@@ -16,6 +16,15 @@ I apologize if I have unintentionally violated any rule.
 Report it to me and I will delete as soon as possible.
 ===================
 
+The source is composed of the fusion of different software from different authors. 
+Therefore there is no uniform style of programming.
+I have made a number of efforts to maintain compatibility 
+with unmodified versions (7.15), 
+even at the cost of expensive on inelegant workarounds.
+
+So don't be surprised if it looks like what in Italy we call 
+"zibaldone" or in Emilia-Romagna "mappazzone".
+
 COMPILING
 
 My main development platforms are Windows and FreeBSD.

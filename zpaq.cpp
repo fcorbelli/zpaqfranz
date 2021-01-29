@@ -4,7 +4,7 @@
 ///////// The source is a mess, and without *nix ifdef
 ///////// Strongly in development
 
-#define ZPAQ_VERSION "50.7-experimental"
+#define ZPAQ_VERSION "50.12-experimental"
 #define FRANZOFFSET 50
 
 /*
@@ -514,6 +514,7 @@ void printUTF8(const char* s, FILE* f=stdout) {
     fprintf(f, "%s", s);
 #endif
 }
+
 
 // Return relative time in milliseconds
 int64_t mtime() {
@@ -3015,7 +3016,7 @@ struct DT {
   vector<DTV> dtv;       // list of versions
 	int written;           // 0..ptr.size() = fragments output. -1=ignore
   uint32_t crc32;
-  DT(): date(0), size(0), attr(0), data(0),written(-1),crc32(0) {sha1hex[0]=0x0;}
+  DT(): date(0), size(0), attr(0), data(0),written(-1),crc32(0) {memset(sha1hex,0,sizeof(sha1hex));}
 };
 typedef map<string, DT> DTMap;
 
@@ -3033,7 +3034,7 @@ struct s_crc32block
 	uint32_t crc32;
 	unsigned char sha1[20];  // fragment hash
 	char sha1hex[40];
-	s_crc32block(): crc32(0),crc32start(0),crc32size(0) {sha1[0]=0x0;sha1hex[0]=0x0;}
+	s_crc32block(): crc32(0),crc32start(0),crc32size(0) {memset(sha1,0,sizeof(sha1));memset(sha1hex,0,sizeof(sha1hex));}
 };
 vector <s_crc32block> g_crc32;
 
@@ -3117,7 +3118,7 @@ private:
   char password_string[32]; // hash of -key argument
   const char* password;     // points to password_string or NULL
   string method;            // default "1"
-  bool noattributes;        // -noattributes option
+  bool flagnoattributes;        // -noattributes option
   vector<string> notfiles;  // list of prefixes to exclude
   string nottype;           // -not =...
   vector<string> onlyfiles; // list of prefixes to include
@@ -3330,29 +3331,25 @@ void Jidac::differences()
 	moreprint("A)  Output is somewhat different (-pakka for alternative)");
 	moreprint("B)  During add() zpaqfranz stores by default the CRC-32 of the files");
 	moreprint("    This can disabled by -crc32 switch");
-	moreprint("C)  Add() using -checksum will store SHA1 hash for every file,");
-	moreprint("    doing a CRC-32 check too");
+	moreprint("C)  Add() using -checksum will store SHA1 hash for every file");
 	moreprint("D)  By default every .XLS file is forcibily added (check of datetime");
-	moreprint("    is not reliable for ancient XLS to detect changes). Disabled by -xls");
+	moreprint("    is not reliable for ancient XLS). Disabled by -xls");
 	moreprint("E)  By default no Windows Alternate Data Stream is stored. -forcewindows to enable");
-	
 	moreprint("\n");
 	moreprint("New functions:");
-	moreprint("1)  Using -comment something is possible to add ASCII text to the versions");
+	moreprint("1)  Using -comment something to add ASCII text to the versions");
 	moreprint("    in add() and list(). WARNING: NO duplicates check is done");
 	moreprint("2)  In list() using -find pippo filter like |grep -i find");
 	moreprint("    In list() -comment / -comment pippo / -comment -all");
 	moreprint("    The list command can be used for comparing ZPAQ contents agains disk");
 	moreprint("    zpaqfranz l z:\\1.zpaq              (show ZPAQ content)");
 	moreprint("    zpaqfranz l z:\\1.zpaq c:\\dati z:\\  (compare files agains c:\\dati and z:\\)");
-	moreprint("3)  New command t (test) for archive test. -force for filesystem post-check");
-	moreprint("    -verbose");
-	moreprint("4)  Switch -test to add. Do a fast post-add verify");
+	moreprint("3)  New command t (test) for archive test -verify for filesystem post-check -verbose");
+	moreprint("4)  Switch -test to command add. -verify for filesystem post-check");
 	moreprint("5)  New command p (paranoid test). Need LOTS of RAM and painfully slow. Check");
 	moreprint("    almost everything. -force -verbose");
 	moreprint("6)  New command s (size). Get the cumulative size of one or more directory.");
 	moreprint("    Skip .zfs and ADS. Use -all for multithread");
-	moreprint("    On *nix return (a kind of) free disk space on filesystem(s)");
 	moreprint("7)  New command sha1 (hashing). Calculate hash of something (default SHA1)");
 	moreprint("    -sha256, -crc32, -crc32c (HW SSE if possible), xxhash");
 	moreprint("8)  New command dir. Something similar to dir command (for *nix)");
@@ -3376,7 +3373,6 @@ void Jidac::differences()
 	moreprint("21) -find something. Find text in full filename (ex list)");
 	moreprint("22) -replace something. Replace a -find text (manipulate output)");
 	moreprint("23) -verify. After a test command read again all files from media");
-	
 	exit(1);
 }
 
@@ -3430,6 +3426,9 @@ void Jidac::examples()
 	moreprint("\n");
 	moreprint("zpaqfranz l r:\\test\\prova.zpaq -find c:/parte/ -replace z:\\mynewdir\\ -pakka");
 	moreprint("Find-and-replace part of output (like awk or sed)");
+	moreprint("\n");
+	moreprint("zpaqfranz l z:\\1.zpaq -checksum -n 10");
+	moreprint("List the 10 greatest file with SHA1 if available");
 	moreprint("\n");
 	moreprint("+++ TESTING");
 	moreprint("zpaqfranz t z:\\1.zpaq");
@@ -3492,16 +3491,16 @@ void Jidac::usage()
 	moreprint("Usage: zpaqfranz command archive[.zpaq] files|directory... -options...");
 	moreprint("Use \?\?\?\? in archive name for multi-part ex \"test_????.zpaq""");
 	moreprint("Commands:");
-	moreprint("   a             Append files (-checksum -force -crc32 -comment boh -test)");
-	moreprint("   x             Extract versions of files (-until N -comment boh)");
-	moreprint("   l             List files (-all -find something -comment boh)");
+	moreprint("   a             Append files (-checksum -force -crc32 -comment foo -test)");
+	moreprint("   x             Extract versions of files (-until N -comment foo)");
+	moreprint("   l             List files (-all -checksum -find something -comment foo)");
 	moreprint("   l d0 d1 d2... Compare content agains directory d0, d1, d2...");
-	moreprint("   t             Fast test of most recent version of files (-force -verbose)");
-	moreprint("   c d0 d1 d2... Quickly compare dir d0 to d1,d2... (-all use parallel scan)");
+	moreprint("   c d0 d1 d2... Quickly compare dir d0 to d1,d2... (-all M/T scan -crc32)");
+	moreprint("   s d0 d1 d2... Cumulative size (excluding .zfs) of d0,d1,d2 (-all M/T)");
+	moreprint("   t             Fast test of most recent version of files (-verify -verbose)");
 	moreprint("   p             Paranoid test. Use lots of RAM (-verbose)");
-	moreprint("   s d0 d1 d2... Return cumulative file size (excluding .zfs) of d0,d1,d2...");
 	moreprint("   sha1          Calculate hash (-sha256 -crc32 -crc32c -xxhash)");
-	moreprint("   dir           Like Windows dir (/s /a /os /od)");
+	moreprint("   dir           Like Windows dir/find duplicates (/s /a /os /od, -crc32)");
 	moreprint("   help          Long help (-h, -he examples, -diff differences)");
 	moreprint("Optional switch(es):");
 	moreprint("  -all [N]       Extract/list versions in N [4] digit directories");
@@ -3513,27 +3512,32 @@ void Jidac::usage()
 	moreprint("                 Add: Post-check of files (-verify for CRC-32)");
 	moreprint("  -to out...     Prefix files... to out... or all to out/all");
 	moreprint("  -until N       Roll back archive to N'th update or -N from end");
-	moreprint("  -comment boooh Add/find ASCII comment string to versions");
+	moreprint("  -comment foo   Add/find ASCII comment string to versions");
 }
 
 
 //// print a lot more
-void Jidac::usagefull() {
-	usage();
-	char buffer[200];
+void Jidac::usagefull() 
+{
+
+usage();
+char buffer[200];
 	
   
-	sprintf(buffer,"  -until %s  Set date, roll back (UT, default time: 235959)",dateToString(date).c_str());
-	moreprint(buffer);
+sprintf(buffer,"  -until %s  Set date, roll back (UT, default time: 235959)",dateToString(date).c_str());
+moreprint(buffer);
 	
 moreprint("  -not files...   Exclude. * and ? match any string or char");
 moreprint("       =[+-#^?]   List: exclude by comparison result");
 moreprint("  -only files...  Include only matches (default: *)");
+moreprint("  -always files   Always (force) adding some file");
 moreprint("  -noattributes   Ignore/don't save file attributes or permissions");
 moreprint("  -index F        Extract: create index F for archive");
 moreprint("                  Add: create suffix for archive indexed by F, update F");
+/*
 moreprint("  -sN -summary N  List: show top N sorted by size. -1: show frag IDs");
 moreprint("                  Add/Extract: if N > 0 show brief progress");
+*/
 moreprint("  ########## franz patch ###########");
 moreprint("  -checksum       Store SHA1+CRC32 for every file");
 moreprint("  -noeta          Do not show ETA");
@@ -3544,12 +3548,11 @@ moreprint("  -zfs            Skip path including .zfs");
 moreprint("  -noqnap         Skip path including @Recently-Snapshot and @Recycle");
 moreprint("  -forcewindows   Take $DATA$ and System Volume Information");
 moreprint("  -xls            Do NOT always force XLS");
-moreprint("  -always files   Always (force) adding some file");
 moreprint("  -nopath         Do not store path");
 moreprint("  -nosort         Do not sort file when adding or listing");
 moreprint("  -find      X    Search for X in full filename (ex. list)");
 moreprint("  -replace   Y    Replace X with Y in full filename (ex. list)");
-moreprint("  -n         X    Only print last X lines in dir (like tail)");
+moreprint("  -n         X    Only print last X lines in dir (like tail)/first X (list)");
 moreprint("  -minsize   X    Find duplicate by dir -crc32 if size >X");
 #if defined(_WIN32) || defined(_WIN64)
 moreprint("  -vss            Do a VSS for drive C: (Windows with administrative rights)");
@@ -3558,11 +3561,12 @@ moreprint("  -crc32c         In sha1 command use CRC32c instead of SHA1");
 moreprint("  -crc32          In sha1 command use CRC32");
 moreprint("  -xxhash         In sha1 command use xxHASH64");
 moreprint("  -sha256         In sha1 command use SHA256");
-moreprint("Advanced options:");
+moreprint("  ########## Advanced options ###########");
+
 moreprint("  -repack F [X]   Extract to new archive F with key X (default: none)");
 
-	sprintf(buffer,"  -tN -threads N  Use N threads (default: 0 = %d cores.",threads);
-	moreprint(buffer);
+sprintf(buffer,"  -tN -threads N  Use N threads (default: 0 = %d cores.",threads);
+moreprint(buffer);
 	
 moreprint("  -fragment N     Use 2^N KiB average fragment size (default: 6)");
 moreprint("  -mNB -method NB Use 2^B MiB blocks (0..11, default: 04, 14, 26..56)");
@@ -3603,9 +3607,6 @@ string append_path(string a, string b) {
   if (nb>0 && b[0]=='/') b=b.substr(1);
   if (na>0 && a[na-1]=='/') a=a.substr(0, na-1);
   return a+"/"+b;
-}
-string myappend_path(const string& a, const string& b) {
-  return a+"|"+b;
 }
 
 // Rename name using tofiles[]
@@ -3783,7 +3784,7 @@ int Jidac::doCommand(int argc, const char** argv) {
   password=0;  // no password
   index=0;
   method="";  // 0..5
-  noattributes=false;
+  flagnoattributes=false;
   repack=0;
   new_password=0;
   summary=0; // detailed: -1
@@ -3925,7 +3926,7 @@ int Jidac::doCommand(int argc, const char** argv) {
     }
     else if (opt=="-method" && i<argc-1) method=argv[++i];
     else if (opt[1]=='m') method=argv[i]+2;
-    else if (opt=="-noattributes") noattributes=true;
+    else if (opt=="-noattributes") flagnoattributes=true;
     else if (opt=="-not") {  // read notfiles
       while (++i<argc && argv[i][0]!='-') {
         if (argv[i][0]=='=') nottype=argv[i];
@@ -4389,158 +4390,109 @@ int64_t Jidac::read_archive(const char* arc, int *errors, int i_myappend) {
             // Contents is: 0[8] filename 0 (deletion)
             // or:       date[8] filename 0 na[4] attr[na] ni[4] ptr[ni][4]
             // Read into DT
-            else if (filename.s[17]=='i') {
-				///printf("\n\n\n\n INIZIO CICLO\n");
+            else if (filename.s[17]=='i') 
+			{
 				
               assert(ver.size()>0);
               if (fdate>ver.back().lastdate) ver.back().lastdate=fdate;
               const char* s=os.c_str();
               const char* const end=s+os.size();
-			  /*
-			  printf("os size %lld\n",os.size());
-			  printf("esse   %lld\n",s);
-			  printf("end    %lld\n",end);
-			  printf("diffe  %lld\n",end-s);
-			  */
-              while (s+9<=end) {
-                DT dtr;
-                dtr.date=btol(s);  // date
-                if (dtr.date) ++ver.back().updates;
-                else ++ver.back().deletes;
-                const int64_t len=strlen(s);
-                if (len>65535) error("filename too long");
-				///printf("Lunghezza nome %lld %s\n",len,s);
-                string fn=s;  // filename renamed
-                if (all) 
+			
+				while (s+9<=end) 
 				{
-					if (i_myappend)
+					DT dtr;
+					dtr.date=btol(s);  // date
+					if (dtr.date) 
+						++ver.back().updates;
+					else 
+						++ver.back().deletes;
+					const int64_t len=strlen(s);
+					if (len>65535) 
+						error("filename too long");
+					
+					string fn=s;  // filename renamed
+					if (all) 
 					{
-						fn=myappend_path(itos(ver.size()-1, all), fn);
+						if (i_myappend)
+							fn=itos(ver.size()-1, all)+"|$1"+fn;
+						else
+							fn=append_path(itos(ver.size()-1, all), fn);
 					}
-					else
+					const bool issel=isselected(fn.c_str(), renamed);
+					s+=len+1;  // skip filename
+					if (s>end) 
+						error("filename too long");
+					if (dtr.date) 
 					{
-						fn=append_path(itos(ver.size()-1, all), fn);
-					}
-				}
-                const bool issel=isselected(fn.c_str(), renamed);
-                s+=len+1;  // skip filename
-                if (s>end) error("filename too long");
-                if (dtr.date) {
-                  ++files;
-                  if (s+4>end) error("missing attr");
-				  unsigned na=0;
+						++files;
+						if (s+4>end) 
+							error("missing attr");
+						unsigned na=0;
 	
-				  /*
-					printf("s    %d\n",(s[0]&255));
-					printf("s+1  %d\n",(s[1]&255));
-					printf("s+2  %d\n",(s[2]&255));
-					printf("s+3  %d\n",(s[3]&255));
+						na=btoi(s);  // attr bytes
+				  
+						if (s+na>end || na>65535) 
+							error("attr too long");
+				  
+						if (na>FRANZOFFSET) //this is the -checksum options. Get SHA1 0x0 CRC32 0x0
+						{
+							for (unsigned int i=0;i<50;i++)
+								dtr.sha1hex[i]=*(s+(na-FRANZOFFSET)+i);
+							dtr.sha1hex[50]=0x0;
+						}
+				
+						for (unsigned i=0; i<na; ++i, ++s)  // read attr
+							if (i<8) 
+								dtr.attr+=int64_t(*s&255)<<(i*8);
 					
-					if (s[0]>FRANZOFFSET)
-					{
-						printf("FIXO franz offset\n");
+						if (flagnoattributes) 
+							dtr.attr=0;
+						if (s+4>end) 
+							error("missing ptr");
+						unsigned ni=btoi(s);  // ptr list size
+				  
+						if (ni>(end-s)/4u) 
+							error("ptr list too long");
+						if (issel) 
+							dtr.ptr.resize(ni);
+						for (unsigned i=0; i<ni; ++i) 
+						{  // read ptr
+							const unsigned j=btoi(s);
+							if (issel) 
+								dtr.ptr[i]=j;
+						}
 					}
-			*/
-	
-					na=btoi(s);  // attr bytes
-					
-				//	printf("K:A na %lld  s vale %lld\n",na,s);
-				  
-                  if (s+na>end || na>65535) 
-				  {
-/*					
-					printf("ATTR TOO LONG s    %lld\n",s);
-							printf("ATTR TOO LONG na   %lld\n",na);
-							printf("ATTR TOO LONG s+na %lld\n",s+na);
-							printf("ATTR TOO LONG end  %lld\n",end);
-							printf("os size            %lld\n",os.size());
-	*/						
-					error("attr too long");
-				  }
-				  
-				  if (na>FRANZOFFSET) //this is the -checksum options. Get SHA1 0x0 CRC32 0x0
-				  {
-					for (unsigned int i=0;i<50;i++)
-						dtr.sha1hex[i]=*(s+(na-FRANZOFFSET)+i);
-	//				dtr.sha1hex[40]=0x0;
-					dtr.sha1hex[50]=0x0;
-
-	///				sprintf(dtr.sha1hex,"AAAAAAA\0x");
-					
-	 ///				printf("---FRANZOFFET---\n");
-				  }
-				else
-				{
-		///				printf("---NORMAL OFFSET---\n");
-        		}
-        
-				for (unsigned i=0; i<na; ++i, ++s)  // read attr
-				{
-			///		printf("ciclo %02d  s %lld  valore %d\n",i,s,(s[0]&255));
-                 
-				 if (i<8) dtr.attr+=int64_t(*s&255)<<(i*8);
-				}
-				///  printf("K:B na dopo succhia vale %lld  s vale %lld\n",na,s);
-				  if (noattributes) dtr.attr=0;
-                  if (s+4>end) error("missing ptr");
-				  
-				  
-				/*  
-					printf("ni    %d\n",(s[0]&255));
-					printf("ni+1  %d\n",(s[1]&255));
-					printf("ni+2  %d\n",(s[2]&255));
-					printf("ni+3  %d\n",(s[3]&255));
-				*/
-                  unsigned ni=btoi(s);  // ptr list size
-			/*
-						printf("ni    %lld\n",ni);
-						printf("end   %lld\n",end);
-						printf("s     %lld\n",s);
-						printf("end-s %lld\n",(end-s));
-						printf("endmo %lld\n",(end-s)/4u);
-			*/
-
-/*
-				if (ni>(end-s)/4u)
-				  {
-					printf("GURU  blocco %1.0f %s\n",double(block_offset),fn.c_str());
-						
-				  }
-	*/			  
-                  if (ni>(end-s)/4u) error("ptr list too long");
-                  if (issel) dtr.ptr.resize(ni);
-                  for (unsigned i=0; i<ni; ++i) {  // read ptr
-                    const unsigned j=btoi(s);
-                    if (issel) dtr.ptr[i]=j;
-                  }
-                }
-                if (issel) dt[fn]=dtr;
-              }  // end while more files
+					if (issel) 
+					dt[fn]=dtr;
+				}  // end while more files
             }  // end if 'i'
-            else {
-              printf("Skipping %s %s\n",
-                  filename.s.c_str(), comment.s.c_str());
-              error("Unexpected journaling block");
+            else 
+			{
+				printf("Skipping %s %s\n",filename.s.c_str(), comment.s.c_str());
+				error("Unexpected journaling block");
             }
           }  // end if journaling
 
           // Streaming format
-          else {
+          else 
+		  {
 
             // If previous version does not exist, start a new one
-            if (ver.size()==1) {
-              if (version<1) {
-                done=true;
-                goto endblock;
-              }
-              ver.push_back(VER());
-              ver.back().firstFragment=ht.size();
-              ver.back().offset=block_offset;
-              ver.back().csize=-1;
-            }
+            if (ver.size()==1) 
+			{
+				if (version<1) 
+				{
+					done=true;
+					goto endblock;
+				}
+				ver.push_back(VER());
+				ver.back().firstFragment=ht.size();
+				ver.back().offset=block_offset;
+				ver.back().csize=-1;
+			}
 
-            char sha1result[21]={0};
-            d.readSegmentEnd(sha1result);
+			char sha1result[21]={0};
+			d.readSegmentEnd(sha1result);
             skip=true;
             string fn=lastfile;
             if (all) fn=append_path(itos(ver.size()-1, all), fn); ///peusa3
@@ -4587,17 +4539,22 @@ endblock:;
       migliaia(block_offset),tohuman(block_offset));
 
   // Calculate file sizes
-  for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p) {
-    for (unsigned i=0; i<p->second.ptr.size(); ++i) {
-      unsigned j=p->second.ptr[i];
-      if (j>0 && j<ht.size() && p->second.size>=0) {
-        if (ht[j].usize>=0) p->second.size+=ht[j].usize;
-        else p->second.size=-1;  // unknown size
-      }
-    }
-  }
+	for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p) 
+	{
+		for (unsigned i=0; i<p->second.ptr.size(); ++i) 
+		{
+			unsigned j=p->second.ptr[i];
+			if (j>0 && j<ht.size() && p->second.size>=0) 
+			{
+				if (ht[j].usize>=0) 
+					p->second.size+=ht[j].usize;
+				else 
+					p->second.size=-1;  // unknown size
+			}
+		}
+	}
   
-  return block_offset;
+	return block_offset;
 }
 
 // Test whether filename and attributes are selected by files, -only, and -not
@@ -4609,7 +4566,6 @@ bool Jidac::isselected(const char* filename, bool rn) {
 		{
 			if (flagverbose)
 				printf("Skip .zfs %s\n",filename);
-			
 			return false;
 		}
     if (flagnoqnap) //this is an "automagically" exclude for qnap's snapshots
@@ -4836,7 +4792,7 @@ void Jidac::addfile(DTMap& i_edt,string filename, int64_t edate,
   DT& d=i_edt[filename];
   d.date=edate;
   d.size=esize;
-  d.attr=noattributes?0:eattr;
+  d.attr=flagnoattributes?0:eattr;
   d.data=0;
   g_bytescanned+=esize;
   g_filescanned++;
@@ -5377,7 +5333,7 @@ bool Jidac::getchecksum(string i_filename, char* o_sha1)
 		
 	
 ///	houston, we have a directory	
-	if (i_filename[i_filename.size()-1]=='/')
+	if (isdirectory(i_filename))
 	{
 ///	                    1234567890123456789012345678901234567890 12345678
 //			sprintf(o_sha1,"THIS IS A DIRECTORY                    Z MYZZEKAN");
@@ -6468,11 +6424,12 @@ int Jidac::add()
 		block.clear();
 		dt.clear();
 		ht.clear();
+		edt.clear();
 		ht.resize(1);  // element 0 not used
 		ver.resize(1); // version 0
 		dhsize=dcsize=0;
 		///return test();
-		return list();
+		return verify();
 	}	
 		//unz(archive.c_str(), password,all);
   return errors>0;
@@ -6526,7 +6483,7 @@ bool Jidac::equal(DTMap::const_iterator p, const char* filename,uint32_t &o_crc3
 
 	if (!flagnoeta)
 		if (flagverbose || (p->second.size>100000000)) //only 100MB+ files
-			printf("Block checking (%19s) done (%10s) of (%10s)\r",migliaia(p->second.size),tohuman(g_worked),tohuman2(g_bytescanned));
+			printf("Checking %s                                          \r",migliaia(p->second.size));
 	
 	for (unsigned i=0; i<p->second.ptr.size(); ++i) 
 	{
@@ -6958,7 +6915,7 @@ int Jidac::extract() {
   // Encrypt or decrypt whole archive
   if (repack && all) {
     if (files.size()>0 || tofiles.size()>0 || onlyfiles.size()>0
-        || noattributes || version!=DEFAULT_VERSION || method!="")
+        || flagnoattributes || version!=DEFAULT_VERSION || method!="")
       error("-repack -all does not allow partial copy");
     InputArchive in(archive.c_str(), password);
     if (flagforce) delete_file(repack);
@@ -7647,16 +7604,22 @@ int Jidac::verify()
 	g_bytescanned=0;
 	g_filescanned=0;
 	g_worked=0;
+	files_count.clear();
+	
+	edt.clear();
 	for (unsigned i=0; i<files.size(); ++i)
 	{
 		scandir(edt,files[i].c_str());
-		printf("%9s in <<%s>>\n",migliaia(edt.size()-howmanyfiles),files[i].c_str());
+		files_count.push_back(edt.size()-howmanyfiles);
 		howmanyfiles=edt.size();
 	}
-
- 	
+	printf("\n");
+ 	for (unsigned i=0; i<files.size(); ++i)
+		printf("%9s in <<%s>>\n",migliaia(files_count[i]),files[i].c_str());
+	
+	
 	if (files.size()) 
-		printf("Total files found %s\n", migliaia(edt.size()));
+		printf("Total files found: %s\n", migliaia(edt.size()));
 	printf("\n");
 
   // Compute directory sizes as the sum of their contents
@@ -7705,19 +7668,34 @@ int Jidac::verify()
 	unsigned matches=0, mismatches=0, internal=0, external=0;
 	uint32_t crc32fromfile;
 	
-
+	vector<string> risultati;
+	vector<bool> risultati_utf8;
+	char linebuffer[1000];
+	unsigned int ultimapercentuale=200;
+	unsigned int percentuale;
+	
 	for (unsigned fi=0;fi<filelist.size(); ++fi) 
 	{
 		DTMap::iterator p=filelist[fi];
-	/*	
-		if (fi%1000==0)
-			printf("Comparing %s (diff size %s)\r",migliaia(fi),migliaia2(usize));
-		*/
+		
+		if (menoenne)
+			if ((mismatches+external+internal)>menoenne)
+				break;
+		
+		if (!flagnoeta)
+		{
+			percentuale=100*fi/filelist.size();
+			if (ultimapercentuale!=percentuale)
+			{
+				printf("Done %02d%% %10s of %9s, diff %s bytes\r",percentuale,tohuman(g_worked),tohuman2(g_bytescanned),migliaia2(usize));
+				ultimapercentuale=percentuale;
+			}
+		}
 		
     // Compare external files
-		if (p->second.data=='-' && fi+1<filelist.size()&& filelist[fi+1]->second.data=='+') 
+		if (p->second.data=='-' && fi+1<filelist.size() && filelist[fi+1]->second.data=='+') 
 		{
-			DTMap::const_iterator p1=filelist[fi+1];
+			DTMap::iterator p1=filelist[fi+1];
 				
 			if (equal(p, p1->first.c_str(),crc32fromfile))
 			{
@@ -7730,7 +7708,14 @@ int Jidac::verify()
 						if (crc32stored!=crc32fromfile)
 						{
 							p->second.data='#';
-							printf("\nGURU SHA1 COLLISION! %08X vs %08X %s\n",crc32stored,crc32fromfile,p1->first.c_str());
+							sprintf(linebuffer,"\nGURU SHA1 COLLISION! %08X vs %08X ",crc32stored,crc32fromfile);
+							risultati.push_back(linebuffer);
+							risultati_utf8.push_back(false);
+							
+							sprintf(linebuffer,"%s\n",p1->first.c_str());
+							risultati.push_back(linebuffer);
+							risultati_utf8.push_back(true);
+							
 						}
 						else
 						{	
@@ -7752,7 +7737,10 @@ int Jidac::verify()
 				}
 			}
 			else
-			p->second.data='#';
+			{
+				p->second.data='#';
+				p1->second.data='!';
+			}
 		}
 
 
@@ -7763,22 +7751,42 @@ int Jidac::verify()
 
 		if (p->second.data!='=') 
 		{
-			if (p->first!="" && p->first[p->first.size()-1]!='/')
+			if (!isdirectory(p->first))
 				usize+=p->second.size;
 				
-			printf("%c %s %19s ", char(p->second.data),dateToString(p->second.date).c_str(), migliaia(p->second.size));
-			printUTF8(p->first.c_str());
-      
-			unsigned v;  // list version updates, deletes, compressed size
-			if (all>0 && p->first.size()==all+1u && (v=atoi(p->first.c_str()))>0&& v<ver.size()) 
-			{  // version info
-				printf(" +%d -%d -> %1.0f", ver[v].updates, ver[v].deletes,(v+1<ver.size() ? ver[v+1].offset : csize)-ver[v].offset+0.0);
+			sprintf(linebuffer,"%c %s %19s ", char(p->second.data),dateToString(p->second.date).c_str(), migliaia(p->second.size));
+			risultati.push_back(linebuffer);
+			risultati_utf8.push_back(false);
+			
+			
+			sprintf(linebuffer,"%s\n",p->first.c_str());
+			risultati.push_back(linebuffer);
+			risultati_utf8.push_back(true);
+	  
+			if (p->second.data=='!')
+			{
+				sprintf(linebuffer,"\n");
+				risultati.push_back(linebuffer);
+				risultati_utf8.push_back(false);
 			}
-			printf("\n");
 		}
 	}  
-	printf("\n");
+	printf("\n\n");
+
 	bool myerror=false;
+	
+	if (menoenne)
+		if ((mismatches+external+internal)>menoenne)
+			printf("**** STOPPED BY TOO MANY ERRORS -n %d\n",menoenne);
+			
+	if  (mismatches || external || internal)
+		for (unsigned int i=0;i<risultati.size();i++)
+		{
+			if (risultati_utf8[i])
+				printUTF8(risultati[i].c_str());
+			else
+			printf("%s",risultati[i].c_str());
+		}
 
 	if (matches)
 		printf("%08d =same\n",matches);
@@ -7794,10 +7802,10 @@ int Jidac::verify()
 	}
 	if (internal)
 	{
-		printf("%08d -internal (fine in ZPAQ but not on disk)\n",internal);
+		printf("%08d -internal (file in ZPAQ but not on disk)\n",internal);
 		myerror=true;
 	}
-	printf("Total different file size %s\n",migliaia(usize));
+	printf("Total different file size: %s bytes\n",migliaia(usize));
  	if (myerror)
 		return 2;
 	else
@@ -7821,70 +7829,31 @@ int Jidac::list()
   int errors=0;
   bool flagshow;
   
-  if (archive!="") csize=read_archive(archive.c_str(),&errors,1); /// AND NOW THE MAGIC ONE!
+	if (archive!="") csize=read_archive(archive.c_str(),&errors,1); /// AND NOW THE MAGIC ONE!
+	printf("\n");
 
 
 	g_bytescanned=0;
 	g_filescanned=0;
 	g_worked=0;
-  // Read external files into edt
-  for (unsigned i=0; i<files.size(); ++i)
-    scandir(edt,files[i].c_str());
-  if (files.size()) printf("%d external files.\n", int(edt.size()));
-  printf("\n");
+	vector<DTMap::iterator> filelist;
 
-  // Compute directory sizes as the sum of their contents
-  DTMap* dp[2]={&dt, &edt};
-  for (int i=0; i<2; ++i) {
-    for (DTMap::iterator p=dp[i]->begin(); p!=dp[i]->end(); ++p) {
-      int len=p->first.size();
-      if (len>0 && p->first[len]!='/') {
-        for (int j=0; j<len; ++j) {
-          if (p->first[j]=='/') {
-            DTMap::iterator q=dp[i]->find(p->first.substr(0, j+1));
-            if (q!=dp[i]->end())
-              q->second.size+=p->second.size;
-          }
-        }
-      }
-    }
-  }
+	for (DTMap::iterator a=dt.begin(); a!=dt.end(); ++a) 
+		if (a->second.data!='-' && (all || a->second.date)) 
+		{
+			a->second.data='-';
+			filelist.push_back(a);
+		}
+	
 
-  // Make list of files to list. List each external file preceded
-  // by the matching internal file, if any. Then list any unmatched
-  // internal files at the end.
-  vector<DTMap::iterator> filelist;
-  
-  for (DTMap::iterator p=edt.begin(); p!=edt.end(); ++p) {
-    
-	
-	
-	
-	
-	DTMap::iterator a=dt.find(rename(p->first));
-    if (a!=dt.end() && (all || a->second.date)) {
-      a->second.data='-';
-      filelist.push_back(a);
-    }
-    p->second.data='+';
-    filelist.push_back(p);
-  }
-  for (DTMap::iterator a=dt.begin(); a!=dt.end(); ++a) {
-    if (a->second.data!='-' && (all || a->second.date)) {
-      a->second.data='-';
-      filelist.push_back(a);
-    }
-  }
-  
-  // Sort
- /// if (summary>0)
-    sort(filelist.begin(), filelist.end(), compareFragmentList);
+  // Sort by size desc
+ 	if (menoenne) // sort by size desc
+	{
+		printf("Sort by size desc, limit to %d\n",menoenne);
+		sort(filelist.begin(), filelist.end(), compareFragmentList);
+	}
 
-  // List
-  int64_t usize=0;
-  unsigned matches=0, mismatches=0, internal=0, external=0,duplicates=0;  // counts
-		   
-		   
+	int64_t usize=0;
 	map<int, string> mappacommenti;
 	
 	//searchcomments(versioncomment,filelist);
@@ -7910,10 +7879,14 @@ int Jidac::list()
 	   
 		   
 	uint32_t crc32fromfile;	   
-  for (unsigned fi=0;
-       fi<filelist.size() /*&& (summary<=0 || int(fi)<summary*/ ; ++fi) 
+	unsigned fi;
+	for (fi=0;fi<filelist.size(); ++fi) 
 	{
     
+		if (menoenne) /// list -n 10 => sort by size and stop at 10
+			if (fi>=menoenne)
+				break;
+			
 		DTMap::iterator p=filelist[fi];
 		flagshow=true;
 		
@@ -7921,163 +7894,139 @@ int Jidac::list()
 			if (strstr(p->first.c_str(),"VCOMMENT "))
 				flagshow=false;
 		
-/*
-		
-		if (strstr(p->first.c_str(), ":$DATA"))
-			if (strstr(p->first.c_str(),"FAKE"))
-				flagshow=false;
-	*/	
 /// a little of change if -search is used
 		if (searchfrom!="")
 			flagshow=stristr(p->first.c_str(),searchfrom.c_str());
 			
+		if (flagchecksum)
+			if (isdirectory(p->first))
+				flagshow=false;
+				
 		if (flagshow)
 		{
-    // Compare external files
-    if (summary<=0 && p->second.data=='-' && fi+1<filelist.size()
-        && filelist[fi+1]->second.data=='+') {
-      DTMap::const_iterator p1=filelist[fi+1];
-      if ((flagforce && equal(p, p1->first.c_str(),crc32fromfile))
-          || (!flagforce && p->second.date==p1->second.date
-              && p->second.size==p1->second.size
-              && (!p->second.attr || !p1->second.attr
-                  || p->second.attr==p1->second.attr))) {
-        p->second.data='=';
-        ++fi;
-      }
-      else
-        p->second.data='#';
-    }
-
-    // Compare with previous file in summary
-    if (summary>0 && fi>0 && p->second.date && p->first!=""
-        && p->first[p->first.size()-1]!='/'
-        && p->second.ptr.size()
-        && filelist[fi-1]->second.ptr==p->second.ptr)
-      p->second.data='^';
-
-    if (p->second.data=='=') ++matches;
-    if (p->second.data=='#') ++mismatches;
-    if (p->second.data=='-') ++internal;
-    if (p->second.data=='+') ++external;
-    if (p->second.data=='^') ++duplicates;
-
-    // List selected comparison results
-    if (!strchr(nottype.c_str(), p->second.data)) 
-	{
-      if (p->first!="" && p->first[p->first.size()-1]!='/')
-        usize+=p->second.size;
+			if (!strchr(nottype.c_str(), p->second.data)) 
+			{
+				if (p->first!="" && (!isdirectory(p->first)))
+					usize+=p->second.size;
 	
-		if (!flagpakka) // special cumulative output
-		{
-      printf("%c %s %12.0f ", char(p->second.data),
-          dateToString(p->second.date).c_str(), p->second.size+0.0);
-      if (!noattributes)
-        printf("%s ", attrToString(p->second.attr).c_str());
-		}
-	
+				if (!flagchecksum) // special output
+				{
+					printf("%c %s %19s ", char(p->second.data),dateToString(p->second.date).c_str(), migliaia(p->second.size));
+					if (!flagnoattributes)
+					printf("%s ", attrToString(p->second.attr).c_str());
+				}
+				
+				string myfilename=p->first;
+				
 	/// houston, we have checksums?
-	  if (p->second.sha1hex[0]!=0)
-		  printf("SHA1: %s ",p->second.sha1hex);
-	  if (p->second.sha1hex[41]!=0)
-		  printf("CRC32: %s ",p->second.sha1hex+41);
-	
-/// search and replace, if requested	
-		if ((searchfrom!="") && (replaceto!=""))
-		{
-			string myfilename=p->first;
-			replace(myfilename,searchfrom,replaceto);
-			printUTF8(myfilename.c_str());
-		}
-		else
-		printUTF8(p->first.c_str());
-			
-	  /*
-      if (summary<0) 
-	  {  // frag pointers
-        const vector<unsigned>& ptr=p->second.ptr;
-        bool hyphen=false;
-        for (int j=0; j<int(ptr.size()); ++j) {
-          if (j==0 || j==int(ptr.size())-1 || ptr[j]!=ptr[j-1]+1
-              || ptr[j]!=ptr[j+1]-1) {
-            if (!hyphen) printf(" ");
-            hyphen=false;
-            printf("%u", ptr[j]);
-          }
-          else {
-            if (!hyphen) printf("-");
-            hyphen=true;
-          }
-        }
-      }
-	  */
-      unsigned v;  // list version updates, deletes, compressed size
-      if (all>0 && p->first.size()==all+1u && (v=atoi(p->first.c_str()))>0
-          && v<ver.size()) 
-		{  // version info
-		
-			std::map<int,string>::iterator commento;
-		
-			commento=mappacommenti.find(v); 
-			if(commento== mappacommenti.end()) 
-			printf(" +%d -%d -> %1.0f", ver[v].updates, ver[v].deletes,
-				(v+1<ver.size() ? ver[v+1].offset : csize)-ver[v].offset+0.0);
+				string mysha1="";
+				string mycrc32="";
+				
+				if (p->second.sha1hex[0]!=0)
+						if (p->second.sha1hex[0+40]==0)
+							mysha1=(string)"SHA1: "+p->second.sha1hex+" ";
+							
+				if (p->second.sha1hex[41]!=0)
+						if (p->second.sha1hex[41+8]==0)
+						{
+							if (isdirectory(myfilename))
+								mycrc32=(string)"CRC32:          ";
+							else
+								mycrc32=(string)"CRC32: "+(p->second.sha1hex+41)+" ";
+						}
+						
+							
+				if (all)
+				{
+					string rimpiazza="|";
+				
+					if (!isdirectory(myfilename))
+	//					rimpiazza+="FOLDER ";
+		//			else
+					{
+						rimpiazza+=mysha1;
+						rimpiazza+=mycrc32;
+					}
+					if (!myreplace(myfilename,"|$1",rimpiazza))
+						myreplace(myfilename,"/","|");
+				}
 				else
-			printf(" +%d -%d -> %1.0f <<%s>>", ver[v].updates, ver[v].deletes,
-				(v+1<ver.size() ? ver[v+1].offset : csize)-ver[v].offset+0.0,commento->second.c_str());
+				{
+						myfilename=mysha1+mycrc32+myfilename;
+					
+				}
+				
+				
+/// search and replace, if requested	
+				if ((searchfrom!="") && (replaceto!=""))
+					replace(myfilename,searchfrom,replaceto);
+								
+				printUTF8(myfilename.c_str());
+			  
+				unsigned v;  // list version updates, deletes, compressed size
+			if (all>0 && p->first.size()==all+1u && (v=atoi(p->first.c_str()))>0
+          && v<ver.size()) 
+				{  // version info
+		
+					std::map<int,string>::iterator commento;
+		
+					commento=mappacommenti.find(v); 
+					if(commento== mappacommenti.end()) 
+						printf(" +%d -%d -> %s", ver[v].updates, ver[v].deletes,
+						(v+1<ver.size() ? migliaia(ver[v+1].offset-ver[v].offset) : migliaia(csize-ver[v].offset)));
+					else
+						printf(" +%d -%d -> %s <<%s>>", ver[v].updates, ver[v].deletes,
+						(v+1<ver.size() ? migliaia(ver[v+1].offset-ver[v].offset) : migliaia(csize-ver[v].offset)),commento->second.c_str());
         		
 				/*
 			if (summary<0)  // print fragment range
 			printf(" %u-%u", ver[v].firstFragment,
               v+1<ver.size()?ver[v+1].firstFragment-1:unsigned(ht.size())-1);
 */
+				}
+				
+				printf("\n");
+			}
 		}
-      printf("\n");
-    }
-		}
-  }  // end for i = each file version
+	}  // end for i = each file version
 
   // Compute dedupe size
-  int64_t ddsize=0, allsize=0;
-  unsigned nfiles=0, nfrags=0, unknown_frags=0, refs=0;
-  vector<bool> ref(ht.size());
-  for (DTMap::const_iterator p=dt.begin(); p!=dt.end(); ++p) {
-    if (p->second.date) {
-      ++nfiles;
-      for (unsigned j=0; j<p->second.ptr.size(); ++j) {
-        unsigned k=p->second.ptr[j];
-        if (k>0 && k<ht.size()) {
-          ++refs;
-          if (ht[k].usize>=0) allsize+=ht[k].usize;
-          if (!ref[k]) {
-            ref[k]=true;
-            ++nfrags;
-            if (ht[k].usize>=0) ddsize+=ht[k].usize;
-            else ++unknown_frags;
-          }
-        }
-      }
-    }
-  
-  }
 
+	int64_t ddsize=0, allsize=0;
+	unsigned nfiles=0, nfrags=0, unknown_frags=0, refs=0;
+	vector<bool> ref(ht.size());
+	for (DTMap::const_iterator p=dt.begin(); p!=dt.end(); ++p) 
+	{
+		if (p->second.date) 
+		{
+			++nfiles;
+			for (unsigned j=0; j<p->second.ptr.size(); ++j) 
+			{
+				unsigned k=p->second.ptr[j];
+				if (k>0 && k<ht.size()) 
+				{
+					++refs;
+					if (ht[k].usize>=0) 
+						allsize+=ht[k].usize;
+					if (!ref[k]) 
+					{
+						ref[k]=true;
+						++nfrags;
+						if (ht[k].usize>=0) 
+							ddsize+=ht[k].usize;
+						else 
+						++unknown_frags;
+					}
+				}
+			}
+		}
+	}
+	
   // Print archive statistics
-  printf("\n"
-      "%1.6f MB of %1.6f MB (%u files) shown\n"
-      "  -> %1.6f MB (%u refs to %u of %u frags) after dedupe\n"
-      "  -> %1.6f MB compressed.\n",
-       usize/1000000.0, allsize/1000000.0, nfiles, 
-       ddsize/1000000.0, refs, nfrags, unsigned(ht.size())-1,
-       (csize+dhsize-dcsize)/1000000.0);
+	printf("\n%s (%s) of %s (%s) in %s files shown\n",migliaia(usize),tohuman(usize),migliaia2(allsize),tohuman2(allsize),migliaia3(fi));
   if (unknown_frags)
     printf("%u fragments have unknown size\n", unknown_frags);
-  if (files.size())
-    printf(
-       "%u =same, %u #different, %u +external, %u -internal\n",
-        matches, mismatches, external, internal);
-  if (summary>0)
-    printf("%u of largest %d files are ^duplicates\n",
-        duplicates, summary);
+
   if (dhsize!=dcsize)  // index?
     printf("Note: %1.0f of %1.0f compressed bytes are in archive\n",
         dcsize+0.0, dhsize+0.0);
@@ -12585,8 +12534,6 @@ will run 7 threads which take care of one directory.
 The hypothesis is that the six copies are each on a different device, and the server
 have plenty of cores
 It's normal in datastorage and virtualization environments
-
-
 */
 
 pthread_mutex_t mylock = PTHREAD_MUTEX_INITIALIZER;
@@ -12599,6 +12546,7 @@ because pthread does not like very much
 void myaddfile(uint32_t i_tnumber,DTMap& i_edt,string i_filename, int64_t i_date,int64_t i_size, bool i_calccrc32) 
 {
 
+	///Raze to the ground ads and zfs as soon as possible
 	if (isads(i_filename))
 		return;
 		
@@ -12606,14 +12554,12 @@ void myaddfile(uint32_t i_tnumber,DTMap& i_edt,string i_filename, int64_t i_date
 		return;
 		
 	uint32_t risultato=0;
+	int64_t dummy;
 	
   	if (i_calccrc32)
 		if (i_filename[i_filename.size()-1]!='/')
-		{
-			int64_t dummy;
 			risultato=crc32_calc_file(i_filename.c_str(),-1,-1,dummy);
-		}
- 
+	
  
 	DT& d=i_edt[i_filename];
 	d.date=i_date;
@@ -12648,6 +12594,7 @@ void myaddfile(uint32_t i_tnumber,DTMap& i_edt,string i_filename, int64_t i_date
 
 void myscandir(uint32_t i_tnumber,DTMap& i_edt,string filename, bool i_recursive,bool i_calccrc32)
 {
+	///Raze to the ground ads and zfs as soon as possible
 	if (isads(filename))
 	{
 		if (flagverbose)
@@ -12712,68 +12659,56 @@ void myscandir(uint32_t i_tnumber,DTMap& i_edt,string filename, bool i_recursive
 #else  // Windows: expand wildcards in filename
 
   // Expand wildcards
-  WIN32_FIND_DATA ffd;
-  string t=filename;
-  if (t.size()>0 && t[t.size()-1]=='/') t+="*";
-  HANDLE h=FindFirstFile(utow(t.c_str()).c_str(), &ffd);
-  if (h==INVALID_HANDLE_VALUE
-      && GetLastError()!=ERROR_FILE_NOT_FOUND
-      && GetLastError()!=ERROR_PATH_NOT_FOUND)
-    printerr(t.c_str());
-  while (h!=INVALID_HANDLE_VALUE) {
+	WIN32_FIND_DATA ffd;
+	string t=filename;
+	if (t.size()>0 && t[t.size()-1]=='/') 
+		t+="*";
+  
+	HANDLE h=FindFirstFile(utow(t.c_str()).c_str(), &ffd);
+	if (h==INVALID_HANDLE_VALUE && GetLastError()!=ERROR_FILE_NOT_FOUND && GetLastError()!=ERROR_PATH_NOT_FOUND)
+		printerr(t.c_str());
+	
+	while (h!=INVALID_HANDLE_VALUE) 
+	{
 
     // For each file, get name, date, size, attributes
-    SYSTEMTIME st;
-    int64_t edate=0;
-    if (FileTimeToSystemTime(&ffd.ftLastWriteTime, &st))
-      edate=st.wYear*10000000000LL+st.wMonth*100000000LL+st.wDay*1000000
-            +st.wHour*10000+st.wMinute*100+st.wSecond;
-    const int64_t esize=ffd.nFileSizeLow+(int64_t(ffd.nFileSizeHigh)<<32);
-    const int64_t eattr='w'+(int64_t(ffd.dwFileAttributes)<<8);
-
+		SYSTEMTIME st;
+		int64_t edate=0;
+		if (FileTimeToSystemTime(&ffd.ftLastWriteTime, &st))
+			edate=st.wYear*10000000000LL+st.wMonth*100000000LL+st.wDay*1000000
+				+st.wHour*10000+st.wMinute*100+st.wSecond;
+		const int64_t esize=ffd.nFileSizeLow+(int64_t(ffd.nFileSizeHigh)<<32);
+    
     // Ignore links, the names "." and ".." or any unselected file
-    t=wtou(ffd.cFileName);
-    if (ffd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT
-        || t=="." || t=="..") edate=0;  // don't add
-    string fn=path(filename)+t;
+		t=wtou(ffd.cFileName);
+		if (ffd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT || t=="." || t=="..") 
+		edate=0;  // don't add
+		
+		string fn=path(filename)+t;
 
     // Save directory names with a trailing / and scan their contents
     // Otherwise, save plain files
-    if (edate) 
-	{
-		if (ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) fn+="/";
-		myaddfile(i_tnumber,i_edt,fn, edate, esize, i_calccrc32);
-		
-		if (i_recursive)
+		if (edate) 
+		{
 			if (ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) 
-			{
-				fn+="*";
-				myscandir(i_tnumber,i_edt,fn,true,i_calccrc32);
-			}
+				fn+="/";
 		
-      // enumerate alternate streams (Win2003/Vista or later)
-      else 
-	  if (findFirstStreamW && findNextStreamW) 
-	  {
-		  
-/*
-        Ahem... no. We do not want the datastream
+			myaddfile(i_tnumber,i_edt,fn, edate, esize, i_calccrc32);
 		
-		WIN32_FIND_STREAM_DATA fsd;
-        HANDLE ah=findFirstStreamW(utow(fn.c_str()).c_str(),
-            FindStreamInfoStandard, &fsd, 0);
-        while (ah!=INVALID_HANDLE_VALUE && findNextStreamW(ah, &fsd))
-          myaddfile(i_edt,fn+wtou(fsd.cStreamName), edate,
-              fsd.StreamSize.QuadPart, i_calccrc32);
-        if (ah!=INVALID_HANDLE_VALUE) FindClose(ah);
-*/
-      }
-    }
-    if (!FindNextFile(h, &ffd)) {
-      if (GetLastError()!=ERROR_NO_MORE_FILES) printerr(fn.c_str());
-      break;
-    }
-  }
+			if (i_recursive)
+				if (ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) 
+				{
+					fn+="*";
+					myscandir(i_tnumber,i_edt,fn,true,i_calccrc32);
+				}
+		}
+		if (!FindNextFile(h, &ffd)) 
+		{
+			if (GetLastError()!=ERROR_NO_MORE_FILES) 
+				printerr(fn.c_str());
+			break;
+		}
+	}
   FindClose(h);
 #endif
 }
@@ -12872,7 +12807,6 @@ int Jidac::dircompare(bool i_flagonlysize)
 		{
 			print_datetime();
 			printf("Scan dir || <<%s>>\n",files[i].c_str());
-			
 			rc = pthread_create(&threads[i], &attr, scansiona, (void*)&vettoreparametri[i]);
 			if (rc) 
 			{
@@ -12902,26 +12836,23 @@ int Jidac::dircompare(bool i_flagonlysize)
 			for (DTMap::iterator p=vettoreparametri[i].theDT.begin(); p!=vettoreparametri[i].theDT.end(); ++p) 
 			{
 				string filename=rename(p->first);
-				if (
-					p->second.date && p->first!="" && (!isdirectory(p->first)) && (!isads(filename.c_str()))		
-					) 
+				if (p->second.date && p->first!="" && (!isdirectory(p->first)) && (!isads(filename.c_str()))) 
 				{
-				sizeofdir+=p->second.size;
-				dircount++;
-				quantifiles++;
+					sizeofdir+=p->second.size;
+					dircount++;
+					quantifiles++;
+				}
+				if (flagverbose)
+				{
+					printUTF8(filename.c_str());
+					printf("\n");
+				}
 			}
-			if (flagverbose)
-			{
-				printUTF8(filename.c_str());
-				printf("\n");
-			}
+			files_edt.push_back(vettoreparametri[i].theDT);
+			files_size.push_back(sizeofdir);
+			files_count.push_back(dircount);
+			files_time.push_back(vettoreparametri[i].timeend-vettoreparametri[i].timestart+1);
 		}
-		files_edt.push_back(vettoreparametri[i].theDT);
-		files_size.push_back(sizeofdir);
-		files_count.push_back(dircount);
-		files_time.push_back(vettoreparametri[i].timeend-vettoreparametri[i].timestart+1);
-	}
-
 	}
 	else
 	{	// single thread. Do a sequential scan
@@ -12939,9 +12870,7 @@ int Jidac::dircompare(bool i_flagonlysize)
 			for (DTMap::iterator p=myblock.begin(); p!=myblock.end(); ++p) 
 			{
 				string filename=rename(p->first);
-				if (
-					p->second.date && p->first!="" && (!isdirectory(p->first)) && (!isads(filename))
-					) 
+				if (p->second.date && p->first!="" && (!isdirectory(p->first)) && (!isads(filename))) 
 				{
 					sizeofdir+=p->second.size;
 					dircount++;
@@ -12983,7 +12912,6 @@ int Jidac::dircompare(bool i_flagonlysize)
 		return 0;
 
 ///// Now check the folders (sequentially)
-
 
 	printf("\nDir 0 (master) time %6g <<%s>>\n",files_time[0]/1000.0,files[0].c_str());
 	printf("size  %24s (files %s)\n",migliaia(files_size[0]),migliaia2(files_count[0]));
@@ -13062,31 +12990,8 @@ int Jidac::dircompare(bool i_flagonlysize)
 				if ((files_size[i]==files_size[0]) && (files_count[i]==files_count[0]))
 					printf("= %s scantime %f \n",files[i].c_str(),files_time[i]/1000.0);
 			printf("-------------------------\n");
-			
 		}
 	}	
 	return risultato;
 }
 
-/*
-I need help establishing the switches to insert for the various post-test functions I've done.
-Functions to be performed after an add ()
-
-type 1
-Check the SHA1 codes of the blocks against the stored files.
-Rather fast, limit is the speed in the calculation of SHA1 (for fast machines ~ SSD transmission speed ~ 500MB / s).
-Very modest use of RAM
-
-Type 2
-Verify the extraction of all blocks, re-calculating the CRC32 codes of the individual files.
-Essentially limited by CPU speed.
-Performing a proper decompression of the individual files should give greater reliability.
-More RAM usage
-
-Type 3
-Like type 2 plus re-reading files and checking CRC-32 codes from the filesystem
-Slower than type 1, but adopts a different mechanism (CRC instead of SHA1) so it represents a double check
-
-Type 4
-Paranoid extraction (in RAM) of the blocks, and re-verification with SHA1. Cannot be used for large files (very high RAM consumption)
-*/

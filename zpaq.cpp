@@ -4,7 +4,7 @@
 ///////// The source is a mess, and without *nix ifdef
 ///////// Strongly in development
 
-#define ZPAQ_VERSION "50.12-experimental"
+#define ZPAQ_VERSION "50.13-experimental"
 #define FRANZOFFSET 50
 
 /*
@@ -33,6 +33,9 @@ gcc7 -O3 -march=native -Dunix zpaq.cpp -static -lstdc++ libzpaq.cpp -pthread -o 
 
 FreeBSD (12.1) gcc 9.3.0
 g++ -O3 -march=native -Dunix zpaq.cpp libzpaq.cpp -pthread -o zpaq -static-libstdc++ -static-libgcc
+
+FreeBSD (11.4) gcc 10.2.0
+g++ -O3 -march=native -Dunix zpaq.cpp libzpaq.cpp -pthread -o zpaq -static-libstdc++ -static-libgcc -Wno-stringop-overflow
 
 Debian Linux (11) gcc 8.3.0
 g++ -O3 -Dunix zpaq.cpp libzpaq.cpp -pthread -o zpaq -static

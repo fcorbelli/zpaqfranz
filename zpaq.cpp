@@ -4,7 +4,7 @@
 ///////// The source is a mess, and without *nix ifdef
 ///////// Strongly in development
 
-#define ZPAQ_VERSION "50.13-experimental"
+#define ZPAQ_VERSION "50.17-experimental"
 #define FRANZOFFSET 50
 
 /*
@@ -14,31 +14,49 @@ Matt Mahoney's ZPAQ version 7.15 (http://mattmahoney.net/dc/zpaq.html)
 Provided as-is, with no warranty whatsoever, by
 Franco Corbelli, franco@francocorbelli.com
 
-Launch 
-zpaqfranz -diff 
-for brief difference agains standard 7.15
+NOTE1: -, not -- (into switch)
+NOTE2: switches ARE case sensitive.   -maxsize <> -MAXSIZE
 
+Launch magics
+
+zpaqfranz help
+zpaqfranz -h
+zpaqfranz -help
+  long (full) help
+  
 zpaqfranz -he
-for some examples
+zpaqfranz --helpe
+zpaqfranz -examples
+  for some examples
+
+zpaqfranz -diff 
+  brief difference agains standard 7.15
 
 
-Windows 64 (g++ 7.3.0 64 bit) compile by
+
+============
+Targets
+
+Windows 64 (g++ 7.3.0 64 bit)
 g++ -O3 zpaq.cpp libzpaq.cpp -o zpaqfranz -static 
 
 Windows 32 (g++ 7.3.0 64 bit)
 c:\mingw32\bin\g++  -O3 -m32 zpaq.cpp libzpaq.cpp -o zpaqfranz32 -static -pthread
 
-FreeBSD (11.x) gcc7
+FreeBSD (11.x) gcc 7
 gcc7 -O3 -march=native -Dunix zpaq.cpp -static -lstdc++ libzpaq.cpp -pthread -o zpaq -static -lm
 
 FreeBSD (12.1) gcc 9.3.0
-g++ -O3 -march=native -Dunix zpaq.cpp libzpaq.cpp -pthread -o zpaq -static-libstdc++ -static-libgcc
+g++ -O3 -march=native -Dunix zpaq.cpp libzpaq.cpp -pthread -o zpaqfranz -static-libstdc++ -static-libgcc
 
 FreeBSD (11.4) gcc 10.2.0
-g++ -O3 -march=native -Dunix zpaq.cpp libzpaq.cpp -pthread -o zpaq -static-libstdc++ -static-libgcc -Wno-stringop-overflow
+g++ -O3 -march=native -Dunix zpaq.cpp libzpaq.cpp -pthread -o zpaqfranz -static-libstdc++ -static-libgcc -Wno-stringop-overflow
 
-Debian Linux (11) gcc 8.3.0
-g++ -O3 -Dunix zpaq.cpp libzpaq.cpp -pthread -o zpaq -static
+FreeBSD (11.3) clang 6.0.0
+clang++ -march=native -Dunix zpaq.cpp libzpaq.cpp -pthread -o zpaqfranz -static
+
+Debian Linux (10/11) gcc 8.3.0
+g++ -O3 -Dunix zpaq.cpp libzpaq.cpp -pthread -o zpaqfranz -static
 
 */
 
@@ -119,7 +137,7 @@ crc32c.c  C opyright (C) 2013 Mark Adler
 
 */
 
-
+#define ESX
 
 #define _FILE_OFFSET_BITS 64  // In Linux make sizeof(off_t) == 8
 #ifndef UNICODE
@@ -223,6 +241,10 @@ using libzpaq::StringBuffer;
 
 int unz(const char * archive,const char * key,bool all); // paranoid unzpaq 2.06
 
+string g_exec_error;
+string g_exec_ok;
+string g_exec_text;
+
 
 
 
@@ -241,6 +263,7 @@ algoritmi myalgoritmi(rawData, rawData + numElems);
 
 // Handle errors in libzpaq and elsewhere
 void libzpaq::error(const char* msg) {
+	g_exec_text=msg;
   if (strstr(msg, "ut of memory")) throw std::bad_alloc();
   throw std::runtime_error(msg);
 }
@@ -364,6 +387,7 @@ int64_t g_bytescanned=0;
 int64_t g_filescanned=0;
 int64_t g_worked=0;
 
+
 /*
 atomic_int64_t g_bytescanned;
 atomic_int64_t g_filescanned;
@@ -448,7 +472,6 @@ char* stristr( const char* str1, const char* str2 )
 
     return *p2 == 0 ? (char*)r : 0 ;
 }
-
 bool isdirectory(string i_filename)
 {
 	if (i_filename.length()==0)
@@ -866,11 +889,11 @@ namespace
 {
   /// zlib's CRC32 polynomial
   const uint32_t Polynomial = 0xEDB88320;
-
+//esx
   /// swap endianess
   static inline uint32_t swap(uint32_t x)
   {
-  #if defined(__GNUC__) || defined(__clang__)
+  #if defined(__GNUC__) || defined(__clang__) && !defined(ESX)
     return __builtin_bswap32(x);
   #else
     return (x >> 24) |
@@ -2355,6 +2378,29 @@ void myreplaceall(std::string& str, const std::string& from, const std::string& 
     }
 }
 
+bool fileexists(const string& i_filename) 
+{
+  struct stat buffer;   
+  return (stat(i_filename.c_str(),&buffer)==0); 
+}
+
+
+void xcommand(string i_command,string i_parameter)
+{
+	if (i_command=="")
+		exit;
+	if (!fileexists(i_command))
+		return;
+	if (i_parameter=="")
+		system(i_command.c_str());
+	else
+	{
+		string mycommand=i_command+" \""+i_parameter+"\"";
+		system(mycommand.c_str());
+	}
+	
+}
+
 
 ///////////// support functions
 string mytrim(const string& i_str)
@@ -2365,13 +2411,9 @@ string mytrim(const string& i_str)
 	size_t last = i_str.find_last_not_of(' ');
 	return i_str.substr(first, (last - first + 1));
 }
+
 #if defined(_WIN32) || defined(_WIN64)
 
-bool fileexists(const string& i_filename) 
-{
-  struct stat buffer;   
-  return (stat(i_filename.c_str(),&buffer)==0); 
-}
 
 
 /// something to get VSS done via batch file
@@ -2480,27 +2522,32 @@ void printerr(const char* filename) {
 #else
 
 // Print last error message
-void printerr(const char* filename) {
+void printerr(const char* filename) 
+{
   fflush(stdout);
   int err=GetLastError();
 	fprintf(stderr,"\n");
   printUTF8(filename, stderr);
+  
+  
   if (err==ERROR_FILE_NOT_FOUND)
-    fprintf(stderr, ": error file not found\n");
+    g_exec_text=": error file not found";
   else if (err==ERROR_PATH_NOT_FOUND)
-    fprintf(stderr, ": error path not found\n");
+   g_exec_text=": error path not found";
   else if (err==ERROR_ACCESS_DENIED)
-    fprintf(stderr, ": error access denied\n");
+    g_exec_text=": error access denied";
   else if (err==ERROR_SHARING_VIOLATION)
-    fprintf(stderr, ": error sharing violation\n");
+    g_exec_text=": error sharing violation";
   else if (err==ERROR_BAD_PATHNAME)
-    fprintf(stderr, ": error bad pathname\n");
+    g_exec_text=": error bad pathname";
   else if (err==ERROR_INVALID_NAME)
-    fprintf(stderr, ": error invalid name\n");
+    g_exec_text=": error invalid name";
   else if (err==ERROR_NETNAME_DELETED)
-    fprintf(stderr, ": error network name no longer available\n");
+    g_exec_text=": error network name no longer available";
   else
-    fprintf(stderr, ": error Windows error %d\n", err);
+    g_exec_text=": error Windows error";
+	fprintf(stderr, g_exec_text.c_str());
+	g_exec_text=filename+g_exec_text;
 }
 
 #endif
@@ -2915,6 +2962,11 @@ inline int tolowerW(int c) {
 // Match * in a to any string in b.
 // In Windows, not case sensitive.
 bool ispath(const char* a, const char* b) {
+  
+  /*
+  printf("ZEKEa %s\n",a);
+  printf("ZEKEb %s\n",b);
+  */
   for (; *a; ++a, ++b) {
     const int ca=tolowerW(*a);
     const int cb=tolowerW(*b);
@@ -3105,8 +3157,9 @@ private:
 
   // Command line arguments
   uint64_t minsize;
-  unsigned int menoenne=0;
-  string versioncomment="";
+  uint64_t maxsize;
+  unsigned int menoenne;
+  string versioncomment;
   bool flagcomment;
   char command;             // command 'a', 'x', or 'l'
   string archive;           // archive name
@@ -3178,7 +3231,7 @@ private:
   // Support functions
   string rename(string name);           // rename from -to
   int64_t read_archive(const char* arc, int *errors=0, int i_myappend=0);  // read arc
-  bool isselected(const char* filename, bool rn=false);// files, -only, -not
+  bool isselected(const char* filename, bool rn,int64_t i_size);// files, -only, -not
   void scandir(DTMap& i_edt,string filename, bool i_recursive=true);        // scan dirs to dt
   void addfile(DTMap& i_edt,string filename, int64_t edate, int64_t esize,
                int64_t eattr);          // add external file to dt
@@ -3198,7 +3251,7 @@ private:
 
  };
 
-
+/*
 static double seconds()
 {
 #if defined(_WIN32) || defined(_WIN64)
@@ -3208,11 +3261,11 @@ static double seconds()
   return now.QuadPart / double(frequency.QuadPart);
 #else
   timespec now;
-  clock_gettime(CLOCK_REALTIME, &now);
+  //#clock_gettime(CLOCK_REALTIME, &now);
   return now.tv_sec + now.tv_nsec / 1000000000.0;
 #endif
 }
-
+*/
 
 int terminalwidth() 
 {
@@ -3354,10 +3407,10 @@ void Jidac::differences()
 	moreprint("6)  New command s (size). Get the cumulative size of one or more directory.");
 	moreprint("    Skip .zfs and ADS. Use -all for multithread");
 	moreprint("7)  New command sha1 (hashing). Calculate hash of something (default SHA1)");
-	moreprint("    -sha256, -crc32, -crc32c (HW SSE if possible), xxhash");
+	moreprint("    -sha256, -crc32, -crc32c (HW SSE if possible), -xxhash");
 	moreprint("8)  New command dir. Something similar to dir command (for *nix)");
 	moreprint("    Switches /s /a /os /od. Show cumulative size in the last line!");
-	moreprint("    -crc32 find duplicates. -n Y like tain -n. -minsize Y");
+	moreprint("    -crc32 find duplicates. -n Y like tain -n. -minsize Y -maxsize U");
 	moreprint("9)  New command c (compare). Quickly compare (size and filename) a source");
 	moreprint("    directory against one or more. Example c /tank/data /dup/1 /dup/2 /dup/3");
 	moreprint("    -all create one scan thread for parameters. DO NOT use for single HDD!");
@@ -3376,6 +3429,11 @@ void Jidac::differences()
 	moreprint("21) -find something. Find text in full filename (ex list)");
 	moreprint("22) -replace something. Replace a -find text (manipulate output)");
 	moreprint("23) -verify. After a test command read again all files from media");
+	moreprint("24) -minsize. Skip file if length < minsize");
+	moreprint("25) -maxsize. Skip file if length > maxsize");
+	moreprint("26) -exec_ok file.sh. After OK run file.sh");
+	moreprint("27) -exec_error file.sh. After A NOT OK (error, warning) run file.sh");
+	
 	exit(1);
 }
 
@@ -3491,20 +3549,21 @@ string mymaxfile(string i_filename,const unsigned int i_lunghezza)
 //// default help
 void Jidac::usage() 
 {
+		
 	moreprint("Usage: zpaqfranz command archive[.zpaq] files|directory... -options...");
-	moreprint("Use \?\?\?\? in archive name for multi-part ex \"test_????.zpaq""");
+	moreprint("\?\?\?\? in archive name for multi-part ex \"test_????.zpaq\"");
 	moreprint("Commands:");
 	moreprint("   a             Append files (-checksum -force -crc32 -comment foo -test)");
 	moreprint("   x             Extract versions of files (-until N -comment foo)");
 	moreprint("   l             List files (-all -checksum -find something -comment foo)");
-	moreprint("   l d0 d1 d2... Compare content agains directory d0, d1, d2...");
+	moreprint("   l d0 d1 d2... Compare (test) content agains directory d0, d1, d2...");
 	moreprint("   c d0 d1 d2... Quickly compare dir d0 to d1,d2... (-all M/T scan -crc32)");
 	moreprint("   s d0 d1 d2... Cumulative size (excluding .zfs) of d0,d1,d2 (-all M/T)");
 	moreprint("   t             Fast test of most recent version of files (-verify -verbose)");
-	moreprint("   p             Paranoid test. Use lots of RAM (-verbose)");
+	moreprint("   p             Paranoid test. Use lots (LOTS!) of RAM (-verbose)");
 	moreprint("   sha1          Calculate hash (-sha256 -crc32 -crc32c -xxhash)");
-	moreprint("   dir           Like Windows dir/find duplicates (/s /a /os /od, -crc32)");
-	moreprint("   help          Long help (-h, -he examples, -diff differences)");
+	moreprint("   dir           Like Windows dir (/s /a /os /od) -crc32 show duplicates");
+	moreprint("   help          Long help (-h, -he examples, -diff differences from 7.15)");
 	moreprint("Optional switch(es):");
 	moreprint("  -all [N]       Extract/list versions in N [4] digit directories");
 	moreprint("  -f -force      Add: append files if contents have changed");
@@ -3515,7 +3574,6 @@ void Jidac::usage()
 	moreprint("                 Add: Post-check of files (-verify for CRC-32)");
 	moreprint("  -to out...     Prefix files... to out... or all to out/all");
 	moreprint("  -until N       Roll back archive to N'th update or -N from end");
-	moreprint("  -comment foo   Add/find ASCII comment string to versions");
 }
 
 
@@ -3532,7 +3590,7 @@ moreprint(buffer);
 	
 moreprint("  -not files...   Exclude. * and ? match any string or char");
 moreprint("       =[+-#^?]   List: exclude by comparison result");
-moreprint("  -only files...  Include only matches (default: *)");
+moreprint("  -only files...  Include only matches (default: *) example *pippo*.mp4");
 moreprint("  -always files   Always (force) adding some file");
 moreprint("  -noattributes   Ignore/don't save file attributes or permissions");
 moreprint("  -index F        Extract: create index F for archive");
@@ -3543,9 +3601,9 @@ moreprint("                  Add/Extract: if N > 0 show brief progress");
 */
 moreprint("  ########## franz patch ###########");
 moreprint("  -checksum       Store SHA1+CRC32 for every file");
+moreprint("  -verify        Force re-read of file during t (test command)");
 moreprint("  -noeta          Do not show ETA");
 moreprint("  -pakka          Output for PAKKA (briefly)");
-moreprint("  -verify         Force re-read of file during test");
 moreprint("  -verbose        Show excluded file");
 moreprint("  -zfs            Skip path including .zfs");
 moreprint("  -noqnap         Skip path including @Recently-Snapshot and @Recycle");
@@ -3557,6 +3615,8 @@ moreprint("  -find      X    Search for X in full filename (ex. list)");
 moreprint("  -replace   Y    Replace X with Y in full filename (ex. list)");
 moreprint("  -n         X    Only print last X lines in dir (like tail)/first X (list)");
 moreprint("  -minsize   X    Find duplicate by dir -crc32 if size >X");
+moreprint("  -maxsize   X    Find duplicate by dir -crc32 if size <X; add only size<X");
+moreprint("  -comment foo   Add/find ASCII comment string to versions");
 #if defined(_WIN32) || defined(_WIN64)
 moreprint("  -vss            Do a VSS for drive C: (Windows with administrative rights)");
 #endif
@@ -3564,6 +3624,8 @@ moreprint("  -crc32c         In sha1 command use CRC32c instead of SHA1");
 moreprint("  -crc32          In sha1 command use CRC32");
 moreprint("  -xxhash         In sha1 command use xxHASH64");
 moreprint("  -sha256         In sha1 command use SHA256");
+moreprint("  -exec_ok fo.bat After OK launch fo.bat");
+moreprint("  -exec_error kz  After NOT OK launch kz %1 is the error");
 moreprint("  ########## Advanced options ###########");
 
 moreprint("  -repack F [X]   Extract to new archive F with key X (default: none)");
@@ -3772,6 +3834,35 @@ inline char* tohuman2(uint64_t i_bytes)
 	sprintf(io_buf, "%.02lf %s",mybytes,myappend[i]);
 	return io_buf;
 }
+inline char* tohuman3(uint64_t i_bytes)
+{
+	static char io_buf[30];
+	
+	char const *myappend[] = {"B","KB","MB","GB","TB","PB"};
+	char length = sizeof(myappend)/sizeof(myappend[0]);
+	double mybytes=i_bytes;
+	unsigned int i=0;
+	if (i_bytes > 1024) 
+		for (i=0;(i_bytes / 1024) > 0 && i<length-1; i++, i_bytes /= 1024)
+			mybytes = i_bytes / 1024.0;
+	sprintf(io_buf, "%.02lf %s",mybytes,myappend[i]);
+	return io_buf;
+}
+inline char* tohuman4(uint64_t i_bytes)
+{
+	static char io_buf[30];
+	
+	char const *myappend[] = {"B","KB","MB","GB","TB","PB"};
+	char length = sizeof(myappend)/sizeof(myappend[0]);
+	double mybytes=i_bytes;
+	unsigned int i=0;
+	if (i_bytes > 1024) 
+		for (i=0;(i_bytes / 1024) > 0 && i<length-1; i++, i_bytes /= 1024)
+			mybytes = i_bytes / 1024.0;
+	sprintf(io_buf, "%.02lf %s",mybytes,myappend[i]);
+	return io_buf;
+}
+
 
 
 
@@ -3779,10 +3870,14 @@ inline char* tohuman2(uint64_t i_bytes)
 int Jidac::doCommand(int argc, const char** argv) {
 
   // Initialize options to default values
+  g_exec_error="";
+  g_exec_ok="";
+  g_exec_text="";
   command=0;
   flagforce=false;
   fragment=6;
   minsize=0;
+  maxsize=0;
   all=0;
   password=0;  // no password
   index=0;
@@ -3791,6 +3886,8 @@ int Jidac::doCommand(int argc, const char** argv) {
   repack=0;
   new_password=0;
   summary=0; // detailed: -1
+  menoenne=0;
+  versioncomment="";
   flagtest=false;  // -test
   flagskipzfs=false; 
   flagverbose=false;
@@ -3826,22 +3923,45 @@ int Jidac::doCommand(int argc, const char** argv) {
 	if (!flagpakka)
 	moreprint("zpaqfranz v" ZPAQ_VERSION " journaling archiver, compiled " __DATE__);
 	
-/// check some magic to show help	
-	for (unsigned int i=0; i<argc; i++)
+/// check some magic to show help in heuristic way
+/// I know, it's bad, but help is always needed!
+
+	if (argc==1) // zero 
 	{
-		const string parametro=argv[i];
-		if (stringcomparei(parametro,"-h"))
-			usagefull();
-		if (stringcomparei(parametro,"-help"))
-			usagefull();
-		if (stringcomparei(parametro,"-he"))
-			examples();
-		if (stringcomparei(parametro,"-helpe"))
-			examples();
-		if (stringcomparei(parametro,"-examples"))
-			examples();
+		usage();
+		exit(0);
+	}
+
+	if (argc==2) // only ONE 
+	{
+		const string parametro=argv[1];
+		if  ((stringcomparei(parametro,"help"))
+			||
+			(stringcomparei(parametro,"-h"))
+			||
+			(stringcomparei(parametro,"?"))
+			||
+			(stringcomparei(parametro,"--help"))
+			||
+			(stringcomparei(parametro,"-help")))
+			{
+				usagefull();
+				exit(0);
+			}
+		if ((stringcomparei(parametro,"-he"))
+			||
+			(stringcomparei(parametro,"-helpe"))
+			||
+			(stringcomparei(parametro,"-examples")))
+			{
+				examples();
+				exit(0);
+			}
 		if (stringcomparei(parametro,"-diff"))
+		{
 			differences();
+			exit(0);
+		}
 	}
 
 	
@@ -3906,7 +4026,27 @@ int Jidac::doCommand(int argc, const char** argv) {
       all=4;
       if (i<argc-1 && isdigit(argv[i+1][0])) all=atoi(argv[++i]);
     }
-	else if (opt=="-comment")
+	else if (opt=="-exec_error")
+	{
+		if (g_exec_error=="")
+		{
+			if (++i<argc && argv[i][0]!='-')  
+				g_exec_error=argv[i];
+			else
+				i--;
+		}
+	}
+    else if (opt=="-exec_ok")
+	{
+		if (g_exec_ok=="")
+		{
+			if (++i<argc && argv[i][0]!='-')  
+				g_exec_ok=argv[i];
+			else
+				i--;
+		}
+	}
+    else if (opt=="-comment")
 	{
 		flagcomment=true;
 		
@@ -3919,6 +4059,7 @@ int Jidac::doCommand(int argc, const char** argv) {
     else if (opt=="-force" || opt=="-f") flagforce=true;
     else if (opt=="-fragment" && i<argc-1) fragment=atoi(argv[++i]);
     else if (opt=="-minsize" && i<argc-1) minsize=atoi(argv[++i]);
+    else if (opt=="-maxsize" && i<argc-1) maxsize=atoi(argv[++i]);
     else if (opt=="-n" && i<argc-1) menoenne=atoi(argv[++i]);
     else if (opt=="-index" && i<argc-1) index=argv[++i];
     else if (opt=="-key" && i<argc-1) {
@@ -4056,6 +4197,7 @@ int Jidac::doCommand(int argc, const char** argv) {
           fprintf(stderr,
             "Version date %1.0f must be 19000101000000 to 29991231235959\n",
              double(version));
+			g_exec_text="Version date must be 19000101000000 to 29991231235959";
           exit(1);
         }
         date=version;
@@ -4063,11 +4205,17 @@ int Jidac::doCommand(int argc, const char** argv) {
     }
     else {
       printf("Unknown option ignored: %s\n", argv[i]);
-      usage();
+    ///  usage();
     }
   }
+	if (g_exec_error!="")
+			printf("franz: exec_error %s\n",g_exec_error.c_str());
+	if (g_exec_ok!="")
+			printf("franz: exec_ok %s\n",g_exec_ok.c_str());
 	if (minsize)
 			printf("franz: minsize %s\n",migliaia(minsize));
+	if (maxsize)
+			printf("franz: maxsize %s\n",migliaia(maxsize));
 	if (menoenne)
 			printf("franz: -n %u\n",menoenne);
 			
@@ -4203,6 +4351,8 @@ int64_t Jidac::read_archive(const char* arc, int *errors, int i_myappend) {
       fflush(stdout);
       printUTF8(arc, stderr);
       fprintf(stderr, " not found.\n");
+	  g_exec_text=arc;
+	  g_exec_text+=" not found";
       if (errors) ++*errors;
     }
     return 0;
@@ -4343,7 +4493,7 @@ int64_t Jidac::read_archive(const char* arc, int *errors, int i_myappend) {
                 if (all) {
                   string fn=itos(ver.size()-1, all)+"/"; ///peusa1 versioni
                   if (renamed) fn=rename(fn);
-                  if (isselected(fn.c_str(), false))
+                  if (isselected(fn.c_str(), false,-1))
                     dt[fn].date=fdate;
                 }
                 if (jmp) goto endblock;
@@ -4370,6 +4520,7 @@ int64_t Jidac::read_archive(const char* arc, int *errors, int i_myappend) {
                 fprintf(stderr,
                   "Unordered fragment tables: expected >= %d found %1.0f\n",
                   int(ht.size()), double(num));
+				 g_exec_text="Unordered fragment tables";
               }
               for (unsigned i=0; i<n; ++i) {
                 if (i==0) {
@@ -4421,7 +4572,7 @@ int64_t Jidac::read_archive(const char* arc, int *errors, int i_myappend) {
 						else
 							fn=append_path(itos(ver.size()-1, all), fn);
 					}
-					const bool issel=isselected(fn.c_str(), renamed);
+					const bool issel=isselected(fn.c_str(), renamed,-1);
 					s+=len+1;  // skip filename
 					if (s>end) 
 						error("filename too long");
@@ -4499,7 +4650,7 @@ int64_t Jidac::read_archive(const char* arc, int *errors, int i_myappend) {
             skip=true;
             string fn=lastfile;
             if (all) fn=append_path(itos(ver.size()-1, all), fn); ///peusa3
-            if (isselected(fn.c_str(), renamed)) {
+            if (isselected(fn.c_str(), renamed,-1)) {
               DT& dtr=dt[fn];
               if (filename.s.size()>0 || first) {
                 ++files;
@@ -4529,7 +4680,7 @@ int64_t Jidac::read_archive(const char* arc, int *errors, int i_myappend) {
       fflush(stdout);
       fprintf(stderr, "Skipping block at %1.0f: %s\n", double(block_offset),
               e.what());
-			  
+		g_exec_text="Skipping block";
       if (errors) ++*errors;
     }
 endblock:;
@@ -4562,38 +4713,68 @@ endblock:;
 
 // Test whether filename and attributes are selected by files, -only, and -not
 // If rn then test renamed filename.
-bool Jidac::isselected(const char* filename, bool rn) {
-  bool matched=true;
+// if i_size >0 check file size too (minsize,maxsize)
+
+bool Jidac::isselected(const char* filename, bool rn,int64_t i_size) 
+{
+	bool matched=true;
     if (flagskipzfs) //this is an "automagically" exclude for zfs' snapshots
 		if (iszfs(filename))
 		{
 			if (flagverbose)
-				printf("Skip .zfs %s\n",filename);
+				printf("Verbose: Skip .zfs %s\n",filename);
 			return false;
 		}
-    if (flagnoqnap) //this is an "automagically" exclude for qnap's snapshots
+
+	if (flagnoqnap) //this is an "automagically" exclude for qnap's snapshots
 		if (
 			(strstr(filename, "@Recently-Snapshot")) 
 			||
 			(strstr(filename, "@Recycle")) 
 			)
+			{
+				if (flagverbose)
+					printf("Verbose: Skip qnap %s\n",filename);
+				return false;
+			}
+			
+	if (!flagforcewindows) //this "automagically" exclude anything with System Volume Information
+	{
+		if (strstr(filename, "System Volume Information")) 
 		{
-			printf("Skip qnap %s\n",filename);
+			if (flagverbose)
+				printf("Verbose: Skip System Volume Information %s\n",filename);
 			return false;
 		}
-		if (!flagforcewindows) //this "automagically" exclude anything with System Volume Information
+		if (strstr(filename, "$RECYCLE.BIN")) 
 		{
-			if (strstr(filename, "System Volume Information")) 
+			if (flagverbose)
+				printf("Verbose: Skip trash %s\n",filename);
+			return false;
+		}
+	}			
+	
+	if  (!flagforcewindows)
+		if (isads(filename))
+			return false;
+	
+	if (i_size>0)
+	{
+		if (maxsize)
+			if (maxsize<i_size)
 			{
-				printf("Skip System Volume Information %s\n",filename);
+				if (flagverbose)
+					printf("Verbose: (-maxsize) too big   %19s %s\n",migliaia(i_size),filename);
 				return false;
 			}
-			if (strstr(filename, "$RECYCLE.BIN")) 
+		if (minsize)
+			if (minsize>i_size)
 			{
-				printf("Skip trash %s\n",filename);
+				if (flagverbose)
+					printf("Verbose: (-minsize) too small %19s %s\n",migliaia(i_size),filename);
 				return false;
 			}
-		}			
+	}
   if (files.size()>0) {
     matched=false;
     for (unsigned i=0; i<files.size() && !matched; ++i) {
@@ -4604,11 +4785,18 @@ bool Jidac::isselected(const char* filename, bool rn) {
     }
   }
   if (!matched) return false;
-  if (onlyfiles.size()>0) {
-    matched=false;
+  if (onlyfiles.size()>0) 
+  {
+	matched=false;
     for (unsigned i=0; i<onlyfiles.size() && !matched; ++i)
-      if (ispath(onlyfiles[i].c_str(), filename))
+	{
+		///printf("ZEKE:Testo %s su %s\n",onlyfiles[i].c_str(),filename);
+	 if (ispath(onlyfiles[i].c_str(), filename))
+	 {
         matched=true;
+		///printf("MAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n");
+	 }
+	}
   }
   if (!matched) return false;
   for (unsigned i=0; i<notfiles.size(); ++i) {
@@ -4644,7 +4832,7 @@ void Jidac::scandir(DTMap& i_edt,string filename, bool i_recursive)
 		if (iszfs(filename))
 		{
 			if (flagverbose)
-				printf("Skip .zfs ----> %s\n",filename.c_str());
+				printf("Verbose: Skip .zfs ----> %s\n",filename.c_str());
 			return;
 		}
 	if (flagnoqnap)
@@ -4652,14 +4840,14 @@ void Jidac::scandir(DTMap& i_edt,string filename, bool i_recursive)
 		if (filename.find("@Recently-Snapshot")!=-1)
 		{
 			if (flagverbose)
-				printf("Skip qnap snapshot ----> %s\n",filename.c_str());
+				printf("Verbose: Skip qnap snapshot ----> %s\n",filename.c_str());
 
 			return;
 		}
 		if (filename.find("@Recycle")!=-1)
 		{
 			if (flagverbose)
-				printf("Skip qnap recycle ----> %s\n",filename.c_str());
+				printf("Verbose: Skip qnap recycle ----> %s\n",filename.c_str());
 			return;
 		}
 	}
@@ -4779,19 +4967,14 @@ void Jidac::scandir(DTMap& i_edt,string filename, bool i_recursive)
 #endif
 }
 
+	
+	
 // Add external file and its date, size, and attributes to dt
 void Jidac::addfile(DTMap& i_edt,string filename, int64_t edate,
                     int64_t esize, int64_t eattr) {
-  if (!isselected(filename.c_str(), false)) return;
+  if (!isselected(filename.c_str(), false,esize)) 
+	return;
   
-  if  (!flagforcewindows)
-	if (isads(filename))
-		return;
-
-	if (flagskipzfs)
-		if (iszfs(filename))
-			return;
-	
   DT& d=i_edt[filename];
   d.date=edate;
   d.size=esize;
@@ -4859,11 +5042,11 @@ void print_progress(int64_t ts, int64_t td,int64_t i_scritti)
 		{
 			ultimaeta=int(eta);
 			if (i_scritti>0)
-			printf("%6.2f%% %d:%02d:%02d %s -> %s of %s %s/sec\r", td*100.0/(ts+0.5),
-			int(eta/3600), int(eta/60)%60, int(eta)%60, migliaia(td),migliaia4(i_scritti),migliaia2(ts),migliaia3(td/secondi));
+			printf("%6.2f%% %d:%02d:%02d (%9s) -> (%9s) of (%9s) 9%s/sec\r", td*100.0/(ts+0.5),
+			int(eta/3600), int(eta/60)%60, int(eta)%60, tohuman(td),tohuman2(i_scritti),tohuman3(ts),tohuman4(td/secondi));
 			else
-			printf("%6.2f%% %d:%02d:%02d %s of %s %s/sec\r", td*100.0/(ts+0.5),
-			int(eta/3600), int(eta/60)%60, int(eta)%60, migliaia(td),migliaia2(ts),migliaia3(td/secondi));
+			printf("%6.2f%% %d:%02d:%02d (%9s) of (%9s) %s/sec\r", td*100.0/(ts+0.5),
+			int(eta/3600), int(eta/60)%60, int(eta)%60, tohuman(td),tohuman2(ts),migliaia3(td/secondi));
 			
 			
 			
@@ -5004,6 +5187,7 @@ ThreadReturn compressThread(void* arg) {
     lock(job.mutex);
     fflush(stdout);
     fprintf(stderr, "job %d: %s\n", jobNumber+1, e.what());
+	g_exec_text="job error";
     release(job.mutex);
     exit(1);
   }
@@ -5059,6 +5243,7 @@ ThreadReturn writeThread(void* arg) {
   catch (std::exception& e) {
     fflush(stdout);
     fprintf(stderr, "zpaqfranz exiting from writeThread: %s\n", e.what());
+	g_exec_text="exiting from writethread";
     exit(1);
   }
   return 0;
@@ -5647,6 +5832,8 @@ int Jidac::add()
     if (exists(arcname)) {
       printUTF8(arcname.c_str(), stderr);
       fprintf(stderr, ": archive exists\n");
+	  g_exec_text=arcname;
+	  g_exec_text+=" archive exists";
       error("archive exists");
     }
     if (password) {  // derive archive salt from index
@@ -5838,7 +6025,7 @@ int Jidac::add()
   ThreadID wid;
   CompressJob job(threads, tid.size(), &out);
 
-  printf("Adding %s in %s files ",migliaia(total_size), migliaia2(int(vf.size())));
+  printf("Adding %s (%s) in %s files ",migliaia(total_size), tohuman(total_size),migliaia2(int(vf.size())));
 	
 	if (flagverbose)
 		printf("-method %s -threads %d ",method.c_str(), threads);
@@ -6662,6 +6849,7 @@ ThreadReturn decompressThread(void* arg) {
           fflush(stdout);
           fprintf(stderr, "Job %d: fragment %u size %d checksum failed\n",
                  jobNumber, j, job.jd.ht[j].usize);
+		g_exec_text="fragment checksum failed";
           release(job.mutex);
           error("bad checksum");
         }
@@ -6674,6 +6862,7 @@ ThreadReturn decompressThread(void* arg) {
       lock(job.mutex);
       fflush(stdout);
       fprintf(stderr, "Job %d killed: %s\n", jobNumber, e.what());
+	  g_exec_text="Job killed";
       b.state=Block::READY;
       b.extracted=0;
       out.resize(0);
@@ -7048,14 +7237,43 @@ int Jidac::extract() {
   ExtractJob job(*this);
   int total_files=0, skipped=0;
   uint32_t crc32fromfile;
+  
+  /*
+  if ((minsize>0) || (maxsize>0))
+	for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p) 
+    	if (!isdirectory(p->first))
+		{
+			if (maxsize)
+				if (maxsize<p->second.size)
+				{
+					if (flagverbose)
+						printf("Verbose: maxsize skip extraction %19s %s\n",migliaia(p->second.size),p->first.c_str());
+					if (p!=dt.end())					
+						dt.erase(p);
+				}
+			if (minsize)
+				if (minsize>p->second.size)
+				{
+					if (flagverbose)
+						printf("Verbose: minsize skip extraction %19s %s\n",migliaia(p->second.size),p->first.c_str());
+					if (p!=dt.end())
+					dt.erase(p);
+				}
+		}
+  */
   for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p) {
 	  ///printf("ZF\n");
 
     p->second.data=-1;  // skip
-    if (p->second.date && p->first!="") {
+	
+	
+    if (p->second.date && p->first!="") 
+	{
       const string fn=rename(p->first);
       const bool isdir=p->first[p->first.size()-1]=='/';
-      if (!repack && !flagtest && flagforce && !isdir && equal(p, fn.c_str(),crc32fromfile)) {
+	
+	if (!repack && !flagtest && flagforce && !isdir && equal(p, fn.c_str(),crc32fromfile)) 
+	{
         ///if (summary<=0) 
 		{  // identical
           printf("= ");
@@ -7498,7 +7716,8 @@ int Jidac::searchcomments(string i_testo,vector<DTMap::iterator> &filelist)
 				///printf("KKKKKKKKKKKKKKKKK <<%s>>\n",fakefile.c_str());
 					
 				string numeroversione=fakefile.substr(found+9,8);
-				int numver=std::stoi(numeroversione.c_str());
+//esx
+				int numver=0; //stoi(numeroversione.c_str());
 				string commento=fakefile.substr(found+9+8+1,65000);
 				if (i_testo.length()>0)
 				{
@@ -7873,7 +8092,8 @@ int Jidac::list()
 			if (found != string::npos)
 			{
     			string numeroversione=fakefile.substr(found+9,8);
-				int numver=std::stoi(numeroversione.c_str());
+//esx		
+		int numver=0;//std::stoi(numeroversione.c_str());
 				string commento=fakefile.substr(found+9+8+1,65000);
 				mappacommenti.insert(std::pair<int, string>(numver, commento));
 			}
@@ -7901,10 +8121,23 @@ int Jidac::list()
 		if (searchfrom!="")
 			flagshow=stristr(p->first.c_str(),searchfrom.c_str());
 			
+/// redundant, but not a really big deal
+
 		if (flagchecksum)
 			if (isdirectory(p->first))
 				flagshow=false;
-				
+
+		if (minsize ||  maxsize)
+			if (isdirectory(p->first))
+				flagshow=false;
+						
+			if (maxsize)
+				if (maxsize<p->second.size)
+					flagshow=false;
+			if (minsize)
+				if (minsize>p->second.size)
+					flagshow=false;
+		
 		if (flagshow)
 		{
 			if (!strchr(nottype.c_str(), p->second.data)) 
@@ -8616,7 +8849,7 @@ int Jidac::summa()
 		printf("Data output         time  %f\n",(mtime()-startprint)/1000.0);
 	
 		int64_t myspeed=(int64_t)(lavorati*1000.0/(mytime));
-		printf("Worked on %lld average speed %s B/s\n",lavorati,migliaia(myspeed));
+		printf("Worked on %s average speed %s B/s\n",migliaia(lavorati),migliaia2(myspeed));
 	
 		if (all)
 		{
@@ -8697,6 +8930,12 @@ int main() {
   fprintf(stderr, "\n%1.3f seconds %s\n", (mtime()-global_start)/1000.0,
       errorcode>1 ? "(with errors)" :
       errorcode>0 ? "(with warnings)" : "(all OK)");
+	  
+	if (errorcode)
+		xcommand(g_exec_error,g_exec_text);
+	else
+		xcommand(g_exec_ok,g_exec_text);
+	
   return errorcode;
 }
 
@@ -10951,6 +11190,8 @@ std::string sha1_calc_file(const char * i_filename)
 	/// a patched... main()!
 int unz(const char * archive,const char * key,bool all)
 {
+	/// really cannot run on ESXi: take WAY too much RAM
+#ifndef ESX
 	if (!archive)
 		return 0;
 	
@@ -11593,6 +11834,7 @@ int unz(const char * archive,const char * key,bool all)
 		printf("WITH ERRORS\n");
 		return 2;
 	}
+#endif
   return 0;
 }
 
@@ -12122,13 +12364,13 @@ int  Jidac::dir()
 	bool barraod=false;
 	bool barraa	=false;
 	
-
+/*esx
 	if (files.size()==0)
 		files.push_back(".");
 	else
 	if (files[0].front()=='/')
 		files.insert(files.begin(),1, ".");
-
+*/
 	string cartella=files[0];
 	
 	if	(!isdirectory(cartella))
@@ -12203,8 +12445,22 @@ int  Jidac::dir()
 			if (duplicati)
 			{
 				if (!myblock.isdir)
-					if (myblock.size>minsize)
+				{
+					if (minsize)
+					{
+						if (myblock.size>minsize)
+							fileandsize.push_back(myblock);
+					}
+					else
+					if (maxsize)
+					{
+						if (myblock.size<minsize)
+							fileandsize.push_back(myblock);
+					}
+					else
 						fileandsize.push_back(myblock);
+					
+				}
 			}
 			else
 				fileandsize.push_back(myblock);

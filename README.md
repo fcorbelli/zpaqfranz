@@ -35,7 +35,7 @@ libzpaq.cpp (original ZPAQ 7.15)
 libzpaq.h (original ZPAQ 7.15)
 zpaq.cpp (my fork)
 
-In any case I use gcc.
+In any case I use gcc (sometimes clang).
 Some examples for compiling
 
 Windows 64 (g++ 7.3.0 64 bit) 
@@ -45,13 +45,13 @@ Windows 32 (g++ 7.3.0 64 bit)
 c:\mingw32\bin\g++  -O3 -m32 zpaq.cpp libzpaq.cpp -o zpaqfranz32 -static -pthread
 
 FreeBSD (11.x) gcc7
-gcc7 -O3 -march=native -Dunix zpaq.cpp -static -lstdc++ libzpaq.cpp -pthread -o zpaq -static -lm
+gcc7 -O3 -march=native -Dunix zpaq.cpp -static -lstdc++ libzpaq.cpp -pthread -o zpaqfranz -static -lm
 
 FreeBSD (12.1) gcc 9.3.0
-g++ -O3 -march=native -Dunix zpaq.cpp libzpaq.cpp -pthread -o zpaq -static-libstdc++ -static-libgcc
+g++ -O3 -march=native -Dunix zpaq.cpp libzpaq.cpp -pthread -o zpaqfranz -static-libstdc++ -static-libgcc
 
 Debian Linux (10/11) gcc 8.3.0
-g++ -O3 -Dunix zpaq.cpp libzpaq.cpp -pthread -o zpaq -static
+g++ -O3 -Dunix zpaq.cpp libzpaq.cpp -pthread -o zpaqfranz -static
 
 FreeBSD (11.3) clang 6.0.0
 clang++ -march=native -Dunix zpaq.cpp libzpaq.cpp -pthread -o zpaqfranz -static

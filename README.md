@@ -50,9 +50,11 @@ gcc7 -O3 -march=native -Dunix zpaq.cpp -static -lstdc++ libzpaq.cpp -pthread -o 
 FreeBSD (12.1) gcc 9.3.0
 g++ -O3 -march=native -Dunix zpaq.cpp libzpaq.cpp -pthread -o zpaq -static-libstdc++ -static-libgcc
 
-Debian Linux (11) gcc 8.3.0
+Debian Linux (10/11) gcc 8.3.0
 g++ -O3 -Dunix zpaq.cpp libzpaq.cpp -pthread -o zpaq -static
 
+FreeBSD (11.3) clang 6.0.0
+clang++ -march=native -Dunix zpaq.cpp libzpaq.cpp -pthread -o zpaqfranz -static
 
 
 ==========

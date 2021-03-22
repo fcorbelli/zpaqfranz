@@ -8,7 +8,7 @@
 			
 			+Added exec_on something / exec_error something
 					execute (system()) a file after successfull (all OK) or NOT (errors/warnings)
-					Typically this is sending an error email message
+					Typically this is for sending an error e-mail alert message
 					Something like (with smtp-cli)
 					
 					smtp-cli 

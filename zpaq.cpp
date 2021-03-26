@@ -4,7 +4,7 @@
 ///////// The source is a mess, and without *nix ifdef
 ///////// Strongly in development
 
-#define ZPAQ_VERSION "50.17-experimental"
+#define ZPAQ_VERSION "50.18-experimental"
 #define FRANZOFFSET 50
 
 /*
@@ -137,7 +137,6 @@ crc32c.c  C opyright (C) 2013 Mark Adler
 
 */
 
-#define ESX
 
 #define _FILE_OFFSET_BITS 64  // In Linux make sizeof(off_t) == 8
 #ifndef UNICODE
@@ -379,6 +378,8 @@ bool flagnoeta;					// -noeta (do not show ETA, for batch file)
 bool flagpakka;					// different output
 bool flagvss;					// make VSS on Windows with admin rights
 bool flagverbose;             	// show more
+bool flagverify;			// read from filesystem
+  
 int64_t g_dimensione=0;
 int64_t g_scritti=0;// note: not thread safe, but who care?
 int64_t g_zerotime=0;
@@ -3192,7 +3193,6 @@ private:
   bool flagnopath;				// do not store path
   bool flagnosort;              // do not sort files std::sort(vf.begin(), vf.end(), compareFilename);
   bool flagchecksum;			// get  checksum for every file (default SHA1)
-  bool flagverify;			// read from filesystem
   bool flagcrc32c;			// flag use CRC-32c instead
   bool flagxxhash;			// flag use xxHash64
   bool flagcrc32;			// flag use CRC32
@@ -3496,7 +3496,7 @@ void Jidac::examples()
 	moreprint("Check archive. With CRC32 if created with -checksum. Use -verbose");
 	moreprint("\n");
 	moreprint("zpaqfranz p z:\\1.zpaq");
-	moreprint("Paranoid test. Better if created with -checksum. Use lots of RAM (warning Win32)");
+	moreprint("Paranoid test. Better if created with -checksum. Use lots of RAM. -verify paranoist");
 	moreprint("\n");
 	moreprint("+++ SUPPORT FUNCTIONS");
 	moreprint("zpaqfranz s r:\\vbox s:\\uno");
@@ -3560,7 +3560,7 @@ void Jidac::usage()
 	moreprint("   c d0 d1 d2... Quickly compare dir d0 to d1,d2... (-all M/T scan -crc32)");
 	moreprint("   s d0 d1 d2... Cumulative size (excluding .zfs) of d0,d1,d2 (-all M/T)");
 	moreprint("   t             Fast test of most recent version of files (-verify -verbose)");
-	moreprint("   p             Paranoid test. Use lots (LOTS!) of RAM (-verbose)");
+	moreprint("   p             Paranoid test. Use lots (LOTS!) of RAM (-verify -verbose)");
 	moreprint("   sha1          Calculate hash (-sha256 -crc32 -crc32c -xxhash)");
 	moreprint("   dir           Like Windows dir (/s /a /os /od) -crc32 show duplicates");
 	moreprint("   help          Long help (-h, -he examples, -diff differences from 7.15)");
@@ -3595,13 +3595,10 @@ moreprint("  -always files   Always (force) adding some file");
 moreprint("  -noattributes   Ignore/don't save file attributes or permissions");
 moreprint("  -index F        Extract: create index F for archive");
 moreprint("                  Add: create suffix for archive indexed by F, update F");
-/*
-moreprint("  -sN -summary N  List: show top N sorted by size. -1: show frag IDs");
-moreprint("                  Add/Extract: if N > 0 show brief progress");
-*/
-moreprint("  ########## franz patch ###########");
+moreprint("  -sN -summary N  IGNORED (deprecated)");
+moreprint("  ########## franz's fork ###########");
 moreprint("  -checksum       Store SHA1+CRC32 for every file");
-moreprint("  -verify        Force re-read of file during t (test command)");
+moreprint("  -verify         Force re-read of file during t (test command)");
 moreprint("  -noeta          Do not show ETA");
 moreprint("  -pakka          Output for PAKKA (briefly)");
 moreprint("  -verbose        Show excluded file");
@@ -3614,9 +3611,9 @@ moreprint("  -nosort         Do not sort file when adding or listing");
 moreprint("  -find      X    Search for X in full filename (ex. list)");
 moreprint("  -replace   Y    Replace X with Y in full filename (ex. list)");
 moreprint("  -n         X    Only print last X lines in dir (like tail)/first X (list)");
-moreprint("  -minsize   X    Find duplicate by dir -crc32 if size >X");
-moreprint("  -maxsize   X    Find duplicate by dir -crc32 if size <X; add only size<X");
-moreprint("  -comment foo   Add/find ASCII comment string to versions");
+moreprint("  -minsize   X    Skip files by length (add(), list(), dir())");
+moreprint("  -maxsize   X    Skip files by length (add(), list(), dir())");
+moreprint("  -comment foo    Add/find ASCII comment string to versions");
 #if defined(_WIN32) || defined(_WIN64)
 moreprint("  -vss            Do a VSS for drive C: (Windows with administrative rights)");
 #endif
@@ -3625,7 +3622,7 @@ moreprint("  -crc32          In sha1 command use CRC32");
 moreprint("  -xxhash         In sha1 command use xxHASH64");
 moreprint("  -sha256         In sha1 command use SHA256");
 moreprint("  -exec_ok fo.bat After OK launch fo.bat");
-moreprint("  -exec_error kz  After NOT OK launch kz %1 is the error");
+moreprint("  -exec_error kz  After NOT OK launch kz");
 moreprint("  ########## Advanced options ###########");
 
 moreprint("  -repack F [X]   Extract to new archive F with key X (default: none)");
@@ -3784,6 +3781,22 @@ inline char *  migliaia3(uint64_t n)
 	return p;
 }
 inline char *  migliaia4(uint64_t n)
+{
+	static char retbuf[30];
+	char *p = &retbuf[sizeof(retbuf)-1];
+	unsigned int i = 0;
+	*p = '\0';
+	do 
+	{
+		if(i%3 == 0 && i != 0)
+			*--p = '.';
+		*--p = '0' + n % 10;
+		n /= 10;
+		i++;
+		} while(n != 0);
+	return p;
+}
+inline char *  migliaia5(uint64_t n)
 {
 	static char retbuf[30];
 	char *p = &retbuf[sizeof(retbuf)-1];
@@ -5042,11 +5055,11 @@ void print_progress(int64_t ts, int64_t td,int64_t i_scritti)
 		{
 			ultimaeta=int(eta);
 			if (i_scritti>0)
-			printf("%6.2f%% %d:%02d:%02d (%9s) -> (%9s) of (%9s) 9%s/sec\r", td*100.0/(ts+0.5),
+			printf("%6.2f%% %d:%02d:%02d (%9s) -> (%9s) of (%9s) %9s/sec\r", td*100.0/(ts+0.5),
 			int(eta/3600), int(eta/60)%60, int(eta)%60, tohuman(td),tohuman2(i_scritti),tohuman3(ts),tohuman4(td/secondi));
 			else
-			printf("%6.2f%% %d:%02d:%02d (%9s) of (%9s) %s/sec\r", td*100.0/(ts+0.5),
-			int(eta/3600), int(eta/60)%60, int(eta)%60, tohuman(td),tohuman2(ts),migliaia3(td/secondi));
+			printf("%6.2f%% %d:%02d:%02d (%9s) of (%9s) %9s/sec\r", td*100.0/(ts+0.5),
+			int(eta/3600), int(eta/60)%60, int(eta)%60, tohuman(td),tohuman2(ts),tohuman3(td/secondi));
 			
 			
 			
@@ -6595,9 +6608,9 @@ int Jidac::add()
     }
   }
   fflush(stdout);
-  fprintf(stderr, "\n%1.6f + (%1.6f -> %1.6f -> %1.6f) = %s\n",
-      header_pos/1000000.0, total_size/1000000.0, dedupesize/1000000.0,
-      (archive_end-header_pos)/1000000.0, migliaia(archive_end));
+  fprintf(stderr, "\n%s + (%s -> %s -> %s) = %s\n",
+      migliaia(header_pos), migliaia2(total_size), migliaia3(dedupesize),
+      migliaia4(archive_end-header_pos), migliaia5(archive_end));
 	  
 	if (total_xls)
   		printf("Forced XLS has included %s bytes in %s files\n",migliaia(total_xls),migliaia2(file_xls));
@@ -7717,7 +7730,8 @@ int Jidac::searchcomments(string i_testo,vector<DTMap::iterator> &filelist)
 					
 				string numeroversione=fakefile.substr(found+9,8);
 //esx
-				int numver=0; //stoi(numeroversione.c_str());
+	///			int numver=0; //stoi(numeroversione.c_str());
+				int numver=stoi(numeroversione.c_str());
 				string commento=fakefile.substr(found+9+8+1,65000);
 				if (i_testo.length()>0)
 				{
@@ -8093,7 +8107,8 @@ int Jidac::list()
 			{
     			string numeroversione=fakefile.substr(found+9,8);
 //esx		
-		int numver=0;//std::stoi(numeroversione.c_str());
+	//	int numver=0;//std::stoi(numeroversione.c_str());
+		int numver=std::stoi(numeroversione.c_str());
 				string commento=fakefile.substr(found+9+8+1,65000);
 				mappacommenti.insert(std::pair<int, string>(numver, commento));
 			}
@@ -8952,6 +8967,10 @@ int Jidac::paranoid()
 #ifndef _WIN64
 	printf("WARNING: paranoid test use lots of RAM, not good for Win32, better Win64\n");
 #endif
+#endif
+#ifdef ESX
+	printf("GURU: sorry: ESXi does not like to give so much RAM\n");
+	exit(0);
 #endif
 
 	unz(archive.c_str(), password,all);
@@ -11190,8 +11209,9 @@ std::string sha1_calc_file(const char * i_filename)
 	/// a patched... main()!
 int unz(const char * archive,const char * key,bool all)
 {
+
+	
 	/// really cannot run on ESXi: take WAY too much RAM
-#ifndef ESX
 	if (!archive)
 		return 0;
 	
@@ -11691,7 +11711,7 @@ int unz(const char * archive,const char * key,bool all)
 			bool flagerror=false;
 		
 			
-			if (all)
+			if (flagverify)
 			{
 				printf("Re-hashing %s\r",p->first.c_str());
 				sha1delfile=sha1_calc_file(p->first.c_str());
@@ -11834,7 +11854,6 @@ int unz(const char * archive,const char * key,bool all)
 		printf("WITH ERRORS\n");
 		return 2;
 	}
-#endif
   return 0;
 }
 
@@ -12364,13 +12383,15 @@ int  Jidac::dir()
 	bool barraod=false;
 	bool barraa	=false;
 	
-/*esx
+/*esx*/
+
 	if (files.size()==0)
 		files.push_back(".");
 	else
 	if (files[0].front()=='/')
 		files.insert(files.begin(),1, ".");
-*/
+
+
 	string cartella=files[0];
 	
 	if	(!isdirectory(cartella))

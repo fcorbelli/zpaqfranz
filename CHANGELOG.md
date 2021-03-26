@@ -1,5 +1,6 @@
 
-
+26-03-2021: 50.18
+            Fixed some aesthetic detail
 22-03-2021: 50.17
             Fixed the "magical" help parser
 			

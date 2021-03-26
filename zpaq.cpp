@@ -7731,7 +7731,7 @@ int Jidac::searchcomments(string i_testo,vector<DTMap::iterator> &filelist)
 				string numeroversione=fakefile.substr(found+9,8);
 //esx
 	///			int numver=0; //stoi(numeroversione.c_str());
-				int numver=stoi(numeroversione.c_str());
+				int numver=std::stoi(numeroversione.c_str());
 				string commento=fakefile.substr(found+9+8+1,65000);
 				if (i_testo.length()>0)
 				{

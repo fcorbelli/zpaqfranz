@@ -1,4 +1,8 @@
 
+29-03-2021: 50.19
+            New "hidden" command kill
+	    Fixed a bug extracting files with -force over existing (but different) ones
+	    
 26-03-2021: 50.18
             Fixed some aesthetic detail
 22-03-2021: 50.17

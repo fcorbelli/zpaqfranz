@@ -4,10 +4,12 @@
 ///////// The source is a mess, and without *nix ifdef
 ///////// Strongly in development
 
-#define ZPAQ_VERSION "50.18-experimental"
+#define ZPAQ_VERSION "50.19-experimental"
 #define FRANZOFFSET 50
 
 /*
+https://gcc.gnu.org/bugs/segfault.html
+
 This is zpaqfranz, a patched  but (maybe) compatible fork of 
 Matt Mahoney's ZPAQ version 7.15 (http://mattmahoney.net/dc/zpaq.html)
 
@@ -57,6 +59,9 @@ clang++ -march=native -Dunix zpaq.cpp libzpaq.cpp -pthread -o zpaqfranz -static
 
 Debian Linux (10/11) gcc 8.3.0
 g++ -O3 -Dunix zpaq.cpp libzpaq.cpp -pthread -o zpaqfranz -static
+
+QNAP NAS TS-431P3 (Annapurna AL314) gcc 7.4.0
+g++ -Dunix zpaq.cpp libzpaq.cpp -pthread -o zpaqfranz -Wno-psabi
 
 */
 
@@ -165,7 +170,6 @@ crc32c.c  C opyright (C) 2013 Mark Adler
 #include <stdexcept>
 #include <fcntl.h>
 #include <math.h>
-#include <stdint.h>
 #include <unistd.h>
 #include <pthread.h>
 
@@ -2513,6 +2517,14 @@ bool delete_file(const char* filename) {
 #endif
 }
 
+bool delete_dir(const char* i_directory) {
+#ifdef unix
+  return remove(i_directory)==0;
+#else
+  return RemoveDirectory(utow(i_directory).c_str());
+#endif
+}
+
 #ifdef unix
 
 // Print last error message
@@ -3221,6 +3233,7 @@ private:
 	int extract();            				// extract, return 1 if error else 0
 	int list();               				// list (one parameter) / check (more than one)
 	int verify();
+	int kill();
 	int test();           					// test, return 1 if error else 0
 	int summa();							// get hash / or sum
 	int paranoid();							// paranoid test by unz. Really slow & lot of RAM
@@ -3232,9 +3245,8 @@ private:
   string rename(string name);           // rename from -to
   int64_t read_archive(const char* arc, int *errors=0, int i_myappend=0);  // read arc
   bool isselected(const char* filename, bool rn,int64_t i_size);// files, -only, -not
-  void scandir(DTMap& i_edt,string filename, bool i_recursive=true);        // scan dirs to dt
-  void addfile(DTMap& i_edt,string filename, int64_t edate, int64_t esize,
-               int64_t eattr);          // add external file to dt
+  void scandir(bool i_checkifselected,DTMap& i_edt,string filename, bool i_recursive=true);        // scan dirs to dt
+  void addfile(bool i_checkifselected,DTMap& i_edt,string filename, int64_t edate, int64_t esize,int64_t eattr);          // add external file to dt
 			   
   bool equal(DTMap::const_iterator p, const char* filename, uint32_t &o_crc32);
              // compare file contents with p
@@ -3649,6 +3661,17 @@ moreprint("    N2..N2+N3-1 ANDed with N4, hash mulitpiler N5, memory halved by N
 moreprint("  m8,24: MIX all previous models, N1 context bits, learning rate N2");
 moreprint("  s8,32,255: SSE last model. N1 context bits, count range N2..N3");
 moreprint("  t8,24: MIX2 last 2 models, N1 context bits, learning rate N2");
+moreprint("  ####### risky");
+moreprint("  k file.zpaq path -to foo");
+moreprint("  kill (delete) all files and directories in foo that arent in archive");
+moreprint("  example: ");
+moreprint("zpaqfranz a z:\\1.zpaq c:\\nz");
+moreprint("zpaqfranz x z:\\1.zpaq c:\\nz -to z:\\knb");
+moreprint("... something happens in z:\\knb and we want to turn back to archive ...");
+moreprint("... WITHOUT delete everything and extract again ...");
+moreprint("zpaqfranz x z:\\1.zpaq c:\\nz -to z:\\knb -force");
+moreprint("zpaqfranz k z:\\1.zpaq c:\\nz -to z:\\knb");
+
 
   exit(1);
 }
@@ -3914,6 +3937,7 @@ int Jidac::doCommand(int argc, const char** argv) {
   flagchecksum=false;
   flagcrc32c=false;
   flagverify=false;
+  
   flagxxhash=false;
   flagcrc32=false;
   flagsha256=false;
@@ -3992,7 +4016,7 @@ int Jidac::doCommand(int argc, const char** argv) {
   // Get optional options
   for (int i=1; i<argc; ++i) {
     const string opt=argv[i];  // read command
-    if ((opt=="add" || opt=="extract" || opt=="list" 
+    if ((opt=="add" || opt=="extract" || opt=="list" || opt=="k"
          || opt=="a"  || opt=="x" || opt=="p" || opt=="t" ||opt=="test" || opt=="l")
         && i<argc-1 && argv[i+1][0]!='-' && command==0) {
       command=opt[0];
@@ -4336,6 +4360,7 @@ int Jidac::doCommand(int argc, const char** argv) {
   else if (command=='t') return test();
   else if (command=='p') return paranoid();
   else if (command=='l') return list();
+  else if (command=='k') return kill();
   else if (command=='s') return dircompare(true); 
   else if (command=='1') return summa();
   else usage();
@@ -4788,6 +4813,7 @@ bool Jidac::isselected(const char* filename, bool rn,int64_t i_size)
 				return false;
 			}
 	}
+	
   if (files.size()>0) {
     matched=false;
     for (unsigned i=0; i<files.size() && !matched; ++i) {
@@ -4797,7 +4823,9 @@ bool Jidac::isselected(const char* filename, bool rn,int64_t i_size)
       else if (ispath(files[i].c_str(), filename)) matched=true;
     }
   }
+  
   if (!matched) return false;
+  
   if (onlyfiles.size()>0) 
   {
 	matched=false;
@@ -4811,11 +4839,13 @@ bool Jidac::isselected(const char* filename, bool rn,int64_t i_size)
 	 }
 	}
   }
+  
   if (!matched) return false;
   for (unsigned i=0; i<notfiles.size(); ++i) {
     if (ispath(notfiles[i].c_str(), filename))
       return false;
   }
+  
   return true;
 }
 
@@ -4832,7 +4862,7 @@ string path(const string& fn) {
 // is a directory then also insert its contents.
 // In Windows, filename might have wildcards like "file.*" or "dir/*"
 // In zpaqfranz, sometimes, we DO not want to recurse
-void Jidac::scandir(DTMap& i_edt,string filename, bool i_recursive)
+void Jidac::scandir(bool i_checkifselected,DTMap& i_edt,string filename, bool i_recursive)
 {
 
   // Don't scan diretories excluded by -not
@@ -4873,12 +4903,12 @@ void Jidac::scandir(DTMap& i_edt,string filename, bool i_recursive)
 	if (!lstat(filename.c_str(), &sb)) 
 	{
 		if (S_ISREG(sb.st_mode))
-		addfile(i_edt,filename, decimal_time(sb.st_mtime), sb.st_size,'u'+(sb.st_mode<<8));
+		addfile(i_checkifselected,i_edt,filename, decimal_time(sb.st_mtime), sb.st_size,'u'+(sb.st_mode<<8));
 
     // Traverse directory
 		if (S_ISDIR(sb.st_mode)) 
 		{
-			addfile(i_edt,filename=="/" ? "/" : filename+"/", decimal_time(sb.st_mtime),0, 'u'+(int64_t(sb.st_mode)<<8));
+			addfile(i_checkifselected,i_edt,filename=="/" ? "/" : filename+"/", decimal_time(sb.st_mtime),0, 'u'+(int64_t(sb.st_mode)<<8));
 			DIR* dirp=opendir(filename.c_str());
 			if (dirp) 
 			{
@@ -4890,15 +4920,15 @@ void Jidac::scandir(DTMap& i_edt,string filename, bool i_recursive)
 						if (s!="/") s+="/";
 						s+=dp->d_name;
 						if (i_recursive)        
-							scandir(i_edt,s);
+							scandir(i_checkifselected,i_edt,s);
 						else
 						{
 							if (!lstat(s.c_str(), &sb)) 
 							{
 								if (S_ISREG(sb.st_mode))
-									addfile(i_edt,s, decimal_time(sb.st_mtime), sb.st_size,'u'+(sb.st_mode<<8));
+									addfile(i_checkifselected,i_edt,s, decimal_time(sb.st_mtime), sb.st_size,'u'+(sb.st_mode<<8));
 								if (S_ISDIR(sb.st_mode)) 
-									addfile(i_edt,s=="/" ? "/" :s+"/", decimal_time(sb.st_mtime),0, 'u'+(int64_t(sb.st_mode)<<8));
+									addfile(i_checkifselected,i_edt,s=="/" ? "/" :s+"/", decimal_time(sb.st_mtime),0, 'u'+(int64_t(sb.st_mode)<<8));
 							}
 						}          			
 					}
@@ -4945,13 +4975,13 @@ void Jidac::scandir(DTMap& i_edt,string filename, bool i_recursive)
     if (edate) 
 	{
 		if (ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) fn+="/";
-		addfile(i_edt,fn, edate, esize, eattr);
+		addfile(i_checkifselected,i_edt,fn, edate, esize, eattr);
 		
 		if (i_recursive)
 			if (ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) 
 			{
 				fn+="*";
-				scandir(i_edt,fn);
+				scandir(i_checkifselected,i_edt,fn);
 			}
 		
 
@@ -4965,7 +4995,7 @@ void Jidac::scandir(DTMap& i_edt,string filename, bool i_recursive)
 			HANDLE ah=findFirstStreamW(utow(fn.c_str()).c_str(),
 				FindStreamInfoStandard, &fsd, 0);
 			while (ah!=INVALID_HANDLE_VALUE && findNextStreamW(ah, &fsd))
-				addfile(i_edt,fn+wtou(fsd.cStreamName), edate,
+				addfile(i_checkifselected,i_edt,fn+wtou(fsd.cStreamName), edate,
               fsd.StreamSize.QuadPart, eattr);
 			if (ah!=INVALID_HANDLE_VALUE) FindClose(ah);
 		}
@@ -4983,10 +5013,12 @@ void Jidac::scandir(DTMap& i_edt,string filename, bool i_recursive)
 	
 	
 // Add external file and its date, size, and attributes to dt
-void Jidac::addfile(DTMap& i_edt,string filename, int64_t edate,
+void Jidac::addfile(bool i_checkifselected,DTMap& i_edt,string filename, int64_t edate,
                     int64_t esize, int64_t eattr) {
-  if (!isselected(filename.c_str(), false,esize)) 
-	return;
+				
+	if (i_checkifselected)
+		if (!isselected(filename.c_str(), false,esize)) 
+			return;
   
   DT& d=i_edt[filename];
   d.date=edate;
@@ -5932,7 +5964,7 @@ int Jidac::add()
   g_filescanned=0;
   g_worked=0;
   for (unsigned i=0; i<files.size(); ++i)
-    scandir(edt,files[i].c_str());
+    scandir(true,edt,files[i].c_str());
 
 /*
 ///	stub for fake file to be added (with someinfos)
@@ -7249,7 +7281,10 @@ int Jidac::extract() {
   // and set date and attributes.
   ExtractJob job(*this);
   int total_files=0, skipped=0;
+  int tobeerased=0,erased=0;
+  
   uint32_t crc32fromfile;
+  
   
   /*
   if ((minsize>0) || (maxsize>0))
@@ -7274,86 +7309,118 @@ int Jidac::extract() {
 				}
 		}
   */
-  for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p) {
-	  ///printf("ZF\n");
-
-    p->second.data=-1;  // skip
-	
-	
-    if (p->second.date && p->first!="") 
+	for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p) 
 	{
-      const string fn=rename(p->first);
-      const bool isdir=p->first[p->first.size()-1]=='/';
-	
-	if (!repack && !flagtest && flagforce && !isdir && equal(p, fn.c_str(),crc32fromfile)) 
-	{
-        ///if (summary<=0) 
-		{  // identical
-          printf("= ");
-          printUTF8(fn.c_str());
-          printf("\n");
-        }
-        close(fn.c_str(), p->second.date, p->second.attr);
-        ++skipped;
-      }
-      else if (!repack && !flagtest && !flagforce && exists(fn)) {  // exists, skip
-        //if (summary<=0) 
+		p->second.data=-1;  // skip
+	    
+		if (p->second.date && p->first!="") 
 		{
-          printf("? ");
-          printUTF8(fn.c_str());
-          printf("\n");
-        }
-        ++skipped;
-      }
-      else if (isdir)  // update directories later
-        p->second.data=0;
-      else if (block.size()>0) {  // files to decompress
-        p->second.data=0;
-        unsigned lo=0, hi=block.size()-1;  // block indexes for binary search
-        for (unsigned i=0; p->second.data>=0 && i<p->second.ptr.size(); ++i) {
-          unsigned j=p->second.ptr[i];  // fragment index
-          if (j==0 || j>=ht.size() || ht[j].usize<-1) {
-            fflush(stdout);
-            printUTF8(p->first.c_str(), stderr);
-            fprintf(stderr, ": bad frag IDs, skipping...\n");
-            p->second.data=-1;  // skip
-            continue;
-          }
-          assert(j>0 && j<ht.size());
-          if (lo!=hi || lo>=block.size() || j<block[lo].start
-              || (lo+1<block.size() && j>=block[lo+1].start)) {
-            lo=0;  // find block with fragment j by binary search
-            hi=block.size()-1;
-            while (lo<hi) {
-              unsigned mid=(lo+hi+1)/2;
-              assert(mid>lo);
-              assert(mid<=hi);
-              if (j<block[mid].start) hi=mid-1;
-              else (lo=mid);
-            }
-          }
-          assert(lo==hi);
-          assert(lo>=0 && lo<block.size());
-          assert(j>=block[lo].start);
-          assert(lo+1==block.size() || j<block[lo+1].start);
-          unsigned c=j-block[lo].start+1;
-          if (block[lo].size<c) block[lo].size=c;
-          if (block[lo].files.size()==0 || block[lo].files.back()!=p)
-            block[lo].files.push_back(p);
-        }
-        ++total_files;
-        job.total_size+=p->second.size;
-      }
-    }  // end if selected
-  }  // end for
-  if (!flagforce && skipped>0)
-    printf("%d ?existing files skipped (-force overwrites).\n", skipped);
-  if (flagforce && skipped>0)
-    printf("%d =identical files skipped.\n", skipped);
-	///printf("ZGF\n");
+			const string fn=rename(p->first);
+			const bool isdir=isdirectory(p->first);
+	  
+			if (!repack && !flagtest && flagforce && !isdir && equal(p, fn.c_str(),crc32fromfile)) 
+			{
+				// identical
+				if (flagverbose)
+				{
+					printf("= ");
+					printUTF8(fn.c_str());
+					printf("\n");
+				}
+				close(fn.c_str(), p->second.date, p->second.attr);
+				++skipped;
+			}
+			else 
+			if (!repack && !flagtest && !flagforce && exists(fn)) 
+			{  
+				// exists, skip
+				if (flagverbose)
+				{
+					printf("? ");
+					printUTF8(fn.c_str());
+					printf("\n");
+				}
+				++skipped;
+			}
+			else 
+			if (isdir)  // update directories later
+				p->second.data=0;
+			else 
+			if (block.size()>0) 
+			{  // files to decompress
+				p->second.data=0;
+				unsigned lo=0, hi=block.size()-1;  // block indexes for binary search
+				for (unsigned i=0; p->second.data>=0 && i<p->second.ptr.size(); ++i) 
+				{
+					unsigned j=p->second.ptr[i];  // fragment index
+					if (j==0 || j>=ht.size() || ht[j].usize<-1) 
+					{
+						fflush(stdout);
+						printUTF8(p->first.c_str(), stderr);
+						fprintf(stderr, ": bad frag IDs, skipping...\n");
+						p->second.data=-1;  // skip
+						continue;
+					}
+					assert(j>0 && j<ht.size());
+					if (lo!=hi || lo>=block.size() || j<block[lo].start
+						|| (lo+1<block.size() && j>=block[lo+1].start)) 
+					{
+						lo=0;  // find block with fragment j by binary search
+						hi=block.size()-1;
+						while (lo<hi) 
+						{
+							unsigned mid=(lo+hi+1)/2;
+							assert(mid>lo);
+							assert(mid<=hi);
+							if (j<block[mid].start) 
+								hi=mid-1;
+							else 
+							(lo=mid);
+						}
+					}
+					assert(lo==hi);
+					assert(lo>=0 && lo<block.size());
+					assert(j>=block[lo].start);
+					assert(lo+1==block.size() || j<block[lo+1].start);
+					unsigned c=j-block[lo].start+1;
+					if (block[lo].size<c) block[lo].size=c;
+					if (block[lo].files.size()==0 || block[lo].files.back()!=p)
+						block[lo].files.push_back(p);
+				}
+				++total_files;
+				job.total_size+=p->second.size;
+				///printf("FACCIO QUALCOSA SU %s per size %d\n",fn.c_str(),p->second.size);
+				if (fileexists(fn.c_str()))
+				{
+					if (flagverbose)
+					{
+						printf("* ");
+						printUTF8(fn.c_str());
+						printf("\n");
+					}
+					tobeerased++;
+					if (delete_file(fn.c_str()))
+						erased++;
+					else
+					printf("************ HIGHLANDER FILE! %s\n",fn.c_str());
+				}
+				
+			}
+		}  // end if selected
+	}  // end for
 
+	if (!flagforce && skipped>0)
+		printf("%08d ?existing files skipped (-force overwrites).\n", skipped);
+	if (flagforce && skipped>0)
+		printf("%08d =identical files skipped.\n", skipped);
+	if (flagforce && tobeerased>0)
+		printf("%08d !=different files to be owerwritten => erased %08d\n",tobeerased,erased);
+	if (tobeerased!=erased)
+		printf("**** GURU **** WE HAVE SOME HIGHLANDER!");
+		
   // Repack to new archive
-  if (repack) {
+	if (repack) 
+	{
 
     // Get total D block size
     if (ver.size()<2) error("cannot repack streaming archive");
@@ -7362,14 +7429,13 @@ int Jidac::extract() {
       if (block[i].bsize<1) error("empty block");
       if (block[i].size>0) csize+=block[i].bsize;
     }
-///printf("ZH\n");
-
-    // Open input
+	
     InputArchive in(archive.c_str(), password);
-///printf("ZI\n");
 
     // Open output
-    if (!flagforce && exists(repack)) error("repack output exists");
+    if (!flagforce && exists(repack)) 
+		error("repack output exists");
+	
     delete_file(repack);
     char salt[32]={0};
     if (new_password) libzpaq::random(salt, 32);
@@ -7463,31 +7529,32 @@ int Jidac::extract() {
 	g_crc32.clear();
 	
   // Decompress archive in parallel
-  printf("Extracting %s in %d files -threads %d\n",
-      migliaia(job.total_size), total_files, threads);
-  vector<ThreadID> tid(threads);
-  for (unsigned i=0; i<tid.size(); ++i) run(tid[i], decompressThread, &job);
+	printf("Extracting %s bytes (%s) in %d files -threads %d\n",migliaia(job.total_size), tohuman(job.total_size),total_files, threads);
+		
+	vector<ThreadID> tid(threads);
+	for (unsigned i=0; i<tid.size(); ++i) 
+		run(tid[i], decompressThread, &job);
 
   // Extract streaming files
-  unsigned segments=0;  // count
-  ///printf("Z1\n");
-  
-  InputArchive in(archive.c_str(), password);
-  ///printf("Z2\n");
-  if (in.isopen()) {
-    FP outf=FPNULL;
-    DTMap::iterator dtptr=dt.end();
-    for (unsigned i=0; i<block.size(); ++i) {
-      if (block[i].usize<0 && block[i].size>0) {
-        Block& b=block[i];
-        try {
-			///printf("Z3 %08ud \n",b.offset);
-  
-          in.seek(b.offset, SEEK_SET);
-          libzpaq::Decompresser d;
-          d.setInput(&in);
-          if (!d.findBlock()) error("block not found");
-          StringWriter filename;
+	unsigned segments=0;  // count
+	InputArchive in(archive.c_str(), password);
+	if (in.isopen()) 
+	{
+		FP outf=FPNULL;
+		DTMap::iterator dtptr=dt.end();
+		for (unsigned i=0; i<block.size(); ++i) 
+		{
+			if (block[i].usize<0 && block[i].size>0) 
+			{
+				Block& b=block[i];
+				try 
+				{
+					in.seek(b.offset, SEEK_SET);
+					libzpaq::Decompresser d;
+					d.setInput(&in);
+					if (!d.findBlock()) 
+						error("block not found");
+					StringWriter filename;
           for (unsigned j=0; j<b.size; ++j) {
             if (!d.findFilename(&filename)) error("segment not found");
             d.readComment();
@@ -7514,7 +7581,8 @@ int Jidac::extract() {
                   printUTF8(outname.c_str());
                   printf("\n");
                 }
-*/  
+*/
+
 				if (!flagtest) {
                   makepath(outname);
                   outf=fopen(outname.c_str(), WB);
@@ -7819,6 +7887,205 @@ int Jidac::enumeratecomments()
 }
 
 
+int64_t prendidimensionefile(const char* i_filename)
+{
+	if (!i_filename)
+		return 0;
+	FILE* myfile = freadopen(i_filename);
+	if (myfile)
+    {
+		fseeko(myfile, 0, SEEK_END);
+		int64_t dimensione=ftello(myfile);
+		fclose(myfile);
+		return dimensione;
+	}
+	else
+	return 0;
+}
+
+
+std::wstring StringToWString(const std::string& s)
+{
+    std::wstring temp(s.length(),L' ');
+    std::copy(s.begin(), s.end(), temp.begin());
+    return temp; 
+}
+
+
+std::string WStringToString(const std::wstring& s)
+{
+    std::string temp(s.length(), ' ');
+    std::copy(s.begin(), s.end(), temp.begin());
+    return temp; 
+}
+
+int Jidac::kill() 
+{
+	
+	printf("KILL of:");
+
+	if (files.size()<=0)
+		return -1;
+		
+
+	int64_t csize=0;
+	if (archive!="") 
+	csize=read_archive(archive.c_str());
+
+  // Read external files into edt
+	///uint64_t howmanyfiles=0;
+	
+	g_bytescanned=0;
+	g_filescanned=0;
+	g_worked=0;
+	files_count.clear();
+	edt.clear();
+	
+	/*
+	tofiles.clear();
+	tofiles.push_back(files[0]);
+	printf("============ TOFILES %s\n",tofiles[0].c_str());
+		*/
+		/*
+	for (unsigned i=0; i<files.size(); ++i)
+	{
+		scandir(edt,files[i].c_str());
+		files_count.push_back(edt.size()-howmanyfiles);
+		howmanyfiles=edt.size();
+	}
+	printf("\n");
+ 	for (unsigned i=0; i<files.size(); ++i)
+		printf("%9s in <<%s>>\n",migliaia(files_count[i]),files[i].c_str());
+	
+	
+	if (files.size()) 
+		printf("Total files found: %s\n", migliaia(edt.size()));
+	printf("\n");
+*/
+
+	
+	///string cartellaoutput=append_path(tofiles[0], files[0]);
+	string cartellaoutput=tofiles[0];
+	/*
+	printf("FILES %s\n",files[0].c_str());
+	printf("TOFILES %s\n",tofiles[0].c_str());
+	printf("cartellaoutput  %s\n",cartellaoutput.c_str());
+*/
+	scandir(false,edt,cartellaoutput);
+	if (edt.size()) 
+		printf("Total files found: %s\n", migliaia(edt.size()));
+	else	
+	{
+		printf("Found nothing in filesystem\n");
+		return 1;
+	}
+	printf("\n");
+	
+	vector<string> inzpaqrinominato;
+	vector<string> tobekilled;
+	vector<string> dirtobekilled;
+	
+	for (DTMap::iterator a=dt.begin(); a!=dt.end(); ++a) 
+	{
+		///string dentrofile=append_path(tofiles[0], a->first);
+		string dentrofile=a->first;
+		
+		myreplace(dentrofile,files[0],tofiles[0]);
+			
+		///printf("Dentro zpaq %s  > rinominato %s\n",a->first.c_str(),dentrofile.c_str());
+		inzpaqrinominato.push_back(dentrofile);
+	}
+
+/*
+	printf("=============================================================\n");
+	printf("=============================================================\n");
+	printf("=============================================================\n");
+	printf("=============================================================\n");
+	
+	for (DTMap::iterator a=edt.begin(); a!=edt.end(); ++a) 
+	{
+		///string nelfilesystem=append_path(tofiles[0], a->first);
+		printf("Nel filesystem %s\n",a->first.c_str());
+	}
+	printf("=============================================================\n");
+	printf("=============================================================\n");
+	printf("=============================================================\n");
+	printf("=============================================================\n");
+	*/
+	std::sort(inzpaqrinominato.begin(), inzpaqrinominato.end());
+
+	uint64_t		sizetobekilled=0;
+	for (DTMap::iterator a=edt.begin(); a!=edt.end(); ++a) 
+		if (binary_search(inzpaqrinominato.begin(),inzpaqrinominato.end(),a->first)==false)
+		{
+			if (isdirectory(a->first))
+				dirtobekilled.push_back(a->first);
+			else
+			{
+				tobekilled.push_back(a->first);
+				sizetobekilled+=a->second.size;
+			}
+		}
+	for (int i=0;i<dirtobekilled.size();i++)
+	{
+		printf("Dir  to be killed ");
+		printUTF8(dirtobekilled[i].c_str());
+		printf("\n");
+	
+	}
+	for (int i=0;i<tobekilled.size();i++)
+	{
+		printf("File to be killed ");
+		printUTF8(tobekilled[i].c_str());
+		printf("\n");
+	}
+	
+	printf("\n");
+	
+	unsigned int 	totaltobekilled=dirtobekilled.size()+tobekilled.size();
+	if (totaltobekilled==0)
+	{
+		printf("Nothing to do\n");
+		return 0;
+	}
+	printf("Directories to be removed %08d\n",dirtobekilled.size());
+	printf("Files       to be removed %08d (%s bytes)\n",tobekilled.size(),migliaia(sizetobekilled));
+	
+	string captcha="kilL"+std::to_string(dirtobekilled.size()+tobekilled.size()+sizetobekilled);
+	printf("Captcha enter %s\n",captcha.c_str());
+	char myline[80];
+    scanf("%80s", myline);
+///	printf("INSERITO |%s|\n",myline);
+	if (myline!=captcha)
+		return 1;
+	
+	printf("OK to continue\n");
+	
+	unsigned int killed=0;
+	unsigned int killeddir=0;
+
+	for (int i=0;i<tobekilled.size();i++)
+		if (delete_file(tobekilled[i].c_str()))
+				killed++;
+	
+/// OK iterating instead of recursing
+	while (killeddir!=dirtobekilled.size())
+		for (int i=0;i<dirtobekilled.size();i++)
+			if (delete_dir(dirtobekilled[i].c_str()))
+				killeddir++;
+
+	printf("Dir  to be removed %08d -> killed %08d\n",dirtobekilled.size(),killeddir);
+	printf("File to be removed %08d -> killed %08d\n",tobekilled.size(),killed);
+	if ((killeddir+killed)!=(dirtobekilled.size()+tobekilled.size())) 
+	{	
+		printf("FAILED !! some highlander !!\n");
+		return 1;
+	}
+	
+	return 0;
+	
+}
+
 
 int Jidac::verify() 
 {
@@ -7845,7 +8112,7 @@ int Jidac::verify()
 	edt.clear();
 	for (unsigned i=0; i<files.size(); ++i)
 	{
-		scandir(edt,files[i].c_str());
+		scandir(true,edt,files[i].c_str());
 		files_count.push_back(edt.size()-howmanyfiles);
 		howmanyfiles=edt.size();
 	}
@@ -8573,21 +8840,6 @@ private:
 
 /////////// other functions
 
-int64_t prendidimensionefile(const char* i_filename)
-{
-	if (!i_filename)
-		return 0;
-	FILE* myfile = freadopen(i_filename);
-	if (myfile)
-    {
-		fseeko(myfile, 0, SEEK_END);
-		int64_t dimensione=ftello(myfile);
-		fclose(myfile);
-		return dimensione;
-	}
-	else
-	return 0;
-}
 
 /// take sha256
 string sha256_calc_file(const char * i_filename,const int64_t i_inizio,const int64_t i_totali,int64_t& io_lavorati)
@@ -8743,7 +8995,7 @@ int Jidac::summa()
 	g_filescanned=0;
 	g_worked=0;
 	for (unsigned i=0; i<files.size(); ++i)
-		scandir(edt,files[i].c_str());
+		scandir(true,edt,files[i].c_str());
 	
 /// firs step: how many file to elaborate ? Fast with filesystem cache
 	printf("Computing filesize for %s files/directory...\n",migliaia(files.size()));
@@ -12436,7 +12688,7 @@ int  Jidac::dir()
 	g_bytescanned=0;
 	g_filescanned=0;
 	g_worked=0;
-	scandir(edt,cartella,barras);
+	scandir(true,edt,cartella,barras);
 	
 	vector <s_fileandsize> fileandsize;
 	

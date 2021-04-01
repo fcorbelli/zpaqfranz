@@ -6,7 +6,7 @@ Provided as-is, with no warranty whatsoever, by me
 Franco Corbelli, franco@francocorbelli.com
 
 Being an experimental software, bugs may exist that also lead to data loss.
-In short, use it only if you want.
+In short, use only if you want.
 
 ====================
 

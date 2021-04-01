@@ -9,8 +9,11 @@ Being an experimental software, bugs may exist that also lead to data loss.
 In short, use it only if you want.
 
 ====================
+
 Portions of software by other authors, mentioned later, are included.
+
 As far as I know this is allowed.
+
 I apologize if I have unintentionally violated any rule.
 
 Include mod by data man and reg2s patch from encode.su forum

@@ -13,6 +13,12 @@ Portions of software by other authors, mentioned later, are included.
 As far as I know this is allowed.
 I apologize if I have unintentionally violated any rule.
 
+Include mod by data man and reg2s patch from encode.su forum
+Crc32.h   Copyright (c) 2011-2019 Stephan Brumme. All rights reserved, slicing-by-16 contributed by Bulat Ziganshin
+crc32c.c  Copyright (C) 2013 Mark Adler
+xxHash    Extremely Fast Hash algorithm, Copyright (C) 2012-2020 Yann Collet
+ 
+
 Report it to me and I will delete as soon as possible.
 ===================
 
@@ -38,23 +44,29 @@ zpaq.cpp (my fork)
 In any case I use gcc (sometimes clang).
 Some examples for compiling
 
-Windows 64 (g++ 7.3.0 64 bit) 
-g++ -O3 zpaq.cpp libzpaq.cpp -o zpaqfranz -static 
+Windows 64 (g++ 7.3.0 64 bit)
+g++ -O3  zpaq.cpp libzpaq.cpp -o zpaqfranz -Wno-shift-overflow -Wno-narrowing
 
 Windows 32 (g++ 7.3.0 64 bit)
-c:\mingw32\bin\g++  -O3 -m32 zpaq.cpp libzpaq.cpp -o zpaqfranz32 -static -pthread
+c:\mingw32\bin\g++  -m32 -O3  zpaq.cpp libzpaq.cpp -o zpaqfranz32 -pthread -Wno-shift-overflow -Wno-narrowing
 
-FreeBSD (11.x) gcc7
-gcc7 -O3 -march=native -Dunix zpaq.cpp -static -lstdc++ libzpaq.cpp -pthread -o zpaqfranz -static -lm
+FreeBSD (11.x) gcc 7
+gcc7 -O3 -march=native -Dunix zpaq.cpp -static -lstdc++ libzpaq.cpp -pthread -o zpaq -static -lm
 
 FreeBSD (12.1) gcc 9.3.0
 g++ -O3 -march=native -Dunix zpaq.cpp libzpaq.cpp -pthread -o zpaqfranz -static-libstdc++ -static-libgcc
 
-Debian Linux (10/11) gcc 8.3.0
-g++ -O3 -Dunix zpaq.cpp libzpaq.cpp -pthread -o zpaqfranz -static
+FreeBSD (11.4) gcc 10.2.0
+g++ -O3 -march=native -Dunix zpaq.cpp libzpaq.cpp -pthread -o zpaqfranz -static-libstdc++ -static-libgcc -Wno-stringop-overflow
 
 FreeBSD (11.3) clang 6.0.0
 clang++ -march=native -Dunix zpaq.cpp libzpaq.cpp -pthread -o zpaqfranz -static
+
+Debian Linux (10/11) gcc 8.3.0
+g++ -O3 -Dunix zpaq.cpp libzpaq.cpp -pthread -o zpaqfranz -static
+
+QNAP NAS TS-431P3 (Annapurna AL314) gcc 7.4.0
+g++ -Dunix zpaq.cpp libzpaq.cpp -pthread -o zpaqfranz -Wno-psabi
 
 
 ==========
@@ -125,15 +137,4 @@ unzpaq206.cpp - ZPAQ level 2 reference decoder version 2.06.
   I grant anyone the right to use this software for any purpose,
   without any conditions, unless such conditions are required by law.
 
-  
-==========
-
-Codes from other authors are used.
-As far as I know of free use in opensource, 
-otherwise I apologize.
-
-Include some mod by users of encode.su forum (data man and reg2s and others)
-
-xxhash64.h Copyright (c) 2016 Stephan Brumme. All rights reserved.
-Crc32.h    Copyright (c) 2011-2019 Stephan Brumme. All rights reserved, slicing-by-16 contributed by Bulat Ziganshin
-crc32c.c   Copyright (C) 2013 Mark Adler
+ 

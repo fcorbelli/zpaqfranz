@@ -1,4 +1,7 @@
-
+01-04-2021: 50.21
+            Use XXH3 (128 bit version) instead of xxhash64
+	    Refined -noeta -pakka in sha1()
+	    
 29-03-2021: 50.19
             New "hidden" command kill
 	    Fixed a bug extracting files with -force over existing (but different) ones

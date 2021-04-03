@@ -1,3 +1,7 @@
+03-04-2021: 50.22
+            With sha1 ... -all runs hash in multithread (DO NOT USE ON MAGNETIC DISKS!)
+	    With sha1 ... -verify compute XXH3 of the entire tree
+
 01-04-2021: 50.21
             Use XXH3 (128 bit version) instead of xxhash64
 	    Refined -noeta -pakka in sha1()

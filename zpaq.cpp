@@ -4,7 +4,7 @@
 ///////// The source is a mess, and without *nix ifdef
 ///////// Strongly in development
 
-#define ZPAQ_VERSION "50.21-experimental"
+#define ZPAQ_VERSION "50.23-experimental"
 #define FRANZOFFSET 50
 
 /*
@@ -261,6 +261,7 @@ const algoritmi::value_type rawData[] = {
    algoritmi::value_type(ALGO_CRC32,"CRC32"),
    algoritmi::value_type(ALGO_CRC32C,"CRC-32C"),
    algoritmi::value_type(ALGO_XXHASH,"XXH3"),
+   algoritmi::value_type(ALGO_SHA256,"SHA256"),
 };
 const int numElems = sizeof rawData / sizeof rawData[0];
 algoritmi myalgoritmi(rawData, rawData + numElems);
@@ -386,6 +387,11 @@ bool flagvss;					// make VSS on Windows with admin rights
 bool flagverbose;             	// show more
 bool flagverify;			// read from filesystem
   
+   bool flagcrc32c;			// flag use CRC-32c instead
+  bool flagxxhash;			// flag use XXH3
+  bool flagcrc32;			// flag use CRC32
+  bool flagsha256;			// use SHA256
+ 
 int64_t g_dimensione=0;
 int64_t g_scritti=0;// note: not thread safe, but who care?
 int64_t g_zerotime=0;
@@ -3086,7 +3092,8 @@ struct DT {
   vector<DTV> dtv;       // list of versions
 	int written;           // 0..ptr.size() = fragments output. -1=ignore
   uint32_t crc32;
-  DT(): date(0), size(0), attr(0), data(0),written(-1),crc32(0) {memset(sha1hex,0,sizeof(sha1hex));}
+  string hexhash;
+  DT(): date(0), size(0), attr(0), data(0),written(-1),crc32(0) {memset(sha1hex,0,sizeof(sha1hex));hexhash="";}
 };
 typedef map<string, DT> DTMap;
 
@@ -3207,10 +3214,6 @@ private:
   bool flagnopath;				// do not store path
   bool flagnosort;              // do not sort files std::sort(vf.begin(), vf.end(), compareFilename);
   bool flagchecksum;			// get  checksum for every file (default SHA1)
-  bool flagcrc32c;			// flag use CRC-32c instead
-  bool flagxxhash;			// flag use XXH3
-  bool flagcrc32;			// flag use CRC32
-  bool flagsha256;			// use SHA256
   string searchfrom;		// search something in path
   string replaceto;			// replace (something like awk)
   int threads;              // default is number of cores
@@ -3253,7 +3256,9 @@ private:
   bool equal(DTMap::const_iterator p, const char* filename, uint32_t &o_crc32);
              // compare file contents with p
 	
-	string mygetalgo();					// checksum choosed
+	///string mygetalgo();					// checksum choosed
+	///int flag2algo();
+
 	void usagefull();         			// verbose help
 	void examples();						// some examples
 	void differences();					// differences from 7.15
@@ -3427,7 +3432,7 @@ void Jidac::differences()
 	moreprint("    -crc32 find duplicates. -n Y like tain -n. -minsize Y -maxsize U");
 	moreprint("9)  New command c (compare). Quickly compare (size and filename) a source");
 	moreprint("    directory against one or more. Example c /tank/data /dup/1 /dup/2 /dup/3");
-	moreprint("    -all create one scan thread for parameters. DO NOT use for single HDD!");
+	moreprint("    -all one thread for parameters. -verify -xxhash/-crc32c/-crc32/-sha256");
 	moreprint("10) New command help. -he show some examples, -diff differences from 7.15");
 	moreprint("11) -noeta. Do not show ETA (for batch file)");
 	moreprint("12) -pakka. Alternative output (for ZPAQ's GUI PAKKA)");
@@ -3580,7 +3585,7 @@ void Jidac::usage()
 	moreprint("   x             Extract versions of files (-until N -comment foo)");
 	moreprint("   l             List files (-all -checksum -find something -comment foo)");
 	moreprint("   l d0 d1 d2... Compare (test) content agains directory d0, d1, d2...");
-	moreprint("   c d0 d1 d2... Quickly compare dir d0 to d1,d2... (-all M/T scan -crc32)");
+	moreprint("   c d0 d1 d2... Compare dir d0 to d1,d2... (-all M/T scan -verify -xxhash...)");
 	moreprint("   s d0 d1 d2... Cumulative size (excluding .zfs) of d0,d1,d2 (-all M/T)");
 	moreprint("   t             Fast test of most recent version of files (-verify -verbose)");
 	moreprint("   p             Paranoid test. Use lots (LOTS!) of RAM (-verify -verbose)");
@@ -3621,7 +3626,7 @@ moreprint("                  Add: create suffix for archive indexed by F, update
 moreprint("  -sN -summary N  IGNORED (deprecated)");
 moreprint("  ########## franz's fork ###########");
 moreprint("  -checksum       Store SHA1+CRC32 for every file");
-moreprint("  -verify         Force re-read of file during t (test command)");
+moreprint("  -verify         Force re-read of file during t (test command) or c");
 moreprint("  -noeta          Do not show ETA");
 moreprint("  -pakka          Output for PAKKA (briefly)");
 moreprint("  -verbose        Show excluded file");
@@ -5534,6 +5539,45 @@ std::wstring utf8_to_utf16(const std::string& utf8)
         }
     }
     return utf16;
+}
+
+
+std::string sha1_calc_file(const char * i_filename,const int64_t i_inizio,const int64_t i_totali,int64_t& io_lavorati)
+{
+	std::string risultato="";
+	FILE* myfile = freadopen(i_filename);
+	if(myfile==NULL )
+ 		return risultato;
+	
+	const int BUFSIZE	=65536*8;
+	char 				unzBuf[BUFSIZE];
+	int 				n=BUFSIZE;
+				
+	libzpaq::SHA1 sha1;
+	while (1)
+	{
+		int r=fread(unzBuf, 1, n, myfile);
+		
+		for (int i=0;i<r;i++)
+			sha1.put(*(unzBuf+i));
+ 		if (r!=n) 
+			break;
+		if ((flagnoeta==false) && (i_inizio>0))
+			avanzamento(io_lavorati,i_totali,i_inizio);
+	}
+	fclose(myfile);
+	
+	char sha1result[20];
+	memcpy(sha1result, sha1.result(), 20);
+	char myhex[4];
+	risultato="";
+	for (int j=0; j <20; j++)
+	{
+		sprintf(myhex,"%02X", (unsigned char)sha1result[j]);
+		risultato.push_back(myhex[0]);
+		risultato.push_back(myhex[1]);
+	}
+	return risultato;
 }
 
 //// get CRC32 of a file
@@ -8016,7 +8060,7 @@ int Jidac::kill()
 	}
 
 /*
-fika
+
 	printf("=============================================================\n");
 	printf("=============================================================\n");
 	printf("=============================================================\n");
@@ -13460,7 +13504,6 @@ int internal_xxh3(const char* fileName, uint64_t& o_high64, uint64_t& o_low64)
 ///d97b86b6eddf4609ef87136fb55c1ab1
 }
 
-
 /////////// other functions
 
 
@@ -13507,7 +13550,7 @@ string sha256_calc_file(const char * i_filename,const int64_t i_inizio,const int
 
 
 //// calc xxh3 (maybe)
-uint64_t xxhash_calc_file(const char * i_filename,const int64_t i_inizio,const int64_t i_totali,int64_t& io_lavorati,
+string xxhash_calc_file(const char * i_filename,const int64_t i_inizio,const int64_t i_totali,int64_t& io_lavorati,
 uint64_t& o_high64,uint64_t& o_low64)
 {
 	o_high64=0;
@@ -13534,7 +13577,10 @@ uint64_t& o_high64,uint64_t& o_low64)
 	XXH128_hash_t myhash=XXH3_128bits_digest(&state128);
 	o_high64=myhash.high64;
 	o_low64=myhash.low64;
-   	return 0;
+	
+	char risultato[33];
+	sprintf(risultato,"%016llX%016llX\0x0",o_high64,o_low64);
+	return risultato;
 }
 
 
@@ -13578,14 +13624,50 @@ unsigned int crc32c_calc_file(const char * i_filename,const int64_t i_inizio,con
 }
 
 
+string hash_calc_file(int i_algo,const char * i_filename,const int64_t i_inizio,const int64_t i_totali,int64_t& io_lavorati)
+{
+	char risultato[33];;
+	switch (i_algo) 
+	{
+		case ALGO_SHA1:
+			return  sha1_calc_file(i_filename,i_inizio,i_totali,io_lavorati);
+		break;
+		
+		case ALGO_CRC32C:
+			sprintf(risultato,"%08X\0x0",crc32c_calc_file(i_filename,i_inizio,i_totali,io_lavorati));
+			return risultato;		
+		break;
+		
+		case ALGO_CRC32:
+			sprintf(risultato,"%08X\0x0",crc32_calc_file(i_filename,i_inizio,i_totali,io_lavorati));
+			return risultato;		
+		break;
+		
+		case ALGO_XXHASH:
+			uint64_t dummybasso64;
+			uint64_t dummyalto64;
+			return xxhash_calc_file(i_filename,i_inizio,i_totali,io_lavorati,dummybasso64,dummyalto64);
+		break;
+		
+		case ALGO_SHA256: 
+		return  sha256_calc_file(i_filename,i_inizio,i_totali,io_lavorati);
+		break;
+		
+		default: 
+			error("GURU 13480 algo ??");
+	}
+	
+
+}
+
+
 ///////////////////////////////////////////////
 //// support functions
-string Jidac::mygetalgo()
+
+
+
+string mygetalgo()
 {
-/*
-  for (algoritmi::iterator p=myalgoritmi.begin(); p!=myalgoritmi.end(); ++p) 
-	printf("%s\n",p->second.c_str());
-*/
 	if (flagcrc32)
 		return "CRC32";
 	else
@@ -13599,15 +13681,30 @@ string Jidac::mygetalgo()
 		return "SHA256";
 	else
 		return "SHA1";
-	
+}
+int flag2algo()
+{
+	if (flagcrc32)
+		return ALGO_CRC32;
+	else
+	if (flagcrc32c)
+		return ALGO_CRC32C;
+	else
+	if (flagxxhash)
+		return ALGO_XXHASH;
+	else
+	if (flagsha256)
+		return ALGO_SHA256;
+	else
+		return ALGO_SHA1;
 }
 
 int Jidac::summa() 
 {
 	if (!flagpakka)
 	{
-	printf("Getting %s",mygetalgo().c_str());
-	printf(" ignoring .zfs and :$DATA\n");
+		printf("Getting %s",mygetalgo().c_str());
+		printf(" ignoring .zfs and :$DATA\n");
 	}
 
 //// sha1 -all. Get a single SHA1 of some files. For backup/restore check
@@ -13677,8 +13774,8 @@ int Jidac::summa()
 				{
 					uint64_t high64=0;
 					uint64_t low64=0;
-					uint64_t result2 = xxhash_calc_file(filename.c_str(),inizio,total_size,lavorati,high64,low64);
-					sprintf(p->second.sha1hex,"%llX%llX\0x0",high64,low64);
+					string result2 = xxhash_calc_file(filename.c_str(),inizio,total_size,lavorati,high64,low64);
+					sprintf(p->second.sha1hex,"%016llX%016llX\0x0",high64,low64);
 					vf.push_back(p);
 				}
 				else
@@ -16045,43 +16142,6 @@ void myavanzamento(int64_t i_lavorati,int64_t i_totali,int64_t i_inizio)
 }
 
 
-std::string sha1_calc_file(const char * i_filename)
-{
-	std::string risultato="";
-	FILE* myfile = freadopen(i_filename);
-	if(myfile==NULL )
- 		return risultato;
-	
-	const int BUFSIZE	=65536*8;
-	char 				unzBuf[BUFSIZE];
-	int 				n=BUFSIZE;
-				
-	unzSHA1 sha1;
-	while (1)
-	{
-		int r=fread(unzBuf, 1, n, myfile);
-		
-		for (int i=0;i<r;i++)
-			sha1.put(*(unzBuf+i));
- 		if (r!=n) 
-			break;
-//		if (!noeta)
-	///		printf("%lld\r",lavorati);
-	}
-	fclose(myfile);
-	
-	char sha1result[20];
-	memcpy(sha1result, sha1.result(), 20);
-	char myhex[4];
-	risultato="";
-	for (int j=0; j <20; j++)
-	{
-		sprintf(myhex,"%02X", (unsigned char)sha1result[j]);
-		risultato.push_back(myhex[0]);
-		risultato.push_back(myhex[1]);
-	}
-	return risultato;
-}
 	
 	void list_print_datetime(void)
 {
@@ -16611,7 +16671,8 @@ int unz(const char * archive,const char * key,bool all)
 			if (flagverify)
 			{
 				printf("Re-hashing %s\r",p->first.c_str());
-				sha1delfile=sha1_calc_file(p->first.c_str());
+				int64_t dummy;
+				sha1delfile=sha1_calc_file(p->first.c_str(),-1,-1,dummy);
 			}
 			std::string sha1decompresso=p->second.sha1decompressedhex;
 			std::string sha1stored=p->second.sha1hex;
@@ -17720,7 +17781,7 @@ pthread_mutex_t mylock = PTHREAD_MUTEX_INITIALIZER;
 We need something out of an object (Jidac), addfile() and scandir(), 
 because pthread does not like very much
 */
-void myaddfile(uint32_t i_tnumber,DTMap& i_edt,string i_filename, int64_t i_date,int64_t i_size, bool i_calccrc32) 
+void myaddfile(uint32_t i_tnumber,DTMap& i_edt,string i_filename, int64_t i_date,int64_t i_size, bool i_flagcalchash) 
 {
 
 	///Raze to the ground ads and zfs as soon as possible
@@ -17733,18 +17794,28 @@ void myaddfile(uint32_t i_tnumber,DTMap& i_edt,string i_filename, int64_t i_date
 	uint32_t risultato=0;
 	int64_t dummy;
 	
-  	if (i_calccrc32)
-		if (i_filename[i_filename.size()-1]!='/')
-			risultato=crc32_calc_file(i_filename.c_str(),-1,-1,dummy);
 	
- 
+  	
 	DT& d=i_edt[i_filename];
 	d.date=i_date;
 	d.size=i_size;
 	d.attr=0;
 	d.data=0;
-	d.crc32=risultato;
-  
+	d.hexhash="";
+	if (i_flagcalchash)
+		if (!isdirectory(i_filename))
+		{
+			
+			int64_t starthash=mtime();
+			d.hexhash=hash_calc_file(flag2algo(),i_filename.c_str(),-1,-1,dummy);
+			if (flagverbose)
+			{
+				printf("%s: |%s| [%d] %6.3f ",mygetalgo().c_str(),d.hexhash.c_str(),i_tnumber,(mtime()-starthash)/1000.0);
+				printUTF8(i_filename.c_str());
+				printf("\n");
+			}
+		}
+ 
 ///  thread safe, but... who cares? 
 	pthread_mutex_lock(&mylock);
 	g_bytescanned+=i_size; 
@@ -17752,7 +17823,7 @@ void myaddfile(uint32_t i_tnumber,DTMap& i_edt,string i_filename, int64_t i_date
 	
 	if (!flagnoeta)
 	{
-		if (i_calccrc32)
+		if (i_flagcalchash)
 		{
 			if (!(g_filescanned % 100))
 				printf("Checksumming |%d| %12s (%10s)\r",i_tnumber,migliaia(g_filescanned),tohuman(g_bytescanned));
@@ -17769,7 +17840,7 @@ void myaddfile(uint32_t i_tnumber,DTMap& i_edt,string i_filename, int64_t i_date
 
 }
 
-void myscandir(uint32_t i_tnumber,DTMap& i_edt,string filename, bool i_recursive,bool i_calccrc32)
+void myscandir(uint32_t i_tnumber,DTMap& i_edt,string filename, bool i_recursive,bool i_flagcalchash)
 {
 	///Raze to the ground ads and zfs as soon as possible
 	if (isads(filename))
@@ -17794,12 +17865,12 @@ void myscandir(uint32_t i_tnumber,DTMap& i_edt,string filename, bool i_recursive
 	if (!lstat(filename.c_str(), &sb)) 
 	{
 		if (S_ISREG(sb.st_mode))
-		myaddfile(i_tnumber,i_edt,filename, decimal_time(sb.st_mtime), sb.st_size,i_calccrc32);
+		myaddfile(i_tnumber,i_edt,filename, decimal_time(sb.st_mtime), sb.st_size,i_flagcalchash);
 
     // Traverse directory
 		if (S_ISDIR(sb.st_mode)) 
 		{
-			myaddfile(i_tnumber,i_edt,filename=="/" ? "/" : filename+"/", decimal_time(sb.st_mtime),0, i_calccrc32);
+			myaddfile(i_tnumber,i_edt,filename=="/" ? "/" : filename+"/", decimal_time(sb.st_mtime),0, i_flagcalchash);
 			DIR* dirp=opendir(filename.c_str());
 			if (dirp) 
 			{
@@ -17811,15 +17882,15 @@ void myscandir(uint32_t i_tnumber,DTMap& i_edt,string filename, bool i_recursive
 						if (s!="/") s+="/";
 						s+=dp->d_name;
 						if (i_recursive)        
-							myscandir(i_tnumber,i_edt,s,true,i_calccrc32);
+							myscandir(i_tnumber,i_edt,s,true,i_flagcalchash);
 						else
 						{
 							if (!lstat(s.c_str(), &sb)) 
 							{
 								if (S_ISREG(sb.st_mode))
-									myaddfile(i_tnumber,i_edt,s, decimal_time(sb.st_mtime), sb.st_size,i_calccrc32);
+									myaddfile(i_tnumber,i_edt,s, decimal_time(sb.st_mtime), sb.st_size,i_flagcalchash);
 								if (S_ISDIR(sb.st_mode)) 
-									myaddfile(i_tnumber,i_edt,s=="/" ? "/" :s+"/", decimal_time(sb.st_mtime),0, i_calccrc32);
+									myaddfile(i_tnumber,i_edt,s=="/" ? "/" :s+"/", decimal_time(sb.st_mtime),0, i_flagcalchash);
 							}
 						}          			
 					}
@@ -17870,13 +17941,13 @@ void myscandir(uint32_t i_tnumber,DTMap& i_edt,string filename, bool i_recursive
 			if (ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) 
 				fn+="/";
 		
-			myaddfile(i_tnumber,i_edt,fn, edate, esize, i_calccrc32);
+			myaddfile(i_tnumber,i_edt,fn, edate, esize, i_flagcalchash);
 		
 			if (i_recursive)
 				if (ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) 
 				{
 					fn+="*";
-					myscandir(i_tnumber,i_edt,fn,true,i_calccrc32);
+					myscandir(i_tnumber,i_edt,fn,true,i_flagcalchash);
 				}
 		}
 		if (!FindNextFile(h, &ffd)) 
@@ -17898,7 +17969,7 @@ struct tparametri
 {
 	string 		directorytobescanned;
 	DTMap		theDT;
-	bool		flagcalccrc32;
+	bool		flagcalchash;
 	uint64_t	timestart;
 	uint64_t	timeend;
 	int	tnumber;
@@ -17912,7 +17983,7 @@ void * scansiona(void *t)
 	assert(t);
 	tparametri* par= ((struct tparametri*)(t));
 	DTMap& tempDTMap = par->theDT;
-	myscandir(par->tnumber,tempDTMap,par->directorytobescanned,true,par->flagcalccrc32);
+	myscandir(par->tnumber,tempDTMap,par->directorytobescanned,true,par->flagcalchash);
 	par->timeend=mtime();
 	pthread_exit(NULL);
 }
@@ -17964,7 +18035,7 @@ int Jidac::dircompare(bool i_flagonlysize)
 			myblock.tnumber=i;
 			myblock.directorytobescanned=files[i];
 			myblock.theDT=vettoreDT[i];
-			myblock.flagcalccrc32=flagcrc32;
+			myblock.flagcalchash=flagverify;
 			myblock.timestart=mtime();
 			vettoreparametri.push_back(myblock);
 		}
@@ -18040,7 +18111,7 @@ int Jidac::dircompare(bool i_flagonlysize)
 			print_datetime();
 			printf("Scan dir <<%s>>\n",files[i].c_str());
 			uint64_t blockstart=mtime();
-			myscandir(i,myblock,files[i].c_str(),true,flagcrc32);
+			myscandir(i,myblock,files[i].c_str(),true,flagverify);
 			
 			uint64_t sizeofdir=0;
 			uint64_t dircount=0;
@@ -18153,11 +18224,13 @@ int Jidac::dircompare(bool i_flagonlysize)
 						flagerror=true;
 					}
 					else
-					if (flagcrc32)
+					if (flagverify)
 					{
-						if (p->second.crc32!=cerca->second.crc32)
+						if (p->second.hexhash!=cerca->second.hexhash)
 						{
-							printf("CRC-32 different %08X (0) vs %08X (%d) %s\n",p->second.crc32,cerca->second.crc32,i,filename0.c_str());
+							printf("%s different %s (0) vs %s (%d) ",mygetalgo().c_str(),p->second.hexhash.c_str(),cerca->second.hexhash.c_str(),i);
+							printUTF8(filename0.c_str());
+							printf("\n");
 							flagerror=true;
 						}
 					}

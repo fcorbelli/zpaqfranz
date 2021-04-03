@@ -13735,8 +13735,8 @@ void * scansionahash(void *t)
 
 
 
-bool sortbyval(const pair<string, string> &a, 
-               const pair<string, string> &b) 
+bool sortbyval(const std::pair<string, string> &a, 
+               const std::pair<string, string> &b) 
 { 
     return (a.second < b.second); 
 } 
@@ -13906,7 +13906,7 @@ int Jidac::summa()
 	}
 	uint64_t hashtime=mtime()-iniziohash;
 	
-	vector<pair<string, string>> vec;
+	vector<std::pair<string, string>> vec;
 	
 	for(int i = 0; i <mythreads; i++ )
 		for (int j=0;j<vettoreparametrihash[i].filestobehashed.size();j++)

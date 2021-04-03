@@ -4,7 +4,7 @@
 ///////// The source is a mess, and without *nix ifdef
 ///////// Strongly in development
 
-#define ZPAQ_VERSION "50.23-experimental"
+#define ZPAQ_VERSION "50.24-experimental"
 #define FRANZOFFSET 50
 
 /*
@@ -40,10 +40,10 @@ zpaqfranz -diff
 Targets
 
 Windows 64 (g++ 7.3.0 64 bit)
-g++ -O3  zpaq.cpp libzpaq.cpp -o zpaqfranz -Wno-shift-overflow -Wno-narrowing
+g++ -O3  zpaq.cpp libzpaq.cpp -o zpaqfranz -Wno-shift-overflow -Wno-narrowing -static
 
 Windows 32 (g++ 7.3.0 64 bit)
-c:\mingw32\bin\g++  -m32 -O3  zpaq.cpp libzpaq.cpp -o zpaqfranz32 -pthread -Wno-shift-overflow -Wno-narrowing
+c:\mingw32\bin\g++  -m32 -O3  zpaq.cpp libzpaq.cpp -o zpaqfranz32 -pthread -Wno-shift-overflow -Wno-narrowing -static
 
 FreeBSD (11.x) gcc 7
 gcc7 -O3 -march=native -Dunix zpaq.cpp -static -lstdc++ libzpaq.cpp -pthread -o zpaq -static -lm
@@ -3098,6 +3098,7 @@ struct DT {
 typedef map<string, DT> DTMap;
 
 typedef map<int, string> MAPPACOMMENTI;
+typedef map<string, string> MAPPAFILEHASH;
 	
 
 
@@ -3426,7 +3427,7 @@ void Jidac::differences()
 	moreprint("6)  New command s (size). Get the cumulative size of one or more directory.");
 	moreprint("    Skip .zfs and ADS. Use -all for multithread");
 	moreprint("7)  New command sha1 (hashing). Calculate hash of something (default SHA1)");
-	moreprint("    -sha256, -crc32, -crc32c (HW SSE if possible), -xxhash");
+	moreprint("    -sha256, -crc32, -crc32c, -xxhash, -all (M/T) -verify (single XXH3)");
 	moreprint("8)  New command dir. Something similar to dir command (for *nix)");
 	moreprint("    Switches /s /a /os /od. Show cumulative size in the last line!");
 	moreprint("    -crc32 find duplicates. -n Y like tain -n. -minsize Y -maxsize U");
@@ -3535,6 +3536,8 @@ void Jidac::examples()
 	moreprint("\n");
 	moreprint("zpaqfranz sha1 r:\\vbox s:\\uno");
 	moreprint("zpaqfranz sha1 r:\\vbox s:\\uno -crc32");
+	moreprint("zpaqfranz sha1 r:\\vbox -verify");
+	moreprint("zpaqfranz sha1 r:\\vbox -all");
 	moreprint("you can use -crc32c -sha256 -xxhash -crc32 (default SHA1)");
 	moreprint("\n");
 	moreprint("zpaqfranz dir /root/script /od");
@@ -5562,6 +5565,7 @@ std::string sha1_calc_file(const char * i_filename,const int64_t i_inizio,const 
 			sha1.put(*(unzBuf+i));
  		if (r!=n) 
 			break;
+		io_lavorati+=r;
 		if ((flagnoeta==false) && (i_inizio>0))
 			avanzamento(io_lavorati,i_totali,i_inizio);
 	}
@@ -13570,6 +13574,7 @@ uint64_t& o_high64,uint64_t& o_low64)
 	{
 		(void)XXH3_128bits_update(&state128, buffer, readSize);
 		io_lavorati+=readSize;
+		///printf("IIIIIIIIIIIIIIIIIIIIIIIIIII OOOOO  %lld\n",io_lavorati);
 		if (flagnoeta==false)
 			avanzamento(io_lavorati,i_totali,i_inizio);
 	}
@@ -13699,6 +13704,43 @@ int flag2algo()
 		return ALGO_SHA1;
 }
 
+
+struct tparametrihash
+{
+	vector<string> filestobehashed;
+	vector<string> hashcalculated;
+	uint64_t	timestart;
+	uint64_t	timeend;
+	int64_t	inizio;
+	int64_t dimensione;
+	int	tnumber;
+};
+
+void * scansionahash(void *t) 
+{
+	///fika
+	assert(t);
+	tparametrihash* par= ((struct tparametrihash*)(t));
+	vector<string>& tmpfilestobehashed= par->filestobehashed;
+	vector<string>& tmphashcalculated= par->hashcalculated;
+	
+	int64_t dummy;
+	for (int i=0;i<tmpfilestobehashed.size();i++)
+	{
+		tmphashcalculated.push_back(hash_calc_file(flag2algo(),tmpfilestobehashed[i].c_str(),par->inizio,par->dimensione,g_dimensione));
+		///printf("INIZIO %lld dimensione %lld lavora %lld\n",par->inizio,par->dimensione,g_dimensione);
+	}
+	pthread_exit(NULL);
+}
+
+
+
+bool sortbyval(const pair<string, string> &a, 
+               const pair<string, string> &b) 
+{ 
+    return (a.second < b.second); 
+} 
+
 int Jidac::summa() 
 {
 	if (!flagpakka)
@@ -13708,9 +13750,10 @@ int Jidac::summa()
 	}
 
 //// sha1 -all. Get a single SHA1 of some files. For backup/restore check
+	/*
 	libzpaq::SHA1 			sha1all;
 	vector<DTMap::iterator> vf;
-
+*/
 	int quantifiles			=0;
 	int64_t total_size		=0;  
 	int64_t lavorati		=0;
@@ -13720,163 +13763,193 @@ int Jidac::summa()
 	
 	g_bytescanned=0;
 	g_filescanned=0;
+	g_dimensione=0;
 	g_worked=0;
 	for (unsigned i=0; i<files.size(); ++i)
 		scandir(true,edt,files[i].c_str());
 	
-/// firs step: how many file to elaborate ? Fast with filesystem cache
-	if (!flagnoeta)
-	printf("Computing filesize for %s files/directory...\n",migliaia(files.size()));
+	
+
+	vector<string> myfiles;
+
 	for (DTMap::iterator p=edt.begin(); p!=edt.end(); ++p) 
-	{
-		string filename=rename(p->first);
-		if (
-			p->second.date && p->first!="" && p->first[p->first.size()-1]!='/' 
-			&& (!isads(filename))
-			) 
+		if (p->second.date && p->first!="" && (!isdirectory(p->first)) && (!isads(p->first)) ) 
 		{
+			myfiles.push_back(p->first);
 			total_size+=p->second.size;
 			quantifiles++;
 		}
-    }
 	
+	if (quantifiles==0)
+	{
+		printf("No files founded\n");
+		return 0;
+	}
+	if (flagverify)
+	{
+		printf("\nGetting global XXH3\n");
+		
+		uint64_t lavorati=0;
+		size_t const blockSize = 65536;
+		unsigned char buffer[blockSize];
+		int64_t tempoinizio=mtime();
+		
+		XXH3_state_t state128;
+		(void)XXH3_128bits_reset(&state128);
+		size_t readSize;
+		int64_t starthash=mtime();
+		for (int i=0;i<myfiles.size();i++)
+		{
+			FILE* inFile = freadopen(myfiles[i].c_str());
+			if (inFile==NULL) 
+			{
+				error("Guru 13790\n");
+				exit(1);
+			}
+		
+			while ((readSize = fread(buffer, 1, blockSize, inFile)) > 0) 
+			{
+				(void)XXH3_128bits_update(&state128, buffer, readSize);
+				lavorati+=readSize;
+				if (flagnoeta==false)
+					avanzamento(lavorati,total_size,tempoinizio);
+			}
+			fclose(inFile);
+		}
+		XXH128_hash_t myhash=XXH3_128bits_digest(&state128);
+		int64_t hashtime=mtime()-starthash;
+		printf("\nGlobal XXH3: %016llX%016llX\n",myhash.high64,myhash.low64);
+		int64_t myspeed=(int64_t)(total_size*1000.0/(hashtime));
+		printf("Worked on %s bytes avg speed %s B/s\n",migliaia(total_size),migliaia2(myspeed));
+		return 0;
+	}
+	
+	
+	
+	vector<string> myhash;
+	vector<tparametrihash> 	vettoreparametrihash;
+
+	int mythreads=threads;
+	
+	if (!all)
+		mythreads=1;
+		
+	tparametrihash 	myblock;
+	for (int i=0;i<mythreads;i++)
+	{
+		myblock.tnumber=(i%threads);
+		myblock.inizio=mtime();
+		myblock.dimensione=total_size;
+		vettoreparametrihash.push_back(myblock);
+	}
+	
+	
+	if (!flagnoeta)
+	printf("Computing filesize for %s files/directory...\n",migliaia(files.size()));
+	
+    
 	
 	int64_t inizio		=mtime();
 	double scantime=(inizio-startscan)/1000.0;
 	if (!flagnoeta)
 	printf("Found %s bytes (%s) in %f\n",migliaia(total_size),tohuman(total_size),scantime);
 	
-	
-		
-		for (DTMap::iterator p=edt.begin(); p!=edt.end(); ++p) 
-		{
-			string filename=rename(p->first);
-		/// flagskipzfs already setted!
-			if (
-				p->second.date && p->first!="" && p->first[p->first.size()-1]!='/' 
-				&& (!isads(filename))
-				) 
-	
-			{
-				if (flagcrc32)
-				{
-					sprintf(p->second.sha1hex,"%08X\0x0",crc32_calc_file(filename.c_str(),inizio,total_size,lavorati));
-					vf.push_back(p);
-				}
-				else
-				if (flagcrc32c)
-				{
-					sprintf(p->second.sha1hex,"%08X\0x0",crc32c_calc_file(filename.c_str(),inizio,total_size,lavorati));
-					vf.push_back(p);
-				}
-				else
-				if (flagxxhash)
-				{
-					uint64_t high64=0;
-					uint64_t low64=0;
-					string result2 = xxhash_calc_file(filename.c_str(),inizio,total_size,lavorati,high64,low64);
-					sprintf(p->second.sha1hex,"%016llX%016llX\0x0",high64,low64);
-					vf.push_back(p);
-				}
-				else
-				if (flagsha256)
-				{
-					string ris256=sha256_calc_file(filename.c_str(),inizio,total_size,lavorati);
-					sprintf(p->second.sha1hex,"%s",ris256.c_str());
-					vf.push_back(p);
-				}
-				else //sha1
-				{
-					FP myin=fopen(filename.c_str(), RB);
-					if (myin==FPNULL) ioerr(filename.c_str());
-					const int BUFSIZE	=65536*8;
-					char 				buf[BUFSIZE];
-					int 				n=BUFSIZE;
-				
-					libzpaq::SHA1 sha1;
-					
-					while (1)
-					{
-						int r=fread(buf, 1, n, myin);
-						if (all)
-							sha1all.write(buf, r);
-						else
-							sha1.write(buf, r);
-										
-						lavorati+=r;
+	for (int i=0;i<myfiles.size();i++)
+		vettoreparametrihash[i%mythreads].filestobehashed.push_back(myfiles[i]);
 
-						if (r!=n) 
-							break;
-					
-						if (flagnoeta==false)
-							avanzamento(lavorati,total_size,inizio);
-					}
-					if (!all)
-					{
-						char sha1result[20];
-						memcpy(sha1result, sha1.result(), 20);
-						for (int j=0; j <= 19; j++)
-							sprintf(p->second.sha1hex+j*2,"%02X", (unsigned char)sha1result[j]);
-						p->second.sha1hex[40]=0x0;
-						vf.push_back(p);
-					}
-					
-					fclose(myin);
-				
-				}
-			}
-		}
+	int totfile=0;
+	for (int i=0;i<mythreads;i++)
+	{
+		if (flagverbose)
+			printf("Thread [%02d] files %s\n",i,migliaia(vettoreparametrihash[i].filestobehashed.size()));
+		totfile+=+vettoreparametrihash[i].filestobehashed.size();
+	}
+	if (flagverbose)
+	printf("Total files %s -> in threads %s\n",migliaia(myfiles.size()),migliaia2(totfile));
 	
+	
+
+	int rc;
+	pthread_t threads[mythreads];
+	pthread_attr_t attr;
+	void *status;
+
+		// ini and set thread joinable
+	pthread_attr_init(&attr);
+	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
+
+	if (!flagnoeta)
+		printf("\nCreating %d hashing thread(s)\n",mythreads);
+	
+	uint64_t iniziohash=mtime();
+	for(int i = 0; i < mythreads; i++ ) 
+	{
+		vettoreparametrihash[i].timestart=mtime();
+		rc = pthread_create(&threads[i], &attr, scansionahash, (void*)&vettoreparametrihash[i]);
+		if (rc) 
+		{
+			printf("Error creating thread\n");
+			exit(-1);
+		}
+	}
+
+	pthread_attr_destroy(&attr);
+	for(int i = 0; i <mythreads; i++ ) 
+	{
+		rc = pthread_join(threads[i], &status);
+		if (rc) 
+		{
+			error("Unable to join\n");
+			exit(-1);
+		}
+	///		printf("Thread completed %d status %d\n",i,status);
+	}
+	uint64_t hashtime=mtime()-iniziohash;
+	
+	vector<pair<string, string>> vec;
+	
+	for(int i = 0; i <mythreads; i++ )
+		for (int j=0;j<vettoreparametrihash[i].filestobehashed.size();j++)
+			vec.push_back(make_pair(vettoreparametrihash[i].filestobehashed[j],vettoreparametrihash[i].hashcalculated[j]));
+
+	if (!flagnosort)
+		std::sort(vec.begin(), vec.end(),sortbyval);
 	
 	double mytime=mtime()-inizio+1;
 	int64_t startprint=mtime();
-	/// sometimes we want sort, sometimes no.   -sort
-	if (!flagnosort)
-		std::sort(vf.begin(), vf.end(), comparesha1hex);
-
-	for (unsigned i=0; i<vf.size(); ++i) 
+	
+	for (int i=0;i<vec.size();i++)
 	{
-		DTMap::iterator p=vf[i];
-		
-		string filename=p->first.c_str();
+		string filename=vec[i].first;
 		if (searchfrom!="")
 			if (replaceto!="")
 				replace(filename,searchfrom,replaceto);
-	
-	
-		printf("%s: %s ",mygetalgo().c_str(),p->second.sha1hex);
+		printf("%s: %s ",mygetalgo().c_str(),vec[i].second.c_str());
+		if (!flagnosort)
+			if (i==0)
+					printf("    ");
+			else
+				if (vec[i-1].second==vec[i].second)
+					printf("=== ");
+				else
+					printf("    ");
 		printUTF8(filename.c_str());
 		printf("\n");
 	}
-		if (!flagnoeta)
-		{
-
-			printf("Used %s\n",mygetalgo().c_str());
+	int64_t printtime=mtime()-startprint;
 		
-			printf("Scanning filesystem time  %f\n",scantime);
-			printf("Data transfer+CPU   time  %f\n",mytime/1000.0);
-			printf("Data output         time  %f\n",(mtime()-startprint)/1000.0);
 	
-			int64_t myspeed=(int64_t)(lavorati*1000.0/(mytime));
-			printf("Worked on %s average speed %s B/s\n",migliaia(lavorati),migliaia2(myspeed));
-		}
-		if (all)
-		{
-			printf("SHA1ALL: ");
-			if (quantifiles)
-			{
-				char sha1result[20];
-				memcpy(sha1result, sha1all.result(), 20);
-				for (int j=0; j <= 19; j++)
-				{
-					if (j > 0)
-						printf(":");
-					printf("%02X", (unsigned char)sha1result[j]);
-				}
-			}		
 	
-			printf("\n");
-		}
+	if (!flagnoeta)
+	{
+		printf("Algo %s by %d threads\n",mygetalgo().c_str(),mythreads);
+		printf("Scanning filesystem time  %f s\n",scantime);
+		printf("Data transfer+CPU   time  %f s\n",hashtime/1000.0);
+		printf("Data output         time  %f s\n",printtime/1000.0);
+	
+		int64_t myspeed=(int64_t)(total_size*1000.0/(hashtime));
+		printf("Worked on %s bytes avg speed (hashtime) %s B/s\n",migliaia(total_size),migliaia2(myspeed));
+	}
 	
   return 0;
 }
@@ -17418,7 +17491,7 @@ int  Jidac::dir()
 			myblock.size=p->second.size;
 			myblock.attr=p->second.attr;
 			myblock.date=p->second.date;
-			myblock.isdir=p->first[p->first.size()-1]=='/';
+			myblock.isdir=isdirectory(p->first);
 			myblock.crc32stored=false;
 				
 			if (duplicati)

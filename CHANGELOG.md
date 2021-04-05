@@ -1,3 +1,6 @@
+05-04-2021: 51.10
+            New branch: single source code (zpaqfranz.cpp), to make it easier to package for FreeBSD and later Linux
+	    
 03-04-2021: 50.22
             With sha1 ... -all runs hash in multithread (DO NOT USE ON MAGNETIC DISKS!)
 	    With sha1 ... -verify compute XXH3 of the entire tree

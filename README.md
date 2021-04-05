@@ -13,12 +13,10 @@ In short, use only if you want.
 Portions of software by other authors, mentioned later, are included.
 
 As far as I know this is allowed.
-
 I apologize if I have unintentionally violated any rule.
 Report it to me and I will delete as soon as possible.
 
 Include mod by data man and reg2s patch from encode.su forum
-
 Crc32.h   Copyright (c) 2011-2019 Stephan Brumme. 
 Slicing-by-16 contributed by Bulat Ziganshin
 xxHash    Extremely Fast Hash algorithm, Copyright (C) 2012-2020 Yann Collet

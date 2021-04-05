@@ -1,4 +1,6 @@
-This is zpaqfranz, a patched  but (maybe) compatible fork of 
+This is zpaqfranz
+=
+a patched  but (maybe) compatible fork of 
 Matt Mahoney's ZPAQ version 7.15 
 (http://mattmahoney.net/dc/zpaq.html)
 
@@ -7,15 +9,13 @@ Franco Corbelli, franco@francocorbelli.com
 
 Being an experimental software, bugs may exist that also lead to data loss.
 In short, use only if you want.
-
+=
 
 Portions of software by other authors, mentioned later, are included.
 
 As far as I know this is allowed.
 I apologize if I have unintentionally violated any rule.
-=
 Report it to me and I will delete as soon as possible.
-=
 
 Include mod by data man and reg2s patch from encode.su forum
 Crc32.h   Copyright (c) 2011-2019 Stephan Brumme. 

@@ -43,39 +43,43 @@ COMPILING
 My main development platforms are Windows and FreeBSD.
 I rarely use Linux or MacOS, so changes may be needed.
 
-Three files are required 
-libzpaq.cpp (original ZPAQ 7.15)
-libzpaq.h (original ZPAQ 7.15)
-zpaq.cpp (my fork)
+From branch 51 only one file is required
+zpaqfranz.cpp (my fork)
 
 In any case I use gcc (sometimes clang).
 Some examples for compiling
 
 Windows 64 (g++ 7.3.0 64 bit)
-g++ -O3  zpaq.cpp libzpaq.cpp -o zpaqfranz -Wno-shift-overflow -Wno-narrowing
+g++ -O3  zpaqfranz.cpp -o zpaqfranz 
 
 Windows 32 (g++ 7.3.0 64 bit)
-c:\mingw32\bin\g++  -m32 -O3  zpaq.cpp libzpaq.cpp -o zpaqfranz32 -pthread -Wno-shift-overflow -Wno-narrowing
+c:\mingw32\bin\g++ -m32 -O3 zpaqfranz.cpp -o zpaqfranz32 -pthread -static
 
 FreeBSD (11.x) gcc 7
-gcc7 -O3 -march=native -Dunix zpaq.cpp -static -lstdc++ libzpaq.cpp -pthread -o zpaq -static -lm
+gcc7 -O3 -march=native -Dunix zpaqfranz.cpp -static -lstdc++ -pthread -o zpaqfranz -static -lm
 
 FreeBSD (12.1) gcc 9.3.0
-g++ -O3 -march=native -Dunix zpaq.cpp libzpaq.cpp -pthread -o zpaqfranz -static-libstdc++ -static-libgcc
+g++ -O3 -march=native -Dunix zpaqfranz.cpp  -pthread -o zpaqfranz -static-libstdc++ -static-libgcc
 
 FreeBSD (11.4) gcc 10.2.0
-g++ -O3 -march=native -Dunix zpaq.cpp libzpaq.cpp -pthread -o zpaqfranz -static-libstdc++ -static-libgcc -Wno-stringop-overflow
+g++ -O3 -march=native -Dunix zpaqfranz.cpp -pthread -o zpaqfranz -static-libstdc++ -static-libgcc -Wno-stringop-overflow
 
 FreeBSD (11.3) clang 6.0.0
-clang++ -march=native -Dunix zpaq.cpp libzpaq.cpp -pthread -o zpaqfranz -static
+clang++ -march=native -Dunix zpaqfranz.cpp -pthread -o zpaqfranz -static
 
 Debian Linux (10/11) gcc 8.3.0
-g++ -O3 -Dunix zpaq.cpp libzpaq.cpp -pthread -o zpaqfranz -static
+g++ -O3 -Dunix zpaqfranz.cpp -pthread -o zpaqfranz -static
 
 QNAP NAS TS-431P3 (Annapurna AL314) gcc 7.4.0
-g++ -Dunix zpaq.cpp libzpaq.cpp -pthread -o zpaqfranz -Wno-psabi
+g++ -Dunix zpaqfranz.cpp -pthread -o zpaqfranz -Wno-psabi
 
-
+==========
+FreeBSD port
+mkdir /tmp/testme
+cd /tmp/testme
+wget http://www.francocorbelli.it/zpaqfranz/ports-51.10.tar.gz
+tar -xvf ports-51.10.tar.gz
+make install clean
 ==========
 
 Notes in zpaq 7.15

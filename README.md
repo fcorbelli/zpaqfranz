@@ -8,20 +8,21 @@ Franco Corbelli, franco@francocorbelli.com
 Being an experimental software, bugs may exist that also lead to data loss.
 In short, use only if you want.
 
-====================
 
 Portions of software by other authors, mentioned later, are included.
 
 As far as I know this is allowed.
 I apologize if I have unintentionally violated any rule.
+=
 Report it to me and I will delete as soon as possible.
+=
 
 Include mod by data man and reg2s patch from encode.su forum
 Crc32.h   Copyright (c) 2011-2019 Stephan Brumme. 
 Slicing-by-16 contributed by Bulat Ziganshin
 xxHash    Extremely Fast Hash algorithm, Copyright (C) 2012-2020 Yann Collet
 crc32c.c  Copyright (C) 2013 Mark Adler
-===================
+
 
 The source is composed of the fusion of different software from different authors. 
 Therefore there is no uniform style of programming.
@@ -67,14 +68,18 @@ g++ -O3 -Dunix zpaqfranz.cpp -pthread -o zpaqfranz -static
 QNAP NAS TS-431P3 (Annapurna AL314) gcc 7.4.0
 g++ -Dunix zpaqfranz.cpp -pthread -o zpaqfranz -Wno-psabi
 
-==========
+
 FreeBSD port
+===
 mkdir /tmp/testme
+
 cd /tmp/testme
+
 wget http://www.francocorbelli.it/zpaqfranz/ports-51.10.tar.gz
+
 tar -xvf ports-51.10.tar.gz
+
 make install clean
-==========
 
 Notes in zpaq 7.15
 

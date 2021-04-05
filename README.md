@@ -81,6 +81,9 @@ tar -xvf ports-51.10.tar.gz
 
 make install clean
 
+
+
+
 Notes in zpaq 7.15
 
   This software is provided as-is, with no warranty.

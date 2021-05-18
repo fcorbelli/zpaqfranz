@@ -1,3 +1,6 @@
+18-05-2021: 51.22
+            A lot of work, experimental extraction of too long filename (and many more)
+
 05-04-2021: 51.10
             New branch: single source code (zpaqfranz.cpp), to make it easier to package for FreeBSD and later Linux
 	    

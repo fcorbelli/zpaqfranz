@@ -1,10 +1,10 @@
 ///////// EXPERIMENTAL BUILD
-///////// The source is a mess, and without *nix ifdef
+///////// The source is a mess
 ///////// Strongly in development
 
-#define ZPAQ_VERSION "51.10-experimental"
-#define FRANZOFFSET 50
-
+#define ZPAQ_VERSION "51.22-experimental"
+#define FRANZOFFSET 	50
+#define FRANZMAXPATH 	240
 /*
 
 This is zpaqfranz, a patched  but (maybe) compatible fork of 
@@ -144,6 +144,8 @@ xxHash  Extremely Fast Hash algorithm, Copyright (C) 2012-2020 Yann Collet
  
 
 */
+
+
 
 
 #define _FILE_OFFSET_BITS 64  // In Linux make sizeof(off_t) == 8
@@ -992,6 +994,7 @@ Use at your own risk.
 #ifndef DEBUG
 #define NDEBUG 1
 #endif
+
 #include <assert.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -9631,12 +9634,18 @@ private:
 
 // Global variables
 int64_t global_start=0;  	// set to mtime() at start of main()
+bool flagdebug; // very verbose output
 bool flagnoeta;					// -noeta (do not show ETA, for batch file)
 bool flagpakka;					// different output
 bool flagvss;					// make VSS on Windows with admin rights
 bool flagverbose;             	// show more
 bool flagverify;			// read from filesystem
-  
+bool flagkill;
+bool flagutf;
+bool flagflat;
+bool flagfix255;
+bool flagfixeml;
+
    bool flagcrc32c;			// flag use CRC-32c instead
   bool flagxxhash;			// flag use XXH3
   bool flagcrc32;			// flag use CRC32
@@ -9742,8 +9751,23 @@ bool isdirectory(string i_filename)
 	else
 	return
 		i_filename[i_filename.size()-1]=='/';
-	
 }
+bool havedoublequote(string i_filename)
+{
+	if (i_filename.length()==0)
+		return false;
+	else
+	return
+		i_filename[i_filename.size()-1]=='"';
+}
+string cutdoublequote(string i_string)
+{
+	string temp=i_string;
+	if (havedoublequote(i_string))
+		temp.pop_back();
+	return temp;
+}
+
 bool isextension(const char* i_filename,const char* i_ext)
 {
 	if (!i_filename)
@@ -10008,6 +10032,7 @@ FILE* freadopen(const char* i_filename)
 		printf( "\nfreadopen cannot open:");
 		printUTF8(i_filename);
 		printf("\n");
+		return 0;
 	}
 	return myfp;
 }
@@ -11639,6 +11664,7 @@ void myreplaceall(std::string& str, const std::string& from, const std::string& 
     }
 }
 
+
 bool fileexists(const string& i_filename) 
 {
   struct stat buffer;   
@@ -11781,17 +11807,97 @@ bool delete_dir(const char* i_directory) {
 #endif
 }
 
+
+
+
+
+
+
+
+long long fsbtoblk(int64_t num, uint64_t fsbs, u_long bs)
+{
+	return (num * (intmax_t) fsbs / (int64_t) bs);
+}
+
+
+
+
+
+/// it is not easy, at all, to take *nix free filesystem space
+uint64_t getfreespace(const char* i_path)
+{
+	
+#ifdef BSD
+	struct statfs stat;
+ 
+	if (statfs(i_path, &stat) != 0) 
+	{
+		// error happens, just quits here
+		return 0;
+	}
+///	long long used = stat.f_blocks - stat.f_bfree;
+///	long long availblks = stat.f_bavail + used;
+
+	static long blocksize = 0;
+	int dummy;
+
+	if (blocksize == 0)
+		getbsize(&dummy, &blocksize);
+	return  fsbtoblk(stat.f_bavail,
+	stat.f_bsize, blocksize)*1024;
+#else
+#ifdef unix //this sould be Linux
+	return 0;
+#else
+	uint64_t spazio=0;
+	
+	BOOL  fResult;
+	unsigned __int64 i64FreeBytesToCaller,i64TotalBytes,i64FreeBytes;
+	WCHAR  *pszDrive  = NULL, szDrive[4];
+
+	const size_t WCHARBUF = 512;
+	wchar_t  wszDest[WCHARBUF];
+	MultiByteToWideChar(CP_ACP, MB_PRECOMPOSED, i_path, -1, wszDest, WCHARBUF);
+
+	pszDrive = wszDest;
+	if (i_path[1] == ':')
+	{
+		szDrive[0] = pszDrive[0];
+		szDrive[1] = ':';
+        szDrive[2] = '\\';
+        szDrive[3] = '\0';
+		pszDrive = szDrive;
+	}
+	fResult = GetDiskFreeSpaceEx ((LPCTSTR)pszDrive,
+                                 (PULARGE_INTEGER)&i64FreeBytesToCaller,
+                                 (PULARGE_INTEGER)&i64TotalBytes,
+                                 (PULARGE_INTEGER)&i64FreeBytes);
+	if (fResult)
+		spazio=i64FreeBytes;
+	return spazio; // Windows
+#endif
+
+
+
+
+
+#endif
+
+
+}
+
 #ifdef unix
 
 // Print last error message
-void printerr(const char* filename) {
+void printerr(const char* i_where,const char* filename) 
+{
   perror(filename);
 }
 
 #else
 
 // Print last error message
-void printerr(const char* filename) 
+void printerr(const char* i_where,const char* filename) 
 {
   fflush(stdout);
   int err=GetLastError();
@@ -11802,7 +11908,7 @@ void printerr(const char* filename)
   if (err==ERROR_FILE_NOT_FOUND)
     g_exec_text=": error file not found";
   else if (err==ERROR_PATH_NOT_FOUND)
-   g_exec_text=": error path not found";
+   g_exec_text=": error pathz not found";
   else if (err==ERROR_ACCESS_DENIED)
     g_exec_text=": error access denied";
   else if (err==ERROR_SHARING_VIOLATION)
@@ -11812,11 +11918,24 @@ void printerr(const char* filename)
   else if (err==ERROR_INVALID_NAME)
     g_exec_text=": error invalid name";
   else if (err==ERROR_NETNAME_DELETED)
-    g_exec_text=": error network name no longer available";
+      g_exec_text=": error network name no longer available";
+  else if (err==ERROR_ALREADY_EXISTS)
+      g_exec_text=": cannot write file already exists";
   else
-    g_exec_text=": error Windows error";
+  {
+	char buffer[100];
+	sprintf(buffer,": Windows error # %d\n",err);
+	
+  g_exec_text=buffer;
+  }
 	fprintf(stderr, g_exec_text.c_str());
+	fprintf(stderr,"\n");
 	g_exec_text=filename+g_exec_text;
+	
+	uint64_t spazio=getfreespace(filename);
+	if (spazio<8)
+		printf("\n\nMAYBE OUT OF FREE SPACE OR INVALID PATH?\n");
+	exit(0);
 }
 
 #endif
@@ -11865,7 +11984,7 @@ void close(const char* filename, int64_t date, int64_t attr, FP fp=FPNULL) {
 
 // Print file open error and throw exception
 void ioerr(const char* msg) {
-  printerr(msg);
+  printerr("11896",msg);
   throw std::runtime_error(msg);
 }
 
@@ -12431,6 +12550,9 @@ private:
   // Command line arguments
   uint64_t minsize;
   uint64_t maxsize;
+  uint32_t filelength;
+  uint32_t dirlength;
+  
   unsigned int menoenne;
   string versioncomment;
   bool flagcomment;
@@ -12490,9 +12612,11 @@ private:
 	int list();               				// list (one parameter) / check (more than one)
 	int verify();
 	int kill();
+	int utf();
 	int test();           					// test, return 1 if error else 0
 	int summa();							// get hash / or sum
 	int paranoid();							// paranoid test by unz. Really slow & lot of RAM
+	int fillami();							// media check
 	void usage();        					// help
 	int dir();								// Windows-like dir command
 	int dircompare(bool i_flagonlysize);
@@ -12677,7 +12801,7 @@ void Jidac::differences()
 	moreprint("6)  New command s (size). Get the cumulative size of one or more directory.");
 	moreprint("    Skip .zfs and ADS. Use -all for multithread");
 	moreprint("7)  New command sha1 (hashing). Calculate hash of something (default SHA1)");
-	moreprint("    -sha256, -crc32, -crc32c, -xxhash, -all (M/T) -verify (single XXH3)");
+	moreprint("    -sha256, -crc32, -crc32c, -xxhash, -all (M/T)");
 	moreprint("8)  New command dir. Something similar to dir command (for *nix)");
 	moreprint("    Switches /s /a /os /od. Show cumulative size in the last line!");
 	moreprint("    -crc32 find duplicates. -n Y like tain -n. -minsize Y -maxsize U");
@@ -12704,6 +12828,15 @@ void Jidac::differences()
 	moreprint("26) -exec_ok file.sh. After OK run file.sh");
 	moreprint("27) -exec_error file.sh. After A NOT OK (error, warning) run file.sh");
 	moreprint("28) kill command");
+	moreprint("29) -kill switch -verify");
+	moreprint("30) -utf switch");
+	moreprint("31) -flat switch");
+	moreprint("31) -dirlength -filelength");
+	moreprint("32) utf command");
+	moreprint("33) -debug flag");
+	moreprint("34) -fix255 flag");
+	moreprint("35) -fixeml flag");
+	
 	
 	exit(1);
 }
@@ -12786,10 +12919,19 @@ void Jidac::examples()
 	moreprint("\n");
 	moreprint("zpaqfranz sha1 r:\\vbox s:\\uno");
 	moreprint("zpaqfranz sha1 r:\\vbox s:\\uno -crc32");
-	moreprint("zpaqfranz sha1 r:\\vbox -verify");
 	moreprint("zpaqfranz sha1 r:\\vbox -all");
 	moreprint("you can use -crc32c -sha256 -xxhash -crc32 (default SHA1)");
 	moreprint("\n");
+	moreprint("zpaqfranz sha1 p:\\staff -xxhash -checksum");
+	moreprint("Create MAGIC cumulative hashes of 1-level");
+	moreprint("\n");
+	moreprint("zpaqfranz sha1 p:\\staff -xxhash -verify");
+	moreprint("Find duplicated files");
+	moreprint("\n");
+	moreprint("zpaqfranz sha1 p:\\staff -xxhash -verify -all -kill -minsize 1000000");
+	moreprint("Find duplicated files, with M/T, show only kill-candidae, min 1MB");
+	moreprint("\n");
+	
 	moreprint("zpaqfranz dir /root/script /od");
 	moreprint("Windows-dir command clone (/od /os /s /a)");
 	moreprint("\n");
@@ -12799,6 +12941,19 @@ void Jidac::examples()
 	moreprint("zpaqfranz dir c:\\ /s -crc32 -find .mp4");
 	moreprint("Find .mp4 duplicate in C:\\");
 	
+	moreprint("\n");
+	moreprint("+++ EXTRACTING");
+	moreprint("zpaqfranz x p:\\due.zpaq -to z:\\muz7\\");
+	moreprint("Extract all files into folder\n");
+	
+	moreprint("zpaqfranz x p:\\due.zpaq -to z:\\muz7\\ -flat");
+	moreprint("Extract all files into single directory\n");
+	
+	moreprint("zpaqfranz x p:\\due.zpaq -to z:\\muz7\\ -kill -verify");
+	moreprint("Create 0-bytes files (check filename restoration)\n");
+	
+	moreprint("zpaqfranz x p:\\due.zpaq -to z:\\muz7\\ -utf -fix255 -fixeml");
+	moreprint("Extract without utf filename, max length 255, compress .eml\n");
 	
 	exit(1);
 }
@@ -12830,19 +12985,20 @@ string mymaxfile(string i_filename,const unsigned int i_lunghezza)
 //// default help
 void Jidac::usage() 
 {
-		
 	moreprint("Usage: zpaqfranz command archive[.zpaq] files|directory... -options...");
 	moreprint("\?\?\?\? in archive name for multi-part ex \"test_????.zpaq\"");
-	moreprint("Commands:");
+	moreprint("Archive commands:");
 	moreprint("   a             Append files (-checksum -force -crc32 -comment foo -test)");
-	moreprint("   x             Extract versions of files (-until N -comment foo)");
+	moreprint("   x             Extract versions of files (-until N -comment foo -kill -utf)");
 	moreprint("   l             List files (-all -checksum -find something -comment foo)");
 	moreprint("   l d0 d1 d2... Compare (test) content agains directory d0, d1, d2...");
+	moreprint("   t             Fast test of most recent version of files (-verify -verbose)");
+	moreprint("Ausiliary commands:");
 	moreprint("   c d0 d1 d2... Compare dir d0 to d1,d2... (-all M/T scan -verify -xxhash...)");
 	moreprint("   s d0 d1 d2... Cumulative size (excluding .zfs) of d0,d1,d2 (-all M/T)");
-	moreprint("   t             Fast test of most recent version of files (-verify -verbose)");
-	moreprint("   p             Paranoid test. Use lots (LOTS!) of RAM (-verify -verbose)");
-	moreprint("   sha1          Calculate hash (-sha256 -crc32 -crc32c -xxhash)");
+	moreprint("   f             Fill (wipe) almost all disk space and check (-verbose -kill)");
+	moreprint("   utf d0        Check/sanitize file/dirnames in d0 (-dirlength X -filelength Y -kill)");
+	moreprint("   sha1          Hash/dup (-sha256 -crc32 -crc32c -xxhash -all -kill -checksum -verify)");
 	moreprint("   dir           Windows dir-like (/s /a /os /od) -crc32 show duplicates");
 	moreprint("   help          Long help (-h, -he examples, -diff differences from 7.15)");
 	moreprint("Optional switch(es):");
@@ -12889,12 +13045,15 @@ moreprint("  -forcewindows   Take $DATA$ and System Volume Information");
 moreprint("  -xls            Do NOT always force XLS");
 moreprint("  -nopath         Do not store path");
 moreprint("  -nosort         Do not sort file when adding or listing");
-moreprint("  -find      X    Search for X in full filename (ex. list)");
-moreprint("  -replace   Y    Replace X with Y in full filename (ex. list)");
-moreprint("  -n         X    Only print last X lines in dir (like tail)/first X (list)");
-moreprint("  -minsize   X    Skip files by length (add(), list(), dir())");
-moreprint("  -maxsize   X    Skip files by length (add(), list(), dir())");
+moreprint("  -find       X   Search for X in full filename (ex. list)");
+moreprint("  -replace    Y   Replace X with Y in full filename (ex. list)");
+moreprint("  -n          X   Only print last X lines in dir (like tail)/first X (list)");
+moreprint("  -minsize    X   Skip files by length (add(), list(), dir())");
+moreprint("  -maxsize    X   Skip files by length (add(), list(), dir())");
+moreprint("  -filelength X   Utf command: find file with length>X, extract maxfilelen");
+moreprint("  -dirlength  X   Utf command: find dirs with length>X, extract maxdirlen");
 moreprint("  -comment foo    Add/find ASCII comment string to versions");
+moreprint("  -nolongfilename Try to keep path+filename <254 chars");
 #if defined(_WIN32) || defined(_WIN64)
 moreprint("  -vss            Do a VSS for drive C: (Windows with administrative rights)");
 #endif
@@ -12904,8 +13063,29 @@ moreprint("  -xxhash         In sha1 command use XXH3");
 moreprint("  -sha256         In sha1 command use SHA256");
 moreprint("  -exec_ok fo.bat After OK launch fo.bat");
 moreprint("  -exec_error kz  After NOT OK launch kz");
-moreprint("  ########## Advanced options ###########");
+moreprint("  -kill           Show 'script-ready' log of dup files");
+moreprint("  -kill -verify   In extraction write 0-bytes file instead of data");
+moreprint("  -utf            On extract kill non-utf8 chars");
+moreprint("  -fix255         On extract shrink total file length");
+moreprint("  -fixeml         On extract compress .eml filenames (Fwd Fwd Fwd =>Fwd)");
+moreprint("  -flat           On extract everithing in single path (emergency)");
+moreprint("  -debug          Show lot of infos (superverbose)");
 
+moreprint("\n");
+moreprint("  ########## Advanced commands ###########");
+moreprint("   p              Paranoid test. Use lots (LOTS!) of RAM (-verify -verbose)");
+moreprint("   k file.zpaq path -to foo");
+moreprint("                  kill (delete) all files and directories in foo that arent in archive");
+moreprint("                  example: ");
+moreprint("                  zpaqfranz a z:\\1.zpaq c:\\nz");
+moreprint("                  zpaqfranz x z:\\1.zpaq c:\\nz -to z:\\knb");
+moreprint("                  ... something happens in z:\\knb and we want to turn back to archive ...");
+moreprint("                  ... WITHOUT delete everything and extract again ...");
+moreprint("                  zpaqfranz x z:\\1.zpaq c:\\nz -to z:\\knb -force");
+moreprint("                  zpaqfranz k z:\\1.zpaq c:\\nz -to z:\\knb");
+
+moreprint("\n");
+moreprint("  ########## Advanced options ###########");
 moreprint("  -repack F [X]   Extract to new archive F with key X (default: none)");
 
 sprintf(buffer,"  -tN -threads N  Use N threads (default: 0 = %d cores.",howmanythreads);
@@ -12930,17 +13110,6 @@ moreprint("    N2..N2+N3-1 ANDed with N4, hash mulitpiler N5, memory halved by N
 moreprint("  m8,24: MIX all previous models, N1 context bits, learning rate N2");
 moreprint("  s8,32,255: SSE last model. N1 context bits, count range N2..N3");
 moreprint("  t8,24: MIX2 last 2 models, N1 context bits, learning rate N2");
-moreprint("  ####### risky");
-moreprint("  k file.zpaq path -to foo");
-moreprint("  kill (delete) all files and directories in foo that arent in archive");
-moreprint("  example: ");
-moreprint("zpaqfranz a z:\\1.zpaq c:\\nz");
-moreprint("zpaqfranz x z:\\1.zpaq c:\\nz -to z:\\knb");
-moreprint("... something happens in z:\\knb and we want to turn back to archive ...");
-moreprint("... WITHOUT delete everything and extract again ...");
-moreprint("zpaqfranz x z:\\1.zpaq c:\\nz -to z:\\knb -force");
-moreprint("zpaqfranz k z:\\1.zpaq c:\\nz -to z:\\knb");
-
 
   exit(1);
 }
@@ -12962,6 +13131,952 @@ string append_path(string a, string b) {
   if (na>0 && a[na-1]=='/') a=a.substr(0, na-1);
   return a+"/"+b;
 }
+
+
+#ifdef _WIN32
+
+
+/*
+uint32_t convert_ansi_to_unicode_string(std::wstring& unicode,const char* ansi,const size_t ansi_size) 
+{
+    uint32_t error = 0;
+    do 
+	{
+
+        if ((nullptr == ansi) || (0 == ansi_size)) {
+            error = ERROR_INVALID_PARAMETER;
+            break;
+        }
+
+        unicode.clear();
+
+        //
+        // getting required cch.
+        //
+
+        int required_cch = ::MultiByteToWideChar(
+                                CP_ACP,
+                                0,
+                                ansi, static_cast<int>(ansi_size),
+                                nullptr, 0
+                                );
+
+        if (0 == required_cch) {
+            error = ::GetLastError();
+            break;
+        }
+
+        unicode.resize(required_cch);
+
+        //
+        // convert.
+        //
+
+        if (0 == ::MultiByteToWideChar(
+                    CP_ACP,
+                    0,
+                    ansi, static_cast<int>(ansi_size),
+                    const_cast<wchar_t*>(unicode.c_str()), static_cast<int>(unicode.size())
+                    )) {
+            error = ::GetLastError();
+            break;
+        }
+
+    } while (false);
+
+    return error;
+}
+*/
+//
+// convert_unicode_to_ansi_string.
+//
+
+uint32_t convert_unicode_to_ansi_string(
+     std::string& ansi,
+    const wchar_t* unicode,
+    const size_t unicode_size
+    ) {
+
+    uint32_t error = 0;
+
+    do {
+
+        if ((nullptr == unicode) || (0 == unicode_size)) {
+            error = ERROR_INVALID_PARAMETER;
+            break;
+        }
+
+        ansi.clear();
+
+        //
+        // getting required cch.
+        //
+
+        int required_cch = ::WideCharToMultiByte(
+                                CP_ACP,
+                                0,
+                                unicode, static_cast<int>(unicode_size),
+                                nullptr, 0,
+                                nullptr, nullptr
+                                );
+
+        if (0 == required_cch) {
+            error = ::GetLastError();
+            break;
+        }
+
+        //
+        // allocate.
+        //
+
+        ansi.resize(required_cch);
+
+        //
+        // convert.
+        //
+
+        if (0 == ::WideCharToMultiByte(
+                    CP_ACP,
+                    0,
+                    unicode, static_cast<int>(unicode_size),
+                    const_cast<char*>(ansi.c_str()), static_cast<int>(ansi.size()),
+                    nullptr, nullptr
+                    )) {
+            error = ::GetLastError();
+            break;
+        }
+
+    } while (false);
+
+    return error;
+}
+
+//
+// convert_unicode_to_utf8_string
+//
+/*
+uint32_t convert_unicode_to_utf8_string(
+     std::string& utf8,
+     const wchar_t* unicode,
+     const size_t unicode_size
+    ) {
+
+    uint32_t error = 0;
+
+    do {
+
+        if ((nullptr == unicode) || (0 == unicode_size)) {
+            error = ERROR_INVALID_PARAMETER;
+            break;
+        }
+
+        utf8.clear();
+
+        //
+        // getting required cch.
+        //
+
+        int required_cch = ::WideCharToMultiByte(
+                                CP_UTF8,
+                                0x0080, //WC_ERR_INVALID_CHARS,
+                                unicode, static_cast<int>(unicode_size),
+                                nullptr, 0,
+                                nullptr, nullptr
+                                );
+
+        if (0 == required_cch) {
+            error = ::GetLastError();
+            break;
+        }
+
+        //
+        // allocate.
+        //
+
+        utf8.resize(required_cch);
+
+        //
+        // convert.
+        //
+
+        if (0 == ::WideCharToMultiByte(
+                    CP_UTF8,
+                    0x0080,//WC_ERR_INVALID_CHARS,
+                    unicode, static_cast<int>(unicode_size),
+                    const_cast<char*>(utf8.c_str()), static_cast<int>(utf8.size()),
+                    nullptr, nullptr
+                    )) {
+            error = ::GetLastError();
+            break;
+        }
+
+    } while (false);
+
+    return error;
+}
+*/
+//
+// convert_utf8_to_unicode_string
+//
+
+uint32_t convert_utf8_to_unicode_string(
+     std::wstring& unicode,
+    const char* utf8,
+    const size_t utf8_size
+    ) {
+
+    uint32_t error = 0;
+
+    do {
+
+        if ((nullptr == utf8) || (0 == utf8_size)) {
+            error = ERROR_INVALID_PARAMETER;
+            break;
+        }
+
+        unicode.clear();
+
+        //
+        // getting required cch.
+        //
+
+        int required_cch = ::MultiByteToWideChar(
+            CP_UTF8,
+            MB_ERR_INVALID_CHARS,
+            utf8, static_cast<int>(utf8_size),
+            nullptr, 0
+        );
+        if (0 == required_cch) {
+            error = ::GetLastError();
+            break;
+        }
+
+        //
+        // allocate.
+        //
+
+        unicode.resize(required_cch);
+
+        //
+        // convert.
+        //
+
+        if (0 == ::MultiByteToWideChar(
+                    CP_UTF8,
+                    MB_ERR_INVALID_CHARS,
+                    utf8, static_cast<int>(utf8_size),
+                    const_cast<wchar_t*>(unicode.c_str()), static_cast<int>(unicode.size())
+                    )) {
+            error = ::GetLastError();
+            break;
+        }
+
+    } while (false);
+
+    return error;
+}
+
+
+
+std::string utf8toansi(const std::string & utf8)
+{
+	std::wstring unicode = L"";
+	convert_utf8_to_unicode_string(unicode, utf8.c_str(), utf8.size());
+	std::string ansi = "";
+	convert_unicode_to_ansi_string(ansi, unicode.c_str(), unicode.size());
+	return ansi;
+}
+
+#else
+
+/// Unix & Linux
+
+
+
+
+#include <string>
+#include <codecvt> // for std::codecvt_utf8
+#include <locale>  // for std::wstring_convert
+
+///std::wstring_convert<std::codecvt_utf8<char32_t>, char32_t> conv_utf8_utf32;
+
+std::wstring linux_utf8_to_unicode(const std::string & str)
+{
+    std::wstring ret;
+	
+	printf("Provo con ");
+	printUTF8(str.c_str());
+	printf("\n");
+	std::wstring_convert<std::codecvt_utf8<char32_t>, char32_t> utf32conv;
+    printf("caz1\n");
+	std::u32string utf32 = utf32conv.from_bytes(str);
+	printf("caz2\n");
+	
+	
+	/*
+    try {
+        std::wstring_convert< std::codecvt_utf8<wchar_t> > wcv;
+        ret = wcv.from_bytes(str);
+    } catch (const std::exception & e) {
+			string err=e.what();
+		printf("ugggg %s\n",err.c_str());
+        ///std::cerr << e.what() << std::endl;
+    }
+	*/
+    return ret;
+}
+
+std::string linux_unicode_to_ansi(const std::wstring & wstr)
+{
+    std::string ret;
+    std::mbstate_t state = {};
+    const wchar_t *src = wstr.data();
+    size_t len = std::wcsrtombs(nullptr, &src, 0, &state);
+    if (static_cast<size_t>(-1) != len) {
+        std::unique_ptr< char [] > buff(new char[len + 1]);
+        len = std::wcsrtombs(buff.get(), &src, len, &state);
+        if (static_cast<size_t>(-1) != len) {
+            ret.assign(buff.get(), len);
+        }
+    }
+    return ret;
+}
+
+
+std::string utf8toansi(const std::string & utf8)
+{
+	return utf8;
+	/*
+	string risultato;
+	printf("Pre purga ||%s||\n",utf8.c_str());
+	
+	for (int i=0;i<utf8.length();i++)
+		if ((isprint(utf8[i])) || (utf8[i]=='.') || (utf8[i]==' '))
+			risultato += utf8[i];
+	printf("Post purga ||%s||\n",risultato.c_str());
+	
+	return risultato;
+	*/
+		
+		
+	///return linux_unicode_to_ansi(linux_utf8_to_unicode(utf8));
+}
+#endif
+
+
+
+
+
+
+
+
+
+const std::string WHITESPACE = " \n\r\t\f\v";
+ 
+std::string myltrim(const std::string &s)
+{
+    size_t start = s.find_first_not_of(WHITESPACE);
+    return (start == std::string::npos) ? "" : s.substr(start);
+}
+ 
+std::string myrtrim(const std::string &s)
+{
+    size_t end = s.find_last_not_of(WHITESPACE);
+    return (end == std::string::npos) ? "" : s.substr(0, end + 1);
+}
+ 
+std::string mytrim2(const std::string &s) {
+    return myrtrim(myltrim(s));
+}
+
+string extractfilename(const string& i_string) 
+{
+	size_t i = i_string.rfind('/', i_string.length());
+	if (i != string::npos) 
+		return(i_string.substr(i+1, i_string.length() - i));
+	return(i_string);
+}
+/*
+int countchar(string i_string,i_string i_char) 
+{
+  int count = 0;
+  for (int i = 0; i < i_string.size(); i++)
+    if (i_string[i] == i_char) 
+		count++;
+
+  return count;
+}
+*/
+string prendiestensione(const string& s) 
+{
+	if (isdirectory(s))
+		return ("");
+	string nomefile=extractfilename(s);
+	size_t i = nomefile.rfind('.', nomefile.length());
+	if (i != string::npos) 
+	{
+		
+		int lunghezzaestensione=nomefile.length() - i;
+		if (lunghezzaestensione>20)
+			return("");
+		return(nomefile.substr(i+1, lunghezzaestensione));
+   }
+
+   return("");
+}
+
+string extractfilepath(const string& i_string) 
+{
+	size_t i = i_string.rfind('/', i_string.length());
+	if (i != string::npos) 
+		return(i_string.substr(0, i+1));
+	return("");
+}
+
+
+string prendinomefileebasta(const string& s) 
+{
+	string nomefile=extractfilename(s);
+//	printf("_________________ filename !%s!\n",nomefile.c_str());
+   size_t i = nomefile.rfind('.', nomefile.length());
+   if (i != string::npos) {
+      return(nomefile.substr(0,i));
+   }
+ ///  return(s);
+  return(nomefile);
+}
+
+std::string ReplaceAll(std::string str, const std::string& from, const std::string& to) {
+    size_t start_pos = 0;
+    while((start_pos = str.find(from, start_pos)) != std::string::npos) {
+        str.replace(start_pos, from.length(), to);
+        start_pos += to.length(); // Handles case where 'to' is a substring of 'from'
+    }
+    return str;
+}
+
+string nomefileseesistegia(string i_nomefile)
+{
+	if (!fileexists(i_nomefile))
+		return i_nomefile;
+	string percorso=extractfilepath(i_nomefile);
+	string estensione=prendiestensione(i_nomefile);
+	string nomefile=prendinomefileebasta(i_nomefile);
+	char	numero[10];
+	for (int i=1;i<99999;i++)
+	{
+		sprintf(numero,"%05d",i);
+		string snumero=numero;
+		string candidato=percorso+nomefile+"_"+snumero+"."+estensione;
+		if (!fileexists(candidato))
+			return candidato;
+	}
+	return ("");
+}
+
+
+
+string padleft(std::string str, const size_t num, const char paddingChar = ' ')
+{
+    if(num > str.size())
+	{
+        string tmpstring=str;
+		tmpstring.insert(0, num - tmpstring.size(), paddingChar);
+		return tmpstring;
+	}
+	else
+	return("");
+}
+
+
+string purgeansi(string i_string,bool i_keeppath=false)
+{
+	if (i_string=="")
+		return ("");
+
+	string purged;
+	for (unsigned int i=0;i<i_string.length();i++)
+	{
+		if (i_keeppath)
+		{
+			if ((i_string[i]=='/') || (i_string[i]=='\\'))
+			{
+				purged+=i_string[i];
+				continue;
+			}
+		}
+		if (isalnum(i_string[i]))
+			purged+=i_string[i];
+		else
+		{
+			switch (i_string[i]) 
+			{
+/*
+very forbiden
+< (less than)
+> (greater than)
+: (colon)
+" (double quote)
+/ (forward slash)
+\ (backslash)
+| (vertical bar or pipe)
+? (question mark)
+* (asterisk)
+*/
+
+
+				case ' ':
+				case '-':
+				case '#':
+				case '~':
+				case '%':
+				case '^':
+				case '_':
+				case '.':
+				case '+':
+				case '=':
+				purged+=i_string[i];
+				break;
+
+				case '&':
+				purged+="_and_";
+				break;
+
+				case ',':
+				case '`':
+//				case '!':
+				case '@':
+				case '$':
+				case '*':
+	///			case '\\':
+				case '|':
+				case ':':
+				case ';':
+				case '"':
+				case '\'':
+				case '<':
+				case '>':
+	///			case '/':
+				case '\n':
+				case '\r':
+				case '\t':
+				purged+='_';
+				break;
+
+				case '(':
+	///			case '[':
+				case '{':
+				purged+='(';
+				break;
+
+				case ')':
+		///		case ']':
+				case '}':
+				purged+=')';
+				break;
+			}
+		}
+	}
+
+	return purged;
+}
+
+string forcelatinansi(string i_string)
+{
+	if (i_string=="")
+		return ("");
+
+	for (unsigned int j=0;j<i_string.length();j++)
+	{
+		if (i_string[j]<0)
+		{
+			if (i_string[j]==-1) // °
+			i_string[j]='u';
+				else
+				if (i_string[j]==-2) // °
+					i_string[j]='u';
+				else
+				if (i_string[j]==-3) // °
+					i_string[j]='u';
+				else
+				if (i_string[j]==-4) // °
+					i_string[j]='u';
+				else
+				if (i_string[j]==-5) // °
+					i_string[j]='u';
+				else
+				if (i_string[j]==-6) // °
+					i_string[j]='u';
+				else
+				if (i_string[j]==-7) // °
+					i_string[j]='u';
+				else
+				if (i_string[j]==-8) // °
+					i_string[j]='o';
+				else
+				if (i_string[j]==-9) // °
+					i_string[j]='o';
+				else
+				if (i_string[j]==-10) //ò
+					i_string[j]='o';
+				else
+				if (i_string[j]==-11) //ò
+					i_string[j]='o';
+				else
+				if (i_string[j]==-12) //ò
+					i_string[j]='o';
+				else
+				if (i_string[j]==-13) //ò
+					i_string[j]='o';
+				else
+				if (i_string[j]==-14) //ò
+					i_string[j]='o';
+				else
+				if (i_string[j]==-15) //ò
+					i_string[j]='o';
+				else
+				if (i_string[j]==-17) //ò
+					i_string[j]='i';
+				else
+				if (i_string[j]==-18) //ò
+					i_string[j]='i';
+				else
+				if (i_string[j]==-19) //ò
+					i_string[j]='i';
+				else
+				if (i_string[j]==-20) //ò
+					i_string[j]='i';
+				else
+				if (i_string[j]==-21) //è
+					i_string[j]='e';
+				else
+				if (i_string[j]==-22) //è
+					i_string[j]='e';
+				else
+				if (i_string[j]==-23) //è
+					i_string[j]='e';
+				else
+				if (i_string[j]==-24) //è
+					i_string[j]='e';
+				else
+				if (i_string[j]==-25) //è
+					i_string[j]='a';
+				else
+				if (i_string[j]==-26) //è
+					i_string[j]='a';
+				else
+				if (i_string[j]==-27) //a
+					i_string[j]='a';
+				else
+				if (i_string[j]==-28) //a
+					i_string[j]='a';
+				else
+				if (i_string[j]==-29) //a
+					i_string[j]='a';
+				else
+				if (i_string[j]==-30) //a
+					i_string[j]='e';
+				else
+				if (i_string[j]==-31) //a
+					i_string[j]='a';
+				else
+				if (i_string[j]==-32) //a
+					i_string[j]='a';
+				else
+				if (i_string[j]==-33) //a
+					i_string[j]='u';
+				else
+				if (i_string[j]==-34) //a
+					i_string[j]='u';
+				else
+				if (i_string[j]==-35) //a
+					i_string[j]='u';
+				else
+				if (i_string[j]==-36) //a
+					i_string[j]='u';
+				else
+				if (i_string[j]==-37) //a
+					i_string[j]='u';
+				else
+				if (i_string[j]==-38) //a
+					i_string[j]='u';
+				else
+				if (i_string[j]==-39) //a
+					i_string[j]='U';
+				else
+				if (i_string[j]==-40) //a
+					i_string[j]='O';
+				else
+				if (i_string[j]==-41) //a
+					i_string[j]='x';
+				else
+				if (i_string[j]==-42) //ò
+					i_string[j]='O';
+				else
+				if (i_string[j]==-45) //ò
+					i_string[j]='O';
+				else
+				if (i_string[j]==-46) //ò
+					i_string[j]='O';
+				else
+				if (i_string[j]==-47) //ò
+					i_string[j]='N';
+				else
+				if (i_string[j]==-49) //ò
+					i_string[j]='I';
+				else
+				if (i_string[j]==-50) //ò
+					i_string[j]='I';
+				else
+				if (i_string[j]==-51) //ò
+					i_string[j]='I';
+				else
+				if (i_string[j]==-52) //ò
+					i_string[j]='I';
+				else
+				if (i_string[j]==-53) //ò
+					i_string[j]='E';
+				else
+				if (i_string[j]==-54) //ò
+					i_string[j]='E';
+				else
+				if (i_string[j]==-55) //ò
+					i_string[j]='E';
+				else
+				if (i_string[j]==-56) //ò
+					i_string[j]='E';
+				else
+				if (i_string[j]==-57) //ò
+					i_string[j]='E';
+				else		
+				if (i_string[j]==-60) //ò
+					i_string[j]='A';
+				else
+				if (i_string[j]==-61) //ò
+					i_string[j]='A';
+				else
+				if (i_string[j]==-62) //ò
+					i_string[j]='A';
+				else
+				if (i_string[j]==-63) //ò
+					i_string[j]='A';
+				else
+				if (i_string[j]==-64) //ò
+					i_string[j]='A';
+				else
+				if (i_string[j]==-66) //ò
+					i_string[j]='3';
+				else
+				if (i_string[j]==-68) //ò
+					i_string[j]='3';
+				else
+				if (i_string[j]==-69) //ò
+					i_string[j]='>';
+				else
+				if (i_string[j]==-70) //ò
+					i_string[j]='o';
+				else
+				if (i_string[j]==-72) //ò
+					i_string[j]='.';
+				else
+				if (i_string[j]==-74) //ò
+					i_string[j]=' ';
+				else
+				if (i_string[j]==-75) //ò
+					i_string[j]=' ';
+				else
+				if (i_string[j]==-76) //ò
+					i_string[j]=' ';
+				else
+				if (i_string[j]==-78) //ò
+					i_string[j]='2';
+				else
+				if (i_string[j]==-80) // °
+					i_string[j]='o';
+				else
+				if (i_string[j]==-81) // °
+					i_string[j]='-';
+				else
+				if (i_string[j]==-82) // °
+					i_string[j]='-';
+				else
+				if (i_string[j]==-83) // °
+					i_string[j]='-';
+				else
+				if (i_string[j]==-84) // °
+					i_string[j]='-';
+				else
+				if (i_string[j]==-85) // °
+					i_string[j]='<';
+				else
+				if (i_string[j]==-89) // °
+					i_string[j]='S';
+				else
+				if (i_string[j]==-90) // °
+					i_string[j]=' ';
+				else
+				if (i_string[j]==-93) // °
+					i_string[j]=' ';
+				else
+				if (i_string[j]==-94) // °
+					i_string[j]=' ';
+				else
+				if (i_string[j]==-95) // °
+					i_string[j]=' ';
+				else
+				if (i_string[j]==-96) // °
+					i_string[j]=' ';
+				else
+				if (i_string[j]==-98) // °
+					i_string[j]=' ';
+				else
+				if (i_string[j]==-102) //-
+					i_string[j]='s';
+				else
+				if (i_string[j]==-103) //-
+					i_string[j]='a';
+				else
+				if (i_string[j]==-106) //-
+					i_string[j]='-';
+				else
+				if (i_string[j]==-107) //-
+					i_string[j]='.';
+				else
+				if (i_string[j]==-108) //-
+					i_string[j]='"';
+				else
+				if (i_string[j]==-109) //-
+					i_string[j]='"';
+				else
+				if (i_string[j]==-110) //-
+					i_string[j]=' ';
+				else
+				if (i_string[j]==-111) //-
+					i_string[j]=' ';
+				else
+				if (i_string[j]==-112) //-
+					i_string[j]=' ';
+				else
+				if (i_string[j]==-112) //-
+					i_string[j]=' ';
+				else
+				if (i_string[j]==-113) //-
+					i_string[j]=' ';
+				else
+				if (i_string[j]==-114) //-
+					i_string[j]=' ';
+				else
+				if (i_string[j]==-115)//-
+					i_string[j]=' ';
+				else
+				if (i_string[j]==-116) //-
+					i_string[j]=' ';
+				else
+				if (i_string[j]==-118) //-
+					i_string[j]='S';
+				else
+				if (i_string[j]==-123) //-
+					i_string[j]='d';
+				else
+				if (i_string[j]==-128) //-
+					i_string[j]='E';
+				else
+					i_string[j]=' ';
+			
+			
+		}
+	}
+		
+	return i_string;
+}
+
+string purgedouble(string i_string,string i_from,string i_to)
+{
+	if (i_string=="")
+		return("");
+	if (i_from=="")
+		return("");
+	if (i_to=="")
+		return("");
+	string purged=i_string;
+	myreplaceall(purged,i_from,i_to);
+		
+	return purged;
+}
+
+string compressemlfilename(string i_string)
+{
+	if (i_string=="")
+		return("");
+	string uniqfilename=extractfilename(i_string);
+	string percorso=extractfilepath(i_string);
+		
+		for (int k=0;k<10;k++)
+			uniqfilename=purgedouble(uniqfilename,"  "," ");
+	
+		for (int k=0;k<10;k++)
+			uniqfilename=purgedouble(uniqfilename,"..",".");
+	
+		for (int k=0;k<10;k++)
+			uniqfilename=purgedouble(uniqfilename,"Fw ","Fwd ");
+		
+		for (int k=0;k<10;k++)
+			uniqfilename=purgedouble(uniqfilename,"Fwd Fwd ","Fwd ");
+
+		for (int k=0;k<10;k++)
+			uniqfilename=purgedouble(uniqfilename," R "," Re ");
+
+		for (int k=0;k<10;k++)
+			uniqfilename=purgedouble(uniqfilename,"R Fwd ","Re Fwd");
+		
+		for (int k=0;k<10;k++)
+			uniqfilename=purgedouble(uniqfilename," RE "," Re ");
+		
+		for (int k=0;k<10;k++)
+			uniqfilename=purgedouble(uniqfilename,"Re Re ","Re ");
+
+		for (int k=0;k<10;k++)
+			uniqfilename=purgedouble(uniqfilename,"Fwd Re Fwd Re ","Fwd Re ");
+	
+		for (int k=0;k<10;k++)
+			uniqfilename=purgedouble(uniqfilename,"Re Fwd Re Fwd ","Re Fwd ");
+	
+		for (int k=0;k<10;k++)
+			uniqfilename=purgedouble(uniqfilename," SV SV "," SV ");
+
+		for (int k=0;k<10;k++)
+			uniqfilename=purgedouble(uniqfilename,"__","_");
+
+ 		for (int k=0;k<10;k++)
+		uniqfilename=purgedouble(uniqfilename," _ ","_");
+
+		for (int k=0;k<10;k++)
+			uniqfilename=purgedouble(uniqfilename,"  "," ");
+
+		uniqfilename=mytrim2(uniqfilename);
+		
+		uniqfilename=percorso+uniqfilename;
+	
+	return uniqfilename;
+}
+
+int64_t prendidimensionefile(const char* i_filename)
+{
+	if (!i_filename)
+		return 0;
+	FILE* myfile = freadopen(i_filename);
+	if (myfile)
+    {
+		fseeko(myfile, 0, SEEK_END);
+		int64_t dimensione=ftello(myfile);
+		fclose(myfile);
+		return dimensione;
+	}
+	else
+	return 0;
+}
+
+
 
 // Rename name using tofiles[]
 string Jidac::rename(string name) 
@@ -13171,6 +14286,52 @@ inline char* tohuman4(uint64_t i_bytes)
 
 
 
+// take care of "z:\pippo\test pluto\" parameters => "z:\pippo\test pluto\\"
+
+bool directoryexists(string& i_directory) 
+{
+	struct stat buffer;
+	///printf("3-0\n");
+	if (isdirectory(i_directory))
+	{
+		printf("3A\n");
+		return (stat(i_directory.c_str(),&buffer)==0);
+	}
+	string mycandidate=i_directory;
+	mycandidate+='/';
+	///printf("CHECCKO SU <<%s>>\n",mycandidate.c_str());
+	bool cista= (stat(mycandidate.c_str(),&buffer)==0);
+	if (cista)
+	{
+		///printf("Cista\n");
+		return true;
+	}
+	else
+	{
+			///printf("non ci sta\n");
+			return false;
+	}
+}
+string directorywithspaces(string i_directory)
+{
+	if (directoryexists(i_directory))
+	{
+		printf("1A\n");
+		if (!isdirectory(i_directory))
+			i_directory+='/';
+		printf("1B\n");
+			
+		return i_directory;
+	}
+	else
+	{
+		printf("2A\n");
+		
+		return (i_directory);
+	}
+}
+
+
 // Parse the command line. Return 1 if error else 0.
 int Jidac::doCommand(int argc, const char** argv) {
 
@@ -13183,6 +14344,8 @@ int Jidac::doCommand(int argc, const char** argv) {
   fragment=6;
   minsize=0;
   maxsize=0;
+  dirlength=0;
+  filelength=0;
   all=0;
   password=0;  // no password
   index=0;
@@ -13193,6 +14356,7 @@ int Jidac::doCommand(int argc, const char** argv) {
   summary=0; // detailed: -1
   menoenne=0;
   versioncomment="";
+  flagdebug=false;
   flagtest=false;  // -test
   flagskipzfs=false; 
   flagverbose=false;
@@ -13206,7 +14370,11 @@ int Jidac::doCommand(int argc, const char** argv) {
   flagchecksum=false;
   flagcrc32c=false;
   flagverify=false;
-  
+  flagkill=false;
+  flagutf=false;
+  flagfix255=false;
+  flagfixeml=false;
+  flagflat=false;
   flagxxhash=false;
   flagcrc32=false;
   flagsha256=false;
@@ -13227,7 +14395,7 @@ int Jidac::doCommand(int argc, const char** argv) {
 	}
   
 	if (!flagpakka)
-	moreprint("zpaqfranz v" ZPAQ_VERSION " journaling archiver, compiled " __DATE__);
+	moreprint("zpaqfranz v" ZPAQ_VERSION " snapshot archiver, compiled " __DATE__);
 	
 /// check some magic to show help in heuristic way
 /// I know, it's bad, but help is always needed!
@@ -13285,34 +14453,27 @@ int Jidac::doCommand(int argc, const char** argv) {
   // Get optional options
   for (int i=1; i<argc; ++i) {
     const string opt=argv[i];  // read command
-    if ((opt=="add" || opt=="extract" || opt=="list" || opt=="k"
+    if ((opt=="add" || opt=="extract" || opt=="list" || opt=="k" 
          || opt=="a"  || opt=="x" || opt=="p" || opt=="t" ||opt=="test" || opt=="l")
-        && i<argc-1 && argv[i+1][0]!='-' && command==0) {
-      command=opt[0];
-      if (opt=="extract") command='x';
-      if (opt=="test") command='t';
-	  archive=argv[++i];  // append ".zpaq" to archive if no extension
-      const char* slash=strrchr(argv[i], '/');
-      const char* dot=strrchr(slash ? slash : argv[i], '.');
-      if (!dot && archive!="") archive+=".zpaq";
-      while (++i<argc && argv[i][0]!='-')  // read filename args
-        files.push_back(argv[i]);
-      --i;
-    }
-	else if (opt=="s")
-	{
-		command=opt[0];
-		while (++i<argc && argv[i][0]!='-')  // read filename args
-			files.push_back(argv[i]);
-                i--;
-	}
-    else if (opt=="c")
-	{
-		command=opt[0];
-		while (++i<argc && argv[i][0]!='-')  // read filename args
-			files.push_back(argv[i]);
-                i--;
-	}
+        && i<argc-1 && argv[i+1][0]!='-' && command==0) 
+		{
+			command=opt[0];
+			if (opt=="extract") 
+				command='x';
+			if (opt=="test") 
+				command='t';
+	  
+			archive=argv[++i];  // append ".zpaq" to archive if no extension
+			const char* slash=strrchr(argv[i], '/');
+			const char* dot=strrchr(slash ? slash : argv[i], '.');
+			if (!dot && archive!="") 
+			archive+=".zpaq";
+			while (++i<argc && argv[i][0]!='-')  // read filename args
+				files.push_back(argv[i]);
+			--i;
+		}
+
+
     else if (opt=="sha1")
 	{
 		command=opt[3];
@@ -13320,7 +14481,28 @@ int Jidac::doCommand(int argc, const char** argv) {
 			files.push_back(argv[i]);
                 i--;
 	}
-    else if (opt=="dir")
+
+	else if ((opt=="f") || (opt=="c") || (opt=="s") || (opt=="utf"))
+	{
+		command=opt[0];
+		while (++i<argc && argv[i][0]!='-')
+		{
+			///printf("<<%s>>\n",argv[i]);
+			
+			string candidate=argv[i];
+			cutdoublequote(candidate);
+			if (havedoublequote(candidate))
+			{
+				printf("WARNING: double quote founded in command line and cutted\n");
+				candidate.pop_back();
+				printf("||%s||\n",candidate.c_str());
+			}
+			files.push_back(candidate);
+			
+		}
+        i--;
+	}
+	else if (opt=="dir")
 	{
 		command='d';
 		while (++i<argc && argv[i][0]!='-')  // read filename args
@@ -13366,6 +14548,8 @@ int Jidac::doCommand(int argc, const char** argv) {
     else if (opt=="-fragment" && i<argc-1) fragment=atoi(argv[++i]);
     else if (opt=="-minsize" && i<argc-1) minsize=atoi(argv[++i]);
     else if (opt=="-maxsize" && i<argc-1) maxsize=atoi(argv[++i]);
+    else if (opt=="-filelength" && i<argc-1) filelength=atoi(argv[++i]);
+    else if (opt=="-dirlength" && i<argc-1) dirlength=atoi(argv[++i]);
     else if (opt=="-n" && i<argc-1) menoenne=atoi(argv[++i]);
     else if (opt=="-index" && i<argc-1) index=argv[++i];
     else if (opt=="-key" && i<argc-1) {
@@ -13408,6 +14592,7 @@ int Jidac::doCommand(int argc, const char** argv) {
     else if (opt=="-zfs") flagskipzfs=true;
     else if (opt=="-xls") flagdonotforcexls=true;
     else if (opt=="-verbose") flagverbose=true;
+    else if (opt=="-debug") flagdebug=true;
     else if (opt=="-noqnap") flagnoqnap=true;
     else if (opt=="-nopath") flagnopath=true;
     else if (opt=="-nosort") flagnosort=true;
@@ -13417,6 +14602,13 @@ int Jidac::doCommand(int argc, const char** argv) {
     else if (opt=="-sha256") flagsha256=true;
     else if (opt=="-crc32") flagcrc32=true;
     else if (opt=="-verify") flagverify=true;
+    else if (opt=="-kill") flagkill=true;
+    else if (opt=="-utf") flagutf=true;
+	else if (opt=="-utf8") flagutf=true;
+	else if (opt=="-fix255") flagfix255=true;
+	else if (opt=="-fixeml") flagfixeml=true;
+	
+    else if (opt=="-flat") flagflat=true;
     else if (opt[1]=='s') summary=atoi(argv[i]+2);
     else if (opt=="-forcewindows") flagforcewindows=true;
 	/*
@@ -13524,6 +14716,11 @@ int Jidac::doCommand(int argc, const char** argv) {
 			printf("franz: minsize %s\n",migliaia(minsize));
 	if (maxsize)
 			printf("franz: maxsize %s\n",migliaia(maxsize));
+	if (dirlength)
+			printf("franz: dirlength %s\n",migliaia(dirlength));
+	if (filelength)
+			printf("franz: filelength %s\n",migliaia(filelength));
+	
 	if (menoenne)
 			printf("franz: -n %u\n",menoenne);
 			
@@ -13549,7 +14746,7 @@ int Jidac::doCommand(int argc, const char** argv) {
 			printf("franz:VERBOSE list of files on (-verbose)\n");
 	
 	if (flagchecksum)
-			printf("franz:checksumming every file with CRC32, store SHA1\n");
+			printf("franz:checksumming\n");
 	
 	if (flagcrc32c)
 			printf("franz:use CRC-32C\n");
@@ -13564,7 +14761,25 @@ int Jidac::doCommand(int argc, const char** argv) {
 			printf("franz:use SHA256\n");
 	
 	if (flagverify)
-			printf("franz:do a VERIFY (re-read from filesystem)\n");
+			printf("franz:verify\n");
+	
+	if (flagkill)
+			printf("franz:KILL!\n");
+	
+	if (flagutf)
+			printf("franz:utf filenames\n");
+	
+	if (flagfix255)
+			printf("franz:fix 255 filelength\n");
+	
+	if (flagfixeml)
+			printf("franz:fix eml filenames\n");
+	
+	if (flagflat)
+			printf("franz:extract with flat filenames\n");
+	
+	if (flagdebug)
+			printf("franz:DEBUG mode (very verbose)\n");
 	
 	if (searchfrom!="")
 			printf("franz:FIND    >>>>%s<<<<<\n",searchfrom.c_str());
@@ -13613,7 +14828,7 @@ int Jidac::doCommand(int argc, const char** argv) {
   // Load dynamic functions in Windows Vista and later
 #ifndef unix
   HMODULE h=GetModuleHandle(TEXT("kernel32.dll"));
-  if (h==NULL) printerr("GetModuleHandle");
+  if (h==NULL) printerr("14717","GetModuleHandle");
   else {
     findFirstStreamW=
       (FindFirstStreamW_t)GetProcAddress(h, "FindFirstStreamW");
@@ -13625,14 +14840,23 @@ int Jidac::doCommand(int argc, const char** argv) {
 #endif
 
   // Execute command
-  if (command=='a' && files.size()>0) return add();
+  if (command=='a' && files.size()>0) 
+  {
+	  flagfixeml=false;
+	  flagfix255=false;
+	  flagutf=false; // enforce: we do not want to change anything when adding
+	  flagflat=false;
+	  return add();
+  }
   else if (command=='d') return dir();
   else if (command=='c') return dircompare(false);
   else if (command=='x') return extract();
   else if (command=='t') return test();
   else if (command=='p') return paranoid();
+  else if (command=='f') return fillami();
   else if (command=='l') return list();
   else if (command=='k') return kill();
+  else if (command=='u') return utf();
   else if (command=='s') return dircompare(true); 
   else if (command=='1') return summa();
   else usage();
@@ -13640,6 +14864,14 @@ int Jidac::doCommand(int argc, const char** argv) {
   
   return 0;
 }
+
+
+
+
+
+
+
+
 
 /////////////////////////// read_archive //////////////////////////////
 
@@ -13698,6 +14930,10 @@ int64_t Jidac::read_archive(const char* arc, int *errors, int i_myappend) {
   StringBuffer os(32832);  // decompressed block
   const bool renamed=command=='l' || command=='a';
 
+	int shortenedfilenames=0;
+	int toolongfilenames=0;
+	int utf8names=0;
+	
 	uint64_t parts=0;
   // Detect archive format and read the filenames, fragment sizes,
   // and hashes. In JIDAC format, these are in the index blocks, allowing
@@ -13771,7 +15007,7 @@ int64_t Jidac::read_archive(const char* arc, int *errors, int i_myappend) {
                 error("bad checksum");
 			if ( ++parts % 1000 ==0)
 				if (!flagnoeta)
-				printf("Block %s K\r",migliaia(parts/1000));
+				printf("Block %10s K\r",migliaia(parts/1000));
             }
             else
               d.readSegmentEnd();
@@ -13882,6 +15118,13 @@ int64_t Jidac::read_archive(const char* arc, int *errors, int i_myappend) {
 						else
 							fn=append_path(itos(ver.size()-1, all), fn);
 					}
+					
+						
+					if (fn.length()>255)
+						toolongfilenames++;
+					if (fn!=utf8toansi(fn))
+						utf8names++;
+		
 					const bool issel=isselected(fn.c_str(), renamed,-1);
 					s+=len+1;  // skip filename
 					if (s>end) 
@@ -14002,6 +15245,20 @@ endblock:;
       int(ver.size()-1), migliaia2(files), migliaia3(unsigned(ht.size())-1),
       migliaia(block_offset),tohuman(block_offset));
 
+	if (shortenedfilenames)
+		printf("Filenames shortened   %9s by extracting with -nolongfilename\n",migliaia(shortenedfilenames));
+	if (toolongfilenames)
+	{
+#ifdef _WIN32	
+	printf("Long filenames (>255) %9s *** WARNING ***\n",migliaia(toolongfilenames));
+#else
+	printf("Long filenames (>255) %9s\n",migliaia(toolongfilenames));
+#endif
+
+	}
+	if (utf8names)
+		printf("Non-latin (UTF-8)     %9s\n",migliaia(utf8names));
+	
   // Calculate file sizes
 	for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p) 
 	{
@@ -14169,13 +15426,14 @@ void Jidac::scandir(bool i_checkifselected,DTMap& i_edt,string filename, bool i_
 	
 #ifdef unix
 // Add regular files and directories
-  while (filename.size()>1 && filename[filename.size()-1]=='/')
-    filename=filename.substr(0, filename.size()-1);  // remove trailing /
+	while (filename.size()>1 && filename[filename.size()-1]=='/')
+		filename=filename.substr(0, filename.size()-1);  // remove trailing /
+	
 	struct stat sb;
 	if (!lstat(filename.c_str(), &sb)) 
 	{
 		if (S_ISREG(sb.st_mode))
-		addfile(i_checkifselected,i_edt,filename, decimal_time(sb.st_mtime), sb.st_size,'u'+(sb.st_mode<<8));
+			addfile(i_checkifselected,i_edt,filename, decimal_time(sb.st_mtime), sb.st_size,'u'+(sb.st_mode<<8));
 
     // Traverse directory
 		if (S_ISDIR(sb.st_mode)) 
@@ -14224,7 +15482,7 @@ void Jidac::scandir(bool i_checkifselected,DTMap& i_edt,string filename, bool i_
   if (h==INVALID_HANDLE_VALUE
       && GetLastError()!=ERROR_FILE_NOT_FOUND
       && GetLastError()!=ERROR_PATH_NOT_FOUND)
-    printerr(t.c_str());
+    printerr("15367",t.c_str());
   while (h!=INVALID_HANDLE_VALUE) {
 
     // For each file, get name, date, size, attributes
@@ -14274,7 +15532,7 @@ void Jidac::scandir(bool i_checkifselected,DTMap& i_edt,string filename, bool i_
 	  }
     }
     if (!FindNextFile(h, &ffd)) {
-      if (GetLastError()!=ERROR_NO_MORE_FILES) printerr(fn.c_str());
+      if (GetLastError()!=ERROR_NO_MORE_FILES) printerr("15417",fn.c_str());
       break;
     }
   }
@@ -14343,26 +15601,29 @@ void print_progress(int64_t ts, int64_t td,int64_t i_scritti)
 
 ///	printf("%d %d\n",int(eta),ultimaeta);
 	
+
 	if (flagpakka)
 	{
+		if (eta<350000)
 		if (((percentuale%10)==0) ||(percentuale==1))
-			if (percentuale!=ultimapercentuale)
+			if ((percentuale!=ultimapercentuale) || (percentuale==1))
 			{
 				ultimapercentuale=percentuale;
-				printf("%03d%% %d:%02d:%02d %20s of %20s %s/sec\n", percentuale,
+				printf("%03d%% %02d:%02d:%02d %20s of %20s %s/sec\r", percentuale,
 					int(eta/3600), int(eta/60)%60, int(eta)%60, migliaia(td), migliaia2(ts),migliaia3(td/secondi));
 			}
 	}
 	else 
 	{
 		if (int(eta)!=ultimaeta)
+		if (eta<350000)
 		{
 			ultimaeta=int(eta);
 			if (i_scritti>0)
-			printf("%6.2f%% %d:%02d:%02d (%9s) -> (%9s) of (%9s) %9s/sec\r", td*100.0/(ts+0.5),
+			printf("%6.2f%% %02d:%02d:%02d (%10s) -> (%10s) of (%10s) %10s/sec\r", td*100.0/(ts+0.5),
 			int(eta/3600), int(eta/60)%60, int(eta)%60, tohuman(td),tohuman2(i_scritti),tohuman3(ts),tohuman4(td/secondi));
 			else
-			printf("%6.2f%% %d:%02d:%02d (%9s) of (%9s) %9s/sec\r", td*100.0/(ts+0.5),
+			printf("%6.2f%% %02d:%02d:%02d (%10s) of (%10s) %10s/sec\r", td*100.0/(ts+0.5),
 			int(eta/3600), int(eta/60)%60, int(eta)%60, tohuman(td),tohuman2(ts),tohuman3(td/secondi));
 			
 			
@@ -14645,6 +15906,12 @@ bool compareFilename(DTMap::iterator ap, DTMap::iterator bp) {
   return ap->first<bp->first;
 }
 
+bool comparefilesize(DTMap::iterator ap, DTMap::iterator bp) {
+  if (ap->second.size!=bp->second.size)
+    return ap->second.size<bp->second.size;
+  return ap->first<bp->first;
+}
+
 // sort by sha1hex, without checks
 bool comparesha1hex(DTMap::iterator i_primo, DTMap::iterator i_secondo) 
 {
@@ -14705,7 +15972,10 @@ void avanzamento(int64_t i_lavorati,int64_t i_totali,int64_t i_inizio)
 		return;
 	
 	int percentuale=int(i_lavorati*100.0/(i_totali+0.5));
-	if (((percentuale%10)==0) && (percentuale>0))
+	
+	if (percentuale>0)
+		if (((percentuale%10)==0)  || (percentuale==1))
+	//if ((((percentuale%10)==0) && (percentuale>0)) || (percentuale==1))
 	if (percentuale!=ultimapercentuale)
 	{
 		ultimapercentuale=percentuale;
@@ -14714,9 +15984,9 @@ void avanzamento(int64_t i_lavorati,int64_t i_totali,int64_t i_inizio)
 		int secondi=(mtime()-i_inizio)/1000;
 		if (secondi==0)
 			secondi=1;
-				
-		printf("%03d%% %d:%02d:%02d %20s of %20s %s/sec\n", percentuale,
-		int(eta/3600), int(eta/60)%60, int(eta)%60, migliaia(i_lavorati), migliaia2(i_totali),migliaia3(i_lavorati/secondi));
+		if (eta<356000)
+		printf("%03d%% %02d:%02d:%02d (%10s) of (%10s) %20s /sec\n", percentuale,
+		int(eta/3600), int(eta/60)%60, int(eta)%60, tohuman(i_lavorati), tohuman2(i_totali),migliaia3(i_lavorati/secondi));
 		fflush(stdout);
 	}
 }
@@ -15415,7 +16685,7 @@ int Jidac::add()
 	  */
       FP in=fopen(p->first.c_str(), RB);
       if (in==FPNULL) {
-        printerr(p->first.c_str());
+        printerr("16570",p->first.c_str());
         total_size-=p->second.size;
         ++errors;
         continue;
@@ -15517,7 +16787,7 @@ int Jidac::add()
       if (in==FPNULL) {  // skip if not found
 	  p->second.date=0;
         total_size-=p->second.size;
-        printerr(p->first.c_str());
+        printerr("16672",p->first.c_str());
         ++errors;
         continue;
       }
@@ -15937,7 +17207,7 @@ int Jidac::add()
       if (archive_end>0) {
         printf("truncating archive from %1.0f to %1.0f\n",
             double(archive_size), double(archive_end));
-        if (truncate(arcname.c_str(), archive_end)) printerr(archive.c_str());
+        if (truncate(arcname.c_str(), archive_end)) printerr("17092",archive.c_str());
       }
       else if (archive_end==0) {
         if (delete_file(arcname.c_str())) {
@@ -16088,6 +17358,24 @@ struct ExtractJob {         // list of jobs
     destroy_mutex(write_mutex);
   }
 };
+
+
+bool direxists(const std::string& dirName_in)
+{
+#ifdef _WIN32
+	std::wstring w=utow(dirName_in.c_str());  // Windows console: convert to UTF-16
+	DWORD ftyp = GetFileAttributesW(w.c_str());
+  ///DWORD ftyp = GetFileAttributesA(dirName_in.c_str());
+  if (ftyp == INVALID_FILE_ATTRIBUTES)
+  {
+	///printf("\n\n\nATTRIBUTO\n\n\n");
+	return false;  //something is wrong with your path!
+  }
+  if (ftyp & FILE_ATTRIBUTE_DIRECTORY)
+    return true;   // this is a directory!
+#endif
+  return false;    // this is not a directory!
+}
 
 // Decompress blocks in a job until none are READY
 ThreadReturn decompressThread(void* arg) {
@@ -16242,7 +17530,7 @@ ThreadReturn decompressThread(void* arg) {
       if (p->second.date==0 || p->second.data<0
           || p->second.data>=int64_t(p->second.ptr.size()))
         continue;  // don't write
-
+		
       // Look for pointers to this block
       const vector<unsigned>& ptr=p->second.ptr;
       int64_t offset=0;  // write offset
@@ -16266,44 +17554,109 @@ ThreadReturn decompressThread(void* arg) {
         }
 
         // Open file for output
-        if (job.lastdt==job.jd.dt.end()) {
-          string filename=job.jd.rename(p->first);
-          assert(job.outf==FPNULL);
-          if (p->second.data==0) {
-            if (!job.jd.flagtest) makepath(filename);
-            ///if (job.jd.summary<=0) 
+        if (job.lastdt==job.jd.dt.end()) 
+		{
+			string filename=job.jd.rename(p->first);
+		  /*
+			if (flagutf)
 			{
-              lock(job.mutex);
-              print_progress(job.total_size, job.total_done,-1);
-              /*
-			  if (job.jd.summary<=0) {
-                printf("> ");
-                printUTF8(filename.c_str());
-                printf("\n");
-              }
-			  */
-              release(job.mutex);
-            }
-            if (!job.jd.flagtest) {
-              job.outf=fopen(filename.c_str(), WB);
-              if (job.outf==FPNULL) {
-                lock(job.mutex);
-                printerr(filename.c_str());
-                release(job.mutex);
-              }
+				///filename=purgeansi(forcelatinansi(utf8toansi(filename)));
+				if (flagdebug)
+					printf("17535: purged filename to <<%s>>\n",filename.c_str());
+			}
+			*/
+			assert(job.outf==FPNULL);
+			if (p->second.data==0) 
+			{
+				if (!job.jd.flagtest) 
+				{
+					if (flagdebug)
+					{
+						printf("17544: MAKEPATH:");
+						printUTF8(filename.c_str());
+						printf("\n");
+					}
+					makepath(filename);
+				}
+				lock(job.mutex);
+				print_progress(job.total_size, job.total_done,-1);
+				release(job.mutex);
+            
+				if (!job.jd.flagtest) 
+				{
+					
+/// sometimes (in Windows) the path is not made (ex. path too long)
+/// let's try to make (is just a fix). Please note utw
+
+#ifdef _WIN32
+					string percorso=extractfilepath(filename);
+					if (percorso!="")
+					{
+						myreplaceall(percorso,"/","\\");
+						if (!direxists(percorso))
+						{
+							if (flagdebug)
+								printf("17577: ERROR DIRNOTEX %s\n",percorso.c_str());
+						
+							string temppercorso=percorso;
+							size_t barra;
+							string percorsino;
+				
+							while (1==1)
+							{
+								barra=temppercorso.find('\\');
+								if (barra==string::npos)
+									break;
+								percorsino+=temppercorso.substr(0, barra)+'\\';
+								if (direxists(percorsino))
+								{
+									if (flagdebug)
+										printf("17583: Small path exists %s\n",percorsino.c_str());
+								}
+								else
+								{
+									string dafare=percorsino;
+									///dafare.pop_back();
+									if (flagdebug)
+										printf("\n\n17950: Make path of %03d\n---\n%s\n---\n",dafare.length(),dafare.c_str());
+									bool creazione=CreateDirectory(utow(dafare.c_str()).c_str(), 0);
+									if (!creazione)
+										printerr("17519",dafare.c_str());
+								}
+								temppercorso=temppercorso.substr(barra+1,temppercorso.length());
+							}
+						}
+						if (!direxists(percorso))
+						{
+							printf("17620: percorso does not exists <<%s>>\n",percorso.c_str());
+				///exit(0);
+						}
+					}
+#endif				
+					
+				job.outf=fopen(filename.c_str(), WB);
+				if (job.outf==FPNULL) 
+				{
+					lock(job.mutex);
+					printerr("17451",filename.c_str());
+					release(job.mutex);
+				}
 #ifndef unix
               else if ((p->second.attr&0x200ff)==0x20000+'w') {  // sparse?
                 DWORD br=0;
                 if (!DeviceIoControl(job.outf, FSCTL_SET_SPARSE,
                     NULL, 0, NULL, 0, &br, NULL))  // set sparse attribute
-                  printerr(filename.c_str());
+                  printerr("17459",filename.c_str());
               }
 #endif
             }
           }
           else if (!job.jd.flagtest)
-            job.outf=fopen(filename.c_str(), RBPLUS);  // update existing file
-          if (!job.jd.flagtest && job.outf==FPNULL) break;  // skip errors
+		  {
+		///	printf("Scriverei su %s\n",filename.c_str());
+			job.outf=fopen(filename.c_str(), RBPLUS);  // update existing file
+          }
+		  if (!job.jd.flagtest && job.outf==FPNULL) break;  // skip errors
           job.lastdt=p;
           assert(job.jd.flagtest || job.outf!=FPNULL);
         }
@@ -16376,18 +17729,16 @@ ThreadReturn decompressThread(void* arg) {
 				*/
 			}
 
+/// with -kill do not write
+		if (!flagkill)
+			if (!job.jd.flagtest && (nz<q+usize || j+1==ptr.size())) 
+			{
+				if (flagdebug)
+					printf("17716:OFFSETTONEWRITE   %08lld  size  %08lld \n",offset,usize);
+				fseeko(job.outf, offset, SEEK_SET);
+				fwrite(out.c_str()+q, 1, usize, job.outf);
+			}
 
-        ///if (nz<q+usize || j+1==ptr.size()) 
-			///printf("OFFSETTONE   %08lld  size  %08lld \n",offset,usize);
-		
-        if (!job.jd.flagtest && (nz<q+usize || j+1==ptr.size())) 
-		{
-			///printf("OFFSETTONEWRITE   %08lld  size  %08lld \n",offset,usize);
-		
-///DTMap::iterator lastdt;   // currently open output file name
-			fseeko(job.outf, offset, SEEK_SET);
-			fwrite(out.c_str()+q, 1, usize, job.outf);
-		}
         offset+=usize;
         lock(job.mutex);
         job.total_done+=usize;
@@ -16426,6 +17777,7 @@ ThreadReturn decompressThread(void* arg) {
   return 0;
 }
 
+
 // Streaming output destination
 struct OutputFile: public libzpaq::Writer {
   FP f;
@@ -16456,7 +17808,41 @@ int64_t copy(libzpaq::Reader& in, libzpaq::Writer& out, uint64_t n=~0ull) {
 // Extract files from archive. If force is true then overwrite
 // existing files and set the dates and attributes of exising directories.
 // Otherwise create only new files and directories. Return 1 if error else 0.
-int Jidac::extract() {
+int Jidac::extract() 
+{
+
+/*
+	-kill -verify
+	-force
+	-comment / versioncomment
+	-flat
+	-utf -filelenght -dirlength
+*/
+	if (flagkill)
+	{
+		if (flagforce)
+		{
+			printf("-kill incompatible with -force\n");
+			return 2;
+		}
+		if (flagverify)
+		{
+			printf("\n");
+			printf("******\n");
+			printf("****** WARNING: -kill -verify switches. Create 0 bytes files (NO data written)\n");
+			printf("****** Full-scale extraction test (UTF-8 strange filenames, path too long...)\n");
+			printf("****** Highly suggested output on RAMDISK\n");
+			printf("******\n\n");
+		}
+		else
+		{
+			printf("Two switches needed: -kill -verify to make 0-files extraction\n");
+			return 2;
+		}
+	}
+	
+
+
 	g_scritti=0;
   // Encrypt or decrypt whole archive
   if (repack && all) {
@@ -16593,40 +17979,276 @@ int Jidac::extract() {
   int tobeerased=0,erased=0;
   
   uint32_t crc32fromfile;
-  
-  
-  /*
-  if ((minsize>0) || (maxsize>0))
-	for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p) 
-    	if (!isdirectory(p->first))
+
+
+
+
+	if ((flagutf) || (flagflat) || flagfix255)
+	{
+/// we make a copy of the map (dt) into mymap, changing the filenames
+/// wy do not in rename()? Because we need very dirty string manipulations
+
+		int lunghezza=FRANZMAXPATH;
+	
+		if (filelength>0)
+			if (filelength<FRANZMAXPATH)
+				lunghezza=filelength;
+		
+		lunghezza-=9; // antidupe
+	
+		if (lunghezza<10)
+			lunghezza=10;
+				
+		printf("\n");
+		printf("******\n");
+		if (flagflat)
+			printf("****** WARNING: extracting all files FLATted, without non-latin chars, max %d length\n",lunghezza);
+		else
 		{
-			if (maxsize)
-				if (maxsize<p->second.size)
-				{
-					if (flagverbose)
-						printf("Verbose: maxsize skip extraction %19s %s\n",migliaia(p->second.size),p->first.c_str());
-					if (p!=dt.end())					
-						dt.erase(p);
-				}
-			if (minsize)
-				if (minsize>p->second.size)
-				{
-					if (flagverbose)
-						printf("Verbose: minsize skip extraction %19s %s\n",migliaia(p->second.size),p->first.c_str());
-					if (p!=dt.end())
-					dt.erase(p);
-				}
+			if (flagutf)
+				printf("****** Extracting without non-latin chars (-utf)\n");
+			if (flagfix255)
+				printf("****** Shrink filenames (-fix255) to %d length\n",FRANZMAXPATH);
+			if (flagfixeml)
+				printf("****** Compress .eml filenames (Fwd Fwd Fwd=>Fwd etc) (-fixeml)\n");
 		}
-  */
+		printf("******\n\n");
+
+		if (flagdebug)
+			printf("17995:Files before %s\n",migliaia(dt.size()));
+	
+		DTMap mymap;
+		int contatore=0;
+		char numero[60];
+			
+			
+		for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p) 
+		{
+		///	if ((p->second.date && p->first!="") && (!isdirectory(p->first)))
+			{
+				string percorso			=extractfilepath(p->first);
+				string nome				=prendinomefileebasta(p->first);
+				
+				string estensione		=prendiestensione(p->first);
+				string senzaestensione	=percorso+nome;
+				string newname;
+				
+				if (flagflat) /// desperate extract without path
+				{
+					sprintf(numero,"%08d_%05d_",++contatore,(unsigned int)p->first.length());
+					newname=numero;
+					newname+=purgeansi(senzaestensione.substr(0, lunghezza));
+					if (estensione!="")
+						newname+="."+estensione;
+///					newname=rename(newname);
+					if (flagdebug)
+						printf("18001: flatted filename <<%s>>\n",newname.c_str());
+				}
+				else
+				{
+					if (flagutf)
+					{
+						string prenome=nome;
+
+						if (flagfixeml)
+							if (estensione=="eml")
+							{
+								prenome=compressemlfilename(nome);
+								if (flagdebug)
+									if (nome!=prenome)
+									{
+										printf("18109: eml pre  %s\n",nome.c_str());
+										printf("18110: eml post %s\n",prenome.c_str());
+									}
+							}
+
+// this is name, throw everything (FALSE)
+						nome=purgeansi(forcelatinansi(utf8toansi(nome)),false);		
+						if (flagdebug)
+							if (nome!=prenome)
+							{
+								printf("18030: flagutf pre  %s\n",prenome.c_str());
+								printf("18034: flagutf post %s\n",nome.c_str());
+							}
+
+						string prepercorso=percorso;
+/// this is a path, so keep \ and / (TRUE)
+						percorso=purgeansi(forcelatinansi(utf8toansi(percorso)),true);		
+						if (flagdebug)
+							if (percorso!=prepercorso)
+							{
+								printf("18045: flagutf pre  perc %s\n",prepercorso.c_str());
+								printf("18046: flagutf post perc %s\n",percorso.c_str());
+							}
+						
+					}
+					
+					
+					if (flagdebug)
+					{
+						printf("18041: First    %03d %s\n",p->first.length(),p->first.c_str());
+						printf("18042: Percorso %03d %s\n",percorso.length(),percorso.c_str());
+						printf("18043: nome     %03d %s\n",nome.length(),nome.c_str());
+						printf("18044: ext      %03d %s\n",estensione.length(),estensione.c_str());
+						printf("18045: Senza ex %03d %s\n",senzaestensione.length(),senzaestensione.c_str());
+					}
+
+					int	lunghezzalibera=lunghezza-percorso.length();//%08d_
+					if (lunghezzalibera<10)
+					{
+						if (flagdebug)
+						{
+							printf("\n\n\n18046: Path too long: need shrink %08d %s\n",percorso.length(),percorso.c_str());
+							printf("lunghezzalibera %d\n",lunghezzalibera);
+						}
+						vector<string> esploso;
+						
+						string temppercorso=percorso;
+						size_t barra;
+						
+						while (1==1)
+						{
+							if (flagdebug)
+								printf("18031: temppercorso %s\n",temppercorso.c_str());
+							barra=temppercorso.find('/');
+							if (flagdebug)
+								printf("18034: Barra %d\n",barra);
+							if (barra==string::npos)
+								break;
+							if (flagdebug)		
+								printf("18038: Eureka!!\n");
+							esploso.push_back(temppercorso.substr(0, barra));
+							temppercorso=temppercorso.substr(barra+1,temppercorso.length());
+						}
+						
+						
+						int lunghezzamassima=0;
+						int indicelunghezzamassima=-1;
+						for (int i=0;i<esploso.size();i++)
+						{
+							if (esploso[i].length()>lunghezzamassima)
+							{
+								indicelunghezzamassima=i;
+								lunghezzamassima=esploso[i].length();
+							}
+							if (flagdebug)
+								printf("18087: Esploso %d %03d %s\n",i,esploso[i].length(),esploso[i].c_str());
+						}
+						/*
+						printf("Lunghezza massima %d\n",lunghezzamassima);
+						printf("Indice lunghezza massima %d\n",indicelunghezzamassima);
+						
+						printf("Lunghezza          %d\n",lunghezza);
+						printf("Lunghezza percorso %d %s\n",percorso.length(),percorso.c_str());
+						printf("Lunghezza nome     %d %s\n",nome.length(),nome.c_str());
+						printf("Lunghezza este     %d %s\n",estensione.length(),estensione.c_str());
+						
+						printf("Resto percoros     %d\n",percorso.length()-lunghezzamassima);
+						*/
+						int lunghezzaliberacartella=lunghezza-nome.length()-estensione.length();
+						
+				///		printf("Lunghezzaliberacartella %d\n",lunghezzaliberacartella);
+						
+						int lunghezzacheserve=lunghezza-10-(percorso.length()-lunghezzamassima);
+					///	printf("Lunghezza che ser  %d\n",lunghezzacheserve);
+						
+						if (lunghezzacheserve<lunghezzamassima)
+						{
+							esploso[indicelunghezzamassima]=esploso[indicelunghezzamassima].substr(0,lunghezzacheserve);
+							string imploso;
+							for (int i=0;i<esploso.size();i++)
+								imploso+=esploso[i]+'/';
+							if (flagdebug)
+								printf("18114: Imploso           %d %s\n",imploso.length(),imploso.c_str());
+							percorso=imploso;
+							lunghezzalibera=lunghezza-percorso.length();
+							makepath(percorso);
+						}
+						else
+						{
+							printf("18088: HOUSTON\n");
+						}						
+					}
+					
+/*		
+		string ansifilename	=utf8toansi(filename);
+		string 	latinfilename=purgeansi(forcelatinansi(ansifilename));
+	*/
+	
+					
+					///newname=purgeansi(nome);
+					newname=nome;
+				
+					lunghezzalibera=lunghezza-percorso.length();
+					
+					if (flagdebug)
+						printf("18098:lunghezze per %03d nome %03d tot %03d\n",percorso.length(),lunghezzalibera,percorso.length()+lunghezzalibera);
+					
+					if (newname.length()>(unsigned int)lunghezzalibera)
+					{
+						newname=newname.substr(0,lunghezzalibera-9);
+						if (flagdebug)
+							printf("18143:Trimmone newname %d %s\n",newname.length(),newname.c_str());
+					}
+				
+					char numero[60];
+					uint32_t crc=0;
+					crc=crc32_16bytes(p->first.c_str(),p->first.size(), crc);
+					sprintf(numero,"%08X_",crc);
+					
+					newname=numero+newname;
+					
+					if (estensione!="")
+						newname+="."+estensione;
+					newname=percorso+newname;
+					
+			
+					if (flagdebug)
+						printf("18195: Finalizzato %d %s\n",newname.length(),newname.c_str());
+					
+					if (newname.length()>255)
+					{
+						printf("18123: WARN pre  %08d   %s\n",p->first.length(),p->first.c_str());
+						printf("18124: WARN post %08d   %s\n",newname.length(),newname.c_str());
+						printf("\n");
+					}
+	
+				}
+				mymap.insert( std::pair<string,DT>(newname,p->second) );
+			}
+/*	
+	else
+			{
+				if (!flagflat)
+					mymap.insert( std::pair<string,DT>(p->first,p->second) );
+			}
+*/	
+		}
+		dt=mymap;
+		if (flagdebug)
+			printf("18181: Files after  %s\n",migliaia(dt.size()));
+	}
+	
+#ifdef _WIN32
+	for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p) 
+		if ((p->second.date && p->first!=""))
+			if (p->first.length()>254)
+			{
+				printf("WARN: path too long %03d ",p->first.length());
+				printUTF8(p->first.c_str());
+				printf("\n");
+			}
+#endif
+	
 	for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p) 
 	{
 		p->second.data=-1;  // skip
 	    
 		if (p->second.date && p->first!="") 
 		{
-			const string fn=rename(p->first);
+			string fn=rename(p->first);
 			const bool isdir=isdirectory(p->first);
-	  
+	  	  
 			if (!repack && !flagtest && flagforce && !isdir && equal(p, fn.c_str(),crc32fromfile)) 
 			{
 				// identical
@@ -16838,7 +18460,7 @@ int Jidac::extract() {
 	g_crc32.clear();
 	
   // Decompress archive in parallel
-	printf("Extracting %s bytes (%s) in %d files -threads %d\n",migliaia(job.total_size), tohuman(job.total_size),total_files, howmanythreads);
+	printf("Extracting %s bytes (%s) in %s files -threads %d\n",migliaia(job.total_size), tohuman(job.total_size),migliaia2(total_files), howmanythreads);
 		
 	vector<ThreadID> tid(howmanythreads);
 	for (unsigned i=0; i<tid.size(); ++i) 
@@ -16894,8 +18516,12 @@ int Jidac::extract() {
 
 				if (!flagtest) {
                   makepath(outname);
+				  
                   outf=fopen(outname.c_str(), WB);
-                  if (outf==FPNULL) printerr(outname.c_str());
+                  if (outf==FPNULL) 
+				  {
+					printerr("18330",outname.c_str());
+				  }
                 }
                 release(job.mutex);
               }
@@ -16984,9 +18610,9 @@ int Jidac::extract() {
   if (errors>0) {
     fflush(stdout);
     fprintf(stderr,
-        "\nExtracted %u of %u files OK (%u errors)"
-        " using %1.3f MB x %d threads\n",
-        extracted-errors, extracted, errors, job.maxMemory/1000000,
+        "\nExtracted %s of %s files OK (%s errors)"
+        " using %s bytes x %d threads\n",
+        migliaia(extracted-errors), migliaia2(extracted), migliaia3(errors), migliaia4(job.maxMemory),
         int(tid.size()));
   }
   return errors>0;
@@ -17195,22 +18821,6 @@ int Jidac::enumeratecomments()
 	return 0;		   
 }
 
-
-int64_t prendidimensionefile(const char* i_filename)
-{
-	if (!i_filename)
-		return 0;
-	FILE* myfile = freadopen(i_filename);
-	if (myfile)
-    {
-		fseeko(myfile, 0, SEEK_END);
-		int64_t dimensione=ftello(myfile);
-		fclose(myfile);
-		return dimensione;
-	}
-	else
-	return 0;
-}
 
 
 std::wstring StringToWString(const std::string& s)
@@ -17505,7 +19115,7 @@ int Jidac::verify()
 			percentuale=100*fi/filelist.size();
 			if (ultimapercentuale!=percentuale)
 			{
-				printf("Done %02d%% %10s of %9s, diff %s bytes\r",percentuale,tohuman(g_worked),tohuman2(g_bytescanned),migliaia2(usize));
+				printf("Done %02d%% %10s of %10s, diff %s bytes\r",percentuale,tohuman(g_worked),tohuman2(g_bytescanned),migliaia2(usize));
 				ultimapercentuale=percentuale;
 			}
 		}
@@ -17870,82 +19480,6 @@ int Jidac::list()
   return 0;
 }
 
-
-
-
-
-
-long long fsbtoblk(int64_t num, uint64_t fsbs, u_long bs)
-{
-	return (num * (intmax_t) fsbs / (int64_t) bs);
-}
-
-
-
-
-
-/// it is not easy, at all, to take *nix free filesystem space
-uint64_t getfreespace(const char* i_path)
-{
-	
-#ifdef BSD
-	struct statfs stat;
- 
-	if (statfs(i_path, &stat) != 0) 
-	{
-		// error happens, just quits here
-		return 0;
-	}
-///	long long used = stat.f_blocks - stat.f_bfree;
-///	long long availblks = stat.f_bavail + used;
-
-	static long blocksize = 0;
-	int dummy;
-
-	if (blocksize == 0)
-		getbsize(&dummy, &blocksize);
-	return  fsbtoblk(stat.f_bavail,
-	stat.f_bsize, blocksize)*1024;
-#else
-#ifdef unix //this sould be Linux
-	return 0;
-#else
-	uint64_t spazio=0;
-	
-	BOOL  fResult;
-	unsigned __int64 i64FreeBytesToCaller,i64TotalBytes,i64FreeBytes;
-	WCHAR  *pszDrive  = NULL, szDrive[4];
-
-	const size_t WCHARBUF = 512;
-	wchar_t  wszDest[WCHARBUF];
-	MultiByteToWideChar(CP_ACP, MB_PRECOMPOSED, i_path, -1, wszDest, WCHARBUF);
-
-	pszDrive = wszDest;
-	if (i_path[1] == ':')
-	{
-		szDrive[0] = pszDrive[0];
-		szDrive[1] = ':';
-        szDrive[2] = '\\';
-        szDrive[3] = '\0';
-		pszDrive = szDrive;
-	}
-	fResult = GetDiskFreeSpaceEx ((LPCTSTR)pszDrive,
-                                 (PULARGE_INTEGER)&i64FreeBytesToCaller,
-                                 (PULARGE_INTEGER)&i64TotalBytes,
-                                 (PULARGE_INTEGER)&i64FreeBytes);
-	if (fResult)
-		spazio=i64FreeBytes;
-	return spazio; // Windows
-#endif
-
-
-
-
-
-#endif
-
-
-}
 
 
 
@@ -22812,7 +24346,7 @@ uint64_t& o_high64,uint64_t& o_low64)
 	unsigned char buffer[blockSize];
     FILE* inFile = freadopen(i_filename);
 	if (inFile==NULL) 
-		return 0;
+		return "ERROR";
 	
 	XXH3_state_t state128;
     (void)XXH3_128bits_reset(&state128);
@@ -22879,7 +24413,8 @@ unsigned int crc32c_calc_file(const char * i_filename,const int64_t i_inizio,con
 
 string hash_calc_file(int i_algo,const char * i_filename,const int64_t i_inizio,const int64_t i_totali,int64_t& io_lavorati)
 {
-	char risultato[33];;
+	char risultato[33];
+	
 	switch (i_algo) 
 	{
 		case ALGO_SHA1:
@@ -22900,6 +24435,7 @@ string hash_calc_file(int i_algo,const char * i_filename,const int64_t i_inizio,
 			uint64_t dummybasso64;
 			uint64_t dummyalto64;
 			return xxhash_calc_file(i_filename,i_inizio,i_totali,io_lavorati,dummybasso64,dummyalto64);
+			
 		break;
 		
 		case ALGO_SHA256: 
@@ -22967,7 +24503,6 @@ struct tparametrihash
 
 void * scansionahash(void *t) 
 {
-	///fika
 	assert(t);
 	tparametrihash* par= ((struct tparametrihash*)(t));
 	vector<string>& tmpfilestobehashed= par->filestobehashed;
@@ -22990,6 +24525,13 @@ bool sortbyval(const std::pair<string, string> &a,
     return (a.second < b.second); 
 } 
 
+bool sortbysize(const std::pair<uint64_t, string> &a, 
+               const std::pair<uint64_t, string> &b) 
+{ 
+    return (a.first < b.first); 
+} 
+
+
 int Jidac::summa() 
 {
 	if (!flagpakka)
@@ -22998,14 +24540,13 @@ int Jidac::summa()
 		printf(" ignoring .zfs and :$DATA\n");
 	}
 
-//// sha1 -all. Get a single SHA1 of some files. For backup/restore check
-	/*
-	libzpaq::SHA1 			sha1all;
-	vector<DTMap::iterator> vf;
-*/
 	int quantifiles			=0;
 	int64_t total_size		=0;  
-
+	unsigned int duplicated_files=0;
+	uint64_t duplicated_size=0;
+	uint64_t scannedsize=0;
+	vector<string> myfiles;
+	
 	flagskipzfs					=true;  // strip down zfs
 	int64_t startscan=mtime();
 	
@@ -23013,65 +24554,211 @@ int Jidac::summa()
 	g_filescanned=0;
 	g_dimensione=0;
 	g_worked=0;
+
+
+	vector<string> mydirs;
+	
+	if (flagchecksum)
+	{
+		printf("Getting cumulative 1-level SHA256\n");
+		if (files.size()!=1)
+		{
+			printf("Error: with -checksum exactly one directory can be searched\n");
+			return 1;
+		}
+		uint64_t startscan=mtime();			
+///		if (!isdirectory(files[0]))
+	///		files[0]+="/";
+		scandir(false,edt,files[0].c_str(),false);
+		
+		for (DTMap::iterator p=edt.begin(); p!=edt.end(); ++p) 
+			if (p->first != files[0])
+			{
+			if (isdirectory(p->first))
+				mydirs.push_back(p->first);
+			else
+				myfiles.push_back(p->first);
+			}
+		uint64_t scantime=mtime()-startscan;
+		
+		if (myfiles.size()+mydirs.size()==0)
+		{
+			printf("Nothing to do\n");
+			return 0;
+		}
+		libzpaq::SHA256 sha256;
+		libzpaq::SHA256 globalesha256;
+	
+		vector<std::pair<string, string>> vec;
+		
+		uint64_t hashtime=0;
+		uint64_t printtime=0;
+		uint64_t total_size=0;
+		
+		for (unsigned int i=0;i<mydirs.size();i++)
+		{
+			if (!flagnoeta)
+				printf("Scanning %s\r",mydirs[i].c_str());
+			edt.clear();
+			startscan=mtime();
+			scandir(true,edt,mydirs[i].c_str(),true);
+			scantime+=mtime()-startscan;
+			
+			vec.clear();
+			for (DTMap::iterator p=edt.begin(); p!=edt.end(); ++p) 
+				if (!isdirectory(p->first))
+				{
+					startscan=mtime();
+					vec.push_back(make_pair("dummy",hash_calc_file(flag2algo(),p->first.c_str(),-1,-1,g_dimensione)));
+					total_size+=p->second.size;
+					hashtime+=mtime()-startscan;
+				}
+				
+			std::sort(vec.begin(), vec.end(),sortbyval);
+
+			for (unsigned int j=0;j<vec.size();j++)
+				for (const char* p=vec[j].second.c_str(); *p; ++p) 
+				{
+					sha256.put(*p);
+					globalesha256.put(*p);
+				}
+
+			scantime=mtime();
+			char sha256result[32];
+			memcpy(sha256result, sha256.result(), 32);
+			printf("MAGIC_%s: ",mygetalgo().c_str());
+			for (int j=0; j <= 31; j++)
+				printf("%02X", (unsigned char)sha256result[j]);
+
+			printf(" ");
+			string directorypurgata=mydirs[i];
+			myreplace(directorypurgata,files[0],"");
+			printUTF8(directorypurgata.c_str());
+			printf("\n");
+			printtime+=mtime()-scantime;
+			
+		}
+		
+		vec.clear();
+		
+		startscan=mtime();
+		for (unsigned int i=0;i<myfiles.size();i++)
+			vec.push_back(make_pair("dummy",hash_calc_file(flag2algo(),myfiles[i].c_str(),-1,-1,g_dimensione)));
+		hashtime+=mtime()-startscan;
+		
+		std::sort(vec.begin(), vec.end(),sortbyval);
+
+		for (unsigned int j=0;j<vec.size();j++)
+			for (const char* p=vec[j].second.c_str(); *p; ++p) 
+					globalesha256.put(*p);
+		
+		scantime=mtime();
+		char sha256result[32];
+		memcpy(sha256result, globalesha256.result(), 32);
+		printf("\nGLOBAL_MAGIC_%s: ",mygetalgo().c_str());
+		for (int j=0; j <= 31; j++)
+			printf("%02X:", (unsigned char)sha256result[j]);
+		printf("\n");
+		printtime+=mtime()-scantime;
+		
+		if (!flagnoeta)
+			{
+				printf("Algo %s\n",mygetalgo().c_str());
+				printf("Scanning filesystem time  %f s\n",scantime/1000.0);
+				printf("Data transfer+CPU   time  %f s\n",hashtime/1000.0);
+				printf("Data output         time  %f s\n",printtime/1000.0);
+				printf("Total size  %19s (%10s)\n",migliaia(total_size),tohuman(total_size));
+				int64_t myspeed=(int64_t)(total_size*1000.0/(hashtime));
+				printf("Worked on %s bytes avg speed (hashtime) %s B/s\n",migliaia(total_size),migliaia2(myspeed));
+			}
+		return 0;
+	}
+	
 	for (unsigned i=0; i<files.size(); ++i)
 		scandir(true,edt,files[i].c_str());
-	
+
 	
 
-	vector<string> myfiles;
-
-	for (DTMap::iterator p=edt.begin(); p!=edt.end(); ++p) 
-		if (p->second.date && p->first!="" && (!isdirectory(p->first)) && (!isads(p->first)) ) 
-		{
-			myfiles.push_back(p->first);
-			total_size+=p->second.size;
-			quantifiles++;
-		}
-	
-	if (quantifiles==0)
-	{
-		printf("No files founded\n");
-		return 0;
-	}
 	if (flagverify)
 	{
-		printf("\nGetting global XXH3\n");
-		
-		uint64_t lavorati=0;
-		size_t const blockSize = 65536;
-		unsigned char buffer[blockSize];
-		int64_t tempoinizio=mtime();
-		
-		XXH3_state_t state128;
-		(void)XXH3_128bits_reset(&state128);
-		size_t readSize;
-		int64_t starthash=mtime();
-		for (unsigned int i=0;i<myfiles.size();i++)
+//	deduplication: I am very lazy, so do a lot of copy
+		printf("\n*** Searching for duplicates with %s minsize %s ***\n",mygetalgo().c_str(),migliaia(minsize));
+// get size and name
+		std::vector<std::pair<uint64_t,string>> filestobepurged;
+		for (DTMap::iterator p=edt.begin(); p!=edt.end(); ++p) 
+			if (p->second.date && p->first!="" && (!isdirectory(p->first)) && (!isads(p->first)) ) 
+			{
+				if (minsize>0)
+				{
+					if ((uint64_t)p->second.size>minsize)
+					{
+						filestobepurged.push_back(make_pair(p->second.size,p->first));
+						scannedsize+=p->second.size;
+					}
+				}
+				else
+				{
+					filestobepurged.push_back(make_pair(p->second.size,p->first));
+					scannedsize+=p->second.size;
+				}
+			}
+// ok, let's purge
+		std::sort(filestobepurged.begin(), filestobepurged.end(),sortbysize);
+		myfiles.clear();
+		unsigned int i=0;
+// get only files with equal size
+// from filestobepurged to myfiles
+		while (i<filestobepurged.size())
 		{
-			FILE* inFile = freadopen(myfiles[i].c_str());
-			if (inFile==NULL) 
+			int j=i;
+			if (filestobepurged[j].first==filestobepurged[j+1].first)
 			{
-				error("Guru 13790\n");
-				exit(1);
+				myfiles.push_back(filestobepurged[j].second);
+				total_size+=filestobepurged[j].first;
+				quantifiles++;
 			}
-		
-			while ((readSize = fread(buffer, 1, blockSize, inFile)) > 0) 
+			while (filestobepurged[j].first==filestobepurged[j+1].first)
 			{
-				(void)XXH3_128bits_update(&state128, buffer, readSize);
-				lavorati+=readSize;
-				if (flagnoeta==false)
-					avanzamento(lavorati,total_size,tempoinizio);
+				myfiles.push_back(filestobepurged[j+1].second);
+				total_size+=filestobepurged[j+1].first;
+				quantifiles++;
+				j++;
 			}
-			fclose(inFile);
+			j++;
+			i=j;
 		}
-		XXH128_hash_t myhash=XXH3_128bits_digest(&state128);
-		int64_t hashtime=mtime()-starthash;
-		printf("\nGlobal XXH3: %016llX%016llX\n",(unsigned long long)myhash.high64,(unsigned long long)myhash.low64);
-		int64_t myspeed=(int64_t)(total_size*1000.0/(hashtime));
-		printf("Worked on %s bytes avg speed %s B/s\n",migliaia(total_size),migliaia2(myspeed));
+	}
+	else
+	{
+//	default: get everything
+		for (DTMap::iterator p=edt.begin(); p!=edt.end(); ++p) 
+			if (p->second.date && p->first!="" && (!isdirectory(p->first)) && (!isads(p->first)) ) 
+			{
+				if (minsize>0)
+				{
+					if ((uint64_t)p->second.size>minsize)
+					{
+						myfiles.push_back(p->first);
+						total_size+=p->second.size;
+						quantifiles++;
+					}
+				}
+				else
+				{
+					myfiles.push_back(p->first);
+					total_size+=p->second.size;
+					quantifiles++;
+				}
+
+			}
+		scannedsize=total_size;
+	}	
+	
+	if (myfiles.size()==0)
+	{
+		printf("Nothing to do\n");
 		return 0;
 	}
-	
 	
 	
 	vector<string> myhash;
@@ -23100,7 +24787,7 @@ int Jidac::summa()
 	int64_t inizio		=mtime();
 	double scantime=(inizio-startscan)/1000.0;
 	if (!flagnoeta)
-	printf("Found %s bytes (%s) in %f\n",migliaia(total_size),tohuman(total_size),scantime);
+	printf("Found (%s) => %s bytes (%s) / %s files in %f\n",tohuman2(scannedsize),migliaia(total_size),tohuman(total_size),migliaia2(quantifiles),scantime);
 	
 	for (unsigned int i=0;i<myfiles.size();i++)
 		vettoreparametrihash[i%mythreads].filestobehashed.push_back(myfiles[i]);
@@ -23154,7 +24841,7 @@ int Jidac::summa()
 		}
 	///		printf("Thread completed %d status %d\n",i,status);
 	}
-	uint64_t hashtime=mtime()-iniziohash;
+	uint64_t hashtime=mtime()-iniziohash+1;
 	
 	vector<std::pair<string, string>> vec;
 	
@@ -23162,55 +24849,174 @@ int Jidac::summa()
 		for (unsigned int j=0;j<vettoreparametrihash[i].filestobehashed.size();j++)
 			vec.push_back(make_pair(vettoreparametrihash[i].filestobehashed[j],vettoreparametrihash[i].hashcalculated[j]));
 
-	if (!flagnosort)
+	if ((!flagnosort) || (flagverify))
 		std::sort(vec.begin(), vec.end(),sortbyval);
 	
+	libzpaq::SHA256 sha256;
+	
 	int64_t startprint=mtime();
+
+	uint64_t testedbytes=0;
 	
 	for (unsigned int i=0;i<vec.size();i++)
 	{
+			
 		string filename=vec[i].first;
+		DTMap::iterator p=edt.find(filename);
+	
+		if (p != edt.end())
+			testedbytes+=p->second.size;
+		
+		for (const char* p=vec[i].second.c_str(); *p; ++p) 
+			sha256.put(*p);
+    
 		if (searchfrom!="")
 			if (replaceto!="")
-				replace(filename,searchfrom,replaceto);
-		printf("%s: %s ",mygetalgo().c_str(),vec[i].second.c_str());
-		if (!flagnosort)
-{			if (i==0)
-	{	
-			printf("    ");
-	}	
-	else
-{
-				if (vec[i-1].second==vec[i].second)
-					printf("=== ");
-				else
-					printf("    ");
-	}
-	}
-printUTF8(filename.c_str());
-		printf("\n");
-	}
-	int64_t printtime=mtime()-startprint;
+				replace(filename,searchfrom,replaceto);	
 		
+		if (flagkill)
+		{
+// get ready to make a script (no kill whatsoever!) by hand
+			if (i>0)
+				if (vec[i-1].second==vec[i].second)
+				{
+					#if defined(_WIN32) || defined(_WIN64)
+					myreplaceall(filename,"/","\\");
+					#endif
+					printf("=== \"");
+					printUTF8(filename.c_str());
+					printf("\"\n");
+					duplicated_files++;
+					if (p != edt.end())
+						duplicated_size+=p->second.size;
+				}
+		}
+		else
+		{
+			printf("%s: %s ",mygetalgo().c_str(),vec[i].second.c_str());
+			if (p != edt.end())
+				printf("[%19s] ",migliaia(p->second.size));
+			if (!flagnosort)
+			{			
+				if (i==0)
+				{	
+					printf("    ");
+				}	
+				else
+				{
+					if (vec[i-1].second==vec[i].second)
+					{
+						printf("=== ");
+							duplicated_files++;
+						if (p != edt.end())
+							duplicated_size+=p->second.size;
+					}
+					else
+						printf("    ");
+				}
+			}
+			printUTF8(filename.c_str());
+			printf("\n");
+		}
+	}
 	
-	
-	if (!flagnoeta)
+	int64_t printtime=mtime()-startprint;
+		if (!flagnoeta)
 	{
 		printf("Algo %s by %d threads\n",mygetalgo().c_str(),mythreads);
 		printf("Scanning filesystem time  %f s\n",scantime);
 		printf("Data transfer+CPU   time  %f s\n",hashtime/1000.0);
 		printf("Data output         time  %f s\n",printtime/1000.0);
-	
-		int64_t myspeed=(int64_t)(total_size*1000.0/(hashtime));
+		printf("Total size                %19s (%10s)\n",migliaia(scannedsize),tohuman(scannedsize));
+		printf("Tested size               %19s (%10s)\n",migliaia(testedbytes),tohuman(testedbytes));
+		printf("Duplicated size           %19s (%10s)\n",migliaia(duplicated_size),tohuman(duplicated_size));
+		printf("Duplicated files          %19s\n",migliaia(duplicated_files));
+		int64_t myspeed=(int64_t)(testedbytes*1000.0/(hashtime));
 		printf("Worked on %s bytes avg speed (hashtime) %s B/s\n",migliaia(total_size),migliaia2(myspeed));
 	}
+	char sha256result[32];
+	memcpy(sha256result, sha256.result(), 32);
+	printf("GLOBAL SHA256: ");
+	for (int j=0; j <= 31; j++)
+		printf("%02X", (unsigned char)sha256result[j]);
+	printf("\n");
+
 	
-delete [] threads;
-  return 0;
+	delete [] threads;
+	return 0;
 }
 
 
 /////////////////////////////// main //////////////////////////////////
+
+
+#ifdef _WIN32
+#ifndef ENABLE_VIRTUAL_TERMINAL_PROCESSING
+#define ENABLE_VIRTUAL_TERMINAL_PROCESSING  0x0004
+#endif
+
+static HANDLE stdoutHandle;
+static DWORD outModeInit;
+ 
+ void setupConsole(void) {
+ 	DWORD outMode = 0;
+ 	stdoutHandle = GetStdHandle(STD_OUTPUT_HANDLE);
+ 
+ 	if(stdoutHandle == INVALID_HANDLE_VALUE) {
+ 		exit(GetLastError());
+ 	}
+ 	
+ 	if(!GetConsoleMode(stdoutHandle, &outMode)) {
+ 		exit(GetLastError());
+ 	}
+ 
+ 	outModeInit = outMode;
+ 	
+     // Enable ANSI escape codes
+ 	outMode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
+ 
+ 	if(!SetConsoleMode(stdoutHandle, outMode)) {
+ 		exit(GetLastError());
+ 	}	
+ }
+ 
+ void restoreConsole(void) {
+     // Reset colors
+     printf("\x1b[0m");	
+ 	
+     // Reset console mode
+ 	if(!SetConsoleMode(stdoutHandle, outModeInit)) {
+ 		exit(GetLastError());
+ 	}
+ }
+ #else
+ void setupConsole(void) 
+ {
+
+ }
+ 
+ void restoreConsole(void) 
+ {
+//colors
+     printf("\x1b[0m");
+ }
+#endif
+
+#include <signal.h>
+
+void my_handler(int s)
+//sig_atomic_t s)
+{
+	// 2==control-C (maybe)
+	if (s==2)
+	{	// we want the cursor back!
+		setupConsole();
+		printf("\e[?25h");
+		fflush(stdout);
+		restoreConsole();
+	}
+	exit(1); 
+}
 
 // Convert argv to UTF-8 and replace \ with /
 #ifdef unix
@@ -23234,6 +25040,9 @@ int main() {
 
   global_start=mtime();  // get start time
 
+
+ signal (SIGINT,my_handler);
+   
 #ifdef _WIN32
 //// set UTF-8 for console
 	SetConsoleCP(65001);
@@ -23277,6 +25086,635 @@ int main() {
 }
 
 
+
+
+
+/* Keys for scalar xorshift128. Must be non-zero
+These are modified by xorshift128plus.
+ */
+struct xorshift128plus_key_s {
+    uint64_t part1;
+    uint64_t part2;
+};
+
+typedef struct xorshift128plus_key_s xorshift128plus_key_t;
+
+
+
+/**
+*
+* You can create a new key like so...
+*   xorshift128plus_key_t mykey;
+*   xorshift128plus_init(324, 4444,&mykey);
+*
+* or directly if you prefer:
+*  xorshift128plus_key_t mykey = {.part1=324,.part2=4444}
+*
+*  Then you can generate random numbers like so...
+*      xorshift128plus(&mykey);
+* If your application is threaded, each thread should have its own
+* key.
+*
+*
+* The seeds (key1 and key2) should be non-zero. You are responsible for
+* checking that they are non-zero.
+*
+*/
+static inline void xorshift128plus_init(uint64_t key1, uint64_t key2, xorshift128plus_key_t *key) {
+  key->part1 = key1;
+  key->part2 = key2;
+}
+
+
+/*
+Return a new 64-bit random number
+*/
+uint64_t xorshift128plus(xorshift128plus_key_t * key);
+
+
+/**
+* equivalent to skipping 2^64 xorshift128plus() calls
+* useful to generate a new key from an existing one (multi-threaded context).
+*/
+void xorshift128plus_jump(xorshift128plus_key_t * key);
+
+/* Fisher-Yates shuffle, shuffling an array of 32-bit values, uses the provided key */
+void  xorshift128plus_shuffle32(xorshift128plus_key_t * key, uint32_t *storage, uint32_t size);
+
+/* Partial Fisher-Yates shuffle, shuffling  "size" 32-bit  values in "storage". You must provide the key for randomness. Applies shuffle to elements in [lower_index_inclusive, size). */
+void  xorshift128plus_shuffle32_partial(xorshift128plus_key_t * key, uint32_t *storage, uint32_t size, uint32_t lower_index_inclusive);
+
+
+
+
+uint64_t xorshift128plus(xorshift128plus_key_t * key) {
+    uint64_t s1 = key->part1;
+    const uint64_t s0 = key->part2;
+    key->part1 = s0;
+    s1 ^= s1 << 23; // a
+    key->part2 = s1 ^ s0 ^ (s1 >> 18) ^ (s0 >> 5); // b, c
+    return key->part2 + s0;
+}
+
+
+void xorshift128plus_jump(xorshift128plus_key_t * key) {
+    static const uint64_t JUMP[] = { 0x8a5cd789635d2dff, 0x121fd2155c472f96 };
+    uint64_t s0 = 0;
+    uint64_t s1 = 0;
+    for(unsigned int i = 0; i < sizeof (JUMP) / sizeof (*JUMP); i++)
+        for(int b = 0; b < 64; b++) {
+            if (JUMP[i] & 1ULL << b) {
+                s0 ^= key->part1;
+                s1 ^= key->part2;
+            }
+            xorshift128plus(key);
+        }
+
+    key->part1 = s0;
+    key->part2 = s1;
+}
+
+
+/**
+ * computer two random number in [0,bound1) and [0,bound2)
+ * has a slight bias, but that's probably the last of your concerns given
+ * that xorshift128plus is not perfect to begin with.
+ */
+static void xorshift128plus_bounded_two_by_two(xorshift128plus_key_t * key,
+		uint32_t bound1, uint32_t bound2, uint32_t* bounded1, uint32_t * bounded2) {
+	uint64_t rand = xorshift128plus(key);
+	* bounded1 = ((rand & UINT64_C(0xFFFFFFFF)) * bound1) >> 32;
+	* bounded2 = ((rand >> 32) * bound2) >> 32;
+}
+
+static uint32_t xorshift128plus_bounded(xorshift128plus_key_t * key, uint32_t bound) {
+	uint64_t rand = xorshift128plus(key);
+	return ((rand & UINT64_C(0xFFFFFFFF)) * bound ) >> 32;
+}
+
+
+/* Fisher-Yates shuffle, shuffling an array of integers, uses the provided key */
+void  xorshift128plus_shuffle32(xorshift128plus_key_t * key, uint32_t *storage, uint32_t size) {
+    xorshift128plus_shuffle32_partial(key, storage, size, 1);
+}
+
+void  xorshift128plus_shuffle32_partial(xorshift128plus_key_t * key, uint32_t *storage, uint32_t size, uint32_t lower_index_inclusive) {
+    uint32_t i;
+    uint32_t nextpos1, nextpos2;
+    if (lower_index_inclusive==0) lower_index_inclusive=1;
+    for (i=size; i>(lower_index_inclusive+1); i-=2) {
+    	xorshift128plus_bounded_two_by_two(key,i,i-1,&nextpos1,&nextpos2);
+        const uint32_t tmp1 = storage[i-1];// likely in cache
+        const uint32_t val1 = storage[nextpos1]; // could be costly
+        storage[i - 1] = val1;
+        storage[nextpos1] = tmp1; // you might have to read this store later
+
+        uint32_t tmp2 = storage[i-2];// likely in cache
+        uint32_t val2 = storage[nextpos2]; // could be costly
+        storage[i - 2] = val2;
+        storage[nextpos2] = tmp2; // you might have to read this store later
+
+    }
+    if(i>lower_index_inclusive) {
+    	const uint32_t nextpos = xorshift128plus_bounded(key,i);
+    	const uint32_t tmp = storage[i-1];// likely in cache
+    	const uint32_t val = storage[nextpos]; // could be costly
+        storage[i - 1] = val;
+        storage[nextpos] = tmp; // you might have to read this store later
+    }
+
+}
+void populateRandom_xorshift128plus(uint32_t *answer, uint32_t size,uint64_t i_key1, uint64_t i_key2) 
+{
+  xorshift128plus_key_t mykey = {.part1 = i_key1, .part2 = i_key2};
+  xorshift128plus_init(i_key1, i_key2, &mykey);
+  uint32_t i = size;
+  while (i > 2) {
+    *(uint64_t *)(answer + size - i) = xorshift128plus(&mykey);
+    i -= 2;
+  }
+  if (i != 0)
+    answer[size - i] = (uint32_t)xorshift128plus(&mykey);
+}
+
+
+typedef map<string, string> MAPPASTRINGASTRINGA;
+
+int Jidac::utf() 
+{
+
+#ifdef ESX
+	printf("GURU: sorry: ESXi does not like this things\n");
+	exit(0);
+#endif
+		
+	vector<string> sourcefile;     
+	
+	g_bytescanned=0;
+	g_filescanned=0;
+	g_worked=0;
+	edt.clear();
+	
+	for (unsigned i=0; i<files.size(); ++i)
+		scandir(true,edt,files[i].c_str());
+	
+	for (DTMap::iterator p=edt.begin(); p!=edt.end(); ++p) 
+		if (!isdirectory(p->first))
+			sourcefile.push_back(p->first);
+
+	
+	vector<string> strange;     
+	
+	printf("\nCheck directories %s\n",migliaia(sourcefile.size()));
+	for (int i=0;i<sourcefile.size();i++)
+	{
+		string filename=extractfilepath(sourcefile[i]);
+		string ansifilename=utf8toansi(filename);
+			
+		string ragione="";
+		if (filename!=ansifilename)
+			ragione+="CHAR |";
+
+		if (dirlength>0)
+			if (filename.length()>dirlength)
+				ragione+="LEN "+std::to_string(dirlength)+"-|";
+
+		if (ragione!="")
+			strange.push_back(padleft(ragione,15)+filename);
+	}
+	
+	
+	sort( strange.begin(), strange.end() );
+	strange.erase( unique( strange.begin(), strange.end() ), strange.end() );
+	if (!flagutf)
+		for (int i=0;i<strange.size();i++)
+		{
+			printf("DIR:%08lu <<",strange[i].length());
+			printUTF8(strange[i].c_str());
+			printf(">>\n");
+		}
+	printf("DIR:Total %s\n",migliaia(strange.size()));
+	
+	strange.clear();
+	printf("\nCheck files %s\n",migliaia(sourcefile.size()));
+	
+	for (int i=0;i<sourcefile.size();i++)
+	{
+		string filename=extractfilename(sourcefile[i]);
+		string ansifilename=utf8toansi(filename);
+	
+		string ragione="";
+		
+		if (filename!=ansifilename)
+			ragione+="CHAR |";
+
+		if (filelength>0)
+			if (filename.length()>filelength)
+				ragione+="LEN "+std::to_string(filelength)+"-|";
+		if (ragione!="")
+			strange.push_back(padleft(ragione,15)+filename);
+
+	}
+	sort( strange.begin(), strange.end() );
+	strange.erase( unique( strange.begin(), strange.end() ), strange.end() );
+	
+	if (!flagutf)
+		for (int i=0;i<strange.size();i++)
+		{
+			printf("FILE:%08ld <<",strange[i].length());
+			printUTF8(strange[i].c_str());
+			printf(">>\n");
+		}
+	printf("FILE:Total %s\n",migliaia(strange.size()));
+
+	if (!flagutf)
+		return 0;
+		
+	printf("******* RENAME STRANGE FILES WITHOUT UTF-8 AND LENGTH\n");
+	if (!flagkill)
+	printf("***** -kill not present => this is a dry run\n");
+	
+	int rinominati=0;
+	int nonrinominati=0;
+	int contatore=0;
+	
+	MAPPASTRINGASTRINGA mappatofrom;
+	
+	for (unsigned int i=0;i<sourcefile.size();i++)
+	{
+		string filename		=extractfilename(sourcefile[i]);
+		string percorso		=extractfilepath(sourcefile[i]);
+		string estensione	=prendiestensione(sourcefile[i]);
+		
+		string ansifilename	=utf8toansi(filename);
+		/*
+		printf("orig file    %s\n",filename.c_str());
+		printf("ansifilename %s\n",ansifilename.c_str());
+		printf("\n");
+		*/
+		string 	latinfilename=purgeansi(forcelatinansi(ansifilename));
+		string	uniqfilename=latinfilename;
+
+/*
+		if (estensione=="eml")
+		
+		uniqfilename=mytrim2(uniqfilename);
+	*/	
+		
+		
+		int lunghezza=FRANZMAXPATH;
+		if (filelength>0)
+			if (filelength<FRANZMAXPATH)
+				lunghezza=filelength;
+		lunghezza-=9; // antidupe
+		if (lunghezza<10)
+			lunghezza=10;
+		
+		
+		int	lunghezzalibera=lunghezza-percorso.length();//%08d_
+		if (lunghezzalibera<10)
+			lunghezzalibera=10;
+			
+		string newname=uniqfilename;
+		
+		
+		//printf("Precheck newname   %s\n",newname.c_str());
+		//printf("Precheck filenae   %s\n",filename.c_str());
+		//printf("newlen             %d %d\n",newname.length(),lunghezzalibera);
+		if ((newname!=filename) /*|| (newname.length()>(unsigned int)lunghezzalibera)*/)
+		{
+		/*	
+			printf("DIVERSI\n");
+			printf("New    <<%s>>\n",newname.c_str());
+			printf("File   <<%s>>\n",filename.c_str());
+			printf("\n");
+			*/
+			if (newname.length()>(unsigned int)lunghezzalibera)
+				newname=newname.substr(0,lunghezzalibera/2)+"---"+newname.substr(newname.length()-lunghezzalibera/2,lunghezzalibera/2);
+	
+	///		printf("Cerco %s\n",(percorso+newname).c_str());
+			std::map<string,string>::iterator elemento;
+			elemento = mappatofrom.find(percorso+newname);
+			if (elemento != mappatofrom.end())
+			{
+				printf("DUPLICATED detox name\n");
+				
+				char numero[60];
+				uint32_t crc=0;
+				crc=crc32_16bytes(sourcefile[i].c_str(),sourcefile[i].size(), crc);
+				sprintf(numero,"%08X_",crc);
+				newname=percorso+numero+newname;
+				
+		///		newname=nomefileseesistegia(percorso+newname);
+			}
+			else
+				newname=percorso+newname;
+				
+		///	printf("Inserisco <<%s>>\n",newname.c_str());
+			mappatofrom.insert(std::pair<string, string>(newname, "DUMMY"));
+			
+			string sfrom=sourcefile[i];
+#ifdef _WIN32
+			myreplaceall(sfrom,"/","\\");
+#endif
+			string sto=newname; 
+#ifdef _WIN32
+			sto=nomefileseesistegia(sto);
+			myreplaceall(sto,"/","\\");
+#endif
+			if (flagverbose)
+			{
+				printf("FROM: ");
+				printUTF8(sfrom.c_str());
+				printf("\nTO:   %s\n\n",sto.c_str());
+			}
+			
+			if (flagkill)
+			{
+#ifdef _WIN32				
+				std::wstring wfrom=utow(sfrom.c_str());  
+				std::wstring wto=utow(sto.c_str());  
+				if (!MoveFileW(wfrom.c_str(),wto.c_str()))
+				{
+					nonrinominati++;
+					printf("ERROR WIN renaming\n");
+					printf("from <<");
+					printUTF8(sfrom.c_str());
+					printf(">>\n");
+					printf("to   <<%s>>\n",sto.c_str());
+					
+					printf("ERROR renaming <<");
+					printUTF8(sfrom.c_str());
+					printf(">> to <<%s>>\n",sto.c_str());
+					if (flagverbose)
+						for (unsigned int j=0;j<sfrom.length();j++)
+							printf("%03d %03d %c\n",j,sto[j],sto[j]);
+				}
+#else
+///gatta
+				if (::rename(sfrom.c_str(), sto.c_str()) != 0)
+				{
+					nonrinominati++;
+					printf("ERROR NIX renaming\n");
+					printf("from <<%s>>\n",sfrom.c_str());
+					printf("to   <<%s>>\n",sto.c_str());
+					if (flagverbose)
+						for (unsigned int j=0;j<sfrom.length();j++)
+							printf("%03d %03d %c\n",j,sto[j],sto[j]);
+
+				}
+#endif	
+				else
+					rinominati++;		
+		///		printf("Renaming %08d failed %08d\r",rinominati,nonrinominati);
+			}
+			else
+				nonrinominati++;
+
+		}
+	}
+	printf("\n");
+	printf("Candidati  %08d\n",rinominati+nonrinominati);
+	if (flagkill)
+	{
+		printf("Renamed %08d\n",rinominati);
+		printf("Failed  %08d\n",nonrinominati);
+	}
+	else
+		printf("*** dry run\n");
+	if (nonrinominati>0)
+		return 2;
+	else
+		return 0;
+	
+}
+
+
+int Jidac::fillami() 
+{
+
+#ifdef ESX
+	printf("GURU: sorry: ESXi does not like this things\n");
+	exit(0);
+#endif
+	if (files.size()!=1)
+	{
+		printf("FILL: exactly one directory\n");
+		return 2;
+	}
+	if (!isdirectory(files[0]))
+	{
+		printf("FILL: you need to specify a directory, not a file\n");
+		return 2;
+	}
+	
+	
+	moreprint("");
+	moreprint("This is FILLAMI, reliability test for media.");
+	moreprint("");
+	moreprint("Almost all free space will be filled by pseudorandom 512MB files,");
+	moreprint("then checked from the ztempdir-created folder.");
+	moreprint("");
+	moreprint("These activities can reduce the media life,");
+	moreprint("especially for solid state drives and if repeated several times.");
+	moreprint("");
+	moreprint("Normally used as stress test for newly devices/controllers");
+	moreprint("or (via NIC) for heavy network stress test.");
+	moreprint("");
+	moreprint("Temporary files are NOT deleted by default (for zfs's scrub).");
+	moreprint("");
+	moreprint("-kill    switch will clear (delete) temp files after execution");
+	moreprint("-verbose for extended output (check IO consistency speed)");
+	moreprint("");
+	moreprint("More than 2GB of free disk space needed.");
+	moreprint("");
+	
+	
+	printf("To EXIT press q, Q / anything else to continue\n");
+	mygetch();
+	
+	
+	string outputdir=files[0]+"ztempdir/";
+	
+	makepath(outputdir);
+	
+	unsigned int percent=99;
+	
+	uint64_t spazio=getfreespace(outputdir.c_str());
+	printf("Free space %12s (%s) <<%s>>\n",migliaia(spazio),tohuman(spazio),outputdir.c_str());
+	
+	uint64_t spacetowrite=spazio*percent/100;
+	printf("To write   %12s (%s) %d percent\n",migliaia(spacetowrite),tohuman(spacetowrite),percent);
+
+
+	uint32_t chunksize=(2<<28)/sizeof(uint32_t); //half gigabyte in 32 bits at time
+	int chunks=spacetowrite/(chunksize*sizeof(uint32_t));
+	chunks--; // just to be sure
+	if (chunks<=0)
+	{
+		printf("Abort: there is something strange on free space (2GB+)\n");
+		return 1;
+	}
+	printf("%d chuks of (%s) will be written\n",chunks,tohuman(chunksize*sizeof(uint32_t)));
+		
+	uint32_t *buffer32bit = (uint32_t*)malloc(chunksize*sizeof(uint32_t));
+	if (buffer32bit==0)
+	{
+		printf("GURU malloc of buffer32bit\n");
+		return 2;
+	}
+	uint64_t starttutto=mtime();	
+	uint64_t hashtime=0;
+	uint64_t totaliotime=0;
+	uint64_t totalhashtime=0;
+	uint64_t totalrandtime=0;
+		
+	vector<string> chunkfilename;     
+	vector<string> chunkhash;     
+	
+	char mynomefile[1000];
+	for (int i=0;i<chunks;i++)
+	{
+		uint64_t startrandom=mtime();
+		populateRandom_xorshift128plus(buffer32bit, chunksize,324+i,4444+i);
+		uint64_t randtime=mtime()-startrandom;
+		
+		uint64_t starthash=mtime();
+		XXH3_state_t state128;
+		(void)XXH3_128bits_reset(&state128);
+		(void)XXH3_128bits_update(&state128, buffer32bit, chunksize*4);
+		XXH128_hash_t myhash=XXH3_128bits_digest(&state128);
+		char risultato[33];
+		sprintf(risultato,"%016llX%016llX",(unsigned long long)myhash.high64,(unsigned long long)myhash.low64);
+		chunkhash.push_back(risultato);
+		hashtime=mtime()-starthash;
+		
+		sprintf(mynomefile,"%szchunk_%05d_$%s",outputdir.c_str(),i,risultato);
+		chunkfilename.push_back(mynomefile);
+		double percentuale=(double)i/(double)chunks*100.0;
+		if (i==0)
+			percentuale=0;
+			
+		printf("%03d%% ",(int)percentuale);
+		
+		uint64_t startio=mtime();
+		FILE* myfile=fopen(mynomefile, "wb");
+		fwrite(buffer32bit, sizeof(uint32_t), chunksize, myfile);
+		fclose(myfile);			
+		uint64_t iotime=mtime()-startio;
+		
+		
+		uint64_t randspeed=	(chunksize*sizeof(uint32_t)/((randtime+1)/1000.0));
+		uint64_t hashspeed=	(chunksize*sizeof(uint32_t)/((hashtime+1)/1000.0));
+		uint64_t iospeed=	(chunksize*sizeof(uint32_t)/((iotime+1)/1000.0));
+		
+		double trascorso=(mtime()-starttutto+1)/1000.0;
+		double eta=((double)trascorso*(double)chunks/(double)i)-trascorso;
+		if (i==0)
+			eta=0;
+
+		if (eta<356000)
+		{
+		printf("ETA %0d:%02d:%02d",int(eta/3600), int(eta/60)%60, int(eta)%60);
+		printf(" todo (%10s) rnd (%10s/s) hash (%10s/s) W (%10s/s)",
+		tohuman(sizeof(uint32_t)*uint64_t(chunksize)*(uint64_t)(chunks-i)),
+		tohuman2(randspeed),
+		tohuman3(hashspeed),
+		tohuman4(iospeed));
+		if (flagverbose)
+			printf("\n");
+		else
+			printf("\r");
+		}
+		totaliotime+=iotime;
+		totalrandtime+=randtime;
+		totalhashtime+=hashtime;
+		
+	}
+	uint64_t timetutto=mtime()-starttutto;
+	printf("Total time %f  rnd %f  hash %f  write %f\n",timetutto/1000.0,totalrandtime/1000.0,totalhashtime/1000.0,totaliotime/1000.0);
+	free(buffer32bit);
+	
+	if (chunkfilename.size()!=chunkhash.size())
+	{
+		printf("Guru 23925: filename size != hash size\n");
+		return 2;
+	}
+	if (chunkfilename.size()!=(unsigned int)chunks)
+	{
+		printf("Abort: expecting %d chunks but %d founded\n",chunks,(unsigned int)chunkfilename.size());
+		return 2;
+	}
+	
+	printf("******* VERIFY\n");
+	
+	g_bytescanned=0;
+	g_filescanned=0;
+	g_worked=0;
+	edt.clear();
+	int64_t lavorati=0;
+	bool flagallok=true;
+	
+	
+	uint64_t starverify=mtime();
+	
+	for (int unsigned i=0;i<chunkfilename.size();i++)
+	{
+		string filename=chunkfilename[i];
+		
+		printf("Loading chunk %05d ",i);
+		
+		uint64_t dummybasso64;
+		uint64_t dummyalto64;
+		uint64_t starthash=mtime();
+		string filehash=xxhash_calc_file(filename.c_str(),-1,-1,lavorati,dummybasso64,dummyalto64);
+		uint64_t hashspeed=chunksize/((mtime()-starthash+1)/1000.0);
+		printf(" (%s/s) ",tohuman(hashspeed));
+
+		bool flagerrore=(filehash!=chunkhash[i]);
+			
+		if (flagerrore)
+		{
+			printf("ERROR\n");
+			flagallok=false;
+		}
+		else
+		{
+			printf("OK %s",chunkhash[i].c_str());
+			if (flagverbose)
+				printf("\n");
+			else
+				printf("\r");
+		}
+	}
+
+	printf("\n");
+	uint64_t verifytime=mtime()-starverify;
+	printf("Verify time %f (%10s) speed (%10s/s)\n",verifytime/1000.0,tohuman(lavorati),tohuman2(lavorati/(verifytime/1000.0)));
+		
+	if (flagallok)
+	{
+		printf("+OK all OK\n");
+		if (flagkill)
+		{
+			for (int unsigned i=0;i<chunkfilename.size();i++)
+			{
+				delete_file(chunkfilename[i].c_str());
+				printf("Deleting tempfile %05d / %05d\r",i,(unsigned int)chunkfilename.size());
+			}
+			delete_dir(outputdir.c_str());
+		printf("\n");
+		}
+		else
+		{
+			printf("REMEMBER: temp file in %s\n",outputdir.c_str());
+		}
+
+	}	
+	else
+		printf("ERROR: SOMETHING WRONG\n");
+	return 0;
+}
 
 
 ///////// This is a merge of unzpaq206.cpp, patched by me to become unz.cpp
@@ -25462,8 +27900,8 @@ void myavanzamento(int64_t i_lavorati,int64_t i_totali,int64_t i_inizio)
 		int secondi=(mtime()-i_inizio)/1000;
 		if (secondi==0)
 			secondi=1;
-				
-		printf("%03d%% %d:%02d:%02d %20s of %20s %s/sec\n", percentuale,
+		if (eta<356000)
+		printf("%03d%% %02d:%02d:%02d %20s of %20s %s/sec\n", percentuale,
 		int(eta/3600), int(eta/60)%60, int(eta)%60, migliaia(i_lavorati), migliaia2(i_totali),migliaia3(i_lavorati/secondi));
 		fflush(stdout);
 	}
@@ -27104,13 +29542,16 @@ It's normal in datastorage and virtualization environments
 pthread_mutex_t mylock = PTHREAD_MUTEX_INITIALIZER;
 
 
+///
+vector<uint64_t> g_arraybytescanned;
+vector<uint64_t> g_arrayfilescanned;
+
 /*
 We need something out of an object (Jidac), addfile() and scandir(), 
 because pthread does not like very much
 */
 void myaddfile(uint32_t i_tnumber,DTMap& i_edt,string i_filename, int64_t i_date,int64_t i_size, bool i_flagcalchash) 
 {
-
 	///Raze to the ground ads and zfs as soon as possible
 	if (isads(i_filename))
 		return;
@@ -27119,9 +29560,6 @@ void myaddfile(uint32_t i_tnumber,DTMap& i_edt,string i_filename, int64_t i_date
 		return;
 		
 	int64_t dummy;
-	
-	
-  	
 	DT& d=i_edt[i_filename];
 	d.date=i_date;
 	d.size=i_size;
@@ -27144,20 +29582,33 @@ void myaddfile(uint32_t i_tnumber,DTMap& i_edt,string i_filename, int64_t i_date
  
 ///  thread safe, but... who cares? 
 	pthread_mutex_lock(&mylock);
-	g_bytescanned+=i_size; 
-	g_filescanned++;
+	g_arraybytescanned[i_tnumber]+=i_size;
+	g_arrayfilescanned[i_tnumber]++;
 	
 	if (!flagnoeta)
 	{
 		if (i_flagcalchash)
 		{
-			if (!(g_filescanned % 100))
-				printf("Checksumming |%d| %12s (%10s)\r",i_tnumber,migliaia(g_filescanned),tohuman(g_bytescanned));
+			if (!(g_arrayfilescanned[i_tnumber] % 100))
+			{
+				
+				for (unsigned int i=0; i<g_arraybytescanned.size();i++)
+					printf("Checksumming |%02d|%10s %12s\n",i,tohuman(g_arraybytescanned[i]),migliaia(g_arrayfilescanned[i]));
+				setupConsole();
+				printf("\033[%dA",(int)g_arraybytescanned.size());
+				restoreConsole();
+			}
 		}
 		else
 		{
-			if (!(g_filescanned % 1000))
-				printf("Scanning |%d| %12s (%10s)\r",i_tnumber,migliaia(g_filescanned),tohuman(g_bytescanned));
+			if (!(g_arrayfilescanned[i_tnumber] % 1000))
+			{
+				for (unsigned int i=0; i<g_arraybytescanned.size();i++)
+					printf("|%02d|%10s %12s\n",i,tohuman(g_arraybytescanned[i]),migliaia(g_arrayfilescanned[i]));
+				setupConsole();
+				printf("\033[%dA",(int)g_arraybytescanned.size());
+				restoreConsole();
+			}
 		}
 		fflush(stdout);
 	}
@@ -27240,7 +29691,7 @@ void myscandir(uint32_t i_tnumber,DTMap& i_edt,string filename, bool i_recursive
   
 	HANDLE h=FindFirstFile(utow(t.c_str()).c_str(), &ffd);
 	if (h==INVALID_HANDLE_VALUE && GetLastError()!=ERROR_FILE_NOT_FOUND && GetLastError()!=ERROR_PATH_NOT_FOUND)
-		printerr(t.c_str());
+		printerr("29617",t.c_str());
 	
 	while (h!=INVALID_HANDLE_VALUE) 
 	{
@@ -27279,7 +29730,7 @@ void myscandir(uint32_t i_tnumber,DTMap& i_edt,string filename, bool i_recursive
 		if (!FindNextFile(h, &ffd)) 
 		{
 			if (GetLastError()!=ERROR_NO_MORE_FILES) 
-				printerr(fn.c_str());
+				printerr("29656",fn.c_str());
 			break;
 		}
 	}
@@ -27316,8 +29767,11 @@ void * scansiona(void *t)
 }
 
 
+///https://solarianprogrammer.com/2019/04/08/c-programming-ansi-escape-codes-windows-macos-linux-terminals/
+
 int Jidac::dircompare(bool i_flagonlysize)
 {
+	
 	int risultato=0;
 	
 	if (i_flagonlysize)
@@ -27347,6 +29801,9 @@ int Jidac::dircompare(bool i_flagonlysize)
 		flagnoeta=true;
 	g_bytescanned			=0;
 	g_worked=0;
+	g_arraybytescanned.clear();
+	g_arrayfilescanned.clear();
+		
 	if (all)	// OK let's make different threads
 	{
 		vector<tparametri> 	vettoreparametri;
@@ -27377,10 +29834,26 @@ int Jidac::dircompare(bool i_flagonlysize)
 		pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
 
 		printf("Creating %s scan threads\n",migliaia(files.size()));
+		
+		
+		if (!flagnoeta)
+		{
+			setupConsole();
+			printf("\e[?25l");	
+			fflush(stdout);
+			restoreConsole();
+		}
 		for(unsigned int i = 0; i < files.size(); i++ ) 
 		{
 			print_datetime();
-			printf("Scan dir || <<%s>>\n",files[i].c_str());
+			printf("Scan dir |%02d| <<%s>>\n",i,files[i].c_str());
+		}
+
+		for(unsigned int i = 0; i < files.size(); i++ ) 
+		{
+			g_arraybytescanned.push_back(0);
+			g_arrayfilescanned.push_back(0);
+			
 			rc = pthread_create(&threads[i], &attr, scansiona, (void*)&vettoreparametri[i]);
 			if (rc) 
 			{
@@ -27388,6 +29861,7 @@ int Jidac::dircompare(bool i_flagonlysize)
 				exit(-1);
 			}
 		}
+		printf("\n");
 
 		// free attribute and wait for the other threads
 		pthread_attr_destroy(&attr);
@@ -27400,6 +29874,14 @@ int Jidac::dircompare(bool i_flagonlysize)
 				exit(-1);
 			}
 			///printf("Thread completed %d status %d\n",i,status);
+		}
+		if (!flagnoeta)
+		{
+			setupConsole();
+			printf("\033[%dB",(int)g_arraybytescanned.size());
+			printf("\e[?25h");
+			fflush(stdout);
+			restoreConsole();
 		}
 		printf("\nParallel scan ended in %f\n",(mtime()-startscan)/1000.0);
 	
@@ -27432,6 +29914,9 @@ int Jidac::dircompare(bool i_flagonlysize)
 	}
 	else
 	{	// single thread. Do a sequential scan
+		g_arraybytescanned.push_back(0);
+		g_arrayfilescanned.push_back(0);
+	
 		for (unsigned i=0; i<files.size(); ++i)
 		{
 			DTMap myblock;
@@ -27478,12 +29963,12 @@ int Jidac::dircompare(bool i_flagonlysize)
 	printf("\n=============================================\n");
 	for (unsigned int i=0;i<files_size.size();i++)
 	{
-		printf("Dir %d   %24s %12s %6g <<%s>>\n",i,migliaia(files_size[i]),migliaia2(files_count[i]),files_time[i]/1000.0,files[i].c_str());
+		printf("Dir %d   %24s %12s %g <<%s>>\n",i,migliaia(files_size[i]),migliaia2(files_count[i]),files_time[i]/1000.0,files[i].c_str());
 		total_size+=files_size[i];
 		total_files+=files_count[i];
 	}
 	printf("=============================================\n");
-	printf("        %24s %12s %6g sec (%s)\n",migliaia(total_size),migliaia2(total_files),(mtime()-startscan)/1000.0,tohuman(total_size));
+	printf("        %24s %12s %g sec (%s)\n",migliaia(total_size),migliaia2(total_files),(mtime()-startscan)/1000.0,tohuman(total_size));
 	
 	if (i_flagonlysize)
 	{
@@ -27491,7 +29976,7 @@ int Jidac::dircompare(bool i_flagonlysize)
 	}
 ///// Now check the folders (sequentially)
 
-	printf("\nDir 0 (master) time %6g <<%s>>\n",files_time[0]/1000.0,files[0].c_str());
+	printf("\nDir 0 (master) time %g <<%s>>\n",files_time[0]/1000.0,files[0].c_str());
 	printf("size  %24s (files %s)\n",migliaia(files_size[0]),migliaia2(files_count[0]));
 	printf("-------------------------\n");
 
@@ -27575,61 +30060,3 @@ int Jidac::dircompare(bool i_flagonlysize)
 	return risultato;
 }
 
-
-
-/*
-zpaqfranz.cpp:12375:28: warning: format specifies type 'long long' but the argument has
-      type 'uint64_t' (aka 'unsigned long') [-Wformat]
-        sprintf(a_start,"%014lld",a.crc32start);
-                         ~~~~~~~  ^~~~~~~~~~~~
-                         %014lu
-zpaqfranz.cpp:12376:28: warning: format specifies type 'long long' but the argument has
-      type 'uint64_t' (aka 'unsigned long') [-Wformat]
-        sprintf(b_start,"%014lld",b.crc32start);
-                         ~~~~~~~  ^~~~~~~~~~~~
-                         %014lu
-zpaqfranz.cpp:15896:31: warning: format specifies type 'long long' but the argument has
-      type 'std::__1::vector<VER, std::__1::allocator<VER> >::size_type'
-      (aka 'unsigned long') [-Wformat]
-                        sprintf(versioni8,"%08lld",ver.size());
-                                           ~~~~~~  ^~~~~~~~~~
-                                           %08lu
-zpaqfranz.cpp:22835:37: warning: format specifies type 'unsigned long long' but the
-      argument has type 'uint64_t' (aka 'unsigned long') [-Wformat]
-        sprintf(risultato,"%016llX%016llX",o_high64,o_low64);
-                           ~~~~~~~         ^~~~~~~~
-                           %016lX
-zpaqfranz.cpp:22835:46: warning: format specifies type 'unsigned long long' but the
-      argument has type 'uint64_t' (aka 'unsigned long') [-Wformat]
-        sprintf(risultato,"%016llX%016llX",o_high64,o_low64);
-                                  ~~~~~~~           ^~~~~~~
-                                  %016lX
-zpaqfranz.cpp:23069:44: warning: format specifies type 'unsigned long long' but the
-      argument has type 'XXH64_hash_t' (aka 'unsigned long') [-Wformat]
-                printf("\nGlobal XXH3: %016llX%016llX\n",myhash.high64,myhash.low64);
-                                       ~~~~~~~           ^~~~~~~~~~~~~
-                                       %016lX
-zpaqfranz.cpp:23069:58: warning: format specifies type 'unsigned long long' but the
-      argument has type 'XXH64_hash_t' (aka 'unsigned long') [-Wformat]
-                printf("\nGlobal XXH3: %016llX%016llX\n",myhash.high64,myhash.low64);
-                                              ~~~~~~~                  ^~~~~~~~~~~~
-                                              %016lX
-zpaqfranz.cpp:26626:27: warning: format specifies type 'long long' but the argument has
-      type 'uint64_t' (aka 'unsigned long') [-Wformat]
-        sprintf(a_size,"%014lld",a.size);
-                        ~~~~~~~  ^~~~~~
-                        %014lu
-zpaqfranz.cpp:26627:27: warning: format specifies type 'long long' but the argument has
-      type 'uint64_t' (aka 'unsigned long') [-Wformat]
-        sprintf(b_size,"%014lld",b.size);
-                        ~~~~~~~  ^~~~~~
-                        %014lu
-zpaqfranz.cpp:26634:27: warning: format specifies type 'long long' but the argument has
-      type 'int64_t' (aka 'long') [-Wformat]
-        sprintf(a_size,"%014lld",a.date);
-                        ~~~~~~~  ^~~~~~
-                        %014ld
-zpaqfranz.cpp:26635:27: warning: format specifies type 'long long' but the argument has
-      type 'int64_t' (aka 'long') [-Wformat]
-        sprintf(b_size,"%014lld",b.date);
-		*/

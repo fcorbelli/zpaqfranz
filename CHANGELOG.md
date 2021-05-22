@@ -1,3 +1,6 @@
+22-05-2021: 51.23
+            First "working" stage of -utf, -fix255, fixeml
+	    
 18-05-2021: 51.22
             A lot of work, experimental extraction of too long filename (and many more)
 

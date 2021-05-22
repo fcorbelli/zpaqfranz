@@ -2,7 +2,7 @@
 ///////// The source is a mess
 ///////// Strongly in development
 
-#define ZPAQ_VERSION "51.22-experimental"
+#define ZPAQ_VERSION "51.23-experimental"
 #define FRANZOFFSET 	50
 #define FRANZMAXPATH 	240
 /*
@@ -11886,6 +11886,37 @@ uint64_t getfreespace(const char* i_path)
 
 }
 
+
+
+
+// take care of "z:\pippo\test pluto\" parameters => "z:\pippo\test pluto\\"
+
+bool directoryexists(string& i_directory) 
+{
+	struct stat buffer;
+	///printf("3-0\n");
+	if (isdirectory(i_directory))
+	{
+///		printf("3A\n");
+		return (stat(i_directory.c_str(),&buffer)==0);
+	}
+	string mycandidate=i_directory;
+	mycandidate+='/';
+	///printf("CHECCKO SU <<%s>>\n",mycandidate.c_str());
+	bool cista= (stat(mycandidate.c_str(),&buffer)==0);
+	if (cista)
+	{
+		///printf("Cista\n");
+		return true;
+	}
+	else
+	{
+			///printf("non ci sta\n");
+			return false;
+	}
+}
+
+
 #ifdef unix
 
 // Print last error message
@@ -11908,7 +11939,7 @@ void printerr(const char* i_where,const char* filename)
   if (err==ERROR_FILE_NOT_FOUND)
     g_exec_text=": error file not found";
   else if (err==ERROR_PATH_NOT_FOUND)
-   g_exec_text=": error pathz not found";
+   g_exec_text=": error path not found";
   else if (err==ERROR_ACCESS_DENIED)
     g_exec_text=": error access denied";
   else if (err==ERROR_SHARING_VIOLATION)
@@ -11933,9 +11964,15 @@ void printerr(const char* i_where,const char* filename)
 	g_exec_text=filename+g_exec_text;
 	
 	uint64_t spazio=getfreespace(filename);
-	if (spazio<8)
-		printf("\n\nMAYBE OUT OF FREE SPACE OR INVALID PATH?\n");
-	exit(0);
+	if (spazio<16384)
+	{
+		string mypath=filename;
+		if (directoryexists(mypath))
+			printf("\n\nMAYBE OUT OF FREE SPACE?\n");
+		else
+			printf("\n\nMAYBE OUT OF FREE SPACE OR INVALID PATH?\n");
+	}
+//	exit(0);
 }
 
 #endif
@@ -12949,7 +12986,7 @@ void Jidac::examples()
 	moreprint("zpaqfranz x p:\\due.zpaq -to z:\\muz7\\ -flat");
 	moreprint("Extract all files into single directory\n");
 	
-	moreprint("zpaqfranz x p:\\due.zpaq -to z:\\muz7\\ -kill -verify");
+	moreprint("zpaqfranz x p:\\due.zpaq -to z:\\muz7\\ -kill");
 	moreprint("Create 0-bytes files (check filename restoration)\n");
 	
 	moreprint("zpaqfranz x p:\\due.zpaq -to z:\\muz7\\ -utf -fix255 -fixeml");
@@ -13064,10 +13101,10 @@ moreprint("  -sha256         In sha1 command use SHA256");
 moreprint("  -exec_ok fo.bat After OK launch fo.bat");
 moreprint("  -exec_error kz  After NOT OK launch kz");
 moreprint("  -kill           Show 'script-ready' log of dup files");
-moreprint("  -kill -verify   In extraction write 0-bytes file instead of data");
+moreprint("  -kill           In extraction write 0-bytes file instead of data");
 moreprint("  -utf            On extract kill non-utf8 chars");
 moreprint("  -fix255         On extract shrink total file length");
-moreprint("  -fixeml         On extract compress .eml filenames (Fwd Fwd Fwd =>Fwd)");
+moreprint("  -fixeml         On extract heuristically compress .eml filenames (Fwd Fwd Fwd =>Fwd)");
 moreprint("  -flat           On extract everithing in single path (emergency)");
 moreprint("  -debug          Show lot of infos (superverbose)");
 
@@ -14045,6 +14082,18 @@ string compressemlfilename(string i_string)
 			uniqfilename=purgedouble(uniqfilename," SV SV "," SV ");
 
 		for (int k=0;k<10;k++)
+			uniqfilename=purgedouble(uniqfilename,"Fwd FW ","Fwd ");
+
+		for (int k=0;k<10;k++)
+			uniqfilename=purgedouble(uniqfilename,"Fwd I ","Fwd ");
+		
+		for (int k=0;k<10;k++)
+			uniqfilename=purgedouble(uniqfilename,"I Fwd ","Fwd ");
+
+	for (int k=0;k<10;k++)
+			uniqfilename=purgedouble(uniqfilename,"R Re ","Re ");
+
+		for (int k=0;k<10;k++)
 			uniqfilename=purgedouble(uniqfilename,"__","_");
 
  		for (int k=0;k<10;k++)
@@ -14053,6 +14102,24 @@ string compressemlfilename(string i_string)
 		for (int k=0;k<10;k++)
 			uniqfilename=purgedouble(uniqfilename,"  "," ");
 
+		for (int k=uniqfilename.length()-1;k>0;k--)
+		{
+	///		printf("k= %d car=%c\n",k,uniqfilename[k]);
+			if ((uniqfilename[k]=='-') || (uniqfilename[k]=='.') || (uniqfilename[k]==' '))
+			{
+		///		printf("decre\n");
+			uniqfilename.pop_back();
+			}
+			else
+			{
+			///	printf("esco %c\n",uniqfilename[k]);
+			break;
+			}
+		}
+		/*
+		printf("kkk |%s|\n",uniqfilename.c_str());
+		exit(0);
+		*/
 		uniqfilename=mytrim2(uniqfilename);
 		
 		uniqfilename=percorso+uniqfilename;
@@ -14285,51 +14352,6 @@ inline char* tohuman4(uint64_t i_bytes)
 
 
 
-
-// take care of "z:\pippo\test pluto\" parameters => "z:\pippo\test pluto\\"
-
-bool directoryexists(string& i_directory) 
-{
-	struct stat buffer;
-	///printf("3-0\n");
-	if (isdirectory(i_directory))
-	{
-		printf("3A\n");
-		return (stat(i_directory.c_str(),&buffer)==0);
-	}
-	string mycandidate=i_directory;
-	mycandidate+='/';
-	///printf("CHECCKO SU <<%s>>\n",mycandidate.c_str());
-	bool cista= (stat(mycandidate.c_str(),&buffer)==0);
-	if (cista)
-	{
-		///printf("Cista\n");
-		return true;
-	}
-	else
-	{
-			///printf("non ci sta\n");
-			return false;
-	}
-}
-string directorywithspaces(string i_directory)
-{
-	if (directoryexists(i_directory))
-	{
-		printf("1A\n");
-		if (!isdirectory(i_directory))
-			i_directory+='/';
-		printf("1B\n");
-			
-		return i_directory;
-	}
-	else
-	{
-		printf("2A\n");
-		
-		return (i_directory);
-	}
-}
 
 
 // Parse the command line. Return 1 if error else 0.
@@ -14864,10 +14886,6 @@ int Jidac::doCommand(int argc, const char** argv) {
   
   return 0;
 }
-
-
-
-
 
 
 
@@ -17618,7 +17636,7 @@ ThreadReturn decompressThread(void* arg) {
 									string dafare=percorsino;
 									///dafare.pop_back();
 									if (flagdebug)
-										printf("\n\n17950: Make path of %03d\n---\n%s\n---\n",dafare.length(),dafare.c_str());
+										printf("\n\n17950: Make path of %03d\n---\n%s\n---\n",(int)dafare.length(),dafare.c_str());
 									bool creazione=CreateDirectory(utow(dafare.c_str()).c_str(), 0);
 									if (!creazione)
 										printerr("17519",dafare.c_str());
@@ -17633,7 +17651,16 @@ ThreadReturn decompressThread(void* arg) {
 						}
 					}
 #endif				
-					
+//fika
+		///		filename=nomefileseesistegia(filename);
+				/*
+				if (fileexists(filename))
+				{
+						printf("KKKKKKKKKKKKKKOOOOOOOOOOOOOOOOOOOOOOOOOOOOO %s\n",filename.c_str());
+						printf("Dim %08d\n\n",prendidimensionefile(filename.c_str()));
+						
+				}
+				*/
 				job.outf=fopen(filename.c_str(), WB);
 				if (job.outf==FPNULL) 
 				{
@@ -17805,6 +17832,21 @@ int64_t copy(libzpaq::Reader& in, libzpaq::Writer& out, uint64_t n=~0ull) {
   return result;
 }
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 // Extract files from archive. If force is true then overwrite
 // existing files and set the dates and attributes of exising directories.
 // Otherwise create only new files and directories. Return 1 if error else 0.
@@ -17812,7 +17854,7 @@ int Jidac::extract()
 {
 
 /*
-	-kill -verify
+	-kill 
 	-force
 	-comment / versioncomment
 	-flat
@@ -17825,20 +17867,12 @@ int Jidac::extract()
 			printf("-kill incompatible with -force\n");
 			return 2;
 		}
-		if (flagverify)
-		{
-			printf("\n");
-			printf("******\n");
-			printf("****** WARNING: -kill -verify switches. Create 0 bytes files (NO data written)\n");
-			printf("****** Full-scale extraction test (UTF-8 strange filenames, path too long...)\n");
-			printf("****** Highly suggested output on RAMDISK\n");
-			printf("******\n\n");
-		}
-		else
-		{
-			printf("Two switches needed: -kill -verify to make 0-files extraction\n");
-			return 2;
-		}
+		printf("\n");
+		printf("******\n");
+		printf("****** WARNING: -kill switch. Create 0 bytes files (NO data written)\n");
+		printf("****** Full-scale extraction test (UTF-8 strange filenames, path too long...)\n");
+		printf("****** Highly suggested output on RAMDISK\n");
+		printf("******\n\n");
 	}
 	
 
@@ -17979,14 +18013,14 @@ int Jidac::extract()
   int tobeerased=0,erased=0;
   
   uint32_t crc32fromfile;
-
-
-
-
+	int kollision=0;
+	int contatore=0;
 	if ((flagutf) || (flagflat) || flagfix255)
 	{
 /// we make a copy of the map (dt) into mymap, changing the filenames
 /// wy do not in rename()? Because we need very dirty string manipulations
+
+		MAPPAFILEHASH mappacollisioni;
 
 		int lunghezza=FRANZMAXPATH;
 	
@@ -18006,26 +18040,34 @@ int Jidac::extract()
 		else
 		{
 			if (flagutf)
-				printf("****** Extracting without non-latin chars (-utf)\n");
+				printf("****** -utf    No Non-latin chars\n");
 			if (flagfix255)
-				printf("****** Shrink filenames (-fix255) to %d length\n",FRANZMAXPATH);
+				printf("****** -fix255 Shrink filenames to %d, case insensitive\n",(int)FRANZMAXPATH);
 			if (flagfixeml)
-				printf("****** Compress .eml filenames (Fwd Fwd Fwd=>Fwd etc) (-fixeml)\n");
+				printf("****** -fixeml Heuristic compress .eml filenames (Fwd Fwd Fwd=>Fwd etc)\n");
 		}
 		printf("******\n\n");
 
-		if (flagdebug)
-			printf("17995:Files before %s\n",migliaia(dt.size()));
-	
-		DTMap mymap;
-		int contatore=0;
 		char numero[60];
-			
-			
+		int64_t filesbefore=0;
+		int64_t dirsbefore=0;
+		
+		if (flagdebug)
+			for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p) 
+			{
+				if ((p->second.date && p->first!="") && (!isdirectory(p->first)))
+					dirsbefore++;
+				else
+					filesbefore++;
+			}
+				
+		DTMap mymap;
+		
 		for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p) 
 		{
 		///	if ((p->second.date && p->first!="") && (!isdirectory(p->first)))
-			{
+		
+		{
 				string percorso			=extractfilepath(p->first);
 				string nome				=prendinomefileebasta(p->first);
 				
@@ -18048,19 +18090,8 @@ int Jidac::extract()
 				{
 					if (flagutf)
 					{
+						
 						string prenome=nome;
-
-						if (flagfixeml)
-							if (estensione=="eml")
-							{
-								prenome=compressemlfilename(nome);
-								if (flagdebug)
-									if (nome!=prenome)
-									{
-										printf("18109: eml pre  %s\n",nome.c_str());
-										printf("18110: eml post %s\n",prenome.c_str());
-									}
-							}
 
 // this is name, throw everything (FALSE)
 						nome=purgeansi(forcelatinansi(utf8toansi(nome)),false);		
@@ -18070,6 +18101,23 @@ int Jidac::extract()
 								printf("18030: flagutf pre  %s\n",prenome.c_str());
 								printf("18034: flagutf post %s\n",nome.c_str());
 							}
+
+						if (flagfixeml)
+							if (estensione=="eml")
+							{
+								prenome=compressemlfilename(nome);
+								if (nome!=prenome)
+								{
+									if (flagdebug)
+									{
+										printf("18109: eml pre  %s\n",nome.c_str());
+										printf("18110: eml post %s\n",prenome.c_str());
+									}
+									
+									nome=prenome;
+								}
+							}
+
 
 						string prepercorso=percorso;
 /// this is a path, so keep \ and / (TRUE)
@@ -18086,11 +18134,11 @@ int Jidac::extract()
 					
 					if (flagdebug)
 					{
-						printf("18041: First    %03d %s\n",p->first.length(),p->first.c_str());
-						printf("18042: Percorso %03d %s\n",percorso.length(),percorso.c_str());
-						printf("18043: nome     %03d %s\n",nome.length(),nome.c_str());
-						printf("18044: ext      %03d %s\n",estensione.length(),estensione.c_str());
-						printf("18045: Senza ex %03d %s\n",senzaestensione.length(),senzaestensione.c_str());
+						printf("18041: First    %03d %s\n",(int)p->first.length(),p->first.c_str());
+						printf("18042: Percorso %03d %s\n",(int)percorso.length(),percorso.c_str());
+						printf("18043: nome     %03d %s\n",(int)nome.length(),nome.c_str());
+						printf("18044: ext      %03d %s\n",(int)estensione.length(),estensione.c_str());
+						printf("18045: Senza ex %03d %s\n",(int)senzaestensione.length(),senzaestensione.c_str());
 					}
 
 					int	lunghezzalibera=lunghezza-percorso.length();//%08d_
@@ -18098,7 +18146,7 @@ int Jidac::extract()
 					{
 						if (flagdebug)
 						{
-							printf("\n\n\n18046: Path too long: need shrink %08d %s\n",percorso.length(),percorso.c_str());
+							printf("\n\n\n18046: Path too long: need shrink %08d %s\n",(int)percorso.length(),percorso.c_str());
 							printf("lunghezzalibera %d\n",lunghezzalibera);
 						}
 						vector<string> esploso;
@@ -18112,7 +18160,7 @@ int Jidac::extract()
 								printf("18031: temppercorso %s\n",temppercorso.c_str());
 							barra=temppercorso.find('/');
 							if (flagdebug)
-								printf("18034: Barra %d\n",barra);
+								printf("18034: Barra %ld\n",(long int)barra);
 							if (barra==string::npos)
 								break;
 							if (flagdebug)		
@@ -18124,15 +18172,15 @@ int Jidac::extract()
 						
 						int lunghezzamassima=0;
 						int indicelunghezzamassima=-1;
-						for (int i=0;i<esploso.size();i++)
+						for (unsigned int i=0;i<esploso.size();i++)
 						{
-							if (esploso[i].length()>lunghezzamassima)
+							if ((int)esploso[i].length()>lunghezzamassima)
 							{
 								indicelunghezzamassima=i;
 								lunghezzamassima=esploso[i].length();
 							}
 							if (flagdebug)
-								printf("18087: Esploso %d %03d %s\n",i,esploso[i].length(),esploso[i].c_str());
+								printf("18087: Esploso %d %03d %s\n",(int)i,(int)esploso[i].length(),esploso[i].c_str());
 						}
 						/*
 						printf("Lunghezza massima %d\n",lunghezzamassima);
@@ -18145,9 +18193,6 @@ int Jidac::extract()
 						
 						printf("Resto percoros     %d\n",percorso.length()-lunghezzamassima);
 						*/
-						int lunghezzaliberacartella=lunghezza-nome.length()-estensione.length();
-						
-				///		printf("Lunghezzaliberacartella %d\n",lunghezzaliberacartella);
 						
 						int lunghezzacheserve=lunghezza-10-(percorso.length()-lunghezzamassima);
 					///	printf("Lunghezza che ser  %d\n",lunghezzacheserve);
@@ -18156,10 +18201,10 @@ int Jidac::extract()
 						{
 							esploso[indicelunghezzamassima]=esploso[indicelunghezzamassima].substr(0,lunghezzacheserve);
 							string imploso;
-							for (int i=0;i<esploso.size();i++)
+							for (unsigned 	int i=0;i<esploso.size();i++)
 								imploso+=esploso[i]+'/';
 							if (flagdebug)
-								printf("18114: Imploso           %d %s\n",imploso.length(),imploso.c_str());
+								printf("18114: Imploso           %d %s\n",(int)imploso.length(),imploso.c_str());
 							percorso=imploso;
 							lunghezzalibera=lunghezza-percorso.length();
 							makepath(percorso);
@@ -18182,51 +18227,104 @@ int Jidac::extract()
 					lunghezzalibera=lunghezza-percorso.length();
 					
 					if (flagdebug)
-						printf("18098:lunghezze per %03d nome %03d tot %03d\n",percorso.length(),lunghezzalibera,percorso.length()+lunghezzalibera);
+						printf("18098:lunghezze per %03d nome %03d tot %03d\n",(int)percorso.length(),lunghezzalibera,(int)(percorso.length()+lunghezzalibera));
 					
 					if (newname.length()>(unsigned int)lunghezzalibera)
 					{
 						newname=newname.substr(0,lunghezzalibera-9);
 						if (flagdebug)
-							printf("18143:Trimmone newname %d %s\n",newname.length(),newname.c_str());
+							printf("18143:Trimmone newname %d %s\n",(int)newname.length(),newname.c_str());
 					}
-				
-					char numero[60];
-					uint32_t crc=0;
-					crc=crc32_16bytes(p->first.c_str(),p->first.size(), crc);
-					sprintf(numero,"%08X_",crc);
 					
-					newname=numero+newname;
-					
-					if (estensione!="")
-						newname+="."+estensione;
+	
 					newname=percorso+newname;
 					
-			
+					std::map<string,string>::iterator collisione;
+					string candidato=newname;
+					if (flagfix255)	/// we are on windows, take care of case
+					{
+						std::for_each(candidato.begin(), candidato.end(), [](char & c)
+						{
+							c = ::tolower(c);	
+						});
+					}
+					collisione=mappacollisioni.find(candidato); 
+					if (collisione!=mappacollisioni.end()) 
+					{
+						if (flagdebug)
+							printf("18255 found  1 %s\n",candidato.c_str());
+						if (collisione->second!=candidato)
+						{
+							if (flagdebug)
+							{
+								printf("18260: Collisione %s\n",collisione->second.c_str());
+								printf("18261: newname    %s\n",collisione->second.c_str());
+							}
+							sprintf(numero,"_%d",kollision++);
+							newname+=numero;
+							///newname+="razzo";
+							if (flagdebug)
+								printf("18267: postname   %s\n\n\n\n\n",newname.c_str());
+						
+						}
+					}
+					mappacollisioni.insert(std::pair<string, string>(candidato,p->first));
+
+
+					if (estensione!="")
+						newname+="."+estensione;
+	
 					if (flagdebug)
-						printf("18195: Finalizzato %d %s\n",newname.length(),newname.c_str());
+						printf("18195: Finalized %d %s\n",(int)newname.length(),newname.c_str());
 					
 					if (newname.length()>255)
 					{
-						printf("18123: WARN pre  %08d   %s\n",p->first.length(),p->first.c_str());
-						printf("18124: WARN post %08d   %s\n",newname.length(),newname.c_str());
+						printf("18123: WARN pre  %08d   %s\n",(int)p->first.length(),p->first.c_str());
+						printf("18124: WARN post %08d   %s\n",(int)newname.length(),newname.c_str());
 						printf("\n");
 					}
-	
+					
 				}
-				mymap.insert( std::pair<string,DT>(newname,p->second) );
-			}
-/*	
-	else
-			{
-				if (!flagflat)
+				
+		/*
+				if (!isdirectory(p->first))
+					mymap.insert( std::pair<string,DT>(newname,p->second) );
+				else
 					mymap.insert( std::pair<string,DT>(p->first,p->second) );
+			*/	
+				auto ret=mymap.insert( std::pair<string,DT>(newname,p->second) );
+				if (ret.second==false) 
+				{
+					printf("18298: KOLLISION! %s\n",newname.c_str());
+				}
+   
 			}
-*/	
 		}
 		dt=mymap;
+		
 		if (flagdebug)
-			printf("18181: Files after  %s\n",migliaia(dt.size()));
+		{
+			int64_t filesafter=0;
+			int64_t dirsafter=0;
+	
+			for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p) 
+			{
+				if ((p->second.date && p->first!="") && (!isdirectory(p->first)))
+					dirsafter++;
+				else
+					filesafter++;
+			}
+		
+		
+			printf("18181:size  before %12s\n",migliaia(dt.size()));
+			printf("17995:Files before %12s\n",migliaia(filesbefore));
+			printf("17996:dirs  before %12s\n",migliaia(dirsbefore));
+			printf("\n\n");
+			printf("18181:size  after  %12s\n",migliaia(dt.size()));
+			printf("17995:Files before %12s\n",migliaia(filesafter));
+			printf("17996:dirs  before %12s\n",migliaia(dirsafter));
+		}
+	///if (flagdebug)
 	}
 	
 #ifdef _WIN32
@@ -18234,7 +18332,7 @@ int Jidac::extract()
 		if ((p->second.date && p->first!=""))
 			if (p->first.length()>254)
 			{
-				printf("WARN: path too long %03d ",p->first.length());
+				printf("WARN: path too long %03d ",(int)p->first.length());
 				printUTF8(p->first.c_str());
 				printf("\n");
 			}
@@ -18506,16 +18604,14 @@ int Jidac::extract()
                 string outname=rename(b.files[k]->first);
                 dtptr=b.files[k];
                 lock(job.mutex);
-/*           
-		   if (summary<=0) {
+
+/*
                   printf("> ");
                   printUTF8(outname.c_str());
                   printf("\n");
-                }
 */
-
 				if (!flagtest) {
-                  makepath(outname);
+	                makepath(outname);
 				  
                   outf=fopen(outname.c_str(), WB);
                   if (outf==FPNULL) 
@@ -18606,8 +18702,11 @@ int Jidac::extract()
     }
   }
   ///printf("Z9\n");
-
-  if (errors>0) {
+	if (kollision)
+		printf("\nFilenames collisions %08d\n",(int)kollision);
+	
+  if (errors>0) 
+  {
     fflush(stdout);
     fprintf(stderr,
         "\nExtracted %s of %s files OK (%s errors)"
@@ -25266,7 +25365,7 @@ int Jidac::utf()
 	vector<string> strange;     
 	
 	printf("\nCheck directories %s\n",migliaia(sourcefile.size()));
-	for (int i=0;i<sourcefile.size();i++)
+	for (int unsigned i=0;i<sourcefile.size();i++)
 	{
 		string filename=extractfilepath(sourcefile[i]);
 		string ansifilename=utf8toansi(filename);
@@ -25287,9 +25386,9 @@ int Jidac::utf()
 	sort( strange.begin(), strange.end() );
 	strange.erase( unique( strange.begin(), strange.end() ), strange.end() );
 	if (!flagutf)
-		for (int i=0;i<strange.size();i++)
+		for (int unsigned i=0;i<strange.size();i++)
 		{
-			printf("DIR:%08lu <<",strange[i].length());
+			printf("DIR:%08lu <<",(long unsigned int)strange[i].length());
 			printUTF8(strange[i].c_str());
 			printf(">>\n");
 		}
@@ -25298,7 +25397,7 @@ int Jidac::utf()
 	strange.clear();
 	printf("\nCheck files %s\n",migliaia(sourcefile.size()));
 	
-	for (int i=0;i<sourcefile.size();i++)
+	for (unsigned int i=0;i<sourcefile.size();i++)
 	{
 		string filename=extractfilename(sourcefile[i]);
 		string ansifilename=utf8toansi(filename);
@@ -25319,9 +25418,9 @@ int Jidac::utf()
 	strange.erase( unique( strange.begin(), strange.end() ), strange.end() );
 	
 	if (!flagutf)
-		for (int i=0;i<strange.size();i++)
+		for (unsigned int i=0;i<strange.size();i++)
 		{
-			printf("FILE:%08ld <<",strange[i].length());
+			printf("FILE:%08ld <<",(long int)strange[i].length());
 			printUTF8(strange[i].c_str());
 			printf(">>\n");
 		}
@@ -25336,8 +25435,7 @@ int Jidac::utf()
 	
 	int rinominati=0;
 	int nonrinominati=0;
-	int contatore=0;
-	
+
 	MAPPASTRINGASTRINGA mappatofrom;
 	
 	for (unsigned int i=0;i<sourcefile.size();i++)

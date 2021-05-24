@@ -2,7 +2,7 @@
 ///////// The source is a mess
 ///////// Strongly in development
 
-#define ZPAQ_VERSION "51.23-experimental"
+#define ZPAQ_VERSION "51.25-experimental"
 #define FRANZOFFSET 	50
 #define FRANZMAXPATH 	240
 /*
@@ -12657,7 +12657,8 @@ private:
 	void usage();        					// help
 	int dir();								// Windows-like dir command
 	int dircompare(bool i_flagonlysize);
-	
+	void printsanitizeflags();
+
   // Support functions
   string rename(string name);           // rename from -to
   int64_t read_archive(const char* arc, int *errors=0, int i_myappend=0);  // read arc
@@ -13090,7 +13091,6 @@ moreprint("  -maxsize    X   Skip files by length (add(), list(), dir())");
 moreprint("  -filelength X   Utf command: find file with length>X, extract maxfilelen");
 moreprint("  -dirlength  X   Utf command: find dirs with length>X, extract maxdirlen");
 moreprint("  -comment foo    Add/find ASCII comment string to versions");
-moreprint("  -nolongfilename Try to keep path+filename <254 chars");
 #if defined(_WIN32) || defined(_WIN64)
 moreprint("  -vss            Do a VSS for drive C: (Windows with administrative rights)");
 #endif
@@ -13636,7 +13636,7 @@ string purgeansi(string i_string,bool i_keeppath=false)
 	{
 		if (i_keeppath)
 		{
-			if ((i_string[i]=='/') || (i_string[i]=='\\'))
+			if ((i_string[i]==':') || (i_string[i]=='/') || (i_string[i]=='\\'))
 			{
 				purged+=i_string[i];
 				continue;
@@ -14889,7 +14889,7 @@ int Jidac::doCommand(int argc, const char** argv) {
 
 
 
-
+#include <set>
 
 /////////////////////////// read_archive //////////////////////////////
 
@@ -14948,10 +14948,20 @@ int64_t Jidac::read_archive(const char* arc, int *errors, int i_myappend) {
   StringBuffer os(32832);  // decompressed block
   const bool renamed=command=='l' || command=='a';
 
-	int shortenedfilenames=0;
 	int toolongfilenames=0;
 	int utf8names=0;
-	
+	int casecollision=0;
+	/*
+	struct insensitivecompare { 
+    bool operator() (const std::string& a, const std::string& b) const {
+        return strcasecmp(a.c_str(), b.c_str()) < 0;
+    }
+};
+
+
+	std::set<std::string, insensitivecompare> collisionset;
+	*/
+	std::set<std::string> collisionset;
 	uint64_t parts=0;
   // Detect archive format and read the filenames, fragment sizes,
   // and hashes. In JIDAC format, these are in the index blocks, allowing
@@ -15136,12 +15146,37 @@ int64_t Jidac::read_archive(const char* arc, int *errors, int i_myappend) {
 						else
 							fn=append_path(itos(ver.size()-1, all), fn);
 					}
-					
-						
+/// OK let's do some check on filenames (slow down, but sometimes save the day)
+
+		
 					if (fn.length()>255)
 						toolongfilenames++;
+					
 					if (fn!=utf8toansi(fn))
 						utf8names++;
+					else
+					{/*
+							if (!isdirectory(fn))
+							{
+								string candidato=extractfilename(fn);
+								std::for_each(candidato.begin(), candidato.end(), [](char & c)
+								{
+									c = ::tolower(c);	
+								});
+								candidato=extractfilepath(fn)+candidato;
+								
+			///		printf("Cerco %s\n",candidato.c_str());
+					if (collisionset.find(candidato) != collisionset.end())
+					{
+						printf("KOLLISIONE %s\n",fn.c_str());
+						printf("kollisione %s\n\n\n\n",candidato.c_str());
+						casecollision++;
+					}
+					else
+						collisionset.insert(candidato);
+							}
+							*/
+					}
 		
 					const bool issel=isselected(fn.c_str(), renamed,-1);
 					s+=len+1;  // skip filename
@@ -15263,12 +15298,12 @@ endblock:;
       int(ver.size()-1), migliaia2(files), migliaia3(unsigned(ht.size())-1),
       migliaia(block_offset),tohuman(block_offset));
 
-	if (shortenedfilenames)
-		printf("Filenames shortened   %9s by extracting with -nolongfilename\n",migliaia(shortenedfilenames));
+	if (casecollision)
+		printf("Case collisions       %9s (-fix255)\n",migliaia(casecollision));
 	if (toolongfilenames)
 	{
 #ifdef _WIN32	
-	printf("Long filenames (>255) %9s *** WARNING ***\n",migliaia(toolongfilenames));
+	printf("Long filenames (>255) %9s *** WARNING *** (-fix255)\n",migliaia(toolongfilenames));
 #else
 	printf("Long filenames (>255) %9s\n",migliaia(toolongfilenames));
 #endif
@@ -17651,7 +17686,7 @@ ThreadReturn decompressThread(void* arg) {
 						}
 					}
 #endif				
-//fika
+
 		///		filename=nomefileseesistegia(filename);
 				/*
 				if (fileexists(filename))
@@ -17837,6 +17872,242 @@ int64_t copy(libzpaq::Reader& in, libzpaq::Writer& out, uint64_t n=~0ull) {
 
 
 
+string sanitizzanomefile(string i_filename,int i_filelength,int& io_collisioni,MAPPAFILEHASH& io_mappacollisioni)
+{
+	if  (i_filename=="")
+		return("");
+		
+	string percorso			=extractfilepath(i_filename);
+	string nome				=prendinomefileebasta(i_filename);
+				
+	string estensione		=prendiestensione(i_filename);
+	string senzaestensione	=percorso+nome;
+	string newname;
+		
+
+	int lunghezza=FRANZMAXPATH;
+	if (i_filelength>0)
+		if (i_filelength<FRANZMAXPATH)
+			lunghezza=i_filelength;
+	lunghezza-=9; // antidupe
+	if (lunghezza<10)
+		lunghezza=10;
+	char numero[60];
+						
+	if (flagflat) /// desperate extract without path
+	{
+		sprintf(numero,"%08d_%05d_",++io_collisioni,(unsigned int)i_filename.length());
+		newname=numero;
+		newname+=purgeansi(senzaestensione.substr(0, lunghezza));
+		if (estensione!="")
+			newname+="."+estensione;
+		if (flagdebug)
+			printf("25396: flatted filename <<%s>>\n",newname.c_str());
+		return newname;
+	}
+	
+	if (flagutf)
+	{
+		string prenome=nome;
+
+// this is name, throw everything (FALSE)
+		nome=purgeansi(forcelatinansi(utf8toansi(nome)),false);		
+		if (flagdebug)
+			if (nome!=prenome)
+			{
+				printf("25410: flagutf pre  %s\n",prenome.c_str());
+				printf("25410: utf8toansi   %s\n",utf8toansi(nome).c_str());
+				printf("25410: force2ansi   %s\n",forcelatinansi(utf8toansi(nome)).c_str());
+				printf("25411: purgeansi    %s\n",nome.c_str());
+			}
+
+		if (flagfixeml)
+			if (estensione=="eml")
+			{
+				prenome=compressemlfilename(nome);
+				if (nome!=prenome)
+				{
+					if (flagdebug)
+					{
+						printf("18109: eml pre  %s\n",nome.c_str());
+						printf("18110: eml post %s\n",prenome.c_str());
+					}
+									
+					nome=prenome;
+				}
+			}
+		
+
+/// this is a path, so keep \ and / (TRUE)
+		string prepercorso=percorso;
+		percorso=purgeansi(forcelatinansi(utf8toansi(percorso)),true);		
+		if (flagdebug)
+			if (percorso!=prepercorso)
+			{
+				printf("25452: flagutf pre  perc %s\n",prepercorso.c_str());
+				printf("25453: flagutf post perc %s\n",percorso.c_str());
+			}
+	}
+					
+	if (flagdebug)
+	{
+		printf("18041: First    %03d %s\n",(int)i_filename.length(),i_filename.c_str());
+		printf("18042: Percorso %03d %s\n",(int)percorso.length(),percorso.c_str());
+		printf("18043: nome     %03d %s\n",(int)nome.length(),nome.c_str());
+		printf("18044: ext      %03d %s\n",(int)estensione.length(),estensione.c_str());
+		printf("18045: Senza ex %03d %s\n",(int)senzaestensione.length(),senzaestensione.c_str());
+	}
+
+	if (flagfix255)
+	{
+		int	lunghezzalibera=lunghezza-percorso.length();//%08d_
+		if (lunghezzalibera<10)
+		{
+			if (flagdebug)
+			{
+				printf("\n\n\n18046: Path too long: need shrink %08d %s\n",(int)percorso.length(),percorso.c_str());
+				printf("lunghezzalibera %d\n",lunghezzalibera);
+			}
+			vector<string> esploso;
+						
+			string temppercorso=percorso;
+			size_t barra;
+						
+			while (1==1)
+			{
+				if (flagdebug)
+					printf("18031: temppercorso %s\n",temppercorso.c_str());
+				barra=temppercorso.find('/');
+				if (flagdebug)
+					printf("18034: Barra %ld\n",(long int)barra);
+				if (barra==string::npos)
+					break;
+				if (flagdebug)		
+					printf("18038: Eureka!!\n");
+				esploso.push_back(temppercorso.substr(0, barra));
+				temppercorso=temppercorso.substr(barra+1,temppercorso.length());
+			}
+		
+			int lunghezzamassima=0;
+			int indicelunghezzamassima=-1;
+			for (unsigned int i=0;i<esploso.size();i++)
+			{
+				if ((int)esploso[i].length()>lunghezzamassima)
+				{
+					indicelunghezzamassima=i;
+					lunghezzamassima=esploso[i].length();
+				}
+				if (flagdebug)
+					printf("18087: Esploso %d %03d %s\n",(int)i,(int)esploso[i].length(),esploso[i].c_str());
+			}
+						/*
+						printf("Lunghezza massima %d\n",lunghezzamassima);
+						printf("Indice lunghezza massima %d\n",indicelunghezzamassima);
+						
+						printf("Lunghezza          %d\n",lunghezza);
+						printf("Lunghezza percorso %d %s\n",percorso.length(),percorso.c_str());
+						printf("Lunghezza nome     %d %s\n",nome.length(),nome.c_str());
+						printf("Lunghezza este     %d %s\n",estensione.length(),estensione.c_str());
+						
+						printf("Resto percoros     %d\n",percorso.length()-lunghezzamassima);
+						*/
+						
+			int lunghezzacheserve=lunghezza-10-(percorso.length()-lunghezzamassima);
+					///	printf("Lunghezza che ser  %d\n",lunghezzacheserve);
+						
+			if (lunghezzacheserve<lunghezzamassima)
+			{
+				esploso[indicelunghezzamassima]=esploso[indicelunghezzamassima].substr(0,lunghezzacheserve);
+				string imploso;
+				for (unsigned 	int i=0;i<esploso.size();i++)
+					imploso+=esploso[i]+'/';
+				if (flagdebug)
+					printf("18114: Imploso           %d %s\n",(int)imploso.length(),imploso.c_str());
+				percorso=imploso;
+				lunghezzalibera=lunghezza-percorso.length();
+				makepath(percorso);
+			}
+			else
+			{
+				printf("18088: HOUSTON\n");
+			}						
+		}
+	}
+	newname=nome;
+	int lunghezzalibera=lunghezza-percorso.length();
+					
+	if (flagdebug)
+		printf("18098:lunghezze per %03d nome %03d tot %03d\n",(int)percorso.length(),lunghezzalibera,(int)(percorso.length()+lunghezzalibera));
+					
+	if (newname.length()>(unsigned int)lunghezzalibera)
+	{
+		newname=newname.substr(0,lunghezzalibera-9);
+		if (flagdebug)
+			printf("18143:Trimmone newname %d %s\n",(int)newname.length(),newname.c_str());
+	}
+	
+	newname=percorso+newname;
+	
+	if (flagdebug)
+		printf("%d: newname %s\n",__LINE__,newname.c_str());
+					
+	std::map<string,string>::iterator collisione;
+	string candidato=newname;
+	if (estensione!="")
+		candidato=candidato+'.'+estensione;
+	if (flagfix255)	/// we are on windows, take care of case
+	{
+		std::for_each(candidato.begin(), candidato.end(), [](char & c)
+		{
+			c = ::tolower(c);	
+		});
+	}
+	if (flagdebug)
+	printf("25570: candidato %s\n",candidato.c_str());
+	
+	collisione=io_mappacollisioni.find(candidato); 
+	if (collisione!=io_mappacollisioni.end()) 
+	{
+		if (flagdebug)
+			printf("18255 found  1 %s\n",candidato.c_str());
+		if (collisione->second!=candidato)
+		{
+			if (flagdebug)
+			{
+				printf("25582: Collisione %s\n",collisione->second.c_str());
+				printf("25583: newname    %s\n",collisione->second.c_str());
+			}
+			sprintf(numero,"_%d",io_collisioni++);
+			newname+=numero;
+			if (flagdebug)
+				printf("18267: postname   %s\n\n\n\n\n",newname.c_str());
+		}
+	}
+	io_mappacollisioni.insert(std::pair<string, string>(candidato,i_filename));
+	
+	if (estensione!="")
+		newname+="."+estensione;
+	
+	if (flagdebug)
+		printf("18195: Finalized %d %s\n",(int)newname.length(),newname.c_str());
+					
+	if (newname.length()>255)
+	{
+		printf("18123: WARN pre  %08d   %s\n",(int)i_filename.length(),i_filename.c_str());
+		printf("18124: WARN post %08d   %s\n",(int)newname.length(),newname.c_str());
+		printf("\n");
+	}
+					
+
+	/*	
+	auto ret=mymap.insert( std::pair<string,DT>(newname,p->second) );
+	if (ret.second==false) 
+	{
+		printf("18298: KOLLISION! %s\n",newname.c_str());
+	}
+	*/
+	return newname;
+}
 
 
 
@@ -17844,7 +18115,23 @@ int64_t copy(libzpaq::Reader& in, libzpaq::Writer& out, uint64_t n=~0ull) {
 
 
 
-
+void Jidac::printsanitizeflags()
+{
+		printf("\n");
+		printf("******\n");
+		if (flagflat)
+			printf("****** WARNING: all files FLATted, without non-latin chars, max %d length\n",(int)FRANZMAXPATH);
+		else
+		{
+			if (flagutf)
+				printf("****** -utf    No Non-latin chars\n");
+			if (flagfix255)
+				printf("****** -fix255 Shrink filenames to %d, case insensitive\n",(int)FRANZMAXPATH);
+			if (flagfixeml)
+				printf("****** -fixeml Heuristic compress .eml filenames (Fwd Fwd Fwd=>Fwd etc)\n");
+		}
+		printf("******\n\n");
+}
 
 
 // Extract files from archive. If force is true then overwrite
@@ -18020,35 +18307,9 @@ int Jidac::extract()
 /// we make a copy of the map (dt) into mymap, changing the filenames
 /// wy do not in rename()? Because we need very dirty string manipulations
 
-		MAPPAFILEHASH mappacollisioni;
-
-		int lunghezza=FRANZMAXPATH;
-	
-		if (filelength>0)
-			if (filelength<FRANZMAXPATH)
-				lunghezza=filelength;
+		printsanitizeflags();
 		
-		lunghezza-=9; // antidupe
-	
-		if (lunghezza<10)
-			lunghezza=10;
-				
-		printf("\n");
-		printf("******\n");
-		if (flagflat)
-			printf("****** WARNING: extracting all files FLATted, without non-latin chars, max %d length\n",lunghezza);
-		else
-		{
-			if (flagutf)
-				printf("****** -utf    No Non-latin chars\n");
-			if (flagfix255)
-				printf("****** -fix255 Shrink filenames to %d, case insensitive\n",(int)FRANZMAXPATH);
-			if (flagfixeml)
-				printf("****** -fixeml Heuristic compress .eml filenames (Fwd Fwd Fwd=>Fwd etc)\n");
-		}
-		printf("******\n\n");
 
-		char numero[60];
 		int64_t filesbefore=0;
 		int64_t dirsbefore=0;
 		
@@ -18062,244 +18323,16 @@ int Jidac::extract()
 			}
 				
 		DTMap mymap;
-		
+		int kollisioni=0;
+		MAPPAFILEHASH mappacollisioni;
 		for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p) 
 		{
-		///	if ((p->second.date && p->first!="") && (!isdirectory(p->first)))
-		
-		{
-				string percorso			=extractfilepath(p->first);
-				string nome				=prendinomefileebasta(p->first);
-				
-				string estensione		=prendiestensione(p->first);
-				string senzaestensione	=percorso+nome;
-				string newname;
-				
-				if (flagflat) /// desperate extract without path
-				{
-					sprintf(numero,"%08d_%05d_",++contatore,(unsigned int)p->first.length());
-					newname=numero;
-					newname+=purgeansi(senzaestensione.substr(0, lunghezza));
-					if (estensione!="")
-						newname+="."+estensione;
-///					newname=rename(newname);
-					if (flagdebug)
-						printf("18001: flatted filename <<%s>>\n",newname.c_str());
-				}
-				else
-				{
-					if (flagutf)
-					{
-						
-						string prenome=nome;
-
-// this is name, throw everything (FALSE)
-						nome=purgeansi(forcelatinansi(utf8toansi(nome)),false);		
-						if (flagdebug)
-							if (nome!=prenome)
-							{
-								printf("18030: flagutf pre  %s\n",prenome.c_str());
-								printf("18034: flagutf post %s\n",nome.c_str());
-							}
-
-						if (flagfixeml)
-							if (estensione=="eml")
-							{
-								prenome=compressemlfilename(nome);
-								if (nome!=prenome)
-								{
-									if (flagdebug)
-									{
-										printf("18109: eml pre  %s\n",nome.c_str());
-										printf("18110: eml post %s\n",prenome.c_str());
-									}
-									
-									nome=prenome;
-								}
-							}
-
-
-						string prepercorso=percorso;
-/// this is a path, so keep \ and / (TRUE)
-						percorso=purgeansi(forcelatinansi(utf8toansi(percorso)),true);		
-						if (flagdebug)
-							if (percorso!=prepercorso)
-							{
-								printf("18045: flagutf pre  perc %s\n",prepercorso.c_str());
-								printf("18046: flagutf post perc %s\n",percorso.c_str());
-							}
-						
-					}
-					
-					
-					if (flagdebug)
-					{
-						printf("18041: First    %03d %s\n",(int)p->first.length(),p->first.c_str());
-						printf("18042: Percorso %03d %s\n",(int)percorso.length(),percorso.c_str());
-						printf("18043: nome     %03d %s\n",(int)nome.length(),nome.c_str());
-						printf("18044: ext      %03d %s\n",(int)estensione.length(),estensione.c_str());
-						printf("18045: Senza ex %03d %s\n",(int)senzaestensione.length(),senzaestensione.c_str());
-					}
-
-					int	lunghezzalibera=lunghezza-percorso.length();//%08d_
-					if (lunghezzalibera<10)
-					{
-						if (flagdebug)
-						{
-							printf("\n\n\n18046: Path too long: need shrink %08d %s\n",(int)percorso.length(),percorso.c_str());
-							printf("lunghezzalibera %d\n",lunghezzalibera);
-						}
-						vector<string> esploso;
-						
-						string temppercorso=percorso;
-						size_t barra;
-						
-						while (1==1)
-						{
-							if (flagdebug)
-								printf("18031: temppercorso %s\n",temppercorso.c_str());
-							barra=temppercorso.find('/');
-							if (flagdebug)
-								printf("18034: Barra %ld\n",(long int)barra);
-							if (barra==string::npos)
-								break;
-							if (flagdebug)		
-								printf("18038: Eureka!!\n");
-							esploso.push_back(temppercorso.substr(0, barra));
-							temppercorso=temppercorso.substr(barra+1,temppercorso.length());
-						}
-						
-						
-						int lunghezzamassima=0;
-						int indicelunghezzamassima=-1;
-						for (unsigned int i=0;i<esploso.size();i++)
-						{
-							if ((int)esploso[i].length()>lunghezzamassima)
-							{
-								indicelunghezzamassima=i;
-								lunghezzamassima=esploso[i].length();
-							}
-							if (flagdebug)
-								printf("18087: Esploso %d %03d %s\n",(int)i,(int)esploso[i].length(),esploso[i].c_str());
-						}
-						/*
-						printf("Lunghezza massima %d\n",lunghezzamassima);
-						printf("Indice lunghezza massima %d\n",indicelunghezzamassima);
-						
-						printf("Lunghezza          %d\n",lunghezza);
-						printf("Lunghezza percorso %d %s\n",percorso.length(),percorso.c_str());
-						printf("Lunghezza nome     %d %s\n",nome.length(),nome.c_str());
-						printf("Lunghezza este     %d %s\n",estensione.length(),estensione.c_str());
-						
-						printf("Resto percoros     %d\n",percorso.length()-lunghezzamassima);
-						*/
-						
-						int lunghezzacheserve=lunghezza-10-(percorso.length()-lunghezzamassima);
-					///	printf("Lunghezza che ser  %d\n",lunghezzacheserve);
-						
-						if (lunghezzacheserve<lunghezzamassima)
-						{
-							esploso[indicelunghezzamassima]=esploso[indicelunghezzamassima].substr(0,lunghezzacheserve);
-							string imploso;
-							for (unsigned 	int i=0;i<esploso.size();i++)
-								imploso+=esploso[i]+'/';
-							if (flagdebug)
-								printf("18114: Imploso           %d %s\n",(int)imploso.length(),imploso.c_str());
-							percorso=imploso;
-							lunghezzalibera=lunghezza-percorso.length();
-							makepath(percorso);
-						}
-						else
-						{
-							printf("18088: HOUSTON\n");
-						}						
-					}
-					
-/*		
-		string ansifilename	=utf8toansi(filename);
-		string 	latinfilename=purgeansi(forcelatinansi(ansifilename));
-	*/
-	
-					
-					///newname=purgeansi(nome);
-					newname=nome;
-				
-					lunghezzalibera=lunghezza-percorso.length();
-					
-					if (flagdebug)
-						printf("18098:lunghezze per %03d nome %03d tot %03d\n",(int)percorso.length(),lunghezzalibera,(int)(percorso.length()+lunghezzalibera));
-					
-					if (newname.length()>(unsigned int)lunghezzalibera)
-					{
-						newname=newname.substr(0,lunghezzalibera-9);
-						if (flagdebug)
-							printf("18143:Trimmone newname %d %s\n",(int)newname.length(),newname.c_str());
-					}
-					
-	
-					newname=percorso+newname;
-					
-					std::map<string,string>::iterator collisione;
-					string candidato=newname;
-					if (flagfix255)	/// we are on windows, take care of case
-					{
-						std::for_each(candidato.begin(), candidato.end(), [](char & c)
-						{
-							c = ::tolower(c);	
-						});
-					}
-					collisione=mappacollisioni.find(candidato); 
-					if (collisione!=mappacollisioni.end()) 
-					{
-						if (flagdebug)
-							printf("18255 found  1 %s\n",candidato.c_str());
-						if (collisione->second!=candidato)
-						{
-							if (flagdebug)
-							{
-								printf("18260: Collisione %s\n",collisione->second.c_str());
-								printf("18261: newname    %s\n",collisione->second.c_str());
-							}
-							sprintf(numero,"_%d",kollision++);
-							newname+=numero;
-							///newname+="razzo";
-							if (flagdebug)
-								printf("18267: postname   %s\n\n\n\n\n",newname.c_str());
-						
-						}
-					}
-					mappacollisioni.insert(std::pair<string, string>(candidato,p->first));
-
-
-					if (estensione!="")
-						newname+="."+estensione;
-	
-					if (flagdebug)
-						printf("18195: Finalized %d %s\n",(int)newname.length(),newname.c_str());
-					
-					if (newname.length()>255)
-					{
-						printf("18123: WARN pre  %08d   %s\n",(int)p->first.length(),p->first.c_str());
-						printf("18124: WARN post %08d   %s\n",(int)newname.length(),newname.c_str());
-						printf("\n");
-					}
-					
-				}
-				
-		/*
-				if (!isdirectory(p->first))
-					mymap.insert( std::pair<string,DT>(newname,p->second) );
-				else
-					mymap.insert( std::pair<string,DT>(p->first,p->second) );
-			*/	
-				auto ret=mymap.insert( std::pair<string,DT>(newname,p->second) );
-				if (ret.second==false) 
-				{
-					printf("18298: KOLLISION! %s\n",newname.c_str());
-				}
-   
-			}
+			string newname=sanitizzanomefile(p->first,filelength,kollisioni,mappacollisioni);
+			auto ret=mymap.insert( std::pair<string,DT>(newname,p->second) );
+			if (ret.second==false) 
+				printf("18298: KOLLISION! %s\n",newname.c_str());
 		}
+		
 		dt=mymap;
 		
 		if (flagdebug)
@@ -18314,8 +18347,7 @@ int Jidac::extract()
 				else
 					filesafter++;
 			}
-		
-		
+			
 			printf("18181:size  before %12s\n",migliaia(dt.size()));
 			printf("17995:Files before %12s\n",migliaia(filesbefore));
 			printf("17996:dirs  before %12s\n",migliaia(dirsbefore));
@@ -25337,6 +25369,9 @@ void populateRandom_xorshift128plus(uint32_t *answer, uint32_t size,uint64_t i_k
 }
 
 
+
+
+
 typedef map<string, string> MAPPASTRINGASTRINGA;
 
 int Jidac::utf() 
@@ -25360,7 +25395,6 @@ int Jidac::utf()
 	for (DTMap::iterator p=edt.begin(); p!=edt.end(); ++p) 
 		if (!isdirectory(p->first))
 			sourcefile.push_back(p->first);
-
 	
 	vector<string> strange;     
 	
@@ -25429,88 +25463,38 @@ int Jidac::utf()
 	if (!flagutf)
 		return 0;
 		
-	printf("******* RENAME STRANGE FILES WITHOUT UTF-8 AND LENGTH\n");
+	printf("******* RENAME STRANGE FILES\n");
+
+	printsanitizeflags();
+
 	if (!flagkill)
-	printf("***** -kill not present => this is a dry run\n");
+	printf("******* -kill not present => this is a dry run\n");
 	
 	int rinominati=0;
 	int nonrinominati=0;
-
+	int kollision=0;
+	MAPPAFILEHASH mappacollisioni;
 	MAPPASTRINGASTRINGA mappatofrom;
 	
 	for (unsigned int i=0;i<sourcefile.size();i++)
 	{
-		string filename		=extractfilename(sourcefile[i]);
-		string percorso		=extractfilepath(sourcefile[i]);
-		string estensione	=prendiestensione(sourcefile[i]);
-		
-		string ansifilename	=utf8toansi(filename);
-		/*
-		printf("orig file    %s\n",filename.c_str());
-		printf("ansifilename %s\n",ansifilename.c_str());
-		printf("\n");
-		*/
-		string 	latinfilename=purgeansi(forcelatinansi(ansifilename));
-		string	uniqfilename=latinfilename;
-
-/*
-		if (estensione=="eml")
-		
-		uniqfilename=mytrim2(uniqfilename);
-	*/	
-		
-		
-		int lunghezza=FRANZMAXPATH;
-		if (filelength>0)
-			if (filelength<FRANZMAXPATH)
-				lunghezza=filelength;
-		lunghezza-=9; // antidupe
-		if (lunghezza<10)
-			lunghezza=10;
-		
-		
-		int	lunghezzalibera=lunghezza-percorso.length();//%08d_
-		if (lunghezzalibera<10)
-			lunghezzalibera=10;
-			
-		string newname=uniqfilename;
-		
-		
-		//printf("Precheck newname   %s\n",newname.c_str());
-		//printf("Precheck filenae   %s\n",filename.c_str());
-		//printf("newlen             %d %d\n",newname.length(),lunghezzalibera);
-		if ((newname!=filename) /*|| (newname.length()>(unsigned int)lunghezzalibera)*/)
+		if (isdirectory(sourcefile[i]))
 		{
-		/*	
-			printf("DIVERSI\n");
-			printf("New    <<%s>>\n",newname.c_str());
-			printf("File   <<%s>>\n",filename.c_str());
-			printf("\n");
-			*/
-			if (newname.length()>(unsigned int)lunghezzalibera)
-				newname=newname.substr(0,lunghezzalibera/2)+"---"+newname.substr(newname.length()-lunghezzalibera/2,lunghezzalibera/2);
-	
-	///		printf("Cerco %s\n",(percorso+newname).c_str());
-			std::map<string,string>::iterator elemento;
-			elemento = mappatofrom.find(percorso+newname);
-			if (elemento != mappatofrom.end())
+			printf("This is strange, dir skipped %s\n",sourcefile[i].c_str());
+		}
+		else
+		{
+		string newname=sanitizzanomefile(sourcefile[i],filelength,kollision,mappacollisioni);
+		
+		if ((newname!=sourcefile[i]))
+		{
+			if (flagdebug)
 			{
-				printf("DUPLICATED detox name\n");
-				
-				char numero[60];
-				uint32_t crc=0;
-				crc=crc32_16bytes(sourcefile[i].c_str(),sourcefile[i].size(), crc);
-				sprintf(numero,"%08X_",crc);
-				newname=percorso+numero+newname;
-				
-		///		newname=nomefileseesistegia(percorso+newname);
+				printf("25733: pre       <<%s>>\n",sourcefile[i].c_str());
+				printf("25734: Inserisco <<%s>>\n\n\n",newname.c_str());
 			}
-			else
-				newname=percorso+newname;
-				
-		///	printf("Inserisco <<%s>>\n",newname.c_str());
 			mappatofrom.insert(std::pair<string, string>(newname, "DUMMY"));
-			
+						
 			string sfrom=sourcefile[i];
 #ifdef _WIN32
 			myreplaceall(sfrom,"/","\\");
@@ -25549,7 +25533,6 @@ int Jidac::utf()
 							printf("%03d %03d %c\n",j,sto[j],sto[j]);
 				}
 #else
-///gatta
 				if (::rename(sfrom.c_str(), sto.c_str()) != 0)
 				{
 					nonrinominati++;
@@ -25570,13 +25553,14 @@ int Jidac::utf()
 				nonrinominati++;
 
 		}
+		}
 	}
 	printf("\n");
-	printf("Candidati  %08d\n",rinominati+nonrinominati);
+	printf("Candidates  %08d\n",rinominati+nonrinominati);
 	if (flagkill)
 	{
-		printf("Renamed %08d\n",rinominati);
-		printf("Failed  %08d\n",nonrinominati);
+		printf("Renamed     %08d\n",rinominati);
+		printf("Failed      %08d\n",nonrinominati);
 	}
 	else
 		printf("*** dry run\n");

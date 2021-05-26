@@ -2,7 +2,7 @@
 ///////// The source is a mess
 ///////// Strongly in development
 
-#define ZPAQ_VERSION "51.25-experimental"
+#define ZPAQ_VERSION "51.27-experimental"
 #define FRANZOFFSET 	50
 #define FRANZMAXPATH 	240
 /*
@@ -9760,7 +9760,7 @@ bool havedoublequote(string i_filename)
 	return
 		i_filename[i_filename.size()-1]=='"';
 }
-string cutdoublequote(string i_string)
+string cutdoublequote(const string& i_string)
 {
 	string temp=i_string;
 	if (havedoublequote(i_string))
@@ -11672,7 +11672,7 @@ bool fileexists(const string& i_filename)
 }
 
 
-void xcommand(string i_command,string i_parameter)
+void xcommand(string i_command,const string& i_parameter)
 {
 	if (i_command=="")
 		return;
@@ -12646,6 +12646,7 @@ private:
   // Commands
 	int add();                				// add, return 1 if error else 0
 	int extract();            				// extract, return 1 if error else 0
+	int info();
 	int list();               				// list (one parameter) / check (more than one)
 	int verify();
 	int kill();
@@ -12842,7 +12843,7 @@ void Jidac::differences()
 	moreprint("    -sha256, -crc32, -crc32c, -xxhash, -all (M/T)");
 	moreprint("8)  New command dir. Something similar to dir command (for *nix)");
 	moreprint("    Switches /s /a /os /od. Show cumulative size in the last line!");
-	moreprint("    -crc32 find duplicates. -n Y like tain -n. -minsize Y -maxsize U");
+	moreprint("    -crc32 find duplicates. -n Y like tail -n. -minsize Y -maxsize U");
 	moreprint("9)  New command c (compare). Quickly compare (size and filename) a source");
 	moreprint("    directory against one or more. Example c /tank/data /dup/1 /dup/2 /dup/3");
 	moreprint("    -all one thread for parameters. -verify -xxhash/-crc32c/-crc32/-sha256");
@@ -13031,6 +13032,7 @@ void Jidac::usage()
 	moreprint("   l             List files (-all -checksum -find something -comment foo)");
 	moreprint("   l d0 d1 d2... Compare (test) content agains directory d0, d1, d2...");
 	moreprint("   t             Fast test of most recent version of files (-verify -verbose)");
+	moreprint("   i             Show versions");
 	moreprint("Ausiliary commands:");
 	moreprint("   c d0 d1 d2... Compare dir d0 to d1,d2... (-all M/T scan -verify -xxhash...)");
 	moreprint("   s d0 d1 d2... Cumulative size (excluding .zfs) of d0,d1,d2 (-all M/T)");
@@ -13086,6 +13088,7 @@ moreprint("  -nosort         Do not sort file when adding or listing");
 moreprint("  -find       X   Search for X in full filename (ex. list)");
 moreprint("  -replace    Y   Replace X with Y in full filename (ex. list)");
 moreprint("  -n          X   Only print last X lines in dir (like tail)/first X (list)");
+moreprint("  -limit      X   (like -n)");
 moreprint("  -minsize    X   Skip files by length (add(), list(), dir())");
 moreprint("  -maxsize    X   Skip files by length (add(), list(), dir())");
 moreprint("  -filelength X   Utf command: find file with length>X, extract maxfilelen");
@@ -13102,10 +13105,11 @@ moreprint("  -exec_ok fo.bat After OK launch fo.bat");
 moreprint("  -exec_error kz  After NOT OK launch kz");
 moreprint("  -kill           Show 'script-ready' log of dup files");
 moreprint("  -kill           In extraction write 0-bytes file instead of data");
-moreprint("  -utf            On extract kill non-utf8 chars");
-moreprint("  -fix255         On extract shrink total file length");
-moreprint("  -fixeml         On extract heuristically compress .eml filenames (Fwd Fwd Fwd =>Fwd)");
-moreprint("  -flat           On extract everithing in single path (emergency)");
+moreprint("  -utf            Remove non-utf8 chars");
+moreprint("  -utf8           Like -utf");
+moreprint("  -fix255         Shrink total file length and case collisions (NTFS)");
+moreprint("  -fixeml         Heuristically compress .eml filenames (Fwd Fwd Fwd =>Fwd)");
+moreprint("  -flat           Everything in single path (emergency extract of strange files)");
 moreprint("  -debug          Show lot of infos (superverbose)");
 
 moreprint("\n");
@@ -13437,6 +13441,7 @@ std::string utf8toansi(const std::string & utf8)
 
 ///std::wstring_convert<std::codecvt_utf8<char32_t>, char32_t> conv_utf8_utf32;
 
+/*
 std::wstring linux_utf8_to_unicode(const std::string & str)
 {
     std::wstring ret;
@@ -13445,24 +13450,12 @@ std::wstring linux_utf8_to_unicode(const std::string & str)
 	printUTF8(str.c_str());
 	printf("\n");
 	std::wstring_convert<std::codecvt_utf8<char32_t>, char32_t> utf32conv;
-    printf("caz1\n");
+    printf("ca1\n");
 	std::u32string utf32 = utf32conv.from_bytes(str);
-	printf("caz2\n");
-	
-	
-	/*
-    try {
-        std::wstring_convert< std::codecvt_utf8<wchar_t> > wcv;
-        ret = wcv.from_bytes(str);
-    } catch (const std::exception & e) {
-			string err=e.what();
-		printf("ugggg %s\n",err.c_str());
-        ///std::cerr << e.what() << std::endl;
-    }
-	*/
+	printf("ca2\n");
     return ret;
 }
-
+*/
 std::string linux_unicode_to_ansi(const std::wstring & wstr)
 {
     std::string ret;
@@ -14027,7 +14020,7 @@ string forcelatinansi(string i_string)
 	return i_string;
 }
 
-string purgedouble(string i_string,string i_from,string i_to)
+string purgedouble(const string& i_string,const string& i_from,const string& i_to)
 {
 	if (i_string=="")
 		return("");
@@ -14041,7 +14034,7 @@ string purgedouble(string i_string,string i_from,string i_to)
 	return purged;
 }
 
-string compressemlfilename(string i_string)
+string compressemlfilename(const string& i_string)
 {
 	if (i_string=="")
 		return("");
@@ -14476,7 +14469,7 @@ int Jidac::doCommand(int argc, const char** argv) {
   for (int i=1; i<argc; ++i) {
     const string opt=argv[i];  // read command
     if ((opt=="add" || opt=="extract" || opt=="list" || opt=="k" 
-         || opt=="a"  || opt=="x" || opt=="p" || opt=="t" ||opt=="test" || opt=="l")
+         || opt=="a"  || opt=="x" || opt=="p" || opt=="t" ||opt=="test" || opt=="l" || opt=="i")
         && i<argc-1 && argv[i+1][0]!='-' && command==0) 
 		{
 			command=opt[0];
@@ -14573,6 +14566,7 @@ int Jidac::doCommand(int argc, const char** argv) {
     else if (opt=="-filelength" && i<argc-1) filelength=atoi(argv[++i]);
     else if (opt=="-dirlength" && i<argc-1) dirlength=atoi(argv[++i]);
     else if (opt=="-n" && i<argc-1) menoenne=atoi(argv[++i]);
+    else if (opt=="-limit" && i<argc-1) menoenne=atoi(argv[++i]);
     else if (opt=="-index" && i<argc-1) index=argv[++i];
     else if (opt=="-key" && i<argc-1) {
       libzpaq::SHA256 sha256;
@@ -14744,7 +14738,7 @@ int Jidac::doCommand(int argc, const char** argv) {
 			printf("franz: filelength %s\n",migliaia(filelength));
 	
 	if (menoenne)
-			printf("franz: -n %u\n",menoenne);
+			printf("franz: -n / -limit %u\n",menoenne);
 			
   	if (flagskipzfs)
 			printf("franz:SKIP ZFS on (-zfs)\n");
@@ -14873,6 +14867,7 @@ int Jidac::doCommand(int argc, const char** argv) {
   else if (command=='d') return dir();
   else if (command=='c') return dircompare(false);
   else if (command=='x') return extract();
+  else if (command=='i') return info();
   else if (command=='t') return test();
   else if (command=='p') return paranoid();
   else if (command=='f') return fillami();
@@ -14969,6 +14964,7 @@ int64_t Jidac::read_archive(const char* arc, int *errors, int i_myappend) {
   // this information from the segment headers and trailers.
   bool done=false;
   printf("\n");
+  uint64_t startblock=mtime();
   while (!done) {
     libzpaq::Decompresser d;
 	///printf("New iteration\r");
@@ -15035,7 +15031,7 @@ int64_t Jidac::read_archive(const char* arc, int *errors, int i_myappend) {
                 error("bad checksum");
 			if ( ++parts % 1000 ==0)
 				if (!flagnoeta)
-				printf("Block %10s K\r",migliaia(parts/1000));
+				printf("Block %10s K %12s (block/s)\r",migliaia(parts/1000),migliaia2(parts/((mtime()-startblock+1)/1000.0)));
             }
             else
               d.readSegmentEnd();
@@ -15298,7 +15294,7 @@ endblock:;
       int(ver.size()-1), migliaia2(files), migliaia3(unsigned(ht.size())-1),
       migliaia(block_offset),tohuman(block_offset));
 
-	if (casecollision)
+	if (casecollision>0)
 		printf("Case collisions       %9s (-fix255)\n",migliaia(casecollision));
 	if (toolongfilenames)
 	{
@@ -17898,7 +17894,12 @@ string sanitizzanomefile(string i_filename,int i_filelength,int& io_collisioni,M
 	{
 		sprintf(numero,"%08d_%05d_",++io_collisioni,(unsigned int)i_filename.length());
 		newname=numero;
-		newname+=purgeansi(senzaestensione.substr(0, lunghezza));
+		string temp=purgeansi(senzaestensione.substr(0, lunghezza));
+		for (int i=0;i<10;i++)
+			myreplaceall(temp,"  "," ");
+		
+		newname+=temp;
+		
 		if (estensione!="")
 			newname+="."+estensione;
 		if (flagdebug)
@@ -17922,6 +17923,7 @@ string sanitizzanomefile(string i_filename,int i_filelength,int& io_collisioni,M
 			}
 
 		if (flagfixeml)
+		{
 			if (estensione=="eml")
 			{
 				prenome=compressemlfilename(nome);
@@ -17936,7 +17938,13 @@ string sanitizzanomefile(string i_filename,int i_filelength,int& io_collisioni,M
 					nome=prenome;
 				}
 			}
-		
+			else
+			{
+				for (int i=0;i<10;i++)
+					myreplaceall(newname,"  "," ");
+					
+			}
+		}
 
 /// this is a path, so keep \ and / (TRUE)
 		string prepercorso=percorso;
@@ -18108,11 +18116,6 @@ string sanitizzanomefile(string i_filename,int i_filelength,int& io_collisioni,M
 	*/
 	return newname;
 }
-
-
-
-
-
 
 
 void Jidac::printsanitizeflags()
@@ -18301,7 +18304,7 @@ int Jidac::extract()
   
   uint32_t crc32fromfile;
 	int kollision=0;
-	int contatore=0;
+
 	if ((flagutf) || (flagflat) || flagfix255)
 	{
 /// we make a copy of the map (dt) into mymap, changing the filenames
@@ -18734,7 +18737,7 @@ int Jidac::extract()
     }
   }
   ///printf("Z9\n");
-	if (kollision)
+	if (kollision>0)
 		printf("\nFilenames collisions %08d\n",(int)kollision);
 	
   if (errors>0) 
@@ -18897,7 +18900,7 @@ int Jidac::enumeratecomments()
 
 	if (archive!="") 
 		csize=read_archive(archive.c_str(),&errors,1); /// AND NOW THE MAGIC ONE!
-	printf("\nVersion comments enumerator\n");
+	printf("\nVersion(s) enumerator\n");
 	
 	vector<DTMap::iterator> filelist;
 	searchcomments(versioncomment,filelist);
@@ -18924,11 +18927,12 @@ int Jidac::enumeratecomments()
 			a->second.data='-';
 			filelist.push_back(a);
 		}
-	
   
 	if (all)
 	{
-		printf("------------\n");
+		printf("-------------------------------------------------------------------------\n");
+		printf("< Ver  > <  date  > < time >  < added > <removed>    <    bytes added   >\n");
+		printf("-------------------------------------------------------------------------\n");
 		for (unsigned fi=0;fi<filelist.size() /*&& (true || int(fi)<summary)*/; ++fi) 
 		{
 			DTMap::iterator p=filelist[fi];
@@ -18943,7 +18947,6 @@ int Jidac::enumeratecomments()
 				commento=mappacommenti.find(v); 
 				if(commento!= mappacommenti.end()) 
 					printf(" <<%s>>", commento->second.c_str());
-
 				printf("\n");
 			}
 		}
@@ -18953,6 +18956,7 @@ int Jidac::enumeratecomments()
 }
 
 
+/*
 
 std::wstring StringToWString(const std::string& s)
 {
@@ -18961,14 +18965,13 @@ std::wstring StringToWString(const std::string& s)
     return temp; 
 }
 
-
 std::string WStringToString(const std::wstring& s)
 {
     std::string temp(s.length(), ' ');
     std::copy(s.begin(), s.end(), temp.begin());
     return temp; 
 }
-
+*/
 int Jidac::kill() 
 {
 	
@@ -19108,7 +19111,7 @@ int Jidac::kill()
 	
 	string captcha="kilL"+std::to_string(dirtobekilled.size()+tobekilled.size()+sizetobekilled);
 	printf("Captcha to continue %s\n",captcha.c_str());
-	char myline[80];
+	char myline[81];
     scanf("%80s", myline);
 	if (myline!=captcha)
 	{
@@ -19371,6 +19374,13 @@ int Jidac::verify()
 		return 0;
 }
 
+int Jidac::info() 
+{
+	flagcomment=true;
+	versioncomment="";
+	all=4;
+	return enumeratecomments();
+}
 
 // List contents
 int Jidac::list() 
@@ -24697,7 +24707,7 @@ int Jidac::summa()
 			printf("Error: with -checksum exactly one directory can be searched\n");
 			return 1;
 		}
-		uint64_t startscan=mtime();			
+		uint64_t startscan=0;			
 ///		if (!isdirectory(files[0]))
 	///		files[0]+="/";
 		scandir(false,edt,files[0].c_str(),false);
@@ -24906,6 +24916,8 @@ int Jidac::summa()
 		myblock.tnumber=(i%mythreads);
 		myblock.inizio=mtime();
 		myblock.dimensione=total_size;
+		myblock.timestart=0;
+		myblock.timeend=0;
 		vettoreparametrihash.push_back(myblock);
 	}
 	
@@ -28637,16 +28649,16 @@ if (!flagnoeta)
 	printf("Total file: %08d\n",total_files);
 
 
-	if (status_e)
+	if (status_e>0)
 	printf("ERRORS  : %08d (ERROR:  something WRONG)\n",status_e);
 	
-	if (status_0)
+	if (status_0>0)
 	printf("WARNING : %08d (UNKNOWN:cannot verify)\n",status_0);
 	
-	if (status_1)
+	if (status_1>0)
 	printf("GOOD    : %08d of %08d (stored=decompressed)\n",status_1,total_files);
 	
-	if (status_2)
+	if (status_2>0)
 	printf("SURE    : %08d of %08d (stored=decompressed=file on disk)\n",status_2,total_files);
 		
 	if (status_e==0)
@@ -29849,8 +29861,6 @@ void * scansiona(void *t)
 }
 
 
-///https://solarianprogrammer.com/2019/04/08/c-programming-ansi-escape-codes-windows-macos-linux-terminals/
-
 int Jidac::dircompare(bool i_flagonlysize)
 {
 	
@@ -30052,10 +30062,14 @@ int Jidac::dircompare(bool i_flagonlysize)
 	printf("=============================================\n");
 	printf("        %24s %12s %g sec (%s)\n",migliaia(total_size),migliaia2(total_files),(mtime()-startscan)/1000.0,tohuman(total_size));
 	
+	
 	if (i_flagonlysize)
 	{
 		return 0;
 	}
+	
+	uint64_t strangethings;
+	
 ///// Now check the folders (sequentially)
 
 	printf("\nDir 0 (master) time %g <<%s>>\n",files_time[0]/1000.0,files[0].c_str());
@@ -30064,6 +30078,7 @@ int Jidac::dircompare(bool i_flagonlysize)
 
 	for (unsigned i=1; i<files.size(); ++i)
 	{
+		strangethings=0;
 		if (!exists(files[i]))
 		{
 			printf("Dir %d (slave) DOES NOT EXISTS %s\n",i,files[i].c_str());
@@ -30091,7 +30106,14 @@ int Jidac::dircompare(bool i_flagonlysize)
 					printUTF8(filename0.c_str());
 					printf("\n");
 					flagerror=true;
+					strangethings++;
 				}
+				if (menoenne>0)
+					if (strangethings>menoenne)
+					{
+						printf("30125: **** TOO MANY STRANGE THINGS (-n %d)  %s\n",menoenne,migliaia(strangethings));
+						break;
+					}
 			}
 			for (DTMap::iterator p=files_edt[i].begin(); p!=files_edt[i].end(); ++p) 
 			{
@@ -30105,7 +30127,15 @@ int Jidac::dircompare(bool i_flagonlysize)
 					printUTF8(filename0.c_str());
 					printf("\n");
 					flagerror=true;
+					strangethings++;
 				}
+				if (menoenne>0)
+					if (strangethings>menoenne)
+					{
+						printf("30146: **** TOO MANY STRANGE THINGS (-n %d)  %s\n",menoenne,migliaia(strangethings));
+						break;
+					}
+
 			}	
 			for (DTMap::iterator p=files_edt[0].begin(); p!=files_edt[0].end(); ++p) 
 			{
@@ -30119,6 +30149,7 @@ int Jidac::dircompare(bool i_flagonlysize)
 					{
 						printf("diff size  %18s (0) %18s (%d) %s\n",migliaia(p->second.size),migliaia2(cerca->second.size),i,filename0.c_str());
 						flagerror=true;
+						strangethings++;
 					}
 					else
 					if (flagverify)
@@ -30129,9 +30160,16 @@ int Jidac::dircompare(bool i_flagonlysize)
 							printUTF8(filename0.c_str());
 							printf("\n");
 							flagerror=true;
+							strangethings++;
 						}
 					}
 				}
+				if (menoenne>0)
+					if (strangethings>menoenne)
+					{
+						printf("30146: **** TOO MANY STRANGE THINGS (-n %d)  %s\n",menoenne,migliaia(strangethings));
+						break;
+					}
 			}
 			if (!flagerror)
 				if ((files_size[i]==files_size[0]) && (files_count[i]==files_count[0]))

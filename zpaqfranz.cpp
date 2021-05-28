@@ -2,7 +2,7 @@
 ///////// The source is a mess
 ///////// Strongly in development
 
-#define ZPAQ_VERSION "51.27-experimental"
+#define ZPAQ_VERSION "51.28-experimental"
 #define FRANZOFFSET 	50
 #define FRANZMAXPATH 	240
 /*
@@ -12614,7 +12614,7 @@ private:
   const char* repack;       // -repack output file
   char new_password_string[32]; // -repack hashed password
   const char* new_password; // points to new_password_string or NULL
-  int summary;              // summary option if > 0, detailed if -1
+  int summary;              // do summary if >0, else brief. OLD 7.15 summary option if > 0, detailed if -1
   
   bool flagtest;              // -test option
   bool flagskipzfs;				// -zfs option (hard-core skip of .zfs)
@@ -13038,7 +13038,8 @@ void Jidac::usage()
 	moreprint("   s d0 d1 d2... Cumulative size (excluding .zfs) of d0,d1,d2 (-all M/T)");
 	moreprint("   f             Fill (wipe) almost all disk space and check (-verbose -kill)");
 	moreprint("   utf d0        Check/sanitize file/dirnames in d0 (-dirlength X -filelength Y -kill)");
-	moreprint("   sha1          Hash/dup (-sha256 -crc32 -crc32c -xxhash -all -kill -checksum -verify)");
+	moreprint("   sha1          Hash/dup (#HASH -all -kill -checksum -verify -summary)");
+	moreprint("                 #HASH can be (nothing=>SHA1) -crc32 -crc32c -xxhash -sha256");
 	moreprint("   dir           Windows dir-like (/s /a /os /od) -crc32 show duplicates");
 	moreprint("   help          Long help (-h, -he examples, -diff differences from 7.15)");
 	moreprint("Optional switch(es):");
@@ -13072,7 +13073,7 @@ moreprint("  -always files   Always (force) adding some file");
 moreprint("  -noattributes   Ignore/don't save file attributes or permissions");
 moreprint("  -index F        Extract: create index F for archive");
 moreprint("                  Add: create suffix for archive indexed by F, update F");
-moreprint("  -sN -summary N  IGNORED (deprecated)");
+moreprint("  -sN -summary N  If >0 show only summary (sha1())");
 moreprint("  ########## franz's fork ###########");
 moreprint("  -checksum       Store SHA1+CRC32 for every file");
 moreprint("  -verify         Force re-read of file during t (test command) or c");
@@ -14368,7 +14369,7 @@ int Jidac::doCommand(int argc, const char** argv) {
   flagnoattributes=false;
   repack=0;
   new_password=0;
-  summary=0; // detailed: -1
+  summary=-1; 
   menoenne=0;
   versioncomment="";
   flagdebug=false;
@@ -14603,8 +14604,13 @@ int Jidac::doCommand(int argc, const char** argv) {
         new_password=new_password_string;
       }
     }
-    else if (opt=="-summary" && i<argc-1) summary=atoi(argv[++i]);
-    else if (opt=="-test") flagtest=true;
+    else if (opt=="-summary")
+	{
+		summary=1;
+		if (i<argc-1) 
+			summary=atoi(argv[++i]);
+   	}		
+	else if (opt=="-test") flagtest=true;
     else if (opt=="-zfs") flagskipzfs=true;
     else if (opt=="-xls") flagdonotforcexls=true;
     else if (opt=="-verbose") flagverbose=true;
@@ -14722,6 +14728,7 @@ int Jidac::doCommand(int argc, const char** argv) {
     ///  usage();
     }
   }
+  
 	if (!flagpakka)
 	{
 	if (g_exec_error!="")
@@ -14736,6 +14743,9 @@ int Jidac::doCommand(int argc, const char** argv) {
 			printf("franz: dirlength %s\n",migliaia(dirlength));
 	if (filelength)
 			printf("franz: filelength %s\n",migliaia(filelength));
+	
+	if (summary>0)
+			printf("franz: summary %d\n",summary);
 	
 	if (menoenne)
 			printf("franz: -n / -limit %u\n",menoenne);
@@ -25036,30 +25046,41 @@ int Jidac::summa()
 		}
 		else
 		{
-			printf("%s: %s ",mygetalgo().c_str(),vec[i].second.c_str());
-			if (p != edt.end())
-				printf("[%19s] ",migliaia(p->second.size));
+			if (summary<0)
+			{
+				printf("%s: %s ",mygetalgo().c_str(),vec[i].second.c_str());
+				if (p != edt.end())
+					printf("[%19s] ",migliaia(p->second.size));
+			}
 			if (!flagnosort)
 			{			
 				if (i==0)
 				{	
-					printf("    ");
+					if (summary<0)
+						printf("    ");
 				}	
 				else
 				{
 					if (vec[i-1].second==vec[i].second)
 					{
-						printf("=== ");
-							duplicated_files++;
+						if (summary<0)
+							printf("=== ");
+						duplicated_files++;
 						if (p != edt.end())
 							duplicated_size+=p->second.size;
 					}
 					else
-						printf("    ");
+					{
+						if (summary<0)
+							printf("    ");
+					}
 				}
 			}
-			printUTF8(filename.c_str());
-			printf("\n");
+			if (summary<0)
+			{
+				printUTF8(filename.c_str());
+				printf("\n");
+			}
 		}
 	}
 	

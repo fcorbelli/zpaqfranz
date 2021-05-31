@@ -2,42 +2,53 @@ Key differences from ZPAQ 7.15 and zpaqfranz
 
 First goal: doveryay, no proveryay (trust, but verify).
 As a storage manager I need to be sure that my backups
-are perfect, so verify is the objective of my zpaq fork.
+are perfect, so "verify" is the objective of my zpaq fork.
 
 Second: do not break compatibility with 7.15.
 
-Third: more useful output.
+Third: most useful output: 7.15 is often cryptic 
+but not very useful.
 
 Fourth: pack everything needed for a storage manager
 (compare directories, hashing, duplicate find,
 fix of utf-8 filenames, wiping etc) in a single
-program
+program.
 
+Fifth: "smart" support for strange filenames and paths,
+Windows and non-Windows.
+
+Sixth: smooth with ZFS 
+(I almost always use FreeBSD servers)
+
+Seventh: run on multiple systems commonly 
+used in storage (ESXi, non-Intel QNAP NAS).
 ---
-add()
-
+Command a (add)
 zpaqfranz (for default) store the CRC-32 of the files
 added.
 zpaq does not have a mechanism to check the integrity
-of the stored files: it do a (smart) "chunk"-SHA1 verify
-Cannot do a "heavy" test (ex. recomputing SHA1 of the entire file)
+of the stored files: it do a (smart) "chunked"-SHA1 verify,
+but cannot do a "full" test (ex. recomputing SHA1 of the entire file)
 because of it design.
-With the CRC32 you are sure against SHA1 collision
-(better: the collision will be noted, not fixed).
+With the CRC-32 you are sure against SHA1 collision
+(better: the collision will be detected, not fixed).
 With an optional switch (-checksum) you can also store 
-the SHA1 hash code (slower, but almost 100% sure.
-In future different [faster] hashes)
+the SHA1 hash code for each file 
+(slower, but almost 100% sure. 
+In future different [faster] hashes are planned).
 With the switch -crc32 it is possible 
 to disable the storage of the control code 
-going back to the operation of 7.15
+going back to the operation of 7.15.
 Warning: the calculation of the CRC-32, 
 especially on modern processors, 
 does not significantly slow down the process. 
 The calculation of SHA1, on the other hand, 
 requires a longer time.
--test do a post-add test
-Now, for default, do NOT store ACLs on Windows
-(-forcewindows)
+-test do a post-add test (doveryay, no proveryay).
+Note: now, for default, do NOT store ACLs on Windows,
+because I consider them essentially useless 
+and very uncomfortable to keep
+(-forcewindows to enable back as 7.15).
 
 By default every .XLS file is forcibily added.
 Check of datetime is not reliable for ancient 
@@ -46,26 +57,30 @@ If you have lots of old XLS edited (for example)
 by Excel 2000, a binary (or hash) check of extracted
 files will fail.
 Yeah I know, it's strange, but Excel can change some
-bytes into XLS files (to update last time) without
-"touch".
+bytes into XLS files (to update metadata like last time)
+without "touch".
 This was the first step for zpaqfranz, 
 I went crazy to discover this amazing behavior of Excel
 Can be disabled by -xls (=7.15)
 
 Volume Shadow Copies (Windows, with administrative rights)
 Create a VSS (DELETING ALL OTHER PRESENTS!) then make
-the backup, typycally for a "utente" into "users", like that
-zpaqfranz a c:\2.zpaq c:\Users\utente\ -vss
+the backup, typically for a "utente" into "users" special
+folder, like that
+zpaqfranz a z:\mycopy.zpaq c:\Users\utente\ -vss
 
-Progress information is shown during the extraction phase, 
-which can be modified by the switches -noeta, -verbose, -pakka, -debug, summary,
+Progress information  shown can be modified by the switches 
+-noeta, -verbose, -pakka, -debug, summary,
 -n x
 
 ASCII comment for versions
 Using the switch -comment sometext 
 it is possible to mark the current version 
-of the archive with "sometext". 
-This will make it easier for you to search or extract.
+of the archive with "sometext".
+zpaqfranz a z:\mycopy.zpaq c:\pippo -comment sometext
+This will make it easier for you to search or extract,
+instead of using -until.
+"Roll back to sometext".
 Warning: the text should not contain spaces or 
 non-ASCII characters and, above all, be unique. 
 There is no duplication check on version comments. 
@@ -73,25 +88,34 @@ If you add the same comment more than once,
 you will not be able to use it later to extract the data. 
 This remains possible through the normal use of -until
 
-e (extract)
-During extraction if the control information (CRC32) 
+
+Command e (extract)
+During extraction if the control information (CRC-32) 
 is present, as in the default setting, 
 at the end of the extraction, 
-the codes are calculated to verify that the files 
-have been correctly extracted. 
--checksum the extracted files will be re-read and the code verified. 
+the codes are checked to verify that the files 
+have been correctly stored. 
+-checksum the extracted files will be re-read and the SHA1 code verified. 
 It is a measure that lengthens the times but increases safety.
 -kill extract to dummy, 0-length files. Simulate a full restore
 (useful for strange filenames)
-sometimes it's impossible to restore a *nix archive on Windows,
-for various reason.
-Path too long and too "strange" filenames.
+Basically you can simulate a restore (for example on RAMDISK) 
+using exactly all the extract function, without writing data. 
+It is therefore not a list(), but a real extract().
+extract() try to intercept the "disk is full" error.
+Interoperability
+Sometimes it's impossible to restore a *nix archive on Windows,
+for various reason: path too long and too "strange" filenames.
 That's really bad (cannot restore data), so there are some
-new switches
+new switches to handle those cases
 -utf change everything non latin to latin
--fix255 shrink to 255 max length, avoid same case collision
+-fix255 shrink to 255 max length, avoid different case collision
+(pippo.txt and PIPPO.txt are be silently overwritten by 7.15).
 -fixeml compress .eml filenames
--flat emergency restore of everything into a single folder
+-flat emergency restore of everything into a single folder.
+If all else fails, however, you can extract the content to 
+Windows however "weird" it was initially.
+
 
 Command l (list)
 With files run a compare (check) of the archive's 
@@ -105,57 +129,65 @@ It also checks the CRC-32,
 to intercept any (very rare) SHA1 collisions.
 After add() you can list() with just the same
 parameter and do a very quick (but safe)
-verify
-It's possible to search by -comment,
-filter -find pippo (just like |grep -i pippo),
+verify.
+zpaqfranz a z:\1.zpaq c:\nz
+zpaqfranz l z:\1.zpaq c:\nz
+It's possible to search by 
+-comment something,
+filter -
+find pippo (just like |grep -i pippo),
 -replace pluto replace "pippo" with "pluto"
+
 
 New command t (test)
 Compared to 7.15, not only is it checked 
 that the blocks are extractable, 
-but also that the CRC-32 code of the individual 
+but also that the CRC-32 checksum of the individual 
 files corresponds to what would be generated 
 by actually extracting the data
 -verify for filesystem post-check
-
+(check that STORED CRC==DECOMPRESSED==FROM FILE)
 With this switch the files are reread, one by one, 
 from the filesystem and compared. 
+-verbose
 Typically it is used in case of a simulated recovery, 
 to be sure that the extracted files are identical, 
 beyond any doubt, to the original ones.
 
 
-
 New command p (paranoid test)
 Test the archive content in a very paranoid fashion.
 The ZPAQ reference decompressor is used to extract 
-the various blocks in RAM and check them. 
+the various blocks in RAM and check them.
+In other words, do not use the 7.15 algorithm to decompress,
+but that of unzpaq, so as to avoid the risk of "silent" bugs.
 Essentially it is similar to extracting 
 the entire archive into a temporary folder. 
-The amount of RAM can quickly become unmanageable. 
+The amount of RAM can quickly become unmanageable.
 Doesn't support multifile _ ????. 
-Shows an estimate of the RAM used (not very early) during the operation.
+Shows an estimate of the RAM used (not very precise) during the operation.
 For each file will output the SHA1 of the virtually extracted one.
 It is normally used in combination with add() -checksum, 
 which stores the SHA1 codes, to make a comparison.
-It warns on win32 systems (with RAM limits) and refuses to run on ESXi
+It warns on Win32 systems (with RAM limits) and refuses to run on ESXi.
 -verify next level of paranoia: check SHA1 against a re-read from filesystem. 
 Essentially it is equivalent to extracting the contents 
 of the archive in a temporary folder, 
 and then checking that the SHA1 codes correspond 
 to those present in the initial folder and that, 
 finally, they are the same ones stored in the archive 
-(if you use -checksum during the by add).
+(if you use -checksum during the add() to store SHA1).
+
 
 New command c (compare dirs)
 Compare a "master" directory (d0) against N "slaves" (d1, d2, dN).
 In the world of professional archiving it is normal to have a source (master) 
 directory copied, with different mechanisms, to multiple destination (slave)
-directories.
+directories (as is known directory can have ubiquitous meaning for *nix systems).
 Usually some of these folders will be (*nix) NFS or SMB mountpoints, 
-which you copy to with rsync, zfs-replica, robocopy for Windows etc.
-Or, in the case of zpaqfranz or 7z or rar, by e extracting a backup inside 
-a temporary folder.
+where you copy with rsync, zfs-replica, robocopy (Windows) etc.
+Or, in the case of zpaqfranz or 7z or rar,
+by extracting a full backup inside a temporary folder.
 How can you be sure that all the master files are in the slaves, 
 and that there are no more files in the slaves than the master?
 Especially with the use of utf8 names 
@@ -166,56 +198,73 @@ zpaqfranz c c:\nz z:\nz r:\nz
 In this example the "master" (or source) dir is c:\nz, 
 and the slaves are z:\nz and r:\nz
 Without further options, the control is done on the file name and size, 
-not on the content, 
-and is essentially designed for copies on NAS and similar devices.
+not on the content, and is essentially designed for copies 
+on NAS and similar devices (quick, but not 100% sure).
 -all N concurrent threads will be created, each scan a slave dir.
 It is used to operate in parallel comparing an original folder with 
 multiple copies on different devices, minimizing the scan time
 -verify will run a hash check: it has the function of diff -qr
+and can use -all more threads (1 for cores or -t K to limit)
+
 
 New command s (size)
 Return cumulative size of N directory, 
 and an estimate of the free space on its filesystem.
-Everything containing .zfs in filename will be ignored
+Everything containing .zfs in filename will be ignored,
+as :$DATA (Windows's ACL)
 It is used for a quick check of synchronized folders: 
 there is no easy way, in UNIX / Linux, to immediately 
 know how big a folder with subfolders is.
 Similarly it is not easy, on UNIX / Linux, 
 to have an idea at least indicative of the free space on devices.
--all N concurrent threads will be created, each scan a slave dir.It is used to operate in parallel on different devices, minimizing the scan time
+-all N concurrent threads will be created, each scan a slave dir.
+It is used to operate in parallel on different devices, minimizing the scan time
+(example: slaves on different NAS).
+
 
 New command sha1 (hashes)
-Calculate SHA1 (or other hashes) of files/directories, and candidate duplicates,
-and cumulative GLOBAL SHA256 (hash of hashes).
-Two == directories have the same GLOBAL 
--xxhash one of checksum/hashes algorithm
--crc32 one of checksum/hashes algorithm
--crc32c one of checksum/hashes algorithm
--sha256 one of checksum/hashes algorithm
+Calculate SHA1 (or other hashes/checksums) of files/directories, 
+candidate duplicates, and cumulative GLOBAL SHA256 (hash of hashes).
+If two directories have the same GLOBAL hash they are ==
+-xxhash very fast hash algorithm (XXH3)
+-crc32  very fast checksum 
+-crc32c very fast hardware-accelerated CRC-32c
+-sha256 slow but very reliable
+In future maybe even a combo myhash and Whirlpool.
 -all make N thread (do not use with spinning HDDs, but SSDs and NVMes)
--kill show the files to be deleted to deduplicate
--checksum get a 1-level checksum
--summary show only GLOBAL
+to calculate very fast (on my PC up to 23GB/s)
+-kill show the files to be deleted to manually deduplicate
+(yes, it is used by redirection to a script)
+-checksum get a 1-level checksum, useful for comparing 
+hierarchically organized folders.
+-summary show only GLOBAL (fast manual compare of directories)
 
 
-New command dir
-If there's one thing I hate about UNIX and Linux in general it's the ls command, 
-as opposed to Windows dir, because it do not show the cumulative filesize (!)
+New command dir (dir)
+If there's one thing I hate about UNIX and Linux in general 
+it's the ls command, because it do not show the cumulative filesize (!)
+as the Windows' dir.
 How big is folder c:\nz, with subdirs?
 zpaqfranz dir c:\nz /s -n 1 
 zpaqfranz dir c:\nz /s |tail -2
 This is a kind of mini clone, to be used with a shell alias for convenience.
 Main switch are /s, /os, /on, /a, -n X like tail -n
+What is the largest file in the c:\nz directory
+(recursively)?
+zpaqfranz dir c:\nz /s /os 
+10 biggest file in c:\nz?
+zpaqfranz dir c:\nz /s /os -n 10
 Can also find duplicate files (-crc32 or -crc32c)
 just about like rar a -oi3:1 -r dummy s:\
-zpaqfranz dir r:\minc\2 /s -crc32 -n 100
-will show the 100 biggest duplicate file in r:\minc\2
-zpaqfranz dir r:\minc\2 /s /os -n 10
-will show the 10 biggest file in r:\minc\2
+100 biggest duplicate files in c:\nz?
+zpaqfranz dir c:\nz /s -crc32 -n 100
+
 
 New command i (info)
 Show the versions of a ZPAQ, just like (for zpaqfranz) l -all -comment
 with size (and comments, if any)
+zpaqfranz i z:\1.zpaq
+
 
 New command utf (deal with strange filenames)
 Check (or sanitize) paths with non-latin chars and/or
@@ -227,8 +276,9 @@ Check (or sanitize) paths with non-latin chars and/or
 -fixeml (sanitize .eml filenames)
 -kill (do the fix=> convert to latin)
 
+
 New command f (fill, or wipe)
-Fill (wipe) almost all disk space and check that the datas is well
+Fill (wipe) almost all disk space and check that data is well
 written, in chunks of 500MB (pseudorandum), onto the new
 ztempdir folder
 Two use: wipe (clear) the space with uncompressible data,
@@ -236,19 +286,24 @@ check if disk-controller-system-RAM is working fine
 -verbose show write speed (useful to check speed consistency)
 -kill delete (after run) the temporary filename
 
-New command k (kill)
-kill (delete) all files and directories that arent in archive
+
+New command k (kill, risky!)
+kill (delete) all files and directories that arent in archive.
+remove the excess files
 example:
 zpaqfranz a z:\1.zpaq c:\nz
 zpaqfranz x z:\1.zpaq c:\nz -to z:\knb
 ... something happens in z:\knb and we want to turn back to archive ...
 ... WITHOUT delete everything and extract again ..."
 zpaqfranz x z:\1.zpaq c:\nz -to z:\knb -force"
-zpaqfranz k z:\1.zpaq c:\nz -to z:\knb"
+zpaqfranz k z:\1.zpaq c:\nz -to z:\knb
+
 
 New command/switches 
 During the automated executions, scripts can be launched 
 to send warnings (e.g. failure or OK)
+Instead of checking the resulting code in a script, 
+it runs a script or program directly
 -exec_ok fo.bat After OK launch fo.bat
 -exec_error kz  After NOT OK launch kz
 
@@ -258,16 +313,15 @@ help           long help
 -he            show examples
 -diff          differences against 7.15
 
-
 Various switches
--summary        Changed: if >0 => only summary
--noeta          do not show ETA (for script)
--pakka          concise output
--verbose        not so concise
+-summary        Retained for compatibility but changed: if >0 => show only summary
+-noeta          do not show ETA (for scripts)
+-pakka          concise new style output (10% updating)
+-verbose        not so concise :)
 -zfs            Skip path including .zfs (for ZFS snapshots)
 -noqnap         Skip path including @Recently-Snapshot and @Recycle
--forcewindows   Take $DATA$ and System Volume Information
--xls            Do NOT always force XLS
+-forcewindows   Take ACL and System Volume Information (default: NO on zpaqfranz)
+-xls            Do NOT always force XLS to be added
 -nopath         Do not store path
 -nosort         Do not sort file when adding or listing
 -find X         Search for X in full filename (ex. list)
@@ -280,10 +334,10 @@ Various switches
 -dirlength  X   Utf command: find dirs with length>X, extract maxdirlen
 -comment foo    Add/find ASCII comment string to versions
 -vss            Do a VSS for drive C: (Windows with administrative rights)
--crc32c         In hash command use CRC32c
--crc32          In hash command use CRC32
--xxhash         In hash command use XXH3
--sha256         In hash command use SHA256
+-crc32c         Use CRC32c
+-crc32          Use CRC32
+-xxhash         Use XXH3
+-sha256         Use SHA256
 -exec_ok fo.bat After OK launch fo.bat
 -exec_error kz  After NOT OK launch kz
 -kill           Show 'script-ready' log of dup files
@@ -294,7 +348,3 @@ Various switches
 -fixeml         Heuristically compress .eml filenames (Fwd Fwd Fwd =>Fwd)
 -flat           Everything in single path (emergency extract of strange files)
 -debug          Show lot of infos (superverbose)
-
-
-
-

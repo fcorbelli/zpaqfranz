@@ -73,7 +73,7 @@ If you add the same comment more than once,
 you will not be able to use it later to extract the data. 
 This remains possible through the normal use of -until
 
-E (extract)
+e (extract)
 During extraction if the control information (CRC32) 
 is present, as in the default setting, 
 at the end of the extraction, 
@@ -83,6 +83,15 @@ have been correctly extracted.
 It is a measure that lengthens the times but increases safety.
 -kill extract to dummy, 0-length files. Simulate a full restore
 (useful for strange filenames)
+sometimes it's impossible to restore a *nix archive on Windows,
+for various reason.
+Path too long and too "strange" filenames.
+That's really bad (cannot restore data), so there are some
+new switches
+-utf change everything non latin to latin
+-fix255 shrink to 255 max length, avoid same case collision
+-fixeml compress .eml filenames
+-flat emergency restore of everything into a single folder
 
 Command l (list)
 With files run a compare (check) of the archive's 

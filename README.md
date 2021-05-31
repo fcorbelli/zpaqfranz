@@ -12,7 +12,7 @@ In short, use only if you want.
 =
 
 You can find key differences against 7.15 with the -diff or
-here differences715.txt
+here https://github.com/fcorbelli/zpaqfranz/blob/main/differences715.txt
 Portions of software by other authors, mentioned later, are included.
 
 As far as I know this is allowed.

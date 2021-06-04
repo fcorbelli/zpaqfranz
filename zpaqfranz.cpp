@@ -1,51 +1,114 @@
 ///////// EXPERIMENTAL BUILD
 ///////// The source is a mess
 ///////// Strongly in development
+/////////
+///////// https://github.com/fcorbelli/zpaqfranz
+///////// https://sourceforge.net/projects/zpaqfranz/
 
-#define ZPAQ_VERSION "51.29-experimental"
+#define ZPAQ_VERSION "51.30-experimental"
 #define FRANZOFFSET 	50
 #define FRANZMAXPATH 	240
-/*
 
-This is zpaqfranz, a patched  but (maybe) compatible fork of 
-Matt Mahoney's ZPAQ version 7.15 (http://mattmahoney.net/dc/zpaq.html)
+/*
+                         __                     
+  _____ __   __ _  __ _ / _|_ __ __ _ _ __  ____
+ |_  / '_ \ / _` |/ _` | |_| '__/ _` | '_ \|_  /
+  / /| |_) | (_| | (_| |  _| | | (_| | | | |/ / 
+ /___| .__/ \__,_|\__, |_| |_|  \__,_|_| |_/___|
+     |_|             |_|                        
+                                                                    
+
+## This is zpaqfranz, a patched  but (maybe) compatible fork of ZPAQ version 7.15 
+(http://mattmahoney.net/dc/zpaq.html)
+
+Ancient version is in FreeBSD /ports/archivers/paq (v 6.57 of 2014)
 
 From branch 51 all source code merged in one zpaqfranz.cpp
-The aim is to make it as easy as possible to compile 
-on "strange" systems (NAS, vSphere etc)
+aiming to make it as easy as possible to compile on "strange" systems (NAS, vSphere etc).
 
-Provided as-is, with no warranty whatsoever, by
-Franco Corbelli, franco@francocorbelli.com
+So be patient if the source is not linear, 
+updating and compilation are now trivial.
+
+The source is composed of the fusion of different software 
+from different authors. 
+
+Therefore there is no uniform style of programming. 
+
+I have made a number of efforts to maintain compatibility 
+with unmodified version (7.15), even at the cost 
+of expensive on inelegant workarounds.
+
+So don't be surprised if it looks like what in Italy 
+we call "zibaldone" or in Emilia-Romagna "mappazzone".
+
+Windows binary builds (32 and 64 bit) on github/sourceforge
+
+## **Provided as-is, with no warranty whatsoever, by Franco Corbelli, franco@francocorbelli.com**
+
+
+####      Key differences against 7.15 by zpaqfranz -diff or here 
+####  https://github.com/fcorbelli/zpaqfranz/blob/main/differences715.txt 
+
+Portions of software by other authors, mentioned later, are included.
+As far as I know this is allowed by the licenses. 
+
+**I apologize if I have unintentionally violated any rule.**
+**Report it and I will fix as soon as possible.**
+
+- Include mod by data man and reg2s patch from encode.su forum 
+- Crc32.h Copyright (c) 2011-2019 Stephan Brumme 
+- Slicing-by-16 contributed by Bulat Ziganshin 
+- xxHash Extremely Fast Hash algorithm, Copyright (C) 2012-2020 Yann Collet 
+- crc32c.c Copyright (C) 2013 Mark Adler
+
+
+
+FreeBSD port, quick and dirty to get a /usr/local/bin/zpaqfranz
+```
+mkdir /tmp/testme
+cd /tmp/testme
+wget http://www.francocorbelli.it/zpaqfranz/zpaqfranz-51.30.tar.gz
+tar -xvf zpaqfranz-51.30.tar.gz
+make install clean
+```
 
 NOTE1: -, not -- (into switch)
 NOTE2: switches ARE case sensitive.   -maxsize <> -MAXSIZE
 
-Launch magics
 
+**Long (full) help**
+```
 zpaqfranz help
 zpaqfranz -h
 zpaqfranz -help
-  long (full) help
-  
+```
+
+**Some examples**
+```
 zpaqfranz -he
 zpaqfranz --helpe
 zpaqfranz -examples
-  for some examples
+```
 
+**Brief difference agains standard 7.15**
+```
 zpaqfranz -diff 
-  brief difference agains standard 7.15
+```
 
+# How to build
+My main development platforms are Windows and FreeBSD. 
+I rarely use Linux or MacOS, so changes may be needed.
 
+As explained the program is single file, 
+be careful to link the pthread library.
 
-============
 Targets
-
+```
 Windows 64 (g++ 7.3.0)
 g++ -O3  zpaqfranz.cpp -o zpaqfranz 
 
 Windows 32 (g++ 7.3.0 64 bit)
 c:\mingw32\bin\g++ -m32 -O3 zpaqfranz.cpp -o zpaqfranz32 -pthread -static
-
 
 FreeBSD (11.x) gcc 7
 gcc7 -O3 -march=native -Dunix zpaqfranz.cpp -static -lstdc++ -pthread -o zpaqfranz -static -lm
@@ -64,10 +127,13 @@ g++ -O3 -Dunix zpaqfranz.cpp  -pthread -o zpaqfranz -static
 
 QNAP NAS TS-431P3 (Annapurna AL314) gcc 7.4.0
 g++ -Dunix zpaqfranz.cpp  -pthread -o zpaqfranz -Wno-psabi
+```
 
 */
 
 /*
+  Those are standard 7.15 notes
+
   This software is provided as-is, with no warranty.
   I, Matt Mahoney, release this software into
   the public domain.   This applies worldwide.
@@ -129,23 +195,6 @@ Possible options:
   I grant anyone the right to use this software for any purpose,
   without any conditions, unless such conditions are required by law.
 */
-
-  
-/*
-Codes from other authors are used.
-As far as I know of free use in opensource, 
-otherwise I apologize.
-
-Include mod by data man and reg2s patch from encode.su forum
-
-Crc32.h    Copyright (c) 2011-2019 Stephan Brumme. All rights reserved, slicing-by-16 contributed by Bulat Ziganshin
-crc32c.c  Copyright (C) 2013 Mark Adler
-xxHash  Extremely Fast Hash algorithm, Copyright (C) 2012-2020 Yann Collet
- 
-
-*/
-
-
 
 
 #define _FILE_OFFSET_BITS 64  // In Linux make sizeof(off_t) == 8

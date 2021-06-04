@@ -1,8 +1,11 @@
+zpaqfranz v51.29-experimental snapshot archiver, compiled Jun  4 2021
 Key differences from ZPAQ 7.15 and zpaqfranz
+@2021-06-03
+
 
 First goal: doveryay, no proveryay (trust, but verify).
 As a storage manager I need to be sure that my backups
-are perfect, so "verify" is the objective of my zpaq fork.
+are perfect, so 'verify' is the objective of my zpaq fork.
 
 Second: do not break compatibility with 7.15.
 
@@ -14,7 +17,7 @@ Fourth: pack everything needed for a storage manager
 fix of utf-8 filenames, wiping etc) in a single
 program.
 
-Fifth: "smart" support for strange filenames and paths,
+Fifth: 'smart' support for strange filenames and paths,
 Windows and non-Windows.
 
 Sixth: smooth with ZFS 
@@ -27,8 +30,8 @@ Command a (add)
 zpaqfranz (for default) store the CRC-32 of the files
 added.
 zpaq does not have a mechanism to check the integrity
-of the stored files: it do a (smart) "chunked"-SHA1 verify,
-but cannot do a "full" test (ex. recomputing SHA1 of the entire file)
+of the stored files: it do a (smart) 'chunked'-SHA1 verify,
+but cannot do a 'full' test (ex. recomputing SHA1 of the entire file)
 because of it design.
 With the CRC-32 you are sure against SHA1 collision
 (better: the collision will be detected, not fixed).
@@ -58,14 +61,17 @@ by Excel 2000, a binary (or hash) check of extracted
 files will fail.
 Yeah I know, it's strange, but Excel can change some
 bytes into XLS files (to update metadata like last time)
-without "touch".
+without 'touch'.
 This was the first step for zpaqfranz, 
 I went crazy to discover this amazing behavior of Excel
 Can be disabled by -xls (=7.15)
+-timestamp X    Set the version datetime@ X, 14 digit ex 2021-12-30_01:03:04
+Must be monotonically increasing (v[i+1].date>v[i]+date)
+Use:freeze many zfs snapshot in one archive
 
 Volume Shadow Copies (Windows, with administrative rights)
 Create a VSS (DELETING ALL OTHER PRESENTS!) then make
-the backup, typically for a "utente" into "users" special
+the backup, typically for a 'utente' into 'users' special
 folder, like that
 zpaqfranz a z:\mycopy.zpaq c:\Users\utente\ -vss
 
@@ -76,11 +82,11 @@ Progress information  shown can be modified by the switches
 ASCII comment for versions
 Using the switch -comment sometext 
 it is possible to mark the current version 
-of the archive with "sometext".
+of the archive with 'sometext'.
 zpaqfranz a z:\mycopy.zpaq c:\pippo -comment sometext
 This will make it easier for you to search or extract,
 instead of using -until.
-"Roll back to sometext".
+'Roll back to sometext'.
 Warning: the text should not contain spaces or 
 non-ASCII characters and, above all, be unique. 
 There is no duplication check on version comments. 
@@ -102,10 +108,10 @@ It is a measure that lengthens the times but increases safety.
 Basically you can simulate a restore (for example on RAMDISK) 
 using exactly all the extract function, without writing data. 
 It is therefore not a list(), but a real extract().
-extract() try to intercept the "disk is full" error.
+extract() try to intercept the 'disk is full' error.
 Interoperability
 Sometimes it's impossible to restore a *nix archive on Windows,
-for various reason: path too long and too "strange" filenames.
+for various reason: path too long and too 'strange' filenames.
 That's really bad (cannot restore data), so there are some
 new switches to handle those cases
 -utf change everything non latin to latin
@@ -114,13 +120,13 @@ new switches to handle those cases
 -fixeml compress .eml filenames
 -flat emergency restore of everything into a single folder.
 If all else fails, however, you can extract the content to 
-Windows however "weird" it was initially.
+Windows however 'weird' it was initially.
 
 
 Command l (list)
 With files run a compare (check) of the archive's 
 content against one or more directory.
-In fact this is a "verify" more than a "list"
+In fact this is a 'verify' more than a 'list'
 The comparison is much faster than the standard, 
 as it only performs a block calculation of the SHA1 codes 
 of the file present in the filesystem, 
@@ -130,13 +136,13 @@ to intercept any (very rare) SHA1 collisions.
 After add() you can list() with just the same
 parameter and do a very quick (but safe)
 verify.
-zpaqfranz a z:\1.zpaq c:\nz
-zpaqfranz l z:\1.zpaq c:\nz
+zpaqfranz a z:\1.zpaq c:\z
+zpaqfranz l z:\1.zpaq c:\z
 It's possible to search by 
 -comment something,
 filter -
 find pippo (just like |grep -i pippo),
--replace pluto replace "pippo" with "pluto"
+-replace pluto replace 'pippo' with 'pluto'
 
 
 New command t (test)
@@ -160,7 +166,7 @@ Test the archive content in a very paranoid fashion.
 The ZPAQ reference decompressor is used to extract 
 the various blocks in RAM and check them.
 In other words, do not use the 7.15 algorithm to decompress,
-but that of unzpaq, so as to avoid the risk of "silent" bugs.
+but that of unzpaq, so as to avoid the risk of 'silent' bugs.
 Essentially it is similar to extracting 
 the entire archive into a temporary folder. 
 The amount of RAM can quickly become unmanageable.
@@ -180,7 +186,7 @@ finally, they are the same ones stored in the archive
 
 
 New command c (compare dirs)
-Compare a "master" directory (d0) against N "slaves" (d1, d2, dN).
+Compare a 'master' directory (d0) against N 'slaves' (d1, d2, dN).
 In the world of professional archiving it is normal to have a source (master) 
 directory copied, with different mechanisms, to multiple destination (slave)
 directories (as is known directory can have ubiquitous meaning for *nix systems).
@@ -194,9 +200,9 @@ Especially with the use of utf8 names
 (non-Latin, often incompatible between UNIX-zfs and Linux-ext4) 
 and path lengths> 260 (for NTFS)?
 And if you have some zfs' snapshot in the path?
-zpaqfranz c c:\nz z:\nz r:\nz
-In this example the "master" (or source) dir is c:\nz, 
-and the slaves are z:\nz and r:\nz
+zpaqfranz c c:\z z:\z r:\z
+In this example the 'master' (or source) dir is c:\z, 
+and the slaves are z:\z and r:\z
 Without further options, the control is done on the file name and size, 
 not on the content, and is essentially designed for copies 
 on NAS and similar devices (quick, but not 100% sure).
@@ -238,26 +244,26 @@ to calculate very fast (on my PC up to 23GB/s)
 -checksum get a 1-level checksum, useful for comparing 
 hierarchically organized folders.
 -summary show only GLOBAL (fast manual compare of directories)
-
+-forcezfs force .zfs path (DEFAULT: skip)
 
 New command dir (dir)
 If there's one thing I hate about UNIX and Linux in general 
 it's the ls command, because it do not show the cumulative filesize (!)
 as the Windows' dir.
-How big is folder c:\nz, with subdirs?
-zpaqfranz dir c:\nz /s -n 1 
-zpaqfranz dir c:\nz /s |tail -2
+How big is folder c:\z, with subdirs?
+zpaqfranz dir c:\z /s -n 1 
+zpaqfranz dir c:\z /s |tail -2
 This is a kind of mini clone, to be used with a shell alias for convenience.
 Main switch are /s, /os, /on, /a, -n X like tail -n
-What is the largest file in the c:\nz directory
+What is the largest file in the c:\z directory
 (recursively)?
-zpaqfranz dir c:\nz /s /os 
-10 biggest file in c:\nz?
-zpaqfranz dir c:\nz /s /os -n 10
+zpaqfranz dir c:\z /s /os 
+10 biggest file in c:\z?
+zpaqfranz dir c:\z /s /os -n 10
 Can also find duplicate files (-crc32 or -crc32c)
 just about like rar a -oi3:1 -r dummy s:\
-100 biggest duplicate files in c:\nz?
-zpaqfranz dir c:\nz /s -crc32 -n 100
+100 biggest duplicate files in c:\z?
+zpaqfranz dir c:\z /s -crc32 -n 100
 
 
 New command i (info)
@@ -269,7 +275,7 @@ zpaqfranz i z:\1.zpaq
 New command utf (deal with strange filenames)
 Check (or sanitize) paths with non-latin chars and/or
 >260 length
--dirlength X (set the "fix")
+-dirlength X (set the 'fix')
 -filelength Y 
 -utf (sanitize filename)
 -fix255 (sanitize file length and filecase)
@@ -291,12 +297,12 @@ New command k (kill, risky!)
 kill (delete) all files and directories that arent in archive.
 remove the excess files
 example:
-zpaqfranz a z:\1.zpaq c:\nz
-zpaqfranz x z:\1.zpaq c:\nz -to z:\knb
+zpaqfranz a z:\1.zpaq c:\z
+zpaqfranz x z:\1.zpaq c:\z -to z:\knb
 ... something happens in z:\knb and we want to turn back to archive ...
-... WITHOUT delete everything and extract again ..."
-zpaqfranz x z:\1.zpaq c:\nz -to z:\knb -force"
-zpaqfranz k z:\1.zpaq c:\nz -to z:\knb
+... WITHOUT delete everything and extract again ...
+zpaqfranz x z:\1.zpaq c:\z -to z:\knb -force
+zpaqfranz k z:\1.zpaq c:\z -to z:\knb
 
 
 New command/switches 
@@ -319,6 +325,7 @@ Various switches
 -pakka          concise new style output (10% updating)
 -verbose        not so concise :)
 -zfs            Skip path including .zfs (for ZFS snapshots)
+-forcezfs       Force paths including .zfs (win on -zfs)
 -noqnap         Skip path including @Recently-Snapshot and @Recycle
 -forcewindows   Take ACL and System Volume Information (default: NO on zpaqfranz)
 -xls            Do NOT always force XLS to be added

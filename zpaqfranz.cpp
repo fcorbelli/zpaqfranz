@@ -2,7 +2,7 @@
 ///////// The source is a mess
 ///////// Strongly in development
 
-#define ZPAQ_VERSION "51.28-experimental"
+#define ZPAQ_VERSION "51.29-experimental"
 #define FRANZOFFSET 	50
 #define FRANZMAXPATH 	240
 /*
@@ -9634,6 +9634,7 @@ private:
 
 // Global variables
 int64_t global_start=0;  	// set to mtime() at start of main()
+bool flagforcezfs;
 bool flagdebug; // very verbose output
 bool flagnoeta;					// -noeta (do not show ETA, for batch file)
 bool flagpakka;					// different output
@@ -12814,68 +12815,363 @@ void moreprint(const char* i_stringa)
 }
 void Jidac::differences() 
 {
-	moreprint("Differences from ZPAQ 7.15");
-	moreprint("\n");
-	moreprint("Changed default behaviors:");
-	moreprint("A)  Output is somewhat different (-pakka for alternative)");
-	moreprint("B)  During add() zpaqfranz stores by default the CRC-32 of the files");
-	moreprint("    This can disabled by -crc32 switch");
-	moreprint("C)  Add() using -checksum will store SHA1 hash for every file");
-	moreprint("D)  By default every .XLS file is forcibily added (check of datetime");
-	moreprint("    is not reliable for ancient XLS). Disabled by -xls");
-	moreprint("E)  By default no Windows Alternate Data Stream is stored. -forcewindows to enable");
-	moreprint("\n");
-	moreprint("New functions:");
-	moreprint("1)  Using -comment something to add ASCII text to the versions");
-	moreprint("    in add() and list(). WARNING: NO duplicates check is done");
-	moreprint("2)  In list() using -find pippo filter like |grep -i find");
-	moreprint("    In list() -comment / -comment pippo / -comment -all");
-	moreprint("    The list command can be used for comparing ZPAQ contents agains disk");
-	moreprint("    zpaqfranz l z:\\1.zpaq              (show ZPAQ content)");
-	moreprint("    zpaqfranz l z:\\1.zpaq c:\\dati z:\\  (compare files agains c:\\dati and z:\\)");
-	moreprint("3)  New command t (test) for archive test -verify for filesystem post-check -verbose");
-	moreprint("4)  Switch -test to command add. -verify for filesystem post-check");
-	moreprint("5)  New command p (paranoid test). Need LOTS of RAM and painfully slow. Check");
-	moreprint("    almost everything. -force -verbose");
-	moreprint("6)  New command s (size). Get the cumulative size of one or more directory.");
-	moreprint("    Skip .zfs and ADS. Use -all for multithread");
-	moreprint("7)  New command sha1 (hashing). Calculate hash of something (default SHA1)");
-	moreprint("    -sha256, -crc32, -crc32c, -xxhash, -all (M/T)");
-	moreprint("8)  New command dir. Something similar to dir command (for *nix)");
-	moreprint("    Switches /s /a /os /od. Show cumulative size in the last line!");
-	moreprint("    -crc32 find duplicates. -n Y like tail -n. -minsize Y -maxsize U");
-	moreprint("9)  New command c (compare). Quickly compare (size and filename) a source");
-	moreprint("    directory against one or more. Example c /tank/data /dup/1 /dup/2 /dup/3");
-	moreprint("    -all one thread for parameters. -verify -xxhash/-crc32c/-crc32/-sha256");
-	moreprint("10) New command help. -he show some examples, -diff differences from 7.15");
-	moreprint("11) -noeta. Do not show ETA (for batch file)");
-	moreprint("12) -pakka. Alternative output (for ZPAQ's GUI PAKKA)");
-	moreprint("13) -verbose. Show more info on files");
-	moreprint("14) -zfs. Skip ZFS's snapshots");
-	moreprint("15) -noqnap. Skip special directories");
-	moreprint("16) -forcewindows. Turn on metafiles and system volume information");
-	moreprint("17) -always files. Always add some file");
-	moreprint("18) -nosort. Do not sort before adding files");
-	moreprint("19) -nopath. Do not store filepath");
-	moreprint("20) -vss. On Windows (if running with admin power) take a snapshot (VSS) of ");
-	moreprint("     drive before add. Useful for backup entire user profiles");
-	moreprint("21) -find something. Find text in full filename (ex list)");
-	moreprint("22) -replace something. Replace a -find text (manipulate output)");
-	moreprint("23) -verify. After a test command read again all files from media");
-	moreprint("24) -minsize. Skip file if length < minsize");
-	moreprint("25) -maxsize. Skip file if length > maxsize");
-	moreprint("26) -exec_ok file.sh. After OK run file.sh");
-	moreprint("27) -exec_error file.sh. After A NOT OK (error, warning) run file.sh");
-	moreprint("28) kill command");
-	moreprint("29) -kill switch -verify");
-	moreprint("30) -utf switch");
-	moreprint("31) -flat switch");
-	moreprint("31) -dirlength -filelength");
-	moreprint("32) utf command");
-	moreprint("33) -debug flag");
-	moreprint("34) -fix255 flag");
-	moreprint("35) -fixeml flag");
-	
+moreprint("Key differences from ZPAQ 7.15 and zpaqfranz");
+moreprint("@2021-06-03");
+moreprint("");
+moreprint("");
+moreprint("First goal: doveryay, no proveryay (trust, but verify).");
+moreprint("As a storage manager I need to be sure that my backups");
+moreprint("are perfect, so 'verify' is the objective of my zpaq fork.");
+moreprint("");
+moreprint("Second: do not break compatibility with 7.15.");
+moreprint("");
+moreprint("Third: most useful output: 7.15 is often cryptic ");
+moreprint("but not very useful.");
+moreprint("");
+moreprint("Fourth: pack everything needed for a storage manager");
+moreprint("(compare directories, hashing, duplicate find,");
+moreprint("fix of utf-8 filenames, wiping etc) in a single");
+moreprint("program.");
+moreprint("");
+moreprint("Fifth: 'smart' support for strange filenames and paths,");
+moreprint("Windows and non-Windows.");
+moreprint("");
+moreprint("Sixth: smooth with ZFS ");
+moreprint("(I almost always use FreeBSD servers)");
+moreprint("");
+moreprint("Seventh: run on multiple systems commonly ");
+moreprint("used in storage (ESXi, non-Intel QNAP NAS).");
+moreprint("---");
+moreprint("Command a (add)");
+moreprint("zpaqfranz (for default) store the CRC-32 of the files");
+moreprint("added.");
+moreprint("zpaq does not have a mechanism to check the integrity");
+moreprint("of the stored files: it do a (smart) 'chunked'-SHA1 verify,");
+moreprint("but cannot do a 'full' test (ex. recomputing SHA1 of the entire file)");
+moreprint("because of it design.");
+moreprint("With the CRC-32 you are sure against SHA1 collision");
+moreprint("(better: the collision will be detected, not fixed).");
+moreprint("With an optional switch (-checksum) you can also store ");
+moreprint("the SHA1 hash code for each file ");
+moreprint("(slower, but almost 100% sure. ");
+moreprint("In future different [faster] hashes are planned).");
+moreprint("With the switch -crc32 it is possible ");
+moreprint("to disable the storage of the control code ");
+moreprint("going back to the operation of 7.15.");
+moreprint("Warning: the calculation of the CRC-32, ");
+moreprint("especially on modern processors, ");
+moreprint("does not significantly slow down the process. ");
+moreprint("The calculation of SHA1, on the other hand, ");
+moreprint("requires a longer time.");
+moreprint("-test do a post-add test (doveryay, no proveryay).");
+moreprint("Note: now, for default, do NOT store ACLs on Windows,");
+moreprint("because I consider them essentially useless ");
+moreprint("and very uncomfortable to keep");
+moreprint("(-forcewindows to enable back as 7.15).");
+moreprint("");
+moreprint("By default every .XLS file is forcibily added.");
+moreprint("Check of datetime is not reliable for ancient ");
+moreprint("XLS to detect changes. ");
+moreprint("If you have lots of old XLS edited (for example)");
+moreprint("by Excel 2000, a binary (or hash) check of extracted");
+moreprint("files will fail.");
+moreprint("Yeah I know, it's strange, but Excel can change some");
+moreprint("bytes into XLS files (to update metadata like last time)");
+moreprint("without 'touch'.");
+moreprint("This was the first step for zpaqfranz, ");
+moreprint("I went crazy to discover this amazing behavior of Excel");
+moreprint("Can be disabled by -xls (=7.15)");
+moreprint("-timestamp X    Set the version datetime@ X, 14 digit ex 2021-12-30_01:03:04"); 
+moreprint("Must be monotonically increasing (v[i+1].date>v[i]+date)");
+moreprint("Use:freeze many zfs snapshot in one archive");
+moreprint("");
+moreprint("Volume Shadow Copies (Windows, with administrative rights)");
+moreprint("Create a VSS (DELETING ALL OTHER PRESENTS!) then make");
+moreprint("the backup, typically for a 'utente' into 'users' special");
+moreprint("folder, like that");
+moreprint("zpaqfranz a z:\\mycopy.zpaq c:\\Users\\utente\\ -vss");
+moreprint("");
+moreprint("Progress information  shown can be modified by the switches ");
+moreprint("-noeta, -verbose, -pakka, -debug, summary,");
+moreprint("-n x");
+moreprint("");
+moreprint("ASCII comment for versions");
+moreprint("Using the switch -comment sometext ");
+moreprint("it is possible to mark the current version ");
+moreprint("of the archive with 'sometext'.");
+moreprint("zpaqfranz a z:\\mycopy.zpaq c:\\pippo -comment sometext");
+moreprint("This will make it easier for you to search or extract,");
+moreprint("instead of using -until.");
+moreprint("'Roll back to sometext'.");
+moreprint("Warning: the text should not contain spaces or ");
+moreprint("non-ASCII characters and, above all, be unique. ");
+moreprint("There is no duplication check on version comments. ");
+moreprint("If you add the same comment more than once, ");
+moreprint("you will not be able to use it later to extract the data. ");
+moreprint("This remains possible through the normal use of -until");
+moreprint("");
+moreprint("");
+moreprint("Command e (extract)");
+moreprint("During extraction if the control information (CRC-32) ");
+moreprint("is present, as in the default setting, ");
+moreprint("at the end of the extraction, ");
+moreprint("the codes are checked to verify that the files ");
+moreprint("have been correctly stored. ");
+moreprint("-checksum the extracted files will be re-read and the SHA1 code verified. ");
+moreprint("It is a measure that lengthens the times but increases safety.");
+moreprint("-kill extract to dummy, 0-length files. Simulate a full restore");
+moreprint("(useful for strange filenames)");
+moreprint("Basically you can simulate a restore (for example on RAMDISK) ");
+moreprint("using exactly all the extract function, without writing data. ");
+moreprint("It is therefore not a list(), but a real extract().");
+moreprint("extract() try to intercept the 'disk is full' error.");
+moreprint("Interoperability");
+moreprint("Sometimes it's impossible to restore a *nix archive on Windows,");
+moreprint("for various reason: path too long and too 'strange' filenames.");
+moreprint("That's really bad (cannot restore data), so there are some");
+moreprint("new switches to handle those cases");
+moreprint("-utf change everything non latin to latin");
+moreprint("-fix255 shrink to 255 max length, avoid different case collision");
+moreprint("(pippo.txt and PIPPO.txt are be silently overwritten by 7.15).");
+moreprint("-fixeml compress .eml filenames");
+moreprint("-flat emergency restore of everything into a single folder.");
+moreprint("If all else fails, however, you can extract the content to ");
+moreprint("Windows however 'weird' it was initially.");
+moreprint("");
+moreprint("");
+moreprint("Command l (list)");
+moreprint("With files run a compare (check) of the archive's ");
+moreprint("content against one or more directory.");
+moreprint("In fact this is a 'verify' more than a 'list'");
+moreprint("The comparison is much faster than the standard, ");
+moreprint("as it only performs a block calculation of the SHA1 codes ");
+moreprint("of the file present in the filesystem, ");
+moreprint("while those archived are not extracted. ");
+moreprint("It also checks the CRC-32, ");
+moreprint("to intercept any (very rare) SHA1 collisions.");
+moreprint("After add() you can list() with just the same");
+moreprint("parameter and do a very quick (but safe)");
+moreprint("verify.");
+moreprint("zpaqfranz a z:\\1.zpaq c:\\z");
+moreprint("zpaqfranz l z:\\1.zpaq c:\\z");
+moreprint("It's possible to search by ");
+moreprint("-comment something,");
+moreprint("filter -");
+moreprint("find pippo (just like |grep -i pippo),");
+moreprint("-replace pluto replace 'pippo' with 'pluto'");
+moreprint("");
+moreprint("");
+moreprint("New command t (test)");
+moreprint("Compared to 7.15, not only is it checked ");
+moreprint("that the blocks are extractable, ");
+moreprint("but also that the CRC-32 checksum of the individual ");
+moreprint("files corresponds to what would be generated ");
+moreprint("by actually extracting the data");
+moreprint("-verify for filesystem post-check");
+moreprint("(check that STORED CRC==DECOMPRESSED==FROM FILE)");
+moreprint("With this switch the files are reread, one by one, ");
+moreprint("from the filesystem and compared. ");
+moreprint("-verbose");
+moreprint("Typically it is used in case of a simulated recovery, ");
+moreprint("to be sure that the extracted files are identical, ");
+moreprint("beyond any doubt, to the original ones.");
+moreprint("");
+moreprint("");
+moreprint("New command p (paranoid test)");
+moreprint("Test the archive content in a very paranoid fashion.");
+moreprint("The ZPAQ reference decompressor is used to extract ");
+moreprint("the various blocks in RAM and check them.");
+moreprint("In other words, do not use the 7.15 algorithm to decompress,");
+moreprint("but that of unzpaq, so as to avoid the risk of 'silent' bugs.");
+moreprint("Essentially it is similar to extracting ");
+moreprint("the entire archive into a temporary folder. ");
+moreprint("The amount of RAM can quickly become unmanageable.");
+moreprint("Doesn't support multifile _ ????. ");
+moreprint("Shows an estimate of the RAM used (not very precise) during the operation.");
+moreprint("For each file will output the SHA1 of the virtually extracted one.");
+moreprint("It is normally used in combination with add() -checksum, ");
+moreprint("which stores the SHA1 codes, to make a comparison.");
+moreprint("It warns on Win32 systems (with RAM limits) and refuses to run on ESXi.");
+moreprint("-verify next level of paranoia: check SHA1 against a re-read from filesystem. ");
+moreprint("Essentially it is equivalent to extracting the contents ");
+moreprint("of the archive in a temporary folder, ");
+moreprint("and then checking that the SHA1 codes correspond ");
+moreprint("to those present in the initial folder and that, ");
+moreprint("finally, they are the same ones stored in the archive ");
+moreprint("(if you use -checksum during the add() to store SHA1).");
+moreprint("");
+moreprint("");
+moreprint("New command c (compare dirs)");
+moreprint("Compare a 'master' directory (d0) against N 'slaves' (d1, d2, dN).");
+moreprint("In the world of professional archiving it is normal to have a source (master) ");
+moreprint("directory copied, with different mechanisms, to multiple destination (slave)");
+moreprint("directories (as is known directory can have ubiquitous meaning for *nix systems).");
+moreprint("Usually some of these folders will be (*nix) NFS or SMB mountpoints, ");
+moreprint("where you copy with rsync, zfs-replica, robocopy (Windows) etc.");
+moreprint("Or, in the case of zpaqfranz or 7z or rar,");
+moreprint("by extracting a full backup inside a temporary folder.");
+moreprint("How can you be sure that all the master files are in the slaves, ");
+moreprint("and that there are no more files in the slaves than the master?");
+moreprint("Especially with the use of utf8 names ");
+moreprint("(non-Latin, often incompatible between UNIX-zfs and Linux-ext4) ");
+moreprint("and path lengths> 260 (for NTFS)?");
+moreprint("And if you have some zfs' snapshot in the path?");
+moreprint("zpaqfranz c c:\\z z:\\z r:\\z");
+moreprint("In this example the 'master' (or source) dir is c:\\z, ");
+moreprint("and the slaves are z:\\z and r:\\z");
+moreprint("Without further options, the control is done on the file name and size, ");
+moreprint("not on the content, and is essentially designed for copies ");
+moreprint("on NAS and similar devices (quick, but not 100% sure).");
+moreprint("-all N concurrent threads will be created, each scan a slave dir.");
+moreprint("It is used to operate in parallel comparing an original folder with ");
+moreprint("multiple copies on different devices, minimizing the scan time");
+moreprint("-verify will run a hash check: it has the function of diff -qr");
+moreprint("and can use -all more threads (1 for cores or -t K to limit)");
+moreprint("");
+moreprint("");
+moreprint("New command s (size)");
+moreprint("Return cumulative size of N directory, ");
+moreprint("and an estimate of the free space on its filesystem.");
+moreprint("Everything containing .zfs in filename will be ignored,");
+moreprint("as :$DATA (Windows's ACL)");
+moreprint("It is used for a quick check of synchronized folders: ");
+moreprint("there is no easy way, in UNIX / Linux, to immediately ");
+moreprint("know how big a folder with subfolders is.");
+moreprint("Similarly it is not easy, on UNIX / Linux, ");
+moreprint("to have an idea at least indicative of the free space on devices.");
+moreprint("-all N concurrent threads will be created, each scan a slave dir.");
+moreprint("It is used to operate in parallel on different devices, minimizing the scan time");
+moreprint("(example: slaves on different NAS).");
+moreprint("");
+moreprint("");
+moreprint("New command sha1 (hashes)");
+moreprint("Calculate SHA1 (or other hashes/checksums) of files/directories, ");
+moreprint("candidate duplicates, and cumulative GLOBAL SHA256 (hash of hashes).");
+moreprint("If two directories have the same GLOBAL hash they are ==");
+moreprint("-xxhash very fast hash algorithm (XXH3)");
+moreprint("-crc32  very fast checksum ");
+moreprint("-crc32c very fast hardware-accelerated CRC-32c");
+moreprint("-sha256 slow but very reliable");
+moreprint("In future maybe even a combo myhash and Whirlpool.");
+moreprint("-all make N thread (do not use with spinning HDDs, but SSDs and NVMes)");
+moreprint("to calculate very fast (on my PC up to 23GB/s)");
+moreprint("-kill show the files to be deleted to manually deduplicate");
+moreprint("(yes, it is used by redirection to a script)");
+moreprint("-checksum get a 1-level checksum, useful for comparing ");
+moreprint("hierarchically organized folders.");
+moreprint("-summary show only GLOBAL (fast manual compare of directories)");
+moreprint("-forcezfs force .zfs path (DEFAULT: skip)");
+moreprint("");
+moreprint("New command dir (dir)");
+moreprint("If there's one thing I hate about UNIX and Linux in general ");
+moreprint("it's the ls command, because it do not show the cumulative filesize (!)");
+moreprint("as the Windows' dir.");
+moreprint("How big is folder c:\\z, with subdirs?");
+moreprint("zpaqfranz dir c:\\z /s -n 1 ");
+moreprint("zpaqfranz dir c:\\z /s |tail -2");
+moreprint("This is a kind of mini clone, to be used with a shell alias for convenience.");
+moreprint("Main switch are /s, /os, /on, /a, -n X like tail -n");
+moreprint("What is the largest file in the c:\\z directory");
+moreprint("(recursively)?");
+moreprint("zpaqfranz dir c:\\z /s /os ");
+moreprint("10 biggest file in c:\\z?");
+moreprint("zpaqfranz dir c:\\z /s /os -n 10");
+moreprint("Can also find duplicate files (-crc32 or -crc32c)");
+moreprint("just about like rar a -oi3:1 -r dummy s:\\");
+moreprint("100 biggest duplicate files in c:\\z?");
+moreprint("zpaqfranz dir c:\\z /s -crc32 -n 100");
+moreprint("");
+moreprint("");
+moreprint("New command i (info)");
+moreprint("Show the versions of a ZPAQ, just like (for zpaqfranz) l -all -comment");
+moreprint("with size (and comments, if any)");
+moreprint("zpaqfranz i z:\\1.zpaq");
+moreprint("");
+moreprint("");
+moreprint("New command utf (deal with strange filenames)");
+moreprint("Check (or sanitize) paths with non-latin chars and/or");
+moreprint(">260 length");
+moreprint("-dirlength X (set the 'fix')");
+moreprint("-filelength Y ");
+moreprint("-utf (sanitize filename)");
+moreprint("-fix255 (sanitize file length and filecase)");
+moreprint("-fixeml (sanitize .eml filenames)");
+moreprint("-kill (do the fix=> convert to latin)");
+moreprint("");
+moreprint("");
+moreprint("New command f (fill, or wipe)");
+moreprint("Fill (wipe) almost all disk space and check that data is well");
+moreprint("written, in chunks of 500MB (pseudorandum), onto the new");
+moreprint("ztempdir folder");
+moreprint("Two use: wipe (clear) the space with uncompressible data,");
+moreprint("check if disk-controller-system-RAM is working fine");
+moreprint("-verbose show write speed (useful to check speed consistency)");
+moreprint("-kill delete (after run) the temporary filename");
+moreprint("");
+moreprint("");
+moreprint("New command k (kill, risky!)");
+moreprint("kill (delete) all files and directories that arent in archive.");
+moreprint("remove the excess files");
+moreprint("example:");
+moreprint("zpaqfranz a z:\\1.zpaq c:\\z");
+moreprint("zpaqfranz x z:\\1.zpaq c:\\z -to z:\\knb");
+moreprint("... something happens in z:\\knb and we want to turn back to archive ...");
+moreprint("... WITHOUT delete everything and extract again ...");
+moreprint("zpaqfranz x z:\\1.zpaq c:\\z -to z:\\knb -force");
+moreprint("zpaqfranz k z:\\1.zpaq c:\\z -to z:\\knb");
+moreprint("");
+moreprint("");
+moreprint("New command/switches ");
+moreprint("During the automated executions, scripts can be launched ");
+moreprint("to send warnings (e.g. failure or OK)");
+moreprint("Instead of checking the resulting code in a script, ");
+moreprint("it runs a script or program directly");
+moreprint("-exec_ok fo.bat After OK launch fo.bat");
+moreprint("-exec_error kz  After NOT OK launch kz");
+moreprint("");
+moreprint("New commands / switches for help");
+moreprint("help           long help");
+moreprint("-h             long help");
+moreprint("-he            show examples");
+moreprint("-diff          differences against 7.15");
+moreprint("");
+moreprint("Various switches");
+moreprint("-summary        Retained for compatibility but changed: if >0 => show only summary");
+moreprint("-noeta          do not show ETA (for scripts)");
+moreprint("-pakka          concise new style output (10% updating)");
+moreprint("-verbose        not so concise :)");
+moreprint("-zfs            Skip path including .zfs (for ZFS snapshots)");
+moreprint("-forcezfs       Force paths including .zfs (win on -zfs)");
+moreprint("-noqnap         Skip path including @Recently-Snapshot and @Recycle");
+moreprint("-forcewindows   Take ACL and System Volume Information (default: NO on zpaqfranz)");
+moreprint("-xls            Do NOT always force XLS to be added");
+moreprint("-nopath         Do not store path");
+moreprint("-nosort         Do not sort file when adding or listing");
+moreprint("-find X         Search for X in full filename (ex. list)");
+moreprint("-replace    Y   Replace X with Y in full filename (ex. list)");
+moreprint("-n          X   Only print last X lines in dir (like tail)/first X (list)");
+moreprint("-limit      X   (like -n)");
+moreprint("-minsize    X   Skip files by length (add(), list(), dir())");
+moreprint("-maxsize    X   Skip files by length (add(), list(), dir())");
+moreprint("-filelength X   Utf command: find file with length>X, extract maxfilelen");
+moreprint("-dirlength  X   Utf command: find dirs with length>X, extract maxdirlen");
+moreprint("-comment foo    Add/find ASCII comment string to versions");
+moreprint("-vss            Do a VSS for drive C: (Windows with administrative rights)");
+moreprint("-crc32c         Use CRC32c");
+moreprint("-crc32          Use CRC32");
+moreprint("-xxhash         Use XXH3");
+moreprint("-sha256         Use SHA256");
+moreprint("-exec_ok fo.bat After OK launch fo.bat");
+moreprint("-exec_error kz  After NOT OK launch kz");
+moreprint("-kill           Show 'script-ready' log of dup files");
+moreprint("-kill           In extraction write 0-bytes file instead of data");
+moreprint("-utf            Remove non-utf8 chars");
+moreprint("-utf8           Like -utf");
+moreprint("-fix255         Shrink total file length and case collisions (NTFS)");
+moreprint("-fixeml         Heuristically compress .eml filenames (Fwd Fwd Fwd =>Fwd)");
+moreprint("-flat           Everything in single path (emergency extract of strange files)");
+moreprint("-debug          Show lot of infos (superverbose)");
+
 	
 	exit(1);
 }
@@ -13080,7 +13376,8 @@ moreprint("  -verify         Force re-read of file during t (test command) or c"
 moreprint("  -noeta          Do not show ETA");
 moreprint("  -pakka          Output for PAKKA (briefly)");
 moreprint("  -verbose        Show excluded file");
-moreprint("  -zfs            Skip path including .zfs");
+moreprint("  -zfs            Skip paths including .zfs");
+moreprint("  -forcezfs       Force paths including .zfs");
 moreprint("  -noqnap         Skip path including @Recently-Snapshot and @Recycle");
 moreprint("  -forcewindows   Take $DATA$ and System Volume Information");
 moreprint("  -xls            Do NOT always force XLS");
@@ -13112,7 +13409,8 @@ moreprint("  -fix255         Shrink total file length and case collisions (NTFS)
 moreprint("  -fixeml         Heuristically compress .eml filenames (Fwd Fwd Fwd =>Fwd)");
 moreprint("  -flat           Everything in single path (emergency extract of strange files)");
 moreprint("  -debug          Show lot of infos (superverbose)");
-
+moreprint("  -timestamp X    Set version datetime@X 14 digit (2021-12-30_01:03:04)"); 	// force the timestamp
+	
 moreprint("\n");
 moreprint("  ########## Advanced commands ###########");
 moreprint("   p              Paranoid test. Use lots (LOTS!) of RAM (-verify -verbose)");
@@ -14345,6 +14643,103 @@ inline char* tohuman4(uint64_t i_bytes)
 }
 
 
+int64_t encodestringdate(string i_date)
+{
+	string purged;
+	for (int i=0;i<i_date.length();i++)
+		if (isdigit(i_date[i]))
+			purged+=i_date[i];
+	
+	if (purged.length()!=14)
+	{
+		printf("106: datelength !=14\n");
+		return -1;
+	}
+	for (int i=0;i<=13;i++)
+		if (!isdigit(purged[i]))
+		{
+			printf("107: date[%d] not idigit\n",i);
+			return -1;
+		}
+		
+	int year=std::stoi(purged.substr(0,4));
+	int month=std::stoi(purged.substr(4,2));
+	int day=std::stoi(purged.substr(6,2));
+	
+	int hour=std::stoi(purged.substr(8,2));
+	int minute=std::stoi(purged.substr(10,2));
+	int second=std::stoi(purged.substr(12,2));
+	if (flagdebug)
+		printf("14669: date   %04d-%02d-%02d %02d:%02d:%02d\n",year,month,day,hour,minute,second);
+	if ((year<1970) || (year>2070))
+	{
+		printf("108: year not from 1970 to 2070\n");
+		return -1;
+	}
+	if ((month<1) || (month>12))
+	{
+		printf("136: month not in 1 to 12\n");
+		return -1;
+	}
+	if ((day<1) || (day>31))
+	{
+		printf("141: day not in 1 to 31\n");
+		return -1;
+	}
+	
+	if (hour>24)
+	{
+		printf("147: hour >24\n");
+		return -1;
+	}
+	if (minute>60)
+	{
+		printf("152: minute >60\n");
+		return -1;
+	}	
+	if (second>60)
+	{
+		printf("157: second >60\n");
+		return -1;
+	}	
+		
+	bool isleap= (((year % 4 == 0) &&
+         (year % 100 != 0)) ||
+         (year % 400 == 0));
+		
+
+    if (month == 2)
+    {
+        if (isleap)
+		{
+			if (!(day <=29))
+			{
+				printf("180: leap year, feb must be <=29\n");
+				return -1;
+			}
+		}
+        else
+			if (!(day <=28))
+			{
+				printf("187: NO leap year, feb must be <=28\n");
+				return -1;
+			}
+    }
+ 
+    if ((month==4) || (month==6) || (month==9) || (month==11))
+		if (!(day <= 30))
+		{
+			printf("195: month cannot have more than 30 days\n");
+			return -1;
+		}
+	return year*10000000000LL
+		+month*100000000LL //mese
+		+day*1000000				// giorno
+	  
+		+hour*10000 // ore
+		+minute*100	// minuti
+		+second;		// secondi
+}
 
 
 
@@ -14466,6 +14861,9 @@ int Jidac::doCommand(int argc, const char** argv) {
   date=(t->tm_year+1900)*10000000000LL+(t->tm_mon+1)*100000000LL
       +t->tm_mday*1000000+t->tm_hour*10000+t->tm_min*100+t->tm_sec;
 
+
+	
+ 
   // Get optional options
   for (int i=1; i<argc; ++i) {
     const string opt=argv[i];  // read command
@@ -14497,7 +14895,22 @@ int Jidac::doCommand(int argc, const char** argv) {
 			files.push_back(argv[i]);
                 i--;
 	}
-
+	else if (opt=="-timestamp") 	// force the timestamp
+	{
+		if (i+1<argc)
+			if (strlen(argv[i+1])>=1)
+			{
+				string mytimestamp=argv[i+1];
+				i++;
+				int64_t newdate=encodestringdate(mytimestamp);
+				if (newdate!=-1)
+				{
+					printf("-timestamp change from %s => %s\n",dateToString(date).c_str(),dateToString(newdate).c_str());
+					date=newdate;
+				}
+			}
+	}
+	
 	else if ((opt=="f") || (opt=="c") || (opt=="s") || (opt=="utf"))
 	{
 		command=opt[0];
@@ -14612,6 +15025,7 @@ int Jidac::doCommand(int argc, const char** argv) {
    	}		
 	else if (opt=="-test") flagtest=true;
     else if (opt=="-zfs") flagskipzfs=true;
+    else if (opt=="-forcezfs") flagforcezfs=true;
     else if (opt=="-xls") flagdonotforcexls=true;
     else if (opt=="-verbose") flagverbose=true;
     else if (opt=="-debug") flagdebug=true;
@@ -14750,6 +15164,11 @@ int Jidac::doCommand(int argc, const char** argv) {
 	if (menoenne)
 			printf("franz: -n / -limit %u\n",menoenne);
 			
+	if (flagforcezfs)
+	{
+			printf("franz:force ZFS on (-forcezfs)\n");
+			flagskipzfs=false;
+	}
   	if (flagskipzfs)
 			printf("franz:SKIP ZFS on (-zfs)\n");
 	
@@ -15344,13 +15763,15 @@ endblock:;
 bool Jidac::isselected(const char* filename, bool rn,int64_t i_size) 
 {
 	bool matched=true;
-    if (flagskipzfs) //this is an "automagically" exclude for zfs' snapshots
-		if (iszfs(filename))
-		{
-			if (flagverbose)
-				printf("Verbose: Skip .zfs %s\n",filename);
-			return false;
-		}
+	
+	if (!flagforcezfs)
+		if (flagskipzfs) //this is an "automagically" exclude for zfs' snapshots
+			if (iszfs(filename))
+			{
+				if (flagverbose)
+					printf("Verbose: Skip .zfs %s\n",filename);
+				return false;
+			}
 
 	if (flagnoqnap) //this is an "automagically" exclude for qnap's snapshots
 		if (
@@ -15458,14 +15879,14 @@ void Jidac::scandir(bool i_checkifselected,DTMap& i_edt,string filename, bool i_
     if (ispath(notfiles[i].c_str(), filename.c_str()))
       return;
 
-	  
-	if (flagskipzfs)
-		if (iszfs(filename))
-		{
-			if (flagverbose)
-				printf("Verbose: Skip .zfs ----> %s\n",filename.c_str());
-			return;
-		}
+	if (!flagforcezfs)
+		if (flagskipzfs)
+			if (iszfs(filename))
+			{
+				if (flagverbose)
+					printf("Verbose: Skip .zfs ----> %s\n",filename.c_str());
+				return;
+			}
 	if (flagnoqnap)
 	{
 		if (filename.find("@Recently-Snapshot")!=std::string::npos)
@@ -16792,7 +17213,7 @@ int Jidac::add()
     out.close();
     return errors>0;
   }  // end if streaming
-
+///fik
   // Adjust date to maintain sequential order
   if (ver.size() && ver.back().lastdate>=date) {
     const int64_t newdate=decimal_time(unix_time(ver.back().lastdate)+1);
@@ -24688,7 +25109,8 @@ int Jidac::summa()
 	if (!flagpakka)
 	{
 		printf("Getting %s",mygetalgo().c_str());
-		printf(" ignoring .zfs and :$DATA\n");
+		if (!flagforcezfs)
+			printf(" ignoring .zfs and :$DATA\n");
 	}
 
 	int quantifiles			=0;
@@ -24828,7 +25250,6 @@ int Jidac::summa()
 	for (unsigned i=0; i<files.size(); ++i)
 		scandir(true,edt,files[i].c_str());
 
-	
 
 	if (flagverify)
 	{
@@ -29671,8 +30092,9 @@ void myaddfile(uint32_t i_tnumber,DTMap& i_edt,string i_filename, int64_t i_date
 	if (isads(i_filename))
 		return;
 		
-	if (iszfs(i_filename))
-		return;
+	if (!flagforcezfs)
+		if (iszfs(i_filename))
+			return;
 		
 	int64_t dummy;
 	DT& d=i_edt[i_filename];
@@ -29742,12 +30164,13 @@ void myscandir(uint32_t i_tnumber,DTMap& i_edt,string filename, bool i_recursive
 		return;
 	}
 	
-	if (iszfs(filename))
-	{
-		if (flagverbose)
-			printf("Skip .zfs ----> %s\n",filename.c_str());
-		return;
-	}
+	if (!flagforcezfs)
+		if (iszfs(filename))
+		{
+			if (flagverbose)
+				printf("Skip .zfs ----> %s\n",filename.c_str());
+			return;
+		}
 	
 #ifdef unix
 // Add regular files and directories
@@ -29888,14 +30311,17 @@ int Jidac::dircompare(bool i_flagonlysize)
 	int risultato=0;
 	
 	if (i_flagonlysize)
-		printf("Get directory size, ignoring .zfs and :$DATA\n");
+		printf("Get directory size ");
 	else
 	{
-		printf("Dir compare (%s dirs to be checked), ignoring .zfs and :$DATA\n",migliaia(files.size()));
+		printf("Dir compare (%s dirs to be checked) ",migliaia(files.size()));
 		if (files.size()<2)
 			error("At least two directories required\n");
 	}
 	
+	if (!flagforcezfs)
+		printf(" ignoring .zfs and :$DATA\n");
+
 	for (unsigned i=0; i<files.size(); ++i)
 		if (!isdirectory(files[i]))
 			files[i]+='/';
@@ -30030,6 +30456,8 @@ int Jidac::dircompare(bool i_flagonlysize)
 		g_arraybytescanned.push_back(0);
 		g_arrayfilescanned.push_back(0);
 	
+	
+		
 		for (unsigned i=0; i<files.size(); ++i)
 		{
 			DTMap myblock;
@@ -30037,6 +30465,9 @@ int Jidac::dircompare(bool i_flagonlysize)
 			print_datetime();
 			printf("Scan dir <<%s>>\n",files[i].c_str());
 			uint64_t blockstart=mtime();
+			
+			///printf("###############################scannati per %d\n",files.size());
+	
 			myscandir(i,myblock,files[i].c_str(),true,flagverify);
 			
 			uint64_t sizeofdir=0;

@@ -5,7 +5,7 @@
 ///////// https://github.com/fcorbelli/zpaqfranz
 ///////// https://sourceforge.net/projects/zpaqfranz/
 
-#define ZPAQ_VERSION "51.30-experimental"
+#define ZPAQ_VERSION "51.31-experimental"
 #define FRANZOFFSET 	50
 #define FRANZMAXPATH 	240
 
@@ -9683,6 +9683,7 @@ private:
 
 // Global variables
 int64_t global_start=0;  	// set to mtime() at start of main()
+bool flag715;
 bool flagforcezfs;
 bool flagdebug; // very verbose output
 bool flagnoeta;					// -noeta (do not show ETA, for batch file)
@@ -13185,6 +13186,7 @@ moreprint("-he            show examples");
 moreprint("-diff          differences against 7.15");
 moreprint("");
 moreprint("Various switches");
+moreprint("-715            Create file just about like v7.15");
 moreprint("-summary        Retained for compatibility but changed: if >0 => show only summary");
 moreprint("-noeta          do not show ETA (for scripts)");
 moreprint("-pakka          concise new style output (10% updating)");
@@ -13420,6 +13422,7 @@ moreprint("  -index F        Extract: create index F for archive");
 moreprint("                  Add: create suffix for archive indexed by F, update F");
 moreprint("  -sN -summary N  If >0 show only summary (sha1())");
 moreprint("  ########## franz's fork ###########");
+moreprint("  -715            Works just about like v7.15");
 moreprint("  -checksum       Store SHA1+CRC32 for every file");
 moreprint("  -verify         Force re-read of file during t (test command) or c");
 moreprint("  -noeta          Do not show ETA");
@@ -15075,6 +15078,7 @@ int Jidac::doCommand(int argc, const char** argv) {
 	else if (opt=="-test") flagtest=true;
     else if (opt=="-zfs") flagskipzfs=true;
     else if (opt=="-forcezfs") flagforcezfs=true;
+    else if (opt=="-715") flag715=true;
     else if (opt=="-xls") flagdonotforcexls=true;
     else if (opt=="-verbose") flagverbose=true;
     else if (opt=="-debug") flagdebug=true;
@@ -15221,6 +15225,9 @@ int Jidac::doCommand(int argc, const char** argv) {
   	if (flagskipzfs)
 			printf("franz:SKIP ZFS on (-zfs)\n");
 	
+	if (flag715)
+			printf("franz:mode 715 activated (-715)\n");
+	
 	if (flagnoqnap)
 			printf("franz:Exclude QNAP snap & trash (-noqnap)\n");
 
@@ -15333,6 +15340,18 @@ int Jidac::doCommand(int argc, const char** argv) {
 ///broken XP parser    printf("Alternate streams not supported in Windows XP.\n");
 #endif
 
+	if (flag715)
+	{
+		printf("**** Activated V7.15 mode ****\n");
+		flagforcewindows=true;
+		flagcrc32=false;
+		flagchecksum=false;
+		flagforcezfs=true;
+		flagdonotforcexls=true;
+	}
+
+
+
   // Execute command
   if (command=='a' && files.size()>0) 
   {
@@ -15422,6 +15441,7 @@ int64_t Jidac::read_archive(const char* arc, int *errors, int i_myappend) {
   const bool renamed=command=='l' || command=='a';
 
 	int toolongfilenames=0;
+	int adsfilenames=0;
 	int utf8names=0;
 	int casecollision=0;
 	/*
@@ -15623,6 +15643,9 @@ int64_t Jidac::read_archive(const char* arc, int *errors, int i_myappend) {
 /// OK let's do some check on filenames (slow down, but sometimes save the day)
 
 		
+					if (strstr(fn.c_str(), ":$DATA"))
+						adsfilenames++;
+		
 					if (fn.length()>255)
 						toolongfilenames++;
 					
@@ -15785,6 +15808,8 @@ endblock:;
 	}
 	if (utf8names)
 		printf("Non-latin (UTF-8)     %9s\n",migliaia(utf8names));
+	if (adsfilenames)
+		printf("ADS ($:DATA)          %9s\n",migliaia(adsfilenames));
 	
   // Calculate file sizes
 	for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p) 
@@ -16803,13 +16828,14 @@ void Jidac::writefranzattr(libzpaq::StringBuffer& i_sb, uint64_t i_data, unsigne
 		
 	}
 	else
-	if (flagcrc32)
+	if ((flagcrc32) || (flag715))
 	{
 // with add -crc32 turn off, going back to 7.15 behaviour
 		write715attr(i_sb,i_data,i_quanti);
 	}
 	else
 	{
+			
 //	OK, we only write the CRC-32 from ZPAQ fragments (file integrity, not file check)
 		memset(i_sha1,0,FRANZOFFSET);
 		sprintf(i_sha1+41,"%08X",i_crc32);
@@ -17106,6 +17132,11 @@ int Jidac::add()
   int64_t total_done=0;  // input deduped so far
   int64_t total_xls=0;
   int64_t file_xls=0;
+
+	int toolongfilenames=0;
+	int adsfilenames=0;
+	int utf8names=0;
+	int casecollision=0;
   
   for (DTMap::iterator p=edt.begin(); p!=edt.end(); ++p) {
 		///printf("testo %s\n",p->first.c_str());
@@ -17113,6 +17144,14 @@ int Jidac::add()
 	string filename=rename(p->first);
 	
 	
+	if (strstr(filename.c_str(), ":$DATA"))
+		adsfilenames++;
+		
+	if (filename.length()>255)
+		toolongfilenames++;
+					
+	if (filename!=utf8toansi(filename))
+		utf8names++;
 
 	/// by default ALWAYS force XLS to be re-packed
 	/// this is because sometimes Excel change the metadata (then SHA1 & CRC32)
@@ -17180,6 +17219,7 @@ int Jidac::add()
   ThreadID wid;
   CompressJob job(howmanythreads, tid.size(), &out);
 
+	
   printf("Adding %s (%s) in %s files ",migliaia(total_size), tohuman(total_size),migliaia2(int(vf.size())));
 	
 	if (flagverbose)
@@ -17192,6 +17232,25 @@ int Jidac::add()
 		if (versioncomment.length()>0)
 			printf("<<%s>>",versioncomment.c_str());
 	printf("\n");
+
+
+
+if (casecollision>0)
+		printf("Case collisions       %9s (-fix255)\n",migliaia(casecollision));
+	if (toolongfilenames)
+	{
+#ifdef _WIN32	
+	printf("Long filenames (>255) %9s *** WARNING *** (-fix255)\n",migliaia(toolongfilenames));
+#else
+	printf("Long filenames (>255) %9s\n",migliaia(toolongfilenames));
+#endif
+
+	}
+	if (utf8names)
+		printf("Non-latin (UTF-8)     %9s\n",migliaia(utf8names));
+	if (adsfilenames)
+		printf("ADS ($:DATA)          %9s\n",migliaia(adsfilenames));
+
 
   for (unsigned i=0; i<tid.size(); ++i) run(tid[i], compressThread, &job);
   run(wid, writeThread, &job);
@@ -29349,7 +29408,8 @@ int Jidac::test()
       }
     }
   }
-  if (errors>0) {
+  if (errors>0) 
+  {
     fflush(stdout);
     fprintf(stderr,
         "\nChecked %u of %u files OK (%u errors)"
@@ -29357,7 +29417,10 @@ int Jidac::test()
         extracted-errors, extracted, errors, job.maxMemory/1000000,
         int(tid.size()));
   }
-  
+  else
+  {
+	printf("No error detected in first stage (standard 7.15), now try CRC-32 (if present)\n");
+  }
 //// OK now check against CRC32   
 
 	uint64_t startverify=mtime();
@@ -29564,10 +29627,10 @@ int Jidac::test()
 	printf("Total  %19s speed %s/sec\n",migliaia(dalavorare+zeroedblocks),migliaia2((dalavorare+zeroedblocks)/((mtime()-startverify+1)/1000.0)));
 	
 	if (checkedfiles>0)
-	printf("Checked   files %19s (zpaqfranz)\n",migliaia(checkedfiles));
+	printf("Checked : %08d (zpaqfranz)\n",checkedfiles);
 	if (uncheckedfiles>0)
 	{
-		printf("UNchecked files %19s (zpaq 7.15)\n",migliaia(uncheckedfiles));
+	printf("UNcheck : %08d (zpaq 7.15)\n",uncheckedfiles);
 		status_0=uncheckedfiles;
 	}
 	
@@ -29576,7 +29639,7 @@ int Jidac::test()
 	printf("ERRORS  : %08d (ERROR:  something WRONG)\n",status_e);
 	
 	if (status_0)
-	printf("WARNING : %08d (UNKNOWN:cannot verify)\n",status_0);
+	printf("WARNING : %08d (Cannot say anything)\n",status_0);
 	
 	if (status_1)
 	printf("GOOD    : %08d of %08d (stored=decompressed)\n",status_1,total_files);
@@ -29587,7 +29650,7 @@ int Jidac::test()
 	if (status_e==0)
 	{
 		if (status_0)
-			printf("Unknown (cannot say anything)\n");
+			printf("Verdict: unknown   (cannot say anything)\n");
 		else
 		{
 			if (flagverify)

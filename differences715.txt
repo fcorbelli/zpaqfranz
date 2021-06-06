@@ -1,6 +1,6 @@
-zpaqfranz v51.29-experimental snapshot archiver, compiled Jun  4 2021
+zpaqfranz v51.31-experimental snapshot archiver, compiled Jun  4 2021
 Key differences from ZPAQ 7.15 and zpaqfranz
-@2021-06-03
+@2021-06-06
 
 
 First goal: doveryay, no proveryay (trust, but verify).
@@ -320,6 +320,7 @@ help           long help
 -diff          differences against 7.15
 
 Various switches
+-715            Works just about like v7.15
 -summary        Retained for compatibility but changed: if >0 => show only summary
 -noeta          do not show ETA (for scripts)
 -pakka          concise new style output (10% updating)

@@ -1,7 +1,7 @@
 ## This is zpaqfranz, a patched  but (maybe) compatible fork of ZPAQ version 7.15 
 (http://mattmahoney.net/dc/zpaq.html)
 
-# An archiver, just like 7z or RAR style to understand, with the ability to maintain a sort of "snapshot" of the data.
+## An archiver, just like 7z or RAR style to understand, with the ability to maintain a sort of "snapshot" of the data.
 
 At every run only data changed since the last execution will be added, creating a new version (just like a snapshot).
 It is then possible to restore the data @ the single version.

@@ -429,7 +429,9 @@ versus ~200GB (yes, 200GB) with zpaq.
 
 Same things for virtual machines (vmdks)
 
-Obviously this is not magic, it is simply the "chaining" of a block deduplicator with a compressor and an archiver.
+**Too good to be true**
+
+Obviously this is not "magic", it is simply the "chaining" of a block deduplicator with a compressor and an archiver.
 There are faster compressors.
 There are better compressors.
 There are faster archivers.
@@ -440,7 +442,7 @@ But what I have never found is a combination of these that is simple to use and 
 This is the key: you don't have to use tar | srep | zstd | something hoping that everything will runs file, but a single 1MB executable, with 7z-like commands
 
 There are also many great features for backup, I mention only the greatest.
-The ZPAQ file is in addition, it is never modified
+**The ZPAQ file is "in addition", it is never modified**
 
 So rsync --append will copy only the portion actually added, for example on ssh tunnel to a remote server, or local NAS (QNAP etc) with tiny times.
 
@@ -448,21 +450,23 @@ You don't have to copy or synchronize let's say 700GB of tar.gz,7z or whatever, 
 
 This opens up the concrete possibility of using VDSL connections (upload ~ 2/4MB /s) to backup even virtual servers of hundreds of gigabytes in a few minutes.
 
-Bonus: for a developer it's just like a "super-git-versioning".
+**Bonus: for a developer it's just like a "super-git-versioning"**
+
 In the makefile just put at top a zpaq-save-everything and you will keep all the versions of your software, even with libraries, SQL dump etc.
 A single archive keeps everything, forever, with just one command (or two, for verify)
     
 **Defects?**
+
 Some.
 
-The main one is that the listing of files is not very fast, when there are many versions (thousands), due to the structure of the archiver-file-format.
-I could get rid of it, but at the cost of breaking the backward compatibility of the file format, so I don't want to.
+The main one is that the listing of files is not very fast, when there are many versions (thousands), due to the structure of the archiver-file-format. 
+*I could get rid of it, but at the cost of breaking the backward compatibility of the file format, so I don't want to.*
 
 It is not the fastest tool out there, with real world performance of 80-200MB/s (depending on the case and HW of course).
-Not a big deal for me (I have very powerful HW, and/or run nightly cron-tasks)
+*Not a big deal for me (I have very powerful HW, and/or run nightly cron-tasks)*
 
 Extraction can require a number of seeks (due to various deduplicated blocks), which can slow down extraction on magnetic disks (but not on SSDs).
-In theory it would be possible to eliminate, but the work is huge and, frankly, I rarely use magnetic discs
+*In theory it would be possible to eliminate, but the work is huge and, frankly, I rarely use magnetic discs*
 
 No other significant ones come to mind, except that it is known and used by few
 

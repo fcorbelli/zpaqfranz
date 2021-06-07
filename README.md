@@ -54,7 +54,7 @@ As the Russians say, trust me, but check.
 **Archiving data requires safety. How can I be sure that I can then extract them without problems?**
 
 It is precisely the portion of the program that I have evolved, implementing a barrage of controls up to the paranoid level, and more.
-I don't think to talk about it now (too long, I should put the link to the Russian forum), but let's say there are verification mechanisms which you have probably never seen.
+I don't think to talk about it now (too long... read the source!), but let's say there are verification mechanisms which you have probably never seen.
 
 **I do not trust you, but I am becoming curious. So?**
 

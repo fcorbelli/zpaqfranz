@@ -14,7 +14,7 @@ Allows rsync copies to the cloud with minimal data transfer and encryption: nigh
 Multiple possibilities of data verification, fast, advanced and even paranoid.
 And much more.
 A GUI (PAKKA) is available on Windows to make extraction easier.
-##To date, there is no software, free or paid, that matches this characteristics.##
+## To date, there is no software, free or paid, that matches this characteristics
 10+ years of developing (2009-now).
 
 

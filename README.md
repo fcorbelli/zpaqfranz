@@ -6,6 +6,16 @@
 At every run only data changed since the last execution will be added, creating a new version (just like a snapshot).
 It is then possible to restore the data @ the single version.
 It shouldn't be difficult to understand its enormous potential, especially for those used to snapshots (by zfs or virtual machines).
+Keeps a forever-to-ever copy (even thousands of versions) of your files, conceptually similar to MAC's time machines, 
+but much more efficiently.
+Ideal for virtual machine disk storage (ex vmdk).
+Easily handles millions of files and tens of TBs of data.
+Allows rsync copies to the cloud with minimal data transfer and encryption: nightly copies with simple FTTC (1-2MB/s upload bandwith) of archives of hundreds of gigabytes.
+Multiple possibilities of data verification, fast, advanced and even paranoid.
+A GUI (PAKKA) is available on Windows to make extraction easier.
+To date, there is no software, free or paid, that matches its characteristics.
+10+ years of developing (2009-now).
+
 
 **Who did that?**
 

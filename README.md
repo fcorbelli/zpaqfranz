@@ -429,7 +429,7 @@ versus ~200GB (yes, 200GB) with zpaq.
 
 Same things for virtual machines (vmdks)
 
-##Too good to be true?##
+## Too good to be true? ##
 
 Obviously this is not "magic", it is simply the "chaining" of a block deduplicator with a compressor and an archiver.
 There are faster compressors.

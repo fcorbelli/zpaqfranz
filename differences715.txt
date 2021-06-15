@@ -1,6 +1,6 @@
 zpaqfranz v51.31-experimental snapshot archiver, compiled Jun  4 2021
 Key differences from ZPAQ 7.15 and zpaqfranz
-@2021-06-06
+@2021-06-15
 
 
 First goal: doveryay, no proveryay (trust, but verify).
@@ -304,6 +304,12 @@ zpaqfranz x z:\1.zpaq c:\z -to z:\knb
 zpaqfranz x z:\1.zpaq c:\z -to z:\knb -force
 zpaqfranz k z:\1.zpaq c:\z -to z:\knb
 
+New command r (robocopy)
+r d0 d1 d2... Mirror d0 in d1,d2... just like robocopy /mir
+-kill     wet run (default: dry-run
+-all      run one thread for folder
+-verify   after copy quick check if OK
+-checksum heavy (hash) check -xxhash...
 
 New command/switches 
 During the automated executions, scripts can be launched 

@@ -5,7 +5,7 @@
 ///////// https://github.com/fcorbelli/zpaqfranz
 ///////// https://sourceforge.net/projects/zpaqfranz/
 
-#define ZPAQ_VERSION "51.31-experimental"
+#define ZPAQ_VERSION "51.32-experimental"
 #define FRANZOFFSET 	50
 #define FRANZMAXPATH 	240
 
@@ -1137,6 +1137,11 @@ void Array<T>::resize(size_t sz, int ex) {
   data=(T*)((char*)data+offset);
 }
 
+
+
+
+
+
 //////////////////////////// SHA1 ////////////////////////////
 
 // For computing SHA-1 checksums
@@ -1160,6 +1165,9 @@ private:
   U32 w[16];        // input buffer
   char hbuf[20];    // result
   void process();   // hash 1 block
+  
+	uint64_t _wyp[4];
+
 };
 
 //////////////////////////// SHA256 //////////////////////////
@@ -1830,6 +1838,8 @@ void SHA1::init() {
   h[3]=0x10325476;
   h[4]=0xC3D2E1F0;
   memset(w, 0, sizeof(w));
+  
+///	make_secret(345,_wyp);
 }
 
 // Return old result and start a new hash
@@ -1877,6 +1887,8 @@ void SHA1::write(const char* buf, int64_t n) {
 
 // Hash 1 block of 64 bytes
 void SHA1::process() {
+	
+
   U32 a=h[0], b=h[1], c=h[2], d=h[3], e=h[4];
   static const U32 k[4]={0x5A827999, 0x6ED9EBA1, 0x8F1BBCDC, 0xCA62C1D6};
   #define f(a,b,c,d,e,i) \
@@ -9555,7 +9567,7 @@ string g_exec_text;
 
 
 
-enum ealgoritmi		{ ALGO_SIZE,ALGO_SHA1,ALGO_CRC32C,ALGO_CRC32,ALGO_XXHASH,ALGO_SHA256,ALGO_LAST };
+enum ealgoritmi		{ ALGO_SIZE,ALGO_SHA1,ALGO_CRC32C,ALGO_CRC32,ALGO_XXHASH,ALGO_SHA256,ALGO_WYHASH,ALGO_LAST };
 typedef std::map<int,std::string> algoritmi;
 const algoritmi::value_type rawData[] = {
    algoritmi::value_type(ALGO_SIZE,"Size"),
@@ -9564,6 +9576,7 @@ const algoritmi::value_type rawData[] = {
    algoritmi::value_type(ALGO_CRC32C,"CRC-32C"),
    algoritmi::value_type(ALGO_XXHASH,"XXH3"),
    algoritmi::value_type(ALGO_SHA256,"SHA256"),
+   algoritmi::value_type(ALGO_WYHASH,"WYHASH"),
 };
 const int numElems = sizeof rawData / sizeof rawData[0];
 algoritmi myalgoritmi(rawData, rawData + numElems);
@@ -9683,6 +9696,7 @@ private:
 
 // Global variables
 int64_t global_start=0;  	// set to mtime() at start of main()
+
 bool flag715;
 bool flagforcezfs;
 bool flagdebug; // very verbose output
@@ -9701,7 +9715,7 @@ bool flagfixeml;
   bool flagxxhash;			// flag use XXH3
   bool flagcrc32;			// flag use CRC32
   bool flagsha256;			// use SHA256
- 
+ bool flagwyhash;
 int64_t g_dimensione=0;
 int64_t g_scritti=0;// note: not thread safe, but who care?
 int64_t g_zerotime=0;
@@ -9995,7 +10009,7 @@ std::wstring GetFullPathNameX(const std::wstring &path)
     return std::wstring(&buffer[0], &buffer[length]);
 }
 
-// Code from https://gist.github.com/nu774/10381075 and Milo's ÅÑ zpaq plugin.
+// Code from https://gist.github.com/nu774/10381075 and Milo's Å‘ zpaq plugin.
 std::wstring make_long_path(const char* filename) {
 
   if (strlen(filename) > 2 && filename[0] == '/' && filename[1] == '/' && filename[2] == '?')
@@ -10012,7 +10026,6 @@ std::wstring make_long_path(const char* filename) {
 // Open file. Only modes "rb", "wb", "rb+" and "wb+" are supported.
 FP fopen(const char* filename, MODE mode) {
   assert(filename);
-
   DWORD access=0;
   if (mode!=WB) access=GENERIC_READ;
   if (mode!=RB) access|=GENERIC_WRITE;
@@ -10088,6 +10101,23 @@ FILE* freadopen(const char* i_filename)
 	return myfp;
 }
 
+FILE* fwriteopen(const char* i_filename)
+{
+#ifdef _WIN32
+	wstring widename=utow(i_filename);
+	FILE* myfp=_wfopen(widename.c_str(), L"wb" );
+#else
+	FILE* myfp=fopen(i_filename, "wb" );
+#endif
+	if (myfp==NULL)
+	{
+		printf( "\nfwriteopen cannot open:");
+		printUTF8(i_filename);
+		printf("\n");
+		return 0;
+	}
+	return myfp;
+}
 
 /////////////////// calculate CRC32 
 
@@ -11846,6 +11876,8 @@ bool delete_file(const char* filename) {
 #ifdef unix
   return remove(filename)==0;
 #else
+	SetFileAttributes(utow(filename).c_str(),FILE_ATTRIBUTE_NORMAL);
+			
   return DeleteFile(utow(filename).c_str());
 #endif
 }
@@ -12708,7 +12740,8 @@ private:
 	int fillami();							// media check
 	void usage();        					// help
 	int dir();								// Windows-like dir command
-	int dircompare(bool i_flagonlysize);
+	int robocopy();
+	int dircompare(bool i_flagonlysize,bool i_flagrobocopy);
 	void printsanitizeflags();
 
   // Support functions
@@ -12866,7 +12899,7 @@ void moreprint(const char* i_stringa)
 void Jidac::differences() 
 {
 moreprint("Key differences from ZPAQ 7.15 and zpaqfranz");
-moreprint("@2021-06-03");
+moreprint("@2021-06-15");
 moreprint("");
 moreprint("");
 moreprint("First goal: doveryay, no proveryay (trust, but verify).");
@@ -13170,7 +13203,15 @@ moreprint("... WITHOUT delete everything and extract again ...");
 moreprint("zpaqfranz x z:\\1.zpaq c:\\z -to z:\\knb -force");
 moreprint("zpaqfranz k z:\\1.zpaq c:\\z -to z:\\knb");
 moreprint("");
+moreprint("New command r (robocopy)");
+moreprint("r d0 d1 d2... Mirror d0 in d1,d2... just like robocopy /mir");
+moreprint("-kill     wet run (default: dry-run");
+moreprint("-all      run one thread for folder");
+moreprint("-verify   after copy quick check if OK");
+moreprint("-checksum heavy (hash) check -xxhash...");
 moreprint("");
+moreprint("");
+	
 moreprint("New command/switches ");
 moreprint("During the automated executions, scripts can be launched ");
 moreprint("to send warnings (e.g. failure or OK)");
@@ -13187,6 +13228,7 @@ moreprint("-diff          differences against 7.15");
 moreprint("");
 moreprint("Various switches");
 moreprint("-715            Create file just about like v7.15");
+moreprint("-checksum       Enable checksumming (default: SHA1)");
 moreprint("-summary        Retained for compatibility but changed: if >0 => show only summary");
 moreprint("-noeta          do not show ETA (for scripts)");
 moreprint("-pakka          concise new style output (10% updating)");
@@ -13381,8 +13423,9 @@ void Jidac::usage()
 	moreprint("   t             Fast test of most recent version of files (-verify -verbose)");
 	moreprint("   i             Show versions");
 	moreprint("Ausiliary commands:");
-	moreprint("   c d0 d1 d2... Compare dir d0 to d1,d2... (-all M/T scan -verify -xxhash...)");
+	moreprint("   c d0 d1 d2... Compare dir d0 to d1,d2... (-all M/T scan -checksum -xxhash...)");
 	moreprint("   s d0 d1 d2... Cumulative size (excluding .zfs) of d0,d1,d2 (-all M/T)");
+	moreprint("   r d0 d1 d2... Robocopy mode: mirror d0 in d1,d2 (-kill -verify -checksum -all -xxhash...");
 	moreprint("   f             Fill (wipe) almost all disk space and check (-verbose -kill)");
 	moreprint("   utf d0        Check/sanitize file/dirnames in d0 (-dirlength X -filelength Y -kill)");
 	moreprint("   sha1          Hash/dup (#HASH -all -kill -checksum -verify -summary)");
@@ -14698,7 +14741,7 @@ inline char* tohuman4(uint64_t i_bytes)
 int64_t encodestringdate(string i_date)
 {
 	string purged;
-	for (int i=0;i<i_date.length();i++)
+	for (unsigned int i=0;i<i_date.length();i++)
 		if (isdigit(i_date[i]))
 			purged+=i_date[i];
 	
@@ -14841,8 +14884,11 @@ int Jidac::doCommand(int argc, const char** argv) {
   flagxxhash=false;
   flagcrc32=false;
   flagsha256=false;
+  flagwyhash=false;
   flagdonotforcexls=false;
   flagcomment=false;
+  flag715=false;
+  
   howmanythreads=0; // 0 = auto-detect
   version=DEFAULT_VERSION;
   date=0;
@@ -14928,7 +14974,7 @@ int Jidac::doCommand(int argc, const char** argv) {
 				command='x';
 			if (opt=="test") 
 				command='t';
-	  
+			
 			archive=argv[++i];  // append ".zpaq" to archive if no extension
 			const char* slash=strrchr(argv[i], '/');
 			const char* dot=strrchr(slash ? slash : argv[i], '.');
@@ -14963,7 +15009,8 @@ int Jidac::doCommand(int argc, const char** argv) {
 			}
 	}
 	
-	else if ((opt=="f") || (opt=="c") || (opt=="s") || (opt=="utf"))
+	  
+	else if ((opt=="f") || (opt=="c") || (opt=="s") || (opt=="utf") || (opt=="r") || (opt=="robocopy"))
 	{
 		command=opt[0];
 		while (++i<argc && argv[i][0]!='-')
@@ -15089,6 +15136,7 @@ int Jidac::doCommand(int argc, const char** argv) {
     else if (opt=="-crc32c") flagcrc32c=true;
     else if (opt=="-xxhash") flagxxhash=true;
     else if (opt=="-sha256") flagsha256=true;
+    else if (opt=="-wyhash") flagwyhash=true;
     else if (opt=="-crc32") flagcrc32=true;
     else if (opt=="-verify") flagverify=true;
     else if (opt=="-kill") flagkill=true;
@@ -15198,110 +15246,125 @@ int Jidac::doCommand(int argc, const char** argv) {
   
 	if (!flagpakka)
 	{
-	if (g_exec_error!="")
-			printf("franz: exec_error %s\n",g_exec_error.c_str());
-	if (g_exec_ok!="")
-			printf("franz: exec_ok %s\n",g_exec_ok.c_str());
-	if (minsize)
-			printf("franz: minsize %s\n",migliaia(minsize));
-	if (maxsize)
-			printf("franz: maxsize %s\n",migliaia(maxsize));
-	if (dirlength)
-			printf("franz: dirlength %s\n",migliaia(dirlength));
-	if (filelength)
-			printf("franz: filelength %s\n",migliaia(filelength));
-	
-	if (summary>0)
-			printf("franz: summary %d\n",summary);
-	
-	if (menoenne)
-			printf("franz: -n / -limit %u\n",menoenne);
+		string franzparameters="";
+		
 			
 	if (flagforcezfs)
 	{
-			printf("franz:force ZFS on (-forcezfs)\n");
+			franzparameters+="force ZFS on (-forcezfs) ";
 			flagskipzfs=false;
 	}
   	if (flagskipzfs)
-			printf("franz:SKIP ZFS on (-zfs)\n");
+			franzparameters+="SKIP ZFS on (-zfs) ";
 	
 	if (flag715)
-			printf("franz:mode 715 activated (-715)\n");
+			franzparameters+="mode 715 activated (-715) " ;
 	
 	if (flagnoqnap)
-			printf("franz:Exclude QNAP snap & trash (-noqnap)\n");
+			franzparameters+="Exclude QNAP snap & trash (-noqnap) ";
 
 	if (flagforcewindows)
-			printf("franz:force  Windows stuff (-forcewindows)\n");
+			franzparameters+="Force Windows stuff (-forcewindows) ";
 
 	if (flagnopath)
-			printf("franz:Do not store path (-nopath)\n");
+			franzparameters+="Do not store path (-nopath) ";
 
 	if (flagnosort)
-			printf("franz:Do not sort files (-nosort)\n");
+			franzparameters+="Do not sort files (-nosort) ";
 
 	if (flagdonotforcexls)
-			printf("franz:Do not force XLS (-xls)\n");
+			franzparameters+="Do not force XLS (-xls) ";
 	
 	if (flagverbose)
-			printf("franz:VERBOSE list of files on (-verbose)\n");
+			franzparameters+="VERBOSE list of files on (-verbose) ";
 	
 	if (flagchecksum)
-			printf("franz:checksumming\n");
+			franzparameters+="checksumming (-checksum) ";
 	
 	if (flagcrc32c)
-			printf("franz:use CRC-32C\n");
+			franzparameters+="CRC-32C (-crc32c) ";
 	
 	if (flagcrc32)
-			printf("franz:use CRC32\n");
-	
+			franzparameters+="CRC-32 (-crc32) ";
+			
 	if (flagxxhash)
-			printf("franz:use xxhash\n");
+			franzparameters+="XXH3 (-xxhash) ";
 	
 	if (flagsha256)
-			printf("franz:use SHA256\n");
-	
+			franzparameters+="SHA256 (-sha256) ";
+			/*
+	if (flagwyhash)
+			printf("franz:wyhash\n");
+	*/
 	if (flagverify)
-			printf("franz:verify\n");
-	
+			franzparameters+="VERIFY (-verify) ";
+			
 	if (flagkill)
-			printf("franz:KILL!\n");
-	
+			franzparameters+="KILL! (-kill) ";
+			
 	if (flagutf)
-			printf("franz:utf filenames\n");
+			franzparameters+="flagutf (-utf / -utf8) ";
 	
 	if (flagfix255)
-			printf("franz:fix 255 filelength\n");
-	
+			franzparameters+="fix255 (-fix255) ";
+			
 	if (flagfixeml)
-			printf("franz:fix eml filenames\n");
+			franzparameters+="Fix eml filenames (-fixeml) ";
 	
 	if (flagflat)
-			printf("franz:extract with flat filenames\n");
-	
+			franzparameters+="Flat filenames (-flat) ";
+			
 	if (flagdebug)
-			printf("franz:DEBUG mode (very verbose)\n");
-	
-	if (searchfrom!="")
-			printf("franz:FIND    >>>>%s<<<<<\n",searchfrom.c_str());
+			franzparameters+="DEBUG very verbose (-debug) ";
 
-	if (replaceto!="")
-			printf("franz:REPLACE >>>>%s<<<<<\n",replaceto.c_str());
+	if (flagcomment)
+			franzparameters+="Use comment (-comment) ";
+
 #if defined(_WIN32) || defined(_WIN64)
-
 	if (flagvss)
 	{
-			printf("franz:VSS Volume Shadow Copy (-vss)\n");
+			franzparameters+=" VSS Volume Shadow Copy (-vss) ";
 			if (!isadmin())
 			{
-				printf("Impossible to run VSS: admin rights required\n");
+				printf("\nImpossible to run VSS: admin rights required\n");
 				return 2;
 			}
 			
 	}
-#endif
-	if (flagcomment)
-			printf("franz:use comment\n");
+#endif	
+	if (franzparameters!="")
+		printf("franz:%s\n",franzparameters.c_str());
+
+
+
+// OK, extended parameters
+
+	if (searchfrom!="")
+			printf("franz:find       <<%s>>\n",searchfrom.c_str());
+
+	if (replaceto!="")
+			printf("franz:replace    <<%s>>\n",replaceto.c_str());
+		if (g_exec_error!="")
+			printf("franz:exec_error <<%s>>\n",g_exec_error.c_str());
+		if (g_exec_ok!="")
+			printf("franz:exec_ok    <<%s>>\n",g_exec_ok.c_str());
+		if (minsize)
+			printf("franz:minsize    %s\n",migliaia(minsize));
+		if (maxsize)
+			printf("franz:maxsize    %s\n",migliaia(maxsize));
+		if (dirlength)
+			printf("franz:dirlength  %s\n",migliaia(dirlength));
+		if (filelength)
+			printf("franz:filelength %s\n",migliaia(filelength));
+		if (summary>0)
+			printf("franz:summary    %d\n",summary);
+		if (menoenne)
+			printf("franz:-n -limit  %u\n",menoenne);
+
+
+
+
+
 /*
 	if (versioncomment!="")
 			printf("franz: Version comment  >>>>%s<<<<<\n",versioncomment.c_str());
@@ -15362,7 +15425,9 @@ int Jidac::doCommand(int argc, const char** argv) {
 	  return add();
   }
   else if (command=='d') return dir();
-  else if (command=='c') return dircompare(false);
+  else if (command=='c') return dircompare(false,false);
+  else if (command=='s') return dircompare(true,false); 
+  else if (command=='r') return robocopy();
   else if (command=='x') return extract();
   else if (command=='i') return info();
   else if (command=='t') return test();
@@ -15371,7 +15436,6 @@ int Jidac::doCommand(int argc, const char** argv) {
   else if (command=='l') return list();
   else if (command=='k') return kill();
   else if (command=='u') return utf();
-  else if (command=='s') return dircompare(true); 
   else if (command=='1') return summa();
   else usage();
   
@@ -16618,6 +16682,40 @@ std::wstring utf8_to_utf16(const std::string& utf8)
 }
 
 
+/*
+
+uint64_t wyhash_calc_file(const char * i_filename,const int64_t i_inizio,const int64_t i_totali,int64_t& io_lavorati)
+{
+/// does not work, only for testing
+	FILE* myfile = freadopen(i_filename);
+	if(myfile==NULL )
+		return 0;
+		
+	char data[65536*16];
+    int got=0;
+	
+	uint64_t _wyp[4];
+	uint64_t hash=0;
+
+#if !defined(_WIN32) && !defined(_WIN64)
+	make_secret(345,_wyp);
+#endif
+	
+	while ((got=fread(data,sizeof(char),sizeof(data),myfile)) > 0) 
+	{
+#if !defined(_WIN32) 
+		hash=wyhash(data,got,hash,_wyp);
+#else
+///		hash=wyhash32(data,got,hash);
+#endif
+		io_lavorati+=got;	
+		if ((flagnoeta==false) && (i_inizio>0))
+			avanzamento(io_lavorati,i_totali,i_inizio);
+	}
+	fclose(myfile);
+	return hash;
+}
+*/
 std::string sha1_calc_file(const char * i_filename,const int64_t i_inizio,const int64_t i_totali,int64_t& io_lavorati)
 {
 	std::string risultato="";
@@ -18331,7 +18429,7 @@ ThreadReturn decompressThread(void* arg) {
 			if (!job.jd.flagtest && (nz<q+usize || j+1==ptr.size())) 
 			{
 				if (flagdebug)
-					printf("17716:OFFSETTONEWRITE   %08lld  size  %08lld \n",offset,usize);
+					printf("17716:OFFSETTONEWRITE   %s  size  %s \n",migliaia(offset),migliaia2(usize));
 				fseeko(job.outf, offset, SEEK_SET);
 				fwrite(out.c_str()+q, 1, usize, job.outf);
 			}
@@ -23286,7 +23384,7 @@ XXH3_initCustomSecret_avx512(void* XXH_RESTRICT customSecret, xxh_u64 seed64)
         int i;
         for (i=0; i < nbRounds; ++i) {
             /* GCC has a bug, _mm512_stream_load_si512 accepts 'void*', not 'void const*',
-             * this will warn "discards ‘const’ qualifier". */
+             * this will warn "discards ?const? qualifier". */
             union {
                 XXH_ALIGN(64) const __m512i* cp;
                 XXH_ALIGN(64) void* p;
@@ -24935,7 +25033,7 @@ XXH128_hashFromCanonical(const XXH128_canonical_t* src)
 #endif
 
 
-
+/*
 int internal_xxh3(const char* fileName, uint64_t& o_high64, uint64_t& o_low64)
 {
 	size_t const blockSize = 65536;
@@ -24944,7 +25042,7 @@ int internal_xxh3(const char* fileName, uint64_t& o_high64, uint64_t& o_low64)
 	inFile = fopen( fileName, "rb" );
 	if (inFile==NULL) 
 	{
-		printf("Error: Could not open '%s': %s. \n", fileName, strerror(errno));
+		printf("25345 Error: Could not open '%s': %s. \n", fileName, strerror(errno));
         return 1;
 	}
 
@@ -24969,7 +25067,7 @@ int internal_xxh3(const char* fileName, uint64_t& o_high64, uint64_t& o_low64)
 	
 ///d97b86b6eddf4609ef87136fb55c1ab1
 }
-
+*/
 /////////// other functions
 
 
@@ -25097,6 +25195,12 @@ string hash_calc_file(int i_algo,const char * i_filename,const int64_t i_inizio,
 	
 	switch (i_algo) 
 	{
+		/*
+		case ALGO_WYHASH:
+			sprintf(risultato,"%016llX",wyhash_calc_file(i_filename,i_inizio,i_totali,io_lavorati));
+			return risultato;		
+		break;
+		*/
 		case ALGO_SHA1:
 			return  sha1_calc_file(i_filename,i_inizio,i_totali,io_lavorati);
 		break;
@@ -25138,6 +25242,9 @@ string hash_calc_file(int i_algo,const char * i_filename,const int64_t i_inizio,
 
 string mygetalgo()
 {
+	if (flagwyhash)
+		return "WYHASH";
+	else
 	if (flagcrc32)
 		return "CRC32";
 	else
@@ -25154,6 +25261,9 @@ string mygetalgo()
 }
 int flag2algo()
 {
+	if (flagwyhash)
+		return ALGO_WYHASH;
+	else
 	if (flagcrc32)
 		return ALGO_CRC32;
 	else
@@ -28531,10 +28641,8 @@ std::string unznumbertostring( T Number )
 void myavanzamento(int64_t i_lavorati,int64_t i_totali,int64_t i_inizio)
 {
 	static int ultimapercentuale=0;
-	
-	
 	int percentuale=int(i_lavorati*100.0/(i_totali+0.5));
-	if (((percentuale%10)==0) && (percentuale>0))
+	if (((percentuale%5)==0) && (percentuale>0))
 	if (percentuale!=ultimapercentuale)
 	{
 		ultimapercentuale=percentuale;
@@ -28545,8 +28653,8 @@ void myavanzamento(int64_t i_lavorati,int64_t i_totali,int64_t i_inizio)
 		if (secondi==0)
 			secondi=1;
 		if (eta<356000)
-		printf("%03d%% %02d:%02d:%02d %20s of %20s %s/sec\n", percentuale,
-		int(eta/3600), int(eta/60)%60, int(eta)%60, migliaia(i_lavorati), migliaia2(i_totali),migliaia3(i_lavorati/secondi));
+		printf("%03d%% %02d:%02d:%02d (%9s) of (%9s) %20s/sec\n", percentuale,
+		int(eta/3600), int(eta/60)%60, int(eta)%60, tohuman(i_lavorati), tohuman2(i_totali),migliaia3(i_lavorati/secondi));
 		fflush(stdout);
 	}
 }
@@ -30200,6 +30308,7 @@ because pthread does not like very much
 */
 void myaddfile(uint32_t i_tnumber,DTMap& i_edt,string i_filename, int64_t i_date,int64_t i_size, bool i_flagcalchash) 
 {
+	
 	///Raze to the ground ads and zfs as soon as possible
 	if (isads(i_filename))
 		return;
@@ -30215,6 +30324,7 @@ void myaddfile(uint32_t i_tnumber,DTMap& i_edt,string i_filename, int64_t i_date
 	d.attr=0;
 	d.data=0;
 	d.hexhash="";
+	
 	if (i_flagcalchash)
 		if (!isdirectory(i_filename))
 		{
@@ -30228,9 +30338,13 @@ void myaddfile(uint32_t i_tnumber,DTMap& i_edt,string i_filename, int64_t i_date
 				printf("\n");
 			}
 		}
- 
+ 	
+	
 ///  thread safe, but... who cares? 
 	pthread_mutex_lock(&mylock);
+
+	///printf("i_tnumber %d\n",i_tnumber);
+	///printf("size %d\n",g_arraybytescanned.size());
 	g_arraybytescanned[i_tnumber]+=i_size;
 	g_arrayfilescanned[i_tnumber]++;
 	
@@ -30261,13 +30375,13 @@ void myaddfile(uint32_t i_tnumber,DTMap& i_edt,string i_filename, int64_t i_date
 		}
 		fflush(stdout);
 	}
-	
+		
 	pthread_mutex_unlock(&mylock);
-
 }
 
 void myscandir(uint32_t i_tnumber,DTMap& i_edt,string filename, bool i_recursive,bool i_flagcalchash)
 {
+	
 	///Raze to the ground ads and zfs as soon as possible
 	if (isads(filename))
 	{
@@ -30332,7 +30446,7 @@ void myscandir(uint32_t i_tnumber,DTMap& i_edt,string filename, bool i_recursive
 		perror(filename.c_str());
 
 #else  // Windows: expand wildcards in filename
-
+	
   // Expand wildcards
 	WIN32_FIND_DATA ffd;
 	string t=filename;
@@ -30360,7 +30474,7 @@ void myscandir(uint32_t i_tnumber,DTMap& i_edt,string filename, bool i_recursive
 		edate=0;  // don't add
 		
 		string fn=path(filename)+t;
-
+	
     // Save directory names with a trailing / and scan their contents
     // Otherwise, save plain files
 		if (edate) 
@@ -30384,6 +30498,7 @@ void myscandir(uint32_t i_tnumber,DTMap& i_edt,string filename, bool i_recursive
 			break;
 		}
 	}
+	
   FindClose(h);
 #endif
 }
@@ -30417,7 +30532,742 @@ void * scansiona(void *t)
 }
 
 
-int Jidac::dircompare(bool i_flagonlysize)
+
+bool getfileinfo(string i_filename,int64_t& o_size,int64_t& o_date,int64_t& o_attr)
+{
+	o_size=0;
+	o_date=0;
+	o_attr=0;
+	
+	
+	
+#ifdef unix
+	while (i_filename.size()>1 && i_filename[i_filename.size()-1]=='/')
+		i_filename=i_filename.substr(0, i_filename.size()-1);  
+		
+	struct stat sb;
+	if (!lstat(i_filename.c_str(), &sb)) 
+	{
+		if (S_ISREG(sb.st_mode))
+		{
+			
+			o_date=decimal_time(sb.st_mtime);
+			o_size=sb.st_size;
+			o_attr='u'+(sb.st_mode<<8);
+			return true;
+		}
+	}
+#endif
+	
+	
+#ifdef _WIN32
+	WIN32_FIND_DATA ffd;
+	string t=i_filename;
+	if (t.size()>0 && t[t.size()-1]=='/') 
+		t+="*";
+  
+	HANDLE h=FindFirstFile(utow(t.c_str()).c_str(), &ffd);
+	if (h==INVALID_HANDLE_VALUE && GetLastError()!=ERROR_FILE_NOT_FOUND && GetLastError()!=ERROR_PATH_NOT_FOUND)
+		printerr("29617",t.c_str());
+	
+	if (h!=INVALID_HANDLE_VALUE) 
+	{
+		SYSTEMTIME st;
+		if (FileTimeToSystemTime(&ffd.ftLastWriteTime, &st))
+			o_date=st.wYear*10000000000LL+st.wMonth*100000000LL+st.wDay*1000000
+				+st.wHour*10000+st.wMinute*100+st.wSecond;
+		o_size=ffd.nFileSizeLow+(int64_t(ffd.nFileSizeHigh)<<32);
+		o_attr=ffd.dwFileAttributes;
+		FindClose(h);
+		return true;
+    }
+	FindClose(h);
+#endif
+	return false;
+}
+
+void printbar(char i_carattere,bool i_printbarraenne=true)
+{
+	int twidth=terminalwidth();
+	if (twidth>10)
+	{
+		for (int i=0;i<twidth-4;i++)
+			printf("%c",i_carattere);
+		if (i_printbarraenne)
+			printf("\n");
+	}
+	else
+		printf("\n");
+}
+
+string secure_copy_file(const string i_filename,const string i_outfilename,int64_t i_startcopy,int64_t i_totalsize,int64_t i_totalcount,int64_t& o_donesize,int64_t& o_donecount)
+{
+	if (i_filename=="")
+		return "30833:SOURCE-EMPTY";
+	
+	if (i_outfilename=="")
+		return "30836:DEST-EMPTY";
+	
+	if (isdirectory(i_filename))
+	{
+		makepath(i_outfilename);
+		return "OK";
+	}
+	
+	int64_t sorgente_dimensione=0;
+	int64_t sorgente_data=0;
+	int64_t sorgente_attr=0;
+	
+	int64_t destinazione_dimensione=0;
+	int64_t destinazione_data=0;
+	int64_t destinazione_attr=0;
+	
+	bool	sorgente_esiste=false;
+	bool	destinazione_esiste=false;
+		
+	sorgente_esiste		=getfileinfo(i_filename,sorgente_dimensione,sorgente_data,sorgente_attr);
+	destinazione_esiste	=getfileinfo(i_outfilename,destinazione_dimensione,destinazione_data,destinazione_attr);
+		
+	///printf("Sorgente size %lld\n",sorgente_dimensione);
+	
+	if (destinazione_esiste)
+	{
+		if (sorgente_esiste)
+			if (destinazione_dimensione==sorgente_dimensione)
+				if (destinazione_data==sorgente_data)
+				{
+					if (sorgente_attr!=destinazione_attr)
+						close(i_outfilename.c_str(),sorgente_data,sorgente_attr);
+					
+					o_donesize+=sorgente_dimensione;
+					o_donecount++;
+					if (o_donecount%1000==0)
+					{
+						//printf("\r");
+						//printbar(' ',false);
+						printf("File %10s/%10s (%9s/%9s)\r",migliaia(o_donecount),migliaia2(i_totalcount),tohuman(o_donesize),tohuman2(i_totalsize));
+					}
+					// NTFS fix at 2 seconds?
+			///	printf("Differenza %08d\n",(destinazione_data-sorgente_data));
+						return "=";
+				}
+		delete_file(i_outfilename.c_str());
+	}
+	
+	size_t const blockSize = 65536;
+	unsigned char buffer[blockSize];
+	FILE* inFile = freadopen(i_filename.c_str());
+
+	if (inFile==NULL) 
+	{
+#ifdef _WIN32
+		int err=GetLastError();
+#else
+		int err=1;
+#endif
+		printf("\nERR <%s> kind %d\n",i_filename.c_str(),err); 
+
+		return "KAPUTT";
+	}
+	
+#ifdef _WIN32
+	wstring widename=utow(i_outfilename.c_str());
+	FILE* outFile=_wfopen(widename.c_str(), L"wb" );
+#else
+	FILE* outFile=fopen(i_outfilename.c_str(), "wb");
+#endif
+
+	if (outFile==NULL) 
+		return "30847:CANNOT OPEN outfile "+i_outfilename;
+	
+	size_t readSize;
+	
+	while ((readSize = fread(buffer, 1, blockSize, inFile)) > 0) 
+	{
+		o_donesize+=fwrite(buffer,1,readSize,outFile);
+		myavanzamento(o_donesize,i_totalsize,i_startcopy);
+	}
+	fclose(inFile);
+	fclose(outFile);
+	close(i_outfilename.c_str(),sorgente_data,sorgente_attr);
+	
+	o_donecount++;
+	
+	return "OK";
+	
+}
+/*
+void stermina(string i_directory)
+{
+	assert					(sizeof(wchar_t)==2);
+	SHFILEOPSTRUCTW fileop	={0};
+    wstring wide			=utow(i_directory.c_str());
+	const wchar_t* wcs 		=wide.c_str();
+	fileop.wFunc			=FO_DELETE;
+	fileop.pFrom			=wcs;
+	fileop.fFlags			=FOF_NO_UI;
+	SHFileOperation			(&fileop);
+}
+*/
+/*
+int DirDelete(const string& path)
+{
+   const gchar*    p;
+   GError*   gerr;
+   GDir*     d;
+   int       r;
+   string    ps;
+   string    path_i;
+   cout << "open:" << path << "\n";
+   d        = g_dir_open(path.c_str(), 0, &gerr);
+   r        = -1;
+
+   if (d) {
+      r = 0;
+
+      while (!r && (p=g_dir_read_name(d))) {
+          ps = string{p};
+          if (ps == "." || ps == "..") {
+            continue;
+          }
+
+          path_i = path + string{"/"} + p;
+
+
+          if (g_file_test(path_i.c_str(), G_FILE_TEST_IS_DIR) != 0) {
+            cout << "recurse:" << path_i << "\n";
+            r = DirDelete(path_i);
+          }
+          else {
+            cout << "unlink:" << path_i << "\n";
+            r = g_unlink(path_i.c_str());
+          }
+      }
+
+      g_dir_close(d);
+   }
+
+   if (r == 0) {
+      r = g_rmdir(path.c_str());
+     cout << "rmdir:" << path << "\n";
+
+   }
+
+   return r;
+}
+*/
+int erredbarras(const std::string &i_path,bool i_flagrecursive=true)
+{
+#ifdef unix
+///		bool	flagdebug=true;
+		bool 	risultato=false;
+
+		DIR *d=opendir(i_path.c_str());
+
+		if (d) 
+		{
+			struct dirent *p;
+			risultato=true;
+			while (risultato && (p=readdir(d))) 
+			{
+				if (!strcmp(p->d_name, ".") || !strcmp(p->d_name, ".."))
+					continue;
+				bool risultato2=false;
+				struct stat statbuf;
+				
+				std::string temp;
+				if (isdirectory(i_path))
+					temp=i_path+p->d_name;
+				else
+					temp=i_path+"/"+p->d_name;
+
+				if (!stat(temp.c_str(), &statbuf)) 
+				{
+					if (S_ISDIR(statbuf.st_mode))
+						risultato2=erredbarras(temp);
+					else
+					{
+						if (flagdebug)
+							printf("Delete file %s\n",temp.c_str());
+						risultato2=delete_file(temp.c_str());
+					}
+				}
+				risultato=risultato2;
+			}
+			closedir(d);
+		}
+
+		if (risultato)
+		{
+			if (flagdebug)
+				printf("Delete dir  %s\n\n",i_path.c_str());
+			delete_dir(i_path.c_str());
+		}
+	   return risultato;
+	
+	
+#endif
+
+#ifdef _WIN32
+
+///	bool	flagdebug=true;
+	bool	flagsubdir=false;
+	HANDLE	myhandle;
+	std::wstring wfilepath;
+	WIN32_FIND_DATA findfiledata;
+
+	std::string pattern=i_path+"\\*.*";
+  
+	std::wstring wpattern	=utow(pattern.c_str());
+	std::wstring wi_path	=utow(i_path.c_str());
+
+	myhandle=FindFirstFile(wpattern.c_str(),&findfiledata);
+  
+	if (myhandle!=INVALID_HANDLE_VALUE)
+	{
+		do
+		{
+			std::string t=wtou(findfiledata.cFileName);
+			
+			if ((t!=".") && (t!=".."))
+			{
+				wfilepath=wi_path+L"\\"+findfiledata.cFileName;
+		        if (findfiledata.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+				{
+					if (i_flagrecursive)
+					{
+						const std::string temp(wfilepath.begin(),wfilepath.end());
+						if (flagdebug)
+							printf("\n\nDelete directory   %s\n",temp.c_str());
+						int myresult=erredbarras(temp,i_flagrecursive);
+						if (myresult)
+							return myresult;
+					}
+					else
+						flagsubdir=true;
+				}
+				else
+				{
+					const std::string ttemp(wfilepath.begin(), wfilepath.end() );
+					if (flagdebug)
+						printf("Try to delete file %s\n",ttemp.c_str());
+
+					if (SetFileAttributes(wfilepath.c_str(),FILE_ATTRIBUTE_NORMAL) == FALSE)
+					{
+						if (flagdebug)
+							printf("31019: ERROR cannot change attr of file %s\n",ttemp.c_str());
+						return GetLastError();
+					}
+					
+					if (DeleteFile(wfilepath.c_str())==FALSE)
+					{
+						if (flagdebug)
+							printf("31025: ERROR highlander file %s\n",ttemp.c_str());
+						return GetLastError();
+					}
+				}
+			}
+		} while(FindNextFile(myhandle,&findfiledata)==TRUE);
+
+		FindClose(myhandle);
+
+		DWORD myerror=GetLastError();
+		if (myerror==ERROR_NO_MORE_FILES)
+		{
+			if (!flagsubdir)
+			{
+				const std::string dtemp(wi_path.begin(), wi_path.end());
+				
+				if (flagdebug)
+					printf("Delete no subdir   %s\n",dtemp.c_str());
+							
+				if (SetFileAttributes(wi_path.c_str(),FILE_ATTRIBUTE_NORMAL)==FALSE)
+				{
+					if (flagdebug)
+						printf("30135: ERROR cannot change folder attr %s\n",dtemp.c_str());
+					return GetLastError();
+				}
+								
+				if (RemoveDirectory(wi_path.c_str())==FALSE)
+				{
+					if (flagdebug)
+						printf("31047: ERROR highlander dir %s\n",dtemp.c_str());
+					return GetLastError();
+				}
+			}
+		}
+		else
+			return myerror;
+	}
+#endif
+	return 0;
+}
+
+
+int Jidac::robocopy()
+{
+	int risultato=0;
+	printf("*** ROBOCOPY MODE *** ");
+	if (!flagkill)
+		printf("*** -kill missing: dry run *** ");
+	
+	if (!flagforcezfs)
+		printf("*** ignoring .zfs and :$DATA ***");
+
+	printf("\n");
+	
+	for (unsigned i=0; i<files.size(); ++i)
+		if (!isdirectory(files[i]))
+			files[i]+='/';
+
+	vector<DTMap> files_edt;
+  
+	files_size.clear();
+	files_count.clear();
+	files_time.clear();
+
+	int64_t startscan=mtime();
+	
+	int 	quantifiles		=0;
+	
+	if (flagverbose)
+		flagnoeta=true;
+	g_bytescanned			=0;
+	g_worked=0;
+	g_arraybytescanned.clear();
+	g_arrayfilescanned.clear();
+
+		
+	if (all)	// OK let's make different threads
+	{
+		vector<tparametri> 	vettoreparametri;
+		vector<DTMap>		vettoreDT;
+		
+		tparametri 	myblock;
+		DTMap		mydtmap;
+	
+		for (unsigned int i=0;i<files.size();i++)
+		{
+			vettoreDT.push_back(mydtmap);
+			myblock.tnumber=i;
+			myblock.directorytobescanned=files[i];
+			myblock.theDT=vettoreDT[i];
+			myblock.flagcalchash=false;//flagverify;
+			myblock.timestart=mtime();
+			vettoreparametri.push_back(myblock);
+		}
+	
+		int rc;
+	pthread_t* threads = new pthread_t[files.size()];
+///		pthread_t threads[files.size()];
+		pthread_attr_t attr;
+		void *status;
+
+		// ini and set thread joinable
+		pthread_attr_init(&attr);
+		pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
+
+		printf("Creating %s scan threads\n",migliaia(files.size()));
+		
+		
+		if (!flagnoeta)
+		{
+			setupConsole();
+			printf("\e[?25l");	
+			fflush(stdout);
+			restoreConsole();
+		}
+		for(unsigned int i = 0; i < files.size(); i++ ) 
+		{
+			print_datetime();
+			printf("Scan dir |%02d| <<%s>>\n",i,files[i].c_str());
+		}
+
+		for(unsigned int i = 0; i < files.size(); i++ ) 
+		{
+			g_arraybytescanned.push_back(0);
+			g_arrayfilescanned.push_back(0);
+			
+			rc = pthread_create(&threads[i], &attr, scansiona, (void*)&vettoreparametri[i]);
+			if (rc) 
+			{
+				printf("Error creating thread\n");
+				exit(-1);
+			}
+		}
+		printf("\n");
+
+		// free attribute and wait for the other threads
+		pthread_attr_destroy(&attr);
+		for(unsigned int i = 0; i < files.size(); i++ ) 
+		{
+			rc = pthread_join(threads[i], &status);
+			if (rc) 
+			{
+				error("Unable to join\n");
+				exit(-1);
+			}
+			///printf("Thread completed %d status %d\n",i,status);
+		}
+		if (!flagnoeta)
+		{
+			setupConsole();
+			printf("\033[%dB",(int)g_arraybytescanned.size());
+			printf("\e[?25h");
+			fflush(stdout);
+			restoreConsole();
+		}
+		printf("\nParallel scan ended in %f s\n",(mtime()-startscan)/1000.0);
+	
+		for (unsigned i=0; i<files.size(); ++i)
+		{
+			uint64_t sizeofdir=0;
+			uint64_t dircount=0;
+			for (DTMap::iterator p=vettoreparametri[i].theDT.begin(); p!=vettoreparametri[i].theDT.end(); ++p) 
+			{
+				string filename=rename(p->first);
+				if (p->second.date && p->first!="" && (!isdirectory(p->first)) && (!isads(filename.c_str()))) 
+				{
+					sizeofdir+=p->second.size;
+					dircount++;
+					quantifiles++;
+				}
+				if (flagverbose)
+				{
+					printUTF8(filename.c_str());
+					printf("\n");
+				}
+			}
+			files_edt.push_back(vettoreparametri[i].theDT);
+			files_size.push_back(sizeofdir);
+			files_count.push_back(dircount);
+			files_time.push_back(vettoreparametri[i].timeend-vettoreparametri[i].timestart+1);
+		}
+		delete[] threads;
+	
+	}
+	else
+	{	// single thread. Do a sequential scan
+
+		g_arraybytescanned.push_back(0);
+		g_arrayfilescanned.push_back(0);
+	
+	
+		for (unsigned i=0; i<files.size(); ++i)
+		{
+
+			DTMap myblock;
+		
+			print_datetime();
+			printf("Scan dir <<%s>>\n",files[i].c_str());
+			uint64_t blockstart=mtime();
+			
+			///printf("###############################scannati per %d\n",files.size());
+	
+			////myscandir(i,myblock,files[i].c_str(),true,false);
+			myscandir(0,myblock,files[i].c_str(),true,false);
+			
+			uint64_t sizeofdir=0;
+			uint64_t dircount=0;
+		
+			for (DTMap::iterator p=myblock.begin(); p!=myblock.end(); ++p) 
+			{
+				string filename=rename(p->first);
+				if (p->second.date && p->first!="" && (!isdirectory(p->first)) && (!isads(filename))) 
+				{
+					sizeofdir+=p->second.size;
+					dircount++;
+					quantifiles++;
+				}
+				if (flagverbose)
+				{
+					printUTF8(filename.c_str());
+					printf("\n");
+				}
+			}
+	
+			files_edt.push_back(myblock);
+			files_size.push_back(sizeofdir);
+			files_count.push_back(dircount);
+			files_time.push_back(mtime()-blockstart);
+			
+		}
+	}
+			
+	
+	
+	uint64_t strangethings;
+	
+///// Now check the folders (sequentially)
+
+	printf("\nMaster  %s (%s files %s) <<%s>>\n",migliaia(files_size[0]),tohuman(files_size[0]),migliaia2(files_count[0]),files[0].c_str());
+	printbar('-');
+	
+	int64_t total_size=files_size[0];
+	int64_t total_count=files_count[0];
+	
+	int64_t done_size=0;
+	int64_t done_count=0;
+	
+	int robocopied=0;
+	uint64_t robocopiedsize=0;
+	int robodeleted=0;
+	uint64_t robodeletedsize=0;
+	
+
+	int roboequal=0;
+	uint64_t roboequalsize=0;
+	
+	int64_t timecopy=0;
+	int64_t timedelete=0;
+
+	for (unsigned i=1; i<files.size(); ++i)
+	{
+		strangethings=0;
+		if (flagkill)
+		{
+			///printf("m1\n");
+			if (isdirectory(files[i]))
+			{
+				///printf("m2\n");
+				if (!exists(files[i]))
+				{
+					///printf("m3\n");
+					makepath(files[i]);
+				}
+			}
+		}
+		if (!exists(files[i]))
+		{
+			if (!flagkill)
+			{
+				printf("Dir %d (slavez) DOES NOT EXISTS %s\n",i,files[i].c_str());
+				risultato=1;
+			}
+		}
+		else
+		{
+			int64_t startdelete=mtime();
+			for (DTMap::iterator p=files_edt[i].begin(); p!=files_edt[i].end(); ++p) 
+			{
+				string filenamei=p->first;
+				string filename0=filenamei;
+				myreplace(filename0,files[i],files[0]);
+				DTMap::iterator cerca=files_edt[0].find(filename0);
+				if  (cerca==files_edt[0].end())
+				{
+					if (!flagkill)
+					{
+							//fake: dry run
+						robodeleted++;
+						robodeletedsize+=p->second.size;
+					}
+					else
+					{
+						string temp=p->first;
+						bool riuscito=true;
+						if (isdirectory(temp))
+						{
+							erredbarras(temp,true);
+							riuscito=delete_dir(temp.c_str())==0;
+						}
+						else
+						{
+							delete_file(temp.c_str());
+						}
+						if (!riuscito)
+							printf("31293: ERROR DELETING  <%s>\n",p->first.c_str());
+						else
+						{
+							robodeleted++;
+							robodeletedsize+=p->second.size;
+						}
+					}
+				}
+				if (menoenne>0)
+					if (strangethings>menoenne)
+					{
+						printf("30146: **** TOO MANY STRANGE THINGS (-n %d)  %s\n",menoenne,migliaia(strangethings));
+						break;
+					}
+			}	
+			timedelete=mtime()-startdelete;
+			
+			
+			for (DTMap::iterator p=files_edt[0].begin(); p!=files_edt[0].end(); ++p) 
+			{
+				string filename0=p->first;
+				string filenamei=filename0;
+				myreplace(filenamei,files[0],files[i]);
+				
+				if (!flagkill)
+				{
+							///fake: dry run
+					robocopiedsize+=p->second.size;
+					robocopied++;
+				}
+				else
+				{
+					int64_t startcopy=mtime();
+					string copyfileresult=secure_copy_file(filename0.c_str(),filenamei.c_str(),startcopy,total_size*(files.size()-1),total_count*(files.size()-1),done_size,done_count);
+					int64_t temptime=mtime()-startcopy;
+					
+					if ((copyfileresult!="OK") && (copyfileresult!="="))
+						printf("31170: error robocoping data  <%s> to %s\n",copyfileresult.c_str(),filenamei.c_str());
+					else
+					{
+						if (!isdirectory(filename0))
+						{
+							if (copyfileresult=="OK")
+							{
+								robocopiedsize+=p->second.size;
+								robocopied++;
+								timecopy+=mtime()-startcopy;
+							}
+							else
+							{
+								roboequalsize+=p->second.size;
+								roboequal++;
+							}
+						}
+					}
+				}
+								
+				if (menoenne>0)
+					if (strangethings>menoenne)
+					{
+						printf("30125: **** TOO MANY STRANGE THINGS (-n %d)  %s\n",menoenne,migliaia(strangethings));
+						break;
+					}
+			}
+		}
+	}	
+
+	timecopy++; //avoid some div by zero
+	timedelete++;
+	printf("\n");
+	if (!flagkill)
+		printf("FAKE: dry run!\n");
+	printf("=  %12s %20s B\n",migliaia(roboequal),migliaia2(roboequalsize));
+	printf("+  %12s %20s B in %9.2fs %15s/sec\n",migliaia(robocopied),migliaia2(robocopiedsize),(timecopy/1000.0),migliaia3(robocopiedsize/(timecopy/1000.0)));
+	printf("-  %12s %20s B in %9.2fs %15s/sec\n",migliaia(robodeleted),migliaia2(robodeletedsize),(timedelete/1000.0),migliaia3(robodeletedsize/(timedelete/1000.0)));
+
+	printf("\nRobocopy time %g s\n\n",((mtime()-startscan)/1000.0));
+	
+	if (not flagverify)
+		return risultato;
+		
+	printf("*** ROBOCOPY: do a (-verify) ");
+	if (!flagforcezfs)
+		printf(" ignoring .zfs and :$DATA");
+	printf("\n");
+
+	return dircompare(false,true);
+	
+
+}
+
+int Jidac::dircompare(bool i_flagonlysize,bool i_flagrobocopy)
 {
 	
 	int risultato=0;
@@ -30426,12 +31276,14 @@ int Jidac::dircompare(bool i_flagonlysize)
 		printf("Get directory size ");
 	else
 	{
-		printf("Dir compare (%s dirs to be checked) ",migliaia(files.size()));
+		if (!i_flagrobocopy)
+			printf("Dir compare (%s dirs to be checked) ",migliaia(files.size()));
 		if (files.size()<2)
 			error("At least two directories required\n");
 	}
 	
 	if (!flagforcezfs)
+		if (!i_flagrobocopy)
 		printf(" ignoring .zfs and :$DATA\n");
 
 	for (unsigned i=0; i<files.size(); ++i)
@@ -30469,7 +31321,7 @@ int Jidac::dircompare(bool i_flagonlysize)
 			myblock.tnumber=i;
 			myblock.directorytobescanned=files[i];
 			myblock.theDT=vettoreDT[i];
-			myblock.flagcalchash=flagverify;
+			myblock.flagcalchash=flagchecksum;
 			myblock.timestart=mtime();
 			vettoreparametri.push_back(myblock);
 		}
@@ -30483,8 +31335,8 @@ int Jidac::dircompare(bool i_flagonlysize)
 		// ini and set thread joinable
 		pthread_attr_init(&attr);
 		pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
-
-		printf("Creating %s scan threads\n",migliaia(files.size()));
+		if (!i_flagrobocopy)
+			printf("Creating %s scan threads\n",migliaia(files.size()));
 		
 		
 		if (!flagnoeta)
@@ -30494,11 +31346,12 @@ int Jidac::dircompare(bool i_flagonlysize)
 			fflush(stdout);
 			restoreConsole();
 		}
-		for(unsigned int i = 0; i < files.size(); i++ ) 
-		{
-			print_datetime();
-			printf("Scan dir |%02d| <<%s>>\n",i,files[i].c_str());
-		}
+		if (!i_flagrobocopy)
+			for(unsigned int i = 0; i < files.size(); i++ ) 
+			{
+				print_datetime();
+				printf("Scan dir |%02d| <<%s>>\n",i,files[i].c_str());
+			}
 
 		for(unsigned int i = 0; i < files.size(); i++ ) 
 		{
@@ -30573,14 +31426,16 @@ int Jidac::dircompare(bool i_flagonlysize)
 		for (unsigned i=0; i<files.size(); ++i)
 		{
 			DTMap myblock;
-		
-			print_datetime();
-			printf("Scan dir <<%s>>\n",files[i].c_str());
+			if (!i_flagrobocopy)
+			{
+				print_datetime();
+				printf("Scan dir <<%s>>\n",files[i].c_str());
+			}
 			uint64_t blockstart=mtime();
 			
 			///printf("###############################scannati per %d\n",files.size());
-	
-			myscandir(i,myblock,files[i].c_str(),true,flagverify);
+///fix 
+			myscandir(0,myblock,files[i].c_str(),true,flagchecksum);
 			
 			uint64_t sizeofdir=0;
 			uint64_t dircount=0;
@@ -30608,23 +31463,39 @@ int Jidac::dircompare(bool i_flagonlysize)
 	}
 	
 /// return free space (USEFUL for crontabbed-emalied backups)
+	printbar('=');
 	for (unsigned i=0; i<files.size(); ++i)
 	{
-		uint64_t spazio=getfreespace(files[i].c_str());
-		printf("Free %d  %24s   %12s    <<%s>>\n",i,migliaia(spazio),tohuman(spazio),files[i].c_str());
+		int64_t spazio=getfreespace(files[i].c_str());
+		if (spazio<0)
+			spazio=0;
+		printf("Free %d %21s (%12s)  <<%s>>\n",i,migliaia(spazio),tohuman(spazio),files[i].c_str());
 	}
+
 
 	uint64_t total_size=0;
 	uint64_t total_files=0;
-	printf("\n=============================================\n");
+	int64_t delta_size=0;
+	int64_t delta_files=0;
+	
+	printbar('=');
 	for (unsigned int i=0;i<files_size.size();i++)
 	{
-		printf("Dir %d   %24s %12s %g <<%s>>\n",i,migliaia(files_size[i]),migliaia2(files_count[i]),files_time[i]/1000.0,files[i].c_str());
+		if (i==0)
+		printf("Dir  %d %21s |%12s| |%12s| %9.2f <<%s>>\n",i,migliaia(files_size[i]),"Delta bytes",									 migliaia3(files_count[i]),files_time[i]/1000.0,files[i].c_str());
+		else
+		{
+		printf("Dir  %d %21s |%12s| |%12s| %9.2f <<%s>>\n",i,migliaia(files_size[i]),tohuman(files_size[0]-files_size[i]),migliaia3(files_count[i]),files_time[i]/1000.0,files[i].c_str());
+		delta_size+= (files_size[0]-files_size[i]);
+		delta_files+= (files_count[0]-files_count[i]);
+			
+		}
 		total_size+=files_size[i];
 		total_files+=files_count[i];
 	}
-	printf("=============================================\n");
-	printf("        %24s %12s %g sec (%s)\n",migliaia(total_size),migliaia2(total_files),(mtime()-startscan)/1000.0,tohuman(total_size));
+	printbar('=');
+	printf("Total  |%21s| (%s)\n",migliaia(total_size),tohuman(total_size));
+	printf("Delta  |%21s| %21s|files\n",migliaia(delta_size),migliaia2(delta_files));
 	
 	
 	if (i_flagonlysize)
@@ -30636,22 +31507,22 @@ int Jidac::dircompare(bool i_flagonlysize)
 	
 ///// Now check the folders (sequentially)
 
-	printf("\nDir 0 (master) time %g <<%s>>\n",files_time[0]/1000.0,files[0].c_str());
-	printf("size  %24s (files %s)\n",migliaia(files_size[0]),migliaia2(files_count[0]));
-	printf("-------------------------\n");
+	printf("\nDir 0 (master) %s (files %s) <<%s>>\n",migliaia(files_size[0]),migliaia2(files_count[0]),files[0].c_str());
+	printbar('-');
+	
+	bool flagerror=false;
 
 	for (unsigned i=1; i<files.size(); ++i)
 	{
 		strangethings=0;
 		if (!exists(files[i]))
 		{
-			printf("Dir %d (slave) DOES NOT EXISTS %s\n",i,files[i].c_str());
+			printf("Dir %d (slave1) DOES NOT EXISTS %s\n",i,files[i].c_str());
 			risultato=1;
 		}
 		else
 		{
-			bool flagerror=false;
-
+			
 			if ((files_size[i]!=files_size[0]) || (files_count[i]!=files_count[0]))
 			{
 				printf("Dir %d (slave) IS DIFFERENT time %6g <<%s>>\n",i,files_time[i]/1000.0,files[i].c_str());
@@ -30716,7 +31587,7 @@ int Jidac::dircompare(bool i_flagonlysize)
 						strangethings++;
 					}
 					else
-					if (flagverify)
+					if (flagchecksum)
 					{
 						if (p->second.hexhash!=cerca->second.hexhash)
 						{
@@ -30737,10 +31608,25 @@ int Jidac::dircompare(bool i_flagonlysize)
 			}
 			if (!flagerror)
 				if ((files_size[i]==files_size[0]) && (files_count[i]==files_count[0]))
-					printf("= %s scantime %f \n",files[i].c_str(),files_time[i]/1000.0);
-			printf("-------------------------\n");
+				{
+					printf("== <<");
+					printUTF8(files[i].c_str());	
+					printf(">>\n");
+				}
+			printbar('-');
 		}
 	}	
+	if (!flagerror)
+	{
+		if (flagchecksum)
+		printf("NO diff FOR SURE in slave dirs (checksum check)\n");
+		else
+		printf("NO diff in slave dirs (fast check, only size)\n");
+	}
+	else
+		printf("DIFFERENT SLAVE DIRS!!\n");
+	
+		
 	return risultato;
 }
 

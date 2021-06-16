@@ -1,3 +1,6 @@
+16-06-2021: 51.33
+            commands r (robocopy) and d (deduplication)
+	    
 06-06-2021: 51.31
             -715 Works just about like v7.15
 	    

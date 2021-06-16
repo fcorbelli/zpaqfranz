@@ -5,7 +5,7 @@
 ///////// https://github.com/fcorbelli/zpaqfranz
 ///////// https://sourceforge.net/projects/zpaqfranz/
 
-#define ZPAQ_VERSION "51.32-experimental"
+#define ZPAQ_VERSION "51.33-experimental"
 #define FRANZOFFSET 	50
 #define FRANZMAXPATH 	240
 
@@ -9730,7 +9730,29 @@ atomic_int64_t g_bytescanned;
 atomic_int64_t g_filescanned;
 */
 
-	
+bool getcaptcha(const string i_captcha,const string i_reason)
+{
+	if (i_captcha=="")
+		return false;
+	if (i_reason=="")
+		return false;
+	printf("\nTo confirm a dangerous command\n");
+	printf("you need to enter EXACTLY the capcha\n");
+	printf("proposed, then press CR (Return).\n");
+	printf("Entering anything else will quit.\n");
+	printf("\nWhy: %s\n",i_reason.c_str());
+	printf("\nCaptcha to continue:     %s\n",i_captcha.c_str());
+	char myline[81];
+    scanf("%80s", myline);
+	if (myline!=i_captcha)
+	{
+		printf("Wrong captcha\n");
+		return false;
+	}
+	printf("Captcha OK\n");
+	return true;
+}
+
   
 // In Windows, convert 16-bit wide string to UTF-8 and \ to /
 #ifdef _WIN32
@@ -12736,6 +12758,7 @@ private:
 	int utf();
 	int test();           					// test, return 1 if error else 0
 	int summa();							// get hash / or sum
+	int deduplicate();							// get hash / or sum
 	int paranoid();							// paranoid test by unz. Really slow & lot of RAM
 	int fillami();							// media check
 	void usage();        					// help
@@ -12899,7 +12922,7 @@ void moreprint(const char* i_stringa)
 void Jidac::differences() 
 {
 moreprint("Key differences from ZPAQ 7.15 and zpaqfranz");
-moreprint("@2021-06-15");
+moreprint("@2021-06-16");
 moreprint("");
 moreprint("");
 moreprint("First goal: doveryay, no proveryay (trust, but verify).");
@@ -13144,6 +13167,7 @@ moreprint("-checksum get a 1-level checksum, useful for comparing ");
 moreprint("hierarchically organized folders.");
 moreprint("-summary show only GLOBAL (fast manual compare of directories)");
 moreprint("-forcezfs force .zfs path (DEFAULT: skip)");
+moreprint("-kill -force Like deduplication without ask!");
 moreprint("");
 moreprint("New command dir (dir)");
 moreprint("If there's one thing I hate about UNIX and Linux in general ");
@@ -13209,6 +13233,11 @@ moreprint("-kill     wet run (default: dry-run");
 moreprint("-all      run one thread for folder");
 moreprint("-verify   after copy quick check if OK");
 moreprint("-checksum heavy (hash) check -xxhash...");
+moreprint("");
+moreprint("New command d (deduplicate)");
+moreprint("d d0      Deduplicate d0 WITHOUT ASKING!");
+moreprint("-kill     Wet run (default: dry-run)");
+moreprint("-sha256   use sha256 instead of XXH3 for detection");
 moreprint("");
 moreprint("");
 	
@@ -13426,9 +13455,10 @@ void Jidac::usage()
 	moreprint("   c d0 d1 d2... Compare dir d0 to d1,d2... (-all M/T scan -checksum -xxhash...)");
 	moreprint("   s d0 d1 d2... Cumulative size (excluding .zfs) of d0,d1,d2 (-all M/T)");
 	moreprint("   r d0 d1 d2... Robocopy mode: mirror d0 in d1,d2 (-kill -verify -checksum -all -xxhash...");
+	moreprint("   d d0          Deduplicate d0 WITHOUT MERCY OR ASKING ANYTHING (-kill -all -sha256)");
 	moreprint("   f             Fill (wipe) almost all disk space and check (-verbose -kill)");
 	moreprint("   utf d0        Check/sanitize file/dirnames in d0 (-dirlength X -filelength Y -kill)");
-	moreprint("   sha1          Hash/dup (#HASH -all -kill -checksum -verify -summary)");
+	moreprint("   sha1          Hash/dup (#HASH -all -kill -force -checksum -verify -summary)");
 	moreprint("                 #HASH can be (nothing=>SHA1) -crc32 -crc32c -xxhash -sha256");
 	moreprint("   dir           Windows dir-like (/s /a /os /od) -crc32 show duplicates");
 	moreprint("   help          Long help (-h, -he examples, -diff differences from 7.15)");
@@ -14993,6 +15023,13 @@ int Jidac::doCommand(int argc, const char** argv) {
 			files.push_back(argv[i]);
                 i--;
 	}
+    else if (opt=="d")
+	{
+		command='d';
+		while (++i<argc && argv[i][0]!='-')  // read filename args
+			files.push_back(argv[i]);
+                i--;
+	}
 	else if (opt=="-timestamp") 	// force the timestamp
 	{
 		if (i+1<argc)
@@ -15032,7 +15069,7 @@ int Jidac::doCommand(int argc, const char** argv) {
 	}
 	else if (opt=="dir")
 	{
-		command='d';
+		command='i';
 		while (++i<argc && argv[i][0]!='-')  // read filename args
 			files.push_back(argv[i]);
                 i--;
@@ -15424,7 +15461,7 @@ int Jidac::doCommand(int argc, const char** argv) {
 	  flagflat=false;
 	  return add();
   }
-  else if (command=='d') return dir();
+  else if (command=='i') return dir();
   else if (command=='c') return dircompare(false,false);
   else if (command=='s') return dircompare(true,false); 
   else if (command=='r') return robocopy();
@@ -15437,6 +15474,7 @@ int Jidac::doCommand(int argc, const char** argv) {
   else if (command=='k') return kill();
   else if (command=='u') return utf();
   else if (command=='1') return summa();
+  else if (command=='d') return deduplicate();
   else usage();
   
   
@@ -25321,7 +25359,35 @@ bool sortbysize(const std::pair<uint64_t, string> &a,
     return (a.first < b.first); 
 } 
 
-
+int Jidac::deduplicate() 
+{
+	printf("*** DIRECTLY DELETE DUPLICATED FILES ***\n");
+	if (files.size()>1)
+	{
+		printf("Sorry, works only on exactly 1 dir\n");
+		return 1;
+	}
+	if (!isdirectory(files[0]))
+	{
+		printf("Sorry, you must enter a directory\n");
+		return 1;
+	}
+	if (!flagkill)
+		printf("-kill not present: dry run\n");
+	flagforce=true;
+	
+	flagcrc32c=false;
+	flagcrc32=false;
+	if (flagsha256)
+		flagxxhash=false;
+	else
+		flagxxhash=true;
+		
+	flagchecksum=false;
+	flagverify=true;
+	summary=1;
+	return summa();
+}
 int Jidac::summa() 
 {
 	if (!flagpakka)
@@ -25330,6 +25396,11 @@ int Jidac::summa()
 		if (!flagforcezfs)
 			printf(" ignoring .zfs and :$DATA\n");
 	}
+
+	if (flagkill)
+		if (flagforce)
+			if (!getcaptcha("iamsure","Delete files without confirmation"))
+				return 1;
 
 	int quantifiles			=0;
 	int64_t total_size		=0;  
@@ -25649,7 +25720,8 @@ int Jidac::summa()
 	int64_t startprint=mtime();
 
 	uint64_t testedbytes=0;
-	
+	int64_t deletedfiles=0;
+	int64_t deletedsize=0;
 	for (unsigned int i=0;i<vec.size();i++)
 	{
 			
@@ -25672,15 +25744,25 @@ int Jidac::summa()
 			if (i>0)
 				if (vec[i-1].second==vec[i].second)
 				{
-					#if defined(_WIN32) || defined(_WIN64)
-					myreplaceall(filename,"/","\\");
-					#endif
-					printf("=== \"");
-					printUTF8(filename.c_str());
-					printf("\"\n");
+					if (summary<0)
+					{
+						#if defined(_WIN32) || defined(_WIN64)
+						myreplaceall(filename,"/","\\");
+						#endif
+						printf("=== \"");
+						printUTF8(filename.c_str());
+						printf("\"\n");
+					}
 					duplicated_files++;
 					if (p != edt.end())
 						duplicated_size+=p->second.size;
+					if (flagforce)
+						if (delete_file(filename.c_str()))
+						{
+							deletedfiles++;
+							if (p != edt.end())
+								deletedsize+=p->second.size;
+						}
 				}
 		}
 		else
@@ -25724,7 +25806,7 @@ int Jidac::summa()
 	}
 	
 	int64_t printtime=mtime()-startprint;
-		if (!flagnoeta)
+	if (!flagnoeta)
 	{
 		printf("Algo %s by %d threads\n",mygetalgo().c_str(),mythreads);
 		printf("Scanning filesystem time  %f s\n",scantime);
@@ -25744,6 +25826,10 @@ int Jidac::summa()
 		printf("%02X", (unsigned char)sha256result[j]);
 	printf("\n");
 
+	if (flagkill)
+		if (flagforce)
+			if (deletedfiles)
+				printf("Duplicated deleted files %08d %s bytes\n",deletedfiles,migliaia(deletedsize));
 	
 	delete [] threads;
 	return 0;
@@ -28646,8 +28732,6 @@ void myavanzamento(int64_t i_lavorati,int64_t i_totali,int64_t i_inizio)
 	if (percentuale!=ultimapercentuale)
 	{
 		ultimapercentuale=percentuale;
-			
-			
 		double eta=0.001*(mtime()-i_inizio)*(i_totali-i_lavorati)/(i_lavorati+1.0);
 		int secondi=(mtime()-i_inizio)/1000;
 		if (secondi==0)
@@ -31192,7 +31276,7 @@ int Jidac::robocopy()
 					}
 			}	
 			timedelete=mtime()-startdelete;
-			
+			int64_t globalstartcopy=mtime();
 			
 			for (DTMap::iterator p=files_edt[0].begin(); p!=files_edt[0].end(); ++p) 
 			{
@@ -31209,8 +31293,7 @@ int Jidac::robocopy()
 				else
 				{
 					int64_t startcopy=mtime();
-					string copyfileresult=secure_copy_file(filename0.c_str(),filenamei.c_str(),startcopy,total_size*(files.size()-1),total_count*(files.size()-1),done_size,done_count);
-					int64_t temptime=mtime()-startcopy;
+					string copyfileresult=secure_copy_file(filename0.c_str(),filenamei.c_str(),globalstartcopy,total_size*(files.size()-1),total_count*(files.size()-1),done_size,done_count);
 					
 					if ((copyfileresult!="OK") && (copyfileresult!="="))
 						printf("31170: error robocoping data  <%s> to %s\n",copyfileresult.c_str(),filenamei.c_str());

@@ -5,7 +5,7 @@
 ///////// https://github.com/fcorbelli/zpaqfranz
 ///////// https://sourceforge.net/projects/zpaqfranz/
 
-#define ZPAQ_VERSION "51.33-experimental"
+#define ZPAQ_VERSION "51.34-experimental"
 #define FRANZOFFSET 	50
 #define FRANZMAXPATH 	240
 
@@ -13235,12 +13235,12 @@ moreprint("-verify   after copy quick check if OK");
 moreprint("-checksum heavy (hash) check -xxhash...");
 moreprint("");
 moreprint("New command d (deduplicate)");
-moreprint("d d0      Deduplicate d0 WITHOUT ASKING!");
-moreprint("-kill     Wet run (default: dry-run)");
+moreprint("d d0      Deduplicate folder d0 WITHOUT ASKING!");
+moreprint("-force    Wet run (default: dry-run)");
+moreprint("-verbose  Show duplicated files");
 moreprint("-sha256   use sha256 instead of XXH3 for detection");
 moreprint("");
 moreprint("");
-	
 moreprint("New command/switches ");
 moreprint("During the automated executions, scripts can be launched ");
 moreprint("to send warnings (e.g. failure or OK)");
@@ -13445,19 +13445,19 @@ void Jidac::usage()
 	moreprint("Usage: zpaqfranz command archive[.zpaq] files|directory... -options...");
 	moreprint("\?\?\?\? in archive name for multi-part ex \"test_????.zpaq\"");
 	moreprint("Archive commands:");
-	moreprint("   a             Append files (-checksum -force -crc32 -comment foo -test)");
+	moreprint("   a             Append files (-715 -checksum -force -crc32 -comment foo -test)");
 	moreprint("   x             Extract versions of files (-until N -comment foo -kill -utf)");
 	moreprint("   l             List files (-all -checksum -find something -comment foo)");
 	moreprint("   l d0 d1 d2... Compare (test) content agains directory d0, d1, d2...");
 	moreprint("   t             Fast test of most recent version of files (-verify -verbose)");
-	moreprint("   i             Show versions");
+	moreprint("   i             Show versions into the ZPAQ archive");
 	moreprint("Ausiliary commands:");
 	moreprint("   c d0 d1 d2... Compare dir d0 to d1,d2... (-all M/T scan -checksum -xxhash...)");
 	moreprint("   s d0 d1 d2... Cumulative size (excluding .zfs) of d0,d1,d2 (-all M/T)");
-	moreprint("   r d0 d1 d2... Robocopy mode: mirror d0 in d1,d2 (-kill -verify -checksum -all -xxhash...");
-	moreprint("   d d0          Deduplicate d0 WITHOUT MERCY OR ASKING ANYTHING (-kill -all -sha256)");
+	moreprint("   r d0 d1 d2... Mirror d0 in d1... (-kill -verify -checksum -all -xxhash...");
+	moreprint("   d d0          Deduplicate folder d0 WITHOUT MERCY (-force -verbose -sha256)");
 	moreprint("   f             Fill (wipe) almost all disk space and check (-verbose -kill)");
-	moreprint("   utf d0        Check/sanitize file/dirnames in d0 (-dirlength X -filelength Y -kill)");
+	moreprint("   utf d0        Check/detox filenames in d0 (-dirlength X -filelength Y -kill)");
 	moreprint("   sha1          Hash/dup (#HASH -all -kill -force -checksum -verify -summary)");
 	moreprint("                 #HASH can be (nothing=>SHA1) -crc32 -crc32c -xxhash -sha256");
 	moreprint("   dir           Windows dir-like (/s /a /os /od) -crc32 show duplicates");
@@ -15069,7 +15069,7 @@ int Jidac::doCommand(int argc, const char** argv) {
 	}
 	else if (opt=="dir")
 	{
-		command='i';
+		command='b';
 		while (++i<argc && argv[i][0]!='-')  // read filename args
 			files.push_back(argv[i]);
                 i--;
@@ -15461,20 +15461,20 @@ int Jidac::doCommand(int argc, const char** argv) {
 	  flagflat=false;
 	  return add();
   }
-  else if (command=='i') return dir();
-  else if (command=='c') return dircompare(false,false);
-  else if (command=='s') return dircompare(true,false); 
-  else if (command=='r') return robocopy();
-  else if (command=='x') return extract();
-  else if (command=='i') return info();
-  else if (command=='t') return test();
-  else if (command=='p') return paranoid();
-  else if (command=='f') return fillami();
-  else if (command=='l') return list();
-  else if (command=='k') return kill();
-  else if (command=='u') return utf();
   else if (command=='1') return summa();
+  else if (command=='b') return dir();
+  else if (command=='c') return dircompare(false,false);
   else if (command=='d') return deduplicate();
+  else if (command=='f') return fillami();
+  else if (command=='i') return info();
+  else if (command=='k') return kill();
+  else if (command=='l') return list();
+  else if (command=='p') return paranoid();
+  else if (command=='r') return robocopy();
+  else if (command=='s') return dircompare(true,false); 
+  else if (command=='t') return test();
+  else if (command=='x') return extract();
+  else if (command=='u') return utf();
   else usage();
   
   
@@ -25372,9 +25372,12 @@ int Jidac::deduplicate()
 		printf("Sorry, you must enter a directory\n");
 		return 1;
 	}
-	if (!flagkill)
-		printf("-kill not present: dry run\n");
-	flagforce=true;
+	if (flagverbose)
+	summary=-1;
+	else
+	summary=1;
+	flagchecksum=false;
+	flagverify=true;
 	
 	flagcrc32c=false;
 	flagcrc32=false;
@@ -25382,10 +25385,14 @@ int Jidac::deduplicate()
 		flagxxhash=false;
 	else
 		flagxxhash=true;
-		
-	flagchecksum=false;
-	flagverify=true;
-	summary=1;
+	flagkill=true;
+	
+	
+	if (!flagforce)
+		printf("-force not present: dry run\n");
+	
+	
+	
 	return summa();
 }
 int Jidac::summa() 
@@ -25738,8 +25745,10 @@ int Jidac::summa()
 			if (replaceto!="")
 				replace(filename,searchfrom,replaceto);	
 		
+					
 		if (flagkill)
 		{
+					
 // get ready to make a script (no kill whatsoever!) by hand
 			if (i>0)
 				if (vec[i-1].second==vec[i].second)
@@ -25829,7 +25838,7 @@ int Jidac::summa()
 	if (flagkill)
 		if (flagforce)
 			if (deletedfiles)
-				printf("Duplicated deleted files %08d %s bytes\n",deletedfiles,migliaia(deletedsize));
+				printf("Duplicated deleted files %s for %s bytes\n",migliaia2(deletedfiles),migliaia(deletedsize));
 	
 	delete [] threads;
 	return 0;

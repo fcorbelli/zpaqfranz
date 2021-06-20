@@ -5,7 +5,7 @@
 ///////// https://github.com/fcorbelli/zpaqfranz
 ///////// https://sourceforge.net/projects/zpaqfranz/
 
-#define ZPAQ_VERSION "51.34-experimental"
+#define ZPAQ_VERSION "51.36-experimental"
 #define FRANZOFFSET 	50
 #define FRANZMAXPATH 	240
 
@@ -123,6 +123,9 @@ FreeBSD (11.3) clang 6.0.0
 clang++ -march=native -Dunix zpaqfranz.cpp  -pthread -o zpaqfranz -static
 
 Debian Linux (10/11) gcc 8.3.0
+ubuntu 21.04 desktop-amd64 gcc  10.3.0
+manjaro 21.07 gcc 11.1.0
+Centos 8.4.2105 gcc 8.4.1
 g++ -O3 -Dunix zpaqfranz.cpp  -pthread -o zpaqfranz -static
 
 QNAP NAS TS-431P3 (Annapurna AL314) gcc 7.4.0
@@ -11870,6 +11873,16 @@ Cleanup:
 }
 #endif
 
+int mypos(const string& i_substring,const string& i_string) 
+{
+    size_t start_pos = i_string.find(i_substring);
+    if	(start_pos==std::string::npos)
+        return -1;
+	else
+		return start_pos;
+}
+
+
 bool myreplace(string& i_str, const string& i_from, const string& i_to) 
 {
     size_t start_pos = i_str.find(i_from);
@@ -12757,6 +12770,8 @@ private:
 	int kill();
 	int utf();
 	int test();           					// test, return 1 if error else 0
+	int consolidate(string i_archive);
+
 	int summa();							// get hash / or sum
 	int deduplicate();							// get hash / or sum
 	int paranoid();							// paranoid test by unz. Really slow & lot of RAM
@@ -12764,6 +12779,7 @@ private:
 	void usage();        					// help
 	int dir();								// Windows-like dir command
 	int robocopy();
+	int zero();
 	int dircompare(bool i_flagonlysize,bool i_flagrobocopy);
 	void printsanitizeflags();
 
@@ -12865,14 +12881,20 @@ void mygetch()
 }
 void moreprint(const char* i_stringa)
 {
-	unsigned int larghezzaconsole=terminalwidth()-2;
-	unsigned int altezzaconsole=terminalheight();
-	unsigned static int righestampate=0;
+	
+	 int larghezzaconsole=terminalwidth()-2;
+	 int altezzaconsole=terminalheight();
+	 static int righestampate=0;
 	if (!i_stringa)
 		return;
-	
 		
-	///if (i_stringa=="\n")
+		
+	if ((larghezzaconsole<0) || (altezzaconsole<0))
+	{
+		printf("%s\n",i_stringa);
+		return;
+	}
+
 	if (!strcmp(i_stringa,"\n"))
 	{
 		printf("\n");
@@ -12881,21 +12903,21 @@ void moreprint(const char* i_stringa)
 		{
 			printf("-- More (q, Q or control C to exit) --\r");
 			mygetch();
-			for (unsigned int i=0;i<altezzaconsole;i++)
+			for (int i=0;i<altezzaconsole;i++)
 				printf("\n");
 			righestampate=0;
 		}
 		return;
 	}
-	unsigned int lunghezzastringa=strlen(i_stringa);
+	 int lunghezzastringa=strlen(i_stringa);
 	
 	if (!larghezzaconsole)
 		return;
 
-	unsigned int righe=(lunghezzastringa/larghezzaconsole)+1;
-	unsigned int massimo=lunghezzastringa-(larghezzaconsole*(righe-1));
+	 int righe=(lunghezzastringa/larghezzaconsole)+1;
+	 int massimo=lunghezzastringa-(larghezzaconsole*(righe-1));
 	
-	for (unsigned int riga=1; riga<=righe;riga++)
+	for (int riga=1; riga<=righe;riga++)
 	{
 		
 		int currentmax=larghezzaconsole;
@@ -12911,9 +12933,9 @@ void moreprint(const char* i_stringa)
 		righestampate++;
 		if (righestampate>(altezzaconsole-2))
 		{
-			printf("-- More (q, Q or control C to exit) --\r");
-			mygetch();
-			for (unsigned int i=0;i<altezzaconsole;i++)
+				printf("-- More (q, Q or control C to exit) --\r");
+				mygetch();
+			for (int i=0;i<altezzaconsole;i++)
 				printf("\n");
 			righestampate=0;
 		}
@@ -13240,6 +13262,18 @@ moreprint("-force    Wet run (default: dry-run)");
 moreprint("-verbose  Show duplicated files");
 moreprint("-sha256   use sha256 instead of XXH3 for detection");
 moreprint("");
+moreprint("New command m (merge, consolidate)");
+moreprint("m in?? out.zpaq Merge a splitted archive in a single one");
+moreprint("-force          Overwrite existing output, ignore free space");
+moreprint("-verify         Do a double-check (XXH3 test)");
+moreprint("");
+moreprint("New command z (delete empty directories, zero length)");
+moreprint("z d0 d1 d2...  Delete empty directories in d0, d1, d2");
+moreprint("-kill          Do a wet run");
+moreprint("-all           Multithread scan");
+moreprint("-verbose       Show infos");
+moreprint("");
+
 moreprint("");
 moreprint("New command/switches ");
 moreprint("During the automated executions, scripts can be launched ");
@@ -13298,123 +13332,120 @@ moreprint("-debug          Show lot of infos (superverbose)");
 	exit(1);
 }
 
+
 //// some examples (to be completed)
 void Jidac::examples() 
 {
-	moreprint("+++ ADDING");
-	moreprint("zpaqfranz a z:\\backup.zpaq c:\\data\\* d:\\pippo\\*");
-	moreprint("Add all files from c:\\data and d:\\pippo to archive z:\\backup.zpaq");
-	moreprint("\n");
-	moreprint("zpaqfranz a z:\\1 c:\\nz\\");
-	moreprint("zpaqfranz l z:\\1 c:\\nz\\");
-	moreprint("Add then test (two commands)");
-	moreprint("\n");
-	moreprint("zpaqfranz a z:\\1 c:\\nz\\ -test");
-	moreprint("Add then test (single command)");
-	moreprint("\n");
-	moreprint("zpaqfranz a z:\\backup.zpaq c:\\vecchio.sql r:\\1.txt -noeta -pakka");
-	moreprint("Add two files archive z:\\backup.zpaq");
-	moreprint("\n");	
-	moreprint("zpaqfranz a z:\\4.zpaq c:\\audio -crc32");
-	moreprint("Add to file, disabling CRC-32 test (just like ZPAQ 7.15)");
-	moreprint("\n");
-	moreprint("zpaqfranz a z:\\4.zpaq c:\\audio -checksum -test -pakka");
-	moreprint("Add to z:\\4.zpaq the folder c:\\audio, do a paranoid test, brief output");
-	moreprint("\n");
-	moreprint("zpaqfranz a z:\\backup.zpaq c:\\data\\* -comment first_copy");
-	moreprint("Add all files from c:\\data with ASCII version 'first_copy' n");
-	moreprint("\n");
+	int twidth=terminalwidth();
+	if (twidth<10)
+		twidth=10;
+	
+	char barbuffer[twidth+10];
+	barbuffer[0]=0;
+	for (int i=0;i<twidth-4;i++)
+		sprintf(barbuffer+i,"-");
+			
+			
+	moreprint(barbuffer);
+	moreprint("   ADDING FILES TO ARCHIVE");
+	moreprint("Add two folders to archive:          a z:\\1.zpaq c:\\data\\* d:\\pippo\\*");
+	moreprint("Add folder, storing full hash        a z:\\2.zpaq c:\\nz\\ -checksum");
+	moreprint("Add folder, then verification:       a z:\\3.zpaq c:\\nz\\ -test");
+	moreprint("Add two files:                       a z:\\4.zpaq.zpaq c:\\vecchio.sql r:\\1.txt");
+	moreprint("Add as zpaq 7.15 (no checksum):      a z:\\5.zpaq c:\\audio -715");
+	moreprint("Add and mark version:                a z:\\6.paq c:\\data\\* -comment first_copy");
 #if defined(_WIN32) || defined(_WIN64)
-	moreprint("Windows running with administrator privileges");
-	moreprint("zpaqfranz a z:\\backup.zpaq c:\\users\\utente\\* -vss -pakka");
-	moreprint("Delete all VSS, create a fresh one of C:\\, backup the 'utente' profile");
-	moreprint("\n");
+	moreprint("Add by a VSS (Windows admin):        a z:\\7.zpaq c:\\users\\utente\\* -vss");
 #endif
-	moreprint("+++ LISTING");
-	moreprint("zpaqfranz l z:\\backup.zpaq");
-	moreprint("Show last version");
+	moreprint("Add folder with timestamping (zfs):  a z:\\8.zpaq c:\\data\\* -timestamp 2021-12-30_01:03:04");
+	moreprint("Create multipart archive:            a \"z:\\9_????.zpaq\" c:\\data\\");
+	moreprint("Create indexed multipart archive:    a \"z:\\a_???.zpaq\" c:\\data\\ -index z:\\a_000.zpaq");
+	moreprint("Add folder, with encryption:         a z:\\b.zpaq c:\\nz\\ -key mygoodpassword");
+	moreprint("Add folder, maximum compress         a z:\\c.zpaq c:\\nz\\ -m 5");
 	moreprint("\n");
-	moreprint("zpaqfranz l z:\\backup.zpaq -all");
-	moreprint("Show every version(s)");
+	moreprint(barbuffer);
+	moreprint("   LISTING/GETTING INFOS");
+	moreprint("Last version:                        l z:\\1.zpaq");
+	moreprint("All (every) version:                 l z:\\1.zpaq -all");
+	moreprint("Version comments (if any):           l z:\\1.zpaq -comment");
+	moreprint("V.comments verbose (if any):         l z:\\1.zpaq -comment -all");
+	moreprint("Only stored 'zpaq.cpp':              l z:\\1.zpaq -find zpaq.cpp -pakka");
+	moreprint("Find-and-replace (like awk or sed)   l r:\\1.zpaq -find c:/biz/ -replace z:\\mydir\\");
+	moreprint("List the 10 greatest file            l z:\\1.zpaq -n 10");
+	moreprint("Show versions info (command i):      i z:\\1.zpaq");
 	moreprint("\n");
-	moreprint("zpaqfranz l z:\\backup.zpaq -comment");
-	moreprint("Show (if any) version comments");
+	moreprint(barbuffer);
+	moreprint("   TESTING ARCHIVE");
+	moreprint("Last version:                        t z:\\1.zpaq");
+	moreprint("All versions:                        t z:\\1.zpaq -all");
+	moreprint("Compare against filesystem:          t z:\\1.zpaq -verify");
+	moreprint("Highly reliable (nz the source dir): l z:\\1.zpaq c:\\nz");
+	moreprint("Paranoid, use lots of RAM:           p z:\\1.zpaq");
+	moreprint("Very paranoid, use lots of RAM:      p z:\\1.zpaq -verify");
 	moreprint("\n");
-	moreprint("zpaqfranz l z:\\backup.zpaq -comment -all");
-	moreprint("Show (if any) version comments verbose");
+	moreprint(barbuffer);
+	moreprint("    EXTRACTING");
+	moreprint("Extract into folder muz7:            x z:\\1.zpaq -to z:\\muz7\\");
+	moreprint("0-bytes files (check restoration):   x z:\\1.zpaq -to z:\\muz7\\ -kill");
+	moreprint("Extract into single directory:       x z:\\1.zpaq -to z:\\muz7\\ -flat");
+	moreprint("Extract without utf,<255,.eml:       x z:\\1.zpaq -to z:\\muz7\\ -utf -fix255 -fixeml");
+	moreprint("Extract forcing overwrite:           x z:\\1.zpaq -to z:\\muz7\\ -force");
+	moreprint("Extract version K:                   x z:\\1.zpaq -to z:\\muz7\\ -until K");
+	moreprint("Extract ALL versions of multipart    x \"z:\\a_???\" -to z:\\ugo -all");
 	moreprint("\n");
-	moreprint("zpaqfranz l z:\\backup.zpaq -find zpaq.cpp -pakka");
-	moreprint("Show from backup.zpaq only stored 'zpaq.cpp' in briefly mode");
+	moreprint(barbuffer);
+	moreprint("    SUPPORT FUNCTIONS FOR DIRS");
+	moreprint("Dir cumulative size (no .zfs/NTFS):  s r:\\vbox s:\\uno");
+	moreprint("Multithreaded size:                  s r:\\vbox s:\\uno -all");
+	moreprint(barbuffer);
+	moreprint("Compare master d0 against d1,d2,d3:  c c:\\d0 k:\\d1 j:\\d2 p:\\d3");
+	moreprint("Multithread compare:                 c c:\\d0 k:\\d1 j:\\d2 p:\\d3 -all");
+	moreprint("Hashed compare d0 against d1,d2,d3:  c c:\\d0 k:\\d1 j:\\d2 p:\\d3 -verify");
+	moreprint(barbuffer);
+	moreprint("Robocopy d0 in d1,d2 (dry run):      r c:\\d0 k:\\d1 j:\\d2 p:\\d3");
+	moreprint("Robocopy d0 in d1,d2 (WET run):      r c:\\d0 k:\\d1 j:\\d2 p:\\d3 -kill");
+	moreprint("Robocopy with verify (WET run):      r c:\\d0 k:\\d1 j:\\d2 p:\\d3 -kill -verify");
+	moreprint("Robocopy with hash verify (WET run): r c:\\d0 k:\\d1 j:\\d2 p:\\d3 -kill -verify -checksum");
+	moreprint(barbuffer);
+	moreprint("Delete empty dirs in d0,d1(dry run): z c:\\d0 k:\\d1");
+	moreprint("Delete empty dirs in d0,d1(WET run): z c:\\d0 k:\\d1 -kill");
+	moreprint(barbuffer);
+	moreprint("Deduplicate d0 WITHOUT MERCY:        d c:\\d0");
+	moreprint("Deduplicate d0 WITHOUT MERCY (wet):  d c:\\d0 -force");
+	moreprint("Dedup WITHOUT MERCY (wet run,sha256):d c:\\d0 -force -sha256");
+	moreprint(barbuffer);
+	moreprint("Windows-dir command clone:           dir /root/script /od");
+	moreprint("Show the 10 largest .mp4 file in c:\\:dir c:\\ /s /os -n 10 -find .mp4");
+	moreprint("Find .mp4 duplicate in C:\\:          dir c:\\ /s -crc32 -find .mp4");
+	moreprint("How big is c:\\z,with subdirs?:       dir c:\\z /s -n 1");
+	moreprint("100 biggest dup. files in c:\\z?:     dir c:\\z /s -crc32 -n 100");
 	moreprint("\n");
-	moreprint("zpaqfranz l r:\\test\\prova.zpaq -find c:/parte/ -replace z:\\mynewdir\\ -pakka");
-	moreprint("Find-and-replace part of output (like awk or sed)");
-	moreprint("\n");
-	moreprint("zpaqfranz l z:\\1.zpaq -checksum -n 10");
-	moreprint("List the 10 greatest file with SHA1 if available");
-	moreprint("\n");
-	moreprint("+++ TESTING");
-	moreprint("zpaqfranz t z:\\1.zpaq");
-	moreprint("Check archive. With CRC32 if created with -checksum. Use -verbose");
-	moreprint("\n");
-	moreprint("zpaqfranz p z:\\1.zpaq");
-	moreprint("Paranoid test. Better if created with -checksum. Use lots of RAM. -verify paranoist");
-	moreprint("\n");
-	moreprint("+++ SUPPORT FUNCTIONS");
-	moreprint("zpaqfranz s r:\\vbox s:\\uno");
-	moreprint("Filesize sum from directories EXCEPT .zfs and NTFS extensions");
-	moreprint("\n");
-	moreprint("zpaqfranz sha1 r:\\vbox s:\\uno -all");
-	moreprint("Get SHA1 of all files (contatenated) in two directories");
-	moreprint("\n");
-	moreprint("zpaqfranz sha1 c:\\nz -all -noeta -pakka");
-	moreprint("zpaqfranz sha1 z:\\knb -all -noeta -pakka");
-	moreprint("Get SHA1 of all files (contatenated) in two directories");
-	moreprint("\n");
-	moreprint("zpaqfranz sha1 c:\\nz -pakka -noeta -nosort -crc32c -find c:\\nz -replace bakdir >1.txt");
-	moreprint("zpaqfranz sha1 z:\\knb -pakka -noeta -nosort -crc32c -find z:\\knb -replace bakdir >2.txt");
-	moreprint("Get hash of files ready to be compared (diff 1.txt 2.txt)");
-	moreprint("\n");
-	moreprint("zpaqfranz sha1 r:\\vbox s:\\uno");
-	moreprint("zpaqfranz sha1 r:\\vbox s:\\uno -crc32");
-	moreprint("zpaqfranz sha1 r:\\vbox -all");
-	moreprint("you can use -crc32c -sha256 -xxhash -crc32 (default SHA1)");
-	moreprint("\n");
-	moreprint("zpaqfranz sha1 p:\\staff -xxhash -checksum");
-	moreprint("Create MAGIC cumulative hashes of 1-level");
-	moreprint("\n");
-	moreprint("zpaqfranz sha1 p:\\staff -xxhash -verify");
-	moreprint("Find duplicated files");
-	moreprint("\n");
-	moreprint("zpaqfranz sha1 p:\\staff -xxhash -verify -all -kill -minsize 1000000");
-	moreprint("Find duplicated files, with M/T, show only kill-candidae, min 1MB");
-	moreprint("\n");
-	
-	moreprint("zpaqfranz dir /root/script /od");
-	moreprint("Windows-dir command clone (/od /os /s /a)");
-	moreprint("\n");
-	moreprint("zpaqfranz dir c:\\ /s /os -n 10 -find .mp4");
-	moreprint("Show the 10 largest .mp4 file in c:\\");
-	moreprint("\n");
-	moreprint("zpaqfranz dir c:\\ /s -crc32 -find .mp4");
-	moreprint("Find .mp4 duplicate in C:\\");
-	
-	moreprint("\n");
-	moreprint("+++ EXTRACTING");
-	moreprint("zpaqfranz x p:\\due.zpaq -to z:\\muz7\\");
-	moreprint("Extract all files into folder\n");
-	
-	moreprint("zpaqfranz x p:\\due.zpaq -to z:\\muz7\\ -flat");
-	moreprint("Extract all files into single directory\n");
-	
-	moreprint("zpaqfranz x p:\\due.zpaq -to z:\\muz7\\ -kill");
-	moreprint("Create 0-bytes files (check filename restoration)\n");
-	
-	moreprint("zpaqfranz x p:\\due.zpaq -to z:\\muz7\\ -utf -fix255 -fixeml");
-	moreprint("Extract without utf filename, max length 255, compress .eml\n");
-	
-	exit(1);
+	moreprint(barbuffer);
+	moreprint("   SUPPORT FUNCTIONS FOR FILES");
+	moreprint("SHA1 of all files (and duplicated):  sha1 z:\\knb");
+	moreprint("SHA1 multithread, only summary:      sha1 z:\\knb -all -summary");
+	moreprint("XXH3 multithread:                    sha1 z:\\knb -all -xxhash");
+	moreprint("CRC-32c HW accelerated:              sha1 z:\\knb -crc32c -pakka -noeta");
+	moreprint("Hashes to be compared (dir1):        sha1 c:\\nz  -pakka -noeta -nosort -crc32c -find c:\\nz  -replace bakdir >1.txt");
+	moreprint("Hashes to be compared (dir2):        sha1 z:\\knb -pakka -noeta -nosort -crc32c -find z:\\knb -replace bakdir >2.txt");
+	moreprint("Duplicated files with sha256:        sha1 z:\\knb -kill -sha256");
+	moreprint("Duplicated files minsize 1000000:    sha1 z:\\knb -kill -all -minsize 1000000");
+	moreprint("MAGIC cumulative hashes of 1-level:  sha1 p:\\staff -xxhash -checksum");
+	moreprint(barbuffer);
+	moreprint("Fill (wipe) almost all free space:   f z:\\");
+	moreprint("Fill (wipe), free space after run:   f z:\\ -kill -verbose");
+	moreprint(barbuffer);
+	moreprint("Check UTF-filenames (dry run):       utf z:\\knb");
+	moreprint("Sanitize UTF-filenames (wet run):    utf z:\\knb -kill");
+	moreprint(barbuffer);
+	moreprint("Check >255 and case collisions:      utf z:\\knb -fix255");
+	moreprint("Fix .eml filenames (dry run):        utf z:\\knb -fixeml");
+	moreprint(barbuffer);
+	moreprint("   RISKY COMMAND: DO NOT USE IF YOU DO NOT UNDERSTAND!");
+	moreprint("Kill everything not in archive:      a z:\\1.zpaq c:\\z");
+	moreprint("Extract into Z                       x z:\\1.zpaq c:\\z -to z:\\knb");
+	moreprint("... something change z:\\knb:         k z:\\1.zpaq c:\\z -to z:\\knb");
 }
-
 
 //// cut a too long filename 
 string mymaxfile(string i_filename,const unsigned int i_lunghezza)
@@ -13442,36 +13473,31 @@ string mymaxfile(string i_filename,const unsigned int i_lunghezza)
 //// default help
 void Jidac::usage() 
 {
-	moreprint("Usage: zpaqfranz command archive[.zpaq] files|directory... -options...");
-	moreprint("\?\?\?\? in archive name for multi-part ex \"test_????.zpaq\"");
-	moreprint("Archive commands:");
-	moreprint("   a             Append files (-715 -checksum -force -crc32 -comment foo -test)");
-	moreprint("   x             Extract versions of files (-until N -comment foo -kill -utf)");
-	moreprint("   l             List files (-all -checksum -find something -comment foo)");
-	moreprint("   l d0 d1 d2... Compare (test) content agains directory d0, d1, d2...");
-	moreprint("   t             Fast test of most recent version of files (-verify -verbose)");
-	moreprint("   i             Show versions into the ZPAQ archive");
-	moreprint("Ausiliary commands:");
-	moreprint("   c d0 d1 d2... Compare dir d0 to d1,d2... (-all M/T scan -checksum -xxhash...)");
-	moreprint("   s d0 d1 d2... Cumulative size (excluding .zfs) of d0,d1,d2 (-all M/T)");
-	moreprint("   r d0 d1 d2... Mirror d0 in d1... (-kill -verify -checksum -all -xxhash...");
-	moreprint("   d d0          Deduplicate folder d0 WITHOUT MERCY (-force -verbose -sha256)");
-	moreprint("   f             Fill (wipe) almost all disk space and check (-verbose -kill)");
-	moreprint("   utf d0        Check/detox filenames in d0 (-dirlength X -filelength Y -kill)");
-	moreprint("   sha1          Hash/dup (#HASH -all -kill -force -checksum -verify -summary)");
-	moreprint("                 #HASH can be (nothing=>SHA1) -crc32 -crc32c -xxhash -sha256");
-	moreprint("   dir           Windows dir-like (/s /a /os /od) -crc32 show duplicates");
-	moreprint("   help          Long help (-h, -he examples, -diff differences from 7.15)");
-	moreprint("Optional switch(es):");
-	moreprint("  -all [N]       Extract/list versions in N [4] digit directories");
-	moreprint("  -f -force      Add: append files if contents have changed");
-	moreprint("                 Extract: overwrite existing output files");
-	moreprint("  -key X         Create or access encrypted archive with password X");
-	moreprint("  -mN  -method N Compress level N (0..5 = faster..better, default 1)");
-	moreprint("  -test          Extract: verify but do not write files");
-	moreprint("                 Add: Post-check of files (-verify for CRC-32)");
-	moreprint("  -to out...     Prefix files... to out... or all to out/all");
-	moreprint("  -until N       Roll back archive to N'th update or -N from end");
+	moreprint("Usage: zpaqfranz command archive[.zpaq] files|directory... -switches...");
+	moreprint("Multi-part archive name               | \?\?\?\?\? => \"test_?????.zpaq\"");
+///	moreprint("       Archive:");
+	moreprint("             a: Append files          |          t: Fast test (-all)");
+	moreprint("             x: Extract versions      |          l: list files (-all)");
+	moreprint(" l d0 d1 d2...: Compare (test) content|          i: show archive's versions");
+	moreprint("                                   Various");
+///	moreprint("--------------------------------------|--------------------------------------");
+	moreprint(" c d0 d1 d2...: Compare d0 to d1,d2...| s d0 d1 d2: cumulative size of d0,d1,d2");
+	moreprint(" r d0 d1 d2...: Mirror d0 in d1...    |       d d0: deduplicate d0 WITHOUT MERCY");
+	moreprint(" z d0 d1 d2...: Delete empty dirs     |        m X: merge multipart archive");
+	moreprint("          f d0: Fill (wipe) free space|     utf d0: Detox filenames in d0");
+	moreprint(" sha1 d0 d1...: Hashing/deduplication |     dir d0: Win dir (/s /a /os /od -crc32)");
+	moreprint("                                Main switches");
+	moreprint("      -all [N]: All versions N digit  |     -key X: archive password X");
+	moreprint(" -mN -method N: 0..5= faster..better  |     -force: always overwrite");
+	moreprint("         -test: Verify (extract/add)  |      -kill: allow destructive operations");
+	moreprint("    -to out...: Prefix files to out   |   -until N: Roll back to N'th version");
+	moreprint("                               Getting help");
+	moreprint(" -h: Long help (-?)     -diff: against zpaq 715     -examples: common examples");
+	//moreprint("            -h: Long help (-?)        |  -examples: Usage examples");
+	///moreprint("--------------------------------------|--------------------------------------");
+	
+	
+
 }
 
 
@@ -13479,13 +13505,29 @@ void Jidac::usage()
 void Jidac::usagefull() 
 {
 
+  time_t now=time(NULL);
+  tm* t=gmtime(&now);
+  date=(t->tm_year+1900)*10000000000LL+(t->tm_mon+1)*100000000LL
+      +t->tm_mday*1000000+t->tm_hour*10000+t->tm_min*100+t->tm_sec;
+
 usage();
 char buffer[200];
-	
-  
-sprintf(buffer,"  -until %s  Set date, roll back (UT, default time: 235959)",dateToString(date).c_str());
+moreprint("Various:");
+moreprint("   c d0 d1 d2... Compare dir d0 to d1,d2... (-all M/T scan -checksum -xxhash...)");
+moreprint("   s d0 d1 d2... Cumulative size (excluding .zfs) of d0,d1,d2 (-all M/T -715)");
+moreprint("   r d0 d1 d2... Mirror d0 in d1... (-kill -verify -checksum -all -xxhash...");
+moreprint("   d d0          Deduplicate folder d0 WITHOUT MERCY (-force -verbose -sha256)");
+moreprint("   z d0 d1 d2... Delete empty directories in d0, d1, d2 (-kill -verbose -all)");
+moreprint("   m archive out Merge (consolidate) multi-part archive into one (-force -verify)");
+moreprint("   f             Fill (wipe) almost all disk space and check (-verbose -kill)");
+moreprint("   utf d0        Check/detox filenames in d0 (-dirlength X -filelength Y -kill)");
+moreprint("   sha1          Hash/dup (#HASH -all -kill -force -checksum -verify -summary)");
+moreprint("                 #HASH can be (nothing=>SHA1) -crc32 -crc32c -xxhash -sha256");
+moreprint("   dir           Windows dir-like (/s /a /os /od) -crc32 show duplicates");
+moreprint("\n");
+moreprint("Extended switches:");
+sprintf(buffer,"  -until %s   Set date, roll back (UT, default time: 235959)",dateToString(date).c_str());
 moreprint(buffer);
-	
 moreprint("  -not files...   Exclude. * and ? match any string or char");
 moreprint("       =[+-#^?]   List: exclude by comparison result");
 moreprint("  -only files...  Include only matches (default: *) example *pippo*.mp4");
@@ -13494,7 +13536,8 @@ moreprint("  -noattributes   Ignore/don't save file attributes or permissions");
 moreprint("  -index F        Extract: create index F for archive");
 moreprint("                  Add: create suffix for archive indexed by F, update F");
 moreprint("  -sN -summary N  If >0 show only summary (sha1())");
-moreprint("  ########## franz's fork ###########");
+moreprint("\n");
+moreprint("zpaqfranz switches:");
 moreprint("  -715            Works just about like v7.15");
 moreprint("  -checksum       Store SHA1+CRC32 for every file");
 moreprint("  -verify         Force re-read of file during t (test command) or c");
@@ -13535,9 +13578,9 @@ moreprint("  -fixeml         Heuristically compress .eml filenames (Fwd Fwd Fwd 
 moreprint("  -flat           Everything in single path (emergency extract of strange files)");
 moreprint("  -debug          Show lot of infos (superverbose)");
 moreprint("  -timestamp X    Set version datetime@X 14 digit (2021-12-30_01:03:04)"); 	// force the timestamp
-	
 moreprint("\n");
-moreprint("  ########## Advanced commands ###########");
+moreprint("zpaqfranz switches:");
+moreprint("Advanced commands:");
 moreprint("   p              Paranoid test. Use lots (LOTS!) of RAM (-verify -verbose)");
 moreprint("   k file.zpaq path -to foo");
 moreprint("                  kill (delete) all files and directories in foo that arent in archive");
@@ -13548,14 +13591,11 @@ moreprint("                  ... something happens in z:\\knb and we want to tur
 moreprint("                  ... WITHOUT delete everything and extract again ...");
 moreprint("                  zpaqfranz x z:\\1.zpaq c:\\nz -to z:\\knb -force");
 moreprint("                  zpaqfranz k z:\\1.zpaq c:\\nz -to z:\\knb");
-
 moreprint("\n");
-moreprint("  ########## Advanced options ###########");
+moreprint("Voodoo switches:");
 moreprint("  -repack F [X]   Extract to new archive F with key X (default: none)");
-
 sprintf(buffer,"  -tN -threads N  Use N threads (default: 0 = %d cores.",howmanythreads);
 moreprint(buffer);
-	
 moreprint("  -fragment N     Use 2^N KiB average fragment size (default: 6)");
 moreprint("  -mNB -method NB Use 2^B MiB blocks (0..11, default: 04, 14, 26..56)");
 moreprint("  -method {xs}B[,N2]...[{ciawmst}[N1[,N2]...]]...  Advanced:");
@@ -13576,7 +13616,7 @@ moreprint("  m8,24: MIX all previous models, N1 context bits, learning rate N2")
 moreprint("  s8,32,255: SSE last model. N1 context bits, count range N2..N3");
 moreprint("  t8,24: MIX2 last 2 models, N1 context bits, learning rate N2");
 
-  exit(1);
+exit(1);
 }
 
 
@@ -14954,6 +14994,8 @@ int Jidac::doCommand(int argc, const char** argv) {
 			||
 			(stringcomparei(parametro,"?"))
 			||
+			(stringcomparei(parametro,"-?"))
+			||
 			(stringcomparei(parametro,"--help"))
 			||
 			(stringcomparei(parametro,"-help")))
@@ -14964,6 +15006,8 @@ int Jidac::doCommand(int argc, const char** argv) {
 		if ((stringcomparei(parametro,"-he"))
 			||
 			(stringcomparei(parametro,"-helpe"))
+			||
+			(stringcomparei(parametro,"-example"))
 			||
 			(stringcomparei(parametro,"-examples")))
 			{
@@ -14996,7 +15040,7 @@ int Jidac::doCommand(int argc, const char** argv) {
   for (int i=1; i<argc; ++i) {
     const string opt=argv[i];  // read command
     if ((opt=="add" || opt=="extract" || opt=="list" || opt=="k" 
-         || opt=="a"  || opt=="x" || opt=="p" || opt=="t" ||opt=="test" || opt=="l" || opt=="i")
+         || opt=="a"  || opt=="x" || opt=="p" || opt=="t" ||opt=="test" || opt=="l" || opt=="i" || opt=="m")
         && i<argc-1 && argv[i+1][0]!='-' && command==0) 
 		{
 			command=opt[0];
@@ -15047,7 +15091,7 @@ int Jidac::doCommand(int argc, const char** argv) {
 	}
 	
 	  
-	else if ((opt=="f") || (opt=="c") || (opt=="s") || (opt=="utf") || (opt=="r") || (opt=="robocopy"))
+	else if ((opt=="f") || (opt=="c") || (opt=="s") || (opt=="utf") || (opt=="r") || (opt=="robocopy") || opt=="z")
 	{
 		command=opt[0];
 		while (++i<argc && argv[i][0]!='-')
@@ -15469,12 +15513,14 @@ int Jidac::doCommand(int argc, const char** argv) {
   else if (command=='i') return info();
   else if (command=='k') return kill();
   else if (command=='l') return list();
+  else if (command=='m') return consolidate(archive);
   else if (command=='p') return paranoid();
   else if (command=='r') return robocopy();
   else if (command=='s') return dircompare(true,false); 
   else if (command=='t') return test();
   else if (command=='x') return extract();
   else if (command=='u') return utf();
+  else if (command=='z') return zero();
   else usage();
   
   
@@ -25397,6 +25443,10 @@ int Jidac::deduplicate()
 }
 int Jidac::summa() 
 {
+	
+	
+	
+	
 	if (!flagpakka)
 	{
 		printf("Getting %s",mygetalgo().c_str());
@@ -29481,9 +29531,206 @@ uint32_t crc32zeros(int64_t i_size)
 	return crc;
 }
 
+void printbar(char i_carattere,bool i_printbarraenne=true)
+{
+	int twidth=terminalwidth();
+	if (twidth>10)
+	{
+		for (int i=0;i<twidth-4;i++)
+			printf("%c",i_carattere);
+		if (i_printbarraenne)
+			printf("\n");
+	}
+	else
+		printf("\n");
+}
+
+
+int Jidac::consolidate(string i_archive)
+{
+	assert(i_archive);
+	printf("*** Merge (consolidate) ***\n");
+	
+	vector<string>	chunk_name;
+	vector<int64_t>	chunk_size;
+	
+	const string part0=subpart(i_archive, 0);
+	for (unsigned i=1; ;i++) 
+	{
+		const string parti=subpart(i_archive, i);
+		if (i>1 && parti==part0) 
+			break;
+		if (!fileexists(parti))
+			break;
+		int64_t dimensione=prendidimensionefile(parti.c_str());
+		if (dimensione<0)
+			break;
+		chunk_size.push_back(dimensione);
+		chunk_name.push_back(parti);
+	}
+	if (chunk_name.size()==0)
+	{
+		printf("29515: Something strange: cannot find archive chunks\n");
+		return 2;
+	}
+	int64_t total_size=0;
+	for (int unsigned i=0;i<chunk_name.size();i++)
+	{
+		printf("Chunk %08d %20s <<%s>>\n",i,migliaia(chunk_size[i]),chunk_name[i].c_str());
+		total_size+=chunk_size[i];
+	}
+	printbar('-');
+	printf("Total %s %20s (%s)\n",migliaia2(chunk_name.size()),migliaia(total_size),tohuman(total_size));
+	
+	if (files.size()!=1)
+	{
+		printf("29545: exactly one file as output for consolidate\n");
+		return 1;
+	}
+	
+	string outfile=files[0];
+	
+	if (fileexists(outfile))
+		if (!flagforce)
+		{
+			printf("29553: outfile exists, and no -force. Quit %s\n",outfile.c_str());
+			return 1;
+		}
+	int64_t spazio=getfreespace(outfile.c_str());
+	printf("Outfile    <<%s>>\n",outfile.c_str());
+	printf("Free space %20s\n",migliaia(spazio));
+	printf("Needed     %20s\n",migliaia(total_size));
+	
+	if (spazio<total_size)
+		if (!flagforce)
+		{
+			printf("29564: Free space seems < needed, and no -force. Quit\n");
+			return 1;
+		}
+
+
+#ifdef _WIN32
+	wstring widename=utow(outfile.c_str());
+	FILE* outFile=_wfopen(widename.c_str(), L"wb" );
+#else
+	FILE* outFile=fopen(outfile.c_str(), "wb");
+#endif
+
+	if (outFile==NULL)
+	{
+		printf("29579 :CANNOT OPEN outfile %s\n",outfile.c_str());
+		return 2;
+	}
+	size_t const blockSize = 65536;
+	unsigned char buffer[blockSize];
+	int64_t donesize=0;
+	int64_t startcopy=mtime();
+
+	XXH3_state_t state128;
+    (void)XXH3_128bits_reset(&state128);
+	if (flagverify)
+		printf("-verify: trust, but check...\n");
+		
+		
+	for (int unsigned i=0;i<chunk_name.size();i++)
+	{
+	///	int64_t sorgente_dimensione=chunk_size[i];
+		string	sorgente_nome=chunk_name[i];
+			
+		FILE* inFile = freadopen(sorgente_nome.c_str());
+		if (inFile==NULL) 
+		{
+#ifdef _WIN32
+		int err=GetLastError();
+#else
+		int err=1;
+#endif
+		printf("\n29585: ERR <%s> kind %d\n",sorgente_nome.c_str(),err); 
+
+		return 2;
+		}
+	
+		
+		size_t readSize;
+		int64_t	chunk_readed=0;
+		int64_t	chunk_written=0;
+		while ((readSize = fread(buffer, 1, blockSize, inFile)) > 0) 
+		{
+			int64_t written=fwrite(buffer,1,readSize,outFile);
+			
+			chunk_written+=written;
+			chunk_readed+=readSize;
+			donesize+=written;
+			if (flagverify)
+				(void)XXH3_128bits_update(&state128, buffer, readSize);
+			avanzamento(donesize,total_size,startcopy);
+		}
+		
+		fclose(inFile);
+		if (flagverbose)
+			printf("Chunk %08d R %20s W %20s E %20s\n",i,migliaia(chunk_readed),migliaia2(chunk_written),migliaia3(chunk_size[i]));
+		if ((chunk_readed!=chunk_written) || (chunk_readed!=chunk_size[i]))
+		{
+			printf("29632: GURU on chunk %d Read, Write, Expec not equal!\n",i);
+			return 1;
+		}
+	}
+	fclose(outFile);
+	printf("Done\n");
+	printf("Written  %20s\n",migliaia(donesize));
+	printf("Expected %20s\n\n",migliaia(total_size));
+	if (donesize!=total_size)
+	{
+		printf("29645: GURU bytes written does not match expected\n");
+		return 1;
+	}
+	if (flagverify)
+	{
+		printf("-flagverify: double check...\n");
+		XXH128_hash_t myhash=XXH3_128bits_digest(&state128);
+		char risultato[33];
+		sprintf(risultato,"%016llX%016llX",(unsigned long long)myhash.high64,(unsigned long long)myhash.low64);
+		
+		uint64_t dummybasso64;
+		uint64_t dummyalto64;
+		int64_t startverify=mtime();
+		int64_t io_lavorati=0;
+		string hashreloaded=xxhash_calc_file(outfile.c_str(),startverify,total_size,io_lavorati,dummybasso64,dummyalto64);
+		printf("Expected   XXH3 hash of the output file %s\n",risultato);
+		printf("Calculated XXH3 hash of the output file %s\n",risultato);
+		if (hashreloaded!=risultato)
+		{
+			printf("29658: GURU hash of output file does not match!\n");
+			return 1;
+		}
+		
+	}
+	
+	
+	return 0;
+	
+}
+
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
 
 /// franz-test
 /// extract data (multithread) and check CRC-32, if any
+
 int Jidac::test() 
 {
 	flagtest=true;
@@ -30679,22 +30926,36 @@ bool getfileinfo(string i_filename,int64_t& o_size,int64_t& o_date,int64_t& o_at
 	return false;
 }
 
-void printbar(char i_carattere,bool i_printbarraenne=true)
+
+int64_t myabs(int64_t i_first,int64_t i_second)
 {
-	int twidth=terminalwidth();
-	if (twidth>10)
-	{
-		for (int i=0;i<twidth-4;i++)
-			printf("%c",i_carattere);
-		if (i_printbarraenne)
-			printf("\n");
-	}
+	if (i_first>i_second)
+		return i_first-i_second;
 	else
-		printf("\n");
+		return i_second-i_first;
+	
 }
 
-string secure_copy_file(const string i_filename,const string i_outfilename,int64_t i_startcopy,int64_t i_totalsize,int64_t i_totalcount,int64_t& o_donesize,int64_t& o_donecount)
+int64_t g_robocopy_check_sorgente;
+int64_t g_robocopy_check_destinazione;
+
+
+string secure_copy_file(
+const string i_filename,const string i_outfilename,int64_t i_startcopy,int64_t i_totalsize,int64_t i_totalcount,int64_t& o_donesize,int64_t& o_donecount,
+int64_t i_sorgente_size,
+int64_t i_sorgente_date,
+int64_t i_sorgente_attr,
+int64_t i_destinazione_size,
+int64_t i_destinazione_date,
+int64_t i_destinazione_attr
+)
 {
+	if (flagdebug)
+	{
+		printf("\n");
+		printf("From:   %s\n",i_filename.c_str());
+		printf("To:     %s\n",i_outfilename.c_str());
+	}
 	if (i_filename=="")
 		return "30833:SOURCE-EMPTY";
 	
@@ -30717,36 +30978,84 @@ string secure_copy_file(const string i_filename,const string i_outfilename,int64
 	
 	bool	sorgente_esiste=false;
 	bool	destinazione_esiste=false;
-		
+	/*
+	int64_t start_sorgente_esiste=mtime();
 	sorgente_esiste		=getfileinfo(i_filename,sorgente_dimensione,sorgente_data,sorgente_attr);
-	destinazione_esiste	=getfileinfo(i_outfilename,destinazione_dimensione,destinazione_data,destinazione_attr);
-		
-	///printf("Sorgente size %lld\n",sorgente_dimensione);
+	g_robocopy_check_sorgente+=mtime()-start_sorgente_esiste;
+	*/
+	sorgente_esiste=true;
+	sorgente_dimensione=i_sorgente_size;
+	sorgente_data=i_sorgente_date;
+	sorgente_attr=i_sorgente_attr;
 	
-	if (destinazione_esiste)
+	if (i_destinazione_size>=0)
 	{
-		if (sorgente_esiste)
-			if (destinazione_dimensione==sorgente_dimensione)
-				if (destinazione_data==sorgente_data)
-				{
-					if (sorgente_attr!=destinazione_attr)
-						close(i_outfilename.c_str(),sorgente_data,sorgente_attr);
-					
-					o_donesize+=sorgente_dimensione;
-					o_donecount++;
-					if (o_donecount%1000==0)
-					{
-						//printf("\r");
-						//printbar(' ',false);
-						printf("File %10s/%10s (%9s/%9s)\r",migliaia(o_donecount),migliaia2(i_totalcount),tohuman(o_donesize),tohuman2(i_totalsize));
-					}
-					// NTFS fix at 2 seconds?
-			///	printf("Differenza %08d\n",(destinazione_data-sorgente_data));
-						return "=";
-				}
-		delete_file(i_outfilename.c_str());
+		destinazione_esiste=true;
+		destinazione_dimensione=i_destinazione_size;
+		destinazione_data=i_destinazione_date;
+		destinazione_attr=i_destinazione_attr;
+	}
+	else
+	{
+		int64_t start_destinazione_esiste=mtime();
+		destinazione_esiste	=getfileinfo(i_outfilename,destinazione_dimensione,destinazione_data,destinazione_attr);
+		g_robocopy_check_destinazione+=mtime()-start_destinazione_esiste;
 	}
 	
+	
+	
+	if (flagdebug)
+	{
+		printf("Sorgente     esiste  %d\n",(int)sorgente_esiste);
+		printf("Sorgente     size    %s\n",migliaia(sorgente_dimensione));
+		printf("Sorgente     data    %s\n",migliaia(sorgente_data));
+		printf("Destinazione esiste  %d\n",(int)destinazione_esiste);
+		printf("Destinazione size    %s\n",migliaia(destinazione_dimensione));
+		printf("Destinazione data    %s\n",migliaia(destinazione_data));
+		printf("\n");
+	}
+	if (destinazione_esiste)
+	{
+		if (flagdebug)
+			printf("Esiste1\n");
+			
+		if (sorgente_esiste)
+		{
+			if (flagdebug)
+			printf("Esiste2\n");
+				if (destinazione_dimensione==sorgente_dimensione)
+				{
+					if (flagdebug)
+						printf("Stessa dimensione\n");
+					if (flagdebug)
+					{
+						printf("PPP %s\n",migliaia(myabs(destinazione_data,sorgente_data)));
+					}
+					if (myabs(destinazione_data,sorgente_data)<=2)
+					{
+						if (flagdebug)
+							printf("Stessa data\n");
+						if (flagkill)
+							if (sorgente_attr!=destinazione_attr)
+								close(i_outfilename.c_str(),sorgente_data,sorgente_attr);
+					
+						o_donesize+=sorgente_dimensione;
+						o_donecount++;
+						if (o_donecount%1000==0)
+							printf("File %10s/%10s (%9s/%9s)\r",migliaia(o_donecount),migliaia2(i_totalcount),tohuman(o_donesize),tohuman2(i_totalsize));
+						return "=";
+					}
+				}
+		}
+		if (flagdebug)
+			printf("Cancellerei\n");
+		if (flagkill)
+			delete_file(i_outfilename.c_str());
+	}
+	
+	if (!flagkill)
+		return "OK";
+		
 	size_t const blockSize = 65536;
 	unsigned char buffer[blockSize];
 	FILE* inFile = freadopen(i_filename.c_str());
@@ -30995,7 +31304,307 @@ int erredbarras(const std::string &i_path,bool i_flagrecursive=true)
 #endif
 	return 0;
 }
+int Jidac::zero()
+{
+	printf("*** Delete empty folders *** ");
+	if (!flagkill)
+		printf("*** -kill missing: dry run *** ");
+	
+	if (!flagforcezfs)
+		printf("*** ignoring .zfs and :$DATA ***");
 
+	printf("\n");
+	
+	for (unsigned i=0; i<files.size(); ++i)
+		if (!isdirectory(files[i]))
+			files[i]+='/';
+
+	vector<DTMap> files_edt;
+  
+	files_size.clear();
+	files_count.clear();
+	files_time.clear();
+
+	int64_t startscan=mtime();
+	
+	int 	quantifiles		=0;
+	
+	if (flagverbose)
+		flagnoeta=true;
+	g_bytescanned			=0;
+	g_worked=0;
+	g_arraybytescanned.clear();
+	g_arrayfilescanned.clear();
+
+		
+	if (all)	// OK let's make different threads
+	{
+		vector<tparametri> 	vettoreparametri;
+		vector<DTMap>		vettoreDT;
+		
+		tparametri 	myblock;
+		DTMap		mydtmap;
+	
+		for (unsigned int i=0;i<files.size();i++)
+		{
+			vettoreDT.push_back(mydtmap);
+			myblock.tnumber=i;
+			myblock.directorytobescanned=files[i];
+			myblock.theDT=vettoreDT[i];
+			myblock.flagcalchash=false;//flagverify;
+			myblock.timestart=mtime();
+			vettoreparametri.push_back(myblock);
+		}
+	
+		int rc;
+	pthread_t* threads = new pthread_t[files.size()];
+///		pthread_t threads[files.size()];
+		pthread_attr_t attr;
+		void *status;
+
+		// ini and set thread joinable
+		pthread_attr_init(&attr);
+		pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
+
+		printf("Creating %s scan threads\n",migliaia(files.size()));
+		
+		
+		if (!flagnoeta)
+		{
+			setupConsole();
+			printf("\e[?25l");	
+			fflush(stdout);
+			restoreConsole();
+		}
+		for(unsigned int i = 0; i < files.size(); i++ ) 
+		{
+			print_datetime();
+			printf("Scan dir |%02d| <<%s>>\n",i,files[i].c_str());
+		}
+
+		for(unsigned int i = 0; i < files.size(); i++ ) 
+		{
+			g_arraybytescanned.push_back(0);
+			g_arrayfilescanned.push_back(0);
+			
+			rc = pthread_create(&threads[i], &attr, scansiona, (void*)&vettoreparametri[i]);
+			if (rc) 
+			{
+				printf("Error creating thread\n");
+				exit(-1);
+			}
+		}
+		printf("\n");
+
+		// free attribute and wait for the other threads
+		pthread_attr_destroy(&attr);
+		for(unsigned int i = 0; i < files.size(); i++ ) 
+		{
+			rc = pthread_join(threads[i], &status);
+			if (rc) 
+			{
+				error("Unable to join\n");
+				exit(-1);
+			}
+			///printf("Thread completed %d status %d\n",i,status);
+		}
+		if (!flagnoeta)
+		{
+			setupConsole();
+			printf("\033[%dB",(int)g_arraybytescanned.size());
+			printf("\e[?25h");
+			fflush(stdout);
+			restoreConsole();
+		}
+		printf("\nParallel scan ended in %f s\n",(mtime()-startscan)/1000.0);
+	
+		for (unsigned i=0; i<files.size(); ++i)
+		{
+			uint64_t sizeofdir=0;
+			uint64_t dircount=0;
+			for (DTMap::iterator p=vettoreparametri[i].theDT.begin(); p!=vettoreparametri[i].theDT.end(); ++p) 
+			{
+				string filename=rename(p->first);
+				if (p->second.date && p->first!="" && (!isdirectory(p->first)) && (!isads(filename.c_str()))) 
+				{
+					sizeofdir+=p->second.size;
+					dircount++;
+					quantifiles++;
+				}
+				if (flagverbose)
+				{
+					printUTF8(filename.c_str());
+					printf("\n");
+				}
+			}
+			files_edt.push_back(vettoreparametri[i].theDT);
+			files_size.push_back(sizeofdir);
+			files_count.push_back(dircount);
+			files_time.push_back(vettoreparametri[i].timeend-vettoreparametri[i].timestart+1);
+		}
+		delete[] threads;
+	
+	}
+	else
+	{	// single thread. Do a sequential scan
+
+		g_arraybytescanned.push_back(0);
+		g_arrayfilescanned.push_back(0);
+	
+	
+		for (unsigned i=0; i<files.size(); ++i)
+		{
+
+			DTMap myblock;
+		
+			print_datetime();
+			printf("Scan dir <<%s>>\n",files[i].c_str());
+			uint64_t blockstart=mtime();
+			
+			///printf("###############################scannati per %d\n",files.size());
+	
+			////myscandir(i,myblock,files[i].c_str(),true,false);
+			myscandir(0,myblock,files[i].c_str(),true,false);
+			
+			uint64_t sizeofdir=0;
+			uint64_t dircount=0;
+		
+			for (DTMap::iterator p=myblock.begin(); p!=myblock.end(); ++p) 
+			{
+				string filename=rename(p->first);
+				if (p->second.date && p->first!="" && (!isdirectory(p->first)) && (!isads(filename))) 
+				{
+					sizeofdir+=p->second.size;
+					dircount++;
+					quantifiles++;
+				}
+				if (flagverbose)
+				{
+					printUTF8(filename.c_str());
+					printf("\n");
+				}
+			}
+	
+			files_edt.push_back(myblock);
+			files_size.push_back(sizeofdir);
+			files_count.push_back(dircount);
+			files_time.push_back(mtime()-blockstart);
+			
+		}
+	}
+
+	vector<string> scannedfiles;
+	
+	for (unsigned i=0; i<files.size(); ++i)
+		for (DTMap::iterator p=files_edt[i].begin(); p!=files_edt[i].end(); ++p) 
+			scannedfiles.push_back(p->first);
+	
+	vector<string> tobedeleted;
+	
+	int candidati=0;
+	for (unsigned int i=0;i<scannedfiles.size();i++)
+	{
+		if (i<scannedfiles.size())
+			if (isdirectory(scannedfiles[i]))
+				{
+					string corrente=scannedfiles[i];
+					bool flagfigli=false;
+					for (unsigned int j=i+1;j<scannedfiles.size();j++)
+					{
+						string prossima=extractfilepath(scannedfiles[j]);
+						string nomefile=extractfilename(scannedfiles[j]);
+				///		if ((nomefile!="Thumbs.db"))
+						{
+							if (mypos(corrente,prossima)!=0)
+							{
+			///				printf("---> esco prossima non  corrente |%s| |%s|\n",prossima.c_str(),corrente.c_str());
+								break;
+							}
+							else
+							{
+								if (!isdirectory(scannedfiles[j]))
+								{
+				///				printf("Figliuolo!! %s\n",scannedfiles[j].c_str());
+									flagfigli=true;
+									break;
+								}
+							}
+						}
+					}
+					if (flagfigli==0)
+					{
+			//			printf("Flag figli %08d  %s\n",int(flagfigli),scannedfiles[i].c_str());
+				//		candidati++;
+						tobedeleted.push_back(scannedfiles[i]);
+					}
+				}
+	}
+	candidati=tobedeleted.size();
+	
+	printf("\n");
+	printf("Candidate (empty dirs) %12s\n",migliaia(candidati));
+	if (candidati==0)
+	{
+		printf("Nothing to do\n");
+		return 0;
+	}
+	if (flagverbose)
+		{
+			printbar('-');
+			for (unsigned int i=0;i<tobedeleted.size();i++)
+			{
+				printf("TO BE DELETED <<");
+				printUTF8(tobedeleted[i].c_str());
+				printf(">>\n");
+			}
+			printbar('-');
+		}
+	
+	if (!flagkill)
+	{
+		printf("dry run, exiting (no -kill)\n");
+		return 0;
+	}	
+
+		
+
+	int lastrun=tobedeleted.size();
+	int newrun=0;
+	int64_t startdelete=mtime();
+	int runs=0;
+	while (lastrun>newrun)
+	{
+		runs++;
+		for (unsigned int i=0;i<tobedeleted.size();i++)
+			if (delete_dir(tobedeleted[i].c_str()))
+				tobedeleted.erase(tobedeleted.begin()+i);
+		newrun=tobedeleted.size();
+		if (flagdebug)
+			printf("lastrun - newrun %d %d\n",lastrun,newrun);
+		if (lastrun>newrun)
+		{
+			lastrun=newrun;
+			newrun=0;
+		}
+	}
+	
+	printf("Delete time %9.2f sec, runs %d\n",(mtime()-startdelete)/1000.0,runs);
+	printf("Survived (not deleted) %12s\n",migliaia(tobedeleted.size()));
+	if (tobedeleted.size()>0)
+		if (flagverbose)
+		{
+			for (unsigned int i=0;i<tobedeleted.size();i++)
+			{
+				printf("Highlander <<");
+				printUTF8(tobedeleted[i].c_str());
+				printf(">>\n");
+			}
+		}
+	if (tobedeleted.size()==0)
+		return 0;
+	else
+		return 1;
+}	
 
 int Jidac::robocopy()
 {
@@ -31187,8 +31796,12 @@ int Jidac::robocopy()
 		}
 	}
 			
-	
-	
+			/*
+	for (DTMap::iterator p=files_edt[1].begin(); p!=files_edt[1].end(); ++p) 
+	{
+		printf("KKKKKKKKKKK %s\n",p->first.c_str());
+	}
+	*/
 	uint64_t strangethings;
 	
 ///// Now check the folders (sequentially)
@@ -31213,6 +31826,11 @@ int Jidac::robocopy()
 	
 	int64_t timecopy=0;
 	int64_t timedelete=0;
+
+	g_robocopy_check_sorgente=0;
+	g_robocopy_check_destinazione=0;
+
+
 
 	for (unsigned i=1; i<files.size(); ++i)
 	{
@@ -31249,6 +31867,8 @@ int Jidac::robocopy()
 				DTMap::iterator cerca=files_edt[0].find(filename0);
 				if  (cerca==files_edt[0].end())
 				{
+					if (flagdebug)
+						printf("2Delete %s\n",p->first.c_str());
 					if (!flagkill)
 					{
 							//fake: dry run
@@ -31292,17 +31912,39 @@ int Jidac::robocopy()
 				string filename0=p->first;
 				string filenamei=filename0;
 				myreplace(filenamei,files[0],files[i]);
-				
-				if (!flagkill)
-				{
-							///fake: dry run
-					robocopiedsize+=p->second.size;
-					robocopied++;
-				}
-				else
-				{
+				/*
+				printf("files 0  %s\n",migliaia(p->second.size));
+				printf("files 0  %ld\n",p->second.date);
+				printf("files 0  %ld\n",p->second.attr);
+					*/
+
+					DTMap::iterator cerca=files_edt[i].find(filenamei);
+					
+					int64_t dest_size=-1;
+					int64_t dest_date=-1;
+					int64_t dest_attr=-1;
+					if  (cerca==files_edt[i].end())
+					{
+						///printf("NON ! %s\n",filenamei.c_str());
+					}
+					else
+					{
+						dest_size=cerca->second.size;
+						dest_date=cerca->second.date;
+						dest_attr=cerca->second.attr;
+						///printf("EUREKKAAAA %s\n",migliaia(dest_size));
+						
+					}
+
 					int64_t startcopy=mtime();
-					string copyfileresult=secure_copy_file(filename0.c_str(),filenamei.c_str(),globalstartcopy,total_size*(files.size()-1),total_count*(files.size()-1),done_size,done_count);
+					string copyfileresult=secure_copy_file(
+					filename0.c_str(),filenamei.c_str(),globalstartcopy,total_size*(files.size()-1),total_count*(files.size()-1),done_size,done_count,
+					p->second.size,
+					p->second.date,
+					p->second.attr,
+					dest_size,
+					dest_date,
+					dest_attr);
 					
 					if ((copyfileresult!="OK") && (copyfileresult!="="))
 						printf("31170: error robocoping data  <%s> to %s\n",copyfileresult.c_str(),filenamei.c_str());
@@ -31323,7 +31965,6 @@ int Jidac::robocopy()
 							}
 						}
 					}
-				}
 								
 				if (menoenne>0)
 					if (strangethings>menoenne)
@@ -31344,8 +31985,11 @@ int Jidac::robocopy()
 	printf("+  %12s %20s B in %9.2fs %15s/sec\n",migliaia(robocopied),migliaia2(robocopiedsize),(timecopy/1000.0),migliaia3(robocopiedsize/(timecopy/1000.0)));
 	printf("-  %12s %20s B in %9.2fs %15s/sec\n",migliaia(robodeleted),migliaia2(robodeletedsize),(timedelete/1000.0),migliaia3(robodeletedsize/(timedelete/1000.0)));
 
-	printf("\nRobocopy time %g s\n\n",((mtime()-startscan)/1000.0));
+	printf("\nRobocopy time %9.2f s\n",((mtime()-startscan)/1000.0));
+	  //printf("Get master    %9.2f s\n",g_robocopy_check_sorgente/1000.0);
+	  printf("Get slaves    %9.2f s\n\n",g_robocopy_check_destinazione/1000.0);
 	
+
 	if (not flagverify)
 		return risultato;
 		
@@ -31358,7 +32002,6 @@ int Jidac::robocopy()
 	
 
 }
-
 int Jidac::dircompare(bool i_flagonlysize,bool i_flagrobocopy)
 {
 	
@@ -31577,9 +32220,9 @@ int Jidac::dircompare(bool i_flagonlysize,bool i_flagrobocopy)
 		printf("Dir  %d %21s |%12s| |%12s| %9.2f <<%s>>\n",i,migliaia(files_size[i]),"Delta bytes",									 migliaia3(files_count[i]),files_time[i]/1000.0,files[i].c_str());
 		else
 		{
-		printf("Dir  %d %21s |%12s| |%12s| %9.2f <<%s>>\n",i,migliaia(files_size[i]),tohuman(files_size[0]-files_size[i]),migliaia3(files_count[i]),files_time[i]/1000.0,files[i].c_str());
-		delta_size+= (files_size[0]-files_size[i]);
-		delta_files+= (files_count[0]-files_count[i]);
+		printf("Dir  %d %21s |%12s| |%12s| %9.2f <<%s>>\n",i,migliaia(files_size[i]),tohuman(myabs(files_size[0],files_size[i])),migliaia3(files_count[i]),files_time[i]/1000.0,files[i].c_str());
+		delta_size+= myabs(files_size[0],files_size[i]);
+		delta_files+= myabs(files_count[0],files_count[i]);
 			
 		}
 		total_size+=files_size[i];

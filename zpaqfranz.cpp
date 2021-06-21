@@ -5,7 +5,12 @@
 ///////// https://github.com/fcorbelli/zpaqfranz
 ///////// https://sourceforge.net/projects/zpaqfranz/
 
-#define ZPAQ_VERSION "51.37-experimental"
+///////// I had to reluctantly move parts of the comments and some times even delete them, 
+///////// because github doesn't like files >1MB. I apologize with the authors,
+///////// it's not a foolish attempt to take over their jobs
+///////// https://github.com/fcorbelli/zpaqfranz/blob/main/notes.txt
+
+#define ZPAQ_VERSION "51.38-experimental"
 #define FRANZOFFSET 	50
 #define FRANZMAXPATH 	240
 
@@ -45,11 +50,7 @@ Windows binary builds (32 and 64 bit) on github/sourceforge
 
 ## **Provided as-is, with no warranty whatsoever, by Franco Corbelli, franco@francocorbelli.com**
 
-I had to reluctantly move parts of the comments and some even delete them, 
-because github doesn't like files> 1MB. I apologize to the authors,
-it's not a foolish attempt to take over their jobs
 
-https://github.com/fcorbelli/zpaqfranz/blob/main/notes.txt
 
 
 ####      Key differences against 7.15 by zpaqfranz -diff or here 
@@ -11797,6 +11798,8 @@ private:
   vector<uint64_t> files_size;     // filename args
   vector<uint64_t> files_count;     // filename args
   vector<uint64_t> files_time;     // filename args
+  vector<DTMap> files_edt;
+  
   int all;                  // -all option
   bool flagforce;               // -force option
   int fragment;             // -fragment option
@@ -11870,6 +11873,8 @@ private:
   void scandir(bool i_checkifselected,DTMap& i_edt,string filename, bool i_recursive=true);        // scan dirs to dt
   void addfile(bool i_checkifselected,DTMap& i_edt,string filename, int64_t edate, int64_t esize,int64_t eattr);          // add external file to dt
 			   
+	int64_t franzparallelscandir();
+
   bool equal(DTMap::const_iterator p, const char* filename, uint32_t &o_crc32);
              // compare file contents with p
 	
@@ -17881,7 +17886,7 @@ int Jidac::extract()
 				++total_files;
 				job.total_size+=p->second.size;
 				///printf("FACCIO QUALCOSA SU %s per size %d\n",fn.c_str(),p->second.size);
-				if (fileexists(fn.c_str()))
+				if (fileexists(fn))
 				{
 					if (flagverbose)
 					{
@@ -24406,231 +24411,6 @@ int Jidac::utf()
 }
 
 
-int Jidac::fillami() 
-{
-
-#ifdef ESX
-	printf("GURU: sorry: ESXi does not like this things\n");
-	exit(0);
-#endif
-	if (files.size()!=1)
-	{
-		printf("FILL: exactly one directory\n");
-		return 2;
-	}
-	if (!isdirectory(files[0]))
-	{
-		printf("FILL: you need to specify a directory, not a file\n");
-		return 2;
-	}
-	
-	
-	moreprint("");
-	moreprint("This is FILLAMI, reliability test for media.");
-	moreprint("");
-	moreprint("Almost all free space will be filled by pseudorandom 512MB files,");
-	moreprint("then checked from the ztempdir-created folder.");
-	moreprint("");
-	moreprint("These activities can reduce the media life,");
-	moreprint("especially for solid state drives and if repeated several times.");
-	moreprint("");
-	moreprint("Normally used as stress test for newly devices/controllers");
-	moreprint("or (via NIC) for heavy network stress test.");
-	moreprint("");
-	moreprint("Temporary files are NOT deleted by default (for zfs's scrub).");
-	moreprint("");
-	moreprint("-kill    switch will clear (delete) temp files after execution");
-	moreprint("-verbose for extended output (check IO consistency speed)");
-	moreprint("");
-	moreprint("More than 2GB of free disk space needed.");
-	moreprint("");
-	
-	
-	printf("To EXIT press q, Q / anything else to continue\n");
-	mygetch();
-	
-	
-	string outputdir=files[0]+"ztempdir/";
-	
-	makepath(outputdir);
-	
-	unsigned int percent=99;
-	
-	uint64_t spazio=getfreespace(outputdir.c_str());
-	printf("Free space %12s (%s) <<%s>>\n",migliaia(spazio),tohuman(spazio),outputdir.c_str());
-	
-	uint64_t spacetowrite=spazio*percent/100;
-	printf("To write   %12s (%s) %d percent\n",migliaia(spacetowrite),tohuman(spacetowrite),percent);
-
-
-	uint32_t chunksize=(2<<28)/sizeof(uint32_t); //half gigabyte in 32 bits at time
-	int chunks=spacetowrite/(chunksize*sizeof(uint32_t));
-	chunks--; // just to be sure
-	if (chunks<=0)
-	{
-		printf("Abort: there is something strange on free space (2GB+)\n");
-		return 1;
-	}
-	printf("%d chuks of (%s) will be written\n",chunks,tohuman(chunksize*sizeof(uint32_t)));
-		
-	uint32_t *buffer32bit = (uint32_t*)malloc(chunksize*sizeof(uint32_t));
-	if (buffer32bit==0)
-	{
-		printf("GURU malloc of buffer32bit\n");
-		return 2;
-	}
-	uint64_t starttutto=mtime();	
-	uint64_t hashtime=0;
-	uint64_t totaliotime=0;
-	uint64_t totalhashtime=0;
-	uint64_t totalrandtime=0;
-		
-	vector<string> chunkfilename;     
-	vector<string> chunkhash;     
-	
-	char mynomefile[1000];
-	for (int i=0;i<chunks;i++)
-	{
-		uint64_t startrandom=mtime();
-		populateRandom_xorshift128plus(buffer32bit, chunksize,324+i,4444+i);
-		uint64_t randtime=mtime()-startrandom;
-		
-		uint64_t starthash=mtime();
-		XXH3_state_t state128;
-		(void)XXH3_128bits_reset(&state128);
-		(void)XXH3_128bits_update(&state128, buffer32bit, chunksize*4);
-		XXH128_hash_t myhash=XXH3_128bits_digest(&state128);
-		char risultato[33];
-		sprintf(risultato,"%016llX%016llX",(unsigned long long)myhash.high64,(unsigned long long)myhash.low64);
-		chunkhash.push_back(risultato);
-		hashtime=mtime()-starthash;
-		
-		sprintf(mynomefile,"%szchunk_%05d_$%s",outputdir.c_str(),i,risultato);
-		chunkfilename.push_back(mynomefile);
-		double percentuale=(double)i/(double)chunks*100.0;
-		if (i==0)
-			percentuale=0;
-			
-		printf("%03d%% ",(int)percentuale);
-		
-		uint64_t startio=mtime();
-		FILE* myfile=fopen(mynomefile, "wb");
-		fwrite(buffer32bit, sizeof(uint32_t), chunksize, myfile);
-		fclose(myfile);			
-		uint64_t iotime=mtime()-startio;
-		
-		
-		uint64_t randspeed=	(chunksize*sizeof(uint32_t)/((randtime+1)/1000.0));
-		uint64_t hashspeed=	(chunksize*sizeof(uint32_t)/((hashtime+1)/1000.0));
-		uint64_t iospeed=	(chunksize*sizeof(uint32_t)/((iotime+1)/1000.0));
-		
-		double trascorso=(mtime()-starttutto+1)/1000.0;
-		double eta=((double)trascorso*(double)chunks/(double)i)-trascorso;
-		if (i==0)
-			eta=0;
-
-		if (eta<356000)
-		{
-		printf("ETA %0d:%02d:%02d",int(eta/3600), int(eta/60)%60, int(eta)%60);
-		printf(" todo (%10s) rnd (%10s/s) hash (%10s/s) W (%10s/s)",
-		tohuman(sizeof(uint32_t)*uint64_t(chunksize)*(uint64_t)(chunks-i)),
-		tohuman2(randspeed),
-		tohuman3(hashspeed),
-		tohuman4(iospeed));
-		if (flagverbose)
-			printf("\n");
-		else
-			printf("\r");
-		}
-		totaliotime+=iotime;
-		totalrandtime+=randtime;
-		totalhashtime+=hashtime;
-		
-	}
-	uint64_t timetutto=mtime()-starttutto;
-	printf("Total time %f  rnd %f  hash %f  write %f\n",timetutto/1000.0,totalrandtime/1000.0,totalhashtime/1000.0,totaliotime/1000.0);
-	free(buffer32bit);
-	
-	if (chunkfilename.size()!=chunkhash.size())
-	{
-		printf("Guru 23925: filename size != hash size\n");
-		return 2;
-	}
-	if (chunkfilename.size()!=(unsigned int)chunks)
-	{
-		printf("Abort: expecting %d chunks but %d founded\n",chunks,(unsigned int)chunkfilename.size());
-		return 2;
-	}
-	
-	printf("******* VERIFY\n");
-	
-	g_bytescanned=0;
-	g_filescanned=0;
-	g_worked=0;
-	edt.clear();
-	int64_t lavorati=0;
-	bool flagallok=true;
-	
-	
-	uint64_t starverify=mtime();
-	
-	for (int unsigned i=0;i<chunkfilename.size();i++)
-	{
-		string filename=chunkfilename[i];
-		
-		printf("Loading chunk %05d ",i);
-		
-		uint64_t dummybasso64;
-		uint64_t dummyalto64;
-		uint64_t starthash=mtime();
-		string filehash=xxhash_calc_file(filename.c_str(),-1,-1,lavorati,dummybasso64,dummyalto64);
-		uint64_t hashspeed=chunksize/((mtime()-starthash+1)/1000.0);
-		printf(" (%s/s) ",tohuman(hashspeed));
-
-		bool flagerrore=(filehash!=chunkhash[i]);
-			
-		if (flagerrore)
-		{
-			printf("ERROR\n");
-			flagallok=false;
-		}
-		else
-		{
-			printf("OK %s",chunkhash[i].c_str());
-			if (flagverbose)
-				printf("\n");
-			else
-				printf("\r");
-		}
-	}
-
-	printf("\n");
-	uint64_t verifytime=mtime()-starverify;
-	printf("Verify time %f (%10s) speed (%10s/s)\n",verifytime/1000.0,tohuman(lavorati),tohuman2(lavorati/(verifytime/1000.0)));
-		
-	if (flagallok)
-	{
-		printf("+OK all OK\n");
-		if (flagkill)
-		{
-			for (int unsigned i=0;i<chunkfilename.size();i++)
-			{
-				delete_file(chunkfilename[i].c_str());
-				printf("Deleting tempfile %05d / %05d\r",i,(unsigned int)chunkfilename.size());
-			}
-			delete_dir(outputdir.c_str());
-		printf("\n");
-		}
-		else
-		{
-			printf("REMEMBER: temp file in %s\n",outputdir.c_str());
-		}
-
-	}	
-	else
-		printf("ERROR: SOMETHING WRONG\n");
-	return 0;
-}
 
 
 ///////// This is a merge of unzpaq206.cpp, patched by me to become unz.cpp
@@ -27563,6 +27343,9 @@ void printbar(char i_carattere,bool i_printbarraenne=true)
 }
 
 
+
+/// concatenate multipart archive into one zpaq
+/// check for freespace and (optionally) hash check
 int Jidac::consolidate(string i_archive)
 {
 	assert(i_archive);
@@ -27598,7 +27381,6 @@ int Jidac::consolidate(string i_archive)
 	}
 	printbar('-');
 	printf("Total %s %20s (%s)\n",migliaia2(chunk_name.size()),migliaia(total_size),tohuman(total_size));
-	
 	if (files.size()!=1)
 	{
 		printf("29545: exactly one file as output for consolidate\n");
@@ -27606,7 +27388,6 @@ int Jidac::consolidate(string i_archive)
 	}
 	
 	string outfile=files[0];
-	
 	if (fileexists(outfile))
 		if (!flagforce)
 		{
@@ -27624,7 +27405,6 @@ int Jidac::consolidate(string i_archive)
 			printf("29564: Free space seems < needed, and no -force. Quit\n");
 			return 1;
 		}
-
 
 #ifdef _WIN32
 	wstring widename=utow(outfile.c_str());
@@ -27648,12 +27428,10 @@ int Jidac::consolidate(string i_archive)
 	if (flagverify)
 		printf("-verify: trust, but check...\n");
 		
-		
 	for (int unsigned i=0;i<chunk_name.size();i++)
 	{
-	///	int64_t sorgente_dimensione=chunk_size[i];
 		string	sorgente_nome=chunk_name[i];
-			
+		
 		FILE* inFile = freadopen(sorgente_nome.c_str());
 		if (inFile==NULL) 
 		{
@@ -27666,7 +27444,6 @@ int Jidac::consolidate(string i_archive)
 
 		return 2;
 		}
-	
 		
 		size_t readSize;
 		int64_t	chunk_readed=0;
@@ -27674,7 +27451,6 @@ int Jidac::consolidate(string i_archive)
 		while ((readSize = fread(buffer, 1, blockSize, inFile)) > 0) 
 		{
 			int64_t written=fwrite(buffer,1,readSize,outFile);
-			
 			chunk_written+=written;
 			chunk_readed+=readSize;
 			donesize+=written;
@@ -27720,29 +27496,10 @@ int Jidac::consolidate(string i_archive)
 			printf("29658: GURU hash of output file does not match!\n");
 			return 1;
 		}
-		
 	}
-	
-	
 	return 0;
 	
 }
-
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
 	
 
 /// franz-test
@@ -28567,23 +28324,18 @@ int  Jidac::dir()
 
 
 
-
-
-
 pthread_mutex_t mylock = PTHREAD_MUTEX_INITIALIZER;
 
-
-///
 vector<uint64_t> g_arraybytescanned;
 vector<uint64_t> g_arrayfilescanned;
 
 /*
 We need something out of an object (Jidac), addfile() and scandir(), 
-because pthread does not like very much
+because pthread does not like very much objects.
+Yes, quick and dirty
 */
 void myaddfile(uint32_t i_tnumber,DTMap& i_edt,string i_filename, int64_t i_date,int64_t i_size, bool i_flagcalchash) 
 {
-	
 	///Raze to the ground ads and zfs as soon as possible
 	if (isads(i_filename))
 		return;
@@ -28603,7 +28355,6 @@ void myaddfile(uint32_t i_tnumber,DTMap& i_edt,string i_filename, int64_t i_date
 	if (i_flagcalchash)
 		if (!isdirectory(i_filename))
 		{
-			
 			int64_t starthash=mtime();
 			d.hexhash=hash_calc_file(flag2algo(),i_filename.c_str(),-1,-1,dummy);
 			if (flagverbose)
@@ -28613,8 +28364,6 @@ void myaddfile(uint32_t i_tnumber,DTMap& i_edt,string i_filename, int64_t i_date
 				printf("\n");
 			}
 		}
- 	
-	
 ///  thread safe, but... who cares? 
 	pthread_mutex_lock(&mylock);
 
@@ -28629,7 +28378,6 @@ void myaddfile(uint32_t i_tnumber,DTMap& i_edt,string i_filename, int64_t i_date
 		{
 			if (!(g_arrayfilescanned[i_tnumber] % 100))
 			{
-				
 				for (unsigned int i=0; i<g_arraybytescanned.size();i++)
 					printf("Checksumming |%02d|%10s %12s\n",i,tohuman(g_arraybytescanned[i]),migliaia(g_arrayfilescanned[i]));
 				setupConsole();
@@ -28650,13 +28398,11 @@ void myaddfile(uint32_t i_tnumber,DTMap& i_edt,string i_filename, int64_t i_date
 		}
 		fflush(stdout);
 	}
-		
 	pthread_mutex_unlock(&mylock);
 }
 
 void myscandir(uint32_t i_tnumber,DTMap& i_edt,string filename, bool i_recursive,bool i_flagcalchash)
 {
-	
 	///Raze to the ground ads and zfs as soon as possible
 	if (isads(filename))
 	{
@@ -28664,7 +28410,6 @@ void myscandir(uint32_t i_tnumber,DTMap& i_edt,string filename, bool i_recursive
 			printf("Skip :$DATA ----> %s\n",filename.c_str());
 		return;
 	}
-	
 	if (!flagforcezfs)
 		if (iszfs(filename))
 		{
@@ -28773,15 +28518,13 @@ void myscandir(uint32_t i_tnumber,DTMap& i_edt,string filename, bool i_recursive
 			break;
 		}
 	}
-	
   FindClose(h);
 #endif
 }
 
 
-/*
-	parameters to run scan threads
-*/
+
+///	parameters to run scan threads
 struct tparametri
 {
 	string 		directorytobescanned;
@@ -28792,9 +28535,8 @@ struct tparametri
 	int	tnumber;
 };
 
-/*
-	run a myscandir() instead of Jidac::scandir() (too hard to use a member)
-*/
+
+///	run a myscandir() instead of Jidac::scandir() (too hard to use a member)
 void * scansiona(void *t) 
 {
 	assert(t);
@@ -28806,20 +28548,15 @@ void * scansiona(void *t)
 	return 0;
 }
 
-
-
+/// return size, date and attr
 bool getfileinfo(string i_filename,int64_t& o_size,int64_t& o_date,int64_t& o_attr)
 {
 	o_size=0;
 	o_date=0;
 	o_attr=0;
-	
-	
-	
 #ifdef unix
 	while (i_filename.size()>1 && i_filename[i_filename.size()-1]=='/')
 		i_filename=i_filename.substr(0, i_filename.size()-1);  
-		
 	struct stat sb;
 	if (!lstat(i_filename.c_str(), &sb)) 
 	{
@@ -28833,7 +28570,6 @@ bool getfileinfo(string i_filename,int64_t& o_size,int64_t& o_date,int64_t& o_at
 		}
 	}
 #endif
-	
 	
 #ifdef _WIN32
 	WIN32_FIND_DATA ffd;
@@ -28862,19 +28598,20 @@ bool getfileinfo(string i_filename,int64_t& o_size,int64_t& o_date,int64_t& o_at
 }
 
 
+/// possible problems with unsigned to calculate the differences. We do NOT want to link abs()
 int64_t myabs(int64_t i_first,int64_t i_second)
 {
 	if (i_first>i_second)
 		return i_first-i_second;
 	else
 		return i_second-i_first;
-	
 }
 
 int64_t g_robocopy_check_sorgente;
 int64_t g_robocopy_check_destinazione;
 
-
+/// make a "robocopy" from source to destination file.
+/// if "someone" call with valid parameters do NOT do a getfileinfo (slow)
 string secure_copy_file(
 const string i_filename,const string i_outfilename,int64_t i_startcopy,int64_t i_totalsize,int64_t i_totalcount,int64_t& o_donesize,int64_t& o_donecount,
 int64_t i_sorgente_size,
@@ -28914,6 +28651,7 @@ int64_t i_destinazione_attr
 	bool	sorgente_esiste=false;
 	bool	destinazione_esiste=false;
 	/*
+	hopefully the source is ALWAYS existing!
 	int64_t start_sorgente_esiste=mtime();
 	sorgente_esiste		=getfileinfo(i_filename,sorgente_dimensione,sorgente_data,sorgente_attr);
 	g_robocopy_check_sorgente+=mtime()-start_sorgente_esiste;
@@ -28925,6 +28663,7 @@ int64_t i_destinazione_attr
 	
 	if (i_destinazione_size>=0)
 	{
+		/// someone call us with valid size=> take the parameters
 		destinazione_esiste=true;
 		destinazione_dimensione=i_destinazione_size;
 		destinazione_data=i_destinazione_date;
@@ -28932,12 +28671,11 @@ int64_t i_destinazione_attr
 	}
 	else
 	{
+		/// houston, we have to make ourself
 		int64_t start_destinazione_esiste=mtime();
 		destinazione_esiste	=getfileinfo(i_outfilename,destinazione_dimensione,destinazione_data,destinazione_attr);
 		g_robocopy_check_destinazione+=mtime()-start_destinazione_esiste;
 	}
-	
-	
 	
 	if (flagdebug)
 	{
@@ -28957,7 +28695,9 @@ int64_t i_destinazione_attr
 		if (sorgente_esiste)
 		{
 			if (flagdebug)
-			printf("Esiste2\n");
+			{
+				printf("Esiste2\n");
+			}
 				if (destinazione_dimensione==sorgente_dimensione)
 				{
 					if (flagdebug)
@@ -28966,6 +28706,9 @@ int64_t i_destinazione_attr
 					{
 						printf("PPP %s\n",migliaia(myabs(destinazione_data,sorgente_data)));
 					}
+				/// this 2 is really important: it is the modulo-differences
+				/// 1 or even 0 is not good for NTFS or Windows
+				
 					if (myabs(destinazione_data,sorgente_data)<=2)
 					{
 						if (flagdebug)
@@ -29026,6 +28769,8 @@ int64_t i_destinazione_attr
 	}
 	fclose(inFile);
 	fclose(outFile);
+	
+/// note: this is a "touch" for the attr
 	close(i_outfilename.c_str(),sorgente_data,sorgente_attr);
 	
 	o_donecount++;
@@ -29046,6 +28791,8 @@ void stermina(string i_directory)
 	SHFileOperation			(&fileop);
 }
 */
+
+/// risky command to make a rd folder /s (or rm -r)
 int erredbarras(const std::string &i_path,bool i_flagrecursive=true)
 {
 #ifdef unix
@@ -29093,9 +28840,7 @@ int erredbarras(const std::string &i_path,bool i_flagrecursive=true)
 				printf("Delete dir  %s\n\n",i_path.c_str());
 			delete_dir(i_path.c_str());
 		}
-	   return risultato;
-	
-	
+	   return risultato;	
 #endif
 
 #ifdef _WIN32
@@ -29192,195 +28937,21 @@ int erredbarras(const std::string &i_path,bool i_flagrecursive=true)
 #endif
 	return 0;
 }
+
+/// find and delete 0-length dirs
+
 int Jidac::zero()
 {
-	printf("*** Delete empty folders *** ");
+	printf("*** Delete empty folders (zero length) *** ");
 	if (!flagkill)
 		printf("*** -kill missing: dry run *** ");
 	
 	if (!flagforcezfs)
 		printf("*** ignoring .zfs and :$DATA ***");
-
 	printf("\n");
 	
-	for (unsigned i=0; i<files.size(); ++i)
-		if (!isdirectory(files[i]))
-			files[i]+='/';
-
-	vector<DTMap> files_edt;
-  
-	files_size.clear();
-	files_count.clear();
-	files_time.clear();
-
-	int64_t startscan=mtime();
+	franzparallelscandir();
 	
-	int 	quantifiles		=0;
-	
-	if (flagverbose)
-		flagnoeta=true;
-	g_bytescanned			=0;
-	g_worked=0;
-	g_arraybytescanned.clear();
-	g_arrayfilescanned.clear();
-
-		
-	if (all)	// OK let's make different threads
-	{
-		vector<tparametri> 	vettoreparametri;
-		vector<DTMap>		vettoreDT;
-		
-		tparametri 	myblock;
-		DTMap		mydtmap;
-	
-		for (unsigned int i=0;i<files.size();i++)
-		{
-			vettoreDT.push_back(mydtmap);
-			myblock.tnumber=i;
-			myblock.directorytobescanned=files[i];
-			myblock.theDT=vettoreDT[i];
-			myblock.flagcalchash=false;//flagverify;
-			myblock.timestart=mtime();
-			vettoreparametri.push_back(myblock);
-		}
-	
-		int rc;
-	pthread_t* threads = new pthread_t[files.size()];
-///		pthread_t threads[files.size()];
-		pthread_attr_t attr;
-		void *status;
-
-		// ini and set thread joinable
-		pthread_attr_init(&attr);
-		pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
-
-		printf("Creating %s scan threads\n",migliaia(files.size()));
-		
-		
-		if (!flagnoeta)
-		{
-			setupConsole();
-			printf("\e[?25l");	
-			fflush(stdout);
-			restoreConsole();
-		}
-		for(unsigned int i = 0; i < files.size(); i++ ) 
-		{
-			print_datetime();
-			printf("Scan dir |%02d| <<%s>>\n",i,files[i].c_str());
-		}
-
-		for(unsigned int i = 0; i < files.size(); i++ ) 
-		{
-			g_arraybytescanned.push_back(0);
-			g_arrayfilescanned.push_back(0);
-			
-			rc = pthread_create(&threads[i], &attr, scansiona, (void*)&vettoreparametri[i]);
-			if (rc) 
-			{
-				printf("Error creating thread\n");
-				exit(-1);
-			}
-		}
-		printf("\n");
-
-		// free attribute and wait for the other threads
-		pthread_attr_destroy(&attr);
-		for(unsigned int i = 0; i < files.size(); i++ ) 
-		{
-			rc = pthread_join(threads[i], &status);
-			if (rc) 
-			{
-				error("Unable to join\n");
-				exit(-1);
-			}
-			///printf("Thread completed %d status %d\n",i,status);
-		}
-		if (!flagnoeta)
-		{
-			setupConsole();
-			printf("\033[%dB",(int)g_arraybytescanned.size());
-			printf("\e[?25h");
-			fflush(stdout);
-			restoreConsole();
-		}
-		printf("\nParallel scan ended in %f s\n",(mtime()-startscan)/1000.0);
-	
-		for (unsigned i=0; i<files.size(); ++i)
-		{
-			uint64_t sizeofdir=0;
-			uint64_t dircount=0;
-			for (DTMap::iterator p=vettoreparametri[i].theDT.begin(); p!=vettoreparametri[i].theDT.end(); ++p) 
-			{
-				string filename=rename(p->first);
-				if (p->second.date && p->first!="" && (!isdirectory(p->first)) && (!isads(filename.c_str()))) 
-				{
-					sizeofdir+=p->second.size;
-					dircount++;
-					quantifiles++;
-				}
-				if (flagverbose)
-				{
-					printUTF8(filename.c_str());
-					printf("\n");
-				}
-			}
-			files_edt.push_back(vettoreparametri[i].theDT);
-			files_size.push_back(sizeofdir);
-			files_count.push_back(dircount);
-			files_time.push_back(vettoreparametri[i].timeend-vettoreparametri[i].timestart+1);
-		}
-		delete[] threads;
-	
-	}
-	else
-	{	// single thread. Do a sequential scan
-
-		g_arraybytescanned.push_back(0);
-		g_arrayfilescanned.push_back(0);
-	
-	
-		for (unsigned i=0; i<files.size(); ++i)
-		{
-
-			DTMap myblock;
-		
-			print_datetime();
-			printf("Scan dir <<%s>>\n",files[i].c_str());
-			uint64_t blockstart=mtime();
-			
-			///printf("###############################scannati per %d\n",files.size());
-	
-			////myscandir(i,myblock,files[i].c_str(),true,false);
-			myscandir(0,myblock,files[i].c_str(),true,false);
-			
-			uint64_t sizeofdir=0;
-			uint64_t dircount=0;
-		
-			for (DTMap::iterator p=myblock.begin(); p!=myblock.end(); ++p) 
-			{
-				string filename=rename(p->first);
-				if (p->second.date && p->first!="" && (!isdirectory(p->first)) && (!isads(filename))) 
-				{
-					sizeofdir+=p->second.size;
-					dircount++;
-					quantifiles++;
-				}
-				if (flagverbose)
-				{
-					printUTF8(filename.c_str());
-					printf("\n");
-				}
-			}
-	
-			files_edt.push_back(myblock);
-			files_size.push_back(sizeofdir);
-			files_count.push_back(dircount);
-			files_time.push_back(mtime()-blockstart);
-			
-		}
-	}
-
 	vector<string> scannedfiles;
 	
 	for (unsigned i=0; i<files.size(); ++i)
@@ -29401,6 +28972,7 @@ int Jidac::zero()
 					{
 						string prossima=extractfilepath(scannedfiles[j]);
 						string nomefile=extractfilename(scannedfiles[j]);
+				/// we count everything, even Thumbs.db as "non empty dirs"
 				///		if ((nomefile!="Thumbs.db"))
 						{
 							if (mypos(corrente,prossima)!=0)
@@ -29420,11 +28992,7 @@ int Jidac::zero()
 						}
 					}
 					if (flagfigli==0)
-					{
-			//			printf("Flag figli %08d  %s\n",int(flagfigli),scannedfiles[i].c_str());
-				//		candidati++;
 						tobedeleted.push_back(scannedfiles[i]);
-					}
 				}
 	}
 	candidati=tobedeleted.size();
@@ -29437,16 +29005,16 @@ int Jidac::zero()
 		return 0;
 	}
 	if (flagverbose)
+	{
+		printbar('-');
+		for (unsigned int i=0;i<tobedeleted.size();i++)
 		{
-			printbar('-');
-			for (unsigned int i=0;i<tobedeleted.size();i++)
-			{
-				printf("TO BE DELETED <<");
-				printUTF8(tobedeleted[i].c_str());
-				printf(">>\n");
-			}
-			printbar('-');
+			printf("TO BE DELETED <<");
+			printUTF8(tobedeleted[i].c_str());
+			printf(">>\n");
 		}
+		printbar('-');
+	}
 	
 	if (!flagkill)
 	{
@@ -29454,12 +29022,15 @@ int Jidac::zero()
 		return 0;
 	}	
 
-		
-
 	int lastrun=tobedeleted.size();
 	int newrun=0;
 	int64_t startdelete=mtime();
 	int runs=0;
+///	OK we want to be safe, so we iterate as many times as possible
+/// to use delete_dir() instead of "erredibarras".
+/// So only "really" empty will be deleted.
+/// Not fast at all but more safe.
+
 	while (lastrun>newrun)
 	{
 		runs++;
@@ -29494,6 +29065,9 @@ int Jidac::zero()
 		return 1;
 }	
 
+
+/// robocopy /mir a master folder to one or more
+
 int Jidac::robocopy()
 {
 	int risultato=0;
@@ -29503,197 +29077,13 @@ int Jidac::robocopy()
 	
 	if (!flagforcezfs)
 		printf("*** ignoring .zfs and :$DATA ***");
-
 	printf("\n");
 	
-	for (unsigned i=0; i<files.size(); ++i)
-		if (!isdirectory(files[i]))
-			files[i]+='/';
-
-	vector<DTMap> files_edt;
-  
-	files_size.clear();
-	files_count.clear();
-	files_time.clear();
-
+	franzparallelscandir();
+	
 	int64_t startscan=mtime();
-	
-	int 	quantifiles		=0;
-	
-	if (flagverbose)
-		flagnoeta=true;
-	g_bytescanned			=0;
-	g_worked=0;
-	g_arraybytescanned.clear();
-	g_arrayfilescanned.clear();
-
-		
-	if (all)	// OK let's make different threads
-	{
-		vector<tparametri> 	vettoreparametri;
-		vector<DTMap>		vettoreDT;
-		
-		tparametri 	myblock;
-		DTMap		mydtmap;
-	
-		for (unsigned int i=0;i<files.size();i++)
-		{
-			vettoreDT.push_back(mydtmap);
-			myblock.tnumber=i;
-			myblock.directorytobescanned=files[i];
-			myblock.theDT=vettoreDT[i];
-			myblock.flagcalchash=false;//flagverify;
-			myblock.timestart=mtime();
-			vettoreparametri.push_back(myblock);
-		}
-	
-		int rc;
-	pthread_t* threads = new pthread_t[files.size()];
-///		pthread_t threads[files.size()];
-		pthread_attr_t attr;
-		void *status;
-
-		// ini and set thread joinable
-		pthread_attr_init(&attr);
-		pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
-
-		printf("Creating %s scan threads\n",migliaia(files.size()));
-		
-		
-		if (!flagnoeta)
-		{
-			setupConsole();
-			printf("\e[?25l");	
-			fflush(stdout);
-			restoreConsole();
-		}
-		for(unsigned int i = 0; i < files.size(); i++ ) 
-		{
-			print_datetime();
-			printf("Scan dir |%02d| <<%s>>\n",i,files[i].c_str());
-		}
-
-		for(unsigned int i = 0; i < files.size(); i++ ) 
-		{
-			g_arraybytescanned.push_back(0);
-			g_arrayfilescanned.push_back(0);
-			
-			rc = pthread_create(&threads[i], &attr, scansiona, (void*)&vettoreparametri[i]);
-			if (rc) 
-			{
-				printf("Error creating thread\n");
-				exit(-1);
-			}
-		}
-		printf("\n");
-
-		// free attribute and wait for the other threads
-		pthread_attr_destroy(&attr);
-		for(unsigned int i = 0; i < files.size(); i++ ) 
-		{
-			rc = pthread_join(threads[i], &status);
-			if (rc) 
-			{
-				error("Unable to join\n");
-				exit(-1);
-			}
-			///printf("Thread completed %d status %d\n",i,status);
-		}
-		if (!flagnoeta)
-		{
-			setupConsole();
-			printf("\033[%dB",(int)g_arraybytescanned.size());
-			printf("\e[?25h");
-			fflush(stdout);
-			restoreConsole();
-		}
-		printf("\nParallel scan ended in %f s\n",(mtime()-startscan)/1000.0);
-	
-		for (unsigned i=0; i<files.size(); ++i)
-		{
-			uint64_t sizeofdir=0;
-			uint64_t dircount=0;
-			for (DTMap::iterator p=vettoreparametri[i].theDT.begin(); p!=vettoreparametri[i].theDT.end(); ++p) 
-			{
-				string filename=rename(p->first);
-				if (p->second.date && p->first!="" && (!isdirectory(p->first)) && (!isads(filename.c_str()))) 
-				{
-					sizeofdir+=p->second.size;
-					dircount++;
-					quantifiles++;
-				}
-				if (flagverbose)
-				{
-					printUTF8(filename.c_str());
-					printf("\n");
-				}
-			}
-			files_edt.push_back(vettoreparametri[i].theDT);
-			files_size.push_back(sizeofdir);
-			files_count.push_back(dircount);
-			files_time.push_back(vettoreparametri[i].timeend-vettoreparametri[i].timestart+1);
-		}
-		delete[] threads;
-	
-	}
-	else
-	{	// single thread. Do a sequential scan
-
-		g_arraybytescanned.push_back(0);
-		g_arrayfilescanned.push_back(0);
-	
-	
-		for (unsigned i=0; i<files.size(); ++i)
-		{
-
-			DTMap myblock;
-		
-			print_datetime();
-			printf("Scan dir <<%s>>\n",files[i].c_str());
-			uint64_t blockstart=mtime();
-			
-			///printf("###############################scannati per %d\n",files.size());
-	
-			////myscandir(i,myblock,files[i].c_str(),true,false);
-			myscandir(0,myblock,files[i].c_str(),true,false);
-			
-			uint64_t sizeofdir=0;
-			uint64_t dircount=0;
-		
-			for (DTMap::iterator p=myblock.begin(); p!=myblock.end(); ++p) 
-			{
-				string filename=rename(p->first);
-				if (p->second.date && p->first!="" && (!isdirectory(p->first)) && (!isads(filename))) 
-				{
-					sizeofdir+=p->second.size;
-					dircount++;
-					quantifiles++;
-				}
-				if (flagverbose)
-				{
-					printUTF8(filename.c_str());
-					printf("\n");
-				}
-			}
-	
-			files_edt.push_back(myblock);
-			files_size.push_back(sizeofdir);
-			files_count.push_back(dircount);
-			files_time.push_back(mtime()-blockstart);
-			
-		}
-	}
-			
-			/*
-	for (DTMap::iterator p=files_edt[1].begin(); p!=files_edt[1].end(); ++p) 
-	{
-		printf("KKKKKKKKKKK %s\n",p->first.c_str());
-	}
-	*/
 	uint64_t strangethings;
 	
-///// Now check the folders (sequentially)
-
 	printf("\nMaster  %s (%s files %s) <<%s>>\n",migliaia(files_size[0]),tohuman(files_size[0]),migliaia2(files_count[0]),files[0].c_str());
 	printbar('-');
 	
@@ -29707,7 +29097,6 @@ int Jidac::robocopy()
 	uint64_t robocopiedsize=0;
 	int robodeleted=0;
 	uint64_t robodeletedsize=0;
-	
 
 	int roboequal=0;
 	uint64_t roboequalsize=0;
@@ -29718,20 +29107,16 @@ int Jidac::robocopy()
 	g_robocopy_check_sorgente=0;
 	g_robocopy_check_destinazione=0;
 
-
-
+///	we start by 1 (the first slave); 0 is the master
 	for (unsigned i=1; i<files.size(); ++i)
 	{
 		strangethings=0;
 		if (flagkill)
 		{
-			///printf("m1\n");
 			if (isdirectory(files[i]))
 			{
-				///printf("m2\n");
 				if (!exists(files[i]))
 				{
-					///printf("m3\n");
 					makepath(files[i]);
 				}
 			}
@@ -29746,6 +29131,7 @@ int Jidac::robocopy()
 		}
 		else
 		{
+		///	first stage: delete everythin in slave-i that is NOT i master-0
 			int64_t startdelete=mtime();
 			for (DTMap::iterator p=files_edt[i].begin(); p!=files_edt[i].end(); ++p) 
 			{
@@ -29756,7 +29142,7 @@ int Jidac::robocopy()
 				if  (cerca==files_edt[0].end())
 				{
 					if (flagdebug)
-						printf("2Delete %s\n",p->first.c_str());
+						printf("Delete %s\n",p->first.c_str());
 					if (!flagkill)
 					{
 							//fake: dry run
@@ -29769,7 +29155,7 @@ int Jidac::robocopy()
 						bool riuscito=true;
 						if (isdirectory(temp))
 						{
-							erredbarras(temp,true);
+							erredbarras(temp,true); // risky!!
 							riuscito=delete_dir(temp.c_str())==0;
 						}
 						else
@@ -29792,6 +29178,7 @@ int Jidac::robocopy()
 						break;
 					}
 			}	
+			/// OK now do the copy from master-0 to slave-i
 			timedelete=mtime()-startdelete;
 			int64_t globalstartcopy=mtime();
 			
@@ -29800,40 +29187,34 @@ int Jidac::robocopy()
 				string filename0=p->first;
 				string filenamei=filename0;
 				myreplace(filenamei,files[0],files[i]);
-				/*
-				printf("files 0  %s\n",migliaia(p->second.size));
-				printf("files 0  %ld\n",p->second.date);
-				printf("files 0  %ld\n",p->second.attr);
-					*/
-
-					DTMap::iterator cerca=files_edt[i].find(filenamei);
+				DTMap::iterator cerca=files_edt[i].find(filenamei);
 					
-					int64_t dest_size=-1;
-					int64_t dest_date=-1;
-					int64_t dest_attr=-1;
-					if  (cerca==files_edt[i].end())
-					{
-						///printf("NON ! %s\n",filenamei.c_str());
-					}
-					else
-					{
-						dest_size=cerca->second.size;
-						dest_date=cerca->second.date;
-						dest_attr=cerca->second.attr;
-						///printf("EUREKKAAAA %s\n",migliaia(dest_size));
-						
-					}
+				int64_t dest_size=-1;
+				int64_t dest_date=-1;
+				int64_t dest_attr=-1;
+				if  (cerca==files_edt[i].end())
+				{
+					/// the file does not exists, maintain default -1 (=>secure_copy_file do yourself)
+					///printf("NON ! %s\n",filenamei.c_str());
+				}
+				else
+				{
+				/// the destination exists, get data from the scanned-data
+					dest_size=cerca->second.size;
+					dest_date=cerca->second.date;
+					dest_attr=cerca->second.attr;
+				}
 
 					int64_t startcopy=mtime();
 					string copyfileresult=secure_copy_file(
-					filename0.c_str(),filenamei.c_str(),globalstartcopy,total_size*(files.size()-1),total_count*(files.size()-1),done_size,done_count,
+					filename0,filenamei,globalstartcopy,total_size*(files.size()-1),total_count*(files.size()-1),done_size,done_count,
 					p->second.size,
 					p->second.date,
 					p->second.attr,
 					dest_size,
 					dest_date,
 					dest_attr);
-					
+					/// the return code can be OK (file copied) or = (file not copied because it is ==)
 					if ((copyfileresult!="OK") && (copyfileresult!="="))
 						printf("31170: error robocoping data  <%s> to %s\n",copyfileresult.c_str(),filenamei.c_str());
 					else
@@ -29874,10 +29255,8 @@ int Jidac::robocopy()
 	printf("-  %12s %20s B in %9.2fs %15s/sec\n",migliaia(robodeleted),migliaia2(robodeletedsize),(timedelete/1000.0),migliaia3(robodeletedsize/(timedelete/1000.0)));
 
 	printf("\nRobocopy time %9.2f s\n",((mtime()-startscan)/1000.0));
-	  //printf("Get master    %9.2f s\n",g_robocopy_check_sorgente/1000.0);
-	  printf("Get slaves    %9.2f s\n\n",g_robocopy_check_destinazione/1000.0);
+	printf("Get slaves    %9.2f s\n\n",g_robocopy_check_destinazione/1000.0);
 	
-
 	if (not flagverify)
 		return risultato;
 		
@@ -29885,14 +29264,12 @@ int Jidac::robocopy()
 	if (!flagforcezfs)
 		printf(" ignoring .zfs and :$DATA");
 	printf("\n");
-
 	return dircompare(false,true);
-	
-
 }
+
+/// do a s (get size) or c (compare). The second flag is for output when called by robocopy
 int Jidac::dircompare(bool i_flagonlysize,bool i_flagrobocopy)
 {
-	
 	int risultato=0;
 	
 	if (i_flagonlysize)
@@ -29909,181 +29286,7 @@ int Jidac::dircompare(bool i_flagonlysize,bool i_flagrobocopy)
 		if (!i_flagrobocopy)
 		printf(" ignoring .zfs and :$DATA\n");
 
-	for (unsigned i=0; i<files.size(); ++i)
-		if (!isdirectory(files[i]))
-			files[i]+='/';
-
-	vector<DTMap> files_edt;
-  
-	files_size.clear();
-	files_count.clear();
-	files_time.clear();
-
-	int64_t startscan=mtime();
-	
-	int 	quantifiles		=0;
-	
-	if (flagverbose)
-		flagnoeta=true;
-	g_bytescanned			=0;
-	g_worked=0;
-	g_arraybytescanned.clear();
-	g_arrayfilescanned.clear();
-		
-	if (all)	// OK let's make different threads
-	{
-		vector<tparametri> 	vettoreparametri;
-		vector<DTMap>		vettoreDT;
-		
-		tparametri 	myblock;
-		DTMap		mydtmap;
-	
-		for (unsigned int i=0;i<files.size();i++)
-		{
-			vettoreDT.push_back(mydtmap);
-			myblock.tnumber=i;
-			myblock.directorytobescanned=files[i];
-			myblock.theDT=vettoreDT[i];
-			myblock.flagcalchash=flagchecksum;
-			myblock.timestart=mtime();
-			vettoreparametri.push_back(myblock);
-		}
-	
-		int rc;
-	pthread_t* threads = new pthread_t[files.size()];
-///		pthread_t threads[files.size()];
-		pthread_attr_t attr;
-		void *status;
-
-		// ini and set thread joinable
-		pthread_attr_init(&attr);
-		pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
-		if (!i_flagrobocopy)
-			printf("Creating %s scan threads\n",migliaia(files.size()));
-		
-		
-		if (!flagnoeta)
-		{
-			setupConsole();
-			printf("\e[?25l");	
-			fflush(stdout);
-			restoreConsole();
-		}
-		if (!i_flagrobocopy)
-			for(unsigned int i = 0; i < files.size(); i++ ) 
-			{
-				print_datetime();
-				printf("Scan dir |%02d| <<%s>>\n",i,files[i].c_str());
-			}
-
-		for(unsigned int i = 0; i < files.size(); i++ ) 
-		{
-			g_arraybytescanned.push_back(0);
-			g_arrayfilescanned.push_back(0);
-			
-			rc = pthread_create(&threads[i], &attr, scansiona, (void*)&vettoreparametri[i]);
-			if (rc) 
-			{
-				printf("Error creating thread\n");
-				exit(-1);
-			}
-		}
-		printf("\n");
-
-		// free attribute and wait for the other threads
-		pthread_attr_destroy(&attr);
-		for(unsigned int i = 0; i < files.size(); i++ ) 
-		{
-			rc = pthread_join(threads[i], &status);
-			if (rc) 
-			{
-				error("Unable to join\n");
-				exit(-1);
-			}
-			///printf("Thread completed %d status %d\n",i,status);
-		}
-		if (!flagnoeta)
-		{
-			setupConsole();
-			printf("\033[%dB",(int)g_arraybytescanned.size());
-			printf("\e[?25h");
-			fflush(stdout);
-			restoreConsole();
-		}
-		printf("\nParallel scan ended in %f\n",(mtime()-startscan)/1000.0);
-	
-		for (unsigned i=0; i<files.size(); ++i)
-		{
-			uint64_t sizeofdir=0;
-			uint64_t dircount=0;
-			for (DTMap::iterator p=vettoreparametri[i].theDT.begin(); p!=vettoreparametri[i].theDT.end(); ++p) 
-			{
-				string filename=rename(p->first);
-				if (p->second.date && p->first!="" && (!isdirectory(p->first)) && (!isads(filename.c_str()))) 
-				{
-					sizeofdir+=p->second.size;
-					dircount++;
-					quantifiles++;
-				}
-				if (flagverbose)
-				{
-					printUTF8(filename.c_str());
-					printf("\n");
-				}
-			}
-			files_edt.push_back(vettoreparametri[i].theDT);
-			files_size.push_back(sizeofdir);
-			files_count.push_back(dircount);
-			files_time.push_back(vettoreparametri[i].timeend-vettoreparametri[i].timestart+1);
-		}
-		delete[] threads;
-	
-	}
-	else
-	{	// single thread. Do a sequential scan
-		g_arraybytescanned.push_back(0);
-		g_arrayfilescanned.push_back(0);
-	
-	
-		
-		for (unsigned i=0; i<files.size(); ++i)
-		{
-			DTMap myblock;
-			if (!i_flagrobocopy)
-			{
-				print_datetime();
-				printf("Scan dir <<%s>>\n",files[i].c_str());
-			}
-			uint64_t blockstart=mtime();
-			
-			///printf("###############################scannati per %d\n",files.size());
-///fix 
-			myscandir(0,myblock,files[i].c_str(),true,flagchecksum);
-			
-			uint64_t sizeofdir=0;
-			uint64_t dircount=0;
-			for (DTMap::iterator p=myblock.begin(); p!=myblock.end(); ++p) 
-			{
-				string filename=rename(p->first);
-				if (p->second.date && p->first!="" && (!isdirectory(p->first)) && (!isads(filename))) 
-				{
-					sizeofdir+=p->second.size;
-					dircount++;
-					quantifiles++;
-				}
-				if (flagverbose)
-				{
-					printUTF8(filename.c_str());
-					printf("\n");
-				}
-			}
-			files_edt.push_back(myblock);
-			files_size.push_back(sizeofdir);
-			files_count.push_back(dircount);
-			files_time.push_back(mtime()-blockstart);
-		}
-	
-	}
+	franzparallelscandir();
 	
 /// return free space (USEFUL for crontabbed-emalied backups)
 	printbar('=');
@@ -30094,7 +29297,6 @@ int Jidac::dircompare(bool i_flagonlysize,bool i_flagrobocopy)
 			spazio=0;
 		printf("Free %d %21s (%12s)  <<%s>>\n",i,migliaia(spazio),tohuman(spazio),files[i].c_str());
 	}
-
 
 	uint64_t total_size=0;
 	uint64_t total_files=0;
@@ -30120,21 +29322,20 @@ int Jidac::dircompare(bool i_flagonlysize,bool i_flagrobocopy)
 	printf("Total  |%21s| (%s)\n",migliaia(total_size),tohuman(total_size));
 	printf("Delta  |%21s| %21s|files\n",migliaia(delta_size),migliaia2(delta_files));
 	
-	
+/// only a s (size)? Done	
 	if (i_flagonlysize)
-	{
 		return 0;
-	}
 	
 	uint64_t strangethings;
 	
-///// Now check the folders (sequentially)
+///// Now check the folders (sequentially).
 
 	printf("\nDir 0 (master) %s (files %s) <<%s>>\n",migliaia(files_size[0]),migliaia2(files_count[0]),files[0].c_str());
 	printbar('-');
 	
 	bool flagerror=false;
 
+/// check from 1 (the first slave)
 	for (unsigned i=1; i<files.size(); ++i)
 	{
 		strangethings=0;
@@ -30145,7 +29346,6 @@ int Jidac::dircompare(bool i_flagonlysize,bool i_flagrobocopy)
 		}
 		else
 		{
-			
 			if ((files_size[i]!=files_size[0]) || (files_count[i]!=files_count[0]))
 			{
 				printf("Dir %d (slave) IS DIFFERENT time %6g <<%s>>\n",i,files_time[i]/1000.0,files[i].c_str());
@@ -30193,7 +29393,6 @@ int Jidac::dircompare(bool i_flagonlysize,bool i_flagrobocopy)
 						printf("30146: **** TOO MANY STRANGE THINGS (-n %d)  %s\n",menoenne,migliaia(strangethings));
 						break;
 					}
-
 			}	
 			for (DTMap::iterator p=files_edt[0].begin(); p!=files_edt[0].end(); ++p) 
 			{
@@ -30242,14 +29441,403 @@ int Jidac::dircompare(bool i_flagonlysize,bool i_flagrobocopy)
 	if (!flagerror)
 	{
 		if (flagchecksum)
-		printf("NO diff FOR SURE in slave dirs (checksum check)\n");
+			printf("NO diff FOR SURE in slave dirs (checksum check)\n");
 		else
-		printf("NO diff in slave dirs (fast check, only size)\n");
+			printf("NO diff in slave dirs (fast check, only size)\n");
 	}
 	else
 		printf("DIFFERENT SLAVE DIRS!!\n");
 	
-		
 	return risultato;
 }
 
+
+/// scans one or more directories, with one or more threads
+/// return total time
+int64_t Jidac::franzparallelscandir()
+{
+	if (flagverbose)
+		flagnoeta=true;
+	
+	for (unsigned i=0; i<files.size(); ++i)
+		if (!isdirectory(files[i]))
+			files[i]+='/';
+
+	files_edt.clear();
+	files_size.clear();
+	files_count.clear();
+	files_time.clear();
+	g_arraybytescanned.clear();
+	g_arrayfilescanned.clear();
+
+	int64_t startscan=mtime();
+	
+	int quantifiles			=0;
+	g_bytescanned			=0;
+	g_worked				=0;
+			
+	if (all)	// OK let's make different threads
+	{
+		vector<tparametri> 	vettoreparametri;
+		vector<DTMap>		vettoreDT;
+		
+		tparametri 	myblock;
+		DTMap		mydtmap;
+	
+		for (unsigned int i=0;i<files.size();i++)
+		{
+			vettoreDT.push_back(mydtmap);
+			myblock.tnumber=i;
+			myblock.directorytobescanned=files[i];
+			myblock.theDT=vettoreDT[i];
+			myblock.flagcalchash=false;//flagverify;
+			myblock.timestart=mtime();
+			vettoreparametri.push_back(myblock);
+		}
+	
+		int rc;
+		pthread_t* threads = new pthread_t[files.size()];
+		pthread_attr_t attr;
+		void *status;
+
+		// ini and set thread joinable
+		pthread_attr_init(&attr);
+		pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
+
+		printf("Creating %s scan threads\n",migliaia(files.size()));
+			
+		if (!flagnoeta)
+		{
+			setupConsole();
+			printf("\e[?25l");	
+			fflush(stdout);
+			restoreConsole();
+		}
+		for(unsigned int i = 0; i < files.size(); i++ ) 
+		{
+			print_datetime();
+			printf("Scan dir |%02d| <<%s>>\n",i,files[i].c_str());
+		}
+		for(unsigned int i = 0; i < files.size(); i++ ) 
+		{
+			g_arraybytescanned.push_back(0);
+			g_arrayfilescanned.push_back(0);
+			
+			rc = pthread_create(&threads[i], &attr, scansiona, (void*)&vettoreparametri[i]);
+			if (rc) 
+			{
+				printf("Error creating thread\n");
+				exit(-1);
+			}
+		}
+		printf("\n");
+
+		// free attribute and wait for the other threads
+		pthread_attr_destroy(&attr);
+		for(unsigned int i = 0; i < files.size(); i++ ) 
+		{
+			rc = pthread_join(threads[i], &status);
+			if (rc) 
+			{
+				error("Unable to join\n");
+				exit(-1);
+			}
+			///printf("Thread completed %d status %d\n",i,status);
+		}
+		if (!flagnoeta)
+		{
+			setupConsole();
+			printf("\033[%dB",(int)g_arraybytescanned.size());
+			printf("\e[?25h");
+			fflush(stdout);
+			restoreConsole();
+		}
+		printf("\nParallel scan ended in %f s\n",(mtime()-startscan)/1000.0);
+	
+		for (unsigned i=0; i<files.size(); ++i)
+		{
+			uint64_t sizeofdir=0;
+			uint64_t dircount=0;
+			for (DTMap::iterator p=vettoreparametri[i].theDT.begin(); p!=vettoreparametri[i].theDT.end(); ++p) 
+			{
+				string filename=rename(p->first);
+				if (p->second.date && p->first!="" && (!isdirectory(p->first)) && (!isads(filename))) 
+				{
+					sizeofdir+=p->second.size;
+					dircount++;
+					quantifiles++;
+				}
+				if (flagverbose)
+				{
+					printUTF8(filename.c_str());
+					printf("\n");
+				}
+			}
+			files_edt.push_back(vettoreparametri[i].theDT);
+			files_size.push_back(sizeofdir);
+			files_count.push_back(dircount);
+			files_time.push_back(vettoreparametri[i].timeend-vettoreparametri[i].timestart+1);
+		}
+		delete[] threads;
+	
+	}
+	else
+	{	// single thread. Do a sequential scan
+
+		g_arraybytescanned.push_back(0);
+		g_arrayfilescanned.push_back(0);
+	
+		for (unsigned i=0; i<files.size(); ++i)
+		{
+			DTMap myblock;
+			print_datetime();
+			printf("Scan dir <<%s>>\n",files[i].c_str());
+			uint64_t blockstart=mtime();
+			myscandir(0,myblock,files[i].c_str(),true,false);
+			
+			uint64_t sizeofdir=0;
+			uint64_t dircount=0;
+		
+			for (DTMap::iterator p=myblock.begin(); p!=myblock.end(); ++p) 
+			{
+				string filename=rename(p->first);
+				if (p->second.date && p->first!="" && (!isdirectory(p->first)) && (!isads(filename))) 
+				{
+					sizeofdir+=p->second.size;
+					dircount++;
+					quantifiles++;
+				}
+				if (flagverbose)
+				{
+					printUTF8(filename.c_str());
+					printf("\n");
+				}
+			}
+			files_edt.push_back(myblock);
+			files_size.push_back(sizeofdir);
+			files_count.push_back(dircount);
+			files_time.push_back(mtime()-blockstart);
+		}
+	}
+	return mtime()-startscan;
+}	
+
+
+/// wipe free space-check if can write and read OK
+int Jidac::fillami() 
+{
+
+#ifdef ESX
+	printf("GURU: sorry: ESXi does not like this things\n");
+	exit(0);
+#endif
+	if (files.size()!=1)
+	{
+		printf("FILL: exactly one directory\n");
+		return 2;
+	}
+	if (!isdirectory(files[0]))
+	{
+		printf("FILL: you need to specify a directory, not a file\n");
+		return 2;
+	}
+	moreprint("");
+	moreprint("This is FILLAMI, reliability test for media.");
+	moreprint("");
+	moreprint("Almost all free space will be filled by pseudorandom 512MB files,");
+	moreprint("then checked from the ztempdir-created folder.");
+	moreprint("");
+	moreprint("These activities can reduce the media life,");
+	moreprint("especially for solid state drives and if repeated several times.");
+	moreprint("");
+	moreprint("Normally used as stress test for newly devices/controllers");
+	moreprint("or (via NIC) for heavy network stress test.");
+	moreprint("");
+	moreprint("Temporary files are NOT deleted by default (for zfs's scrub).");
+	moreprint("");
+	moreprint("-kill    switch will clear (delete) temp files after execution");
+	moreprint("-verbose for extended output (check IO consistency speed)");
+	moreprint("");
+	moreprint("More than 2GB of free disk space needed.");
+	moreprint("");
+	printf("To EXIT press q, Q / anything else to continue\n");
+	mygetch();
+	
+	
+	string outputdir=files[0]+"ztempdir/";
+	makepath(outputdir);
+	
+	unsigned int percent=99;
+	
+	uint64_t spazio=getfreespace(outputdir.c_str());
+	printf("Free space %12s (%s) <<%s>>\n",migliaia(spazio),tohuman(spazio),outputdir.c_str());
+	
+	uint64_t spacetowrite=spazio*percent/100;
+	printf("To write   %12s (%s) %d percent\n",migliaia(spacetowrite),tohuman(spacetowrite),percent);
+
+
+	uint32_t chunksize=(2<<28)/sizeof(uint32_t); //half gigabyte in 32 bits at time
+	int chunks=spacetowrite/(chunksize*sizeof(uint32_t));
+	chunks--; // just to be sure
+	if (chunks<=0)
+	{
+		printf("Abort: there is something strange on free space (2GB+)\n");
+		return 1;
+	}
+	printf("%d chuks of (%s) will be written\n",chunks,tohuman(chunksize*sizeof(uint32_t)));
+		
+	uint32_t *buffer32bit = (uint32_t*)malloc(chunksize*sizeof(uint32_t));
+	if (buffer32bit==0)
+	{
+		printf("GURU malloc of buffer32bit\n");
+		return 2;
+	}
+	uint64_t starttutto=mtime();	
+	uint64_t hashtime=0;
+	uint64_t totaliotime=0;
+	uint64_t totalhashtime=0;
+	uint64_t totalrandtime=0;
+		
+	vector<string> chunkfilename;     
+	vector<string> chunkhash;     
+	
+	char mynomefile[1000];
+	for (int i=0;i<chunks;i++)
+	{
+		uint64_t startrandom=mtime();
+		populateRandom_xorshift128plus(buffer32bit, chunksize,324+i,4444+i);
+		uint64_t randtime=mtime()-startrandom;
+		
+		uint64_t starthash=mtime();
+		XXH3_state_t state128;
+		(void)XXH3_128bits_reset(&state128);
+		(void)XXH3_128bits_update(&state128, buffer32bit, chunksize*4);
+		XXH128_hash_t myhash=XXH3_128bits_digest(&state128);
+		char risultato[33];
+		sprintf(risultato,"%016llX%016llX",(unsigned long long)myhash.high64,(unsigned long long)myhash.low64);
+		chunkhash.push_back(risultato);
+		hashtime=mtime()-starthash;
+		
+		sprintf(mynomefile,"%szchunk_%05d_$%s",outputdir.c_str(),i,risultato);
+		chunkfilename.push_back(mynomefile);
+		double percentuale=(double)i/(double)chunks*100.0;
+		if (i==0)
+			percentuale=0;
+			
+		printf("%03d%% ",(int)percentuale);
+		
+		uint64_t startio=mtime();
+		FILE* myfile=fopen(mynomefile, "wb");
+		fwrite(buffer32bit, sizeof(uint32_t), chunksize, myfile);
+		fclose(myfile);			
+		uint64_t iotime=mtime()-startio;
+		
+		
+		uint64_t randspeed=	(chunksize*sizeof(uint32_t)/((randtime+1)/1000.0));
+		uint64_t hashspeed=	(chunksize*sizeof(uint32_t)/((hashtime+1)/1000.0));
+		uint64_t iospeed=	(chunksize*sizeof(uint32_t)/((iotime+1)/1000.0));
+		
+		double trascorso=(mtime()-starttutto+1)/1000.0;
+		double eta=((double)trascorso*(double)chunks/(double)i)-trascorso;
+		if (i==0)
+			eta=0;
+
+		if (eta<356000)
+		{
+			printf("ETA %0d:%02d:%02d",int(eta/3600), int(eta/60)%60, int(eta)%60);
+			printf(" todo (%10s) rnd (%10s/s) hash (%10s/s) W (%10s/s)",
+			tohuman(sizeof(uint32_t)*uint64_t(chunksize)*(uint64_t)(chunks-i)),
+			tohuman2(randspeed),
+			tohuman3(hashspeed),
+			tohuman4(iospeed));
+			if (flagverbose)
+				printf("\n");
+			else
+				printf("\r");
+		}
+		totaliotime+=iotime;
+		totalrandtime+=randtime;
+		totalhashtime+=hashtime;
+		
+	}
+	uint64_t timetutto=mtime()-starttutto;
+	printf("Total time %f  rnd %f  hash %f  write %f\n",timetutto/1000.0,totalrandtime/1000.0,totalhashtime/1000.0,totaliotime/1000.0);
+	free(buffer32bit);
+	
+	if (chunkfilename.size()!=chunkhash.size())
+	{
+		printf("Guru 23925: filename size != hash size\n");
+		return 2;
+	}
+	if (chunkfilename.size()!=(unsigned int)chunks)
+	{
+		printf("Abort: expecting %d chunks but %d founded\n",chunks,(unsigned int)chunkfilename.size());
+		return 2;
+	}
+	
+	printf("******* VERIFY\n");
+	
+	g_bytescanned=0;
+	g_filescanned=0;
+	g_worked=0;
+	edt.clear();
+	int64_t lavorati=0;
+	bool flagallok=true;
+	
+	uint64_t starverify=mtime();
+	
+	for (int unsigned i=0;i<chunkfilename.size();i++)
+	{
+		string filename=chunkfilename[i];
+		printf("Reading chunk %05d ",i);
+		
+		uint64_t dummybasso64;
+		uint64_t dummyalto64;
+		uint64_t starthash=mtime();
+		string filehash=xxhash_calc_file(filename.c_str(),-1,-1,lavorati,dummybasso64,dummyalto64);
+		uint64_t hashspeed=chunksize/((mtime()-starthash+1)/1000.0);
+		printf(" (%s/s) ",tohuman(hashspeed));
+
+		bool flagerrore=(filehash!=chunkhash[i]);
+			
+		if (flagerrore)
+		{
+			printf("ERROR\n");
+			flagallok=false;
+		}
+		else
+		{
+			printf("OK %s",chunkhash[i].c_str());
+			if (flagverbose)
+				printf("\n");
+			else
+				printf("\r");
+		}
+	}
+
+	printf("\n");
+	uint64_t verifytime=mtime()-starverify;
+	printf("Verify time %f (%10s) speed (%10s/s)\n",verifytime/1000.0,tohuman(lavorati),tohuman2(lavorati/(verifytime/1000.0)));
+		
+	if (flagallok)
+	{
+		printf("+OK all OK\n");
+		if (flagkill)
+		{
+			for (int unsigned i=0;i<chunkfilename.size();i++)
+			{
+				delete_file(chunkfilename[i].c_str());
+				printf("Deleting tempfile %05d / %05d\r",i,(unsigned int)chunkfilename.size());
+			}
+			delete_dir(outputdir.c_str());
+			printf("\n");
+		}
+		else
+		{
+			printf("REMEMBER: temp file in %s\n",outputdir.c_str());
+		}
+	}	
+	else
+		printf("ERROR: SOMETHING WRONG\n");
+	return 0;
+}

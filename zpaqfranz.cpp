@@ -5,7 +5,7 @@
 ///////// https://github.com/fcorbelli/zpaqfranz
 ///////// https://sourceforge.net/projects/zpaqfranz/
 
-#define ZPAQ_VERSION "51.36-experimental"
+#define ZPAQ_VERSION "51.37-experimental"
 #define FRANZOFFSET 	50
 #define FRANZMAXPATH 	240
 
@@ -44,6 +44,12 @@ we call "zibaldone" or in Emilia-Romagna "mappazzone".
 Windows binary builds (32 and 64 bit) on github/sourceforge
 
 ## **Provided as-is, with no warranty whatsoever, by Franco Corbelli, franco@francocorbelli.com**
+
+I had to reluctantly move parts of the comments and some even delete them, 
+because github doesn't like files> 1MB. I apologize to the authors,
+it's not a foolish attempt to take over their jobs
+
+https://github.com/fcorbelli/zpaqfranz/blob/main/notes.txt
 
 
 ####      Key differences against 7.15 by zpaqfranz -diff or here 
@@ -134,71 +140,6 @@ g++ -Dunix zpaqfranz.cpp  -pthread -o zpaqfranz -Wno-psabi
 
 */
 
-/*
-  Those are standard 7.15 notes
-
-  This software is provided as-is, with no warranty.
-  I, Matt Mahoney, release this software into
-  the public domain.   This applies worldwide.
-  In some countries this may not be legally possible; if so:
-  I grant anyone the right to use this software for any purpose,
-  without any conditions, unless such conditions are required by law.
-
-zpaq is a journaling (append-only) archiver for incremental backups.
-Files are added only when the last-modified date has changed. Both the old
-and new versions are saved. You can extract from old versions of the
-archive by specifying a date or version number. zpaq supports 5
-compression levels, deduplication, AES-256 encryption, and multi-threading
-using an open, self-describing format for backward and forward
-compatibility in Windows and Linux. See zpaq.pod for usage.
-
-TO COMPILE:
-
-This program needs libzpaq from http://mattmahoney.net/zpaq/
-Recommended compile for Windows with MinGW:
-
-  g++ -O3 zpaq.cpp libzpaq.cpp -o zpaq
-
-With Visual C++:
-
-  cl /O2 /EHsc zpaq.cpp libzpaq.cpp advapi32.lib
-
-For Linux:
-
-  g++ -O3 -Dunix zpaq.cpp libzpaq.cpp -pthread -o zpaq
-
-For BSD or OS/X
-
-  g++ -O3 -Dunix -DBSD zpaq.cpp libzpaq.cpp -pthread -o zpaq
-
-Possible options:
-
-  -DDEBUG    Enable run time checks and help screen for undocumented options.
-  -DNOJIT    Don't assume x86 with SSE2 for libzpaq. Slower (disables JIT).
-  -Dunix     Not Windows. Sometimes automatic in Linux. Needed for Mac OS/X.
-  -DBSD      For BSD or OS/X.
-  -DPTHREAD  Use Pthreads instead of Windows threads. Requires pthreadGC2.dll
-             or pthreadVC2.dll from http://sourceware.org/pthreads-win32/
-  -Dunixtest To make -Dunix work in Windows with MinGW.
-  -fopenmp   Parallel divsufsort (faster, implies -pthread, broken in MinGW).
-  -pthread   Required in Linux, implied by -fopenmp.
-  -O3 or /O2 Optimize (faster).
-  -o         Name of output executable.
-  /EHsc      Enable exception handing in VC++ (required).
-  advapi32.lib  Required for libzpaq in VC++.
-
-*/
-
-/* unzpaq206.cpp - ZPAQ level 2 reference decoder version 2.06.
-
-  This software is provided as-is, with no warranty.
-  I, Matt Mahoney, release this software into
-  the public domain.   This applies worldwide.
-  In some countries this may not be legally possible; if so:
-  I grant anyone the right to use this software for any purpose,
-  without any conditions, unless such conditions are required by law.
-*/
-
 
 #define _FILE_OFFSET_BITS 64  // In Linux make sizeof(off_t) == 8
 #ifndef UNICODE
@@ -209,834 +150,6 @@ Possible options:
 #include <omp.h>
 #endif
 
-/* libzpaq.h - LIBZPAQ Version 7.12 header - Apr. 19, 2016.
-
-  This software is provided as-is, with no warranty.
-  I, Matt Mahoney, release this software into
-  the public domain.   This applies worldwide.
-  In some countries this may not be legally possible; if so:
-  I grant anyone the right to use this software for any purpose,
-  without any conditions, unless such conditions are required by law.
-
-LIBZPAQ is a C++ library providing data compression and decompression
-services using the ZPAQ level 2 format as described in
-http://mattmahoney.net/zpaq/
-
-An application wishing to use these services should #include "libzpaq.h"
-and link to libzpaq.cpp (and advapi32.lib in Windows/VC++).
-libzpaq recognizes the following options:
-
-  -DDEBUG   Turn on assertion checks (slower).
-  -DNOJIT   Don't assume x86-32 or x86-64 with SSE2 (slower).
-  -Dunix    Without -DNOJIT, assume Unix (Linux, Mac) rather than Windows.
-
-The application must provide an error handling function and derived
-implementations of two abstract classes, Reader and Writer,
-specifying the input and output byte streams. For example, to compress
-from stdin to stdout (assuming binary I/O as in Linux):
-
-  #include "libzpaq.h"
-  #include <stdio.h>
-  #include <stdlib.h>
-
-  void libzpaq::error(const char* msg) {  // print message and exit
-    fprintf(stderr, "Oops: %s\n", msg);
-    exit(1);
-  }
-
-  class In: public libzpaq::Reader {
-  public:
-    int get() {return getchar();}  // returns byte 0..255 or -1 at EOF
-  } in;
-
-  class Out: public libzpaq::Writer {
-  public:
-    void put(int c) {putchar(c);}  // writes 1 byte 0..255
-  } out;
-
-  int main() {
-    libzpaq::compress(&in, &out, "1");  // "0".."5" = faster..better
-  }
-
-Or to decompress:
-
-    libzpaq::decompress(&in, &out);
-
-The function error() will be called with an English language message
-in case of an unrecoverable error such as badly formatted compressed
-input data or running out of memory. error() should not return.
-In a multi-threaded application where ZPAQ blocks are being decompressed
-in separate threads, error() should exit the thread, but other threads
-may continue. Blocks are independent and libzpaq is thread safe.
-
-Reader and Writer provide default implementations of read() and write()
-for block I/O. You may override these with your own versions, which
-might be faster. The default is to call get() or put() the appropriate
-number of times. For example:
-
-  // Read n bytes into buf[0..n-1] or to EOF, whichever is first.
-  // Return the number of bytes actually read.
-  int In::read(char* buf, int n) {return fread(buf, 1, n, stdin);}
-
-  // Write buf[0..n-1]
-  void Out::write(char* buf, int n) {fwrite(buf, 1, n, stdout);}
-
-By default, compress() divides the input into blocks with one segment
-each. The segment filename field is empty. The comment field of each
-block is the uncompressed size as a decimal string. The checksum
-is saved. To override:
-
-  compress(&in, &out, "1", "filename", "comment", false);
-
-If the filename is not NULL then it is saved in the first block only.
-If the comment is not NULL then a space and the comment are appended
-to the decimal size in the first block only. The comment would normally
-be the date and attributes like "20141231235959 w32", or "jDC\x01" for
-a journaling archive as described in the ZPAQ specification.
-
-The method string has the general form of a concatenation of single
-character commands each possibly followed by a list of decimal
-numeric arguments separated by commas or periods:
-
-  {012345xciawmst}[N1[{.,}N2]...]...
-
-For example "1" or "14,128,0" or "x6.3ci1m".
-
-Only the first command can be a digit 0..5. If it is, then it selects
-a compression level and the other commands are ignored. Otherwise,
-if it is "x" then the arguments and remaining commands describe
-the compression method. Any other letter as the first command is
-interpreted the same as "x". 
-
-Higher compression levels are slower but compress better. "1" is
-good for most purposes. "0" does not compress. "2" compresses slower
-but decompression is just as fast as 1. "3", "4", and "5" also
-decompress slower. The numeric arguments are as follows:
-
-  N1: 0..11 = block size of at most 2^N1 MiB - 4096 bytes (default 4).
-  N2: 0..255 = estimated ease of compression (default 128).
-  N3: 0..3 = data type. 1 = text, 2 = exe, 3 = both (default 0).
-
-For example, "14" or "54" divide the input in 16 MB blocks which
-are compressed independently. N2 and N3 are hints to the compressor
-based on analysis of the input data. N2 is 0 if the data is random
-or 255 if the data is easily compressed (for example, all zero bytes).
-Most compression methods will simply store random data with no
-compression. The default is "14,128,0".
-
-If the first command is "x" then the string describes the exact
-compression method. The arguments to "x" describe the pre/post
-processing (LZ77, BWT, E8E9), and remaining commands describe the
-context model, if any, of the transformed data. The arguments to "x" are:
-
-  N1: 0..11 = block size as before.
-  N2: 0..7: 0=none, 1=packed LZ77, 2=LZ77, 3=BWT, 4..7 = 0..3 + E8E9.
-  N3: 4..63: LZ77 min match.
-  N4: LZ77 secondary match to try first or 0 to skip.
-  N5: LZ77 log search depth.
-  N6: LZ77 log hash table size, or N1+21 to use a suffix array.
-  N7: LZ77 lookahead.
-
-N2 selects the basic transform applied before context modeling.
-N2 = 0 does not transform the input. N2 = 1 selects LZ77 encoding
-of literals strings and matches using bit-packed codes. It is normally
-not used with a context model. N2 = 2 selects byte aligned LZ77, which
-compresses worse by itself but better than 1 when a context model is
-used. It uses single bytes to encode either a literal of length 1..64
-or a match of length N3..N3+63 with a 2, 3, or 4 byte offset.
-
-N2 = 3 selects a Burrows-Wheeler transform, in which the input is
-sorted by right-context. This does not compress by itself but makes
-the data more compressible using a low order, adaptive context model.
-BWT requires 4 times the block size in additional memory for both
-compression and decompression.
-
-N2 = 4..7 are the same as 0..3 except that a E8E9 transform is first applied
-to improve the compression of x86 code usually found .exe and .dll files.
-It scans the input block backward for 5 byte strings of the form
-{E8|E9 xx xx xx 00|FF} and adds the offset from the start of the
-block to the middle 3 bytes interpreted as a little-endian (LSB first)
-number (mod 2^24). E8 and E9 are the CALL and JMP instructions, followed
-by a 32 bit relative offset.
-
-N3..N7 apply only to LZ77. For either type, it searches for matches
-by hashing the next N4 bytes, and then the next N3 bytes, and looking
-up each of the hashes at 2^N5 locations in a table with 2^N6 entries.
-Of those, it picks the longest match, or closest in case of a tie.
-If no match is at least N3, then a literal is encoded instead. If N5
-is 0 then only one hash is computed, which is faster but does not
-compress as well. Typical good values for fast compression are
-"x4.1.5.0.3.22" which means 16 MiB blocks, packed LZ77, mininum match
-length 5, no secondary match, search depth 2^3 = 8, and 2^22 = 4M
-hash table (using 16 MiB memory).
-
-The hash table requires 4 x 2^N6 bytes of memory. If N6 = N1+21, then
-matches are found using a suffix array and inverse suffix array using
-2.25 x 2^N6 bytes (4.5 x block size). This finds better matches but
-takes longer to compute the suffix array (SA). The matches are found by
-searching forward and backward in the SA 2^N5 in each direction up
-to the first earlier match, and picking the longer of the two.
-Good values are "x4.1.4.0.8.25". The secondary match N4 has no effect.
-
-N7 is the lookahead. It looks for matches of length at least N4+N7
-when using a hash table or N3+N7 for a SA, but allows the first N7
-bytes not to match and be coded as literals if this results in
-a significantly longer match. Values higher than 1 are rarely effective.
-The default is 0.
-
-All subsequent commands after "x" describe a context model. A model
-consists of a set of components that output a bit prediction, taking
-a context and possibly earlier predictions as input. The final prediction
-is arithmetic coded. The component types are:
-
-  c = CM or ICM (context model or indirect context model).
-  i = ISSE chain (indirect secondary symbol estimator).
-  a = MATCH.
-  w = word model (ICM-ISSE chain with whole word contexts).
-  m = MIX.
-  s = SSE (secondary symbol estimator).
-  t = MIX2 (2 input MIX).
-
-For example, "x4.3ci1" describes a BWT followed by an order 0 CM
-and order 1 ISSE, which is used for level 3 text compression. The
-parameters to "c" (default all 0) are as follows:
-
-  N1: 0 = ICM, 1..256 CM with faster..slower adaptation, +1000 halves memory.
-  N2: 1..255 = offset mod N2, 1000..1255 = offset to last N2-1000 byte.
-  N3: 0..255 = order 0 context mask, 256..511 mixes LZ77 parse state.
-  N4...: 0..255 order 1... context masks. 1000... skips N4-1000 bytes.
-
-Most components use no more memory than the block size, depending on
-the number of context bits, but it is possible to select less memory
-and lose compression.
-
-A CM inputs a context hash and outputs a prediction from a table.
-The table entry is then updated by adjusting in the direction of the
-actual bit. The adjustment is 1/count, where the maximum count is 4 x N1.
-Larger values are best for stationary data. Smaller values adapt faster
-to changing data.
-
-If N1 is 0 then c selects an ICM. An ICM maps a context to a bit history
-(8 bit state), and then to slow adapting prediction. It is generally
-better than a CM on most nonstationary data.
-
-The context for a CM or ICM is a hash of all selected contexts: a
-cyclic counter (N2 = 1..255), the distance from the last occurrence
-of some byte value (N2 = 1000..1255), and the masked history of the
-last 64K bytes ANDED with N3, N4... For example, "c0.0.255.255.255" is
-an order 3 ICM. "C0.1010.255" is an order 1 context hashed together
-with the column number in a text file (distance to the last linefeed,
-ASCII 10). "c256.0.255.1511.255" is a stationary grayscale 512 byte
-wide image model using the two previous neighboring pixels as context.
-"c0.0.511.255" is an order 1 model for LZ77, which helps compress
-literal strings. The LZ77 state context applies only to byte aligned
-LZ77 (type 2 or 6).
-
-The parameters to "i" (ISSE chain) are the initial context length and
-subsequent increments for a chain connected to an existing earlier component.
-For example, "ci1.1.2" specifies an ICM (order 0) followed by a chain
-of 3 ISSE with orders 1, 2, and 4. An ISSE maps a context to a bit
-history like an ISSE, but uses the history to select a pair of weights
-to mix the input prediction with a constant 1, thus performing the
-mapping q' := w1 x q + w2 in the logistic domain (q = log p/(1-p)).
-The mixer is then updated by adjusting the weights to improve the
-prediction. High order ISSE chains (like "x4.0ci1.1.1.1.2") and BWT
-followed by a low order chain (like "x4.3ci1") both provide
-excellent general purpose compression.
-
-A MATCH ("a") keeps a rotating history buffer and a hash table to look
-up the previous occurrence of the current context hash and predicts
-whatever bit came next. The parameters are:
-
-  N1 = hash multiplier, default 24.
-  N2 = halve buffer size, default 0 = same size as input block.
-  N3 = halve hash table size, default 0 = block size / 4.
-
-For example, "x4.0m24.1.1" selects a 16 MiB block size, 8 MiB match
-buffer size, and 2M hash table size (using 8 MiB at 4 bytes per entry).
-The hash is computed as hash := hash x N1 + next_byte + 1 (mod hash table
-size). Thus, N1 = 12 selects a higher order context, and N1 = 48 selects a
-lower order.
-
-A word model ('w") is an ICM-ISSE chain of length N1 (orders 0..N1-1)
-in which the contexts are whole words. A word is defined as the set
-of characters in the range N2..N2+N3-1 after ANDing with N4. The context
-is hashed using multiplier N5. Memory is halved by N6. The default is
-"w1.65.26.223.20.0" which is a chain of length 1 (ICM only), where words
-are in range 65 ('A') to 65+26-1 ('Z') after ANDing with 223 (which
-converts to upper case). The hash multiplier is 20, which has the
-effect of shifting the high 2 bits out of the hash. The memory usage
-of each component is the same as the block size.
-
-A MIX ("m") performs the weighted average of all previous component
-predictions. The weights are then adjusted to improve the prediction
-by favoring the most accurate components. N1 selects the number of
-context bits (not hashed) to select a set of weights. N2 is the
-learning rate (around 16..32 works well). The default is "m8.24"
-which selects the previously modeled bits of the current byte as
-context. When N1 is not a multiple of 8, it selects the most significant
-bits of the oldest byte.
-
-A SSE ("s") adjusts the previous prediction like an ISSE, but uses
-a direct lookup table of the quantized and interpolated input prediction
-and a direct (not hashed) N1-bit context. The adjustment is 1/count where
-the count is allowed to range from N2 to 4 x N3. The default
-is "s8.32.255".
-
-A MIX2 ("t") is a MIX but mixing only the last 2 components. The
-default is "t8.24" where the meaning is the same as "m".
-
-For example, a good model for text is "x6.0ci1.1.1.1.2aw2mm16tst"
-which selects 2^6 = 64 MiB blocks, no preprocessing, an order 0 ICM,
-an ISSE chain with orders 1, 2, 3, 4, 6, a MATCH, an order 0-1 word
-ICM-ISSE chain, two mixers with 0 and 1 byte contexts, whose outputs are
-mixed by a MIX2. The MIX2 output is adjusted by a SSE, and finally
-the SSE input and outputs are mixed again for the final bit prediction.
-
-
-COMPRESSBLOCK
-
-CompressBlock() takes the same arguments as compress() except that
-the input is a StringBuffer instead of a Reader. The output is always
-a single block, regardless of the N1 (block size) argument in the method.
-
-  void compressBlock(StringBuffer* in, Writer* out, const char* method,
-                     const char* filename=0, const char* comment=0,
-                     bool compute_sha1=false);
-
-A StringBuffer is both a Reader and a Writer, but also allows random
-memory access. It provides convenient and efficient storage when the
-input size is unknown.
-
-  class StringBuffer: public libzpaq::Reader, public libzpaq::Writer {
-  public:
-    StringBuffer(size_t n=0);     // initial allocation after first use
-    ~StringBuffer();
-    int get();                    // read 1 byte or EOF from memory
-    int read(char* buf, int n);   // read n bytes
-    void put(int c);              // write 1 byte to memory
-    void write(const char* buf, int n);  // write n bytes
-    const char* c_str() const;    // read-only access to written data
-    unsigned char* data();        // read-write access
-    size_t size() const;          // number of bytes written
-    size_t remaining() const;     // number of bytes to read until EOF
-    void setLimit(size_t n);      // set maximum write size
-    void reset();                 // discard contents and free memory
-    void resize(size_t n);        // truncate to n bytes
-    void swap(StringBuffer& s);   // exchange contents efficiently
-  };
-
-The constructor sets the inital allocation size after the first
-write to n or 128, whichever is larger. Initially, no memory is allocated.
-The allocated size is always n x (2^k - 1), for example
-128 x (1, 3, 7, 15, 31...).
-
-put() and write() append 1 or n bytes, allocating memory as needed.
-buf can be NULL and the StringBuffer will be enlarged by n.
-get() and read() read 1 or up to n bytes. get() returns EOF if you
-attempt to read past the end of written data. read() returns less
-than n if it reaches EOF first, or 0 at EOF.
-
-size() is the number of bytes written, which does not change when
-data is read. remaining() is the number of bytes left to read
-before EOF.
-
-c_str() provides read-only access to the data. It is not NUL terminated.
-data() provides read-write access. Either may return NULL if size()
-is 0. write(), put(), reset(), swap(), and the destructor may
-invalidate saved pointers.
-
-setLimit() sets a maximum size. It will call error() if you try to
-write past it. The default is -1 or no limit.
-
-reset() sets the size to 0 and frees memory. resize() sets the size
-to n by moving the write pointer, but does not allocate or free memory.
-Moving the pointer forward does not overwrite the previous contents
-in between. The write pointer can be moved past the end of allocated
-memory, and the next put() or write() will allocate as needed. If the
-write pointer is moved back before the read pointer, then remaining()
-is set to 0.
-
-swap() swaps 2 StringBuffers efficiently, but does not change their
-initial allocations.
-
-
-DECOMPRESSER
-
-decompress() will decompress any valid ZPAQ stream, which may contain
-multiple blocks with multiple segments each. It will ignore filenames,
-comments, and checksums. You need the Decompresser class if you want to
-do something other than decompress all of the data serially to a single
-file. To decompress individual blocks and segments and retrieve the
-filenames, comments, data, and hashes of each segment (in exactly this
-order):
-
-  libzpaq::Decompresser d;               // to decompress
-  libzpaq::SHA1 sha1;                    // to verify output hashes
-  double memory;                         // bytes required to decompress
-  Out filename, comment;
-  char sha1out[21];
-  d.setInput(&in);
-  while (d.findBlock(&memory)) {         // default is NULL
-    while (d.findFilename(&filename)) {  // default is NULL
-      d.readComment(&comment);           // default is NULL
-      d.setOutput(&out);                 // if omitted or NULL, discard output
-      d.setSHA1(&sha1);                  // optional
-      while (d.decompress(1000));        // bytes to decode, default is all
-      d.readSegmentEnd(sha1out);         // {0} or {1,hash[20]}
-      if (sha1out[0]==1 && memcmp(sha1.result(), sha1out+1, 20))
-        error("checksum error");
-    }
-  }
-
-findBlock() scans the input for the next ZPAQ block and returns true
-if found. It optionally sets memory to the approximate number of bytes
-that it will allocate at the first call to decompress().
-
-findFilename() finds the next segment and returns false if there are
-no more in the current block. It optionally writes the saved filename.
-
-readComment() optionally writes the comment. It must be called
-after reading the filename and before decompressing.
-
-setSHA1() specifies an SHA1 object for computing a hash of the segment.
-It may be omitted if you do not want to compute a hash.
-
-decompress() decodes the requested number of bytes, postprocesses them,
-and writes them to out. For the 3 built in compression levels, this
-is the same as the number of bytes output, but it may be different if
-postprocessing was used. It returns true until there is no more data
-to decompress in the current segment. The default (-1) is to decompress the
-whole segment.
-
-readSegmentEnd() skips any remaining data not yet decompressed in the
-segment and writes 21 bytes, either a 0 if no hash was saved, 
-or a 1 followed by the 20 byte saved hash. If any data is skipped,
-then all data in the remaining segments in the current block must
-also be skipped.
-
-
-SHA1
-
-The SHA1 object computes SHA-1 cryptographic hashes. It is safe to
-assume that two inputs with the same hash are identical. For example:
-
-  libzpaq::SHA1 sha1;
-  int ch;
-  while ((ch=getchar())!=EOF)
-    sha1.put(ch);
-  printf("Size is %1.0f or %1.0f bytes\n", sha1.size(), double(sha1.usize()));
-
-size() returns the number of bytes read as a double, and usize() as a
-64 bit integer. result() returns a pointer to the 20 byte hash and
-resets the size to 0. The hash (not just the pointer) should be copied
-before the next call to result() if you want to save it. You can also
-call sha1.write(buffer, n) to hash n bytes of char* buffer.
-
-
-COMPRESSOR
-
-A Compressor object allows greater control over the compressed data.
-In particular you can specify the compression algorithm in ZPAQL to
-specify methods not possible using compress() or compressBlock(). You
-can create blocks with multiple segments specifying different files,
-or compress streams of unlimited size to a single block when the
-input size is not known.
-
-  libzpaq::Compressor c;
-  for (int i=0; i<num_blocks; ++i) {
-    c.setOutput(&out);              // if omitted or NULL, discard output
-    c.writeTag();                   // optional locator tag
-    c.startBlock(2);                // compression level 1, 2, or 3
-    for (int j=0; j<num_segments; ++j) {
-      c.startSegment("filename", "comment");  // default NULL = empty
-      c.setInput(&in);
-      while (c.compress(1000));     // bytes to compress, default -1 = all
-      c.endSegment(sha1.result());  // default NULL = don't save checksum
-    }
-    c.endBlock();
-  }
-
-Input and output can be set anywhere before the first input and output
-operation, respectively. Output may be changed any time.
-
-writeTag() outputs a 13 byte string that allows decompress() to scan
-for blocks that don't occur immediately, such as searching from the
-start of a self extracting archive.
-
-startBlock() specifies either a compression level (1, 2, 3), or a ZPAQL
-program, described below. It does not work with the fast method type
-arguments to compress() or compressBlock(). Levels 1, 2, and 3 correspond
-approximately to "3", "4", and "5". Any preprocessing must be done
-by the application before input to the Compressor.
-
-StartSegment() starts a segment. An empty or NULL filename continues
-the previous file. The comment normally contains the uncompressed size
-of the segment as a decimal string, but it is allowed to omit it.
-
-compress() will read the requested number of bytes or until in.get()
-returns EOF (-1), whichever comes first, and return true if there is
-more data to decompress. If the argument is omitted or -1, then it will
-read to EOF and return false.
-
-endSegment() writes a provided SHA-1 cryptographic hash checksum of the
-input segment before any preprocessing. It may be omitted.
-
-
-ZPAQL
-
-ZPAQ supports arbitrary compression algorithms in addition to the
-built in levels. For example, method "x4.0c0.0.255.255i4" compression could
-alternatively be specified using the ZPAQL language description of the
-compression algorithm:
-
-  int args[9]={0}
-  c.startBlock(
-    "(min.cfg - equivalent to level 1) "
-    "comp 1 2 0 0 2 (log array sizes hh,hm,ph,pm and number of components n) "
-    "  0 icm 16    (order 2 indirect context model using 4 MB memory) "
-    "  1 isse 19 0 (order 4 indirect secondary symbol estimator, 32 MB) "
-    "hcomp (context computation, input is last modeled byte in A) "
-    "  *b=a a=0 (save in rotating buffer M pointed to by B) "
-    "  d=0 hash b-- hash *d=a (put order 2 context hash in H[0] pointed by D)"
-    "  d++ b-- hash b-- hash *d=a (put order 4 context in H[1]) "
-    "  halt "
-    "end " (no pre/post processing) ",
-    args,     // Arguments $1 through $9 to ZPAQL code (unused, can be NULL)
-    &out);    // Writer* to write pcomp command (default is NULL)
-
-The first argument is a description of the compression algorithm in
-the ZPAQL language. It is compiled into byte code and saved in the
-archive block header so that the decompressor knows how read the data.
-A ZPAQL program accepts up to 9 numeric arguments, which should be
-passed in array.
-
-A decompression algorithm has two optional parts, a context mixing
-model and a postprocessor. The context model is identical for both
-the compressor and decompressor, so is used in both instances. The
-postprocessor, if present, is generally different, which presents
-the possibility that the user supplied code may not restore the
-original data exactly. It is assumed that the input has already been
-preprocessed by the application but that the hash supplied to endSegment()
-is of the original input before preprocessing. The following functions
-allow you to test the postprocesser during compression:
-
-  c.setVerify(true); // before c.compress(), may run slower
-  c.getSize();       // return 64 bit size of postprocessed output
-  c.getChecksum();   // after c.readSegmentEnd(), return hash, reset size to 0
-
-This example has no postprocessor, but if it did, then setVerify(true)
-would cause compress() to run the preprocessed input through the
-postprocessor and into a SHA1 in parallel with compression. Then,
-getChecksum() would return the hash which could be compared with
-the hash of the input computed by the application. Also,
-
-  int64_t size;
-  c.endSegmentChecksum(&size, true);
-
-instead of c.endSegment() will automatically add the computed checksum
-if setVerify is true and return the checksum, whether or not there
-is a postprocessor. If &size is not NULL then the segment size is written
-to size. If the second argument is false then the computed checksum is
-not saved to output. Default is true. If setVerify is false, then no
-checksum is saved and the function returns 0 with size not written.
-
-A context model consists of two parts, an array COMP of n components,
-and some code HCOMP that computes contexts for the components.
-The model compresses one bit at a time (MSB to LSB order) by computing
-a probability that the next bit will be a 1, and then arithmetic
-coding that bit. Better predictions compress smaller.
-
-If n is 0 then the data is uncompressed. Otherwise, there is an array
-of n = 1..255 components each taking a context and possibly the
-predictions of previous components as input and outputting a new
-prediction. The output of the last prediction is used to encode the
-bit. After encoding, the state of each component is updated to
-reduce the prediction error when the same context occurs again.
-Components are as follows. Most arguments have range 0...255.
-
-  CONST c          predict a 1 (c > 128) or 0 (c < 128).
-  CM s t           context model with 2^s contexts, learning rate 1/4t.
-  ICM s            indirect context model with 2^(s+6) contexts.
-  MATCH s b        match model with 2^s context hashes and 2^b history.
-  AVG j k wt       average components j and k with weight wt/256 for j.
-  MIX2 s j k r x   average j and k with 2^s contexts, rate r, mask x.
-  MIX  s j m r x   average j..j+m-1 with 2^s contexts, rate r, mask x.
-  ISSE s j         adjust prediction j using 2^(s+6) indirect contexts.
-  SSE s j t1 t2    adjust j using 2^s direct contexts, rate 1/t1..1/4t2.
-
-A CONST predicts a 1 with probability 1/(1+exp((128-c)/16)), i.e
-numbers near 0 or 255 are the most confident.
-  
-A CM maps a context to a prediction and a count. It is updated by
-adjusting the prediction to reduce the error by 1/count and incrementing
-the count up to 4t.
-
-A ICM maps a s+10 bit context hash to a bit history (8 bit state)
-representing a bounded count of zeros and ones previously seen in the
-context and which bit was last. The bit history is mapped to a
-prediction, which is updated by reducing the error by 1/1024.
-The initial prediction is estimated from the counts represented by each
-bit history.
-
-A MATCH looks up a context hash and predicts whatever bit came next
-following the previous occurrence in the history buffer. The strength
-of the prediction depends on the match length.
-
-AVG, MIX2, and MIX perform weighted averaging of predictions in the
-logistic domain (log(p/(1-p))). AVG uses a fixed weight. MIX2 and MIX
-adjust the weights (selected by context) to reduce prediction error
-by a rate that increases with r. The mask is AND-ed with the current
-partially coded byte to compute that context. Normally it is 255.
-A MIX takes a contiguous range of m components as input.
-
-ISSE adjusts a prediction using a bit history (as with an ICM) to
-select a pair of weights for a 2 input MIX. It mixes the input
-prediction with a constant 1 in the logistic domain.
-
-SSE adjusts a logistic prediction by quantizing it to 32 levels and
-selecting a new prediction from a table indexed by context, interpolating
-between the nearest two steps. The nearest prediction error is
-reduced by 1/count where count increments from t1 to 4*t2.
-
-Contexts are computed and stored in an array H of 32 bit unsigned
-integers by the HCOMP program written in ZPAQL. The program is called
-after encoding a whole byte. To form a complete context, these values
-are combined with the previous 0 to 7 bits of the current parital byte.
-The method depends on the component type as follows:
-
-  CM: H[i]    XOR hmap4(c).
-  ICM, ISSE:  hash table lookup of (H[i]*16+c) on nibble boundaries.
-  MIX2, MIX:  H[i] + (c AND x).
-  SSE:        H[i] + c.
-
-where c is the previous bits with a leading 1 bit (1, 1x, 1xx, ...,
-1xxxxxxx where x is a previously coded bit). hmap4(c) maps c
-to a 9 bit value to reduce cache misses. The first nibble is
-mapped as before and the second nibble with 1xxxx in the high
-5 bits. For example, after 6 bits, where c = 1xxxxxx,
-hmap4(c) = 1xxxx01xx with the bits in the same order.
-
-There are two ZPAQL virtual machines, HCOMP to compute contexts
-and PCOMP to post-process the decoded output. Each has the
-following state:
-
-  PC: 16 bit program counter.
-  A, B, C, D, R0...R255: 32 bit unsigned registers.
-  F: 1 bit condition register.
-  H: array of 2^h 32 bit unsigned values (output for HCOMP).
-  M: array of 2^m 8 bit unsigned values.
-
-All values are initialized to 0 at the beginning of a block
-and retain their values between calls. There are two machines.
-HCOMP is called after coding each byte with the value of that
-byte in A. PCOMP, if present, is called once for each decoded
-byte with that byte in A, and once more at the end of each
-segment with 2^32 - 1 in A.
-
-Normally, A is an accumulator. It is the destination of all
-binary operations except assignment. The low m bits of B and
-C index M. The low h bits of D indexes H. We write *B, *C, *D
-to refer to the elements they point to. The instruction set
-is as follows, where X is A, B, C, D, *B, *C, *D except as
-indicated. X may also be a constant 0...255, written with
-a leading space if it appears on the right side of an operator,
-e.g. "*B= 255". Instructions taking a numeric argument are 2 bytes,
-otherwise 1. Arithmetic is modulo 2^32.
-
-  X<>A    Swap X with A (X cannot be A).
-  X++     Add 1.
-  X--     Subtract 1.
-  X!      Complement bits of X.
-  X=0     Clear X (1 byte instruction).
-  X=X     Assignment to left hand side.
-  A+=X    Add to A
-  A-=X    Subtract from A
-  A*=X    Multipy
-  A/=X    Divide. If X is 0 then A=0.
-  A%=X    Mod. If X is 0 then A=0.
-  A&=X    Clear bits of A that are 0 in X.
-  A&~X    Clear bits of A that are 1 in X.
-  A|=X    Set bits of A that are 1 in X.
-  A^=X    Complement bits of A that are set in X.
-  A<<=X   Shift A left by (X mod 32) bits.
-  A>>=X   Shift right (zero fill) A by (X mod 32) bits.
-  A==X    Set F=1 if equal else F=0.
-  A<X     Set F=1 if less else F=0.
-  A>X     Set F=1 if greater else F=0.
-  X=R N   Set A,B,C,D to RN (R0...R255).
-  R=A N   Set R0...R255 to A.
-  JMP N   Jump N=-128...127 bytes from next instruction.
-  JT N    Jump N=-128...127 if F is 1.
-  JF N    Jump N=-128...127 if F is 0.
-  LJ N    Long jump to location 0...65535 (only 3 byte instruction).
-  OUT     Output A (PCOMP only).
-  HASH    A=(A+*B+512)*773.
-  HASHD   *D=(*D+A+512)*773.
-  HALT    Return at end of program.
-  ERROR   Fail if executed.
-
-Rather than using jump instructions, the following constructs are
-allowed and translated appropriately.
-
-  IF ... ENDIF              Execute if F is 1.
-  IFNOT ... ENDIF           Execute if F is 0.
-  IF ... ELSE ... ENDIF     Execute first part if F is 1 else second part.
-  IFNOT ... ELSE ... ENDIF  Execute first part if F is 0 else second part.
-  DO ... WHILE              Loop while F is 1.
-  DO ... UNTIL              Loop while F is 0.
-  DO ... FOREVER            Loop unconditionally.
-
-Forward jumps (IF, IFNOT, ELSE) will not compile if beyond 127
-instructions. In that case, use the long form (IFL, IFNOTL, ELSEL).
-DO loops automatically use long jumps if needed. IF and DO loops
-may intersect. For example, DO ... IF ... FOREVER ENDIF is equivalent
-to a while-loop.
-
-A config argument without a postprocessor has the following syntax:
-
-  COMP hh hm ph pm n
-    i COMP args...
-  HCOMP
-    zpaql...
-  END (or POST 0 END for backward compatibility)
-
-With a postprocessor:
-
-  COMP hh hm ph pm n
-    i COMP args...
-  HCOMP
-    zpaql...
-  PCOMP command args... ;
-    zpaql...
-  END
-
-In HCOMP, H and M have sizes 2^hh and 2^hm respectively. In PCOMP,
-H and M have sizes 2^ph and 2^pm respectively. There are n components,
-which must be numbered i = 0 to n-1. If a postprocessor is used, then
-"command args..." is written to the Writer* passed as the 4'th argument,
-but otherwise ignored. A typical use in a development environment might
-be to call an external program that will be passed two additional
-arguments on the command line, the input and output file names
-respectively.
-
-You can pass up to 9 signed numeric arguments in args[]. In any
-place that a number "N" is allowed, you can write "$M" or "$M+N"
-(like "$1" or $9+25") and value args[M-1]+N will be substituted.
-
-ZPAQL allows (nested) comments in parenthesis. It is not case sensitive.
-If there are input errors, then error() will report the error. If the
-string contains newlines, it will report the line number of the error.
-
-ZPAQL is compiled internally into a byte code, and then to native x86
-32 or 64 bit code (unless compiled with -DNOJIT, in which case the
-byte code is interpreted). You can also specify the algorithm directly
-in byte code, although this is less convenient because it requires two
-steps:
-
-  c.startBlock(hcomp);      // COMP and HCOMP at start of block
-  c.postProcess(pcomp, 0);  // PCOMP right before compress() in first segment
-
-This is necessary because the COMP and HCOMP sections are stored in
-the block header, but the PCOMP section is compressed in the first
-segment after the filename and comment but before any data.
-
-To retrive compiled byte code in suitable format after startBlock():
-
-  c.hcomp(&out);      // writes COMP and HCOMP sections
-  c.pcomp(&out);      // writes PCOMP section if any
-
-Or during decompression:
-
-  d.hcomp(&out);      // valid after findBlock()
-  d.pcomp(&out);      // valid after decompress(0) in first segment
-
-Both versions of pcomp() write nothing and return false if there is no
-PCOMP section. The output of hcomp() and pcomp() may be passed to the
-input of startBlock() and postProcess(). These are strings in which the
-first 2 bytes encode the length of the rest of the string, least
-significant byte first. Alternatively, postProcess() allows the length to
-be omitted and passed separately as the second argument. In the case
-of decompression, the HCOMP and PCOMP strings are read from the archive.
-The preprocessor command (from "PCOMP cmd ;") is not saved in the compressed
-data.
-
-
-ARRAY
-
-The libzpaq::Array template class is convenient for creating arrays aligned
-on 64 byte addresses. It calls error("Out of memory") if needed.
-It is used as follows:
-
-  libzpaq::Array<T> a(n);  // array a[0]..a[n-1] of type T, zeroed
-  a.resize(n);             // change size and zero contents
-  a[i]                     // i'th element
-  a(i)                     // a[i%n], valid only if n is a power of 2
-  a.size()                 // n (as a size_t)
-  a.isize()                // n (as a signed int)
-
-T should be a simple type without constructors or destructors. Arrays
-cannot be copied or assigned. You can also specify the size:
-
-  Array<T> a(n, e);  // n << e
-  a.resize(n, e);    // n << e
-
-which is equivalent to n << e except that it calls error("Array too big")
-rather than overflow if n << e would require more than 32 bits. If
-compiled with -DDEBUG, then bounds are checked at run time.
-
-
-ENCRYPTION
-
-There is a class libzpaq::SHA256 with put(), result(), size(), and usize()
-as in SHA1. result() returns a 32 byte SHA-256 hash. It is used by scrypt.
-
-The libzpaq::AES_CTR class allows encryption in CTR mode with 128, 192,
-or 256 bit keys. The public members are:
-
-class AES_CTR {
-public:
-  AES_CTR(const char* key, int keylen, char* iv=0);
-  void encrypt(U32 s0, U32 s1, U32 s2, U32 s3, unsigned char* ct);
-  void encrypt(char* buf, int n, U64 offset);
-};
-
-The constructor initializes with a 16, 24, or 32 byte key. The length
-is given by keylen. iv can be an 8 byte string or NULL. If not NULL
-then iv0, iv1 are initialized with iv[0..7] in big-endian order, else 0.
-
-encrypt(s0, s1, s2, s3, ct) encrypts a plaintext block divided into
-4 32-bit words MSB first. The first byte of plaintext is the high 8
-bits of s0. The output is to ct[16].
-
-encrypt(buf, n, offset) encrypts or decrypts an n byte slice of a string
-starting at offset. The i'th 16 byte block is encrypted by XOR with
-the result (in ct) of encrypt(iv0, iv1, i>>32, i&0xffffffff, ct) starting
-with i = 0. For example:
-
-  AES_CTR a("a 128 bit key!!!", 16);
-  char buf[500];             // some data 
-  a.encrypt(buf, 100, 0);    // encrypt first 100 bytes
-  a.encrypt(buf, 400, 100);  // encrypt next 400 bytes
-  a.encrypt(buf, 500, 0);    // decrypt in one step
-
-libzpaq::stretchKey(char* out, const char* in, const char* salt);
-
-Generate a 32 byte key out[0..31] from key[0..31] and salt[0..31]
-using scrypt(key, salt, N=16384, r=8, p=1). key[0..31] should be
-the SHA-256 hash of the password. With these parameters, the function
-uses 0.1 to 0.3 seconds and 16 MiB memory.
-Scrypt is defined in http://www.tarsnap.com/scrypt/scrypt.pdf
-
-void random(char* buf, int n);
-
-Puts n cryptographic random bytes in buf[0..n-1], where the first
-byte is never '7' or 'z' (start of a ZPAQ archive). For a pure
-random string, discard the first byte.
-
-Other classes and functions defined here are for internal use.
-Use at your own risk.
-*/
 
 //////////////////////////////////////////////////////////////
 
@@ -1729,29 +842,6 @@ void compressBlock(StringBuffer* in, Writer* out, const char* method,
 
 #endif  // LIBZPAQ_H
 
-/* libzpaq.cpp - LIBZPAQ Version 7.15 implementation - Aug. 17, 2016.
-
-  libdivsufsort.c for divsufsort 2.00, included within, is
-  (C) 2003-2008 Yuta Mori, all rights reserved.
-  It is released under the MIT license as described in the comments
-  at the beginning of that section.
-
-  Some of the code for AES is from libtomcrypt 1.17 by Tom St. Denis
-  and is public domain.
-
-  The Salsa20/8 code for Scrypt is by D. Bernstein and is public domain.
-
-  All of the remaining software is provided as-is, with no warranty.
-  I, Matt Mahoney, release this software into
-  the public domain. This applies worldwide.
-  In some countries this may not be legally possible; if so:
-  I grant anyone the right to use this software for any purpose,
-  without any conditions, unless such conditions are required by law.
-
-LIBZPAQ is a C++ library for compression and decompression of data
-conforming to the ZPAQ level 2 standard. See http://mattmahoney.net/zpaq/
-See libzpaq.h for additional documentation.
-*/
 
 #include <string.h>
 #include <string>
@@ -10223,16 +9313,6 @@ uint32_t crc32_16bytes_prefetch(const void* data, size_t length, uint32_t previo
 // see http://create.stephan-brumme.com/disclaimer.html
 //
 
-// if running on an embedded system, you might consider shrinking the
-// big Crc32Lookup table:
-// - crc32_bitwise  doesn't need it at all
-// - crc32_halfbyte has its own small lookup table
-// - crc32_1byte    needs only Crc32Lookup[0]
-// - crc32_4bytes   needs only Crc32Lookup[0..3]
-// - crc32_8bytes   needs only Crc32Lookup[0..7]
-// - crc32_4x8bytes needs only Crc32Lookup[0..7]
-// - crc32_16bytes  needs all of Crc32Lookup
-
 
 
 #ifndef __LITTLE_ENDIAN
@@ -12943,393 +12023,176 @@ void moreprint(const char* i_stringa)
 }
 void Jidac::differences() 
 {
-moreprint("Key differences from ZPAQ 7.15 and zpaqfranz");
-moreprint("@2021-06-16");
-moreprint("");
-moreprint("");
-moreprint("First goal: doveryay, no proveryay (trust, but verify).");
-moreprint("As a storage manager I need to be sure that my backups");
-moreprint("are perfect, so 'verify' is the objective of my zpaq fork.");
-moreprint("");
-moreprint("Second: do not break compatibility with 7.15.");
-moreprint("");
-moreprint("Third: most useful output: 7.15 is often cryptic ");
-moreprint("but not very useful.");
-moreprint("");
-moreprint("Fourth: pack everything needed for a storage manager");
-moreprint("(compare directories, hashing, duplicate find,");
-moreprint("fix of utf-8 filenames, wiping etc) in a single");
-moreprint("program.");
-moreprint("");
-moreprint("Fifth: 'smart' support for strange filenames and paths,");
-moreprint("Windows and non-Windows.");
-moreprint("");
-moreprint("Sixth: smooth with ZFS ");
-moreprint("(I almost always use FreeBSD servers)");
-moreprint("");
-moreprint("Seventh: run on multiple systems commonly ");
-moreprint("used in storage (ESXi, non-Intel QNAP NAS).");
-moreprint("---");
-moreprint("Command a (add)");
-moreprint("zpaqfranz (for default) store the CRC-32 of the files");
-moreprint("added.");
-moreprint("zpaq does not have a mechanism to check the integrity");
-moreprint("of the stored files: it do a (smart) 'chunked'-SHA1 verify,");
-moreprint("but cannot do a 'full' test (ex. recomputing SHA1 of the entire file)");
-moreprint("because of it design.");
-moreprint("With the CRC-32 you are sure against SHA1 collision");
-moreprint("(better: the collision will be detected, not fixed).");
-moreprint("With an optional switch (-checksum) you can also store ");
-moreprint("the SHA1 hash code for each file ");
-moreprint("(slower, but almost 100% sure. ");
-moreprint("In future different [faster] hashes are planned).");
-moreprint("With the switch -crc32 it is possible ");
-moreprint("to disable the storage of the control code ");
-moreprint("going back to the operation of 7.15.");
-moreprint("Warning: the calculation of the CRC-32, ");
-moreprint("especially on modern processors, ");
-moreprint("does not significantly slow down the process. ");
-moreprint("The calculation of SHA1, on the other hand, ");
-moreprint("requires a longer time.");
-moreprint("-test do a post-add test (doveryay, no proveryay).");
-moreprint("Note: now, for default, do NOT store ACLs on Windows,");
-moreprint("because I consider them essentially useless ");
-moreprint("and very uncomfortable to keep");
-moreprint("(-forcewindows to enable back as 7.15).");
-moreprint("");
-moreprint("By default every .XLS file is forcibily added.");
-moreprint("Check of datetime is not reliable for ancient ");
-moreprint("XLS to detect changes. ");
-moreprint("If you have lots of old XLS edited (for example)");
-moreprint("by Excel 2000, a binary (or hash) check of extracted");
-moreprint("files will fail.");
-moreprint("Yeah I know, it's strange, but Excel can change some");
-moreprint("bytes into XLS files (to update metadata like last time)");
-moreprint("without 'touch'.");
-moreprint("This was the first step for zpaqfranz, ");
-moreprint("I went crazy to discover this amazing behavior of Excel");
-moreprint("Can be disabled by -xls (=7.15)");
-moreprint("-timestamp X    Set the version datetime@ X, 14 digit ex 2021-12-30_01:03:04"); 
-moreprint("Must be monotonically increasing (v[i+1].date>v[i]+date)");
-moreprint("Use:freeze many zfs snapshot in one archive");
-moreprint("");
-moreprint("Volume Shadow Copies (Windows, with administrative rights)");
-moreprint("Create a VSS (DELETING ALL OTHER PRESENTS!) then make");
-moreprint("the backup, typically for a 'utente' into 'users' special");
-moreprint("folder, like that");
-moreprint("zpaqfranz a z:\\mycopy.zpaq c:\\Users\\utente\\ -vss");
-moreprint("");
-moreprint("Progress information  shown can be modified by the switches ");
-moreprint("-noeta, -verbose, -pakka, -debug, summary,");
-moreprint("-n x");
-moreprint("");
-moreprint("ASCII comment for versions");
-moreprint("Using the switch -comment sometext ");
-moreprint("it is possible to mark the current version ");
-moreprint("of the archive with 'sometext'.");
-moreprint("zpaqfranz a z:\\mycopy.zpaq c:\\pippo -comment sometext");
-moreprint("This will make it easier for you to search or extract,");
-moreprint("instead of using -until.");
-moreprint("'Roll back to sometext'.");
-moreprint("Warning: the text should not contain spaces or ");
-moreprint("non-ASCII characters and, above all, be unique. ");
-moreprint("There is no duplication check on version comments. ");
-moreprint("If you add the same comment more than once, ");
-moreprint("you will not be able to use it later to extract the data. ");
-moreprint("This remains possible through the normal use of -until");
-moreprint("");
-moreprint("");
-moreprint("Command e (extract)");
-moreprint("During extraction if the control information (CRC-32) ");
-moreprint("is present, as in the default setting, ");
-moreprint("at the end of the extraction, ");
-moreprint("the codes are checked to verify that the files ");
-moreprint("have been correctly stored. ");
-moreprint("-checksum the extracted files will be re-read and the SHA1 code verified. ");
-moreprint("It is a measure that lengthens the times but increases safety.");
-moreprint("-kill extract to dummy, 0-length files. Simulate a full restore");
-moreprint("(useful for strange filenames)");
-moreprint("Basically you can simulate a restore (for example on RAMDISK) ");
-moreprint("using exactly all the extract function, without writing data. ");
-moreprint("It is therefore not a list(), but a real extract().");
-moreprint("extract() try to intercept the 'disk is full' error.");
-moreprint("Interoperability");
-moreprint("Sometimes it's impossible to restore a *nix archive on Windows,");
-moreprint("for various reason: path too long and too 'strange' filenames.");
-moreprint("That's really bad (cannot restore data), so there are some");
-moreprint("new switches to handle those cases");
-moreprint("-utf change everything non latin to latin");
-moreprint("-fix255 shrink to 255 max length, avoid different case collision");
-moreprint("(pippo.txt and PIPPO.txt are be silently overwritten by 7.15).");
-moreprint("-fixeml compress .eml filenames");
-moreprint("-flat emergency restore of everything into a single folder.");
-moreprint("If all else fails, however, you can extract the content to ");
-moreprint("Windows however 'weird' it was initially.");
-moreprint("");
-moreprint("");
-moreprint("Command l (list)");
-moreprint("With files run a compare (check) of the archive's ");
-moreprint("content against one or more directory.");
-moreprint("In fact this is a 'verify' more than a 'list'");
-moreprint("The comparison is much faster than the standard, ");
-moreprint("as it only performs a block calculation of the SHA1 codes ");
-moreprint("of the file present in the filesystem, ");
-moreprint("while those archived are not extracted. ");
-moreprint("It also checks the CRC-32, ");
-moreprint("to intercept any (very rare) SHA1 collisions.");
-moreprint("After add() you can list() with just the same");
-moreprint("parameter and do a very quick (but safe)");
-moreprint("verify.");
-moreprint("zpaqfranz a z:\\1.zpaq c:\\z");
-moreprint("zpaqfranz l z:\\1.zpaq c:\\z");
-moreprint("It's possible to search by ");
-moreprint("-comment something,");
-moreprint("filter -");
-moreprint("find pippo (just like |grep -i pippo),");
-moreprint("-replace pluto replace 'pippo' with 'pluto'");
-moreprint("");
-moreprint("");
-moreprint("New command t (test)");
-moreprint("Compared to 7.15, not only is it checked ");
-moreprint("that the blocks are extractable, ");
-moreprint("but also that the CRC-32 checksum of the individual ");
-moreprint("files corresponds to what would be generated ");
-moreprint("by actually extracting the data");
-moreprint("-verify for filesystem post-check");
-moreprint("(check that STORED CRC==DECOMPRESSED==FROM FILE)");
-moreprint("With this switch the files are reread, one by one, ");
-moreprint("from the filesystem and compared. ");
-moreprint("-verbose");
-moreprint("Typically it is used in case of a simulated recovery, ");
-moreprint("to be sure that the extracted files are identical, ");
-moreprint("beyond any doubt, to the original ones.");
-moreprint("");
-moreprint("");
-moreprint("New command p (paranoid test)");
-moreprint("Test the archive content in a very paranoid fashion.");
-moreprint("The ZPAQ reference decompressor is used to extract ");
-moreprint("the various blocks in RAM and check them.");
-moreprint("In other words, do not use the 7.15 algorithm to decompress,");
-moreprint("but that of unzpaq, so as to avoid the risk of 'silent' bugs.");
-moreprint("Essentially it is similar to extracting ");
-moreprint("the entire archive into a temporary folder. ");
-moreprint("The amount of RAM can quickly become unmanageable.");
-moreprint("Doesn't support multifile _ ????. ");
-moreprint("Shows an estimate of the RAM used (not very precise) during the operation.");
-moreprint("For each file will output the SHA1 of the virtually extracted one.");
-moreprint("It is normally used in combination with add() -checksum, ");
-moreprint("which stores the SHA1 codes, to make a comparison.");
-moreprint("It warns on Win32 systems (with RAM limits) and refuses to run on ESXi.");
-moreprint("-verify next level of paranoia: check SHA1 against a re-read from filesystem. ");
-moreprint("Essentially it is equivalent to extracting the contents ");
-moreprint("of the archive in a temporary folder, ");
-moreprint("and then checking that the SHA1 codes correspond ");
-moreprint("to those present in the initial folder and that, ");
-moreprint("finally, they are the same ones stored in the archive ");
-moreprint("(if you use -checksum during the add() to store SHA1).");
-moreprint("");
-moreprint("");
-moreprint("New command c (compare dirs)");
-moreprint("Compare a 'master' directory (d0) against N 'slaves' (d1, d2, dN).");
-moreprint("In the world of professional archiving it is normal to have a source (master) ");
-moreprint("directory copied, with different mechanisms, to multiple destination (slave)");
-moreprint("directories (as is known directory can have ubiquitous meaning for *nix systems).");
-moreprint("Usually some of these folders will be (*nix) NFS or SMB mountpoints, ");
-moreprint("where you copy with rsync, zfs-replica, robocopy (Windows) etc.");
-moreprint("Or, in the case of zpaqfranz or 7z or rar,");
-moreprint("by extracting a full backup inside a temporary folder.");
-moreprint("How can you be sure that all the master files are in the slaves, ");
-moreprint("and that there are no more files in the slaves than the master?");
-moreprint("Especially with the use of utf8 names ");
-moreprint("(non-Latin, often incompatible between UNIX-zfs and Linux-ext4) ");
-moreprint("and path lengths> 260 (for NTFS)?");
-moreprint("And if you have some zfs' snapshot in the path?");
-moreprint("zpaqfranz c c:\\z z:\\z r:\\z");
-moreprint("In this example the 'master' (or source) dir is c:\\z, ");
-moreprint("and the slaves are z:\\z and r:\\z");
-moreprint("Without further options, the control is done on the file name and size, ");
-moreprint("not on the content, and is essentially designed for copies ");
-moreprint("on NAS and similar devices (quick, but not 100% sure).");
-moreprint("-all N concurrent threads will be created, each scan a slave dir.");
-moreprint("It is used to operate in parallel comparing an original folder with ");
-moreprint("multiple copies on different devices, minimizing the scan time");
-moreprint("-verify will run a hash check: it has the function of diff -qr");
-moreprint("and can use -all more threads (1 for cores or -t K to limit)");
-moreprint("");
-moreprint("");
-moreprint("New command s (size)");
-moreprint("Return cumulative size of N directory, ");
-moreprint("and an estimate of the free space on its filesystem.");
-moreprint("Everything containing .zfs in filename will be ignored,");
-moreprint("as :$DATA (Windows's ACL)");
-moreprint("It is used for a quick check of synchronized folders: ");
-moreprint("there is no easy way, in UNIX / Linux, to immediately ");
-moreprint("know how big a folder with subfolders is.");
-moreprint("Similarly it is not easy, on UNIX / Linux, ");
-moreprint("to have an idea at least indicative of the free space on devices.");
-moreprint("-all N concurrent threads will be created, each scan a slave dir.");
-moreprint("It is used to operate in parallel on different devices, minimizing the scan time");
-moreprint("(example: slaves on different NAS).");
-moreprint("");
-moreprint("");
-moreprint("New command sha1 (hashes)");
-moreprint("Calculate SHA1 (or other hashes/checksums) of files/directories, ");
-moreprint("candidate duplicates, and cumulative GLOBAL SHA256 (hash of hashes).");
-moreprint("If two directories have the same GLOBAL hash they are ==");
-moreprint("-xxhash very fast hash algorithm (XXH3)");
-moreprint("-crc32  very fast checksum ");
-moreprint("-crc32c very fast hardware-accelerated CRC-32c");
-moreprint("-sha256 slow but very reliable");
-moreprint("In future maybe even a combo myhash and Whirlpool.");
-moreprint("-all make N thread (do not use with spinning HDDs, but SSDs and NVMes)");
-moreprint("to calculate very fast (on my PC up to 23GB/s)");
-moreprint("-kill show the files to be deleted to manually deduplicate");
-moreprint("(yes, it is used by redirection to a script)");
-moreprint("-checksum get a 1-level checksum, useful for comparing ");
-moreprint("hierarchically organized folders.");
-moreprint("-summary show only GLOBAL (fast manual compare of directories)");
-moreprint("-forcezfs force .zfs path (DEFAULT: skip)");
-moreprint("-kill -force Like deduplication without ask!");
-moreprint("");
-moreprint("New command dir (dir)");
-moreprint("If there's one thing I hate about UNIX and Linux in general ");
-moreprint("it's the ls command, because it do not show the cumulative filesize (!)");
-moreprint("as the Windows' dir.");
-moreprint("How big is folder c:\\z, with subdirs?");
-moreprint("zpaqfranz dir c:\\z /s -n 1 ");
-moreprint("zpaqfranz dir c:\\z /s |tail -2");
-moreprint("This is a kind of mini clone, to be used with a shell alias for convenience.");
-moreprint("Main switch are /s, /os, /on, /a, -n X like tail -n");
-moreprint("What is the largest file in the c:\\z directory");
-moreprint("(recursively)?");
-moreprint("zpaqfranz dir c:\\z /s /os ");
-moreprint("10 biggest file in c:\\z?");
-moreprint("zpaqfranz dir c:\\z /s /os -n 10");
-moreprint("Can also find duplicate files (-crc32 or -crc32c)");
-moreprint("just about like rar a -oi3:1 -r dummy s:\\");
-moreprint("100 biggest duplicate files in c:\\z?");
-moreprint("zpaqfranz dir c:\\z /s -crc32 -n 100");
-moreprint("");
-moreprint("");
-moreprint("New command i (info)");
-moreprint("Show the versions of a ZPAQ, just like (for zpaqfranz) l -all -comment");
-moreprint("with size (and comments, if any)");
-moreprint("zpaqfranz i z:\\1.zpaq");
-moreprint("");
-moreprint("");
-moreprint("New command utf (deal with strange filenames)");
-moreprint("Check (or sanitize) paths with non-latin chars and/or");
-moreprint(">260 length");
-moreprint("-dirlength X (set the 'fix')");
-moreprint("-filelength Y ");
-moreprint("-utf (sanitize filename)");
-moreprint("-fix255 (sanitize file length and filecase)");
-moreprint("-fixeml (sanitize .eml filenames)");
-moreprint("-kill (do the fix=> convert to latin)");
-moreprint("");
-moreprint("");
-moreprint("New command f (fill, or wipe)");
-moreprint("Fill (wipe) almost all disk space and check that data is well");
-moreprint("written, in chunks of 500MB (pseudorandum), onto the new");
-moreprint("ztempdir folder");
-moreprint("Two use: wipe (clear) the space with uncompressible data,");
-moreprint("check if disk-controller-system-RAM is working fine");
-moreprint("-verbose show write speed (useful to check speed consistency)");
-moreprint("-kill delete (after run) the temporary filename");
-moreprint("");
-moreprint("");
-moreprint("New command k (kill, risky!)");
-moreprint("kill (delete) all files and directories that arent in archive.");
-moreprint("remove the excess files");
-moreprint("example:");
-moreprint("zpaqfranz a z:\\1.zpaq c:\\z");
-moreprint("zpaqfranz x z:\\1.zpaq c:\\z -to z:\\knb");
-moreprint("... something happens in z:\\knb and we want to turn back to archive ...");
-moreprint("... WITHOUT delete everything and extract again ...");
-moreprint("zpaqfranz x z:\\1.zpaq c:\\z -to z:\\knb -force");
-moreprint("zpaqfranz k z:\\1.zpaq c:\\z -to z:\\knb");
-moreprint("");
-moreprint("New command r (robocopy)");
-moreprint("r d0 d1 d2... Mirror d0 in d1,d2... just like robocopy /mir");
-moreprint("-kill     wet run (default: dry-run");
-moreprint("-all      run one thread for folder");
-moreprint("-verify   after copy quick check if OK");
-moreprint("-checksum heavy (hash) check -xxhash...");
-moreprint("");
-moreprint("New command d (deduplicate)");
-moreprint("d d0      Deduplicate folder d0 WITHOUT ASKING!");
-moreprint("-force    Wet run (default: dry-run)");
-moreprint("-verbose  Show duplicated files");
-moreprint("-sha256   use sha256 instead of XXH3 for detection");
-moreprint("");
-moreprint("New command m (merge, consolidate)");
-moreprint("m in?? out.zpaq Merge a splitted archive in a single one");
-moreprint("-force          Overwrite existing output, ignore free space");
-moreprint("-verify         Do a double-check (XXH3 test)");
-moreprint("");
-moreprint("New command z (delete empty directories, zero length)");
-moreprint("z d0 d1 d2...  Delete empty directories in d0, d1, d2");
-moreprint("-kill          Do a wet run");
-moreprint("-all           Multithread scan");
-moreprint("-verbose       Show infos");
-moreprint("");
-
-moreprint("");
-moreprint("New command/switches ");
-moreprint("During the automated executions, scripts can be launched ");
-moreprint("to send warnings (e.g. failure or OK)");
-moreprint("Instead of checking the resulting code in a script, ");
-moreprint("it runs a script or program directly");
-moreprint("-exec_ok fo.bat After OK launch fo.bat");
-moreprint("-exec_error kz  After NOT OK launch kz");
-moreprint("");
-moreprint("New commands / switches for help");
-moreprint("help           long help");
-moreprint("-h             long help");
-moreprint("-he            show examples");
-moreprint("-diff          differences against 7.15");
-moreprint("");
-moreprint("Various switches");
-moreprint("-715            Create file just about like v7.15");
-moreprint("-checksum       Enable checksumming (default: SHA1)");
-moreprint("-summary        Retained for compatibility but changed: if >0 => show only summary");
-moreprint("-noeta          do not show ETA (for scripts)");
-moreprint("-pakka          concise new style output (10% updating)");
-moreprint("-verbose        not so concise :)");
-moreprint("-zfs            Skip path including .zfs (for ZFS snapshots)");
-moreprint("-forcezfs       Force paths including .zfs (win on -zfs)");
-moreprint("-noqnap         Skip path including @Recently-Snapshot and @Recycle");
-moreprint("-forcewindows   Take ACL and System Volume Information (default: NO on zpaqfranz)");
-moreprint("-xls            Do NOT always force XLS to be added");
-moreprint("-nopath         Do not store path");
-moreprint("-nosort         Do not sort file when adding or listing");
-moreprint("-find X         Search for X in full filename (ex. list)");
-moreprint("-replace    Y   Replace X with Y in full filename (ex. list)");
-moreprint("-n          X   Only print last X lines in dir (like tail)/first X (list)");
-moreprint("-limit      X   (like -n)");
-moreprint("-minsize    X   Skip files by length (add(), list(), dir())");
-moreprint("-maxsize    X   Skip files by length (add(), list(), dir())");
-moreprint("-filelength X   Utf command: find file with length>X, extract maxfilelen");
-moreprint("-dirlength  X   Utf command: find dirs with length>X, extract maxdirlen");
-moreprint("-comment foo    Add/find ASCII comment string to versions");
-moreprint("-vss            Do a VSS for drive C: (Windows with administrative rights)");
-moreprint("-crc32c         Use CRC32c");
-moreprint("-crc32          Use CRC32");
-moreprint("-xxhash         Use XXH3");
-moreprint("-sha256         Use SHA256");
-moreprint("-exec_ok fo.bat After OK launch fo.bat");
-moreprint("-exec_error kz  After NOT OK launch kz");
-moreprint("-kill           Show 'script-ready' log of dup files");
-moreprint("-kill           In extraction write 0-bytes file instead of data");
-moreprint("-utf            Remove non-utf8 chars");
-moreprint("-utf8           Like -utf");
-moreprint("-fix255         Shrink total file length and case collisions (NTFS)");
-moreprint("-fixeml         Heuristically compress .eml filenames (Fwd Fwd Fwd =>Fwd)");
-moreprint("-flat           Everything in single path (emergency extract of strange files)");
-moreprint("-debug          Show lot of infos (superverbose)");
-
 	
-	exit(1);
+	int twidth=terminalwidth();
+	if (twidth<10)
+		twidth=10;
+	
+	char barbuffer[twidth+10];
+	barbuffer[0]=0;
+	for (int i=0;i<twidth-4;i++)
+		sprintf(barbuffer+i,"-");
+			
+			
+	
+moreprint("@2021-06-21: Key differences from ZPAQ 7.15 and zpaqfranz");
+moreprint("");
+moreprint("Doveryay, no proveryay (trust, but verify; fidarsi e' bene, non fidarsi e' meglio).");
+moreprint("'Verify' is the goal of this zpaq fork, without breaking 7.15 compatibility.");
+moreprint("");
+moreprint("Pack everything needed for a storage manager (dir compare, hashing, deduplication,");
+moreprint("fix utf-8 filenames, wiping etc) on Win/*Nix in a single executable.");
+moreprint("");
+moreprint("'Smart' support for non-latin charsets,Windows and non-Windows, smooth with ZFS.");
+moreprint(barbuffer);
+moreprint("CMD   a (add)");
+moreprint("DIFF: zpaqfranz (by default) store CRC-32s of the files, while zpaq cannot by design.");
+moreprint("      Any SHA-1 collisions are detected by zpaqfranz, not by zpaq.");
+moreprint("      Additional computation (can be disabled by -crc32 or -715), on modern CPU,");
+moreprint("      does not significantly slow down.");
+moreprint("PLUS: -checksum store hash code of each file (slower, but almost 100% sure).");
+moreprint("DIFF: by default do NOT store ADSs on Windows (essentially useless).");
+moreprint("DIFF: By default every .XLS file is forcibily added (old Excel change metafiles).");
+moreprint("PLUS: -forcewindows, -forcezfs, -xls and -715 to mimic old behaviour.");
+moreprint("PLUS: freezing many zfs snapshot in one archive by -timestamp X, setting version datetime");
+moreprint("      @X, ex 2021-12-30_01:03:04 Must be monotonic. increasing (v[i+1].date>v[i]+date)");
+moreprint("PLUS: -test do a post-add test (doveryay, no proveryay).");
+moreprint("PLUS: -vss Volume Shadow Copies (Win with admin rights) to backup files from %users%.");
+moreprint("DIFF: Progress output with switches -noeta, -verbose, -pakka, -debug, summary, -n K");
+moreprint("PLUS: ASCII comment for versions with -comment sometext.");
+moreprint(barbuffer);
+moreprint("CMD   x (extract)");
+moreprint("PLUS: During extraction,if CRC-32s are present, the codes are checked.");
+moreprint("PLUS: -checksum force a full hash-code verify (if added with -checksum)");
+moreprint("PLUS: -kill extract to dummy, 0-length files. Da a empty-full restore.");
+moreprint("PLUS: -utf change everything non latin to latin (Linux/*Nix => NTFS compatibility)");
+moreprint("PLUS: -fix255 shrink max file name, avoid different case collision (Linux => NTFS)");
+moreprint("      (pippo.txt and PIPPO.txt are be silently overwritten by 7.15).");
+moreprint("PLUS: -fixeml compress .eml filenames.");
+moreprint("PLUS: -flat emergency restore of everything into a single folder (Linux => NTFS)");
+moreprint(barbuffer);
+moreprint("CMD   l (list)");
+moreprint("PLUS: If source folders are specified, do a compare of the archive's content.");
+moreprint("      In fact this is a 'verify' more than a 'list', much faster than the standard,");
+moreprint("      as it performs a block calculation of the SHA1 codes of source files, but not of");
+moreprint("      the archived ones; also checks the CRC-32, to intercept any SHA1 collisions.");
+moreprint("      Use the exact same parameters of add(), just use l instead of a.");
+moreprint("PLUS: Filtering by by -comment something, -find pippo (just like |grep -i pippo),");
+moreprint("      -replace pluto => replace 'pippo' with 'pluto' in the output.");
+moreprint(barbuffer);
+moreprint("CMD   i (info)");
+moreprint("PLUS: Directly shows the versions into the archive, with size (and comments, if any)");
+moreprint(barbuffer);
+moreprint("CMD   t (test)");
+moreprint("PLUS: Compared to 7.15, check that all block are OK, and the CRC-32s of the individual ");
+moreprint("      files corresponds to what would be generated by actually extracting.");
+moreprint("PLUS: -verify do a filesystem post-check: STORED CRC==DECOMPRESSED==FROM FILE.");
+moreprint(barbuffer);
+moreprint("CMD   p (paranoid test)");
+moreprint("PLUS: Test the archive (** does not work for multipart **) in a very paranoid fashion.");
+moreprint("      ZPAQ reference decompressor is used to extract various blocks in RAM and check them.");
+moreprint("      In fact runs a unzpaq instead of 7.15 extract: double check to avoid the risk of");
+moreprint("      'silent' bugs. Just about extracting the entire archive in RAM, amount needed can");
+moreprint("      quickly become unmanageable (warn: be very careful with 32bit versions).");
+moreprint("PLUS: Hard-hash check on archive created with a -checksum");
+moreprint("PLUS: -verify next level (mine) of paranoia: check SHA-11 against a re-read from filesystem. ");
+moreprint("      Essentially equivalent to extracting thearchive in a temporary folder and check");
+moreprint("      against initial folders. For very paranoid people, or debug reason.");
+moreprint(barbuffer);
+moreprint("CMD   c (compare dirs)");
+moreprint("PLUS: Compare a 'master' directory (d0) against N 'slaves' (d1, d2... dN).");
+moreprint("      Typically the slaves are made by zpaq restores, or rsync, robocopy, zfs replica.");
+moreprint("      It is not easy to check on different filesystems (ex. NAS-Linux, NTFS) the charsets");
+moreprint("      By default check file name and file size (excluding .zfs), not the content.");
+moreprint("PLUS: -verify run a hash 'hard' check, suggested -xxhash, fast and reliable.");
+moreprint("PLUS: -all N concurrent threads will be created, each scan a slave dir (-t K to limit).");
+moreprint("      NOT good for single spinning drives, good for multiple slaves on different media.");
+moreprint(barbuffer);
+moreprint("CMD   s (size)");
+moreprint("PLUS: Cumulative size of N directory, and an estimate of the free space on its filesystem.");
+moreprint("      Everything containing .zfs and :$DATA (Windows's ADS) ignored by default");
+moreprint("      Very quick-and-dirty check of rsynced folders against the master");
+moreprint("PLUS: -all for multithreaded executions (warning for single spinning drive)");
+moreprint(barbuffer);
+moreprint("CMD   r ('robocopy')");
+moreprint("PLUS: Mirror a master folder in K slaves, just like robocopy /mir or rsync -a --delete");
+moreprint("      Ignore .zfs and ADS by default (-715 or -forcezfs to enable)");
+moreprint("PLUS: -kill wet run (default: dry-run");
+moreprint("PLUS: -all run one thread for folder");
+moreprint("PLUS: -verify after copy quick check if OK (only filename and size)");
+moreprint("PLUS: -checksum heavy (hash) test of equality. Suggest: -xxhash fast and reliable.");
+moreprint(barbuffer);
+moreprint("CMD   z (delete empty directories, zero length)");
+moreprint("PLUS: Remove empty directories in d0...dK folders. Conservative (ex hidden Thumbs.db)");
+moreprint("PLUS: -kill Do a wet run (default dry run)");
+moreprint("PLUS: -all  Multithread scan");
+moreprint("PLUS: -verbose Show infos");
+moreprint(barbuffer);
+moreprint("CMD   m (merge, consolidate)");
+moreprint("PLUS: Merge a splitted (multipart) archive into a single one, just like a concatenated cat");
+moreprint("PLUS: -force Overwrite existing output, ignore lack of free space");
+moreprint("PLUS: -verify do a double-check (XXH3 hash test)");
+moreprint(barbuffer);
+moreprint("CMD   d (deduplicate)");
+moreprint("PLUS: Deduplicate a single folder WITHOUT ASKING ANYTHING!");
+moreprint("PLUS: -force wet run (default: dry-run)");
+moreprint("PLUS: -verbose show duplicated files");
+moreprint("PLUS: -sha256 use sha256 instead of XXH3 for detection (slower, the most reliable)");
+moreprint(barbuffer);
+moreprint("CMD   f (fill, or wipe)");
+moreprint("PLUS: Fill (wipe) 9%% of free disk space, checking that data is well written, in 500MB chunks");
+moreprint("      Check if disk-controller-system-RAM-cache-cables are working fine");
+moreprint("PLUS: -verbose show write speed (useful to check speed consistency)");
+moreprint("PLUS: -kill delete (after run) the temporary filename. By default do NOT erase temporary files");
+moreprint(barbuffer);
+moreprint("CMD   utf (deal with strange filenames)");
+moreprint("PLUS: Check (or sanitize) paths with non-latin chars and/or >260 length and/or case.");
+moreprint("      Can become a real problem extracting on different filesystems (ex. *nix => NTFS)");
+moreprint("PLUS: -kill (wet run, default dry run)");
+moreprint("PLUS: -utf (sanitize filenames)");
+moreprint("PLUS: -fix255 (sanitize file length and filecase collisions pippo.txt PIPPO.txt)");
+moreprint("PLUS: -fixeml (sanitize .eml filenames)");
+moreprint("PLUS: -dirlength X (set the 'fix')");
+moreprint("PLUS: -filelength Y ");
+moreprint(barbuffer);
+moreprint("CMD   sha1 (hashes: named for historical reasons, 7.15 always uses SHA-1 only)");
+moreprint("PLUS: Calculate hashe/checksum of files/directories, duplicates, and cumulative GLOBAL SHA256");
+moreprint("      (If two directories have the same GLOBAL SHA256 they are ==)");
+moreprint("      With no switches, by default, use SHA-1 (reliable, but not very fast)");
+moreprint("PLUS: -xxhash very fast hash algorithm (XXH3)");
+moreprint("PLUS: -crc32  very fast checksum");
+moreprint("PLUS: -crc32c very fast hardware-accelerated CRC-32c");
+moreprint("PLUS: -sha256 slow but very reliable, legal level (in Italy)");
+moreprint("PLUS: -all make N thread (do not use with spinning HDDs, but SSDs and NVMes)");
+moreprint("PLUS: -kill show the files to be deleted to manually deduplicate");
+moreprint("PLUS: -checksum get a 1-level checksum, for comparing hierarchically user-organized folders.");
+moreprint("PLUS: -summary show only GLOBAL (fast manual compare of directories)");
+moreprint("PLUS: -forcezfs force .zfs path (DEFAULT: skip)");
+moreprint("PLUS: -kill -force => runs a deduplication without ask anything!");
+moreprint(barbuffer);
+moreprint("CMD   dir (yes, dir as in Windows).");
+moreprint("PLUS: I really,really hate the ls command, which does not show the cumulative filesize (!)");
+moreprint("      This is a 'mini clone' of Windows's dir command, with the main switches");
+moreprint("      /s, /os, /on, /a and (yessss!)      -n X => like |tail -X");
+moreprint("EX:   Largest file in c:\\z ?             zpaqfranz dir c:\\z /os -n 1");
+moreprint("EX:   10 biggest files in c:\\?           zpaqfranz dir c:\\z /s /os -n 10");
+moreprint("EX:   How big is c:\\z, with subdirs?     zpaqfranz dir c:\\z /s  -n 1");
+moreprint("EX:   100 biggest dups in c:\\z?          zpaqfranz dir c:\\z /s -crc32 -n 100");
+moreprint(barbuffer);
+moreprint("CMD   k (kill, risky!)");
+moreprint("PLUS: kill (delete) all files and directories that arent in an archivem removing excess files");
+moreprint("EX:   create an archive                   zpaqfranz a z:\\1.zpaq c:\\z");
+moreprint("      extract into z:\\kbn                zpaqfranz x z:\\1.zpaq c:\\z -to z:\\knb");
+moreprint("      ... something happens (change) in z:\\knb and we want to turn back to archive ...");
+moreprint("      ... WITHOUT delete everything and extract again (maybe it's huge) ...");
+moreprint("                                          zpaqfranz k z:\\1.zpaq c:\\z -to z:\\knb");
+moreprint(barbuffer);
+moreprint("New switches for automation (launched after the execution)");
+moreprint("PLUS: During script execution it is possible to check the result (0=OK, 1=WARN, 2=ERROR)");
+moreprint("      But it can be inconvenient to intercept the result (e.g. cron), so it is possible to");
+moreprint("      run a script or program directly");
+moreprint("EX:   -exec_ok    c:\\nz\\fo.bat     => After OK launch c:\\nz\\fo.bat");
+moreprint("EX:   -exec_error c:\\nz\\kaputt.bat => After NOT OK launch c:\\nz\\kaputt.bat");
 }
 
 
@@ -13579,18 +12442,9 @@ moreprint("  -flat           Everything in single path (emergency extract of str
 moreprint("  -debug          Show lot of infos (superverbose)");
 moreprint("  -timestamp X    Set version datetime@X 14 digit (2021-12-30_01:03:04)"); 	// force the timestamp
 moreprint("\n");
-moreprint("zpaqfranz switches:");
 moreprint("Advanced commands:");
 moreprint("   p              Paranoid test. Use lots (LOTS!) of RAM (-verify -verbose)");
-moreprint("   k file.zpaq path -to foo");
-moreprint("                  kill (delete) all files and directories in foo that arent in archive");
-moreprint("                  example: ");
-moreprint("                  zpaqfranz a z:\\1.zpaq c:\\nz");
-moreprint("                  zpaqfranz x z:\\1.zpaq c:\\nz -to z:\\knb");
-moreprint("                  ... something happens in z:\\knb and we want to turn back to archive ...");
-moreprint("                  ... WITHOUT delete everything and extract again ...");
-moreprint("                  zpaqfranz x z:\\1.zpaq c:\\nz -to z:\\knb -force");
-moreprint("                  zpaqfranz k z:\\1.zpaq c:\\nz -to z:\\knb");
+moreprint("   k              file.zpaq sourcepath -to foo");
 moreprint("\n");
 moreprint("Voodoo switches:");
 moreprint("  -repack F [X]   Extract to new archive F with key X (default: none)");
@@ -13615,7 +12469,8 @@ moreprint("    N2..N2+N3-1 ANDed with N4, hash mulitpiler N5, memory halved by N
 moreprint("  m8,24: MIX all previous models, N1 context bits, learning rate N2");
 moreprint("  s8,32,255: SSE last model. N1 context bits, count range N2..N3");
 moreprint("  t8,24: MIX2 last 2 models, N1 context bits, learning rate N2");
-
+moreprint("\n");
+differences();
 exit(1);
 }
 
@@ -13641,57 +12496,7 @@ string append_path(string a, string b) {
 #ifdef _WIN32
 
 
-/*
-uint32_t convert_ansi_to_unicode_string(std::wstring& unicode,const char* ansi,const size_t ansi_size) 
-{
-    uint32_t error = 0;
-    do 
-	{
 
-        if ((nullptr == ansi) || (0 == ansi_size)) {
-            error = ERROR_INVALID_PARAMETER;
-            break;
-        }
-
-        unicode.clear();
-
-        //
-        // getting required cch.
-        //
-
-        int required_cch = ::MultiByteToWideChar(
-                                CP_ACP,
-                                0,
-                                ansi, static_cast<int>(ansi_size),
-                                nullptr, 0
-                                );
-
-        if (0 == required_cch) {
-            error = ::GetLastError();
-            break;
-        }
-
-        unicode.resize(required_cch);
-
-        //
-        // convert.
-        //
-
-        if (0 == ::MultiByteToWideChar(
-                    CP_ACP,
-                    0,
-                    ansi, static_cast<int>(ansi_size),
-                    const_cast<wchar_t*>(unicode.c_str()), static_cast<int>(unicode.size())
-                    )) {
-            error = ::GetLastError();
-            break;
-        }
-
-    } while (false);
-
-    return error;
-}
-*/
 //
 // convert_unicode_to_ansi_string.
 //
@@ -13756,70 +12561,7 @@ uint32_t convert_unicode_to_ansi_string(
     return error;
 }
 
-//
-// convert_unicode_to_utf8_string
-//
-/*
-uint32_t convert_unicode_to_utf8_string(
-     std::string& utf8,
-     const wchar_t* unicode,
-     const size_t unicode_size
-    ) {
 
-    uint32_t error = 0;
-
-    do {
-
-        if ((nullptr == unicode) || (0 == unicode_size)) {
-            error = ERROR_INVALID_PARAMETER;
-            break;
-        }
-
-        utf8.clear();
-
-        //
-        // getting required cch.
-        //
-
-        int required_cch = ::WideCharToMultiByte(
-                                CP_UTF8,
-                                0x0080, //WC_ERR_INVALID_CHARS,
-                                unicode, static_cast<int>(unicode_size),
-                                nullptr, 0,
-                                nullptr, nullptr
-                                );
-
-        if (0 == required_cch) {
-            error = ::GetLastError();
-            break;
-        }
-
-        //
-        // allocate.
-        //
-
-        utf8.resize(required_cch);
-
-        //
-        // convert.
-        //
-
-        if (0 == ::WideCharToMultiByte(
-                    CP_UTF8,
-                    0x0080,//WC_ERR_INVALID_CHARS,
-                    unicode, static_cast<int>(unicode_size),
-                    const_cast<char*>(utf8.c_str()), static_cast<int>(utf8.size()),
-                    nullptr, nullptr
-                    )) {
-            error = ::GetLastError();
-            break;
-        }
-
-    } while (false);
-
-    return error;
-}
-*/
 //
 // convert_utf8_to_unicode_string
 //
@@ -16764,42 +15506,6 @@ std::wstring utf8_to_utf16(const std::string& utf8)
     }
     return utf16;
 }
-
-
-/*
-
-uint64_t wyhash_calc_file(const char * i_filename,const int64_t i_inizio,const int64_t i_totali,int64_t& io_lavorati)
-{
-/// does not work, only for testing
-	FILE* myfile = freadopen(i_filename);
-	if(myfile==NULL )
-		return 0;
-		
-	char data[65536*16];
-    int got=0;
-	
-	uint64_t _wyp[4];
-	uint64_t hash=0;
-
-#if !defined(_WIN32) && !defined(_WIN64)
-	make_secret(345,_wyp);
-#endif
-	
-	while ((got=fread(data,sizeof(char),sizeof(data),myfile)) > 0) 
-	{
-#if !defined(_WIN32) 
-		hash=wyhash(data,got,hash,_wyp);
-#else
-///		hash=wyhash32(data,got,hash);
-#endif
-		io_lavorati+=got;	
-		if ((flagnoeta==false) && (i_inizio>0))
-			avanzamento(io_lavorati,i_totali,i_inizio);
-	}
-	fclose(myfile);
-	return hash;
-}
-*/
 std::string sha1_calc_file(const char * i_filename,const int64_t i_inizio,const int64_t i_totali,int64_t& io_lavorati)
 {
 	std::string risultato="";
@@ -20384,43 +19090,6 @@ int Jidac::list()
  *   - xxHash source repository: https://github.com/Cyan4973/xxHash
  */
 
-/* TODO: update */
-/* Notice extracted from xxHash homepage:
-
-xxHash is an extremely fast hash algorithm, running at RAM speed limits.
-It also successfully passes all tests from the SMHasher suite.
-
-Comparison (single thread, Windows Seven 32 bits, using SMHasher on a Core 2 Duo @3GHz)
-
-Name            Speed       Q.Score   Author
-xxHash          5.4 GB/s     10
-CrapWow         3.2 GB/s      2       Andrew
-MumurHash 3a    2.7 GB/s     10       Austin Appleby
-SpookyHash      2.0 GB/s     10       Bob Jenkins
-SBox            1.4 GB/s      9       Bret Mulvey
-Lookup3         1.2 GB/s      9       Bob Jenkins
-SuperFastHash   1.2 GB/s      1       Paul Hsieh
-CityHash64      1.05 GB/s    10       Pike & Alakuijala
-FNV             0.55 GB/s     5       Fowler, Noll, Vo
-CRC32           0.43 GB/s     9
-MD5-32          0.33 GB/s    10       Ronald L. Rivest
-SHA1-32         0.28 GB/s    10
-
-Q.Score is a measure of quality of the hash function.
-It depends on successfully passing SMHasher test set.
-10 is a perfect score.
-
-Note: SMHasher's CRC32 implementation is not the fastest one.
-Other speed-oriented implementations can be faster,
-especially in combination with PCLMUL instruction:
-https://fastcompression.blogspot.com/2019/03/presenting-xxh3.html?showComment=1552696407071#c3490092340461170735
-
-A 64-bit version, named XXH64, is available since r35.
-It offers much better speed, but for 64-bit applications only.
-Name     Speed on 64 bits    Speed on 32 bits
-XXH64       13.8 GB/s            1.9 GB/s
-XXH32        6.8 GB/s            6.0 GB/s
-*/
 
 #if defined (__cplusplus)
 extern "C" {
@@ -21042,38 +19711,6 @@ struct XXH3_state_s {
 #define XXH3_INITSTATE(XXH3_state_ptr)   { (XXH3_state_ptr)->seed = 0; }
 
 
-/* ===   Experimental API   === */
-/* Symbols defined below must be considered tied to a specific library version. */
-
-/*
- * XXH3_generateSecret():
- *
- * Derive a high-entropy secret from any user-defined content, named customSeed.
- * The generated secret can be used in combination with `*_withSecret()` functions.
- * The `_withSecret()` variants are useful to provide a higher level of protection than 64-bit seed,
- * as it becomes much more difficult for an external actor to guess how to impact the calculation logic.
- *
- * The function accepts as input a custom seed of any length and any content,
- * and derives from it a high-entropy secret of length XXH3_SECRET_DEFAULT_SIZE
- * into an already allocated buffer secretBuffer.
- * The generated secret is _always_ XXH_SECRET_DEFAULT_SIZE bytes long.
- *
- * The generated secret can then be used with any `*_withSecret()` variant.
- * Functions `XXH3_128bits_withSecret()`, `XXH3_64bits_withSecret()`,
- * `XXH3_128bits_reset_withSecret()` and `XXH3_64bits_reset_withSecret()`
- * are part of this list. They all accept a `secret` parameter
- * which must be very long for implementation reasons (>= XXH3_SECRET_SIZE_MIN)
- * _and_ feature very high entropy (consist of random-looking bytes).
- * These conditions can be a high bar to meet, so
- * this function can be used to generate a secret of proper quality.
- *
- * customSeed can be anything. It can have any size, even small ones,
- * and its content can be anything, even stupidly "low entropy" source such as a bunch of zeroes.
- * The resulting `secret` will nonetheless provide all expected qualities.
- *
- * Supplying NULL as the customSeed copies the default secret into `secretBuffer`.
- * When customSeedSize > 0, supplying NULL as customSeed is undefined behavior.
- */
 XXH_PUBLIC_API void XXH3_generateSecret(void* secretBuffer, const void* customSeed, size_t customSeedSize);
 
 
@@ -21091,32 +19728,6 @@ XXH_PUBLIC_API XXH128_hash_t XXH128(const void* data, size_t len, XXH64_hash_t s
 #endif  /* defined(XXH_STATIC_LINKING_ONLY) && !defined(XXHASH_H_STATIC_13879238742) */
 
 
-/* ======================================================================== */
-/* ======================================================================== */
-/* ======================================================================== */
-
-
-/*-**********************************************************************
- * xxHash implementation
- *-**********************************************************************
- * xxHash's implementation used to be hosted inside xxhash.c.
- *
- * However, inlining requires implementation to be visible to the compiler,
- * hence be included alongside the header.
- * Previously, implementation was hosted inside xxhash.c,
- * which was then #included when inlining was activated.
- * This construction created issues with a few build and install systems,
- * as it required xxhash.c to be stored in /include directory.
- *
- * xxHash implementation is now directly integrated within xxhash.h.
- * As a consequence, xxhash.c is no longer needed in /include.
- *
- * xxhash.c is still available and is still useful.
- * In a "normal" setup, when xxhash is not inlined,
- * xxhash.h only exposes the prototypes and public symbols,
- * while xxhash.c can be built into an object file xxhash.o
- * which can then be linked into the final binary.
- ************************************************************************/
 
 #if ( defined(XXH_INLINE_ALL) || defined(XXH_PRIVATE_API) \
    || defined(XXH_IMPLEMENTATION) ) && !defined(XXH_IMPLEM_13a8737387)
@@ -21559,51 +20170,6 @@ static xxh_u32 XXH32_round(xxh_u32 acc, xxh_u32 input)
     acc  = XXH_rotl32(acc, 13);
     acc *= XXH_PRIME32_1;
 #if defined(__GNUC__) && defined(__SSE4_1__) && !defined(XXH_ENABLE_AUTOVECTORIZE)
-    /*
-     * UGLY HACK:
-     * This inline assembly hack forces acc into a normal register. This is the
-     * only thing that prevents GCC and Clang from autovectorizing the XXH32
-     * loop (pragmas and attributes don't work for some resason) without globally
-     * disabling SSE4.1.
-     *
-     * The reason we want to avoid vectorization is because despite working on
-     * 4 integers at a time, there are multiple factors slowing XXH32 down on
-     * SSE4:
-     * - There's a ridiculous amount of lag from pmulld (10 cycles of latency on
-     *   newer chips!) making it slightly slower to multiply four integers at
-     *   once compared to four integers independently. Even when pmulld was
-     *   fastest, Sandy/Ivy Bridge, it is still not worth it to go into SSE
-     *   just to multiply unless doing a long operation.
-     *
-     * - Four instructions are required to rotate,
-     *      movqda tmp,  v // not required with VEX encoding
-     *      pslld  tmp, 13 // tmp <<= 13
-     *      psrld  v,   19 // x >>= 19
-     *      por    v,  tmp // x |= tmp
-     *   compared to one for scalar:
-     *      roll   v, 13    // reliably fast across the board
-     *      shldl  v, v, 13 // Sandy Bridge and later prefer this for some reason
-     *
-     * - Instruction level parallelism is actually more beneficial here because
-     *   the SIMD actually serializes this operation: While v1 is rotating, v2
-     *   can load data, while v3 can multiply. SSE forces them to operate
-     *   together.
-     *
-     * How this hack works:
-     * __asm__(""       // Declare an assembly block but don't declare any instructions
-     *          :       // However, as an Input/Output Operand,
-     *          "+r"    // constrain a read/write operand (+) as a general purpose register (r).
-     *          (acc)   // and set acc as the operand
-     * );
-     *
-     * Because of the 'r', the compiler has promised that seed will be in a
-     * general purpose register and the '+' says that it will be 'read/write',
-     * so it has to assume it has changed. It is like volatile without all the
-     * loads and stores.
-     *
-     * Since the argument has to be in a normal register (not an SSE register),
-     * each time XXH32_round is called, it is impossible to vectorize.
-     */
     __asm__("" : "+r" (acc));
 #endif
     return acc;
@@ -21876,21 +20442,6 @@ XXH_PUBLIC_API XXH32_hash_t XXH32_digest (const XXH32_state_t* state)
 }
 
 
-/*******   Canonical representation   *******/
-
-/*
- * The default return values from XXH functions are unsigned 32 and 64 bit
- * integers.
- *
- * The canonical representation uses big endian convention, the same convention
- * as human-readable numbers (large digits first).
- *
- * This way, hash values can be written into a file or buffer, remaining
- * comparable across different systems.
- *
- * The following functions allow transformation of hash values to and from their
- * canonical format.
- */
 XXH_PUBLIC_API void XXH32_canonicalFromHash(XXH32_canonical_t* dst, XXH32_hash_t hash)
 {
     XXH_STATIC_ASSERT(sizeof(XXH32_canonical_t) == sizeof(XXH32_hash_t));
@@ -21918,22 +20469,6 @@ typedef XXH64_hash_t xxh_u64;
 #  define U64 xxh_u64
 #endif
 
-/*!
- * XXH_REROLL_XXH64:
- * Whether to reroll the XXH64_finalize() loop.
- *
- * Just like XXH32, we can unroll the XXH64_finalize() loop. This can be a
- * performance gain on 64-bit hosts, as only one jump is required.
- *
- * However, on 32-bit hosts, because arithmetic needs to be done with two 32-bit
- * registers, and 64-bit arithmetic needs to be simulated, it isn't beneficial
- * to unroll. The code becomes ridiculously large (the largest function in the
- * binary on i386!), and rerolling it saves anywhere from 3kB to 20kB. It is
- * also slightly faster because it fits into cache better and is more likely
- * to be inlined by the compiler.
- *
- * If XXH_REROLL is defined, this is ignored and the loop is always rerolled.
- */
 #ifndef XXH_REROLL_XXH64
 #  if (defined(__ILP32__) || defined(_ILP32)) /* ILP32 is often defined on 32-bit GCC family */ \
    || !(defined(__x86_64__) || defined(_M_X64) || defined(_M_AMD64) /* x86-64 */ \
@@ -22473,75 +21008,6 @@ XXH_PUBLIC_API XXH64_hash_t XXH64_hashFromCanonical(const XXH64_canonical_t* src
 #  include <intrin.h>
 #endif
 
-/*
- * One goal of XXH3 is to make it fast on both 32-bit and 64-bit, while
- * remaining a true 64-bit/128-bit hash function.
- *
- * This is done by prioritizing a subset of 64-bit operations that can be
- * emulated without too many steps on the average 32-bit machine.
- *
- * For example, these two lines seem similar, and run equally fast on 64-bit:
- *
- *   xxh_u64 x;
- *   x ^= (x >> 47); // good
- *   x ^= (x >> 13); // bad
- *
- * However, to a 32-bit machine, there is a major difference.
- *
- * x ^= (x >> 47) looks like this:
- *
- *   x.lo ^= (x.hi >> (47 - 32));
- *
- * while x ^= (x >> 13) looks like this:
- *
- *   // note: funnel shifts are not usually cheap.
- *   x.lo ^= (x.lo >> 13) | (x.hi << (32 - 13));
- *   x.hi ^= (x.hi >> 13);
- *
- * The first one is significantly faster than the second, simply because the
- * shift is larger than 32. This means:
- *  - All the bits we need are in the upper 32 bits, so we can ignore the lower
- *    32 bits in the shift.
- *  - The shift result will always fit in the lower 32 bits, and therefore,
- *    we can ignore the upper 32 bits in the xor.
- *
- * Thanks to this optimization, XXH3 only requires these features to be efficient:
- *
- *  - Usable unaligned access
- *  - A 32-bit or 64-bit ALU
- *      - If 32-bit, a decent ADC instruction
- *  - A 32 or 64-bit multiply with a 64-bit result
- *  - For the 128-bit variant, a decent byteswap helps short inputs.
- *
- * The first two are already required by XXH32, and almost all 32-bit and 64-bit
- * platforms which can run XXH32 can run XXH3 efficiently.
- *
- * Thumb-1, the classic 16-bit only subset of ARM's instruction set, is one
- * notable exception.
- *
- * First of all, Thumb-1 lacks support for the UMULL instruction which
- * performs the important long multiply. This means numerous __aeabi_lmul
- * calls.
- *
- * Second of all, the 8 functional registers are just not enough.
- * Setup for __aeabi_lmul, byteshift loads, pointers, and all arithmetic need
- * Lo registers, and this shuffling results in thousands more MOVs than A32.
- *
- * A32 and T32 don't have this limitation. They can access all 14 registers,
- * do a 32->64 multiply with UMULL, and the flexible operand allowing free
- * shifts is helpful, too.
- *
- * Therefore, we do a quick sanity check.
- *
- * If compiling Thumb-1 for a target which supports ARM instructions, we will
- * emit a warning, as it is not a "sane" platform to compile for.
- *
- * Usually, if this happens, it is because of an accident and you probably need
- * to specify -march, as you likely meant to compile for a newer architecture.
- *
- * Credit: large sections of the vectorial and asm source code paths
- *         have been contributed by @easyaspi314
- */
 #if defined(__thumb__) && !defined(__thumb2__) && defined(__ARM_ARCH_ISA_ARM)
 #   warning "XXH3 is highly inefficient without ARM or Thumb-2."
 #endif
@@ -22606,27 +21072,6 @@ XXH_PUBLIC_API XXH64_hash_t XXH64_hashFromCanonical(const XXH64_canonical_t* src
 #  define XXH_SEC_ALIGN 8
 #endif
 
-/*
- * UGLY HACK:
- * GCC usually generates the best code with -O3 for xxHash.
- *
- * However, when targeting AVX2, it is overzealous in its unrolling resulting
- * in code roughly 3/4 the speed of Clang.
- *
- * There are other issues, such as GCC splitting _mm256_loadu_si256 into
- * _mm_loadu_si128 + _mm256_inserti128_si256. This is an optimization which
- * only applies to Sandy and Ivy Bridge... which don't even support AVX2.
- *
- * That is why when compiling the AVX2 version, it is recommended to use either
- *   -O2 -mavx2 -march=haswell
- * or
- *   -O2 -mavx2 -mno-avx256-split-unaligned-load
- * for decent performance, or to use Clang instead.
- *
- * Fortunately, we can control the first one with a pragma that forces GCC into
- * -O2, but the other one we can't control without "failed to inline always
- * inline function due to target mismatch" warnings.
- */
 #if XXH_VECTOR == XXH_AVX2 /* AVX2 */ \
   && defined(__GNUC__) && !defined(__clang__) /* GCC, not Clang */ \
   && defined(__OPTIMIZE__) && !defined(__OPTIMIZE_SIZE__) /* respect -O0 and -Os */
@@ -22636,86 +21081,6 @@ XXH_PUBLIC_API XXH64_hash_t XXH64_hashFromCanonical(const XXH64_canonical_t* src
 
 
 #if XXH_VECTOR == XXH_NEON
-/*
- * NEON's setup for vmlal_u32 is a little more complicated than it is on
- * SSE2, AVX2, and VSX.
- *
- * While PMULUDQ and VMULEUW both perform a mask, VMLAL.U32 performs an upcast.
- *
- * To do the same operation, the 128-bit 'Q' register needs to be split into
- * two 64-bit 'D' registers, performing this operation::
- *
- *   [                a                 |                 b                ]
- *            |              '---------. .--------'                |
- *            |                         x                          |
- *            |              .---------' '--------.                |
- *   [ a & 0xFFFFFFFF | b & 0xFFFFFFFF ],[    a >> 32     |     b >> 32    ]
- *
- * Due to significant changes in aarch64, the fastest method for aarch64 is
- * completely different than the fastest method for ARMv7-A.
- *
- * ARMv7-A treats D registers as unions overlaying Q registers, so modifying
- * D11 will modify the high half of Q5. This is similar to how modifying AH
- * will only affect bits 8-15 of AX on x86.
- *
- * VZIP takes two registers, and puts even lanes in one register and odd lanes
- * in the other.
- *
- * On ARMv7-A, this strangely modifies both parameters in place instead of
- * taking the usual 3-operand form.
- *
- * Therefore, if we want to do this, we can simply use a D-form VZIP.32 on the
- * lower and upper halves of the Q register to end up with the high and low
- * halves where we want - all in one instruction.
- *
- *   vzip.32   d10, d11       @ d10 = { d10[0], d11[0] }; d11 = { d10[1], d11[1] }
- *
- * Unfortunately we need inline assembly for this: Instructions modifying two
- * registers at once is not possible in GCC or Clang's IR, and they have to
- * create a copy.
- *
- * aarch64 requires a different approach.
- *
- * In order to make it easier to write a decent compiler for aarch64, many
- * quirks were removed, such as conditional execution.
- *
- * NEON was also affected by this.
- *
- * aarch64 cannot access the high bits of a Q-form register, and writes to a
- * D-form register zero the high bits, similar to how writes to W-form scalar
- * registers (or DWORD registers on x86_64) work.
- *
- * The formerly free vget_high intrinsics now require a vext (with a few
- * exceptions)
- *
- * Additionally, VZIP was replaced by ZIP1 and ZIP2, which are the equivalent
- * of PUNPCKL* and PUNPCKH* in SSE, respectively, in order to only modify one
- * operand.
- *
- * The equivalent of the VZIP.32 on the lower and upper halves would be this
- * mess:
- *
- *   ext     v2.4s, v0.4s, v0.4s, #2 // v2 = { v0[2], v0[3], v0[0], v0[1] }
- *   zip1    v1.2s, v0.2s, v2.2s     // v1 = { v0[0], v2[0] }
- *   zip2    v0.2s, v0.2s, v1.2s     // v0 = { v0[1], v2[1] }
- *
- * Instead, we use a literal downcast, vmovn_u64 (XTN), and vshrn_n_u64 (SHRN):
- *
- *   shrn    v1.2s, v0.2d, #32  // v1 = (uint32x2_t)(v0 >> 32);
- *   xtn     v0.2s, v0.2d       // v0 = (uint32x2_t)(v0 & 0xFFFFFFFF);
- *
- * This is available on ARMv7-A, but is less efficient than a single VZIP.32.
- */
-
-/*
- * Function-like macro:
- * void XXH_SPLIT_IN_PLACE(uint64x2_t &in, uint32x2_t &outLo, uint32x2_t &outHi)
- * {
- *     outLo = (uint32x2_t)(in & 0xFFFFFFFF);
- *     outHi = (uint32x2_t)(in >> 32);
- *     in = UNDEFINED;
- * }
- */
 # if !defined(XXH_NO_VZIP_HACK) /* define to disable */ \
    && defined(__GNUC__) \
    && !defined(__aarch64__) && !defined(__arm64__)
@@ -22886,22 +21251,6 @@ XXH_ALIGN(64) static const xxh_u8 XXH3_kSecret[XXH_SECRET_DEFAULT_SIZE] = {
 #  define kSecret XXH3_kSecret
 #endif
 
-/*
- * Calculates a 32-bit to 64-bit long multiply.
- *
- * Wraps __emulu on MSVC x86 because it tends to call __allmul when it doesn't
- * need to (but it shouldn't need to anyways, it is about 7 instructions to do
- * a 64x64 multiply...). Since we know that this will _always_ emit MULL, we
- * use that instead of the normal method.
- *
- * If you are compiling for platforms like Thumb-1 and don't have a better option,
- * you may also want to write your own long multiply routine here.
- *
- * XXH_FORCE_INLINE xxh_u64 XXH_mult32to64(xxh_u64 x, xxh_u64 y)
- * {
- *    return (x & 0xFFFFFFFF) * (y & 0xFFFFFFFF);
- * }
- */
 #if defined(_MSC_VER) && defined(_M_IX86)
 #    include <intrin.h>
 #    define XXH_mult32to64(x, y) __emulu((unsigned)(x), (unsigned)(y))
@@ -22969,48 +21318,6 @@ XXH_mult64to128(xxh_u64 lhs, xxh_u64 rhs)
     return r128;
 
 #else
-    /*
-     * Portable scalar method. Optimized for 32-bit and 64-bit ALUs.
-     *
-     * This is a fast and simple grade school multiply, which is shown below
-     * with base 10 arithmetic instead of base 0x100000000.
-     *
-     *           9 3 // D2 lhs = 93
-     *         x 7 5 // D2 rhs = 75
-     *     ----------
-     *           1 5 // D2 lo_lo = (93 % 10) * (75 % 10) = 15
-     *         4 5 | // D2 hi_lo = (93 / 10) * (75 % 10) = 45
-     *         2 1 | // D2 lo_hi = (93 % 10) * (75 / 10) = 21
-     *     + 6 3 | | // D2 hi_hi = (93 / 10) * (75 / 10) = 63
-     *     ---------
-     *         2 7 | // D2 cross = (15 / 10) + (45 % 10) + 21 = 27
-     *     + 6 7 | | // D2 upper = (27 / 10) + (45 / 10) + 63 = 67
-     *     ---------
-     *       6 9 7 5 // D4 res = (27 * 10) + (15 % 10) + (67 * 100) = 6975
-     *
-     * The reasons for adding the products like this are:
-     *  1. It avoids manual carry tracking. Just like how
-     *     (9 * 9) + 9 + 9 = 99, the same applies with this for UINT64_MAX.
-     *     This avoids a lot of complexity.
-     *
-     *  2. It hints for, and on Clang, compiles to, the powerful UMAAL
-     *     instruction available in ARM's Digital Signal Processing extension
-     *     in 32-bit ARMv6 and later, which is shown below:
-     *
-     *         void UMAAL(xxh_u32 *RdLo, xxh_u32 *RdHi, xxh_u32 Rn, xxh_u32 Rm)
-     *         {
-     *             xxh_u64 product = (xxh_u64)*RdLo * (xxh_u64)*RdHi + Rn + Rm;
-     *             *RdLo = (xxh_u32)(product & 0xFFFFFFFF);
-     *             *RdHi = (xxh_u32)(product >> 32);
-     *         }
-     *
-     *     This instruction was designed for efficient long multiplication, and
-     *     allows this to be calculated in only 4 instructions at speeds
-     *     comparable to some 64-bit ALUs.
-     *
-     *  3. It isn't terrible on other platforms. Usually this will be a couple
-     *     of 32-bit ADD/ADCs.
-     */
 
     /* First calculate all of the cross products. */
     xxh_u64 const lo_lo = XXH_mult32to64(lhs & 0xFFFFFFFF, rhs & 0xFFFFFFFF);
@@ -23030,12 +21337,6 @@ XXH_mult64to128(xxh_u64 lhs, xxh_u64 rhs)
 #endif
 }
 
-/*
- * Does a 64-bit to 128-bit multiply, then XOR folds it.
- *
- * The reason for the separate function is to prevent passing too many structs
- * around by value. This will hopefully inline the multiply, but we don't force it.
- */
 static xxh_u64
 XXH3_mul128_fold64(xxh_u64 lhs, xxh_u64 rhs)
 {
@@ -23078,39 +21379,6 @@ static XXH64_hash_t XXH3_rrmxmx(xxh_u64 h64, xxh_u64 len)
 }
 
 
-/* ==========================================
- * Short keys
- * ==========================================
- * One of the shortcomings of XXH32 and XXH64 was that their performance was
- * sub-optimal on short lengths. It used an iterative algorithm which strongly
- * favored lengths that were a multiple of 4 or 8.
- *
- * Instead of iterating over individual inputs, we use a set of single shot
- * functions which piece together a range of lengths and operate in constant time.
- *
- * Additionally, the number of multiplies has been significantly reduced. This
- * reduces latency, especially when emulating 64-bit multiplies on 32-bit.
- *
- * Depending on the platform, this may or may not be faster than XXH32, but it
- * is almost guaranteed to be faster than XXH64.
- */
-
-/*
- * At very short lengths, there isn't enough input to fully hide secrets, or use
- * the entire secret.
- *
- * There is also only a limited amount of mixing we can do before significantly
- * impacting performance.
- *
- * Therefore, we use different sections of the secret and always mix two secret
- * samples with an XOR. This should have no effect on performance on the
- * seedless or withSeed variants because everything _should_ be constant folded
- * by modern compilers.
- *
- * The XOR mixing hides individual parts of the secret and increases entropy.
- *
- * This adds an extra layer of strength for custom secrets.
- */
 XXH_FORCE_INLINE XXH64_hash_t
 XXH3_len_1to3_64b(const xxh_u8* input, size_t len, const xxh_u8* secret, XXH64_hash_t seed)
 {
@@ -23177,53 +21445,12 @@ XXH3_len_0to16_64b(const xxh_u8* input, size_t len, const xxh_u8* secret, XXH64_
     }
 }
 
-/*
- * DISCLAIMER: There are known *seed-dependent* multicollisions here due to
- * multiplication by zero, affecting hashes of lengths 17 to 240.
- *
- * However, they are very unlikely.
- *
- * Keep this in mind when using the unseeded XXH3_64bits() variant: As with all
- * unseeded non-cryptographic hashes, it does not attempt to defend itself
- * against specially crafted inputs, only random inputs.
- *
- * Compared to classic UMAC where a 1 in 2^31 chance of 4 consecutive bytes
- * cancelling out the secret is taken an arbitrary number of times (addressed
- * in XXH3_accumulate_512), this collision is very unlikely with random inputs
- * and/or proper seeding:
- *
- * This only has a 1 in 2^63 chance of 8 consecutive bytes cancelling out, in a
- * function that is only called up to 16 times per hash with up to 240 bytes of
- * input.
- *
- * This is not too bad for a non-cryptographic hash function, especially with
- * only 64 bit outputs.
- *
- * The 128-bit variant (which trades some speed for strength) is NOT affected
- * by this, although it is always a good idea to use a proper seed if you care
- * about strength.
- */
 XXH_FORCE_INLINE xxh_u64 XXH3_mix16B(const xxh_u8* XXH_RESTRICT input,
                                      const xxh_u8* XXH_RESTRICT secret, xxh_u64 seed64)
 {
 #if defined(__GNUC__) && !defined(__clang__) /* GCC, not Clang */ \
   && defined(__i386__) && defined(__SSE2__)  /* x86 + SSE2 */ \
   && !defined(XXH_ENABLE_AUTOVECTORIZE)      /* Define to disable like XXH32 hack */
-    /*
-     * UGLY HACK:
-     * GCC for x86 tends to autovectorize the 128-bit multiply, resulting in
-     * slower code.
-     *
-     * By forcing seed64 into a register, we disrupt the cost model and
-     * cause it to scalarize. See `XXH32_round()`
-     *
-     * FIXME: Clang's output is still _much_ faster -- On an AMD Ryzen 3600,
-     * XXH3_64bits @ len=240 runs at 4.6 GB/s with Clang 9, but 3.3 GB/s on
-     * GCC 9.2, despite both emitting scalar code.
-     *
-     * GCC generates much better scalar code than Clang for the rest of XXH3,
-     * which is why finding a more optimal codepath is an interest.
-     */
     __asm__ ("" : "+r" (seed64));
 #endif
     {   xxh_u64 const input_lo = XXH_readLE64(input);
@@ -23288,26 +21515,6 @@ XXH3_len_129to240_64b(const xxh_u8* XXH_RESTRICT input, size_t len,
 #if defined(__clang__)                                /* Clang */ \
     && (defined(__ARM_NEON) || defined(__ARM_NEON__)) /* NEON */ \
     && !defined(XXH_ENABLE_AUTOVECTORIZE)             /* Define to disable */
-        /*
-         * UGLY HACK:
-         * Clang for ARMv7-A tries to vectorize this loop, similar to GCC x86.
-         * In everywhere else, it uses scalar code.
-         *
-         * For 64->128-bit multiplies, even if the NEON was 100% optimal, it
-         * would still be slower than UMAAL (see XXH_mult64to128).
-         *
-         * Unfortunately, Clang doesn't handle the long multiplies properly and
-         * converts them to the nonexistent "vmulq_u64" intrinsic, which is then
-         * scalarized into an ugly mess of VMOV.32 instructions.
-         *
-         * This mess is difficult to avoid without turning autovectorization
-         * off completely, but they are usually relatively minor and/or not
-         * worth it to fix.
-         *
-         * This loop is the easiest to fix, as unlike XXH32, this pragma
-         * _actually works_ because it is a loop vectorization instead of an
-         * SLP vectorization.
-         */
         #pragma clang loop vectorize(disable)
 #endif
         for (i=8 ; i < nbRounds; i++) {
@@ -23351,28 +21558,6 @@ XXH_FORCE_INLINE void XXH_writeLE64(void* dst, xxh_u64 v64)
     typedef long long xxh_i64;
 #endif
 
-/*
- * XXH3_accumulate_512 is the tightest loop for long inputs, and it is the most optimized.
- *
- * It is a hardened version of UMAC, based off of FARSH's implementation.
- *
- * This was chosen because it adapts quite well to 32-bit, 64-bit, and SIMD
- * implementations, and it is ridiculously fast.
- *
- * We harden it by mixing the original input to the accumulators as well as the product.
- *
- * This means that in the (relatively likely) case of a multiply by zero, the
- * original input is preserved.
- *
- * On 128-bit inputs, we swap 64-bit pairs when we add the input to improve
- * cross-pollination, as otherwise the upper and lower halves would be
- * essentially independent.
- *
- * This doesn't matter on 64-bit hashes since they all get merged together in
- * the end, so we skip the extra step.
- *
- * Both XXH3_64bits and XXH3_128bits use this subroutine.
- */
 
 #if (XXH_VECTOR == XXH_AVX512) || defined(XXH_X86DISPATCH)
 
@@ -23408,26 +21593,6 @@ XXH3_accumulate_512_avx512(void* XXH_RESTRICT acc,
     }
 }
 
-/*
- * XXH3_scrambleAcc: Scrambles the accumulators to improve mixing.
- *
- * Multiplication isn't perfect, as explained by Google in HighwayHash:
- *
- *  // Multiplication mixes/scrambles bytes 0-7 of the 64-bit result to
- *  // varying degrees. In descending order of goodness, bytes
- *  // 3 4 2 5 1 6 0 7 have quality 228 224 164 160 100 96 36 32.
- *  // As expected, the upper and lower bytes are much worse.
- *
- * Source: https://github.com/google/highwayhash/blob/0aaf66b/highwayhash/hh_avx2.h#L291
- *
- * Since our algorithm uses a pseudorandom secret to add some variance into the
- * mix, we don't need to (or want to) mix as often or as much as HighwayHash does.
- *
- * This isn't as tight as XXH3_accumulate, but still written in SIMD to avoid
- * extraction.
- *
- * Both XXH3_64bits and XXH3_128bits use this subroutine.
- */
 
 XXH_FORCE_INLINE XXH_TARGET_AVX512 void
 XXH3_scrambleAcc_avx512(void* XXH_RESTRICT acc, const void* XXH_RESTRICT secret)
@@ -23897,34 +22062,6 @@ XXH3_initCustomSecret_scalar(void* XXH_RESTRICT customSecret, xxh_u64 seed64)
     XXH_STATIC_ASSERT((XXH_SECRET_DEFAULT_SIZE & 15) == 0);
 
 #if defined(__clang__) && defined(__aarch64__)
-    /*
-     * UGLY HACK:
-     * Clang generates a bunch of MOV/MOVK pairs for aarch64, and they are
-     * placed sequentially, in order, at the top of the unrolled loop.
-     *
-     * While MOVK is great for generating constants (2 cycles for a 64-bit
-     * constant compared to 4 cycles for LDR), long MOVK chains stall the
-     * integer pipelines:
-     *   I   L   S
-     * MOVK
-     * MOVK
-     * MOVK
-     * MOVK
-     * ADD
-     * SUB      STR
-     *          STR
-     * By forcing loads from memory (as the asm line causes Clang to assume
-     * that XXH3_kSecretPtr has been changed), the pipelines are used more
-     * efficiently:
-     *   I   L   S
-     *      LDR
-     *  ADD LDR
-     *  SUB     STR
-     *          STR
-     * XXH3_64bits_withSeed, len == 256, Snapdragon 835
-     *   without hack: 2654.4 MB/s
-     *   with hack:    3202.9 MB/s
-     */
     __asm__("" : "+r" (kSecretPtr));
 #endif
     /*
@@ -24231,32 +22368,6 @@ XXH3_64bits_withSeed(const void* input, size_t len, XXH64_hash_t seed)
     return XXH3_64bits_internal(input, len, seed, XXH3_kSecret, sizeof(XXH3_kSecret), XXH3_hashLong_64b_withSeed);
 }
 
-
-/* ===   XXH3 streaming   === */
-
-/*
- * Malloc's a pointer that is always aligned to align.
- *
- * This must be freed with `XXH_alignedFree()`.
- *
- * malloc typically guarantees 16 byte alignment on 64-bit systems and 8 byte
- * alignment on 32-bit. This isn't enough for the 32 byte aligned loads in AVX2
- * or on 32-bit, the 16 byte aligned loads in SSE2 and NEON.
- *
- * This underalignment previously caused a rather obvious crash which went
- * completely unnoticed due to XXH3_createState() not actually being tested.
- * Credit to RedSpah for noticing this bug.
- *
- * The alignment is done manually: Functions like posix_memalign or _mm_malloc
- * are avoided: To maintain portability, we would have to write a fallback
- * like this anyways, and besides, testing for the existence of library
- * functions without relying on external build tools is impossible.
- *
- * The method is simple: Overallocate, manually align, and store the offset
- * to the original behind the returned pointer.
- *
- * Align must be a power of 2 and 8 <= align <= 128.
- */
 static void* XXH_alignedMalloc(size_t s, size_t align)
 {
     XXH_ASSERT(align <= 128 && align >= 8); /* range check */
@@ -24577,22 +22688,6 @@ XXH3_generateSecret(void* secretBuffer, const void* customSeed, size_t customSee
 }
 
 
-/* ==========================================
- * XXH3 128 bits (a.k.a XXH128)
- * ==========================================
- * XXH3's 128-bit variant has better mixing and strength than the 64-bit variant,
- * even without counting the significantly larger output size.
- *
- * For example, extra steps are taken to avoid the seed-dependent collisions
- * in 17-240 byte inputs (See XXH3_mix16B and XXH128_mix32B).
- *
- * This strength naturally comes at the cost of some speed, especially on short
- * lengths. Note that longer hashes are about as fast as the 64-bit version
- * due to it using only a slight modification of the 64-bit loop.
- *
- * XXH128 is also more oriented towards 64-bit machines. It is still extremely
- * fast for a _128-bit_ hash on 32-bit (it usually clears XXH64).
- */
 
 XXH_FORCE_INLINE XXH128_hash_t
 XXH3_len_1to3_128b(const xxh_u8* input, size_t len, const xxh_u8* secret, XXH64_hash_t seed)
@@ -24683,30 +22778,6 @@ XXH3_len_9to16_128b(const xxh_u8* input, size_t len, const xxh_u8* secret, XXH64
              */
             m128.high64 += (input_hi & 0xFFFFFFFF00000000ULL) + XXH_mult32to64((xxh_u32)input_hi, XXH_PRIME32_2);
         } else {
-            /*
-             * 64-bit optimized (albeit more confusing) version.
-             *
-             * Uses some properties of addition and multiplication to remove the mask:
-             *
-             * Let:
-             *    a = input_hi.lo = (input_hi & 0x00000000FFFFFFFF)
-             *    b = input_hi.hi = (input_hi & 0xFFFFFFFF00000000)
-             *    c = XXH_PRIME32_2
-             *
-             *    a + (b * c)
-             * Inverse Property: x + y - x == y
-             *    a + (b * (1 + c - 1))
-             * Distributive Property: x * (y + z) == (x * y) + (x * z)
-             *    a + (b * 1) + (b * (c - 1))
-             * Identity Property: x * 1 == x
-             *    a + b + (b * (c - 1))
-             *
-             * Substitute a, b, and c:
-             *    input_hi.hi + input_hi.lo + ((xxh_u64)input_hi.lo * (XXH_PRIME32_2 - 1))
-             *
-             * Since input_hi.hi + input_hi.lo == input_hi, we get this:
-             *    input_hi + ((xxh_u64)input_hi.lo * (XXH_PRIME32_2 - 1))
-             */
             m128.high64 += input_hi + XXH_mult32to64((xxh_u32)input_hi, XXH_PRIME32_2 - 1);
         }
         /* m128 ^= XXH_swap64(m128 >> 64); */
@@ -25117,41 +23188,6 @@ XXH128_hashFromCanonical(const XXH128_canonical_t* src)
 #endif
 
 
-/*
-int internal_xxh3(const char* fileName, uint64_t& o_high64, uint64_t& o_low64)
-{
-	size_t const blockSize = 65536;
-	unsigned char buffer[blockSize];
-    FILE* inFile;
-	inFile = fopen( fileName, "rb" );
-	if (inFile==NULL) 
-	{
-		printf("25345 Error: Could not open '%s': %s. \n", fileName, strerror(errno));
-        return 1;
-	}
-
-	XXH3_state_t state128;
-    (void)XXH3_128bits_reset(&state128);
-	
-	size_t readSize;
-	while ((readSize = fread(buffer, 1, blockSize, inFile)) > 0) 
-		(void)XXH3_128bits_update(&state128, buffer, readSize);
-
-	if (ferror(inFile)) 
-	{
-		printf("Error: a failure occurred reading the input file.\n");
-		exit(1);
-	}
-	fclose(inFile);
-
-	XXH128_hash_t myhash=XXH3_128bits_digest(&state128);
-	o_high64=myhash.high64;
-	o_low64=myhash.low64;
-   	return 0;
-	
-///d97b86b6eddf4609ef87136fb55c1ab1
-}
-*/
 /////////// other functions
 
 
@@ -26049,25 +24085,6 @@ typedef struct xorshift128plus_key_s xorshift128plus_key_t;
 
 
 
-/**
-*
-* You can create a new key like so...
-*   xorshift128plus_key_t mykey;
-*   xorshift128plus_init(324, 4444,&mykey);
-*
-* or directly if you prefer:
-*  xorshift128plus_key_t mykey = {.part1=324,.part2=4444}
-*
-*  Then you can generate random numbers like so...
-*      xorshift128plus(&mykey);
-* If your application is threaded, each thread should have its own
-* key.
-*
-*
-* The seeds (key1 and key2) should be non-zero. You are responsible for
-* checking that they are non-zero.
-*
-*/
 static inline void xorshift128plus_init(uint64_t key1, uint64_t key2, xorshift128plus_key_t *key) {
   key->part1 = key1;
   key->part2 = key2;
@@ -30170,29 +28187,6 @@ bool comparefilenamedate(s_fileandsize a, s_fileandsize b)
 	return a_size+a.filename<b_size+b.filename;
 }
 
-/*
-If there's one thing I hate about UNIX and Linux in general it's the ls command, 
-as opposed to Windows dir. 
-This is a kind of mini clone, to be used with a shell alias for convenience.
-
-Main switch are /s, /os, /on, /a
--n X like tail -n
-
-Using -crc32 or -crc32c find duplicate files, just about like rar a -oi3:1 -r dummy s:\
-		
-
-zpaqfranz dir r:\minc\2 /s -crc32 -n 100
-will show the 100 biggest duplicate file in r:\minc\2
-
-zpaqfranz dir r:\minc\2 /s /os -n 10
-will show the 10 biggest file in r:\minc\2
-
-
-----
-
-The UNIX philosophy is "do one thing, and do it well"
-Mine is "build everything to make you comfortable"
-*/
 
 
 int  Jidac::dir() 
@@ -30575,65 +28569,6 @@ int  Jidac::dir()
 
 
 
-/*
-///////////////////////////////////////////
-During the verification phase of the correct functioning of the backups 
-it is normal to extract them on several different media (devices).
-
-Using for example folders synchronized with rsync on NAS, ZIP files, ZPAQ
-via NFS-mounted shares, smbfs, internal HDD etc.
-
-Comparing multiple copies can takes a long time.
-
-Suppose to have a /tank/condivisioni master (or source) directory (hundreds of GB, hundred thousand files)
-
-Suppose to have some internal (HDD) and external (NAS)
-rsynced copy (/rsynced-copy-1, /rsynced-copy-2, /rsynced-copy-3...)
-
-Suppose to have  internal ZIP backup, internal ZPAQ backup,
-external (NAS1 zip backup),  external (NAS2 zpaq backup) and so on.
-Let's extract all of them (ZIP and ZPAQs) into
-/temporaneo/1, /temporaneo/2, /temporaneo/3...
-
-You can do something like
-diff -qr /temporaneo/condivisioni /temporaneo/1
-diff -qr /temporaneo/condivisioni /temporaneo/2
-diff -qr /temporaneo/condivisioni /temporaneo/3
-(...)
-diff -qr /temporaneo/condivisioni /rsynced-copy-1
-diff -qr /temporaneo/condivisioni /rsynced-copy-2
-diff -qr /temporaneo/condivisioni /rsynced-copy-3
-(...)
-
-But this can take a lot of time (many hours) even for fast machines
-
-
-The command c compares a master folder (the first indicated) 
-to N slave folders (all the others) in two particular operating modes.
-
-By default it just checks the correspondence of files and their size 
-(for example for rsync copies with different charsets, 
-ex unix vs linux, mac vs linux, unix vs ntfs it is extremely useful)
-
-Using the -crc32 switch a check of this code is also made (with HW CPU support, if available).
-
-The interesting aspect is the -all switch: N threads will be created 
-(one for each specified folder) and executed in parallel, 
-both for scanning and for calculating the CRC.
-
-On modern servers (eg Xeon with 8, 10 or more CPUs) 
-with different media (internal) and multiple connections (NICs) to NAS 
-you can drastically reduce times compared to multiple, sequential diff -qr. 
-It clearly makes no sense for single magnetic disks
-
-In the given example
-zpaqfranz c /tank/condivisioni /temporaneo/1 /temporaneo/2 /temporaneo/3 /rsynced-copy-1 /rsynced-copy-2 /rsynced-copy 3 -crc32 -all
-will run 7 threads which take care of one directory.
-
-The hypothesis is that the six copies are each on a different device, and the server
-have plenty of cores
-It's normal in datastorage and virtualization environments
-*/
 
 pthread_mutex_t mylock = PTHREAD_MUTEX_INITIALIZER;
 
@@ -31109,53 +29044,6 @@ void stermina(string i_directory)
 	fileop.pFrom			=wcs;
 	fileop.fFlags			=FOF_NO_UI;
 	SHFileOperation			(&fileop);
-}
-*/
-/*
-int DirDelete(const string& path)
-{
-   const gchar*    p;
-   GError*   gerr;
-   GDir*     d;
-   int       r;
-   string    ps;
-   string    path_i;
-   cout << "open:" << path << "\n";
-   d        = g_dir_open(path.c_str(), 0, &gerr);
-   r        = -1;
-
-   if (d) {
-      r = 0;
-
-      while (!r && (p=g_dir_read_name(d))) {
-          ps = string{p};
-          if (ps == "." || ps == "..") {
-            continue;
-          }
-
-          path_i = path + string{"/"} + p;
-
-
-          if (g_file_test(path_i.c_str(), G_FILE_TEST_IS_DIR) != 0) {
-            cout << "recurse:" << path_i << "\n";
-            r = DirDelete(path_i);
-          }
-          else {
-            cout << "unlink:" << path_i << "\n";
-            r = g_unlink(path_i.c_str());
-          }
-      }
-
-      g_dir_close(d);
-   }
-
-   if (r == 0) {
-      r = g_rmdir(path.c_str());
-     cout << "rmdir:" << path << "\n";
-
-   }
-
-   return r;
 }
 */
 int erredbarras(const std::string &i_path,bool i_flagrecursive=true)

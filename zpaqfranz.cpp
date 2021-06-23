@@ -10,7 +10,7 @@
 ///////// it's not a foolish attempt to take over their jobs
 ///////// https://github.com/fcorbelli/zpaqfranz/blob/main/notes.txt
 
-#define ZPAQ_VERSION "51.38-experimental"
+#define ZPAQ_VERSION "51.40-experimental"
 #define FRANZOFFSET 	50
 #define FRANZMAXPATH 	240
 
@@ -45,12 +45,11 @@ of expensive on inelegant workarounds.
 
 So don't be surprised if it looks like what in Italy 
 we call "zibaldone" or in Emilia-Romagna "mappazzone".
+Jun 2021: starting to fix the mess (refactoring). Work in progress.
 
 Windows binary builds (32 and 64 bit) on github/sourceforge
 
 ## **Provided as-is, with no warranty whatsoever, by Franco Corbelli, franco@francocorbelli.com**
-
-
 
 
 ####      Key differences against 7.15 by zpaqfranz -diff or here 
@@ -83,25 +82,6 @@ NOTE1: -, not -- (into switch)
 NOTE2: switches ARE case sensitive.   -maxsize <> -MAXSIZE
 
 
-**Long (full) help**
-```
-zpaqfranz help
-zpaqfranz -h
-zpaqfranz -help
-```
-
-**Some examples**
-```
-zpaqfranz -he
-zpaqfranz --helpe
-zpaqfranz -examples
-```
-
-**Brief difference agains standard 7.15**
-```
-zpaqfranz -diff 
-```
-
 # How to build
 My main development platforms are Windows and FreeBSD. 
 I rarely use Linux or MacOS, so changes may be needed.
@@ -132,7 +112,6 @@ clang++ -march=native -Dunix zpaqfranz.cpp  -pthread -o zpaqfranz -static
 Debian Linux (10/11) gcc 8.3.0
 ubuntu 21.04 desktop-amd64 gcc  10.3.0
 manjaro 21.07 gcc 11.1.0
-Centos 8.4.2105 gcc 8.4.1
 g++ -O3 -Dunix zpaqfranz.cpp  -pthread -o zpaqfranz -static
 
 QNAP NAS TS-431P3 (Annapurna AL314) gcc 7.4.0
@@ -143,29 +122,82 @@ g++ -Dunix zpaqfranz.cpp  -pthread -o zpaqfranz -Wno-psabi
 
 
 #define _FILE_OFFSET_BITS 64  // In Linux make sizeof(off_t) == 8
+
 #ifndef UNICODE
-#define UNICODE  // For Windows
+	#define UNICODE  // For Windows
+#endif
+
+#ifndef DEBUG
+	#define NDEBUG 1
 #endif
 
 #ifdef _OPENMP
-#include <omp.h>
+	#include <omp.h>
 #endif
 
-
-//////////////////////////////////////////////////////////////
-
-#ifndef LIBZPAQ_H
-#define LIBZPAQ_H
-
-#ifndef DEBUG
-#define NDEBUG 1
+#if defined(__unix__) || (defined(__APPLE__) && defined(__MACH__))
+	#ifndef unix
+		#define unix 1
+	#endif
 #endif
 
 #include <assert.h>
-#include <stdint.h>
-#include <stdlib.h>
+#include <time.h>
+#include <pthread.h>
+#include <math.h>
+#include <stdio.h>
 #include <string.h>
+#include <unistd.h>
+
 #include <algorithm>
+#include <string>
+#include <vector>
+#include <map>
+#include <stdexcept>
+#include <cstddef>
+
+#ifdef unix
+	#ifndef NOJIT
+		#include <sys/mman.h>
+	#endif
+
+	#define PTHREAD 1
+	#include <termios.h>
+	#include <sys/param.h>
+	#include <sys/types.h>
+	#include <sys/stat.h>
+	#include <sys/time.h>
+	#include <dirent.h>
+	#include <utime.h>
+
+	#ifdef BSD
+		#include <sys/sysctl.h>
+		#include <sys/mount.h>
+	#endif
+
+#else  // Assume Windows
+	
+///	#include <wincrypt.h>
+	#include <conio.h>
+	#include <windows.h>
+	#include <io.h>
+	#include <sys/stat.h>
+	using namespace std;
+
+#endif
+
+// For testing -Dunix in Windows
+#ifdef unixtest
+	#define lstat(a,b) stat(a,b)
+	#define mkdir(a,b) mkdir(a)
+	#ifndef fseeko
+		#define fseeko(a,b,c) fseeko64(a,b,c)
+	#endif
+	#ifndef ftello
+		#define ftello(a) ftello64(a)
+	#endif
+#endif
+
 
 namespace libzpaq {
 
@@ -283,7 +315,7 @@ private:
   char hbuf[20];    // result
   void process();   // hash 1 block
   
-	uint64_t _wyp[4];
+	///uint64_t _wyp[4];
 
 };
 
@@ -841,22 +873,9 @@ void compressBlock(StringBuffer* in, Writer* out, const char* method,
 
 }  // namespace libzpaq
 
-#endif  // LIBZPAQ_H
 
 
-#include <string.h>
-#include <string>
-#include <vector>
-#include <stdio.h>
 
-#ifdef unix
-#ifndef NOJIT
-#include <sys/mman.h>
-#endif
-#else
-#include <windows.h>
-#include <wincrypt.h>
-#endif
 
 namespace libzpaq {
 
@@ -8562,87 +8581,6 @@ void compressBlock(StringBuffer* in, Writer* out, const char* method_,
 
 
 
-/*
-#include <atomic>
-*/
-#include <sstream>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <ctype.h>
-#include <time.h>
-#include <stdint.h>
-#include <string>
-#include <vector>
-#include <map>
-#include <algorithm>
-#include <stdexcept>
-#include <fcntl.h>
-#include <math.h>
-#include <unistd.h>
-#include <pthread.h>
-
-/* CRC-32C (iSCSI) polynomial in reversed bit order. */
-#define POLY 0x82f63b78
-#define CRC32_TEST_BITWISE
-#define CRC32_TEST_HALFBYTE
-#define CRC32_TEST_TABLELESS
-
-#ifndef DEBUG
-#define NDEBUG 1
-#endif
-#include <assert.h>
-
-#if defined(__unix__) || (defined(__APPLE__) && defined(__MACH__))
-#ifndef unix
-#define unix 1
-#endif
-#endif
-#ifdef unix
-#define PTHREAD 1
-#include <termios.h>
-#include <sys/ioctl.h>
-#include <sys/param.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <sys/time.h>
-#include <unistd.h>
-#include <dirent.h>
-#include <utime.h>
-#include <errno.h>
-#ifdef BSD
-#include <termios.h>
-#include <unistd.h>
-#include <sys/sysctl.h>
-#include <sys/param.h>
-#include <sys/mount.h>
-#include <libutil.h>
-#include <sys/statvfs.h>
-#endif
-
-#else  // Assume Windows
-#include <conio.h>
-#include <windows.h>
-#include <io.h>
-#include <windows.h>
-#include <stdio.h>
-#include <sys/stat.h>
-using namespace std;
-
-#endif
-
-// For testing -Dunix in Windows
-#ifdef unixtest
-#define lstat(a,b) stat(a,b)
-#define mkdir(a,b) mkdir(a)
-#ifndef fseeko
-#define fseeko(a,b,c) fseeko64(a,b,c)
-#endif
-#ifndef ftello
-#define ftello(a) ftello64(a)
-#endif
-#endif
-
 
 
 using std::string;
@@ -8708,7 +8646,6 @@ using libzpaq::error;
 // sem.destroy();          // deallocate resources used by semaphore
 
 #ifdef PTHREAD
-#include <pthread.h>
 typedef void* ThreadReturn;                                // job return type
 typedef pthread_t ThreadID;                                // job ID type
 void run(ThreadID& tid, ThreadReturn(*f)(void*), void* arg)// start job
@@ -8831,10 +8768,9 @@ bool getcaptcha(const string i_captcha,const string i_reason)
 	if (i_reason=="")
 		return false;
 	printf("\nTo confirm a dangerous command\n");
-	printf("you need to enter EXACTLY the capcha\n");
-	printf("proposed, then press CR (Return).\n");
+	printf(">>> %s\n",i_reason.c_str());
+	printf("enter EXACTLY the capcha, then press CR (return)\n");
 	printf("Entering anything else will quit.\n");
-	printf("\nWhy: %s\n",i_reason.c_str());
 	printf("\nCaptcha to continue:     %s\n",i_captcha.c_str());
 	char myline[81];
     scanf("%80s", myline);
@@ -9217,24 +9153,6 @@ FILE* freadopen(const char* i_filename)
 	return myfp;
 }
 
-FILE* fwriteopen(const char* i_filename)
-{
-#ifdef _WIN32
-	wstring widename=utow(i_filename);
-	FILE* myfp=_wfopen(widename.c_str(), L"wb" );
-#else
-	FILE* myfp=fopen(i_filename, "wb" );
-#endif
-	if (myfp==NULL)
-	{
-		printf( "\nfwriteopen cannot open:");
-		printUTF8(i_filename);
-		printf("\n");
-		return 0;
-	}
-	return myfp;
-}
-
 /////////////////// calculate CRC32 
 
 // //////////////////////////////////////////////////////////
@@ -9245,75 +9163,13 @@ FILE* fwriteopen(const char* i_filename)
 // see http://create.stephan-brumme.com/disclaimer.html
 //
 
-// if running on an embedded system, you might consider shrinking the
-// big Crc32Lookup table by undefining these lines:
-#define CRC32_USE_LOOKUP_TABLE_BYTE
-#define CRC32_USE_LOOKUP_TABLE_SLICING_BY_4
-#define CRC32_USE_LOOKUP_TABLE_SLICING_BY_8
 #define CRC32_USE_LOOKUP_TABLE_SLICING_BY_16
-// - crc32_bitwise  doesn't need it at all
-// - crc32_halfbyte has its own small lookup table
-// - crc32_1byte_tableless and crc32_1byte_tableless2 don't need it at all
-// - crc32_1byte    needs only Crc32Lookup[0]
-// - crc32_4bytes   needs only Crc32Lookup[0..3]
-// - crc32_8bytes   needs only Crc32Lookup[0..7]
-// - crc32_4x8bytes needs only Crc32Lookup[0..7]
-// - crc32_16bytes  needs all of Crc32Lookup
-// using the aforementioned #defines the table is automatically fitted to your needs
 
 // uint8_t, uint32_t, int32_t
-#include <stdint.h>
-// size_t
-#include <cstddef>
 
 
-/// merge two CRC32 such that result = crc32(dataB, lengthB, crc32(dataA, lengthA))
 uint32_t crc32_combine (uint32_t crcA, uint32_t crcB, size_t lengthB);
-
-/// compute CRC32 (bitwise algorithm)
-uint32_t crc32_bitwise (const void* data, size_t length, uint32_t previousCrc32 = 0);
-/// compute CRC32 (half-byte algoritm)
-uint32_t crc32_halfbyte(const void* data, size_t length, uint32_t previousCrc32 = 0);
-
-#ifdef CRC32_USE_LOOKUP_TABLE_BYTE
-/// compute CRC32 (standard algorithm)
-uint32_t crc32_1byte   (const void* data, size_t length, uint32_t previousCrc32 = 0);
-#endif
-
-/// compute CRC32 (byte algorithm) without lookup tables
-uint32_t crc32_1byte_tableless (const void* data, size_t length, uint32_t previousCrc32 = 0);
-/// compute CRC32 (byte algorithm) without lookup tables
-uint32_t crc32_1byte_tableless2(const void* data, size_t length, uint32_t previousCrc32 = 0);
-
-#ifdef CRC32_USE_LOOKUP_TABLE_SLICING_BY_4
-/// compute CRC32 (Slicing-by-4 algorithm)
-uint32_t crc32_4bytes  (const void* data, size_t length, uint32_t previousCrc32 = 0);
-#endif
-
-#ifdef CRC32_USE_LOOKUP_TABLE_SLICING_BY_8
-/// compute CRC32 (Slicing-by-8 algorithm)
-uint32_t crc32_8bytes  (const void* data, size_t length, uint32_t previousCrc32 = 0);
-/// compute CRC32 (Slicing-by-8 algorithm), unroll inner loop 4 times
-uint32_t crc32_4x8bytes(const void* data, size_t length, uint32_t previousCrc32 = 0);
-#endif
-
-#ifdef CRC32_USE_LOOKUP_TABLE_SLICING_BY_16
-/// compute CRC32 (Slicing-by-16 algorithm)
 uint32_t crc32_16bytes (const void* data, size_t length, uint32_t previousCrc32 = 0);
-/// compute CRC32 (Slicing-by-16 algorithm, prefetch upcoming data blocks)
-uint32_t crc32_16bytes_prefetch(const void* data, size_t length, uint32_t previousCrc32 = 0, size_t prefetchAhead = 256);
-#endif
-
-
-
-// //////////////////////////////////////////////////////////
-// Crc32.cpp
-// Copyright (c) 2011-2019 Stephan Brumme. All rights reserved.
-// Slicing-by-16 contributed by Bulat Ziganshin
-// Tableless bytewise CRC contributed by Hagai Gold
-// see http://create.stephan-brumme.com/disclaimer.html
-//
-
 
 
 #ifndef __LITTLE_ENDIAN
@@ -9348,12 +9204,6 @@ uint32_t crc32_16bytes_prefetch(const void* data, size_t length, uint32_t previo
   #endif
 #endif
 
-/*
-// abort if byte order is undefined
-#if !defined(__BYTE_ORDER)
-#error undefined byte order, compile with -D__BYTE_ORDER=1234 (if little endian) or -D__BYTE_ORDER=4321 (big endian)
-#endif
-*/
 
 #define __BYTE_ORDER __LITTLE_ENDIAN
 
@@ -9391,297 +9241,13 @@ namespace
 
 } // anonymous namespace
 
-#ifndef NO_LUT
 /// forward declaration, table is at the end of this file
 extern const uint32_t Crc32Lookup[MaxSlice][256]; // extern is needed to keep compiler happy
-#endif
 
 
-/// compute CRC32 (bitwise algorithm)
-uint32_t crc32_bitwise(const void* data, size_t length, uint32_t previousCrc32)
-{
-  uint32_t crc = ~previousCrc32; // same as previousCrc32 ^ 0xFFFFFFFF
-  const uint8_t* current = (const uint8_t*) data;
-
-  while (length-- != 0)
-  {
-    crc ^= *current++;
-
-    for (int j = 0; j < 8; j++)
-    {
-      // branch-free
-      crc = (crc >> 1) ^ (-int32_t(crc & 1) & Polynomial);
-
-      // branching, much slower:
-      //if (crc & 1)
-      //  crc = (crc >> 1) ^ Polynomial;
-      //else
-      //  crc =  crc >> 1;
-    }
-  }
-
-  return ~crc; // same as crc ^ 0xFFFFFFFF
-}
 
 
-/// compute CRC32 (half-byte algoritm)
-uint32_t crc32_halfbyte(const void* data, size_t length, uint32_t previousCrc32)
-{
-  uint32_t crc = ~previousCrc32; // same as previousCrc32 ^ 0xFFFFFFFF
-  const uint8_t* current = (const uint8_t*) data;
 
-  /// look-up table for half-byte, same as crc32Lookup[0][16*i]
-  static const uint32_t Crc32Lookup16[16] =
-  {
-    0x00000000,0x1DB71064,0x3B6E20C8,0x26D930AC,0x76DC4190,0x6B6B51F4,0x4DB26158,0x5005713C,
-    0xEDB88320,0xF00F9344,0xD6D6A3E8,0xCB61B38C,0x9B64C2B0,0x86D3D2D4,0xA00AE278,0xBDBDF21C
-  };
-
-  while (length-- != 0)
-  {
-    crc = Crc32Lookup16[(crc ^  *current      ) & 0x0F] ^ (crc >> 4);
-    crc = Crc32Lookup16[(crc ^ (*current >> 4)) & 0x0F] ^ (crc >> 4);
-    current++;
-  }
-
-  return ~crc; // same as crc ^ 0xFFFFFFFF
-}
-
-
-#ifdef CRC32_USE_LOOKUP_TABLE_BYTE
-/// compute CRC32 (standard algorithm)
-uint32_t crc32_1byte(const void* data, size_t length, uint32_t previousCrc32)
-{
-  uint32_t crc = ~previousCrc32; // same as previousCrc32 ^ 0xFFFFFFFF
-  const uint8_t* current = (const uint8_t*) data;
-
-  while (length-- != 0)
-    crc = (crc >> 8) ^ Crc32Lookup[0][(crc & 0xFF) ^ *current++];
-
-  return ~crc; // same as crc ^ 0xFFFFFFFF
-}
-#endif
-
-
-/// compute CRC32 (byte algorithm) without lookup tables
-uint32_t crc32_1byte_tableless(const void* data, size_t length, uint32_t previousCrc32)
-{
-  uint32_t crc = ~previousCrc32; // same as previousCrc32 ^ 0xFFFFFFFF
-  const uint8_t* current = (const uint8_t*) data;
-
-  while (length-- != 0)
-  {
-    uint8_t s = uint8_t(crc) ^ *current++;
-
-    // Hagai Gold made me aware of this table-less algorithm and send me code
-
-    // polynomial 0xEDB88320 can be written in binary as 11101101101110001000001100100000b
-    // reverse the bits (or just assume bit 0 is the first one)
-    // and we have bits set at position 0, 1, 2, 4, 5, 7, 8, 10, 11, 12, 16, 22, 23, 26
-    // => those are the shift offsets:
-    //crc = (crc >> 8) ^
-    //       t ^
-    //      (t >>  1) ^ (t >>  2) ^ (t >>  4) ^ (t >>  5) ^  // == y
-    //      (t >>  7) ^ (t >>  8) ^ (t >> 10) ^ (t >> 11) ^  // == y >> 6
-    //      (t >> 12) ^ (t >> 16) ^                          // == z
-    //      (t >> 22) ^ (t >> 26) ^                          // == z >> 10
-    //      (t >> 23);
-
-    // the fastest I can come up with:
-    uint32_t low = (s ^ (s << 6)) & 0xFF;
-    uint32_t a   = (low * ((1 << 23) + (1 << 14) + (1 << 2)));
-    crc = (crc >> 8) ^
-          (low * ((1 << 24) + (1 << 16) + (1 << 8))) ^
-           a ^
-          (a >> 1) ^
-          (low * ((1 << 20) + (1 << 12)           )) ^
-          (low << 19) ^
-          (low << 17) ^
-          (low >>  2);
-
-    // Hagai's code:
-    /*uint32_t t = (s ^ (s << 6)) << 24;
-
-    // some temporaries to optimize XOR
-    uint32_t x = (t >> 1) ^ (t >> 2);
-    uint32_t y = x ^ (x >> 3);
-    uint32_t z = (t >> 12) ^ (t >> 16);
-
-    crc = (crc >> 8) ^
-           t ^ (t >> 23) ^
-           y ^ (y >>  6) ^
-           z ^ (z >> 10);*/
-  }
-
-  return ~crc; // same as crc ^ 0xFFFFFFFF
-}
-
-
-/// compute CRC32 (byte algorithm) without lookup tables
-uint32_t crc32_1byte_tableless2(const void* data, size_t length, uint32_t previousCrc32)
-{
-  int32_t crc = ~previousCrc32; // note: signed integer, right shift distributes sign bit into lower bits
-  const uint8_t* current = (const uint8_t*) data;
-
-  while (length-- != 0)
-  {
-    crc = crc ^ *current++;
-
-    uint32_t c = (((crc << 31) >> 31) & ((Polynomial >> 7)  ^ (Polynomial >> 1))) ^
-                 (((crc << 30) >> 31) & ((Polynomial >> 6)  ^  Polynomial)) ^
-                 (((crc << 29) >> 31) &  (Polynomial >> 5)) ^
-                 (((crc << 28) >> 31) &  (Polynomial >> 4)) ^
-                 (((crc << 27) >> 31) &  (Polynomial >> 3)) ^
-                 (((crc << 26) >> 31) &  (Polynomial >> 2)) ^
-                 (((crc << 25) >> 31) &  (Polynomial >> 1)) ^
-                 (((crc << 24) >> 31) &   Polynomial);
-
-    crc = ((uint32_t)crc >> 8) ^ c; // convert to unsigned integer before right shift
-  }
-
-  return ~crc; // same as crc ^ 0xFFFFFFFF
-}
-
-
-#ifdef CRC32_USE_LOOKUP_TABLE_SLICING_BY_4
-/// compute CRC32 (Slicing-by-4 algorithm)
-uint32_t crc32_4bytes(const void* data, size_t length, uint32_t previousCrc32)
-{
-  uint32_t  crc = ~previousCrc32; // same as previousCrc32 ^ 0xFFFFFFFF
-  const uint32_t* current = (const uint32_t*) data;
-
-  // process four bytes at once (Slicing-by-4)
-  while (length >= 4)
-  {
-#if __BYTE_ORDER == __BIG_ENDIAN
-    uint32_t one = *current++ ^ swap(crc);
-    crc = Crc32Lookup[0][ one      & 0xFF] ^
-          Crc32Lookup[1][(one>> 8) & 0xFF] ^
-          Crc32Lookup[2][(one>>16) & 0xFF] ^
-          Crc32Lookup[3][(one>>24) & 0xFF];
-#else
-    uint32_t one = *current++ ^ crc;
-    crc = Crc32Lookup[0][(one>>24) & 0xFF] ^
-          Crc32Lookup[1][(one>>16) & 0xFF] ^
-          Crc32Lookup[2][(one>> 8) & 0xFF] ^
-          Crc32Lookup[3][ one      & 0xFF];
-#endif
-
-    length -= 4;
-  }
-
-  const uint8_t* currentChar = (const uint8_t*) current;
-  // remaining 1 to 3 bytes (standard algorithm)
-  while (length-- != 0)
-    crc = (crc >> 8) ^ Crc32Lookup[0][(crc & 0xFF) ^ *currentChar++];
-
-  return ~crc; // same as crc ^ 0xFFFFFFFF
-}
-#endif
-
-
-#ifdef CRC32_USE_LOOKUP_TABLE_SLICING_BY_8
-/// compute CRC32 (Slicing-by-8 algorithm)
-uint32_t crc32_8bytes(const void* data, size_t length, uint32_t previousCrc32)
-{
-  uint32_t crc = ~previousCrc32; // same as previousCrc32 ^ 0xFFFFFFFF
-  const uint32_t* current = (const uint32_t*) data;
-
-  // process eight bytes at once (Slicing-by-8)
-  while (length >= 8)
-  {
-#if __BYTE_ORDER == __BIG_ENDIAN
-    uint32_t one = *current++ ^ swap(crc);
-    uint32_t two = *current++;
-    crc = Crc32Lookup[0][ two      & 0xFF] ^
-          Crc32Lookup[1][(two>> 8) & 0xFF] ^
-          Crc32Lookup[2][(two>>16) & 0xFF] ^
-          Crc32Lookup[3][(two>>24) & 0xFF] ^
-          Crc32Lookup[4][ one      & 0xFF] ^
-          Crc32Lookup[5][(one>> 8) & 0xFF] ^
-          Crc32Lookup[6][(one>>16) & 0xFF] ^
-          Crc32Lookup[7][(one>>24) & 0xFF];
-#else
-    uint32_t one = *current++ ^ crc;
-    uint32_t two = *current++;
-    crc = Crc32Lookup[0][(two>>24) & 0xFF] ^
-          Crc32Lookup[1][(two>>16) & 0xFF] ^
-          Crc32Lookup[2][(two>> 8) & 0xFF] ^
-          Crc32Lookup[3][ two      & 0xFF] ^
-          Crc32Lookup[4][(one>>24) & 0xFF] ^
-          Crc32Lookup[5][(one>>16) & 0xFF] ^
-          Crc32Lookup[6][(one>> 8) & 0xFF] ^
-          Crc32Lookup[7][ one      & 0xFF];
-#endif
-
-    length -= 8;
-  }
-
-  const uint8_t* currentChar = (const uint8_t*) current;
-  // remaining 1 to 7 bytes (standard algorithm)
-  while (length-- != 0)
-    crc = (crc >> 8) ^ Crc32Lookup[0][(crc & 0xFF) ^ *currentChar++];
-
-  return ~crc; // same as crc ^ 0xFFFFFFFF
-}
-
-
-/// compute CRC32 (Slicing-by-8 algorithm), unroll inner loop 4 times
-uint32_t crc32_4x8bytes(const void* data, size_t length, uint32_t previousCrc32)
-{
-  uint32_t crc = ~previousCrc32; // same as previousCrc32 ^ 0xFFFFFFFF
-  const uint32_t* current = (const uint32_t*) data;
-
-  // enabling optimization (at least -O2) automatically unrolls the inner for-loop
-  const size_t Unroll = 4;
-  const size_t BytesAtOnce = 8 * Unroll;
-
-  // process 4x eight bytes at once (Slicing-by-8)
-  while (length >= BytesAtOnce)
-  {
-    for (size_t unrolling = 0; unrolling < Unroll; unrolling++)
-    {
-#if __BYTE_ORDER == __BIG_ENDIAN
-      uint32_t one = *current++ ^ swap(crc);
-      uint32_t two = *current++;
-      crc = Crc32Lookup[0][ two      & 0xFF] ^
-            Crc32Lookup[1][(two>> 8) & 0xFF] ^
-            Crc32Lookup[2][(two>>16) & 0xFF] ^
-            Crc32Lookup[3][(two>>24) & 0xFF] ^
-            Crc32Lookup[4][ one      & 0xFF] ^
-            Crc32Lookup[5][(one>> 8) & 0xFF] ^
-            Crc32Lookup[6][(one>>16) & 0xFF] ^
-            Crc32Lookup[7][(one>>24) & 0xFF];
-#else
-      uint32_t one = *current++ ^ crc;
-      uint32_t two = *current++;
-      crc = Crc32Lookup[0][(two>>24) & 0xFF] ^
-            Crc32Lookup[1][(two>>16) & 0xFF] ^
-            Crc32Lookup[2][(two>> 8) & 0xFF] ^
-            Crc32Lookup[3][ two      & 0xFF] ^
-            Crc32Lookup[4][(one>>24) & 0xFF] ^
-            Crc32Lookup[5][(one>>16) & 0xFF] ^
-            Crc32Lookup[6][(one>> 8) & 0xFF] ^
-            Crc32Lookup[7][ one      & 0xFF];
-#endif
-
-    }
-
-    length -= BytesAtOnce;
-  }
-
-  const uint8_t* currentChar = (const uint8_t*) current;
-  // remaining 1 to 31 bytes (standard algorithm)
-  while (length-- != 0)
-    crc = (crc >> 8) ^ Crc32Lookup[0][(crc & 0xFF) ^ *currentChar++];
-
-  return ~crc; // same as crc ^ 0xFFFFFFFF
-}
-#endif // CRC32_USE_LOOKUP_TABLE_SLICING_BY_8
-
-
-#ifdef CRC32_USE_LOOKUP_TABLE_SLICING_BY_16
-/// compute CRC32 (Slicing-by-16 algorithm)
 uint32_t crc32_16bytes(const void* data, size_t length, uint32_t previousCrc32)
 {
   uint32_t crc = ~previousCrc32; // same as previousCrc32 ^ 0xFFFFFFFF
@@ -9752,114 +9318,11 @@ uint32_t crc32_16bytes(const void* data, size_t length, uint32_t previousCrc32)
 }
 
 
-/// compute CRC32 (Slicing-by-16 algorithm, prefetch upcoming data blocks)
-uint32_t crc32_16bytes_prefetch(const void* data, size_t length, uint32_t previousCrc32, size_t prefetchAhead)
-{
-  // CRC code is identical to crc32_16bytes (including unrolling), only added prefetching
-  // 256 bytes look-ahead seems to be the sweet spot on Core i7 CPUs
-
-  uint32_t crc = ~previousCrc32; // same as previousCrc32 ^ 0xFFFFFFFF
-  const uint32_t* current = (const uint32_t*) data;
-
-  // enabling optimization (at least -O2) automatically unrolls the for-loop
-  const size_t Unroll = 4;
-  const size_t BytesAtOnce = 16 * Unroll;
-
-  while (length >= BytesAtOnce + prefetchAhead)
-  {
-    PREFETCH(((const char*) current) + prefetchAhead);
-
-    for (size_t unrolling = 0; unrolling < Unroll; unrolling++)
-    {
-#if __BYTE_ORDER == __BIG_ENDIAN
-    uint32_t one   = *current++ ^ swap(crc);
-    uint32_t two   = *current++;
-    uint32_t three = *current++;
-    uint32_t four  = *current++;
-    crc  = Crc32Lookup[ 0][ four         & 0xFF] ^
-           Crc32Lookup[ 1][(four  >>  8) & 0xFF] ^
-           Crc32Lookup[ 2][(four  >> 16) & 0xFF] ^
-           Crc32Lookup[ 3][(four  >> 24) & 0xFF] ^
-           Crc32Lookup[ 4][ three        & 0xFF] ^
-           Crc32Lookup[ 5][(three >>  8) & 0xFF] ^
-           Crc32Lookup[ 6][(three >> 16) & 0xFF] ^
-           Crc32Lookup[ 7][(three >> 24) & 0xFF] ^
-           Crc32Lookup[ 8][ two          & 0xFF] ^
-           Crc32Lookup[ 9][(two   >>  8) & 0xFF] ^
-           Crc32Lookup[10][(two   >> 16) & 0xFF] ^
-           Crc32Lookup[11][(two   >> 24) & 0xFF] ^
-           Crc32Lookup[12][ one          & 0xFF] ^
-           Crc32Lookup[13][(one   >>  8) & 0xFF] ^
-           Crc32Lookup[14][(one   >> 16) & 0xFF] ^
-           Crc32Lookup[15][(one   >> 24) & 0xFF];
-#else
-    uint32_t one   = *current++ ^ crc;
-    uint32_t two   = *current++;
-    uint32_t three = *current++;
-    uint32_t four  = *current++;
-    crc  = Crc32Lookup[ 0][(four  >> 24) & 0xFF] ^
-           Crc32Lookup[ 1][(four  >> 16) & 0xFF] ^
-           Crc32Lookup[ 2][(four  >>  8) & 0xFF] ^
-           Crc32Lookup[ 3][ four         & 0xFF] ^
-           Crc32Lookup[ 4][(three >> 24) & 0xFF] ^
-           Crc32Lookup[ 5][(three >> 16) & 0xFF] ^
-           Crc32Lookup[ 6][(three >>  8) & 0xFF] ^
-           Crc32Lookup[ 7][ three        & 0xFF] ^
-           Crc32Lookup[ 8][(two   >> 24) & 0xFF] ^
-           Crc32Lookup[ 9][(two   >> 16) & 0xFF] ^
-           Crc32Lookup[10][(two   >>  8) & 0xFF] ^
-           Crc32Lookup[11][ two          & 0xFF] ^
-           Crc32Lookup[12][(one   >> 24) & 0xFF] ^
-           Crc32Lookup[13][(one   >> 16) & 0xFF] ^
-           Crc32Lookup[14][(one   >>  8) & 0xFF] ^
-           Crc32Lookup[15][ one          & 0xFF];
-#endif
-    }
-
-    length -= BytesAtOnce;
-  }
-
-  const uint8_t* currentChar = (const uint8_t*) current;
-  // remaining 1 to 63 bytes (standard algorithm)
-  while (length-- != 0)
-    crc = (crc >> 8) ^ Crc32Lookup[0][(crc & 0xFF) ^ *currentChar++];
-
-  return ~crc; // same as crc ^ 0xFFFFFFFF
-}
-#endif
-
-
 
 
 /// merge two CRC32 such that result = crc32(dataB, lengthB, crc32(dataA, lengthA))
 uint32_t crc32_combine(uint32_t crcA, uint32_t crcB, size_t lengthB)
 {
-  // based on Mark Adler's crc_combine from
-  // https://github.com/madler/pigz/blob/master/pigz.c
-
-  // main idea:
-  // - if you have two equally-sized blocks A and B,
-  //   then you can create a block C = A ^ B
-  //   which has the property crc(C) = crc(A) ^ crc(B)
-  // - if you append length(B) zeros to A and call it A' (think of it as AAAA000)
-  //   and   prepend length(A) zeros to B and call it B' (think of it as 0000BBB)
-  //   then exists a C' = A' ^ B'
-  // - remember: if you XOR someting with zero, it remains unchanged: X ^ 0 = X
-  // - that means C' = A concat B so that crc(A concat B) = crc(C') = crc(A') ^ crc(B')
-  // - the trick is to compute crc(A') based on crc(A)
-  //                       and crc(B') based on crc(B)
-  // - since B' starts with many zeros, the crc of those initial zeros is still zero
-  // - that means crc(B') = crc(B)
-  // - unfortunately the trailing zeros of A' change the crc, so usually crc(A') != crc(A)
-  // - the following code is a fast algorithm to compute crc(A')
-  // - starting with crc(A) and appending length(B) zeros, needing just log2(length(B)) iterations
-  // - the details are explained by the original author at
-  //   https://stackoverflow.com/questions/23122312/crc-calculation-of-a-mostly-static-data-stream/23126768
-  //
-  // notes:
-  // - I squeezed everything into one function to keep global namespace clean (original code two helper functions)
-  // - most original comments are still in place, I added comments where these helper functions where made inline code
-  // - performance-wise there isn't any differenze to the original zlib/pigz code
 
   // degenerated case
   if (lengthB == 0)
@@ -9941,19 +9404,6 @@ uint32_t crc32_combine(uint32_t crcA, uint32_t crcB, size_t lengthB)
 /// look-up table, already declared above
 const uint32_t Crc32Lookup[MaxSlice][256] =
 {
-  //// same algorithm as crc32_bitwise
-  //for (int i = 0; i <= 0xFF; i++)
-  //{
-  //  uint32_t crc = i;
-  //  for (int j = 0; j < 8; j++)
-  //    crc = (crc >> 1) ^ ((crc & 1) * Polynomial);
-  //  Crc32Lookup[0][i] = crc;
-  //}
-  //// ... and the following slicing-by-8 algorithm (from Intel):
-  //// http://www.intel.com/technology/comms/perfnet/download/CRC_generators.pdf
-  //// http://sourceforge.net/projects/slicing-by-8/
-  //for (int slice = 1; slice < MaxSlice; slice++)
-  //  Crc32Lookup[slice][i] = (Crc32Lookup[slice - 1][i] >> 8) ^ Crc32Lookup[0][Crc32Lookup[slice - 1][i] & 0xFF];
   {
     // note: the first number of every second row corresponds to the half-byte look-up table !
     0x00000000,0x77073096,0xEE0E612C,0x990951BA,0x076DC419,0x706AF48F,0xE963A535,0x9E6495A3,
@@ -10525,11 +9975,6 @@ const uint32_t Crc32Lookup[MaxSlice][256] =
 #endif // NO_LUT
 
 
-
-
-
-
-
 /////////////// CRC-32C with hardware acceleration
 
 
@@ -10540,6 +9985,7 @@ const uint32_t Crc32Lookup[MaxSlice][256] =
 /* Table for a quadword-at-a-time software crc. */
 static pthread_once_t crc32c_once_sw = PTHREAD_ONCE_INIT;
 static uint32_t crc32c_table[8][256];
+#define POLY 0x82f63b78
 
 /* Construct table for software CRC-32C calculation. */
 static void crc32c_init_sw(void)
@@ -10854,8 +10300,26 @@ void myreplaceall(std::string& str, const std::string& from, const std::string& 
 
 bool fileexists(const string& i_filename) 
 {
+#ifdef unix
+// true even for dirs no S_ISDIR
   struct stat buffer;   
   return (stat(i_filename.c_str(),&buffer)==0); 
+#endif
+
+#ifdef _WIN32
+	HANDLE	myhandle;
+	WIN32_FIND_DATA findfiledata;
+	std::wstring wpattern=utow(i_filename.c_str());
+	myhandle=FindFirstFile(wpattern.c_str(),&findfiledata);
+	if (myhandle!=INVALID_HANDLE_VALUE)
+	{
+		FindClose(myhandle);
+		return true;
+	}
+	return false;
+#endif
+
+	return false;
 }
 
 
@@ -10990,11 +10454,13 @@ bool exists(string filename) {
 // Delete a file, return true if successful
 bool delete_file(const char* filename) {
 #ifdef unix
-  return remove(filename)==0;
+	return remove(filename)==0;
 #else
+
+	if (!fileexists(filename))
+		return true;
 	SetFileAttributes(utow(filename).c_str(),FILE_ATTRIBUTE_NORMAL);
-			
-  return DeleteFile(utow(filename).c_str());
+	return DeleteFile(utow(filename).c_str());
 #endif
 }
 
@@ -11006,21 +10472,10 @@ bool delete_dir(const char* i_directory) {
 #endif
 }
 
-
-
-
-
-
-
-
 long long fsbtoblk(int64_t num, uint64_t fsbs, u_long bs)
 {
 	return (num * (intmax_t) fsbs / (int64_t) bs);
 }
-
-
-
-
 
 /// it is not easy, at all, to take *nix free filesystem space
 uint64_t getfreespace(const char* i_path)
@@ -11076,43 +10531,35 @@ uint64_t getfreespace(const char* i_path)
 	return spazio; // Windows
 #endif
 
-
-
-
-
 #endif
 
 
 }
 
-
-
-
-// take care of "z:\pippo\test pluto\" parameters => "z:\pippo\test pluto\\"
-
-bool directoryexists(string& i_directory) 
+bool direxists(string& i_directory) 
 {
-	struct stat buffer;
-	///printf("3-0\n");
-	if (isdirectory(i_directory))
+#ifdef unix
+	struct stat sb;
+    return ((stat(i_directory.c_str(), &sb) == 0) && S_ISDIR(sb.st_mode)); 	
+#endif
+
+#ifdef _WIN32
+	HANDLE	myhandle;
+	WIN32_FIND_DATA findfiledata;
+	if (!isdirectory(i_directory))
+		i_directory+="/";
+	std::string pattern=i_directory+"*.*";
+	std::wstring wpattern=utow(pattern.c_str());
+	myhandle=FindFirstFile(wpattern.c_str(),&findfiledata);
+	if (myhandle!=INVALID_HANDLE_VALUE)
 	{
-///		printf("3A\n");
-		return (stat(i_directory.c_str(),&buffer)==0);
-	}
-	string mycandidate=i_directory;
-	mycandidate+='/';
-	///printf("CHECCKO SU <<%s>>\n",mycandidate.c_str());
-	bool cista= (stat(mycandidate.c_str(),&buffer)==0);
-	if (cista)
-	{
-		///printf("Cista\n");
+		FindClose(myhandle);
 		return true;
 	}
-	else
-	{
-			///printf("non ci sta\n");
-			return false;
-	}
+	return false;
+#endif
+
+	return false;
 }
 
 
@@ -11166,7 +10613,7 @@ void printerr(const char* i_where,const char* filename)
 	if (spazio<16384)
 	{
 		string mypath=filename;
-		if (directoryexists(mypath))
+		if (direxists(mypath))
 			printf("\n\nMAYBE OUT OF FREE SPACE?\n");
 		else
 			printf("\n\nMAYBE OUT OF FREE SPACE OR INVALID PATH?\n");
@@ -11873,7 +11320,7 @@ private:
   void scandir(bool i_checkifselected,DTMap& i_edt,string filename, bool i_recursive=true);        // scan dirs to dt
   void addfile(bool i_checkifselected,DTMap& i_edt,string filename, int64_t edate, int64_t esize,int64_t eattr);          // add external file to dt
 			   
-	int64_t franzparallelscandir();
+	int64_t franzparallelscandir(bool i_flaghash);
 
   bool equal(DTMap::const_iterator p, const char* filename, uint32_t &o_crc32);
              // compare file contents with p
@@ -11891,22 +11338,6 @@ private:
 	
 
  };
-
-/*
-static double seconds()
-{
-#if defined(_WIN32) || defined(_WIN64)
-  LARGE_INTEGER frequency, now;
-  QueryPerformanceFrequency(&frequency);
-  QueryPerformanceCounter  (&now);
-  return now.QuadPart / double(frequency.QuadPart);
-#else
-  timespec now;
-  //#clock_gettime(CLOCK_REALTIME, &now);
-  return now.tv_sec + now.tv_nsec / 1000000000.0;
-#endif
-}
-*/
 
 int terminalwidth() 
 {
@@ -12363,9 +11794,6 @@ void Jidac::usage()
 	moreprint(" -h: Long help (-?)     -diff: against zpaq 715     -examples: common examples");
 	//moreprint("            -h: Long help (-?)        |  -examples: Usage examples");
 	///moreprint("--------------------------------------|--------------------------------------");
-	
-	
-
 }
 
 
@@ -12500,217 +11928,106 @@ string append_path(string a, string b) {
 
 #ifdef _WIN32
 
+	uint32_t convert_unicode_to_ansi_string(std::string& ansi,const wchar_t* unicode,const size_t unicode_size) 
+	{
+		uint32_t error = 0;
+		do 
+		{
+			if ((nullptr == unicode) || (0 == unicode_size)) 
+			{
+				error = ERROR_INVALID_PARAMETER;
+				break;
+			}
+			ansi.clear();
+			int required_cch=::WideCharToMultiByte(
+									CP_ACP,
+									0,
+									unicode, static_cast<int>(unicode_size),
+									nullptr, 0,
+									nullptr, nullptr
+									);
 
+			if (required_cch==0) 
+			{
+				error=::GetLastError();
+				break;
+			}
+			ansi.resize(required_cch);
+			if (0 == ::WideCharToMultiByte(
+						CP_ACP,
+						0,
+						unicode, static_cast<int>(unicode_size),
+						const_cast<char*>(ansi.c_str()), static_cast<int>(ansi.size()),
+						nullptr, nullptr
+						)) 
+			{
+				error =::GetLastError();
+				break;
+			}
+		} 
+		while (false);
 
-//
-// convert_unicode_to_ansi_string.
-//
+		return error;
+	}
 
-uint32_t convert_unicode_to_ansi_string(
-     std::string& ansi,
-    const wchar_t* unicode,
-    const size_t unicode_size
-    ) {
+	uint32_t convert_utf8_to_unicode_string(std::wstring& unicode,const char* utf8,const size_t utf8_size)
+	{
+		uint32_t error = 0;
+		do 
+		{
+			if ((nullptr == utf8) || (0 == utf8_size)) 
+			{
+				error = ERROR_INVALID_PARAMETER;
+				break;
+			}
+			unicode.clear();
+			int required_cch = ::MultiByteToWideChar(
+				CP_UTF8,
+				MB_ERR_INVALID_CHARS,
+				utf8, static_cast<int>(utf8_size),
+				nullptr, 0
+			);
+			if (required_cch==0) 
+			{
+				error = ::GetLastError();
+				break;
+			}
+			unicode.resize(required_cch);
+			if (0 == ::MultiByteToWideChar(
+						CP_UTF8,
+						MB_ERR_INVALID_CHARS,
+						utf8, static_cast<int>(utf8_size),
+						const_cast<wchar_t*>(unicode.c_str()), static_cast<int>(unicode.size())
+						)) 
+			{
+				error=::GetLastError();
+				break;
+			}
+		} 
+		while (false);
 
-    uint32_t error = 0;
-
-    do {
-
-        if ((nullptr == unicode) || (0 == unicode_size)) {
-            error = ERROR_INVALID_PARAMETER;
-            break;
-        }
-
-        ansi.clear();
-
-        //
-        // getting required cch.
-        //
-
-        int required_cch = ::WideCharToMultiByte(
-                                CP_ACP,
-                                0,
-                                unicode, static_cast<int>(unicode_size),
-                                nullptr, 0,
-                                nullptr, nullptr
-                                );
-
-        if (0 == required_cch) {
-            error = ::GetLastError();
-            break;
-        }
-
-        //
-        // allocate.
-        //
-
-        ansi.resize(required_cch);
-
-        //
-        // convert.
-        //
-
-        if (0 == ::WideCharToMultiByte(
-                    CP_ACP,
-                    0,
-                    unicode, static_cast<int>(unicode_size),
-                    const_cast<char*>(ansi.c_str()), static_cast<int>(ansi.size()),
-                    nullptr, nullptr
-                    )) {
-            error = ::GetLastError();
-            break;
-        }
-
-    } while (false);
-
-    return error;
-}
-
-
-//
-// convert_utf8_to_unicode_string
-//
-
-uint32_t convert_utf8_to_unicode_string(
-     std::wstring& unicode,
-    const char* utf8,
-    const size_t utf8_size
-    ) {
-
-    uint32_t error = 0;
-
-    do {
-
-        if ((nullptr == utf8) || (0 == utf8_size)) {
-            error = ERROR_INVALID_PARAMETER;
-            break;
-        }
-
-        unicode.clear();
-
-        //
-        // getting required cch.
-        //
-
-        int required_cch = ::MultiByteToWideChar(
-            CP_UTF8,
-            MB_ERR_INVALID_CHARS,
-            utf8, static_cast<int>(utf8_size),
-            nullptr, 0
-        );
-        if (0 == required_cch) {
-            error = ::GetLastError();
-            break;
-        }
-
-        //
-        // allocate.
-        //
-
-        unicode.resize(required_cch);
-
-        //
-        // convert.
-        //
-
-        if (0 == ::MultiByteToWideChar(
-                    CP_UTF8,
-                    MB_ERR_INVALID_CHARS,
-                    utf8, static_cast<int>(utf8_size),
-                    const_cast<wchar_t*>(unicode.c_str()), static_cast<int>(unicode.size())
-                    )) {
-            error = ::GetLastError();
-            break;
-        }
-
-    } while (false);
-
-    return error;
-}
-
-
-
-std::string utf8toansi(const std::string & utf8)
-{
-	std::wstring unicode = L"";
-	convert_utf8_to_unicode_string(unicode, utf8.c_str(), utf8.size());
-	std::string ansi = "";
-	convert_unicode_to_ansi_string(ansi, unicode.c_str(), unicode.size());
-	return ansi;
-}
+		return error;
+	}
+// Windows: double converison
+	std::string utf8toansi(const std::string & utf8)
+	{
+		std::wstring unicode = L"";
+		convert_utf8_to_unicode_string(unicode, utf8.c_str(), utf8.size());
+		std::string ansi = "";
+		convert_unicode_to_ansi_string(ansi, unicode.c_str(), unicode.size());
+		return ansi;
+	}
 
 #else
 
 /// Unix & Linux
 
+	std::string utf8toansi(const std::string & utf8)
+	{
+		return utf8;
+	}
 
-
-
-#include <string>
-#include <codecvt> // for std::codecvt_utf8
-#include <locale>  // for std::wstring_convert
-
-///std::wstring_convert<std::codecvt_utf8<char32_t>, char32_t> conv_utf8_utf32;
-
-/*
-std::wstring linux_utf8_to_unicode(const std::string & str)
-{
-    std::wstring ret;
-	
-	printf("Provo con ");
-	printUTF8(str.c_str());
-	printf("\n");
-	std::wstring_convert<std::codecvt_utf8<char32_t>, char32_t> utf32conv;
-    printf("ca1\n");
-	std::u32string utf32 = utf32conv.from_bytes(str);
-	printf("ca2\n");
-    return ret;
-}
-*/
-std::string linux_unicode_to_ansi(const std::wstring & wstr)
-{
-    std::string ret;
-    std::mbstate_t state = {};
-    const wchar_t *src = wstr.data();
-    size_t len = std::wcsrtombs(nullptr, &src, 0, &state);
-    if (static_cast<size_t>(-1) != len) {
-        std::unique_ptr< char [] > buff(new char[len + 1]);
-        len = std::wcsrtombs(buff.get(), &src, len, &state);
-        if (static_cast<size_t>(-1) != len) {
-            ret.assign(buff.get(), len);
-        }
-    }
-    return ret;
-}
-
-
-std::string utf8toansi(const std::string & utf8)
-{
-	return utf8;
-	/*
-	string risultato;
-	printf("Pre purga ||%s||\n",utf8.c_str());
-	
-	for (int i=0;i<utf8.length();i++)
-		if ((isprint(utf8[i])) || (utf8[i]=='.') || (utf8[i]==' '))
-			risultato += utf8[i];
-	printf("Post purga ||%s||\n",risultato.c_str());
-	
-	return risultato;
-	*/
-		
-		
-	///return linux_unicode_to_ansi(linux_utf8_to_unicode(utf8));
-}
 #endif
-
-
-
-
-
-
-
-
 
 const std::string WHITESPACE = " \n\r\t\f\v";
  
@@ -12737,17 +12054,6 @@ string extractfilename(const string& i_string)
 		return(i_string.substr(i+1, i_string.length() - i));
 	return(i_string);
 }
-/*
-int countchar(string i_string,i_string i_char) 
-{
-  int count = 0;
-  for (int i = 0; i < i_string.size(); i++)
-    if (i_string[i] == i_char) 
-		count++;
-
-  return count;
-}
-*/
 string prendiestensione(const string& s) 
 {
 	if (isdirectory(s))
@@ -12762,7 +12068,6 @@ string prendiestensione(const string& s)
 			return("");
 		return(nomefile.substr(i+1, lunghezzaestensione));
    }
-
    return("");
 }
 
@@ -12778,22 +12083,10 @@ string extractfilepath(const string& i_string)
 string prendinomefileebasta(const string& s) 
 {
 	string nomefile=extractfilename(s);
-//	printf("_________________ filename !%s!\n",nomefile.c_str());
-   size_t i = nomefile.rfind('.', nomefile.length());
-   if (i != string::npos) {
-      return(nomefile.substr(0,i));
-   }
- ///  return(s);
-  return(nomefile);
-}
-
-std::string ReplaceAll(std::string str, const std::string& from, const std::string& to) {
-    size_t start_pos = 0;
-    while((start_pos = str.find(from, start_pos)) != std::string::npos) {
-        str.replace(start_pos, from.length(), to);
-        start_pos += to.length(); // Handles case where 'to' is a substring of 'from'
-    }
-    return str;
+	size_t i = nomefile.rfind('.', nomefile.length());
+	if (i != string::npos) 
+		return(nomefile.substr(0,i));
+	return(nomefile);
 }
 
 string nomefileseesistegia(string i_nomefile)
@@ -12814,8 +12107,6 @@ string nomefileseesistegia(string i_nomefile)
 	}
 	return ("");
 }
-
-
 
 string padleft(std::string str, const size_t num, const char paddingChar = ' ')
 {
@@ -13252,81 +12543,74 @@ string compressemlfilename(const string& i_string)
 	string uniqfilename=extractfilename(i_string);
 	string percorso=extractfilepath(i_string);
 		
-		for (int k=0;k<10;k++)
-			uniqfilename=purgedouble(uniqfilename,"  "," ");
+	for (int k=0;k<10;k++)
+		uniqfilename=purgedouble(uniqfilename,"  "," ");
+
+	for (int k=0;k<10;k++)
+		uniqfilename=purgedouble(uniqfilename,"..",".");
+
+	for (int k=0;k<10;k++)
+		uniqfilename=purgedouble(uniqfilename,"Fw ","Fwd ");
 	
-		for (int k=0;k<10;k++)
-			uniqfilename=purgedouble(uniqfilename,"..",".");
+	for (int k=0;k<10;k++)
+		uniqfilename=purgedouble(uniqfilename,"Fwd Fwd ","Fwd ");
+
+	for (int k=0;k<10;k++)
+		uniqfilename=purgedouble(uniqfilename," R "," Re ");
+
+	for (int k=0;k<10;k++)
+		uniqfilename=purgedouble(uniqfilename,"R Fwd ","Re Fwd");
 	
-		for (int k=0;k<10;k++)
-			uniqfilename=purgedouble(uniqfilename,"Fw ","Fwd ");
-		
-		for (int k=0;k<10;k++)
-			uniqfilename=purgedouble(uniqfilename,"Fwd Fwd ","Fwd ");
-
-		for (int k=0;k<10;k++)
-			uniqfilename=purgedouble(uniqfilename," R "," Re ");
-
-		for (int k=0;k<10;k++)
-			uniqfilename=purgedouble(uniqfilename,"R Fwd ","Re Fwd");
-		
-		for (int k=0;k<10;k++)
-			uniqfilename=purgedouble(uniqfilename," RE "," Re ");
-		
-		for (int k=0;k<10;k++)
-			uniqfilename=purgedouble(uniqfilename,"Re Re ","Re ");
-
-		for (int k=0;k<10;k++)
-			uniqfilename=purgedouble(uniqfilename,"Fwd Re Fwd Re ","Fwd Re ");
+	for (int k=0;k<10;k++)
+		uniqfilename=purgedouble(uniqfilename," RE "," Re ");
 	
-		for (int k=0;k<10;k++)
-			uniqfilename=purgedouble(uniqfilename,"Re Fwd Re Fwd ","Re Fwd ");
+	for (int k=0;k<10;k++)
+		uniqfilename=purgedouble(uniqfilename,"Re Re ","Re ");
+
+	for (int k=0;k<10;k++)
+		uniqfilename=purgedouble(uniqfilename,"Fwd Re Fwd Re ","Fwd Re ");
+
+	for (int k=0;k<10;k++)
+		uniqfilename=purgedouble(uniqfilename,"Re Fwd Re Fwd ","Re Fwd ");
+
+	for (int k=0;k<10;k++)
+		uniqfilename=purgedouble(uniqfilename," SV SV "," SV ");
+
+	for (int k=0;k<10;k++)
+		uniqfilename=purgedouble(uniqfilename,"Fwd FW ","Fwd ");
+
+	for (int k=0;k<10;k++)
+		uniqfilename=purgedouble(uniqfilename,"Fwd I ","Fwd ");
 	
-		for (int k=0;k<10;k++)
-			uniqfilename=purgedouble(uniqfilename," SV SV "," SV ");
-
-		for (int k=0;k<10;k++)
-			uniqfilename=purgedouble(uniqfilename,"Fwd FW ","Fwd ");
-
-		for (int k=0;k<10;k++)
-			uniqfilename=purgedouble(uniqfilename,"Fwd I ","Fwd ");
-		
-		for (int k=0;k<10;k++)
-			uniqfilename=purgedouble(uniqfilename,"I Fwd ","Fwd ");
+	for (int k=0;k<10;k++)
+		uniqfilename=purgedouble(uniqfilename,"I Fwd ","Fwd ");
 
 	for (int k=0;k<10;k++)
 			uniqfilename=purgedouble(uniqfilename,"R Re ","Re ");
 
-		for (int k=0;k<10;k++)
-			uniqfilename=purgedouble(uniqfilename,"__","_");
+	for (int k=0;k<10;k++)
+		uniqfilename=purgedouble(uniqfilename,"__","_");
 
- 		for (int k=0;k<10;k++)
-		uniqfilename=purgedouble(uniqfilename," _ ","_");
+	for (int k=0;k<10;k++)
+	uniqfilename=purgedouble(uniqfilename," _ ","_");
 
-		for (int k=0;k<10;k++)
-			uniqfilename=purgedouble(uniqfilename,"  "," ");
+	for (int k=0;k<10;k++)
+		uniqfilename=purgedouble(uniqfilename,"  "," ");
 
-		for (int k=uniqfilename.length()-1;k>0;k--)
+	for (int k=uniqfilename.length()-1;k>0;k--)
+	{
+		if ((uniqfilename[k]=='-') || (uniqfilename[k]=='.') || (uniqfilename[k]==' '))
 		{
-	///		printf("k= %d car=%c\n",k,uniqfilename[k]);
-			if ((uniqfilename[k]=='-') || (uniqfilename[k]=='.') || (uniqfilename[k]==' '))
-			{
-		///		printf("decre\n");
 			uniqfilename.pop_back();
-			}
-			else
-			{
-			///	printf("esco %c\n",uniqfilename[k]);
-			break;
-			}
 		}
-		/*
-		printf("kkk |%s|\n",uniqfilename.c_str());
-		exit(0);
-		*/
-		uniqfilename=mytrim2(uniqfilename);
-		
-		uniqfilename=percorso+uniqfilename;
+		else
+		{
+			break;
+		}
+	}
+	uniqfilename=mytrim2(uniqfilename);
+	
+	uniqfilename=percorso+uniqfilename;
 	
 	return uniqfilename;
 }
@@ -13346,8 +12630,6 @@ int64_t prendidimensionefile(const char* i_filename)
 	else
 	return 0;
 }
-
-
 
 // Rename name using tofiles[]
 string Jidac::rename(string name) 
@@ -13371,14 +12653,6 @@ string Jidac::rename(string name)
 
 		}
 		return myname;
-		/*
-		const size_t last_slash_idx = myname.find_last_of("\\/");
-		if (std::string::npos != last_slash_idx)
-			myname.erase(0, last_slash_idx + 1);
-		myname="./"+myname;
-		///printf("KKKKKKKKKKKKKKKKKKKK <<%s>> -> <<%s>>\n",name.c_str(),myname.c_str());
-		return myname;
-		*/
 	}
 	
   if (files.size()==0 && tofiles.size()>0)  // append prefix tofiles[0]
@@ -13656,77 +12930,83 @@ int64_t encodestringdate(string i_date)
 
 
 // Parse the command line. Return 1 if error else 0.
-int Jidac::doCommand(int argc, const char** argv) {
-
+int Jidac::doCommand(int argc, const char** argv) 
+{
   // Initialize options to default values
-  g_exec_error="";
-  g_exec_ok="";
-  g_exec_text="";
-  command=0;
-  flagforce=false;
-  fragment=6;
-  minsize=0;
-  maxsize=0;
-  dirlength=0;
-  filelength=0;
-  all=0;
-  password=0;  // no password
-  index=0;
-  method="";  // 0..5
-  flagnoattributes=false;
-  repack=0;
-  new_password=0;
-  summary=-1; 
-  menoenne=0;
-  versioncomment="";
-  flagdebug=false;
-  flagtest=false;  // -test
-  flagskipzfs=false; 
-  flagverbose=false;
-  flagnoqnap=false;
-  flagforcewindows=false;
-  flagnopath=false;
-  flagnoeta=false;
-  flagpakka=false;
-  flagvss=false;
-  flagnosort=false;
-  flagchecksum=false;
-  flagcrc32c=false;
-  flagverify=false;
-  flagkill=false;
-  flagutf=false;
-  flagfix255=false;
-  flagfixeml=false;
-  flagflat=false;
-  flagxxhash=false;
-  flagcrc32=false;
-  flagsha256=false;
-  flagwyhash=false;
-  flagdonotforcexls=false;
-  flagcomment=false;
-  flag715=false;
+  // Why some variables out of Jidac? Because of pthread: does not like very much C++ objects
+  // quick and dirty.
   
-  howmanythreads=0; // 0 = auto-detect
-  version=DEFAULT_VERSION;
-  date=0;
-  searchfrom="";
-  replaceto="";
-
+	g_exec_error="";
+	g_exec_ok="";
+	g_exec_text="";
+	command=0;
+	flagforce=false;
+	fragment=6;
+	minsize=0;
+	maxsize=0;
+	dirlength=0;
+	filelength=0;
+	all=0;
+	password=0;  // no password
+	index=0;
+	method="";  // 0..5
+	flagnoattributes=false;
+	repack=0;
+	new_password=0;
+	summary=-1; 
+	menoenne=0;
+	versioncomment="";
+	flagdebug=false;
+	flagtest=false;
+	flagskipzfs=false; 
+	flagverbose=false;
+	flagnoqnap=false;
+	flagforcewindows=false;
+	flagnopath=false;
+	flagnoeta=false;
+	flagpakka=false;
+	flagvss=false;
+	flagnosort=false;
+	flagchecksum=false;
+	flagcrc32c=false;
+	flagverify=false;
+	flagkill=false;
+	flagutf=false;
+	flagfix255=false;
+	flagfixeml=false;
+	flagflat=false;
+	flagxxhash=false;
+	flagcrc32=false;
+	flagsha256=false;
+	flagwyhash=false;
+	flagdonotforcexls=false;
+	flagcomment=false;
+	flag715=false;
+	searchfrom="";
+	replaceto="";
+ 
+	howmanythreads=0; // 0 = auto-detect
+	version=DEFAULT_VERSION;
+	date=0;
+ 
   /// if we have a -pakka, set the flag early
 	for (int i=0; i<argc; i++)
 	{
 		const string parametro=argv[i];
 		if (stringcomparei(parametro,"-pakka"))
+		{
 				flagpakka=true;
+				break;
+		}
 	}
   
 	if (!flagpakka)
-	moreprint("zpaqfranz v" ZPAQ_VERSION " snapshot archiver, compiled " __DATE__);
+		moreprint("zpaqfranz v" ZPAQ_VERSION " snapshot archiver, compiled " __DATE__);
 	
 /// check some magic to show help in heuristic way
 /// I know, it's bad, but help is always needed!
 
-	if (argc==1) // zero 
+	if (argc==1) // zero parameters
 	{
 		usage();
 		exit(0);
@@ -13770,24 +13050,33 @@ int Jidac::doCommand(int argc, const char** argv) {
 
 	
   // Init archive state
-  ht.resize(1);  // element 0 not used
-  ver.resize(1); // version 0
-  dhsize=dcsize=0;
-
-  // Get date
-  time_t now=time(NULL);
-  tm* t=gmtime(&now);
-  date=(t->tm_year+1900)*10000000000LL+(t->tm_mon+1)*100000000LL
+	ht.resize(1);  // element 0 not used
+	ver.resize(1); // version 0
+	dhsize=dcsize=0;
+	
+	// Get date
+	time_t now=time(NULL);
+	tm* t=gmtime(&now);
+	date=(t->tm_year+1900)*10000000000LL+(t->tm_mon+1)*100000000LL
       +t->tm_mday*1000000+t->tm_hour*10000+t->tm_min*100+t->tm_sec;
 
-
-	
- 
-  // Get optional options
-  for (int i=1; i<argc; ++i) {
-    const string opt=argv[i];  // read command
-    if ((opt=="add" || opt=="extract" || opt=="list" || opt=="k" 
-         || opt=="a"  || opt=="x" || opt=="p" || opt=="t" ||opt=="test" || opt=="l" || opt=="i" || opt=="m")
+	// Get optional options
+	for (int i=1; i<argc; ++i) 
+	{
+		const string opt=argv[i];  // read command
+		if ((
+		opt=="add" || 
+		opt=="extract" || 
+		opt=="list" || 
+		opt=="k" || 
+		opt=="a"  || 
+		opt=="x" || 
+		opt=="p" || 
+		opt=="t" ||
+		opt=="test" || 
+		opt=="l" || 
+		opt=="i" || 
+		opt=="m")
         && i<argc-1 && argv[i+1][0]!='-' && command==0) 
 		{
 			command=opt[0];
@@ -13800,433 +13089,448 @@ int Jidac::doCommand(int argc, const char** argv) {
 			const char* slash=strrchr(argv[i], '/');
 			const char* dot=strrchr(slash ? slash : argv[i], '.');
 			if (!dot && archive!="") 
-			archive+=".zpaq";
+				archive+=".zpaq";
 			while (++i<argc && argv[i][0]!='-')  // read filename args
 				files.push_back(argv[i]);
 			--i;
 		}
-
-
-    else if (opt=="sha1")
-	{
-		command=opt[3];
-		while (++i<argc && argv[i][0]!='-')  // read filename args
-			files.push_back(argv[i]);
-                i--;
-	}
-    else if (opt=="d")
-	{
-		command='d';
-		while (++i<argc && argv[i][0]!='-')  // read filename args
-			files.push_back(argv[i]);
-                i--;
-	}
-	else if (opt=="-timestamp") 	// force the timestamp
-	{
-		if (i+1<argc)
-			if (strlen(argv[i+1])>=1)
-			{
-				string mytimestamp=argv[i+1];
-				i++;
-				int64_t newdate=encodestringdate(mytimestamp);
-				if (newdate!=-1)
-				{
-					printf("-timestamp change from %s => %s\n",dateToString(date).c_str(),dateToString(newdate).c_str());
-					date=newdate;
-				}
-			}
-	}
-	
-	  
-	else if ((opt=="f") || (opt=="c") || (opt=="s") || (opt=="utf") || (opt=="r") || (opt=="robocopy") || opt=="z")
-	{
-		command=opt[0];
-		while (++i<argc && argv[i][0]!='-')
+		else if (opt=="sha1")
 		{
-			///printf("<<%s>>\n",argv[i]);
-			
-			string candidate=argv[i];
-			cutdoublequote(candidate);
-			if (havedoublequote(candidate))
-			{
-				printf("WARNING: double quote founded in command line and cutted\n");
-				candidate.pop_back();
-				printf("||%s||\n",candidate.c_str());
-			}
-			files.push_back(candidate);
-			
-		}
-        i--;
-	}
-	else if (opt=="dir")
-	{
-		command='b';
-		while (++i<argc && argv[i][0]!='-')  // read filename args
-			files.push_back(argv[i]);
-                i--;
-	}
-    else if (opt.size()<2 || opt[0]!='-') usage();
-    else if (opt=="-all") {
-      all=4;
-      if (i<argc-1 && isdigit(argv[i+1][0])) all=atoi(argv[++i]);
-    }
-	else if (opt=="-exec_error")
-	{
-		if (g_exec_error=="")
-		{
-			if (++i<argc && argv[i][0]!='-')  
-				g_exec_error=argv[i];
-			else
-				i--;
-		}
-	}
-    else if (opt=="-exec_ok")
-	{
-		if (g_exec_ok=="")
-		{
-			if (++i<argc && argv[i][0]!='-')  
-				g_exec_ok=argv[i];
-			else
-				i--;
-		}
-	}
-    else if (opt=="-comment")
-	{
-		flagcomment=true;
-		
-		if (++i<argc && argv[i][0]!='-')  
-				versioncomment=argv[i];
-		else
+			command=opt[3]; /// note!
+			while (++i<argc && argv[i][0]!='-')  // read filename args
+				files.push_back(argv[i]);
 			i--;
-		
-	}
-    else if (opt=="-force" || opt=="-f") flagforce=true;
-    else if (opt=="-fragment" && i<argc-1) fragment=atoi(argv[++i]);
-    else if (opt=="-minsize" && i<argc-1) minsize=atoi(argv[++i]);
-    else if (opt=="-maxsize" && i<argc-1) maxsize=atoi(argv[++i]);
-    else if (opt=="-filelength" && i<argc-1) filelength=atoi(argv[++i]);
-    else if (opt=="-dirlength" && i<argc-1) dirlength=atoi(argv[++i]);
-    else if (opt=="-n" && i<argc-1) menoenne=atoi(argv[++i]);
-    else if (opt=="-limit" && i<argc-1) menoenne=atoi(argv[++i]);
-    else if (opt=="-index" && i<argc-1) index=argv[++i];
-    else if (opt=="-key" && i<argc-1) {
-      libzpaq::SHA256 sha256;
-      for (const char* p=argv[++i]; *p; ++p) sha256.put(*p);
-      memcpy(password_string, sha256.result(), 32);
-      password=password_string;
-    }
-    else if (opt=="-method" && i<argc-1) method=argv[++i];
-    else if (opt[1]=='m') method=argv[i]+2;
-    else if (opt=="-noattributes") flagnoattributes=true;
-    else if (opt=="-not") {  // read notfiles
-      while (++i<argc && argv[i][0]!='-') {
-        if (argv[i][0]=='=') nottype=argv[i];
-        else notfiles.push_back(argv[i]);
-      }
-      --i;
-    }
-    else if (opt=="-only") {  // read onlyfiles
-      while (++i<argc && argv[i][0]!='-')
-        onlyfiles.push_back(argv[i]);
-      --i;
-    }
-    else if (opt=="-always") {  // read alwaysfiles
-      while (++i<argc && argv[i][0]!='-')
-        alwaysfiles.push_back(argv[i]);
-      --i;
-    }
-    else if (opt=="-repack" && i<argc-1) {
-      repack=argv[++i];
-      if (i<argc-1 && argv[i+1][0]!='-') {
-        libzpaq::SHA256 sha256;
-        for (const char* p=argv[++i]; *p; ++p) sha256.put(*p);
-        memcpy(new_password_string, sha256.result(), 32);
-        new_password=new_password_string;
-      }
-    }
-    else if (opt=="-summary")
-	{
-		summary=1;
-		if (i<argc-1) 
-			summary=atoi(argv[++i]);
-   	}		
-	else if (opt=="-test") flagtest=true;
-    else if (opt=="-zfs") flagskipzfs=true;
-    else if (opt=="-forcezfs") flagforcezfs=true;
-    else if (opt=="-715") flag715=true;
-    else if (opt=="-xls") flagdonotforcexls=true;
-    else if (opt=="-verbose") flagverbose=true;
-    else if (opt=="-debug") flagdebug=true;
-    else if (opt=="-noqnap") flagnoqnap=true;
-    else if (opt=="-nopath") flagnopath=true;
-    else if (opt=="-nosort") flagnosort=true;
-    else if (opt=="-checksum") flagchecksum=true;
-    else if (opt=="-crc32c") flagcrc32c=true;
-    else if (opt=="-xxhash") flagxxhash=true;
-    else if (opt=="-sha256") flagsha256=true;
-    else if (opt=="-wyhash") flagwyhash=true;
-    else if (opt=="-crc32") flagcrc32=true;
-    else if (opt=="-verify") flagverify=true;
-    else if (opt=="-kill") flagkill=true;
-    else if (opt=="-utf") flagutf=true;
-	else if (opt=="-utf8") flagutf=true;
-	else if (opt=="-fix255") flagfix255=true;
-	else if (opt=="-fixeml") flagfixeml=true;
-	
-    else if (opt=="-flat") flagflat=true;
-    else if (opt[1]=='s') summary=atoi(argv[i]+2);
-    else if (opt=="-forcewindows") flagforcewindows=true;
-	/*
-	{		
-        flagforcewindows=true;
-        notfiles.push_back("*:*:$DATA");
-    }
-	*/
-   else if (opt=="-noeta") flagnoeta=true;
-   else if (opt=="-pakka") flagpakka=true;  // we already have pakka flag, but this is for remember
-   else if (opt=="-vss") flagvss=true;
-    else if (opt=="-to") {  // read tofiles
-      while (++i<argc && argv[i][0]!='-')
-	  {
-
-// fix to (on windows) -to "z:\pippo pluto" going to a mess
-		string mytemp=mytrim(argv[i]);
-		myreplaceall(mytemp,"\"","");
-///printf("Faccio to <<%s>>\n",mytemp.c_str());
-///	   tofiles.push_back(argv[i]);
-	   tofiles.push_back(mytemp);
-	  }
-      if (tofiles.size()==0) tofiles.push_back("");
-      --i;
-    }
-	else if (opt=="-find")
-	{
-		if (searchfrom=="" && strlen(argv[i+1])>=1)
+		}
+		else if (opt=="d")
 		{
-			searchfrom=argv[i+1];
-			i++;
+			command='d';
+			while (++i<argc && argv[i][0]!='-')  // read filename args
+				files.push_back(argv[i]);
+			i--;
+		}
+		else if (opt=="dir")
+		{
+			command='b'; // YES, B
+			while (++i<argc && argv[i][0]!='-')  // read filename args
+				files.push_back(argv[i]);
+			i--;
+		}
+		else if (
+		(opt=="f") || 
+		(opt=="c") || 
+		(opt=="s") || 
+		(opt=="utf") || 
+		(opt=="r") || 
+		(opt=="robocopy") || 
+		opt=="z")
+		{
+			command=opt[0];
+			while (++i<argc && argv[i][0]!='-')
+			{
+	//	a very ugly fix for last \ in Windows
+				string candidate=argv[i];
+				cutdoublequote(candidate);
+				if (havedoublequote(candidate))
+				{
+					printf("WARNING: double quote founded in command line and cutted\n");
+					candidate.pop_back();
+					printf("||%s||\n",candidate.c_str());
+				}
+				files.push_back(candidate);
+			}
+			i--;
+		}
+
+		else if (opt.size()<2 || opt[0]!='-') usage();
+		else 
+		if (opt=="-all") 
+		{
+			all=4;
+			if (i<argc-1 && isdigit(argv[i+1][0])) 	all				=atoi(argv[++i]);
+		}
+		else if (opt=="-fragment" 	&& i<argc-1)	fragment		=atoi(argv[++i]);
+		else if (opt=="-minsize" 	&& i<argc-1) 	minsize			=atoi(argv[++i]);
+		else if (opt=="-maxsize" 	&& i<argc-1) 	maxsize			=atoi(argv[++i]);
+		else if (opt=="-filelength" && i<argc-1) 	filelength		=atoi(argv[++i]);
+		else if (opt=="-dirlength" 	&& i<argc-1) 	dirlength		=atoi(argv[++i]);
+		else if (opt=="-n" 			&& i<argc-1) 	menoenne		=atoi(argv[++i]);
+		else if (opt=="-limit" 		&& i<argc-1) 	menoenne		=atoi(argv[++i]);
+		else if (opt=="-index" 		&& i<argc-1) 	index			=argv[++i];
+		else if (opt=="-method" 	&& i<argc-1) 	method			=argv[++i];
+		else if (opt[1]=='m') 						method			=argv[i]+2;
+		else if (opt[1]=='s') 						summary			=atoi(argv[i]+2);
+		else if (opt[1]=='t') 						howmanythreads	=atoi(argv[i]+2);
+		else if (opt=="-threads" && i<argc-1) 		howmanythreads	=atoi(argv[++i]);
+		
+		else if (opt=="-summary") // retained for backwards compatibility
+		{
+			summary=1;
+			if (i<argc-1) 
+				summary=atoi(argv[++i]);
+		}		
+		else if (opt=="-find")
+		{
+			if (searchfrom=="" && strlen(argv[i+1])>=1)
+			{
+				searchfrom=argv[i+1];
+				i++;
+			}
+		}
+		else if (opt=="-replace")
+		{
+			if (replaceto=="" && strlen(argv[i+1])>=1)
+			{
+				replaceto=argv[i+1];
+				i++;
+			}
+		}
+		else if (opt=="-exec_error")
+		{
+			if (g_exec_error=="")
+			{
+				if (++i<argc && argv[i][0]!='-')  
+					g_exec_error=argv[i];
+				else
+					i--;
+			}
+		}
+		else if (opt=="-exec_ok")
+		{
+			if (g_exec_ok=="")
+			{
+				if (++i<argc && argv[i][0]!='-')  
+					g_exec_ok=argv[i];
+				else
+					i--;
+			}
+		}
+		else if (opt=="-comment")
+		{
+			flagcomment=true;
+			if (++i<argc && argv[i][0]!='-')  
+				versioncomment=argv[i];
+			else
+				i--;
+		}
+		else if (opt=="-timestamp") 	// force the timestamp: zfs freezing
+		{
+			if (i+1<argc)
+				if (strlen(argv[i+1])>=1)
+				{
+					string mytimestamp=argv[i+1];
+					i++;
+					int64_t newdate=encodestringdate(mytimestamp);
+					if (newdate!=-1)
+					{
+						printf("-timestamp change from %s => %s\n",dateToString(date).c_str(),dateToString(newdate).c_str());
+						date=newdate;
+					}
+				}
+		}
+		
+		else if (opt=="-force" || opt=="-f") 		flagforce			=true;
+		else if (opt=="-noattributes") 				flagnoattributes	=true;
+		else if (opt=="-test") 						flagtest			=true;
+		else if (opt=="-zfs") 						flagskipzfs			=true;
+		else if (opt=="-forcezfs") 					flagforcezfs		=true;
+		else if (opt=="-715") 						flag715				=true;
+		else if (opt=="-xls") 						flagdonotforcexls	=true;
+		else if (opt=="-verbose") 					flagverbose			=true;
+		else if (opt=="-debug") 					flagdebug			=true;
+		else if (opt=="-noqnap") 					flagnoqnap			=true;
+		else if (opt=="-nopath") 					flagnopath			=true;
+		else if (opt=="-nosort") 					flagnosort			=true;
+		else if (opt=="-checksum") 					flagchecksum		=true;
+		else if (opt=="-crc32c") 					flagcrc32c			=true;
+		else if (opt=="-xxhash") 					flagxxhash			=true;
+		else if (opt=="-sha256") 					flagsha256			=true;
+		else if (opt=="-wyhash") 					flagwyhash			=true;
+		else if (opt=="-crc32") 					flagcrc32			=true;
+		else if (opt=="-verify") 					flagverify			=true;
+		else if (opt=="-kill") 						flagkill			=true;
+		else if (opt=="-utf") 						flagutf				=true;
+		else if (opt=="-utf8") 						flagutf				=true;//alias
+		else if (opt=="-fix255") 					flagfix255			=true;
+		else if (opt=="-fixeml") 					flagfixeml			=true;
+		else if (opt=="-flat") 						flagflat			=true;
+		else if (opt=="-noeta") 					flagnoeta			=true;
+		else if (opt=="-pakka") 					flagpakka			=true;  // we already have pakka flag, but this is for remember
+		else if (opt=="-vss") 						flagvss				=true;
+		else if (opt=="-forcewindows") 				flagforcewindows	=true;
+		else if (opt=="-not") 
+		{  // read notfiles
+			while (++i<argc && argv[i][0]!='-') 
+			{
+				if (argv[i][0]=='=')
+					nottype=argv[i];
+				else
+					notfiles.push_back(argv[i]);
+			}
+			--i;
+		}
+		else if (opt=="-only") 
+		{  // read onlyfiles
+			while (++i<argc && argv[i][0]!='-')
+				onlyfiles.push_back(argv[i]);
+			--i;
+		}
+		else if (opt=="-always") 
+		{  // read alwaysfiles
+			while (++i<argc && argv[i][0]!='-')
+				alwaysfiles.push_back(argv[i]);
+			--i;
+		}
+		else if (opt=="-key" && i<argc-1) 
+		{
+			libzpaq::SHA256 sha256;
+			for (const char* p=argv[++i]; *p; ++p)
+				sha256.put(*p);
+			memcpy(password_string, sha256.result(), 32);
+			password=password_string;
+		}
+		else
+		if (opt=="-repack" && i<argc-1) 
+		{
+			repack=argv[++i];
+			if (i<argc-1 && argv[i+1][0]!='-') 
+			{
+				libzpaq::SHA256 sha256;
+				for (const char* p=argv[++i]; *p; ++p) 
+					sha256.put(*p);
+				memcpy(new_password_string, sha256.result(), 32);
+				new_password=new_password_string;
+			}
+		}
+		else if (opt=="-to") 
+		{  // read tofiles
+			while (++i<argc && argv[i][0]!='-')
+			{
+	// fix to (on windows) -to "z:\pippo pluto" going to a mess
+				string mytemp=mytrim(argv[i]);
+				myreplaceall(mytemp,"\"","");
+				tofiles.push_back(mytemp);
+			}
+			if (tofiles.size()==0)
+				tofiles.push_back("");
+			--i;
+		}
+		else 
+		if (opt=="-until" && i+1<argc) 
+		{  // read date
+
+		  // Read digits from multiple args and fill in leading zeros
+			version=0;
+			int digits=0;
+			if (argv[i+1][0]=='-')
+			{  // negative version
+				version=atol(argv[i+1]);
+				if (version>-1) usage();
+				++i;
+			}
+			else 
+			{  // positive version or date
+				while (++i<argc && argv[i][0]!='-') 
+				{
+					for (int j=0; ; ++j) 
+					{
+						if (isdigit(argv[i][j])) 
+						{
+							version=version*10+argv[i][j]-'0';
+							++digits;
+						}
+						else 
+						{
+							if (digits==1)
+								version=version/10*100+version%10;
+							digits=0;
+							if (argv[i][j]==0)
+								break;
+						}
+					}
+				}
+				--i;
+			}
+
+		  // Append default time
+			if (version>=19000000LL     && version<=29991231LL)
+				version=version*100+23;
+			if (version>=1900000000LL   && version<=2999123123LL)
+				version=version*100+59;
+			if (version>=190000000000LL && version<=299912312359LL)
+				version=version*100+59;
+			if (version>9999999) 
+			{
+				if (version<19000101000000LL || version>29991231235959LL) 
+				{
+					fflush(stdout);
+					fprintf(stderr,"Version date %1.0f must be 19000101000000 to 29991231235959\n",double(version));
+					g_exec_text="Version date must be 19000101000000 to 29991231235959";
+					exit(1);
+				}
+				date=version;
+			}
+		}
+		else 
+		{
+		printf("Unknown option ignored: %s\n", argv[i]);
 		}
 	}
-	else if (opt=="-replace")
-	{
-		if (replaceto=="" && strlen(argv[i+1])>=1)
-		{
-			replaceto=argv[i+1];
-			i++;
-		}
-	}
-    else if (opt=="-threads" && i<argc-1) howmanythreads=atoi(argv[++i]);
-    else if (opt[1]=='t') howmanythreads=atoi(argv[i]+2);
-    else if (opt=="-until" && i+1<argc) {  // read date
-
-      // Read digits from multiple args and fill in leading zeros
-      version=0;
-      int digits=0;
-      if (argv[i+1][0]=='-') {  // negative version
-        version=atol(argv[i+1]);
-        if (version>-1) usage();
-        ++i;
-      }
-      else {  // positive version or date
-        while (++i<argc && argv[i][0]!='-') {
-          for (int j=0; ; ++j) {
-            if (isdigit(argv[i][j])) {
-              version=version*10+argv[i][j]-'0';
-              ++digits;
-            }
-            else {
-              if (digits==1) version=version/10*100+version%10;
-              digits=0;
-              if (argv[i][j]==0) break;
-            }
-          }
-        }
-        --i;
-      }
-	  
-	
-		
-
-      // Append default time
-      if (version>=19000000LL     && version<=29991231LL)
-        version=version*100+23;
-      if (version>=1900000000LL   && version<=2999123123LL)
-        version=version*100+59;
-      if (version>=190000000000LL && version<=299912312359LL)
-        version=version*100+59;
-      if (version>9999999) {
-        if (version<19000101000000LL || version>29991231235959LL) {
-          fflush(stdout);
-          fprintf(stderr,
-            "Version date %1.0f must be 19000101000000 to 29991231235959\n",
-             double(version));
-			g_exec_text="Version date must be 19000101000000 to 29991231235959";
-          exit(1);
-        }
-        date=version;
-      }
-    }
-    else {
-      printf("Unknown option ignored: %s\n", argv[i]);
-    ///  usage();
-    }
-  }
   
+
+//	write franzs' parameters (if not very briefly)
 	if (!flagpakka)
 	{
 		string franzparameters="";
-		
 			
-	if (flagforcezfs)
-	{
+		if (flagforcezfs)
+		{
 			franzparameters+="force ZFS on (-forcezfs) ";
-			flagskipzfs=false;
-	}
-  	if (flagskipzfs)
+			flagskipzfs=false; // win over skip
+		}
+		if (flagskipzfs)
 			franzparameters+="SKIP ZFS on (-zfs) ";
-	
-	if (flag715)
+		
+		if (flag715)
 			franzparameters+="mode 715 activated (-715) " ;
-	
-	if (flagnoqnap)
+		
+		if (flagnoqnap)
 			franzparameters+="Exclude QNAP snap & trash (-noqnap) ";
 
-	if (flagforcewindows)
+		if (flagforcewindows)
 			franzparameters+="Force Windows stuff (-forcewindows) ";
 
-	if (flagnopath)
+		if (flagnopath)
 			franzparameters+="Do not store path (-nopath) ";
 
-	if (flagnosort)
-			franzparameters+="Do not sort files (-nosort) ";
+		if (flagnosort)
+			franzparameters+="Do not sort (-nosort) ";
 
-	if (flagdonotforcexls)
+		if (flagdonotforcexls)
 			franzparameters+="Do not force XLS (-xls) ";
-	
-	if (flagverbose)
-			franzparameters+="VERBOSE list of files on (-verbose) ";
-	
-	if (flagchecksum)
+		
+		if (flagverbose)
+			franzparameters+="VERBOSE on (-verbose) ";
+		
+		if (flagchecksum)
 			franzparameters+="checksumming (-checksum) ";
-	
-	if (flagcrc32c)
+		
+		if (flagcrc32c)
 			franzparameters+="CRC-32C (-crc32c) ";
-	
-	if (flagcrc32)
+		
+		if (flagcrc32)
 			franzparameters+="CRC-32 (-crc32) ";
-			
-	if (flagxxhash)
+				
+		if (flagxxhash)
 			franzparameters+="XXH3 (-xxhash) ";
-	
-	if (flagsha256)
+		
+		if (flagsha256)
 			franzparameters+="SHA256 (-sha256) ";
-			/*
-	if (flagwyhash)
-			printf("franz:wyhash\n");
-	*/
-	if (flagverify)
+				/*
+		if (flagwyhash)
+				printf("franz:wyhash\n");
+		*/
+		if (flagverify)
 			franzparameters+="VERIFY (-verify) ";
-			
-	if (flagkill)
-			franzparameters+="KILL! (-kill) ";
-			
-	if (flagutf)
+				
+		if (flagkill)
+			franzparameters+="do a wet run! (-kill) ";
+				
+		if (flagutf)
 			franzparameters+="flagutf (-utf / -utf8) ";
-	
-	if (flagfix255)
+		
+		if (flagfix255)
 			franzparameters+="fix255 (-fix255) ";
-			
-	if (flagfixeml)
+				
+		if (flagfixeml)
 			franzparameters+="Fix eml filenames (-fixeml) ";
-	
-	if (flagflat)
+		
+		if (flagflat)
 			franzparameters+="Flat filenames (-flat) ";
-			
-	if (flagdebug)
+				
+		if (flagdebug)
 			franzparameters+="DEBUG very verbose (-debug) ";
 
-	if (flagcomment)
+		if (flagcomment)
 			franzparameters+="Use comment (-comment) ";
 
-#if defined(_WIN32) || defined(_WIN64)
-	if (flagvss)
-	{
+	#if defined(_WIN32) || defined(_WIN64)
+		if (flagvss)
+		{
 			franzparameters+=" VSS Volume Shadow Copy (-vss) ";
 			if (!isadmin())
 			{
 				printf("\nImpossible to run VSS: admin rights required\n");
 				return 2;
-			}
-			
-	}
-#endif	
-	if (franzparameters!="")
-		printf("franz:%s\n",franzparameters.c_str());
+			}	
+		}
+	#endif	
+		if (franzparameters!="")
+			printf("franz:%s\n",franzparameters.c_str());
 
+///	extended (switch with options)
 
-
-// OK, extended parameters
-
-	if (searchfrom!="")
+		if (searchfrom!="")
 			printf("franz:find       <<%s>>\n",searchfrom.c_str());
 
-	if (replaceto!="")
+		if (replaceto!="")
 			printf("franz:replace    <<%s>>\n",replaceto.c_str());
+		
 		if (g_exec_error!="")
 			printf("franz:exec_error <<%s>>\n",g_exec_error.c_str());
+		
 		if (g_exec_ok!="")
 			printf("franz:exec_ok    <<%s>>\n",g_exec_ok.c_str());
+		
 		if (minsize)
 			printf("franz:minsize    %s\n",migliaia(minsize));
+		
 		if (maxsize)
 			printf("franz:maxsize    %s\n",migliaia(maxsize));
+		
 		if (dirlength)
 			printf("franz:dirlength  %s\n",migliaia(dirlength));
+		
 		if (filelength)
 			printf("franz:filelength %s\n",migliaia(filelength));
+		
 		if (summary>0)
 			printf("franz:summary    %d\n",summary);
+		
 		if (menoenne)
 			printf("franz:-n -limit  %u\n",menoenne);
-
-
-
-
-
-/*
-	if (versioncomment!="")
-			printf("franz: Version comment  >>>>%s<<<<<\n",versioncomment.c_str());
-	*/	
-  // Set threads
 	}
-  if (howmanythreads<1) howmanythreads=numberOfProcessors();
+	
+	if (howmanythreads<1) 
+		howmanythreads=numberOfProcessors();
 
 #ifdef _OPENMP
   omp_set_dynamic(howmanythreads);
 #endif
 
   // Test date
-  if (now==-1 || date<19000000000000LL || date>30000000000000LL)
-    error("date is incorrect, use -until YYYY-MM-DD HH:MM:SS to set");
+	if (now==-1 || date<19000000000000LL || date>30000000000000LL)
+		error("date is incorrect, use -until YYYY-MM-DD HH:MM:SS to set");
 
   // Adjust negative version
-  if (version<0) {
-    Jidac jidac(*this);
-    jidac.version=DEFAULT_VERSION;
-    jidac.read_archive(archive.c_str());
-    version+=jidac.ver.size()-1;
-    printf("Version %1.0f\n", version+.0);
-  }
-  // Load dynamic functions in Windows Vista and later
+	if (version<0) 
+	{
+		Jidac jidac(*this);
+		jidac.version=DEFAULT_VERSION;
+		jidac.read_archive(archive.c_str());
+		version+=jidac.ver.size()-1;
+		printf("Version %1.0f\n", version+.0);
+	}
+
+// Load dynamic functions in Windows Vista and later
 #ifndef unix
-  HMODULE h=GetModuleHandle(TEXT("kernel32.dll"));
-  if (h==NULL) printerr("14717","GetModuleHandle");
-  else {
-    findFirstStreamW=
-      (FindFirstStreamW_t)GetProcAddress(h, "FindFirstStreamW");
-    findNextStreamW=
-      (FindNextStreamW_t)GetProcAddress(h, "FindNextStreamW");
-  }
+	HMODULE h=GetModuleHandle(TEXT("kernel32.dll"));
+	if (h==NULL) 
+		printerr("14717","GetModuleHandle");
+	else 
+	{
+		findFirstStreamW=(FindFirstStreamW_t)GetProcAddress(h, "FindFirstStreamW");
+		findNextStreamW=(FindNextStreamW_t)GetProcAddress(h, "FindNextStreamW");
+	}
 ///  if (!findFirstStreamW || !findNextStreamW)
 ///broken XP parser    printf("Alternate streams not supported in Windows XP.\n");
 #endif
@@ -14234,49 +13538,44 @@ int Jidac::doCommand(int argc, const char** argv) {
 	if (flag715)
 	{
 		printf("**** Activated V7.15 mode ****\n");
-		flagforcewindows=true;
-		flagcrc32=false;
-		flagchecksum=false;
-		flagforcezfs=true;
-		flagdonotforcexls=true;
+		flagforcewindows	=true;
+		flagcrc32			=false;
+		flagchecksum		=false;
+		flagforcezfs		=true;
+		flagdonotforcexls	=true;
 	}
 
-
-
   // Execute command
-  if (command=='a' && files.size()>0) 
-  {
-	  flagfixeml=false;
-	  flagfix255=false;
-	  flagutf=false; // enforce: we do not want to change anything when adding
-	  flagflat=false;
-	  return add();
-  }
-  else if (command=='1') return summa();
-  else if (command=='b') return dir();
-  else if (command=='c') return dircompare(false,false);
-  else if (command=='d') return deduplicate();
-  else if (command=='f') return fillami();
-  else if (command=='i') return info();
-  else if (command=='k') return kill();
-  else if (command=='l') return list();
-  else if (command=='m') return consolidate(archive);
-  else if (command=='p') return paranoid();
-  else if (command=='r') return robocopy();
-  else if (command=='s') return dircompare(true,false); 
-  else if (command=='t') return test();
-  else if (command=='x') return extract();
-  else if (command=='u') return utf();
-  else if (command=='z') return zero();
-  else usage();
-  
-  
-  return 0;
+	if (command=='a' && files.size()>0) // enforce: we do not want to change anything when adding
+	{
+		flagfixeml			=false;
+		flagfix255			=false;
+		flagutf				=false;
+		flagflat			=false;
+		return add();
+	}
+	else if (command=='1') return summa();
+	else if (command=='b') return dir();
+	else if (command=='c') return dircompare(false,false);
+	else if (command=='d') return deduplicate();
+	else if (command=='f') return fillami();
+	else if (command=='i') return info();
+	else if (command=='k') return kill();
+	else if (command=='l') return list();
+	else if (command=='m') return consolidate(archive);
+	else if (command=='p') return paranoid();
+	else if (command=='r') return robocopy();
+	else if (command=='s') return dircompare(true,false); 
+	else if (command=='t') return test();
+	else if (command=='x') return extract();
+	else if (command=='u') return utf();
+	else if (command=='z') return zero();
+	else usage();
+	return 0;
 }
 
 
 
-#include <set>
 
 /////////////////////////// read_archive //////////////////////////////
 
@@ -14349,7 +13648,7 @@ int64_t Jidac::read_archive(const char* arc, int *errors, int i_myappend) {
 
 	std::set<std::string, insensitivecompare> collisionset;
 	*/
-	std::set<std::string> collisionset;
+	///std::set<std::string> collisionset;
 	uint64_t parts=0;
   // Detect archive format and read the filenames, fragment sizes,
   // and hashes. In JIDAC format, these are in the index blocks, allowing
@@ -15354,18 +14653,20 @@ bool compareFilename(DTMap::iterator ap, DTMap::iterator bp) {
     return ap->second.data<bp->second.data;
   return ap->first<bp->first;
 }
-
+/*
 bool comparefilesize(DTMap::iterator ap, DTMap::iterator bp) {
   if (ap->second.size!=bp->second.size)
     return ap->second.size<bp->second.size;
   return ap->first<bp->first;
 }
-
+*/
 // sort by sha1hex, without checks
+/*
 bool comparesha1hex(DTMap::iterator i_primo, DTMap::iterator i_secondo) 
 {
 	return (strcmp(i_primo->second.sha1hex,i_secondo->second.sha1hex)<0);
 }
+*/
 
 // For writing to two archives at once
 struct WriterPair: public libzpaq::Writer {
@@ -15440,77 +14741,6 @@ void avanzamento(int64_t i_lavorati,int64_t i_totali,int64_t i_inizio)
 	}
 }
 
-
-std::wstring utf8_to_utf16(const std::string& utf8)
-{
-    std::vector<unsigned long> unicode;
-    size_t i = 0;
-    while (i < utf8.size())
-    {
-        unsigned long uni;
-        size_t todo;
-        unsigned char ch = utf8[i++];
-        if (ch <= 0x7F)
-        {
-            uni = ch;
-            todo = 0;
-        }
-        else if (ch <= 0xBF)
-        {
-            throw std::logic_error("not a UTF-8 string");
-        }
-        else if (ch <= 0xDF)
-        {
-            uni = ch&0x1F;
-            todo = 1;
-        }
-        else if (ch <= 0xEF)
-        {
-            uni = ch&0x0F;
-            todo = 2;
-        }
-        else if (ch <= 0xF7)
-        {
-            uni = ch&0x07;
-            todo = 3;
-        }
-        else
-        {
-            throw std::logic_error("not a UTF-8 string");
-        }
-        for (size_t j = 0; j < todo; ++j)
-        {
-            if (i == utf8.size())
-                throw std::logic_error("not a UTF-8 string");
-            unsigned char ch = utf8[i++];
-            if (ch < 0x80 || ch > 0xBF)
-                throw std::logic_error("not a UTF-8 string");
-            uni <<= 6;
-            uni += ch & 0x3F;
-        }
-        if (uni >= 0xD800 && uni <= 0xDFFF)
-            throw std::logic_error("not a UTF-8 string");
-        if (uni > 0x10FFFF)
-            throw std::logic_error("not a UTF-8 string");
-        unicode.push_back(uni);
-    }
-    std::wstring utf16;
-    for (size_t i = 0; i < unicode.size(); ++i)
-    {
-        unsigned long uni = unicode[i];
-        if (uni <= 0xFFFF)
-        {
-            utf16 += (wchar_t)uni;
-        }
-        else
-        {
-            uni -= 0x10000;
-            utf16 += (wchar_t)((uni >> 10) + 0xD800);
-            utf16 += (wchar_t)((uni & 0x3FF) + 0xDC00);
-        }
-    }
-    return utf16;
-}
 std::string sha1_calc_file(const char * i_filename,const int64_t i_inizio,const int64_t i_totali,int64_t& io_lavorati)
 {
 	std::string risultato="";
@@ -16840,7 +16070,7 @@ struct ExtractJob {         // list of jobs
   }
 };
 
-
+/*
 bool direxists(const std::string& dirName_in)
 {
 #ifdef _WIN32
@@ -16857,6 +16087,7 @@ bool direxists(const std::string& dirName_in)
 #endif
   return false;    // this is not a directory!
 }
+*/
 
 // Decompress blocks in a job until none are READY
 ThreadReturn decompressThread(void* arg) {
@@ -18196,11 +17427,13 @@ bool compareFragmentList(DTMap::const_iterator p, DTMap::const_iterator q) {
   return p->first<q->first;
 }
 
+/*
 // Return p<q for sort by name and comparison result
 bool compareName(DTMap::const_iterator p, DTMap::const_iterator q) {
   if (p->first!=q->first) return p->first<q->first;
   return p->second.data<q->second.data;
 }
+*/
 
 
 
@@ -18217,38 +17450,6 @@ uint32_t crchex2int(char *hex)
         val = (val << 4) | (byte & 0xF);
     }
     return val;
-}
-
-
-string mydateToString(int64_t date) {
-  if (date<=0) return "                   ";
-  ///        0123456789012345678
-  string  s="0000-00-00 00:00:00";
-  string s2="00/00/0000 00:00:00";
-  
-  
-  static const int t[]={18,17,15,14,12,11,9,8,6,5,3,2,1,0};
-  for (int i=0; i<14; ++i) s[t[i]]+=int(date%10), date/=10;
-  //// convert to italy's stile
-  s2[0]=s[8];
-  s2[1]=s[9];
-  s2[3]=s[5];
-  s2[4]=s[6];
-  s2[6]=s[0];
-  s2[7]=s[1];
-  s2[8]=s[2];
-  s2[9]=s[3];
-  
-  s2[11]=s[11];
-  s2[12]=s[12];
-  
-  s2[14]=s[14];
-  s2[15]=s[15];
-  
-  s2[17]=s[17];
-  s2[18]=s[18];
-    
-  return s2;
 }
 void print_datetime(void)
 {
@@ -18388,22 +17589,6 @@ int Jidac::enumeratecomments()
 }
 
 
-/*
-
-std::wstring StringToWString(const std::string& s)
-{
-    std::wstring temp(s.length(),L' ');
-    std::copy(s.begin(), s.end(), temp.begin());
-    return temp; 
-}
-
-std::string WStringToString(const std::wstring& s)
-{
-    std::string temp(s.length(), ' ');
-    std::copy(s.begin(), s.end(), temp.begin());
-    return temp; 
-}
-*/
 int Jidac::kill() 
 {
 	
@@ -18426,27 +17611,6 @@ int Jidac::kill()
 	files_count.clear();
 	edt.clear();
 	
-	/*
-	tofiles.clear();
-	tofiles.push_back(files[0]);
-	printf("============ TOFILES %s\n",tofiles[0].c_str());
-		*/
-		/*
-	for (unsigned i=0; i<files.size(); ++i)
-	{
-		scandir(edt,files[i].c_str());
-		files_count.push_back(edt.size()-howmanyfiles);
-		howmanyfiles=edt.size();
-	}
-	printf("\n");
- 	for (unsigned i=0; i<files.size(); ++i)
-		printf("%9s in <<%s>>\n",migliaia(files_count[i]),files[i].c_str());
-	
-	
-	if (files.size()) 
-		printf("Total files found: %s\n", migliaia(edt.size()));
-	printf("\n");
-*/
 
 	
 	///string cartellaoutput=append_path(tofiles[0], files[0]);
@@ -18485,23 +17649,6 @@ int Jidac::kill()
 			printf("Into zpaq %s  > renamed %s\n",a->first.c_str(),dentrofile.c_str());
 	}
 
-/*
-
-	printf("=============================================================\n");
-	printf("=============================================================\n");
-	printf("=============================================================\n");
-	printf("=============================================================\n");
-	
-	for (DTMap::iterator a=edt.begin(); a!=edt.end(); ++a) 
-	{
-		///string nelfilesystem=append_path(tofiles[0], a->first);
-		printf("Nel filesystem %s\n",a->first.c_str());
-	}
-	printf("=============================================================\n");
-	printf("=============================================================\n");
-	printf("=============================================================\n");
-	printf("=============================================================\n");
-	*/
 	std::sort(inzpaqrinominato.begin(), inzpaqrinominato.end());
 
 	uint64_t		sizetobekilled=0;
@@ -19066,33 +18213,6 @@ int Jidac::list()
  * Copyright (C) 2012-2020 Yann Collet
  *
  * BSD 2-Clause License (https://www.opensource.org/licenses/bsd-license.php)
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are
- * met:
- *
- *    * Redistributions of source code must retain the above copyright
- *      notice, this list of conditions and the following disclaimer.
- *    * Redistributions in binary form must reproduce the above
- *      copyright notice, this list of conditions and the following disclaimer
- *      in the documentation and/or other materials provided with the
- *      distribution.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- *
- * You can contact the author at:
- *   - xxHash homepage: https://www.xxhash.com
- *   - xxHash source repository: https://github.com/Cyan4973/xxHash
  */
 
 
@@ -19100,25 +18220,6 @@ int Jidac::list()
 extern "C" {
 #endif
 
-/* ****************************
- *  INLINE mode
- ******************************/
-/*!
- * XXH_INLINE_ALL (and XXH_PRIVATE_API)
- * Use these build macros to inline xxhash into the target unit.
- * Inlining improves performance on small inputs, especially when the length is
- * expressed as a compile-time constant:
- *
- *      https://fastcompression.blogspot.com/2018/03/xxhash-for-small-keys-impressive-power.html
- *
- * It also keeps xxHash symbols private to the unit, so they are not exported.
- *
- * Usage:
- *     #define XXH_INLINE_ALL
- *     #include "xxhash.h"
- *
- * Do not compile and link xxhash.o as a separate object, as it is not useful.
- */
 #if (defined(XXH_INLINE_ALL) || defined(XXH_PRIVATE_API)) \
     && !defined(XXH_INLINE_ALL_31684351384)
    /* this section should be traversed only once */
@@ -19139,15 +18240,6 @@ extern "C" {
 #    define XXH_PUBLIC_API static
 #  endif
 
-   /*
-    * This part deals with the special case where a unit wants to inline xxHash,
-    * but "xxhash.h" has previously been included without XXH_INLINE_ALL, such
-    * as part of some previously included *.h header file.
-    * Without further action, the new include would just be ignored,
-    * and functions would effectively _not_ be inlined (silent failure).
-    * The following macros solve this situation by prefixing all inlined names,
-    * avoiding naming collision with previous inclusions.
-    */
 #  ifdef XXH_NAMESPACE
 #    error "XXH_INLINE_ALL with XXH_NAMESPACE is not supported"
      /*
@@ -19156,13 +18248,6 @@ extern "C" {
       */
 #  endif
 #  define XXH_NAMESPACE XXH_INLINE_
-   /*
-    * Some identifiers (enums, type names) are not symbols, but they must
-    * still be renamed to avoid redeclaration.
-    * Alternative solution: do not redeclare them.
-    * However, this requires some #ifdefs, and is a more dispersed action.
-    * Meanwhile, renaming can be achieved in a single block
-    */
 #  define XXH_IPREF(Id)   XXH_INLINE_ ## Id
 #  define XXH_OK XXH_IPREF(XXH_OK)
 #  define XXH_ERROR XXH_IPREF(XXH_ERROR)
@@ -19203,19 +18288,6 @@ extern "C" {
 #  endif
 #endif
 
-/*!
- * XXH_NAMESPACE, aka Namespace Emulation:
- *
- * If you want to include _and expose_ xxHash functions from within your own
- * library, but also want to avoid symbol collisions with other libraries which
- * may also include xxHash, you can use XXH_NAMESPACE to automatically prefix
- * any public symbol from xxhash library with the value of XXH_NAMESPACE
- * (therefore, avoid empty or numeric values).
- *
- * Note that no change is required within the calling program as long as it
- * includes `xxhash.h`: Regular symbol names will be automatically translated
- * by this header.
- */
 #ifdef XXH_NAMESPACE
 #  define XXH_CAT(A,B) A##B
 #  define XXH_NAME2(A,B) XXH_CAT(A,B)
@@ -19283,7 +18355,6 @@ XXH_PUBLIC_API unsigned XXH_versionNumber (void);
 /* ****************************
 *  Definitions
 ******************************/
-#include <stddef.h>   /* size_t */
 typedef enum { XXH_OK=0, XXH_ERROR } XXH_errorcode;
 
 
@@ -19308,43 +18379,8 @@ typedef enum { XXH_OK=0, XXH_ERROR } XXH_errorcode;
 #   endif
 #endif
 
-/*!
- * XXH32():
- *  Calculate the 32-bit hash of sequence "length" bytes stored at memory address "input".
- *  The memory between input & input+length must be valid (allocated and read-accessible).
- *  "seed" can be used to alter the result predictably.
- *  Speed on Core 2 Duo @ 3 GHz (single thread, SMHasher benchmark): 5.4 GB/s
- *
- * Note: XXH3 provides competitive speed for both 32-bit and 64-bit systems,
- * and offers true 64/128 bit hash results. It provides a superior level of
- * dispersion, and greatly reduces the risks of collisions.
- */
 XXH_PUBLIC_API XXH32_hash_t XXH32 (const void* input, size_t length, XXH32_hash_t seed);
 
-/*******   Streaming   *******/
-
-/*
- * Streaming functions generate the xxHash value from an incrememtal input.
- * This method is slower than single-call functions, due to state management.
- * For small inputs, prefer `XXH32()` and `XXH64()`, which are better optimized.
- *
- * An XXH state must first be allocated using `XXH*_createState()`.
- *
- * Start a new hash by initializing the state with a seed using `XXH*_reset()`.
- *
- * Then, feed the hash state by calling `XXH*_update()` as many times as necessary.
- *
- * The function returns an error code, with 0 meaning OK, and any other value
- * meaning there is an error.
- *
- * Finally, a hash value can be produced anytime, by using `XXH*_digest()`.
- * This function returns the nn-bits hash as an int or long long.
- *
- * It's still possible to continue inserting input into the hash state after a
- * digest, and generate new hash values later on by invoking `XXH*_digest()`.
- *
- * When done, release the state using `XXH*_freeState()`.
- */
 
 typedef struct XXH32_state_s XXH32_state_t;   /* incomplete type */
 XXH_PUBLIC_API XXH32_state_t* XXH32_createState(void);
@@ -19355,26 +18391,6 @@ XXH_PUBLIC_API XXH_errorcode XXH32_reset  (XXH32_state_t* statePtr, XXH32_hash_t
 XXH_PUBLIC_API XXH_errorcode XXH32_update (XXH32_state_t* statePtr, const void* input, size_t length);
 XXH_PUBLIC_API XXH32_hash_t  XXH32_digest (const XXH32_state_t* statePtr);
 
-/*******   Canonical representation   *******/
-
-/*
- * The default return values from XXH functions are unsigned 32 and 64 bit
- * integers.
- * This the simplest and fastest format for further post-processing.
- *
- * However, this leaves open the question of what is the order on the byte level,
- * since little and big endian conventions will store the same number differently.
- *
- * The canonical representation settles this issue by mandating big-endian
- * convention, the same convention as human-readable numbers (large digits first).
- *
- * When writing hash values to storage, sending them over a network, or printing
- * them, it's highly recommended to use the canonical representation to ensure
- * portability across a wider range of systems, present and future.
- *
- * The following functions allow transformation of hash values to and from
- * canonical format.
- */
 
 typedef struct { unsigned char digest[4]; } XXH32_canonical_t;
 XXH_PUBLIC_API void XXH32_canonicalFromHash(XXH32_canonical_t* dst, XXH32_hash_t hash);
@@ -19395,19 +18411,6 @@ XXH_PUBLIC_API XXH32_hash_t XXH32_hashFromCanonical(const XXH32_canonical_t* src
     typedef unsigned long long XXH64_hash_t;
 #endif
 
-/*!
- * XXH64():
- * Returns the 64-bit hash of sequence of length @length stored at memory
- * address @input.
- * @seed can be used to alter the result predictably.
- *
- * This function usually runs faster on 64-bit systems, but slower on 32-bit
- * systems (see benchmark).
- *
- * Note: XXH3 provides competitive speed for both 32-bit and 64-bit systems,
- * and offers true 64/128 bit hash results. It provides a superior level of
- * dispersion, and greatly reduces the risks of collisions.
- */
 XXH_PUBLIC_API XXH64_hash_t XXH64 (const void* input, size_t length, XXH64_hash_t seed);
 
 /*******   Streaming   *******/
@@ -19426,99 +18429,18 @@ XXH_PUBLIC_API void XXH64_canonicalFromHash(XXH64_canonical_t* dst, XXH64_hash_t
 XXH_PUBLIC_API XXH64_hash_t XXH64_hashFromCanonical(const XXH64_canonical_t* src);
 
 
-/*-**********************************************************************
-*  XXH3 64-bit variant
-************************************************************************/
-
-/* ************************************************************************
- * XXH3 is a new hash algorithm featuring:
- *  - Improved speed for both small and large inputs
- *  - True 64-bit and 128-bit outputs
- *  - SIMD acceleration
- *  - Improved 32-bit viability
- *
- * Speed analysis methodology is explained here:
- *
- *    https://fastcompression.blogspot.com/2019/03/presenting-xxh3.html
- *
- * In general, expect XXH3 to run about ~2x faster on large inputs and >3x
- * faster on small ones compared to XXH64, though exact differences depend on
- * the platform.
- *
- * The algorithm is portable: Like XXH32 and XXH64, it generates the same hash
- * on all platforms.
- *
- * It benefits greatly from SIMD and 64-bit arithmetic, but does not require it.
- *
- * Almost all 32-bit and 64-bit targets that can run XXH32 smoothly can run
- * XXH3 at competitive speeds, even if XXH64 runs slowly. Further details are
- * explained in the implementation.
- *
- * Optimized implementations are provided for AVX512, AVX2, SSE2, NEON, POWER8,
- * ZVector and scalar targets. This can be controlled with the XXH_VECTOR macro.
- *
- * XXH3 offers 2 variants, _64bits and _128bits.
- * When only 64 bits are needed, prefer calling the _64bits variant, as it
- * reduces the amount of mixing, resulting in faster speed on small inputs.
- *
- * It's also generally simpler to manipulate a scalar return type than a struct.
- *
- * The 128-bit version adds additional strength, but it is slightly slower.
- *
- * The XXH3 algorithm is still in development.
- * The results it produces may still change in future versions.
- *
- * Results produced by v0.7.x are not comparable with results from v0.7.y.
- * However, the API is completely stable, and it can safely be used for
- * ephemeral data (local sessions).
- *
- * Avoid storing values in long-term storage until the algorithm is finalized.
- * XXH3's return values will be officially finalized upon reaching v0.8.0.
- *
- * After which, return values of XXH3 and XXH128 will no longer change in
- * future versions.
- *
- * The API supports one-shot hashing, streaming mode, and custom secrets.
- */
 
 /* XXH3_64bits():
  * default 64-bit variant, using default secret and default seed of 0.
  * It's the fastest variant. */
 XXH_PUBLIC_API XXH64_hash_t XXH3_64bits(const void* data, size_t len);
 
-/*
- * XXH3_64bits_withSeed():
- * This variant generates a custom secret on the fly
- * based on default secret altered using the `seed` value.
- * While this operation is decently fast, note that it's not completely free.
- * Note: seed==0 produces the same results as XXH3_64bits().
- */
 XXH_PUBLIC_API XXH64_hash_t XXH3_64bits_withSeed(const void* data, size_t len, XXH64_hash_t seed);
 
-/*
- * XXH3_64bits_withSecret():
- * It's possible to provide any blob of bytes as a "secret" to generate the hash.
- * This makes it more difficult for an external actor to prepare an intentional collision.
- * The main condition is that secretSize *must* be large enough (>= XXH3_SECRET_SIZE_MIN).
- * However, the quality of produced hash values depends on secret's entropy.
- * Technically, the secret must look like a bunch of random bytes.
- * Avoid "trivial" or structured data such as repeated sequences or a text document.
- * Whenever unsure about the "randomness" of the blob of bytes,
- * consider relabelling it as a "custom seed" instead,
- * and employ "XXH3_generateSecret()" (see below)
- * to generate a high entropy secret derived from the custom seed.
- */
 #define XXH3_SECRET_SIZE_MIN 136
 XXH_PUBLIC_API XXH64_hash_t XXH3_64bits_withSecret(const void* data, size_t len, const void* secret, size_t secretSize);
 
 
-/*******   Streaming   *******/
-/*
- * Streaming requires state maintenance.
- * This operation costs memory and CPU.
- * As a consequence, streaming is slower than one-shot hashing.
- * For better performance, prefer one-shot functions whenever applicable.
- */
 typedef struct XXH3_state_s XXH3_state_t;
 XXH_PUBLIC_API XXH3_state_t* XXH3_createState(void);
 XXH_PUBLIC_API XXH_errorcode XXH3_freeState(XXH3_state_t* statePtr);
@@ -19586,26 +18508,8 @@ XXH_PUBLIC_API XXH_errorcode XXH3_128bits_reset_withSecret(XXH3_state_t* statePt
 
 XXH_PUBLIC_API XXH_errorcode XXH3_128bits_update (XXH3_state_t* statePtr, const void* input, size_t length);
 XXH_PUBLIC_API XXH128_hash_t XXH3_128bits_digest (const XXH3_state_t* statePtr);
-
-/* Following helper functions make it possible to compare XXH128_hast_t values.
- * Since XXH128_hash_t is a structure, this capability is not offered by the language.
- * Note: For better performance, these functions can be inlined using XXH_INLINE_ALL */
-
-/*!
- * XXH128_isEqual():
- * Return: 1 if `h1` and `h2` are equal, 0 if they are not.
- */
 XXH_PUBLIC_API int XXH128_isEqual(XXH128_hash_t h1, XXH128_hash_t h2);
 
-/*!
- * XXH128_cmp():
- *
- * This comparator is compatible with stdlib's `qsort()`/`bsearch()`.
- *
- * return: >0 if *h128_1  > *h128_2
- *         =0 if *h128_1 == *h128_2
- *         <0 if *h128_1  < *h128_2
- */
 XXH_PUBLIC_API int XXH128_cmp(const void* h128_1, const void* h128_2);
 
 
@@ -19623,19 +18527,6 @@ XXH_PUBLIC_API XXH128_hash_t XXH128_hashFromCanonical(const XXH128_canonical_t* 
 
 #if defined(XXH_STATIC_LINKING_ONLY) && !defined(XXHASH_H_STATIC_13879238742)
 #define XXHASH_H_STATIC_13879238742
-/* ****************************************************************************
- * This section contains declarations which are not guaranteed to remain stable.
- * They may change in future versions, becoming incompatible with a different
- * version of the library.
- * These declarations should only be used with static linking.
- * Never use them in association with dynamic linking!
- ***************************************************************************** */
-
-/*
- * These definitions are only present to allow static allocation
- * of XXH states, on stack or in a struct, for example.
- * Never **ever** access their members directly.
- */
 
 struct XXH32_state_s {
    XXH32_hash_t total_len_32;
@@ -19738,40 +18629,6 @@ XXH_PUBLIC_API XXH128_hash_t XXH128(const void* data, size_t len, XXH64_hash_t s
    || defined(XXH_IMPLEMENTATION) ) && !defined(XXH_IMPLEM_13a8737387)
 #  define XXH_IMPLEM_13a8737387
 
-/* *************************************
-*  Tuning parameters
-***************************************/
-/*!
- * XXH_FORCE_MEMORY_ACCESS:
- * By default, access to unaligned memory is controlled by `memcpy()`, which is
- * safe and portable.
- *
- * Unfortunately, on some target/compiler combinations, the generated assembly
- * is sub-optimal.
- *
- * The below switch allow selection of a different access method
- * in the search for improved performance.
- * Method 0 (default):
- *     Use `memcpy()`. Safe and portable. Default.
- * Method 1:
- *     `__attribute__((packed))` statement. It depends on compiler extensions
- *     and is therefore not portable.
- *     This method is safe if your compiler supports it, and *generally* as
- *     fast or faster than `memcpy`.
- * Method 2:
- *     Direct access via cast. This method doesn't depend on the compiler but
- *     violates the C standard.
- *     It can generate buggy code on targets which do not support unaligned
- *     memory accesses.
- *     But in some circumstances, it's the only known way to get the most
- *     performance (example: GCC + ARMv6)
- * Method 3:
- *     Byteshift. This can generate the best code on old compilers which don't
- *     inline small `memcpy()` calls, and it might also be faster on big-endian
- *     systems which lack a native byteswap instruction.
- * See https://stackoverflow.com/a/32095106/646947 for details.
- * Prefer these methods in priority order (0 > 1 > 2 > 3)
- */
 #ifndef XXH_FORCE_MEMORY_ACCESS   /* can be defined externally, on command line for example */
 #  if !defined(__clang__) && defined(__GNUC__) && defined(__ARM_FEATURE_UNALIGNED) && defined(__ARM_ARCH) && (__ARM_ARCH == 6)
 #    define XXH_FORCE_MEMORY_ACCESS 2
@@ -19781,36 +18638,10 @@ XXH_PUBLIC_API XXH128_hash_t XXH128(const void* data, size_t len, XXH64_hash_t s
 #  endif
 #endif
 
-/*!
- * XXH_ACCEPT_NULL_INPUT_POINTER:
- * If the input pointer is NULL, xxHash's default behavior is to dereference it,
- * triggering a segfault.
- * When this macro is enabled, xxHash actively checks the input for a null pointer.
- * If it is, the result for null input pointers is the same as a zero-length input.
- */
 #ifndef XXH_ACCEPT_NULL_INPUT_POINTER   /* can be defined externally */
 #  define XXH_ACCEPT_NULL_INPUT_POINTER 0
 #endif
 
-/*!
- * XXH_FORCE_ALIGN_CHECK:
- * This is an important performance trick
- * for architectures without decent unaligned memory access performance.
- * It checks for input alignment, and when conditions are met,
- * uses a "fast path" employing direct 32-bit/64-bit read,
- * resulting in _dramatically faster_ read speed.
- *
- * The check costs one initial branch per hash, which is generally negligible, but not zero.
- * Moreover, it's not useful to generate binary for an additional code path
- * if memory access uses same instruction for both aligned and unaligned adresses.
- *
- * In these cases, the alignment check can be removed by setting this macro to 0.
- * Then the code will always use unaligned memory access.
- * Align check is automatically disabled on x86, x64 & arm64,
- * which are platforms known to offer good unaligned memory accesses performance.
- *
- * This option does not affect XXH3 (only XXH32 and XXH64).
- */
 #ifndef XXH_FORCE_ALIGN_CHECK  /* can be defined externally */
 #  if defined(__i386)  || defined(__x86_64__) || defined(__aarch64__) \
    || defined(_M_IX86) || defined(_M_X64)     || defined(_M_ARM64) /* visual */
@@ -19820,25 +18651,6 @@ XXH_PUBLIC_API XXH128_hash_t XXH128(const void* data, size_t len, XXH64_hash_t s
 #  endif
 #endif
 
-/*!
- * XXH_NO_INLINE_HINTS:
- *
- * By default, xxHash tries to force the compiler to inline almost all internal
- * functions.
- *
- * This can usually improve performance due to reduced jumping and improved
- * constant folding, but significantly increases the size of the binary which
- * might not be favorable.
- *
- * Additionally, sometimes the forced inlining can be detrimental to performance,
- * depending on the architecture.
- *
- * XXH_NO_INLINE_HINTS marks all internal functions as static, giving the
- * compiler full control on whether to inline or not.
- *
- * When not optimizing (-O0), optimizing for size (-Os, -Oz), or using
- * -fno-inline with GCC or Clang, this will automatically be defined.
- */
 #ifndef XXH_NO_INLINE_HINTS
 #  if defined(__OPTIMIZE_SIZE__) /* -Os, -Oz */ \
    || defined(__NO_INLINE__)     /* -O0, -fno-inline */
@@ -19848,13 +18660,6 @@ XXH_PUBLIC_API XXH128_hash_t XXH128(const void* data, size_t len, XXH64_hash_t s
 #  endif
 #endif
 
-/*!
- * XXH_REROLL:
- * Whether to reroll XXH32_finalize, and XXH64_finalize,
- * instead of using an unrolled jump table/if statement loop.
- *
- * This is automatically defined on -Os/-Oz on GCC and Clang.
- */
 #ifndef XXH_REROLL
 #  if defined(__OPTIMIZE_SIZE__)
 #    define XXH_REROLL 1
@@ -19871,19 +18676,17 @@ XXH_PUBLIC_API XXH128_hash_t XXH128(const void* data, size_t len, XXH64_hash_t s
  * Modify the local functions below should you wish to use
  * different memory routines for malloc() and free()
  */
-#include <stdlib.h>
+
 
 static void* XXH_malloc(size_t s) { return malloc(s); }
 static void XXH_free(void* p) { free(p); }
 
 /*! and for memcpy() */
-#include <string.h>
 static void* XXH_memcpy(void* dest, const void* src, size_t size)
 {
     return memcpy(dest,src,size);
 }
 
-#include <limits.h>   /* ULLONG_MAX */
 
 
 /* *************************************
@@ -19918,13 +18721,6 @@ static void* XXH_memcpy(void* dest, const void* src, size_t size)
 
 
 
-/* *************************************
-*  Debug
-***************************************/
-/*
- * XXH_DEBUGLEVEL is expected to be defined externally, typically via the
- * compiler's command line options. The value must be a number.
- */
 #ifndef XXH_DEBUGLEVEL
 #  ifdef DEBUGLEVEL /* backwards compat */
 #    define XXH_DEBUGLEVEL DEBUGLEVEL
@@ -21278,21 +20074,6 @@ XXH_ALIGN(64) static const xxh_u8 XXH3_kSecret[XXH_SECRET_DEFAULT_SIZE] = {
 static XXH128_hash_t
 XXH_mult64to128(xxh_u64 lhs, xxh_u64 rhs)
 {
-    /*
-     * GCC/Clang __uint128_t method.
-     *
-     * On most 64-bit targets, GCC and Clang define a __uint128_t type.
-     * This is usually the best way as it usually uses a native long 64-bit
-     * multiply, such as MULQ on x86_64 or MUL + UMULH on aarch64.
-     *
-     * Usually.
-     *
-     * Despite being a 32-bit platform, Clang (and emscripten) define this type
-     * despite not having the arithmetic for it. This results in a laggy
-     * compiler builtin call which calculates a full 128-bit multiply.
-     * In that case it is best to use the portable one.
-     * https://github.com/Cyan4973/xxHash/issues/211#issuecomment-515575677
-     */
 #if defined(__GNUC__) && !defined(__wasm__) \
     && defined(__SIZEOF_INT128__) \
     || (defined(_INTEGRAL_MAX_BITS) && _INTEGRAL_MAX_BITS >= 128)
@@ -22286,17 +21067,6 @@ XXH3_hashLong_64b_default(const void* XXH_RESTRICT input, size_t len,
     return XXH3_hashLong_64b_internal(input, len, XXH3_kSecret, sizeof(XXH3_kSecret), XXH3_accumulate_512, XXH3_scrambleAcc);
 }
 
-/*
- * XXH3_hashLong_64b_withSeed():
- * Generate a custom key based on alteration of default XXH3_kSecret with the seed,
- * and then use this key for long mode hashing.
- *
- * This operation is decently fast but nonetheless costs a little bit of time.
- * Try to avoid it whenever possible (typically when seed==0).
- *
- * It's important for performance that XXH3_hashLong is not inlined. Not sure
- * why (uop cache maybe?), but the difference is large and easily measurable.
- */
 XXH_FORCE_INLINE XXH64_hash_t
 XXH3_hashLong_64b_withSeed_internal(const void* input, size_t len,
                                     XXH64_hash_t seed,
@@ -23129,7 +21899,6 @@ XXH_PUBLIC_API XXH128_hash_t XXH3_128bits_digest (const XXH3_state_t* state)
 
 /* 128-bit utility functions */
 
-#include <string.h>   /* memcmp, memcpy */
 
 /* return : 1 is equal, 0 if different */
 XXH_PUBLIC_API int XXH128_isEqual(XXH128_hash_t h1, XXH128_hash_t h2)
@@ -23261,7 +22030,7 @@ uint64_t& o_high64,uint64_t& o_low64)
 		io_lavorati+=readSize;
 		///printf("IIIIIIIIIIIIIIIIIIIIIIIIIII OOOOO  %lld\n",io_lavorati);
 		if (flagnoeta==false)
-			avanzamento(io_lavorati,i_totali,i_inizio);
+				avanzamento(io_lavorati,i_totali,i_inizio);
 	}
 	fclose(inFile);
 	XXH128_hash_t myhash=XXH3_128bits_digest(&state128);
@@ -23474,20 +22243,13 @@ int Jidac::deduplicate()
 		flagxxhash=true;
 	flagkill=true;
 	
-	
 	if (!flagforce)
 		printf("-force not present: dry run\n");
-	
-	
-	
 	return summa();
 }
+
 int Jidac::summa() 
 {
-	
-	
-	
-	
 	if (!flagpakka)
 	{
 		printf("Getting %s",mygetalgo().c_str());
@@ -23940,61 +22702,55 @@ int Jidac::summa()
 
 
 #ifdef _WIN32
-#ifndef ENABLE_VIRTUAL_TERMINAL_PROCESSING
-#define ENABLE_VIRTUAL_TERMINAL_PROCESSING  0x0004
+	#ifndef ENABLE_VIRTUAL_TERMINAL_PROCESSING
+		#define ENABLE_VIRTUAL_TERMINAL_PROCESSING  0x0004
+	#endif
+
+	static HANDLE stdoutHandle;
+	static DWORD outModeInit;
+	 
+	void setupConsole(void) 
+	{
+		DWORD outMode 	= 0;
+		stdoutHandle 	= GetStdHandle(STD_OUTPUT_HANDLE);
+	 
+		if(stdoutHandle == INVALID_HANDLE_VALUE)
+			exit(GetLastError());
+		
+		if(!GetConsoleMode(stdoutHandle, &outMode))
+			exit(GetLastError());
+		outModeInit = outMode;
+		
+		 // Enable ANSI escape codes
+		outMode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
+	 
+		if(!SetConsoleMode(stdoutHandle, outMode)) 
+			exit(GetLastError());
+	}
+	 
+	void restoreConsole(void) 
+	{
+		// Reset colors
+		printf("\x1b[0m");	
+		
+		// Reset console mode
+		if(!SetConsoleMode(stdoutHandle, outModeInit)) 
+			exit(GetLastError());
+	}
+#else // Houston, we have Unix
+	void setupConsole(void) 
+	{
+	}
+
+	void restoreConsole(void) 
+	{
+		//colors
+		printf("\x1b[0m");
+	}
 #endif
 
-static HANDLE stdoutHandle;
-static DWORD outModeInit;
- 
- void setupConsole(void) {
- 	DWORD outMode = 0;
- 	stdoutHandle = GetStdHandle(STD_OUTPUT_HANDLE);
- 
- 	if(stdoutHandle == INVALID_HANDLE_VALUE) {
- 		exit(GetLastError());
- 	}
- 	
- 	if(!GetConsoleMode(stdoutHandle, &outMode)) {
- 		exit(GetLastError());
- 	}
- 
- 	outModeInit = outMode;
- 	
-     // Enable ANSI escape codes
- 	outMode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
- 
- 	if(!SetConsoleMode(stdoutHandle, outMode)) {
- 		exit(GetLastError());
- 	}	
- }
- 
- void restoreConsole(void) {
-     // Reset colors
-     printf("\x1b[0m");	
- 	
-     // Reset console mode
- 	if(!SetConsoleMode(stdoutHandle, outModeInit)) {
- 		exit(GetLastError());
- 	}
- }
- #else
- void setupConsole(void) 
- {
-
- }
- 
- void restoreConsole(void) 
- {
-//colors
-     printf("\x1b[0m");
- }
-#endif
-
-#include <signal.h>
-
+/// control-c handler
 void my_handler(int s)
-//sig_atomic_t s)
 {
 	// 2==control-C (maybe)
 	if (s==2)
@@ -24009,60 +22765,59 @@ void my_handler(int s)
 
 // Convert argv to UTF-8 and replace \ with /
 #ifdef unix
-int main(int argc, const char** argv) {
+	int main(int argc, const char** argv) 
+	{
 #else
-#ifdef _MSC_VER
-int wmain(int argc, LPWSTR* argw) {
-#else
-int main() {
-  int argc=0;
-  LPWSTR* argw=CommandLineToArgvW(GetCommandLine(), &argc);
+	#ifdef _MSC_VER
+		int wmain(int argc, LPWSTR* argw) 
+		{
+	#else
+		int main() 
+		{
+			int argc=0;
+			LPWSTR* argw=CommandLineToArgvW(GetCommandLine(), &argc);
+	#endif
+
+///	This is Windows: take care of parameters
+	vector<string> args(argc);
+
+	libzpaq::Array<const char*> argp(argc);
+	for (int i=0; i<argc; ++i) 
+	{
+		args[i]=wtou(argw[i]);
+		argp[i]=args[i].c_str();
+	}
+	const char** argv=&argp[0];
 #endif
-  vector<string> args(argc);
-  libzpaq::Array<const char*> argp(argc);
-  for (int i=0; i<argc; ++i) {
-    args[i]=wtou(argw[i]);
-    argp[i]=args[i].c_str();
-  }
-  const char** argv=&argp[0];
-#endif
 
-  global_start=mtime();  // get start time
-
-
- signal (SIGINT,my_handler);
+	global_start=mtime();  		// get start time
+	signal (SIGINT,my_handler); // the control-C handler
    
 #ifdef _WIN32
 //// set UTF-8 for console
 	SetConsoleCP(65001);
 	SetConsoleOutputCP(65001);
-	
-	
-	/*
-	UINT in_cp = GetConsoleCP();
-	UINT out_cp = GetConsoleOutputCP();
-	printf("XXXXXXXXXXXX CodePage in=%u out=%u\n", in_cp, out_cp);
-		*/
-		
-  OSVERSIONINFO vi = {0};
-  vi.dwOSVersionInfoSize = sizeof(OSVERSIONINFO);
-  GetVersionEx(&vi);
-  windows7_or_above = (vi.dwMajorVersion >= 6) && (vi.dwMinorVersion >= 1);
+	OSVERSIONINFO vi = {0};
+	vi.dwOSVersionInfoSize = sizeof(OSVERSIONINFO);
+	GetVersionEx(&vi);
+	windows7_or_above = (vi.dwMajorVersion >= 6) && (vi.dwMinorVersion >= 1);
 #endif
 
-  int errorcode=0;
-  try {
-    Jidac jidac;
-    errorcode=jidac.doCommand(argc, argv);
-  }
-  catch (std::exception& e) {
-    fflush(stdout);
-    fprintf(stderr, "zpaq error: %s\n", e.what());
-    errorcode=2;
-  }
-  ///printf("Staerro %d\n",errorcode);
-  fflush(stdout);
-  fprintf(stderr, "\n%1.3f seconds %s\n", (mtime()-global_start)/1000.0,
+	int errorcode=0;
+	try 
+	{
+		Jidac jidac;
+		errorcode=jidac.doCommand(argc, argv);
+	}
+	catch (std::exception& e) 
+	{
+		fflush(stdout);
+		fprintf(stderr, "23013: zpaq error: %s\n", e.what());
+		errorcode=2;
+	}
+  
+	fflush(stdout);
+	fprintf(stderr, "\n%1.3f seconds %s\n", (mtime()-global_start)/1000.0,
       errorcode>1 ? "(with errors)" :
       errorcode>0 ? "(with warnings)" : "(all OK)");
 	  
@@ -24071,16 +22826,14 @@ int main() {
 	else
 		xcommand(g_exec_ok,g_exec_text);
 	
-  return errorcode;
+	return errorcode;
 }
 
 
 
 
 
-/* Keys for scalar xorshift128. Must be non-zero
-These are modified by xorshift128plus.
- */
+
 struct xorshift128plus_key_s {
     uint64_t part1;
     uint64_t part2;
@@ -24088,34 +22841,10 @@ struct xorshift128plus_key_s {
 
 typedef struct xorshift128plus_key_s xorshift128plus_key_t;
 
-
-
 static inline void xorshift128plus_init(uint64_t key1, uint64_t key2, xorshift128plus_key_t *key) {
   key->part1 = key1;
   key->part2 = key2;
 }
-
-
-/*
-Return a new 64-bit random number
-*/
-uint64_t xorshift128plus(xorshift128plus_key_t * key);
-
-
-/**
-* equivalent to skipping 2^64 xorshift128plus() calls
-* useful to generate a new key from an existing one (multi-threaded context).
-*/
-void xorshift128plus_jump(xorshift128plus_key_t * key);
-
-/* Fisher-Yates shuffle, shuffling an array of 32-bit values, uses the provided key */
-void  xorshift128plus_shuffle32(xorshift128plus_key_t * key, uint32_t *storage, uint32_t size);
-
-/* Partial Fisher-Yates shuffle, shuffling  "size" 32-bit  values in "storage". You must provide the key for randomness. Applies shuffle to elements in [lower_index_inclusive, size). */
-void  xorshift128plus_shuffle32_partial(xorshift128plus_key_t * key, uint32_t *storage, uint32_t size, uint32_t lower_index_inclusive);
-
-
-
 
 uint64_t xorshift128plus(xorshift128plus_key_t * key) {
     uint64_t s1 = key->part1;
@@ -24144,56 +22873,6 @@ void xorshift128plus_jump(xorshift128plus_key_t * key) {
     key->part2 = s1;
 }
 
-
-/**
- * computer two random number in [0,bound1) and [0,bound2)
- * has a slight bias, but that's probably the last of your concerns given
- * that xorshift128plus is not perfect to begin with.
- */
-static void xorshift128plus_bounded_two_by_two(xorshift128plus_key_t * key,
-		uint32_t bound1, uint32_t bound2, uint32_t* bounded1, uint32_t * bounded2) {
-	uint64_t rand = xorshift128plus(key);
-	* bounded1 = ((rand & UINT64_C(0xFFFFFFFF)) * bound1) >> 32;
-	* bounded2 = ((rand >> 32) * bound2) >> 32;
-}
-
-static uint32_t xorshift128plus_bounded(xorshift128plus_key_t * key, uint32_t bound) {
-	uint64_t rand = xorshift128plus(key);
-	return ((rand & UINT64_C(0xFFFFFFFF)) * bound ) >> 32;
-}
-
-
-/* Fisher-Yates shuffle, shuffling an array of integers, uses the provided key */
-void  xorshift128plus_shuffle32(xorshift128plus_key_t * key, uint32_t *storage, uint32_t size) {
-    xorshift128plus_shuffle32_partial(key, storage, size, 1);
-}
-
-void  xorshift128plus_shuffle32_partial(xorshift128plus_key_t * key, uint32_t *storage, uint32_t size, uint32_t lower_index_inclusive) {
-    uint32_t i;
-    uint32_t nextpos1, nextpos2;
-    if (lower_index_inclusive==0) lower_index_inclusive=1;
-    for (i=size; i>(lower_index_inclusive+1); i-=2) {
-    	xorshift128plus_bounded_two_by_two(key,i,i-1,&nextpos1,&nextpos2);
-        const uint32_t tmp1 = storage[i-1];// likely in cache
-        const uint32_t val1 = storage[nextpos1]; // could be costly
-        storage[i - 1] = val1;
-        storage[nextpos1] = tmp1; // you might have to read this store later
-
-        uint32_t tmp2 = storage[i-2];// likely in cache
-        uint32_t val2 = storage[nextpos2]; // could be costly
-        storage[i - 2] = val2;
-        storage[nextpos2] = tmp2; // you might have to read this store later
-
-    }
-    if(i>lower_index_inclusive) {
-    	const uint32_t nextpos = xorshift128plus_bounded(key,i);
-    	const uint32_t tmp = storage[i-1];// likely in cache
-    	const uint32_t val = storage[nextpos]; // could be costly
-        storage[i - 1] = val;
-        storage[nextpos] = tmp; // you might have to read this store later
-    }
-
-}
 void populateRandom_xorshift128plus(uint32_t *answer, uint32_t size,uint64_t i_key1, uint64_t i_key2) 
 {
   xorshift128plus_key_t mykey = {.part1 = i_key1, .part2 = i_key2};
@@ -26571,6 +25250,7 @@ bool unzcompareprimo(unzDTMap::iterator i_primo, unzDTMap::iterator i_secondo)
 {
 	return (i_primo->first<i_secondo->first);
 }
+/*
 template <typename T>
 std::string unznumbertostring( T Number )
 {
@@ -26578,7 +25258,7 @@ std::string unznumbertostring( T Number )
      ss << Number;
      return ss.str();
 }
-
+*/
 
 void myavanzamento(int64_t i_lavorati,int64_t i_totali,int64_t i_inizio)
 {
@@ -27891,6 +26571,7 @@ int Jidac::test()
 	
   return (errors+status_e)>0;
 }
+/*
 template <typename I> std::string n2hexstr(I w, size_t hex_len = sizeof(I)<<1) {
     static const char* digits = "0123456789ABCDEF";
     std::string rc(hex_len,'0');
@@ -27898,6 +26579,7 @@ template <typename I> std::string n2hexstr(I w, size_t hex_len = sizeof(I)<<1) {
         rc[i] = digits[(w>>j) & 0x0f];
     return rc;
 }
+*/
 
 
 struct s_fileandsize
@@ -27907,22 +26589,22 @@ struct s_fileandsize
 	int64_t attr;
 	int64_t date;
 	bool isdir;
-	char crc32hex[16];
-	uint32_t crc32;
-	bool crc32stored;
-	s_fileandsize(): size(0),attr(0),date(0),isdir(false),crc32(0),crc32stored(false) {crc32hex[0]=0x0;}
+	string hashhex;
+	bool flaghashstored;
+	s_fileandsize(): size(0),attr(0),date(0),isdir(false),flaghashstored(false) {hashhex="";}
 };
 
 bool comparecrc32(s_fileandsize a, s_fileandsize b)
 {
-	return a.crc32>b.crc32;
+	return a.hashhex>b.hashhex;
+///	return a.crc32>b.crc32;
 }
-bool comparesizecrc32(s_fileandsize a, s_fileandsize b)
+bool comparesizehash(s_fileandsize a, s_fileandsize b)
 {
 	
 	return (a.size < b.size) ||
-           ((a.size == b.size) && (a.crc32 > b.crc32)) || 
-           ((a.size == b.size) && (a.crc32 == b.crc32) &&
+           ((a.size == b.size) && (a.hashhex > b.hashhex)) || 
+           ((a.size == b.size) && (a.hashhex == b.hashhex) &&
               (a.filename<b.filename));
 			  ///(strcmp(a.filename.c_str(), b.filename.c_str()) <0));
 			  
@@ -27946,381 +26628,6 @@ bool comparefilenamedate(s_fileandsize a, s_fileandsize b)
 
 
 
-int  Jidac::dir() 
-{
-	bool barras	=false;
-	bool barraos=false;
-	bool barraod=false;
-	bool barraa	=false;
-	
-/*esx*/
-
-	if (files.size()==0)
-		files.push_back(".");
-	else
-	if (files[0].front()=='/')
-		files.insert(files.begin(),1, ".");
-
-
-	string cartella=files[0];
-	
-	if	(!isdirectory(cartella))
-		cartella+='/';
-		
-	if (files.size()>1)
-		for (unsigned i=0; i<files.size(); i++) 
-		{
-				barras	|=(stringcomparei(files[i],"/s"));
-				barraos	|=(stringcomparei(files[i],"/os"));
-				barraod	|=(stringcomparei(files[i],"/od"));
-				barraa	|=(stringcomparei(files[i],"/a"));
-		}
-	
-	printf("==== Scanning dir <<%s>> ",cartella.c_str());
-		
-	if (barras)
-		printf(" /s");
-	if (barraos)
-		printf(" /os");
-	if (barraod)
-		printf(" /od");
-	if (barraa)
-		printf(" /a");
-			
-	printf("\n");
-			
-			
-	bool		duplicati		=false;
-	int64_t 	total_size		=0;
-	int 		quantifiles		=0;
-	int 		quantedirectory	=0;
-	int64_t		dummylavorati	=0;
-	int32_t 	crc;
-	int			quanticrc		=0;
-	int64_t		crc_calcolati	=0;
-	if (flagcrc32 || flagcrc32c)
-		duplicati=true;
-	uint64_t	iniziocrc=0;
-	uint64_t	finecrc=0;
-			
-	g_bytescanned=0;
-	g_filescanned=0;
-	g_worked=0;
-	scandir(true,edt,cartella,barras);
-	
-	vector <s_fileandsize> fileandsize;
-	
-	for (DTMap::iterator p=edt.begin(); p!=edt.end(); ++p) 
-	{
-		bool flagaggiungi=true;
-
-#ifdef _WIN32	
-		if (!barraa)
-			flagaggiungi=((int)attrToString(p->second.attr).find("H") < 0);
-		flagaggiungi &= (!isads(p->first));
-#endif
-		
-		if (searchfrom!="")
-			flagaggiungi &= (stristr(p->first.c_str(),searchfrom.c_str())!=0);
-	
-		if (flagaggiungi)
-		{
-			s_fileandsize myblock;
-			myblock.filename=p->first;
-			myblock.size=p->second.size;
-			myblock.attr=p->second.attr;
-			myblock.date=p->second.date;
-			myblock.isdir=isdirectory(p->first);
-			myblock.crc32stored=false;
-				
-			if (duplicati)
-			{
-				if (!myblock.isdir)
-				{
-					if (minsize)
-					{
-						if (myblock.size>minsize)
-							fileandsize.push_back(myblock);
-					}
-					else
-					if (maxsize)
-					{
-						if (myblock.size<minsize)
-							fileandsize.push_back(myblock);
-					}
-					else
-						fileandsize.push_back(myblock);
-					
-				}
-			}
-			else
-				fileandsize.push_back(myblock);
-		}
-	}
-	
-	
-	if (duplicati)
-	{
-		if (flagverbose)
-		{
-			printf("Pre-sort\n");
-			for (unsigned int i=0;i<fileandsize.size();i++)
-				printf("PRE %08d  %s %s\n",i,migliaia(fileandsize[i].size),fileandsize[i].filename.c_str());
-		}
-	
-		sort(fileandsize.begin(),fileandsize.end(),comparefilenamesize);
-	
-		if (flagverbose)
-		{
-			printf("Post-sort\n");
-			for (unsigned int i=0;i<fileandsize.size();i++)
-				printf("POST %08d  %s %s\n",i,migliaia(fileandsize[i].size),fileandsize[i].filename.c_str());
-		}
-	
-		iniziocrc=mtime();
-	
-		int64_t dalavorare=0;
-		for (unsigned int i=0;i<fileandsize.size();i++)
-			if (i<fileandsize.size()-1)
-			{
-				bool entrato=false;
-				while (fileandsize[i].size==fileandsize[i+1].size)
-				{
-					if (!entrato)
-					{
-						dalavorare+=fileandsize[i].size;
-						entrato=true;
-					}
-					
-					dalavorare+=fileandsize[i+1].size;
-					i++;
-					if (i==fileandsize.size())
-						break;
-				}
-			}
-
-		
-		/*
-		rar a -oi3:1 -r dummy s:\
-		*/
-		printf("\nStart checksumming %s / %s bytes ...\n",migliaia(fileandsize.size()),migliaia2(dalavorare));
-			
-		int larghezzaconsole=terminalwidth()-2;
-		if (larghezzaconsole<10)
-			larghezzaconsole=80;
-
-		int64_t ultimapercentuale=0;
-		int64_t rapporto;
-		int64_t percentuale;
-		///larghezzaconsole=50;
-		///printf("Rapporto %d\n",larghezzaconsole);
-		for (unsigned int i=0;i<fileandsize.size();i++)
-		{
-			if (i<fileandsize.size()-1)
-			{
-				bool entrato=false;
-				while (fileandsize[i].size==fileandsize[i+1].size)
-				{
-					if (!entrato)
-					{
-						crc=crc32c_calc_file(fileandsize[i].filename.c_str(),0,0,dummylavorati);
-						fileandsize[i].crc32=crc;
-						fileandsize[i].crc32stored=true;
-						quanticrc++;
-						crc_calcolati+=fileandsize[i].size;
-						entrato=true;
-						if (flagverbose)
-							printf("%08d CRC-1 %08X %s %19s %s\n",i,fileandsize[i].crc32,dateToString(fileandsize[i].date).c_str(),migliaia(fileandsize[i].size),fileandsize[i].filename.c_str());
-						else
-						{
-							rapporto=larghezzaconsole*crc_calcolati/(dalavorare+1);
-							percentuale=100*crc_calcolati/(dalavorare+1);
-							printf("Done %03d ",(unsigned int)percentuale);
-							if (percentuale>ultimapercentuale)
-							{
-								if (rapporto>10)
-								{
-									for (unsigned j=0;j<rapporto-10;j++)
-										printf(".");
-									ultimapercentuale=percentuale;
-								}
-							}
-							printf("\r");
-							
-						}
-					
-					}
-					
-					crc=crc32c_calc_file(fileandsize[i+1].filename.c_str(),0,0,dummylavorati);
-					fileandsize[i+1].crc32=crc;
-					fileandsize[i+1].crc32stored=true;
-					quanticrc++;
-					crc_calcolati+=fileandsize[i+1].size;
-					if (flagverbose)
-						printf("%08d CRC-2 %08X %s %19s %s\n",i+1,fileandsize[i+1].crc32,dateToString(fileandsize[i+1].date).c_str(),migliaia(fileandsize[i+1].size),fileandsize[i+1].filename.c_str());
-					else
-					{
-						rapporto=larghezzaconsole*crc_calcolati/(dalavorare+1);
-						percentuale=100*crc_calcolati/(dalavorare+1);
-						printf("Done %03d ",(unsigned int)percentuale);
-						if (percentuale>ultimapercentuale)
-							{
-								if (rapporto>10)
-								{
-									for (unsigned j=0;j<rapporto-10;j++)
-										printf(".");
-									ultimapercentuale=percentuale;
-								}
-							}
-							
-						printf("\r");
-						
-					}
-					
-					i++;
-					if (i==fileandsize.size())
-						break;
-					
-				}
-				
-			}
-		}
-		finecrc=mtime();
-		printf("\n");
-		sort(fileandsize.begin(),fileandsize.end(),comparecrc32);
-	
-		if (flagverbose)
-		{
-			printf("CRC taken %08d %s\n",quanticrc,migliaia(crc_calcolati));
-			printf("Before shrink %s\n",migliaia(fileandsize.size()));
-			printf("Time %f\n",(finecrc-iniziocrc)/1000.0);
-	
-			for (unsigned int i=0;i<fileandsize.size();i++)
-				printf("before shrink %08d  %08X %s\n",i,fileandsize[i].crc32,fileandsize[i].filename.c_str());
-		}
-	
-		int limite=-1;
-		for (unsigned int i=0;i<fileandsize.size(); i++)
-		{
-			if (flagverbose)
-				printf("%d size %s <<%08X>>\n",i,migliaia(fileandsize.size()),fileandsize[i].crc32);
-		
-			if (!fileandsize[i].crc32stored)
-			{
-				limite=i;
-				break;
-			}	
-		}
-	
-		if (flagverbose)
-		printf("Limit founded %d\n",limite);
-		
-		if (limite>-1)
-			for (int i=fileandsize.size()-1;i>=limite;i--)
-				fileandsize.pop_back();
-	
-	
-		if (flagverbose)
-		{
-			printf("After shrink %s\n",migliaia(fileandsize.size()));
-
-			for (unsigned int i=0;i<fileandsize.size();i++)
-				printf("After shrinking %08d  %08X %s\n",i,fileandsize[i].crc32,fileandsize[i].filename.c_str());
-		}
-	
-		sort(fileandsize.begin(),fileandsize.end(),comparesizecrc32);
-	
-		if (flagverbose)
-		{
-			printf("After re-sort %s\n",migliaia(fileandsize.size()));
-
-			for (unsigned int i=0;i<fileandsize.size();i++)
-				printf("After re-sort %08d  %08X %s\n",i,fileandsize[i].crc32,fileandsize[i].filename.c_str());
-		}
-	
-	}
-	else
-	{
-
-		if (barraod)
-			sort(fileandsize.begin(),fileandsize.end(),comparefilenamedate);
-	
-		if (barraos)
-			sort(fileandsize.begin(),fileandsize.end(),comparefilenamesize);
-	}
-	unsigned int inizio=0;
-	if (menoenne)
-		if (menoenne<fileandsize.size())
-			inizio=fileandsize.size()-menoenne;
-	
-	
-	int64_t tot_duplicati=0;
-	
-	for (unsigned int i=inizio;i<fileandsize.size();i++)
-		if (fileandsize[i].isdir)
-		{
-			printf("%s <DIR>               %s\n",dateToString(fileandsize[i].date).c_str(),fileandsize[i].filename.c_str());
-			quantedirectory++;
-		}
-		else
-		{
-			total_size+=fileandsize[i].size;
-			quantifiles++;
-			
-			if (duplicati)
-			{
-			
-				if (i<fileandsize.size()-1)
-				{
-					bool entrato=false;
-
-					//if (memcmp(fileandsize[i].crc32hex,fileandsize[i+1].crc32hex,8)==0)
-					if (fileandsize[i].crc32==fileandsize[i+1].crc32)
-					{
-						if (flagverbose)
-							printf("%08X ",fileandsize[i].crc32);
-						
-						printf("%s %19s %s\n",dateToString(fileandsize[i].date).c_str(),migliaia(fileandsize[i].size),fileandsize[i].filename.c_str());
-						
-						while (fileandsize[i].crc32==fileandsize[i+1].crc32)
-						{
-							if (flagverbose)
-							printf("%08X ",fileandsize[i].crc32);
-							
-							printf("=================== %19s %s\n",migliaia(fileandsize[i+1].size),fileandsize[i+1].filename.c_str());
-							tot_duplicati+=fileandsize[i].size;
-							entrato=true;
-							i++;
-							if (i==fileandsize.size())
-								break;
-						}
-					}
-					if (entrato)
-						printf("\n");
-				}
-				
-			}
-			else
-				printf("%s %19s %s\n",dateToString(fileandsize[i].date).c_str(),migliaia(fileandsize[i].size),fileandsize[i].filename.c_str());
-			
-		}
-	
-	           
-	printf("  %8d File     %19s byte\n",quantifiles,migliaia(total_size));
-	if (!duplicati)
-	printf("  %8d directory",quantedirectory);
-	
-	int64_t spazio=getfreespace(cartella.c_str());
-	printf(" %s bytes (%10s) free",migliaia(spazio),tohuman(spazio));
-	
-	printf("\n");
-	if (duplicati)
-	{
-		printf("          Duplicate %19s byte\n",migliaia(tot_duplicati));
-		printf("CRC taken %08d %s in %f s %s /s\n",quanticrc,migliaia(crc_calcolati),(finecrc-iniziocrc)/1000.0,migliaia2(crc_calcolati/((finecrc-iniziocrc+1)/1000.0)));
-	}
-	return 0;
-}
 
 
 
@@ -28939,18 +27246,18 @@ int erredbarras(const std::string &i_path,bool i_flagrecursive=true)
 }
 
 /// find and delete 0-length dirs
+/// in a slow (but hopefully) safe way
 
 int Jidac::zero()
 {
 	printf("*** Delete empty folders (zero length) *** ");
 	if (!flagkill)
 		printf("*** -kill missing: dry run *** ");
-	
 	if (!flagforcezfs)
 		printf("*** ignoring .zfs and :$DATA ***");
 	printf("\n");
 	
-	franzparallelscandir();
+	franzparallelscandir(false);
 	
 	vector<string> scannedfiles;
 	
@@ -29071,41 +27378,37 @@ int Jidac::zero()
 int Jidac::robocopy()
 {
 	int risultato=0;
+	
 	printf("*** ROBOCOPY MODE *** ");
 	if (!flagkill)
 		printf("*** -kill missing: dry run *** ");
-	
 	if (!flagforcezfs)
 		printf("*** ignoring .zfs and :$DATA ***");
 	printf("\n");
 	
-	franzparallelscandir();
+	franzparallelscandir(false);
 	
-	int64_t startscan=mtime();
-	uint64_t strangethings;
+	int64_t 	startscan=mtime();
+	uint64_t 	strangethings;
 	
 	printf("\nMaster  %s (%s files %s) <<%s>>\n",migliaia(files_size[0]),tohuman(files_size[0]),migliaia2(files_count[0]),files[0].c_str());
 	printbar('-');
 	
-	int64_t total_size=files_size[0];
-	int64_t total_count=files_count[0];
-	
-	int64_t done_size=0;
-	int64_t done_count=0;
-	
-	int robocopied=0;
-	uint64_t robocopiedsize=0;
-	int robodeleted=0;
-	uint64_t robodeletedsize=0;
+	int64_t total_size				=files_size[0];
+	int64_t total_count				=files_count[0];
+	int64_t done_size				=0;
+	int64_t done_count				=0;
+	int robocopied					=0;
+	uint64_t robocopiedsize			=0;
+	int robodeleted					=0;
+	uint64_t robodeletedsize		=0;
+	int roboequal					=0;
+	uint64_t roboequalsize			=0;
+	int64_t timecopy				=0;
+	int64_t timedelete				=0;
 
-	int roboequal=0;
-	uint64_t roboequalsize=0;
-	
-	int64_t timecopy=0;
-	int64_t timedelete=0;
-
-	g_robocopy_check_sorgente=0;
-	g_robocopy_check_destinazione=0;
+	g_robocopy_check_sorgente		=0;
+	g_robocopy_check_destinazione	=0;
 
 ///	we start by 1 (the first slave); 0 is the master
 	for (unsigned i=1; i<files.size(); ++i)
@@ -29131,7 +27434,7 @@ int Jidac::robocopy()
 		}
 		else
 		{
-		///	first stage: delete everythin in slave-i that is NOT i master-0
+		///	first stage: delete everything in slave-i that is NOT i master-0
 			int64_t startdelete=mtime();
 			for (DTMap::iterator p=files_edt[i].begin(); p!=files_edt[i].end(); ++p) 
 			{
@@ -29159,8 +27462,9 @@ int Jidac::robocopy()
 							riuscito=delete_dir(temp.c_str())==0;
 						}
 						else
-						{
-							delete_file(temp.c_str());
+						{ 
+						/// delete without mercy!
+							riuscito=delete_file(temp.c_str());
 						}
 						if (!riuscito)
 							printf("31293: ERROR DELETING  <%s>\n",p->first.c_str());
@@ -29279,16 +27583,14 @@ int Jidac::dircompare(bool i_flagonlysize,bool i_flagrobocopy)
 		if (!i_flagrobocopy)
 			printf("Dir compare (%s dirs to be checked) ",migliaia(files.size()));
 		if (files.size()<2)
-			error("At least two directories required\n");
+			error("28212: At least two directories required\n");
 	}
 	
 	if (!flagforcezfs)
-		if (!i_flagrobocopy)
-		printf(" ignoring .zfs and :$DATA\n");
+			printf(" ignoring .zfs and :$DATA\n");
 
-	franzparallelscandir();
+	franzparallelscandir(flagchecksum);
 	
-/// return free space (USEFUL for crontabbed-emalied backups)
 	printbar('=');
 	for (unsigned i=0; i<files.size(); ++i)
 	{
@@ -29298,25 +27600,24 @@ int Jidac::dircompare(bool i_flagonlysize,bool i_flagrobocopy)
 		printf("Free %d %21s (%12s)  <<%s>>\n",i,migliaia(spazio),tohuman(spazio),files[i].c_str());
 	}
 
-	uint64_t total_size=0;
+	uint64_t total_size	=0;
 	uint64_t total_files=0;
-	int64_t delta_size=0;
-	int64_t delta_files=0;
+	int64_t delta_size	=0;
+	int64_t delta_files	=0;
 	
 	printbar('=');
 	for (unsigned int i=0;i<files_size.size();i++)
 	{
 		if (i==0)
-		printf("Dir  %d %21s |%12s| |%12s| %9.2f <<%s>>\n",i,migliaia(files_size[i]),"Delta bytes",									 migliaia3(files_count[i]),files_time[i]/1000.0,files[i].c_str());
+			printf("Dir  %d %21s |%12s| |%12s| %9.2f <<%s>>\n",i,migliaia(files_size[i]),"Delta bytes",									 migliaia3(files_count[i]),files_time[i]/1000.0,files[i].c_str());
 		else
 		{
-		printf("Dir  %d %21s |%12s| |%12s| %9.2f <<%s>>\n",i,migliaia(files_size[i]),tohuman(myabs(files_size[0],files_size[i])),migliaia3(files_count[i]),files_time[i]/1000.0,files[i].c_str());
-		delta_size+= myabs(files_size[0],files_size[i]);
-		delta_files+= myabs(files_count[0],files_count[i]);
-			
+			printf("Dir  %d %21s |%12s| |%12s| %9.2f <<%s>>\n",i,migliaia(files_size[i]),tohuman(myabs(files_size[0],files_size[i])),migliaia3(files_count[i]),files_time[i]/1000.0,files[i].c_str());
+			delta_size	+= myabs(files_size[0],files_size[i]);
+			delta_files	+= myabs(files_count[0],files_count[i]);
 		}
-		total_size+=files_size[i];
-		total_files+=files_count[i];
+		total_size	+=files_size[i];
+		total_files	+=files_count[i];
 	}
 	printbar('=');
 	printf("Total  |%21s| (%s)\n",migliaia(total_size),tohuman(total_size));
@@ -29327,9 +27628,6 @@ int Jidac::dircompare(bool i_flagonlysize,bool i_flagrobocopy)
 		return 0;
 	
 	uint64_t strangethings;
-	
-///// Now check the folders (sequentially).
-
 	printf("\nDir 0 (master) %s (files %s) <<%s>>\n",migliaia(files_size[0]),migliaia2(files_count[0]),files[0].c_str());
 	printbar('-');
 	
@@ -29454,14 +27752,11 @@ int Jidac::dircompare(bool i_flagonlysize,bool i_flagrobocopy)
 
 /// scans one or more directories, with one or more threads
 /// return total time
-int64_t Jidac::franzparallelscandir()
+int64_t Jidac::franzparallelscandir(bool i_flaghash)
 {
+
 	if (flagverbose)
 		flagnoeta=true;
-	
-	for (unsigned i=0; i<files.size(); ++i)
-		if (!isdirectory(files[i]))
-			files[i]+='/';
 
 	files_edt.clear();
 	files_size.clear();
@@ -29469,6 +27764,17 @@ int64_t Jidac::franzparallelscandir()
 	files_time.clear();
 	g_arraybytescanned.clear();
 	g_arrayfilescanned.clear();
+
+	if (files.size()==0)
+	{
+		if (flagdebug)
+			printf("28403: files.size zero\n");
+		return 0;
+	}
+	
+	for (unsigned i=0; i<files.size(); ++i)
+		if (!isdirectory(files[i]))
+			files[i]+='/';
 
 	int64_t startscan=mtime();
 	
@@ -29490,7 +27796,7 @@ int64_t Jidac::franzparallelscandir()
 			myblock.tnumber=i;
 			myblock.directorytobescanned=files[i];
 			myblock.theDT=vettoreDT[i];
-			myblock.flagcalchash=false;//flagverify;
+			myblock.flagcalchash=i_flaghash;//flagverify;
 			myblock.timestart=mtime();
 			vettoreparametri.push_back(myblock);
 		}
@@ -29567,7 +27873,7 @@ int64_t Jidac::franzparallelscandir()
 					dircount++;
 					quantifiles++;
 				}
-				if (flagverbose)
+				if (flagdebug)
 				{
 					printUTF8(filename.c_str());
 					printf("\n");
@@ -29593,7 +27899,7 @@ int64_t Jidac::franzparallelscandir()
 			print_datetime();
 			printf("Scan dir <<%s>>\n",files[i].c_str());
 			uint64_t blockstart=mtime();
-			myscandir(0,myblock,files[i].c_str(),true,false);
+			myscandir(0,myblock,files[i].c_str(),true,i_flaghash);
 			
 			uint64_t sizeofdir=0;
 			uint64_t dircount=0;
@@ -29607,7 +27913,7 @@ int64_t Jidac::franzparallelscandir()
 					dircount++;
 					quantifiles++;
 				}
-				if (flagverbose)
+				if (flagdebug)
 				{
 					printUTF8(filename.c_str());
 					printf("\n");
@@ -29638,43 +27944,44 @@ int Jidac::fillami()
 	}
 	if (!isdirectory(files[0]))
 	{
-		printf("FILL: you need to specify a directory, not a file\n");
+		printf("FILL: you need to specify a directory, not a file (last bar)\n");
 		return 2;
 	}
 	moreprint("");
-	moreprint("This is FILLAMI, reliability test for media.");
-	moreprint("");
 	moreprint("Almost all free space will be filled by pseudorandom 512MB files,");
-	moreprint("then checked from the ztempdir-created folder.");
+	moreprint("then checked from the ztempdir-created folder (2GB+ needed).");
 	moreprint("");
 	moreprint("These activities can reduce the media life,");
-	moreprint("especially for solid state drives and if repeated several times.");
+	moreprint("especially for solid state drives (SSDs) and if repeated several times.");
 	moreprint("");
-	moreprint("Normally used as stress test for newly devices/controllers");
-	moreprint("or (via NIC) for heavy network stress test.");
-	moreprint("");
-	moreprint("Temporary files are NOT deleted by default (for zfs's scrub).");
-	moreprint("");
-	moreprint("-kill    switch will clear (delete) temp files after execution");
-	moreprint("-verbose for extended output (check IO consistency speed)");
-	moreprint("");
-	moreprint("More than 2GB of free disk space needed.");
-	moreprint("");
-	printf("To EXIT press q, Q / anything else to continue\n");
-	mygetch();
+	if (!flagkill)
+	{
+		moreprint("*** Temporary files are NOT deleted (no -kill, to enforce zfs's scrub) ***");
+		moreprint("");
+	}
 	
+	if (!getcaptcha("ok","Fill (wipe) free space"))
+				return 1;
 	
 	string outputdir=files[0]+"ztempdir/";
 	makepath(outputdir);
-	
+	if (!direxists(outputdir))
+	{
+		printf("\n28599: impossible to makepath %s\n",outputdir.c_str());
+		return 2;
+	}
 	unsigned int percent=99;
 	
-	uint64_t spazio=getfreespace(outputdir.c_str());
+	int64_t spazio=getfreespace(outputdir.c_str());
 	printf("Free space %12s (%s) <<%s>>\n",migliaia(spazio),tohuman(spazio),outputdir.c_str());
+	if (spazio<600000000)
+	{
+		printf("28607: less than 600.000.000 bytes free on %s\n",outputdir.c_str());
+		return 2;
+	}
 	
 	uint64_t spacetowrite=spazio*percent/100;
 	printf("To write   %12s (%s) %d percent\n",migliaia(spacetowrite),tohuman(spacetowrite),percent);
-
 
 	uint32_t chunksize=(2<<28)/sizeof(uint32_t); //half gigabyte in 32 bits at time
 	int chunks=spacetowrite/(chunksize*sizeof(uint32_t));
@@ -29689,7 +27996,7 @@ int Jidac::fillami()
 	uint32_t *buffer32bit = (uint32_t*)malloc(chunksize*sizeof(uint32_t));
 	if (buffer32bit==0)
 	{
-		printf("GURU malloc of buffer32bit\n");
+		printf("28628: GURU cannot alloc the buffer\n");
 		return 2;
 	}
 	uint64_t starttutto=mtime();	
@@ -29701,13 +28008,15 @@ int Jidac::fillami()
 	vector<string> chunkfilename;     
 	vector<string> chunkhash;     
 	
-	char mynomefile[1000];
+	char mynomefile[outputdir.size()+100];
 	for (int i=0;i<chunks;i++)
 	{
+		/// pseudorandom population (not cryptographic-level, but enough)
 		uint64_t startrandom=mtime();
 		populateRandom_xorshift128plus(buffer32bit, chunksize,324+i,4444+i);
 		uint64_t randtime=mtime()-startrandom;
 		
+		/// get XXH3, fast and reliable (not cryptographic-level, but enough)
 		uint64_t starthash=mtime();
 		XXH3_state_t state128;
 		(void)XXH3_128bits_reset(&state128);
@@ -29755,9 +28064,9 @@ int Jidac::fillami()
 			else
 				printf("\r");
 		}
-		totaliotime+=iotime;
-		totalrandtime+=randtime;
-		totalhashtime+=hashtime;
+		totaliotime		+=iotime;
+		totalrandtime	+=randtime;
+		totalhashtime	+=hashtime;
 		
 	}
 	uint64_t timetutto=mtime()-starttutto;
@@ -29839,5 +28148,389 @@ int Jidac::fillami()
 	}	
 	else
 		printf("ERROR: SOMETHING WRONG\n");
+	return 0;
+}
+/*
+clang++ -march=native -Dunix zpaqfranz.cpp -pthread -o zclang2 -static -ffunction-sections -fdata-sections -Wl,--gc-sections,--print-gc-section > & 1.txt
+*/
+
+int  Jidac::dir() 
+{
+	bool barras	=false;
+	bool barraos=false;
+	bool barraod=false;
+	bool barraa	=false;
+	
+/*esx*/
+
+	if (files.size()==0)
+		files.push_back(".");
+	else
+	if (files[0].front()=='/')
+		files.insert(files.begin(),1, ".");
+
+
+	string cartella=files[0];
+	
+	if	(!isdirectory(cartella))
+		cartella+='/';
+		
+	if (files.size()>1)
+		for (unsigned i=0; i<files.size(); i++) 
+		{
+				barras	|=(stringcomparei(files[i],"/s"));
+				barraos	|=(stringcomparei(files[i],"/os"));
+				barraod	|=(stringcomparei(files[i],"/od"));
+				barraa	|=(stringcomparei(files[i],"/a"));
+		}
+	
+	printf("==== Scanning dir <<");
+	printUTF8(cartella.c_str());
+	printf(">> ");
+		
+	if (barras)
+		printf(" /s");
+	if (barraos)
+		printf(" /os");
+	if (barraod)
+		printf(" /od");
+	if (barraa)
+		printf(" /a");
+			
+	printf("\n");
+
+	bool		flagduplicati	=false;
+	int64_t 	total_size		=0;
+	int 		quantifiles		=0;
+	int 		quantedirectory	=0;
+	int64_t		dummylavorati	=0;
+	int			quantihash		=0;
+	int64_t		hash_calcolati	=0;
+	uint64_t	iniziohash		=0;
+	uint64_t	finehash			=0;
+		
+	flagduplicati=(flagcrc32 || flagcrc32c ||flagxxhash || flagxxhash || flagsha256);
+			
+	g_bytescanned=0;
+	g_filescanned=0;
+	g_worked=0;
+	scandir(true,edt,cartella,barras);
+	
+	vector <s_fileandsize> fileandsize;
+	
+	for (DTMap::iterator p=edt.begin(); p!=edt.end(); ++p) 
+	{
+		bool flagaggiungi=true;
+
+#ifdef _WIN32	
+		if (!barraa)
+			flagaggiungi=((int)attrToString(p->second.attr).find("H") < 0);
+		flagaggiungi &= (!isads(p->first));
+#endif
+		
+		if (searchfrom!="")
+			flagaggiungi &= (stristr(p->first.c_str(),searchfrom.c_str())!=0);
+	
+		if (flagaggiungi)
+		{
+			s_fileandsize myblock;
+			myblock.filename=p->first;
+			myblock.size=p->second.size;
+			myblock.attr=p->second.attr;
+			myblock.date=p->second.date;
+			myblock.isdir=isdirectory(p->first);
+			myblock.flaghashstored=false;
+				
+			if (flagduplicati)
+			{
+				if (!myblock.isdir)
+				{
+					if (minsize)
+					{
+						if (myblock.size>minsize)
+							fileandsize.push_back(myblock);
+					}
+					else
+					if (maxsize)
+					{
+						if (myblock.size<minsize)
+							fileandsize.push_back(myblock);
+					}
+					else
+						fileandsize.push_back(myblock);
+					
+				}
+			}
+			else
+				fileandsize.push_back(myblock);
+		}
+	}
+		
+	if (flagduplicati)
+	{
+		if (flagdebug)
+		{
+			printf("Pre-sort\n");
+			for (unsigned int i=0;i<fileandsize.size();i++)
+				printf("PRE %08d  %s %s\n",i,migliaia(fileandsize[i].size),fileandsize[i].filename.c_str());
+		}
+	
+		sort(fileandsize.begin(),fileandsize.end(),comparefilenamesize);
+	
+		if (flagdebug)
+		{
+			printf("Post-sort\n");
+			for (unsigned int i=0;i<fileandsize.size();i++)
+				printf("POST %08d  %s %s\n",i,migliaia(fileandsize[i].size),fileandsize[i].filename.c_str());
+		}
+	
+		iniziohash=mtime();
+	
+		int64_t dalavorare=0;
+		for (unsigned int i=0;i<fileandsize.size();i++)
+			if (i<fileandsize.size()-1)
+			{
+				bool entrato=false;
+				while (fileandsize[i].size==fileandsize[i+1].size)
+				{
+					if (!entrato)
+					{
+						dalavorare+=fileandsize[i].size;
+						entrato=true;
+					}
+					
+					dalavorare+=fileandsize[i+1].size;
+					i++;
+					if (i==fileandsize.size())
+						break;
+				}
+			}
+		
+		printf("\nStart checksumming %s / %s bytes ...\n",migliaia(fileandsize.size()),migliaia2(dalavorare));
+		int larghezzaconsole=terminalwidth()-2;
+		if (larghezzaconsole<10)
+			larghezzaconsole=80;
+
+		int64_t ultimapercentuale=0;
+		int64_t rapporto;
+		int64_t percentuale;
+		
+		for (unsigned int i=0;i<fileandsize.size();i++)
+		{
+			if (i<fileandsize.size()-1)
+			{
+				bool entrato=false;
+				while (fileandsize[i].size==fileandsize[i+1].size)
+				{
+					if (!entrato)
+					{
+						bool saveeta=flagnoeta;
+						flagnoeta=true;
+						string temp=hash_calc_file(flag2algo(),fileandsize[i].filename.c_str(),0,0,dummylavorati);
+						flagnoeta=saveeta;
+
+						fileandsize[i].hashhex=temp;
+						fileandsize[i].flaghashstored=true;
+						quantihash++;
+						hash_calcolati+=fileandsize[i].size;
+						entrato=true;
+						if (flagdebug)
+							printf("%08d HASH %s %s %19s %s\n",i,fileandsize[i].hashhex.c_str(),dateToString(fileandsize[i].date).c_str(),migliaia(fileandsize[i].size),fileandsize[i].filename.c_str());
+						else
+						{
+							rapporto=larghezzaconsole*hash_calcolati/(dalavorare+1);
+							percentuale=100*hash_calcolati/(dalavorare+1);
+							if (!flagnoeta)
+							{
+								printf("Done %03d ",(unsigned int)percentuale);
+								if (percentuale>ultimapercentuale)
+								{
+									if (rapporto>10)
+									{
+										for (unsigned j=0;j<rapporto-10;j++)
+											printf(".");
+										ultimapercentuale=percentuale;
+									}
+								}
+								printf("\r");
+							}
+						}
+					
+					}
+					
+					bool saveeta=flagnoeta;
+					flagnoeta=true;
+					string temp=hash_calc_file(flag2algo(),fileandsize[i+1].filename.c_str(),0,0,dummylavorati);
+					flagnoeta=saveeta;
+					
+					fileandsize[i+1].hashhex=temp;
+					fileandsize[i+1].flaghashstored=true;
+					quantihash++;
+					hash_calcolati+=fileandsize[i+1].size;
+					if (flagdebug)
+						printf("%08d HASH-2 %s %s %19s %s\n",i+1,fileandsize[i+1].hashhex.c_str(),dateToString(fileandsize[i+1].date).c_str(),migliaia(fileandsize[i+1].size),fileandsize[i+1].filename.c_str());
+					else
+					{
+						rapporto=larghezzaconsole*hash_calcolati/(dalavorare+1);
+						percentuale=100*hash_calcolati/(dalavorare+1);
+						if (!flagnoeta)
+						{
+							printf("Done %03d ",(unsigned int)percentuale);
+							if (percentuale>ultimapercentuale)
+								{
+									if (rapporto>10)
+									{
+										for (unsigned j=0;j<rapporto-10;j++)
+											printf(".");
+										ultimapercentuale=percentuale;
+									}
+								}
+								
+							printf("\r");
+						}
+					}
+					
+					i++;
+					if (i==fileandsize.size())
+						break;
+					
+				}
+				
+			}
+		}
+		finehash=mtime();
+		printf("\n");
+		sort(fileandsize.begin(),fileandsize.end(),comparecrc32);
+	
+		if (flagdebug)
+		{
+			printf("Hash taken %08d %s\n",quantihash,migliaia(hash_calcolati));
+			printf("Before shrink %s\n",migliaia(fileandsize.size()));
+			printf("Time %f\n",(finehash-iniziohash)/1000.0);
+	
+			for (unsigned int i=0;i<fileandsize.size();i++)
+				printf("before shrink %08d  %s %s\n",i,fileandsize[i].hashhex.c_str(),fileandsize[i].filename.c_str());
+		}
+	
+		int limite=-1;
+		for (unsigned int i=0;i<fileandsize.size(); i++)
+		{
+			if (flagdebug)
+				printf("%d size %s <<%s>>\n",i,migliaia(fileandsize.size()),fileandsize[i].hashhex.c_str());
+		
+			if (!fileandsize[i].flaghashstored)
+			{
+				limite=i;
+				break;
+			}	
+		}
+	
+		if (flagverbose)
+		printf("Limit founded %d\n",limite);
+		
+		if (limite>-1)
+			for (int i=fileandsize.size()-1;i>=limite;i--)
+				fileandsize.pop_back();
+	
+	
+		if (flagdebug)
+		{
+			printf("After shrink %s\n",migliaia(fileandsize.size()));
+
+			for (unsigned int i=0;i<fileandsize.size();i++)
+				printf("After shrinking %08d  %s %s\n",i,fileandsize[i].hashhex.c_str(),fileandsize[i].filename.c_str());
+		}
+	
+		sort(fileandsize.begin(),fileandsize.end(),comparesizehash);
+	
+		if (flagdebug)
+		{
+			printf("After re-sort %s\n",migliaia(fileandsize.size()));
+
+			for (unsigned int i=0;i<fileandsize.size();i++)
+				printf("After re-sort %08d  %s %s\n",i,fileandsize[i].hashhex.c_str(),fileandsize[i].filename.c_str());
+		}
+	
+	}
+	else
+	{
+
+		if (barraod)
+			sort(fileandsize.begin(),fileandsize.end(),comparefilenamedate);
+	
+		if (barraos)
+			sort(fileandsize.begin(),fileandsize.end(),comparefilenamesize);
+	}
+	unsigned int inizio=0;
+	if (menoenne)
+		if (menoenne<fileandsize.size())
+			inizio=fileandsize.size()-menoenne;
+	
+	
+	int64_t tot_duplicati=0;
+	
+	for (unsigned int i=inizio;i<fileandsize.size();i++)
+		if (fileandsize[i].isdir)
+		{
+			printf("%s <DIR>               %s\n",dateToString(fileandsize[i].date).c_str(),fileandsize[i].filename.c_str());
+			quantedirectory++;
+		}
+		else
+		{
+			total_size+=fileandsize[i].size;
+			quantifiles++;
+			
+			if (flagduplicati)
+			{
+			
+				if (i<fileandsize.size()-1)
+				{
+					bool entrato=false;
+
+					//if (memcmp(fileandsize[i].crc32hex,fileandsize[i+1].crc32hex,8)==0)
+					if (fileandsize[i].hashhex==fileandsize[i+1].hashhex)
+					{
+						if (flagverbose)
+							printf("%s ",fileandsize[i].hashhex.c_str());
+						
+						printf("%s %19s %s\n",dateToString(fileandsize[i].date).c_str(),migliaia(fileandsize[i].size),fileandsize[i].filename.c_str());
+						
+						while (fileandsize[i].hashhex==fileandsize[i+1].hashhex)
+						{
+							if (flagverbose)
+							printf("%s ",fileandsize[i].hashhex.c_str());
+							
+							printf("=================== %19s %s\n",migliaia(fileandsize[i+1].size),fileandsize[i+1].filename.c_str());
+							tot_duplicati+=fileandsize[i].size;
+							entrato=true;
+							i++;
+							if (i==fileandsize.size())
+								break;
+						}
+					}
+					if (entrato)
+						printf("\n");
+				}
+				
+			}
+			else
+				printf("%s %19s %s\n",dateToString(fileandsize[i].date).c_str(),migliaia(fileandsize[i].size),fileandsize[i].filename.c_str());
+			
+		}
+	
+	           
+	printf("  %8d File     %19s byte\n",quantifiles,migliaia(total_size));
+	if (!flagduplicati)
+	printf("  %8d directory",quantedirectory);
+	
+	int64_t spazio=getfreespace(cartella.c_str());
+	printf(" %s bytes (%10s) free",migliaia(spazio),tohuman(spazio));
+	
+	printf("\n");
+	if (flagduplicati)
+	{
+		printf("\n          Duplicate %19s byte\n",migliaia(tot_duplicati));
+		printf("Hashed %08d files %s in %f s %s /s\n",quantihash,migliaia(hash_calcolati),(finehash-iniziohash)/1000.0,migliaia2(hash_calcolati/((finehash-iniziohash+1)/1000.0)));
+	}
 	return 0;
 }

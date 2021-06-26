@@ -552,6 +552,18 @@ zpaqfranz -examples
 zpaqfranz -diff 
 ```
 
+**Single help**
+It is possible to call -? and -examples with a parameter
+a c d dir i k l m r s sha1 t utf x z franz main normal voodoo
+
+```
+zpaqfranz -? a 
+zpaqfranz -examples x 
+
+```
+
+
+
 # How to build
 My main development platforms are Windows and FreeBSD. 
 I rarely use Linux or MacOS, so changes may be needed.

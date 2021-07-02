@@ -1,3 +1,5 @@
+02-07-2021:  51.43 n command (decimation)
+
 26-06-2021:  51.41 help refactoring (splitted map)
 
 20-06-2021:  51.36 help refactoring

@@ -10,7 +10,7 @@
 ///////// it's not a foolish attempt to take over their jobs
 ///////// https://github.com/fcorbelli/zpaqfranz/blob/main/notes.txt
 
-#define ZPAQ_VERSION "51.41-experimental"
+#define ZPAQ_VERSION "51.43-experimental"
 #define FRANZOFFSET 	50
 #define FRANZMAXPATH 	240
 
@@ -8597,9 +8597,18 @@ typedef map<string, voidhelpfunction> MAPPAHELP;
 
 
 
+
+pthread_mutex_t g_mylock = PTHREAD_MUTEX_INITIALIZER;
+
+
+vector<uint64_t> g_arraybytescanned;
+vector<uint64_t> g_arrayfilescanned;
 string g_exec_error;
 string g_exec_ok;
 string g_exec_text;
+string g_exec;
+int64_t g_robocopy_check_sorgente;
+int64_t g_robocopy_check_destinazione;
 
 
 
@@ -8749,6 +8758,11 @@ bool flagutf;
 bool flagflat;
 bool flagfix255;
 bool flagfixeml;
+bool flagbarraod;
+bool flagbarraon;
+bool flagbarraos;
+
+
 
    bool flagcrc32c;			// flag use CRC-32c instead
   bool flagxxhash;			// flag use XXH3
@@ -10331,8 +10345,12 @@ bool fileexists(const string& i_filename)
 }
 
 
-void xcommand(string i_command,const string& i_parameter)
+void xcommand(string i_command,string i_parameter)
 {
+
+//	printf("Comm %s\n",i_command.c_str());
+//	printf("parm %s\n",i_parameter.c_str());
+	
 	if (i_command=="")
 		return;
 	if (!fileexists(i_command))
@@ -11310,6 +11328,7 @@ private:
 	int test();           					// test, return 1 if error else 0
 	int consolidate(string i_archive);
 	int summa();							// get hash / or sum
+	int decimation();							
 	int deduplicate();							// get hash / or sum
 	int paranoid();							// paranoid test by unz. Really slow & lot of RAM
 	int fillami();							// media check
@@ -11333,7 +11352,7 @@ private:
 	void scandir(bool i_checkifselected,DTMap& i_edt,string filename, bool i_recursive=true);        // scan dirs to dt
 	void addfile(bool i_checkifselected,DTMap& i_edt,string filename, int64_t edate, int64_t esize,int64_t eattr);          // add external file to dt
 			   
-	int64_t franzparallelscandir(bool i_flaghash);
+	int64_t franzparallelscandir(bool i_flaghash,bool i_recursive,bool i_forcedir);
 	bool equal(DTMap::const_iterator p, const char* filename, uint32_t &o_crc32);// compare file contents with p
 	void write715attr(libzpaq::StringBuffer& i_sb, uint64_t i_data, unsigned int i_quanti);
 	void writefranzattr(libzpaq::StringBuffer& i_sb, uint64_t i_data, unsigned int i_quanti,bool i_checksum,string i_filename,char *i_sha1,uint32_t i_crc32);
@@ -11343,6 +11362,2196 @@ private:
 	bool getchecksum(string i_filename, char* o_sha1); //get SHA1 AND CRC32 of a file
 
 };
+
+////////////////////////////////////////////////////////////////////////////
+///////// This is a merge of unzpaq206.cpp, patched by me to become unz.cpp
+///////// Now support FRANZOFFSET (embedding SHA1 into ZPAQ's c block)
+
+
+int Jidac::paranoid() 
+{
+#ifdef _WIN32
+#ifndef _WIN64
+	printf("WARNING: paranoid test use lots of RAM, not good for Win32, better Win64\n");
+#endif
+#endif
+#ifdef ESX
+	printf("GURU: sorry: ESXi does not like to give so much RAM\n");
+	exit(0);
+#endif
+
+	unz(archive.c_str(), password,all);
+	return 0;
+}
+
+
+// Callback for user defined ZPAQ error handling.
+// It will be called on input error with an English language error message.
+// This function should not return.
+extern void unzerror(const char* msg);
+
+// Virtual base classes for input and output
+// get() and put() must be overridden to read or write 1 byte.
+class unzReader {
+public:
+  virtual int get() = 0;  // should return 0..255, or -1 at EOF
+  virtual ~unzReader() {}
+};
+
+class unzWriter {
+public:
+  virtual void put(int c) = 0;  // should output low 8 bits of c
+  virtual ~unzWriter() {}
+};
+
+// An Array of T is cleared and aligned on a 64 byte address
+//   with no constructors called. No copy or assignment.
+// Array<T> a(n, ex=0);  - creates n<<ex elements of type T
+// a[i] - index
+// a(i) - index mod n, n must be a power of 2
+// a.size() - gets n
+template <typename T>
+class Array {
+  T *data;     // user location of [0] on a 64 byte boundary
+  size_t n;    // user size
+  int offset;  // distance back in bytes to start of actual allocation
+  void operator=(const Array&);  // no assignment
+  Array(const Array&);  // no copy
+public:
+  Array(size_t sz=0, int ex=0): data(0), n(0), offset(0) {
+    resize(sz, ex);} // [0..sz-1] = 0
+  void resize(size_t sz, int ex=0); // change size, erase content to zeros
+  ~Array() {resize(0);}  // free memory
+  size_t size() const {return n;}  // get size
+  int isize() const {return int(n);}  // get size as an int
+  T& operator[](size_t i) {assert(n>0 && i<n); return data[i];}
+  T& operator()(size_t i) {assert(n>0 && (n&(n-1))==0); return data[i&(n-1)];}
+};
+
+// Change size to sz<<ex elements of 0
+template<typename T>
+void Array<T>::resize(size_t sz, int ex) {
+  assert(size_t(-1)>0);  // unsigned type?
+  while (ex>0) {
+    if (sz>sz*2) unzerror("Array too big");
+    sz*=2, --ex;
+  }
+  if (n>0) {
+    assert(offset>=0 && offset<=64);
+    assert((char*)data-offset);
+    free((char*)data-offset);
+  }
+  n=0;
+  if (sz==0) return;
+  n=sz;
+  const size_t nb=128+n*sizeof(T);  // test for overflow
+  if (nb<=128 || (nb-128)/sizeof(T)!=n) unzerror("Array too big");
+  data=(T*)calloc(nb, 1);
+  if (!data) unzerror("out of memory");
+
+  // Align array on a 64 byte address.
+  // This optimization is NOT required by the ZPAQ standard.
+  offset=64-(((char*)data-(char*)0)&63);
+  assert(offset>0 && offset<=64);
+  data=(T*)((char*)data+offset);
+}
+
+//////////////////////////// unzSHA1 ////////////////////////////
+
+// For computing SHA-1 checksums
+class unzSHA1 {
+public:
+  void put(int c) {  // hash 1 byte
+    uint32_t& r=w[len0>>5&15];
+    r=(r<<8)|(c&255);
+    if (!(len0+=8)) ++len1;
+    if ((len0&511)==0) process();
+  }
+  double size() const {return len0/8+len1*536870912.0;} // size in bytes
+  const char* result();  // get hash and reset
+  unzSHA1() {init();}
+private:
+  void init();      // reset, but don't clear hbuf
+  uint32_t len0, len1;   // length in bits (low, high)
+  uint32_t h[5];         // hash state
+  uint32_t w[80];        // input buffer
+  char hbuf[20];    // result
+  void process();   // hash 1 block
+};
+
+// Start a new hash
+void unzSHA1::init() {
+  len0=len1=0;
+  h[0]=0x67452301;
+  h[1]=0xEFCDAB89;
+  h[2]=0x98BADCFE;
+  h[3]=0x10325476;
+  h[4]=0xC3D2E1F0;
+}
+
+// Return old result and start a new hash
+const char* unzSHA1::result() {
+
+  // pad and append length
+  const uint32_t s1=len1, s0=len0;
+  put(0x80);
+  while ((len0&511)!=448)
+    put(0);
+  put(s1>>24);
+  put(s1>>16);
+  put(s1>>8);
+  put(s1);
+  put(s0>>24);
+  put(s0>>16);
+  put(s0>>8);
+  put(s0);
+
+  // copy h to hbuf
+  for (int i=0; i<5; ++i) {
+    hbuf[4*i]=h[i]>>24;
+    hbuf[4*i+1]=h[i]>>16;
+    hbuf[4*i+2]=h[i]>>8;
+    hbuf[4*i+3]=h[i];
+  }
+
+  // return hash prior to clearing state
+  init();
+  return hbuf;
+}
+
+// Hash 1 block of 64 bytes
+void unzSHA1::process() {
+  for (int i=16; i<80; ++i) {
+    w[i]=w[i-3]^w[i-8]^w[i-14]^w[i-16];
+    w[i]=w[i]<<1|w[i]>>31;
+  }
+  uint32_t a=h[0];
+  uint32_t b=h[1];
+  uint32_t c=h[2];
+  uint32_t d=h[3];
+  uint32_t e=h[4];
+  const uint32_t k1=0x5A827999, k2=0x6ED9EBA1, k3=0x8F1BBCDC, k4=0xCA62C1D6;
+#define f1(a,b,c,d,e,i) e+=(a<<5|a>>27)+((b&c)|(~b&d))+k1+w[i]; b=b<<30|b>>2;
+#define f5(i) f1(a,b,c,d,e,i) f1(e,a,b,c,d,i+1) f1(d,e,a,b,c,i+2) \
+              f1(c,d,e,a,b,i+3) f1(b,c,d,e,a,i+4)
+  f5(0) f5(5) f5(10) f5(15)
+#undef f1
+#define f1(a,b,c,d,e,i) e+=(a<<5|a>>27)+(b^c^d)+k2+w[i]; b=b<<30|b>>2;
+  f5(20) f5(25) f5(30) f5(35)
+#undef f1
+#define f1(a,b,c,d,e,i) e+=(a<<5|a>>27)+((b&c)|(b&d)|(c&d))+k3+w[i]; \
+        b=b<<30|b>>2;
+  f5(40) f5(45) f5(50) f5(55)
+#undef f1
+#define f1(a,b,c,d,e,i) e+=(a<<5|a>>27)+(b^c^d)+k4+w[i]; b=b<<30|b>>2;
+  f5(60) f5(65) f5(70) f5(75)
+#undef f1
+#undef f5
+  h[0]+=a;
+  h[1]+=b;
+  h[2]+=c;
+  h[3]+=d;
+  h[4]+=e;
+}
+
+//////////////////////////// unzSHA256 //////////////////////////
+
+// For computing SHA-256 checksums
+// http://en.wikipedia.org/wiki/SHA-2
+class unzSHA256 {
+public:
+  void put(int c) {  // hash 1 byte
+    unsigned& r=w[len0>>5&15];
+    r=(r<<8)|(c&255);
+    if (!(len0+=8)) ++len1;
+    if ((len0&511)==0) process();
+  }
+  double size() const {return len0/8+len1*536870912.0;} // size in bytes
+  uint64_t usize() const {return len0/8+(uint64_t(len1)<<29);} //size in bytes
+  const char* result();  // get hash and reset
+  unzSHA256() {init();}
+private:
+  void init();           // reset, but don't clear hbuf
+  unsigned len0, len1;   // length in bits (low, high)
+  unsigned s[8];         // hash state
+  unsigned w[16];        // input buffer
+  char hbuf[32];         // result
+  void process();        // hash 1 block
+};
+
+void unzSHA256::init() {
+  len0=len1=0;
+  s[0]=0x6a09e667;
+  s[1]=0xbb67ae85;
+  s[2]=0x3c6ef372;
+  s[3]=0xa54ff53a;
+  s[4]=0x510e527f;
+  s[5]=0x9b05688c;
+  s[6]=0x1f83d9ab;
+  s[7]=0x5be0cd19;
+  memset(w, 0, sizeof(w));
+}
+
+void unzSHA256::process() {
+
+  #define ror(a,b) ((a)>>(b)|(a<<(32-(b))))
+
+  #define m(i) \
+     w[(i)&15]+=w[(i-7)&15] \
+       +(ror(w[(i-15)&15],7)^ror(w[(i-15)&15],18)^(w[(i-15)&15]>>3)) \
+       +(ror(w[(i-2)&15],17)^ror(w[(i-2)&15],19)^(w[(i-2)&15]>>10))
+
+  #define r(a,b,c,d,e,f,g,h,i) { \
+    unsigned t1=ror(e,14)^e; \
+    t1=ror(t1,5)^e; \
+    h+=ror(t1,6)+((e&f)^(~e&g))+k[i]+w[(i)&15]; } \
+    d+=h; \
+    {unsigned t1=ror(a,9)^a; \
+    t1=ror(t1,11)^a; \
+    h+=ror(t1,2)+((a&b)^(c&(a^b))); }
+
+  #define mr(a,b,c,d,e,f,g,h,i) m(i); r(a,b,c,d,e,f,g,h,i);
+
+  #define r8(i) \
+    r(a,b,c,d,e,f,g,h,i);   \
+    r(h,a,b,c,d,e,f,g,i+1); \
+    r(g,h,a,b,c,d,e,f,i+2); \
+    r(f,g,h,a,b,c,d,e,i+3); \
+    r(e,f,g,h,a,b,c,d,i+4); \
+    r(d,e,f,g,h,a,b,c,i+5); \
+    r(c,d,e,f,g,h,a,b,i+6); \
+    r(b,c,d,e,f,g,h,a,i+7);
+
+  #define mr8(i) \
+    mr(a,b,c,d,e,f,g,h,i);   \
+    mr(h,a,b,c,d,e,f,g,i+1); \
+    mr(g,h,a,b,c,d,e,f,i+2); \
+    mr(f,g,h,a,b,c,d,e,i+3); \
+    mr(e,f,g,h,a,b,c,d,i+4); \
+    mr(d,e,f,g,h,a,b,c,i+5); \
+    mr(c,d,e,f,g,h,a,b,i+6); \
+    mr(b,c,d,e,f,g,h,a,i+7);
+
+  static const unsigned k[64]={
+    0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5,
+    0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+    0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3,
+    0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+    0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc,
+    0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+    0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7,
+    0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+    0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13,
+    0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+    0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3,
+    0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+    0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5,
+    0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+    0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208,
+    0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2};
+
+  unsigned a=s[0];
+  unsigned b=s[1];
+  unsigned c=s[2];
+  unsigned d=s[3];
+  unsigned e=s[4];
+  unsigned f=s[5];
+  unsigned g=s[6];
+  unsigned h=s[7];
+
+  r8(0);
+  r8(8);
+  mr8(16);
+  mr8(24);
+  mr8(32);
+  mr8(40);
+  mr8(48);
+  mr8(56);
+
+  s[0]+=a;
+  s[1]+=b;
+  s[2]+=c;
+  s[3]+=d;
+  s[4]+=e;
+  s[5]+=f;
+  s[6]+=g;
+  s[7]+=h;
+
+  #undef mr8
+  #undef r8
+  #undef mr
+  #undef r
+  #undef m
+  #undef ror
+}
+
+// Return old result and start a new hash
+const char* unzSHA256::result() {
+
+  // pad and append length
+  const unsigned s1=len1, s0=len0;
+  put(0x80);
+  while ((len0&511)!=448) put(0);
+  put(s1>>24);
+  put(s1>>16);
+  put(s1>>8);
+  put(s1);
+  put(s0>>24);
+  put(s0>>16);
+  put(s0>>8);
+  put(s0);
+
+  // copy s to hbuf
+  for (int i=0; i<8; ++i) {
+    hbuf[4*i]=s[i]>>24;
+    hbuf[4*i+1]=s[i]>>16;
+    hbuf[4*i+2]=s[i]>>8;
+    hbuf[4*i+3]=s[i];
+  }
+
+  // return hash prior to clearing state
+  init();
+  return hbuf;
+}
+
+//////////////////////////// AES /////////////////////////////
+
+// For encrypting with AES in CTR mode.
+// The i'th 16 byte block is encrypted by XOR with AES(i)
+// (i is big endian or MSB first, starting with 0).
+class unzAES_CTR {
+  uint32_t Te0[256], Te1[256], Te2[256], Te3[256], Te4[256]; // encryption tables
+  uint32_t ek[60];  // round key
+  int Nr;  // number of rounds (10, 12, 14 for AES 128, 192, 256)
+  uint32_t iv0, iv1;  // first 8 bytes in CTR mode
+public:
+  unzAES_CTR(const char* key, int keylen, const char* iv=0);
+    // Schedule: keylen is 16, 24, or 32, iv is 8 bytes or NULL
+  void encrypt(uint32_t s0, uint32_t s1, uint32_t s2, uint32_t s3, unsigned char* ct);
+  void encrypt(char* unzBuf, int n, uint64_t offset);  // encrypt n bytes of unzBuf
+};
+
+// Some AES code is derived from libtomcrypt 1.17 (public domain).
+
+#define Te4_0 0x000000FF & Te4
+#define Te4_1 0x0000FF00 & Te4
+#define Te4_2 0x00FF0000 & Te4
+#define Te4_3 0xFF000000 & Te4
+
+// Extract byte n of x
+static inline unsigned unzbyte(unsigned x, unsigned n) {return (x>>(8*n))&255;}
+
+// x = y[0..3] MSB first
+static inline void LOAD32H(uint32_t& x, const char* y) {
+  const unsigned char* u=(const unsigned char*)y;
+  x=u[0]<<24|u[1]<<16|u[2]<<8|u[3];
+}
+
+// y[0..3] = x MSB first
+static inline void STORE32H(uint32_t& x, unsigned char* y) {
+  y[0]=x>>24;
+  y[1]=x>>16;
+  y[2]=x>>8;
+  y[3]=x;
+}
+
+#define setup_mix(temp) \
+  ((Te4_3[unzbyte(temp, 2)]) ^ (Te4_2[unzbyte(temp, 1)]) ^ \
+   (Te4_1[unzbyte(temp, 0)]) ^ (Te4_0[unzbyte(temp, 3)]))
+
+// Initialize encryption tables and round key. keylen is 16, 24, or 32.
+unzAES_CTR::unzAES_CTR(const char* key, int keylen, const char* iv) {
+  assert(key  != NULL);
+  assert(keylen==16 || keylen==24 || keylen==32);
+
+  // Initialize IV (default 0)
+  iv0=iv1=0;
+  if (iv) {
+    LOAD32H(iv0, iv);
+    LOAD32H(iv1, iv+4);
+  }
+
+  // Initialize encryption tables
+  for (int i=0; i<256; ++i) {
+    unsigned s1=
+    "\x63\x7c\x77\x7b\xf2\x6b\x6f\xc5\x30\x01\x67\x2b\xfe\xd7\xab\x76"
+    "\xca\x82\xc9\x7d\xfa\x59\x47\xf0\xad\xd4\xa2\xaf\x9c\xa4\x72\xc0"
+    "\xb7\xfd\x93\x26\x36\x3f\xf7\xcc\x34\xa5\xe5\xf1\x71\xd8\x31\x15"
+    "\x04\xc7\x23\xc3\x18\x96\x05\x9a\x07\x12\x80\xe2\xeb\x27\xb2\x75"
+    "\x09\x83\x2c\x1a\x1b\x6e\x5a\xa0\x52\x3b\xd6\xb3\x29\xe3\x2f\x84"
+    "\x53\xd1\x00\xed\x20\xfc\xb1\x5b\x6a\xcb\xbe\x39\x4a\x4c\x58\xcf"
+    "\xd0\xef\xaa\xfb\x43\x4d\x33\x85\x45\xf9\x02\x7f\x50\x3c\x9f\xa8"
+    "\x51\xa3\x40\x8f\x92\x9d\x38\xf5\xbc\xb6\xda\x21\x10\xff\xf3\xd2"
+    "\xcd\x0c\x13\xec\x5f\x97\x44\x17\xc4\xa7\x7e\x3d\x64\x5d\x19\x73"
+    "\x60\x81\x4f\xdc\x22\x2a\x90\x88\x46\xee\xb8\x14\xde\x5e\x0b\xdb"
+    "\xe0\x32\x3a\x0a\x49\x06\x24\x5c\xc2\xd3\xac\x62\x91\x95\xe4\x79"
+    "\xe7\xc8\x37\x6d\x8d\xd5\x4e\xa9\x6c\x56\xf4\xea\x65\x7a\xae\x08"
+    "\xba\x78\x25\x2e\x1c\xa6\xb4\xc6\xe8\xdd\x74\x1f\x4b\xbd\x8b\x8a"
+    "\x70\x3e\xb5\x66\x48\x03\xf6\x0e\x61\x35\x57\xb9\x86\xc1\x1d\x9e"
+    "\xe1\xf8\x98\x11\x69\xd9\x8e\x94\x9b\x1e\x87\xe9\xce\x55\x28\xdf"
+    "\x8c\xa1\x89\x0d\xbf\xe6\x42\x68\x41\x99\x2d\x0f\xb0\x54\xbb\x16"
+    [i]&255;
+    unsigned s2=s1<<1;
+    if (s2>=0x100) s2^=0x11b;
+    unsigned s3=s1^s2;
+    Te0[i]=s2<<24|s1<<16|s1<<8|s3;
+    Te1[i]=s3<<24|s2<<16|s1<<8|s1;
+    Te2[i]=s1<<24|s3<<16|s2<<8|s1;
+    Te3[i]=s1<<24|s1<<16|s3<<8|s2;
+    Te4[i]=s1<<24|s1<<16|s1<<8|s1;
+  }
+
+  // setup the forward key
+  Nr = 10 + ((keylen/8)-2)*2;  // 10, 12, or 14 rounds
+  int i = 0;
+  uint32_t* rk = &ek[0];
+  uint32_t temp;
+  static const uint32_t rcon[10] = {
+    0x01000000UL, 0x02000000UL, 0x04000000UL, 0x08000000UL,
+    0x10000000UL, 0x20000000UL, 0x40000000UL, 0x80000000UL,
+    0x1B000000UL, 0x36000000UL};  // round constants
+
+  LOAD32H(rk[0], key   );
+  LOAD32H(rk[1], key +  4);
+  LOAD32H(rk[2], key +  8);
+  LOAD32H(rk[3], key + 12);
+  if (keylen == 16) {
+    for (;;) {
+      temp  = rk[3];
+      rk[4] = rk[0] ^ setup_mix(temp) ^ rcon[i];
+      rk[5] = rk[1] ^ rk[4];
+      rk[6] = rk[2] ^ rk[5];
+      rk[7] = rk[3] ^ rk[6];
+      if (++i == 10) {
+         break;
+      }
+      rk += 4;
+    }
+  }
+  else if (keylen == 24) {
+    LOAD32H(rk[4], key + 16);
+    LOAD32H(rk[5], key + 20);
+    for (;;) {
+      temp = rk[5];
+      rk[ 6] = rk[ 0] ^ setup_mix(temp) ^ rcon[i];
+      rk[ 7] = rk[ 1] ^ rk[ 6];
+      rk[ 8] = rk[ 2] ^ rk[ 7];
+      rk[ 9] = rk[ 3] ^ rk[ 8];
+      if (++i == 8) {
+        break;
+      }
+      rk[10] = rk[ 4] ^ rk[ 9];
+      rk[11] = rk[ 5] ^ rk[10];
+      rk += 6;
+    }
+  }
+  else if (keylen == 32) {
+    LOAD32H(rk[4], key + 16);
+    LOAD32H(rk[5], key + 20);
+    LOAD32H(rk[6], key + 24);
+    LOAD32H(rk[7], key + 28);
+    for (;;) {
+      temp = rk[7];
+      rk[ 8] = rk[ 0] ^ setup_mix(temp) ^ rcon[i];
+      rk[ 9] = rk[ 1] ^ rk[ 8];
+      rk[10] = rk[ 2] ^ rk[ 9];
+      rk[11] = rk[ 3] ^ rk[10];
+      if (++i == 7) {
+        break;
+      }
+      temp = rk[11];
+      rk[12] = rk[ 4] ^ setup_mix(temp<<24|temp>>8);
+      rk[13] = rk[ 5] ^ rk[12];
+      rk[14] = rk[ 6] ^ rk[13];
+      rk[15] = rk[ 7] ^ rk[14];
+      rk += 8;
+    }
+  }
+}
+
+// Encrypt to ct[16]
+void unzAES_CTR::encrypt(uint32_t s0, uint32_t s1, uint32_t s2, uint32_t s3, unsigned char* ct) {
+  int r = Nr >> 1;
+  uint32_t *rk = &ek[0];
+  uint32_t t0=0, t1=0, t2=0, t3=0;
+  s0 ^= rk[0];
+  s1 ^= rk[1];
+  s2 ^= rk[2];
+  s3 ^= rk[3];
+  for (;;) {
+    t0 =
+      Te0[unzbyte(s0, 3)] ^
+      Te1[unzbyte(s1, 2)] ^
+      Te2[unzbyte(s2, 1)] ^
+      Te3[unzbyte(s3, 0)] ^
+      rk[4];
+    t1 =
+      Te0[unzbyte(s1, 3)] ^
+      Te1[unzbyte(s2, 2)] ^
+      Te2[unzbyte(s3, 1)] ^
+      Te3[unzbyte(s0, 0)] ^
+      rk[5];
+    t2 =
+      Te0[unzbyte(s2, 3)] ^
+      Te1[unzbyte(s3, 2)] ^
+      Te2[unzbyte(s0, 1)] ^
+      Te3[unzbyte(s1, 0)] ^
+      rk[6];
+    t3 =
+      Te0[unzbyte(s3, 3)] ^
+      Te1[unzbyte(s0, 2)] ^
+      Te2[unzbyte(s1, 1)] ^
+      Te3[unzbyte(s2, 0)] ^
+      rk[7];
+
+    rk += 8;
+    if (--r == 0) {
+      break;
+    }
+
+    s0 =
+      Te0[unzbyte(t0, 3)] ^
+      Te1[unzbyte(t1, 2)] ^
+      Te2[unzbyte(t2, 1)] ^
+      Te3[unzbyte(t3, 0)] ^
+      rk[0];
+    s1 =
+      Te0[unzbyte(t1, 3)] ^
+      Te1[unzbyte(t2, 2)] ^
+      Te2[unzbyte(t3, 1)] ^
+      Te3[unzbyte(t0, 0)] ^
+      rk[1];
+    s2 =
+      Te0[unzbyte(t2, 3)] ^
+      Te1[unzbyte(t3, 2)] ^
+      Te2[unzbyte(t0, 1)] ^
+      Te3[unzbyte(t1, 0)] ^
+      rk[2];
+    s3 =
+      Te0[unzbyte(t3, 3)] ^
+      Te1[unzbyte(t0, 2)] ^
+      Te2[unzbyte(t1, 1)] ^
+      Te3[unzbyte(t2, 0)] ^
+      rk[3];
+  }
+
+  // apply last round and map cipher state to byte array block:
+  s0 =
+    (Te4_3[unzbyte(t0, 3)]) ^
+    (Te4_2[unzbyte(t1, 2)]) ^
+    (Te4_1[unzbyte(t2, 1)]) ^
+    (Te4_0[unzbyte(t3, 0)]) ^
+    rk[0];
+  STORE32H(s0, ct);
+  s1 =
+    (Te4_3[unzbyte(t1, 3)]) ^
+    (Te4_2[unzbyte(t2, 2)]) ^
+    (Te4_1[unzbyte(t3, 1)]) ^
+    (Te4_0[unzbyte(t0, 0)]) ^
+    rk[1];
+  STORE32H(s1, ct+4);
+  s2 =
+    (Te4_3[unzbyte(t2, 3)]) ^
+    (Te4_2[unzbyte(t3, 2)]) ^
+    (Te4_1[unzbyte(t0, 1)]) ^
+    (Te4_0[unzbyte(t1, 0)]) ^
+    rk[2];
+  STORE32H(s2, ct+8);
+  s3 =
+    (Te4_3[unzbyte(t3, 3)]) ^
+    (Te4_2[unzbyte(t0, 2)]) ^
+    (Te4_1[unzbyte(t1, 1)]) ^
+    (Te4_0[unzbyte(t2, 0)]) ^ 
+    rk[3];
+  STORE32H(s3, ct+12);
+}
+
+// Encrypt or decrypt slice unzBuf[0..n-1] at offset by XOR with AES(i) where
+// i is the 128 bit big-endian distance from the start in 16 byte blocks.
+void unzAES_CTR::encrypt(char* unzBuf, int n, uint64_t offset) {
+  for (uint64_t i=offset/16; i<=(offset+n)/16; ++i) {
+    unsigned char ct[16];
+    encrypt(iv0, iv1, i>>32, i, ct);
+    for (int j=0; j<16; ++j) {
+      const int k=i*16-offset+j;
+      if (k>=0 && k<n)
+        unzBuf[k]^=ct[j];
+    }
+  }
+}
+
+#undef setup_mix
+#undef Te4_3
+#undef Te4_2
+#undef Te4_1
+#undef Te4_0
+
+//////////////////////////// stretchKey //////////////////////
+
+// PBKDF2(pw[0..pwlen], salt[0..saltlen], c) to unzBuf[0..dkLen-1]
+// using HMAC-unzSHA256, for the special case of c = 1 iterations
+// output size dkLen a multiple of 32, and pwLen <= 64.
+static void unzpbkdf2(const char* pw, int pwLen, const char* salt, int saltLen,
+                   int c, char* unzBuf, int dkLen) {
+  assert(c==1);
+  assert(dkLen%32==0);
+  assert(pwLen<=64);
+
+  unzSHA256 sha256;
+  char b[32];
+  for (int i=1; i*32<=dkLen; ++i) {
+    for (int j=0; j<pwLen; ++j) sha256.put(pw[j]^0x36);
+    for (int j=pwLen; j<64; ++j) sha256.put(0x36);
+    for (int j=0; j<saltLen; ++j) sha256.put(salt[j]);
+    for (int j=24; j>=0; j-=8) sha256.put(i>>j);
+    memcpy(b, sha256.result(), 32);
+    for (int j=0; j<pwLen; ++j) sha256.put(pw[j]^0x5c);
+    for (int j=pwLen; j<64; ++j) sha256.put(0x5c);
+    for (int j=0; j<32; ++j) sha256.put(b[j]);
+    memcpy(unzBuf+i*32-32, sha256.result(), 32);
+  }
+}
+
+// Hash b[0..15] using 8 rounds of salsa20
+// Modified from http://cr.yp.to/salsa20.html (public domain) to 8 rounds
+static void salsa8(uint32_t* b) {
+  unsigned x[16]={0};
+  memcpy(x, b, 64);
+  for (int i=0; i<4; ++i) {
+    #define R(a,b) (((a)<<(b))+((a)>>(32-b)))
+    x[ 4] ^= R(x[ 0]+x[12], 7);  x[ 8] ^= R(x[ 4]+x[ 0], 9);
+    x[12] ^= R(x[ 8]+x[ 4],13);  x[ 0] ^= R(x[12]+x[ 8],18);
+    x[ 9] ^= R(x[ 5]+x[ 1], 7);  x[13] ^= R(x[ 9]+x[ 5], 9);
+    x[ 1] ^= R(x[13]+x[ 9],13);  x[ 5] ^= R(x[ 1]+x[13],18);
+    x[14] ^= R(x[10]+x[ 6], 7);  x[ 2] ^= R(x[14]+x[10], 9);
+    x[ 6] ^= R(x[ 2]+x[14],13);  x[10] ^= R(x[ 6]+x[ 2],18);
+    x[ 3] ^= R(x[15]+x[11], 7);  x[ 7] ^= R(x[ 3]+x[15], 9);
+    x[11] ^= R(x[ 7]+x[ 3],13);  x[15] ^= R(x[11]+x[ 7],18);
+    x[ 1] ^= R(x[ 0]+x[ 3], 7);  x[ 2] ^= R(x[ 1]+x[ 0], 9);
+    x[ 3] ^= R(x[ 2]+x[ 1],13);  x[ 0] ^= R(x[ 3]+x[ 2],18);
+    x[ 6] ^= R(x[ 5]+x[ 4], 7);  x[ 7] ^= R(x[ 6]+x[ 5], 9);
+    x[ 4] ^= R(x[ 7]+x[ 6],13);  x[ 5] ^= R(x[ 4]+x[ 7],18);
+    x[11] ^= R(x[10]+x[ 9], 7);  x[ 8] ^= R(x[11]+x[10], 9);
+    x[ 9] ^= R(x[ 8]+x[11],13);  x[10] ^= R(x[ 9]+x[ 8],18);
+    x[12] ^= R(x[15]+x[14], 7);  x[13] ^= R(x[12]+x[15], 9);
+    x[14] ^= R(x[13]+x[12],13);  x[15] ^= R(x[14]+x[13],18);
+    #undef R
+  }
+  for (int i=0; i<16; ++i) b[i]+=x[i];
+}
+
+// BlockMix_{Salsa20/8, r} on b[0..128*r-1]
+static void blockmix(uint32_t* b, int r) {
+  assert(r<=8);
+  uint32_t x[16];
+  uint32_t y[256];
+  memcpy(x, b+32*r-16, 64);
+  for (int i=0; i<2*r; ++i) {
+    for (int j=0; j<16; ++j) x[j]^=b[i*16+j];
+    salsa8(x);
+    memcpy(&y[i*16], x, 64);
+  }
+  for (int i=0; i<r; ++i) memcpy(b+i*16, &y[i*32], 64);
+  for (int i=0; i<r; ++i) memcpy(b+(i+r)*16, &y[i*32+16], 64);
+}
+
+// Mix b[0..128*r-1]. Uses 128*r*n bytes of memory and O(r*n) time
+static void smix(char* b, int r, int n) {
+  Array<uint32_t> x(32*r), v(32*r*n);
+  for (int i=0; i<r*128; ++i) x[i/4]+=(b[i]&255)<<i%4*8;
+  for (int i=0; i<n; ++i) {
+    memcpy(&v[i*r*32], &x[0], r*128);
+    blockmix(&x[0], r);
+  }
+  for (int i=0; i<n; ++i) {
+    uint32_t j=x[(2*r-1)*16]&(n-1);
+    for (int k=0; k<r*32; ++k) x[k]^=v[j*r*32+k];
+    blockmix(&x[0], r);
+  }
+  for (int i=0; i<r*128; ++i) b[i]=x[i/4]>>(i%4*8);
+}
+
+// Strengthen password pw[0..pwlen-1] and salt[0..saltlen-1]
+// to produce key unzBuf[0..buflen-1]. Uses O(n*r*p) time and 128*r*n bytes
+// of memory. n must be a power of 2 and r <= 8.
+void unzscrypt(const char* pw, int pwlen,
+            const char* salt, int saltlen,
+            int n, int r, int p, char* unzBuf, int buflen) {
+  assert(r<=8);
+  assert(n>0 && (n&(n-1))==0);  // power of 2?
+  Array<char> b(p*r*128);
+  unzpbkdf2(pw, pwlen, salt, saltlen, 1, &b[0], p*r*128);
+  for (int i=0; i<p; ++i) smix(&b[i*r*128], r, n);
+  unzpbkdf2(pw, pwlen, &b[0], p*r*128, 1, unzBuf, buflen);
+}
+
+// Stretch key in[0..31], assumed to be unzSHA256(password), with
+// NUL terminate salt to produce new key out[0..31]
+void stretchKey(char* out, const char* in, const char* salt) {
+  unzscrypt(in, 32, salt, 32, 1<<14, 8, 1, out, 32);
+}
+
+//////////////////////////// unzZPAQL ///////////////////////////
+
+// Symbolic instructions and their sizes
+typedef enum {NONE,CONS,CM,ICM,MATCH,AVG,MIX2,MIX,ISSE,SSE} CompType;
+const int compsize[256]={0,2,3,2,3,4,6,6,3,5};
+
+// A unzZPAQL virtual machine COMP+HCOMP or PCOMP.
+class unzZPAQL {
+public:
+  unzZPAQL();
+  void clear();           // Free memory, erase program, reset machine state
+  void inith();           // Initialize as HCOMP to run
+  void initp();           // Initialize as PCOMP to run
+  void run(uint32_t input);    // Execute with input
+  int read(unzReader* in2);  // Read header
+  void outc(int c);       // output a byte
+
+  unzWriter* output;         // Destination for OUT instruction, or 0 to suppress
+  unzSHA1* sha1;             // Points to checksum computer
+  uint32_t H(int i) {return h(i);}  // get element of h
+
+  // unzZPAQL block header
+  Array<uint8_t> header;   // hsize[2] hh hm ph pm n COMP (guard) HCOMP (guard)
+  int cend;           // COMP in header[7...cend-1]
+  int hbegin, hend;   // HCOMP/PCOMP in header[hbegin...hend-1]
+
+private:
+  // Machine state for executing HCOMP
+  Array<uint8_t> m;        // memory array M for HCOMP
+  Array<uint32_t> h;       // hash array H for HCOMP
+  Array<uint32_t> r;       // 256 element register array
+  uint32_t a, b, c, d;     // machine registers
+  int f;              // condition flag
+  int pc;             // program counter
+
+  // Support code
+  void init(int hbits, int mbits);  // initialize H and M sizes
+  int execute();  // execute 1 instruction, return 0 after HALT, else 1
+  void div(uint32_t x) {if (x) a/=x; else a=0;}
+  void mod(uint32_t x) {if (x) a%=x; else a=0;}
+  void swap(uint32_t& x) {a^=x; x^=a; a^=x;}
+  void swap(uint8_t& x)  {a^=x; x^=a; a^=x;}
+  void err();  // exit with run time error
+};
+
+// Read header from in2
+int unzZPAQL::read(unzReader* in2) {
+
+  // Get header size and allocate
+  int hsize=in2->get();
+  if (hsize<0) unzerror("end of header");
+  hsize+=in2->get()*256;
+  if (hsize<0) unzerror("end of header");
+  header.resize(hsize+300);
+  cend=hbegin=hend=0;
+  header[cend++]=hsize&255;
+  header[cend++]=hsize>>8;
+  while (cend<7) header[cend++]=in2->get(); // hh hm ph pm n
+
+  // Read COMP
+  int n=header[cend-1];
+  for (int i=0; i<n; ++i) {
+    int type=in2->get();  // component type
+    if (type==-1) unzerror("unexpected end of file");
+    header[cend++]=type;  // component type
+    int size=compsize[type];
+    if (size<1) unzerror("Invalid component type");
+    if (cend+size>hsize) unzerror("COMP overflows header");
+    for (int j=1; j<size; ++j)
+      header[cend++]=in2->get();
+  }
+  if ((header[cend++]=in2->get())!=0) unzerror("missing COMP END");
+
+  // Insert a guard gap and read HCOMP
+  hbegin=hend=cend+128;
+  if (hend>hsize+129) unzerror("missing HCOMP");
+  while (hend<hsize+129) {
+    assert(hend<header.isize()-8);
+    int op=in2->get();
+    if (op<0) unzerror("unexpected end of file");
+    header[hend++]=op;
+  }
+  if ((header[hend++]=in2->get())!=0) unzerror("missing HCOMP END");
+  assert(cend>=7 && cend<header.isize());
+  assert(hbegin==cend+128 && hbegin<header.isize());
+  assert(hend>hbegin && hend<header.isize());
+  assert(hsize==header[0]+256*header[1]);
+  assert(hsize==cend-2+hend-hbegin);
+  return cend+hend-hbegin;
+}
+
+// Free memory, but preserve output, sha1 pointers
+void unzZPAQL::clear() {
+  cend=hbegin=hend=0;  // COMP and HCOMP locations
+  a=b=c=d=f=pc=0;      // machine state
+  header.resize(0);
+  h.resize(0);
+  m.resize(0);
+  r.resize(0);
+}
+
+// Constructor
+unzZPAQL::unzZPAQL() {
+  output=0;
+  sha1=0;
+  clear();
+}
+
+// Initialize machine state as HCOMP
+void unzZPAQL::inith() {
+  assert(header.isize()>6);
+  assert(output==0);
+  assert(sha1==0);
+  init(header[2], header[3]); // hh, hm
+}
+
+// Initialize machine state as PCOMP
+void unzZPAQL::initp() {
+  assert(header.isize()>6);
+  init(header[4], header[5]); // ph, pm
+}
+
+// Initialize machine state to run a program.
+void unzZPAQL::init(int hbits, int mbits) {
+  assert(header.isize()>0);
+  assert(cend>=7);
+  assert(hbegin>=cend+128);
+  assert(hend>=hbegin);
+  assert(hend<header.isize()-130);
+  assert(header[0]+256*header[1]==cend-2+hend-hbegin);
+  h.resize(1, hbits);
+  m.resize(1, mbits);
+  r.resize(256);
+  a=b=c=d=pc=f=0;
+}
+
+// Run program on input by interpreting header
+void unzZPAQL::run(uint32_t input) {
+  assert(cend>6);
+  assert(hbegin>=cend+128);
+  assert(hend>=hbegin);
+  assert(hend<header.isize()-130);
+  assert(m.size()>0);
+  assert(h.size()>0);
+  assert(header[0]+256*header[1]==cend+hend-hbegin-2);
+  pc=hbegin;
+  a=input;
+  while (execute()) ;
+}
+
+void unzZPAQL::outc(int c) {
+  if (output) output->put(c);
+  if (sha1) sha1->put(c);
+}
+
+// Execute one instruction, return 0 after HALT else 1
+int unzZPAQL::execute() {
+  switch(header[pc++]) {
+    case 0: err(); break; // ERROR
+    case 1: ++a; break; // A++
+    case 2: --a; break; // A--
+    case 3: a = ~a; break; // A!
+    case 4: a = 0; break; // A=0
+    case 7: a = r[header[pc++]]; break; // A=R N
+    case 8: swap(b); break; // B<>A
+    case 9: ++b; break; // B++
+    case 10: --b; break; // B--
+    case 11: b = ~b; break; // B!
+    case 12: b = 0; break; // B=0
+    case 15: b = r[header[pc++]]; break; // B=R N
+    case 16: swap(c); break; // C<>A
+    case 17: ++c; break; // C++
+    case 18: --c; break; // C--
+    case 19: c = ~c; break; // C!
+    case 20: c = 0; break; // C=0
+    case 23: c = r[header[pc++]]; break; // C=R N
+    case 24: swap(d); break; // D<>A
+    case 25: ++d; break; // D++
+    case 26: --d; break; // D--
+    case 27: d = ~d; break; // D!
+    case 28: d = 0; break; // D=0
+    case 31: d = r[header[pc++]]; break; // D=R N
+    case 32: swap(m(b)); break; // *B<>A
+    case 33: ++m(b); break; // *B++
+    case 34: --m(b); break; // *B--
+    case 35: m(b) = ~m(b); break; // *B!
+    case 36: m(b) = 0; break; // *B=0
+    case 39: if (f) pc+=((header[pc]+128)&255)-127; else ++pc; break; // JT N
+    case 40: swap(m(c)); break; // *C<>A
+    case 41: ++m(c); break; // *C++
+    case 42: --m(c); break; // *C--
+    case 43: m(c) = ~m(c); break; // *C!
+    case 44: m(c) = 0; break; // *C=0
+    case 47: if (!f) pc+=((header[pc]+128)&255)-127; else ++pc; break; // JF N
+    case 48: swap(h(d)); break; // *D<>A
+    case 49: ++h(d); break; // *D++
+    case 50: --h(d); break; // *D--
+    case 51: h(d) = ~h(d); break; // *D!
+    case 52: h(d) = 0; break; // *D=0
+    case 55: r[header[pc++]] = a; break; // R=A N
+    case 56: return 0  ; // HALT
+    case 57: outc(a&255); break; // OUT
+    case 59: a = (a+m(b)+512)*773; break; // HASH
+    case 60: h(d) = (h(d)+a+512)*773; break; // HASHD
+    case 63: pc+=((header[pc]+128)&255)-127; break; // JMP N
+    case 64: break; // A=A
+    case 65: a = b; break; // A=B
+    case 66: a = c; break; // A=C
+    case 67: a = d; break; // A=D
+    case 68: a = m(b); break; // A=*B
+    case 69: a = m(c); break; // A=*C
+    case 70: a = h(d); break; // A=*D
+    case 71: a = header[pc++]; break; // A= N
+    case 72: b = a; break; // B=A
+    case 73: break; // B=B
+    case 74: b = c; break; // B=C
+    case 75: b = d; break; // B=D
+    case 76: b = m(b); break; // B=*B
+    case 77: b = m(c); break; // B=*C
+    case 78: b = h(d); break; // B=*D
+    case 79: b = header[pc++]; break; // B= N
+    case 80: c = a; break; // C=A
+    case 81: c = b; break; // C=B
+    case 82: break; // C=C
+    case 83: c = d; break; // C=D
+    case 84: c = m(b); break; // C=*B
+    case 85: c = m(c); break; // C=*C
+    case 86: c = h(d); break; // C=*D
+    case 87: c = header[pc++]; break; // C= N
+    case 88: d = a; break; // D=A
+    case 89: d = b; break; // D=B
+    case 90: d = c; break; // D=C
+    case 91: break; // D=D
+    case 92: d = m(b); break; // D=*B
+    case 93: d = m(c); break; // D=*C
+    case 94: d = h(d); break; // D=*D
+    case 95: d = header[pc++]; break; // D= N
+    case 96: m(b) = a; break; // *B=A
+    case 97: m(b) = b; break; // *B=B
+    case 98: m(b) = c; break; // *B=C
+    case 99: m(b) = d; break; // *B=D
+    case 100: break; // *B=*B
+    case 101: m(b) = m(c); break; // *B=*C
+    case 102: m(b) = h(d); break; // *B=*D
+    case 103: m(b) = header[pc++]; break; // *B= N
+    case 104: m(c) = a; break; // *C=A
+    case 105: m(c) = b; break; // *C=B
+    case 106: m(c) = c; break; // *C=C
+    case 107: m(c) = d; break; // *C=D
+    case 108: m(c) = m(b); break; // *C=*B
+    case 109: break; // *C=*C
+    case 110: m(c) = h(d); break; // *C=*D
+    case 111: m(c) = header[pc++]; break; // *C= N
+    case 112: h(d) = a; break; // *D=A
+    case 113: h(d) = b; break; // *D=B
+    case 114: h(d) = c; break; // *D=C
+    case 115: h(d) = d; break; // *D=D
+    case 116: h(d) = m(b); break; // *D=*B
+    case 117: h(d) = m(c); break; // *D=*C
+    case 118: break; // *D=*D
+    case 119: h(d) = header[pc++]; break; // *D= N
+    case 128: a += a; break; // A+=A
+    case 129: a += b; break; // A+=B
+    case 130: a += c; break; // A+=C
+    case 131: a += d; break; // A+=D
+    case 132: a += m(b); break; // A+=*B
+    case 133: a += m(c); break; // A+=*C
+    case 134: a += h(d); break; // A+=*D
+    case 135: a += header[pc++]; break; // A+= N
+    case 136: a -= a; break; // A-=A
+    case 137: a -= b; break; // A-=B
+    case 138: a -= c; break; // A-=C
+    case 139: a -= d; break; // A-=D
+    case 140: a -= m(b); break; // A-=*B
+    case 141: a -= m(c); break; // A-=*C
+    case 142: a -= h(d); break; // A-=*D
+    case 143: a -= header[pc++]; break; // A-= N
+    case 144: a *= a; break; // A*=A
+    case 145: a *= b; break; // A*=B
+    case 146: a *= c; break; // A*=C
+    case 147: a *= d; break; // A*=D
+    case 148: a *= m(b); break; // A*=*B
+    case 149: a *= m(c); break; // A*=*C
+    case 150: a *= h(d); break; // A*=*D
+    case 151: a *= header[pc++]; break; // A*= N
+    case 152: div(a); break; // A/=A
+    case 153: div(b); break; // A/=B
+    case 154: div(c); break; // A/=C
+    case 155: div(d); break; // A/=D
+    case 156: div(m(b)); break; // A/=*B
+    case 157: div(m(c)); break; // A/=*C
+    case 158: div(h(d)); break; // A/=*D
+    case 159: div(header[pc++]); break; // A/= N
+    case 160: mod(a); break; // A%=A
+    case 161: mod(b); break; // A%=B
+    case 162: mod(c); break; // A%=C
+    case 163: mod(d); break; // A%=D
+    case 164: mod(m(b)); break; // A%=*B
+    case 165: mod(m(c)); break; // A%=*C
+    case 166: mod(h(d)); break; // A%=*D
+    case 167: mod(header[pc++]); break; // A%= N
+    case 168: a &= a; break; // A&=A
+    case 169: a &= b; break; // A&=B
+    case 170: a &= c; break; // A&=C
+    case 171: a &= d; break; // A&=D
+    case 172: a &= m(b); break; // A&=*B
+    case 173: a &= m(c); break; // A&=*C
+    case 174: a &= h(d); break; // A&=*D
+    case 175: a &= header[pc++]; break; // A&= N
+    case 176: a &= ~ a; break; // A&~A
+    case 177: a &= ~ b; break; // A&~B
+    case 178: a &= ~ c; break; // A&~C
+    case 179: a &= ~ d; break; // A&~D
+    case 180: a &= ~ m(b); break; // A&~*B
+    case 181: a &= ~ m(c); break; // A&~*C
+    case 182: a &= ~ h(d); break; // A&~*D
+    case 183: a &= ~ header[pc++]; break; // A&~ N
+    case 184: a |= a; break; // A|=A
+    case 185: a |= b; break; // A|=B
+    case 186: a |= c; break; // A|=C
+    case 187: a |= d; break; // A|=D
+    case 188: a |= m(b); break; // A|=*B
+    case 189: a |= m(c); break; // A|=*C
+    case 190: a |= h(d); break; // A|=*D
+    case 191: a |= header[pc++]; break; // A|= N
+    case 192: a ^= a; break; // A^=A
+    case 193: a ^= b; break; // A^=B
+    case 194: a ^= c; break; // A^=C
+    case 195: a ^= d; break; // A^=D
+    case 196: a ^= m(b); break; // A^=*B
+    case 197: a ^= m(c); break; // A^=*C
+    case 198: a ^= h(d); break; // A^=*D
+    case 199: a ^= header[pc++]; break; // A^= N
+    case 200: a <<= (a&31); break; // A<<=A
+    case 201: a <<= (b&31); break; // A<<=B
+    case 202: a <<= (c&31); break; // A<<=C
+    case 203: a <<= (d&31); break; // A<<=D
+    case 204: a <<= (m(b)&31); break; // A<<=*B
+    case 205: a <<= (m(c)&31); break; // A<<=*C
+    case 206: a <<= (h(d)&31); break; // A<<=*D
+    case 207: a <<= (header[pc++]&31); break; // A<<= N
+    case 208: a >>= (a&31); break; // A>>=A
+    case 209: a >>= (b&31); break; // A>>=B
+    case 210: a >>= (c&31); break; // A>>=C
+    case 211: a >>= (d&31); break; // A>>=D
+    case 212: a >>= (m(b)&31); break; // A>>=*B
+    case 213: a >>= (m(c)&31); break; // A>>=*C
+    case 214: a >>= (h(d)&31); break; // A>>=*D
+    case 215: a >>= (header[pc++]&31); break; // A>>= N
+    case 216: f = (true); break; // A==A f = (a == a)
+    case 217: f = (a == b); break; // A==B
+    case 218: f = (a == c); break; // A==C
+    case 219: f = (a == d); break; // A==D
+    case 220: f = (a == uint32_t(m(b))); break; // A==*B
+    case 221: f = (a == uint32_t(m(c))); break; // A==*C
+    case 222: f = (a == h(d)); break; // A==*D
+    case 223: f = (a == uint32_t(header[pc++])); break; // A== N
+    case 224: f = (false); break; // A<A f = (a < a)
+    case 225: f = (a < b); break; // A<B
+    case 226: f = (a < c); break; // A<C
+    case 227: f = (a < d); break; // A<D
+    case 228: f = (a < uint32_t(m(b))); break; // A<*B
+    case 229: f = (a < uint32_t(m(c))); break; // A<*C
+    case 230: f = (a < h(d)); break; // A<*D
+    case 231: f = (a < uint32_t(header[pc++])); break; // A< N
+    case 232: f = (false); break; // A>A f= (a > a)
+    case 233: f = (a > b); break; // A>B
+    case 234: f = (a > c); break; // A>C
+    case 235: f = (a > d); break; // A>D
+    case 236: f = (a > uint32_t(m(b))); break; // A>*B
+    case 237: f = (a > uint32_t(m(c))); break; // A>*C
+    case 238: f = (a > h(d)); break; // A>*D
+    case 239: f = (a > uint32_t(header[pc++])); break; // A> N
+    case 255: if((pc=hbegin+header[pc]+256*header[pc+1])>=hend)err();break;//LJ
+    default: err();
+  }
+  return 1;
+}
+
+// Print illegal instruction error message and exit
+void unzZPAQL::err() {
+  unzerror("unzZPAQL execution error");
+}
+
+///////////////////////// Component //////////////////////////
+
+// A Component is a context model, indirect context model, match model,
+// fixed weight mixer, adaptive 2 input mixer without or with current
+// partial byte as context, adaptive m input mixer (without or with),
+// or SSE (without or with).
+
+struct unzComponent {
+  uint32_t limit;      // max count for cm
+  uint32_t cxt;        // saved context
+  uint32_t a, b, c;    // multi-purpose variables
+  Array<uint32_t> cm;  // cm[cxt] -> p in bits 31..10, n in 9..0; MATCH index
+  Array<uint8_t> ht;   // ICM/ISSE hash table[0..size1][0..15] and MATCH unzBuf
+  Array<uint16_t> a16; // MIX weights
+  void init();    // initialize to all 0
+  unzComponent() {init();}
+};
+
+void unzComponent::init() {
+  limit=cxt=a=b=c=0;
+  cm.resize(0);
+  ht.resize(0);
+  a16.resize(0);
+}
+
+////////////////////////// StateTable ////////////////////////
+
+// Next state table generator
+class StateTable {
+  enum {N=64}; // sizes of b, t
+  int num_states(int n0, int n1);  // compute t[n0][n1][1]
+  void discount(int& n0);  // set new value of n0 after 1 or n1 after 0
+  void next_state(int& n0, int& n1, int y);  // new (n0,n1) after bit y
+public:
+  uint8_t ns[1024]; // state*4 -> next state if 0, if 1, n0, n1
+  int next(int state, int y) {  // next state for bit y
+    assert(state>=0 && state<256);
+    assert(y>=0 && y<4);
+    return ns[state*4+y];
+  }
+  int cminit(int state) {  // initial probability of 1 * 2^23
+    assert(state>=0 && state<256);
+    return ((ns[state*4+3]*2+1)<<22)/(ns[state*4+2]+ns[state*4+3]+1);
+  }
+  StateTable();
+};
+
+// How many states with count of n0 zeros, n1 ones (0...2)
+int StateTable::num_states(int n0, int n1) {
+  const int B=6;
+  const int bound[B]={20,48,15,8,6,5}; // n0 -> max n1, n1 -> max n0
+  if (n0<n1) return num_states(n1, n0);
+  if (n0<0 || n1<0 || n1>=B || n0>bound[n1]) return 0;
+  return 1+(n1>0 && n0+n1<=17);
+}
+
+// New value of count n0 if 1 is observed (and vice versa)
+void StateTable::discount(int& n0) {
+  n0=(n0>=1)+(n0>=2)+(n0>=3)+(n0>=4)+(n0>=5)+(n0>=7)+(n0>=8);
+}
+
+// compute next n0,n1 (0 to N) given input y (0 or 1)
+void StateTable::next_state(int& n0, int& n1, int y) {
+  if (n0<n1)
+    next_state(n1, n0, 1-y);
+  else {
+    if (y) {
+      ++n1;
+      discount(n0);
+    }
+    else {
+      ++n0;
+      discount(n1);
+    }
+    // 20,0,0 -> 20,0
+    // 48,1,0 -> 48,1
+    // 15,2,0 -> 8,1
+    //  8,3,0 -> 6,2
+    //  8,3,1 -> 5,3
+    //  6,4,0 -> 5,3
+    //  5,5,0 -> 5,4
+    //  5,5,1 -> 4,5
+    while (!num_states(n0, n1)) {
+      if (n1<2) --n0;
+      else {
+        n0=(n0*(n1-1)+(n1/2))/n1;
+        --n1;
+      }
+    }
+  }
+}
+
+// Initialize next state table ns[state*4] -> next if 0, next if 1, n0, n1
+StateTable::StateTable() {
+
+  // Assign states by increasing priority
+  const int N=50;
+  uint8_t t[N][N][2]={{{0}}}; // (n0,n1,y) -> state number
+  int state=0;
+  for (int i=0; i<N; ++i) {
+    for (int n1=0; n1<=i; ++n1) {
+      int n0=i-n1;
+      int n=num_states(n0, n1);
+      assert(n>=0 && n<=2);
+      if (n) {
+        t[n0][n1][0]=state;
+        t[n0][n1][1]=state+n-1;
+        state+=n;
+      }
+    }
+  }
+       
+  // Generate next state table
+  memset(ns, 0, sizeof(ns));
+  for (int n0=0; n0<N; ++n0) {
+    for (int n1=0; n1<N; ++n1) {
+      for (int y=0; y<num_states(n0, n1); ++y) {
+        int s=t[n0][n1][y];
+        assert(s>=0 && s<256);
+        int s0=n0, s1=n1;
+        next_state(s0, s1, 0);
+        assert(s0>=0 && s0<N && s1>=0 && s1<N);
+        ns[s*4+0]=t[s0][s1][0];
+        s0=n0, s1=n1;
+        next_state(s0, s1, 1);
+        assert(s0>=0 && s0<N && s1>=0 && s1<N);
+        ns[s*4+1]=t[s0][s1][1];
+        ns[s*4+2]=n0;
+        ns[s*4+3]=n1;
+      }
+    }
+  }
+}
+
+///////////////////////// Predictor //////////////////////////
+
+// A predictor guesses the next bit
+class unzPredictor {
+public:
+  unzPredictor(unzZPAQL&);
+  void init();          // build model
+  int predict();        // probability that next bit is a 1 (0..32767)
+  void update(int y);   // train on bit y (0..1)
+  bool isModeled() {    // n>0 components?
+    assert(z.header.isize()>6);
+    return z.header[6]!=0;
+  }
+
+private:
+
+  // unzPredictor state
+  int c8;               // last 0...7 bits.
+  int hmap4;            // c8 split into nibbles
+  int p[256];           // predictions
+  uint32_t h[256];           // unrolled copy of z.h
+  unzZPAQL& z;             // VM to compute context hashes, includes H, n
+  unzComponent comp[256];  // the model, includes P
+
+  // Modeling support functions
+  int dt2k[256];        // division table for match: dt2k[i] = 2^12/i
+  int dt[1024];         // division table for cm: dt[i] = 2^16/(i+1.5)
+  uint16_t squasht[4096];    // squash() lookup table
+  short stretcht[32768];// stretch() lookup table
+  StateTable st;        // next, cminit functions
+
+  // reduce prediction error in cr.cm
+  void train(unzComponent& cr, int y) {
+    assert(y==0 || y==1);
+    uint32_t& pn=cr.cm(cr.cxt);
+    uint32_t count=pn&0x3ff;
+    int error=y*32767-(cr.cm(cr.cxt)>>17);
+    pn+=(error*dt[count]&-1024)+(count<cr.limit);
+  }
+
+  // x -> floor(32768/(1+exp(-x/64)))
+  int squash(int x) {
+    assert(x>=-2048 && x<=2047);
+    return squasht[x+2048];
+  }
+
+  // x -> round(64*log((x+0.5)/(32767.5-x))), approx inverse of squash
+  int stretch(int x) {
+    assert(x>=0 && x<=32767);
+    return stretcht[x];
+  }
+
+  // bound x to a 12 bit signed int
+  int clamp2k(int x) {
+    if (x<-2048) return -2048;
+    else if (x>2047) return 2047;
+    else return x;
+  }
+
+  // bound x to a 20 bit signed int
+  int clamp512k(int x) {
+    if (x<-(1<<19)) return -(1<<19);
+    else if (x>=(1<<19)) return (1<<19)-1;
+    else return x;
+  }
+
+  // Get cxt in ht, creating a new row if needed
+  size_t find(Array<uint8_t>& ht, int sizebits, uint32_t cxt);
+};
+
+// Initailize model-independent tables
+unzPredictor::unzPredictor(unzZPAQL& zr):
+    c8(1), hmap4(1), z(zr) {
+  assert(sizeof(uint8_t)==1);
+  assert(sizeof(uint16_t)==2);
+  assert(sizeof(uint32_t)==4);
+  assert(sizeof(uint64_t)==8);
+  assert(sizeof(short)==2);
+  assert(sizeof(int)==4);
+
+  // Initialize tables
+  dt2k[0]=0;
+  for (int i=1; i<256; ++i)
+    dt2k[i]=2048/i;
+  for (int i=0; i<1024; ++i)
+    dt[i]=(1<<17)/(i*2+3)*2;
+  for (int i=0; i<32768; ++i)
+    stretcht[i]=int(log((i+0.5)/(32767.5-i))*64+0.5+100000)-100000;
+  for (int i=0; i<4096; ++i)
+    squasht[i]=int(32768.0/(1+exp((i-2048)*(-1.0/64))));
+
+  // Verify floating point math for squash() and stretch()
+  uint32_t sqsum=0, stsum=0;
+  for (int i=32767; i>=0; --i)
+    stsum=stsum*3+stretch(i);
+  for (int i=4095; i>=0; --i)
+    sqsum=sqsum*3+squash(i-2048);
+  assert(stsum==3887533746u);
+  assert(sqsum==2278286169u);
+}
+
+// Initialize the predictor with a new model in z
+void unzPredictor::init() {
+
+  // Initialize context hash function
+  z.inith();
+
+  // Initialize predictions
+  for (int i=0; i<256; ++i) h[i]=p[i]=0;
+
+  // Initialize components
+  for (int i=0; i<256; ++i)  // clear old model
+    comp[i].init();
+  int n=z.header[6]; // hsize[0..1] hh hm ph pm n (comp)[n] 0 0[128] (hcomp) 0
+  const uint8_t* cp=&z.header[7];  // start of component list
+  for (int i=0; i<n; ++i) {
+    assert(cp<&z.header[z.cend]);
+    assert(cp>&z.header[0] && cp<&z.header[z.header.isize()-8]);
+    unzComponent& cr=comp[i];
+    switch(cp[0]) {
+      case CONS:  // c
+        p[i]=(cp[1]-128)*4;
+        break;
+      case CM: // sizebits limit
+        if (cp[1]>32) unzerror("max size for CM is 32");
+        cr.cm.resize(1, cp[1]);  // packed CM (22 bits) + CMCOUNT (10 bits)
+        cr.limit=cp[2]*4;
+        for (size_t j=0; j<cr.cm.size(); ++j)
+          cr.cm[j]=0x80000000;
+        break;
+      case ICM: // sizebits
+        if (cp[1]>26) unzerror("max size for ICM is 26");
+        cr.limit=1023;
+        cr.cm.resize(256);
+        cr.ht.resize(64, cp[1]);
+        for (size_t j=0; j<cr.cm.size(); ++j)
+          cr.cm[j]=st.cminit(j);
+        break;
+      case MATCH:  // sizebits
+        if (cp[1]>32 || cp[2]>32) unzerror("max size for MATCH is 32 32");
+        cr.cm.resize(1, cp[1]);  // index
+        cr.ht.resize(1, cp[2]);  // unzBuf
+        cr.ht(0)=1;
+        break;
+      case AVG: // j k wt
+        if (cp[1]>=i) unzerror("AVG j >= i");
+        if (cp[2]>=i) unzerror("AVG k >= i");
+        break;
+      case MIX2:  // sizebits j k rate mask
+        if (cp[1]>32) unzerror("max size for MIX2 is 32");
+        if (cp[3]>=i) unzerror("MIX2 k >= i");
+        if (cp[2]>=i) unzerror("MIX2 j >= i");
+        cr.c=(size_t(1)<<cp[1]); // size (number of contexts)
+        cr.a16.resize(1, cp[1]);  // wt[size][m]
+        for (size_t j=0; j<cr.a16.size(); ++j)
+          cr.a16[j]=32768;
+        break;
+      case MIX: {  // sizebits j m rate mask
+        if (cp[1]>32) unzerror("max size for MIX is 32");
+        if (cp[2]>=i) unzerror("MIX j >= i");
+        if (cp[3]<1 || cp[3]>i-cp[2]) unzerror("MIX m not in 1..i-j");
+        int m=cp[3];  // number of inputs
+        assert(m>=1);
+        cr.c=(size_t(1)<<cp[1]); // size (number of contexts)
+        cr.cm.resize(m, cp[1]);  // wt[size][m]
+        for (size_t j=0; j<cr.cm.size(); ++j)
+          cr.cm[j]=65536/m;
+        break;
+      }
+      case ISSE:  // sizebits j
+        if (cp[1]>32) unzerror("max size for ISSE is 32");
+        if (cp[2]>=i) unzerror("ISSE j >= i");
+        cr.ht.resize(64, cp[1]);
+        cr.cm.resize(512);
+        for (int j=0; j<256; ++j) {
+          cr.cm[j*2]=1<<15;
+          cr.cm[j*2+1]=clamp512k(stretch(st.cminit(j)>>8)*1024);
+        }
+        break;
+      case SSE: // sizebits j start limit
+        if (cp[1]>32) unzerror("max size for SSE is 32");
+        if (cp[2]>=i) unzerror("SSE j >= i");
+        if (cp[3]>cp[4]*4) unzerror("SSE start > limit*4");
+        cr.cm.resize(32, cp[1]);
+        cr.limit=cp[4]*4;
+        for (size_t j=0; j<cr.cm.size(); ++j)
+          cr.cm[j]=squash((j&31)*64-992)<<17|cp[3];
+        break;
+      default: unzerror("unknown component type");
+    }
+    assert(compsize[*cp]>0);
+    cp+=compsize[*cp];
+    assert(cp>=&z.header[7] && cp<&z.header[z.cend]);
+  }
+}
+
+// Return next bit prediction using interpreted COMP code
+int unzPredictor::predict() {
+  assert(c8>=1 && c8<=255);
+
+  // Predict next bit
+  int n=z.header[6];
+  assert(n>0 && n<=255);
+  const uint8_t* cp=&z.header[7];
+  assert(cp[-1]==n);
+  for (int i=0; i<n; ++i) {
+    assert(cp>&z.header[0] && cp<&z.header[z.header.isize()-8]);
+    unzComponent& cr=comp[i];
+    switch(cp[0]) {
+      case CONS:  // c
+        break;
+      case CM:  // sizebits limit
+        cr.cxt=h[i]^hmap4;
+        p[i]=stretch(cr.cm(cr.cxt)>>17);
+        break;
+      case ICM: // sizebits
+        assert((hmap4&15)>0);
+        if (c8==1 || (c8&0xf0)==16) cr.c=find(cr.ht, cp[1]+2, h[i]+16*c8);
+        cr.cxt=cr.ht[cr.c+(hmap4&15)];
+        p[i]=stretch(cr.cm(cr.cxt)>>8);
+        break;
+      case MATCH: // sizebits bufbits: a=len, b=offset, c=bit, cxt=bitpos,
+                  //                   ht=unzBuf, limit=pos
+        assert(cr.cm.size()==(size_t(1)<<cp[1]));
+        assert(cr.ht.size()==(size_t(1)<<cp[2]));
+        assert(cr.a<=255);
+        assert(cr.c==0 || cr.c==1);
+        assert(cr.cxt<8);
+        assert(cr.limit<cr.ht.size());
+        if (cr.a==0) p[i]=0;
+        else {
+          cr.c=(cr.ht(cr.limit-cr.b)>>(7-cr.cxt))&1; // predicted bit
+          p[i]=stretch(dt2k[cr.a]*(cr.c*-2+1)&32767);
+        }
+        break;
+      case AVG: // j k wt
+        p[i]=(p[cp[1]]*cp[3]+p[cp[2]]*(256-cp[3]))>>8;
+        break;
+      case MIX2: { // sizebits j k rate mask
+                   // c=size cm=wt[size] cxt=input
+        cr.cxt=((h[i]+(c8&cp[5]))&(cr.c-1));
+        assert(cr.cxt<cr.a16.size());
+        int w=cr.a16[cr.cxt];
+        assert(w>=0 && w<65536);
+        p[i]=(w*p[cp[2]]+(65536-w)*p[cp[3]])>>16;
+        assert(p[i]>=-2048 && p[i]<2048);
+      }
+        break;
+      case MIX: {  // sizebits j m rate mask
+                   // c=size cm=wt[size][m] cxt=index of wt in cm
+        int m=cp[3];
+        assert(m>=1 && m<=i);
+        cr.cxt=h[i]+(c8&cp[5]);
+        cr.cxt=(cr.cxt&(cr.c-1))*m; // pointer to row of weights
+        assert(cr.cxt<=cr.cm.size()-m);
+        int* wt=(int*)&cr.cm[cr.cxt];
+        p[i]=0;
+        for (int j=0; j<m; ++j)
+          p[i]+=(wt[j]>>8)*p[cp[2]+j];
+        p[i]=clamp2k(p[i]>>8);
+      }
+        break;
+      case ISSE: { // sizebits j -- c=hi, cxt=bh
+        assert((hmap4&15)>0);
+        if (c8==1 || (c8&0xf0)==16)
+          cr.c=find(cr.ht, cp[1]+2, h[i]+16*c8);
+        cr.cxt=cr.ht[cr.c+(hmap4&15)];  // bit history
+        int *wt=(int*)&cr.cm[cr.cxt*2];
+        p[i]=clamp2k((wt[0]*p[cp[2]]+wt[1]*64)>>16);
+      }
+        break;
+      case SSE: { // sizebits j start limit
+        cr.cxt=(h[i]+c8)*32;
+        int pq=p[cp[2]]+992;
+        if (pq<0) pq=0;
+        if (pq>1983) pq=1983;
+        int wt=pq&63;
+        pq>>=6;
+        assert(pq>=0 && pq<=30);
+        cr.cxt+=pq;
+        p[i]=stretch(((cr.cm(cr.cxt)>>10)*(64-wt)+(cr.cm(cr.cxt+1)>>10)*wt)
+             >>13);
+        cr.cxt+=wt>>5;
+      }
+        break;
+      default:
+        unzerror("component predict not implemented");
+    }
+    cp+=compsize[cp[0]];
+    assert(cp<&z.header[z.cend]);
+    assert(p[i]>=-2048 && p[i]<2048);
+  }
+  assert(cp[0]==NONE);
+  return squash(p[n-1]);
+}
+
+// Update model with decoded bit y (0...1)
+void unzPredictor::update(int y) {
+  assert(y==0 || y==1);
+  assert(c8>=1 && c8<=255);
+  assert(hmap4>=1 && hmap4<=511);
+
+  // Update components
+  const uint8_t* cp=&z.header[7];
+  int n=z.header[6];
+  assert(n>=1 && n<=255);
+  assert(cp[-1]==n);
+  for (int i=0; i<n; ++i) {
+    unzComponent& cr=comp[i];
+    switch(cp[0]) {
+      case CONS:  // c
+        break;
+      case CM:  // sizebits limit
+        train(cr, y);
+        break;
+      case ICM: { // sizebits: cxt=ht[b]=bh, ht[c][0..15]=bh row, cxt=bh
+        cr.ht[cr.c+(hmap4&15)]=st.next(cr.ht[cr.c+(hmap4&15)], y);
+        uint32_t& pn=cr.cm(cr.cxt);
+        pn+=int(y*32767-(pn>>8))>>2;
+      }
+        break;
+      case MATCH: // sizebits bufbits:
+                  //   a=len, b=offset, c=bit, cm=index, cxt=bitpos
+                  //   ht=unzBuf, limit=pos
+      {
+        assert(cr.a<=255);
+        assert(cr.c==0 || cr.c==1);
+        assert(cr.cxt<8);
+        assert(cr.cm.size()==(size_t(1)<<cp[1]));
+        assert(cr.ht.size()==(size_t(1)<<cp[2]));
+        assert(cr.limit<cr.ht.size());
+        if (int(cr.c)!=y) cr.a=0;  // mismatch?
+        cr.ht(cr.limit)+=cr.ht(cr.limit)+y;
+        if (++cr.cxt==8) {
+          cr.cxt=0;
+          ++cr.limit;
+          cr.limit&=(1<<cp[2])-1;
+          if (cr.a==0) {  // look for a match
+            cr.b=cr.limit-cr.cm(h[i]);
+            if (cr.b&(cr.ht.size()-1))
+              while (cr.a<255
+                     && cr.ht(cr.limit-cr.a-1)==cr.ht(cr.limit-cr.a-cr.b-1))
+                ++cr.a;
+          }
+          else cr.a+=cr.a<255;
+          cr.cm(h[i])=cr.limit;
+        }
+      }
+        break;
+      case AVG:  // j k wt
+        break;
+      case MIX2: { // sizebits j k rate mask
+                   // cm=wt[size], cxt=input
+        assert(cr.a16.size()==cr.c);
+        assert(cr.cxt<cr.a16.size());
+        int err=(y*32767-squash(p[i]))*cp[4]>>5;
+        int w=cr.a16[cr.cxt];
+        w+=(err*(p[cp[2]]-p[cp[3]])+(1<<12))>>13;
+        if (w<0) w=0;
+        if (w>65535) w=65535;
+        cr.a16[cr.cxt]=w;
+      }
+        break;
+      case MIX: {   // sizebits j m rate mask
+                    // cm=wt[size][m], cxt=input
+        int m=cp[3];
+        assert(m>0 && m<=i);
+        assert(cr.cm.size()==m*cr.c);
+        assert(cr.cxt+m<=cr.cm.size());
+        int err=(y*32767-squash(p[i]))*cp[4]>>4;
+        int* wt=(int*)&cr.cm[cr.cxt];
+        for (int j=0; j<m; ++j)
+          wt[j]=clamp512k(wt[j]+((err*p[cp[2]+j]+(1<<12))>>13));
+      }
+        break;
+      case ISSE: { // sizebits j  -- c=hi, cxt=bh
+        assert(cr.cxt==uint32_t(cr.ht[cr.c+(hmap4&15)]));
+        int err=y*32767-squash(p[i]);
+        int *wt=(int*)&cr.cm[cr.cxt*2];
+        wt[0]=clamp512k(wt[0]+((err*p[cp[2]]+(1<<12))>>13));
+        wt[1]=clamp512k(wt[1]+((err+16)>>5));
+        cr.ht[cr.c+(hmap4&15)]=st.next(cr.cxt, y);
+      }
+        break;
+      case SSE:  // sizebits j start limit
+        train(cr, y);
+        break;
+      default:
+        assert(0);
+    }
+    cp+=compsize[cp[0]];
+    assert(cp>=&z.header[7] && cp<&z.header[z.cend] 
+           && cp<&z.header[z.header.isize()-8]);
+  }
+  assert(cp[0]==NONE);
+
+  // Save bit y in c8, hmap4
+  c8+=c8+y;
+  if (c8>=256) {
+    z.run(c8-256);
+    hmap4=1;
+    c8=1;
+    for (int i=0; i<n; ++i) h[i]=z.H(i);
+  }
+  else if (c8>=16 && c8<32)
+    hmap4=(hmap4&0xf)<<5|y<<4|1;
+  else
+    hmap4=(hmap4&0x1f0)|(((hmap4&0xf)*2+y)&0xf);
+}
+
+// Find cxt row in hash table ht. ht has rows of 16 indexed by the
+// low sizebits of cxt with element 0 having the next higher 8 bits for
+// collision detection. If not found after 3 adjacent tries, replace the
+// row with lowest element 1 as priority. Return index of row.
+size_t unzPredictor::find(Array<uint8_t>& ht, int sizebits, uint32_t cxt) {
+  assert(ht.size()==size_t(16)<<sizebits);
+  int chk=cxt>>sizebits&255;
+  size_t h0=(cxt*16)&(ht.size()-16);
+  if (ht[h0]==chk) return h0;
+  size_t h1=h0^16;
+  if (ht[h1]==chk) return h1;
+  size_t h2=h0^32;
+  if (ht[h2]==chk) return h2;
+  if (ht[h0+1]<=ht[h1+1] && ht[h0+1]<=ht[h2+1])
+    return memset(&ht[h0], 0, 16), ht[h0]=chk, h0;
+  else if (ht[h1+1]<ht[h2+1])
+    return memset(&ht[h1], 0, 16), ht[h1]=chk, h1;
+  else
+    return memset(&ht[h2], 0, 16), ht[h2]=chk, h2;
+}
+
+//////////////////////////// unzDecoder /////////////////////////
+
+// unzDecoder decompresses using an arithmetic code
+class unzDecoder {
+public:
+  unzReader* in;        // destination
+  unzDecoder(unzZPAQL& z);
+  int decompress();  // return a byte or EOF
+  void init();       // initialize at start of block
+private:
+  uint32_t low, high;     // range
+  uint32_t curr;          // last 4 bytes of archive
+  unzPredictor pr;      // to get p
+  int decode(int p); // return decoded bit (0..1) with prob. p (0..65535)
+};
+
+unzDecoder::unzDecoder(unzZPAQL& z):
+    in(0), low(1), high(0xFFFFFFFF), curr(0), pr(z) {
+}
+
+void unzDecoder::init() {
+  pr.init();
+  if (pr.isModeled()) low=1, high=0xFFFFFFFF, curr=0;
+  else low=high=curr=0;
+}
+
+// Return next bit of decoded input, which has 16 bit probability p of being 1
+int unzDecoder::decode(int p) {
+  assert(p>=0 && p<65536);
+  assert(high>low && low>0);
+  if (curr<low || curr>high) unzerror("archive corrupted");
+  assert(curr>=low && curr<=high);
+  uint32_t mid=low+uint32_t(((high-low)*uint64_t(uint32_t(p)))>>16);  // split range
+  assert(high>mid && mid>=low);
+  int y=curr<=mid;
+  if (y) high=mid; else low=mid+1; // pick half
+  while ((high^low)<0x1000000) { // shift out identical leading bytes
+    high=high<<8|255;
+    low=low<<8;
+    low+=(low==0);
+    int c=in->get();
+    if (c<0) unzerror("unexpected end of file");
+    curr=curr<<8|c;
+  }
+  return y;
+}
+
+// Decompress 1 byte or -1 at end of input
+int unzDecoder::decompress() {
+  if (pr.isModeled()) {  // n>0 components?
+    if (curr==0) {  // segment initialization
+      for (int i=0; i<4; ++i)
+        curr=curr<<8|in->get();
+    }
+    if (decode(0)) {
+      if (curr!=0) unzerror("decoding end of input");
+      return -1;
+    }
+    else {
+      int c=1;
+      while (c<256) {  // get 8 bits
+        int p=pr.predict()*2+1;
+        c+=c+decode(p);
+        pr.update(c&1);
+      }
+      return c-256;
+    }
+  }
+  else {
+    if (curr==0) {  // segment initialization
+      for (int i=0; i<4; ++i)
+        curr=curr<<8|in->get();
+      if (curr==0) return -1;
+    }
+    assert(curr>0);
+    --curr;
+    return in->get();
+  }
+}
+
+/////////////////////////// unzPostProcessor ////////////////////
+
+class unzPostProcessor {
+  int state;   // input parse state: 0=INIT, 1=PASS, 2..4=loading, 5=POST
+  int hsize;   // header size
+  int ph, pm;  // sizes of H and M in z
+public:
+  unzZPAQL z;     // holds PCOMP
+  unzPostProcessor(): state(0), hsize(0), ph(0), pm(0) {}
+  void init(int h, int m);  // ph, pm sizes of H and M
+  int write(int c);  // Input a byte, return state
+  void setOutput(unzWriter* out) {z.output=out;}
+  void setSHA1(unzSHA1* sha1ptr) {z.sha1=sha1ptr;}
+  int getState() const {return state;}
+};
+
+// Copy ph, pm from block header
+void unzPostProcessor::init(int h, int m) {
+  state=hsize=0;
+  ph=h;
+  pm=m;
+  z.clear();
+}
+
+// (PASS=0 | PROG=1 psize[0..1] pcomp[0..psize-1]) data... EOB=-1
+// Return state: 1=PASS, 2..4=loading PROG, 5=PROG loaded
+int unzPostProcessor::write(int c) {
+  assert(c>=-1 && c<=255);
+  switch (state) {
+    case 0:  // initial state
+      if (c<0) unzerror("Unexpected EOS");
+      state=c+1;  // 1=PASS, 2=PROG
+      if (state>2) unzerror("unknown post processing type");
+      if (state==1) z.clear();
+      break;
+    case 1:  // PASS
+      if (c>=0) z.outc(c);
+      break;
+    case 2: // PROG
+      if (c<0) unzerror("Unexpected EOS");
+      hsize=c;  // low byte of size
+      state=3;
+      break;
+    case 3:  // PROG psize[0]
+      if (c<0) unzerror("Unexpected EOS");
+      hsize+=c*256;  // high byte of psize
+      if (hsize<1) unzerror("Empty PCOMP");
+      z.header.resize(hsize+300);
+      z.cend=8;
+      z.hbegin=z.hend=z.cend+128;
+      z.header[4]=ph;
+      z.header[5]=pm;
+      state=4;
+      break;
+    case 4:  // PROG psize[0..1] pcomp[0...]
+      if (c<0) unzerror("Unexpected EOS");
+      assert(z.hend<z.header.isize());
+      z.header[z.hend++]=c;  // one byte of pcomp
+      if (z.hend-z.hbegin==hsize) {  // last byte of pcomp?
+        hsize=z.cend-2+z.hend-z.hbegin;
+        z.header[0]=hsize&255;  // header size with empty COMP
+        z.header[1]=hsize>>8;
+        z.initp();
+        state=5;
+      }
+      break;
+    case 5:  // PROG ... data
+      z.run(c);
+      break;
+  }
+  return state;
+}
+
+//////////////////////// unzDecompresser ////////////////////////
+
+// For decompression and listing archive contents
+class unzDecompresser {
+public:
+  unzDecompresser(): z(), dec(z), pp(), state(BLOCK), decode_state(FIRSTSEG) {}
+  void setInput(unzReader* in) {dec.in=in;}
+  bool findBlock();
+  bool findFilename(unzWriter* = 0);
+  void readComment(unzWriter* = 0);
+  void setOutput(unzWriter* out) {pp.setOutput(out);}
+  void setSHA1(unzSHA1* sha1ptr) {pp.setSHA1(sha1ptr);}
+  void decompress();  // decompress segment
+  void readSegmentEnd(char* sha1string = 0);
+private:
+  unzZPAQL z;
+  unzDecoder dec;
+  unzPostProcessor pp;
+  enum {BLOCK, FILENAME, COMMENT, DATA, SEGEND} state;  // expected next
+  enum {FIRSTSEG, SEG} decode_state;  // which segment in block?
+};
+
+// Find the start of a block and return true if found. Set memptr
+// to memory used.
+bool unzDecompresser::findBlock() {
+  assert(state==BLOCK);
+
+  // Find start of block
+  uint32_t h1=0x3D49B113, h2=0x29EB7F93, h3=0x2614BE13, h4=0x3828EB13;
+  // Rolling hashes initialized to hash of first 13 bytes
+  int c;
+  while ((c=dec.in->get())!=-1) {
+    h1=h1*12+c;
+    h2=h2*20+c;
+    h3=h3*28+c;
+    h4=h4*44+c;
+    if (h1==0xB16B88F1 && h2==0xFF5376F1 && h3==0x72AC5BF1 && h4==0x2F909AF1)
+      break;  // hash of 16 byte string
+  }
+  if (c==-1) return false;
+
+  // Read header
+  if ((c=dec.in->get())!=1 && c!=2) unzerror("unsupported ZPAQ level");
+  if (dec.in->get()!=1) unzerror("unsupported unzZPAQL type");
+  z.read(dec.in);
+  if (c==1 && z.header.isize()>6 && z.header[6]==0)
+    unzerror("ZPAQ level 1 requires at least 1 component");
+  state=FILENAME;
+  decode_state=FIRSTSEG;
+  return true;
+}
+
+// Read the start of a segment (1) or end of block code (255).
+// If a segment is found, write the filename and return true, else false.
+bool unzDecompresser::findFilename(unzWriter* filename) {
+  assert(state==FILENAME);
+  int c=dec.in->get();
+  if (c==1) {  // segment found
+    while (true) {
+      c=dec.in->get();
+      if (c==-1) unzerror("unexpected EOF");
+      if (c==0) {
+        state=COMMENT;
+        return true;
+      }
+      if (filename) filename->put(c);
+    }
+  }
+  else if (c==255) {  // end of block found
+    state=BLOCK;
+    return false;
+  }
+  else
+    unzerror("missing segment or end of block");
+  return false;
+}
+
+// Read the comment from the segment header
+void unzDecompresser::readComment(unzWriter* comment) {
+  assert(state==COMMENT);
+  state=DATA;
+  while (true) {
+    int c=dec.in->get();
+    if (c==-1) unzerror("unexpected EOF");
+    if (c==0) break;
+    if (comment) comment->put(c);
+  }
+  if (dec.in->get()!=0) unzerror("missing reserved byte");
+}
+
+// Decompress n bytes, or all if n < 0. Return false if done
+void unzDecompresser::decompress() {
+  assert(state==DATA);
+
+  // Initialize models to start decompressing block
+  if (decode_state==FIRSTSEG) {
+    dec.init();
+    assert(z.header.size()>5);
+    pp.init(z.header[4], z.header[5]);
+    decode_state=SEG;
+  }
+
+  // Decompress and load PCOMP into postprocessor
+  while ((pp.getState()&3)!=1)
+    pp.write(dec.decompress());
+
+  // Decompress n bytes, or all if n < 0
+  while (true) {
+    int c=dec.decompress();
+    pp.write(c);
+    if (c==-1) {
+      state=SEGEND;
+      return;
+    }
+  }
+}
+
+// Read end of block. If a unzSHA1 checksum is present, write 1 and the
+// 20 byte checksum into sha1string, else write 0 in first byte.
+// If sha1string is 0 then discard it.
+void unzDecompresser::readSegmentEnd(char* sha1string) {
+  assert(state==SEGEND);
+
+  // Read checksum
+  int c=dec.in->get();
+  if (c==254) {
+    if (sha1string) sha1string[0]=0;  // no checksum
+  }
+  else if (c==253) {
+    if (sha1string) sha1string[0]=1;
+    for (int i=1; i<=20; ++i) {
+      c=dec.in->get();
+      if (sha1string) sha1string[i]=c;
+    }
+  }
+  else
+    unzerror("missing end of segment marker");
+  state=FILENAME;
+}
+
+///////////////////////// Driver program ////////////////////
+
+uint64_t offset=0;  // number of bytes input prior to current block
+
+// Handle errors
+void unzerror(const char* msg) {
+  printf("\nError at offset %1.0f: %s\n", double(offset), msg);
+  exit(1);
+}
+
+// Input archive
+class unzInputFile: public unzReader {
+  FILE* f;  // input file
+  enum {BUFSIZE=4096};
+  uint64_t offset;  // number of bytes read
+  unsigned p, end;  // start and end of unread bytes in unzBuf
+  unzAES_CTR* aes;  // to decrypt
+  char unzBuf[BUFSIZE];  // input buffer
+  int64_t filesize;
+public:
+  unzInputFile(): f(0), offset(0), p(0), end(0), aes(0),filesize(-1) {}
+
+  void open(const char* filename, const char* key);
+
+  // Return one input byte or -1 for EOF
+  int get() {
+    if (f && p>=end) {
+      p=0;
+      end=fread(unzBuf, 1, BUFSIZE, f);
+      if (aes) aes->encrypt(unzBuf, end, offset);
+    }
+    if (p>=end) return -1;
+    ++offset;
+    return unzBuf[p++]&255;
+  }
+
+  // Return number of bytes read
+  uint64_t tell() {return offset;}
+  int64_t getfilesize() {return filesize;}
+};
+
+	
+// Open input. Decrypt with key.
+void unzInputFile::open(const char* filename, const char* key) {
+  f=fopen(filename, "rb");
+  if (!f) {
+    perror(filename);
+    return ;
+  }
+	fseeko(f, 0, SEEK_END);
+	filesize=ftello(f);
+	fseeko(f, 0, SEEK_SET);
+	
+  if (key) {
+    char salt[32], stretched_key[32];
+    unzSHA256 sha256;
+    for (int i=0; i<32; ++i) salt[i]=get();
+    if (offset!=32) unzerror("no salt");
+    while (*key) sha256.put(*key++);
+    stretchKey(stretched_key, sha256.result(), salt);
+    aes=new unzAES_CTR(stretched_key, 32, salt);
+    if (!aes) unzerror("out of memory");
+    aes->encrypt(unzBuf, end, 0);
+  }
+}
+
+// File to extract
+class unzOutputFile: public unzWriter {
+  FILE* f;  // output file or NULL
+  unsigned p;  // number of pending bytes to write
+  enum {BUFSIZE=4096};
+  char unzBuf[BUFSIZE];  // output buffer
+public:
+  unzOutputFile(): f(0), p(0) {}
+  void open(const char* filename);
+  void close();
+
+  // write 1 byte
+  void put(int c) {
+    if (f) {
+      unzBuf[p++]=c;
+      if (p==BUFSIZE) fwrite(unzBuf, 1, p, f), p=0;
+    }
+  }
+
+  virtual ~unzOutputFile() {close();}
+};
+
+// Open file unless it exists. Print error message if unsuccessful.
+void unzOutputFile::open(const char* filename) {
+  close();
+  f=fopen(filename, "rb");
+  if (f) {
+    fclose(f);
+    f=0;
+    fprintf(stderr, "file exists: %s\n", filename);
+  }
+  f=fopen(filename, "wb");
+  if (!f) perror(filename);
+}
+
+// Flush output and close file
+void unzOutputFile::close() {
+  if (f && p>0) fwrite(unzBuf, 1, p, f);
+  if (f) fclose(f), f=0;
+  p=0;
+}
+
+
+// Write to string
+struct unzBuf: public unzWriter {
+  size_t limit;  // maximum size
+  std::string s;  // saved output
+  unzBuf(size_t l): limit(l) {}
+
+  // Save c in s
+  void put(int c) {
+    if (s.size()>=limit) unzerror("output overflow");
+    s+=char(c);
+  }
+};
+
+// Test if 14 digit date is valid YYYYMMDDHHMMSS format
+void verify_date(uint64_t date) {
+  int year=date/1000000/10000;
+  int month=date/100000000%100;
+  int day=date/1000000%100;
+  int hour=date/10000%100;
+  int min=date/100%100;
+  int sec=date%100;
+  if (year<1900 || year>2999 || month<1 || month>12 || day<1 || day>31
+      || hour<0 || hour>59 || min<0 || min>59 || sec<0 || sec>59)
+    unzerror("invalid date");
+}
+
+// Test if string is valid UTF8
+void unzverify_utf8(const char* s) {
+  while (true) {
+    int c=uint8_t(*s);
+    if (c==0) return;
+    if ((c>=128 && c<194) || c>=245) unzerror("invalid UTF-8 first byte");
+    int len=1+(c>=192)+(c>=224)+(c>=240);
+    for (int i=1; i<len; ++i)
+      if ((s[i]&192)!=128) unzerror("invalid UTF-8 extra byte");
+    if (c==224 && uint8_t(s[1])<160) unzerror("UTF-8 3 byte long code");
+    if (c==240 && uint8_t(s[1])<144) unzerror("UTF-8 4 byte long code");
+    s+=len;
+  }
+}
+
+// read 8 byte LSB number
+uint64_t unzget8(const char* p) {
+  uint64_t r=0;
+  for (int i=0; i<8; ++i)
+    r+=(p[i]&255ull)<<(i*8);
+  return r;
+}
+
+// read 4 byte LSB number
+uint32_t unzget4(const char* p) {
+  uint32_t r=0;
+  for (int i=0; i<4; ++i)
+    r+=(p[i]&255u)<<(i*8);
+  return r;
+}
+
+// file metadata
+struct unzDT {
+  uint64_t date;  // YYYYMMDDHHMMSS or 0 if deleted
+  uint64_t attr;  // first 8 bytes, LSB first
+  std::vector<uint32_t> ptr;  // fragment IDs
+  char sha1hex[66];		 // 1+32+32 (unzSHA256)+ zero
+  char sha1decompressedhex[66];		 // 1+32+32 (unzSHA256)+ zero
+  std::string sha1fromfile;		 // 1+32+32 (unzSHA256)+ zero
+
+  unzDT(): date(0), attr(0) {sha1hex[0]=0x0;sha1decompressedhex[0]=0x0;sha1fromfile="";}
+};
+
+typedef std::map<std::string, unzDT> unzDTMap;
+
+bool unzcomparesha1hex(unzDTMap::iterator i_primo, unzDTMap::iterator i_secondo) 
+{
+	return (strcmp(i_primo->second.sha1hex,i_secondo->second.sha1hex)<0);
+}
+
+bool unzcompareprimo(unzDTMap::iterator i_primo, unzDTMap::iterator i_secondo) 
+{
+	return (i_primo->first<i_secondo->first);
+}
+///////// end of patched unzpaq206.cpp
+
+
+
+
+
+
+
+
+
+
+////////////////////////////////////////
+///// Support functions
+
+
+
+struct s_fileandsize
+{
+	string	filename;
+	uint64_t size;
+	int64_t attr;
+	int64_t date;
+	bool isdir;
+	string hashhex;
+	bool flaghashstored;
+	s_fileandsize(): size(0),attr(0),date(0),isdir(false),flaghashstored(false) {hashhex="";}
+};
+
+
+
 
 int terminalwidth() 
 {
@@ -11389,26 +13598,27 @@ void mygetch()
 	mychar = getchar();
 	tcsetattr ( STDIN_FILENO, TCSANOW, &oldt );
 #endif
-
-
-
 	if ((mychar==113) || (mychar==81) || (mychar==3))  /// q, Q, control-C
 	{
 #ifdef unix
 		printf("\n\n");
 #endif
-	exit(0);
+		exit(0);
 	}
 }
+
+
+///	print text just like |more
 void moreprint(const char* i_stringa)
 {
+	/// warn: if redirected or piped widths can become <0
 	
-	 int larghezzaconsole=terminalwidth()-2;
-	 int altezzaconsole=terminalheight();
-	 static int righestampate=0;
+	int larghezzaconsole=terminalwidth()-2;
+	int altezzaconsole=terminalheight();
+	static int righestampate=0;
+	
 	if (!i_stringa)
 		return;
-		
 		
 	if ((larghezzaconsole<0) || (altezzaconsole<0))
 	{
@@ -11430,23 +13640,23 @@ void moreprint(const char* i_stringa)
 		}
 		return;
 	}
-	 int lunghezzastringa=strlen(i_stringa);
+	int lunghezzastringa=strlen(i_stringa);
 	
 	if (!larghezzaconsole)
 		return;
 
-	 int righe=(lunghezzastringa/larghezzaconsole)+1;
-	 int massimo=lunghezzastringa-(larghezzaconsole*(righe-1));
+	int righe	=(lunghezzastringa/larghezzaconsole)+1;
+	int massimo	=lunghezzastringa-(larghezzaconsole*(righe-1));
 	
 	for (int riga=1; riga<=righe;riga++)
 	{
-		
 		int currentmax=larghezzaconsole;
 		
 		if (riga==righe)
 			currentmax=massimo;
 
 		int startcarattere=(riga-1)*larghezzaconsole;
+		
 		for (int i=startcarattere;i<startcarattere+currentmax;i++)
 			printf("%c",i_stringa[i]);
 		printf("\n");
@@ -11454,26 +13664,1893 @@ void moreprint(const char* i_stringa)
 		righestampate++;
 		if (righestampate>(altezzaconsole-2))
 		{
-				printf("-- More (q, Q or control C to exit) --\r");
-				mygetch();
+			printf("-- More (q, Q or control C to exit) --\r");
+			mygetch();
 			for (int i=0;i<altezzaconsole;i++)
 				printf("\n");
 			righestampate=0;
 		}
-	}	
+	}
 }
 void morebar(const char i_carattere)
 {
 	int twidth=terminalwidth();
-	
 	if (twidth<10)
 		twidth=100; // redirect
-		
+	
 	char barbuffer[twidth+10];
 	for (int i=0;i<twidth-4;i++)
 		sprintf(barbuffer+i,"%c",i_carattere);
 	moreprint(barbuffer);
 }
+
+
+//// cut a too long filename 
+string mymaxfile(string i_filename,const unsigned int i_lunghezza)
+{
+	if (i_filename=="")
+		return "";
+	if (i_lunghezza==0)
+		return "";
+	if (i_filename.length()<=i_lunghezza)
+		return i_filename;
+	
+	if (i_lunghezza>10)
+	{
+		if (i_filename.length()>10)
+		{
+			unsigned int intestazione=i_lunghezza-10;
+			return i_filename.substr(0,intestazione)+"(...)"+i_filename.substr(i_filename.length()-5,5);
+		}
+		else
+		return i_filename.substr(0,i_lunghezza);
+			
+	}
+	else
+		return i_filename.substr(0,i_lunghezza);
+}
+
+
+// return a/b such that there is exactly one "/" in between, and
+// in Windows, any drive letter in b the : is removed and there
+// is a "/" after.
+string append_path(string a, string b) {
+  int na=a.size();
+  int nb=b.size();
+#ifndef unix
+  if (nb>1 && b[1]==':') {  // remove : from drive letter
+    if (nb>2 && b[2]!='/') b[1]='/';
+    else b=b[0]+b.substr(2), --nb;
+  }
+#endif
+  if (nb>0 && b[0]=='/') b=b.substr(1);
+  if (na>0 && a[na-1]=='/') a=a.substr(0, na-1);
+  return a+"/"+b;
+}
+
+//////// Some functions to deal with UTF-8 on Windows
+#ifdef _WIN32
+	uint32_t convert_unicode_to_ansi_string(std::string& ansi,const wchar_t* unicode,const size_t unicode_size) 
+	{
+		uint32_t error = 0;
+		do 
+		{
+			if ((nullptr == unicode) || (0 == unicode_size)) 
+			{
+				error = ERROR_INVALID_PARAMETER;
+				break;
+			}
+			ansi.clear();
+			int required_cch=::WideCharToMultiByte(
+									CP_ACP,
+									0,
+									unicode, static_cast<int>(unicode_size),
+									nullptr, 0,
+									nullptr, nullptr
+									);
+
+			if (required_cch==0) 
+			{
+				error=::GetLastError();
+				break;
+			}
+			ansi.resize(required_cch);
+			if (0 == ::WideCharToMultiByte(
+						CP_ACP,
+						0,
+						unicode, static_cast<int>(unicode_size),
+						const_cast<char*>(ansi.c_str()), static_cast<int>(ansi.size()),
+						nullptr, nullptr
+						)) 
+			{
+				error =::GetLastError();
+				break;
+			}
+		} 
+		while (false);
+
+		return error;
+	}
+
+	uint32_t convert_utf8_to_unicode_string(std::wstring& unicode,const char* utf8,const size_t utf8_size)
+	{
+		uint32_t error = 0;
+		do 
+		{
+			if ((nullptr == utf8) || (0 == utf8_size)) 
+			{
+				error = ERROR_INVALID_PARAMETER;
+				break;
+			}
+			unicode.clear();
+			int required_cch = ::MultiByteToWideChar(
+				CP_UTF8,
+				MB_ERR_INVALID_CHARS,
+				utf8, static_cast<int>(utf8_size),
+				nullptr, 0
+			);
+			if (required_cch==0) 
+			{
+				error = ::GetLastError();
+				break;
+			}
+			unicode.resize(required_cch);
+			if (0 == ::MultiByteToWideChar(
+						CP_UTF8,
+						MB_ERR_INVALID_CHARS,
+						utf8, static_cast<int>(utf8_size),
+						const_cast<wchar_t*>(unicode.c_str()), static_cast<int>(unicode.size())
+						)) 
+			{
+				error=::GetLastError();
+				break;
+			}
+		} 
+		while (false);
+
+		return error;
+	}
+// Windows: double converison
+	std::string utf8toansi(const std::string & utf8)
+	{
+		std::wstring unicode = L"";
+		convert_utf8_to_unicode_string(unicode, utf8.c_str(), utf8.size());
+		std::string ansi = "";
+		convert_unicode_to_ansi_string(ansi, unicode.c_str(), unicode.size());
+		return ansi;
+	}
+
+#else
+
+/// Unix & Linux
+
+	std::string utf8toansi(const std::string & utf8)
+	{
+		return utf8;
+	}
+
+#endif
+
+
+//// trim left, right, and left-right
+const std::string WHITESPACE = " \n\r\t\f\v";
+ 
+std::string myltrim(const std::string &s)
+{
+    size_t start = s.find_first_not_of(WHITESPACE);
+    return (start == std::string::npos) ? "" : s.substr(start);
+}
+ 
+std::string myrtrim(const std::string &s)
+{
+    size_t end = s.find_last_not_of(WHITESPACE);
+    return (end == std::string::npos) ? "" : s.substr(0, end + 1);
+}
+ 
+std::string mytrim2(const std::string &s) 
+{
+    return myrtrim(myltrim(s));
+}
+
+//// functions "a-la-Delphi"
+string extractfilename(const string& i_string) 
+{
+	size_t i = i_string.rfind('/', i_string.length());
+	if (i != string::npos) 
+		return(i_string.substr(i+1, i_string.length() - i));
+	return(i_string);
+}
+string prendiestensione(const string& s) 
+{
+	if (isdirectory(s))
+		return ("");
+	string nomefile=extractfilename(s);
+	size_t i = nomefile.rfind('.', nomefile.length());
+	if (i != string::npos) 
+	{
+		int lunghezzaestensione=nomefile.length() - i;
+/// sometimes it is hard to get the extension: pippo.plutopaperino
+		if (lunghezzaestensione>20)
+			return("");
+		return(nomefile.substr(i+1, lunghezzaestensione));
+	}
+   return("");
+}
+
+string extractfilepath(const string& i_string) 
+{
+	size_t i = i_string.rfind('/', i_string.length());
+	if (i != string::npos) 
+		return(i_string.substr(0, i+1));
+	return("");
+}
+string prendinomefileebasta(const string& s) 
+{
+	string nomefile=extractfilename(s);
+	size_t i = nomefile.rfind('.', nomefile.length());
+	if (i != string::npos) 
+		return(nomefile.substr(0,i));
+	return(nomefile);
+}
+
+// Return the part of fn up to the last slash
+string path(const string& fn) 
+{
+	int n=0;
+	for (int i=0; fn[i]; ++i)
+	if (fn[i]=='/' || fn[i]=='\\') 
+		n=i+1;
+	return fn.substr(0, n);
+}
+
+/// iterative find of filename
+string nomefileseesistegia(string i_nomefile)
+{
+	if (!fileexists(i_nomefile))
+		return i_nomefile;
+	string percorso=extractfilepath(i_nomefile);
+	string estensione=prendiestensione(i_nomefile);
+	string nomefile=prendinomefileebasta(i_nomefile);
+	char	numero[10];
+	for (int i=1;i<99999;i++)
+	{
+		sprintf(numero,"%05d",i);
+		string snumero=numero;
+		string candidato=percorso+nomefile+"_"+snumero+"."+estensione;
+		if (!fileexists(candidato))
+			return candidato;
+	}
+	return ("");
+}
+
+string padleft(std::string str, const size_t num, const char paddingChar = ' ')
+{
+    if(num > str.size())
+	{
+        string tmpstring=str;
+		tmpstring.insert(0, num - tmpstring.size(), paddingChar);
+		return tmpstring;
+	}
+	else
+		return("");
+}
+
+//// sanitixe filenames
+string purgeansi(string i_string,bool i_keeppath=false)
+{
+	if (i_string=="")
+		return ("");
+
+	string purged;
+	for (unsigned int i=0;i<i_string.length();i++)
+	{
+		if (i_keeppath)
+		{
+			if ((i_string[i]==':') || (i_string[i]=='/') || (i_string[i]=='\\'))
+			{
+				purged+=i_string[i];
+				continue;
+			}
+		}
+		if (isalnum(i_string[i]))
+			purged+=i_string[i];
+		else
+		{
+			switch (i_string[i]) 
+			{
+/*
+very forbiden
+< (less than)
+> (greater than)
+: (colon)
+" (double quote)
+/ (forward slash)
+\ (backslash)
+| (vertical bar or pipe)
+? (question mark)
+* (asterisk)
+*/
+
+
+				case ' ':
+				case '-':
+				case '#':
+				case '~':
+				case '%':
+				case '^':
+				case '_':
+				case '.':
+				case '+':
+				case '=':
+				purged+=i_string[i];
+				break;
+
+				case '&':
+				purged+="_and_";
+				break;
+
+				case ',':
+				case '`':
+//				case '!':
+				case '@':
+				case '$':
+				case '*':
+	///			case '\\':
+				case '|':
+				case ':':
+				case ';':
+				case '"':
+				case '\'':
+				case '<':
+				case '>':
+	///			case '/':
+				case '\n':
+				case '\r':
+				case '\t':
+				purged+='_';
+				break;
+
+				case '(':
+	///			case '[':
+				case '{':
+				purged+='(';
+				break;
+
+				case ')':
+		///		case ']':
+				case '}':
+				purged+=')';
+				break;
+			}
+		}
+	}
+
+	return purged;
+}
+/// heuristic strange-charset to latin
+string forcelatinansi(string i_string)
+{
+	if (i_string=="")
+		return ("");
+
+	for (unsigned int j=0;j<i_string.length();j++)
+	{
+		if (i_string[j]<0)
+		{
+			if (i_string[j]==-1) // °
+			i_string[j]='u';
+				else
+				if (i_string[j]==-2) // °
+					i_string[j]='u';
+				else
+				if (i_string[j]==-3) // °
+					i_string[j]='u';
+				else
+				if (i_string[j]==-4) // °
+					i_string[j]='u';
+				else
+				if (i_string[j]==-5) // °
+					i_string[j]='u';
+				else
+				if (i_string[j]==-6) // °
+					i_string[j]='u';
+				else
+				if (i_string[j]==-7) // °
+					i_string[j]='u';
+				else
+				if (i_string[j]==-8) // °
+					i_string[j]='o';
+				else
+				if (i_string[j]==-9) // °
+					i_string[j]='o';
+				else
+				if (i_string[j]==-10) //ò
+					i_string[j]='o';
+				else
+				if (i_string[j]==-11) //ò
+					i_string[j]='o';
+				else
+				if (i_string[j]==-12) //ò
+					i_string[j]='o';
+				else
+				if (i_string[j]==-13) //ò
+					i_string[j]='o';
+				else
+				if (i_string[j]==-14) //ò
+					i_string[j]='o';
+				else
+				if (i_string[j]==-15) //ò
+					i_string[j]='o';
+				else
+				if (i_string[j]==-17) //ò
+					i_string[j]='i';
+				else
+				if (i_string[j]==-18) //ò
+					i_string[j]='i';
+				else
+				if (i_string[j]==-19) //ò
+					i_string[j]='i';
+				else
+				if (i_string[j]==-20) //ò
+					i_string[j]='i';
+				else
+				if (i_string[j]==-21) //è
+					i_string[j]='e';
+				else
+				if (i_string[j]==-22) //è
+					i_string[j]='e';
+				else
+				if (i_string[j]==-23) //è
+					i_string[j]='e';
+				else
+				if (i_string[j]==-24) //è
+					i_string[j]='e';
+				else
+				if (i_string[j]==-25) //è
+					i_string[j]='a';
+				else
+				if (i_string[j]==-26) //è
+					i_string[j]='a';
+				else
+				if (i_string[j]==-27) //a
+					i_string[j]='a';
+				else
+				if (i_string[j]==-28) //a
+					i_string[j]='a';
+				else
+				if (i_string[j]==-29) //a
+					i_string[j]='a';
+				else
+				if (i_string[j]==-30) //a
+					i_string[j]='e';
+				else
+				if (i_string[j]==-31) //a
+					i_string[j]='a';
+				else
+				if (i_string[j]==-32) //a
+					i_string[j]='a';
+				else
+				if (i_string[j]==-33) //a
+					i_string[j]='u';
+				else
+				if (i_string[j]==-34) //a
+					i_string[j]='u';
+				else
+				if (i_string[j]==-35) //a
+					i_string[j]='u';
+				else
+				if (i_string[j]==-36) //a
+					i_string[j]='u';
+				else
+				if (i_string[j]==-37) //a
+					i_string[j]='u';
+				else
+				if (i_string[j]==-38) //a
+					i_string[j]='u';
+				else
+				if (i_string[j]==-39) //a
+					i_string[j]='U';
+				else
+				if (i_string[j]==-40) //a
+					i_string[j]='O';
+				else
+				if (i_string[j]==-41) //a
+					i_string[j]='x';
+				else
+				if (i_string[j]==-42) //ò
+					i_string[j]='O';
+				else
+				if (i_string[j]==-45) //ò
+					i_string[j]='O';
+				else
+				if (i_string[j]==-46) //ò
+					i_string[j]='O';
+				else
+				if (i_string[j]==-47) //ò
+					i_string[j]='N';
+				else
+				if (i_string[j]==-49) //ò
+					i_string[j]='I';
+				else
+				if (i_string[j]==-50) //ò
+					i_string[j]='I';
+				else
+				if (i_string[j]==-51) //ò
+					i_string[j]='I';
+				else
+				if (i_string[j]==-52) //ò
+					i_string[j]='I';
+				else
+				if (i_string[j]==-53) //ò
+					i_string[j]='E';
+				else
+				if (i_string[j]==-54) //ò
+					i_string[j]='E';
+				else
+				if (i_string[j]==-55) //ò
+					i_string[j]='E';
+				else
+				if (i_string[j]==-56) //ò
+					i_string[j]='E';
+				else
+				if (i_string[j]==-57) //ò
+					i_string[j]='E';
+				else		
+				if (i_string[j]==-60) //ò
+					i_string[j]='A';
+				else
+				if (i_string[j]==-61) //ò
+					i_string[j]='A';
+				else
+				if (i_string[j]==-62) //ò
+					i_string[j]='A';
+				else
+				if (i_string[j]==-63) //ò
+					i_string[j]='A';
+				else
+				if (i_string[j]==-64) //ò
+					i_string[j]='A';
+				else
+				if (i_string[j]==-66) //ò
+					i_string[j]='3';
+				else
+				if (i_string[j]==-68) //ò
+					i_string[j]='3';
+				else
+				if (i_string[j]==-69) //ò
+					i_string[j]='>';
+				else
+				if (i_string[j]==-70) //ò
+					i_string[j]='o';
+				else
+				if (i_string[j]==-72) //ò
+					i_string[j]='.';
+				else
+				if (i_string[j]==-74) //ò
+					i_string[j]=' ';
+				else
+				if (i_string[j]==-75) //ò
+					i_string[j]=' ';
+				else
+				if (i_string[j]==-76) //ò
+					i_string[j]=' ';
+				else
+				if (i_string[j]==-78) //ò
+					i_string[j]='2';
+				else
+				if (i_string[j]==-80) // °
+					i_string[j]='o';
+				else
+				if (i_string[j]==-81) // °
+					i_string[j]='-';
+				else
+				if (i_string[j]==-82) // °
+					i_string[j]='-';
+				else
+				if (i_string[j]==-83) // °
+					i_string[j]='-';
+				else
+				if (i_string[j]==-84) // °
+					i_string[j]='-';
+				else
+				if (i_string[j]==-85) // °
+					i_string[j]='<';
+				else
+				if (i_string[j]==-89) // °
+					i_string[j]='S';
+				else
+				if (i_string[j]==-90) // °
+					i_string[j]=' ';
+				else
+				if (i_string[j]==-93) // °
+					i_string[j]=' ';
+				else
+				if (i_string[j]==-94) // °
+					i_string[j]=' ';
+				else
+				if (i_string[j]==-95) // °
+					i_string[j]=' ';
+				else
+				if (i_string[j]==-96) // °
+					i_string[j]=' ';
+				else
+				if (i_string[j]==-98) // °
+					i_string[j]=' ';
+				else
+				if (i_string[j]==-102) //-
+					i_string[j]='s';
+				else
+				if (i_string[j]==-103) //-
+					i_string[j]='a';
+				else
+				if (i_string[j]==-106) //-
+					i_string[j]='-';
+				else
+				if (i_string[j]==-107) //-
+					i_string[j]='.';
+				else
+				if (i_string[j]==-108) //-
+					i_string[j]='"';
+				else
+				if (i_string[j]==-109) //-
+					i_string[j]='"';
+				else
+				if (i_string[j]==-110) //-
+					i_string[j]=' ';
+				else
+				if (i_string[j]==-111) //-
+					i_string[j]=' ';
+				else
+				if (i_string[j]==-112) //-
+					i_string[j]=' ';
+				else
+				if (i_string[j]==-112) //-
+					i_string[j]=' ';
+				else
+				if (i_string[j]==-113) //-
+					i_string[j]=' ';
+				else
+				if (i_string[j]==-114) //-
+					i_string[j]=' ';
+				else
+				if (i_string[j]==-115)//-
+					i_string[j]=' ';
+				else
+				if (i_string[j]==-116) //-
+					i_string[j]=' ';
+				else
+				if (i_string[j]==-118) //-
+					i_string[j]='S';
+				else
+				if (i_string[j]==-123) //-
+					i_string[j]='d';
+				else
+				if (i_string[j]==-128) //-
+					i_string[j]='E';
+				else
+					i_string[j]=' ';
+			
+			
+		}
+	}
+		
+	return i_string;
+}
+
+string purgedouble(const string& i_string,const string& i_from,const string& i_to)
+{
+	if (i_string=="")
+		return("");
+	if (i_from=="")
+		return("");
+	if (i_to=="")
+		return("");
+	string purged=i_string;
+	myreplaceall(purged,i_from,i_to);
+	return purged;
+}
+///	"dedup-compress" long .eml filenames (ex. thunderbird .eml)
+string compressemlfilename(const string& i_string)
+{
+	if (i_string=="")
+		return("");
+	string uniqfilename=extractfilename(i_string);
+	string percorso=extractfilepath(i_string);
+		
+	for (int k=0;k<10;k++)
+		uniqfilename=purgedouble(uniqfilename,"  "," ");
+
+	for (int k=0;k<10;k++)
+		uniqfilename=purgedouble(uniqfilename,"..",".");
+
+	for (int k=0;k<10;k++)
+		uniqfilename=purgedouble(uniqfilename,"Fw ","Fwd ");
+	
+	for (int k=0;k<10;k++)
+		uniqfilename=purgedouble(uniqfilename,"Fwd Fwd ","Fwd ");
+
+	for (int k=0;k<10;k++)
+		uniqfilename=purgedouble(uniqfilename," R "," Re ");
+
+	for (int k=0;k<10;k++)
+		uniqfilename=purgedouble(uniqfilename,"R Fwd ","Re Fwd");
+	
+	for (int k=0;k<10;k++)
+		uniqfilename=purgedouble(uniqfilename," RE "," Re ");
+	
+	for (int k=0;k<10;k++)
+		uniqfilename=purgedouble(uniqfilename,"Re Re ","Re ");
+
+	for (int k=0;k<10;k++)
+		uniqfilename=purgedouble(uniqfilename,"Fwd Re Fwd Re ","Fwd Re ");
+
+	for (int k=0;k<10;k++)
+		uniqfilename=purgedouble(uniqfilename,"Re Fwd Re Fwd ","Re Fwd ");
+
+	for (int k=0;k<10;k++)
+		uniqfilename=purgedouble(uniqfilename," SV SV "," SV ");
+
+	for (int k=0;k<10;k++)
+		uniqfilename=purgedouble(uniqfilename,"Fwd FW ","Fwd ");
+
+	for (int k=0;k<10;k++)
+		uniqfilename=purgedouble(uniqfilename,"Fwd I ","Fwd ");
+	
+	for (int k=0;k<10;k++)
+		uniqfilename=purgedouble(uniqfilename,"I Fwd ","Fwd ");
+
+	for (int k=0;k<10;k++)
+			uniqfilename=purgedouble(uniqfilename,"R Re ","Re ");
+
+	for (int k=0;k<10;k++)
+		uniqfilename=purgedouble(uniqfilename,"__","_");
+
+	for (int k=0;k<10;k++)
+	uniqfilename=purgedouble(uniqfilename," _ ","_");
+
+	for (int k=0;k<10;k++)
+		uniqfilename=purgedouble(uniqfilename,"  "," ");
+
+	for (int k=uniqfilename.length()-1;k>0;k--)
+	{
+		if ((uniqfilename[k]=='-') || (uniqfilename[k]=='.') || (uniqfilename[k]==' '))
+		{
+			uniqfilename.pop_back();
+		}
+		else
+		{
+			break;
+		}
+	}
+	uniqfilename=mytrim2(uniqfilename);
+	
+	uniqfilename=percorso+uniqfilename;
+	
+	return uniqfilename;
+}
+
+
+string sanitizzanomefile(string i_filename,int i_filelength,int& io_collisioni,MAPPAFILEHASH& io_mappacollisioni)
+{
+	if  (i_filename=="")
+		return("");
+		
+	string percorso			=extractfilepath(i_filename);
+	string nome				=prendinomefileebasta(i_filename);
+				
+	string estensione		=prendiestensione(i_filename);
+	string senzaestensione	=percorso+nome;
+	string newname;
+		
+
+	int lunghezza=FRANZMAXPATH;
+	if (i_filelength>0)
+		if (i_filelength<FRANZMAXPATH)
+			lunghezza=i_filelength;
+	lunghezza-=9; // antidupe
+	if (lunghezza<10)
+		lunghezza=10;
+	char numero[60];
+						
+	if (flagflat) /// desperate extract without path
+	{
+		sprintf(numero,"%08d_%05d_",++io_collisioni,(unsigned int)i_filename.length());
+		newname=numero;
+		string temp=purgeansi(senzaestensione.substr(0, lunghezza));
+		for (int i=0;i<10;i++)
+			myreplaceall(temp,"  "," ");
+		
+		newname+=temp;
+		
+		if (estensione!="")
+			newname+="."+estensione;
+		if (flagdebug)
+			printf("25396: flatted filename <<%s>>\n",newname.c_str());
+		return newname;
+	}
+	
+	if (flagutf)
+	{
+		string prenome=nome;
+
+// this is name, throw everything (FALSE)
+		nome=purgeansi(forcelatinansi(utf8toansi(nome)),false);		
+		if (flagdebug)
+			if (nome!=prenome)
+			{
+				printf("25410: flagutf pre  %s\n",prenome.c_str());
+				printf("25410: utf8toansi   %s\n",utf8toansi(nome).c_str());
+				printf("25410: force2ansi   %s\n",forcelatinansi(utf8toansi(nome)).c_str());
+				printf("25411: purgeansi    %s\n",nome.c_str());
+			}
+
+		if (flagfixeml)
+		{
+			if (estensione=="eml")
+			{
+				prenome=compressemlfilename(nome);
+				if (nome!=prenome)
+				{
+					if (flagdebug)
+					{
+						printf("18109: eml pre  %s\n",nome.c_str());
+						printf("18110: eml post %s\n",prenome.c_str());
+					}
+									
+					nome=prenome;
+				}
+			}
+			else
+			{
+				for (int i=0;i<10;i++)
+					myreplaceall(newname,"  "," ");
+					
+			}
+		}
+
+/// this is a path, so keep \ and / (TRUE)
+		string prepercorso=percorso;
+		percorso=purgeansi(forcelatinansi(utf8toansi(percorso)),true);		
+		if (flagdebug)
+			if (percorso!=prepercorso)
+			{
+				printf("25452: flagutf pre  perc %s\n",prepercorso.c_str());
+				printf("25453: flagutf post perc %s\n",percorso.c_str());
+			}
+	}
+					
+	if (flagdebug)
+	{
+		printf("18041: First    %03d %s\n",(int)i_filename.length(),i_filename.c_str());
+		printf("18042: Percorso %03d %s\n",(int)percorso.length(),percorso.c_str());
+		printf("18043: nome     %03d %s\n",(int)nome.length(),nome.c_str());
+		printf("18044: ext      %03d %s\n",(int)estensione.length(),estensione.c_str());
+		printf("18045: Senza ex %03d %s\n",(int)senzaestensione.length(),senzaestensione.c_str());
+	}
+
+	if (flagfix255)
+	{
+		int	lunghezzalibera=lunghezza-percorso.length();//%08d_
+		if (lunghezzalibera<10)
+		{
+			if (flagdebug)
+			{
+				printf("\n\n\n18046: Path too long: need shrink %08d %s\n",(int)percorso.length(),percorso.c_str());
+				printf("lunghezzalibera %d\n",lunghezzalibera);
+			}
+			vector<string> esploso;
+						
+			string temppercorso=percorso;
+			size_t barra;
+						
+			while (1==1)
+			{
+				if (flagdebug)
+					printf("18031: temppercorso %s\n",temppercorso.c_str());
+				barra=temppercorso.find('/');
+				if (flagdebug)
+					printf("18034: Barra %ld\n",(long int)barra);
+				if (barra==string::npos)
+					break;
+				if (flagdebug)		
+					printf("18038: Eureka!!\n");
+				esploso.push_back(temppercorso.substr(0, barra));
+				temppercorso=temppercorso.substr(barra+1,temppercorso.length());
+			}
+		
+			int lunghezzamassima=0;
+			int indicelunghezzamassima=-1;
+			for (unsigned int i=0;i<esploso.size();i++)
+			{
+				if ((int)esploso[i].length()>lunghezzamassima)
+				{
+					indicelunghezzamassima=i;
+					lunghezzamassima=esploso[i].length();
+				}
+				if (flagdebug)
+					printf("18087: Esploso %d %03d %s\n",(int)i,(int)esploso[i].length(),esploso[i].c_str());
+			}
+						/*
+						printf("Lunghezza massima %d\n",lunghezzamassima);
+						printf("Indice lunghezza massima %d\n",indicelunghezzamassima);
+						
+						printf("Lunghezza          %d\n",lunghezza);
+						printf("Lunghezza percorso %d %s\n",percorso.length(),percorso.c_str());
+						printf("Lunghezza nome     %d %s\n",nome.length(),nome.c_str());
+						printf("Lunghezza este     %d %s\n",estensione.length(),estensione.c_str());
+						
+						printf("Resto percoros     %d\n",percorso.length()-lunghezzamassima);
+						*/
+						
+			int lunghezzacheserve=lunghezza-10-(percorso.length()-lunghezzamassima);
+					///	printf("Lunghezza che ser  %d\n",lunghezzacheserve);
+						
+			if (lunghezzacheserve<lunghezzamassima)
+			{
+				esploso[indicelunghezzamassima]=esploso[indicelunghezzamassima].substr(0,lunghezzacheserve);
+				string imploso;
+				for (unsigned 	int i=0;i<esploso.size();i++)
+					imploso+=esploso[i]+'/';
+				if (flagdebug)
+					printf("18114: Imploso           %d %s\n",(int)imploso.length(),imploso.c_str());
+				percorso=imploso;
+				lunghezzalibera=lunghezza-percorso.length();
+				makepath(percorso);
+			}
+			else
+			{
+				printf("18088: HOUSTON\n");
+			}						
+		}
+	}
+	newname=nome;
+	int lunghezzalibera=lunghezza-percorso.length();
+					
+	if (flagdebug)
+		printf("18098:lunghezze per %03d nome %03d tot %03d\n",(int)percorso.length(),lunghezzalibera,(int)(percorso.length()+lunghezzalibera));
+					
+	if (newname.length()>(unsigned int)lunghezzalibera)
+	{
+		newname=newname.substr(0,lunghezzalibera-9);
+		if (flagdebug)
+			printf("18143:Trimmone newname %d %s\n",(int)newname.length(),newname.c_str());
+	}
+	
+	newname=percorso+newname;
+	
+	if (flagdebug)
+		printf("%d: newname %s\n",__LINE__,newname.c_str());
+					
+	std::map<string,string>::iterator collisione;
+	string candidato=newname;
+	if (estensione!="")
+		candidato=candidato+'.'+estensione;
+	if (flagfix255)	/// we are on windows, take care of case
+	{
+		std::for_each(candidato.begin(), candidato.end(), [](char & c)
+		{
+			c = ::tolower(c);	
+		});
+	}
+	if (flagdebug)
+	printf("25570: candidato %s\n",candidato.c_str());
+	
+	collisione=io_mappacollisioni.find(candidato); 
+	if (collisione!=io_mappacollisioni.end()) 
+	{
+		if (flagdebug)
+			printf("18255 found  1 %s\n",candidato.c_str());
+		if (collisione->second!=candidato)
+		{
+			if (flagdebug)
+			{
+				printf("25582: Collisione %s\n",collisione->second.c_str());
+				printf("25583: newname    %s\n",collisione->second.c_str());
+			}
+			sprintf(numero,"_%d",io_collisioni++);
+			newname+=numero;
+			if (flagdebug)
+				printf("18267: postname   %s\n\n\n\n\n",newname.c_str());
+		}
+	}
+	io_mappacollisioni.insert(std::pair<string, string>(candidato,i_filename));
+	
+	if (estensione!="")
+		newname+="."+estensione;
+	
+	if (flagdebug)
+		printf("18195: Finalized %d %s\n",(int)newname.length(),newname.c_str());
+					
+	if (newname.length()>255)
+	{
+		printf("18123: WARN pre  %08d   %s\n",(int)i_filename.length(),i_filename.c_str());
+		printf("18124: WARN post %08d   %s\n",(int)newname.length(),newname.c_str());
+		printf("\n");
+	}
+					
+
+	/*	
+	auto ret=mymap.insert( std::pair<string,DT>(newname,p->second) );
+	if (ret.second==false) 
+	{
+		printf("18298: KOLLISION! %s\n",newname.c_str());
+	}
+	*/
+	return newname;
+}
+
+
+int64_t prendidimensionefile(const char* i_filename)
+{
+	if (!i_filename)
+		return 0;
+	FILE* myfile = freadopen(i_filename);
+	if (myfile)
+    {
+		fseeko(myfile, 0, SEEK_END);
+		int64_t dimensione=ftello(myfile);
+		fclose(myfile);
+		return dimensione;
+	}
+	else
+	return 0;
+}
+
+
+//// some support functions to string compare case insensitive
+bool comparechar(char c1, char c2)
+{
+    if (c1 == c2)
+        return true;
+    else if (std::toupper(c1) == std::toupper(c2))
+        return true;
+    return false;
+}
+
+bool stringcomparei(std::string str1, std::string str2)
+{
+    return ( (str1.size() == str2.size() ) &&
+             std::equal(str1.begin(), str1.end(), str2.begin(), &comparechar) );
+}
+
+/// very quick and very dirty output
+inline char *  migliaia(uint64_t n)
+{
+	static char retbuf[30];
+	char *p = &retbuf[sizeof(retbuf)-1];
+	unsigned int i = 0;
+	*p = '\0';
+	do 
+	{
+		if(i%3 == 0 && i != 0)
+			*--p = '.';
+		*--p = '0' + n % 10;
+		n /= 10;
+		i++;
+		} while(n != 0);
+	return p;
+}
+inline char *  migliaia2(uint64_t n)
+{
+	static char retbuf[30];
+	char *p = &retbuf[sizeof(retbuf)-1];
+	unsigned int i = 0;
+	*p = '\0';
+	do 
+	{
+		if(i%3 == 0 && i != 0)
+			*--p = '.';
+		*--p = '0' + n % 10;
+		n /= 10;
+		i++;
+		} while(n != 0);
+	return p;
+}
+inline char *  migliaia3(uint64_t n)
+{
+	static char retbuf[30];
+	char *p = &retbuf[sizeof(retbuf)-1];
+	unsigned int i = 0;
+	*p = '\0';
+	do 
+	{
+		if(i%3 == 0 && i != 0)
+			*--p = '.';
+		*--p = '0' + n % 10;
+		n /= 10;
+		i++;
+		} while(n != 0);
+	return p;
+}
+inline char *  migliaia4(uint64_t n)
+{
+	static char retbuf[30];
+	char *p = &retbuf[sizeof(retbuf)-1];
+	unsigned int i = 0;
+	*p = '\0';
+	do 
+	{
+		if(i%3 == 0 && i != 0)
+			*--p = '.';
+		*--p = '0' + n % 10;
+		n /= 10;
+		i++;
+		} while(n != 0);
+	return p;
+}
+inline char *  migliaia5(uint64_t n)
+{
+	static char retbuf[30];
+	char *p = &retbuf[sizeof(retbuf)-1];
+	unsigned int i = 0;
+	*p = '\0';
+	do 
+	{
+		if(i%3 == 0 && i != 0)
+			*--p = '.';
+		*--p = '0' + n % 10;
+		n /= 10;
+		i++;
+		} while(n != 0);
+	return p;
+}
+/*
+char *rtrim(char *s)
+{
+    char* back = s + strlen(s);
+    while(isspace(*--back));
+    *(back+1) = '\0';
+    return s;
+}
+*/
+
+/// quick and ugly
+inline char* tohuman(uint64_t i_bytes)
+{
+	static char io_buf[30];
+	
+	char const *myappend[] = {"B","KB","MB","GB","TB","PB"};
+	char length = sizeof(myappend)/sizeof(myappend[0]);
+	double mybytes=i_bytes;
+	int i=0;
+	if (i_bytes > 1024) 
+		for (i=0;(i_bytes / 1024) > 0 && i<length-1; i++, i_bytes /= 1024)
+			mybytes = i_bytes / 1024.0;
+	sprintf(io_buf, "%.02lf %s",mybytes,myappend[i]);
+	return io_buf;
+}
+inline char* tohuman2(uint64_t i_bytes)
+{
+	static char io_buf[30];
+	
+	char const *myappend[] = {"B","KB","MB","GB","TB","PB"};
+	char length = sizeof(myappend)/sizeof(myappend[0]);
+	double mybytes=i_bytes;
+	int i=0;
+	if (i_bytes > 1024) 
+		for (i=0;(i_bytes / 1024) > 0 && i<length-1; i++, i_bytes /= 1024)
+			mybytes = i_bytes / 1024.0;
+	sprintf(io_buf, "%.02lf %s",mybytes,myappend[i]);
+	return io_buf;
+}
+inline char* tohuman3(uint64_t i_bytes)
+{
+	static char io_buf[30];
+	
+	char const *myappend[] = {"B","KB","MB","GB","TB","PB"};
+	char length = sizeof(myappend)/sizeof(myappend[0]);
+	double mybytes=i_bytes;
+	int i=0;
+	if (i_bytes > 1024) 
+		for (i=0;(i_bytes / 1024) > 0 && i<length-1; i++, i_bytes /= 1024)
+			mybytes = i_bytes / 1024.0;
+	sprintf(io_buf, "%.02lf %s",mybytes,myappend[i]);
+	return io_buf;
+}
+inline char* tohuman4(uint64_t i_bytes)
+{
+	static char io_buf[30];
+	
+	char const *myappend[] = {"B","KB","MB","GB","TB","PB"};
+	char length = sizeof(myappend)/sizeof(myappend[0]);
+	double mybytes=i_bytes;
+	int i=0;
+	if (i_bytes > 1024) 
+		for (i=0;(i_bytes / 1024) > 0 && i<length-1; i++, i_bytes /= 1024)
+			mybytes = i_bytes / 1024.0;
+	sprintf(io_buf, "%.02lf %s",mybytes,myappend[i]);
+	return io_buf;
+}
+
+
+//// rather robust 14 digits to strings (ignore non digits)
+int64_t encodestringdate(string i_date)
+{
+	string purged;
+	for (unsigned int i=0;i<i_date.length();i++)
+		if (isdigit(i_date[i]))
+			purged+=i_date[i];
+	
+	if (purged.length()!=14)
+	{
+		printf("106: datelength !=14\n");
+		return -1;
+	}
+	for (int i=0;i<=13;i++)
+		if (!isdigit(purged[i]))
+		{
+			printf("107: date[%d] not idigit\n",i);
+			return -1;
+		}
+		
+	int year=std::stoi(purged.substr(0,4));
+	int month=std::stoi(purged.substr(4,2));
+	int day=std::stoi(purged.substr(6,2));
+	
+	int hour=std::stoi(purged.substr(8,2));
+	int minute=std::stoi(purged.substr(10,2));
+	int second=std::stoi(purged.substr(12,2));
+	if (flagdebug)
+		printf("14669: date   %04d-%02d-%02d %02d:%02d:%02d\n",year,month,day,hour,minute,second);
+	if ((year<1970) || (year>2070))
+	{
+		printf("108: year not from 1970 to 2070\n");
+		return -1;
+	}
+	if ((month<1) || (month>12))
+	{
+		printf("136: month not in 1 to 12\n");
+		return -1;
+	}
+	if ((day<1) || (day>31))
+	{
+		printf("141: day not in 1 to 31\n");
+		return -1;
+	}
+	
+	if (hour>24)
+	{
+		printf("147: hour >24\n");
+		return -1;
+	}
+	if (minute>60)
+	{
+		printf("152: minute >60\n");
+		return -1;
+	}	
+	if (second>60)
+	{
+		printf("157: second >60\n");
+		return -1;
+	}	
+		
+	bool isleap= (((year % 4 == 0) &&
+         (year % 100 != 0)) ||
+         (year % 400 == 0));
+		
+
+    if (month == 2)
+    {
+        if (isleap)
+		{
+			if (!(day <=29))
+			{
+				printf("180: leap year, feb must be <=29\n");
+				return -1;
+			}
+		}
+        else
+			if (!(day <=28))
+			{
+				printf("187: NO leap year, feb must be <=28\n");
+				return -1;
+			}
+    }
+ 
+    if ((month==4) || (month==6) || (month==9) || (month==11))
+		if (!(day <= 30))
+		{
+			printf("195: month cannot have more than 30 days\n");
+			return -1;
+		}
+	return year*10000000000LL
+		+month*100000000LL //mese
+		+day*1000000				// giorno
+	  
+		+hour*10000 // ore
+		+minute*100	// minuti
+		+second;		// secondi
+}
+
+
+
+
+// Print percent done (td/ts) and estimated time remaining
+// two modes: "normal" (old zpaqfranz) "pakka" (new)
+void print_progress(int64_t ts, int64_t td,int64_t i_scritti) 
+{
+	static int ultimapercentuale=0;
+	static int ultimaeta=0;
+	
+	if (flagnoeta==true)
+		return;
+		
+	if (td>ts) 
+		td=ts;
+	
+	if (td<1000000)
+		return;
+		
+	double eta=0.001*(mtime()-global_start)*(ts-td)/(td+1.0);
+	int secondi=(mtime()-global_start)/1000;
+	if (secondi==0)
+		secondi=1;
+	
+	int percentuale=int(td*100.0/(ts+0.5));
+
+///	printf("%d %d\n",int(eta),ultimaeta);
+	
+
+	if (flagpakka)
+	{
+		if (eta<350000)
+		if (((percentuale%10)==0) ||(percentuale==1))
+			if ((percentuale!=ultimapercentuale) || (percentuale==1))
+			{
+				ultimapercentuale=percentuale;
+				printf("%03d%% %02d:%02d:%02d %20s of %20s %s/sec\r", percentuale,
+					int(eta/3600), int(eta/60)%60, int(eta)%60, migliaia(td), migliaia2(ts),migliaia3(td/secondi));
+			}
+	}
+	else 
+	{
+		if (int(eta)!=ultimaeta)
+		if (eta<350000)
+		{
+			ultimaeta=int(eta);
+			if (i_scritti>0)
+			printf("%6.2f%% %02d:%02d:%02d (%10s) -> (%10s) of (%10s) %10s/sec\r", td*100.0/(ts+0.5),
+			int(eta/3600), int(eta/60)%60, int(eta)%60, tohuman(td),tohuman2(i_scritti),tohuman3(ts),tohuman4(td/secondi));
+			else
+			printf("%6.2f%% %02d:%02d:%02d (%10s) of (%10s) %10s/sec\r", td*100.0/(ts+0.5),
+			int(eta/3600), int(eta/60)%60, int(eta)%60, tohuman(td),tohuman2(ts),tohuman3(td/secondi));
+			
+			
+			
+		}
+	}				
+}
+
+
+bool replace(std::string& str, const std::string& from, const std::string& to) {
+    size_t start_pos = str.find(from);
+    if(start_pos == std::string::npos)
+        return false;
+    str.replace(start_pos, from.length(), to);
+    return true;
+}
+
+
+/// sorting
+
+bool comparecrc32(s_fileandsize a, s_fileandsize b)
+{
+	return a.hashhex>b.hashhex;
+///	return a.crc32>b.crc32;
+}
+bool comparesizehash(s_fileandsize a, s_fileandsize b)
+{
+	
+	return (a.size < b.size) ||
+           ((a.size == b.size) && (a.hashhex > b.hashhex)) || 
+           ((a.size == b.size) && (a.hashhex == b.hashhex) &&
+              (a.filename<b.filename));
+			  ///(strcmp(a.filename.c_str(), b.filename.c_str()) <0));
+			  
+}
+bool comparefilenamesize(s_fileandsize a, s_fileandsize b)
+{
+	char a_size[40];
+	char b_size[40];
+	sprintf(a_size,"%014lld",(long long)a.size);
+	sprintf(b_size,"%014lld",(long long)b.size);
+	return a_size+a.filename<b_size+b.filename;
+}
+bool comparefilenamedate(s_fileandsize a, s_fileandsize b)
+{
+	char a_size[40];
+	char b_size[40];
+	sprintf(a_size,"%014lld",(long long)a.date);
+	sprintf(b_size,"%014lld",(long long)b.date);
+	return a_size+a.filename<b_size+b.filename;
+}
+
+// Return p<q for sorting files by decreasing size, then fragment ID list
+bool compareFragmentList(DTMap::const_iterator p, DTMap::const_iterator q) {
+  if (p->second.size!=q->second.size) return p->second.size>q->second.size;
+  if (p->second.ptr<q->second.ptr) return true;
+  if (q->second.ptr<p->second.ptr) return false;
+  if (p->second.data!=q->second.data) return p->second.data<q->second.data;
+  return p->first<q->first;
+}
+
+// Sort by sortkey, then by full path
+bool compareFilename(DTMap::iterator ap, DTMap::iterator bp) {
+  if (ap->second.data!=bp->second.data)
+    return ap->second.data<bp->second.data;
+  return ap->first<bp->first;
+}
+bool comparedatethenfilename(DTMap::iterator ap, DTMap::iterator bp) 
+{
+	if (ap->second.date!=bp->second.date)
+		return ap->second.date<bp->second.date;
+	return ap->first<bp->first;
+}
+
+
+
+bool sortbyval(const std::pair<string, string> &a, 
+               const std::pair<string, string> &b) 
+{ 
+    return (a.second < b.second); 
+} 
+
+bool sortbysize(const std::pair<uint64_t, string> &a, 
+               const std::pair<uint64_t, string> &b) 
+{ 
+    return (a.first < b.first); 
+} 
+
+
+
+
+#if defined(_WIN32) || defined(_WIN64)
+//// VSS on Windows by... batchfile
+//// delete all kind of shadows copies (if any)
+void vss_deleteshadows()
+{
+	if (flagvss)
+	{
+		string	filebatch	=g_gettempdirectory()+"vsz.bat";
+		
+		printf("Starting delete VSS shadows\n");
+    		
+		if (fileexists(filebatch))
+			if (remove(filebatch.c_str())!=0)
+			{
+				printf("Highlander batch  %s\n", filebatch.c_str());
+				return;
+			}
+		
+		FILE* batch=fopen(filebatch.c_str(), "wb");
+		fprintf(batch,"@echo OFF\n");
+		fprintf(batch,"@wmic shadowcopy delete /nointeractive\n");
+		fclose(batch);
+	
+		waitexecute(filebatch,"",SW_HIDE);
+	
+		printf("End VSS delete shadows\n");
+	}
+
+}
+#endif
+
+/// work with a batch job
+void avanzamento(int64_t i_lavorati,int64_t i_totali,int64_t i_inizio)
+{
+	static int ultimapercentuale=0;
+	
+	if (flagnoeta==true)
+		return;
+	
+	int percentuale=int(i_lavorati*100.0/(i_totali+0.5));
+	
+	if (percentuale>0)
+		if (((percentuale%10)==0)  || (percentuale==1))
+	//if ((((percentuale%10)==0) && (percentuale>0)) || (percentuale==1))
+	if (percentuale!=ultimapercentuale)
+	{
+		ultimapercentuale=percentuale;
+				
+		double eta=0.001*(mtime()-i_inizio)*(i_totali-i_lavorati)/(i_lavorati+1.0);
+		int secondi=(mtime()-i_inizio)/1000;
+		if (secondi==0)
+			secondi=1;
+		if (eta<356000)
+		printf("%03d%% %02d:%02d:%02d (%10s) of (%10s) %20s /sec\n", percentuale,
+		int(eta/3600), int(eta/60)%60, int(eta)%60, tohuman(i_lavorati), tohuman2(i_totali),migliaia3(i_lavorati/secondi));
+		fflush(stdout);
+	}
+}
+
+
+uint32_t crchex2int(char *hex) 
+{
+	assert(hex);
+	uint32_t val = 0;
+	for (int i=0;i<8;i++)
+	{
+        uint8_t byte = *hex++; 
+        if (byte >= '0' && byte <= '9') byte = byte - '0';
+        else if (byte >= 'a' && byte <='f') byte = byte - 'a' + 10;
+        else if (byte >= 'A' && byte <='F') byte = byte - 'A' + 10;    
+        val = (val << 4) | (byte & 0xF);
+    }
+    return val;
+}
+void print_datetime(void)
+{
+	int hours, minutes, seconds, day, month, year;
+
+	time_t now;
+	time(&now);
+	struct tm *local = localtime(&now);
+
+	hours = local->tm_hour;			// get hours since midnight	(0-23)
+	minutes = local->tm_min;		// get minutes passed after the hour (0-59)
+	seconds = local->tm_sec;		// get seconds passed after the minute (0-59)
+
+	day = local->tm_mday;			// get day of month (1 to 31)
+	month = local->tm_mon + 1;		// get month of year (0 to 11)
+	year = local->tm_year + 1900;	// get year since 1900
+
+	printf("%02d/%02d/%d %02d:%02d:%02d ", day, month, year, hours,minutes,seconds);
+}
+
+
+string mygetalgo()
+{
+	if (flagwyhash)
+		return "WYHASH";
+	else
+	if (flagcrc32)
+		return "CRC32";
+	else
+	if (flagcrc32c)
+		return "CRC-32C";
+	else
+	if (flagxxhash)
+		return "XXH3";
+	else
+	if (flagsha256)
+		return "SHA256";
+	else
+		return "SHA1";
+}
+int flag2algo()
+{
+	if (flagwyhash)
+		return ALGO_WYHASH;
+	else
+	if (flagcrc32)
+		return ALGO_CRC32;
+	else
+	if (flagcrc32c)
+		return ALGO_CRC32C;
+	else
+	if (flagxxhash)
+		return ALGO_XXHASH;
+	else
+	if (flagsha256)
+		return ALGO_SHA256;
+	else
+		return ALGO_SHA1;
+}
+
+
+
+
+
+
+
+struct xorshift128plus_key_s {
+    uint64_t part1;
+    uint64_t part2;
+};
+
+typedef struct xorshift128plus_key_s xorshift128plus_key_t;
+
+static inline void xorshift128plus_init(uint64_t key1, uint64_t key2, xorshift128plus_key_t *key) {
+  key->part1 = key1;
+  key->part2 = key2;
+}
+
+uint64_t xorshift128plus(xorshift128plus_key_t * key) {
+    uint64_t s1 = key->part1;
+    const uint64_t s0 = key->part2;
+    key->part1 = s0;
+    s1 ^= s1 << 23; // a
+    key->part2 = s1 ^ s0 ^ (s1 >> 18) ^ (s0 >> 5); // b, c
+    return key->part2 + s0;
+}
+
+
+void xorshift128plus_jump(xorshift128plus_key_t * key) {
+    static const uint64_t JUMP[] = { 0x8a5cd789635d2dff, 0x121fd2155c472f96 };
+    uint64_t s0 = 0;
+    uint64_t s1 = 0;
+    for(unsigned int i = 0; i < sizeof (JUMP) / sizeof (*JUMP); i++)
+        for(int b = 0; b < 64; b++) {
+            if (JUMP[i] & 1ULL << b) {
+                s0 ^= key->part1;
+                s1 ^= key->part2;
+            }
+            xorshift128plus(key);
+        }
+
+    key->part1 = s0;
+    key->part2 = s1;
+}
+
+void populateRandom_xorshift128plus(uint32_t *answer, uint32_t size,uint64_t i_key1, uint64_t i_key2) 
+{
+  xorshift128plus_key_t mykey = {.part1 = i_key1, .part2 = i_key2};
+  xorshift128plus_init(i_key1, i_key2, &mykey);
+  uint32_t i = size;
+  while (i > 2) {
+    *(uint64_t *)(answer + size - i) = xorshift128plus(&mykey);
+    i -= 2;
+  }
+  if (i != 0)
+    answer[size - i] = (uint32_t)xorshift128plus(&mykey);
+}
+
+
+
+
+
+typedef map<string, string> MAPPASTRINGASTRINGA;
+
+
+void myavanzamento(int64_t i_lavorati,int64_t i_totali,int64_t i_inizio)
+{
+	static int ultimapercentuale=0;
+	int percentuale=int(i_lavorati*100.0/(i_totali+0.5));
+	if (((percentuale%5)==0) && (percentuale>0))
+	if (percentuale!=ultimapercentuale)
+	{
+		ultimapercentuale=percentuale;
+		double eta=0.001*(mtime()-i_inizio)*(i_totali-i_lavorati)/(i_lavorati+1.0);
+		int secondi=(mtime()-i_inizio)/1000;
+		if (secondi==0)
+			secondi=1;
+		if (eta<356000)
+		printf("%03d%% %02d:%02d:%02d (%9s) of (%9s) %20s/sec\n", percentuale,
+		int(eta/3600), int(eta/60)%60, int(eta)%60, tohuman(i_lavorati), tohuman2(i_totali),migliaia3(i_lavorati/secondi));
+		fflush(stdout);
+	}
+}
+
+
+	
+
+
+void printbar(char i_carattere,bool i_printbarraenne=true)
+{
+	int twidth=terminalwidth();
+	if (twidth<10)
+		twidth=100;
+		
+	for (int i=0;i<twidth-4;i++)
+		printf("%c",i_carattere);
+	if (i_printbarraenne)
+		printf("\n");
+}
+
+
+
+
+/// return size, date and attr
+bool getfileinfo(string i_filename,int64_t& o_size,int64_t& o_date,int64_t& o_attr)
+{
+	o_size=0;
+	o_date=0;
+	o_attr=0;
+#ifdef unix
+	while (i_filename.size()>1 && i_filename[i_filename.size()-1]=='/')
+		i_filename=i_filename.substr(0, i_filename.size()-1);  
+	struct stat sb;
+	if (!lstat(i_filename.c_str(), &sb)) 
+	{
+		if (S_ISREG(sb.st_mode))
+		{
+			
+			o_date=decimal_time(sb.st_mtime);
+			o_size=sb.st_size;
+			o_attr='u'+(sb.st_mode<<8);
+			return true;
+		}
+	}
+#endif
+	
+#ifdef _WIN32
+	WIN32_FIND_DATA ffd;
+	string t=i_filename;
+	if (t.size()>0 && t[t.size()-1]=='/') 
+		t+="*";
+  
+	HANDLE h=FindFirstFile(utow(t.c_str()).c_str(), &ffd);
+	if (h==INVALID_HANDLE_VALUE && GetLastError()!=ERROR_FILE_NOT_FOUND && GetLastError()!=ERROR_PATH_NOT_FOUND)
+		printerr("29617",t.c_str());
+	
+	if (h!=INVALID_HANDLE_VALUE) 
+	{
+		SYSTEMTIME st;
+		if (FileTimeToSystemTime(&ffd.ftLastWriteTime, &st))
+			o_date=st.wYear*10000000000LL+st.wMonth*100000000LL+st.wDay*1000000
+				+st.wHour*10000+st.wMinute*100+st.wSecond;
+		o_size=ffd.nFileSizeLow+(int64_t(ffd.nFileSizeHigh)<<32);
+		o_attr=ffd.dwFileAttributes;
+		FindClose(h);
+		return true;
+    }
+	FindClose(h);
+#endif
+	return false;
+}
+
+
+/// possible problems with unsigned to calculate the differences. We do NOT want to link abs()
+int64_t myabs(int64_t i_first,int64_t i_second)
+{
+	if (i_first>i_second)
+		return i_first-i_second;
+	else
+		return i_second-i_first;
+}
+
+
+
+/// risky command to make a rd folder /s (or rm -r)
+int erredbarras(const std::string &i_path,bool i_flagrecursive=true)
+{
+#ifdef unix
+///		bool	flagdebug=true;
+		bool 	risultato=false;
+
+		DIR *d=opendir(i_path.c_str());
+
+		if (d) 
+		{
+			struct dirent *p;
+			risultato=true;
+			while (risultato && (p=readdir(d))) 
+			{
+				if (!strcmp(p->d_name, ".") || !strcmp(p->d_name, ".."))
+					continue;
+				bool risultato2=false;
+				struct stat statbuf;
+				
+				std::string temp;
+				if (isdirectory(i_path))
+					temp=i_path+p->d_name;
+				else
+					temp=i_path+"/"+p->d_name;
+
+				if (!stat(temp.c_str(), &statbuf)) 
+				{
+					if (S_ISDIR(statbuf.st_mode))
+						risultato2=erredbarras(temp);
+					else
+					{
+						if (flagdebug)
+							printf("Delete file %s\n",temp.c_str());
+						risultato2=delete_file(temp.c_str());
+					}
+				}
+				risultato=risultato2;
+			}
+			closedir(d);
+		}
+
+		if (risultato)
+		{
+			if (flagdebug)
+				printf("Delete dir  %s\n\n",i_path.c_str());
+			delete_dir(i_path.c_str());
+		}
+	   return risultato;	
+#endif
+
+#ifdef _WIN32
+
+///	bool	flagdebug=true;
+	bool	flagsubdir=false;
+	HANDLE	myhandle;
+	std::wstring wfilepath;
+	WIN32_FIND_DATA findfiledata;
+
+	std::string pattern=i_path+"\\*.*";
+  
+	std::wstring wpattern	=utow(pattern.c_str());
+	std::wstring wi_path	=utow(i_path.c_str());
+
+	myhandle=FindFirstFile(wpattern.c_str(),&findfiledata);
+  
+	if (myhandle!=INVALID_HANDLE_VALUE)
+	{
+		do
+		{
+			std::string t=wtou(findfiledata.cFileName);
+			
+			if ((t!=".") && (t!=".."))
+			{
+				wfilepath=wi_path+L"\\"+findfiledata.cFileName;
+		        if (findfiledata.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+				{
+					if (i_flagrecursive)
+					{
+						const std::string temp(wfilepath.begin(),wfilepath.end());
+						if (flagdebug)
+							printf("\n\nDelete directory   %s\n",temp.c_str());
+						int myresult=erredbarras(temp,i_flagrecursive);
+						if (myresult)
+							return myresult;
+					}
+					else
+						flagsubdir=true;
+				}
+				else
+				{
+					const std::string ttemp(wfilepath.begin(), wfilepath.end() );
+					if (flagdebug)
+						printf("Try to delete file %s\n",ttemp.c_str());
+
+					if (SetFileAttributes(wfilepath.c_str(),FILE_ATTRIBUTE_NORMAL) == FALSE)
+					{
+						if (flagdebug)
+							printf("31019: ERROR cannot change attr of file %s\n",ttemp.c_str());
+						return GetLastError();
+					}
+					
+					if (DeleteFile(wfilepath.c_str())==FALSE)
+					{
+						if (flagdebug)
+							printf("31025: ERROR highlander file %s\n",ttemp.c_str());
+						return GetLastError();
+					}
+				}
+			}
+		} while(FindNextFile(myhandle,&findfiledata)==TRUE);
+
+		FindClose(myhandle);
+
+		DWORD myerror=GetLastError();
+		if (myerror==ERROR_NO_MORE_FILES)
+		{
+			if (!flagsubdir)
+			{
+				const std::string dtemp(wi_path.begin(), wi_path.end());
+				
+				if (flagdebug)
+					printf("Delete no subdir   %s\n",dtemp.c_str());
+							
+				if (SetFileAttributes(wi_path.c_str(),FILE_ATTRIBUTE_NORMAL)==FALSE)
+				{
+					if (flagdebug)
+						printf("30135: ERROR cannot change folder attr %s\n",dtemp.c_str());
+					return GetLastError();
+				}
+								
+				if (RemoveDirectory(wi_path.c_str())==FALSE)
+				{
+					if (flagdebug)
+						printf("31047: ERROR highlander dir %s\n",dtemp.c_str());
+					return GetLastError();
+				}
+			}
+		}
+		else
+			return myerror;
+	}
+#endif
+	return 0;
+}
+
+
+
+/////////////////////////////////////////
+//////// help_something functions
 
 void help_a(bool i_usage,bool i_example)
 {
@@ -11801,13 +15878,13 @@ void help_f(bool i_usage,bool i_example)
 		moreprint("PLUS:               Fill (wipe) 99% of free disk space in 500MB chunks");
 		moreprint("                    Check if disk-controller-system-RAM-cache-cables are working fine");
 		moreprint("PLUS: -verbose      Show write speed (useful to check speed consistency)");
-		moreprint("PLUS: -kill         Delete (after run) the temporary filename. By default do NOT erase");
+		moreprint("PLUS: -force        Do NOT delete (after run) the temporary filename. By default free");
 	}
 	if (i_usage && i_example) moreprint("    Examples:");
 	if (i_example)
 	{
 		moreprint("Fill (wipe) almost all free space:   f z:\\");
-		moreprint("Fill (wipe), free space after run:   f z:\\ -kill -verbose");
+		moreprint("Fill (wipe) keep temp files:         f z:\\ -force -verbose");
 	}
 }
 
@@ -11893,9 +15970,36 @@ void help_k(bool i_usage,bool i_example)
 		moreprint("z:\\knb and we want to turn back");
 		moreprint("WITHOUT delete everything and ");
 		moreprint("extract again (maybe it's huge):     k z:\\1.zpaq c:\\z -to z:\\knb");
-
 	}
 }
+
+void help_n(bool i_usage,bool i_example)
+{
+	if (i_usage)
+	{
+		moreprint("CMD   n (decimatioN)");
+		moreprint("PLUS:               Keep -n X files in a folder (NO recursive scan), delete all the others");
+		moreprint("                    At least one * must be used to filter.");
+		moreprint("                    with -exec execute external command");
+		moreprint("PLUS: -kill         Do a wet run (default dry run)");
+		moreprint("PLUS: -exec p.bat   Instead of delete launch p.bat with parameter");
+		moreprint("PLUS: /od           Order by date (default)");
+		moreprint("PLUS: /on           Order by name");
+		moreprint("PLUS: -verbose      Show infos");
+		moreprint("PLUS: -force        Continue even if >50 files founded");
+		
+	}
+	if (i_usage && i_example) moreprint("    Examples:");
+	if (i_example)
+	{
+		moreprint("   RISKY COMMAND: DO NOT USE IF YOU DO NOT UNDERSTAND!");
+		moreprint("Keep 10 newest files in z:\\1\\        n z:\\1\\*.txt -n 10 -kill");
+		moreprint("Keep 20 ordered by name              n z:\\1\\dumpy_*.sql -n 20 -kill -force /on");
+		moreprint("Keep 30 txt ordered by name          n z:\\1\\*.txt -n 20 -kill -force /on");
+		moreprint("Check the last file with ugo.bat     n z:\\1\\*.txt -kill -exec ugo.bat");
+	}
+}
+
 void help_mainswitches(bool i_usage,bool i_example)
 {
 	moreprint("  -all [N]:     All versions (default 4 digits)");
@@ -11960,6 +16064,7 @@ void help_franzswitches(bool i_usage,bool i_example)
 	moreprint("  -sha256         In sha1 command use SHA256");
 	moreprint("  -exec_ok fo.bat After OK launch fo.bat");
 	moreprint("  -exec_error kz  After NOT OK launch kz");
+	moreprint("  -exec pippo.bat Launch pippo.bat %1 with command n");
 	moreprint("  -kill           Show 'script-ready' log of dup files");
 	moreprint("  -kill           In extraction write 0-bytes file instead of data");
 	moreprint("  -utf            Remove non-utf8 chars");
@@ -12018,7 +16123,10 @@ void Jidac::differences()
 void Jidac::load_help_map()
 {
 	/// a map is not so good, but we want to keep the executable small
+	/// NOT in the constructor
 	
+	help_map.insert(std::pair<string, voidhelpfunction>("n",help_n));
+	help_map.insert(std::pair<string, voidhelpfunction>("f",help_f));
 	help_map.insert(std::pair<string, voidhelpfunction>("a",help_a));
 	help_map.insert(std::pair<string, voidhelpfunction>("l",help_l));
 	help_map.insert(std::pair<string, voidhelpfunction>("i",help_i));
@@ -12044,8 +16152,6 @@ void Jidac::load_help_map()
 //// default help
 void Jidac::usage() 
 {
-	
-	
 	load_help_map();
 	string lista=" Help parameter: ";
 	
@@ -12067,19 +16173,16 @@ void Jidac::usage()
 	moreprint(" z d0 d1 d2...: Delete empty dirs     |        m X: merge multipart archive");
 	moreprint("          f d0: Fill (wipe) free space|     utf d0: Detox filenames in d0");
 	moreprint(" sha1 d0 d1...: Hashing/deduplication |     dir d0: Win dir (/s /a /os /od -crc32)");
+	moreprint(" n d0 -n X    : Keep X files in d0    |");
 	moreprint("                                Main switches");
 	moreprint("      -all [N]: All versions N digit  |     -key X: archive password X");
 	moreprint(" -mN -method N: 0..5= faster..better  |     -force: always overwrite");
 	moreprint("         -test: Verify (extract/add)  |      -kill: allow destructive operations");
 	moreprint("    -to out...: Prefix files to out   |   -until N: Roll back to N'th version");
 	moreprint("                                 Getting Help");
-	moreprint(" -h: Long help (-?)     -diff: against zpaq 715     -examples: common examples");
+	moreprint(" -h: Long help (-?)       -diff: against zpaq 715     -examples: common examples");
 	moreprint(lista.c_str());
-	
-	
-	
 }
-
 
 //// print a lot more
 void Jidac::usagefull(string i_command) 
@@ -12123,7 +16226,6 @@ void Jidac::usagefull(string i_command)
 		(*a->second)(true,true);
 		morebar('-');
 	}
-	
 	exit(0);
 }
 
@@ -12150,752 +16252,6 @@ void Jidac::examples(string i_command)
 
 
 
-//// cut a too long filename 
-string mymaxfile(string i_filename,const unsigned int i_lunghezza)
-{
-	if (i_lunghezza==0)
-		return "";
-	if (i_filename.length()<=i_lunghezza)
-		return i_filename;
-	
-	if (i_lunghezza>10)
-	{
-		if (i_filename.length()>10)
-		{
-			unsigned int intestazione=i_lunghezza-10;
-			return i_filename.substr(0,intestazione)+"(...)"+i_filename.substr(i_filename.length()-5,5);
-		}
-		else
-		return i_filename.substr(0,i_lunghezza);
-			
-	}
-	else
-		return i_filename.substr(0,i_lunghezza);
-}
-
-
-// return a/b such that there is exactly one "/" in between, and
-// in Windows, any drive letter in b the : is removed and there
-// is a "/" after.
-string append_path(string a, string b) {
-  int na=a.size();
-  int nb=b.size();
-#ifndef unix
-  if (nb>1 && b[1]==':') {  // remove : from drive letter
-    if (nb>2 && b[2]!='/') b[1]='/';
-    else b=b[0]+b.substr(2), --nb;
-  }
-#endif
-  if (nb>0 && b[0]=='/') b=b.substr(1);
-  if (na>0 && a[na-1]=='/') a=a.substr(0, na-1);
-  return a+"/"+b;
-}
-
-
-#ifdef _WIN32
-
-	uint32_t convert_unicode_to_ansi_string(std::string& ansi,const wchar_t* unicode,const size_t unicode_size) 
-	{
-		uint32_t error = 0;
-		do 
-		{
-			if ((nullptr == unicode) || (0 == unicode_size)) 
-			{
-				error = ERROR_INVALID_PARAMETER;
-				break;
-			}
-			ansi.clear();
-			int required_cch=::WideCharToMultiByte(
-									CP_ACP,
-									0,
-									unicode, static_cast<int>(unicode_size),
-									nullptr, 0,
-									nullptr, nullptr
-									);
-
-			if (required_cch==0) 
-			{
-				error=::GetLastError();
-				break;
-			}
-			ansi.resize(required_cch);
-			if (0 == ::WideCharToMultiByte(
-						CP_ACP,
-						0,
-						unicode, static_cast<int>(unicode_size),
-						const_cast<char*>(ansi.c_str()), static_cast<int>(ansi.size()),
-						nullptr, nullptr
-						)) 
-			{
-				error =::GetLastError();
-				break;
-			}
-		} 
-		while (false);
-
-		return error;
-	}
-
-	uint32_t convert_utf8_to_unicode_string(std::wstring& unicode,const char* utf8,const size_t utf8_size)
-	{
-		uint32_t error = 0;
-		do 
-		{
-			if ((nullptr == utf8) || (0 == utf8_size)) 
-			{
-				error = ERROR_INVALID_PARAMETER;
-				break;
-			}
-			unicode.clear();
-			int required_cch = ::MultiByteToWideChar(
-				CP_UTF8,
-				MB_ERR_INVALID_CHARS,
-				utf8, static_cast<int>(utf8_size),
-				nullptr, 0
-			);
-			if (required_cch==0) 
-			{
-				error = ::GetLastError();
-				break;
-			}
-			unicode.resize(required_cch);
-			if (0 == ::MultiByteToWideChar(
-						CP_UTF8,
-						MB_ERR_INVALID_CHARS,
-						utf8, static_cast<int>(utf8_size),
-						const_cast<wchar_t*>(unicode.c_str()), static_cast<int>(unicode.size())
-						)) 
-			{
-				error=::GetLastError();
-				break;
-			}
-		} 
-		while (false);
-
-		return error;
-	}
-// Windows: double converison
-	std::string utf8toansi(const std::string & utf8)
-	{
-		std::wstring unicode = L"";
-		convert_utf8_to_unicode_string(unicode, utf8.c_str(), utf8.size());
-		std::string ansi = "";
-		convert_unicode_to_ansi_string(ansi, unicode.c_str(), unicode.size());
-		return ansi;
-	}
-
-#else
-
-/// Unix & Linux
-
-	std::string utf8toansi(const std::string & utf8)
-	{
-		return utf8;
-	}
-
-#endif
-
-const std::string WHITESPACE = " \n\r\t\f\v";
- 
-std::string myltrim(const std::string &s)
-{
-    size_t start = s.find_first_not_of(WHITESPACE);
-    return (start == std::string::npos) ? "" : s.substr(start);
-}
- 
-std::string myrtrim(const std::string &s)
-{
-    size_t end = s.find_last_not_of(WHITESPACE);
-    return (end == std::string::npos) ? "" : s.substr(0, end + 1);
-}
- 
-std::string mytrim2(const std::string &s) {
-    return myrtrim(myltrim(s));
-}
-
-string extractfilename(const string& i_string) 
-{
-	size_t i = i_string.rfind('/', i_string.length());
-	if (i != string::npos) 
-		return(i_string.substr(i+1, i_string.length() - i));
-	return(i_string);
-}
-string prendiestensione(const string& s) 
-{
-	if (isdirectory(s))
-		return ("");
-	string nomefile=extractfilename(s);
-	size_t i = nomefile.rfind('.', nomefile.length());
-	if (i != string::npos) 
-	{
-		
-		int lunghezzaestensione=nomefile.length() - i;
-		if (lunghezzaestensione>20)
-			return("");
-		return(nomefile.substr(i+1, lunghezzaestensione));
-   }
-   return("");
-}
-
-string extractfilepath(const string& i_string) 
-{
-	size_t i = i_string.rfind('/', i_string.length());
-	if (i != string::npos) 
-		return(i_string.substr(0, i+1));
-	return("");
-}
-
-
-string prendinomefileebasta(const string& s) 
-{
-	string nomefile=extractfilename(s);
-	size_t i = nomefile.rfind('.', nomefile.length());
-	if (i != string::npos) 
-		return(nomefile.substr(0,i));
-	return(nomefile);
-}
-
-string nomefileseesistegia(string i_nomefile)
-{
-	if (!fileexists(i_nomefile))
-		return i_nomefile;
-	string percorso=extractfilepath(i_nomefile);
-	string estensione=prendiestensione(i_nomefile);
-	string nomefile=prendinomefileebasta(i_nomefile);
-	char	numero[10];
-	for (int i=1;i<99999;i++)
-	{
-		sprintf(numero,"%05d",i);
-		string snumero=numero;
-		string candidato=percorso+nomefile+"_"+snumero+"."+estensione;
-		if (!fileexists(candidato))
-			return candidato;
-	}
-	return ("");
-}
-
-string padleft(std::string str, const size_t num, const char paddingChar = ' ')
-{
-    if(num > str.size())
-	{
-        string tmpstring=str;
-		tmpstring.insert(0, num - tmpstring.size(), paddingChar);
-		return tmpstring;
-	}
-	else
-	return("");
-}
-
-
-string purgeansi(string i_string,bool i_keeppath=false)
-{
-	if (i_string=="")
-		return ("");
-
-	string purged;
-	for (unsigned int i=0;i<i_string.length();i++)
-	{
-		if (i_keeppath)
-		{
-			if ((i_string[i]==':') || (i_string[i]=='/') || (i_string[i]=='\\'))
-			{
-				purged+=i_string[i];
-				continue;
-			}
-		}
-		if (isalnum(i_string[i]))
-			purged+=i_string[i];
-		else
-		{
-			switch (i_string[i]) 
-			{
-/*
-very forbiden
-< (less than)
-> (greater than)
-: (colon)
-" (double quote)
-/ (forward slash)
-\ (backslash)
-| (vertical bar or pipe)
-? (question mark)
-* (asterisk)
-*/
-
-
-				case ' ':
-				case '-':
-				case '#':
-				case '~':
-				case '%':
-				case '^':
-				case '_':
-				case '.':
-				case '+':
-				case '=':
-				purged+=i_string[i];
-				break;
-
-				case '&':
-				purged+="_and_";
-				break;
-
-				case ',':
-				case '`':
-//				case '!':
-				case '@':
-				case '$':
-				case '*':
-	///			case '\\':
-				case '|':
-				case ':':
-				case ';':
-				case '"':
-				case '\'':
-				case '<':
-				case '>':
-	///			case '/':
-				case '\n':
-				case '\r':
-				case '\t':
-				purged+='_';
-				break;
-
-				case '(':
-	///			case '[':
-				case '{':
-				purged+='(';
-				break;
-
-				case ')':
-		///		case ']':
-				case '}':
-				purged+=')';
-				break;
-			}
-		}
-	}
-
-	return purged;
-}
-
-string forcelatinansi(string i_string)
-{
-	if (i_string=="")
-		return ("");
-
-	for (unsigned int j=0;j<i_string.length();j++)
-	{
-		if (i_string[j]<0)
-		{
-			if (i_string[j]==-1) // °
-			i_string[j]='u';
-				else
-				if (i_string[j]==-2) // °
-					i_string[j]='u';
-				else
-				if (i_string[j]==-3) // °
-					i_string[j]='u';
-				else
-				if (i_string[j]==-4) // °
-					i_string[j]='u';
-				else
-				if (i_string[j]==-5) // °
-					i_string[j]='u';
-				else
-				if (i_string[j]==-6) // °
-					i_string[j]='u';
-				else
-				if (i_string[j]==-7) // °
-					i_string[j]='u';
-				else
-				if (i_string[j]==-8) // °
-					i_string[j]='o';
-				else
-				if (i_string[j]==-9) // °
-					i_string[j]='o';
-				else
-				if (i_string[j]==-10) //ò
-					i_string[j]='o';
-				else
-				if (i_string[j]==-11) //ò
-					i_string[j]='o';
-				else
-				if (i_string[j]==-12) //ò
-					i_string[j]='o';
-				else
-				if (i_string[j]==-13) //ò
-					i_string[j]='o';
-				else
-				if (i_string[j]==-14) //ò
-					i_string[j]='o';
-				else
-				if (i_string[j]==-15) //ò
-					i_string[j]='o';
-				else
-				if (i_string[j]==-17) //ò
-					i_string[j]='i';
-				else
-				if (i_string[j]==-18) //ò
-					i_string[j]='i';
-				else
-				if (i_string[j]==-19) //ò
-					i_string[j]='i';
-				else
-				if (i_string[j]==-20) //ò
-					i_string[j]='i';
-				else
-				if (i_string[j]==-21) //è
-					i_string[j]='e';
-				else
-				if (i_string[j]==-22) //è
-					i_string[j]='e';
-				else
-				if (i_string[j]==-23) //è
-					i_string[j]='e';
-				else
-				if (i_string[j]==-24) //è
-					i_string[j]='e';
-				else
-				if (i_string[j]==-25) //è
-					i_string[j]='a';
-				else
-				if (i_string[j]==-26) //è
-					i_string[j]='a';
-				else
-				if (i_string[j]==-27) //a
-					i_string[j]='a';
-				else
-				if (i_string[j]==-28) //a
-					i_string[j]='a';
-				else
-				if (i_string[j]==-29) //a
-					i_string[j]='a';
-				else
-				if (i_string[j]==-30) //a
-					i_string[j]='e';
-				else
-				if (i_string[j]==-31) //a
-					i_string[j]='a';
-				else
-				if (i_string[j]==-32) //a
-					i_string[j]='a';
-				else
-				if (i_string[j]==-33) //a
-					i_string[j]='u';
-				else
-				if (i_string[j]==-34) //a
-					i_string[j]='u';
-				else
-				if (i_string[j]==-35) //a
-					i_string[j]='u';
-				else
-				if (i_string[j]==-36) //a
-					i_string[j]='u';
-				else
-				if (i_string[j]==-37) //a
-					i_string[j]='u';
-				else
-				if (i_string[j]==-38) //a
-					i_string[j]='u';
-				else
-				if (i_string[j]==-39) //a
-					i_string[j]='U';
-				else
-				if (i_string[j]==-40) //a
-					i_string[j]='O';
-				else
-				if (i_string[j]==-41) //a
-					i_string[j]='x';
-				else
-				if (i_string[j]==-42) //ò
-					i_string[j]='O';
-				else
-				if (i_string[j]==-45) //ò
-					i_string[j]='O';
-				else
-				if (i_string[j]==-46) //ò
-					i_string[j]='O';
-				else
-				if (i_string[j]==-47) //ò
-					i_string[j]='N';
-				else
-				if (i_string[j]==-49) //ò
-					i_string[j]='I';
-				else
-				if (i_string[j]==-50) //ò
-					i_string[j]='I';
-				else
-				if (i_string[j]==-51) //ò
-					i_string[j]='I';
-				else
-				if (i_string[j]==-52) //ò
-					i_string[j]='I';
-				else
-				if (i_string[j]==-53) //ò
-					i_string[j]='E';
-				else
-				if (i_string[j]==-54) //ò
-					i_string[j]='E';
-				else
-				if (i_string[j]==-55) //ò
-					i_string[j]='E';
-				else
-				if (i_string[j]==-56) //ò
-					i_string[j]='E';
-				else
-				if (i_string[j]==-57) //ò
-					i_string[j]='E';
-				else		
-				if (i_string[j]==-60) //ò
-					i_string[j]='A';
-				else
-				if (i_string[j]==-61) //ò
-					i_string[j]='A';
-				else
-				if (i_string[j]==-62) //ò
-					i_string[j]='A';
-				else
-				if (i_string[j]==-63) //ò
-					i_string[j]='A';
-				else
-				if (i_string[j]==-64) //ò
-					i_string[j]='A';
-				else
-				if (i_string[j]==-66) //ò
-					i_string[j]='3';
-				else
-				if (i_string[j]==-68) //ò
-					i_string[j]='3';
-				else
-				if (i_string[j]==-69) //ò
-					i_string[j]='>';
-				else
-				if (i_string[j]==-70) //ò
-					i_string[j]='o';
-				else
-				if (i_string[j]==-72) //ò
-					i_string[j]='.';
-				else
-				if (i_string[j]==-74) //ò
-					i_string[j]=' ';
-				else
-				if (i_string[j]==-75) //ò
-					i_string[j]=' ';
-				else
-				if (i_string[j]==-76) //ò
-					i_string[j]=' ';
-				else
-				if (i_string[j]==-78) //ò
-					i_string[j]='2';
-				else
-				if (i_string[j]==-80) // °
-					i_string[j]='o';
-				else
-				if (i_string[j]==-81) // °
-					i_string[j]='-';
-				else
-				if (i_string[j]==-82) // °
-					i_string[j]='-';
-				else
-				if (i_string[j]==-83) // °
-					i_string[j]='-';
-				else
-				if (i_string[j]==-84) // °
-					i_string[j]='-';
-				else
-				if (i_string[j]==-85) // °
-					i_string[j]='<';
-				else
-				if (i_string[j]==-89) // °
-					i_string[j]='S';
-				else
-				if (i_string[j]==-90) // °
-					i_string[j]=' ';
-				else
-				if (i_string[j]==-93) // °
-					i_string[j]=' ';
-				else
-				if (i_string[j]==-94) // °
-					i_string[j]=' ';
-				else
-				if (i_string[j]==-95) // °
-					i_string[j]=' ';
-				else
-				if (i_string[j]==-96) // °
-					i_string[j]=' ';
-				else
-				if (i_string[j]==-98) // °
-					i_string[j]=' ';
-				else
-				if (i_string[j]==-102) //-
-					i_string[j]='s';
-				else
-				if (i_string[j]==-103) //-
-					i_string[j]='a';
-				else
-				if (i_string[j]==-106) //-
-					i_string[j]='-';
-				else
-				if (i_string[j]==-107) //-
-					i_string[j]='.';
-				else
-				if (i_string[j]==-108) //-
-					i_string[j]='"';
-				else
-				if (i_string[j]==-109) //-
-					i_string[j]='"';
-				else
-				if (i_string[j]==-110) //-
-					i_string[j]=' ';
-				else
-				if (i_string[j]==-111) //-
-					i_string[j]=' ';
-				else
-				if (i_string[j]==-112) //-
-					i_string[j]=' ';
-				else
-				if (i_string[j]==-112) //-
-					i_string[j]=' ';
-				else
-				if (i_string[j]==-113) //-
-					i_string[j]=' ';
-				else
-				if (i_string[j]==-114) //-
-					i_string[j]=' ';
-				else
-				if (i_string[j]==-115)//-
-					i_string[j]=' ';
-				else
-				if (i_string[j]==-116) //-
-					i_string[j]=' ';
-				else
-				if (i_string[j]==-118) //-
-					i_string[j]='S';
-				else
-				if (i_string[j]==-123) //-
-					i_string[j]='d';
-				else
-				if (i_string[j]==-128) //-
-					i_string[j]='E';
-				else
-					i_string[j]=' ';
-			
-			
-		}
-	}
-		
-	return i_string;
-}
-
-string purgedouble(const string& i_string,const string& i_from,const string& i_to)
-{
-	if (i_string=="")
-		return("");
-	if (i_from=="")
-		return("");
-	if (i_to=="")
-		return("");
-	string purged=i_string;
-	myreplaceall(purged,i_from,i_to);
-		
-	return purged;
-}
-
-string compressemlfilename(const string& i_string)
-{
-	if (i_string=="")
-		return("");
-	string uniqfilename=extractfilename(i_string);
-	string percorso=extractfilepath(i_string);
-		
-	for (int k=0;k<10;k++)
-		uniqfilename=purgedouble(uniqfilename,"  "," ");
-
-	for (int k=0;k<10;k++)
-		uniqfilename=purgedouble(uniqfilename,"..",".");
-
-	for (int k=0;k<10;k++)
-		uniqfilename=purgedouble(uniqfilename,"Fw ","Fwd ");
-	
-	for (int k=0;k<10;k++)
-		uniqfilename=purgedouble(uniqfilename,"Fwd Fwd ","Fwd ");
-
-	for (int k=0;k<10;k++)
-		uniqfilename=purgedouble(uniqfilename," R "," Re ");
-
-	for (int k=0;k<10;k++)
-		uniqfilename=purgedouble(uniqfilename,"R Fwd ","Re Fwd");
-	
-	for (int k=0;k<10;k++)
-		uniqfilename=purgedouble(uniqfilename," RE "," Re ");
-	
-	for (int k=0;k<10;k++)
-		uniqfilename=purgedouble(uniqfilename,"Re Re ","Re ");
-
-	for (int k=0;k<10;k++)
-		uniqfilename=purgedouble(uniqfilename,"Fwd Re Fwd Re ","Fwd Re ");
-
-	for (int k=0;k<10;k++)
-		uniqfilename=purgedouble(uniqfilename,"Re Fwd Re Fwd ","Re Fwd ");
-
-	for (int k=0;k<10;k++)
-		uniqfilename=purgedouble(uniqfilename," SV SV "," SV ");
-
-	for (int k=0;k<10;k++)
-		uniqfilename=purgedouble(uniqfilename,"Fwd FW ","Fwd ");
-
-	for (int k=0;k<10;k++)
-		uniqfilename=purgedouble(uniqfilename,"Fwd I ","Fwd ");
-	
-	for (int k=0;k<10;k++)
-		uniqfilename=purgedouble(uniqfilename,"I Fwd ","Fwd ");
-
-	for (int k=0;k<10;k++)
-			uniqfilename=purgedouble(uniqfilename,"R Re ","Re ");
-
-	for (int k=0;k<10;k++)
-		uniqfilename=purgedouble(uniqfilename,"__","_");
-
-	for (int k=0;k<10;k++)
-	uniqfilename=purgedouble(uniqfilename," _ ","_");
-
-	for (int k=0;k<10;k++)
-		uniqfilename=purgedouble(uniqfilename,"  "," ");
-
-	for (int k=uniqfilename.length()-1;k>0;k--)
-	{
-		if ((uniqfilename[k]=='-') || (uniqfilename[k]=='.') || (uniqfilename[k]==' '))
-		{
-			uniqfilename.pop_back();
-		}
-		else
-		{
-			break;
-		}
-	}
-	uniqfilename=mytrim2(uniqfilename);
-	
-	uniqfilename=percorso+uniqfilename;
-	
-	return uniqfilename;
-}
-
-int64_t prendidimensionefile(const char* i_filename)
-{
-	if (!i_filename)
-		return 0;
-	FILE* myfile = freadopen(i_filename);
-	if (myfile)
-    {
-		fseeko(myfile, 0, SEEK_END);
-		int64_t dimensione=ftello(myfile);
-		fclose(myfile);
-		return dimensione;
-	}
-	else
-	return 0;
-}
 
 // Rename name using tofiles[]
 string Jidac::rename(string name) 
@@ -12935,264 +16291,6 @@ string Jidac::rename(string name)
   return name;
 }
 
-//// some support functions to string compare case insensitive
-bool comparechar(char c1, char c2)
-{
-    if (c1 == c2)
-        return true;
-    else if (std::toupper(c1) == std::toupper(c2))
-        return true;
-    return false;
-}
-
-bool stringcomparei(std::string str1, std::string str2)
-{
-    return ( (str1.size() == str2.size() ) &&
-             std::equal(str1.begin(), str1.end(), str2.begin(), &comparechar) );
-}
-inline char *  migliaia(uint64_t n)
-{
-	static char retbuf[30];
-	char *p = &retbuf[sizeof(retbuf)-1];
-	unsigned int i = 0;
-	*p = '\0';
-	do 
-	{
-		if(i%3 == 0 && i != 0)
-			*--p = '.';
-		*--p = '0' + n % 10;
-		n /= 10;
-		i++;
-		} while(n != 0);
-	return p;
-}
-inline char *  migliaia2(uint64_t n)
-{
-	static char retbuf[30];
-	char *p = &retbuf[sizeof(retbuf)-1];
-	unsigned int i = 0;
-	*p = '\0';
-	do 
-	{
-		if(i%3 == 0 && i != 0)
-			*--p = '.';
-		*--p = '0' + n % 10;
-		n /= 10;
-		i++;
-		} while(n != 0);
-	return p;
-}
-inline char *  migliaia3(uint64_t n)
-{
-	static char retbuf[30];
-	char *p = &retbuf[sizeof(retbuf)-1];
-	unsigned int i = 0;
-	*p = '\0';
-	do 
-	{
-		if(i%3 == 0 && i != 0)
-			*--p = '.';
-		*--p = '0' + n % 10;
-		n /= 10;
-		i++;
-		} while(n != 0);
-	return p;
-}
-inline char *  migliaia4(uint64_t n)
-{
-	static char retbuf[30];
-	char *p = &retbuf[sizeof(retbuf)-1];
-	unsigned int i = 0;
-	*p = '\0';
-	do 
-	{
-		if(i%3 == 0 && i != 0)
-			*--p = '.';
-		*--p = '0' + n % 10;
-		n /= 10;
-		i++;
-		} while(n != 0);
-	return p;
-}
-inline char *  migliaia5(uint64_t n)
-{
-	static char retbuf[30];
-	char *p = &retbuf[sizeof(retbuf)-1];
-	unsigned int i = 0;
-	*p = '\0';
-	do 
-	{
-		if(i%3 == 0 && i != 0)
-			*--p = '.';
-		*--p = '0' + n % 10;
-		n /= 10;
-		i++;
-		} while(n != 0);
-	return p;
-}
-char *rtrim(char *s)
-{
-    char* back = s + strlen(s);
-    while(isspace(*--back));
-    *(back+1) = '\0';
-    return s;
-}
-inline char* tohuman(uint64_t i_bytes)
-{
-	static char io_buf[30];
-	
-	char const *myappend[] = {"B","KB","MB","GB","TB","PB"};
-	char length = sizeof(myappend)/sizeof(myappend[0]);
-	double mybytes=i_bytes;
-	int i=0;
-	if (i_bytes > 1024) 
-		for (i=0;(i_bytes / 1024) > 0 && i<length-1; i++, i_bytes /= 1024)
-			mybytes = i_bytes / 1024.0;
-	sprintf(io_buf, "%.02lf %s",mybytes,myappend[i]);
-	return io_buf;
-}
-inline char* tohuman2(uint64_t i_bytes)
-{
-	static char io_buf[30];
-	
-	char const *myappend[] = {"B","KB","MB","GB","TB","PB"};
-	char length = sizeof(myappend)/sizeof(myappend[0]);
-	double mybytes=i_bytes;
-	int i=0;
-	if (i_bytes > 1024) 
-		for (i=0;(i_bytes / 1024) > 0 && i<length-1; i++, i_bytes /= 1024)
-			mybytes = i_bytes / 1024.0;
-	sprintf(io_buf, "%.02lf %s",mybytes,myappend[i]);
-	return io_buf;
-}
-inline char* tohuman3(uint64_t i_bytes)
-{
-	static char io_buf[30];
-	
-	char const *myappend[] = {"B","KB","MB","GB","TB","PB"};
-	char length = sizeof(myappend)/sizeof(myappend[0]);
-	double mybytes=i_bytes;
-	int i=0;
-	if (i_bytes > 1024) 
-		for (i=0;(i_bytes / 1024) > 0 && i<length-1; i++, i_bytes /= 1024)
-			mybytes = i_bytes / 1024.0;
-	sprintf(io_buf, "%.02lf %s",mybytes,myappend[i]);
-	return io_buf;
-}
-inline char* tohuman4(uint64_t i_bytes)
-{
-	static char io_buf[30];
-	
-	char const *myappend[] = {"B","KB","MB","GB","TB","PB"};
-	char length = sizeof(myappend)/sizeof(myappend[0]);
-	double mybytes=i_bytes;
-	int i=0;
-	if (i_bytes > 1024) 
-		for (i=0;(i_bytes / 1024) > 0 && i<length-1; i++, i_bytes /= 1024)
-			mybytes = i_bytes / 1024.0;
-	sprintf(io_buf, "%.02lf %s",mybytes,myappend[i]);
-	return io_buf;
-}
-
-
-int64_t encodestringdate(string i_date)
-{
-	string purged;
-	for (unsigned int i=0;i<i_date.length();i++)
-		if (isdigit(i_date[i]))
-			purged+=i_date[i];
-	
-	if (purged.length()!=14)
-	{
-		printf("106: datelength !=14\n");
-		return -1;
-	}
-	for (int i=0;i<=13;i++)
-		if (!isdigit(purged[i]))
-		{
-			printf("107: date[%d] not idigit\n",i);
-			return -1;
-		}
-		
-	int year=std::stoi(purged.substr(0,4));
-	int month=std::stoi(purged.substr(4,2));
-	int day=std::stoi(purged.substr(6,2));
-	
-	int hour=std::stoi(purged.substr(8,2));
-	int minute=std::stoi(purged.substr(10,2));
-	int second=std::stoi(purged.substr(12,2));
-	if (flagdebug)
-		printf("14669: date   %04d-%02d-%02d %02d:%02d:%02d\n",year,month,day,hour,minute,second);
-	if ((year<1970) || (year>2070))
-	{
-		printf("108: year not from 1970 to 2070\n");
-		return -1;
-	}
-	if ((month<1) || (month>12))
-	{
-		printf("136: month not in 1 to 12\n");
-		return -1;
-	}
-	if ((day<1) || (day>31))
-	{
-		printf("141: day not in 1 to 31\n");
-		return -1;
-	}
-	
-	if (hour>24)
-	{
-		printf("147: hour >24\n");
-		return -1;
-	}
-	if (minute>60)
-	{
-		printf("152: minute >60\n");
-		return -1;
-	}	
-	if (second>60)
-	{
-		printf("157: second >60\n");
-		return -1;
-	}	
-		
-	bool isleap= (((year % 4 == 0) &&
-         (year % 100 != 0)) ||
-         (year % 400 == 0));
-		
-
-    if (month == 2)
-    {
-        if (isleap)
-		{
-			if (!(day <=29))
-			{
-				printf("180: leap year, feb must be <=29\n");
-				return -1;
-			}
-		}
-        else
-			if (!(day <=28))
-			{
-				printf("187: NO leap year, feb must be <=28\n");
-				return -1;
-			}
-    }
- 
-    if ((month==4) || (month==6) || (month==9) || (month==11))
-		if (!(day <= 30))
-		{
-			printf("195: month cannot have more than 30 days\n");
-			return -1;
-		}
-	return year*10000000000LL
-		+month*100000000LL //mese
-		+day*1000000				// giorno
-	  
-		+hour*10000 // ore
-		+minute*100	// minuti
-		+second;		// secondi
-}
-
 
 
 // Parse the command line. Return 1 if error else 0.
@@ -13204,6 +16302,7 @@ int Jidac::doCommand(int argc, const char** argv)
   
 	g_exec_error="";
 	g_exec_ok="";
+	g_exec="";
 	g_exec_text="";
 	command=0;
 	flagforce=false;
@@ -13222,6 +16321,9 @@ int Jidac::doCommand(int argc, const char** argv)
 	summary=-1; 
 	menoenne=0;
 	versioncomment="";
+	flagbarraod=false;
+	flagbarraon=false;
+	flagbarraos=false;
 	flagdebug=false;
 	flagtest=false;
 	flagskipzfs=false; 
@@ -13366,7 +16468,25 @@ int Jidac::doCommand(int argc, const char** argv)
 	for (int i=1; i<argc; ++i) 
 	{
 		const string opt=argv[i];  // read command
-		//printf("---- >opt  %s\n",opt.c_str());
+		///printf("---- >opt  %s\n",opt.c_str());
+		if (opt=="/od")
+		{
+			flagbarraod=true;
+			//i++;
+		}
+		else
+		if (opt=="/on")
+		{
+			flagbarraon=true;
+			///i++;
+		}
+		else
+		if (opt=="/os")
+		{
+			flagbarraos=true;
+			///i++;
+		}
+		else
 		if ((
 		opt=="add" 		|| 
 		opt=="extract" 	|| 
@@ -13419,6 +16539,7 @@ int Jidac::doCommand(int argc, const char** argv)
 			i--;
 		}
 		else if (
+		(opt=="n") 			|| 
 		(opt=="f") 			|| 
 		(opt=="c") 			|| 
 		(opt=="s") 			|| 
@@ -13507,6 +16628,16 @@ int Jidac::doCommand(int argc, const char** argv)
 			{
 				if (++i<argc && argv[i][0]!='-')  
 					g_exec_ok=argv[i];
+				else
+					i--;
+			}
+		}
+		else if (opt=="-exec")
+		{
+			if (g_exec=="")
+			{
+				if (++i<argc && argv[i][0]!='-')  
+					g_exec=argv[i];
 				else
 					i--;
 			}
@@ -13689,6 +16820,15 @@ int Jidac::doCommand(int argc, const char** argv)
 	if (!flagpakka)
 	{
 		string franzparameters="";
+
+		if (flagbarraod)
+			franzparameters+="Order by date (/od) ";
+		
+		if (flagbarraon)
+			franzparameters+="Order by name (/on) ";
+		
+		if (flagbarraos)
+			franzparameters+="Order by size (/os) ";
 			
 		if (flagforcezfs)
 		{
@@ -13789,6 +16929,9 @@ int Jidac::doCommand(int argc, const char** argv)
 		if (g_exec_ok!="")
 			printf("franz:exec_ok    <<%s>>\n",g_exec_ok.c_str());
 		
+		if (g_exec!="")
+			printf("franz:exec_ok    <<%s>>\n",g_exec.c_str());
+		
 		if (minsize)
 			printf("franz:minsize    %s\n",migliaia(minsize));
 		
@@ -13862,6 +17005,7 @@ int Jidac::doCommand(int argc, const char** argv)
 		flagflat			=false;
 		return add();
 	}
+	else if (command=='n') return decimation();
 	else if (command=='1') return summa();
 	else if (command=='b') return dir();
 	else if (command=='c') return dircompare(false,false);
@@ -14434,13 +17578,6 @@ bool Jidac::isselected(const char* filename, bool rn,int64_t i_size)
   return true;
 }
 
-// Return the part of fn up to the last slash
-string path(const string& fn) {
-  int n=0;
-  for (int i=0; fn[i]; ++i)
-    if (fn[i]=='/' || fn[i]=='\\') n=i+1;
-  return fn.substr(0, n);
-}
 
 // Insert external filename (UTF-8 with "/") into dt if selected
 // by files, onlyfiles, and notfiles. If filename
@@ -14600,29 +17737,28 @@ void Jidac::scandir(bool i_checkifselected,DTMap& i_edt,string filename, bool i_
 	
 // Add external file and its date, size, and attributes to dt
 void Jidac::addfile(bool i_checkifselected,DTMap& i_edt,string filename, int64_t edate,
-                    int64_t esize, int64_t eattr) {
+                    int64_t esize, int64_t eattr) 
+{
 				
 	if (i_checkifselected)
 		if (!isselected(filename.c_str(), false,esize)) 
 			return;
   
-  DT& d=i_edt[filename];
-  d.date=edate;
-  d.size=esize;
-  d.attr=flagnoattributes?0:eattr;
-  d.data=0;
-  g_bytescanned+=esize;
-  g_filescanned++;
- if (flagnoeta==false)
- { 
-  if (!(i_edt.size() % 1000))
-  {
-    double scantime=mtime()-global_start+1;
-	printf("Scanning %s %2.2fs %d file/s (%s)\r",migliaia(i_edt.size()),scantime/1000.0,(int)(i_edt.size()/(scantime/1000.0)),migliaia2(g_bytescanned));
-	fflush(stdout);
- }
- 
- }
+	DT& d=i_edt[filename];
+	d.date=edate;
+	d.size=esize;
+	d.attr=flagnoattributes?0:eattr;
+	d.data=0;
+	g_bytescanned+=esize;
+	g_filescanned++;
+
+	if (flagnoeta==false)
+		if (!(i_edt.size() % 1000))
+		{
+			double scantime=mtime()-global_start+1;
+			printf("Scanning %s %2.2fs %d file/s (%s)\r",migliaia(i_edt.size()),scantime/1000.0,(int)(i_edt.size()/(scantime/1000.0)),migliaia2(g_bytescanned));
+			fflush(stdout);
+		}
 }
 
 //////////////////////////////// add //////////////////////////////////
@@ -14632,61 +17768,6 @@ inline void puti(libzpaq::StringBuffer& sb, uint64_t x, int n) {
   for (; n>0; --n) sb.put(x&255), x>>=8;
 }
 
-// Print percent done (td/ts) and estimated time remaining
-// two modes: "normal" (old zpaqfranz) "pakka" (new)
-void print_progress(int64_t ts, int64_t td,int64_t i_scritti) 
-{
-	static int ultimapercentuale=0;
-	static int ultimaeta=0;
-	
-	if (flagnoeta==true)
-		return;
-		
-	if (td>ts) 
-		td=ts;
-	
-	if (td<1000000)
-		return;
-		
-	double eta=0.001*(mtime()-global_start)*(ts-td)/(td+1.0);
-	int secondi=(mtime()-global_start)/1000;
-	if (secondi==0)
-		secondi=1;
-	
-	int percentuale=int(td*100.0/(ts+0.5));
-
-///	printf("%d %d\n",int(eta),ultimaeta);
-	
-
-	if (flagpakka)
-	{
-		if (eta<350000)
-		if (((percentuale%10)==0) ||(percentuale==1))
-			if ((percentuale!=ultimapercentuale) || (percentuale==1))
-			{
-				ultimapercentuale=percentuale;
-				printf("%03d%% %02d:%02d:%02d %20s of %20s %s/sec\r", percentuale,
-					int(eta/3600), int(eta/60)%60, int(eta)%60, migliaia(td), migliaia2(ts),migliaia3(td/secondi));
-			}
-	}
-	else 
-	{
-		if (int(eta)!=ultimaeta)
-		if (eta<350000)
-		{
-			ultimaeta=int(eta);
-			if (i_scritti>0)
-			printf("%6.2f%% %02d:%02d:%02d (%10s) -> (%10s) of (%10s) %10s/sec\r", td*100.0/(ts+0.5),
-			int(eta/3600), int(eta/60)%60, int(eta)%60, tohuman(td),tohuman2(i_scritti),tohuman3(ts),tohuman4(td/secondi));
-			else
-			printf("%6.2f%% %02d:%02d:%02d (%10s) of (%10s) %10s/sec\r", td*100.0/(ts+0.5),
-			int(eta/3600), int(eta/60)%60, int(eta)%60, tohuman(td),tohuman2(ts),tohuman3(td/secondi));
-			
-			
-			
-		}
-	}				
-}
 
 // A CompressJob is a queue of blocks to compress and write to the archive.
 // Each block cycles through states EMPTY, FILLING, FULL, COMPRESSING,
@@ -14947,34 +18028,6 @@ public:
   }    
 };
 
-bool replace(std::string& str, const std::string& from, const std::string& to) {
-    size_t start_pos = str.find(from);
-    if(start_pos == std::string::npos)
-        return false;
-    str.replace(start_pos, from.length(), to);
-    return true;
-}
-
-// Sort by sortkey, then by full path
-bool compareFilename(DTMap::iterator ap, DTMap::iterator bp) {
-  if (ap->second.data!=bp->second.data)
-    return ap->second.data<bp->second.data;
-  return ap->first<bp->first;
-}
-/*
-bool comparefilesize(DTMap::iterator ap, DTMap::iterator bp) {
-  if (ap->second.size!=bp->second.size)
-    return ap->second.size<bp->second.size;
-  return ap->first<bp->first;
-}
-*/
-// sort by sha1hex, without checks
-/*
-bool comparesha1hex(DTMap::iterator i_primo, DTMap::iterator i_secondo) 
-{
-	return (strcmp(i_primo->second.sha1hex,i_secondo->second.sha1hex)<0);
-}
-*/
 
 // For writing to two archives at once
 struct WriterPair: public libzpaq::Writer {
@@ -14990,126 +18043,7 @@ struct WriterPair: public libzpaq::Writer {
   WriterPair(): a(0), b(0) {}
 };
 
-#if defined(_WIN32) || defined(_WIN64)
-//// VSS on Windows by... batchfile
-//// delete all kind of shadows copies (if any)
-void vss_deleteshadows()
-{
-	if (flagvss)
-	{
-		string	filebatch	=g_gettempdirectory()+"vsz.bat";
-		
-		printf("Starting delete VSS shadows\n");
-    		
-		if (fileexists(filebatch))
-			if (remove(filebatch.c_str())!=0)
-			{
-				printf("Highlander batch  %s\n", filebatch.c_str());
-				return;
-			}
-		
-		FILE* batch=fopen(filebatch.c_str(), "wb");
-		fprintf(batch,"@echo OFF\n");
-		fprintf(batch,"@wmic shadowcopy delete /nointeractive\n");
-		fclose(batch);
-	
-		waitexecute(filebatch,"",SW_HIDE);
-	
-		printf("End VSS delete shadows\n");
-	}
 
-}
-#endif
-
-/// work with a batch job
-void avanzamento(int64_t i_lavorati,int64_t i_totali,int64_t i_inizio)
-{
-	static int ultimapercentuale=0;
-	
-	if (flagnoeta==true)
-		return;
-	
-	int percentuale=int(i_lavorati*100.0/(i_totali+0.5));
-	
-	if (percentuale>0)
-		if (((percentuale%10)==0)  || (percentuale==1))
-	//if ((((percentuale%10)==0) && (percentuale>0)) || (percentuale==1))
-	if (percentuale!=ultimapercentuale)
-	{
-		ultimapercentuale=percentuale;
-				
-		double eta=0.001*(mtime()-i_inizio)*(i_totali-i_lavorati)/(i_lavorati+1.0);
-		int secondi=(mtime()-i_inizio)/1000;
-		if (secondi==0)
-			secondi=1;
-		if (eta<356000)
-		printf("%03d%% %02d:%02d:%02d (%10s) of (%10s) %20s /sec\n", percentuale,
-		int(eta/3600), int(eta/60)%60, int(eta)%60, tohuman(i_lavorati), tohuman2(i_totali),migliaia3(i_lavorati/secondi));
-		fflush(stdout);
-	}
-}
-
-std::string sha1_calc_file(const char * i_filename,const int64_t i_inizio,const int64_t i_totali,int64_t& io_lavorati)
-{
-	std::string risultato="";
-	FILE* myfile = freadopen(i_filename);
-	if(myfile==NULL )
- 		return risultato;
-	
-	const int BUFSIZE	=65536*8;
-	char 				unzBuf[BUFSIZE];
-	int 				n=BUFSIZE;
-				
-	libzpaq::SHA1 sha1;
-	while (1)
-	{
-		int r=fread(unzBuf, 1, n, myfile);
-		
-		for (int i=0;i<r;i++)
-			sha1.put(*(unzBuf+i));
- 		if (r!=n) 
-			break;
-		io_lavorati+=r;
-		if ((flagnoeta==false) && (i_inizio>0))
-			avanzamento(io_lavorati,i_totali,i_inizio);
-	}
-	fclose(myfile);
-	
-	char sha1result[20];
-	memcpy(sha1result, sha1.result(), 20);
-	char myhex[4];
-	risultato="";
-	for (int j=0; j <20; j++)
-	{
-		sprintf(myhex,"%02X", (unsigned char)sha1result[j]);
-		risultato.push_back(myhex[0]);
-		risultato.push_back(myhex[1]);
-	}
-	return risultato;
-}
-
-//// get CRC32 of a file
-
-uint32_t crc32_calc_file(const char * i_filename,const int64_t i_inizio,const int64_t i_totali,int64_t& io_lavorati)
-{
-	FILE* myfile = freadopen(i_filename);
-	if(myfile==NULL )
-		return 0;
-		
-	char data[65536*16];
-    uint32_t crc=0;
-	int got=0;
-	
-	while ((got=fread(data,sizeof(char),sizeof(data),myfile)) > 0) 
-	{
-		crc=crc32_16bytes (data, got, crc);
-		io_lavorati+=got;	
-		if ((flagnoeta==false) && (i_inizio>0))
-			avanzamento(io_lavorati,i_totali,i_inizio);
-	}
-	fclose(myfile);
-	return crc;
-}
 
 
 /// special function: get SHA1 AND CRC32 of a file
@@ -16835,260 +19769,6 @@ int64_t copy(libzpaq::Reader& in, libzpaq::Writer& out, uint64_t n=~0ull) {
 }
 
 
-
-
-
-
-string sanitizzanomefile(string i_filename,int i_filelength,int& io_collisioni,MAPPAFILEHASH& io_mappacollisioni)
-{
-	if  (i_filename=="")
-		return("");
-		
-	string percorso			=extractfilepath(i_filename);
-	string nome				=prendinomefileebasta(i_filename);
-				
-	string estensione		=prendiestensione(i_filename);
-	string senzaestensione	=percorso+nome;
-	string newname;
-		
-
-	int lunghezza=FRANZMAXPATH;
-	if (i_filelength>0)
-		if (i_filelength<FRANZMAXPATH)
-			lunghezza=i_filelength;
-	lunghezza-=9; // antidupe
-	if (lunghezza<10)
-		lunghezza=10;
-	char numero[60];
-						
-	if (flagflat) /// desperate extract without path
-	{
-		sprintf(numero,"%08d_%05d_",++io_collisioni,(unsigned int)i_filename.length());
-		newname=numero;
-		string temp=purgeansi(senzaestensione.substr(0, lunghezza));
-		for (int i=0;i<10;i++)
-			myreplaceall(temp,"  "," ");
-		
-		newname+=temp;
-		
-		if (estensione!="")
-			newname+="."+estensione;
-		if (flagdebug)
-			printf("25396: flatted filename <<%s>>\n",newname.c_str());
-		return newname;
-	}
-	
-	if (flagutf)
-	{
-		string prenome=nome;
-
-// this is name, throw everything (FALSE)
-		nome=purgeansi(forcelatinansi(utf8toansi(nome)),false);		
-		if (flagdebug)
-			if (nome!=prenome)
-			{
-				printf("25410: flagutf pre  %s\n",prenome.c_str());
-				printf("25410: utf8toansi   %s\n",utf8toansi(nome).c_str());
-				printf("25410: force2ansi   %s\n",forcelatinansi(utf8toansi(nome)).c_str());
-				printf("25411: purgeansi    %s\n",nome.c_str());
-			}
-
-		if (flagfixeml)
-		{
-			if (estensione=="eml")
-			{
-				prenome=compressemlfilename(nome);
-				if (nome!=prenome)
-				{
-					if (flagdebug)
-					{
-						printf("18109: eml pre  %s\n",nome.c_str());
-						printf("18110: eml post %s\n",prenome.c_str());
-					}
-									
-					nome=prenome;
-				}
-			}
-			else
-			{
-				for (int i=0;i<10;i++)
-					myreplaceall(newname,"  "," ");
-					
-			}
-		}
-
-/// this is a path, so keep \ and / (TRUE)
-		string prepercorso=percorso;
-		percorso=purgeansi(forcelatinansi(utf8toansi(percorso)),true);		
-		if (flagdebug)
-			if (percorso!=prepercorso)
-			{
-				printf("25452: flagutf pre  perc %s\n",prepercorso.c_str());
-				printf("25453: flagutf post perc %s\n",percorso.c_str());
-			}
-	}
-					
-	if (flagdebug)
-	{
-		printf("18041: First    %03d %s\n",(int)i_filename.length(),i_filename.c_str());
-		printf("18042: Percorso %03d %s\n",(int)percorso.length(),percorso.c_str());
-		printf("18043: nome     %03d %s\n",(int)nome.length(),nome.c_str());
-		printf("18044: ext      %03d %s\n",(int)estensione.length(),estensione.c_str());
-		printf("18045: Senza ex %03d %s\n",(int)senzaestensione.length(),senzaestensione.c_str());
-	}
-
-	if (flagfix255)
-	{
-		int	lunghezzalibera=lunghezza-percorso.length();//%08d_
-		if (lunghezzalibera<10)
-		{
-			if (flagdebug)
-			{
-				printf("\n\n\n18046: Path too long: need shrink %08d %s\n",(int)percorso.length(),percorso.c_str());
-				printf("lunghezzalibera %d\n",lunghezzalibera);
-			}
-			vector<string> esploso;
-						
-			string temppercorso=percorso;
-			size_t barra;
-						
-			while (1==1)
-			{
-				if (flagdebug)
-					printf("18031: temppercorso %s\n",temppercorso.c_str());
-				barra=temppercorso.find('/');
-				if (flagdebug)
-					printf("18034: Barra %ld\n",(long int)barra);
-				if (barra==string::npos)
-					break;
-				if (flagdebug)		
-					printf("18038: Eureka!!\n");
-				esploso.push_back(temppercorso.substr(0, barra));
-				temppercorso=temppercorso.substr(barra+1,temppercorso.length());
-			}
-		
-			int lunghezzamassima=0;
-			int indicelunghezzamassima=-1;
-			for (unsigned int i=0;i<esploso.size();i++)
-			{
-				if ((int)esploso[i].length()>lunghezzamassima)
-				{
-					indicelunghezzamassima=i;
-					lunghezzamassima=esploso[i].length();
-				}
-				if (flagdebug)
-					printf("18087: Esploso %d %03d %s\n",(int)i,(int)esploso[i].length(),esploso[i].c_str());
-			}
-						/*
-						printf("Lunghezza massima %d\n",lunghezzamassima);
-						printf("Indice lunghezza massima %d\n",indicelunghezzamassima);
-						
-						printf("Lunghezza          %d\n",lunghezza);
-						printf("Lunghezza percorso %d %s\n",percorso.length(),percorso.c_str());
-						printf("Lunghezza nome     %d %s\n",nome.length(),nome.c_str());
-						printf("Lunghezza este     %d %s\n",estensione.length(),estensione.c_str());
-						
-						printf("Resto percoros     %d\n",percorso.length()-lunghezzamassima);
-						*/
-						
-			int lunghezzacheserve=lunghezza-10-(percorso.length()-lunghezzamassima);
-					///	printf("Lunghezza che ser  %d\n",lunghezzacheserve);
-						
-			if (lunghezzacheserve<lunghezzamassima)
-			{
-				esploso[indicelunghezzamassima]=esploso[indicelunghezzamassima].substr(0,lunghezzacheserve);
-				string imploso;
-				for (unsigned 	int i=0;i<esploso.size();i++)
-					imploso+=esploso[i]+'/';
-				if (flagdebug)
-					printf("18114: Imploso           %d %s\n",(int)imploso.length(),imploso.c_str());
-				percorso=imploso;
-				lunghezzalibera=lunghezza-percorso.length();
-				makepath(percorso);
-			}
-			else
-			{
-				printf("18088: HOUSTON\n");
-			}						
-		}
-	}
-	newname=nome;
-	int lunghezzalibera=lunghezza-percorso.length();
-					
-	if (flagdebug)
-		printf("18098:lunghezze per %03d nome %03d tot %03d\n",(int)percorso.length(),lunghezzalibera,(int)(percorso.length()+lunghezzalibera));
-					
-	if (newname.length()>(unsigned int)lunghezzalibera)
-	{
-		newname=newname.substr(0,lunghezzalibera-9);
-		if (flagdebug)
-			printf("18143:Trimmone newname %d %s\n",(int)newname.length(),newname.c_str());
-	}
-	
-	newname=percorso+newname;
-	
-	if (flagdebug)
-		printf("%d: newname %s\n",__LINE__,newname.c_str());
-					
-	std::map<string,string>::iterator collisione;
-	string candidato=newname;
-	if (estensione!="")
-		candidato=candidato+'.'+estensione;
-	if (flagfix255)	/// we are on windows, take care of case
-	{
-		std::for_each(candidato.begin(), candidato.end(), [](char & c)
-		{
-			c = ::tolower(c);	
-		});
-	}
-	if (flagdebug)
-	printf("25570: candidato %s\n",candidato.c_str());
-	
-	collisione=io_mappacollisioni.find(candidato); 
-	if (collisione!=io_mappacollisioni.end()) 
-	{
-		if (flagdebug)
-			printf("18255 found  1 %s\n",candidato.c_str());
-		if (collisione->second!=candidato)
-		{
-			if (flagdebug)
-			{
-				printf("25582: Collisione %s\n",collisione->second.c_str());
-				printf("25583: newname    %s\n",collisione->second.c_str());
-			}
-			sprintf(numero,"_%d",io_collisioni++);
-			newname+=numero;
-			if (flagdebug)
-				printf("18267: postname   %s\n\n\n\n\n",newname.c_str());
-		}
-	}
-	io_mappacollisioni.insert(std::pair<string, string>(candidato,i_filename));
-	
-	if (estensione!="")
-		newname+="."+estensione;
-	
-	if (flagdebug)
-		printf("18195: Finalized %d %s\n",(int)newname.length(),newname.c_str());
-					
-	if (newname.length()>255)
-	{
-		printf("18123: WARN pre  %08d   %s\n",(int)i_filename.length(),i_filename.c_str());
-		printf("18124: WARN post %08d   %s\n",(int)newname.length(),newname.c_str());
-		printf("\n");
-	}
-					
-
-	/*	
-	auto ret=mymap.insert( std::pair<string,DT>(newname,p->second) );
-	if (ret.second==false) 
-	{
-		printf("18298: KOLLISION! %s\n",newname.c_str());
-	}
-	*/
-	return newname;
-}
-
-
 void Jidac::printsanitizeflags()
 {
 		printf("\n");
@@ -17725,58 +20405,6 @@ int Jidac::extract()
 
 
 /////////////////////////////// list //////////////////////////////////
-
-// Return p<q for sorting files by decreasing size, then fragment ID list
-bool compareFragmentList(DTMap::const_iterator p, DTMap::const_iterator q) {
-  if (p->second.size!=q->second.size) return p->second.size>q->second.size;
-  if (p->second.ptr<q->second.ptr) return true;
-  if (q->second.ptr<p->second.ptr) return false;
-  if (p->second.data!=q->second.data) return p->second.data<q->second.data;
-  return p->first<q->first;
-}
-
-/*
-// Return p<q for sort by name and comparison result
-bool compareName(DTMap::const_iterator p, DTMap::const_iterator q) {
-  if (p->first!=q->first) return p->first<q->first;
-  return p->second.data<q->second.data;
-}
-*/
-
-
-
-uint32_t crchex2int(char *hex) 
-{
-	assert(hex);
-	uint32_t val = 0;
-	for (int i=0;i<8;i++)
-	{
-        uint8_t byte = *hex++; 
-        if (byte >= '0' && byte <= '9') byte = byte - '0';
-        else if (byte >= 'a' && byte <='f') byte = byte - 'a' + 10;
-        else if (byte >= 'A' && byte <='F') byte = byte - 'A' + 10;    
-        val = (val << 4) | (byte & 0xF);
-    }
-    return val;
-}
-void print_datetime(void)
-{
-	int hours, minutes, seconds, day, month, year;
-
-	time_t now;
-	time(&now);
-	struct tm *local = localtime(&now);
-
-	hours = local->tm_hour;			// get hours since midnight	(0-23)
-	minutes = local->tm_min;		// get minutes passed after the hour (0-59)
-	seconds = local->tm_sec;		// get seconds passed after the minute (0-59)
-
-	day = local->tm_mday;			// get day of month (1 to 31)
-	month = local->tm_mon + 1;		// get month of year (0 to 11)
-	year = local->tm_year + 1900;	// get year since 1900
-
-	printf("%02d/%02d/%d %02d:%02d:%02d ", day, month, year, hours,minutes,seconds);
-}
 
 /// quanti==1 => version (>0)
 /// quanti==0 => 0
@@ -18511,10 +21139,13 @@ int Jidac::list()
 
 
 
-#define XXH_IMPLEMENTATION   /* access definitions */
 
 
-#define XXH_STATIC_LINKING_ONLY   /* *_state_t */
+
+
+#define XXH_INLINE_ALL
+
+
 /*
  * xxHash - Extremely Fast Hash algorithm
  * Header File
@@ -18522,6 +21153,8 @@ int Jidac::list()
  *
  * BSD 2-Clause License (https://www.opensource.org/licenses/bsd-license.php)
  */
+#define XXH_IMPLEMENTATION   /* access definitions */
+#define XXH_STATIC_LINKING_ONLY   /* *_state_t */
 
 
 #if defined (__cplusplus)
@@ -22272,6 +24905,69 @@ XXH128_hashFromCanonical(const XXH128_canonical_t* src)
 
 /////////// other functions
 
+/////////////// checksum file
+std::string sha1_calc_file(const char * i_filename,const int64_t i_inizio,const int64_t i_totali,int64_t& io_lavorati)
+{
+	std::string risultato="";
+	FILE* myfile = freadopen(i_filename);
+	if(myfile==NULL )
+ 		return risultato;
+	
+	const int BUFSIZE	=65536*8;
+	char 				unzBuf[BUFSIZE];
+	int 				n=BUFSIZE;
+				
+	libzpaq::SHA1 sha1;
+	while (1)
+	{
+		int r=fread(unzBuf, 1, n, myfile);
+		
+		for (int i=0;i<r;i++)
+			sha1.put(*(unzBuf+i));
+ 		if (r!=n) 
+			break;
+		io_lavorati+=r;
+		if ((flagnoeta==false) && (i_inizio>0))
+			avanzamento(io_lavorati,i_totali,i_inizio);
+	}
+	fclose(myfile);
+	
+	char sha1result[20];
+	memcpy(sha1result, sha1.result(), 20);
+	char myhex[4];
+	risultato="";
+	for (int j=0; j <20; j++)
+	{
+		sprintf(myhex,"%02X", (unsigned char)sha1result[j]);
+		risultato.push_back(myhex[0]);
+		risultato.push_back(myhex[1]);
+	}
+	return risultato;
+}
+
+//// get CRC32 of a file
+
+uint32_t crc32_calc_file(const char * i_filename,const int64_t i_inizio,const int64_t i_totali,int64_t& io_lavorati)
+{
+	FILE* myfile = freadopen(i_filename);
+	if(myfile==NULL )
+		return 0;
+		
+	char data[65536*16];
+    uint32_t crc=0;
+	int got=0;
+	
+	while ((got=fread(data,sizeof(char),sizeof(data),myfile)) > 0) 
+	{
+		crc=crc32_16bytes (data, got, crc);
+		io_lavorati+=got;	
+		if ((flagnoeta==false) && (i_inizio>0))
+			avanzamento(io_lavorati,i_totali,i_inizio);
+	}
+	fclose(myfile);
+	return crc;
+}
+
 
 /// take sha256
 string sha256_calc_file(const char * i_filename,const int64_t i_inizio,const int64_t i_totali,int64_t& io_lavorati)
@@ -22442,44 +25138,6 @@ string hash_calc_file(int i_algo,const char * i_filename,const int64_t i_inizio,
 
 
 
-string mygetalgo()
-{
-	if (flagwyhash)
-		return "WYHASH";
-	else
-	if (flagcrc32)
-		return "CRC32";
-	else
-	if (flagcrc32c)
-		return "CRC-32C";
-	else
-	if (flagxxhash)
-		return "XXH3";
-	else
-	if (flagsha256)
-		return "SHA256";
-	else
-		return "SHA1";
-}
-int flag2algo()
-{
-	if (flagwyhash)
-		return ALGO_WYHASH;
-	else
-	if (flagcrc32)
-		return ALGO_CRC32;
-	else
-	if (flagcrc32c)
-		return ALGO_CRC32C;
-	else
-	if (flagxxhash)
-		return ALGO_XXHASH;
-	else
-	if (flagsha256)
-		return ALGO_SHA256;
-	else
-		return ALGO_SHA1;
-}
 
 
 struct tparametrihash
@@ -22510,18 +25168,6 @@ void * scansionahash(void *t)
 }
 
 
-
-bool sortbyval(const std::pair<string, string> &a, 
-               const std::pair<string, string> &b) 
-{ 
-    return (a.second < b.second); 
-} 
-
-bool sortbysize(const std::pair<uint64_t, string> &a, 
-               const std::pair<uint64_t, string> &b) 
-{ 
-    return (a.first < b.first); 
-} 
 
 int Jidac::deduplicate() 
 {
@@ -23137,69 +25783,6 @@ void my_handler(int s)
 	return errorcode;
 }
 
-
-
-
-
-
-struct xorshift128plus_key_s {
-    uint64_t part1;
-    uint64_t part2;
-};
-
-typedef struct xorshift128plus_key_s xorshift128plus_key_t;
-
-static inline void xorshift128plus_init(uint64_t key1, uint64_t key2, xorshift128plus_key_t *key) {
-  key->part1 = key1;
-  key->part2 = key2;
-}
-
-uint64_t xorshift128plus(xorshift128plus_key_t * key) {
-    uint64_t s1 = key->part1;
-    const uint64_t s0 = key->part2;
-    key->part1 = s0;
-    s1 ^= s1 << 23; // a
-    key->part2 = s1 ^ s0 ^ (s1 >> 18) ^ (s0 >> 5); // b, c
-    return key->part2 + s0;
-}
-
-
-void xorshift128plus_jump(xorshift128plus_key_t * key) {
-    static const uint64_t JUMP[] = { 0x8a5cd789635d2dff, 0x121fd2155c472f96 };
-    uint64_t s0 = 0;
-    uint64_t s1 = 0;
-    for(unsigned int i = 0; i < sizeof (JUMP) / sizeof (*JUMP); i++)
-        for(int b = 0; b < 64; b++) {
-            if (JUMP[i] & 1ULL << b) {
-                s0 ^= key->part1;
-                s1 ^= key->part2;
-            }
-            xorshift128plus(key);
-        }
-
-    key->part1 = s0;
-    key->part2 = s1;
-}
-
-void populateRandom_xorshift128plus(uint32_t *answer, uint32_t size,uint64_t i_key1, uint64_t i_key2) 
-{
-  xorshift128plus_key_t mykey = {.part1 = i_key1, .part2 = i_key2};
-  xorshift128plus_init(i_key1, i_key2, &mykey);
-  uint32_t i = size;
-  while (i > 2) {
-    *(uint64_t *)(answer + size - i) = xorshift128plus(&mykey);
-    i -= 2;
-  }
-  if (i != 0)
-    answer[size - i] = (uint32_t)xorshift128plus(&mykey);
-}
-
-
-
-
-
-typedef map<string, string> MAPPASTRINGASTRINGA;
-
 int Jidac::utf() 
 {
 
@@ -23397,2223 +25980,9 @@ int Jidac::utf()
 	
 }
 
-
-
-
-///////// This is a merge of unzpaq206.cpp, patched by me to become unz.cpp
-///////// Now support FRANZOFFSET (embedding SHA1 into ZPAQ's c block)
-
-
-int Jidac::paranoid() 
-{
-#ifdef _WIN32
-#ifndef _WIN64
-	printf("WARNING: paranoid test use lots of RAM, not good for Win32, better Win64\n");
-#endif
-#endif
-#ifdef ESX
-	printf("GURU: sorry: ESXi does not like to give so much RAM\n");
-	exit(0);
-#endif
-
-	unz(archive.c_str(), password,all);
-	return 0;
-}
-
-
-// Callback for user defined ZPAQ error handling.
-// It will be called on input error with an English language error message.
-// This function should not return.
-extern void unzerror(const char* msg);
-
-// Virtual base classes for input and output
-// get() and put() must be overridden to read or write 1 byte.
-class unzReader {
-public:
-  virtual int get() = 0;  // should return 0..255, or -1 at EOF
-  virtual ~unzReader() {}
-};
-
-class unzWriter {
-public:
-  virtual void put(int c) = 0;  // should output low 8 bits of c
-  virtual ~unzWriter() {}
-};
-
-// An Array of T is cleared and aligned on a 64 byte address
-//   with no constructors called. No copy or assignment.
-// Array<T> a(n, ex=0);  - creates n<<ex elements of type T
-// a[i] - index
-// a(i) - index mod n, n must be a power of 2
-// a.size() - gets n
-template <typename T>
-class Array {
-  T *data;     // user location of [0] on a 64 byte boundary
-  size_t n;    // user size
-  int offset;  // distance back in bytes to start of actual allocation
-  void operator=(const Array&);  // no assignment
-  Array(const Array&);  // no copy
-public:
-  Array(size_t sz=0, int ex=0): data(0), n(0), offset(0) {
-    resize(sz, ex);} // [0..sz-1] = 0
-  void resize(size_t sz, int ex=0); // change size, erase content to zeros
-  ~Array() {resize(0);}  // free memory
-  size_t size() const {return n;}  // get size
-  int isize() const {return int(n);}  // get size as an int
-  T& operator[](size_t i) {assert(n>0 && i<n); return data[i];}
-  T& operator()(size_t i) {assert(n>0 && (n&(n-1))==0); return data[i&(n-1)];}
-};
-
-// Change size to sz<<ex elements of 0
-template<typename T>
-void Array<T>::resize(size_t sz, int ex) {
-  assert(size_t(-1)>0);  // unsigned type?
-  while (ex>0) {
-    if (sz>sz*2) unzerror("Array too big");
-    sz*=2, --ex;
-  }
-  if (n>0) {
-    assert(offset>=0 && offset<=64);
-    assert((char*)data-offset);
-    free((char*)data-offset);
-  }
-  n=0;
-  if (sz==0) return;
-  n=sz;
-  const size_t nb=128+n*sizeof(T);  // test for overflow
-  if (nb<=128 || (nb-128)/sizeof(T)!=n) unzerror("Array too big");
-  data=(T*)calloc(nb, 1);
-  if (!data) unzerror("out of memory");
-
-  // Align array on a 64 byte address.
-  // This optimization is NOT required by the ZPAQ standard.
-  offset=64-(((char*)data-(char*)0)&63);
-  assert(offset>0 && offset<=64);
-  data=(T*)((char*)data+offset);
-}
-
-//////////////////////////// unzSHA1 ////////////////////////////
-
-// For computing SHA-1 checksums
-class unzSHA1 {
-public:
-  void put(int c) {  // hash 1 byte
-    uint32_t& r=w[len0>>5&15];
-    r=(r<<8)|(c&255);
-    if (!(len0+=8)) ++len1;
-    if ((len0&511)==0) process();
-  }
-  double size() const {return len0/8+len1*536870912.0;} // size in bytes
-  const char* result();  // get hash and reset
-  unzSHA1() {init();}
-private:
-  void init();      // reset, but don't clear hbuf
-  uint32_t len0, len1;   // length in bits (low, high)
-  uint32_t h[5];         // hash state
-  uint32_t w[80];        // input buffer
-  char hbuf[20];    // result
-  void process();   // hash 1 block
-};
-
-// Start a new hash
-void unzSHA1::init() {
-  len0=len1=0;
-  h[0]=0x67452301;
-  h[1]=0xEFCDAB89;
-  h[2]=0x98BADCFE;
-  h[3]=0x10325476;
-  h[4]=0xC3D2E1F0;
-}
-
-// Return old result and start a new hash
-const char* unzSHA1::result() {
-
-  // pad and append length
-  const uint32_t s1=len1, s0=len0;
-  put(0x80);
-  while ((len0&511)!=448)
-    put(0);
-  put(s1>>24);
-  put(s1>>16);
-  put(s1>>8);
-  put(s1);
-  put(s0>>24);
-  put(s0>>16);
-  put(s0>>8);
-  put(s0);
-
-  // copy h to hbuf
-  for (int i=0; i<5; ++i) {
-    hbuf[4*i]=h[i]>>24;
-    hbuf[4*i+1]=h[i]>>16;
-    hbuf[4*i+2]=h[i]>>8;
-    hbuf[4*i+3]=h[i];
-  }
-
-  // return hash prior to clearing state
-  init();
-  return hbuf;
-}
-
-// Hash 1 block of 64 bytes
-void unzSHA1::process() {
-  for (int i=16; i<80; ++i) {
-    w[i]=w[i-3]^w[i-8]^w[i-14]^w[i-16];
-    w[i]=w[i]<<1|w[i]>>31;
-  }
-  uint32_t a=h[0];
-  uint32_t b=h[1];
-  uint32_t c=h[2];
-  uint32_t d=h[3];
-  uint32_t e=h[4];
-  const uint32_t k1=0x5A827999, k2=0x6ED9EBA1, k3=0x8F1BBCDC, k4=0xCA62C1D6;
-#define f1(a,b,c,d,e,i) e+=(a<<5|a>>27)+((b&c)|(~b&d))+k1+w[i]; b=b<<30|b>>2;
-#define f5(i) f1(a,b,c,d,e,i) f1(e,a,b,c,d,i+1) f1(d,e,a,b,c,i+2) \
-              f1(c,d,e,a,b,i+3) f1(b,c,d,e,a,i+4)
-  f5(0) f5(5) f5(10) f5(15)
-#undef f1
-#define f1(a,b,c,d,e,i) e+=(a<<5|a>>27)+(b^c^d)+k2+w[i]; b=b<<30|b>>2;
-  f5(20) f5(25) f5(30) f5(35)
-#undef f1
-#define f1(a,b,c,d,e,i) e+=(a<<5|a>>27)+((b&c)|(b&d)|(c&d))+k3+w[i]; \
-        b=b<<30|b>>2;
-  f5(40) f5(45) f5(50) f5(55)
-#undef f1
-#define f1(a,b,c,d,e,i) e+=(a<<5|a>>27)+(b^c^d)+k4+w[i]; b=b<<30|b>>2;
-  f5(60) f5(65) f5(70) f5(75)
-#undef f1
-#undef f5
-  h[0]+=a;
-  h[1]+=b;
-  h[2]+=c;
-  h[3]+=d;
-  h[4]+=e;
-}
-
-//////////////////////////// unzSHA256 //////////////////////////
-
-// For computing SHA-256 checksums
-// http://en.wikipedia.org/wiki/SHA-2
-class unzSHA256 {
-public:
-  void put(int c) {  // hash 1 byte
-    unsigned& r=w[len0>>5&15];
-    r=(r<<8)|(c&255);
-    if (!(len0+=8)) ++len1;
-    if ((len0&511)==0) process();
-  }
-  double size() const {return len0/8+len1*536870912.0;} // size in bytes
-  uint64_t usize() const {return len0/8+(uint64_t(len1)<<29);} //size in bytes
-  const char* result();  // get hash and reset
-  unzSHA256() {init();}
-private:
-  void init();           // reset, but don't clear hbuf
-  unsigned len0, len1;   // length in bits (low, high)
-  unsigned s[8];         // hash state
-  unsigned w[16];        // input buffer
-  char hbuf[32];         // result
-  void process();        // hash 1 block
-};
-
-void unzSHA256::init() {
-  len0=len1=0;
-  s[0]=0x6a09e667;
-  s[1]=0xbb67ae85;
-  s[2]=0x3c6ef372;
-  s[3]=0xa54ff53a;
-  s[4]=0x510e527f;
-  s[5]=0x9b05688c;
-  s[6]=0x1f83d9ab;
-  s[7]=0x5be0cd19;
-  memset(w, 0, sizeof(w));
-}
-
-void unzSHA256::process() {
-
-  #define ror(a,b) ((a)>>(b)|(a<<(32-(b))))
-
-  #define m(i) \
-     w[(i)&15]+=w[(i-7)&15] \
-       +(ror(w[(i-15)&15],7)^ror(w[(i-15)&15],18)^(w[(i-15)&15]>>3)) \
-       +(ror(w[(i-2)&15],17)^ror(w[(i-2)&15],19)^(w[(i-2)&15]>>10))
-
-  #define r(a,b,c,d,e,f,g,h,i) { \
-    unsigned t1=ror(e,14)^e; \
-    t1=ror(t1,5)^e; \
-    h+=ror(t1,6)+((e&f)^(~e&g))+k[i]+w[(i)&15]; } \
-    d+=h; \
-    {unsigned t1=ror(a,9)^a; \
-    t1=ror(t1,11)^a; \
-    h+=ror(t1,2)+((a&b)^(c&(a^b))); }
-
-  #define mr(a,b,c,d,e,f,g,h,i) m(i); r(a,b,c,d,e,f,g,h,i);
-
-  #define r8(i) \
-    r(a,b,c,d,e,f,g,h,i);   \
-    r(h,a,b,c,d,e,f,g,i+1); \
-    r(g,h,a,b,c,d,e,f,i+2); \
-    r(f,g,h,a,b,c,d,e,i+3); \
-    r(e,f,g,h,a,b,c,d,i+4); \
-    r(d,e,f,g,h,a,b,c,i+5); \
-    r(c,d,e,f,g,h,a,b,i+6); \
-    r(b,c,d,e,f,g,h,a,i+7);
-
-  #define mr8(i) \
-    mr(a,b,c,d,e,f,g,h,i);   \
-    mr(h,a,b,c,d,e,f,g,i+1); \
-    mr(g,h,a,b,c,d,e,f,i+2); \
-    mr(f,g,h,a,b,c,d,e,i+3); \
-    mr(e,f,g,h,a,b,c,d,i+4); \
-    mr(d,e,f,g,h,a,b,c,i+5); \
-    mr(c,d,e,f,g,h,a,b,i+6); \
-    mr(b,c,d,e,f,g,h,a,i+7);
-
-  static const unsigned k[64]={
-    0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5,
-    0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
-    0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3,
-    0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
-    0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc,
-    0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
-    0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7,
-    0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
-    0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13,
-    0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
-    0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3,
-    0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
-    0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5,
-    0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
-    0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208,
-    0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2};
-
-  unsigned a=s[0];
-  unsigned b=s[1];
-  unsigned c=s[2];
-  unsigned d=s[3];
-  unsigned e=s[4];
-  unsigned f=s[5];
-  unsigned g=s[6];
-  unsigned h=s[7];
-
-  r8(0);
-  r8(8);
-  mr8(16);
-  mr8(24);
-  mr8(32);
-  mr8(40);
-  mr8(48);
-  mr8(56);
-
-  s[0]+=a;
-  s[1]+=b;
-  s[2]+=c;
-  s[3]+=d;
-  s[4]+=e;
-  s[5]+=f;
-  s[6]+=g;
-  s[7]+=h;
-
-  #undef mr8
-  #undef r8
-  #undef mr
-  #undef r
-  #undef m
-  #undef ror
-}
-
-// Return old result and start a new hash
-const char* unzSHA256::result() {
-
-  // pad and append length
-  const unsigned s1=len1, s0=len0;
-  put(0x80);
-  while ((len0&511)!=448) put(0);
-  put(s1>>24);
-  put(s1>>16);
-  put(s1>>8);
-  put(s1);
-  put(s0>>24);
-  put(s0>>16);
-  put(s0>>8);
-  put(s0);
-
-  // copy s to hbuf
-  for (int i=0; i<8; ++i) {
-    hbuf[4*i]=s[i]>>24;
-    hbuf[4*i+1]=s[i]>>16;
-    hbuf[4*i+2]=s[i]>>8;
-    hbuf[4*i+3]=s[i];
-  }
-
-  // return hash prior to clearing state
-  init();
-  return hbuf;
-}
-
-//////////////////////////// AES /////////////////////////////
-
-// For encrypting with AES in CTR mode.
-// The i'th 16 byte block is encrypted by XOR with AES(i)
-// (i is big endian or MSB first, starting with 0).
-class unzAES_CTR {
-  uint32_t Te0[256], Te1[256], Te2[256], Te3[256], Te4[256]; // encryption tables
-  uint32_t ek[60];  // round key
-  int Nr;  // number of rounds (10, 12, 14 for AES 128, 192, 256)
-  uint32_t iv0, iv1;  // first 8 bytes in CTR mode
-public:
-  unzAES_CTR(const char* key, int keylen, const char* iv=0);
-    // Schedule: keylen is 16, 24, or 32, iv is 8 bytes or NULL
-  void encrypt(uint32_t s0, uint32_t s1, uint32_t s2, uint32_t s3, unsigned char* ct);
-  void encrypt(char* unzBuf, int n, uint64_t offset);  // encrypt n bytes of unzBuf
-};
-
-// Some AES code is derived from libtomcrypt 1.17 (public domain).
-
-#define Te4_0 0x000000FF & Te4
-#define Te4_1 0x0000FF00 & Te4
-#define Te4_2 0x00FF0000 & Te4
-#define Te4_3 0xFF000000 & Te4
-
-// Extract byte n of x
-static inline unsigned unzbyte(unsigned x, unsigned n) {return (x>>(8*n))&255;}
-
-// x = y[0..3] MSB first
-static inline void LOAD32H(uint32_t& x, const char* y) {
-  const unsigned char* u=(const unsigned char*)y;
-  x=u[0]<<24|u[1]<<16|u[2]<<8|u[3];
-}
-
-// y[0..3] = x MSB first
-static inline void STORE32H(uint32_t& x, unsigned char* y) {
-  y[0]=x>>24;
-  y[1]=x>>16;
-  y[2]=x>>8;
-  y[3]=x;
-}
-
-#define setup_mix(temp) \
-  ((Te4_3[unzbyte(temp, 2)]) ^ (Te4_2[unzbyte(temp, 1)]) ^ \
-   (Te4_1[unzbyte(temp, 0)]) ^ (Te4_0[unzbyte(temp, 3)]))
-
-// Initialize encryption tables and round key. keylen is 16, 24, or 32.
-unzAES_CTR::unzAES_CTR(const char* key, int keylen, const char* iv) {
-  assert(key  != NULL);
-  assert(keylen==16 || keylen==24 || keylen==32);
-
-  // Initialize IV (default 0)
-  iv0=iv1=0;
-  if (iv) {
-    LOAD32H(iv0, iv);
-    LOAD32H(iv1, iv+4);
-  }
-
-  // Initialize encryption tables
-  for (int i=0; i<256; ++i) {
-    unsigned s1=
-    "\x63\x7c\x77\x7b\xf2\x6b\x6f\xc5\x30\x01\x67\x2b\xfe\xd7\xab\x76"
-    "\xca\x82\xc9\x7d\xfa\x59\x47\xf0\xad\xd4\xa2\xaf\x9c\xa4\x72\xc0"
-    "\xb7\xfd\x93\x26\x36\x3f\xf7\xcc\x34\xa5\xe5\xf1\x71\xd8\x31\x15"
-    "\x04\xc7\x23\xc3\x18\x96\x05\x9a\x07\x12\x80\xe2\xeb\x27\xb2\x75"
-    "\x09\x83\x2c\x1a\x1b\x6e\x5a\xa0\x52\x3b\xd6\xb3\x29\xe3\x2f\x84"
-    "\x53\xd1\x00\xed\x20\xfc\xb1\x5b\x6a\xcb\xbe\x39\x4a\x4c\x58\xcf"
-    "\xd0\xef\xaa\xfb\x43\x4d\x33\x85\x45\xf9\x02\x7f\x50\x3c\x9f\xa8"
-    "\x51\xa3\x40\x8f\x92\x9d\x38\xf5\xbc\xb6\xda\x21\x10\xff\xf3\xd2"
-    "\xcd\x0c\x13\xec\x5f\x97\x44\x17\xc4\xa7\x7e\x3d\x64\x5d\x19\x73"
-    "\x60\x81\x4f\xdc\x22\x2a\x90\x88\x46\xee\xb8\x14\xde\x5e\x0b\xdb"
-    "\xe0\x32\x3a\x0a\x49\x06\x24\x5c\xc2\xd3\xac\x62\x91\x95\xe4\x79"
-    "\xe7\xc8\x37\x6d\x8d\xd5\x4e\xa9\x6c\x56\xf4\xea\x65\x7a\xae\x08"
-    "\xba\x78\x25\x2e\x1c\xa6\xb4\xc6\xe8\xdd\x74\x1f\x4b\xbd\x8b\x8a"
-    "\x70\x3e\xb5\x66\x48\x03\xf6\x0e\x61\x35\x57\xb9\x86\xc1\x1d\x9e"
-    "\xe1\xf8\x98\x11\x69\xd9\x8e\x94\x9b\x1e\x87\xe9\xce\x55\x28\xdf"
-    "\x8c\xa1\x89\x0d\xbf\xe6\x42\x68\x41\x99\x2d\x0f\xb0\x54\xbb\x16"
-    [i]&255;
-    unsigned s2=s1<<1;
-    if (s2>=0x100) s2^=0x11b;
-    unsigned s3=s1^s2;
-    Te0[i]=s2<<24|s1<<16|s1<<8|s3;
-    Te1[i]=s3<<24|s2<<16|s1<<8|s1;
-    Te2[i]=s1<<24|s3<<16|s2<<8|s1;
-    Te3[i]=s1<<24|s1<<16|s3<<8|s2;
-    Te4[i]=s1<<24|s1<<16|s1<<8|s1;
-  }
-
-  // setup the forward key
-  Nr = 10 + ((keylen/8)-2)*2;  // 10, 12, or 14 rounds
-  int i = 0;
-  uint32_t* rk = &ek[0];
-  uint32_t temp;
-  static const uint32_t rcon[10] = {
-    0x01000000UL, 0x02000000UL, 0x04000000UL, 0x08000000UL,
-    0x10000000UL, 0x20000000UL, 0x40000000UL, 0x80000000UL,
-    0x1B000000UL, 0x36000000UL};  // round constants
-
-  LOAD32H(rk[0], key   );
-  LOAD32H(rk[1], key +  4);
-  LOAD32H(rk[2], key +  8);
-  LOAD32H(rk[3], key + 12);
-  if (keylen == 16) {
-    for (;;) {
-      temp  = rk[3];
-      rk[4] = rk[0] ^ setup_mix(temp) ^ rcon[i];
-      rk[5] = rk[1] ^ rk[4];
-      rk[6] = rk[2] ^ rk[5];
-      rk[7] = rk[3] ^ rk[6];
-      if (++i == 10) {
-         break;
-      }
-      rk += 4;
-    }
-  }
-  else if (keylen == 24) {
-    LOAD32H(rk[4], key + 16);
-    LOAD32H(rk[5], key + 20);
-    for (;;) {
-      temp = rk[5];
-      rk[ 6] = rk[ 0] ^ setup_mix(temp) ^ rcon[i];
-      rk[ 7] = rk[ 1] ^ rk[ 6];
-      rk[ 8] = rk[ 2] ^ rk[ 7];
-      rk[ 9] = rk[ 3] ^ rk[ 8];
-      if (++i == 8) {
-        break;
-      }
-      rk[10] = rk[ 4] ^ rk[ 9];
-      rk[11] = rk[ 5] ^ rk[10];
-      rk += 6;
-    }
-  }
-  else if (keylen == 32) {
-    LOAD32H(rk[4], key + 16);
-    LOAD32H(rk[5], key + 20);
-    LOAD32H(rk[6], key + 24);
-    LOAD32H(rk[7], key + 28);
-    for (;;) {
-      temp = rk[7];
-      rk[ 8] = rk[ 0] ^ setup_mix(temp) ^ rcon[i];
-      rk[ 9] = rk[ 1] ^ rk[ 8];
-      rk[10] = rk[ 2] ^ rk[ 9];
-      rk[11] = rk[ 3] ^ rk[10];
-      if (++i == 7) {
-        break;
-      }
-      temp = rk[11];
-      rk[12] = rk[ 4] ^ setup_mix(temp<<24|temp>>8);
-      rk[13] = rk[ 5] ^ rk[12];
-      rk[14] = rk[ 6] ^ rk[13];
-      rk[15] = rk[ 7] ^ rk[14];
-      rk += 8;
-    }
-  }
-}
-
-// Encrypt to ct[16]
-void unzAES_CTR::encrypt(uint32_t s0, uint32_t s1, uint32_t s2, uint32_t s3, unsigned char* ct) {
-  int r = Nr >> 1;
-  uint32_t *rk = &ek[0];
-  uint32_t t0=0, t1=0, t2=0, t3=0;
-  s0 ^= rk[0];
-  s1 ^= rk[1];
-  s2 ^= rk[2];
-  s3 ^= rk[3];
-  for (;;) {
-    t0 =
-      Te0[unzbyte(s0, 3)] ^
-      Te1[unzbyte(s1, 2)] ^
-      Te2[unzbyte(s2, 1)] ^
-      Te3[unzbyte(s3, 0)] ^
-      rk[4];
-    t1 =
-      Te0[unzbyte(s1, 3)] ^
-      Te1[unzbyte(s2, 2)] ^
-      Te2[unzbyte(s3, 1)] ^
-      Te3[unzbyte(s0, 0)] ^
-      rk[5];
-    t2 =
-      Te0[unzbyte(s2, 3)] ^
-      Te1[unzbyte(s3, 2)] ^
-      Te2[unzbyte(s0, 1)] ^
-      Te3[unzbyte(s1, 0)] ^
-      rk[6];
-    t3 =
-      Te0[unzbyte(s3, 3)] ^
-      Te1[unzbyte(s0, 2)] ^
-      Te2[unzbyte(s1, 1)] ^
-      Te3[unzbyte(s2, 0)] ^
-      rk[7];
-
-    rk += 8;
-    if (--r == 0) {
-      break;
-    }
-
-    s0 =
-      Te0[unzbyte(t0, 3)] ^
-      Te1[unzbyte(t1, 2)] ^
-      Te2[unzbyte(t2, 1)] ^
-      Te3[unzbyte(t3, 0)] ^
-      rk[0];
-    s1 =
-      Te0[unzbyte(t1, 3)] ^
-      Te1[unzbyte(t2, 2)] ^
-      Te2[unzbyte(t3, 1)] ^
-      Te3[unzbyte(t0, 0)] ^
-      rk[1];
-    s2 =
-      Te0[unzbyte(t2, 3)] ^
-      Te1[unzbyte(t3, 2)] ^
-      Te2[unzbyte(t0, 1)] ^
-      Te3[unzbyte(t1, 0)] ^
-      rk[2];
-    s3 =
-      Te0[unzbyte(t3, 3)] ^
-      Te1[unzbyte(t0, 2)] ^
-      Te2[unzbyte(t1, 1)] ^
-      Te3[unzbyte(t2, 0)] ^
-      rk[3];
-  }
-
-  // apply last round and map cipher state to byte array block:
-  s0 =
-    (Te4_3[unzbyte(t0, 3)]) ^
-    (Te4_2[unzbyte(t1, 2)]) ^
-    (Te4_1[unzbyte(t2, 1)]) ^
-    (Te4_0[unzbyte(t3, 0)]) ^
-    rk[0];
-  STORE32H(s0, ct);
-  s1 =
-    (Te4_3[unzbyte(t1, 3)]) ^
-    (Te4_2[unzbyte(t2, 2)]) ^
-    (Te4_1[unzbyte(t3, 1)]) ^
-    (Te4_0[unzbyte(t0, 0)]) ^
-    rk[1];
-  STORE32H(s1, ct+4);
-  s2 =
-    (Te4_3[unzbyte(t2, 3)]) ^
-    (Te4_2[unzbyte(t3, 2)]) ^
-    (Te4_1[unzbyte(t0, 1)]) ^
-    (Te4_0[unzbyte(t1, 0)]) ^
-    rk[2];
-  STORE32H(s2, ct+8);
-  s3 =
-    (Te4_3[unzbyte(t3, 3)]) ^
-    (Te4_2[unzbyte(t0, 2)]) ^
-    (Te4_1[unzbyte(t1, 1)]) ^
-    (Te4_0[unzbyte(t2, 0)]) ^ 
-    rk[3];
-  STORE32H(s3, ct+12);
-}
-
-// Encrypt or decrypt slice unzBuf[0..n-1] at offset by XOR with AES(i) where
-// i is the 128 bit big-endian distance from the start in 16 byte blocks.
-void unzAES_CTR::encrypt(char* unzBuf, int n, uint64_t offset) {
-  for (uint64_t i=offset/16; i<=(offset+n)/16; ++i) {
-    unsigned char ct[16];
-    encrypt(iv0, iv1, i>>32, i, ct);
-    for (int j=0; j<16; ++j) {
-      const int k=i*16-offset+j;
-      if (k>=0 && k<n)
-        unzBuf[k]^=ct[j];
-    }
-  }
-}
-
-#undef setup_mix
-#undef Te4_3
-#undef Te4_2
-#undef Te4_1
-#undef Te4_0
-
-//////////////////////////// stretchKey //////////////////////
-
-// PBKDF2(pw[0..pwlen], salt[0..saltlen], c) to unzBuf[0..dkLen-1]
-// using HMAC-unzSHA256, for the special case of c = 1 iterations
-// output size dkLen a multiple of 32, and pwLen <= 64.
-static void unzpbkdf2(const char* pw, int pwLen, const char* salt, int saltLen,
-                   int c, char* unzBuf, int dkLen) {
-  assert(c==1);
-  assert(dkLen%32==0);
-  assert(pwLen<=64);
-
-  unzSHA256 sha256;
-  char b[32];
-  for (int i=1; i*32<=dkLen; ++i) {
-    for (int j=0; j<pwLen; ++j) sha256.put(pw[j]^0x36);
-    for (int j=pwLen; j<64; ++j) sha256.put(0x36);
-    for (int j=0; j<saltLen; ++j) sha256.put(salt[j]);
-    for (int j=24; j>=0; j-=8) sha256.put(i>>j);
-    memcpy(b, sha256.result(), 32);
-    for (int j=0; j<pwLen; ++j) sha256.put(pw[j]^0x5c);
-    for (int j=pwLen; j<64; ++j) sha256.put(0x5c);
-    for (int j=0; j<32; ++j) sha256.put(b[j]);
-    memcpy(unzBuf+i*32-32, sha256.result(), 32);
-  }
-}
-
-// Hash b[0..15] using 8 rounds of salsa20
-// Modified from http://cr.yp.to/salsa20.html (public domain) to 8 rounds
-static void salsa8(uint32_t* b) {
-  unsigned x[16]={0};
-  memcpy(x, b, 64);
-  for (int i=0; i<4; ++i) {
-    #define R(a,b) (((a)<<(b))+((a)>>(32-b)))
-    x[ 4] ^= R(x[ 0]+x[12], 7);  x[ 8] ^= R(x[ 4]+x[ 0], 9);
-    x[12] ^= R(x[ 8]+x[ 4],13);  x[ 0] ^= R(x[12]+x[ 8],18);
-    x[ 9] ^= R(x[ 5]+x[ 1], 7);  x[13] ^= R(x[ 9]+x[ 5], 9);
-    x[ 1] ^= R(x[13]+x[ 9],13);  x[ 5] ^= R(x[ 1]+x[13],18);
-    x[14] ^= R(x[10]+x[ 6], 7);  x[ 2] ^= R(x[14]+x[10], 9);
-    x[ 6] ^= R(x[ 2]+x[14],13);  x[10] ^= R(x[ 6]+x[ 2],18);
-    x[ 3] ^= R(x[15]+x[11], 7);  x[ 7] ^= R(x[ 3]+x[15], 9);
-    x[11] ^= R(x[ 7]+x[ 3],13);  x[15] ^= R(x[11]+x[ 7],18);
-    x[ 1] ^= R(x[ 0]+x[ 3], 7);  x[ 2] ^= R(x[ 1]+x[ 0], 9);
-    x[ 3] ^= R(x[ 2]+x[ 1],13);  x[ 0] ^= R(x[ 3]+x[ 2],18);
-    x[ 6] ^= R(x[ 5]+x[ 4], 7);  x[ 7] ^= R(x[ 6]+x[ 5], 9);
-    x[ 4] ^= R(x[ 7]+x[ 6],13);  x[ 5] ^= R(x[ 4]+x[ 7],18);
-    x[11] ^= R(x[10]+x[ 9], 7);  x[ 8] ^= R(x[11]+x[10], 9);
-    x[ 9] ^= R(x[ 8]+x[11],13);  x[10] ^= R(x[ 9]+x[ 8],18);
-    x[12] ^= R(x[15]+x[14], 7);  x[13] ^= R(x[12]+x[15], 9);
-    x[14] ^= R(x[13]+x[12],13);  x[15] ^= R(x[14]+x[13],18);
-    #undef R
-  }
-  for (int i=0; i<16; ++i) b[i]+=x[i];
-}
-
-// BlockMix_{Salsa20/8, r} on b[0..128*r-1]
-static void blockmix(uint32_t* b, int r) {
-  assert(r<=8);
-  uint32_t x[16];
-  uint32_t y[256];
-  memcpy(x, b+32*r-16, 64);
-  for (int i=0; i<2*r; ++i) {
-    for (int j=0; j<16; ++j) x[j]^=b[i*16+j];
-    salsa8(x);
-    memcpy(&y[i*16], x, 64);
-  }
-  for (int i=0; i<r; ++i) memcpy(b+i*16, &y[i*32], 64);
-  for (int i=0; i<r; ++i) memcpy(b+(i+r)*16, &y[i*32+16], 64);
-}
-
-// Mix b[0..128*r-1]. Uses 128*r*n bytes of memory and O(r*n) time
-static void smix(char* b, int r, int n) {
-  Array<uint32_t> x(32*r), v(32*r*n);
-  for (int i=0; i<r*128; ++i) x[i/4]+=(b[i]&255)<<i%4*8;
-  for (int i=0; i<n; ++i) {
-    memcpy(&v[i*r*32], &x[0], r*128);
-    blockmix(&x[0], r);
-  }
-  for (int i=0; i<n; ++i) {
-    uint32_t j=x[(2*r-1)*16]&(n-1);
-    for (int k=0; k<r*32; ++k) x[k]^=v[j*r*32+k];
-    blockmix(&x[0], r);
-  }
-  for (int i=0; i<r*128; ++i) b[i]=x[i/4]>>(i%4*8);
-}
-
-// Strengthen password pw[0..pwlen-1] and salt[0..saltlen-1]
-// to produce key unzBuf[0..buflen-1]. Uses O(n*r*p) time and 128*r*n bytes
-// of memory. n must be a power of 2 and r <= 8.
-void unzscrypt(const char* pw, int pwlen,
-            const char* salt, int saltlen,
-            int n, int r, int p, char* unzBuf, int buflen) {
-  assert(r<=8);
-  assert(n>0 && (n&(n-1))==0);  // power of 2?
-  Array<char> b(p*r*128);
-  unzpbkdf2(pw, pwlen, salt, saltlen, 1, &b[0], p*r*128);
-  for (int i=0; i<p; ++i) smix(&b[i*r*128], r, n);
-  unzpbkdf2(pw, pwlen, &b[0], p*r*128, 1, unzBuf, buflen);
-}
-
-// Stretch key in[0..31], assumed to be unzSHA256(password), with
-// NUL terminate salt to produce new key out[0..31]
-void stretchKey(char* out, const char* in, const char* salt) {
-  unzscrypt(in, 32, salt, 32, 1<<14, 8, 1, out, 32);
-}
-
-//////////////////////////// unzZPAQL ///////////////////////////
-
-// Symbolic instructions and their sizes
-typedef enum {NONE,CONS,CM,ICM,MATCH,AVG,MIX2,MIX,ISSE,SSE} CompType;
-const int compsize[256]={0,2,3,2,3,4,6,6,3,5};
-
-// A unzZPAQL virtual machine COMP+HCOMP or PCOMP.
-class unzZPAQL {
-public:
-  unzZPAQL();
-  void clear();           // Free memory, erase program, reset machine state
-  void inith();           // Initialize as HCOMP to run
-  void initp();           // Initialize as PCOMP to run
-  void run(uint32_t input);    // Execute with input
-  int read(unzReader* in2);  // Read header
-  void outc(int c);       // output a byte
-
-  unzWriter* output;         // Destination for OUT instruction, or 0 to suppress
-  unzSHA1* sha1;             // Points to checksum computer
-  uint32_t H(int i) {return h(i);}  // get element of h
-
-  // unzZPAQL block header
-  Array<uint8_t> header;   // hsize[2] hh hm ph pm n COMP (guard) HCOMP (guard)
-  int cend;           // COMP in header[7...cend-1]
-  int hbegin, hend;   // HCOMP/PCOMP in header[hbegin...hend-1]
-
-private:
-  // Machine state for executing HCOMP
-  Array<uint8_t> m;        // memory array M for HCOMP
-  Array<uint32_t> h;       // hash array H for HCOMP
-  Array<uint32_t> r;       // 256 element register array
-  uint32_t a, b, c, d;     // machine registers
-  int f;              // condition flag
-  int pc;             // program counter
-
-  // Support code
-  void init(int hbits, int mbits);  // initialize H and M sizes
-  int execute();  // execute 1 instruction, return 0 after HALT, else 1
-  void div(uint32_t x) {if (x) a/=x; else a=0;}
-  void mod(uint32_t x) {if (x) a%=x; else a=0;}
-  void swap(uint32_t& x) {a^=x; x^=a; a^=x;}
-  void swap(uint8_t& x)  {a^=x; x^=a; a^=x;}
-  void err();  // exit with run time error
-};
-
-// Read header from in2
-int unzZPAQL::read(unzReader* in2) {
-
-  // Get header size and allocate
-  int hsize=in2->get();
-  if (hsize<0) unzerror("end of header");
-  hsize+=in2->get()*256;
-  if (hsize<0) unzerror("end of header");
-  header.resize(hsize+300);
-  cend=hbegin=hend=0;
-  header[cend++]=hsize&255;
-  header[cend++]=hsize>>8;
-  while (cend<7) header[cend++]=in2->get(); // hh hm ph pm n
-
-  // Read COMP
-  int n=header[cend-1];
-  for (int i=0; i<n; ++i) {
-    int type=in2->get();  // component type
-    if (type==-1) unzerror("unexpected end of file");
-    header[cend++]=type;  // component type
-    int size=compsize[type];
-    if (size<1) unzerror("Invalid component type");
-    if (cend+size>hsize) unzerror("COMP overflows header");
-    for (int j=1; j<size; ++j)
-      header[cend++]=in2->get();
-  }
-  if ((header[cend++]=in2->get())!=0) unzerror("missing COMP END");
-
-  // Insert a guard gap and read HCOMP
-  hbegin=hend=cend+128;
-  if (hend>hsize+129) unzerror("missing HCOMP");
-  while (hend<hsize+129) {
-    assert(hend<header.isize()-8);
-    int op=in2->get();
-    if (op<0) unzerror("unexpected end of file");
-    header[hend++]=op;
-  }
-  if ((header[hend++]=in2->get())!=0) unzerror("missing HCOMP END");
-  assert(cend>=7 && cend<header.isize());
-  assert(hbegin==cend+128 && hbegin<header.isize());
-  assert(hend>hbegin && hend<header.isize());
-  assert(hsize==header[0]+256*header[1]);
-  assert(hsize==cend-2+hend-hbegin);
-  return cend+hend-hbegin;
-}
-
-// Free memory, but preserve output, sha1 pointers
-void unzZPAQL::clear() {
-  cend=hbegin=hend=0;  // COMP and HCOMP locations
-  a=b=c=d=f=pc=0;      // machine state
-  header.resize(0);
-  h.resize(0);
-  m.resize(0);
-  r.resize(0);
-}
-
-// Constructor
-unzZPAQL::unzZPAQL() {
-  output=0;
-  sha1=0;
-  clear();
-}
-
-// Initialize machine state as HCOMP
-void unzZPAQL::inith() {
-  assert(header.isize()>6);
-  assert(output==0);
-  assert(sha1==0);
-  init(header[2], header[3]); // hh, hm
-}
-
-// Initialize machine state as PCOMP
-void unzZPAQL::initp() {
-  assert(header.isize()>6);
-  init(header[4], header[5]); // ph, pm
-}
-
-// Initialize machine state to run a program.
-void unzZPAQL::init(int hbits, int mbits) {
-  assert(header.isize()>0);
-  assert(cend>=7);
-  assert(hbegin>=cend+128);
-  assert(hend>=hbegin);
-  assert(hend<header.isize()-130);
-  assert(header[0]+256*header[1]==cend-2+hend-hbegin);
-  h.resize(1, hbits);
-  m.resize(1, mbits);
-  r.resize(256);
-  a=b=c=d=pc=f=0;
-}
-
-// Run program on input by interpreting header
-void unzZPAQL::run(uint32_t input) {
-  assert(cend>6);
-  assert(hbegin>=cend+128);
-  assert(hend>=hbegin);
-  assert(hend<header.isize()-130);
-  assert(m.size()>0);
-  assert(h.size()>0);
-  assert(header[0]+256*header[1]==cend+hend-hbegin-2);
-  pc=hbegin;
-  a=input;
-  while (execute()) ;
-}
-
-void unzZPAQL::outc(int c) {
-  if (output) output->put(c);
-  if (sha1) sha1->put(c);
-}
-
-// Execute one instruction, return 0 after HALT else 1
-int unzZPAQL::execute() {
-  switch(header[pc++]) {
-    case 0: err(); break; // ERROR
-    case 1: ++a; break; // A++
-    case 2: --a; break; // A--
-    case 3: a = ~a; break; // A!
-    case 4: a = 0; break; // A=0
-    case 7: a = r[header[pc++]]; break; // A=R N
-    case 8: swap(b); break; // B<>A
-    case 9: ++b; break; // B++
-    case 10: --b; break; // B--
-    case 11: b = ~b; break; // B!
-    case 12: b = 0; break; // B=0
-    case 15: b = r[header[pc++]]; break; // B=R N
-    case 16: swap(c); break; // C<>A
-    case 17: ++c; break; // C++
-    case 18: --c; break; // C--
-    case 19: c = ~c; break; // C!
-    case 20: c = 0; break; // C=0
-    case 23: c = r[header[pc++]]; break; // C=R N
-    case 24: swap(d); break; // D<>A
-    case 25: ++d; break; // D++
-    case 26: --d; break; // D--
-    case 27: d = ~d; break; // D!
-    case 28: d = 0; break; // D=0
-    case 31: d = r[header[pc++]]; break; // D=R N
-    case 32: swap(m(b)); break; // *B<>A
-    case 33: ++m(b); break; // *B++
-    case 34: --m(b); break; // *B--
-    case 35: m(b) = ~m(b); break; // *B!
-    case 36: m(b) = 0; break; // *B=0
-    case 39: if (f) pc+=((header[pc]+128)&255)-127; else ++pc; break; // JT N
-    case 40: swap(m(c)); break; // *C<>A
-    case 41: ++m(c); break; // *C++
-    case 42: --m(c); break; // *C--
-    case 43: m(c) = ~m(c); break; // *C!
-    case 44: m(c) = 0; break; // *C=0
-    case 47: if (!f) pc+=((header[pc]+128)&255)-127; else ++pc; break; // JF N
-    case 48: swap(h(d)); break; // *D<>A
-    case 49: ++h(d); break; // *D++
-    case 50: --h(d); break; // *D--
-    case 51: h(d) = ~h(d); break; // *D!
-    case 52: h(d) = 0; break; // *D=0
-    case 55: r[header[pc++]] = a; break; // R=A N
-    case 56: return 0  ; // HALT
-    case 57: outc(a&255); break; // OUT
-    case 59: a = (a+m(b)+512)*773; break; // HASH
-    case 60: h(d) = (h(d)+a+512)*773; break; // HASHD
-    case 63: pc+=((header[pc]+128)&255)-127; break; // JMP N
-    case 64: break; // A=A
-    case 65: a = b; break; // A=B
-    case 66: a = c; break; // A=C
-    case 67: a = d; break; // A=D
-    case 68: a = m(b); break; // A=*B
-    case 69: a = m(c); break; // A=*C
-    case 70: a = h(d); break; // A=*D
-    case 71: a = header[pc++]; break; // A= N
-    case 72: b = a; break; // B=A
-    case 73: break; // B=B
-    case 74: b = c; break; // B=C
-    case 75: b = d; break; // B=D
-    case 76: b = m(b); break; // B=*B
-    case 77: b = m(c); break; // B=*C
-    case 78: b = h(d); break; // B=*D
-    case 79: b = header[pc++]; break; // B= N
-    case 80: c = a; break; // C=A
-    case 81: c = b; break; // C=B
-    case 82: break; // C=C
-    case 83: c = d; break; // C=D
-    case 84: c = m(b); break; // C=*B
-    case 85: c = m(c); break; // C=*C
-    case 86: c = h(d); break; // C=*D
-    case 87: c = header[pc++]; break; // C= N
-    case 88: d = a; break; // D=A
-    case 89: d = b; break; // D=B
-    case 90: d = c; break; // D=C
-    case 91: break; // D=D
-    case 92: d = m(b); break; // D=*B
-    case 93: d = m(c); break; // D=*C
-    case 94: d = h(d); break; // D=*D
-    case 95: d = header[pc++]; break; // D= N
-    case 96: m(b) = a; break; // *B=A
-    case 97: m(b) = b; break; // *B=B
-    case 98: m(b) = c; break; // *B=C
-    case 99: m(b) = d; break; // *B=D
-    case 100: break; // *B=*B
-    case 101: m(b) = m(c); break; // *B=*C
-    case 102: m(b) = h(d); break; // *B=*D
-    case 103: m(b) = header[pc++]; break; // *B= N
-    case 104: m(c) = a; break; // *C=A
-    case 105: m(c) = b; break; // *C=B
-    case 106: m(c) = c; break; // *C=C
-    case 107: m(c) = d; break; // *C=D
-    case 108: m(c) = m(b); break; // *C=*B
-    case 109: break; // *C=*C
-    case 110: m(c) = h(d); break; // *C=*D
-    case 111: m(c) = header[pc++]; break; // *C= N
-    case 112: h(d) = a; break; // *D=A
-    case 113: h(d) = b; break; // *D=B
-    case 114: h(d) = c; break; // *D=C
-    case 115: h(d) = d; break; // *D=D
-    case 116: h(d) = m(b); break; // *D=*B
-    case 117: h(d) = m(c); break; // *D=*C
-    case 118: break; // *D=*D
-    case 119: h(d) = header[pc++]; break; // *D= N
-    case 128: a += a; break; // A+=A
-    case 129: a += b; break; // A+=B
-    case 130: a += c; break; // A+=C
-    case 131: a += d; break; // A+=D
-    case 132: a += m(b); break; // A+=*B
-    case 133: a += m(c); break; // A+=*C
-    case 134: a += h(d); break; // A+=*D
-    case 135: a += header[pc++]; break; // A+= N
-    case 136: a -= a; break; // A-=A
-    case 137: a -= b; break; // A-=B
-    case 138: a -= c; break; // A-=C
-    case 139: a -= d; break; // A-=D
-    case 140: a -= m(b); break; // A-=*B
-    case 141: a -= m(c); break; // A-=*C
-    case 142: a -= h(d); break; // A-=*D
-    case 143: a -= header[pc++]; break; // A-= N
-    case 144: a *= a; break; // A*=A
-    case 145: a *= b; break; // A*=B
-    case 146: a *= c; break; // A*=C
-    case 147: a *= d; break; // A*=D
-    case 148: a *= m(b); break; // A*=*B
-    case 149: a *= m(c); break; // A*=*C
-    case 150: a *= h(d); break; // A*=*D
-    case 151: a *= header[pc++]; break; // A*= N
-    case 152: div(a); break; // A/=A
-    case 153: div(b); break; // A/=B
-    case 154: div(c); break; // A/=C
-    case 155: div(d); break; // A/=D
-    case 156: div(m(b)); break; // A/=*B
-    case 157: div(m(c)); break; // A/=*C
-    case 158: div(h(d)); break; // A/=*D
-    case 159: div(header[pc++]); break; // A/= N
-    case 160: mod(a); break; // A%=A
-    case 161: mod(b); break; // A%=B
-    case 162: mod(c); break; // A%=C
-    case 163: mod(d); break; // A%=D
-    case 164: mod(m(b)); break; // A%=*B
-    case 165: mod(m(c)); break; // A%=*C
-    case 166: mod(h(d)); break; // A%=*D
-    case 167: mod(header[pc++]); break; // A%= N
-    case 168: a &= a; break; // A&=A
-    case 169: a &= b; break; // A&=B
-    case 170: a &= c; break; // A&=C
-    case 171: a &= d; break; // A&=D
-    case 172: a &= m(b); break; // A&=*B
-    case 173: a &= m(c); break; // A&=*C
-    case 174: a &= h(d); break; // A&=*D
-    case 175: a &= header[pc++]; break; // A&= N
-    case 176: a &= ~ a; break; // A&~A
-    case 177: a &= ~ b; break; // A&~B
-    case 178: a &= ~ c; break; // A&~C
-    case 179: a &= ~ d; break; // A&~D
-    case 180: a &= ~ m(b); break; // A&~*B
-    case 181: a &= ~ m(c); break; // A&~*C
-    case 182: a &= ~ h(d); break; // A&~*D
-    case 183: a &= ~ header[pc++]; break; // A&~ N
-    case 184: a |= a; break; // A|=A
-    case 185: a |= b; break; // A|=B
-    case 186: a |= c; break; // A|=C
-    case 187: a |= d; break; // A|=D
-    case 188: a |= m(b); break; // A|=*B
-    case 189: a |= m(c); break; // A|=*C
-    case 190: a |= h(d); break; // A|=*D
-    case 191: a |= header[pc++]; break; // A|= N
-    case 192: a ^= a; break; // A^=A
-    case 193: a ^= b; break; // A^=B
-    case 194: a ^= c; break; // A^=C
-    case 195: a ^= d; break; // A^=D
-    case 196: a ^= m(b); break; // A^=*B
-    case 197: a ^= m(c); break; // A^=*C
-    case 198: a ^= h(d); break; // A^=*D
-    case 199: a ^= header[pc++]; break; // A^= N
-    case 200: a <<= (a&31); break; // A<<=A
-    case 201: a <<= (b&31); break; // A<<=B
-    case 202: a <<= (c&31); break; // A<<=C
-    case 203: a <<= (d&31); break; // A<<=D
-    case 204: a <<= (m(b)&31); break; // A<<=*B
-    case 205: a <<= (m(c)&31); break; // A<<=*C
-    case 206: a <<= (h(d)&31); break; // A<<=*D
-    case 207: a <<= (header[pc++]&31); break; // A<<= N
-    case 208: a >>= (a&31); break; // A>>=A
-    case 209: a >>= (b&31); break; // A>>=B
-    case 210: a >>= (c&31); break; // A>>=C
-    case 211: a >>= (d&31); break; // A>>=D
-    case 212: a >>= (m(b)&31); break; // A>>=*B
-    case 213: a >>= (m(c)&31); break; // A>>=*C
-    case 214: a >>= (h(d)&31); break; // A>>=*D
-    case 215: a >>= (header[pc++]&31); break; // A>>= N
-    case 216: f = (true); break; // A==A f = (a == a)
-    case 217: f = (a == b); break; // A==B
-    case 218: f = (a == c); break; // A==C
-    case 219: f = (a == d); break; // A==D
-    case 220: f = (a == uint32_t(m(b))); break; // A==*B
-    case 221: f = (a == uint32_t(m(c))); break; // A==*C
-    case 222: f = (a == h(d)); break; // A==*D
-    case 223: f = (a == uint32_t(header[pc++])); break; // A== N
-    case 224: f = (false); break; // A<A f = (a < a)
-    case 225: f = (a < b); break; // A<B
-    case 226: f = (a < c); break; // A<C
-    case 227: f = (a < d); break; // A<D
-    case 228: f = (a < uint32_t(m(b))); break; // A<*B
-    case 229: f = (a < uint32_t(m(c))); break; // A<*C
-    case 230: f = (a < h(d)); break; // A<*D
-    case 231: f = (a < uint32_t(header[pc++])); break; // A< N
-    case 232: f = (false); break; // A>A f= (a > a)
-    case 233: f = (a > b); break; // A>B
-    case 234: f = (a > c); break; // A>C
-    case 235: f = (a > d); break; // A>D
-    case 236: f = (a > uint32_t(m(b))); break; // A>*B
-    case 237: f = (a > uint32_t(m(c))); break; // A>*C
-    case 238: f = (a > h(d)); break; // A>*D
-    case 239: f = (a > uint32_t(header[pc++])); break; // A> N
-    case 255: if((pc=hbegin+header[pc]+256*header[pc+1])>=hend)err();break;//LJ
-    default: err();
-  }
-  return 1;
-}
-
-// Print illegal instruction error message and exit
-void unzZPAQL::err() {
-  unzerror("unzZPAQL execution error");
-}
-
-///////////////////////// Component //////////////////////////
-
-// A Component is a context model, indirect context model, match model,
-// fixed weight mixer, adaptive 2 input mixer without or with current
-// partial byte as context, adaptive m input mixer (without or with),
-// or SSE (without or with).
-
-struct unzComponent {
-  uint32_t limit;      // max count for cm
-  uint32_t cxt;        // saved context
-  uint32_t a, b, c;    // multi-purpose variables
-  Array<uint32_t> cm;  // cm[cxt] -> p in bits 31..10, n in 9..0; MATCH index
-  Array<uint8_t> ht;   // ICM/ISSE hash table[0..size1][0..15] and MATCH unzBuf
-  Array<uint16_t> a16; // MIX weights
-  void init();    // initialize to all 0
-  unzComponent() {init();}
-};
-
-void unzComponent::init() {
-  limit=cxt=a=b=c=0;
-  cm.resize(0);
-  ht.resize(0);
-  a16.resize(0);
-}
-
-////////////////////////// StateTable ////////////////////////
-
-// Next state table generator
-class StateTable {
-  enum {N=64}; // sizes of b, t
-  int num_states(int n0, int n1);  // compute t[n0][n1][1]
-  void discount(int& n0);  // set new value of n0 after 1 or n1 after 0
-  void next_state(int& n0, int& n1, int y);  // new (n0,n1) after bit y
-public:
-  uint8_t ns[1024]; // state*4 -> next state if 0, if 1, n0, n1
-  int next(int state, int y) {  // next state for bit y
-    assert(state>=0 && state<256);
-    assert(y>=0 && y<4);
-    return ns[state*4+y];
-  }
-  int cminit(int state) {  // initial probability of 1 * 2^23
-    assert(state>=0 && state<256);
-    return ((ns[state*4+3]*2+1)<<22)/(ns[state*4+2]+ns[state*4+3]+1);
-  }
-  StateTable();
-};
-
-// How many states with count of n0 zeros, n1 ones (0...2)
-int StateTable::num_states(int n0, int n1) {
-  const int B=6;
-  const int bound[B]={20,48,15,8,6,5}; // n0 -> max n1, n1 -> max n0
-  if (n0<n1) return num_states(n1, n0);
-  if (n0<0 || n1<0 || n1>=B || n0>bound[n1]) return 0;
-  return 1+(n1>0 && n0+n1<=17);
-}
-
-// New value of count n0 if 1 is observed (and vice versa)
-void StateTable::discount(int& n0) {
-  n0=(n0>=1)+(n0>=2)+(n0>=3)+(n0>=4)+(n0>=5)+(n0>=7)+(n0>=8);
-}
-
-// compute next n0,n1 (0 to N) given input y (0 or 1)
-void StateTable::next_state(int& n0, int& n1, int y) {
-  if (n0<n1)
-    next_state(n1, n0, 1-y);
-  else {
-    if (y) {
-      ++n1;
-      discount(n0);
-    }
-    else {
-      ++n0;
-      discount(n1);
-    }
-    // 20,0,0 -> 20,0
-    // 48,1,0 -> 48,1
-    // 15,2,0 -> 8,1
-    //  8,3,0 -> 6,2
-    //  8,3,1 -> 5,3
-    //  6,4,0 -> 5,3
-    //  5,5,0 -> 5,4
-    //  5,5,1 -> 4,5
-    while (!num_states(n0, n1)) {
-      if (n1<2) --n0;
-      else {
-        n0=(n0*(n1-1)+(n1/2))/n1;
-        --n1;
-      }
-    }
-  }
-}
-
-// Initialize next state table ns[state*4] -> next if 0, next if 1, n0, n1
-StateTable::StateTable() {
-
-  // Assign states by increasing priority
-  const int N=50;
-  uint8_t t[N][N][2]={{{0}}}; // (n0,n1,y) -> state number
-  int state=0;
-  for (int i=0; i<N; ++i) {
-    for (int n1=0; n1<=i; ++n1) {
-      int n0=i-n1;
-      int n=num_states(n0, n1);
-      assert(n>=0 && n<=2);
-      if (n) {
-        t[n0][n1][0]=state;
-        t[n0][n1][1]=state+n-1;
-        state+=n;
-      }
-    }
-  }
-       
-  // Generate next state table
-  memset(ns, 0, sizeof(ns));
-  for (int n0=0; n0<N; ++n0) {
-    for (int n1=0; n1<N; ++n1) {
-      for (int y=0; y<num_states(n0, n1); ++y) {
-        int s=t[n0][n1][y];
-        assert(s>=0 && s<256);
-        int s0=n0, s1=n1;
-        next_state(s0, s1, 0);
-        assert(s0>=0 && s0<N && s1>=0 && s1<N);
-        ns[s*4+0]=t[s0][s1][0];
-        s0=n0, s1=n1;
-        next_state(s0, s1, 1);
-        assert(s0>=0 && s0<N && s1>=0 && s1<N);
-        ns[s*4+1]=t[s0][s1][1];
-        ns[s*4+2]=n0;
-        ns[s*4+3]=n1;
-      }
-    }
-  }
-}
-
-///////////////////////// Predictor //////////////////////////
-
-// A predictor guesses the next bit
-class unzPredictor {
-public:
-  unzPredictor(unzZPAQL&);
-  void init();          // build model
-  int predict();        // probability that next bit is a 1 (0..32767)
-  void update(int y);   // train on bit y (0..1)
-  bool isModeled() {    // n>0 components?
-    assert(z.header.isize()>6);
-    return z.header[6]!=0;
-  }
-
-private:
-
-  // unzPredictor state
-  int c8;               // last 0...7 bits.
-  int hmap4;            // c8 split into nibbles
-  int p[256];           // predictions
-  uint32_t h[256];           // unrolled copy of z.h
-  unzZPAQL& z;             // VM to compute context hashes, includes H, n
-  unzComponent comp[256];  // the model, includes P
-
-  // Modeling support functions
-  int dt2k[256];        // division table for match: dt2k[i] = 2^12/i
-  int dt[1024];         // division table for cm: dt[i] = 2^16/(i+1.5)
-  uint16_t squasht[4096];    // squash() lookup table
-  short stretcht[32768];// stretch() lookup table
-  StateTable st;        // next, cminit functions
-
-  // reduce prediction error in cr.cm
-  void train(unzComponent& cr, int y) {
-    assert(y==0 || y==1);
-    uint32_t& pn=cr.cm(cr.cxt);
-    uint32_t count=pn&0x3ff;
-    int error=y*32767-(cr.cm(cr.cxt)>>17);
-    pn+=(error*dt[count]&-1024)+(count<cr.limit);
-  }
-
-  // x -> floor(32768/(1+exp(-x/64)))
-  int squash(int x) {
-    assert(x>=-2048 && x<=2047);
-    return squasht[x+2048];
-  }
-
-  // x -> round(64*log((x+0.5)/(32767.5-x))), approx inverse of squash
-  int stretch(int x) {
-    assert(x>=0 && x<=32767);
-    return stretcht[x];
-  }
-
-  // bound x to a 12 bit signed int
-  int clamp2k(int x) {
-    if (x<-2048) return -2048;
-    else if (x>2047) return 2047;
-    else return x;
-  }
-
-  // bound x to a 20 bit signed int
-  int clamp512k(int x) {
-    if (x<-(1<<19)) return -(1<<19);
-    else if (x>=(1<<19)) return (1<<19)-1;
-    else return x;
-  }
-
-  // Get cxt in ht, creating a new row if needed
-  size_t find(Array<uint8_t>& ht, int sizebits, uint32_t cxt);
-};
-
-// Initailize model-independent tables
-unzPredictor::unzPredictor(unzZPAQL& zr):
-    c8(1), hmap4(1), z(zr) {
-  assert(sizeof(uint8_t)==1);
-  assert(sizeof(uint16_t)==2);
-  assert(sizeof(uint32_t)==4);
-  assert(sizeof(uint64_t)==8);
-  assert(sizeof(short)==2);
-  assert(sizeof(int)==4);
-
-  // Initialize tables
-  dt2k[0]=0;
-  for (int i=1; i<256; ++i)
-    dt2k[i]=2048/i;
-  for (int i=0; i<1024; ++i)
-    dt[i]=(1<<17)/(i*2+3)*2;
-  for (int i=0; i<32768; ++i)
-    stretcht[i]=int(log((i+0.5)/(32767.5-i))*64+0.5+100000)-100000;
-  for (int i=0; i<4096; ++i)
-    squasht[i]=int(32768.0/(1+exp((i-2048)*(-1.0/64))));
-
-  // Verify floating point math for squash() and stretch()
-  uint32_t sqsum=0, stsum=0;
-  for (int i=32767; i>=0; --i)
-    stsum=stsum*3+stretch(i);
-  for (int i=4095; i>=0; --i)
-    sqsum=sqsum*3+squash(i-2048);
-  assert(stsum==3887533746u);
-  assert(sqsum==2278286169u);
-}
-
-// Initialize the predictor with a new model in z
-void unzPredictor::init() {
-
-  // Initialize context hash function
-  z.inith();
-
-  // Initialize predictions
-  for (int i=0; i<256; ++i) h[i]=p[i]=0;
-
-  // Initialize components
-  for (int i=0; i<256; ++i)  // clear old model
-    comp[i].init();
-  int n=z.header[6]; // hsize[0..1] hh hm ph pm n (comp)[n] 0 0[128] (hcomp) 0
-  const uint8_t* cp=&z.header[7];  // start of component list
-  for (int i=0; i<n; ++i) {
-    assert(cp<&z.header[z.cend]);
-    assert(cp>&z.header[0] && cp<&z.header[z.header.isize()-8]);
-    unzComponent& cr=comp[i];
-    switch(cp[0]) {
-      case CONS:  // c
-        p[i]=(cp[1]-128)*4;
-        break;
-      case CM: // sizebits limit
-        if (cp[1]>32) unzerror("max size for CM is 32");
-        cr.cm.resize(1, cp[1]);  // packed CM (22 bits) + CMCOUNT (10 bits)
-        cr.limit=cp[2]*4;
-        for (size_t j=0; j<cr.cm.size(); ++j)
-          cr.cm[j]=0x80000000;
-        break;
-      case ICM: // sizebits
-        if (cp[1]>26) unzerror("max size for ICM is 26");
-        cr.limit=1023;
-        cr.cm.resize(256);
-        cr.ht.resize(64, cp[1]);
-        for (size_t j=0; j<cr.cm.size(); ++j)
-          cr.cm[j]=st.cminit(j);
-        break;
-      case MATCH:  // sizebits
-        if (cp[1]>32 || cp[2]>32) unzerror("max size for MATCH is 32 32");
-        cr.cm.resize(1, cp[1]);  // index
-        cr.ht.resize(1, cp[2]);  // unzBuf
-        cr.ht(0)=1;
-        break;
-      case AVG: // j k wt
-        if (cp[1]>=i) unzerror("AVG j >= i");
-        if (cp[2]>=i) unzerror("AVG k >= i");
-        break;
-      case MIX2:  // sizebits j k rate mask
-        if (cp[1]>32) unzerror("max size for MIX2 is 32");
-        if (cp[3]>=i) unzerror("MIX2 k >= i");
-        if (cp[2]>=i) unzerror("MIX2 j >= i");
-        cr.c=(size_t(1)<<cp[1]); // size (number of contexts)
-        cr.a16.resize(1, cp[1]);  // wt[size][m]
-        for (size_t j=0; j<cr.a16.size(); ++j)
-          cr.a16[j]=32768;
-        break;
-      case MIX: {  // sizebits j m rate mask
-        if (cp[1]>32) unzerror("max size for MIX is 32");
-        if (cp[2]>=i) unzerror("MIX j >= i");
-        if (cp[3]<1 || cp[3]>i-cp[2]) unzerror("MIX m not in 1..i-j");
-        int m=cp[3];  // number of inputs
-        assert(m>=1);
-        cr.c=(size_t(1)<<cp[1]); // size (number of contexts)
-        cr.cm.resize(m, cp[1]);  // wt[size][m]
-        for (size_t j=0; j<cr.cm.size(); ++j)
-          cr.cm[j]=65536/m;
-        break;
-      }
-      case ISSE:  // sizebits j
-        if (cp[1]>32) unzerror("max size for ISSE is 32");
-        if (cp[2]>=i) unzerror("ISSE j >= i");
-        cr.ht.resize(64, cp[1]);
-        cr.cm.resize(512);
-        for (int j=0; j<256; ++j) {
-          cr.cm[j*2]=1<<15;
-          cr.cm[j*2+1]=clamp512k(stretch(st.cminit(j)>>8)*1024);
-        }
-        break;
-      case SSE: // sizebits j start limit
-        if (cp[1]>32) unzerror("max size for SSE is 32");
-        if (cp[2]>=i) unzerror("SSE j >= i");
-        if (cp[3]>cp[4]*4) unzerror("SSE start > limit*4");
-        cr.cm.resize(32, cp[1]);
-        cr.limit=cp[4]*4;
-        for (size_t j=0; j<cr.cm.size(); ++j)
-          cr.cm[j]=squash((j&31)*64-992)<<17|cp[3];
-        break;
-      default: unzerror("unknown component type");
-    }
-    assert(compsize[*cp]>0);
-    cp+=compsize[*cp];
-    assert(cp>=&z.header[7] && cp<&z.header[z.cend]);
-  }
-}
-
-// Return next bit prediction using interpreted COMP code
-int unzPredictor::predict() {
-  assert(c8>=1 && c8<=255);
-
-  // Predict next bit
-  int n=z.header[6];
-  assert(n>0 && n<=255);
-  const uint8_t* cp=&z.header[7];
-  assert(cp[-1]==n);
-  for (int i=0; i<n; ++i) {
-    assert(cp>&z.header[0] && cp<&z.header[z.header.isize()-8]);
-    unzComponent& cr=comp[i];
-    switch(cp[0]) {
-      case CONS:  // c
-        break;
-      case CM:  // sizebits limit
-        cr.cxt=h[i]^hmap4;
-        p[i]=stretch(cr.cm(cr.cxt)>>17);
-        break;
-      case ICM: // sizebits
-        assert((hmap4&15)>0);
-        if (c8==1 || (c8&0xf0)==16) cr.c=find(cr.ht, cp[1]+2, h[i]+16*c8);
-        cr.cxt=cr.ht[cr.c+(hmap4&15)];
-        p[i]=stretch(cr.cm(cr.cxt)>>8);
-        break;
-      case MATCH: // sizebits bufbits: a=len, b=offset, c=bit, cxt=bitpos,
-                  //                   ht=unzBuf, limit=pos
-        assert(cr.cm.size()==(size_t(1)<<cp[1]));
-        assert(cr.ht.size()==(size_t(1)<<cp[2]));
-        assert(cr.a<=255);
-        assert(cr.c==0 || cr.c==1);
-        assert(cr.cxt<8);
-        assert(cr.limit<cr.ht.size());
-        if (cr.a==0) p[i]=0;
-        else {
-          cr.c=(cr.ht(cr.limit-cr.b)>>(7-cr.cxt))&1; // predicted bit
-          p[i]=stretch(dt2k[cr.a]*(cr.c*-2+1)&32767);
-        }
-        break;
-      case AVG: // j k wt
-        p[i]=(p[cp[1]]*cp[3]+p[cp[2]]*(256-cp[3]))>>8;
-        break;
-      case MIX2: { // sizebits j k rate mask
-                   // c=size cm=wt[size] cxt=input
-        cr.cxt=((h[i]+(c8&cp[5]))&(cr.c-1));
-        assert(cr.cxt<cr.a16.size());
-        int w=cr.a16[cr.cxt];
-        assert(w>=0 && w<65536);
-        p[i]=(w*p[cp[2]]+(65536-w)*p[cp[3]])>>16;
-        assert(p[i]>=-2048 && p[i]<2048);
-      }
-        break;
-      case MIX: {  // sizebits j m rate mask
-                   // c=size cm=wt[size][m] cxt=index of wt in cm
-        int m=cp[3];
-        assert(m>=1 && m<=i);
-        cr.cxt=h[i]+(c8&cp[5]);
-        cr.cxt=(cr.cxt&(cr.c-1))*m; // pointer to row of weights
-        assert(cr.cxt<=cr.cm.size()-m);
-        int* wt=(int*)&cr.cm[cr.cxt];
-        p[i]=0;
-        for (int j=0; j<m; ++j)
-          p[i]+=(wt[j]>>8)*p[cp[2]+j];
-        p[i]=clamp2k(p[i]>>8);
-      }
-        break;
-      case ISSE: { // sizebits j -- c=hi, cxt=bh
-        assert((hmap4&15)>0);
-        if (c8==1 || (c8&0xf0)==16)
-          cr.c=find(cr.ht, cp[1]+2, h[i]+16*c8);
-        cr.cxt=cr.ht[cr.c+(hmap4&15)];  // bit history
-        int *wt=(int*)&cr.cm[cr.cxt*2];
-        p[i]=clamp2k((wt[0]*p[cp[2]]+wt[1]*64)>>16);
-      }
-        break;
-      case SSE: { // sizebits j start limit
-        cr.cxt=(h[i]+c8)*32;
-        int pq=p[cp[2]]+992;
-        if (pq<0) pq=0;
-        if (pq>1983) pq=1983;
-        int wt=pq&63;
-        pq>>=6;
-        assert(pq>=0 && pq<=30);
-        cr.cxt+=pq;
-        p[i]=stretch(((cr.cm(cr.cxt)>>10)*(64-wt)+(cr.cm(cr.cxt+1)>>10)*wt)
-             >>13);
-        cr.cxt+=wt>>5;
-      }
-        break;
-      default:
-        unzerror("component predict not implemented");
-    }
-    cp+=compsize[cp[0]];
-    assert(cp<&z.header[z.cend]);
-    assert(p[i]>=-2048 && p[i]<2048);
-  }
-  assert(cp[0]==NONE);
-  return squash(p[n-1]);
-}
-
-// Update model with decoded bit y (0...1)
-void unzPredictor::update(int y) {
-  assert(y==0 || y==1);
-  assert(c8>=1 && c8<=255);
-  assert(hmap4>=1 && hmap4<=511);
-
-  // Update components
-  const uint8_t* cp=&z.header[7];
-  int n=z.header[6];
-  assert(n>=1 && n<=255);
-  assert(cp[-1]==n);
-  for (int i=0; i<n; ++i) {
-    unzComponent& cr=comp[i];
-    switch(cp[0]) {
-      case CONS:  // c
-        break;
-      case CM:  // sizebits limit
-        train(cr, y);
-        break;
-      case ICM: { // sizebits: cxt=ht[b]=bh, ht[c][0..15]=bh row, cxt=bh
-        cr.ht[cr.c+(hmap4&15)]=st.next(cr.ht[cr.c+(hmap4&15)], y);
-        uint32_t& pn=cr.cm(cr.cxt);
-        pn+=int(y*32767-(pn>>8))>>2;
-      }
-        break;
-      case MATCH: // sizebits bufbits:
-                  //   a=len, b=offset, c=bit, cm=index, cxt=bitpos
-                  //   ht=unzBuf, limit=pos
-      {
-        assert(cr.a<=255);
-        assert(cr.c==0 || cr.c==1);
-        assert(cr.cxt<8);
-        assert(cr.cm.size()==(size_t(1)<<cp[1]));
-        assert(cr.ht.size()==(size_t(1)<<cp[2]));
-        assert(cr.limit<cr.ht.size());
-        if (int(cr.c)!=y) cr.a=0;  // mismatch?
-        cr.ht(cr.limit)+=cr.ht(cr.limit)+y;
-        if (++cr.cxt==8) {
-          cr.cxt=0;
-          ++cr.limit;
-          cr.limit&=(1<<cp[2])-1;
-          if (cr.a==0) {  // look for a match
-            cr.b=cr.limit-cr.cm(h[i]);
-            if (cr.b&(cr.ht.size()-1))
-              while (cr.a<255
-                     && cr.ht(cr.limit-cr.a-1)==cr.ht(cr.limit-cr.a-cr.b-1))
-                ++cr.a;
-          }
-          else cr.a+=cr.a<255;
-          cr.cm(h[i])=cr.limit;
-        }
-      }
-        break;
-      case AVG:  // j k wt
-        break;
-      case MIX2: { // sizebits j k rate mask
-                   // cm=wt[size], cxt=input
-        assert(cr.a16.size()==cr.c);
-        assert(cr.cxt<cr.a16.size());
-        int err=(y*32767-squash(p[i]))*cp[4]>>5;
-        int w=cr.a16[cr.cxt];
-        w+=(err*(p[cp[2]]-p[cp[3]])+(1<<12))>>13;
-        if (w<0) w=0;
-        if (w>65535) w=65535;
-        cr.a16[cr.cxt]=w;
-      }
-        break;
-      case MIX: {   // sizebits j m rate mask
-                    // cm=wt[size][m], cxt=input
-        int m=cp[3];
-        assert(m>0 && m<=i);
-        assert(cr.cm.size()==m*cr.c);
-        assert(cr.cxt+m<=cr.cm.size());
-        int err=(y*32767-squash(p[i]))*cp[4]>>4;
-        int* wt=(int*)&cr.cm[cr.cxt];
-        for (int j=0; j<m; ++j)
-          wt[j]=clamp512k(wt[j]+((err*p[cp[2]+j]+(1<<12))>>13));
-      }
-        break;
-      case ISSE: { // sizebits j  -- c=hi, cxt=bh
-        assert(cr.cxt==uint32_t(cr.ht[cr.c+(hmap4&15)]));
-        int err=y*32767-squash(p[i]);
-        int *wt=(int*)&cr.cm[cr.cxt*2];
-        wt[0]=clamp512k(wt[0]+((err*p[cp[2]]+(1<<12))>>13));
-        wt[1]=clamp512k(wt[1]+((err+16)>>5));
-        cr.ht[cr.c+(hmap4&15)]=st.next(cr.cxt, y);
-      }
-        break;
-      case SSE:  // sizebits j start limit
-        train(cr, y);
-        break;
-      default:
-        assert(0);
-    }
-    cp+=compsize[cp[0]];
-    assert(cp>=&z.header[7] && cp<&z.header[z.cend] 
-           && cp<&z.header[z.header.isize()-8]);
-  }
-  assert(cp[0]==NONE);
-
-  // Save bit y in c8, hmap4
-  c8+=c8+y;
-  if (c8>=256) {
-    z.run(c8-256);
-    hmap4=1;
-    c8=1;
-    for (int i=0; i<n; ++i) h[i]=z.H(i);
-  }
-  else if (c8>=16 && c8<32)
-    hmap4=(hmap4&0xf)<<5|y<<4|1;
-  else
-    hmap4=(hmap4&0x1f0)|(((hmap4&0xf)*2+y)&0xf);
-}
-
-// Find cxt row in hash table ht. ht has rows of 16 indexed by the
-// low sizebits of cxt with element 0 having the next higher 8 bits for
-// collision detection. If not found after 3 adjacent tries, replace the
-// row with lowest element 1 as priority. Return index of row.
-size_t unzPredictor::find(Array<uint8_t>& ht, int sizebits, uint32_t cxt) {
-  assert(ht.size()==size_t(16)<<sizebits);
-  int chk=cxt>>sizebits&255;
-  size_t h0=(cxt*16)&(ht.size()-16);
-  if (ht[h0]==chk) return h0;
-  size_t h1=h0^16;
-  if (ht[h1]==chk) return h1;
-  size_t h2=h0^32;
-  if (ht[h2]==chk) return h2;
-  if (ht[h0+1]<=ht[h1+1] && ht[h0+1]<=ht[h2+1])
-    return memset(&ht[h0], 0, 16), ht[h0]=chk, h0;
-  else if (ht[h1+1]<ht[h2+1])
-    return memset(&ht[h1], 0, 16), ht[h1]=chk, h1;
-  else
-    return memset(&ht[h2], 0, 16), ht[h2]=chk, h2;
-}
-
-//////////////////////////// unzDecoder /////////////////////////
-
-// unzDecoder decompresses using an arithmetic code
-class unzDecoder {
-public:
-  unzReader* in;        // destination
-  unzDecoder(unzZPAQL& z);
-  int decompress();  // return a byte or EOF
-  void init();       // initialize at start of block
-private:
-  uint32_t low, high;     // range
-  uint32_t curr;          // last 4 bytes of archive
-  unzPredictor pr;      // to get p
-  int decode(int p); // return decoded bit (0..1) with prob. p (0..65535)
-};
-
-unzDecoder::unzDecoder(unzZPAQL& z):
-    in(0), low(1), high(0xFFFFFFFF), curr(0), pr(z) {
-}
-
-void unzDecoder::init() {
-  pr.init();
-  if (pr.isModeled()) low=1, high=0xFFFFFFFF, curr=0;
-  else low=high=curr=0;
-}
-
-// Return next bit of decoded input, which has 16 bit probability p of being 1
-int unzDecoder::decode(int p) {
-  assert(p>=0 && p<65536);
-  assert(high>low && low>0);
-  if (curr<low || curr>high) unzerror("archive corrupted");
-  assert(curr>=low && curr<=high);
-  uint32_t mid=low+uint32_t(((high-low)*uint64_t(uint32_t(p)))>>16);  // split range
-  assert(high>mid && mid>=low);
-  int y=curr<=mid;
-  if (y) high=mid; else low=mid+1; // pick half
-  while ((high^low)<0x1000000) { // shift out identical leading bytes
-    high=high<<8|255;
-    low=low<<8;
-    low+=(low==0);
-    int c=in->get();
-    if (c<0) unzerror("unexpected end of file");
-    curr=curr<<8|c;
-  }
-  return y;
-}
-
-// Decompress 1 byte or -1 at end of input
-int unzDecoder::decompress() {
-  if (pr.isModeled()) {  // n>0 components?
-    if (curr==0) {  // segment initialization
-      for (int i=0; i<4; ++i)
-        curr=curr<<8|in->get();
-    }
-    if (decode(0)) {
-      if (curr!=0) unzerror("decoding end of input");
-      return -1;
-    }
-    else {
-      int c=1;
-      while (c<256) {  // get 8 bits
-        int p=pr.predict()*2+1;
-        c+=c+decode(p);
-        pr.update(c&1);
-      }
-      return c-256;
-    }
-  }
-  else {
-    if (curr==0) {  // segment initialization
-      for (int i=0; i<4; ++i)
-        curr=curr<<8|in->get();
-      if (curr==0) return -1;
-    }
-    assert(curr>0);
-    --curr;
-    return in->get();
-  }
-}
-
-/////////////////////////// unzPostProcessor ////////////////////
-
-class unzPostProcessor {
-  int state;   // input parse state: 0=INIT, 1=PASS, 2..4=loading, 5=POST
-  int hsize;   // header size
-  int ph, pm;  // sizes of H and M in z
-public:
-  unzZPAQL z;     // holds PCOMP
-  unzPostProcessor(): state(0), hsize(0), ph(0), pm(0) {}
-  void init(int h, int m);  // ph, pm sizes of H and M
-  int write(int c);  // Input a byte, return state
-  void setOutput(unzWriter* out) {z.output=out;}
-  void setSHA1(unzSHA1* sha1ptr) {z.sha1=sha1ptr;}
-  int getState() const {return state;}
-};
-
-// Copy ph, pm from block header
-void unzPostProcessor::init(int h, int m) {
-  state=hsize=0;
-  ph=h;
-  pm=m;
-  z.clear();
-}
-
-// (PASS=0 | PROG=1 psize[0..1] pcomp[0..psize-1]) data... EOB=-1
-// Return state: 1=PASS, 2..4=loading PROG, 5=PROG loaded
-int unzPostProcessor::write(int c) {
-  assert(c>=-1 && c<=255);
-  switch (state) {
-    case 0:  // initial state
-      if (c<0) unzerror("Unexpected EOS");
-      state=c+1;  // 1=PASS, 2=PROG
-      if (state>2) unzerror("unknown post processing type");
-      if (state==1) z.clear();
-      break;
-    case 1:  // PASS
-      if (c>=0) z.outc(c);
-      break;
-    case 2: // PROG
-      if (c<0) unzerror("Unexpected EOS");
-      hsize=c;  // low byte of size
-      state=3;
-      break;
-    case 3:  // PROG psize[0]
-      if (c<0) unzerror("Unexpected EOS");
-      hsize+=c*256;  // high byte of psize
-      if (hsize<1) unzerror("Empty PCOMP");
-      z.header.resize(hsize+300);
-      z.cend=8;
-      z.hbegin=z.hend=z.cend+128;
-      z.header[4]=ph;
-      z.header[5]=pm;
-      state=4;
-      break;
-    case 4:  // PROG psize[0..1] pcomp[0...]
-      if (c<0) unzerror("Unexpected EOS");
-      assert(z.hend<z.header.isize());
-      z.header[z.hend++]=c;  // one byte of pcomp
-      if (z.hend-z.hbegin==hsize) {  // last byte of pcomp?
-        hsize=z.cend-2+z.hend-z.hbegin;
-        z.header[0]=hsize&255;  // header size with empty COMP
-        z.header[1]=hsize>>8;
-        z.initp();
-        state=5;
-      }
-      break;
-    case 5:  // PROG ... data
-      z.run(c);
-      break;
-  }
-  return state;
-}
-
-//////////////////////// unzDecompresser ////////////////////////
-
-// For decompression and listing archive contents
-class unzDecompresser {
-public:
-  unzDecompresser(): z(), dec(z), pp(), state(BLOCK), decode_state(FIRSTSEG) {}
-  void setInput(unzReader* in) {dec.in=in;}
-  bool findBlock();
-  bool findFilename(unzWriter* = 0);
-  void readComment(unzWriter* = 0);
-  void setOutput(unzWriter* out) {pp.setOutput(out);}
-  void setSHA1(unzSHA1* sha1ptr) {pp.setSHA1(sha1ptr);}
-  void decompress();  // decompress segment
-  void readSegmentEnd(char* sha1string = 0);
-private:
-  unzZPAQL z;
-  unzDecoder dec;
-  unzPostProcessor pp;
-  enum {BLOCK, FILENAME, COMMENT, DATA, SEGEND} state;  // expected next
-  enum {FIRSTSEG, SEG} decode_state;  // which segment in block?
-};
-
-// Find the start of a block and return true if found. Set memptr
-// to memory used.
-bool unzDecompresser::findBlock() {
-  assert(state==BLOCK);
-
-  // Find start of block
-  uint32_t h1=0x3D49B113, h2=0x29EB7F93, h3=0x2614BE13, h4=0x3828EB13;
-  // Rolling hashes initialized to hash of first 13 bytes
-  int c;
-  while ((c=dec.in->get())!=-1) {
-    h1=h1*12+c;
-    h2=h2*20+c;
-    h3=h3*28+c;
-    h4=h4*44+c;
-    if (h1==0xB16B88F1 && h2==0xFF5376F1 && h3==0x72AC5BF1 && h4==0x2F909AF1)
-      break;  // hash of 16 byte string
-  }
-  if (c==-1) return false;
-
-  // Read header
-  if ((c=dec.in->get())!=1 && c!=2) unzerror("unsupported ZPAQ level");
-  if (dec.in->get()!=1) unzerror("unsupported unzZPAQL type");
-  z.read(dec.in);
-  if (c==1 && z.header.isize()>6 && z.header[6]==0)
-    unzerror("ZPAQ level 1 requires at least 1 component");
-  state=FILENAME;
-  decode_state=FIRSTSEG;
-  return true;
-}
-
-// Read the start of a segment (1) or end of block code (255).
-// If a segment is found, write the filename and return true, else false.
-bool unzDecompresser::findFilename(unzWriter* filename) {
-  assert(state==FILENAME);
-  int c=dec.in->get();
-  if (c==1) {  // segment found
-    while (true) {
-      c=dec.in->get();
-      if (c==-1) unzerror("unexpected EOF");
-      if (c==0) {
-        state=COMMENT;
-        return true;
-      }
-      if (filename) filename->put(c);
-    }
-  }
-  else if (c==255) {  // end of block found
-    state=BLOCK;
-    return false;
-  }
-  else
-    unzerror("missing segment or end of block");
-  return false;
-}
-
-// Read the comment from the segment header
-void unzDecompresser::readComment(unzWriter* comment) {
-  assert(state==COMMENT);
-  state=DATA;
-  while (true) {
-    int c=dec.in->get();
-    if (c==-1) unzerror("unexpected EOF");
-    if (c==0) break;
-    if (comment) comment->put(c);
-  }
-  if (dec.in->get()!=0) unzerror("missing reserved byte");
-}
-
-// Decompress n bytes, or all if n < 0. Return false if done
-void unzDecompresser::decompress() {
-  assert(state==DATA);
-
-  // Initialize models to start decompressing block
-  if (decode_state==FIRSTSEG) {
-    dec.init();
-    assert(z.header.size()>5);
-    pp.init(z.header[4], z.header[5]);
-    decode_state=SEG;
-  }
-
-  // Decompress and load PCOMP into postprocessor
-  while ((pp.getState()&3)!=1)
-    pp.write(dec.decompress());
-
-  // Decompress n bytes, or all if n < 0
-  while (true) {
-    int c=dec.decompress();
-    pp.write(c);
-    if (c==-1) {
-      state=SEGEND;
-      return;
-    }
-  }
-}
-
-// Read end of block. If a unzSHA1 checksum is present, write 1 and the
-// 20 byte checksum into sha1string, else write 0 in first byte.
-// If sha1string is 0 then discard it.
-void unzDecompresser::readSegmentEnd(char* sha1string) {
-  assert(state==SEGEND);
-
-  // Read checksum
-  int c=dec.in->get();
-  if (c==254) {
-    if (sha1string) sha1string[0]=0;  // no checksum
-  }
-  else if (c==253) {
-    if (sha1string) sha1string[0]=1;
-    for (int i=1; i<=20; ++i) {
-      c=dec.in->get();
-      if (sha1string) sha1string[i]=c;
-    }
-  }
-  else
-    unzerror("missing end of segment marker");
-  state=FILENAME;
-}
-
-///////////////////////// Driver program ////////////////////
-
-uint64_t offset=0;  // number of bytes input prior to current block
-
-// Handle errors
-void unzerror(const char* msg) {
-  printf("\nError at offset %1.0f: %s\n", double(offset), msg);
-  exit(1);
-}
-
-// Input archive
-class unzInputFile: public unzReader {
-  FILE* f;  // input file
-  enum {BUFSIZE=4096};
-  uint64_t offset;  // number of bytes read
-  unsigned p, end;  // start and end of unread bytes in unzBuf
-  unzAES_CTR* aes;  // to decrypt
-  char unzBuf[BUFSIZE];  // input buffer
-  int64_t filesize;
-public:
-  unzInputFile(): f(0), offset(0), p(0), end(0), aes(0),filesize(-1) {}
-
-  void open(const char* filename, const char* key);
-
-  // Return one input byte or -1 for EOF
-  int get() {
-    if (f && p>=end) {
-      p=0;
-      end=fread(unzBuf, 1, BUFSIZE, f);
-      if (aes) aes->encrypt(unzBuf, end, offset);
-    }
-    if (p>=end) return -1;
-    ++offset;
-    return unzBuf[p++]&255;
-  }
-
-  // Return number of bytes read
-  uint64_t tell() {return offset;}
-  int64_t getfilesize() {return filesize;}
-};
-
-	
-// Open input. Decrypt with key.
-void unzInputFile::open(const char* filename, const char* key) {
-  f=fopen(filename, "rb");
-  if (!f) {
-    perror(filename);
-    return ;
-  }
-	fseeko(f, 0, SEEK_END);
-	filesize=ftello(f);
-	fseeko(f, 0, SEEK_SET);
-	
-  if (key) {
-    char salt[32], stretched_key[32];
-    unzSHA256 sha256;
-    for (int i=0; i<32; ++i) salt[i]=get();
-    if (offset!=32) unzerror("no salt");
-    while (*key) sha256.put(*key++);
-    stretchKey(stretched_key, sha256.result(), salt);
-    aes=new unzAES_CTR(stretched_key, 32, salt);
-    if (!aes) unzerror("out of memory");
-    aes->encrypt(unzBuf, end, 0);
-  }
-}
-
-// File to extract
-class unzOutputFile: public unzWriter {
-  FILE* f;  // output file or NULL
-  unsigned p;  // number of pending bytes to write
-  enum {BUFSIZE=4096};
-  char unzBuf[BUFSIZE];  // output buffer
-public:
-  unzOutputFile(): f(0), p(0) {}
-  void open(const char* filename);
-  void close();
-
-  // write 1 byte
-  void put(int c) {
-    if (f) {
-      unzBuf[p++]=c;
-      if (p==BUFSIZE) fwrite(unzBuf, 1, p, f), p=0;
-    }
-  }
-
-  virtual ~unzOutputFile() {close();}
-};
-
-// Open file unless it exists. Print error message if unsuccessful.
-void unzOutputFile::open(const char* filename) {
-  close();
-  f=fopen(filename, "rb");
-  if (f) {
-    fclose(f);
-    f=0;
-    fprintf(stderr, "file exists: %s\n", filename);
-  }
-  f=fopen(filename, "wb");
-  if (!f) perror(filename);
-}
-
-// Flush output and close file
-void unzOutputFile::close() {
-  if (f && p>0) fwrite(unzBuf, 1, p, f);
-  if (f) fclose(f), f=0;
-  p=0;
-}
-
-
-// Write to string
-struct unzBuf: public unzWriter {
-  size_t limit;  // maximum size
-  std::string s;  // saved output
-  unzBuf(size_t l): limit(l) {}
-
-  // Save c in s
-  void put(int c) {
-    if (s.size()>=limit) unzerror("output overflow");
-    s+=char(c);
-  }
-};
-
-// Test if 14 digit date is valid YYYYMMDDHHMMSS format
-void verify_date(uint64_t date) {
-  int year=date/1000000/10000;
-  int month=date/100000000%100;
-  int day=date/1000000%100;
-  int hour=date/10000%100;
-  int min=date/100%100;
-  int sec=date%100;
-  if (year<1900 || year>2999 || month<1 || month>12 || day<1 || day>31
-      || hour<0 || hour>59 || min<0 || min>59 || sec<0 || sec>59)
-    unzerror("invalid date");
-}
-
-// Test if string is valid UTF8
-void unzverify_utf8(const char* s) {
-  while (true) {
-    int c=uint8_t(*s);
-    if (c==0) return;
-    if ((c>=128 && c<194) || c>=245) unzerror("invalid UTF-8 first byte");
-    int len=1+(c>=192)+(c>=224)+(c>=240);
-    for (int i=1; i<len; ++i)
-      if ((s[i]&192)!=128) unzerror("invalid UTF-8 extra byte");
-    if (c==224 && uint8_t(s[1])<160) unzerror("UTF-8 3 byte long code");
-    if (c==240 && uint8_t(s[1])<144) unzerror("UTF-8 4 byte long code");
-    s+=len;
-  }
-}
-
-// read 8 byte LSB number
-uint64_t unzget8(const char* p) {
-  uint64_t r=0;
-  for (int i=0; i<8; ++i)
-    r+=(p[i]&255ull)<<(i*8);
-  return r;
-}
-
-// read 4 byte LSB number
-uint32_t unzget4(const char* p) {
-  uint32_t r=0;
-  for (int i=0; i<4; ++i)
-    r+=(p[i]&255u)<<(i*8);
-  return r;
-}
-
-// file metadata
-struct unzDT {
-  uint64_t date;  // YYYYMMDDHHMMSS or 0 if deleted
-  uint64_t attr;  // first 8 bytes, LSB first
-  std::vector<uint32_t> ptr;  // fragment IDs
-  char sha1hex[66];		 // 1+32+32 (unzSHA256)+ zero
-  char sha1decompressedhex[66];		 // 1+32+32 (unzSHA256)+ zero
-  std::string sha1fromfile;		 // 1+32+32 (unzSHA256)+ zero
-
-  unzDT(): date(0), attr(0) {sha1hex[0]=0x0;sha1decompressedhex[0]=0x0;sha1fromfile="";}
-};
-
-typedef std::map<std::string, unzDT> unzDTMap;
-
-bool unzcomparesha1hex(unzDTMap::iterator i_primo, unzDTMap::iterator i_secondo) 
-{
-	return (strcmp(i_primo->second.sha1hex,i_secondo->second.sha1hex)<0);
-}
-
-bool unzcompareprimo(unzDTMap::iterator i_primo, unzDTMap::iterator i_secondo) 
-{
-	return (i_primo->first<i_secondo->first);
-}
-/*
-template <typename T>
-std::string unznumbertostring( T Number )
-{
-     std::ostringstream ss;
-     ss << Number;
-     return ss.str();
-}
-*/
-
-void myavanzamento(int64_t i_lavorati,int64_t i_totali,int64_t i_inizio)
-{
-	static int ultimapercentuale=0;
-	int percentuale=int(i_lavorati*100.0/(i_totali+0.5));
-	if (((percentuale%5)==0) && (percentuale>0))
-	if (percentuale!=ultimapercentuale)
-	{
-		ultimapercentuale=percentuale;
-		double eta=0.001*(mtime()-i_inizio)*(i_totali-i_lavorati)/(i_lavorati+1.0);
-		int secondi=(mtime()-i_inizio)/1000;
-		if (secondi==0)
-			secondi=1;
-		if (eta<356000)
-		printf("%03d%% %02d:%02d:%02d (%9s) of (%9s) %20s/sec\n", percentuale,
-		int(eta/3600), int(eta/60)%60, int(eta)%60, tohuman(i_lavorati), tohuman2(i_totali),migliaia3(i_lavorati/secondi));
-		fflush(stdout);
-	}
-}
-
-
-	
-	void list_print_datetime(void)
-{
-	int hours, minutes, seconds, day, month, year;
-
-	time_t now;
-	time(&now);
-	struct tm *local = localtime(&now);
-
-	hours = local->tm_hour;			// get hours since midnight	(0-23)
-	minutes = local->tm_min;		// get minutes passed after the hour (0-59)
-	seconds = local->tm_sec;		// get seconds passed after the minute (0-59)
-
-	day = local->tm_mday;			// get day of month (1 to 31)
-	month = local->tm_mon + 1;		// get month of year (0 to 11)
-	year = local->tm_year + 1900;	// get year since 1900
-
-	printf("%02d/%02d/%d %02d:%02d:%02d ", day, month, year, hours,minutes,seconds);
-
-}
-
-	/// a patched... main()!
+/// a patched... main()!
 int unz(const char * archive,const char * key,bool all)
 {
-
-	
 	/// really cannot run on ESXi: take WAY too much RAM
 	if (!archive)
 		return 0;
@@ -25797,7 +26166,7 @@ int unz(const char * archive,const char * key,bool all)
 			if (flagnoeta==false)
 			{
 				///printf("\n");
-				list_print_datetime();
+				print_datetime();
 				printf("%20s (%15s)\n", migliaia(lavorati),migliaia(csize));
 			}
         // test for end of archive marker
@@ -26023,7 +26392,7 @@ int unz(const char * archive,const char * key,bool all)
 			}
 		}
 		printf("\r");
-		list_print_datetime();
+		print_datetime();
 		printf("%s frags %s (RAM used ~ %s)\r",migliaia2(100-(offset*100/(total_size+1))),migliaia(frag.size()),migliaia2(ramsize));
 
     }  // end while findFilename
@@ -26264,6 +26633,8 @@ if (!flagnoeta)
 
 
 
+///
+
 /*
 ZPAQ does not store blocks of zeros at all.
 This means that they are not, materially, in the file, 
@@ -26316,17 +26687,6 @@ uint32_t crc32zeros(int64_t i_size)
 	return crc;
 }
 
-void printbar(char i_carattere,bool i_printbarraenne=true)
-{
-	int twidth=terminalwidth();
-	if (twidth<10)
-		twidth=100;
-		
-	for (int i=0;i<twidth-4;i++)
-		printf("%c",i_carattere);
-	if (i_printbarraenne)
-		printf("\n");
-}
 
 
 
@@ -26877,70 +27237,10 @@ int Jidac::test()
 	
   return (errors+status_e)>0;
 }
-/*
-template <typename I> std::string n2hexstr(I w, size_t hex_len = sizeof(I)<<1) {
-    static const char* digits = "0123456789ABCDEF";
-    std::string rc(hex_len,'0');
-    for (size_t i=0, j=(hex_len-1)*4 ; i<hex_len; ++i,j-=4)
-        rc[i] = digits[(w>>j) & 0x0f];
-    return rc;
-}
-*/
-
-
-struct s_fileandsize
-{
-	string	filename;
-	uint64_t size;
-	int64_t attr;
-	int64_t date;
-	bool isdir;
-	string hashhex;
-	bool flaghashstored;
-	s_fileandsize(): size(0),attr(0),date(0),isdir(false),flaghashstored(false) {hashhex="";}
-};
-
-bool comparecrc32(s_fileandsize a, s_fileandsize b)
-{
-	return a.hashhex>b.hashhex;
-///	return a.crc32>b.crc32;
-}
-bool comparesizehash(s_fileandsize a, s_fileandsize b)
-{
-	
-	return (a.size < b.size) ||
-           ((a.size == b.size) && (a.hashhex > b.hashhex)) || 
-           ((a.size == b.size) && (a.hashhex == b.hashhex) &&
-              (a.filename<b.filename));
-			  ///(strcmp(a.filename.c_str(), b.filename.c_str()) <0));
-			  
-}
-bool comparefilenamesize(s_fileandsize a, s_fileandsize b)
-{
-	char a_size[40];
-	char b_size[40];
-	sprintf(a_size,"%014lld",(long long)a.size);
-	sprintf(b_size,"%014lld",(long long)b.size);
-	return a_size+a.filename<b_size+b.filename;
-}
-bool comparefilenamedate(s_fileandsize a, s_fileandsize b)
-{
-	char a_size[40];
-	char b_size[40];
-	sprintf(a_size,"%014lld",(long long)a.date);
-	sprintf(b_size,"%014lld",(long long)b.date);
-	return a_size+a.filename<b_size+b.filename;
-}
 
 
 
 
-
-
-pthread_mutex_t mylock = PTHREAD_MUTEX_INITIALIZER;
-
-vector<uint64_t> g_arraybytescanned;
-vector<uint64_t> g_arrayfilescanned;
 
 /*
 We need something out of an object (Jidac), addfile() and scandir(), 
@@ -26999,7 +27299,7 @@ void myaddfile(uint32_t i_tnumber,DTMap& i_edt,string i_filename, int64_t i_date
 			}
 		}
 ///  thread safe, but... who cares? 
-	pthread_mutex_lock(&mylock);
+	pthread_mutex_lock(&g_mylock);
 
 	///printf("i_tnumber %d\n",i_tnumber);
 	///printf("size %d\n",g_arraybytescanned.size());
@@ -27032,7 +27332,7 @@ void myaddfile(uint32_t i_tnumber,DTMap& i_edt,string i_filename, int64_t i_date
 		}
 		fflush(stdout);
 	}
-	pthread_mutex_unlock(&mylock);
+	pthread_mutex_unlock(&g_mylock);
 }
 
 void myscandir(uint32_t i_tnumber,DTMap& i_edt,string filename, bool i_recursive,bool i_flagcalchash)
@@ -27104,9 +27404,14 @@ void myscandir(uint32_t i_tnumber,DTMap& i_edt,string filename, bool i_recursive
   // Expand wildcards
 	WIN32_FIND_DATA ffd;
 	string t=filename;
+	
+	///printf("t1:   %s\n",t.c_str());
+
 	if (t.size()>0 && t[t.size()-1]=='/') 
 		t+="*";
-  
+
+	///printf("t2:   %s\n",t.c_str());
+	
 	HANDLE h=FindFirstFile(utow(t.c_str()).c_str(), &ffd);
 	if (h==INVALID_HANDLE_VALUE && GetLastError()!=ERROR_FILE_NOT_FOUND && GetLastError()!=ERROR_PATH_NOT_FOUND)
 		printerr("29617",t.c_str());
@@ -27160,6 +27465,7 @@ void myscandir(uint32_t i_tnumber,DTMap& i_edt,string filename, bool i_recursive
 ///	parameters to run scan threads
 struct tparametri
 {
+	bool		recursive;
 	string 		directorytobescanned;
 	DTMap		theDT;
 	bool		flagcalchash;
@@ -27175,73 +27481,11 @@ void * scansiona(void *t)
 	assert(t);
 	tparametri* par= ((struct tparametri*)(t));
 	DTMap& tempDTMap = par->theDT;
-	myscandir(par->tnumber,tempDTMap,par->directorytobescanned,true,par->flagcalchash);
+	myscandir(par->tnumber,tempDTMap,par->directorytobescanned,par->recursive,par->flagcalchash);
 	par->timeend=mtime();
 	pthread_exit(NULL);
 	return 0;
 }
-
-/// return size, date and attr
-bool getfileinfo(string i_filename,int64_t& o_size,int64_t& o_date,int64_t& o_attr)
-{
-	o_size=0;
-	o_date=0;
-	o_attr=0;
-#ifdef unix
-	while (i_filename.size()>1 && i_filename[i_filename.size()-1]=='/')
-		i_filename=i_filename.substr(0, i_filename.size()-1);  
-	struct stat sb;
-	if (!lstat(i_filename.c_str(), &sb)) 
-	{
-		if (S_ISREG(sb.st_mode))
-		{
-			
-			o_date=decimal_time(sb.st_mtime);
-			o_size=sb.st_size;
-			o_attr='u'+(sb.st_mode<<8);
-			return true;
-		}
-	}
-#endif
-	
-#ifdef _WIN32
-	WIN32_FIND_DATA ffd;
-	string t=i_filename;
-	if (t.size()>0 && t[t.size()-1]=='/') 
-		t+="*";
-  
-	HANDLE h=FindFirstFile(utow(t.c_str()).c_str(), &ffd);
-	if (h==INVALID_HANDLE_VALUE && GetLastError()!=ERROR_FILE_NOT_FOUND && GetLastError()!=ERROR_PATH_NOT_FOUND)
-		printerr("29617",t.c_str());
-	
-	if (h!=INVALID_HANDLE_VALUE) 
-	{
-		SYSTEMTIME st;
-		if (FileTimeToSystemTime(&ffd.ftLastWriteTime, &st))
-			o_date=st.wYear*10000000000LL+st.wMonth*100000000LL+st.wDay*1000000
-				+st.wHour*10000+st.wMinute*100+st.wSecond;
-		o_size=ffd.nFileSizeLow+(int64_t(ffd.nFileSizeHigh)<<32);
-		o_attr=ffd.dwFileAttributes;
-		FindClose(h);
-		return true;
-    }
-	FindClose(h);
-#endif
-	return false;
-}
-
-
-/// possible problems with unsigned to calculate the differences. We do NOT want to link abs()
-int64_t myabs(int64_t i_first,int64_t i_second)
-{
-	if (i_first>i_second)
-		return i_first-i_second;
-	else
-		return i_second-i_first;
-}
-
-int64_t g_robocopy_check_sorgente;
-int64_t g_robocopy_check_destinazione;
 
 /// make a "robocopy" from source to destination file.
 /// if "someone" call with valid parameters do NOT do a getfileinfo (slow)
@@ -27255,6 +27499,8 @@ int64_t i_destinazione_date,
 int64_t i_destinazione_attr
 )
 {
+		static int ultimapercentuale=0;
+
 	if (flagdebug)
 	{
 		printf("\n");
@@ -27352,8 +27598,22 @@ int64_t i_destinazione_attr
 					
 						o_donesize+=sorgente_dimensione;
 						o_donecount++;
-						if (o_donecount%1000==0)
-							printf("File %10s/%10s (%9s/%9s)\r",migliaia(o_donecount),migliaia2(i_totalcount),tohuman(o_donesize),tohuman2(i_totalsize));
+						
+						if (!flagnoeta)
+						{
+							int percentuale=100*o_donecount/(i_totalcount+1);
+							if (percentuale%10==0)
+								if (percentuale!=ultimapercentuale)
+								{
+								printf("Done %02d %10s/%10s (%9s/%9s)\n",percentuale,migliaia(o_donecount),migliaia2(i_totalcount),tohuman(o_donesize),tohuman2(i_totalsize));
+								///printf("Done %02d %10s/%10s (9s/9s)\n",percentuale,migliaia(o_donecount),migliaia2(i_totalcount));
+					///			printf("Done %02d\n",percentuale);
+								///,tohuman(o_donesize),tohuman2(i_totalsize));
+					//////				printf("Done %02d\n",percentuale);
+									ultimapercentuale=percentuale;
+								}
+						}
+						
 						return "=";
 					}
 				}
@@ -27462,152 +27722,6 @@ void stermina(string i_directory)
 }
 */
 
-/// risky command to make a rd folder /s (or rm -r)
-int erredbarras(const std::string &i_path,bool i_flagrecursive=true)
-{
-#ifdef unix
-///		bool	flagdebug=true;
-		bool 	risultato=false;
-
-		DIR *d=opendir(i_path.c_str());
-
-		if (d) 
-		{
-			struct dirent *p;
-			risultato=true;
-			while (risultato && (p=readdir(d))) 
-			{
-				if (!strcmp(p->d_name, ".") || !strcmp(p->d_name, ".."))
-					continue;
-				bool risultato2=false;
-				struct stat statbuf;
-				
-				std::string temp;
-				if (isdirectory(i_path))
-					temp=i_path+p->d_name;
-				else
-					temp=i_path+"/"+p->d_name;
-
-				if (!stat(temp.c_str(), &statbuf)) 
-				{
-					if (S_ISDIR(statbuf.st_mode))
-						risultato2=erredbarras(temp);
-					else
-					{
-						if (flagdebug)
-							printf("Delete file %s\n",temp.c_str());
-						risultato2=delete_file(temp.c_str());
-					}
-				}
-				risultato=risultato2;
-			}
-			closedir(d);
-		}
-
-		if (risultato)
-		{
-			if (flagdebug)
-				printf("Delete dir  %s\n\n",i_path.c_str());
-			delete_dir(i_path.c_str());
-		}
-	   return risultato;	
-#endif
-
-#ifdef _WIN32
-
-///	bool	flagdebug=true;
-	bool	flagsubdir=false;
-	HANDLE	myhandle;
-	std::wstring wfilepath;
-	WIN32_FIND_DATA findfiledata;
-
-	std::string pattern=i_path+"\\*.*";
-  
-	std::wstring wpattern	=utow(pattern.c_str());
-	std::wstring wi_path	=utow(i_path.c_str());
-
-	myhandle=FindFirstFile(wpattern.c_str(),&findfiledata);
-  
-	if (myhandle!=INVALID_HANDLE_VALUE)
-	{
-		do
-		{
-			std::string t=wtou(findfiledata.cFileName);
-			
-			if ((t!=".") && (t!=".."))
-			{
-				wfilepath=wi_path+L"\\"+findfiledata.cFileName;
-		        if (findfiledata.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
-				{
-					if (i_flagrecursive)
-					{
-						const std::string temp(wfilepath.begin(),wfilepath.end());
-						if (flagdebug)
-							printf("\n\nDelete directory   %s\n",temp.c_str());
-						int myresult=erredbarras(temp,i_flagrecursive);
-						if (myresult)
-							return myresult;
-					}
-					else
-						flagsubdir=true;
-				}
-				else
-				{
-					const std::string ttemp(wfilepath.begin(), wfilepath.end() );
-					if (flagdebug)
-						printf("Try to delete file %s\n",ttemp.c_str());
-
-					if (SetFileAttributes(wfilepath.c_str(),FILE_ATTRIBUTE_NORMAL) == FALSE)
-					{
-						if (flagdebug)
-							printf("31019: ERROR cannot change attr of file %s\n",ttemp.c_str());
-						return GetLastError();
-					}
-					
-					if (DeleteFile(wfilepath.c_str())==FALSE)
-					{
-						if (flagdebug)
-							printf("31025: ERROR highlander file %s\n",ttemp.c_str());
-						return GetLastError();
-					}
-				}
-			}
-		} while(FindNextFile(myhandle,&findfiledata)==TRUE);
-
-		FindClose(myhandle);
-
-		DWORD myerror=GetLastError();
-		if (myerror==ERROR_NO_MORE_FILES)
-		{
-			if (!flagsubdir)
-			{
-				const std::string dtemp(wi_path.begin(), wi_path.end());
-				
-				if (flagdebug)
-					printf("Delete no subdir   %s\n",dtemp.c_str());
-							
-				if (SetFileAttributes(wi_path.c_str(),FILE_ATTRIBUTE_NORMAL)==FALSE)
-				{
-					if (flagdebug)
-						printf("30135: ERROR cannot change folder attr %s\n",dtemp.c_str());
-					return GetLastError();
-				}
-								
-				if (RemoveDirectory(wi_path.c_str())==FALSE)
-				{
-					if (flagdebug)
-						printf("31047: ERROR highlander dir %s\n",dtemp.c_str());
-					return GetLastError();
-				}
-			}
-		}
-		else
-			return myerror;
-	}
-#endif
-	return 0;
-}
-
 /// find and delete 0-length dirs
 /// in a slow (but hopefully) safe way
 
@@ -27620,7 +27734,7 @@ int Jidac::zero()
 		printf("*** ignoring .zfs and :$DATA ***");
 	printf("\n");
 	
-	franzparallelscandir(false);
+	franzparallelscandir(false,true,true);
 	
 	vector<string> scannedfiles;
 	
@@ -27754,7 +27868,7 @@ int Jidac::robocopy()
 		return 1;
 	}
 	
-	franzparallelscandir(false);
+	franzparallelscandir(false,true,true);
 
 	
 	if (!flagforce)
@@ -27984,7 +28098,7 @@ int Jidac::dircompare(bool i_flagonlysize,bool i_flagrobocopy)
 	if (!flagforcezfs)
 			printf(" ignoring .zfs and :$DATA\n");
 
-	franzparallelscandir(flagchecksum);
+	franzparallelscandir(flagchecksum,true,true);
 	
 	printbar('=');
 	for (unsigned i=0; i<files.size(); ++i)
@@ -28147,7 +28261,7 @@ int Jidac::dircompare(bool i_flagonlysize,bool i_flagrobocopy)
 
 /// scans one or more directories, with one or more threads
 /// return total time
-int64_t Jidac::franzparallelscandir(bool i_flaghash)
+int64_t Jidac::franzparallelscandir(bool i_flaghash,bool i_recursive,bool i_forcedir)
 {
 
 	if (flagverbose)
@@ -28166,10 +28280,10 @@ int64_t Jidac::franzparallelscandir(bool i_flaghash)
 			printf("28403: files.size zero\n");
 		return 0;
 	}
-	
-	for (unsigned i=0; i<files.size(); ++i)
-		if (!isdirectory(files[i]))
-			files[i]+='/';
+	if (i_forcedir)
+		for (unsigned i=0; i<files.size(); ++i)
+			if (!isdirectory(files[i]))
+				files[i]+='/';
 
 	int64_t startscan=mtime();
 	
@@ -28190,6 +28304,7 @@ int64_t Jidac::franzparallelscandir(bool i_flaghash)
 			vettoreDT.push_back(mydtmap);
 			myblock.tnumber=i;
 			myblock.directorytobescanned=files[i];
+			myblock.recursive=i_recursive;
 			myblock.theDT=vettoreDT[i];
 			myblock.flagcalchash=i_flaghash;//flagverify;
 			myblock.timestart=mtime();
@@ -28294,7 +28409,7 @@ int64_t Jidac::franzparallelscandir(bool i_flaghash)
 			print_datetime();
 			printf("Scan dir <<%s>>\n",files[i].c_str());
 			uint64_t blockstart=mtime();
-			myscandir(0,myblock,files[i].c_str(),true,i_flaghash);
+			myscandir(0,myblock,files[i].c_str(),i_recursive,i_flaghash);
 			
 			uint64_t sizeofdir=0;
 			uint64_t dircount=0;
@@ -28349,9 +28464,9 @@ int Jidac::fillami()
 	moreprint("These activities can reduce the media life,");
 	moreprint("especially for solid state drives (SSDs) and if repeated several times.");
 	moreprint("");
-	if (!flagkill)
+	if (flagforce)
 	{
-		moreprint("*** Temporary files are NOT deleted (no -kill, to enforce zfs's scrub) ***");
+		moreprint("*** Temporary files are NOT deleted (no -force, to enforce zfs's scrub) ***");
 		moreprint("");
 	}
 	
@@ -28500,7 +28615,7 @@ int Jidac::fillami()
 		uint64_t starthash=mtime();
 		string filehash=xxhash_calc_file(filename.c_str(),-1,-1,lavorati,dummybasso64,dummyalto64);
 		uint64_t hashspeed=chunksize/((mtime()-starthash+1)/1000.0);
-		printf(" (%s/s) ",tohuman(hashspeed));
+		printf(" (%12s/s) ",tohuman(hashspeed));
 
 		bool flagerrore=(filehash!=chunkhash[i]);
 			
@@ -28526,12 +28641,12 @@ int Jidac::fillami()
 	if (flagallok)
 	{
 		printf("+OK all OK\n");
-		if (flagkill)
+		if (!flagforce)
 		{
 			for (int unsigned i=0;i<chunkfilename.size();i++)
 			{
 				delete_file(chunkfilename[i].c_str());
-				printf("Deleting tempfile %05d / %05d\r",i,(unsigned int)chunkfilename.size());
+				printf("Deleting tempfile %05d / %05d\r",i,(unsigned int)chunkfilename.size()-1);
 			}
 			delete_dir(outputdir.c_str());
 			printf("\n");
@@ -28929,3 +29044,177 @@ int  Jidac::dir()
 	}
 	return 0;
 }
+
+
+int Jidac::decimation()
+{
+	bool flagthelastone=false;
+	
+	if (g_exec!="")
+		flagthelastone=true;
+	
+	if (flagthelastone)
+		printf("*** Run the last ones *** ");
+	else
+		printf("*** Decimation *** ");
+	
+	printf("*** -kill missing: dry run *** ");
+	if (!flagforcezfs)
+		printf("*** ignoring .zfs and :$DATA ***");
+	
+	printf("\n\n");
+	
+	if (g_exec!="")
+		if (!fileexists(g_exec))
+		{
+			printf("29066: -g_exec does not exists\n");
+			return 2;
+		}
+
+	if (flagthelastone)
+		if (menoenne<=0)
+			menoenne=1;
+			
+	
+	if (menoenne<=0)
+	{
+		printf("28960: -n or -limit not set\n");
+		return 1;
+	}
+
+	flagbarraod=true; // by default, sort by date
+	
+	if (flagbarraon)
+		flagbarraod=false; // if /on, sort by name
+		
+	if (files.size()>1)
+	{
+		printf("28966: only one dir can be elaborated\n");
+		return 1;
+	}
+
+	if (mypos("*",files[0])==-1)
+	{
+		printf("29053: * pattern requested (ex. /tmp/dump_*.sql)\n");
+		return 1;
+	}
+	franzparallelscandir(false,false,false);
+	printf("\n");
+
+	if (files_edt[0].size()==0)
+	{
+		printf("29048: empty result, nothing to do\n");
+		return 0;
+	}
+	
+	if (!flagthelastone)
+		if (!flagforce)
+			if (files_edt[0].size()>50)
+			{
+				printf("29024: founded lots of files (%s), no -force => quit (security measure)\n",migliaia(files_edt[0].size()));
+				return 1;
+			}
+	
+	vector<string> 		scannedfiles;
+		
+	if (flagbarraod)
+	{
+		printf("Order by DATE (/od or default)\n");
+		vector<DTMap::iterator> filelist;
+
+		for (DTMap::iterator a=files_edt[0].begin(); a!=files_edt[0].end(); ++a) 
+			filelist.push_back(a);
+		sort(filelist.begin(), filelist.end(), comparedatethenfilename);
+		
+		for (unsigned int i=0; i<filelist.size();i++)
+			scannedfiles.push_back(filelist[i]->first);
+	}
+	else
+	{
+		printf("Order by NAME (/on)\n");
+		for (DTMap::iterator p=files_edt[0].begin(); p!=files_edt[0].end(); ++p) 
+			scannedfiles.push_back(p->first);
+	}
+	
+	if (scannedfiles.size()<=menoenne)
+	{
+		if (flagthelastone)
+			menoenne=scannedfiles.size();
+		else
+		{
+			printf("28977: candidate %s less or equal to limit %s => do nothing\n",migliaia(menoenne),migliaia2(scannedfiles.size()));
+			return 0;
+		}
+	}
+	vector<string> tobedeleted;
+	
+	if (flagthelastone)
+	{
+		for (unsigned int i=1;i<=menoenne;i++)
+			tobedeleted.push_back(scannedfiles[scannedfiles.size()-i]);
+	}
+	else
+	{
+		for (unsigned int i=0;i<scannedfiles.size()-menoenne;i++)
+			tobedeleted.push_back(scannedfiles[i]);
+		
+		if (flagverbose)
+			for (unsigned int i=scannedfiles.size()-menoenne;i<scannedfiles.size();i++)
+				printf("KEEP   %s\n",scannedfiles[i].c_str());
+	}
+	printf("\n");
+	
+	printf("Candidate (to be elaborated) %12s\n",migliaia(tobedeleted.size()));
+	if (tobedeleted.size()==0)
+	{
+		printf("28985: Nothing to do\n");
+		return 0;
+	}
+	
+	if (!flagkill)
+		printf("28990: dry run (no -kill)\n");
+
+	if (flagthelastone)
+	{
+		printf("Executing  %s times <<%s>>\n",migliaia(tobedeleted.size()),g_exec.c_str());
+		for (unsigned int i=0;i<tobedeleted.size();i++)
+		{
+			#ifdef _WIN32	
+				myreplaceall(tobedeleted[i],"/","\\");
+			#endif
+			printf("%08d with param <<%s>>\n",i+1,tobedeleted[i].c_str());
+			if (flagkill)
+				xcommand(g_exec,tobedeleted[i]);
+		}
+		return 0;
+	}
+	
+	int deleted=0;
+	int highlander=0;
+	for (unsigned int i=0;i<tobedeleted.size();i++)
+	{
+		if (flagverbose)
+		{
+			printf("DELETE <<");
+			printUTF8(tobedeleted[i].c_str());
+			printf(">>\n");
+		}
+		if (flagkill)
+		{
+			if (delete_file(tobedeleted[i].c_str()))
+				deleted++;
+			else
+				highlander++;
+		}
+	}
+	
+	if (deleted>0)
+	printf("Deleted                      %12s\n",migliaia(deleted));
+	if (highlander>0)
+	printf("Highlander                   %12s\n",migliaia(highlander));
+	
+	if (highlander>0)
+		return 2;
+		
+	return 0;
+}	

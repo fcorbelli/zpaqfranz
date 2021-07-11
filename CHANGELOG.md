@@ -1,3 +1,15 @@
+11-07-2021:  52.1
+New switch -filelist
+zpaqfranz a z:\1.zpaq c:\nz -filelist
+zpaqfranz x z:\1.zpaq -filelist
+
+New behavior: store by default XXH3 and CRC-32 of every file (to be completed)
+
+New switches -checksum and -summary in list
+
+zpaqfranz l z:\1.zpaq -checksum (show CRC and hash if any)
+zpaqfranz l z:\1.zpaq -checksum -summary (compact output)
+
 02-07-2021:  51.43 n command (decimation)
 
 26-06-2021:  51.41 help refactoring (splitted map)

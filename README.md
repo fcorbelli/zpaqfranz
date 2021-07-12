@@ -3,6 +3,8 @@
 
 ## An archiver, just like 7z or RAR style to understand, with the ability to maintain sort of "snapshots" of the data.
 
+[Wiki](https://github.com/fcorbelli/zpaqfranz/wiki)
+
 At every run only data changed since the last execution will be added, creating a new version (the "snapshot").
 It is then possible to restore the data @ the single version.
 It shouldn't be difficult to understand its enormous potential, especially for those used to snapshots (by zfs or virtual machines).

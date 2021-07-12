@@ -10,7 +10,7 @@
 ///////// it's not a foolish attempt to take over their jobs
 ///////// https://github.com/fcorbelli/zpaqfranz/blob/main/notes.txt
 
-#define ZPAQ_VERSION "52.1-experimental"
+#define ZPAQ_VERSION "52.2-experimental"
 #define FRANZOFFSET 	50
 #define FRANZMAXPATH 	240
 
@@ -16723,7 +16723,7 @@ private:
 	vector<string> onlyfiles; 			// list of prefixes to include
 	vector<string> alwaysfiles; 		// list of prefixes to pack ALWAYS
 
-	const char* repack;       			// -repack output file
+	string repack;       				// -repack output file
 	
 	map<int, string> mappacommenti;
 	string versioncomment;
@@ -19428,6 +19428,7 @@ void help_x(bool i_usage,bool i_example)
 		moreprint("PLUS: -fixeml       compress .eml filenames.");
 		moreprint("PLUS: -flat         emergency restore of everything into a single folder (Linux => NTFS)");
 		moreprint("PLUS: -filelist     show (if any) a stored filelist");
+		
 	}
 	if (i_usage && i_example) moreprint("    Examples:");
 	if (i_example)
@@ -19442,6 +19443,7 @@ void help_x(bool i_usage,bool i_example)
 		moreprint("Extract into muz7 every versions:    x z:\\1.zpaq -to z:\\muz7\\ -all");
 		moreprint("Show the filelist (if any):          x z:\\1.zpaq -filelist");
 		moreprint("Show the filelist (if any) of v3:    x z:\\1.zpaq -filelist -until 3");
+		moreprint("Extract all *.xls into new archive:  x z:\\1.zpaq *.xls -repack onlyxls.zpaq");
 	}
 	
 }
@@ -19929,7 +19931,7 @@ void Jidac::differences()
 	moreprint("");
 	moreprint("Doveryay, no proveryay;   trust, but verify;   fidarsi e' bene, non fidarsi e' meglio.");
 	moreprint("");
-	moreprint("zpaqfranz store by default CRC-32s of every file, optionally  (-checksum) full hashes,");
+	moreprint("zpaqfranz store by default CRC-32s/XXH3 of every file, optionally  (-checksum) SHA-1,");
 	moreprint("without breaking backward compatibility.");
 	moreprint("");
 	moreprint("Pack everything needed for a storage manager: dir compare, hashing, deduplication, fix");
@@ -20142,7 +20144,7 @@ int Jidac::doCommand(int argc, const char** argv)
 	index=0;
 	method="";  // 0..5
 	flagnoattributes=false;
-	repack=0;
+	repack="";
 	new_password=0;
 	summary=-1; 
 	menoenne=0;
@@ -20296,6 +20298,11 @@ int Jidac::doCommand(int argc, const char** argv)
 	{
 		const string opt=argv[i];  // read command
 		///printf("---- >opt  %s\n",opt.c_str());
+		if (opt=="-715") 			
+		{			
+			flag715=true;
+		}
+		else
 		if (opt=="/od")
 		{
 			flagbarraod=true;
@@ -20498,7 +20505,6 @@ int Jidac::doCommand(int argc, const char** argv)
 		else if (opt=="-test") 						flagtest			=true;
 		else if (opt=="-zfs") 						flagskipzfs			=true;
 		else if (opt=="-forcezfs") 					flagforcezfs		=true;
-		else if (opt=="-715") 						flag715				=true;
 		else if (opt=="-filelist") 					flagfilelist		=true;
 		else if (opt=="-xls") 						flagdonotforcexls	=true;
 		else if (opt=="-verbose") 					flagverbose			=true;
@@ -20557,7 +20563,14 @@ int Jidac::doCommand(int argc, const char** argv)
 		else
 		if (opt=="-repack" && i<argc-1) 
 		{
+			
 			repack=argv[++i];
+			string estensione=prendiestensione(repack);
+			if (estensione=="")
+				repack+=".zpaq";
+				
+///			printf("Repack to %s\n",repack.c_str());
+				
 			if (i<argc-1 && argv[i+1][0]!='-') 
 			{
 				libzpaq::SHA256 sha256;
@@ -20820,18 +20833,19 @@ int Jidac::doCommand(int argc, const char** argv)
 
 	if (flag715)
 	{
-		printf("**** Activated V7.15 mode ****\n");
+		flagforcezfs		=true;
+		flagdonotforcexls	=true;
 		flagforcewindows	=true;
 		flagcrc32			=false;
 		flagchecksum		=false;
-		flagforcezfs		=true;
-		flagdonotforcexls	=true;
 		flagfilelist		=false;
 		flagxxhash			=false; // checksumming add new style
 		flagfixeml			=false;
 		flagfix255			=false;
 		flagutf				=false;
 		flagflat			=false;
+		printf("**** Activated V7.15 mode ****\n");
+		printf("T forcezfs,donotforcexls,forcewindows; F crc32,checksum,filelist,xxhash,fixeml,fix255,utf,flat\n");
 	}
 
   // Execute command
@@ -22719,12 +22733,12 @@ int Jidac::extract()
 
 	g_scritti=0;
   // Encrypt or decrypt whole archive
-  if (repack && all) {
+  if ((repack!="") && all) {
     if (files.size()>0 || tofiles.size()>0 || onlyfiles.size()>0
         || flagnoattributes || version!=DEFAULT_VERSION || method!="")
       error("-repack -all does not allow partial copy");
     InputArchive in(archive.c_str(), password);
-    if (flagforce) delete_file(repack);
+    if (flagforce) delete_file(repack.c_str());
     if (exists(repack)) error("output file exists");
 
     // Get key and salt
@@ -22732,12 +22746,12 @@ int Jidac::extract()
     if (new_password) libzpaq::random(salt, 32);
 
     // Copy
-    OutputArchive out(repack, new_password, salt, 0);
+    OutputArchive out(repack.c_str(), new_password, salt, 0);
     copy(in, out);
     printUTF8(archive.c_str());
-    printf(" %1.0f ", in.tell()+.0);
-    printUTF8(repack);
-    printf(" -> %1.0f\n", out.tell()+.0);
+    printf(" %s ", migliaia(in.tell()));
+    printUTF8(repack.c_str());
+    printf(" -> %s\n", migliaia(out.tell()));
     out.close();
     return 0;
   }
@@ -22838,7 +22852,7 @@ int Jidac::extract()
       if (copy(in, out, n)!=n) error("EOF");  // copy H and I blocks
     }
     printUTF8(index);
-    printf(" -> %1.0f\n", out.tell()+.0);
+    printf(" -> %s\n", migliaia(out.tell()));
     out.close();
     return 0;
   }
@@ -22932,7 +22946,7 @@ int Jidac::extract()
 			string fn=rename(p->first);
 			const bool isdir=isdirectory(p->first);
 	  	  
-			if (!repack && !flagtest && flagforce && !isdir && equal(p, fn.c_str(),crc32fromfile)) 
+			if ((repack=="") && !flagtest && flagforce && !isdir && equal(p, fn.c_str(),crc32fromfile)) 
 			{
 				// identical
 				if (flagverbose)
@@ -22945,7 +22959,7 @@ int Jidac::extract()
 				++skipped;
 			}
 			else 
-			if (!repack && !flagtest && !flagforce && exists(fn)) 
+			if ((repack=="") && !flagtest && !flagforce && exists(fn)) 
 			{  
 				// exists, skip
 				if (flagverbose)
@@ -23033,7 +23047,7 @@ int Jidac::extract()
 		printf("**** GURU **** WE HAVE SOME HIGHLANDER!");
 		
   // Repack to new archive
-	if (repack) 
+	if (repack!="") 
 	{
 
     // Get total D block size
@@ -23050,10 +23064,10 @@ int Jidac::extract()
     if (!flagforce && exists(repack)) 
 		error("repack output exists");
 	
-    delete_file(repack);
+    delete_file(repack.c_str());
     char salt[32]={0};
     if (new_password) libzpaq::random(salt, 32);
-    OutputArchive out(repack, new_password, salt, 0);
+    OutputArchive out(repack.c_str(), new_password, salt, 0);
     int64_t cstart=out.tell();
 
     // Write C block using first version date
@@ -23068,9 +23082,9 @@ int Jidac::extract()
         copy(in, out, block[i].bsize);
       }
     }
-    printf("Data %1.0f -> ", csize+.0);
+    printf("Data %s -> ",migliaia(csize));
     csize=out.tell()-dstart;
-    printf("%1.0f\n", csize+.0);
+    printf(" %s\n", migliaia(csize));
 
     // Re-create referenced H blocks using latest date
     for (unsigned i=0; i<block.size(); ++i) {
@@ -23104,7 +23118,7 @@ int Jidac::extract()
         is.put(0);
 		
 		
-		
+		/*
 		
 		char risultato[FRANZOFFSET]={0};
 		if ((!flagcrc32) && (!flag715))
@@ -23126,6 +23140,15 @@ int Jidac::extract()
 			writefranzattr(is,p->second.attr,5,flagchecksum,filename,risultato,2);
 		else 
 			puti(is, 0, 4);  // no attributes
+*/
+
+        if ((p->second.attr&255)=='u') // unix attributes
+				write715attr(is,p->second.attr,3);
+		else 
+		if ((p->second.attr&255)=='w') // windows attributes
+				write715attr(is,p->second.attr,5);
+		else 
+			puti(is, 0, 4);  // no attributes
 
         puti(is, p->second.ptr.size(), 4);  // list of frag pointers
         for (unsigned i=0; i<p->second.ptr.size(); ++i)
@@ -23143,9 +23166,9 @@ int Jidac::extract()
 
     // Summarize result
     printUTF8(archive.c_str());
-    printf(" %1.0f -> ", sz+.0);
-    printUTF8(repack);
-    printf(" %1.0f\n", out.tell()+.0);
+    printf(" %s -> ", migliaia(sz));
+    printUTF8(repack.c_str());
+    printf(" %s\n", migliaia(out.tell()));
 
     // Rewrite C block
     out.seek(cstart, SEEK_SET);
@@ -26508,7 +26531,7 @@ int Jidac::test()
 		printf("Checked   : %08d (zpaqfranz)\n",checkedfiles);
 	if (uncheckedfiles>0)
 	{
-		printf("UNcheck   c: %08d (zpaq 7.15)\n",uncheckedfiles);
+		printf("UNcheck   : %08d (zpaq 7.15)\n",uncheckedfiles);
 			status_0=uncheckedfiles;
 	}
 	
@@ -26531,7 +26554,7 @@ int Jidac::test()
 	if (status_e==0)
 	{
 		if (status_0)
-			printf("Verdict: unknown   (cannot say anything)\n");
+			printf("Verdict: unknown     (Cannot say anything)\n");
 		else
 		{
 			if (flagverify)
@@ -28680,17 +28703,17 @@ set mac1=0011355CA785*/
 // Add or delete files from archive. Return 1 if error else 0.
 int Jidac::add() 
 {
+	/*
 	if (flagchecksum)
 		if (flagnopath)
 			error("incompatible -checksum and -nopath");
-	
+	*/
 	if (flagvss)
 	{
 		if (flagtest)
 			error("incompatible -vss and -test");
 		if (flagnopath)
 			error("incompatible -vss and -nopath");
-	
 	}
 	
 	g_scritti=0;
@@ -29547,10 +29570,6 @@ if (casecollision>0)
 		if (searchfrom!="")
 			if (replaceto!="")
 				replace(filename,searchfrom,replaceto);
-
-
-
-	
 
 ///	by using FRANZOFFSET we need to cut down the attr during this compare
 	

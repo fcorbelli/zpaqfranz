@@ -462,7 +462,7 @@ A single archive keeps everything, forever, with just one command (or two, for v
 Some.
 
 The main one is that the listing of files is not very fast, when there are many versions (thousands), due to the structure of the archiver-file-format. 
-*I could get rid of it, but at the cost of breaking the backward compatibility of the file format, so I don't want to.*
+*I could get rid of it, but at the cost of breaking the backward compatibility of the file format, so I don't want to. On 52+ there is a workaround (-filelist)*
 
 It is not the fastest tool out there, with real world performance of 80-200MB/s (depending on the case and HW of course).
 *Not a big deal for me (I have very powerful HW, and/or run nightly cron-tasks)*
@@ -507,6 +507,7 @@ Windows binary builds (32 and 64 bit) on github/sourceforge
 
 ####      Key differences against 7.15 by zpaqfranz -diff or here 
 ####  https://github.com/fcorbelli/zpaqfranz/blob/main/differences715.txt 
+####  [Wiki in progress...](https://github.com/fcorbelli/zpaqfranz/wiki/DIff-against-7.15)
 
 Portions of software by other authors, mentioned later, are included.
 As far as I know this is allowed by the licenses. 

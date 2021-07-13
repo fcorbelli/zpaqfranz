@@ -1,3 +1,5 @@
+_GitHub does not like sources >1MB, so I have to put on "diet"_
+
 /*
   Those are standard 7.15 notes
 

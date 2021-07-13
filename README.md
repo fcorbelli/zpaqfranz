@@ -1,4 +1,4 @@
-# zpaqfranz: more advanced, but compatible, fork of ZPAQ 7.15 
+# zpaqfranz: advanced, but compatible, fork of ZPAQ 7.15 
 [Main site of old ZPAQ](http://mattmahoney.net/dc/zpaq.html)
 
 ## Classic archivers (tar, 7z, RAR etc) are obsolete, when used for repeated backups (daily etc), compared to the ZPAQ technology, that maintain "snapshots" (versions) of the data.

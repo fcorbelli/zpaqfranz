@@ -1,4 +1,4 @@
-## This is zpaqfranz, a patched  but (maybe) compatible fork of ZPAQ version 7.15 
+## This is zpaqfranz, a more advanced, but compatible, fork of ZPAQ version 7.15 
 [Main site of old ZPAQ](http://mattmahoney.net/dc/zpaq.html)
 
 ## An archiver, just like 7z or RAR style to understand, with the ability to maintain sort of "snapshots" of the data.

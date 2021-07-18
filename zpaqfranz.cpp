@@ -10,7 +10,7 @@
 ///////// it's not a foolish attempt to take over their jobs
 ///////// https://github.com/fcorbelli/zpaqfranz/blob/main/notes.txt
 
-#define ZPAQ_VERSION "52.3-experimental"
+#define ZPAQ_VERSION "52.4-experimental"
 #define FRANZOFFSET 		50
 #define FRANZOFFSETSHA256 	76 
 #define FRANZMAXPATH 		240
@@ -8599,11 +8599,11 @@ enum ealgoritmi		{ ALGO_SIZE,ALGO_SHA1,ALGO_CRC32C,ALGO_CRC32,ALGO_XXHASH,ALGO_S
 typedef std::map<int,std::string> algoritmi;
 const algoritmi::value_type rawData[] = {
    algoritmi::value_type(ALGO_SIZE,"Size"),
-   algoritmi::value_type(ALGO_SHA1,"SHA1"),
+   algoritmi::value_type(ALGO_SHA1,"SHA-1"),
    algoritmi::value_type(ALGO_CRC32,"CRC32"),
    algoritmi::value_type(ALGO_CRC32C,"CRC-32C"),
    algoritmi::value_type(ALGO_XXHASH,"XXH3"),
-   algoritmi::value_type(ALGO_SHA256,"SHA256"),
+   algoritmi::value_type(ALGO_SHA256,"SHA-256"),
    algoritmi::value_type(ALGO_WYHASH,"WYHASH"),
 };
 const int numElems = sizeof rawData / sizeof rawData[0];
@@ -14789,7 +14789,7 @@ bool sortbysize(const std::pair<uint64_t, string> &a,
     return (a.first < b.first); 
 } 
 
-uint32_t crchex2int(char *hex) 
+uint32_t crchex2int(const char *hex) 
 {
 	assert(hex);
 	uint32_t val = 0;
@@ -14838,7 +14838,7 @@ string mygetalgo()
 		return "XXH3";
 	else
 	if (flagsha256)
-		return "SHA256";
+		return "SHA-256";
 	else
 		return "SHA1";
 }
@@ -16813,6 +16813,8 @@ private:
 	
 	bool 	getchecksum(string i_filename, char* o_sha1); //get SHA1 AND CRC32 of a file. Old, for backward
 	string 	decodefranzoffset();
+	int 	decode_franz_block(const bool i_isdirectory,const char* i_franz_block,string& o_hashtype,string& o_hashvalue,string& o_crc32value);
+
 
 };
 
@@ -16829,9 +16831,9 @@ string Jidac::decodefranzoffset()
 	if (franzotype==2)
 		return "XXH3+CRC-32";
 	if (franzotype==3)
-		return "SHA1+CRC-32";
+		return "SHA-1+CRC-32";
 	if (franzotype==4)
-		return "SHA256+CRC-32";
+		return "SHA-256+CRC-32";
 	perror("16839: franzotype strange");		
 	return "BYPASSWARNING";
 }
@@ -20760,7 +20762,7 @@ int Jidac::doCommand(int argc, const char** argv)
 			franzparameters+="XXH3 (-xxhash) ";
 		
 		if (flagsha256)
-			franzparameters+="SHA256 (-sha256) ";
+			franzparameters+="SHA-256 (-sha256) ";
 				/*
 		if (flagwyhash)
 				printf("franz:wyhash\n");
@@ -20918,6 +20920,8 @@ int Jidac::doCommand(int argc, const char** argv)
 		else
 			franzotype=2; // by default 2 (CRC32+XXHASH)
 	
+		if (franzotype!=0) // do a verify too (store CRC by fragments), but not for 7.15
+			flagverify=true;
 			
 		return add();
 	}
@@ -22107,13 +22111,16 @@ void Jidac::writefranzattr(libzpaq::StringBuffer& i_sb, uint64_t i_data, unsigne
 			printf("\nGURU-C: on file %s\n",i_filename.c_str());
 			printf("GURU: CRC-32 from fragments %08X\n",i_crc32fromfragments);
 			printf("GURU: CRC-32 from file      %08X\n",i_crc32);
-			if (!flagdebug)
-				error("Guru-C checking crc32");
+//			if (!flagdebug)
+	///			error("Guru-C checking crc32");
 		}
 
 	if (franzotype==1) /// store only CRC-32
 	{
 		char mybuffer[FRANZOFFSET]={0};
+		if (flagverify)
+		sprintf(mybuffer+41,"%08X",i_crc32fromfragments);
+		else
 		sprintf(mybuffer+41,"%08X",i_crc32);
 		puti(i_sb, 8+FRANZOFFSET, 4); 	// 8+FRANZOFFSET block
 		puti(i_sb, i_data, i_quanti);
@@ -22128,6 +22135,9 @@ void Jidac::writefranzattr(libzpaq::StringBuffer& i_sb, uint64_t i_data, unsigne
 		assert(i_thehash.length()==32);
 		char mybuffer[FRANZOFFSET]={0};
 		sprintf(mybuffer+8,	"%s",i_thehash.c_str());
+		if (flagverify)
+		sprintf(mybuffer+41,"%08X",i_crc32fromfragments);
+		else
 		sprintf(mybuffer+41,"%08X",i_crc32);
 		puti(i_sb, 8+FRANZOFFSET, 4); 	// 8+FRANZOFFSET block
 		puti(i_sb, i_data, i_quanti);
@@ -22143,6 +22153,9 @@ void Jidac::writefranzattr(libzpaq::StringBuffer& i_sb, uint64_t i_data, unsigne
 		assert(i_thehash.length()==40);
 		char mybuffer[FRANZOFFSET]={0};
 		sprintf(mybuffer+0,	"%s",i_thehash.c_str());
+		if (flagverify)
+		sprintf(mybuffer+41,"%08X",i_crc32fromfragments);
+		else
 		sprintf(mybuffer+41,"%08X",i_crc32);
 		puti(i_sb, 8+FRANZOFFSET, 4); 	// 8+FRANZOFFSET block
 		puti(i_sb, i_data, i_quanti);
@@ -22158,7 +22171,7 @@ void Jidac::writefranzattr(libzpaq::StringBuffer& i_sb, uint64_t i_data, unsigne
 		char mybuffer[FRANZOFFSETSHA256]={0};
 		sprintf(mybuffer,	"04");
 		sprintf(mybuffer+2,	"%s",i_thehash.c_str());
-		sprintf(mybuffer+2+64+1,"%08X",i_crc32);
+		sprintf(mybuffer+2+64+1,"%08X",i_crc32fromfragments);
 		puti(i_sb, 8+FRANZOFFSETSHA256, 4); 	// 8+FRANZOFFSET block
 		puti(i_sb, i_data, i_quanti);
 		puti(i_sb, 0, (8 - i_quanti));  // pad with zeros (for 7.15 little bug)
@@ -23795,41 +23808,51 @@ int Jidac::verify()
 		{
 			DTMap::iterator p1=filelist[fi+1];
 				
-			if (equal(p, p1->first.c_str(),crc32fromfile))
+			if (equal(p, p1->first.c_str(),crc32fromfile)) //crc32 of second parameters
 			{
-				
-				if (p->second.franz_block[41]!=0)
+				if (!isdirectory(p1->first))
 				{
-					if (!isdirectory(p1->first))
+					string myhashtype="";
+					string myhash="";
+					string mycrc32="";
+				
+					decode_franz_block(false,p->second.franz_block,
+					myhashtype,
+					myhash,
+					mycrc32);
+					///printf("File ciucciato %s  %s\n",p->first.c_str(),mycrc32.c_str());
+					if (mycrc32!="")
 					{
-						uint32_t crc32stored=crchex2int(p->second.franz_block+41);
+						uint32_t crc32stored=crchex2int(mycrc32.c_str());
 						if (crc32stored!=crc32fromfile)
 						{
 							p->second.data='#';
-							sprintf(linebuffer,"\nGURU SHA1 COLLISION! %08X vs %08X ",crc32stored,crc32fromfile);
+							sprintf(linebuffer,"\nCRC-32 NOT MATCH STORED %s vs FROM FILE %08X ",mycrc32.c_str(),crc32fromfile);
 							risultati.push_back(linebuffer);
 							risultati_utf8.push_back(false);
 							
 							sprintf(linebuffer,"%s\n",p1->first.c_str());
 							risultati.push_back(linebuffer);
 							risultati_utf8.push_back(true);
-							
 						}
 						else
 						{	
+						/// if very, do a full hash verify!
 							p->second.data='=';
 							++fi;
 						}
 					}
 					else
 					{
+						/// crc-32 is not stored in the archive, cannot tell anything
 						p->second.data='=';
 						++fi;
 					}
 					
-				}
+				}	
 				else
 				{
+					/// directory always match
 					p->second.data='=';
 					++fi;
 				}
@@ -23910,6 +23933,67 @@ int Jidac::verify()
 		return 0;
 }
 
+int Jidac::decode_franz_block(const bool i_isdirectory,const char* i_franz_block,string& o_hashtype,string& o_hashvalue,string& o_crc32value)
+{
+	/// yes, I can do incomprensible code too.
+	int	risultato;
+	if (i_franz_block==NULL)
+	{
+		o_hashtype="";
+		o_hashvalue="";
+		o_crc32value="";
+		return -1;
+	}
+		
+	/// zpaqfranz 51, old style
+	if (i_franz_block[0]!=0)
+		if (i_franz_block[0+40]==0)
+		{
+			o_hashtype="SHA-1";
+			o_hashvalue=i_franz_block;
+			risultato=3; //franzotype
+		}			
+	
+	if (i_franz_block[0]==0)
+	{
+		if (i_franz_block[0+8]!=0)
+		{
+			if (i_franz_block[0+40]==0)
+			o_hashtype="XXH3";
+			o_hashvalue=i_franz_block+8;
+			risultato=2; //franzotype
+		}
+	}
+	
+	if (i_franz_block[41]!=0)
+		if (i_franz_block[41+8]==0)
+		{
+			if (i_isdirectory)
+				o_crc32value="        ";
+			else
+				o_crc32value=i_franz_block+41;
+		}
+
+	/// zpaqfranz 52, sha 256. Note: '0' is not "0" !
+			
+	if (i_franz_block[0]=='0')
+		if (i_franz_block[1]=='4')
+			if (i_franz_block[0+66]==0)
+			{
+				risultato=4; //franzotype
+				o_hashtype="SHA-256";
+				o_hashvalue=i_franz_block+2;
+				if (i_isdirectory)
+					o_crc32value="        ";
+				else
+				{
+					if (i_franz_block[67]!=0)
+						if (i_franz_block[67+8]==0)
+							o_crc32value=i_franz_block+67;
+				}
+			}
+	return risultato;
+}				
 int Jidac::info() 
 {
 	flagcomment=true;
@@ -24050,63 +24134,37 @@ int Jidac::list()
 				
 				string myfilename=p->first;
 	/// houston, we have checksums?
-				string mysha1="";
+				string myhashtype="";
+				string myhash="";
 				string mycrc32="";
-		
-					/*
-							for (int i=0; i<FRANZOFFSET;i++)
-							{
-								if (*(p->second.franz_block+i))
-								printf("Kajo %02d  %c\n",i,*(p->second.franz_block+i));
-								else
-								printf("Kajo %02d  <<0>>\n",i);
-								
-							}
-							*/
 				
 				if (flagchecksum)
 				{
-		/// zpaqfranz 51, old style
-					if (p->second.franz_block[0]!=0)
-							if (p->second.franz_block[0+40]==0)
-								mysha1=(string)"SHA1: "+p->second.franz_block+" ";
-					
-					if (p->second.franz_block[0]==0)
+				/*
+					for (int i=0; i<FRANZOFFSET;i++)
 					{
-						if (p->second.franz_block[0+8]!=0)
-						{
-							
-								if (p->second.franz_block[0+40]==0)
-									mysha1=(string)"XXH3: "+(p->second.franz_block+8)+" ";
-						}
+						if (*(p->second.franz_block+i))
+							printf("Kajo %02d  %c\n",i,*(p->second.franz_block+i));
+							else
+						printf("Kajo %02d  <<0>>\n",i);
 					}
-					if (p->second.franz_block[41]!=0)
-							if (p->second.franz_block[41+8]==0)
-							{
-								if (isdirectory(myfilename))
-									mycrc32=(string)"CRC32:          ";
-								else
-									mycrc32=(string)"CRC32: "+(p->second.franz_block+41)+" ";
-							}
-			/// zpaqfranz 52, sha 256. Note: '0' is not "0" !
-			
-					if (p->second.franz_block[0]=='0')
-						if (p->second.franz_block[1]=='4')
-							if (p->second.franz_block[0+66]==0)
-							{
-								mysha1=(string)"SHA256: "+(p->second.franz_block+2)+" ";
+				*/
+					
+					
+					int franzotypedetected=
+						decode_franz_block(isdirectory(myfilename),p->second.franz_block,
+						myhashtype,
+						myhash,
+						mycrc32);
+					
+					if (franzotypedetected>1)
+					{
+						if ((myhashtype!="") && (myhash!=""))
+							myhash=myhashtype+": "+myhash+" ";
+						if (mycrc32!="")
+							mycrc32="CRC32: "+mycrc32+" ";
+					}
 
-								if (isdirectory(myfilename))
-									mycrc32=(string)"CRC32:          ";
-								else
-								{
-									if (p->second.franz_block[67]!=0)
-										if (p->second.franz_block[67+8]==0)
-											mycrc32=(string)"CRC32: "+(p->second.franz_block+67)+" ";
-								}
-							}
-		
-		
 				}		
 							
 				if (all)
@@ -24117,7 +24175,7 @@ int Jidac::list()
 	//					rimpiazza+="FOLDER ";
 		//			else
 					{
-						rimpiazza+=mysha1;
+						rimpiazza+=myhash;
 						rimpiazza+=mycrc32;
 					}
 					if (!myreplace(myfilename,"|$1",rimpiazza))
@@ -24125,7 +24183,7 @@ int Jidac::list()
 				}
 				else
 				{
-						myfilename=mysha1+mycrc32+myfilename;
+						myfilename=myhash+mycrc32+myfilename;
 					
 				}
 				
@@ -24215,8 +24273,10 @@ int Jidac::list()
 /////////// other functions
 
 /////////////// checksum file
-std::string sha1_calc_file(const char * i_filename,const int64_t i_inizio,const int64_t i_totali,int64_t& io_lavorati)
+std::string sha1_calc_file(const char * i_filename,bool i_flagcalccrc32,uint32_t& o_crc32,const int64_t i_inizio,const int64_t i_totali,int64_t& io_lavorati)
 {
+	o_crc32=0;
+	
 	std::string risultato="";
 	FILE* myfile = freadopen(i_filename);
 	if(myfile==NULL )
@@ -24233,6 +24293,8 @@ std::string sha1_calc_file(const char * i_filename,const int64_t i_inizio,const 
 		
 		for (int i=0;i<r;i++)
 			sha1.put(*(unzBuf+i));
+		if (i_flagcalccrc32)
+			o_crc32=crc32_16bytes(unzBuf,r,o_crc32);
  		if (r!=n) 
 			break;
 		io_lavorati+=r;
@@ -24279,8 +24341,9 @@ uint32_t crc32_calc_file(const char * i_filename,const int64_t i_inizio,const in
 
 
 /// take sha256
-string sha256_calc_file(const char * i_filename,const int64_t i_inizio,const int64_t i_totali,int64_t& io_lavorati)
+string sha256_calc_file(const char * i_filename,bool i_flagcalccrc32,uint32_t& o_crc32,const int64_t i_inizio,const int64_t i_totali,int64_t& io_lavorati)
 {
+	o_crc32=0;
 	string risultato="ERROR";
 	FILE* myfile = freadopen(i_filename);
 	if(myfile==NULL )
@@ -24297,6 +24360,8 @@ string sha256_calc_file(const char * i_filename,const int64_t i_inizio,const int
 		
 		for (int i=0;i<r;i++)
 			sha256.put(*(buf+i));
+		if (i_flagcalccrc32)
+			o_crc32=crc32_16bytes(buf,r,o_crc32);
  		if (r!=n) 
 			break;
 		io_lavorati+=n;
@@ -24321,9 +24386,10 @@ string sha256_calc_file(const char * i_filename,const int64_t i_inizio,const int
 
 
 //// calc xxh3 (maybe)
-string xxhash_calc_file(const char * i_filename,const int64_t i_inizio,const int64_t i_totali,int64_t& io_lavorati,
+string xxhash_calc_file(const char * i_filename,bool i_flagcalccrc32,uint32_t& o_crc32,const int64_t i_inizio,const int64_t i_totali,int64_t& io_lavorati,
 uint64_t& o_high64,uint64_t& o_low64)
 {
+	o_crc32=0;
 	o_high64=0;
 	o_low64=0;
 		
@@ -24340,6 +24406,8 @@ uint64_t& o_high64,uint64_t& o_low64)
 	while ((readSize = fread(buffer, 1, blockSize, inFile)) > 0) 
 	{
 		(void)XXH3_128bits_update(&state128, buffer, readSize);
+		if (i_flagcalccrc32)
+			o_crc32=crc32_16bytes(buffer,readSize,o_crc32);
 		io_lavorati+=readSize;
 		///printf("IIIIIIIIIIIIIIIIIIIIIIIIIII OOOOO  %lld\n",io_lavorati);
 		if (flagnoeta==false)
@@ -24355,36 +24423,6 @@ uint64_t& o_high64,uint64_t& o_low64)
 	return risultato;
 }
 
-
-string xxhash_and_crc32_calc_file(const char * i_filename,const int64_t i_inizio,const int64_t i_totali,int64_t& io_lavorati,
-uint32_t& o_crc32)
-{
-	o_crc32=0;
-		
-	size_t const blockSize = 65536;
-	unsigned char buffer[blockSize];
-    FILE* inFile = freadopen(i_filename);
-	if (inFile==NULL) 
-		return "ERROR";
-	
-	XXH3_state_t state128;
-    (void)XXH3_128bits_reset(&state128);
-	
-	size_t readSize;
-	while ((readSize = fread(buffer, 1, blockSize, inFile)) > 0) 
-	{
-		(void)XXH3_128bits_update(&state128, buffer, readSize);
-		o_crc32=crc32_16bytes(buffer,readSize,o_crc32);
-		io_lavorati+=readSize;
-		if (flagnoeta==false)
-				myavanzamento(io_lavorati,i_totali,i_inizio);
-	}
-	fclose(inFile);
-	XXH128_hash_t myhash=XXH3_128bits_digest(&state128);
-	char risultato[33];
-	sprintf(risultato,"%016llX%016llX",(unsigned long long)myhash.high64,(unsigned long long)myhash.low64);
-	return risultato;
-}
 
 
 
@@ -24426,8 +24464,9 @@ unsigned int crc32c_calc_file(const char * i_filename,const int64_t i_inizio,con
 }
 
 
-string hash_calc_file(int i_algo,const char * i_filename,const int64_t i_inizio,const int64_t i_totali,int64_t& io_lavorati)
+string hash_calc_file(int i_algo,const char * i_filename,bool i_flagcalccrc32,uint32_t& o_crc32,const int64_t i_inizio,const int64_t i_totali,int64_t& io_lavorati)
 {
+	o_crc32=0;
 	char risultato[33];
 	
 	switch (i_algo) 
@@ -24439,7 +24478,7 @@ string hash_calc_file(int i_algo,const char * i_filename,const int64_t i_inizio,
 		break;
 		*/
 		case ALGO_SHA1:
-			return  sha1_calc_file(i_filename,i_inizio,i_totali,io_lavorati);
+			return  sha1_calc_file(i_filename,i_flagcalccrc32,o_crc32,i_inizio,i_totali,io_lavorati);
 		break;
 		
 		case ALGO_CRC32C:
@@ -24455,12 +24494,12 @@ string hash_calc_file(int i_algo,const char * i_filename,const int64_t i_inizio,
 		case ALGO_XXHASH:
 			uint64_t dummybasso64;
 			uint64_t dummyalto64;
-			return xxhash_calc_file(i_filename,i_inizio,i_totali,io_lavorati,dummybasso64,dummyalto64);
+			return xxhash_calc_file(i_filename,i_flagcalccrc32,o_crc32,i_inizio,i_totali,io_lavorati,dummybasso64,dummyalto64);
 			
 		break;
 		
 		case ALGO_SHA256: 
-		return  sha256_calc_file(i_filename,i_inizio,i_totali,io_lavorati);
+		return  sha256_calc_file(i_filename,i_flagcalccrc32,o_crc32,i_inizio,i_totali,io_lavorati);
 		break;
 		
 		default: 
@@ -24499,7 +24538,8 @@ void * scansionahash(void *t)
 	
 	for (unsigned int i=0;i<tmpfilestobehashed.size();i++)
 	{
-		tmphashcalculated.push_back(hash_calc_file(flag2algo(),tmpfilestobehashed[i].c_str(),par->inizio,par->dimensione,g_dimensione));
+		uint32_t dummycrc;
+		tmphashcalculated.push_back(hash_calc_file(flag2algo(),tmpfilestobehashed[i].c_str(),false,dummycrc,par->inizio,par->dimensione,g_dimensione));
 		///printf("INIZIO %lld dimensione %lld lavora %lld\n",par->inizio,par->dimensione,g_dimensione);
 	}
 	pthread_exit(NULL);
@@ -24624,7 +24664,8 @@ int Jidac::summa()
 				if (!isdirectory(p->first))
 				{
 					startscan=mtime();
-					vec.push_back(make_pair("dummy",hash_calc_file(flag2algo(),p->first.c_str(),-1,-1,g_dimensione)));
+					uint32_t dummycrc;
+					vec.push_back(make_pair("dummy",hash_calc_file(flag2algo(),p->first.c_str(),false,dummycrc,-1,-1,g_dimensione)));
 					total_size+=p->second.size;
 					hashtime+=mtime()-startscan;
 				}
@@ -24657,8 +24698,9 @@ int Jidac::summa()
 		vec.clear();
 		
 		startscan=mtime();
+		uint32_t dummycrc;
 		for (unsigned int i=0;i<myfiles.size();i++)
-			vec.push_back(make_pair("dummy",hash_calc_file(flag2algo(),myfiles[i].c_str(),-1,-1,g_dimensione)));
+			vec.push_back(make_pair("dummy",hash_calc_file(flag2algo(),myfiles[i].c_str(),false,dummycrc,-1,-1,g_dimensione)));
 		hashtime+=mtime()-startscan;
 		
 		std::sort(vec.begin(), vec.end(),sortbyval);
@@ -25829,7 +25871,8 @@ if (!flagnoeta)
 			{
 				printf("Re-hashing %s\r",p->first.c_str());
 				int64_t dummy;
-				sha1delfile=sha1_calc_file(p->first.c_str(),-1,-1,dummy);
+				uint32_t dummycrc;
+				sha1delfile=sha1_calc_file(p->first.c_str(),false,dummycrc,-1,-1,dummy);
 			}
 			std::string sha1decompresso=p->second.sha1decompressedhex;
 			std::string sha1stored=p->second.sha1hex;
@@ -26173,9 +26216,10 @@ int Jidac::consolidate(string i_archive)
 		
 		uint64_t dummybasso64;
 		uint64_t dummyalto64;
+		uint32_t dummycrc32;
 		int64_t startverify=mtime();
 		int64_t io_lavorati=0;
-		string hashreloaded=xxhash_calc_file(outfile.c_str(),startverify,total_size,io_lavorati,dummybasso64,dummyalto64);
+		string hashreloaded=xxhash_calc_file(outfile.c_str(),false,dummycrc32,startverify,total_size,io_lavorati,dummybasso64,dummyalto64);
 		printf("Expected   XXH3 hash of the output file %s\n",risultato);
 		printf("Calculated XXH3 hash of the output file %s\n",risultato);
 		if (hashreloaded!=risultato)
@@ -26191,6 +26235,16 @@ int Jidac::consolidate(string i_archive)
 
 /// franz-test
 /// extract data (multithread) and check CRC-32, if any
+struct	hash_check
+{
+	int		algotype;
+	int		checkedok;
+	int		checkedfailed;
+	int		checkednotfound;
+	int64_t checksize;
+	hash_check(): algotype(0), checkedok(0),checkedfailed(0),checkednotfound(0),checksize(0) {};
+};
+typedef map<string, hash_check> MAPPACHECK;
 
 int Jidac::test() 
 {
@@ -26330,42 +26384,56 @@ int Jidac::test()
 	{
 		printf("No error detected in first stage (standard 7.15), now try CRC-32 (if present)\n");
 	}
-//// OK now check against CRC32   
+//// OK now check against CRC32 and the entire World (if any)
 
 	uint64_t startverify=mtime();
 	
 	sort(g_crc32.begin(),g_crc32.end(),comparecrc32block);
 	
+	unsigned int 	status_e		=0; //all kinds of error
+	unsigned int 	status_e_hash	=0; //errors on hashes by file
+	unsigned int 	status_e_crc	=0;	//errors on crcs by file
+	unsigned int 	status_e_blocks	=0;	//errors on crcs by blocks
+	
+	unsigned int 	status_0		=0;
+	unsigned int 	status_1		=0;
+	unsigned int 	status_2		=0;
+	unsigned int 	status_3		=0;
+	uint32_t 		checkedfiles	=0;
+	uint32_t 		uncheckedfiles	=0;
+	
+	unsigned int 	parti			=1;
+	int64_t 		lavorati		=0;
+	uint64_t 		dalavorare		=0;
+	
+	uint32_t 		currentcrc32	=0;
+	uint32_t 		crc32stored		=0;
+		
+	struct hash_check dummycheck;
+	MAPPACHECK	mychecks;
+		
+	dummycheck.algotype=ALGO_SHA1;
+	mychecks.insert(std::pair<string, hash_check>("SHA-1",dummycheck));
+	
+	dummycheck.algotype=ALGO_SHA256;
+	mychecks.insert(std::pair<string, hash_check>("SHA-256",dummycheck));
+	
+	dummycheck.algotype=ALGO_XXHASH;
+	mychecks.insert(std::pair<string, hash_check>("XXH3",dummycheck));
 
-	unsigned int status_e=0;
-	unsigned int status_0=0;
-	unsigned int status_1=0;
-	unsigned int status_2=0;
-	unsigned int status_3=0;
-	uint32_t 	checkedfiles=0;
-	uint32_t 	uncheckedfiles=0;
-	
-	unsigned int i=0;
-	unsigned int parti=1;
-	int64_t lavorati=0;
-	uint32_t currentcrc32=0;
-	char * crc32storedhex;
-	uint32_t crc32stored;
-	uint64_t dalavorare=0;
-	
-	
 	for (unsigned int i=0;i<g_crc32.size();i++)
 		dalavorare+=g_crc32[i].crc32size;
 	
 	printf("\n\nChecking  %s blocks with CRC32 (%s)\n",migliaia(g_crc32.size()),migliaia2(dalavorare));
+	
 	if (flagverify)
-		printf("Re-testing from filesystem (slow, but reliable)\n");
+		printf("Re-testing from filesystem (-verify) if possible\n");
 		
-	uint32_t parts=0;
+	uint32_t 	parts=0;
 	uint64_t	zeroedblocks=0;
 	uint32_t	howmanyzero=0;
-	
 	g_zerotime=0;
+	
 	/*
 	printf("======================\n");
 	for (unsigned int i=0;i<g_crc32.size();i++)
@@ -26375,6 +26443,8 @@ int Jidac::test()
 	}
 	printf("======================\n");
 	*/
+	
+	unsigned int i=0;
 	while (i<g_crc32.size())
 	{
 		if ( ++parts % 1000 ==0)
@@ -26383,28 +26453,29 @@ int Jidac::test()
             
 		s_crc32block it=g_crc32[i];
 		DTMap::iterator p=dt.find(it.filename);
-		string mysha1="";
-		string myxxh3="";/// from archive
-		string hashread=""; /// from file
-		crc32storedhex=0;
-		crc32stored=0;
-		if (p != dt.end())
-			if (p->second.franz_block[41]!=0)
-			{
-				crc32storedhex=p->second.franz_block+41;
-				crc32stored=crchex2int(crc32storedhex);
-				
-				if (p->second.franz_block[0]!=0)
-					if (p->second.franz_block[0+40]==0)
-						mysha1=p->second.franz_block;
-						
-				if (p->second.franz_block[0]==0)
-						if (p->second.franz_block[0+8]!=0)
-							if (p->second.franz_block[0+40]==0)
-								myxxh3=p->second.franz_block+8;
 
-			}
+		crc32stored=0;
+
+		string myhashtype="";
+		string myhash="";
+		string mycrc32="";
+				
+		if (p != dt.end())
+		{
+			decode_franz_block(isdirectory(it.filename),p->second.franz_block,
+			myhashtype,
+			myhash,
+			mycrc32);
+			crc32stored=crchex2int(mycrc32.c_str());
+		}
 		
+		if (flagdebug)
+		{
+			printf("MYhashtype   %s\n",myhashtype.c_str());
+			printf("Myhash       %s\n",myhash.c_str());
+			printf("Mycrc32      %s\n",mycrc32.c_str());
+			printf("\n");
+		}
 /// Houston, we have something that start with a sequence of zeros, let's compute the missing CRC		
 		if (it.crc32start>0)
 		{
@@ -26413,10 +26484,10 @@ int Jidac::test()
 			printf("Holesize iniziale %ld\n",holesize);
 			*/
 			
-			uint32_t zerocrc=crc32zeros(holesize);
-			currentcrc32=crc32_combine(currentcrc32, zerocrc,holesize);
-			lavorati+=holesize;	
-			zeroedblocks+=holesize;
+			uint32_t zerocrc	=crc32zeros(holesize);
+			currentcrc32		=crc32_combine(currentcrc32, zerocrc,holesize);
+			lavorati			+=holesize;	
+			zeroedblocks		+=holesize;
 			howmanyzero++;
 			/*
 			char mynomefile[100];
@@ -26480,21 +26551,58 @@ int Jidac::test()
 		string filedefinitivo=g_crc32[i].filename;
 		uint32_t crc32fromfilesystem=0; 
 		
-		int	xxh3compareok=-1; // -1 unknown; 0=not ok; 1=ok; 
+		
 		if (flagverify)
 		{
+		/// check for one hash algorithm. In fact a mixed situation can occour
 			checkedfiles++;
 			
-			if (myxxh3!="")
+			if (myhash!="")
 			{
-				if (flagverbose)
-					printf("Taking XXH3 and CRC32 for %s\r",filedefinitivo.c_str());
-				hashread=xxhash_and_crc32_calc_file(filedefinitivo.c_str(),startverify,dimtotalefile,lavorati,crc32fromfilesystem);
-				///printf("hash read  %s  my %s \n",hashread.c_str(),myxxh3.c_str());
-				if (hashread==myxxh3)
-					xxh3compareok=1;
+				
+				MAPPACHECK::iterator a=mychecks.find(myhashtype);
+	
+				if (a!=mychecks.end())
+				{
+					if (flagdebug)
+						printf("Taking %s and CRC32 for %s\r",myhashtype.c_str(),filedefinitivo.c_str());
+
+					if (!fileexists(filedefinitivo.c_str()))
+					{
+						if (flagverbose)
+								printf("FILE NOT FOUND on %s: FILE %s\n",myhashtype.c_str(),filedefinitivo.c_str());
+						a->second.checkednotfound++;			
+					}
+					else
+					{
+						string hashread=hash_calc_file(
+						a->second.algotype,
+						filedefinitivo.c_str(),
+						true,	/// <--- look at this
+						crc32fromfilesystem,
+						startverify,dimtotalefile,lavorati);
+						if (hashread==myhash)
+						{
+							if (flagdebug)
+								printf("GOOD %s:  STORED == FROM FILE\n",myhashtype.c_str());
+							status_3++;
+							a->second.checkedok++;
+							a->second.checksize+=p->second.size;
+						}
+						else
+						{
+							if (flagverbose)
+								printf("ERROR on %s: STORED HASH %s VS %s IN FILE %s\n",myhashtype.c_str(),filedefinitivo.c_str(),myhash.c_str(),hashread.c_str());
+							status_e_hash++;
+							a->second.checkedfailed++;
+						}
+					}
+				}
 				else
-					xxh3compareok=0;
+				{
+					perror("26620: algo unknown!");
+				}
+	
 			}
 			else
 			{
@@ -26502,22 +26610,12 @@ int Jidac::test()
 					printf("Taking CRC32 for %s\r",filedefinitivo.c_str());
 				crc32fromfilesystem=crc32_calc_file(filedefinitivo.c_str(),-1,dimtotalefile,lavorati);
 			}
-	
-/*		
-
-		if (crc32fromfilesystem==0)
-			{
-				printf("WARNING impossible to read file %s\n",filedefinitivo.c_str());
-				status_w++;
-				status_0++;
-			}
-			*/
 		}
 		
-		if (flagverbose)
+		if (flagdebug)
 			printf("Stored %08X calculated %08X fromfile %08X %s\n",crc32stored,currentcrc32,crc32fromfilesystem,filedefinitivo.c_str());
 
-		if (crc32storedhex)
+		if (mycrc32!="")
 		{
 			if (currentcrc32==crc32stored)
 			{
@@ -26525,19 +26623,19 @@ int Jidac::test()
 				{
 					if (crc32stored==crc32fromfilesystem)
 					{
-						if (flagverbose)
+						if (flagdebug)
 						printf("SURE:  STORED %08X = DECOMPRESSED = FROM FILE %s\n",crc32stored,filedefinitivo.c_str());
 						status_2++;
 					}
 					else
 					{
 						printf("ERROR:  STORED %08X XTRACTED %08X FILE %08X NOT THE SAME! (ck %08d) %s\n",crc32stored,currentcrc32,(unsigned int)crc32fromfilesystem,parti,filedefinitivo.c_str());
-						status_e++;
+						status_e_crc++;
 					}
 				}
 				else
 				{
-					if (flagverbose)
+					if (flagdebug)
 					printf("GOOD: STORED %08X = DECOMPRESSED %s\n",crc32stored,filedefinitivo.c_str());
 					status_1++;
 				}
@@ -26545,26 +26643,8 @@ int Jidac::test()
 			else
 			{
 				printf("ERROR: STORED %08X != DECOMPRESSED %08X (ck %08d) %s\n",crc32stored,currentcrc32,parti,filedefinitivo.c_str());
-				status_e++;
+				status_e_blocks++;
 			}
-			
-			if (xxh3compareok>-1)
-			{
-				if (xxh3compareok==1)
-				{
-					if (flagverbose)
-						printf("GOOD XHH3:  STORED == FROM FILE\n");
-					status_3++;
-				}
-				else
-				{
-					if (flagverbose)
-						printf("ERROR on XXH3: STORED HASH %s VS FROM FILE %s\n",myxxh3.c_str(),hashread.c_str());
-					status_e++;
-				}
-			}
-			
-			
 		}
 		else
 		{	// we have and old style ZPAQ without CRC32
@@ -26582,30 +26662,50 @@ int Jidac::test()
 	printf("Zeros  %19s (%12s) %f s\n",migliaia(zeroedblocks),migliaia2(howmanyzero),(g_zerotime/1000.0));
 	printf("Total  %19s speed %s/sec\n",migliaia(dalavorare+zeroedblocks),migliaia2((dalavorare+zeroedblocks)/((mtime()-startverify+1)/1000.0)));
 	
+	
 	if (checkedfiles>0)
-		printf("Checked   : %08d (zpaqfranz)\n",checkedfiles);
+		printf("Checked       : %08d of %08d (zpaqfranz)\n",checkedfiles,total_files);
 	if (uncheckedfiles>0)
 	{
-		printf("UNcheck   : %08d (zpaq 7.15)\n",uncheckedfiles);
+		printf("UNcheck       : %08d if %08d (zpaq 7.15)\n",uncheckedfiles,total_files);
 			status_0=uncheckedfiles;
 	}
 	
+	if (flagverify)
+	{
+		morebar('-');
+		for (MAPPACHECK::iterator p=mychecks.begin(); p!=mychecks.end(); ++p) 
+		{
+			if (p->second.checkedok)
+				printf("OK   %8s : %08d of %08d (%s hash check against file on disk)\n",p->first.c_str(),p->second.checkedok,total_files,tohuman(p->second.checksize));
+			if (p->second.checkedfailed)
+				printf("FAIL %8s : %08d of %08d (FAILED hash check against file on disk)\n",p->first.c_str(),p->second.checkedfailed,total_files);
+			if (p->second.checkednotfound)
+				printf("WARN %8s : %08d of %08d (file not found, cannot check hash)\n",p->first.c_str(),p->second.checkedfailed,total_files);
+		}
+		morebar('-');
+	}
 	
-	if (status_e)
-	printf("ERRORS    : %08d (ERROR:  something WRONG)\n",status_e);
+	
+	if (status_e_hash)
+	printf("ERRORS HASH   : %08d (ERROR verifyng hash from disk)\n",status_e_hash);
+	if (status_e_crc)
+	printf("ERRORS CRC FI : %08d (ERROR verifyng CRC-32 from disk)\n",status_e_crc);
+	if (status_e_blocks)
+	printf("ERRORS        : %08d (ERROR in rebuilded CRC-32, SHA-1 collisions?)\n",status_e_blocks);
+	status_e = status_e_hash+status_e_crc+status_e_blocks;
+	morebar('-');
 	
 	if (status_0)
-	printf("WARNING   : %08d (Cannot say anything)\n",status_0);
+	printf("WARNING       : %08d (Cannot say anything)\n",status_0);
 	
 	if (status_1)
-	printf("GOOD      : %08d of %08d (stored=decompressed)\n",status_1,total_files);
+	printf("GOOD          : %08d of %08d (stored=decompressed)\n",status_1,total_files);
 	
 	if (status_2)
-	printf("SURE      : %08d of %08d (stored=decompressed=file on disk)\n",status_2,total_files);
+	printf("SURE          : %08d of %08d (stored=decompressed=file on disk)\n",status_2,total_files);
+
 	
-	if (status_3)
-	printf("XXH3 CHK  : %08d of %08d (hash check against file on disk)\n",status_3,total_files);
-		
 	if (status_e==0)
 	{
 		if (status_0)
@@ -26648,9 +26748,6 @@ void myaddfile(uint32_t i_tnumber,DTMap& i_edt,string i_filename, int64_t i_date
 	if (!flagforcezfs)
 		if (iszfs(i_filename))
 			return;
-		
-		
-		
 				
 	if (minsize>0)
 		if ((uint64_t)i_size<minsize)
@@ -26681,7 +26778,8 @@ void myaddfile(uint32_t i_tnumber,DTMap& i_edt,string i_filename, int64_t i_date
 		if (!isdirectory(i_filename))
 		{
 			int64_t starthash=mtime();
-			d.hexhash=hash_calc_file(flag2algo(),i_filename.c_str(),-1,-1,dummy);
+			uint32_t dummycrc;
+			d.hexhash=hash_calc_file(flag2algo(),i_filename.c_str(),false,dummycrc,-1,-1,dummy);
 			if (flagverbose)
 			{
 				printf("%s: |%s| [%d] %6.3f ",mygetalgo().c_str(),d.hexhash.c_str(),i_tnumber,(mtime()-starthash)/1000.0);
@@ -28147,8 +28245,9 @@ int Jidac::fillami()
 		
 		uint64_t dummybasso64;
 		uint64_t dummyalto64;
+		uint32_t dummycrc32;
 		uint64_t starthash=mtime();
-		string filehash=xxhash_calc_file(filename.c_str(),-1,-1,lavorati,dummybasso64,dummyalto64);
+		string filehash=xxhash_calc_file(filename.c_str(),false,dummycrc32,-1,-1,lavorati,dummybasso64,dummyalto64);
 		uint64_t hashspeed=chunksize/((mtime()-starthash+1)/1000.0);
 		printf(" (%12s/s) ",tohuman(hashspeed));
 
@@ -28371,7 +28470,8 @@ int  Jidac::dir()
 					{
 						bool saveeta=flagnoeta;
 						flagnoeta=true;
-						string temp=hash_calc_file(flag2algo(),fileandsize[i].filename.c_str(),0,0,dummylavorati);
+						uint32_t dummycrc;
+						string temp=hash_calc_file(flag2algo(),fileandsize[i].filename.c_str(),false,dummycrc,0,0,dummylavorati);
 						flagnoeta=saveeta;
 
 						fileandsize[i].hashhex=temp;
@@ -28405,7 +28505,8 @@ int  Jidac::dir()
 					
 					bool saveeta=flagnoeta;
 					flagnoeta=true;
-					string temp=hash_calc_file(flag2algo(),fileandsize[i+1].filename.c_str(),0,0,dummylavorati);
+					uint32_t dummycrc;
+					string temp=hash_calc_file(flag2algo(),fileandsize[i+1].filename.c_str(),false,dummycrc,0,0,dummylavorati);
 					flagnoeta=saveeta;
 					
 					fileandsize[i+1].hashhex=temp;
@@ -29662,7 +29763,7 @@ if (casecollision>0)
 			{
 				for (unsigned i=0; i<p->second.ptr.size(); ++i)
 					currentcrc32=crc32_combine(currentcrc32, ht[p->second.ptr[i]].crc32,ht[p->second.ptr[i]].crc32size);
-						
+				///printf("Currentcrc32 by blocks  %08X\n",currentcrc32);
 				if (currentcrc32!=p->second.file_crc32)
 					printf("29604 SOMETHING WRONG ON %s\n",p->first.c_str());
 			}	

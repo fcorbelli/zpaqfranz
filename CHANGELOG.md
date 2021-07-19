@@ -1,3 +1,16 @@
+```
+19-07-2021:  52.5 
+Support for storing SHA-256 for each file.
+New switch
+
+zpaqfranz a z:\1.zpaq c:\nz -xxhash (the default)
+zpaqfranz a z:\1.zpaq c:\nz -sha1
+zpaqfranz a z:\1.zpaq c:\nz -sha256
+zpaqfranz a z:\1.zpaq c:\nz -crc32
+zpaqfranz a z:\1.zpaq c:\nz -nochecksum (like 7.15)
+
+
+
 11-07-2021:  52.1
 New switch -filelist
 zpaqfranz a z:\1.zpaq c:\nz -filelist
@@ -69,3 +82,4 @@ zpaqfranz l z:\1.zpaq -checksum -summary (compact output)
 					-subject  "CHECK-ZPAQ" 
 					-body-plain="Something wrong" 
 					-attach=/tmp/checkoutput.txt
+```

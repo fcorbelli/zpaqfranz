@@ -5,12 +5,15 @@
 ///////// https://github.com/fcorbelli/zpaqfranz
 ///////// https://sourceforge.net/projects/zpaqfranz/
 
+///////// https://github.com/fcorbelli/zpaqfranz/wiki
+
+
 ///////// I had to reluctantly move parts of the comments and some times even delete them, 
 ///////// because github doesn't like files >1MB. I apologize with the authors,
 ///////// it's not a foolish attempt to take over their jobs
 ///////// https://github.com/fcorbelli/zpaqfranz/blob/main/notes.txt
 
-#define ZPAQ_VERSION "52.4-experimental"
+#define ZPAQ_VERSION "52.5-experimental"
 #define FRANZOFFSET 		50
 #define FRANZOFFSETSHA256 	76 
 #define FRANZMAXPATH 		240
@@ -8594,6 +8597,17 @@ typedef map<string, voidhelpfunction> 	MAPPAHELP;
 typedef map<int, 	string> 			MAPPACOMMENTI;
 typedef map<string, string> 			MAPPAFILEHASH;
 typedef map<string, string> 			MAPPASTRINGASTRINGA;
+struct	hash_check
+{
+	int		algotype;
+	int		checkedok;
+	int		checkedfailed;
+	int		checkednotfound;
+	int64_t checksize;
+	hash_check(): algotype(0), checkedok(0),checkedfailed(0),checkednotfound(0),checksize(0) {};
+};
+typedef map<string, hash_check> MAPPACHECK;
+
 
 enum ealgoritmi		{ ALGO_SIZE,ALGO_SHA1,ALGO_CRC32C,ALGO_CRC32,ALGO_XXHASH,ALGO_SHA256,ALGO_WYHASH,ALGO_LAST };
 typedef std::map<int,std::string> algoritmi;
@@ -16812,17 +16826,17 @@ private:
 	int 	searchcomments(string i_testo,vector<DTMap::iterator> &filelist);
 	
 	bool 	getchecksum(string i_filename, char* o_sha1); //get SHA1 AND CRC32 of a file. Old, for backward
-	string 	decodefranzoffset();
-	int 	decode_franz_block(const bool i_isdirectory,const char* i_franz_block,string& o_hashtype,string& o_hashvalue,string& o_crc32value);
-
-
+	
+	/// out of Jidac by unzpaq206 merging and naming "shadowing"
+	///string 	decodefranzoffset();
+	///int 	decode_franz_block(const bool i_isdirectory,const char* i_franz_block,string& o_hashtype,string& o_hashvalue,string& o_crc32value);
 };
 
 ////////////////////////////////////////////////////////////////////////////
 ///////// This is a merge of unzpaq206.cpp, patched by me to become unz.cpp
-///////// Now support FRANZOFFSET (embedding SHA1 into ZPAQ's c block)
+///////// Now support FRANZOFFSET256 (embedding SHA1-XXHASH-SHA256 into ZPAQ's c block)
 
-string Jidac::decodefranzoffset()
+string decodefranzoffset(int franzotype)
 {
 	if (franzotype==0)
 		return "NOTHING (LIKE 7.15)";
@@ -18973,8 +18987,8 @@ struct unzDT {
   uint64_t date;  // YYYYMMDDHHMMSS or 0 if deleted
   uint64_t attr;  // first 8 bytes, LSB first
   std::vector<uint32_t> ptr;  // fragment IDs
-  char sha1hex[66];		 // 1+32+32 (unzSHA256)+ zero
-  char sha1decompressedhex[66];		 // 1+32+32 (unzSHA256)+ zero
+  char sha1hex[FRANZOFFSETSHA256];		 // 1+32+32 (unzSHA256)+ zero
+  char sha1decompressedhex[FRANZOFFSETSHA256];		 // 1+32+32 (unzSHA256)+ zero
   std::string sha1fromfile;		 // 1+32+32 (unzSHA256)+ zero
 
   unzDT(): date(0), attr(0) {sha1hex[0]=0x0;sha1decompressedhex[0]=0x0;sha1fromfile="";}
@@ -19403,12 +19417,12 @@ void help_a(bool i_usage,bool i_example)
 		moreprint("DIFF: -xls          Do NOT force adding of .XLS (default: NO)");
 		moreprint("DIFF: -forcezfs     Do NOT ignore .zfs          (default: YES)");
 		moreprint("DIFF: -715          Runs just about like 7.15");
-		moreprint("PLUS: -nochecksum   Do NOT get checksum (faster)");
+		moreprint("PLUS: -nochecksum   Disable zpaqfranz additional checks (faster, less sure)");
 		moreprint("PLUS: -crc32        Get CRC-32 for every file");
-		moreprint("PLUS: -xxhash       Get XXH3 for every file (default)");
+		moreprint("PLUS: -xxhash       Get XXH3 for every file     (default: YES)");
 		moreprint("PLUS: -sha1         Get SHA1 for every file");
 		moreprint("PLUS: -sha256       Get SHA256 for every file");
-		moreprint("PLUS: -verify       Do an early check for SHA-1 collisions (slows 10%)");
+		moreprint("PLUS: -verify       Enable double checks        (default: YES). Slower but safer");
 		moreprint("PLUS: -test         Do a post-add test (doveryay, no proveryay).");
 		moreprint("PLUS: -vss          Volume Shadow Copies (Win with admin rights) to backup files from %users%.");
 		moreprint("PLUS: -timestamp X  Setting version datetime @X, ex 2021-12-30_01:03:04 to freeze zfs snapshots");
@@ -19554,8 +19568,12 @@ void help_p(bool i_usage,bool i_example)
 		moreprint("                    Runs on unzpaq206.cpp source instead of 7.15 extract: double check");
 		moreprint("                    to avoid the risk of 'silent' bugs. The RAM needed can");
 		moreprint("                    quickly become unmanageable (warn: be very careful with 32bit versions).");
-		moreprint("PLUS: -checksum     Hard-hash check on archive created with add -checksum");
-		moreprint("PLUS: -verify       Next level (mine) of paranoia: check SHA-1 against the filesystem.");
+		moreprint("PLUS: -noeta        Brief");
+		moreprint("PLUS: -verbose      Shows positive checks");
+		moreprint("PLUS: -xxhash       Hard-hash check on archive created with add -xxhash");
+		moreprint("PLUS: -sha1         Hard-hash check on archive created with add -sha1 (zpaqfranz <52)");
+		moreprint("PLUS: -sha256       Hard-hash check on archive created with add -sha256");
+		moreprint("PLUS: -verify       Next level (mine) of paranoia: check hashes against the filesystem.");
 		moreprint("                    Essentially equivalent to extracting in a temporary folder and check");
 		moreprint("                    against initial folders. For very paranoid people, or debug reason.");
 	}
@@ -19563,7 +19581,7 @@ void help_p(bool i_usage,bool i_example)
 	if (i_example)
 	{
 		moreprint("Paranoid, use lots of RAM:           p z:\\1.zpaq");
-		moreprint("Very paranoid, use lots of RAM:      p z:\\1.zpaq -verify");
+		moreprint("Very paranoid, use lots of RAM:      p z:\\1.zpaq -xxhash -verify");
 	}
 }
 void help_c(bool i_usage,bool i_example)
@@ -22098,7 +22116,12 @@ void Jidac::writefranzattr(libzpaq::StringBuffer& i_sb, uint64_t i_data, unsigne
 	assert(i_quanti<8);				//just to be sure at least 1 zero pad, so < and not <=
 	assert(i_filename!="");
 
-	
+	uint32_t writtencrc;
+	if (flagverify)
+		writtencrc=i_crc32fromfragments;
+	else
+		writtencrc=i_crc32;
+		
 	if (franzotype==0)	// 7.15
 	{
 		write715attr(i_sb,i_data,i_quanti);
@@ -22118,10 +22141,7 @@ void Jidac::writefranzattr(libzpaq::StringBuffer& i_sb, uint64_t i_data, unsigne
 	if (franzotype==1) /// store only CRC-32
 	{
 		char mybuffer[FRANZOFFSET]={0};
-		if (flagverify)
-		sprintf(mybuffer+41,"%08X",i_crc32fromfragments);
-		else
-		sprintf(mybuffer+41,"%08X",i_crc32);
+		sprintf(mybuffer+41,"%08X",writtencrc);
 		puti(i_sb, 8+FRANZOFFSET, 4); 	// 8+FRANZOFFSET block
 		puti(i_sb, i_data, i_quanti);
 		puti(i_sb, 0, (8 - i_quanti));  // pad with zeros (for 7.15 little bug)
@@ -22135,10 +22155,7 @@ void Jidac::writefranzattr(libzpaq::StringBuffer& i_sb, uint64_t i_data, unsigne
 		assert(i_thehash.length()==32);
 		char mybuffer[FRANZOFFSET]={0};
 		sprintf(mybuffer+8,	"%s",i_thehash.c_str());
-		if (flagverify)
-		sprintf(mybuffer+41,"%08X",i_crc32fromfragments);
-		else
-		sprintf(mybuffer+41,"%08X",i_crc32);
+		sprintf(mybuffer+41,"%08X",writtencrc);
 		puti(i_sb, 8+FRANZOFFSET, 4); 	// 8+FRANZOFFSET block
 		puti(i_sb, i_data, i_quanti);
 		puti(i_sb, 0, (8 - i_quanti));  // pad with zeros (for 7.15 little bug)
@@ -22153,10 +22170,7 @@ void Jidac::writefranzattr(libzpaq::StringBuffer& i_sb, uint64_t i_data, unsigne
 		assert(i_thehash.length()==40);
 		char mybuffer[FRANZOFFSET]={0};
 		sprintf(mybuffer+0,	"%s",i_thehash.c_str());
-		if (flagverify)
-		sprintf(mybuffer+41,"%08X",i_crc32fromfragments);
-		else
-		sprintf(mybuffer+41,"%08X",i_crc32);
+		sprintf(mybuffer+41,"%08X",writtencrc);
 		puti(i_sb, 8+FRANZOFFSET, 4); 	// 8+FRANZOFFSET block
 		puti(i_sb, i_data, i_quanti);
 		puti(i_sb, 0, (8 - i_quanti));  // pad with zeros (for 7.15 little bug)
@@ -22171,7 +22185,7 @@ void Jidac::writefranzattr(libzpaq::StringBuffer& i_sb, uint64_t i_data, unsigne
 		char mybuffer[FRANZOFFSETSHA256]={0};
 		sprintf(mybuffer,	"04");
 		sprintf(mybuffer+2,	"%s",i_thehash.c_str());
-		sprintf(mybuffer+2+64+1,"%08X",i_crc32fromfragments);
+		sprintf(mybuffer+2+64+1,"%08X",writtencrc);
 		puti(i_sb, 8+FRANZOFFSETSHA256, 4); 	// 8+FRANZOFFSET block
 		puti(i_sb, i_data, i_quanti);
 		puti(i_sb, 0, (8 - i_quanti));  // pad with zeros (for 7.15 little bug)
@@ -23694,6 +23708,67 @@ int Jidac::kill()
 	
 }
 
+int decode_franz_block(const bool i_isdirectory,const char* i_franz_block,string& o_hashtype,string& o_hashvalue,string& o_crc32value)
+{
+	/// yes, I can do incomprensible code too.
+	int	risultato;
+	if (i_franz_block==NULL)
+	{
+		o_hashtype="";
+		o_hashvalue="";
+		o_crc32value="";
+		return -1;
+	}
+		
+	/// zpaqfranz 51, old style
+	if (i_franz_block[0]!=0)
+		if (i_franz_block[0+40]==0)
+		{
+			o_hashtype="SHA-1";
+			o_hashvalue=i_franz_block;
+			risultato=3; //franzotype
+		}			
+	
+	if (i_franz_block[0]==0)
+	{
+		if (i_franz_block[0+8]!=0)
+		{
+			if (i_franz_block[0+40]==0)
+			o_hashtype="XXH3";
+			o_hashvalue=i_franz_block+8;
+			risultato=2; //franzotype
+		}
+	}
+	
+	if (i_franz_block[41]!=0)
+		if (i_franz_block[41+8]==0)
+		{
+			if (i_isdirectory)
+				o_crc32value="        ";
+			else
+				o_crc32value=i_franz_block+41;
+		}
+
+	/// zpaqfranz 52, sha 256. Note: '0' is not "0" !
+			
+	if (i_franz_block[0]=='0')
+		if (i_franz_block[1]=='4')
+			if (i_franz_block[0+66]==0)
+			{
+				risultato=4; //franzotype
+				o_hashtype="SHA-256";
+				o_hashvalue=i_franz_block+2;
+				if (i_isdirectory)
+					o_crc32value="        ";
+				else
+				{
+					if (i_franz_block[67]!=0)
+						if (i_franz_block[67+8]==0)
+							o_crc32value=i_franz_block+67;
+				}
+			}
+	return risultato;
+}				
 
 int Jidac::verify() 
 {
@@ -23933,67 +24008,6 @@ int Jidac::verify()
 		return 0;
 }
 
-int Jidac::decode_franz_block(const bool i_isdirectory,const char* i_franz_block,string& o_hashtype,string& o_hashvalue,string& o_crc32value)
-{
-	/// yes, I can do incomprensible code too.
-	int	risultato;
-	if (i_franz_block==NULL)
-	{
-		o_hashtype="";
-		o_hashvalue="";
-		o_crc32value="";
-		return -1;
-	}
-		
-	/// zpaqfranz 51, old style
-	if (i_franz_block[0]!=0)
-		if (i_franz_block[0+40]==0)
-		{
-			o_hashtype="SHA-1";
-			o_hashvalue=i_franz_block;
-			risultato=3; //franzotype
-		}			
-	
-	if (i_franz_block[0]==0)
-	{
-		if (i_franz_block[0+8]!=0)
-		{
-			if (i_franz_block[0+40]==0)
-			o_hashtype="XXH3";
-			o_hashvalue=i_franz_block+8;
-			risultato=2; //franzotype
-		}
-	}
-	
-	if (i_franz_block[41]!=0)
-		if (i_franz_block[41+8]==0)
-		{
-			if (i_isdirectory)
-				o_crc32value="        ";
-			else
-				o_crc32value=i_franz_block+41;
-		}
-
-	/// zpaqfranz 52, sha 256. Note: '0' is not "0" !
-			
-	if (i_franz_block[0]=='0')
-		if (i_franz_block[1]=='4')
-			if (i_franz_block[0+66]==0)
-			{
-				risultato=4; //franzotype
-				o_hashtype="SHA-256";
-				o_hashvalue=i_franz_block+2;
-				if (i_isdirectory)
-					o_crc32value="        ";
-				else
-				{
-					if (i_franz_block[67]!=0)
-						if (i_franz_block[67+8]==0)
-							o_crc32value=i_franz_block+67;
-				}
-			}
-	return risultato;
-}				
 int Jidac::info() 
 {
 	flagcomment=true;
@@ -25368,9 +25382,11 @@ int unz(const char * archive,const char * key,bool all)
 	if (!archive)
 		return 0;
 	
-  uint64_t until=0;
-  bool index=false;
- 	printf("PARANOID TEST: working on %s\n",archive);
+	uint64_t until=0;
+	bool index=false;
+ 	
+	printf("PARANOID TEST: working on %s\n",archive);
+
 	
   // Journaling archive state
 	std::map<uint32_t, unsigned> bsize;  // frag ID -> d block compressed size
@@ -25386,9 +25402,6 @@ int unz(const char * archive,const char * key,bool all)
 	unzInputFile in;  // Archive
 	in.open(archive, key);
 	int64_t total_size=in.getfilesize();
-	
-	
-	
 	
 	unzDecompresser d;
 	d.setInput(&in);
@@ -25724,14 +25737,16 @@ int unz(const char * archive,const char * key,bool all)
 					unzerror("attr size > 65535");
 			
 					///printf("2 NA VALE %d\n",na);
-						
-					if (na>FRANZOFFSET) // houston we have a FRANZBLOCK? SHA1 0 CRC32?
+					
+					
+					if (na>FRANZOFFSET) // houston we have a FRANZBLOCK? 
 					{
+						assert((na-8)<FRANZOFFSETSHA256); // cannot work on too small buffer
 						/// paranoid works with SHA1, not CRC32. Get (if any)
-						for (unsigned int i=0;i<40;i++)
-							f.sha1hex[i]=*(p+(na-FRANZOFFSET)+i);
-						f.sha1hex[40]=0x0;
-					///printf("---FRANZ OFFSET---\n");
+						for (unsigned int i=0;i<(na-8);i++)
+							f.sha1hex[i]=*(p+(na-(na-8))+i);
+						f.sha1hex[(na-8)]=0x0;
+						///printf("---FRANZ OFFSET---\n");
 					}
 					else
 					{
@@ -25781,13 +25796,39 @@ int unz(const char * archive,const char * key,bool all)
     }  // end while findFilename
     offset=in.tell();
   }  // end while findBlock
-  printf("\n%s bytes of %s tested\n", migliaia(in.tell()), archive);
+	printf("\n%s bytes of %s tested\n", migliaia(in.tell()), archive);
 
+
+	printbar('-');
+
+	if ((!flagxxhash) && (!flagsha256) && (!flagsha1))
+	{
+		printf("No hashes selected (no -xxhash or -sha1 or -sha256). Quit\n");
+		return 0;
+	}
+	int unzfranzotype=-1;
+	
+	if (flagxxhash)
+		unzfranzotype=2;
+	else
+	if (flagsha1)
+		unzfranzotype=3;
+	else
+	if (flagsha256)
+		unzfranzotype=4;
+	
+	if (unzfranzotype==-1)
+	{
+		printf("25820: hash can be one of -xxhash -sha1 -sha256\n");
+		return 0;
+	}
+	
+	string unzfranzostring=decodefranzoffset(unzfranzotype);
+	myreplace(unzfranzostring,"+CRC-32","");
+	printf("Now recalculating hash with %s\n",unzfranzostring.c_str());
   	
 	std::vector<unzDTMap::iterator> mappadt;
 	std::vector<unzDTMap::iterator> vf;
-	std::vector<unzDTMap::iterator> errori;
-	std::vector<unzDTMap::iterator> warning;
 	std::map<std::string, unzDT>::iterator p;
 
 	int64_t iniziocalcolo=mtime();
@@ -25796,7 +25837,7 @@ int unz(const char * archive,const char * key,bool all)
 		mappadt.push_back(p);
 		
 	std::sort(mappadt.begin(), mappadt.end(),unzcompareprimo);
-
+	
 	for (unsigned i=0; i<mappadt.size(); ++i) 
 	{
 		unzDTMap::iterator p=mappadt[i];
@@ -25811,23 +25852,60 @@ int unz(const char * archive,const char * key,bool all)
 			{
 				std::string fn=p->first;
 				
+				if ((!isads(fn)) && (!iszfs(fn)) && (!isdirectory(fn)))
+				/*
 				if 	((fn.find(":$DATA")==std::string::npos) 	&&
 						(fn.find(".zfs")==std::string::npos)	&&
 						(fn.back()!='/')) ///changeme
-					
+				*/
 				{
 					int64_t startrecalc=mtime();
-					unzSHA1 mysha1;
-					for (uint32_t i=0; i<f.ptr.size(); ++i) 
-						if (f.ptr[i]<frag.size())
-							for (uint32_t j=24; j<frag[f.ptr[i]].size(); ++j)
-								mysha1.put(frag[f.ptr[i]][j]);
-									
-					char sha1result[20];
-					memcpy(sha1result, mysha1.result(), 20);
-					for (int j=0; j <= 19; j++)
-						sprintf(p->second.sha1decompressedhex+j*2,"%02X", (unsigned char)sha1result[j]);
-					p->second.sha1decompressedhex[40]=0x0;
+					
+					if (unzfranzotype==2)
+					{
+						XXH3_state_t state128;
+						(void)XXH3_128bits_reset(&state128);
+						for (uint32_t i=0; i<f.ptr.size(); ++i) 
+							if (f.ptr[i]<frag.size())
+								for (uint32_t j=24; j<frag[f.ptr[i]].size(); ++j)
+									(void)XXH3_128bits_update(&state128, &frag[f.ptr[i]][j],1);
+							XXH128_hash_t myhash=XXH3_128bits_digest(&state128);
+						sprintf(p->second.sha1decompressedhex,"%016llX%016llX",(unsigned long long)myhash.high64,(unsigned long long)myhash.low64);
+					}
+					else
+					if (unzfranzotype==3)
+					{
+						unzSHA1 mysha1;
+						for (uint32_t i=0; i<f.ptr.size(); ++i) 
+							if (f.ptr[i]<frag.size())
+								for (uint32_t j=24; j<frag[f.ptr[i]].size(); ++j)
+									mysha1.put(frag[f.ptr[i]][j]);
+										
+						char sha1result[20];
+						memcpy(sha1result, mysha1.result(), 20);
+						for (int j=0; j <= 19; j++)
+							sprintf(p->second.sha1decompressedhex+j*2,"%02X", (unsigned char)sha1result[j]);
+						p->second.sha1decompressedhex[40]=0x0;
+					}
+					else
+					if (unzfranzotype==4)
+					{
+						unzSHA256 mysha256;
+						for (uint32_t i=0; i<f.ptr.size(); ++i) 
+							if (f.ptr[i]<frag.size())
+								for (uint32_t j=24; j<frag[f.ptr[i]].size(); ++j)
+									mysha256.put(frag[f.ptr[i]][j]);
+										
+						char sha256result[32];
+						memcpy(sha256result, mysha256.result(), 32);
+						for (int j=0; j <= 31; j++)
+							sprintf(p->second.sha1decompressedhex+j*2,"%02X", (unsigned char)sha256result[j]);
+						p->second.sha1decompressedhex[64]=0x0;
+					}
+					else
+						error("25904: unknown unzfranzotype");
+
+
 					vf.push_back(p);
 					
 					if (flagnoeta==false)
@@ -25837,7 +25915,7 @@ int unz(const char * archive,const char * key,bool all)
 			}
 		}
 	}
-if (!flagnoeta)
+	if (!flagnoeta)
 	printf("\n");
 		std::sort(vf.begin(), vf.end(), unzcomparesha1hex);
 	printf("\n");
@@ -25845,154 +25923,133 @@ if (!flagnoeta)
 	
 	printf("Calc time %f\n",(finecalcolo-iniziocalcolo)/1000.0);
 	
+	struct hash_check dummycheck;
+	MAPPACHECK	mychecks;
+		
+	dummycheck.algotype=ALGO_SHA1;
+	mychecks.insert(std::pair<string, hash_check>("SHA-1",dummycheck));
+	
+	dummycheck.algotype=ALGO_SHA256;
+	mychecks.insert(std::pair<string, hash_check>("SHA-256",dummycheck));
+	
+	dummycheck.algotype=ALGO_XXHASH;
+	mychecks.insert(std::pair<string, hash_check>("XXH3",dummycheck));
+
 //////////////////////////////
 /////// now some tests
 /////// if possible check SHA1 into the ZPAQ with SHA1 extracted with SHA1 of the current file
 
 		unsigned int status_e=0;
-		unsigned int status_w=0;
-
-		unsigned int status_0=0;
+		
+		unsigned int status_nohash=0;
+		unsigned int status_filenotfound=0;
 		unsigned int status_1=0;
 		unsigned int status_2=0;
 		
-		std::string sha1delfile;
+		std::string hashfromfile;
 		
 		for (unsigned i=0; i<vf.size(); ++i) 
 		{
 			
 			unzDTMap::iterator p=vf[i];
 			
-			unsigned int statusok=0;
-			bool flagerror=false;
-		
+			
+			string hashstoredinzpaq="";
+			string myhashtype="";
+			string mycrc32="";
+				
+			int myfranzo=decode_franz_block(isdirectory(p->first),p->second.sha1hex,
+					myhashtype,
+					hashstoredinzpaq,
+					mycrc32);
+			
+			if (myfranzo!=unzfranzotype)
+				error("25927: archive with different hash from the one selected!");
+				
 			
 			if (flagverify)
 			{
-				printf("Re-hashing %s\r",p->first.c_str());
-				int64_t dummy;
-				uint32_t dummycrc;
-				sha1delfile=sha1_calc_file(p->first.c_str(),false,dummycrc,-1,-1,dummy);
-			}
-			std::string sha1decompresso=p->second.sha1decompressedhex;
-			std::string sha1stored=p->second.sha1hex;
-
+					
+				MAPPACHECK::iterator a=mychecks.find(myhashtype);
 	
-			if (flagverbose)
-			{
-				printf("SHA1 OF FILE:   %s\n",p->first.c_str());
-				printf("DECOMPRESSED:   %s\n",sha1decompresso.c_str());
-			
-				if (!sha1stored.empty())
-				printf("STORED IN ZPAQ: %s\n",p->second.sha1hex);
-			
-				if (!sha1delfile.empty())
-				printf("FROM FILE:      %s\n",sha1delfile.c_str());
+				if (a!=mychecks.end())
+				{
+					if (!fileexists(p->first.c_str()))
+					{
+						if (flagdebug)
+							printf("25919: FILE NOT FOUND on %s: FILE %s\n",myhashtype.c_str(),p->first.c_str());
+						status_filenotfound++;
+					}
+					else
+					{
+						uint32_t dummycrc;
+						int64_t dummy;
+						hashfromfile=hash_calc_file(
+						a->second.algotype,
+						p->first.c_str(),
+						true,	/// <--- look at this
+						dummycrc,
+						-1,-1,dummy);
+					}
+				}
 			}
-			
-			if (!sha1delfile.empty())
+
+			std::string hashdecompresso=p->second.sha1decompressedhex;
+	
+			if (flagverify)
+				if (hashfromfile=="")
+					status_nohash++;
+				
+			bool localok=true;
+			if (!hashstoredinzpaq.empty())
 			{
-				if (sha1delfile==sha1decompresso)
-					statusok++;
-				else
-					flagerror=true;
-			}
-			if (!sha1stored.empty())
-			{
-				if (sha1stored==sha1decompresso)
-					statusok++;
-				else
-					flagerror=true;
-			}
-			if (flagerror)
-			{
-				if (flagverbose)
-				printf("ERROR IN VERIFY!\n");
-				status_e++;
-				p->second.sha1fromfile=sha1delfile;
-				errori.push_back(p);
-			}
-			else
-			{
-				if (flagverbose)
-					printf("OK status:      %d (0=N/A, 1=good, 2=sure)\n",statusok);
-				if (statusok==1)
+				if (hashstoredinzpaq==hashdecompresso)
 					status_1++;
-				if (statusok==2)
-					status_2++;
-			}
-			if (statusok==0)
+				else
+					localok=false;
+			}			
+			if (!hashfromfile.empty())
 			{
-				status_w++;
-				p->second.sha1fromfile=sha1delfile;
-				warning.push_back(p);
+				if (hashfromfile==hashdecompresso)
+					status_2++;
+				else
+					localok=false;
 			}
+
 			
-			if (flagverbose)
+			if ((!localok) || (flagverbose))
+			{
+				printf("%14s: %s\n",unzfranzostring.c_str(),p->first.c_str());
+				printf("DECOMPRESSED  : %s\n",hashdecompresso.c_str());
+			
+				if (!hashstoredinzpaq.empty())
+				printf("STORED IN ZPAQ: %s\n",hashstoredinzpaq.c_str());
+			
+				if (!hashfromfile.empty())
+				printf("FROM FILE     : %s\n",hashfromfile.c_str());
 				printf("\n");
+				
+				if (!localok)
+					status_e++;
+			}
 		}
 
-		int64_t fine=mtime();
-		
-		if (warning.size()>0)
-		{
-			printf("WARNING(S) FOUND!\n");
-			
-			for (unsigned i=0; i<warning.size(); ++i) 
-			{
-				unzDTMap::iterator p=warning[i];
-				
-				std::string sha1delfile=p->second.sha1fromfile;
-				std::string sha1decompresso=p->second.sha1decompressedhex;
-				std::string sha1stored=p->second.sha1hex;
-				
-				printf("SHA1 OF FILE:   %s\n",p->first.c_str());
-				printf("DECOMPRESSED:   %s\n",sha1decompresso.c_str());
-			
-				if (!sha1stored.empty())
-				printf("STORED IN ZPAQ: %s\n",p->second.sha1hex);
-			
-				if (!sha1delfile.empty())
-				printf("FROM FILE:      %s\n",sha1delfile.c_str());
-				printf("\n");
-			}
-			printf("\n\n");
-		}
-		if (errori.size()>0)
-		{
-			printf("ERROR(S) FOUND!\n");
-			
-			for (unsigned i=0; i<errori.size(); ++i) 
-			{
-				unzDTMap::iterator p=errori[i];
-				
-				std::string sha1delfile=p->second.sha1fromfile;
-				std::string sha1decompresso=p->second.sha1decompressedhex;
-				std::string sha1stored=p->second.sha1hex;
-				
-				printf("SHA1 OF FILE:   %s\n",p->first.c_str());
-				printf("DECOMPRESSED:   %s\n",sha1decompresso.c_str());
-			
-				if (!sha1stored.empty())
-				printf("STORED IN ZPAQ: %s\n",sha1stored.c_str());
-			
-				if (!sha1delfile.empty())
-				printf("FROM FILE:      %s\n",sha1delfile.c_str());
-				printf("\n");
-			}
-		}
+	int64_t fine=mtime();
 	
 	unsigned int total_files=vf.size();
 	
 	printf("SUMMARY  %1.3f s\n",(fine-inizio)/1000.0);
-	printf("Total file: %08d\n",total_files);
+	printf("Total   : %08d\n",total_files);
 
 
 	if (status_e>0)
 	printf("ERRORS  : %08d (ERROR:  something WRONG)\n",status_e);
 	
-	if (status_0>0)
-	printf("WARNING : %08d (UNKNOWN:cannot verify)\n",status_0);
+	if (status_nohash>0)
+	printf("WARNING : %08d (UNKNOWN:cannot verify nohash)\n",status_nohash);
+	
+	if (status_filenotfound>0)
+	printf("WARNING : %08d (UNKNOWN:file not found)\n",status_filenotfound);
 	
 	if (status_1>0)
 	printf("GOOD    : %08d of %08d (stored=decompressed)\n",status_1,total_files);
@@ -26002,7 +26059,7 @@ if (!flagnoeta)
 		
 	if (status_e==0)
 	{
-		if (status_0)
+		if (status_nohash+status_filenotfound)
 			printf("Unknown (cannot verify)\n");
 		else
 			printf("All OK (paranoid test)\n");
@@ -26012,7 +26069,7 @@ if (!flagnoeta)
 		printf("WITH ERRORS\n");
 		return 2;
 	}
-  return 0;
+	return 0;
 }
 
 
@@ -26233,18 +26290,6 @@ int Jidac::consolidate(string i_archive)
 }
 	
 
-/// franz-test
-/// extract data (multithread) and check CRC-32, if any
-struct	hash_check
-{
-	int		algotype;
-	int		checkedok;
-	int		checkedfailed;
-	int		checkednotfound;
-	int64_t checksize;
-	hash_check(): algotype(0), checkedok(0),checkedfailed(0),checkednotfound(0),checksize(0) {};
-};
-typedef map<string, hash_check> MAPPACHECK;
 
 int Jidac::test() 
 {
@@ -26382,7 +26427,7 @@ int Jidac::test()
 	}
 	else
 	{
-		printf("No error detected in first stage (standard 7.15), now try CRC-32 (if present)\n");
+		printf("No error detected in 1st stage (7.15, RAM ~ %s), try zpaqfranz (if enabled) \n",tohuman(tid.size()*job.maxMemory));
 	}
 //// OK now check against CRC32 and the entire World (if any)
 
@@ -26555,7 +26600,6 @@ int Jidac::test()
 		if (flagverify)
 		{
 		/// check for one hash algorithm. In fact a mixed situation can occour
-			checkedfiles++;
 			
 			if (myhash!="")
 			{
@@ -26564,6 +26608,7 @@ int Jidac::test()
 	
 				if (a!=mychecks.end())
 				{
+					checkedfiles++;
 					if (flagdebug)
 						printf("Taking %s and CRC32 for %s\r",myhashtype.c_str(),filedefinitivo.c_str());
 
@@ -26673,17 +26718,24 @@ int Jidac::test()
 	
 	if (flagverify)
 	{
-		morebar('-');
+		bool printsomething=false;
 		for (MAPPACHECK::iterator p=mychecks.begin(); p!=mychecks.end(); ++p) 
+			printsomething |= (p->second.checkedok+p->second.checkedfailed+p->second.checkednotfound);
+
+		if (printsomething)
 		{
-			if (p->second.checkedok)
-				printf("OK   %8s : %08d of %08d (%s hash check against file on disk)\n",p->first.c_str(),p->second.checkedok,total_files,tohuman(p->second.checksize));
-			if (p->second.checkedfailed)
-				printf("FAIL %8s : %08d of %08d (FAILED hash check against file on disk)\n",p->first.c_str(),p->second.checkedfailed,total_files);
-			if (p->second.checkednotfound)
-				printf("WARN %8s : %08d of %08d (file not found, cannot check hash)\n",p->first.c_str(),p->second.checkedfailed,total_files);
+			morebar('-');
+			for (MAPPACHECK::iterator p=mychecks.begin(); p!=mychecks.end(); ++p) 
+			{
+				if (p->second.checkedok)
+					printf("OK   %8s : %08d of %08d (%s hash check against file on disk)\n",p->first.c_str(),p->second.checkedok,total_files,tohuman(p->second.checksize));
+				if (p->second.checkedfailed)
+					printf("FAIL %8s : %08d of %08d (FAILED hash check against file on disk)\n",p->first.c_str(),p->second.checkedfailed,total_files);
+				if (p->second.checkednotfound)
+					printf("WARN %8s : %08d of %08d (file not found, cannot check hash)\n",p->first.c_str(),p->second.checkedfailed,total_files);
+			}
+			morebar('-');
 		}
-		morebar('-');
 	}
 	
 	
@@ -26709,13 +26761,13 @@ int Jidac::test()
 	if (status_e==0)
 	{
 		if (status_0)
-			printf("Verdict: unknown     (Cannot say anything)\n");
+			printf("Verdict       : UNKNOWN  (Cannot say anything)\n");
 		else
 		{
 			if (flagverify)
-			printf("All OK (with verification from filesystem)\n");
+			printf("Verdict       : All OK (with verification from filesystem)\n");
 			else
-			printf("All OK (normal test)\n");
+			printf("Verdict       : All OK (normal test)\n");
 				
 		}
 	}
@@ -27043,7 +27095,7 @@ bool isfilesequal(string i_source,string i_destination)
 	unsigned char bufferdestination	[blockSize];
 	size_t readsource;
 	size_t readdestination;
-	int64_t confrontatitotale=0;
+	///int64_t confrontatitotale=0;
 
 	while ((readsource = fread(buffersource, 1, blockSize, source_file)) > 0) 
 	{
@@ -27064,7 +27116,7 @@ bool isfilesequal(string i_source,string i_destination)
 			fclose(destination_file);
 			return false;
 		}
-		confrontatitotale+=readsource;
+///		confrontatitotale+=readsource;
 	}
 	fclose(source_file);
 	fclose(destination_file);
@@ -27119,7 +27171,7 @@ int64_t i_destinazione_attr
 	sorgente_esiste		=getfileinfo(i_filename,sorgente_dimensione,sorgente_data,sorgente_attr);
 	g_robocopy_check_sorgente+=mtime()-start_sorgente_esiste;
 	*/
-	sorgente_esiste=true;
+	sorgente_esiste=true;		// trust in caller
 	sorgente_dimensione=i_sorgente_size;
 	sorgente_data=i_sorgente_date;
 	sorgente_attr=i_sorgente_attr;
@@ -27743,7 +27795,7 @@ int Jidac::dircompare(bool i_flagonlysize,bool i_flagrobocopy)
 	}
 
 	uint64_t total_size	=0;
-	uint64_t total_files=0;
+	///uint64_t total_files=0;
 	int64_t delta_size	=0;
 	int64_t delta_files	=0;
 	
@@ -27759,7 +27811,7 @@ int Jidac::dircompare(bool i_flagonlysize,bool i_flagrobocopy)
 			delta_files	+= myabs(files_count[0],files_count[i]);
 		}
 		total_size	+=files_size[i];
-		total_files	+=files_count[i];
+///		total_files	+=files_count[i];
 	}
 	printbar('=');
 	printf("Total  |%21s| (%s)\n",migliaia(total_size),tohuman(total_size));
@@ -28997,7 +29049,9 @@ int Jidac::add()
 	}
 
 				
-	string ffranzotype=decodefranzoffset();
+	string ffranzotype=decodefranzoffset(franzotype);
+	if (flagverify)
+		ffranzotype+=" + CRC-32 by fragments";
 	printf("Integrity check type: %s\n",ffranzotype.c_str());
 	
 

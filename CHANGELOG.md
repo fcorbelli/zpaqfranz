@@ -1,7 +1,7 @@
 ```
 19-07-2021:  52.5 
 Support for storing SHA-256 for each file.
-New switch
+New switches
 
 zpaqfranz a z:\1.zpaq c:\nz -xxhash (the default)
 zpaqfranz a z:\1.zpaq c:\nz -sha1

@@ -5,18 +5,14 @@
 ///////// https://github.com/fcorbelli/zpaqfranz
 ///////// https://sourceforge.net/projects/zpaqfranz/
 
-///////// https://github.com/fcorbelli/zpaqfranz/wiki
-
-
 ///////// I had to reluctantly move parts of the comments and some times even delete them, 
 ///////// because github doesn't like files >1MB. I apologize with the authors,
 ///////// it's not a foolish attempt to take over their jobs
 ///////// https://github.com/fcorbelli/zpaqfranz/blob/main/notes.txt
 
-#define ZPAQ_VERSION "52.5-experimental"
-#define FRANZOFFSET 		50
-#define FRANZOFFSETSHA256 	76 
-#define FRANZMAXPATH 		240
+//#define UBUNTU
+
+#define ZPAQ_VERSION "52.8-experimental"
 
 /*
                          __                     
@@ -50,7 +46,7 @@ of expensive on inelegant workarounds.
 So don't be surprised if it looks like what in Italy 
 we call "zibaldone" or in Emilia-Romagna "mappazzone".
 Jun 2021: starting to fix the mess (refactoring). Work in progress.
-Jul 2021: source cleaned a bit. From 52+ XXH3 as checksum algo
+Jul 2021: source cleaned a bit. From 52+ XXHASH64 as checksum algo
 
 Windows binary builds (32 and 64 bit) on github/sourceforge
 
@@ -68,10 +64,12 @@ As far as I know this is allowed by the licenses.
 
 - Include mod by data man and reg2s patch from encode.su forum 
 - Crc32.h Copyright (c) 2011-2019 Stephan Brumme 
+- xxhash64 by Stephan Brumme https://create.stephan-brumme.com/xxhash/
 - Slicing-by-16 contributed by Bulat Ziganshin 
 - xxHash Extremely Fast Hash algorithm, Copyright (C) 2012-2020 Yann Collet 
 - crc32c.c Copyright (C) 2013 Mark Adler
-
+- Embedded Artistry https://github.com/embeddedartistry
+- wyhash WangYi  https://github.com/wangyi-fudan/wyhash
 
 
 FreeBSD port, quick and dirty to get a /usr/local/bin/zpaqfranz
@@ -121,9 +119,61 @@ g++ -O3 -Dunix zpaqfranz.cpp  -pthread -o zpaqfranz -static
 
 QNAP NAS TS-431P3 (Annapurna AL314) gcc 7.4.0
 g++ -Dunix zpaqfranz.cpp  -pthread -o zpaqfranz -Wno-psabi
+
+
+
+CentoOS
+Please note:
+"Red Hat discourages the use of static linking for security reasons. 
+Use static linking only when necessary, especially against libraries provided by Red Hat. "
+
+Therefore a -static linking is often a nightmare on CentOS => change the Makefile
+g++ -O3 -Dunix zpaqfranz.cpp  -pthread -o zpaqfranz
+
+
+============
+*nix 
+Makefile 
+
+
+CXX=g++
+CPPFLAGS+=-Dunix
+CXXFLAGS=-O3 -march=native
+PREFIX=/usr/local
+BINDIR=$(PREFIX)/bin
+
+all: zpaqfranz
+
+zpaqfranz: 
+        $(CXX) $(CPPFLAGS) $(CXXFLAGS) zpaqfranz.cpp -o $@ -pthread -static 
+
+install: zpaqfranz
+        install -m 0755 -d $(DESTDIR)$(BINDIR)
+        install -m 0755 zpaqfranz $(DESTDIR)$(BINDIR)
+        
+clean:
+        rm -f zpaqfranz
+
+check: zpaqfranz
+        ./zpaqfranz a ./archive.zpaq *  -xxh3 -test -verify
+        rm ./archive.zpaq 
+
+
 ```
 
+
 */
+
+#define FRANZOFFSET 		50
+#define FRANZOFFSETSHA256 	76 
+#define FRANZMAXPATH 		240
+
+#define FRANZO_NONE			0
+#define FRANZO_CRC_32 		1
+#define	FRANZO_XXHASH64		2
+#define FRANZO_SHA_1		3
+#define FRANZO_SHA_256		4
+#define	FRANZO_XXH3			5
 
 
 #define _FILE_OFFSET_BITS 64  // In Linux make sizeof(off_t) == 8
@@ -174,6 +224,8 @@ g++ -Dunix zpaqfranz.cpp  -pthread -o zpaqfranz -Wno-psabi
 	#include <sys/time.h>
 	#include <dirent.h>
 	#include <utime.h>
+	
+	#include <sys/ioctl.h>
 
 	#ifdef BSD
 		#include <sys/sysctl.h>
@@ -956,8 +1008,6 @@ void SHA1::init() {
   h[3]=0x10325476;
   h[4]=0xC3D2E1F0;
   memset(w, 0, sizeof(w));
-  
-///	make_secret(345,_wyp);
 }
 
 // Return old result and start a new hash
@@ -8609,14 +8659,15 @@ struct	hash_check
 typedef map<string, hash_check> MAPPACHECK;
 
 
-enum ealgoritmi		{ ALGO_SIZE,ALGO_SHA1,ALGO_CRC32C,ALGO_CRC32,ALGO_XXHASH,ALGO_SHA256,ALGO_WYHASH,ALGO_LAST };
+enum ealgoritmi		{ ALGO_SIZE,ALGO_SHA1,ALGO_CRC32C,ALGO_CRC32,ALGO_XXH3,ALGO_SHA256,ALGO_WYHASH,ALGO_XXHASH64,ALGO_LAST };
 typedef std::map<int,std::string> algoritmi;
 const algoritmi::value_type rawData[] = {
    algoritmi::value_type(ALGO_SIZE,"Size"),
    algoritmi::value_type(ALGO_SHA1,"SHA-1"),
    algoritmi::value_type(ALGO_CRC32,"CRC32"),
    algoritmi::value_type(ALGO_CRC32C,"CRC-32C"),
-   algoritmi::value_type(ALGO_XXHASH,"XXH3"),
+   algoritmi::value_type(ALGO_XXH3,"XXH3"),
+   algoritmi::value_type(ALGO_XXHASH64,"XXH64"),
    algoritmi::value_type(ALGO_SHA256,"SHA-256"),
    algoritmi::value_type(ALGO_WYHASH,"WYHASH"),
 };
@@ -8681,10 +8732,438 @@ bool flagbarraon;
 bool flagbarraos;
 bool flagcrc32c;
 bool flagsha1;
-bool flagxxhash;
+bool flagxxh3;
 bool flagcrc32;
 bool flagsha256;
 bool flagwyhash; // future
+bool flagxxhash64;
+
+/// out of Jidac because of struct DT and XXH3 align
+int g_franzotype; // type of FRANZOFFSET. 0 = nothing, 1 CRC, 2 XXHASH64, 3 SHA1, 4 SHA256, 5 XXH3
+
+
+// This is free and unencumbered software released into the public domain under The Unlicense (http://unlicense.org/)
+// main repo: https://github.com/wangyi-fudan/wyhash
+// author: 王一 Wang Yi <godspeed_china@yeah.net>
+// contributors: Reini Urban, Dietrich Epp, Joshua Haberman, Tommy Ettinger, Daniel Lemire, Otmar Ertl, cocowalla, leo-yuriev, Diego Barrios Romero, paulie-g, dumblob, Yann Collet, ivte-ms, hyb, James Z.M. Gao, easyaspi314 (Devin), TheOneric
+
+/* quick example:
+   string s="fjsakfdsjkf";
+   uint64_t hash=wyhash(s.c_str(), s.size(), 0, _wyp);
+*/
+
+#define wyhash_final_version_3
+
+#ifndef WYHASH_CONDOM
+//protections that produce different results:
+//1: normal valid behavior
+//2: extra protection against entropy loss (probability=2^-63), aka. "blind multiplication"
+#define WYHASH_CONDOM 1
+#endif
+
+#ifndef WYHASH_32BIT_MUM
+//0: normal version, slow on 32 bit systems
+//1: faster on 32 bit systems but produces different results, incompatible with wy2u0k function
+#define WYHASH_32BIT_MUM 0  
+#endif
+
+//includes
+#include <stdint.h>
+#include <string.h>
+#if defined(_MSC_VER) && defined(_M_X64)
+  #include <intrin.h>
+  #pragma intrinsic(_umul128)
+#endif
+
+//likely and unlikely macros
+#if defined(__GNUC__) || defined(__INTEL_COMPILER) || defined(__clang__)
+  #define _likely_(x)  __builtin_expect(x,1)
+  #define _unlikely_(x)  __builtin_expect(x,0)
+#else
+  #define _likely_(x) (x)
+  #define _unlikely_(x) (x)
+#endif
+
+//128bit multiply function
+static inline uint64_t _wyrot(uint64_t x) { return (x>>32)|(x<<32); }
+static inline void _wymum(uint64_t *A, uint64_t *B){
+#if(WYHASH_32BIT_MUM)
+  uint64_t hh=(*A>>32)*(*B>>32), hl=(*A>>32)*(uint32_t)*B, lh=(uint32_t)*A*(*B>>32), ll=(uint64_t)(uint32_t)*A*(uint32_t)*B;
+  #if(WYHASH_CONDOM>1)
+  *A^=_wyrot(hl)^hh; *B^=_wyrot(lh)^ll;
+  #else
+  *A=_wyrot(hl)^hh; *B=_wyrot(lh)^ll;
+  #endif
+#elif defined(__SIZEOF_INT128__)
+  __uint128_t r=*A; r*=*B; 
+  #if(WYHASH_CONDOM>1)
+  *A^=(uint64_t)r; *B^=(uint64_t)(r>>64);
+  #else
+  *A=(uint64_t)r; *B=(uint64_t)(r>>64);
+  #endif
+#elif defined(_MSC_VER) && defined(_M_X64)
+  #if(WYHASH_CONDOM>1)
+  uint64_t  a,  b;
+  a=_umul128(*A,*B,&b);
+  *A^=a;  *B^=b;
+  #else
+  *A=_umul128(*A,*B,B);
+  #endif
+#else
+  uint64_t ha=*A>>32, hb=*B>>32, la=(uint32_t)*A, lb=(uint32_t)*B, hi, lo;
+  uint64_t rh=ha*hb, rm0=ha*lb, rm1=hb*la, rl=la*lb, t=rl+(rm0<<32), c=t<rl;
+  lo=t+(rm1<<32); c+=lo<t; hi=rh+(rm0>>32)+(rm1>>32)+c;
+  #if(WYHASH_CONDOM>1)
+  *A^=lo;  *B^=hi;
+  #else
+  *A=lo;  *B=hi;
+  #endif
+#endif
+}
+
+//multiply and xor mix function, aka MUM
+static inline uint64_t _wymix(uint64_t A, uint64_t B){ _wymum(&A,&B); return A^B; }
+
+//endian macros
+#ifndef WYHASH_LITTLE_ENDIAN
+  #if defined(_WIN32) || defined(__LITTLE_ENDIAN__) || (defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__)
+    #define WYHASH_LITTLE_ENDIAN 1
+  #elif defined(__BIG_ENDIAN__) || (defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__)
+    #define WYHASH_LITTLE_ENDIAN 0
+  #else
+    #warning could not determine endianness! Falling back to little endian.
+    #define WYHASH_LITTLE_ENDIAN 1
+  #endif
+#endif
+
+//read functions
+#if (WYHASH_LITTLE_ENDIAN)
+static inline uint64_t _wyr8(const uint8_t *p) { uint64_t v; memcpy(&v, p, 8); return v;}
+static inline uint64_t _wyr4(const uint8_t *p) { uint32_t v; memcpy(&v, p, 4); return v;}
+#elif defined(__GNUC__) || defined(__INTEL_COMPILER) || defined(__clang__)
+static inline uint64_t _wyr8(const uint8_t *p) { uint64_t v; memcpy(&v, p, 8); return __builtin_bswap64(v);}
+static inline uint64_t _wyr4(const uint8_t *p) { uint32_t v; memcpy(&v, p, 4); return __builtin_bswap32(v);}
+#elif defined(_MSC_VER)
+static inline uint64_t _wyr8(const uint8_t *p) { uint64_t v; memcpy(&v, p, 8); return _byteswap_uint64(v);}
+static inline uint64_t _wyr4(const uint8_t *p) { uint32_t v; memcpy(&v, p, 4); return _byteswap_ulong(v);}
+#else
+static inline uint64_t _wyr8(const uint8_t *p) {
+  uint64_t v; memcpy(&v, p, 8);
+  return (((v >> 56) & 0xff)| ((v >> 40) & 0xff00)| ((v >> 24) & 0xff0000)| ((v >>  8) & 0xff000000)| ((v <<  8) & 0xff00000000)| ((v << 24) & 0xff0000000000)| ((v << 40) & 0xff000000000000)| ((v << 56) & 0xff00000000000000));
+}
+static inline uint64_t _wyr4(const uint8_t *p) {
+  uint32_t v; memcpy(&v, p, 4);
+  return (((v >> 24) & 0xff)| ((v >>  8) & 0xff00)| ((v <<  8) & 0xff0000)| ((v << 24) & 0xff000000));
+}
+#endif
+static inline uint64_t _wyr3(const uint8_t *p, size_t k) { return (((uint64_t)p[0])<<16)|(((uint64_t)p[k>>1])<<8)|p[k-1];}
+//wyhash main function
+static inline uint64_t wyhash(const void *key, size_t len, uint64_t seed, const uint64_t *secret){
+  const uint8_t *p=(const uint8_t *)key; seed^=*secret;	uint64_t	a,	b;
+  if(_likely_(len<=16)){
+    if(_likely_(len>=4)){ a=(_wyr4(p)<<32)|_wyr4(p+((len>>3)<<2)); b=(_wyr4(p+len-4)<<32)|_wyr4(p+len-4-((len>>3)<<2)); }
+    else if(_likely_(len>0)){ a=_wyr3(p,len); b=0;}
+    else a=b=0;
+  }
+  else{
+    size_t i=len; 
+    if(_unlikely_(i>48)){
+      uint64_t see1=seed, see2=seed;
+      do{
+        seed=_wymix(_wyr8(p)^secret[1],_wyr8(p+8)^seed);
+        see1=_wymix(_wyr8(p+16)^secret[2],_wyr8(p+24)^see1);
+        see2=_wymix(_wyr8(p+32)^secret[3],_wyr8(p+40)^see2);
+        p+=48; i-=48;
+      }while(_likely_(i>48));
+      seed^=see1^see2;
+    }
+    while(_unlikely_(i>16)){  seed=_wymix(_wyr8(p)^secret[1],_wyr8(p+8)^seed);  i-=16; p+=16;  }
+    a=_wyr8(p+i-16);  b=_wyr8(p+i-8);
+  }
+  return _wymix(secret[1]^len,_wymix(a^secret[1],b^seed));
+}
+
+//the default secret parameters
+static const uint64_t _wyp[4] = {0xa0761d6478bd642full, 0xe7037ed1a0b428dbull, 0x8ebc6af09c88c6e3ull, 0x589965cc75374cc3ull};
+
+//a useful 64bit-64bit mix function to produce deterministic pseudo random numbers that can pass BigCrush and PractRand
+static inline uint64_t wyhash64(uint64_t A, uint64_t B){ A^=0xa0761d6478bd642full; B^=0xe7037ed1a0b428dbull; _wymum(&A,&B); return _wymix(A^0xa0761d6478bd642full,B^0xe7037ed1a0b428dbull);}
+
+//The wyrand PRNG that pass BigCrush and PractRand
+static inline uint64_t wyrand(uint64_t *seed){ *seed+=0xa0761d6478bd642full; return _wymix(*seed,*seed^0xe7037ed1a0b428dbull);}
+
+//convert any 64 bit pseudo random numbers to uniform distribution [0,1). It can be combined with wyrand, wyhash64 or wyhash.
+static inline double wy2u01(uint64_t r){ const double _wynorm=1.0/(1ull<<52); return (r>>12)*_wynorm;}
+
+//convert any 64 bit pseudo random numbers to APPROXIMATE Gaussian distribution. It can be combined with wyrand, wyhash64 or wyhash.
+static inline double wy2gau(uint64_t r){ const double _wynorm=1.0/(1ull<<20); return ((r&0x1fffff)+((r>>21)&0x1fffff)+((r>>42)&0x1fffff))*_wynorm-3.0;}
+
+#if(!WYHASH_32BIT_MUM)
+//fast range integer random number generation on [0,k) credit to Daniel Lemire. May not work when WYHASH_32BIT_MUM=1. It can be combined with wyrand, wyhash64 or wyhash.
+static inline uint64_t wy2u0k(uint64_t r, uint64_t k){ _wymum(&r,&k); return k; }
+#endif
+
+//make your own secret
+static inline void make_secret(uint64_t seed, uint64_t *secret){
+  uint8_t c[] = {15, 23, 27, 29, 30, 39, 43, 45, 46, 51, 53, 54, 57, 58, 60, 71, 75, 77, 78, 83, 85, 86, 89, 90, 92, 99, 101, 102, 105, 106, 108, 113, 114, 116, 120, 135, 139, 141, 142, 147, 149, 150, 153, 154, 156, 163, 165, 166, 169, 170, 172, 177, 178, 180, 184, 195, 197, 198, 201, 202, 204, 209, 210, 212, 216, 225, 226, 228, 232, 240 };
+  for(size_t i=0;i<4;i++){
+    uint8_t ok;
+    do{
+      ok=1; secret[i]=0;
+      for(size_t j=0;j<64;j+=8) secret[i]|=((uint64_t)c[wyrand(&seed)%sizeof(c)])<<j;
+      if(secret[i]%2==0){ ok=0; continue; }
+      for(size_t j=0;j<i;j++) {
+#if defined(__GNUC__) || defined(__INTEL_COMPILER) || defined(__clang__)
+        if(__builtin_popcountll(secret[j]^secret[i])!=32){ ok=0; break; }
+#elif defined(_MSC_VER) && defined(_M_X64)
+        if(_mm_popcnt_u64(secret[j]^secret[i])!=32){ ok=0; break; }
+#else
+        //manual popcount
+        uint64_t x = secret[j]^secret[i];
+        x -= (x >> 1) & 0x5555555555555555;
+        x = (x & 0x3333333333333333) + ((x >> 2) & 0x3333333333333333);
+        x = (x + (x >> 4)) & 0x0f0f0f0f0f0f0f0f;
+        x = (x * 0x0101010101010101) >> 56;
+        if(x!=32){ ok=0; break; }
+#endif
+      }
+    }while(!ok);
+  }
+}
+
+
+/* The Unlicense
+This is free and unencumbered software released into the public domain.
+
+Anyone is free to copy, modify, publish, use, compile, sell, or
+distribute this software, either in source code form or as a compiled
+binary, for any purpose, commercial or non-commercial, and by any
+means.
+
+In jurisdictions that recognize copyright laws, the author or authors
+of this software dedicate any and all copyright interest in the
+software to the public domain. We make this dedication for the benefit
+of the public at large and to the detriment of our heirs and
+successors. We intend this dedication to be an overt act of
+relinquishment in perpetuity of all present and future rights to this
+software under copyright law.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+OTHER DEALINGS IN THE SOFTWARE.
+
+For more information, please refer to <http://unlicense.org/>
+*/
+
+
+
+
+
+// //////////////////////////////////////////////////////////
+// xxhash64.h
+// Copyright (c) 2016 Stephan Brumme. All rights reserved.
+// see http://create.stephan-brumme.com/disclaimer.html
+//
+
+
+
+/// XXHash (64 bit), based on Yann Collet's descriptions, see http://cyan4973.github.io/xxHash/
+/** How to use:
+    uint64_t myseed = 0;
+    XXHash64 myhash(myseed);
+    myhash.add(pointerToSomeBytes,     numberOfBytes);
+    myhash.add(pointerToSomeMoreBytes, numberOfMoreBytes); // call add() as often as you like to ...
+    // and compute hash:
+    uint64_t result = myhash.hash();
+
+    // or all of the above in one single line:
+    uint64_t result2 = XXHash64::hash(mypointer, numBytes, myseed);
+
+    Note: my code is NOT endian-aware !
+**/
+class XXHash64
+{
+public:
+  /// create new XXHash (64 bit)
+  /** @param seed your seed value, even zero is a valid seed **/
+  explicit XXHash64(uint64_t seed)
+  {
+    state[0] = seed + Prime1 + Prime2;
+    state[1] = seed + Prime2;
+    state[2] = seed;
+    state[3] = seed - Prime1;
+    bufferSize  = 0;
+    totalLength = 0;
+  }
+
+  /// add a chunk of bytes
+  /** @param  input  pointer to a continuous block of data
+      @param  length number of bytes
+      @return false if parameters are invalid / zero **/
+  bool add(const void* input, uint64_t length)
+  {
+    // no data ?
+    if (!input || length == 0)
+      return false;
+
+    totalLength += length;
+    // byte-wise access
+    const unsigned char* data = (const unsigned char*)input;
+
+    // unprocessed old data plus new data still fit in temporary buffer ?
+    if (bufferSize + length < MaxBufferSize)
+    {
+      // just add new data
+      while (length-- > 0)
+        buffer[bufferSize++] = *data++;
+      return true;
+    }
+
+    // point beyond last byte
+    const unsigned char* stop      = data + length;
+    const unsigned char* stopBlock = stop - MaxBufferSize;
+
+    // some data left from previous update ?
+    if (bufferSize > 0)
+    {
+      // make sure temporary buffer is full (16 bytes)
+      while (bufferSize < MaxBufferSize)
+        buffer[bufferSize++] = *data++;
+
+      // process these 32 bytes (4x8)
+      process(buffer, state[0], state[1], state[2], state[3]);
+    }
+
+    // copying state to local variables helps optimizer A LOT
+    uint64_t s0 = state[0], s1 = state[1], s2 = state[2], s3 = state[3];
+    // 32 bytes at once
+    while (data <= stopBlock)
+    {
+      // local variables s0..s3 instead of state[0]..state[3] are much faster
+      process(data, s0, s1, s2, s3);
+      data += 32;
+    }
+    // copy back
+    state[0] = s0; state[1] = s1; state[2] = s2; state[3] = s3;
+
+    // copy remainder to temporary buffer
+    bufferSize = stop - data;
+    for (unsigned int i = 0; i < bufferSize; i++)
+      buffer[i] = data[i];
+
+    // done
+    return true;
+  }
+
+  /// get current hash
+  /** @return 64 bit XXHash **/
+  uint64_t hash() const
+  {
+    // fold 256 bit state into one single 64 bit value
+    uint64_t result;
+    if (totalLength >= MaxBufferSize)
+    {
+      result = rotateLeft(state[0],  1) +
+               rotateLeft(state[1],  7) +
+               rotateLeft(state[2], 12) +
+               rotateLeft(state[3], 18);
+      result = (result ^ processSingle(0, state[0])) * Prime1 + Prime4;
+      result = (result ^ processSingle(0, state[1])) * Prime1 + Prime4;
+      result = (result ^ processSingle(0, state[2])) * Prime1 + Prime4;
+      result = (result ^ processSingle(0, state[3])) * Prime1 + Prime4;
+    }
+    else
+    {
+      // internal state wasn't set in add(), therefore original seed is still stored in state2
+      result = state[2] + Prime5;
+    }
+
+    result += totalLength;
+
+    // process remaining bytes in temporary buffer
+    const unsigned char* data = buffer;
+    // point beyond last byte
+    const unsigned char* stop = data + bufferSize;
+
+    // at least 8 bytes left ? => eat 8 bytes per step
+    for (; data + 8 <= stop; data += 8)
+      result = rotateLeft(result ^ processSingle(0, *(uint64_t*)data), 27) * Prime1 + Prime4;
+
+    // 4 bytes left ? => eat those
+    if (data + 4 <= stop)
+    {
+      result = rotateLeft(result ^ (*(uint32_t*)data) * Prime1,   23) * Prime2 + Prime3;
+      data  += 4;
+    }
+
+    // take care of remaining 0..3 bytes, eat 1 byte per step
+    while (data != stop)
+      result = rotateLeft(result ^ (*data++) * Prime5,            11) * Prime1;
+
+    // mix bits
+    result ^= result >> 33;
+    result *= Prime2;
+    result ^= result >> 29;
+    result *= Prime3;
+    result ^= result >> 32;
+    return result;
+  }
+
+
+  /// combine constructor, add() and hash() in one static function (C style)
+  /** @param  input  pointer to a continuous block of data
+      @param  length number of bytes
+      @param  seed your seed value, e.g. zero is a valid seed
+      @return 64 bit XXHash **/
+  static uint64_t hash(const void* input, uint64_t length, uint64_t seed)
+  {
+    XXHash64 hasher(seed);
+    hasher.add(input, length);
+      return hasher.hash();
+  }
+
+private:
+  /// magic constants :-)
+  static const uint64_t Prime1 = 11400714785074694791ULL;
+  static const uint64_t Prime2 = 14029467366897019727ULL;
+  static const uint64_t Prime3 =  1609587929392839161ULL;
+  static const uint64_t Prime4 =  9650029242287828579ULL;
+  static const uint64_t Prime5 =  2870177450012600261ULL;
+
+  /// temporarily store up to 31 bytes between multiple add() calls
+  static const uint64_t MaxBufferSize = 31+1;
+
+  uint64_t      state[4];
+  unsigned char buffer[MaxBufferSize];
+  unsigned int  bufferSize;
+  uint64_t      totalLength;
+
+  /// rotate bits, should compile to a single CPU instruction (ROL)
+  static inline uint64_t rotateLeft(uint64_t x, unsigned char bits)
+  {
+    return (x << bits) | (x >> (64 - bits));
+  }
+
+  /// process a single 64 bit value
+  static inline uint64_t processSingle(uint64_t previous, uint64_t input)
+  {
+    return rotateLeft(previous + input * Prime2, 31) * Prime1;
+  }
+
+  /// process a block of 4x4 bytes, this is the main part of the XXHash32 algorithm
+  static inline void process(const void* data, uint64_t& state0, uint64_t& state1, uint64_t& state2, uint64_t& state3)
+  {
+    const uint64_t* block = (const uint64_t*) data;
+    state0 = processSingle(state0, block[0]);
+    state1 = processSingle(state1, block[1]);
+    state2 = processSingle(state2, block[2]);
+    state3 = processSingle(state3, block[3]);
+  }
+};
 
 
 
@@ -8695,7 +9174,31 @@ bool flagwyhash; // future
 
 
 
-#define XXH_INLINE_ALL
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 /*
@@ -12583,7 +13086,9 @@ bool getcaptcha(const string i_captcha,const string i_reason)
 	printf("Entering anything else will quit.\n");
 	printf("\nCaptcha to continue:     %s\n",i_captcha.c_str());
 	char myline[81];
-    scanf("%80s", myline);
+    int dummy=scanf("%80s", myline);
+	if (dummy==888888)
+		printf("no-warning-please\n");
 	if (myline!=i_captcha)
 	{
 		printf("Wrong captcha\n");
@@ -13007,13 +13512,17 @@ void xcommand(string i_command,string i_parameter)
 		return;
 	if (!fileexists(i_command))
 		return;
+	int dummy;
 	if (i_parameter=="")
-		system(i_command.c_str());
+		dummy=system(i_command.c_str());
 	else
 	{
 		string mycommand=i_command+" \""+i_parameter+"\"";
-		system(mycommand.c_str());
+		dummy=system(mycommand.c_str());
 	}
+	if (dummy==888888)
+		printf("no-warning-please\n");
+	
 	
 }
 
@@ -14839,6 +15348,9 @@ void print_datetime(void)
 
 string mygetalgo()
 {
+	if (flagxxhash64)
+		return "XXHASH64";
+	else
 	if (flagwyhash)
 		return "WYHASH";
 	else
@@ -14848,7 +15360,7 @@ string mygetalgo()
 	if (flagcrc32c)
 		return "CRC-32C";
 	else
-	if (flagxxhash)
+	if (flagxxh3)
 		return "XXH3";
 	else
 	if (flagsha256)
@@ -14858,6 +15370,9 @@ string mygetalgo()
 }
 int flag2algo()
 {
+	if (flagxxhash64)
+		return ALGO_XXHASH64;
+	else
 	if (flagwyhash)
 		return ALGO_WYHASH;
 	else
@@ -14867,8 +15382,8 @@ int flag2algo()
 	if (flagcrc32c)
 		return ALGO_CRC32C;
 	else
-	if (flagxxhash)
-		return ALGO_XXHASH;
+	if (flagxxh3)
+		return ALGO_XXH3;
 	else
 	if (flagsha256)
 		return ALGO_SHA256;
@@ -16616,6 +17131,86 @@ struct DTV {
   DTV(): date(0), size(0), attr(0), csize(0), version(0) {}
 };
 
+
+/// OK we need a fix for 64-byte-align problem on some Linux compiler
+
+/*
+https://github.com/embeddedartistry/embedded-resources/blob/master/examples/c/malloc_aligned.c
+*/
+
+#ifndef align_up
+#define align_up(num, align) \
+	(((num) + ((align) - 1)) & ~((align) - 1))
+#endif
+
+//Convenience macro for memalign, the linux API
+#define memalign(align, size) aligned_malloc(align, size)
+
+//Number of bytes we're using for storing the aligned pointer offset
+typedef uint16_t offset_t;
+#define PTR_OFFSET_SZ sizeof(offset_t)
+
+/**
+* aligned_malloc takes in the requested alignment and size
+*	We will call malloc with extra bytes for our header and the offset
+*	required to guarantee the desired alignment.
+*/
+void * aligned_malloc(size_t align, size_t size)
+{
+	void * ptr = NULL;
+
+	//We want it to be a power of two since align_up operates on powers of two
+	assert((align & (align - 1)) == 0);
+
+	if(align && size)
+	{
+		/*
+		 * We know we have to fit an offset value
+		 * We also allocate extra bytes to ensure we can meet the alignment
+		 */
+		uint32_t hdr_size = PTR_OFFSET_SZ + (align - 1);
+		void * p = malloc(size + hdr_size);
+
+		if(p)
+		{
+			/*
+			 * Add the offset size to malloc's pointer (we will always store that)
+			 * Then align the resulting value to the arget alignment
+			 */
+			ptr = (void *) align_up(((uintptr_t)p + PTR_OFFSET_SZ), align);
+
+			//Calculate the offset and store it behind our aligned pointer
+			*((offset_t *)ptr - 1) = (offset_t)((uintptr_t)ptr - (uintptr_t)p);
+
+		} // else NULL, could not malloc
+	} //else NULL, invalid arguments
+
+	return ptr;
+}
+
+/**
+* aligned_free works like free(), but we work backwards from the returned
+* pointer to find the correct offset and pointer location to return to free()
+* Note that it is VERY BAD to call free() on an aligned_malloc() pointer.
+*/
+void aligned_free(void * ptr)
+{
+	assert(ptr);
+
+	/*
+	* Walk backwards from the passed-in pointer to get the pointer offset
+	* We convert to an offset_t pointer and rely on pointer math to get the data
+	*/
+	offset_t offset = *((offset_t *)ptr - 1);
+
+	/*
+	* Once we have the offset, we can get our original pointer and call free
+	*/
+	void * p = (void *)((uint8_t *)ptr - offset);
+	free(p);
+}
+
+
 // filename entry
 struct DT 
 {
@@ -16634,11 +17229,30 @@ struct DT
 */
 	char 			franz_block[FRANZOFFSETSHA256];
 	uint32_t 		file_crc32;
-	XXH3_state_t 	file_xxh3;
+///#ifndef UBUNTU
+///	XXH3_state_t 	file_xxh3;
+///#else
+	XXH3_state_t	*pfile_xxh3;  // this is the problem: XXH3's 64-byte align not always work with too old-too new compilers
+	
+    XXHash64 		file_xxhash64;
+///#endif
+
 	libzpaq::SHA256 file_sha256;
 	libzpaq::SHA1 	file_sha1;
 	
-	DT(): date(0), size(0), attr(0), data(0),written(-1),file_crc32(0) {memset(franz_block,0,sizeof(franz_block));hexhash="";(void)XXH3_128bits_reset(&file_xxh3);}
+	DT(): date(0), size(0), attr(0), data(0),written(-1),file_crc32(0),file_xxhash64(0) {memset(franz_block,0,sizeof(franz_block));hexhash="";
+	
+/// beware of time and space, but now we are sure to maintain 64 byte alignment
+	pfile_xxh3=NULL;
+	if (g_franzotype==FRANZO_XXH3)
+	{
+		pfile_xxh3=(XXH3_state_t*)aligned_malloc(64, sizeof(XXH3_state_t));
+		(void)XXH3_128bits_reset(pfile_xxh3);
+	}
+///#ifndef UBUNTU
+///	(void)XXH3_128bits_reset(&file_xxh3);
+///#endif
+	}
 };
 typedef map<string, DT> DTMap;
 
@@ -16722,7 +17336,6 @@ private:
 	vector<uint64_t> 	files_time;
 	vector<DTMap> 		files_edt;
 
-	int franzotype;						// type of FRANZOFFSET. 0 = nothing, 1 CRC, 2 CRC+XXHASH, 3 SHA1, 4 SHA256
 	
 	int all;                  			// -all option
 	int fragment;             			// -fragment option
@@ -16834,20 +17447,22 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////
 ///////// This is a merge of unzpaq206.cpp, patched by me to become unz.cpp
-///////// Now support FRANZOFFSET256 (embedding SHA1-XXHASH-SHA256 into ZPAQ's c block)
+///////// Now support FRANZOFFSET256 (embedding SHA1-XXHASH64-SHA256-XHH3 into ZPAQ's c block)
 
 string decodefranzoffset(int franzotype)
 {
-	if (franzotype==0)
+	if (franzotype==FRANZO_NONE)
 		return "NOTHING (LIKE 7.15)";
-	if (franzotype==1) /// store only CRC-32
+	if (franzotype==FRANZO_CRC_32) /// store only CRC-32
 		return "CRC-32";
-	if (franzotype==2)
-		return "XXH3+CRC-32";
-	if (franzotype==3)
+	if (franzotype==FRANZO_XXHASH64)
+		return "XXHASH64+CRC-32";
+	if (franzotype==FRANZO_SHA_1)
 		return "SHA-1+CRC-32";
-	if (franzotype==4)
+	if (franzotype==FRANZO_SHA_256)
 		return "SHA-256+CRC-32";
+	if (franzotype==FRANZO_XXH3)
+		return "XXH3+CRC-32";
 	perror("16839: franzotype strange");		
 	return "BYPASSWARNING";
 }
@@ -18984,7 +19599,7 @@ uint32_t unzget4(const char* p) {
 
 // file metadata
 struct unzDT {
-  uint64_t date;  // YYYYMMDDHHMMSS or 0 if deleted
+  uint64_t date;  // unzdt YYYYMMDDHHMMSS or 0 if deleted
   uint64_t attr;  // first 8 bytes, LSB first
   std::vector<uint32_t> ptr;  // fragment IDs
   char sha1hex[FRANZOFFSETSHA256];		 // 1+32+32 (unzSHA256)+ zero
@@ -19408,7 +20023,7 @@ void help_a(bool i_usage,bool i_example)
 	if (i_usage)
 	{
 		moreprint("CMD   a (add)");
-		moreprint("DIFF:               zpaqfranz store CRC-32/XXH3 of each file, detecting SHA-1 collisions,");
+		moreprint("DIFF:               zpaqfranz store CRC-32/XXH of each file, detecting SHA-1 collisions,");
 		moreprint("                    while zpaq cannot by design. Can be disabled by -crc32 or -715,");
 		moreprint("                    on modern CPU slow down ~10%.");
 		moreprint("DIFF:               By default do NOT store ADSs on Windows (essentially useless).");
@@ -19419,7 +20034,8 @@ void help_a(bool i_usage,bool i_example)
 		moreprint("DIFF: -715          Runs just about like 7.15");
 		moreprint("PLUS: -nochecksum   Disable zpaqfranz additional checks (faster, less sure)");
 		moreprint("PLUS: -crc32        Get CRC-32 for every file");
-		moreprint("PLUS: -xxhash       Get XXH3 for every file     (default: YES)");
+		moreprint("PLUS: -xxh3         Get XXH3  (128bit) for every file");
+		moreprint("PLUS: -xxhash       Get XXHASH64 (64 bit) for every file");
 		moreprint("PLUS: -sha1         Get SHA1 for every file");
 		moreprint("PLUS: -sha256       Get SHA256 for every file");
 		moreprint("PLUS: -verify       Enable double checks        (default: YES). Slower but safer");
@@ -19570,7 +20186,7 @@ void help_p(bool i_usage,bool i_example)
 		moreprint("                    quickly become unmanageable (warn: be very careful with 32bit versions).");
 		moreprint("PLUS: -noeta        Brief");
 		moreprint("PLUS: -verbose      Shows positive checks");
-		moreprint("PLUS: -xxhash       Hard-hash check on archive created with add -xxhash");
+		moreprint("PLUS: -xxh3         Hard-hash check on archive created with add -xxh3");
 		moreprint("PLUS: -sha1         Hard-hash check on archive created with add -sha1 (zpaqfranz <52)");
 		moreprint("PLUS: -sha256       Hard-hash check on archive created with add -sha256");
 		moreprint("PLUS: -verify       Next level (mine) of paranoia: check hashes against the filesystem.");
@@ -19581,7 +20197,7 @@ void help_p(bool i_usage,bool i_example)
 	if (i_example)
 	{
 		moreprint("Paranoid, use lots of RAM:           p z:\\1.zpaq");
-		moreprint("Very paranoid, use lots of RAM:      p z:\\1.zpaq -xxhash -verify");
+		moreprint("Very paranoid, use lots of RAM:      p z:\\1.zpaq -xxh3 -verify");
 	}
 }
 void help_c(bool i_usage,bool i_example)
@@ -19596,7 +20212,7 @@ void help_c(bool i_usage,bool i_example)
 		moreprint("                    By default check file name and file size (excluding .zfs), not the content.");
 		moreprint("PLUS: -all N        Concurrent threads will be created, each scan a slave dir (-t K to limit).");
 		moreprint("                    NOT good for single spinning drives, good for multiple slaves on different media.");
-		moreprint("PLUS: -checksum     Do a hash 'hard' check, suggested -xxhash, fast and reliable.");
+		moreprint("PLUS: -checksum     Do a hash 'hard' check, suggested -xxh3, fast and reliable.");
 		moreprint("PLUS: -maxsize X    Filter out on filesize");
 		moreprint("PLUS: -minsize X    Filter out on filesize");
 		moreprint("PLUS: -715          Work as 7.15 (with .zfs and ADS)");
@@ -19646,7 +20262,7 @@ void help_r(bool i_usage,bool i_example)
 		moreprint("PLUS: -force        do not exit if not enough space reported");
 		moreprint("PLUS: -all          run one thread for folder");
 		moreprint("PLUS: -verify       after copy quick check if OK (only filename and size)");
-		moreprint("PLUS: -checksum     heavy (hash) test of equality. Suggest: -xxhash fast and reliable.");
+		moreprint("PLUS: -checksum     heavy (hash) test of equality. Suggest: -xxh3 fast and reliable.");
 		moreprint("PLUS: -maxsize X    Filter out on filesize");
 		moreprint("PLUS: -minsize X    Filter out on filesize");
 		moreprint("PLUS: -xls          Do not enforce backup of XLS");
@@ -19770,7 +20386,8 @@ void help_sha1(bool i_usage,bool i_example)
 		moreprint("PLUS:               Calculate hash/cksum of files/dirs, dupes and cumulative GLOBAL SHA256");
 		moreprint("                    (If two directories have the same GLOBAL SHA256 they are ==)");
 		moreprint("                    With no switches, by default, use SHA-1 (reliable, but not very fast)");
-		moreprint("PLUS: -xxhash       very fast hash algorithm (XXH3)");
+		moreprint("PLUS: -xxhash       very fast hash algorithm (XXHASH64 bit)");
+		moreprint("PLUS: -xxh3         very fast hash algorithm (XXH3  128 bit)");
 		moreprint("PLUS: -crc32        very fast checksum");
 		moreprint("PLUS: -crc32c       very fast hardware-accelerated CRC-32c");
 		moreprint("PLUS: -sha256       slow but very reliable, legal level (in Italy)");
@@ -19790,13 +20407,13 @@ void help_sha1(bool i_usage,bool i_example)
 	{
 		moreprint("SHA1 of all files (and duplicated):  sha1 z:\\knb");
 		moreprint("SHA1 multithread, only summary:      sha1 z:\\knb -all -summary");
-		moreprint("XXH3 multithread:                    sha1 z:\\knb -all -xxhash");
+		moreprint("XXH3 multithread:                    sha1 z:\\knb -all -xxh3");
 		moreprint("CRC-32c HW accelerated:              sha1 z:\\knb -crc32c -pakka -noeta");
 		moreprint("Hashes to be compared (dir1):        sha1 c:\\nz  -pakka -noeta -nosort -crc32c -find c:\\nz  -replace bakdir >1.txt");
 		moreprint("Hashes to be compared (dir2):        sha1 z:\\knb -pakka -noeta -nosort -crc32c -find z:\\knb -replace bakdir >2.txt");
 		moreprint("Duplicated files with sha256:        sha1 z:\\knb -kill -sha256");
 		moreprint("Duplicated files minsize 1000000:    sha1 z:\\knb -kill -all -minsize 1000000");
-		moreprint("MAGIC cumulative hashes of 1-level:  sha1 p:\\staff -xxhash -checksum");
+		moreprint("MAGIC cumulative hashes of 1-level:  sha1 p:\\staff -xxh3 -checksum");
 	}
 }
 
@@ -19934,7 +20551,8 @@ void help_franzswitches(bool i_usage,bool i_example)
 	#endif
 	moreprint("  -crc32c         In sha1 command use CRC32c instead of SHA1");
 	moreprint("  -crc32          In sha1 command use CRC32");
-	moreprint("  -xxhash         In sha1 command use XXH3");
+	moreprint("  -xxh3           In sha1 command use XXH3");
+	moreprint("  -xxhash         In sha1 command use XXHASH64");
 	moreprint("  -sha256         In sha1 command use SHA256");
 	moreprint("  -exec_ok fo.bat After OK launch fo.bat");
 	moreprint("  -exec_error kz  After NOT OK launch kz");
@@ -19982,7 +20600,7 @@ void Jidac::differences()
 	moreprint("");
 	moreprint("Doveryay, no proveryay;   trust, but verify;   fidarsi e' bene, non fidarsi e' meglio.");
 	moreprint("");
-	moreprint("zpaqfranz store by default CRC-32s/XXH3 of every file, optionally  (-checksum) SHA-1,");
+	moreprint("zpaqfranz store by default CRC-32s/XXH of every file, optionally  (-checksum) SHA-1,");
 	moreprint("without breaking backward compatibility.");
 	moreprint("");
 	moreprint("Pack everything needed for a storage manager: dir compare, hashing, deduplication, fix");
@@ -20180,7 +20798,7 @@ int Jidac::doCommand(int argc, const char** argv)
 	// Why some variables out of Jidac? Because of pthread: does not like very much C++ objects
 	// quick and dirty.
   
-	franzotype=2; //by default take CRC-32 AND XXHASH
+	g_franzotype=2; //by default take CRC-32 AND XXHASH64
 	
 	g_exec_error="";
 	g_exec_ok="";
@@ -20227,10 +20845,11 @@ int Jidac::doCommand(int argc, const char** argv)
 	flagfix255=false;
 	flagfixeml=false;
 	flagflat=false;
-	flagxxhash=false;
+	flagxxh3=false;
 	flagcrc32=false;
 	flagsha256=false;
 	flagwyhash=false;
+	flagxxhash64=false;
 	flagdonotforcexls=false;
 	flagcomment=false;
 	flag715=false;
@@ -20572,9 +21191,10 @@ int Jidac::doCommand(int argc, const char** argv)
 		else if (opt=="-nochecksum") 				flagnochecksum		=true;
 		else if (opt=="-crc32c") 					flagcrc32c			=true;
 		else if (opt=="-sha1") 						flagsha1			=true;// stub: by default flagsha1
-		else if (opt=="-xxhash") 					flagxxhash			=true;
+		else if (opt=="-xxh3") 						flagxxh3			=true;
 		else if (opt=="-sha256") 					flagsha256			=true;
 		else if (opt=="-wyhash") 					flagwyhash			=true;
+		else if (opt=="-xxhash") 					flagxxhash64		=true;
 		else if (opt=="-crc32") 					flagcrc32			=true;
 		else if (opt=="-verify") 					flagverify			=true;
 		else if (opt=="-kill") 						flagkill			=true;
@@ -20776,15 +21396,18 @@ int Jidac::doCommand(int argc, const char** argv)
 		if (flagcrc32)
 			franzparameters+="CRC-32 (-crc32) ";
 				
-		if (flagxxhash)
-			franzparameters+="XXH3 (-xxhash) ";
+		if (flagxxh3)
+			franzparameters+="XXH3 (-xxh3) ";
 		
 		if (flagsha256)
 			franzparameters+="SHA-256 (-sha256) ";
-				/*
+			
 		if (flagwyhash)
 				printf("franz:wyhash\n");
-		*/
+	
+		if (flagxxhash64)
+				printf("franz:XXHASH64\n");
+	
 		if (flagverify)
 			franzparameters+="VERIFY (-verify) ";
 				
@@ -20906,14 +21529,15 @@ int Jidac::doCommand(int argc, const char** argv)
 		flagchecksum		=false;
 		flagnochecksum		=true;
 		flagfilelist		=false;
-		flagxxhash			=false; // checksumming add new style
+		flagxxh3			=false; // checksumming add new style
+		flagxxhash64		=false; // checksumming add new style
 		flagfixeml			=false;
 		flagfix255			=false;
 		flagutf				=false;
 		flagflat			=false;
-		franzotype			=0;
+		g_franzotype		=0;
 		printf("**** Activated V7.15 mode ****\n");
-		printf("T forcezfs,donotforcexls,forcewindows; F crc32,checksum,filelist,xxhash,fixeml,fix255,utf,flat\n");
+		printf("T forcezfs,donotforcexls,forcewindows; F crc32,checksum,filelist,xxhash,xxh3,fixeml,fix255,utf,flat\n");
 	}
 
   // Execute command
@@ -20925,20 +21549,23 @@ int Jidac::doCommand(int argc, const char** argv)
 		flagflat			=false;
 		
 		if (flag715 || flagnochecksum)
-			franzotype=0;
+			g_franzotype=0;
 		else
 		if (flagcrc32)
-			franzotype=1;
+			g_franzotype=1;
 		else
 		if (flagsha1 || flagchecksum) //backward compatibility 51
-			franzotype=3; //SHA1
+			g_franzotype=3; //SHA1
 		else
 		if (flagsha256)
-			franzotype=4;
+			g_franzotype=4;
 		else
-			franzotype=2; // by default 2 (CRC32+XXHASH)
+		if (flagxxh3)
+			g_franzotype=5;
+		else
+			g_franzotype=2; // by default 2 (CRC32+XXHASH64)
 	
-		if (franzotype!=0) // do a verify too (store CRC by fragments), but not for 7.15
+		if (g_franzotype!=0) // do a verify too (store CRC by fragments), but not for 7.15
 			flagverify=true;
 			
 		return add();
@@ -21301,8 +21928,10 @@ int64_t Jidac::read_archive(const char* arc, int *errors, int i_myappend) {
 								dtr.ptr[i]=j;
 						}
 					}
+/// UBUNTU
 					if (issel) 
-					dt[fn]=dtr;
+			///		dt[fn]=dtr;
+					dt.insert(std::pair<string, DT>(fn,dtr));
 				}  // end while more files
             }  // end if 'i'
             else 
@@ -22122,7 +22751,7 @@ void Jidac::writefranzattr(libzpaq::StringBuffer& i_sb, uint64_t i_data, unsigne
 	else
 		writtencrc=i_crc32;
 		
-	if (franzotype==0)	// 7.15
+	if (g_franzotype==FRANZO_NONE)	// 7.15
 	{
 		write715attr(i_sb,i_data,i_quanti);
 		return;
@@ -22138,7 +22767,7 @@ void Jidac::writefranzattr(libzpaq::StringBuffer& i_sb, uint64_t i_data, unsigne
 	///			error("Guru-C checking crc32");
 		}
 
-	if (franzotype==1) /// store only CRC-32
+	if (g_franzotype==FRANZO_CRC_32) /// store only CRC-32
 	{
 		char mybuffer[FRANZOFFSET]={0};
 		sprintf(mybuffer+41,"%08X",writtencrc);
@@ -22150,7 +22779,7 @@ void Jidac::writefranzattr(libzpaq::StringBuffer& i_sb, uint64_t i_data, unsigne
 			printf("Mode1: CRC32 by frag <<%s>> %s\n",mybuffer+41,i_filename.c_str());
 	}
 	else
-	if (franzotype==2) ///2= 52 (XXHASH-0-CRC32)
+	if (g_franzotype==FRANZO_XXHASH64) ///2= 52 (XXHASH64-0-CRC32)
 	{
 		assert(i_thehash.length()==32);
 		char mybuffer[FRANZOFFSET]={0};
@@ -22160,12 +22789,12 @@ void Jidac::writefranzattr(libzpaq::StringBuffer& i_sb, uint64_t i_data, unsigne
 		puti(i_sb, i_data, i_quanti);
 		puti(i_sb, 0, (8 - i_quanti));  // pad with zeros (for 7.15 little bug)
 		i_sb.write(mybuffer,FRANZOFFSET);
-		/// please note the dirty trick: start by +8
+		/// please note the dirty trick: start by +10
 		if (flagdebug)
-				printf("Mode2: XXH3: <<%s>> CRC32 <<%s>> %s\n",mybuffer+8,mybuffer+41,i_filename.c_str());
+				printf("Mode2: XXHASH64: <<%s>> CRC32 <<%s>> %s\n",mybuffer+8,mybuffer+41,i_filename.c_str());
 	}
 	else
-	if (franzotype==3)  //3= 51 (SHA1-0-CRC32)
+	if (g_franzotype==FRANZO_SHA_1)  //3= 51 (SHA1-0-CRC32)
 	{
 		assert(i_thehash.length()==40);
 		char mybuffer[FRANZOFFSET]={0};
@@ -22179,7 +22808,7 @@ void Jidac::writefranzattr(libzpaq::StringBuffer& i_sb, uint64_t i_data, unsigne
 			printf("Mode3: SHA1 <<%s>> CRC32 <<%s>> %s\n",mybuffer,mybuffer+41,i_filename.c_str());
 	}
 	else
-	if (franzotype==4) ///4= 52 (01-SHA256-0-CRC32)
+	if (g_franzotype==FRANZO_SHA_256) ///4= 52 (01-SHA256-0-CRC32)
 	{
 		assert(i_thehash.length()==64);
 		char mybuffer[FRANZOFFSETSHA256]={0};
@@ -22193,6 +22822,21 @@ void Jidac::writefranzattr(libzpaq::StringBuffer& i_sb, uint64_t i_data, unsigne
 		/// please note the dirty trick: start by +8
 		if (flagdebug)
 				printf("Mode4: SHA256 <<%s>> CRC32 <<%s>> %s\n",mybuffer+2,mybuffer+67,i_filename.c_str());
+	}
+	else
+	if (g_franzotype==FRANZO_XXH3) ///5= 52 (00XXH3-0-CRC32)
+	{
+		assert(i_thehash.length()==32);
+		char mybuffer[FRANZOFFSET]={0};
+		sprintf(mybuffer+10,"%s",i_thehash.c_str());
+		sprintf(mybuffer+41,"%08X",writtencrc);
+		puti(i_sb, 8+FRANZOFFSET, 4); 	// 8+FRANZOFFSET block
+		puti(i_sb, i_data, i_quanti);
+		puti(i_sb, 0, (8 - i_quanti));  // pad with zeros (for 7.15 little bug)
+		i_sb.write(mybuffer,FRANZOFFSET);
+		/// please note the dirty trick: start by +8
+		if (flagdebug)
+				printf("Mode5: XXH3: <<%s>> CRC32 <<%s>> %s\n",mybuffer+10,mybuffer+41,i_filename.c_str());
 	}
 	else
 		perror("22144: unknown franzotype");
@@ -23675,7 +24319,10 @@ int Jidac::kill()
 	string captcha="kilL"+std::to_string(dirtobekilled.size()+tobekilled.size()+sizetobekilled);
 	printf("Captcha to continue %s\n",captcha.c_str());
 	char myline[81];
-    scanf("%80s", myline);
+    int dummy=scanf("%80s", myline);
+	if (dummy==888888)
+		printf("no-warning-please\n");
+	
 	if (myline!=captcha)
 	{
 		printf("Wrong captcha\n");
@@ -23734,10 +24381,21 @@ int decode_franz_block(const bool i_isdirectory,const char* i_franz_block,string
 		if (i_franz_block[0+8]!=0)
 		{
 			if (i_franz_block[0+40]==0)
-			o_hashtype="XXH3";
+			o_hashtype="XXHASH64";
 			o_hashvalue=i_franz_block+8;
 			risultato=2; //franzotype
 		}
+	}
+	
+	if (i_franz_block[0]==0)
+	{
+		if (i_franz_block[0+10]!=0)
+			if (i_franz_block[0+8]==0)
+			{
+				o_hashtype="XXH3";
+				o_hashvalue=i_franz_block+10;
+				risultato=5;
+			}
 	}
 	
 	if (i_franz_block[41]!=0)
@@ -23801,7 +24459,8 @@ int Jidac::verify()
 	}
 	printf("\n");
  	for (unsigned i=0; i<files.size(); ++i)
-		printf("%9s in <<%s>>\n",migliaia(files_count[i]),files[i].c_str());
+		if (isdirectory(files[i]))
+			printf("%9s in <<%s>>\n",migliaia(files_count[i]),files[i].c_str());
 	
 	
 	if (files.size()) 
@@ -24170,6 +24829,7 @@ int Jidac::list()
 						myhashtype,
 						myhash,
 						mycrc32);
+					///printf("myhastyppeeee %s %d\n",myhashtype.c_str(),franzotypedetected);
 					
 					if (franzotypedetected>1)
 					{
@@ -24354,6 +25014,80 @@ uint32_t crc32_calc_file(const char * i_filename,const int64_t i_inizio,const in
 }
 
 
+
+std::string xxhash64_calc_file(const char * i_filename,bool i_flagcalccrc32,uint32_t& o_crc32,const int64_t i_inizio,const int64_t i_totali,int64_t& io_lavorati)
+{
+	o_crc32=0;
+	
+	std::string risultato="";
+	FILE* myfile = freadopen(i_filename);
+	if(myfile==NULL )
+ 		return risultato;
+	
+	const int BUFSIZE	=65536*8;
+	char 				unzBuf[BUFSIZE];
+	int 				n=BUFSIZE;
+				
+	uint64_t myseed = 0;
+    XXHash64 myhash(myseed);
+    
+	while (1)
+	{
+		int r=fread(unzBuf, 1, n, myfile);
+		myhash.add(unzBuf,r);
+		
+		if (i_flagcalccrc32)
+			o_crc32=crc32_16bytes(unzBuf,r,o_crc32);
+ 		if (r!=n) 
+			break;
+		io_lavorati+=r;
+		if ((flagnoeta==false) && (i_inizio>0))
+			avanzamento(io_lavorati,i_totali,i_inizio);
+	}
+	fclose(myfile);
+	
+	char temp[33];
+	sprintf(temp,"%016llX",(unsigned long long)myhash.hash());
+	return temp;
+	
+}
+
+
+// WARNING: I am not sure AT ALL that in this mode a streamed-chunked-wyhash is computable
+// Just a test
+string wyhash_calc_file(const char * i_filename,bool i_flagcalccrc32,uint32_t& o_crc32,const int64_t i_inizio,const int64_t i_totali,int64_t& io_lavorati)
+{
+	o_crc32=0;
+	string risultato="ERROR";
+	FILE* myfile = freadopen(i_filename);
+	if(myfile==NULL )
+		return risultato;
+		
+	char data[65536*16];
+    int got=0;
+	
+	uint64_t hash;
+	uint64_t _wyp[4];
+	make_secret(345,_wyp);
+	
+	while ((got=fread(data,sizeof(char),sizeof(data),myfile)) > 0) 
+	{
+		hash=wyhash(data,got,hash,_wyp);
+		if (i_flagcalccrc32)
+			o_crc32=crc32_16bytes(data,got,o_crc32);
+ 		
+		io_lavorati+=got;	
+		
+		if ((flagnoeta==false) && (i_inizio>0))
+			avanzamento(io_lavorati,i_totali,i_inizio);
+	}
+	fclose(myfile);
+	
+	char temp[33];
+	sprintf(temp,"%016llX",(unsigned long long)hash);
+	return temp;
+}
+
 /// take sha256
 string sha256_calc_file(const char * i_filename,bool i_flagcalccrc32,uint32_t& o_crc32,const int64_t i_inizio,const int64_t i_totali,int64_t& io_lavorati)
 {
@@ -24399,7 +25133,6 @@ string sha256_calc_file(const char * i_filename,bool i_flagcalccrc32,uint32_t& o
 	
 
 
-//// calc xxh3 (maybe)
 string xxhash_calc_file(const char * i_filename,bool i_flagcalccrc32,uint32_t& o_crc32,const int64_t i_inizio,const int64_t i_totali,int64_t& io_lavorati,
 uint64_t& o_high64,uint64_t& o_low64)
 {
@@ -24485,12 +25218,15 @@ string hash_calc_file(int i_algo,const char * i_filename,bool i_flagcalccrc32,ui
 	
 	switch (i_algo) 
 	{
-		/*
+		
 		case ALGO_WYHASH:
-			sprintf(risultato,"%016llX",wyhash_calc_file(i_filename,i_inizio,i_totali,io_lavorati));
-			return risultato;		
+			return  wyhash_calc_file(i_filename,i_flagcalccrc32,o_crc32,i_inizio,i_totali,io_lavorati);
 		break;
-		*/
+		
+		case ALGO_XXHASH64:
+			return  xxhash64_calc_file(i_filename,i_flagcalccrc32,o_crc32,i_inizio,i_totali,io_lavorati);
+		break;
+		
 		case ALGO_SHA1:
 			return  sha1_calc_file(i_filename,i_flagcalccrc32,o_crc32,i_inizio,i_totali,io_lavorati);
 		break;
@@ -24505,7 +25241,7 @@ string hash_calc_file(int i_algo,const char * i_filename,bool i_flagcalccrc32,ui
 			return risultato;		
 		break;
 		
-		case ALGO_XXHASH:
+		case ALGO_XXH3:
 			uint64_t dummybasso64;
 			uint64_t dummyalto64;
 			return xxhash_calc_file(i_filename,i_flagcalccrc32,o_crc32,i_inizio,i_totali,io_lavorati,dummybasso64,dummyalto64);
@@ -24585,9 +25321,9 @@ int Jidac::deduplicate()
 	flagcrc32c=false;
 	flagcrc32=false;
 	if (flagsha256)
-		flagxxhash=false;
+		flagxxh3=false;
 	else
-		flagxxhash=true;
+		flagxxh3=true;
 	flagkill=true;
 	
 	if (!flagforce)
@@ -25390,7 +26126,7 @@ int unz(const char * archive,const char * key,bool all)
 	
   // Journaling archive state
 	std::map<uint32_t, unsigned> bsize;  // frag ID -> d block compressed size
-	std::map<std::string, unzDT> dt;   // filename -> date, attr, frags
+	std::map<std::string, unzDT> unzdt;   // filename -> date, attr, frags
 	std::vector<std::string> frag;  // ID -> hash[20] size[4] data
 	std::string last_filename;      // streaming destination
 	uint64_t ramsize=0;
@@ -25786,7 +26522,10 @@ int unz(const char * archive,const char * key,bool all)
 						}
 					}
 				}
-				dt[fn]=f;
+/// UBUNTU
+///			unzdt[fn]=f;
+			unzdt.insert(std::pair<string, unzDT>(fn,f));
+	
 			}
 		}
 		printf("\r");
@@ -25801,25 +26540,31 @@ int unz(const char * archive,const char * key,bool all)
 
 	printbar('-');
 
-	if ((!flagxxhash) && (!flagsha256) && (!flagsha1))
+	if ((!flagxxh3) && (!flagsha256) && (!flagsha1) && (!flagxxhash64))
 	{
-		printf("No hashes selected (no -xxhash or -sha1 or -sha256). Quit\n");
+		printf("No hashes selected (no -xxh3 -xxhash or -sha1 or -sha256). Quit\n");
 		return 0;
 	}
 	int unzfranzotype=-1;
 	
-	if (flagxxhash)
+	if (flagxxhash64)
 		unzfranzotype=2;
+	else
+	if (flagxxh3)
+		unzfranzotype=5;
 	else
 	if (flagsha1)
 		unzfranzotype=3;
 	else
 	if (flagsha256)
 		unzfranzotype=4;
+	else
+	if (flagxxhash64)
+		unzfranzotype=5;
 	
 	if (unzfranzotype==-1)
 	{
-		printf("25820: hash can be one of -xxhash -sha1 -sha256\n");
+		printf("25820: hash can be one of -xxh3 -xxhash64 -sha1 -sha256\n");
 		return 0;
 	}
 	
@@ -25833,7 +26578,7 @@ int unz(const char * archive,const char * key,bool all)
 
 	int64_t iniziocalcolo=mtime();
 		
-	for (p=dt.begin(); p!=dt.end(); ++p)
+	for (p=unzdt.begin(); p!=unzdt.end(); ++p)
 		mappadt.push_back(p);
 		
 	std::sort(mappadt.begin(), mappadt.end(),unzcompareprimo);
@@ -25853,27 +26598,22 @@ int unz(const char * archive,const char * key,bool all)
 				std::string fn=p->first;
 				
 				if ((!isads(fn)) && (!iszfs(fn)) && (!isdirectory(fn)))
-				/*
-				if 	((fn.find(":$DATA")==std::string::npos) 	&&
-						(fn.find(".zfs")==std::string::npos)	&&
-						(fn.back()!='/')) ///changeme
-				*/
 				{
 					int64_t startrecalc=mtime();
 					
-					if (unzfranzotype==2)
+					if (unzfranzotype==FRANZO_XXHASH64)
 					{
-						XXH3_state_t state128;
-						(void)XXH3_128bits_reset(&state128);
+						uint64_t myseed = 0;
+						XXHash64 myhash(myseed);
 						for (uint32_t i=0; i<f.ptr.size(); ++i) 
 							if (f.ptr[i]<frag.size())
 								for (uint32_t j=24; j<frag[f.ptr[i]].size(); ++j)
-									(void)XXH3_128bits_update(&state128, &frag[f.ptr[i]][j],1);
-							XXH128_hash_t myhash=XXH3_128bits_digest(&state128);
-						sprintf(p->second.sha1decompressedhex,"%016llX%016llX",(unsigned long long)myhash.high64,(unsigned long long)myhash.low64);
+									myhash.add(&frag[f.ptr[i]][j],1);
+						sprintf(p->second.sha1decompressedhex,"%016llX",(unsigned long long)myhash.hash());
+						
 					}
 					else
-					if (unzfranzotype==3)
+					if (unzfranzotype==FRANZO_SHA_1)
 					{
 						unzSHA1 mysha1;
 						for (uint32_t i=0; i<f.ptr.size(); ++i) 
@@ -25888,7 +26628,7 @@ int unz(const char * archive,const char * key,bool all)
 						p->second.sha1decompressedhex[40]=0x0;
 					}
 					else
-					if (unzfranzotype==4)
+					if (unzfranzotype==FRANZO_SHA_256)
 					{
 						unzSHA256 mysha256;
 						for (uint32_t i=0; i<f.ptr.size(); ++i) 
@@ -25903,6 +26643,19 @@ int unz(const char * archive,const char * key,bool all)
 						p->second.sha1decompressedhex[64]=0x0;
 					}
 					else
+					if (unzfranzotype==FRANZO_XXH3)
+					{
+						XXH3_state_t state128;
+						(void)XXH3_128bits_reset(&state128);
+						for (uint32_t i=0; i<f.ptr.size(); ++i) 
+							if (f.ptr[i]<frag.size())
+								for (uint32_t j=24; j<frag[f.ptr[i]].size(); ++j)
+									(void)XXH3_128bits_update(&state128, &frag[f.ptr[i]][j],1);
+						XXH128_hash_t myhash=XXH3_128bits_digest(&state128);
+						sprintf(p->second.sha1decompressedhex,"%016llX%016llX",(unsigned long long)myhash.high64,(unsigned long long)myhash.low64);
+					}
+					else
+
 						error("25904: unknown unzfranzotype");
 
 
@@ -25931,8 +26684,11 @@ int unz(const char * archive,const char * key,bool all)
 	
 	dummycheck.algotype=ALGO_SHA256;
 	mychecks.insert(std::pair<string, hash_check>("SHA-256",dummycheck));
-	
-	dummycheck.algotype=ALGO_XXHASH;
+
+	dummycheck.algotype=ALGO_XXHASH64;
+	mychecks.insert(std::pair<string, hash_check>("XXHASH64",dummycheck));
+
+	dummycheck.algotype=ALGO_XXH3;
 	mychecks.insert(std::pair<string, hash_check>("XXH3",dummycheck));
 
 //////////////////////////////
@@ -26462,8 +27218,11 @@ int Jidac::test()
 	
 	dummycheck.algotype=ALGO_SHA256;
 	mychecks.insert(std::pair<string, hash_check>("SHA-256",dummycheck));
-	
-	dummycheck.algotype=ALGO_XXHASH;
+
+	dummycheck.algotype=ALGO_XXHASH64;
+	mychecks.insert(std::pair<string, hash_check>("XXHASH64",dummycheck));
+
+	dummycheck.algotype=ALGO_XXH3;
 	mychecks.insert(std::pair<string, hash_check>("XXH3",dummycheck));
 
 	for (unsigned int i=0;i<g_crc32.size();i++)
@@ -26620,6 +27379,7 @@ int Jidac::test()
 					}
 					else
 					{
+						
 						string hashread=hash_calc_file(
 						a->second.algotype,
 						filedefinitivo.c_str(),
@@ -26637,7 +27397,7 @@ int Jidac::test()
 						else
 						{
 							if (flagverbose)
-								printf("ERROR on %s: STORED HASH %s VS %s IN FILE %s\n",myhashtype.c_str(),filedefinitivo.c_str(),myhash.c_str(),hashread.c_str());
+								printf("ERROR on %s: STORED HASH %s VS %s IN FILE %s\n",myhashtype.c_str(),myhash.c_str(),hashread.c_str(),filedefinitivo.c_str());
 							status_e_hash++;
 							a->second.checkedfailed++;
 						}
@@ -26674,7 +27434,7 @@ int Jidac::test()
 					}
 					else
 					{
-						printf("ERROR:  STORED %08X XTRACTED %08X FILE %08X NOT THE SAME! (ck %08d) %s\n",crc32stored,currentcrc32,(unsigned int)crc32fromfilesystem,parti,filedefinitivo.c_str());
+						printf("ERROR:  STORED CRC-32 %08X XTRACTED %08X FILE %08X NOT THE SAME! (ck %08d) %s\n",crc32stored,currentcrc32,(unsigned int)crc32fromfilesystem,parti,filedefinitivo.c_str());
 						status_e_crc++;
 					}
 				}
@@ -26687,7 +27447,7 @@ int Jidac::test()
 			}
 			else
 			{
-				printf("ERROR: STORED %08X != DECOMPRESSED %08X (ck %08d) %s\n",crc32stored,currentcrc32,parti,filedefinitivo.c_str());
+				printf("ERROR:  STORED CRC-32 %08X != DECOMPRESSED %08X (ck %08d) %s\n",crc32stored,currentcrc32,parti,filedefinitivo.c_str());
 				status_e_blocks++;
 			}
 		}
@@ -27766,7 +28526,7 @@ int Jidac::robocopy()
 int Jidac::dircompare(bool i_flagonlysize,bool i_flagrobocopy)
 {
 /// If you specify a checksum, do hard compare
-	flagchecksum=(flagcrc32 || flagcrc32c || flagxxhash || flagsha1 || flagsha256);
+	flagchecksum=(flagcrc32 || flagcrc32c || flagxxh3 || flagxxhash64 || flagsha1 || flagsha256);
 		
 	int risultato=0;
 	
@@ -28405,7 +29165,7 @@ int  Jidac::dir()
 	uint64_t	iniziohash		=0;
 	uint64_t	finehash			=0;
 		
-	flagduplicati=(flagcrc32 || flagcrc32c || flagxxhash || flagsha1 || flagsha256);
+	flagduplicati=(flagcrc32 || flagcrc32c || flagxxh3 || flagxxhash64 || flagsha1 || flagsha256);
 			
 	g_bytescanned=0;
 	g_filescanned=0;
@@ -29049,7 +29809,7 @@ int Jidac::add()
 	}
 
 				
-	string ffranzotype=decodefranzoffset(franzotype);
+	string ffranzotype=decodefranzoffset(g_franzotype);
 	if (flagverify)
 		ffranzotype+=" + CRC-32 by fragments";
 	printf("Integrity check type: %s\n",ffranzotype.c_str());
@@ -29497,22 +30257,27 @@ if (casecollision>0)
 			if (bufptr>=buflen) bufptr=0, buflen=fread(buf, 1, BUFSIZE, in);
 	
 	  
-			if (franzotype>0)
+			if (g_franzotype>0)
 				if (bufptr==0)
 					if (buflen>0) 
 					{
 						p->second.file_crc32=crc32_16bytes(buf,buflen,p->second.file_crc32);
 	
-						if (franzotype==2)
-							(void)XXH3_128bits_update(&p->second.file_xxh3, buf,buflen);
+						if (g_franzotype==FRANZO_XXHASH64)
+							p->second.file_xxhash64.add(buf,buflen);
 
-						if (franzotype==3)
+						if (g_franzotype==FRANZO_SHA_1)
 							for (int i=0;i<buflen;i++)
 								p->second.file_sha1.put(*(buf+i));
 												
-						if (franzotype==4)
+						if (g_franzotype==FRANZO_SHA_256)
 							for (int i=0;i<buflen;i++)
 								p->second.file_sha256.put(*(buf+i));
+								
+						if (g_franzotype==FRANZO_XXH3)
+							if (p->second.pfile_xxh3)
+								(void)XXH3_128bits_update(p->second.pfile_xxh3, buf,buflen);
+
 					}
           if (bufptr>=buflen) c=EOF;
           else c=(unsigned char)buf[bufptr++];
@@ -29544,7 +30309,7 @@ if (casecollision>0)
 
 		uint32_t crc;
 		if (flagverify)
-			if (franzotype>0)
+			if (g_franzotype>0)
 			{
 				crc=crc32_16bytes(&fragbuf[0],(uint32_t) sz);
 				if (htptr)
@@ -29691,7 +30456,7 @@ if (casecollision>0)
 		//crckanz++;
 		///crc=crc32_16bytes(&fragbuf[0],(uint32_t) sz);
 		if (flagverify)
-			if (franzotype>0)
+			if (g_franzotype>0)
 			{
 				ht[htptr].crc32=crc;
 				ht[htptr].crc32size=sz;
@@ -29828,26 +30593,25 @@ if (casecollision>0)
 			
 			string hashtobewritten="";
 							
-			if (franzotype==1) /// store only CRC-32
+			if (g_franzotype==FRANZO_CRC_32) /// store only CRC-32
 			{
 				hashtobewritten="";
 				if (flagdebug)
 					printf("Mode1: CRC32 by frag <<%08X>> for %s\n",currentcrc32,p->first.c_str());
 			}
 			else
-			if (franzotype==2)
+			if (g_franzotype==FRANZO_XXHASH64)
 			{
-				char xxh3result[33];
-				XXH128_hash_t myhash=XXH3_128bits_digest(&p->second.file_xxh3);
-				sprintf(xxh3result,"%016llX%016llX",(unsigned long long)myhash.high64,(unsigned long long)myhash.low64);
-				hashtobewritten=xxh3result;
+				char temp[17]={0};
+				sprintf(temp,"%016llX",(unsigned long long)p->second.file_xxhash64.hash());
+				hashtobewritten=temp;
 				if (flagdebug)
-					printf("Model2: XXH3 %s %s\n",hashtobewritten.c_str(),p->first.c_str());
+					printf("Model2: XXHASH64 %s %s\n",hashtobewritten.c_str(),p->first.c_str());
 			}
 			else
-			if (franzotype==3)  //3= 51 (SHA1-0-CRC32)
+			if (g_franzotype==FRANZO_SHA_1)  //3= 51 (SHA1-0-CRC32)
 			{
-				char sha1result[20];
+				char sha1result[21]={0};
 				memcpy(sha1result, p->second.file_sha1.result(), 20);
 				char myhex[4];
 				for (int j=0; j <20; j++)
@@ -29860,9 +30624,9 @@ if (casecollision>0)
 					printf("Mode3: SHA1 %s %s\n",hashtobewritten.c_str(),p->first.c_str());
 			}
 			else
-			if (franzotype==4)
+			if (g_franzotype==FRANZO_SHA_256)
 			{
-				char sha256result[32];
+				char sha256result[33]={0};
 				memcpy(sha256result, p->second.file_sha256.result(), 32);
 				char myhex[4];
 				hashtobewritten="";
@@ -29874,6 +30638,16 @@ if (casecollision>0)
 				}
 				if (flagdebug)
 					printf("Mode4: SHA256 %s %s\n",hashtobewritten.c_str(),p->first.c_str());
+			}
+			else
+			if (g_franzotype==FRANZO_XXH3)
+			{
+				char xxh3result[33]={0};
+				XXH128_hash_t myhash=XXH3_128bits_digest(p->second.pfile_xxh3);
+				sprintf(xxh3result,"%016llX%016llX",(unsigned long long)myhash.high64,(unsigned long long)myhash.low64);
+				hashtobewritten=xxh3result;
+				if (flagdebug)
+					printf("Model5: XXH3 %s %s\n",hashtobewritten.c_str(),p->first.c_str());
 			}
 			
 			if ((p->second.attr&255)=='u') // unix attributes
@@ -29897,7 +30671,7 @@ if (casecollision>0)
 		{
 /// quickly store a fake file (for backward compatibility) with the version comment			
 			///VCOMMENT 00000002 seconda_versione:$DATA
-			char versioni8[9];
+			char versioni8[32];
 			sprintf(versioni8,"%08lld",(long long)ver.size());
 			versioni8[8]=0x0;
 			string fakefile="VCOMMENT "+string(versioni8)+" "+versioncomment+":$DATA"; //hidden windows file

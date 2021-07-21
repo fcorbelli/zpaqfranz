@@ -1,4 +1,7 @@
 ```
+21-07-2021:  52.8
+Support for storing XXHASH64 as default, plus a fix for XXH3 on "strange" compilers
+
 19-07-2021:  52.5 
 Support for storing SHA-256 for each file.
 New switches

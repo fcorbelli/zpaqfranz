@@ -476,7 +476,8 @@ No other significant ones come to mind, except that it is known and used by few
 
 You can try to build the port (of paq, inside archivers) but it is very, very, very old (2014).
 You can download the original version (7.15 of 2016) directly from the author's website, and compile it, or get the original from github.
-In this case be careful, because the source is divided into 3 source files, but nothing difficult for the compilation.
+In this case be careful, because the source is divided into 3 source files, but nothing difficult for the compilation.  
+On Debian there is a zpaq 7.15 package  
 
 **OK, let's assume I want to try it out. How?**
 
@@ -513,13 +514,17 @@ Portions of software by other authors, mentioned later, are included.
 As far as I know this is allowed by the licenses. 
 
 **I apologize if I have unintentionally violated any rule.**
-**Report it and I will fix as soon as possible.**
+**Report it and I will fix as soon as possible.**  
+**CREDITS**  
 
 - Include mod by data man and reg2s patch from encode.su forum 
 - Crc32.h Copyright (c) 2011-2019 Stephan Brumme 
+- xxhash64 by Stephan Brumme https://create.stephan-brumme.com/xxhash/  
 - Slicing-by-16 contributed by Bulat Ziganshin 
 - xxHash Extremely Fast Hash algorithm, Copyright (C) 2012-2020 Yann Collet 
-- crc32c.c Copyright (C) 2013 Mark Adler
+- crc32c.c Copyright (C) 2013 Mark Adler  
+- Embedded Artistry https://github.com/embeddedartistry  
+- wyhash WangYi  https://github.com/wangyi-fudan/wyhash  
 
 
 
@@ -571,6 +576,16 @@ zpaqfranz -examples x
 My main development platforms are Windows and FreeBSD. 
 I rarely use Linux or MacOS, so changes may be needed.
 
+# WARNING 22-07-2021
+_I discovered two different compilation problems on the latest Ubuntu  
+[The first is the 64-byte alignment of some structures (for the XXH3 hash)](https://github.com/Cyan4973/xxHash/issues/543) which can fail with some compilers "too new" or others "too old"_  
+_So the software works great on Windows an FreeBSD, but can fail on Ubuntu (!)_  
+_[The second is a bug (!) in g++ 10.3, the DEFAULT Ubuntu 21 compiler. Yes, a bug recognized in the compiler](https://gcc.gnu.org/bugzilla/show_bug.cgi?id=101558)_  
+_Some fixes/workaroud are implemented from 52.8+, and the default hasher (in add) is now XXHASH64, and not XXH3 (the 128 bit version)_  
+_I'm sorry but, as always explained, I rarely use Linux (almost always Debian) and hardly Ubuntu_
+
+
+
 As explained the program is single file, 
 be careful to link the pthread library.
 
@@ -599,4 +614,11 @@ g++ -O3 -Dunix zpaqfranz.cpp  -pthread -o zpaqfranz -static
 
 QNAP NAS TS-431P3 (Annapurna AL314) gcc 7.4.0
 g++ -Dunix zpaqfranz.cpp  -pthread -o zpaqfranz -Wno-psabi
+
+CentoOS
+Please note: "Red Hat discourages the use of static linking for security reasons. 
+Use static linking only when necessary, especially against libraries provided by Red Hat. "
+Therefore a -static linking is often a nightmare on CentOS => change the Makefile
+g++ -O3 -Dunix zpaqfranz.cpp  -pthread -o zpaqfranz
+
 ```

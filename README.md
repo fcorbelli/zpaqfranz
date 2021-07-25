@@ -516,6 +516,7 @@ As far as I know this is allowed by the licenses.
 - crc32c.c Copyright (C) 2013 Mark Adler  
 - Embedded Artistry https://github.com/embeddedartistry  
 - wyhash (experimental) WangYi  https://github.com/wangyi-fudan/wyhash  
+- https://github.com/System-Glitch/SHA256
 
 
 

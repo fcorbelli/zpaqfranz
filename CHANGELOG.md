@@ -1,4 +1,9 @@
 ```
+25-07-2021:  52.9
+A little more faster in -sha256 (2%)
+TWO TIME faster in multithreaded -sha1. Up to 6.7 GB/s on my test PC
+Implemented, just for fun, the -wyhash running on memory mapped files (not so fast, of course)  
+
 21-07-2021:  52.8
 Support for storing XXHASH64 as default, plus a fix for XXH3 on "strange" compilers
 

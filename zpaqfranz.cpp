@@ -25071,6 +25071,18 @@ std::string xxhash64_calc_file(const char * i_filename,bool i_flagcalccrc32,uint
 	
 }
 
+/*
+#include <stdio.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#include <sys/mman.h>
+#include <sys/io.h>
+*/
+
+#ifdef unix
+#include <fcntl.h>
+#endif
 
 // WARNING: I am not sure AT ALL that in this mode a streamed-chunked-wyhash is computable
 // Just a test, with memory mapped file
@@ -25078,6 +25090,30 @@ string wyhash_calc_file(const char * i_filename,bool i_flagcalccrc32,uint32_t& o
 {
 	o_crc32=0;
 	
+	int64_t lunghezza=prendidimensionefile(i_filename);
+	
+	if (lunghezza<=0)
+		return "";
+
+
+#ifdef unix
+
+	int myfilehandle=open(i_filename,O_RDONLY);
+	if (myfilehandle<=0)
+	{
+		printf("25098 in open\n");
+		return "";
+	}
+	char *data=(char *)mmap(0,lunghezza,PROT_READ,MAP_PRIVATE,myfilehandle,0);
+	if (data==MAP_FAILED)
+	{
+        printf("25098: map failed\n");
+		if (myfilehandle>0)
+			close(myfilehandle);
+		
+        return "";
+    }
+#else
 	wstring wfilename=utow(i_filename);
 	HANDLE myfile=CreateFile(wfilename.c_str(),GENERIC_READ,FILE_SHARE_READ | FILE_SHARE_WRITE,0,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,0);
 	if (myfile==INVALID_HANDLE_VALUE) 
@@ -25085,8 +25121,6 @@ string wyhash_calc_file(const char * i_filename,bool i_flagcalccrc32,uint32_t& o
 		printf("25057: Invalid handle for %s\n",i_filename);
 		return "";
 	}
-	uint64_t lunghezza=prendidimensionefile(i_filename);
-	
 	HANDLE mapping=CreateFileMapping(myfile,0,PAGE_READONLY, 0, 0, 0);
 	if (mapping==0) 
 	{
@@ -25094,23 +25128,42 @@ string wyhash_calc_file(const char * i_filename,bool i_flagcalccrc32,uint32_t& o
 			CloseHandle(myfile);
 		return "";
 	}
-	string risultato="";
 	const char* data=(const char*)MapViewOfFile(mapping,FILE_MAP_READ,0,0,0);
+
+
+#endif
+	
+	string risultato="";
+	uint64_t _wyp[4];
+	make_secret(0,_wyp);
+
 	if (data)
 	{
-		uint64_t _wyp[4];
-		make_secret(0,_wyp);
 		uint64_t mywyhash=wyhash(data,lunghezza,0,_wyp);
+
 		char buffer[33];
-		sprintf(buffer,"%16llX",mywyhash);
+		sprintf(buffer,"%16llX",(unsigned long long)mywyhash);
 		risultato=buffer;
+
 		if (i_flagcalccrc32)
 			o_crc32=crc32_16bytes(data,lunghezza,o_crc32);
+
 		io_lavorati+=lunghezza;	
+
 		if (flagnoeta==false)
 			avanzamento(io_lavorati,i_totali,i_inizio);
-
 	}
+#ifdef unix
+	close(myfilehandle);    
+	int errore=munmap(data,lunghezza);
+    if (errore!=0)
+	{
+        printf("25109: unmapping guru\n");
+        return "";
+    }
+	return risultato;
+
+#else
 	else
 	{
 		printf("25095: data empty\n");
@@ -25125,6 +25178,7 @@ string wyhash_calc_file(const char * i_filename,bool i_flagcalccrc32,uint32_t& o
 	CloseHandle(mapping);
 	CloseHandle(myfile);
 	return risultato;
+#endif
 }
 
 
@@ -26129,8 +26183,8 @@ void my_handler(int s)
 }
 
 
-#include <windows.h>
-#include <cstdio>
+///#include <windows.h>
+///#include <cstdio>
 
 
 // Convert argv to UTF-8 and replace \ with /

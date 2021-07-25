@@ -12,7 +12,7 @@
 
 //#define UBUNTU
 
-#define ZPAQ_VERSION "52.8-experimental"
+#define ZPAQ_VERSION "52.9-experimental"
 
 /*
                          __                     
@@ -69,8 +69,8 @@ As far as I know this is allowed by the licenses.
 - xxHash Extremely Fast Hash algorithm, Copyright (C) 2012-2020 Yann Collet 
 - crc32c.c Copyright (C) 2013 Mark Adler
 - Embedded Artistry https://github.com/embeddedartistry
-- wyhash WangYi  https://github.com/wangyi-fudan/wyhash
-
+- wyhash (experimental) WangYi  https://github.com/wangyi-fudan/wyhash  
+- https://github.com/System-Glitch/SHA256
 
 FreeBSD port, quick and dirty to get a /usr/local/bin/zpaqfranz
 ```
@@ -388,6 +388,7 @@ public:
     if (!(len0+=8)) ++len1;
     if ((len0&511)==0) process();
   }
+  ///void write(const char* buf, int64_t n); // hash buf[0..n-1]
   double size() const {return len0/8+len1*536870912.0;} // size in bytes
   uint64_t usize() const {return len0/8+(U64(len1)<<29);} //size in bytes
   const char* result();  // get hash and reset
@@ -1211,6 +1212,7 @@ const char* SHA256::result() {
   init();
   return hbuf;
 }
+
 
 //////////////////////////// AES /////////////////////////////
 
@@ -8742,6 +8744,8 @@ bool flagxxhash64;
 int g_franzotype; // type of FRANZOFFSET. 0 = nothing, 1 CRC, 2 XXHASH64, 3 SHA1, 4 SHA256, 5 XXH3
 
 
+
+
 // This is free and unencumbered software released into the public domain under The Unlicense (http://unlicense.org/)
 // main repo: https://github.com/wangyi-fudan/wyhash
 // author: 王一 Wang Yi <godspeed_china@yeah.net>
@@ -14993,6 +14997,14 @@ string stringtolower(string i_stringa)
 	});
 	return i_stringa;
 }			
+string stringtoupper(string i_stringa)
+{
+	std::for_each(i_stringa.begin(), i_stringa.end(), [](char & c)
+	{
+		c = ::toupper(c);	
+	});
+	return i_stringa;
+}			
 /*
 bool isxls(string i_stringa)
 {
@@ -21193,7 +21205,13 @@ int Jidac::doCommand(int argc, const char** argv)
 		else if (opt=="-sha1") 						flagsha1			=true;// stub: by default flagsha1
 		else if (opt=="-xxh3") 						flagxxh3			=true;
 		else if (opt=="-sha256") 					flagsha256			=true;
-		else if (opt=="-wyhash") 					flagwyhash			=true;
+		
+		else if (opt=="-wyhash")
+		{		flagwyhash			=true;
+				printf("\n****** WARNING: WYHASH IMPLEMENTATION IS JUST FOR TEST *******\n\n");
+				
+		}
+		
 		else if (opt=="-xxhash") 					flagxxhash64		=true;
 		else if (opt=="-crc32") 					flagcrc32			=true;
 		else if (opt=="-verify") 					flagverify			=true;
@@ -22332,7 +22350,7 @@ void Jidac::addfile(bool i_checkifselected,DTMap& i_edt,string filename, int64_t
 		if (!(i_edt.size() % 1000))
 		{
 			double scantime=mtime()-global_start+1;
-			printf("Scanning %s %2.2fs %d file/s (%s)\r",migliaia(i_edt.size()),scantime/1000.0,(int)(i_edt.size()/(scantime/1000.0)),migliaia2(g_bytescanned));
+			printf("Scanning %10s %2.2fs %10s file/s (%21s)\r",migliaia(i_edt.size()),scantime/1000.0,migliaia3((int)(i_edt.size()/(scantime/1000.0))),migliaia2(g_bytescanned));
 			fflush(stdout);
 		}
 }
@@ -24944,17 +24962,15 @@ int Jidac::list()
 
 
 
-/////////// other functions
+/////////// HASHING-checksumming functions
 
-/////////////// checksum file
-std::string sha1_calc_file(const char * i_filename,bool i_flagcalccrc32,uint32_t& o_crc32,const int64_t i_inizio,const int64_t i_totali,int64_t& io_lavorati)
+string sha1_calc_file(const char * i_filename,bool i_flagcalccrc32,uint32_t& o_crc32,const int64_t i_inizio,const int64_t i_totali,int64_t& io_lavorati)
 {
 	o_crc32=0;
 	
-	std::string risultato="";
 	FILE* myfile = freadopen(i_filename);
 	if(myfile==NULL )
- 		return risultato;
+ 		return "";
 	
 	const int BUFSIZE	=65536*8;
 	char 				unzBuf[BUFSIZE];
@@ -24965,8 +24981,11 @@ std::string sha1_calc_file(const char * i_filename,bool i_flagcalccrc32,uint32_t
 	{
 		int r=fread(unzBuf, 1, n, myfile);
 		
-		for (int i=0;i<r;i++)
-			sha1.put(*(unzBuf+i));
+		///for (int i=0;i<r;i++)
+		///	sha1.put(*(unzBuf+i));
+			
+		sha1.write(unzBuf,r);
+		
 		if (i_flagcalccrc32)
 			o_crc32=crc32_16bytes(unzBuf,r,o_crc32);
  		if (r!=n) 
@@ -24980,7 +24999,7 @@ std::string sha1_calc_file(const char * i_filename,bool i_flagcalccrc32,uint32_t
 	char sha1result[20];
 	memcpy(sha1result, sha1.result(), 20);
 	char myhex[4];
-	risultato="";
+	string risultato="";
 	for (int j=0; j <20; j++)
 	{
 		sprintf(myhex,"%02X", (unsigned char)sha1result[j]);
@@ -24991,12 +25010,11 @@ std::string sha1_calc_file(const char * i_filename,bool i_flagcalccrc32,uint32_t
 }
 
 //// get CRC32 of a file
-
-uint32_t crc32_calc_file(const char * i_filename,const int64_t i_inizio,const int64_t i_totali,int64_t& io_lavorati)
+string crc32_calc_file(const char * i_filename,const int64_t i_inizio,const int64_t i_totali,int64_t& io_lavorati)
 {
 	FILE* myfile = freadopen(i_filename);
 	if(myfile==NULL )
-		return 0;
+		return "";
 		
 	char data[65536*16];
     uint32_t crc=0;
@@ -25010,19 +25028,20 @@ uint32_t crc32_calc_file(const char * i_filename,const int64_t i_inizio,const in
 			avanzamento(io_lavorati,i_totali,i_inizio);
 	}
 	fclose(myfile);
-	return crc;
+	
+	char temp[9];
+	sprintf(temp,"%08X",crc);
+	return temp;
+	
 }
-
 
 
 std::string xxhash64_calc_file(const char * i_filename,bool i_flagcalccrc32,uint32_t& o_crc32,const int64_t i_inizio,const int64_t i_totali,int64_t& io_lavorati)
 {
 	o_crc32=0;
-	
-	std::string risultato="";
 	FILE* myfile = freadopen(i_filename);
 	if(myfile==NULL )
- 		return risultato;
+ 		return "";
 	
 	const int BUFSIZE	=65536*8;
 	char 				unzBuf[BUFSIZE];
@@ -25054,48 +25073,328 @@ std::string xxhash64_calc_file(const char * i_filename,bool i_flagcalccrc32,uint
 
 
 // WARNING: I am not sure AT ALL that in this mode a streamed-chunked-wyhash is computable
-// Just a test
+// Just a test, with memory mapped file
 string wyhash_calc_file(const char * i_filename,bool i_flagcalccrc32,uint32_t& o_crc32,const int64_t i_inizio,const int64_t i_totali,int64_t& io_lavorati)
 {
 	o_crc32=0;
-	string risultato="ERROR";
-	FILE* myfile = freadopen(i_filename);
-	if(myfile==NULL )
-		return risultato;
-		
-	char data[65536*16];
-    int got=0;
 	
-	uint64_t hash;
-	uint64_t _wyp[4];
-	make_secret(345,_wyp);
-	
-	while ((got=fread(data,sizeof(char),sizeof(data),myfile)) > 0) 
+	wstring wfilename=utow(i_filename);
+	HANDLE myfile=CreateFile(wfilename.c_str(),GENERIC_READ,FILE_SHARE_READ | FILE_SHARE_WRITE,0,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,0);
+	if (myfile==INVALID_HANDLE_VALUE) 
 	{
-		hash=wyhash(data,got,hash,_wyp);
-		if (i_flagcalccrc32)
-			o_crc32=crc32_16bytes(data,got,o_crc32);
- 		
-		io_lavorati+=got;	
-		
-		if ((flagnoeta==false) && (i_inizio>0))
-			avanzamento(io_lavorati,i_totali,i_inizio);
+		printf("25057: Invalid handle for %s\n",i_filename);
+		return "";
 	}
-	fclose(myfile);
+	uint64_t lunghezza=prendidimensionefile(i_filename);
 	
-	char temp[33];
-	sprintf(temp,"%016llX",(unsigned long long)hash);
-	return temp;
+	HANDLE mapping=CreateFileMapping(myfile,0,PAGE_READONLY, 0, 0, 0);
+	if (mapping==0) 
+	{
+		if (myfile!=0)
+			CloseHandle(myfile);
+		return "";
+	}
+	string risultato="";
+	const char* data=(const char*)MapViewOfFile(mapping,FILE_MAP_READ,0,0,0);
+	if (data)
+	{
+		uint64_t _wyp[4];
+		make_secret(0,_wyp);
+		uint64_t mywyhash=wyhash(data,lunghezza,0,_wyp);
+		char buffer[33];
+		sprintf(buffer,"%16llX",mywyhash);
+		risultato=buffer;
+		if (i_flagcalccrc32)
+			o_crc32=crc32_16bytes(data,lunghezza,o_crc32);
+		io_lavorati+=lunghezza;	
+		if (flagnoeta==false)
+			avanzamento(io_lavorati,i_totali,i_inizio);
+
+	}
+	else
+	{
+		printf("25095: data empty\n");
+		if (mapping!=0)
+			CloseHandle(mapping);
+		if (myfile!=0)
+			CloseHandle(myfile);
+		return "";
+	}	
+    
+	UnmapViewOfFile(data);
+	CloseHandle(mapping);
+	CloseHandle(myfile);
+	return risultato;
 }
+
+
+/*
+	Testing SHA256 speed.
+	This implementation is a minor reworked of
+	https://github.com/System-Glitch/SHA256
+	Writing style very similar to mine, so it's no surprise that I liked it.
+	
+	Speed test against libzpaq (on my PC)
+
+	SHA-256: 3EB85BE4D8291AB53A306D47B9B756CFFCC55650C1EEA0283404683EACEA3A14 [     31.138.512.896]     e:/parte/BKmusicall3p
+	Data transfer+CPU   time          103.642 s
+	Worked on 31.138.512.896 bytes avg speed (hashtime) 300.442.995 B/s
+	GLOBAL SHA256: 11ABC63D805AF3D76F229EA88BD7C2AE4FB004920848BF77F2079280E9EBC424
+ 
+ 
+	Libzpaq (ZPAQ)
+	SHA-256: 3EB85BE4D8291AB53A306D47B9B756CFFCC55650C1EEA0283404683EACEA3A14 [     31.138.512.896]     e:/parte/BKmusicall3p
+	Algo SHA-256 by 1 threads
+	Data transfer+CPU   time  105.798000 s
+	Worked on 31.138.512.896 bytes avg speed (hashtime) 294.320.430 B/s
+	GLOBAL SHA256: 11ABC63D805AF3D76F229EA88BD7C2AE4FB004920848BF77F2079280E9EBC424
+ 
+	As you can see just about 2% faster
+*/
+
+
+static constexpr std::array<uint32_t, 64> Kappa = {
+		0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,
+		0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,
+		0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,
+		0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,
+		0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,
+		0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,
+		0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,
+		0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,
+		0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,
+		0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,
+		0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,
+		0xd192e819,0xd6990624,0xf40e3585,0x106aa070,
+		0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,
+		0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,
+		0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,
+		0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2
+	};
+
+class franzSHA256 {
+
+public:
+	franzSHA256();
+	void update(const uint8_t * data, size_t length);
+	///void update(const std::string &data);
+	///uint8_t * digest();
+
+	std::string gethex();
+
+private:
+	uint8_t  m_data[64];
+	uint32_t m_blocklen;
+	uint64_t m_bitlen;
+	uint32_t m_state[8]; //A, B, C, D, E, F, G, H
+
+
+	static uint32_t rotr(uint32_t x, uint32_t n);
+	static uint32_t choose(uint32_t e, uint32_t f, uint32_t g);
+	static uint32_t majority(uint32_t a, uint32_t b, uint32_t c);
+	static uint32_t sig0(uint32_t x);
+	static uint32_t sig1(uint32_t x);
+	void transform();
+	void pad();
+	void revert(uint8_t * hash);
+};
+
+franzSHA256::franzSHA256(): m_blocklen(0), m_bitlen(0) {
+	m_state[0] = 0x6a09e667;
+	m_state[1] = 0xbb67ae85;
+	m_state[2] = 0x3c6ef372;
+	m_state[3] = 0xa54ff53a;
+	m_state[4] = 0x510e527f;
+	m_state[5] = 0x9b05688c;
+	m_state[6] = 0x1f83d9ab;
+	m_state[7] = 0x5be0cd19;
+}
+
+void franzSHA256::update(const uint8_t * data, size_t length) {
+	for (size_t i = 0 ; i < length ; i++) {
+		m_data[m_blocklen++] = data[i];
+		if (m_blocklen == 64) {
+			transform();
+
+			// End of the block
+			m_bitlen += 512;
+			m_blocklen = 0;
+		}
+	}
+}
+
+/*
+void franzSHA256::update(const std::string &data) {
+	update(reinterpret_cast<const uint8_t*> (data.c_str()), data.size());
+}
+uint8_t * franzSHA256::digest() {
+	uint8_t * hash = new uint8_t[32];
+
+	pad();
+	revert(hash);
+
+	return hash;
+}
+*/
+uint32_t franzSHA256::rotr(uint32_t x, uint32_t n) {
+	return (x >> n) | (x << (32 - n));
+}
+
+uint32_t franzSHA256::choose(uint32_t e, uint32_t f, uint32_t g) {
+	return (e & f) ^ (~e & g);
+}
+
+uint32_t franzSHA256::majority(uint32_t a, uint32_t b, uint32_t c) {
+	return (a & (b | c)) | (b & c);
+}
+
+uint32_t franzSHA256::sig0(uint32_t x) {
+	return franzSHA256::rotr(x, 7) ^ franzSHA256::rotr(x, 18) ^ (x >> 3);
+}
+
+uint32_t franzSHA256::sig1(uint32_t x) {
+	return franzSHA256::rotr(x, 17) ^ franzSHA256::rotr(x, 19) ^ (x >> 10);
+}
+
+void franzSHA256::transform() {
+	uint32_t maj, xorA, ch, xorE, sum, newA, newE, m[64];
+	uint32_t state[8];
+
+	for (uint8_t i = 0, j = 0; i < 16; i++, j += 4) { // Split data in 32 bit blocks for the 16 first words
+		m[i] = (m_data[j] << 24) | (m_data[j + 1] << 16) | (m_data[j + 2] << 8) | (m_data[j + 3]);
+	}
+
+	for (uint8_t k = 16 ; k < 64; k++) { // Remaining 48 blocks
+		m[k] = franzSHA256::sig1(m[k - 2]) + m[k - 7] + franzSHA256::sig0(m[k - 15]) + m[k - 16];
+	}
+
+	for(uint8_t i = 0 ; i < 8 ; i++) {
+		state[i] = m_state[i];
+	}
+
+	for (uint8_t i = 0; i < 64; i++) {
+		maj   = franzSHA256::majority(state[0], state[1], state[2]);
+		xorA  = franzSHA256::rotr(state[0], 2) ^ franzSHA256::rotr(state[0], 13) ^ franzSHA256::rotr(state[0], 22);
+
+		ch = choose(state[4], state[5], state[6]);
+
+		xorE  = franzSHA256::rotr(state[4], 6) ^ franzSHA256::rotr(state[4], 11) ^ franzSHA256::rotr(state[4], 25);
+
+		sum  = m[i] + Kappa[i] + state[7] + ch + xorE;
+		newA = xorA + maj + sum;
+		newE = state[3] + sum;
+
+		state[7] = state[6];
+		state[6] = state[5];
+		state[5] = state[4];
+		state[4] = newE;
+		state[3] = state[2];
+		state[2] = state[1];
+		state[1] = state[0];
+		state[0] = newA;
+	}
+
+	for(uint8_t i = 0 ; i < 8 ; i++) {
+		m_state[i] += state[i];
+	}
+}
+
+void franzSHA256::pad() 
+{
+
+	uint64_t i = m_blocklen;
+	uint8_t end = m_blocklen < 56 ? 56 : 64;
+
+	m_data[i++] = 0x80; // Append a bit 1
+	while (i < end) {
+		m_data[i++] = 0x00; // Pad with zeros
+	}
+
+	if(m_blocklen >= 56) {
+		transform();
+		memset(m_data, 0, 56);
+	}
+
+	// Append to the padding the total message's length in bits and transform.
+	m_bitlen += m_blocklen * 8;
+	m_data[63] = m_bitlen;
+	m_data[62] = m_bitlen >> 8;
+	m_data[61] = m_bitlen >> 16;
+	m_data[60] = m_bitlen >> 24;
+	m_data[59] = m_bitlen >> 32;
+	m_data[58] = m_bitlen >> 40;
+	m_data[57] = m_bitlen >> 48;
+	m_data[56] = m_bitlen >> 56;
+	transform();
+}
+
+void franzSHA256::revert(uint8_t * hash) 
+{
+	// SHA uses big endian byte ordering
+	// Revert all bytes
+	for (uint8_t i = 0 ; i < 4 ; i++) {
+		for(uint8_t j = 0 ; j < 8 ; j++) {
+			hash[i + (j * 4)] = (m_state[j] >> (24 - i * 8)) & 0x000000ff;
+		}
+	}
+}
+
+std::string franzSHA256::gethex()
+{
+/// less include, smaller executable. Dirty, but quick and small
+	uint8_t * hash = new uint8_t[32];
+	pad();
+	revert(hash);
+	char myhex[4];
+	string risultato="";
+	for (int j=0; j <= 31; j++)
+	{
+		sprintf(myhex,"%02X", (unsigned char)hash[j]);
+		risultato.push_back(myhex[0]);
+		risultato.push_back(myhex[1]);
+	}
+	delete[] hash;
+	return risultato;
+}
+
+
 
 /// take sha256
 string sha256_calc_file(const char * i_filename,bool i_flagcalccrc32,uint32_t& o_crc32,const int64_t i_inizio,const int64_t i_totali,int64_t& io_lavorati)
 {
 	o_crc32=0;
-	string risultato="ERROR";
+	
 	FILE* myfile = freadopen(i_filename);
 	if(myfile==NULL )
- 		return risultato;
+ 		return "";
+	
+	const int BUFSIZE	=65536*8;
+	unsigned char 		buf[BUFSIZE];
+	int 				n=BUFSIZE;
+				
+	franzSHA256 mysha256;
+	while (1)
+	{
+		int r=fread(buf, 1, n, myfile);
+		mysha256.update(buf,r);
+		if (i_flagcalccrc32)
+			o_crc32=crc32_16bytes(buf,r,o_crc32);
+ 		if (r!=n) 
+			break;
+		io_lavorati+=n;
+		if (flagnoeta==false)
+			avanzamento(io_lavorati,i_totali,i_inizio);
+	}
+	fclose(myfile);
+	return mysha256.gethex();
+	
+	
+	/* with libzpaq
+	o_crc32=0;
+	
+	FILE* myfile = freadopen(i_filename);
+	if(myfile==NULL )
+ 		return "";
 	
 	const int BUFSIZE	=65536*8;
 	char 				buf[BUFSIZE];
@@ -25121,7 +25420,7 @@ string sha256_calc_file(const char * i_filename,bool i_flagcalccrc32,uint32_t& o
 	char sha256result[32];
 	memcpy(sha256result, sha256.result(), 32);
 	char myhex[4];
-	risultato="";
+	string risultato="";
 	for (int j=0; j <= 31; j++)
 	{
 		sprintf(myhex,"%02X", (unsigned char)sha256result[j]);
@@ -25129,44 +25428,40 @@ string sha256_calc_file(const char * i_filename,bool i_flagcalccrc32,uint32_t& o
 		risultato.push_back(myhex[1]);
 	}
 	return risultato;
+	*/
 }	
 	
 
 
-string xxhash_calc_file(const char * i_filename,bool i_flagcalccrc32,uint32_t& o_crc32,const int64_t i_inizio,const int64_t i_totali,int64_t& io_lavorati,
-uint64_t& o_high64,uint64_t& o_low64)
+string xxhash_calc_file(const char * i_filename,bool i_flagcalccrc32,uint32_t& o_crc32,const int64_t i_inizio,const int64_t i_totali,int64_t& io_lavorati)
 {
 	o_crc32=0;
-	o_high64=0;
-	o_low64=0;
-		
-	size_t const blockSize = 65536;
-	unsigned char buffer[blockSize];
+	
     FILE* inFile = freadopen(i_filename);
 	if (inFile==NULL) 
-		return "ERROR";
+		return "";
+
+	size_t const blockSize = 65536;
+	unsigned char buffer[blockSize];
+	size_t readSize;
 	
 	XXH3_state_t state128;
     (void)XXH3_128bits_reset(&state128);
 	
-	size_t readSize;
 	while ((readSize = fread(buffer, 1, blockSize, inFile)) > 0) 
 	{
 		(void)XXH3_128bits_update(&state128, buffer, readSize);
 		if (i_flagcalccrc32)
 			o_crc32=crc32_16bytes(buffer,readSize,o_crc32);
 		io_lavorati+=readSize;
-		///printf("IIIIIIIIIIIIIIIIIIIIIIIIIII OOOOO  %lld\n",io_lavorati);
 		if (flagnoeta==false)
 				avanzamento(io_lavorati,i_totali,i_inizio);
 	}
 	fclose(inFile);
 	XXH128_hash_t myhash=XXH3_128bits_digest(&state128);
-	o_high64=myhash.high64;
-	o_low64=myhash.low64;
-	
-	char risultato[33];
-	sprintf(risultato,"%016llX%016llX",(unsigned long long)o_high64,(unsigned long long)o_low64);
+	char buf[33];
+	sprintf(buf,"%016llX%016llX",(unsigned long long)myhash.high64,(unsigned long long)myhash.low64);
+	string risultato=buf;
 	return risultato;
 }
 
@@ -25176,19 +25471,19 @@ uint64_t& o_high64,uint64_t& o_low64)
 /// finally get crc32-c 
 #define SIZE (262144*3)
 #define CHUNK SIZE
-unsigned int crc32c_calc_file(const char * i_filename,const int64_t i_inizio,const int64_t i_totali,int64_t& io_lavorati)
+string crc32c_calc_file(const char * i_filename,const int64_t i_inizio,const int64_t i_totali,int64_t& io_lavorati)
 {
 	FILE* myfile = freadopen(i_filename);
 	
 	if( myfile==NULL )
     	return 0;
     
-	char buf[SIZE];
+	char buffer[SIZE];
     ssize_t got;
     size_t off, n;
     uint32_t crc=0;
 	
-    while ((got = fread(buf, sizeof(char),SIZE,myfile)) > 0) 
+    while ((got = fread(buffer, sizeof(char),SIZE,myfile)) > 0) 
 	{
 		off = 0;
         do 
@@ -25196,7 +25491,7 @@ unsigned int crc32c_calc_file(const char * i_filename,const int64_t i_inizio,con
             n = (size_t)got - off;
             if (n > CHUNK)
                 n = CHUNK;
-            crc = crc32c(crc, (const unsigned char*)buf + off, n);
+            crc = crc32c(crc, (const unsigned char*)buffer + off, n);
             off += n;
         } while (off < (size_t)got);
 				
@@ -25207,57 +25502,41 @@ unsigned int crc32c_calc_file(const char * i_filename,const int64_t i_inizio,con
 
     }
     fclose(myfile);
-	return crc;
+	char buf[9];
+	sprintf(buf,"%08X",crc);
+	string risultato=buf;
+	return risultato;
 }
 
 
 string hash_calc_file(int i_algo,const char * i_filename,bool i_flagcalccrc32,uint32_t& o_crc32,const int64_t i_inizio,const int64_t i_totali,int64_t& io_lavorati)
 {
 	o_crc32=0;
-	char risultato[33];
+		
+	if (i_algo==ALGO_WYHASH)		// memory mapped file
+		return wyhash_calc_file(i_filename,i_flagcalccrc32,o_crc32,i_inizio,i_totali,io_lavorati);
+	else
+	if (i_algo==ALGO_XXHASH64)
+		return xxhash64_calc_file(i_filename,i_flagcalccrc32,o_crc32,i_inizio,i_totali,io_lavorati);
+	else
+	if (i_algo==ALGO_SHA1)
+		return sha1_calc_file(i_filename,i_flagcalccrc32,o_crc32,i_inizio,i_totali,io_lavorati);
+	else
+	if (i_algo==ALGO_CRC32C)
+		return crc32c_calc_file(i_filename,i_inizio,i_totali,io_lavorati);
+	else
+	if (i_algo==ALGO_CRC32)
+		return crc32_calc_file(i_filename,i_inizio,i_totali,io_lavorati);
+	else
+	if (i_algo==ALGO_XXH3)
+		return xxhash_calc_file(i_filename,i_flagcalccrc32,o_crc32,i_inizio,i_totali,io_lavorati);
+	else
+	if (i_algo==ALGO_SHA256)
+		return sha256_calc_file(i_filename,i_flagcalccrc32,o_crc32,i_inizio,i_totali,io_lavorati);
+	else
+		error("GURU 13480 algo ??");
 	
-	switch (i_algo) 
-	{
-		
-		case ALGO_WYHASH:
-			return  wyhash_calc_file(i_filename,i_flagcalccrc32,o_crc32,i_inizio,i_totali,io_lavorati);
-		break;
-		
-		case ALGO_XXHASH64:
-			return  xxhash64_calc_file(i_filename,i_flagcalccrc32,o_crc32,i_inizio,i_totali,io_lavorati);
-		break;
-		
-		case ALGO_SHA1:
-			return  sha1_calc_file(i_filename,i_flagcalccrc32,o_crc32,i_inizio,i_totali,io_lavorati);
-		break;
-		
-		case ALGO_CRC32C:
-			sprintf(risultato,"%08X",crc32c_calc_file(i_filename,i_inizio,i_totali,io_lavorati));
-			return risultato;		
-		break;
-		
-		case ALGO_CRC32:
-			sprintf(risultato,"%08X",crc32_calc_file(i_filename,i_inizio,i_totali,io_lavorati));
-			return risultato;		
-		break;
-		
-		case ALGO_XXH3:
-			uint64_t dummybasso64;
-			uint64_t dummyalto64;
-			return xxhash_calc_file(i_filename,i_flagcalccrc32,o_crc32,i_inizio,i_totali,io_lavorati,dummybasso64,dummyalto64);
-			
-		break;
-		
-		case ALGO_SHA256: 
-		return  sha256_calc_file(i_filename,i_flagcalccrc32,o_crc32,i_inizio,i_totali,io_lavorati);
-		break;
-		
-		default: 
-			error("GURU 13480 algo ??");
-	}
-	
-
-	return "ERROR";
+	return "";
 }
 
 
@@ -25270,13 +25549,13 @@ string hash_calc_file(int i_algo,const char * i_filename,bool i_flagcalccrc32,ui
 
 struct tparametrihash
 {
-	vector<string> filestobehashed;
-	vector<string> hashcalculated;
-	uint64_t	timestart;
-	uint64_t	timeend;
-	int64_t	inizio;
-	int64_t dimensione;
-	int	tnumber;
+	vector<string> 	filestobehashed;
+	vector<string> 	hashcalculated;
+	uint64_t		timestart;
+	uint64_t		timeend;
+	int64_t			inizio;
+	int64_t 		dimensione;
+	int				tnumber;
 };
 
 void * scansionahash(void *t) 
@@ -25297,7 +25576,10 @@ void * scansionahash(void *t)
 }
 
 
-
+bool ischecksum()
+{
+	return (flagcrc32 || flagcrc32c || flagxxh3 || flagxxhash64 || flagsha1 || flagsha256);
+}	
 int Jidac::deduplicate() 
 {
 	printf("*** DIRECTLY DELETE DUPLICATED FILES ***\n");
@@ -25318,11 +25600,7 @@ int Jidac::deduplicate()
 	flagchecksum=false;
 	flagverify=true;
 	
-	flagcrc32c=false;
-	flagcrc32=false;
-	if (flagsha256)
-		flagxxh3=false;
-	else
+	if (!ischecksum())
 		flagxxh3=true;
 	flagkill=true;
 	
@@ -25585,10 +25863,9 @@ int Jidac::summa()
 		myblock.timeend=0;
 		vettoreparametrihash.push_back(myblock);
 	}
-	
-	
-	if (!flagnoeta)
-	printf("Computing filesize for %s files/directory...\n",migliaia(files.size()));
+	printbar(' ');
+	///if (!flagnoeta)
+	///printf("Computing filesize for %s files/directory...\n",migliaia(files.size()));
 	
     
 	
@@ -25603,7 +25880,7 @@ int Jidac::summa()
 	int totfile=0;
 	for (int i=0;i<mythreads;i++)
 	{
-		if (flagverbose)
+		if (flagdebug)
 			printf("Thread [%02d] files %s\n",i,migliaia(vettoreparametrihash[i].filestobehashed.size()));
 		totfile+=+vettoreparametrihash[i].filestobehashed.size();
 	}
@@ -25624,7 +25901,7 @@ int Jidac::summa()
 	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
 
 	if (!flagnoeta)
-		printf("\nCreating %d hashing thread(s)\n",mythreads);
+		printf("\nCreating %d hashing thread(s) with %s\n",mythreads,mygetalgo().c_str());
 	
 	uint64_t iniziohash=mtime();
 	for(int i = 0; i < mythreads; i++ ) 
@@ -25755,23 +26032,26 @@ int Jidac::summa()
 	int64_t printtime=mtime()-startprint;
 	if (!flagnoeta)
 	{
-		printf("Algo %s by %d threads\n",mygetalgo().c_str(),mythreads);
-		printf("Scanning filesystem time  %f s\n",scantime);
-		printf("Data transfer+CPU   time  %f s\n",hashtime/1000.0);
-		printf("Data output         time  %f s\n",printtime/1000.0);
+		///printf("Algo %s by %d threads\n",mygetalgo().c_str(),mythreads);
+		printf("Scanning filesystem time  %15.3f s\n",scantime);
+		printf("Data transfer+CPU   time  %15.3f s\n",hashtime/1000.0);
+		printf("Data output         time  %15.3f s\n",printtime/1000.0);
 		printf("Total size                %19s (%10s)\n",migliaia(scannedsize),tohuman(scannedsize));
 		printf("Tested size               %19s (%10s)\n",migliaia(testedbytes),tohuman(testedbytes));
+		if (!flagnosort)
+		{
 		printf("Duplicated size           %19s (%10s)\n",migliaia(duplicated_size),tohuman(duplicated_size));
 		printf("Duplicated files          %19s\n",migliaia(duplicated_files));
+		}
 		int64_t myspeed=(int64_t)(testedbytes*1000.0/(hashtime));
 		printf("Worked on %s bytes avg speed (hashtime) %s B/s\n",migliaia(total_size),migliaia2(myspeed));
+		char sha256result[32];
+		memcpy(sha256result, sha256.result(), 32);
+		printf("GLOBAL SHA256: ");
+		for (int j=0; j <= 31; j++)
+			printf("%02X", (unsigned char)sha256result[j]);
+		printf("\n");
 	}
-	char sha256result[32];
-	memcpy(sha256result, sha256.result(), 32);
-	printf("GLOBAL SHA256: ");
-	for (int j=0; j <= 31; j++)
-		printf("%02X", (unsigned char)sha256result[j]);
-	printf("\n");
 
 	if (flagkill)
 		if (flagforce)
@@ -25847,6 +26127,11 @@ void my_handler(int s)
 	}
 	exit(1); 
 }
+
+
+#include <windows.h>
+#include <cstdio>
+
 
 // Convert argv to UTF-8 and replace \ with /
 #ifdef unix
@@ -27027,12 +27312,10 @@ int Jidac::consolidate(string i_archive)
 		char risultato[33];
 		sprintf(risultato,"%016llX%016llX",(unsigned long long)myhash.high64,(unsigned long long)myhash.low64);
 		
-		uint64_t dummybasso64;
-		uint64_t dummyalto64;
 		uint32_t dummycrc32;
 		int64_t startverify=mtime();
 		int64_t io_lavorati=0;
-		string hashreloaded=xxhash_calc_file(outfile.c_str(),false,dummycrc32,startverify,total_size,io_lavorati,dummybasso64,dummyalto64);
+		string hashreloaded=xxhash_calc_file(outfile.c_str(),false,dummycrc32,startverify,total_size,io_lavorati);
 		printf("Expected   XXH3 hash of the output file %s\n",risultato);
 		printf("Calculated XXH3 hash of the output file %s\n",risultato);
 		if (hashreloaded!=risultato)
@@ -27206,6 +27489,7 @@ int Jidac::test()
 	unsigned int 	parti			=1;
 	int64_t 		lavorati		=0;
 	uint64_t 		dalavorare		=0;
+	int64_t			hashati			=0;
 	
 	uint32_t 		currentcrc32	=0;
 	uint32_t 		crc32stored		=0;
@@ -27347,8 +27631,7 @@ int Jidac::test()
 			i++;
 			s_crc32block myit=g_crc32[i];
 			currentcrc32=crc32_combine (currentcrc32, myit.crc32,myit.crc32size);
-			if (!flagverify)
-				lavorati+=myit.crc32size;
+			lavorati+=myit.crc32size;
 			parti++;
 		}
 		
@@ -27385,7 +27668,7 @@ int Jidac::test()
 						filedefinitivo.c_str(),
 						true,	/// <--- look at this
 						crc32fromfilesystem,
-						startverify,dimtotalefile,lavorati);
+						startverify,dimtotalefile,hashati);
 						if (hashread==myhash)
 						{
 							if (flagdebug)
@@ -27413,7 +27696,8 @@ int Jidac::test()
 			{
 				if (flagverbose)
 					printf("Taking CRC32 for %s\r",filedefinitivo.c_str());
-				crc32fromfilesystem=crc32_calc_file(filedefinitivo.c_str(),-1,dimtotalefile,lavorati);
+				string temp=crc32_calc_file(filedefinitivo.c_str(),-1,dimtotalefile,lavorati);
+				crc32fromfilesystem=crchex2int(temp.c_str());
 			}
 		}
 		
@@ -27472,7 +27756,7 @@ int Jidac::test()
 		printf("Checked       : %08d of %08d (zpaqfranz)\n",checkedfiles,total_files);
 	if (uncheckedfiles>0)
 	{
-		printf("UNcheck       : %08d if %08d (zpaq 7.15)\n",uncheckedfiles,total_files);
+		printf("UNcheck       : %08d of %08d (zpaq 7.15)\n",uncheckedfiles,total_files);
 			status_0=uncheckedfiles;
 	}
 	
@@ -27506,6 +27790,7 @@ int Jidac::test()
 	if (status_e_blocks)
 	printf("ERRORS        : %08d (ERROR in rebuilded CRC-32, SHA-1 collisions?)\n",status_e_blocks);
 	status_e = status_e_hash+status_e_crc+status_e_blocks;
+	if (status_e)
 	morebar('-');
 	
 	if (status_0)
@@ -27521,13 +27806,13 @@ int Jidac::test()
 	if (status_e==0)
 	{
 		if (status_0)
-			printf("Verdict       : UNKNOWN  (Cannot say anything)\n");
+			printf("VERDICT       : UNKNOWN  (Cannot say anything)\n");
 		else
 		{
 			if (flagverify)
-			printf("Verdict       : All OK (with verification from filesystem)\n");
+			printf("VERDICT       : All OK (with verification from filesystem)\n");
 			else
-			printf("Verdict       : All OK (normal test)\n");
+			printf("VERDICT       : All OK (normal test)\n");
 				
 		}
 	}
@@ -29055,11 +29340,9 @@ int Jidac::fillami()
 		string filename=chunkfilename[i];
 		printf("Reading chunk %05d ",i);
 		
-		uint64_t dummybasso64;
-		uint64_t dummyalto64;
 		uint32_t dummycrc32;
 		uint64_t starthash=mtime();
-		string filehash=xxhash_calc_file(filename.c_str(),false,dummycrc32,-1,-1,lavorati,dummybasso64,dummyalto64);
+		string filehash=xxhash_calc_file(filename.c_str(),false,dummycrc32,-1,-1,lavorati);
 		uint64_t hashspeed=chunksize/((mtime()-starthash+1)/1000.0);
 		printf(" (%12s/s) ",tohuman(hashspeed));
 

@@ -11,8 +11,9 @@
 ///////// https://github.com/fcorbelli/zpaqfranz/blob/main/notes.txt
 
 //#define UBUNTU
+void help_hash(bool i_usage,bool i_example);
 
-#define ZPAQ_VERSION "52.9-experimental"
+#define ZPAQ_VERSION "52.10-experimental"
 
 /*
                          __                     
@@ -44,7 +45,7 @@ with unmodified version (7.15), even at the cost
 of expensive on inelegant workarounds.
 
 So don't be surprised if it looks like what in Italy 
-we call "zibaldone" or in Emilia-Romagna "mappazzone".
+we call "zibaldone" or in Emilia-Romagna "4zzone".
 Jun 2021: starting to fix the mess (refactoring). Work in progress.
 Jul 2021: source cleaned a bit. From 52+ XXHASH64 as checksum algo
 
@@ -71,6 +72,7 @@ As far as I know this is allowed by the licenses.
 - Embedded Artistry https://github.com/embeddedartistry
 - wyhash (experimental) WangYi  https://github.com/wangyi-fudan/wyhash  
 - https://github.com/System-Glitch/SHA256
+- https://github.com/BLAKE3-team/BLAKE3
 
 FreeBSD port, quick and dirty to get a /usr/local/bin/zpaqfranz
 ```
@@ -8649,6 +8651,8 @@ typedef map<string, voidhelpfunction> 	MAPPAHELP;
 typedef map<int, 	string> 			MAPPACOMMENTI;
 typedef map<string, string> 			MAPPAFILEHASH;
 typedef map<string, string> 			MAPPASTRINGASTRINGA;
+typedef map<int64_t,string> 			MAPPAINT64STRING;
+
 struct	hash_check
 {
 	int		algotype;
@@ -8661,17 +8665,19 @@ struct	hash_check
 typedef map<string, hash_check> MAPPACHECK;
 
 
-enum ealgoritmi		{ ALGO_SIZE,ALGO_SHA1,ALGO_CRC32C,ALGO_CRC32,ALGO_XXH3,ALGO_SHA256,ALGO_WYHASH,ALGO_XXHASH64,ALGO_LAST };
+enum ealgoritmi		{ ALGO_SHA1,ALGO_CRC32C,ALGO_CRC32,ALGO_XXH3,ALGO_SHA256,ALGO_WYHASH,ALGO_XXHASH64,ALGO_BLAKE3,ALGO_LAST };
 typedef std::map<int,std::string> algoritmi;
-const algoritmi::value_type rawData[] = {
-   algoritmi::value_type(ALGO_SIZE,"Size"),
-   algoritmi::value_type(ALGO_SHA1,"SHA-1"),
-   algoritmi::value_type(ALGO_CRC32,"CRC32"),
-   algoritmi::value_type(ALGO_CRC32C,"CRC-32C"),
-   algoritmi::value_type(ALGO_XXH3,"XXH3"),
-   algoritmi::value_type(ALGO_XXHASH64,"XXH64"),
-   algoritmi::value_type(ALGO_SHA256,"SHA-256"),
-   algoritmi::value_type(ALGO_WYHASH,"WYHASH"),
+const algoritmi::value_type rawData[] = 
+{
+   ///algoritmi::value_type(ALGO_SIZE,"Size"),
+   algoritmi::value_type(ALGO_SHA1,"sha1"),
+   algoritmi::value_type(ALGO_CRC32,"crc32"),
+   algoritmi::value_type(ALGO_CRC32C,"crc32c"),
+   algoritmi::value_type(ALGO_XXH3,"xxh3"),
+   algoritmi::value_type(ALGO_XXHASH64,"xxhash"),
+   algoritmi::value_type(ALGO_SHA256,"sha256"),
+   algoritmi::value_type(ALGO_WYHASH,"wyhash"),
+   algoritmi::value_type(ALGO_BLAKE3,"blake3"),
 };
 const int numElems = sizeof rawData / sizeof rawData[0];
 algoritmi myalgoritmi(rawData, rawData + numElems);
@@ -8739,9 +8745,1148 @@ bool flagcrc32;
 bool flagsha256;
 bool flagwyhash; // future
 bool flagxxhash64;
+bool flagblake3;
 
 /// out of Jidac because of struct DT and XXH3 align
 int g_franzotype; // type of FRANZOFFSET. 0 = nothing, 1 CRC, 2 XXHASH64, 3 SHA1, 4 SHA256, 5 XXH3
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/*
+gcc -O3 -o ex.exe example.c  
+*/
+
+#include <assert.h>
+#include <stdbool.h>
+#include <string.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <unistd.h>
+#include <stdbool.h>
+#include <stdint.h>
+
+
+
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#define BLAKE3_VERSION_STRING "1.0.0"
+#define BLAKE3_KEY_LEN 32
+#define BLAKE3_OUT_LEN 32
+#define BLAKE3_BLOCK_LEN 64
+#define BLAKE3_CHUNK_LEN 1024
+#define BLAKE3_MAX_DEPTH 54
+
+// This struct is a private implementation detail. It has to be here because
+// it's part of blake3_hasher below.
+typedef struct {
+  uint32_t cv[8];
+  uint64_t chunk_counter;
+  uint8_t buf[BLAKE3_BLOCK_LEN];
+  uint8_t buf_len;
+  uint8_t blocks_compressed;
+  uint8_t flags;
+} blake3_chunk_state;
+
+typedef struct {
+  uint32_t key[8];
+  blake3_chunk_state chunk;
+  uint8_t cv_stack_len;
+  // The stack size is MAX_DEPTH + 1 because we do lazy merging. For example,
+  // with 7 chunks, we have 3 entries in the stack. Adding an 8th chunk
+  // requires a 4th entry, rather than merging everything down to 1, because we
+  // don't know whether more input is coming. This is different from how the
+  // reference implementation does things.
+  uint8_t cv_stack[(BLAKE3_MAX_DEPTH + 1) * BLAKE3_OUT_LEN];
+} blake3_hasher;
+
+const char *blake3_version(void);
+void blake3_hasher_init(blake3_hasher *self);
+void blake3_hasher_init_keyed(blake3_hasher *self,
+                              const uint8_t key[BLAKE3_KEY_LEN]);
+void blake3_hasher_init_derive_key(blake3_hasher *self, const char *context);
+void blake3_hasher_init_derive_key_raw(blake3_hasher *self, const void *context,
+                                       size_t context_len);
+void blake3_hasher_update(blake3_hasher *self, const void *input,
+                          size_t input_len);
+void blake3_hasher_finalize(const blake3_hasher *self, uint8_t *out,
+                            size_t out_len);
+void blake3_hasher_finalize_seek(const blake3_hasher *self, uint64_t seek,
+                                 uint8_t *out, size_t out_len);
+
+#ifdef __cplusplus
+}
+#endif
+
+
+// internal flags
+enum blake3_flags {
+  CHUNK_START         = 1 << 0,
+  CHUNK_END           = 1 << 1,
+  PARENT              = 1 << 2,
+  ROOT                = 1 << 3,
+  KEYED_HASH          = 1 << 4,
+  DERIVE_KEY_CONTEXT  = 1 << 5,
+  DERIVE_KEY_MATERIAL = 1 << 6,
+};
+
+// This C implementation tries to support recent versions of GCC, Clang, and
+// MSVC.
+
+
+
+
+#define MAX_SIMD_DEGREE 1
+
+// There are some places where we want a static size that's equal to the
+// MAX_SIMD_DEGREE, but also at least 2.
+#define MAX_SIMD_DEGREE_OR_2 (MAX_SIMD_DEGREE > 2 ? MAX_SIMD_DEGREE : 2)
+
+static const uint32_t IV[8] = {0x6A09E667UL, 0xBB67AE85UL, 0x3C6EF372UL,
+                               0xA54FF53AUL, 0x510E527FUL, 0x9B05688CUL,
+                               0x1F83D9ABUL, 0x5BE0CD19UL};
+
+static const uint8_t MSG_SCHEDULE[7][16] = {
+    {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15},
+    {2, 6, 3, 10, 7, 0, 4, 13, 1, 11, 12, 5, 9, 14, 15, 8},
+    {3, 4, 10, 12, 13, 2, 7, 14, 6, 5, 9, 0, 11, 15, 8, 1},
+    {10, 7, 12, 9, 14, 3, 13, 15, 4, 0, 11, 2, 5, 8, 1, 6},
+    {12, 13, 9, 11, 15, 10, 14, 8, 7, 2, 5, 3, 0, 1, 6, 4},
+    {9, 14, 11, 5, 8, 12, 15, 1, 13, 3, 0, 10, 2, 6, 4, 7},
+    {11, 15, 5, 0, 1, 9, 8, 6, 14, 10, 2, 12, 3, 4, 7, 13},
+};
+
+/* Find index of the highest set bit */
+/* x is assumed to be nonzero.       */
+static unsigned int highest_one(uint64_t x) {
+#if defined(__GNUC__) || defined(__clang__)
+  return 63 ^ __builtin_clzll(x);
+#elif defined(_MSC_VER) && defined(IS_X86_64)
+  unsigned long index;
+  _BitScanReverse64(&index, x);
+  return index;
+#elif defined(_MSC_VER) && defined(IS_X86_32)
+  if(x >> 32) {
+    unsigned long index;
+    _BitScanReverse(&index, x >> 32);
+    return 32 + index;
+  } else {
+    unsigned long index;
+    _BitScanReverse(&index, x);
+    return index;
+  }
+#else
+  unsigned int c = 0;
+  if(x & 0xffffffff00000000ULL) { x >>= 32; c += 32; }
+  if(x & 0x00000000ffff0000ULL) { x >>= 16; c += 16; }
+  if(x & 0x000000000000ff00ULL) { x >>=  8; c +=  8; }
+  if(x & 0x00000000000000f0ULL) { x >>=  4; c +=  4; }
+  if(x & 0x000000000000000cULL) { x >>=  2; c +=  2; }
+  if(x & 0x0000000000000002ULL) {           c +=  1; }
+  return c;
+#endif
+}
+
+// Count the number of 1 bits.
+INLINE unsigned int popcnt(uint64_t x) {
+#if defined(__GNUC__) || defined(__clang__)
+  return __builtin_popcountll(x);
+#else
+  unsigned int count = 0;
+  while (x != 0) {
+    count += 1;
+    x &= x - 1;
+  }
+  return count;
+#endif
+}
+
+// Largest power of two less than or equal to x. As a special case, returns 1
+// when x is 0. 
+INLINE uint64_t round_down_to_power_of_2(uint64_t x) {
+  return 1ULL << highest_one(x | 1);
+}
+
+INLINE uint32_t counter_low(uint64_t counter) { return (uint32_t)counter; }
+
+INLINE uint32_t counter_high(uint64_t counter) {
+  return (uint32_t)(counter >> 32);
+}
+
+INLINE uint32_t load32(const void *src) {
+  const uint8_t *p = (const uint8_t *)src;
+  return ((uint32_t)(p[0]) << 0) | ((uint32_t)(p[1]) << 8) |
+         ((uint32_t)(p[2]) << 16) | ((uint32_t)(p[3]) << 24);
+}
+
+INLINE void load_key_words(const uint8_t key[BLAKE3_KEY_LEN],
+                           uint32_t key_words[8]) {
+  key_words[0] = load32(&key[0 * 4]);
+  key_words[1] = load32(&key[1 * 4]);
+  key_words[2] = load32(&key[2 * 4]);
+  key_words[3] = load32(&key[3 * 4]);
+  key_words[4] = load32(&key[4 * 4]);
+  key_words[5] = load32(&key[5 * 4]);
+  key_words[6] = load32(&key[6 * 4]);
+  key_words[7] = load32(&key[7 * 4]);
+}
+
+INLINE void store32(void *dst, uint32_t w) {
+  uint8_t *p = (uint8_t *)dst;
+  p[0] = (uint8_t)(w >> 0);
+  p[1] = (uint8_t)(w >> 8);
+  p[2] = (uint8_t)(w >> 16);
+  p[3] = (uint8_t)(w >> 24);
+}
+
+INLINE void store_cv_words(uint8_t bytes_out[32], uint32_t cv_words[8]) {
+  store32(&bytes_out[0 * 4], cv_words[0]);
+  store32(&bytes_out[1 * 4], cv_words[1]);
+  store32(&bytes_out[2 * 4], cv_words[2]);
+  store32(&bytes_out[3 * 4], cv_words[3]);
+  store32(&bytes_out[4 * 4], cv_words[4]);
+  store32(&bytes_out[5 * 4], cv_words[5]);
+  store32(&bytes_out[6 * 4], cv_words[6]);
+  store32(&bytes_out[7 * 4], cv_words[7]);
+}
+
+void blake3_compress_in_place(uint32_t cv[8],
+                              const uint8_t block[BLAKE3_BLOCK_LEN],
+                              uint8_t block_len, uint64_t counter,
+                              uint8_t flags);
+
+void blake3_compress_xof(const uint32_t cv[8],
+                         const uint8_t block[BLAKE3_BLOCK_LEN],
+                         uint8_t block_len, uint64_t counter, uint8_t flags,
+                         uint8_t out[64]);
+
+void blake3_hash_many(const uint8_t *const *inputs, size_t num_inputs,
+                      size_t blocks, const uint32_t key[8], uint64_t counter,
+                      bool increment_counter, uint8_t flags,
+                      uint8_t flags_start, uint8_t flags_end, uint8_t *out);
+
+size_t blake3_simd_degree(void);
+
+
+// Declarations for implementation-specific functions.
+void blake3_compress_in_place_portable(uint32_t cv[8],
+                                       const uint8_t block[BLAKE3_BLOCK_LEN],
+                                       uint8_t block_len, uint64_t counter,
+                                       uint8_t flags);
+
+void blake3_compress_xof_portable(const uint32_t cv[8],
+                                  const uint8_t block[BLAKE3_BLOCK_LEN],
+                                  uint8_t block_len, uint64_t counter,
+                                  uint8_t flags, uint8_t out[64]);
+
+void blake3_hash_many_portable(const uint8_t *const *inputs, size_t num_inputs,
+                               size_t blocks, const uint32_t key[8],
+                               uint64_t counter, bool increment_counter,
+                               uint8_t flags, uint8_t flags_start,
+                               uint8_t flags_end, uint8_t *out);
+
+
+
+
+
+const char *blake3_version(void) { return BLAKE3_VERSION_STRING; }
+
+INLINE void chunk_state_init(blake3_chunk_state *self, const uint32_t key[8],
+                             uint8_t flags) {
+  memcpy(self->cv, key, BLAKE3_KEY_LEN);
+  self->chunk_counter = 0;
+  memset(self->buf, 0, BLAKE3_BLOCK_LEN);
+  self->buf_len = 0;
+  self->blocks_compressed = 0;
+  self->flags = flags;
+}
+
+INLINE void chunk_state_reset(blake3_chunk_state *self, const uint32_t key[8],
+                              uint64_t chunk_counter) {
+  memcpy(self->cv, key, BLAKE3_KEY_LEN);
+  self->chunk_counter = chunk_counter;
+  self->blocks_compressed = 0;
+  memset(self->buf, 0, BLAKE3_BLOCK_LEN);
+  self->buf_len = 0;
+}
+
+INLINE size_t chunk_state_len(const blake3_chunk_state *self) {
+  return (BLAKE3_BLOCK_LEN * (size_t)self->blocks_compressed) +
+         ((size_t)self->buf_len);
+}
+
+INLINE size_t chunk_state_fill_buf(blake3_chunk_state *self,
+                                   const uint8_t *input, size_t input_len) {
+  size_t take = BLAKE3_BLOCK_LEN - ((size_t)self->buf_len);
+  if (take > input_len) {
+    take = input_len;
+  }
+  uint8_t *dest = self->buf + ((size_t)self->buf_len);
+  memcpy(dest, input, take);
+  self->buf_len += (uint8_t)take;
+  return take;
+}
+
+INLINE uint8_t chunk_state_maybe_start_flag(const blake3_chunk_state *self) {
+  if (self->blocks_compressed == 0) {
+    return CHUNK_START;
+  } else {
+    return 0;
+  }
+}
+
+typedef struct {
+  uint32_t input_cv[8];
+  uint64_t counter;
+  uint8_t block[BLAKE3_BLOCK_LEN];
+  uint8_t block_len;
+  uint8_t flags;
+} output_t;
+
+INLINE output_t make_output(const uint32_t input_cv[8],
+                            const uint8_t block[BLAKE3_BLOCK_LEN],
+                            uint8_t block_len, uint64_t counter,
+                            uint8_t flags) {
+  output_t ret;
+  memcpy(ret.input_cv, input_cv, 32);
+  memcpy(ret.block, block, BLAKE3_BLOCK_LEN);
+  ret.block_len = block_len;
+  ret.counter = counter;
+  ret.flags = flags;
+  return ret;
+}
+
+// Chaining values within a given chunk (specifically the compress_in_place
+// interface) are represented as words. This avoids unnecessary bytes<->words
+// conversion overhead in the portable implementation. However, the hash_many
+// interface handles both user input and parent node blocks, so it accepts
+// bytes. For that reason, chaining values in the CV stack are represented as
+// bytes.
+INLINE void output_chaining_value(const output_t *self, uint8_t cv[32]) {
+  uint32_t cv_words[8];
+  memcpy(cv_words, self->input_cv, 32);
+  blake3_compress_in_place(cv_words, self->block, self->block_len,
+                           self->counter, self->flags);
+  store_cv_words(cv, cv_words);
+}
+
+INLINE void output_root_bytes(const output_t *self, uint64_t seek, uint8_t *out,
+                              size_t out_len) {
+  uint64_t output_block_counter = seek / 64;
+  size_t offset_within_block = seek % 64;
+  uint8_t wide_buf[64];
+  while (out_len > 0) {
+    blake3_compress_xof(self->input_cv, self->block, self->block_len,
+                        output_block_counter, self->flags | ROOT, wide_buf);
+    size_t available_bytes = 64 - offset_within_block;
+    size_t memcpy_len;
+    if (out_len > available_bytes) {
+      memcpy_len = available_bytes;
+    } else {
+      memcpy_len = out_len;
+    }
+    memcpy(out, wide_buf + offset_within_block, memcpy_len);
+    out += memcpy_len;
+    out_len -= memcpy_len;
+    output_block_counter += 1;
+    offset_within_block = 0;
+  }
+}
+
+INLINE void chunk_state_update(blake3_chunk_state *self, const uint8_t *input,
+                               size_t input_len) {
+  if (self->buf_len > 0) {
+    size_t take = chunk_state_fill_buf(self, input, input_len);
+    input += take;
+    input_len -= take;
+    if (input_len > 0) {
+      blake3_compress_in_place(
+          self->cv, self->buf, BLAKE3_BLOCK_LEN, self->chunk_counter,
+          self->flags | chunk_state_maybe_start_flag(self));
+      self->blocks_compressed += 1;
+      self->buf_len = 0;
+      memset(self->buf, 0, BLAKE3_BLOCK_LEN);
+    }
+  }
+
+  while (input_len > BLAKE3_BLOCK_LEN) {
+    blake3_compress_in_place(self->cv, input, BLAKE3_BLOCK_LEN,
+                             self->chunk_counter,
+                             self->flags | chunk_state_maybe_start_flag(self));
+    self->blocks_compressed += 1;
+    input += BLAKE3_BLOCK_LEN;
+    input_len -= BLAKE3_BLOCK_LEN;
+  }
+
+  size_t take = chunk_state_fill_buf(self, input, input_len);
+  input += take;
+  input_len -= take;
+}
+
+INLINE output_t chunk_state_output(const blake3_chunk_state *self) {
+  uint8_t block_flags =
+      self->flags | chunk_state_maybe_start_flag(self) | CHUNK_END;
+  return make_output(self->cv, self->buf, self->buf_len, self->chunk_counter,
+                     block_flags);
+}
+
+INLINE output_t parent_output(const uint8_t block[BLAKE3_BLOCK_LEN],
+                              const uint32_t key[8], uint8_t flags) {
+  return make_output(key, block, BLAKE3_BLOCK_LEN, 0, flags | PARENT);
+}
+
+// Given some input larger than one chunk, return the number of bytes that
+// should go in the left subtree. This is the largest power-of-2 number of
+// chunks that leaves at least 1 byte for the right subtree.
+INLINE size_t left_len(size_t content_len) {
+  // Subtract 1 to reserve at least one byte for the right side. content_len
+  // should always be greater than BLAKE3_CHUNK_LEN.
+  size_t full_chunks = (content_len - 1) / BLAKE3_CHUNK_LEN;
+  return round_down_to_power_of_2(full_chunks) * BLAKE3_CHUNK_LEN;
+}
+
+// Use SIMD parallelism to hash up to MAX_SIMD_DEGREE chunks at the same time
+// on a single thread. Write out the chunk chaining values and return the
+// number of chunks hashed. These chunks are never the root and never empty;
+// those cases use a different codepath.
+INLINE size_t compress_chunks_parallel(const uint8_t *input, size_t input_len,
+                                       const uint32_t key[8],
+                                       uint64_t chunk_counter, uint8_t flags,
+                                       uint8_t *out) {
+#if defined(BLAKE3_TESTING)
+  assert(0 < input_len);
+  assert(input_len <= MAX_SIMD_DEGREE * BLAKE3_CHUNK_LEN);
+#endif
+
+  const uint8_t *chunks_array[MAX_SIMD_DEGREE];
+  size_t input_position = 0;
+  size_t chunks_array_len = 0;
+  while (input_len - input_position >= BLAKE3_CHUNK_LEN) {
+    chunks_array[chunks_array_len] = &input[input_position];
+    input_position += BLAKE3_CHUNK_LEN;
+    chunks_array_len += 1;
+  }
+
+  blake3_hash_many(chunks_array, chunks_array_len,
+                   BLAKE3_CHUNK_LEN / BLAKE3_BLOCK_LEN, key, chunk_counter,
+                   true, flags, CHUNK_START, CHUNK_END, out);
+
+  // Hash the remaining partial chunk, if there is one. Note that the empty
+  // chunk (meaning the empty message) is a different codepath.
+  if (input_len > input_position) {
+    uint64_t counter = chunk_counter + (uint64_t)chunks_array_len;
+    blake3_chunk_state chunk_state;
+    chunk_state_init(&chunk_state, key, flags);
+    chunk_state.chunk_counter = counter;
+    chunk_state_update(&chunk_state, &input[input_position],
+                       input_len - input_position);
+    output_t output = chunk_state_output(&chunk_state);
+    output_chaining_value(&output, &out[chunks_array_len * BLAKE3_OUT_LEN]);
+    return chunks_array_len + 1;
+  } else {
+    return chunks_array_len;
+  }
+}
+
+// Use SIMD parallelism to hash up to MAX_SIMD_DEGREE parents at the same time
+// on a single thread. Write out the parent chaining values and return the
+// number of parents hashed. (If there's an odd input chaining value left over,
+// return it as an additional output.) These parents are never the root and
+// never empty; those cases use a different codepath.
+INLINE size_t compress_parents_parallel(const uint8_t *child_chaining_values,
+                                        size_t num_chaining_values,
+                                        const uint32_t key[8], uint8_t flags,
+                                        uint8_t *out) {
+#if defined(BLAKE3_TESTING)
+  assert(2 <= num_chaining_values);
+  assert(num_chaining_values <= 2 * MAX_SIMD_DEGREE_OR_2);
+#endif
+
+  const uint8_t *parents_array[MAX_SIMD_DEGREE_OR_2];
+  size_t parents_array_len = 0;
+  while (num_chaining_values - (2 * parents_array_len) >= 2) {
+    parents_array[parents_array_len] =
+        &child_chaining_values[2 * parents_array_len * BLAKE3_OUT_LEN];
+    parents_array_len += 1;
+  }
+
+  blake3_hash_many(parents_array, parents_array_len, 1, key,
+                   0, // Parents always use counter 0.
+                   false, flags | PARENT,
+                   0, // Parents have no start flags.
+                   0, // Parents have no end flags.
+                   out);
+
+  // If there's an odd child left over, it becomes an output.
+  if (num_chaining_values > 2 * parents_array_len) {
+    memcpy(&out[parents_array_len * BLAKE3_OUT_LEN],
+           &child_chaining_values[2 * parents_array_len * BLAKE3_OUT_LEN],
+           BLAKE3_OUT_LEN);
+    return parents_array_len + 1;
+  } else {
+    return parents_array_len;
+  }
+}
+
+// The wide helper function returns (writes out) an array of chaining values
+// and returns the length of that array. The number of chaining values returned
+// is the dyanmically detected SIMD degree, at most MAX_SIMD_DEGREE. Or fewer,
+// if the input is shorter than that many chunks. The reason for maintaining a
+// wide array of chaining values going back up the tree, is to allow the
+// implementation to hash as many parents in parallel as possible.
+//
+// As a special case when the SIMD degree is 1, this function will still return
+// at least 2 outputs. This guarantees that this function doesn't perform the
+// root compression. (If it did, it would use the wrong flags, and also we
+// wouldn't be able to implement exendable ouput.) Note that this function is
+// not used when the whole input is only 1 chunk long; that's a different
+// codepath.
+//
+// Why not just have the caller split the input on the first update(), instead
+// of implementing this special rule? Because we don't want to limit SIMD or
+// multi-threading parallelism for that update().
+static size_t blake3_compress_subtree_wide(const uint8_t *input,
+                                           size_t input_len,
+                                           const uint32_t key[8],
+                                           uint64_t chunk_counter,
+                                           uint8_t flags, uint8_t *out) {
+  // Note that the single chunk case does *not* bump the SIMD degree up to 2
+  // when it is 1. If this implementation adds multi-threading in the future,
+  // this gives us the option of multi-threading even the 2-chunk case, which
+  // can help performance on smaller platforms.
+  if (input_len <= blake3_simd_degree() * BLAKE3_CHUNK_LEN) {
+    return compress_chunks_parallel(input, input_len, key, chunk_counter, flags,
+                                    out);
+  }
+
+  // With more than simd_degree chunks, we need to recurse. Start by dividing
+  // the input into left and right subtrees. (Note that this is only optimal
+  // as long as the SIMD degree is a power of 2. If we ever get a SIMD degree
+  // of 3 or something, we'll need a more complicated strategy.)
+  size_t left_input_len = left_len(input_len);
+  size_t right_input_len = input_len - left_input_len;
+  const uint8_t *right_input = &input[left_input_len];
+  uint64_t right_chunk_counter =
+      chunk_counter + (uint64_t)(left_input_len / BLAKE3_CHUNK_LEN);
+
+  // Make space for the child outputs. Here we use MAX_SIMD_DEGREE_OR_2 to
+  // account for the special case of returning 2 outputs when the SIMD degree
+  // is 1.
+  uint8_t cv_array[2 * MAX_SIMD_DEGREE_OR_2 * BLAKE3_OUT_LEN];
+  size_t degree = blake3_simd_degree();
+  if (left_input_len > BLAKE3_CHUNK_LEN && degree == 1) {
+    // The special case: We always use a degree of at least two, to make
+    // sure there are two outputs. Except, as noted above, at the chunk
+    // level, where we allow degree=1. (Note that the 1-chunk-input case is
+    // a different codepath.)
+    degree = 2;
+  }
+  uint8_t *right_cvs = &cv_array[degree * BLAKE3_OUT_LEN];
+
+  // Recurse! If this implementation adds multi-threading support in the
+  // future, this is where it will go.
+  size_t left_n = blake3_compress_subtree_wide(input, left_input_len, key,
+                                               chunk_counter, flags, cv_array);
+  size_t right_n = blake3_compress_subtree_wide(
+      right_input, right_input_len, key, right_chunk_counter, flags, right_cvs);
+
+  // The special case again. If simd_degree=1, then we'll have left_n=1 and
+  // right_n=1. Rather than compressing them into a single output, return
+  // them directly, to make sure we always have at least two outputs.
+  if (left_n == 1) {
+    memcpy(out, cv_array, 2 * BLAKE3_OUT_LEN);
+    return 2;
+  }
+
+  // Otherwise, do one layer of parent node compression.
+  size_t num_chaining_values = left_n + right_n;
+  return compress_parents_parallel(cv_array, num_chaining_values, key, flags,
+                                   out);
+}
+
+// Hash a subtree with compress_subtree_wide(), and then condense the resulting
+// list of chaining values down to a single parent node. Don't compress that
+// last parent node, however. Instead, return its message bytes (the
+// concatenated chaining values of its children). This is necessary when the
+// first call to update() supplies a complete subtree, because the topmost
+// parent node of that subtree could end up being the root. It's also necessary
+// for extended output in the general case.
+//
+// As with compress_subtree_wide(), this function is not used on inputs of 1
+// chunk or less. That's a different codepath.
+INLINE void compress_subtree_to_parent_node(
+    const uint8_t *input, size_t input_len, const uint32_t key[8],
+    uint64_t chunk_counter, uint8_t flags, uint8_t out[2 * BLAKE3_OUT_LEN]) {
+#if defined(BLAKE3_TESTING)
+  assert(input_len > BLAKE3_CHUNK_LEN);
+#endif
+
+  uint8_t cv_array[MAX_SIMD_DEGREE_OR_2 * BLAKE3_OUT_LEN];
+  size_t num_cvs = blake3_compress_subtree_wide(input, input_len, key,
+                                                chunk_counter, flags, cv_array);
+
+  // If MAX_SIMD_DEGREE is greater than 2 and there's enough input,
+  // compress_subtree_wide() returns more than 2 chaining values. Condense
+  // them into 2 by forming parent nodes repeatedly.
+  uint8_t out_array[MAX_SIMD_DEGREE_OR_2 * BLAKE3_OUT_LEN / 2];
+  while (num_cvs > 2) {
+    num_cvs =
+        compress_parents_parallel(cv_array, num_cvs, key, flags, out_array);
+    memcpy(cv_array, out_array, num_cvs * BLAKE3_OUT_LEN);
+  }
+  memcpy(out, cv_array, 2 * BLAKE3_OUT_LEN);
+}
+
+INLINE void hasher_init_base(blake3_hasher *self, const uint32_t key[8],
+                             uint8_t flags) {
+  memcpy(self->key, key, BLAKE3_KEY_LEN);
+  chunk_state_init(&self->chunk, key, flags);
+  self->cv_stack_len = 0;
+}
+
+void blake3_hasher_init(blake3_hasher *self) { hasher_init_base(self, IV, 0); }
+
+void blake3_hasher_init_keyed(blake3_hasher *self,
+                              const uint8_t key[BLAKE3_KEY_LEN]) {
+  uint32_t key_words[8];
+  load_key_words(key, key_words);
+  hasher_init_base(self, key_words, KEYED_HASH);
+}
+
+void blake3_hasher_init_derive_key_raw(blake3_hasher *self, const void *context,
+                                       size_t context_len) {
+  blake3_hasher context_hasher;
+  hasher_init_base(&context_hasher, IV, DERIVE_KEY_CONTEXT);
+  blake3_hasher_update(&context_hasher, context, context_len);
+  uint8_t context_key[BLAKE3_KEY_LEN];
+  blake3_hasher_finalize(&context_hasher, context_key, BLAKE3_KEY_LEN);
+  uint32_t context_key_words[8];
+  load_key_words(context_key, context_key_words);
+  hasher_init_base(self, context_key_words, DERIVE_KEY_MATERIAL);
+}
+
+void blake3_hasher_init_derive_key(blake3_hasher *self, const char *context) {
+  blake3_hasher_init_derive_key_raw(self, context, strlen(context));
+}
+
+// As described in hasher_push_cv() below, we do "lazy merging", delaying
+// merges until right before the next CV is about to be added. This is
+// different from the reference implementation. Another difference is that we
+// aren't always merging 1 chunk at a time. Instead, each CV might represent
+// any power-of-two number of chunks, as long as the smaller-above-larger stack
+// order is maintained. Instead of the "count the trailing 0-bits" algorithm
+// described in the spec, we use a "count the total number of 1-bits" variant
+// that doesn't require us to retain the subtree size of the CV on top of the
+// stack. The principle is the same: each CV that should remain in the stack is
+// represented by a 1-bit in the total number of chunks (or bytes) so far.
+INLINE void hasher_merge_cv_stack(blake3_hasher *self, uint64_t total_len) {
+  size_t post_merge_stack_len = (size_t)popcnt(total_len);
+  while (self->cv_stack_len > post_merge_stack_len) {
+    uint8_t *parent_node =
+        &self->cv_stack[(self->cv_stack_len - 2) * BLAKE3_OUT_LEN];
+    output_t output = parent_output(parent_node, self->key, self->chunk.flags);
+    output_chaining_value(&output, parent_node);
+    self->cv_stack_len -= 1;
+  }
+}
+
+// In reference_impl.rs, we merge the new CV with existing CVs from the stack
+// before pushing it. We can do that because we know more input is coming, so
+// we know none of the merges are root.
+//
+// This setting is different. We want to feed as much input as possible to
+// compress_subtree_wide(), without setting aside anything for the chunk_state.
+// If the user gives us 64 KiB, we want to parallelize over all 64 KiB at once
+// as a single subtree, if at all possible.
+//
+// This leads to two problems:
+// 1) This 64 KiB input might be the only call that ever gets made to update.
+//    In this case, the root node of the 64 KiB subtree would be the root node
+//    of the whole tree, and it would need to be ROOT finalized. We can't
+//    compress it until we know.
+// 2) This 64 KiB input might complete a larger tree, whose root node is
+//    similarly going to be the the root of the whole tree. For example, maybe
+//    we have 196 KiB (that is, 128 + 64) hashed so far. We can't compress the
+//    node at the root of the 256 KiB subtree until we know how to finalize it.
+//
+// The second problem is solved with "lazy merging". That is, when we're about
+// to add a CV to the stack, we don't merge it with anything first, as the
+// reference impl does. Instead we do merges using the *previous* CV that was
+// added, which is sitting on top of the stack, and we put the new CV
+// (unmerged) on top of the stack afterwards. This guarantees that we never
+// merge the root node until finalize().
+//
+// Solving the first problem requires an additional tool,
+// compress_subtree_to_parent_node(). That function always returns the top
+// *two* chaining values of the subtree it's compressing. We then do lazy
+// merging with each of them separately, so that the second CV will always
+// remain unmerged. (That also helps us support extendable output when we're
+// hashing an input all-at-once.)
+INLINE void hasher_push_cv(blake3_hasher *self, uint8_t new_cv[BLAKE3_OUT_LEN],
+                           uint64_t chunk_counter) {
+  hasher_merge_cv_stack(self, chunk_counter);
+  memcpy(&self->cv_stack[self->cv_stack_len * BLAKE3_OUT_LEN], new_cv,
+         BLAKE3_OUT_LEN);
+  self->cv_stack_len += 1;
+}
+
+void blake3_hasher_update(blake3_hasher *self, const void *input,
+                          size_t input_len) {
+  // Explicitly checking for zero avoids causing UB by passing a null pointer
+  // to memcpy. This comes up in practice with things like:
+  //   std::vector<uint8_t> v;
+  //   blake3_hasher_update(&hasher, v.data(), v.size());
+  if (input_len == 0) {
+    return;
+  }
+
+  const uint8_t *input_bytes = (const uint8_t *)input;
+
+  // If we have some partial chunk bytes in the internal chunk_state, we need
+  // to finish that chunk first.
+  if (chunk_state_len(&self->chunk) > 0) {
+    size_t take = BLAKE3_CHUNK_LEN - chunk_state_len(&self->chunk);
+    if (take > input_len) {
+      take = input_len;
+    }
+    chunk_state_update(&self->chunk, input_bytes, take);
+    input_bytes += take;
+    input_len -= take;
+    // If we've filled the current chunk and there's more coming, finalize this
+    // chunk and proceed. In this case we know it's not the root.
+    if (input_len > 0) {
+      output_t output = chunk_state_output(&self->chunk);
+      uint8_t chunk_cv[32];
+      output_chaining_value(&output, chunk_cv);
+      hasher_push_cv(self, chunk_cv, self->chunk.chunk_counter);
+      chunk_state_reset(&self->chunk, self->key, self->chunk.chunk_counter + 1);
+    } else {
+      return;
+    }
+  }
+
+  // Now the chunk_state is clear, and we have more input. If there's more than
+  // a single chunk (so, definitely not the root chunk), hash the largest whole
+  // subtree we can, with the full benefits of SIMD (and maybe in the future,
+  // multi-threading) parallelism. Two restrictions:
+  // - The subtree has to be a power-of-2 number of chunks. Only subtrees along
+  //   the right edge can be incomplete, and we don't know where the right edge
+  //   is going to be until we get to finalize().
+  // - The subtree must evenly divide the total number of chunks up until this
+  //   point (if total is not 0). If the current incomplete subtree is only
+  //   waiting for 1 more chunk, we can't hash a subtree of 4 chunks. We have
+  //   to complete the current subtree first.
+  // Because we might need to break up the input to form powers of 2, or to
+  // evenly divide what we already have, this part runs in a loop.
+  while (input_len > BLAKE3_CHUNK_LEN) {
+    size_t subtree_len = round_down_to_power_of_2(input_len);
+    uint64_t count_so_far = self->chunk.chunk_counter * BLAKE3_CHUNK_LEN;
+    // Shrink the subtree_len until it evenly divides the count so far. We know
+    // that subtree_len itself is a power of 2, so we can use a bitmasking
+    // trick instead of an actual remainder operation. (Note that if the caller
+    // consistently passes power-of-2 inputs of the same size, as is hopefully
+    // typical, this loop condition will always fail, and subtree_len will
+    // always be the full length of the input.)
+    //
+    // An aside: We don't have to shrink subtree_len quite this much. For
+    // example, if count_so_far is 1, we could pass 2 chunks to
+    // compress_subtree_to_parent_node. Since we'll get 2 CVs back, we'll still
+    // get the right answer in the end, and we might get to use 2-way SIMD
+    // parallelism. The problem with this optimization, is that it gets us
+    // stuck always hashing 2 chunks. The total number of chunks will remain
+    // odd, and we'll never graduate to higher degrees of parallelism. See
+    // https://github.com/BLAKE3-team/BLAKE3/issues/69.
+    while ((((uint64_t)(subtree_len - 1)) & count_so_far) != 0) {
+      subtree_len /= 2;
+    }
+    // The shrunken subtree_len might now be 1 chunk long. If so, hash that one
+    // chunk by itself. Otherwise, compress the subtree into a pair of CVs.
+    uint64_t subtree_chunks = subtree_len / BLAKE3_CHUNK_LEN;
+    if (subtree_len <= BLAKE3_CHUNK_LEN) {
+      blake3_chunk_state chunk_state;
+      chunk_state_init(&chunk_state, self->key, self->chunk.flags);
+      chunk_state.chunk_counter = self->chunk.chunk_counter;
+      chunk_state_update(&chunk_state, input_bytes, subtree_len);
+      output_t output = chunk_state_output(&chunk_state);
+      uint8_t cv[BLAKE3_OUT_LEN];
+      output_chaining_value(&output, cv);
+      hasher_push_cv(self, cv, chunk_state.chunk_counter);
+    } else {
+      // This is the high-performance happy path, though getting here depends
+      // on the caller giving us a long enough input.
+      uint8_t cv_pair[2 * BLAKE3_OUT_LEN];
+      compress_subtree_to_parent_node(input_bytes, subtree_len, self->key,
+                                      self->chunk.chunk_counter,
+                                      self->chunk.flags, cv_pair);
+      hasher_push_cv(self, cv_pair, self->chunk.chunk_counter);
+      hasher_push_cv(self, &cv_pair[BLAKE3_OUT_LEN],
+                     self->chunk.chunk_counter + (subtree_chunks / 2));
+    }
+    self->chunk.chunk_counter += subtree_chunks;
+    input_bytes += subtree_len;
+    input_len -= subtree_len;
+  }
+
+  // If there's any remaining input less than a full chunk, add it to the chunk
+  // state. In that case, also do a final merge loop to make sure the subtree
+  // stack doesn't contain any unmerged pairs. The remaining input means we
+  // know these merges are non-root. This merge loop isn't strictly necessary
+  // here, because hasher_push_chunk_cv already does its own merge loop, but it
+  // simplifies blake3_hasher_finalize below.
+  if (input_len > 0) {
+    chunk_state_update(&self->chunk, input_bytes, input_len);
+    hasher_merge_cv_stack(self, self->chunk.chunk_counter);
+  }
+}
+
+void blake3_hasher_finalize(const blake3_hasher *self, uint8_t *out,
+                            size_t out_len) {
+  blake3_hasher_finalize_seek(self, 0, out, out_len);
+}
+
+void blake3_hasher_finalize_seek(const blake3_hasher *self, uint64_t seek,
+                                 uint8_t *out, size_t out_len) {
+  // Explicitly checking for zero avoids causing UB by passing a null pointer
+  // to memcpy. This comes up in practice with things like:
+  //   std::vector<uint8_t> v;
+  //   blake3_hasher_finalize(&hasher, v.data(), v.size());
+  if (out_len == 0) {
+    return;
+  }
+
+  // If the subtree stack is empty, then the current chunk is the root.
+  if (self->cv_stack_len == 0) {
+    output_t output = chunk_state_output(&self->chunk);
+    output_root_bytes(&output, seek, out, out_len);
+    return;
+  }
+  // If there are any bytes in the chunk state, finalize that chunk and do a
+  // roll-up merge between that chunk hash and every subtree in the stack. In
+  // this case, the extra merge loop at the end of blake3_hasher_update
+  // guarantees that none of the subtrees in the stack need to be merged with
+  // each other first. Otherwise, if there are no bytes in the chunk state,
+  // then the top of the stack is a chunk hash, and we start the merge from
+  // that.
+  output_t output;
+  size_t cvs_remaining;
+  if (chunk_state_len(&self->chunk) > 0) {
+    cvs_remaining = self->cv_stack_len;
+    output = chunk_state_output(&self->chunk);
+  } else {
+    // There are always at least 2 CVs in the stack in this case.
+    cvs_remaining = self->cv_stack_len - 2;
+    output = parent_output(&self->cv_stack[cvs_remaining * 32], self->key,
+                           self->chunk.flags);
+  }
+  while (cvs_remaining > 0) {
+    cvs_remaining -= 1;
+    uint8_t parent_block[BLAKE3_BLOCK_LEN];
+    memcpy(parent_block, &self->cv_stack[cvs_remaining * 32], 32);
+    output_chaining_value(&output, &parent_block[32]);
+    output = parent_output(parent_block, self->key, self->chunk.flags);
+  }
+  output_root_bytes(&output, seek, out, out_len);
+}
+
+
+
+
+
+
+#define MAYBE_UNUSED(x) (void)((x))
+
+#if defined(IS_X86)
+static uint64_t xgetbv() {
+#if defined(_MSC_VER)
+  return _xgetbv(0);
+#else
+  uint32_t eax = 0, edx = 0;
+  __asm__ __volatile__("xgetbv\n" : "=a"(eax), "=d"(edx) : "c"(0));
+  return ((uint64_t)edx << 32) | eax;
+#endif
+}
+
+static void cpuid(uint32_t out[4], uint32_t id) {
+#if defined(_MSC_VER)
+  __cpuid((int *)out, id);
+#elif defined(__i386__) || defined(_M_IX86)
+  __asm__ __volatile__("movl %%ebx, %1\n"
+                       "cpuid\n"
+                       "xchgl %1, %%ebx\n"
+                       : "=a"(out[0]), "=r"(out[1]), "=c"(out[2]), "=d"(out[3])
+                       : "a"(id));
+#else
+  __asm__ __volatile__("cpuid\n"
+                       : "=a"(out[0]), "=b"(out[1]), "=c"(out[2]), "=d"(out[3])
+                       : "a"(id));
+#endif
+}
+
+static void cpuidex(uint32_t out[4], uint32_t id, uint32_t sid) {
+#if defined(_MSC_VER)
+  __cpuidex((int *)out, id, sid);
+#elif defined(__i386__) || defined(_M_IX86)
+  __asm__ __volatile__("movl %%ebx, %1\n"
+                       "cpuid\n"
+                       "xchgl %1, %%ebx\n"
+                       : "=a"(out[0]), "=r"(out[1]), "=c"(out[2]), "=d"(out[3])
+                       : "a"(id), "c"(sid));
+#else
+  __asm__ __volatile__("cpuid\n"
+                       : "=a"(out[0]), "=b"(out[1]), "=c"(out[2]), "=d"(out[3])
+                       : "a"(id), "c"(sid));
+#endif
+}
+
+#endif
+
+
+
+
+void blake3_compress_in_place(uint32_t cv[8],
+                              const uint8_t block[BLAKE3_BLOCK_LEN],
+                              uint8_t block_len, uint64_t counter,
+                              uint8_t flags) {
+
+  blake3_compress_in_place_portable(cv, block, block_len, counter, flags);
+}
+
+void blake3_compress_xof(const uint32_t cv[8],
+                         const uint8_t block[BLAKE3_BLOCK_LEN],
+                         uint8_t block_len, uint64_t counter, uint8_t flags,
+                         uint8_t out[64]) {
+  blake3_compress_xof_portable(cv, block, block_len, counter, flags, out);
+}
+
+void blake3_hash_many(const uint8_t *const *inputs, size_t num_inputs,
+                      size_t blocks, const uint32_t key[8], uint64_t counter,
+                      bool increment_counter, uint8_t flags,
+                      uint8_t flags_start, uint8_t flags_end, uint8_t *out) {
+
+  blake3_hash_many_portable(inputs, num_inputs, blocks, key, counter,
+                            increment_counter, flags, flags_start, flags_end,
+                            out);
+}
+
+// The dynamically detected SIMD degree of the current platform.
+size_t blake3_simd_degree(void) {
+  return 1;
+}
+
+
+INLINE uint32_t rotr32(uint32_t w, uint32_t c) {
+  return (w >> c) | (w << (32 - c));
+}
+
+INLINE void g(uint32_t *state, size_t a, size_t b, size_t c, size_t d,
+              uint32_t x, uint32_t y) {
+  state[a] = state[a] + state[b] + x;
+  state[d] = rotr32(state[d] ^ state[a], 16);
+  state[c] = state[c] + state[d];
+  state[b] = rotr32(state[b] ^ state[c], 12);
+  state[a] = state[a] + state[b] + y;
+  state[d] = rotr32(state[d] ^ state[a], 8);
+  state[c] = state[c] + state[d];
+  state[b] = rotr32(state[b] ^ state[c], 7);
+}
+
+INLINE void round_fn(uint32_t state[16], const uint32_t *msg, size_t round) {
+  // Select the message schedule based on the round.
+  const uint8_t *schedule = MSG_SCHEDULE[round];
+
+  // Mix the columns.
+  g(state, 0, 4, 8, 12, msg[schedule[0]], msg[schedule[1]]);
+  g(state, 1, 5, 9, 13, msg[schedule[2]], msg[schedule[3]]);
+  g(state, 2, 6, 10, 14, msg[schedule[4]], msg[schedule[5]]);
+  g(state, 3, 7, 11, 15, msg[schedule[6]], msg[schedule[7]]);
+
+  // Mix the rows.
+  g(state, 0, 5, 10, 15, msg[schedule[8]], msg[schedule[9]]);
+  g(state, 1, 6, 11, 12, msg[schedule[10]], msg[schedule[11]]);
+  g(state, 2, 7, 8, 13, msg[schedule[12]], msg[schedule[13]]);
+  g(state, 3, 4, 9, 14, msg[schedule[14]], msg[schedule[15]]);
+}
+
+INLINE void compress_pre(uint32_t state[16], const uint32_t cv[8],
+                         const uint8_t block[BLAKE3_BLOCK_LEN],
+                         uint8_t block_len, uint64_t counter, uint8_t flags) {
+  uint32_t block_words[16];
+  block_words[0] = load32(block + 4 * 0);
+  block_words[1] = load32(block + 4 * 1);
+  block_words[2] = load32(block + 4 * 2);
+  block_words[3] = load32(block + 4 * 3);
+  block_words[4] = load32(block + 4 * 4);
+  block_words[5] = load32(block + 4 * 5);
+  block_words[6] = load32(block + 4 * 6);
+  block_words[7] = load32(block + 4 * 7);
+  block_words[8] = load32(block + 4 * 8);
+  block_words[9] = load32(block + 4 * 9);
+  block_words[10] = load32(block + 4 * 10);
+  block_words[11] = load32(block + 4 * 11);
+  block_words[12] = load32(block + 4 * 12);
+  block_words[13] = load32(block + 4 * 13);
+  block_words[14] = load32(block + 4 * 14);
+  block_words[15] = load32(block + 4 * 15);
+
+  state[0] = cv[0];
+  state[1] = cv[1];
+  state[2] = cv[2];
+  state[3] = cv[3];
+  state[4] = cv[4];
+  state[5] = cv[5];
+  state[6] = cv[6];
+  state[7] = cv[7];
+  state[8] = IV[0];
+  state[9] = IV[1];
+  state[10] = IV[2];
+  state[11] = IV[3];
+  state[12] = counter_low(counter);
+  state[13] = counter_high(counter);
+  state[14] = (uint32_t)block_len;
+  state[15] = (uint32_t)flags;
+
+  round_fn(state, &block_words[0], 0);
+  round_fn(state, &block_words[0], 1);
+  round_fn(state, &block_words[0], 2);
+  round_fn(state, &block_words[0], 3);
+  round_fn(state, &block_words[0], 4);
+  round_fn(state, &block_words[0], 5);
+  round_fn(state, &block_words[0], 6);
+}
+
+void blake3_compress_in_place_portable(uint32_t cv[8],
+                                       const uint8_t block[BLAKE3_BLOCK_LEN],
+                                       uint8_t block_len, uint64_t counter,
+                                       uint8_t flags) {
+  uint32_t state[16];
+  compress_pre(state, cv, block, block_len, counter, flags);
+  cv[0] = state[0] ^ state[8];
+  cv[1] = state[1] ^ state[9];
+  cv[2] = state[2] ^ state[10];
+  cv[3] = state[3] ^ state[11];
+  cv[4] = state[4] ^ state[12];
+  cv[5] = state[5] ^ state[13];
+  cv[6] = state[6] ^ state[14];
+  cv[7] = state[7] ^ state[15];
+}
+
+void blake3_compress_xof_portable(const uint32_t cv[8],
+                                  const uint8_t block[BLAKE3_BLOCK_LEN],
+                                  uint8_t block_len, uint64_t counter,
+                                  uint8_t flags, uint8_t out[64]) {
+  uint32_t state[16];
+  compress_pre(state, cv, block, block_len, counter, flags);
+
+  store32(&out[0 * 4], state[0] ^ state[8]);
+  store32(&out[1 * 4], state[1] ^ state[9]);
+  store32(&out[2 * 4], state[2] ^ state[10]);
+  store32(&out[3 * 4], state[3] ^ state[11]);
+  store32(&out[4 * 4], state[4] ^ state[12]);
+  store32(&out[5 * 4], state[5] ^ state[13]);
+  store32(&out[6 * 4], state[6] ^ state[14]);
+  store32(&out[7 * 4], state[7] ^ state[15]);
+  store32(&out[8 * 4], state[8] ^ cv[0]);
+  store32(&out[9 * 4], state[9] ^ cv[1]);
+  store32(&out[10 * 4], state[10] ^ cv[2]);
+  store32(&out[11 * 4], state[11] ^ cv[3]);
+  store32(&out[12 * 4], state[12] ^ cv[4]);
+  store32(&out[13 * 4], state[13] ^ cv[5]);
+  store32(&out[14 * 4], state[14] ^ cv[6]);
+  store32(&out[15 * 4], state[15] ^ cv[7]);
+}
+
+INLINE void hash_one_portable(const uint8_t *input, size_t blocks,
+                              const uint32_t key[8], uint64_t counter,
+                              uint8_t flags, uint8_t flags_start,
+                              uint8_t flags_end, uint8_t out[BLAKE3_OUT_LEN]) {
+  uint32_t cv[8];
+  memcpy(cv, key, BLAKE3_KEY_LEN);
+  uint8_t block_flags = flags | flags_start;
+  while (blocks > 0) {
+    if (blocks == 1) {
+      block_flags |= flags_end;
+    }
+    blake3_compress_in_place_portable(cv, input, BLAKE3_BLOCK_LEN, counter,
+                                      block_flags);
+    input = &input[BLAKE3_BLOCK_LEN];
+    blocks -= 1;
+    block_flags = flags;
+  }
+  store_cv_words(out, cv);
+}
+
+void blake3_hash_many_portable(const uint8_t *const *inputs, size_t num_inputs,
+                               size_t blocks, const uint32_t key[8],
+                               uint64_t counter, bool increment_counter,
+                               uint8_t flags, uint8_t flags_start,
+                               uint8_t flags_end, uint8_t *out) {
+  while (num_inputs > 0) {
+    hash_one_portable(inputs[0], blocks, key, counter, flags, flags_start,
+                      flags_end, out);
+    if (increment_counter) {
+      counter += 1;
+    }
+    inputs += 1;
+    num_inputs -= 1;
+    out = &out[BLAKE3_OUT_LEN];
+  }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -15360,6 +16505,10 @@ void print_datetime(void)
 
 string mygetalgo()
 {
+	
+	if (flagblake3)
+		return "BLAKE3";
+	else
 	if (flagxxhash64)
 		return "XXHASH64";
 	else
@@ -15367,7 +16516,7 @@ string mygetalgo()
 		return "WYHASH";
 	else
 	if (flagcrc32)
-		return "CRC32";
+		return "CRC-32";
 	else
 	if (flagcrc32c)
 		return "CRC-32C";
@@ -15382,6 +16531,9 @@ string mygetalgo()
 }
 int flag2algo()
 {
+	if (flagblake3)
+		return ALGO_BLAKE3;
+	else
 	if (flagxxhash64)
 		return ALGO_XXHASH64;
 	else
@@ -17422,7 +18574,8 @@ private:
 	int robocopy();						// Like robocopy, but with XLS
 	int zero();							// Delete empty directory
 	int dircompare(bool i_flagonlysize,bool i_flagrobocopy);
-	
+	int benchmark();
+
 	void load_help_map	();					// not in the constructor!
 	void usage			();        			// help
 	void usagefull		(string i_command); // verbose help
@@ -17452,6 +18605,8 @@ private:
 	
 	bool 	getchecksum(string i_filename, char* o_sha1); //get SHA1 AND CRC32 of a file. Old, for backward
 	
+	string 	do_benchmark(int i_timelimit,string i_runningalgo,int i_chunksize,uint32_t* buffer32bit,double& o_speed);
+
 	/// out of Jidac by unzpaq206 merging and naming "shadowing"
 	///string 	decodefranzoffset();
 	///int 	decode_franz_block(const bool i_isdirectory,const char* i_franz_block,string& o_hashtype,string& o_hashvalue,string& o_crc32value);
@@ -20021,14 +21176,39 @@ bool comparedatethenfilename(DTMap::iterator ap, DTMap::iterator bp)
 
 
 
+void help_b(bool i_usage,bool i_example)
+{
+	if (i_usage)
+	{
+		moreprint("CMD   b (benchmark)");
+		moreprint("DIFF:               Rough benchmarking of hash-checksum");
+		moreprint("DIFF:               By default test ALL for 5 seconds with 400.000 bytes");
+		moreprint("DIFF:               NOTE: THIS IS THE MAXIMUM PERFORMANCES, not the real one!");
+		moreprint("DIFF: -verbose      Verbose output");
+		moreprint("DIFF: -n X          Set time limit to X (<1000)");
+		moreprint("DIFF: -minsize Y    Run on chunks of Y bytes");
+		moreprint("PLUS: -crc32        Test CRC-32");
+		moreprint("PLUS: -crc32c       Test CRC-32c");
+		moreprint("PLUS: -xxh3         Test XXH3 (128bit)");
+		moreprint("PLUS: -xxhash       Test XXHASH64 (64 bit)");
+		moreprint("PLUS: -sha1         Test SHA-1");
+		moreprint("PLUS: -sha256       Test SHA-256");
+		moreprint("PLUS: -blake3       Test BLAKE3");
+		moreprint("PLUS: -wyhash       Test WYHASH");
+			}
+	if (i_usage && i_example) moreprint("    Examples:");
+	
+	if (i_example)
+	{
+		moreprint("Benchmark all:                       b");
+		moreprint("Benchmark all on 1.86GB:             b -minsize 2000000000");
+		moreprint("Benchmark all on 1MB:                b -minsize 1048576");
+		moreprint("Benchmark SHA256 and BLAKE3:         b -sha256 -blake 3 -minsize 1048576");
+		moreprint("Benchmark for 10 second each:        b -n 10 -sha256 -blake3 -minsize 1048576");
+	}
+}
 
 
-
-
-
-
-/////////////////////////////////////////
-//////// help_something functions
 
 void help_a(bool i_usage,bool i_example)
 {
@@ -20631,6 +21811,7 @@ void Jidac::load_help_map()
 	/// a map is not so good, but we want to keep the executable small
 	/// NOT in the constructor
 	
+	help_map.insert(std::pair<string, voidhelpfunction>("b",help_b));
 	help_map.insert(std::pair<string, voidhelpfunction>("n",help_n));
 	help_map.insert(std::pair<string, voidhelpfunction>("f",help_f));
 	help_map.insert(std::pair<string, voidhelpfunction>("a",help_a));
@@ -20679,7 +21860,7 @@ void Jidac::usage()
 	moreprint(" z d0 d1 d2...: Delete empty dirs     |        m X: merge multipart archive");
 	moreprint("          f d0: Fill (wipe) free space|     utf d0: Detox filenames in d0");
 	moreprint(" sha1 d0 d1...: Hashing/deduplication |     dir d0: Win dir (/s /a /os /od -crc32)");
-	moreprint(" n d0 -n X    : Keep X files in d0    |");
+	moreprint(" n d0 -n X    : Keep X files in d0    |  benchmark: Hash bench (-n X  -minsize Y)");
 	moreprint("                                Main switches");
 	moreprint("      -all [N]: All versions N digit  |     -key X: archive password X");
 	moreprint(" -mN -method N: 0..5= faster..better  |     -force: always overwrite");
@@ -20861,6 +22042,7 @@ int Jidac::doCommand(int argc, const char** argv)
 	flagcrc32=false;
 	flagsha256=false;
 	flagwyhash=false;
+	flagblake3=false;
 	flagxxhash64=false;
 	flagdonotforcexls=false;
 	flagcomment=false;
@@ -21007,6 +22189,10 @@ int Jidac::doCommand(int argc, const char** argv)
 			flagbarraos=true;
 			///i++;
 		}
+		if ((opt=="benchmark") || (opt=="b"))
+		{
+			command='b';
+		}
 		else
 		if ((
 		opt=="add" 		|| 
@@ -21054,7 +22240,7 @@ int Jidac::doCommand(int argc, const char** argv)
 		}
 		else if (opt=="dir")
 		{
-			command='b'; // YES, B
+			command='2'; // YES 2
 			while (++i<argc && argv[i][0]!='-')  // read filename args
 				files.push_back(argv[i]);
 			i--;
@@ -21205,6 +22391,7 @@ int Jidac::doCommand(int argc, const char** argv)
 		else if (opt=="-sha1") 						flagsha1			=true;// stub: by default flagsha1
 		else if (opt=="-xxh3") 						flagxxh3			=true;
 		else if (opt=="-sha256") 					flagsha256			=true;
+		else if (opt=="-blake3") 					flagblake3			=true;
 		
 		else if (opt=="-wyhash")
 		{		flagwyhash			=true;
@@ -21423,6 +22610,9 @@ int Jidac::doCommand(int argc, const char** argv)
 		if (flagwyhash)
 				printf("franz:wyhash\n");
 	
+		if (flagblake3)
+				printf("franz:blake3\n");
+	
 		if (flagxxhash64)
 				printf("franz:XXHASH64\n");
 	
@@ -21590,7 +22780,8 @@ int Jidac::doCommand(int argc, const char** argv)
 	}
 	else if (command=='n') return decimation();
 	else if (command=='1') return summa();
-	else if (command=='b') return dir();
+	else if (command=='2') return dir();
+	else if (command=='b') return benchmark();
 	else if (command=='c') return dircompare(false,false);
 	else if (command=='d') return deduplicate();
 	else if (command=='f') return fillami();
@@ -25519,6 +26710,45 @@ string xxhash_calc_file(const char * i_filename,bool i_flagcalccrc32,uint32_t& o
 	return risultato;
 }
 
+string blake3_calc_file(const char * i_filename,bool i_flagcalccrc32,uint32_t& o_crc32,const int64_t i_inizio,const int64_t i_totali,int64_t& io_lavorati)
+{
+	o_crc32=0;
+	
+    FILE* inFile = freadopen(i_filename);
+///	FILE* inFile = fopen(i_filename,"rb");
+	if (inFile==NULL) 
+		return "";
+	
+	blake3_hasher hasher;
+	blake3_hasher_init(&hasher);
+	unsigned char buffer[65536];
+	ssize_t readSize;
+
+	while ((readSize = fread(buffer, 1, sizeof(buffer), inFile)) > 0) 
+	{
+		blake3_hasher_update(&hasher, buffer, readSize);
+
+		if (i_flagcalccrc32)
+			o_crc32=crc32_16bytes(buffer,readSize,o_crc32);
+		io_lavorati+=readSize;
+		if (flagnoeta==false)
+				avanzamento(io_lavorati,i_totali,i_inizio);
+	}
+	fclose(inFile);
+	
+	uint8_t output[BLAKE3_OUT_LEN];
+	blake3_hasher_finalize(&hasher, output, BLAKE3_OUT_LEN);
+
+	char myhex[4];
+	string risultato="";
+	for (size_t i = 0; i < BLAKE3_OUT_LEN; i++) 
+	{
+		sprintf(myhex,"%02X", (unsigned char)output[i]);
+		risultato.push_back(myhex[0]);
+		risultato.push_back(myhex[1]);
+	}
+	return risultato;
+}
 
 
 
@@ -25567,6 +26797,9 @@ string hash_calc_file(int i_algo,const char * i_filename,bool i_flagcalccrc32,ui
 {
 	o_crc32=0;
 		
+	if (i_algo==ALGO_BLAKE3)
+		return blake3_calc_file(i_filename,i_flagcalccrc32,o_crc32,i_inizio,i_totali,io_lavorati);
+	else
 	if (i_algo==ALGO_WYHASH)		// memory mapped file
 		return wyhash_calc_file(i_filename,i_flagcalccrc32,o_crc32,i_inizio,i_totali,io_lavorati);
 	else
@@ -25632,7 +26865,7 @@ void * scansionahash(void *t)
 
 bool ischecksum()
 {
-	return (flagcrc32 || flagcrc32c || flagxxh3 || flagxxhash64 || flagsha1 || flagsha256);
+	return (flagcrc32 || flagcrc32c || flagxxh3 || flagxxhash64 || flagsha1 || flagsha256 || flagblake3 || flagwyhash);
 }	
 int Jidac::deduplicate() 
 {
@@ -25662,6 +26895,263 @@ int Jidac::deduplicate()
 		printf("-force not present: dry run\n");
 	return summa();
 }
+
+string Jidac::do_benchmark(int i_timelimit,string i_runningalgo,int i_chunksize,uint32_t* buffer32bit,double& o_speed)
+{
+	
+	int64_t lavorati=0;
+	uint64_t starttutto=mtime();	
+
+	uint64_t totalrandtime=0;
+	uint64_t totalhashtime=0;
+	int	ultimotrascorso=0;	
+	int	buffersize=i_chunksize*4-7;
+	
+	int i=0;
+	while (1)
+	{
+		uint64_t startrandom=mtime();
+		populateRandom_xorshift128plus(buffer32bit, i_chunksize,324+i,4444+i);
+		uint64_t randtime=mtime()-startrandom;
+		
+			
+		if (i_runningalgo=="XXH3")
+		{
+			XXH3_state_t state128;
+			(void)XXH3_128bits_reset(&state128);
+			(void)XXH3_128bits_update(&state128, buffer32bit, buffersize);
+		}
+		else
+		if (i_runningalgo=="SHA-1")
+		{
+			libzpaq::SHA1 sha1;
+			sha1.write((const char*)buffer32bit,buffersize);
+		}
+		else
+		if (i_runningalgo=="SHA-256")
+		{
+			franzSHA256 mysha256;
+			mysha256.update((const uint8_t*)buffer32bit,buffersize);
+		}
+		else
+		if (i_runningalgo=="WYHASH")
+		{
+			uint64_t _wyp[4];
+			make_secret(0,_wyp);
+			wyhash((const char*)buffer32bit,buffersize,0,_wyp);
+		}
+		else
+		if (i_runningalgo=="BLAKE3")
+		{
+			blake3_hasher hasher;
+			blake3_hasher_init(&hasher);
+			blake3_hasher_update(&hasher, (const char*)buffer32bit,buffersize);
+		}
+		else
+		if (i_runningalgo=="CRC-32")
+		{
+			uint32_t crc=0;
+			crc=crc32_16bytes ((const char*)buffer32bit,buffersize, crc);
+		///	printf("jaja %08X\n",crc);
+		}
+		else
+		if (i_runningalgo=="CRC-32C")
+		{
+			uint32_t crc=0;
+			crc = crc32c(crc, (const unsigned char*)buffer32bit,buffersize);
+		}
+		else
+		if (i_runningalgo=="XXHASH64")
+		{
+			uint64_t myseed = 0;
+			XXHash64 myhash(myseed);
+			myhash.add((const unsigned char*)buffer32bit,buffersize);
+		}
+		
+		
+		totalhashtime=mtime()-starttutto-randtime;
+
+		if (totalhashtime<=0)
+			totalhashtime=1;
+
+		lavorati+= (i_chunksize*4);
+	
+		///printf("\n\nrand time %f\n",randtime);
+
+		totalrandtime	+=randtime;
+		
+		double hashingtime=totalhashtime/1000.0;
+		o_speed=lavorati/hashingtime;
+
+		
+		int trascorso=(mtime()-starttutto+1)/1000.0;
+		
+		if (trascorso!=ultimotrascorso)
+		{
+			printf("%08d s %12s: speed (%11s/s) ",trascorso,i_runningalgo.c_str(),
+			tohuman3(o_speed));
+			
+			if (flagverbose)
+				printf("\n");
+			else
+				printf("\r");
+			ultimotrascorso=trascorso;
+		}
+		if ((int)((mtime()-starttutto)/1000)>=i_timelimit)
+			break;
+		i++;
+	}
+	
+	double hashingtime=totalhashtime/1000.0;
+	o_speed=lavorati/hashingtime;
+	lavorati+=mtime()-starttutto;
+	
+	int trascorso=(mtime()-starttutto+1)/1000.0;
+	printf("%08d s %12s: speed (%11s/s) ",trascorso,i_runningalgo.c_str(),tohuman3(o_speed));
+	printf("\n");
+	
+	char buf[100];
+	sprintf(buf,"%12s: %11s/s (done %11s)",i_runningalgo.c_str(),tohuman(o_speed),tohuman2(lavorati));
+	string risultato=buf;
+	return risultato;
+}
+
+struct s_benchmark
+{
+    string	algoritmo;
+	double	speed;
+	string 	risultati;
+};
+
+bool compare_s_benchmark(const s_benchmark &a, const s_benchmark &b)
+{
+    return a.speed < b.speed;
+}
+
+/////////////////////////////////////////
+//////// help_something functions
+
+
+void explode(string i_string,char i_delimiter,vector<string>& array)
+{
+	///printf("Delimiter %c\n",i_delimiter);
+	///printf("String %s\n",i_string.c_str());
+	int i=0;
+	while(i<i_string.size())
+	{
+		string temp="";
+///		printf("entro %02d %c %d\n",i,i_string[i],(int)(i_string[i]!=i_delimiter));
+		while (i_string[i]!=i_delimiter)
+        {
+			temp+=i_string[i];
+			i++;
+		}
+		array.push_back(temp);
+		i++;
+		if (i>=i_string.size())
+			break;
+    }
+}
+	
+int Jidac::benchmark()
+{
+
+
+	int			chunksize=100000;
+	int			timelimit=5;
+	
+	if (menoenne>0)
+	{
+		if (menoenne<1000)
+			timelimit=menoenne;
+		else
+		{
+			printf("Time limit (-n    -limit) must be <1000\n");
+			return 1;
+		}
+	}
+	if (minsize>0)
+	{
+		if (minsize<=2000000000)
+			chunksize=minsize/4;
+		else
+		{
+			printf("Chunk (-minsize) must be <= 2000000000 (2 billion)\n");
+			return 1;
+		}
+	}
+	uint32_t *buffer32bit = (uint32_t*)malloc(chunksize*sizeof(uint32_t));
+	if (buffer32bit==0)
+	{
+		printf("21202: GURU cannot alloc the buffer32bit\n");
+		return 1;
+	}
+	
+	
+	
+	
+	vector<string> thehashes;
+	string hashes="";
+	
+	if (!ischecksum())
+		hashes="XXHASH64;XXH3;SHA-1;SHA-256;BLAKE3;CRC-32;CRC-32C;WYHASH;";
+	else
+	{
+		if (flagxxhash64)
+			hashes+="XXHASH64;";
+		if (flagxxh3)
+			hashes+="XXH3;";
+		if (flagsha1)
+			hashes+="SHA-1;";
+		if (flagsha256)
+			hashes+="SHA-256;";
+		if (flagblake3)
+			hashes+="BLAKE3;";
+		if (flagcrc32)
+			hashes+="CRC-32;";
+		if (flagcrc32c)
+			hashes+="CRC-32C;";
+		if (flagwyhash)
+			hashes+="WYHASH;";
+	}
+	explode(hashes,';',thehashes);
+	if (thehashes.size()==0)
+	{
+		printf("27144: strange hash selection\n");
+		return 1;
+	}
+	vector<s_benchmark> vettorerisultati;     
+	s_benchmark	block;
+	string 	risultato;
+	double	speed;
+	
+	printf("Benchmark parameters\n");
+	for (int i=0;i<thehashes.size();i++)
+		printf("%s ",thehashes[i].c_str());
+	printf("\n");
+	printf("Time limit %10d s  (-n X)\n",timelimit);
+	printf("Chunks of  %12s  (-minsize Y)\n",tohuman(chunksize*4));
+	printf("\n");
+
+	for (int i=0;i<thehashes.size();i++)
+	{
+		risultato=do_benchmark(timelimit,thehashes[i],chunksize,buffer32bit,speed);
+		block.algoritmo=thehashes[i];
+		block.speed=speed;
+		block.risultati=risultato;
+		vettorerisultati.push_back(block);
+	}
+	
+	std::sort(vettorerisultati.begin(), vettorerisultati.end(), compare_s_benchmark);
+
+	printf("Results\n\n");
+	for (unsigned int i=0;i<vettorerisultati.size();i++)
+		printf("%s\n",vettorerisultati[i].risultati.c_str());
+	
+	free(buffer32bit);
+	return 0;
+   
+};
 
 int Jidac::summa() 
 {
@@ -31094,3 +32584,6 @@ if (casecollision>0)
 		//unz(archive.c_str(), password,all);
   return errors>0;
 }
+
+
+

@@ -1,4 +1,13 @@
 ```
+29-07-2021
+Very rough benchmark command for hashes-checksums test.  
+By default runs 5 seconds each on 390.62 (-7) KB  
+To be developed in future (in fact it is a BLAKE3 mock up test)
+YES I KNOW, THOSE ARE REALLY CRUDE BENCHMARKS!
+
+zpaqfranz b
+zpaqfranz -? b
+
 25-07-2021:  52.9
 A little more faster in -sha256 (2%)
 TWO TIME faster in multithreaded -sha1. Up to 6.7 GB/s on my test PC

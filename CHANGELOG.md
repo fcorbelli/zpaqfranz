@@ -1,4 +1,7 @@
 ```
+30-07-2021
+The CPU cooker: in the b command (benchmark) now -all (multithread) and -tX (limit to X thread)  
+
 29-07-2021
 Very rough benchmark command for hashes-checksums test.  
 By default runs 5 seconds each on 390.62 (-7) KB  

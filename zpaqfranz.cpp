@@ -13,7 +13,7 @@
 //#define UBUNTU
 void help_hash(bool i_usage,bool i_example);
 
-#define ZPAQ_VERSION "52.10-experimental"
+#define ZPAQ_VERSION "52.11-experimental"
 
 /*
                          __                     
@@ -255,6 +255,56 @@ check: zpaqfranz
 	#ifndef ftello
 		#define ftello(a) ftello64(a)
 	#endif
+#endif
+
+
+
+#ifdef _WIN32
+	#ifndef ENABLE_VIRTUAL_TERMINAL_PROCESSING
+		#define ENABLE_VIRTUAL_TERMINAL_PROCESSING  0x0004
+	#endif
+
+	static HANDLE stdoutHandle;
+	static DWORD outModeInit;
+	 
+	void setupConsole(void) 
+	{
+		DWORD outMode 	= 0;
+		stdoutHandle 	= GetStdHandle(STD_OUTPUT_HANDLE);
+	 
+		if(stdoutHandle == INVALID_HANDLE_VALUE)
+			exit(GetLastError());
+		
+		if(!GetConsoleMode(stdoutHandle, &outMode))
+			exit(GetLastError());
+		outModeInit = outMode;
+		
+		 // Enable ANSI escape codes
+		outMode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
+	 
+		if(!SetConsoleMode(stdoutHandle, outMode)) 
+			exit(GetLastError());
+	}
+	 
+	void restoreConsole(void) 
+	{
+		// Reset colors
+		printf("\x1b[0m");	
+		
+		// Reset console mode
+		if(!SetConsoleMode(stdoutHandle, outModeInit)) 
+			exit(GetLastError());
+	}
+#else // Houston, we have Unix
+	void setupConsole(void) 
+	{
+	}
+
+	void restoreConsole(void) 
+	{
+		//colors
+		printf("\x1b[0m");
+	}
 #endif
 
 
@@ -698,7 +748,7 @@ void decompress(Reader* in, Writer* out);
 // Encoder compresses using an arithmetic code
 class Encoder {
 public:
-  Encoder(ZPAQL& z, int size=0):
+  Encoder(ZPAQL& z):
     out(0), low(1), high(0xFFFFFFFF), pr(z) {}
   void init();
   void compress(int c);  // c is 0..255 or EOF
@@ -1479,8 +1529,7 @@ void AES_CTR::encrypt(char* buf, int n, U64 offset) {
 // using HMAC-SHA256, for the special case of c = 1 iterations
 // output size dkLen a multiple of 32, and pwLen <= 64.
 static void pbkdf2(const char* pw, int pwLen, const char* salt, int saltLen,
-                   int c, char* buf, int dkLen) {
-  assert(c==1);
+                    char* buf, int dkLen) {
   assert(dkLen%32==0);
   assert(pwLen<=64);
 
@@ -1567,9 +1616,9 @@ void scrypt(const char* pw, int pwlen,
   assert(r<=8);
   assert(n>0 && (n&(n-1))==0);  // power of 2?
   libzpaq::Array<char> b(p*r*128);
-  pbkdf2(pw, pwlen, salt, saltlen, 1, &b[0], p*r*128);
+  pbkdf2(pw, pwlen, salt, saltlen,  &b[0], p*r*128);
   for (int i=0; i<p; ++i) smix(&b[i*r*128], r, n);
-  pbkdf2(pw, pwlen, &b[0], p*r*128, 1, buf, buflen);
+  pbkdf2(pw, pwlen, &b[0], p*r*128,  buf, buflen);
 }
 
 // Stretch key in[0..31], assumed to be SHA256(password), with
@@ -8644,7 +8693,7 @@ using std::map;
 ///using std::max;
 using libzpaq::StringBuffer;
 
-int unz(const char * archive,const char * key,bool all); // paranoid unzpaq 2.06
+int unz(const char * archive,const char * key); // paranoid unzpaq 2.06
 
 typedef void (*voidhelpfunction)(bool i_usage,bool i_example); 
 typedef map<string, voidhelpfunction> 	MAPPAHELP;
@@ -14715,7 +14764,9 @@ string g_gettempdirectory()
 
 void waitexecute(string i_filename,string i_parameters,int i_show)
 {
-	SHELLEXECUTEINFOA ShExecInfo = {0};
+	///SHELLEXECUTEINFOA ShExecInfo = {0};
+	SHELLEXECUTEINFOA ShExecInfo =SHELLEXECUTEINFOA();
+			 
 	ShExecInfo.cbSize = sizeof(SHELLEXECUTEINFOA);
 	ShExecInfo.fMask = SEE_MASK_NOCLOSEPROCESS;
 	ShExecInfo.hwnd = NULL;
@@ -14945,7 +14996,10 @@ bool direxists(string& i_directory)
 // Print last error message
 void printerr(const char* i_where,const char* filename) 
 {
-  perror(filename);
+	string lasterror=i_where;
+	string lasterror2=filename;
+	string risultato=lasterror+":"+lasterror2;
+	perror(risultato.c_str());
 }
 
 #else
@@ -14953,6 +15007,8 @@ void printerr(const char* i_where,const char* filename)
 // Print last error message
 void printerr(const char* i_where,const char* filename) 
 {
+	string lasterror=i_where;
+	
   fflush(stdout);
   int err=GetLastError();
 	fprintf(stderr,"\n");
@@ -15150,7 +15206,9 @@ int numberOfProcessors() {
   // In Windows return %NUMBER_OF_PROCESSORS%
   //const char* p=getenv("NUMBER_OF_PROCESSORS");
   //if (p) rc=atoi(p);
-  SYSTEM_INFO si={0};
+  ///SYSTEM_INFO si={0};
+  SYSTEM_INFO si= SYSTEM_INFO();
+  
   GetSystemInfo(&si);
   rc=si.dwNumberOfProcessors;
 #endif
@@ -15355,8 +15413,10 @@ void morebar(const char i_carattere)
 	int twidth=terminalwidth();
 	if (twidth<10)
 		twidth=100; // redirect
+	if (twidth>100)
+		twidth=100;
 	
-	char barbuffer[twidth+10];
+	char barbuffer[100+10];
 	for (int i=0;i<twidth-4;i++)
 		sprintf(barbuffer+i,"%c",i_carattere);
 	moreprint(barbuffer);
@@ -16602,7 +16662,9 @@ void xorshift128plus_jump(xorshift128plus_key_t * key) {
 
 void populateRandom_xorshift128plus(uint32_t *answer, uint32_t size,uint64_t i_key1, uint64_t i_key2) 
 {
-  xorshift128plus_key_t mykey = {.part1 = i_key1, .part2 = i_key2};
+	xorshift128plus_key_t mykey; /// nowarning
+	mykey.part1 = i_key1;
+	mykey.part2 = i_key2;
   xorshift128plus_init(i_key1, i_key2, &mykey);
   uint32_t i = size;
   while (i > 2) {
@@ -18271,7 +18333,8 @@ struct HT {
 			memset(sha1, 0, 20);
 		usize=u;
 	}
-	HT(string hello,const char* s=0, int u=-1, int64_t c=HT_BAD) 
+	/*
+	HT(string kello,const char* s=0, int u=-1, int64_t c=HT_BAD) 
 	{
 		crc32=0;
 		crc32size=0;
@@ -18282,6 +18345,7 @@ struct HT {
 		usize=u; 
 		csize=c;
 	}
+	*/
 };
 
 struct DTV {
@@ -18605,7 +18669,7 @@ private:
 	
 	bool 	getchecksum(string i_filename, char* o_sha1); //get SHA1 AND CRC32 of a file. Old, for backward
 	
-	string 	do_benchmark(int i_timelimit,string i_runningalgo,int i_chunksize,uint32_t* buffer32bit,double& o_speed);
+	///string 	do_benchmark(int i_timelimit,string i_runningalgo,int i_chunksize,uint32_t* buffer32bit,double& o_speed);
 
 	/// out of Jidac by unzpaq206 merging and naming "shadowing"
 	///string 	decodefranzoffset();
@@ -18645,7 +18709,7 @@ int Jidac::paranoid()
 	exit(0);
 #endif
 
-	unz(archive.c_str(), password,all);
+	unz(archive.c_str(), password);
 	return 0;
 }
 
@@ -19257,8 +19321,8 @@ void unzAES_CTR::encrypt(char* unzBuf, int n, uint64_t offset) {
 // using HMAC-unzSHA256, for the special case of c = 1 iterations
 // output size dkLen a multiple of 32, and pwLen <= 64.
 static void unzpbkdf2(const char* pw, int pwLen, const char* salt, int saltLen,
-                   int c, char* unzBuf, int dkLen) {
-  assert(c==1);
+                    char* unzBuf, int dkLen) {
+
   assert(dkLen%32==0);
   assert(pwLen<=64);
 
@@ -19345,9 +19409,9 @@ void unzscrypt(const char* pw, int pwlen,
   assert(r<=8);
   assert(n>0 && (n&(n-1))==0);  // power of 2?
   Array<char> b(p*r*128);
-  unzpbkdf2(pw, pwlen, salt, saltlen, 1, &b[0], p*r*128);
+  unzpbkdf2(pw, pwlen, salt, saltlen,  &b[0], p*r*128);
   for (int i=0; i<p; ++i) smix(&b[i*r*128], r, n);
-  unzpbkdf2(pw, pwlen, &b[0], p*r*128, 1, unzBuf, buflen);
+  unzpbkdf2(pw, pwlen, &b[0], p*r*128,  unzBuf, buflen);
 }
 
 // Stretch key in[0..31], assumed to be unzSHA256(password), with
@@ -21180,13 +21244,13 @@ void help_b(bool i_usage,bool i_example)
 {
 	if (i_usage)
 	{
-		moreprint("CMD   b (benchmark)");
+		moreprint("CMD   b (benchmark and CPU stresser)");
 		moreprint("DIFF:               Rough benchmarking of hash-checksum");
 		moreprint("DIFF:               By default test ALL for 5 seconds with 400.000 bytes");
 		moreprint("DIFF:               NOTE: THIS IS THE MAXIMUM PERFORMANCES, not the real one!");
 		moreprint("DIFF: -verbose      Verbose output");
-		moreprint("DIFF: -n X          Set time limit to X (<1000)");
-		moreprint("DIFF: -minsize Y    Run on chunks of Y bytes");
+		moreprint("DIFF: -n X          Set time limit to X s (<1000)");
+		moreprint("DIFF: -minsize Y    Run on chunks of Y bytes (<2000000000)");
 		moreprint("PLUS: -crc32        Test CRC-32");
 		moreprint("PLUS: -crc32c       Test CRC-32c");
 		moreprint("PLUS: -xxh3         Test XXH3 (128bit)");
@@ -21195,6 +21259,9 @@ void help_b(bool i_usage,bool i_example)
 		moreprint("PLUS: -sha256       Test SHA-256");
 		moreprint("PLUS: -blake3       Test BLAKE3");
 		moreprint("PLUS: -wyhash       Test WYHASH");
+		moreprint("PLUS: -all          Multithread run (CPU cooker)");
+		moreprint("PLUS: -tX           With -all limit to X threads");
+		
 			}
 	if (i_usage && i_example) moreprint("    Examples:");
 	
@@ -21205,6 +21272,8 @@ void help_b(bool i_usage,bool i_example)
 		moreprint("Benchmark all on 1MB:                b -minsize 1048576");
 		moreprint("Benchmark SHA256 and BLAKE3:         b -sha256 -blake 3 -minsize 1048576");
 		moreprint("Benchmark for 10 second each:        b -n 10 -sha256 -blake3 -minsize 1048576");
+		moreprint("Cook the CPU (all cores):            b -all -n 20 -blake3");
+		moreprint("Cook the CPU (8 cores):              b -all -t8 -n 20 -blake3");
 	}
 }
 
@@ -21685,6 +21754,10 @@ void help_n(bool i_usage,bool i_example)
 
 void help_mainswitches(bool i_usage,bool i_example)
 {
+	if (i_usage) /// no warning
+		if (i_example)
+			i_example=i_usage;
+			
 	moreprint("  -all [N]:     All versions (default 4 digits)");
 	moreprint("  -key X:       Archive password X");
 	moreprint("  -mN -method N:0=no compression, 1..5=faster..better ");
@@ -21697,6 +21770,10 @@ void help_mainswitches(bool i_usage,bool i_example)
 
 void help_switches(bool i_usage,bool i_example)
 {
+	if (i_usage) /// no warning
+		if (i_example)
+			i_example=i_usage;
+	
 	char buffer[200];
 	time_t now=time(NULL);
 	tm* t=gmtime(&now);
@@ -21716,6 +21793,10 @@ void help_switches(bool i_usage,bool i_example)
 }
 void help_franzswitches(bool i_usage,bool i_example)
 {
+	if (i_usage) /// no warning
+		if (i_example)
+			i_example=i_usage;
+	
 	moreprint("  -715            Works just about like v7.15");
 	moreprint("  -checksum       Store SHA1+CRC32 for every file");
 	moreprint("  -verify         Force re-read of file during t (test command) or c");
@@ -21762,6 +21843,10 @@ void help_franzswitches(bool i_usage,bool i_example)
 }
 void help_voodooswitches(bool i_usage,bool i_example)
 {
+	if (i_usage) /// no warning
+		if (i_example)
+			i_example=i_usage;
+	
 	moreprint("  -repack F [X]   Extract to new archive F with key X (default: none)");
 	moreprint("  -tN -threads N  Use N threads (default: 0 = all cores)");
 	moreprint("  -fragment N     Use 2^N KiB average fragment size (default: 6)");
@@ -26896,7 +26981,21 @@ int Jidac::deduplicate()
 	return summa();
 }
 
-string Jidac::do_benchmark(int i_timelimit,string i_runningalgo,int i_chunksize,uint32_t* buffer32bit,double& o_speed)
+struct tparametribenchmark
+{
+	int 		chunksize;		// no big data :-)
+	uint32_t* 	buffer32bit;
+	int			timelimit;
+	string		runningalgo;
+	int			tnumber;
+	
+	string		risultato;
+	double		speed;
+};
+
+
+
+string do_benchmark(int i_tnumber,int i_timelimit,string i_runningalgo,int i_chunksize,uint32_t* buffer32bit,double& o_speed)
 {
 	
 	int64_t lavorati=0;
@@ -26976,7 +27075,6 @@ string Jidac::do_benchmark(int i_timelimit,string i_runningalgo,int i_chunksize,
 
 		lavorati+= (i_chunksize*4);
 	
-		///printf("\n\nrand time %f\n",randtime);
 
 		totalrandtime	+=randtime;
 		
@@ -26988,13 +27086,25 @@ string Jidac::do_benchmark(int i_timelimit,string i_runningalgo,int i_chunksize,
 		
 		if (trascorso!=ultimotrascorso)
 		{
-			printf("%08d s %12s: speed (%11s/s) ",trascorso,i_runningalgo.c_str(),
-			tohuman3(o_speed));
-			
-			if (flagverbose)
-				printf("\n");
+			if (i_tnumber<0) /// not a pthread
+			{
+				printf("%03d s %12s: speed (%11s/s) ",trascorso,i_runningalgo.c_str(),
+				tohuman3(o_speed));
+				
+				if (flagverbose)
+					printf("\n");
+				else
+					printf("\r");
+			}
 			else
-				printf("\r");
+			{
+				pthread_mutex_lock(&g_mylock);		
+				setupConsole();
+				printf("\033[%d;0H",(int)i_tnumber+1);
+				restoreConsole();
+				printf("Thread %02d %03d s %12s: speed (%11s/s)",i_tnumber,trascorso,i_runningalgo.c_str(),tohuman3(o_speed));
+				pthread_mutex_unlock(&g_mylock);	
+			}
 			ultimotrascorso=trascorso;
 		}
 		if ((int)((mtime()-starttutto)/1000)>=i_timelimit)
@@ -27014,6 +27124,15 @@ string Jidac::do_benchmark(int i_timelimit,string i_runningalgo,int i_chunksize,
 	sprintf(buf,"%12s: %11s/s (done %11s)",i_runningalgo.c_str(),tohuman(o_speed),tohuman2(lavorati));
 	string risultato=buf;
 	return risultato;
+}
+void * benchmark_thread(void *t) 
+{
+	assert(t);
+	tparametribenchmark* par= ((struct tparametribenchmark*)(t));
+	
+	par->risultato=do_benchmark(par->tnumber,par->timelimit,par->runningalgo,par->chunksize,par->buffer32bit,par->speed);
+	pthread_exit(NULL);
+	return 0;
 }
 
 struct s_benchmark
@@ -27036,7 +27155,7 @@ void explode(string i_string,char i_delimiter,vector<string>& array)
 {
 	///printf("Delimiter %c\n",i_delimiter);
 	///printf("String %s\n",i_string.c_str());
-	int i=0;
+	unsigned int i=0;
 	while(i<i_string.size())
 	{
 		string temp="";
@@ -27055,10 +27174,8 @@ void explode(string i_string,char i_delimiter,vector<string>& array)
 	
 int Jidac::benchmark()
 {
-
-
 	int			chunksize=100000;
-	int			timelimit=5;
+	int			timelimit=20;
 	
 	if (menoenne>0)
 	{
@@ -27086,9 +27203,6 @@ int Jidac::benchmark()
 		printf("21202: GURU cannot alloc the buffer32bit\n");
 		return 1;
 	}
-	
-	
-	
 	
 	vector<string> thehashes;
 	string hashes="";
@@ -27120,38 +27234,127 @@ int Jidac::benchmark()
 		printf("27144: strange hash selection\n");
 		return 1;
 	}
-	vector<s_benchmark> vettorerisultati;     
-	s_benchmark	block;
-	string 	risultato;
-	double	speed;
+
+	if (all)
+		if (thehashes.size()!=1)
+		{
+			printf("When benchmarking with -all (multithread), exactly ONE algo\n");
+			return 1;
+		}
 	
+	vector<s_benchmark> 			vettorerisultati;     
+	vector<tparametribenchmark> 	vettoreparametribenchmark; // pthread
+
 	printf("Benchmark parameters\n");
-	for (int i=0;i<thehashes.size();i++)
+	for (unsigned int i=0;i<thehashes.size();i++)
 		printf("%s ",thehashes[i].c_str());
 	printf("\n");
 	printf("Time limit %10d s  (-n X)\n",timelimit);
 	printf("Chunks of  %12s  (-minsize Y)\n",tohuman(chunksize*4));
 	printf("\n");
 
-	for (int i=0;i<thehashes.size();i++)
+	if (all)
 	{
-		risultato=do_benchmark(timelimit,thehashes[i],chunksize,buffer32bit,speed);
-		block.algoritmo=thehashes[i];
-		block.speed=speed;
-		block.risultati=risultato;
-		vettorerisultati.push_back(block);
+		if (thehashes.size()!=1)
+		{
+			printf("When benchmarking with -all (multithread), only ONE algo\n");
+			return 1;
+		}
+		int mythreads=howmanythreads;
+	
+		if (!all)
+			mythreads=1;
+		
+		tparametribenchmark	myblock;
+		for (int i=0;i<mythreads;i++)
+		{
+			myblock.tnumber=i;
+			myblock.chunksize=chunksize;
+			myblock.buffer32bit=buffer32bit;
+			myblock.timelimit=timelimit;
+			myblock.runningalgo=thehashes[0];
+			vettoreparametribenchmark.push_back(myblock);
+		}
+	
+		int rc;
+		pthread_t* threads = new pthread_t[mythreads];
+
+		pthread_attr_t attr;
+		void *status;
+
+		// ini and set thread joinable
+		pthread_attr_init(&attr);
+		pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
+
+		printf("\nCreating %d hashing thread(s) with %s\n\n",mythreads,mygetalgo().c_str());
+
+		setupConsole();
+		printf("\033[2J"); //cls
+		restoreConsole();
+	
+		for(int i = 0; i < mythreads; i++ ) 
+		{	
+			rc 	= pthread_create(&threads[i], &attr, benchmark_thread, (void*)&vettoreparametribenchmark[i]);
+			if (rc) 
+			{
+				printf("Error creating thread\n");
+				exit(-1);
+			}
+		}
+	
+
+		pthread_attr_destroy(&attr);
+		for(int i = 0; i <mythreads; i++ ) 
+		{
+			rc = pthread_join(threads[i], &status);
+			if (rc) 
+			{
+				error("Unable to join\n");
+				exit(-1);
+			}
+		}
+		
+		setupConsole();
+				
+		setupConsole();
+		printf("\033[2J"); //cls
+		printf("\033[%d;0H",(int)1);
+		restoreConsole();
+		printf("Final results\n\n");
+		double total_speed=0;
+		for (int i=0;i<mythreads;i++)
+			total_speed+=vettoreparametribenchmark[i].speed;
+		printf("Total speed %s /s\n",tohuman(total_speed));
+		delete [] threads;
+	
+	}
+	else
+	{
+/// NO pthread
+		string 			risultato;
+		double			speed;
+		s_benchmark		block;
+		
+		for (unsigned int i=0;i<thehashes.size();i++)
+		{
+			risultato=do_benchmark(-1,timelimit,thehashes[i],chunksize,buffer32bit,speed);
+			block.algoritmo=thehashes[i];
+			block.speed=speed;
+			block.risultati=risultato;
+			vettorerisultati.push_back(block);
+		}
+
+		std::sort(vettorerisultati.begin(), vettorerisultati.end(), compare_s_benchmark);
+
+		printf("Results\n\n");
+		for (unsigned int i=0;i<vettorerisultati.size();i++)
+			printf("%s\n",vettorerisultati[i].risultati.c_str());
 	}
 	
-	std::sort(vettorerisultati.begin(), vettorerisultati.end(), compare_s_benchmark);
-
-	printf("Results\n\n");
-	for (unsigned int i=0;i<vettorerisultati.size();i++)
-		printf("%s\n",vettorerisultati[i].risultati.c_str());
 	
 	free(buffer32bit);
 	return 0;
-   
-};
+}
 
 int Jidac::summa() 
 {
@@ -27610,54 +27813,6 @@ int Jidac::summa()
 /////////////////////////////// main //////////////////////////////////
 
 
-#ifdef _WIN32
-	#ifndef ENABLE_VIRTUAL_TERMINAL_PROCESSING
-		#define ENABLE_VIRTUAL_TERMINAL_PROCESSING  0x0004
-	#endif
-
-	static HANDLE stdoutHandle;
-	static DWORD outModeInit;
-	 
-	void setupConsole(void) 
-	{
-		DWORD outMode 	= 0;
-		stdoutHandle 	= GetStdHandle(STD_OUTPUT_HANDLE);
-	 
-		if(stdoutHandle == INVALID_HANDLE_VALUE)
-			exit(GetLastError());
-		
-		if(!GetConsoleMode(stdoutHandle, &outMode))
-			exit(GetLastError());
-		outModeInit = outMode;
-		
-		 // Enable ANSI escape codes
-		outMode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
-	 
-		if(!SetConsoleMode(stdoutHandle, outMode)) 
-			exit(GetLastError());
-	}
-	 
-	void restoreConsole(void) 
-	{
-		// Reset colors
-		printf("\x1b[0m");	
-		
-		// Reset console mode
-		if(!SetConsoleMode(stdoutHandle, outModeInit)) 
-			exit(GetLastError());
-	}
-#else // Houston, we have Unix
-	void setupConsole(void) 
-	{
-	}
-
-	void restoreConsole(void) 
-	{
-		//colors
-		printf("\x1b[0m");
-	}
-#endif
-
 /// control-c handler
 void my_handler(int s)
 {
@@ -27665,7 +27820,7 @@ void my_handler(int s)
 	if (s==2)
 	{	// we want the cursor back!
 		setupConsole();
-		printf("\e[?25h");
+		printf("\033[?25h");
 		fflush(stdout);
 		restoreConsole();
 	}
@@ -27711,7 +27866,10 @@ void my_handler(int s)
 //// set UTF-8 for console
 	SetConsoleCP(65001);
 	SetConsoleOutputCP(65001);
-	OSVERSIONINFO vi = {0};
+	OSVERSIONINFO vi;// = {0};
+	vi.dwMajorVersion=0;
+	vi.dwMinorVersion=0;
+	vi.dwPlatformId=0;
 	vi.dwOSVersionInfoSize = sizeof(OSVERSIONINFO);
 	GetVersionEx(&vi);
 	windows7_or_above = (vi.dwMajorVersion >= 6) && (vi.dwMinorVersion >= 1);
@@ -27941,7 +28099,7 @@ int Jidac::utf()
 }
 
 /// a patched... main()!
-int unz(const char * archive,const char * key,bool all)
+int unz(const char * archive,const char * key)
 {
 	/// really cannot run on ESXi: take WAY too much RAM
 	if (!archive)
@@ -30599,7 +30757,7 @@ int64_t Jidac::franzparallelscandir(bool i_flaghash,bool i_recursive,bool i_forc
 		if (!flagnoeta)
 		{
 			setupConsole();
-			printf("\e[?25l");	
+			printf("\033[?25l");	
 			fflush(stdout);
 			restoreConsole();
 		}
@@ -30638,7 +30796,7 @@ int64_t Jidac::franzparallelscandir(bool i_flaghash,bool i_recursive,bool i_forc
 		{
 			setupConsole();
 			printf("\033[%dB",(int)g_arraybytescanned.size());
-			printf("\e[?25h");
+			printf("\033[?25h");
 			fflush(stdout);
 			restoreConsole();
 		}
@@ -30792,7 +30950,8 @@ int Jidac::fillami()
 	vector<string> chunkfilename;     
 	vector<string> chunkhash;     
 	
-	char mynomefile[outputdir.size()+100];
+	assert(outputdir.size()<200);
+	char mynomefile[200+100];
 	for (int i=0;i<chunks;i++)
 	{
 		/// pseudorandom population (not cryptographic-level, but enough)
@@ -32584,6 +32743,5 @@ if (casecollision>0)
 		//unz(archive.c_str(), password,all);
   return errors>0;
 }
-
 
 

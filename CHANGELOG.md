@@ -1,5 +1,8 @@
 ```
-30-07-2021
+31-07-2021: 59.12
+In the command a (add) it is now possible to use -blake3 as file integrity checker
+
+30-07-2021: 59.11
 The CPU cooker: in the b command (benchmark) now -all (multithread) and -tX (limit to X thread)  
 
 29-07-2021

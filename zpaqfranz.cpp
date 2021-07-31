@@ -13,7 +13,7 @@
 //#define UBUNTU
 void help_hash(bool i_usage,bool i_example);
 
-#define ZPAQ_VERSION "52.11-experimental"
+#define ZPAQ_VERSION "52.12-experimental"
 
 /*
                          __                     
@@ -176,6 +176,7 @@ check: zpaqfranz
 #define FRANZO_SHA_1		3
 #define FRANZO_SHA_256		4
 #define	FRANZO_XXH3			5
+#define	FRANZO_BLAKE3		6
 
 
 #define _FILE_OFFSET_BITS 64  // In Linux make sizeof(off_t) == 8
@@ -18468,6 +18469,8 @@ struct DT
 	libzpaq::SHA256 file_sha256;
 	libzpaq::SHA1 	file_sha1;
 	
+	blake3_hasher 	*pfile_blake3;
+	
 	DT(): date(0), size(0), attr(0), data(0),written(-1),file_crc32(0),file_xxhash64(0) {memset(franz_block,0,sizeof(franz_block));hexhash="";
 	
 /// beware of time and space, but now we are sure to maintain 64 byte alignment
@@ -18476,6 +18479,13 @@ struct DT
 	{
 		pfile_xxh3=(XXH3_state_t*)aligned_malloc(64, sizeof(XXH3_state_t));
 		(void)XXH3_128bits_reset(pfile_xxh3);
+	}
+	
+	pfile_blake3=NULL;
+	if (g_franzotype==FRANZO_BLAKE3)
+	{
+		pfile_blake3=(blake3_hasher*)malloc(sizeof(blake3_hasher));
+		blake3_hasher_init(pfile_blake3);
 	}
 ///#ifndef UBUNTU
 ///	(void)XXH3_128bits_reset(&file_xxh3);
@@ -18694,6 +18704,8 @@ string decodefranzoffset(int franzotype)
 		return "SHA-256+CRC-32";
 	if (franzotype==FRANZO_XXH3)
 		return "XXH3+CRC-32";
+	if (franzotype==FRANZO_BLAKE3)
+		return "BLAKE3+CRC-32";
 	perror("16839: franzotype strange");		
 	return "BYPASSWARNING";
 }
@@ -21299,6 +21311,7 @@ void help_a(bool i_usage,bool i_example)
 		moreprint("PLUS: -xxhash       Get XXHASH64 (64 bit) for every file");
 		moreprint("PLUS: -sha1         Get SHA1 for every file");
 		moreprint("PLUS: -sha256       Get SHA256 for every file");
+		moreprint("PLUS: -blake3       Get BLAKE3 for every file");
 		moreprint("PLUS: -verify       Enable double checks        (default: YES). Slower but safer");
 		moreprint("PLUS: -test         Do a post-add test (doveryay, no proveryay).");
 		moreprint("PLUS: -vss          Volume Shadow Copies (Win with admin rights) to backup files from %users%.");
@@ -22842,21 +22855,24 @@ int Jidac::doCommand(int argc, const char** argv)
 		flagflat			=false;
 		
 		if (flag715 || flagnochecksum)
-			g_franzotype=0;
+			g_franzotype=FRANZO_NONE;
 		else
 		if (flagcrc32)
-			g_franzotype=1;
+			g_franzotype=FRANZO_CRC_32;
 		else
 		if (flagsha1 || flagchecksum) //backward compatibility 51
-			g_franzotype=3; //SHA1
+			g_franzotype=FRANZO_SHA_1; //SHA1
 		else
 		if (flagsha256)
-			g_franzotype=4;
+			g_franzotype=FRANZO_SHA_256;
 		else
 		if (flagxxh3)
-			g_franzotype=5;
+			g_franzotype=FRANZO_XXH3;
 		else
-			g_franzotype=2; // by default 2 (CRC32+XXHASH64)
+		if (flagblake3)
+			g_franzotype=FRANZO_BLAKE3;
+		else
+			g_franzotype=FRANZO_XXHASH64; // by default 2 (CRC32+XXHASH64)
 	
 		if (g_franzotype!=0) // do a verify too (store CRC by fragments), but not for 7.15
 			flagverify=true;
@@ -24106,7 +24122,7 @@ void Jidac::writefranzattr(libzpaq::StringBuffer& i_sb, uint64_t i_data, unsigne
 	{
 		assert(i_thehash.length()==64);
 		char mybuffer[FRANZOFFSETSHA256]={0};
-		sprintf(mybuffer,	"04");
+		sprintf(mybuffer,	"04"); //<<< look at this
 		sprintf(mybuffer+2,	"%s",i_thehash.c_str());
 		sprintf(mybuffer+2+64+1,"%08X",writtencrc);
 		puti(i_sb, 8+FRANZOFFSETSHA256, 4); 	// 8+FRANZOFFSET block
@@ -24116,6 +24132,21 @@ void Jidac::writefranzattr(libzpaq::StringBuffer& i_sb, uint64_t i_data, unsigne
 		/// please note the dirty trick: start by +8
 		if (flagdebug)
 				printf("Mode4: SHA256 <<%s>> CRC32 <<%s>> %s\n",mybuffer+2,mybuffer+67,i_filename.c_str());
+	}
+	else
+	if (g_franzotype==FRANZO_BLAKE3) ///3= 52 (01-BLAKE3-0-CRC32)
+	{
+		assert(i_thehash.length()==64);
+		char mybuffer[FRANZOFFSETSHA256]={0};
+		sprintf(mybuffer,	"03"); //<<< look at this
+		sprintf(mybuffer+2,	"%s",i_thehash.c_str());
+		sprintf(mybuffer+2+64+1,"%08X",writtencrc);
+		puti(i_sb, 8+FRANZOFFSETSHA256, 4); 	// 8+FRANZOFFSET block
+		puti(i_sb, i_data, i_quanti);
+		puti(i_sb, 0, (8 - i_quanti));  // pad with zeros (for 7.15 little bug)
+		i_sb.write(mybuffer,FRANZOFFSETSHA256); ///please note the dirty trick: start by +8		
+		if (flagdebug)
+				printf("Mode6: BLAKE3 <<%s>> CRC32 <<%s>> %s\n",mybuffer+2,mybuffer+67,i_filename.c_str());
 	}
 	else
 	if (g_franzotype==FRANZO_XXH3) ///5= 52 (00XXH3-0-CRC32)
@@ -25667,7 +25698,7 @@ int decode_franz_block(const bool i_isdirectory,const char* i_franz_block,string
 		{
 			o_hashtype="SHA-1";
 			o_hashvalue=i_franz_block;
-			risultato=3; //franzotype
+			risultato=FRANZO_SHA_1; //franzotype
 		}			
 	
 	if (i_franz_block[0]==0)
@@ -25677,7 +25708,7 @@ int decode_franz_block(const bool i_isdirectory,const char* i_franz_block,string
 			if (i_franz_block[0+40]==0)
 			o_hashtype="XXHASH64";
 			o_hashvalue=i_franz_block+8;
-			risultato=2; //franzotype
+			risultato=FRANZO_XXHASH64; //franzotype
 		}
 	}
 	
@@ -25688,7 +25719,7 @@ int decode_franz_block(const bool i_isdirectory,const char* i_franz_block,string
 			{
 				o_hashtype="XXH3";
 				o_hashvalue=i_franz_block+10;
-				risultato=5;
+				risultato=FRANZO_XXH3;
 			}
 	}
 	
@@ -25707,8 +25738,25 @@ int decode_franz_block(const bool i_isdirectory,const char* i_franz_block,string
 		if (i_franz_block[1]=='4')
 			if (i_franz_block[0+66]==0)
 			{
-				risultato=4; //franzotype
+				risultato=FRANZO_SHA_256; //franzotype
 				o_hashtype="SHA-256";
+				o_hashvalue=i_franz_block+2;
+				if (i_isdirectory)
+					o_crc32value="        ";
+				else
+				{
+					if (i_franz_block[67]!=0)
+						if (i_franz_block[67+8]==0)
+							o_crc32value=i_franz_block+67;
+				}
+			}
+			
+	if (i_franz_block[0]=='0')
+		if (i_franz_block[1]=='3') // <<< 3, not 4!
+			if (i_franz_block[0+66]==0)
+			{
+				risultato=FRANZO_BLAKE3; //franzotype
+				o_hashtype="BLAKE3";
 				o_hashvalue=i_franz_block+2;
 				if (i_isdirectory)
 					o_crc32value="        ";
@@ -27314,8 +27362,7 @@ int Jidac::benchmark()
 			}
 		}
 		
-		setupConsole();
-				
+
 		setupConsole();
 		printf("\033[2J"); //cls
 		printf("\033[%d;0H",(int)1);
@@ -27326,7 +27373,6 @@ int Jidac::benchmark()
 			total_speed+=vettoreparametribenchmark[i].speed;
 		printf("Total speed %s /s\n",tohuman(total_speed));
 		delete [] threads;
-	
 	}
 	else
 	{
@@ -28630,6 +28676,23 @@ int unz(const char * archive,const char * key)
 						p->second.sha1decompressedhex[64]=0x0;
 					}
 					else
+					if (unzfranzotype==FRANZO_BLAKE3)
+					{
+						blake3_hasher hasher;
+						blake3_hasher_init(&hasher);
+									
+						for (uint32_t i=0; i<f.ptr.size(); ++i) 
+							if (f.ptr[i]<frag.size())
+								for (uint32_t j=24; j<frag[f.ptr[i]].size(); ++j)
+									blake3_hasher_update(&hasher, &frag[f.ptr[i]][j],1);
+
+						uint8_t output[BLAKE3_OUT_LEN];
+						blake3_hasher_finalize(&hasher, output, BLAKE3_OUT_LEN);
+						for (int j=0; j < BLAKE3_OUT_LEN; j++)
+							sprintf(p->second.sha1decompressedhex+j*2,"%02X", (unsigned char)output[j]);
+						p->second.sha1decompressedhex[64]=0x0;
+					}
+					else
 					if (unzfranzotype==FRANZO_XXH3)
 					{
 						XXH3_state_t state128;
@@ -28677,6 +28740,9 @@ int unz(const char * archive,const char * key)
 
 	dummycheck.algotype=ALGO_XXH3;
 	mychecks.insert(std::pair<string, hash_check>("XXH3",dummycheck));
+
+	dummycheck.algotype=ALGO_BLAKE3;
+	mychecks.insert(std::pair<string, hash_check>("BLAKE3",dummycheck));
 
 //////////////////////////////
 /////// now some tests
@@ -29210,6 +29276,9 @@ int Jidac::test()
 
 	dummycheck.algotype=ALGO_XXH3;
 	mychecks.insert(std::pair<string, hash_check>("XXH3",dummycheck));
+
+	dummycheck.algotype=ALGO_BLAKE3;
+	mychecks.insert(std::pair<string, hash_check>("BLAKE3",dummycheck));
 
 	for (unsigned int i=0;i<g_crc32.size();i++)
 		dalavorare+=g_crc32[i].crc32size;
@@ -32263,7 +32332,11 @@ if (casecollision>0)
 						if (g_franzotype==FRANZO_XXH3)
 							if (p->second.pfile_xxh3)
 								(void)XXH3_128bits_update(p->second.pfile_xxh3, buf,buflen);
-
+						
+						if (g_franzotype==FRANZO_BLAKE3)
+							if (p->second.pfile_blake3)
+								blake3_hasher_update(p->second.pfile_blake3, buf,buflen);
+					
 					}
           if (bufptr>=buflen) c=EOF;
           else c=(unsigned char)buf[bufptr++];
@@ -32624,6 +32697,26 @@ if (casecollision>0)
 				}
 				if (flagdebug)
 					printf("Mode4: SHA256 %s %s\n",hashtobewritten.c_str(),p->first.c_str());
+			}
+			else
+			if (g_franzotype==FRANZO_BLAKE3)
+			{
+				
+				uint8_t output[BLAKE3_OUT_LEN];
+				blake3_hasher_finalize(p->second.pfile_blake3, output, BLAKE3_OUT_LEN);
+				
+				char myhex[4];
+				hashtobewritten="";
+				
+				for (int j=0; j < BLAKE3_OUT_LEN; j++)
+				{
+					sprintf(myhex,"%02X", (unsigned char)output[j]);
+					hashtobewritten.push_back(myhex[0]);
+					hashtobewritten.push_back(myhex[1]);
+				}
+				
+				if (flagdebug)
+					printf("Mode6: BLAKE3 %s %s\n",hashtobewritten.c_str(),p->first.c_str());
 			}
 			else
 			if (g_franzotype==FRANZO_XXH3)

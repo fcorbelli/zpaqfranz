@@ -1,4 +1,8 @@
 ```
+03-08-2021: 59.13
+New hasher -whirlpool
+new commands zfs
+
 31-07-2021: 59.12
 In the command a (add) it is now possible to use -blake3 as file integrity checker
 

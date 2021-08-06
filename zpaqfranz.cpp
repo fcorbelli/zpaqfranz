@@ -11,9 +11,8 @@
 ///////// https://github.com/fcorbelli/zpaqfranz/blob/main/notes.txt
 
 //#define UBUNTU
-void help_hash(bool i_usage,bool i_example);
 
-#define ZPAQ_VERSION "52.13-experimental"
+#define ZPAQ_VERSION "52.15-experimental"
 
 /*
                          __                     
@@ -231,6 +230,7 @@ check: zpaqfranz
 	
 	#include <sys/ioctl.h>
 	#include <fcntl.h>
+	#include <stdarg.h>
 /*
 #include <stdio.h>
 #include <sys/types.h>
@@ -8768,10 +8768,14 @@ pthread_mutex_t g_mylock = PTHREAD_MUTEX_INITIALIZER;
 vector <s_crc32block> g_crc32;
 vector<uint64_t> g_arraybytescanned;
 vector<uint64_t> g_arrayfilescanned;
+string g_copy;
 string g_exec_error;
 string g_exec_ok;
 string g_exec_text;
 string g_exec;
+string g_output;
+string g_archive; /// archive writted by add()
+FILE* g_output_handle;
 int64_t g_robocopy_check_sorgente;
 int64_t g_robocopy_check_destinazione;
 int64_t global_start=0;  	// set to mtime() at start of main()
@@ -8813,6 +8817,7 @@ bool flagxxhash64;
 bool flagblake3;
 bool flagwhirlpool;
 bool flagmm;
+bool flagappend;
 /// out of Jidac because of struct DT and XXH3 align
 int g_franzotype; // type of FRANZOFFSET. 0 = nothing, 1 CRC, 2 XXHASH64, 3 SHA1, 4 SHA256, 5 XXH3
 string g_optional;					// command optional
@@ -15470,6 +15475,20 @@ private:
 
 
 ////////// support functions
+
+void myprintf(const char *fmt, ...)
+{
+	char buffer[4096];
+	va_list args;
+    va_start(args, fmt);
+    vsnprintf(buffer, sizeof(buffer), fmt, args);	
+    printf("%s",buffer);
+	if (g_output_handle!=0)
+		fprintf(g_output_handle,"%s",buffer);
+	
+    va_end(args);
+}
+
 bool getcaptcha(const string i_captcha,const string i_reason)
 {
 	if (i_captcha=="")
@@ -22531,6 +22550,8 @@ void help_a(bool i_usage,bool i_example)
 		moreprint("PLUS: -debug        Show LOTS of infos");
 		moreprint("PLUS: -summary      Be brief");
 		moreprint("PLUS: -filelist     Add the list of file to be added in a VFILE");
+		moreprint("PLUS: -copy z:\\two  Make a 2nd copy of the written data into another folder");
+		moreprint("PLUS: -exec_ok p.sh After successful run launch p.sh with archive name as parameter");
 	}
 	if (i_usage && i_example) moreprint("    Examples:");
 	
@@ -22552,8 +22573,8 @@ void help_a(bool i_usage,bool i_example)
 		moreprint("Add folder, maximum compress:        a z:\\c.zpaq c:\\nz\\ -m5");
 		moreprint("Store the filelist VFILE:            a z:\\d.zpaq c:\\nz\\ -filelist");
 		moreprint("Add WITHOUT CRC-32/hash (like 715):  a z:\\e.zpaq c:\\nz\\ -crc32");
-		
-		
+		moreprint("Add 2nd copy to USB drive (U):       a \"z:\\f_???.zpaq\" c:\\nz\\ -copy u:\\usb");
+		moreprint("Launch pippo.bat after OK:           a \"z:\\g_???.zpaq\" c:\\nz\\ -exec_ok u:\\pippo.bat");
 	}
 
 
@@ -22768,8 +22789,9 @@ void help_zfs(bool i_usage,bool i_example)
 	{
 		moreprint("      Auxiliary zfs commands (typically for FreeBSD)");
 		moreprint("      The user must have the rights to do this kind of stuff!");
-		moreprint("      NOTE: must redirect the output and edit your own script");
-		moreprint("      zpaqfranz cowardly do NOT execute zfspurge or zfsadd");
+		moreprint("      NOTE: you can use -output xx.sh to redirect the output");
+		moreprint("      and edit your own script");
+		moreprint("      !zpaqfranz cowardly do NOT execute!");
 		moreprint("");
 		moreprint("****  LUKE... REMEMBER... !USE THE DOUBLEQUOTES! ...");
 		moreprint("");
@@ -22783,6 +22805,7 @@ void help_zfs(bool i_usage,bool i_example)
 		if ((g_optional=="zfsadd") || (g_optional==""))
 		moreprint("CMD   zfsadd        Freeze into an archive a selection of snapshots");
 		
+		moreprint("PLUS: -output pi.sh Write a script-ready on pi.sh");
 		moreprint("PLUS: -pakka        Remove first line in output");
 	}
 	if (i_usage && i_example) moreprint("    Examples:");
@@ -22790,8 +22813,8 @@ void help_zfs(bool i_usage,bool i_example)
 	{
 		if ((g_optional=="zfsadd") || (g_optional==""))
 		{
-		moreprint("zfsadd \"/tmp/47/zpaqfranz\" \"/temporaneo/kongo60.zpaq\" \"tank/d@2021\" \"--60d\" \"scanner\"");
-		moreprint("zfsadd \"/tmp/47/zpaqfranz\" \"/temporaneo/kongo7.zpaq\"  \"tank/d@2021\" \"--7d\"");
+		moreprint("zfsadd \"tank/d@2021\" \"--60d\" \"/tmp/47/zpaqfranz\" \"/temporaneo/kongo60.zpaq\" -output ./dothejob.sh");
+		moreprint("zfsadd \"tank/d@2021\" \"--60d\" \"/tmp/47/zpaqfranz\" \"/temporaneo/kongo60.zpaq\" \"scanner\" -output ./dothejob.sh");
 		}
 		
 		if ((g_optional=="zfslist") || (g_optional==""))
@@ -22806,6 +22829,8 @@ void help_zfs(bool i_usage,bool i_example)
 		moreprint("zfspurge \"tank/d@2021\" \"--60d\"");
 		moreprint("zfspurge \"*\" \"*\"");
 		moreprint("zfspurge \"tank\" \"--7d\"");
+		moreprint("zfspurge \"tank\" \"--7d\" -output mygoodscript.sh");
+		
 		}
 	}
 }
@@ -23102,6 +23127,7 @@ void help_franzswitches(bool i_usage,bool i_example)
 	moreprint("  -exec_ok fo.bat After OK launch fo.bat");
 	moreprint("  -exec_error kz  After NOT OK launch kz");
 	moreprint("  -exec pippo.bat Launch pippo.bat %1 with command n");
+	moreprint("  -output scri.sh Output on scri.sh too");
 	moreprint("  -kill           Show 'script-ready' log of dup files");
 	moreprint("  -kill           In extraction write 0-bytes file instead of data");
 	moreprint("  -utf            Remove non-utf8 chars");
@@ -23302,7 +23328,24 @@ void Jidac::examples(string i_command)
 
 ///mika2
 
-
+void open_output(string i_filename)
+{
+	///printf("Sto per aprire %s\n",i_filename.c_str());
+	if (i_filename!="")
+	{
+		if (g_output_handle==0)
+		{
+			g_output=i_filename;
+			g_output_handle=fopen(i_filename.c_str(),"wb");
+			/*
+			if (g_output_handle!=0)
+				printf("Aperto\n");
+			else
+				printf("Problema in apertura output\n");
+			*/
+		}
+	}
+}
 
 // Rename name using tofiles[]
 string Jidac::rename(string name) 
@@ -23353,10 +23396,14 @@ int Jidac::doCommand(int argc, const char** argv)
   
 	g_franzotype=2; //by default take CRC-32 AND XXHASH64
 	
+	g_archive="";
+	g_output_handle=NULL;
+	g_output="";
 	g_exec_error="";
 	g_exec_ok="";
 	g_exec="";
 	g_exec_text="";
+	g_copy="";
 	command=0;
 	flagforce=false;
 	fragment=6;
@@ -23410,6 +23457,7 @@ int Jidac::doCommand(int argc, const char** argv)
 	flag715=false;
 	flagfilelist=false;
 	flagmm=false;
+	flagappend=false;
 	searchfrom="";
 	replaceto="";
  
@@ -23724,6 +23772,26 @@ int Jidac::doCommand(int argc, const char** argv)
 					i--;
 			}
 		}
+		else if (opt=="-copy")
+		{
+			if (g_copy=="")
+			{
+				if (++i<argc && argv[i][0]!='-')  
+					g_copy=argv[i];
+				else
+					i--;
+			}
+		}
+		else if (opt=="-output")
+		{
+			if (g_output=="")
+			{
+				if (++i<argc && argv[i][0]!='-')  
+					g_output=argv[i];
+				else
+					i--;
+			}
+		}
 		else if (opt=="-exec")
 		{
 			if (g_exec=="")
@@ -23778,6 +23846,7 @@ int Jidac::doCommand(int argc, const char** argv)
 		else if (opt=="-sha256") 					flagsha256			=true;
 		else if (opt=="-blake3") 					flagblake3			=true;
 		else if (opt=="-mm") 						flagmm				=true;
+///		else if (opt=="-append") 					flagappend			=true;
 		else if (opt=="-whirlpool")					flagwhirlpool		=true;
 		
 		else if (opt=="-wyhash")
@@ -24007,6 +24076,8 @@ int Jidac::doCommand(int argc, const char** argv)
 		if (flagmm)
 			franzparameters+="memory mapped file (-mm) ";
 			
+		if (flagappend)
+			franzparameters+="append in copy (-append) ";
 		
 		if (flagverify)
 			franzparameters+="VERIFY (-verify) ";
@@ -24093,7 +24164,16 @@ int Jidac::doCommand(int argc, const char** argv)
 			printf("franz:exec_ok    <<%s>>\n",g_exec_ok.c_str());
 		
 		if (g_exec!="")
-			printf("franz:exec_ok    <<%s>>\n",g_exec.c_str());
+			printf("franz:exec       <<%s>>\n",g_exec.c_str());
+	
+		if (g_copy!="")
+			printf("franz:copy       <<%s>>\n",g_copy.c_str());
+
+		if (g_output!="")
+		{
+			printf("franz:output     <<%s>>\n",g_output.c_str());
+			open_output(g_output);
+		}
 	}
 	
 	if (howmanythreads<1) 
@@ -29545,11 +29625,21 @@ void my_handler(int s)
       errorcode>1 ? "(with errors)" :
       errorcode>0 ? "(with warnings)" : "(all OK)");
 	  
+		
 	if (errorcode)
 		xcommand(g_exec_error,g_exec_text);
 	else
+	{
+/// when adding multipart archive, and no errors, take the last filename
+		if (g_archive!="")
+			g_exec_text=g_archive;
+
 		xcommand(g_exec_ok,g_exec_text);
-	
+	}
+
+	if (g_output_handle!=0)
+		fclose(g_output_handle);
+
 	return errorcode;
 }
 
@@ -30691,7 +30781,7 @@ int Jidac::consolidate(string i_archive)
 		int64_t io_lavorati=0;
 		string hashreloaded=xxhash_calc_file(outfile.c_str(),false,dummycrc32,startverify,total_size,io_lavorati);
 		printf("Expected   XXH3 hash of the output file %s\n",risultato);
-		printf("Calculated XXH3 hash of the output file %s\n",risultato);
+		printf("Calculated XXH3 hash of the output file %s\n",hashreloaded.c_str());
 		if (hashreloaded!=risultato)
 		{
 			printf("29658: GURU hash of output file does not match!\n");
@@ -31941,6 +32031,17 @@ string Jidac::zfs_get_snaplist(string i_header,string i_footer,vector<string>& o
 
 }
 
+string	heuristic_output_search(vector<string>& i_array)
+{
+	for (unsigned int i=0;i<i_array.size();i++)
+	{
+		if (i_array[i]=="-output")
+			if (i+1<i_array.size())
+				if (i_array[i+1]!="")
+					return i_array[i+1];
+	}
+	return "";
+}
 int Jidac::zfs(string command)
 {
 	if (flagdebug)
@@ -31948,80 +32049,18 @@ int Jidac::zfs(string command)
 		printf("*** ZFS support functions ***\n");
 		printf("With command %s\n",command.c_str());
 	}
+	
+	
 	if (command=="zfsadd")
-	{
 		if (files.size()<4)
-		{
-			printf("For zfsadd you need at least 4 parameters\n\n");
-			printf("*** DO NOT FORGET THE DOUBLEQUOTE ***\n\n");
-			help_zfs(true,true);
-			return 1;
-		}
-		if (flagdebug)
-			for (unsigned int i=0;i<files.size();i++)
-				printf("Files  %d %s\n",i,files[i].c_str());
-	
-		string	exepath		=files[0];//"/tmp/47/zpaqfranz";
-		string  zpaqfile	=files[1];//"/temporaneo/kongo7.zpaq";
-		string 	header		=files[2];//"tank/d@2021";
-		string 	footer		=files[3];//"--60d";
-		string 	onlysubdir	="";
-		
-		if (files.size()>=5)
-		{
-			onlysubdir=files[4];
-			if (onlysubdir[0]=='/') 
-				onlysubdir.erase(0,1);
-			if (onlysubdir!="")
-				if (!isdirectory(onlysubdir))
-					onlysubdir+="/";
-
-		}	
-		if (flagdebug)
-		{
-			printf("Exepath  : %s\n",exepath.c_str());
-			printf("Zpaqfile : %s\n",zpaqfile.c_str());
-			printf("Header   : %s\n",header.c_str());
-			printf("Footer   : %s\n",footer.c_str());
-			
-			if (onlysubdir!="")
-			printf("Subdir   : %s\n",onlysubdir.c_str());
-		}
-
-		vector<string> array_primachiocciola;
-		vector<string> array_dopochiocciola;
-		string risul=zfs_get_snaplist(header,footer,array_primachiocciola,array_dopochiocciola);
-		
-		for (unsigned int i=0;i<array_primachiocciola.size();i++)
-		{
-			string prima_chiocciola	=array_primachiocciola	[i];
-			string dopo_chiocciola	=array_dopochiocciola		[i];
-
-			if (prima_chiocciola[0]!='/') 
-				prima_chiocciola="/"+prima_chiocciola;
-			
-			string percorso=prima_chiocciola+"/.zfs/snapshot/"+dopo_chiocciola+"/";
-			
-			string timestamp=dopo_chiocciola;
-			myreplace(timestamp,footer,"");
-			
-			int64_t testdate=encodestringdate(timestamp);
-			if (testdate==-1)
 			{
-				printf("30640: timestamp is strange %s\n",timestamp.c_str());
-				return 2;
+				printf("For zfsadd you need at least 4 parameters\n\n");
+				printf("*** DO NOT FORGET THE DOUBLEQUOTE ***\n\n");
+				help_zfs(true,true);
+				return 1;
 			}
-			
-///			printf("|%s| |%s|  tstamp |%s| <<%s>>\n",prima_chiocciola.c_str(),dopo_chiocciola.c_str(),timestamp.c_str(),percorso.c_str());
-			string command=exepath+" a "+zpaqfile+" "+percorso+onlysubdir+" -to "+prima_chiocciola+"/"+onlysubdir+" -timestamp "+timestamp;
-			printf("%s\n",command.c_str());
-			
-		}
-	}
-	
-	
+
 	if ((command=="zfspurge") || (command=="zfslist"))
-	{
 		if (files.size()<1) // impossible
 		{
 			printf("For zfspurge/zfslist you need at least 1 parameter\n\n");
@@ -32030,10 +32069,15 @@ int Jidac::zfs(string command)
 			return 1;
 		}
 		
+		
+	if ((command=="zfspurge") || (command=="zfslist") || (command=="zfsadd"))
+	{
 		string 	header		=files[0];//"tank/d@2021";
 		string 	footer		="";
-		
-		
+		string	exepath		=""; ///zfsadd
+		string  zpaqfile	=""; ///zfsadd
+		string 	onlysubdir	=""; ///zfsadd
+				
 		if (files.size()>1)
 			footer=files[1];
 			
@@ -32059,9 +32103,78 @@ int Jidac::zfs(string command)
 */	
 		if (array_primachiocciola.size()==0)
 		{
-			printf("30768: nothing to do. Do you use the doublequote?\n");
+			printf("32030: nothing to do. Do you use the doublequote?\n");
 			return 1;
 		}
+		
+		
+		string	myoutput=heuristic_output_search(files);
+		if (myoutput!="")
+			open_output(myoutput);
+		
+		if (command=="zfsadd")
+		{
+		/*
+		
+		Files  0 tank/d@2021
+		Files  1 --60d
+		Files  2 c:/zpaqfranz/zpaqfranz.exe
+		Files  3 z:/kongo60.zpaq
+		(4)
+		
+		Files  0 tank/d@2021
+		Files  1 --60d
+		Files  2 c:/zpaqfranz/zpaqfranz.exe
+		Files  3 z:/kongo60.zpaq
+		files  4 "scanner"
+		Files  5 -output
+		Files  6 z:/1.bat
+		(7)
+		
+		Files  0 tank/d@2021
+		Files  1 --60d
+		Files  2 c:/zpaqfranz/zpaqfranz.exe
+		Files  3 z:/kongo60.zpaq
+		Files  4 -output
+		Files  5 z:/1.bat
+		
+		(6)
+		*/
+			if (flagdebug)
+				for (unsigned int i=0;i<files.size();i++)
+					printf("Files  %d %s\n",i,files[i].c_str());
+			
+			exepath		=files[2];//"/tmp/47/zpaqfranz";
+			zpaqfile	=files[3];//"/temporaneo/kongo7.zpaq";
+			
+			if (files.size()>4)
+			{
+				if (files[4]!="-output")
+				{
+					onlysubdir=files[4];
+					if (onlysubdir[0]=='/') 
+						onlysubdir.erase(0,1);
+					if (onlysubdir!="")
+						if (!isdirectory(onlysubdir))
+						onlysubdir+="/";
+				}
+				
+			}
+
+			if (flagdebug)
+			{
+				printf("Exepath  : %s\n",exepath.c_str());
+				printf("Zpaqfile : %s\n",zpaqfile.c_str());
+				printf("Header   : %s\n",header.c_str());
+				printf("Footer   : %s\n",footer.c_str());
+				if (onlysubdir!="")
+					printf("Subdir   : %s\n",onlysubdir.c_str());
+				if (myoutput!="")
+					printf("Output on: %s\n",myoutput.c_str());
+				}
+			
+		}
+		
 		for (unsigned int i=0;i<array_primachiocciola.size();i++)
 		{
 			string prima_chiocciola	=array_primachiocciola	[i];
@@ -32069,10 +32182,7 @@ int Jidac::zfs(string command)
 			
 			string tutto=prima_chiocciola+"@"+dopo_chiocciola;
 			
-			///printf("Tutto <<%s>>\n",tutto.c_str());
-			
 			string doublecheck=tutto+" "; // please note the space
-			
 			bool flagtrovato=false;
 			for (unsigned int j=0;j<thefile.size();j++)
 				if (pos(thefile[j],doublecheck)>=0)
@@ -32082,19 +32192,46 @@ int Jidac::zfs(string command)
 				}
 			if (flagtrovato)
 			{
+				if (command=="zfsadd")
+				{
+					if (prima_chiocciola[0]!='/') 
+						prima_chiocciola="/"+prima_chiocciola;
+			
+					string percorso=prima_chiocciola+"/.zfs/snapshot/"+dopo_chiocciola+"/";
+			
+					string timestamp=dopo_chiocciola;
+					myreplace(timestamp,footer,"");
+			
+					int64_t testdate=encodestringdate(timestamp);
+					if (testdate==-1)
+					{
+						printf("30640: timestamp is strange %s\n",timestamp.c_str());
+						return 2;
+					}
+			
+					tutto=exepath+" a "+zpaqfile+" "+percorso+onlysubdir+" -to "+prima_chiocciola+"/"+onlysubdir+" -timestamp "+timestamp;
+				}
+				else
 				if (command=="zfspurge")
-					printf("zfs destroy ");
-				printf("%s\n",tutto.c_str());
+					myprintf("zfs destroy ");
+				myprintf("%s\n",tutto.c_str());
 			}
 			else
 			{
 				printf("30816: guru evalutating <<%s>>\n",doublecheck.c_str());
 				return 2;
 			}
-	
+		}
+		
+		if (g_output_handle)
+		{
+			fclose(g_output_handle);
+#ifdef unix
+// ok we want the +x
+		chmod(g_output.c_str(),0700);
+#endif
 		}
 	}
-	
 	return 0;
 }
 /// find and delete 0-length dirs
@@ -32653,6 +32790,158 @@ int Jidac::dircompare(bool i_flagonlysize,bool i_flagrobocopy)
 }
 
 
+
+string filecopy(bool i_append,string i_infile,string i_outfile,bool i_verify,bool i_force)
+{
+	if ((i_infile)=="")
+		return "";
+		
+	if ((i_outfile)=="")
+		return "";
+
+		
+		
+	string percorso=i_outfile;
+	if (!isdirectory(percorso))
+		percorso+="/";
+
+	if (!direxists(percorso))
+		makepath(percorso);
+	
+	int64_t dimensionedacopiare	=prendidimensionefile(i_infile.c_str());
+	
+	if (!i_force)
+	{
+		int64_t spaziolibero	=getfreespace(percorso.c_str());
+		if (spaziolibero<dimensionedacopiare)
+		{
+			printf("34878: impossible to make a copy of %s insufficient free space %s on <<%s>>\n",migliaia(dimensionedacopiare),migliaia2(spaziolibero),percorso.c_str());
+			return "";
+		}
+	}
+	
+	string solofile=extractfilename(i_infile);
+	string filedefinitivo=percorso+solofile;
+	
+	if (flagdebug)
+		printf("ready to make a copy in %s\n",filedefinitivo.c_str());
+		
+	int64_t	lunghezzadefinitivo=0;
+	/*
+	if (fileexists(filedefinitivo))
+		if (i_append)
+		{
+			printf("Proverei un append\n");
+			lunghezzadefinitivo=prendidimensionefile(filedefinitivo.c_str());
+			
+			if (dimensionedacopiare<lunghezzadefinitivo)
+				lunghezzadefinitivo=0; /// overwrite
+		}
+*/
+	FILE* outFile=NULL;	
+#ifdef _WIN32
+	wstring widename=utow(filedefinitivo.c_str());
+	if (lunghezzadefinitivo>0)
+	outFile=_wfopen(widename.c_str(), L"ab" );
+	else
+	outFile=_wfopen(widename.c_str(), L"wb" );
+#else
+	if (lunghezzadefinitivo>0)
+	outFile=fopen(filedefinitivo.c_str(), "ab");
+	else
+	outFile=fopen(filedefinitivo.c_str(), "wb");
+#endif
+
+	if (outFile==NULL)
+	{
+		printf("32827 :CANNOT OPEN outfile %s\n",filedefinitivo.c_str());
+		return "";
+	}
+	size_t const blockSize = 65536;
+	unsigned char buffer[blockSize];
+	int64_t donesize=0;
+
+	XXH3_state_t state128;
+    (void)XXH3_128bits_reset(&state128);
+	if (i_verify)
+		if (flagverbose)
+			printf("verify: trust, but check...\n");
+		
+	
+	FILE* inFile = freadopen(i_infile.c_str());
+	if (inFile==NULL) 
+	{
+#ifdef _WIN32
+	int err=GetLastError();
+#else
+	int err=1;
+#endif
+	printf("\32849: ERR <%s> kind %d\n",i_infile.c_str(),err); 
+
+	return "";
+	}
+	
+	/*
+	if (lunghezzadefinitivo>0)
+		inFile.seek(lunghezzadefinitivo, SEEK_SET);
+	*/
+		
+	size_t readSize;
+	int64_t	chunk_readed=0;
+	int64_t	chunk_written=0;
+	int64_t startcopy=mtime();
+
+	while ((readSize = fread(buffer, 1, blockSize, inFile)) > 0) 
+	{
+		int64_t written=fwrite(buffer,1,readSize,outFile);
+		chunk_written+=written;
+		chunk_readed+=readSize;
+		donesize+=written;
+		if (lunghezzadefinitivo==0) /// the append case
+			if (flagverify)
+				(void)XXH3_128bits_update(&state128, buffer, readSize);
+		avanzamento(donesize,dimensionedacopiare,startcopy);
+	}
+	
+	fclose(inFile);
+	fclose(outFile);
+	if (flagdebug)
+	{
+		printf("Done\n");
+		printf("Written  %20s\n",migliaia(donesize));
+		printf("Expected %20s\n\n",migliaia(dimensionedacopiare));
+	}
+	
+	if (donesize!=dimensionedacopiare)
+	{
+		printf("32876: GURU bytes written does not match expected\n");
+		return "";
+	}
+	if (flagverify)
+	{
+		printbar('=');
+		printf("Checking the copy...\n");
+		XXH128_hash_t myhash=XXH3_128bits_digest(&state128);
+		char risultato[33];
+		sprintf(risultato,"%016llX%016llX",(unsigned long long)myhash.high64,(unsigned long long)myhash.low64);
+		
+		uint32_t dummycrc32;
+		int64_t startverify=mtime();
+		int64_t io_lavorati=0;
+		string hashreloaded=xxhash_calc_file(filedefinitivo.c_str(),false,dummycrc32,startverify,dimensionedacopiare,io_lavorati);
+		if (flagdebug)
+		{
+			printf("Expected   XXH3 hash of the output file %s\n",risultato);
+			printf("Calculated XXH3 hash of the output file %s\n",hashreloaded.c_str());
+		}
+		if (hashreloaded!=risultato)
+		{
+			printf("29658: GURU hash of output file does not match!\n");
+			return "";
+		}
+	}
+	return filedefinitivo;
+}
 /// scans one or more directories, with one or more threads
 /// return total time
 int64_t Jidac::franzparallelscandir(bool i_flaghash,bool i_recursive,bool i_forcedir)
@@ -33774,6 +34063,7 @@ int Jidac::add()
 
   // Set arcname, offset, header_pos, and salt to open out archive
   arcname=archive;  // output file name
+  
   int64_t offset=0;  // total size of existing parts
   char salt[32]={0};  // encryption salt
   if (password) libzpaq::random(salt, 32);
@@ -33840,6 +34130,8 @@ int Jidac::add()
   printUTF8(arcname.c_str());
   printf(" at offset %1.0f + %1.0f\n", double(header_pos), double(offset));
 
+	g_archive=arcname; /// for multipart the last
+	
   // Set method
   if (method=="") method="1";
   if (method.size()==1) {  // set default blocksize
@@ -34708,9 +35000,26 @@ if (casecollision>0)
 		vss_deleteshadows();
 #endif
 	
+	
 	if (flagfilelist)
 		if (fileexists(tempfile))
 			delete_file(tempfile.c_str());
+			
+	///do a second copy (ex. to USB)	
+	if (errors==0)
+	{
+		if (g_copy!="")
+		{
+			string filescritto=filecopy(flagappend,g_archive,g_copy,true,false);
+			
+			if (filescritto!="")
+				printf("Copied <<%s>> to <<%s>>\n",g_archive.c_str(),filescritto.c_str());
+			else
+				printf("34971: ERROR doing -copy from %s to %s\n",g_archive.c_str(),filescritto.c_str());
+		}
+	}
+			
+	
 	/// late -test    
 	if (flagtest)
 	{

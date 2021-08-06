@@ -1,4 +1,14 @@
 ```
+06-08-2021: 59.14
+in add()   
+```
+-exec_ok something.bat (launch a script with archivename as parameter)
+-copy somewhere (write a second copy of the archive into somewhere)
+
+Add 2nd copy to USB drive (U):       a "z:\f_???.zpaq" c:\nz\ -copy u:\usb
+Launch pippo.bat after OK:           a "z:\g_???.zpaq" c:\nz\ -exec_ok u:\pippo.bat
+```
+
 03-08-2021: 59.13
 New hasher -whirlpool
 new commands zfs

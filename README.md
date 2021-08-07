@@ -517,6 +517,8 @@ As far as I know this is allowed by the licenses.
 - Embedded Artistry https://github.com/embeddedartistry  
 - wyhash (experimental) WangYi  https://github.com/wangyi-fudan/wyhash  
 - https://github.com/System-Glitch/SHA256
+- https://github.com/BLAKE3-team/BLAKE3
+- * The Whirlpool algorithm was developed by Paulo S. L. M. Barreto and Vincent Rijmen
 
 
 
@@ -603,6 +605,12 @@ g++ -O3 -Dunix zpaqfranz.cpp  -pthread -o zpaqfranz -static
 
 QNAP NAS TS-431P3 (Annapurna AL314) gcc 7.4.0
 g++ -Dunix zpaqfranz.cpp  -pthread -o zpaqfranz -Wno-psabi
+
+Fedora 34 gcc 11.2.1
+Typically you will need some library (out of a fresh Fedora box)
+sudo dnf install glibc-static libstdc++-static -y;
+Then you can compile, via Makefile or "by hand"
+(do not forget... sudo!)
 
 CentoOS
 Please note: "Red Hat discourages the use of static linking for security reasons. 

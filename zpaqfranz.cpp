@@ -12,7 +12,7 @@
 
 //#define UBUNTU
 
-#define ZPAQ_VERSION "52.15-experimental"
+#define ZPAQ_VERSION "52.16-experimental"
 
 /*
                          __                     
@@ -44,7 +44,7 @@ with unmodified version (7.15), even at the cost
 of expensive on inelegant workarounds.
 
 So don't be surprised if it looks like what in Italy 
-we call "zibaldone" or in Emilia-Romagna "4zzone".
+we call "zibaldone" or in Emilia-Romagna "mappazzone".
 Jun 2021: starting to fix the mess (refactoring). Work in progress.
 Jul 2021: source cleaned a bit. From 52+ XXHASH64 as checksum algo
 
@@ -94,16 +94,32 @@ I rarely use Linux or MacOS, so changes may be needed.
 As explained the program is single file, 
 be careful to link the pthread library.
 
+
+WARNINGS
+Some strange warning with some compilers 
+(too old, or too new).
+
+My very own reporting
+https://gcc.gnu.org/bugzilla/show_bug.cgi?id=101558
+
+Original bug
+https://gcc.gnu.org/bugzilla/show_bug.cgi?id=96963
+
+
+
 Targets
 ```
 Windows 64 (g++ 7.3.0)
 g++ -O3  zpaqfranz.cpp -o zpaqfranz 
 
+Windows 64 (g++ 10.3.0) MSYS2
+g++ -O3  zpaqfranz.cpp -o zpaqfranz -pthread -static
+
 Windows 32 (g++ 7.3.0 64 bit)
 c:\mingw32\bin\g++ -m32 -O3 zpaqfranz.cpp -o zpaqfranz32 -pthread -static
 
 FreeBSD (11.x) gcc 7
-gcc7 -O3 -march=native -Dunix zpaqfranz.cpp -static -lstdc++ -pthread -o zpaqfranz -static -lm
+gcc7 -O3 -march=native -Dunix zpaqfranz.cpp -lstdc++ -pthread -o zpaqfranz -static -lm
 
 FreeBSD (12.1) gcc 9.3.0
 g++ -O3 -march=native -Dunix zpaqfranz.cpp  -pthread -o zpaqfranz -static-libstdc++ -static-libgcc
@@ -122,6 +138,12 @@ g++ -O3 -Dunix zpaqfranz.cpp  -pthread -o zpaqfranz -static
 QNAP NAS TS-431P3 (Annapurna AL314) gcc 7.4.0
 g++ -Dunix zpaqfranz.cpp  -pthread -o zpaqfranz -Wno-psabi
 
+
+Fedora 34 gcc 11.2.1
+Typically you will need some library (out of a fresh Fedora box)
+sudo dnf install glibc-static libstdc++-static -y;
+Then you can compile, via Makefile or "by hand"
+(do not forget... sudo!)
 
 
 CentoOS
@@ -9291,9 +9313,18 @@ INLINE size_t compress_parents_parallel(const uint8_t *child_chaining_values,
 
   // If there's an odd child left over, it becomes an output.
   if (num_chaining_values > 2 * parents_array_len) {
+	  /*
+	  franzfix to avoid strange warning
+	  */
+	  
+	  memcpy(&out+(parents_array_len * BLAKE3_OUT_LEN),
+           &child_chaining_values+(2 * parents_array_len * BLAKE3_OUT_LEN),
+           BLAKE3_OUT_LEN);
+/*
     memcpy(&out[parents_array_len * BLAKE3_OUT_LEN],
            &child_chaining_values[2 * parents_array_len * BLAKE3_OUT_LEN],
            BLAKE3_OUT_LEN);
+*/
     return parents_array_len + 1;
   } else {
     return parents_array_len;
@@ -9400,7 +9431,7 @@ INLINE void compress_subtree_to_parent_node(
   // If MAX_SIMD_DEGREE is greater than 2 and there's enough input,
   // compress_subtree_wide() returns more than 2 chaining values. Condense
   // them into 2 by forming parent nodes repeatedly.
-  uint8_t out_array[MAX_SIMD_DEGREE_OR_2 * BLAKE3_OUT_LEN / 2];
+  uint8_t out_array[MAX_SIMD_DEGREE_OR_2 * BLAKE3_OUT_LEN /*franzfix / 2*/];
   while (num_cvs > 2) {
     num_cvs =
         compress_parents_parallel(cv_array, num_cvs, key, flags, out_array);
@@ -19785,6 +19816,8 @@ public:
 	friend struct ExtractJob;
 private:
 
+	string	zpaqfranzexename;
+	
 	MAPPAHELP help_map;					/// maps: string command, helpfunctions(bool,bool)
 	MAPPAHELP switches_map;	
 	char command;             			// command 'a', 'x', or 'l'
@@ -19903,7 +19936,7 @@ private:
 	bool 	getchecksum(string i_filename, char* o_sha1); //get SHA1 AND CRC32 of a file. Old, for backward
 	string 	zfs_get_snaplist(string i_header,string i_footer,vector<string>& o_array_primachiocciola,vector<string>& o_array_dopochiocciola);
 	
-
+	void	reset();
 	///string 	do_benchmark(int i_timelimit,string i_runningalgo,int i_chunksize,uint32_t* buffer32bit,double& o_speed);
 
 	/// out of Jidac by unzpaq206 merging and naming "shadowing"
@@ -19934,6 +19967,24 @@ string decodefranzoffset(int franzotype)
 	perror("16839: franzotype strange");		
 	return "BYPASSWARNING";
 }
+void Jidac::reset()
+{
+	files_size.clear();
+	files_count.clear();
+	files_time.clear();
+	files_edt.clear();
+	ver.clear();
+	block.clear();
+	dt.clear();
+	ht.clear();
+	edt.clear();
+	ht.resize(1);  // element 0 not used
+	ver.resize(1); // version 0
+	dhsize=dcsize=0;
+	tofiles.clear();
+	files.clear();
+}
+
 int Jidac::paranoid() 
 {
 #ifdef _WIN32
@@ -22714,7 +22765,9 @@ void help_c(bool i_usage,bool i_example)
 		moreprint("                    By default check file name and file size (excluding .zfs), not the content.");
 		moreprint("PLUS: -all N        Concurrent threads will be created, each scan a slave dir (-t K to limit).");
 		moreprint("                    NOT good for single spinning drives, good for multiple slaves on different media.");
-		moreprint("PLUS: -checksum     Do a hash 'hard' check, suggested -xxh3, fast and reliable.");
+		moreprint("PLUS: -xxh3         Do a hash 'hard' check, suggested -xxh3, fast and reliable.");
+		moreprint("PLUS: -sha256       Do a hash 'hard' check");
+		moreprint("PLUS: -oneofcheck   Do a hash 'hard' check");
 		moreprint("PLUS: -maxsize X    Filter out on filesize");
 		moreprint("PLUS: -minsize X    Filter out on filesize");
 		moreprint("PLUS: -715          Work as 7.15 (with .zfs and ADS)");
@@ -22803,8 +22856,10 @@ void help_zfs(bool i_usage,bool i_example)
 		moreprint("CMD   zfspurge      Destroy selected zfs snapshot (works like zfslist)");	
 		
 		if ((g_optional=="zfsadd") || (g_optional==""))
+		{
 		moreprint("CMD   zfsadd        Freeze into an archive a selection of snapshots");
-		
+		moreprint("PLUS: -force        Do the freezing (wet run)");
+		}
 		moreprint("PLUS: -output pi.sh Write a script-ready on pi.sh");
 		moreprint("PLUS: -pakka        Remove first line in output");
 	}
@@ -22813,8 +22868,10 @@ void help_zfs(bool i_usage,bool i_example)
 	{
 		if ((g_optional=="zfsadd") || (g_optional==""))
 		{
-		moreprint("zfsadd \"tank/d@2021\" \"--60d\" \"/tmp/47/zpaqfranz\" \"/temporaneo/kongo60.zpaq\" -output ./dothejob.sh");
-		moreprint("zfsadd \"tank/d@2021\" \"--60d\" \"/tmp/47/zpaqfranz\" \"/temporaneo/kongo60.zpaq\" \"scanner\" -output ./dothejob.sh");
+		moreprint("zfsadd \"tank/d@2021\" \"--60d\" \"/temporaneo/kongo60.zpaq\" ");
+		moreprint("zfsadd \"tank/d@2021\" \"--60d\" \"/temporaneo/kongo60.zpaq\" \"scanner\"");
+		moreprint("zfsadd \"tank/d@2021\" \"--60d\" \"/temporaneo/kongo60.zpaq\" \"scanner\" -force");
+		moreprint("zfsadd \"tank/d@2021\" \"--60d\" \"/temporaneo/kongo60.zpaq\" \"scanner\" -output ./dothejob.sh");
 		}
 		
 		if ((g_optional=="zfslist") || (g_optional==""))
@@ -23385,7 +23442,49 @@ string Jidac::rename(string name)
   return name;
 }
 
+string getpassword()
+{
+/*
+    static struct termios oldt, newt;
+    tcgetattr(STDIN_FILENO,&oldt);
+    newt=oldt;
+	newt.c_lflag &= ~(ECHO);          
+	tcsetattr(STDIN_FILENO,TCSANOW,&newt);
 
+	do something
+	
+    tcsetattr(STDIN_FILENO,TCSANOW,&oldt);
+*/
+
+
+	char myline[251];
+	unsigned int i=0;
+    int c;
+
+	printf("\nEnter password (max %d chars):",(int)sizeof(myline)-1);
+	
+	string myresult="";
+	while (1)
+	{
+		while (( (c = getchar())!='\n') && (c!= EOF) && (i< sizeof(myline)-1) )
+			myline[i++] = c;
+		myline[i] = '\0';
+		myresult=myline;
+		if (myresult!="")
+		{
+			if (myresult[0]=='-')
+			{
+				printf("Password starting with - can be confused with switches, enter another one!\n");
+				i=0;
+				myresult="";
+			}
+			
+			else
+				break;
+		}
+	}
+	return myresult;
+}
 
 // Parse the command line. Return 1 if error else 0.
 int Jidac::doCommand(int argc, const char** argv) 
@@ -23460,7 +23559,14 @@ int Jidac::doCommand(int argc, const char** argv)
 	flagappend=false;
 	searchfrom="";
 	replaceto="";
- 
+	zpaqfranzexename="";
+	if (argc>0)
+	{
+		zpaqfranzexename=argv[0];
+#ifdef _WIN32
+		zpaqfranzexename+=".exe";
+#endif
+	}		
 	howmanythreads=0; // 0 = auto-detect
 	version=DEFAULT_VERSION;
 	date=0;
@@ -23612,7 +23718,13 @@ int Jidac::doCommand(int argc, const char** argv)
 			command='9';
 			g_optional=opt;
 			while (++i<argc)  // read filename args
-				files.push_back(argv[i]);
+			{
+				string dummy=argv[i];
+				if (dummy=="-force")
+					flagforce=true;
+				else
+					files.push_back(argv[i]);
+			}
 			--i;
 		}
 		else
@@ -23889,13 +24001,33 @@ int Jidac::doCommand(int argc, const char** argv)
 				alwaysfiles.push_back(argv[i]);
 			--i;
 		}
-		else if (opt=="-key" && i<argc-1) 
+
+		else if (opt=="-key") 
 		{
-			libzpaq::SHA256 sha256;
-			for (const char* p=argv[++i]; *p; ++p)
-				sha256.put(*p);
-			memcpy(password_string, sha256.result(), 32);
-			password=password_string;
+			if (i<argc-1) // I am not the last parameter
+				if (argv[i+1][0]!='-') // -key pippo -whirlpool
+				{
+			//		printf("We take password\n");
+					libzpaq::SHA256 sha256;
+					for (const char* p=argv[++i]; *p; ++p)
+						sha256.put(*p);
+					memcpy(password_string, sha256.result(), 32);
+					password=password_string;
+				}
+			if (password==NULL)
+			{
+				string spassword=getpassword();
+				///printf("entered <<%s>>\n",spassword.c_str());
+				if (spassword!="")
+				{
+					libzpaq::SHA256 sha256;
+					for (unsigned int i=0;i<spassword.size();i++)
+						sha256.put(spassword[i]);
+					memcpy(password_string, sha256.result(), 32);
+					password=password_string;
+				}
+				
+			}
 		}
 		else
 		if (opt=="-repack" && i<argc-1) 
@@ -24297,10 +24429,14 @@ int Jidac::doCommand(int argc, const char** argv)
 
 // Read arc up to -date into ht, dt, ver. Return place to
 // append. If errors is not NULL then set it to number of errors found.
-int64_t Jidac::read_archive(const char* arc, int *errors, int i_myappend) {
-  if (errors) *errors=0;
-  dcsize=dhsize=0;
-  assert(ver.size()==1);
+int64_t Jidac::read_archive(const char* arc, int *errors, int i_myappend) 
+{
+	if (errors) *errors=0;
+	dcsize=dhsize=0;
+	assert(ver.size()==1);
+
+	const bool i_renamed=command=='l' || command=='a'; ///arrggghh hidden parameter!
+
   unsigned files=0;  // count
 
   // Open archive
@@ -24345,8 +24481,7 @@ int64_t Jidac::read_archive(const char* arc, int *errors, int i_myappend) {
   bool found_data=false;   // exit if nothing found
   bool first=true;         // first segment in archive?
   StringBuffer os(32832);  // decompressed block
-  const bool renamed=command=='l' || command=='a';
-
+  
 	int toolongfilenames=0;
 	int adsfilenames=0;
 	int utf8names=0;
@@ -24467,7 +24602,7 @@ int64_t Jidac::read_archive(const char* arc, int *errors, int i_myappend) {
                 ver.back().csize=jmp;
                 if (all) {
                   string fn=itos(ver.size()-1, all)+"/"; ///peusa1 versioni
-                  if (renamed) fn=rename(fn);
+                  if (i_renamed) fn=rename(fn);
                   if (isselected(fn.c_str(), false,-1))
                     dt[fn].date=fdate;
                 }
@@ -24539,7 +24674,7 @@ int64_t Jidac::read_archive(const char* arc, int *errors, int i_myappend) {
 					if (len>65535) 
 						error("filename too long");
 					
-					string fn=s;  // filename renamed
+					string fn=s;  // filename ren
 					if (all) 
 					{
 						if (i_myappend)
@@ -24582,7 +24717,7 @@ int64_t Jidac::read_archive(const char* arc, int *errors, int i_myappend) {
 							*/
 					}
 		
-					const bool issel=isselected(fn.c_str(), renamed,-1);
+					const bool issel=isselected(fn.c_str(), i_renamed,-1);
 					s+=len+1;  // skip filename
 					if (s>end) 
 						error("filename too long");
@@ -24663,7 +24798,7 @@ int64_t Jidac::read_archive(const char* arc, int *errors, int i_myappend) {
             skip=true;
             string fn=lastfile;
             if (all) fn=append_path(itos(ver.size()-1, all), fn); ///peusa3
-            if (isselected(fn.c_str(), renamed,-1)) {
+            if (isselected(fn.c_str(), i_renamed,-1)) {
               DT& dtr=dt[fn];
               if (filename.s.size()>0 || first) {
                 ++files;
@@ -24746,6 +24881,9 @@ endblock:;
 
 bool Jidac::isselected(const char* filename, bool rn,int64_t i_size) 
 {
+	if (g_optional=="zfsadd")
+		return true; // skip all this stuff, take everything
+	
 	bool matched=true;
 	
 	if (!flagforcezfs)
@@ -28905,6 +29043,25 @@ void explode(string i_string,char i_delimiter,vector<string>& array)
 	
 int Jidac::benchmark()
 {
+	/*
+	archive="z:\\prog.zpaq";
+	reset();
+	files.push_back("y:\\snap01");
+	tofiles.push_back("c:/ciu");
+	date=encodestringdate("2021-08-10_01:00:00");
+	command='a';
+	add();
+
+	reset();
+	files.push_back("y:\\snap02");
+	tofiles.push_back("c:/ciu");
+	date=encodestringdate("2021-08-10_02:00:00");
+	command='a';
+	add();
+
+	return 0;
+	*/
+	
 	int			chunksize=100000;
 	int			timelimit=20;
 	
@@ -32052,9 +32209,9 @@ int Jidac::zfs(string command)
 	
 	
 	if (command=="zfsadd")
-		if (files.size()<4)
+		if (files.size()<3)
 			{
-				printf("For zfsadd you need at least 4 parameters\n\n");
+				printf("For zfsadd you need at least 3 parameters\n\n");
 				printf("*** DO NOT FORGET THE DOUBLEQUOTE ***\n\n");
 				help_zfs(true,true);
 				return 1;
@@ -32074,7 +32231,7 @@ int Jidac::zfs(string command)
 	{
 		string 	header		=files[0];//"tank/d@2021";
 		string 	footer		="";
-		string	exepath		=""; ///zfsadd
+		string	exepath		=zpaqfranzexename;
 		string  zpaqfile	=""; ///zfsadd
 		string 	onlysubdir	=""; ///zfsadd
 				
@@ -32118,40 +32275,46 @@ int Jidac::zfs(string command)
 		
 		Files  0 tank/d@2021
 		Files  1 --60d
-		Files  2 c:/zpaqfranz/zpaqfranz.exe
-		Files  3 z:/kongo60.zpaq
+		Files  2 z:/kongo60.zpaq
+		(3)
+
+		Files  0 tank/d@2021
+		Files  1 --60d
+		Files  2 z:/kongo60.zpaq
+		Files  3 scanner
 		(4)
 		
 		Files  0 tank/d@2021
 		Files  1 --60d
-		Files  2 c:/zpaqfranz/zpaqfranz.exe
-		Files  3 z:/kongo60.zpaq
-		files  4 "scanner"
-		Files  5 -output
-		Files  6 z:/1.bat
-		(7)
+		Files  2 z:/kongo60.zpaq
+		files  3 "scanner"
+		Files  4 -output
+		Files  5 z:/1.bat
+		(6)
 		
 		Files  0 tank/d@2021
 		Files  1 --60d
-		Files  2 c:/zpaqfranz/zpaqfranz.exe
-		Files  3 z:/kongo60.zpaq
-		Files  4 -output
-		Files  5 z:/1.bat
+		Files  2 z:/kongo60.zpaq
+		Files  3 -output
+		Files  4 z:/1.bat
 		
-		(6)
+		(5)
 		*/
 			if (flagdebug)
 				for (unsigned int i=0;i<files.size();i++)
 					printf("Files  %d %s\n",i,files[i].c_str());
 			
-			exepath		=files[2];//"/tmp/47/zpaqfranz";
-			zpaqfile	=files[3];//"/temporaneo/kongo7.zpaq";
+			///exepath		=files[2];//"/tmp/47/zpaqfranz";
+			zpaqfile	=files[2];//"/temporaneo/kongo7.zpaq";
 			
-			if (files.size()>4)
+			if (files.size()>3)
 			{
-				if (files[4]!="-output")
+				///printf("entro1\n");
+				
+				if (files[3]!="-output")
 				{
-					onlysubdir=files[4];
+					///printf("entro2\n");
+					onlysubdir=files[3];
 					if (onlysubdir[0]=='/') 
 						onlysubdir.erase(0,1);
 					if (onlysubdir!="")
@@ -32161,8 +32324,9 @@ int Jidac::zfs(string command)
 				
 			}
 
-			if (flagdebug)
+			///if (flagdebug)
 			{
+				
 				printf("Exepath  : %s\n",exepath.c_str());
 				printf("Zpaqfile : %s\n",zpaqfile.c_str());
 				printf("Header   : %s\n",header.c_str());
@@ -32171,9 +32335,12 @@ int Jidac::zfs(string command)
 					printf("Subdir   : %s\n",onlysubdir.c_str());
 				if (myoutput!="")
 					printf("Output on: %s\n",myoutput.c_str());
-				}
+			}
 			
 		}
+		vector<string> 	snapshot_folder;
+		vector<int64_t>	snapshot_date;
+		vector<string>  snapshot_to;
 		
 		for (unsigned int i=0;i<array_primachiocciola.size();i++)
 		{
@@ -32208,12 +32375,19 @@ int Jidac::zfs(string command)
 						printf("30640: timestamp is strange %s\n",timestamp.c_str());
 						return 2;
 					}
-			
+					else
+					{
+						snapshot_date.push_back(testdate);
+						snapshot_folder.push_back(percorso+onlysubdir);
+						snapshot_to.push_back(prima_chiocciola+"/"+onlysubdir);
+					}
+					
 					tutto=exepath+" a "+zpaqfile+" "+percorso+onlysubdir+" -to "+prima_chiocciola+"/"+onlysubdir+" -timestamp "+timestamp;
 				}
 				else
 				if (command=="zfspurge")
 					myprintf("zfs destroy ");
+				if (!flagforce)
 				myprintf("%s\n",tutto.c_str());
 			}
 			else
@@ -32231,6 +32405,28 @@ int Jidac::zfs(string command)
 		chmod(g_output.c_str(),0700);
 #endif
 		}
+		if ((command=="zfsadd") && (flagforce)) /// -force, to be checked
+			if (snapshot_date.size()>0)
+			{
+				archive=zpaqfile;
+				bool allok=true;
+				for (unsigned int i=0;i<snapshot_date.size();i++)
+				{
+					printbar('-');
+					printf("Freezing %8s of %8s snapshots\n",migliaia(i+1),migliaia2(snapshot_date.size()));
+					reset();
+					printf("Folder %s\n",snapshot_folder[i].c_str());
+					printf("To     %s\n",snapshot_to[i].c_str());
+					files.push_back(snapshot_folder[i]);
+					date=snapshot_date[i];
+					tofiles.push_back(snapshot_to[i]);
+					command='a'; /// hidden parameter in read_archive with reflex on issel
+					if (add()!=0)
+						allok=false;
+				}
+				if (!allok)
+					return 2;
+			}
 	}
 	return 0;
 }
@@ -32612,7 +32808,7 @@ int Jidac::robocopy()
 int Jidac::dircompare(bool i_flagonlysize,bool i_flagrobocopy)
 {
 /// If you specify a checksum, do hard compare
-	flagchecksum=(flagcrc32 || flagcrc32c || flagxxh3 || flagxxhash64 || flagsha1 || flagsha256);
+	flagchecksum=(flagcrc32 || flagcrc32c || flagxxh3 || flagxxhash64 || flagsha1 || flagsha256 || flagblake3 || flagwhirlpool);
 		
 	int risultato=0;
 	
@@ -32799,7 +32995,9 @@ string filecopy(bool i_append,string i_infile,string i_outfile,bool i_verify,boo
 	if ((i_outfile)=="")
 		return "";
 
-		
+	string nowarn;
+	if (i_append)
+		nowarn="NO-WARN";
 		
 	string percorso=i_outfile;
 	if (!isdirectory(percorso))
@@ -34128,7 +34326,7 @@ int Jidac::add()
   if (exists(arcname)) printf("Updating ");
   else printf("Creating ");
   printUTF8(arcname.c_str());
-  printf(" at offset %1.0f + %1.0f\n", double(header_pos), double(offset));
+  printf(" at offset %s + %s\n", migliaia(header_pos), migliaia2(offset));
 
 	g_archive=arcname; /// for multipart the last
 	
@@ -35038,15 +35236,4 @@ if (casecollision>0)
 		//unz(archive.c_str(), password,all);
   return errors>0;
 }
-
-
-
-
-
-
-
-
-
-
-
 

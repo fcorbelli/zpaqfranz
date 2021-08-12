@@ -1,5 +1,8 @@
 ```
-06-08-2021: 59.14
+12-08-2021: 52.16  
+zfslist, zfspurge, zfsadd
+
+06-08-2021: 52.14
 in add()   
 ```
 -exec_ok something.bat (launch a script with archivename as parameter)
@@ -9,14 +12,14 @@ Add 2nd copy to USB drive (U):       a "z:\f_???.zpaq" c:\nz\ -copy u:\usb
 Launch pippo.bat after OK:           a "z:\g_???.zpaq" c:\nz\ -exec_ok u:\pippo.bat
 ```
 
-03-08-2021: 59.13
+03-08-2021: 52.13
 New hasher -whirlpool
 new commands zfs
 
-31-07-2021: 59.12
+31-07-2021: 52.12
 In the command a (add) it is now possible to use -blake3 as file integrity checker
 
-30-07-2021: 59.11
+30-07-2021: 52.11
 The CPU cooker: in the b command (benchmark) now -all (multithread) and -tX (limit to X thread)  
 
 29-07-2021

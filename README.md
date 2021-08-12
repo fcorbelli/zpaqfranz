@@ -6,7 +6,8 @@
 
 ## Classic archivers (tar, 7z, RAR etc) are obsolete, when used for repeated backups (daily etc), compared to the ZPAQ technology, that maintain "snapshots" (versions) of the data.
 
-[Wiki being written - be patient](https://github.com/fcorbelli/zpaqfranz/wiki)
+[Wiki being written - be patient](https://github.com/fcorbelli/zpaqfranz/wiki)  
+[Quick link to ZFS's snapshots support functions](https://github.com/fcorbelli/zpaqfranz/wiki/Command:-zfs(something))
 
 At every run only data changed since the last execution will be added, creating a new version (the "snapshot").
 It is then possible to restore the data @ the single version.
@@ -18,9 +19,14 @@ Easily handles millions of files and tens of TBs of data.
 Allows rsync copies to the cloud with minimal data transfer and encryption: nightly copies with simple FTTC (1-2MB/s upload bandwith) of archives of hundreds of gigabytes.
 Multiple possibilities of data verification, fast, advanced and even paranoid.
 And much more.
-A GUI (PAKKA) is available on Windows to make extraction easier.
-## To date, there is no software, free or paid, that matches this characteristics
+A GUI (PAKKA) is available on Windows to make extraction easier.  
+
+**No complex (and fragile) repository folders, with hundreds of "whatever", just only a single file!**  
+## To date, there is no software, free or paid, that matches this characteristics  
+_AFAIK of course_  
 10+ years of developing (2009-now).
+
+
 
 
 **Who did that?**
@@ -345,11 +351,7 @@ Version(s) enumerator
 00000975 2021-02-23 18:12:45  +00000357 -00000029 ->          298.551.067
 00000976 2021-02-24 18:13:07  +00000609 -00000047 ->          507.154.350
 00000977 2021-02-25 18:19:47  +00031694 -00000023 ->        3.673.844.953
-00000978 2021-02-26 18:14:04  +00000832 -00000529 ->          212.231.488
-00000979 2021-02-27 18:12:25  +00000003 -00000000 ->            5.386.009
-00000980 2021-03-01 18:13:26  +00000653 -00000293 ->          285.460.026
-00000981 2021-03-02 18:13:31  +00000629 -00000287 ->          377.233.510
-00000982 2021-03-03 18:13:31  +00000462 -00000096 ->        1.046.609.168
+(...)
 00000983 2021-03-04 18:13:18  +00000320 -00000015 ->          261.091.829
 00000984 2021-03-05 18:13:17  +00000482 -00000071 ->          596.715.880
 (...)
@@ -399,13 +401,7 @@ Version comments enumerator
 00004890 2021-02-16 16:40:51  +00000190 -00000005 ->           99.051.540
 00004891 2021-02-16 19:30:17  +00000065 -00000006 ->           16.467.364
 00004892 2021-02-17 19:34:04  +00000381 -00000257 ->           95.354.305
-00004893 2021-02-18 19:32:59  +00000363 -00000244 ->          142.371.767
-00004894 2021-02-19 19:33:55  +00000528 -00000305 ->           69.809.434
-00004895 2021-02-20 19:30:18  +00000026 -00000000 ->            7.590.410
-00004896 2021-02-21 19:30:18  +00000029 -00000005 ->           11.250.079
-00004897 2021-02-22 19:34:15  +00000485 -00000192 ->          167.085.478
-00004898 2021-02-23 19:32:17  +00000258 -00000144 ->           37.831.971
-00004899 2021-02-24 19:32:40  +00000089 -00000003 ->           73.584.310
+(...)
 00004900 2021-02-25 19:35:47  +00000755 -00000611 ->          132.241.557
 00004901 2021-02-26 19:57:16  +00000406 -00000253 ->          122.669.868
 00004902 2021-02-27 20:33:45  +00000029 -00000002 ->           12.677.932
@@ -431,6 +427,12 @@ so for 4900 versions you need
 versus ~200GB (yes, 200GB) with zpaq.
 
 Same things for virtual machines (vmdks)
+
+## Why you say uniqueness? We got (hb) hashbackup,borg, restic, bupstash etc ##
+
+Because other software (sometimes very, very good) runs on complex "repositories", very fragile and way too hard to manage (at least for my tastes).  
+It may happen that you have to worry about backing up ... the backup, because maybe some files were lost during a transfer, corrupted etc.  
+_If it's simple, maybe it will work_
 
 ## Too good to be true? ##
 

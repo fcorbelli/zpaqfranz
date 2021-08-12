@@ -444,7 +444,8 @@ There are more efficient deduplicators.
 
 But what I have never found is a combination of these that is simple to use and reliable, with excellent handling of non-Latin filenames (Chinese, Russian etc).
 
-This is the key: you don't have to use tar | srep | zstd | something hoping that everything will runs file, but a single 1MB executable, with 7z-like commands
+This is the key: you don't have to use tar | srep | zstd | something hoping that everything will runs file, but a single 1MB executable, with 7z-like commands.  
+You don't even have to install a complex program with many dependencies that will have to read a folder (the repository) with maybe thousands of files, hoping that they are all fully functional.
 
 There are also many great features for backup, I mention only the greatest.
 **The ZPAQ file is "in addition", it is never modified**
@@ -557,11 +558,12 @@ zpaqfranz -diff
 ```
 
 **Single help**
-It is possible to call -? and -examples with a parameter
+It is possible to call -? (better -h for Unix) and -examples with a parameter
 a c d dir i k l m r s sha1 t utf x z franz main normal voodoo
 
 ```
 zpaqfranz -? a 
+zpaqfranz -h zfs
 zpaqfranz -examples x 
 
 ```
@@ -586,6 +588,9 @@ Targets
 ```
 Windows 64 (g++ 7.3.0)
 g++ -O3  zpaqfranz.cpp -o zpaqfranz 
+
+Windows 64 (g++ 10.3.0) MSYS2
+g++ -O3  zpaqfranz.cpp -o zpaqfranz -pthread -static
 
 Windows 32 (g++ 7.3.0 64 bit)
 c:\mingw32\bin\g++ -m32 -O3 zpaqfranz.cpp -o zpaqfranz32 -pthread -static

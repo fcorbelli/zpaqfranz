@@ -1,4 +1,21 @@
 ```
+17-08-2021: 51.17
+
+New switch for add()
+- freeze outputfolder  -maxsize something
+zpaqfranz a z:\1.zpaq c:\nz\ -freeze y:\archived -maxsize 2000000000
+If the archive (z:\1.zpaq) is bigger than the -maxsize limit (2GB), it will be MOVED (before the execution) to the -freeze folder (the y:\archived directory, so **y:\archived\1.zpaq**, **y:\archived\1_000001.zpaq**, **y:\archived\1_000002.zpaq** ...)   **without** overwrite.  
+
+HW acceleration for BLAKE3 on Windows 64
+zpaqfranz use 1 of 4 implementations (if supported), SSE2 SSE41, AVX2, AVX512 for the BLAKE3 hasher.
+it is not a very tested version, I use it mainly to compare performance with the Rust version
+Fast check
+zpaqfranz b -blake3 -sha1
+On SW implementation (zpaqfranz <=52.16) BLAKE3 run slower then SHA-1 (about 2/3)  
+You can see here
+zpaqfranz v52.17-experimental **with HW BLAKE3**, compiled Aug 17 2021
+Usage: zpaqfranz command archive[.zpaq] files|directory... -switches...
+
 12-08-2021: 52.16  
 zfslist, zfspurge, zfsadd
 

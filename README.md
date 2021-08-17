@@ -520,7 +520,7 @@ As far as I know this is allowed by the licenses.
 - Embedded Artistry https://github.com/embeddedartistry  
 - wyhash (experimental) WangYi  https://github.com/wangyi-fudan/wyhash  
 - https://github.com/System-Glitch/SHA256
-- https://github.com/BLAKE3-team/BLAKE3
+- https://github.com/BLAKE3-team/BLAKE3 (The C code is copyright Samuel Neves and Jack O'Connor, 2019-2020, the assembly code is copyright Samuel Neves, 2019-2020)
 - * The Whirlpool algorithm was developed by Paulo S. L. M. Barreto and Vincent Rijmen
 
 
@@ -594,6 +594,10 @@ g++ -O3  zpaqfranz.cpp -o zpaqfranz -pthread -static
 
 Windows 32 (g++ 7.3.0 64 bit)
 c:\mingw32\bin\g++ -m32 -O3 zpaqfranz.cpp -o zpaqfranz32 -pthread -static
+
+Windows 64 (g++, Hardware Blake3 implementation)
+In this case, of course, the .S file is mandatory
+g++ -O3 -DHWBLAKE3 blake3_windows_gnu.S zpaqfranz.cpp -o zpaqfranz -pthread -static
 
 FreeBSD (11.x) gcc 7
 gcc7 -O3 -march=native -Dunix zpaqfranz.cpp -static -lstdc++ -pthread -o zpaqfranz -static -lm

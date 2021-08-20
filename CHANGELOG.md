@@ -1,5 +1,9 @@
 ```
-17-08-2021: 51.17
+20-08-2021: 52.18
+-sha3 (SHA3-256)
+-md5  (MD5)
+
+17-08-2021: 52.17
 
 New switch for add()
 - freeze outputfolder  -maxsize something

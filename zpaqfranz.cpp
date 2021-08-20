@@ -12,7 +12,7 @@
 
 //#define UBUNTU
 
-#define ZPAQ_VERSION "52.17-experimental"
+#define ZPAQ_VERSION "52.18-experimental"
 
 /*
                          __                     
@@ -65,6 +65,7 @@ As far as I know this is allowed by the licenses.
 - Include mod by data man and reg2s patch from encode.su forum 
 - Crc32.h Copyright (c) 2011-2019 Stephan Brumme 
 - xxhash64 by Stephan Brumme https://create.stephan-brumme.com/xxhash/
+- part of hash-library (MD5, SHA-3) by Stephan Brumme https://github.com/stbrumme/hash-library
 - Slicing-by-16 contributed by Bulat Ziganshin 
 - xxHash Extremely Fast Hash algorithm, Copyright (C) 2012-2020 Yann Collet 
 - crc32c.c Copyright (C) 2013 Mark Adler
@@ -343,6 +344,797 @@ check: zpaqfranz
 		printf("\x1b[0m");
 	}
 #endif
+
+
+
+
+// //////////////////////////////////////////////////////////
+// sha3.h
+// Copyright (c) 2014,2015 Stephan Brumme. All rights reserved.
+// see http://create.stephan-brumme.com/disclaimer.html
+//
+
+/// compute SHA3 hash
+/** Usage:
+    SHA3 sha3;
+    std::string myHash  = sha3("Hello World");     // std::string
+    std::string myHash2 = sha3("How are you", 11); // arbitrary data, 11 bytes
+
+    // or in a streaming fashion:
+
+    SHA3 sha3;
+    while (more data available)
+      sha3.add(pointer to fresh data, number of new bytes);
+    std::string myHash3 = sha3.getHash();
+  */
+class SHA3 //: public Hash
+{
+public:
+  /// algorithm variants
+  enum Bits { Bits224 = 224, Bits256 = 256, Bits384 = 384, Bits512 = 512 };
+
+  /// same as reset()
+  explicit SHA3(Bits bits = Bits256);
+
+  /// compute hash of a memory block
+  std::string operator()(const void* data, size_t numBytes);
+  /// compute hash of a string, excluding final zero
+  std::string operator()(const std::string& text);
+
+  /// add arbitrary number of bytes
+  void add(const void* data, size_t numBytes);
+
+  /// return latest hash as hex characters
+  std::string getHash();
+
+  /// restart
+  void reset();
+
+private:
+  /// process a full block
+  void processBlock(const void* data);
+  /// process everything left in the internal buffer
+  void processBuffer();
+
+  /// 1600 bits, stored as 25x64 bit, BlockSize is no more than 1152 bits (Keccak224)
+  enum { StateSize    = 1600 / (8 * 8),
+         MaxBlockSize =  200 - 2 * (224 / 8) };
+
+  /// hash
+  uint64_t m_hash[StateSize];
+  /// size of processed data in bytes
+  uint64_t m_numBytes;
+  /// block size (less or equal to MaxBlockSize)
+  size_t   m_blockSize;
+  /// valid bytes in m_buffer
+  size_t   m_bufferSize;
+  /// bytes not processed yet
+  uint8_t  m_buffer[MaxBlockSize];
+  /// variant
+  Bits     m_bits;
+};
+
+/// same as reset()
+SHA3::SHA3(Bits bits)
+: m_blockSize(200 - 2 * (bits / 8)),
+  m_bits(bits)
+{
+  reset();
+}
+
+
+/// restart
+void SHA3::reset()
+{
+  for (size_t i = 0; i < StateSize; i++)
+    m_hash[i] = 0;
+
+  m_numBytes   = 0;
+  m_bufferSize = 0;
+}
+
+
+/// constants and local helper functions
+namespace
+{
+  const unsigned int Rounds = 24;
+  const uint64_t XorMasks[Rounds] =
+  {
+    0x0000000000000001ULL, 0x0000000000008082ULL, 0x800000000000808aULL,
+    0x8000000080008000ULL, 0x000000000000808bULL, 0x0000000080000001ULL,
+    0x8000000080008081ULL, 0x8000000000008009ULL, 0x000000000000008aULL,
+    0x0000000000000088ULL, 0x0000000080008009ULL, 0x000000008000000aULL,
+    0x000000008000808bULL, 0x800000000000008bULL, 0x8000000000008089ULL,
+    0x8000000000008003ULL, 0x8000000000008002ULL, 0x8000000000000080ULL,
+    0x000000000000800aULL, 0x800000008000000aULL, 0x8000000080008081ULL,
+    0x8000000000008080ULL, 0x0000000080000001ULL, 0x8000000080008008ULL
+  };
+
+  /// rotate left and wrap around to the right
+  inline uint64_t rotateLeft(uint64_t x, uint8_t numBits)
+  {
+    return (x << numBits) | (x >> (64 - numBits));
+  }
+
+  /// convert litte vs big endian
+  inline uint64_t swap(uint64_t x)
+  {
+#if defined(__GNUC__) || defined(__clang__)
+    return __builtin_bswap64(x);
+#endif
+#ifdef _MSC_VER
+    return _byteswap_uint64(x);
+#endif
+
+    return  (x >> 56) |
+           ((x >> 40) & 0x000000000000FF00ULL) |
+           ((x >> 24) & 0x0000000000FF0000ULL) |
+           ((x >>  8) & 0x00000000FF000000ULL) |
+           ((x <<  8) & 0x000000FF00000000ULL) |
+           ((x << 24) & 0x0000FF0000000000ULL) |
+           ((x << 40) & 0x00FF000000000000ULL) |
+            (x << 56);
+  }
+
+
+  /// return x % 5 for 0 <= x <= 9
+  unsigned int mod5(unsigned int x)
+  {
+    if (x < 5)
+      return x;
+
+    return x - 5;
+  }
+}
+
+
+/// process a full block
+void SHA3::processBlock(const void* data)
+{
+#if defined(__BYTE_ORDER) && (__BYTE_ORDER != 0) && (__BYTE_ORDER == __BIG_ENDIAN)
+#define LITTLEENDIAN(x) swap(x)
+#else
+#define LITTLEENDIAN(x) (x)
+#endif
+
+  const uint64_t* data64 = (const uint64_t*) data;
+  // mix data into state
+  for (unsigned int i = 0; i < m_blockSize / 8; i++)
+    m_hash[i] ^= LITTLEENDIAN(data64[i]);
+
+  // re-compute state
+  for (unsigned int round = 0; round < Rounds; round++)
+  {
+    // Theta
+    uint64_t coefficients[5];
+    for (unsigned int i = 0; i < 5; i++)
+      coefficients[i] = m_hash[i] ^ m_hash[i + 5] ^ m_hash[i + 10] ^ m_hash[i + 15] ^ m_hash[i + 20];
+
+    for (unsigned int i = 0; i < 5; i++)
+    {
+      uint64_t one = coefficients[mod5(i + 4)] ^ rotateLeft(coefficients[mod5(i + 1)], 1);
+      m_hash[i     ] ^= one;
+      m_hash[i +  5] ^= one;
+      m_hash[i + 10] ^= one;
+      m_hash[i + 15] ^= one;
+      m_hash[i + 20] ^= one;
+    }
+
+    // temporary
+    uint64_t one;
+
+    // Rho Pi
+    uint64_t last = m_hash[1];
+    one = m_hash[10]; m_hash[10] = rotateLeft(last,  1); last = one;
+    one = m_hash[ 7]; m_hash[ 7] = rotateLeft(last,  3); last = one;
+    one = m_hash[11]; m_hash[11] = rotateLeft(last,  6); last = one;
+    one = m_hash[17]; m_hash[17] = rotateLeft(last, 10); last = one;
+    one = m_hash[18]; m_hash[18] = rotateLeft(last, 15); last = one;
+    one = m_hash[ 3]; m_hash[ 3] = rotateLeft(last, 21); last = one;
+    one = m_hash[ 5]; m_hash[ 5] = rotateLeft(last, 28); last = one;
+    one = m_hash[16]; m_hash[16] = rotateLeft(last, 36); last = one;
+    one = m_hash[ 8]; m_hash[ 8] = rotateLeft(last, 45); last = one;
+    one = m_hash[21]; m_hash[21] = rotateLeft(last, 55); last = one;
+    one = m_hash[24]; m_hash[24] = rotateLeft(last,  2); last = one;
+    one = m_hash[ 4]; m_hash[ 4] = rotateLeft(last, 14); last = one;
+    one = m_hash[15]; m_hash[15] = rotateLeft(last, 27); last = one;
+    one = m_hash[23]; m_hash[23] = rotateLeft(last, 41); last = one;
+    one = m_hash[19]; m_hash[19] = rotateLeft(last, 56); last = one;
+    one = m_hash[13]; m_hash[13] = rotateLeft(last,  8); last = one;
+    one = m_hash[12]; m_hash[12] = rotateLeft(last, 25); last = one;
+    one = m_hash[ 2]; m_hash[ 2] = rotateLeft(last, 43); last = one;
+    one = m_hash[20]; m_hash[20] = rotateLeft(last, 62); last = one;
+    one = m_hash[14]; m_hash[14] = rotateLeft(last, 18); last = one;
+    one = m_hash[22]; m_hash[22] = rotateLeft(last, 39); last = one;
+    one = m_hash[ 9]; m_hash[ 9] = rotateLeft(last, 61); last = one;
+    one = m_hash[ 6]; m_hash[ 6] = rotateLeft(last, 20); last = one;
+                      m_hash[ 1] = rotateLeft(last, 44);
+
+    // Chi
+    for (unsigned int j = 0; j < StateSize; j += 5)
+    {
+      // temporaries
+      uint64_t one = m_hash[j];
+      uint64_t two = m_hash[j + 1];
+
+      m_hash[j]     ^= m_hash[j + 2] & ~two;
+      m_hash[j + 1] ^= m_hash[j + 3] & ~m_hash[j + 2];
+      m_hash[j + 2] ^= m_hash[j + 4] & ~m_hash[j + 3];
+      m_hash[j + 3] ^=      one      & ~m_hash[j + 4];
+      m_hash[j + 4] ^=      two      & ~one;
+    }
+
+    // Iota
+    m_hash[0] ^= XorMasks[round];
+  }
+}
+
+
+/// add arbitrary number of bytes
+void SHA3::add(const void* data, size_t numBytes)
+{
+  const uint8_t* current = (const uint8_t*) data;
+
+  // copy data to buffer
+  if (m_bufferSize > 0)
+  {
+    while (numBytes > 0 && m_bufferSize < m_blockSize)
+    {
+      m_buffer[m_bufferSize++] = *current++;
+      numBytes--;
+    }
+  }
+
+  // full buffer
+  if (m_bufferSize == m_blockSize)
+  {
+    processBlock((void*)m_buffer);
+    m_numBytes  += m_blockSize;
+    m_bufferSize = 0;
+  }
+
+  // no more data ?
+  if (numBytes == 0)
+    return;
+
+  // process full blocks
+  while (numBytes >= m_blockSize)
+  {
+    processBlock(current);
+    current    += m_blockSize;
+    m_numBytes += m_blockSize;
+    numBytes   -= m_blockSize;
+  }
+
+  // keep remaining bytes in buffer
+  while (numBytes > 0)
+  {
+    m_buffer[m_bufferSize++] = *current++;
+    numBytes--;
+  }
+}
+
+
+/// process everything left in the internal buffer
+void SHA3::processBuffer()
+{
+  // add padding
+  size_t offset = m_bufferSize;
+  // add a "1" byte
+  m_buffer[offset++] = 0x06;
+  // fill with zeros
+  while (offset < m_blockSize)
+    m_buffer[offset++] = 0;
+
+  // and add a single set bit
+  m_buffer[offset - 1] |= 0x80;
+
+  processBlock(m_buffer);
+}
+
+
+/// return latest hash as 16 hex characters
+std::string SHA3::getHash()
+{
+  // save hash state
+  uint64_t oldHash[StateSize];
+  for (unsigned int i = 0; i < StateSize; i++)
+    oldHash[i] = m_hash[i];
+
+  // process remaining bytes
+  processBuffer();
+
+  // convert hash to string
+  static const char dec2hex[16 + 1] = "0123456789abcdef";
+
+  // number of significant elements in hash (uint64_t)
+  unsigned int hashLength = m_bits / 64;
+
+  std::string result;
+  result.reserve(m_bits / 4);
+  for (unsigned int i = 0; i < hashLength; i++)
+    for (unsigned int j = 0; j < 8; j++) // 64 bits => 8 bytes
+    {
+      // convert a byte to hex
+      unsigned char oneByte = (unsigned char) (m_hash[i] >> (8 * j));
+      result += dec2hex[oneByte >> 4];
+      result += dec2hex[oneByte & 15];
+    }
+
+  // SHA3-224's last entry in m_hash provides only 32 bits instead of 64 bits
+  unsigned int remainder = m_bits - hashLength * 64;
+  unsigned int processed = 0;
+  while (processed < remainder)
+  {
+    // convert a byte to hex
+    unsigned char oneByte = (unsigned char) (m_hash[hashLength] >> processed);
+    result += dec2hex[oneByte >> 4];
+    result += dec2hex[oneByte & 15];
+
+    processed += 8;
+  }
+
+  // restore state
+  for (unsigned int i = 0; i < StateSize; i++)
+    m_hash[i] = oldHash[i];
+
+  return result;
+}
+
+
+/// compute SHA3 of a memory block
+std::string SHA3::operator()(const void* data, size_t numBytes)
+{
+  reset();
+  add(data, numBytes);
+  return getHash();
+}
+
+
+/// compute SHA3 of a string, excluding final zero
+std::string SHA3::operator()(const std::string& text)
+{
+  reset();
+  add(text.c_str(), text.size());
+  return getHash();
+}
+
+// //////////////////////////////////////////////////////////
+// md5.h
+// Copyright (c) 2014 Stephan Brumme. All rights reserved.
+// see http://create.stephan-brumme.com/disclaimer.html
+//
+
+
+
+/// compute MD5 hash
+/** Usage:
+    MD5 md5;
+    std::string myHash  = md5("Hello World");     // std::string
+    std::string myHash2 = md5("How are you", 11); // arbitrary data, 11 bytes
+
+    // or in a streaming fashion:
+
+    MD5 md5;
+    while (more data available)
+      md5.add(pointer to fresh data, number of new bytes);
+    std::string myHash3 = md5.getHash();
+  */
+class MD5 //: public Hash
+{
+public:
+  /// split into 64 byte blocks (=> 512 bits), hash is 16 bytes long
+  enum { BlockSize = 512 / 8, HashBytes = 16 };
+
+  /// same as reset()
+  MD5();
+
+  /// compute MD5 of a memory block
+  std::string operator()(const void* data, size_t numBytes);
+  /// compute MD5 of a string, excluding final zero
+  std::string operator()(const std::string& text);
+
+  /// add arbitrary number of bytes
+  void add(const void* data, size_t numBytes);
+
+  /// return latest hash as 32 hex characters
+  std::string getHash();
+  /// return latest hash as bytes
+  void        getHash(unsigned char buffer[HashBytes]);
+
+  /// restart
+  void reset();
+
+private:
+  /// process 64 bytes
+  void processBlock(const void* data);
+  /// process everything left in the internal buffer
+  void processBuffer();
+
+  /// size of processed data in bytes
+  uint64_t m_numBytes;
+  /// valid bytes in m_buffer
+  size_t   m_bufferSize;
+  /// bytes not processed yet
+  uint8_t  m_buffer[BlockSize];
+
+  enum { HashValues = HashBytes / 4 };
+  /// hash, stored as integers
+  uint32_t m_hash[HashValues];
+};
+
+
+
+/// same as reset()
+MD5::MD5()
+{
+  reset();
+}
+
+
+/// restart
+void MD5::reset()
+{
+  m_numBytes   = 0;
+  m_bufferSize = 0;
+
+  // according to RFC 1321
+  m_hash[0] = 0x67452301;
+  m_hash[1] = 0xefcdab89;
+  m_hash[2] = 0x98badcfe;
+  m_hash[3] = 0x10325476;
+}
+
+
+namespace
+{
+  // mix functions for processBlock()
+  inline uint32_t f1(uint32_t b, uint32_t c, uint32_t d)
+  {
+    return d ^ (b & (c ^ d)); // original: f = (b & c) | ((~b) & d);
+  }
+
+  inline uint32_t f2(uint32_t b, uint32_t c, uint32_t d)
+  {
+    return c ^ (d & (b ^ c)); // original: f = (b & d) | (c & (~d));
+  }
+
+  inline uint32_t f3(uint32_t b, uint32_t c, uint32_t d)
+  {
+    return b ^ c ^ d;
+  }
+
+  inline uint32_t f4(uint32_t b, uint32_t c, uint32_t d)
+  {
+    return c ^ (b | ~d);
+  }
+
+  inline uint32_t rotate(uint32_t a, uint32_t c)
+  {
+    return (a << c) | (a >> (32 - c));
+  }
+
+#if defined(__BYTE_ORDER) && (__BYTE_ORDER != 0) && (__BYTE_ORDER == __BIG_ENDIAN)
+  inline uint32_t swap(uint32_t x)
+  {
+#if defined(__GNUC__) || defined(__clang__)
+    return __builtin_bswap32(x);
+#endif
+#ifdef MSC_VER
+    return _byteswap_ulong(x);
+#endif
+
+    return (x >> 24) |
+          ((x >>  8) & 0x0000FF00) |
+          ((x <<  8) & 0x00FF0000) |
+           (x << 24);
+  }
+#endif
+}
+
+
+/// process 64 bytes
+void MD5::processBlock(const void* data)
+{
+  // get last hash
+  uint32_t a = m_hash[0];
+  uint32_t b = m_hash[1];
+  uint32_t c = m_hash[2];
+  uint32_t d = m_hash[3];
+
+  // data represented as 16x 32-bit words
+  const uint32_t* words = (uint32_t*) data;
+
+  // computations are little endian, swap data if necessary
+#if defined(__BYTE_ORDER) && (__BYTE_ORDER != 0) && (__BYTE_ORDER == __BIG_ENDIAN)
+#define LITTLEENDIAN(x) swap(x)
+#else
+#define LITTLEENDIAN(x) (x)
+#endif
+
+  // first round
+  uint32_t word0  = LITTLEENDIAN(words[ 0]);
+  a = rotate(a + f1(b,c,d) + word0  + 0xd76aa478,  7) + b;
+  uint32_t word1  = LITTLEENDIAN(words[ 1]);
+  d = rotate(d + f1(a,b,c) + word1  + 0xe8c7b756, 12) + a;
+  uint32_t word2  = LITTLEENDIAN(words[ 2]);
+  c = rotate(c + f1(d,a,b) + word2  + 0x242070db, 17) + d;
+  uint32_t word3  = LITTLEENDIAN(words[ 3]);
+  b = rotate(b + f1(c,d,a) + word3  + 0xc1bdceee, 22) + c;
+
+  uint32_t word4  = LITTLEENDIAN(words[ 4]);
+  a = rotate(a + f1(b,c,d) + word4  + 0xf57c0faf,  7) + b;
+  uint32_t word5  = LITTLEENDIAN(words[ 5]);
+  d = rotate(d + f1(a,b,c) + word5  + 0x4787c62a, 12) + a;
+  uint32_t word6  = LITTLEENDIAN(words[ 6]);
+  c = rotate(c + f1(d,a,b) + word6  + 0xa8304613, 17) + d;
+  uint32_t word7  = LITTLEENDIAN(words[ 7]);
+  b = rotate(b + f1(c,d,a) + word7  + 0xfd469501, 22) + c;
+
+  uint32_t word8  = LITTLEENDIAN(words[ 8]);
+  a = rotate(a + f1(b,c,d) + word8  + 0x698098d8,  7) + b;
+  uint32_t word9  = LITTLEENDIAN(words[ 9]);
+  d = rotate(d + f1(a,b,c) + word9  + 0x8b44f7af, 12) + a;
+  uint32_t word10 = LITTLEENDIAN(words[10]);
+  c = rotate(c + f1(d,a,b) + word10 + 0xffff5bb1, 17) + d;
+  uint32_t word11 = LITTLEENDIAN(words[11]);
+  b = rotate(b + f1(c,d,a) + word11 + 0x895cd7be, 22) + c;
+
+  uint32_t word12 = LITTLEENDIAN(words[12]);
+  a = rotate(a + f1(b,c,d) + word12 + 0x6b901122,  7) + b;
+  uint32_t word13 = LITTLEENDIAN(words[13]);
+  d = rotate(d + f1(a,b,c) + word13 + 0xfd987193, 12) + a;
+  uint32_t word14 = LITTLEENDIAN(words[14]);
+  c = rotate(c + f1(d,a,b) + word14 + 0xa679438e, 17) + d;
+  uint32_t word15 = LITTLEENDIAN(words[15]);
+  b = rotate(b + f1(c,d,a) + word15 + 0x49b40821, 22) + c;
+
+  // second round
+  a = rotate(a + f2(b,c,d) + word1  + 0xf61e2562,  5) + b;
+  d = rotate(d + f2(a,b,c) + word6  + 0xc040b340,  9) + a;
+  c = rotate(c + f2(d,a,b) + word11 + 0x265e5a51, 14) + d;
+  b = rotate(b + f2(c,d,a) + word0  + 0xe9b6c7aa, 20) + c;
+
+  a = rotate(a + f2(b,c,d) + word5  + 0xd62f105d,  5) + b;
+  d = rotate(d + f2(a,b,c) + word10 + 0x02441453,  9) + a;
+  c = rotate(c + f2(d,a,b) + word15 + 0xd8a1e681, 14) + d;
+  b = rotate(b + f2(c,d,a) + word4  + 0xe7d3fbc8, 20) + c;
+
+  a = rotate(a + f2(b,c,d) + word9  + 0x21e1cde6,  5) + b;
+  d = rotate(d + f2(a,b,c) + word14 + 0xc33707d6,  9) + a;
+  c = rotate(c + f2(d,a,b) + word3  + 0xf4d50d87, 14) + d;
+  b = rotate(b + f2(c,d,a) + word8  + 0x455a14ed, 20) + c;
+
+  a = rotate(a + f2(b,c,d) + word13 + 0xa9e3e905,  5) + b;
+  d = rotate(d + f2(a,b,c) + word2  + 0xfcefa3f8,  9) + a;
+  c = rotate(c + f2(d,a,b) + word7  + 0x676f02d9, 14) + d;
+  b = rotate(b + f2(c,d,a) + word12 + 0x8d2a4c8a, 20) + c;
+
+  // third round
+  a = rotate(a + f3(b,c,d) + word5  + 0xfffa3942,  4) + b;
+  d = rotate(d + f3(a,b,c) + word8  + 0x8771f681, 11) + a;
+  c = rotate(c + f3(d,a,b) + word11 + 0x6d9d6122, 16) + d;
+  b = rotate(b + f3(c,d,a) + word14 + 0xfde5380c, 23) + c;
+
+  a = rotate(a + f3(b,c,d) + word1  + 0xa4beea44,  4) + b;
+  d = rotate(d + f3(a,b,c) + word4  + 0x4bdecfa9, 11) + a;
+  c = rotate(c + f3(d,a,b) + word7  + 0xf6bb4b60, 16) + d;
+  b = rotate(b + f3(c,d,a) + word10 + 0xbebfbc70, 23) + c;
+
+  a = rotate(a + f3(b,c,d) + word13 + 0x289b7ec6,  4) + b;
+  d = rotate(d + f3(a,b,c) + word0  + 0xeaa127fa, 11) + a;
+  c = rotate(c + f3(d,a,b) + word3  + 0xd4ef3085, 16) + d;
+  b = rotate(b + f3(c,d,a) + word6  + 0x04881d05, 23) + c;
+
+  a = rotate(a + f3(b,c,d) + word9  + 0xd9d4d039,  4) + b;
+  d = rotate(d + f3(a,b,c) + word12 + 0xe6db99e5, 11) + a;
+  c = rotate(c + f3(d,a,b) + word15 + 0x1fa27cf8, 16) + d;
+  b = rotate(b + f3(c,d,a) + word2  + 0xc4ac5665, 23) + c;
+
+  // fourth round
+  a = rotate(a + f4(b,c,d) + word0  + 0xf4292244,  6) + b;
+  d = rotate(d + f4(a,b,c) + word7  + 0x432aff97, 10) + a;
+  c = rotate(c + f4(d,a,b) + word14 + 0xab9423a7, 15) + d;
+  b = rotate(b + f4(c,d,a) + word5  + 0xfc93a039, 21) + c;
+
+  a = rotate(a + f4(b,c,d) + word12 + 0x655b59c3,  6) + b;
+  d = rotate(d + f4(a,b,c) + word3  + 0x8f0ccc92, 10) + a;
+  c = rotate(c + f4(d,a,b) + word10 + 0xffeff47d, 15) + d;
+  b = rotate(b + f4(c,d,a) + word1  + 0x85845dd1, 21) + c;
+
+  a = rotate(a + f4(b,c,d) + word8  + 0x6fa87e4f,  6) + b;
+  d = rotate(d + f4(a,b,c) + word15 + 0xfe2ce6e0, 10) + a;
+  c = rotate(c + f4(d,a,b) + word6  + 0xa3014314, 15) + d;
+  b = rotate(b + f4(c,d,a) + word13 + 0x4e0811a1, 21) + c;
+
+  a = rotate(a + f4(b,c,d) + word4  + 0xf7537e82,  6) + b;
+  d = rotate(d + f4(a,b,c) + word11 + 0xbd3af235, 10) + a;
+  c = rotate(c + f4(d,a,b) + word2  + 0x2ad7d2bb, 15) + d;
+  b = rotate(b + f4(c,d,a) + word9  + 0xeb86d391, 21) + c;
+
+  // update hash
+  m_hash[0] += a;
+  m_hash[1] += b;
+  m_hash[2] += c;
+  m_hash[3] += d;
+}
+
+
+/// add arbitrary number of bytes
+void MD5::add(const void* data, size_t numBytes)
+{
+  const uint8_t* current = (const uint8_t*) data;
+
+  if (m_bufferSize > 0)
+  {
+    while (numBytes > 0 && m_bufferSize < BlockSize)
+    {
+      m_buffer[m_bufferSize++] = *current++;
+      numBytes--;
+    }
+  }
+
+  // full buffer
+  if (m_bufferSize == BlockSize)
+  {
+    processBlock(m_buffer);
+    m_numBytes  += BlockSize;
+    m_bufferSize = 0;
+  }
+
+  // no more data ?
+  if (numBytes == 0)
+    return;
+
+  // process full blocks
+  while (numBytes >= BlockSize)
+  {
+    processBlock(current);
+    current    += BlockSize;
+    m_numBytes += BlockSize;
+    numBytes   -= BlockSize;
+  }
+
+  // keep remaining bytes in buffer
+  while (numBytes > 0)
+  {
+    m_buffer[m_bufferSize++] = *current++;
+    numBytes--;
+  }
+}
+
+
+/// process final block, less than 64 bytes
+void MD5::processBuffer()
+{
+  // the input bytes are considered as bits strings, where the first bit is the most significant bit of the byte
+
+  // - append "1" bit to message
+  // - append "0" bits until message length in bit mod 512 is 448
+  // - append length as 64 bit integer
+
+  // number of bits
+  size_t paddedLength = m_bufferSize * 8;
+
+  // plus one bit set to 1 (always appended)
+  paddedLength++;
+
+  // number of bits must be (numBits % 512) = 448
+  size_t lower11Bits = paddedLength & 511;
+  if (lower11Bits <= 448)
+    paddedLength +=       448 - lower11Bits;
+  else
+    paddedLength += 512 + 448 - lower11Bits;
+  // convert from bits to bytes
+  paddedLength /= 8;
+
+  // only needed if additional data flows over into a second block
+  unsigned char extra[BlockSize];
+
+  // append a "1" bit, 128 => binary 10000000
+  if (m_bufferSize < BlockSize)
+    m_buffer[m_bufferSize] = 128;
+  else
+    extra[0] = 128;
+
+  size_t i;
+  for (i = m_bufferSize + 1; i < BlockSize; i++)
+    m_buffer[i] = 0;
+  for (; i < paddedLength; i++)
+    extra[i - BlockSize] = 0;
+
+  // add message length in bits as 64 bit number
+  uint64_t msgBits = 8 * (m_numBytes + m_bufferSize);
+  // find right position
+  unsigned char* addLength;
+  if (paddedLength < BlockSize)
+    addLength = m_buffer + paddedLength;
+  else
+    addLength = extra + paddedLength - BlockSize;
+
+  // must be little endian
+  *addLength++ = msgBits & 0xFF; msgBits >>= 8;
+  *addLength++ = msgBits & 0xFF; msgBits >>= 8;
+  *addLength++ = msgBits & 0xFF; msgBits >>= 8;
+  *addLength++ = msgBits & 0xFF; msgBits >>= 8;
+  *addLength++ = msgBits & 0xFF; msgBits >>= 8;
+  *addLength++ = msgBits & 0xFF; msgBits >>= 8;
+  *addLength++ = msgBits & 0xFF; msgBits >>= 8;
+  *addLength++ = msgBits & 0xFF;
+
+  // process blocks
+  processBlock(m_buffer);
+  // flowed over into a second block ?
+  if (paddedLength > BlockSize)
+    processBlock(extra);
+}
+
+
+/// return latest hash as 32 hex characters
+std::string MD5::getHash()
+{
+  // compute hash (as raw bytes)
+  unsigned char rawHash[HashBytes];
+  getHash(rawHash);
+
+  // convert to hex string
+  std::string result;
+  result.reserve(2 * HashBytes);
+  for (int i = 0; i < HashBytes; i++)
+  {
+    static const char dec2hex[16+1] = "0123456789abcdef";
+    result += dec2hex[(rawHash[i] >> 4) & 15];
+    result += dec2hex[ rawHash[i]       & 15];
+  }
+
+  return result;
+}
+
+
+/// return latest hash as bytes
+void MD5::getHash(unsigned char buffer[MD5::HashBytes])
+{
+  // save old hash if buffer is partially filled
+  uint32_t oldHash[HashValues];
+  for (int i = 0; i < HashValues; i++)
+    oldHash[i] = m_hash[i];
+
+  // process remaining bytes
+  processBuffer();
+
+  unsigned char* current = buffer;
+  for (int i = 0; i < HashValues; i++)
+  {
+    *current++ =  m_hash[i]        & 0xFF;
+    *current++ = (m_hash[i] >>  8) & 0xFF;
+    *current++ = (m_hash[i] >> 16) & 0xFF;
+    *current++ = (m_hash[i] >> 24) & 0xFF;
+
+    // restore old hash
+    m_hash[i] = oldHash[i];
+  }
+}
+
+
+/// compute MD5 of a memory block
+std::string MD5::operator()(const void* data, size_t numBytes)
+{
+  reset();
+  add(data, numBytes);
+  return getHash();
+}
+
+
+/// compute MD5 of a string, excluding final zero
+std::string MD5::operator()(const std::string& text)
+{
+  reset();
+  add(text.c_str(), text.size());
+  return getHash();
+}
+
+
+// warning to the namespace
 
 
 namespace libzpaq {
@@ -8757,7 +9549,7 @@ struct	hash_check
 typedef map<string, hash_check> MAPPACHECK;
 
 
-enum ealgoritmi		{ ALGO_SHA1,ALGO_CRC32C,ALGO_CRC32,ALGO_XXH3,ALGO_SHA256,ALGO_WYHASH,ALGO_XXHASH64,ALGO_BLAKE3,ALGO_WHIRLPOOL,ALGO_LAST };
+enum ealgoritmi		{ ALGO_SHA1,ALGO_CRC32C,ALGO_CRC32,ALGO_XXH3,ALGO_SHA256,ALGO_WYHASH,ALGO_XXHASH64,ALGO_BLAKE3,ALGO_WHIRLPOOL,ALGO_MD5,ALGO_SHA3,ALGO_LAST };
 typedef std::map<int,std::string> algoritmi;
 const algoritmi::value_type rawData[] = 
 {
@@ -8771,6 +9563,8 @@ const algoritmi::value_type rawData[] =
    algoritmi::value_type(ALGO_WYHASH,"wyhash"),
    algoritmi::value_type(ALGO_BLAKE3,"blake3"),
    algoritmi::value_type(ALGO_WHIRLPOOL,"whirlpool"),
+   algoritmi::value_type(ALGO_MD5,"md5"),
+   algoritmi::value_type(ALGO_MD5,"sha3"),
 };
 const int numElems = sizeof rawData / sizeof rawData[0];
 algoritmi myalgoritmi(rawData, rawData + numElems);
@@ -8845,6 +9639,8 @@ bool flagwyhash; // future
 bool flagxxhash64;
 bool flagblake3;
 bool flagwhirlpool;
+bool flagmd5;
+bool flagsha3;
 bool flagmm;
 bool flagappend;
 /// out of Jidac because of struct DT and XXH3 align
@@ -19233,6 +20029,12 @@ string mygetalgo()
 	if (flagwhirlpool)
 		return "WHIRLPOOL";
 	else
+	if (flagmd5)
+		return "MD5";
+	else
+	if (flagsha3)
+		return "SHA-3";
+	else
 		return "SHA1";
 }
 int flag2algo()
@@ -19248,6 +20050,12 @@ int flag2algo()
 	else
 	if (flagwhirlpool)
 		return ALGO_WHIRLPOOL;
+	else
+	if (flagmd5)
+		return ALGO_MD5;
+	else
+	if (flagsha3)
+		return ALGO_SHA3;
 	else
 	if (flagcrc32)
 		return ALGO_CRC32;
@@ -23944,6 +24752,8 @@ void help_b(bool i_usage,bool i_example)
 		moreprint("PLUS: -blake3       Test BLAKE3");
 		moreprint("PLUS: -wyhash       Test WYHASH");
 		moreprint("PLUS: -whirlpool    Test WHIRLPOOL");
+		moreprint("PLUS: -md5          Test MD5");
+		moreprint("PLUS: -sha3         Test SHA-3-256");
 		moreprint("PLUS: -all          Multithread run (CPU cooker)");
 		moreprint("PLUS: -tX           With -all limit to X threads");
 		
@@ -24948,6 +25758,8 @@ int Jidac::doCommand(int argc, const char** argv)
 	flagsha256=false;
 	flagwyhash=false;
 	flagwhirlpool=false;
+	flagmd5=false;
+	flagsha3=false;
 	flagblake3=false;
 	flagxxhash64=false;
 	flagdonotforcexls=false;
@@ -25375,6 +26187,8 @@ int Jidac::doCommand(int argc, const char** argv)
 		else if (opt=="-mm") 						flagmm				=true;
 ///		else if (opt=="-append") 					flagappend			=true;
 		else if (opt=="-whirlpool")					flagwhirlpool		=true;
+		else if (opt=="-md5")						flagmd5				=true;
+		else if (opt=="-sha3")						flagsha3			=true;
 		
 		else if (opt=="-wyhash")
 		{		flagwyhash			=true;
@@ -25613,6 +26427,12 @@ int Jidac::doCommand(int argc, const char** argv)
 	
 		if (flagwhirlpool)
 			franzparameters+="whirlpool (-whirlpool) ";
+	
+		if (flagmd5)
+			franzparameters+="MD5 (-md5) ";
+	
+		if (flagsha3)
+			franzparameters+="SHA-3 (-sha3) ";
 	
 		if (flagblake3)
 			franzparameters+="blake3 (-blake3) ";
@@ -29228,6 +30048,70 @@ int Jidac::list()
 
 
 /////////// HASHING-checksumming functions
+string sha3_calc_file(const char * i_filename,bool i_flagcalccrc32,uint32_t& o_crc32,const int64_t i_inizio,const int64_t i_totali,int64_t& io_lavorati)
+{
+	o_crc32=0;
+	
+	FILE* myfile = freadopen(i_filename);
+	if(myfile==NULL )
+ 		return "";
+	
+	const int BUFSIZE	=65536*8;
+	unsigned char 				unzBuf[BUFSIZE];
+	int 				n=BUFSIZE;
+			
+	SHA3 sha3;
+
+	while (1)
+	{
+		int r=fread(unzBuf, 1, n, myfile);
+		sha3.add(unzBuf,r);
+		if (i_flagcalccrc32)
+			o_crc32=crc32_16bytes(unzBuf,r,o_crc32);
+ 		if (r!=n) 
+			break;
+		io_lavorati+=r;
+		if ((flagnoeta==false) && (i_inizio>0))
+			avanzamento(io_lavorati,i_totali,i_inizio);
+	}
+	fclose(myfile);
+
+    string risultato = sha3.getHash();
+	
+	return risultato;
+}
+string md5_calc_file(const char * i_filename,bool i_flagcalccrc32,uint32_t& o_crc32,const int64_t i_inizio,const int64_t i_totali,int64_t& io_lavorati)
+{
+	o_crc32=0;
+	
+	FILE* myfile = freadopen(i_filename);
+	if(myfile==NULL )
+ 		return "";
+	
+	const int BUFSIZE	=65536*8;
+	unsigned char 				unzBuf[BUFSIZE];
+	int 				n=BUFSIZE;
+			
+	MD5 md5;
+
+	while (1)
+	{
+		int r=fread(unzBuf, 1, n, myfile);
+		md5.add(unzBuf,r);
+		if (i_flagcalccrc32)
+			o_crc32=crc32_16bytes(unzBuf,r,o_crc32);
+ 		if (r!=n) 
+			break;
+		io_lavorati+=r;
+		if ((flagnoeta==false) && (i_inizio>0))
+			avanzamento(io_lavorati,i_totali,i_inizio);
+	}
+	fclose(myfile);
+
+    string risultato = md5.getHash();
+	
+	return risultato;
+}
 
 string whirlpool_calc_file(const char * i_filename,bool i_flagcalccrc32,uint32_t& o_crc32,const int64_t i_inizio,const int64_t i_totali,int64_t& io_lavorati)
 {
@@ -29650,6 +30534,22 @@ string mm_hash_calc_file(int i_algo,const char * i_filename,bool i_flagcalccrc32
 				risultato.push_back(myhex[1]);
 			}
 			
+		}
+		else
+		if (i_algo==ALGO_MD5)
+		{
+			MD5 md5;
+			md5.add(data,lunghezza);
+			string mymd5 = md5.getHash();
+			risultato=mymd5;
+		}
+		else
+		if (i_algo==ALGO_SHA3)
+		{
+			SHA3 sha3;
+			sha3.add(data,lunghezza);
+			string mysha3 = sha3.getHash();
+			risultato=mysha3;
 		}
 		else
 		if (i_algo==ALGO_XXH3)
@@ -30157,6 +31057,12 @@ string hash_calc_file(int i_algo,const char * i_filename,bool i_flagcalccrc32,ui
 	if (i_algo==ALGO_WHIRLPOOL)		
 		return whirlpool_calc_file(i_filename,i_flagcalccrc32,o_crc32,i_inizio,i_totali,io_lavorati);
 	else
+	if (i_algo==ALGO_MD5)		
+		return md5_calc_file(i_filename,i_flagcalccrc32,o_crc32,i_inizio,i_totali,io_lavorati);
+	else
+	if (i_algo==ALGO_SHA3)		
+		return sha3_calc_file(i_filename,i_flagcalccrc32,o_crc32,i_inizio,i_totali,io_lavorati);
+	else
 	if (i_algo==ALGO_XXHASH64)
 		return xxhash64_calc_file(i_filename,i_flagcalccrc32,o_crc32,i_inizio,i_totali,io_lavorati);
 	else
@@ -30219,7 +31125,7 @@ void * scansionahash(void *t)
 
 bool ischecksum()
 {
-	return (flagcrc32 || flagcrc32c || flagxxh3 || flagxxhash64 || flagsha1 || flagsha256 || flagblake3 || flagwyhash || flagwhirlpool);
+	return (flagcrc32 || flagcrc32c || flagxxh3 || flagxxhash64 || flagsha1 || flagsha256 || flagblake3 || flagwyhash || flagwhirlpool || flagmd5 || flagsha3);
 }	
 int Jidac::deduplicate() 
 {
@@ -30312,6 +31218,19 @@ string do_benchmark(int i_tnumber,int i_timelimit,string i_runningalgo,int i_chu
 			make_secret(0,_wyp);
 			wyhash((const char*)buffer32bit,buffersize,0,_wyp);
 		}
+		else
+		if (i_runningalgo=="MD5")
+		{
+			MD5 md5;
+    		md5.add((const char*)buffer32bit,buffersize);
+		}
+		else
+		if (i_runningalgo=="SHA-3")
+		{
+			SHA3 sha3;
+    		sha3.add((const char*)buffer32bit,buffersize);
+		}
+		else
 		if (i_runningalgo=="WHIRLPOOL")
 		{
 				NESSIEstruct hasher;
@@ -30478,8 +31397,11 @@ int Jidac::benchmark()
 	*/
 	
 	int			chunksize=100000;
-	int			timelimit=20;
+	int			timelimit=5;
 	
+	if (all)
+		timelimit=20;
+		
 	if (menoenne>0)
 	{
 		if (menoenne<1000)
@@ -30511,7 +31433,7 @@ int Jidac::benchmark()
 	string hashes="";
 	
 	if (!ischecksum())
-		hashes="XXHASH64;XXH3;SHA-1;SHA-256;BLAKE3;CRC-32;CRC-32C;WYHASH;WHIRLPOOL;";
+		hashes="XXHASH64;XXH3;SHA-1;SHA-256;BLAKE3;CRC-32;CRC-32C;WYHASH;WHIRLPOOL;MD5;SHA-3";
 	else
 	{
 		if (flagxxhash64)
@@ -30532,6 +31454,10 @@ int Jidac::benchmark()
 			hashes+="WYHASH;";
 		if (flagwhirlpool)
 			hashes+="WHIRLPOOL;";
+		if (flagmd5)
+			hashes+="MD5;";
+		if (flagsha3)
+			hashes+="SHA-3;";
 	}
 	explode(hashes,';',thehashes);
 	if (thehashes.size()==0)
@@ -30550,7 +31476,7 @@ int Jidac::benchmark()
 	vector<s_benchmark> 			vettorerisultati;     
 	vector<tparametribenchmark> 	vettoreparametribenchmark; // pthread
 
-	printf("Benchmark parameters\n");
+	printf("Benchmarks: ");
 	for (unsigned int i=0;i<thehashes.size();i++)
 		printf("%s ",thehashes[i].c_str());
 	printf("\n");
@@ -34223,7 +35149,7 @@ int Jidac::robocopy()
 int Jidac::dircompare(bool i_flagonlysize,bool i_flagrobocopy)
 {
 /// If you specify a checksum, do hard compare
-	flagchecksum=(flagcrc32 || flagcrc32c || flagxxh3 || flagxxhash64 || flagsha1 || flagsha256 || flagblake3 || flagwhirlpool);
+	flagchecksum=(flagcrc32 || flagcrc32c || flagxxh3 || flagxxhash64 || flagsha1 || flagsha256 || flagblake3 || flagwhirlpool || flagmd5 ||flagsha3);
 		
 	int risultato=0;
 	
@@ -35537,12 +36463,13 @@ int Jidac::add()
 			error("incompatible -checksum and -nopath");
 	*/
 	if (g_freeze!="")
+	{
 		if (maxsize>0)
 		{
 			if (fileexists(archive))
 			{
 				int64_t dimensionefile=prendidimensionefile(archive.c_str());
-				if (dimensionefile>maxsize)
+				if (dimensionefile>(int64_t)maxsize)
 				{
 					printf("Freezing archive size %s vs maxsize %s\n",migliaia(dimensionefile),migliaia2(maxsize));
 					string filescritto=filecopy(false,archive,g_freeze,true,false,false);
@@ -35559,6 +36486,7 @@ int Jidac::add()
 		}
 		else
 			error("-freeze without -maxsize");
+	}
 	if (flagvss)
 	{
 		if (flagtest)

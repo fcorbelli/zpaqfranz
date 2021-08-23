@@ -1,7 +1,6 @@
 # zpaqfranz: advanced, but compatible, fork of ZPAQ 7.15 
 ### [Windows binary 32/64 bit on sourceforge](https://sourceforge.net/projects/zpaqfranz/files/)  
-[Main site of old ZPAQ](http://mattmahoney.net/dc/zpaq.html) [Reference decompressor](https://github.com/fcorbelli/unzpaq/tree/main) 
-
+[Main site of old ZPAQ](http://mattmahoney.net/dc/zpaq.html)      [Reference decompressor](https://github.com/fcorbelli/unzpaq/tree/main) 
 
 
 ## Classic archivers (tar, 7z, RAR etc) are obsolete, when used for repeated backups (daily etc), compared to the ZPAQ technology, that maintain "snapshots" (versions) of the data.
@@ -10,14 +9,22 @@
 [Quick link to ZFS's snapshots support functions](https://github.com/fcorbelli/zpaqfranz/wiki/Command:-zfs(something))
 
 At every run only data changed since the last execution will be added, creating a new version (the "snapshot").
-It is then possible to restore the data @ the single version.
-It shouldn't be difficult to understand its enormous potential, especially for those used to snapshots (by zfs or virtual machines).
-Keeps a forever-to-ever copy (even thousands of versions) of your files, conceptually similar to MAC's time machines, 
-but much more efficiently.
-Ideal for virtual machine disk storage (ex backup of vmdk), virtual disks (VHDx) and even TrueCrypt containers.
-Easily handles millions of files and tens of TBs of data.
-Allows rsync copies to the cloud with minimal data transfer and encryption: nightly copies with simple FTTC (1-2MB/s upload bandwith) of archives of hundreds of gigabytes.
-Multiple possibilities of data verification, fast, advanced and even paranoid.
+It is then possible to restore the data @ the single version, just like snapshots by zfs or virtual machines, but a single-file level.  
+- Keeps a forever-to-ever copy (even thousands of versions), conceptually similar to Mac's time machine, but much more efficiently.  
+- Ideal for virtual machine disk storage (ex backup of vmdk), virtual disks (VHDx) and even TrueCrypt containers.  
+- Easily handles millions of files and tens of TBs of data.  
+- Allows rsync (or zfs replica) copies to the cloud with minimal data transfer and encryption.    
+- Multiple possibilities of data verification, fast, advanced and even paranoid.  
+```
+By default zpaqfranz triple-check with "chunked" SHA-1, XXHASH64 and CRC-32 (!).  
+For even higher level of paranoia, it is possible to use others hash algorithms, as
+MD5
+SHA-1-full-file (NIST FIPS 180-4)
+XXH3-128
+BLAKE3
+SHA-2-256 (NIST FIPS 180-4)
+SHA-3-256 (NIST FIPS 202)
+```
 And much more.
 A GUI (PAKKA) is available on Windows to make extraction easier.  
 
@@ -25,9 +32,6 @@ A GUI (PAKKA) is available on Windows to make extraction easier.
 ## To date, there is no software, free or paid, that matches this characteristics  
 _AFAIK of course_  
 10+ years of developing (2009-now).
-
-
-
 
 **Who did that?**
 
@@ -63,7 +67,7 @@ As the Russians say, trust me, but check.
 **Archiving data requires safety. How can I be sure that I can then extract them without problems?**
 
 It is precisely the portion of the program that I have evolved, implementing a barrage of controls up to the paranoid level, and more.
-Let's say there are verification mechanisms which you have probably never seen.
+Let's say there are verification mechanisms which you have probably never seen. Do you want to use SHA-2/SHA-3 to be very confident? You can.
 
 **Why do you say 7z, RAR etc are obsolete? How is ZPAQ so innovative?**
 

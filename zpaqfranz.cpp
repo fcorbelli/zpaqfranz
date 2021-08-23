@@ -12,7 +12,7 @@
 
 //#define UBUNTU
 
-#define ZPAQ_VERSION "52.19-experimental"
+#define ZPAQ_VERSION "52.20-experimental"
 
 /*
                          __                     
@@ -21916,6 +21916,7 @@ struct DT
 	new FRANZOFFSET
 */
 	char 			franz_block[FRANZOFFSETSHA256];
+	int				franz_block_size;
 	uint32_t 		file_crc32;
 ///#ifndef UBUNTU
 ///	XXH3_state_t 	file_xxh3;
@@ -21933,7 +21934,7 @@ struct DT
 	
 	blake3_hasher 	*pfile_blake3;
 	
-	DT(): date(0), size(0), attr(0), data(0),written(-1),file_crc32(0),file_xxhash64(0) {memset(franz_block,0,sizeof(franz_block));hexhash="";hashtype="";
+	DT(): date(0), size(0), attr(0), data(0),written(-1),franz_block_size(FRANZOFFSETSHA256),file_crc32(0),file_xxhash64(0) {memset(franz_block,0,sizeof(franz_block));hexhash="";hashtype="";
 	
 /// beware of time and space, but now we are sure to maintain 64 byte alignment
 	pfile_xxh3=NULL;
@@ -22179,7 +22180,10 @@ string decodefranzoffset(int franzotype)
 		return "SHA-3+CRC-32";
 	if (franzotype==FRANZO_MD5)
 		return "MD5+CRC-32";
-	perror("16839: franzotype strange");		
+/*
+	string temp="16839: franzotype strange "+franzotype;
+	perror(temp.c_str());
+	*/
 	return "BYPASSWARNING";
 }
 void Jidac::reset()
@@ -24373,7 +24377,8 @@ int decode_franz_block(const bool i_isdirectory,const char* i_franz_block,string
 		o_crc32value="";
 		return -1;
 	}
-		
+	
+		/*
 	/// zpaqfranz 51, old style
 	if (i_franz_block[0]!=0)
 		if (i_franz_block[0+40]==0)
@@ -24381,7 +24386,9 @@ int decode_franz_block(const bool i_isdirectory,const char* i_franz_block,string
 			o_hashtype="SHA-1";
 			o_hashvalue=i_franz_block;
 			risultato=FRANZO_SHA_1; //franzotype
-		}			
+	///		return risultato;
+		}
+*/		
 	
 	if (i_franz_block[0]==0)
 	{
@@ -24394,6 +24401,16 @@ int decode_franz_block(const bool i_isdirectory,const char* i_franz_block,string
 		}
 	}
 	
+	if (i_franz_block[41]!=0)
+		if (i_franz_block[41+8]==0)
+		{
+			if (i_isdirectory)
+				o_crc32value="        ";
+			else
+				o_crc32value=i_franz_block+41;
+		}
+
+	/*
 	if (i_franz_block[0]==0)
 	{
 		if (i_franz_block[0+10]!=0)
@@ -24404,15 +24421,51 @@ int decode_franz_block(const bool i_isdirectory,const char* i_franz_block,string
 				risultato=FRANZO_XXH3;
 			}
 	}
+	*/
 	
-	if (i_franz_block[41]!=0)
-		if (i_franz_block[41+8]==0)
-		{
-			if (i_isdirectory)
-				o_crc32value="        ";
-			else
-				o_crc32value=i_franz_block+41;
-		}
+	if (i_franz_block[0]=='0')
+		if (i_franz_block[1]=='8') // <<< 8, not 4!
+			if (i_franz_block[0+66]==0)
+			{
+			/*
+				printf("decripto sha1\n");
+				for (int j=0;j<FRANZOFFSETSHA256;j++)
+					printf("%02d  %d  %c\n",j,i_franz_block[j],i_franz_block[j]);
+					*/
+				risultato=FRANZO_SHA_1; //franzotype
+				o_hashtype="SHA-1";
+				o_hashvalue=i_franz_block+2;
+				if (i_isdirectory)
+					o_crc32value="        ";
+				else
+				{
+	///				printf("Entro crc1\n");
+					if (i_franz_block[67]!=0)
+						if (i_franz_block[67+8]==0)
+							o_crc32value=i_franz_block+67;
+		///			printf("|||%s|||\n\n",o_crc32value.c_str());
+				}
+			}
+		
+			
+			
+	if (i_franz_block[0]=='0')
+		if (i_franz_block[1]=='9') // <<< 9, not 4!
+			if (i_franz_block[0+66]==0)
+			{
+				risultato=FRANZO_XXH3; //franzotype
+				o_hashtype="XXH3";
+				o_hashvalue=i_franz_block+2;
+				if (i_isdirectory)
+					o_crc32value="        ";
+				else
+				{
+					if (i_franz_block[67]!=0)
+						if (i_franz_block[67+8]==0)
+							o_crc32value=i_franz_block+67;
+				}
+			}
+
 
 	/// zpaqfranz 52, sha 256. Note: '0' is not "0" !
 			
@@ -25136,9 +25189,6 @@ void help_p(bool i_usage,bool i_example)
 		moreprint("                    quickly become unmanageable (warn: be very careful with 32bit versions).");
 		moreprint("PLUS: -noeta        Brief");
 		moreprint("PLUS: -verbose      Shows positive checks");
-		moreprint("PLUS: -xxh3         Hard-hash check on archive created with add -xxh3");
-		moreprint("PLUS: -sha1         Hard-hash check on archive created with add -sha1 (zpaqfranz <52)");
-		moreprint("PLUS: -sha256       Hard-hash check on archive created with add -sha256");
 		moreprint("PLUS: -verify       Next level (mine) of paranoia: check hashes against the filesystem.");
 		moreprint("                    Essentially equivalent to extracting in a temporary folder and check");
 		moreprint("                    against initial folders. For very paranoid people, or debug reason.");
@@ -25147,12 +25197,11 @@ void help_p(bool i_usage,bool i_example)
 	if (i_example)
 	{
 		moreprint("Paranoid, use lots of RAM:           p z:\\1.zpaq");
-		moreprint("Very paranoid, use lots of RAM:      p z:\\1.zpaq -xxh3 -verify");
+		moreprint("Very paranoid, use lots of RAM:      p z:\\1.zpaq -verify");
 	}
 }
 void help_c(bool i_usage,bool i_example)
 {
-	
 	if (i_usage)
 	{
 		moreprint("CMD   c (compare dirs)");
@@ -27176,9 +27225,11 @@ int64_t Jidac::read_archive(const char* arc, int *errors, int i_myappend)
 							
 						if (na>FRANZOFFSET) //Get FRANZOFFSET
 						{
+							
 							assert((na-8)<FRANZOFFSETSHA256); // cannot work on too small buffer
 							for (unsigned int i=0;i<(na-8);i++)
 								dtr.franz_block[i]=*(s+(na-(na-8))+i);
+							dtr.franz_block_size=(na-8);
 							dtr.franz_block[(na-8)]=0x0;
 						}
 				
@@ -28074,7 +28125,36 @@ void Jidac::writefranzattr(libzpaq::StringBuffer& i_sb, uint64_t i_data, unsigne
 	else
 	if (g_franzotype==FRANZO_SHA_1)  //3= 51 (SHA1-0-CRC32)
 	{
+		
+		//printf("Scrivo CRC32  <<%08X>>\n",writtencrc);
+		
+///		assert(i_thehash.length()==64);
+		char mybuffer[FRANZOFFSETSHA256]={0};
+		sprintf(mybuffer,	"08"); //<<< look at this
+		sprintf(mybuffer+2,	"%s",i_thehash.c_str());
+		sprintf(mybuffer+2+64+1,"%08X",writtencrc);
+		puti(i_sb, 8+FRANZOFFSETSHA256, 4); 	// 8+FRANZOFFSET block
+		puti(i_sb, i_data, i_quanti);
+		puti(i_sb, 0, (8 - i_quanti));  // pad with zeros (for 7.15 little bug)
+		i_sb.write(mybuffer,FRANZOFFSETSHA256); ///please note the dirty trick: start by +8		
+		if (flagdebug)
+				printf("Model8: SHA1 <<%s>> CRC32 <<%s>> %s\n",mybuffer+2,mybuffer+67,i_filename.c_str());
+
+		/*
+		
 		assert(i_thehash.length()==40);
+		char mybuffer[FRANZOFFSETSHA256]={0};
+		sprintf(mybuffer,	"08"); //<<< look at this
+		sprintf(mybuffer+2,	"%s",i_thehash.c_str());
+		sprintf(mybuffer+2+64+1,"%08X",writtencrc);
+		puti(i_sb, 8+FRANZOFFSETSHA256, 4); 	// 8+FRANZOFFSET block
+		puti(i_sb, i_data, i_quanti);
+		puti(i_sb, 0, (8 - i_quanti));  // pad with zeros (for 7.15 little bug)
+		i_sb.write(mybuffer,FRANZOFFSETSHA256); ///please note the dirty trick: start by +8		
+		if (flagdebug)
+				printf("Model3: SHA1 <<%s>> CRC32 <<%s>> %s\n",mybuffer,mybuffer+67,i_filename.c_str());
+		*/
+		/*
 		char mybuffer[FRANZOFFSET]={0};
 		sprintf(mybuffer+0,	"%s",i_thehash.c_str());
 		sprintf(mybuffer+41,"%08X",writtencrc);
@@ -28084,6 +28164,7 @@ void Jidac::writefranzattr(libzpaq::StringBuffer& i_sb, uint64_t i_data, unsigne
 		i_sb.write(mybuffer,FRANZOFFSET);
 		if (flagdebug)
 			printf("Mode3: SHA1 <<%s>> CRC32 <<%s>> %s\n",mybuffer,mybuffer+41,i_filename.c_str());
+			*/
 	}
 	else
 	if (g_franzotype==FRANZO_SHA_256) ///4= 52 (01-SHA256-0-CRC32)
@@ -28148,7 +28229,17 @@ void Jidac::writefranzattr(libzpaq::StringBuffer& i_sb, uint64_t i_data, unsigne
 	}
 	else
 	if (g_franzotype==FRANZO_XXH3) ///5= 52 (00XXH3-0-CRC32)
-	{
+	{	
+		assert(i_thehash.length()==32);
+		char mybuffer[FRANZOFFSETSHA256]={0};
+		sprintf(mybuffer,	"09"); //<<< look at this
+		sprintf(mybuffer+2,	"%s",i_thehash.c_str());
+		sprintf(mybuffer+2+64+1,"%08X",writtencrc);
+		puti(i_sb, 8+FRANZOFFSETSHA256, 4); 	// 8+FRANZOFFSET block
+		puti(i_sb, i_data, i_quanti);
+		puti(i_sb, 0, (8 - i_quanti));  // pad with zeros (for 7.15 little bug)
+		i_sb.write(mybuffer,FRANZOFFSETSHA256); ///please note the dirty trick: start by +8		
+	/*
 		assert(i_thehash.length()==32);
 		char mybuffer[FRANZOFFSET]={0};
 		sprintf(mybuffer+10,"%s",i_thehash.c_str());
@@ -28157,9 +28248,12 @@ void Jidac::writefranzattr(libzpaq::StringBuffer& i_sb, uint64_t i_data, unsigne
 		puti(i_sb, i_data, i_quanti);
 		puti(i_sb, 0, (8 - i_quanti));  // pad with zeros (for 7.15 little bug)
 		i_sb.write(mybuffer,FRANZOFFSET);
+		*/
+		
 		/// please note the dirty trick: start by +8
 		if (flagdebug)
-				printf("Mode5: XXH3: <<%s>> CRC32 <<%s>> %s\n",mybuffer+10,mybuffer+41,i_filename.c_str());
+				printf("Mode5: XXH3: <<%s>> CRC32 <<%s>> %s\n",mybuffer+2,mybuffer+67,i_filename.c_str());
+				///printf("Mode5: XXH3: <<%s>> CRC32 <<%s>> %s\n",mybuffer+10,mybuffer+41,i_filename.c_str());
 	}
 	else
 		perror("22144: unknown franzotype");
@@ -28882,7 +28976,9 @@ int Jidac::verify()
 					myhashtype,
 					myhash,
 					mycrc32);
-					///printf("File ciucciato %s  %s\n",p->first.c_str(),mycrc32.c_str());
+					
+					///printf("File ciucciato %s  %s\n",mycrc32.c_str(),p->first.c_str());
+					
 					if (mycrc32!="")
 					{
 						uint32_t crc32stored=crchex2int(mycrc32.c_str());
@@ -30081,7 +30177,7 @@ string sha256_calc_file(const char * i_filename,bool i_flagcalccrc32,uint32_t& o
 		mysha256.update(buf,r);
 		if (i_flagcalccrc32)
 			o_crc32=crc32_16bytes(buf,r,o_crc32);
- 		io_lavorati+=n;
+ 		io_lavorati+=r;
 		if (r!=n) 
 			break;
 		if (flagnoeta==false)
@@ -32561,6 +32657,38 @@ int Jidac::utf()
 	
 }
 
+
+int from_flag_to_franzotype()
+{
+
+	if (flagcrc32)
+		return FRANZO_CRC_32;
+
+	if (flagxxhash64)
+		return FRANZO_XXHASH64;
+	
+	if (flagxxh3)
+		return FRANZO_XXH3;
+	
+	if (flagsha1)
+		return FRANZO_SHA_1;
+	
+	if (flagsha256)
+		return FRANZO_SHA_256;
+	
+	if (flagmd5)
+		return FRANZO_MD5;
+	
+	if (flagblake3)
+		return FRANZO_BLAKE3;
+	
+	if (flagsha3)
+		return FRANZO_SHA3;
+	
+	return -1;
+}
+	
+	
 /// a patched... main()!
 int unz(const char * archive,const char * key)
 {
@@ -32921,10 +33049,9 @@ int unz(const char * archive,const char * key)
 					p+=4;
 					if (na>65535) 
 					unzerror("attr size > 65535");
-			
+	
 					///printf("2 NA VALE %d\n",na);
-					
-					
+	
 					if (na>FRANZOFFSET) // houston we have a FRANZBLOCK? 
 					{
 						assert((na-8)<FRANZOFFSETSHA256); // cannot work on too small buffer
@@ -32990,37 +33117,16 @@ int unz(const char * archive,const char * key)
 
 	printbar('-');
 
-	if ((!flagxxh3) && (!flagsha256) && (!flagsha1) && (!flagxxhash64))
+/*
+	if ((!flagxxh3) && (!flagsha256) && (!flagsha1) && (!flagxxhash64) && (!flagmd5) && (!flagblake3) && (!flagxxh3) && (!flagsha3) && (!flagmd5))
 	{
-		printf("No hashes selected (no -xxh3 -xxhash or -sha1 or -sha256). Quit\n");
+		printf("No hashes selected (no -xxh3 -xxhash -sha1 -sha256 -md5 -blake3 -sha3). Quit\n");
 		return 0;
 	}
-	int unzfranzotype=-1;
+	*/
+
 	
-	if (flagxxhash64)
-		unzfranzotype=2;
-	else
-	if (flagxxh3)
-		unzfranzotype=5;
-	else
-	if (flagsha1)
-		unzfranzotype=3;
-	else
-	if (flagsha256)
-		unzfranzotype=4;
-	else
-	if (flagxxhash64)
-		unzfranzotype=5;
-	
-	if (unzfranzotype==-1)
-	{
-		printf("25820: hash can be one of -xxh3 -xxhash64 -sha1 -sha256\n");
-		return 0;
-	}
-	
-	string unzfranzostring=decodefranzoffset(unzfranzotype);
-	myreplace(unzfranzostring,"+CRC-32","");
-	printf("Now recalculating hash with %s\n",unzfranzostring.c_str());
+	printf("Now recalculating hashes\n");
   	
 	std::vector<unzDTMap::iterator> mappadt;
 	std::vector<unzDTMap::iterator> vf;
@@ -33050,7 +33156,16 @@ int unz(const char * archive,const char * key)
 				if ((!isads(fn)) && (!iszfs(fn)) && (!isdirectory(fn)))
 				{
 					int64_t startrecalc=mtime();
-					
+	
+					string hashstoredinzpaq="";
+					string myhashtype="";
+					string mycrc32="";
+				
+					int unzfranzotype=decode_franz_block(isdirectory(p->first),p->second.sha1hex,
+					myhashtype,
+					hashstoredinzpaq,
+					mycrc32);
+				
 					if (unzfranzotype==FRANZO_XXHASH64)
 					{
 						uint64_t myseed = 0;
@@ -33155,8 +33270,8 @@ int unz(const char * archive,const char * key)
 
 					vf.push_back(p);
 					
-					if (flagnoeta==false)
-						printf("File %08u of %08lld (%20s) %1.3f %s\n",i+1,(long long)mappadt.size(),migliaia(size),(mtime()-startrecalc)/1000.0,fn.c_str());
+					if (flagverbose)
+						printf("File <<%-20s>> %08u of %08lld (%20s) %1.3f %s\n",myhashtype.c_str(),i+1,(long long)mappadt.size(),migliaia(size),(mtime()-startrecalc)/1000.0,fn.c_str());
 						
 				}
 			}
@@ -33209,10 +33324,8 @@ int unz(const char * archive,const char * key)
 		
 		for (unsigned i=0; i<vf.size(); ++i) 
 		{
-			
 			unzDTMap::iterator p=vf[i];
-			
-			
+
 			string hashstoredinzpaq="";
 			string myhashtype="";
 			string mycrc32="";
@@ -33221,18 +33334,19 @@ int unz(const char * archive,const char * key)
 					myhashtype,
 					hashstoredinzpaq,
 					mycrc32);
-			
-			if (myfranzo!=unzfranzotype)
-				error("25927: archive with different hash from the one selected!");
-				
-			
+			if (myfranzo==-1)
+				error("33351: archive use an unknown hasher!");
+
+			string unzfranzostring="";
+		
 			if (flagverify)
 			{
-					
 				MAPPACHECK::iterator a=mychecks.find(myhashtype);
-	
 				if (a!=mychecks.end())
 				{
+					unzfranzostring=decodefranzoffset(a->second.algotype);
+					myreplace(unzfranzostring,"+CRC-32","");				
+
 					if (!fileexists(p->first.c_str()))
 					{
 						if (flagdebug)
@@ -33277,20 +33391,21 @@ int unz(const char * archive,const char * key)
 
 			
 			if ((!localok) || (flagverbose))
-			{
-				printf("%14s: %s\n",unzfranzostring.c_str(),p->first.c_str());
-				printf("DECOMPRESSED  : %s\n",hashdecompresso.c_str());
-			
-				if (!hashstoredinzpaq.empty())
-				printf("STORED IN ZPAQ: %s\n",hashstoredinzpaq.c_str());
-			
-				if (!hashfromfile.empty())
-				printf("FROM FILE     : %s\n",hashfromfile.c_str());
-				printf("\n");
+				if (unzfranzostring!="")
+				{
+					printf("%14s: %s\n",myhashtype.c_str(),p->first.c_str());
+					printf("DECOMPRESSED  : %s\n",hashdecompresso.c_str());
 				
-				if (!localok)
-					status_e++;
-			}
+					if (!hashstoredinzpaq.empty())
+					printf("STORED IN ZPAQ: %s\n",hashstoredinzpaq.c_str());
+				
+					if (!hashfromfile.empty())
+					printf("FROM FILE     : %s\n",hashfromfile.c_str());
+					printf("\n");
+					
+					if (!localok)
+						status_e++;
+				}
 		}
 
 	int64_t fine=mtime();
@@ -33299,7 +33414,6 @@ int unz(const char * archive,const char * key)
 	
 	printf("SUMMARY  %1.3f s\n",(fine-inizio)/1000.0);
 	printf("Total   : %08d\n",total_files);
-
 
 	if (status_e>0)
 	printf("ERRORS  : %08d (ERROR:  something WRONG)\n",status_e);
@@ -37723,7 +37837,6 @@ if (casecollision>0)
 					printf("Mode3: SHA1 %s %s\n",hashtobewritten.c_str(),p->first.c_str());
 				p->second.hashtype="SHA-1";
 				p->second.hexhash=hashtobewritten;
-				
 			}
 			else
 			if (g_franzotype==FRANZO_SHA_256)

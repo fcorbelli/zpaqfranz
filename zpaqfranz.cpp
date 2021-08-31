@@ -12,7 +12,7 @@
 
 //#define UBUNTU
 
-#define ZPAQ_VERSION "52.20-experimental"
+#define ZPAQ_VERSION "52.21-experimental"
 
 /*
                          __                     
@@ -159,9 +159,17 @@ Use static linking only when necessary, especially against libraries provided by
 Therefore a -static linking is often a nightmare on CentOS => change the Makefile
 g++ -O3 -Dunix zpaqfranz.cpp  -pthread -o zpaqfranz
 
+Solaris 11.4 gcc 7.3.0
+g++ -O3 -march=native -DSOLARIS zpaqfranz.cpp -o zpaqfranz  -pthread -static-libgcc
+
+Beware of #definitions
+g++ -dM -E - < /dev/null
+sometimes __sun, sometimes not
+
 
 ============
-*nix 
+*nix (note: on Solaris you have to make some fixes)
+
 Makefile 
 
 
@@ -208,6 +216,8 @@ check: zpaqfranz
 #define	FRANZO_BLAKE3		6
 #define FRANZO_SHA3			7
 #define FRANZO_MD5			8
+
+///#define SOLARIS		// Solaris is similar, but not equal, to BSD Unix, compile with -DSOLARIS
 
 
 #define _FILE_OFFSET_BITS 64  // In Linux make sizeof(off_t) == 8
@@ -9617,6 +9627,7 @@ uint64_t maxsize;
 bool flagdonotforcexls;       // do not always include xls
 bool flagfilelist;
 bool flag715;
+bool flagzero;
 bool flagforcezfs;
 bool flagdebug;
 bool flagnoeta;
@@ -9646,7 +9657,7 @@ bool flagmd5;
 bool flagsha3;
 bool flagmm;
 bool flagappend;
-/// out of ... because of struct DT and XXH3 align
+/// out of ... because of struct  and XXH3 align
 int g_franzotype; // type of FRANZOFFSET. 0 = nothing, 1 CRC, 2 XXHASH64, 3 SHA1, 4 SHA256, 5 XXH3
 string g_optional;					// command optional
 
@@ -15400,7 +15411,7 @@ XXH_PUBLIC_API XXH64_hash_t XXH64_hashFromCanonical(const XXH64_canonical_t* src
 
 /* ===   Compiler specifics   === */
 
-#if defined (__STDC_VERSION__) && __STDC_VERSION__ >= 199901L   /* >= C99 */
+#if defined (__STDC_VERSION__) && __STDC_VERSION__ >= 199901L  && (!defined(SOLARIS))  /* franzfix >= C99 */
 #  define XXH_RESTRICT   restrict
 #else
 /* Note: it might be useful to define __restrict or __restrict__ for some C++ compilers */
@@ -21835,8 +21846,8 @@ https://github.com/embeddedartistry/embedded-resources/blob/master/examples/c/ma
 #define memalign(align, size) aligned_malloc(align, size)
 
 //Number of bytes we're using for storing the aligned pointer offset
-typedef uint16_t offset_t;
-#define PTR_OFFSET_SZ sizeof(offset_t)
+typedef uint16_t myoffset_t;
+#define PTR_OFFSET_SZ sizeof(myoffset_t)
 
 /**
 * aligned_malloc takes in the requested alignment and size
@@ -21868,7 +21879,7 @@ void * aligned_malloc(size_t align, size_t size)
 			ptr = (void *) align_up(((uintptr_t)p + PTR_OFFSET_SZ), align);
 
 			//Calculate the offset and store it behind our aligned pointer
-			*((offset_t *)ptr - 1) = (offset_t)((uintptr_t)ptr - (uintptr_t)p);
+			*((myoffset_t *)ptr - 1) = (myoffset_t)((uintptr_t)ptr - (uintptr_t)p);
 
 		} // else NULL, could not malloc
 	} //else NULL, invalid arguments
@@ -21889,7 +21900,7 @@ void aligned_free(void * ptr)
 	* Walk backwards from the passed-in pointer to get the pointer offset
 	* We convert to an offset_t pointer and rely on pointer math to get the data
 	*/
-	offset_t offset = *((offset_t *)ptr - 1);
+	myoffset_t offset = *((myoffset_t *)ptr - 1);
 
 	/*
 	* Once we have the offset, we can get our original pointer and call free
@@ -21921,21 +21932,43 @@ struct DT
 ///#ifndef UBUNTU
 ///	XXH3_state_t 	file_xxh3;
 ///#else
+
+/// now using pointer to shrink DT from more then 1K to 296 bytes
 	XXH3_state_t	*pfile_xxh3;  // this is the problem: XXH3's 64-byte align not always work with too old-too new compilers
 	
-    XXHash64 		file_xxhash64;
+    XXHash64 		*pfile_xxhash64;
 ///#endif
 
-	libzpaq::SHA256 file_sha256;
-	libzpaq::SHA1 	file_sha1;
-	SHA3			file_sha3;
-	MD5				file_md5;
+	libzpaq::SHA256 *pfile_sha256;
+	libzpaq::SHA1 	*pfile_sha1;
+	SHA3			*pfile_sha3;
+	MD5				*pfile_md5;
 	
 	
 	blake3_hasher 	*pfile_blake3;
 	
-	DT(): date(0), size(0), attr(0), data(0),written(-1),franz_block_size(FRANZOFFSETSHA256),file_crc32(0),file_xxhash64(0) {memset(franz_block,0,sizeof(franz_block));hexhash="";hashtype="";
-	
+	DT(): date(0), size(0), attr(0), data(0),written(-1),franz_block_size(FRANZOFFSETSHA256),file_crc32(0) {memset(franz_block,0,sizeof(franz_block));hexhash="";hashtype="";
+
+	pfile_xxhash64=NULL;
+	if (g_franzotype==FRANZO_XXHASH64)
+		pfile_xxhash64=new XXHash64(0);
+
+	pfile_md5=NULL;
+	if (g_franzotype==FRANZO_MD5)
+		pfile_md5=new MD5;
+		
+	pfile_sha1=NULL;
+	if (g_franzotype==FRANZO_SHA_1)
+		pfile_sha1=new libzpaq::SHA1;
+		
+	pfile_sha256=NULL;
+	if (g_franzotype==FRANZO_SHA_256)
+		pfile_sha256=new libzpaq::SHA256;
+		
+	pfile_sha3=NULL;
+	if (g_franzotype==FRANZO_SHA3)
+		pfile_sha3=new SHA3;
+			
 /// beware of time and space, but now we are sure to maintain 64 byte alignment
 	pfile_xxh3=NULL;
 	if (g_franzotype==FRANZO_XXH3)
@@ -25163,6 +25196,8 @@ void help_t(bool i_usage,bool i_example)
 		moreprint("PLUS:               Check that all block are OK, and the CRC-32s of the individual ");
 		moreprint("                    files corresponds to what would be generated by actually extracting.");
 		moreprint("PLUS: -verify       Do a filesystem post-check: STORED CRC==DECOMPRESSED==FROM FILE.");
+		moreprint("PLUS: -find pippo   For path-rework of verify");
+		moreprint("PLUS: -replace plu  For path-rework of verify (find and replace)");
 		moreprint("PLUS: -paranoid     Extract all into -to something, check every file with stored hash");
 		moreprint("PLUS:               delete every equal files");
 	}
@@ -25174,7 +25209,7 @@ void help_t(bool i_usage,bool i_example)
 		moreprint("All versions:                        t z:\\1.zpaq -all");
 		moreprint("Compare against filesystem:          t z:\\1.zpaq -verify");
 		moreprint("Real paranoid: extract all           t z:\\1.zpaq -to z:\\knb -paranoid");
-		moreprint("Highly reliable (nz the source dir): l z:\\1.zpaq c:\\nz");
+		moreprint("Fast-SHA1 (nz the source dir):       t z:\\1.zpaq c:\\nz");
 	}
 }
 void help_p(bool i_usage,bool i_example)
@@ -25426,12 +25461,14 @@ void help_f(bool i_usage,bool i_example)
 		moreprint("                    Check if disk-controller-system-RAM-cache-cables are working fine");
 		moreprint("PLUS: -verbose      Show write speed (useful to check speed consistency)");
 		moreprint("PLUS: -force        Do NOT delete (after run) the temporary filename. By default free");
+		moreprint("PLUS: -zero         Zero-fill instead of random. Use to prepare a thin VMDK shrink");
 	}
 	if (i_usage && i_example) moreprint("    Examples:");
 	if (i_example)
 	{
 		moreprint("Fill (wipe) almost all free space:   f z:\\");
 		moreprint("Fill (wipe) keep temp files:         f z:\\ -force -verbose");
+		moreprint("Zero free space:                     f z:\\ -zero");
 	}
 }
 
@@ -25956,6 +25993,7 @@ int Jidac::doCommand(int argc, const char** argv)
 	g_copy="";
 	command=0;
 	flagforce=false;
+	flagzero=false;
 	fragment=6;
 	minsize=0;
 	maxsize=0;
@@ -26409,6 +26447,7 @@ int Jidac::doCommand(int argc, const char** argv)
 		}
 		
 		else if (opt=="-force" || opt=="-f") 		flagforce			=true;
+		else if (opt=="-zero") 						flagzero			=true;
 		else if (opt=="-noattributes") 				flagnoattributes	=true;
 		else if (opt=="-test") 						flagtest			=true;
 		else if (opt=="-zfs") 						flagskipzfs			=true;
@@ -26636,6 +26675,9 @@ int Jidac::doCommand(int argc, const char** argv)
 		if (flagnopath)
 			franzparameters+="Do not store path (-nopath) ";
 
+		if (flagzero)
+			franzparameters+="Zero file ";
+
 		if (flagnosort)
 			franzparameters+="-nosort ";
 
@@ -26830,6 +26872,7 @@ int Jidac::doCommand(int argc, const char** argv)
 	
 	if (flag715)
 	{
+		flagzero			=false;
 		flagforcezfs		=true;
 		flagdonotforcexls	=true;
 		flagforcewindows	=true;
@@ -28271,50 +28314,74 @@ bool Jidac::equal(DTMap::const_iterator p, const char* filename,uint32_t &o_crc3
 	o_crc32=0;
 
   // test if all fragment sizes and hashes exist
-  if (filename==0) 
-  {
-    static const char zero[20]={0};
-    for (unsigned i=0; i<p->second.ptr.size(); ++i) {
-      unsigned j=p->second.ptr[i];
-      if (j<1 || j>=ht.size()
-          || ht[j].usize<0 || !memcmp(ht[j].sha1, zero, 20))
-        return false;
-    }
-    return true;
-  }
+	if (filename==0) 
+	{
+		static const char zero[20]={0};
+		for (unsigned i=0; i<p->second.ptr.size(); ++i) 
+		{
+			unsigned j=p->second.ptr[i];
+			if (j<1 || j>=ht.size() || ht[j].usize<0 || !memcmp(ht[j].sha1, zero, 20))
+				return false;
+		}
+		return true;
+	}
 
   // internal or neither file exists
-  if (p->second.date==0) return !exists(filename);
+	if (p->second.date==0) 
+		return !exists(filename);
 
   // directories always match
-  if (p->first!="" && isdirectory(p->first))
-    return exists(filename);
+	if (p->first!="" && isdirectory(p->first))
+		return exists(filename);
 
   // compare sizes
-  FP in=fopen(filename, RB);
-  if (in==FPNULL) return false;
-  fseeko(in, 0, SEEK_END);
-  if (ftello(in)!=p->second.size) 
-	return fclose(in), false;
-
+	FP in=fopen(filename, RB);
+	if (in==FPNULL) 
+		return false;
+	fseeko(in, 0, SEEK_END);
+	if (ftello(in)!=p->second.size) 
+		return fclose(in), false;
 
 
   // compare hashes chunk by chunk.
-  fseeko(in, 0, SEEK_SET);
-  libzpaq::SHA1 sha1;
-  const int BUFSIZE=4096;
-  char buf[BUFSIZE];
+	fseeko(in, 0, SEEK_SET);
+	libzpaq::SHA1 sha1;
+	const int BUFSIZE=4096;
+	char buf[BUFSIZE];
 
+	bool	flagshow=false;
 	if (!flagnoeta)
 		if (flagverbose || (p->second.size>100000000)) //only 100MB+ files
-			printf("Checking equality %s\r",migliaia(p->second.size));
-	
+			flagshow=true;
+			
+	if (flagshow)
+		printf("\n");
+
+	int64_t 	done				=0;
+	int 		ultimapercentuale	=-1;
+
+	int64_t timestart=mtime();
 	for (unsigned i=0; i<p->second.ptr.size(); ++i) 
 	{
 		unsigned f=p->second.ptr[i];
 		if (f<1 || f>=ht.size() || ht[f].usize<0) 
 			return fclose(in), false;
     
+		double percentuale=0;
+		if (flagshow)
+		{
+			percentuale=100.0*((double)i/(double)p->second.ptr.size());
+			int proper=percentuale;
+			if (percentuale>0)
+			if (proper!=ultimapercentuale)
+			{
+				double tempo=(mtime()-timestart+1)/1000.0;
+				int myspeed=done/tempo;
+				printf("SHA1 %03d (%12s) @ %s/s\r",proper,tohuman(done),tohuman2(myspeed));
+				ultimapercentuale=percentuale;
+			}
+		}
+			
 		for (int j=0; j<ht[f].usize;) 
 		{
 			int n=ht[f].usize-j;
@@ -28324,17 +28391,29 @@ bool Jidac::equal(DTMap::const_iterator p, const char* filename,uint32_t &o_crc3
 			
 			int r=fread(buf, 1, n, in);
 			o_crc32=crc32_16bytes(buf,r,o_crc32);
-	
+			done+=r;
 			g_worked+=r;
 			
 			if (r!=n) 
+			{
+		//		if (flagshow)
+			//		printf("\n");
+					
 				return fclose(in), false;
+			}
 			sha1.write(buf, n);
 			j+=n;
 		}
 		if (memcmp(sha1.result(), ht[f].sha1, 20)!=0) 
+		{	
+			//if (flagshow)
+				//printf("\n");
 			return fclose(in), false;
+		}
 	}
+	//if (flagshow)
+		//printf("\n");
+				
 	if (fread(buf, 1, BUFSIZE, in)!=0) 
 		return fclose(in), false;
 	fclose(in);
@@ -28954,7 +29033,7 @@ int Jidac::verify()
 			percentuale=100*fi/filelist.size();
 			if (ultimapercentuale!=percentuale)
 			{
-				printf("Done %02d%% %10s of %10s, diff %s bytes\r",percentuale,tohuman(g_worked),tohuman2(g_bytescanned),migliaia2(usize));
+				printf("Done %02d%% %10s of %10s, diff %s bytes so far\r",percentuale,tohuman(g_worked),tohuman2(g_bytescanned),migliaia2(usize));
 				ultimapercentuale=percentuale;
 			}
 		}
@@ -31696,6 +31775,7 @@ void explode(string i_string,char i_delimiter,vector<string>& array)
 	
 int Jidac::benchmark()
 {
+	
 	/*
 	archive="z:\\prog.zpaq";
 	reset();
@@ -32407,10 +32487,12 @@ void my_handler(int s)
 	}
 	const char** argv=&argp[0];
 #endif
-
 	global_start=mtime();  		// get start time
+
+#ifndef SOLARIS // solaris does not like this things very much
 	signal (SIGINT,my_handler); // the control-C handler
-   
+#endif
+
 #ifdef _WIN32
 //// set UTF-8 for console
 	SetConsoleCP(65001);
@@ -33664,6 +33746,12 @@ int Jidac::consolidate(string i_archive)
 
 int Jidac::test() 
 {
+	if (files.size()>0)
+	{
+		/// zpaqfranz t z:\1.zpaq k:\sorgente
+		printf("SHA-1-chunked verify\n");
+		return list();
+	}
 	if (flagparanoid)
 	{
 		if (tofiles.size()==0)
@@ -33989,6 +34077,9 @@ int Jidac::test()
 		}
 		
 		string filedefinitivo=g_crc32[i].filename;
+		if ((searchfrom!="") && (replaceto!=""))
+					replace(filedefinitivo,searchfrom,replaceto);
+				
 		uint32_t crc32fromfilesystem=0; 
 		
 		
@@ -36075,7 +36166,11 @@ int Jidac::fillami()
 		return 2;
 	}
 	moreprint("");
+	if (flagzero)
+	moreprint("Almost all free space will be filled by zeroed 512MB files.");
+	else
 	moreprint("Almost all free space will be filled by pseudorandom 512MB files,");
+	if (!flagzero)
 	moreprint("then checked from the ztempdir-created folder (2GB+ needed).");
 	moreprint("");
 	moreprint("These activities can reduce the media life,");
@@ -36098,27 +36193,38 @@ int Jidac::fillami()
 		return 2;
 	}
 	unsigned int percent=99;
-	
+		
 	int64_t spazio=getfreespace(outputdir.c_str());
 	printf("Free space %12s (%s) <<%s>>\n",migliaia(spazio),tohuman(spazio),outputdir.c_str());
-	if (spazio<600000000)
-	{
-		printf("28607: less than 600.000.000 bytes free on %s\n",outputdir.c_str());
-		return 2;
-	}
+	if (!flagzero)
+		if (spazio<600000000)
+		{
+			printf("28607: less than 600.000.000 bytes free on %s\n",outputdir.c_str());
+			return 2;
+		}
 	
 	uint64_t spacetowrite=spazio*percent/100;
 	printf("To write   %12s (%s) %d percent\n",migliaia(spacetowrite),tohuman(spacetowrite),percent);
 
 	uint32_t chunksize=(2<<28)/sizeof(uint32_t); //half gigabyte in 32 bits at time
+	
 	int chunks=spacetowrite/(chunksize*sizeof(uint32_t));
+	
+		
 	chunks--; // just to be sure
+
+	
 	if (chunks<=0)
 	{
-		printf("Abort: there is something strange on free space (2GB+)\n");
-		return 1;
+		if (flagzero)
+			chunks=1;
+		else
+		{
+			printf("Abort: there is something strange on free space (2GB+)\n");
+			return 1;
+		}
 	}
-	printf("%d chuks of (%s) will be written\n",chunks,tohuman(chunksize*sizeof(uint32_t)));
+	printf("%d chunks of (%s) will be written\n",chunks,tohuman(chunksize*sizeof(uint32_t)));
 		
 	uint32_t *buffer32bit = (uint32_t*)malloc(chunksize*sizeof(uint32_t));
 	if (buffer32bit==0)
@@ -36137,6 +36243,99 @@ int Jidac::fillami()
 	
 	assert(outputdir.size()<200);
 	char mynomefile[200+100];
+	
+	if (flagzero)
+	{
+		memset(buffer32bit,0,chunksize*4);
+		int i=0;
+		uint64_t byteswritten=0;
+		while (1)
+		{
+			i++;
+			
+			sprintf(mynomefile,"%szchunk_%05d",outputdir.c_str(),i);
+			chunkfilename.push_back(mynomefile);
+			double percentuale=(double)i/(double)chunks*100.0;
+			if (i==0)
+				percentuale=0;
+			if (percentuale>100)
+				percentuale=100;
+				
+			printf("%03d%% ",(int)percentuale);
+			
+			uint64_t startio=mtime();
+			FILE* myfile=fopen(mynomefile, "wb");
+			size_t scritti=fwrite(buffer32bit, sizeof(uint32_t), chunksize, myfile);
+			fclose(myfile);		
+			byteswritten+=scritti*4;
+			uint64_t iotime=mtime()-startio;
+			totaliotime		+=iotime;
+			if (scritti!=chunksize)
+				break;
+
+			uint64_t iospeed=	(chunksize*sizeof(uint32_t)/((iotime+1)/1000.0));
+			double trascorso=(mtime()-starttutto+1)/1000.0;
+			double eta=((double)trascorso*(double)spacetowrite/(double)byteswritten)-trascorso;
+			if (i==0)
+				eta=0;
+
+			if (eta<356000)
+			{
+				printf("ETA %0d:%02d:%02d",int(eta/3600), int(eta/60)%60, int(eta)%60);
+				printf(" todo (%10s) W (%10s/s)",
+				tohuman(spacetowrite-byteswritten),
+				tohuman4(iospeed));
+				if (flagverbose)
+					printf("\n");
+				else
+					printf("\r");
+			}
+		}
+		
+		chunksize=16384;
+		printf("\nFilling all the way @ %s bytes\n",migliaia(chunksize*4));
+		spazio=getfreespace(outputdir.c_str());
+		byteswritten=0;
+		while (1)
+		{
+			i++;
+			sprintf(mynomefile,"%szchunk_%05d",outputdir.c_str(),i);
+			chunkfilename.push_back(mynomefile);
+			FILE* myfile=fopen(mynomefile, "wb");
+			size_t scritti=fwrite(buffer32bit, sizeof(uint32_t), chunksize, myfile);
+			fclose(myfile);			
+			byteswritten	+=scritti*4;
+			if (scritti!=chunksize)
+				break;
+
+			printf("Todo (%10s)",tohuman(spazio-byteswritten));
+
+			if (flagverbose)
+				printf("\n");
+			else
+				printf("\r");
+
+		}
+	
+		if (!flagforce)
+		{
+			for (int unsigned i=0;i<chunkfilename.size();i++)
+			{
+				delete_file(chunkfilename[i].c_str());
+				printf("Deleting tempfile %05d / %05d\r",i,(unsigned int)chunkfilename.size()-1);
+			}
+			delete_dir(outputdir.c_str());
+			printf("\n");
+		}
+		else
+			printf("REMEMBER: temp file in %s\n",outputdir.c_str());
+		return 0;
+	}
+
+
+
+/// Not zero, but random from here
+
 	for (int i=0;i<chunks;i++)
 	{
 		/// pseudorandom population (not cryptographic-level, but enough)
@@ -36276,6 +36475,8 @@ int Jidac::fillami()
 	else
 		printf("ERROR: SOMETHING WRONG\n");
 	return 0;
+
+	
 }
 /*
 clang++ -march=native -Dunix zpaqfranz.cpp -pthread -o zclang2 -static -ffunction-sections -fdata-sections -Wl,--gc-sections,--print-gc-section > & 1.txt
@@ -37463,15 +37664,19 @@ if (casecollision>0)
 						p->second.file_crc32=crc32_16bytes(buf,buflen,p->second.file_crc32);
 	
 						if (g_franzotype==FRANZO_XXHASH64)
-							p->second.file_xxhash64.add(buf,buflen);
+							if (p->second.pfile_xxhash64)
+								(*p->second.pfile_xxhash64).add(buf,buflen);
 
 						if (g_franzotype==FRANZO_SHA_1)
-							for (int i=0;i<buflen;i++)
-								p->second.file_sha1.put(*(buf+i));
+							if (p->second.pfile_sha1)
+							///	for (int i=0;i<buflen;i++)
+								///	(*p->second.pfile_sha1).put(*(buf+i));
+									(*p->second.pfile_sha1).write(buf,buflen);
 												
 						if (g_franzotype==FRANZO_SHA_256)
-							for (int i=0;i<buflen;i++)
-								p->second.file_sha256.put(*(buf+i));
+							if (p->second.pfile_sha256)
+								for (int i=0;i<buflen;i++)
+									(*p->second.pfile_sha256).put(*(buf+i));
 								
 						if (g_franzotype==FRANZO_XXH3)
 							if (p->second.pfile_xxh3)
@@ -37482,10 +37687,13 @@ if (casecollision>0)
 								blake3_hasher_update(p->second.pfile_blake3, buf,buflen);
 						
 						if (g_franzotype==FRANZO_SHA3)
-							p->second.file_sha3.add(buf,buflen);
+							if (p->second.pfile_sha3)
+								(*p->second.pfile_sha3).add(buf,buflen);
 					
 						if (g_franzotype==FRANZO_MD5)
-							p->second.file_md5.add(buf,buflen);
+							if (p->second.pfile_md5)
+							(*p->second.pfile_md5).add(buf,buflen);
+					
 					
 					}
           if (bufptr>=buflen) c=EOF;
@@ -37812,7 +38020,7 @@ if (casecollision>0)
 			if (g_franzotype==FRANZO_XXHASH64)
 			{
 				char temp[17]={0};
-				sprintf(temp,"%016llX",(unsigned long long)p->second.file_xxhash64.hash());
+				sprintf(temp,"%016llX",(unsigned long long)(*p->second.pfile_xxhash64).hash());
 				hashtobewritten=temp;
 				if (flagdebug)
 					printf("Model2: XXHASH64 %s %s\n",hashtobewritten.c_str(),p->first.c_str());
@@ -37825,7 +38033,7 @@ if (casecollision>0)
 			if (g_franzotype==FRANZO_SHA_1)  //3= 51 (SHA1-0-CRC32)
 			{
 				char sha1result[21]={0};
-				memcpy(sha1result, p->second.file_sha1.result(), 20);
+				memcpy(sha1result, (*p->second.pfile_sha1).result(), 20);
 				char myhex[4];
 				for (int j=0; j <20; j++)
 				{
@@ -37842,7 +38050,7 @@ if (casecollision>0)
 			if (g_franzotype==FRANZO_SHA_256)
 			{
 				char sha256result[33]={0};
-				memcpy(sha256result, p->second.file_sha256.result(), 32);
+				memcpy(sha256result, (*p->second.pfile_sha256).result(), 32);
 				char myhex[4];
 				hashtobewritten="";
 				for (int j=0; j <= 31; j++)
@@ -37883,7 +38091,7 @@ if (casecollision>0)
 			else
 			if (g_franzotype==FRANZO_SHA3)
 			{
-				hashtobewritten=p->second.file_sha3.getHash();
+				hashtobewritten=(*p->second.pfile_sha3).getHash();
 								
 				if (flagdebug)
 					printf("Mode7: SHA3 %s %s\n",hashtobewritten.c_str(),p->first.c_str());
@@ -37894,7 +38102,7 @@ if (casecollision>0)
 			else
 			if (g_franzotype==FRANZO_MD5)
 			{
-				hashtobewritten=p->second.file_md5.getHash();
+				hashtobewritten=(*p->second.pfile_md5).getHash();
 								
 				if (flagdebug)
 					printf("Mode8: MD5 %s %s\n",hashtobewritten.c_str(),p->first.c_str());

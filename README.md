@@ -633,4 +633,12 @@ Use static linking only when necessary, especially against libraries provided by
 Therefore a -static linking is often a nightmare on CentOS => change the Makefile
 g++ -O3 -Dunix zpaqfranz.cpp  -pthread -o zpaqfranz
 
+Solaris 11.4 gcc 7.3.0
+g++ -O3 -march=native -DSOLARIS zpaqfranz.cpp -o zpaqfranz  -pthread -static-libgcc
+
+Beware of #definitions
+g++ -dM -E - < /dev/null
+sometimes __sun, sometimes not
+
+
 ```

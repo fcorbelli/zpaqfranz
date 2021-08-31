@@ -1,4 +1,7 @@
 ```
+31-08-2021: 52.21
+Some fixes, less RAM usage, Solaris port
+
 21-08-2021: 52.19
 -paranoid in test
 

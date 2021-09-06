@@ -1,4 +1,7 @@
 ```
+06-09-2021: 54.1
+SFX module for Win64, some fixes
+
 31-08-2021: 52.21
 Some fixes, less RAM usage, Solaris port
 

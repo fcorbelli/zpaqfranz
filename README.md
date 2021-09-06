@@ -1,4 +1,4 @@
-# zpaqfranz: advanced, but compatible, fork of ZPAQ 7.15 
+# zpaqfranz: advanced, but compatible, fork of ZPAQ 7.15, now (54+) with SFX on Win64   
 ### [Windows binary 32/64 bit on sourceforge](https://sourceforge.net/projects/zpaqfranz/files/)  
 [Main site of old ZPAQ](http://mattmahoney.net/dc/zpaq.html)      [Reference decompressor](https://github.com/fcorbelli/unzpaq/tree/main) 
 
@@ -525,7 +525,7 @@ As far as I know this is allowed by the licenses.
 - wyhash (experimental) WangYi  https://github.com/wangyi-fudan/wyhash  
 - https://github.com/System-Glitch/SHA256
 - https://github.com/BLAKE3-team/BLAKE3 (The C code is copyright Samuel Neves and Jack O'Connor, 2019-2020, the assembly code is copyright Samuel Neves, 2019-2020)
-- * The Whirlpool algorithm was developed by Paulo S. L. M. Barreto and Vincent Rijmen
+- The Whirlpool algorithm was developed by Paulo S. L. M. Barreto and Vincent Rijmen
 
 
 
@@ -584,9 +584,13 @@ _I discovered two different compilation problems on the latest Ubuntu
 _So the software works great on Windows an FreeBSD, but can fail on Ubuntu (!)_  
 _[The second is a bug (!) in g++ 10.3, the DEFAULT Ubuntu 21 compiler. Yes, a bug recognized in the compiler](https://gcc.gnu.org/bugzilla/show_bug.cgi?id=101558)_  
 _Some fixes/workaroud are implemented from 52.8+, and the default hasher (in add) is now XXHASH64, and not XXH3 (the 128 bit version)_  
-_I'm sorry but, as always explained, I rarely use Linux (almost always Debian) and hardly Ubuntu_
+_I'm sorry but, as always explained, I rarely use Linux (almost always Debian) and hardly Ubuntu_  
+_News: from 54+ removed the workarouds, sometimes makes side effects. Update your compiler!_  
+
 
 Be careful to link the pthread library.
+
+_On Win64 from 54+ include a SFX module_  
 
 Targets
 ```

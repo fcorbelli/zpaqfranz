@@ -1,4 +1,7 @@
 ```
+07-09-2021: 52.2
+SFX module for Win32 too, LZ4-compressed
+
 06-09-2021: 54.1
 SFX module for Win64, some fixes
 

@@ -1,4 +1,7 @@
 ```
+08-09-2021: 52.3
+SFX module (for Windows) now support encrypted archives
+
 07-09-2021: 52.2
 SFX module for Win32 too, LZ4-compressed
 

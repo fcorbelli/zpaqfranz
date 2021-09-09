@@ -1,4 +1,4 @@
-# zpaqfranz: advanced, but compatible, fork of ZPAQ 7.15, now (54+) with SFX on Win64   
+# zpaqfranz: advanced, but compatible, fork of ZPAQ 7.15, now (54+) with SFX on Win32/64   
 ### [Windows binary 32/64 bit on sourceforge](https://sourceforge.net/projects/zpaqfranz/files/)  
 [Main site of old ZPAQ](http://mattmahoney.net/dc/zpaq.html)      [Reference decompressor](https://github.com/fcorbelli/unzpaq/tree/main) 
 

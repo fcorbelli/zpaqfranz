@@ -6,11 +6,10 @@
 ///////// https://sourceforge.net/projects/zpaqfranz/
 
 ///////// I had to reluctantly move parts of the comments and some times even delete them, 
-///////// because github doesn't like files >1MB. I apologize with the authors,
-///////// it's not a foolish attempt to take over their jobs
-///////// https://github.com/fcorbelli/zpaqfranz/blob/main/notes.txt
+///////// I apologize with the authors, it's not a foolish attempt to take over their jobs
 
-#define ZPAQ_VERSION "54.3-experimental"
+
+#define ZPAQ_VERSION "54.6-experimental"
 
 #if defined(_WIN64)
 #define ZSFX_VERSION "SFX64 v52.15,"
@@ -45,9 +44,7 @@ So be patient if the source is not linear,
 updating and compilation are now trivial.
 
 The source is composed of the fusion of different software 
-from different authors. 
-
-Therefore there is no uniform style of programming. 
+from different authors, therefore there is no uniform style of programming. 
 
 I have made a number of efforts to maintain compatibility 
 with unmodified version (7.15), even at the cost 
@@ -57,6 +54,7 @@ So don't be surprised if it looks like what in Italy
 we call "zibaldone" or in Emilia-Romagna "mappazzone".
 Jun 2021: starting to fix the mess (refactoring). Work in progress.
 Jul 2021: source cleaned a bit. From 52+ XXHASH64 as checksum algo
+Sep 2021: refactoring in progress...
 
 Windows binary builds (32 and 64 bit) on github/sourceforge
 
@@ -117,7 +115,7 @@ Original bug
 https://gcc.gnu.org/bugzilla/show_bug.cgi?id=96963
 
 
-Please note: on Win64 embed a SFX module
+Please note: on Windows there is an embedded SFX module
 
 Targets
 ```
@@ -128,7 +126,7 @@ Windows 64 (g++ 10.3.0) MSYS2
 g++ -O3  zpaqfranz.cpp -o zpaqfranz -pthread -static
 
 Windows 64 (g++, Hardware Blake3 implementation)
-In this case, of course, the .S file is mandatory
+In this case, of course, linking the .S file is mandatory
 g++ -O3 -DHWBLAKE3 blake3_windows_gnu.S zpaqfranz.cpp -o zpaqfranz -pthread -static
 
 Windows 32 (g++ 7.3.0 64 bit)
@@ -154,34 +152,42 @@ g++ -O3 -Dunix zpaqfranz.cpp  -pthread -o zpaqfranz -static
 QNAP NAS TS-431P3 (Annapurna AL314) gcc 7.4.0
 g++ -Dunix zpaqfranz.cpp  -pthread -o zpaqfranz -Wno-psabi
 
-
 Fedora 34 gcc 11.2.1
 Typically you will need some library (out of a fresh Fedora box)
 sudo dnf install glibc-static libstdc++-static -y;
 Then you can compile, via Makefile or "by hand"
 (do not forget... sudo!)
 
-
 CentoOS
 Please note:
 "Red Hat discourages the use of static linking for security reasons. 
 Use static linking only when necessary, especially against libraries provided by Red Hat. "
-
 Therefore a -static linking is often a nightmare on CentOS => change the Makefile
 g++ -O3 -Dunix zpaqfranz.cpp  -pthread -o zpaqfranz
 
 Solaris 11.4 gcc 7.3.0
 g++ -O3 -march=native -DSOLARIS zpaqfranz.cpp -o zpaqfranz  -pthread -static-libgcc
 
+MacOS 11.0 gcc (clang) 12.0.5
+Please note:
+The -std=c++11 is required, unless you have to change half a dozen lines. No -static here
+"Apple does not support statically linked binaries on Mac OS X. 
+(...)
+Rather, we strive to ensure binary 
+compatibility in each dynamically linked system library and framework
+(AHAHAHAHAHAH, note by me)
+Warning: Shipping a statically linked binary entails a significant compatibility risk. 
+We strongly recommend that you not do this...
+Short version: Apple does not like -static, so compile with
+g++ -Dunix  -O3 -march=native zpaqfranz.cpp -o zpaqfranz -pthread  -std=c++11
+
+
 Beware of #definitions
 g++ -dM -E - < /dev/null
 sometimes __sun, sometimes not
 
-
 ============
-*nix (note: on Solaris you have to make some fixes)
-
-Makefile 
+General Makefile (note: remove -static on some systems)
 
 
 CXX=g++
@@ -205,14 +211,9 @@ clean:
 check: zpaqfranz
         ./zpaqfranz a ./archive.zpaq *  -xxh3 -test -verify
         rm ./archive.zpaq 
-
-
-```
-
-
 */
 
-//#DEFINE HWBLAKE3  => use HWBLAKE3
+
 
 #define FRANZOFFSET 		50
 #define FRANZOFFSETSHA256 	76 
@@ -230,8 +231,7 @@ check: zpaqfranz
 
 ///#define SOLARIS		// Solaris is similar, but not equal, to BSD Unix, compile with -DSOLARIS
 
-
-#define _FILE_OFFSET_BITS 64  // In Linux make sizeof(off_t) == 8
+#define _FILE_OFFSET_BITS 64  // In Linux make sizeof(off_t) == 8. Define BEFORE including windows.h!!!
 
 #ifndef UNICODE
 	#define UNICODE  // For Windows
@@ -239,10 +239,6 @@ check: zpaqfranz
 
 #ifndef DEBUG
 	#define NDEBUG 1
-#endif
-
-#ifdef _OPENMP
-	#include <omp.h>
 #endif
 
 #if defined(__unix__) || (defined(__APPLE__) && defined(__MACH__))
@@ -258,7 +254,6 @@ check: zpaqfranz
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
-
 #include <algorithm>
 #include <string>
 #include <vector>
@@ -283,21 +278,17 @@ check: zpaqfranz
 	#include <sys/ioctl.h>
 	#include <fcntl.h>
 	#include <stdarg.h>
-/*
-#include <stdio.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <unistd.h>
-#include <sys/mman.h>
-*/
+
 	#ifdef BSD
 		#include <sys/sysctl.h>
 		#include <sys/mount.h>
+		// macos
+		///#include <curses.h>
+
 	#endif
 
 #else  // Assume Windows
 	
-///	#include <wincrypt.h>
 	#include <conio.h>
 	#include <windows.h>
 	#include <io.h>
@@ -306,856 +297,9 @@ check: zpaqfranz
 
 #endif
 
-// For testing -Dunix in Windows
-#ifdef unixtest
-	#define lstat(a,b) stat(a,b)
-	#define mkdir(a,b) mkdir(a)
-	#ifndef fseeko
-		#define fseeko(a,b,c) fseeko64(a,b,c)
-	#endif
-	#ifndef ftello
-		#define ftello(a) ftello64(a)
-	#endif
-#endif
-
-
-
-#ifdef _WIN32
-	#ifndef ENABLE_VIRTUAL_TERMINAL_PROCESSING
-		#define ENABLE_VIRTUAL_TERMINAL_PROCESSING  0x0004
-	#endif
-
-	static HANDLE stdoutHandle;
-	static DWORD outModeInit;
-	 
-	void setupConsole(void) 
-	{
-		DWORD outMode 	= 0;
-		stdoutHandle 	= GetStdHandle(STD_OUTPUT_HANDLE);
-	 
-		if(stdoutHandle == INVALID_HANDLE_VALUE)
-			exit(GetLastError());
-		
-		if(!GetConsoleMode(stdoutHandle, &outMode))
-			exit(GetLastError());
-		outModeInit = outMode;
-		
-		 // Enable ANSI escape codes
-		outMode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
-	 
-		if(!SetConsoleMode(stdoutHandle, outMode)) 
-			exit(GetLastError());
-	}
-	 
-	void restoreConsole(void) 
-	{
-		// Reset colors
-		printf("\x1b[0m");	
-		
-		// Reset console mode
-		if(!SetConsoleMode(stdoutHandle, outModeInit)) 
-			exit(GetLastError());
-	}
-#else // Houston, we have Unix
-	void setupConsole(void) 
-	{
-	}
-
-	void restoreConsole(void) 
-	{
-		//colors
-		printf("\x1b[0m");
-	}
-#endif
-
-
-// //////////////////////////////////////////////////////////
-// sha3.h
-// Copyright (c) 2014,2015 Stephan Brumme. All rights reserved.
-// see http://create.stephan-brumme.com/disclaimer.html
-//
-
-/// compute SHA3 hash
-/** Usage:
-    SHA3 sha3;
-    std::string myHash  = sha3("Hello World");     // std::string
-    std::string myHash2 = sha3("How are you", 11); // arbitrary data, 11 bytes
-
-    // or in a streaming fashion:
-
-    SHA3 sha3;
-    while (more data available)
-      sha3.add(pointer to fresh data, number of new bytes);
-    std::string myHash3 = sha3.getHash();
-  */
-class SHA3 //: public Hash
-{
-public:
-  /// algorithm variants
-  enum Bits { Bits224 = 224, Bits256 = 256, Bits384 = 384, Bits512 = 512 };
-
-  /// same as reset()
-  explicit SHA3(Bits bits = Bits256);
-
-  /// compute hash of a memory block
-  std::string operator()(const void* data, size_t numBytes);
-  /// compute hash of a string, excluding final zero
-  std::string operator()(const std::string& text);
-
-  /// add arbitrary number of bytes
-  void add(const void* data, size_t numBytes);
-
-  /// return latest hash as hex characters
-  std::string getHash();
-
-  /// restart
-  void reset();
-
-private:
-  /// process a full block
-  void processBlock(const void* data);
-  /// process everything left in the internal buffer
-  void processBuffer();
-
-  /// 1600 bits, stored as 25x64 bit, BlockSize is no more than 1152 bits (Keccak224)
-  enum { StateSize    = 1600 / (8 * 8),
-         MaxBlockSize =  200 - 2 * (224 / 8) };
-
-  /// hash
-  uint64_t m_hash[StateSize];
-  /// size of processed data in bytes
-  uint64_t m_numBytes;
-  /// block size (less or equal to MaxBlockSize)
-  size_t   m_blockSize;
-  /// valid bytes in m_buffer
-  size_t   m_bufferSize;
-  /// bytes not processed yet
-  uint8_t  m_buffer[MaxBlockSize];
-  /// variant
-  Bits     m_bits;
-};
-
-/// same as reset()
-SHA3::SHA3(Bits bits)
-: m_blockSize(200 - 2 * (bits / 8)),
-  m_bits(bits)
-{
-  reset();
-}
-
-
-/// restart
-void SHA3::reset()
-{
-  for (size_t i = 0; i < StateSize; i++)
-    m_hash[i] = 0;
-
-  m_numBytes   = 0;
-  m_bufferSize = 0;
-}
-
-
-/// constants and local helper functions
-namespace
-{
-  const unsigned int Rounds = 24;
-  const uint64_t XorMasks[Rounds] =
-  {
-    0x0000000000000001ULL, 0x0000000000008082ULL, 0x800000000000808aULL,
-    0x8000000080008000ULL, 0x000000000000808bULL, 0x0000000080000001ULL,
-    0x8000000080008081ULL, 0x8000000000008009ULL, 0x000000000000008aULL,
-    0x0000000000000088ULL, 0x0000000080008009ULL, 0x000000008000000aULL,
-    0x000000008000808bULL, 0x800000000000008bULL, 0x8000000000008089ULL,
-    0x8000000000008003ULL, 0x8000000000008002ULL, 0x8000000000000080ULL,
-    0x000000000000800aULL, 0x800000008000000aULL, 0x8000000080008081ULL,
-    0x8000000000008080ULL, 0x0000000080000001ULL, 0x8000000080008008ULL
-  };
-
-  /// rotate left and wrap around to the right
-  inline uint64_t rotateLeft(uint64_t x, uint8_t numBits)
-  {
-    return (x << numBits) | (x >> (64 - numBits));
-  }
-
-  /// convert litte vs big endian
-  inline uint64_t swap(uint64_t x)
-  {
-#if defined(__GNUC__) || defined(__clang__)
-    return __builtin_bswap64(x);
-#endif
-#ifdef _MSC_VER
-    return _byteswap_uint64(x);
-#endif
-
-    return  (x >> 56) |
-           ((x >> 40) & 0x000000000000FF00ULL) |
-           ((x >> 24) & 0x0000000000FF0000ULL) |
-           ((x >>  8) & 0x00000000FF000000ULL) |
-           ((x <<  8) & 0x000000FF00000000ULL) |
-           ((x << 24) & 0x0000FF0000000000ULL) |
-           ((x << 40) & 0x00FF000000000000ULL) |
-            (x << 56);
-  }
-
-
-  /// return x % 5 for 0 <= x <= 9
-  unsigned int mod5(unsigned int x)
-  {
-    if (x < 5)
-      return x;
-
-    return x - 5;
-  }
-}
-
-
-/// process a full block
-void SHA3::processBlock(const void* data)
-{
-#if defined(__BYTE_ORDER) && (__BYTE_ORDER != 0) && (__BYTE_ORDER == __BIG_ENDIAN)
-#define LITTLEENDIAN(x) swap(x)
-#else
-#define LITTLEENDIAN(x) (x)
-#endif
-
-  const uint64_t* data64 = (const uint64_t*) data;
-  // mix data into state
-  for (unsigned int i = 0; i < m_blockSize / 8; i++)
-    m_hash[i] ^= LITTLEENDIAN(data64[i]);
-
-  // re-compute state
-  for (unsigned int round = 0; round < Rounds; round++)
-  {
-    // Theta
-    uint64_t coefficients[5];
-    for (unsigned int i = 0; i < 5; i++)
-      coefficients[i] = m_hash[i] ^ m_hash[i + 5] ^ m_hash[i + 10] ^ m_hash[i + 15] ^ m_hash[i + 20];
-
-    for (unsigned int i = 0; i < 5; i++)
-    {
-      uint64_t one = coefficients[mod5(i + 4)] ^ rotateLeft(coefficients[mod5(i + 1)], 1);
-      m_hash[i     ] ^= one;
-      m_hash[i +  5] ^= one;
-      m_hash[i + 10] ^= one;
-      m_hash[i + 15] ^= one;
-      m_hash[i + 20] ^= one;
-    }
-
-    // temporary
-    uint64_t one;
-
-    // Rho Pi
-    uint64_t last = m_hash[1];
-    one = m_hash[10]; m_hash[10] = rotateLeft(last,  1); last = one;
-    one = m_hash[ 7]; m_hash[ 7] = rotateLeft(last,  3); last = one;
-    one = m_hash[11]; m_hash[11] = rotateLeft(last,  6); last = one;
-    one = m_hash[17]; m_hash[17] = rotateLeft(last, 10); last = one;
-    one = m_hash[18]; m_hash[18] = rotateLeft(last, 15); last = one;
-    one = m_hash[ 3]; m_hash[ 3] = rotateLeft(last, 21); last = one;
-    one = m_hash[ 5]; m_hash[ 5] = rotateLeft(last, 28); last = one;
-    one = m_hash[16]; m_hash[16] = rotateLeft(last, 36); last = one;
-    one = m_hash[ 8]; m_hash[ 8] = rotateLeft(last, 45); last = one;
-    one = m_hash[21]; m_hash[21] = rotateLeft(last, 55); last = one;
-    one = m_hash[24]; m_hash[24] = rotateLeft(last,  2); last = one;
-    one = m_hash[ 4]; m_hash[ 4] = rotateLeft(last, 14); last = one;
-    one = m_hash[15]; m_hash[15] = rotateLeft(last, 27); last = one;
-    one = m_hash[23]; m_hash[23] = rotateLeft(last, 41); last = one;
-    one = m_hash[19]; m_hash[19] = rotateLeft(last, 56); last = one;
-    one = m_hash[13]; m_hash[13] = rotateLeft(last,  8); last = one;
-    one = m_hash[12]; m_hash[12] = rotateLeft(last, 25); last = one;
-    one = m_hash[ 2]; m_hash[ 2] = rotateLeft(last, 43); last = one;
-    one = m_hash[20]; m_hash[20] = rotateLeft(last, 62); last = one;
-    one = m_hash[14]; m_hash[14] = rotateLeft(last, 18); last = one;
-    one = m_hash[22]; m_hash[22] = rotateLeft(last, 39); last = one;
-    one = m_hash[ 9]; m_hash[ 9] = rotateLeft(last, 61); last = one;
-    one = m_hash[ 6]; m_hash[ 6] = rotateLeft(last, 20); last = one;
-                      m_hash[ 1] = rotateLeft(last, 44);
-
-    // Chi
-    for (unsigned int j = 0; j < StateSize; j += 5)
-    {
-      // temporaries
-      uint64_t one = m_hash[j];
-      uint64_t two = m_hash[j + 1];
-
-      m_hash[j]     ^= m_hash[j + 2] & ~two;
-      m_hash[j + 1] ^= m_hash[j + 3] & ~m_hash[j + 2];
-      m_hash[j + 2] ^= m_hash[j + 4] & ~m_hash[j + 3];
-      m_hash[j + 3] ^=      one      & ~m_hash[j + 4];
-      m_hash[j + 4] ^=      two      & ~one;
-    }
-
-    // Iota
-    m_hash[0] ^= XorMasks[round];
-  }
-}
-
-
-/// add arbitrary number of bytes
-void SHA3::add(const void* data, size_t numBytes)
-{
-  const uint8_t* current = (const uint8_t*) data;
-
-  // copy data to buffer
-  if (m_bufferSize > 0)
-  {
-    while (numBytes > 0 && m_bufferSize < m_blockSize)
-    {
-      m_buffer[m_bufferSize++] = *current++;
-      numBytes--;
-    }
-  }
-
-  // full buffer
-  if (m_bufferSize == m_blockSize)
-  {
-    processBlock((void*)m_buffer);
-    m_numBytes  += m_blockSize;
-    m_bufferSize = 0;
-  }
-
-  // no more data ?
-  if (numBytes == 0)
-    return;
-
-  // process full blocks
-  while (numBytes >= m_blockSize)
-  {
-    processBlock(current);
-    current    += m_blockSize;
-    m_numBytes += m_blockSize;
-    numBytes   -= m_blockSize;
-  }
-
-  // keep remaining bytes in buffer
-  while (numBytes > 0)
-  {
-    m_buffer[m_bufferSize++] = *current++;
-    numBytes--;
-  }
-}
-
-
-/// process everything left in the internal buffer
-void SHA3::processBuffer()
-{
-  // add padding
-  size_t offset = m_bufferSize;
-  // add a "1" byte
-  m_buffer[offset++] = 0x06;
-  // fill with zeros
-  while (offset < m_blockSize)
-    m_buffer[offset++] = 0;
-
-  // and add a single set bit
-  m_buffer[offset - 1] |= 0x80;
-
-  processBlock(m_buffer);
-}
-
-
-/// return latest hash as 16 hex characters
-std::string SHA3::getHash()
-{
-  // save hash state
-  uint64_t oldHash[StateSize];
-  for (unsigned int i = 0; i < StateSize; i++)
-    oldHash[i] = m_hash[i];
-
-  // process remaining bytes
-  processBuffer();
-
-  // convert hash to string
-  static const char dec2hex[16 + 1] = "0123456789ABCDEF";
-
-  // number of significant elements in hash (uint64_t)
-  unsigned int hashLength = m_bits / 64;
-
-  std::string result;
-  result.reserve(m_bits / 4);
-  for (unsigned int i = 0; i < hashLength; i++)
-    for (unsigned int j = 0; j < 8; j++) // 64 bits => 8 bytes
-    {
-      // convert a byte to hex
-      unsigned char oneByte = (unsigned char) (m_hash[i] >> (8 * j));
-      result += dec2hex[oneByte >> 4];
-      result += dec2hex[oneByte & 15];
-    }
-
-  // SHA3-224's last entry in m_hash provides only 32 bits instead of 64 bits
-  unsigned int remainder = m_bits - hashLength * 64;
-  unsigned int processed = 0;
-  while (processed < remainder)
-  {
-    // convert a byte to hex
-    unsigned char oneByte = (unsigned char) (m_hash[hashLength] >> processed);
-    result += dec2hex[oneByte >> 4];
-    result += dec2hex[oneByte & 15];
-
-    processed += 8;
-  }
-
-  // restore state
-  for (unsigned int i = 0; i < StateSize; i++)
-    m_hash[i] = oldHash[i];
-
-  return result;
-}
-
-
-/// compute SHA3 of a memory block
-std::string SHA3::operator()(const void* data, size_t numBytes)
-{
-  reset();
-  add(data, numBytes);
-  return getHash();
-}
-
-
-/// compute SHA3 of a string, excluding final zero
-std::string SHA3::operator()(const std::string& text)
-{
-  reset();
-  add(text.c_str(), text.size());
-  return getHash();
-}
-
-// //////////////////////////////////////////////////////////
-// md5.h
-// Copyright (c) 2014 Stephan Brumme. All rights reserved.
-// see http://create.stephan-brumme.com/disclaimer.html
-//
-
-
-
-/// compute MD5 hash
-/** Usage:
-    MD5 md5;
-    std::string myHash  = md5("Hello World");     // std::string
-    std::string myHash2 = md5("How are you", 11); // arbitrary data, 11 bytes
-
-    // or in a streaming fashion:
-
-    MD5 md5;
-    while (more data available)
-      md5.add(pointer to fresh data, number of new bytes);
-    std::string myHash3 = md5.getHash();
-  */
-class MD5 //: public Hash
-{
-public:
-  /// split into 64 byte blocks (=> 512 bits), hash is 16 bytes long
-  enum { BlockSize = 512 / 8, HashBytes = 16 };
-
-  /// same as reset()
-  MD5();
-
-  /// compute MD5 of a memory block
-  std::string operator()(const void* data, size_t numBytes);
-  /// compute MD5 of a string, excluding final zero
-  std::string operator()(const std::string& text);
-
-  /// add arbitrary number of bytes
-  void add(const void* data, size_t numBytes);
-
-  /// return latest hash as 32 hex characters
-  std::string getHash();
-  /// return latest hash as bytes
-  void        getHash(unsigned char buffer[HashBytes]);
-
-  /// restart
-  void reset();
-
-private:
-  /// process 64 bytes
-  void processBlock(const void* data);
-  /// process everything left in the internal buffer
-  void processBuffer();
-
-  /// size of processed data in bytes
-  uint64_t m_numBytes;
-  /// valid bytes in m_buffer
-  size_t   m_bufferSize;
-  /// bytes not processed yet
-  uint8_t  m_buffer[BlockSize];
-
-  enum { HashValues = HashBytes / 4 };
-  /// hash, stored as integers
-  uint32_t m_hash[HashValues];
-};
-
-
-
-/// same as reset()
-MD5::MD5()
-{
-  reset();
-}
-
-
-/// restart
-void MD5::reset()
-{
-  m_numBytes   = 0;
-  m_bufferSize = 0;
-
-  // according to RFC 1321
-  m_hash[0] = 0x67452301;
-  m_hash[1] = 0xefcdab89;
-  m_hash[2] = 0x98badcfe;
-  m_hash[3] = 0x10325476;
-}
-
-
-namespace
-{
-  // mix functions for processBlock()
-  inline uint32_t f1(uint32_t b, uint32_t c, uint32_t d)
-  {
-    return d ^ (b & (c ^ d)); // original: f = (b & c) | ((~b) & d);
-  }
-
-  inline uint32_t f2(uint32_t b, uint32_t c, uint32_t d)
-  {
-    return c ^ (d & (b ^ c)); // original: f = (b & d) | (c & (~d));
-  }
-
-  inline uint32_t f3(uint32_t b, uint32_t c, uint32_t d)
-  {
-    return b ^ c ^ d;
-  }
-
-  inline uint32_t f4(uint32_t b, uint32_t c, uint32_t d)
-  {
-    return c ^ (b | ~d);
-  }
-
-  inline uint32_t rotate(uint32_t a, uint32_t c)
-  {
-    return (a << c) | (a >> (32 - c));
-  }
-
-#if defined(__BYTE_ORDER) && (__BYTE_ORDER != 0) && (__BYTE_ORDER == __BIG_ENDIAN)
-  inline uint32_t swap(uint32_t x)
-  {
-#if defined(__GNUC__) || defined(__clang__)
-    return __builtin_bswap32(x);
-#endif
-#ifdef MSC_VER
-    return _byteswap_ulong(x);
-#endif
-
-    return (x >> 24) |
-          ((x >>  8) & 0x0000FF00) |
-          ((x <<  8) & 0x00FF0000) |
-           (x << 24);
-  }
-#endif
-}
-
-
-/// process 64 bytes
-void MD5::processBlock(const void* data)
-{
-  // get last hash
-  uint32_t a = m_hash[0];
-  uint32_t b = m_hash[1];
-  uint32_t c = m_hash[2];
-  uint32_t d = m_hash[3];
-
-  // data represented as 16x 32-bit words
-  const uint32_t* words = (uint32_t*) data;
-
-  // computations are little endian, swap data if necessary
-#if defined(__BYTE_ORDER) && (__BYTE_ORDER != 0) && (__BYTE_ORDER == __BIG_ENDIAN)
-#define LITTLEENDIAN(x) swap(x)
-#else
-#define LITTLEENDIAN(x) (x)
-#endif
-
-  // first round
-  uint32_t word0  = LITTLEENDIAN(words[ 0]);
-  a = rotate(a + f1(b,c,d) + word0  + 0xd76aa478,  7) + b;
-  uint32_t word1  = LITTLEENDIAN(words[ 1]);
-  d = rotate(d + f1(a,b,c) + word1  + 0xe8c7b756, 12) + a;
-  uint32_t word2  = LITTLEENDIAN(words[ 2]);
-  c = rotate(c + f1(d,a,b) + word2  + 0x242070db, 17) + d;
-  uint32_t word3  = LITTLEENDIAN(words[ 3]);
-  b = rotate(b + f1(c,d,a) + word3  + 0xc1bdceee, 22) + c;
-
-  uint32_t word4  = LITTLEENDIAN(words[ 4]);
-  a = rotate(a + f1(b,c,d) + word4  + 0xf57c0faf,  7) + b;
-  uint32_t word5  = LITTLEENDIAN(words[ 5]);
-  d = rotate(d + f1(a,b,c) + word5  + 0x4787c62a, 12) + a;
-  uint32_t word6  = LITTLEENDIAN(words[ 6]);
-  c = rotate(c + f1(d,a,b) + word6  + 0xa8304613, 17) + d;
-  uint32_t word7  = LITTLEENDIAN(words[ 7]);
-  b = rotate(b + f1(c,d,a) + word7  + 0xfd469501, 22) + c;
-
-  uint32_t word8  = LITTLEENDIAN(words[ 8]);
-  a = rotate(a + f1(b,c,d) + word8  + 0x698098d8,  7) + b;
-  uint32_t word9  = LITTLEENDIAN(words[ 9]);
-  d = rotate(d + f1(a,b,c) + word9  + 0x8b44f7af, 12) + a;
-  uint32_t word10 = LITTLEENDIAN(words[10]);
-  c = rotate(c + f1(d,a,b) + word10 + 0xffff5bb1, 17) + d;
-  uint32_t word11 = LITTLEENDIAN(words[11]);
-  b = rotate(b + f1(c,d,a) + word11 + 0x895cd7be, 22) + c;
-
-  uint32_t word12 = LITTLEENDIAN(words[12]);
-  a = rotate(a + f1(b,c,d) + word12 + 0x6b901122,  7) + b;
-  uint32_t word13 = LITTLEENDIAN(words[13]);
-  d = rotate(d + f1(a,b,c) + word13 + 0xfd987193, 12) + a;
-  uint32_t word14 = LITTLEENDIAN(words[14]);
-  c = rotate(c + f1(d,a,b) + word14 + 0xa679438e, 17) + d;
-  uint32_t word15 = LITTLEENDIAN(words[15]);
-  b = rotate(b + f1(c,d,a) + word15 + 0x49b40821, 22) + c;
-
-  // second round
-  a = rotate(a + f2(b,c,d) + word1  + 0xf61e2562,  5) + b;
-  d = rotate(d + f2(a,b,c) + word6  + 0xc040b340,  9) + a;
-  c = rotate(c + f2(d,a,b) + word11 + 0x265e5a51, 14) + d;
-  b = rotate(b + f2(c,d,a) + word0  + 0xe9b6c7aa, 20) + c;
-
-  a = rotate(a + f2(b,c,d) + word5  + 0xd62f105d,  5) + b;
-  d = rotate(d + f2(a,b,c) + word10 + 0x02441453,  9) + a;
-  c = rotate(c + f2(d,a,b) + word15 + 0xd8a1e681, 14) + d;
-  b = rotate(b + f2(c,d,a) + word4  + 0xe7d3fbc8, 20) + c;
-
-  a = rotate(a + f2(b,c,d) + word9  + 0x21e1cde6,  5) + b;
-  d = rotate(d + f2(a,b,c) + word14 + 0xc33707d6,  9) + a;
-  c = rotate(c + f2(d,a,b) + word3  + 0xf4d50d87, 14) + d;
-  b = rotate(b + f2(c,d,a) + word8  + 0x455a14ed, 20) + c;
-
-  a = rotate(a + f2(b,c,d) + word13 + 0xa9e3e905,  5) + b;
-  d = rotate(d + f2(a,b,c) + word2  + 0xfcefa3f8,  9) + a;
-  c = rotate(c + f2(d,a,b) + word7  + 0x676f02d9, 14) + d;
-  b = rotate(b + f2(c,d,a) + word12 + 0x8d2a4c8a, 20) + c;
-
-  // third round
-  a = rotate(a + f3(b,c,d) + word5  + 0xfffa3942,  4) + b;
-  d = rotate(d + f3(a,b,c) + word8  + 0x8771f681, 11) + a;
-  c = rotate(c + f3(d,a,b) + word11 + 0x6d9d6122, 16) + d;
-  b = rotate(b + f3(c,d,a) + word14 + 0xfde5380c, 23) + c;
-
-  a = rotate(a + f3(b,c,d) + word1  + 0xa4beea44,  4) + b;
-  d = rotate(d + f3(a,b,c) + word4  + 0x4bdecfa9, 11) + a;
-  c = rotate(c + f3(d,a,b) + word7  + 0xf6bb4b60, 16) + d;
-  b = rotate(b + f3(c,d,a) + word10 + 0xbebfbc70, 23) + c;
-
-  a = rotate(a + f3(b,c,d) + word13 + 0x289b7ec6,  4) + b;
-  d = rotate(d + f3(a,b,c) + word0  + 0xeaa127fa, 11) + a;
-  c = rotate(c + f3(d,a,b) + word3  + 0xd4ef3085, 16) + d;
-  b = rotate(b + f3(c,d,a) + word6  + 0x04881d05, 23) + c;
-
-  a = rotate(a + f3(b,c,d) + word9  + 0xd9d4d039,  4) + b;
-  d = rotate(d + f3(a,b,c) + word12 + 0xe6db99e5, 11) + a;
-  c = rotate(c + f3(d,a,b) + word15 + 0x1fa27cf8, 16) + d;
-  b = rotate(b + f3(c,d,a) + word2  + 0xc4ac5665, 23) + c;
-
-  // fourth round
-  a = rotate(a + f4(b,c,d) + word0  + 0xf4292244,  6) + b;
-  d = rotate(d + f4(a,b,c) + word7  + 0x432aff97, 10) + a;
-  c = rotate(c + f4(d,a,b) + word14 + 0xab9423a7, 15) + d;
-  b = rotate(b + f4(c,d,a) + word5  + 0xfc93a039, 21) + c;
-
-  a = rotate(a + f4(b,c,d) + word12 + 0x655b59c3,  6) + b;
-  d = rotate(d + f4(a,b,c) + word3  + 0x8f0ccc92, 10) + a;
-  c = rotate(c + f4(d,a,b) + word10 + 0xffeff47d, 15) + d;
-  b = rotate(b + f4(c,d,a) + word1  + 0x85845dd1, 21) + c;
-
-  a = rotate(a + f4(b,c,d) + word8  + 0x6fa87e4f,  6) + b;
-  d = rotate(d + f4(a,b,c) + word15 + 0xfe2ce6e0, 10) + a;
-  c = rotate(c + f4(d,a,b) + word6  + 0xa3014314, 15) + d;
-  b = rotate(b + f4(c,d,a) + word13 + 0x4e0811a1, 21) + c;
-
-  a = rotate(a + f4(b,c,d) + word4  + 0xf7537e82,  6) + b;
-  d = rotate(d + f4(a,b,c) + word11 + 0xbd3af235, 10) + a;
-  c = rotate(c + f4(d,a,b) + word2  + 0x2ad7d2bb, 15) + d;
-  b = rotate(b + f4(c,d,a) + word9  + 0xeb86d391, 21) + c;
-
-  // update hash
-  m_hash[0] += a;
-  m_hash[1] += b;
-  m_hash[2] += c;
-  m_hash[3] += d;
-}
-
-
-/// add arbitrary number of bytes
-void MD5::add(const void* data, size_t numBytes)
-{
-  const uint8_t* current = (const uint8_t*) data;
-
-  if (m_bufferSize > 0)
-  {
-    while (numBytes > 0 && m_bufferSize < BlockSize)
-    {
-      m_buffer[m_bufferSize++] = *current++;
-      numBytes--;
-    }
-  }
-
-  // full buffer
-  if (m_bufferSize == BlockSize)
-  {
-    processBlock(m_buffer);
-    m_numBytes  += BlockSize;
-    m_bufferSize = 0;
-  }
-
-  // no more data ?
-  if (numBytes == 0)
-    return;
-
-  // process full blocks
-  while (numBytes >= BlockSize)
-  {
-    processBlock(current);
-    current    += BlockSize;
-    m_numBytes += BlockSize;
-    numBytes   -= BlockSize;
-  }
-
-  // keep remaining bytes in buffer
-  while (numBytes > 0)
-  {
-    m_buffer[m_bufferSize++] = *current++;
-    numBytes--;
-  }
-}
-
-
-/// process final block, less than 64 bytes
-void MD5::processBuffer()
-{
-  // the input bytes are considered as bits strings, where the first bit is the most significant bit of the byte
-
-  // - append "1" bit to message
-  // - append "0" bits until message length in bit mod 512 is 448
-  // - append length as 64 bit integer
-
-  // number of bits
-  size_t paddedLength = m_bufferSize * 8;
-
-  // plus one bit set to 1 (always appended)
-  paddedLength++;
-
-  // number of bits must be (numBits % 512) = 448
-  size_t lower11Bits = paddedLength & 511;
-  if (lower11Bits <= 448)
-    paddedLength +=       448 - lower11Bits;
-  else
-    paddedLength += 512 + 448 - lower11Bits;
-  // convert from bits to bytes
-  paddedLength /= 8;
-
-  // only needed if additional data flows over into a second block
-  unsigned char extra[BlockSize];
-
-  // append a "1" bit, 128 => binary 10000000
-  if (m_bufferSize < BlockSize)
-    m_buffer[m_bufferSize] = 128;
-  else
-    extra[0] = 128;
-
-  size_t i;
-  for (i = m_bufferSize + 1; i < BlockSize; i++)
-    m_buffer[i] = 0;
-  for (; i < paddedLength; i++)
-    extra[i - BlockSize] = 0;
-
-  // add message length in bits as 64 bit number
-  uint64_t msgBits = 8 * (m_numBytes + m_bufferSize);
-  // find right position
-  unsigned char* addLength;
-  if (paddedLength < BlockSize)
-    addLength = m_buffer + paddedLength;
-  else
-    addLength = extra + paddedLength - BlockSize;
-
-  // must be little endian
-  *addLength++ = msgBits & 0xFF; msgBits >>= 8;
-  *addLength++ = msgBits & 0xFF; msgBits >>= 8;
-  *addLength++ = msgBits & 0xFF; msgBits >>= 8;
-  *addLength++ = msgBits & 0xFF; msgBits >>= 8;
-  *addLength++ = msgBits & 0xFF; msgBits >>= 8;
-  *addLength++ = msgBits & 0xFF; msgBits >>= 8;
-  *addLength++ = msgBits & 0xFF; msgBits >>= 8;
-  *addLength++ = msgBits & 0xFF;
-
-  // process blocks
-  processBlock(m_buffer);
-  // flowed over into a second block ?
-  if (paddedLength > BlockSize)
-    processBlock(extra);
-}
-
-
-/// return latest hash as 32 hex characters
-std::string MD5::getHash()
-{
-  // compute hash (as raw bytes)
-  unsigned char rawHash[HashBytes];
-  getHash(rawHash);
-
-  // convert to hex string
-  std::string result;
-  result.reserve(2 * HashBytes);
-  for (int i = 0; i < HashBytes; i++)
-  {
-    static const char dec2hex[16+1] = "0123456789ABCDEF";
-    result += dec2hex[(rawHash[i] >> 4) & 15];
-    result += dec2hex[ rawHash[i]       & 15];
-  }
-
-  return result;
-}
-
-
-/// return latest hash as bytes
-void MD5::getHash(unsigned char buffer[MD5::HashBytes])
-{
-  // save old hash if buffer is partially filled
-  uint32_t oldHash[HashValues];
-  for (int i = 0; i < HashValues; i++)
-    oldHash[i] = m_hash[i];
-
-  // process remaining bytes
-  processBuffer();
-
-  unsigned char* current = buffer;
-  for (int i = 0; i < HashValues; i++)
-  {
-    *current++ =  m_hash[i]        & 0xFF;
-    *current++ = (m_hash[i] >>  8) & 0xFF;
-    *current++ = (m_hash[i] >> 16) & 0xFF;
-    *current++ = (m_hash[i] >> 24) & 0xFF;
-
-    // restore old hash
-    m_hash[i] = oldHash[i];
-  }
-}
-
-
-/// compute MD5 of a memory block
-std::string MD5::operator()(const void* data, size_t numBytes)
-{
-  reset();
-  add(data, numBytes);
-  return getHash();
-}
-
-
-/// compute MD5 of a string, excluding final zero
-std::string MD5::operator()(const std::string& text)
-{
-  reset();
-  add(text.c_str(), text.size());
-  return getHash();
-}
-
-
-// warning to the namespace
+/*
+	Section: libzpaq
+*/
 
 
 namespace libzpaq {
@@ -1247,20 +391,13 @@ void Array<T>::resize(size_t sz, int ex) {
 
 
 
-
-
-
 //////////////////////////// SHA1 ////////////////////////////
 
 // For computing SHA-1 checksums
 class SHA1 {
 public:
-  void put(int c) {  // hash 1 byte
-    U32& r=w[U32(len)>>5&15];
-    r=(r<<8)|(c&255);
-    len+=8;
-    if ((U32(len)&511)==0) process();
-  }
+	void put(int c);
+
   void write(const char* buf, int64_t n); // hash buf[0..n-1]
   double size() const {return len/8;}     // size in bytes
   uint64_t usize() const {return len/8;}  // size in bytes
@@ -1273,9 +410,7 @@ private:
   U32 w[16];        // input buffer
   char hbuf[20];    // result
   void process();   // hash 1 block
-  
-	///uint64_t _wyp[4];
-
+	
 };
 
 //////////////////////////// SHA256 //////////////////////////
@@ -1903,63 +1038,72 @@ void allocx(U8* &p, int &n, int newsize) {
 // SHA1 code, see http://en.wikipedia.org/wiki/SHA-1
 
 // Start a new hash
-void SHA1::init() {
-  len=0;
-  h[0]=0x67452301;
-  h[1]=0xEFCDAB89;
-  h[2]=0x98BADCFE;
-  h[3]=0x10325476;
-  h[4]=0xC3D2E1F0;
-  memset(w, 0, sizeof(w));
+void SHA1::init() 
+{
+	len=0;
+	h[0]=0x67452301;
+	h[1]=0xEFCDAB89;
+	h[2]=0x98BADCFE;
+	h[3]=0x10325476;
+	h[4]=0xC3D2E1F0;
+	memset(w, 0, sizeof(w));
 }
 
+
+void SHA1::put(int c) 
+{ 	
+    U32& r=w[U32(len)>>5&15];
+    r=(r<<8)|(c&255);
+    len+=8;
+    if ((U32(len)&511)==0)
+		process();
+}
 // Return old result and start a new hash
-const char* SHA1::result() {
+const char* SHA1::result() 
+{
+	// pad and append length
+	const U64 s=len;
+	put(0x80);
+	while ((len&511)!=448)
+	put(0);
+	put(s>>56);
+	put(s>>48);
+	put(s>>40);
+	put(s>>32);
+	put(s>>24);
+	put(s>>16);
+	put(s>>8);
+	put(s);
 
-  // pad and append length
-  const U64 s=len;
-  put(0x80);
-  while ((len&511)!=448)
-    put(0);
-  put(s>>56);
-  put(s>>48);
-  put(s>>40);
-  put(s>>32);
-  put(s>>24);
-  put(s>>16);
-  put(s>>8);
-  put(s);
-
-  // copy h to hbuf
-  for (unsigned int i=0; i<5; ++i) {
-    hbuf[4*i]=h[i]>>24;
-    hbuf[4*i+1]=h[i]>>16;
-    hbuf[4*i+2]=h[i]>>8;
-    hbuf[4*i+3]=h[i];
-  }
-
-  // return hash prior to clearing state
-  init();
-  return hbuf;
+	// copy h to hbuf
+	for (unsigned int i=0; i<5; ++i) 
+	{
+		hbuf[4*i]=h[i]>>24;
+		hbuf[4*i+1]=h[i]>>16;
+		hbuf[4*i+2]=h[i]>>8;
+		hbuf[4*i+3]=h[i];
+	}
+	init();
+	return hbuf;
+	
 }
 
 // Hash buf[0..n-1]
-void SHA1::write(const char* buf, int64_t n) {
+void SHA1::write(const char* buf, int64_t n) 
+{
   const unsigned char* p=(const unsigned char*) buf;
   for (; n>0 && (U32(len)&511)!=0; --n) put(*p++);
   for (; n>=64; n-=64) {
     for (unsigned int i=0; i<16; ++i)
       w[i]=p[0]<<24|p[1]<<16|p[2]<<8|p[3], p+=4;
     len+=512;
-    process();
+	process();
   }
   for (; n>0; --n) put(*p++);
 }
 
 // Hash 1 block of 64 bytes
 void SHA1::process() {
-	
-
   U32 a=h[0], b=h[1], c=h[2], d=h[3], e=h[4];
   static const U32 k[4]={0x5A827999, 0x6ED9EBA1, 0x8F1BBCDC, 0xCA62C1D6};
   #define f(a,b,c,d,e,i) \
@@ -7886,16 +7030,8 @@ sort_typeBstar(const unsigned char *T, int *SA,
                int *bucket_A, int *bucket_B,
                int n) {
   int *PAb, *ISAb, *buf;
-#ifdef _OPENMP
-  int *curbuf;
-  int l;
-#endif
   int i, j, k, t, m, bufsize;
   int c0, c1;
-#ifdef _OPENMP
-  int d0, d1;
-  int tmp;
-#endif
 
   /* Initialize bucket arrays. */
   for(i = 0; i < BUCKET_A_SIZE; ++i) { bucket_A[i] = 0; }
@@ -7947,36 +7083,6 @@ note:
     SA[--BUCKET_BSTAR(c0, c1)] = m - 1;
 
     /* Sort the type B* substrings using sssort. */
-#ifdef _OPENMP
-    tmp = omp_get_max_threads();
-    buf = SA + m, bufsize = (n - (2 * m)) / tmp;
-    c0 = ALPHABET_SIZE - 2, c1 = ALPHABET_SIZE - 1, j = m;
-#pragma omp parallel default(shared) private(curbuf, k, l, d0, d1, tmp)
-    {
-      tmp = omp_get_thread_num();
-      curbuf = buf + tmp * bufsize;
-      k = 0;
-      for(;;) {
-        #pragma omp critical(sssort_lock)
-        {
-          if(0 < (l = j)) {
-            d0 = c0, d1 = c1;
-            do {
-              k = BUCKET_BSTAR(d0, d1);
-              if(--d1 <= d0) {
-                d1 = ALPHABET_SIZE - 1;
-                if(--d0 < 0) { break; }
-              }
-            } while(((l - k) <= 1) && (0 < (l = k)));
-            c0 = d0, c1 = d1, j = k;
-          }
-        }
-        if(l == 0) { break; }
-        sssort(T, PAb, SA + k, SA + l,
-               curbuf, bufsize, 2, n, *(SA + k) == (m - 1));
-      }
-    }
-#else
     buf = SA + m, bufsize = n - (2 * m);
     for(c0 = ALPHABET_SIZE - 2, j = m; 0 < j; --c0) {
       for(c1 = ALPHABET_SIZE - 1; c0 < c1; j = i, --c1) {
@@ -7987,7 +7093,6 @@ note:
         }
       }
     }
-#endif
 
     /* Compute ranks of type B* substrings. */
     for(i = m - 1; 0 <= i; --i) {
@@ -9569,8 +8674,6 @@ struct	hash_check
 };
 typedef map<string, hash_check> MAPPACHECK;
 
-MAPPACHECK	g_mychecks;
-	
 
 enum ealgoritmi		{ ALGO_SHA1,ALGO_CRC32C,ALGO_CRC32,ALGO_XXH3,ALGO_SHA256,ALGO_WYHASH,ALGO_XXHASH64,ALGO_BLAKE3,ALGO_WHIRLPOOL,ALGO_MD5,ALGO_SHA3,ALGO_LAST };
 typedef std::map<int,std::string> algoritmi;
@@ -9592,6 +8695,7 @@ const algoritmi::value_type rawData[] =
 const int numElems = sizeof rawData / sizeof rawData[0];
 algoritmi myalgoritmi(rawData, rawData + numElems);
 
+
 ////// calculate CRC32 by blocks and not by file. Need to sort before combine
 ////// list of CRC32 for every file  
 struct s_crc32block
@@ -9600,92 +8704,1414 @@ struct s_crc32block
 	uint64_t crc32start;
 	uint64_t crc32size;
 	uint32_t crc32;
-	unsigned char sha1[20];  // fragment hash
-	char sha1hex[40];
-	s_crc32block(): crc32start(0),crc32size(0),crc32(0) {memset(sha1,0,sizeof(sha1));memset(sha1hex,0,sizeof(sha1hex));}
+	s_crc32block(): crc32start(0),crc32size(0),crc32(0) {}
+};
+
+/// Global variables
+/// not in Jidac for pthread that does not like class and methods
+
+pthread_mutex_t g_mylock = PTHREAD_MUTEX_INITIALIZER;
+vector<s_crc32block> 	g_crc32;
+vector<uint64_t> 		g_arraybytescanned;
+vector<uint64_t> 		g_arrayfilescanned;
+string 	g_copy;
+string 	g_freeze;
+string 	g_exec_error;
+string 	g_exec_ok;
+string 	g_exec_text;
+string 	g_exec;
+string 	g_output;
+string 	g_sfx;
+string 	g_sfxto;
+string 	g_sfxnot;
+string 	g_sfxonly;
+string 	g_sfxuntil;
+bool 	g_sfxflagall;
+bool  	g_sfxflagforce;
+string 	g_archive; /// archive writted by add
+FILE* 	g_output_handle;
+int64_t g_robocopy_check_sorgente;
+int64_t g_robocopy_check_destinazione;
+int64_t g_start			=0;  	// set to mtime() at start of main()
+int64_t g_dimensione	=0;
+int64_t g_scritti		=0;// note: not thread safe, but who care?
+int64_t g_zerotime		=0;
+int64_t g_bytescanned	=0;
+int64_t g_filescanned	=0;
+int64_t g_worked		=0;
+
+uint64_t minsize;
+uint64_t maxsize;
+bool 	flagdonotforcexls;
+bool 	flagfilelist;
+bool 	flag715;
+bool 	flagzero;
+bool 	flagforcezfs;
+bool 	flagdebug;
+bool 	flagnoeta;
+bool 	flagpakka;
+bool 	flagvss;
+bool 	flagverbose;
+bool 	flagverify;
+bool 	flagkill;
+bool 	flagutf;
+bool 	flagflat;
+bool 	flagparanoid;
+bool 	flagfix255;
+bool 	flagfixeml;
+bool 	flagbarraod;
+bool 	flagbarraon;
+bool 	flagbarraos;
+bool 	flagcrc32c;
+bool 	flagsha1;
+bool 	flagxxh3;
+bool 	flagcrc32;
+bool 	flagsha256;
+bool 	flagwyhash; // future
+bool 	flagxxhash64;
+bool 	flagblake3;
+bool 	flagwhirlpool;
+bool 	flagmd5;
+bool 	flagsha3;
+bool 	flagmm;
+bool 	flagappend;
+bool 	flaghw;
+
+int 	g_franzotype; 
+string 	g_optional;
+
+MAPPACHECK	g_mychecks;
+
+
+/*
+	Section: hashers
+*/
+
+string	binarytohex(const unsigned char* i_risultato,const int i_lunghezza)
+{
+	/// slow, and dirty
+	string risultato="";
+	char myhex[4];
+	
+	if (i_risultato!=NULL)
+		if (i_lunghezza>0)
+			for (int j=0;j<i_lunghezza;j++)
+			{
+				sprintf(myhex,"%02X", (unsigned char)i_risultato[j]);
+				risultato.push_back(myhex[0]);
+				risultato.push_back(myhex[1]);
+			}
+	return risultato;
+}
+
+
+string decodefranzoffset(int franzotype)
+{
+	if (franzotype==FRANZO_NONE)
+		return "NOTHING (LIKE 7.15)";
+	if (franzotype==FRANZO_CRC_32) /// store only CRC-32
+		return "CRC-32";
+	if (franzotype==FRANZO_XXHASH64)
+		return "XXHASH64+CRC-32";
+	if (franzotype==FRANZO_SHA_1)
+		return "SHA-1+CRC-32";
+	if (franzotype==FRANZO_SHA_256)
+		return "SHA-256+CRC-32";
+	if (franzotype==FRANZO_XXH3)
+		return "XXH3+CRC-32";
+	if (franzotype==FRANZO_BLAKE3)
+		return "BLAKE3+CRC-32";
+	if (franzotype==FRANZO_SHA3)
+		return "SHA-3+CRC-32";
+	if (franzotype==FRANZO_MD5)
+		return "MD5+CRC-32";
+/*
+	string temp="16839: franzotype strange "+franzotype;
+	perror(temp.c_str());
+	*/
+	return "BYPASSWARNING";
+}
+
+string mygetalgo()
+{
+	
+	if (flagblake3)
+		return "BLAKE3";
+	else
+	if (flagxxhash64)
+		return "XXHASH64";
+	else
+	if (flagwyhash)
+		return "WYHASH";
+	else
+	if (flagcrc32)
+		return "CRC-32";
+	else
+	if (flagcrc32c)
+		return "CRC-32C";
+	else
+	if (flagxxh3)
+		return "XXH3";
+	else
+	if (flagsha256)
+		return "SHA-256";
+	else
+	if (flagwhirlpool)
+		return "WHIRLPOOL";
+	else
+	if (flagmd5)
+		return "MD5";
+	else
+	if (flagsha3)
+		return "SHA-3";
+	else
+		return "SHA-1";
+}
+int flag2algo()
+{
+	if (flagblake3)
+		return ALGO_BLAKE3;
+	else
+	if (flagxxhash64)
+		return ALGO_XXHASH64;
+	else
+	if (flagwyhash)
+		return ALGO_WYHASH;
+	else
+	if (flagwhirlpool)
+		return ALGO_WHIRLPOOL;
+	else
+	if (flagmd5)
+		return ALGO_MD5;
+	else
+	if (flagsha3)
+		return ALGO_SHA3;
+	else
+	if (flagcrc32)
+		return ALGO_CRC32;
+	else
+	if (flagcrc32c)
+		return ALGO_CRC32C;
+	else
+	if (flagxxh3)
+		return ALGO_XXH3;
+	else
+	if (flagsha256)
+		return ALGO_SHA256;
+	else
+		return ALGO_SHA1;
+}
+
+/*
+	This implementation is a minor reworked of
+	https://github.com/System-Glitch/SHA256
+	Writing style very similar to mine, so it's no surprise that I liked it.
+	
+	Speed test against libzpaq (on my PC) just about 2% faster
+*/
+
+/*macos*/
+static uint32_t Kappa[] = {
+		0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,
+		0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,
+		0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,
+		0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,
+		0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,
+		0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,
+		0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,
+		0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,
+		0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,
+		0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,
+		0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,
+		0xd192e819,0xd6990624,0xf40e3585,0x106aa070,
+		0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,
+		0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,
+		0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,
+		0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2
+	};
+
+class franzSHA256 {
+
+public:
+	franzSHA256();
+	void update(const uint8_t * data, size_t length);
+	std::string gethex();
+
+private:
+	uint8_t  m_data[64];
+	uint32_t m_blocklen;
+	uint64_t m_bitlen;
+	uint32_t m_state[8]; //A, B, C, D, E, F, G, H
+
+
+	static uint32_t rotr(uint32_t x, uint32_t n);
+	static uint32_t choose(uint32_t e, uint32_t f, uint32_t g);
+	static uint32_t majority(uint32_t a, uint32_t b, uint32_t c);
+	static uint32_t sig0(uint32_t x);
+	static uint32_t sig1(uint32_t x);
+	void transform();
+	void pad();
+	void revert(uint8_t * hash);
+};
+
+franzSHA256::franzSHA256(): m_blocklen(0), m_bitlen(0) {
+	m_state[0] = 0x6a09e667;
+	m_state[1] = 0xbb67ae85;
+	m_state[2] = 0x3c6ef372;
+	m_state[3] = 0xa54ff53a;
+	m_state[4] = 0x510e527f;
+	m_state[5] = 0x9b05688c;
+	m_state[6] = 0x1f83d9ab;
+	m_state[7] = 0x5be0cd19;
+}
+
+void franzSHA256::update(const uint8_t * data, size_t length) {
+	for (size_t i = 0 ; i < length ; i++) {
+		m_data[m_blocklen++] = data[i];
+		if (m_blocklen == 64) {
+			transform();
+
+			// End of the block
+			m_bitlen += 512;
+			m_blocklen = 0;
+		}
+	}
+}
+
+uint32_t franzSHA256::rotr(uint32_t x, uint32_t n) {
+	return (x >> n) | (x << (32 - n));
+}
+
+uint32_t franzSHA256::choose(uint32_t e, uint32_t f, uint32_t g) {
+	return (e & f) ^ (~e & g);
+}
+
+uint32_t franzSHA256::majority(uint32_t a, uint32_t b, uint32_t c) {
+	return (a & (b | c)) | (b & c);
+}
+
+uint32_t franzSHA256::sig0(uint32_t x) {
+	return franzSHA256::rotr(x, 7) ^ franzSHA256::rotr(x, 18) ^ (x >> 3);
+}
+
+uint32_t franzSHA256::sig1(uint32_t x) {
+	return franzSHA256::rotr(x, 17) ^ franzSHA256::rotr(x, 19) ^ (x >> 10);
+}
+
+void franzSHA256::transform() {
+	uint32_t maj, xorA, ch, xorE, sum, newA, newE, m[64];
+	uint32_t state[8];
+
+	for (uint8_t i = 0, j = 0; i < 16; i++, j += 4) { // Split data in 32 bit blocks for the 16 first words
+		m[i] = (m_data[j] << 24) | (m_data[j + 1] << 16) | (m_data[j + 2] << 8) | (m_data[j + 3]);
+	}
+
+	for (uint8_t k = 16 ; k < 64; k++) { // Remaining 48 blocks
+		m[k] = franzSHA256::sig1(m[k - 2]) + m[k - 7] + franzSHA256::sig0(m[k - 15]) + m[k - 16];
+	}
+
+	for(uint8_t i = 0 ; i < 8 ; i++) {
+		state[i] = m_state[i];
+	}
+
+	for (uint8_t i = 0; i < 64; i++) {
+		maj   = franzSHA256::majority(state[0], state[1], state[2]);
+		xorA  = franzSHA256::rotr(state[0], 2) ^ franzSHA256::rotr(state[0], 13) ^ franzSHA256::rotr(state[0], 22);
+
+		ch = choose(state[4], state[5], state[6]);
+
+		xorE  = franzSHA256::rotr(state[4], 6) ^ franzSHA256::rotr(state[4], 11) ^ franzSHA256::rotr(state[4], 25);
+
+		sum  = m[i] + Kappa[i] + state[7] + ch + xorE;
+		newA = xorA + maj + sum;
+		newE = state[3] + sum;
+
+		state[7] = state[6];
+		state[6] = state[5];
+		state[5] = state[4];
+		state[4] = newE;
+		state[3] = state[2];
+		state[2] = state[1];
+		state[1] = state[0];
+		state[0] = newA;
+	}
+
+	for(uint8_t i = 0 ; i < 8 ; i++) {
+		m_state[i] += state[i];
+	}
+}
+
+void franzSHA256::pad() 
+{
+
+	uint64_t i = m_blocklen;
+	uint8_t end = m_blocklen < 56 ? 56 : 64;
+
+	m_data[i++] = 0x80; // Append a bit 1
+	while (i < end) {
+		m_data[i++] = 0x00; // Pad with zeros
+	}
+
+	if(m_blocklen >= 56) {
+		transform();
+		memset(m_data, 0, 56);
+	}
+
+	// Append to the padding the total message's length in bits and transform.
+	m_bitlen += m_blocklen * 8;
+	m_data[63] = m_bitlen;
+	m_data[62] = m_bitlen >> 8;
+	m_data[61] = m_bitlen >> 16;
+	m_data[60] = m_bitlen >> 24;
+	m_data[59] = m_bitlen >> 32;
+	m_data[58] = m_bitlen >> 40;
+	m_data[57] = m_bitlen >> 48;
+	m_data[56] = m_bitlen >> 56;
+	transform();
+}
+
+void franzSHA256::revert(uint8_t * hash) 
+{
+	// SHA uses big endian byte ordering
+	// Revert all bytes
+	for (uint8_t i = 0 ; i < 4 ; i++) {
+		for(uint8_t j = 0 ; j < 8 ; j++) {
+			hash[i + (j * 4)] = (m_state[j] >> (24 - i * 8)) & 0x000000ff;
+		}
+	}
+}
+
+std::string franzSHA256::gethex()
+{
+/// less include, smaller executable. Dirty, but quick and small
+	uint8_t * hash = new uint8_t[32];
+	pad();
+	revert(hash);
+	string risultato=binarytohex((const unsigned char*)hash,32);
+	delete[] hash;
+	return risultato;
+}
+
+
+
+
+// //////////////////////////////////////////////////////////
+// sha3.h
+// Copyright (c) 2014,2015 Stephan Brumme. All rights reserved.
+// see http://create.stephan-brumme.com/disclaimer.html
+//
+
+class SHA3
+{
+public:
+  enum Bits { Bits224 = 224, Bits256 = 256, Bits384 = 384, Bits512 = 512 };
+  explicit SHA3(Bits bits = Bits256);
+  void add(const void* data, size_t numBytes);
+  std::string getHash();
+  void reset();
+
+private:
+  void processBlock(const void* data);
+  void processBuffer();
+
+  /// 1600 bits, stored as 25x64 bit, BlockSize is no more than 1152 bits (Keccak224)
+  enum { StateSize    = 1600 / (8 * 8),
+         MaxBlockSize =  200 - 2 * (224 / 8) };
+
+  /// hash
+  uint64_t m_hash[StateSize];
+  /// size of processed data in bytes
+  uint64_t m_numBytes;
+  /// block size (less or equal to MaxBlockSize)
+  size_t   m_blockSize;
+  /// valid bytes in m_buffer
+  size_t   m_bufferSize;
+  /// bytes not processed yet
+  uint8_t  m_buffer[MaxBlockSize];
+  /// variant
+  Bits     m_bits;
+};
+
+SHA3::SHA3(Bits bits)
+: m_blockSize(200 - 2 * (bits / 8)),
+  m_bits(bits)
+{
+  reset();
+}
+void SHA3::reset()
+{
+  for (size_t i = 0; i < StateSize; i++)
+    m_hash[i] = 0;
+
+  m_numBytes   = 0;
+  m_bufferSize = 0;
+}
+
+namespace
+{
+  const unsigned int Rounds = 24;
+  const uint64_t XorMasks[Rounds] =
+  {
+    0x0000000000000001ULL, 0x0000000000008082ULL, 0x800000000000808aULL,
+    0x8000000080008000ULL, 0x000000000000808bULL, 0x0000000080000001ULL,
+    0x8000000080008081ULL, 0x8000000000008009ULL, 0x000000000000008aULL,
+    0x0000000000000088ULL, 0x0000000080008009ULL, 0x000000008000000aULL,
+    0x000000008000808bULL, 0x800000000000008bULL, 0x8000000000008089ULL,
+    0x8000000000008003ULL, 0x8000000000008002ULL, 0x8000000000000080ULL,
+    0x000000000000800aULL, 0x800000008000000aULL, 0x8000000080008081ULL,
+    0x8000000000008080ULL, 0x0000000080000001ULL, 0x8000000080008008ULL
+  };
+
+  inline uint64_t rotateLeft(uint64_t x, uint8_t numBits)
+  {
+    return (x << numBits) | (x >> (64 - numBits));
+  }
+
+  /// convert litte vs big endian
+  inline uint64_t swap(uint64_t x)
+  {
+#if defined(__GNUC__) || defined(__clang__)
+    return __builtin_bswap64(x);
+#endif
+#ifdef _MSC_VER
+    return _byteswap_uint64(x);
+#endif
+
+    return  (x >> 56) |
+           ((x >> 40) & 0x000000000000FF00ULL) |
+           ((x >> 24) & 0x0000000000FF0000ULL) |
+           ((x >>  8) & 0x00000000FF000000ULL) |
+           ((x <<  8) & 0x000000FF00000000ULL) |
+           ((x << 24) & 0x0000FF0000000000ULL) |
+           ((x << 40) & 0x00FF000000000000ULL) |
+            (x << 56);
+  }
+  unsigned int mod5(unsigned int x)
+  {
+    if (x < 5)
+      return x;
+
+    return x - 5;
+  }
+}
+
+
+void SHA3::processBlock(const void* data)
+{
+#if defined(__BYTE_ORDER) && (__BYTE_ORDER != 0) && (__BYTE_ORDER == __BIG_ENDIAN)
+#define LITTLEENDIAN(x) swap(x)
+#else
+#define LITTLEENDIAN(x) (x)
+#endif
+
+  const uint64_t* data64 = (const uint64_t*) data;
+  for (unsigned int i = 0; i < m_blockSize / 8; i++)
+    m_hash[i] ^= LITTLEENDIAN(data64[i]);
+
+  for (unsigned int round = 0; round < Rounds; round++)
+  {
+    uint64_t coefficients[5];
+    for (unsigned int i = 0; i < 5; i++)
+      coefficients[i] = m_hash[i] ^ m_hash[i + 5] ^ m_hash[i + 10] ^ m_hash[i + 15] ^ m_hash[i + 20];
+
+    for (unsigned int i = 0; i < 5; i++)
+    {
+      uint64_t one = coefficients[mod5(i + 4)] ^ rotateLeft(coefficients[mod5(i + 1)], 1);
+      m_hash[i     ] ^= one;
+      m_hash[i +  5] ^= one;
+      m_hash[i + 10] ^= one;
+      m_hash[i + 15] ^= one;
+      m_hash[i + 20] ^= one;
+    }
+
+    uint64_t one;
+
+    uint64_t last = m_hash[1];
+    one = m_hash[10]; m_hash[10] = rotateLeft(last,  1); last = one;
+    one = m_hash[ 7]; m_hash[ 7] = rotateLeft(last,  3); last = one;
+    one = m_hash[11]; m_hash[11] = rotateLeft(last,  6); last = one;
+    one = m_hash[17]; m_hash[17] = rotateLeft(last, 10); last = one;
+    one = m_hash[18]; m_hash[18] = rotateLeft(last, 15); last = one;
+    one = m_hash[ 3]; m_hash[ 3] = rotateLeft(last, 21); last = one;
+    one = m_hash[ 5]; m_hash[ 5] = rotateLeft(last, 28); last = one;
+    one = m_hash[16]; m_hash[16] = rotateLeft(last, 36); last = one;
+    one = m_hash[ 8]; m_hash[ 8] = rotateLeft(last, 45); last = one;
+    one = m_hash[21]; m_hash[21] = rotateLeft(last, 55); last = one;
+    one = m_hash[24]; m_hash[24] = rotateLeft(last,  2); last = one;
+    one = m_hash[ 4]; m_hash[ 4] = rotateLeft(last, 14); last = one;
+    one = m_hash[15]; m_hash[15] = rotateLeft(last, 27); last = one;
+    one = m_hash[23]; m_hash[23] = rotateLeft(last, 41); last = one;
+    one = m_hash[19]; m_hash[19] = rotateLeft(last, 56); last = one;
+    one = m_hash[13]; m_hash[13] = rotateLeft(last,  8); last = one;
+    one = m_hash[12]; m_hash[12] = rotateLeft(last, 25); last = one;
+    one = m_hash[ 2]; m_hash[ 2] = rotateLeft(last, 43); last = one;
+    one = m_hash[20]; m_hash[20] = rotateLeft(last, 62); last = one;
+    one = m_hash[14]; m_hash[14] = rotateLeft(last, 18); last = one;
+    one = m_hash[22]; m_hash[22] = rotateLeft(last, 39); last = one;
+    one = m_hash[ 9]; m_hash[ 9] = rotateLeft(last, 61); last = one;
+    one = m_hash[ 6]; m_hash[ 6] = rotateLeft(last, 20); last = one;
+                      m_hash[ 1] = rotateLeft(last, 44);
+
+    for (unsigned int j = 0; j < StateSize; j += 5)
+    {
+      uint64_t one = m_hash[j];
+      uint64_t two = m_hash[j + 1];
+
+      m_hash[j]     ^= m_hash[j + 2] & ~two;
+      m_hash[j + 1] ^= m_hash[j + 3] & ~m_hash[j + 2];
+      m_hash[j + 2] ^= m_hash[j + 4] & ~m_hash[j + 3];
+      m_hash[j + 3] ^=      one      & ~m_hash[j + 4];
+      m_hash[j + 4] ^=      two      & ~one;
+    }
+
+    m_hash[0] ^= XorMasks[round];
+  }
+}
+
+
+void SHA3::add(const void* data, size_t numBytes)
+{
+  const uint8_t* current = (const uint8_t*) data;
+
+  // copy data to buffer
+  if (m_bufferSize > 0)
+    while (numBytes > 0 && m_bufferSize < m_blockSize)
+    {
+      m_buffer[m_bufferSize++] = *current++;
+      numBytes--;
+    }
+
+  // full buffer
+  if (m_bufferSize == m_blockSize)
+  {
+    processBlock((void*)m_buffer);
+    m_numBytes  += m_blockSize;
+    m_bufferSize = 0;
+  }
+
+  // no more data ?
+  if (numBytes == 0)
+    return;
+
+  // process full blocks
+  while (numBytes >= m_blockSize)
+  {
+    processBlock(current);
+    current    += m_blockSize;
+    m_numBytes += m_blockSize;
+    numBytes   -= m_blockSize;
+  }
+
+  // keep remaining bytes in buffer
+  while (numBytes > 0)
+  {
+    m_buffer[m_bufferSize++] = *current++;
+    numBytes--;
+  }
+}
+
+void SHA3::processBuffer()
+{
+  // add padding
+  size_t offset = m_bufferSize;
+  // add a "1" byte
+  m_buffer[offset++] = 0x06;
+  // fill with zeros
+  while (offset < m_blockSize)
+    m_buffer[offset++] = 0;
+
+  // and add a single set bit
+  m_buffer[offset - 1] |= 0x80;
+
+  processBlock(m_buffer);
+}
+
+std::string SHA3::getHash()
+{
+  // save hash state
+  uint64_t oldHash[StateSize];
+  for (unsigned int i = 0; i < StateSize; i++)
+    oldHash[i] = m_hash[i];
+
+  processBuffer();
+
+  static const char dec2hex[16 + 1] = "0123456789ABCDEF";
+
+  // number of significant elements in hash (uint64_t)
+  unsigned int hashLength = m_bits / 64;
+
+  std::string result;
+  result.reserve(m_bits / 4);
+  for (unsigned int i = 0; i < hashLength; i++)
+    for (unsigned int j = 0; j < 8; j++) // 64 bits => 8 bytes
+    {
+      // convert a byte to hex
+      unsigned char oneByte = (unsigned char) (m_hash[i] >> (8 * j));
+      result += dec2hex[oneByte >> 4];
+      result += dec2hex[oneByte & 15];
+    }
+
+  // SHA3-224's last entry in m_hash provides only 32 bits instead of 64 bits
+  unsigned int remainder = m_bits - hashLength * 64;
+  unsigned int processed = 0;
+  while (processed < remainder)
+  {
+    // convert a byte to hex
+    unsigned char oneByte = (unsigned char) (m_hash[hashLength] >> processed);
+    result += dec2hex[oneByte >> 4];
+    result += dec2hex[oneByte & 15];
+
+    processed += 8;
+  }
+
+  // restore state
+  for (unsigned int i = 0; i < StateSize; i++)
+    m_hash[i] = oldHash[i];
+
+  return result;
+}
+
+
+/*
+
+Hardware-accelerated calc of SHA-1, 
+with something like
+
+https://github.com/nidud/asmc
+asmc64.exe sha1ugo.asm 
+g++ -O3 -s  zpaqfranz.cpp -o zpaqfranz blake3_windows_gnu.s sha1ugo.obj 
+
+In fact does not change very much against original SHA-1 implementation:
+about two time faster (on AMD Ryzen) BUT higher latency, and do not scale very well
+in multithread
+Short version: for now not worth the effort
+
+
+#define MY_ALIGN(n) __attribute__ ((aligned(n)))
+#define MY_NO_INLINE __attribute__((noinline))
+#define MY_FAST_CALL
+
+typedef unsigned char 			Byte;
+typedef short 					Int16;
+typedef int 					Int32;
+typedef long long int 			Int64;
+typedef unsigned short 			UInt16;
+typedef unsigned int 			UInt32;
+typedef unsigned long long int 	UInt64;
+typedef int 					BoolInt;
+
+
+#define SHA1_NUM_BLOCK_WORDS  16
+#define SHA1_NUM_DIGEST_WORDS  5
+#define SHA1_BLOCK_SIZE   (SHA1_NUM_BLOCK_WORDS * 4)
+#define SHA1_DIGEST_SIZE  (SHA1_NUM_DIGEST_WORDS * 4)
+typedef void (MY_FAST_CALL *SHA1_FUNC_UPDATE_BLOCKS)(UInt32 state[5], const Byte *data, size_t numBlocks);
+
+typedef struct
+{
+  SHA1_FUNC_UPDATE_BLOCKS func_UpdateBlocks;
+  UInt64 count;
+  UInt64 __pad_2[2];
+  UInt32 state[SHA1_NUM_DIGEST_WORDS];
+  UInt32 __pad_3[3];
+  Byte buffer[SHA1_BLOCK_SIZE];
+} CSha1;
+
+void Sha1Prepare(bool i_flaghardware=false);
+
+void Sha1_InitState(CSha1 *p);
+void Sha1_Init(CSha1 *p);
+void Sha1_Update(CSha1 *p, const Byte *data, size_t size);
+void Sha1_Final			(CSha1 *p, Byte *digest);
+void Sha1_PrepareBlock(const CSha1 *p, Byte *block, unsigned size);
+void Sha1_GetBlockDigest(const CSha1 *p, const Byte *data, Byte *destDigest);
+
+void MY_FAST_CALL Sha1_UpdateBlocks(UInt32 state[5], const Byte *data, size_t numBlocks);
+
+extern "C" void MY_FAST_CALL Sha1_UpdateBlocks_HW(UInt32 state[5], const Byte *data, size_t numBlocks);
+
+static SHA1_FUNC_UPDATE_BLOCKS g_FUNC_UPDATE_BLOCKS = Sha1_UpdateBlocks;
+static SHA1_FUNC_UPDATE_BLOCKS g_FUNC_UPDATE_BLOCKS_HW;
+
+#define rotlFixed(x, n) (((x) << (n)) | ((x) >> (32 - (n))))
+#define rotrFixed(x, n) (((x) >> (n)) | ((x) << (32 - (n))))
+
+#define STEP_PRE  20
+#define STEP_MAIN 20
+#define kNumW 16
+#define w(i) W[(i)&15]
+
+#define w0(i) (W[i] = GetBe32(data + (size_t)(i) * 4))
+#define w1(i) (w(i) = rotlFixed(w((size_t)(i)-3) ^ w((size_t)(i)-8) ^ w((size_t)(i)-14) ^ w((size_t)(i)-16), 1))
+
+#define sha1_f0(x,y,z)  ( 0x5a827999 + (z^(x&(y^z))) )
+#define sha1_f1(x,y,z)  ( 0x6ed9eba1 + (x^y^z) )
+#define sha1_f2(x,y,z)  ( 0x8f1bbcdc + ((x&y)|(z&(x|y))) )
+#define sha1_f3(x,y,z)  ( 0xca62c1d6 + (x^y^z) )
+
+#define T5(a,b,c,d,e, fx, ww) \
+    e += fx(b,c,d) + ww + rotlFixed(a, 5); \
+    b = rotlFixed(b, 30); \
+
+#define M5(i, fx, wx0, wx1) \
+    T5 ( a,b,c,d,e, fx, wx0((i)  ) ); \
+    T5 ( e,a,b,c,d, fx, wx1((i)+1) ); \
+    T5 ( d,e,a,b,c, fx, wx1((i)+2) ); \
+    T5 ( c,d,e,a,b, fx, wx1((i)+3) ); \
+    T5 ( b,c,d,e,a, fx, wx1((i)+4) ); \
+
+#define R5(i, fx, wx) \
+    M5 ( i, fx, wx, wx) \
+
+
+#if STEP_PRE > 5
+
+  #define R20_START \
+    R5 (  0, sha1_f0, w0); \
+    R5 (  5, sha1_f0, w0); \
+    R5 ( 10, sha1_f0, w0); \
+    M5 ( 15, sha1_f0, w0, w1); \
+  
+  #elif STEP_PRE == 5
+  
+  #define R20_START \
+    { size_t i; for (i = 0; i < 15; i += STEP_PRE) \
+      { R5(i, sha1_f0, w0); } } \
+    M5 ( 15, sha1_f0, w0, w1); \
+
+#else
+
+  #if STEP_PRE == 1
+    #define R_PRE R1
+  #elif STEP_PRE == 2
+    #define R_PRE R2
+  #elif STEP_PRE == 4
+    #define R_PRE R4
+  #endif
+
+  #define R20_START \
+    { size_t i; for (i = 0; i < 16; i += STEP_PRE) \
+      { R_PRE(i, sha1_f0, w0); } } \
+    R4 ( 16, sha1_f0, w1); \
+
+#endif
+
+#if STEP_MAIN > 5
+
+  #define R20(ii, fx) \
+    R5 ( (ii)     , fx, w1); \
+    R5 ( (ii) + 5 , fx, w1); \
+    R5 ( (ii) + 10, fx, w1); \
+    R5 ( (ii) + 15, fx, w1); \
+
+#else
+
+  #if STEP_MAIN == 1
+    #define R_MAIN R1
+  #elif STEP_MAIN == 2
+    #define R_MAIN R2
+  #elif STEP_MAIN == 4
+    #define R_MAIN R4
+  #elif STEP_MAIN == 5
+    #define R_MAIN R5
+  #endif
+
+  #define R20(ii, fx)  \
+    { size_t i; for (i = (ii); i < (ii) + 20; i += STEP_MAIN) \
+      { R_MAIN(i, fx, w1); } } \
+
+#endif
+
+
+#define SetUi32(p, v) { *(UInt32 *)(void *)(p) = (v); }
+#define GetBe32(p) ( \
+    ((UInt32)((const Byte *)(p))[0] << 24) | \
+    ((UInt32)((const Byte *)(p))[1] << 16) | \
+    ((UInt32)((const Byte *)(p))[2] <<  8) | \
+             ((const Byte *)(p))[3] )
+#define SetBe32(p, v) { Byte *_ppp_ = (Byte *)(p); UInt32 _vvv_ = (v); \
+    _ppp_[0] = (Byte)(_vvv_ >> 24); \
+    _ppp_[1] = (Byte)(_vvv_ >> 16); \
+    _ppp_[2] = (Byte)(_vvv_ >> 8); \
+    _ppp_[3] = (Byte)_vvv_; }
+
+
+void Sha1_InitState(CSha1 *p)
+{
+	p->count = 0;
+	p->state[0] = 0x67452301;
+	p->state[1] = 0xEFCDAB89;
+	p->state[2] = 0x98BADCFE;
+	p->state[3] = 0x10325476;
+	p->state[4] = 0xC3D2E1F0;
+}
+
+void Sha1_Init(CSha1 *p)
+{
+	p->func_UpdateBlocks =     g_FUNC_UPDATE_BLOCKS;
+	Sha1_InitState(p);
+}
+
+
+MY_NO_INLINE
+void MY_FAST_CALL Sha1_UpdateBlocks(UInt32 state[5], const Byte *data, size_t numBlocks)
+{
+	UInt32 a, b, c, d, e;
+	UInt32 W[kNumW];
+	// if (numBlocks != 0x1264378347) return;
+	if (numBlocks==0)
+		return;
+
+	a = state[0];
+	b = state[1];
+	c = state[2];
+	d = state[3];
+	e = state[4];
+
+	do
+	{
+		#if STEP_PRE < 5 || STEP_MAIN < 5
+		UInt32 tmp;
+		#endif
+
+		R20_START
+		R20(20, sha1_f1);
+		R20(40, sha1_f2);
+		R20(60, sha1_f3);
+
+		a += state[0];
+		b += state[1];
+		c += state[2];
+		d += state[3];
+		e += state[4];
+
+		state[0] = a;
+		state[1] = b;
+		state[2] = c;
+		state[3] = d;
+		state[4] = e;
+
+		data += 64;
+	}
+	while (--numBlocks);
+}
+
+void Sha1_Update(CSha1 *p, const Byte *data, size_t size)
+{
+	if (size==0)
+		return;
+
+	unsigned pos = (unsigned)p->count & 0x3F;
+	unsigned num;
+
+	p->count += size;
+
+	num=64-pos;
+	if (num > size)
+	{
+		memcpy(p->buffer + pos, data, size);
+		return;
+	}
+
+	if (pos != 0)
+	{
+		size -= num;
+		memcpy(p->buffer + pos, data, num);
+		data += num;
+		p->func_UpdateBlocks(p->state, p->buffer, 1);
+	}
+
+	size_t numBlocks = size >> 6;
+	p->func_UpdateBlocks(p->state, data, numBlocks);
+	size &= 0x3F;
+	if (size==0)
+	  return;
+	data += (numBlocks << 6);
+	memcpy(p->buffer, data, size);
+}
+
+
+void Sha1_Final(CSha1 *p, Byte *digest)
+{
+	unsigned pos = (unsigned)p->count & 0x3F;
+  
+	p->buffer[pos++] = 0x80;
+
+	if (pos > (64 - 8))
+	{
+		while (pos != 64) 
+			p->buffer[pos++]=0; 
+		// memset(&p->buf.buffer[pos], 0, 64 - pos);
+		p->func_UpdateBlocks(p->state, p->buffer, 1);
+		pos = 0;
+	}
+
+	memset(&p->buffer[pos], 0, (64 - 8) - pos);
+  
+	UInt64 numBits = (p->count << 3);
+    SetBe32(p->buffer + 64 - 8, (UInt32)(numBits >> 32));
+    SetBe32(p->buffer + 64 - 4, (UInt32)(numBits));
+ 
+	p->func_UpdateBlocks(p->state, p->buffer, 1);
+
+	SetBe32(digest,      p->state[0]);
+	SetBe32(digest + 4,  p->state[1]);
+	SetBe32(digest + 8,  p->state[2]);
+	SetBe32(digest + 12, p->state[3]);
+	SetBe32(digest + 16, p->state[4]);
+	Sha1_InitState(p);
+}
+
+
+void Sha1_PrepareBlock(const CSha1 *p, Byte *block, unsigned size)
+{
+	const UInt64 numBits = (p->count + size) << 3;
+	SetBe32(&((UInt32 *)(void *)block)[SHA1_NUM_BLOCK_WORDS - 2], (UInt32)(numBits >> 32));
+	SetBe32(&((UInt32 *)(void *)block)[SHA1_NUM_BLOCK_WORDS - 1], (UInt32)(numBits));
+	// SetBe32((UInt32 *)(block + size), 0x80000000);
+	SetUi32((UInt32 *)(void *)(block + size), 0x80);
+	size += 4;
+	while (size != (SHA1_NUM_BLOCK_WORDS - 2) * 4)
+	{
+		*((UInt32 *)(void *)(block + size)) = 0;
+		size += 4;
+	}
+}
+
+void Sha1_GetBlockDigest(const CSha1 *p, const Byte *data, Byte *destDigest)
+{
+	MY_ALIGN (16)
+	UInt32 st[SHA1_NUM_DIGEST_WORDS];
+
+	st[0] = p->state[0];
+	st[1] = p->state[1];
+	st[2] = p->state[2];
+	st[3] = p->state[3];
+	st[4] = p->state[4];
+
+	p->func_UpdateBlocks(st, data, 1);
+
+	SetBe32(destDigest + 0    , st[0]);
+	SetBe32(destDigest + 1 * 4, st[1]);
+	SetBe32(destDigest + 2 * 4, st[2]);
+	SetBe32(destDigest + 3 * 4, st[3]);
+	SetBe32(destDigest + 4 * 4, st[4]);
+}
+
+
+void Sha1Prepare(bool i_flaghardware)
+{
+	SHA1_FUNC_UPDATE_BLOCKS f, f_hw;
+	f = Sha1_UpdateBlocks;
+	if (i_flaghardware)
+		f = f_hw = Sha1_UpdateBlocks_HW;
+	g_FUNC_UPDATE_BLOCKS    = f;
+	g_FUNC_UPDATE_BLOCKS_HW = f_hw;
+}
+
+*/
+
+
+
+// //////////////////////////////////////////////////////////
+// md5.h
+// Copyright (c) 2014 Stephan Brumme. All rights reserved.
+// see http://create.stephan-brumme.com/disclaimer.html
+//
+
+
+
+/** Usage:
+    MD5 md5;
+    while (more data available)
+      md5.add(pointer to fresh data, number of new bytes);
+    std::string myHash3 = md5.getHash();
+  */
+class MD5
+{
+public:
+  /// split into 64 byte blocks (=> 512 bits), hash is 16 bytes long
+  enum { BlockSize = 512 / 8, HashBytes = 16 };
+
+  MD5();
+
+  void add(const void* data, size_t numBytes);
+  std::string getHash();
+  void getHash(unsigned char buffer[HashBytes]);
+  void reset();
+
+private:
+  void processBlock(const void* data);
+  void processBuffer();
+  /// size of processed data in bytes
+  uint64_t m_numBytes;
+  /// valid bytes in m_buffer
+  size_t   m_bufferSize;
+  /// bytes not processed yet
+  uint8_t  m_buffer[BlockSize];
+
+  enum { HashValues = HashBytes / 4 };
+  /// hash, stored as integers
+  uint32_t m_hash[HashValues];
 };
 
 
-// Global variables
+
+/// same as reset()
+MD5::MD5()
+{
+  reset();
+}
 
 
-pthread_mutex_t g_mylock = PTHREAD_MUTEX_INITIALIZER;
-vector <s_crc32block> g_crc32;
-vector<uint64_t> g_arraybytescanned;
-vector<uint64_t> g_arrayfilescanned;
-string g_copy;
-string g_freeze;
-string g_exec_error;
-string g_exec_ok;
-string g_exec_text;
-string g_exec;
-string g_output;
-string g_sfx;
-string g_sfxto;
-string g_sfxnot;
-string g_sfxonly;
-string g_sfxuntil;
-bool 	g_sfxflagall;
-bool  	g_sfxflagforce;
-string g_archive; /// archive writted by add
-FILE* g_output_handle;
-int64_t g_robocopy_check_sorgente;
-int64_t g_robocopy_check_destinazione;
-int64_t global_start=0;  	// set to mtime() at start of main()
-int64_t g_dimensione=0;
-int64_t g_scritti=0;// note: not thread safe, but who care?
-int64_t g_zerotime=0;
-int64_t g_bytescanned=0;
-int64_t g_filescanned=0;
-int64_t g_worked=0;
+/// restart
+void MD5::reset()
+{
+  m_numBytes   = 0;
+  m_bufferSize = 0;
 
-/// not in Jidac for pthread
-uint64_t minsize;
-uint64_t maxsize;
-bool flagdonotforcexls;       // do not always include xls
-bool flagfilelist;
-bool flag715;
-bool flagzero;
-bool flagforcezfs;
-bool flagdebug;
-bool flagnoeta;
-bool flagpakka;
-bool flagvss;
-bool flagverbose;
-bool flagverify;
-bool flagkill;
-bool flagutf;
-bool flagflat;
-bool flagparanoid;
-bool flagfix255;
-bool flagfixeml;
-bool flagbarraod;
-bool flagbarraon;
-bool flagbarraos;
-bool flagcrc32c;
-bool flagsha1;
-bool flagxxh3;
-bool flagcrc32;
-bool flagsha256;
-bool flagwyhash; // future
-bool flagxxhash64;
-bool flagblake3;
-bool flagwhirlpool;
-bool flagmd5;
-bool flagsha3;
-bool flagmm;
-bool flagappend;
-/// out of ... because of struct  and XXH3 align
-int g_franzotype; // type of FRANZOFFSET. 0 = nothing, 1 CRC, 2 XXHASH64, 3 SHA1, 4 SHA256, 5 XXH3
-string g_optional;					// command optional
+  // according to RFC 1321
+  m_hash[0] = 0x67452301;
+  m_hash[1] = 0xefcdab89;
+  m_hash[2] = 0x98badcfe;
+  m_hash[3] = 0x10325476;
+}
+
+
+namespace
+{
+  // mix functions for processBlock()
+  inline uint32_t f1(uint32_t b, uint32_t c, uint32_t d)
+  {
+    return d ^ (b & (c ^ d)); // original: f = (b & c) | ((~b) & d);
+  }
+
+  inline uint32_t f2(uint32_t b, uint32_t c, uint32_t d)
+  {
+    return c ^ (d & (b ^ c)); // original: f = (b & d) | (c & (~d));
+  }
+
+  inline uint32_t f3(uint32_t b, uint32_t c, uint32_t d)
+  {
+    return b ^ c ^ d;
+  }
+
+  inline uint32_t f4(uint32_t b, uint32_t c, uint32_t d)
+  {
+    return c ^ (b | ~d);
+  }
+
+  inline uint32_t rotate(uint32_t a, uint32_t c)
+  {
+    return (a << c) | (a >> (32 - c));
+  }
+
+#if defined(__BYTE_ORDER) && (__BYTE_ORDER != 0) && (__BYTE_ORDER == __BIG_ENDIAN)
+  inline uint32_t swap(uint32_t x)
+  {
+#if defined(__GNUC__) || defined(__clang__)
+    return __builtin_bswap32(x);
+#endif
+#ifdef MSC_VER
+    return _byteswap_ulong(x);
+#endif
+
+    return (x >> 24) |
+          ((x >>  8) & 0x0000FF00) |
+          ((x <<  8) & 0x00FF0000) |
+           (x << 24);
+  }
+#endif
+}
+
+
+/// process 64 bytes
+void MD5::processBlock(const void* data)
+{
+  // get last hash
+  uint32_t a = m_hash[0];
+  uint32_t b = m_hash[1];
+  uint32_t c = m_hash[2];
+  uint32_t d = m_hash[3];
+
+  // data represented as 16x 32-bit words
+  const uint32_t* words = (uint32_t*) data;
+
+  // computations are little endian, swap data if necessary
+#if defined(__BYTE_ORDER) && (__BYTE_ORDER != 0) && (__BYTE_ORDER == __BIG_ENDIAN)
+#define LITTLEENDIAN(x) swap(x)
+#else
+#define LITTLEENDIAN(x) (x)
+#endif
+
+  // first round
+  uint32_t word0  = LITTLEENDIAN(words[ 0]);
+  a = rotate(a + f1(b,c,d) + word0  + 0xd76aa478,  7) + b;
+  uint32_t word1  = LITTLEENDIAN(words[ 1]);
+  d = rotate(d + f1(a,b,c) + word1  + 0xe8c7b756, 12) + a;
+  uint32_t word2  = LITTLEENDIAN(words[ 2]);
+  c = rotate(c + f1(d,a,b) + word2  + 0x242070db, 17) + d;
+  uint32_t word3  = LITTLEENDIAN(words[ 3]);
+  b = rotate(b + f1(c,d,a) + word3  + 0xc1bdceee, 22) + c;
+
+  uint32_t word4  = LITTLEENDIAN(words[ 4]);
+  a = rotate(a + f1(b,c,d) + word4  + 0xf57c0faf,  7) + b;
+  uint32_t word5  = LITTLEENDIAN(words[ 5]);
+  d = rotate(d + f1(a,b,c) + word5  + 0x4787c62a, 12) + a;
+  uint32_t word6  = LITTLEENDIAN(words[ 6]);
+  c = rotate(c + f1(d,a,b) + word6  + 0xa8304613, 17) + d;
+  uint32_t word7  = LITTLEENDIAN(words[ 7]);
+  b = rotate(b + f1(c,d,a) + word7  + 0xfd469501, 22) + c;
+
+  uint32_t word8  = LITTLEENDIAN(words[ 8]);
+  a = rotate(a + f1(b,c,d) + word8  + 0x698098d8,  7) + b;
+  uint32_t word9  = LITTLEENDIAN(words[ 9]);
+  d = rotate(d + f1(a,b,c) + word9  + 0x8b44f7af, 12) + a;
+  uint32_t word10 = LITTLEENDIAN(words[10]);
+  c = rotate(c + f1(d,a,b) + word10 + 0xffff5bb1, 17) + d;
+  uint32_t word11 = LITTLEENDIAN(words[11]);
+  b = rotate(b + f1(c,d,a) + word11 + 0x895cd7be, 22) + c;
+
+  uint32_t word12 = LITTLEENDIAN(words[12]);
+  a = rotate(a + f1(b,c,d) + word12 + 0x6b901122,  7) + b;
+  uint32_t word13 = LITTLEENDIAN(words[13]);
+  d = rotate(d + f1(a,b,c) + word13 + 0xfd987193, 12) + a;
+  uint32_t word14 = LITTLEENDIAN(words[14]);
+  c = rotate(c + f1(d,a,b) + word14 + 0xa679438e, 17) + d;
+  uint32_t word15 = LITTLEENDIAN(words[15]);
+  b = rotate(b + f1(c,d,a) + word15 + 0x49b40821, 22) + c;
+
+  // second round
+  a = rotate(a + f2(b,c,d) + word1  + 0xf61e2562,  5) + b;
+  d = rotate(d + f2(a,b,c) + word6  + 0xc040b340,  9) + a;
+  c = rotate(c + f2(d,a,b) + word11 + 0x265e5a51, 14) + d;
+  b = rotate(b + f2(c,d,a) + word0  + 0xe9b6c7aa, 20) + c;
+
+  a = rotate(a + f2(b,c,d) + word5  + 0xd62f105d,  5) + b;
+  d = rotate(d + f2(a,b,c) + word10 + 0x02441453,  9) + a;
+  c = rotate(c + f2(d,a,b) + word15 + 0xd8a1e681, 14) + d;
+  b = rotate(b + f2(c,d,a) + word4  + 0xe7d3fbc8, 20) + c;
+
+  a = rotate(a + f2(b,c,d) + word9  + 0x21e1cde6,  5) + b;
+  d = rotate(d + f2(a,b,c) + word14 + 0xc33707d6,  9) + a;
+  c = rotate(c + f2(d,a,b) + word3  + 0xf4d50d87, 14) + d;
+  b = rotate(b + f2(c,d,a) + word8  + 0x455a14ed, 20) + c;
+
+  a = rotate(a + f2(b,c,d) + word13 + 0xa9e3e905,  5) + b;
+  d = rotate(d + f2(a,b,c) + word2  + 0xfcefa3f8,  9) + a;
+  c = rotate(c + f2(d,a,b) + word7  + 0x676f02d9, 14) + d;
+  b = rotate(b + f2(c,d,a) + word12 + 0x8d2a4c8a, 20) + c;
+
+  // third round
+  a = rotate(a + f3(b,c,d) + word5  + 0xfffa3942,  4) + b;
+  d = rotate(d + f3(a,b,c) + word8  + 0x8771f681, 11) + a;
+  c = rotate(c + f3(d,a,b) + word11 + 0x6d9d6122, 16) + d;
+  b = rotate(b + f3(c,d,a) + word14 + 0xfde5380c, 23) + c;
+
+  a = rotate(a + f3(b,c,d) + word1  + 0xa4beea44,  4) + b;
+  d = rotate(d + f3(a,b,c) + word4  + 0x4bdecfa9, 11) + a;
+  c = rotate(c + f3(d,a,b) + word7  + 0xf6bb4b60, 16) + d;
+  b = rotate(b + f3(c,d,a) + word10 + 0xbebfbc70, 23) + c;
+
+  a = rotate(a + f3(b,c,d) + word13 + 0x289b7ec6,  4) + b;
+  d = rotate(d + f3(a,b,c) + word0  + 0xeaa127fa, 11) + a;
+  c = rotate(c + f3(d,a,b) + word3  + 0xd4ef3085, 16) + d;
+  b = rotate(b + f3(c,d,a) + word6  + 0x04881d05, 23) + c;
+
+  a = rotate(a + f3(b,c,d) + word9  + 0xd9d4d039,  4) + b;
+  d = rotate(d + f3(a,b,c) + word12 + 0xe6db99e5, 11) + a;
+  c = rotate(c + f3(d,a,b) + word15 + 0x1fa27cf8, 16) + d;
+  b = rotate(b + f3(c,d,a) + word2  + 0xc4ac5665, 23) + c;
+
+  // fourth round
+  a = rotate(a + f4(b,c,d) + word0  + 0xf4292244,  6) + b;
+  d = rotate(d + f4(a,b,c) + word7  + 0x432aff97, 10) + a;
+  c = rotate(c + f4(d,a,b) + word14 + 0xab9423a7, 15) + d;
+  b = rotate(b + f4(c,d,a) + word5  + 0xfc93a039, 21) + c;
+
+  a = rotate(a + f4(b,c,d) + word12 + 0x655b59c3,  6) + b;
+  d = rotate(d + f4(a,b,c) + word3  + 0x8f0ccc92, 10) + a;
+  c = rotate(c + f4(d,a,b) + word10 + 0xffeff47d, 15) + d;
+  b = rotate(b + f4(c,d,a) + word1  + 0x85845dd1, 21) + c;
+
+  a = rotate(a + f4(b,c,d) + word8  + 0x6fa87e4f,  6) + b;
+  d = rotate(d + f4(a,b,c) + word15 + 0xfe2ce6e0, 10) + a;
+  c = rotate(c + f4(d,a,b) + word6  + 0xa3014314, 15) + d;
+  b = rotate(b + f4(c,d,a) + word13 + 0x4e0811a1, 21) + c;
+
+  a = rotate(a + f4(b,c,d) + word4  + 0xf7537e82,  6) + b;
+  d = rotate(d + f4(a,b,c) + word11 + 0xbd3af235, 10) + a;
+  c = rotate(c + f4(d,a,b) + word2  + 0x2ad7d2bb, 15) + d;
+  b = rotate(b + f4(c,d,a) + word9  + 0xeb86d391, 21) + c;
+
+  // update hash
+  m_hash[0] += a;
+  m_hash[1] += b;
+  m_hash[2] += c;
+  m_hash[3] += d;
+}
+
+
+/// add arbitrary number of bytes
+void MD5::add(const void* data, size_t numBytes)
+{
+  const uint8_t* current = (const uint8_t*) data;
+
+  if (m_bufferSize > 0)
+  {
+    while (numBytes > 0 && m_bufferSize < BlockSize)
+    {
+      m_buffer[m_bufferSize++] = *current++;
+      numBytes--;
+    }
+  }
+
+  // full buffer
+  if (m_bufferSize == BlockSize)
+  {
+    processBlock(m_buffer);
+    m_numBytes  += BlockSize;
+    m_bufferSize = 0;
+  }
+
+  // no more data ?
+  if (numBytes == 0)
+    return;
+
+  // process full blocks
+  while (numBytes >= BlockSize)
+  {
+    processBlock(current);
+    current    += BlockSize;
+    m_numBytes += BlockSize;
+    numBytes   -= BlockSize;
+  }
+
+  // keep remaining bytes in buffer
+  while (numBytes > 0)
+  {
+    m_buffer[m_bufferSize++] = *current++;
+    numBytes--;
+  }
+}
+
+
+/// process final block, less than 64 bytes
+void MD5::processBuffer()
+{
+  // the input bytes are considered as bits strings, where the first bit is the most significant bit of the byte
+
+  // - append "1" bit to message
+  // - append "0" bits until message length in bit mod 512 is 448
+  // - append length as 64 bit integer
+
+  // number of bits
+  size_t paddedLength = m_bufferSize * 8;
+
+  // plus one bit set to 1 (always appended)
+  paddedLength++;
+
+  // number of bits must be (numBits % 512) = 448
+  size_t lower11Bits = paddedLength & 511;
+  if (lower11Bits <= 448)
+    paddedLength +=       448 - lower11Bits;
+  else
+    paddedLength += 512 + 448 - lower11Bits;
+  // convert from bits to bytes
+  paddedLength /= 8;
+
+  // only needed if additional data flows over into a second block
+  unsigned char extra[BlockSize];
+
+  // append a "1" bit, 128 => binary 10000000
+  if (m_bufferSize < BlockSize)
+    m_buffer[m_bufferSize] = 128;
+  else
+    extra[0] = 128;
+
+  size_t i;
+  for (i = m_bufferSize + 1; i < BlockSize; i++)
+    m_buffer[i] = 0;
+  for (; i < paddedLength; i++)
+    extra[i - BlockSize] = 0;
+
+  // add message length in bits as 64 bit number
+  uint64_t msgBits = 8 * (m_numBytes + m_bufferSize);
+  // find right position
+  unsigned char* addLength;
+  if (paddedLength < BlockSize)
+    addLength = m_buffer + paddedLength;
+  else
+    addLength = extra + paddedLength - BlockSize;
+
+  // must be little endian
+  *addLength++ = msgBits & 0xFF; msgBits >>= 8;
+  *addLength++ = msgBits & 0xFF; msgBits >>= 8;
+  *addLength++ = msgBits & 0xFF; msgBits >>= 8;
+  *addLength++ = msgBits & 0xFF; msgBits >>= 8;
+  *addLength++ = msgBits & 0xFF; msgBits >>= 8;
+  *addLength++ = msgBits & 0xFF; msgBits >>= 8;
+  *addLength++ = msgBits & 0xFF; msgBits >>= 8;
+  *addLength++ = msgBits & 0xFF;
+
+  // process blocks
+  processBlock(m_buffer);
+  // flowed over into a second block ?
+  if (paddedLength > BlockSize)
+    processBlock(extra);
+}
+
+
+/// return latest hash as 32 hex characters
+std::string MD5::getHash()
+{
+  // compute hash (as raw bytes)
+  unsigned char rawHash[HashBytes];
+  getHash(rawHash);
+
+  // convert to hex string
+  std::string result;
+  result.reserve(2 * HashBytes);
+  for (int i = 0; i < HashBytes; i++)
+  {
+    static const char dec2hex[16+1] = "0123456789ABCDEF";
+    result += dec2hex[(rawHash[i] >> 4) & 15];
+    result += dec2hex[ rawHash[i]       & 15];
+  }
+
+  return result;
+}
+
+
+/// return latest hash as bytes
+void MD5::getHash(unsigned char buffer[MD5::HashBytes])
+{
+  // save old hash if buffer is partially filled
+  uint32_t oldHash[HashValues];
+  for (int i = 0; i < HashValues; i++)
+    oldHash[i] = m_hash[i];
+
+  // process remaining bytes
+  processBuffer();
+
+  unsigned char* current = buffer;
+  for (int i = 0; i < HashValues; i++)
+  {
+    *current++ =  m_hash[i]        & 0xFF;
+    *current++ = (m_hash[i] >>  8) & 0xFF;
+    *current++ = (m_hash[i] >> 16) & 0xFF;
+    *current++ = (m_hash[i] >> 24) & 0xFF;
+
+    // restore old hash
+    m_hash[i] = oldHash[i];
+  }
+}
 
 
 
 #if !defined(HWBLAKE3)
+// Sligthly reworked to compile on C++ (and FreeBSD)
 
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 #define BLAKE3_VERSION_STRING "1.0.0"
 #define BLAKE3_KEY_LEN 32
@@ -9709,32 +10135,17 @@ typedef struct {
   uint32_t key[8];
   blake3_chunk_state chunk;
   uint8_t cv_stack_len;
-  // The stack size is MAX_DEPTH + 1 because we do lazy merging. For example,
-  // with 7 chunks, we have 3 entries in the stack. Adding an 8th chunk
-  // requires a 4th entry, rather than merging everything down to 1, because we
-  // don't know whether more input is coming. This is different from how the
-  // reference implementation does things.
   uint8_t cv_stack[(BLAKE3_MAX_DEPTH + 1) * BLAKE3_OUT_LEN];
 } blake3_hasher;
 
 const char *blake3_version(void);
 void blake3_hasher_init(blake3_hasher *self);
-void blake3_hasher_init_keyed(blake3_hasher *self,
-                              const uint8_t key[BLAKE3_KEY_LEN]);
-void blake3_hasher_init_derive_key(blake3_hasher *self, const char *context);
-void blake3_hasher_init_derive_key_raw(blake3_hasher *self, const void *context,
-                                       size_t context_len);
 void blake3_hasher_update(blake3_hasher *self, const void *input,
                           size_t input_len);
 void blake3_hasher_finalize(const blake3_hasher *self, uint8_t *out,
                             size_t out_len);
 void blake3_hasher_finalize_seek(const blake3_hasher *self, uint64_t seek,
                                  uint8_t *out, size_t out_len);
-
-#ifdef __cplusplus
-}
-#endif
-
 
 // internal flags
 enum blake3_flags {
@@ -9747,14 +10158,8 @@ enum blake3_flags {
   DERIVE_KEY_MATERIAL = 1 << 6,
 };
 
-// This C implementation tries to support recent versions of GCC, Clang, and
-// MSVC.
-
-
-
 
 #define MAX_SIMD_DEGREE 1
-
 // There are some places where we want a static size that's equal to the
 // MAX_SIMD_DEGREE, but also at least 2.
 #define MAX_SIMD_DEGREE_OR_2 (MAX_SIMD_DEGREE > 2 ? MAX_SIMD_DEGREE : 2)
@@ -10272,28 +10677,7 @@ INLINE_divsuf void hasher_init_base(blake3_hasher *self, const uint32_t key[8],
 
 void blake3_hasher_init(blake3_hasher *self) { hasher_init_base(self, IV, 0); }
 
-void blake3_hasher_init_keyed(blake3_hasher *self,
-                              const uint8_t key[BLAKE3_KEY_LEN]) {
-  uint32_t key_words[8];
-  load_key_words(key, key_words);
-  hasher_init_base(self, key_words, KEYED_HASH);
-}
 
-void blake3_hasher_init_derive_key_raw(blake3_hasher *self, const void *context,
-                                       size_t context_len) {
-  blake3_hasher context_hasher;
-  hasher_init_base(&context_hasher, IV, DERIVE_KEY_CONTEXT);
-  blake3_hasher_update(&context_hasher, context, context_len);
-  uint8_t context_key[BLAKE3_KEY_LEN];
-  blake3_hasher_finalize(&context_hasher, context_key, BLAKE3_KEY_LEN);
-  uint32_t context_key_words[8];
-  load_key_words(context_key, context_key_words);
-  hasher_init_base(self, context_key_words, DERIVE_KEY_MATERIAL);
-}
-
-void blake3_hasher_init_derive_key(blake3_hasher *self, const char *context) {
-  blake3_hasher_init_derive_key_raw(self, context, strlen(context));
-}
 
 // As described in hasher_push_cv() below, we do "lazy merging", delaying
 // merges until right before the next CV is about to be added. This is
@@ -10594,8 +10978,9 @@ void blake3_hash_many(const uint8_t *const *inputs, size_t num_inputs,
                             out);
 }
 
-// The dynamically detected SIMD degree of the current platform.
-size_t blake3_simd_degree(void) {
+// No SIMD here, full-software implementation
+size_t blake3_simd_degree(void) 
+{
   return 1;
 }
 
@@ -10760,6 +11145,9 @@ void blake3_hash_many_portable(const uint8_t *const *inputs, size_t num_inputs,
 
 #else  /// HWBLAKE3
 
+
+///	This call the hardware-accelerated-Win64-asm zpaqfranz
+
 #define BLAKE3_VERSION_STRING "1.0.0"
 #define BLAKE3_KEY_LEN 32
 #define BLAKE3_OUT_LEN 32
@@ -10792,8 +11180,6 @@ typedef struct {
 
 const char *blake3_version(void);
 void blake3_hasher_init(blake3_hasher *self);
-void blake3_hasher_init_keyed(blake3_hasher *self,
-                              const uint8_t key[BLAKE3_KEY_LEN]);
 void blake3_hasher_init_derive_key(blake3_hasher *self, const char *context);
 void blake3_hasher_init_derive_key_raw(blake3_hasher *self, const void *context,
                                        size_t context_len);
@@ -10803,19 +11189,6 @@ void blake3_hasher_finalize(const blake3_hasher *self, uint8_t *out,
                             size_t out_len);
 void blake3_hasher_finalize_seek(const blake3_hasher *self, uint64_t seek,
                                  uint8_t *out, size_t out_len);
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 // internal flags
 enum blake3_flags {
@@ -11170,6 +11543,7 @@ static /* Allow the variable to be controlled manually for testing */
 static
 #endif
 
+///	This is C++ compatible fix
 #ifdef FRANZFIX
 	uint32_t
 #else
@@ -11556,10 +11930,6 @@ void blake3_hash_many_portable(const uint8_t *const *inputs, size_t num_inputs,
 }
 
 
-
-
-
-
 const char *blake3_version(void) { return BLAKE3_VERSION_STRING; }
 
 INLINE void chunk_state_init(blake3_chunk_state *self, const uint32_t key[8],
@@ -11799,23 +12169,6 @@ INLINE size_t compress_parents_parallel(const uint8_t *child_chaining_values,
   }
 }
 
-// The wide helper function returns (writes out) an array of chaining values
-// and returns the length of that array. The number of chaining values returned
-// is the dyanmically detected SIMD degree, at most MAX_SIMD_DEGREE. Or fewer,
-// if the input is shorter than that many chunks. The reason for maintaining a
-// wide array of chaining values going back up the tree, is to allow the
-// implementation to hash as many parents in parallel as possible.
-//
-// As a special case when the SIMD degree is 1, this function will still return
-// at least 2 outputs. This guarantees that this function doesn't perform the
-// root compression. (If it did, it would use the wrong flags, and also we
-// wouldn't be able to implement exendable ouput.) Note that this function is
-// not used when the whole input is only 1 chunk long; that's a different
-// codepath.
-//
-// Why not just have the caller split the input on the first update(), instead
-// of implementing this special rule? Because we don't want to limit SIMD or
-// multi-threading parallelism for that update().
 static size_t blake3_compress_subtree_wide(const uint8_t *input,
                                            size_t input_len,
                                            const uint32_t key[8],
@@ -11875,16 +12228,6 @@ static size_t blake3_compress_subtree_wide(const uint8_t *input,
                                    out);
 }
 
-// Hash a subtree with compress_subtree_wide(), and then condense the resulting
-// list of chaining values down to a single parent node. Don't compress that
-// last parent node, however. Instead, return its message bytes (the
-// concatenated chaining values of its children). This is necessary when the
-// first call to update() supplies a complete subtree, because the topmost
-// parent node of that subtree could end up being the root. It's also necessary
-// for extended output in the general case.
-//
-// As with compress_subtree_wide(), this function is not used on inputs of 1
-// chunk or less. That's a different codepath.
 INLINE void compress_subtree_to_parent_node(
     const uint8_t *input, size_t input_len, const uint32_t key[8],
     uint64_t chunk_counter, uint8_t flags, uint8_t out[2 * BLAKE3_OUT_LEN]) {
@@ -11917,12 +12260,6 @@ INLINE void hasher_init_base(blake3_hasher *self, const uint32_t key[8],
 
 void blake3_hasher_init(blake3_hasher *self) { hasher_init_base(self, IV, 0); }
 
-void blake3_hasher_init_keyed(blake3_hasher *self,
-                              const uint8_t key[BLAKE3_KEY_LEN]) {
-  uint32_t key_words[8];
-  load_key_words(key, key_words);
-  hasher_init_base(self, key_words, KEYED_HASH);
-}
 
 void blake3_hasher_init_derive_key_raw(blake3_hasher *self, const void *context,
                                        size_t context_len) {
@@ -11940,16 +12277,6 @@ void blake3_hasher_init_derive_key(blake3_hasher *self, const char *context) {
   blake3_hasher_init_derive_key_raw(self, context, strlen(context));
 }
 
-// As described in hasher_push_cv() below, we do "lazy merging", delaying
-// merges until right before the next CV is about to be added. This is
-// different from the reference implementation. Another difference is that we
-// aren't always merging 1 chunk at a time. Instead, each CV might represent
-// any power-of-two number of chunks, as long as the smaller-above-larger stack
-// order is maintained. Instead of the "count the trailing 0-bits" algorithm
-// described in the spec, we use a "count the total number of 1-bits" variant
-// that doesn't require us to retain the subtree size of the CV on top of the
-// stack. The principle is the same: each CV that should remain in the stack is
-// represented by a 1-bit in the total number of chunks (or bytes) so far.
 INLINE void hasher_merge_cv_stack(blake3_hasher *self, uint64_t total_len) {
   size_t post_merge_stack_len = (size_t)popcnt(total_len);
   while (self->cv_stack_len > post_merge_stack_len) {
@@ -11961,38 +12288,6 @@ INLINE void hasher_merge_cv_stack(blake3_hasher *self, uint64_t total_len) {
   }
 }
 
-// In reference_impl.rs, we merge the new CV with existing CVs from the stack
-// before pushing it. We can do that because we know more input is coming, so
-// we know none of the merges are root.
-//
-// This setting is different. We want to feed as much input as possible to
-// compress_subtree_wide(), without setting aside anything for the chunk_state.
-// If the user gives us 64 KiB, we want to parallelize over all 64 KiB at once
-// as a single subtree, if at all possible.
-//
-// This leads to two problems:
-// 1) This 64 KiB input might be the only call that ever gets made to update.
-//    In this case, the root node of the 64 KiB subtree would be the root node
-//    of the whole tree, and it would need to be ROOT finalized. We can't
-//    compress it until we know.
-// 2) This 64 KiB input might complete a larger tree, whose root node is
-//    similarly going to be the the root of the whole tree. For example, maybe
-//    we have 196 KiB (that is, 128 + 64) hashed so far. We can't compress the
-//    node at the root of the 256 KiB subtree until we know how to finalize it.
-//
-// The second problem is solved with "lazy merging". That is, when we're about
-// to add a CV to the stack, we don't merge it with anything first, as the
-// reference impl does. Instead we do merges using the *previous* CV that was
-// added, which is sitting on top of the stack, and we put the new CV
-// (unmerged) on top of the stack afterwards. This guarantees that we never
-// merge the root node until finalize().
-//
-// Solving the first problem requires an additional tool,
-// compress_subtree_to_parent_node(). That function always returns the top
-// *two* chaining values of the subtree it's compressing. We then do lazy
-// merging with each of them separately, so that the second CV will always
-// remain unmerged. (That also helps us support extendable output when we're
-// hashing an input all-at-once.)
 INLINE void hasher_push_cv(blake3_hasher *self, uint8_t new_cv[BLAKE3_OUT_LEN],
                            uint64_t chunk_counter) {
   hasher_merge_cv_stack(self, chunk_counter);
@@ -12036,37 +12331,9 @@ void blake3_hasher_update(blake3_hasher *self, const void *input,
     }
   }
 
-  // Now the chunk_state is clear, and we have more input. If there's more than
-  // a single chunk (so, definitely not the root chunk), hash the largest whole
-  // subtree we can, with the full benefits of SIMD (and maybe in the future,
-  // multi-threading) parallelism. Two restrictions:
-  // - The subtree has to be a power-of-2 number of chunks. Only subtrees along
-  //   the right edge can be incomplete, and we don't know where the right edge
-  //   is going to be until we get to finalize().
-  // - The subtree must evenly divide the total number of chunks up until this
-  //   point (if total is not 0). If the current incomplete subtree is only
-  //   waiting for 1 more chunk, we can't hash a subtree of 4 chunks. We have
-  //   to complete the current subtree first.
-  // Because we might need to break up the input to form powers of 2, or to
-  // evenly divide what we already have, this part runs in a loop.
   while (input_len > BLAKE3_CHUNK_LEN) {
     size_t subtree_len = round_down_to_power_of_2(input_len);
     uint64_t count_so_far = self->chunk.chunk_counter * BLAKE3_CHUNK_LEN;
-    // Shrink the subtree_len until it evenly divides the count so far. We know
-    // that subtree_len itself is a power of 2, so we can use a bitmasking
-    // trick instead of an actual remainder operation. (Note that if the caller
-    // consistently passes power-of-2 inputs of the same size, as is hopefully
-    // typical, this loop condition will always fail, and subtree_len will
-    // always be the full length of the input.)
-    //
-    // An aside: We don't have to shrink subtree_len quite this much. For
-    // example, if count_so_far is 1, we could pass 2 chunks to
-    // compress_subtree_to_parent_node. Since we'll get 2 CVs back, we'll still
-    // get the right answer in the end, and we might get to use 2-way SIMD
-    // parallelism. The problem with this optimization, is that it gets us
-    // stuck always hashing 2 chunks. The total number of chunks will remain
-    // odd, and we'll never graduate to higher degrees of parallelism. See
-    // https://github.com/BLAKE3-team/BLAKE3/issues/69.
     while ((((uint64_t)(subtree_len - 1)) & count_so_far) != 0) {
       subtree_len /= 2;
     }
@@ -12162,34 +12429,6 @@ void blake3_hasher_finalize_seek(const blake3_hasher *self, uint64_t seek,
 
 
 #endif ///HWBLAKE3
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -13390,13 +13629,6 @@ void NESSIEfinalize(struct NESSIEstruct * const structpointer,
 
 
 
-
-
-
-
-
-
-
 // This is free and unencumbered software released into the public domain under The Unlicense (http://unlicense.org/)
 // main repo: https://github.com/wangyi-fudan/wyhash
 // author: 王一 Wang Yi <godspeed_china@yeah.net>
@@ -13587,34 +13819,6 @@ static inline void make_secret(uint64_t seed, uint64_t *secret){
 }
 
 
-/* The Unlicense
-This is free and unencumbered software released into the public domain.
-
-Anyone is free to copy, modify, publish, use, compile, sell, or
-distribute this software, either in source code form or as a compiled
-binary, for any purpose, commercial or non-commercial, and by any
-means.
-
-In jurisdictions that recognize copyright laws, the author or authors
-of this software dedicate any and all copyright interest in the
-software to the public domain. We make this dedication for the benefit
-of the public at large and to the detriment of our heirs and
-successors. We intend this dedication to be an overt act of
-relinquishment in perpetuity of all present and future rights to this
-software under copyright law.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
-EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
-MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
-IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR
-OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
-ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
-OTHER DEALINGS IN THE SOFTWARE.
-
-For more information, please refer to <http://unlicense.org/>
-*/
-
-
 
 
 
@@ -13624,8 +13828,6 @@ For more information, please refer to <http://unlicense.org/>
 // see http://create.stephan-brumme.com/disclaimer.html
 //
 
-
-
 /// XXHash (64 bit), based on Yann Collet's descriptions, see http://cyan4973.github.io/xxHash/
 /** How to use:
     uint64_t myseed = 0;
@@ -13634,10 +13836,6 @@ For more information, please refer to <http://unlicense.org/>
     myhash.add(pointerToSomeMoreBytes, numberOfMoreBytes); // call add as often as you like to ...
     // and compute hash:
     uint64_t result = myhash.hash();
-
-    // or all of the above in one single line:
-    uint64_t result2 = XXHash64::hash(mypointer, numBytes, myseed);
-
     Note: my code is NOT endian-aware !
 **/
 class XXHash64
@@ -13655,10 +13853,6 @@ public:
     totalLength = 0;
   }
 
-  /// add a chunk of bytes
-  /** @param  input  pointer to a continuous block of data
-      @param  length number of bytes
-      @return false if parameters are invalid / zero **/
   bool add(const void* input, uint64_t length)
   {
     // no data ?
@@ -13714,8 +13908,6 @@ public:
     return true;
   }
 
-  /// get current hash
-  /** @return 64 bit XXHash **/
   uint64_t hash() const
   {
     // fold 256 bit state into one single 64 bit value
@@ -13769,17 +13961,6 @@ public:
   }
 
 
-  /// combine constructor, add and hash() in one static function (C style)
-  /** @param  input  pointer to a continuous block of data
-      @param  length number of bytes
-      @param  seed your seed value, e.g. zero is a valid seed
-      @return 64 bit XXHash **/
-  static uint64_t hash(const void* input, uint64_t length, uint64_t seed)
-  {
-    XXHash64 hasher(seed);
-    hasher.add(input, length);
-      return hasher.hash();
-  }
 
 private:
   /// magic constants :-)
@@ -13820,42 +14001,6 @@ private:
   }
 };
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 /*
  * xxHash - Extremely Fast Hash algorithm
  * Header File
@@ -13867,9 +14012,6 @@ private:
 #define XXH_STATIC_LINKING_ONLY   /* *_state_t */
 
 
-#if defined (__cplusplus)
-extern "C" {
-#endif
 
 #if (defined(XXH_INLINE_ALL) || defined(XXH_PRIVATE_API)) \
     && !defined(XXH_INLINE_ALL_31684351384)
@@ -17608,9 +17750,11 @@ XXH128_hashFromCanonical(const XXH128_canonical_t* src)
 #endif  /* XXH_IMPLEMENTATION */
 
 
-#if defined (__cplusplus)
-}
-#endif
+
+
+
+
+
 
 
 
@@ -17727,20 +17871,237 @@ private:
 #endif
 
 
+///fika
+
+
+
+#ifdef _WIN32
+	#ifndef ENABLE_VIRTUAL_TERMINAL_PROCESSING
+		#define ENABLE_VIRTUAL_TERMINAL_PROCESSING  0x0004
+	#endif
+
+static HANDLE stdoutHandle;
+static DWORD outModeInit;
+ 
+void setupConsole(void) 
+{
+	DWORD outMode 	= 0;
+	stdoutHandle 	= GetStdHandle(STD_OUTPUT_HANDLE);
+ 
+	if(stdoutHandle == INVALID_HANDLE_VALUE)
+		exit(GetLastError());
+	
+	if(!GetConsoleMode(stdoutHandle, &outMode))
+		exit(GetLastError());
+	outModeInit = outMode;
+	
+	 // Enable ANSI escape codes
+	outMode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
+ 
+	if(!SetConsoleMode(stdoutHandle, outMode)) 
+		exit(GetLastError());
+}
+ 
+void restoreConsole(void) 
+{
+	// Reset colors
+	printf("\x1b[0m");	
+	
+	// Reset console mode
+	if(!SetConsoleMode(stdoutHandle, outModeInit)) 
+		exit(GetLastError());
+}
+#else // Houston, we have Unix
+void setupConsole(void) 
+{
+}
+
+void restoreConsole(void) 
+{
+	//colors
+	printf("\x1b[0m");
+}
+#endif
+
+
+
+
+
+
+int terminalwidth() 
+{
+#if defined(_WIN32)
+    CONSOLE_SCREEN_BUFFER_INFO csbi;
+    GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &csbi);
+    return (int) csbi.srWindow.Right - csbi.srWindow.Left + 1;
+   /// return (int)(csbi.dwSize.X);
+#else
+    struct winsize w;
+    ioctl(fileno(stdout), TIOCGWINSZ, &w);
+    return (int)(w.ws_col);
+#endif 
+}
+int terminalheight()
+{
+#if defined(_WIN32)
+    CONSOLE_SCREEN_BUFFER_INFO csbi;
+    GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &csbi);
+//    return (int)(csbi.dwSize.Y);
+	return (int)csbi.srWindow.Bottom - csbi.srWindow.Top + 1;
+#else
+    struct winsize w;
+    ioctl(fileno(stdout), TIOCGWINSZ, &w);
+    return (int)(w.ws_row);
+#endif 
+}
+
+int mygetch(bool i_flagmore)
+{
+	int mychar=0;
+#if defined(_WIN32)
+	mychar=getch();
+#endif
+
+
+#ifdef unix
+/// BSD Unix
+	struct termios oldt, newt;
+	tcgetattr ( STDIN_FILENO, &oldt );
+	newt = oldt;
+	newt.c_lflag &= ~( ICANON | ECHO );
+	tcsetattr ( STDIN_FILENO, TCSANOW, &newt );
+	mychar = getchar();
+	tcsetattr ( STDIN_FILENO, TCSANOW, &oldt );
+#endif
+
+	if (!i_flagmore)
+		return mychar;
+
+	if ((mychar==113) || (mychar==81) || (mychar==3))  /// q, Q, control-C
+	{
+#ifdef unix
+		printf("\n\n");
+#endif
+		exit(0);
+	}
+	return mychar;
+
+}
+
+
+void printbar(char i_carattere,bool i_printbarraenne=true)
+{
+	int twidth=terminalwidth();
+	if (twidth<10)
+		twidth=100;
+		
+	for (int i=0;i<twidth-4;i++)
+		printf("%c",i_carattere);
+	if (i_printbarraenne)
+		printf("\n");
+}
+
+///	print text just like |more
+void moreprint(const char* i_stringa)
+{
+	/// warn: if redirected or piped widths can become <0
+	
+	int larghezzaconsole=terminalwidth()-2;
+	int altezzaconsole=terminalheight();
+	static int righestampate=0;
+	
+	if (!i_stringa)
+		return;
+		
+	if ((larghezzaconsole<0) || (altezzaconsole<0))
+	{
+		printf("%s\n",i_stringa);
+		return;
+	}
+
+	if (!strcmp(i_stringa,"\n"))
+	{
+		printf("\n");
+		righestampate++;
+		if (righestampate>(altezzaconsole-2))
+		{
+			printf("-- More (q, Q or control C to exit) --\r");
+			mygetch(true);
+			for (int i=0;i<altezzaconsole;i++)
+				printf("\n");
+			righestampate=0;
+		}
+		return;
+	}
+	int lunghezzastringa=strlen(i_stringa);
+	
+	if (!larghezzaconsole)
+		return;
+
+	int righe	=(lunghezzastringa/larghezzaconsole)+1;
+	int massimo	=lunghezzastringa-(larghezzaconsole*(righe-1));
+	
+	for (int riga=1; riga<=righe;riga++)
+	{
+		int currentmax=larghezzaconsole;
+		
+		if (riga==righe)
+			currentmax=massimo;
+
+		int startcarattere=(riga-1)*larghezzaconsole;
+		
+		for (int i=startcarattere;i<startcarattere+currentmax;i++)
+			printf("%c",i_stringa[i]);
+		printf("\n");
+		
+		righestampate++;
+		if (righestampate>(altezzaconsole-2))
+		{
+			printf("-- More (q, Q or control C to exit) --\r");
+			mygetch(true);
+			for (int i=0;i<altezzaconsole;i++)
+				printf("\n");
+			righestampate=0;
+		}
+	}
+}
+void morebar(const char i_carattere)
+{
+	int twidth=terminalwidth();
+	if (twidth<10)
+		twidth=100; // redirect
+	if (twidth>100)
+		twidth=100;
+	
+	char barbuffer[100+10];
+	for (int i=0;i<twidth-4;i++)
+		sprintf(barbuffer+i,"%c",i_carattere);
+	moreprint(barbuffer);
+}
+
+
+
+
+
+
+
+
+
+
 
 ////////// support functions
 
 void myprintf(const char *fmt, ...)
 {
+	/// printf() on g_output_handle too
 	char buffer[4096];
 	va_list args;
     va_start(args, fmt);
-    vsnprintf(buffer, sizeof(buffer), fmt, args);	
+    vsnprintf(buffer,sizeof(buffer),fmt,args);	
     printf("%s",buffer);
 	if (g_output_handle!=0)
 		fprintf(g_output_handle,"%s",buffer);
-	
-    va_end(args);
+   va_end(args);
 }
 
 bool getcaptcha(const string i_captcha,const string i_reason)
@@ -17756,7 +18117,7 @@ bool getcaptcha(const string i_captcha,const string i_reason)
 	printf("\nCaptcha to continue:     %s\n",i_captcha.c_str());
 	char myline[81];
     int dummy=scanf("%80s", myline);
-	if (dummy==888888)
+	if (dummy==888888)	// compiler be quiet!
 		printf("no-warning-please\n");
 	if (myline!=i_captcha)
 	{
@@ -17808,39 +18169,37 @@ std::wstring utow(const char* ss, char slash='\\') {
 #endif
 
 
-
 /////////////	case insensitive compare
 
-char* stristr( const char* str1, const char* str2 )
+char* stristr(const char* str1,const char* str2)
 {
     const char* p1 = str1;
     const char* p2 = str2;
     const char* r = *p2 == 0 ? str1 : 0 ;
 
-    while( *p1 != 0 && *p2 != 0 )
+    while((*p1!=0) && (*p2!=0))
     {
-        if( tolower( (unsigned char)*p1 ) == tolower( (unsigned char)*p2 ) )
+        if( tolower((unsigned char)*p1)==tolower((unsigned char)*p2))
         {
-            if( r == 0 )
-                r = p1 ;
-            p2++ ;
+            if(r==0)
+                r=p1;
+            p2++;
         }
         else
         {
-            p2 = str2 ;
-            if( r != 0 )
-                p1 = r + 1 ;
+            p2=str2;
+            if(r!=0)
+                p1=r+1;
 
-            if( tolower( (unsigned char)*p1 ) == tolower( (unsigned char)*p2 ) )
+            if(tolower((unsigned char)*p1)==tolower((unsigned char)*p2))
             {
-                r = p1 ;
-                p2++ ;
+                r=p1;
+                p2++;
             }
             else
-                r = 0 ;
+                r=0;
         }
-
-        p1++ ;
+        p1++;
     }
 
     return *p2 == 0 ? (char*)r : 0 ;
@@ -17908,236 +18267,13 @@ bool iszfs(string i_filename)
 }
 
 
-// Print a UTF-8 string to f (stdout, stderr) so it displays properly
-void printUTF8(const char* s, FILE* f=stdout) {
-  assert(f);
-  assert(s);
-
-	if (g_output_handle!=0)
-		fprintf(g_output_handle,"%s",s);
-
-#ifdef unix
-  fprintf(f, "%s", s);
-#else
-  const HANDLE h=(HANDLE)_get_osfhandle(_fileno(f));
-  DWORD ft=GetFileType(h);
-  if (ft==FILE_TYPE_CHAR) {
-    fflush(f);
-    std::wstring w=utow(s, '/');  // Windows console: convert to UTF-16
-    DWORD n=0;
-    WriteConsole(h, w.c_str(), w.size(), &n, 0);
-  }
-  else  // stdout redirected to file
-    fprintf(f, "%s", s);
-#endif
+bool replace(std::string& str, const std::string& from, const std::string& to) {
+    size_t start_pos = str.find(from);
+    if(start_pos == std::string::npos)
+        return false;
+    str.replace(start_pos, from.length(), to);
+    return true;
 }
-
-
-// Return relative time in milliseconds
-int64_t mtime() {
-#ifdef unix
-  timeval tv;
-  gettimeofday(&tv, 0);
-  return tv.tv_sec*1000LL+tv.tv_usec/1000;
-#else
-  int64_t t=GetTickCount();
-  if (t<global_start) t+=0x100000000LL;
-  return t;
-#endif
-}
-
-// Convert 64 bit decimal YYYYMMDDHHMMSS to "YYYY-MM-DD HH:MM:SS"
-// where -1 = unknown date, 0 = deleted.
-string dateToString(int64_t date) {
-  if (date<=0) return "                   ";
-  string s="0000-00-00 00:00:00";
-  static const int t[]={18,17,15,14,12,11,9,8,6,5,3,2,1,0};
-  for (int i=0; i<14; ++i) s[t[i]]+=int(date%10), date/=10;
-  return s;
-}
-
-// Convert attributes to a readable format
-string attrToString(int64_t attrib) {
-  string r="     ";
-  if ((attrib&255)=='u') {
-    r[0]="0pc3d5b7 9lBsDEF"[(attrib>>20)&15];
-    for (int i=0; i<4; ++i)
-      r[4-i]=(attrib>>(8+3*i))%8+'0';
-  }
-  else if ((attrib&255)=='w') {
-    for (int i=0, j=0; i<32; ++i) {
-      if ((attrib>>(i+8))&1) {
-        char c="RHS DAdFTprCoIEivs89012345678901"[i];
-        if (j<5) r[j]=c;
-        else r+=c;
-        ++j;
-      }
-    }
-  }
-  return r;
-}
-
-// Convert seconds since 0000 1/1/1970 to 64 bit decimal YYYYMMDDHHMMSS
-// Valid from 1970 to 2099.
-int64_t decimal_time(time_t tt) {
-  if (tt==-1) tt=0;
-  int64_t t=(sizeof(tt)==4) ? unsigned(tt) : tt;
-  const int second=t%60;
-  const int minute=t/60%60;
-  const int hour=t/3600%24;
-  t/=86400;  // days since Jan 1 1970
-  const int term=t/1461;  // 4 year terms since 1970
-  t%=1461;
-  t+=(t>=59);  // insert Feb 29 on non leap years
-  t+=(t>=425);
-  t+=(t>=1157);
-  const int year=term*4+t/366+1970;  // actual year
-  t%=366;
-  t+=(t>=60)*2;  // make Feb. 31 days
-  t+=(t>=123);   // insert Apr 31
-  t+=(t>=185);   // insert June 31
-  t+=(t>=278);   // insert Sept 31
-  t+=(t>=340);   // insert Nov 31
-  const int month=t/31+1;
-  const int day=t%31+1;
-  return year*10000000000LL+month*100000000+day*1000000
-         +hour*10000+minute*100+second;
-}
-
-// Convert decimal date to time_t - inverse of decimal_time()
-time_t unix_time(int64_t date) {
-  if (date<=0) return -1;
-  static const int days[12]={0,31,59,90,120,151,181,212,243,273,304,334};
-  const int year=date/10000000000LL%10000;
-  const int month=(date/100000000%100-1)%12;
-  const int day=date/1000000%100;
-  const int hour=date/10000%100;
-  const int min=date/100%100;
-  const int sec=date%100;
-  return (day-1+days[month]+(year%4==0 && month>1)+((year-1970)*1461+1)/4)
-    *86400+hour*3600+min*60+sec;
-}
-
-
-
-/////////////////////////////// File //////////////////////////////////
-
-// Windows/Linux compatible file type
-#ifdef unix
-typedef FILE* FP;
-const FP FPNULL=NULL;
-const char* const RB="rb";
-const char* const WB="wb";
-const char* const RBPLUS="rb+";
-
-#else // Windows
-typedef HANDLE FP;
-const FP FPNULL=INVALID_HANDLE_VALUE;
-typedef enum {RB, WB, RBPLUS, WBPLUS} MODE;  // fopen modes
-
-// Few lines from https://gist.github.com/nu774/10381075, and few from milo1012 TC zpaq plugin.
-std::wstring GetFullPathNameX(const std::wstring &path)
-{
-    DWORD length = GetFullPathNameW(path.c_str(), 0, 0, 0);
-    std::vector<wchar_t> buffer(length);
-    length = GetFullPathNameW(path.c_str(), buffer.size(), &buffer[0], 0);
-    return std::wstring(&buffer[0], &buffer[length]);
-}
-
-// Code from https://gist.github.com/nu774/10381075 and Milo's ő zpaq plugin.
-std::wstring make_long_path(const char* filename) {
-
-  if (strlen(filename) > 2 && filename[0] == '/' && filename[1] == '/' && filename[2] == '?')
-    return utow(filename);
-  else {
-    std::wstring ws =  L"\\\\?\\" + GetFullPathNameX(utow(filename));
-    //wprintf(L"\nCONV: (%d) %ls\n\n", ws.length(), ws.c_str());
-    return ws;
-  }
-}
-
-	
-
-// Open file. Only modes "rb", "wb", "rb+" and "wb+" are supported.
-FP fopen(const char* filename, MODE mode) {
-  assert(filename);
-  DWORD access=0;
-  if (mode!=WB) access=GENERIC_READ;
-  if (mode!=RB) access|=GENERIC_WRITE;
-  DWORD disp=OPEN_ALWAYS;  // wb or wb+
-  if (mode==RB || mode==RBPLUS) disp=OPEN_EXISTING;
-  DWORD share=FILE_SHARE_READ;
-  if (mode==RB) share|=FILE_SHARE_WRITE|FILE_SHARE_DELETE;
-  return CreateFile(utow(filename).c_str(), access, share,
-                    NULL, disp, FILE_ATTRIBUTE_NORMAL, NULL);
-}
-
-
-// Close file
-int fclose(FP fp) {
-  return CloseHandle(fp) ? 0 : EOF;
-}
-
-// Read nobj objects of size size into ptr. Return number of objects read.
-size_t fread(void* ptr, size_t size, size_t nobj, FP fp) {
-  DWORD r=0;
-  ReadFile(fp, ptr, size*nobj, &r, NULL);
-  if (size>1) r/=size;
-  return r;
-}
-
-// Write nobj objects of size size from ptr to fp. Return number written.
-size_t fwrite(const void* ptr, size_t size, size_t nobj, FP fp) {
-  DWORD r=0;
-  WriteFile(fp, ptr, size*nobj, &r, NULL);
-  if (size>1) r/=size;
-  return r;
-}
-
-// Move file pointer by offset. origin is SEEK_SET (from start), SEEK_CUR,
-// (from current position), or SEEK_END (from end).
-int fseeko(FP fp, int64_t offset, int origin) {
-  if (origin==SEEK_SET) origin=FILE_BEGIN;
-  else if (origin==SEEK_CUR) origin=FILE_CURRENT;
-  else if (origin==SEEK_END) origin=FILE_END;
-  LONG h=uint64_t(offset)>>32;
-  SetFilePointer(fp, offset&0xffffffffull, &h, origin);
-  return GetLastError()!=NO_ERROR;
-}
-
-// Get file position
-int64_t ftello(FP fp) {
-  LONG h=0;
-  DWORD r=SetFilePointer(fp, 0, &h, FILE_CURRENT);
-  return r+(uint64_t(h)<<32);
-}
-
-#endif
-
-
-/// We want to read the damn UTF8 files. 
-/// In the case of Windows using the function for UTF16, after conversion
-
-FILE* freadopen(const char* i_filename)
-{
-#ifdef _WIN32
-	wstring widename=utow(i_filename);
-	FILE* myfp=_wfopen(widename.c_str(), L"rb" );
-#else
-	FILE* myfp=fopen(i_filename, "rb" );
-#endif
-	if (myfp==NULL)
-	{
-		printf( "\nfreadopen cannot open:");
-		printUTF8(i_filename);
-		printf("\n");
-		return 0;
-	}
-	return myfp;
-}
-
-
-
 
 void myreplaceall(std::string& str, const std::string& from, const std::string& to) {
     if(from.empty())
@@ -18148,179 +18284,14 @@ void myreplaceall(std::string& str, const std::string& from, const std::string& 
         start_pos += to.length(); // In case 'to' contains 'from', like replacing 'x' with 'yx'
     }
 }
-
-
-bool fileexists(const string& i_filename) 
+bool myreplace(string& i_str, const string& i_from, const string& i_to) 
 {
-#ifdef unix
-// true even for dirs no S_ISDIR
-  struct stat buffer;   
-  return (stat(i_filename.c_str(),&buffer)==0); 
-#endif
-
-#ifdef _WIN32
-	HANDLE	myhandle;
-	WIN32_FIND_DATA findfiledata;
-	std::wstring wpattern=utow(i_filename.c_str());
-	myhandle=FindFirstFile(wpattern.c_str(),&findfiledata);
-	if (myhandle!=INVALID_HANDLE_VALUE)
-	{
-		FindClose(myhandle);
-		return true;
-	}
-	return false;
-#endif
-
-	return false;
+    size_t start_pos = i_str.find(i_from);
+    if(start_pos == std::string::npos)
+        return false;
+    i_str.replace(start_pos, i_from.length(), i_to);
+    return true;
 }
-
-
-void xcommand(string i_command,string i_parameter)
-{
-
-//	printf("Comm %s\n",i_command.c_str());
-//	printf("parm %s\n",i_parameter.c_str());
-	
-	if (i_command=="")
-		return;
-	if (!fileexists(i_command))
-		return;
-	int dummy;
-	if (i_parameter=="")
-		dummy=system(i_command.c_str());
-	else
-	{
-		string mycommand=i_command+" \""+i_parameter+"\"";
-		dummy=system(mycommand.c_str());
-	}
-	if (dummy==888888)
-		printf("no-warning-please\n");
-	
-	
-}
-
-
-///////////// support functions
-string mytrim(const string& i_str)
-{
-	size_t first = i_str.find_first_not_of(' ');
-	if (string::npos == first)
-		return i_str;
-	size_t last = i_str.find_last_not_of(' ');
-	return i_str.substr(first, (last - first + 1));
-}
-
-
-string g_gettempdirectory()
-{
-#if defined(_WIN32) || defined(_WIN64)
-	string temppath="";
-	wchar_t charpath[MAX_PATH];
-	if (GetTempPathW(MAX_PATH, charpath))
-	{
-		wstring ws(charpath);
-		string str(ws.begin(), ws.end());	
-		return str;
-	}
-	return temppath;
-#else
-	return "/tmp/";
-
-#endif
-
-}
-
-
-
-
-#if defined(_WIN32) || defined(_WIN64)
-
-/// something to get VSS done via batch file
-
-void waitexecute(string i_filename,string i_parameters,int i_show)
-{
-	///SHELLEXECUTEINFOA ShExecInfo = {0};
-	SHELLEXECUTEINFOA ShExecInfo =SHELLEXECUTEINFOA();
-			 
-	ShExecInfo.cbSize = sizeof(SHELLEXECUTEINFOA);
-	ShExecInfo.fMask = SEE_MASK_NOCLOSEPROCESS;
-	ShExecInfo.hwnd = NULL;
-	ShExecInfo.lpVerb = NULL;
-	ShExecInfo.lpFile = i_filename.c_str();
-	ShExecInfo.lpParameters = i_parameters.c_str();   
-	ShExecInfo.lpDirectory = NULL;
-	ShExecInfo.nShow = i_show;
-	ShExecInfo.hInstApp = NULL; 
-	ShellExecuteExA(&ShExecInfo);
-	WaitForSingleObject(ShExecInfo.hProcess, INFINITE);
-	CloseHandle(ShExecInfo.hProcess);
-}
-
-bool isadmin()
-{
-	BOOL fIsElevated = FALSE;
-	HANDLE hToken = NULL;
-	TOKEN_ELEVATION elevation;
-	DWORD dwSize;
-
-	if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &hToken))
-	{
-		printf("\n Failed to get Process Token\n");
-		goto Cleanup;  // if Failed, we treat as False
-	}
-
-
-	if (!GetTokenInformation(hToken, TokenElevation, &elevation, sizeof(elevation), &dwSize))
-	{	
-		printf("\nFailed to get Token Information\n");
-		goto Cleanup;// if Failed, we treat as False
-	}
-
-	fIsElevated = elevation.TokenIsElevated;
-
-Cleanup:
-	if (hToken)
-	{
-		CloseHandle(hToken);
-		hToken = NULL;
-	}
-	return fIsElevated; 
-}
-#endif
-
-
-#if defined(_WIN32) || defined(_WIN64)
-//// VSS on Windows by... batchfile
-//// delete all kind of shadows copies (if any)
-void vss_deleteshadows()
-{
-	if (flagvss)
-	{
-		string	filebatch	=g_gettempdirectory()+"vsz.bat";
-		
-		printf("Starting delete VSS shadows\n");
-    		
-		if (fileexists(filebatch))
-			if (remove(filebatch.c_str())!=0)
-			{
-				printf("Highlander batch  %s\n", filebatch.c_str());
-				return;
-			}
-		
-		FILE* batch=fopen(filebatch.c_str(), "wb");
-		fprintf(batch,"@echo OFF\n");
-		fprintf(batch,"@wmic shadowcopy delete /nointeractive\n");
-		fclose(batch);
-	
-		waitexecute(filebatch,"",SW_HIDE);
-	
-		printf("End VSS delete shadows\n");
-	}
-
-}
-#endif
-
-
 int mypos(const string& i_substring,const string& i_string) 
 {
     size_t start_pos = i_string.find(i_substring);
@@ -18330,424 +18301,32 @@ int mypos(const string& i_substring,const string& i_string)
 		return start_pos;
 }
 
-
-bool myreplace(string& i_str, const string& i_from, const string& i_to) 
+string mytrim(const string& i_str)
 {
-    size_t start_pos = i_str.find(i_from);
-    if(start_pos == std::string::npos)
-        return false;
-    i_str.replace(start_pos, i_from.length(), i_to);
-    return true;
+	size_t first = i_str.find_first_not_of(' ');
+	if (string::npos == first)
+		return i_str;
+	size_t last = i_str.find_last_not_of(' ');
+	return i_str.substr(first, (last - first + 1));
 }
 
-// Return true if a file or directory (UTF-8 without trailing /) exists.
-bool exists(string filename) {
-  int len=filename.size();
-  if (len<1) return false;
-  if (filename[len-1]=='/') filename=filename.substr(0, len-1);
-#ifdef unix
-  struct stat sb;
-  return !lstat(filename.c_str(), &sb);
-#else
-  return GetFileAttributes(utow(filename.c_str()).c_str())
-         !=INVALID_FILE_ATTRIBUTES;
-#endif
-}
-
-// Delete a file, return true if successful
-bool delete_file(const char* filename) {
-#ifdef unix
-	return remove(filename)==0;
-#else
-
-	if (!fileexists(filename))
-		return true;
-	SetFileAttributes(utow(filename).c_str(),FILE_ATTRIBUTE_NORMAL);
-	return DeleteFile(utow(filename).c_str());
-#endif
-}
-
-bool delete_dir(const char* i_directory) {
-#ifdef unix
-  return remove(i_directory)==0;
-#else
-  return RemoveDirectory(utow(i_directory).c_str());
-#endif
-}
-
-long long fsbtoblk(int64_t num, uint64_t fsbs, u_long bs)
+void explode(string i_string,char i_delimiter,vector<string>& array)
 {
-	return (num * (intmax_t) fsbs / (int64_t) bs);
-}
-
-/// it is not easy, at all, to take *nix free filesystem space
-int64_t getfreespace(const char* i_path)
-{
-	
-#ifdef BSD
-	struct statfs stat;
- 
-	if (statfs(i_path, &stat) != 0) 
+	unsigned int i=0;
+	while(i<i_string.size())
 	{
-		// error happens, just quits here
-		return 0;
-	}
-///	long long used = stat.f_blocks - stat.f_bfree;
-///	long long availblks = stat.f_bavail + used;
-
-	static long blocksize = 0;
-	int dummy;
-
-	if (blocksize == 0)
-		getbsize(&dummy, &blocksize);
-	return  fsbtoblk(stat.f_bavail,
-	stat.f_bsize, blocksize)*1024;
-#else
-#ifdef unix //this sould be Linux
-	return 0;
-#else
-	uint64_t spazio=0;
-	
-	BOOL  fResult;
-	unsigned __int64 i64FreeBytesToCaller,i64TotalBytes,i64FreeBytes;
-	WCHAR  *pszDrive  = NULL, szDrive[4];
-
-	const size_t WCHARBUF = 512;
-	wchar_t  wszDest[WCHARBUF];
-	MultiByteToWideChar(CP_ACP, MB_PRECOMPOSED, i_path, -1, wszDest, WCHARBUF);
-
-	pszDrive = wszDest;
-	if (i_path[1] == ':')
-	{
-		szDrive[0] = pszDrive[0];
-		szDrive[1] = ':';
-        szDrive[2] = '\\';
-        szDrive[3] = '\0';
-		pszDrive = szDrive;
-	}
-	fResult = GetDiskFreeSpaceEx ((LPCTSTR)pszDrive,
-                                 (PULARGE_INTEGER)&i64FreeBytesToCaller,
-                                 (PULARGE_INTEGER)&i64TotalBytes,
-                                 (PULARGE_INTEGER)&i64FreeBytes);
-	if (fResult)
-		spazio=i64FreeBytes;
-	return spazio; // Windows
-#endif
-
-#endif
-
-
-}
-
-bool direxists(string& i_directory) 
-{
-#ifdef unix
-	struct stat sb;
-    return ((stat(i_directory.c_str(), &sb) == 0) && S_ISDIR(sb.st_mode)); 	
-#endif
-
-#ifdef _WIN32
-	HANDLE	myhandle;
-	WIN32_FIND_DATA findfiledata;
-	if (!isdirectory(i_directory))
-		i_directory+="/";
-	std::string pattern=i_directory+"*.*";
-	std::wstring wpattern=utow(pattern.c_str());
-	myhandle=FindFirstFile(wpattern.c_str(),&findfiledata);
-	if (myhandle!=INVALID_HANDLE_VALUE)
-	{
-		FindClose(myhandle);
-		return true;
-	}
-	return false;
-#endif
-
-	return false;
-}
-
-
-#ifdef unix
-
-// Print last error message
-void printerr(const char* i_where,const char* filename) 
-{
-	string lasterror=i_where;
-	string lasterror2=filename;
-	string risultato=lasterror+":"+lasterror2;
-	perror(risultato.c_str());
-}
-
-#else
-
-// Print last error message
-void printerr(const char* i_where,const char* filename) 
-{
-	string lasterror=i_where;
-	
-  fflush(stdout);
-  int err=GetLastError();
-	fprintf(stderr,"\n");
-  printUTF8(filename, stderr);
-  
-  
-  if (err==ERROR_FILE_NOT_FOUND)
-    g_exec_text=": error file not found";
-  else if (err==ERROR_PATH_NOT_FOUND)
-   g_exec_text=": error path not found";
-  else if (err==ERROR_ACCESS_DENIED)
-    g_exec_text=": error access denied";
-  else if (err==ERROR_SHARING_VIOLATION)
-    g_exec_text=": error sharing violation";
-  else if (err==ERROR_BAD_PATHNAME)
-    g_exec_text=": error bad pathname";
-  else if (err==ERROR_INVALID_NAME)
-    g_exec_text=": error invalid name";
-  else if (err==ERROR_NETNAME_DELETED)
-      g_exec_text=": error network name no longer available";
-  else if (err==ERROR_ALREADY_EXISTS)
-      g_exec_text=": cannot write file already exists";
-  else
-  {
-	char buffer[100];
-	sprintf(buffer,": Windows error # %d\n",err);
-	
-  g_exec_text=buffer;
-  }
-	fprintf(stderr, g_exec_text.c_str());
-	fprintf(stderr,"\n");
-	g_exec_text=filename+g_exec_text;
-	
-	uint64_t spazio=getfreespace(filename);
-	if (spazio<16384)
-	{
-		string mypath=filename;
-		if (direxists(mypath))
-			printf("\n\nMAYBE OUT OF FREE SPACE?\n");
-		else
-			printf("\n\nMAYBE OUT OF FREE SPACE OR INVALID PATH?\n");
-	}
-//	exit(0);
-}
-
-#endif
-
-// Close fp if open. Set date and attributes unless 0
-void close(const char* filename, int64_t date, int64_t attr, FP fp=FPNULL) {
-  assert(filename);
-#ifdef unix
-  if (fp!=FPNULL) fclose(fp);
-  if (date>0) {
-    struct utimbuf ub;
-    ub.actime=time(NULL);
-    ub.modtime=unix_time(date);
-    utime(filename, &ub);
-  }
-  if ((attr&255)=='u')
-    chmod(filename, attr>>8);
-#else
-  const bool ads=strstr(filename, ":$DATA")!=0;  // alternate data stream?
-  if (date>0 && !ads) {
-    if (fp==FPNULL)
-      fp=CreateFile(utow(filename).c_str(),
-                    FILE_WRITE_ATTRIBUTES,
-                    FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE,
-                    NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, NULL);
-    if (fp!=FPNULL) {
-      SYSTEMTIME st;
-      st.wYear=date/10000000000LL%10000;
-      st.wMonth=date/100000000%100;
-      st.wDayOfWeek=0;  // ignored
-      st.wDay=date/1000000%100;
-      st.wHour=date/10000%100;
-      st.wMinute=date/100%100;
-      st.wSecond=date%100;
-      st.wMilliseconds=0;
-      FILETIME ft;
-      SystemTimeToFileTime(&st, &ft);
-      SetFileTime(fp, NULL, NULL, &ft);
+		string temp="";
+		while ((i_string[i]!=i_delimiter) && (i<i_string.size()))
+        {
+			temp+=i_string[i];
+			i++;
+		}
+		array.push_back(temp);
+		i++;
+		if (i>=i_string.size())
+			break;
     }
-  }
-  if (fp!=FPNULL) CloseHandle(fp);
-  if ((attr&255)=='w' && !ads)
-    SetFileAttributes(utow(filename).c_str(), attr>>8);
-#endif
 }
-
-// Print file open error and throw exception
-void ioerr(const char* msg) {
-  printerr("11896",msg);
-  throw std::runtime_error(msg);
-}
-
-// Create directories as needed. For example if path="/tmp/foo/bar"
-// then create directories /, /tmp, and /tmp/foo unless they exist.
-// Set date and attributes if not 0.
-void makepath(string path, int64_t date=0, int64_t attr=0) {
-  for (unsigned i=0; i<path.size(); ++i) {
-    if (path[i]=='\\' || path[i]=='/') {
-      path[i]=0;
-#ifdef unix
-      mkdir(path.c_str(), 0777);
-#else
-      CreateDirectory(utow(path.c_str()).c_str(), 0);
-#endif
-      path[i]='/';
-    }
-  }
-
-  // Set date and attributes
-  string filename=path;
-  if (filename!="" && filename[filename.size()-1]=='/')
-    filename=filename.substr(0, filename.size()-1);  // remove trailing slash
-  close(filename.c_str(), date, attr);
-}
-
-#ifndef unix
-
-// Truncate filename to length. Return -1 if error, else 0.
-int truncate(const char* filename, int64_t length) {
-  std::wstring w=utow(filename);
-  HANDLE out=CreateFile(w.c_str(), GENERIC_READ | GENERIC_WRITE,
-                        0, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-  if (out!=INVALID_HANDLE_VALUE) {
-    //// LONG
-	long hi=length>>32;
-    if (SetFilePointer(out, length, &hi, FILE_BEGIN)
-             !=INVALID_SET_FILE_POINTER
-        && SetEndOfFile(out)
-        && CloseHandle(out))
-      return 0;
-  }
-  return -1;
-}
-#endif
-
-/////////////////////////////// Archive ///////////////////////////////
-
-// Convert non-negative decimal number x to string of at least n digits
-string itos(int64_t x, int n=1) {
-  assert(x>=0);
-  assert(n>=0);
-  string r;
-  for (; x || n>0; x/=10, --n) r=string(1, '0'+x%10)+r;
-  return r;
-}
-
-// Replace * and ? in fn with part or digits of part
-string subpart(string fn, int part) {
-  for (int j=fn.size()-1; j>=0; --j) {
-    if (fn[j]=='?')
-      fn[j]='0'+part%10, part/=10;
-    else if (fn[j]=='*')
-      fn=fn.substr(0, j)+itos(part)+fn.substr(j+1), part=0;
-  }
-  return fn;
-}
-
-
-
-// Guess number of cores. In 32 bit mode, max is 2.
-int numberOfProcessors() {
-  int rc=0;  // result
-#ifdef unix
-#ifdef BSD  // BSD or Mac OS/X
-  size_t rclen=sizeof(rc);
-  int mib[2]={CTL_HW, HW_NCPU};
-  if (sysctl(mib, 2, &rc, &rclen, 0, 0)!=0)
-    perror("sysctl");
-
-#else  // Linux
-  // Count lines of the form "processor\t: %d\n" in /proc/cpuinfo
-  // where %d is 0, 1, 2,..., rc-1
-  FILE *in=fopen("/proc/cpuinfo", "r");
-  if (!in) return 1;
-  std::string s;
-  int c;
-  while ((c=getc(in))!=EOF) {
-    if (c>='A' && c<='Z') c+='a'-'A';  // convert to lowercase
-    if (c>' ') s+=c;  // remove white space
-    if (c=='\n') {  // end of line?
-      if (s.size()>10 && s.substr(0, 10)=="processor:") {
-        c=atoi(s.c_str()+10);
-        if (c==rc) ++rc;
-      }
-      s="";
-    }
-  }
-  fclose(in);
-#endif
-#else
-
-  // In Windows return %NUMBER_OF_PROCESSORS%
-  //const char* p=getenv("NUMBER_OF_PROCESSORS");
-  //if (p) rc=atoi(p);
-  ///SYSTEM_INFO si={0};
-  SYSTEM_INFO si= SYSTEM_INFO();
-  
-  GetSystemInfo(&si);
-  rc=si.dwNumberOfProcessors;
-#endif
-  if (rc<1) rc=1; /// numero massimo core 32bit
-  if (sizeof(char*)==4 && rc>2) rc=2;
-  return rc;
-}
-// In Windows convert upper case to lower case.
-inline int tolowerW(int c) {
-#ifndef unix
-  if (c>='A' && c<='Z') return c-'A'+'a';
-#endif
-  return c;
-}
-
-// Return true if strings a == b or a+"/" is a prefix of b
-// or a ends in "/" and is a prefix of b.
-// Match ? in a to any char in b.
-// Match * in a to any string in b.
-// In Windows, not case sensitive.
-bool ispath(const char* a, const char* b) {
-  
-  /*
-  printf("ZEKEa %s\n",a);
-  printf("ZEKEb %s\n",b);
-  */
-  for (; *a; ++a, ++b) {
-    const int ca=tolowerW(*a);
-    const int cb=tolowerW(*b);
-    if (ca=='*') {
-      while (true) {
-        if (ispath(a+1, b)) return true;
-        if (!*b) return false;
-        ++b;
-      }
-    }
-    else if (ca=='?') {
-      if (*b==0) return false;
-    }
-    else if (ca==cb && ca=='/' && a[1]==0)
-      return true;
-    else if (ca!=cb)
-      return false;
-  }
-  return *b==0 || *b=='/';
-}
-
-// Read 4 byte little-endian int and advance s
-unsigned btoi(const char* &s) {
-  s+=4;
-  return (s[-4]&255)|((s[-3]&255)<<8)|((s[-2]&255)<<16)|((s[-1]&255)<<24);
-}
-
-// Read 8 byte little-endian int and advance s
-int64_t btol(const char* &s) {
-  uint64_t r=btoi(s);
-  return r+(uint64_t(btoi(s))<<32);
-}
-
-
-////////////////////////////////////////
-///// Support functions
-
-
 
 struct s_fileandsize
 {
@@ -18760,142 +18339,6 @@ struct s_fileandsize
 	bool flaghashstored;
 	s_fileandsize(): size(0),attr(0),date(0),isdir(false),flaghashstored(false) {hashhex="";}
 };
-
-
-
-
-int terminalwidth() 
-{
-#if defined(_WIN32)
-    CONSOLE_SCREEN_BUFFER_INFO csbi;
-    GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &csbi);
-    return (int) csbi.srWindow.Right - csbi.srWindow.Left + 1;
-   /// return (int)(csbi.dwSize.X);
-#else
-    struct winsize w;
-    ioctl(fileno(stdout), TIOCGWINSZ, &w);
-    return (int)(w.ws_col);
-#endif 
-}
-int terminalheight()
-{
-#if defined(_WIN32)
-    CONSOLE_SCREEN_BUFFER_INFO csbi;
-    GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &csbi);
-//    return (int)(csbi.dwSize.Y);
-	return (int)csbi.srWindow.Bottom - csbi.srWindow.Top + 1;
-#else
-    struct winsize w;
-    ioctl(fileno(stdout), TIOCGWINSZ, &w);
-    return (int)(w.ws_row);
-#endif 
-}
-
-void mygetch()
-{
-	int mychar=0;
-#if defined(_WIN32)
-	mychar=getch();
-#endif
-
-
-#ifdef unix
-/// BSD Unix
-	struct termios oldt, newt;
-	tcgetattr ( STDIN_FILENO, &oldt );
-	newt = oldt;
-	newt.c_lflag &= ~( ICANON | ECHO );
-	tcsetattr ( STDIN_FILENO, TCSANOW, &newt );
-	mychar = getchar();
-	tcsetattr ( STDIN_FILENO, TCSANOW, &oldt );
-#endif
-	if ((mychar==113) || (mychar==81) || (mychar==3))  /// q, Q, control-C
-	{
-#ifdef unix
-		printf("\n\n");
-#endif
-		exit(0);
-	}
-}
-
-
-///	print text just like |more
-void moreprint(const char* i_stringa)
-{
-	/// warn: if redirected or piped widths can become <0
-	
-	int larghezzaconsole=terminalwidth()-2;
-	int altezzaconsole=terminalheight();
-	static int righestampate=0;
-	
-	if (!i_stringa)
-		return;
-		
-	if ((larghezzaconsole<0) || (altezzaconsole<0))
-	{
-		printf("%s\n",i_stringa);
-		return;
-	}
-
-	if (!strcmp(i_stringa,"\n"))
-	{
-		printf("\n");
-		righestampate++;
-		if (righestampate>(altezzaconsole-2))
-		{
-			printf("-- More (q, Q or control C to exit) --\r");
-			mygetch();
-			for (int i=0;i<altezzaconsole;i++)
-				printf("\n");
-			righestampate=0;
-		}
-		return;
-	}
-	int lunghezzastringa=strlen(i_stringa);
-	
-	if (!larghezzaconsole)
-		return;
-
-	int righe	=(lunghezzastringa/larghezzaconsole)+1;
-	int massimo	=lunghezzastringa-(larghezzaconsole*(righe-1));
-	
-	for (int riga=1; riga<=righe;riga++)
-	{
-		int currentmax=larghezzaconsole;
-		
-		if (riga==righe)
-			currentmax=massimo;
-
-		int startcarattere=(riga-1)*larghezzaconsole;
-		
-		for (int i=startcarattere;i<startcarattere+currentmax;i++)
-			printf("%c",i_stringa[i]);
-		printf("\n");
-		
-		righestampate++;
-		if (righestampate>(altezzaconsole-2))
-		{
-			printf("-- More (q, Q or control C to exit) --\r");
-			mygetch();
-			for (int i=0;i<altezzaconsole;i++)
-				printf("\n");
-			righestampate=0;
-		}
-	}
-}
-void morebar(const char i_carattere)
-{
-	int twidth=terminalwidth();
-	if (twidth<10)
-		twidth=100; // redirect
-	if (twidth>100)
-		twidth=100;
-	
-	char barbuffer[100+10];
-	for (int i=0;i<twidth-4;i++)
-		sprintf(barbuffer+i,"%c",i_carattere);
-	moreprint(barbuffer);
-}
 
 
 //// cut a too long filename 
@@ -18923,23 +18366,89 @@ string mymaxfile(string i_filename,const unsigned int i_lunghezza)
 		return i_filename.substr(0,i_lunghezza);
 }
 
+/// OK we need a fix for 64-byte-align problem on some Linux compiler
 
-// return a/b such that there is exactly one "/" in between, and
-// in Windows, any drive letter in b the : is removed and there
-// is a "/" after.
-string append_path(string a, string b) {
-  int na=a.size();
-  int nb=b.size();
-#ifndef unix
-  if (nb>1 && b[1]==':') {  // remove : from drive letter
-    if (nb>2 && b[2]!='/') b[1]='/';
-    else b=b[0]+b.substr(2), --nb;
-  }
+/*
+https://github.com/embeddedartistry/embedded-resources/blob/master/examples/c/malloc_aligned.c
+*/
+
+#ifndef align_up
+#define align_up(num, align) \
+	(((num) + ((align) - 1)) & ~((align) - 1))
 #endif
-  if (nb>0 && b[0]=='/') b=b.substr(1);
-  if (na>0 && a[na-1]=='/') a=a.substr(0, na-1);
-  return a+"/"+b;
+
+//Convenience macro for memalign, the linux API
+#define memalign(align, size) aligned_malloc(align, size)
+
+//Number of bytes we're using for storing the aligned pointer offset
+typedef uint16_t myoffset_t;
+#define PTR_OFFSET_SZ sizeof(myoffset_t)
+
+/**
+* aligned_malloc takes in the requested alignment and size
+*	We will call malloc with extra bytes for our header and the offset
+*	required to guarantee the desired alignment.
+*/
+void * aligned_malloc(size_t align, size_t size)
+{
+	void * ptr = NULL;
+
+	//We want it to be a power of two since align_up operates on powers of two
+	assert((align & (align - 1)) == 0);
+
+	if(align && size)
+	{
+		/*
+		 * We know we have to fit an offset value
+		 * We also allocate extra bytes to ensure we can meet the alignment
+		 */
+		uint32_t hdr_size = PTR_OFFSET_SZ + (align - 1);
+		void * p = malloc(size + hdr_size);
+
+		if(p)
+		{
+			/*
+			 * Add the offset size to malloc's pointer (we will always store that)
+			 * Then align the resulting value to the arget alignment
+			 */
+			ptr = (void *) align_up(((uintptr_t)p + PTR_OFFSET_SZ), align);
+
+			//Calculate the offset and store it behind our aligned pointer
+			*((myoffset_t *)ptr - 1) = (myoffset_t)((uintptr_t)ptr - (uintptr_t)p);
+
+		} // else NULL, could not malloc
+	} //else NULL, invalid arguments
+
+	return ptr;
 }
+
+/**
+* aligned_free works like free(), but we work backwards from the returned
+* pointer to find the correct offset and pointer location to return to free()
+* Note that it is VERY BAD to call free() on an aligned_malloc() pointer.
+*/
+void aligned_free(void * ptr)
+{
+	assert(ptr);
+
+	/*
+	* Walk backwards from the passed-in pointer to get the pointer offset
+	* We convert to an offset_t pointer and rely on pointer math to get the data
+	*/
+	myoffset_t offset = *((myoffset_t *)ptr - 1);
+
+	/*
+	* Once we have the offset, we can get our original pointer and call free
+	*/
+	void * p = (void *)((uint8_t *)ptr - offset);
+	free(p);
+}
+
+
+
+
+
+
 
 //////// Some functions to deal with UTF-8 on Windows
 #ifdef _WIN32
@@ -19117,24 +18626,6 @@ string path(const string& fn)
 }
 
 /// iterative find of filename
-string nomefileseesistegia(string i_nomefile)
-{
-	if (!fileexists(i_nomefile))
-		return i_nomefile;
-	string percorso=extractfilepath(i_nomefile);
-	string estensione=prendiestensione(i_nomefile);
-	string nomefile=prendinomefileebasta(i_nomefile);
-	char	numero[10];
-	for (int i=1;i<99999;i++)
-	{
-		sprintf(numero,"%05d",i);
-		string snumero=numero;
-		string candidato=percorso+nomefile+"_"+snumero+"."+estensione;
-		if (!fileexists(candidato))
-			return candidato;
-	}
-	return ("");
-}
 
 string padleft(std::string str, const size_t num, const char paddingChar = ' ')
 {
@@ -19642,6 +19133,74 @@ string compressemlfilename(const string& i_string)
 	return uniqfilename;
 }
 
+void print_datetime(void)
+{
+	int hours, minutes, seconds, day, month, year;
+
+	time_t now;
+	time(&now);
+	struct tm *local = localtime(&now);
+
+	hours = local->tm_hour;			// get hours since midnight	(0-23)
+	minutes = local->tm_min;		// get minutes passed after the hour (0-59)
+	seconds = local->tm_sec;		// get seconds passed after the minute (0-59)
+
+	day = local->tm_mday;			// get day of month (1 to 31)
+	month = local->tm_mon + 1;		// get month of year (0 to 11)
+	year = local->tm_year + 1900;	// get year since 1900
+
+	printf("%02d/%02d/%d %02d:%02d:%02d ", day, month, year, hours,minutes,seconds);
+}
+
+
+// Print a UTF-8 string to f (stdout, stderr) so it displays properly
+void printUTF8(const char* s, FILE* f=stdout) 
+{
+	assert(f);
+	assert(s);
+
+	/// output on g_output_handle too (-output somefile)
+	if (g_output_handle!=0)
+		fprintf(g_output_handle,"%s",s);
+
+#ifdef unix
+  fprintf(f, "%s", s);
+#else
+  const HANDLE h=(HANDLE)_get_osfhandle(_fileno(f));
+  DWORD ft=GetFileType(h);
+  if (ft==FILE_TYPE_CHAR) {
+    fflush(f);
+    std::wstring w=utow(s, '/');  // Windows console: convert to UTF-16
+    DWORD n=0;
+    WriteConsole(h, w.c_str(), w.size(), &n, 0);
+  }
+  else  // stdout redirected to file
+    fprintf(f, "%s", s);
+#endif
+}
+
+/// We want to read the damn UTF8 files. 
+/// In the case of Windows using the function for UTF16, after conversion
+
+FILE* freadopen(const char* i_filename)
+{
+#ifdef _WIN32
+	wstring widename=utow(i_filename);
+	FILE* myfp=_wfopen(widename.c_str(), L"rb" );
+#else
+	FILE* myfp=fopen(i_filename, "rb" );
+#endif
+	if (myfp==NULL)
+	{
+		printf( "\nfreadopen cannot open:");
+		printUTF8(i_filename);
+		printf("\n");
+		return 0;
+	}
+	return myfp;
+}
+
+
 int64_t prendidimensionefile(const char* i_filename)
 {
 	if (!i_filename)
@@ -19671,19 +19230,24 @@ bool comparechar(char c1, char c2)
 
 string stringtolower(string i_stringa)
 {
+	/*macos*/
 	std::for_each(i_stringa.begin(), i_stringa.end(), [](char & c)
 	{
 		c = ::tolower(c);	
 	});
 	return i_stringa;
+
 }			
 string stringtoupper(string i_stringa)
 {
+	/*macos */
 	std::for_each(i_stringa.begin(), i_stringa.end(), [](char & c)
 	{
 		c = ::toupper(c);	
 	});
 	return i_stringa;
+
+	
 }			
 /*
 bool isxls(string i_stringa)
@@ -19778,15 +19342,18 @@ inline char *  migliaia5(uint64_t n)
 		} while(n != 0);
 	return p;
 }
-/*
-char *rtrim(char *s)
+
+string timetohuman(int32_t i_seconds)
 {
-    char* back = s + strlen(s);
-    while(isspace(*--back));
-    *(back+1) = '\0';
-    return s;
+	if (i_seconds<=0)
+		return "00:00:00";
+	int h=(i_seconds/3600); 
+	int m=(i_seconds -(3600*h))/60;
+	int s=(i_seconds -(3600*h)-(m*60));
+	char	temporaneo[20];
+	sprintf(temporaneo,"%03d:%02d:%02d",h,m,s);
+	return temporaneo;
 }
-*/
 
 /// quick and ugly
 inline char* tohuman(uint64_t i_bytes)
@@ -19948,252 +19515,385 @@ int64_t encodestringdate(string i_date)
 
 
 
-bool replace(std::string& str, const std::string& from, const std::string& to) {
-    size_t start_pos = str.find(from);
-    if(start_pos == std::string::npos)
-        return false;
-    str.replace(start_pos, from.length(), to);
-    return true;
+
+// Convert non-negative decimal number x to string of at least n digits
+string itos(int64_t x, int n=1) {
+  assert(x>=0);
+  assert(n>=0);
+  string r;
+  for (; x || n>0; x/=10, --n) r=string(1, '0'+x%10)+r;
+  return r;
 }
 
-
-/// sorting
-
-bool comparecrc32(s_fileandsize a, s_fileandsize b)
-{
-	return a.hashhex>b.hashhex;
-///	return a.crc32>b.crc32;
-}
-bool comparesizehash(s_fileandsize a, s_fileandsize b)
-{
-	
-	return (a.size < b.size) ||
-           ((a.size == b.size) && (a.hashhex > b.hashhex)) || 
-           ((a.size == b.size) && (a.hashhex == b.hashhex) &&
-              (a.filename<b.filename));
-			  ///(strcmp(a.filename.c_str(), b.filename.c_str()) <0));
-			  
-}
-bool comparefilenamesize(s_fileandsize a, s_fileandsize b)
-{
-	char a_size[40];
-	char b_size[40];
-	sprintf(a_size,"%014lld",(long long)a.size);
-	sprintf(b_size,"%014lld",(long long)b.size);
-	return a_size+a.filename<b_size+b.filename;
-}
-bool comparefilenamedate(s_fileandsize a, s_fileandsize b)
-{
-	char a_size[40];
-	char b_size[40];
-	sprintf(a_size,"%014lld",(long long)a.date);
-	sprintf(b_size,"%014lld",(long long)b.date);
-	return a_size+a.filename<b_size+b.filename;
-}
-
-
-bool sortbyval(const std::pair<string, string> &a, 
-               const std::pair<string, string> &b) 
-{ 
-///	slower, but usefun sorting filenames
-///	printf("First   %s     second   %s\n",a.first.c_str(),a.second.c_str());
-	if (a.second==b.second)
-		return (a.first < b.first);
-	return (a.second < b.second); 
-} 
-
-bool sortbysize(const std::pair<uint64_t, string> &a, 
-               const std::pair<uint64_t, string> &b) 
-{ 
-    return (a.first < b.first); 
-} 
-
-uint32_t crchex2int(const char *hex) 
-{
-	assert(hex);
-	uint32_t val = 0;
-	for (int i=0;i<8;i++)
-	{
-        uint8_t byte = *hex++; 
-        if (byte >= '0' && byte <= '9') byte = byte - '0';
-        else if (byte >= 'a' && byte <='f') byte = byte - 'a' + 10;
-        else if (byte >= 'A' && byte <='F') byte = byte - 'A' + 10;    
-        val = (val << 4) | (byte & 0xF);
-    }
-    return val;
-}
-void print_datetime(void)
-{
-	int hours, minutes, seconds, day, month, year;
-
-	time_t now;
-	time(&now);
-	struct tm *local = localtime(&now);
-
-	hours = local->tm_hour;			// get hours since midnight	(0-23)
-	minutes = local->tm_min;		// get minutes passed after the hour (0-59)
-	seconds = local->tm_sec;		// get seconds passed after the minute (0-59)
-
-	day = local->tm_mday;			// get day of month (1 to 31)
-	month = local->tm_mon + 1;		// get month of year (0 to 11)
-	year = local->tm_year + 1900;	// get year since 1900
-
-	printf("%02d/%02d/%d %02d:%02d:%02d ", day, month, year, hours,minutes,seconds);
-}
-
-
-string mygetalgo()
-{
-	
-	if (flagblake3)
-		return "BLAKE3";
-	else
-	if (flagxxhash64)
-		return "XXHASH64";
-	else
-	if (flagwyhash)
-		return "WYHASH";
-	else
-	if (flagcrc32)
-		return "CRC-32";
-	else
-	if (flagcrc32c)
-		return "CRC-32C";
-	else
-	if (flagxxh3)
-		return "XXH3";
-	else
-	if (flagsha256)
-		return "SHA-256";
-	else
-	if (flagwhirlpool)
-		return "WHIRLPOOL";
-	else
-	if (flagmd5)
-		return "MD5";
-	else
-	if (flagsha3)
-		return "SHA-3";
-	else
-		return "SHA-1";
-}
-int flag2algo()
-{
-	if (flagblake3)
-		return ALGO_BLAKE3;
-	else
-	if (flagxxhash64)
-		return ALGO_XXHASH64;
-	else
-	if (flagwyhash)
-		return ALGO_WYHASH;
-	else
-	if (flagwhirlpool)
-		return ALGO_WHIRLPOOL;
-	else
-	if (flagmd5)
-		return ALGO_MD5;
-	else
-	if (flagsha3)
-		return ALGO_SHA3;
-	else
-	if (flagcrc32)
-		return ALGO_CRC32;
-	else
-	if (flagcrc32c)
-		return ALGO_CRC32C;
-	else
-	if (flagxxh3)
-		return ALGO_XXH3;
-	else
-	if (flagsha256)
-		return ALGO_SHA256;
-	else
-		return ALGO_SHA1;
-}
-
-
-
-
-
-
-
-struct xorshift128plus_key_s {
-    uint64_t part1;
-    uint64_t part2;
-};
-
-typedef struct xorshift128plus_key_s xorshift128plus_key_t;
-
-static inline void xorshift128plus_init(uint64_t key1, uint64_t key2, xorshift128plus_key_t *key) {
-  key->part1 = key1;
-  key->part2 = key2;
-}
-
-uint64_t xorshift128plus(xorshift128plus_key_t * key) {
-    uint64_t s1 = key->part1;
-    const uint64_t s0 = key->part2;
-    key->part1 = s0;
-    s1 ^= s1 << 23; // a
-    key->part2 = s1 ^ s0 ^ (s1 >> 18) ^ (s0 >> 5); // b, c
-    return key->part2 + s0;
-}
-
-
-void xorshift128plus_jump(xorshift128plus_key_t * key) {
-    static const uint64_t JUMP[] = { 0x8a5cd789635d2dff, 0x121fd2155c472f96 };
-    uint64_t s0 = 0;
-    uint64_t s1 = 0;
-    for(unsigned int i = 0; i < sizeof (JUMP) / sizeof (*JUMP); i++)
-        for(int b = 0; b < 64; b++) {
-            if (JUMP[i] & 1ULL << b) {
-                s0 ^= key->part1;
-                s1 ^= key->part2;
-            }
-            xorshift128plus(key);
-        }
-
-    key->part1 = s0;
-    key->part2 = s1;
-}
-
-void populateRandom_xorshift128plus(uint32_t *answer, uint32_t size,uint64_t i_key1, uint64_t i_key2) 
-{
-	xorshift128plus_key_t mykey; /// nowarning
-	mykey.part1 = i_key1;
-	mykey.part2 = i_key2;
-  xorshift128plus_init(i_key1, i_key2, &mykey);
-  uint32_t i = size;
-  while (i > 2) {
-    *(uint64_t *)(answer + size - i) = xorshift128plus(&mykey);
-    i -= 2;
+// Replace * and ? in fn with part or digits of part
+string subpart(string fn, int part) {
+  for (int j=fn.size()-1; j>=0; --j) {
+    if (fn[j]=='?')
+      fn[j]='0'+part%10, part/=10;
+    else if (fn[j]=='*')
+      fn=fn.substr(0, j)+itos(part)+fn.substr(j+1), part=0;
   }
-  if (i != 0)
-    answer[size - i] = (uint32_t)xorshift128plus(&mykey);
+  return fn;
 }
 
 
 
 
+// Return relative time in milliseconds
+int64_t mtime() 
+{
+#ifdef unix
+  timeval tv;
+  gettimeofday(&tv, 0);
+  return tv.tv_sec*1000LL+tv.tv_usec/1000;
+#else
+  int64_t t=GetTickCount();
+  if (t<g_start) t+=0x100000000LL;
+  return t;
+#endif
+}
+
+// Convert 64 bit decimal YYYYMMDDHHMMSS to "YYYY-MM-DD HH:MM:SS"
+// where -1 = unknown date, 0 = deleted.
+string dateToString(int64_t date) 
+{
+  if (date<=0) return "                   ";
+  string s="0000-00-00 00:00:00";
+  static const int t[]={18,17,15,14,12,11,9,8,6,5,3,2,1,0};
+  for (int i=0; i<14; ++i) s[t[i]]+=int(date%10), date/=10;
+  return s;
+}
+
+// Convert attributes to a readable format
+string attrToString(int64_t attrib) {
+  string r="     ";
+  if ((attrib&255)=='u') {
+    r[0]="0pc3d5b7 9lBsDEF"[(attrib>>20)&15];
+    for (int i=0; i<4; ++i)
+      r[4-i]=(attrib>>(8+3*i))%8+'0';
+  }
+  else if ((attrib&255)=='w') {
+    for (int i=0, j=0; i<32; ++i) {
+      if ((attrib>>(i+8))&1) {
+        char c="RHS DAdFTprCoIEivs89012345678901"[i];
+        if (j<5) r[j]=c;
+        else r+=c;
+        ++j;
+      }
+    }
+  }
+  return r;
+}
+
+// Convert seconds since 0000 1/1/1970 to 64 bit decimal YYYYMMDDHHMMSS
+// Valid from 1970 to 2099.
+int64_t decimal_time(time_t tt) {
+  if (tt==-1) tt=0;
+  int64_t t=(sizeof(tt)==4) ? unsigned(tt) : tt;
+  const int second=t%60;
+  const int minute=t/60%60;
+  const int hour=t/3600%24;
+  t/=86400;  // days since Jan 1 1970
+  const int term=t/1461;  // 4 year terms since 1970
+  t%=1461;
+  t+=(t>=59);  // insert Feb 29 on non leap years
+  t+=(t>=425);
+  t+=(t>=1157);
+  const int year=term*4+t/366+1970;  // actual year
+  t%=366;
+  t+=(t>=60)*2;  // make Feb. 31 days
+  t+=(t>=123);   // insert Apr 31
+  t+=(t>=185);   // insert June 31
+  t+=(t>=278);   // insert Sept 31
+  t+=(t>=340);   // insert Nov 31
+  const int month=t/31+1;
+  const int day=t%31+1;
+  return year*10000000000LL+month*100000000+day*1000000
+         +hour*10000+minute*100+second;
+}
+
+// Convert decimal date to time_t - inverse of decimal_time()
+time_t unix_time(int64_t date) {
+  if (date<=0) return -1;
+  static const int days[12]={0,31,59,90,120,151,181,212,243,273,304,334};
+  const int year=date/10000000000LL%10000;
+  const int month=(date/100000000%100-1)%12;
+  const int day=date/1000000%100;
+  const int hour=date/10000%100;
+  const int min=date/100%100;
+  const int sec=date%100;
+  return (day-1+days[month]+(year%4==0 && month>1)+((year-1970)*1461+1)/4)
+    *86400+hour*3600+min*60+sec;
+}
+
+
+/*
+	error section
+*/
+long long fsbtoblk(int64_t num, uint64_t fsbs, u_long bs)
+{
+	return (num * (intmax_t) fsbs / (int64_t) bs);
+}
+
+
+/// it is not easy, at all, to take *nix free filesystem space
+int64_t getfreespace(const char* i_path)
+{
+#ifdef BSD
+	struct statfs stat;
+ 
+	if (statfs(i_path, &stat) != 0) 
+	{
+		// error happens, just quits here
+		return 0;
+	}
+///	long long used = stat.f_blocks - stat.f_bfree;
+///	long long availblks = stat.f_bavail + used;
+
+	static long blocksize = 0;
+	int dummy;
+
+	if (blocksize == 0)
+		getbsize(&dummy, &blocksize);
+	return  fsbtoblk(stat.f_bavail,
+	stat.f_bsize, blocksize)*1024;
+#else
+#ifdef unix //this sould be Linux
+	return 0;
+#else
+	uint64_t spazio=0;
+	
+	BOOL  fResult;
+	unsigned __int64 i64FreeBytesToCaller,i64TotalBytes,i64FreeBytes;
+	WCHAR  *pszDrive  = NULL, szDrive[4];
+
+	const size_t WCHARBUF = 512;
+	wchar_t  wszDest[WCHARBUF];
+	MultiByteToWideChar(CP_ACP, MB_PRECOMPOSED, i_path, -1, wszDest, WCHARBUF);
+
+	pszDrive = wszDest;
+	if (i_path[1] == ':')
+	{
+		szDrive[0] = pszDrive[0];
+		szDrive[1] = ':';
+        szDrive[2] = '\\';
+        szDrive[3] = '\0';
+		pszDrive = szDrive;
+	}
+	fResult = GetDiskFreeSpaceEx ((LPCTSTR)pszDrive,
+                                 (PULARGE_INTEGER)&i64FreeBytesToCaller,
+                                 (PULARGE_INTEGER)&i64TotalBytes,
+                                 (PULARGE_INTEGER)&i64FreeBytes);
+	if (fResult)
+		spazio=i64FreeBytes;
+	return spazio; // Windows
+#endif
+
+#endif
+}
+
+bool direxists(string& i_directory) 
+{
+#ifdef unix
+	struct stat sb;
+    return ((stat(i_directory.c_str(), &sb) == 0) && S_ISDIR(sb.st_mode)); 	
+#endif
+
+#ifdef _WIN32
+	HANDLE	myhandle;
+	WIN32_FIND_DATA findfiledata;
+	if (!isdirectory(i_directory))
+		i_directory+="/";
+	std::string pattern=i_directory+"*.*";
+	std::wstring wpattern=utow(pattern.c_str());
+	myhandle=FindFirstFile(wpattern.c_str(),&findfiledata);
+	if (myhandle!=INVALID_HANDLE_VALUE)
+	{
+		FindClose(myhandle);
+		return true;
+	}
+	return false;
+#endif
+
+	return false;
+}
+
+
+#ifdef unix
+// Print last error message
+void printerr(const char* i_where,const char* filename) 
+{
+	string lasterror=i_where;
+	string lasterror2=filename;
+	string risultato=lasterror+":"+lasterror2;
+	perror(risultato.c_str());
+}
+
+#else
+
+
+// Print last error message
+void printerr(const char* i_where,const char* filename) 
+{
+	string lasterror=i_where;
+	
+  fflush(stdout);
+  int err=GetLastError();
+	fprintf(stderr,"\n");
+  printUTF8(filename, stderr);
+  
+  if (err==ERROR_FILE_NOT_FOUND)
+    g_exec_text=": error file not found";
+  else if (err==ERROR_PATH_NOT_FOUND)
+   g_exec_text=": error path not found";
+  else if (err==ERROR_ACCESS_DENIED)
+    g_exec_text=": error access denied";
+  else if (err==ERROR_SHARING_VIOLATION)
+    g_exec_text=": error sharing violation";
+  else if (err==ERROR_BAD_PATHNAME)
+    g_exec_text=": error bad pathname";
+  else if (err==ERROR_INVALID_NAME)
+    g_exec_text=": error invalid name";
+  else if (err==ERROR_NETNAME_DELETED)
+      g_exec_text=": error network name no longer available";
+  else if (err==ERROR_ALREADY_EXISTS)
+      g_exec_text=": cannot write file already exists";
+  else
+  {
+	char buffer[100];
+	sprintf(buffer,": Windows error # %d\n",err);
+	
+  g_exec_text=buffer;
+  }
+	fprintf(stderr, g_exec_text.c_str());
+	fprintf(stderr,"\n");
+	g_exec_text=filename+g_exec_text;
+	
+	uint64_t spazio=getfreespace(filename);
+	if (spazio<16384)
+	{
+		string mypath=filename;
+		if (direxists(mypath))
+			printf("\n\nMAYBE OUT OF FREE SPACE?\n");
+		else
+			printf("\n\nMAYBE OUT OF FREE SPACE OR INVALID PATH?\n");
+	}
+//	exit(0);
+}
+
+#endif
+
+// Print file open error and throw exception
+void ioerr(const char* msg) {
+  printerr("11896",msg);
+  throw std::runtime_error(msg);
+}
+
+
+
+/*
+
+	File-funtions section
+*/
+
+
+// Windows/Linux compatible file type
+#ifdef unix
+typedef FILE* FP;
+const FP FPNULL=NULL;
+const char* const RB="rb";
+const char* const WB="wb";
+const char* const RBPLUS="rb+";
+#else // Windows
+typedef HANDLE FP;
+const FP FPNULL=INVALID_HANDLE_VALUE;
+typedef enum {RB, WB, RBPLUS, WBPLUS} MODE;  // fopen modes
 
 
 	
 
-
-void printbar(char i_carattere,bool i_printbarraenne=true)
+// Open file. Only modes "rb", "wb", "rb+" and "wb+" are supported.
+FP fopen(const char* filename, MODE mode) 
 {
-	int twidth=terminalwidth();
-	if (twidth<10)
-		twidth=100;
-		
-	for (int i=0;i<twidth-4;i++)
-		printf("%c",i_carattere);
-	if (i_printbarraenne)
-		printf("\n");
+  assert(filename);
+  DWORD access=0;
+  if (mode!=WB) access=GENERIC_READ;
+  if (mode!=RB) access|=GENERIC_WRITE;
+  DWORD disp=OPEN_ALWAYS;  // wb or wb+
+  if (mode==RB || mode==RBPLUS) disp=OPEN_EXISTING;
+  DWORD share=FILE_SHARE_READ;
+  if (mode==RB) share|=FILE_SHARE_WRITE|FILE_SHARE_DELETE;
+  return CreateFile(utow(filename).c_str(), access, share,
+                    NULL, disp, FILE_ATTRIBUTE_NORMAL, NULL);
 }
 
+// Close file
+int fclose(FP fp) 
+{
+  return CloseHandle(fp) ? 0 : EOF;
+}
+
+// Read nobj objects of size size into ptr. Return number of objects read.
+size_t fread(void* ptr, size_t size, size_t nobj, FP fp) {
+  DWORD r=0;
+  ReadFile(fp, ptr, size*nobj, &r, NULL);
+  if (size>1) r/=size;
+  return r;
+}
+
+// Write nobj objects of size size from ptr to fp. Return number written.
+size_t fwrite(const void* ptr, size_t size, size_t nobj, FP fp) {
+  DWORD r=0;
+  WriteFile(fp, ptr, size*nobj, &r, NULL);
+  if (size>1) r/=size;
+  return r;
+}
+
+// Move file pointer by offset. origin is SEEK_SET (from start), SEEK_CUR,
+// (from current position), or SEEK_END (from end).
+int fseeko(FP fp, int64_t offset, int origin) {
+  if (origin==SEEK_SET) origin=FILE_BEGIN;
+  else if (origin==SEEK_CUR) origin=FILE_CURRENT;
+  else if (origin==SEEK_END) origin=FILE_END;
+  LONG h=uint64_t(offset)>>32;
+  SetFilePointer(fp, offset&0xffffffffull, &h, origin);
+  return GetLastError()!=NO_ERROR;
+}
+
+// Get file position
+int64_t ftello(FP fp) {
+  LONG h=0;
+  DWORD r=SetFilePointer(fp, 0, &h, FILE_CURRENT);
+  return r+(uint64_t(h)<<32);
+}
+
+#endif
 
 
+
+bool fileexists(const string& i_filename) 
+{
+#ifdef unix
+// true even for dirs no S_ISDIR
+  struct stat buffer;   
+  return (stat(i_filename.c_str(),&buffer)==0); 
+#endif
+
+#ifdef _WIN32
+	HANDLE	myhandle;
+	WIN32_FIND_DATA findfiledata;
+	std::wstring wpattern=utow(i_filename.c_str());
+	myhandle=FindFirstFile(wpattern.c_str(),&findfiledata);
+	if (myhandle!=INVALID_HANDLE_VALUE)
+	{
+		FindClose(myhandle);
+		return true;
+	}
+	return false;
+#endif
+
+	return false;
+}
 
 /// return size, date and attr
 bool getfileinfo(string i_filename,int64_t& o_size,int64_t& o_date,int64_t& o_attr)
@@ -20244,14 +19944,25 @@ bool getfileinfo(string i_filename,int64_t& o_size,int64_t& o_date,int64_t& o_at
 	return false;
 }
 
+// Delete a file, return true if successful
+bool delete_file(const char* filename) {
+#ifdef unix
+	return remove(filename)==0;
+#else
 
-/// possible problems with unsigned to calculate the differences. We do NOT want to link abs()
-int64_t myabs(int64_t i_first,int64_t i_second)
-{
-	if (i_first>i_second)
-		return i_first-i_second;
-	else
-		return i_second-i_first;
+	if (!fileexists(filename))
+		return true;
+	SetFileAttributes(utow(filename).c_str(),FILE_ATTRIBUTE_NORMAL);
+	return DeleteFile(utow(filename).c_str());
+#endif
+}
+
+bool delete_dir(const char* i_directory) {
+#ifdef unix
+  return remove(i_directory)==0;
+#else
+  return RemoveDirectory(utow(i_directory).c_str());
+#endif
 }
 
 
@@ -20404,11 +20115,525 @@ int erredbarras(const std::string &i_path,bool i_flagrecursive=true)
 
 
 
+string nomefileseesistegia(string i_nomefile)
+{
+	if (!fileexists(i_nomefile))
+		return i_nomefile;
+	string percorso=extractfilepath(i_nomefile);
+	string estensione=prendiestensione(i_nomefile);
+	string nomefile=prendinomefileebasta(i_nomefile);
+	char	numero[10];
+	for (int i=1;i<99999;i++)
+	{
+		sprintf(numero,"%05d",i);
+		string snumero=numero;
+		string candidato=percorso+nomefile+"_"+snumero+"."+estensione;
+		if (!fileexists(candidato))
+			return candidato;
+	}
+	return ("");
+}
 
-///mika
+void xcommand(string i_command,string i_parameter)
+{
+
+//	printf("Comm %s\n",i_command.c_str());
+//	printf("parm %s\n",i_parameter.c_str());
+	
+	if (i_command=="")
+		return;
+	if (!fileexists(i_command))
+		return;
+	int dummy;
+	if (i_parameter=="")
+		dummy=system(i_command.c_str());
+	else
+	{
+		string mycommand=i_command+" \""+i_parameter+"\"";
+		dummy=system(mycommand.c_str());
+	}
+	if (dummy==888888)
+		printf("no-warning-please\n");
+	
+	
+}
+
+string g_gettempdirectory()
+{
+#if defined(_WIN32) || defined(_WIN64)
+	string temppath="";
+	wchar_t charpath[MAX_PATH];
+	if (GetTempPathW(MAX_PATH, charpath))
+	{
+		wstring ws(charpath);
+		string str(ws.begin(), ws.end());	
+		return str;
+	}
+	return temppath;
+#else
+	return "/tmp/";
+#endif
+}
 
 
 
+
+#if defined(_WIN32)
+/// something to get VSS done via batch file
+
+void waitexecute(string i_filename,string i_parameters,int i_show)
+{
+	///SHELLEXECUTEINFOA ShExecInfo = {0};
+	SHELLEXECUTEINFOA ShExecInfo =SHELLEXECUTEINFOA();
+			 
+	ShExecInfo.cbSize = sizeof(SHELLEXECUTEINFOA);
+	ShExecInfo.fMask = SEE_MASK_NOCLOSEPROCESS;
+	ShExecInfo.hwnd = NULL;
+	ShExecInfo.lpVerb = NULL;
+	ShExecInfo.lpFile = i_filename.c_str();
+	ShExecInfo.lpParameters = i_parameters.c_str();   
+	ShExecInfo.lpDirectory = NULL;
+	ShExecInfo.nShow = i_show;
+	ShExecInfo.hInstApp = NULL; 
+	ShellExecuteExA(&ShExecInfo);
+	WaitForSingleObject(ShExecInfo.hProcess, INFINITE);
+	CloseHandle(ShExecInfo.hProcess);
+}
+
+bool isadmin()
+{
+	BOOL fIsElevated = FALSE;
+	HANDLE hToken = NULL;
+	TOKEN_ELEVATION elevation;
+	DWORD dwSize;
+
+	if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &hToken))
+	{
+		printf("\n Failed to get Process Token\n");
+		goto Cleanup;  // if Failed, we treat as False
+	}
+
+
+	if (!GetTokenInformation(hToken, TokenElevation, &elevation, sizeof(elevation), &dwSize))
+	{	
+		printf("\nFailed to get Token Information\n");
+		goto Cleanup;// if Failed, we treat as False
+	}
+
+	fIsElevated = elevation.TokenIsElevated;
+
+Cleanup:
+	if (hToken)
+	{
+		CloseHandle(hToken);
+		hToken = NULL;
+	}
+	return fIsElevated; 
+}
+
+//// VSS on Windows by... batchfile
+//// delete all kind of shadows copies (if any)
+void vss_deleteshadows()
+{
+	if (flagvss)
+	{
+		string	filebatch	=g_gettempdirectory()+"vsz.bat";
+		
+		printf("Starting delete VSS shadows\n");
+    		
+		if (fileexists(filebatch))
+			if (remove(filebatch.c_str())!=0)
+			{
+				printf("Highlander batch  %s\n", filebatch.c_str());
+				return;
+			}
+		
+		FILE* batch=fopen(filebatch.c_str(), "wb");
+		fprintf(batch,"@echo OFF\n");
+		fprintf(batch,"@wmic shadowcopy delete /nointeractive\n");
+		fclose(batch);
+	
+		waitexecute(filebatch,"",SW_HIDE);
+	
+		printf("End VSS delete shadows\n");
+	}
+
+}
+#endif
+
+
+// Return true if a file or directory (UTF-8 without trailing /) exists.
+bool exists(string filename) {
+  int len=filename.size();
+  if (len<1) return false;
+  if (filename[len-1]=='/') filename=filename.substr(0, len-1);
+#ifdef unix
+  struct stat sb;
+  return !lstat(filename.c_str(), &sb);
+#else
+  return GetFileAttributes(utow(filename.c_str()).c_str())
+         !=INVALID_FILE_ATTRIBUTES;
+#endif
+}
+
+
+
+
+// Close fp if open. Set date and attributes unless 0
+void close(const char* filename, int64_t date, int64_t attr, FP fp=FPNULL) {
+  assert(filename);
+#ifdef unix
+  if (fp!=FPNULL) fclose(fp);
+  if (date>0) {
+    struct utimbuf ub;
+    ub.actime=time(NULL);
+    ub.modtime=unix_time(date);
+    utime(filename, &ub);
+  }
+  if ((attr&255)=='u')
+    chmod(filename, attr>>8);
+#else
+  const bool ads=strstr(filename, ":$DATA")!=0;  // alternate data stream?
+  if (date>0 && !ads) {
+    if (fp==FPNULL)
+      fp=CreateFile(utow(filename).c_str(),
+                    FILE_WRITE_ATTRIBUTES,
+                    FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE,
+                    NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, NULL);
+    if (fp!=FPNULL) {
+      SYSTEMTIME st;
+      st.wYear=date/10000000000LL%10000;
+      st.wMonth=date/100000000%100;
+      st.wDayOfWeek=0;  // ignored
+      st.wDay=date/1000000%100;
+      st.wHour=date/10000%100;
+      st.wMinute=date/100%100;
+      st.wSecond=date%100;
+      st.wMilliseconds=0;
+      FILETIME ft;
+      SystemTimeToFileTime(&st, &ft);
+      SetFileTime(fp, NULL, NULL, &ft);
+    }
+  }
+  if (fp!=FPNULL) CloseHandle(fp);
+  if ((attr&255)=='w' && !ads)
+    SetFileAttributes(utow(filename).c_str(), attr>>8);
+#endif
+}
+// Create directories as needed. For example if path="/tmp/foo/bar"
+// then create directories /, /tmp, and /tmp/foo unless they exist.
+// Set date and attributes if not 0.
+void makepath(string path, int64_t date=0, int64_t attr=0) {
+  for (unsigned i=0; i<path.size(); ++i) {
+    if (path[i]=='\\' || path[i]=='/') {
+      path[i]=0;
+#ifdef unix
+      mkdir(path.c_str(), 0777);
+#else
+      CreateDirectory(utow(path.c_str()).c_str(), 0);
+#endif
+      path[i]='/';
+    }
+  }
+
+  // Set date and attributes
+  string filename=path;
+  if (filename!="" && filename[filename.size()-1]=='/')
+    filename=filename.substr(0, filename.size()-1);  // remove trailing slash
+  close(filename.c_str(), date, attr);
+}
+
+#ifndef unix
+
+// Truncate filename to length. Return -1 if error, else 0.
+int truncate(const char* filename, int64_t length) {
+  std::wstring w=utow(filename);
+  HANDLE out=CreateFile(w.c_str(), GENERIC_READ | GENERIC_WRITE,
+                        0, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+  if (out!=INVALID_HANDLE_VALUE) {
+    //// LONG
+	long hi=length>>32;
+    if (SetFilePointer(out, length, &hi, FILE_BEGIN)
+             !=INVALID_SET_FILE_POINTER
+        && SetEndOfFile(out)
+        && CloseHandle(out))
+      return 0;
+  }
+  return -1;
+}
+#endif
+
+
+
+
+/*
+	some zpaq functions
+*/
+
+
+
+// Guess number of cores. In 32 bit mode, max is 2.
+int numberOfProcessors() {
+  int rc=0;  // result
+#ifdef unix
+#ifdef BSD  // BSD or Mac OS/X
+  size_t rclen=sizeof(rc);
+  int mib[2]={CTL_HW, HW_NCPU};
+  if (sysctl(mib, 2, &rc, &rclen, 0, 0)!=0)
+    perror("sysctl");
+
+#else  // Linux
+  // Count lines of the form "processor\t: %d\n" in /proc/cpuinfo
+  // where %d is 0, 1, 2,..., rc-1
+  FILE *in=fopen("/proc/cpuinfo", "r");
+  if (!in) return 1;
+  std::string s;
+  int c;
+  while ((c=getc(in))!=EOF) {
+    if (c>='A' && c<='Z') c+='a'-'A';  // convert to lowercase
+    if (c>' ') s+=c;  // remove white space
+    if (c=='\n') {  // end of line?
+      if (s.size()>10 && s.substr(0, 10)=="processor:") {
+        c=atoi(s.c_str()+10);
+        if (c==rc) ++rc;
+      }
+      s="";
+    }
+  }
+  fclose(in);
+#endif
+#else
+
+  // In Windows return %NUMBER_OF_PROCESSORS%
+  //const char* p=getenv("NUMBER_OF_PROCESSORS");
+  //if (p) rc=atoi(p);
+  ///SYSTEM_INFO si={0};
+  SYSTEM_INFO si= SYSTEM_INFO();
+  
+  GetSystemInfo(&si);
+  rc=si.dwNumberOfProcessors;
+#endif
+  if (rc<1) rc=1; /// numero massimo core 32bit
+  if (sizeof(char*)==4 && rc>2) rc=2;
+  return rc;
+}
+
+
+// In Windows convert upper case to lower case.
+inline int tolowerW(int c) {
+#ifndef unix
+  if (c>='A' && c<='Z') return c-'A'+'a';
+#endif
+  return c;
+}
+
+// Return true if strings a == b or a+"/" is a prefix of b
+// or a ends in "/" and is a prefix of b.
+// Match ? in a to any char in b.
+// Match * in a to any string in b.
+// In Windows, not case sensitive.
+bool ispath(const char* a, const char* b) {
+  
+  /*
+  printf("ZEKEa %s\n",a);
+  printf("ZEKEb %s\n",b);
+  */
+  for (; *a; ++a, ++b) {
+    const int ca=tolowerW(*a);
+    const int cb=tolowerW(*b);
+    if (ca=='*') {
+      while (true) {
+        if (ispath(a+1, b)) return true;
+        if (!*b) return false;
+        ++b;
+      }
+    }
+    else if (ca=='?') {
+      if (*b==0) return false;
+    }
+    else if (ca==cb && ca=='/' && a[1]==0)
+      return true;
+    else if (ca!=cb)
+      return false;
+  }
+  return *b==0 || *b=='/';
+}
+
+// Read 4 byte little-endian int and advance s
+unsigned btoi(const char* &s) {
+  s+=4;
+  return (s[-4]&255)|((s[-3]&255)<<8)|((s[-2]&255)<<16)|((s[-1]&255)<<24);
+}
+
+// Read 8 byte little-endian int and advance s
+int64_t btol(const char* &s) {
+  uint64_t r=btoi(s);
+  return r+(uint64_t(btoi(s))<<32);
+}
+
+
+// return a/b such that there is exactly one "/" in between, and
+// in Windows, any drive letter in b the : is removed and there
+// is a "/" after.
+string append_path(string a, string b) {
+  int na=a.size();
+  int nb=b.size();
+#ifndef unix
+  if (nb>1 && b[1]==':') {  // remove : from drive letter
+    if (nb>2 && b[2]!='/') b[1]='/';
+    else b=b[0]+b.substr(2), --nb;
+  }
+#endif
+  if (nb>0 && b[0]=='/') b=b.substr(1);
+  if (na>0 && a[na-1]=='/') a=a.substr(0, na-1);
+  return a+"/"+b;
+}
+
+
+bool check_if_password(string i_filename)
+{
+	if (!fileexists(i_filename))
+		return false;
+		
+	FILE* inFile = freadopen(i_filename.c_str());
+	if (inFile==NULL) 
+	{
+#ifdef _WIN32
+		int err=GetLastError();
+#else
+		int err=1;
+#endif
+		printf("\19802: ERR <%s> kind %d\n",i_filename.c_str(),err); 
+		exit(0);
+	}
+    char s[4]={0};
+    const int nr=fread(s,1,4,inFile);
+///	for (int i=0;i<4;i++)
+///		printf("%d  %c  %d\n",i,s[i],s[i]);
+	fclose(inFile);
+    if (nr>0 && memcmp(s, "7kSt", 4) && (memcmp(s, "zPQ", 3) || s[3]<1))
+		return true;
+	return false;
+}
+
+/*
+
+	Sort section
+*/
+
+///// sort by offset, then by filename
+///// use sprintf for debug, not very fast.
+bool comparecrc32block(s_crc32block a, s_crc32block b)
+{
+	char a_start[40];
+	char b_start[40];
+	sprintf(a_start,"%014lld",(long long)a.crc32start);
+	sprintf(b_start,"%014lld",(long long)b.crc32start);
+	return a.filename+a_start<b.filename+b_start;
+}
+
+bool comparecrc32(s_fileandsize a, s_fileandsize b)
+{
+	return a.hashhex>b.hashhex;
+}
+bool comparesizehash(s_fileandsize a, s_fileandsize b)
+{
+	return (a.size < b.size) ||
+           ((a.size == b.size) && (a.hashhex > b.hashhex)) || 
+           ((a.size == b.size) && (a.hashhex == b.hashhex) &&
+              (a.filename<b.filename));
+			  ///(strcmp(a.filename.c_str(), b.filename.c_str()) <0));
+			  
+}
+bool comparefilenamesize(s_fileandsize a, s_fileandsize b)
+{
+	char a_size[40];
+	char b_size[40];
+	sprintf(a_size,"%014lld",(long long)a.size);
+	sprintf(b_size,"%014lld",(long long)b.size);
+	return a_size+a.filename<b_size+b.filename;
+}
+bool comparefilenamedate(s_fileandsize a, s_fileandsize b)
+{
+	char a_size[40];
+	char b_size[40];
+	sprintf(a_size,"%014lld",(long long)a.date);
+	sprintf(b_size,"%014lld",(long long)b.date);
+	return a_size+a.filename<b_size+b.filename;
+}
+bool sortbyval(const std::pair<string, string> &a, 
+               const std::pair<string, string> &b) 
+{ 
+///	slower, but useful sorting filenames
+///	printf("First   %s     second   %s\n",a.first.c_str(),a.second.c_str());
+	if (a.second==b.second)
+		return (a.first < b.first);
+	return (a.second < b.second); 
+} 
+
+bool sortbysize(const std::pair<uint64_t, string> &a, 
+               const std::pair<uint64_t, string> &b) 
+{ 
+    return (a.first < b.first); 
+} 
+
+/// possible problems with unsigned to calculate the differences. We do NOT want to link abs()
+int64_t myabs(int64_t i_first,int64_t i_second)
+{
+	if (i_first>i_second)
+		return i_first-i_second;
+	else
+		return i_second-i_first;
+}
+
+
+/*
+	random section
+*/
+
+struct xorshift128plus_key_s 
+{
+    uint64_t part1;
+    uint64_t part2;
+};
+
+typedef struct xorshift128plus_key_s xorshift128plus_key_t;
+
+static inline void xorshift128plus_init(uint64_t key1, uint64_t key2, xorshift128plus_key_t *key) 
+{
+  key->part1 = key1;
+  key->part2 = key2;
+}
+
+uint64_t xorshift128plus(xorshift128plus_key_t * key) 
+{
+    uint64_t s1 = key->part1;
+    const uint64_t s0 = key->part2;
+    key->part1 = s0;
+    s1 ^= s1 << 23; // a
+    key->part2 = s1 ^ s0 ^ (s1 >> 18) ^ (s0 >> 5); // b, c
+    return key->part2 + s0;
+}
+
+void populateRandom_xorshift128plus(uint32_t *answer, uint32_t size,uint64_t i_key1, uint64_t i_key2) 
+{
+	xorshift128plus_key_t mykey; /// nowarning
+	mykey.part1 = i_key1;
+	mykey.part2 = i_key2;
+  xorshift128plus_init(i_key1, i_key2, &mykey);
+  uint32_t i = size;
+  while (i > 2) {
+    *(uint64_t *)(answer + size - i) = xorshift128plus(&mykey);
+    i -= 2;
+  }
+  if (i != 0)
+    answer[size - i] = (uint32_t)xorshift128plus(&mykey);
+}
+
+
+/*
+	checksum section
+*/
 
 
 /////////////////// calculate CRC32 
@@ -20465,7 +20690,6 @@ uint32_t crc32_16bytes (const void* data, size_t length, uint32_t previousCrc32 
 
 #define __BYTE_ORDER __LITTLE_ENDIAN
 
-
 namespace
 {
   /// zlib's CRC32 polynomial
@@ -20485,26 +20709,12 @@ namespace
   }
 
   /// Slicing-By-16
-  #ifdef CRC32_USE_LOOKUP_TABLE_SLICING_BY_16
   const size_t MaxSlice = 16;
-  #elif defined(CRC32_USE_LOOKUP_TABLE_SLICING_BY_8)
-  const size_t MaxSlice = 8;
-  #elif defined(CRC32_USE_LOOKUP_TABLE_SLICING_BY_4)
-  const size_t MaxSlice = 4;
-  #elif defined(CRC32_USE_LOOKUP_TABLE_BYTE)
-  const size_t MaxSlice = 1;
-  #else
-    #define NO_LUT // don't need Crc32Lookup at all
-  #endif
-
+  
 } // anonymous namespace
 
 /// forward declaration, table is at the end of this file
 extern const uint32_t Crc32Lookup[MaxSlice][256]; // extern is needed to keep compiler happy
-
-
-
-
 
 uint32_t crc32_16bytes(const void* data, size_t length, uint32_t previousCrc32)
 {
@@ -20574,8 +20784,6 @@ uint32_t crc32_16bytes(const void* data, size_t length, uint32_t previousCrc32)
 
   return ~crc; // same as crc ^ 0xFFFFFFFF
 }
-
-
 
 
 /// merge two CRC32 such that result = crc32(dataB, lengthB, crc32(dataA, lengthA))
@@ -21234,8 +21442,6 @@ const uint32_t Crc32Lookup[MaxSlice][256] =
 
 
 /////////////// CRC-32C with hardware acceleration
-
-
 /* crc32c.c -- compute CRC-32C using the Intel crc32 instruction
  * Copyright (C) 2013 Mark Adler
  * Version 1.1  1 Aug 2013  Mark Adler
@@ -21797,12 +22003,6 @@ struct StringWriter: public libzpaq::Writer {
 
 
 
-/////////////////////////////// Jidac /////////////////////////////////
-
-// A Jidac object represents an archive contents: a list of file
-// fragments with hash, size, and archive offset, and a list of
-// files with date, attributes, and list of fragment pointers.
-// Methods add to, extract from, compare, and list the archive.
 
 // enum for version
 
@@ -21811,7 +22011,8 @@ static const int64_t DEFAULT_VERSION=99999999999999LL; // unless -until
 
 
 // fragment hash table entry
-struct HT {
+struct HT 
+{
 	uint32_t crc32;			// new: take the CRC-32 of the fragment
 	uint32_t crc32size;
 
@@ -21830,22 +22031,10 @@ struct HT {
 			memset(sha1, 0, 20);
 		usize=u;
 	}
-	/*
-	HT(string kello,const char* s=0, int u=-1, int64_t c=HT_BAD) 
-	{
-		crc32=0;
-		crc32size=0;
-		if (s) 
-			memcpy(sha1, s, 20);
-		else 
-			memset(sha1, 0, 20);
-		usize=u; 
-		csize=c;
-	}
-	*/
 };
 
-struct DTV {
+struct DTV 
+{
   int64_t date;          // decimal YYYYMMDDHHMMSS (UT) or 0 if deleted
   int64_t size;          // size or -1 if unknown
   int64_t attr;          // first 8 attribute bytes
@@ -21855,85 +22044,6 @@ struct DTV {
   
   DTV(): date(0), size(0), attr(0), csize(0), version(0) {}
 };
-
-
-/// OK we need a fix for 64-byte-align problem on some Linux compiler
-
-/*
-https://github.com/embeddedartistry/embedded-resources/blob/master/examples/c/malloc_aligned.c
-*/
-
-#ifndef align_up
-#define align_up(num, align) \
-	(((num) + ((align) - 1)) & ~((align) - 1))
-#endif
-
-//Convenience macro for memalign, the linux API
-#define memalign(align, size) aligned_malloc(align, size)
-
-//Number of bytes we're using for storing the aligned pointer offset
-typedef uint16_t myoffset_t;
-#define PTR_OFFSET_SZ sizeof(myoffset_t)
-
-/**
-* aligned_malloc takes in the requested alignment and size
-*	We will call malloc with extra bytes for our header and the offset
-*	required to guarantee the desired alignment.
-*/
-void * aligned_malloc(size_t align, size_t size)
-{
-	void * ptr = NULL;
-
-	//We want it to be a power of two since align_up operates on powers of two
-	assert((align & (align - 1)) == 0);
-
-	if(align && size)
-	{
-		/*
-		 * We know we have to fit an offset value
-		 * We also allocate extra bytes to ensure we can meet the alignment
-		 */
-		uint32_t hdr_size = PTR_OFFSET_SZ + (align - 1);
-		void * p = malloc(size + hdr_size);
-
-		if(p)
-		{
-			/*
-			 * Add the offset size to malloc's pointer (we will always store that)
-			 * Then align the resulting value to the arget alignment
-			 */
-			ptr = (void *) align_up(((uintptr_t)p + PTR_OFFSET_SZ), align);
-
-			//Calculate the offset and store it behind our aligned pointer
-			*((myoffset_t *)ptr - 1) = (myoffset_t)((uintptr_t)ptr - (uintptr_t)p);
-
-		} // else NULL, could not malloc
-	} //else NULL, invalid arguments
-
-	return ptr;
-}
-
-/**
-* aligned_free works like free(), but we work backwards from the returned
-* pointer to find the correct offset and pointer location to return to free()
-* Note that it is VERY BAD to call free() on an aligned_malloc() pointer.
-*/
-void aligned_free(void * ptr)
-{
-	assert(ptr);
-
-	/*
-	* Walk backwards from the passed-in pointer to get the pointer offset
-	* We convert to an offset_t pointer and rely on pointer math to get the data
-	*/
-	myoffset_t offset = *((myoffset_t *)ptr - 1);
-
-	/*
-	* Once we have the offset, we can get our original pointer and call free
-	*/
-	void * p = (void *)((uint8_t *)ptr - offset);
-	free(p);
-}
 
 
 // filename entry
@@ -21959,65 +22069,61 @@ struct DT   // if you get some warning here, update your compiler!
 
 /// now using pointer to shrink DT from more then 1K to 296 bytes
 	XXH3_state_t	*pfile_xxh3;  // this is the problem: XXH3's 64-byte align not always work with too old-too new compilers
-	
     XXHash64 		*pfile_xxhash64;
-///#endif
-
 	libzpaq::SHA256 *pfile_sha256;
 	libzpaq::SHA1 	*pfile_sha1;
 	SHA3			*pfile_sha3;
 	MD5				*pfile_md5;
-	
-	
 	blake3_hasher 	*pfile_blake3;
 	
-	DT(): date(0), size(0), attr(0), data(0),written(-1),franz_block_size(FRANZOFFSETSHA256),file_crc32(0) {memset(franz_block,0,sizeof(franz_block));hexhash="";hashtype="";
+	DT(): date(0), size(0), attr(0), data(0),written(-1),franz_block_size(FRANZOFFSETSHA256),file_crc32(0) 
+	{
+		memset(franz_block,0,sizeof(franz_block));
+		hexhash	="";
+		hashtype="";
 
-	pfile_xxhash64=NULL;
-	if (g_franzotype==FRANZO_XXHASH64)
-		pfile_xxhash64=new XXHash64(0);
+		pfile_xxhash64=NULL;
+		if (g_franzotype==FRANZO_XXHASH64)
+			pfile_xxhash64=new XXHash64(0);
 
-	pfile_md5=NULL;
-	if (g_franzotype==FRANZO_MD5)
-		pfile_md5=new MD5;
-		
-	pfile_sha1=NULL;
-	if (g_franzotype==FRANZO_SHA_1)
-		pfile_sha1=new libzpaq::SHA1;
-		
-	pfile_sha256=NULL;
-	if (g_franzotype==FRANZO_SHA_256)
-		pfile_sha256=new libzpaq::SHA256;
-		
-	pfile_sha3=NULL;
-	if (g_franzotype==FRANZO_SHA3)
-		pfile_sha3=new SHA3;
+		pfile_md5=NULL;
+		if (g_franzotype==FRANZO_MD5)
+			pfile_md5=new MD5;
 			
-/// beware of time and space, but now we are sure to maintain 64 byte alignment
-	pfile_xxh3=NULL;
-	if (g_franzotype==FRANZO_XXH3)
-	{
-		pfile_xxh3=(XXH3_state_t*)aligned_malloc(64, sizeof(XXH3_state_t));
-		(void)XXH3_128bits_reset(pfile_xxh3);
-	}
-	
-	pfile_blake3=NULL;
-	if (g_franzotype==FRANZO_BLAKE3)
-	{
-		pfile_blake3=(blake3_hasher*)malloc(sizeof(blake3_hasher));
-		blake3_hasher_init(pfile_blake3);
-	}
+		pfile_sha1=NULL;
+		if (g_franzotype==FRANZO_SHA_1)
+			pfile_sha1=new libzpaq::SHA1;
+			
+		pfile_sha256=NULL;
+		if (g_franzotype==FRANZO_SHA_256)
+			pfile_sha256=new libzpaq::SHA256;
+			
+		pfile_sha3=NULL;
+		if (g_franzotype==FRANZO_SHA3)
+			pfile_sha3=new SHA3;
+				
+	/// beware of time and space, but now we are sure to maintain 64 byte alignment
+		pfile_xxh3=NULL;
+		if (g_franzotype==FRANZO_XXH3)
+		{
+			pfile_xxh3=(XXH3_state_t*)aligned_malloc(64, sizeof(XXH3_state_t));
+			(void)XXH3_128bits_reset(pfile_xxh3);
+		}
+		
+		pfile_blake3=NULL;
+		if (g_franzotype==FRANZO_BLAKE3)
+		{
+			pfile_blake3=(blake3_hasher*)malloc(sizeof(blake3_hasher));
+			blake3_hasher_init(pfile_blake3);
+		}
 	}
 };
 typedef map<string, DT> DTMap;
 
 
-
-
-
-
 // list of blocks to extract
-struct Block {
+struct Block 
+{
   int64_t offset;       // location in archive
   int64_t usize;        // uncompressed size, -1 if unknown (streaming)
   int64_t bsize;        // compressed size
@@ -22032,7 +22138,8 @@ struct Block {
 };
 
 // Version info
-struct VER {
+struct VER 
+{
   int64_t date;          // Date of C block, 0 if streaming
   int64_t lastdate;      // Latest date of any block
   int64_t offset;        // start of transaction C block
@@ -22045,18 +22152,6 @@ struct VER {
   
   VER() {memset(this, 0, sizeof(*this));}
 };
-
-
-///// sort by offset, then by filename
-///// use sprintf for debug, not very fast.
-bool comparecrc32block(s_crc32block a, s_crc32block b)
-{
-	char a_start[40];
-	char b_start[40];
-	sprintf(a_start,"%014lld",(long long)a.crc32start);
-	sprintf(b_start,"%014lld",(long long)b.crc32start);
-	return a.filename+a_start<b.filename+b_start;
-}
 
 
 // Windows API functions not in Windows XP to be dynamically loaded
@@ -22074,10 +22169,10 @@ class CompressJob;
 class Jidac 
 {
 public:
-	int doCommand(int argc, const char** argv);
-	friend ThreadReturn decompressThread(void* arg);
-	friend ThreadReturn testThread(void* arg);
-	friend struct ExtractJob;
+	int 	doCommand(int argc, const char** argv);
+	friend 	ThreadReturn decompressThread(void* arg);
+	friend 	ThreadReturn testThread(void* arg);
+	friend 	struct ExtractJob;
 private:
 
 	string	zpaqfranzexename;
@@ -22183,6 +22278,7 @@ private:
 	
 	
   // Support functions
+	void	reset();
 	void 	printsanitizeflags();
 	
 	string 	rename(string name);           // rename from -to
@@ -22202,51 +22298,73 @@ private:
 	int 	enumeratecomments();
 	int 	searchcomments(string i_testo,vector<DTMap::iterator> &filelist);
 	
-	bool 	getchecksum(string i_filename, char* o_sha1); //get SHA1 AND CRC32 of a file. Old, for backward
 	string 	zfs_get_snaplist(string i_header,string i_footer,vector<string>& o_array_primachiocciola,vector<string>& o_array_dopochiocciola);
-	
-	void	reset();
-	string sanitizzanomefile(string i_filename,int i_filelength,int& io_collisioni,MAPPAFILEHASH& io_mappacollisioni);
+	string 	sanitizzanomefile(string i_filename,int i_filelength,int& io_collisioni,MAPPAFILEHASH& io_mappacollisioni);
+
+	void 	getpasswordifempty();
+	string 	getpasswordblind();
+	string 	getpassword();
 
 	int		writesfxmodule(string i_filename);
-	
-	///string 	do_benchmark(int i_timelimit,string i_runningalgo,int i_chunksize,uint32_t* buffer32bit,double& o_speed);
-
-	/// out of Jidac by unzpaq206 merging and naming "shadowing"
-	///string 	decodefranzoffset();
-	///int 	decode_franz_block(const bool i_isdirectory,const char* i_franz_block,string& o_hashtype,string& o_hashvalue,string& o_crc32value);
+	int 	decompress_sfx_to_file(FILE* i_outfile);
 };
-
-////////////////////////////////////////////////////////////////////////////
-///////// This is a merge of unzpaq206.cpp, patched by me to become unz.cpp
-///////// Now support FRANZOFFSET256 (embedding SHA1-XXHASH64-SHA256-XHH3 into ZPAQ's c block)
-
-string decodefranzoffset(int franzotype)
+string Jidac::getpasswordblind()
 {
-	if (franzotype==FRANZO_NONE)
-		return "NOTHING (LIKE 7.15)";
-	if (franzotype==FRANZO_CRC_32) /// store only CRC-32
-		return "CRC-32";
-	if (franzotype==FRANZO_XXHASH64)
-		return "XXHASH64+CRC-32";
-	if (franzotype==FRANZO_SHA_1)
-		return "SHA-1+CRC-32";
-	if (franzotype==FRANZO_SHA_256)
-		return "SHA-256+CRC-32";
-	if (franzotype==FRANZO_XXH3)
-		return "XXH3+CRC-32";
-	if (franzotype==FRANZO_BLAKE3)
-		return "BLAKE3+CRC-32";
-	if (franzotype==FRANZO_SHA3)
-		return "SHA-3+CRC-32";
-	if (franzotype==FRANZO_MD5)
-		return "MD5+CRC-32";
-/*
-	string temp="16839: franzotype strange "+franzotype;
-	perror(temp.c_str());
-	*/
-	return "BYPASSWARNING";
+	string myresult="";
+	printf("\nEnter password :");
+		/*macos*/
+#if defined (__APPLE__)
+	///printf(" APPLE ");
+	int mychar=0;
+	struct termios oldt, newt;
+	tcgetattr ( STDIN_FILENO, &oldt );
+	newt = oldt;
+	newt.c_lflag &= ~( ICANON | ECHO );
+	tcsetattr ( STDIN_FILENO, TCSANOW, &newt );
+#endif
+	char carattere;
+	while (1)
+	{
+#if defined(unix)
+		carattere=getchar();
+		if (carattere==10)
+			break;
+#else	/// Windows
+		carattere=getch();
+		if(carattere=='\r')
+			break;
+		printf("*");
+#endif	
+		myresult+=carattere;
+	}
+#if defined (__APPLE__)
+	tcsetattr ( STDIN_FILENO, TCSANOW, &oldt );
+#endif
+
+	printf("\n");
+	return myresult;
 }
+
+void Jidac::getpasswordifempty()
+{
+	if (password==NULL)
+		if (check_if_password(archive))
+		{
+			printf("Archive seems encrypted (or corrupted)");
+			string spassword=getpasswordblind();
+			if (spassword!="")
+			{
+				libzpaq::SHA256 sha256;
+				for (unsigned int i=0;i<spassword.size();i++)
+					sha256.put(spassword[i]);
+				memcpy(password_string, sha256.result(), 32);
+				password=password_string;
+			}
+		}
+}	
+
+
+
 void Jidac::reset()
 {
 	g_freeze="";
@@ -22267,6 +22385,9 @@ void Jidac::reset()
 }
 
 int Jidac::paranoid() 
+////////////////////////////////////////////////////////////////////////////
+///////// This is a merge of unzpaq206.cpp, patched by me to become unz.cpp
+///////// Now support FRANZOFFSET256 
 {
 #ifdef _WIN32
 #ifndef _WIN64
@@ -24425,8 +24546,9 @@ bool unzcompareprimo(unzDTMap::iterator i_primo, unzDTMap::iterator i_secondo)
 
 
 
-
-//// zpaqfranz stuff
+/*
+	franzo section
+*/
 
 int decode_franz_block(const bool i_isdirectory,const char* i_franz_block,string& o_hashtype,string& o_hashvalue,string& o_crc32value)
 {
@@ -24453,7 +24575,6 @@ int decode_franz_block(const bool i_isdirectory,const char* i_franz_block,string
 */		
 	
 	if (i_franz_block[0]==0)
-	{
 		if (i_franz_block[0+8]!=0)
 		{
 			if (i_franz_block[0+40]==0)
@@ -24461,7 +24582,6 @@ int decode_franz_block(const bool i_isdirectory,const char* i_franz_block,string
 			o_hashvalue=i_franz_block+8;
 			risultato=FRANZO_XXHASH64; //franzotype
 		}
-	}
 	
 	if (i_franz_block[41]!=0)
 		if (i_franz_block[41+8]==0)
@@ -24843,10 +24963,12 @@ string Jidac::sanitizzanomefile(string i_filename,int i_filelength,int& io_colli
 		candidato=candidato+'.'+estensione;
 	if (flagfix255)	/// we are on windows, take care of case
 	{
+		/*macos*/
 		std::for_each(candidato.begin(), candidato.end(), [](char & c)
 		{
 			c = ::tolower(c);	
 		});
+		
 	}
 	if (flagdebug)
 	printf("25570: candidato %s\n",candidato.c_str());
@@ -24896,6 +25018,10 @@ string Jidac::sanitizzanomefile(string i_filename,int i_filelength,int& io_colli
 }
 
 
+/*
+
+	section: progress
+*/
 // Print percent done (td/ts) and estimated time remaining
 // two modes: "normal" (old zpaqfranz) "pakka" (new)
 void print_progress(int64_t ts, int64_t td,int64_t i_scritti) 
@@ -24912,8 +25038,8 @@ void print_progress(int64_t ts, int64_t td,int64_t i_scritti)
 	if (td<1000000)
 		return;
 		
-	double eta=0.001*(mtime()-global_start)*(ts-td)/(td+1.0);
-	int secondi=(mtime()-global_start)/1000;
+	double eta=0.001*(mtime()-g_start)*(ts-td)/(td+1.0);
+	int secondi=(mtime()-g_start)/1000;
 	if (secondi==0)
 		secondi=1;
 	
@@ -25027,6 +25153,9 @@ bool comparedatethenfilename(DTMap::iterator ap, DTMap::iterator bp)
 }
 
 
+/*
+	Section: help
+*/
 
 void help_b(bool i_usage,bool i_example)
 {
@@ -25067,8 +25196,6 @@ void help_b(bool i_usage,bool i_example)
 		moreprint("Cook the CPU (8 cores):              b -all -t8 -n 20 -blake3");
 	}
 }
-
-
 
 void help_a(bool i_usage,bool i_example)
 {
@@ -25958,7 +26085,6 @@ void Jidac::examples(string i_command)
 
 
 
-///mika2
 
 void open_output(string i_filename)
 {
@@ -26021,7 +26147,7 @@ string Jidac::rename(string name)
   return name;
 }
 
-string getpassword()
+string Jidac::getpassword()
 {
 /*
     static struct termios oldt, newt;
@@ -26083,7 +26209,6 @@ int Jidac::doCommand(int argc, const char** argv)
 	g_sfxflagforce=false;
 	g_sfxflagall=false;
 	
-	
 	g_freeze="";
 	g_archive="";
 	g_output_handle=NULL;
@@ -26094,8 +26219,52 @@ int Jidac::doCommand(int argc, const char** argv)
 	g_exec_text="";
 	g_copy="";
 	command=0;
-	flagforce=false;
-	flagzero=false;
+	
+	flagforce			=false;
+	flagzero			=false;
+	flagnoattributes	=false;
+	flagbarraod			=false;
+	flagbarraon			=false;
+	flagbarraos			=false;
+	flagdebug			=false;
+	flaghw				=false;
+	flagtest			=false;
+	flagskipzfs			=false; 
+	flagverbose			=false;
+	flagnoqnap			=false;
+	flagforcewindows	=false;
+	flagnopath			=false;
+	flagnoeta			=false;
+	flagpakka			=false;
+	flagvss				=false;
+	flagnosort			=false;
+	flagchecksum		=false;
+	flagnochecksum		=false;
+	flagcrc32c			=false;
+	flagsha1			=false;
+	flagverify			=false;
+	flagkill			=false;
+	flagutf				=false;
+	flagfix255			=false;
+	flagfixeml			=false;
+	flagflat			=false;
+	flagparanoid		=false;
+	flagxxh3			=false;
+	flagcrc32			=false;
+	flagsha256			=false;
+	flagwyhash			=false;
+	flagwhirlpool		=false;
+	flagmd5				=false;
+	flagsha3			=false;
+	flagblake3			=false;
+	flagxxhash64		=false;
+	flagdonotforcexls	=false;
+	flagcomment			=false;
+	flag715				=false;
+	flagfilelist		=false;
+	flagmm				=false;
+	flagappend			=false;
+	
 	fragment=6;
 	minsize=0;
 	maxsize=0;
@@ -26105,52 +26274,11 @@ int Jidac::doCommand(int argc, const char** argv)
 	password=0;  // no password
 	index=0;
 	method="";  // 0..5
-	flagnoattributes=false;
 	repack="";
 	new_password=0;
 	summary=-1; 
 	menoenne=0;
 	versioncomment="";
-	flagbarraod=false;
-	flagbarraon=false;
-	flagbarraos=false;
-	flagdebug=false;
-	flagtest=false;
-	flagskipzfs=false; 
-	flagverbose=false;
-	flagnoqnap=false;
-	flagforcewindows=false;
-	flagnopath=false;
-	flagnoeta=false;
-	flagpakka=false;
-	flagvss=false;
-	flagnosort=false;
-	flagchecksum=false;
-	flagnochecksum=false;
-	flagcrc32c=false;
-	flagsha1=false;
-	flagverify=false;
-	flagkill=false;
-	flagutf=false;
-	flagfix255=false;
-	flagfixeml=false;
-	flagflat=false;
-	flagparanoid=false;
-	flagxxh3=false;
-	flagcrc32=false;
-	flagsha256=false;
-	flagwyhash=false;
-	flagwhirlpool=false;
-	flagmd5=false;
-	flagsha3=false;
-	flagblake3=false;
-	flagxxhash64=false;
-	flagdonotforcexls=false;
-	flagcomment=false;
-	flag715=false;
-	flagfilelist=false;
-	flagmm=false;
-	flagappend=false;
 	searchfrom="";
 	replaceto="";
 	zpaqfranzexename="";
@@ -26590,6 +26718,7 @@ int Jidac::doCommand(int argc, const char** argv)
 		else if (opt=="-xls") 						flagdonotforcexls	=true;
 		else if (opt=="-verbose") 					flagverbose			=true;
 		else if (opt=="-debug") 					flagdebug			=true;
+		else if (opt=="-hw") 						flaghw				=true;
 		else if (opt=="-noqnap") 					flagnoqnap			=true;
 		else if (opt=="-nopath") 					flagnopath			=true;
 		else if (opt=="-nosort") 					flagnosort			=true;
@@ -26918,6 +27047,16 @@ int Jidac::doCommand(int argc, const char** argv)
 		if (flagdebug)
 			franzparameters+="DEBUG very verbose (-debug) ";
 
+/*	
+		if (flaghw)
+		{
+			franzparameters+="Enable HW acceleration ";
+			Sha1Prepare(true);
+		}
+		else
+			Sha1Prepare(false);
+*/		
+		
 		if (flagcomment)
 			franzparameters+="Use comment (-comment) ";
 	
@@ -27001,10 +27140,6 @@ int Jidac::doCommand(int argc, const char** argv)
 	
 	if (howmanythreads<1) 
 		howmanythreads=numberOfProcessors();
-
-#ifdef _OPENMP
-  omp_set_dynamic(howmanythreads);
-#endif
 
 
   // Test date
@@ -27872,7 +28007,7 @@ void Jidac::addfile(bool i_checkifselected,DTMap& i_edt,string filename, int64_t
 	if (flagnoeta==false)
 		if (!(i_edt.size() % 1000))
 		{
-			double scantime=mtime()-global_start+1;
+			double scantime=mtime()-g_start+1;
 			printf("Scanning %10s %2.2fs %10s file/s (%21s)\r",migliaia(i_edt.size()),scantime/1000.0,migliaia3((int)(i_edt.size()/(scantime/1000.0))),migliaia2(g_bytescanned));
 			fflush(stdout);
 		}
@@ -28163,105 +28298,6 @@ struct WriterPair: public libzpaq::Writer {
 
 
 
-/// special function: get SHA1 AND CRC32 of a file
-/// return a special string (HEX ASCII)
-/// SHA1 (zero) CRC32 (zero)
-/// output[40] and output[50] will be set to zero
-/// a waste of space, but I do not care at all
-
-/// note: take CRC-32 to a quick verify against CRC-32 of fragments
-bool Jidac::getchecksum(string i_filename, char* o_sha1)
-{
-		
-	if (i_filename=="")
-		return false;
-	
-	if (!o_sha1)
-		return false;
-	if (isdirectory(i_filename))
-		return false;
-		
-	
-///	houston, we have a directory	
-	if (isdirectory(i_filename))
-	{
-///	                    1234567890123456789012345678901234567890 12345678
-//			sprintf(o_sha1,"THIS IS A DIRECTORY                    Z MYZZEKAN");
-		sprintf(o_sha1,"THIS IS A DIRECTORY                      DIRECTOR");
-		o_sha1[40]=0x0;
-		o_sha1[50]=0x0;
-		return true;
-	}
-	
-	int64_t total_size		=0;  
-	int64_t lavorati		=0;
-
-	const int BUFSIZE	=65536*16;
-	char 				buf[BUFSIZE];
-	int 				n=BUFSIZE;
-
-	uint32_t crc=0;
-	
-	FP myin=fopen(i_filename.c_str(), RB);
-	if (myin==FPNULL)
-	{
-///		return false;
-		ioerr(i_filename.c_str());
-	
-	}
-    fseeko(myin, 0, SEEK_END);
-    total_size=ftello(myin);
-	fseeko(myin, 0, SEEK_SET);
-
-	string nomecorto=mymaxfile(i_filename,40); /// cut filename to max 40 chars
-	if (!flagnoeta)
-	printf("  Checksumming (%19s) %40s",migliaia(total_size),nomecorto.c_str());
-
-	int64_t blocco = (total_size / 8)+1;
-	libzpaq::SHA1 sha1;
-	unsigned int ultimapercentuale=200;
-	char simboli[]= {'|','/','-','\\','|','/','-','\\'};
-	while (1)
-	{
-		int r=fread(buf, 1, n, myin);
-		sha1.write(buf, r);					// double tap: first SHA1 (I like it)
-		crc=crc32_16bytes(buf, r, crc);	// than CRC32 (for checksum)
-
-		lavorati+=r;
-		if (r!=n) 
-			break;
-					
-		unsigned int rapporto=lavorati/blocco;
-		if (!flagnoeta)
-		if (rapporto!=ultimapercentuale)
-		{
-			if (rapporto<=sizeof(simboli)) // just to be sure
-				printf("\r%c",simboli[rapporto]); //,migliaia(total_size),nomecorto.c_str());
-			ultimapercentuale=lavorati/blocco;
-		}
-	}
-	fclose(myin);
-	
-	char sha1result[20];
-	memcpy(sha1result, sha1.result(), 20);
-	for (int j=0; j <= 19; j++)
-		sprintf(o_sha1+j*2,"%02X", (unsigned char)sha1result[j]);
-	o_sha1[40]=0x0;
-
-	sprintf(o_sha1+41,"%08X",crc);
-	o_sha1[50]=0x0;
-	
-	// example output 	96298A42DB2377092E75F5E649082758F2E0718F 
-	//				  	(zero)
-	//					3953EFF0
-	//					(zero)
-	if (!flagnoeta)
-		printf("\r+\r");
-		
-	return true;
-}
-
-
 
 void Jidac::write715attr(libzpaq::StringBuffer& i_sb, uint64_t i_data, unsigned int i_quanti)
 {
@@ -28271,13 +28307,7 @@ void Jidac::write715attr(libzpaq::StringBuffer& i_sb, uint64_t i_data, unsigned 
 	puti(i_sb, i_data, i_quanti);
 }
 
-/*
-0= 7.15
-1= 51 (0000-0-CRC32)
-2= 51 (SHA1-0-CRC32)
-3= 52 (XXHASH-0-CRC32)
-4= SHA256
-*/
+
 void Jidac::writefranzattr(libzpaq::StringBuffer& i_sb, uint64_t i_data, unsigned int i_quanti,string i_filename,uint32_t i_crc32fromfragments,uint32_t i_crc32,string i_thehash)
 {
 
@@ -28617,24 +28647,7 @@ struct ExtractJob {         // list of jobs
   }
 };
 
-/*
-bool direxists(const std::string& dirName_in)
-{
-#ifdef _WIN32
-	std::wstring w=utow(dirName_in.c_str());  // Windows console: convert to UTF-16
-	DWORD ftyp = GetFileAttributesW(w.c_str());
-  ///DWORD ftyp = GetFileAttributesA(dirName_in.c_str());
-  if (ftyp == INVALID_FILE_ATTRIBUTES)
-  {
-	///printf("\n\n\nATTRIBUTO\n\n\n");
-	return false;  //something is wrong with your path!
-  }
-  if (ftyp & FILE_ATTRIBUTE_DIRECTORY)
-    return true;   // this is a directory!
-#endif
-  return false;    // this is not a directory!
-}
-*/
+
 
 // Decompress blocks in a job until none are READY
 ThreadReturn decompressThread(void* arg) {
@@ -29073,11 +29086,24 @@ int64_t copy(libzpaq::Reader& in, libzpaq::Writer& out, uint64_t n=~0ull) {
   }
   return result;
 }
-/*
-too big
-#include <fstream>
-#include <iostream>
-*/
+
+
+
+uint32_t crchex2int(const char *hex) 
+{
+	assert(hex);
+	uint32_t val = 0;
+	for (int i=0;i<8;i++)
+	{
+        uint8_t byte = *hex++; 
+        if (byte >= '0' && byte <= '9') byte = byte - '0';
+        else if (byte >= 'a' && byte <='f') byte = byte - 'a' + 10;
+        else if (byte >= 'A' && byte <='F') byte = byte - 'A' + 10;    
+        val = (val << 4) | (byte & 0xF);
+    }
+    return val;
+}
+
 void Jidac::printsanitizeflags()
 {
 		printf("\n");
@@ -29100,8 +29126,8 @@ void Jidac::printsanitizeflags()
 
 int Jidac::testverify() 
 {
-	
-	
+	getpasswordifempty();
+
 	if (files.size()<=0)
 		return -1;
 	if (archive=="")
@@ -29350,6 +29376,8 @@ int Jidac::info()
 // List contents
 int Jidac::list() 
 {
+	getpasswordifempty();
+
 	if (flagcomment)
 	{
 		enumeratecomments();
@@ -29605,21 +29633,6 @@ int Jidac::list()
 
 /////////// HASHING-checksumming functions
 
-string	binarytohex(const unsigned char* i_risultato,const int i_lunghezza)
-{
-	string risultato="";
-	char myhex[4];
-	
-	if (i_risultato!=NULL)
-		if (i_lunghezza>0)
-			for (int j=0;j<i_lunghezza;j++)
-			{
-				sprintf(myhex,"%02X", (unsigned char)i_risultato[j]);
-				risultato.push_back(myhex[0]);
-				risultato.push_back(myhex[1]);
-			}
-	return risultato;
-}
 
 
 string sha3_calc_file(const char * i_filename,bool i_flagcalccrc32,uint32_t& o_crc32,const int64_t i_inizio,const int64_t i_totali,int64_t& io_lavorati)
@@ -29701,19 +29714,10 @@ string whirlpool_calc_file(const char * i_filename,bool i_flagcalccrc32,uint32_t
 				
 	NESSIEstruct hasher;
 	NESSIEinit(&hasher);
-	/*
-	whirlpool_ctx hasher;
-	rhash_whirlpool_init(&hasher);
-*/
 	while (1)
 	{
 		int r=fread(unzBuf, 1, n, myfile);
-
-	///	rhash_whirlpool_update(&hasher,(const unsigned char*)unzBuf,n);
-
 		NESSIEadd(unzBuf,r*8,&hasher);
-				  
-				  
 		if (i_flagcalccrc32)
 			o_crc32=crc32_16bytes(unzBuf,r,o_crc32);
  		io_lavorati+=r;
@@ -29729,9 +29733,51 @@ string whirlpool_calc_file(const char * i_filename,bool i_flagcalccrc32,uint32_t
 
 	return binarytohex(buffer,64);
 }
+/*
+string sha1hw_calc_file(const char * i_filename,bool i_flagcalccrc32,uint32_t& o_crc32,const int64_t i_inizio,const int64_t i_totali,int64_t& io_lavorati)
+{
+	o_crc32=0;
+	
+	FILE* myfile = freadopen(i_filename);
+	if(myfile==NULL )
+ 		return "";
+	
+	const int BUFSIZE	=65536*8;
+	char 				unzBuf[BUFSIZE];
+	int 				n=BUFSIZE;
+	
+	CSha1	myhasher;
+	Sha1_Init	(&myhasher);
+	
+ 
+	while (1)
+	{
+		int r=fread(unzBuf, 1, n, myfile);
+		Sha1_Update	(&myhasher,(const Byte*)unzBuf,r);
+	
+		if (i_flagcalccrc32)
+			o_crc32=crc32_16bytes(unzBuf,r,o_crc32);
+ 		
+		io_lavorati+=r;
+		if (r!=n) 
+			break;
+		if ((flagnoeta==false) && (i_inizio>0))
+			avanzamento(io_lavorati,i_totali,i_inizio);
 
+	}
+	fclose(myfile);
+
+	char sha1result[20];
+	Sha1_Final	(&myhasher,(Byte*)sha1result);
+	return binarytohex((const unsigned char*)sha1result,20);
+}
+*/
 string sha1_calc_file(const char * i_filename,bool i_flagcalccrc32,uint32_t& o_crc32,const int64_t i_inizio,const int64_t i_totali,int64_t& io_lavorati)
 {
+/*
+	if (flaghw)
+		return sha1hw_calc_file(i_filename,i_flagcalccrc32,o_crc32,i_inizio,i_totali,io_lavorati);
+*/
 	o_crc32=0;
 	
 	FILE* myfile = freadopen(i_filename);
@@ -29764,7 +29810,6 @@ string sha1_calc_file(const char * i_filename,bool i_flagcalccrc32,uint32_t& o_c
 	return binarytohex((const unsigned char*)sha1result,20);
 }
 
-//// get CRC32 of a file
 string crc32_calc_file(const char * i_filename,const int64_t i_inizio,const int64_t i_totali,int64_t& io_lavorati)
 {
 	FILE* myfile = freadopen(i_filename);
@@ -29787,9 +29832,7 @@ string crc32_calc_file(const char * i_filename,const int64_t i_inizio,const int6
 	char temp[9];
 	sprintf(temp,"%08X",crc);
 	return temp;
-	
 }
-
 
 std::string xxhash64_calc_file(const char * i_filename,bool i_flagcalccrc32,uint32_t& o_crc32,const int64_t i_inizio,const int64_t i_totali,int64_t& io_lavorati)
 {
@@ -29825,15 +29868,6 @@ std::string xxhash64_calc_file(const char * i_filename,bool i_flagcalccrc32,uint
 	return temp;
 	
 }
-
-/*
-#include <stdio.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <unistd.h>
-#include <sys/mman.h>
-#include <sys/io.h>
-*/
 
 
 // WARNING: I am not sure AT ALL that in this mode a streamed-chunked-wyhash is computable
@@ -29881,8 +29915,6 @@ string wyhash_calc_file(const char * i_filename,bool i_flagcalccrc32,uint32_t& o
 		return "";
 	}
 	const char* data=(const char*)MapViewOfFile(mapping,FILE_MAP_READ,0,0,0);
-
-
 #endif
 	
 	string risultato="";
@@ -29941,7 +29973,6 @@ string wyhash_calc_file(const char * i_filename,bool i_flagcalccrc32,uint32_t& o
 
 string mm_hash_calc_file(int i_algo,const char * i_filename,bool i_flagcalccrc32,uint32_t& o_crc32,const int64_t i_inizio,const int64_t i_totali,int64_t& io_lavorati)
 {
-	
 	o_crc32=0;
 	char buffer[100];
 	
@@ -29994,9 +30025,6 @@ string mm_hash_calc_file(int i_algo,const char * i_filename,bool i_flagcalccrc32
 		data=(char*)MapViewOfFile(mapping,FILE_MAP_READ,0,0,0);
 #endif
 	}
-
-
-
 	if (data)
 	{
 		if (i_algo==ALGO_WYHASH)
@@ -30019,7 +30047,6 @@ string mm_hash_calc_file(int i_algo,const char * i_filename,bool i_flagcalccrc32
 		else
 		if (i_algo==ALGO_SHA1)
 		{
-	///		printf("Putto %lld\n",lunghezza);
 			libzpaq::SHA1 sha1;
 			for (uint64_t i=0;i<lunghezza;i++)
 				sha1.put(*(data+i));
@@ -30143,229 +30170,6 @@ string mm_hash_calc_file(int i_algo,const char * i_filename,bool i_flagcalccrc32
 }
 
 
-/*
-	Testing SHA256 speed.
-	This implementation is a minor reworked of
-	https://github.com/System-Glitch/SHA256
-	Writing style very similar to mine, so it's no surprise that I liked it.
-	
-	Speed test against libzpaq (on my PC)
-
-	SHA-256: 3EB85BE4D8291AB53A306D47B9B756CFFCC55650C1EEA0283404683EACEA3A14 [     31.138.512.896]     e:/parte/BKmusicall3p
-	Data transfer+CPU   time          103.642 s
-	Worked on 31.138.512.896 bytes avg speed (hashtime) 300.442.995 B/s
-	GLOBAL SHA256: 11ABC63D805AF3D76F229EA88BD7C2AE4FB004920848BF77F2079280E9EBC424
- 
- 
-	Libzpaq (ZPAQ)
-	SHA-256: 3EB85BE4D8291AB53A306D47B9B756CFFCC55650C1EEA0283404683EACEA3A14 [     31.138.512.896]     e:/parte/BKmusicall3p
-	Algo SHA-256 by 1 threads
-	Data transfer+CPU   time  105.798000 s
-	Worked on 31.138.512.896 bytes avg speed (hashtime) 294.320.430 B/s
-	GLOBAL SHA256: 11ABC63D805AF3D76F229EA88BD7C2AE4FB004920848BF77F2079280E9EBC424
- 
-	As you can see just about 2% faster
-*/
-
-
-static constexpr std::array<uint32_t, 64> Kappa = {
-		0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,
-		0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,
-		0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,
-		0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,
-		0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,
-		0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,
-		0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,
-		0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,
-		0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,
-		0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,
-		0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,
-		0xd192e819,0xd6990624,0xf40e3585,0x106aa070,
-		0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,
-		0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,
-		0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,
-		0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2
-	};
-
-class franzSHA256 {
-
-public:
-	franzSHA256();
-	void update(const uint8_t * data, size_t length);
-	///void update(const std::string &data);
-	///uint8_t * digest();
-
-	std::string gethex();
-
-private:
-	uint8_t  m_data[64];
-	uint32_t m_blocklen;
-	uint64_t m_bitlen;
-	uint32_t m_state[8]; //A, B, C, D, E, F, G, H
-
-
-	static uint32_t rotr(uint32_t x, uint32_t n);
-	static uint32_t choose(uint32_t e, uint32_t f, uint32_t g);
-	static uint32_t majority(uint32_t a, uint32_t b, uint32_t c);
-	static uint32_t sig0(uint32_t x);
-	static uint32_t sig1(uint32_t x);
-	void transform();
-	void pad();
-	void revert(uint8_t * hash);
-};
-
-franzSHA256::franzSHA256(): m_blocklen(0), m_bitlen(0) {
-	m_state[0] = 0x6a09e667;
-	m_state[1] = 0xbb67ae85;
-	m_state[2] = 0x3c6ef372;
-	m_state[3] = 0xa54ff53a;
-	m_state[4] = 0x510e527f;
-	m_state[5] = 0x9b05688c;
-	m_state[6] = 0x1f83d9ab;
-	m_state[7] = 0x5be0cd19;
-}
-
-void franzSHA256::update(const uint8_t * data, size_t length) {
-	for (size_t i = 0 ; i < length ; i++) {
-		m_data[m_blocklen++] = data[i];
-		if (m_blocklen == 64) {
-			transform();
-
-			// End of the block
-			m_bitlen += 512;
-			m_blocklen = 0;
-		}
-	}
-}
-
-/*
-void franzSHA256::update(const std::string &data) {
-	update(reinterpret_cast<const uint8_t*> (data.c_str()), data.size());
-}
-uint8_t * franzSHA256::digest() {
-	uint8_t * hash = new uint8_t[32];
-
-	pad();
-	revert(hash);
-
-	return hash;
-}
-*/
-uint32_t franzSHA256::rotr(uint32_t x, uint32_t n) {
-	return (x >> n) | (x << (32 - n));
-}
-
-uint32_t franzSHA256::choose(uint32_t e, uint32_t f, uint32_t g) {
-	return (e & f) ^ (~e & g);
-}
-
-uint32_t franzSHA256::majority(uint32_t a, uint32_t b, uint32_t c) {
-	return (a & (b | c)) | (b & c);
-}
-
-uint32_t franzSHA256::sig0(uint32_t x) {
-	return franzSHA256::rotr(x, 7) ^ franzSHA256::rotr(x, 18) ^ (x >> 3);
-}
-
-uint32_t franzSHA256::sig1(uint32_t x) {
-	return franzSHA256::rotr(x, 17) ^ franzSHA256::rotr(x, 19) ^ (x >> 10);
-}
-
-void franzSHA256::transform() {
-	uint32_t maj, xorA, ch, xorE, sum, newA, newE, m[64];
-	uint32_t state[8];
-
-	for (uint8_t i = 0, j = 0; i < 16; i++, j += 4) { // Split data in 32 bit blocks for the 16 first words
-		m[i] = (m_data[j] << 24) | (m_data[j + 1] << 16) | (m_data[j + 2] << 8) | (m_data[j + 3]);
-	}
-
-	for (uint8_t k = 16 ; k < 64; k++) { // Remaining 48 blocks
-		m[k] = franzSHA256::sig1(m[k - 2]) + m[k - 7] + franzSHA256::sig0(m[k - 15]) + m[k - 16];
-	}
-
-	for(uint8_t i = 0 ; i < 8 ; i++) {
-		state[i] = m_state[i];
-	}
-
-	for (uint8_t i = 0; i < 64; i++) {
-		maj   = franzSHA256::majority(state[0], state[1], state[2]);
-		xorA  = franzSHA256::rotr(state[0], 2) ^ franzSHA256::rotr(state[0], 13) ^ franzSHA256::rotr(state[0], 22);
-
-		ch = choose(state[4], state[5], state[6]);
-
-		xorE  = franzSHA256::rotr(state[4], 6) ^ franzSHA256::rotr(state[4], 11) ^ franzSHA256::rotr(state[4], 25);
-
-		sum  = m[i] + Kappa[i] + state[7] + ch + xorE;
-		newA = xorA + maj + sum;
-		newE = state[3] + sum;
-
-		state[7] = state[6];
-		state[6] = state[5];
-		state[5] = state[4];
-		state[4] = newE;
-		state[3] = state[2];
-		state[2] = state[1];
-		state[1] = state[0];
-		state[0] = newA;
-	}
-
-	for(uint8_t i = 0 ; i < 8 ; i++) {
-		m_state[i] += state[i];
-	}
-}
-
-void franzSHA256::pad() 
-{
-
-	uint64_t i = m_blocklen;
-	uint8_t end = m_blocklen < 56 ? 56 : 64;
-
-	m_data[i++] = 0x80; // Append a bit 1
-	while (i < end) {
-		m_data[i++] = 0x00; // Pad with zeros
-	}
-
-	if(m_blocklen >= 56) {
-		transform();
-		memset(m_data, 0, 56);
-	}
-
-	// Append to the padding the total message's length in bits and transform.
-	m_bitlen += m_blocklen * 8;
-	m_data[63] = m_bitlen;
-	m_data[62] = m_bitlen >> 8;
-	m_data[61] = m_bitlen >> 16;
-	m_data[60] = m_bitlen >> 24;
-	m_data[59] = m_bitlen >> 32;
-	m_data[58] = m_bitlen >> 40;
-	m_data[57] = m_bitlen >> 48;
-	m_data[56] = m_bitlen >> 56;
-	transform();
-}
-
-void franzSHA256::revert(uint8_t * hash) 
-{
-	// SHA uses big endian byte ordering
-	// Revert all bytes
-	for (uint8_t i = 0 ; i < 4 ; i++) {
-		for(uint8_t j = 0 ; j < 8 ; j++) {
-			hash[i + (j * 4)] = (m_state[j] >> (24 - i * 8)) & 0x000000ff;
-		}
-	}
-}
-
-std::string franzSHA256::gethex()
-{
-/// less include, smaller executable. Dirty, but quick and small
-	uint8_t * hash = new uint8_t[32];
-	pad();
-	revert(hash);
-	string risultato=binarytohex((const unsigned char*)hash,32);
-	delete[] hash;
-	return risultato;
-}
-
-
 
 /// take sha256
 string sha256_calc_file(const char * i_filename,bool i_flagcalccrc32,uint32_t& o_crc32,const int64_t i_inizio,const int64_t i_totali,int64_t& io_lavorati)
@@ -30395,7 +30199,6 @@ string sha256_calc_file(const char * i_filename,bool i_flagcalccrc32,uint32_t& o
 	}
 	fclose(myfile);
 	return mysha256.gethex();
-	
 }	
 	
 
@@ -30464,8 +30267,6 @@ string blake3_calc_file(const char * i_filename,bool i_flagcalccrc32,uint32_t& o
 }
 
 
-
-/// finally get crc32-c 
 #define SIZE (262144*3)
 #define CHUNK SIZE
 string crc32c_calc_file(const char * i_filename,const int64_t i_inizio,const int64_t i_totali,int64_t& io_lavorati)
@@ -30605,6 +30406,8 @@ string shash_calc_file(string i_algo,const char * i_filename,bool i_flagcalccrc3
 // Otherwise create only new files and directories. Return 1 if error else 0.
 int Jidac::extract() 
 {
+	getpasswordifempty();
+
 	if (flagparanoid)
 	{
 		if (tofiles.size()==0)
@@ -30634,10 +30437,6 @@ int Jidac::extract()
 		printf("****** Highly suggested output on RAMDISK\n");
 		printf("******\n\n");
 	}
-	
-	
-	
-	
 	
 	string kunfile=g_gettempdirectory()+"VFILE-kun.txt";
 	myreplaceall(kunfile,"\\","/");
@@ -30818,6 +30617,7 @@ int Jidac::extract()
 		for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p) 
 		{
 			string newname=sanitizzanomefile(p->first,filelength,kollisioni,mappacollisioni);
+			/*macos*/
 			auto ret=mymap.insert( std::pair<string,DT>(newname,p->second) );
 			if (ret.second==false) 
 				printf("18298: KOLLISION! %s\n",newname.c_str());
@@ -31407,7 +31207,8 @@ int Jidac::searchcomments(string i_testo,vector<DTMap::iterator> &filelist)
 }
 int Jidac::enumeratecomments()
 {
-	
+	getpasswordifempty();
+
 	  // Read archive into dt, which may be "" for empty.
 	int64_t csize=0;
 	int errors=0;
@@ -31472,7 +31273,8 @@ int Jidac::enumeratecomments()
 
 int Jidac::kill() 
 {
-	
+	getpasswordifempty();
+
 	printf("KILL of:");
 
 	if (files.size()<=0)
@@ -31608,10 +31410,10 @@ int Jidac::kill()
 	
 }
 
-///////////////////////////////////////////////
-//// support functions
+/*
 
-
+	section: multithread
+*/
 
 
 
@@ -31689,8 +31491,6 @@ struct tparametribenchmark
 	double		speed;
 };
 
-
-
 string do_benchmark(int i_tnumber,int i_timelimit,string i_runningalgo,int i_chunksize,uint32_t* buffer32bit,double& o_speed)
 {
 	
@@ -31753,9 +31553,6 @@ string do_benchmark(int i_tnumber,int i_timelimit,string i_runningalgo,int i_chu
 				NESSIEstruct hasher;
 				NESSIEinit(&hasher);
 				NESSIEadd((const unsigned char*)buffer32bit,buffersize*8,&hasher);
-///				whirlpool_ctx hasher;
-	///			rhash_whirlpool_init(&hasher);
-		///		rhash_whirlpool_update(&hasher,(const unsigned char*)buffer32bit,buffersize);
 		}
 		else
 		if (i_runningalgo=="BLAKE3")
@@ -31769,7 +31566,6 @@ string do_benchmark(int i_tnumber,int i_timelimit,string i_runningalgo,int i_chu
 		{
 			uint32_t crc=0;
 			crc=crc32_16bytes ((const char*)buffer32bit,buffersize, crc);
-		///	printf("jaja %08X\n",crc);
 		}
 		else
 		if (i_runningalgo=="CRC-32C")
@@ -31864,34 +31660,6 @@ bool compare_s_benchmark(const s_benchmark &a, const s_benchmark &b)
 {
     return a.speed < b.speed;
 }
-
-/////////////////////////////////////////
-//////// help_something functions
-
-
-void explode(string i_string,char i_delimiter,vector<string>& array)
-{
-	///printf("1\n");
-//	printf("Delimiter %c\n",i_delimiter);
-//	printf("2\n");
-	//printf("String %s\n",i_string.c_str());
-	unsigned int i=0;
-	while(i<i_string.size())
-	{
-		string temp="";
-///		printf("entro %02d %c %d\n",i,i_string[i],(int)(i_string[i]!=i_delimiter));
-		while ((i_string[i]!=i_delimiter) && (i<i_string.size()))
-        {
-			temp+=i_string[i];
-			i++;
-		}
-		array.push_back(temp);
-		i++;
-		if (i>=i_string.size())
-			break;
-    }
-}
-	
 
 int Jidac::benchmark()
 {
@@ -32082,8 +31850,6 @@ int Jidac::benchmark()
 		for (unsigned int i=0;i<vettorerisultati.size();i++)
 			printf("%s\n",vettorerisultati[i].risultati.c_str());
 	}
-	
-	
 	free(buffer32bit);
 	return 0;
 }
@@ -32104,11 +31870,11 @@ int Jidac::summa()
 			if (!getcaptcha("iamsure","Delete files without confirmation"))
 				return 1;
 
-	int quantifiles			=0;
-	int64_t total_size		=0;  
-	unsigned int duplicated_files=0;
-	uint64_t duplicated_size=0;
-	uint64_t scannedsize=0;
+	int quantifiles					=0;
+	int64_t total_size				=0;  
+	unsigned int duplicated_files	=0;
+	uint64_t duplicated_size		=0;
+	uint64_t scannedsize			=0;
 	vector<string> myfiles;
 	
 	flagskipzfs					=true;  // strip down zfs
@@ -32152,8 +31918,8 @@ int Jidac::summa()
 		}
 		libzpaq::SHA256 sha256;
 		libzpaq::SHA256 globalesha256;
-	
-		vector<std::pair<string, string>> vec;
+	/*macos*/
+		std::vector<std::pair<string, string>> vec;
 		
 		uint64_t hashtime=0;
 		uint64_t printtime=0;
@@ -32555,8 +32321,10 @@ int Jidac::summa()
 }
 
 
-/////////////////////////////// main //////////////////////////////////
+/*
 
+	Section: main
+*/
 
 /// control-c handler
 void my_handler(int s)
@@ -32601,7 +32369,7 @@ void my_handler(int s)
 	}
 	const char** argv=&argp[0];
 #endif
-	global_start=mtime();  		// get start time
+	g_start=mtime();  		// get start time
 
 #ifndef SOLARIS // solaris does not like this things very much
 	signal (SIGINT,my_handler); // the control-C handler
@@ -32658,7 +32426,7 @@ void my_handler(int s)
 	}
   
 	fflush(stdout);
-	fprintf(stderr, "\n%1.3f seconds %s\n", (mtime()-global_start)/1000.0,
+	fprintf(stderr, "\n%1.3f seconds (%s)  %s\n", (mtime()-g_start)/1000.0,timetohuman((mtime()-g_start)/1000.0).c_str(),
       errorcode>1 ? "(with errors)" :
       errorcode>0 ? "(with warnings)" : "(all OK)");
 	  
@@ -32721,7 +32489,6 @@ int Jidac::utf()
 		if (ragione!="")
 			strange.push_back(padleft(ragione,15)+filename);
 	}
-	
 	
 	sort( strange.begin(), strange.end() );
 	strange.erase( unique( strange.begin(), strange.end() ), strange.end() );
@@ -32878,36 +32645,6 @@ int Jidac::utf()
 }
 
 
-int from_flag_to_franzotype()
-{
-
-	if (flagcrc32)
-		return FRANZO_CRC_32;
-
-	if (flagxxhash64)
-		return FRANZO_XXHASH64;
-	
-	if (flagxxh3)
-		return FRANZO_XXH3;
-	
-	if (flagsha1)
-		return FRANZO_SHA_1;
-	
-	if (flagsha256)
-		return FRANZO_SHA_256;
-	
-	if (flagmd5)
-		return FRANZO_MD5;
-	
-	if (flagblake3)
-		return FRANZO_BLAKE3;
-	
-	if (flagsha3)
-		return FRANZO_SHA3;
-	
-	return -1;
-}
-	
 	
 /// a patched... main()!
 int unz(const char * archive,const char * key)
@@ -33857,6 +33594,7 @@ int Jidac::consolidate(string i_archive)
 
 int Jidac::verify(bool i_readfile) 
 {
+	getpasswordifempty();
 
 	flagtest=true;
 	summary=1;
@@ -34004,6 +33742,8 @@ int Jidac::verify(bool i_readfile)
 
 int Jidac::test() 
 {
+	getpasswordifempty();
+
 	if (files.size()>0)
 	{
 		/// zpaqfranz t z:\1.zpaq k:\sorgente
@@ -37176,6 +36916,7 @@ int Jidac::decimation()
 
 int Jidac::add() 
 {
+	getpasswordifempty();
 	
 	if (g_freeze!="")
 	{
@@ -38358,7 +38099,8 @@ if (casecollision>0)
 
 
 /*
-	Now some SFX stuff
+	Section: sfx
+	
 	The two binaries (zsfx.exe for Windows 64 bit, and zsfx32.exe for Win32)
 	are compressed with smallz4
 	https://create.stephan-brumme.com/smallz4
@@ -38379,9 +38121,6 @@ char zsfx_mime64[]=
 #endif
 
 
-/*
-	Base64 decoder
-*/
 int b64invs[] = { 62, -1, -1, -1, 63, 52, 53, 54, 55, 56, 57, 58,
 	59, 60, 61, -1, -1, -1, -1, -1, -1, -1, 0, 1, 2, 3, 4, 5,
 	6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
@@ -38426,7 +38165,6 @@ size_t mimesize(const char *i_input)
 
 int mime2binary(const char *i_in, unsigned char *o_out, size_t outlen)
 {
-
 	if (i_in==NULL)
 		return 0;
 	if (o_out==NULL)
@@ -38461,6 +38199,11 @@ int mime2binary(const char *i_in, unsigned char *o_out, size_t outlen)
 
 
 
+
+/*
+	Section: lz4
+*/
+
 // //////////////////////////////////////////////////////////
 // smallz4cat.c
 // Copyright (c) 2016-2019 Stephan Brumme. All rights reserved.
@@ -38493,29 +38236,25 @@ static void unlz4error(const char* msg)
   exit(1);
 }
 
-// ==================== I/O INTERFACE ====================
 
-
-// read one byte from input, see getByteFromIn()  for a basic implementation
 typedef unsigned char (*GET_BYTE)  (void* userPtr);
-// write several bytes,      see sendBytesToOut() for a basic implementation
 typedef void          (*SEND_BYTES)(const unsigned char*, unsigned int, void* userPtr);
 
-struct UserPtr
+struct s_lz4parameter
 {
 	unsigned char*	source;		//my memory buffer
 	FILE* out;
 	unsigned int  	pos;		//readed so far
 	unsigned int	size;
 	unsigned int	extracted;	//written so far
-	UserPtr(): source(0), out(0), pos(0), size(0),extracted(0){};
+	s_lz4parameter(): source(0), out(0), pos(0), size(0),extracted(0){};
 }; 
 
 /// read a single byte
 static unsigned char getByteFromIn(void* userPtr) // parameter "userPtr" not needed
 {
 	/// cast user-specific data
-	struct UserPtr* user = (struct UserPtr*)userPtr;
+	struct s_lz4parameter* user = (struct s_lz4parameter*)userPtr;
 	return user->source[user->pos++];
 }
 
@@ -38523,7 +38262,7 @@ static unsigned char getByteFromIn(void* userPtr) // parameter "userPtr" not nee
 static void sendBytesToOut(const unsigned char* data, unsigned int numBytes, void* userPtr)
 {
   /// cast user-specific data
-  struct UserPtr* user = (struct UserPtr*)userPtr;
+  struct s_lz4parameter* user = (struct s_lz4parameter*)userPtr;
   if (data != NULL && numBytes > 0)
 	if (user->out != NULL)
 	{
@@ -38789,7 +38528,7 @@ string ahahencrypt(string i_string)
 ///	decode the mime64 into memory (~150KB, not very big),
 ///	decompress by LZ4 (not very big ~300KB)
 /// write into i_outfile
-int decompress_sfx_to_file(FILE* i_outfile)
+int Jidac::decompress_sfx_to_file(FILE* i_outfile)
 {
 	if (i_outfile==NULL)
 		return 0;
@@ -38810,22 +38549,19 @@ int decompress_sfx_to_file(FILE* i_outfile)
 	}
 	
 	// redundant, but better be sure
-	struct UserPtr user;
-	
+	struct s_lz4parameter user;
 	user.source		=(unsigned char*)zsfx_exe;
 	user.size		=zsfx_exe_len;
 	user.out		=i_outfile;
 	user.pos		=0;
 	user.extracted	=0;
-	
 	// do the "magic"
 	unlz4_userPtr(getByteFromIn,sendBytesToOut,&user);
 	free(zsfx_exe);
 	return user.extracted;
 }
 	
-	
-	
+
 int Jidac::writesfxmodule(string i_filename)
 {
 #if defined(_WIN32)

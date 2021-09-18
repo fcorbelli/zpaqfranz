@@ -1,4 +1,7 @@
 ```
+18-09-2021: 54.6
+Refactoring, some fixes
+
 08-09-2021: 52.3
 SFX module (for Windows) now support encrypted archives
 

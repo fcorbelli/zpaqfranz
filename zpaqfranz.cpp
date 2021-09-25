@@ -9,7 +9,7 @@
 ///////// I apologize with the authors, it's not a foolish attempt to take over their jobs
 
 
-#define ZPAQ_VERSION "54.6-experimental"
+#define ZPAQ_VERSION "54.7-experimental"
 
 #if defined(_WIN64)
 #define ZSFX_VERSION "SFX64 v52.15,"
@@ -8834,7 +8834,6 @@ string decodefranzoffset(int franzotype)
 
 string mygetalgo()
 {
-	
 	if (flagblake3)
 		return "BLAKE3";
 	else
@@ -8898,6 +8897,41 @@ int flag2algo()
 	else
 	if (flagsha256)
 		return ALGO_SHA256;
+	else
+		return ALGO_SHA1;
+}
+
+int string2algo(string i_string)
+{
+	if (i_string=="BLAKE3")
+		return ALGO_BLAKE3;
+	else
+	if (i_string=="XXHASH64")
+		return ALGO_XXHASH64;
+	else
+	if (i_string=="WYHASH")
+		return ALGO_WYHASH;
+	else
+	if (i_string=="CRC-32")
+		return ALGO_CRC32;
+	else
+	if (i_string=="CRC-32C")
+		return ALGO_CRC32C;
+	else
+	if (i_string=="XXH3")
+		return ALGO_XXH3;
+	else
+	if (i_string=="SHA-256")
+		return ALGO_SHA256;
+	else
+	if (i_string=="WHIRLPOOL")
+		return ALGO_WHIRLPOOL;
+	else
+	if (i_string=="MD5")
+		return ALGO_MD5;
+	else
+	if (i_string=="SHA-3")
+		return ALGO_SHA3;
 	else
 		return ALGO_SHA1;
 }
@@ -17871,7 +17905,7 @@ private:
 #endif
 
 
-///fika
+
 
 
 
@@ -19192,9 +19226,12 @@ FILE* freadopen(const char* i_filename)
 #endif
 	if (myfp==NULL)
 	{
-		printf( "\nfreadopen cannot open:");
-		printUTF8(i_filename);
-		printf("\n");
+		if (flagverbose)
+		{
+			printf( "\nfreadopen cannot open:");
+			printUTF8(i_filename);
+			printf("\n");
+		}
 		return 0;
 	}
 	return myfp;
@@ -25403,6 +25440,9 @@ void help_v(bool i_usage,bool i_example)
 	{
 		moreprint("CMD   v (verify)");
 		moreprint("PLUS:               Verify all files (by hashes) against filesystem");
+		moreprint("PLUS: -all          Multithread (for SSD/NVMe). Do NOT use on spinning drives");
+		moreprint("PLUS: -tX           Limit -all to X threads");
+		moreprint("PLUS: -until Y      Check the version Y");
 		moreprint("PLUS: -find pippo   For path-rework of verify");
 		moreprint("PLUS: -replace plu  For path-rework of verify (find and replace)");
 		moreprint("PLUS: -verbose      Show distinct errors");
@@ -25417,7 +25457,7 @@ void help_v(bool i_usage,bool i_example)
 		moreprint("Show errors line by line:            v z:\\1.zpaq -verbose");
 		moreprint("2n version:                          v z:\\1.zpaq -until 2");
 		moreprint("Remake path:                         v z:\\1.zpaq -find c:\\dropbox -replace z:\\knb");
-		
+		moreprint("1st version, multithread:            v z:\\1.zpaq -until 1 -all");
 	}
 }
 void help_p(bool i_usage,bool i_example)
@@ -27829,6 +27869,70 @@ bool Jidac::isselected(const char* filename, bool rn,int64_t i_size)
   return true;
 }
 
+#if defined (_WIN32)
+void	decodewinattribute(int32_t i_attribute)
+{
+	string risultato="";
+	if (i_attribute & FILE_ATTRIBUTE_ARCHIVE)
+		risultato+="ARCHIVE;";
+		
+	if (i_attribute & FILE_ATTRIBUTE_COMPRESSED)
+		risultato+="COMPRESSED;";
+	
+	if (i_attribute & FILE_ATTRIBUTE_DEVICE)
+		risultato+="DEVICE;";
+
+	if (i_attribute & FILE_ATTRIBUTE_DIRECTORY)
+		risultato+="DIRECTORY;";
+	
+	if (i_attribute & FILE_ATTRIBUTE_ENCRYPTED)
+		risultato+="ENCRYPTED;";
+
+	if (i_attribute & FILE_ATTRIBUTE_HIDDEN)
+		risultato+="HIDDEN;";
+		
+	if (i_attribute & 32768)
+		risultato+="INTEGRITY_STREAM;";
+
+	if (i_attribute & FILE_ATTRIBUTE_NORMAL)
+		risultato+="NORMAL;";
+	
+	if (i_attribute & FILE_ATTRIBUTE_NOT_CONTENT_INDEXED)
+		risultato+="NOT_CONTENT_INDEXED;";
+
+	if (i_attribute & 131072)
+		risultato+="NO_SCRUB_DATA;";
+
+	if (i_attribute & FILE_ATTRIBUTE_OFFLINE)
+		risultato+="OFFLINE;";
+
+	if (i_attribute & FILE_ATTRIBUTE_READONLY)
+		risultato+="READONY;";
+
+	if (i_attribute & 4194304 )
+		risultato+="RECALL_ON_DATA_ACCESS;";
+	
+	if (i_attribute & 262144 )
+		risultato+="RECALL_ON_OPEN;";
+
+	if (i_attribute & FILE_ATTRIBUTE_REPARSE_POINT)
+		risultato+="REPARSE_POINT;";
+
+	if (i_attribute & FILE_ATTRIBUTE_SPARSE_FILE)
+		risultato+="SPARSE_FILE;";
+	
+	if (i_attribute & FILE_ATTRIBUTE_SYSTEM)
+		risultato+="SYSTEM;";
+		
+	if (i_attribute & FILE_ATTRIBUTE_TEMPORARY)
+		risultato+="TEMPORARY;";
+	
+	if (i_attribute & FILE_ATTRIBUTE_VIRTUAL)
+		risultato+="VIRTUAL;";
+	if (risultato!="")
+		printf("%s\n",risultato.c_str());
+}
+#endif
 
 // Insert external filename (UTF-8 with "/") into dt if selected
 // by files, onlyfiles, and notfiles. If filename
@@ -27940,9 +28044,32 @@ void Jidac::scandir(bool i_checkifselected,DTMap& i_edt,string filename, bool i_
 
     // Ignore links, the names "." and ".." or any unselected file
     t=wtou(ffd.cFileName);
-    if (ffd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT
-        || t=="." || t=="..") edate=0;  // don't add
-    string fn=path(filename)+t;
+	if (flagdebug) // sometimes Windows get very strange attributes
+	{
+		printf("%08X MY new t %s\n",(unsigned int)ffd.dwFileAttributes,t.c_str());
+		decodewinattribute(ffd.dwFileAttributes);
+		printf("\n");
+	}
+
+   	if (t=="." || t=="..") 
+		edate=0;  // don't add, of course
+	
+
+	if ((ffd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) && (!(ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)))
+	{
+			/// Houston, we have a strange deduplicated .vhdx file?
+			/// add as by default
+			if (flagverbose)
+				printf("Verbose: found something strange (VHDX?) %s\n",t.c_str());
+	}
+	else
+	{
+		///	A junction?
+		if ((ffd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) && (ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY))
+			edate=0;  // don't add
+	}
+    
+	string fn=path(filename)+t;
 
     // Save directory names with a trailing / and scan their contents
     // Otherwise, save plain files
@@ -31419,8 +31546,13 @@ int Jidac::kill()
 
 struct tparametrihash
 {
+	vector<string> 	o_hashcalculated;
+	
+	vector<string> 	originalfilenames;
 	vector<string> 	filestobehashed;
-	vector<string> 	hashcalculated;
+	vector<string> 	filehash;
+	vector<string> 	algo;
+	
 	uint64_t		timestart;
 	uint64_t		timeend;
 	int64_t			inizio;
@@ -31432,13 +31564,20 @@ void * scansionahash(void *t)
 {
 	assert(t);
 	tparametrihash* par= ((struct tparametrihash*)(t));
-	vector<string>& tmpfilestobehashed= par->filestobehashed;
-	vector<string>& tmphashcalculated= par->hashcalculated;
-	
+	vector<string>& tmpfilestobehashed	= par->filestobehashed;
+	vector<string>& tmpalgo				= par->algo;
+	if (tmpfilestobehashed.size()!=tmpalgo.size())
+	{
+		printf("51569: FILETOBEHASHED != ALGO\n");
+		exit(0);
+	}
+	vector<string>& tmphashcalculated	= par->o_hashcalculated;
+		
 	for (unsigned int i=0;i<tmpfilestobehashed.size();i++)
 	{
 		uint32_t dummycrc;
-		tmphashcalculated.push_back(hash_calc_file(flag2algo(),tmpfilestobehashed[i].c_str(),false,dummycrc,par->inizio,par->dimensione,g_dimensione));
+		tmphashcalculated.push_back(hash_calc_file(string2algo(tmpalgo[i]),tmpfilestobehashed[i].c_str(),false,dummycrc,par->inizio,par->dimensione,g_dimensione));
+		///tmphashcalculated.push_back(hash_calc_file(flag2algo(),tmpfilestobehashed[i].c_str(),false,dummycrc,par->inizio,par->dimensione,g_dimensione));
 		///printf("INIZIO %lld dimensione %lld lavora %lld\n",par->inizio,par->dimensione,g_dimensione);
 	}
 	pthread_exit(NULL);
@@ -32122,8 +32261,10 @@ int Jidac::summa()
 	printf("Found (%s) => %s bytes (%s) / %s files in %f\n",tohuman2(scannedsize),migliaia(total_size),tohuman(total_size),migliaia2(quantifiles),scantime);
 	
 	for (unsigned int i=0;i<myfiles.size();i++)
+	{
 		vettoreparametrihash[i%mythreads].filestobehashed.push_back(myfiles[i]);
-
+		vettoreparametrihash[i%mythreads].algo.				push_back(mygetalgo().c_str());
+	}
 	int totfile=0;
 	for (int i=0;i<mythreads;i++)
 	{
@@ -32179,7 +32320,7 @@ int Jidac::summa()
 	
 	for(int i = 0; i <mythreads; i++ )
 		for (unsigned int j=0;j<vettoreparametrihash[i].filestobehashed.size();j++)
-			vec.push_back(make_pair(vettoreparametrihash[i].filestobehashed[j],vettoreparametrihash[i].hashcalculated[j]));
+			vec.push_back(make_pair(vettoreparametrihash[i].filestobehashed[j],vettoreparametrihash[i].o_hashcalculated[j]));
 
 	if ((!flagnosort) || (flagverify))
 	std::sort(vec.begin(), vec.end(),sortbyval);
@@ -33592,153 +33733,6 @@ int Jidac::consolidate(string i_archive)
 
 
 
-int Jidac::verify(bool i_readfile) 
-{
-	getpasswordifempty();
-
-	flagtest=true;
-	summary=1;
-	if (all)
-	{
-		printf("33777: cannot verify with -all (only one version at time)\n");
-		return 0;
-	}
-  
-	if (i_readfile)
-	{
-		const int64_t sz=read_archive(archive.c_str());
-		if (sz<1) error("archive not found");
-	}
-		
-	myprintf("\nVerify hashes against the filesystem\n");
-	
-	int 		checkedbyhash=0;
-	uint64_t 	starthashing=mtime();
-	uint64_t 	hashtotali=0;
-	int64_t		hashatifinora=0;
-	int			tobechecked=0;
-	int			nohashfound=0;
-	for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p) 
-		if (p->second.date && p->first!="") 
-		{
-			const string filedefinitivo=rename(p->first);
-			if (!isdirectory(filedefinitivo))
-			if (p->second.size>0)
-			{
-				hashtotali+=p->second.size;
-				tobechecked++;
-			}
-		}
-	
-	for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p) 
-	{
-		if (p->second.date && p->first!="") 
-		{
-			string filedefinitivo=rename(p->first);
-			
-			if ((searchfrom!="") && (replaceto!=""))
-				replace(filedefinitivo,searchfrom,replaceto);
-				
-			if (!isdirectory(filedefinitivo))
-			if (p->second.size>0)
-			{
-	
-				string myhashtype="";
-				string myhash="";
-				string mycrc32="";
-				
-				uint32_t crc32fromfilesystem=0;
-				
-				decode_franz_block(false,p->second.franz_block,
-					myhashtype,
-					myhash,
-					mycrc32);
-				MAPPACHECK::iterator a=g_mychecks.find(myhashtype);
-	
-				if (a!=g_mychecks.end())
-				{
-					checkedbyhash++;
-					if (flagdebug)
-						printf("Taking %s and CRC32 for %s\r",myhashtype.c_str(),filedefinitivo.c_str());
-
-					if (!fileexists(filedefinitivo.c_str()))
-					{
-						if (flagverbose || (g_output!=""))
-								myprintf("FILE NOT FOUND on %s: FILE %s\n",myhashtype.c_str(),filedefinitivo.c_str());
-						a->second.checkednotfound++;			
-					}
-					else
-					{
-						string hashread=hash_calc_file(
-						a->second.algotype,
-						filedefinitivo.c_str(),
-						true,	/// <--- look at this
-						crc32fromfilesystem,
-						starthashing,hashtotali,hashatifinora);
-						if (hashread==myhash)
-						{
-							if (flagdebug)
-								printf("GOOD %s:  STORED == FROM FILE %s\n",myhashtype.c_str(),filedefinitivo.c_str());
-							a->second.checkedok++;
-							a->second.checksize+=p->second.size;
-						}
-						else
-						{
-							if (flagverbose || (g_output!=""))
-							{
-								myprintf("ERROR on %s: STORED HASH %s VS %s IN FILE ",myhashtype.c_str(),myhash.c_str(),hashread.c_str());
-								printUTF8(filedefinitivo.c_str());
-								myprintf("\n");
-							}
-							a->second.checkedfailed++;
-						}
-					}
-				}
-				else
-				{
-					nohashfound++;
-					if (flagverbose)
-						printf("26620: algo unknown (or no algo!) %s\n",filedefinitivo.c_str());
-				}
-	
-			}
-		}
-	}
-	
-	int risultato=0;
-	bool outsomething=(nohashfound>0);
-	
-	if (nohashfound>0)
-		risultato=1;
-		
-	for (MAPPACHECK::iterator p=g_mychecks.begin(); p!=g_mychecks.end(); ++p) 
-		outsomething |= (p->second.checkedok+p->second.checkedfailed+p->second.checkednotfound);
-
-	if (outsomething)
-	{
-		morebar('-');
-		for (MAPPACHECK::iterator p=g_mychecks.begin(); p!=g_mychecks.end(); ++p) 
-		{
-			if (p->second.checkedok)
-				myprintf("OK   %8s : %08d of %08d (%s hash check against file on disk)\n",p->first.c_str(),p->second.checkedok,tobechecked,tohuman(p->second.checksize));
-			if (p->second.checkedfailed)
-			{
-				myprintf("FAIL %8s : %08d of %08d (FAILED hash check against file on disk)\n",p->first.c_str(),p->second.checkedfailed,tobechecked);
-				risultato=2;
-			}
-			if (p->second.checkednotfound)
-			{
-				myprintf("WARN %8s : %08d of %08d (file not found, cannot check hash)\n",p->first.c_str(),p->second.checkedfailed,tobechecked);
-				if (risultato!=2)
-					risultato=1;
-			}
-		}
-		if (nohashfound)
-				myprintf("UNKNOWN/NO HASH %08d of %08d\n",nohashfound,tobechecked);
-		morebar('-');
-	}
-	return risultato;
-}
 
 int Jidac::test() 
 {
@@ -38766,4 +38760,242 @@ int Jidac::sfx()
 #endif
 
 	return 0;
+}
+
+
+
+
+
+
+
+
+
+int Jidac::verify(bool i_readfile) 
+{
+	getpasswordifempty();
+
+	flagtest		=true;
+	summary			=1;
+	bool myflagall	=all;
+	
+	all=false;
+	if (i_readfile)
+	{
+		const int64_t sz=read_archive(archive.c_str());
+		if (sz<1) error("archive not found");
+	}
+	all=myflagall;	
+	
+	myprintf("\nVerify hashes of last version against the filesystem\n");
+	
+	int 		checkedbyhash=0;
+	uint64_t 	hashtotali=0;
+	int			tobechecked=0;
+	int			nohashfound=0;
+	
+	vector<string> 	myfiles;
+	vector<string> 	myfilesoriginal;
+	vector<string> 	myfilehash;
+	vector<string> 	myalgo;
+		
+	for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p) 
+		if (p->second.date && p->first!="") 
+		{
+			const string filedefinitivo=rename(p->first);
+			if (!isdirectory(filedefinitivo))
+			if (p->second.size>0)
+			{
+				hashtotali+=p->second.size;
+				tobechecked++;
+				
+				string myhashtype	="";
+				string myhash		="";
+				string mycrc32		="";
+				
+				decode_franz_block(false,p->second.franz_block,
+					myhashtype,
+					myhash,
+					mycrc32);
+				MAPPACHECK::iterator a=g_mychecks.find(myhashtype);
+	
+				if (a!=g_mychecks.end())
+				{
+					string filedefinitivo=rename(p->first);
+			
+					if ((searchfrom!="") && (replaceto!=""))
+						replace(filedefinitivo,searchfrom,replaceto);
+					myfiles.push_back(filedefinitivo);
+					myfilesoriginal.push_back(p->first);
+					myfilehash.push_back(myhash);
+					myalgo.push_back(myhashtype);
+				}
+			}
+		}
+
+	int mythreads=howmanythreads;
+	
+	if (!all)
+		mythreads=1;
+
+	vector<tparametrihash> 	vettoreparametrihash;
+
+	tparametrihash 	myblock;
+	for (int i=0;i<mythreads;i++)
+	{
+		myblock.tnumber		=(i%mythreads);
+		myblock.inizio		=mtime();
+		myblock.dimensione	=hashtotali;
+		myblock.timestart	=0;
+		myblock.timeend		=0;
+		vettoreparametrihash.push_back(myblock);
+	}
+	
+	for (unsigned int i=0;i<myfiles.size();i++)
+	{
+		vettoreparametrihash[i%mythreads].filestobehashed.	push_back(myfiles[i]);
+		vettoreparametrihash[i%mythreads].algo.				push_back(myalgo[i]);
+		vettoreparametrihash[i%mythreads].filehash.			push_back(myfilehash[i]);
+		vettoreparametrihash[i%mythreads].originalfilenames.push_back(myfilesoriginal[i]);
+	}
+	
+	int totfile=0;
+	for (int i=0;i<mythreads;i++)
+	{
+		if (flagdebug)
+			printf("Thread [%02d] files %s\n",i,migliaia(vettoreparametrihash[i].filestobehashed.size()));
+		totfile+=+vettoreparametrihash[i].filestobehashed.size();
+	}
+	
+	
+	int rc;
+	pthread_t* threads = new pthread_t[mythreads];
+
+	pthread_attr_t attr;
+	void *status;
+
+	pthread_attr_init(&attr);
+	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
+
+	if (!flagnoeta)
+		printf("Total files %s -> in %03d threads -> %s\n",migliaia(myfiles.size()),mythreads,migliaia2(totfile));
+	int64_t	startrunning=mtime();
+	for(int i = 0; i < mythreads; i++ ) 
+	{
+		vettoreparametrihash[i].timestart=mtime();
+		rc = pthread_create(&threads[i], &attr, scansionahash, (void*)&vettoreparametrihash[i]);
+		if (rc) 
+		{
+			printf("Error creating thread\n");
+			exit(-1);
+		}
+	}
+
+	pthread_attr_destroy(&attr);
+	for(int i = 0; i <mythreads; i++ ) 
+	{
+		rc = pthread_join(threads[i], &status);
+		if (rc) 
+		{
+			error("Unable to join\n");
+			exit(-1);
+		}
+	///		printf("Thread completed %d status %d\n",i,status);
+	}
+	if (!flagnoeta)
+			printf("Scan done, preparing report...\n");
+	
+	
+	for(int i = 0; i <mythreads; i++ )
+		for (unsigned int j=0;j<vettoreparametrihash[i].filestobehashed.size();j++)
+		{
+			string filedefinitivo	=vettoreparametrihash[i].filestobehashed[j];
+			string myhashtype		=vettoreparametrihash[i].algo[j];
+			MAPPACHECK::iterator a	=g_mychecks.find(myhashtype);
+			
+			if (a!=g_mychecks.end())
+			{
+				checkedbyhash++;
+				if (vettoreparametrihash[i].o_hashcalculated[j]=="")
+				{
+					if (flagverbose || (g_output!=""))
+						myprintf("FILE NOT FOUND on %s: FILE %s\n",myhashtype.c_str(),filedefinitivo.c_str());
+					a->second.checkednotfound++;			
+				}
+				else
+				{
+					if (vettoreparametrihash[i].o_hashcalculated[j]==vettoreparametrihash[i].filehash[j])
+					{
+						if (flagdebug)
+							printf("GOOD %s:  STORED == FROM FILE %s\n",myhashtype.c_str(),filedefinitivo.c_str());
+						a->second.checkedok++;
+						
+						DTMap::iterator p=dt.find(vettoreparametrihash[i].originalfilenames[j]);
+						if (p!=dt.end())
+						{
+							a->second.checksize+=p->second.size; 
+							///a->second.checksize+=prendidimensionefile(filedefinitivo.c_str());
+						}
+						else
+						{
+							if (flagdebug)
+								printf("38931: GURONEEEEEEEEEEEEEE\n");
+						}
+					}
+					else
+					{
+						if (flagverbose || (g_output!=""))
+						{
+							myprintf("ERROR on %s: STORED HASH %s VS %s IN FILE ",myhashtype.c_str(),vettoreparametrihash[i].filehash[j].c_str(),vettoreparametrihash[i].o_hashcalculated[j].c_str());
+							printUTF8(filedefinitivo.c_str());
+							myprintf("\n");
+						}
+						a->second.checkedfailed++;
+					}
+				}
+			}
+			else
+			{
+				nohashfound++;
+				if (flagverbose)
+					printf("26620: algo unknown (or no algo!) %s\n",filedefinitivo.c_str());
+			}
+		}
+
+	
+	int risultato=0;
+	bool outsomething=(nohashfound>0);
+	
+	if (nohashfound>0)
+		risultato=1;
+		
+	for (MAPPACHECK::iterator p=g_mychecks.begin(); p!=g_mychecks.end(); ++p) 
+		outsomething |= (p->second.checkedok+p->second.checkedfailed+p->second.checkednotfound);
+
+	if (outsomething)
+	{
+		morebar('-');
+		int64_t	byteshashed=0;
+		for (MAPPACHECK::iterator p=g_mychecks.begin(); p!=g_mychecks.end(); ++p) 
+		{
+			byteshashed+=p->second.checksize;
+			if (p->second.checkedok)
+				myprintf("OK   %8s : %08d of %08d (%12s hash check against file on disk)\n",p->first.c_str(),p->second.checkedok,tobechecked,tohuman(p->second.checksize));
+			if (p->second.checkedfailed)
+			{
+				myprintf("FAIL %8s : %08d of %08d (   FAILED    hash check against file on disk)\n",p->first.c_str(),p->second.checkedfailed,tobechecked);
+				risultato=2;
+			}
+			if (p->second.checkednotfound)
+			{
+				myprintf("WARN %8s : %08d of %08d (file not found, cannot check hash)\n",p->first.c_str(),p->second.checkedfailed,tobechecked);
+				if (risultato!=2)
+					risultato=1;
+			}
+		}
+		if (nohashfound)
+				myprintf("UNKNOWN/NO HASH %08d of %08d\n",nohashfound,tobechecked);
+		morebar('-');
+		printf("Total hashed bytes %s @ %s B/s\n",migliaia(byteshashed),migliaia2(byteshashed/((mtime()-startrunning)/1000.0)));
+	}
+	return risultato;
 }

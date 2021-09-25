@@ -1,4 +1,7 @@
 ```
+25-09-2021: 54.7
+Support (maybe!) for ReFS-deduplicated VHDX, verify now supports multithread (-all)
+
 18-09-2021: 54.6
 Refactoring, some fixes
 

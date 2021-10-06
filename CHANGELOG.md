@@ -1,4 +1,7 @@
 ```
+06-10-2021: 54.8
+New purgesync command, exec_warn, support for "strange things", .ppt with .xls, fix, changed -kill to -zero in extract
+
 25-09-2021: 54.7
 Support (maybe!) for ReFS-deduplicated VHDX, verify now supports multithread (-all)
 

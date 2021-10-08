@@ -1,4 +1,7 @@
-# zpaqfranz: advanced, but compatible, fork of ZPAQ 7.15, now (54+) with SFX on Win32/64   
+# zpaqfranz: advanced, but compatible, fork of ZPAQ 7.15, with SFX (on Windows)  
+### Main platforms: Windows, FreeBSD, Linux
+### Secondary platforms: Solaris, MacOS, ESXi, QNAP-based NAS
+
 ### [Windows binary 32/64 bit on sourceforge](https://sourceforge.net/projects/zpaqfranz/files/)  
 [Main site of old ZPAQ](http://mattmahoney.net/dc/zpaq.html)      [Reference decompressor](https://github.com/fcorbelli/unzpaq/tree/main) 
 
@@ -14,19 +17,21 @@ It is then possible to restore the data @ the single version, just like snapshot
 - Ideal for virtual machine disk storage (ex backup of vmdk), virtual disks (VHDx) and even TrueCrypt containers.  
 - Easily handles millions of files and tens of TBs of data.  
 - Allows rsync (or zfs replica) copies to the cloud with minimal data transfer and encryption.    
-- Multiple possibilities of data verification, fast, advanced and even paranoid.  
+- Multiple possibilities of data verification, fast, advanced and even paranoid.
+- Some optimizations for modern hardware (aka: SSD, NVMe, multithread).
+- By default triple-check with "chunked" SHA-1, XXHASH64 and CRC-32 (!).  
 ```
-By default zpaqfranz triple-check with "chunked" SHA-1, XXHASH64 and CRC-32 (!).  
 For even higher level of paranoia, it is possible to use others hash algorithms, as
-MD5
-SHA-1-full-file (NIST FIPS 180-4)
-XXH3-128
-BLAKE3
-SHA-2-256 (NIST FIPS 180-4)
-SHA-3-256 (NIST FIPS 202)
-```
-And much more.
-A GUI (PAKKA) is available on Windows to make extraction easier.  
+ ```
+- MD5
+- SHA-1 of the full-file (NIST FIPS 180-4)
+- XXH3-128
+- BLAKE3 128
+- SHA-2-256 (NIST FIPS 180-4)
+- SHA-3-256 (NIST FIPS 202)
+
+...And much more.  
+A freeware GUI (PAKKA) is available on Windows to make extraction easier.  
 
 **No complex (and fragile) repository folders, with hundreds of "whatever", just only a single file!**  
 ## To date, there is no software, free or paid, that matches this characteristics  
@@ -231,26 +236,14 @@ Version(s) enumerator
 00000004 2018-01-10 15:17:44  +00007006 -00000000 ->              612.584
 00000005 2018-01-10 15:47:03  +00007005 -00000000 ->              611.980
 00000006 2018-01-10 18:03:08  +00008135 -00000829 ->        2.698.417.427
-00000007 2018-01-10 18:06:42  +00007007 -00000000 ->              613.273
-00000008 2018-01-10 18:16:44  +00007007 -00000000 ->              613.273
-00000009 2018-01-10 18:23:07  +00007007 -00000000 ->              613.273
-00000010 2018-01-10 18:26:25  +00007009 -00000000 ->              615.192
+(...)
 00000011 2018-01-10 19:20:30  +00007007 -00000000 ->              613.273
 00000012 2018-01-11 07:00:36  +00007008 -00000000 ->              613.877
 (...)
 00000146 2018-03-27 17:08:39  +00001105 -00000541 ->          164.399.767
 00000147 2018-03-28 17:08:28  +00000422 -00000134 ->          277.237.055
 00000148 2018-03-29 17:12:02  +00011953 -00011515 ->          826.218.948
-00000149 2018-03-30 17:08:28  +00000396 -00000301 ->          614.932.523
-00000150 2018-03-31 17:08:04  +00000003 -00000000 ->           13.228.327
-00000151 2018-04-01 17:08:06  +00000003 -00000000 ->           13.228.445
-00000152 2018-04-02 17:08:07  +00000003 -00000000 ->           13.229.456
-00000153 2018-04-03 17:08:15  +00000362 -00000050 ->           84.812.331
-00000154 2018-04-04 17:08:22  +00000330 -00000057 ->          246.051.997
-00000155 2018-04-05 17:08:21  +00000334 -00000036 ->           99.834.743
-00000156 2018-04-06 17:08:37  +00003058 -00000035 ->          318.541.190
-00000157 2018-04-07 17:08:18  +00000003 -00000000 ->           13.353.976
-00000158 2018-04-08 17:08:17  +00000003 -00000000 ->           13.353.062
+(...)
 00000159 2018-04-09 17:08:18  +00000342 -00000016 ->          161.661.586
 00000160 2018-04-10 17:08:22  +00000397 -00000017 ->          129.474.045
 (...)
@@ -266,14 +259,7 @@ Version(s) enumerator
 00000434 2019-02-09 18:10:08  +00000009 -00000001 ->           17.491.737
 00000435 2019-02-10 18:10:06  +00000001 -00000000 ->           15.472.629
 00000436 2019-02-11 18:10:35  +00000354 -00000077 ->          310.408.124
-00000437 2019-02-12 18:39:07  +00012281 -00012069 ->           92.558.250
-00000438 2019-02-13 18:10:26  +00000327 -00000027 ->          156.617.222
-00000439 2019-02-14 18:10:33  +00000393 -00000047 ->          201.978.058
-00000440 2019-02-15 18:10:21  +00000357 -00000078 ->          137.899.556
-00000441 2019-02-16 18:10:19  +00000007 -00000000 ->           15.903.020
-00000442 2019-02-17 18:10:16  +00000001 -00000000 ->           15.507.069
-00000443 2019-02-18 18:11:06  +00000433 -00000128 ->          804.210.678
-00000444 2019-02-19 18:10:31  +00000311 -00000047 ->          394.942.132
+(...)
 00000445 2019-02-20 18:11:52  +00005711 -00005474 ->          662.296.698
 00000446 2019-02-21 18:10:32  +00000325 -00004017 ->          592.816.097
 00000447 2019-02-22 18:18:37  +00009206 -00000021 ->       24.236.986.132
@@ -285,26 +271,13 @@ Version(s) enumerator
 00000496 2019-04-17 17:12:06  +00000356 -00000018 ->          119.696.255
 00000497 2019-04-18 17:11:03  +00000305 -00000023 ->        2.503.628.883
 00000498 2019-04-19 17:12:06  +00000298 -00000008 ->        3.007.508.933
-00000499 2019-04-20 17:11:03  +00000001 -00000000 ->           16.680.076
-00000500 2019-04-21 17:11:22  +00000001 -00000000 ->           16.682.634
-00000501 2019-04-22 17:11:03  +00000001 -00000000 ->           16.680.028
-00000502 2019-04-23 17:11:30  +00000311 -00000029 ->          156.716.433
-00000503 2019-04-24 17:11:05  +00000340 -00000040 ->          150.014.131
-00000504 2019-04-25 17:11:15  +00000001 -00000000 ->           16.698.751
-00000505 2019-04-26 17:11:12  +00000001 -00000000 ->           16.694.826
-00000506 2019-04-27 17:11:18  +00000001 -00000000 ->           16.698.196
-00000507 2019-04-28 17:11:55  +00000001 -00000000 ->           16.693.376
+(...)
 00000508 2019-04-29 17:11:04  +00000831 -00000470 ->           94.625.724
 (...)
 00000572 2019-07-02 17:13:53  +00000449 -00000040 ->          108.048.297
 00000573 2019-07-03 17:13:55  +00000579 -00000044 ->          400.854.748
 00000574 2019-07-04 17:13:52  +00000631 -00000237 ->           91.992.975
-00000575 2019-07-05 17:11:37  +00000273 -00000002 ->           48.580.359
-00000576 2019-07-06 17:15:10  +00000005 -00000000 ->           17.051.250
-00000577 2019-07-07 17:13:41  +00000001 -00000000 ->           17.030.268
-00000578 2019-07-08 17:13:39  +00000349 -00000010 ->           85.705.672
-00000579 2019-07-10 17:13:47  +00000715 -00000093 ->          321.573.944
-00000580 2019-07-11 17:14:08  +00000590 -00000255 ->          634.245.790
+(...)
 00000581 2019-07-12 17:13:52  +00000410 -00000031 ->          172.390.369
 00000582 2019-07-13 17:13:49  +00000103 -00000093 ->           50.633.900
 00000583 2019-07-14 17:13:44  +00000001 -00000000 ->           17.068.608
@@ -324,13 +297,7 @@ Version(s) enumerator
 00000769 2020-04-15 17:12:51  +00000012 -00000000 ->              278.407
 00000770 2020-04-16 17:13:00  +00000028 -00000000 ->            5.355.373
 00000771 2020-04-17 17:13:00  +00000010 -00000001 ->              129.334
-00000772 2020-04-18 17:13:10  +00000001 -00000000 ->              109.065
-00000773 2020-04-19 17:12:49  +00000001 -00000000 ->              109.205
-00000774 2020-04-20 17:12:47  +00000287 -00000015 ->           86.857.663
-00000775 2020-04-21 17:13:01  +00000124 -00000015 ->           13.069.143
-00000776 2020-04-22 17:13:03  +00000173 -00000003 ->           16.582.870
-00000777 2020-04-23 17:13:01  +00000119 -00000005 ->            6.720.711
-00000778 2020-04-24 17:13:34  +00000145 -00000001 ->           21.905.114
+(...)
 00000779 2020-04-25 17:13:07  +00000001 -00000000 ->              743.346
 00000780 2020-04-26 17:13:03  +00000001 -00000000 ->              109.083
 00000781 2020-04-27 17:12:42  +00000439 -00000366 ->           26.002.842
@@ -339,12 +306,7 @@ Version(s) enumerator
 00000918 2020-11-10 18:16:14  +00000450 -00000059 ->        2.453.075.624
 00000919 2020-11-11 18:15:25  +00000354 -00000061 ->          185.478.412
 00000920 2020-11-12 18:15:33  +00000274 -00000059 ->           74.152.731
-00000921 2020-11-13 18:15:25  +00000206 -00000019 ->           40.681.663
-00000922 2020-11-16 18:15:12  +00000321 -00000016 ->          162.377.906
-00000923 2020-11-17 18:15:22  +00000523 -00000109 ->          423.009.390
-00000924 2020-11-18 18:16:03  +00000470 -00001051 ->          497.305.664
-00000925 2020-11-19 18:15:32  +00000775 -00000031 ->          554.932.985
-00000926 2020-11-20 18:15:09  +00000248 -00000019 ->          125.918.278
+(...)
 00000927 2020-11-23 18:16:24  +00002176 -00001826 ->          380.446.024
 00000928 2020-11-24 18:15:51  +00000364 -00000057 ->          322.920.107
 00000929 2020-11-25 18:15:53  +00000298 -00000030 ->          595.760.380
@@ -432,7 +394,7 @@ versus ~200GB (yes, 200GB) with zpaq.
 
 Same things for virtual machines (vmdks)
 
-## Why you say uniqueness? We got (hb) hashbackup,borg, restic, bupstash etc ##
+## Why you say uniqueness? We got (hb) hashbackup, borg, restic, bupstash etc ##
 
 Because other software (sometimes very, very good) runs on complex "repositories", very fragile and way too hard to manage (at least for my tastes).  
 It may happen that you have to worry about backing up ... the backup, because maybe some files were lost during a transfer, corrupted etc.  
@@ -446,9 +408,9 @@ There are better compressors.
 There are faster archivers.
 There are more efficient deduplicators.
 
-But what I have never found is a combination of these that is simple to use and reliable, with excellent handling of non-Latin filenames (Chinese, Russian etc).
+But what I have never found is a combination of these that is so simple to use and reliable, with excellent handling of non-Latin filenames (Chinese, Russian etc).
 
-This is the key: you don't have to use tar | srep | zstd | something hoping that everything will runs file, but a single 1MB executable, with 7z-like commands.  
+This is the key: you don't have to use complex "chain" of tar | srep | zstd | something hoping that everything will runs file, but a single ~1MB executable, with 7z-like commands.  
 You don't even have to install a complex program with many dependencies that will have to read a folder (the repository) with maybe thousands of files, hoping that they are all fully functional.
 
 There are also many great features for backup, I mention only the greatest.
@@ -563,7 +525,7 @@ zpaqfranz -diff
 
 **Single help**
 It is possible to call -? (better -h for Unix) and -examples with a parameter
-a c d dir i k l m r s sha1 t utf x z franz main normal voodoo
+a b c d dir f i k l m n r rsync s sfx sum t utf v x z franz main normal voodoo
 
 ```
 zpaqfranz -? a 
@@ -639,6 +601,19 @@ g++ -O3 -Dunix zpaqfranz.cpp  -pthread -o zpaqfranz
 
 Solaris 11.4 gcc 7.3.0
 g++ -O3 -march=native -DSOLARIS zpaqfranz.cpp -o zpaqfranz  -pthread -static-libgcc
+
+MacOS 11.0 gcc (clang) 12.0.5
+Please note:
+The -std=c++11 is required, unless you have to change half a dozen lines. No -static here
+"Apple does not support statically linked binaries on Mac OS X. 
+(...)
+Rather, we strive to ensure binary 
+compatibility in each dynamically linked system library and framework
+(AHAHAHAHAHAH, note by me)
+Warning: Shipping a statically linked binary entails a significant compatibility risk. 
+We strongly recommend that you not do this...
+Short version: Apple does not like -static, so compile with
+g++ -Dunix  -O3 -march=native zpaqfranz.cpp -o zpaqfranz -pthread  -std=c++11
 
 Beware of #definitions
 g++ -dM -E - < /dev/null

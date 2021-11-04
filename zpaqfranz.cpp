@@ -18581,6 +18581,10 @@ bool isextension(const char* i_filename,const char* i_ext)
 	*/
 	return (posizione-i_filename)+strlen(i_ext)==strlen(i_filename);
 }
+bool iszpaq(string i_filename)
+{
+	return isextension(i_filename.c_str(), ".zpaq");
+}
 bool isxls(string i_filename)
 {
 	return (isextension(i_filename.c_str(), ".xls") || isextension(i_filename.c_str(), ".ppt") || isextension(i_filename.c_str(), ".pps"));
@@ -35649,7 +35653,7 @@ void * scansiona(void *t)
 /// make a "robocopy" from source to destination file.
 /// if "someone" call with valid parameters do NOT do a getfileinfo (slow)
 string secure_copy_file(
-const string i_filename,const string i_outfilename,int64_t i_startcopy,int64_t i_totalsize,int64_t i_totalcount,int64_t& o_donesize,int64_t& o_donecount,
+const string i_filename,const string i_outfilename,int64_t i_startcopy,int64_t i_totalsize,int64_t i_totalcount,int64_t& o_writtensize,int64_t& o_donesize,int64_t& o_donecount,
 int64_t i_sorgente_size,
 int64_t i_sorgente_date,
 int64_t i_sorgente_attr,
@@ -35658,8 +35662,9 @@ int64_t i_destinazione_date,
 int64_t i_destinazione_attr
 )
 {
-		static int ultimapercentuale=0;
-
+	static int ultimapercentuale=0;
+	
+	
 	if (flagdebug)
 	{
 		printf("\n");
@@ -35807,11 +35812,13 @@ int64_t i_destinazione_attr
 					}
 				}
 		}
-		if (flagdebug)
-			printf("Cancellerei\n");
 		if (flagkill)
-			if (!flagappend)
+			if ((!flagappend) && (!iszpaq(i_outfilename)))
+			{
 				delete_file(i_outfilename.c_str());
+			if (flagdebug)
+				printf("Cancellato %s\n",i_outfilename.c_str());
+			}
 	}
 	
 	if (!flagkill)
@@ -35834,8 +35841,22 @@ int64_t i_destinazione_attr
 	}
 
 	if (flagappend)
+	{
 		if (destinazione_dimensione>=sorgente_dimensione)
 			flagappend=false;	// full overwrite
+
+		if (!iszpaq(i_filename))
+		{
+			if (flagdebug)
+				printf("35672: not a ZPAQ / not flagappend!\n");
+			flagappend=false;
+		}
+		else
+		{
+			if (flagdebug)
+				printf("35677: we have a ZPAQ and a --append!\n");
+		}
+	}
 
 	/// to fix excluded myaddfiles()
 	makepath(i_outfilename);
@@ -35933,6 +35954,7 @@ int64_t i_destinazione_attr
 		///printf("Scritti %19s\n",migliaia(scritti));
 		scrittitotali+=scritti;
 		o_donesize+=scritti;
+		o_writtensize+=scritti;
 		if ((sorgente_dimensione>LARGEFILE) && (larghezzaconsole>0))
 		{
 			int barra=larghezzaconsole*scrittitotali/(sorgente_dimensione+1);
@@ -35949,7 +35971,7 @@ int64_t i_destinazione_attr
 	if (flagappend)
 		if (flagdebug)
 		{
-			printf("\nsScritti %s\n",migliaia(scrittitotali));
+			printf("\nScritti %s\n",migliaia(scrittitotali));
 		}	
 	
 	if ((sorgente_dimensione>LARGEFILE) && (larghezzaconsole>0))
@@ -36549,6 +36571,7 @@ int Jidac::robocopy()
 	int64_t total_count				=files_count[0];
 	int64_t done_size				=0;
 	int64_t done_count				=0;
+	int64_t written_size			=0;
 	int robocopied					=0;
 	uint64_t robocopiedsize			=0;
 	int robodeleted					=0;
@@ -36667,7 +36690,7 @@ int Jidac::robocopy()
 
 					int64_t startcopy=mtime();
 					string copyfileresult=secure_copy_file(
-					filename0,filenamei,globalstartcopy,total_size*(files.size()-1),total_count*(files.size()-1),done_size,done_count,
+					filename0,filenamei,globalstartcopy,total_size*(files.size()-1),total_count*(files.size()-1),written_size,done_size,done_count,
 					p->second.size,
 					p->second.date,
 					p->second.attr,
@@ -36729,7 +36752,9 @@ int Jidac::robocopy()
 	printf("-   %12s %20s B in %9.2fs %15s/sec\n",migliaia(robodeleted),migliaia2(robodeletedsize),(timedelete/1000.0),migliaia3(robodeletedsize/(timedelete/1000.0)));
 
 	printf("\nRobocopy time  %9.2f s\n",((mtime()-startscan)/1000.0));
-	printf("Slaves getinfo %9.2f s\n\n",g_robocopy_check_destinazione/1000.0);
+	printf("Slaves getinfo %9.2f s\n",g_robocopy_check_destinazione/1000.0);
+	printf("Written bytes %s (%s)\n",migliaia(written_size),tohuman(written_size));
+		
 		
 	if (not flagverify)
 		return risultato;

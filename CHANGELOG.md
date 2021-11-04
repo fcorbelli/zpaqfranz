@@ -1,4 +1,14 @@
 ```
+04-11-2021: 54.9  
+-nilsimsa
+-nodedup
+-desc
+-tar
+-orderby 
+-desc
+-flagappend (robocopy)
+-minsize (s command)
+
 06-10-2021: 54.8
 New purgesync command, exec_warn, support for "strange things", .ppt with .xls, fix, changed -kill to -zero in extract
 

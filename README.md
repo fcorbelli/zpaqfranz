@@ -1,11 +1,11 @@
 # zpaqfranz: advanced, but compatible, fork of ZPAQ 7.15, with SFX (on Windows)  
 ### Main platforms: Windows, FreeBSD, Linux
-### Secondary platforms: Solaris, MacOS, ESXi, QNAP-based NAS
+Secondary platforms: Solaris, MacOS, ESXi, QNAP-based NAS
 
-### [Windows binary 32/64 bit on sourceforge](https://sourceforge.net/projects/zpaqfranz/files/)  
+### [Windows binary 32/64 bit on sourceforge](https://sourceforge.net/projects/zpaqfranz/files/) 
+### [Quick start FreeBSD](https://github.com/fcorbelli/zpaqfranz/wiki/Quickstart:-FreeBSD)   
 [Main site of old ZPAQ](http://mattmahoney.net/dc/zpaq.html)      [Reference decompressor](https://github.com/fcorbelli/unzpaq/tree/main) 
 
-[Quick start for FreeBSD users](https://github.com/fcorbelli/zpaqfranz/wiki/Quickstart:-FreeBSD)
 
 
 ## Classic archivers (tar, 7z, RAR etc) are obsolete, when used for repeated backups (daily etc), compared to the ZPAQ technology, that maintain "snapshots" (versions) of the data.

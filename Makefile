@@ -7,7 +7,7 @@ BINDIR=$(PREFIX)/bin
 all: zpaqfranz
 
 zpaqfranz: 
-	$(CXX) $(CPPFLAGS) $(CXXFLAGS) zpaqfranz.cpp -o $@ -pthread -static
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) zpaqfranz.cpp -o $@ -pthread
 
 install: zpaqfranz
 	install -m 0755 -d $(DESTDIR)$(BINDIR)

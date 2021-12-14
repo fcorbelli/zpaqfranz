@@ -5,7 +5,7 @@
 ### [Windows binary 32/64 bit on sourceforge](https://sourceforge.net/projects/zpaqfranz/files/)  
 [Main site of old ZPAQ](http://mattmahoney.net/dc/zpaq.html)      [Reference decompressor](https://github.com/fcorbelli/unzpaq/tree/main) 
 
-[Go to quick start for FreeBSD](https://github.com/fcorbelli/zpaqfranz/wiki/Quickstart:-FreeBSD)
+[Quick start for FreeBSD users](https://github.com/fcorbelli/zpaqfranz/wiki/Quickstart:-FreeBSD)
 
 
 ## Classic archivers (tar, 7z, RAR etc) are obsolete, when used for repeated backups (daily etc), compared to the ZPAQ technology, that maintain "snapshots" (versions) of the data.

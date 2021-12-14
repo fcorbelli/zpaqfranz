@@ -7,15 +7,18 @@ BINDIR=$(PREFIX)/bin
 all: zpaqfranz
 
 zpaqfranz: 
-        $(CXX) $(CPPFLAGS) $(CXXFLAGS) zpaqfranz.cpp -o $@ -pthread -static 
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) zpaqfranz.cpp -o $@ -pthread -static
 
 install: zpaqfranz
-        install -m 0755 -d $(DESTDIR)$(BINDIR)
-        install -m 0755 zpaqfranz $(DESTDIR)$(BINDIR)
-        
+	install -m 0755 -d $(DESTDIR)$(BINDIR)
+	install -m 0755 zpaqfranz $(DESTDIR)$(BINDIR)
+	
 clean:
-        rm -f zpaqfranz
+	rm -f zpaqfranz
 
 check: zpaqfranz
-        ./zpaqfranz a ./archive.zpaq *  -xxh3 -test -verify
-        rm ./archive.zpaq 
+	rm archive.zpaq 
+	./zpaqfranz a archive.zpaq zpaqfranz.cpp
+	./zpaqfranz t archive.zpaq -verify
+	rm archive.zpaq 
+	

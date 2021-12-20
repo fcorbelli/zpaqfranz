@@ -1,4 +1,9 @@
 ```
+20-12-2021: 54.10  
+media full check  
+franzomips  
+-checksum in test
+
 04-11-2021: 54.9  
 -nilsimsa
 -nodedup

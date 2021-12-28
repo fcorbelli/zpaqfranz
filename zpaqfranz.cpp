@@ -9,7 +9,7 @@
 ///////// I apologize with the authors, it's not a foolish attempt to take over their jobs
 
 
-#define ZPAQ_VERSION "54.10-experimental"
+#define ZPAQ_VERSION "54.11-experimental"
 
 #if defined(_WIN64)
 #define ZSFX_VERSION "SFX64 v52.15,"
@@ -8754,6 +8754,7 @@ bool 	flagfilelist;
 bool 	flag715;
 bool 	flagzero;
 bool 	flagforcezfs;
+bool	flagspace;
 bool 	flagdebug;
 bool 	flagnoeta;
 bool 	flagpakka;
@@ -20565,6 +20566,7 @@ string nomefileseesistegia(string i_nomefile)
 	return ("");
 }
 
+
 void xcommand(string i_command,string i_parameter)
 {
 	if (flagdebug)
@@ -20843,6 +20845,64 @@ int truncate(const char* filename, int64_t length) {
 }
 #endif
 
+
+bool saggiascrivibilitacartella(string i_cartella)
+{
+	if (i_cartella=="")
+	{
+		if (flagdebug)
+				printf("20574: empty folder to be checked\n");
+		return false;
+	}
+	if (!isdirectory(i_cartella))
+			i_cartella+="/";
+	if (flagdebug)		
+		printf("20580: Folder %s\n",i_cartella.c_str());
+	string	percorso=extractfilepath(i_cartella);
+	if (flagdebug)
+		printf("20583: Percorso %s\n",percorso.c_str());
+	if  (percorso=="")
+	{
+		if (flagdebug)
+				printf("20587: percorso empty\n");
+		return false;
+	}
+	makepath(percorso);
+	
+	string	testfile;
+	testfile=percorso+"test$$$.txt.me";
+	if (flagdebug)
+		printf("20593: TEST FILE PRE  <<%s>>\n",testfile.c_str());
+	testfile=nomefileseesistegia(testfile);
+	if (flagdebug)
+	printf("20595: TEST FILE POST <<%s>>\n",testfile.c_str());
+
+	if (flagdebug)
+		printf("20599: A1\n");
+	
+	FILE* testbyte=fopen(testfile.c_str(), "wb");
+	if (testbyte!=NULL)
+	{
+		if (flagdebug)
+			printf("20605\n");
+		fprintf(testbyte,"this-file-can-be-deleted");
+		if (flagdebug)
+			printf("20608\n");
+		fclose(testbyte);
+	}
+	if (flagdebug)
+			printf("20611\n");
+		
+		
+	bool risultato=fileexists(testfile.c_str());
+	if (flagdebug)
+			printf("20617\n");
+	delete_file(testfile.c_str());
+	if (flagdebug)
+			printf("20620\n");
+	
+	return risultato;
+}
 
 
 
@@ -22745,6 +22805,7 @@ private:
 	int fillami();						// media check
 	int dir();							// Windows-like dir command
 	int robocopy();						// Like robocopy, but with XLS
+	int mycopy();						// Like copy, but with progress
 	int zero();							// Delete empty directory
 	int purgersync();					// Purge rsync temporary file
 	int sfx();							// Write autoextract module
@@ -25590,8 +25651,9 @@ void avanzamento(int64_t i_lavorati,int64_t i_totali,int64_t i_inizio)
 }
 
 
-void myavanzamento(int64_t i_lavorati,int64_t i_totali,int64_t i_inizio)
+bool myavanzamento(int64_t i_lavorati,int64_t i_totali,int64_t i_inizio,bool i_barran=true)
 {
+	bool	hostampato=false;
 	static int ultimapercentuale=0;
 	int percentuale=int(i_lavorati*100.0/(i_totali+0.5));
 	if (((percentuale%5)==0) && (percentuale>0))
@@ -25603,10 +25665,18 @@ void myavanzamento(int64_t i_lavorati,int64_t i_totali,int64_t i_inizio)
 		if (secondi==0)
 			secondi=1;
 		if (eta<356000)
-		printf("%03d%% %02d:%02d:%02d (%9s) of (%9s) %20s/sec\n", percentuale,
+		{
+			printf("%03d%% %02d:%02d:%02d (%9s) of (%9s) %20s/sec", percentuale,
 		int(eta/3600), int(eta/60)%60, int(eta)%60, tohuman(i_lavorati), tohuman2(i_totali),migliaia3(i_lavorati/secondi));
+			if (i_barran)
+				printf("\n");
+			else
+				printf("\r");
+			hostampato=true;
+		}
 		fflush(stdout);
 	}
+	return hostampato;
 }
 
 
@@ -25957,6 +26027,7 @@ void help_x(bool i_usage,bool i_example)
 		moreprint("PLUS: -flat         emergency restore of everything into a single folder (Linux => NTFS)");
 		moreprint("PLUS: -filelist     show (if any) a stored filelist");
 		moreprint("PLUS: -force        Force overwrite AND extracting of corrupted files (if any)");
+		moreprint("PLUS: -space        Do not check free space before extract");
 			
 	}
 	if (i_usage && i_example) moreprint("    Examples:");
@@ -26215,6 +26286,28 @@ void help_r(bool i_usage,bool i_example)
 		moreprint("Robocopy with hash verify (WET run): r c:\\d0 k:\\d1 j:\\d2 p:\\d3 -kill -verify -checksum");
 		moreprint("Robocopy d0 in d1, forced WET run:   r c:\\d0 k:\\d1 j:\\d2 -kill -force");
 		moreprint("Robocopy append mode with subst      r c:\\d0 z:\\backup_$day -append -kill");
+	}
+	
+}
+void help_cp(bool i_usage,bool i_example)
+{
+	if (i_usage)
+	{
+		moreprint("CMD   cp ('friendly copy')");
+		moreprint("PLUS:               Copy files (with wildcards) into -to folder");
+		moreprint("PLUS:               with progression feedback");
+		moreprint("PLUS:               By default overwrite, use -paranoid to create unique name");
+		moreprint("PLUS: -verify       Do an heavy (XXH3) check of copied data");
+		moreprint("PLUS: -paranoid     Rename output file to do not overwrite");
+		moreprint("PLUS: -append       Only append data (*risky, use with zpaq archives)");
+		moreprint("PLUS: -force        Do no check if destination is writeable");
+	}
+	if (i_usage && i_example) moreprint("    Examples:");
+	if (i_example)
+	{
+		moreprint("Copy k:\\*.mp4 d:\\a.txt in z:\\pluto   cp k:\\*.mp4 d:\\a.txt -to z:\\pluto");
+		moreprint("Copy with verify                     cp k:\\*.mp4 -to z:\\pluto -verify");
+		moreprint("Copy WITHOUT overwrite               cp k:\\*.mp4 -to z:\\pluto -paranoid");
 	}
 	
 }
@@ -26609,22 +26702,18 @@ void help_voodooswitches(bool i_usage,bool i_example)
 void Jidac::differences() 
 {
 	moreprint("");
-	moreprint("Key differences from ZPAQ 7.15?");
-	moreprint("Doveryay,no proveryay; trust, but verify; fidarsi e' bene, non fidarsi e' meglio");
-	moreprint("");
-	moreprint("zpaqfranz store by default, without breaking backward compatibility with 7.15, CRC-32 and");
-	moreprint("XXHASH64 of every file, optionally SHA-1 | SHA-256 | SHA-3 (256) | MD5 | BLAKE3 | XXH3 (128)");
-	moreprint("for an (optional) paranoid level of data integrity check-and-verify.");
-	moreprint("");
+	moreprint("This is a fork of the mighty ZPAQ 7.15, with some key differences.");
+	moreprint("Doveryay, no proveryay; trust, but verify; fidarsi e' bene, non fidarsi e' meglio.");
+	moreprint("zpaqfranz store by default CRC-32 and XXHASH64 of every file, with optionally");
+	moreprint("SHA-1 | SHA-256 | SHA-3 (256) | MD5 | BLAKE3 | XXH3 (128) for higher level of verify.");
+	moreprint("Full backward compatibility: zpaq 7.15 can list, extract etc zpaqfranz's archives.");
 	moreprint("Pack everything needed for a storage manager: dir compare, hashing, deduplication, fix");
 	moreprint("utf-8 filenames, SFX on Win, wide compatibility with all charsets, support for ZFS...");
-	moreprint("");
 	moreprint("...and much, much more...");
 	moreprint("");
+	moreprint("Works on      : Win, Linux, FreeBSD, Solaris, MacOS");
 	moreprint("Sourceforge   : https://sourceforge.net/projects/zpaqfranz");
-	moreprint("Win SFX       : https://sourceforge.net/projects/zsfx");
-	moreprint("Author's home : http://www.francocorbelli.it");
-	moreprint("");
+	moreprint("Author's home : https://www.francocorbelli.com");
 }
 
 void Jidac::load_help_map()
@@ -26647,6 +26736,7 @@ void Jidac::load_help_map()
 	help_map.insert(std::pair<string, voidhelpfunction>("s",help_s));
 	help_map.insert(std::pair<string, voidhelpfunction>("c",help_c));
 	help_map.insert(std::pair<string, voidhelpfunction>("r",help_r));
+	help_map.insert(std::pair<string, voidhelpfunction>("cp",help_cp));
 	help_map.insert(std::pair<string, voidhelpfunction>("z",help_z));
 	help_map.insert(std::pair<string, voidhelpfunction>("m",help_m));
 	help_map.insert(std::pair<string, voidhelpfunction>("d",help_d));
@@ -26690,9 +26780,9 @@ void Jidac::usage()
 	moreprint(" r d0 d1 d2...: Mirror  d0 in d1...   |       d d0: deduplicate d0 WITHOUT MERCY");
 	moreprint(" z d0 d1 d2...: Delete empty dirs     |        m X: merge multipart archive");
 	moreprint("          f d0: Fill (wipe) free space|     utf d0: Detox filenames in d0");
-		moreprint(" sum  d0 d1...: Hashing/deduplication |     dir d0: Win dir (/s /a /os /od)");
+	moreprint(" sum  d0 d1...: Hashing/deduplication |     dir d0: Win dir (/s /a /os /od)");
 	moreprint(" n d0 -n X    : Keep X files in d0    |          b: Benchmarking");
-	moreprint(" rsync d0 d1  : Purge temporary rsync |");
+	moreprint(" rsync d0 d1  : Purge temporary rsync |cp d0 -to X: Copy files (w/wildcards) to X");
 #if defined(unix)
 	moreprint(" zfsadd zfslist zfspurge              =>  zfs-specific commands (typically FreBSD)");
 #endif
@@ -27221,9 +27311,13 @@ int Jidac::doCommand(int argc, const char** argv)
 		(opt=="utf") 		|| 
 		(opt=="r") 			|| 
 		(opt=="robocopy") 	|| 
+		(opt=="cp") 	|| 
 		opt=="z")
 		{
 			command=opt[0];
+			if (opt=="cp")
+					command='o';
+				
 			while (++i<argc && argv[i][0]!='-')
 			{
 	//	a very ugly fix for last \ in Windows
@@ -27447,6 +27541,7 @@ int Jidac::doCommand(int argc, const char** argv)
 		else if (opt=="-test") 						flagtest			=true;
 		else if (opt=="-zfs") 						flagskipzfs			=true;
 		else if (opt=="-forcezfs") 					flagforcezfs		=true;
+		else if (opt=="-space") 					flagspace   		=true;
 		else if (opt=="-filelist") 					flagfilelist		=true;
 		else if (opt=="-xls") 						flagdonotforcexls	=true;
 		else if (opt=="-verbose") 					flagverbose			=true;
@@ -27712,6 +27807,9 @@ int Jidac::doCommand(int argc, const char** argv)
 
 		if (flagdonotforcexls)
 			franzparameters+="Do not force XLS/PPT (-xls) ";
+		
+		if (flagspace)
+			franzparameters+="Do not check free space/writeability ";
 		
 		if (flagverbose)
 			franzparameters+="-verbose ";
@@ -28019,6 +28117,7 @@ int Jidac::doCommand(int argc, const char** argv)
 	else if (command=='k') return kill();
 	else if (command=='l') return list();
 	else if (command=='m') return consolidate(archive);
+	else if (command=='o') return mycopy();
 	else if (command=='p') return paranoid();
 	else if (command=='r') return robocopy();
 	else if (command=='s') return dircompare(true,false); 
@@ -31585,6 +31684,19 @@ int Jidac::extract()
 		
 	}
 
+
+	if (!flagspace)
+		if (tofiles.size()==1)
+		{
+			if (!saggiascrivibilitacartella(tofiles[0].c_str()))
+			{
+				printf("Cannot write on <<-to %s>>\n",tofiles[0].c_str());
+				printf("Aborting. Use -space to bypass and enforcing.\n");
+				return 2;
+				///error("Path seems not writeable");
+			}
+		}
+		
 	if (flagzero)
 	{
 		if (flagforce)
@@ -32042,6 +32154,25 @@ int Jidac::extract()
   // Decompress archive in parallel
 	printf("Extracting %s bytes (%s) in %s files -threads %d\n",migliaia(job.total_size), tohuman(job.total_size),migliaia2(total_files), howmanythreads);
 	
+	if (!flagspace)
+		if (tofiles.size()==1)
+		{
+			if (!saggiascrivibilitacartella(tofiles[0].c_str()))
+			{
+				printf("Cannot write on <<-to %s>>\n",tofiles[0].c_str());
+				printf("Aborting. Use -space to bypass and enforcing.\n");
+				error("Path seems not writeable");
+			}
+			int64_t spazio=getfreespace(tofiles[0].c_str());
+			if (spazio<job.total_size)
+			{
+				printf("Free space on <<-to %s>>\n",tofiles[0].c_str());
+				printf("is      %21s\n",migliaia(spazio));
+				printf("needed  %21s\n",migliaia(job.total_size));
+				printf("Aborting extraction. Use -space to bypass and enforcing.\n");
+				error("Not enough free space");
+			}
+		}
 	
 	vector<ThreadID> tid(howmanythreads);
 	for (unsigned i=0; i<tid.size(); ++i) 
@@ -33158,6 +33289,296 @@ bool isfilesequal(string i_source,string i_destination,bool i_flagfast=false)
 	return true;
 }
 
+string filecopy(bool i_append,string i_infile,string i_outfile,bool i_verify,bool i_donotcheckspace,bool i_overwrite)
+{
+	if ((i_infile)=="")
+		return "";
+		
+	if ((i_outfile)=="")
+		return "";
+
+	string nowarn;
+	if (i_append)
+		nowarn="NO-WARN";
+		
+	string percorso=i_outfile;
+	if (!isdirectory(percorso))
+		percorso+="/";
+
+	if (!direxists(percorso))
+		makepath(percorso);
+	
+	int64_t dimensionedacopiare	=prendidimensionefile(i_infile.c_str());
+	
+	if (!i_donotcheckspace)
+	{
+		int64_t spaziolibero	=getfreespace(percorso.c_str());
+		if (spaziolibero<dimensionedacopiare)
+		{
+			printf("34878: impossible to make a copy of %s insufficient free space %s on <<%s>>\n",migliaia(dimensionedacopiare),migliaia2(spaziolibero),percorso.c_str());
+			return "";
+		}
+	}
+	
+	string solofile=extractfilename(i_infile);
+	string filedefinitivo=percorso+solofile;
+	
+	if (!i_overwrite)
+	{
+		if (flagdebug)
+			printf("Pre not overwrite %s\n",filedefinitivo.c_str());
+		
+		filedefinitivo=nomefileseesistegia(filedefinitivo);
+		
+		if (flagdebug)
+			printf("Post not overwrite %s\n",filedefinitivo.c_str());
+		
+	}
+	if (flagdebug)
+		printf("ready to make a copy in %s\n",filedefinitivo.c_str());
+		
+	int64_t	lunghezzadefinitivo=0;
+	/*
+	if (fileexists(filedefinitivo))
+		if (i_append)
+		{
+			printf("Proverei un append\n");
+			lunghezzadefinitivo=prendidimensionefile(filedefinitivo.c_str());
+			
+			if (dimensionedacopiare<lunghezzadefinitivo)
+				lunghezzadefinitivo=0; /// overwrite
+		}
+*/
+	FILE* outFile=NULL;	
+#ifdef _WIN32
+	wstring widename=utow(filedefinitivo.c_str());
+	if (lunghezzadefinitivo>0)
+	outFile=_wfopen(widename.c_str(), L"ab" );
+	else
+	outFile=_wfopen(widename.c_str(), L"wb" );
+#else
+	if (lunghezzadefinitivo>0)
+	outFile=fopen(filedefinitivo.c_str(), "ab");
+	else
+	outFile=fopen(filedefinitivo.c_str(), "wb");
+#endif
+
+	if (outFile==NULL)
+	{
+		printf("32827 :CANNOT OPEN outfile %s\n",filedefinitivo.c_str());
+		return "";
+	}
+	size_t const blockSize = 65536;
+	unsigned char buffer[blockSize];
+	int64_t donesize=0;
+
+	XXH3_state_t state128;
+    (void)XXH3_128bits_reset(&state128);
+	if (i_verify)
+		if (flagverbose)
+			printf("verify: trust, but check...\n");
+		
+	
+	FILE* inFile = freadopen(i_infile.c_str());
+	if (inFile==NULL) 
+	{
+#ifdef _WIN32
+	int err=GetLastError();
+#else
+	int err=1;
+#endif
+	printf("\32849: ERR <%s> kind %d\n",i_infile.c_str(),err); 
+	if (outFile!=NULL)
+		fclose(outFile);
+	
+	return "";
+	}
+	
+	/*
+	if (lunghezzadefinitivo>0)
+		inFile.seek(lunghezzadefinitivo, SEEK_SET);
+	*/
+		
+	size_t readSize;
+	int64_t	chunk_readed=0;
+	int64_t	chunk_written=0;
+	int64_t startcopy=mtime();
+	bool	hostampato=false;
+	while ((readSize = fread(buffer, 1, blockSize, inFile)) > 0) 
+	{
+		int64_t written=fwrite(buffer,1,readSize,outFile);
+		chunk_written+=written;
+		chunk_readed+=readSize;
+		donesize+=written;
+		if (lunghezzadefinitivo==0) /// the append case
+			if (flagverify)
+				(void)XXH3_128bits_update(&state128, buffer, readSize);
+		if (!flagnoeta)
+			hostampato |= myavanzamento(donesize,dimensionedacopiare,startcopy,false);
+	}
+	if (hostampato)
+		printf("                                                                         \r");
+
+	fclose(inFile);
+	fclose(outFile);
+	if (flagdebug)
+	{
+		printf("Done\n");
+		printf("Written  %20s\n",migliaia(donesize));
+		printf("Expected %20s\n\n",migliaia(dimensionedacopiare));
+	}
+	
+	if (donesize!=dimensionedacopiare)
+	{
+		printf("32876: GURU bytes written does not match expected\n");
+		return "";
+	}
+	if (flagverify)
+	{
+		if (!flagnoeta)
+		{
+			printbar('=');
+			printf("Checking ...\n");
+		}
+		XXH128_hash_t myhash=XXH3_128bits_digest(&state128);
+		char risultato[33];
+		sprintf(risultato,"%016llX%016llX",(unsigned long long)myhash.high64,(unsigned long long)myhash.low64);
+		
+		uint32_t dummycrc32;
+		int64_t startverify=mtime();
+		int64_t io_lavorati=0;
+		string hashreloaded=xxhash_calc_file(filedefinitivo.c_str(),false,dummycrc32,startverify,dimensionedacopiare,io_lavorati);
+		if (flagdebug)
+		{
+			printf("Expected   XXH3 hash of the output file %s\n",risultato);
+			printf("Calculated XXH3 hash of the output file %s\n",hashreloaded.c_str());
+		}
+		if (hashreloaded!=risultato)
+		{
+			printf("29658: GURU hash of output file does not match!\n");
+			return "";
+		}
+	}
+	return filedefinitivo;
+}
+
+int Jidac::mycopy()
+{
+	printf("Your friendly neighborhood cp/copy ");
+	
+	if (flagverify)
+		printf(" without a trusting attitude (-verify) ");
+	
+	if (flagparanoid)
+		printf(" no overwrite (-paranoid) ");
+		
+	printf("\n");
+	if (files.size()==0)
+	{
+		printf("33433: No source files\n");
+		return 2;
+	}
+	if (tofiles.size()!=1)
+	{
+		printf("33438: exactly one -to required\n");
+		return 2;
+	}
+
+	string	todirectory=tofiles[0];
+	if (!isdirectory(todirectory))
+			todirectory+='/';
+
+	if (!flagforce)
+		if (!saggiascrivibilitacartella(todirectory))
+		{
+			printf("33493: sorry -to directory seems not writeable. Use -force to bypass\n");
+			return 2;
+		}
+
+	vector<string> 	sourcelist;
+	vector<int64_t> sourcesize;
+	int64_t			totalsourcesize=0;
+	for (unsigned int i=0;i<files.size();i++)
+	{
+		scandir(false,edt,files[i].c_str(),false);
+		for (DTMap::iterator p=edt.begin(); p!=edt.end(); ++p) 
+		{
+			if (!isdirectory(p->first))
+			{
+				sourcelist.push_back(p->first);
+				sourcesize.push_back(p->second.size);
+				totalsourcesize+=p->second.size;
+			}
+		}
+	}
+	
+	if (sourcelist.size()==0)
+	{
+		printf("33461: cannot build source file list\n");
+		return 2;
+	}
+	
+	int64_t spaziolibero=0;
+	
+	spaziolibero=getfreespace(todirectory.c_str());
+	if (spaziolibero<totalsourcesize)
+	{
+		printf("\n");
+		printbar('*');
+		printf("WARNING FREE SPACE SEEMS %s NEEDED %s\n",migliaia(spaziolibero),migliaia2(totalsourcesize));
+		printbar('*');
+	}
+		
+	printf("         Space needed             Space free\n");
+	bool		allok=true;
+	bool		skipcopy=false;
+	int64_t		totalwritten=0;
+	int			fileswritten=0;
+	for (unsigned int i=0;i<sourcelist.size();i++)
+	{
+		string 	filesource	=sourcelist[i];
+		int64_t	filesize	=sourcesize[i];
+		spaziolibero=getfreespace(todirectory.c_str());
+		
+		printf("%21s  %21s  %s\n",migliaia(filesize),migliaia2(spaziolibero),filesource.c_str());
+		
+		string risultato;
+
+		risultato=filecopy(
+		flagappend, // append
+		filesource,todirectory,
+		flagverify, //verify
+		true,  //donocheckspace
+		!flagparanoid); //overwrite
+		if (risultato=="")
+		{
+			printf("ERROR: %s\n",risultato.c_str());
+			allok=false;
+		}
+		else
+		{
+			totalwritten+=prendidimensionefile(risultato.c_str());
+			fileswritten++;
+		}
+	}
+	printf("---------------------\n");
+	printf("%21s   bytes written\n",migliaia(totalwritten));
+	printf("%21s   bytes expected\n",migliaia(totalsourcesize));
+	
+	printf("%21s   files OK\n",migliaia(fileswritten));
+	printf("%21s   files expected\n",migliaia(sourcelist.size()));
+	
+	if (totalwritten!=totalsourcesize)
+	{
+		printf("33497: Written %s != expected %s\n",migliaia(totalwritten),migliaia2(totalsourcesize));
+		allok=false;
+	}
+	
+	if (allok)
+		return 0;
+	else	
+		return	2;
+}
 
 int Jidac::benchmark()
 {
@@ -33384,7 +33805,7 @@ int Jidac::benchmark()
 		{
 			franzomips/=1000000;
 			
-			for (int i=0;i<array_cpu.size();i++)
+			for (unsigned int i=0;i<array_cpu.size();i++)
 				array_multi[i]=franzomips/array_multi[i]*100.0;
 		}
 
@@ -33413,7 +33834,7 @@ int Jidac::benchmark()
 			franzomips/=thehashes.size()-1;
 			franzomips/=1000000;
 			
-			for (int i=0;i<array_cpu.size();i++)
+			for (unsigned int i=0;i<array_cpu.size();i++)
 				array_single[i]=franzomips/array_single[i]*100.0;
 		}
 		std::sort(vettorerisultati.begin(), vettorerisultati.end(), compare_s_benchmark);
@@ -33433,7 +33854,7 @@ int Jidac::benchmark()
 			
 		printf("(quick CPU check, raw %s)\n",migliaia(franzomips));
 			
-		for (int i=0;i<array_cpu.size();i++)
+		for (unsigned int i=0;i<array_cpu.size();i++)
 			if (all)
 				printf("%s %10.2f %%\n",array_cpu[i].c_str(),array_multi[i]);
 			else
@@ -36331,7 +36752,10 @@ int pos(const std::string &i_stringa,const std::string& i_cerca)
 
 string Jidac::zfs_get_snaplist(string i_header,string i_footer,vector<string>& o_array_primachiocciola,vector<string>& o_array_dopochiocciola)
 {
-	string filebatch="./exec_zfs.sh";
+	string filebatch="/tmp/exec_zfs.sh";
+	filebatch=nomefileseesistegia(filebatch);
+	if (flagdebug)
+		printf("36337 script EXECUTING %s\n",filebatch.c_str());
 	FILE* batch=fopen(filebatch.c_str(), "wb");
 	fprintf(batch,"zfs list -t snapshot\n");
 	fclose(batch);
@@ -36395,6 +36819,8 @@ string Jidac::zfs_get_snaplist(string i_header,string i_footer,vector<string>& o
 		}
 		i++;
 	}
+	
+	delete_file(filebatch.c_str());
 	return snapshotlist;
 
 }
@@ -37224,168 +37650,6 @@ int Jidac::dircompare(bool i_flagonlysize,bool i_flagrobocopy)
 
 
 
-string filecopy(bool i_append,string i_infile,string i_outfile,bool i_verify,bool i_force,bool i_overwrite)
-{
-	if ((i_infile)=="")
-		return "";
-		
-	if ((i_outfile)=="")
-		return "";
-
-	string nowarn;
-	if (i_append)
-		nowarn="NO-WARN";
-		
-	string percorso=i_outfile;
-	if (!isdirectory(percorso))
-		percorso+="/";
-
-	if (!direxists(percorso))
-		makepath(percorso);
-	
-	int64_t dimensionedacopiare	=prendidimensionefile(i_infile.c_str());
-	
-	if (!i_force)
-	{
-		int64_t spaziolibero	=getfreespace(percorso.c_str());
-		if (spaziolibero<dimensionedacopiare)
-		{
-			printf("34878: impossible to make a copy of %s insufficient free space %s on <<%s>>\n",migliaia(dimensionedacopiare),migliaia2(spaziolibero),percorso.c_str());
-			return "";
-		}
-	}
-	
-	string solofile=extractfilename(i_infile);
-	string filedefinitivo=percorso+solofile;
-	
-	if (!i_overwrite)
-		filedefinitivo=nomefileseesistegia(filedefinitivo);
-		
-	if (flagdebug)
-		printf("ready to make a copy in %s\n",filedefinitivo.c_str());
-		
-	int64_t	lunghezzadefinitivo=0;
-	/*
-	if (fileexists(filedefinitivo))
-		if (i_append)
-		{
-			printf("Proverei un append\n");
-			lunghezzadefinitivo=prendidimensionefile(filedefinitivo.c_str());
-			
-			if (dimensionedacopiare<lunghezzadefinitivo)
-				lunghezzadefinitivo=0; /// overwrite
-		}
-*/
-	FILE* outFile=NULL;	
-#ifdef _WIN32
-	wstring widename=utow(filedefinitivo.c_str());
-	if (lunghezzadefinitivo>0)
-	outFile=_wfopen(widename.c_str(), L"ab" );
-	else
-	outFile=_wfopen(widename.c_str(), L"wb" );
-#else
-	if (lunghezzadefinitivo>0)
-	outFile=fopen(filedefinitivo.c_str(), "ab");
-	else
-	outFile=fopen(filedefinitivo.c_str(), "wb");
-#endif
-
-	if (outFile==NULL)
-	{
-		printf("32827 :CANNOT OPEN outfile %s\n",filedefinitivo.c_str());
-		return "";
-	}
-	size_t const blockSize = 65536;
-	unsigned char buffer[blockSize];
-	int64_t donesize=0;
-
-	XXH3_state_t state128;
-    (void)XXH3_128bits_reset(&state128);
-	if (i_verify)
-		if (flagverbose)
-			printf("verify: trust, but check...\n");
-		
-	
-	FILE* inFile = freadopen(i_infile.c_str());
-	if (inFile==NULL) 
-	{
-#ifdef _WIN32
-	int err=GetLastError();
-#else
-	int err=1;
-#endif
-	printf("\32849: ERR <%s> kind %d\n",i_infile.c_str(),err); 
-	if (outFile!=NULL)
-		fclose(outFile);
-	
-	return "";
-	}
-	
-	/*
-	if (lunghezzadefinitivo>0)
-		inFile.seek(lunghezzadefinitivo, SEEK_SET);
-	*/
-		
-	size_t readSize;
-	int64_t	chunk_readed=0;
-	int64_t	chunk_written=0;
-	int64_t startcopy=mtime();
-
-	while ((readSize = fread(buffer, 1, blockSize, inFile)) > 0) 
-	{
-		int64_t written=fwrite(buffer,1,readSize,outFile);
-		chunk_written+=written;
-		chunk_readed+=readSize;
-		donesize+=written;
-		if (lunghezzadefinitivo==0) /// the append case
-			if (flagverify)
-				(void)XXH3_128bits_update(&state128, buffer, readSize);
-		if (!flagnoeta)
-			avanzamento(donesize,dimensionedacopiare,startcopy);
-	}
-	
-	fclose(inFile);
-	fclose(outFile);
-	if (flagdebug)
-	{
-		printf("Done\n");
-		printf("Written  %20s\n",migliaia(donesize));
-		printf("Expected %20s\n\n",migliaia(dimensionedacopiare));
-	}
-	
-	if (donesize!=dimensionedacopiare)
-	{
-		printf("32876: GURU bytes written does not match expected\n");
-		return "";
-	}
-	if (flagverify)
-	{
-		if (!flagnoeta)
-		{
-			printbar('=');
-			printf("Checking ...\n");
-		}
-		XXH128_hash_t myhash=XXH3_128bits_digest(&state128);
-		char risultato[33];
-		sprintf(risultato,"%016llX%016llX",(unsigned long long)myhash.high64,(unsigned long long)myhash.low64);
-		
-		uint32_t dummycrc32;
-		int64_t startverify=mtime();
-		int64_t io_lavorati=0;
-		string hashreloaded=xxhash_calc_file(filedefinitivo.c_str(),false,dummycrc32,startverify,dimensionedacopiare,io_lavorati);
-		if (flagdebug)
-		{
-			printf("Expected   XXH3 hash of the output file %s\n",risultato);
-			printf("Calculated XXH3 hash of the output file %s\n",hashreloaded.c_str());
-		}
-		if (hashreloaded!=risultato)
-		{
-			printf("29658: GURU hash of output file does not match!\n");
-			return "";
-		}
-	}
-	return filedefinitivo;
-}
 /// scans one or more directories, with one or more threads
 /// return total time
 int64_t Jidac::franzparallelscandir(bool i_flaghash,bool i_recursive,bool i_forcedir)

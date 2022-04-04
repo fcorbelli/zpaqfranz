@@ -1,0 +1,27 @@
+zpaqfranz
+=========
+    ** As usual, this software is provided "as is", without any warranty **
+
+    Portions of software by other authors, mentioned later, are included. 
+	Different licenses apply to different "pieces" of this software.
+	As far as I know this is allowed by the licenses. 
+	Some text comment stripped due the size limit for github,
+	but the various license-copyrights should be in place.
+
+    I apologize if I have unintentionally violated any rule.
+    Report it and I will fix as soon as possible.
+    
+	CREDITS
+
+    - Include mod by data man and reg2s patch from encode.su forum
+    - Crc32.h Copyright (c) 2011-2019 Stephan Brumme
+    - xxhash64 by Stephan Brumme https://create.stephan-brumme.com/xxhash/
+    - Slicing-by-16 contributed by Bulat Ziganshin
+    - xxHash Extremely Fast Hash algorithm, Copyright (C) 2012-2020 Yann Collet
+    - crc32c.c Copyright (C) 2013 Mark Adler
+    - Embedded Artistry https://github.com/embeddedartistry
+    - wyhash (experimental) WangYi https://github.com/wangyi-fudan/wyhash
+    - https://github.com/System-Glitch/SHA256
+    - https://github.com/BLAKE3-team/BLAKE3 (The C code is copyright Samuel Neves and Jack O'Connor, 2019-2020, the assembly code is copyright Samuel Neves, 2019-2020)
+    - The Whirlpool algorithm was developed by Paulo S. L. M. Barreto and Vincent Rijmen
+    - Nilsimsa implementation by Sepehr Laal

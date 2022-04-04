@@ -1,6 +1,16 @@
 zpaqfranz
 =========
     ** As usual, this software is provided "as is", without any warranty **
+    
+                         __                     
+  _____ __   __ _  __ _ / _|_ __ __ _ _ __  ____
+ |_  / '_ \ / _` |/ _` | |_| '__/ _` | '_ \|_  /
+  / /| |_) | (_| | (_| |  _| | | (_| | | | |/ / 
+ /___| .__/ \__,_|\__, |_| |_|  \__,_|_| |_/___|
+     |_|             |_|                        
+                                                                    
+    This is zpaqfranz, a patched  but (maybe) compatible fork of ZPAQ version 7.15 
+    (http://mattmahoney.net/dc/zpaq.html)
 
     Portions of software by other authors, mentioned later, are included. 
     Different licenses apply to different "pieces".

@@ -1,4 +1,4 @@
-# zpaqfranz: advanced, but compatible, fork of ZPAQ 7.15, with SFX (on Windows)  
+# zpaqfranz: advanced and compatible fork of ZPAQ 7.15, with SFX (on Windows)  
 ### Main platforms: Windows, FreeBSD, Linux
 Secondary platforms: Solaris, MacOS, ESXi, QNAP-based NAS
 

@@ -9,7 +9,7 @@
 ///////// I apologize with the authors, it's not a foolish attempt to take over their jobs
 
 
-#define ZPAQ_VERSION "54.12-experimental"
+#define ZPAQ_VERSION "54.14-experimental"
 
 #if defined(_WIN64)
 #define ZSFX_VERSION "SFX64 v52.15,"
@@ -42,7 +42,7 @@ aiming to make it as easy as possible to compile on "strange" systems (NAS, vSph
 
 So be patient if the source is not linear, 
 updating and compilation are now trivial.
-
+ 
 The source is composed of the fusion of different software 
 from different authors, therefore there is no uniform style of programming. 
 
@@ -20060,7 +20060,7 @@ int64_t mtime()
 string ConvertUtcToLocalTime(const string i_date)
 {
 	if (flagdebug)
-		printf("20006: converting to localtime %s\n",i_date.c_str());
+		printf("\n20006: converting to localtime %s\n",i_date.c_str());
 #ifdef _WIN32
 	struct tm t;
 	memset(&t,0,sizeof(t));
@@ -26299,6 +26299,7 @@ void help_x(bool i_usage,bool i_example)
 		moreprint("PLUS:               During extraction,if CRC-32s are present, the codes are checked.");
 		moreprint("PLUS: -checksum     force a full hash-code verify (if added with -checksum)");
 		moreprint("PLUS: -zero         extract to dummy, 0-length files. Da a empty-full restore.");
+		moreprint("PLUS: -zero -debug  extract full-sized files, 0 filled (Dry restore)");
 		moreprint("PLUS: -utf          change everything non latin to latin (Linux/*Nix => NTFS compatibility)");
 		moreprint("PLUS: -fix255       shrink max file name, avoid different case collision (Linux => NTFS)");
 		moreprint("                    (pippo.txt and PIPPO.txt are be silently overwritten by 7.15).");
@@ -26561,6 +26562,7 @@ void help_r(bool i_usage,bool i_example)
 		moreprint("PLUS: -715          Work as 7.15 (with .zfs and ADS)");
 		moreprint("PLUS: -flagforcezfs Include .zfs");
 		moreprint("PLUS: -append       Only append data (*risky, use with zpaq archives)");
+		moreprint("PLUS: -zero         Fill all output file with zeros (for debug)");
 	
 	}
 	if (i_usage && i_example) moreprint("    Examples:");
@@ -26742,13 +26744,15 @@ void help_f(bool i_usage,bool i_example)
 		moreprint("PLUS: -verbose      Show write speed (useful to check speed consistency)");
 		moreprint("PLUS: -force        Do NOT delete (after run) the temporary filename. By default free");
 		moreprint("PLUS: -zero         Zero-fill instead of random. Use to prepare a thin VMDK shrink");
+		moreprint("PLUS: -verify       For -zero: do a verify.");
 	}
 	if (i_usage && i_example) moreprint("    Examples:");
 	if (i_example)
 	{
 		moreprint("Fill (wipe) almost all free space:   f z:\\");
 		moreprint("Fill (wipe) keep temp files:         f z:\\ -force -verbose");
-		moreprint("Zero free space:                     f z:\\ -zero");
+		moreprint("Zero free space (VM shrink):         f z:\\ -zero");
+		moreprint("Zero free space (WITH verify):       f z:\\ -zero -verify");
 	}
 }
 
@@ -26802,6 +26806,7 @@ void help_dir(bool i_usage,bool i_example)
 		moreprint("PLUS: /os           Order by size");
 		moreprint("PLUS: /on           Order by name");
 		moreprint("PLUS: /a            Show all (hidden)");
+		moreprint("PLUS: -md5 -xxh3... Find duplicated file with selected hasher");
 		moreprint("PLUS: -n X          like |tail -X");
 		moreprint("PLUS: -maxsize X    Filter out on filesize");
 		moreprint("PLUS: -minsize X    Filter out on filesize");
@@ -27025,6 +27030,7 @@ void Jidac::load_help_map()
 	help_map.insert(std::pair<string, voidhelpfunction>("x",help_x));
 	help_map.insert(std::pair<string, voidhelpfunction>("s",help_s));
 	help_map.insert(std::pair<string, voidhelpfunction>("c",help_c));
+	help_map.insert(std::pair<string, voidhelpfunction>("p",help_p));
 	help_map.insert(std::pair<string, voidhelpfunction>("r",help_r));
 	help_map.insert(std::pair<string, voidhelpfunction>("cp",help_cp));
 	help_map.insert(std::pair<string, voidhelpfunction>("z",help_z));
@@ -28754,8 +28760,10 @@ int64_t Jidac::read_archive(const char* arc, int *errors, int i_myappend,bool i_
 
 		
 					if (strstr(fn.c_str(), ":$DATA"))
-						adsfilenames++;
-		
+					{
+						if (mypos("VCOMMENT",fn)!=0)
+							adsfilenames++;
+					}
 					if (fn.length()>255)
 						toolongfilenames++;
 					
@@ -29158,7 +29166,19 @@ void	decodewinattribute(int32_t i_attribute)
 		printf("%s\n",risultato.c_str());
 }
 #endif
-
+/*
+	This is a kludge to get the filesize of a symlinked file on Windows,
+	in a (more or less) "portable" (against compilators) way
+*/
+int64_t dim(string i_filename)
+{
+    FILE* inFile = freadopen(i_filename.c_str());
+	if (inFile==NULL) 
+		return 0;
+	int64_t realsize=prendidimensionehandle(inFile);
+	fclose(inFile);
+	return realsize;
+}		
 // Insert external filename (UTF-8 with "/") into dt if selected
 // by files, onlyfiles, and notfiles. If filename
 // is a directory then also insert its contents.
@@ -29265,11 +29285,12 @@ void Jidac::scandir(bool i_checkifselected,DTMap& i_edt,string filename, bool i_
     if (FileTimeToSystemTime(&ffd.ftLastWriteTime, &st))
       edate=st.wYear*10000000000LL+st.wMonth*100000000LL+st.wDay*1000000
             +st.wHour*10000+st.wMinute*100+st.wSecond;
-    const int64_t esize=ffd.nFileSizeLow+(int64_t(ffd.nFileSizeHigh)<<32);
+    int64_t esize=ffd.nFileSizeLow+(int64_t(ffd.nFileSizeHigh)<<32);
     const int64_t eattr='w'+(int64_t(ffd.dwFileAttributes)<<8);
 	
     // Ignore links, the names "." and ".." or any unselected file
     t=wtou(ffd.cFileName);
+	
 	if (flagdebug) // sometimes Windows get very strange attributes
 	{
 		printf("%08X MY new t %s\n",(unsigned int)ffd.dwFileAttributes,t.c_str());
@@ -29280,6 +29301,18 @@ void Jidac::scandir(bool i_checkifselected,DTMap& i_edt,string filename, bool i_
    	if (t=="." || t=="..") 
 		edate=0;  // don't add, of course
 	
+	/*
+		OK, now test Windows crazy fake files
+	*/
+	
+	if ((ffd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) && (ffd.dwReserved0==IO_REPARSE_TAG_SYMLINK))
+	{
+		int64_t newsize=dim(filename);
+		if (flagdebug)
+			printf("29300: maybe Windows-symlinked file, fake size %s real size %s %s\n",migliaia(esize),migliaia(newsize),filename.c_str());
+		esize=newsize;
+	}
+		
 
 	if ((ffd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) && (!(ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)))
 	{
@@ -30093,7 +30126,7 @@ struct ExtractJob {         // list of jobs
 ThreadReturn decompressThread(void* arg) {
   ExtractJob& job=*(ExtractJob*)arg;
   int jobNumber=0;
-
+	char	byte0={0};
   // Get job number
   lock(job.mutex);
   jobNumber=++job.job;
@@ -30454,15 +30487,27 @@ ThreadReturn decompressThread(void* arg) {
 				*/
 			}
 
+		if (!job.jd.flagtest && (nz<q+usize || j+1==ptr.size())) 
+		{
 /// with -zero do not write
-		if (!flagzero)
-			if (!job.jd.flagtest && (nz<q+usize || j+1==ptr.size())) 
+			if (flagzero)
 			{
+/// -zero -debug: write all zeros in output
+				if (flagdebug)
+				{
+					///seek to the end and write a 0
+					fseeko(job.outf, offset+usize, SEEK_SET);
+					fwrite(&byte0, 1, 1, job.outf);
+				}
+			}
+			else
+			{				
 				if (flagdebug)
 					printf("17716:OFFSET-WRITE   %19s  size  %12s %s\n",migliaia(offset),migliaia2(usize),job.lastdt->first.c_str());
 				fseeko(job.outf, offset, SEEK_SET);
 				fwrite(out.c_str()+q, 1, usize, job.outf);
 			}
+		}	
 
         offset+=usize;
         lock(job.mutex);
@@ -32095,6 +32140,14 @@ string shash_calc_file(string i_algo,const char * i_filename,bool i_flagcalccrc3
 	return "";
 }
 
+bool 	iszpaqfranzvirtualfile(const string& i_filename)
+{
+	if (mypos("VCOMMENT ",i_filename)>-1)
+		return true;
+	if (mypos("VFILE-",i_filename)>-1)
+		return true;
+	return false;
+}
 
 bool isletterpath(const string& i_filename)
 {
@@ -32955,7 +33008,7 @@ int Jidac::extract()
 		
 	if (flagparanoid)
 	{
-		printf("\n\nFULL-extract hashing check\n");
+		printf("\n\nFULL-extract hashing check (aka:paranoid)\n");
 		int64_t	dimensionetotale=0;
 		int		dalavorare=0;
 		for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p) 
@@ -32982,6 +33035,13 @@ int Jidac::extract()
 			if (p->second.date && p->first!="") 
 			{
 				string fn=rename(p->first);
+				if (iszpaqfranzvirtualfile(p->first))
+				{
+					if (flagdebug)
+					printf("33042: found a virtualfile %s\n",fn.c_str());
+					if (fileexists(fn))
+						delete_file(fn.c_str());
+				}
 				if (!isdirectory(fn))
 					if (p->second.hashtype!="")
 						if (fileexists(fn))			// no fakefile-dirs
@@ -33009,6 +33069,7 @@ int Jidac::extract()
 									printf("!= from file %s from archive %s <<%s>>\n",hashfromfile.c_str(),p->second.hexhash.c_str(),fn.c_str());
 							}
 						}
+
 			}
 		if (dalavorare>0)
 		{
@@ -33071,9 +33132,17 @@ int numver=std::stoi(numeroversione.c_str());
 				string commento=fakefile.substr(found+9+8+1,65000);
 				if (i_testo.length()>0)
 				{
+					/*
+					printf("COMMENTO %s\n",commento.c_str());
+					printf("i_testo %s\n",i_testo.c_str());
+					*/
+					if (!stringcomparei(commento,i_testo))
+						continue;
+					/*
 					size_t start_comment = commento.find(i_testo);
 					if (start_comment == std::string::npos)
 					continue;
+				*/
 				}
     			mappacommenti.insert(std::pair<int, string>(numver, commento));
 				versione=numver;
@@ -35703,7 +35772,7 @@ int unz(const char * archive,const char * key)
 		}
 		printf("\r");
 		print_datetime();
-		printf("Remining %s %% frags %s (RAM used ~ %s)\r",migliaia2(100-(offset*100/(total_size+1))),migliaia(frag.size()),migliaia2(ramsize));
+		printf("Remining %3s %% frags %12s (RAM used ~ %15s)\r",migliaia2(100-(offset*100/(total_size+1))),migliaia(frag.size()),migliaia2(ramsize));
 
     }  // end while findFilename
     offset=in.tell();
@@ -36998,7 +37067,7 @@ int64_t i_destinazione_attr
 			if (flagdebug)
 				printf("27584: enforcing xls/ppt test %s\n",i_filename.c_str());
 
-			destinazione_esiste=isfilesequal(i_filename,i_outfilename);
+			destinazione_esiste=isfilesequal(i_filename,i_outfilename,flagzero);
 			if (destinazione_esiste)
 			{
 				if (flagdebug)
@@ -37204,6 +37273,9 @@ int64_t i_destinazione_attr
 	
 	while ((readSize = fread(buffer, 1, blockSize, inFile)) > 0) 
 	{
+		if (flagzero)
+			memset(buffer,0,sizeof(buffer));
+
 		int scritti=fwrite(buffer,1,readSize,outFile);
 		///printf("Scritti %19s\n",migliaia(scritti));
 		scrittitotali+=scritti;
@@ -38513,103 +38585,14 @@ int Jidac::fillami()
 	assert(outputdir.size()<200);
 	char mynomefile[200+100];
 	
-	if (flagzero)
-	{
-		memset(buffer32bit,0,chunksize*4);
-		int i=0;
-		uint64_t byteswritten=0;
-		while (1)
-		{
-			i++;
-			
-			sprintf(mynomefile,"%szchunk_%05d",outputdir.c_str(),i);
-			chunkfilename.push_back(mynomefile);
-			double percentuale=(double)i/(double)chunks*100.0;
-			if (i==0)
-				percentuale=0;
-			if (percentuale>100)
-				percentuale=100;
-				
-			printf("%03d%% ",(int)percentuale);
-			
-			uint64_t startio=mtime();
-			FILE* myfile=fopen(mynomefile, "wb");
-			size_t scritti=fwrite(buffer32bit, sizeof(uint32_t), chunksize, myfile);
-			fclose(myfile);		
-			byteswritten+=scritti*4;
-			uint64_t iotime=mtime()-startio;
-			totaliotime		+=iotime;
-			if (scritti!=chunksize)
-				break;
-
-			uint64_t iospeed=(uint64_t)	(chunksize*sizeof(uint32_t)/((iotime+1)/1000.0));
-			double trascorso=(mtime()-starttutto+1)/1000.0;
-			double eta=((double)trascorso*(double)spacetowrite/(double)byteswritten)-trascorso;
-			if (i==0)
-				eta=0;
-
-			if (eta<356000)
-			{
-				printf("ETA %0d:%02d:%02d",int(eta/3600), int(eta/60)%60, int(eta)%60);
-				printf(" todo (%10s) W (%10s/s)",
-				tohuman(spacetowrite-byteswritten),
-				tohuman4(iospeed));
-				if (flagverbose)
-					printf("\n");
-				else
-					printf("\r");
-			}
-		}
-		
-		chunksize=16384;
-		printf("\nFilling all the way @ %s bytes\n",migliaia(chunksize*4));
-		spazio=getfreespace(outputdir);
-		byteswritten=0;
-		while (1)
-		{
-			i++;
-			sprintf(mynomefile,"%szchunk_%05d",outputdir.c_str(),i);
-			chunkfilename.push_back(mynomefile);
-			FILE* myfile=fopen(mynomefile, "wb");
-			size_t scritti=fwrite(buffer32bit, sizeof(uint32_t), chunksize, myfile);
-			fclose(myfile);			
-			byteswritten	+=scritti*4;
-			if (scritti!=chunksize)
-				break;
-
-			printf("Todo (%10s)",tohuman(spazio-byteswritten));
-
-			if (flagverbose)
-				printf("\n");
-			else
-				printf("\r");
-
-		}
-	
-		if (!flagforce)
-		{
-			for (int unsigned i=0;i<chunkfilename.size();i++)
-			{
-				delete_file(chunkfilename[i].c_str());
-				printf("Deleting tempfile %05d / %05d\r",i,(unsigned int)chunkfilename.size()-1);
-			}
-			delete_dir(outputdir.c_str());
-			printf("\n");
-		}
-		else
-			printf("REMEMBER: temp file in %s\n",outputdir.c_str());
-		return 0;
-	}
-
-
-
-/// Not zero, but random from here
+	memset(buffer32bit,0,chunksize*4);
 
 	for (int i=0;i<chunks;i++)
 	{
 		/// pseudorandom population (not cryptographic-level, but enough)
 		uint64_t startrandom=mtime();
-		populateRandom_xorshift128plus(buffer32bit, chunksize,324+i,4444+i);
+		if (!flagzero)
+			populateRandom_xorshift128plus(buffer32bit, chunksize,324+i,4444+i);
 		uint64_t randtime=mtime()-startrandom;
 		
 		/// get XXH3, fast and reliable (not cryptographic-level, but enough)
@@ -38680,49 +38663,60 @@ int Jidac::fillami()
 		return 2;
 	}
 	
-	printf("******* VERIFY\n");
-	
-	g_bytescanned=0;
-	g_filescanned=0;
-	g_worked=0;
-	edt.clear();
-	int64_t lavorati=0;
+	/// by default zero to shrink vmdks
 	bool flagallok=true;
 	
-	uint64_t starverify=mtime();
+	bool doverify=true;
 	
-	for (int unsigned i=0;i<chunkfilename.size();i++)
+	if (flagzero)
+		if (!flagverify)
+			doverify=false;
+	
+	if (doverify)
 	{
-		string filename=chunkfilename[i];
-		printf("Reading chunk %05d ",i);
+		printf("******* VERIFY\n");
 		
-		uint32_t dummycrc32;
-		uint64_t starthash=mtime();
-		string filehash=xxhash_calc_file(filename.c_str(),false,dummycrc32,-1,-1,lavorati);
-		uint64_t hashspeed=(uint64_t)(chunksize/((mtime()-starthash+1)/1000.0));
-		printf(" (%12s/s) ",tohuman(hashspeed));
-
-		bool flagerrore=(filehash!=chunkhash[i]);
+		g_bytescanned=0;
+		g_filescanned=0;
+		g_worked=0;
+		edt.clear();
+		int64_t lavorati=0;
+		
+		uint64_t startverify=mtime();
+		
+		for (int unsigned i=0;i<chunkfilename.size();i++)
+		{
+			string filename=chunkfilename[i];
+			printf("Reading chunk %05d ",i);
 			
-		if (flagerrore)
-		{
-			printf("ERROR\n");
-			flagallok=false;
-		}
-		else
-		{
-			printf("OK %s",chunkhash[i].c_str());
-			if (flagverbose)
-				printf("\n");
-			else
-				printf("\r");
-		}
-	}
+			uint32_t dummycrc32;
+			///uint64_t starthash=mtime();
+			string filehash=xxhash_calc_file(filename.c_str(),false,dummycrc32,-1,-1,lavorati);
+			uint64_t hashspeed=(uint64_t)(lavorati/((mtime()-startverify+1)/1000.0));
+			printf(" (%12s/s) ",tohuman(hashspeed));
 
-	printf("\n");
-	uint64_t verifytime=mtime()-starverify;
-	printf("Verify time %f (%10s) speed (%10s/s)\n",verifytime/1000.0,tohuman(lavorati),tohuman2((uint64_t)(lavorati/(verifytime/1000.0))));
-		
+			bool flagerrore=(filehash!=chunkhash[i]);
+				
+			if (flagerrore)
+			{
+				printf("ERROR\n");
+				flagallok=false;
+			}
+			else
+			{
+				printf("OK %s",chunkhash[i].c_str());
+				if (flagverbose)
+					printf("\n");
+				else
+					printf("\r");
+			}
+		}
+
+		printf("\n");
+		uint64_t verifytime=mtime()-startverify;
+		printf("Verify time %f (%10s) speed (%10s/s)\n",verifytime/1000.0,tohuman(lavorati),tohuman2((uint64_t)(lavorati/(verifytime/1000.0))));
+	}
+	
 	if (flagallok)
 	{
 		printf("+OK all OK\n");
@@ -38748,6 +38742,29 @@ int Jidac::fillami()
 	
 }
 
+/*
+	On FreeBSD (and zfs) home is very often a symlink, but the readlink() sometimes
+	report relative links (/home => usr/home)
+*/
+#ifdef unix
+string my_realpath(std::string const& i_path) 
+{
+	char buf[PATH_MAX];
+    char *res=realpath(i_path.c_str(),buf);
+    if (res) 
+	{ 
+		return buf;
+    } 
+	else 
+	{
+		if (flagdebug)
+			printf("38761: error on realpath of %s\n",i_path.c_str());
+		return i_path;
+    }
+}
+#endif
+
+
 int  Jidac::dir() 
 {
 	bool barras	=false;
@@ -38758,17 +38775,40 @@ int  Jidac::dir()
 /*esx*/
 #ifndef ESX
 	if (files.size()==0)
+	{
+		if (flagdebug)
+			printf("38759: push .\n");
 		files.push_back(".");
-	else
-	if (files[0].front()=='/')
-		files.insert(files.begin(),1, ".");
+	}
 #endif
 
+
 	string cartella=files[0];
-	
+
 	if	(!isdirectory(cartella))
 		cartella+='/';
 		
+#ifdef unix
+	if (flagdebug)
+		printf("38802: folder before %s\n",cartella.c_str());
+	string nuovacartella=my_realpath(cartella);
+	if (flagdebug)
+		printf("38805: folder after %s\n",nuovacartella.c_str());
+	
+	if	(!isdirectory(nuovacartella))
+		nuovacartella+='/';
+	if (cartella!=nuovacartella)
+	{
+		printf("38798: WARNING path : <<");
+		printUTF8(cartella.c_str());
+		printf(">>\nresolved to         : <<");
+		printUTF8(nuovacartella.c_str());
+		printf(">>\n");
+	}
+	cartella=nuovacartella;
+	files[0]=cartella;
+#endif
+	
 	if (files.size()>1)
 		for (unsigned i=0; i<files.size(); i++) 
 		{
@@ -38777,6 +38817,7 @@ int  Jidac::dir()
 				barraod	|=(stringcomparei(files[i],"/od"));
 				barraa	|=(stringcomparei(files[i],"/a"));
 		}
+	
 	
 	printf("==== Scanning dir <<");
 	printUTF8(cartella.c_str());
@@ -38792,7 +38833,7 @@ int  Jidac::dir()
 		printf(" /a");
 			
 	printf("\n");
-
+		
 	bool		flagduplicati	=false;
 	int64_t 	total_size		=0;
 	int 		quantifiles		=0;
@@ -38803,7 +38844,7 @@ int  Jidac::dir()
 	uint64_t	iniziohash		=0;
 	uint64_t	finehash			=0;
 		
-	flagduplicati=(flagcrc32 || flagcrc32c || flagxxh3 || flagxxhash64 || flagsha1 || flagsha256);
+	flagduplicati=ischecksum(); //(flagcrc32 || flagcrc32c || flagxxh3 || flagxxhash64 || flagsha1 || flagsha256 || flagmd5 || flagblake3 || flagxxhash64 || flagsha3);
 			
 	g_bytescanned=0;
 	g_filescanned=0;
@@ -39718,7 +39759,6 @@ int Jidac::add()
 	
 	if (strstr(filename.c_str(), ":$DATA"))
 		adsfilenames++;
-
 	
 	if (filename.length()>255)
 		toolongfilenames++;
@@ -40079,6 +40119,9 @@ if (casecollision>0)
         while (true) {
 			if (bufptr>=buflen) bufptr=0, buflen=fread(buf, 1, BUFSIZE, in);
 	
+			if (flagdebug)
+				if (flagzero)
+					memset(buf,0,buflen);
 	  
 			if (g_franzotype>0)
 				if (bufptr==0)
@@ -41808,7 +41851,8 @@ int Jidac::extract2()
 
 int Jidac::multiverify(vector <s_fileandsize>& i_arrayfilename,int64_t i_totalsize) 
 {
-	
+	if (i_totalsize==88734)
+		printf("Dummy nowarning\n");
 	myprintf("\nMultithread verify\n");
 	
 	/* reset global */
@@ -42052,17 +42096,19 @@ int Jidac::multiverify(vector <s_fileandsize>& i_arrayfilename,int64_t i_totalsi
 
 int Jidac::extractqueue(int i_chunk,int64_t i_size)
 {
+	if (i_size==88734)
+		printf("Dummy nowarning\n");
 	printf("Chunk %08d ",i_chunk);
 	/// very ugly: reset and re-read. To be fixed in future
 
 
-	printf("Ver     %d\n",ver.size());
-	printf("Block   %d\n",block.size());
-	printf("dt      %d\n",dt.size());
-	printf("ht      %d\n",ht.size());
-	printf("dhsize  %d\n",dhsize);
-	printf("dcsize  %d\n",dcsize);
-	printf("chunkfs %d\n",chunkfiles.size());
+	printf("Ver    %s\n",migliaia(ver.size()));
+	printf("Block  %s\n",migliaia(block.size()));
+	printf("dt     %s\n",migliaia(dt.size()));
+	printf("ht     %s\n",migliaia(ht.size()));
+	printf("dhsize %s\n",migliaia(dhsize));
+	printf("dcsize %s\n",migliaia(dcsize));	
+	printf("chunkf %s\n",migliaia(chunkfiles.size()));
 
 	ver.clear();
 	block.clear();
@@ -42084,13 +42130,13 @@ int Jidac::extractqueue(int i_chunk,int64_t i_size)
 	print_datetime();
 	
 	printf("99999999999999999999 start read\n");
-	printf("Ver    %d\n",ver.size());
-	printf("Block  %d\n",block.size());
-	printf("dt     %d\n",dt.size());
-	printf("ht     %d\n",ht.size());
-	printf("dhsize %d\n",dhsize);
-	printf("dcsize %d\n",dcsize);	
-	printf("onlyf  %d\n",onlyfiles.size());
+	printf("Ver    %s\n",migliaia(ver.size()));
+	printf("Block  %s\n",migliaia(block.size()));
+	printf("dt     %s\n",migliaia(dt.size()));
+	printf("ht     %s\n",migliaia(ht.size()));
+	printf("dhsize %s\n",migliaia(dhsize));
+	printf("dcsize %s\n",migliaia(dcsize));	
+	printf("onlyf  %s\n",migliaia(onlyfiles.size()));
 
 
 	ExtractJob job(*this);
@@ -42122,7 +42168,7 @@ int Jidac::extractqueue(int i_chunk,int64_t i_size)
 		{
 			string fn=rename(p->first);
 						
-			const bool isdir=isdirectory(p->first);
+///			const bool isdir=isdirectory(p->first);
 			string dummy="";
 				p->second.data=-1;
 			
@@ -42541,7 +42587,7 @@ int64_t Jidac::read_archive2(const char* arc, int *errors, int i_myappend,bool i
 		
 					if (strstr(fn.c_str(), ":$DATA"))
 						adsfilenames++;
-		
+
 					if (fn.length()>255)
 						toolongfilenames++;
 					

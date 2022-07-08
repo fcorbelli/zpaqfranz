@@ -60,28 +60,55 @@ _Delete hard-to-erase folders on Windows
 # And now... the main thing!
 ### command w Chunked-extraction  
 _Extract/test in chunks, on disk or 'ramdisk' (RAM)  
-The output -to folder MUST BE EMPTY
+The output -to folder MUST BE EMPTY  
+The w command essentially works like the x (extract) command but in chunks  
+It can extract the data into RAM, and to simply check (hash) it, or even write it in order_  
+
+PRELIMINARY NOTE: the -to folder MUST BE EMPTY (no advanced checks-and-balance as zpaq)  
+
+There are various scenarios
+
+1) Extracting on spinning drive (HDD)
+zpaq's extraction method is not very fit for spinning drive, because can make a lot of seeks while writing data to disk. This can slow down the process. On media with lower latency (SSD, NVMe, ramdisk) the slowdown is much less noticeable. Basically zpaq "loves" SSD  and isn't very HDD friendly.
+If the largest file in the archive is smaller than the free RAM on your computer, you can use the -ramdisk switch
+Extract to a spinning drive (Windows)
+zpaqfranz w z:\1.zpaq -to p:\muz7\ -ramdisk -longpath
+In this example the archive 1.zpaq will be extracted in RAM, then written on p:\muz7 folder (suppose an HDD drive) at the max speed possible (no seeks at all)
+
+2) Checking the hashes without write on disk AND MULTITHREAD AND MULTIPART and whatever
+The p (paranoid) command can verify the hash checksum of the files into the archive WITHOUT writing to disk, but it is limited to a SINGLE CORE computation, without multipart archive support
+The w command (if the largest file in the archive is smaller than free RAM) does not have such limitations
+zpaqfranz w z:\1.zpaq -ramdisk -test -checksum -ssd -frugal -verbose
+will test (-test, no write on drive) the archive 1.zpaq, into RAM (-ramdisk), testing hashes (-checksum), in multithread way (-ssd), using as little memory as possible (-frugal) and in -verbose mode
+
+3) Paranoid no-limit check, for huge archives (where the largest uncompressed file is bigger than free RAM)
+zpaqfranz w z:\1.zpaq -to z:\muz7\ -paranoid -verify -verbose -longpath
+will extract everything from 1.zpaq into z:\muz7, with longpath support (example for Windows), then do a -paranoid -verify
+At the end into z:\muz7\zfranz the BAD files will be present. If everything is ok this folder should be empty
+
+4) Paranoid test-everything, when the biggest uncompressed file is smaller then RAM and using a SSD/NVMe/ramdisk as output (z:\)
+zpaqfranz w z:\1.zpaq -to z:\kajo -ramdisk -paranoid -verify -checksum -longpath -ssd
 
 
+Recap of switches
 + : -maxsize X    Maxsize of the chunk @ X bytes
-+ : -ramdisk      Use 'RAMDISK'
-+ : -frugal       Use less possible RAM (default: get 75% of free RAM)'
-+ : -ssd          Multithread writing from ramdisk
++ : -ramdisk      Use 'RAMDISK', only if uncompressed size of the biggest file (+10%) is smaller than current free RAM (-25%)
++ : -frugal       Use less possible RAM (default: get 75% of free RAM)
++ : -ssd          Multithread writing from ramdisk to disk / Multithread hash computation
 + : -test         Do not write on media
 + : -verbose      Show useful infos
-+ : -checksum     Do CRC-32 / hashes test
++ : -checksum     Do CRC-32 / hashes test (by default: NO)
 + : -verify       Do a 'check-against-filesystem'
-+ : -paranoid     Extract to filesystem, then delete if OK (need -verify)
-    Examples:
-```
-Extract to a spinning drive:         w z:\1.zpaq -to p:\muz7\ -ramdisk -longpath
-Paranoid check into folder muz7:     w z:\1.zpaq -to z:\muz7\ -paranoid -verify -verbose
- -frugal -longpath
-Paranoid  max chunksize 1000000000:  w z:\1.zpaq -to z:\muz7\ -paranoid -verify -maxsize
- 1000000000
-Test in RAM (no disk write,M/T)      w z:\1.zpaq -ramdisk -test -checksum -ssd -frugal
-Top test (W/disk write on SSD z:\)   w z:\1.zpaq -to z:\kajo -ramdisk -paranoid -verify
--checksum -longpath -ssd
++ : -paranoid     Extract to filesystem, then delete if OK (need -verify)  
+
+### Yes, I understand, the w command can seems incomprehensible.
+In fact it is developed to avoid the limitations of zpaq in the management of very large archives with huge files (for example virtual machine disks) kept on HDD or archives containing a very large number (millions) of relatively small files (such as for example a file server backup of shared Word, EML, JPG etc) to be checked on a high-powered machine (with many cores, lot of RAM and SSD), without wearing the media. As is known, writing large amounts of data reduces the life of SSDs and NVMes (HDDs too, but to a lesser extent). The p command is monothread AND cannot handle archive bigger than RAM.
+To make a "quick check" compare execution time of a "small" archive (=uncompressed size smaller than your RAM)
+zpaqfranz p p:\1.zpaq
+against
+zpaqfranz w p:\1.zpaq -test -checksum -ramdisk -ssd -verbose
+
+
 ```
 
 

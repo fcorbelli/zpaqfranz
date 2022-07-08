@@ -1,6 +1,6 @@
 # 09-07-2022: 55.1
-This new release introduce new features  
-As all new code should be deeply tested, before use in production  
+This new release introduce... new features  
+As all new code should be deeply tested, before production use    
 
 ### Compile on OpenBSD 6.6+ and OmniOS (open Solaris Unix) r151042  
 
@@ -8,7 +8,7 @@ As all new code should be deeply tested, before use in production
 _Show less infos during execution. It is a working in progress    
 Switches to REDUCE output are -noeta, -pakka and -summary  
 Switches to AUGMENT output are -verbose and -debug  
-Advancing by 1 s in progress infos_  
+Advancing by 1s in progress infos_  
 
 ### The "dir" command, by default, show dates in European format
 _Instead of 2022-12-25 => 25/12/2022  
@@ -18,12 +18,12 @@ It does NOT use "local" translator, because it's way too hard to support many pl
 ### -flagflat use mime64 encoded filenames
 _In some cases there were problems with reserved words on filesystems_  
 
-### On Windows more extensive support for -longpath
+### On Windows more extensive support for -longpath (filenames longer than 255 chars)
 
 ### On Windows -fixcase and -fixreserved  
 _Handle case collisions (ex. pippo.txt and PIPPO.txt) and reserved filenames (ex lpt1)_  
 
-### Disabled some computation. Use -stat to activate  
+### Disabled some computation. Use -stat to re-activate  
 _Some checks can be slow for huge archives (reserved filenames, collisions etc)_
 
 ### The -all switch, for turning on multi-thread computation, is now -ssd
@@ -103,13 +103,13 @@ Recap of switches
 
 ### Yes, I understand, the w command can seems incomprehensible.
 In fact it is developed to avoid the limitations of zpaq in the management of very large archives with huge files (for example virtual machine disks) kept on HDD or archives containing a very large number (millions) of relatively small files (such as for example a file server backup of shared Word, EML, JPG etc) to be checked on a high-powered machine (with many cores, lot of RAM and SSD), without wearing the media. As is known, writing large amounts of data reduces the life of SSDs and NVMes (HDDs too, but to a lesser extent). And remember: the p command is monothread AND cannot handle archive bigger than RAM.
-To make a "quick check" compare execution time of a "small" archive (=uncompressed size smaller than your RAM)  
+To make a "quick check" compare execution time of a "small" archive (=uncompressed size smaller than your RAM, say 5/10GB)  
 zpaqfranz p p:\1.zpaq  
 against  
 zpaqfranz w p:\1.zpaq -test -checksum -ramdisk -ssd -verbose  
 
 
-### One last thing: 55.1 is developed and tested on Windows. More develop for BSD/Linux from 55.2+
+### One last thing: 55.1 is developed and tested on Windows. More develop for BSD/Linux from 55.2+. And remember: the embedded help (and examples) are just about always updated
 ```
 
 

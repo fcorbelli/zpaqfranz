@@ -2,6 +2,8 @@
 ### Main platforms: Windows, FreeBSD, Linux
 Secondary platforms: Solaris, MacOS, OpenBSD, OmniOS, (ESXi, QNAP-based NAS for older builds)  
 
+# New Release: 55.1 (July 2022)
+
 ### [Windows binary 32/64 bit on sourceforge](https://sourceforge.net/projects/zpaqfranz/files/) 
 ### [Quick start FreeBSD](https://github.com/fcorbelli/zpaqfranz/wiki/Quickstart:-FreeBSD)   
 [Main site of old ZPAQ](http://mattmahoney.net/dc/zpaq.html)      [Reference decompressor](https://github.com/fcorbelli/unzpaq/tree/main) 

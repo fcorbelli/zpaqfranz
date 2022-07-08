@@ -102,13 +102,14 @@ Recap of switches
 + : -paranoid     Extract to filesystem, then delete if OK (need -verify)  
 
 ### Yes, I understand, the w command can seems incomprehensible.
-In fact it is developed to avoid the limitations of zpaq in the management of very large archives with huge files (for example virtual machine disks) kept on HDD or archives containing a very large number (millions) of relatively small files (such as for example a file server backup of shared Word, EML, JPG etc) to be checked on a high-powered machine (with many cores, lot of RAM and SSD), without wearing the media. As is known, writing large amounts of data reduces the life of SSDs and NVMes (HDDs too, but to a lesser extent). The p command is monothread AND cannot handle archive bigger than RAM.
-To make a "quick check" compare execution time of a "small" archive (=uncompressed size smaller than your RAM)
-zpaqfranz p p:\1.zpaq
-against
-zpaqfranz w p:\1.zpaq -test -checksum -ramdisk -ssd -verbose
+In fact it is developed to avoid the limitations of zpaq in the management of very large archives with huge files (for example virtual machine disks) kept on HDD or archives containing a very large number (millions) of relatively small files (such as for example a file server backup of shared Word, EML, JPG etc) to be checked on a high-powered machine (with many cores, lot of RAM and SSD), without wearing the media. As is known, writing large amounts of data reduces the life of SSDs and NVMes (HDDs too, but to a lesser extent). And remember: the p command is monothread AND cannot handle archive bigger than RAM.
+To make a "quick check" compare execution time of a "small" archive (=uncompressed size smaller than your RAM)  
+zpaqfranz p p:\1.zpaq  
+against  
+zpaqfranz w p:\1.zpaq -test -checksum -ramdisk -ssd -verbose  
 
 
+### One last thing: 55.1 is developed and tested on Windows. More develop for BSD/Linux from 55.2+
 ```
 
 

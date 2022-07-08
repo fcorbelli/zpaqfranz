@@ -7,7 +7,8 @@ As all new code should be deeply tested, before use in production
 ### General behaviour
 _Show less infos during execution. It is a working in progress    
 Switches to REDUCE output are -noeta, -pakka and -summary  
-Switches to AUGMENT output are -verbose and -debug_  
+Switches to AUGMENT output are -verbose and -debug  
+Advancing by 1 s in progress infos_  
 
 ### The "dir" command, by default, show dates in European format
 _Instead of 2022-12-25 => 25/12/2022  
@@ -19,84 +20,60 @@ _In some cases there were problems with reserved words on filesystems_
 
 ### On Windows more extensive support for -longpath
 
+### On Windows -fixcase and -fixreserved  
+_Handle case collisions (ex. pippo.txt and PIPPO.txt) and reserved filenames (ex lpt1)_  
 
-Switch
--checksum
--fixcase
--fixreserved (Win)
--stat
--ssd
--ramdisk
--frugal
--v (like -verbose)
+### Disabled some computation. Use -stat to activate  
+_Some checks can be slow for huge archives (reserved filenames, collisions etc)_
 
+### The -all switch, for turning on multi-thread computation, is now -ssd
+_In zpaqfranz 55- -all can means "all versions" or "all core". On 55+ for a read or write in Multithread use -ssd_  
 
+### command d
+_It is possible to use different hashes  
+zpaqfranz d c:\dropbox\ -ssd -blake3_  
 
+### command dir
+_It is possible to use different hashes to find duplicates  
+zpaqfranz dir c:\dropbox\ /s -checksum -blake3_  
 
-New command rd()
+### Main changes command a (add)
+_-debug -zero       Add files but zero-filled (debugging)_  
+_If you want to send me some kind of strange archive, for debug, without privacy issues_  
 
-Handling of Windows-reserved filenames
-Case collisions
+_-debug -zero -kill Add 0-byte long file (debugging)_  
+_Store empty files, very small archive, to test and debug filesystem issues_  
 
--ramdisk
+_-verify       Verify hashes against filesystem_  
+_-verify -ssd  Verify hashes against filesystem MULTITHREAD (do NOT use on spinning drives)_
 
-extractw()
+### Command i (information)
+_Is now about 30% faster_  
+_-stat to calc statistics on files, like case collisions (slow)_  
 
-command add()
-		moreprint("+ : -debug -zero       Add files but zero-filled (debugging)");
-		moreprint("+ : -debug -zero -kill Add 0-byte long file (debugging)");
-		moreprint("+ : -verify       Verify hashes against filesystem");
-		moreprint("+ : -verify -ssd  Verify hashes against filesystem MULTITHREAD (do NOT use on spinning drives)");
+### On Windows: new command rd()
+_Delete hard-to-erase folders on Windows  
+-force  Remove folder if not-zero files present  
+-kill wet-run  
+-space do not check writeability (example delete folder from a 0 bytes free drive)_  
 
-command i
--stat
-
-command t
--verify -ssd
-
-command v
--ssd
-
-
-everywhere
--ssd instead of -all
-
-command cp
--space
-
-command d
-usa un hash qualsiasi
-
-command dir
--somehash
-
-avanzamento1sec nell'hashing
-
-remove empty dir
+# And now... the main thing!
+### command w Chunked-extraction  
+_Extract/test in chunks, on disk or 'ramdisk' (RAM)  
+The output -to folder MUST BE EMPTY
 
 
-CMD   w (Chunked-extraction)
-+ :               Extract/test in chunks, on disk or 'ramdisk' (RAM)
-+ :               The output -to folder MUST BE EMPTY
 + : -maxsize X    Maxsize of the chunk @ X bytes
-
 + : -ramdisk      Use 'RAMDISK'
-
 + : -frugal       Use less possible RAM (default: get 75% of free RAM)'
-
 + : -ssd          Multithread writing from ramdisk
-
 + : -test         Do not write on media
-
 + : -verbose      Show useful infos
-
 + : -checksum     Do CRC-32 / hashes test
-
 + : -verify       Do a 'check-against-filesystem'
-
 + : -paranoid     Extract to filesystem, then delete if OK (need -verify)
-
     Examples:
+```
 Extract to a spinning drive:         w z:\1.zpaq -to p:\muz7\ -ramdisk -longpath
 Paranoid check into folder muz7:     w z:\1.zpaq -to z:\muz7\ -paranoid -verify -verbose
  -frugal -longpath
@@ -105,7 +82,7 @@ Paranoid  max chunksize 1000000000:  w z:\1.zpaq -to z:\muz7\ -paranoid -verify 
 Test in RAM (no disk write,M/T)      w z:\1.zpaq -ramdisk -test -checksum -ssd -frugal
 Top test (W/disk write on SSD z:\)   w z:\1.zpaq -to z:\kajo -ramdisk -paranoid -verify
 -checksum -longpath -ssd
-
+```
 
 
 

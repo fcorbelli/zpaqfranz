@@ -1,3 +1,111 @@
+# 09-07-2022: 55.1
+This new release introduce new features  
+As all new code should be deeply tested, before used in production  
+
+Compile on OpenBSD 6.6+ and OmniOS (open Solaris Unix) r151042  
+Switch
+-checksum
+-fixcase
+-fixreserved (Win)
+-stat
+-ssd
+-ramdisk
+-frugal
+-v (like -verbose)
+
+General behaviour
+Show less infos during execution 
+Switches to REDUCE output are -noeta, -pakka and -summary
+Switches to AUGMENT output are -verbose and -debug
+
+The "dir" command, by default, show date in European format
+Instead of 2022-12-25 => 25/12/2022
+It does NOT use "local" translator, because it's way too hard to support many platforms
+-utc turn off local time (just like 7.15)
+
+-flagflat use mime64 encoded filenames
+
+-longpath
+
+New command rd()
+
+Handling of Windows-reserved filenames
+Case collisions
+
+-ramdisk
+
+extractw()
+
+command add()
+		moreprint("+ : -debug -zero       Add files but zero-filled (debugging)");
+		moreprint("+ : -debug -zero -kill Add 0-byte long file (debugging)");
+		moreprint("+ : -verify       Verify hashes against filesystem");
+		moreprint("+ : -verify -ssd  Verify hashes against filesystem MULTITHREAD (do NOT use on spinning drives)");
+
+command i
+-stat
+
+command t
+-verify -ssd
+
+command v
+-ssd
+
+
+everywhere
+-ssd instead of -all
+
+command cp
+-space
+
+command d
+usa un hash qualsiasi
+
+command dir
+-somehash
+
+avanzamento1sec nell'hashing
+
+remove empty dir
+
+
+CMD   w (Chunked-extraction)
++ :               Extract/test in chunks, on disk or 'ramdisk' (RAM)
++ :               The output -to folder MUST BE EMPTY
++ : -maxsize X    Maxsize of the chunk @ X bytes
+
++ : -ramdisk      Use 'RAMDISK'
+
++ : -frugal       Use less possible RAM (default: get 75% of free RAM)'
+
++ : -ssd          Multithread writing from ramdisk
+
++ : -test         Do not write on media
+
++ : -verbose      Show useful infos
+
++ : -checksum     Do CRC-32 / hashes test
+
++ : -verify       Do a 'check-against-filesystem'
+
++ : -paranoid     Extract to filesystem, then delete if OK (need -verify)
+
+    Examples:
+Extract to a spinning drive:         w z:\1.zpaq -to p:\muz7\ -ramdisk -longpath
+Paranoid check into folder muz7:     w z:\1.zpaq -to z:\muz7\ -paranoid -verify -verbose
+ -frugal -longpath
+Paranoid  max chunksize 1000000000:  w z:\1.zpaq -to z:\muz7\ -paranoid -verify -maxsize
+ 1000000000
+Test in RAM (no disk write,M/T)      w z:\1.zpaq -ramdisk -test -checksum -ssd -frugal
+Top test (W/disk write on SSD z:\)   w z:\1.zpaq -to z:\kajo -ramdisk -paranoid -verify
+-checksum -longpath -ssd
+
+
+
+
+
+
+
 ```
 20-12-2021: 54.10  
 media full check  

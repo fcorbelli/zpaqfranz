@@ -1,8 +1,25 @@
 # 09-07-2022: 55.1
 This new release introduce new features  
-As all new code should be deeply tested, before used in production  
+As all new code should be deeply tested, before use in production  
 
-Compile on OpenBSD 6.6+ and OmniOS (open Solaris Unix) r151042  
+### Compile on OpenBSD 6.6+ and OmniOS (open Solaris Unix) r151042  
+
+### General behaviour
+_Show less infos during execution. It is a working in progress    
+Switches to REDUCE output are -noeta, -pakka and -summary  
+Switches to AUGMENT output are -verbose and -debug_  
+
+### The "dir" command, by default, show dates in European format
+_Instead of 2022-12-25 => 25/12/2022  
+It does NOT use "local" translator, because it's way too hard to support many platforms  
+-utc turn off local time (just like 7.15)_  
+
+### -flagflat use mime64 encoded filenames
+_In some cases there were problems with reserved words on filesystems_  
+
+### On Windows more extensive support for -longpath
+
+
 Switch
 -checksum
 -fixcase
@@ -13,19 +30,8 @@ Switch
 -frugal
 -v (like -verbose)
 
-General behaviour
-Show less infos during execution 
-Switches to REDUCE output are -noeta, -pakka and -summary
-Switches to AUGMENT output are -verbose and -debug
 
-The "dir" command, by default, show date in European format
-Instead of 2022-12-25 => 25/12/2022
-It does NOT use "local" translator, because it's way too hard to support many platforms
--utc turn off local time (just like 7.15)
 
--flagflat use mime64 encoded filenames
-
--longpath
 
 New command rd()
 

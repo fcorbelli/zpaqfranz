@@ -1,6 +1,6 @@
 # zpaqfranz: advanced and compatible fork of ZPAQ 7.15, with SFX (on Windows)  
 ### Main platforms: Windows, FreeBSD, Linux
-Secondary platforms: Solaris, MacOS, ESXi, QNAP-based NAS
+Secondary platforms: Solaris, MacOS, OpenBSD, OmniOS, (ESXi, QNAP-based NAS for older builds)  
 
 ### [Windows binary 32/64 bit on sourceforge](https://sourceforge.net/projects/zpaqfranz/files/) 
 ### [Quick start FreeBSD](https://github.com/fcorbelli/zpaqfranz/wiki/Quickstart:-FreeBSD)   
@@ -490,6 +490,8 @@ As far as I know this is allowed by the licenses.
 - https://github.com/System-Glitch/SHA256
 - https://github.com/BLAKE3-team/BLAKE3 (The C code is copyright Samuel Neves and Jack O'Connor, 2019-2020, the assembly code is copyright Samuel Neves, 2019-2020)
 - The Whirlpool algorithm was developed by Paulo S. L. M. Barreto and Vincent Rijmen
+- Nilsimsa implementation by Sepehr Laal
+- Thanks for testing on various Unixes to https://github.com/dertuxmalwieder
 
 
 
@@ -583,6 +585,9 @@ g++ -O3 -march=native -Dunix zpaqfranz.cpp  -pthread -o zpaqfranz -static-libstd
 FreeBSD (11.3) clang 6.0.0
 clang++ -march=native -Dunix zpaqfranz.cpp  -pthread -o zpaqfranz -static
 
+OpenBSD 6.6 clang++ 8.0.1
+clang++ -Dunix -O3 -march=native zpaqfranz.cpp -o zpaqfranz -pthread -static
+
 Debian Linux (10/11) gcc 8.3.0
 g++ -O3 -Dunix zpaqfranz.cpp  -pthread -o zpaqfranz -static
 
@@ -602,7 +607,8 @@ Therefore a -static linking is often a nightmare on CentOS => change the Makefil
 g++ -O3 -Dunix zpaqfranz.cpp  -pthread -o zpaqfranz
 
 Solaris 11.4 gcc 7.3.0
-g++ -O3 -march=native -DSOLARIS zpaqfranz.cpp -o zpaqfranz  -pthread -static-libgcc
+OmniOS r151042 gcc 7.5.0
+g++ -O3 -march=native -DSOLARIS zpaqfranz.cpp -o zpaqfranz  -pthread -static-libgcc -lkstat
 
 MacOS 11.0 gcc (clang) 12.0.5
 Please note:

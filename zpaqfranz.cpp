@@ -272,9 +272,7 @@ check: zpaqfranz
 #include <cstddef>
 
 #ifdef unix
-	#ifndef NOJIT
-		#include <sys/mman.h>
-	#endif
+	#include <sys/mman.h>
 
 	#define PTHREAD 1
 	#include <termios.h>

@@ -1,3 +1,30 @@
+### 15-07-2022: 55.2
+### Some fixes on ETA computations
+### A little bit better handling of verify on legacy 7.15 archives
+### -verbose shows individual % of files bigger than 100.000.000 (10%) or 1.000.000.000 (1%)
+_One of the problems with zpaq is that, while updating a large, little changed file, there is no response: the program seems to hang  
+This is evident, in particular, for virtual machine disks, hundreds of GBs each, in which perhaps only a few MB need to be added to the archive.
+In this case you get zero feedback maybe for an hour, then 5 seconds of ETA, then all is done.  
+So now, using the -verbose switch, you get a progress indicator on big files (nothing on smaller one to reduce console output time)_
+### -touch switch on command a add()
+_Converting a legacy 7.15 archive to zpaqfranz (aka: saving CRC-32s and hashes for every file) IN PLACE (=without extracting/repack etc) is not trivial and potentially, it is a dangerous thing to do.  
+As a workaround I implemented the -touch switch that, during the add phase, "fakely" change the timestamp of the files.  
+Therefore IF you own the original files, you can switch from 7.15 to zpaqfranz in two steps  
+Suppose you have a **z:\1.zpaq** file, created by zpaq 7.15, containing years of backups WITHOUT **CRC-32**. Now you want to use zpaqfranz to get better testing features. The data folder is **c:\nz** and is available_
+
+```
+zpaqfranz a z:\1.zpaq c:\nz\ -touch
+```
+_This will force to add ANYTHING from **c:\nz** into **z:\1.zpaq**. Lenghty, but litte space needed. Then_
+```
+zpaqfranz a z:\1.zpaq c:\nz\
+```
+_This time **without -touch**. Add, again, everything, BUT now with "true" timestamps.  
+Yes, I know, it is rather weird, but the complexity (on the source code) is minimal.  
+It is actually possible to carry out this operation WITHOUT having the data archive available, and in a much faster way. However, as it is normally a one-off operation, it is enough for me_
+
+---
+
 ### 09-07-2022: 55.1
 This new release introduce... new features  
 # As all new code should be deeply tested, before production use    

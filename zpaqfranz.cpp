@@ -9,7 +9,7 @@
 ///////// I apologize with the authors, it's not a foolish attempt to take over their jobs
 
 
-#define ZPAQ_VERSION "55.1-experimental"
+#define ZPAQ_VERSION "55.2-experimental"
 
 #if defined(_WIN64)
 #define ZSFX_VERSION "SFX64 v55.1,"
@@ -272,7 +272,9 @@ check: zpaqfranz
 #include <cstddef>
 
 #ifdef unix
-	#include <sys/mman.h>
+	#ifndef NOJIT
+		#include <sys/mman.h>
+	#endif
 
 	#define PTHREAD 1
 	#include <termios.h>
@@ -8811,6 +8813,7 @@ bool	flagnodedup;
 bool	flagtar;
 bool	flagramdisk;
 bool	flagssd;
+bool 	flagtouch;
 bool	flagstat;
 bool	flagfrugal;
 
@@ -20353,7 +20356,13 @@ bool direxists(string i_directory)
 
 	return false;
 }
-
+///		some windows' functions does not work with longpath
+string	makeshortpath(string i_path)
+{
+	if (islongpath(i_path))
+		return myright(i_path,i_path.size()-4);
+	return i_path;
+}	
 /// it is not easy, at all, to take *nix free filesystem space
 int64_t getfreespace(string i_path)
 {
@@ -20380,7 +20389,9 @@ int64_t getfreespace(string i_path)
 	return 0;
 #else
 	uint64_t spazio=0;
-
+	
+	i_path=makeshortpath(i_path);
+	
 	if (iswindowsunc(i_path))
 	{
 		string mydir=getfirstwindowsuncdir(i_path);
@@ -23203,6 +23214,7 @@ struct DT   // if you get some warning here, update your compiler!
 	int64_t			hashedsize;
 	int		chunk;
 	uint32_t		filefix;	// something strange?
+	int64_t			expectedsize;
 /// now using pointer to shrink DT from more then 1K to 296 bytes
 	XXH3_state_t	*pfile_xxh3;  // this is the problem: XXH3's 64-byte align not always work with too old-too new compilers
     XXHash64 		*pfile_xxhash64;
@@ -23214,7 +23226,7 @@ struct DT   // if you get some warning here, update your compiler!
 	
 	franzfs			*pramfile;
 	
-	DT(): date(0), size(0), attr(0), data(0),written(-1),franz_block_size(FRANZOFFSETSHA256),file_crc32(0),hashedsize(0),chunk(-1),filefix(0)	 
+	DT(): date(0), size(0), attr(0), data(0),written(-1),franz_block_size(FRANZOFFSETSHA256),file_crc32(0),hashedsize(0),chunk(-1),filefix(0),expectedsize(0)
 	{
 		memset(franz_block,0,sizeof(franz_block));
 		hexhash	="";
@@ -26450,7 +26462,7 @@ std::for_each(candidato.begin(), candidato.end(), [](char & c)
 // two modes: "normal" (old zpaqfranz) "pakka" (new)
 
 // beware STATIC not good for M/T
-void print_progress(int64_t ts, int64_t td,int64_t i_scritti) 
+void print_progress(int64_t ts, int64_t td,int64_t i_scritti,int i_percentuale) 
 {
 	static int ultimapercentuale=0;
 	static int ultimaeta=0;
@@ -26488,12 +26500,18 @@ void print_progress(int64_t ts, int64_t td,int64_t i_scritti)
 		if (eta<350000)
 		{
 			ultimaeta=int(eta);
-			if (i_scritti>0)
-			printf("%6.2f%% %02d:%02d:%02d (%10s) -> (%10s) of (%10s) %10s/sec\r", td*100.0/(ts+0.5),
+			
+			if (i_percentuale>0)
+				printf("(%03d%%) %6.2f%% %02d:%02d:%02d (%10s) -> (%10s) of (%10s) %10s/sec\r", i_percentuale,td*100.0/(ts+0.5),int(eta/3600), int(eta/60)%60, int(eta)%60, tohuman(td),tohuman2(i_scritti),tohuman3(ts),tohuman4(td/secondi));
+			else
+			{
+				if (i_scritti>0)
+			printf("       %6.2f%% %02d:%02d:%02d (%10s) -> (%10s) of (%10s) %10s/sec\r", td*100.0/(ts+0.5),
 			int(eta/3600), int(eta/60)%60, int(eta)%60, tohuman(td),tohuman2(i_scritti),tohuman3(ts),tohuman4(td/secondi));
 			else
-			printf("%6.2f%% %02d:%02d:%02d (%10s) of (%10s) %10s/sec\r", td*100.0/(ts+0.5),
+			printf("       %6.2f%% %02d:%02d:%02d (%10s) of (%10s) %10s/sec\r", td*100.0/(ts+0.5),
 			int(eta/3600), int(eta/60)%60, int(eta)%60, tohuman(td),tohuman2(ts),tohuman3(td/secondi));
+			}
 		}
 	}				
 }
@@ -26532,7 +26550,10 @@ bool myavanzamento(int64_t i_lavorati,int64_t i_totali,int64_t i_inizio,bool i_b
 {
 	bool	hostampato=false;
 	static int ultimapercentuale=0;
+
 	int percentuale=int(i_lavorati*100.0/(i_totali+0.5));
+	if (percentuale>100)
+		percentuale=100;
 	if (((percentuale%5)==0) && (percentuale>0))
 	if (percentuale!=ultimapercentuale)
 	{
@@ -26543,7 +26564,7 @@ bool myavanzamento(int64_t i_lavorati,int64_t i_totali,int64_t i_inizio,bool i_b
 			secondi=1;
 		if (eta<356000)
 		{
-			printf("%03d%% %02d:%02d:%02d (%9s) of (%9s) %20s/sec", percentuale,
+			printf("%03d%% %02d:%02d:%02d (%9s) of (%9s) %20s/sEc", percentuale,
 		int(eta/3600), int(eta/60)%60, int(eta)%60, tohuman(i_lavorati), tohuman2(i_totali),migliaia3(i_lavorati/secondi));
 			if (i_barran)
 				printf("\n");
@@ -26563,7 +26584,9 @@ bool myavanzamentoby1sec(int64_t i_lavorati,int64_t i_totali,int64_t i_inizio,bo
 
 	int secondi=(mtime()-i_inizio)/1000;
 	int percentuale=int(i_lavorati*100.0/(i_totali+0.5));
-
+if (percentuale>100)
+		percentuale=100;
+	
 	if (secondi!=ultimotempo)
 	{
 		ultimotempo=secondi;
@@ -26573,7 +26596,7 @@ bool myavanzamentoby1sec(int64_t i_lavorati,int64_t i_totali,int64_t i_inizio,bo
 		
 		if (eta<356000)
 		{
-			printf("%03d%% %02d:%02d:%02d (%9s) of (%9s) %20s/sec", percentuale,
+			printf("%03d%% %02d:%02d:%02d (%9s) of (%9s) %20s/SeC", percentuale,
 		int(eta/3600), int(eta/60)%60, int(eta)%60, tohuman(i_lavorati), tohuman2(i_totali),migliaia3(i_lavorati/secondi));
 	
 			if (i_barran)
@@ -26914,6 +26937,7 @@ void help_a(bool i_usage,bool i_example)
 		moreprint("+ : -nochecksum   Disable zpaqfranz additional checks (faster, less sure)");
 		moreprint("+ : -nodedup      Turn off deduplicator");
 		moreprint("+ : -tar          Tar mode: no deduplication, no compression");
+		moreprint("+ : -touch        Force 'touch' on date (converting 7.15 to zpaqfranz)");
 		help_printhash(true);
 		moreprint("+ : -test         Do a post-add test (doveryay, no proveryay).");
 		moreprint("+ : -verify       Verify hashes against filesystem");
@@ -26967,6 +26991,8 @@ void help_a(bool i_usage,bool i_example)
 		moreprint("2.exe extract/overwrite into z:\\kom: a z:\\1.zpaq *.cpp -sfx z:\\2.exe -sfxto z:\\kom -sfxforce");
 #endif
 		moreprint("Prepare a debug archive...for me     a z:\\1.zpaq c:\\nz\\ -debug -zero");
+		moreprint("In-place 7.15 to zpaqfranz  1/2      a z:\\1.zpaq c:\\nz\\ -touch");
+		moreprint("In-place 7.15 to zpaqfranz  2/2      a z:\\1.zpaq c:\\nz\\");
 	}
 }
 
@@ -28077,6 +28103,7 @@ int Jidac::doCommand(int argc, const char** argv)
 	flagtar				=false;
 	flagramdisk			=false;
 	flagssd				=false;
+	flagtouch			=false;
 	flagfrugal			=false;
 	flagstat			=false;
 	flagdesc			=false;
@@ -28679,6 +28706,7 @@ int Jidac::doCommand(int argc, const char** argv)
 		else if (opt=="-tar") 						flagtar				=true;
 		else if (opt=="-ramdisk") 					flagramdisk			=true;
 		else if (opt=="-ssd") 						flagssd				=true;
+		else if (opt=="-touch") 					flagtouch			=true;
 		else if (opt=="-frugal") 					flagfrugal			=true;
 		else if (opt=="-stat") 						flagstat			=true;
 		else if (opt=="-desc") 						flagdesc			=true;
@@ -29079,6 +29107,9 @@ int Jidac::doCommand(int argc, const char** argv)
 		if (flagssd)
 			franzparameters+="-ssd ";
 		
+		if (flagtouch)
+			franzparameters+="-touch ";
+		
 		if (flagfrugal)
 			franzparameters+="-frugal ";
 		
@@ -29247,6 +29278,8 @@ int Jidac::doCommand(int argc, const char** argv)
 		flagxxhash64		=false; // checksumming add new style
 		flagfixeml			=false;
 		flagfix255			=false;
+		flagtouch			=false;
+		flagramdisk			=false;
 #ifdef _WIN32
 		flagfixcase			=false;
 		flagfixreserved		=false;
@@ -31295,7 +31328,7 @@ ThreadReturn decompressThread(void* arg) {
 	///		printf("out size %lld\n",out.size());
 	//	printf(".........................................................\n");
     ///	printf("---------------- %s  %s\n",migliaia(job.total_size),migliaia2(job.total_done));
-		print_progress(job.total_size, job.total_done,-1);
+		print_progress(job.total_size, job.total_done,-1,-1);
         /*
 		if (job.jd.summary<=0)
           printf("[%d..%d] -> %1.0f\n", b.start, b.start+b.size-1,
@@ -31424,7 +31457,7 @@ ThreadReturn decompressThread(void* arg) {
 					makepath(filename);
 				}
 				lock(job.mutex);
-				print_progress(job.total_size, job.total_done,-1);
+				print_progress(job.total_size, job.total_done,-1,-1);
 				release(job.mutex);
             
 				if (!job.jd.flagtest) 
@@ -31745,7 +31778,7 @@ ThreadReturn decompressthreadramdisk(void* arg)
 				;
 		
 			lock(job.mutex);
-			print_progress(job.total_size, job.total_done,-1);
+			print_progress(job.total_size, job.total_done,-1,-1);
 			release(job.mutex);
 			if (out.size()>=output_size) 
 				break;
@@ -31859,7 +31892,7 @@ ThreadReturn decompressthreadramdisk(void* arg)
 				if (p->second.data==0) 
 				{
 					lock(job.mutex);
-					print_progress(job.total_size, job.total_done,-1);
+					print_progress(job.total_size, job.total_done,-1,-1);
 					release(job.mutex);
 				}
 				
@@ -33433,8 +33466,7 @@ string sha256_calc_file(const char * i_filename,bool i_flagcalccrc32,uint32_t& o
 string xxhash_calc_file(const char * i_filename,bool i_flagcalccrc32,uint32_t& o_crc32,const int64_t i_inizio,const int64_t i_totali,int64_t& io_lavorati)
 {
 	o_crc32=0;
-	
-    FILE* inFile = freadopen(i_filename);
+	FILE* inFile = freadopen(i_filename);
 	if (inFile==NULL) 
 		return "";
 	
@@ -33455,7 +33487,7 @@ string xxhash_calc_file(const char * i_filename,bool i_flagcalccrc32,uint32_t& o
 			o_crc32=crc32_16bytes(buffer,readSize,o_crc32);
 		io_lavorati+=readSize;
 		letti+=readSize;
-		if (flagnoeta==false)
+		if (flagnoeta==false) 
 				myavanzamentoby1sec(io_lavorati,i_totali,i_inizio,false);
 	}
 	fclose(inFile);
@@ -33986,7 +34018,7 @@ void * scriviramtodisk(void *t)
 					{
 						par->o_fileerror++;
 						if (flagverbose)
-							printf("33966: ERROR hash stored %s %s  from ram|%s| %s\n",par->algo[i].c_str(),par->filecrc[i].c_str(),hashstringato.c_str(),par->filenameondisk[i].c_str());
+							printf("33968: ERROR hash stored %s %s  from ram|%s| %s\n",par->algo[i].c_str(),par->filecrc[i].c_str(),hashstringato.c_str(),par->filenameondisk[i].c_str());
 					}
 					else
 					{
@@ -37126,7 +37158,7 @@ int Jidac::summa()
 
 	int mythreads=howmanythreads;
 	
-	if (!all)
+	if (!flagssd)
 		mythreads=1;
 		
 	tparametrihash 	myblock;
@@ -39146,7 +39178,8 @@ void myaddfile(uint32_t i_tnumber,DTMap& i_edt,string i_filename, int64_t i_date
 		{
 			int64_t starthash=mtime();
 			uint32_t dummycrc;
-			d.hexhash=hash_calc_file(flag2algo(),i_filename.c_str(),false,dummycrc,-1,-1,dummy);
+			///printf("k1 lemmada\n");
+			d.hexhash=hash_calc_file(flag2algo(),i_filename.c_str(),false,dummycrc,mtime(),prendidimensionefile(i_filename.c_str()),dummy);
 			if (flagverbose)
 			{
 				printf("%s: |%s| [%d] %6.3f ",mygetalgo().c_str(),d.hexhash.c_str(),i_tnumber,(mtime()-starthash)/1000.0);
@@ -40423,6 +40456,7 @@ int Jidac::dircompare(bool i_flagonlysize,bool i_flagrobocopy)
 	for (unsigned i=0; i<files.size(); ++i)
 	{
 		int64_t spazio=getfreespace(files[i]);
+	
 		if (spazio<0)
 			spazio=0;
 		printf("Free %d %21s (%12s)  <<%s>>\n",i,migliaia(spazio),tohuman(spazio),files[i].c_str());
@@ -42123,7 +42157,16 @@ int Jidac::add()
 			total_xls+=p->second.size;
 			file_xls++;
 		}
-	
+
+///	converting ancient 7.15 archives to zpaqfranz (aka: storing hashes) is not
+/// trivial. A very quick-and-dirty method is run TWO times
+/// zpaqfranz a z:\1.zpaq c:\dropbox -touch
+/// zpaqfranz a z:\1.zpaq c:\dropbox
+/// space and time wasted, but afterall about 10 SLOCs
+
+	if (flagtouch)
+		p->second.date+=1;  // just a little bit...
+
     if (a!=dt.end()) a->second.data=1;  // keep
     if (
 			p->second.date && p->first!="" && p->first[p->first.size()-1]!='/' && 
@@ -42329,7 +42372,7 @@ int Jidac::add()
     StringBuffer sb(blocksize+4096-128);
     for (unsigned fi=0; fi<vf.size(); ++fi) {
       DTMap::iterator p=vf[fi];
-      print_progress(total_size, total_done,g_scritti);
+      print_progress(total_size, total_done,g_scritti,-1);
 	  
 /*     
 	 if (summary<=0) {
@@ -42455,10 +42498,19 @@ int Jidac::add()
         ++errors;
         continue;
       }
-	  
-      p->second.data=1;  // add
+		// get expected filesize
+		if (flagverbose)
+		{
+			fseeko(in, 0, SEEK_END);
+			p->second.expectedsize=ftello(in);
+			fseeko(in, 0, SEEK_SET);
+		}
+		p->second.data=1;  // add
     }
 
+	
+	int		ultimapercentuale=0;
+	
     // Read fragments
     int64_t fsize=0;  // file size after dedupe
     for (unsigned fj=0; true; ++fj) {
@@ -42491,6 +42543,23 @@ int Jidac::add()
 					{
 						/// check for strange things (corrupted files, lost connection...)
 						p->second.hashedsize+=buflen;
+						
+						if (flagverbose)
+						if (p->second.expectedsize>100000000)
+						{
+							int percentuale=(int)(100.0*p->second.hashedsize/p->second.expectedsize)+1;
+							int modulo=10;
+							
+							if (p->second.expectedsize>1000000000)
+								modulo=1;
+						
+							if (percentuale!=ultimapercentuale)
+							if (percentuale%modulo==0)
+							{
+								print_progress(total_size, total_done,g_scritti,ultimapercentuale);
+								ultimapercentuale=percentuale;
+							}
+						}
 						
 						//printf("CUUUUU   %s\n",migliaia(p->second.size));
 						p->second.file_crc32=crc32_16bytes(buf,buflen,p->second.file_crc32);
@@ -42657,7 +42726,7 @@ int Jidac::add()
             m+=","+itos(redundancy/(sb.size()/256+1))
                  +","+itos((exe>frags)*2+(text>frags));
           string fn="jDC"+itos(date, 14)+"d"+itos(ht.size()-frags, 10);
-          print_progress(total_size, total_done,g_scritti);
+          print_progress(total_size, total_done,g_scritti,ultimapercentuale);
 
 /*         
 		 if (summary<=0)
@@ -42726,7 +42795,7 @@ int Jidac::add()
       dedupesize+=fsize;
 	  ///print_datetime();	
 	  /// check errori 
-      print_progress(total_size, total_done,g_scritti);
+      print_progress(total_size, total_done,g_scritti,ultimapercentuale);
       assert(in!=FPNULL);
       fclose(in);
       in=FPNULL;
@@ -43893,21 +43962,27 @@ int Jidac::verify(bool i_readfile)
 					myhashtype,
 					myhash,
 					mycrc32);
-				MAPPACHECK::iterator a=g_mychecks.find(myhashtype);
-	
-				if (a!=g_mychecks.end())
+					
+				if (myhashtype!="")
 				{
-					if ((searchfrom!="") && (replaceto!=""))
-						replace(finalfile,searchfrom,replaceto);
-					myfiles.push_back(finalfile);
-					myfilesoriginal.push_back(p->first);
-					myfilehash.push_back(myhash);
-					myalgo.push_back(myhashtype);
+					MAPPACHECK::iterator a=g_mychecks.find(myhashtype);
+		
+					if (a!=g_mychecks.end())
+					{
+						if ((searchfrom!="") && (replaceto!=""))
+							replace(finalfile,searchfrom,replaceto);
+						myfiles.push_back(finalfile);
+						myfilesoriginal.push_back(p->first);
+						myfilehash.push_back(myhash);
+						myalgo.push_back(myhashtype);
+					}
+					else
+					{
+						printf("39202: unknown algo |%s| for %s\n",myhashtype.c_str(),finalfile.c_str());
+					}
 				}
 				else
-				{
-					printf("39202: unknown algo for %s\n",finalfile.c_str());
-				}
+					nohashfound++;
 			}
 		}
 
@@ -43987,58 +44062,69 @@ int Jidac::verify(bool i_readfile)
 	if (flagverbose)
 		printf("Scan done, preparing report...\n");
 	
+///	printf("k1\n");
 	for(unsigned int i=0;i<mythreads;i++)
 		for (unsigned int j=0;j<vettoreparametrihash[i].filestobehashed.size();j++)
 		{
 			string finalfile		=vettoreparametrihash[i].filestobehashed[j];
 			string myhashtype		=vettoreparametrihash[i].algo[j];
-			MAPPACHECK::iterator a	=g_mychecks.find(myhashtype);
-			
-			if (a!=g_mychecks.end())
-			{
-				checkedbyhash++;
-				if (vettoreparametrihash[i].o_hashcalculated[j]=="")
-				{
-					if (flagverbose || (g_output!=""))
-						myprintf("FILE NOT FOUND on %s: FILE %s\n",myhashtype.c_str(),finalfile.c_str());
-					a->second.checkednotfound++;
-				}
-				else
-				{
-					if (vettoreparametrihash[i].o_hashcalculated[j]==vettoreparametrihash[i].filehash[j])
-					{
-						if (flagdebug)
-							printf("GOOD %s:  STORED == FROM FILE %s\n",myhashtype.c_str(),finalfile.c_str());
-						a->second.checkedok++;
-						
-					///	Getting the filesize is slow (very slow on network), then waste some RAM
-					///  a->second.checksize+=prendidimensionefile(finalfile.c_str());
-						DTMap::iterator p=dt.find(vettoreparametrihash[i].originalfilenames[j]);
-						if (p!=dt.end())
-							a->second.checksize+=p->second.size; 
-						else
-						{
-							if (flagdebug)
-								printf("38931: Cannot find originalfilename %s\n",vettoreparametrihash[i].originalfilenames[j].c_str());
-						}
-					}
-					else
-					{
-						if (flagverbose || (g_output!=""))
-						{
-							myprintf("ERROR on %s: STORED HASH %s VS %s IN FILE ",myhashtype.c_str(),vettoreparametrihash[i].filehash[j].c_str(),vettoreparametrihash[i].o_hashcalculated[j].c_str());
-							printUTF8(finalfile.c_str());
-							myprintf("\n");
-						}
-						a->second.checkedfailed++;
-					}
-				}
-			}
-			else
+	///		printf("k2 skkkkkkkkkkkkkk |%s|\n",myhashtype.c_str());
+			if (myhashtype=="")
 			{
 				nohashfound++;
 				if (flagverbose)
-					printf("26620: algo unknown (or no algo!) %s\n",finalfile.c_str());
+					printf("44039: NO hashtype %s\n",finalfile.c_str());
+			}
+			else
+			{
+				MAPPACHECK::iterator a	=g_mychecks.find(myhashtype);
+				
+				if (a!=g_mychecks.end())
+				{
+					checkedbyhash++;
+					if (vettoreparametrihash[i].o_hashcalculated[j]=="")
+					{
+						if (flagverbose || (g_output!=""))
+							myprintf("FILE NOT FOUND on %s: FILE %s\n",myhashtype.c_str(),finalfile.c_str());
+						a->second.checkednotfound++;
+					}
+					else
+					{
+						if (vettoreparametrihash[i].o_hashcalculated[j]==vettoreparametrihash[i].filehash[j])
+						{
+							if (flagdebug)
+								printf("GOOD %s:  STORED == FROM FILE %s\n",myhashtype.c_str(),finalfile.c_str());
+							a->second.checkedok++;
+							
+						///	Getting the filesize is slow (very slow on network), then waste some RAM
+						///  a->second.checksize+=prendidimensionefile(finalfile.c_str());
+							DTMap::iterator p=dt.find(vettoreparametrihash[i].originalfilenames[j]);
+							if (p!=dt.end())
+								a->second.checksize+=p->second.size; 
+							else
+							{
+								if (flagdebug)
+									printf("38931: Cannot find originalfilename %s\n",vettoreparametrihash[i].originalfilenames[j].c_str());
+							}
+						}
+						else
+						{
+							if (flagverbose || (g_output!=""))
+							{
+								myprintf("ERROR on %s: STORED HASH %s VS %s IN FILE ",myhashtype.c_str(),vettoreparametrihash[i].filehash[j].c_str(),vettoreparametrihash[i].o_hashcalculated[j].c_str());
+								printUTF8(finalfile.c_str());
+								myprintf("\n");
+							}
+							a->second.checkedfailed++;
+						}
+					}
+				}
+				else
+				{
+					nohashfound++;
+					if (flagverbose)
+						printf("26620: algo unknown (or no algo!) %s\n",finalfile.c_str());
+				}
 			}
 		}
 
@@ -44055,7 +44141,7 @@ int Jidac::verify(bool i_readfile)
 
 	if (outsomething)
 	{
-		morebar('+');
+		morebar('-');
 		int64_t	byteshashed=0;
 		for (MAPPACHECK::iterator p=g_mychecks.begin(); p!=g_mychecks.end(); ++p) 
 		{
@@ -44075,8 +44161,8 @@ int Jidac::verify(bool i_readfile)
 			}
 		}
 		if (nohashfound)
-			myprintf("UNKNOWN/NO HASH %08d of %08d\n",nohashfound,tobechecked);
-		morebar('|');
+			myprintf("UNKNOWN/NOHASH: %08d of %08d (legacy 7.15 archive?)\n",nohashfound,tobechecked);
+		morebar('-');
 		if (flagverbose)
 		printf("Total hashed bytes %s @ %s B/s\n",migliaia((uint64_t)byteshashed),migliaia2((uint64_t)(byteshashed/((mtime()-startrunning)/1000.0))));
 	}
@@ -44640,6 +44726,15 @@ int Jidac::multiverify(vector <s_fileandsize>& i_arrayfilename)
 			string myhashtype		=vettoreparametrihash[i].algo[j];
 			MAPPACHECK::iterator a	=g_mychecks.find(myhashtype);
 			
+			
+			if (myhashtype=="")
+			{
+				nohashfound++;
+				if (flagverbose)
+					printf("44695: NO hashtype %s\n",finalfile.c_str());
+			}
+			else
+			{
 			if (a!=g_mychecks.end())
 			{
 				checkedbyhash++;
@@ -44656,42 +44751,42 @@ int Jidac::multiverify(vector <s_fileandsize>& i_arrayfilename)
 				}
 				else
 				{
-
-								
-				if (vettoreparametrihash[i].o_hashcalculated[j]==vettoreparametrihash[i].filehash[j])
-					{
-						if (flagdebug)
-							printf("GOOD %s:  STORED == FROM FILE %s\n",myhashtype.c_str(),finalfile.c_str());
-						a->second.checkedok++;
-					///	Getting the filesize is slow (very slow on network), then waste some RAM
-					///  a->second.checksize+=prendidimensionefile(finalfile.c_str());
-						DTMap::iterator p=dt.find(vettoreparametrihash[i].originalfilenames[j]);
-						if (p!=dt.end())
-							a->second.checksize+=p->second.size; 
-						else
+					if (vettoreparametrihash[i].o_hashcalculated[j]==vettoreparametrihash[i].filehash[j])
 						{
 							if (flagdebug)
-								printf("38931: Cannot find originalfilename %s\n",vettoreparametrihash[i].originalfilenames[j].c_str());
+								printf("GOOD %s:  STORED == FROM FILE %s\n",myhashtype.c_str(),finalfile.c_str());
+							a->second.checkedok++;
+						///	Getting the filesize is slow (very slow on network), then waste some RAM
+						///  a->second.checksize+=prendidimensionefile(finalfile.c_str());
+							DTMap::iterator p=dt.find(vettoreparametrihash[i].originalfilenames[j]);
+							if (p!=dt.end())
+								a->second.checksize+=p->second.size; 
+							else
+							{
+								if (flagdebug)
+									printf("38931: Cannot find originalfilename %s\n",vettoreparametrihash[i].originalfilenames[j].c_str());
+							}
 						}
-					}
-					else
-					{
-						if (flagverbose || (g_output!=""))
+						else
 						{
-							myprintf("ERROR on %s: STORED HASH %s VS %s IN FILE ",myhashtype.c_str(),vettoreparametrihash[i].filehash[j].c_str(),vettoreparametrihash[i].o_hashcalculated[j].c_str());
-							printUTF8(finalfile.c_str());
-							myprintf("\n");
+							if (flagverbose || (g_output!=""))
+							{
+								myprintf("ERROR on %s: STORED HASH %s VS %s IN FILE ",myhashtype.c_str(),vettoreparametrihash[i].filehash[j].c_str(),vettoreparametrihash[i].o_hashcalculated[j].c_str());
+								printUTF8(finalfile.c_str());
+								myprintf("\n");
+							}
+							a->second.checkedfailed++;
 						}
-						a->second.checkedfailed++;
 					}
 				}
-			}
-			else
-			{
-///				printf("BOIONEEEEE %s\n",finalfile.c_str());
-				nohashfound++;
-				if (flagverbose)
-					printf("26620: algo unknown (or no algo!) %s\n",finalfile.c_str());
+				else
+				{
+	///				printf("BOIONEEEEE %s\n",finalfile.c_str());
+					nohashfound++;
+					if (flagverbose)
+						printf("44750: algo unknown (or no algo!) %s\n",finalfile.c_str());
+				}
+				
 			}
 		}
 
@@ -44734,7 +44829,7 @@ int Jidac::multiverify(vector <s_fileandsize>& i_arrayfilename)
 			}
 		}
 		if (nohashfound)
-			myprintf("UNKNOWN/NO HASH %08d of %08d\n",nohashfound,myfiles.size());
+			myprintf("UNKNOWN/NOHASH: %08d of %08d (legacy 7.15 archive?)\n",nohashfound,myfiles.size());
 		morebar('-');
 		if (flagverbose)
 			printf("Total hashed bytes %s @ %s B/s\n",migliaia((uint64_t)byteshashed),migliaia2((uint64_t)(byteshashed/((mtime()-startrunning)/1000.0))));
@@ -45133,7 +45228,7 @@ int Jidac::extractqueue2(int i_chunk,int i_chunksize)
 	printf("\r");
 	if (flagverbose)
 		printf("Running %d threads on %s files\n",mythreads,migliaia(myfiles.size()));
-///fika
+
 	for(unsigned int i=0; i<mythreads; i++ ) 
 	{
 		vettoreramtodisk[i].timestart=mtime();

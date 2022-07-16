@@ -1,3 +1,9 @@
+### 16-07-2022: 55.2
+### Command r (robocopy) MAYBE works with -longpath on Windows (caution using r)
+### Some minor fixes in help
+### Source code in "Unix" text format (no CR/LF) for easy ancient make compatibility
+---
+
 ### 15-07-2022: 55.2
 ### Some fixes on ETA computations
 ### A little bit better handling of verify on legacy 7.15 archives

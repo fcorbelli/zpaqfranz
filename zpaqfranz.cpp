@@ -9,7 +9,7 @@
 ///////// I apologize with the authors, it's not a foolish attempt to take over their jobs
 
 
-#define ZPAQ_VERSION "55.2-experimental"
+#define ZPAQ_VERSION "55.3-experimental"
 
 #if defined(_WIN64)
 #define ZSFX_VERSION "SFX64 v55.1,"
@@ -105,6 +105,12 @@ I rarely use Linux or MacOS, so changes may be needed.
 
 As explained the program is single file, 
 be careful to link the pthread library.
+
+DEFINEs
+(nothing)							// Compile for Windows
+-DHWBLAKE3 blake3_windows_gnu.S		// On Win64 enable HW accelerated BLAKE3 (with assembly)
+-Dunix 								// Compile on "something different from Windows"
+-DSOLARIS        					// Solaris is similar, but not equal, to BSD Unix
 
 
 WARNINGS
@@ -238,8 +244,6 @@ check: zpaqfranz
 #define	FRANZO_BLAKE3		6
 #define FRANZO_SHA3			7
 #define FRANZO_MD5			8
-
-///#define SOLARIS		// Solaris is similar, but not equal, to BSD Unix, compile with -DSOLARIS
 
 #define _FILE_OFFSET_BITS 64  // In Linux make sizeof(off_t) == 8. Define BEFORE including windows.h!!!
 
@@ -20356,6 +20360,12 @@ bool direxists(string i_directory)
 
 	return false;
 }
+string	trimbarra(string i_path)
+{
+	if (isdirectory(i_path))
+		return i_path.substr(0, i_path.size()-1);
+	return i_path;
+}
 ///		some windows' functions does not work with longpath
 string	makeshortpath(string i_path)
 {
@@ -20363,6 +20373,18 @@ string	makeshortpath(string i_path)
 		return myright(i_path,i_path.size()-4);
 	return i_path;
 }	
+string makelongpath(string i_path)
+{
+#ifndef _WIN32
+	return i_string;
+#endif
+
+	if (flaglongpath)
+		if (iswindowspath(i_path))
+			if (!islongpath(i_path))
+				return "//?/"+i_path;
+	return i_path;
+}
 /// it is not easy, at all, to take *nix free filesystem space
 int64_t getfreespace(string i_path)
 {
@@ -21206,9 +21228,8 @@ bool exists(string filename) {
 
 
 
-
 // Close fp if open. Set date and attributes unless 0
-void close(const char* filename, int64_t date, int64_t attr, FP fp=FPNULL) {
+bool close(const char* filename, int64_t date, int64_t attr, FP fp=FPNULL) {
   assert(filename);
 #ifdef unix
   if (fp!=FPNULL) fclose(fp);
@@ -21220,32 +21241,55 @@ void close(const char* filename, int64_t date, int64_t attr, FP fp=FPNULL) {
   }
   if ((attr&255)=='u')
     chmod(filename, attr>>8);
+	return true;
 #else
-  const bool ads=strstr(filename, ":$DATA")!=0;  // alternate data stream?
-  if (date>0 && !ads) {
-    if (fp==FPNULL)
-      fp=CreateFile(utow(filename).c_str(),
+	const bool ads=strstr(filename, ":$DATA")!=0;  // alternate data stream?
+	bool allok=true;
+	
+	if (date>0 && !ads) 
+	{
+		if (fp==FPNULL)		// Windows require HANDLE
+			fp=CreateFile(utow(filename).c_str(),
                     FILE_WRITE_ATTRIBUTES,
                     FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE,
                     NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, NULL);
-    if (fp!=FPNULL) {
-      SYSTEMTIME st;
-      st.wYear=date/10000000000LL%10000;
-      st.wMonth=date/100000000%100;
-      st.wDayOfWeek=0;  // ignored
-      st.wDay=date/1000000%100;
-      st.wHour=date/10000%100;
-      st.wMinute=date/100%100;
-      st.wSecond=date%100;
-      st.wMilliseconds=0;
-      FILETIME ft;
-      SystemTimeToFileTime(&st, &ft);
-      SetFileTime(fp, NULL, NULL, &ft);
-    }
-  }
-  if (fp!=FPNULL) CloseHandle(fp);
-  if ((attr&255)=='w' && !ads)
-    SetFileAttributes(utow(filename).c_str(), attr>>8);
+					
+		if (fp!=FPNULL) 
+		{
+			SYSTEMTIME st;
+			st.wYear=date/10000000000LL%10000;
+			st.wMonth=date/100000000%100;
+			st.wDayOfWeek=0;  // ignored
+			st.wDay=date/1000000%100;
+			st.wHour=date/10000%100;
+			st.wMinute=date/100%100;
+			st.wSecond=date%100;
+			st.wMilliseconds=0;
+			FILETIME ft;
+			SystemTimeToFileTime(&st, &ft);
+			
+///			printf("%d-%d-%d   %d %d %d\n",st.wYear,st.wMonth,st.wDay,st.wHour,st.wMinute,st.wSecond);
+
+			if (!SetFileTime(fp, NULL, NULL, &ft))
+			{
+				printf("21273: WARN cannot set filetime (error %s) on ",migliaia(GetLastError()));
+				printUTF8(filename);
+				printf("\n");
+				allok=false;
+			}
+		}
+	}
+	if (fp!=FPNULL) 
+		CloseHandle(fp);
+	if ((attr&255)=='w' && !ads)
+		if (!SetFileAttributes(utow(filename).c_str(), attr>>8))
+		{
+			printf("21290: WARN cannot set attributes on ");
+			printUTF8(filename);
+			printf("\n");
+			allok=false;
+		}
+	return allok;
 #endif
 }
 // Create directories as needed. For example if path="/tmp/foo/bar"
@@ -26564,7 +26608,7 @@ bool myavanzamento(int64_t i_lavorati,int64_t i_totali,int64_t i_inizio,bool i_b
 			secondi=1;
 		if (eta<356000)
 		{
-			printf("%03d%% %02d:%02d:%02d (%9s) of (%9s) %20s/sEc", percentuale,
+			printf("%03d%% %02d:%02d:%02d (%10s) of (%10s) %20s/sEc", percentuale,
 		int(eta/3600), int(eta/60)%60, int(eta)%60, tohuman(i_lavorati), tohuman2(i_totali),migliaia3(i_lavorati/secondi));
 			if (i_barran)
 				printf("\n");
@@ -26596,7 +26640,7 @@ if (percentuale>100)
 		
 		if (eta<356000)
 		{
-			printf("%03d%% %02d:%02d:%02d (%9s) of (%9s) %20s/SeC", percentuale,
+			printf("%03d%% %02d:%02d:%02d (%10s) of (%10s) %20s/SeC", percentuale,
 		int(eta/3600), int(eta/60)%60, int(eta)%60, tohuman(i_lavorati), tohuman2(i_totali),migliaia3(i_lavorati/secondi));
 	
 			if (i_barran)
@@ -27278,7 +27322,7 @@ void help_c(bool i_usage,bool i_example)
 		moreprint("+ : -maxsize X    Filter out on filesize");
 		moreprint("+ : -minsize X    Filter out on filesize");
 		moreprint("+ : -715          Work as 7.15 (with .zfs and ADS)");
-		moreprint("+ : -flagforcezfs Include .zfs");
+		moreprint("+ : -forcezfs     Include .zfs");
 	}
 	if (i_usage && i_example) moreprint("    Examples:");
 	if (i_example)
@@ -27301,7 +27345,7 @@ void help_s(bool i_usage,bool i_example)
 		moreprint("+ : -maxsize X    Filter out on filesize");
 		moreprint("+ : -minsize X    Filter out on filesize");
 		moreprint("+ : -715          Work as 7.15 (with .zfs and ADS)");
-		moreprint("+ : -flagforcezfs Include .zfs");
+		moreprint("+ : -forcezfs     Include .zfs");
 		moreprint("+ : -minsize X    Show a warning if free space < X");
 		
 		}
@@ -27324,7 +27368,7 @@ void help_r(bool i_usage,bool i_example)
 		moreprint("                  $week $date $time $datetime");
 		moreprint("                  ENFORCING XLS, ignore .zfs and ADS by default");
 		moreprint("+ : -kill         wet run (default: dry-run");
-		moreprint("+ : -force        do not exit if not enough space reported");
+		moreprint("+ : -space        do not exit if not enough space reported");
 		moreprint("+ : -ssd          run one thread for folder");
 		moreprint("+ : -verify       after copy quick check if OK (only filename and size)");
 		moreprint("+ : -checksum     heavy (hash) test of equality. Suggest: -xxh3 fast and reliable.");
@@ -27332,7 +27376,7 @@ void help_r(bool i_usage,bool i_example)
 		moreprint("+ : -minsize X    Filter out on filesize");
 		moreprint("+ : -xls          Do not enforce backup of XLS/PPT");
 		moreprint("+ : -715          Work as 7.15 (with .zfs and ADS)");
-		moreprint("+ : -flagforcezfs Include .zfs");
+		moreprint("+ : -forcezfs     Include .zfs");
 		moreprint("+ : -append       Only append data (*risky, use with zpaq archives)");
 		moreprint("+ : -zero         Fill all output file with zeros (for debug)");
 	
@@ -27343,8 +27387,8 @@ void help_r(bool i_usage,bool i_example)
 		moreprint("Robocopy d0 in d1,d2 (dry run):      r c:\\d0 k:\\d1 j:\\d2 p:\\d3");
 		moreprint("Robocopy d0 in d1,d2 (WET run):      r c:\\d0 k:\\d1 j:\\d2 p:\\d3 -kill");
 		moreprint("Robocopy with verify (WET run):      r c:\\d0 k:\\d1 j:\\d2 p:\\d3 -kill -verify");
-		moreprint("Robocopy with hash verify (WET run): r c:\\d0 k:\\d1 j:\\d2 p:\\d3 -kill -verify -checksum");
-		moreprint("Robocopy d0 in d1, forced WET run:   r c:\\d0 k:\\d1 j:\\d2 -kill -force");
+		moreprint("Robocopy with hash verify (WET run): r c:\\d0 k:\\d1 j:\\d2 p:\\d3 -kill -verify -checksum -xxh3");
+		moreprint("Robocopy d0 in d1, forced WET run:   r c:\\d0 k:\\d1 j:\\d2 -kill -space");
 		moreprint("Robocopy append mode with subst      r c:\\d0 z:\\backup_$day -append -kill");
 	}
 }
@@ -27455,7 +27499,8 @@ void help_m(bool i_usage,bool i_example)
 	moreprint("CMD   m (merge, consolidate)");
 	moreprint("+ :                   Merge a splitted (multipart) archive into a single one,");
 	moreprint("                      just like a concatenated cat or copy /b");
-	moreprint("+ : -force            Overwrite existing output, ignore lack of free space");
+	moreprint("+ : -force            Overwrite existing output");
+	moreprint("+ : -space            Ignore lack of free space");
 	moreprint("+ : -verify           Double-check (XXH3 hash test)");
 	}
 	if (i_usage && i_example) moreprint("    Examples:");
@@ -27482,7 +27527,7 @@ void help_d(bool i_usage,bool i_example)
 	{
 		moreprint("Deduplicate d0 (dry run, w/xxh3) :   d c:\\d0\\");
 		moreprint("Deduplicate d0 (dry run,xxh3,M/T):   d c:\\d0\\ -ssd");
-		moreprint("Deduplicate d0 WITHOUT MERCY (wet):  d c:\\d0\\ -force");
+		moreprint("Deduplicate d0 WITHOUT MERCY (wet):  d c:\\d0\\ -kill");
 		moreprint("Dedup WITHOUT MERCY (wet run,sha256):d c:\\d0\\ -force -sha256");
 	}
 }
@@ -27553,7 +27598,7 @@ void help_sha1(bool i_usage,bool i_example)
 		moreprint("+ : -maxsize X    Filter out on filesize");
 		moreprint("+ : -minsize X    Filter out on filesize");
 		moreprint("+ : -715          Work as 7.15 (with .zfs and ADS)");
-		moreprint("+ : -flagforcezfs Include .zfs");
+		moreprint("+ : -forcezfs     Include .zfs");
 	}
 	if (i_usage && i_example) moreprint("    Examples:");
 	if (i_example)
@@ -27776,10 +27821,11 @@ void help_voodooswitches(bool i_usage,bool i_example)
 void Jidac::differences() 
 {
 	moreprint("");
-	moreprint("This is a fork of the mighty ZPAQ 7.15, with some key differences.");
+	moreprint("This is a fork of the mighty ZPAQ 7.15 (http://mattmahoney.net/dc/zpaq.html).");
+	moreprint("");
 	moreprint("Doveryay, no proveryay; trust, but verify; fidarsi e' bene, non fidarsi e' meglio.");
 	moreprint("zpaqfranz store by default CRC-32 and XXHASH64 of every file, with optionally");
-	moreprint("SHA-1 | SHA-256 | SHA-3 (256) | MD5 | BLAKE3 | XXH3 (128) for higher level of verify.");
+	moreprint("SHA-1 | SHA-256 | SHA-3 (256) | MD5 | BLAKE3 | XXH3 (128) for higher level of check.");
 	moreprint("Full backward compatibility: zpaq 7.15 can list, extract etc zpaqfranz's archives.");
 	moreprint("Pack everything needed for a storage manager: dir compare, hashing, deduplication, fix");
 	moreprint("utf-8 filenames, SFX on Win, wide compatibility with all charsets, support for ZFS...");
@@ -27840,13 +27886,13 @@ void Jidac::load_help_map()
 void Jidac::usage() 
 {
 	load_help_map();
-	string lista="H parm: ";
-	
+	string 	lista		="h parm: ";
+	string	listaswitch	="        ";
 	for (MAPPAHELP::iterator p=help_map.begin(); p!=help_map.end(); ++p) 
 		lista+=p->first+" ";
 	
 	for (MAPPAHELP::iterator p=switches_map.begin(); p!=switches_map.end(); ++p) 
-		lista+=p->first+" ";
+		listaswitch+=p->first+" ";
 		
 	moreprint("Usage: zpaqfranz command archive[.zpaq] files|directory... -switches...");
 ///	moreprint("Use double quote for multi-part archive name => \"test_?????.zpaq\"");
@@ -27854,12 +27900,12 @@ void Jidac::usage()
 	moreprint("             x: Extract versions      |          l: List files");
 	moreprint("             v: Verify on filesystem  |          i: Info (show versions)");
 #if defined(_WIN32)
-	moreprint("           sfx: Create SFX (Windows)  |         rd: Remove 'hard to delete'");
+	moreprint("           sfx: Create SFX (Windows)  |         rd: Remove 'hard to delete' folders");
 #endif
 ///	moreprint("                                   Various");
-	moreprint(" c d0 d1 d2...: Compare d0 to d1,d2...| s d0 d1 d2: cumulative size of d0,d1,d2");
-	moreprint(" r d0 d1 d2...: Mirror  d0 in d1...   |       d d0: deduplicate d0 WITHOUT MERCY");
-	moreprint(" z d0 d1 d2...: Delete empty dirs     |        m X: merge multipart archive");
+	moreprint(" c d0 d1 d2...: Compare d0 to d1,d2...| s d0 d1 d2: Cumulative size of d0,d1,d2");
+	moreprint(" r d0 d1 d2...: Mirror  d0 in d1...   |       d d0: Deduplicate d0 WITHOUT MERCY");
+	moreprint(" z d0 d1 d2...: Delete empty dirs     |        m X: Merge multipart archive");
 	moreprint("          f d0: Fill (wipe) free space|     utf d0: Detox filenames in d0");
 	moreprint(" sum  d0 d1...: Hashing/deduplication |     dir d0: Win dir (/s /a /os /od)");
 	moreprint(" n d0 -n X    : Keep X files in d0    |          b: Benchmarking");
@@ -27870,12 +27916,14 @@ void Jidac::usage()
 	moreprint(" zfsadd zfslist zfspurge              =>  zfs-specific commands (typically FreBSD)");
 #endif
 	moreprint("                                Main switches");
-	moreprint("      -all [N]: All versions N digit  |     -key X: archive password X");
-	moreprint(" -mN -method N: 0..5= faster..better  |     -force: always overwrite");
-	moreprint("         -test: Verify (extract/add)  |      -kill: allow destructive operations");
+	moreprint("      -all [N]: All versions N digit  |     -key X: Archive password X");
+	moreprint(" -mN -method N: 0..5= faster..better  |     -force: Always overwrite");
+	moreprint("         -test: Test (extract/add)    |      -kill: Allow destructive (dry-run)");
 	moreprint("    -to out...: Prefix files to out   |   -until N: Roll back to N'th version");
-	moreprint(" -h -? (param): Long help    -examples (param): common examples   -diff: against 7.15");
+	moreprint("Long help -h (parm)     i.e.   zpaqfranz -h a     -examples (parm)    -info: colophon");
+	///moreprint(" -h -? (param): Long help    -examples (param): common examples   -diff: against 7.15");
 	moreprint(lista.c_str());
+	moreprint(listaswitch.c_str());
 }
 
 //// print a lot more
@@ -28258,7 +28306,7 @@ int Jidac::doCommand(int argc, const char** argv)
 				examples("");
 				exit(0);
 			}
-		if (stringcomparei(parametro,"-diff"))
+		if (stringcomparei(parametro,"-info"))
 		{
 			differences();
 			exit(0);
@@ -38621,9 +38669,9 @@ int Jidac::consolidate(string i_archive)
 	printf("Needed     %20s\n",migliaia(total_size));
 	
 	if (spazio<total_size)
-		if (!flagforce)
+		if (!flagspace)
 		{
-			printf("29564: Free space seems < needed, and no -force. Quit\n");
+			printf("29564: Free space seems < needed, and no -space. Quit\n");
 			return 1;
 		}
 
@@ -39322,6 +39370,13 @@ void myscandir(uint32_t i_tnumber,DTMap& i_edt,string filename, bool i_recursive
     // Ignore links, the names "." and ".." or any unselected file
 		t=wtou(ffd.cFileName);
 		
+/*
+		if (t=="tempisinca.xls")
+		{
+			printf("MOROOOOOOOOOOOO %s\n",t.c_str());
+			exit(0);
+		}
+		*/
 		if (flagdebug) // sometimes Windows get very strange attributes
 		{
 			printf("%08X MY new t2 %s\n",(unsigned int)ffd.dwFileAttributes,t.c_str());
@@ -39419,8 +39474,11 @@ int64_t i_destinazione_attr
 )
 {
 	static int ultimapercentuale=0;
-	
-	
+	/*
+	string solonome=extractfilename(i_filename);
+	if (solonome=="tempisinca.xls")
+		printf("K1 MUORO %s\n",solonome.c_str());
+	*/
 	if (flagdebug)
 	{
 		printf("\n");
@@ -39496,7 +39554,10 @@ int64_t i_destinazione_attr
 /// The changes are in the beginning of the file, so a 64K block comparison is normally 
 /// faster than the full hash computation (for different files). 
 /// Obviously for the very same files it is almost identical
-
+/*
+	if (solonome=="tempisinca.xls")
+		printf("K2 MUORO %s\n",solonome.c_str());
+*/
 			if (flagdebug)
 				printf("27584: enforcing xls/ppt test %s\n",i_filename.c_str());
 
@@ -39504,12 +39565,13 @@ int64_t i_destinazione_attr
 			if (destinazione_esiste)
 			{
 				if (flagdebug)
-					printf("Equal XLS: skip\n");
+					printf("Equal XLS: skip %s\n",i_outfilename.c_str());
 				close(i_outfilename.c_str(),sorgente_data,sorgente_attr);
 				return "=";
 			}
 			else
 			{
+	///			printf("K3: da uccidere!\n");
 				if (flagdebug)
 					printf("Different XLSs!\n");
 			}
@@ -39533,7 +39595,7 @@ int64_t i_destinazione_attr
 						printf("Stessa dimensione\n");
 					if (flagdebug)
 					{
-						printf("PPP %s\n",migliaia(myabs(destinazione_data,sorgente_data)));
+						printf("39590: PPP %s\n",migliaia(myabs(destinazione_data,sorgente_data)));
 					}
 				/// this 2 is really important: it is the modulo-differences
 				/// 1 or even 0 is not good for NTFS or Windows
@@ -39555,11 +39617,7 @@ int64_t i_destinazione_attr
 							if (percentuale%10==0)
 								if (percentuale!=ultimapercentuale)
 								{
-								printf("Done %02d %10s/%10s (%9s/%9s)\n",percentuale,migliaia(o_donecount),migliaia2(i_totalcount),tohuman(o_donesize),tohuman2(i_totalsize));
-								///printf("Done %02d %10s/%10s (9s/9s)\n",percentuale,migliaia(o_donecount),migliaia2(i_totalcount));
-					///			printf("Done %02d\n",percentuale);
-								///,tohuman(o_donesize),tohuman2(i_totalsize));
-					//////				printf("Done %02d\n",percentuale);
+									printf("Done %02d %% %12s /%12s (%11s /%11s)\n",percentuale,migliaia(o_donecount),migliaia2(i_totalcount),tohuman(o_donesize),tohuman2(i_totalsize));
 									ultimapercentuale=percentuale;
 								}
 						}
@@ -39618,7 +39676,6 @@ int64_t i_destinazione_attr
 	makepath(i_outfilename);
 	
 	FILE* outFile=NULL;
-	
 
 	if (flagdebug)
 	{
@@ -39657,7 +39714,10 @@ int64_t i_destinazione_attr
 	else
 		outFile=fopen(i_outfilename.c_str(), "wb");
 #endif
-
+/*
+	if (solonome=="tempisinca.xls")
+		printf("K5 sono su apertura %s %s\n",solonome.c_str(),i_outfilename.c_str());
+*/
 	if (outFile==NULL) 
 		return "30847:CANNOT OPEN outfile "+i_outfilename;
 	
@@ -39703,13 +39763,20 @@ int64_t i_destinazione_attr
 		}
 	}
 	
-	
+	/*
+	if (solonome=="tempisinca.xls")
+		printf("K6 sono su apertura %s %s\n",solonome.c_str(),i_outfilename.c_str());
+*/
 	while ((readSize = fread(buffer, 1, blockSize, inFile)) > 0) 
 	{
 		if (flagzero)
 			memset(buffer,0,sizeof(buffer));
 
 		int scritti=fwrite(buffer,1,readSize,outFile);
+	/*	
+		if (solonome=="tempisinca.xls")
+			printf("K7 scritti %19s\n",migliaia(scritti));
+*/
 		///printf("Scritti %19s\n",migliaia(scritti));
 		scrittitotali+=scritti;
 		o_donesize+=scritti;
@@ -39740,7 +39807,10 @@ int64_t i_destinazione_attr
 	fclose(inFile);
 	fclose(outFile);
 	
-	
+	/*
+	if (solonome=="tempisinca.xls")
+		printf("K7 faccio il touccione su i_outfilename %%s\n",i_outfilename.c_str());
+*/
 /// note: this is a "touch" for the attr
 	close(i_outfilename.c_str(),sorgente_data,sorgente_attr);
 	
@@ -40182,18 +40252,64 @@ int Jidac::robocopy()
 	if (!flagforcezfs)
 		printf("*** ignoring .zfs and :$DATA ***");
 	printf("\n");
+	
+	if (files.size()<2)
+	{
+		printf("40188: at least two folders needed\n");
+		return 1;
+	}
+	
 	if (!direxists(files[0]))
 	{
 		printf("27420: Master dir does not exists\n");
 		return 1;
 	}
 	
+	/// slow, but the cardinality is so small
+	vector<string> checkdupe;
+	
+	for (unsigned int i=0;i<files.size();i++)
+	{
+		if (!isdirectory(files[i]))
+				files[i]=files[i]+'/';
+		string	outputfolder=files[i];
+		
+#ifdef _WIN32
+	outputfolder=stringtolower(outputfolder);
+#endif
+		checkdupe.push_back(outputfolder);
+	}
+	
+	if (flagdebug)
+	{
+		printf("Size checkdup %s\n",migliaia(checkdupe.size()));
+		for (unsigned int i=0;i<files.size();i++)
+			printf("40228: %03d files[i] %s  checkdupe [i] |%s|\n",i,files[i].c_str(),checkdupe[i].c_str());
+	}
+
+	for (unsigned int i=1;i<files.size();i++)
+		if (checkdupe[0]==checkdupe[i])
+		{
+			printf("40222: a slave dir is == to the master, quit\n");
+			return 1;
+		}
+#ifdef _WIN32
+	if (flaglongpath)
+		for (unsigned int i=0;i<files.size();i++)
+			files[i]=makelongpath(files[i]);
+
+	if (flagdebug)
+		for (unsigned int i=0;i<files.size();i++)
+			printf("40245: after %03d files[i] %s\n",i,files[i].c_str());
+
+#endif
+
 	franzparallelscandir(false,true,true);
 
 
 ///27437: space needed
 	
-	if (!flagforce)
+	if (!flagspace)
 		if (files_size[0]>0)
 		{
 			bool	spazioinsufficiente=false;
@@ -40212,7 +40328,7 @@ int Jidac::robocopy()
 		
 			if (spazioinsufficiente)
 			{
-				printf("27441: exit, not enough space; use -force if you want\n");
+				printf("27441: exit, not enough space; use -space if you want\n");
 				return 1;
 			}
 		}
@@ -40224,7 +40340,7 @@ int Jidac::robocopy()
 	
 	printf("\nMaster  %s (%s files %s) <<%s>>\n",migliaia(files_size[0]),tohuman(files_size[0]),migliaia2(files_count[0]),files[0].c_str());
 	printbar('-');
-	
+		
 	int64_t total_size				=files_size[0];
 	int64_t total_count				=files_count[0];
 	int64_t done_size				=0;
@@ -40250,15 +40366,9 @@ int Jidac::robocopy()
 	{
 		strangethings=0;
 		if (flagkill)
-		{
-			if (isdirectory(files[i]))
-			{
-				if (!exists(files[i]))
-				{
-					makepath(files[i]);
-				}
-			}
-		}
+			if (!exists(files[i]))
+				makepath(files[i]);
+
 		if (!exists(files[i]))
 		{
 			if (!flagkill)
@@ -40290,6 +40400,8 @@ int Jidac::robocopy()
 					else
 					{
 						string temp=p->first;
+					
+					///	printf("AAAAAAAAAAAAAAAAAAAAA %s\n",temp.c_str());
 						bool riuscito=true;
 						if (isdirectory(temp))
 						{
@@ -40514,7 +40626,10 @@ int Jidac::dircompare(bool i_flagonlysize,bool i_flagrobocopy)
 		strangethings=0;
 		if (!exists(files[i]))
 		{
-			printf("Dir %d (slave1) DOES NOT EXISTS %s\n",i,files[i].c_str());
+			printf("[%03d] ERROR DOES NOT EXISTS <<",i);
+			printUTF8(files[i].c_str());
+			printf(">>\n");
+			flagerror=true;
 			risultato=1;
 		}
 		else
@@ -40604,7 +40719,7 @@ int Jidac::dircompare(bool i_flagonlysize,bool i_flagrobocopy)
 			if (!flagerror)
 				if ((files_size[i]==files_size[0]) && (files_count[i]==files_count[0]))
 				{
-					printf("== <<");
+					printf("[%03d] == <<",i);
 					printUTF8(files[i].c_str());	
 					printf(">>\n");
 				}

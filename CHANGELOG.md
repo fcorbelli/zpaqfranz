@@ -1,5 +1,5 @@
 ### 20-07-2022: 55.4
-### Command q (paQQa) on Windows: backup of drive C
+### Command q (paQQa) on Windows: archive ("fake backup") of drive C
 _The new command archive (a large part) of the C: drive, excluding, by default, the swap files, system volume information, and the Windows folder  
 **Admin rights are required, and the C:\FRANZSNAP FOLDER MUST NOT EXISTS  
 EVERY KIND OF PRE-EXISTING VSS WILL BE DELETED**_  
@@ -17,7 +17,7 @@ zpaqfranz q z:\pippo.zpaq -only *.cpp -key migthypassword
 
 
 **This is NOT a bare-metal restorable backup but a (blazingly fast) snapshotted/versioned archiving of precious data**  
-_On my PC a "backup" (aka: new version) takes less than 2 minutes_  
+_On my PC updating the "backup" (aka: new version) takes less than 2 minutes for ~200GB C: drive_  
 _Note: some special folders cannot be accessed/archived at all (Windows's Defender, CSC etc.), because Windows does not like. I am working on it_
 
 

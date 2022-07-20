@@ -1,3 +1,26 @@
+### 20-07-2022: 55.4
+### Command q (paQQa) on Windows: backup of drive C
+_The new command archive (a large part) of the C: drive, excluding, by default, the swap files, system volume information, and the Windows folder  
+**Admin rights are required, and the C:\FRANZSNAP FOLDER MUST NOT EXISTS  
+EVERY KIND OF PRE-EXISTING VSS WILL BE DELETED**_  
+
+_Usage is quite easy_
+```
+zpaqfranz q z:\pippo.zpaq
+```
+_the -forcewindows add the c:\windows folder, the %TEMP% and ADS  
+Almost all add() switches are enabled, with the exception of -to_  
+
+```
+zpaqfranz q z:\pippo.zpaq -only *.cpp -key migthypassword
+```
+
+
+**This is NOT a bare-metal restorable backup but a (blazingly fast) snapshotted/versioned archiving of precious data**  
+_On my PC a "backup" (aka: new version) takes less than 2 minutes_  
+_Note: some special folders cannot be accessed/archived at all (Windows's Defender, CSC etc.), because Windows does not like. I am working on it_
+
+
 ### 16-07-2022: 55.2
 ### Command r (robocopy) MAYBE works with -longpath on Windows (caution using r)
 ### Some minor fixes in help

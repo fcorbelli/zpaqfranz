@@ -9,7 +9,7 @@
 ///////// I apologize with the authors, it's not a foolish attempt to take over their jobs
 
 
-#define ZPAQ_VERSION "55.3-experimental"
+#define ZPAQ_VERSION "55.4-experimental"
 
 #if defined(_WIN64)
 #define ZSFX_VERSION "SFX64 v55.1,"
@@ -8730,6 +8730,8 @@ pthread_mutex_t g_mylock = PTHREAD_MUTEX_INITIALIZER;
 vector<s_crc32block> 	g_crc32;
 vector<uint64_t> 		g_arraybytescanned;
 vector<uint64_t> 		g_arrayfilescanned;
+string 	vss_shadow="";
+string	vss_letter="";
 string 	g_copy;
 string 	g_freeze;
 string 	g_exec_error;
@@ -20375,14 +20377,12 @@ string	makeshortpath(string i_path)
 }	
 string makelongpath(string i_path)
 {
-#ifndef _WIN32
-	return i_string;
-#endif
-
+#ifdef _WIN32
 	if (flaglongpath)
 		if (iswindowspath(i_path))
 			if (!islongpath(i_path))
 				return "//?/"+i_path;
+#endif
 	return i_path;
 }
 /// it is not easy, at all, to take *nix free filesystem space
@@ -20470,11 +20470,17 @@ void printerr(const char* i_where,const char* filename)
 void printerr(const char* i_where,const char* filename) 
 {
 	string lasterror=i_where;
+	fflush(stdout);
+	int err=GetLastError();
 	
-  fflush(stdout);
-  int err=GetLastError();
+	if (!flagdebug)
+		if (flagvss)
+			if (err==ERROR_ACCESS_DENIED)
+				return;
+		
+	
 	fprintf(stderr,"\n");
-  printUTF8(filename, stderr);
+	printUTF8(filename, stderr);
   
   if (err==ERROR_FILE_NOT_FOUND)
     g_exec_text=": error file not found";
@@ -21183,29 +21189,37 @@ Cleanup:
 
 //// VSS on Windows by... batchfile
 //// delete all kind of shadows copies (if any)
-void vss_deleteshadows()
+void vss_deleteshadows(string i_cartella)
 {
 	if (flagvss)
 	{
 		string	filebatch	=g_gettempdirectory()+"vsz.bat";
-		
-		printf("Starting delete VSS shadows\n");
+		filebatch=nomefileseesistegia(filebatch);
+		print_datetime();
+		printf("VSS: starting release\n");
     		
 		if (fileexists(filebatch))
 			if (remove(filebatch.c_str())!=0)
 			{
-				printf("Highlander batch  %s\n", filebatch.c_str());
+				printf("21204: Highlander batch  %s\n", filebatch.c_str());
 				return;
 			}
 		
 		FILE* batch=fopen(filebatch.c_str(), "wb");
 		fprintf(batch,"@echo OFF\n");
+		
+		if (i_cartella!="")
+		{
+			///fprintf(batch,"subst %s: /d\n",i_lettera.c_str());
+			fprintf(batch,"rmdir %s\n",i_cartella.c_str());
+		}
 		fprintf(batch,"@wmic shadowcopy delete /nointeractive\n");
 		fclose(batch);
 	
 		waitexecute(filebatch,"",SW_HIDE);
 	
-		printf("End VSS delete shadows\n");
+		print_datetime();
+		printf("VSS: end releasing\n");
 	}
 
 }
@@ -23361,6 +23375,9 @@ typedef HANDLE (WINAPI* FindFirstStreamW_t)
 FindFirstStreamW_t findFirstStreamW=0;
 typedef BOOL (WINAPI* FindNextStreamW_t)(HANDLE, LPVOID);
 FindNextStreamW_t findNextStreamW=0;
+
+typedef BOOL (WINAPI* GetFinalPathNameByHandleW_t)(HANDLE, LPWSTR,DWORD,DWORD);
+GetFinalPathNameByHandleW_t getFinalPathNameByHandleW=0;
 #endif
 
 char command;             			// command 'a', 'x', or 'l'
@@ -23406,6 +23423,7 @@ private:
 
 	const char* index;        			// index option
 
+	string	plainpassword;
 	const char* password;     			// points to password_string or NULL
 	char password_string[32]; 			// hash of -key argument
 	char new_password_string[32]; 		// -repack hashed password
@@ -23482,6 +23500,7 @@ private:
 	int dircompare(bool i_flagonlysize,bool i_flagrobocopy);
 	int benchmark();
 	int	zfs(string command);
+	int windowsc();						// Backup (kind of) drive C:
 	
 	void load_help_map	();					// not in the constructor!
 	void usage			();        			// help
@@ -23533,6 +23552,10 @@ private:
 	void 	changedtmapkey(string i_oldkey,string i_newkey);
 	
 	int 	removeemptydirs(string i_folder,bool i_kill);
+	
+	int 	writeresource(string i_filename,bool i_force,const char* i_mime64);
+	int 	decompress_mime64_to_file(FILE* i_outfile,const char* i_mime64);
+
 
 };
 
@@ -27182,6 +27205,30 @@ void help_i(bool i_usage,bool i_example)
 	}
 }
 
+void help_q(bool i_usage,bool i_example)
+{
+	if (i_usage)
+	{
+		moreprint("CMD   q (zpaq backup of C: (kind of)");
+		moreprint("+ :               Try to archive as much C: as possible (no pagefile.sys and sysvol)");
+		moreprint("+ :               This is NOT a full backup (aka: bare-metal restorable)");
+		moreprint("+ :               But a VERSIONED backup of data, NOT software");
+		moreprint("+ : -forcewindows INCLUDE Windows, TEMP and $RECYCLE BIN and ADS (default: NO)");
+		moreprint("+ :               Just about all switches of add() (-key -m -only ...)");
+		moreprint("+ :               except files selection (always C:/*) and -to");
+		moreprint("+ :     ****      The folder c:/franzsnap MUST NOT EXIST");
+
+	}
+	if (i_usage && i_example) moreprint("    Examples:");
+	if (i_example)
+	{
+		moreprint("Copy 'large part' of C:              q z:\\1.zpaq");
+		moreprint("Copy C++ files:                      q z:\\1.zpaq -only *.c* -only *.h*");
+		
+	}
+}
+
+
 void help_dirsize(bool i_usage,bool i_example)
 {
 	if (i_usage)
@@ -27852,6 +27899,7 @@ void Jidac::load_help_map()
 #if defined(_WIN32)
 	help_map.insert(std::pair<string, voidhelpfunction>("sfx",help_sfx));
 	help_map.insert(std::pair<string, voidhelpfunction>("rd",help_rd));
+	help_map.insert(std::pair<string, voidhelpfunction>("q",help_q));
 #endif
 	help_map.insert(std::pair<string, voidhelpfunction>("l",help_l));
 	help_map.insert(std::pair<string, voidhelpfunction>("i",help_i));
@@ -27911,7 +27959,11 @@ void Jidac::usage()
 	moreprint(" n d0 -n X    : Keep X files in d0    |          b: Benchmarking");
 	moreprint(" rsync d0 d1  : Purge temporary rsync |cp d0 -to X: Copy files (w/wildcards) to X");
 	moreprint(" trim         : Trim incomplete add() |    dirsize: Get size of archive's folders");
+#if defined(_WIN32)
+	moreprint(" password     : Add/remove/change pwd | q z:\\pippo: 'kind of' C: backup on z:\\pippo.zpaq (Win)");
+#else
 	moreprint(" password     : Add/remove/change pwd |");
+#endif
 #if defined(unix)
 	moreprint(" zfsadd zfslist zfspurge              =>  zfs-specific commands (typically FreBSD)");
 #endif
@@ -28118,7 +28170,8 @@ int Jidac::doCommand(int argc, const char** argv)
 	// Initialize options to default values
 	// Why some variables out of Jidac? Because of pthread: does not like very much C++ objects
 	// quick and dirty.
-  
+  	vss_shadow			="";
+	plainpassword		="";
 	g_franzotype		=2; //by default take CRC-32 AND XXHASH64
 	g_sfx				="";
 	g_sfxto				="";
@@ -28439,6 +28492,7 @@ int Jidac::doCommand(int argc, const char** argv)
 		opt=="v"		||
 		opt=="w"		||
 		opt=="i" 		|| 
+		opt=="q" 		|| 
 		opt=="sfx" 		|| 
 		opt=="m"		||
 		opt=="dirsize")
@@ -28846,10 +28900,14 @@ int Jidac::doCommand(int argc, const char** argv)
 			if (i<argc-1) // I am not the last parameter
 				if (argv[i+1][0]!='-') // -key pippo -whirlpool
 				{
+					plainpassword="";
 			//		printf("We take password\n");
 					libzpaq::SHA256 sha256;
 					for (const char* p=argv[++i]; *p; ++p)
+					{
 						sha256.put(*p);
+						plainpassword+=*p;
+					}
 					memcpy(password_string, sha256.result(), 32);
 					password=password_string;
 				}
@@ -29304,6 +29362,15 @@ int Jidac::doCommand(int argc, const char** argv)
 	{
 		findFirstStreamW=(FindFirstStreamW_t)GetProcAddress(h, "FindFirstStreamW");
 		findNextStreamW=(FindNextStreamW_t)GetProcAddress(h, "FindNextStreamW");
+///		getFinalPathNameByHandleW=(GetFinalPathNameByHandleW_t)GetProcAddress(h, "GetFinalPathNameByHandleW");
+		/*
+		if (getFinalPathNameByHandleW==NULL)
+			printf("ZEROOO\n");
+		else
+			printf("CIaiamoooo\n");
+		exit(0);
+		*/
+		
 	}
 ///  if (!findFirstStreamW || !findNextStreamW)
 ///broken XP parser    printf("Alternate streams not supported in Windows XP.\n");
@@ -29409,6 +29476,9 @@ int Jidac::doCommand(int argc, const char** argv)
 	else if (command=='m') return consolidate(archive);
 	else if (command=='o') return mycopy();
 	else if (command=='p') return paranoid();
+#ifdef _WIN32
+	else if (command=='q') return windowsc();
+#endif
 	else if (command=='r') return robocopy();
 	else if (command=='s') return dircompare(true,false); 
 	else if (command=='t') return test();
@@ -30154,7 +30224,8 @@ endblock:;
 #ifdef _WIN32	
 			if (!flaglongpath)
 				if (!flagtest)
-				printf("Long filenames (>255)  %9s *** WARNING *** (suggest -longpath or -fix255 or -flat)\n",migliaia(toolongfilenames));
+					if (!flagvss)
+						printf("Long filenames (>255)  %9s *** WARNING *** (suggest -longpath or -fix255 or -flat)\n",migliaia(toolongfilenames));
 #else
 			if (!flagtest)
 			printf("Long filenames (>255)  %9s\n",migliaia(toolongfilenames));
@@ -30315,6 +30386,100 @@ bool Jidac::isselected(const char* filename, bool rn,int64_t i_size)
   return true;
 }
 
+#ifdef _WIN32
+string my_realpath(std::string const& i_path) 
+{
+	if (i_path=="")
+			return "";
+		
+	char linkbuffer[66000]={0};
+	size_t	linksize=66000;
+	
+    HANDLE h = CreateFileW(utow(i_path.c_str()).c_str(), 0, 0, NULL, OPEN_EXISTING, FILE_FLAG_OPEN_REPARSE_POINT, NULL);
+    char buffer[MAXIMUM_REPARSE_DATA_BUFFER_SIZE];
+    DWORD dwBytesReturned = 0;
+    DeviceIoControl(h, FSCTL_GET_REPARSE_POINT, NULL, 0, buffer, sizeof(buffer), &dwBytesReturned, 0);
+    typedef struct
+    {
+        ULONG ReparseTag;
+        USHORT ReparseDataLength;
+        USHORT Reserved;
+        union
+        {
+            struct
+            {
+                USHORT SubstituteNameOffset;
+                USHORT SubstituteNameLength;
+                USHORT PrintNameOffset;
+                USHORT PrintNameLength;
+                ULONG Flags;
+                WCHAR PathBuffer[1];
+            } SymbolicLinkReparseBuffer;
+            struct
+            {
+                USHORT SubstituteNameOffset;
+                USHORT SubstituteNameLength;
+                USHORT PrintNameOffset;
+                USHORT PrintNameLength;
+                WCHAR PathBuffer[1];
+            } MountPointReparseBuffer;
+            struct
+            {
+                UCHAR  DataBuffer[1];
+            } GenericReparseBuffer;
+        };
+    } REPARSE_DATA_BUFFER;
+    REPARSE_DATA_BUFFER* pRDB = reinterpret_cast<REPARSE_DATA_BUFFER*>(buffer);
+    if (pRDB->ReparseTag == IO_REPARSE_TAG_SYMLINK)
+    {
+        int nameLength = pRDB->SymbolicLinkReparseBuffer.SubstituteNameLength / sizeof(wchar_t);
+        wchar_t* pName = (wchar_t*)((char*)pRDB->SymbolicLinkReparseBuffer.PathBuffer + pRDB->SymbolicLinkReparseBuffer.SubstituteNameOffset);
+        WideCharToMultiByte(CP_UTF8, 0, pName, nameLength, linkbuffer, linksize, NULL, NULL);
+        return linkbuffer;
+    }
+    CloseHandle(h);
+    return "";
+}
+#endif
+/*
+std::wstring GetLinkTarget(const char* i_link) 
+{
+    // Open file for querying only (no read/write access).
+	
+								 
+	
+
+
+	
+	HANDLE h=CreateFileW(utow(i_link).c_str(), 
+	0,                                 FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                                 nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr );
+					
+						   
+	if (h==INVALID_HANDLE_VALUE)
+	{
+		printf("30334: failed createfile %s\n",i_link);
+		return L"";
+	}
+    
+	
+    const size_t requiredSize = getFinalPathNameByHandleW( h, nullptr, 0,FILE_NAME_NORMALIZED );
+    if ( requiredSize == 0 ) 
+	{
+		printf("30342: requiredsize==0\n");
+		return L"";
+	}
+	printf("requireddd size %d\n",requiredSize);
+	
+	std::vector<wchar_t> buffer( requiredSize );
+    getFinalPathNameByHandleW( h, buffer.data(),
+                                 static_cast<DWORD>( buffer.size() ),
+                                 FILE_NAME_NORMALIZED );
+
+	CloseHandle(h);
+    return std::wstring( buffer.begin(), buffer.end() - 1 );
+}
+*/
 #if defined (_WIN32)
 void	decodewinattribute(int32_t i_attribute)
 {
@@ -30504,9 +30669,77 @@ void Jidac::scandir(bool i_checkifselected,DTMap& i_edt,string filename, bool i_
     // Ignore links, the names "." and ".." or any unselected file
     t=wtou(ffd.cFileName);
 	
+		/// Ok this is rather weird, but is Microsoft afterall
+	/// a SYMLINK in a VSS can become rather tricky
+	/// this should (?) get the "real" name of a SYMLINK
+	/// Microsoft documentations sucks big time
+	///string solonome=extractfilename(t);
+///	if (flagvss)
+	if ((ffd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) && !(ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY))
+	///	if (solonome=="java.exe")
+	{
+		string miofilename=path(filename)+t;
+		///printbar('-');
+/*
+		printf("java.exe FATTR %08X RES0 %08X ",(unsigned int)ffd.dwFileAttributes,(unsigned int)ffd.dwReserved0);
+		printUTF8(t.c_str());
+		printf("\n");
+		decodewinattribute(ffd.dwFileAttributes);
+		printf("\n");
+		printf("Cerco nome |%s|\n",miofilename.c_str());
+*/
+		string nuovonome=my_realpath(miofilename);
+///		printf("30517: nuovo nome |%s|\n",nuovonome.c_str());
+
+		if (nuovonome!="")
+		{
+			int64_t newsize=dim(nuovonome);
+///			printf("30517: maybe Windows-symlinked file, fake size %s real size %s %s\n",migliaia(esize),migliaia(newsize),nuovonome.c_str());
+			esize=newsize;
+		}
+		/*
+		printf("vss_shad   |%s|\n",vss_shadow.c_str());
+		printf("miofilenam |%s|\n",miofilename.c_str());
+		printf("FIlename   |%s|\n",filename.c_str());
+		printf("t          |%s|\n",t.c_str());
+		printf("nuovo      |%s|\n",nuovonome.c_str());
+		*/
+		string percorso="";
+		
+		size_t destra= nuovonome.rfind(t);
+		if (destra!=std::string::npos)
+			percorso=myleft(nuovonome,destra)+"*";
+		///printf("percorso   |%s|\n",percorso.c_str());
+		
+		if (percorso!="")
+			filename=percorso;
+		
+/*		
+		printf("new ilenam |%s|\n",filename.c_str());
+		getcaptcha("y","pause");
+		printbar('-');
+	*/	
+	}
+	
+/*
+
+	dir /al /s c:\programdata
+NOT_CONTENT_INDEXED
+archive;NOT_CONTENT_INDEXED;REPARSE_POINT
+
+shadowspawn c:\ Q: zpaqfranz a j:\2.zpaq Q:\ -vss
+2420
+A000000C
+3 3 2 2 2 2 2 2 2 2 2 2 1 1 1 1 1 1 1 1 1 1
+1 0 9 8 7 6 5 4 3 2 1 0 9 8 7 6 5 4 3 2 1 0 9 8 7 6 5 4 3 2 1 0
+1 0 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 1 0 0
+31 Microsoft bit
+
+*/
+
 	if (flagdebug) // sometimes Windows get very strange attributes
 	{
-		printf("FATTR %08X ",(unsigned int)ffd.dwFileAttributes);
+		printf("FATTR %08X RES0 %08X ",(unsigned int)ffd.dwFileAttributes,(unsigned int)ffd.dwReserved0);
 		printUTF8(t.c_str());
 		printf("\n");
 		decodewinattribute(ffd.dwFileAttributes);
@@ -30591,12 +30824,24 @@ void Jidac::scandir(bool i_checkifselected,DTMap& i_edt,string filename, bool i_
 void Jidac::addfile(bool i_checkifselected,DTMap& i_edt,string filename, int64_t edate,
                     int64_t esize, int64_t eattr) 
 {
-				
+
+///	printf("checcko con size |%s| %20s %s\n",vss_shadow.c_str(),migliaia(esize),filename.c_str());
+		
 	if (i_checkifselected)
+	{
 		if (!isselected(filename.c_str(), false,esize)) 
+		{
+			///printf("Scarto!\n");
 			return;
-	///printf("Aggiungo con size %20s %s\n",migliaia(esize),filename.c_str());
+		}
+		///printf("Aggiungo!\n");
+	}
 	
+	//	OK, let's handle longpath on VSS
+	if (command=='q')
+		if (filename.size()>250)
+			myreplace(filename,"c:/franzsnap",vss_shadow);
+
 	DT& d=i_edt[filename];
 	d.date=edate;
 	d.size=esize;
@@ -36668,7 +36913,40 @@ int64_t getramdisksize()
 	return internal_getramdisksize(); /// if you get an error HERE substitute with return 0;
 	///return 0;
 }
+int contabit(unsigned int u)
+{
+	unsigned int uCount;
+	uCount=u-((u >> 1) & 033333333333)-((u >> 2) & 011111111111);
+	return ((uCount + (uCount >> 3)) & 030707070707) % 63;
+}
 
+int bittino(int i)
+{
+	i=~i;
+	return contabit((i&(-i))-1);
+}
+
+string windows_get_free_letter()
+{
+#ifdef _WIN32
+	DWORD unita=GetLogicalDrives();
+	///1234567890123456789012345678
+	///                   IHGFEDCBA
+	///0010000010001111111010010100
+	/*
+	printf("unita  %08X\n",unita);
+	printf("bittino %d\n",bittino(unita));
+	*/
+	char	unitalibera='A'+bittino(unita);
+	///printf("Unita |%c|\n",unitalibera);
+	//unitalibera='C';
+	string s(1, unitalibera);
+	string percorso=s+":/";
+	if (getfreespace(percorso)==0)
+		return s;
+#endif
+	return "";
+}
 int Jidac::benchmark()
 {
 	
@@ -37459,7 +37737,14 @@ void my_handler(int s)
 {
 	// 2==control-C (maybe)
 	if (s==2)
-	{	// we want the cursor back!
+	{	
+#ifdef _WIN32
+		if (command=='q')
+		{
+			printf("*** VSS RUNNING, DETACHING\n");
+			vss_deleteshadows("c:\\franzsnap");
+		}
+#endif
 		setupConsole();
 		printf("\033[?25h");
 		fflush(stdout);
@@ -37568,18 +37853,16 @@ void my_handler(int s)
 		errorcode=2;
 	  }
 #ifndef ESX	  
+	if (command=='q')
+	fprintf(stderr, "\n%1.3f seconds (%s)  on VSS operation\n", (mtime()-g_start)/1000.0,timetohuman((mtime()-g_start)/1000.0).c_str());
+	else
 	fprintf(stderr, "\n%1.3f seconds (%s)  %s\n", (mtime()-g_start)/1000.0,timetohuman((mtime()-g_start)/1000.0).c_str(),
       errorcode>1 ? "(with errors)" :
       errorcode>0 ? "(with warnings)" : "(all OK)");
 #endif
 	if (g_255)
 		fprintf(stderr, "\nSeems %08d errors by path/filename too long (>255)\n", g_255);
-		
-/*	  
-	fprintf(stderr, "\n%1.3f seconds (%s)  %s\n", (mtime()-g_start)/1000.0,timetohuman((uint64_t)((mtime()-g_start)/1000.0).c_str()),
-      errorcode>1 ? "(with errors)" :
-      errorcode>0 ? "(with warnings)" : "(all OK)");
-	*/
+
 	if (errorcode==2)
 	{
 		if (flagdebug)
@@ -41844,6 +42127,10 @@ int Jidac::decimation()
 ///zpaqfranz a z:\1 \\?\UNC\franzk\z\cb -longpath -debug
 int Jidac::add() 
 {
+	
+	//if (tofiles.size()==1)
+		///printf("KA------------------- to %s\n",tofiles[0].c_str());
+
 	#ifdef _WIN32
 	if (flaglongpath)
 		if (tofiles.size()==0)
@@ -41900,6 +42187,9 @@ int Jidac::add()
 			}
 		}
 	#endif
+	
+	///if (tofiles.size()==1)
+		///printf("KB------------------- to %s\n",tofiles[0].c_str());
 
 	getpasswordifempty();
 	
@@ -41937,12 +42227,25 @@ int Jidac::add()
 	}
 	
 	g_scritti=0;
-	
+	string primalettera="";
+	string cartellalocale="";
+		
 	if (flagvss)
 	{
 
 #if defined(_WIN32) || defined(_WIN64)
-
+		if (command=='q')
+		{
+			cartellalocale="c:\\franzsnap";
+			if (!flagspace)
+				if (direxists(cartellalocale))
+				{
+					printf("42236: abort because folder already exists %s\n",cartellalocale.c_str());
+					printf("42236: you need to rename/delete or try -space to bypass\n");
+					exit(0);
+				}
+		}
+	
 		char mydrive=0; // only ONE letter, only ONE VSS snapshot
 		// abort for something like zpaqfranz a z:\1.zpaq c:\pippo d:\pluto -vss
 		// abort for zpaqranz a z:\1.zpaq \\server\dati -vss
@@ -41950,27 +42253,33 @@ int Jidac::add()
 		for (unsigned i=0; i<files.size(); ++i)
 		{
 			string temp=files[i];
-		
+			///printf("K1 %d |%s|\n",i,temp.c_str());
+			
 			if (temp[1]!=':')
 				error("VSS need X:something as path (missing :)");
 				
 			char currentdrive=toupper(temp[0]);
 			if (!isalpha(currentdrive))
 				error("VSS need X:something as path (X not isalpha)");
+			///printf("K2 |%c|\n",mydrive);
+			
 			if (mydrive)
 			{
 				if (mydrive!=currentdrive)
 				error("VSS can only runs on ONE drive");
 			}
-			else	
-			mydrive=currentdrive;
+			else
+				mydrive=currentdrive;
 		}
 
+		///printf("K3 |%c|\n",mydrive);
 			
 		string	fileoutput	=g_gettempdirectory()+"outputz.txt";
 		string	filebatch	=g_gettempdirectory()+"vsz.bat";
-	
-		printf("Starting VSS\n");
+		fileoutput=nomefileseesistegia(fileoutput);
+		filebatch=nomefileseesistegia(filebatch);
+		print_datetime();
+		printf("VSS: starting\n");
     
 		if (fileexists(fileoutput))
 			if (remove(fileoutput.c_str())!=0)
@@ -42011,49 +42320,138 @@ int Jidac::add()
 			}
 		
 		fclose(myoutput);
-		printf("global root |%s|\n",globalroot.c_str());
+		if (flagdebug)
+		printf("Global root |%s|\n",globalroot.c_str());
 ///	sometimes VSS is not available
 		if (globalroot=="")
 			error("VSS cannot continue. Maybe impossible to take snapshot?");
 
 		string volume="";
-		string vss_shadow="";
+
 		
 		int posstart=globalroot.find("\\\\");
 			
 		if (posstart>0)
 			for (unsigned i=posstart; i<globalroot.length(); ++i)
 				vss_shadow=vss_shadow+globalroot.at(i);
-		printf("VSS VOLUME <<<%s>>>\n",vss_shadow.c_str());
+		if (flagdebug)
+			printf("VSS VOLUME <<<%s>>>\n",vss_shadow.c_str());
 		myreplaceall(vss_shadow,"\\","/");
-		printf("VSS SHADOW <<<%s>>>\n",vss_shadow.c_str());
+		if (flagdebug)
+			printf("VSS SHADOW <<<%s>>>\n",vss_shadow.c_str());
+		
+		
+		/*
+		mklink /d c:\fiza \\?\GLOBALROOT\Device\HarddiskVolumeShadowCopy41\
+subst b: z:\fiza
+
+zpaqfranz a z:\bi.zpaq b:\ -to c:\ -only *.cpp
+
+subst b: /d
+rmdir z:\fiza
+*/
+	
+		
+		string	filesubba	=g_gettempdirectory()+"subba.bat";
+		filesubba=nomefileseesistegia(filesubba);
+		print_datetime();
+		printf("VSS: intermediate\n");
+		if (fileexists(filesubba))
+			if (remove(filesubba.c_str())!=0)
+					error("Highlander subba.txt");
+
+		
+		string 	vss_windows_style=vss_shadow;
+		myreplaceall(vss_windows_style,"/","\\");
+		
+		FILE* subbatch=fopen(filesubba.c_str(), "wb");
+		fprintf(subbatch,"@echo OFF\n");
+		fprintf(subbatch,"rmdir %s\n",cartellalocale.c_str());
+		fprintf(subbatch,"mklink /d %s %s\\ \n",cartellalocale.c_str(),vss_windows_style.c_str());
+		///fprintf(subbatch,"subst %s: %s\n",primalettera.c_str(),cartellalocale.c_str());
+		fclose(subbatch);
+		waitexecute(filesubba,"",SW_HIDE);
+	
+		///int64_t	liberavss=getfreespace(primalettera+":");
+		int64_t	liberavss=getfreespace(cartellalocale.c_str());
+		///printf("SPazio lebero vss %s\n",migliaia(liberavss));
+		if (liberavss==0)
+		{
+			///printf("42360: something wrong preparing %s\n",primalettera.c_str());
+			printf("42360: something wrong preparing %s\n",cartellalocale.c_str());
+			return 2;
+		}
+		
+		
+		
 		
 			
-		tofiles.clear();
-		for (unsigned i=0; i<files.size(); ++i)
-			tofiles.push_back(files[i]);
-		
-		for (unsigned i=0; i<tofiles.size(); ++i)
-			printf("TOFILESSS %s\n",tofiles[i].c_str());
-		printf("\n");
-		
-		string replaceme=tofiles[0].substr(0,2);
-		printf("-------------- %s -------\n",replaceme.c_str());
-		
-		for (unsigned i=0; i<files.size(); ++i)
+/*
+		if (files.size()>0)
 		{
-			printf("PRE  FILES %s\n",files[i].c_str());
-			myreplace(files[i],replaceme,vss_shadow);
-			printf("POST FILES %s\n",files[i].c_str());
-			if (strstr(files[i].c_str(), "GLOBALROOT")==0)
-				error("VSS fail: strange post files");
+			printf("Files 0 vale |%s|\n",files[0].c_str());
+			string temp=files[0];
+			vss_letter=temp[0];
+			printf("VSS_LETTER |%s|\n",vss_letter.c_str());
 		}
+		searchfrom=vss_shadow;
+		replaceto="c:";
+		
+
+*/
+		if (command!='q')
+		{
+			if (flagdebug)
+				printf("42139: tofiles because not q\n");
+			tofiles.clear();
+			for (unsigned i=0; i<files.size(); ++i)
+				tofiles.push_back(files[i]);
+			string replaceme=tofiles[0].substr(0,2);
+			if (flagdebug)
+			printf("-------------- %s -------\n",replaceme.c_str());
+			
+			for (unsigned i=0; i<files.size(); ++i)
+			{
+				if (flagdebug)
+					printf("PRE  FILES %s\n",files[i].c_str());
+				myreplace(files[i],replaceme,vss_shadow);
+				if (flagdebug)
+					printf("POST FILES %s\n",files[i].c_str());
+				if (strstr(files[i].c_str(), "GLOBALROOT")==0)
+					error("VSS fail: strange post files");
+			}	
+			}
+		else
+		{/// command q, windows c backup
+			tofiles.clear();
+			files.clear();
+			string cartellaunix=cartellalocale;
+			myreplaceall(cartellaunix,"\\","/");
+			cartellaunix+="/*";
+			files.push_back(cartellaunix);
+		}
+		if (flagdebug)
+		{
+			for (unsigned i=0; i<files.size(); ++i)
+				printf("files %s\n",files[i].c_str());
+			printf("\n");
+			for (unsigned i=0; i<tofiles.size(); ++i)
+				printf("TOFILESSS %s\n",tofiles[i].c_str());
+			printf("\n");
+			
+		}
+		
 #else
 		printf("Volume Shadow Copies runs only on Windows\n");
 #endif
-		printf("End VSS\n");
+		print_datetime();
+		printf("VSS: end\n");
 	}
 
+/*
+	if (tofiles.size()==1)
+		printf("KC------------------- to %s\n",tofiles[0].c_str());
+*/
 				
 	string ffranzotype=decodefranzoffset(g_franzotype);
 	if (flagverify)
@@ -42189,7 +42587,8 @@ int Jidac::add()
 		}
 #endif
 	
-
+	///if (tofiles.size()==1)
+		///printf("K1------------------- to %s\n",tofiles[0].c_str());
 
   // Sort the files to be added by filename extension and decreasing size
   vector<DTMap::iterator> vf;
@@ -42245,8 +42644,9 @@ int Jidac::add()
   
   for (DTMap::iterator p=edt.begin(); p!=edt.end(); ++p) 
   {
-		DTMap::iterator a=dt.find(rename(p->first));
 		string filename=rename(p->first);
+		DTMap::iterator a=dt.find(filename);
+
 
 		if (isdirectory(filename))
 			folders++;
@@ -42464,7 +42864,8 @@ int Jidac::add()
 	if (toolongfilenames)
 	{
 #ifdef _WIN32	
-	printf("Long filenames (>255) %9s *** WARNING *** (-fix255)\n",migliaia(toolongfilenames));
+	if (!flagvss)
+		printf("Long filenames (>255) %9s *** WARNING *** (-fix255)\n",migliaia(toolongfilenames));
 #else
 	printf("Long filenames (>255) %9s\n",migliaia(toolongfilenames));
 #endif
@@ -42606,6 +43007,7 @@ int Jidac::add()
       bufptr=buflen=0;
       in=fopen(p->first.c_str(), RB);
 	   
+	  
       if (in==FPNULL) {  // skip if not found
 	  p->second.date=0;
         total_size-=p->second.size;
@@ -42659,7 +43061,7 @@ int Jidac::add()
 						/// check for strange things (corrupted files, lost connection...)
 						p->second.hashedsize+=buflen;
 						
-						if (flagverbose)
+						///if (flagverbose)
 						if (p->second.expectedsize>100000000)
 						{
 							int percentuale=(int)(100.0*p->second.hashedsize/p->second.expectedsize)+1;
@@ -42996,7 +43398,14 @@ int Jidac::add()
 		if (p!=edt.end()) 
 		{
 			string filename=rename(p->first);
-		
+
+			/// Fix longpath on VSS ( reference the addfile() )
+			if (command=='q')
+			{
+				myreplace(filename,vss_shadow,"c:/franzsnap");
+			///	myreplace(filename,"c:/franzsnap","c:");
+			}
+			
 			if (searchfrom!="")
 				if (replaceto!="")
 					replace(filename,searchfrom,replaceto);
@@ -43133,17 +43542,23 @@ int Jidac::add()
 					{
 						if ((p->second.size!=p->second.hashedsize) && (p->second.hashedsize==0))
 						{
-							printf("38383: ERROR expected %19s getted 0 bytes  ",migliaia(p->second.size));
-							printUTF8(filename.c_str());
-							printf("\n");
+							if (!flagvss)
+							{
+								printf("38383: ERROR expected %19s getted 0 bytes  ",migliaia(p->second.size));
+								printUTF8(filename.c_str());
+								printf("\n");
+							}
 							hashtobewritten=hasherror;
 						}
 						else
 						if (p->second.size!=p->second.hashedsize)
 						{
-							printf("38385: WARN expected %19s getted %19s for ",migliaia(p->second.size),migliaia2(p->second.hashedsize));
-							printUTF8(filename.c_str());
-							printf("\n");
+							if (!flagvss)
+							{
+								printf("38385: WARN expected %19s getted %19s for ",migliaia(p->second.size),migliaia2(p->second.hashedsize));
+								printUTF8(filename.c_str());
+								printf("\n");
+							}
 	///						hashtobewritten=hasherror;
 						}
 
@@ -43261,7 +43676,7 @@ int Jidac::add()
 	
 #if defined(_WIN32) || defined(_WIN64)
 	if (flagvss)
-		vss_deleteshadows();
+		vss_deleteshadows(cartellalocale);
 #endif
 		
 	if (flagfilelist)
@@ -43273,6 +43688,7 @@ int Jidac::add()
 		}
 #ifdef _WIN32
 	if (!flaglongpath)
+		if (!flagvss)
 		if (maxfilelength>255)
 			printf("\n*** WINDOWS WARNING *** found file length >255. Suggestion: use -longpath switch\n");
 #endif
@@ -43334,9 +43750,16 @@ int Jidac::add()
 		if (total_size!=(total_done))
 		{
 			printf("\n");
-			printf("38271: HOUSTON something seems wrong: expected %s, done %s\n",migliaia(total_size),migliaia2(total_done));
-			printf("38271: Corrupted source files? Lost connection? Cannot access? Media full?\n");
-			printf("38271: =>The updated .zpaq archive is almost certainly incompleted\n");
+			printf("38271: HOUSTON expected %s, done %s, diff %s\n",migliaia(total_size),migliaia2(total_done),migliaia3(myabs(total_size,total_done)));
+			if (flagvss)
+			{
+				printf("38271: This could be 'normal' for a VSS operation\n");
+			}
+			else
+			{
+				printf("38271: Corrupted source files? Lost connection? Cannot access? Media full?\n");
+				printf("38271: =>The updated .zpaq archive is almost certainly incompleted\n");
+			}
 			g_exec_text="38271: HOUSTON something seems wrong expected vs done";
 			errors=2;
 		}
@@ -44023,6 +44446,105 @@ int Jidac::sfx()
 
 	return 0;
 }
+
+/* 
+more general resource-like extraction (future)
+*/
+int Jidac::decompress_mime64_to_file(FILE* i_outfile,const char* i_mime64)
+{
+	if (i_outfile==NULL)
+		return 0;
+	if (i_mime64==NULL)
+		return 0;
+		
+	///	put down the file
+	size_t 	the_exe_len=mimesize(i_mime64);
+	char*	the_exe;
+	the_exe=(char*)malloc(the_exe_len);
+	if (the_exe==NULL)
+	{
+		printf("45953: error in malloc\n");
+		return 0;
+	}
+	if (!mime2binary(i_mime64,(unsigned char *)the_exe,the_exe_len)) 
+	{
+		printf("45960: mime decoder kaputt!\n");
+		return 0;
+	}
+	
+	// redundant, but better be sure
+	struct s_lz4parameter user;
+	user.source		=(unsigned char*)the_exe;
+	user.size		=the_exe_len;
+	user.out		=i_outfile;
+	user.pos		=0;
+	user.extracted	=0;
+	// do the "magic"
+	unlz4_userPtr(getByteFromIn,sendBytesToOut,&user);
+	free(the_exe);
+	return user.extracted;
+}
+
+
+int Jidac::writeresource(string i_filename,bool i_force,const char* i_mime64)
+{
+#if defined(_WIN32)
+
+	printf("\n\n*** WRITING RESOURCE\n");
+	
+	if (i_filename=="")
+	{
+		printf("45987: resource filename empty\n");
+		return 2;
+	}
+
+	string outfile	=prendinomefileebasta(i_filename);
+	string percorso	=extractfilepath(i_filename);
+	outfile=percorso+outfile+".exe";
+
+	printf("percorso %s\n",percorso.c_str());
+	printf("outfile %s\n",outfile.c_str());
+	
+	if (fileexists(outfile))
+		if (!i_force)
+		{
+			printf("46001: output file exists and no -force, abort %s\n",outfile.c_str());
+			return 2;
+		}
+		
+	printf("Working on    : %s\n",outfile.c_str());
+
+	std::wstring widename=utow(outfile.c_str());
+	FILE* outFile=_wfopen(widename.c_str(), L"wb" );
+	if (outFile==NULL)
+	{
+		printf("46011 :CANNOT OPEN outfile %s\n",outfile.c_str());
+		return 2;
+	}
+
+	int the_exe_len=decompress_mime64_to_file(outFile,i_mime64);
+	if (the_exe_len==0)
+	{
+		printf("46018: guru extracting sfx\n");
+		fclose(outFile);
+		exit(0);
+	}
+	if (outFile!=NULL)
+		fclose(outFile);
+#else
+	printf("46024: resource module supported only on Windows\n");
+#endif
+	return 0;
+}
+
+
+
+
+/*
+	Section: verify and command w (chunked extraction)
+	         running on pthread
+*/
+
 
 int Jidac::verify(bool i_readfile) 
 {
@@ -45667,4 +46189,65 @@ int Jidac::removeemptydirs(string i_folder,bool i_kill)
 		return 0;
 	else
 		return 1;
+}
+
+
+/*
+	Section: command q. Backup of Windows C:
+*/
+
+
+int Jidac::windowsc()
+{
+	printf("*** (KIND OF) WINDOWS C: BACKUP  ***\n");
+#ifndef _WIN32
+	printf("46173: Windows C: backup works... on Windows\n");
+	return 2;
+#else
+
+	if (archive=="")
+	{
+		printf("45757: need an archive (.zpaq)\n");
+		return 2;
+	}
+	
+	if (!isadmin())
+	{
+		printf("\n46178: you need admin rights, quit\n");
+		return 2;
+	}
+			
+			
+	if (tofiles.size()!=0)
+		printf("46041: -to ignored\n");
+	if (files.size()!=0)
+		printf("46042: files ignored (try to copy all C:)\n");
+
+	tofiles.clear();
+	tofiles.push_back("c:/");
+	files.clear();
+	files.push_back("c:/");
+
+	notfiles.push_back("c:/franzsnap/pagefile.sys");
+	notfiles.push_back("c:/franzsnap/swapfile.sys");
+	notfiles.push_back("c:/franzsnap/System Volume Information/*");
+	printf("Excluding ALWAYS pagefile.sys, swapfile.sys, Sytem Volume Information\n");
+	
+	
+	if (!flagforcewindows)
+	{
+		notfiles.push_back("c:/franzsnap/windows/*");
+		notfiles.push_back("c:/franzsnap/$RECYCLE.BIN/*");
+
+		string tempdir=g_gettempdirectory();
+		myreplaceall(tempdir,"\\","/");
+		tempdir+="*";
+		if (flagdebug)
+			printf("TEMP |%s|\n",tempdir.c_str());
+		notfiles.push_back(tempdir);
+		printf("Excluding        c:\\windows, TEMP, RECYCLE.BIN, bypass with -forcewindows\n");
+	}
+	flagvss=true;
+	return add();
+#endif
 }

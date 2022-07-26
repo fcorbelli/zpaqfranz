@@ -1,3 +1,63 @@
+### 26-07-2022: 55.6
+### Support for HW accelerated SHA1 instructions (Windows 64)  
+_Thanks to Igor Pavlov  (7-Zip's author) I introduce a new EXE: **zpaqfranzhw.exe** with the new switch **-hw**  to use (if any) CPU's HW SHA1 instructions.  
+Not very "Intel friendly" (only a few Intel models), but more common in the AMD field: the Ryzen processors implement them (AFAIK) since 2017
+The difference in overall performance is modest.  
+However, if you have a Ryzen CPU (like me) ... just try and DO NOT forget the **-hw** :)_
+
+![ryzen cpu](http://www.francocorbelli.it/ryzen.jpg)
+
+### More advanced errors (Windows)
+_Filesystems error (access denied etc) are now kept (on Windows) and written briefly (-verbose) or in detail (-debug) after **add()**_ 
+_In case of error zpaqfranz try to get filesystem's attributes, very helpful for debug (aka: send me!)_
+_In this example it's very clear "why"_
+**-verbose**
+```
+File errors report
+Error 00000032 #        1 |sharing violation        |
+```
+**-debug**
+```
+File errors report
+Error 00000032 #        1 |sharing violation        |
+c:/pagefile.sys>>
+00000026 ARCHIVE;HIDDEN;SYSTEM;
+```
+
+### Refactored help
+_The "no command" is now this (a bit tighter). Of course Windows and Non-Windows are different_  
+![ryzen cpu](http://www.francocorbelli.it/nocommand.jpg)  
+_The "help on help" (can be asked by zpaqfranz /?    zpaqfranz h    zpaqfranz -h etc) is *more concise, but more readable*_  
+![ryzen cpu](http://www.francocorbelli.it/command.jpg)
+
+
+### Commands "kind of C: backup" g/q refined a bit
+Default exclusions are:
+- c:\windows
+- RECYCLE BIN
+- %TEMP%
+- ADS
+- .zfs
+- pagefile.sys
+- swapfile.sys
+- System Volume Information
+- WindowsApps (maybe)
+
+_Switches_
+**-frugal**  
+_Exclude program files and program files x86_
+
+**-forcewindows**
+_Takes C:\WINDOWS, $RECYCLE.BIN, %TEMP%, ADS and .zfs_
+
+**-all**
+_All EXCEPT pagefile, swapfile, system volume information, WindowsApps_
+
+
+### Starting of reparsepoint support
+_Windows have a LOT of strange files (for example in WindowsApps folder), work in progress..._
+
+
 ### 20-07-2022: 55.4
 ### Command q (paQQa) on Windows: archive ("fake backup") of drive C
 _The new command archive (a large part) of the C: drive, excluding, by default, the swap files, system volume information, and the Windows folder  

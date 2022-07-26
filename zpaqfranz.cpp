@@ -7,9 +7,10 @@
 
 ///////// I had to reluctantly move parts of the comments and some times even delete them, 
 ///////// I apologize with the authors, it's not a foolish attempt to take over their jobs
+///////// but a LASAGNA-code style (spaghetti on steroids)
 
 
-#define ZPAQ_VERSION "55.4-experimental"
+#define ZPAQ_VERSION "55.6-experimental"
 
 #if defined(_WIN64)
 #define ZSFX_VERSION "SFX64 v55.1,"
@@ -22,6 +23,7 @@
 #if (!defined(_WIN32)) && (!defined(_WIN64))
 #define ZSFX_VERSION ""
 #endif
+
 
 /*
                          __                     
@@ -84,6 +86,7 @@ As far as I know this is allowed by the licenses.
 - The Whirlpool algorithm was developed by Paulo S. L. M. Barreto and Vincent Rijmen
 - Nilsimsa implementation by Sepehr Laal
 - Thanks for testing on various Unixes to https://github.com/dertuxmalwieder
+- JFLarvoire for usefun (yes, usefun) informations https://github.com/JFLarvoire/SysToolsLib/blob/master/C/MsvcLibX/src/readlink.c
 
  
 FreeBSD port, quick and dirty to get a /usr/local/bin/zpaqfranz
@@ -111,7 +114,13 @@ DEFINEs
 -DHWBLAKE3 blake3_windows_gnu.S		// On Win64 enable HW accelerated BLAKE3 (with assembly)
 -Dunix 								// Compile on "something different from Windows"
 -DSOLARIS        					// Solaris is similar, but not equal, to BSD Unix
+-DHWSHA1							// On Win64 enable HW SHA1 (-flaghw)
 
+-DEBUG								// Old 7.15
+-NOJIT								// Old 7.15, not x86 CPU
+
+HIDDEN GEMS
+If the executable is named "dir" act (just about) like Windows' dir
 
 WARNINGS
 Some strange warning with some compilers 
@@ -124,7 +133,7 @@ Original bug
 https://gcc.gnu.org/bugzilla/show_bug.cgi?id=96963
 
 
-Please note: on Windows there is an embedded SFX module
+Please note: on Windows there are embedded SFXs modules
 
 Targets
 ```
@@ -137,6 +146,9 @@ g++ -O3  zpaqfranz.cpp -o zpaqfranz -pthread -static
 Windows 64 (g++, Hardware Blake3 implementation)
 In this case, of course, linking the .S file is mandatory
 g++ -O3 -DHWBLAKE3 blake3_windows_gnu.S zpaqfranz.cpp -o zpaqfranz -pthread -static
+
+Windows 64 (g++, Hardware Blake3 implementation PLUS HW SHA1)
+g++ -O3 -DHWBLAKE3 -DHWSHA1 blake3_windows_gnu.s zpaqfranz.cpp sha1ugo.obj -o zpaqfranzhw -pthread -static
 
 Windows 32 (g++ 7.3.0 64 bit)
 c:\mingw32\bin\g++ -m32 -O3 zpaqfranz.cpp -o zpaqfranz32 -pthread -static
@@ -220,6 +232,7 @@ zpaqfranz:
 install: zpaqfranz
         install -m 0755 -d $(DESTDIR)$(BINDIR)
         install -m 0755 zpaqfranz $(DESTDIR)$(BINDIR)
+		install -m 0755 zpaqfranz $(DESTDIR)$(BINDIR)/dir
         
 clean:
         rm -f zpaqfranz
@@ -227,6 +240,7 @@ clean:
 check: zpaqfranz
         ./zpaqfranz a ./archive.zpaq *  -xxh3 -test -verify
         rm ./archive.zpaq 
+		
 */
 
 
@@ -311,6 +325,364 @@ check: zpaqfranz
 
 #endif
 
+#ifdef HWSHA1
+/*
+Hardware-accelerated calc of SHA-1
+
+
+This is a "piece" of 7-zip by Igor Pavlov
+(I am sure you know)
+
+No really useful, just for fun (!)
+NO CPU capability checks, straight -hw switch
+Why? Because I use AMD 5950X 
+
+
+C:\zpaqfranz>zpaqfranzhw b -sha1
+zpaqfranz v55.6g-experimental (HW BLAKE3,SHA1), SFX64 v55.1, compiled Jul 25 2022
+(...)
+       SHA-1:   951.61 MB/s (done     4.65 GB)
+
+C:\zpaqfranz>zpaqfranzhw b -sha1 -hw
+zpaqfranz v55.6g-experimental (HW BLAKE3,SHA1), SFX64 v55.1, compiled Jul 25 2022
+(...)
+       SHA-1:     1.86 GB/s (done     9.29 GB)
+
+
+You will need to link the .obj and use the -DHWSHA1
+
+https://github.com/nidud/asmc
+asmc64.exe sha1ugo.asm 
+g++ -O3 -s  zpaqfranz.cpp -o zpaqfranz blake3_windows_gnu.s sha1ugo.obj 
+
+In fact does not change very much against original SHA-1 implementation:
+about two time faster (on AMD Ryzen) BUT higher latency
+
+Short version:  not worth the effort for the GA release
+*/
+
+#define MY_ALIGN(n) __attribute__ ((aligned(n)))
+#define MY_NO_INLINE __attribute__((noinline))
+#define MY_FAST_CALL
+
+typedef unsigned char 			Byte;
+typedef short 					Int16;
+typedef int 					Int32;
+typedef long long int 			Int64;
+typedef unsigned short 			UInt16;
+typedef unsigned int 			UInt32;
+typedef unsigned long long int 	UInt64;
+typedef int 					BoolInt;
+
+
+#define SHA1_NUM_BLOCK_WORDS  16
+#define SHA1_NUM_DIGEST_WORDS  5
+#define SHA1_BLOCK_SIZE   (SHA1_NUM_BLOCK_WORDS * 4)
+#define SHA1_DIGEST_SIZE  (SHA1_NUM_DIGEST_WORDS * 4)
+typedef void (MY_FAST_CALL *SHA1_FUNC_UPDATE_BLOCKS)(UInt32 state[5], const Byte *data, size_t numBlocks);
+
+typedef struct
+{
+  SHA1_FUNC_UPDATE_BLOCKS func_UpdateBlocks;
+  UInt64 count;
+  UInt64 __pad_2[2];
+  UInt32 state[SHA1_NUM_DIGEST_WORDS];
+  UInt32 __pad_3[3];
+  Byte buffer[SHA1_BLOCK_SIZE];
+} CSha1;
+
+void Sha1Prepare(bool i_flaghardware=false);
+
+void Sha1_InitState(CSha1 *p);
+void Sha1_Init(CSha1 *p);
+void Sha1_Update(CSha1 *p, const Byte *data, size_t size);
+void Sha1_Final			(CSha1 *p, Byte *digest);
+void Sha1_PrepareBlock(const CSha1 *p, Byte *block, unsigned size);
+void Sha1_GetBlockDigest(const CSha1 *p, const Byte *data, Byte *destDigest);
+
+void MY_FAST_CALL Sha1_UpdateBlocks(UInt32 state[5], const Byte *data, size_t numBlocks);
+
+extern "C" void MY_FAST_CALL Sha1_UpdateBlocks_HW(UInt32 state[5], const Byte *data, size_t numBlocks);
+
+static SHA1_FUNC_UPDATE_BLOCKS g_FUNC_UPDATE_BLOCKS = Sha1_UpdateBlocks;
+static SHA1_FUNC_UPDATE_BLOCKS g_FUNC_UPDATE_BLOCKS_HW;
+
+#define rotlFixed(x, n) (((x) << (n)) | ((x) >> (32 - (n))))
+#define rotrFixed(x, n) (((x) >> (n)) | ((x) << (32 - (n))))
+
+#define STEP_PRE  20
+#define STEP_MAIN 20
+#define kNumW 16
+#define w(i) W[(i)&15]
+
+#define w0(i) (W[i] = GetBe32(data + (size_t)(i) * 4))
+#define w1(i) (w(i) = rotlFixed(w((size_t)(i)-3) ^ w((size_t)(i)-8) ^ w((size_t)(i)-14) ^ w((size_t)(i)-16), 1))
+
+#define sha1_f0(x,y,z)  ( 0x5a827999 + (z^(x&(y^z))) )
+#define sha1_f1(x,y,z)  ( 0x6ed9eba1 + (x^y^z) )
+#define sha1_f2(x,y,z)  ( 0x8f1bbcdc + ((x&y)|(z&(x|y))) )
+#define sha1_f3(x,y,z)  ( 0xca62c1d6 + (x^y^z) )
+
+#define T5(a,b,c,d,e, fx, ww) \
+    e += fx(b,c,d) + ww + rotlFixed(a, 5); \
+    b = rotlFixed(b, 30); \
+
+#define M5(i, fx, wx0, wx1) \
+    T5 ( a,b,c,d,e, fx, wx0((i)  ) ); \
+    T5 ( e,a,b,c,d, fx, wx1((i)+1) ); \
+    T5 ( d,e,a,b,c, fx, wx1((i)+2) ); \
+    T5 ( c,d,e,a,b, fx, wx1((i)+3) ); \
+    T5 ( b,c,d,e,a, fx, wx1((i)+4) ); \
+
+#define R5(i, fx, wx) \
+    M5 ( i, fx, wx, wx) \
+
+
+#if STEP_PRE > 5
+
+  #define R20_START \
+    R5 (  0, sha1_f0, w0); \
+    R5 (  5, sha1_f0, w0); \
+    R5 ( 10, sha1_f0, w0); \
+    M5 ( 15, sha1_f0, w0, w1); \
+  
+  #elif STEP_PRE == 5
+  
+  #define R20_START \
+    { size_t i; for (i = 0; i < 15; i += STEP_PRE) \
+      { R5(i, sha1_f0, w0); } } \
+    M5 ( 15, sha1_f0, w0, w1); \
+
+#else
+
+  #if STEP_PRE == 1
+    #define R_PRE R1
+  #elif STEP_PRE == 2
+    #define R_PRE R2
+  #elif STEP_PRE == 4
+    #define R_PRE R4
+  #endif
+
+  #define R20_START \
+    { size_t i; for (i = 0; i < 16; i += STEP_PRE) \
+      { R_PRE(i, sha1_f0, w0); } } \
+    R4 ( 16, sha1_f0, w1); \
+
+#endif
+
+#if STEP_MAIN > 5
+
+  #define R20(ii, fx) \
+    R5 ( (ii)     , fx, w1); \
+    R5 ( (ii) + 5 , fx, w1); \
+    R5 ( (ii) + 10, fx, w1); \
+    R5 ( (ii) + 15, fx, w1); \
+
+#else
+
+  #if STEP_MAIN == 1
+    #define R_MAIN R1
+  #elif STEP_MAIN == 2
+    #define R_MAIN R2
+  #elif STEP_MAIN == 4
+    #define R_MAIN R4
+  #elif STEP_MAIN == 5
+    #define R_MAIN R5
+  #endif
+
+  #define R20(ii, fx)  \
+    { size_t i; for (i = (ii); i < (ii) + 20; i += STEP_MAIN) \
+      { R_MAIN(i, fx, w1); } } \
+
+#endif
+
+
+#define SetUi32(p, v) { *(UInt32 *)(void *)(p) = (v); }
+#define GetBe32(p) ( \
+    ((UInt32)((const Byte *)(p))[0] << 24) | \
+    ((UInt32)((const Byte *)(p))[1] << 16) | \
+    ((UInt32)((const Byte *)(p))[2] <<  8) | \
+             ((const Byte *)(p))[3] )
+#define SetBe32(p, v) { Byte *_ppp_ = (Byte *)(p); UInt32 _vvv_ = (v); \
+    _ppp_[0] = (Byte)(_vvv_ >> 24); \
+    _ppp_[1] = (Byte)(_vvv_ >> 16); \
+    _ppp_[2] = (Byte)(_vvv_ >> 8); \
+    _ppp_[3] = (Byte)_vvv_; }
+
+
+void Sha1_InitState(CSha1 *p)
+{
+	p->count = 0;
+	p->state[0] = 0x67452301;
+	p->state[1] = 0xEFCDAB89;
+	p->state[2] = 0x98BADCFE;
+	p->state[3] = 0x10325476;
+	p->state[4] = 0xC3D2E1F0;
+}
+
+void Sha1_Init(CSha1 *p)
+{
+	p->func_UpdateBlocks =     g_FUNC_UPDATE_BLOCKS;
+	Sha1_InitState(p);
+}
+
+
+MY_NO_INLINE
+void MY_FAST_CALL Sha1_UpdateBlocks(UInt32 state[5], const Byte *data, size_t numBlocks)
+{
+	UInt32 a, b, c, d, e;
+	UInt32 W[kNumW];
+	// if (numBlocks != 0x1264378347) return;
+	if (numBlocks==0)
+		return;
+
+	a = state[0];
+	b = state[1];
+	c = state[2];
+	d = state[3];
+	e = state[4];
+
+	do
+	{
+		#if STEP_PRE < 5 || STEP_MAIN < 5
+		UInt32 tmp;
+		#endif
+
+		R20_START
+		R20(20, sha1_f1);
+		R20(40, sha1_f2);
+		R20(60, sha1_f3);
+
+		a += state[0];
+		b += state[1];
+		c += state[2];
+		d += state[3];
+		e += state[4];
+
+		state[0] = a;
+		state[1] = b;
+		state[2] = c;
+		state[3] = d;
+		state[4] = e;
+
+		data += 64;
+	}
+	while (--numBlocks);
+}
+
+void Sha1_Update(CSha1 *p, const Byte *data, size_t size)
+{
+	if (size==0)
+		return;
+
+	unsigned pos = (unsigned)p->count & 0x3F;
+	unsigned num;
+
+	p->count += size;
+
+	num=64-pos;
+	if (num > size)
+	{
+		memcpy(p->buffer + pos, data, size);
+		return;
+	}
+
+	if (pos != 0)
+	{
+		size -= num;
+		memcpy(p->buffer + pos, data, num);
+		data += num;
+		p->func_UpdateBlocks(p->state, p->buffer, 1);
+	}
+
+	size_t numBlocks = size >> 6;
+	p->func_UpdateBlocks(p->state, data, numBlocks);
+	size &= 0x3F;
+	if (size==0)
+	  return;
+	data += (numBlocks << 6);
+	memcpy(p->buffer, data, size);
+}
+
+
+void Sha1_Final(CSha1 *p, Byte *digest)
+{
+	unsigned pos = (unsigned)p->count & 0x3F;
+  
+	p->buffer[pos++] = 0x80;
+
+	if (pos > (64 - 8))
+	{
+		while (pos != 64) 
+			p->buffer[pos++]=0; 
+		// memset(&p->buf.buffer[pos], 0, 64 - pos);
+		p->func_UpdateBlocks(p->state, p->buffer, 1);
+		pos = 0;
+	}
+
+	memset(&p->buffer[pos], 0, (64 - 8) - pos);
+  
+	UInt64 numBits = (p->count << 3);
+    SetBe32(p->buffer + 64 - 8, (UInt32)(numBits >> 32));
+    SetBe32(p->buffer + 64 - 4, (UInt32)(numBits));
+ 
+	p->func_UpdateBlocks(p->state, p->buffer, 1);
+
+	SetBe32(digest,      p->state[0]);
+	SetBe32(digest + 4,  p->state[1]);
+	SetBe32(digest + 8,  p->state[2]);
+	SetBe32(digest + 12, p->state[3]);
+	SetBe32(digest + 16, p->state[4]);
+	Sha1_InitState(p);
+}
+
+
+void Sha1_PrepareBlock(const CSha1 *p, Byte *block, unsigned size)
+{
+	const UInt64 numBits = (p->count + size) << 3;
+	SetBe32(&((UInt32 *)(void *)block)[SHA1_NUM_BLOCK_WORDS - 2], (UInt32)(numBits >> 32));
+	SetBe32(&((UInt32 *)(void *)block)[SHA1_NUM_BLOCK_WORDS - 1], (UInt32)(numBits));
+	// SetBe32((UInt32 *)(block + size), 0x80000000);
+	SetUi32((UInt32 *)(void *)(block + size), 0x80);
+	size += 4;
+	while (size != (SHA1_NUM_BLOCK_WORDS - 2) * 4)
+	{
+		*((UInt32 *)(void *)(block + size)) = 0;
+		size += 4;
+	}
+}
+
+void Sha1_GetBlockDigest(const CSha1 *p, const Byte *data, Byte *destDigest)
+{
+	MY_ALIGN (16)
+	UInt32 st[SHA1_NUM_DIGEST_WORDS];
+
+	st[0] = p->state[0];
+	st[1] = p->state[1];
+	st[2] = p->state[2];
+	st[3] = p->state[3];
+	st[4] = p->state[4];
+
+	p->func_UpdateBlocks(st, data, 1);
+
+	SetBe32(destDigest + 0    , st[0]);
+	SetBe32(destDigest + 1 * 4, st[1]);
+	SetBe32(destDigest + 2 * 4, st[2]);
+	SetBe32(destDigest + 3 * 4, st[3]);
+	SetBe32(destDigest + 4 * 4, st[4]);
+}
+
+
+void Sha1Prepare(bool i_flaghardware)
+{
+	SHA1_FUNC_UPDATE_BLOCKS f, f_hw;
+	f = Sha1_UpdateBlocks;
+	if (i_flaghardware)
+		f = f_hw = Sha1_UpdateBlocks_HW;
+	g_FUNC_UPDATE_BLOCKS    = f;
+	g_FUNC_UPDATE_BLOCKS_HW = f_hw;
+}
+#endif  // HWSHA1
 /*
 	Section: libzpaq
 */
@@ -407,25 +779,166 @@ void Array<T>::resize(size_t sz, int ex) {
 
 //////////////////////////// SHA1 ////////////////////////////
 
-// For computing SHA-1 checksums
-class SHA1 {
+// SHA1 code, see http://en.wikipedia.org/wiki/SHA-1
+
+
+
+#define SHA1CHUNK 64
+class SHA1 
+{
 public:
 	void put(int c);
-
-  void write(const char* buf, int64_t n); // hash buf[0..n-1]
-  double size() const {return len/8;}     // size in bytes
-  uint64_t usize() const {return len/8;}  // size in bytes
-  const char* result();  // get hash and reset
-  SHA1() {init();}
+	void write(const char* buf, int64_t n); // hash buf[0..n-1]
+	double size() const {return len/8;}     // size in bytes
+	uint64_t usize() const {return len/8;}  // size in bytes
+	const char* result();  // get hash and reset
+	SHA1() {init();}
 private:
-  void init();      // reset, but don't clear hbuf
-  U64 len;          // length in bits
-  U32 h[5];         // hash state
-  U32 w[16];        // input buffer
-  char hbuf[20];    // result
-  void process();   // hash 1 block
-	
+#ifdef HWSHA1
+	int				bufpos;				// 7-Zip SHA1 is rather different from
+	CSha1			myhasher;			// the original 7.15. So I put an input buffer
+	unsigned char 	w_hw[SHA1CHUNK];	// Slower, in fact, but it works
+#endif
+	U32 w[16];        // input buffer
+	U64 len;          // length in bits
+	U32 h[5];         // hash state
+	char hbuf[20];    // result
+	void process();   // hash 1 block
+	void init();      // reset, but don't clear hbuf
 };
+// Start a new hash
+
+#ifdef HWSHA1
+/// This "thing" seems weird, and not very optimized
+/// Must be a "plug in" replacment
+void SHA1::init() 
+{
+	len=0;
+	bufpos=0;
+	Sha1_Init(&myhasher);
+}
+void SHA1::put(int c) 
+{ 	
+	w_hw[bufpos++]=c;
+	if (bufpos==SHA1CHUNK)
+	{
+		Sha1_Update(&myhasher,(const Byte*)w_hw,SHA1CHUNK);
+		bufpos=0;
+	}
+	len+=8;
+}
+// Return old result and start a new hash
+const char* SHA1::result() 
+{
+	Sha1_Update(&myhasher,(const Byte*)w_hw,bufpos);
+	Sha1_Final(&myhasher,(Byte*)hbuf);
+	init();
+	return hbuf;
+}
+// Hash buf[0..n-1]
+void SHA1::write(const char* buf, int64_t n) 
+{
+	Sha1_Update(&myhasher,(const Byte*)buf,n);
+	len+=n*8;
+}
+
+// Hash 1 block of 64 bytes
+void SHA1::process() 
+{
+}
+
+#else
+
+///	zpaq 7.15 use a very, very, very good implementation of SHA1,
+///	but full of very dirty tricks
+
+
+void SHA1::init() 
+{
+	len=0;
+	memset(w, 0, sizeof(w));
+	h[0]=0x67452301;
+	h[1]=0xEFCDAB89;
+	h[2]=0x98BADCFE;
+	h[3]=0x10325476;
+	h[4]=0xC3D2E1F0;
+}
+
+
+void SHA1::put(int c) 
+{ 	
+	U32& r=w[U32(len)>>5&15];
+	r=(r<<8)|(c&255);
+    len+=8;
+	if ((U32(len)&511)==0)
+		process();
+}
+// Return old result and start a new hash
+const char* SHA1::result() 
+{
+	// pad and append length
+	const U64 s=len;
+	put(0x80);
+	while ((len&511)!=448)
+	put(0);
+	put(s>>56);
+	put(s>>48);
+	put(s>>40);
+	put(s>>32);
+	put(s>>24);
+	put(s>>16);
+	put(s>>8);
+	put(s);
+	// copy h to hbuf
+	for (unsigned int i=0; i<5; ++i) 
+	{
+		hbuf[4*i]=h[i]>>24;
+		hbuf[4*i+1]=h[i]>>16;
+		hbuf[4*i+2]=h[i]>>8;
+		hbuf[4*i+3]=h[i];
+	}
+	init();
+	return hbuf;
+	
+}
+
+// Hash buf[0..n-1]
+void SHA1::write(const char* buf, int64_t n) 
+{
+  const unsigned char* p=(const unsigned char*) buf;
+  for (; n>0 && (U32(len)&511)!=0; --n) put(*p++);
+  for (; n>=64; n-=64) {
+    for (unsigned int i=0; i<16; ++i)
+      w[i]=p[0]<<24|p[1]<<16|p[2]<<8|p[3], p+=4;
+    len+=512;
+	process();
+  }
+  for (; n>0; --n) put(*p++);
+}
+
+// Hash 1 block of 64 bytes
+void SHA1::process() 
+{
+  U32 a=h[0], b=h[1], c=h[2], d=h[3], e=h[4];
+  static const U32 k[4]={0x5A827999, 0x6ED9EBA1, 0x8F1BBCDC, 0xCA62C1D6};
+  #define f(a,b,c,d,e,i) \
+    if (i>=16) \
+      w[(i)&15]^=w[(i-3)&15]^w[(i-8)&15]^w[(i-14)&15], \
+      w[(i)&15]=w[(i)&15]<<1|w[(i)&15]>>31; \
+    e+=(a<<5|a>>27)+k[(i)/20]+w[(i)&15] \
+      +((i)%40>=20 ? b^c^d : i>=40 ? (b&c)|(d&(b|c)) : d^(b&(c^d))); \
+    b=b<<30|b>>2;
+  #define r(i) f(a,b,c,d,e,i) f(e,a,b,c,d,i+1) f(d,e,a,b,c,i+2) \
+               f(c,d,e,a,b,i+3) f(b,c,d,e,a,i+4)
+  r(0)  r(5)  r(10) r(15) r(20) r(25) r(30) r(35)
+  r(40) r(45) r(50) r(55) r(60) r(65) r(70) r(75)
+  #undef f
+  #undef r
+  h[0]+=a; h[1]+=b; h[2]+=c; h[3]+=d; h[4]+=e;
+}
+
+#endif
+
 
 //////////////////////////// SHA256 //////////////////////////
 
@@ -980,13 +1493,6 @@ void compress(Reader* in, Writer* out, const char* method,
 void compressBlock(StringBuffer* in, Writer* out, const char* method,
      const char* filename=0, const char* comment=0, bool dosha1=true);
 
-}  // namespace libzpaq
-
-
-
-
-
-namespace libzpaq {
 
 // Read 16 bit little-endian number
 int toU16(const char* p) {
@@ -1047,94 +1553,8 @@ void allocx(U8* &p, int &n, int newsize) {
 #endif
 }
 
-//////////////////////////// SHA1 ////////////////////////////
-
-// SHA1 code, see http://en.wikipedia.org/wiki/SHA-1
-
-// Start a new hash
-void SHA1::init() 
-{
-	len=0;
-	h[0]=0x67452301;
-	h[1]=0xEFCDAB89;
-	h[2]=0x98BADCFE;
-	h[3]=0x10325476;
-	h[4]=0xC3D2E1F0;
-	memset(w, 0, sizeof(w));
-}
 
 
-void SHA1::put(int c) 
-{ 	
-    U32& r=w[U32(len)>>5&15];
-    r=(r<<8)|(c&255);
-    len+=8;
-    if ((U32(len)&511)==0)
-		process();
-}
-// Return old result and start a new hash
-const char* SHA1::result() 
-{
-	// pad and append length
-	const U64 s=len;
-	put(0x80);
-	while ((len&511)!=448)
-	put(0);
-	put(s>>56);
-	put(s>>48);
-	put(s>>40);
-	put(s>>32);
-	put(s>>24);
-	put(s>>16);
-	put(s>>8);
-	put(s);
-
-	// copy h to hbuf
-	for (unsigned int i=0; i<5; ++i) 
-	{
-		hbuf[4*i]=h[i]>>24;
-		hbuf[4*i+1]=h[i]>>16;
-		hbuf[4*i+2]=h[i]>>8;
-		hbuf[4*i+3]=h[i];
-	}
-	init();
-	return hbuf;
-	
-}
-
-// Hash buf[0..n-1]
-void SHA1::write(const char* buf, int64_t n) 
-{
-  const unsigned char* p=(const unsigned char*) buf;
-  for (; n>0 && (U32(len)&511)!=0; --n) put(*p++);
-  for (; n>=64; n-=64) {
-    for (unsigned int i=0; i<16; ++i)
-      w[i]=p[0]<<24|p[1]<<16|p[2]<<8|p[3], p+=4;
-    len+=512;
-	process();
-  }
-  for (; n>0; --n) put(*p++);
-}
-
-// Hash 1 block of 64 bytes
-void SHA1::process() {
-  U32 a=h[0], b=h[1], c=h[2], d=h[3], e=h[4];
-  static const U32 k[4]={0x5A827999, 0x6ED9EBA1, 0x8F1BBCDC, 0xCA62C1D6};
-  #define f(a,b,c,d,e,i) \
-    if (i>=16) \
-      w[(i)&15]^=w[(i-3)&15]^w[(i-8)&15]^w[(i-14)&15], \
-      w[(i)&15]=w[(i)&15]<<1|w[(i)&15]>>31; \
-    e+=(a<<5|a>>27)+k[(i)/20]+w[(i)&15] \
-      +((i)%40>=20 ? b^c^d : i>=40 ? (b&c)|(d&(b|c)) : d^(b&(c^d))); \
-    b=b<<30|b>>2;
-  #define r(i) f(a,b,c,d,e,i) f(e,a,b,c,d,i+1) f(d,e,a,b,c,i+2) \
-               f(c,d,e,a,b,i+3) f(b,c,d,e,a,i+4)
-  r(0)  r(5)  r(10) r(15) r(20) r(25) r(30) r(35)
-  r(40) r(45) r(50) r(55) r(60) r(65) r(70) r(75)
-  #undef f
-  #undef r
-  h[0]+=a; h[1]+=b; h[2]+=c; h[3]+=d; h[4]+=e;
-}
 
 //////////////////////////// SHA256 //////////////////////////
 
@@ -8723,6 +9143,20 @@ struct s_crc32block
 	s_crc32block(): crc32start(0),crc32size(0),crc32(0) {}
 };
 
+
+struct s_error
+{
+	int				counter;
+	string			text;
+	vector<string>	filenames;
+	vector<int32_t>	attrs;
+	s_error(): counter(0) {text="";}
+};
+
+
+typedef map<int,s_error> 	MAPPAERRORS;
+
+
 /// Global variables
 /// not in  for pthread that does not like class and methods
 
@@ -8730,8 +9164,10 @@ pthread_mutex_t g_mylock = PTHREAD_MUTEX_INITIALIZER;
 vector<s_crc32block> 	g_crc32;
 vector<uint64_t> 		g_arraybytescanned;
 vector<uint64_t> 		g_arrayfilescanned;
-string 	vss_shadow="";
-string	vss_letter="";
+MAPPAERRORS g_errors;
+
+char 	command;             			// command 'a', 'x', or 'l'
+string 	g_vss_shadow="";
 string 	g_copy;
 string 	g_freeze;
 string 	g_exec_error;
@@ -8822,6 +9258,7 @@ bool	flagssd;
 bool 	flagtouch;
 bool	flagstat;
 bool	flagfrugal;
+
 
 int 	g_franzotype; 
 string 	g_optional;
@@ -9753,344 +10190,6 @@ std::string SHA3::getHash()
 }
 
 
-/*
-
-Hardware-accelerated calc of SHA-1, 
-with something like
-
-https://github.com/nidud/asmc
-asmc64.exe sha1ugo.asm 
-g++ -O3 -s  zpaqfranz.cpp -o zpaqfranz blake3_windows_gnu.s sha1ugo.obj 
-
-In fact does not change very much against original SHA-1 implementation:
-about two time faster (on AMD Ryzen) BUT higher latency, and do not scale very well
-in multithread
-Short version: for now not worth the effort
-
-
-#define MY_ALIGN(n) __attribute__ ((aligned(n)))
-#define MY_NO_INLINE __attribute__((noinline))
-#define MY_FAST_CALL
-
-typedef unsigned char 			Byte;
-typedef short 					Int16;
-typedef int 					Int32;
-typedef long long int 			Int64;
-typedef unsigned short 			UInt16;
-typedef unsigned int 			UInt32;
-typedef unsigned long long int 	UInt64;
-typedef int 					BoolInt;
-
-
-#define SHA1_NUM_BLOCK_WORDS  16
-#define SHA1_NUM_DIGEST_WORDS  5
-#define SHA1_BLOCK_SIZE   (SHA1_NUM_BLOCK_WORDS * 4)
-#define SHA1_DIGEST_SIZE  (SHA1_NUM_DIGEST_WORDS * 4)
-typedef void (MY_FAST_CALL *SHA1_FUNC_UPDATE_BLOCKS)(UInt32 state[5], const Byte *data, size_t numBlocks);
-
-typedef struct
-{
-  SHA1_FUNC_UPDATE_BLOCKS func_UpdateBlocks;
-  UInt64 count;
-  UInt64 __pad_2[2];
-  UInt32 state[SHA1_NUM_DIGEST_WORDS];
-  UInt32 __pad_3[3];
-  Byte buffer[SHA1_BLOCK_SIZE];
-} CSha1;
-
-void Sha1Prepare(bool i_flaghardware=false);
-
-void Sha1_InitState(CSha1 *p);
-void Sha1_Init(CSha1 *p);
-void Sha1_Update(CSha1 *p, const Byte *data, size_t size);
-void Sha1_Final			(CSha1 *p, Byte *digest);
-void Sha1_PrepareBlock(const CSha1 *p, Byte *block, unsigned size);
-void Sha1_GetBlockDigest(const CSha1 *p, const Byte *data, Byte *destDigest);
-
-void MY_FAST_CALL Sha1_UpdateBlocks(UInt32 state[5], const Byte *data, size_t numBlocks);
-
-extern "C" void MY_FAST_CALL Sha1_UpdateBlocks_HW(UInt32 state[5], const Byte *data, size_t numBlocks);
-
-static SHA1_FUNC_UPDATE_BLOCKS g_FUNC_UPDATE_BLOCKS = Sha1_UpdateBlocks;
-static SHA1_FUNC_UPDATE_BLOCKS g_FUNC_UPDATE_BLOCKS_HW;
-
-#define rotlFixed(x, n) (((x) << (n)) | ((x) >> (32 - (n))))
-#define rotrFixed(x, n) (((x) >> (n)) | ((x) << (32 - (n))))
-
-#define STEP_PRE  20
-#define STEP_MAIN 20
-#define kNumW 16
-#define w(i) W[(i)&15]
-
-#define w0(i) (W[i] = GetBe32(data + (size_t)(i) * 4))
-#define w1(i) (w(i) = rotlFixed(w((size_t)(i)-3) ^ w((size_t)(i)-8) ^ w((size_t)(i)-14) ^ w((size_t)(i)-16), 1))
-
-#define sha1_f0(x,y,z)  ( 0x5a827999 + (z^(x&(y^z))) )
-#define sha1_f1(x,y,z)  ( 0x6ed9eba1 + (x^y^z) )
-#define sha1_f2(x,y,z)  ( 0x8f1bbcdc + ((x&y)|(z&(x|y))) )
-#define sha1_f3(x,y,z)  ( 0xca62c1d6 + (x^y^z) )
-
-#define T5(a,b,c,d,e, fx, ww) \
-    e += fx(b,c,d) + ww + rotlFixed(a, 5); \
-    b = rotlFixed(b, 30); \
-
-#define M5(i, fx, wx0, wx1) \
-    T5 ( a,b,c,d,e, fx, wx0((i)  ) ); \
-    T5 ( e,a,b,c,d, fx, wx1((i)+1) ); \
-    T5 ( d,e,a,b,c, fx, wx1((i)+2) ); \
-    T5 ( c,d,e,a,b, fx, wx1((i)+3) ); \
-    T5 ( b,c,d,e,a, fx, wx1((i)+4) ); \
-
-#define R5(i, fx, wx) \
-    M5 ( i, fx, wx, wx) \
-
-
-#if STEP_PRE > 5
-
-  #define R20_START \
-    R5 (  0, sha1_f0, w0); \
-    R5 (  5, sha1_f0, w0); \
-    R5 ( 10, sha1_f0, w0); \
-    M5 ( 15, sha1_f0, w0, w1); \
-  
-  #elif STEP_PRE == 5
-  
-  #define R20_START \
-    { size_t i; for (i = 0; i < 15; i += STEP_PRE) \
-      { R5(i, sha1_f0, w0); } } \
-    M5 ( 15, sha1_f0, w0, w1); \
-
-#else
-
-  #if STEP_PRE == 1
-    #define R_PRE R1
-  #elif STEP_PRE == 2
-    #define R_PRE R2
-  #elif STEP_PRE == 4
-    #define R_PRE R4
-  #endif
-
-  #define R20_START \
-    { size_t i; for (i = 0; i < 16; i += STEP_PRE) \
-      { R_PRE(i, sha1_f0, w0); } } \
-    R4 ( 16, sha1_f0, w1); \
-
-#endif
-
-#if STEP_MAIN > 5
-
-  #define R20(ii, fx) \
-    R5 ( (ii)     , fx, w1); \
-    R5 ( (ii) + 5 , fx, w1); \
-    R5 ( (ii) + 10, fx, w1); \
-    R5 ( (ii) + 15, fx, w1); \
-
-#else
-
-  #if STEP_MAIN == 1
-    #define R_MAIN R1
-  #elif STEP_MAIN == 2
-    #define R_MAIN R2
-  #elif STEP_MAIN == 4
-    #define R_MAIN R4
-  #elif STEP_MAIN == 5
-    #define R_MAIN R5
-  #endif
-
-  #define R20(ii, fx)  \
-    { size_t i; for (i = (ii); i < (ii) + 20; i += STEP_MAIN) \
-      { R_MAIN(i, fx, w1); } } \
-
-#endif
-
-
-#define SetUi32(p, v) { *(UInt32 *)(void *)(p) = (v); }
-#define GetBe32(p) ( \
-    ((UInt32)((const Byte *)(p))[0] << 24) | \
-    ((UInt32)((const Byte *)(p))[1] << 16) | \
-    ((UInt32)((const Byte *)(p))[2] <<  8) | \
-             ((const Byte *)(p))[3] )
-#define SetBe32(p, v) { Byte *_ppp_ = (Byte *)(p); UInt32 _vvv_ = (v); \
-    _ppp_[0] = (Byte)(_vvv_ >> 24); \
-    _ppp_[1] = (Byte)(_vvv_ >> 16); \
-    _ppp_[2] = (Byte)(_vvv_ >> 8); \
-    _ppp_[3] = (Byte)_vvv_; }
-
-
-void Sha1_InitState(CSha1 *p)
-{
-	p->count = 0;
-	p->state[0] = 0x67452301;
-	p->state[1] = 0xEFCDAB89;
-	p->state[2] = 0x98BADCFE;
-	p->state[3] = 0x10325476;
-	p->state[4] = 0xC3D2E1F0;
-}
-
-void Sha1_Init(CSha1 *p)
-{
-	p->func_UpdateBlocks =     g_FUNC_UPDATE_BLOCKS;
-	Sha1_InitState(p);
-}
-
-
-MY_NO_INLINE
-void MY_FAST_CALL Sha1_UpdateBlocks(UInt32 state[5], const Byte *data, size_t numBlocks)
-{
-	UInt32 a, b, c, d, e;
-	UInt32 W[kNumW];
-	// if (numBlocks != 0x1264378347) return;
-	if (numBlocks==0)
-		return;
-
-	a = state[0];
-	b = state[1];
-	c = state[2];
-	d = state[3];
-	e = state[4];
-
-	do
-	{
-		#if STEP_PRE < 5 || STEP_MAIN < 5
-		UInt32 tmp;
-		#endif
-
-		R20_START
-		R20(20, sha1_f1);
-		R20(40, sha1_f2);
-		R20(60, sha1_f3);
-
-		a += state[0];
-		b += state[1];
-		c += state[2];
-		d += state[3];
-		e += state[4];
-
-		state[0] = a;
-		state[1] = b;
-		state[2] = c;
-		state[3] = d;
-		state[4] = e;
-
-		data += 64;
-	}
-	while (--numBlocks);
-}
-
-void Sha1_Update(CSha1 *p, const Byte *data, size_t size)
-{
-	if (size==0)
-		return;
-
-	unsigned pos = (unsigned)p->count & 0x3F;
-	unsigned num;
-
-	p->count += size;
-
-	num=64-pos;
-	if (num > size)
-	{
-		memcpy(p->buffer + pos, data, size);
-		return;
-	}
-
-	if (pos != 0)
-	{
-		size -= num;
-		memcpy(p->buffer + pos, data, num);
-		data += num;
-		p->func_UpdateBlocks(p->state, p->buffer, 1);
-	}
-
-	size_t numBlocks = size >> 6;
-	p->func_UpdateBlocks(p->state, data, numBlocks);
-	size &= 0x3F;
-	if (size==0)
-	  return;
-	data += (numBlocks << 6);
-	memcpy(p->buffer, data, size);
-}
-
-
-void Sha1_Final(CSha1 *p, Byte *digest)
-{
-	unsigned pos = (unsigned)p->count & 0x3F;
-  
-	p->buffer[pos++] = 0x80;
-
-	if (pos > (64 - 8))
-	{
-		while (pos != 64) 
-			p->buffer[pos++]=0; 
-		// memset(&p->buf.buffer[pos], 0, 64 - pos);
-		p->func_UpdateBlocks(p->state, p->buffer, 1);
-		pos = 0;
-	}
-
-	memset(&p->buffer[pos], 0, (64 - 8) - pos);
-  
-	UInt64 numBits = (p->count << 3);
-    SetBe32(p->buffer + 64 - 8, (UInt32)(numBits >> 32));
-    SetBe32(p->buffer + 64 - 4, (UInt32)(numBits));
- 
-	p->func_UpdateBlocks(p->state, p->buffer, 1);
-
-	SetBe32(digest,      p->state[0]);
-	SetBe32(digest + 4,  p->state[1]);
-	SetBe32(digest + 8,  p->state[2]);
-	SetBe32(digest + 12, p->state[3]);
-	SetBe32(digest + 16, p->state[4]);
-	Sha1_InitState(p);
-}
-
-
-void Sha1_PrepareBlock(const CSha1 *p, Byte *block, unsigned size)
-{
-	const UInt64 numBits = (p->count + size) << 3;
-	SetBe32(&((UInt32 *)(void *)block)[SHA1_NUM_BLOCK_WORDS - 2], (UInt32)(numBits >> 32));
-	SetBe32(&((UInt32 *)(void *)block)[SHA1_NUM_BLOCK_WORDS - 1], (UInt32)(numBits));
-	// SetBe32((UInt32 *)(block + size), 0x80000000);
-	SetUi32((UInt32 *)(void *)(block + size), 0x80);
-	size += 4;
-	while (size != (SHA1_NUM_BLOCK_WORDS - 2) * 4)
-	{
-		*((UInt32 *)(void *)(block + size)) = 0;
-		size += 4;
-	}
-}
-
-void Sha1_GetBlockDigest(const CSha1 *p, const Byte *data, Byte *destDigest)
-{
-	MY_ALIGN (16)
-	UInt32 st[SHA1_NUM_DIGEST_WORDS];
-
-	st[0] = p->state[0];
-	st[1] = p->state[1];
-	st[2] = p->state[2];
-	st[3] = p->state[3];
-	st[4] = p->state[4];
-
-	p->func_UpdateBlocks(st, data, 1);
-
-	SetBe32(destDigest + 0    , st[0]);
-	SetBe32(destDigest + 1 * 4, st[1]);
-	SetBe32(destDigest + 2 * 4, st[2]);
-	SetBe32(destDigest + 3 * 4, st[3]);
-	SetBe32(destDigest + 4 * 4, st[4]);
-}
-
-
-void Sha1Prepare(bool i_flaghardware)
-{
-	SHA1_FUNC_UPDATE_BLOCKS f, f_hw;
-	f = Sha1_UpdateBlocks;
-	if (i_flaghardware)
-		f = f_hw = Sha1_UpdateBlocks_HW;
-	g_FUNC_UPDATE_BLOCKS    = f;
-	g_FUNC_UPDATE_BLOCKS_HW = f_hw;
-}
-
-*/
 
 
 
@@ -19675,7 +19774,7 @@ FILE* freadopen(const char* i_filename)
 #endif
 	if (myfp==NULL)
 	{
-		if (flagverbose)
+		if (flagdebug)
 		{
 			printf( "\nfreadopen cannot open:");
 			printUTF8(i_filename);
@@ -20455,7 +20554,7 @@ int64_t getfreespace(string i_path)
 
 #ifdef unix
 // Print last error message
-void printerr(const char* i_where,const char* filename) 
+void printerr(const char* i_where,const char* filename,int32_t i_fileattr) 
 {
 	string lasterror=i_where;
 	string lasterror2=filename;
@@ -20466,63 +20565,176 @@ void printerr(const char* i_where,const char* filename)
 #else
 
 
-// Print last error message
-void printerr(const char* i_where,const char* filename) 
+string decodewinattribute(int32_t i_attribute)
 {
-	string lasterror=i_where;
-	fflush(stdout);
-	int err=GetLastError();
-	
-	if (!flagdebug)
-		if (flagvss)
-			if (err==ERROR_ACCESS_DENIED)
-				return;
+	string risultato="";
+	if (i_attribute & FILE_ATTRIBUTE_ARCHIVE)
+		risultato+="ARCHIVE;";
 		
+	if (i_attribute & FILE_ATTRIBUTE_COMPRESSED)
+		risultato+="COMPRESSED;";
 	
-	fprintf(stderr,"\n");
-	printUTF8(filename, stderr);
-  
-  if (err==ERROR_FILE_NOT_FOUND)
-    g_exec_text=": error file not found";
-  else if (err==ERROR_PATH_NOT_FOUND)
-  {
-	g_exec_text=": error path not found";
-	if (filename)
-		if (strlen(filename)>255)
-		{
-			char buffer[10];
-			sprintf(buffer,"%08d",(int)strlen(filename));
-			string lunghezza=buffer;
-			g_exec_text+=" : maybe length "+lunghezza+" >255?";
-			g_255++;
-		}
-  }
-  else if (err==ERROR_ACCESS_DENIED)
-    g_exec_text=": error access denied";
-  else if (err==ERROR_SHARING_VIOLATION)
-    g_exec_text=": error sharing violation";
-  else if (err==ERROR_BAD_PATHNAME)
-    g_exec_text=": error bad pathname";
-  else if (err==ERROR_INVALID_NAME)
-    g_exec_text=": error invalid name";
-  else if (err==ERROR_NETNAME_DELETED)
-      g_exec_text=": error network name no longer available";
-  else if (err==ERROR_ALREADY_EXISTS)
-      g_exec_text=": cannot write file already exists";
-  else if (err==1920)
-      g_exec_text=": ERROR_CANT_ACCESS_FILE";
-  else
-  {
+	if (i_attribute & FILE_ATTRIBUTE_DEVICE)
+		risultato+="DEVICE;";
+
+	if (i_attribute & FILE_ATTRIBUTE_DIRECTORY)
+		risultato+="DIRECTORY;";
+	
+	if (i_attribute & FILE_ATTRIBUTE_ENCRYPTED)
+		risultato+="ENCRYPTED;";
+
+	if (i_attribute & FILE_ATTRIBUTE_HIDDEN)
+		risultato+="HIDDEN;";
+		
+	if (i_attribute & 32768)
+		risultato+="INTEGRITY_STREAM;";
+
+	if (i_attribute & FILE_ATTRIBUTE_NORMAL)
+		risultato+="NORMAL;";
+	
+	if (i_attribute & FILE_ATTRIBUTE_NOT_CONTENT_INDEXED)
+		risultato+="NOT_CONTENT_INDEXED;";
+
+	if (i_attribute & 131072)
+		risultato+="NO_SCRUB_DATA;";
+
+	if (i_attribute & FILE_ATTRIBUTE_OFFLINE)
+		risultato+="OFFLINE;";
+
+	if (i_attribute & FILE_ATTRIBUTE_READONLY)
+		risultato+="READONY;";
+
+	if (i_attribute & 4194304 )
+		risultato+="RECALL_ON_DATA_ACCESS;";
+	
+	if (i_attribute & 262144 )
+		risultato+="RECALL_ON_OPEN;";
+
+	if (i_attribute & FILE_ATTRIBUTE_REPARSE_POINT)
+		risultato+="REPARSE_POINT;";
+
+	if (i_attribute & FILE_ATTRIBUTE_SPARSE_FILE)
+		risultato+="SPARSE_FILE;";
+	
+	if (i_attribute & FILE_ATTRIBUTE_SYSTEM)
+		risultato+="SYSTEM;";
+		
+	if (i_attribute & FILE_ATTRIBUTE_TEMPORARY)
+		risultato+="TEMPORARY;";
+	
+	if (i_attribute & FILE_ATTRIBUTE_VIRTUAL)
+		risultato+="VIRTUAL;";
+	return risultato;
+	
+}
+
+string	decodewinerror(int	i_error,const char* i_filename)
+{
+	string risultato="";
+	
 	char buffer[100];
-	sprintf(buffer,": Windows error # %d\n",err);
 	
-  g_exec_text=buffer;
-  }
-	fprintf(stderr, g_exec_text.c_str());
-	fprintf(stderr,"\n");
-	g_exec_text=filename+g_exec_text;
+	if (i_error==ERROR_PATH_NOT_FOUND)
+	{
+		risultato="path not found";
+		if (i_filename)
+			if (strlen(i_filename)>255)
+			{
+				sprintf(buffer,"%08d",(int)strlen(i_filename));
+				string lunghezza=buffer;
+				risultato+=" : maybe length "+lunghezza+" >255?";
+				g_255++;
+			}
+	}
+	else if (i_error==ERROR_FILE_NOT_FOUND)
+		risultato="file not found";
+	else if (i_error==ERROR_ACCESS_DENIED)
+		risultato="access denied";
+	else if (i_error==ERROR_SHARING_VIOLATION)
+		risultato="sharing violation";
+	else if (i_error==ERROR_BAD_PATHNAME)
+		risultato="bad pathname";
+	else if (i_error==ERROR_INVALID_NAME)
+		risultato="invalid name";
+	else if (i_error==ERROR_NETNAME_DELETED)
+		risultato="network name KO";
+	else if (i_error==ERROR_ALREADY_EXISTS)
+		risultato="file already exists";
+	else if (i_error==1920)
+		risultato="ERROR_CANT_ACCESS_FILE";
+	else
+	{
+		sprintf(buffer,"Windows error # %d\n",i_error);
+		risultato=buffer;
+	}
+	if (risultato!="")
+		while (risultato.size()<25)
+				risultato+=" ";
+	return risultato;
 	
-///	if (!flaglongpath)
+}
+
+void	enumerateerrors()
+{
+	if (g_errors.size()==0)
+	{
+		printf("20650: no file errors tracked\n");
+		return;
+	}
+	printf("\nFile errors report\n");
+	for (MAPPAERRORS::iterator p=g_errors.begin(); p!=g_errors.end(); p++)
+	{
+		printf("Error %08d # %8s |%s| \n",p->first,migliaia(p->second.counter),decodewinerror(p->first,NULL).c_str());
+		if (flagdebug)
+		{
+			for (unsigned int i=0;i<p->second.filenames.size();i++)
+			{
+				printUTF8(p->second.filenames[i].c_str());
+				printf(">>\n");
+				printf("%08X %s\n",p->second.attrs[i],decodewinattribute(p->second.attrs[i]).c_str());
+			}
+			printbar('-');
+		}
+	}
+}
+// Print last error message
+void printerr(const char* i_where,const char* filename,int32_t i_fileattr) 
+{
+	int err=GetLastError();
+							
+	MAPPAERRORS::iterator a=g_errors.find(err);
+	if (a!=g_errors.end())
+	{
+		a->second.counter++;
+		if (filename)
+		{
+			a->second.filenames.push_back(filename);
+			a->second.attrs.push_back(i_fileattr);
+		}
+	}
+	else
+	{
+		s_error myblock;
+		myblock.counter=1;
+		if (filename)
+		{
+			myblock.filenames.push_back(filename);
+			myblock.attrs.push_back(i_fileattr);
+		}
+		g_errors.insert(std::pair<int,s_error>(err,myblock));
+	}
+
+	
+	string swhere=i_where;
+	
+	g_exec_text=swhere+": "+decodewinerror(err,filename);
+	printf("\n%s ",g_exec_text.c_str());
+	printUTF8(filename);
+	printf("\n");
+	
+	g_exec_text=g_exec_text+" "+filename;
+	
+	if (filename)
 	{
 		uint64_t spazio=getfreespace(filename);
 		if (spazio<16384)
@@ -20539,8 +20751,9 @@ void printerr(const char* i_where,const char* filename)
 #endif
 
 // Print file open error and throw exception
-void ioerr(const char* msg) {
-  printerr("11896",msg);
+void ioerr(const char* msg) 
+{
+  printerr("11896",msg,0);
   throw std::runtime_error(msg);
 }
 
@@ -20578,6 +20791,13 @@ FP fopen(const char* filename, MODE mode)
   if (mode==RB || mode==RBPLUS) disp=OPEN_EXISTING;
   DWORD share=FILE_SHARE_READ;
   if (mode==RB) share|=FILE_SHARE_WRITE|FILE_SHARE_DELETE;
+
+///	kludge: we are doing a "C:" backup, bypass ACLS
+    
+	if (command=='q')
+		return CreateFile(utow(filename).c_str(), access, share,
+                    NULL, disp, FILE_FLAG_BACKUP_SEMANTICS, NULL);
+	
   return CreateFile(utow(filename).c_str(), access, share,
                     NULL, disp, FILE_ATTRIBUTE_NORMAL, NULL);
 }
@@ -20717,7 +20937,7 @@ bool getfileinfo(string i_filename,int64_t& o_size,int64_t& o_date,int64_t& o_at
   
 	HANDLE h=FindFirstFile(utow(t.c_str()).c_str(), &ffd);
 	if (h==INVALID_HANDLE_VALUE && GetLastError()!=ERROR_FILE_NOT_FOUND && GetLastError()!=ERROR_PATH_NOT_FOUND)
-		printerr("29617",t.c_str());
+		printerr("29617",t.c_str(),0);
 	
 	if (h!=INVALID_HANDLE_VALUE) 
 	{
@@ -23380,7 +23600,6 @@ typedef BOOL (WINAPI* GetFinalPathNameByHandleW_t)(HANDLE, LPWSTR,DWORD,DWORD);
 GetFinalPathNameByHandleW_t getFinalPathNameByHandleW=0;
 #endif
 
-char command;             			// command 'a', 'x', or 'l'
 
 class CompressJob;
 
@@ -23394,8 +23613,11 @@ public:
 	friend 	ThreadReturn decompressThread(void* arg);
 	friend 	ThreadReturn decompressthreadramdisk(void* arg);
 	friend 	struct ExtractJob;
+	void usageall		(string i_command); // verbose help
+	
 private:
 
+	string				fullcommandline;
 	vector<string> 		results;     	// warning and errors
 	
 	string	zpaqfranzexename;
@@ -23501,13 +23723,13 @@ private:
 	int benchmark();
 	int	zfs(string command);
 	int windowsc();						// Backup (kind of) drive C:
+	int adminrun();						// Run windowsc()
 	
 	void load_help_map	();					// not in the constructor!
+	void helphelp		();        			// help
 	void usage			();        			// help
-	void usagefull		(string i_command); // verbose help
 	void examples		(string i_command);	// some examples
-	void differences	();					// differences from 7.15
-
+	
 	void join_split();
 	
 	
@@ -27209,11 +27431,12 @@ void help_q(bool i_usage,bool i_example)
 {
 	if (i_usage)
 	{
-		moreprint("CMD   q (zpaq backup of C: (kind of)");
-		moreprint("+ :               Try to archive as much C: as possible (no pagefile.sys and sysvol)");
+		moreprint("CMD   q Windows archiving of C: (*** admin rights mandatory ***)");
+		moreprint("+ :               Take as much C: as possible (no Windows and swapfile)");
 		moreprint("+ :               This is NOT a full backup (aka: bare-metal restorable)");
-		moreprint("+ :               But a VERSIONED backup of data, NOT software");
-		moreprint("+ : -forcewindows INCLUDE Windows, TEMP and $RECYCLE BIN and ADS (default: NO)");
+		moreprint("+ : -forcewindows INCLUDE Windows folder");
+		moreprint("+ : -frugal       Exclude Windows, %programfiles% and %temp%");
+		moreprint("+ : -all          Get everything (except swapfile)");
 		moreprint("+ :               Just about all switches of add() (-key -m -only ...)");
 		moreprint("+ :               except files selection (always C:/*) and -to");
 		moreprint("+ :     ****      The folder c:/franzsnap MUST NOT EXIST");
@@ -27222,9 +27445,27 @@ void help_q(bool i_usage,bool i_example)
 	if (i_usage && i_example) moreprint("    Examples:");
 	if (i_example)
 	{
-		moreprint("Copy 'large part' of C:              q z:\\1.zpaq");
-		moreprint("Copy C++ files:                      q z:\\1.zpaq -only *.c* -only *.h*");
-		
+		moreprint("NOT C:\\WINDOWS, NOT RECYCLE BIN      q z:\\1.zpaq");
+		moreprint("Everything                           q z:\\1.zpaq -all");
+		moreprint("Everything NOT C:\\DROPBOX            q z:\\1.zpaq -all -not c:/franzsnap/dropbox");
+		moreprint("NOT C:\\WINDOWS, NOT %programs%       q z:\\1.zpaq -frugal");
+		moreprint("Only C/C++ files and header          q z:\\1.zpaq -only *.c* -only *.h*");
+	}
+}
+void help_g(bool i_usage,bool i_example)
+{
+	if (i_usage)
+	{
+		moreprint("CMD   g Run a q command (Windows archiving of C:)");
+		moreprint("+ :               If the user is in the administrator group, BUT");
+		moreprint("+ :               the current shell does not have admin rights, you");
+		moreprint("+ :               the current shell does not have admin rights, you");
+	}
+	if (i_usage && i_example) moreprint("    Examples:");
+	if (i_example)
+	{
+		moreprint("NOT C:\\WINDOWS, NOT RECYCLE BIN      g z:\\1.zpaq");
+		moreprint("... same as command q, but with g");
 	}
 }
 
@@ -27865,24 +28106,6 @@ void help_voodooswitches(bool i_usage,bool i_example)
 	moreprint("  t8,24: MIX2 last 2 models, N1 context bits, learning rate N2");
 }
 
-void Jidac::differences() 
-{
-	moreprint("");
-	moreprint("This is a fork of the mighty ZPAQ 7.15 (http://mattmahoney.net/dc/zpaq.html).");
-	moreprint("");
-	moreprint("Doveryay, no proveryay; trust, but verify; fidarsi e' bene, non fidarsi e' meglio.");
-	moreprint("zpaqfranz store by default CRC-32 and XXHASH64 of every file, with optionally");
-	moreprint("SHA-1 | SHA-256 | SHA-3 (256) | MD5 | BLAKE3 | XXH3 (128) for higher level of check.");
-	moreprint("Full backward compatibility: zpaq 7.15 can list, extract etc zpaqfranz's archives.");
-	moreprint("Pack everything needed for a storage manager: dir compare, hashing, deduplication, fix");
-	moreprint("utf-8 filenames, SFX on Win, wide compatibility with all charsets, support for ZFS...");
-	moreprint("...and much, much more...");
-	moreprint("");
-	moreprint("Works on      : Win, Linux, FreeBSD, OpenBSD, Solaris, MacOS");
-	moreprint("Sourceforge   : https://sourceforge.net/projects/zpaqfranz");
-	moreprint("Author's home : https://www.francocorbelli.com");
-}
-
 void Jidac::load_help_map()
 {
 	/// a map is not so good, but we want to keep the executable small
@@ -27892,6 +28115,7 @@ void Jidac::load_help_map()
 	help_map.insert(std::pair<string, voidhelpfunction>("password",help_setpassword));
 	help_map.insert(std::pair<string, voidhelpfunction>("dirsize",help_dirsize));
 
+	///help_map.insert(std::pair<string, voidhelpfunction>("h",help_b));
 	help_map.insert(std::pair<string, voidhelpfunction>("b",help_b));
 	help_map.insert(std::pair<string, voidhelpfunction>("n",help_n));
 	help_map.insert(std::pair<string, voidhelpfunction>("f",help_f));
@@ -27900,6 +28124,7 @@ void Jidac::load_help_map()
 	help_map.insert(std::pair<string, voidhelpfunction>("sfx",help_sfx));
 	help_map.insert(std::pair<string, voidhelpfunction>("rd",help_rd));
 	help_map.insert(std::pair<string, voidhelpfunction>("q",help_q));
+	help_map.insert(std::pair<string, voidhelpfunction>("g",help_q));
 #endif
 	help_map.insert(std::pair<string, voidhelpfunction>("l",help_l));
 	help_map.insert(std::pair<string, voidhelpfunction>("i",help_i));
@@ -27933,6 +28158,7 @@ void Jidac::load_help_map()
 //// default help
 void Jidac::usage() 
 {
+	/*
 	load_help_map();
 	string 	lista		="h parm: ";
 	string	listaswitch	="        ";
@@ -27941,45 +28167,80 @@ void Jidac::usage()
 	
 	for (MAPPAHELP::iterator p=switches_map.begin(); p!=switches_map.end(); ++p) 
 		listaswitch+=p->first+" ";
-		
+		*/
 	moreprint("Usage: zpaqfranz command archive[.zpaq] files|directory... -switches...");
 ///	moreprint("Use double quote for multi-part archive name => \"test_?????.zpaq\"");
+	moreprint("             h: **** Help on Help ****|  With great power comes great  ...  help!");
 	moreprint("             a: Append files          |          t: Test (integrity)");
 	moreprint("             x: Extract versions      |          l: List files");
 	moreprint("             v: Verify on filesystem  |          i: Info (show versions)");
 #if defined(_WIN32)
-	moreprint("           sfx: Create SFX (Windows)  |         rd: Remove 'hard to delete' folders");
+	moreprint("           sfx: Create SFX (Windows)  |         rd: Remove  'highlander'  folders");
 #endif
 ///	moreprint("                                   Various");
-	moreprint(" c d0 d1 d2...: Compare d0 to d1,d2...| s d0 d1 d2: Cumulative size of d0,d1,d2");
-	moreprint(" r d0 d1 d2...: Mirror  d0 in d1...   |       d d0: Deduplicate d0 WITHOUT MERCY");
+	moreprint(" c d0 d1 d2...: Compare d0 to d1,d2.. | s d0 d1 d2: Cumulative size of d0, d1, d2");
+	moreprint(" r d0 d1 d2...: Mirror  d0 in d1...   |       d d0: Deduplicate d0  WITHOUT MERCY");
 	moreprint(" z d0 d1 d2...: Delete empty dirs     |        m X: Merge multipart archive");
-	moreprint("          f d0: Fill (wipe) free space|     utf d0: Detox filenames in d0");
-	moreprint(" sum  d0 d1...: Hashing/deduplication |     dir d0: Win dir (/s /a /os /od)");
-	moreprint(" n d0 -n X    : Keep X files in d0    |          b: Benchmarking");
-	moreprint(" rsync d0 d1  : Purge temporary rsync |cp d0 -to X: Copy files (w/wildcards) to X");
-	moreprint(" trim         : Trim incomplete add() |    dirsize: Get size of archive's folders");
+	moreprint("          f d0: Fill /wipe free space |     utf d0: Detox filenames  in  d0");
+	moreprint("  sum d0 d1...: Hashing/deduplication |     dir d0: Win dir (/s /a /os /od)");
+	moreprint("     n d0 -n X: Keep X files in d0    |          b: CPU benchmarking (-all)");
+	moreprint("   rsync d0 d1: Purge temporary rsync | cp X -to Y: Copy files (w/wildcards) to Y");
+	moreprint("          trim: Trim incomplete add() |    dirsize: Get size of archive's folders");
 #if defined(_WIN32)
-	moreprint(" password     : Add/remove/change pwd | q z:\\pippo: 'kind of' C: backup on z:\\pippo.zpaq (Win)");
+	moreprint("      password: Add/remove/change pwd |   q z:\\foo: VSS-archive C: in z:\\foo.zpaq");
 #else
-	moreprint(" password     : Add/remove/change pwd |");
+	moreprint("      password: Add/remove/change pwd |");
 #endif
 #if defined(unix)
 	moreprint(" zfsadd zfslist zfspurge              =>  zfs-specific commands (typically FreBSD)");
 #endif
-	moreprint("                                Main switches");
-	moreprint("      -all [N]: All versions N digit  |     -key X: Archive password X");
-	moreprint(" -mN -method N: 0..5= faster..better  |     -force: Always overwrite");
-	moreprint("         -test: Test (extract/add)    |      -kill: Allow destructive (dry-run)");
+	moreprint("                                 Main | switches");
+	moreprint("      -all [N]: All versions N digit  |     -key X: Use/set archive password to X");
+	moreprint(" -mN -method N: 0..5= faster..better  |     -force: Always overwrite (extraction)");
+	moreprint("         -test: Test (extract/add)    |      -kill: Allow destructive (NO dryrun)");
 	moreprint("    -to out...: Prefix files to out   |   -until N: Roll back to N'th version");
-	moreprint("Long help -h (parm)     i.e.   zpaqfranz -h a     -examples (parm)    -info: colophon");
-	///moreprint(" -h -? (param): Long help    -examples (param): common examples   -diff: against 7.15");
-	moreprint(lista.c_str());
-	moreprint(listaswitch.c_str());
 }
 
+
+void Jidac::helphelp()
+{
+	load_help_map();
+	string 	lista		="";
+	string	listaswitch	="OR one set of SWITCHES:  ";
+	for (MAPPAHELP::iterator p=help_map.begin(); p!=help_map.end(); ++p) 
+		lista+=p->first+" ";
+	
+	for (MAPPAHELP::iterator p=switches_map.begin(); p!=switches_map.end(); ++p) 
+		listaswitch+=p->first+" ";
+	
+///	moreprint("Fork of zpaq 7.15 by   : www.francocorbelli.com                github.com/fcorbelli");
+///	moreprint("Sourceforge            : sourceforge.net/projects/zpaqfranz");
+  	///moreprint("                     Fork of zpaq 7.15 by Franco Corbelli (2022)");
+	moreprint("");
+	moreprint("zpaq fork that stores by default CRC32+XXHASH64 (SHA-1|SHA-2|SHA-3|MD5|XXH3|BLAKE3)");
+	moreprint("with full backward zpaq 7.15 compatibility. Swiss army knife for disaster managers:");
+	moreprint("comparing,hashing,deduplication,utf-8,empty dirs,SFX,ZFS & VSS support... and more.");
+	moreprint("Doveryay, no proveryay;  trust, but verify; fidarsi e' bene, non fidarsi e' meglio.");
+	moreprint("");
+	moreprint("Runs on                  Win 32/64, Linux, Free/OpenBSD, Solaris, MacOS and others.");
+	moreprint("www.francocorbelli.com   sourceforge.net/projects/zpaqfranz    github.com/fcorbelli");
+	printbar('=');
+	moreprint("Help ALL IN EVERYTHING : zpaqfranz h h                       zpaqfranz /? /?");
+	moreprint("Help     on SOMETHING  : zpaqfranz h   SOMETHING             zpaqfranz /? SOMETHING");
+	moreprint("Help     on SOMETHING  : zpaqfranz -?  SOMETHING             zpaqfranz -h SOMETHING");
+	moreprint("Examples of SOMETHING  : zpaqfranz -he SOMETHING");
+	moreprint("");
+	moreprint("SOMETHING is a COMMAND");
+	printbar('-');
+	moreprint(lista.c_str());
+	printbar('-');
+	moreprint(listaswitch.c_str());
+	printbar('-');
+	
+}	
+
 //// print a lot more
-void Jidac::usagefull(string i_command) 
+void Jidac::usageall(string i_command) 
 {
 	load_help_map();
 	MAPPAHELP::iterator a=help_map.find(i_command);
@@ -28170,8 +28431,11 @@ int Jidac::doCommand(int argc, const char** argv)
 	// Initialize options to default values
 	// Why some variables out of Jidac? Because of pthread: does not like very much C++ objects
 	// quick and dirty.
-  	vss_shadow			="";
-	plainpassword		="";
+	
+	fullcommandline		="";
+  	plainpassword		="";
+	
+	g_vss_shadow		="";
 	g_franzotype		=2; //by default take CRC-32 AND XXHASH64
 	g_sfx				="";
 	g_sfxto				="";
@@ -28199,7 +28463,6 @@ int Jidac::doCommand(int argc, const char** argv)
 	flagbarraon			=false;
 	flagbarraos			=false;
 	flagdebug			=false;
-	flaghw				=false;
 	flagnodedup			=false;
 	flagtar				=false;
 	flagramdisk			=false;
@@ -28251,7 +28514,8 @@ int Jidac::doCommand(int argc, const char** argv)
 	flagmm				=false;
 	flagappend			=false;
 	flagutc				=false;
-	
+	flaghw				=false;
+
 	fragment			=6;
 	minsize				=0;
 	maxsize				=0;
@@ -28275,7 +28539,15 @@ int Jidac::doCommand(int argc, const char** argv)
 	version				=DEFAULT_VERSION;
 	date				=0;
  
+
+	if (argc>1)
+		for (int i=1; i<argc; i++)
+		{
+			string temp=argv[i];
+			fullcommandline+=temp+" ";
+		}
 	
+		
 	if (argc>0)
 	{
 		zpaqfranzexename=argv[0];
@@ -28313,7 +28585,12 @@ int Jidac::doCommand(int argc, const char** argv)
 	if (!flagpakka)
 	{
 #if defined (HWBLAKE3)
+#ifdef HWSHA1
+		moreprint("zpaqfranz v" ZPAQ_VERSION " (HW BLAKE3,SHA1), " ZSFX_VERSION " compiled " __DATE__);
+#else
 		moreprint("zpaqfranz v" ZPAQ_VERSION " (HW BLAKE3), " ZSFX_VERSION " compiled " __DATE__);
+#endif
+
 #else
 		moreprint("zpaqfranz v" ZPAQ_VERSION " archiver, " ZSFX_VERSION " compiled " __DATE__);
 #endif
@@ -28341,11 +28618,13 @@ int Jidac::doCommand(int argc, const char** argv)
 			||
 			(stringcomparei(parametro,"-?"))
 			||
+			(stringcomparei(parametro,"/?"))
+			||
 			(stringcomparei(parametro,"--help"))
 			||
 			(stringcomparei(parametro,"-help")))
 			{
-				usagefull("");
+				helphelp();
 				exit(0);
 			}
 		if ((stringcomparei(parametro,"-he"))
@@ -28359,11 +28638,7 @@ int Jidac::doCommand(int argc, const char** argv)
 				examples("");
 				exit(0);
 			}
-		if (stringcomparei(parametro,"-info"))
-		{
-			differences();
-			exit(0);
-		}
+		
 	}
 	if (argc==3) // only TWO (-examples sha1) 
 	{
@@ -28378,13 +28653,18 @@ int Jidac::doCommand(int argc, const char** argv)
 			||
 			(stringcomparei(parametro,"?"))
 			||
+			(stringcomparei(parametro,"/?"))
+			||
 			(stringcomparei(parametro,"-?"))
 			||
 			(stringcomparei(parametro,"--help"))
 			||
 			(stringcomparei(parametro,"-help")))
 			{
-				usagefull(comando);
+				if (comando=="h") /// zpaqfranz h h 
+					usageall("");
+				else
+					usageall(comando);
 				exit(0);
 			}
 		if ((stringcomparei(parametro,"-he"))
@@ -28493,6 +28773,7 @@ int Jidac::doCommand(int argc, const char** argv)
 		opt=="w"		||
 		opt=="i" 		|| 
 		opt=="q" 		|| 
+		opt=="g" 		|| 
 		opt=="sfx" 		|| 
 		opt=="m"		||
 		opt=="dirsize")
@@ -28803,7 +29084,9 @@ int Jidac::doCommand(int argc, const char** argv)
 		else if (opt=="-verbose") 					flagverbose			=true;
 		else if (opt=="-v") 						flagverbose			=true;
 		else if (opt=="-debug") 					flagdebug			=true;
+#ifdef HWSHA1
 		else if (opt=="-hw") 						flaghw				=true;
+#endif
 		else if (opt=="-nodedup") 					flagnodedup			=true;
 		else if (opt=="-tar") 						flagtar				=true;
 		else if (opt=="-ramdisk") 					flagramdisk			=true;
@@ -29229,15 +29512,15 @@ int Jidac::doCommand(int argc, const char** argv)
 			if (orderby!="")
 				franzparameters+="desc sort ";
 
-/*	
+#ifdef HWSHA1
 		if (flaghw)
 		{
-			franzparameters+="Enable HW acceleration ";
+			franzparameters+="SHA1 HW ";
 			Sha1Prepare(true);
 		}
 		else
 			Sha1Prepare(false);
-*/		
+#endif
 		
 		if (flagcomment)
 			franzparameters+="Use comment (-comment) ";
@@ -29357,7 +29640,7 @@ int Jidac::doCommand(int argc, const char** argv)
 #ifndef unix
 	HMODULE h=GetModuleHandle(TEXT("kernel32.dll"));
 	if (h==NULL) 
-		printerr("14717","GetModuleHandle");
+		printerr("14717","GetModuleHandle",0);
 	else 
 	{
 		findFirstStreamW=(FindFirstStreamW_t)GetProcAddress(h, "FindFirstStreamW");
@@ -29470,6 +29753,9 @@ int Jidac::doCommand(int argc, const char** argv)
 	else if (command=='c') return dircompare(false,false);
 	else if (command=='d') return deduplicate();
 	else if (command=='f') return fillami();
+#ifdef _WIN32
+	else if (command=='g') return adminrun();
+#endif
 	else if (command=='i') return info();
 	else if (command=='k') return kill();
 	else if (command=='l') return list();
@@ -30480,83 +30766,193 @@ std::wstring GetLinkTarget(const char* i_link)
     return std::wstring( buffer.begin(), buffer.end() - 1 );
 }
 */
-#if defined (_WIN32)
-void	decodewinattribute(int32_t i_attribute)
-{
-	string risultato="";
-	if (i_attribute & FILE_ATTRIBUTE_ARCHIVE)
-		risultato+="ARCHIVE;";
-		
-	if (i_attribute & FILE_ATTRIBUTE_COMPRESSED)
-		risultato+="COMPRESSED;";
-	
-	if (i_attribute & FILE_ATTRIBUTE_DEVICE)
-		risultato+="DEVICE;";
-
-	if (i_attribute & FILE_ATTRIBUTE_DIRECTORY)
-		risultato+="DIRECTORY;";
-	
-	if (i_attribute & FILE_ATTRIBUTE_ENCRYPTED)
-		risultato+="ENCRYPTED;";
-
-	if (i_attribute & FILE_ATTRIBUTE_HIDDEN)
-		risultato+="HIDDEN;";
-		
-	if (i_attribute & 32768)
-		risultato+="INTEGRITY_STREAM;";
-
-	if (i_attribute & FILE_ATTRIBUTE_NORMAL)
-		risultato+="NORMAL;";
-	
-	if (i_attribute & FILE_ATTRIBUTE_NOT_CONTENT_INDEXED)
-		risultato+="NOT_CONTENT_INDEXED;";
-
-	if (i_attribute & 131072)
-		risultato+="NO_SCRUB_DATA;";
-
-	if (i_attribute & FILE_ATTRIBUTE_OFFLINE)
-		risultato+="OFFLINE;";
-
-	if (i_attribute & FILE_ATTRIBUTE_READONLY)
-		risultato+="READONY;";
-
-	if (i_attribute & 4194304 )
-		risultato+="RECALL_ON_DATA_ACCESS;";
-	
-	if (i_attribute & 262144 )
-		risultato+="RECALL_ON_OPEN;";
-
-	if (i_attribute & FILE_ATTRIBUTE_REPARSE_POINT)
-		risultato+="REPARSE_POINT;";
-
-	if (i_attribute & FILE_ATTRIBUTE_SPARSE_FILE)
-		risultato+="SPARSE_FILE;";
-	
-	if (i_attribute & FILE_ATTRIBUTE_SYSTEM)
-		risultato+="SYSTEM;";
-		
-	if (i_attribute & FILE_ATTRIBUTE_TEMPORARY)
-		risultato+="TEMPORARY;";
-	
-	if (i_attribute & FILE_ATTRIBUTE_VIRTUAL)
-		risultato+="VIRTUAL;";
-	if (risultato!="")
-		printf("%s\n",risultato.c_str());
-}
-#endif
 /*
 	This is a kludge to get the filesize of a symlinked file on Windows,
 	in a (more or less) "portable" (against compilators) way
 */
 int64_t dim(string i_filename)
 {
+	///printf("k1\n");
     FILE* inFile = freadopen(i_filename.c_str());
-	if (inFile==NULL) 
+	///printf("k2\n");
+    if (inFile==NULL) 
 		return 0;
 	int64_t realsize=prendidimensionehandle(inFile);
 	fclose(inFile);
 	return realsize;
 }		
+
+
+
+#ifdef _WIN32
+int64_t	getwinattributes(string i_filename)
+{
+	WIN32_FIND_DATA ffd;
+    if ( (i_filename.size()>0) && (isdirectory(i_filename)))
+		i_filename+="*";
+	HANDLE h=FindFirstFile(utow(i_filename.c_str()).c_str(), &ffd);
+	if (h!=INVALID_HANDLE_VALUE)
+	{
+		FindClose(h);
+		return ffd.dwFileAttributes;
+	}
+	return 0;
+}
+/// reworked https://github.com/JFLarvoire/SysToolsLib/blob/master/C/MsvcLibX/src/readlink.c
+
+
+typedef struct _REPARSE_READ_BUFFER 
+{
+	DWORD  ReparseTag;
+	WORD   ReparseDataLength;
+	WORD   Reserved;
+	UCHAR  DataBuffer[1];
+} REPARSE_READ_BUFFER, *PREPARSE_READ_BUFFER;
+
+bool getreparsepointW(bool i_flagdebug,const string i_path, char *i_buf, size_t i_bufsize,size_t& o_byteletti,DWORD& o_tag,string& o_type) 
+{
+	o_byteletti	=0;
+	o_tag		=0;
+	o_type		="";
+	printf("REPPAAA\n");
+	return true;
+	wstring wi_path=utow(i_path.c_str());
+	
+	PREPARSE_READ_BUFFER pIoctlBuf;
+
+	DWORD attributi = GetFileAttributesW(wi_path.c_str());
+	if (attributi==INVALID_FILE_ATTRIBUTES) 
+	{
+		printf("37390: failed GetFileAttributesW\n");
+		return false;
+	}
+
+	if (!(attributi & FILE_ATTRIBUTE_REPARSE_POINT)) 
+	{
+		printf("37396: fake file is not a reparse point\n");
+		return false;
+	}
+
+	DWORD flag=FILE_FLAG_OPEN_REPARSE_POINT;
+	if (attributi & FILE_ATTRIBUTE_DIRECTORY) 
+		flag|=FILE_FLAG_BACKUP_SEMANTICS;
+	
+	HANDLE h=CreateFileW(wi_path.c_str(),0,FILE_SHARE_READ | FILE_SHARE_WRITE,NULL,OPEN_EXISTING,flag,NULL);
+
+	if (h==INVALID_HANDLE_VALUE) 
+	{
+		printf("37413: cannot createfile on reparse point\n");
+		return false;
+	}
+
+	DWORD byteletti;
+ 	BOOL fattoio=DeviceIoControl(h,FSCTL_GET_REPARSE_POINT,NULL,0,i_buf,(DWORD)i_bufsize,&byteletti,NULL);
+	CloseHandle(h);
+	if (!fattoio) 
+	{
+		printf("37429: DeviceIoControl kaputt\n");
+		return false;
+	}
+
+	if (byteletti<8) 
+	{
+		printf("37438: something wrong\n");
+		return false;
+	}
+  
+	pIoctlBuf 	= (PREPARSE_READ_BUFFER)i_buf;
+	
+	o_tag		=pIoctlBuf->ReparseTag;
+	o_byteletti	=pIoctlBuf->ReparseDataLength;
+	
+    switch (o_tag) 
+	{
+		case 0x00000000: 	o_type="Reserved0"; break;	
+		case 0x00000001: 	o_type="Reserved1"; break;
+		case 0x00000002: 	o_type="Reserved2"; break;
+		case 0xA0000003: 	o_type="Mount point or junction"; break;
+		case 0xC0000004: 	o_type="Hierarchical Storage Manager"; break;
+		case 0x80000005: 	o_type="Home server drive extender"; break;
+		case 0x80000006: 	o_type="Hierarchical Storage Manager Product #2"; break;
+		case 0x80000007: 	o_type="Single-instance storage filter driver"; break;
+		case 0x80000008: 	o_type="Windows boot Image File"; break;
+		case 0x80000009: 	o_type="Cluster Shared Volume"; break;
+		case 0x8000000A: 	o_type="Distributed File System"; break;
+		case 0x8000000B: 	o_type="Filter manager test harness"; break;
+		case 0xA000000C: 	o_type="Symbolic link"; break;
+		case 0xA0000010: 	o_type="Internet Information Services cache"; break;
+		case 0x80000012: 	o_type="Distributed File System R filter"; break;
+		case 0x80000013: 	o_type="Deduplicated file"; break;
+		case 0x80000014: 	o_type="NFS symbolic link"; break;
+		case 0xC0000014: 	o_type="APPXSTREAM (Not used?)"; break;
+		case 0x80000015: 	o_type="Placeholder for a OneDrive file"; break;
+		case 0x80000016: 	o_type="Dynamic File filter"; break;
+		case 0x80000017: 	o_type="Windows Overlay Filesystem compressed file"; break;
+		case 0x80000018: 	o_type="Windows Container Isolation filter"; break;
+		case 0xA0000019: 	o_type="NPFS server silo named pipe symbolic link into the host silo"; break;
+		case 0x9000001A: 	o_type="Cloud Files filter"; break;
+		case 0x8000001B: 	o_type="Application Execution link"; break;
+		case 0x9000001C: 	o_type="Projected File System VFS filter, ex for git"; break;
+		case 0xA000001D: 	o_type="Linux Sub-System Symbolic Link"; break;
+		case 0x8000001E: 	o_type="Azure File Sync (AFS) filter"; break;
+		case 0xA000001F: 	o_type="Windows Container Isolation filter tombstone"; break;
+		case 0xA0000020: 	o_type="Unhandled Windows Container Isolation filter"; break;
+		case 0xA0000021: 	o_type="One Drive (Not used?)"; break;
+		case 0xA0000022: 	o_type="Projected File System VFS filter tombstone, ex for git"; break;
+		case 0xA0000023: 	o_type="Linux Sub-System Socket"; break;
+		case 0xA0000024: 	o_type="Linux Sub-System FIFO"; break;
+		case 0xA0000025: 	o_type="Linux Sub-System Character Device"; break;
+		case 0xA0000026: 	o_type="Linux Sub-System Block Device"; break;
+		case 0xA0000027: 	o_type="Windows Container Isolation filter Link"; break;
+		default:			o_type="35701: Microsoft strikes back!"; break;
+    }
+	
+	if (!i_flagdebug)
+		return true;
+
+    unsigned int ul;
+    unsigned int u;
+    unsigned int uMax;
+
+	for (ul = 0; ul < (unsigned)(pIoctlBuf->ReparseDataLength); ul += 16) 
+	{
+		printf("%08X ", ul);
+
+		uMax = (unsigned)(pIoctlBuf->ReparseDataLength) - ul;
+		if (uMax > 16) 
+			uMax = 16;
+
+      /* Display the hex dump */
+		for (u=0; u<16; u++) 
+		{
+			if (!(u&3)) 
+				printf(" ");
+			if (u < uMax) 
+				printf("%2.2X ", ((unsigned char *)pIoctlBuf->DataBuffer)[ul + u]);
+			else 
+				printf("   ");
+		}
+
+      /* Display the ASCII characters dump */
+		for (u=0; u<16; u++) 
+		{
+			char c = ((char *)pIoctlBuf->DataBuffer)[ul + u];
+			if (!(u&7)) 
+				printf(" ");
+			if (c < ' ') 
+				c = ' ';
+			if ((unsigned char)c > '\x7F') 
+				c = ' ';
+			printf("%c", c);
+		}
+
+		printf("\n");
+    }
+	return true;
+}
+#endif
+
+
 // Insert external filename (UTF-8 with "/") into dt if selected
 // by files, onlyfiles, and notfiles. If filename
 // is a directory then also insert its contents.
@@ -30654,96 +31050,60 @@ void Jidac::scandir(bool i_checkifselected,DTMap& i_edt,string filename, bool i_
   if (h==INVALID_HANDLE_VALUE
       && GetLastError()!=ERROR_FILE_NOT_FOUND
       && GetLastError()!=ERROR_PATH_NOT_FOUND)
-    printerr("15367",t.c_str());
-  while (h!=INVALID_HANDLE_VALUE) {
+    printerr("15367",t.c_str(),0);
+	while (h!=INVALID_HANDLE_VALUE) 
+	{
 
-    // For each file, get name, date, size, attributes
-    SYSTEMTIME st;
-    int64_t edate=0;
-    if (FileTimeToSystemTime(&ffd.ftLastWriteTime, &st))
-      edate=st.wYear*10000000000LL+st.wMonth*100000000LL+st.wDay*1000000
-            +st.wHour*10000+st.wMinute*100+st.wSecond;
-    int64_t esize=ffd.nFileSizeLow+(int64_t(ffd.nFileSizeHigh)<<32);
-    const int64_t eattr='w'+(int64_t(ffd.dwFileAttributes)<<8);
+		// For each file, get name, date, size, attributes
+		SYSTEMTIME st;
+		int64_t edate=0;
+		if (FileTimeToSystemTime(&ffd.ftLastWriteTime, &st))
+			edate=st.wYear*10000000000LL+st.wMonth*100000000LL+st.wDay*1000000
+				+st.wHour*10000+st.wMinute*100+st.wSecond;
+		int64_t esize=ffd.nFileSizeLow+(int64_t(ffd.nFileSizeHigh)<<32);
+		const int64_t eattr='w'+(int64_t(ffd.dwFileAttributes)<<8);
 	
-    // Ignore links, the names "." and ".." or any unselected file
-    t=wtou(ffd.cFileName);
+		// Ignore links, the names "." and ".." or any unselected file
+		t=wtou(ffd.cFileName);
 	
 		/// Ok this is rather weird, but is Microsoft afterall
-	/// a SYMLINK in a VSS can become rather tricky
-	/// this should (?) get the "real" name of a SYMLINK
-	/// Microsoft documentations sucks big time
-	///string solonome=extractfilename(t);
-///	if (flagvss)
-	if ((ffd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) && !(ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY))
-	///	if (solonome=="java.exe")
-	{
-		string miofilename=path(filename)+t;
-		///printbar('-');
-/*
-		printf("java.exe FATTR %08X RES0 %08X ",(unsigned int)ffd.dwFileAttributes,(unsigned int)ffd.dwReserved0);
-		printUTF8(t.c_str());
-		printf("\n");
-		decodewinattribute(ffd.dwFileAttributes);
-		printf("\n");
-		printf("Cerco nome |%s|\n",miofilename.c_str());
-*/
-		string nuovonome=my_realpath(miofilename);
-///		printf("30517: nuovo nome |%s|\n",nuovonome.c_str());
-
-		if (nuovonome!="")
+		/// a SYMLINK in a VSS can become rather tricky
+		/// this should (?) get the "real" name of a SYMLINK
+		/// Microsoft documentations sucks big time
+		///string solonome=extractfilename(t);
+		if ((ffd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) && !(ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY))
 		{
-			int64_t newsize=dim(nuovonome);
-///			printf("30517: maybe Windows-symlinked file, fake size %s real size %s %s\n",migliaia(esize),migliaia(newsize),nuovonome.c_str());
-			esize=newsize;
-		}
-		/*
-		printf("vss_shad   |%s|\n",vss_shadow.c_str());
-		printf("miofilenam |%s|\n",miofilename.c_str());
-		printf("FIlename   |%s|\n",filename.c_str());
-		printf("t          |%s|\n",t.c_str());
-		printf("nuovo      |%s|\n",nuovonome.c_str());
-		*/
-		string percorso="";
+			string miofilename=path(filename)+t;
+			string nuovonome=my_realpath(miofilename);
+			if (nuovonome!="")
+			{
+				int64_t newsize=dim(nuovonome);
+				esize=newsize;
+			}
+			string percorso="";
 		
-		size_t destra= nuovonome.rfind(t);
-		if (destra!=std::string::npos)
-			percorso=myleft(nuovonome,destra)+"*";
-		///printf("percorso   |%s|\n",percorso.c_str());
-		
-		if (percorso!="")
-			filename=percorso;
-		
-/*		
-		printf("new ilenam |%s|\n",filename.c_str());
-		getcaptcha("y","pause");
-		printbar('-');
-	*/	
+			size_t destra= nuovonome.rfind(t);
+			if (destra!=std::string::npos)
+				percorso=myleft(nuovonome,destra)+"*";
+			if (percorso!="")
+				filename=percorso;
 	}
 	
 /*
-
 	dir /al /s c:\programdata
 NOT_CONTENT_INDEXED
 archive;NOT_CONTENT_INDEXED;REPARSE_POINT
-
-shadowspawn c:\ Q: zpaqfranz a j:\2.zpaq Q:\ -vss
-2420
-A000000C
-3 3 2 2 2 2 2 2 2 2 2 2 1 1 1 1 1 1 1 1 1 1
-1 0 9 8 7 6 5 4 3 2 1 0 9 8 7 6 5 4 3 2 1 0 9 8 7 6 5 4 3 2 1 0
-1 0 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 1 0 0
-31 Microsoft bit
 
 */
 
 	if (flagdebug) // sometimes Windows get very strange attributes
 	{
+		string myfn=path(filename)+t;
 		printf("FATTR %08X RES0 %08X ",(unsigned int)ffd.dwFileAttributes,(unsigned int)ffd.dwReserved0);
-		printUTF8(t.c_str());
+		printUTF8(myfn.c_str());
 		printf("\n");
-		decodewinattribute(ffd.dwFileAttributes);
-		printf("\n");
+		string temp=decodewinattribute(ffd.dwFileAttributes);
+		printf("%s\n",temp.c_str());
 	}
 
    	if (t=="." || t=="..") 
@@ -30761,19 +31121,53 @@ A000000C
 		esize=newsize;
 	}
 		
+	if (ffd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)
+	{
+	/*
+		REPARSE_POINTS are a nightmare
+		For now: just skip
+		char buffer[100000];
+		int bufsize=100000;
+	
+		size_t 	byteletti;
+		DWORD 	tag;
+		string	tipo;
+		string thefile=path(filename)+t;
 
+		if (flagverbose)
+			printf("30908: try to get reparse point %s\n",thefile.c_str());
+		if (getreparsepointW(false,thefile,buffer,bufsize,byteletti,tag,tipo))
+		{
+			if (flagverbose)
+			{
+				printf("30911: Reparse <<%s>>\n",thefile.c_str());
+				printf("30912: TAG %08X LEN %11s |%s|\n",tag,migliaia(byteletti),tipo.c_str());
+			}
+		}
+		else
+		{
+			if (flagverbose)
+				printf("31072: fallito getreparsepointW %s\n",thefile.c_str());
+		}
+		*/
+	}
+	
 	if ((ffd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) && (!(ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)))
 	{
-			/// Houston, we have a strange deduplicated .vhdx file?
-			/// add as by default
-			if (flagverbose)
-				printf("Verbose: found something strange (VHDX?) %s\n",t.c_str());
+		/// Houston, we have a strange deduplicated .vhdx file?
+		/// add as by default
+		if (flagdebug)
+			printf("Verbose: found something strange (VHDX?) %s\n",t.c_str());
 	}
 	else
 	{
 		///	A junction?
 		if ((ffd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) && (ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY))
+		{
+			if (flagdebug)
+				printf("30908: discard REPARSE POINT & DIRECTORY\n");
 			edate=0;  // don't add
+		}
 	}
     
 	string fn=path(filename)+t;
@@ -30810,7 +31204,7 @@ A000000C
 	  }
     }
     if (!FindNextFile(h, &ffd)) {
-      if (GetLastError()!=ERROR_NO_MORE_FILES) printerr("15417",fn.c_str());
+      if (GetLastError()!=ERROR_NO_MORE_FILES) printerr("15417",(fn+fn).c_str(),ffd.dwFileAttributes);
       break;
     }
   }
@@ -30825,22 +31219,15 @@ void Jidac::addfile(bool i_checkifselected,DTMap& i_edt,string filename, int64_t
                     int64_t esize, int64_t eattr) 
 {
 
-///	printf("checcko con size |%s| %20s %s\n",vss_shadow.c_str(),migliaia(esize),filename.c_str());
-		
 	if (i_checkifselected)
-	{
 		if (!isselected(filename.c_str(), false,esize)) 
-		{
-			///printf("Scarto!\n");
 			return;
-		}
-		///printf("Aggiungo!\n");
-	}
 	
-	//	OK, let's handle longpath on VSS
+	//	OK, let's handle longpath on VSS by a kludge
+	//	cook some spaghetti code!
 	if (command=='q')
 		if (filename.size()>250)
-			myreplace(filename,"c:/franzsnap",vss_shadow);
+			myreplace(filename,"c:/franzsnap",g_vss_shadow);
 
 	DT& d=i_edt[filename];
 	d.date=edate;
@@ -31794,7 +32181,7 @@ ThreadReturn decompressThread(void* arg) {
 									bool creazione=CreateDirectory(utow(dafare.c_str()).c_str(), 0);
 									if (!flaglongpath)
 									if (!creazione)
-										printerr("17519",dafare.c_str());
+										printerr("17519",dafare.c_str(),0);
 								}
 								temppercorso=temppercorso.substr(barra+1,temppercorso.length());
 							}
@@ -31821,7 +32208,7 @@ ThreadReturn decompressThread(void* arg) {
 				if (job.outf==FPNULL) 
 				{
 					lock(job.mutex);
-					printerr("17451",filename.c_str());
+					printerr("17451",filename.c_str(),0);
 					release(job.mutex);
 				}
 #ifndef unix
@@ -31829,7 +32216,7 @@ ThreadReturn decompressThread(void* arg) {
                 DWORD br=0;
                 if (!DeviceIoControl(job.outf, FSCTL_SET_SPARSE,
                     NULL, 0, NULL, 0, &br, NULL))  // set sparse attribute
-                  printerr("17459",filename.c_str());
+                  printerr("17459",filename.c_str(),0);
               }
 #endif
             }
@@ -32648,7 +33035,6 @@ int Jidac::info()
 	all=4;
 	return enumeratecomments();
 }
-
 
 
 int Jidac::zpaqdirsize() 
@@ -35109,7 +35495,7 @@ int Jidac::extract()
 										
 										if (outf==FPNULL) 
 										{
-											printerr("18330",outname.c_str());
+											printerr("18330",outname.c_str(),0);
 										}
 									}
 								release(job.mutex);
@@ -36947,9 +37333,151 @@ string windows_get_free_letter()
 #endif
 	return "";
 }
+
+
+#ifdef _WIN32
+HRESULT ModifyPrivilege(
+    IN LPCTSTR szPrivilege,
+    IN BOOL fEnable)
+{
+    HRESULT hr = S_OK;
+    TOKEN_PRIVILEGES NewState;
+    LUID             luid;
+    HANDLE hToken    = NULL;
+
+    // Open the process token for this process.
+    if (!OpenProcessToken(GetCurrentProcess(),
+                          TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY,
+                          &hToken ))
+    {
+        printf("Failed OpenProcessToken\n");
+        return ERROR_FUNCTION_FAILED;
+    }
+
+    // Get the local unique ID for the privilege.
+    if ( !LookupPrivilegeValue( NULL,
+                                szPrivilege,
+                                &luid ))
+    {
+        CloseHandle( hToken );
+        printf("Failed LookupPrivilegeValue\n");
+        return ERROR_FUNCTION_FAILED;
+    }
+
+    // Assign values to the TOKEN_PRIVILEGE structure.
+    NewState.PrivilegeCount = 1;
+    NewState.Privileges[0].Luid = luid;
+    NewState.Privileges[0].Attributes = 
+              (fEnable ? SE_PRIVILEGE_ENABLED : 0);
+
+    // Adjust the token privilege.
+    if (!AdjustTokenPrivileges(hToken,
+                               FALSE,
+                               &NewState,
+                               0,
+                               NULL,
+                               NULL))
+    {
+        printf("Failed AdjustTokenPrivileges\n");
+        hr = ERROR_FUNCTION_FAILED;
+    }
+
+    // Close the handle.
+    CloseHandle(hToken);
+
+    return hr;
+}
+
+
+
+
+/* NTFS reparse point definitions */
+
+/* Constants from http://msdn.microsoft.com/en-us/library/dd541667.aspx */
+/* Some, but not all, of them also defined in recent versions of winnt.h. */
+/* All seem to come from NT DDK's ntifs.h, for installable file system drivers. */
+/* Since the list varies a lot, redefine them one by one as needed */
+/* Bit 31 = Tag owned by Microsoft
+   Bit 30 = Reserved for Microsoft. Must be 0 for non-MS tags.
+   Bit 29 = Surrogate bit. Points to another file of directory.
+   Bit 28 = Directory bit. Any directory with this reparse tag can have children.
+   Bits 16-27: Invalid and must be 0. */
+/* Reparse tags, with the exception of IO_REPARSE_TAG_SYMLINK,
+   are processed on the server and are not processed by a client after transmission over the wire. */
+/* See https://github.com/prsyahmi/GpuRamDrive/blob/master/GpuRamDrive/3rdparty/inc/imdisk/ntumapi.h
+   for a list of non-Microsoft reparse tags */
+
+
+#define REPARSE_READ_BUFFER_HEADER_SIZE (sizeof(REPARSE_READ_BUFFER) - sizeof(UCHAR))
+
+typedef struct _REPARSE_SYMLINK_READ_BUFFER { // For tag IO_REPARSE_TAG_SYMLINK
+  DWORD  ReparseTag;
+  WORD   ReparseDataLength;
+  WORD   Reserved;
+  WORD   SubstituteNameOffset;
+  WORD   SubstituteNameLength;
+  WORD   PrintNameOffset;
+  WORD   PrintNameLength;
+  ULONG  Flags;
+  WCHAR  PathBuffer[1];
+} SYMLINK_READ_BUFFER, *PSYMLINK_READ_BUFFER;
+#define SYMLINK_READ_BUFFER_HEADER_SIZE (sizeof(SYMLINK_READ_BUFFER) - sizeof(WCHAR))
+
+typedef struct _REPARSE_MOUNTPOINT_READ_BUFFER { // For tag IO_REPARSE_TAG_MOUNT_POINT, aka. junctions
+  DWORD  ReparseTag;
+  WORD   ReparseDataLength;
+  WORD   Reserved;
+  WORD   SubstituteNameOffset;
+  WORD   SubstituteNameLength;
+  WORD   PrintNameOffset;
+  WORD   PrintNameLength;
+  WCHAR  PathBuffer[1];
+} MOUNTPOINT_READ_BUFFER, *PMOUNTPOINT_READ_BUFFER;
+#define MOUNTPOINT_READ_BUFFER_HEADER_SIZE (sizeof(MOUNTPOINT_READ_BUFFER) - sizeof(WCHAR))
+
+typedef struct _REPARSE_MOUNTPOINT_WRITE_BUFFER {
+  DWORD  ReparseTag;
+  DWORD  ReparseDataLength;
+  WORD   Reserved;
+  WORD   ReparseTargetLength;
+  WORD   ReparseTargetMaximumLength;
+  WORD   Reserved1;
+  WCHAR  ReparseTarget[1];
+} MOUNTPOINT_WRITE_BUFFER, *PMOUNTPOINT_WRITE_BUFFER;
+#define MOUNTPOINT_WRITE_BUFFER_HEADER_SIZE (sizeof(MOUNTPOINT_WRITE_BUFFER) - sizeof(WCHAR))
+
+// Universal Windows Platform (UWP) Application Execution Links
+// Ref: https://www.tiraniddo.dev/2019/09/overview-of-windows-execution-aliases.html
+typedef struct _REPARSE_APPEXECLINK_READ_BUFFER { // For tag IO_REPARSE_TAG_APPEXECLINK
+  DWORD  ReparseTag;
+  WORD   ReparseDataLength;
+  WORD   Reserved;
+  ULONG  Version;	// Currently version 3
+  WCHAR  StringList[1];	// Multistring (Consecutive strings each ending with a NUL)
+  /* There are normally 4 strings here. Ex:
+	Package ID:	L"Microsoft.WindowsTerminal_8wekyb3d8bbwe"
+	Entry Point:	L"Microsoft.WindowsTerminal_8wekyb3d8bbwe!App"
+	Executable:	L"C:\Program Files\WindowsApps\Microsoft.WindowsTerminal_1.4.3243.0_x64__8wekyb3d8bbwe\wt.exe"
+	Applic. Type:	l"0"	// Integer as ASCII. "0" = Desktop bridge application; Else sandboxed UWP application
+  */     
+} APPEXECLINK_READ_BUFFER, *PAPPEXECLINK_READ_BUFFER;
+
+// LinuX Sub-System (LXSS) Symbolic Links
+typedef struct _REPARSE_LX_SYMLINK_BUFFER {
+  DWORD  ReparseTag;
+  WORD	 ReparseDataLength;
+  WORD	 Reserved;
+  DWORD  FileType; 	// Value is apparently always 2 for symlinks.
+  char   PathBuffer[1];	// POSIX path of symlink. UTF-8. Not \0 terminated.
+} LX_SYMLINK_READ_BUFFER, *PLX_SYMLINK_READ_BUFFER;
+#endif
+
+
+
+
+
 int Jidac::benchmark()
 {
-	
 	int64_t myram=getramdisksize();
 	printf("RAM seems %s\n",migliaia(myram));
 	
@@ -39634,7 +40162,7 @@ void myscandir(uint32_t i_tnumber,DTMap& i_edt,string filename, bool i_recursive
 	
 	HANDLE h=FindFirstFile(utow(t.c_str()).c_str(), &ffd);
 	if (h==INVALID_HANDLE_VALUE && GetLastError()!=ERROR_FILE_NOT_FOUND && GetLastError()!=ERROR_PATH_NOT_FOUND)
-		printerr("29617",t.c_str());
+		printerr("29617",t.c_str(),0);
 
 ///	printf("t22:   %s\n",t.c_str());
 	
@@ -39663,7 +40191,8 @@ void myscandir(uint32_t i_tnumber,DTMap& i_edt,string filename, bool i_recursive
 		if (flagdebug) // sometimes Windows get very strange attributes
 		{
 			printf("%08X MY new t2 %s\n",(unsigned int)ffd.dwFileAttributes,t.c_str());
-			decodewinattribute(ffd.dwFileAttributes);
+			string temp=decodewinattribute(ffd.dwFileAttributes);
+			printf("%s\n",temp.c_str());
 			printf("\n");
 		}
 
@@ -39706,7 +40235,7 @@ void myscandir(uint32_t i_tnumber,DTMap& i_edt,string filename, bool i_recursive
 		if (!FindNextFile(h, &ffd)) 
 		{
 			if (GetLastError()!=ERROR_NO_MORE_FILES) 
-				printerr("29656",fn.c_str());
+				printerr("29656",fn.c_str(),ffd.dwFileAttributes);
 			break;
 		}
 	}
@@ -42233,9 +42762,11 @@ int Jidac::add()
 	if (flagvss)
 	{
 
-#if defined(_WIN32) || defined(_WIN64)
+#if defined(_WIN32)
+///	command q is hardcoded. Why? Because it is so much simplier
+/// the generic switch -vss is just about abandoned
 		if (command=='q')
-		{
+		{			
 			cartellalocale="c:\\franzsnap";
 			if (!flagspace)
 				if (direxists(cartellalocale))
@@ -42253,7 +42784,6 @@ int Jidac::add()
 		for (unsigned i=0; i<files.size(); ++i)
 		{
 			string temp=files[i];
-			///printf("K1 %d |%s|\n",i,temp.c_str());
 			
 			if (temp[1]!=':')
 				error("VSS need X:something as path (missing :)");
@@ -42261,7 +42791,6 @@ int Jidac::add()
 			char currentdrive=toupper(temp[0]);
 			if (!isalpha(currentdrive))
 				error("VSS need X:something as path (X not isalpha)");
-			///printf("K2 |%c|\n",mydrive);
 			
 			if (mydrive)
 			{
@@ -42272,12 +42801,10 @@ int Jidac::add()
 				mydrive=currentdrive;
 		}
 
-		///printf("K3 |%c|\n",mydrive);
-			
 		string	fileoutput	=g_gettempdirectory()+"outputz.txt";
 		string	filebatch	=g_gettempdirectory()+"vsz.bat";
-		fileoutput=nomefileseesistegia(fileoutput);
-		filebatch=nomefileseesistegia(filebatch);
+		fileoutput			=nomefileseesistegia(fileoutput); // this will proliferate batch files, but they are tiny
+		filebatch			=nomefileseesistegia(filebatch);
 		print_datetime();
 		printf("VSS: starting\n");
     
@@ -42289,11 +42816,9 @@ int Jidac::add()
 			if (remove(filebatch.c_str())!=0)
 				error("Highlander vsz.bat");
 		
-		
 		FILE* batch=fopen(filebatch.c_str(), "wb");
 		fprintf(batch,"@echo OFF\n");
 		fprintf(batch,"@wmic shadowcopy delete /nointeractive\n");
-		///fprintf(batch,"@wmic shadowcopy call create Volume=C:\\\n");
 		fprintf(batch,"@wmic shadowcopy call create Volume=%c:\\\n",mydrive);
 		fprintf(batch,"@vssadmin list shadows >%s\n",fileoutput.c_str());
 		fclose(batch);
@@ -42328,29 +42853,17 @@ int Jidac::add()
 
 		string volume="";
 
-		
 		int posstart=globalroot.find("\\\\");
 			
 		if (posstart>0)
 			for (unsigned i=posstart; i<globalroot.length(); ++i)
-				vss_shadow=vss_shadow+globalroot.at(i);
+				g_vss_shadow=g_vss_shadow+globalroot.at(i);
 		if (flagdebug)
-			printf("VSS VOLUME <<<%s>>>\n",vss_shadow.c_str());
-		myreplaceall(vss_shadow,"\\","/");
+			printf("VSS VOLUME <<<%s>>>\n",g_vss_shadow.c_str());
+		myreplaceall(g_vss_shadow,"\\","/");
 		if (flagdebug)
-			printf("VSS SHADOW <<<%s>>>\n",vss_shadow.c_str());
+			printf("VSS SHADOW <<<%s>>>\n",g_vss_shadow.c_str());
 		
-		
-		/*
-		mklink /d c:\fiza \\?\GLOBALROOT\Device\HarddiskVolumeShadowCopy41\
-subst b: z:\fiza
-
-zpaqfranz a z:\bi.zpaq b:\ -to c:\ -only *.cpp
-
-subst b: /d
-rmdir z:\fiza
-*/
-	
 		
 		string	filesubba	=g_gettempdirectory()+"subba.bat";
 		filesubba=nomefileseesistegia(filesubba);
@@ -42361,7 +42874,7 @@ rmdir z:\fiza
 					error("Highlander subba.txt");
 
 		
-		string 	vss_windows_style=vss_shadow;
+		string 	vss_windows_style=g_vss_shadow;
 		myreplaceall(vss_windows_style,"/","\\");
 		
 		FILE* subbatch=fopen(filesubba.c_str(), "wb");
@@ -42383,22 +42896,6 @@ rmdir z:\fiza
 		}
 		
 		
-		
-		
-			
-/*
-		if (files.size()>0)
-		{
-			printf("Files 0 vale |%s|\n",files[0].c_str());
-			string temp=files[0];
-			vss_letter=temp[0];
-			printf("VSS_LETTER |%s|\n",vss_letter.c_str());
-		}
-		searchfrom=vss_shadow;
-		replaceto="c:";
-		
-
-*/
 		if (command!='q')
 		{
 			if (flagdebug)
@@ -42414,7 +42911,7 @@ rmdir z:\fiza
 			{
 				if (flagdebug)
 					printf("PRE  FILES %s\n",files[i].c_str());
-				myreplace(files[i],replaceme,vss_shadow);
+				myreplace(files[i],replaceme,g_vss_shadow);
 				if (flagdebug)
 					printf("POST FILES %s\n",files[i].c_str());
 				if (strstr(files[i].c_str(), "GLOBALROOT")==0)
@@ -42429,6 +42926,11 @@ rmdir z:\fiza
 			myreplaceall(cartellaunix,"\\","/");
 			cartellaunix+="/*";
 			files.push_back(cartellaunix);
+			
+			///printf("dal vss\n");
+			//system( "dir /b /s C:\\Users\\utente\\AppData\\Local\\Microsoft\\WindowsApps" );
+			///printf("moro\n");
+			///exit(0);
 		}
 		if (flagdebug)
 		{
@@ -42606,6 +43108,9 @@ rmdir z:\fiza
   
 	FILE* myoutfile=NULL;
 	string tempfile="";
+
+///	What is a file list? Just about a dir with redirection on a .txt
+/// Why? Because I am paranoid: this is THE file list, dt must be ==
   
 	if (flagfilelist)
 	{
@@ -42646,7 +43151,6 @@ rmdir z:\fiza
   {
 		string filename=rename(p->first);
 		DTMap::iterator a=dt.find(filename);
-
 
 		if (isdirectory(filename))
 			folders++;
@@ -42721,7 +43225,6 @@ rmdir z:\fiza
   if (!flagnosort)
 	std::sort(vf.begin(), vf.end(), compareFilename);
 */
-
 		
 	if (menoenne>0)
 	{
@@ -42732,13 +43235,14 @@ rmdir z:\fiza
 			printf("1 %19s %s %s\n",migliaia(vf[i]->second.size),vf[i]->second.hexhash.c_str(),vf[i]->first.c_str());
 	}
 	
+///	Changin' the order of file, before archiving
 
 	if (orderby.size()>0)
 	{
-		/// ext;size;name;hash;date
+		/// ext;size;name;hash;date;data;nilsimsa;
 		g_theorderby.clear();
 		if (orderby[orderby.size()-1]!=';')
-				orderby+=';';
+			orderby+=';';
 			
 		explode(orderby,';',g_theorderby);
 		if (g_theorderby.size()>0)
@@ -42755,7 +43259,6 @@ rmdir z:\fiza
 					(g_theorderby[i]!="data") 
 					)
 				printf("\n38022: WARNING: discarded orderby |%s|\n",g_theorderby[i].c_str());
-					
 			}
 
 			printf("\nMaking the orderby\n");
@@ -42792,11 +43295,8 @@ rmdir z:\fiza
 						printf("38402: error taking hash %s\n",filename.c_str());
 				}
 			}
-			
-			
 			std::sort(vf.begin(), vf.end(), compareorderby);
-			
-	}
+		}
 	}
 	else
 	{
@@ -42817,8 +43317,8 @@ rmdir z:\fiza
 			printf("2 %19s %s %s\n",migliaia(vf[i]->second.size),vf[i]->second.hexhash.c_str(),vf[i]->first.c_str());
 	}
 	
-	
-	
+
+///	Mmmhh... seems nothing to do. Exit early and quickly
 	if ((total_size==0) && (vf.size()==0))
 	{
 		printf("\nTotal size and file count == zero, quit. Already archived/wrong/inaccessible source ?\n");
@@ -42900,10 +43400,8 @@ rmdir z:\fiza
       FP in=fopen(p->first.c_str(), RB);
 	  
 	  
-	  ///printf("======================================  %s\n",p->first.c_str());
-	  
       if (in==FPNULL) {
-        printerr("16570",p->first.c_str());
+        printerr("16570",p->first.c_str(),0);
         total_size-=p->second.size;
         ++errors;
         continue;
@@ -43008,15 +43506,22 @@ rmdir z:\fiza
       in=fopen(p->first.c_str(), RB);
 	   
 	  
-      if (in==FPNULL) {  // skip if not found
-	  p->second.date=0;
-        total_size-=p->second.size;
-        printerr("16672",p->first.c_str());
-        ++errors;
-        continue;
+      if (in==FPNULL) 
+	  {  // skip if not found
+			p->second.date=0;
+			total_size-=p->second.size;
+///	Houston, we got an error. Try to figure why re-opening the file (on Windows)
+/// Microsoft filesystem is so complex, better some help
+			int64_t attrib=0;
+#ifdef _WIN32
+			attrib=getwinattributes(p->first);
+#endif
+			printerr("16672",p->first.c_str(),attrib);
+			++errors;
+			continue;
       }
-		// get expected filesize
-		if (flagverbose)
+		// get expected filesize. Slow down a bit. But I like very much 
+		///if (flagverbose)
 		{
 			fseeko(in, 0, SEEK_END);
 			p->second.expectedsize=ftello(in);
@@ -43045,6 +43550,9 @@ rmdir z:\fiza
         while (true) {
 			if (bufptr>=buflen) bufptr=0, buflen=fread(buf, 1, BUFSIZE, in);
 	
+	///	zero-length file (-debug -zero -kill)
+	/// or zero-filled file (-debug -zero)
+	
 			if (flagdebug)
 				if (flagzero)
 				{
@@ -43060,7 +43568,8 @@ rmdir z:\fiza
 					{
 						/// check for strange things (corrupted files, lost connection...)
 						p->second.hashedsize+=buflen;
-						
+				
+///	this is why pre-get filesize: % of big files into global %				
 						///if (flagverbose)
 						if (p->second.expectedsize>100000000)
 						{
@@ -43078,7 +43587,7 @@ rmdir z:\fiza
 							}
 						}
 						
-						//printf("CUUUUU   %s\n",migliaia(p->second.size));
+	///	compute CRC-32 (always) in zpaqfranz, then the hash
 						p->second.file_crc32=crc32_16bytes(buf,buflen,p->second.file_crc32);
 	
 						if (g_franzotype==FRANZO_XXHASH64)
@@ -43087,9 +43596,7 @@ rmdir z:\fiza
 
 						if (g_franzotype==FRANZO_SHA_1)
 							if (p->second.pfile_sha1)
-							///	for (int i=0;i<buflen;i++)
-								///	(*p->second.pfile_sha1).put(*(buf+i));
-									(*p->second.pfile_sha1).write(buf,buflen);
+								(*p->second.pfile_sha1).write(buf,buflen);
 												
 						if (g_franzotype==FRANZO_SHA_256)
 							if (p->second.pfile_sha256)
@@ -43111,8 +43618,6 @@ rmdir z:\fiza
 						if (g_franzotype==FRANZO_MD5)
 							if (p->second.pfile_md5)
 							(*p->second.pfile_md5).add(buf,buflen);
-					
-					
 					}
 					///
           if (bufptr>=buflen) c=EOF;
@@ -43377,19 +43882,6 @@ rmdir z:\fiza
       }
     }
   }
-/*
-	printf("\n#########################\n");
-	
-		for (int i=0;i<ht.size();i++)
-		{
-			unsigned int crc32=ht[i].crc32;
-			if (crc32==0)
-				printf("ZERO %d\n",i);
-		}
-	printf("#########################\n");
-	*/
-
-		
 	
   // Append compressed index to archive
 	int added=0;  // count
@@ -43400,9 +43892,10 @@ rmdir z:\fiza
 			string filename=rename(p->first);
 
 			/// Fix longpath on VSS ( reference the addfile() )
+			///	hardcoded, do you like it?
 			if (command=='q')
 			{
-				myreplace(filename,vss_shadow,"c:/franzsnap");
+				myreplace(filename,g_vss_shadow,"c:/franzsnap");
 			///	myreplace(filename,"c:/franzsnap","c:");
 			}
 			
@@ -43611,8 +44104,8 @@ rmdir z:\fiza
 	}	
 
 	printbar(' ',false);
-  printf("\r%s +added, %s -removed.\n", migliaia(added), migliaia2(removed));
-  assert(is.size()==0);
+	printf("\r%s +added, %s -removed.\n", migliaia(added), migliaia2(removed));
+	assert(is.size()==0);
 
   // Back up and write the header
   outi.close();
@@ -43635,7 +44128,7 @@ rmdir z:\fiza
 				if (flagverbose)
 				printf("truncating archive from %s to %s\n",migliaia(archive_size), migliaia2(archive_end));
 				if (truncate(arcname.c_str(), archive_end)) 
-					printerr("17092",archive.c_str());
+					printerr("17092",archive.c_str(),0);
 			}
 			else 
 			if (archive_end==0) 
@@ -43652,7 +44145,7 @@ rmdir z:\fiza
   }
   fflush(stdout);
   
-	if (archive_end)
+	if (archive_end) //sometimes the unencrypted .zpaq is empty
 	{
 		if (flagverbose)
 			if (total_xls)
@@ -43674,9 +44167,14 @@ rmdir z:\fiza
 			  migliaia4(archive_end-header_pos), migliaia5(archive_end),tohuman(speed));
 	}
 	
-#if defined(_WIN32) || defined(_WIN64)
+#if defined(_WIN32)
 	if (flagvss)
 		vss_deleteshadows(cartellalocale);
+	
+	if (!flaglongpath)
+		if (!flagvss) // hard-coded kludge for long vss files
+			if (maxfilelength>255)
+				printf("\n*** WINDOWS WARNING *** found file length >255. Suggestion: use -longpath switch\n");
 #endif
 		
 	if (flagfilelist)
@@ -43686,12 +44184,8 @@ rmdir z:\fiza
 				printf("42972: deleting tempfile %s\n",tempfile.c_str());
 			delete_file(tempfile.c_str());
 		}
-#ifdef _WIN32
-	if (!flaglongpath)
-		if (!flagvss)
-		if (maxfilelength>255)
-			printf("\n*** WINDOWS WARNING *** found file length >255. Suggestion: use -longpath switch\n");
-#endif
+		
+
 	///do a second copy (ex. to USB)	
 	if (errors==0)
 		if (g_copy!="")
@@ -43703,9 +44197,6 @@ rmdir z:\fiza
 			else
 				printf("34971: ERROR doing -copy from %s to %s\n",g_archive.c_str(),filescritto.c_str());
 		}
-			
-			
-	
 	
 	/// late -test    
 	if (flagtest)
@@ -43763,6 +44254,11 @@ rmdir z:\fiza
 			g_exec_text="38271: HOUSTON something seems wrong expected vs done";
 			errors=2;
 		}
+#ifdef _WIN32
+// this is a new thing: takes "strange" file access error, for debug (cannot access, denied etc)
+	if (flagverbose)
+		enumerateerrors();
+#endif 
 
 	return errors;
 }
@@ -46193,9 +46689,46 @@ int Jidac::removeemptydirs(string i_folder,bool i_kill)
 
 
 /*
-	Section: command q. Backup of Windows C:
+	Section: 	command q. Backup of Windows C:
+				command g  Launch a powershell (non need for a cmd-administrator)
 */
 
+int Jidac::adminrun()
+{
+	printf("*** LAUNCH C: ARCHIVING  ***\n");
+#ifndef _WIN32
+	printf("46452: Windows C: backup works... on Windows\n");
+	return 2;
+#else
+	if (archive=="")
+	{
+		printf("46458: need an archive (.zpaq)\n");
+		return 2;
+	}
+
+	if (fullcommandline=="")
+	{
+		printf("46464: command line empty\n");
+		return 2;
+	}
+	replace(fullcommandline,"g ","q ");
+	wchar_t myexepath[_MAX_PATH];
+	GetModuleFileName(NULL,myexepath,_MAX_PATH);
+	string myexename=wtou(myexepath);
+///	get the "right" path is not easy, registry digging needed.
+///	too "complex", try to run
+#ifdef _WIN64
+	string runme="c:\\Windows\\SysWOW64\\WindowsPowerShell\\v1.0\\powershell.exe";
+#else
+#ifdef _WIN32
+#endif
+	string runme="c:\\Windows\\system32\\WindowsPowerShell\\v1.0\\powershell.exe";
+#endif
+	string parms="-Command \"Start-Process '"+myexename+"' '"+fullcommandline+"' -Wait -Verb runAs\"";
+	waitexecute(runme,parms,SW_HIDE);
+	return 0;
+#endif
+}
 
 int Jidac::windowsc()
 {
@@ -46210,19 +46743,36 @@ int Jidac::windowsc()
 		printf("45757: need an archive (.zpaq)\n");
 		return 2;
 	}
-	
+
 	if (!isadmin())
 	{
 		printf("\n46178: you need admin rights, quit\n");
 		return 2;
 	}
-			
-			
+	
+	HRESULT hr;
+
+	hr=ModifyPrivilege(SE_BACKUP_NAME, TRUE);
+    if (hr>0) printf("46406: Failed to become BACKUP\n");
+
+	hr=ModifyPrivilege(SE_AUDIT_NAME, TRUE);
+    if (hr>0) printf("46414: Failed to become AUDIT\n");
+    
+	hr=ModifyPrivilege(SE_SECURITY_NAME, TRUE);
+    if (hr>0) printf("46414: Failed to become SECURITY\n");
+
 	if (tofiles.size()!=0)
 		printf("46041: -to ignored\n");
+	
 	if (files.size()!=0)
 		printf("46042: files ignored (try to copy all C:)\n");
+/*
+	printf("Outside VSS\n");
+	system( "dir /b /s C:\\Users\\utente\\AppData\\Local\\Microsoft\\WindowsApps" );
 
+
+	exit(0);
+*/
 	tofiles.clear();
 	tofiles.push_back("c:/");
 	files.clear();
@@ -46231,22 +46781,38 @@ int Jidac::windowsc()
 	notfiles.push_back("c:/franzsnap/pagefile.sys");
 	notfiles.push_back("c:/franzsnap/swapfile.sys");
 	notfiles.push_back("c:/franzsnap/System Volume Information/*");
-	printf("Excluding ALWAYS pagefile.sys, swapfile.sys, Sytem Volume Information\n");
+	notfiles.push_back("/AppData/Local/Microsoft/WindowsApps/*");	// no full reparse point, yet
+	printf("Excluding ALWAYS pagefile.sys, swapfile.sys, System Volume Information, WindowsApps\n");
 	
-	
-	if (!flagforcewindows)
+	if (all)
 	{
-		notfiles.push_back("c:/franzsnap/windows/*");
-		notfiles.push_back("c:/franzsnap/$RECYCLE.BIN/*");
-
-		string tempdir=g_gettempdirectory();
-		myreplaceall(tempdir,"\\","/");
-		tempdir+="*";
-		if (flagdebug)
-			printf("TEMP |%s|\n",tempdir.c_str());
-		notfiles.push_back(tempdir);
-		printf("Excluding        c:\\windows, TEMP, RECYCLE.BIN, bypass with -forcewindows\n");
+		flagforcewindows=true;
+		all=false;
 	}
+	else	
+	{
+		if (flagfrugal)
+		{
+			notfiles.push_back("c:/franzsnap/program files/*");
+			notfiles.push_back("c:/franzsnap/program files (x86)/*");
+			notfiles.push_back("c:/franzsnap/program files (x86)/*");
+			printf("Excluding        %%programfiles%% and x86 (because -frugal)\n");
+		}
+		if (!flagforcewindows)
+		{
+			notfiles.push_back("c:/franzsnap/windows/*");
+			notfiles.push_back("c:/franzsnap/$RECYCLE.BIN/*");
+
+			string tempdir=g_gettempdirectory();
+			myreplaceall(tempdir,"\\","/");
+			tempdir+="*";
+			if (flagdebug)
+				printf("TEMP |%s|\n",tempdir.c_str());
+			notfiles.push_back(tempdir);
+			printf("Excluding        C:\\WINDOWS, TEMP, RECYCLE.BIN, ADS and .zfs bypass with -forcewindows\n");
+		}
+	}
+	
 	flagvss=true;
 	return add();
 #endif

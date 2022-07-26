@@ -10,7 +10,7 @@
 ///////// but a LASAGNA-code style (spaghetti on steroids)
 
 
-#define ZPAQ_VERSION "55.6-experimental"
+#define ZPAQ_VERSION "55.7-experimental"
 
 #if defined(_WIN64)
 #define ZSFX_VERSION "SFX64 v55.1,"
@@ -87,7 +87,7 @@ As far as I know this is allowed by the licenses.
 - Nilsimsa implementation by Sepehr Laal
 - Thanks for testing on various Unixes to https://github.com/dertuxmalwieder
 - JFLarvoire for usefun (yes, usefun) informations https://github.com/JFLarvoire/SysToolsLib/blob/master/C/MsvcLibX/src/readlink.c
-
+- Thanks for a merged-unmerged-hardcoded NOJIT fix https://github.com/omar-polo
  
 FreeBSD port, quick and dirty to get a /usr/local/bin/zpaqfranz
 ```
@@ -290,9 +290,9 @@ check: zpaqfranz
 #include <cstddef>
 
 #ifdef unix
-	#ifndef NOJIT
+///	#ifndef NOJIT "hardfixed"
 		#include <sys/mman.h>
-	#endif
+///	#endif
 
 	#define PTHREAD 1
 	#include <termios.h>

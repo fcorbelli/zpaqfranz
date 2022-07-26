@@ -46781,7 +46781,7 @@ int Jidac::windowsc()
 	notfiles.push_back("c:/franzsnap/pagefile.sys");
 	notfiles.push_back("c:/franzsnap/swapfile.sys");
 	notfiles.push_back("c:/franzsnap/System Volume Information/*");
-	notfiles.push_back("/AppData/Local/Microsoft/WindowsApps/*");	// no full reparse point, yet
+	notfiles.push_back("*/AppData/Local/Microsoft/WindowsApps/*");	// no full reparse point, yet
 	printf("Excluding ALWAYS pagefile.sys, swapfile.sys, System Volume Information, WindowsApps\n");
 	
 	if (all)

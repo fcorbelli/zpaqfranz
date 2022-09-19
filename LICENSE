@@ -20,35 +20,3 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-Credits and copyrights and licenses and links
-
- 0 [Public domain]                zpaq http://mattmahoney.net/dc/zpaq.html  
- 1 [Public domain]                zpaq.AES from libtomcrypt by Tom St Denis 
- 2 [Public domain]                zpaq.salsa20 by D. J. Bernstein 
- 3 [Public domain]                unzpaq206.cpp by Matt Mahoney
- 4 [Public domain]                zpaq.Include mod by data man and reg2s patch from encode.su forum
- 5 [Public domain]                Sha1Opt.asm and 7zAsm.asm by Igor Pavlov 
- 6 [MIT license]                  zpaq.Code from libdivsufsort 2.0 (C) Yuta Mori, 2003-2008 
- 7 [MIT License]                  Embedded Artistry (memory-aligned malloc)           https://github.com/embeddedartistry 
- 8 [MIT License]                  redundand SHA256                                    https://github.com/System-Glitch/SHA256 
- 9 [MIT License]                  Nilsimsa implementation by Sepehr Laal              https://github.com/3p3r/nilsimsa-lite/blob/master/nilsimsa.c 
-10 [MIT License]                  zsfx by me                                          https://github.com/fcorbelli/zsfx
-11 [zlib license]                 Crc32.h Copyright (c) 2011-2019 Stephan Brumme      https://create.stephan-brumme.com/crc32/ 
-12 [zlib license]                 part of hash-library (MD5, SHA-3) by Stephan Brumme https://github.com/stbrumme/hash-library 
-13 [zlib license]                 crc32c.c Copyright (C) 2015 Mark Adler              https://github.com/madler/brotli/blob/master/crc32c.c
-14 [The Unlicense]                wyhash (experimental) WangYi                        https://github.com/wangyi-fudan/wyhash 
-15 [BSD 2-Clause license]         xxHash Copyright (C) 2012-2020 Yann Collet          https://github.com/memcached/memcached/blob/master/xxhash.h
-16 [CC0 1.0 / Apache License 2.0] BLAKE3 hasher                                       https://github.com/BLAKE3-team/BLAKE3 
-17 [nothing explicit, seems BSD]  Whirlpool by Paulo Barreto and Vincent Rijmen       https://web.archive.org/web/20171129084214/http://www.larc.usp.br/~pbarreto/WhirlpoolPage.html
-
-Greetings
- 0 Of course Dr. Matt Mahoney http://mattmahoney.net
- 1 Thanks to JFLarvoire for usefun (yes, usefun) informations https://github.com/JFLarvoire/SysToolsLib/blob/master/C/MsvcLibX/src/readlink.c
- 2 Thanks to Bulat Ziganshin for contribution on Slicing-by-16 for crc32
- 3 Thanks to SeDD user of the encode.ru forum   for SFX debugging
- 4 Thanks to Aki  user of forums.debian.net     for some Debian's packager help
- 5 Thanks to https://github.com/dertuxmalwieder for testing on various Unixes and OpenBSD port 
- 6 Thanks to Felix Palmen <zirias@freebsd.org>  for great help on FreeBSD "packaging"
- 7 Thanks to https://github.com/omar-polo       for a merged-unmerged-hardcoded NOJIT fix 
- 8 Thanks to https://github.com/Piqlet          for non-x86 help
- 9 Thanks to https://github.com/osmano807       for non-x86 help

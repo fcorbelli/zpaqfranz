@@ -1,0 +1,21 @@
+#!/usr/bin/make -f
+export DEB_CFLAGS_MAINT_APPEND = -Wno-stringop-overflow 
+export DEB_BUILD_MAINT_OPTIONS = hardening=+all
+
+include /usr/share/dpkg/architecture.mk
+ifneq ($(DEB_HOST_GNU_CPU), x86_64)
+	  DEB_CPPFLAGS_MAINT_APPEND = -DNOJIT
+endif
+
+ifneq ($(DEB_HOST_ARCH_ENDIAN), little)
+	  DEB_CPPFLAGS_MAINT_APPEND = -DBIG -DNOJIT
+endif
+
+DPKG_EXPORT_BUILDFLAGS = 1
+include /usr/share/dpkg/buildflags.mk
+
+%:
+	dh $@
+
+override_dh_auto_install:
+	dh_auto_install -- prefix=/usr

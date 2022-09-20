@@ -596,7 +596,7 @@ g++ -Dunix zpaqfranz.cpp  -pthread -o zpaqfranz -Wno-psabi
 
 Fedora 34 gcc 11.2.1
 Typically you will need some library (out of a fresh Fedora box)
-sudo dnf install glibc-static libstdc++-static -y;
+sudo dnf install glibc-static libstdc++-static gcc-c++ -y;
 Then you can compile, via Makefile or "by hand"
 (do not forget... sudo!)
 

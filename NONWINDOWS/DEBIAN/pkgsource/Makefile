@@ -4,7 +4,7 @@ LDADD=          -pthread -lstdc++ -lm
 
 all: src/zpaqfranz
 
-src/zpaqfranz: src/zpaqfranz.cpp
+src/zpaqfranz: ../zpaqfranz-debian.cpp
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(LDCFLAGS) -o $@ $^ ${LDADD}
 
 install: src/zpaqfranz

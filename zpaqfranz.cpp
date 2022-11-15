@@ -52,9 +52,8 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 */
 
-
-#define ZPAQ_VERSION "55.16h-experimental"
-#define ZPAQ_DATE " (03 Oct 2022)"  // cannot use __DATE__ on Debian!
+#define ZPAQ_VERSION "56.1j"
+#define ZPAQ_DATE " (15 Nov 2022)"  // cannot use __DATE__ on Debian!
 
 #if defined(_WIN64)
 	#define ZSFX_VERSION "SFX64 v55.1,"
@@ -91,6 +90,16 @@ OTHER DEALINGS IN THE SOFTWARE.
 	#define ANCIENT 1
 	#define TEXT_NOJIT "-ESX"
 	#define TEXT_BIG ""
+#endif
+
+#ifndef _WIN32
+	#undef SERVER
+#endif
+
+#ifdef SERVER
+	#define TEXT_SERVER "-cloud"
+#else
+	#define TEXT_SERVER ""
 #endif
 
 /*                                                               
@@ -685,7 +694,29 @@ Credits and copyrights and licenses and links
 	   
 17 [nothing explicit, seems BSD]  Whirlpool by Paulo Barreto and Vincent Rijmen       https://web.archive.org/web/20171129084214/http://www.larc.usp.br/~pbarreto/WhirlpoolPage.html
 
+18 [almost-unrestricted]		  Twofish implementation,(c) 2002 by Niels Ferguson   https://github.com/wernerd/ZRTPCPP/blob/master/cryptcommon/twofish.c
+	* Fast, portable, and easy-to-use Twofish implementation,  
+	* Version 0.3. 
+	* Copyright (c) 2002 by Niels Ferguson.  
+ 
+	The author hereby grants a perpetual license to everybody to 
+	use this code for any purpose as long as the copyright message is included 
+	in the source code of this or any derived work. 
+	 
+	Yes, this means that you, your company, your club, and anyone else 
+	can use this code anywhere you want. You can change it and distribute it 
+	under the GPL, include it in your commercial product without releasing 
+	the source code, put it on the web, etc.  
+	The only thing you cannot do is remove my copyright message,  
+	or distribute any source code based on this implementation that does not  
+	include my copyright message.  
+	 
+	I appreciate a mention in the documentation or credits,  
+	but I understand if that is difficult to do. 
+	I also appreciate it if you tell me where and why you used my code. 
+	
 Greetings
+
  0 Of course Dr. Matt Mahoney http://mattmahoney.net
  1 Thanks to JFLarvoire for usefun (yes, usefun) informations https://github.com/JFLarvoire/SysToolsLib/blob/master/C/MsvcLibX/src/readlink.c
  2 Thanks to Bulat Ziganshin for contribution on Slicing-by-16 for crc32
@@ -697,7 +728,9 @@ Greetings
  8 Thanks to https://github.com/Piqlet          for non-x86 help
  9 Thanks to https://github.com/osmano807       for non-x86 help
 10 Thanks to Stephen Kitt <skitt@debian.org>    for supporting Debian "packaging"
-
+11 Thanks to Niels Ferguson                     for the Twofish implementation
+12 Thanks to Newcastle University				for some winsock related issues, Master Degree, Game Engineering
+13 Thanks to https://github.com/akumiszcza      for OneDrive issue
 
 Almost "universal" (minimal) Makefile. Beware /usr/ LOCAL /bin!
 
@@ -786,6 +819,8 @@ DEFINEs at compile-time
 
 -DESX								// Yes, zpaqfranz run (kind of) on ESXi too :-)
 
+-DSERVER							// Enable the cloudpaq client (for Windows)
+
 HIDDEN GEMS
 If the (non Windows) executable is named "dir" act (just about)... like Windows' dir
 Beware of collisions with other software "dir"
@@ -865,6 +900,9 @@ g++ -O3 -DHWBLAKE3 -DHWSHA1 blake3_windows_gnu.s zpaqfranz.cpp sha1ugo.obj -o zp
 
 Windows 32 (g++ 7.3.0 64 bit)
 c:\mingw32\bin\g++ -m32 -O3 zpaqfranz.cpp -o zpaqfranz32 -pthread -static
+
+Windows 64 (g++ 7.3.0), WITH cloud paq
+g++ -O3 -DSERVER zpaqfranz.cpp -o zpaqfranz -lwsock32 -lws2_32
 
 FreeBSD (11.x) gcc 7
 gcc7 -O3 -march=native -Dunix zpaqfranz.cpp -lstdc++ -pthread -o zpaqfranz -static -lm
@@ -978,6 +1016,13 @@ sometimes __sun, sometimes not
 	#endif
 #endif
 
+
+/// On Windows you need to link -lwsock32 -lws2_32
+#ifdef SERVER
+	#include <winsock2.h>
+	#include <ws2tcpip.h>
+#endif
+
 #ifdef unix
 	#ifndef ANCIENT
 		#include <array>
@@ -1039,7 +1084,20 @@ sometimes __sun, sometimes not
 	#include <windows.h>
 	#include <io.h>
 	#include <sys/stat.h>
+	#include <fcntl.h> // for setmode()
 	using namespace std;
+#endif
+
+#ifdef SERVER
+string	g_server		="127.0.0.1";
+string	g_port			="4567";
+SOCKET 	g_socket		=0;
+int64_t g_socket_sended	=0;
+int64_t g_socket_packet	=0;
+int64_t g_socket_packets=0;
+string 	g_cloudkey		="";
+int64_t	g_enter			=0;
+	
 #endif
 
 #ifdef HWSHA1
@@ -9012,6 +9070,7 @@ bool 	g_sfxflagall;
 bool  	g_sfxflagforce;
 bool	g_sse42;
 string 	g_archive;
+string	g_indexname;
 FILE* 	g_output_handle;
 int64_t g_robocopy_check_sorgente;
 int64_t g_robocopy_check_destinazione;
@@ -9091,6 +9150,9 @@ bool	flagnodedup;
 bool	flagtar;
 bool	flagramdisk;
 bool	flagssd;
+bool	flagbig;
+bool	flagchecktxt;
+bool	flagstdin;
 bool 	flagtouch;
 bool	flagstat;
 bool	flagfrugal;
@@ -9102,6 +9164,11 @@ string 	g_optional;
 string orderby;
 vector<string> g_theorderby;
 MAPPACHECK	g_mychecks;
+#ifdef	SERVER
+bool	flagserver;
+#endif
+
+
 /*
 	Section: hashers
 */
@@ -9123,6 +9190,59 @@ void myprintf(const char *fmt, ...)
 		fprintf(g_output_handle,"%s",buffer);
    va_end(args);
 }
+///https://patorjk.com/software/taag/#p=display&f=Graffiti&t=Type%20Something%20
+///banner font
+void bigguru()
+{
+	myprintf("\n\n");
+	myprintf(" #####  #     # ######  #     #\n");
+	myprintf("#     # #     # #     # #     #\n"); 
+	myprintf("#       #     # #     # #     #\n"); 
+	myprintf("#  #### #     # ######  #     #\n"); 
+	myprintf("#     # #     # #   #   #     #\n"); 
+	myprintf("#     # #     # #    #  #     #\n"); 
+	myprintf(" #####   #####  #     #  ##### \n"); 
+	myprintf("\n\n");
+}                                 
+
+void bigok()
+{
+	myprintf("\n\n");
+	myprintf("####### #    #\n");
+	myprintf("#     # #   #\n");  
+	myprintf("#     # #  #\n");   
+	myprintf("#     # ###\n");    
+	myprintf("#     # #  #\n");   
+	myprintf("#     # #   #\n");  
+	myprintf("####### #    #\n"); 
+	myprintf("\n\n");
+}
+void bigerror()
+{
+	myprintf("\n\n");
+	myprintf("####### ######  ######  ####### ######  ###\n");
+	myprintf("#       #     # #     # #     # #     # ###\n"); 
+	myprintf("#       #     # #     # #     # #     # ###\n");
+	myprintf("#####   ######  ######  #     # ######   #\n"); 
+	myprintf("#       #   #   #   #   #     # #   #\n");  
+	myprintf("#       #    #  #    #  #     # #    #  ###\n"); 
+	myprintf("####### #     # #     # ####### #     # ###\n"); 
+	myprintf("\n\n");
+}
+void bigwarning()
+{
+	myprintf("\n\n");
+	myprintf("#     #    #    ######  #     # ### #     #  #####\n");
+	myprintf("#  #  #   # #   #     # ##    #  #  ##    # #     #\n");
+	myprintf("#  #  #  #   #  #     # # #   #  #  # #   # #\n");       
+	myprintf("#  #  # #     # ######  #  #  #  #  #  #  # #  ####\n"); 
+	myprintf("#  #  # ####### #   #   #   # #  #  #   # # #     #\n"); 
+	myprintf("#  #  # #     # #    #  #    ##  #  #    ## #     #\n"); 
+	myprintf(" ## ##  #     # #     # #     # ### #     #  #####\n");  
+	myprintf("\n\n");
+}
+
+
 string	binarytohex(const unsigned char* i_risultato,const int i_lunghezza)
 {
 	/// slow, and dirty
@@ -9772,13 +9892,13 @@ namespace
 void SHA3::processBlock(const void* data)
 {
 #if defined(__BYTE_ORDER) && (__BYTE_ORDER != 0) && (__BYTE_ORDER == __BIG_ENDIAN)
-#define LITTLEENDIAN(x) swap(x)
+#define MYLITTLEENDIAN(x) swap(x)
 #else
-#define LITTLEENDIAN(x) (x)
+#define MYLITTLEENDIAN(x) (x)
 #endif
   const uint64_t* data64 = (const uint64_t*) data;
   for (unsigned int i = 0; i < m_blockSize / 8; i++)
-    m_hash[i] ^= LITTLEENDIAN(data64[i]);
+    m_hash[i] ^= MYLITTLEENDIAN(data64[i]);
   for (unsigned int round = 0; round < Rounds; round++)
   {
     uint64_t coefficients[5];
@@ -10016,42 +10136,42 @@ void MD5::processBlock(const void* data)
   const uint32_t* words = (uint32_t*) data;
   // computations are little endian, swap data if necessary
 #if defined(__BYTE_ORDER) && (__BYTE_ORDER != 0) && (__BYTE_ORDER == __BIG_ENDIAN)
-#define LITTLEENDIAN(x) swap(x)
+#define MYLITTLEENDIAN(x) swap(x)
 #else
-#define LITTLEENDIAN(x) (x)
+#define MYLITTLEENDIAN(x) (x)
 #endif
   // first round
-  uint32_t word0  = LITTLEENDIAN(words[ 0]);
+  uint32_t word0  = MYLITTLEENDIAN(words[ 0]);
   a = rotate(a + f1(b,c,d) + word0  + 0xd76aa478,  7) + b;
-  uint32_t word1  = LITTLEENDIAN(words[ 1]);
+  uint32_t word1  = MYLITTLEENDIAN(words[ 1]);
   d = rotate(d + f1(a,b,c) + word1  + 0xe8c7b756, 12) + a;
-  uint32_t word2  = LITTLEENDIAN(words[ 2]);
+  uint32_t word2  = MYLITTLEENDIAN(words[ 2]);
   c = rotate(c + f1(d,a,b) + word2  + 0x242070db, 17) + d;
-  uint32_t word3  = LITTLEENDIAN(words[ 3]);
+  uint32_t word3  = MYLITTLEENDIAN(words[ 3]);
   b = rotate(b + f1(c,d,a) + word3  + 0xc1bdceee, 22) + c;
-  uint32_t word4  = LITTLEENDIAN(words[ 4]);
+  uint32_t word4  = MYLITTLEENDIAN(words[ 4]);
   a = rotate(a + f1(b,c,d) + word4  + 0xf57c0faf,  7) + b;
-  uint32_t word5  = LITTLEENDIAN(words[ 5]);
+  uint32_t word5  = MYLITTLEENDIAN(words[ 5]);
   d = rotate(d + f1(a,b,c) + word5  + 0x4787c62a, 12) + a;
-  uint32_t word6  = LITTLEENDIAN(words[ 6]);
+  uint32_t word6  = MYLITTLEENDIAN(words[ 6]);
   c = rotate(c + f1(d,a,b) + word6  + 0xa8304613, 17) + d;
-  uint32_t word7  = LITTLEENDIAN(words[ 7]);
+  uint32_t word7  = MYLITTLEENDIAN(words[ 7]);
   b = rotate(b + f1(c,d,a) + word7  + 0xfd469501, 22) + c;
-  uint32_t word8  = LITTLEENDIAN(words[ 8]);
+  uint32_t word8  = MYLITTLEENDIAN(words[ 8]);
   a = rotate(a + f1(b,c,d) + word8  + 0x698098d8,  7) + b;
-  uint32_t word9  = LITTLEENDIAN(words[ 9]);
+  uint32_t word9  = MYLITTLEENDIAN(words[ 9]);
   d = rotate(d + f1(a,b,c) + word9  + 0x8b44f7af, 12) + a;
-  uint32_t word10 = LITTLEENDIAN(words[10]);
+  uint32_t word10 = MYLITTLEENDIAN(words[10]);
   c = rotate(c + f1(d,a,b) + word10 + 0xffff5bb1, 17) + d;
-  uint32_t word11 = LITTLEENDIAN(words[11]);
+  uint32_t word11 = MYLITTLEENDIAN(words[11]);
   b = rotate(b + f1(c,d,a) + word11 + 0x895cd7be, 22) + c;
-  uint32_t word12 = LITTLEENDIAN(words[12]);
+  uint32_t word12 = MYLITTLEENDIAN(words[12]);
   a = rotate(a + f1(b,c,d) + word12 + 0x6b901122,  7) + b;
-  uint32_t word13 = LITTLEENDIAN(words[13]);
+  uint32_t word13 = MYLITTLEENDIAN(words[13]);
   d = rotate(d + f1(a,b,c) + word13 + 0xfd987193, 12) + a;
-  uint32_t word14 = LITTLEENDIAN(words[14]);
+  uint32_t word14 = MYLITTLEENDIAN(words[14]);
   c = rotate(c + f1(d,a,b) + word14 + 0xa679438e, 17) + d;
-  uint32_t word15 = LITTLEENDIAN(words[15]);
+  uint32_t word15 = MYLITTLEENDIAN(words[15]);
   b = rotate(b + f1(c,d,a) + word15 + 0x49b40821, 22) + c;
   // second round
   a = rotate(a + f2(b,c,d) + word1  + 0xf61e2562,  5) + b;
@@ -16905,6 +17025,11 @@ public:
 private:
 	XXH64_state_t*	state;
 };
+
+#ifdef SERVER
+XXHash64 g_socket_hash(0);
+#endif
+
 int b64invs[] = { 62, -1, -1, -1, 63, 52, 53, 54, 55, 56, 57, 58,
 	59, 60, 61, -1, -1, -1, -1, -1, -1, -1, 0, 1, 2, 3, 4, 5,
 	6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
@@ -17161,6 +17286,7 @@ bool isdirectory(string i_filename)
 	return
 		i_filename[i_filename.size()-1]=='/';
 }
+
 
 
 #ifdef _WIN32
@@ -17582,6 +17708,8 @@ int erredbarras(const std::wstring &wi_path)
 		return myerror;
 	return 0;
 }
+
+
 int64_t	getwinattributes(string i_filename)
 {
 	WIN32_FIND_DATA ffd;
@@ -18027,6 +18155,7 @@ void myreplaceall(std::string& str, const std::string& from, const std::string& 
         start_pos += to.length(); // In case 'to' contains 'from', like replacing 'x' with 'yx'
     }
 }
+
 string format_datetime(string i_formato,tm* t=NULL)
 {
 	char	temp[12];
@@ -18629,6 +18758,19 @@ inline char* tohuman4(int64_t i_bytes)
 	snprintf(io_buf,sizeof(io_buf),"%.02lf %s",mybytes,myappend[i]);
 	return io_buf;
 }
+inline char* tohuman5(int64_t i_bytes)
+{
+	static char io_buf[30];
+	char const *myappend[] = {"B","KB","MB","GB","TB","PB"};
+	char length = sizeof(myappend)/sizeof(myappend[0]);
+	double mybytes=i_bytes;
+	int i=0;
+	if (i_bytes > 1024) 
+		for (i=0;(i_bytes / 1024) > 0 && i<length-1; i++, i_bytes /= 1024)
+			mybytes = i_bytes / 1024.0;
+	snprintf(io_buf,sizeof(io_buf),"%.02lf %s",mybytes,myappend[i]);
+	return io_buf;
+}
 int64_t myatoll(const char * i_str)
 {
 	if (i_str==NULL)
@@ -18928,6 +19070,20 @@ string dateToString(bool i_flagutc,int64_t date,bool i_mylocal=false)
   }
   return s;
 }
+int64_t now()
+{
+	time_t 	mynow=time(NULL);
+	tm* 	t=localtime(&mynow);
+	if (t==NULL)
+		return 0;
+	return	(t->tm_year+1900)	*10000000000LL
+		+	(t->tm_mon+1)		*100000000LL 
+		+	t->tm_mday			*1000000		
+		+	t->tm_hour			*10000 
+		+	t->tm_min			*100	
+		+	t->tm_sec;
+}
+
 string attrToString(int64_t attrib) {
   string r="     ";
   if ((attrib&255)=='u') {
@@ -19440,6 +19596,7 @@ bool fileexists(const string& i_filename)
 #endif
 	return false;
 }
+
 // a bit different: check only for "real" files
 bool realfileexists(const string& i_filename) 
 {
@@ -19987,9 +20144,15 @@ bool close(const char* filename, int64_t date, int64_t attr, FP fp=FPNULL) {
 	if (fp!=FPNULL) 
 		CloseHandle(fp);
 	if ((attr&255)=='w' && !ads)
+		if (fileexists(filename))
 		if (!SetFileAttributes(utow(filename).c_str(), attr>>8))
 		{
-			myprintf("21290: WARN cannot set attributes on ");
+#ifdef _WIN32
+		DWORD err=GetLastError();
+#else
+		int err=1;
+#endif
+			myprintf("21290: WARN kind %s cannot set attributes on ",migliaia((int64_t)err));
 			printUTF8(filename);
 			myprintf("\n");
 			allok=false;
@@ -19997,41 +20160,45 @@ bool close(const char* filename, int64_t date, int64_t attr, FP fp=FPNULL) {
 	return allok;
 #endif
 }
-
+bool iswindowsletter(string i_dir)
+{
+	/// fix for altered-string (!)
+	string mydir=i_dir.c_str();
+	if (mydir.size()==2)
+		if (isalpha(mydir[0]))
+			if (mydir[1]==':')
+				return true;
+	return false;
+}
+string includetrailingbackslash(string i_dir)
+{
+	/// fix for altered-string (!)
+	string mydir=i_dir.c_str();
+	if (mydir.size()==2)
+		if (isalpha(mydir[0]))
+			if (mydir[1]==':')
+				return mydir+"/";
+	if (!isdirectory(i_dir))
+		return i_dir+"/";
+	else
+		return i_dir;
+}
 // Create directories as needed. For example if path="/tmp/foo/bar"
 // then create directories /, /tmp, and /tmp/foo unless they exist.
 // Set date and attributes if not 0.
 void makepath(string path, int64_t date=0, int64_t attr=0) {
   for (unsigned i=0; i<path.size(); ++i) {
     if (path[i]=='\\' || path[i]=='/') {
-      path[i]=0;
+      path[i]=0;	//very dirty trick
 #ifdef unix
-	if (mkdir(path.c_str(), 0777)!=0)
-	{
-		if (flagdebug)
-		{
-			myprintf("19920: mkdir failed ");
-			printUTF8(path.c_str());
-			myprintf("\n");
-		}
-		return;
-	}
-	
+      mkdir(path.c_str(), 0777);
 #else
-	if (CreateDirectory(utow(path.c_str()).c_str(), 0)==0)
-	{
-		if (flagdebug)
-		{
-			myprintf("19920: create directory failed ");
-			printUTF8(path.c_str());
-			myprintf("\n");
-		}
-		return;
-	}
+      CreateDirectory(utow(path.c_str()).c_str(), 0);
 #endif
       path[i]='/';
     }
   }
+
   // Set date and attributes
   string filename=path;
   if (filename!="" && filename[filename.size()-1]=='/')
@@ -21637,12 +21804,1775 @@ InputArchive::InputArchive(const char* filename, const char* password):
     off=32;
   }
 }
+
+
+
+
+
+void int64toarray(int64_t i_number, char* i_buffer)
+{
+	if (i_buffer==NULL)
+	{
+		myprintf("29412: GURU buffer NULL!\n");
+		seppuku();
+	}
+	///printf("Numero da scrivere %016llX\n",i_number);
+	for (int i=0;i<8;i++)
+	{
+		uint8_t numerino=(i_number&255);
+		///printf("Numerino %d  %02X\n",i,numerino);
+		*i_buffer++ =numerino;
+		i_number>>=8;
+	}
+}
+
+
+int64_t arraytoint64(const char* i_buffer)
+{
+	if (i_buffer==NULL)
+	{
+		myprintf("29297: i_buffer is NULL\n");
+		seppuku();
+		return -1;
+	}
+	int64_t	risultato=0;
+	for (int i=7;i>=0;i--)
+	{
+		uint8_t numerino=*(i_buffer+i);
+	///	printf("Letto %d  %02X\n",i,numerino);
+		risultato=risultato+numerino;
+		if (i>0)
+		risultato<<=8;
+	}
+	///printf("Numero riletto %016llX\n",risultato);
+	return risultato;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#ifdef SERVER
+
+/*
+	This is the cloudpaq client, aka zpaqfranz-over-socket, aka zpaqfranz-over-ssh
+	Obviously it is under study and development, for now only for Windows
+	The ultimate goal is to have a ransomware-resistant backup system
+*/
+
+/* 
+ * Fast, portable, and easy-to-use Twofish implementation,  
+ * Version 0.3. 
+ * Copyright (c) 2002 by Niels Ferguson.  
+ * (See further down for the almost-unrestricted licensing terms.) 
+ */
+
+
+typedef unsigned char   Twofish_Byte; 
+typedef unsigned int    Twofish_UInt32; 
+typedef struct {Twofish_UInt32 s[4][256];Twofish_UInt32 K[40];} Twofish_key; 
+int Twofish_initialise(); 
+int Twofish_prepare_key(
+                                Twofish_Byte key[],
+                                int key_len,
+                                Twofish_key * xkey
+                                );
+void Twofish_encrypt(
+                            Twofish_key * xkey,
+                            Twofish_Byte p[16],
+                            Twofish_Byte c[16]
+                            ); 
+void Twofish_decrypt(
+                            Twofish_key * xkey,
+                            Twofish_Byte c[16],
+                            Twofish_Byte p[16]
+                            ); 
+ 
+#define UINT32_MASK    ( (((Twofish_UInt32)2)<<31) - 1 ) 
+ 
+#ifndef _MSC_VER 
+#define ROL32(x,n) ( (x)<<(n) | ((x) & UINT32_MASK) >> (32-(n)) ) 
+#define ROR32(x,n) ( (x)>>(n) | ((x) & UINT32_MASK) << (32-(n)) ) 
+#else 
+#define ROL32(x,n) (_lrotl((x), (n))) 
+#define ROR32(x,n) (_lrotr((x), (n))) 
+#endif 
+#define LARGE_Q_TABLE   0    /* default = 0 */ 
+ 
+#define SELECT_BYTE_FROM_UINT32_IN_MEMORY    0    /* default = 0 */ 
+#define CONVERT_USING_CASTS    0    /* default = 0 */ 
+
+#define CPU_IS_BIG_ENDIAN    0 
+#define BSWAP(x) ((ROL32((x),8)&0x00ff00ff) | (ROR32((x),8) & 0xff00ff00)) 
+ 
+#if CPU_IS_BIG_ENDIAN 
+#define ENDIAN_CONVERT(x)    BSWAP(x) 
+#else 
+#define ENDIAN_CONVERT(x)    (x) 
+#endif 
+ 
+#if CPU_IS_BIG_ENDIAN 
+#define BYTE_OFFSET( n )  (sizeof(Twofish_UInt32) - 1 - (n) ) 
+#else 
+#define BYTE_OFFSET( n )  (n) 
+#endif 
+ 
+#if SELECT_BYTE_FROM_UINT32_IN_MEMORY 
+    /* Pick the byte from the memory in which X is stored. */ 
+#define SELECT_BYTE( X, b ) (((Twofish_Byte *)(&(X)))[BYTE_OFFSET(b)]) 
+#else 
+    /* Portable solution: Pick the byte directly from the X value. */ 
+#define SELECT_BYTE( X, b ) (((X) >> (8*(b))) & 0xff) 
+#endif 
+ 
+ 
+/* Some shorthands because we use byte selection in large formulae. */ 
+#define b0(X)   SELECT_BYTE((X),0) 
+#define b1(X)   SELECT_BYTE((X),1) 
+#define b2(X)   SELECT_BYTE((X),2) 
+#define b3(X)   SELECT_BYTE((X),3) 
+ 
+ 
+/* 
+ * We need macros to load and store UInt32 from/to byte arrays 
+ * using the least-significant-byte-first convention. 
+ * 
+ * GET32( p ) gets a UInt32 in lsb-first form from four bytes pointed to 
+ * by p. 
+ * PUT32( v, p ) writes the UInt32 value v at address p in lsb-first form. 
+ */ 
+#if CONVERT_USING_CASTS 
+ 
+    /* Get UInt32 from four bytes pointed to by p. */ 
+#define GET32( p )    ENDIAN_CONVERT( *((Twofish_UInt32 *)(p)) ) 
+    /* Put UInt32 into four bytes pointed to by p */ 
+#define PUT32( v, p ) *((Twofish_UInt32 *)(p)) = ENDIAN_CONVERT(v) 
+ 
+#else 
+ 
+    /* Get UInt32 from four bytes pointed to by p. */ 
+#define GET32( p ) \
+    ( \
+      (Twofish_UInt32)((p)[0])     \
+    | (Twofish_UInt32)((p)[1])<< 8 \
+    | (Twofish_UInt32)((p)[2])<<16 \
+    | (Twofish_UInt32)((p)[3])<<24 \
+    ) 
+    /* Put UInt32 into four bytes pointed to by p */ 
+#define PUT32( v, p ) \
+    (p)[0] = (Twofish_Byte)(((v)      ) & 0xff); \
+    (p)[1] = (Twofish_Byte)(((v) >>  8) & 0xff); \
+    (p)[2] = (Twofish_Byte)(((v) >> 16) & 0xff); \
+    (p)[3] = (Twofish_Byte)(((v) >> 24) & 0xff)
+ 
+#endif 
+
+int test_platform() 
+    { 
+    /* Buffer with test values. */ 
+    Twofish_Byte buf[] = {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0}; 
+    Twofish_UInt32 C; 
+    Twofish_UInt32 x,y; 
+    int i; 
+ 
+    if( ((Twofish_UInt32)((Twofish_UInt32)1 << 31) == 0) || ((Twofish_UInt32)-1 < 0 ))  
+        { 
+	  printf( "Twofish code: Twofish_UInt32 type not suitable\n"); 
+	  exit(1);
+        } 
+    if( (sizeof( Twofish_Byte ) != 1) || (((Twofish_Byte)-1) < 0) )  
+        { 
+	  printf( "Twofish code: Twofish_Byte type not suitable\n"); 
+	  exit(1);
+        } 
+ 
+    /*  
+     * Sanity-check the endianness conversions.  
+     * This is just an aid to find problems. If you do the endianness 
+     * conversion macros wrong you will fail the full cipher test, 
+     * but that does not help you find the error. 
+     * Always make it easy to find the bugs!  
+     * 
+     * Detail: There is no fully portable way of writing UInt32 constants, 
+     * as you don't know whether to use the U or UL suffix. Using only U you 
+     * might only be allowed 16-bit constants. Using UL you might get 64-bit 
+     * constants which cannot be stored in a UInt32 without warnings, and 
+     * which generally behave subtly different from a true UInt32. 
+     * As long as we're just comparing with the constant,  
+     * we can always use the UL suffix and at worst lose some efficiency.  
+     * I use a separate '32-bit constant' macro in most of my other code. 
+     * 
+     * I hate C. 
+     * 
+     * Start with testing GET32. We test it on all positions modulo 4  
+     * to make sure we can handly any position of inputs. (Some CPUs 
+     * do not allow non-aligned accesses which we would do if you used 
+     * the CONVERT_USING_CASTS option. 
+     */ 
+    if( (GET32( buf ) != 0x78563412UL) || (GET32(buf+1) != 0x9a785634UL)  
+        || (GET32( buf+2 ) != 0xbc9a7856UL) || (GET32(buf+3) != 0xdebc9a78UL) ) 
+        { 
+	  printf( "Twofish code: GET32 not implemented properly\n");
+	  exit(1);
+	    } 
+ 
+    /*  
+     * We can now use GET32 to test PUT32. 
+     * We don't test the shifted versions. If GET32 can do that then 
+     * so should PUT32. 
+     */ 
+    C = GET32( buf ); 
+    PUT32( 3*C, buf ); 
+    if( GET32( buf ) != 0x69029c36UL ) 
+        { 
+	  printf( "Twofish code: PUT32 not implemented properly\n");
+	  exit(1);
+	    } 
+ 
+ 
+    /* Test ROL and ROR */ 
+    for( i=1; i<32; i++ )  
+        { 
+        /* Just a simple test. */ 
+        x = ROR32( C, i ); 
+        y = ROL32( C, i ); 
+        x ^= (C>>i) ^ (C<<(32-i)); 
+        /*y ^= (C<>(32-i));  */
+        y ^= (C<<i) ^ (C>>(32-i));
+        x |= y; 
+        /*  
+         * Now all we check is that x is zero in the least significant 
+         * 32 bits. Using the UL suffix is safe here, as it doesn't matter 
+         * if we get a larger type. 
+         */ 
+	if( (x & 0xffffffffUL) != 0 ) 
+            { 
+	      printf( "Twofish ROL or ROR not properly defined.\n");
+		  exit(1);
+		    } 
+        } 
+ 
+    /* Test the BSWAP macro */ 
+    if( BSWAP(C) != 0x12345678UL ) 
+        { 
+        /* 
+         * The BSWAP macro should always work, even if you are not using it. 
+         * A smart optimising compiler will just remove this entire test. 
+         */ 
+	  printf( "BSWAP not properly defined.\n");
+	  exit(1);
+	    } 
+ 
+    /* And we can test the b macros which use SELECT_BYTE. */ 
+    if( (b0(C)!=0x12) || (b1(C) != 0x34) || (b2(C) != 0x56) || (b3(C) != 0x78) ) 
+        { 
+        /* 
+         * There are many reasons why this could fail. 
+         * Most likely is that CPU_IS_BIG_ENDIAN has the wrong value.  
+         */ 
+	  printf( "Twofish code: SELECT_BYTE not implemented properly\n");
+	  exit(1);
+	    }
+    return 1;
+    } 
+ 
+int test_vector( Twofish_Byte key[], int key_len, Twofish_Byte p[16], Twofish_Byte c[16] ) 
+    { 
+    Twofish_Byte tmp[16];               /* scratch pad. */ 
+    Twofish_key xkey;           /* The expanded key */ 
+    int i; 
+ 
+ 
+    /* Prepare the key */ 
+    if ((i = Twofish_prepare_key( key, key_len, &xkey)) < 0)
+	return i; 
+ 
+    /*  
+     * We run the test twice to ensure that the xkey structure 
+     * is not damaged by the first encryption.  
+     * Those are hideous bugs to find if you get them in an application. 
+     */ 
+    for( i=0; i<2; i++ )  
+        { 
+        /* Encrypt and test */ 
+        Twofish_encrypt( &xkey, p, tmp ); 
+        if( memcmp( c, tmp, 16 ) != 0 )  
+            { 
+	      printf( "Twofish encryption failure\n");
+		  exit(1);
+		    } 
+ 
+        /* Decrypt and test */ 
+        Twofish_decrypt( &xkey, c, tmp ); 
+        if( memcmp( p, tmp, 16 ) != 0 )  
+            { 
+	      printf( "Twofish decryption failure\n");
+		  exit(1);
+		    } 
+        } 
+ 
+    /* The test keys are not secret, so we don't need to wipe xkey. */
+    return 1;
+    }
+ 
+ 
+int test_vectors() 
+    { 
+    static Twofish_Byte k128[] = { 
+        0x9F, 0x58, 0x9F, 0x5C, 0xF6, 0x12, 0x2C, 0x32,  
+        0xB6, 0xBF, 0xEC, 0x2F, 0x2A, 0xE8, 0xC3, 0x5A, 
+        }; 
+    static Twofish_Byte p128[] = { 
+        0xD4, 0x91, 0xDB, 0x16, 0xE7, 0xB1, 0xC3, 0x9E,  
+        0x86, 0xCB, 0x08, 0x6B, 0x78, 0x9F, 0x54, 0x19 
+        }; 
+    static Twofish_Byte c128[] = { 
+        0x01, 0x9F, 0x98, 0x09, 0xDE, 0x17, 0x11, 0x85,  
+        0x8F, 0xAA, 0xC3, 0xA3, 0xBA, 0x20, 0xFB, 0xC3 
+        }; 
+ 
+    /* 192-bit test is the I=4 case of section B.2 of the Twofish book. */ 
+    static Twofish_Byte k192[] = { 
+        0x88, 0xB2, 0xB2, 0x70, 0x6B, 0x10, 0x5E, 0x36,  
+        0xB4, 0x46, 0xBB, 0x6D, 0x73, 0x1A, 0x1E, 0x88,  
+        0xEF, 0xA7, 0x1F, 0x78, 0x89, 0x65, 0xBD, 0x44 
+        }; 
+    static Twofish_Byte p192[] = { 
+        0x39, 0xDA, 0x69, 0xD6, 0xBA, 0x49, 0x97, 0xD5, 
+        0x85, 0xB6, 0xDC, 0x07, 0x3C, 0xA3, 0x41, 0xB2 
+        }; 
+    static Twofish_Byte c192[] = { 
+        0x18, 0x2B, 0x02, 0xD8, 0x14, 0x97, 0xEA, 0x45, 
+        0xF9, 0xDA, 0xAC, 0xDC, 0x29, 0x19, 0x3A, 0x65 
+        }; 
+ 
+    /* 256-bit test is the I=4 case of section B.2 of the Twofish book. */ 
+    static Twofish_Byte k256[] = { 
+        0xD4, 0x3B, 0xB7, 0x55, 0x6E, 0xA3, 0x2E, 0x46,  
+        0xF2, 0xA2, 0x82, 0xB7, 0xD4, 0x5B, 0x4E, 0x0D, 
+        0x57, 0xFF, 0x73, 0x9D, 0x4D, 0xC9, 0x2C, 0x1B, 
+        0xD7, 0xFC, 0x01, 0x70, 0x0C, 0xC8, 0x21, 0x6F 
+        }; 
+    static Twofish_Byte p256[] = { 
+        0x90, 0xAF, 0xE9, 0x1B, 0xB2, 0x88, 0x54, 0x4F, 
+        0x2C, 0x32, 0xDC, 0x23, 0x9B, 0x26, 0x35, 0xE6 
+        }; 
+    static Twofish_Byte c256[] = { 
+        0x6C, 0xB4, 0x56, 0x1C, 0x40, 0xBF, 0x0A, 0x97, 
+        0x05, 0x93, 0x1C, 0xB6, 0xD4, 0x08, 0xE7, 0xFA 
+        }; 
+
+    int ret;
+
+    /* Run the actual tests. */ 
+    if ((ret = test_vector( k128, 16, p128, c128 )) < 0)
+      return ret; 
+    if ((ret = test_vector( k192, 24, p192, c192 )) < 0)
+      return ret; 
+    if ((ret = test_vector( k256, 32, p256, c256 )) < 0)
+      return ret;
+    return 1;
+    }    
+ 
+ 
+int test_sequence( int key_len, Twofish_Byte final_value[] ) 
+    { 
+    Twofish_Byte buf[ (50+3)*16 ];      /* Buffer to hold our computation values. */ 
+    Twofish_Byte tmp[16];               /* Temp for testing the decryption. */ 
+    Twofish_key xkey;           /* The expanded key */ 
+    int i, ret;
+    Twofish_Byte * p; 
+ 
+    /* Wipe the buffer */ 
+    memset( buf, 0, sizeof( buf ) ); 
+ 
+    /* 
+     * Because the recurrence relation is done in an inconvenient manner 
+     * we end up looping backwards over the buffer. 
+     */ 
+ 
+    /* Pointer in buffer points to current plaintext. */ 
+    p = &buf[50*16]; 
+    for( i=1; i<50; i++ ) 
+        { 
+        /*  
+         * Prepare a key. 
+         * This automatically checks that key_len is valid. 
+         */ 
+	  if ((ret = Twofish_prepare_key( p+16, key_len, &xkey)) < 0)
+	    return ret; 
+ 
+        /* Compute the next 16 bytes in the buffer */ 
+        Twofish_encrypt( &xkey, p, p-16 ); 
+ 
+        /* Check that the decryption is correct. */ 
+        Twofish_decrypt( &xkey, p-16, tmp ); 
+        if( memcmp( tmp, p, 16 ) != 0 ) 
+            { 
+	      printf("Twofish decryption failure in sequence\n");
+		  exit(1);
+		    } 
+        /* Move on to next 16 bytes in the buffer. */ 
+        p -= 16; 
+        } 
+ 
+    /* And check the final value. */ 
+    if( memcmp( p, final_value, 16 ) != 0 )  
+        { 
+	  printf( "Twofish encryption failure in sequence\n");
+	  exit(1);
+	    } 
+ 
+    /* None of the data was secret, so there is no need to wipe anything. */
+    return 1;
+    } 
+int test_sequences() 
+    { 
+    static Twofish_Byte r128[] = { 
+        0x5D, 0x9D, 0x4E, 0xEF, 0xFA, 0x91, 0x51, 0x57, 
+        0x55, 0x24, 0xF1, 0x15, 0x81, 0x5A, 0x12, 0xE0 
+        }; 
+    static Twofish_Byte r192[] = { 
+        0xE7, 0x54, 0x49, 0x21, 0x2B, 0xEE, 0xF9, 0xF4, 
+        0xA3, 0x90, 0xBD, 0x86, 0x0A, 0x64, 0x09, 0x41 
+        }; 
+    static Twofish_Byte r256[] = { 
+        0x37, 0xFE, 0x26, 0xFF, 0x1C, 0xF6, 0x61, 0x75, 
+        0xF5, 0xDD, 0xF4, 0xC3, 0x3B, 0x97, 0xA2, 0x05 
+        }; 
+ 
+    /* Run the three sequence test vectors */
+    int ret;
+    if ((ret = test_sequence( 16, r128)) < 0)
+      return ret; 
+    if ((ret = test_sequence( 24, r192)) < 0)
+      return ret; 
+    if ((ret = test_sequence( 32, r256)) < 0)
+      return ret;
+    return 1;
+    } 
+ 
+ 
+/* 
+ * Test the odd-sized keys. 
+ * 
+ * Every odd-sized key is equivalent to a one of 128, 192, or 256 bits. 
+ * The equivalent key is found by padding at the end with zero bytes 
+ * until a regular key size is reached. 
+ * 
+ * We just test that the key expansion routine behaves properly. 
+ * If the expanded keys are identical, then the encryptions and decryptions 
+ * will behave the same. 
+ */ 
+int test_odd_sized_keys() 
+    { 
+    Twofish_Byte buf[32]; 
+    Twofish_key xkey; 
+    Twofish_key xkey_two; 
+    int i, ret;
+ 
+    /*  
+     * We first create an all-zero key to use as PRNG key.  
+     * Normally we would not have to fill the buffer with zeroes, as we could 
+     * just pass a zero key length to the Twofish_prepare_key function. 
+     * However, this relies on using odd-sized keys, and those are just the 
+     * ones we are testing here. We can't use an untested function to test  
+     * itself.  
+     */ 
+    memset( buf, 0, sizeof( buf ) ); 
+    if ((ret = Twofish_prepare_key( buf, 16, &xkey)) < 0)
+      return ret; 
+ 
+    /* Fill buffer with pseudo-random data derived from two encryptions */ 
+    Twofish_encrypt( &xkey, buf, buf ); 
+    Twofish_encrypt( &xkey, buf, buf+16 ); 
+ 
+    /* Create all possible shorter keys that are prefixes of the buffer. */ 
+    for( i=31; i>=0; i-- ) 
+        { 
+        /* Set a byte to zero. This is the new padding byte */ 
+        buf[i] = 0; 
+ 
+        /* Expand the key with only i bytes of length */ 
+        if ((ret = Twofish_prepare_key( buf, i, &xkey)) < 0)
+	  return ret; 
+ 
+        /* Expand the corresponding padded key of regular length */ 
+        if ((ret = Twofish_prepare_key( buf, i<=16 ? 16 : (i<= 24 ? 24 : 32), &xkey_two )) < 0)
+	  return ret; 
+ 
+        /* Compare the two */ 
+        if( memcmp( &xkey, &xkey_two, sizeof( xkey ) ) != 0 ) 
+            { 
+	      printf( "Odd sized keys do not expand properly\n");
+		  exit(1);
+		    } 
+        } 
+ 
+    /* None of the key values are secret, so we don't need to wipe them. */
+    return 1;
+    } 
+ 
+ 
+/* 
+ * Test the Twofish implementation. 
+ * 
+ * This routine runs all the self tests, in order of importance. 
+ * It is called by the Twofish_initialise routine. 
+ *  
+ * In almost all applications the cost of running the self tests during 
+ * initialisation is insignificant, especially 
+ * compared to the time it takes to load the application from disk.  
+ * If you are very pressed for initialisation performance,  
+ * you could remove some of the tests. Make sure you did run them 
+ * once in the software and hardware configuration you are using. 
+ */ 
+int self_test() 
+    {
+      int ret;
+    /* The three test vectors form an absolute minimal test set. */ 
+      if ((ret = test_vectors()) < 0)
+	return ret;
+ 
+    /*  
+     * If at all possible you should run these tests too. They take 
+     * more time, but provide a more thorough coverage. 
+     */ 
+      if ((ret = test_sequences()) < 0)
+	return ret;
+ 
+    /* Test the odd-sized keys. */ 
+      if ((ret = test_odd_sized_keys()) < 0)
+	return ret;
+      return 1;
+    } 
+ 
+ 
+/* 
+ * And now, the actual Twofish implementation. 
+ * 
+ * This implementation generates all the tables during initialisation.  
+ * I don't like large tables in the code, especially since they are easily  
+ * damaged in the source without anyone noticing it. You need code to  
+ * generate them anyway, and this way all the code is close together. 
+ * Generating them in the application leads to a smaller executable  
+ * (the code is smaller than the tables it generates) and a  
+ * larger static memory footprint. 
+ * 
+ * Twofish can be implemented in many ways. I have chosen to  
+ * use large tables with a relatively long key setup time. 
+ * If you encrypt more than a few blocks of data it pays to pre-compute  
+ * as much as possible. This implementation is relatively inefficient for  
+ * applications that need to re-key every block or so. 
+ */ 
+ 
+/*  
+ * We start with the t-tables, directly from the Twofish definition.  
+ * These are nibble-tables, but merging them and putting them two nibbles  
+ * in one byte is more work than it is worth. 
+ */ 
+static Twofish_Byte t_table[2][4][16] = { 
+    { 
+        {0x8,0x1,0x7,0xD,0x6,0xF,0x3,0x2,0x0,0xB,0x5,0x9,0xE,0xC,0xA,0x4}, 
+        {0xE,0xC,0xB,0x8,0x1,0x2,0x3,0x5,0xF,0x4,0xA,0x6,0x7,0x0,0x9,0xD}, 
+        {0xB,0xA,0x5,0xE,0x6,0xD,0x9,0x0,0xC,0x8,0xF,0x3,0x2,0x4,0x7,0x1}, 
+        {0xD,0x7,0xF,0x4,0x1,0x2,0x6,0xE,0x9,0xB,0x3,0x0,0x8,0x5,0xC,0xA} 
+    }, 
+    { 
+        {0x2,0x8,0xB,0xD,0xF,0x7,0x6,0xE,0x3,0x1,0x9,0x4,0x0,0xA,0xC,0x5}, 
+        {0x1,0xE,0x2,0xB,0x4,0xC,0x3,0x7,0x6,0xD,0xA,0x5,0xF,0x9,0x0,0x8}, 
+        {0x4,0xC,0x7,0x5,0x1,0x6,0x9,0xA,0x0,0xE,0xD,0x8,0x2,0xB,0x3,0xF}, 
+        {0xB,0x9,0x5,0x1,0xC,0x3,0xD,0xE,0x6,0x4,0x7,0xF,0x2,0x0,0x8,0xA} 
+    } 
+}; 
+ 
+ 
+/* A 1-bit rotation of 4-bit values. Input must be in range 0..15 */ 
+#define ROR4BY1( x ) (((x)>>1) | (((x)<<3) & 0x8) ) 
+ 
+/* 
+ * The q-boxes are only used during the key schedule computations.  
+ * These are 8->8 bit lookup tables. Some CPUs prefer to have 8->32 bit  
+ * lookup tables as it is faster to load a 32-bit value than to load an  
+ * 8-bit value and zero the rest of the register. 
+ * The LARGE_Q_TABLE switch allows you to choose 32-bit entries in  
+ * the q-tables. Here we just define the Qtype which is used to store  
+ * the entries of the q-tables. 
+ */ 
+#if LARGE_Q_TABLE 
+typedef Twofish_UInt32      Qtype; 
+#else 
+typedef Twofish_Byte        Qtype; 
+#endif 
+ 
+/*  
+ * The actual q-box tables.  
+ * There are two q-boxes, each having 256 entries. 
+ */ 
+static Qtype q_table[2][256]; 
+ 
+ 
+/* 
+ * Now the function that converts a single t-table into a q-table. 
+ * 
+ * Arguments: 
+ * t[4][16] : four 4->4bit lookup tables that define the q-box 
+ * q[256]   : output parameter: the resulting q-box as a lookup table. 
+ */ 
+static void make_q_table( Twofish_Byte t[4][16], Qtype q[256] ) 
+    { 
+    int ae,be,ao,bo;        /* Some temporaries. */ 
+    int i; 
+    /* Loop over all input values and compute the q-box result. */ 
+    for( i=0; i<256; i++ ) { 
+        /*  
+         * This is straight from the Twofish specifications.  
+         *  
+         * The ae variable is used for the a_i values from the specs 
+         * with even i, and ao for the odd i's. Similarly for the b's. 
+         */ 
+        ae = i>>4; be = i&0xf; 
+        ao = ae ^ be; bo = ae ^ ROR4BY1(be) ^ ((ae<<3)&8); 
+        ae = t[0][ao]; be = t[1][bo]; 
+        ao = ae ^ be; bo = ae ^ ROR4BY1(be) ^ ((ae<<3)&8); 
+        ae = t[2][ao]; be = t[3][bo]; 
+ 
+        /* Store the result in the q-box table, the cast avoids a warning. */ 
+        q[i] = (Qtype) ((be<<4) | ae); 
+        } 
+    } 
+ 
+ 
+/*  
+ * Initialise both q-box tables.  
+ */ 
+static void initialise_q_boxes() { 
+    /* Initialise each of the q-boxes using the t-tables */ 
+    make_q_table( t_table[0], q_table[0] ); 
+    make_q_table( t_table[1], q_table[1] ); 
+    } 
+ 
+ 
+/* 
+ * Next up is the MDS matrix multiplication. 
+ * The MDS matrix multiplication operates in the field 
+ * GF(2)[x]/p(x) with p(x)=x^8+x^6+x^5+x^3+1. 
+ * If you don't understand this, read a book on finite fields. You cannot 
+ * follow the finite-field computations without some background. 
+ *  
+ * In this field, multiplication by x is easy: shift left one bit  
+ * and if bit 8 is set then xor the result with 0x169.  
+ * 
+ * The MDS coefficients use a multiplication by 1/x, 
+ * or rather a division by x. This is easy too: first make the 
+ * value 'even' (i.e. bit 0 is zero) by xorring with 0x169 if necessary,  
+ * and then shift right one position.  
+ * Even easier: shift right and xor with 0xb4 if the lsbit was set. 
+ * 
+ * The MDS coefficients are 1, EF, and 5B, and we use the fact that 
+ *   EF = 1 + 1/x + 1/x^2 
+ *   5B = 1       + 1/x^2 
+ * in this field. This makes multiplication by EF and 5B relatively easy. 
+ * 
+ * This property is no accident, the MDS matrix was designed to allow 
+ * this implementation technique to be used. 
+ * 
+ * We have four MDS tables, each mapping 8 bits to 32 bits. 
+ * Each table performs one column of the matrix multiplication.  
+ * As the MDS is always preceded by q-boxes, each of these tables 
+ * also implements the q-box just previous to that column. 
+ */ 
+ 
+/* The actual MDS tables. */ 
+static Twofish_UInt32 MDS_table[4][256]; 
+ 
+/* A small table to get easy conditional access to the 0xb4 constant. */ 
+static Twofish_UInt32 mds_poly_divx_const[] = {0,0xb4}; 
+ 
+/* Function to initialise the MDS tables. */ 
+static void initialise_mds_tables() 
+    { 
+    int i; 
+    Twofish_UInt32 q,qef,q5b;       /* Temporary variables. */ 
+ 
+    /* Loop over all 8-bit input values */ 
+    for( i=0; i<256; i++ )  
+        { 
+        /*  
+         * To save some work during the key expansion we include the last 
+         * of the q-box layers from the h() function in these MDS tables. 
+         */ 
+ 
+        /* We first do the inputs that are mapped through the q0 table. */ 
+        q = q_table[0][i]; 
+        /* 
+         * Here we divide by x, note the table to get 0xb4 only if the  
+         * lsbit is set.  
+         * This sets qef = (1/x)*q in the finite field 
+         */ 
+        qef = (q >> 1) ^ mds_poly_divx_const[ q & 1 ]; 
+        /* 
+         * Divide by x again, and add q to get (1+1/x^2)*q.  
+         * Note that (1+1/x^2) =  5B in the field, and addition in the field 
+         * is exclusive or on the bits. 
+         */ 
+        q5b = (qef >> 1) ^ mds_poly_divx_const[ qef & 1 ] ^ q; 
+        /*  
+         * Add q5b to qef to set qef = (1+1/x+1/x^2)*q. 
+         * Again, (1+1/x+1/x^2) = EF in the field. 
+         */ 
+        qef ^= q5b; 
+ 
+        /*  
+         * Now that we have q5b = 5B * q and qef = EF * q  
+         * we can fill two of the entries in the MDS matrix table.  
+         * See the Twofish specifications for the order of the constants. 
+         */ 
+        MDS_table[1][i] = (q  <<24) | (q5b<<16) | (qef<<8) | qef; 
+        MDS_table[3][i] = (q5b<<24) | (qef<<16) | (q  <<8) | q5b; 
+ 
+        /* Now we do it all again for the two columns that have a q1 box. */ 
+        q = q_table[1][i]; 
+        qef = (q >> 1) ^ mds_poly_divx_const[ q & 1 ]; 
+        q5b = (qef >> 1) ^ mds_poly_divx_const[ qef & 1 ] ^ q; 
+        qef ^= q5b; 
+ 
+        /* The other two columns use the coefficient in a different order. */ 
+        MDS_table[0][i] = (qef<<24) | (qef<<16) | (q5b<<8) | q  ; 
+        MDS_table[2][i] = (qef<<24) | (q  <<16) | (qef<<8) | q5b; 
+        } 
+    } 
+ 
+ 
+/* 
+ * The h() function is the heart of the Twofish cipher.  
+ * It is a complicated sequence of q-box lookups, key material xors,  
+ * and finally the MDS matrix. 
+ * We use lots of macros to make this reasonably fast. 
+ */ 
+ 
+/* First a shorthand for the two q-tables */ 
+#define q0  q_table[0] 
+#define q1  q_table[1] 
+ 
+/* 
+ * Each macro computes one column of the h for either 2, 3, or 4 stages. 
+ * As there are 4 columns, we have 12 macros in all. 
+ *  
+ * The key bytes are stored in the Byte array L at offset  
+ * 0,1,2,3,  8,9,10,11,  [16,17,18,19,   [24,25,26,27]] as this is the 
+ * order we get the bytes from the user. If you look at the Twofish  
+ * specs, you'll see that h() is applied to the even key words or the 
+ * odd key words. The bytes of the even words appear in this spacing, 
+ * and those of the odd key words too. 
+ * 
+ * These macros are the only place where the q-boxes and the MDS table 
+ * are used. 
+ */ 
+#define H02( y, L )  MDS_table[0][q0[q0[y]^L[ 8]]^L[0]] 
+#define H12( y, L )  MDS_table[1][q0[q1[y]^L[ 9]]^L[1]] 
+#define H22( y, L )  MDS_table[2][q1[q0[y]^L[10]]^L[2]] 
+#define H32( y, L )  MDS_table[3][q1[q1[y]^L[11]]^L[3]] 
+#define H03( y, L )  H02( q1[y]^L[16], L ) 
+#define H13( y, L )  H12( q1[y]^L[17], L ) 
+#define H23( y, L )  H22( q0[y]^L[18], L ) 
+#define H33( y, L )  H32( q0[y]^L[19], L ) 
+#define H04( y, L )  H03( q1[y]^L[24], L ) 
+#define H14( y, L )  H13( q0[y]^L[25], L ) 
+#define H24( y, L )  H23( q0[y]^L[26], L ) 
+#define H34( y, L )  H33( q1[y]^L[27], L ) 
+ 
+/* 
+ * Now we can define the h() function given an array of key bytes.  
+ * This function is only used in the key schedule, and not to pre-compute 
+ * the keyed S-boxes. 
+ * 
+ * In the key schedule, the input is always of the form k*(1+2^8+2^16+2^24) 
+ * so we only provide k as an argument. 
+ * 
+ * Arguments: 
+ * k        input to the h() function. 
+ * L        pointer to array of key bytes at  
+ *          offsets 0,1,2,3, ... 8,9,10,11, [16,17,18,19, [24,25,26,27]] 
+ * kCycles  # key cycles, 2, 3, or 4. 
+ */ 
+static Twofish_UInt32 h( int k, Twofish_Byte L[], int kCycles ) 
+    { 
+    switch( kCycles ) { 
+        /* We code all 3 cases separately for speed reasons. */ 
+    case 2: 
+        return H02(k,L) ^ H12(k,L) ^ H22(k,L) ^ H32(k,L); 
+    case 3: 
+        return H03(k,L) ^ H13(k,L) ^ H23(k,L) ^ H33(k,L); 
+    case 4: 
+        return H04(k,L) ^ H14(k,L) ^ H24(k,L) ^ H34(k,L); 
+    default:  
+        /* This is always a coding error, which is fatal. */ 
+      printf( "Twofish h(): Illegal argument\n");
+	  exit(1);
+        } 
+    } 
+ 
+ 
+/* 
+ * Pre-compute the keyed S-boxes. 
+ * Fill the pre-computed S-box array in the expanded key structure. 
+ * Each pre-computed S-box maps 8 bits to 32 bits. 
+ * 
+ * The S argument contains half the number of bytes of the full key, but is 
+ * derived from the full key. (See Twofish specifications for details.) 
+ * S has the weird byte input order used by the Hxx macros. 
+ * 
+ * This function takes most of the time of a key expansion. 
+ * 
+ * Arguments: 
+ * S        pointer to array of 8*kCycles Bytes containing the S vector. 
+ * kCycles  number of key words, must be in the set {2,3,4} 
+ * xkey     pointer to Twofish_key structure that will contain the S-boxes. 
+ */ 
+int fill_keyed_sboxes( Twofish_Byte S[], int kCycles, Twofish_key * xkey ) 
+    { 
+    int i; 
+    switch( kCycles ) { 
+        /* We code all 3 cases separately for speed reasons. */ 
+    case 2: 
+        for( i=0; i<256; i++ ) 
+            { 
+            xkey->s[0][i]= H02( i, S ); 
+            xkey->s[1][i]= H12( i, S ); 
+            xkey->s[2][i]= H22( i, S ); 
+            xkey->s[3][i]= H32( i, S ); 
+            } 
+        break; 
+    case 3: 
+        for( i=0; i<256; i++ ) 
+            { 
+            xkey->s[0][i]= H03( i, S ); 
+            xkey->s[1][i]= H13( i, S ); 
+            xkey->s[2][i]= H23( i, S ); 
+            xkey->s[3][i]= H33( i, S ); 
+            } 
+        break; 
+    case 4: 
+        for( i=0; i<256; i++ ) 
+            { 
+            xkey->s[0][i]= H04( i, S ); 
+            xkey->s[1][i]= H14( i, S ); 
+            xkey->s[2][i]= H24( i, S ); 
+            xkey->s[3][i]= H34( i, S ); 
+            } 
+        break; 
+    default:  
+        /* This is always a coding error, which is fatal. */ 
+      printf( "Twofish fill_keyed_sboxes(): Illegal argument\n");
+	  exit(1);
+	    }
+    return 1;
+    }
+ 
+ 
+/* A flag to keep track of whether we have been initialised or not. */ 
+int g_Twofish_initialised = 0; 
+ 
+/* 
+ * Initialise the Twofish implementation. 
+ * This function must be called before any other function in the 
+ * Twofish implementation is called. 
+ * This routine also does some sanity checks, to make sure that 
+ * all the macros behave, and it tests the whole cipher. 
+ */ 
+int Twofish_initialise() 
+{
+      int ret;
+    /* First test the various platform-specific definitions. */ 
+      if ((ret = test_platform()) < 0)
+	return ret;
+ 
+    /* We can now generate our tables, in the right order of course. */ 
+    initialise_q_boxes(); 
+    initialise_mds_tables(); 
+ 
+    /* We're finished with the initialisation itself. */ 
+    g_Twofish_initialised = 1; 
+ 
+    /*  
+     * And run some tests on the whole cipher.  
+     * Yes, you need to do this every time you start your program.  
+     * It is called assurance; you have to be certain that your program 
+     * still works properly.  
+     */ 
+    return self_test(); 
+    } 
+ 
+ 
+/* 
+ * The Twofish key schedule uses an Reed-Solomon code matrix multiply. 
+ * Just like the MDS matrix, the RS-matrix is designed to be easy 
+ * to implement. Details are below in the code.  
+ * 
+ * These constants make it easy to compute in the finite field used  
+ * for the RS code. 
+ * 
+ * We use Bytes for the RS computation, but these are automatically 
+ * widened to unsigned integers in the expressions. Having unsigned 
+ * ints in these tables therefore provides the fastest access. 
+ */ 
+static unsigned int rs_poly_const[] = {0, 0x14d}; 
+static unsigned int rs_poly_div_const[] = {0, 0xa6 }; 
+ 
+/*
+ * memset_volatile is a volatile pointer to the memset function.
+ * You can call (*memset_volatile)(buf, val, len) or even
+ * memset_volatile(buf, val, len) just as you would call
+ * memset(buf, val, len), but the use of a volatile pointer
+ * guarantees that the compiler will not optimise the call away.
+ */
+static void * (*volatile memset_volatile)(void *, int, size_t) = memset;
+
+/* 
+ * Prepare a key for use in encryption and decryption. 
+ * Like most block ciphers, Twofish allows the key schedule  
+ * to be pre-computed given only the key.  
+ * Twofish has a fairly 'heavy' key schedule that takes a lot of time  
+ * to compute. The main work is pre-computing the S-boxes used in the  
+ * encryption and decryption. We feel that this makes the cipher much  
+ * harder to attack. The attacker doesn't even know what the S-boxes  
+ * contain without including the entire key schedule in the analysis.  
+ * 
+ * Unlike most Twofish implementations, this one allows any key size from 
+ * 0 to 32 bytes. Odd key sizes are defined for Twofish (see the  
+ * specifications); the key is simply padded with zeroes to the next real  
+ * key size of 16, 24, or 32 bytes. 
+ * Each odd-sized key is thus equivalent to a single normal-sized key. 
+ * 
+ * Arguments: 
+ * key      array of key bytes 
+ * key_len  number of bytes in the key, must be in the range 0,...,32. 
+ * xkey     Pointer to an Twofish_key structure that will be filled  
+ *             with the internal form of the cipher key. 
+ */ 
+int Twofish_prepare_key( Twofish_Byte key[], int key_len, Twofish_key * xkey ) 
+    { 
+    /* We use a single array to store all key material in,  
+     * to simplify the wiping of the key material at the end. 
+     * The first 32 bytes contain the actual (padded) cipher key. 
+     * The next 32 bytes contain the S-vector in its weird format, 
+     * and we have 4 bytes of overrun necessary for the RS-reduction. 
+     */ 
+    Twofish_Byte K[32+32+4];  
+ 
+    int kCycles;        /* # key cycles, 2,3, or 4. */ 
+ 
+    int i; 
+    Twofish_UInt32 A, B;        /* Used to compute the round keys. */ 
+ 
+    Twofish_Byte * kptr;        /* Three pointers for the RS computation. */ 
+    Twofish_Byte * sptr; 
+    Twofish_Byte * t; 
+ 
+    Twofish_Byte b,bx,bxx;      /* Some more temporaries for the RS computation. */ 
+	///printf("k1\n");
+    /* Check that the Twofish implementation was initialised. */ 
+    if( g_Twofish_initialised == 0 ) 
+        { 
+		 printf("05371: not init\n");
+		 exit(1);
+	    for(;;);        /* Infinite loop, which beats being insecure. */ 
+        } 
+ 
+    /* Check for valid key length. */ 
+    if( key_len < 0 || key_len > 32 ) 
+        { 
+        /*  
+         * This can only happen if a programmer didn't read the limitations 
+         * on the key size.  
+         */ 
+	  printf( "Twofish_prepare_key: illegal key length\n");
+	  exit(1);
+	    /*  
+         * A return statement just in case the fatal macro returns. 
+         * The rest of the code assumes that key_len is in range, and would 
+         * buffer-overflow if it wasn't.  
+         * 
+         * Why do we still use a programming language that has problems like 
+         * buffer overflows, when these problems were solved in 1960 with 
+         * the development of Algol? Have we not leared anything? 
+         */ 
+        } 
+ 
+    /* Pad the key with zeroes to the next suitable key length. */ 
+    memcpy( K, key, key_len ); 
+    memset( K+key_len, 0, sizeof(K)-key_len ); 
+ 
+    /*  
+     * Compute kCycles: the number of key cycles used in the cipher.  
+     * 2 for 128-bit keys, 3 for 192-bit keys, and 4 for 256-bit keys. 
+     */ 
+    kCycles = (key_len + 7) >> 3; 
+    /* Handle the special case of very short keys: minimum 2 cycles. */ 
+    if( kCycles < 2 ) 
+        { 
+        kCycles = 2; 
+        } 
+ 
+    /*  
+     * From now on we just pretend to have 8*kCycles bytes of  
+     * key material in K. This handles all the key size cases.  
+     */ 
+ 
+    /*  
+     * We first compute the 40 expanded key words,  
+     * formulas straight from the Twofish specifications. 
+     */ 
+    for( i=0; i<40; i+=2 ) 
+        { 
+        /*  
+         * Due to the byte spacing expected by the h() function  
+         * we can pick the bytes directly from the key K. 
+         * As we use bytes, we never have the little/big endian 
+         * problem. 
+         * 
+         * Note that we apply the rotation function only to simple 
+         * variables, as the rotation macro might evaluate its argument 
+         * more than once. 
+         */ 
+        A = h( i  , K  , kCycles ); 
+        B = h( i+1, K+4, kCycles ); 
+        B = ROL32( B, 8 ); 
+ 
+        /* Compute and store the round keys. */ 
+        A += B; 
+        B += A; 
+        xkey->K[i]   = A; 
+        xkey->K[i+1] = ROL32( B, 9 ); 
+        } 
+ 
+    /* Wipe variables that contained key material. */ 
+    A=B=0; 
+ 
+    /*  
+     * And now the dreaded RS multiplication that few seem to understand. 
+     * The RS matrix is not random, and is specially designed to compute the 
+     * RS matrix multiplication in a simple way. 
+     * 
+     * We work in the field GF(2)[x]/x^8+x^6+x^3+x^2+1. Note that this is a 
+     * different field than used for the MDS matrix.  
+     * (At least, it is a different representation because all GF(2^8)  
+     * representations are equivalent in some form.) 
+     *  
+     * We take 8 consecutive bytes of the key and interpret them as  
+     * a polynomial k_0 + k_1 y + k_2 y^2 + ... + k_7 y^7 where  
+     * the k_i bytes are the key bytes and are elements of the finite field. 
+     * We multiply this polynomial by y^4 and reduce it modulo 
+     *     y^4 + (x + 1/x)y^3 + (x)y^2 + (x + 1/x)y + 1.  
+     * using straightforward polynomial modulo reduction. 
+     * The coefficients of the result are the result of the RS 
+     * matrix multiplication. When we wrote the Twofish specification,  
+     * the original RS definition used the polynomials,  
+     * but that requires much more mathematical knowledge.  
+     * We were already using matrix multiplication in a finite field for  
+     * the MDS matrix, so I re-wrote the RS operation as a matrix  
+     * multiplication to reduce the difficulty of understanding it.  
+     * Some implementors have not picked up on this simpler method of 
+     * computing the RS operation, even though it is mentioned in the 
+     * specifications. 
+     * 
+     * It is possible to perform these computations faster by using 32-bit  
+     * word operations, but that is not portable and this is not a speed- 
+     * critical area. 
+     * 
+     * We explained the 1/x computation when we did the MDS matrix.  
+     * 
+     * The S vector is stored in K[32..64]. 
+     * The S vector has to be reversed, so we loop cross-wise. 
+     * 
+     * Note the weird byte spacing of the S-vector, to match the even  
+     * or odd key words arrays. See the discussion at the Hxx macros for 
+     * details. 
+     */ 
+    kptr = K + 8*kCycles;           /* Start at end of key */ 
+    sptr = K + 32;                  /* Start at start of S */ 
+ //printf("k2\n");
+    
+    /* Loop over all key material */ 
+    while( kptr > K )  
+        { 
+        kptr -= 8; 
+        /*  
+         * Initialise the polynimial in sptr[0..12] 
+         * The first four coefficients are 0 as we have to multiply by y^4. 
+         * The next 8 coefficients are from the key material. 
+         */ 
+        memset( sptr, 0, 4 ); 
+        memcpy( sptr+4, kptr, 8 ); 
+ 
+        /*  
+         * The 12 bytes starting at sptr are now the coefficients of 
+         * the polynomial we need to reduce. 
+         */ 
+ 
+        /* Loop over the polynomial coefficients from high to low */ 
+        t = sptr+11; 
+        /* Keep looping until polynomial is degree 3; */ 
+        while( t > sptr+3 ) 
+            { 
+            /* Pick up the highest coefficient of the poly. */ 
+            b = *t; 
+ 
+            /*  
+             * Compute x and (x+1/x) times this coefficient.  
+             * See the MDS matrix implementation for a discussion of  
+             * multiplication by x and 1/x. We just use different  
+             * constants here as we are in a  
+             * different finite field representation. 
+             * 
+             * These two statements set  
+             * bx = (x) * b  
+             * bxx= (x + 1/x) * b 
+             */ 
+            bx = (Twofish_Byte)((b<<1) ^ rs_poly_const[ b>>7 ]); 
+            bxx= (Twofish_Byte)((b>>1) ^ rs_poly_div_const[ b&1 ] ^ bx); 
+ 
+            /* 
+             * Subtract suitable multiple of  
+             * y^4 + (x + 1/x)y^3 + (x)y^2 + (x + 1/x)y + 1  
+             * from the polynomial, except that we don't bother 
+             * updating t[0] as it will become zero anyway. 
+             */ 
+            t[-1] ^= bxx; 
+            t[-2] ^= bx; 
+            t[-3] ^= bxx; 
+            t[-4] ^= b; 
+             
+            /* Go to the next coefficient. */ 
+            t--; 
+            } 
+ 
+        /* Go to next S-vector word, obeying the weird spacing rules. */ 
+        sptr += 8; 
+        } 
+ 
+    /* Wipe variables that contained key material. */ 
+    b = bx = bxx = 0; 
+ 
+    /* And finally, we can compute the key-dependent S-boxes. */ 
+    fill_keyed_sboxes( &K[32], kCycles, xkey ); 
+ 
+ ///printf("k3\n");
+    
+    /* Wipe array that contained key material. */ 
+    (*memset_volatile)( K, 0, sizeof( K ) );
+	///printf("k4\n");
+    
+    return 1;
+    } 
+ 
+ 
+/* 
+ * We can now start on the actual encryption and decryption code. 
+ * As these are often speed-critical we will use a lot of macros. 
+ */ 
+ 
+/* 
+ * The g() function is the heart of the round function. 
+ * We have two versions of the g() function, one without an input 
+ * rotation and one with. 
+ * The pre-computed S-boxes make this pretty simple. 
+ */ 
+#define g0(X,xkey) \
+ (xkey->s[0][b0(X)]^xkey->s[1][b1(X)]^xkey->s[2][b2(X)]^xkey->s[3][b3(X)]) 
+ 
+#define g1(X,xkey) \
+ (xkey->s[0][b3(X)]^xkey->s[1][b0(X)]^xkey->s[2][b1(X)]^xkey->s[3][b2(X)]) 
+ 
+/* 
+ * A single round of Twofish. The A,B,C,D are the four state variables, 
+ * T0 and T1 are temporaries, xkey is the expanded key, and r the  
+ * round number. 
+ * 
+ * Note that this macro does not implement the swap at the end of the round. 
+ */ 
+#define ENCRYPT_RND( A,B,C,D, T0, T1, xkey, r ) \
+    T0 = g0(A,xkey); T1 = g1(B,xkey);\
+    C ^= T0+T1+xkey->K[8+2*(r)]; C = ROR32(C,1);\
+    D = ROL32(D,1); D ^= T0+2*T1+xkey->K[8+2*(r)+1] 
+ 
+/* 
+ * Encrypt a single cycle, consisting of two rounds. 
+ * This avoids the swapping of the two halves.  
+ * Parameter r is now the cycle number. 
+ */ 
+#define ENCRYPT_CYCLE( A, B, C, D, T0, T1, xkey, r ) \
+    ENCRYPT_RND( A,B,C,D,T0,T1,xkey,2*(r)   );\
+    ENCRYPT_RND( C,D,A,B,T0,T1,xkey,2*(r)+1 )
+ 
+/* Full 16-round encryption */ 
+#define ENCRYPT( A,B,C,D,T0,T1,xkey ) \
+    ENCRYPT_CYCLE( A,B,C,D,T0,T1,xkey, 0 );\
+    ENCRYPT_CYCLE( A,B,C,D,T0,T1,xkey, 1 );\
+    ENCRYPT_CYCLE( A,B,C,D,T0,T1,xkey, 2 );\
+    ENCRYPT_CYCLE( A,B,C,D,T0,T1,xkey, 3 );\
+    ENCRYPT_CYCLE( A,B,C,D,T0,T1,xkey, 4 );\
+    ENCRYPT_CYCLE( A,B,C,D,T0,T1,xkey, 5 );\
+    ENCRYPT_CYCLE( A,B,C,D,T0,T1,xkey, 6 );\
+    ENCRYPT_CYCLE( A,B,C,D,T0,T1,xkey, 7 )
+ 
+/* 
+ * A single round of Twofish for decryption. It differs from 
+ * ENCRYTP_RND only because of the 1-bit rotations. 
+ */ 
+#define DECRYPT_RND( A,B,C,D, T0, T1, xkey, r ) \
+    T0 = g0(A,xkey); T1 = g1(B,xkey);\
+    C = ROL32(C,1); C ^= T0+T1+xkey->K[8+2*(r)];\
+    D ^= T0+2*T1+xkey->K[8+2*(r)+1]; D = ROR32(D,1)
+ 
+/* 
+ * Decrypt a single cycle, consisting of two rounds.  
+ * This avoids the swapping of the two halves.  
+ * Parameter r is now the cycle number. 
+ */ 
+#define DECRYPT_CYCLE( A, B, C, D, T0, T1, xkey, r ) \
+    DECRYPT_RND( A,B,C,D,T0,T1,xkey,2*(r)+1 );\
+    DECRYPT_RND( C,D,A,B,T0,T1,xkey,2*(r)   )
+ 
+/* Full 16-round decryption. */ 
+#define DECRYPT( A,B,C,D,T0,T1, xkey ) \
+    DECRYPT_CYCLE( A,B,C,D,T0,T1,xkey, 7 );\
+    DECRYPT_CYCLE( A,B,C,D,T0,T1,xkey, 6 );\
+    DECRYPT_CYCLE( A,B,C,D,T0,T1,xkey, 5 );\
+    DECRYPT_CYCLE( A,B,C,D,T0,T1,xkey, 4 );\
+    DECRYPT_CYCLE( A,B,C,D,T0,T1,xkey, 3 );\
+    DECRYPT_CYCLE( A,B,C,D,T0,T1,xkey, 2 );\
+    DECRYPT_CYCLE( A,B,C,D,T0,T1,xkey, 1 );\
+    DECRYPT_CYCLE( A,B,C,D,T0,T1,xkey, 0 ) 
+
+/* 
+ * A macro to read the state from the plaintext and do the initial key xors. 
+ * The koff argument allows us to use the same macro  
+ * for the decryption which uses different key words at the start. 
+ */ 
+#define GET_INPUT( src, A,B,C,D, xkey, koff ) \
+    A = GET32(src   )^xkey->K[  koff]; B = GET32(src+ 4)^xkey->K[1+koff]; \
+    C = GET32(src+ 8)^xkey->K[2+koff]; D = GET32(src+12)^xkey->K[3+koff]
+ 
+/* 
+ * Similar macro to put the ciphertext in the output buffer. 
+ * We xor the keys into the state variables before we use the PUT32  
+ * macro as the macro might use its argument multiple times. 
+ */ 
+#define PUT_OUTPUT( A,B,C,D, dst, xkey, koff ) \
+    A ^= xkey->K[  koff]; B ^= xkey->K[1+koff]; \
+    C ^= xkey->K[2+koff]; D ^= xkey->K[3+koff]; \
+    PUT32( A, dst   ); PUT32( B, dst+ 4 ); \
+    PUT32( C, dst+8 ); PUT32( D, dst+12 )
+ 
+ 
+/* 
+ * Twofish block encryption 
+ * 
+ * Arguments: 
+ * xkey         expanded key array 
+ * p            16 bytes of plaintext 
+ * c            16 bytes in which to store the ciphertext 
+ */ 
+void Twofish_encrypt( Twofish_key * xkey, Twofish_Byte p[16], Twofish_Byte c[16]) 
+    { 
+    Twofish_UInt32 A,B,C,D,T0,T1;       /* Working variables */ 
+ 
+    /* Get the four plaintext words xorred with the key */ 
+    GET_INPUT( p, A,B,C,D, xkey, 0 ); 
+ 
+    /* Do 8 cycles (= 16 rounds) */ 
+    ENCRYPT( A,B,C,D,T0,T1,xkey ); 
+ 
+    /* Store them with the final swap and the output whitening. */ 
+    PUT_OUTPUT( C,D,A,B, c, xkey, 4 ); 
+    } 
+ 
+ 
+/* 
+ * Twofish block decryption. 
+ * 
+ * Arguments: 
+ * xkey         expanded key array 
+ * p            16 bytes of plaintext 
+ * c            16 bytes in which to store the ciphertext 
+ */ 
+void Twofish_decrypt( Twofish_key * xkey, Twofish_Byte c[16], Twofish_Byte p[16]) 
+    { 
+    Twofish_UInt32 A,B,C,D,T0,T1;       /* Working variables */ 
+ 
+    /* Get the four plaintext words xorred with the key */ 
+    GET_INPUT( c, A,B,C,D, xkey, 4 ); 
+ 
+    /* Do 8 cycles (= 16 rounds) */ 
+    DECRYPT( A,B,C,D,T0,T1,xkey ); 
+ 
+    /* Store them with the final swap and the output whitening. */ 
+    PUT_OUTPUT( C,D,A,B, p, xkey, 0 ); 
+    } 
+ 
+
+
+/////////////////
+
+
+/*
+	This is the actual client-side
+	Beware: in final release everything will be length fixed, now it is forced to be multiple
+	        of 16 due Twofish
+*/
+
+#define HIGHVERSION 	2
+#define LOWVERSION 		2
+#define CLOUDBUFFSIZE 	16*1000
+
+Twofish_key 		g_mykey;		/// twofish keys are slow, big and painful, therefore a global one
+WSAData 			g_wsaData;
+struct addrinfo* 	g_addr;
+
+
+
+
+
+
+
+
+///   Twofish runs 16 bytes at time
+int	paddingto16(int i_number) 
+{ 
+	int bittini=i_number&15;
+	return 16-bittini;
+} 
+
+
+///		functions to be made BIG ENDIAN-compatible, just mockups
+void char8toarray(const char* i_char8,char* i_buffer)
+{
+	if (i_buffer==NULL)
+	{
+		myprintf("05837: guru i_buffer null\n");
+		seppuku();
+		exit(1);
+	}
+	if (i_char8==NULL)
+	{
+		myprintf("05842: guru i_char8 null\n");
+		seppuku();
+		exit(1);
+	}
+	memcpy(i_buffer,i_char8,8);
+}
+void arraytochar8(char* i_buffer,char* i_char8)
+{
+	if (i_buffer==NULL)
+	{
+		myprintf("05851: guru i_buffer null\n");
+		seppuku();
+		exit(1);
+	}
+	if (i_char8==NULL)
+	{
+		myprintf("05856: guru i_char8 null\n");
+		seppuku();
+		exit(1);
+	}
+	memcpy(i_char8,i_buffer,8);
+}
+int64_t arraytoint64(char* i_buffer)
+{
+	int64_t	risultato=0;
+	for (int i=7;i>=0;i--)
+	{
+		uint8_t numerino=*(i_buffer+i);
+		risultato=risultato+numerino;
+		if (i>0)
+		risultato<<=8;
+	}
+	return risultato;
+}
+
+bool maketwofishkey(std::string i_lachiave,Twofish_key*	o_thekey)
+{	
+	if (o_thekey==NULL)
+	{
+		myprintf("46203: o_thekey is null\n");
+		return false;
+	}
+	if (i_lachiave=="")
+	{
+		myprintf("46208: i_lachiave is empty!\n");
+		return false;
+	}
+	char	buflachiave[32];
+	memset(buflachiave,0,32);
+	sprintf(buflachiave,"%s",i_lachiave.c_str());
+	return (Twofish_prepare_key((unsigned char*)buflachiave,i_lachiave.size(),o_thekey)==1);
+}
+
+
+
+
+
+#define FRANZOPACKET_HEADERSIZE			64
+#define	FRANZOPACKET_BUFSIZE			65536
+#define FRANZOPACKET_STAMPSIZE			16
+#define FRANZOPACKET_TYPECOMMAND_NEW 	'N'
+#define FRANZOPACKET_TYPECOMMAND_DATA 	'D'
+#define FRANZOPACKET_TYPECOMMAND_EOF 	'E'
+#define FRANZOPACKET_TYPECOMMAND_DEBUG 	'B'
+
+uint8_t		g_packet_start[16]={233,200,139,245,172, 35,223, 14,  5,235,126, 92, 68, 81,  1,160};
+uint8_t		g_packet_end	[16]={195, 20,249,239, 69, 71, 88, 64,103,254, 66,187,192, 33,  2,220};
+
+class franzpacket
+{
+	private:
+	int64_t		okhash;		// unencrypted
+
+////////// this is the "real packet": 8x8 bytes =16 (packet start)	+ 64 + 65536 (payload) + 16 (packet end)
+	int64_t		accepthash;
+	int64_t		buffersize;
+	char		type[8];
+	int64_t		bufferhash;
+	int64_t		bytes;
+	int64_t		number1;
+	int64_t		number2;
+	int64_t		number3;
+////////// for 64 bytes, then the payload
+
+	char		buffer[FRANZOPACKET_HEADERSIZE+FRANZOPACKET_BUFSIZE]; ///4064 + 16 + 16 = 4096
+
+	bool		flagencrypted;
+	
+	public:
+	
+	bool	sendtosocket()
+	{
+		twofish_encode(&g_mykey);
+		if (g_socket==0)
+			myprintf("\n\n23216: sendtosocket() on a 0 socket \n\n");
+		else
+		{
+			g_socket_packet	+=sizeof(buffer);
+			g_socket_packets++;
+			g_socket_hash.add(buffer,sizeof(buffer));
+			///printf("****************************************** %05d %08d %08X\n",g_socket_packets,g_socket_packet,g_socket_hash.hash());
+			send(g_socket,(const char*)g_packet_start,FRANZOPACKET_STAMPSIZE,0);
+			send(g_socket,buffer,sizeof(buffer),0);
+			send(g_socket,(const char*)g_packet_end,FRANZOPACKET_STAMPSIZE,0);
+			return true;
+		}
+		bytes=0;
+		memset(buffer,	0,sizeof(buffer));
+		return false;
+	}
+	
+	franzpacket(): okhash(0),accepthash(0),buffersize(0),bufferhash(0),bytes(0),number2(0),number3(0),flagencrypted(false)
+	{
+		memset(buffer,	0,sizeof(buffer));
+		memset(type,	0,sizeof(type));
+	}
+	char*	get_payload()
+	{
+		return buffer+FRANZOPACKET_HEADERSIZE;
+	}
+	int64_t	get_bytes()
+	{
+		return bytes;
+	}
+	bool	put(int i_char)
+	{
+		if (i_char==EOF)
+		{
+			myprintf("45713: Operating a sendsocket EOF (from put)\n");
+			type[0]=FRANZOPACKET_TYPECOMMAND_EOF;
+			sendtosocket();
+			return true;
+		}
+
+		if ((uint64_t)(bytes+FRANZOPACKET_HEADERSIZE)<=sizeof(buffer))
+		{
+			*(buffer+FRANZOPACKET_HEADERSIZE+bytes)=i_char&255;
+			bytes++;
+		}
+		else
+		{
+			myprintf("45977: Ready to empty buffer sending to socket\n");
+			sendtosocket();
+			return true;
+		}
+	}
+	int64_t	get_accepthash()
+	{
+		return accepthash;
+	}
+	int64_t	get_buffersize()
+	{
+		return buffersize;
+	}
+	int64_t	get_bufferhash()
+	{
+		return bufferhash;
+	}
+	char get_type0()
+	{
+		return type[0];
+	}
+	bool	loadpayload(char* i_data,uint64_t i_datalen)
+	{
+		if (i_datalen<=0)
+		{
+			printf("Guru 5352: datalen <=0\n");
+			exit(0);
+		}
+		if (i_data==NULL)
+		{
+			printf("Guru 5347: i_data null\n");
+			exit(0);
+		}
+		if (i_datalen>sizeof(buffer))
+		{
+			printf("GURU 5342: packet too large\n");
+			exit(0);
+		}
+		memcpy(buffer+FRANZOPACKET_HEADERSIZE,i_data,i_datalen);
+		
+		bytes			=i_datalen;
+		buffersize		=sizeof(buffer);
+		flagencrypted	=false;
+		return true;
+	}
+	bool	setpacket(const int64_t i_accepthash,const char i_type,const int64_t i_number1,const int64_t i_number2,const int64_t i_number3,const string i_payload)
+	{
+		okhash		=0;
+		accepthash	=0;
+		buffersize	=0;
+		bufferhash	=0;
+		bytes		=0;
+		number1		=i_number1;
+		number2		=i_number2;
+		number3		=i_number3;
+		memset(type,0,8);
+		flagencrypted=false;
+			
+		if 	(
+			(i_type==FRANZOPACKET_TYPECOMMAND_NEW) 	||
+			(i_type==FRANZOPACKET_TYPECOMMAND_DATA) ||
+			(i_type==FRANZOPACKET_TYPECOMMAND_DEBUG) ||
+			(i_type==FRANZOPACKET_TYPECOMMAND_EOF) 	
+			)
+		{
+			okhash			=i_accepthash;
+			type[0]			=i_type;
+			/// only temporary!
+			memset(buffer+FRANZOPACKET_HEADERSIZE,0,sizeof(buffer)-FRANZOPACKET_HEADERSIZE);
+			
+			if (i_payload!="")
+				if (i_payload.size()<sizeof(buffer))
+				{
+					snprintf(buffer+FRANZOPACKET_HEADERSIZE,sizeof(buffer),"%s",i_payload.c_str());
+					bytes=i_payload.size();
+				}
+			return true;
+		}
+		return false;
+	}
+	
+	bool	twofish_encode(Twofish_key* i_thekey) ///ecb, quick and dirty
+	{
+		if (i_thekey==NULL)
+		{
+			myprintf("05954: i_thekey null\n");
+			return false;
+		}
+		if (buffer==NULL)
+		{
+			myprintf("05953: i_buffer null\n");
+			return false;
+		}
+		if (bytes<=0)
+		{
+			myprintf("05959: bytes is <=0\n");
+			exit(0);
+			return false;
+		}
+		if (flagencrypted)
+		{
+			myprintf("05964: buffersize already encrypted\n");
+			return false;
+		}
+		buffersize=FRANZOPACKET_HEADERSIZE+bytes;
+		Twofish_Byte criptato[16];
+		int chunks=(buffersize)/16;
+		if (buffersize%16!=0)
+			chunks++;
+			
+		int padding=paddingto16(buffersize);
+		if (flagdebug)
+			if (padding)
+				myprintf("23376: Chunks %03d Need some padding %d\n",chunks,padding);
+		memset(buffer+buffersize,00,padding);
+		buffersize+=padding;
+
+		uint64_t myseed	= 0;
+		XXHash64 myhash(myseed);
+		myhash.add(buffer+FRANZOPACKET_HEADERSIZE,bytes);
+		bufferhash		=myhash.hash();
+		int64toarray(okhash,		buffer+ 0);
+		int64toarray(buffersize,	buffer+ 8);
+		char8toarray(type,			buffer+16);
+		int64toarray(bufferhash,	buffer+24);
+		int64toarray(bytes,			buffer+32);
+		int64toarray(number1,		buffer+40);
+		int64toarray(number2,		buffer+48);
+		int64toarray(number3,		buffer+56);
+				
+/*
+		for (int i=0;i<16*chunks;i++)
+		{
+			printf("SOURCE %03d:%02X %c ",i,(unsigned char)buffer[i],(unsigned char)buffer[i]);
+			if (i%4==3)
+				printf("\n");
+		}
+*/
+		for (int i=0;i<chunks;i++)
+		{
+			Twofish_encrypt(i_thekey,(Twofish_Byte*)buffer+i*16,criptato);
+			memcpy(buffer+i*16,criptato,16);
+		}
+/*
+		for (int i=0;i<buffersize;i++)
+		{
+			printf("ENC %03d:%02X   ",i,(unsigned char)buffer[i]);
+			if (i%4==3)
+				printf("\n");
+		}
+*/
+		flagencrypted=true;
+		return true;
+	}
+
+	bool	twofish_decode(Twofish_key* i_thekey) ///ecb, quick and dirty
+	{
+		if (flagdebug)
+			myprintf("05531: Start decryt\n");
+		if (i_thekey==NULL)
+		{
+			myprintf("05967: i_thekey null\n");
+			return false;
+		}
+		if (buffer==NULL)
+		{
+			myprintf("05972: i_buffer null\n");
+			return false;
+		}
+		if (buffersize<=0)
+		{
+			myprintf("05977: buffersize is <=0\n");
+			return false;
+		}
+		if (!flagencrypted)
+		{
+			myprintf("05982: buffer NOT encrypted\n");
+			return false;
+		}
+
+		memset(type,0,8);
+		bufferhash	=0;
+		bytes		=0;
+		number1		=0;
+		number2		=0;
+		number3		=0;
+/*
+		for (int i=0;i<buffersize;i++)
+		{
+			printf("PACCHETTO %03d:%02X %c ",i,(unsigned char)buffer[i],(unsigned char)buffer[i]);
+			if (i%4==3)
+				printf("\n");
+		}
+*/
+		Twofish_Byte test[16];
+		Twofish_decrypt(i_thekey,(Twofish_Byte*)buffer,test);
+		accepthash=arraytoint64((char*)test);
+		if (accepthash!=okhash)
+		{
+			myprintf("06047: decrypt FAILED %lld vs ACCEPTED %lld!\n",accepthash,okhash);
+			return false;
+		}
+		
+		buffersize=arraytoint64((char*)test+8);
+		if (flagdebug)
+			myprintf("05574: Decoding from little header %d\n",buffersize);
+		Twofish_Byte decriptato[16];
+		int chunks=(buffersize)/16;
+		if (buffersize%16!=0)
+		{
+			chunks++;
+			myprintf("2347: NOT 16!\n");
+		}	
+
+		for (int i=0;i<chunks;i++)
+		{
+			Twofish_decrypt(i_thekey,(Twofish_Byte*)buffer+i*16,decriptato);
+			memcpy(buffer+i*16,decriptato,16);
+		}
+
+		arraytochar8((char*)buffer+16,type);
+		bufferhash	=arraytoint64(buffer+24);
+		bytes		=arraytoint64(buffer+32);
+		number1		=arraytoint64(buffer+40);
+		number2		=arraytoint64(buffer+48);
+		number3		=arraytoint64(buffer+56);
+		
+		uint64_t myseed	= 0;
+		XXHash64 myhash(myseed);
+		myhash.add(buffer+64,bytes);
+		int64_t recalcbufferhash		=myhash.hash();
+		
+		if (recalcbufferhash!=bufferhash)
+		{
+			myprintf("05514: hash check failed! decoded %08X vs recalc %08X\n",bufferhash,recalcbufferhash);
+			memset(type,0,8);
+			accepthash	=0;
+			bufferhash	=0;
+			bytes		=0;
+			number1		=0;
+			number2		=0;
+			number3		=0;
+			return false;
+		}
+		flagencrypted=false;
+		return true;
+	}
+	
+};
+franzpacket	g_flushpacket;
+#endif
+
+
+
 // An Archive is a file supporting encryption
 class OutputArchive: public ArchiveBase, public libzpaq::Writer {
   int64_t off;    // preceding multi-part bytes
   unsigned ptr;   // write pointer in buf: 0 <= ptr <= BUFSIZE
   enum {BUFSIZE=1<<16};
   char buf[BUFSIZE];  // I/O buffer
+  string thefilename;
+  
 public:
   // Open. If password then encrypt output.
   OutputArchive(const char* filename, const char* password=0,
@@ -21651,7 +23581,19 @@ public:
   void flush() {
     assert(fp!=FPNULL);
     if (aes) aes->encrypt(buf, ptr, ftello(fp)+off);
-    fwrite(buf, 1, ptr, fp);
+
+	fwrite(buf, 1, ptr, fp);
+#ifdef SERVER
+	if (g_socket!=0)
+		if (ptr>0)
+			if (thefilename!=g_indexname)
+			{	
+				g_socket_sended+=ptr;
+				g_flushpacket.setpacket(g_enter,FRANZOPACKET_TYPECOMMAND_DATA,g_socket_sended,2002,3003,"");
+				g_flushpacket.loadpayload(buf,ptr);
+				g_flushpacket.sendtosocket();
+			}
+#endif
     ptr=0;
   }
   // Position the next read or write offset to p.
@@ -21676,8 +23618,8 @@ public:
   // Return current file offset.
   int64_t tell() const 
   {
-		if (g_fakewrite)  /// ransomware
-			return off;
+	if (g_fakewrite)  /// ransomware
+		return off;
 
     if (fp!=FPNULL) 
 		return ftello(fp)+ptr;
@@ -21732,7 +23674,10 @@ OutputArchive::OutputArchive(const char* filename, const char* password,
     const char* salt_, int64_t off_): /*off(off_), */ptr(0) {
   assert(filename);
   off=off_;
+  thefilename="";
   if (!*filename) return;
+  thefilename=filename;
+	
   // Open existing file
   char salt[32]={0};
 #ifdef BSD
@@ -21753,6 +23698,15 @@ OutputArchive::OutputArchive(const char* filename, const char* password,
     if (password) {
       if (fread(salt, 1, 32, fp)!=32) error("cannot read salt");
       if (salt_ && memcmp(salt, salt_, 32)) error("salt mismatch");
+#ifdef SERVER
+		if (g_socket!=0)
+		{
+			myprintf("21968: Sock write criptoheader\n");
+			g_flushpacket.setpacket(g_enter,FRANZOPACKET_TYPECOMMAND_DATA,2001,2002,3003,"");
+			g_flushpacket.loadpayload(salt,32);
+			g_flushpacket.sendtosocket();
+		}
+#endif
     }
     seek(0, SEEK_END);
   }
@@ -21779,6 +23733,16 @@ OutputArchive::OutputArchive(const char* filename, const char* password,
 	  }
       memcpy(salt, salt_, 32);
       if (off==0 && fwrite(salt, 1, 32, fp)!=32) ioerr(filename);
+#ifdef SERVER
+	  if (g_socket!=0)
+			if (thefilename!=g_indexname)
+			{
+				myprintf("22002: Sending cryptoheader to server\n");
+				g_flushpacket.setpacket(g_enter,FRANZOPACKET_TYPECOMMAND_DATA,2001,2002,3003,"");
+				g_flushpacket.loadpayload(salt,32);
+				g_flushpacket.sendtosocket();
+			}
+#endif
     }
   }
   // Set up encryption
@@ -22085,6 +24049,7 @@ private:
 	vector<string> sfxonlyfiles; 		// list of prefixes to include
 	vector<string> alwaysfiles; 		// list of prefixes to pack ALWAYS
 	string repack;       				// -repack output file
+	string	checktxt;					// check txt
 	map<int, string> mappacommenti;
 	string versioncomment;
 	bool flagnoattributes;        		// -noattributes option
@@ -22144,6 +24109,7 @@ private:
 	int benchmark();
 	int autotest();
 	int pause();
+	int isopen();
 	int	zfs(string command);
 	int windowsc();						// Backup (kind of) drive C:
 	int adminrun();						// Run windowsc()
@@ -22185,6 +24151,10 @@ private:
 	int 	writeresource(string i_filename,bool i_force,const char* i_mime64);
 	int 	decompress_mime64_to_file(FILE* i_outfile,const char* i_mime64);
 	int 	hashselect();
+#ifdef SERVER	
+	int 	sendtocloudpaq(const int64_t i_extimated,const int i_version);
+#endif
+
 };
 ///	detecting case collision: xxhash64 is more than enough (fast and compact)
 uint64_t Jidac::hashastringa(string& i_string)
@@ -24336,42 +26306,6 @@ bool unzcompareprimo(unzDTMap::iterator i_primo, unzDTMap::iterator i_secondo)
 /*
 	franzo section
 */
-void int64toarray(int64_t i_number, char* i_buffer)
-{
-	if (i_buffer==NULL)
-	{
-		myprintf("29412: GURU buffer NULL!\n");
-		seppuku();
-	}
-	///printf("Numero da scrivere %016llX\n",i_number);
-	for (int i=0;i<8;i++)
-	{
-		uint8_t numerino=(i_number&255);
-		///printf("Numerino %d  %02X\n",i,numerino);
-		*i_buffer++ =numerino;
-		i_number>>=8;
-	}
-}
-int64_t arraytoint64(const char* i_buffer)
-{
-	if (i_buffer==NULL)
-	{
-		myprintf("29297: i_buffer is NULL\n");
-		seppuku();
-		return -1;
-	}
-	int64_t	risultato=0;
-	for (int i=7;i>=0;i--)
-	{
-		uint8_t numerino=*(i_buffer+i);
-	///	printf("Letto %d  %02X\n",i,numerino);
-		risultato=risultato+numerino;
-		if (i>0)
-		risultato<<=8;
-	}
-	///printf("Numero riletto %016llX\n",risultato);
-	return risultato;
-}
 
 /// yes, I can do incomprensible code too :)
 /// decode a franzoblock, discriminating on length of the block, to get crc32 and hash, and hashtype
@@ -24848,6 +26782,19 @@ void print_progress(int64_t ts, int64_t td,int64_t i_scritti,int i_percentuale)
 			if (eta<350000)
 			{
 				ultimaeta=int(eta);
+#ifdef SERVER
+				if (i_percentuale>0)
+					myprintf("(%03d%%) %6.2f%% %02d:%02d:%02d (%10s)->(%10s) of (%10s) %10s/sec >%10s\r", i_percentuale,td*100.0/(ts+0.5),int(eta/3600), int(eta/60)%60, int(eta)%60, tohuman(td),tohuman2(i_scritti),tohuman3(ts),tohuman4(td/secondi),tohuman5(g_socket_sended));
+				else
+				{
+					if (i_scritti>0)
+				myprintf("       %6.2f%% %02d:%02d:%02d (%10s)->(%10s) of (%10s) %10s/sec >%10s\r", td*100.0/(ts+0.5),
+				int(eta/3600), int(eta/60)%60, int(eta)%60, tohuman(td),tohuman2(i_scritti),tohuman3(ts),tohuman4(td/secondi),tohuman5(g_socket_sended));
+				else
+				myprintf("       %6.2f%% %02d:%02d:%02d (%10s) of (%10s) %10s/sec >%10s\r", td*100.0/(ts+0.5),
+				int(eta/3600), int(eta/60)%60, int(eta)%60, tohuman(td),tohuman2(ts),tohuman3(td/secondi),tohuman5(g_socket_sended));
+				}
+#else
 				if (i_percentuale>0)
 					myprintf("(%03d%%) %6.2f%% %02d:%02d:%02d (%10s)->(%10s) of (%10s) %10s/sec\r", i_percentuale,td*100.0/(ts+0.5),int(eta/3600), int(eta/60)%60, int(eta)%60, tohuman(td),tohuman2(i_scritti),tohuman3(ts),tohuman4(td/secondi));
 				else
@@ -24859,6 +26806,7 @@ void print_progress(int64_t ts, int64_t td,int64_t i_scritti,int i_percentuale)
 				myprintf("       %6.2f%% %02d:%02d:%02d (%10s) of (%10s) %10s/sec\r", td*100.0/(ts+0.5),
 				int(eta/3600), int(eta/60)%60, int(eta)%60, tohuman(td),tohuman2(ts),tohuman3(td/secondi));
 				}
+#endif
 			}
 	}				
 }
@@ -25098,6 +27046,15 @@ bool compareorderby(DTMap::iterator a, DTMap::iterator b)
 /*
 	Section: help
 */
+void help_range()
+{
+	moreprint("+ : -range X-Y    Range versions [X-Y]");
+	moreprint("+ : -range X-     Range versions [X-THE LAST]");
+	moreprint("+ : -range -X     Range versions [1-X]");
+	moreprint("+ : -range X      Range is single version X");
+	
+}
+
 void help_date()
 {
 	moreprint("+ : -datefrom X   datetime<=X The length must be even, beware of leading zeros");
@@ -25190,6 +27147,22 @@ void help_autotest(bool i_usage,bool i_example)
 		moreprint("Hashing internal test                autotest -hw");
 #endif
 		moreprint("Prepare a z:\\pippo\\dotest.bat      autotest -all -verbose -to z:\\pippo");
+	}
+}
+void help_isopen(bool i_usage,bool i_example)
+{
+	if (i_usage)
+	{
+		moreprint("CMD   isopen()");
+		moreprint("<>:               Get a key from stdin (like pause on DOS)");
+		moreprint("<>: -n X          Wait X seconds, then proceed");
+		moreprint("<>: -pakka        Write less");
+		moreprint("<>: -silent       Write way less");
+	}
+	if (i_usage && i_example) moreprint("    Examples:");
+	if (i_example)
+	{
+		moreprint("Wait for a key                       pause");
 	}
 }
 void help_pause(bool i_usage,bool i_example)
@@ -25296,6 +27269,9 @@ void help_a(bool i_usage,bool i_example)
 		moreprint("+ : -copy z:\\two  Make a 2nd copy of the written data into another folder");
 		moreprint("+ : -exec_ok p.sh After successful run launch p.sh with archive name as parameter");
 		moreprint("+ : -freeze kajo  If current archive size > maxsize, move to kajo folder");
+		moreprint("+ : -stdin        Input data from stdin (pipe)");
+		moreprint("+ : -checktxt kaj Write out XXH3 on kaj. For rsync/rclone sync");
+		moreprint("+ : -checktxt     Write out XXH3 on archivename.txt");
 		help_orderby();
 #if defined(_WIN32)
 		moreprint("+ : -sfx autoz    Make SFX autoz.exe (on Win)");
@@ -25342,6 +27318,9 @@ void help_a(bool i_usage,bool i_example)
 		moreprint("Hard-check of files                  a z:\\1.zpaq c:\\nz\\ -paranoid");
 		moreprint("Hard-check of files multithread      a z:\\1.zpaq c:\\nz\\ -paranoid -ssd");
 		moreprint("Archive, without recursion           a z:\\1.zpaq f:\\zarc\\*.* -norecursion");
+		moreprint("Archive mysqldump                    a z:\\1.zpaq mydump.sql -stdin");
+		moreprint("XXH3 quick check                     a z:\\knb.zpaq c:\\nz\\ -checktxt z:\\pippo.txt");
+		moreprint("Write XXH3 on z:\\knb.txt             a z:\\knb.zpaq c:\\nz\\ -checktxt");
 #ifdef _WIN32
 		moreprint("Find file /prova/ci.zpaq on drives   a z:\\prova\\ci.zpaq c:\\nz\\* -findzpaq");
 		moreprint("Abort if file already open           a z:\\2.zpaq c:\\nz\\* -open");
@@ -25398,6 +27377,8 @@ void help_x(bool i_usage,bool i_example)
 	{
 		moreprint("CMD   x (extract)");
 		moreprint("+ :               During extraction,if CRC-32s are present, the codes are checked.");
+		moreprint("+ : -all          All versions");
+		moreprint("+ : -all -comment Restore all versions with DATETIME and comment (if any)");
 		moreprint("+ : -checksum     force a full hash-code verify (if added with -checksum)");
 		moreprint("+ : -zero         extract to dummy, 0-length files. Da a empty-full restore.");
 		moreprint("+ : -zero -debug  extract full-sized files, 0 filled (Dry restore)");
@@ -25408,6 +27389,7 @@ void help_x(bool i_usage,bool i_example)
 		moreprint("+ : -fixeml       compress .eml filenames.");
 #ifdef _WIN32
 		moreprint("+ : -fixreserved  fix reserved filenames on Windows (ex. LPT1).");
+		moreprint("+ : -windate      Restore (if any) file's creation date");
 #endif
 		moreprint("+ : -flat         emergency restore of everything into a single folder (Linux => NTFS)");
 		moreprint("+ : -filelist     show (if any) a stored filelist");
@@ -25418,6 +27400,8 @@ void help_x(bool i_usage,bool i_example)
 #ifdef _WIN32
 		moreprint("+ : -longpath     Extracting on Windows filenames longer than 255");
 #endif
+		help_range();
+		
 	}
 	if (i_usage && i_example) moreprint("    Examples:");
 	if (i_example)
@@ -25436,8 +27420,9 @@ void help_x(bool i_usage,bool i_example)
 		moreprint("Extract from a VSS (Windows):        x z:\\1.zpaq \\\\?\\GLOBALROOT\\Device\\HarddiskVolumeShadowCopy1\\path -to d:\\output");
 		moreprint("Replace path in extract              x 1.zpaq -find /tank/ -replace z:\\uno\\");
 		moreprint("Change path in extract, longpath     x 1.zpaq -replace z:\\uno\\ -longpath");		
-		moreprint("Create files tree                    x 1.zpaq -to z:\\testdir\\ -debug -kill -zero -longpath");
-		
+		moreprint("Create files' tree                   x 1.zpaq -to z:\\testdir\\ -debug -kill -zero -longpath");
+		moreprint("Range-extract version                x copia.zpaq -only *comp.pas -to z:\\allcomp -all -range 100-1000");
+		moreprint("Restore datetime and comments        x copia.zpaq -to z:\\prova\\ -all -comment");
 	}
 }
 void help_l(bool i_usage,bool i_example)
@@ -25534,7 +27519,7 @@ void help_g(bool i_usage,bool i_example)
 	{
 		moreprint("CMD   g Run a q command (Windows archiving of C:)");
 		moreprint("+ :               If the user is in the administrator group, BUT");
-		moreprint("+ :               the current shell does not have admin rights, you");
+		moreprint("+ :               the current shell does not have admin rights, this will work");
 	}
 	if (i_usage && i_example) moreprint("    Examples:");
 	if (i_example)
@@ -25922,6 +27907,7 @@ void help_utf(bool i_usage,bool i_example)
 		moreprint("                  Can become a real problem extracting on different filesystems (ex. *nix => NTFS)");
 		moreprint("+ : -kill         Wet run (default dry run)");
 		moreprint("+ : -verbose      Show what is running");
+		moreprint("+ : -fix255       Show files too long");
 		/*
 		moreprint("+ : -utf          Sanitize filenames (strip non-latin)");
 		moreprint("+ : -fix255       Sanitize file length and filecase collisions pippo.txt PIPPO.txt)");
@@ -25983,6 +27969,8 @@ void help_sha1(bool i_usage,bool i_example)
 		help_size();
 		moreprint("+ : -715          Work as 7.15 (with .zfs and ADS)");
 		moreprint("+ : -forcezfs     Include .zfs");
+		moreprint("+ : -checktxt kaj Check XXH3 against kaj file. For rsync/rclone sync");
+
 	}
 	if (i_usage && i_example) moreprint("    Examples:");
 	if (i_example)
@@ -25997,6 +27985,7 @@ void help_sha1(bool i_usage,bool i_example)
 		moreprint("Duplicated files minsize 1000000:    sum z:\\knb -kill -ssd -minsize 1000000");
 		moreprint("MAGIC cumulative hashes of 1-level:  sum p:\\staff -xxh3 -checksum");
 		moreprint("BLAKE3 multithread from memory map:  sum z:\\knb -ssd -blake3 -mm");
+		moreprint("XXH3 quick check                     sum z:\\knb.zpaq -checktxt z:\\pippo.txt");
 	}
 }
 void help_dir(bool i_usage,bool i_example)
@@ -26111,6 +28100,7 @@ void help_franzswitches(bool i_usage,bool i_example)
 	if (i_usage) /// no warning
 		if (i_example)
 			i_example=i_usage;
+	moreprint("+ : -big          ASCII art on final result");
 	moreprint("+ : -utc          Do not convert to localtime (use UTC, like 715)");
 	moreprint("+ : -715          Works just about like v7.15");
 	moreprint("+ : -checksum     Store SHA1+CRC32 for every file");
@@ -26201,7 +28191,7 @@ void Jidac::load_help_map()
 	help_map.insert(std::pair<string, voidhelpfunction>("e",help_e));
 	help_map.insert(std::pair<string, voidhelpfunction>("f",help_f));
 #if defined(_WIN32)
-	help_map.insert(std::pair<string, voidhelpfunction>("g",help_q));
+	help_map.insert(std::pair<string, voidhelpfunction>("g",help_g));
 #endif
 	help_map.insert(std::pair<string, voidhelpfunction>("i",help_i));
 	help_map.insert(std::pair<string, voidhelpfunction>("k",help_k));
@@ -26210,7 +28200,7 @@ void Jidac::load_help_map()
 	help_map.insert(std::pair<string, voidhelpfunction>("n",help_n));
 	help_map.insert(std::pair<string, voidhelpfunction>("p",help_p));
 #if defined(_WIN32)
-	help_map.insert(std::pair<string, voidhelpfunction>("q",help_g));
+	help_map.insert(std::pair<string, voidhelpfunction>("q",help_q));
 #endif
 	help_map.insert(std::pair<string, voidhelpfunction>("r",help_r));
 	help_map.insert(std::pair<string, voidhelpfunction>("s",help_s));
@@ -26229,6 +28219,7 @@ void Jidac::load_help_map()
 	help_map.insert(std::pair<string, voidhelpfunction>("utf",			help_utf));
 	help_map.insert(std::pair<string, voidhelpfunction>("rsync",		help_rsync));
 	help_map.insert(std::pair<string, voidhelpfunction>("pause",		help_pause));
+	help_map.insert(std::pair<string, voidhelpfunction>("isopen",		help_isopen));
 	help_map.insert(std::pair<string, voidhelpfunction>("autotest",		help_autotest));
 #if defined(_WIN32)
 	help_map.insert(std::pair<string, voidhelpfunction>("sfx",			help_sfx));
@@ -26393,13 +28384,6 @@ string tail(string const& i_source, size_t const i_length)
 		return i_source;
 	return i_source.substr(i_source.size()-i_length);
 }
-string includetrailingbackslash(string i_dir)
-{
-	if (!isdirectory(i_dir))
-		return i_dir+"/";
-	else
-		return i_dir;
-}
 // Rename name using tofiles[]
 string Jidac::rename(string name) 
 {
@@ -26427,7 +28411,7 @@ string Jidac::rename(string name)
 */
 #ifdef _WIN32
 	if (flaglongpath)
-		if (command=='x')
+		if ((command=='x') || (command=='w'))
 			if (tofiles.size()==1)
 			{
 				if (flagdebug)
@@ -26448,6 +28432,12 @@ string Jidac::rename(string name)
 					replace(name,"//","__");
 					replace(name,"/","_");
 				}
+				if (name.size()>2)
+					if (isalpha(name[0]))
+						if (name[1]==':')
+							if (name[2]=='/')
+								name[1]='_';
+									
 				string finale=includetrailingbackslash(tofiles[0])+name;
 				if (flagdebug)
 				{
@@ -26643,6 +28633,7 @@ int Jidac::doCommand(int argc, const char** argv)
 	g_sfxflagall		=false;
 	g_freeze			="";
 	g_archive			="";
+	g_indexname			="";
 	g_output_handle		=NULL;
 	g_output			="";
 	g_exec_error		="";
@@ -26665,6 +28656,9 @@ int Jidac::doCommand(int argc, const char** argv)
 	flagtar				=false;
 	flagramdisk			=false;
 	flagssd				=false;
+	flagbig				=false;
+	flagchecktxt		=false;
+	flagstdin			=false;
 	flagnorecursion		=false;
 	flagsilent			=false;
 	flagtouch			=false;
@@ -26729,6 +28723,7 @@ int Jidac::doCommand(int argc, const char** argv)
 	index				=0;
 	method				="";
 	repack				="";
+	checktxt			="";
 	new_password		=0;
 	summary				=-1; 
 	menoenne			=0;
@@ -26777,12 +28772,12 @@ int Jidac::doCommand(int argc, const char** argv)
 	{
 #if defined (HWBLAKE3)
 #ifdef HWSHA1
-		moreprint("zpaqfranz v" ZPAQ_VERSION TEXT_NOJIT TEXT_BIG " (HW BLAKE3,SHA1), " ZSFX_VERSION ZPAQ_DATE); /// FAKE COMPILER WARNING
+		moreprint("zpaqfranz v" ZPAQ_VERSION TEXT_NOJIT TEXT_BIG TEXT_SERVER " (HW BLAKE3,SHA1), " ZSFX_VERSION ZPAQ_DATE); /// FAKE COMPILER WARNING
 #else
-		moreprint("zpaqfranz v" ZPAQ_VERSION TEXT_NOJIT TEXT_BIG " (HW BLAKE3), " ZSFX_VERSION ZPAQ_DATE); /// FAKE COMPILER WARNING
+		moreprint("zpaqfranz v" ZPAQ_VERSION TEXT_NOJIT TEXT_BIG TEXT_SERVER " (HW BLAKE3), " ZSFX_VERSION ZPAQ_DATE); /// FAKE COMPILER WARNING
 #endif
 #else
-		moreprint("zpaqfranz v" ZPAQ_VERSION TEXT_NOJIT TEXT_BIG " archiver, " ZSFX_VERSION ZPAQ_DATE); /// FAKE COMPILER WARNING
+		moreprint("zpaqfranz v" ZPAQ_VERSION TEXT_NOJIT TEXT_BIG TEXT_SERVER " archiver, " ZSFX_VERSION ZPAQ_DATE); /// FAKE COMPILER WARNING
 #endif
 	}
 /// check some magic to show help in heuristic way
@@ -26920,6 +28915,14 @@ int Jidac::doCommand(int argc, const char** argv)
 		if ((opt=="trim"))
 		{
 			command='4'; 
+			while (++i<argc && argv[i][0]!='-')  
+				files.push_back(argv[i]);
+			i--;
+		}
+		else
+		if ((opt=="isopen"))
+		{
+			command='!'; 
 			while (++i<argc && argv[i][0]!='-')  
 				files.push_back(argv[i]);
 			i--;
@@ -27086,7 +29089,26 @@ int Jidac::doCommand(int argc, const char** argv)
 		else if (opt=="-dirlength" 	&& i<argc-1) 	dirlength		=atoi(argv[++i]);
 		else if (opt=="-n" 			&& i<argc-1) 	menoenne		=atoi(argv[++i]);
 		else if (opt=="-limit" 		&& i<argc-1) 	menoenne		=atoi(argv[++i]);
-		else if (opt=="-index" 		&& i<argc-1) 	index			=argv[++i];
+		else if (opt=="-index" 		&& i<argc-1) 	
+		{
+			index			=argv[++i];
+			g_indexname		=index;
+		}
+#ifdef SERVER
+		else if (opt=="-server" 		&& i<argc-1) 	
+		{
+			g_server=argv[++i];
+			flagserver=true;
+		}
+		else if (opt=="-port" 		&& i<argc-1) 	
+		{
+			g_port=argv[++i];
+		}
+		else if (opt=="-cloudkey" 		&& i<argc-1) 	
+		{
+			g_cloudkey=argv[++i];
+		}
+#endif
 		else if (opt=="-method" 	&& i<argc-1) 	method			=argv[++i];
 		else if (opt=="-threads" 	&& i<argc-1) 	howmanythreads	=atoi(argv[++i]);
 		///	warning -t3 agains -to z:\pippo
@@ -27242,6 +29264,14 @@ int Jidac::doCommand(int argc, const char** argv)
 			else
 				i--;
 		}
+		else if (opt=="-checktxt")
+		{
+			flagchecktxt=true;
+			if (++i<argc && argv[i][0]!='-')  
+				checktxt=argv[i];
+			else
+				i--;
+		}
 		else if (opt=="-timestamp") 	// force the timestamp: zfs freezing
 		{
 			if (i+1<argc)
@@ -27304,6 +29334,8 @@ int Jidac::doCommand(int argc, const char** argv)
 		else if (opt=="-tar") 						flagtar				=true;
 		else if (opt=="-ramdisk") 					flagramdisk			=true;
 		else if (opt=="-ssd") 						flagssd				=true;
+		else if (opt=="-big") 						flagbig				=true;
+		else if (opt=="-stdin") 					flagstdin			=true;
 		else if (opt=="-norecursion") 				flagnorecursion		=true;
 		else if (opt=="-silent") 					flagsilent			=true;
 		else if (opt=="-touch") 					flagtouch			=true;
@@ -27464,7 +29496,6 @@ int Jidac::doCommand(int argc, const char** argv)
 				new_password=new_password_string;
 			}
 		}
-		
 		else if (opt=="-to") 
 		{  // read tofiles. Possible collision with -tthread
 			while (++i<argc && argv[i][0]!='-')
@@ -27671,6 +29702,10 @@ int Jidac::doCommand(int argc, const char** argv)
 			franzparameters+="-ramdisk ";
 		if (flagssd)
 			franzparameters+="-ssd ";
+		if (flagbig)
+			franzparameters+="-big ";
+		if (flagstdin)
+			franzparameters+="-stdin ";
 		if (flagnorecursion)
 			franzparameters+="-norecursion ";
 		if (flagtouch)
@@ -27743,6 +29778,17 @@ int Jidac::doCommand(int argc, const char** argv)
 #endif	
 		if (franzparameters!="")
 			myprintf("franz:%s\n",franzparameters.c_str());
+		
+		if (flagchecktxt)
+			if (checktxt=="")
+			{
+				string 	percorso=extractfilepath(archive);
+				string	nome=prendinomefileebasta(archive);
+				checktxt=percorso+nome+".txt";
+			}
+
+		if (checktxt!="")
+			myprintf("franz:checktxt   <<%s>>\n",checktxt	.c_str());
 		if (orderby!="")
 			myprintf("franz:orderby    <<%s>>\n",orderby.c_str());
 		if (searchhash!="")
@@ -27774,6 +29820,19 @@ int Jidac::doCommand(int argc, const char** argv)
 			myprintf("franz:rangefrom  %08d (version)\n",g_rangefrom);
 		if (g_rangeto>0)
 			myprintf("franz:rangeto    %08d (version)\n",g_rangeto);
+#ifdef SERVER
+		if (flagserver)
+		{
+			myprintf("franz:zpaqfranz-server %s\n",g_server.c_str());
+			myprintf("franz:server port      %s\n",g_port.c_str());
+			int64_t myport=myatoll(g_port.c_str());
+			if (myport>65353)
+			{
+				myprintf("27952: server port must be [0..65353]\n");
+				return 2;
+			}
+		}
+#endif
 	}
 	if (g_rangefrom>0)
 	{
@@ -27908,7 +29967,6 @@ int Jidac::doCommand(int argc, const char** argv)
 		else
 #endif
 			g_franzotype=FRANZO_XXHASH64; // by default 2 (CRC32+XXHASH64)
-		
 		if (flagappend)
 			return append();
 		else
@@ -27925,6 +29983,7 @@ int Jidac::doCommand(int argc, const char** argv)
 	else if (command=='7') return rd();
 	else if (command=='8') return autotest();
 	else if (command=='0') return pause();
+	else if (command=='!') return isopen();
 	else if (command=='b') return benchmark();
 	else if (command=='c') return dircompare(false,false);
 	else if (command=='d') return deduplicate();
@@ -28283,8 +30342,8 @@ int64_t Jidac::read_archive(const char* arc, int *errors, int i_myappend,bool i_
 							if (filename.s[i]=='\\') 
 								filename.s[i]='/';
 						lastfile=filename.s.c_str();
-						if (flagdebug)
-							myprintf("27357: K3  |%s|\n",lastfile.c_str());
+///						if (flagdebug)
+///							myprintf("27357: K3  |%s|\n",lastfile.c_str());
 					}
 					comment.s="";
 					d.readComment(&comment);
@@ -28350,8 +30409,8 @@ int64_t Jidac::read_archive(const char* arc, int *errors, int i_myappend,bool i_
 							data_offset=in.tell()+1-d.buffered();
 							const char* s=os.c_str();
 							int64_t jmp=btol(s);
-							if (flagdebug)
-								myprintf("27424: jump %s\n",migliaia(jmp));
+							///if (flagdebug)
+								///myprintf("27424: jump %s\n",migliaia(jmp));
 							if (jmp<0) 
 								myprintf("Incomplete transaction ignored\n");
 							if (jmp<0 || 
@@ -28373,11 +30432,13 @@ int64_t Jidac::read_archive(const char* arc, int *errors, int i_myappend,bool i_
 								ver.back().csize=jmp;
 								if (all) 
 								{
+									///fka1
 									string fn=itos(ver.size()-1, all)+"/";
 									if (i_renamed) 
 										fn=rename(fn);
 									if (isselected(fn.c_str(), false,-1))
 										dt[fn].date=fdate;
+									///printf("FKA1 KKKKKKKKKKKKKKKKKK %s\n",fn.c_str());
 								}
 								if (jmp) 
 									goto endblock;
@@ -28502,10 +30563,12 @@ int64_t Jidac::read_archive(const char* arc, int *errors, int i_myappend,bool i_
 #endif
 										if (all) 
 										{
+											///fka2
 											if (i_myappend)
 												fn=itos(ver.size()-1, all)+"|$1"+fn;
 											else
 												fn=append_path(itos(ver.size()-1, all), fn);
+											///printf("------------- %s\n",fn.c_str());
 										}
 								}
 					bool issel=false;
@@ -28514,19 +30577,9 @@ int64_t Jidac::read_archive(const char* arc, int *errors, int i_myappend,bool i_
 					
 					if (g_rangefrom>0)
 						if (all)
-						{
-							int curver=ver.size()-1;
-						///	printf("Curver %d\n",curver);
-							///printf("from %d\n",g_rangefrom);
-							///printf("to   %d\n",g_rangeto);
-							if ((curver<g_rangefrom) || (curver>g_rangeto))
-							{
-								///printf("Scarto!\n");
+							if (((ver.size()-1)<g_rangefrom) || ((ver.size()-1)>g_rangeto))
 								issel=false;
-							}
-							///else
-								///printf("Accetto\n");
-						}
+
 					s+=len+1;  // skip filename
 					if (s>end) 
 						error("filename too long");
@@ -28635,7 +30688,11 @@ int64_t Jidac::read_archive(const char* arc, int *errors, int i_myappend,bool i_
 			d.readSegmentEnd(sha1result);
             skip=true;
             string fn=lastfile;
-            if (all) fn=append_path(itos(ver.size()-1, all), fn); ///peusa3
+            if (all)
+			{	
+///fka3		
+				fn=append_path(itos(ver.size()-1, all), fn); ///peusa3
+			}
             if (isselected(fn.c_str(), i_renamed,-1)) {
               DT& dtr=dt[fn];
               if (filename.s.size()>0 || first) {
@@ -28847,6 +30904,23 @@ bool Jidac::isselected(const char* filename, bool rn,int64_t i_size)
   }
   return true;
 }
+#define IO_REPARSE_TAG_CLOUD   0x9000001A
+#define IO_REPARSE_TAG_CLOUD_1 0x9000101A
+#define IO_REPARSE_TAG_CLOUD_2 0x9000201A
+#define IO_REPARSE_TAG_CLOUD_3 0x9000301A
+#define IO_REPARSE_TAG_CLOUD_4 0x9000401A
+#define IO_REPARSE_TAG_CLOUD_5 0x9000501A
+#define IO_REPARSE_TAG_CLOUD_6 0x9000601A
+#define IO_REPARSE_TAG_CLOUD_7 0x9000701A
+#define IO_REPARSE_TAG_CLOUD_8 0x9000801A
+#define IO_REPARSE_TAG_CLOUD_9 0x9000901A
+#define IO_REPARSE_TAG_CLOUD_A 0x9000A01A
+#define IO_REPARSE_TAG_CLOUD_B 0x9000B01A
+#define IO_REPARSE_TAG_CLOUD_C 0x9000C01A
+#define IO_REPARSE_TAG_CLOUD_D 0x9000D01A
+#define IO_REPARSE_TAG_CLOUD_E 0x9000E01A
+#define IO_REPARSE_TAG_CLOUD_F 0x9000F01A
+
 /*
 	This is a kludge to get the filesize of a symlinked file on Windows,
 	in a (more or less) "portable" (against compilators) way
@@ -29062,9 +31136,55 @@ void Jidac::scandir(bool i_checkifselected,DTMap& i_edt,string filename, bool i_
 			///	A junction?
 			if ((ffd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) && (ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY))
 			{
-				if (flagdebug)
-					myprintf("30908: discard REPARSE POINT & DIRECTORY\n");
-				edate=0;  // don't add
+				
+				///https://bvckup2.com/support/forum/topic/981
+				///https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-fscc/c8e77b37-3909-4fe6-a4ea-2b9d423b1ee4
+				if 
+				(
+				(ffd.dwReserved0==IO_REPARSE_TAG_CLOUD)
+				||
+				(ffd.dwReserved0==IO_REPARSE_TAG_CLOUD_1)
+				||
+				(ffd.dwReserved0==IO_REPARSE_TAG_CLOUD_2)
+				||
+				(ffd.dwReserved0==IO_REPARSE_TAG_CLOUD_3)
+				||
+				(ffd.dwReserved0==IO_REPARSE_TAG_CLOUD_4)
+				||
+				(ffd.dwReserved0==IO_REPARSE_TAG_CLOUD_5)
+				||
+				(ffd.dwReserved0==IO_REPARSE_TAG_CLOUD_6)
+				||
+				(ffd.dwReserved0==IO_REPARSE_TAG_CLOUD_7)
+				||
+				(ffd.dwReserved0==IO_REPARSE_TAG_CLOUD_8)
+				||
+				(ffd.dwReserved0==IO_REPARSE_TAG_CLOUD_9)
+				||
+				(ffd.dwReserved0==IO_REPARSE_TAG_CLOUD_A)
+				||
+				(ffd.dwReserved0==IO_REPARSE_TAG_CLOUD_B)
+				||
+				(ffd.dwReserved0==IO_REPARSE_TAG_CLOUD_C)
+				||
+				(ffd.dwReserved0==IO_REPARSE_TAG_CLOUD_D)
+				||
+				(ffd.dwReserved0==IO_REPARSE_TAG_CLOUD_E)
+				||
+				(ffd.dwReserved0==IO_REPARSE_TAG_CLOUD_F)
+				)
+				{
+					if (flagdebug)
+						myprintf("31184: this seems a ONEDRIVE-something, try to keep\n");
+				}
+				
+				
+				else
+				{
+					if (flagdebug)
+						myprintf("30908: discard REPARSE POINT & DIRECTORY\n");
+					edate=0;  // don't add
+				}
 			}
 		}
 		string fn=path(filename)+t;
@@ -29332,14 +31452,57 @@ ThreadReturn writeThread(void* arg) {
 // Write a ZPAQ compressed JIDAC block header. Output size should not
 // depend on input data.
 void writeJidacHeader(libzpaq::Writer *out, int64_t date,
-                      int64_t cdata, unsigned htsize) {
+                      int64_t cdata, unsigned htsize)
+{
   if (!out) return;
   assert(date>=19000000000000LL && date<30000000000000LL);
   StringBuffer is;
   puti(is, cdata, 8);
   libzpaq::compressBlock(&is, out, "0",
       ("jDC"+itos(date, 14)+"c"+itos(htsize, 10)).c_str(), "jDC\x01");
+
 }
+/*
+int calcjidacheader(int64_t date,int64_t cdata, unsigned htsize,char* i_theheader,size_t i_theheadersize)
+{
+	printf("Calcolo jidacheader\n");
+	if (i_theheader==NULL)
+	{
+		myprintf("29628: guru i_theheader is null\n");
+		seppuku();
+		return 0;
+	}
+	if (i_theheadersize<=0)
+	{
+		myprintf("29634: guru i_theheadersize <=0\n");
+		seppuku();
+		return 0;
+	}
+	
+	assert(date>=19000000000000LL && date<30000000000000LL);
+	StringBuffer is;
+	puti(is, cdata, 8);
+	StringBuffer	theheader;
+	libzpaq::compressBlock(&is, &theheader, "0",
+      ("jDC"+itos(date, 14)+"c"+itos(htsize, 10)).c_str(), "jDC\x01");
+	printf("Fatto calcolo jidacheader\n");
+	printf("Size %d\n",theheader.size());
+	
+	if (i_theheadersize<theheader.size())
+	{
+		myprintf("29650: guru i_theheadersize %d too small vs real size %d\n",i_theheadersize,theheader.size());
+		seppuku();
+		return 0;
+	}
+	const char* p=theheader.c_str();
+	memcpy(i_theheader,p,theheader.size());
+	return theheader.size();
+}
+*/
+
+
+
+
 // Maps sha1 -> fragment ID in ht with known size
 class HTIndex {
   vector<HT>& htr;  // reference to ht
@@ -30467,6 +32630,8 @@ uint32_t crchex2int(const char *hex)
 }
 void Jidac::printsanitizeflags()
 {
+	if (flagflat || flagutf || flagfix255 || flagfixeml)
+	{
 		myprintf("\n");
 		myprintf("******\n");
 		if (flagflat)
@@ -30487,6 +32652,7 @@ void Jidac::printsanitizeflags()
 #endif
 		}
 		myprintf("******\n\n");
+	}
 }
 int Jidac::testverify() 
 {
@@ -31001,56 +33167,51 @@ int Jidac::list()
 							mycrc32="CRC32: "+mycrc32+" ";
 					}
 				}
-				if (summary<=0) // special output
+				if (summary<=0)
 				{
 #ifdef _WIN32
 					if (flagwindate)
 						myprintf("%c %s (C) %s %19s ", char(p->second.data),dateToString(flagutc,p->second.date).c_str(),dateToString(flagutc,mycreationtime).c_str(), migliaia(p->second.size));
 					else
 #endif
-						myprintf("%c %s %19s ", char(p->second.data),dateToString(flagutc,p->second.date).c_str(), migliaia(p->second.size));
+					myprintf("%c %s %19s ", char(p->second.data),dateToString(flagutc,p->second.date).c_str(), migliaia(p->second.size));
 					if (!flagnoattributes)
 						myprintf("%s ", attrToString(p->second.attr).c_str());
-				}
-				if (all)
-				{
-					string rimpiazza="|";
-					if (!isdirectory(myfilename))
+					if (all)
 					{
-						rimpiazza+=myhash;
-						rimpiazza+=mycrc32;
+						string rimpiazza="|";
+						if (!isdirectory(myfilename))
+						{
+							rimpiazza+=myhash;
+							rimpiazza+=mycrc32;
+						}
+						if (!myreplace(myfilename,"|$1",rimpiazza))
+							myreplace(myfilename,"/","|");
 					}
-					if (!myreplace(myfilename,"|$1",rimpiazza))
-						myreplace(myfilename,"/","|");
-				}
-				else
-				{
-					if (tofiles.size()>0)
-						myfilename=rename(myfilename);
-					myfilename=myhash+mycrc32+myfilename;	
-				}
-/// search and replace, if requested	
-				if ((searchfrom!="") && (replaceto!=""))
-					replace(myfilename,searchfrom,replaceto);
-				printUTF8(myfilename.c_str());
-				unsigned v;  // list version updates, deletes, compressed size
-				if (all>0 && p->first.size()==all+1u && (v=atoi(p->first.c_str()))>0 && v<ver.size()) 
-				{  // version info
-					std::map<int,string>::iterator commento;
-					commento=mappacommenti.find(v); 
-					if(commento== mappacommenti.end()) 
-						myprintf(" +%d -%d -> %s", ver[v].updates, ver[v].deletes,
-						(v+1<ver.size() ? migliaia(ver[v+1].offset-ver[v].offset) : migliaia(csize-ver[v].offset)));
 					else
-						myprintf(" +%d -%d -> %s <<%s>>", ver[v].updates, ver[v].deletes,
-						(v+1<ver.size() ? migliaia(ver[v+1].offset-ver[v].offset) : migliaia(csize-ver[v].offset)),commento->second.c_str());
-/*
-			if (summary<0)  // print fragment range
-			myprintf(" %u-%u", ver[v].firstFragment,
-              v+1<ver.size()?ver[v+1].firstFragment-1:unsigned(ht.size())-1);
-*/
+					{
+						if (tofiles.size()>0)
+							myfilename=rename(myfilename);
+						myfilename=myhash+mycrc32+myfilename;	
+					}
+	/// search and replace, if requested	
+					if ((searchfrom!="") && (replaceto!=""))
+						replace(myfilename,searchfrom,replaceto);
+					printUTF8(myfilename.c_str());
+					unsigned v;  // list version updates, deletes, compressed size
+					if (all>0 && p->first.size()==all+1u && (v=atoi(p->first.c_str()))>0 && v<ver.size()) 
+					{  // version info
+						std::map<int,string>::iterator commento;
+						commento=mappacommenti.find(v); 
+						if(commento== mappacommenti.end()) 
+							myprintf(" +%d -%d -> %s", ver[v].updates, ver[v].deletes,
+							(v+1<ver.size() ? migliaia(ver[v+1].offset-ver[v].offset) : migliaia(csize-ver[v].offset)));
+						else
+							myprintf(" +%d -%d -> %s <<%s>>", ver[v].updates, ver[v].deletes,
+							(v+1<ver.size() ? migliaia(ver[v+1].offset-ver[v].offset) : migliaia(csize-ver[v].offset)),commento->second.c_str());
+					}
+					myprintf("\n");
 				}
-				myprintf("\n");
 			}
 	}  // end for i = each file version
 	int64_t 	allsize=0;
@@ -31708,7 +33869,8 @@ string xxhash_calc_file(const char * i_filename,bool i_flagcalccrc32,uint32_t& o
 			o_crc32=crc32_16bytes(buffer,readSize,o_crc32);
 		io_lavorati+=readSize;
 		letti+=readSize;
-		if (flagnoeta==false) 
+		if (flagnoeta==false)
+			if (i_inizio>=0)
 				myavanzamentoby1sec(io_lavorati,i_totali,i_inizio,false);
 	}
 	fclose(inFile);
@@ -32107,9 +34269,12 @@ void * scriviramtodisk(void *t)
 								par->o_filecrcok++;
 							else
 							{
-								if (flagverbose)
-									myprintf("33162: ERROR CRC stored %s  from ram|%s|\n",par->filecrc[i].c_str(),crc32fromram.c_str());
-								par->o_filecrcerror++;
+								if (par->filecrc[i]!="00000000")
+								{
+									if (flagverbose)
+										myprintf("33162: ERROR CRC stored %s  from ram|%s|\n",par->filecrc[i].c_str(),crc32fromram.c_str());
+									par->o_filecrcerror++;
+								}
 							}
 							par->o_crcsize+=par->filesize[i];
 							par->o_timecrc+=(mtime()-startcrc);
@@ -32193,11 +34358,13 @@ void * scriviramtodisk(void *t)
 							error("33964: unknown myhashtype");
 						if (flagdebug)
 							myprintf("33966: INFO hash stored %s %s  from ram|%s| %s\n",par->algo[i].c_str(),par->filecrc[i].c_str(),hashstringato.c_str(),par->filenameondisk[i].c_str());
+						
+						///if (par->filehash[i]!="!ERROR!")
 						if (par->filehash[i]!=hashstringato)
 						{
 							par->o_fileerror++;
 							if (flagverbose)
-								myprintf("33968: ERROR hash stored %s %s  from ram|%s| %s\n",par->algo[i].c_str(),par->filecrc[i].c_str(),hashstringato.c_str(),par->filenameondisk[i].c_str());
+								myprintf("33968: ERROR hash stored |%s| |%s|  from ram|%s| %s\n",par->algo[i].c_str(),par->filehash[i].c_str(),hashstringato.c_str(),par->filenameondisk[i].c_str());
 						}
 						else
 						{
@@ -32268,6 +34435,47 @@ int Jidac::ecommand()
 	tofiles.push_back(relative);
 	return extract();
 }
+int myrename(string sfrom,string sto)
+{
+#ifdef _WIN32	
+	if (flaglongpath)
+	{
+			sfrom	=makelongpath(sfrom);
+			sto		=makelongpath(sto);
+	}
+	std::wstring wfrom	=utow(sfrom.c_str());  
+	std::wstring wto	=utow(sto.c_str());  
+	if (!MoveFileW(wfrom.c_str(),wto.c_str()))
+	{
+		myprintf("ERROR WIN renaming\n");
+		myprintf("from <<");
+		printUTF8(sfrom.c_str());
+		myprintf(">>\n");
+		myprintf("to   <<%s>>\n",sto.c_str());
+		myprintf("ERROR renaming <<");
+		printUTF8(sfrom.c_str());
+		myprintf(">> to <<%s>>\n",sto.c_str());
+		decodewinerror(GetLastError(),"dummy");
+		
+			for (unsigned int j=0;j<sfrom.length();j++)
+				myprintf("%03d %03d %c\n",j,sto[j],sto[j]);
+		return 1;
+	}
+#else
+	if (::rename(sfrom.c_str(), sto.c_str()) != 0)
+	{
+		myprintf("ERROR NIX renaming\n");
+		myprintf("from <<%s>>\n",sfrom.c_str());
+		myprintf("to   <<%s>>\n",sto.c_str());
+		if (flagverbose)
+			for (unsigned int j=0;j<sfrom.length();j++)
+				myprintf("%03d %03d %c\n",j,sto[j],sto[j]);
+		return 1;
+	}
+#endif
+	return 0;
+}			
+
 int Jidac::extract() 
 {
 #ifdef _WIN32
@@ -32615,6 +34823,7 @@ int Jidac::extract()
 				}
 			}
 #endif
+
 	for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p) 
 	{
 		p->second.data=-1;  // skip
@@ -32743,6 +34952,16 @@ int Jidac::extract()
     OutputArchive out(repack.c_str(), new_password, salt, 0);
     int64_t cstart=out.tell();
     // Write C block using first version date
+
+#ifdef SERVER
+	if (flagdebug)
+	{
+		franzpacket	debugpacket;
+		debugpacket.setpacket(g_enter,FRANZOPACKET_TYPECOMMAND_DATA,1000,1001,1002,"******* AVVISO: 34794");
+		debugpacket.sendtosocket();
+	}
+#endif
+
     writeJidacHeader(&out, ver[1].date, -1, 1);
     int64_t dstart=out.tell();
 ///myprintf("ZJ\n");
@@ -32811,6 +35030,18 @@ int Jidac::extract()
     myprintf(" %s\n", migliaia(out.tell()));
     // Rewrite C block
     out.seek(cstart, SEEK_SET);
+/*
+	avviso="AVVISOOOOOO 33175   ";
+	send(g_socket,avviso.c_str(),avviso.size(),0);
+*/
+#ifdef SERVER
+	if (flagdebug)
+	{
+		franzpacket	debugpacket2;
+		debugpacket2.setpacket(g_enter,FRANZOPACKET_TYPECOMMAND_DATA,1000,1001,1002,"******* AVVISO: 34870");
+		debugpacket2.sendtosocket();
+	}
+#endif
     writeJidacHeader(&out, ver[1].date, csize, 1);
     out.close();
     return 0;
@@ -33286,11 +35517,13 @@ int Jidac::extract()
 			}
 		if (dalavorare>0)
 		{
-			myprintf("Total bytes          %s\n",migliaia(dimensionetotale));
-			myprintf("Bytes checked        %s\n",migliaia(lavorati));
-			myprintf("Files to be checked  %08d\n",dalavorare);
-			myprintf("Files ==             %08d\n",uguali);
-			myprintf("Files !=             %08d\n",diversi);
+			printbar(' ');
+			myprintf("\r");
+			myprintf("Total bytes          %21s\n",migliaia(dimensionetotale));
+			myprintf("Bytes checked        %21s\n",migliaia(lavorati));
+			myprintf("Files to be checked  %21s\n",migliaia(dalavorare));
+			myprintf("Files ==             %21s\n",migliaia(uguali));
+			myprintf("Files !=             %21s\n",migliaia(diversi));
 			if ((dalavorare!=uguali) || (lavorati!=dimensionetotale))
 			{
 				myprintf("*** ERROR IN PARANOID EXTRACT CHECK! ***\n");
@@ -33321,10 +35554,12 @@ int Jidac::extract()
 			if (p->second.date && p->first!="") 
 			{
 				string fn=rename(p->first);
+				/*
+				fima
 				if (isdirectory(fn))
 					if (wintouch(fn,p->second.date,p->second.date))
 						tobesetted++, setted++;
-				
+				*/
 				if ((!isads(fn)) && (!iszfs(fn)))
 					if (fileexists(fn))
 					{
@@ -33359,11 +35594,58 @@ int Jidac::extract()
 			myprintf("Files to be worked %s  => founded %s => OK %s\n",migliaia((int64_t)tobeworked),migliaia2((int64_t)tobesetted),migliaia3((int64_t)setted));
 	}
 #endif
- /*
-	if (flagramdisk)
-		if (tofiles.size()==1)
-			removetempdirifempty(tofiles[0],true);
-*/
+
+
+	if (flagcomment)
+		if (all)
+		{
+			printbar('-');
+			vector<DTMap::iterator> filelist;
+			searchcomments(versioncomment,filelist);
+			int64_t	dasettare		=0;
+			int64_t	settati			=0;
+			int64_t	darinominare	=0;
+			int64_t	rinominati		=0; 
+			for (unsigned fi=0;fi<filelist.size(); ++fi) 
+			{
+				DTMap::iterator p=filelist[fi];
+				unsigned v;  
+				if (p->first.size()==all+1u && (v=atoi(p->first.c_str()))>0 && v<ver.size()) 
+				{
+					string versione=rename(itos(v, all));
+					dasettare++;
+					myprintf("%s %s ",dateToString(flagutc,p->second.date).c_str(),versione.c_str());
+					if (close(versione.c_str(),p->second.date,0))
+					{
+						settati++;
+						myprintf("[OK] ");
+					}
+					else
+						myprintf("[KO] ");
+					std::map<int,string>::iterator commento;
+					commento=mappacommenti.find(v); 
+					if(commento!= mappacommenti.end())
+					{
+						darinominare++;
+						myprintf(" <<%s>> ", commento->second.c_str());
+						string finalpath=versione+'_'+commento->second;
+						if (myrename(versione,finalpath)==0)
+						{
+							myprintf("=> renamed to <<%s>>",finalpath.c_str());
+							rinominati++;
+						}
+						else
+							myprintf("FAILED renamed to <<%s>>",finalpath.c_str());	
+					}
+					myprintf("\n");
+				}
+			}
+			if (dasettare>0)
+				myprintf("Dir to be setted  %s (OK %s)\n",migliaia(dasettare),migliaia2(settati));
+			if (darinominare>0)
+				myprintf("Dir to be renamed %s (OK %s)\n",migliaia(darinominare),migliaia2(rinominati));
+		}
+
   return errors>0;
 }
 /////////////////////////////// list //////////////////////////////////
@@ -34171,6 +36453,7 @@ int Jidac::trim()
 }
 int Jidac::purgersync()
 {
+	
 	myprintf("PURGING RSYNC TEMPORARY FILES ");
 	if (!flagkill)
 			myprintf(" : DRY RUN (no -kill)");
@@ -35438,7 +37721,26 @@ int Jidac::findj()
 	}
 	return 0;
 }
+int Jidac::isopen()
+{
+	if (files.size()!=1)
+	{
+		myprintf("35476: for isopen() exactly 1 file needed\n");
+		return 2;
+	}		
+	if (isfileopen(files[0]))
+	{
+		myprintf("35481: file seems open ");
+		printUTF8(files[0].c_str());
+		myprintf("\n");
+		return 1;
+	}
 
+	myprintf("35487: file is NOT open ");
+	printUTF8(files[0].c_str());
+	myprintf("\n");
+	return 0;
+}
 int Jidac::benchmark()
 {
 /*
@@ -35724,49 +38026,90 @@ int Jidac::benchmark()
 	}
 	return 0;
 }
-int myrename(string sfrom,string sto)
-{
-#ifdef _WIN32	
-	if (flaglongpath)
-	{
-			sfrom=makelongpath(sfrom);
-			sto=makelongpath(sto);
-	}
-	std::wstring wfrom	=utow(sfrom.c_str());  
-	std::wstring wto	=utow(sto.c_str());  
-	if (!MoveFileW(wfrom.c_str(),wto.c_str()))
-	{
-		myprintf("ERROR WIN renaming\n");
-		myprintf("from <<");
-		printUTF8(sfrom.c_str());
-		myprintf(">>\n");
-		myprintf("to   <<%s>>\n",sto.c_str());
-		myprintf("ERROR renaming <<");
-		printUTF8(sfrom.c_str());
-		myprintf(">> to <<%s>>\n",sto.c_str());
-		decodewinerror(GetLastError(),"dummy");
-		
-			for (unsigned int j=0;j<sfrom.length();j++)
-				myprintf("%03d %03d %c\n",j,sto[j],sto[j]);
-		return 1;
-	}
-#else
-	if (::rename(sfrom.c_str(), sto.c_str()) != 0)
-	{
-		myprintf("ERROR NIX renaming\n");
-		myprintf("from <<%s>>\n",sfrom.c_str());
-		myprintf("to   <<%s>>\n",sto.c_str());
-		if (flagverbose)
-			for (unsigned int j=0;j<sfrom.length();j++)
-				myprintf("%03d %03d %c\n",j,sto[j],sto[j]);
-		return 1;
-	}
-#endif
-	return 0;
-}			
 
 int Jidac::summa() 
 {
+	if (checktxt!="")
+	{
+		if (files.size()!=1)
+		{
+			myprintf("37871: You need exactly ONE file to be checked\n");
+			return 2;
+		}
+		if (!fileexists(files[0].c_str()))
+		{
+			myprintf("37876: Abort, the first file does not exists\n",checktxt.c_str());
+			return 2;
+		}
+		if (flagchecktxt)
+			if ((checktxt=="") || (checktxt==".txt"))
+			{
+				string 	percorso=extractfilepath(files[0]);
+				string	nome=prendinomefileebasta(files[0]);
+				checktxt=percorso+nome+".txt";
+			}
+		if (!fileexists(checktxt.c_str()))
+		{
+			myprintf("37871: Abort, -checktxt %s does not exists\n",checktxt.c_str());
+			return 2;
+		}		
+		myprintf("Checking XXH3 (because of -checktxt) on %s\n",checktxt.c_str());
+
+		int64_t	dimensionefile=prendidimensionefile(checktxt.c_str());
+		char linebuffer[1000];
+		if ((uint64_t)dimensionefile>sizeof(linebuffer))
+		{
+			myprintf("37878: The -checktxt file seems way too big %s\n",migliaia(dimensionefile));
+			return 2;
+		}
+		
+		if (dimensionefile<64)
+		{
+			myprintf("37884: The -checktxt file seems too small %s\n",migliaia(dimensionefile));
+			return 2;
+		}
+		
+		FILE* inFile = freadopen(checktxt.c_str());
+		if (inFile==NULL) 
+		{
+#ifdef _WIN32
+		DWORD err=GetLastError();
+#else
+		int err=1;
+#endif
+			myprintf("\37885: ERR <%s> kind %s\n",checktxt.c_str(),migliaia((int64_t)err)); 
+			return 2;
+		}
+		const int letti=fread(linebuffer,1,sizeof(linebuffer),inFile);
+		fclose(inFile);
+		if (flagdebug)
+			myprintf("37914: Readed %d\n",letti);
+		string hashletto="";
+		for (int i=6;i<38;i++)
+			if (isdigit(linebuffer[i]) || (isalpha(linebuffer[i])))
+			hashletto+=linebuffer[i];
+		myprintf("Hash from checktxt |%s|\n",hashletto.c_str());
+		
+		
+		uint32_t dummycrc32;
+		int64_t startverify=mtime();
+		int64_t io_lavorati=0;
+		int64_t larghezzain	=prendidimensionefile(files[0].c_str());
+		string 
+		hashreloaded=xxhash_calc_file(files[0].c_str(),
+		false,dummycrc32,
+		startverify,
+		larghezzain,io_lavorati);
+		if ((hashreloaded=="") || (hashreloaded!=hashletto))
+		{
+			myprintf("****  ERROR: FILE DOES NOT MATCH WITH THE CHECKSUM  ****\n");
+			myprintf("****               THIS IS VERY BAD                 ****\n");
+			myprintf("\n\n");
+			return 2;
+		}
+		return 0;
+	}
+
 	if (!flagpakka)
 	{
 		myprintf("Getting %s",mygetalgo().c_str());
@@ -36397,18 +38740,38 @@ void my_handler(int s)
 		printbar('*');
 		errorcode=2;
 	  }
+	  
+	myprintf( "\n%1.3f seconds (%s) ", (mtime()-g_start)/1000.0,timetohuman((uint32_t)((mtime()-g_start)/1000.0)).c_str());
+	 
 	if (command=='q')
-	myprintf( "\n%1.3f seconds (%s)  on VSS operation\n", (mtime()-g_start)/1000.0,timetohuman((uint32_t)((mtime()-g_start)/1000.0)).c_str());
+		myprintf( "on VSS operation\n");
 	else
-	myprintf( "\n%1.3f seconds (%s)  %s\n", (mtime()-g_start)/1000.0,timetohuman((uint32_t)((mtime()-g_start)/1000.0)).c_str(),
-      errorcode>1 ? "(with errors)" :
-      errorcode>0 ? "(with warnings)" : "(all OK)");
+	{
+		if (errorcode==0)
+		{
+			myprintf("(all OK)\n");
+			if (flagbig)
+				bigok();
+		}
+		else if (errorcode==1)
+		{
+			myprintf("(with warnings)\n");
+			if (flagbig)
+				bigwarning();
+		}
+		else
+		{
+			myprintf("(with errors)\n");
+			if (flagbig)
+				bigerror();
+		}
+	}
 	if (g_255)
 		myprintf( "\nSeems %08d errors by path/filename too long (>255)\n", g_255);
 	if (errorcode==2)
 	{
 		if (flagdebug)
-				myprintf("33026: call xcommand on errorcode==2\n");
+			myprintf("33026: call xcommand on errorcode==2\n");
 		xcommand(g_exec_error,g_exec_text);
 	}
 	else
@@ -36463,7 +38826,15 @@ int Jidac::utf()
 		if (isdirectory(p->first))
 		{
 			if (p->first.size()>250)
+			{
 				longdirs++;
+				if (flagfix255)
+				{
+					myprintf("TOO LONG %08d ",p->first.size());
+					printUTF8(p->first.c_str());
+					myprintf("\n");
+				}
+			}
 			string	thedir=p->first;
 			string 	ansidir=purgeansi(forcelatinansi(utf8toansi(thedir)),true); //it is a path	
 			if (ansidir!=thedir)
@@ -36481,7 +38852,15 @@ int Jidac::utf()
 		else
 		{
 			if (p->first.size()>250)
+			{
 				longfiles++;
+				if (flagfix255)
+				{
+					myprintf("TOO LONG %08d ",p->first.size());
+					printUTF8(p->first.c_str());
+					myprintf("\n");
+				}
+			}
 			
 			string	thefile=extractfilename(p->first);
 			string 	ansifile=purgeansi(forcelatinansi(utf8toansi(thefile)),true); //it is a path	
@@ -37802,8 +40181,12 @@ int Jidac::test()
 			}
 			else
 			{
-				myprintf("ERROR:  STORED CRC-32 %08X != DECOMPRESSED %08X (ck %08d) %s\n",crc32stored,currentcrc32,parti,filedefinitivo.c_str());
-				status_e_blocks++;
+				if (crc32stored!=0)
+				{
+					myprintf("ERROR:  STORED CRC-32 %08X != DECOMPRESSED %08X (ck %08d) %s\n",crc32stored,currentcrc32,parti,filedefinitivo.c_str());
+					status_e_blocks++;
+				}
+				
 			}
 		}
 		else
@@ -39319,6 +41702,7 @@ int Jidac::fillami()
 	if (!getcaptcha("ok","Fill (wipe) free space"))
 				return 1;
 	string outputdir=files[0]+"ztempdir/";
+	///printf("Z1 makepath %s\n",outputdir.c_str());
 	makepath(outputdir);
 	if (!direxists(outputdir))
 	{
@@ -39393,7 +41777,11 @@ int Jidac::fillami()
 		FILE* myfile=fopen(mynomefile, "wb");
 		if (myfile==NULL)
 		{
-			myprintf("38604: mynomefile is null\n",mynomefile);
+#ifdef _WIN32
+			myprintf("38604: myfile not open %s (error %s)\n",mynomefile,migliaia((int64_t)GetLastError()));
+#else
+			myprintf("39540: myfile KO %s\n",mynomefile);
+#endif
 			exit(0);
 		}
 		fwrite(buffer32bit, sizeof(uint32_t), chunksize, myfile);
@@ -39457,6 +41845,7 @@ int Jidac::fillami()
 			myprintf("Reading chunk %05d ",i);
 			uint32_t dummycrc32;
 			///uint64_t starthash=mtime();
+			///inizio totali
 			string filehash=xxhash_calc_file(filename.c_str(),false,dummycrc32,-1,-1,lavorati);
 			uint64_t hashspeed=(uint64_t)(lavorati/((mtime()-startverify+1)/1000.0));
 			myprintf(" (%12s/s) ",tohuman(hashspeed));
@@ -39579,9 +41968,10 @@ int  Jidac::dir()
 	flagduplicati=ischecksum(); //(flagcrc32 || flagcrc32c || flagxxh3 || flagxxhash64 || flagsha1 || flagsha256 || flagmd5 || flagblake3 || flagxxhash64 || flagsha3);
 	if (flagchecksum)
 			flagduplicati=false;
-	g_bytescanned=0;
-	g_filescanned=0;
-	g_worked=0;
+	g_bytescanned	=0;
+	g_filescanned	=0;
+	g_worked		=0;
+	flagskipzfs					=true;  // strip down zfs
 	scandir(true,edt,cartella,barras);
 	printbar(' ',false);
 	myprintf("\r");
@@ -40078,6 +42468,13 @@ int Jidac::append()
 ///zpaqfranz a z:\1 \\?\UNC\franzk\z\cb -longpath -debug
 int Jidac::add() 
 {
+	if (flagstdin)
+		if (files.size()!=1)
+		{
+			myprintf("40090: with -stdin you must enter exactly ONE file\n");
+			return 2;
+		}
+
 #ifdef _WIN32
 	if (flagfindzpaq)
 		if (archive!="")
@@ -40550,6 +42947,60 @@ int Jidac::add()
 				maxfilelength=filename.size();
 		}
 #endif
+
+	if (flagstdin)
+	{
+		int i=0;
+		if (flagdebug)
+		{
+			for (DTMap::iterator p=edt.begin(); p!=edt.end(); ++p) 
+			{
+				myprintf("%03d  first %s\n",i,p->first.c_str());
+				myprintf("%03d  date  %s\n",i,migliaia(p->second.date));
+				myprintf("%03d  size  %s\n",i,migliaia(p->second.size)); ///-1
+				myprintf("%03d  attr  %s\n",i,migliaia(p->second.attr)); 
+				myprintf("%03d  data  %s\n",i,migliaia(p->second.data)); 
+				myprintf("%03d  writ  %d\n",i,p->second.written); 
+				myprintf("%03d  ptrsi %s\n",i,migliaia(p->second.ptr.size())); 
+				myprintf("%03d  dtv   %s\n",i,migliaia(p->second.dtv.size())); 
+				i++;
+			}
+		}
+		myprintf("40587: REBUILDING STDIN\n");
+		assert(files.size()==1);
+		edt.clear();
+		string solonome=extractfilename(files[0]);
+		DT& d=edt[solonome];
+		int64_t myora=now();
+		d.date=myora;
+		d.creationdate=0;
+		d.accessdate=0;
+		d.size=4;
+#ifdef _WIN32
+		d.attr=8311;
+#else
+		d.attr=8496245; //0644
+#endif
+		d.data=16777215;
+		d.written=-1;
+		if (flagdebug)
+		{
+			printf("k2\n");
+			for (DTMap::iterator p=edt.begin(); p!=edt.end(); ++p) 
+			{
+				myprintf("%03d  first %s\n",i,p->first.c_str());
+				myprintf("%03d  date  %s\n",i,migliaia(p->second.date));
+				myprintf("%03d  size  %s\n",i,migliaia(p->second.size)); ///-1
+				myprintf("%03d  attr  %s\n",i,migliaia(p->second.attr)); 
+				myprintf("%03d  data  %s\n",i,migliaia(p->second.data)); 
+				myprintf("%03d  writ  %d\n",i,p->second.written); 
+				myprintf("%03d  ptrsi %s\n",i,migliaia(p->second.ptr.size())); 
+				myprintf("%03d  dtv   %s\n",i,migliaia(p->second.dtv.size())); 
+				i++;
+			}
+		}
+	}
+
   // Sort the files to be added by filename extension and decreasing size
 	vector<DTMap::iterator> vf;
 	int64_t total_size=0;  // size of all input
@@ -40615,6 +43066,13 @@ int Jidac::add()
 			myprintf("----end files forced\n");
 		}
 	}
+	/*
+	if (flagstdin)
+		for (DTMap::iterator p=edt.begin(); p!=edt.end(); ++p) 
+			vf.push_back(p);
+	
+	if (!flagstdin)
+		*/
 	for (DTMap::iterator p=edt.begin(); p!=edt.end(); ++p) 
 	{
 			string filename=rename(p->first);
@@ -40760,12 +43218,55 @@ int Jidac::add()
 		for (int i=0;i<dastampare; i++) 
 			myprintf("POST %08d sort %19s |%s| |%s|\n",i,migliaia(vf[i]->second.size),vf[i]->second.hexhash.c_str(),vf[i]->first.c_str());
 	}
+	
 ///	Mmmhh... seems nothing to do. Exit early and quickly
 	if ((total_size==0) && (vf.size()==0) && (folders==0))
 	{
 		myprintf("\nQUIT: total size,file/folder count == zero. Already archived/wrong/inaccessible source?\n");
 		return 1;
 	}
+
+	if (flagdebug)
+	{
+		printf("k3\n");
+		unsigned i=0;
+		for (DTMap::iterator p=edt.begin(); p!=edt.end(); ++p) 
+		{
+			myprintf("%03d  first %s\n",i,p->first.c_str());
+			myprintf("%03d  date  %s\n",i,migliaia(p->second.date));
+			myprintf("%03d  size  %s\n",i,migliaia(p->second.size)); ///-1
+			myprintf("%03d  attr  %s\n",i,migliaia(p->second.attr)); 
+			myprintf("%03d  data  %s\n",i,migliaia(p->second.data)); 
+			myprintf("%03d  writ  %d\n",i,p->second.written); 
+			myprintf("%03d  ptrsi %s\n",i,migliaia(p->second.ptr.size())); 
+			myprintf("%03d  dtv   %s\n",i,migliaia(p->second.dtv.size())); 
+			i++;
+		}
+	}	
+	if (flagstdin)
+	{
+#ifdef _WIN32
+		setmode(0, O_BINARY);  // yes, we want binary
+#endif
+		myprintf("40828: IMPORT FROM STDIN\n");
+		if (flagdebug)
+		{
+			myprintf("vf size %d\n",vf.size());
+			for (unsigned i=0; i<vf.size(); i++) 
+			{
+				DTMap::iterator p=vf[i];
+				printf("%03d  first %s\n",i,p->first.c_str());
+				printf("%03d  date  %s\n",i,migliaia(p->second.date));
+				printf("%03d  size  %s\n",i,migliaia(p->second.size)); ///-1
+				printf("%03d  attr  %s\n",i,migliaia(p->second.attr)); 
+				printf("%03d  data  %s\n",i,migliaia(p->second.data)); 
+				printf("%03d  writ  %d\n",i,p->second.written); 
+				printf("%03d  ptrsi %s\n",i,migliaia(p->second.ptr.size())); 
+				printf("%03d  dtv   %s\n",i,migliaia(p->second.dtv.size())); 
+			}
+		}
+	}
+		
   // Test for reliable access to archive
   if (archive_exists!=exists(subpart(archive, 1).c_str()))
     error("archive access is intermittent");
@@ -40778,6 +43279,39 @@ int Jidac::add()
 		printUTF8(arcname.c_str());
 		myprintf(" at offset %s + %s\n", migliaia(header_pos), migliaia2(offset));
 	}
+
+#ifdef SERVER
+	if (flagserver)
+	{
+		if (g_cloudkey=="")
+		{
+			myprintf("40401: in -server mode -cloudkey cannot be empty, ABORT\n");
+			return 2;
+		}
+		/*
+		if (password==0)
+		{
+			myprintf("40406: in -server mode -key cannot be empty, ABORT\n");
+			return 2;
+		}
+		*/
+		if (g_indexname=="")
+		{
+			myprintf("40411: in -server mode -index cannot be empty, ABORT\n");
+			return 2;
+		}
+		sendtocloudpaq(total_size,ver.size());
+		if (g_socket==0)
+		{
+			printbar('*');
+			myprintf("\n\n40452: **** Cannot work with cloudpaq server, something is wrong ****\n");
+			myprintf("40453: ****           Now running only on local                  ****\n\n\n");
+			printbar('*');
+		}
+	}
+#endif
+	
+	
   // Open output
   OutputArchive out(arcname.c_str(), password, salt, offset);
   out.seek(header_pos, SEEK_SET);
@@ -40789,7 +43323,12 @@ int Jidac::add()
 	if (g_fakewrite)
 		myprintf("Processing %s (%s) in %s files (%s dirs), %d threads ",migliaia(total_size), tohuman(total_size),migliaia2(int(vf.size())),migliaia3(folders),howmanythreads);
 	else
-		myprintf("Adding %s (%s) in %s files (%s dirs), %d threads ",migliaia(total_size), tohuman(total_size),migliaia2(int(vf.size())),migliaia3(folders),howmanythreads);
+	{
+		if (flagstdin)
+			myprintf("Adding stream from stdin with %d threads ",howmanythreads);
+		else
+			myprintf("Adding %s (%s) in %s files (%s dirs), %d threads ",migliaia(total_size), tohuman(total_size),migliaia2(int(vf.size())),migliaia3(folders),howmanythreads);
+	}
 	if (flagverbose)
 		myprintf("-method %s ",method.c_str());
 	myprintf("@ %s ",dateToString(flagutc,date).c_str());
@@ -40830,6 +43369,7 @@ int Jidac::add()
   
   if (howmanythreads>1) 
   if (method[0]=='s') {
+
     StringBuffer sb(blocksize+4096-128);
     for (unsigned fi=0; fi<vf.size(); ++fi) {
       DTMap::iterator p=vf[fi];
@@ -40876,7 +43416,8 @@ int Jidac::add()
         if (r==0) break;
       }
 	  if (in!=NULL)
-		fclose(in);
+		  if (!flagstdin)
+			fclose(in);
     }
     // Wait for jobs to finish
     job.appendz(sb, 0, "");  // signal end of input
@@ -40926,12 +43467,35 @@ int Jidac::add()
 	{
 		if (flagdebug)
 			myprintf("39358: append cdatasize %s htsize %s\n",migliaia(g_cdatasize),migliaia2(g_htsize));
+/*
+	string avviso="AVVISOOOOOO 41450    ";
+	send(g_socket,avviso.c_str(),avviso.size(),0);
+*/
+#ifdef SERVER
+	if (flagdebug)
+	{
+		franzpacket	debugpacket;
+		debugpacket.setpacket(g_enter,FRANZOPACKET_TYPECOMMAND_DATA,1000,1001,1002,"******* AVVISO: 43179");
+		debugpacket.sendtosocket();
+	}
+#endif
 		writeJidacHeader(&out, date, g_cdatasize, g_htsize);
 	}
 	 else
 	{
 		if (flagdebug)
 			myprintf("39431 writeJidacheader -1\n");
+/*
+	send(g_socket,avviso.c_str(),avviso.size(),0);
+*/
+#ifdef SERVER
+	if (flagdebug)
+	{
+		franzpacket	debugpacket;
+		debugpacket.setpacket(g_enter,FRANZOPACKET_TYPECOMMAND_DATA,1000,1001,1002,"******* AVVISO: 43193");
+		debugpacket.sendtosocket();
+	}
+#endif
 		writeJidacHeader(&out, date, -1, htsize);
 	}
   const int64_t header_end=out.tell();
@@ -40948,6 +43512,7 @@ int Jidac::add()
   vector<unsigned> blocklist;  // list of starting fragments
 	///int64_t	crckanz=0;
  // For each file to be added
+	int64_t startstream=mtime();
   for (unsigned fi=0; fi<=vf.size(); ++fi) 
   {
 	///string workingfile="";
@@ -40958,129 +43523,203 @@ int Jidac::add()
 	DTMap::iterator p;
     if (fi<vf.size()) 
 	{
-      assert(vf[fi]->second.ptr.size()==0);
-      p=vf[fi];
-		///workingfile=p->first;
-		/// mik myprintf("lavoro %s\n",p->first.c_str());
-      // Open input file
-      bufptr=buflen=0;
-      in=fopen(p->first.c_str(), RB);
-      if (in==FPNULL) 
-	  {  // skip if not found
-			p->second.date=0;
-			total_size-=p->second.size;
+		assert(vf[fi]->second.ptr.size()==0);
+		p=vf[fi];
+		bufptr=buflen=0;
+		// Open input file, IF not on stdin
+		if (!flagstdin)
+		{
+			in=fopen(p->first.c_str(), RB);
+			if (in==FPNULL) 
+			{  // skip if not found
+				p->second.date=0;
+				total_size-=p->second.size;
 ///	Houston, we got an error. Try to figure why re-opening the file (on Windows)
 /// Microsoft filesystem is so complex, better some help
-			int64_t attrib=0;
+				int64_t attrib=0;
 #ifdef _WIN32
-			attrib=getwinattributes(p->first);
+				attrib=getwinattributes(p->first);
 #endif
-			printerr("16672",p->first.c_str(),attrib);
-			++errors;
-			continue;
-      }
+				printerr("16672",p->first.c_str(),attrib);
+				++errors;
+				continue;
+			}
 		// get expected filesize. Slow down a bit. But I like very much 
 		///if (flagverbose)
-		{
-			fseeko(in, 0, SEEK_END);
-			p->second.expectedsize=ftello(in);
-			fseeko(in, 0, SEEK_SET);
+			{
+				fseeko(in, 0, SEEK_END);
+				p->second.expectedsize=ftello(in);
+				fseeko(in, 0, SEEK_SET);
+			}
 		}
-		p->second.data=1;  // add
+		p->second.data=1;  // add in every case
     }
 	int		ultimapercentuale=0;
+	int		ultimotempo=0;
     // Read fragments
     int64_t fsize=0;  // file size after dedupe
-    for (unsigned fj=0; true; ++fj) {
-      int64_t sz=0;  // fragment size;
-      unsigned hits=0;  // correct prediction count
-      int c=EOF;  // current byte
-      unsigned htptr=0;  // fragment index
-      char sha1result[20]={0};  // fragment hash
-      unsigned char o1[256]={0};  // order 1 context -> predicted byte
-      if (fi<vf.size()) {
-        int c1=0;  // previous byte
-        unsigned h=0;  // rolling hash for finding fragment boundaries
-        libzpaq::SHA1 sha1;
-        assert(in!=FPNULL);
-        assert(in!=NULL);
-        while (true) 
+    for (unsigned fj=0; true; ++fj) 
+	{
+		int64_t sz=0;  // fragment size;
+		unsigned hits=0;  // correct prediction count
+		int c=EOF;  // current byte
+		unsigned htptr=0;  // fragment index
+		char sha1result[20]={0};  // fragment hash
+		unsigned char o1[256]={0};  // order 1 context -> predicted byte
+		if (fi<vf.size()) 
 		{
-			if (bufptr>=buflen) bufptr=0, buflen=fread(buf, 1, BUFSIZE, in);
-	///	zero-length file (-debug -zero -kill)
-	/// or zero-filled file (-debug -zero)
-			if (flagdebug)
-				if (flagzero)
+			int c1=0;  // previous byte
+			unsigned h=0;  // rolling hash for finding fragment boundaries
+			libzpaq::SHA1 sha1;
+			assert(in!=FPNULL);
+			assert(in!=NULL);
+			// this is a kind of "loop unrolling", do not want to check every time the flag inside the loop
+			if (flagstdin)
+			{
+				///c:\nz\dd if="\\\\.\\c:" bs=1048576 count=100000000000 |c:\zpaqfranz\zpaqfranz a j:\image\prova cimage.img -stdin
+			
+				while (true) 
 				{
-					if (flagkill)
-						bufptr=buflen;
-					else
-						memset(buf,0,buflen);
-				}
-			if (g_franzotype>0)
-				if (bufptr==0)
-					if (buflen>0) 
+					c		=getc(stdin);
+					buflen	=1;
+					buf[0]	=c;
+					if (c!=EOF)
 					{
-						/// check for strange things (corrupted files, lost connection...)
-						p->second.hashedsize+=buflen;
-///	this is why pre-get filesize: % of big files into global %				
-						///if (flagverbose)
-						if (p->second.expectedsize>100000000)
-						{
-							int percentuale=(int)(100.0*p->second.hashedsize/p->second.expectedsize)+1;
-							int modulo=10;
-							if (p->second.expectedsize>1000000000)
-								modulo=1;
-							if (percentuale!=ultimapercentuale)
-							if (percentuale%modulo==0)
+						total_size++;
+						if (!flagnoeta)
+							if (total_size %1000000==0)
 							{
-								print_progress(total_size, total_done,g_scritti,ultimapercentuale);
-								ultimapercentuale=percentuale;
+								int secondi=(mtime()-startstream)/1000;
+								if (secondi!=ultimotempo)
+								{
+									myprintf("So far %12s @ %12s /s\r",tohuman(total_size),tohuman2(total_size/secondi));
+									ultimotempo=secondi;
+								}
 							}
+						if (g_franzotype>0)
+						{
+							p->second.hashedsize+=buflen;
+							p->second.file_crc32=crc32_16bytes(buf,buflen,p->second.file_crc32);
+							if (g_franzotype==FRANZO_XXHASH64)
+								if (p->second.pfile_xxhash64)
+									(*p->second.pfile_xxhash64).add(buf,buflen);
+							if (g_franzotype==FRANZO_SHA_1)
+								if (p->second.pfile_sha1)
+									(*p->second.pfile_sha1).write(buf,buflen);
+							if (g_franzotype==FRANZO_SHA_256)
+								if (p->second.pfile_sha256)
+									for (int i=0;i<buflen;i++)
+										(*p->second.pfile_sha256).put(*(buf+i));
+							if (g_franzotype==FRANZO_XXH3)
+								if (p->second.pfile_xxh3)
+									(void)XXH3_128bits_update(p->second.pfile_xxh3, buf,buflen);
+							if (g_franzotype==FRANZO_BLAKE3)
+								if (p->second.pfile_blake3)
+									blake3_hasher_update(p->second.pfile_blake3, buf,buflen);
+							if (g_franzotype==FRANZO_SHA3)
+								if (p->second.pfile_sha3)
+									(*p->second.pfile_sha3).add(buf,buflen);
+							if (g_franzotype==FRANZO_MD5)
+								if (p->second.pfile_md5)
+								(*p->second.pfile_md5).add(buf,buflen);
 						}
-	///	compute CRC-32 (always) in zpaqfranz, then the hash
-						p->second.file_crc32=crc32_16bytes(buf,buflen,p->second.file_crc32);
-						if ((g_franzotype==FRANZO_XXHASH64) || (g_franzotype==FRANZO_WINHASH64))
-							if (p->second.pfile_xxhash64)
-								(*p->second.pfile_xxhash64).add(buf,buflen);
-						if (g_franzotype==FRANZO_SHA_1)
-							if (p->second.pfile_sha1)
-								(*p->second.pfile_sha1).write(buf,buflen);
-						if (g_franzotype==FRANZO_SHA_256)
-							if (p->second.pfile_sha256)
-								for (int i=0;i<buflen;i++)
-									(*p->second.pfile_sha256).put(*(buf+i));
-						if (g_franzotype==FRANZO_XXH3)
-							if (p->second.pfile_xxh3)
-								(void)XXH3_128bits_update(p->second.pfile_xxh3, buf,buflen);
-						if (g_franzotype==FRANZO_BLAKE3)
-							if (p->second.pfile_blake3)
-								blake3_hasher_update(p->second.pfile_blake3, buf,buflen);
-						if (g_franzotype==FRANZO_SHA3)
-							if (p->second.pfile_sha3)
-								(*p->second.pfile_sha3).add(buf,buflen);
-						if (g_franzotype==FRANZO_MD5)
-							if (p->second.pfile_md5)
-							(*p->second.pfile_md5).add(buf,buflen);
+						if (c==o1[c1]) h=(h+c+1)*314159265u, ++hits;
+						else 
+							h=(h+c+1)*271828182u;
+						o1[c1]=c;
+						c1=c;
+						sha1.put(c);
+						fragbuf[sz++]=c;
 					}
-					///
-          if (bufptr>=buflen) c=EOF;
-          else c=(unsigned char)buf[bufptr++];
-          if (c!=EOF) {
-            if (c==o1[c1]) h=(h+c+1)*314159265u, ++hits;
-            else h=(h+c+1)*271828182u;
-            o1[c1]=c;
-            c1=c;
-			///if (!flagnodedup)
-            sha1.put(c);
-            fragbuf[sz++]=c;
-	///		myprintf("sz %08d\n",sz);
-          }
-          if (c==EOF
-              || sz>=MAX_FRAGMENT
-              || (fragment<=22 && h<(1u<<(22-fragment)) && sz>=MIN_FRAGMENT))
-            break;
-        }
+					if (c==EOF
+						|| sz>=MAX_FRAGMENT
+						|| (fragment<=22 && h<(1u<<(22-fragment)) && sz>=MIN_FRAGMENT))
+						break;
+				}
+			}	
+			if (!flagstdin)
+			{
+				while (true) 
+				{
+					if (bufptr>=buflen) bufptr=0, buflen=fread(buf, 1, BUFSIZE, in);
+					///	zero-length file (-debug -zero -kill)
+					/// or zero-filled file (-debug -zero)
+					if (flagdebug)
+						if (flagzero)
+						{
+							if (flagkill)
+								bufptr=buflen;
+							else
+								memset(buf,0,buflen);
+						}
+					if (g_franzotype>0)
+						if (bufptr==0)
+							if (buflen>0) 
+							{
+								/// check for strange things (corrupted files, lost connection...)
+								p->second.hashedsize+=buflen;
+								///	this is why pre-get filesize: % of big files into global %				
+								///if (flagverbose)
+								if (p->second.expectedsize>100000000)
+								{
+									int percentuale=(int)(100.0*p->second.hashedsize/p->second.expectedsize)+1;
+									int modulo=10;
+									if (p->second.expectedsize>1000000000)
+										modulo=1;
+									if (percentuale!=ultimapercentuale)
+									if (percentuale%modulo==0)
+									{
+										print_progress(total_size, total_done,g_scritti,ultimapercentuale);
+										ultimapercentuale=percentuale;
+									}
+								}
+							///	compute CRC-32 (always) in zpaqfranz, then the hash
+								p->second.file_crc32=crc32_16bytes(buf,buflen,p->second.file_crc32);
+								if (g_franzotype==FRANZO_XXHASH64)
+									if (p->second.pfile_xxhash64)
+										(*p->second.pfile_xxhash64).add(buf,buflen);
+								if (g_franzotype==FRANZO_SHA_1)
+									if (p->second.pfile_sha1)
+										(*p->second.pfile_sha1).write(buf,buflen);
+								if (g_franzotype==FRANZO_SHA_256)
+									if (p->second.pfile_sha256)
+										for (int i=0;i<buflen;i++)
+											(*p->second.pfile_sha256).put(*(buf+i));
+								if (g_franzotype==FRANZO_XXH3)
+									if (p->second.pfile_xxh3)
+										(void)XXH3_128bits_update(p->second.pfile_xxh3, buf,buflen);
+								if (g_franzotype==FRANZO_BLAKE3)
+									if (p->second.pfile_blake3)
+										blake3_hasher_update(p->second.pfile_blake3, buf,buflen);
+								if (g_franzotype==FRANZO_SHA3)
+									if (p->second.pfile_sha3)
+										(*p->second.pfile_sha3).add(buf,buflen);
+								if (g_franzotype==FRANZO_MD5)
+									if (p->second.pfile_md5)
+									(*p->second.pfile_md5).add(buf,buflen);
+							}
+				
+					if (bufptr>=buflen) 
+						c=EOF;
+					else 
+						c=(unsigned char)buf[bufptr++];
+					if (c!=EOF) 
+					{
+						if (c==o1[c1]) 
+							h=(h+c+1)*314159265u, ++hits;
+						else 
+							h=(h+c+1)*271828182u;
+						o1[c1]=c;
+						c1=c;
+						sha1.put(c);
+						fragbuf[sz++]=c;
+					}
+					if (c==EOF
+						|| sz>=MAX_FRAGMENT
+						|| (fragment<=22 && h<(1u<<(22-fragment)) && sz>=MIN_FRAGMENT))
+						break;
+				}
+			}
         assert(sz<=MAX_FRAGMENT);
         total_done+=sz;
         // Look for matching fragment
@@ -41267,16 +43906,19 @@ int Jidac::add()
 			}
 	}
       if (c==EOF) break;
-	///myprintf("Fragment fj %ld\n",fj);
-    }  // end for each fragment fj
-    if (fi<vf.size()) {
-      dedupesize+=fsize;
+	}  // end for each fragment fj
+    
+	///printf("sono uscito\n");
+	if (fi<vf.size()) 
+	{
+		dedupesize+=fsize;
 	  ///print_datetime();	
 	  /// check errori 
-      print_progress(total_size, total_done,g_scritti,ultimapercentuale);
+  print_progress(total_size, total_done,g_scritti,ultimapercentuale);
       assert(in!=FPNULL);
 	  assert(in!=NULL);
-      fclose(in);
+	  if (!flagstdin)
+		fclose(in);
       in=FPNULL;
     }
   }  // end for each file fi
@@ -41294,6 +43936,18 @@ int Jidac::add()
 	WriterPair wp;
 	wp.a=&out;
 	if (index) wp.b=&outi;
+/*
+	string avviso="AVVISOOOOOO 41904    ";
+	send(g_socket,avviso.c_str(),avviso.size(),0);
+*/
+#ifdef SERVER
+	if (flagdebug)
+	{
+		franzpacket	debugpacket;
+		debugpacket.setpacket(g_enter,FRANZOPACKET_TYPECOMMAND_DATA,1000,1001,1002,"******* AVVISO: 43640");
+		debugpacket.sendtosocket();
+	}
+#endif
 	writeJidacHeader(&outi, date, 0, htsize);
 	// Append compressed fragment tables to archive
 	int64_t cdatasize=out.tell()-header_end;
@@ -41335,6 +43989,7 @@ int Jidac::add()
 			{
 				libzpaq::compressBlock(&is, &wp, "1",("jDC"+itos(date)+"i"+itos(++dtcount, 10)).c_str(), "jDC\x01");
 				is.resize(0);
+				
 			}
 		}
 	}
@@ -41488,7 +44143,7 @@ int Jidac::add()
 					{
 						if ((p->second.size!=p->second.hashedsize) && (p->second.hashedsize==0))
 						{
-							if (!flagvss)
+							if (!flagvss && (!flagstdin))
 							{
 								myprintf("38383: ERROR expected %19s getted 0 bytes  ",migliaia(p->second.size));
 								printUTF8(filename.c_str());
@@ -41499,7 +44154,7 @@ int Jidac::add()
 						else
 						if (p->second.size!=p->second.hashedsize)
 						{
-							if (!flagvss)
+							if ((!flagvss) && (!flagstdin))
 							{
 								myprintf("38385: WARN expected %19s getted %19s for ",migliaia(p->second.size),migliaia2(p->second.hashedsize));
 								printUTF8(filename.c_str());
@@ -41569,13 +44224,82 @@ int Jidac::add()
 	}
 	else
 	{
+		
 		if (flagdebug)
 		myprintf("40045 writeJidacHeader %s %s\n",migliaia(cdatasize),migliaia2(htsize));
 		out.seek(header_pos, SEEK_SET);
+		///g_skipsocket=true;
+		///string avviso="AVVISOOOOOO 42192     ";
+		///send(g_socket,avviso.c_str(),avviso.size(),0);
+#ifdef SERVER
+	if (flagdebug)
+	{
+		franzpacket	debugpacket;
+		debugpacket.setpacket(g_enter,FRANZOPACKET_TYPECOMMAND_DATA,1000,1001,1002,"******* AVVISO: 43927");
+		debugpacket.sendtosocket();
+	}
+#endif
 		writeJidacHeader(&out, date, cdatasize, htsize);
+		out.flush(); //this is fundamental!
+		///avviso="POST-SCRITTURA 42192     ";
+		///send(g_socket,avviso.c_str(),avviso.size(),0);
 		out.seek(0, SEEK_END);
 	}
 	int64_t archive_size=out.tell();
+
+/*
+#ifdef SERVER
+	if (g_socket!=0)
+	{
+		string 	stringtoserver="$start$fix;";
+		char	buffer[30];
+		string	temp;
+		
+		sprintf(buffer,"%lld",header_pos);
+		temp=buffer;
+		stringtoserver+=temp+';';
+		
+		sprintf(buffer,"%lld",date);
+		temp=buffer;
+		stringtoserver+=temp+';';
+		
+		sprintf(buffer,"%lld",cdatasize);
+		temp=buffer;
+		stringtoserver+=temp+';';
+		
+		sprintf(buffer,"%lld",(long long int)htsize);
+		temp=buffer;
+		stringtoserver+=temp+';';
+		
+		sprintf(buffer,"%lld",archive_end);
+		temp=buffer;
+		stringtoserver+=temp+';';
+		sprintf(buffer,"%lld",archive_size);
+		temp=buffer;
+		stringtoserver+=temp+';';
+		
+		stringtoserver+="$end$fix;";
+///		send(g_socket,stringtoserver.c_str(),stringtoserver.size(),0);
+///		myprintf("42166:stringtoserver |%s|\n",stringtoserver.c_str());
+
+		printf("FACCIO SOCKOUT JDA\n");
+		char myheader[1000];
+		
+		int myheadersize=calcjidacheader(date, cdatasize, htsize,myheader,sizeof(myheader));
+		if (myheadersize==0)
+		{
+			myprintf("42236: guru, jidacheadersize returned ==0\n");
+			seppuku();
+			return 2;
+		}			
+		 printf("My header grande %d\n",myheadersize);
+///	for (int i=0;i<myheadersize;i++)
+///		printf("header %03d  %03d %c\n",i,myheader[i],myheader[i]);
+///		send(g_socket,myheader,myheadersize,0);
+	}
+#endif
+*/
+
 	out.close();
   // Truncate empty update from archive (if not indexed)
 	if (!index) 
@@ -41689,6 +44413,7 @@ int Jidac::add()
 	}	
 	if (g_sfx!="")
 		errors+=writesfxmodule(g_sfx);
+	if (!flagstdin)
 	if (!(flagdebug && flagzero && flagkill))
 		if (total_size!=(total_done))
 		{
@@ -41711,6 +44436,68 @@ int Jidac::add()
 	if (flagverbose)
 		enumerateerrors();
 #endif 
+#ifdef SERVER
+	if (flagserver)
+	{
+		if (g_socket==0)
+		{
+			myprintf("42370: Cloudpaq communication KAPUTT\n");
+			errors=2;
+		}
+		else
+		if (g_socket!=0)
+		{
+			int64_t lasthash=g_socket_hash.hash();
+			int64_t	finalfile=prendidimensionefile(archive.c_str());
+
+			franzpacket	mypacket;
+			mypacket.setpacket(g_enter,FRANZOPACKET_TYPECOMMAND_EOF,g_socket_sended,lasthash,finalfile,"done");
+			mypacket.sendtosocket();
+			myprintf("44136: EOF packet sended, now closing\n");
+			closesocket (g_socket);
+			WSACleanup ();
+			g_socket=0;
+			float overhead=(1.0*g_socket_packet/g_socket_sended-1)*100;
+			myprintf("Total   packets %21s (hash %08X)\n",migliaia(g_socket_packets),lasthash);
+			myprintf("Real      bytes %21s (%10s)\n",migliaia(g_socket_packet),tohuman(g_socket_packet));
+			myprintf("Effective bytes %21s (%10s)\n",migliaia(g_socket_sended),tohuman(g_socket_sended));
+			myprintf("Overhead  bytes %21s (%d%%)\n",migliaia(g_socket_packet-g_socket_sended),(int)overhead);
+		}
+	}
+#endif
+	if (checktxt!="")
+	{
+		myprintf("Creating XXH3 check txt on %s\n",checktxt.c_str());
+		uint32_t dummycrc32;
+		int64_t startverify=mtime();
+		int64_t io_lavorati=0;
+		int64_t larghezzain	=prendidimensionefile(g_archive.c_str());
+		string 
+		hashreloaded=xxhash_calc_file(g_archive.c_str(),
+		false,dummycrc32,
+		startverify,
+		larghezzain,io_lavorati);
+		if (hashreloaded=="")
+			errors=2;
+		else
+		{
+			myprintf("\n44202: final XXH3: hash %s\n",hashreloaded.c_str());
+			FILE* myoutput=fopen(checktxt.c_str(), "wb");
+			if (myoutput==NULL)
+			{
+				myprintf("44206: cannot write on %s\n",checktxt.c_str());
+				errors=2;
+			}
+			else
+			{
+				fprintf(myoutput,"XXH3: %s [%21s] %s",hashreloaded.c_str(),migliaia(larghezzain),g_archive.c_str());
+				fclose(myoutput);
+				if (flagverbose)
+					myprintf("44214: XXH3: checksum file done\n");
+			}
+	
+		}
+	}
 	return errors;
 }
 /*
@@ -42734,6 +45521,8 @@ bool Jidac::removetempdirifempty(string i_folder,bool i_deleteifsizezero=false)
 }
 int Jidac::multiverify(vector <s_fileandsize>& i_arrayfilename)
 {
+	printbar(' ');
+	myprintf("\r");
 	myprintf("VERIFY (=re-read from filesystem) and compare hashes\n");
 	if (howmanythreads==1)
 	{
@@ -42939,6 +45728,8 @@ int Jidac::multiverify(vector <s_fileandsize>& i_arrayfilename)
 				tobedeleted+=vettoreparametrihash[i].filestobehashed.size();
 			uint32_t	testati=0;
 			int			percentualestampata=0;
+			printbar(' ');
+			myprintf("\r");
 			myprintf("Purging ");
 			for(unsigned int i=0;i<mythreads;i++)
 				for (unsigned int j=0;j<vettoreparametrihash[i].filestobehashed.size();j++)
@@ -42985,15 +45776,7 @@ int Jidac::multiverify(vector <s_fileandsize>& i_arrayfilename)
 			myprintf("\r");
 			if (flagverbose)
 				if (!alldeleted)
-				{
-					myprintf("MMMMMMMMMMMMMMMMMMMMMMMMMMMMM\n");
-					myprintf("MMMMMMMMMMMMMMMMMMMMMMMMMMMMM\n");
-					myprintf("MMMMMMMMMMMMMMMMMMMMMMMMMMMMM\n");
-					myprintf("MMMMMMMM  GURUUUU  MMMMMMMMMM\n");
-					myprintf("MMMMMMMMMMMMMMMMMMMMMMMMMMMMM\n");
-					myprintf("MMMMMMMMMMMMMMMMMMMMMMMMMMMMM\n");
-					myprintf("MMMMMMMMMMMMMMMMMMMMMMMMMMMMM\n");
-				}
+					bigguru();
 			if (flagverbose)
 				myprintf("44667: removing temp dir (if empty) %s\n",tofiles[0].c_str());
 			if (!removetempdirifempty(tofiles[0],false))
@@ -43430,7 +46213,8 @@ int Jidac::removeemptydirs(string i_folder,bool i_kill)
 	vector<string> scannedfiles;
 	for (DTMap::iterator p=mydestinationdir.begin(); p!=mydestinationdir.end(); ++p) 
 		scannedfiles.push_back(p->first);
-	myprintf("Scanned files %s\n",migliaia(scannedfiles.size()));
+	if (flagverbose)
+		myprintf("Scanned files  (remove empty dir) %s\n",migliaia(scannedfiles.size()));
 	vector<string> tobedeleted;
 	int candidati=0;
 	for (unsigned int i=0;i<scannedfiles.size();i++)
@@ -43821,3 +46605,198 @@ int Jidac::hashselect()
 	myprintf("Time for paranoid select : %.2fs (speed %s/s), forced files %s\n",tempo,tohuman((total_size/tempo)),migliaia(forzati));
 	return 0;
 }
+
+
+#ifdef SERVER
+int init ()
+{
+	int error=WSAStartup(MAKEWORD(HIGHVERSION,LOWVERSION),&g_wsaData);
+	if(error!=0)
+	{
+		myprintf("45685: WSAStartup KO code %d\n",error);
+		return 1;
+	}
+	if(LOBYTE(g_wsaData.wVersion)!=LOWVERSION||HIBYTE(g_wsaData.wVersion)!=HIGHVERSION)
+	{
+		myprintf("45691: version too old : %d.%d\n",LOBYTE(g_wsaData.wVersion),HIBYTE(g_wsaData.wVersion));
+		WSACleanup();
+		return 1;
+	}
+	else
+	{
+		myprintf(" (Windows Socket v%d.%d, this is good)\n",HIBYTE(g_wsaData.wVersion),LOBYTE(g_wsaData.wVersion));
+		return 0;
+	}
+}
+string	dnsresolve(string i_address)
+{
+	if (i_address=="")
+		return "";
+	const char* inetAddr;
+	addrinfo hints2, *res;
+	memset(&hints2, 0, sizeof (hints2));
+	hints2.ai_family     =AF_INET ; //I want IPv4 AF_UNSPEC;
+	hints2.ai_socktype   =SOCK_STREAM;
+	hints2.ai_protocol   =IPPROTO_TCP;
+
+	if (getaddrinfo(i_address.c_str(),NULL,&hints2,&res)!=0)
+	{
+		myprintf("46229: Cannot resolve %s to IP address\n",i_address.c_str());
+		return "";
+	}
+	else
+	{
+		inetAddr=inet_ntoa(((sockaddr_in *)res->ai_addr)->sin_addr);
+		string 	dummy=inetAddr;
+		return dummy;
+	}	
+	return "";
+}
+///	future expansion: multiple interfaces enumeration
+int addressing()
+{
+	int result;
+	struct addrinfo hints;
+	struct addrinfo* temp;
+	memset(&hints,0,sizeof(hints));
+	hints.ai_family		=AF_UNSPEC;
+	hints.ai_socktype	=SOCK_STREAM;
+	hints.ai_flags		=AI_PASSIVE;
+	hints.ai_protocol	=IPPROTO_TCP;
+
+	string	old_server=g_server;
+	g_server=dnsresolve(g_server);
+	if (old_server!=g_server)
+		myprintf("45816: DNS resolved %s => IP %s\n",old_server.c_str(),g_server.c_str());
+	
+	result=getaddrinfo(g_server.c_str(),g_port.c_str(),&hints,&g_addr);
+
+	if(result!=0)
+	{
+		myprintf("45715: getaddrinfo KO %d %s\n",result,wtou(gai_strerror(WSAGetLastError())).c_str());
+		WSACleanup();
+		return 1;
+	}
+
+	myprintf("45720: Cloudpaq Server %s:%s ",g_server.c_str(),g_port.c_str());
+	int i=0;
+	for(temp=g_addr;temp!=NULL;temp=temp->ai_next)
+	{
+		myprintf("[%02d] ",++i);
+		
+		if (temp->ai_family==AF_INET)
+			myprintf("AF_INET (v4) ");
+		
+		if (temp->ai_family==AF_INET6)
+			myprintf("AF_INET6 (v6) ");
+			
+		if (temp->ai_protocol==IPPROTO_TCP)
+			myprintf(" TCP ");
+
+		if (temp->ai_protocol==IPPROTO_UDP)
+			myprintf(" UDP ");
+			
+		if (temp->ai_socktype==SOCK_STREAM)
+			myprintf(" socket stream ");
+		
+		if (temp->ai_socktype==SOCK_DGRAM)
+			myprintf(" socket datagram ");
+		
+		myprintf("\n");
+	}
+	return 0;
+}
+
+int Jidac::sendtocloudpaq(const int64_t i_extimated,const int i_version)
+{
+	if (g_cloudkey=="")
+	{
+		printf("46174: -cloudkey is empty!\n");
+		return 1;
+	}
+	myprintf("46175: Going 'Internet' ");
+	if (g_socket==0)
+	{
+		if(init())
+		{
+			myprintf("\n46181: Winsock library KO\n");
+			g_socket=0;
+			return 1;
+		}
+		if(addressing()!=0)
+		{
+			printf("\n46187: addressing KO\n");
+			g_socket=0;
+			return 1;
+		}
+		if((g_socket=socket(g_addr->ai_family,g_addr->ai_socktype,g_addr->ai_protocol))==INVALID_SOCKET)
+		{
+			myprintf("\n46190: Unable to make socket %d %s\n",WSAGetLastError(),wtou(gai_strerror(WSAGetLastError())).c_str());
+			g_socket=0;
+			return 1;
+		}
+		else
+			myprintf("46162: Socket OK, try to connect...\n");
+		
+		if (connect(g_socket,g_addr->ai_addr,g_addr->ai_addrlen)!= 0)
+		{
+			myprintf("46199: Failed connect : %d %s\n" ,WSAGetLastError(),wtou(gai_strerror(WSAGetLastError())).c_str());
+			g_socket=0;
+			return 1;
+		}
+		else
+			myprintf("46206: Connected to server (this is good)\n");
+	///	freeaddrinfo ( g_addr );
+	}
+	
+	/// just the "hello" message (the server version)
+	int bytesreceived;
+	char buff[CLOUDBUFFSIZE];
+	if ((bytesreceived=recv(g_socket,buff,CLOUDBUFFSIZE-1,0))==-1)
+	{
+		myprintf("46212: recv KO %d  %s\n" , WSAGetLastError () ,wtou(gai_strerror(WSAGetLastError())).c_str());
+		return 1;
+	}
+	else
+	{
+		buff[bytesreceived]=0;
+		myprintf("46024: Message from server %d bytes |%s|\n",bytesreceived,buff);
+	}
+		
+	Twofish_initialise();
+	std::string		lachiave=g_cloudkey;
+	string			filename=extractfilename(g_indexname);
+	myprintf("46418: Onlyfilename  %s\n",filename.c_str());
+
+
+	XXHash64 myhash(0);
+	myhash.add(filename.c_str(),filename.size());
+	g_enter=myhash.hash();
+	myprintf("46221: Accepted code %08X\n",g_enter);
+	
+	maketwofishkey(lachiave,&g_mykey);
+	
+	franzpacket	mypacket;
+	mypacket.setpacket(g_enter,FRANZOPACKET_TYPECOMMAND_NEW,i_extimated,i_version,1003,"hello I am zpaqfranz");
+	mypacket.sendtosocket();
+	
+	myprintf("46237: Closing socket (after first packet sended)\n");
+	closesocket (g_socket);
+///	rude check for connection stability over VPN or whatever: close and reopen
+	if((g_socket=socket(g_addr->ai_family,g_addr->ai_socktype,g_addr->ai_protocol))==INVALID_SOCKET)
+	{
+		myprintf("46242: cannot open socket [2] %d %s\n",WSAGetLastError(),wtou(gai_strerror(WSAGetLastError())).c_str());
+		return 1;
+	}
+	else
+		myprintf("46246: Second socket OK\n");
+	if(connect(g_socket,g_addr->ai_addr,g_addr->ai_addrlen)!=0)
+	{
+		myprintf("46249: second connect KO %d %s\n" , WSAGetLastError () ,wtou(gai_strerror(WSAGetLastError())).c_str());
+		return 1;
+	}
+	else
+		myprintf("46252: Connected to server [2]: this is VERY good\n");
+	return 0;
+}
+#endif

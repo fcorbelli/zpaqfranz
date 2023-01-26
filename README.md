@@ -1,12 +1,12 @@
 # zpaqfranz: advanced and compatible fork of ZPAQ 7.15, with SFX (on Windows)  
 ### Main platforms: Windows, FreeBSD, Linux
-Secondary platforms: Solaris, MacOS, OpenBSD, OmniOS, (ESXi, QNAP-based NAS for older builds)  
+Secondary platforms: Solaris, MacOS, OpenBSD, OmniOS, ESXi, QNAP-based NAS, Haiku OS  
 
-### [Windows binary 32/64 bit on sourceforge](https://sourceforge.net/projects/zpaqfranz/files/) 
+### [Binaries on sourceforge](https://sourceforge.net/projects/zpaqfranz/files/) 
 ### [Quick start FreeBSD](https://github.com/fcorbelli/zpaqfranz/wiki/Quickstart:-FreeBSD)   
 [Main site of old ZPAQ](http://mattmahoney.net/dc/zpaq.html)      [Reference decompressor](https://github.com/fcorbelli/unzpaq/tree/main) 
 ### OpenBSD: `pkg_add zpaqfranz`
-
+### FreeBSD: `pkg install zpaqfranz`
 
 ## Classic archivers (tar, 7z, RAR etc) are obsolete, when used for repeated backups (daily etc), compared to the ZPAQ technology, that maintain "snapshots" (versions) of the data.
 
@@ -31,7 +31,8 @@ For even higher level of paranoia, it is possible to use others hash algorithms,
 - BLAKE3 128
 - SHA-2-256 (NIST FIPS 180-4)
 - SHA-3-256 (NIST FIPS 202)
-
+- WHIRLPOOL (ISO/IEC 10118-3)
+- HIGHWAY (64,128,256)
 ...And much more.  
 A freeware GUI (PAKKA) is available on Windows to make extraction easier.  
 
@@ -65,7 +66,7 @@ When the author left the project, I made my fork to make the functions I need as
 
 **Why is it no longer developed? Why should I use your fork?**
 
-Because mr. Mahoney is now retired and no longer supports it (he... run!)
+Because Dr. Mahoney is now retired and no longer supports it (he... run!)
 
 **Why should I trust? It will be one of 1000 other programs that silently fail and give problems**
 

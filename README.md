@@ -456,7 +456,9 @@ Backup update from file system (real speed)
 Backup upgrade via zfs (real speed)
 [![Watch the video](https://i.imgur.com/vKb2F1B.png)](http://www.francocorbelli.it/zpaqfranz/zfs_backup.avi)
 
-[![Watch the video](https://img.youtube.com/vi/T-D1KVIuvjA/maxresdefault.jpg)]([https://www.youtube.com/watch?v=gifEFCFnJb8])
+[![Now in Android: 55]          // Title
+(https://i.ytimg.com/vi/Hc79sDi3f0U/maxresdefault.jpg)] // Thumbnail
+(https://www.youtube.com/watch?v=gifEFCFnJb8 "Now in Android: 55")    // Video Link
 
 
 **I do not trust you, but I am becoming curious. So?**

@@ -30,9 +30,9 @@ _As you can see, the .7z "daily" 5x backups takes ~ 5x the space of the .zpaq_
 
 # Seeing is believing ("real world")
 
-I thought it's best to show the difference, for those who don't do (zfs) server backups.
+I thought it's best to show the difference for a more realistic example.  
 
-Physical (small fileserve) Xeon machine with 8 cores, 64GB RAM and NVMe disks, plus Solaris-based NAS, 1Gb ethernet
+Physical (small fileserver) Xeon machine with 8 cores, 64GB RAM and NVMe disks, plus Solaris-based NAS, 1Gb ethernet
 
 Rsync update from filesystem to filesystem (real speed)  
 
@@ -279,7 +279,7 @@ There are also many great features for backup, I mention only the greatest.
 
 So rsync --append will copy only the portion actually added, for example on ssh tunnel to a remote server, or local NAS (QNAP etc) with tiny times.
 
-You don't have to copy or synchronize let's say 700GB of tar.gz,7z or whatever, but only (say) the 2GB added in the last copy, the firs 698GB are untouched.
+You don't have to copy or synchronize let's say 700GB of tar.gz,7z or whatever, but only (say) the 2GB added in the last copy, the first 698GB are untouched.
 
 This opens up the concrete possibility of using VDSL connections (upload ~ 2/4MB /s) to backup even virtual servers of hundreds of gigabytes in a few minutes.
 
@@ -298,8 +298,8 @@ The main one is that the listing of files is not very fast, when there are many 
 It is not the fastest tool out there, with real world performance of 80-200MB/s (depending on the case and HW of course).
 *Not a big deal for me (I have very powerful HW, and/or run nightly cron-tasks)*
 
-Extraction can require a number of seeks (due to various deduplicated blocks), which can slow down extraction on magnetic disks (but not on SSDs).
-*In theory it would be possible to eliminate, but the work is huge and, frankly, I rarely use magnetic discs*
+Extraction can require a number of seeks (due to various deduplicated blocks), which can slow down extraction on magnetic disks (but not on SSDs).  
+*If you have plenty of RAM now it is possible to bypass with the w command*
 
 No other significant ones come to mind, except that it is known and used by few
 
@@ -307,6 +307,7 @@ No other significant ones come to mind, except that it is known and used by few
 **I do not trust you, but I am becoming curious. So?**
 
 On **FreeBSD** [you can try to build the port (of paq, inside archivers)](https://www.freshports.org/archivers/paq) but it is very, very, very old (v 6.57 of 2014)  
+
 On **Debian** [there is a zpaq 7.15 package](https://packages.debian.org/sid/utils/zpaq)  
 You can download the original version (7.15 of 2016) directly from the author's website, and compile it, or get the same from github.  
 In this case be careful, because the source is divided into 3 source files, but nothing difficult for the compilation.  
@@ -315,14 +316,15 @@ In this case be careful, because the source is divided into 3 source files, but 
 
 From branch 51 all source code is merged in one zpaqfranz.cpp aiming to make it as easy as possible to compile on "strange" systems (NAS, vSphere etc).  
 Updating, compilation and Makefile are now trivial.  
+Or (for a newer, but not the very last, build)...  
+### OpenBSD: `pkg_add zpaqfranz`
+### FreeBSD: `pkg install zpaqfranz`
 
 # How to build
 
-My main development platforms are INTEL Windows 
-(non-Intel Windows (arm) currently unsupported) and FreeBSD.
+My main development platforms are INTEL Windows (non-Intel Windows (arm) currently unsupported) and FreeBSD.
 
-I rarely use Linux or MacOS or whatever (for compiling),
-so fixing may be needed.
+I rarely use Linux or MacOS or whatever (for compiling), so fixing may be needed.
 
 As explained the program is single file, be careful to link the pthread library.
 You need it for ESXi too, even if it doesn't work. Don't be afraid, zpaqfranz knows!

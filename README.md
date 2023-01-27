@@ -16,7 +16,7 @@ Secondary platforms: Solaris, MacOS, OpenBSD, OmniOS, ESXi, QNAP-based NAS, Haik
 **Why do you say 7z, RAR etc are obsolete? How is ZPAQ so innovative?**
 
 Let's see.
-Archiving a folder multiple times (5), simulating a daily run, with 7z
+Archiving a folder multiple times (5), simulating a daily run Monday-to-Friday, with 7z
 
 https://user-images.githubusercontent.com/77727889/215149589-0f2d9f91-ea5a-4f60-b587-f2a506148fe9.mp4
 
@@ -28,11 +28,11 @@ _As you can see, the .7z "daily" 5x backups takes ~ 5x the space of the .zpaq_
 
 ![compare](https://user-images.githubusercontent.com/77727889/215150599-83032cc6-06b0-432d-ba3b-b410698e3631.jpg)
 
-# Seeing is believing
+# Seeing is believing ("real world")
 
-I thought it's best to show the difference, for those who don't do (zfs) server backups, otherwise they seem abstruse and complicated speeches (and they are indeed :)
+I thought it's best to show the difference, for those who don't do (zfs) server backups.
 
-Physical Xeon machine with 8 cores, 64GB RAM and NVMe disks, small fileserver, Solaris-based NAS, 1Gb ethernet
+Physical (small fileserve) Xeon machine with 8 cores, 64GB RAM and NVMe disks, plus Solaris-based NAS, 1Gb ethernet
 
 Rsync update from filesystem to filesystem (real speed)  
 
@@ -260,19 +260,6 @@ Same things for virtual machines (vmdks)
 Because other software (sometimes very, very good) runs on complex "repositories", very fragile and way too hard to manage (at least for my tastes).  
 It may happen that you have to worry about backing up ... the backup, because maybe some files were lost during a transfer, corrupted etc.  
 _If it's simple, maybe it will work_
-
-## What about zfsbackup? ##
-
-zpaqfranz can retain zfs' replicas into an archive, for a bit-level-disaster-recovery (if needed!)
-
-Let's compare a "normal" zpaqfranz backup.
-
-https://user-images.githubusercontent.com/77727889/215151097-f4ddddaf-ea57-43c5-9163-756744339853.mp4
-
-Against a zfsbackup command (of zpaqfranz)
-
-https://user-images.githubusercontent.com/77727889/215151159-41263a41-a7bb-4cd8-b452-762d346ba5c8.mp4
-
 
 ## Too good to be true? ##
 

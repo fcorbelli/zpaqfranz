@@ -13,6 +13,47 @@ Secondary platforms: Solaris, MacOS, OpenBSD, OmniOS, ESXi, QNAP-based NAS, Haik
 [Wiki being written - be patient](https://github.com/fcorbelli/zpaqfranz/wiki)  
 [Quick link to ZFS's snapshots support functions](https://github.com/fcorbelli/zpaqfranz/wiki/Command:-zfs(something))
 
+**Why do you say 7z, RAR etc are obsolete? How is ZPAQ so innovative?**
+
+Let's see.
+Archiving a folder multiple times (5), simulating a daily run, with 7z
+
+https://user-images.githubusercontent.com/77727889/215149589-0f2d9f91-ea5a-4f60-b587-f2a506148fe9.mp4
+
+Same, but with zpaqfranz
+
+https://user-images.githubusercontent.com/77727889/215148702-edb8e5bb-8f4e-42bb-9637-6ee98742318a.mp4
+
+_As you can see, the .7z "daily" 5x backups takes ~ 5x the space of the .zpaq_
+
+![compare](https://user-images.githubusercontent.com/77727889/215150599-83032cc6-06b0-432d-ba3b-b410698e3631.jpg)
+
+# Seeing is believing
+
+I thought it's best to show the difference, for those who don't do (zfs) server backups, otherwise they seem abstruse and complicated speeches (and they are indeed :)
+
+Physical Xeon machine with 8 cores, 64GB RAM and NVMe disks, small fileserver, Solaris-based NAS, 1Gb ethernet
+
+Rsync update from filesystem to filesystem (real speed)  
+
+https://user-images.githubusercontent.com/77727889/215152167-c6ce107a-6345-4060-b7a7-33ad30b269ee.mp4
+
+
+Rsync update to Solaris NAS (real speed)
+
+https://user-images.githubusercontent.com/77727889/215152259-2baa7001-d838-40de-b56c-6fe3feff9f1b.mp4
+
+
+Backup update from file system with zpaqfranz (real speed)  
+
+https://user-images.githubusercontent.com/77727889/215146670-1a11cd5d-6f00-4544-b797-9ca288ae12b1.mp4
+
+Backup upgrade via zfsbackup (real speed)
+
+https://user-images.githubusercontent.com/77727889/215147310-cc760f20-08b8-4088-9d8a-f58f00eac211.mp4
+
+# What?
+
 At every run only data changed since the last execution will be added, creating a new version (the "snapshot").
 It is then possible to restore the data @ the single version, just like snapshots by zfs or virtual machines, but a single-file level.  
 - Keeps a forever-to-ever copy (even thousands of versions), conceptually similar to Mac's time machine, but much more efficiently.  
@@ -22,9 +63,10 @@ It is then possible to restore the data @ the single version, just like snapshot
 - Multiple possibilities of data verification, fast, advanced and even paranoid.
 - Some optimizations for modern hardware (aka: SSD, NVMe, multithread).
 - By default triple-check with "chunked" SHA-1, XXHASH64 and CRC-32 (!).  
+
 ```
 For even higher level of paranoia, it is possible to use others hash algorithms, as
- ```
+```
 - MD5
 - SHA-1 of the full-file (NIST FIPS 180-4)
 - XXH3-128
@@ -76,22 +118,6 @@ As the Russians say, trust me, but check.
 
 It is precisely the portion of the program that I have evolved, implementing a barrage of controls up to the paranoid level, and more.
 Let's say there are verification mechanisms which you have probably never seen. Do you want to use SHA-2/SHA-3 to be very confident? You can.
-
-**Why do you say 7z, RAR etc are obsolete? How is ZPAQ so innovative?**
-
-Let's see.
-Archiving a folder multiple times (5), simulating a daily run, with 7z
-
-https://user-images.githubusercontent.com/77727889/215149589-0f2d9f91-ea5a-4f60-b587-f2a506148fe9.mp4
-
-Same, but with zpaqfranz
-
-https://user-images.githubusercontent.com/77727889/215148702-edb8e5bb-8f4e-42bb-9637-6ee98742318a.mp4
-
-_As you can see, the .7z "daily" 5x backups takes ~ 5x the space of the .zpaq_
-
-![compare](https://user-images.githubusercontent.com/77727889/215150599-83032cc6-06b0-432d-ba3b-b410698e3631.jpg)
-
 
 **ZPAQ (zpaqfranz) allows you to NEVER delete the data that is stored and will be available forever (in reality typically you starts from scratch every 1,000 or 2,000 versions, for speed reasons), and restore the files present to each archived version, even if a month or three years ago.**
 
@@ -289,31 +315,6 @@ Extraction can require a number of seeks (due to various deduplicated blocks), w
 *In theory it would be possible to eliminate, but the work is huge and, frankly, I rarely use magnetic discs*
 
 No other significant ones come to mind, except that it is known and used by few
-
-# Seeing is believing
-
-I thought it's best to show the difference, for those who don't do zfs server backups, otherwise they seem abstruse and complicated speeches (and they are indeed :)
-
-Physical Xeon machine with 8 cores, 64GB RAM and NVMe disks, small fileserver, Solaris-based NAS, 1Gb ethernet
-
-Rsync update from filesystem to filesystem (real speed)  
-
-https://user-images.githubusercontent.com/77727889/215152167-c6ce107a-6345-4060-b7a7-33ad30b269ee.mp4
-
-
-Rsync update to Solaris NAS (real speed)
-
-https://user-images.githubusercontent.com/77727889/215152259-2baa7001-d838-40de-b56c-6fe3feff9f1b.mp4
-
-
-Backup update from file system with zpaqfranz (real speed)  
-
-https://user-images.githubusercontent.com/77727889/215146670-1a11cd5d-6f00-4544-b797-9ca288ae12b1.mp4
-
-Backup upgrade via zfsbackup (real speed)
-
-https://user-images.githubusercontent.com/77727889/215147310-cc760f20-08b8-4088-9d8a-f58f00eac211.mp4
-
 
 
 **I do not trust you, but I am becoming curious. So?**

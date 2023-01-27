@@ -445,6 +445,20 @@ Extraction can require a number of seeks (due to various deduplicated blocks), w
 
 No other significant ones come to mind, except that it is known and used by few
 
+I thought it's best to show the difference, for those who don't do zfs server backups
+Otherwise they seem abstruse and complicated speeches (and they are indeed )
+
+Physical Xeon machine with 8 cores, 64GB ram and NVMe disks, small fileserver
+
+Backup update from file system (real speed)
+[![Watch the video](https://i.imgur.com/vKb2F1B.png)]([http://www.francocorbelli.it/zpaqfranz/zpaq_backup.avi))
+
+Backup upgrade via zfs (real speed)
+[![Watch the video](https://i.imgur.com/vKb2F1B.png)](http://www.francocorbelli.it/zpaqfranz/zfs_backup.avi)
+
+
+
+
 **I do not trust you, but I am becoming curious. So?**
 
 On **FreeBSD** [you can try to build the port (of paq, inside archivers)](https://www.freshports.org/archivers/paq) but it is very, very, very old (v 6.57 of 2014)  

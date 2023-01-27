@@ -80,6 +80,16 @@ Let's say there are verification mechanisms which you have probably never seen. 
 **Why do you say 7z, RAR etc are obsolete? How is ZPAQ so innovative?**
 
 Let's see.
+Archiving a folder multiple times (5), simulating a daily run, with 7z
+
+https://user-images.githubusercontent.com/77727889/215148204-0c9d201b-808d-42df-95bf-acf965c052d3.mp4
+
+Same, but with zpaqfranz
+
+https://user-images.githubusercontent.com/77727889/215148702-edb8e5bb-8f4e-42bb-9637-6ee98742318a.mp4
+
+
+
 I want to make a copy of /etc
 
 a=add

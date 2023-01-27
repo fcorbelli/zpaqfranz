@@ -456,57 +456,256 @@ In this case be careful, because the source is divided into 3 source files, but 
 From branch 51 all source code is merged in one zpaqfranz.cpp aiming to make it as easy as possible to compile on "strange" systems (NAS, vSphere etc).  
 Updating, compilation and Makefile are now trivial.  
 
-_So be patient if the source is not linear, composed by the fusion of different software from different authors, without uniform style of programming. 
-I have made a number of efforts to maintain compatibility 
-with unmodified version (7.15), minimizing warnings, even at the cost 
-of expensive on inelegant workarounds._  
+# How to build
 
-Don't be surprised if it looks like what in Italy we call "zibaldone" or in Emilia-Romagna "mappazzone".  
+My main development platforms are INTEL Windows 
+(non-Intel Windows (arm) currently unsupported) and FreeBSD.
 
-### [Windows binary builds (32 and 64 bit) on github/sourceforge](https://sourceforge.net/projects/zpaqfranz/files/)
+I rarely use Linux or MacOS or whatever (for compiling),
+so fixing may be needed.
 
-## **Provided as-is, with no warranty whatsoever, by Franco Corbelli, franco@francocorbelli.com**
+As explained the program is single file, be careful to link the pthread library.
+You need it for ESXi too, even if it doesn't work. Don't be afraid, zpaqfranz knows!
 
+Be careful to link the pthread library.
 
-####      Key differences against 7.15 by zpaqfranz -diff or here 
-####  https://github.com/fcorbelli/zpaqfranz/blob/main/differences715.txt 
-####  [Wiki in progress...](https://github.com/fcorbelli/zpaqfranz/wiki/DIff-against-7.15)
-
-Portions of software by other authors, mentioned later, are included.
-As far as I know this is allowed by the licenses. 
-**Some text comment stripped due the 1MB limit for github.**  
-
-**I apologize if I have unintentionally violated any rule.**  
-**Report it and I will fix as soon as possible.**  
-**CREDITS**  
-
-- Include mod by data man and reg2s patch from encode.su forum 
-- Crc32.h Copyright (c) 2011-2019 Stephan Brumme 
-- xxhash64 by Stephan Brumme https://create.stephan-brumme.com/xxhash/  
-- Slicing-by-16 contributed by Bulat Ziganshin 
-- xxHash Extremely Fast Hash algorithm, Copyright (C) 2012-2020 Yann Collet 
-- crc32c.c Copyright (C) 2013 Mark Adler  
-- Embedded Artistry https://github.com/embeddedartistry  
-- wyhash (experimental) WangYi  https://github.com/wangyi-fudan/wyhash  
-- https://github.com/System-Glitch/SHA256
-- https://github.com/BLAKE3-team/BLAKE3 (The C code is copyright Samuel Neves and Jack O'Connor, 2019-2020, the assembly code is copyright Samuel Neves, 2019-2020)
-- The Whirlpool algorithm was developed by Paulo S. L. M. Barreto and Vincent Rijmen
-- Nilsimsa implementation by Sepehr Laal
-- Thanks for testing on various Unixes to https://github.com/dertuxmalwieder
+_On Win64 from 54+ include a SFX module_  
 
 
-
-FreeBSD port, quick and dirty to get a /usr/local/bin/zpaqfranz
+### Almost "universal" (minimal) Makefile. Beware /usr/ LOCAL /bin!
 ```
-mkdir /tmp/testme
-cd /tmp/testme
-wget http://www.francocorbelli.it/zpaqfranz/zpaqfranz-51.30.tar.gz
-tar -xvf zpaqfranz-51.30.tar.gz
+CC?=            cc
+INSTALL?=       install
+RM?=            rm
+PROG=           zpaqfranz
+CFLAGS+=        -O3 -Dunix
+LDADD=          -pthread -lstdc++ -lm
+BINDIR=         /usr/local/bin
+BSD_INSTALL_PROGRAM?=   install -m 0555
+
+all:    build
+
+build:  ${PROG}
+
+install:        ${PROG}
+	${BSD_INSTALL_PROGRAM} ${PROG} ${DESTDIR}${BINDIR}
+
+${PROG}:        ${OBJECTS}
+	${CC}  ${CFLAGS} zpaqfranz.cpp -o ${PROG} ${LDADD}
+clean:
+	${RM} -f ${PROG}
+```
+
+Quick and dirty: dirtier!
+```
+wget https://github.com/fcorbelli/zpaqfranz/raw/main/zpaqfranz.cpp
+wget https://github.com/fcorbelli/zpaqfranz/raw/main/NONWINDOWS/Makefile
 make install clean
 ```
 
-NOTE1: -, not -- (into switch)
-NOTE2: switches ARE case sensitive.   -maxsize <> -MAXSIZE
+Dirtiest (!) no SSL certificate (very old systems), nightly build
+```
+wget http://www.francocorbelli.it/zpaqfranz.cpp -O zpaqfranz.cpp
+```
+
+then... build (aka: compile)
+
+
+_Library dependencies are minimal:   libc,libc++,libcxxrt,libm,libgcc_s,libthr_
+
+DEFINEs at compile-time
+```
+(nothing)							// Compile for INTEL Windows
+-DHWBLAKE3 blake3_windows_gnu.S		// On Win64 enable HW accelerated BLAKE3 (with assembly)
+-DHWSHA1							// On Win64 enable HW SHA1 (-flaghw)
+-Dunix 								// Compile on "something different from Windows"
+-DSOLARIS        					// Solaris is similar, but not equal, to BSD Unix
+
+-DNOJIT								// By default zpaqfranz works on Intel CPUs
+									// (for simplicity I'll call them Intel, meaning x86-SSE2 and amd64)
+									// On non-Intel a -NOJIT should runs fine on LITTLE ENDIANs
+									// like Linux aarch64, Android aarch64 etc
+									// On BIG ENDIAN or "strange things" like middle endian 
+									// (Honeywell 316) or little word (PDP-11)
+									// the autotest command is for you :)
+									// https://gcc.gnu.org/legacy-ml/gcc-help/2007-07/msg00343.html
+
+-DANCIENT							// Turn off some functions for compiling in very old systems
+									// consuming less RAM (ex. PowerPC Mac), no auto C++
+
+-DBIG								// Turn on BIG ENDIAN at compile time
+									
+-DDEBUG								// Old 7.15, almost useless. Use -debug switch instead
+
+-DESX								// Yes, zpaqfranz run (kind of) on ESXi too :-)
+
+-DALIGNMALLOC 						// Force malloc to be aligned at something (sparc64)
+
+-DSERVER							// Enable the cloudpaq client (for Windows)
+```
+
+### HIDDEN GEMS
+If the (non Windows) executable is named "dir" act (just about)... like Windows' dir
+Beware of collisions with other software "dir"
+
+### WARNINGS
+Some strange warnings with some compilers (too old, or too new), not MY fault
+
+### STRANGE THINGS
+
+_NOTE1: -, not -- (into switch)_
+
+_NOTE2: switches ARE case sensitive.   -maxsize <> -MAXSIZE_
+
+### THE JIT (just-in-time)
+zpaqfranz can translate ZPAQL opcodes into "real" Intel (amd64 or x86+SSE2) code, by default
+On other systems a -DNOJIT (arm CPUs for example) will enforce software interpration
+
+### SHA-1 HARDWARE ACCELERATION
+Some CPUs does have SHA instructions (typically AMD, not very widespread on Intel).
+So you can use a piece of 7-zip by Igor Pavlov (I am sure you know 7z) that is
+not really useful, but just for fun (faster BUT with higher latency).
+For performances reason, no run-time CPU compatibility checks, must be turn on 
+via optional -hw switch
+On AMD 5950X runs ~1.86 GB/s vs ~951 MB/s
+The obj can be assembled from the fixed source code with asmc64
+https://github.com/nidud/asmc
+asmc64.exe sha1ugo.asm 
+Then link the .obj and compile with -DHWSHA1
+Short version:  not worth the effort for the GA release
+
+### STATIC LINKING
+I like -static very much, there are a thousand arguments as to whether it is good or not. 
+There are strengths and weaknesses. 
+Normally I prefer it, you do as you prefer.
+
+### TO BE NATIVE OR NOT TO BE?
+The -march=native  is a switch that asks the compiler to activate all possible 
+optimizations for the CPU on which zpaqfranz is being compiled. 
+This is to obtain the maximum possible performance, 
+while binding the executable to the processor. 
+It should not be used if you intend, for some reason, 
+to transfer the object program to a different system.
+If you are compiling from source you can safely use it.
+
+### DEBIAN (and derivates)
+Debian does not "like" anything embedded https://wiki.debian.org/EmbeddedCopies
+zpaqfranz (on Windows) have two SFX modules (32 and 64)
+and (every platform) a testfile (sha256.zpaq) for extraction autotest
+(aka: weird CPUs)
+It is possible to make a Debian-package-compliant source code 
+with some sed (or a single sed -e) (of course remove the |)
+sed -i "/DEBIAN|START/,/\/\/\/DEBIA|NEND/d"  zpaqfranz.cpp
+sed -i "s/\/\/\/char ext|ract_test1/char ext|ract_test1/g" zpaqfranz.cpp
+
+
+### TARGET EXAMPLES
+```
+Windows 64 (g++ 7.3.0)
+g++ -O3  zpaqfranz.cpp -o zpaqfranz 
+
+Windows 64 (g++ 10.3.0) MSYS2
+g++ -O3  zpaqfranz.cpp -o zpaqfranz -pthread -static
+
+Windows 64 (g++, Hardware Blake3 implementation)
+In this case, of course, linking the .S file is mandatory
+g++ -O3 -DHWBLAKE3 blake3_windows_gnu.S zpaqfranz.cpp -o zpaqfranz -pthread -static
+
+Windows 64 (g++, Hardware Blake3 implementation PLUS HW SHA1)
+g++ -O3 -DHWBLAKE3 -DHWSHA1 blake3_windows_gnu.s zpaqfranz.cpp sha1ugo.obj -o zpaqfranzhw -pthread -static
+
+Windows 32 (g++ 7.3.0 64 bit)
+c:\mingw32\bin\g++ -m32 -O3 zpaqfranz.cpp -o zpaqfranz32 -pthread -static
+
+Windows 64 (g++ 7.3.0), WITH cloud paq
+g++ -O3 -DSERVER zpaqfranz.cpp -o zpaqfranz -lwsock32 -lws2_32
+
+FreeBSD (11.x) gcc 7
+gcc7 -O3 -Dunix zpaqfranz.cpp -lstdc++ -pthread -o zpaqfranz -static -lm
+
+FreeBSD (12.1) gcc 9.3.0
+g++ -O3 -Dunix zpaqfranz.cpp  -pthread -o zpaqfranz -static-libstdc++ -static-libgcc
+
+FreeBSD (11.4) gcc 10.2.0
+g++ -O3 -Dunix zpaqfranz.cpp  -pthread -o zpaqfranz -static-libstdc++ -static-libgcc -Wno-stringop-overflow
+
+FreeBSD (11.3) clang 6.0.0
+clang++ -Dunix zpaqfranz.cpp  -pthread -o zpaqfranz -static
+
+OpenBSD 6.6 clang++ 8.0.1
+OpenBSD 7.1 clang++ 13.0.0
+clang++ -Dunix -O3 zpaqfranz.cpp -o zpaqfranz -pthread -static
+
+Arch Linux
+I strongly advise against using zpaqfranz on this Linux distro(s).
+There is a bizarre policy on compiling executables.
+Obviously no one forbids it (runs fine), but just don't ask for help.
+
+Debian Linux (10/11) gcc 8.3.0
+ubuntu 21.04 desktop-amd64 gcc  10.3.0
+manjaro 21.07 gcc 11.1.0
+g++ -O3 -Dunix zpaqfranz.cpp  -pthread -o zpaqfranz -static
+
+QNAP NAS TS-431P3 (Annapurna AL314) gcc 7.4.0
+g++ -Dunix zpaqfranz.cpp  -pthread -o zpaqfranz -Wno-psabi
+
+Fedora 34 gcc 11.2.1
+Typically you will need some library (out of a fresh Fedora box)
+sudo dnf install glibc-static libstdc++-static -y;
+Then you can compile, via Makefile or "by hand"
+(do not forget... sudo!)
+
+CentoOS
+Please note:
+"Red Hat discourages the use of static linking for security reasons. 
+Use static linking only when necessary, especially against libraries provided by Red Hat. "
+Therefore a -static linking is often a nightmare on CentOS => change the Makefile
+g++ -O3 -Dunix zpaqfranz.cpp  -pthread -o zpaqfranz
+
+Solaris 11.4 gcc 7.3.0
+OmniOS r151042 gcc 7.5.0
+Beware: -DSOLARIS and some different linking options
+g++ -O3 -DSOLARIS zpaqfranz.cpp -o zpaqfranz  -pthread -static-libgcc -lkstat
+
+MacOS 11.0 gcc (clang) 12.0.5, INTEL
+MacOS 12.6 gcc (clang) 13.1.6, INTEL
+Please note:
+The -std=c++11 is required, otherwise you have to change half a dozen lines (or -DANCIENT). 
+No -static here
+"Apple does not support statically linked binaries on Mac OS X. 
+(...) Rather, we strive to ensure binary 
+compatibility in each dynamically linked system library and framework
+(AHAHAHAHAHAH, note by me)
+Warning: Shipping a statically linked binary entails a significant compatibility risk. 
+We strongly recommend that you not do this..."
+Short version: Apple does not like -static, so compile with
+g++ -Dunix  -O3 -march=native zpaqfranz.cpp -o zpaqfranz -pthread  -std=c++11
+
+Mac PowerPC with gcc4.x
+Look at -DBIG (for BIG ENDIAN) and -DANCIENT (old-compiler)
+g++ -O3 -DBIG -DANCIENT -Dunix -DNOJIT zpaqfranz.cpp -o zpaqfranz -pthread
+
+Apple Macintosh (M1/M2)
+Untested (yet), should be
+g++ -Dunix  -O3 -DNOJIT zpaqfranz.cpp -o zpaqfranz -pthread  -std=c++11
+
+ESXi (gcc 3.4.6)
+Note: not fully developed ( extract() with minimum RAM need to be implemented )
+g++ -O3 -DESX zpaqfranz.cpp -o zpaqfranz6  -pthread -static -s
+
+sparc64 (not tested)
+try
+-DALIGNMALLOC (+ other switches)
+
+Haiku R1/beta4, 64 bit (gcc 11.2.0), hrev56721
+Not very tested
+g++ -O3 -Dunix zpaqfranz.cpp -o zpaqfranz  -pthread -static
+
+
+Beware of #definitions
+g++ -dM -E - < /dev/null
+sometimes __sun, sometimes not
+```
 
 
 **Long (full) help**
@@ -523,43 +722,24 @@ zpaqfranz --helpe
 zpaqfranz -examples
 ```
 
-**Brief difference agains standard 7.15**
-```
-zpaqfranz -diff 
-```
 
 **Single help**
+```
+Help    "ALL IN": zpaqfranz h h         zpaqfranz /? /?
+Help     on XXX : zpaqfranz h   XXX     zpaqfranz /? XXX    zpaqfranz -h XXX
+Examples of XXX : zpaqfranz -he XXX
+----------------------------------------------------------------------------------------------------
+XXX can be a COMMAND: a autotest b c cp d dir dirsize e f find g i isopen k l m n p password pause q r
+ rd rsync s sfx sum t trim utf v versum w x z zfsbackup zfsreceive zfsrestore
+----------------------------------------------------------------------------------------------------
+OR a set of SWITCHES: franz main normal voodoo
+
 It is possible to call -? (better -h for Unix) and -examples with a parameter
 a b c d dir f i k l m n r rsync s sfx sum t utf v x z franz main normal voodoo
-
-```
-zpaqfranz -? a 
-zpaqfranz -h zfs
-zpaqfranz -examples x 
-
 ```
 
 
-
-# How to build
-My main development platforms are Windows and FreeBSD. 
-I rarely use Linux or MacOS, so changes may be needed.
-
-## WARNING 22-07-2021
-_I discovered two different compilation problems on the latest Ubuntu  
-[The first is the 64-byte alignment of some structures (for the XXH3 hash)](https://github.com/Cyan4973/xxHash/issues/543) which can fail with some compilers "too new" or others "too old"_  
-_So the software works great on Windows an FreeBSD, but can fail on Ubuntu (!)_  
-_[The second is a bug (!) in g++ 10.3, the DEFAULT Ubuntu 21 compiler. Yes, a bug recognized in the compiler](https://gcc.gnu.org/bugzilla/show_bug.cgi?id=101558)_  
-_Some fixes/workaroud are implemented from 52.8+, and the default hasher (in add) is now XXHASH64, and not XXH3 (the 128 bit version)_  
-_I'm sorry but, as always explained, I rarely use Linux (almost always Debian) and hardly Ubuntu_  
-_News: from 54+ removed the workarouds, sometimes makes side effects. Update your compiler!_  
-
-
-Be careful to link the pthread library.
-
-_On Win64 from 54+ include a SFX module_  
-
-Targets
+# Targets
 ```
 Windows 64 (g++ 7.3.0)
 g++ -O3  zpaqfranz.cpp -o zpaqfranz 

@@ -577,6 +577,20 @@ zpaqfranz -examples
 
 **Single help**
 ```
+             Swiss army knife for backup and disaster recovery
+      Like 7z or RAR on steroids,with deduplicated "snapshots" (versions)
+      Conceptually similar to Mac time machine, but much more efficiently
+      Keeps backup always-to-always, no need to ever prune (CryptoLocker)
+      Easily handles millions of files and TBs of data, non-latin support
+      Cloud backups with full encryption, minimal data transfer/bandwidth
+      Data integrity check CRC32+XXHASH|SHA-1|SHA-2|SHA-3|MD5|XXH3|BLAKE3
+      Thorough data verification, multithread support (real world 1GB+/s)
+      Specific zfs handling functions,full multiplatform interoperability
+      Particularly suitable for minimal space storage of virtual machines
+      Windows, FreeBSD, OpenBSD, Linux, MacOS, Solaris, OmniOS and others
+WWW:  https://sourceforge.net/projects/zpaqfranz
+
+Doveryay,no proveryay; trust,but verify; fidarsi e'bene,non fidarsi e'meglio
 Help    "ALL IN": zpaqfranz h h         zpaqfranz /? /?
 Help     on XXX : zpaqfranz h   XXX     zpaqfranz /? XXX    zpaqfranz -h XXX
 Examples of XXX : zpaqfranz -he XXX
@@ -586,6 +600,4 @@ XXX can be a COMMAND: a autotest b c cp d dir dirsize e f find g i isopen k l m 
 ----------------------------------------------------------------------------------------------------
 OR a set of SWITCHES: franz main normal voodoo
 
-It is possible to call -? (better -h for Unix) and -examples with a parameter
-a b c d dir f i k l m n r rsync s sfx sum t utf v x z franz main normal voodoo
 ```

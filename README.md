@@ -451,14 +451,11 @@ Otherwise they seem abstruse and complicated speeches (and they are indeed )
 Physical Xeon machine with 8 cores, 64GB ram and NVMe disks, small fileserver
 
 Backup update from file system (real speed)
-[![Watch the video](https://i.imgur.com/vKb2F1B.png)]([http://www.francocorbelli.it/zpaqfranz/zpaq_backup.avi))
+
+https://user-images.githubusercontent.com/77727889/215146023-0e9f4bc1-c7d1-4fab-ab01-b1b15ee59879.mp4
+
 
 Backup upgrade via zfs (real speed)
-[![Watch the video](https://i.imgur.com/vKb2F1B.png)](http://www.francocorbelli.it/zpaqfranz/zfs_backup.avi)
-
-[![Now in Android: 55]          // Title
-(https://i.ytimg.com/vi/Hc79sDi3f0U/maxresdefault.jpg)] // Thumbnail
-(https://www.youtube.com/watch?v=gifEFCFnJb8 "Now in Android: 55")    // Video Link
 
 
 **I do not trust you, but I am becoming curious. So?**

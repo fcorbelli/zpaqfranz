@@ -290,19 +290,27 @@ Extraction can require a number of seeks (due to various deduplicated blocks), w
 
 No other significant ones come to mind, except that it is known and used by few
 
-I thought it's best to show the difference, for those who don't do zfs server backups
-Otherwise they seem abstruse and complicated speeches (and they are indeed )
+# Seeing is believing
 
-Physical Xeon machine with 8 cores, 64GB ram and NVMe disks, small fileserver
+I thought it's best to show the difference, for those who don't do zfs server backups, otherwise they seem abstruse and complicated speeches (and they are indeed :)
 
-Backup update from file system (real speed)  
+Physical Xeon machine with 8 cores, 64GB RAM and NVMe disks, small fileserver, Solaris-based NAS, 1Gb ethernet
 
+Rsync update from filesystem to filesystem (real speed)  
+
+https://user-images.githubusercontent.com/77727889/215152167-c6ce107a-6345-4060-b7a7-33ad30b269ee.mp4
+
+
+Rsync update to Solaris NAS (real speed)
+
+https://user-images.githubusercontent.com/77727889/215152259-2baa7001-d838-40de-b56c-6fe3feff9f1b.mp4
+
+
+Backup update from file system with zpaqfranz (real speed)  
 
 https://user-images.githubusercontent.com/77727889/215146670-1a11cd5d-6f00-4544-b797-9ca288ae12b1.mp4
 
-Backup upgrade via zfs (real speed)
-
-
+Backup upgrade via zfsbackup (real speed)
 
 https://user-images.githubusercontent.com/77727889/215147310-cc760f20-08b8-4088-9d8a-f58f00eac211.mp4
 

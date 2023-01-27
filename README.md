@@ -88,9 +88,12 @@ Same, but with zpaqfranz
 
 https://user-images.githubusercontent.com/77727889/215148702-edb8e5bb-8f4e-42bb-9637-6ee98742318a.mp4
 
+_As you can see, the .7z "daily" 5x backups takes ~ 5x the space of the .zpaq_
+
+![compare](https://user-images.githubusercontent.com/77727889/215150599-83032cc6-06b0-432d-ba3b-b410698e3631.jpg)
 
 
-**Therefore ZPAQ (zpaqfranz) allows you to NEVER delete the data that is stored and will be available forever (in reality typically you starts from scratch every 1,000 or 2,000 versions, for speed reasons), and restore the files present to each archived version, even if a month or three years ago.**
+**ZPAQ (zpaqfranz) allows you to NEVER delete the data that is stored and will be available forever (in reality typically you starts from scratch every 1,000 or 2,000 versions, for speed reasons), and restore the files present to each archived version, even if a month or three years ago.**
 
 In this "real world" example (a ~500.000 files / ~500GB file server of a mid-sized enterprise), you will see 1042 "snapshots", stored in 877GB.
 
@@ -152,49 +155,6 @@ Version(s) enumerator
 00000572 2019-07-02 17:13:53  +00000449 -00000040 ->          108.048.297
 00000573 2019-07-03 17:13:55  +00000579 -00000044 ->          400.854.748
 00000574 2019-07-04 17:13:52  +00000631 -00000237 ->           91.992.975
-(...)
-00000581 2019-07-12 17:13:52  +00000410 -00000031 ->          172.390.369
-00000582 2019-07-13 17:13:49  +00000103 -00000093 ->           50.633.900
-00000583 2019-07-14 17:13:44  +00000001 -00000000 ->           17.068.608
-00000584 2019-07-15 17:14:03  +00000327 -00000005 ->          105.520.572
-00000585 2019-07-16 17:13:54  +00000364 -00000018 ->          128.560.509
-00000586 2019-07-17 17:14:03  +00000356 -00000032 ->          161.728.363
-(...)
-00000672 2019-11-17 11:51:36  +00002712 -00001401 ->        9.712.799.579
-00000673 2019-11-21 18:27:07  +00001179 -00054945 ->          658.766.521
-00000674 2019-11-21 19:04:12  +00000002 -00000000 ->                2.096
-00000675 2019-11-28 18:17:48  +00001201 -00000253 ->          998.527.198
-00000676 2019-11-29 18:13:14  +00000244 -00000014 ->          111.502.243
-00000677 2019-12-02 18:14:19  +00000207 -00000075 ->           87.855.054
-00000678 2019-12-03 18:12:01  +00000299 -00000078 ->          106.043.128
-00000679 2019-12-04 18:12:12  +00000322 -00000005 ->          177.800.387
-(...)
-00000769 2020-04-15 17:12:51  +00000012 -00000000 ->              278.407
-00000770 2020-04-16 17:13:00  +00000028 -00000000 ->            5.355.373
-00000771 2020-04-17 17:13:00  +00000010 -00000001 ->              129.334
-(...)
-00000779 2020-04-25 17:13:07  +00000001 -00000000 ->              743.346
-00000780 2020-04-26 17:13:03  +00000001 -00000000 ->              109.083
-00000781 2020-04-27 17:12:42  +00000439 -00000366 ->           26.002.842
-00000782 2020-04-28 17:13:38  +00000762 -00000627 ->          159.137.512
-(...)
-00000918 2020-11-10 18:16:14  +00000450 -00000059 ->        2.453.075.624
-00000919 2020-11-11 18:15:25  +00000354 -00000061 ->          185.478.412
-00000920 2020-11-12 18:15:33  +00000274 -00000059 ->           74.152.731
-(...)
-00000927 2020-11-23 18:16:24  +00002176 -00001826 ->          380.446.024
-00000928 2020-11-24 18:15:51  +00000364 -00000057 ->          322.920.107
-00000929 2020-11-25 18:15:53  +00000298 -00000030 ->          595.760.380
-(...)
-00000972 2021-02-19 18:17:52  +00000331 -00000082 ->        9.936.198.948
-00000973 2021-02-20 18:12:10  +00000001 -00000001 ->                  628
-00000974 2021-02-22 18:13:31  +00000324 -00000115 ->          234.014.447
-00000975 2021-02-23 18:12:45  +00000357 -00000029 ->          298.551.067
-00000976 2021-02-24 18:13:07  +00000609 -00000047 ->          507.154.350
-00000977 2021-02-25 18:19:47  +00031694 -00000023 ->        3.673.844.953
-(...)
-00000983 2021-03-04 18:13:18  +00000320 -00000015 ->          261.091.829
-00000984 2021-03-05 18:13:17  +00000482 -00000071 ->          596.715.880
 (...)
 00001039 2021-05-02 17:17:42  +00030599 -00031135 ->       12.657.155.316
 00001040 2021-05-03 17:14:03  +00000960 -00000095 ->          398.358.496
@@ -274,6 +234,19 @@ Same things for virtual machines (vmdks)
 Because other software (sometimes very, very good) runs on complex "repositories", very fragile and way too hard to manage (at least for my tastes).  
 It may happen that you have to worry about backing up ... the backup, because maybe some files were lost during a transfer, corrupted etc.  
 _If it's simple, maybe it will work_
+
+## What about zfsbackup? ##
+
+zpaqfranz can retain zfs' replicas into an archive, for a bit-level-disaster-recovery (if needed!)
+
+Let's compare a "normal" zpaqfranz backup.
+
+https://user-images.githubusercontent.com/77727889/215151097-f4ddddaf-ea57-43c5-9163-756744339853.mp4
+
+Against a zfsbackup command (of zpaqfranz)
+
+https://user-images.githubusercontent.com/77727889/215151159-41263a41-a7bb-4cd8-b452-762d346ba5c8.mp4
+
 
 ## Too good to be true? ##
 

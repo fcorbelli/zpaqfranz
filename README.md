@@ -1,19 +1,18 @@
-# zpaqfranz: advanced and compatible fork of ZPAQ 7.15, with SFX (on Windows)  
-### Main platforms: Windows, FreeBSD, Linux
-Secondary platforms: Solaris, MacOS, OpenBSD, OmniOS, ESXi, QNAP-based NAS, Haiku OS  
+# zpaqfranz: advanced multiplatform fork of ZPAQ 7.15, with SFX (on Windows)  
 
-### [Binaries on sourceforge](https://sourceforge.net/projects/zpaqfranz/files/) 
-### [Quick start FreeBSD](https://github.com/fcorbelli/zpaqfranz/wiki/Quickstart:-FreeBSD)   
-[Main site of old ZPAQ](http://mattmahoney.net/dc/zpaq.html)      [Reference decompressor](https://github.com/fcorbelli/unzpaq/tree/main) 
+Swiss army knife for backup and disaster recovery, like 7z or RAR on steroids,with deduplicated "snapshots" (versions). Conceptually similar to Mac time machine, but much more efficiently.  
+     
+###  Runs on: Windows 32/64, FreeBSD, OpenBSD, Linux, MacOS, Solaris, OmniOS, ESXi, QNAP-based NAS, Haiku OS
+
+[Wiki being written - be patient](https://github.com/fcorbelli/zpaqfranz/wiki)  [Main site of old ZPAQ](http://mattmahoney.net/dc/zpaq.html)      [Reference decompressor](https://github.com/fcorbelli/unzpaq/tree/main) 
+
+### [Binaries on sourceforge](https://sourceforge.net/projects/zpaqfranz/files/)  [Quick start FreeBSD](https://github.com/fcorbelli/zpaqfranz/wiki/Quickstart:-FreeBSD)  [Quick link to ZFS's snapshots support functions](https://github.com/fcorbelli/zpaqfranz/wiki/Command:-zfs(something))
+
+
 ### OpenBSD: `pkg_add zpaqfranz`
 ### FreeBSD: `pkg install zpaqfranz`
 
 ## Classic archivers (tar, 7z, RAR etc) are obsolete, when used for repeated backups (daily etc), compared to the ZPAQ technology, that maintain "snapshots" (versions) of the data.
-
-[Wiki being written - be patient](https://github.com/fcorbelli/zpaqfranz/wiki)  
-[Quick link to ZFS's snapshots support functions](https://github.com/fcorbelli/zpaqfranz/wiki/Command:-zfs(something))
-
-**Why do you say 7z, RAR etc are obsolete? How is ZPAQ so innovative?**
 
 Let's see.
 Archiving a folder multiple times (5), simulating a daily run Monday-to-Friday, with 7z
@@ -28,7 +27,7 @@ _As you can see, the .7z "daily" 5x backups takes ~ 5x the space of the .zpaq_
 
 ![compare](https://user-images.githubusercontent.com/77727889/215150599-83032cc6-06b0-432d-ba3b-b410698e3631.jpg)
 
-# Seeing is believing ("real world")
+## Seeing is believing ("real world")
 
 I thought it's best to show the difference for a more realistic example.  
 
@@ -274,7 +273,7 @@ But what I have never found is a combination of these that is so simple to use a
 This is the key: you don't have to use complex "chain" of tar | srep | zstd | something hoping that everything will runs file, but a single ~1MB executable, with 7z-like commands.  
 You don't even have to install a complex program with many dependencies that will have to read a folder (the repository) with maybe thousands of files, hoping that they are all fully functional.
 
-There are also many great features for backup, I mention only the greatest.
+There are also many great features for backup, I mention only the greatest.  
 **The ZPAQ file is "in addition", it is never modified**
 
 So rsync --append will copy only the portion actually added, for example on ssh tunnel to a remote server, or local NAS (QNAP etc) with tiny times.
@@ -316,9 +315,6 @@ In this case be careful, because the source is divided into 3 source files, but 
 
 From branch 51 all source code is merged in one zpaqfranz.cpp aiming to make it as easy as possible to compile on "strange" systems (NAS, vSphere etc).  
 Updating, compilation and Makefile are now trivial.  
-Or (for a newer, but not the very last, build)...  
-### OpenBSD: `pkg_add zpaqfranz`
-### FreeBSD: `pkg install zpaqfranz`
 
 # How to build
 
@@ -326,7 +322,7 @@ My main development platforms are INTEL Windows (non-Intel Windows (arm) current
 
 I rarely use Linux or MacOS or whatever (for compiling), so fixing may be needed.
 
-As explained the program is single file, be careful to link the pthread library.
+As explained the program is single file, be careful to link the pthread library.  
 You need it for ESXi too, even if it doesn't work. Don't be afraid, zpaqfranz knows!
 
 ### Almost "universal" (minimal) Makefile.  
@@ -574,22 +570,8 @@ zpaqfranz --helpe
 zpaqfranz -examples
 ```
 
-
 **Single help**
 ```
-             Swiss army knife for backup and disaster recovery
-      Like 7z or RAR on steroids,with deduplicated "snapshots" (versions)
-      Conceptually similar to Mac time machine, but much more efficiently
-      Keeps backup always-to-always, no need to ever prune (CryptoLocker)
-      Easily handles millions of files and TBs of data, non-latin support
-      Cloud backups with full encryption, minimal data transfer/bandwidth
-      Data integrity check CRC32+XXHASH|SHA-1|SHA-2|SHA-3|MD5|XXH3|BLAKE3
-      Thorough data verification, multithread support (real world 1GB+/s)
-      Specific zfs handling functions,full multiplatform interoperability
-      Particularly suitable for minimal space storage of virtual machines
-      Windows, FreeBSD, OpenBSD, Linux, MacOS, Solaris, OmniOS and others
-WWW:  https://sourceforge.net/projects/zpaqfranz
-
 Doveryay,no proveryay; trust,but verify; fidarsi e'bene,non fidarsi e'meglio
 Help    "ALL IN": zpaqfranz h h         zpaqfranz /? /?
 Help     on XXX : zpaqfranz h   XXX     zpaqfranz /? XXX    zpaqfranz -h XXX
@@ -601,3 +583,7 @@ XXX can be a COMMAND: a autotest b c cp d dir dirsize e f find g i isopen k l m 
 OR a set of SWITCHES: franz main normal voodoo
 
 ```
+
+
+
+

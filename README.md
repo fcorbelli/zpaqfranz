@@ -451,9 +451,16 @@ Otherwise they seem abstruse and complicated speeches (and they are indeed )
 Physical Xeon machine with 8 cores, 64GB ram and NVMe disks, small fileserver
 
 Backup update from file system (real speed)  
+
+
 https://user-images.githubusercontent.com/77727889/215146670-1a11cd5d-6f00-4544-b797-9ca288ae12b1.mp4
 
 Backup upgrade via zfs (real speed)
+
+
+
+https://user-images.githubusercontent.com/77727889/215147310-cc760f20-08b8-4088-9d8a-f58f00eac211.mp4
+
 
 
 **I do not trust you, but I am becoming curious. So?**

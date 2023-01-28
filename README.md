@@ -270,7 +270,7 @@ There are more efficient deduplicators.
 
 But what I have never found is a combination of these that is so simple to use and reliable, with excellent handling of non-Latin filenames (Chinese, Russian etc).
 
-This is the key: you don't have to use complex "chain" of tar | srep | zstd | something hoping that everything will runs file, but a single ~1MB executable, with 7z-like commands.  
+This is the key: you don't have to use complex "pipe" of tar | srep | zstd | something hoping that everything will runs file, but a single ~1MB executable, with 7z-like commands.  
 You don't even have to install a complex program with many dependencies that will have to read a folder (the repository) with maybe thousands of files, hoping that they are all fully functional.
 
 There are also many great features for backup, I mention only the greatest.  
@@ -281,6 +281,11 @@ So rsync --append will copy only the portion actually added, for example on ssh 
 You don't have to copy or synchronize let's say 700GB of tar.gz,7z or whatever, but only (say) the 2GB added in the last copy, the first 698GB are untouched.
 
 This opens up the concrete possibility of using VDSL connections (upload ~ 2/4MB /s) to backup even virtual servers of hundreds of gigabytes in a few minutes.
+
+In this (accelerated) video the rsync transfer of 2 remote backups: "standard" .zpaq archive (file level) AND zfsbackup (bit-level) for a small real-world server 1 day-update of work 
+
+https://user-images.githubusercontent.com/77727889/215267855-22bf875c-90ee-47d1-8f8f-c2d0fa2ab201.mp4
+
 
 **Bonus: for a developer it's just like a "super-git-versioning"**
 

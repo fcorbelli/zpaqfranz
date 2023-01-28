@@ -121,7 +121,7 @@ Let's say there are verification mechanisms which you have probably never seen. 
 **ZPAQ (zpaqfranz) allows you to NEVER delete the data that is stored and will be available forever (in reality typically you starts from scratch every 1,000 or 2,000 versions, for speed reasons, on HDD. 10K+ on SSD), and restore the files present to each archived version, even if a month or three years ago.**
 
 
-Real-speed updating (on QNAP NAS) of a small server (300GB) in ~4 minutes
+Real-speed updating (on QNAP NAS) of a small server (300GB); ~7GB of Thunderbird mbox become ~6MB (!) in ~4 minutes. 
 
 https://user-images.githubusercontent.com/77727889/215268613-e07e385c-0880-4534-ae35-0db8925cee6b.mp4
 

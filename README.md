@@ -138,6 +138,11 @@ As the Russians say, trust me, but check.
 It is precisely the portion of the program that I have evolved, implementing a barrage of controls up to the paranoid level, and more.
 Let's say there are verification mechanisms which you have probably never seen. Do you want to use SHA-2/SHA-3 to be very confident? You can.
 
+Accelerated speed of real world testing of archive >1GB/s
+
+https://user-images.githubusercontent.com/77727889/215271989-5a77e1f1-8fba-422b-9e25-24c3f4640eb2.mp4
+
+
 **ZPAQ (zpaqfranz) allows you to NEVER delete the data that is stored and will be available forever (in reality typically you starts from scratch every 1,000 or 2,000 versions, for speed reasons, on HDD. 10K+ on SSD), and restore the files present to each archived version, even if a month or three years ago.**
 
 

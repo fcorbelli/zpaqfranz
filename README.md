@@ -118,7 +118,12 @@ As the Russians say, trust me, but check.
 It is precisely the portion of the program that I have evolved, implementing a barrage of controls up to the paranoid level, and more.
 Let's say there are verification mechanisms which you have probably never seen. Do you want to use SHA-2/SHA-3 to be very confident? You can.
 
-**ZPAQ (zpaqfranz) allows you to NEVER delete the data that is stored and will be available forever (in reality typically you starts from scratch every 1,000 or 2,000 versions, for speed reasons), and restore the files present to each archived version, even if a month or three years ago.**
+**ZPAQ (zpaqfranz) allows you to NEVER delete the data that is stored and will be available forever (in reality typically you starts from scratch every 1,000 or 2,000 versions, for speed reasons, on HDD. 10K+ on SSD), and restore the files present to each archived version, even if a month or three years ago.**
+
+
+Real-speed updating (on QNAP NAS) of a small server (300GB) in ~4 minutes
+
+https://user-images.githubusercontent.com/77727889/215268613-e07e385c-0880-4534-ae35-0db8925cee6b.mp4
 
 In this "real world" example (a ~500.000 files / ~500GB file server of a mid-sized enterprise), you will see 1042 "snapshots", stored in 877GB.
 

@@ -77,8 +77,18 @@ For even higher level of paranoia, it is possible to use others hash algorithms,
 ...And much more.  
 A freeware GUI (PAKKA) is available on Windows to make extraction easier.  
 
+
+## Yes, VSS backups of Windows too! 
+
+Real speed (encrypted) update of C: without software (-frugal)  
+
+https://user-images.githubusercontent.com/77727889/215269540-8e2c8641-0d3a-4f67-a243-ab617834c5de.mp4
+
+
+	
+
 **No complex (and fragile) repository folders, with hundreds of "whatever", just only a single file!**  
-## To date, there is no software, free or paid, that matches this characteristics  
+### To date, there is no software, free or paid, that matches this characteristics  
 _AFAIK of course_  
 10+ years of developing (2009-now).
 

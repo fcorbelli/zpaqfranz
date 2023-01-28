@@ -77,17 +77,27 @@ For even higher level of paranoia, it is possible to use others hash algorithms,
 ...And much more.  
 A freeware GUI (PAKKA) is available on Windows to make extraction easier.  
 
+**No complex (and fragile) repository folders, with hundreds of "whatever", just only a single file!**  
 
-## Yes, VSS backups of Windows too! 
+## Windows client? Minimum size (without software) VSS backups
+
+_It is often important to copy the %desktop% folder, Thunderbird's data, %download% and generally the data folders of a Windows system, leaving out the programs_
 
 Real speed (encrypted) update of C: without software (-frugal)  
 
 https://user-images.githubusercontent.com/77727889/215269540-8e2c8641-0d3a-4f67-a243-ab617834c5de.mp4
 
+## Are you a really paranoid Windows user (like me)? You can get sector-level copies of C:, too.
 
-	
+_In this case the space used is obviously larger, as is the execution time, but even the "most difficult" folders are also taken. Deliberately the bitmap of occupied clusters is ignored: if you are paranoid, be all the way down!_  
 
-**No complex (and fragile) repository folders, with hundreds of "whatever", just only a single file!**  
+_It is just like a dd. You can't (for now) restore with zpaqfranz. You have to extract to a temporary folder and then use other software (e.g., 7z, OSFMount) to extract the files directly from the image_
+
+Accelerated speed (encrypted) every-sector update of a 256GB C: @ ~150MB/s
+
+https://user-images.githubusercontent.com/77727889/215271199-94400833-f973-41d2-a018-3f2277a648a9.mp4
+
+
 ### To date, there is no software, free or paid, that matches this characteristics  
 _AFAIK of course_  
 10+ years of developing (2009-now).

@@ -337,6 +337,19 @@ Extraction can require a number of seeks (due to various deduplicated blocks), w
 
 No other significant ones come to mind, except that it is known and used by few
 
+**Very hard to use?**  
+It is a tool for power users and administrators, who are used to the command line. A text-based GUI is being developed to make data selection and complex extraction easier (!).  
+
+In this example we want to extract all the .cpp files as .bak from the 1.zpaq archive. This is something you typically cannot do with other archives such as tar, 7z, rar etc.  
+### With a "sort of" WYSIWYG 'composer' 
+First **f** key (find) and entering .cpp  
+Then **s** (search) every .cpp substring  
+Then **r** (replace) with .bak  
+Then **t** (to) for the z:\example folder  
+Finally **x** to run the extraction  
+
+https://user-images.githubusercontent.com/77727889/226925740-d62b92ae-4eee-43ac-94a9-e1a6dae684c1.mp4
+
 
 **I do not trust you, but I am becoming curious. So?**
 

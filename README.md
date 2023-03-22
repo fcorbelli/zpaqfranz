@@ -354,6 +354,9 @@ https://user-images.githubusercontent.com/77727889/226925740-d62b92ae-4eee-43ac-
 **I do not trust you, but I am becoming curious. So?**
 
 On **FreeBSD** [you can try to build the port (of paq, inside archivers)](https://www.freshports.org/archivers/paq) but it is very, very, very old (v 6.57 of 2014)  
+You can get a "not too old" zpaqfranz with a `pkg install zpaqfranz`
+
+On **OpenBSD** `pkg_add zpaqfranz` is usually rather updated
 
 On **Debian** [there is a zpaq 7.15 package](https://packages.debian.org/sid/utils/zpaq)  
 You can download the original version (7.15 of 2016) directly from the author's website, and compile it, or get the same from github.  

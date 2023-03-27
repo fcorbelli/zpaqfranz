@@ -11,6 +11,7 @@ Swiss army knife for backup and disaster recovery, like 7z or RAR on steroids,wi
 
 ### OpenBSD: `pkg_add zpaqfranz`
 ### FreeBSD: `pkg install zpaqfranz`
+### MacOS: `brew install zpaqfranz`
 
 ## Classic archivers (tar, 7z, RAR etc) are obsolete, when used for repeated backups (daily etc), compared to the ZPAQ technology, that maintain "snapshots" (versions) of the data.
 

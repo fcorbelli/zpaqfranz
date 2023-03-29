@@ -421,7 +421,7 @@ clean:
 	#ifndef ANCIENT
 		#include <array>
 	#endif
-	#if defined(__linux) || defined(SOLARIS)
+	#if defined(__linux__) || defined(SOLARIS)
 		#include <sys/statvfs.h>
 	#endif
 	#include <algorithm>
@@ -18746,7 +18746,7 @@ int64_t getfreespace(string i_path)
 	return  fsbtoblk(stat.f_bavail,
 	stat.f_bsize, blocksize)*1024;
 #else
-#if defined(__linux) || (defined(__APPLE__) && defined(__MACH__) && (!defined(__ppc__))) || defined(SOLARIS)
+#if defined(__linux__) || (defined(__APPLE__) && defined(__MACH__) && (!defined(__ppc__))) || defined(SOLARIS)
 	if (flagdebug)
 		myprintf("LINUX: getfreespace\n");
 	struct statvfs stat;

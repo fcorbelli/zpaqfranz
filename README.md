@@ -13,7 +13,7 @@ Swiss army knife for backup and disaster recovery, like 7z or RAR on steroids,wi
 ### FreeBSD: `pkg install zpaqfranz`
 ### MacOS: `brew install zpaqfranz`
 
-## Classic archivers (tar, 7z, RAR etc) are obsolete, when used for repeated backups (daily etc), compared to the ZPAQ technology, that maintain "snapshots" (versions) of the data.
+## Classic archivers (tar, 7z, RAR etc) are obsolete, when used for repeated backups (daily etc), compared to the ZPAQ technology, that maintain "snapshots" (versions) of the data. This is even more true in the case of ASCII dumps of databases (e.g. MySQL/MariaDB)
 
 Let's see.
 Archiving a folder multiple times (5), simulating a daily run Monday-to-Friday, with 7z
@@ -132,7 +132,7 @@ Because Dr. Mahoney is now retired and no longer supports it (he... run!)
 
 **Why should I trust? It will be one of 1000 other programs that silently fail and give problems**
 
-As the Russians say, trust me, but check.
+As the Russians (and Italians) say, trust me, but check.
 
 **Archiving data requires safety. How can I be sure that I can then extract them without problems?**
 
@@ -177,40 +177,6 @@ Version(s) enumerator
 00000146 2018-03-27 17:08:39  +00001105 -00000541 ->          164.399.767
 00000147 2018-03-28 17:08:28  +00000422 -00000134 ->          277.237.055
 00000148 2018-03-29 17:12:02  +00011953 -00011515 ->          826.218.948
-(...)
-00000159 2018-04-09 17:08:18  +00000342 -00000016 ->          161.661.586
-00000160 2018-04-10 17:08:22  +00000397 -00000017 ->          129.474.045
-(...)
-00000315 2018-09-12 17:08:29  +00000437 -00000254 ->        1.156.119.701
-00000316 2018-09-13 17:08:27  +00000278 -00000003 ->          348.365.215
-00000317 2018-09-14 17:08:28  +00000247 -00000041 ->          587.163.740
-00000318 2018-09-15 17:08:29  +00000003 -00000000 ->           14.610.281
-00000319 2018-09-16 17:08:33  +00000003 -00000000 ->           14.612.065
-00000320 2018-09-17 17:08:31  +00000226 -00000000 ->           56.830.129
-00000321 2018-09-18 17:08:29  +00000276 -00000017 ->           43.014.662
-00000322 2018-09-19 17:08:33  +00000247 -00000002 ->           43.257.079
-(...)
-00000434 2019-02-09 18:10:08  +00000009 -00000001 ->           17.491.737
-00000435 2019-02-10 18:10:06  +00000001 -00000000 ->           15.472.629
-00000436 2019-02-11 18:10:35  +00000354 -00000077 ->          310.408.124
-(...)
-00000445 2019-02-20 18:11:52  +00005711 -00005474 ->          662.296.698
-00000446 2019-02-21 18:10:32  +00000325 -00004017 ->          592.816.097
-00000447 2019-02-22 18:18:37  +00009206 -00000021 ->       24.236.986.132
-(...)
-00000492 2019-04-13 17:11:37  +00000003 -00000000 ->           16.651.589
-00000493 2019-04-14 17:11:37  +00000001 -00000000 ->           16.645.997
-00000494 2019-04-15 17:12:01  +00000279 -00000012 ->           78.171.480
-00000495 2019-04-16 17:12:18  +00000231 -00000018 ->           70.858.973
-00000496 2019-04-17 17:12:06  +00000356 -00000018 ->          119.696.255
-00000497 2019-04-18 17:11:03  +00000305 -00000023 ->        2.503.628.883
-00000498 2019-04-19 17:12:06  +00000298 -00000008 ->        3.007.508.933
-(...)
-00000508 2019-04-29 17:11:04  +00000831 -00000470 ->           94.625.724
-(...)
-00000572 2019-07-02 17:13:53  +00000449 -00000040 ->          108.048.297
-00000573 2019-07-03 17:13:55  +00000579 -00000044 ->          400.854.748
-00000574 2019-07-04 17:13:52  +00000631 -00000237 ->           91.992.975
 (...)
 00001039 2021-05-02 17:17:42  +00030599 -00031135 ->       12.657.155.316
 00001040 2021-05-03 17:14:03  +00000960 -00000095 ->          398.358.496
@@ -301,13 +267,15 @@ There are more efficient deduplicators.
 
 But what I have never found is a combination of these that is so simple to use and reliable, with excellent handling of non-Latin filenames (Chinese, Russian etc).
 
-This is the key: you don't have to use complex "pipe" of tar | srep | zstd | something hoping that everything will runs file, but a single ~1MB executable, with 7z-like commands.  
+This is the key: you don't have to use complex "pipe" of tar | srep | zstd | something hoping that everything will runs file, but a single ~4MB executable, with 7z-like commands.  
 You don't even have to install a complex program with many dependencies that will have to read a folder (the repository) with maybe thousands of files, hoping that they are all fully functional.
 
 There are also many great features for backup, I mention only the greatest.  
 **The ZPAQ file is "in addition", it is never modified**
 
-So rsync --append will copy only the portion actually added, for example on ssh tunnel to a remote server, or local NAS (QNAP etc) with tiny times.
+So rsync --append will copy only the portion actually added, for example on ssh tunnel to a remote server, or local NAS (QNAP etc) with tiny times.  
+TRANSLATION  
+You can pay ~$4 a month for 1TB cloud-storage-space to store just about everything
 
 You don't have to copy or synchronize let's say 700GB of tar.gz,7z or whatever, but only (say) the 2GB added in the last copy, the first 698GB are untouched.
 
@@ -424,6 +392,7 @@ DEFINEs at compile-time
 (nothing)                          // Compile for INTEL Windows
 -DHWBLAKE3 blake3_windows_gnu.S    // On Win64 enable HW accelerated BLAKE3 (with assembly)
 -DHWSHA1                           // On Win64 enable HW SHA1 (-hw)
+-DHWSHA2                           // Enable HW SHA2 (without assembly code to be linked)
 -Dunix                             // Compile on "something different from Windows"
 -DSOLARIS                          // Solaris is similar, but not equal, to BSD Unix
 -DNOJIT                            // By default zpaqfranz works on Intel CPUs
@@ -440,6 +409,7 @@ DEFINEs at compile-time
 -DESX                              // Yes, zpaqfranz run (kind of) on ESXi too :-)
 -DALIGNMALLOC                      // Force malloc to be aligned at something (sparc64)
 -DSERVER                           // Enable the cloudpaq client (for Windows)
+-DGUI                              // Enable the gui (ncurses on Windows)
 ```
 
 ### HIDDEN GEMS
@@ -472,6 +442,7 @@ https://github.com/nidud/asmc
 asmc64.exe sha1ugo.asm 
 Then link the .obj and compile with -DHWSHA1  
 Short version:  not worth the effort for the GA release  
+From build 58+ there is a new -DHWSHA2, without linking of asm, that accelerate SHA256 too  
 
 ### STATIC LINKING
 I like **-static** very much, there are a thousand arguments as to whether it is good or not. 
@@ -518,6 +489,9 @@ g++ -O3 -DHWBLAKE3 blake3_windows_gnu.S zpaqfranz.cpp -o zpaqfranz -pthread -sta
 
 Windows 64 (g++, Hardware Blake3 implementation PLUS HW SHA1)
 g++ -O3 -DHWBLAKE3 -DHWSHA1 blake3_windows_gnu.s zpaqfranz.cpp sha1ugo.obj -o zpaqfranzhw -pthread -static
+
+Windows 64 (g++, Hardware Blake3 implementation PLUS HW SHA1/2 with GUI)
+g++ -O3 -DGUI -DHWBLAKE3 -DHWSHA2 blake3_windows_gnu.s zpaqfranz.cpp -o zpaqfranzhw -pthread -static -s
 
 Windows 32 (g++ 7.3.0 64 bit)
 c:\mingw32\bin\g++ -m32 -O3 zpaqfranz.cpp -o zpaqfranz32 -pthread -static
@@ -579,7 +553,7 @@ compatibility in each dynamically linked system library and framework
 Warning: Shipping a statically linked binary entails a significant compatibility risk. 
 We strongly recommend that you not do this..."
 Short version: Apple does not like -static, so compile with
-g++ -Dunix  -O3 -march=native zpaqfranz.cpp -o zpaqfranz -pthread  -std=c++11
+g++ -Dunix  -O3  zpaqfranz.cpp -o zpaqfranz -pthread  
 
 Mac PowerPC with gcc4.x
 Look at -DBIG (for BIG ENDIAN) and -DANCIENT (old-compiler)
@@ -607,35 +581,64 @@ g++ -dM -E - < /dev/null
 sometimes __sun, sometimes not
 ```
 
+**Short help**
+```
+zpaqfranz h
+```
+
 
 **Long (full) help**
 ```
-zpaqfranz help
-zpaqfranz -h
-zpaqfranz -help
+zpaqfranz h h
 ```
 
-**Some examples**
+**Single help (a command or switch set)**
 ```
-zpaqfranz -he
-zpaqfranz --helpe
-zpaqfranz -examples
+    zpaqfranz   h a   => ask help and examples for command 'a'
+    zpaqfranz -he a   => ask examples for command 'a'
+ 
+1on1       Delete folder2's files with same name/hash of folder1
+a          Add or append files to archive
+autotest   Autotest for hidden errors after compiling from source
+b          CPU benchmark, speed index in (yes!) franzomips
+c          Compare one master dir against one or more slave dir(s)
+cp         Friendly file copy with ETA (resumable)
+d          Deduplicate files inside a single folder WITHOUT MERCY
+dir        A better dir (yes, Windows' dir)
+dirsize    Show cumulative folder(s) size
+e          Extract file(s) on current folder
+f          Free disk space fill (=reliability test) or wipe (privacy)
+find       Search file(s) with wildcards
+g          Windows C: archiver from a shell without admin rights
+gui        Windows text-based GUI (listing-extraction)
+i          File (archive) information
+isopen     Check if a file isopen (by other software)
+k          Kill (delete) everything not in archive (RISKY!)
+l          List file(s)
+m          Merge (consolidate) multipart archive into one
+n          Decimate (keeping the newer X) older files
+p          Paranoid test (slow, lot of RAM needed)
+password   Change/remove password of single archive (no multipart)
+pause      Halt script execution until time or keypress
+q          Windows archive of C: with VSS
+r          Robocopy one master to multiple slave folders
+rd         Remove hard-to-delete Windows' folder (ex. path too long)
+rsync      Delete rsync's dangling temporary files
+s          Get dir(s) size, return free disk space
+sfx        Create SFX module (with encryption support)
+sum        Calc hash/checksums, find duplicated files
+t          Test archive integrity
+trim       Trim .zpaq archive from incomplete transaction
+utf        Convert filenames to latin, fix too long filenames etc
+v          Verify archive (against filesystem)
+versum     Hashdeep-like double check of hashes
+w          Chunked extraction/test of very big files
+x          Extract file(s)
+z          Remove empty directories
+franz      Advanced switches
+main       Most used switches
+normal     Usual switches
+voodoo     Nerd's switches
 ```
 
-**Single help**
-```
-Doveryay,no proveryay; trust,but verify; fidarsi e'bene,non fidarsi e'meglio
-Help    "ALL IN": zpaqfranz h h         zpaqfranz /? /?
-Help     on XXX : zpaqfranz h   XXX     zpaqfranz /? XXX    zpaqfranz -h XXX
-Examples of XXX : zpaqfranz -he XXX
-----------------------------------------------------------------------------------------------------
-XXX can be a COMMAND: a autotest b c cp d dir dirsize e f find g i isopen k l m n p password pause q r
- rd rsync s sfx sum t trim utf v versum w x z zfsbackup zfsreceive zfsrestore
-----------------------------------------------------------------------------------------------------
-OR a set of SWITCHES: franz main normal voodoo
-
-```
-
-
-
-
+### Database dumps (SQL-based backups)

@@ -1,19 +1,18 @@
-# zpaqfranz: advanced multiplatform fork of ZPAQ 7.15, with SFX (on Windows)  
+# zpaqfranz: advanced multiplatform fork of ZPAQ 7.15, with SFX (on Windows), HW acceleration     
 
 Swiss army knife for backup and disaster recovery, like 7z or RAR on steroids,with deduplicated "snapshots" (versions). Conceptually similar to Mac time machine, but much more efficiently.  
      
 ###  Runs on: Windows 32/64, FreeBSD, OpenBSD, Linux, MacOS, Solaris, OmniOS, ESXi, QNAP-based NAS, Haiku OS
 
-[Wiki being written - be patient](https://github.com/fcorbelli/zpaqfranz/wiki)  [Main site of old ZPAQ](http://mattmahoney.net/dc/zpaq.html)      [Reference decompressor](https://github.com/fcorbelli/unzpaq/tree/main) 
-
-### [Binaries on sourceforge](https://sourceforge.net/projects/zpaqfranz/files/)  [Quick start FreeBSD](https://github.com/fcorbelli/zpaqfranz/wiki/Quickstart:-FreeBSD)  [Quick link to ZFS's snapshots support functions](https://github.com/fcorbelli/zpaqfranz/wiki/Command:-zfs(something))
-
+### [Wiki being written - be patient](https://github.com/fcorbelli/zpaqfranz/wiki)
+### [HELP](https://github.com/fcorbelli/zpaqfranz/wiki/HELP:-integrated)
+### [Binaries on sourceforge](https://sourceforge.net/projects/zpaqfranz/files/)  
 
 ### OpenBSD: `pkg_add zpaqfranz`
 ### FreeBSD: `pkg install zpaqfranz`
 ### MacOS: `brew install zpaqfranz`
 
-## Classic archivers (tar, 7z, RAR etc) are obsolete, when used for repeated backups (daily etc), compared to the ZPAQ technology, that maintain "snapshots" (versions) of the data. This is even more true in the case of ASCII dumps of databases (e.g. MySQL/MariaDB)
+## Classic archivers (tar, 7z, RAR etc) are obsolete, when used for repeated backups (daily etc), compared to the ZPAQ technology, that maintain "snapshots" (versions) of the data. [This is even more true in the case of ASCII dumps of databases (e.g. MySQL/MariaDB)](https://github.com/fcorbelli/zpaqfranz/wiki/Real-world:-SQL-dumps-(MySQL-MariaDB-Postgres-backup))
 
 Let's see.
 Archiving a folder multiple times (5), simulating a daily run Monday-to-Friday, with 7z
@@ -640,5 +639,3 @@ main       Most used switches
 normal     Usual switches
 voodoo     Nerd's switches
 ```
-
-### Database dumps (SQL-based backups)

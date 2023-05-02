@@ -52,8 +52,8 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 */
 
-#define ZPAQ_VERSION "58.1e"
-#define ZPAQ_DATE "(2023-03-21)"  // cannot use __DATE__ on Debian!
+#define ZPAQ_VERSION "58.2g"
+#define ZPAQ_DATE "(2023-05-02)"  // cannot use __DATE__ on Debian!
 
 
 ///	optional align for malloc (sparc64) via -DALIGNMALLOC
@@ -1155,7 +1155,6 @@ asmc64.exe sha1ugo.asm
 Then link the .obj and compile with -DHWSHA1
 Short version:  not worth the effort for the GA release
 From build 58+ there is a new -DHWSHA2, without linking of asm, that accelerate SHA256 too
-BEWARE: as today no CPU id check (for performances reason)
 
 STATIC LINKING
 I like -static very much, there are a thousand arguments as to whether it is good or not. 
@@ -1351,6 +1350,7 @@ sometimes __sun, sometimes not
 #define ALGO_WYHASH			101
 #define ALGO_NILSIMSA		103
 #define ALGO_ENTROPY		104
+#define ALGO_QUICK			105
 
 
 #define _FILE_OFFSET_BITS 64  // In Linux make sizeof(off_t) == 8. Define BEFORE including windows.h!!!
@@ -1753,37 +1753,22 @@ bool 	flagdebug;
 
 #ifdef HWSHA2
 
-
-
-/*
-// not much tested, quickest and dirtiest 2nd try
-static void mycpuid(uint32_t out[4], uint32_t id) 
-{
-  __asm__ __volatile__("cpuid\n"
-                       : "=a"(out[0]), "=b"(out[1]), "=c"(out[2]), "=d"(out[3])
-                       : "a"(id));
-}
-
-static void mycpuid7(uint32_t out[4]) 
-{
-  __asm__ __volatile__("mov $7,%%eax\nmov $0,%%ecx\ncpuid\n"
-                       : "=a"(out[0]), "=b"(out[1]), "=c"(out[2]), "=d"(out[3])
-                       );
-}
-*/
-
-
 void getcpuid(uint32_t eax, uint32_t ecx, uint32_t& o_a,uint32_t& o_b,uint32_t& o_c,uint32_t& o_d)
 {
     uint32_t ebx=0;
 	uint32_t edx=0;
 	// on some kind of ancient HW ebx need to be saved. Not sure if and why, readed here and there
-    __asm__ __volatile__ (	"movl %%ebx, %%edi;"
+	// It is unpredictable what exactly the compiler will do
+	// https://sites.uclouvain.be/SystInfo/usr/include/cpuid.h.html
+#if defined(__i386__) && defined(__PIC__)
+   __asm__ __volatile__ (	"movl %%ebx, %%edi;"
 							"cpuid;"
 							"xchgl %%ebx, %%edi;"
 							: "=D"(ebx), "+a"(eax), "+c"(ecx), "=d"(edx));
-
-    o_a=eax; // cpuid silently change the input parameter, so we have to store back
+#else
+	__asm__("cpuid;" : "+b"(ebx), "+a"(eax), "+c"(ecx), "=d"(edx));
+#endif
+	o_a=eax; // cpuid silently change the input parameter, so we have to store back
     o_b=ebx;
     o_c=ecx;
     o_d=edx;
@@ -3396,11 +3381,8 @@ const char* SHA256::result()
 	init();
 	return hbuf;
 }
-///fiko
 void SHA256::write(const char* buf, int64_t n) 
 {
-	///for (int64_t l=0;l<n;l++)
-		///put(*(buf+l));	
 	sha256_write(&sum_ctx,(const uint8_t*)buf,n);
 }
 void SHA256::process() 
@@ -10849,6 +10831,7 @@ string 	g_deleteinto;
 bool 	g_sfxflagall;
 bool  	g_sfxflagforce;
 bool	g_sse42;
+bool	g_flagmultipart;
 string 	g_archive;
 string	g_indexname;
 FILE* 	g_output_handle;
@@ -10901,6 +10884,7 @@ bool flagentropy;
 bool flagwindate;
 
 
+
 bool flag715;
 bool flagappend;
 bool flagbig;
@@ -10935,6 +10919,7 @@ bool flagsilent;
 bool flagskipzfs;
 bool flagspace;
 bool flagssd;
+bool flagquick;
 bool flagquiet;
 bool flagstat;
 bool flagstdin;
@@ -11363,6 +11348,9 @@ string emptyalgo(const string i_string)
 {
 	if (i_string=="BLAKE3")
 		return "AF1349B9F5F9A1A6A0404DEA36DCC9499BCB25C9ADC112B7CC9A93CAE41F3262";
+	else
+	if (i_string=="QUICK")
+		return "EF46DB3751D8E999";
 	else
 	if (i_string=="XXHASH64")
 		return "EF46DB3751D8E999";
@@ -20122,8 +20110,12 @@ int terminalwidth()
     return (int) csbi.srWindow.Right - csbi.srWindow.Left + 1;
 #else
     struct winsize w;
-    ioctl(fileno(stdout), TIOCGWINSZ, &w);
-    return (int)(w.ws_col);
+    int colonna=80;
+	if (ioctl(fileno(stdout), TIOCGWINSZ, &w)==0)
+		colonna=(w.ws_col);
+	if (colonna>200)
+		colonna=200;
+    return colonna;
 #endif 
 }
 int terminalheight()
@@ -20134,8 +20126,12 @@ int terminalheight()
 	return (int)csbi.srWindow.Bottom - csbi.srWindow.Top + 1;
 #else
     struct winsize w;
-    ioctl(fileno(stdout), TIOCGWINSZ, &w);
-    return (int)(w.ws_row);
+    int riga=30;
+	if (ioctl(fileno(stdout), TIOCGWINSZ, &w)==0)
+		riga=(w.ws_row);
+	if (riga>200)
+		riga=30;
+    return riga;
 #endif 
 }
 bool iskeypressed()
@@ -20191,6 +20187,8 @@ int mygetch(bool i_flagmore)
 }
 void printbar(char i_carattere,bool i_printbarraenne=true)
 {
+	if (flagpakka)
+		return;
 	int twidth=terminalwidth();
 	if (twidth<10)
 		twidth=100;
@@ -21172,6 +21170,8 @@ int64_t encodestringdate(string i_date,bool i_flagfrom)
 		+	minute	*100	
 		+	second;	
 }
+
+
 // Convert non-negative decimal number x to string of at least n digits
 string itos(int64_t x, int n=1) {
   assert(x>=0);
@@ -21353,6 +21353,9 @@ bool isdospath(const string& i_filename)
 					return true;
 	return false;
 }
+
+
+
 bool iswindowspath(const string& i_filename)
 {
 ///	printf("Y1 |%s|\n",i_filename.c_str());
@@ -35328,6 +35331,10 @@ bool comparesizehash(s_fileandsize a, s_fileandsize b)
               (a.filename<b.filename));
 			  ///(strcmp(a.filename.c_str(), b.filename.c_str()) <0));
 }
+bool comparefilename(s_fileandsize a, s_fileandsize b)
+{
+	return a.filename<b.filename;
+}
 bool comparefilenamesize(s_fileandsize a, s_fileandsize b)
 {
 	return myulltoa(a.size,18)+a.filename<myulltoa(b.size,18)+b.filename;
@@ -35366,6 +35373,11 @@ bool pairsortbyfirst(const s_pair_intstring &a,
                const s_pair_intstring &b) 
 { 
     return (a.first < b.first); 
+} 
+bool pairsortbysecond(const s_pair_intstring &a, 
+               const s_pair_intstring &b) 
+{ 
+    return (b.first < a.first); 
 } 
 
 bool sortbysize(const std::pair<uint64_t, string> &a, 
@@ -36517,6 +36529,9 @@ uint32_t crc32c(uint32_t crc, const unsigned char *buf, size_t len)
 
 #endif
 }
+
+FP g_archivefp;
+
 //////////////////// zpaq stuff
 // Base of InputArchive and OutputArchive
 class ArchiveBase {
@@ -36530,6 +36545,7 @@ public:
     if (fp!=FPNULL) fclose(fp);
   }  
   bool isopen() {return fp!=FPNULL;}
+  FP	getthefp() { return fp;}
 };
 // An InputArchive supports encrypted reading
 class InputArchive: public ArchiveBase, public libzpaq::Reader {
@@ -38948,6 +38964,8 @@ private:
 	vector<string> alwaysfiles; 		// list of prefixes to pack ALWAYS
 	string repack;       				// -repack output file
 	string	checktxt;					// check txt
+	string	backuptxt;
+	string	backupindex;
 	map<int, string> mappacommenti;
 	string versioncomment;
 	bool flagnoattributes;        		// -noattributes option
@@ -39017,6 +39035,10 @@ private:
 	int pause();
 	int isopen();
 	int	versum();
+	int last2();
+	int last();
+	int testbackup();
+	int backup();
 	int zfslist();
 	int zfspurge();
 	int zfsadd();
@@ -39085,7 +39107,10 @@ private:
 	int 		get_filelist(callback_function i_advance,vector<DTMap::iterator>* o_filelist,int64_t& o_sizeuncompressed,int64_t& o_sizededuplicated,int64_t& o_sizecompressed,int64_t& o_sizeall,int64_t& o_dhsize,int64_t& o_dcsize);
 	void 		filter_filelist(vector<DTMap::iterator>* i_filelist,vector<DTMap::iterator>* o_filtered,string i_filtro,string i_ordine,string i_crc32,string i_hash);
 	bool 		searchunixfile();            			
-	string		get_lastfilename(string i_file);
+	string		get_lastfilename(string i_file,int64_t& o_totalfilesize);
+	int64_t		getzpaqsum(string i_archive,int64_t& o_usize,int64_t& o_allsize,int64_t& o_dtsize,int64_t& o_compressedsize);
+	
+
 };
 #ifdef unix
 std::string exec(const char* cmd) 
@@ -42703,11 +42728,10 @@ bool singlecompareorderby(DTMap::iterator a, DTMap::iterator b)
 */
 void help_range()
 {
-	moreprint("+ : -range X-Y    Range versions [X-Y]");
-	moreprint("+ : -range X-     Range versions [X-THE LAST]");
-	moreprint("+ : -range -X     Range versions [1-X]");
-	moreprint("+ : -range X      Range is single version X");
-	
+	moreprint("+ : -range X:Y    Range versions [X-Y]");
+	moreprint("+ : -range X:     Range versions [X-THE LAST]");
+	moreprint("+ : -range :X     Range versions [1-X]");
+	moreprint("+ : -range X      Range is single version X");	
 }
 
 void help_date()
@@ -42868,6 +42892,101 @@ string help_versum(bool i_usage,bool i_example)
 	}
 	return("Hashdeep-like double check of hashes");
 }
+///zpaqfranz backup z:\prova_????.zpaq c:\zpaqfranz 
+
+
+string help_backup(bool i_usage,bool i_example)
+{
+	if (i_usage)
+	{
+		moreprint("CMD   backup Multipart-managed backup: keeps part size/hash/quickhash");
+		moreprint("             Hardening backups in 'pieces' (ex. rsync, robocopy etc)");
+		moreprint("             Use command testbackup to check missing or invalid 'pieces'");
+	}
+	if (i_usage && i_example) moreprint("    Examples:");
+	if (i_example)
+	{
+		moreprint("Use the same parameters as add       backup z:\\prova.zpaq *.txt -key pippo");
+	}
+	return("Backup with hardened multipart");
+}
+string help_testbackup(bool i_usage,bool i_example)
+{
+	if (i_usage)
+	{
+		moreprint("CMD   testbackup  Check multipart-managed backup");
+		moreprint("+ : -to something Path to .zpaq chunks (if different)");
+		moreprint("+ : -verify       Read from filesystem and recompute hashes");
+		moreprint("+ : -ssd          Multithread (for SSDs, do NOT use on spinning drives)");
+		moreprint("+ : -paranoid     Compare index vs chunks (require password if encrypted)");
+		moreprint("+ : -verbose      Show more things");
+		moreprint("+ : -find         Change something in filenames");
+		moreprint("+ : -replace      for 'dirty' tricks");
+		moreprint("+ : -checktxt f1  Load md5sum-like textfile to compare against index");
+		help_range();
+	}
+	if (i_usage && i_example) moreprint("    Examples:");
+	if (i_example)
+	{
+		moreprint("Quick check local backup             testbackup foo.zpaq");
+		moreprint("Multipart in different path          testbackup foo.zpaq -to \\\\franzk\\z\\ -ssd");
+		moreprint("Different path, MD5 full test        testbackup foo.zpaq -to \\\\franzk\\z\\ -verify");
+		moreprint("With multithread (on solid drives)   testbackup foo.zpaq -to \\\\franzk\\z\\ -verify -ssd");
+		moreprint("Check from chunk 10 until last       testbackup foo.zpaq -range 10: -verify");
+		moreprint("Test index with password (if any)    testbackup foo.zpaq -paranoid -key pippo");
+		moreprint("Compare md5 hashes                   testbackup foo.zpaq -checktxt z:\\md5.txt");
+	}
+	return("Multipart hardening");
+}
+
+string help_last2(bool i_usage,bool i_example)
+{
+	if (i_usage)
+	{
+		moreprint("CMD   last2       Compare last 2 rows of a textfile, hash filename");
+		moreprint("                  Usually n-1 row the remote md5sum, last the local");
+		moreprint("                  zpaqfranz a z:\\1.zpaq *.bat -checktxt -noeta >z:\\l.txt");
+		moreprint("                  (some kind of rsync-rclone to remote)");
+		moreprint("                  (some kind of md5sum from remote) >z:\\r.txt");
+		moreprint("                  grep \"final MD5:\" z:\\l.txt >>z:\r.txt");
+		moreprint("                  zpaqfranz last2 z:\\r.txt -big");
+	}
+	if (i_usage && i_example) moreprint("    Examples:");
+	if (i_example)
+	{
+		moreprint("Compare md5 hashes                   last2 c:\\stor\\confronto.txt -big");
+	}
+	return("Compare last2 rows");
+}
+
+
+string help_last(bool i_usage,bool i_example)
+{
+	if (i_usage)
+	{
+		moreprint("CMD   last       Get last of multipart filename, usually for");
+		moreprint("                 scripting. Backups use 8 (eight) ? in filename");
+		moreprint(" ");
+		moreprint("Windows' example (script use %%, direct only %)");
+		moreprint(" ");
+		moreprint("FOR /f %%G in ('zpaqfranz last K:\\parte_???????? -pakka -noeta') DO ");
+		moreprint("ssh -i thekey user@theserver.com md5sum '/home/franco/%%G' >remote.txt");
+		moreprint(" ");
+		moreprint("FOR /f %%G in ('zpaqfranz last K:\\parte_???????? -pakka -noeta') DO ");
+		moreprint("zpaqfranz sum k:/%%G -md5 -pakka -noeta -stdout >>remote.txt");
+		moreprint(" ");
+		moreprint("zpaqfranz last2 remote.txt -big");
+		moreprint(" ");
+	}
+
+	if (i_usage && i_example) moreprint("    Examples:");
+	if (i_example)
+	{
+		moreprint("Get the last partname               last z:\\prova_????????");
+	}
+	return("Get last multipart filename");
+}
+
 string help_pause(bool i_usage,bool i_example)
 {
 	if (i_usage)
@@ -43123,7 +43242,6 @@ string help_x(bool i_usage,bool i_example)
 		moreprint("+ : -image        Change the progress to handle huge files (-minsize X default 20MB)");
 		moreprint("+ : -stdout       Output (if possible) a single file on stdout");
 		help_range();
-		
 	}
 	if (i_usage && i_example) moreprint("    Examples:");
 	if (i_example)
@@ -43592,6 +43710,30 @@ string help_cp(bool i_usage,bool i_example)
 	return("Friendly file copy with ETA (resumable)");
 	
 }
+string help_zfs(bool i_usage,bool i_example)
+{
+	if (i_usage)
+	{
+		moreprint("On UNIX you get some zfs-specific commands\n");
+		moreprint("--- Enumerate / delete snapshots");
+		moreprint("zfslist");
+		moreprint("zfspurge");
+		moreprint("--- Freezing snapshot inside archive");
+		moreprint("zfsadd");
+		moreprint("--- Make / restore zfs backups inside zpaq");
+		moreprint("zfsbackup");
+		moreprint("zfsreceive");
+		moreprint("zfsrestore");
+		moreprint("--- Make / restore zfs backups of proxmox VM");
+		moreprint("zfsproxbackup");
+		moreprint("zfsproxrestore");
+	}
+	if (i_example)
+	{
+		moreprint("Ask extensive help, example zpaqfranz h zfsadd       zpaqfranz h zfslist");
+	}
+	return "Bunch of zfs-specific commands";
+}
 string help_zfsadd(bool i_usage,bool i_example)
 {
 	if (i_usage)
@@ -43909,7 +44051,6 @@ string help_summa(bool i_usage,bool i_example)
 		moreprint("+ : -forcezfs     Include .zfs");
 		moreprint("+ : -checktxt kaj Check MD5 against kaj file. For rsync/rclone sync");
 		moreprint("+ : -hashdeep     Make (into mandatory -out) hashdeep-compatible output");
-		
 	}
 	if (i_usage && i_example) moreprint("    Examples:");
 	if (i_example)
@@ -43926,6 +44067,7 @@ string help_summa(bool i_usage,bool i_example)
 		moreprint("BLAKE3 multithread from memory map:  sum z:\\knb -ssd -blake3 -mm");
 		moreprint("MD5 quick check                      sum z:\\knb.zpaq -checktxt z:\\pippo.txt");
 		moreprint("hashdeep-compatible (multithread)    sum *.jpg *.cpp -hashdeep -ssd -out z:\\thehash.txt");
+		moreprint("like md5sum                          sum *.txt -md5 -pakka -noeta -stdout -nosort");
 	}
 	return("Calc hash/checksums, find duplicated files");
 	
@@ -44178,6 +44320,10 @@ void Jidac::load_help_map()
 	help_map.insert(std::pair<string, voidhelpfunction>("isopen",			help_isopen));
 	help_map.insert(std::pair<string, voidhelpfunction>("autotest",			help_autotest));
 	help_map.insert(std::pair<string, voidhelpfunction>("versum",			help_versum));
+	help_map.insert(std::pair<string, voidhelpfunction>("testbackup",		help_testbackup));
+	help_map.insert(std::pair<string, voidhelpfunction>("backup",			help_backup));
+	help_map.insert(std::pair<string, voidhelpfunction>("last2",			help_last2));
+	help_map.insert(std::pair<string, voidhelpfunction>("last",				help_last));
 #ifdef GUI
 	help_map.insert(std::pair<string, voidhelpfunction>("gui",help_gui));
 #endif
@@ -44188,6 +44334,7 @@ void Jidac::load_help_map()
 	help_map.insert(std::pair<string, voidhelpfunction>("rd",				help_rd));
 #endif
 #if defined(unix)
+	help_map.insert(std::pair<string, voidhelpfunction>("zfs",				help_zfs));
 	help_map.insert(std::pair<string, voidhelpfunction>("zfsproxbackup",	help_zfsproxbackup));
 	help_map.insert(std::pair<string, voidhelpfunction>("zfsproxrestore",	help_zfsproxrestore));
 	help_map.insert(std::pair<string, voidhelpfunction>("zfsbackup",		help_zfsbackup));
@@ -44209,7 +44356,7 @@ void Jidac::usage(bool i_flagdie=true)
 	moreprint("Usage: zpaqfranz command archive.zpaq files|directories -switches");
 	moreprint("       double quote for multipart archive name => \"test_???.zpaq\"");
 #if defined(unix)
-	moreprint("UNIX   zfs commands available           (zpaqfranz h for details)");
+	moreprint("UNIX   zfs commands available      (zpaqfranz h zfs   for details)");
 #endif
 	moreprint(" ");
 	moreprint("  a: Append files     | x: Extract            |   t: Test");
@@ -45134,6 +45281,8 @@ bool Jidac::cli_onlystring(string i_opt,string i_string,string i_alias,string& o
 
 int Jidac::loadparameters(int argc, const char** argv)
 {
+	///printf("*********************** CARICO *******************\n");
+	
 	bool flagdummy=false;
 	g_programflags.add(&flag715,			"-715",					"Runs just about like zpaq 7.15",					"a;");
 	g_programflags.add(&flagappend,			"-append",				"Append-only (antiransomware, slow)",				"a;");
@@ -45234,7 +45383,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 	g_mappatipohash.insert(std::pair<int, tipohash>(ALGO_WYHASH		 ,	tipohash("WYHASH",	   16,"Maybe the fastest, limited 'strength'",						false	,"-wyhash",			&flagwyhash,		&finalizza_wyhash,		"")));		
 	g_mappatipohash.insert(std::pair<int, tipohash>(ALGO_NILSIMSA	 ,	tipohash("NILSIMSA",  128,"Look for similarities, not differences",						false	,"-nilsimsa",		&flagnilsimsa,		&finalizza_nilsimsa,	"")));		
 	g_mappatipohash.insert(std::pair<int, tipohash>(ALGO_ENTROPY	 ,	tipohash("ENTROPY",     6,"Quick-and-dirty entropy estimator",							false	,"-entropy",		&flagentropy,		&finalizza_entropy,		"")));		
-
+	g_mappatipohash.insert(std::pair<int, tipohash>(ALGO_QUICK	 	 ,	tipohash("QUICK",      16,"Quick partial hasher",										false	,"-quick",			&flagquick,			&finalizza_xxhash64,	"")));		
 #ifdef _WIN32	
 	g_mappatipohash.insert(std::pair<int, tipohash>(FRANZO_WINHASH64,tipohash("WINHASH64", 	16,"Same as xxhash64 (with Windows' dates)",						true	,"-windate",		&flagwindate,		&finalizza_xxhash64,	"10")));
 #endif
@@ -45260,6 +45409,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 	g_archive			="";
 	g_indexname			="";
 	g_output_handle		=NULL;
+	g_archivefp			=NULL;
 	g_output			="";
 	g_exec_error		="";
 	g_exec_warn			="";
@@ -45280,6 +45430,8 @@ int Jidac::loadparameters(int argc, const char** argv)
 	method				="";
 	repack				="";
 	checktxt			="";
+	backuptxt			="";
+	backupindex			="";
 	new_password		=0;
 	summary				=-1; 
 	menoenne			=0;
@@ -45294,6 +45446,8 @@ int Jidac::loadparameters(int argc, const char** argv)
 	howmanythreads		=0;
 	version				=DEFAULT_VERSION;
 	date				=0;
+	g_flagmultipart		=false;
+	
 #ifdef GUI
 	iszpaqloaded		=false;
 	gui_filtername		="";
@@ -45382,13 +45536,15 @@ int Jidac::loadparameters(int argc, const char** argv)
 #endif	
 
 
+	if (argc>=2) // early disable output
+		if  (stringcomparei(argv[1],"last"))
+			flagpakka=true;
+	
 	if ((!flagpakka) && (!flagstdout))
 		moreprint("zpaqfranz v" ZPAQ_VERSION TEXT_NOJIT TEXT_GUI TEXT_BIG TEXT_SERVER TEXT_ALIGN TEXT_HWPRE TEXT_HWBLAKE3 TEXT_HWSHA1 TEXT_HWSHA2 ZSFX_VERSION ZPAQ_DATE); /// FAKE COMPILER WARNING
 
 	if (flagdebug)
 		printf("FULL exename <<%s>>\n",fullzpaqexename.c_str());
-
-
 
 	if (argc==2) // going early on gui 
 	{
@@ -45519,7 +45675,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 		myprintf("42993: The chosen algo %d %s\n",g_thechosenhash,g_thechosenhash_str.c_str());
 
 #ifdef HWSHA2
-	if ((!flagpakka) && (!flagstdout))
+	if (flagverbose)
 		if (ihavehw())
 		{
 			myprintf("DETECTED SHA1/2 HW INSTRUCTIONS\n");
@@ -45552,6 +45708,8 @@ int Jidac::loadparameters(int argc, const char** argv)
 		else if (cli_filesandcommand(opt,"sum",			'1',argc,argv,&i));
 		else if (cli_filesandcommand(opt,"trim",		'4',argc,argv,&i));
 		else if (cli_filesandcommand(opt,"versum",		'|',argc,argv,&i));
+		else if (cli_filesandcommand(opt,"last2",		'^',argc,argv,&i));
+		else if (cli_filesandcommand(opt,"testbackup",	'_',argc,argv,&i));
 		else if (cli_filesandcommand(opt,"zfsrestore",	'%',argc,argv,&i));
 		else if (cli_filesandcommand(opt,"zfslist",		'B',argc,argv,&i));
 		else if (cli_filesandcommand(opt,"zfspurge",	'C',argc,argv,&i));
@@ -45561,8 +45719,10 @@ int Jidac::loadparameters(int argc, const char** argv)
 	else
 		if ((
 		opt=="add" 				|| 
+		opt=="backup"			|| 
 		opt=="append"			|| 
 		opt=="extract" 			|| 
+		opt=="last" 			|| 
 		opt=="list" 			|| 
 		opt=="k" 				|| 
 		opt=="a"  				|| 
@@ -45602,7 +45762,13 @@ int Jidac::loadparameters(int argc, const char** argv)
 			}
 			if (opt=="gui")
 				command='G';
-			
+			if (opt=="backup")
+				command='Z';
+			if (opt=="last")
+			{
+				command='L';
+				flagpakka=true;
+			}
 			if (opt=="zfsreceive")
 				command=';';
 			if (opt=="zfsbackup")
@@ -45916,15 +46082,6 @@ int Jidac::loadparameters(int argc, const char** argv)
 			snapmark=newmark;
 		}
 	}
-/*
-	if (flagchecktxt)
-		if (checktxt=="")
-		{
-			string 	percorso	=extractfilepath		(g_archive);
-			string	nome		=prendinomefileebasta	(g_archive);
-			checktxt			=percorso+nome+"_md5.txt";
-		}
-*/
 	if (g_output!="")
 		open_output(g_output);
 
@@ -46113,6 +46270,7 @@ int Jidac::doCommand()
 		else
 			return add();
 	}
+	else if (command=='Z') return backup();
 	else if (command=='1') return summa();
 	else if (command=='2') return dir();
 	else if (command=='3') return purgersync();
@@ -46127,6 +46285,9 @@ int Jidac::doCommand()
 	else if (command=='0') return pause();
 	else if (command=='!') return isopen();
 	else if (command=='|') return versum();
+	else if (command=='^') return last2();
+	else if (command=='L') return last();
+	else if (command=='_') return testbackup();
 	else if (command=='b') return benchmark();
 	else if (command=='c') return dircompare(false,false);
 	else if (command=='d') return deduplicate();
@@ -47511,11 +47672,23 @@ void Jidac::addfile(bool i_checkifselected,DTMap& i_edt,string filename, int64_t
 	d.data=0;
 	g_bytescanned+=esize;
 	g_filescanned++;
+	
+	static int ultimotempo	=-1;
+	double scantime			=(mtime()-g_start+1);
+	int iscantime			=scantime/1000;
+
 	if (flagnoeta==false)
-		if (!(i_edt.size() % 1000))
+		if (iscantime!=ultimotempo)
 		{
-			double scantime=mtime()-g_start+1;
-			printf("Scanning %10s %2.2fs %10s file/s (%21s)\r",migliaia((int64_t)i_edt.size()),scantime/1000.0,migliaia3((int)(i_edt.size()/(scantime/1000.0))),migliaia2(g_bytescanned));
+			ultimotempo=iscantime;
+			printf("Scanned %10s %02d:%02d:%02d %10s file/s (%21s)\r",
+			migliaia((int64_t)i_edt.size()),
+			
+			int(iscantime/3600),
+			int(iscantime/60)%60, 
+			int(iscantime)%60,
+			
+			migliaia3((int)(i_edt.size()/(scantime/1000.0))),migliaia2(g_bytescanned));
 			fflush(stdout);
 		}
 }
@@ -49882,7 +50055,7 @@ class franz_do_hash
 	uint32_t		*p_crc32c;
 	
 	finalize_function	ffinalize;
-	
+
 	public:
 	string		i_hashtype2;
 	int			ihashtype;
@@ -49937,6 +50110,8 @@ class franz_do_hash
 			{
 				ffinalize=p->second.ffinalize;
 				ihashtype=p->first;
+				///printf("stopme %d\n",p->first);
+				///exit(0);
 			}
 		if (ffinalize==NULL)
 		{
@@ -49983,7 +50158,6 @@ class franz_do_hash
 		isinit				=false;
 		isfinalized			=false;
 	}
-	
 	string	filehash(string i_filename,bool i_flagcalccrc32,int64_t i_inizio,int64_t i_totali);
 };
 
@@ -50309,6 +50483,7 @@ void franz_do_hash::update(char *i_buffer,const int i_buflen)
 		return;
 	}
 }
+
 string	franz_do_hash::filehash(string i_filename,bool i_flagcalccrc32,int64_t i_inizio,int64_t i_totali)
 {
 	o_thefilesize	=0;
@@ -50331,7 +50506,7 @@ string	franz_do_hash::filehash(string i_filename,bool i_flagcalccrc32,int64_t i_
 	{
 		myprintf("62969: error empty filename\n");
 		o_status="62969: ERROR EMPTY FILENAME";
- 		return "";
+		return "";
 	}
 	if  ((isdirectory(i_filename)) || (i_filename==".") || (i_filename==".."))
 	{
@@ -50341,7 +50516,6 @@ string	franz_do_hash::filehash(string i_filename,bool i_flagcalccrc32,int64_t i_
 		o_status="62703: CANNOT HASH A FOLDER";
 		return "";
 	}
-	
 	char temp[128];
 	
 	
@@ -50358,6 +50532,7 @@ string	franz_do_hash::filehash(string i_filename,bool i_flagcalccrc32,int64_t i_
 	}
 	
 	FILE* myfilez = freadopen(i_filename.c_str());
+	
 	if	(myfilez==NULL)
 	{
 		
@@ -50374,12 +50549,11 @@ string	franz_do_hash::filehash(string i_filename,bool i_flagcalccrc32,int64_t i_
 		printUTF8(i_filename.c_str());
 		myprintf(">>\n");
 #endif
-		
 		o_status="62697: ERROR OPENING FILE";
- 		return "";
+		return "";
 	}
 	
-	int64_t lunghezza	=prendidimensionehandle(myfilez);
+	int64_t lunghezza	=prendidimensionefile(i_filename.c_str());//prendidimensionehandle(myfilez);
 	int64_t	letti		=0;
 	
 #ifdef __HAIKU__
@@ -50391,27 +50565,99 @@ string	franz_do_hash::filehash(string i_filename,bool i_flagcalccrc32,int64_t i_
 	const int BUFSIZE	=65536*8;
 #endif
 #endif
-
+	
 	unsigned char 		unzBuf[BUFSIZE];
 	int 				n=BUFSIZE;
 	
 	uint64_t myseed = 0;
 	XXHash64 myhash(myseed);
+	
+/// just an extimate. If <64K get xxhash64
+//  otherwise get 16K head +16KB mid, +16KB tail =>xxhash64
+//	
+	int mytype=ihashtype;
+	
+	
+	if (ihashtype==ALGO_QUICK) 
+	{
+		if (lunghezza<65536)
+		{
+			mytype=ALGO_XXHASH64;
+		}
+		else
+		{
+			n=16384;
+			int r=0;
+		
+			r=fread(unzBuf,1,n,myfilez);
+			if (r!=n)
+			{
+				myprintf("84669: Error reading head\n");
+				if (myfilez!=NULL)
+					fclose(myfilez);
+				o_hexhash		="";
+				o_thefilesize	=0;
+				return "";
+			}
+			myhash.add(unzBuf,r);
+
+			int64_t off=lunghezza/2;
+		
+			fseeko(myfilez,off,SEEK_SET);
+			r=fread(unzBuf,1,n, myfilez);
+			if (r!=n)
+			{
+				myprintf("84698: Error reading mid\n");
+				if (myfilez!=NULL)
+					fclose(myfilez);
+				o_hexhash		="";
+				o_thefilesize	=0;
+				return "";
+			}
+			myhash.add(unzBuf,r);
+
+			fseeko(myfilez,-n,SEEK_END);
+			r=fread(unzBuf,1,n,myfilez);
+			if (r!=n)
+			{
+				myprintf("84706: Error reading tail\n");
+				if (myfilez!=NULL)
+					fclose(myfilez);
+				o_hexhash		="";
+				o_thefilesize	=0;
+				return "";
+			}
+			myhash.add(unzBuf,r);
+
+			if (myfilez!=NULL)
+				fclose(myfilez);
+
+			if ((flagnoeta==false) && (i_inizio>0) && (i_totali>0))
+				myavanzamentoby1sec(g_dimensione,i_totali,i_inizio,false);
+		
+			o_hexhash		=bin2hex_64(myhash.hash());
+			o_thefilesize	=lunghezza;
+			g_dimensione	+=lunghezza;
+			return o_hexhash;
+		}
+	}
+	
+	
 	libzpaq::SHA1 sha1;
 	MD5 md5;
 	libzpaq::SHA256 mysha256;
 	XXH3_state_t state128;
-	if (ihashtype==ALGO_XXH3)
+	if (mytype==ALGO_XXH3)
 		(void)XXH3_128bits_reset(&state128);
 
 	blake3_hasher hasher;
-	if (ihashtype==ALGO_BLAKE3)
+	if (mytype==ALGO_BLAKE3)
 		blake3_hasher_init(&hasher);
 
 	SHA3 sha3;
 
 	NESSIEstruct whihasher;
-	if (ihashtype==ALGO_WHIRLPOOL)
+	if (mytype==ALGO_WHIRLPOOL)
 		NESSIEinit(&whihasher);
 	
 	size_t f[256] = { 0 };
@@ -50419,13 +50665,14 @@ string	franz_do_hash::filehash(string i_filename,bool i_flagcalccrc32,int64_t i_
 	HighwayHashCat state;
 	uint64_t hash;
 	uint64_t key[4] = {1, 2, 3, 4};
-	if ((ihashtype==ALGO_HIGHWAY64) || (ihashtype==ALGO_HIGHWAY128) || (ihashtype==ALGO_HIGHWAY256))
+	if ((mytype==ALGO_HIGHWAY64) || (mytype==ALGO_HIGHWAY128) || (mytype==ALGO_HIGHWAY256))
 		HighwayHashCatStart(key, &state);
 
-	if (ihashtype==ALGO_CRC32)
+	if (mytype==ALGO_CRC32)
 		i_flagcalccrc32=true;
 
-	if (ihashtype==ALGO_CRC32C)
+			
+	if (mytype==ALGO_CRC32C)
 	{
 		ssize_t got;
 		size_t off, n;
@@ -50459,37 +50706,37 @@ string	franz_do_hash::filehash(string i_filename,bool i_flagcalccrc32,int64_t i_
 	{
 		int r=fread(unzBuf, 1, n, myfilez);
 	
-		if (ihashtype==ALGO_XXHASH64)
+		if (mytype==ALGO_XXHASH64)
 			myhash.add(unzBuf,r);
 		else
-		if (ihashtype==ALGO_SHA1)
+		if (mytype==ALGO_SHA1)
 			sha1.write((const char*)unzBuf,r);
 		else
-		if (ihashtype==ALGO_SHA256)
+		if (mytype==ALGO_SHA256)
 			mysha256.write((const char*)unzBuf,r);
 		else
-		if (ihashtype==ALGO_XXH3)
+		if (mytype==ALGO_XXH3)
 			(void)XXH3_128bits_update(&state128,unzBuf,r);
 		else
-		if (ihashtype==ALGO_BLAKE3)
+		if (mytype==ALGO_BLAKE3)
 			blake3_hasher_update(&hasher,unzBuf,r);
 		else
-		if (ihashtype==ALGO_MD5)
+		if (mytype==ALGO_MD5)
 			md5.add(unzBuf,r);
 		else
-		if (ihashtype==ALGO_SHA3)
+		if (mytype==ALGO_SHA3)
 			sha3.add(unzBuf,r);
 		else
-		if (ihashtype==ALGO_WHIRLPOOL)
+		if (mytype==ALGO_WHIRLPOOL)
 			NESSIEadd(unzBuf,r*8,&whihasher);
 		else
-		if (ihashtype==ALGO_ENTROPY)
+		if (mytype==ALGO_ENTROPY)
 		{
 			for(int i=0;i<r;i++)
 				f[unzBuf[i]]++;
 		}
 		else
-		if ((ihashtype==ALGO_HIGHWAY64) || (ihashtype==ALGO_HIGHWAY128) || (ihashtype==ALGO_HIGHWAY256))
+		if ((mytype==ALGO_HIGHWAY64) || (mytype==ALGO_HIGHWAY128) || (mytype==ALGO_HIGHWAY256))
 			HighwayHashCatAppend((const uint8_t*)unzBuf,r,&state);
 		
 		if (i_flagcalccrc32)
@@ -50511,49 +50758,49 @@ string	franz_do_hash::filehash(string i_filename,bool i_flagcalccrc32,int64_t i_
 		o_hexcrc32 =temp;
 	}
 	
-	if (ihashtype==ALGO_CRC32)
+	if (mytype==ALGO_CRC32)
 	{
 		snprintf(temp,sizeof(temp),"%08X",o_crc32);
 		o_hexhash	=temp;
 	}
-	if (ihashtype==ALGO_XXHASH64)
+	if (mytype==ALGO_XXHASH64)
 	{
 		o_hexhash=bin2hex_64(myhash.hash());
 	}
-	if (ihashtype==ALGO_SHA1)
+	if (mytype==ALGO_SHA1)
 	{
 		char sha1result[20];
 		memcpy(sha1result, sha1.result(), 20);
 		o_hexhash=binarytohex((const unsigned char*)sha1result,20);
 	}
-	if (ihashtype==ALGO_SHA256)
+	if (mytype==ALGO_SHA256)
 	{
 		char sha256result[32];
 		memcpy(sha256result,mysha256.result(),32);
 		o_hexhash=binarytohex((const unsigned char*)sha256result,32);
 	}
-	if (ihashtype==ALGO_XXH3)
+	if (mytype==ALGO_XXH3)
 	{
 		XXH128_hash_t myhash=XXH3_128bits_digest(&state128);
 		o_hexhash=bin2hex_128(myhash.high64,myhash.low64);
 	}
-	if (ihashtype==ALGO_BLAKE3)
+	if (mytype==ALGO_BLAKE3)
 	{
 		uint8_t output[BLAKE3_OUT_LEN];
 		blake3_hasher_finalize(&hasher, output, BLAKE3_OUT_LEN);
 		o_hexhash=binarytohex((const unsigned char*)output,BLAKE3_OUT_LEN);	
 	}
-	if (ihashtype==ALGO_MD5)
+	if (mytype==ALGO_MD5)
 		o_hexhash=md5.getHash();
-	if (ihashtype==ALGO_SHA3)
+	if (mytype==ALGO_SHA3)
 		o_hexhash=sha3.getHash();
-	if (ihashtype==ALGO_WHIRLPOOL)
+	if (mytype==ALGO_WHIRLPOOL)
 	{
 		unsigned char output[512]={0};
 		NESSIEfinalize(&whihasher,output);
 		o_hexhash=binarytohex(output,64);
 	}
-	if (ihashtype==ALGO_ENTROPY)
+	if (mytype==ALGO_ENTROPY)
 	{
 		double entropy=0.0;
 		double byteletti=letti;
@@ -50571,18 +50818,18 @@ string	franz_do_hash::filehash(string i_filename,bool i_flagcalccrc32,int64_t i_
 		o_hexhash=temp;
 	}	
 
-	if (ihashtype==ALGO_HIGHWAY64)
+	if (mytype==ALGO_HIGHWAY64)
 	{
 		hash=HighwayHashCatFinish64(&state);
 		o_hexhash=bin2hex_64(hash);
 	}
-	if (ihashtype==ALGO_HIGHWAY128)
+	if (mytype==ALGO_HIGHWAY128)
 	{
 		uint64_t hash[2];
 		HighwayHashCatFinish128(&state,hash);
 		o_hexhash=binarytohex((const unsigned char*)hash,16);	
 	}
-	if (ihashtype==ALGO_HIGHWAY256)
+	if (mytype==ALGO_HIGHWAY256)
 	{
 		uint64_t hash[4];
 		HighwayHashCatFinish256(&state,hash);
@@ -50596,9 +50843,9 @@ string	franz_do_hash::filehash(string i_filename,bool i_flagcalccrc32,int64_t i_
 		myprintf("\n");
 	}
 	o_thefilesize=letti;
+	///myprintf("****************************** ritorno lunghezza %s\n",migliaia(lunghezza));
 	return o_hexhash;
 }
-
 
 
 
@@ -50725,6 +50972,10 @@ bool 	iszpaqfranzvirtualfile(const string& i_filename)
 	if (mypos("VFILE-",i_filename)>-1)
 		return true;
 	return false;
+}
+bool ishex(const char i_char)
+{
+	return (((i_char>=48) && (i_char<=57)) || ((i_char>=65) && (i_char<=70)) || ((i_char>=97) && (i_char<=102)));
 }
 bool isletterpath(const string& i_filename)
 {
@@ -52702,7 +52953,9 @@ string do_benchmark(int i_tnumber,int i_timelimit,string i_runningalgo,int i_chu
 	MD5 md5;
 	libzpaq::SHA1 sha1;
 	XXH3_state_t state128;
-	franzSHA256 mysha256;
+///	franzSHA256 mysha256;
+	libzpaq::SHA256 sha256;
+
 	uint64_t _wyp[4];
 	make_secret(0,_wyp);
 	SHA3 sha3;
@@ -52735,7 +52988,8 @@ string do_benchmark(int i_tnumber,int i_timelimit,string i_runningalgo,int i_chu
 			sha1.write((const char*)buffer32bit,buffersize);
 		else
 		if (i_runningalgo=="SHA-256")
-			mysha256.update((const uint8_t*)buffer32bit,buffersize);
+			sha256.write((const char*)buffer32bit,buffersize);
+	////		mysha256.update((const uint8_t*)buffer32bit,buffersize);
 		else
 		if (i_runningalgo=="WYHASH")
 			wyhash((const char*)buffer32bit,buffersize,0,_wyp);
@@ -54589,9 +54843,29 @@ Jidac* pjidac;
 /// control-c handler
 void my_handler(int s)
 {
+	myprintf("\n\n54760: CONTROL-C detected, try some housekeeping...\n");
+	if (g_archivefp!=NULL)
+	{
+		myprintf("54470: Closing file handle\n");
+		fclose(g_archivefp);
+	}
+	if (fileexists(g_archive.c_str()))
+		if (prendidimensionefile(g_archive.c_str())>=0)
+		{
+			if (delete_file(g_archive.c_str()))
+				myprintf("54766: Erased chunk <<");
+			else
+				myprintf("54766: *FAILED* delete of <<");
+			printUTF8(g_archive.c_str());
+			myprintf(">>\n");
+		}
+	
 	// 2==control-C (maybe)
 	if (s==2)
 	{	
+		
+	
+
 #ifdef _WIN32
 		if (command=='q')
 		{
@@ -54710,7 +54984,9 @@ void my_handler(int s)
 		errorcode=2;
 	}
 	  
-	if ((!flaghashdeep) && (!flagstdout)) /// we need to make output compatible with hashdeep?
+	  
+///	  exit(0);
+	if ((!flaghashdeep) && (!flagstdout) && (command!='L')) /// we need to make output compatible with hashdeep?
 	{
 			myprintf( "\n%1.3f seconds (%s) ", (mtime()-g_start)/1000.0,timetohuman((uint32_t)((mtime()-g_start)/1000.0)).c_str());
 		 
@@ -55296,7 +55572,7 @@ int unz(const char * archive,const char * key)
         ///myprintf("    [%u..%u) %u ", uint32_t(id), uint32_t(id+len/24), b);
         // Compare hashes and sizes
 			const char* p=seg.s.data()+4;  // next hash, size
-			uint32_t sum=0;  // uncompressed size of all frags
+///			uint32_t sum=0;  // uncompressed size of all frags
 			for (uint32_t i=0; i<len/24; ++i) 
 			{
 				if (index) 
@@ -55311,7 +55587,7 @@ int unz(const char * archive,const char * key)
 				else 
 				if (frag[id+i].substr(0, 24)!=std::string(p, p+24))
 					unzerror("frag size or hash mismatch");
-				sum+=unzget4(p+20);
+///				sum+=unzget4(p+20);
 				p+=24;
 			}
 			///if (!noeta)
@@ -56425,6 +56701,10 @@ void myaddfile(uint32_t i_tnumber,DTMap& i_edt,string i_filename, int64_t i_date
 }
 void myscandir(uint32_t i_tnumber,DTMap& i_edt,string filename, bool i_recursive,bool i_flagcalchash)
 {
+	if (!i_recursive)
+		if (flagdebug)
+			myprintf("56571: myscandir of %s\n",filename.c_str());
+
 	///Raze to the ground ads and zfs as soon as possible
 	if (isads(filename))
 	{
@@ -56557,6 +56837,346 @@ void myscandir(uint32_t i_tnumber,DTMap& i_edt,string filename, bool i_recursive
   FindClose(h);
 #endif
 }
+
+
+
+int	getpartnumber(string i_thefilename)
+{
+	if (i_thefilename.size()<14)
+	{
+		if (flagdebug)
+			myprintf("84205: return -1 because size <14 |%s|\n",i_thefilename.c_str());
+		return -1;
+	}
+#ifdef _WIN32
+	i_thefilename=stringtolower(i_thefilename);
+#endif
+	int		risultato	=-1;
+	bool fileok			=true;
+	string candidato	=extractfilename(i_thefilename);
+	
+	if (candidato[candidato.size()-14]=='_')
+	{
+		unsigned int resto=candidato.size()-13;
+		fileok=fileok && (isdigit(candidato[resto++]));
+		fileok=fileok && (isdigit(candidato[resto++]));
+		fileok=fileok && (isdigit(candidato[resto++]));
+		fileok=fileok && (isdigit(candidato[resto++]));
+		fileok=fileok && (isdigit(candidato[resto++]));
+		fileok=fileok && (isdigit(candidato[resto++]));
+		fileok=fileok && (isdigit(candidato[resto++]));
+		fileok=fileok && (isdigit(candidato[resto++]));
+		fileok=fileok && (candidato[resto++]=='.');
+		fileok=fileok && (candidato[resto++]=='z');
+		fileok=fileok && (candidato[resto++]=='p');
+		fileok=fileok && (candidato[resto++]=='a');
+		fileok=fileok && (candidato[resto++]=='q');
+		if (fileok)
+		{
+			string numerini=candidato.substr(candidato.size()-13,8);
+			if (numerini.size()>0)
+				risultato=atoi(numerini.c_str());
+			if (flagdebug)
+				myprintf("84724: numerini |%s| int %s\n",numerini.c_str(),migliaia(risultato));
+		}
+	}
+	else
+	{
+		if (flagdebug)
+			myprintf("84240: -14 is not '_' for |%s|\n",candidato.c_str());
+	}
+	return risultato;			
+}
+
+bool	isbackuppart(string i_partname,string i_mask)
+{
+#ifdef _WIN32
+	i_partname	=stringtolower(i_partname);
+	i_mask		=stringtolower(i_mask);
+#endif
+
+	if (flagdebug)
+		myprintf("84250: i_partname |%s|  i_mask |%s|\n",i_partname.c_str(),i_mask.c_str());
+	
+	if (isdirectory(i_partname))
+	{
+		if (flagdebug)
+			myprintf("84252: i_partname is a folder |%s|\n",i_partname.c_str());
+		return false;
+	}
+	if (i_partname=="")
+	{
+		if (flagdebug)
+			myprintf("84250: partname empty\n");
+		return false;
+	}
+	
+	if (!iszpaq(i_partname))
+	{
+		if (flagdebug)
+			myprintf("84256: partname not a .zpaq |%s|\n",i_partname.c_str());
+		return false;
+	}
+
+	if (i_mask=="")
+	{
+		if (flagdebug)
+		{
+			myprintf("84243: i_mask empty\n");
+			string onlyname=extractfilename(i_partname);
+			if (i_partname.size()>14)
+				i_mask=i_partname.substr(0,i_partname.size()-14);
+			myprintf("56922: new i_mask =>|%s|\n",i_mask.c_str());
+			
+		}
+	}
+	
+	string candidato=extractfilename(i_partname);
+	if (candidato.size()<14)
+	{
+		if (flagdebug)
+			myprintf("84265: partname too short of |%s|\n",i_partname.c_str());
+		return false;
+	}
+
+
+	myreplace(i_mask,"????????.zpaq","");
+
+	string onlyname=prendinomefileebasta(i_mask);
+	if (onlyname.size()==0)
+	{
+		if (flagdebug)
+			myprintf("84273: onlyfilename empty of mask |%s|\n",i_mask.c_str());
+		return false;
+	}
+
+	if (mypos(onlyname,candidato)!=0)
+	{
+		if (flagdebug)
+			myprintf("84280: cannot match |%s| in |%s|\n",onlyname.c_str(),candidato.c_str());
+		return false;
+	}
+	
+	if (candidato[candidato.size()-14]!='_')
+	{
+		if (flagdebug)
+			myprintf("84287: char -14 not _ in |%s|\n",candidato.c_str());
+		return false;
+	}
+	
+	int	thepart=getpartnumber(i_partname);
+	if (thepart<0)
+	{
+		if (flagdebug)
+			myprintf("84294: thepart <0 for %s\n",i_partname.c_str());
+		return false;
+	}
+	return true;
+}
+
+
+
+typedef std::pair<string,string>  mycoppia;
+bool compare_second(const std::pair<string,string>& a,const std::pair<string,string>& b)
+{
+	return (a.second<b.second);
+}
+
+class multipart
+{
+	private:
+	string			thefilename;
+	
+	public:
+	vector<s_fileandsize> 	filenamearray;
+	vector<s_fileandsize> 	partarray;
+
+	string	lastpart;
+	string	nextpart;
+	
+	int		howmanychunks;
+	bool	ismultipart;
+	bool	isgood;
+	int		howmanyjolly;
+	int64_t	filenamearray_size;
+	
+	multipart(string i_filename): 
+	howmanychunks(0),
+	ismultipart(false),
+	isgood(false),
+	howmanyjolly(0),
+	filenamearray_size(0)
+	{
+		if (!iszpaq(i_filename))
+			i_filename+=".zpaq";
+#ifdef _WIN32
+		i_filename=stringtolower(i_filename);
+#endif
+
+		thefilename	=i_filename;
+		lastpart	="";
+		nextpart	="";
+		
+		if (i_filename=="")
+		{
+			myprintf("84400: multipartfilename is empty\n");
+			return;
+		}
+		for (unsigned int i=0;i<i_filename.size();i++)
+			if (i_filename[i]=='?')
+				howmanyjolly++;
+		ismultipart=howmanyjolly>0;
+		
+		if (!ismultipart)
+			return;
+		enumerate();
+		
+		partarray.clear();
+		int parts	=0;  // number of existing parts in multipart
+		string part0=subpart(i_filename,0);
+		string thehole	="";
+		for (int i=1;; ++i) 
+		{
+			string partname=subpart(i_filename,i);
+			if (partname==part0) 
+				error("84285: too many archive parts");
+			if (!fileexists(partname.c_str()))
+			{
+				thehole=partname;
+				break;
+			}
+			else
+			{
+				s_fileandsize myblock;
+				myblock.filename=partname;
+				myblock.size=prendidimensionefile(partname.c_str());
+				myblock.attr=0;
+				myblock.date=0;
+				myblock.isdir=isdirectory(partname.c_str());
+				myblock.flaghashstored=false;
+				partarray.push_back(myblock);
+			}
+			++parts;
+		}
+		std::sort(partarray.begin(),partarray.end(),comparefilename);
+		isgood=filenamearray.size()==partarray.size();
+		
+		if (!isgood)
+		{
+		///	myprintf("84478: PART NUMBER MISMATCH: disk %s vs part %s (HOLE IN %s)\n",migliaia(filenamearray.size()),migliaia2(partarray.size()),thehole.c_str());
+			myprintf("84478: AT LEAST ONE HOLE DETECTED! <<");
+			printUTF8(thehole.c_str());
+			myprintf(">>\n");
+			
+			if (filenamearray.size()>partarray.size()) // this should be
+				for (unsigned int i=0;i<filenamearray.size();i++)
+				{
+					bool trovato=false;
+					for (unsigned int j=0;j<partarray.size();j++)
+						if (filenamearray[i].filename==partarray[j].filename)
+						{
+							trovato=true;
+							break;
+						}
+					if (!trovato)
+						if (flagdebug)
+							myprintf("84493: Filename not matched %s\n",filenamearray[i].filename.c_str());
+				}
+		}
+		if (partarray.size()>0)
+		{
+			if (fileexists(subpart(i_filename, parts)))
+				lastpart=subpart(i_filename, parts);
+			nextpart=subpart(i_filename, parts+1);
+		}
+		else
+			nextpart=subpart(i_filename, 1);
+	}
+	
+	string enumerate()
+	{
+		
+		/// UNIX get strange behaviour with folders and jolly
+		/// this "thing" is weird, but works on Win and *nix
+		DTMap thedt;
+		flagforcezfs=true;
+		g_arraybytescanned.clear();
+		g_arrayfilescanned.clear();
+		g_arraybytescanned.push_back(0);
+		g_arrayfilescanned.push_back(0);
+		string onlypath=extractfilepath(thefilename);
+		string onlyname=extractfilename(thefilename);
+		myreplace(onlyname,"????????.zpaq","");
+		myreplace(onlyname,".zpaq","");
+		
+		if (flagdebug)
+		{
+			myprintf("84383: scan by   %s\n",onlypath.c_str());
+			myprintf("84383: filename  %s\n",thefilename.c_str());
+			myprintf("84384: onlyname  %s\n",onlyname.c_str());
+		}
+		myscandir(0,thedt,onlypath.c_str(),false,false);
+		
+		printbar(' ',false);
+		myprintf("\r");
+		
+		if (flagdebug)
+			myprintf("84316: scanned %s\n",migliaia(thedt.size()));
+		
+		if (thedt.size()==0)
+			return "";
+	
+		filenamearray.clear();
+		for (DTMap::iterator p=thedt.begin(); p!=thedt.end(); ++p) 
+		{
+			s_fileandsize myblock;
+			string currentfilename=p->first;
+#ifdef _WIN32
+			currentfilename=stringtolower(currentfilename);
+#endif
+			if (isbackuppart(currentfilename,onlyname))
+			{
+				int thepartnumber=getpartnumber(currentfilename);
+				if (thepartnumber>0)
+				{
+					myblock.filename		=currentfilename;
+					myblock.size			=p->second.size;
+					myblock.attr			=p->second.attr;
+					myblock.date			=p->second.date;
+					myblock.isdir			=false;
+					myblock.flaghashstored	=false;
+					filenamearray.push_back(myblock);
+	///				myprintf("84406: %s %s\n",estensione.c_str(),p->first.c_str());
+				}
+			}
+			else
+			{
+				if (flagdebug)
+					myprintf("84591: Not backup part %s\n",currentfilename.c_str());
+			}
+		}
+		std::sort(filenamearray.begin(),filenamearray.end(),comparefilename);
+		if (flagdebug)
+			myprintf("84518: filenamearray size post %s\n",migliaia(filenamearray.size()));
+
+		if (filenamearray.size()==0)
+			return "";
+		else
+		{
+			if (flagdebug)
+				for (int unsigned i=0;i<filenamearray.size();i++)
+					myprintf("84527: filenamearray %08d %s\n",i,filenamearray[i].filename.c_str());
+			return filenamearray[filenamearray.size()-1].filename;
+		}
+	}
+};
+
+
+bool isjolly(const string& i_filename)
+{
+	return strrchr(i_filename.c_str(),'?');
+}
+
 
 // this is for SMALL list of parameters
 int listfiles(string i_path,string i_extension,bool i_fullname,vector<string>* o_thelist)
@@ -57036,12 +57656,6 @@ string Jidac::zfs_get_snaplist(string i_header,const string i_footer,vector<stri
 	o_array_dopochiocciola.push_back("zpaqfranz00000003");
 	o_array_primachiocciola.push_back("zroot/tmp");
 	o_array_dopochiocciola.push_back("zpaqfranz00000004");
-	/*
-	o_array_primachiocciola.push_back("zroot/tmp");
-	o_array_dopochiocciola.push_back("zpaqfranz00000005");
-	o_array_primachiocciola.push_back("zroot/tmp");
-	o_array_dopochiocciola.push_back("zpaqfranz00000006");
-	*/
 	return "ciao";
 #endif
 
@@ -57257,7 +57871,6 @@ int64_t getdatefromsnapshot(string i_snaptoget)
 }
 int Jidac::zfsadd()
 {
-
 	if ((files.size()!=1) && (files.size()!=2) && (files.size()!=3))
 	{
 		myprintf("For zfsadd you need 1, 2 or 3 parameters\n\n");
@@ -58910,6 +59523,46 @@ bool iswinroot(string i_path)
 	return false;
 }
 
+
+bool iszpaqfranzfile(string i_filename,string i_header)
+{
+	if (i_filename=="")
+		return false;
+	if (!fileexists(i_filename.c_str()))
+	{
+		myprintf("58918: File not found ");
+		printUTF8(i_filename.c_str());
+		myprintf("\n");
+		return false;
+	}
+	FILE* backupfile=fopen(i_filename.c_str(), "rb");
+	if (backupfile==NULL)
+	{
+		myprintf("58926: Cannot open file\n");
+		return false;
+	}
+	char line[65536];
+	string linea="";
+	if (!fgets(line, sizeof(line), backupfile))
+	{
+		myprintf("58933: failed reading first line\n");
+		return false;
+	}
+	linea=line;
+	if (linea.size()==0)
+	{
+		myprintf("58939: first line empty\n");
+		return false;
+	}
+	if (mypos(i_header,linea)==-1)
+	{
+		myprintf("58944: File does not seems by zpaqfranz %s\n",linea.c_str());
+		return false;
+	}
+	fclose(backupfile);
+	return true;
+}
+
 int Jidac::append() 
 {
 	myprintf("Append 2-pass *** ALPHA STAGE *** ANTI-RANSOMWARE (FOR chflags sappend)\n");
@@ -58927,21 +59580,6 @@ int Jidac::append()
 		if (flagdebug)
 			myprintf("38611: Second round cdatasize %s  htsize %s\n",migliaia(g_cdatasize),migliaia2(g_htsize));
 		jidacreset();
-		/*
-		g_freeze="";
-		files_size.clear();
-		files_count.clear();
-		files_time.clear();
-		files_edt.clear();
-		ver.clear();
-		block.clear();
-		dt.clear();
-		ht.clear();
-		edt.clear();
-		ht.resize(1);  // element 0 not used
-		ver.resize(1); // version 0
-		dhsize=dcsize=0;
-		*/
 		return add();
 	}
 	else
@@ -59444,6 +60082,8 @@ int Jidac::add()
   // Set arcname, offset, header_pos, and salt to open out archive
   arcname=archive;  // output file name
 	
+	
+			
 	if (flagcomment)
 		if (versioncomment!="")
 		{
@@ -59490,6 +60130,7 @@ int Jidac::add()
   else {
     int parts=0;  // number of existing parts in multipart
     string part0=subpart(archive, 0);
+	
     if (part0!=archive) {  // multi-part?
       for (int i=1;; ++i) {
         string partname=subpart(archive, i);
@@ -59501,11 +60142,84 @@ int Jidac::add()
         offset+=ftello(fp);
 		if (fp!=NULL)
 			fclose(fp);
+		
+
       }
       header_pos=32*(password && parts==0);
       arcname=subpart(archive, parts+1);
       if (exists(arcname)) error("part exists");
-    }
+	
+		g_flagmultipart=true;
+		
+		if (command=='Z') // backup
+		{
+			string lastpiece="";
+			multipart thelastone(archive);
+			lastpiece=thelastone.enumerate();
+			if (flagdebug)
+				myprintf("59752: the last piece |%s|\n",lastpiece.c_str());
+			if (isbackuppart(lastpiece,archive))
+			{
+				if (flagdebug)
+					myprintf("60085: IS backup part |%s|\n",lastpiece.c_str());
+				if (prendidimensionefile(lastpiece.c_str())==0)
+				{
+					myprintf("60088:File lenght 0   |%s|\n",lastpiece.c_str());
+					myprintf("60091:Delete lastpiece|%s|\n",lastpiece.c_str());
+					delete_file(lastpiece.c_str());
+					
+					arcname=subpart(archive, parts);
+					myprintf("60090:Going back to   |%s|\n",arcname.c_str());
+				}
+				else
+				{
+					if (flagdebug)
+						myprintf("60097: Last piece >0, do nothing  |%s|\n",lastpiece.c_str());
+				}
+			}
+			else
+			{
+				if (flagdebug)
+					myprintf("60095: NOT a backup part |%s|\n",lastpiece.c_str());
+			}
+			
+			string percorso=extractfilepath(part0);
+			string solonome=prendinomefileebasta(part0);
+			
+			g_indexname=percorso+solonome+"_backup.index";
+			myreplaceall(g_indexname,"?","0");
+			
+			index=g_indexname.c_str();
+			
+			backuptxt=percorso+solonome+"_backup.txt";
+			myreplaceall(backuptxt,"?","0");
+			if (flagverbose)
+			{
+				myprintf("59944: Backup index     : <<");
+				printUTF8(g_indexname.c_str());
+				myprintf(">>\n");
+				
+				myprintf("59944: Backup txt       : <<");
+				printUTF8(backuptxt.c_str());
+				myprintf(">>\n");
+				
+				myprintf("59499: Multipart archive: <<");
+				printUTF8(arcname.c_str());
+				myprintf(">>\n");
+			}
+			if (parts>0)
+			{
+				if (!fileexists(backuptxt.c_str()))
+				{
+					myprintf("59526: Backup file does not exists! ");
+					printUTF8(backuptxt.c_str());
+					myprintf("\n");
+				}
+			}
+		}
+		
+    }	
+	
     // Get salt from first part if it exists
     if (password) {
       FP fp=fopen(subpart(archive, 1).c_str(), RB);
@@ -60039,6 +60753,20 @@ int Jidac::add()
 			myprintf("Creating ");
 		printUTF8(arcname.c_str());
 		myprintf(" at offset %s + %s\n", migliaia(header_pos), migliaia2(offset));
+		
+		//long-waited 
+		
+		string percorso=extractfilepath(arcname.c_str());
+		if (!direxists(percorso.c_str()))
+			makepath(percorso.c_str());
+		if (!flagspace)
+			if (!saggiascrivibilitacartella(percorso.c_str()))
+			{
+				myprintf("60251: Cannot write, use -space to bypass, on ");
+				printUTF8(percorso.c_str());
+				myprintf("\n");
+				return 2;
+			}
 	}
 
 #ifdef SERVER
@@ -60075,6 +60803,10 @@ int Jidac::add()
 	
   // Open output
   OutputArchive out(arcname.c_str(), password, salt, offset);
+  /// I know, we need something for a "goto-control-c"
+  g_archivefp=out.getthefp();
+  
+  
   out.seek(header_pos, SEEK_SET);
   // Start compress and write jobs
   vector<ThreadID> tid(howmanythreads*2-1);
@@ -60108,7 +60840,8 @@ int Jidac::add()
 	{
 #ifdef _WIN32	
 	if (!flagvss)
-		myprintf("Long filenames (>255) %9s *** WARNING *** (-fix255)\n",migliaia(toolongfilenames));
+		if (!flaglongpath)
+			myprintf("Long filenames (>255) %9s *** WARNING *** (-fix255)\n",migliaia(toolongfilenames));
 #else
 	myprintf("Long filenames (>255) %9s\n",migliaia(toolongfilenames));
 #endif
@@ -61211,16 +61944,6 @@ int Jidac::add()
 			myprintf("43054: Do a testverify()\n");
 		all=false;
 		jidacreset();
-		/*
-		ver.clear();
-		block.clear();
-		dt.clear();
-		ht.clear();
-		edt.clear();
-		ht.resize(1);  // element 0 not used
-		ver.resize(1); // version 0
-		dhsize=dcsize=0;
-		*/
 		errors=testverify();
 	}	
 	if (flagverify)
@@ -61230,16 +61953,6 @@ int Jidac::add()
 			myprintf("43070: Do a verify()\n");
 		all=false;
 		jidacreset();
-		/*
-		ver.clear();
-		block.clear();
-		dt.clear();
-		ht.clear();
-		edt.clear();
-		ht.resize(1);  // element 0 not used
-		ver.resize(1); // version 0
-		dhsize=dcsize=0;
-		*/
 		errors=verify(true); //re-read, again
 	}	
 	if (g_sfx!="")
@@ -61307,9 +62020,10 @@ int Jidac::add()
 		}
 	}
 #endif
-	if (checktxt!="")
+	if ((checktxt!="") || (backuptxt!=""))
+		if (fileexists(g_archive.c_str())) // with no changes no multipart file is created
 	{
-		myprintf("Creating MD5 check txt on %s\n",checktxt.c_str());
+		myprintf("Creating MD5 check txt on %s\n",g_archive.c_str());
 		int64_t startverify	=mtime();
 		int64_t larghezzain	=prendidimensionefile(g_archive.c_str());
 
@@ -61318,27 +62032,107 @@ int Jidac::add()
 		string hashreloaded=dummy.filehash(g_archive,false,startverify,larghezzain);
 			
 		if (hashreloaded=="")
-			errors=2;
-		else
 		{
-			myprintf("\n44202: final MD5: hash %s\n",hashreloaded.c_str());
+			myprintf("61437: Guru calculating hash for <<");
+			printUTF8(g_archive.c_str());
+			myprintf(">>\n");
+			return 2;
+		}
+		myprintf("\n%s 44202: final MD5: %s\n",hashreloaded.c_str(),g_archive.c_str());
+	
+		if (checktxt!="") 
+		{
 			FILE* myoutput=fopen(checktxt.c_str(), "wb");
 			if (myoutput==NULL)
 			{
-				myprintf("44206: cannot write on %s\n",checktxt.c_str());
-				errors=2;
+				myprintf("44206: cannot write on ");
+				printUTF8(checktxt.c_str());
+				myprintf("\n");
+				return 2;
 			}
 			else
 			{	
-
-			
-				///fprintf(myoutput,"MD5: %s [%21s] %s",hashreloaded.c_str(),migliaia(larghezzain),g_archive.c_str());
 				fprintf(myoutput,"%s %s|[%21s] %s",stringtolower(hashreloaded).c_str(),checktxt.c_str(),migliaia(larghezzain),/*dateToString(true,now()).c_str(),*/g_archive.c_str());
 				fclose(myoutput);
 				if (flagverbose)
 					myprintf("44214: MD5: checksum file done\n");
 			}
-	
+			fclose(myoutput);
+		}			
+		
+		if (backuptxt!="")
+		{
+			if (flagverbose)
+				myprintf("61467: Doing backup stuff\n");
+			if (!fileexists(backuptxt.c_str()))
+			{
+				if (flagverbose)
+					myprintf("61376: Creating backup txt ");
+				printUTF8(backuptxt.c_str());
+				myprintf("\n");
+				FILE* backupfile=fopen(backuptxt.c_str(), "wb");
+				if (backupfile==NULL)
+				{
+					myprintf("61383: Cannot write on backupfile\n");
+					return 2;
+				}
+				fprintf(backupfile,"$zpaqfranz backupfile|1|MD5|%s|%s\n",dateToString(true,now()).c_str(),archive.c_str());
+				fclose(backupfile);
+			}
+
+			if (fileexists(backuptxt.c_str()))
+			{
+				if (!iszpaqfranzfile(backuptxt,"$zpaqfranz backupfile|"))
+				{
+					myprintf("61431: Does not seems a zpaqfranz's backup\n");
+					return 2;
+				}
+				myprintf("61367: Updating backup txt ");
+				printUTF8(backuptxt.c_str());
+				myprintf("\n");
+				
+				franz_do_hash dummyquick("QUICK");
+				string quickhash=dummyquick.filehash(g_archive,false,startverify,larghezzain);
+
+				FILE* backupfile=fopen(backuptxt.c_str(), "rb");
+				if (backupfile==NULL)
+				{
+					myprintf("61377: Cannot append on backupfile\n");
+					return 2;
+				}
+				char line[65536];
+				string linea="";
+				if (!fgets(line, sizeof(line), backupfile))
+				{
+					myprintf("61384: failed reading first line\n");
+					return 2;
+				}
+				linea=line;
+				if (linea.size()==0)
+				{
+					myprintf("61390: first line empty\n");
+					return 2;
+				}
+				if (mypos("$zpaqfranz backupfile|",linea)==-1)
+				{
+					myprintf("61396: Abort: first line is strange %s\n",linea.c_str());
+					return 2;
+				}
+				fclose(backupfile);
+				backupfile=fopen(backuptxt.c_str(), "a");
+				if (backupfile==NULL)
+				{
+					myprintf("61403: Cannot append on backupfile\n");
+					return 2;
+				}
+				fprintf(backupfile,"%s %s|[%21s] <%s> %s\r\n",stringtolower(hashreloaded).c_str(),checktxt.c_str(),migliaia(larghezzain),quickhash.c_str(),g_archive.c_str());
+				fclose(backupfile);
+			}
+			else
+			{
+				myprintf("61426: gurone, aborting!\n");
+				return 2;
+			}
 		}
 	}
 	if (buf!=NULL)
@@ -61371,9 +62165,10 @@ char zsfx_mime64[]=
 string zsfx_hash="ERRORE";
 #endif
 
+
+
 int Jidac::benchmark()
 {
-
 	string myname=getuname();
 	myprintf("uname %s\n",myname.c_str());
 	myprintf("full exename seems <<%s>>\n",fullzpaqexename.c_str());
@@ -61529,6 +62324,13 @@ int Jidac::benchmark()
 			franz_free(buffer32bit);
 			return 1;
 		}
+		
+	if (thehashes.size()==13)
+		if (flaghw)
+		{
+			myprintf("61522: HW disabled, because franzomips. Choose one to keep (ex -sha256)\n");
+			flaghw=false;
+		}
 	vector<s_benchmark> 			vettorerisultati;     
 	vector<tparametribenchmark> 	vettoreparametribenchmark; // pthread
 	myprintf("Benchmarks: ");
@@ -61669,96 +62471,173 @@ string stringtosomething(const string i_input,callback_issomething i_check)
 	return onlysomething;
 }
 
-string	Jidac::get_lastfilename(string i_file)
+// just a bit of recursion
+bool jollymatch(const char* i_pattern, const char* i_thestring)
 {
+    if ( (*i_pattern=='\0') && (*i_thestring=='\0'))
+        return true;
+    if (*i_pattern=='*')
+	{
+        while (*(i_pattern+1)=='*')
+            i_pattern++;
+	}
+	if ((*i_pattern=='*') && (*(i_pattern+1)!='\0') && (*i_thestring=='\0'))
+        return false;
+	if ((*i_pattern=='?') || (*i_pattern==*i_thestring))
+        return jollymatch(i_pattern+1,i_thestring+1);
+	if (*i_pattern=='*')
+		return jollymatch(i_pattern+1,i_thestring) || jollymatch(i_pattern,i_thestring+1);
+	return false;
+}
+
+
+/*
+_Bool wildcard_strcmp(char *line, char *pattern)
+{
+    _Bool wildcard = 0;
+    char *placeholder;
+
+    do
+    {
+        if ((*pattern == *line) || (*pattern == '?'))
+        {
+            line++;
+            pattern++;
+        }
+        else if (*pattern == '*')
+        {
+            if (*(++pattern) == '\0')
+            {
+                return 1;
+            }
+            wildcard = 1;
+        }
+        else if (wildcard)
+        {
+            if (pattern == placeholder)
+            {
+                line++;
+            }
+            else
+            {
+                pattern = placeholder;
+            }
+        } 
+        else
+        {
+            return 0;
+        }
+    } while (*line);
+
+    if (*pattern == '\0')
+    {
+        return 1;
+    }
+    else
+    {
+        return 0;
+    }
+}
+
+int main()
+{
+    char string[200] = "foobarfoobar";
+    char pattern[200] = "fo?*barfoo*";
+
+    if (wildcard_strcmp(string, pattern))
+    {
+        printf("Match\n");
+    }
+    else
+    {
+        printf("No Match\n");
+    }
+
+    return 0;
+}
+*/
+string	Jidac::get_lastfilename(string i_file,int64_t& o_totalfilesize)
+{
+	o_totalfilesize=0;
 	if (i_file=="")
 	{
 		myprintf("60537: empty filename\n");
 		return "";
 	}
-	if (!strrchr(i_file.c_str(), '?'))
+	if (!isjolly(i_file.c_str()))
 	{
-		myprintf("60542: no jolly\n");
+		myprintf("60542: no jolly (you must insert some kind of ? sequence)\n");
 		return i_file;
 	}
 	if (flagdebug)
 	{
 		myprintf("60541: Jolly in archivefile!\n");
-		myprintf("Searching for jolly archive(s) in <<%s>>\n",i_file.c_str());
+		myprintf("62517: Searching for jolly archive(s) in <<%s>>\n",i_file.c_str());
 	}
-	g_bytescanned	=0;
-	g_filescanned	=0;
-	g_worked		=0;
-	flagskipzfs		=true;  // strip down zfs
-	DTMap		thedt;
-	scandir(false,thedt,i_file,false);
-	printbar(' ',false);
-	myprintf("\r");
+	
+	DTMap thedt;
+	flagforcezfs=true;
+	g_arraybytescanned.clear();
+	g_arrayfilescanned.clear();
+	g_arraybytescanned.push_back(0);
+	g_arrayfilescanned.push_back(0);
+	string onlypath=extractfilepath(i_file);
+	string onlyname=extractfilename(i_file);
+	myreplace(onlyname,"????????.zpaq","");
+	myreplace(onlyname,".zpaq","");
+	
+	if (flagdebug)
+	{
+		myprintf("62538: scan by   %s\n",onlypath.c_str());
+		myprintf("62539: filename  %s\n",i_file.c_str());
+		myprintf("62540: onlyname  %s\n",onlyname.c_str());
+	}
+	myscandir(0,thedt,onlypath.c_str(),false,false);
+	if (!flagpakka)
+	{
+		printbar(' ',false);
+		myprintf("\r");
+	}
+	
+	if (flagdebug)
+		myprintf("62548: scanned %s\n",migliaia(thedt.size()));
+	
 	if (thedt.size()==0)
 	{
 		myprintf("60553: no archive => quit\n");
 		return "";
 	}
 	if (flagdebug)
-	myprintf("60560:Founded %s files(s), sorting\n",migliaia(thedt.size()));
-
-	int parts=0;  // number of existing parts in multipart
-	string part0=subpart(i_file, 0);
-	if (part0!=i_file) 
-	{  // multi-part?
-		for (int i=1;; ++i) 
-		{
-			string partname=subpart(i_file, i);
-			if (partname==part0) 
-				error("60568: too many archive parts");
-			if (flagdebug)
-			myprintf("60575: %04d %s\n",parts,partname.c_str());
-			if (!fileexists(partname.c_str()))
-			{
-				if (flagdebug)
-					myprintf("60573: Non exist %08d %s\n",parts,partname.c_str());
-				break;
-			}
-			parts++;
-		}
-	}
-	if (flagdebug)
-		myprintf("60580: expected last part %08d\n",parts);
+		myprintf("60560:Founded %s files(s), sorting\n",migliaia(thedt.size()));
+	
 	vector<string> filenamearray;
 	for (DTMap::iterator p=thedt.begin(); p!=thedt.end(); ++p) 
 	{
-		string temp=extractfilename(p->first);
-		filenamearray.push_back(temp);
+		string temp		=extractfilename(p->first);
+		if (isbackuppart(temp,onlyname))
+		{
+			filenamearray.push_back(temp);
+			o_totalfilesize+=p->second.size;
+		}
 	}
-	std::sort(filenamearray.begin(),filenamearray.end());
-	for (unsigned int i=0;i<filenamearray.size();i++)
+	if (filenamearray.size()==0)
 	{
-		string 	ssolonumeri="";
-		string temp=filenamearray[i];
-		
-		unsigned int j=0;
-		while ((j<temp.size()) && (!isdigit(temp[j])))
-			j++;
-		
-		while ((j<temp.size()) && (isdigit(temp[j])))
-		{
-			ssolonumeri+=temp[j];
-			j++;
-		}
 		if (flagdebug)
-			myprintf("60610: <<%s>>\n",ssolonumeri.c_str());	
-		int64_t solonumeri=myatoll(ssolonumeri.c_str());
-		if (flagdebug)
-		myprintf("%08d => %08d %s\n",i+1,solonumeri,filenamearray[i].c_str());
-		if ((i+1)!=solonumeri)
-		{
-			myprintf("60608: ERROR IN ENUM %s!\n",i_file.c_str());
-			return "";
-		}
-	}
-	string srisultato=extractfilepath(i_file)+filenamearray[filenamearray.size()-1];
-	if (!fileexists(srisultato))
+			myprintf("62602: No single match\n");
 		return "";
+	}
+	
+	std::sort(filenamearray.begin(),filenamearray.end());
+	
+	string thelastone=filenamearray[filenamearray.size()-1];
+
+	string srisultato=extractfilepath(i_file)+thelastone;
+	if (!fileexists(srisultato))
+	{
+		if (flagdebug)
+			myprintf("62598: srisultato does not exits |%s|\n",srisultato.c_str());
+		return "";
+	}
 	return srisultato;
 }
 
@@ -61780,7 +62659,8 @@ int Jidac::summa()
 		string thelastzpaq=files[0];
 		if (strrchr(files[0].c_str(), '?'))
 		{
-			thelastzpaq=get_lastfilename(files[0]);
+			int64_t dummysize;
+			thelastzpaq=get_lastfilename(files[0],dummysize);
 			myprintf("60648: the lastzpaq |%s|\n",thelastzpaq.c_str());
 		}
 		string thelasttxt="";
@@ -61800,7 +62680,8 @@ int Jidac::summa()
 			}
 		if (strrchr(checktxt.c_str(), '?'))
 		{
-			checktxt=get_lastfilename(checktxt);
+			int64_t dummysize;
+			checktxt=get_lastfilename(checktxt,dummysize);
 			myprintf("60672: The lasttxt |%s|\n",checktxt.c_str());
 		}	
 
@@ -62204,7 +63085,6 @@ int Jidac::summa()
 				////myprintf("60224: franz_do_hash\n");
 	
 			franz_do_hash dummy(g_thechosenhash);
-	
 			string risu=dummy.filehash(myfiles[i],false,inizio,total_size);
 			s_stringpair mypair;
 			mypair.first=myfiles[i];
@@ -62389,18 +63269,23 @@ int Jidac::summa()
 		{
 			if (summary<0)
 			{
-				myprintf("|%s: %s ",g_thechosenhash_str.c_str(),vec[i].second.c_str());
-				if (p != edt.end())
+				if (flagpakka)
+					myprintf("%s ",stringtolower(vec[i].second).c_str());
+					
+				else
 				{
-					myprintf("[%19s] ",migliaia(p->second.size));
+					myprintf("|%s: %s ",g_thechosenhash_str.c_str(),vec[i].second.c_str());
+					if (p != edt.end())
+						myprintf("[%19s] ",migliaia(p->second.size));
 				}
 			}
 			if (!flagnosort)
 			{			
 				if (i==0)
 				{	
-					if (summary<0)
-						myprintf("    ");
+					if (!flagpakka)
+						if (summary<0)
+							myprintf("    ");
 				}	
 				else
 				{
@@ -62418,14 +63303,16 @@ int Jidac::summa()
 					}
 					else
 					{
-						if (summary<0)
-							myprintf("    ");
+						if (!flagpakka)
+							if (summary<0)
+								myprintf("    ");
 					}
 				}
 			}
 			if (summary<0)
 			{
-				myprintf("|");
+				if (!flagpakka)
+					myprintf("|");
 				printUTF8(filename.c_str());
 				myprintf("\n");
 			}
@@ -62482,6 +63369,7 @@ int Jidac::summa()
 		if (flagforce)
 			if (deletedfiles)
 				myprintf("Duplicated deleted files %s for %s bytes\n",migliaia2(deletedfiles),migliaia(deletedsize));
+	
 	return errori;
 }
 
@@ -64041,7 +64929,7 @@ int Jidac::extractqueue2(int i_chunk,int i_chunksize)
 		vettoreramtodisk[i%mythreads].data				.push_back(mydata[i]);
 		vettoreramtodisk[i%mythreads].filecrc			.push_back(myfilecrc[i]);
 	}
-	int totfile=0;
+	unsigned int totfile=0;
 	for (unsigned int i=0;i<mythreads;i++)
 	{
 		if (flagdebug)
@@ -64054,7 +64942,12 @@ int Jidac::extractqueue2(int i_chunk,int i_chunksize)
 	void *status;
 	pthread_attr_init(&attr);
 	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
-	assert(myfiles.size()==totfile);
+	if (myfiles.size()!=totfile)
+	{
+		myprintf("64043: guru myfiles.size != totfile\n");
+		seppuku();
+		exit(0);
+	}
 	printbar(' ',false);
 	myprintf("\r");
 	if (flagverbose)
@@ -66061,7 +66954,7 @@ int Jidac::oneonone()
 	return errors;
 }
 
-int64_t Jidac::franzparallelhashfiles(string i_hashtype,int64_t i_totalsize,vector<string> i_thefiles,vector<std::pair<string,string> >& o_hashname)
+int64_t Jidac::franzparallelhashfiles(const string i_hashtype,int64_t i_totalsize,vector<string> i_thefiles,vector<std::pair<string,string> >& o_hashname)
 {
 	int64_t startscan=mtime();
 	unsigned int mythreads=howmanythreads;
@@ -66276,14 +67169,7 @@ Defined by this header:
 # include <stdbool.h>
 #endif
 
-#ifdef __cplusplus
-extern "C"
-{
-# ifndef PDC_PP98
-#  define bool _bool
-# endif
-#endif
-
+/*
 #ifdef NO_STDINT_H
    #define uint64_t unsigned __int64
    #define uint32_t unsigned long
@@ -66296,7 +67182,7 @@ extern "C"
       #define uint64_t unsigned long long
    #endif
 #endif
-
+*/
 /*----------------------------------------------------------------------
  *
  *  Constants and Types
@@ -68106,7 +68992,7 @@ ignored.       */
 # ifndef PDC_PP98
 #  undef bool
 # endif
-}
+
 #endif
 
 #endif  /* __PDCURSES__ */
@@ -83818,4 +84704,814 @@ int Jidac::guilist()
 
 #endif /// GUI
 
+int Jidac::last()
+{
+	if (archive=="")
+	{
+		myprintf("84627: Need an archive name\n");
+		return 2;
+	}
+	flagpakka	=true; //suppress every output
+	flagnoeta	=true;
+	flagstdout	=true;
+	int64_t	dummy	=0;
+	string ultimo	=get_lastfilename(archive,dummy);
+	if (ultimo=="")
+		return 2;
+	printUTF8(extractfilename(ultimo).c_str());
+	myprintf("\n");
+	return 0;
+}
 
+int Jidac::last2()
+{
+	if (files.size()!=1)
+	{
+		myprintf("83823: last2 require 1 file \n");
+		return 2;
+	}
+	int risultato=0;
+	if (files.size()==1) /// single file, last 2 lines
+	{
+		int riga=0;
+		string filename=files[0];
+		if (!fileexists(filename))
+		{
+			myprintf("83851: error file does not exists ");
+			printUTF8(filename.c_str());
+			myprintf("\n");
+			return 2;
+		}
+		
+		FILE* myfile = freadopen(filename.c_str());
+		if (myfile==NULL)
+		{
+			myprintf("83861: guru cannot open the file\n");
+			return 2;
+		}
+		
+		char line[65536];
+		
+		while (fgets(line, sizeof(line), myfile))
+		{
+			if (flagdebug)
+				myprintf("83856: %08d %s", riga,line); 
+			riga++;	
+		}
+		if (riga>0)
+		{
+			fseeko(myfile,0,SEEK_SET);
+			int penultima=riga-2;
+			riga=0;
+			while (fgets(line, sizeof(line), myfile) && (riga!=penultima))
+			{
+				if (flagdebug)
+					myprintf("83868: %08d %08d %s", riga,penultima,line); 
+				riga++;	
+			}
+			string spenultima	="";
+			string sultima		="";
+			spenultima			=line;
+			fgets(line, sizeof(line), myfile);
+			sultima				=line;
+
+			for (unsigned int i=0;i<spenultima.size();i++)
+				if ((spenultima[i]==10) || (spenultima[i]==13))
+					spenultima[i]=' ';
+
+			for (unsigned int i=0;i<sultima.size();i++)
+				if ((sultima[i]==10) || (sultima[i]==13))
+					sultima[i]=' ';
+
+			myprintf("83876:      |%s\n",spenultima.c_str());
+			myprintf("83877:      |%s\n",sultima.c_str());
+						
+			string hashpenultima="";
+			for (unsigned int i=0;i<spenultima.size();i++)
+				if ((isdigit(spenultima[i])) || (isalpha(spenultima[i])))
+					hashpenultima+=spenultima[i];
+				else
+					break;
+			
+			string hashultima="";
+			for (unsigned int i=0;i<sultima.size();i++)
+				if ((isdigit(sultima[i])) || (isalpha(sultima[i])))
+					hashultima+=sultima[i];
+				else
+					break;
+			hashpenultima=stringtolower(hashpenultima);
+			hashultima=stringtolower(hashultima);
+			myprintf("83896: n-1  |%s|\n",hashpenultima.c_str());
+			myprintf("83897: last |%s|\n",hashultima.c_str());
+			if (hashultima=="")
+				risultato=2;
+			else
+			{
+				if (hashpenultima!=hashultima)
+					risultato=2;
+			}
+		}
+		fclose(myfile);
+	}
+	return risultato;
+}
+int64_t Jidac::getzpaqsum(string i_archive,int64_t& o_usize,int64_t& o_allsize,int64_t& o_dtsize,int64_t& o_compressedsize)
+{
+	o_usize				=0;
+	o_allsize			=0;
+	o_dtsize			=0;
+	o_compressedsize	=0;
+	int errors			=0;
+	g_optional			="versum"; //force isselected
+
+	getpasswordifempty();
+	jidacreset();
+
+	int64_t csize=read_archive(NULL,i_archive.c_str(),&errors,1); /// AND NOW THE MAGIC ONE!
+	myprintf("\n");
+	int64_t usize=0;
+	for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p)
+		if (p->first!="" && (!isdirectory(p->first)))
+			usize+=p->second.size;
+	int64_t 	allsize=0;
+	for (DTMap::const_iterator p=dt.begin(); p!=dt.end(); ++p) 
+		if (p->second.date) 
+			for (unsigned j=0; j<p->second.ptr.size(); ++j) 
+			{
+				unsigned k=p->second.ptr[j];
+				if (k>0 && k<ht.size()) 
+					if (ht[k].usize>=0) 
+						allsize+=ht[k].usize;
+			}	
+	o_usize				=usize;
+	o_allsize			=allsize;
+	o_dtsize			=dt.size();
+	o_compressedsize	=(csize+dhsize-dcsize);
+	if (flagdebug)
+	{
+		myprintf("84723: usize      : %21s\n",migliaia(usize));
+		myprintf("84724: allsize    : %21s\n",migliaia(allsize));
+		myprintf("84725: dtsize     : %21s\n",migliaia(dt.size()));
+		myprintf("84726: compressed : %21s\n",migliaia((csize+dhsize-dcsize)));
+	}
+	return csize;
+}
+
+bool	readfiletoarray(string i_filename,vector<string>& o_lines)
+{
+	o_lines.clear();
+	
+	if (!fileexists(i_filename.c_str()))
+	{
+		myprintf("85073: cannot find ");
+		printUTF8(i_filename.c_str());
+		myprintf("\n");
+		return false;
+	}
+	FILE* myfile = freadopen(i_filename.c_str());
+	if (myfile==NULL)
+	{
+		myprintf("85083: cannot open file ");
+		printUTF8(i_filename.c_str());
+		myprintf("\n");
+		return false;
+	}
+	char 	line[65536];
+	string 	linea	="";
+	while (fgets(line, sizeof(line), myfile))
+	{
+		linea=line;
+		if (flagdebug)
+			myprintf("85102: line %s\n",linea.c_str());
+		myreplaceall(linea,std::string(1,10),"");
+		myreplaceall(linea,std::string(1,13),"");
+		o_lines.push_back(linea);
+	}
+	fclose(myfile);
+	return true;
+}
+int Jidac::testbackup()
+{
+	flagquick=true;
+	if (flagverify)
+		flagquick=false;
+	
+	if (files.size()!=1)
+	{
+		myprintf("84029: estbackup require one file parameter\n");
+		return 2;
+	}
+	if (isjolly(files[0]))
+	{
+		myprintf("84364: Do not use ? for backups\n");
+		return 2;
+	}
+	if (tofiles.size()>1)
+	{
+		myprintf("84034: testbackup require zero or one -to (where are the zpaqs?)\n");
+		return 2;
+	}
+	if (tofiles.size()==0)
+		tofiles.push_back(extractfilepath(files[0]));
+
+	string 	indexname	=extractfilepath(files[0])+prendinomefileebasta(files[0])+"_00000000_backup.index";
+	string 	filename	=extractfilepath(files[0])+prendinomefileebasta(files[0])+"_00000000_backup.txt";
+	string	firstzpaq	=extractfilepath(files[0])+prendinomefileebasta(files[0])+"_00000001.zpaq";
+	string	zpaqchunks	=extractfilepath(files[0])+prendinomefileebasta(files[0])+"_????????.zpaq";
+	
+	string 	onlyname=extractfilename(files[0]);
+	myreplace(onlyname,"????????.zpaq","");
+	myreplace(onlyname,".zpaq","");
+		
+	if (!exists(firstzpaq.c_str()))
+	{
+		myprintf("84398: Cannot find first zpaq ");
+		printUTF8(firstzpaq.c_str());
+		myprintf("\n");
+		return 2;
+	}
+
+	if (!exists(filename.c_str()))
+	{
+		myprintf("84406: Cannot find backup file ");
+		printUTF8(filename.c_str());
+		myprintf("\n");
+		return 2;
+	}
+	
+	int64_t starttime=mtime();
+	printbar('=');
+	multipart archivechunks(zpaqchunks);
+	if (archivechunks.isgood)
+		myprintf("84424: Multipart backup looks good\n");
+	else
+	{
+		myprintf("84426: Multipart backup NOT GOOD\n");
+		return 2;
+	}
+	myprintf("84040: Loading backupfile... ");
+	printUTF8(filename.c_str());
+	myprintf("\n");
+	if (!fileexists(filename))
+	{
+		myprintf("84044: backup file does not exists\n");
+		return 2;
+	}
+	if (!iszpaqfranzfile(filename,"$zpaqfranz backupfile|"))
+	{
+		myprintf("84097: File does not seems zpaqfranz's backup\n");
+		return 2;
+	}
+	FILE* myfile = freadopen(filename.c_str());
+	if (myfile==NULL)
+	{
+		myprintf("83861: guru cannot open the backup\n");
+		return 2;
+	}
+	char 	line[65536];
+	int		riga	=0;	
+	int		maxriga	=0;
+	string 	linea	="";
+	
+	while (fgets(line, sizeof(line), myfile))
+		maxriga++;
+	fseeko(myfile,0,SEEK_SET);
+	
+	if (g_rangefrom!=0)
+		myprintf("84578: Rangefrom %08d\n",g_rangefrom);
+	if (g_rangeto!=0)
+		myprintf("84579: Rangeto   %08d\n",g_rangeto);
+		
+	int	minimo	=g_rangefrom;
+	int massimo	=g_rangeto;
+	if (minimo<1)
+		minimo=1;
+	if ((massimo>maxriga-1) || (massimo<minimo))
+		massimo=maxriga-1;
+	
+	myprintf("84190: Rows in backup %08d from %08d to %08d\n",maxriga-1,minimo,massimo);
+	vector<string> 	filenames;
+	vector<int64_t>	filesizes;
+	vector<string>	filehashes;
+	vector<string>	filequickhashes;
+	vector<int64_t>	filenumbers;
+	while (fgets(line, sizeof(line), myfile))
+	{
+		linea=line;
+		if (flagdebug)
+			myprintf("84272: line %s\n",linea.c_str());
+		if (linea.size()<40)
+		{
+			myprintf("84446: getted a too small line |%s| |%s|\n",migliaia(linea.size()),linea.c_str());
+			return 2;
+		}
+		if ((riga>=minimo) && (riga<=massimo))
+		{
+			string thehash="";
+			unsigned int i=0;
+			while (i<linea.size())
+			{
+				if ((isdigit(linea[i])) || (isalpha(linea[i])))
+					thehash+=linea[i++];
+				else
+					break;
+			}
+			if (flagdebug)
+				myprintf("84128: The hash |%s|\n",thehash.c_str());
+			if (thehash.size()!=32)
+			{
+				myprintf("84131: Hash length not good\n");
+				return 2;
+			}
+			if (linea[i]!=' ')
+			{
+				myprintf("84131: Space not found\n");
+				return 2;
+			}
+			i++;
+			string thefilename="";
+			while (i<linea.size())
+				if (linea[i]!='|')
+					thefilename+=linea[i++];
+				else
+					break;
+			/// this is the file.txt, discard
+			if (flagdebug)
+			{
+				myprintf("84153: The txt <<");
+				printUTF8(thefilename.c_str());
+				myprintf(">>\n");
+			}
+			i++;
+			if (linea[i]!='[')
+			{
+				myprintf("84161: File len marker KO\n");
+				return 2;
+			}
+			string sfilesize="";
+			i++;
+			while (i<linea.size())
+			{
+				if (linea[i]==']')
+					break;
+				if (isdigit(linea[i]))
+					sfilesize+=linea[i];
+				i++;
+			}
+			uint64_t filesize=myatoll(sfilesize.c_str());
+			if (flagdebug)
+				myprintf("84173: filesize |%s|\n",migliaia(filesize));
+			i++;
+			i++;
+			if (linea[i]!='<')
+			{
+				myprintf("84336: < KO\n");
+				return 2;
+			}
+			i++;
+			string thequickhash="";
+			while (i<linea.size())
+			{
+				if (ishex(linea[i]))
+					thequickhash+=linea[i];
+				else
+					break;
+				i++;
+			}
+			if (flagdebug)
+				myprintf("84357: the quickhash |%s|\n",thequickhash.c_str());
+			
+			i++;
+			if (linea[i]!=' ')
+			{
+				myprintf("84185: Space filename KO\n");
+				return 2;
+			}
+			i++;
+			thefilename="";
+			while (i<linea.size())
+			{
+				if ((linea[i]!=10) && (linea[i]!=13))
+					thefilename+=linea[i];
+				i++;
+			}
+			if (flagdebug)
+			{
+				myprintf("84191: The filename <<");
+				printUTF8(thefilename.c_str());
+				myprintf(">>\n");
+			}
+			int	thepartnumber=getpartnumber(thefilename);
+			if (thepartnumber<0)
+				myprintf("84703: Houston thefilename is not ok %s\n",thefilename.c_str());
+			else
+			{
+				if (flagdebug)
+					myprintf("84712: zpaq piece %s\n",migliaia(thepartnumber));
+				filenumbers.		push_back(thepartnumber);
+				filenames.			push_back(thefilename);
+				filequickhashes.	push_back(thequickhash);
+				filehashes.			push_back(thehash);
+				filesizes.			push_back(filesize);
+			}
+		}
+		riga++;	
+	}
+	fclose(myfile);
+	
+	if ((!flagverify) && (!flagquick))
+	{
+		myprintf("84283: First stage syntax check: OK\n");
+		return 0;
+	}
+	string percorso=tofiles[0];
+	if (!isdirectory(percorso))
+			percorso+="/";
+	int64_t	totalsize=0;
+	for (unsigned int i=1;i<=filenames.size();i++)
+	{
+		if (i<filenames.size()-1)
+		{
+			if (flagverbose)
+				myprintf("84601: Working on %08d  %08d %s\n",i,filenumbers[i],filenames[i].c_str());
+			if (filenumbers[i]+1!=filenumbers[i+1])
+			{
+				string 	i_candidato		=extractfilename(filenames[i]);
+				string 	i_numerini_i	=i_candidato.substr(i_candidato.size()-13,8);
+				int64_t inumerini		=myatoll(i_numerini_i.c_str())+1;
+				
+				string 	ip_candidato	=extractfilename(filenames[i+1]);
+				string 	ip_numerini_i	=ip_candidato.substr(ip_candidato.size()-13,8);
+				int64_t ipnumerini		=myatoll(ip_numerini_i.c_str())-1;
+
+				string partetestuale=extractfilename(filenames[i]);
+				partetestuale=partetestuale.substr(0,partetestuale.size()-13);
+				
+				myprintf("84749: We have a hole in part numbers [%s..%s], checking if 0-bytes\n",migliaia(inumerini),migliaia2(ipnumerini));
+				for (unsigned int k=inumerini;k<=ipnumerini;k++)
+				{
+					char buffer[16];
+					snprintf(buffer,sizeof(buffer),"%08d",k);
+					string fileinthehole=extractfilepath(filenames[i])+partetestuale+buffer+".zpaq";
+					myprintf("84767: File in the hole %s\n",fileinthehole.c_str());
+					if (!fileexists(fileinthehole.c_str()))
+					{
+						myprintf("84769: Cannot find expected 'hole' ");
+						printUTF8(fileinthehole.c_str());
+						myprintf("\n");
+						return 2;
+					}
+					if (prendidimensionefile(fileinthehole.c_str())!=0)
+					{
+						myprintf("84776: Expected file not 0-bytes long ");
+						printUTF8(fileinthehole.c_str());
+						myprintf("\n");
+						return 2;
+					}
+				}
+			}
+		}
+		string solonomefile=extractfilename(filenames[i-1]);
+		string filedefinitivo=percorso+solonomefile;
+		if (searchfrom!="")
+			replace(filedefinitivo,searchfrom,replaceto);
+					
+		myprintf("84221: Initial check part <<");
+		printUTF8(filedefinitivo.c_str());
+		myprintf(">>\r");
+			
+		if (!fileexists(filedefinitivo.c_str()))
+		{
+			myprintf("\n84221: File does not exists\n");
+			return 2;
+		}
+		int64_t larghezzain=prendidimensionefile(filedefinitivo.c_str());
+		if (larghezzain!=filesizes[i-1])
+		{
+			myprintf("\n84218: Filesize does not match real %s vs expected %s\n",migliaia(larghezzain),migliaia2(filesizes[i-1]));
+			return 2;
+		}
+		filenames[i-1]=filedefinitivo;
+		totalsize+=larghezzain;
+	}
+	printbar(' ',true);
+	vector<mycoppia> couple_hashname;
+	if (flagchecktxt)
+		if (checktxt!="")
+		{
+			printbar('*');
+			myprintf("85139: COMPARING CHECKTXT HASHES VS INDEX TXT\n");
+			string md5file=checktxt;
+			if (!fileexists(md5file.c_str()))
+			{
+				myprintf("85072: checksum file not found ");
+				printUTF8(md5file.c_str());
+				myprintf("\n");
+				return 2;
+			}
+			vector<string> arraymd5;
+			if (!readfiletoarray(md5file,arraymd5))
+			{
+				myprintf("85129: I quit, cannot read to array!\n");
+				return 2;
+			}
+			unsigned int	trovati				=0;
+			unsigned int	nontrovati			=0;
+			unsigned int	trovatihashok		=0;
+			unsigned int	trovatihashkaputt	=0;
+			for (unsigned int i=0;i<arraymd5.size();i++)
+			{
+				if (flagdebug)
+					myprintf("85135: %08d %s\n",i,arraymd5[i].c_str());
+
+				string	theline		=arraymd5[i];
+				string 	thehash		="";
+				string	thefilename	="";
+				unsigned int j=0;
+				while (j<theline.size())
+				{
+					if (ishex(theline[j]))
+						thehash+=theline[j];
+					else
+						break;
+					j++;
+				}
+				if (thehash.size()==32)
+				{
+					if (theline[j]!=' ')
+					{
+						myprintf("85164: no space after hash\n");
+						thehash="";
+					}
+					else
+					{
+						j++;
+						while (j<theline.size())
+							thefilename+=theline[j++];
+						if (thefilename.size()>0)
+						{
+#ifdef _WIN32
+							thefilename		=stringtolower(thefilename);
+#endif
+							if (isbackuppart(thefilename,onlyname))
+								if (getpartnumber(thefilename)>0)
+									couple_hashname.push_back(std::pair<string,string>(stringtolower(thehash),wintolinuxpath(thefilename)));
+						}
+					}
+				}
+				else
+					thehash="";
+			}
+		
+			///myprintf("85187: Found %s rows matched\n",migliaia(couple_hashname.size()));
+			for (unsigned int i=0;i<couple_hashname.size();i++)
+			{
+				if (flagverbose)
+					myprintf("%08d |%s| |%s|\n",i,couple_hashname[i].first.c_str(),couple_hashname[i].second.c_str());
+				string filename=couple_hashname[i].second;
+				bool trovatodopotutto=false;
+				
+				for (unsigned int j=0;j<filenames.size();j++)
+				{
+					if (extractfilename(filename)==extractfilename(filenames[j]))
+					{
+						trovatodopotutto=true;
+						trovati++;
+						if (flagverbose)
+							myprintf("85204: EUREKA : ");
+						if (couple_hashname[i].first==filehashes[j])
+						{
+							if (flagverbose)
+							myprintf("HASH MATCH <<");
+							trovatihashok++;
+						}
+						else
+						{
+							if (flagverbose)
+								myprintf("HASH KAPUTT %s %s <<",couple_hashname[i].first.c_str(),filehashes[j].c_str());
+							trovatihashkaputt++;
+						}
+						if (flagverbose)
+						{
+							printUTF8(extractfilename(filename).c_str());
+							myprintf(">>\n");
+						}
+					}	
+				}
+				if (!trovatodopotutto)
+				{
+					nontrovati++;
+					myprintf("85231: Cannot find ");
+					printUTF8(extractfilename(filename).c_str());
+					myprintf("\n");
+				}
+				
+			}
+			myprintf("85212: %8s vs exp %8s :",migliaia(trovati),
+			migliaia2(couple_hashname.size()));
+			if (trovati==couple_hashname.size())
+				myprintf("THIS IS GOOD\n");
+			else
+				myprintf("NOT GOOD!\n");
+			
+			myprintf("85231: HASH OK     %12s :",migliaia(trovatihashok));
+			if (trovatihashok==trovati)
+				myprintf("THIS IS GOOD\n");
+			else
+				myprintf("NOT GOOD!\n");
+			
+			myprintf("85231: HASH KAPUTT %12s :",migliaia(trovatihashkaputt));
+			if (trovatihashkaputt==0)
+				myprintf("THIS IS GOOD\n");
+			else
+				myprintf("NOT GOOD!\n");
+			
+			myprintf("85231: NOT FOUND   %12s :",migliaia(nontrovati));
+			if (nontrovati==0)
+				myprintf("THIS IS GOOD\n");
+			else
+				myprintf("NOT GOOD!\n");
+			
+			if ((trovatihashok!=trovati) || (trovati!=couple_hashname.size() || (nontrovati>0)))
+			{
+				myprintf("85234: Something is wrong, exit (use -verbose or - debug)\n");
+				return 2;
+			}
+			printbar('!');
+		}
+	if (flagquick)
+		myprintf("84596: Quick hash check\n");
+	else
+		myprintf("84240: Now FULL hash check\n");
+	vector<mycoppia> tobehasheddest_hashname;
+
+	string myhashalgo="MD5";
+	if (flagquick)
+		myhashalgo="QUICK";
+	
+	franzparallelhashfiles(myhashalgo,totalsize,filenames,tobehasheddest_hashname);
+
+	std::sort(tobehasheddest_hashname.begin(), tobehasheddest_hashname.end(), compare_second);
+	printbar(' ',true);
+	if (flagverbose)
+		myprintf("84258: Report\n");
+
+	bool flagallok=true;
+
+	for (unsigned int i=0;i<tobehasheddest_hashname.size();i++)
+	{
+		if (flagverbose)
+		{
+			myprintf("63920: ");
+			printUTF8(tobehasheddest_hashname[i].second.c_str());
+			myprintf(":");
+		}
+		if (flagverbose)
+		{
+			myprintf("%s:<",myhashalgo.c_str());
+			printUTF8(filehashes[i].c_str());
+			myprintf(">");
+		}
+		string	hashfromfile="";
+		if (flagquick)
+			hashfromfile=stringtolower(filequickhashes[i]);
+		else
+			hashfromfile=stringtolower(filehashes[i]);
+			
+		if (hashfromfile!=stringtolower(tobehasheddest_hashname[i].first))
+		{
+			myprintf("KAPUTT!\n");
+			myprintf("84261: ERROR: real hash %s vs expected %s on ",tobehasheddest_hashname[i].first.c_str(),filehashes[i].c_str());
+			printUTF8(tobehasheddest_hashname[i].second.c_str());
+			myprintf("\n");
+			flagallok=false;
+		}
+		else
+		{
+			if (flagverbose)
+				myprintf("OK\n");
+		}
+	}
+	if (flagallok)
+	{
+		double velocita=totalsize/((mtime()-starttime+1)/1000.0);
+		myprintf("84287: Chunks checked OK: %s (%s @ %s/s)\n",migliaia(tobehasheddest_hashname.size()),
+		migliaia2(totalsize),
+		migliaia3(velocita)
+		);
+	}
+	else
+	{
+		myprintf("85118: *** ALREADY IN ERROR ***\n");
+	}
+	if (flagparanoid)
+	{
+		if (fileexists(indexname.c_str()))
+		{
+			bool matchok=true;
+			printbar('-');
+			int64_t	index_usize			=0;
+			int64_t index_allsize		=0;
+			int64_t	index_dtsize		=0;
+			int64_t	index_compressedsize=0;
+			getzpaqsum(indexname,index_usize,index_allsize,index_dtsize,index_compressedsize);
+			printbar('-');
+			int64_t	chunk_usize			=0;
+			int64_t chunk_allsize		=0;
+			int64_t	chunk_dtsize		=0;
+			int64_t	chunk_compressedsize=0;
+			getzpaqsum(zpaqchunks,chunk_usize,chunk_allsize,chunk_dtsize,chunk_compressedsize);
+		
+			myprintf("85135: dtsize     %21s [i] %21s [c]:",migliaia(index_dtsize),migliaia2(chunk_dtsize));
+			if (index_dtsize==chunk_dtsize)
+				myprintf("OK\n");
+			else
+			{
+				myprintf("ERROR\n");
+				matchok=false;
+			}
+			
+			myprintf("85135: usize      %21s [i] %21s [c]:",migliaia(index_usize),migliaia2(chunk_usize));
+			if (index_usize==chunk_usize)
+				myprintf("OK\n");
+			else
+			{
+				myprintf("ERROR\n");
+				matchok=false;
+			}
+			myprintf("85135: allsize    %21s [i] %21s [c]:",migliaia(index_allsize),migliaia2(chunk_allsize));
+			if (index_allsize==chunk_allsize)
+				myprintf("OK\n");
+			else
+			{
+				myprintf("ERROR\n");
+				matchok=false;
+			}
+			myprintf("85135: compressed %21s [i] %21s [c]:",migliaia(index_compressedsize),migliaia2(chunk_compressedsize));
+			
+			if (index_compressedsize==chunk_compressedsize)
+				myprintf("OK\n");
+			else
+			{
+				myprintf("ERROR\n");
+				matchok=false;
+			}
+			if (!matchok)
+			{
+				flagallok=false;
+				myprintf("85177: Index data != chunks. Wrong append? Manual update?\n");
+			}
+		}
+		else
+		{
+			myprintf("85060: index does not exists ");
+			printUTF8(indexname.c_str());
+			myprintf("\n");
+			flagallok=false;
+		}
+	}
+	if (flagallok)
+		return 0;
+	else
+		return 2;
+}
+int Jidac::backup()
+{
+	if (archive=="")
+	{
+		myprintf("84334: You need a non-empty archive name\n");
+		return 2;
+	}
+	if (strrchr(archive.c_str(), '?'))
+	{
+		myprintf("84339: Backup is for managed multipart, do not use ?\n");
+		return 2;
+	}
+	if (g_indexname!="")
+	{
+		myprintf("85088: -index must be empty (managed) |%s|\n",g_indexname.c_str());
+		return 2;
+	}
+	archive=extractfilepath(archive)+prendinomefileebasta(archive)+"_????????.zpaq";
+	printbar('+');
+	multipart archivechunks(archive);
+	if (archivechunks.isgood)
+		myprintf("84424: Multipart backup seems OK\n");
+	else
+	{
+		myprintf("84426: Multipart backup DOES NOT SEEMS GOOD!\n");
+		myprintf("84428: To prevent corruption no 'holes' in numeration allowed\n");
+		myprintf("84429: Manually fill with 0-bytes [ex touch] to bypass\n");
+		return 2;
+	}
+	if (flagverbose)
+	{
+		myprintf("84682: Last part ");
+		printUTF8(archivechunks.lastpart.c_str());
+		myprintf("\n");
+		myprintf("84683: Next part ");
+		printUTF8(archivechunks.nextpart.c_str());
+		myprintf("\n");
+	}
+	return add();
+}

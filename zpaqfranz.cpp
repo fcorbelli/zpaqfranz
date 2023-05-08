@@ -52,8 +52,8 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 */
 
-#define ZPAQ_VERSION "58.2g"
-#define ZPAQ_DATE "(2023-05-02)"  // cannot use __DATE__ on Debian!
+#define ZPAQ_VERSION "58.3c"
+#define ZPAQ_DATE "(2023-05-08)"  // cannot use __DATE__ on Debian!
 
 
 ///	optional align for malloc (sparc64) via -DALIGNMALLOC
@@ -986,7 +986,7 @@ Greetings
 18 Thanks to https://github.com/justinormont            for the proposed Homebrew install formula for macOS and x64 Linux
 19 Thanks to https://github.com/alebcay                 for coding the Homebrew install formula for macOS and x64 Linux
 20 Thanks to https://github.com/ZhongRuoyu				for __linux__ instead of older #defines
-
+21 Thanks to Coody user of encode.ru					for unexistent folder bug 
   _____ _   _  _____ _______       _      _      
  |_   _| \ | |/ ____|__   __|/\   | |    | |     
    | | |  \| | (___    | |  /  \  | |    | |     
@@ -10809,6 +10809,7 @@ vector<s_crc32block> 	g_crc32;
 vector<uint64_t> 		g_arraybytescanned;
 vector<uint64_t> 		g_arrayfilescanned;
 MAPPAERRORS g_errors;
+bool	g_flagcreating;
 char 	command;
 string	g_franzsnap;
 string 	g_vss_shadow;
@@ -39137,6 +39138,56 @@ string exec(const char* cmd)
 }
 #endif
 
+string tail(string const& i_source, size_t const i_length) 
+{
+	if (i_length>=i_source.size()) 
+		return i_source;
+	return i_source.substr(i_source.size()-i_length);
+}
+
+string x_one_vector(string i_command,string i_text,vector<string>& o_line)
+{
+	o_line.clear();
+	if (i_command=="")
+		return "";
+
+	string 	risultato=exec(i_command.c_str());
+	if (i_text!="")
+		myprintf("39147: running        %s\n",i_text.c_str());
+	if (risultato=="")
+	{
+		myprintf("39149: x_one          %s\n",i_command.c_str());
+		return "";
+	}
+	if (flagdebug)
+		myprintf("39153: x_one          %s => %s\n",i_command.c_str(),risultato.c_str());
+
+	unsigned int i=0;
+	string lineetta="";
+
+	while (i<risultato.size())
+	{
+		if ((risultato[i]==10) || (risultato[i]==13))
+		{
+			myreplaceall(lineetta,std::string(1,10),"");
+			myreplaceall(lineetta,std::string(1,13),"");
+		
+			o_line.push_back(lineetta);
+			if (flagdebug)
+				myprintf("39166: Pushato |%s|\n",lineetta.c_str());
+			lineetta="";
+		}
+		else
+		{
+			lineetta+=risultato[i];
+		}
+		i++;
+	}
+
+	return risultato;
+}	
+
+
 string x_one(string i_command,string i_text)
 {
 	if (i_command=="")
@@ -44509,12 +44560,6 @@ void open_output(string i_filename)
 				printf("28342: ERROR OPENING LOG FILE %s\n",i_filename.c_str());
 		}
 }
-string tail(string const& i_source, size_t const i_length) 
-{
-	if (i_length>=i_source.size()) 
-		return i_source;
-	return i_source.substr(i_source.size()-i_length);
-}
 // Rename name using tofiles[]
 string Jidac::rename(string name) 
 {
@@ -45447,6 +45492,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 	version				=DEFAULT_VERSION;
 	date				=0;
 	g_flagmultipart		=false;
+	g_flagcreating		=false;
 	
 #ifdef GUI
 	iszpaqloaded		=false;
@@ -47943,7 +47989,7 @@ public:
   HTIndex(vector<HT>& r, size_t sz): htr(r), t(0), htsize(1) {
     int b;
     for (b=1; sz*3>>b; ++b);
-    t.resize(1, b-1);
+		t.resize(1, b-1);
     update();
   }
   // Find sha1 in ht. Return its index or 0 if not found.
@@ -48683,14 +48729,12 @@ ThreadReturn decompressThread(void* arg) {
 			{
 /// -zero -debug: write all zeros in output
 				if (flagdebug)
-				{
 					///seek to the end and write a 0
 					if (job.outf!=NULL)
 					{
 						fseeko(job.outf, offset+usize, SEEK_SET);
 						fwrite(&byte0, 1, 1, job.outf);
 					}
-				}
 			}
 			else
 			{				
@@ -54849,17 +54893,23 @@ void my_handler(int s)
 		myprintf("54470: Closing file handle\n");
 		fclose(g_archivefp);
 	}
-	if (fileexists(g_archive.c_str()))
-		if (prendidimensionefile(g_archive.c_str())>=0)
-		{
-			if (delete_file(g_archive.c_str()))
-				myprintf("54766: Erased chunk <<");
-			else
-				myprintf("54766: *FAILED* delete of <<");
-			printUTF8(g_archive.c_str());
-			myprintf(">>\n");
-		}
 	
+	bool flagalwayscheck=g_flagcreating;
+	if (command=='Z')
+		flagalwayscheck=true;
+	
+	
+	if (flagalwayscheck)
+		if (fileexists(g_archive.c_str()))
+			if (prendidimensionefile(g_archive.c_str())>=0)
+				{
+					if (delete_file(g_archive.c_str()))
+						myprintf("54766: Erased chunk <<");
+					else
+						myprintf("54766: *FAILED* delete of <<");
+					printUTF8(g_archive.c_str());
+					myprintf(">>\n");
+				}
 	// 2==control-C (maybe)
 	if (s==2)
 	{	
@@ -56976,7 +57026,6 @@ bool	isbackuppart(string i_partname,string i_mask)
 
 
 
-typedef std::pair<string,string>  mycoppia;
 bool compare_second(const std::pair<string,string>& a,const std::pair<string,string>& b)
 {
 	return (a.second<b.second);
@@ -59743,19 +59792,19 @@ int Jidac::add()
 		{
 			if (flagdebug)
 				for (unsigned int i=0;i<files.size();i++)
-					myprintf("Before paths %d %s\n",i,files[i].c_str());
+					myprintf("59797: Before paths %d %s\n",i,files[i].c_str());
 			for (unsigned int i=0;i<files.size();i++)
 				if ((!iswindowspath(files[i])) && (!iswindowsunc(files[i])))
 					files[i]=relativetolongpath(files[i]);
 			if (flagdebug)
 				for (unsigned int i=0;i<files.size();i++)
-					myprintf("After  paths %d %s\n",i,files[i].c_str());
+					myprintf("59803: After  paths %d %s\n",i,files[i].c_str());
 			unsigned int	howmanyshort=0;
 			for (unsigned int i=0;i<files.size();i++)
 				if ((!islongpath(files[i])) && (!islonguncpath(files[i])))
 					howmanyshort++;
 			if (flagdebug)
-				myprintf("Howmanyshort %s files.size %s\n",migliaia(howmanyshort),migliaia2(files.size()));
+				myprintf("59809: Howmanyshort %s files.size %s\n",migliaia(howmanyshort),migliaia2(files.size()));
 			if (howmanyshort==files.size())
 			{
 				myprintf("38992: INFO: getting Windows' long filenames\n");
@@ -59781,6 +59830,40 @@ int Jidac::add()
 					{
 						if (flagdebug)
 							myprintf("53598: NO ROOT  %s\n",files[i].c_str());
+						
+						/// some kludges for * *.*, folders etc
+						if (isdirectory(files[i].c_str()))
+						{
+							files[i].pop_back();
+							myprintf("59838: Trimmed last /  %s\n",files[i].c_str());
+						}							
+						string thefilename=extractfilename(files[i]);
+						if (flagdebug)
+							myprintf("59842: Thefilename |%s|\n",thefilename.c_str());
+						
+						if (thefilename=="*.*")
+							thefilename="*";
+						
+						if (thefilename=="*")
+						{
+							files[i]=extractfilepath(files[i]);
+							files[i].pop_back();
+							myprintf("59848: Trimmed /* %s\n",files[i].c_str());
+						}
+						else
+						{
+							if (mypos("*",files[i])!=-1)
+							{
+								myprintf("59854: -longpath does not work with *, select A PATH!\n");
+								return 1;
+							}
+							if (mypos("?",files[i])!=-1)
+							{
+								myprintf("59859: -longpath does not work with ?, select A PATH!\n");
+								return 1;
+							}
+						}
+						
 				/// very dirty trick to get the exact "caseness"
 				/// because some Windows does not like to mix
 				/// z:\NS, \\?\Z:\ns\ and z:\ns
@@ -60748,25 +60831,34 @@ int Jidac::add()
 	if (!g_fakewrite)
 	{
 		if (exists(arcname)) 
+		{
 			myprintf("Updating ");
+			g_flagcreating=false;
+		}
 		else 
+		{
 			myprintf("Creating ");
+			g_flagcreating=true;
+		}
 		printUTF8(arcname.c_str());
 		myprintf(" at offset %s + %s\n", migliaia(header_pos), migliaia2(offset));
 		
 		//long-waited 
 		
 		string percorso=extractfilepath(arcname.c_str());
-		if (!direxists(percorso.c_str()))
-			makepath(percorso.c_str());
-		if (!flagspace)
-			if (!saggiascrivibilitacartella(percorso.c_str()))
-			{
-				myprintf("60251: Cannot write, use -space to bypass, on ");
-				printUTF8(percorso.c_str());
-				myprintf("\n");
-				return 2;
-			}
+		if (percorso!="")
+		{
+			if (!direxists(percorso.c_str()))
+				makepath(percorso.c_str());
+			if (!flagspace)
+				if (!saggiascrivibilitacartella(percorso.c_str()))
+				{
+					myprintf("60251: Cannot write, use -space to bypass, on <<");
+					printUTF8(percorso.c_str());
+					myprintf(">>\n");
+					return 2;
+				}
+		}
 	}
 
 #ifdef SERVER
@@ -66301,6 +66393,8 @@ int Jidac::versum()
 }
 
 
+typedef std::pair<string,string>  mycoppia;
+
 int Jidac::zfsproxbackup()
 {
 	string	storepath	="/var/lib/vz";
@@ -66404,33 +66498,89 @@ int Jidac::zfsproxbackup()
 	string 	listresult=x_one(listme,"Searching vz from zfs list...");
 #endif
 
-	int	vzpos=mypos(storepath,listresult);
+
+	vector<string> arraylist;
+	listresult=x_one_vector(listme,"Searching something",arraylist);
 	
-	if (vzpos==-1)
+
+///fika
+
+	vector<mycoppia> name_mountpoint;
+	
+	for (unsigned int i=0;i<arraylist.size();i++)
 	{
-		myprintf("38042: GURU, cannot find %s inside zfs list\n",storepath.c_str());
-		return 2;
+		string 	name		="";
+		string 	mountpoint	="";
+		string lavoro=arraylist[i];
+		if (flagdebug)
+			myprintf("66470: %08d %s\n",i,arraylist[i].c_str());
+		unsigned int j=0;
+		while (j<lavoro.size())
+		{
+			if (lavoro[j]!=' ')
+				name+=lavoro[j];
+			else
+				break;
+			j++;
+		}
+		j=lavoro.size();
+		while (j>0)
+		{
+			if (lavoro[j]!=' ')
+				j--;
+			else
+				break;
+		}
+		///printf("k2 j %d\n",j);
+		for (unsigned int k=j+1;k<lavoro.size();k++)
+			mountpoint+=lavoro[k];
+		if (flagdebug)
+			myprintf("66493: NAME       <<%s>> <<%s>>",name.c_str(),mountpoint.c_str());
+		if (i==0)
+		{
+			if ((name!="NAME") || (mountpoint!="MOUNTPOINT"))
+				break;
+		}
+		else
+		name_mountpoint.push_back(std::pair<string,string>(name,mountpoint));
 	}
-	if (flagdebug)
+	
+	string	mountpoint	="";
+	for (unsigned int i=0;i<name_mountpoint.size();i++)
+		myprintf("66507: <<%30s>> <<%30s>>\n",name_mountpoint[i].first.c_str(),name_mountpoint[i].second.c_str());
+	
+	/// first try
+	for (unsigned int i=0;i<name_mountpoint.size();i++)
+		if (name_mountpoint[i].second==storepath)
+		{
+			thepool		=name_mountpoint[i].first;
+			mountpoint	=name_mountpoint[i].second;
+			break;
+		}
+
+	if (thepool=="")
 	{
-		myprintf("38062: listresult %s\n",listresult.c_str());
-		myprintf("38063: vzpos 1    %d\n",vzpos);
+		myprintf("66517: cannot find store path %s, look for / \n",storepath.c_str());
+		for (unsigned int i=0;i<name_mountpoint.size();i++)
+			if (name_mountpoint[i].second=="/")
+			{
+				thepool		=name_mountpoint[i].first;
+				mountpoint	=name_mountpoint[i].second;
+				break;
+			}
 	}
-	while ((vzpos>0) && (listresult[--vzpos]!=10));
-	if (flagdebug)
-		myprintf("38070: vzpos 2 %d\n",vzpos);
-	if (vzpos>0)
-	{
-		vzpos++;
-		while ( (isalpha(listresult[vzpos])) || (isdigit(listresult[vzpos])) || (listresult[vzpos]=='/') )
-			thepool+=listresult[vzpos++];
-	}
+	myprintf("66511: thepool    |%s|\n",thepool.c_str());
+
+	if (!isdirectory(mountpoint))
+		mountpoint+='/';
+
+	myprintf("66516: mountpoint |%s|\n",mountpoint.c_str());
+
 	if (thepool=="")
 	{
 		myprintf("38081: GURU: cannot reverse-lookup for %s\n",storepath.c_str());
 		return 2;
 	}
-	myprintf("38072: Founded pool   <<%s>>\n",thepool.c_str());
 
 	if (isdirectory(thepool))
 	{
@@ -66442,15 +66592,10 @@ int Jidac::zfsproxbackup()
 	if (snapmark!="")
 		themark=snapmark;
 	
-	int	howmanyslash	=0;
 	int	howmanyat		=0;
 	for (unsigned int i=0;i<thepool.size();i++)
-	{
-		if (thepool[i]=='/')
-			howmanyslash++;
 		if (thepool[i]=='@')
 			howmanyat++;
-	}
 			
 	string purgedpool=thepool;
 	for (unsigned int i=0;i<purgedpool.size();i++)
@@ -66461,26 +66606,14 @@ int Jidac::zfsproxbackup()
 	myprintf("53550: Pool           %s\n",thepool.c_str());
 	myprintf("53550: Purged Pool    %s\n",purgedpool.c_str());
 	myprintf("53552: Mark           %s\n",themark.c_str());
-	if (howmanyslash>1)
-	{
-		myprintf("53549: A pool-dataset |%s| must have exactly 0 or 1 / instead of %d\n",thepool.c_str(),howmanyslash);
-		return 2;
-	}
+	
 	if (howmanyat>0)
 	{
 		myprintf("52984: A pool-dataset |%s| cannot have @\n",thepool.c_str());
 		return 2;
 	}
-	
 	string fullexpectedsnapshot=thepool+'@'+themark;
 	vector<string> thedrives;
-	for (unsigned int i=0;i<files.size();i++)
-	{
-		string percorso=storepath+"/.zfs/snapshot/"+themark+"/images/"+files[i];
-		myprintf("38135: VM Path        %03d  %s\n",i,percorso.c_str());
-		thedrives.push_back(percorso);
-	}
-	
 	if (!flagforce)
 	{
 		vector<string> array_primachiocciola;
@@ -66502,7 +66635,18 @@ int Jidac::zfsproxbackup()
 		myprintf("38152: GURU, something seems wrong, %s\n",runresult.c_str());
 		return 2;
 	}
-	
+
+	for (unsigned int i=0;i<files.size();i++)
+	{
+		string percorso="";
+		if (mountpoint!="/")
+			percorso=mountpoint+".zfs/snapshot/"+themark+/*storepath*/+"/images/"+files[i];
+		else
+			percorso=mountpoint+".zfs/snapshot/"+themark+storepath+"/images/"+files[i];
+		myprintf("38135: VM Path        %03d  %s\n",i,percorso.c_str());
+		thedrives.push_back(percorso);
+	}
+
 	files.clear();
 	for (unsigned int i=0;i<conffiles.size();i++)
 		files.push_back(conffiles[i]);

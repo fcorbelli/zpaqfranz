@@ -52,8 +52,8 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 */
 
-#define ZPAQ_VERSION "58.5o"
-#define ZPAQ_DATE "(2023-07-12)"  // cannot use __DATE__ on Debian!
+#define ZPAQ_VERSION "58.6c"
+#define ZPAQ_DATE "(2023-07-19)"  // cannot use __DATE__ on Debian!
 
 ///	optional align for malloc (sparc64) via -DALIGNMALLOC
 #define STR(a) #a
@@ -986,6 +986,8 @@ Greetings
 19 Thanks to https://github.com/alebcay                 for coding the Homebrew install formula for macOS and x64 Linux
 20 Thanks to https://github.com/ZhongRuoyu				for __linux__ instead of older #defines
 21 Thanks to Coody user of encode.ru					for unexistent folder bug 
+22 Thanks to https://github.com/ruptotus				for "hidden" overloaded fwrite() function bug
+
   _____ _   _  _____ _______       _      _      
  |_   _| \ | |/ ____|__   __|/\   | |    | |     
    | | |  \| | (___    | |  /  \  | |    | |     
@@ -35170,32 +35172,83 @@ int fseeko(FP fp, int64_t offset, int origin) {
 
 #endif
 
+FP 			g_fp_zpaq				=0;
+int			g_crc32_sequence_data	=0;
+int			g_crc32_sequence_index	=0;
+uint32_t  	g_crc32_index			=0;
+
 
 // Write nobj objects of size size from ptr to fp. Return number written.
 // "overloaded" from fwrite() for flagfasttxt
 size_t myfwrite(const void* ptr, size_t size, size_t nobj, FP fp) 
 {
-	///myprintf("35160: do fwrite\n");
+	if (fp==0)
+	{
+		myprintf("35208: FP NOT POSITIVE\n");
+		return 0;
+	}
+	if ((nobj*size)==0)
+		return 0;
+
+/*	
+	char mynomefile[100];
+	uint32_t crc=crc32_16bytes(ptr,nobj*size);
+			
+	if ((fp==g_fp_zpaq) || (g_fp_zpaq==0))
+		snprintf(mynomefile,sizeof(mynomefile),"z:\\d_%08d_start_%11s_size_%7s_%08X",g_crc32_sequence_data,migliaia3(ftello(fp)),migliaia2(nobj*size),crc);
+	else
+		snprintf(mynomefile,sizeof(mynomefile),"z:\\i_%08d_start_%11s_size_%7s_%08X",g_crc32_sequence_index,migliaia3(ftello(fp)),migliaia2(nobj*size));
+
+	FILE* myfile=fopen(mynomefile, "wb");
+	if (myfile==NULL)
+	{
+		myprintf("34399: cannot write on %s\n",mynomefile);
+		exit(0);
+	}
+	fwrite(ptr,size*nobj,1,myfile);
+	fclose(myfile);
+*/
+
 #ifdef _WIN32
 	DWORD r=0;
 	WriteFile(fp, ptr, size*nobj, &r, NULL);
+	
+///	myprintf("35239: FP %s PTR %s size %s nobj %s r= %08d\n",migliaia(int64_t(fp)),migliaia2(int64_t(ptr)),migliaia3(int64_t(size)),migliaia4(int64_t(nobj)),r);
+	
 #else
 	size_t r=fwrite(ptr, size, nobj, fp);
 #endif
 	g_fexpected+=(size*nobj);
 	g_fwritten+=r;
+	
 	if (flagfasttxt)
-		if ((size*nobj)>0)
+	{
+		if ((fp==g_fp_zpaq) || (g_fp_zpaq==0))
 		{
 			if (flagdebug)
-				myprintf("36567: fwrite |%d| pos %9s g_hep %s r=|%d| ",int(g_crc_getheader),migliaia(ftello(fp)),migliaia2(g_header_pos),r);
-
-			if (g_crc_getheader) // g_crcpiece==0 only if password
 			{
-				g_crc_header=crc32_16bytes(ptr,r);
-				if (flagdebug)
-					myprintf("HEADER  r=%08d %08X\n",r,g_crc_header);
-				g_crc_getheader=false;
+				myprintf("36567: fwrite |%08d| pos %9s g_hep %s r=|%d| ",int(g_crc32_sequence_data),migliaia(ftello(fp)),migliaia2(g_header_pos),r);
+				myprintf("35255: g_crc_get_header %d\n",int(g_crc_getheader));
+			}
+			
+			if (g_crc32_sequence_data==0) // this is the header of an encrypted piece
+			{
+				if (r==32)
+				{
+					g_crc_header=crc32_16bytes(ptr,r);
+					if (flagdebug)
+						myprintf("HEADER  r=%08d %08X\n",r,g_crc_header);
+				}
+				else
+				{
+					uint32_t crc=0;
+					crc=crc32_16bytes((char*)ptr+104,r-104);
+					g_crc_body=crc32_combine(g_crc_body,crc,r-104);
+					if (flagdebug)
+						myprintf(" SKIPPOZ 104 ");
+					g_veryfirst=false;
+				
+				}
 			}
 			else
 			{
@@ -35224,8 +35277,19 @@ size_t myfwrite(const void* ptr, size_t size, size_t nobj, FP fp)
 					if (flagdebug)
 						myprintf("BODY  %08X\n",g_crc_body);
 				}
-			}
+			}	
+			g_crc32_sequence_data++;
+			
 		}
+		else
+		{
+			if (flagdebug)
+				myprintf("35322: Doing CRC-32 on index for bytes %s\n",migliaia(r));
+			uint32_t crc	=crc32_16bytes(ptr,r);
+			g_crc32_index	=crc32_combine(g_crc32_index,crc,r);
+			g_crc32_sequence_index++;
+		}
+	}
 	
   if (flagdebug)
 		if ((size*nobj)!=r)
@@ -38251,9 +38315,9 @@ class franzpacket
 				myprintf("34399: cannot write on %s\n",mynomefile);
 				exit(0);
 			}
-	///		myfwrite((const char*)g_packet_start, 1, FRANZOPACKET_STAMPSIZE, myfile);
-			myfwrite(buffer, 1, sizeof(buffer), myfile);
-		///	myfwrite((const char*)g_packet_end, 1, FRANZOPACKET_STAMPSIZE, myfile);
+	///		fwrite((const char*)g_packet_start, 1, FRANZOPACKET_STAMPSIZE, myfile);
+			fwrite(buffer, 1, sizeof(buffer), myfile);
+		///	fwrite((const char*)g_packet_end, 1, FRANZOPACKET_STAMPSIZE, myfile);
 			fclose(myfile);
 			///
 
@@ -38559,6 +38623,7 @@ class OutputArchive: public ArchiveBase, public libzpaq::Writer {
   enum {BUFSIZE=1<<16};
   char buf[BUFSIZE];  // I/O buffer
   string thefilename;
+  bool	flagindex;
   
 public:
   // Open. If password then encrypt output.
@@ -38663,10 +38728,12 @@ OutputArchive::OutputArchive(const char* filename, const char* password,
   assert(filename);
   off=off_;
   thefilename="";
+  flagindex=false;
+  
   if (!*filename) return;
   thefilename=filename;
 	
-  // Open existing file
+	// Open existing file
   char salt[32]={0};
 #ifdef BSD
 	if (flagappend)
@@ -38733,12 +38800,37 @@ OutputArchive::OutputArchive(const char* filename, const char* password,
 #endif
     }
   }
+  
+  
+
+
+	if (thefilename!=g_indexname)
+	{
+		g_fp_zpaq	=fp;
+		flagindex=false;
+		if (flagdebug)
+		myprintf("38478: ;;;;;;;;;;;;;;;;;;;;;;;;;; settato index %s %08d;;;;;;;;;;;;;\n",migliaia(int64_t(g_fp_zpaq)),int64_t(g_fp_zpaq));
+	}
+  
+  if (flagindex)
+  {
+	  if (flagdebug)
+		myprintf("39681: OutputArchive ISINDEX %s %s\n",thefilename.c_str(),migliaia(int64_t(fp)));
+  }
+  else
+  {
+	  if (flagdebug)
+		myprintf("38769: OutputArchive ZPAQ    %s %s\n",thefilename.c_str(),migliaia(int64_t(fp)));
+  }
+  
   // Set up encryption
   if (password) {
     char key[32];
     libzpaq::stretchKey(key, password, salt);
     aes=new libzpaq::AES_CTR(key, 32, salt);
   }
+
+
 }
 ////////////////////////////// misc ///////////////////////////////////
 //zpaq
@@ -39083,6 +39175,7 @@ private:
 	string	backuptxt;
 	string	backupindex;
 	string	fasttxt;
+	string	indexfasttxt;
 	map<int, string> mappacommenti;
 	string versioncomment;
 	bool flagnoattributes;        		// -noattributes option
@@ -39238,6 +39331,8 @@ private:
 	int 		versum_zpaqfranz(FILE* i_thefile,vector<string>& o_files,vector<string>& o_filealgo,vector<string>& o_filehash,vector<int64_t>& o_filesize,int64_t&	o_expected_size,int& o_expected_file);
 	int 		versum_againstzpaq(vector<string> i_myfiles,vector<string> i_filealgo,vector<string> i_filehash,vector<string>& o_missing,int& o_errori,int64_t& o_total_hashed);
 
+	int			makecrc32txt(string i_filename, string& o_initialquickhash,int64_t& o_initialzpaqsize,string& o_initialzpaqquick, string& o_initialzpaqcrc32,string& o_prezpaqcrc32,int64_t& prezpaqsize,string& o_thecrcfile);
+	
 };
 #ifdef unix
 std::string exec(const char* cmd) 
@@ -41957,7 +42052,7 @@ public:
   void put(int c) {
     if (f) {
       unzBuf[p++]=c;
-      if (p==BUFSIZE) myfwrite(unzBuf, 1, p, f), p=0;
+      if (p==BUFSIZE) fwrite(unzBuf, 1, p, f), p=0;
     }
   }
   virtual ~unzOutputFile() {close();}
@@ -41976,7 +42071,7 @@ void unzOutputFile::open(const char* filename) {
 }
 // Flush output and close file
 void unzOutputFile::close() {
-  if (f && p>0) myfwrite(unzBuf, 1, p, f);
+  if (f && p>0) fwrite(unzBuf, 1, p, f);
   if (f) fclose(f), f=0;
   p=0;
 }
@@ -43316,6 +43411,8 @@ string help_a(bool i_usage,bool i_example)
 		moreprint("+ : -buffer X     Use a input buffer of X bytes (default: 4KB)");
 		moreprint("+ : -hashdeep     Add the hashdeep MD5 VFILE (-ssd for multithread)");
 		moreprint("+ : -fasttxt      Write out CRC32 on archivename_crc32.txt");
+		moreprint("+ : -fasttxt -verify Post-check of crc32.txt");
+		
 		help_orderby();
 #if defined(_WIN32)
 		moreprint("+ : -sfx autoz    Make SFX autoz.exe (on Win)");
@@ -45646,6 +45743,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 	repack				="";
 	checktxt			="";
 	fasttxt				="";
+	indexfasttxt		="";
 	backuptxt			="";
 	backupindex			="";
 	new_password		=0;
@@ -46030,8 +46128,8 @@ int Jidac::loadparameters(int argc, const char** argv)
 				files.push_back(argv[i]);
 			--i;
 
-///zpaqfranz a foo 
-///if file "./foo" or folder "./foo" does esists, create or update "./foo.zpaq" with the "./foo"			
+///zpaqfranz a z:\foo 
+///if file "./foo" or folder "./foo" does esists, create or update "z:\foo.zpaq" with the "./foo"			
 			if ((opt=="a") || (opt=="add"))
 				if (files.size()==0)
 					if (archive!="")
@@ -49010,7 +49108,7 @@ ThreadReturn decompressThread(void* arg) {
 							myfwrite(out.c_str()+q, 1, usize, job.outf);
 						}
 						else
-							myfwrite(out.c_str()+q, 1, usize, stdout);
+							fwrite(out.c_str()+q, 1, usize, stdout);
 						
 						
 					}
@@ -51506,7 +51604,7 @@ void * scriviramtodisk(void *t)
 				if (w!=n)
 					break;
 			}
-			///size_t scritti=myfwrite(par->data[i],1,par->filesize[i],myfile);
+			///size_t scritti=fwrite(par->data[i],1,par->filesize[i],myfile);
 			par->o_writtenbythread+=scritti;
 			fclose(myfile);
 			close(par->filenameondisk[i].c_str(),par->filedate[i],par->fileattr[i]);
@@ -52601,7 +52699,7 @@ int Jidac::extract()
 						if (w!=n)
 							break;
 					}
-					//size_t scritti=myfwrite((*p->second.pramfile).data, 1, (*p->second.pramfile).filesize, myfile);
+					//size_t scritti=fwrite((*p->second.pramfile).data, 1, (*p->second.pramfile).filesize, myfile);
 					written+=scritti;
 					fclose(myfile);
 				}
@@ -52690,7 +52788,7 @@ int Jidac::extract()
 #endif
 					int got=0;
 					while ((got=fread(data,sizeof(char),sizeof(data),myfile)) > 0) 
-						myfwrite(data,1,got,stdout);
+						fwrite(data,1,got,stdout);
 					fclose(myfile);
 					delete_file(kunfile.c_str());
 				}
@@ -53497,7 +53595,7 @@ string filecopy(bool i_singlefile,bool i_append,const string i_infile,const stri
 	bool	hostampato=false;
 	while ((readSize = fread(buffer, 1, blockSize, inFile)) > 0) 
 	{
-		int64_t written=myfwrite(buffer,1,readSize,outFile);
+		int64_t written=fwrite(buffer,1,readSize,outFile);
 		donesize+=written;
 		if (!i_append)
 			if (i_verify)
@@ -54570,7 +54668,7 @@ int Jidac::autotest()
 				franz_free(buffer32bit);
 				return 2;
 			}
-			unsigned int scritti=myfwrite(the_file,1,the_file_len,outFile);
+			unsigned int scritti=fwrite(the_file,1,the_file_len,outFile);
 			fclose(outFile);
 			if (scritti!=the_file_len)
 			{
@@ -54660,7 +54758,7 @@ int Jidac::autotest()
 						myprintf("34399: cannot write on %s\n",mynomefile);
 						exit(0);
 					}
-					myfwrite(buffer8bit, 1, chunksize, myfile);
+					fwrite(buffer8bit, 1, chunksize, myfile);
 					fclose(myfile);
 				}
 				
@@ -56498,7 +56596,7 @@ int Jidac::consolidate(string i_archive)
 		int64_t	chunk_written=0;
 		while ((readSize = fread(buffer, 1, blockSize, inFile)) > 0) 
 		{
-			int64_t written=myfwrite(buffer,1,readSize,outFile);
+			int64_t written=fwrite(buffer,1,readSize,outFile);
 			chunk_written+=written;
 			chunk_readed+=readSize;
 			donesize+=written;
@@ -58004,7 +58102,7 @@ int64_t i_destinazione_attr
 	{
 		if (flagzero)
 			memset(buffer,0,sizeof(buffer));
-		int scritti=myfwrite(buffer,1,readSize,outFile);
+		int scritti=fwrite(buffer,1,readSize,outFile);
 		///myprintf("Scritti %19s\n",migliaia(scritti));
 		scrittitotali+=scritti;
 		o_donesize+=scritti;
@@ -59183,7 +59281,7 @@ int Jidac::fillami()
 #endif
 			exit(0);
 		}
-		myfwrite(buffer32bit, sizeof(uint32_t), chunksize, myfile);
+		fwrite(buffer32bit, sizeof(uint32_t), chunksize, myfile);
 		fclose(myfile);			
 		int64_t iotime=mtime()-startio;
 		uint64_t randspeed=(uint64_t)	(chunksize*sizeof(uint32_t)/((randtime+1)/1000.0));
@@ -59986,13 +60084,12 @@ string getfirsthash(string i_theline)
 	return stringtolower(hashletto);
 }		
 
-bool getdatafromfasttxt(string i_filename,string& o_crc32,string& o_quick,string& o_precrc32,int64_t& o_size,int64_t& o_presize)
+bool getdatafromfasttxt(string i_filename,string& o_crc32,string& o_quick,string& o_precrc32,int64_t& o_size)
 {
 	o_crc32		="";
 	o_precrc32	="";
 	o_quick		="";
 	o_size		=0;
-	o_presize	=0;
 	if (!iszpaqfranzfile(i_filename,"$zpaqfranz fasttxt|"))
 	{
 		myprintf("62699: Does not seems a zpaqfranz's fasttxt ");
@@ -60169,6 +60266,139 @@ int Jidac::append()
 		myprintf("38594: append() something is wrong %d\n",errore);
 		return errore;
 	}
+}
+
+
+/*
+	int64_t initialzpaqsize	=0;
+	string	initialzpaqquick="";
+	string	initialzpaqcrc32="";
+	string	prezpaqcrc32	="";
+	int64_t	prezpaqsize		=0;
+	
+*/
+int	Jidac::makecrc32txt(string i_filename, 
+string& 	o_initialquickhash,
+int64_t& 	o_initialzpaqsize,
+string& 	o_initialzpaqquick, 
+string& 	o_initialzpaqcrc32,
+string& 	o_prezpaqcrc32,
+int64_t& 	o_prezpaqsize,
+string&		o_thecrcfile)
+{
+	
+	string 	percorso	=extractfilepath		(i_filename);
+	string	nome		=prendinomefileebasta	(i_filename);
+	o_thecrcfile		=percorso+nome+"_crc32.txt";
+	if (flagverbose)
+		myprintf("60362: Doing makecrc32txt on %s\n",o_thecrcfile.c_str());
+	if (fileexists(i_filename))
+	{
+		franz_do_hash dummyquick("QUICK");
+		o_initialquickhash=dummyquick.filehash(i_filename,false,-1,-1);
+		o_initialzpaqsize=prendidimensionefile(i_filename.c_str());
+	}
+	bool	fastisok	=true;
+	if (fileexists(i_filename))
+		if (!fileexists(o_thecrcfile.c_str()))
+		{
+			myprintf("60938: fasttxt does not exists ");
+			printUTF8(o_thecrcfile.c_str());
+			myprintf("\n");
+			myprintf("60942: You can rebuild with -space\n");
+			fastisok=false;
+		}
+	if (fileexists(o_thecrcfile.c_str()))
+	{
+		if (flagverbose)
+		{
+			myprintf("60855: Founded fasttxt ");
+			printUTF8(o_thecrcfile.c_str());
+			myprintf("\n");
+		}
+		
+		if (!getdatafromfasttxt(o_thecrcfile,o_initialzpaqcrc32,o_initialzpaqquick,o_prezpaqcrc32,o_prezpaqsize))
+		{
+			myprintf("60865: Failed getting data from fasttxt!\n");
+			return 2;
+		}
+		if (flagverbose)
+			myprintf("60868: CRC32  %s QUICK %s SIZE %s\n",o_initialzpaqcrc32.c_str(),o_initialzpaqquick.c_str(),migliaia(o_prezpaqsize));
+		if (o_prezpaqsize!=o_initialzpaqsize)
+		{
+			myprintf("60873: size into fasttxt does not match %s vs %s\n",migliaia(o_prezpaqsize),migliaia2(o_initialzpaqsize));
+			if (!flagspace)
+			{
+				myprintf("60875: quitting now. You can override with -space\n");
+				return 2;
+			}
+			fastisok=false;
+		}
+		if (stringtoupper(o_initialquickhash)!=stringtoupper(o_initialzpaqquick))
+		{
+			myprintf("60879: quick fasttxt does not match %s vs %s\n",o_initialzpaqquick.c_str(),o_initialquickhash.c_str());
+			if (!flagspace)
+			{
+				myprintf("60887: quitting now. You can override with -space\n");
+				return 2;
+			}
+			fastisok=false;
+		}
+	}
+		
+	if (!fastisok)
+	{
+		if (!flagspace)
+			return 2;
+		
+		myprintf("60892: Rebuilding broken fasttxt (doing TRIM for incomplete transaction)\n");
+		if (i_filename!=g_indexname)
+		{
+			flagkill=true;
+			jidacreset();
+			files.clear();
+			files.push_back(i_filename.c_str());
+			
+			trim();
+			myprintf("60897: TRIM done, recomputing hash and CRC-32\n");
+		}
+		int64_t startverify		=mtime();
+		franz_do_hash dummyquick("QUICK");
+		o_initialzpaqquick=dummyquick.filehash(i_filename,false,startverify,prendidimensionefile(i_filename.c_str()));
+		if (o_initialzpaqquick=="")
+		{
+			myprintf("60899: quick hash empty!\n");
+			return 2;
+		}
+		
+		franz_do_hash dummyquick2("CRC-32");
+		o_initialzpaqcrc32=dummyquick2.filehash(i_filename,false,startverify,prendidimensionefile(i_filename.c_str()));
+		if (o_initialzpaqcrc32=="")
+		{
+			myprintf("60907: CRC-32 empty!\n");
+			return 2;
+		}
+
+		myprintf("62682: Rebuilding fasttxt (%s) ",o_initialzpaqcrc32.c_str());
+		printUTF8(o_thecrcfile.c_str());
+		if (!writedatainfasttxt(o_thecrcfile,i_filename,o_initialzpaqcrc32,o_initialzpaqquick,
+		"0",prendidimensionefile(i_filename.c_str()),0))
+		{
+			myprintf(" :62957: something wrong!\n");
+			return 2;
+		}
+		else
+			myprintf(" :OK\n");
+		if (!getdatafromfasttxt(o_thecrcfile,o_initialzpaqcrc32,o_initialzpaqquick,o_prezpaqcrc32,o_prezpaqsize))
+		{
+			myprintf("60865: Failed getting data from fasttxt!\n");
+			return 2;
+		}
+		myprintf("60907: REBUILDED CRC32  %s QUICK %s SIZE %s\n",o_initialzpaqcrc32.c_str(),o_initialzpaqquick.c_str(),migliaia(o_prezpaqsize));
+		seppuku();
+		exit(0);
+	}
+	return 0;
 }
 // Add or delete files from archive. Return 1 if error else 0.
 // Note: by flagverify do a CRC32-integrity check (@zpaqfranz)
@@ -60862,7 +61092,19 @@ int Jidac::add()
 		if (flagdebug)
 		myprintf("60594: header_pos  %s\n",migliaia(g_header_pos));
 
-	string initialquickhash="0";
+	string 	initialquickhash		="0";
+	int64_t initialzpaqsize			=0;
+	string	initialzpaqquick		="";
+	string	initialzpaqcrc32		="";
+	string	prezpaqcrc32			="";
+	int64_t	prezpaqsize				=0;
+	
+	string 	indexinitialquickhash	="0";
+	int64_t indexinitialzpaqsize	=0;
+	string	indexinitialzpaqquick	="";
+	string	indexinitialzpaqcrc32	="";
+	string	indexprezpaqcrc32		="";
+	int64_t	indexprezpaqsize		=0;
 	
 	if (password!=NULL)
 		g_crc_getheader=true;
@@ -60887,15 +61129,51 @@ int Jidac::add()
 			checktxt			=percorso+nome+"_md5.txt";
 		}
 
-	int64_t initialzpaqsize	=0;
-	string	initialzpaqquick="";
-	string	initialzpaqcrc32="";
-	string	prezpaqcrc32	="";
-	int64_t	prezpaqsize		=0;
-	
+
+
+
+
 	if (flagfasttxt)
 		if (fasttxt=="")
 		{
+			int resultzpaq=makecrc32txt(g_archive,initialquickhash,initialzpaqsize,initialzpaqquick,initialzpaqcrc32,prezpaqcrc32,prezpaqsize,fasttxt);
+			if (resultzpaq!=0)
+			{
+				myprintf("61207: resultzpaq not zero\n");
+				return resultzpaq;
+			}
+			if (g_indexname!="")
+			{
+				int resultindex=makecrc32txt(
+				g_indexname,
+				indexinitialquickhash,
+				indexinitialzpaqsize,
+				indexinitialzpaqquick,
+				indexinitialzpaqcrc32,
+				indexprezpaqcrc32,
+				indexprezpaqsize,
+				indexfasttxt);
+					
+				if (flagdebug)
+				{
+					printbar('+');
+					myprintf("61218: indexprezpaqcrc32 %s\n",indexinitialzpaqcrc32.c_str());
+					myprintf("61219: indexprezpaqsize  %s\n",migliaia(indexprezpaqsize));
+					printbar('+');
+				}
+				if (resultindex!=0)
+				{
+					myprintf("61215: resultindex not zero\n");
+					return resultindex;
+				}
+				
+			}
+/*
+
+			
+			
+			
+			
 			string 	percorso	=extractfilepath		(g_archive);
 			string	nome		=prendinomefileebasta	(g_archive);
 			fasttxt				=percorso+nome+"_crc32.txt";
@@ -60999,6 +61277,7 @@ int Jidac::add()
 				seppuku();
 				exit(0);
 			}
+			*/
 		}
 
 	
@@ -63097,19 +63376,53 @@ int Jidac::add()
 			char temp[10];
 			snprintf(temp,sizeof(temp),"%08X",totalcrc32);
 			string scrc32post=temp;
-			myprintf("62655: CRC-32 EXPECTED %s\n",scrc32post.c_str());
+			if (flagverbose)
+				myprintf("62655: CRC-32 EXPECTED %s\n",scrc32post.c_str());
 			
-			if (flagdebug)
+			string scrc32indexpost="";
+			
+			if (flagverify)
 			{
 				franz_do_hash dummy("CRC-32");
 				string hashreloaded=dummy.filehash(g_archive,false,0,finalfile);
 				myprintf("62659: CRC-32 FROM FS  %s %s\n",hashreloaded.c_str(),g_archive.c_str());
 				if (stringtoupper(hashreloaded)==stringtoupper(scrc32post))
-				{
-					myprintf("\n62943: CRC-32 MATCH, THIS IS GOOD!\n\n");
-				}
+					myprintf("62943: CRC-32 MATCH, THIS IS GOOD!\n");
 				else
 					myprintf("\n62946: CRC-32 DOES NOT MATCH *** THIS IS BAD ***\n\n");
+			}
+
+			if (g_crc32_index!=0)
+			{
+				if (flagdebug)
+				{
+					printbar('=');
+					myprintf("63454: indexprezpaqcrc32 %s\n",indexinitialzpaqcrc32.c_str());
+					myprintf("63467: indexprezpaqsize  %s\n",migliaia(indexprezpaqsize));
+				}
+				
+				uint32_t newcrc32index=0;
+				sscanf(indexinitialzpaqcrc32.c_str(),"%x",&newcrc32index);
+				
+				if (flagdebug)
+					myprintf("63472: newcrc32index so far %08X\n",newcrc32index);
+			
+				g_crc32_index=crc32_combine(newcrc32index,g_crc32_index,prendidimensionefile(g_indexname.c_str())-indexprezpaqsize);
+				
+				snprintf(temp,sizeof(temp),"%08X",g_crc32_index);
+				scrc32indexpost=temp;
+				myprintf("63240: INDEX CRC-32 EXPECTED %s\n",scrc32indexpost.c_str());
+
+				if (flagverify)
+				{
+					franz_do_hash dummy("CRC-32");
+					string hashreloaded=dummy.filehash(g_indexname,false,0,finalfile);
+					myprintf("63261: INDEX CRC-32 FROM FS  %s %s\n",hashreloaded.c_str(),g_indexname.c_str());
+					if (stringtoupper(hashreloaded)==stringtoupper(scrc32indexpost))
+						myprintf("63265: INDEX CRC-32 MATCH, THIS IS GOOD!\n");
+					else
+						myprintf("\n63268: INDEX CRC-32 DOES NOT MATCH *** THIS IS BAD ***\n\n");
+				}
 			}
 
 			int64_t startverify		=mtime();
@@ -63121,7 +63434,7 @@ int Jidac::add()
 				return 2;
 			}
 			
-			myprintf("62682: Updating fasttxt ");
+			myprintf("62682: Updating fasttxt       ");
 			printUTF8(fasttxt.c_str());
 			
 			if (!writedatainfasttxt(fasttxt,g_archive,scrc32post,quickhash,
@@ -63132,6 +63445,33 @@ int Jidac::add()
 			}
 			else
 				myprintf(" :OK\n");
+			
+			if (g_indexname!="")
+			{
+				myprintf("63490: Updating INDEX fasttxt ");
+				printUTF8(indexfasttxt.c_str());
+			
+				franz_do_hash dummyquick("QUICK");
+				string quickhash=dummyquick.filehash(g_indexname,false,startverify,finalfile);
+				if (quickhash=="")
+				{
+					myprintf("63499: quick hash empty!\n");
+					return 2;
+				}
+				
+				if (!writedatainfasttxt(indexfasttxt,g_indexname,
+				scrc32indexpost,
+				quickhash,
+				indexinitialzpaqcrc32,
+				prendidimensionefile(g_indexname.c_str()),
+				indexinitialzpaqsize))
+				{
+					myprintf(" :63500: something wrong!\n");
+					return 2;
+				}
+				else
+					myprintf(" :OK\n");
+			}
 		}
 
 	
@@ -64600,14 +64940,14 @@ int Jidac::writesfxmodule(const string i_filename)
 	/// yes, one byte at time. Why? Because some too smart compilers can substitute too much
 	/// please note: the strings are already inverted 
 	for (unsigned int i=0;i<g_franzo_start.size();i++)
-		myfwrite(&g_franzo_start[i],1,1,outFile);
+		fwrite(&g_franzo_start[i],1,1,outFile);
 	/// High security!
 	string ahahaencrypted=ahahencrypt(i_thecommands);
 	for (unsigned int i=0;i<i_thecommands.size();i++)
-		///myfwrite(&i_thecommands[i],1,1,outFile);
-		myfwrite(&ahahaencrypted[i],1,1,outFile);
+		///fwrite(&i_thecommands[i],1,1,outFile);
+		fwrite(&ahahaencrypted[i],1,1,outFile);
 	for (unsigned int i=0;i<g_franzo_end.size();i++)
-		myfwrite(&g_franzo_end[i],1,1,outFile);
+		fwrite(&g_franzo_end[i],1,1,outFile);
 	///	Now append the .zpaq. Please note: no handling for multipart (in fact, not too hard)
 	FILE* inFile = freadopen(archive.c_str());
 	if (inFile==NULL) 
@@ -64617,7 +64957,7 @@ int Jidac::writesfxmodule(const string i_filename)
 		return 2;
 	}
 	while ((readSize = fread(buffer, 1, blockSize, inFile)) > 0) 
-		myfwrite(buffer,1,readSize,outFile);
+		fwrite(buffer,1,readSize,outFile);
 	fclose(outFile);
 	///	Just debug stuff
 	myprintf("SFX written on: %s\n",outfile.c_str());
@@ -64766,7 +65106,7 @@ int Jidac::writeresource(const string i_filename,bool i_force,const char* i_mime
 		franz_free(the_res);
 		return 2;
 	}
-	size_t written=myfwrite(the_res,1,the_res_len,outFile);
+	size_t written=fwrite(the_res,1,the_res_len,outFile);
 	if (the_res_len!=written)
 	{
 		myprintf("44994: guru extracting resource\n");

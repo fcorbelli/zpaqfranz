@@ -52,8 +52,8 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 */
 
-#define ZPAQ_VERSION "58.6c"
-#define ZPAQ_DATE "(2023-07-19)"  // cannot use __DATE__ on Debian!
+#define ZPAQ_VERSION "58.7k"
+#define ZPAQ_DATE "(2023-07-24)"  // cannot use __DATE__ on Debian!
 
 ///	optional align for malloc (sparc64) via -DALIGNMALLOC
 #define STR(a) #a
@@ -119,6 +119,7 @@ OTHER DEALINGS IN THE SOFTWARE.
 #endif
 
 
+#define LARGEFILE 100000000
 
 
 
@@ -986,7 +987,7 @@ Greetings
 19 Thanks to https://github.com/alebcay                 for coding the Homebrew install formula for macOS and x64 Linux
 20 Thanks to https://github.com/ZhongRuoyu				for __linux__ instead of older #defines
 21 Thanks to Coody user of encode.ru					for unexistent folder bug 
-22 Thanks to https://github.com/ruptotus				for "hidden" overloaded fwrite() function bug
+22 Thanks to https://github.com/ruptotus				for "hidden" overloaded fwrite() function bug, and -dryrun on robocopy fix
 
   _____ _   _  _____ _______       _      _      
  |_   _| \ | |/ ____|__   __|/\   | |    | |     
@@ -1122,6 +1123,11 @@ DEFINEs at compile-time
 HIDDEN GEMS
 If the (non Windows) executable is named "dir" act (just about)... like Windows' dir
 Beware of collisions with other software "dir"
+
+If the (non Windows) executable is name "robocopy" runs... some kind of robocopy-like.
+ex robocopy /tmp/zp /tmp/backup1 /tmp/backup2 
+BEWARE: those are WET RUNS (-kill automagically enabled), with -space enabled!
+
 
 WARNINGS
 Some strange warnings with some compilers (too old, or too new), not MY fault
@@ -4054,7 +4060,7 @@ void allocx(U8* &p, int &n, int newsize) {
     else {
       n=0;
 		std::string nsize=migliaia(newsize);
-		std::string errorone=" 2249: allocx failed for "+nsize;
+		std::string errorone=" 2249: allocx failed for "+nsize+" (maybe non-Intel CPU? try compiling with -DNOJIT)";
       error(errorone.c_str());
     }
   }
@@ -10868,6 +10874,21 @@ string	g_pidname;
 FILE* 	g_output_handle;
 int64_t g_robocopy_check_sorgente;
 int64_t g_robocopy_check_destinazione;
+int64_t g_robocopy_makepath;
+int64_t g_robocopy_makepath2;
+int64_t g_robocopy_isequal;
+int64_t g_robocopy_close;
+int64_t g_robocopy_close2;
+int64_t g_robocopy_touch;
+int64_t g_robocopy_delete;
+int64_t	g_robocopy_readopen;
+int64_t	g_robocopy_openoutfile;
+int64_t g_robocopy_fclose;
+int64_t g_robocopy_fread;
+int64_t g_robocopy_fwrite;
+
+
+
 int64_t g_start			=0;
 int64_t g_dimensione	=0;
 int64_t g_scritti		=0;
@@ -10903,6 +10924,7 @@ int64_t g_dateto		=0;
 string	g_until;
 int		g_rangefrom		=0;
 int		g_rangeto		=0;
+int		g_rangelast		=0;
 
 
 bool flagnochecksum;
@@ -11007,6 +11029,7 @@ int 	g_ioBUFSIZE=4096;
     
 int		g_thechosenhash;
 string	g_thechosenhash_str;
+
 
 
 void seppuku()
@@ -21540,6 +21563,37 @@ string makelongpath(string i_path)
 /// https://searchcode.com/codesearch/view/17947198/
 int64_t getfreespace(string i_path)
 {
+	
+#ifndef _WIN32
+	if (i_path!="")
+		if (!direxists(i_path.c_str()))
+		{
+			myprintf("21571: Path does not exists   ");
+			printUTF8(i_path.c_str());
+			myprintf("\n");
+			vector<string> pezzi;
+			explode(i_path,'/',pezzi);
+			if (pezzi.size()>=2)
+			{
+				string percorso="/";
+				for (unsigned int i=1;i<pezzi.size()-1;i++)
+					percorso+=pezzi[i]+"/";
+				if (percorso!="/")
+				{
+					if (direxists(percorso))
+					{
+						myprintf("21584: Getting free space for ");
+						i_path=percorso;
+					}
+					else
+						myprintf("21589: Sorry: cannot find the path heuristically  ");
+					printUTF8(percorso.c_str());
+					myprintf("\n");
+				}
+			}
+		}
+#endif
+
 #ifdef BSD
 	if (flagdebug)
 		myprintf("BSD: getfreespace\n");
@@ -35819,6 +35873,7 @@ bool wintouch(string i_filename, int64_t i_date, int64_t i_creationdate)
 	return true;
 }
 #endif
+
 // Close fp if open. Set date and attributes unless 0
 bool close(const char* filename, int64_t date, int64_t attr, FP fp=FPNULL) {
   assert(filename);
@@ -35886,6 +35941,65 @@ bool close(const char* filename, int64_t date, int64_t attr, FP fp=FPNULL) {
 	return allok;
 #endif
 }
+
+bool touch(const char* filename, int64_t date, int64_t attr)
+{
+	if (filename==NULL)
+		return true;
+#ifdef unix
+	if (date>0) 
+	{
+		struct utimbuf ub;
+		ub.actime=time(NULL);
+		ub.modtime=unix_time(date);
+		utime(filename, &ub);
+	}
+	if ((attr&255)=='u')
+		chmod(filename, attr>>8);
+	return true;
+#else
+	bool allok=true;
+	if (strstr(filename,":$DATA")==0)
+	{
+		FP fp=CreateFile(utow(filename).c_str(),
+                    FILE_WRITE_ATTRIBUTES,
+                    FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE,
+                    NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, NULL);
+		if (fp!=FPNULL) 
+		{
+			SYSTEMTIME st;
+			st.wYear			=date/10000000000LL%10000;
+			st.wMonth			=date/100000000%100;
+			st.wDayOfWeek		=0;  // ignored
+			st.wDay				=date/1000000%100;
+			st.wHour			=date/10000%100;
+			st.wMinute			=date/100%100;
+			st.wSecond			=date%100;
+			st.wMilliseconds	=0;
+			FILETIME ft;
+			SystemTimeToFileTime(&st, &ft);
+			if (!SetFileTime(fp, NULL, NULL, &ft))
+			{
+				myprintf("35951: WARN cannot set filetime (error %s) on ",migliaia((int64_t)GetLastError()));
+				printUTF8(filename);
+				myprintf("\n");
+				allok=false;
+			}
+			CloseHandle(fp);
+			if (!SetFileAttributes(utow(filename).c_str(), attr>>8))
+			{
+				myprintf("35959: WARN kind %s cannot set attributes on ",migliaia((int64_t)GetLastError()));
+				printUTF8(filename);
+				myprintf("\n");
+				allok=false;
+			}
+		}
+	}
+	return allok;
+#endif
+	return true;
+}
+
 bool iswindowsletter(string i_dir)
 {
 	/// fix for altered-string (!)
@@ -39204,6 +39318,7 @@ private:
   // Commands
 	int add();                			// add, return 1 if error else 0
 	int list();               			// list (one parameter) / check (more than one)
+	int fzf();
 	int ecommand();						// extract on ./
 	int append();						// anti-ramsomware (slow)
 	int extract();            			// extract, return 1 if error else 0
@@ -39332,7 +39447,8 @@ private:
 	int 		versum_againstzpaq(vector<string> i_myfiles,vector<string> i_filealgo,vector<string> i_filehash,vector<string>& o_missing,int& o_errori,int64_t& o_total_hashed);
 
 	int			makecrc32txt(string i_filename, string& o_initialquickhash,int64_t& o_initialzpaqsize,string& o_initialzpaqquick, string& o_initialzpaqcrc32,string& o_prezpaqcrc32,int64_t& prezpaqsize,string& o_thecrcfile);
-	
+	void 		decodelastversion();
+
 };
 #ifdef unix
 std::string exec(const char* cmd) 
@@ -43016,6 +43132,7 @@ void help_range()
 	moreprint("+ : -range X:     Range versions [X-THE LAST]");
 	moreprint("+ : -range :X     Range versions [1-X]");
 	moreprint("+ : -range X      Range is single version X");	
+	moreprint("+ : -range ::X    Last X versions");	
 }
 
 void help_date()
@@ -43492,6 +43609,21 @@ string help_rd(bool i_usage,bool i_example)
 		moreprint("Remove folder z:\\kajo:     rd z:\\kajo -force -kill -space");
 	return ("Remove hard-to-delete Windows' folder (ex. path too long)");
 }
+string help_fzf(bool i_usage,bool i_example)
+{
+	if (i_usage)
+	{
+		moreprint("CMD   fzf List archive content 'plain-and-dirty'");
+		moreprint("+ : -all          Show all version\n");
+	}
+	if (i_usage && i_example) moreprint("    Examples:");
+	if (i_example)
+	{
+		moreprint("List filenames              fzf z:\\kajo.zpaq");
+		moreprint("List filenames/pipe in fzf  fzf z:\\kajo.zpaq|fzf");
+	}
+	return ("List archive filenames 'plain-and-dirty'");
+}
 string help_w(bool i_usage,bool i_example)
 {
 	if (i_usage)
@@ -43573,11 +43705,11 @@ string help_x(bool i_usage,bool i_example)
 		moreprint("Replace path in extract              x 1.zpaq -find /tank/ -replace z:\\uno\\");
 		moreprint("Change path in extract, longpath     x 1.zpaq -replace z:\\uno\\ -longpath");		
 		moreprint("Create files' tree                   x 1.zpaq -to z:\\testdir\\ -debug -kill -zero -longpath");
-		moreprint("Range-extract version                x copia.zpaq -only *comp.pas -to z:\\allcomp -all -range 100-1000");
+		moreprint("Range-extract version                x copia.zpaq -only *comp.pas -to z:\\allcomp -all -range 100:1000");
 		moreprint("Restore datetime and comments        x copia.zpaq -to z:\\prova\\ -all -comment");
 		moreprint("Restore huge image w/smart progress  x copia.zpaq -to z:\\prova\\ -image");
 		moreprint("Single file to stdout                x copia.zpaq 00000015.zfs >z:\\15.zfs");
-		moreprint("Extract multiple zpaqs               x vu*.zpaq -to z:\\pippo\\");
+		moreprint("Extract multiple zpaqs               x \"vu*.zpaq\" -to z:\\pippo\\");
 	}
 	return("Extract file(s)");
 	
@@ -43985,16 +44117,26 @@ string help_r(bool i_usage,bool i_example)
 		moreprint("+ : -forcezfs     Include .zfs");
 		moreprint("+ : -append       Only append data (*risky, use with zpaq archives)");
 		moreprint("+ : -zero         Fill all output file with zeros (for debug)");
+		moreprint("+ : -verbose      Show internal timings");
+		moreprint("+ : -buffer X     Use a input buffer of X bytes (default: 1MB)");
+#ifdef _WIN32
+		moreprint("+ : -big          Special Windows function for big files over LAN");
+#endif
+
 	}
 	if (i_usage && i_example) moreprint("    Examples:");
 	if (i_example)
 	{
-		moreprint("Robocopy d0 in d1,d2 (dry run):      r c:\\d0 k:\\d1 j:\\d2 p:\\d3");
-		moreprint("Robocopy d0 in d1,d2 (WET run):      r c:\\d0 k:\\d1 j:\\d2 p:\\d3 -kill");
-		moreprint("Robocopy with verify (WET run):      r c:\\d0 k:\\d1 j:\\d2 p:\\d3 -kill -verify");
+		moreprint("Robocopy d0 in d1,d2      (dry run): r c:\\d0 k:\\d1 j:\\d2 p:\\d3");
+		moreprint("Robocopy d0 in d1,d2      (WET run): r c:\\d0 k:\\d1 j:\\d2 p:\\d3 -kill");
+		moreprint("Robocopy with verify      (WET run): r c:\\d0 k:\\d1 j:\\d2 p:\\d3 -kill -verify");
 		moreprint("Robocopy with hash verify (WET run): r c:\\d0 k:\\d1 j:\\d2 p:\\d3 -kill -verify -checksum -xxh3");
-		moreprint("Robocopy d0 in d1, forced WET run:   r c:\\d0 k:\\d1 j:\\d2 -kill -space");
-		moreprint("Robocopy append mode with subst      r c:\\d0 z:\\backup_$day -append -kill");
+		moreprint("Robocopy d0 in d1, forced (WET run): r c:\\d0 k:\\d1 j:\\d2 -kill -space");
+		moreprint("Robocopy append mode      (WET run): r c:\\d0 z:\\backup_$day -append -kill");
+		moreprint("Robocopy d0 in d1,w/infos (WET run): r c:\\d0 k:\\d1 -kill -verbose");
+#ifdef _WIN32
+		moreprint("Huge file to NAS (Windows)(WET run): r c:\\d0 \\\\nas\\share\\d1 -kill -big");
+#endif
 	}
 	return("Robocopy one master to multiple slave folders");
 }
@@ -44639,6 +44781,7 @@ void Jidac::load_help_map()
 	help_map.insert(std::pair<string, voidhelpfunction>("backup",			help_backup));
 	help_map.insert(std::pair<string, voidhelpfunction>("last2",			help_last2));
 	help_map.insert(std::pair<string, voidhelpfunction>("last",				help_last));
+	help_map.insert(std::pair<string, voidhelpfunction>("fzf",				help_fzf));
 #ifdef GUI
 	help_map.insert(std::pair<string, voidhelpfunction>("gui",help_gui));
 #endif
@@ -44970,14 +45113,37 @@ void decoderange(string i_range)
 -range 2: -> Extract all versions from 2 to <all that exist>
 -range :3 -> Extract all versions from 1 to 3 (equal to: 1:3)
 -range 2 
+-range ::3 -> Extract the last 3
 */
 	g_rangefrom	=0;
 	g_rangeto	=0;
+	g_rangelast	=0;
 	if (i_range=="")
 		return;
 	string primaparte	="";
 	string secondaparte	="";
 	unsigned int i=0;
+	// pre-check for ::3
+	if (i_range.size()>=3)
+	{
+		if (!isdigit(i_range[i]))
+			if (!isdigit(i_range[i+1]))
+			{
+				string resto=myright(i_range,i_range.size()-2);
+				string temp="";
+				for (unsigned int j=0;j<resto.size();j++)
+					if (isdigit(resto[j]))
+						temp+=resto[j];
+				int lastver=atoll(temp.c_str());
+				if (lastver>0)
+				{
+					g_rangelast=lastver;
+					return;
+				}
+			}
+	}
+	
+	i=0;
 	while (i<i_range.size())
 	{
 		if (isdigit(i_range[i]))
@@ -45037,8 +45203,6 @@ void decoderange(string i_range)
 		myprintf("26450: Rangefrom  %d\n",g_rangefrom);
 		myprintf("26451: Rangeto    %d\n",g_rangeto);
 	}	
-	
-	
 
 	if (g_rangeto<g_rangefrom)
 	{
@@ -45762,6 +45926,8 @@ int Jidac::loadparameters(int argc, const char** argv)
 	date				=0;
 	g_flagmultipart		=false;
 	g_flagcreating		=false;
+
+	bool flagforzarobocopy=false;
 	
 #ifdef GUI
 	iszpaqloaded		=false;
@@ -45850,13 +46016,21 @@ int Jidac::loadparameters(int argc, const char** argv)
 		seppuku();
 		return 0;
 	}
+	if (myexename=="robocopy")
+		flagforzarobocopy=true;
 #endif	
-
 
 	if (argc>=2) // early disable output
 		if  (stringcomparei(argv[1],"last"))
 			flagpakka=true;
 	
+	if (argc>=2) // early disable output
+		if  (stringcomparei(argv[1],"fzf"))
+		{
+			flagpakka=true;
+			flagstdout=false;
+			flagnoeta=true;
+		}
 	if ((!flagpakka) && (!flagstdout))
 		moreprint("zpaqfranz v" ZPAQ_VERSION TEXT_NOJIT TEXT_GUI TEXT_BIG TEXT_SERVER TEXT_ALIGN TEXT_HWPRE TEXT_HWBLAKE3 TEXT_HWSHA1 TEXT_HWSHA2 ZSFX_VERSION ZPAQ_DATE); /// FAKE COMPILER WARNING
 
@@ -46005,7 +46179,14 @@ int Jidac::loadparameters(int argc, const char** argv)
 		
 	for (int i=1; i<argc; ++i) 
 	{
-		const string opt=argv[i];  // read command
+		string opt=argv[i];  // read command
+		if (flagforzarobocopy)
+		{
+			opt			="robocopy";
+			flagkill	=true;
+			flagverbose	=true;
+			flagspace	=true;
+		}
 		///myprintf("---- >opt  %s\n",opt.c_str());
 
 		if (opt=="-dummyhash")
@@ -46042,6 +46223,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 		opt=="extract" 			|| 
 		opt=="last" 			|| 
 		opt=="list" 			|| 
+		opt=="fzf" 				|| 
 		opt=="k" 				|| 
 		opt=="a"  				|| 
 		opt=="e"  				|| 
@@ -46080,6 +46262,9 @@ int Jidac::loadparameters(int argc, const char** argv)
 			}
 			if (opt=="gui")
 				command='G';
+			if (opt=="fzf")
+				command='F';
+		
 			if (opt=="backup")
 				command='Z';
 			if (opt=="last")
@@ -46158,6 +46343,13 @@ int Jidac::loadparameters(int argc, const char** argv)
 			command=opt[0];
 			if (opt=="cp")
 					command='o';
+				
+			if (flagforzarobocopy)
+			{
+				///myprintf("46279: i=%d  argc %d\n",i,argc);
+				if (i==1)
+					i--;
+			}
 			while (++i<argc && argv[i][0]!='-')
 			{
 	//	a very ugly fix for last \ in Windows
@@ -46173,7 +46365,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 			}
 			i--;
 		}
-		else if (opt.size()<2 || opt[0]!='-') usage();
+		else if ((!flagforzarobocopy) && ((opt.size()<2 || opt[0]!='-'))) usage();
 		else if (cli_getint		(opt,"-all",		false,	"",								argc,argv,&i,4,					&all));
 		else if (cli_getint		(opt,"-fragment",	false,	"",								argc,argv,&i,fragment,			&fragment));
 		else if (cli_getuint	(opt,"-filelength",	false,	"",								argc,argv,&i,filelength,		&filelength));
@@ -46564,7 +46756,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 			printbar('$');
 	}
 #endif
-
+	
 	return 0;
 }
 
@@ -46658,6 +46850,8 @@ int Jidac::doCommand()
 	else if (command=='%') return zfsrestore();
 	else if (command==';') return zfsreceive();
 	else if (command==')') return oneonone();
+	else if (command=='F') return fzf();
+	
 	else usage();
 	return 0;
 }
@@ -47275,7 +47469,7 @@ int64_t Jidac::read_archive(callback_function i_advance,const char* arc, int *er
 						if (all)
 							if (((ver.size()-1)<(unsigned int)g_rangefrom) || ((ver.size()-1)>(unsigned int)g_rangeto))
 								issel=false;
-
+		
 					s+=len+1;  // skip filename
 					if (s>end) 
 						error("filename too long");
@@ -47505,9 +47699,11 @@ endblock:;
 			if (!flaglongpath)
 				if (!flagtest)
 					if (!flagvss)
-						myprintf("Long filenames (>255)  %9s *** WARNING *** (suggest -longpath or -fix255 or -flat)\n",migliaia(toolongfilenames));
+						if (!flagstdout)
+							myprintf("Long filenames (>255)  %9s *** WARNING *** (suggest -longpath or -fix255 or -flat)\n",migliaia(toolongfilenames));
 #else
 			if (!flagtest)
+				if (!flagstdout)
 			myprintf("Long filenames (>255)  %9s\n",migliaia(toolongfilenames));
 #endif
 		}
@@ -49858,6 +50054,29 @@ int Jidac::zpaqdirsize()
 	}
 	return 0;
 }
+
+void Jidac::decodelastversion()
+{
+	if (g_rangelast>0)
+	{
+		myprintf("50100: You ask the last     %08d versions (...wait...)\n",g_rangelast);
+		int errors=0;
+		if (archive!="") 
+			read_archive(NULL,archive.c_str(),&errors,1,true); /// AND NOW THE MAGIC ONE!
+		int lastver=ver.size()-1;
+		myprintf("50104: Last version present %08d\n",lastver);
+		if (g_rangelast>lastver)
+		{
+			myprintf("50111: Quit because weird vers selection\n");
+			seppuku();
+		}
+		jidacreset();
+		g_rangefrom	=lastver-g_rangelast+1;
+		g_rangeto	=lastver;
+		myprintf("50122: From version         %08d to %08d\n",g_rangefrom,g_rangeto);
+	}
+}
+
 // List contents
 int Jidac::list() 
 {
@@ -49884,17 +50103,11 @@ int Jidac::list()
 		flagcomment=false;
 		myprintf("Found version -until %d scanning again...\n",versione);
 		jidacreset();
-		/*
-		ver.clear();
-		block.clear();
-		dt.clear();
-		ht.clear();
-		ht.resize(1);  // element 0 not used
-		ver.resize(1); // version 0
-		dhsize=dcsize=0;
-		*/
-///		sz=read_archive(archive.c_str());
 	}
+	
+
+	decodelastversion();
+	
 	if (files.size()>=1)
 		return testverify();
   // Read archive into dt, which may be "" for empty.
@@ -51850,9 +52063,11 @@ int Jidac::extract()
 		return 0;
   }
 ///myprintf("ZA\n");
+
+
+	decodelastversion();
+
 	int	errors=0;
-	
-	
 	int64_t sz=read_archive(NULL,archive.c_str(),&errors,0,flagstdout); // we want to be quiet by stdout?
 	if (sz<1) error("archive not found");
 	
@@ -55365,7 +55580,7 @@ void my_handler(int s)
 	  
 	  
 ///	  exit(0);
-	if ((!flaghashdeep) && (!flagstdout) && (command!='L')) /// we need to make output compatible with hashdeep?
+	if ((!flaghashdeep) && (!flagstdout) && (command!='L') && (command!='F')) /// we need to make output compatible with hashdeep?
 	{
 			myprintf( "\n%1.3f seconds (%s) ", (mtime()-g_start)/1000.0,timetohuman((uint32_t)((mtime()-g_start)/1000.0)).c_str());
 		 
@@ -57849,6 +58064,72 @@ void * scansiona(void *t)
 	pthread_exit(NULL);
 	return 0;
 }
+
+#ifdef _WIN32
+typedef DWORD (*callback_avanzamento)(
+LARGE_INTEGER, // file size
+LARGE_INTEGER, // bytes transferred
+LARGE_INTEGER, // bytes in stream
+LARGE_INTEGER, // bytes transferred for stream
+DWORD, // current stream
+DWORD, // callback reason
+HANDLE, // handle to source file
+HANDLE, // handle to destination file
+LPVOID // from CopyFileEx
+); // type for conciseness
+
+DWORD  win_avanzamento(
+LARGE_INTEGER TotalFileSize, // file size
+LARGE_INTEGER TotalBytesTransferred, // bytes transferred
+LARGE_INTEGER StreamSize, // bytes in stream
+LARGE_INTEGER StreamBytesTransferred, // bytes transferred for stream
+DWORD dwStreamNumber, // current stream
+DWORD dwCallbackReason, // callback reason
+HANDLE hSourceFile, // handle to source file
+HANDLE hDestinationFile, // handle to destination file
+LPVOID lpData // from CopyFileEx
+)
+{
+	static int lastpercentuale=0;
+	
+	if (int64_t(dwStreamNumber)+int64_t(dwCallbackReason)+int64_t(hSourceFile)+int64_t(hDestinationFile)+int64_t(lpData)==12445)
+		if (StreamSize.HighPart==TotalBytesTransferred.HighPart)
+			if (StreamBytesTransferred.HighPart==StreamSize.HighPart)
+				lastpercentuale++; // compiler be quiet!
+			
+	int64_t numeratore	=(TotalBytesTransferred	.HighPart*2147483648+TotalBytesTransferred.LowPart)*100 ;
+	int64_t	denominatore=(TotalFileSize			.HighPart*2147483648+TotalFileSize.LowPart)+1;
+	if (denominatore>LARGEFILE)
+	{
+		int percentuale=numeratore/denominatore;
+		
+		if (percentuale==1)
+			myprintf("\r%s",tohuman(denominatore));
+		else
+			percentuale/=5;
+		
+		if (percentuale!=lastpercentuale)
+		{
+			myprintf(".");
+			lastpercentuale=percentuale;
+		}
+	}
+	
+	return  PROGRESS_CONTINUE;
+}
+bool windows_copy(string i_src_filename,string i_dest_filename,callback_avanzamento callback_fn)
+{
+	wstring in_widename=utow(i_src_filename.c_str());
+	wstring out_widename=utow(i_dest_filename.c_str());
+	
+	LPPROGRESS_ROUTINE prog_fn = (LPPROGRESS_ROUTINE) callback_fn;
+	if (callback_fn)
+		return (CopyFileEx (in_widename.c_str(),out_widename.c_str(),prog_fn,NULL,0,0)!=0);
+	else
+		return (CopyFile (in_widename.c_str(),out_widename.c_str(),TRUE)!=0);
+}
+#endif
+
 /// make a "robocopy" from source to destination file.
 /// if "someone" call with valid parameters do NOT do a getfileinfo (slow)
 string secure_copy_file(
@@ -57858,9 +58139,24 @@ int64_t i_sorgente_date,
 int64_t i_sorgente_attr,
 int64_t i_destinazione_size,
 int64_t i_destinazione_date,
-int64_t i_destinazione_attr
+int64_t i_destinazione_attr,
+unsigned char*	i_buffer,
+size_t			i_buffersize
 )
 {
+	if (i_buffer==NULL)
+	{
+		myprintf("57886: GURU buffer null\n");
+		seppuku();
+		return "";
+	}
+	if (i_buffersize==0)
+	{
+		myprintf("57892: buffer size 0\n");
+		seppuku();
+		return "";
+	}
+	
 	static int ultimapercentuale=0;
 	if (flagdebug)
 	{
@@ -57872,36 +58168,40 @@ int64_t i_destinazione_attr
 		return "30833:SOURCE-EMPTY";
 	if (i_outfilename=="")
 		return "30836:DEST-EMPTY";
+	
+	int64_t s1=mtime();
 	if (isdirectory(i_filename))
 	{
 		makepath(i_outfilename);
 		return "OK";
 	}
-	int64_t sorgente_dimensione=0;
-	int64_t sorgente_data=0;
-	int64_t sorgente_attr=0;
-	int64_t destinazione_dimensione=0;
-	int64_t destinazione_data=0;
-	int64_t destinazione_attr=0;
-	bool	sorgente_esiste=false;
-	bool	destinazione_esiste=false;
+	g_robocopy_makepath+=mtime()-s1;
+	
+	int64_t sorgente_dimensione		=0;
+	int64_t sorgente_data			=0;
+	int64_t sorgente_attr			=0;
+	int64_t destinazione_dimensione	=0;
+	int64_t destinazione_data		=0;
+	int64_t destinazione_attr		=0;
+	bool	sorgente_esiste			=false;
+	bool	destinazione_esiste		=false;
 	/*
 	hopefully the source is ALWAYS existing!
 	int64_t start_sorgente_esiste=mtime();
 	sorgente_esiste		=getfileinfo(i_filename,sorgente_dimensione,sorgente_data,sorgente_attr);
 	g_robocopy_check_sorgente+=mtime()-start_sorgente_esiste;
 	*/
-	sorgente_esiste=true;		// trust in caller
-	sorgente_dimensione=i_sorgente_size;
-	sorgente_data=i_sorgente_date;
-	sorgente_attr=i_sorgente_attr;
+	sorgente_esiste					=true;		// trust in caller
+	sorgente_dimensione				=i_sorgente_size;
+	sorgente_data					=i_sorgente_date;
+	sorgente_attr					=i_sorgente_attr;
 	if (i_destinazione_size>=0)
 	{
 		/// someone call us with valid size=> take the parameters
-		destinazione_esiste=true;
-		destinazione_dimensione=i_destinazione_size;
-		destinazione_data=i_destinazione_date;
-		destinazione_attr=i_destinazione_attr;
+		destinazione_esiste			=true;
+		destinazione_dimensione		=i_destinazione_size;
+		destinazione_data			=i_destinazione_date;
+		destinazione_attr			=i_destinazione_attr;
 	}
 	else
 	{
@@ -57931,12 +58231,16 @@ int64_t i_destinazione_attr
 /// Obviously for the very same files it is almost identical
 			if (flagdebug)
 				myprintf("27584: enforcing xls/ppt test %s\n",i_filename.c_str());
+			int64_t s2=mtime();
 			destinazione_esiste=isfilesequal(i_filename,i_outfilename,flagzero);
+			g_robocopy_isequal+=mtime()-s2;
 			if (destinazione_esiste)
 			{
 				if (flagdebug)
 					myprintf("Equal XLS: skip %s\n",i_outfilename.c_str());
+				int64_t s3=mtime();
 				close(i_outfilename.c_str(),sorgente_data,sorgente_attr);
+				g_robocopy_close+=mtime()-s3;
 				return "=";
 			}
 			else
@@ -57971,8 +58275,13 @@ int64_t i_destinazione_attr
 							myprintf("Stessa data\n");
 						if (flagkill)
 							if (sorgente_attr!=destinazione_attr)
+							{
+								int64_t s3=mtime();
 								close(i_outfilename.c_str(),sorgente_data,sorgente_attr);
-						o_donesize+=sorgente_dimensione;
+								g_robocopy_close2+=mtime()-s3;			
+							}
+						o_writtensize	+=sorgente_dimensione;
+						o_donesize		+=sorgente_dimensione;
 						o_donecount++;
 						if (!flagnoeta)
 						{
@@ -57991,16 +58300,52 @@ int64_t i_destinazione_attr
 		if (flagkill)
 			if ((!flagappend) && (!iszpaq(i_outfilename)))
 			{
+				int64_t s4=mtime();
 				delete_file(i_outfilename.c_str());
-			if (flagdebug)
-				myprintf("Cancellato %s\n",i_outfilename.c_str());
+				g_robocopy_delete+=mtime()-s4;
+
+				if (flagdebug)
+					myprintf("Cancellato %s\n",i_outfilename.c_str());
 			}
 	}
 	if (!flagkill)
 		return "OK";
-	size_t const blockSize = 65536;
-	unsigned char buffer[blockSize];
+
+
+#ifdef _WIN32
+	if (flagbig)
+	{
+		bool 	copyresult=false;
+		int64_t sw1=mtime();
+		if (flagnoeta)
+			copyresult=windows_copy(i_filename,i_outfilename,NULL);
+		else
+			copyresult=windows_copy(i_filename,i_outfilename,win_avanzamento);
+		g_robocopy_fread+=mtime()-sw1;
+		
+		if (!flagnoeta)
+			if (sorgente_dimensione>LARGEFILE)
+				myprintf("\r                              \r");
+		if (copyresult)
+		{
+			int64_t sw2=mtime();
+			close(i_outfilename.c_str(),sorgente_data,sorgente_attr);
+			g_robocopy_touch+=mtime()-sw2;
+			o_donecount++;
+			o_writtensize+=sorgente_dimensione;
+			o_donesize+=sorgente_dimensione;
+			if (!flagnoeta)
+				myavanzamento(o_donesize,i_totalsize,i_startcopy);
+			return "OK";
+		}
+		else
+			return "ERROR";
+	}
+#endif
+	
+	int64_t s5=mtime();
 	FILE* inFile = freadopen(i_filename.c_str());
+	g_robocopy_readopen+=mtime()-s5;
 	if (inFile==NULL) 
 	{
 #ifdef _WIN32
@@ -58028,7 +58373,15 @@ int64_t i_destinazione_attr
 		}
 	}
 	/// to fix excluded myaddfiles()
-	makepath(i_outfilename);
+	
+	int64_t s6=mtime();
+	///	makepath(i_outfilename);
+	string percorso=extractfilepath(i_outfilename);
+	if (!direxists(percorso))
+		makepath(i_outfilename);
+	g_robocopy_makepath2+=mtime()-s6;
+	
+	int64_t s7=mtime();
 	FILE* outFile=NULL;
 	if (flagdebug)
 	{
@@ -58066,8 +58419,10 @@ int64_t i_destinazione_attr
 #endif
 	if (outFile==NULL) 
 		return "30847:CANNOT OPEN outfile "+i_outfilename;
+	
+	g_robocopy_openoutfile+=mtime()-s7;
+	
 	size_t readSize;
-#define LARGEFILE 100000000
 	int larghezzaconsole=terminalwidth();
 	if (larghezzaconsole>=50)
 		larghezzaconsole=50;
@@ -58098,39 +58453,62 @@ int64_t i_destinazione_attr
 				myprintf("Da scrivere             %19s\n",migliaia(dascrivere));
 		}
 	}
-	while ((readSize = fread(buffer, 1, blockSize, inFile)) > 0) 
+	int64_t s8=mtime();
+
+	
+	while ((readSize = fread(i_buffer, 1, i_buffersize, inFile)) > 0) 
 	{
 		if (flagzero)
-			memset(buffer,0,sizeof(buffer));
-		int scritti=fwrite(buffer,1,readSize,outFile);
+			memset(i_buffer,0,i_buffersize);
+		int64_t s11=mtime();
+		int scritti=fwrite(i_buffer,1,readSize,outFile);
+		g_robocopy_fwrite+=mtime()-s11;
+
 		///myprintf("Scritti %19s\n",migliaia(scritti));
-		scrittitotali+=scritti;
-		o_donesize+=scritti;
-		o_writtensize+=scritti;
-		if ((sorgente_dimensione>LARGEFILE) && (larghezzaconsole>0))
+		scrittitotali	+=scritti;
+		o_donesize		+=scritti;
+		o_writtensize	+=scritti;
+		if (!flagnoeta)
 		{
-			int barra=larghezzaconsole*scrittitotali/(sorgente_dimensione+1);
-			if (barra>lastbarra)
+			if ((sorgente_dimensione>LARGEFILE) && (larghezzaconsole>0))
 			{
-				myprintf(".");
-				lastbarra=barra;
+				int barra=larghezzaconsole*scrittitotali/(sorgente_dimensione+1);
+				if (barra>lastbarra)
+				{
+					myprintf(".");
+					lastbarra=barra;
+				}
 			}
+			else
+				myavanzamento(o_donesize,i_totalsize,i_startcopy);
 		}
-		else
-			myavanzamento(o_donesize,i_totalsize,i_startcopy);
 	}
 	if (flagappend)
 		if (flagdebug)
 		{
 			myprintf("\nScritti %s\n",migliaia(scrittitotali));
 		}	
-	if ((sorgente_dimensione>LARGEFILE) && (larghezzaconsole>0))
-		myprintf("\r                                                            \r");
-	myavanzamento(o_donesize,i_totalsize,i_startcopy);
+	if (!flagnoeta)
+	{
+		if ((sorgente_dimensione>LARGEFILE) && (larghezzaconsole>0))
+			myprintf("\r                                                            \r");
+		myavanzamento(o_donesize,i_totalsize,i_startcopy);
+	}
+	
+	g_robocopy_fread+=mtime()-s8;
+	
+	int64_t s9=mtime();
 	fclose(inFile);
 	fclose(outFile);
+	g_robocopy_fclose+=mtime()-s9;
+	
 /// note: this is a "touch" for the attr
+	int64_t s10=mtime();
 	close(i_outfilename.c_str(),sorgente_data,sorgente_attr);
+	///touch(i_outfilename.c_str(),sorgente_data,sorgente_attr);
+	
+	g_robocopy_touch+=mtime()-s10;
+	
 	o_donecount++;
 	if (scrittitotali!=dascrivere)
 	{
@@ -58569,6 +58947,14 @@ int Jidac::robocopy()
 {
 	int risultato=0;
 	myprintf("*** ROBOCOPY MODE *** ");
+#ifdef _WIN32
+	if (flagappend && flagbig)
+	{
+		myprintf("58876: On Windows you cannot run -append -big, removing -big\n");
+		myprintf("58876: (-big is a specific switch for... big files)\n");
+		flagbig=false;
+	}
+#endif
 	if (!flagkill)
 		myprintf("*** -kill missing: dry run *** ");
 	if (!flagforcezfs)
@@ -58576,12 +58962,14 @@ int Jidac::robocopy()
 	myprintf("\n");
 	if (files.size()<2)
 	{
-		myprintf("40188: at least two folders needed\n");
+		myprintf("40188: at least two folders needed (instead of %d)\n",files.size());
+		for (unsigned int i=0;i<files.size();i++)
+			myprintf("40189: %08d %s\n",i,files[i].c_str());
 		return 1;
 	}
 	if (!direxists(files[0]))
 	{
-		myprintf("27420: Master dir does not exists\n");
+		myprintf("27420: Master dir does not exists <<%s>>\n",files[0].c_str());
 		return 1;
 	}
 	/// slow, but the cardinality is so small
@@ -58589,7 +58977,7 @@ int Jidac::robocopy()
 	for (unsigned int i=0;i<files.size();i++)
 	{
 		if (!isdirectory(files[i]))
-				files[i]=files[i]+'/';
+			files[i]=files[i]+'/';
 		string	outputfolder=files[i];
 #ifdef _WIN32
 	outputfolder=stringtolower(outputfolder);
@@ -58618,7 +59006,10 @@ int Jidac::robocopy()
 		for (unsigned int i=0;i<files.size();i++)
 			myprintf("40245: after %03d files[i] %s\n",i,files[i].c_str());
 #endif
+	int64_t s13=mtime();
 	franzparallelscandir(false,true,true);
+	int64_t timescandir=mtime()-s13;
+	
 ///27437: space needed
 	if (!flagspace)
 		if (files_size[0]>0)
@@ -58638,10 +59029,11 @@ int Jidac::robocopy()
 			}
 			if (spazioinsufficiente)
 			{
-				myprintf("27441: exit, not enough space; use -space if you want\n");
+				myprintf("27441: exit, not enough space/destination does not exists; use -space if you want\n");
 				return 1;
 			}
 		}
+	
 	int64_t 	startscan=mtime();
 	uint64_t 	strangethings;
 	myprintf("\nMaster  %s (%s files %s) <<%s>>\n",migliaia(files_size[0]),tohuman(files_size[0]),migliaia2(files_count[0]),files[0].c_str());
@@ -58661,16 +59053,68 @@ int Jidac::robocopy()
 	int64_t timedelete				=0;
 	int xlscopied					=0;
 	uint64_t xlscopiedsize			=0;
+	
 	g_robocopy_check_sorgente		=0;
 	g_robocopy_check_destinazione	=0;
+	g_robocopy_makepath				=0;
+	g_robocopy_makepath2			=0;
+	g_robocopy_isequal				=0;
+	g_robocopy_close				=0;
+	g_robocopy_close2				=0;
+	g_robocopy_touch				=0;
+	g_robocopy_delete				=0;
+	g_robocopy_readopen				=0;
+	g_robocopy_openoutfile			=0;
+	g_robocopy_fclose				=0;
+	g_robocopy_fread				=0;
+	g_robocopy_fwrite				=0;
+
+	
+	int64_t timelocalexists			=0;
+	int64_t timelocalexists2		=0;
+	int64_t timelocalmakepath		=0;
+	
+	int 	timelocalexists_hm		=0;
+	int 	timelocalexists2_hm		=0;
+	int 	timelocalmakepath_hm	=0;
+	
+	if (g_ioBUFSIZE==4096)
+		g_ioBUFSIZE=1048576;
+	
+	unsigned char *buf=(unsigned char*)aligned_malloc(64, g_ioBUFSIZE);
+	if (buf==NULL)
+	{
+		myprintf(": GURU allocating io buf of size %s\n",g_ioBUFSIZE);
+		seppuku();
+		return 2;
+	}
+
+
 ///	we start by 1 (the first slave); 0 is the master
 	for (unsigned i=1; i<files.size(); ++i)
 	{
 		strangethings=0;
 		if (flagkill)
-			if (!exists(files[i]))
+		{
+			timelocalexists_hm++;
+			int64_t s14=mtime();
+			bool exists1=exists(files[i]);
+			timelocalexists+=mtime()-s14;
+			
+			if (!exists1)
+			{
+				timelocalmakepath_hm++;
+				int64_t s15=mtime();
 				makepath(files[i]);
-		if (!exists(files[i]))
+				timelocalmakepath+=mtime()-s15;
+			}
+		}
+		timelocalexists2_hm++;
+		int64_t s16=mtime();
+		bool exists2=exists(files[i]);
+		timelocalexists2+=mtime()-s16;
+		
+		if (!exists2)
 		{
 			if (!flagkill)
 			{
@@ -58754,14 +59198,18 @@ int Jidac::robocopy()
 					dest_attr=cerca->second.attr;
 				}
 					int64_t startcopy=mtime();
-					string copyfileresult=secure_copy_file(
+					string copyfileresult="OK";
+					if (flagkill)
+						copyfileresult=secure_copy_file(
 					filename0,filenamei,globalstartcopy,total_size*(files.size()-1),total_count*(files.size()-1),written_size,done_size,done_count,
 					p->second.size,
 					p->second.date,
 					p->second.attr,
 					dest_size,
 					dest_date,
-					dest_attr);
+					dest_attr,
+					buf,
+					g_ioBUFSIZE);
 					/// the return code can be OK (file copied) or = (file not copied because it is ==)
 					if ((copyfileresult!="OK") && (copyfileresult!="="))
 					{
@@ -58800,19 +59248,51 @@ int Jidac::robocopy()
 			}
 		}
 	}	
+	
+	if (buf!=NULL)
+	{
+		aligned_free(buf);
+		buf=0;
+	}
+	
 	timecopy++; //avoid some div by zero
 	timedelete++;
 	myprintf("\n");
 	if (!flagkill)
 		myprintf("FAKE: dry run!\n");
-	myprintf("=   %12s %20s B\n",migliaia(roboequal),migliaia2(roboequalsize));
-	myprintf("+   %12s %20s B in %9.2fs %15s/sec\n",migliaia(robocopied),migliaia2(robocopiedsize),(timecopy/1000.0),migliaia3((robocopiedsize/(timecopy/1000.0))));
+	if (roboequal>0)
+		myprintf("=   %12s %20s B\n",migliaia(roboequal),migliaia2(roboequalsize));
+	if (robocopied>0)
+		myprintf("+   %12s %20s B in %9.2fs %15s/sec\n",migliaia(robocopied),migliaia2(robocopiedsize),(timecopy/1000.0),migliaia3((robocopiedsize/(timecopy/1000.0))));
 	if (xlscopied>0)
-	myprintf("xls %12s %20s B\n",migliaia(xlscopied),migliaia2(xlscopiedsize));
-	myprintf("-   %12s %20s B in %9.2fs %15s/sec\n",migliaia(robodeleted),migliaia2(robodeletedsize),(timedelete/1000.0),migliaia3((robodeletedsize/(timedelete/1000.0))));
-	myprintf("\nRobocopy time  %9.2f s\n",((mtime()-startscan)/1000.0));
-	myprintf("Slaves getinfo %9.2f s\n",g_robocopy_check_destinazione/1000.0);
-	myprintf("Written bytes %s (%s)\n",migliaia(written_size),tohuman(written_size));
+		myprintf("xls %12s %20s B\n",migliaia(xlscopied),migliaia2(xlscopiedsize));
+	if (robodeleted)
+		myprintf("-   %12s %20s B in %9.2fs %15s/sec\n",migliaia(robodeleted),migliaia2(robodeletedsize),(timedelete/1000.0),migliaia3((robodeletedsize/(timedelete/1000.0))));
+	double tempo=(mtime()-startscan)+1;
+	tempo/=1000.0;
+	
+	myprintf("\nRobocopy time  %9.2f  - Slaves getinfo %9.2f s\n",tempo,g_robocopy_check_destinazione/1000.0);
+	
+	myprintf("Written bytes %s (%s) @ %s B/sec\n",migliaia(written_size),tohuman(written_size),migliaia2(written_size/tempo)
+	);
+
+/*
+	myprintf("localexists   %21s %08d\n",migliaia(timelocalexists),timelocalexists_hm);
+	myprintf("localexists2  %21s %08d\n",migliaia(timelocalexists2),timelocalexists2_hm);
+	myprintf("localmakepath %21s %08d\n",migliaia(timelocalmakepath),timelocalmakepath_hm);
+*/
+
+	if (flagverbose)
+	{
+		g_robocopy_fread++;
+		double realspeed=written_size/(g_robocopy_fread/1000.0);
+		printbar('=');
+		myprintf("check_source %10s check_dest %10s makepath %10s\n",migliaia(g_robocopy_check_sorgente),migliaia2(g_robocopy_check_destinazione),migliaia3(g_robocopy_makepath));
+		myprintf("makepath2    %10s isequal    %10s close    %10s\n",migliaia(g_robocopy_makepath2),migliaia2(g_robocopy_isequal),migliaia3(g_robocopy_close));
+		myprintf("close2       %10s touch      %10s delete   %10s\n",migliaia(g_robocopy_close2),migliaia2(g_robocopy_touch),migliaia3(g_robocopy_delete));
+		myprintf("readopen     %10s openout    %10s fclose   %10s\n",migliaia2(g_robocopy_readopen),migliaia2(g_robocopy_openoutfile),migliaia3(g_robocopy_fclose));
+		myprintf("buffersize   %10s scandir    %10s copy     %10s @ %s/s\n",tohuman(g_ioBUFSIZE),migliaia2(timescandir),migliaia3(g_robocopy_fread),migliaia4(realspeed));
+	}
 	if (not flagverify)
 		return risultato;
 	myprintf("*** ROBOCOPY: do a (-verify) ");
@@ -63508,6 +63988,7 @@ string zsfx_hash="ERRORE";
 
 int Jidac::benchmark()
 {
+	
 /*
 	uint32_t calculatedcrc=0;
 	parallelcrc32("01.cpp",16,calculatedcrc);
@@ -87683,5 +88164,60 @@ int Jidac::fastquicktxt()
 	if (testerror>0)
 		return 2;
 	
+	return 0;
+}
+void niente_read_archive(char* i_text)
+{
+}
+
+int Jidac::fzf()
+{
+	vector<DTMap::iterator> localfilelist;
+
+	if (!fileexists(archive.c_str()))
+		return -1;
+	getpasswordifempty();
+	if (flagcomment)
+	{
+		if (versioncomment=="")
+			return -1;
+		enumeratecomments();
+		vector<DTMap::iterator> myfilelist;
+		int versione=searchcomments(versioncomment,myfilelist);
+		if (versione==0)
+		{
+			myprintf("88130: cannot find version comment <<%s>>\n",versioncomment.c_str());
+			return 1;
+		}
+		if (versione==-1)
+		{
+			myprintf("88135: multiple match for version comment <<%s>>\n",versioncomment.c_str());
+			return 1;
+		}
+		version=versione;
+		flagcomment=false;
+		jidacreset();
+	}
+
+	int errors=0;
+	read_archive(niente_read_archive,archive.c_str(),&errors,1,true); /// AND NOW THE MAGIC ONE!
+	for (DTMap::iterator a=dt.begin(); a!=dt.end(); ++a) 
+		if (a->second.data!='-' && (all || a->second.date)) 
+		{
+			a->second.data='-';
+			localfilelist.push_back(a);
+		}
+	for (unsigned int i=0;i<localfilelist.size();i++)
+	{
+		string temp=localfilelist[i]->first;
+		if (all)
+			myreplace(temp,"|$1","|");
+		if (!isads(temp))
+			if (!isdirectory(temp.c_str()))
+			{
+				printUTF8(temp.c_str());
+				myprintf("\n");
+			}
+	}
 	return 0;
 }

@@ -4,6 +4,10 @@ Swiss army knife for backup and disaster recovery, like 7z or RAR on steroids,wi
      
 ###  Runs on: Windows 32/64, FreeBSD, OpenBSD, Linux, MacOS, Solaris, OmniOS, ESXi, QNAP-based NAS, Haiku OS
 
+.   
+[A freeware GUI (PAKKA) is available on Windows to make extraction easier](https://www.francocorbelli.it/pakka)
+_Please note: PAKKA is a Windows 32 EXE packed with mpress. Therefore it is possible that some antiviruses report false positives. I always recommend, as with any executable program, to take it only from reputable sources. It is actually the database backup portion of one of my ERP software, that's why I can't make an opensource version of it, it means rewriting from scratch. ***To avoid risks I put directly the download link from my personal site, the download is not logged.***_
+
 ### [Wiki being written - be patient](https://github.com/fcorbelli/zpaqfranz/wiki)
 ### [HELP](https://github.com/fcorbelli/zpaqfranz/wiki/HELP:-integrated)
 ### [Binaries on sourceforge](https://sourceforge.net/projects/zpaqfranz/files/)  
@@ -75,7 +79,7 @@ For even higher level of paranoia, it is possible to use others hash algorithms,
 - WHIRLPOOL (ISO/IEC 10118-3)
 - HIGHWAY (64,128,256)
 ...And much more.  
-A freeware GUI (PAKKA) is available on Windows to make extraction easier.  
+
 
 **No complex (and fragile) repository folders, with hundreds of "whatever", just only a single file!**  
 

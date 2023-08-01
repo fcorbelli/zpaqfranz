@@ -1,8 +1,8 @@
-#   zpaqfranz.pod - zpaqfranz 55.13 man page source
+#   zpaqfranz.pod - zpaqfranz 58.8 man page source
 #
 #   Copyright
 #
-#       Released to public domain by Franco Corbelli in 2022
+#       Released to public domain by Franco Corbelli in 2023
 #
 #   Description
 #
@@ -35,7 +35,8 @@ zpaqfranz I<command> I<archive>[C<.zpaq>] [I<files|directory>]... [-I<switches>]
 
 =head1 DESCRIPTION
 
-I<zpaqfranz> is something like 7z or RAR on steroids, with deduplicated "snapshots" (versions)
+I<zpaqfranz> is like 7z or RAR on steroids, with versions/"snapshots"
+
  Conceptually similar to Mac time machine, but much more efficiently
  Keeps backup always-to-always, no need to ever prune (CryptoLocker)
  Easily handles millions of files and TBs of data, non-latin support
@@ -71,35 +72,55 @@ The help is embedded : please use that or read the wiki on github
  Examples of XXX     : zpaqfranz -he XXX
 
  XXX can be a COMMAND
- a                   : add files to archive
- autotest            : operational self test 
- b                   : benchmark and CPU stresser
- c                   : dir compare
- cp                  : copy files (with ETA)
- d                   : deduplication
- dir                 : just about a mini Windows' dir
- dirsize             : folder size into an archive
- f                   : fill (or wipe) drive space
- i                   : information 
- k                   : kill files not in archive
- l                   : list archive content
- m                   : merge (consolidate) multipart archives
- n                   : decimation
- p                   : paranoid test
- password            : set/change/remove password
- pause               : just like 'pause' in Windows' batch
- r                   : something like multithreaded robocopy
- rsync               : delete rsync temporary files
- s                   : return size of folders and free spaces
- sum                 : hashing / deduplication finder
- t                   : test archive's integrity
- trim                : trim (reduce size) of incompleted archives
- utf                 : test and fix "strange" filenames
- v                   : verify archive's hashes against filesystem
- w                   : chunked "RAMDISK" test-extraction
- x                   : extraction
- z                   : delete empty directory (zero length)
-
+ 1on1                : Delete folder2's files with same name/hash of folder1
+ a                   : Add or append files to archive
+ autotest            : Autotest for hidden errors after compiling from source
+ b                   : CPU benchmark, speed index in (yes!) franzomips
+ backup              : Backup with hardened multipart
+ c                   : Compare one master dir against one or more slave dir(s)
+ consolidatebackup   : Consolidate multipart backup
+ cp                  : Friendly file copy with ETA (resumable)
+ d                   : Deduplicate files inside a single folder WITHOUT MERCY
+ dir                 : A better dir (yes, Windows' dir)
+ dirsize             : Show cumulative folder(s) size
+ e                   : Extract file(s) on current folder
+ f                   : Free disk space fill (=reliability test) or wipe (privacy)
+ find                : Search file(s) with wildcards
+ fzf                 : List archive filenames 'plain-and-dirty'
+ i                   : File (archive) information
+ isopen              : Check if a file isopen (by other software)
+ k                   : Kill (delete) everything not in archive (RISKY!)
+ l                   : List file(s)
+ last                : Get last multipart filename
+ last2               : Compare last2 rows
+ m                   : Merge (consolidate) multipart archive into one
+ n                   : Decimate (keeping the newer X) older files
+ p                   : Paranoid test (slow, lot of RAM needed)
+ password            : Change/remove password of single archive (no multipart)
+ pause               : Halt script execution until time or keypress
+ r                   : Robocopy one master to multiple slave folders
+ rd                  : Remove hard-to-delete Windows' folder (ex. path too long)
+ rsync               : Delete rsync's dangling temporary files
+ s                   : Get dir(s) size, return free disk space
+ sum                 : Calc hash/checksums, find duplicated files
+ t                   : Test archive integrity
+ testbackup          : Multipart hardening
+ trim                : Trim .zpaq archive from incomplete transaction
+ utf                 : Convert filenames to latin, fix too long filenames etc
+ v                   : Verify archive (against filesystem)
+ versum              : Hashdeep-like double check of hashes
+ w                   : Chunked extraction/test of very big files
+ x                   : Extract file(s)
+ z                   : Remove empty directories
+ zfsadd              : Freeze zfs' snapshots inside archive
+ zfsbackup           : Backup of zfs' streams
+ zfslist             : List zfs' snapshots with wildcard
+ zfsproxbackup       : Backup of proxmox on zfs
+ zfsproxrestore      : Restore of proxmox on zfs
+ zfspurge            : Purge snapshots with wildcards
+ zfsreceive          : Restore (with zfs) from zpaq archive
+ zfsrestore          : Restore from extracted .zfs stream
+ 
 =head1 OPTIONS
 
  Embbedded help on optional switches
@@ -115,17 +136,44 @@ The help is embedded : please use that or read the wiki on github
 
 =head1 AVAILABILITY
 
-https://github.com/fcorbelli/zpaqfranz
+ https://github.com/fcorbelli/zpaqfranz
+ https://sourceforge.net/projects/zpaqfranz/
 
 =head1 BUGS
 
-Compiling on BIG ENDIAND / "weird" CPUs requires the right switches or bad things can happen. Use the autotest command if necessary.
+ Provided as-is, with no warranty whatsoever.
 
+=head1 ENVIRONMENT
+
+ Running on "weird things" requires compiling with the right switches 
+ -DNOJIT           : Not-Intel CPU (ex. Apple M1/M2, ARM...)
+ -DSOLARIS         : Solaris-based OS
+ -DANCIENT         : Very old system (cheap NAS...)
+ -DBIG             : BIG ENDIAN
+ -DESX             : ESXi server
+ -DALIGNMALLOC     : Enforce mem alignment (sparc64...)
+ -DHWSHA2          : Enable HW SHA support (Ryzen...)
+
+ Use the autotest command if necessary.
+ 
+ If the executable is named "dir" act (just about)... like Windows' dir
+
+ If the executable is named "robocopy" runs... some kind of robocopy-like
+ WET RUNS (-kill automagically enabled), with -space enabled.
+ ex robocopy /tmp/zp /tmp/backup1 /tmp/backup2 
+ 
 =head1 LIMITATIONS
 
-zpaqfranz does not store owner/group of the file, symlinks or whatever.
-If you really need you must use tar.
+ zpaqfranz currently does not store owner/group (it will be in the future).
+ If you really need you must use tar.
+ 
+ "Strange" systems with little memory (NAS, ESX servers...) can crash.
 
+
+=head1 FEATURES
+
+ zpaqfranz supports -stdin and -stdout (zpaq does not)
+ 
 =head1 SEE ALSO
 
 C<bzip2(1)>
@@ -138,16 +186,22 @@ C<zpaq(1)>
 
 =head1 AUTHORS
 
-This is a fork of zpaq 7.15 made by Franco Corbelli and released under MIT in 2021-2022.
+This is a fork of zpaq 7.15 (released to public domain by Matt Mahoney)
+made by Franco Corbelli and released under MIT in 2021-2023.
 
-Licenses of various software (more details in the source code):
-I<Public domain> for zpaq, libzpaq, AES from libtomcrypt by Tom St Denis,salsa20 by D. J. Bernstein, mod by data man and reg2s patch from encode.su forum Sha1Opt.asm and 7zAsm.asm by Igor Pavlov;
+Licenses of various software (more details in the source code)
+
+
+I<Public domain> for zpaq, libzpaq, AES from libtomcrypt by Tom St Denis,salsa20 by D. J. Bernstein, mod by data man and reg2s patch from encode.su forum Sha1Opt.asm, 7zAsm.asm by Igor Pavlov and PDCursesMod;
 I<MIT> for Code from libdivsufsort 2.0 (C) Yuta Mori, 2003-2008, Embedded Artistry, Nilsimsa implementation by Sepehr Laal;
 I<zlib> for Crc32.h Copyright (c) 2011-2019 Stephan Brumme, part of hash-library (MD5, SHA-3), crc32c.c Copyright (C) 2015 Mark Adler;
 I<The Unlicense> for wyhash (experimental) by WangYi;
 I<BSD 2> for xxHash Copyright (C) 2012-2020 Yann Collet;
-I<CC0 1.0 / Apache License 2.0> for the BLAKE3 hasher;
-I<Nothing explicit, seems BSD> for Whirlpool by Paulo Barreto and Vincent Rijmen.
+I<CC0 1.0 / Apache License 2.0> for the BLAKE3 hasher and HighWay64 hasher;
+I<Nothing explicit, seems BSD> for Whirlpool by Paulo Barreto and Vincent Rijmen;
+I<almost-unrestricted> Twofish implementation by Niels Ferguson;
+I<GPL3+> Rufus: The Reliable USB Formatting Utility.
+
 
 =head1 EXAMPLE 1 create a temporary file, add /etc to mybackup.zpaq
 

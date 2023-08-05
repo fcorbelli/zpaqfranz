@@ -1,10 +1,10 @@
 /*
-                                  __                     
+                                  __
            _____ __   __ _  __ _ / _|_ __ __ _ _ __  ____
           |_  / '_ \ / _` |/ _` | |_| '__/ _` | '_ \|_  /
-           / /| |_) | (_| | (_| |  _| | | (_| | | | |/ / 
+           / /| |_) | (_| | (_| |  _| | | (_| | | | |/ /
           /___| .__/ \__,_|\__, |_| |_|  \__,_|_| |_/___|
-              |_|             |_|                        
+              |_|             |_|
          Swiss army knife for backup and disaster recovery
 Like 7z or RAR on steroids,with deduplicated "snapshots" (versions)
 Conceptually similar to Mac time machine, but much more efficiently
@@ -22,7 +22,7 @@ WWW: https://github.com/fcorbelli/zpaqfranz
 
 EXPERIMENTAL BUILD: the source is a mess, strongly in development
 
-           Provided as-is, with no warranty whatsoever, 
+           Provided as-is, with no warranty whatsoever,
                      by Franco Corbelli
                   franco@francocorbelli.com
 
@@ -52,8 +52,8 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 */
 
-#define ZPAQ_VERSION "58.7k"
-#define ZPAQ_DATE "(2023-07-24)"  // cannot use __DATE__ on Debian!
+#define ZPAQ_VERSION "58.8k"
+#define ZPAQ_DATE "(2023-08-05)"  // cannot use __DATE__ on Debian!
 
 ///	optional align for malloc (sparc64) via -DALIGNMALLOC
 #define STR(a) #a
@@ -153,27 +153,27 @@ OTHER DEALINGS IN THE SOFTWARE.
 	#define TEXT_SERVER ""
 #endif
 
-/*                                                               
-This is zpaqfranz, a patched  but (maybe :) compatible fork of ZPAQ version 7.15 
+/*
+This is zpaqfranz, a patched  but (maybe :) compatible fork of ZPAQ version 7.15
 (http://mattmahoney.net/dc/zpaq.html)
 
 Old version in FreeBSD ports archivers/paq (v 6.57 of 2014),
 Debian (7.15 of 2016) et al.
 
 From branch 51 all source code merged into one .cpp,
-aiming to make it as easy as possible to compile on "strange" systems 
+aiming to make it as easy as possible to compile on "strange" systems
 (NAS, vSphere etc), because no make needed anymore.
 
 So be patient if the source is not linear, updating and compilation are now trivial.
 
-The source is composed of the fusion of different software 
-from different authors, therefore there is no uniform style of programming. 
+The source is composed of the fusion of different software
+from different authors, therefore there is no uniform style of programming.
 
 I have made a number of efforts to maintain compatibility with unmodified version (7.15)
 and compatibility with older versions of C++, even at the cost of slow or inelegant workarounds
 and as few as possible warnings (-Wall -Wunused-parameter -Wextra -pedantic)
 
-So don't be surprised if it looks like what in Italy 
+So don't be surprised if it looks like what in Italy
 we call "zibaldone" or in Emilia-Romagna "mappazzone".
 As Kirk McKusick once said: "nobody has offered to pay me the $25K to have me do it"
 :)
@@ -202,22 +202,22 @@ https://github.com/fcorbelli/zpaqfranz/wiki
 
 
 Portions of software by other authors, mentioned later, are included.
-As far as I know this is allowed by the licenses. 
+As far as I know this is allowed by the licenses.
 
 **** I apologize if I have unintentionally violated any rule ****
 ****    Please report and I will fix as soon as possible     ****
 
 Credits and copyrights and licenses and links
 
- 0 [Public domain]                zpaq http://mattmahoney.net/dc/zpaq.html  
+ 0 [Public domain]                zpaq http://mattmahoney.net/dc/zpaq.html
 	This software is provided as-is, with no warranty.
 	I, Matt Mahoney, release this software into
 	the public domain.   This applies worldwide.
 	In some countries this may not be legally possible; if so:
 	I grant anyone the right to use this software for any purpose,
 	without any conditions, unless such conditions are required by law.
-  
- 1 [Public domain]                zpaq.AES from libtomcrypt by Tom St Denis 
+
+ 1 [Public domain]                zpaq.AES from libtomcrypt by Tom St Denis
 	The LibTom license
 	This is free and unencumbered software released into the public domain.
 	Anyone is free to copy, modify, publish, use, compile, sell, or
@@ -241,11 +241,11 @@ Credits and copyrights and licenses and links
 	For more information, please refer to <http://unlicense.org/>
 
  2 [Public domain]                zpaq.salsa20 by D. J. Bernstein
-	From the reference 
+	From the reference
 	salsa20-ref.c version 20051118
 	D. J. Bernstein
 	Public domain.
- 	
+
  3 [Public domain]                unzpaq206.cpp by Matt Mahoney
 	This software is provided as-is, with no warranty.
 	I, Matt Mahoney, release this software into
@@ -256,8 +256,8 @@ Credits and copyrights and licenses and links
 
  4 [Public domain]                zpaq.Include mod by data man and reg2s patch from encode.su forum
     Public forum                  https://encode.su/threads/456-zpaq-updates
-	
- 5 [Public domain]                Sha1Opt.asm and 7zAsm.asm by Igor Pavlov 
+
+ 5 [Public domain]                Sha1Opt.asm and 7zAsm.asm by Igor Pavlov
     https://sourceforge.net/p/sevenzip/discussion/45797/thread/7d394aca49/?limit=25#521d
  	Hello, I am the developer of a little zpaq's fork (zpaqfranz)	(...)
 	I integrated two of yours source code into mine	(...)
@@ -267,8 +267,8 @@ Credits and copyrights and licenses and links
 	Franco Corbelli
 	(Igor Pavlov, 2022-07-22)
 		Yes, you can use any public domain code from 7-zip in any project.
-	
- 6 [MIT license]                  zpaq.Code from libdivsufsort 2.0 (C) Yuta Mori, 2003-2008 
+
+ 6 [MIT license]                  zpaq.Code from libdivsufsort 2.0 (C) Yuta Mori, 2003-2008
 	The MIT License (MIT)
 	Copyright (c) 2003-2008 Yuta Mori All rights reserved.
 	Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -286,8 +286,8 @@ Credits and copyrights and licenses and links
 	LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 	OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 	SOFTWARE.
-	
- 7 [MIT License]                  Embedded Artistry (memory-aligned malloc)           https://github.com/embeddedartistry 
+
+ 7 [MIT License]                  Embedded Artistry (memory-aligned malloc)           https://github.com/embeddedartistry
 	MIT License
 	Copyright (c) 2017 Embedded Artistry
 	Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -306,7 +306,7 @@ Credits and copyrights and licenses and links
 	OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 	SOFTWARE.
 
- 8 [MIT License]                  redundand SHA256                                    https://github.com/System-Glitch/SHA256 
+ 8 [MIT License]                  redundand SHA256                                    https://github.com/System-Glitch/SHA256
 	This code is used in the benchmark, to take a "common" code, vs HW acceleration
 	MIT License
 	Copyright (c) 2021 Jérémy LAMBERT (SystemGlitch)
@@ -325,8 +325,8 @@ Credits and copyrights and licenses and links
 	LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 	OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 	SOFTWARE.
- 
- 9 [MIT License]                  Nilsimsa implementation by Sepehr Laal              https://github.com/3p3r/nilsimsa-lite/blob/master/nilsimsa.c 
+
+ 9 [MIT License]                  Nilsimsa implementation by Sepehr Laal              https://github.com/3p3r/nilsimsa-lite/blob/master/nilsimsa.c
 	MIT License
 	Copyright (c) 2017 Sepehr Laal
 	Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -379,8 +379,8 @@ Credits and copyrights and licenses and links
 	2. Altered source versions must be plainly marked as such, and must not be
 	   misrepresented as being the original software.
 	3. This notice may not be removed or altered from any source distribution.
- 
-12 [zlib license]                 part of hash-library (MD5, SHA-3) by Stephan Brumme https://github.com/stbrumme/hash-library 
+
+12 [zlib license]                 part of hash-library (MD5, SHA-3) by Stephan Brumme https://github.com/stbrumme/hash-library
 	zlib License
 	Copyright (c) 2014,2015 Stephan Brumme
 	This software is provided 'as-is', without any express or implied warranty. In no event will the authors be held liable for any damages arising from the use of this software.
@@ -408,7 +408,7 @@ Credits and copyrights and licenses and links
 	3. This notice may not be removed or altered from any source distribution.
 	Mark Adler
 	madler@alumni.caltech.edu
-  
+
 14 [The Unlicense]                wyhash (experimental) WangYi                        https://github.com/wangyi-fudan/wyhash
 	This is free and unencumbered software released into the public domain.
 	Anyone is free to copy, modify, publish, use, compile, sell, or
@@ -430,7 +430,7 @@ Credits and copyrights and licenses and links
 	ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 	OTHER DEALINGS IN THE SOFTWARE.
 	For more information, please refer to <http://unlicense.org/>
- 
+
 15 [BSD 2-Clause license]         xxHash Copyright (C) 2012-2020 Yann Collet          https://github.com/memcached/memcached/blob/master/xxhash.h
 	xxHash - Extremely Fast Hash algorithm
 	Header File
@@ -460,7 +460,7 @@ Credits and copyrights and licenses and links
 	  - xxHash homepage: https://www.xxhash.com
 	  - xxHash source repository: https://github.com/Cyan4973/xxHash
 
-16 [CC0 1.0 / Apache License 2.0] BLAKE3 hasher                                       https://github.com/BLAKE3-team/BLAKE3 
+16 [CC0 1.0 / Apache License 2.0] BLAKE3 hasher                                       https://github.com/BLAKE3-team/BLAKE3
 	This work is released into the public domain with CC0 1.0. Alternatively, it is
 	licensed under the Apache License 2.0.
 	-------------------------------------------------------------------------------
@@ -743,37 +743,31 @@ Credits and copyrights and licenses and links
 	   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 	   See the License for the specific language governing permissions and
 	   limitations under the License.
-	   
+
 17 [nothing explicit, seems BSD]  Whirlpool by Paulo Barreto and Vincent Rijmen       https://web.archive.org/web/20171129084214/http://www.larc.usp.br/~pbarreto/WhirlpoolPage.html
 
 18 [almost-unrestricted]		  Twofish implementation,(c) 2002 by Niels Ferguson   https://github.com/wernerd/ZRTPCPP/blob/master/cryptcommon/twofish.c
-	* Fast, portable, and easy-to-use Twofish implementation,  
-	* Version 0.3. 
-	* Copyright (c) 2002 by Niels Ferguson.  
- 
-	The author hereby grants a perpetual license to everybody to 
-	use this code for any purpose as long as the copyright message is included 
-	in the source code of this or any derived work. 
-	 
-	Yes, this means that you, your company, your club, and anyone else 
-	can use this code anywhere you want. You can change it and distribute it 
-	under the GPL, include it in your commercial product without releasing 
-	the source code, put it on the web, etc.  
-	The only thing you cannot do is remove my copyright message,  
-	or distribute any source code based on this implementation that does not  
-	include my copyright message.  
-	 
-	I appreciate a mention in the documentation or credits,  
-	but I understand if that is difficult to do. 
-	I also appreciate it if you tell me where and why you used my code. 
-	
-19 [GPLv3+]							Copyright (C) 2016 Free Software Foundation, Inc. dd (coreutils) 8.26
-	License GPLv3+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>.
-	This is free software: you are free to change and redistribute it.
-	There is NO WARRANTY, to the extent permitted by law.
-	Written by Paul Rubin, David MacKenzie, and Stuart Kemp.
+	* Fast, portable, and easy-to-use Twofish implementation,
+	* Version 0.3.
+	* Copyright (c) 2002 by Niels Ferguson.
 
-20 [Apache License 2.0] HighWay64 hasher                                       https://github.com/google/highwayhash
+	The author hereby grants a perpetual license to everybody to
+	use this code for any purpose as long as the copyright message is included
+	in the source code of this or any derived work.
+
+	Yes, this means that you, your company, your club, and anyone else
+	can use this code anywhere you want. You can change it and distribute it
+	under the GPL, include it in your commercial product without releasing
+	the source code, put it on the web, etc.
+	The only thing you cannot do is remove my copyright message,
+	or distribute any source code based on this implementation that does not
+	include my copyright message.
+
+	I appreciate a mention in the documentation or credits,
+	but I understand if that is difficult to do.
+	I also appreciate it if you tell me where and why you used my code.
+
+19 [Apache License 2.0] HighWay64 hasher                                       https://github.com/google/highwayhash
       Apache License
                            Version 2.0, January 2004
                         http://www.apache.org/licenses/
@@ -925,20 +919,20 @@ Credits and copyrights and licenses and links
       incurred by, or claims asserted against, such Contributor by reason
       of your accepting any such warranty or additional liability.
 
-21 [Public domain]                The files in this directory are released to the Public Domain.
+20 [Public domain]                The files in this directory are released to the Public Domain.
     github     	                  https://github.com/Bill-Gray/PDCursesMod
-	
+
 	In particular				  https://github.com/Bill-Gray/PDCursesMod/tree/master/wincon
 								  Windows console port was originally provided by Chris Szurgot szurgot@itribe.net
 	Legal Stuff
-	The core package is in the public domain, but small portions of PDCursesMod are subject 
-	to copyright under various licenses. 
-	Each directory contains a README file, 
-	with a section titled "Distribution Status" which describes the status 
+	The core package is in the public domain, but small portions of PDCursesMod are subject
+	to copyright under various licenses.
+	Each directory contains a README file,
+	with a section titled "Distribution Status" which describes the status
 	of the files in that directory.
 
-22 [GPL3+]                        Rufus: The Reliable USB Formatting Utility  
-                                  https://rufus.ie        
+21 [GPL3+]                        Rufus: The Reliable USB Formatting Utility
+                                  https://rufus.ie
 
   Message-Digest algorithms (md5sum, sha1sum, sha256sum, sha512sum)
   Copyright © 1998-2001 Free Software Foundation, Inc.
@@ -947,21 +941,21 @@ Credits and copyrights and licenses and links
   Copyright © 2002-2015 Wei Dai & Igor Pavlov
   Copyright © 2015-2021 Pete Batard <pete@akeo.ie>
   Copyright © 2022 Jeffrey Walton <noloader@gmail.com>
- 
+
   This program is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
   the Free Software Foundation, either version 3 of the License, or
   (at your option) any later version.
- 
+
   This program is distributed in the hope that it will be useful,
   but WITHOUT ANY WARRANTY; without even the implied warranty of
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
   GNU General Public License for more details.
- 
+
   You should have received a copy of the GNU General Public License
   along with this program.  If not, see <http://www.gnu.org/licenses/>.
- 
- 
+
+
 This software is provided AS IS with NO WARRANTY whatsoever.
 Greetings
 
@@ -970,9 +964,9 @@ Greetings
  2 Thanks to Bulat Ziganshin 							for contribution on Slicing-by-16 for crc32
  3 Thanks to SeDD user of the encode.ru forum   		for SFX debugging
  4 Thanks to Aki  user of forums.debian.net     		for some Debian's packager help
- 5 Thanks to https://github.com/dertuxmalwieder 		for testing on various Unixes and OpenBSD port 
+ 5 Thanks to https://github.com/dertuxmalwieder 		for testing on various Unixes and OpenBSD port
  6 Thanks to Felix Palmen <zirias@freebsd.org>  		for great help on FreeBSD "packaging"
- 7 Thanks to https://github.com/omar-polo       		for a merged-unmerged-hardcoded NOJIT fix 
+ 7 Thanks to https://github.com/omar-polo       		for a merged-unmerged-hardcoded NOJIT fix
  8 Thanks to https://github.com/Piqlet          		for non-x86 help
  9 Thanks to https://github.com/osmano807       		for non-x86 help
 10 Thanks to Stephen Kitt <skitt@debian.org>    		for supporting Debian "packaging"
@@ -986,17 +980,18 @@ Greetings
 18 Thanks to https://github.com/justinormont            for the proposed Homebrew install formula for macOS and x64 Linux
 19 Thanks to https://github.com/alebcay                 for coding the Homebrew install formula for macOS and x64 Linux
 20 Thanks to https://github.com/ZhongRuoyu				for __linux__ instead of older #defines
-21 Thanks to Coody user of encode.ru					for unexistent folder bug 
+21 Thanks to Coody user of encode.ru					for unexistent folder bug
 22 Thanks to https://github.com/ruptotus				for "hidden" overloaded fwrite() function bug, and -dryrun on robocopy fix
+23 Thanks to Karl Wagner								for typo fixing and various suggestions
 
-  _____ _   _  _____ _______       _      _      
- |_   _| \ | |/ ____|__   __|/\   | |    | |     
-   | | |  \| | (___    | |  /  \  | |    | |     
-   | | | . ` |\___ \   | | / /\ \ | |    | |     
-  _| |_| |\  |____) |  | |/ ____ \| |____| |____ 
+  _____ _   _  _____ _______       _      _
+ |_   _| \ | |/ ____|__   __|/\   | |    | |
+   | | |  \| | (___    | |  /  \  | |    | |
+   | | | . ` |\___ \   | | / /\ \ | |    | |
+  _| |_| |\  |____) |  | |/ ____ \| |____| |____
  |_____|_| \_|_____/   |_/_/    \_\______|______|
-                                                 
-                                                 
+
+
 ===============================================================================
 [1] Fastest: 	binary packages (sometimes not the most updated)
 OpenBSD: 		pkg_add zpaqfranz
@@ -1058,7 +1053,7 @@ clean:
 [4] Dirtiest (!), the "nightly build"
 (pre-requisite: working C++ compiler like g++ or clang, wget, NO MAKE NEEDED)
 
-*** WARNING This version is practically the n-1, 
+*** WARNING This version is practically the n-1,
 *** may contain experimental code, compilation incompatibilities etc.
 *** Almost the bleeding edge
 ```
@@ -1068,16 +1063,16 @@ wget http://www.francocorbelli.it/zpaqfranz.cpp -O zpaqfranz.cpp
 then... build (aka: compile)
 
 
-  _    _  ______          __  _______ ____    ____  _    _ _____ _      _____  
- | |  | |/ __ \ \        / / |__   __/ __ \  |  _ \| |  | |_   _| |    |  __ \ 
+  _    _  ______          __  _______ ____    ____  _    _ _____ _      _____
+ | |  | |/ __ \ \        / / |__   __/ __ \  |  _ \| |  | |_   _| |    |  __ \
  | |__| | |  | \ \  /\  / /     | | | |  | | | |_) | |  | | | | | |    | |  | |
  |  __  | |  | |\ \/  \/ /      | | | |  | | |  _ <| |  | | | | | |    | |  | |
  | |  | | |__| | \  /\  /       | | | |__| | | |_) | |__| |_| |_| |____| |__| |
- |_|  |_|\____/   \/  \/        |_|  \____/  |____/ \____/|_____|______|_____/ 
-                                                                               
-                                                                               
+ |_|  |_|\____/   \/  \/        |_|  \____/  |____/ \____/|_____|______|_____/
 
-My main development platforms are INTEL Windows 
+
+
+My main development platforms are INTEL Windows
 (non-Intel Windows (arm) currently unsupported) and FreeBSD.
 
 I rarely use Linux or MacOS or whatever (for compiling),
@@ -1100,7 +1095,7 @@ DEFINEs at compile-time
 									// (for simplicity I'll call them Intel, meaning x86-SSE2 and amd64)
 									// On non-Intel a -NOJIT should runs fine on LITTLE ENDIANs
 									// like Linux aarch64, Android aarch64 etc
-									// On BIG ENDIAN or "strange things" like middle endian 
+									// On BIG ENDIAN or "strange things" like middle endian
 									// (Honeywell 316) or little word (PDP-11)
 									// the autotest command is for you :)
 									// https://gcc.gnu.org/legacy-ml/gcc-help/2007-07/msg00343.html
@@ -1109,7 +1104,7 @@ DEFINEs at compile-time
 									// consuming less RAM (ex. PowerPC Mac), no auto C++
 
 -DBIG								// Turn on BIG ENDIAN at compile time
-									
+
 -DDEBUG								// Old 7.15, almost useless. Use -debug switch instead
 
 -DESX								// Yes, zpaqfranz run (kind of) on ESXi too :-)
@@ -1124,8 +1119,8 @@ HIDDEN GEMS
 If the (non Windows) executable is named "dir" act (just about)... like Windows' dir
 Beware of collisions with other software "dir"
 
-If the (non Windows) executable is name "robocopy" runs... some kind of robocopy-like.
-ex robocopy /tmp/zp /tmp/backup1 /tmp/backup2 
+If the (non Windows) executable is named "robocopy" runs... some kind of robocopy-like.
+ex robocopy /tmp/zp /tmp/backup1 /tmp/backup2
 BEWARE: those are WET RUNS (-kill automagically enabled), with -space enabled!
 
 
@@ -1153,27 +1148,27 @@ SHA-1 HARDWARE ACCELERATION
 Some CPUs does have SHA instructions (typically AMD, not very widespread on Intel).
 So you can use a piece of 7-zip by Igor Pavlov (I am sure you know 7z) that is
 not really useful, but just for fun (faster BUT with higher latency).
-For performances reason, no run-time CPU compatibility checks, must be turn on 
+For performances reason, no run-time CPU compatibility checks, must be turn on
 via optional -hw switch
 On AMD 5950X runs ~1.86 GB/s vs ~951 MB/s
 The obj can be assembled from the fixed source code with asmc64
 https://github.com/nidud/asmc
-asmc64.exe sha1ugo.asm 
+asmc64.exe sha1ugo.asm
 Then link the .obj and compile with -DHWSHA1
 Short version:  not worth the effort for the GA release
 From build 58+ there is a new -DHWSHA2, without linking of asm, that accelerate SHA256 too
 
 STATIC LINKING
-I like -static very much, there are a thousand arguments as to whether it is good or not. 
-There are strengths and weaknesses. 
+I like -static very much, there are a thousand arguments as to whether it is good or not.
+There are strengths and weaknesses.
 Normally I prefer it, you do as you prefer.
 
 TO BE NATIVE OR NOT TO BE?
-The -march=native  is a switch that asks the compiler to activate all possible 
-optimizations for the CPU on which zpaqfranz is being compiled. 
-This is to obtain the maximum possible performance, 
-while binding the executable to the processor. 
-It should not be used if you intend, for some reason, 
+The -march=native  is a switch that asks the compiler to activate all possible
+optimizations for the CPU on which zpaqfranz is being compiled.
+This is to obtain the maximum possible performance,
+while binding the executable to the processor.
+It should not be used if you intend, for some reason,
 to transfer the object program to a different system.
 If you are compiling from source you can safely use it.
 
@@ -1182,7 +1177,7 @@ Debian does not "like" anything embedded https://wiki.debian.org/EmbeddedCopies
 zpaqfranz (on Windows) have two SFX modules (32 and 64)
 and (every platform) a testfile (sha256.zpaq) for extraction autotest
 (aka: weird CPUs)
-It is possible to make a Debian-package-compliant source code 
+It is possible to make a Debian-package-compliant source code
 with some sed (or a single sed -e) (of course remove the |)
 sed -i "/DEBIAN|START/,/\/\/\/DEBIA|NEND/d"  zpaqfranz.cpp
 sed -i "s/\/\/\/char ext|ract_test1/char ext|ract_test1/g" zpaqfranz.cpp
@@ -1191,7 +1186,7 @@ sed -i "s/\/\/\/char ext|ract_test1/char ext|ract_test1/g" zpaqfranz.cpp
 TARGET EXAMPLES
 ```
 Windows 64 (g++ 7.3.0)
-g++ -O3  zpaqfranz.cpp -o zpaqfranz 
+g++ -O3  zpaqfranz.cpp -o zpaqfranz
 
 Windows 64 (g++ 10.3.0) MSYS2
 g++ -O3  zpaqfranz.cpp -o zpaqfranz -pthread -static
@@ -1252,7 +1247,7 @@ Then you can compile, via Makefile or "by hand"
 
 CentoOS
 Please note:
-"Red Hat discourages the use of static linking for security reasons. 
+"Red Hat discourages the use of static linking for security reasons.
 Use static linking only when necessary, especially against libraries provided by Red Hat. "
 Therefore a -static linking is often a nightmare on CentOS => change the Makefile
 g++ -O3 -Dunix zpaqfranz.cpp  -pthread -o zpaqfranz
@@ -1266,14 +1261,14 @@ MacOS 11.0 gcc (clang) 12.0.5, INTEL
 MacOS 12.6 gcc (clang) 13.1.6, INTEL
 Please note:
 No -static here
-"Apple does not support statically linked binaries on Mac OS X. 
-(...) Rather, we strive to ensure binary 
+"Apple does not support statically linked binaries on Mac OS X.
+(...) Rather, we strive to ensure binary
 compatibility in each dynamically linked system library and framework
 (AHAHAHAHAHAH, note by me)
-Warning: Shipping a statically linked binary entails a significant compatibility risk. 
+Warning: Shipping a statically linked binary entails a significant compatibility risk.
 We strongly recommend that you not do this..."
 Short version: Apple does not like -static, so compile with
-g++ -Dunix  -O3  zpaqfranz.cpp -o zpaqfranz -pthread  
+g++ -Dunix  -O3  zpaqfranz.cpp -o zpaqfranz -pthread
 
 Mac PowerPC with gcc4.x
 Look at -DBIG (for BIG ENDIAN) and -DANCIENT (old-compiler)
@@ -1281,7 +1276,7 @@ g++ -O3 -DBIG -DANCIENT -Dunix -DNOJIT zpaqfranz.cpp -o zpaqfranz -pthread
 
 Apple Macintosh (M1/M2)
 Untested (yet), should be
-g++ -Dunix  -O3 -DNOJIT zpaqfranz.cpp -o zpaqfranz -pthread  
+g++ -Dunix  -O3 -DNOJIT zpaqfranz.cpp -o zpaqfranz -pthread
 
 ESXi (gcc 3.4.6)
 Note: not fully developed ( extract() with minimum RAM need to be implemented )
@@ -1301,17 +1296,17 @@ g++ -dM -E - < /dev/null
 sometimes __sun, sometimes not
 
 ============
-	
+
 	zpaqfranz can use a backwards compatible archive format, using various "packages"
 	Each FRANZOFFSET occupies, for each archived file, a certain space,
 	upto ~500 bytes, but they are still compressed, so there is less waste
-	
+
 	V1 (little overhead) is the default
 	V2 (up to zpaqfranz 56) is for extended hashes, like sha-3
-	V3 (from zpaqfranz 57+) is variable-sized in two 
+	V3 (from zpaqfranz 57+) is variable-sized in two
 	"flavours": 190 bytes and 550.
-	The shorter allows very long hashes (e.g. whirlpool), 
-	the bigger also contains a TAR-like format for storing 
+	The shorter allows very long hashes (e.g. whirlpool),
+	the bigger also contains a TAR-like format for storing
 	symlinks (and other information)
 */
 
@@ -1399,7 +1394,6 @@ sometimes __sun, sometimes not
 	#include <fcntl.h>
 	#include <iostream>
 	#include <map>
-///	#include <unordered_map>
 	#include <math.h>
 	#include <memory>
 	#include <pthread.h>
@@ -1445,7 +1439,6 @@ sometimes __sun, sometimes not
 	#include <string>
 	#include <vector>
 	#include <map>
-///	#include <unordered_map>
 	#include <stdexcept>
 	#include <cstddef>
 	#include <conio.h>
@@ -1453,7 +1446,6 @@ sometimes __sun, sometimes not
 	#include <io.h>
 	#include <sys/stat.h>
 	#include <fcntl.h> // for setmode()
-	///#include <winternl.h>
 	using namespace std;
 #endif
 
@@ -1539,18 +1531,18 @@ void aligned_free(void * ptr)
 	Let's try to force align everywhere, on some kind of "choosy" CPUs
 	I do not have such kind of iron, just a try...
 */
-static void* franz_malloc(size_t i_size) 
-{ 
+static void* franz_malloc(size_t i_size)
+{
 	assert(i_size>0);
 #ifdef MALLOC_ALIGN
 	return aligned_malloc(MALLOC_ALIGN,i_size);
 #else
-	return malloc(i_size); 
+	return malloc(i_size);
 #endif
 }
 
-static void franz_free(void* i_mem) 
-{ 
+static void franz_free(void* i_mem)
+{
 	if (i_mem==NULL)
 		return;
 #ifdef MALLOC_ALIGN
@@ -1561,11 +1553,11 @@ static void franz_free(void* i_mem)
 	i_mem=0;
 }
 
-static void* franz_extend(void* i_mem,size_t i_size,size_t i_oldsize) 
-{ 
+static void* franz_extend(void* i_mem,size_t i_size,size_t i_oldsize)
+{
 #ifdef MALLOC_ALIGN
     void *new_mem;
-	if (i_size==0) 
+	if (i_size==0)
 	{
 ///#ifdef DEBUG
 		printf("01200: realloc i_size == 0\n");
@@ -1573,14 +1565,14 @@ static void* franz_extend(void* i_mem,size_t i_size,size_t i_oldsize)
 		franz_free(i_mem);
 		return NULL;
 	}
-    if (!i_mem) 
+    if (!i_mem)
 	{
 ///#ifdef DEBUG
 		printf("01205: realloc from empty, allocating %08d\n",i_size);
 ///#endif
         return franz_malloc(i_size);
-	} 
-	if (i_oldsize<i_size) 
+	}
+	if (i_oldsize<i_size)
 	{
 ///#ifdef DEBUG
 		printf("01211: realloc from %08d to %08d\n",i_oldsize,i_size);
@@ -1591,7 +1583,7 @@ static void* franz_extend(void* i_mem,size_t i_size,size_t i_oldsize)
 		memcpy(new_mem,i_mem,i_oldsize);
 		franz_free(i_mem);
 		return new_mem;
-	} 
+	}
 ///#ifdef DEBUG
 	printf("01219: realloc smaller, do nothing\n");
 ///#endif
@@ -1600,7 +1592,7 @@ static void* franz_extend(void* i_mem,size_t i_size,size_t i_oldsize)
 #else
 	if (i_oldsize>0)
 		i_oldsize++; /// compiler be quiet!
-	return realloc(i_mem,i_size); 
+	return realloc(i_mem,i_size);
 #endif
 }
 
@@ -1626,7 +1618,7 @@ std::string myulltoa(uint64_t value,int i_len)
 	char tmp[20];
 	char *p1=tmp;
 	memset(tmp,0,sizeof(tmp));
-	do 
+	do
 	{
 		*p1++ = xlat[value % 10];
 	} while((value /= 10));
@@ -1649,7 +1641,7 @@ std::string bin2hex(char *i_in,size_t i_len)
 		risultato+=dec2hex[i_in[i]&15];
   }
   return risultato;
-} 
+}
 
 std::string bin2hex_64(uint64_t i_thenumber)
 {
@@ -1665,7 +1657,7 @@ std::string bin2hex_64(uint64_t i_thenumber)
 	}
 	buf[16]=0;
 	return buf;
-} 
+}
 
 
 std::string bin2hex_128(uint64_t i_high,uint64_t i_low)
@@ -1673,7 +1665,7 @@ std::string bin2hex_128(uint64_t i_high,uint64_t i_low)
 	std::string shigh=bin2hex_64(i_high);
 	std::string slow	=bin2hex_64(i_low);
 	return shigh+slow;
-} 
+}
 /// very quick and very dirty output
 inline char *  migliaia(int64_t n)
 {
@@ -1686,7 +1678,7 @@ inline char *  migliaia(int64_t n)
 	char *p = &retbuf[sizeof(retbuf)-1];
 	unsigned int i = 0;
 	*p = '\0';
-	do 
+	do
 	{
 		if(i%3 == 0 && i != 0)
 			*--p = '.';
@@ -1707,7 +1699,7 @@ inline char *  migliaia2(int64_t n)
 	char *p = &retbuf[sizeof(retbuf)-1];
 	unsigned int i = 0;
 	*p = '\0';
-	do 
+	do
 	{
 		if(i%3 == 0 && i != 0)
 			*--p = '.';
@@ -1728,7 +1720,7 @@ inline char *  migliaia3(int64_t n)
 	char *p = &retbuf[sizeof(retbuf)-1];
 	unsigned int i = 0;
 	*p = '\0';
-	do 
+	do
 	{
 		if(i%3 == 0 && i != 0)
 			*--p = '.';
@@ -1750,7 +1742,7 @@ inline char *  migliaia4(int64_t n)
 	char *p = &retbuf[sizeof(retbuf)-1];
 	unsigned int i = 0;
 	*p = '\0';
-	do 
+	do
 	{
 		if(i%3 == 0 && i != 0)
 			*--p = '.';
@@ -1771,7 +1763,7 @@ inline char *  migliaia5(int64_t n)
 	char *p = &retbuf[sizeof(retbuf)-1];
 	unsigned int i = 0;
 	*p = '\0';
-	do 
+	do
 	{
 		if(i%3 == 0 && i != 0)
 			*--p = '.';
@@ -1817,7 +1809,7 @@ bool ihavehw()
 		printf("1825: cpuid cannot get at least EAX 7\n");
 		return false;
 	}
-	
+
 	bool 	supported_ssse3	=false;
 	bool 	supported_sse41	=false;
 	bool	supported_sha	=false;
@@ -1832,7 +1824,7 @@ bool ihavehw()
 	supported_sha	=(b & (1UL << 29));
 	if (flagdebug)
 		printf("1843: new ebx %d\n",b);
-   
+
 	if (flagdebug)
 	{
 		printf("SSSE3 :");
@@ -1840,13 +1832,13 @@ bool ihavehw()
 			printf("OK\n");
 		else
 			printf("NO\n");
-		
+
 		printf("SSE41 :");
 		if (supported_sse41)
 			printf("OK\n");
 		else
 			printf("NO\n");
-		
+
 		printf("SHA   :");
 		if (supported_sha)
 			printf("OK\n");
@@ -1857,7 +1849,7 @@ bool ihavehw()
 }
 
 /*
-	This is a reworked 
+	This is a reworked
 	Rufus: The Reliable USB Formatting Utility
 	code (!)
 	https://rufus.ie/it/
@@ -2094,7 +2086,7 @@ static void sha1_transform_x86(uint64_t state64[5], const uint8_t *data, size_t 
 {
 	__m128i ABCD, E0, E1;
 	__m128i MSG0, MSG1, MSG2, MSG3;
-	
+
 	const __m128i MYMASK = _mm_set_epi64x(0x0001020304050607ULL, 0x08090a0b0c0d0e0fULL);
 
 	/* Rufus uses uint64_t for the state array. Pack it into uint32_t. */
@@ -2882,9 +2874,9 @@ static SHA1_FUNC_UPDATE_BLOCKS g_FUNC_UPDATE_BLOCKS_HW;
     R5 (  5, sha1_f0, w0); \
     R5 ( 10, sha1_f0, w0); \
     M5 ( 15, sha1_f0, w0, w1); \
-  
+
   #elif STEP_PRE == 5
-  
+
   #define R20_START \
     { size_t i; for (i = 0; i < 15; i += STEP_PRE) \
       { R5(i, sha1_f0, w0); } } \
@@ -3031,8 +3023,8 @@ void Sha1_Final(CSha1 *p, Byte *digest)
 	p->buffer[pos++] = 0x80;
 	if (pos > (64 - 8))
 	{
-		while (pos != 64) 
-			p->buffer[pos++]=0; 
+		while (pos != 64)
+			p->buffer[pos++]=0;
 		p->func_UpdateBlocks(p->state, p->buffer, 1);
 		pos = 0;
 	}
@@ -3173,14 +3165,13 @@ void Array<T>::resize(size_t sz, int ex) {
 //////////////////////////// SHA1 ////////////////////////////
 // SHA1 code, see http://en.wikipedia.org/wiki/SHA-1
 #define SHA1CHUNK 64
-class SHA1 
+class SHA1
 {
 public:
 	void put(int c);
-	void write(const char* buf, int64_t n); 
-	///double size() const {return len/8;}     
-	uint64_t usize() const {return len/8;}  
-	const char* result();  
+	void write(const char* buf, int64_t n);
+	uint64_t usize() const {return len/8;}
+	const char* result();
 	SHA1() {init();}
 private:
 #ifdef HWSHA1
@@ -3199,23 +3190,23 @@ private:
 	#endif
 #endif
 
-	U64 len;         
-	char hbuf[20];   
-	void process();  
-	void init();     
+	U64 len;
+	char hbuf[20];
+	void process();
+	void init();
 };
 #ifdef HWSHA2
 
 /// This "thing" seems weird, and not very optimized, must be a "plug in" replacment
-void SHA1::init() 
+void SHA1::init()
 {
 	len=0;
 	bufpos=0;
 	memset(&sum_ctx,0,sizeof(sum_ctx));
 	sha1_init(&sum_ctx);
 }
-void SHA1::put(int c) 
-{ 	
+void SHA1::put(int c)
+{
 	///sha1_write(&sum_ctx,(const uint8_t*)&c,1);
 
 	w_hw[bufpos++]=c;
@@ -3226,7 +3217,7 @@ void SHA1::put(int c)
 	}
 	len+=8;
 }
-const char* SHA1::result() 
+const char* SHA1::result()
 {
 	sha1_write(&sum_ctx,w_hw,bufpos);
 	sha1_final(&sum_ctx);
@@ -3234,29 +3225,29 @@ const char* SHA1::result()
 	init();
 	return hbuf;
 }
-void SHA1::write(const char* buf, int64_t n) 
+void SHA1::write(const char* buf, int64_t n)
 {
 	sha1_write(&sum_ctx,(const uint8_t*)buf,n);
 	len+=n*8;
 }
-void SHA1::process() 
+void SHA1::process()
 {
 }
 
 #else
-	
+
 
 
 #ifdef HWSHA1
 /// This "thing" seems weird, and not very optimized, must be a "plug in" replacment
-void SHA1::init() 
+void SHA1::init()
 {
 	len=0;
 	bufpos=0;
 	Sha1_Init(&myhasher);
 }
-void SHA1::put(int c) 
-{ 	
+void SHA1::put(int c)
+{
 	w_hw[bufpos++]=c;
 	if (bufpos==SHA1CHUNK)
 	{
@@ -3265,24 +3256,24 @@ void SHA1::put(int c)
 	}
 	len+=8;
 }
-const char* SHA1::result() 
+const char* SHA1::result()
 {
 	Sha1_Update(&myhasher,(const Byte*)w_hw,bufpos);
 	Sha1_Final(&myhasher,(Byte*)hbuf);
 	init();
 	return hbuf;
 }
-void SHA1::write(const char* buf, int64_t n) 
+void SHA1::write(const char* buf, int64_t n)
 {
 	Sha1_Update(&myhasher,(const Byte*)buf,n);
 	len+=n*8;
 }
-void SHA1::process() 
+void SHA1::process()
 {
 }
 #else
 ///	zpaq 7.15 use a very, very, very good implementation of SHA1, but full of very dirty tricks
-void SHA1::init() 
+void SHA1::init()
 {
 	len=0;
 	memset(w, 0, sizeof(w));
@@ -3292,15 +3283,15 @@ void SHA1::init()
 	h[3]=0x10325476;
 	h[4]=0xC3D2E1F0;
 }
-void SHA1::put(int c) 
-{ 	
+void SHA1::put(int c)
+{
 	U32& r=w[U32(len)>>5&15];
 	r=(r<<8)|(c&255);
     len+=8;
 	if ((U32(len)&511)==0)
 		process();
 }
-const char* SHA1::result() 
+const char* SHA1::result()
 {
 	const U64 s=len;
 	put(0x80);
@@ -3314,7 +3305,7 @@ const char* SHA1::result()
 	put(s>>16);
 	put(s>>8);
 	put(s);
-	for (unsigned int i=0; i<5; ++i) 
+	for (unsigned int i=0; i<5; ++i)
 	{
 		hbuf[4*i]=h[i]>>24;
 		hbuf[4*i+1]=h[i]>>16;
@@ -3324,7 +3315,7 @@ const char* SHA1::result()
 	init();
 	return hbuf;
 }
-void SHA1::write(const char* buf, int64_t n) 
+void SHA1::write(const char* buf, int64_t n)
 {
   const unsigned char* p=(const unsigned char*) buf;
   for (; n>0 && (U32(len)&511)!=0; --n) put(*p++);
@@ -3336,7 +3327,7 @@ void SHA1::write(const char* buf, int64_t n)
   }
   for (; n>0; --n) put(*p++);
 }
-void SHA1::process() 
+void SHA1::process()
 {
   U32 a=h[0], b=h[1], c=h[2], d=h[3], e=h[4];
   static const U32 k[4]={0x5A827999, 0x6ED9EBA1, 0x8F1BBCDC, 0xCA62C1D6};
@@ -3368,20 +3359,18 @@ void SHA1::process()
 class SHA256 {
 public:
   void put(int c);
-  void write(const char* buf, int64_t n); 
-///  double size() const {return len0/8+len1*536870912.0;} 
-///  uint64_t usize() const {return len0/8+(U64(len1)<<29);} 
-  const char* result();  
+  void write(const char* buf, int64_t n);
+  const char* result();
   SHA256() {init();}
-  
+
 private:
   void init();
 #ifndef HWSHA2
   unsigned len0, len1; /// puoi togliere?
-  unsigned s[8];      ///puoi togliere   
-  unsigned w[16];     ///puoitogliere    
+  unsigned s[8];      ///puoi togliere
+  unsigned w[16];     ///puoitogliere
 #endif
-  char hbuf[32];         
+  char hbuf[32];
   void process();
 #ifdef HWSHA2
 	int				bufpos;
@@ -3392,15 +3381,15 @@ private:
 };
 #ifdef HWSHA2
 //////////////////////////// SHA256 //////////////////////////
-void SHA256::init() 
+void SHA256::init()
 {
 	bufpos=0;
 	memset(&sum_ctx,0,sizeof(sum_ctx));
 	sha256_init(&sum_ctx);
 }
 
-void SHA256::put(int c) 
-{  
+void SHA256::put(int c)
+{
 	w_hw[bufpos++]=c;
 	if (bufpos==SHA2CHUNK)
 	{
@@ -3408,7 +3397,7 @@ void SHA256::put(int c)
 		bufpos=0;
 	}
 }
-const char* SHA256::result() 
+const char* SHA256::result()
 {
 	sha256_write(&sum_ctx,w_hw,bufpos);
 	sha256_final(&sum_ctx);
@@ -3416,18 +3405,18 @@ const char* SHA256::result()
 	init();
 	return hbuf;
 }
-void SHA256::write(const char* buf, int64_t n) 
+void SHA256::write(const char* buf, int64_t n)
 {
 	sha256_write(&sum_ctx,(const uint8_t*)buf,n);
 }
-void SHA256::process() 
+void SHA256::process()
 {
 }
 
 #else
-	
+
 //////////////////////////// SHA256 //////////////////////////
-void SHA256::put(int c) 
+void SHA256::put(int c)
 {  // hash 1 byte
     unsigned& r=w[len0>>5&15];
     r=(r<<8)|(c&255);
@@ -3549,7 +3538,7 @@ const char* SHA256::result() {
   init();
   return hbuf;
 }
-void SHA256::write(const char* buf, int64_t n) 
+void SHA256::write(const char* buf, int64_t n)
 {
 	for (int64_t i=0;i<n;i++)
 		put(*(buf+i));
@@ -4283,7 +4272,7 @@ void AES_CTR::encrypt(U32 s0, U32 s1, U32 s2, U32 s3, unsigned char* ct) {
     (Te4_3[byte(t3, 3)]) ^
     (Te4_2[byte(t0, 2)]) ^
     (Te4_1[byte(t1, 1)]) ^
-    (Te4_0[byte(t2, 0)]) ^ 
+    (Te4_0[byte(t2, 0)]) ^
     rk[3];
   STORE32H(s3, ct+12);
 }
@@ -5725,7 +5714,7 @@ void Predictor::update0(int y) {
         assert(0);
     }
     cp+=compsize[cp[0]];
-    assert(cp>=&z.header[7] && cp<&z.header[z.cend] 
+    assert(cp>=&z.header[7] && cp<&z.header[z.cend]
            && cp<&z.header[z.header.isize()-8]);
   }
   assert(cp[0]==NONE);
@@ -6338,7 +6327,7 @@ Compiler::Compiler(const char* in_, int* args_, ZPAQL& hz_, ZPAQL& pz_,
   state=0;
   hz.clear();
   pz.clear();
-  hz.header.resize(68000); 
+  hz.header.resize(68000);
   // Compile the COMP section of header
   rtoken("comp");
   hz.header[2]=rtoken(0, 255);  // hh
@@ -8190,13 +8179,13 @@ void ZPAQL::run(U32 input) {
 #define TR_STACKSIZE (64)
 #ifndef SWAP
 # define SWAP(_a, _b) do { t = (_a); (_a) = (_b); (_b) = t; } while(0)
-#endif 
+#endif
 #ifndef MIN
 # define MIN(_a, _b) (((_a) < (_b)) ? (_a) : (_b))
-#endif 
+#endif
 #ifndef MAX
 # define MAX(_a, _b) (((_a) > (_b)) ? (_a) : (_b))
-#endif 
+#endif
 #define STACK_PUSH(_a, _b, _c, _d)\
   do {\
     assert(ssize < STACK_SIZE);\
@@ -9721,7 +9710,7 @@ LZBuffer::LZBuffer(StringBuffer& inbuf, int args[], const unsigned* sap):
     maxLiteral(BUFSIZE/4),
     lookahead(args[6]),
     h1(0), h2(0),
-    bucket((1<<args[4])-1), 
+    bucket((1<<args[4])-1),
     shift1(minMatch>0 ? (args[5]-1)/minMatch+1 : 1),
     shift2(minMatch2>0 ? (args[5]-1)/minMatch2+1 : 0),
     minMatchBoth(MAX(minMatch, minMatch2+lookahead)+4),
@@ -9943,7 +9932,7 @@ void LZBuffer::write_match(unsigned len, unsigned off) {
     putb(off, rb);     // r
     putb(off>>rb, lo); // q
   }
-  // x[2]:len[6] off[x-1] 
+  // x[2]:len[6] off[x-1]
   else {
     assert(level==2);
     assert(minMatch>=1 && minMatch<=64);
@@ -10797,7 +10786,7 @@ using std::vector;
 using std::map;
 using libzpaq::StringBuffer;
 int unz(const char * archive,const char * key); // paranoid unzpaq 2.06
-typedef string (*voidhelpfunction)(bool i_usage,bool i_example); 
+typedef string (*voidhelpfunction)(bool i_usage,bool i_example);
 typedef map<string, voidhelpfunction> 	MAPPAHELP;
 typedef map<int, 	string> 			MAPPACOMMENTI;
 typedef map<string, string> 			MAPPAFILEHASH;
@@ -10929,21 +10918,21 @@ int		g_rangelast		=0;
 
 bool flagnochecksum;
 bool flagcrc32;
-bool flagxxhash64;	
+bool flagxxhash64;
 bool flagsha1;
 bool flagsha256;
 bool flagxxh3;
 bool flagmd5;
-bool flagblake3;	
-bool flagsha3;	
-bool flagwhirlpool;	
-bool flaghighway64;	
+bool flagblake3;
+bool flagsha3;
+bool flagwhirlpool;
+bool flaghighway64;
 bool flaghighway128;
 bool flaghighway256;
 bool flagcrc32c;
-bool flagwyhash;	
-bool flagnilsimsa;	
-bool flagentropy;	
+bool flagwyhash;
+bool flagnilsimsa;
+bool flagentropy;
 bool flagwindate;
 
 
@@ -11016,9 +11005,9 @@ int  g_ConsoleOutputCP;
 bool 	flagbarraod;
 bool 	flagbarraon;
 bool 	flagbarraos;
-	
-	
-int 	g_franzotype; 
+
+
+int 	g_franzotype;
 string 	g_optional;
 string orderby;
 vector<string> g_theorderby;
@@ -11026,7 +11015,7 @@ vector<string> g_theorderby;
 bool	flagserver;
 #endif
 int 	g_ioBUFSIZE=4096;
-    
+
 int		g_thechosenhash;
 string	g_thechosenhash_str;
 
@@ -11043,7 +11032,7 @@ void myprintf(const char *fmt, ...)
 	char buffer[4096];
 	va_list args;
     va_start(args, fmt);
-    vsnprintf(buffer,sizeof(buffer),fmt,args);	
+    vsnprintf(buffer,sizeof(buffer),fmt,args);
 	if (!flagsilent)
 		printf("%s",buffer);
 	if (g_output_handle!=0)
@@ -11061,8 +11050,8 @@ struct	franz_flag
 	string	help;
 	string	scope;
 	bool	*theflag;
-	franz_flag(string i_name, string i_help, bool* i_flag) 
-	{ 
+	franz_flag(string i_name, string i_help, bool* i_flag)
+	{
 		if (i_name=="")
 		{
 			printf("48111: GURU i_name empty\n");
@@ -11086,8 +11075,8 @@ class franz_flags
 	MAPPAFLAGS 	mappaflags;
 	HELPFLAGS 	helpflags;
 	HELPFLAGS 	helpflagsscope;
-	
-	
+
+
 	bool get(string i_name)
 	{
 		MAPPAFLAGS::iterator p=mappaflags.find(i_name);
@@ -11115,7 +11104,7 @@ class franz_flags
 	bool exists(string i_name)
 	{
 		return (mappaflags.find(i_name)!=mappaflags.end());
-	}	
+	}
 	void set(string i_name, bool i_value)
 	{
 
@@ -11133,7 +11122,7 @@ class franz_flags
 			printf("42928: guru empty pointer flag%s\n",i_name.c_str());
 			seppuku();
 		}
-		
+
 		(*p->second)=i_value;
 	}
 	void settrue(string i_name)
@@ -11153,19 +11142,19 @@ class franz_flags
 	}
 	bool* getbool(string i_name)
 	{
-		
+
 		MAPPAFLAGS::iterator p=mappaflags.find(i_name);
 		if (p!=mappaflags.end())
 			return p->second;
-		
+
 		return NULL;
 	}
-	
-	
+
+
 	void debugga()
 	{
 		printf("48149: array franz flag size %s\n",migliaia(mappaflags.size()));
-		
+
 		for (MAPPAFLAGS::iterator p=mappaflags.begin(); p!=mappaflags.end(); ++p)
 		{
 			printf("48150: %-20s   %d ",p->first.c_str(),(int)*p->second);
@@ -11175,17 +11164,17 @@ class franz_flags
 			printf("\n");
 		}
 	}
-	
+
 	string compact()
 	{
-		
+
 		string risultato="";
 		for (MAPPAFLAGS::iterator p=mappaflags.begin(); p!=mappaflags.end(); ++p)
 			if (*p->second)
 				risultato+=p->first+' ';
 		return risultato;
 	}
-	
+
 	void add(bool* i_thebool,string i_name,string i_help,string i_helpscope)
 	{
 		if (i_name=="")
@@ -11198,7 +11187,7 @@ class franz_flags
 			printf("09778: GURU thebool NULL\n");
 			seppuku();
 		}
-		
+
 		MAPPAFLAGS::iterator p=mappaflags.find(i_name);
 		if (p==mappaflags.end())
 		{
@@ -11210,7 +11199,7 @@ class franz_flags
 				helpflags.insert(std::pair<string, string>(i_name, i_helpscope));
 		}
 	}
-	
+
 };
 
 franz_flags	g_programflags;
@@ -11249,9 +11238,9 @@ struct tipohash
 	int		checkedfailed;
 	int		checkednotfound;
 	int64_t checksize;
-	
+
 	finalize_function	ffinalize;
-		
+
 	tipohash(string i_hashname,int i_hashlen, string i_hashdescription,bool i_iszpaq,string i_switchname,bool* i_switchflag,finalize_function i_finalize,string i_franzcode): switchflag(NULL),flagiszpaq(i_iszpaq),flagisbenchmark(false),
 	checkedok(0),checkedfailed(0),checkednotfound(0),checksize(0)
 	{
@@ -11265,9 +11254,9 @@ struct tipohash
 		if (i_franzcode.size()==2)
 			franzocode=std::string()+ i_franzcode[0]+i_franzcode[1];
 		hasherror="!ERROR!";
-		while (hasherror.size()<(unsigned int)i_hashlen) 
+		while (hasherror.size()<(unsigned int)i_hashlen)
 			hasherror+=' ';
-			
+
 	}
 	void resetcheckstat()
 	{
@@ -11276,10 +11265,9 @@ struct tipohash
 		checkednotfound=0;
 		checksize=0;
 	}
-	
+
 };
 
-///typedef std::unordered_map<int, 	tipohash> MAPPATIPOHASH;
 typedef std::map<int, 	tipohash> MAPPATIPOHASH;
 
 MAPPATIPOHASH g_mappatipohash;
@@ -11298,37 +11286,37 @@ void bigguru()
 {
 	myprintf("\n\n");
 	myprintf(" #####  #     # ######  #     #\n");
-	myprintf("#     # #     # #     # #     #\n"); 
-	myprintf("#       #     # #     # #     #\n"); 
-	myprintf("#  #### #     # ######  #     #\n"); 
-	myprintf("#     # #     # #   #   #     #\n"); 
-	myprintf("#     # #     # #    #  #     #\n"); 
-	myprintf(" #####   #####  #     #  ##### \n"); 
+	myprintf("#     # #     # #     # #     #\n");
+	myprintf("#       #     # #     # #     #\n");
+	myprintf("#  #### #     # ######  #     #\n");
+	myprintf("#     # #     # #   #   #     #\n");
+	myprintf("#     # #     # #    #  #     #\n");
+	myprintf(" #####   #####  #     #  ##### \n");
 	myprintf("\n\n");
-}                                 
+}
 
 void bigok()
 {
 	myprintf("\n\n");
 	myprintf("####### #    #\n");
-	myprintf("#     # #   #\n");  
-	myprintf("#     # #  #\n");   
-	myprintf("#     # ###!\n");    
-	myprintf("#     # #  #\n");   
-	myprintf("#     # #   #\n");  
-	myprintf("####### #    #\n"); 
+	myprintf("#     # #   #\n");
+	myprintf("#     # #  #\n");
+	myprintf("#     # ###!\n");
+	myprintf("#     # #  #\n");
+	myprintf("#     # #   #\n");
+	myprintf("####### #    #\n");
 	myprintf("\n\n");
 }
 void bigerror()
 {
 	myprintf("\n\n");
 	myprintf("####### ######  ######  ####### ######  ###\n");
-	myprintf("#       #     # #     # #     # #     # ###\n"); 
 	myprintf("#       #     # #     # #     # #     # ###\n");
-	myprintf("#####   ######  ######  #     # ######   #\n"); 
-	myprintf("#       #   #   #   #   #     # #   #\n");  
-	myprintf("#       #    #  #    #  #     # #    #  ###\n"); 
-	myprintf("####### #     # #     # ####### #     # ###\n"); 
+	myprintf("#       #     # #     # #     # #     # ###\n");
+	myprintf("#####   ######  ######  #     # ######   #\n");
+	myprintf("#       #   #   #   #   #     # #   #\n");
+	myprintf("#       #    #  #    #  #     # #    #  ###\n");
+	myprintf("####### #     # #     # ####### #     # ###\n");
 	myprintf("\n\n");
 }
 void bigwarning()
@@ -11336,11 +11324,11 @@ void bigwarning()
 	myprintf("\n\n");
 	myprintf("#     #    #    ######  #     # ### #     #  #####\n");
 	myprintf("#  #  #   # #   #     # ##    #  #  ##    # #     #\n");
-	myprintf("#  #  #  #   #  #     # # #   #  #  # #   # #\n");       
-	myprintf("#  #  # #     # ######  #  #  #  #  #  #  # #  ####\n"); 
-	myprintf("#  #  # ####### #   #   #   # #  #  #   # # #     #\n"); 
-	myprintf("#  #  # #     # #    #  #    ##  #  #    ## #     #\n"); 
-	myprintf(" ## ##  #     # #     # #     # ### #     #  #####\n");  
+	myprintf("#  #  #  #   #  #     # # #   #  #  # #   # #\n");
+	myprintf("#  #  # #     # ######  #  #  #  #  #  #  # #  ####\n");
+	myprintf("#  #  # ####### #   #   #   # #  #  #   # # #     #\n");
+	myprintf("#  #  # #     # #    #  #    ##  #  #    ## #     #\n");
+	myprintf(" ## ##  #     # #     # #     # ### #     #  #####\n");
 	myprintf("\n\n");
 }
 
@@ -11372,7 +11360,7 @@ string decodefranzoffset(int franzotype)
 		return "NOTHING (LIKE 7.15)";
 	if (franzotype==FRANZO_CRC_32)
 		return "CRC-32";
-	
+
 	MAPPATIPOHASH::iterator p=g_mappatipohash.find(franzotype);
 	if (p==g_mappatipohash.end())
 	{
@@ -11384,7 +11372,7 @@ string decodefranzoffset(int franzotype)
 		string temp="09603: franzotype does not seems iszpaq "+myto_string(franzotype);
 		perror(temp.c_str());
 	}
-	
+
 	return p->second.hashname+"+CRC-32";
 }
 string decodefranzocode(int franzotype)
@@ -11393,7 +11381,7 @@ string decodefranzocode(int franzotype)
 		return "";
 	if (franzotype==FRANZO_CRC_32)
 		return "";
-	
+
 	MAPPATIPOHASH::iterator p=g_mappatipohash.find(franzotype);
 	if (p==g_mappatipohash.end())
 	{
@@ -11405,7 +11393,7 @@ string decodefranzocode(int franzotype)
 		string temp="09625: franzotype does not seems iszpaq "+myto_string(franzotype);
 		perror(temp.c_str());
 	}
-	
+
 	return p->second.franzocode;
 }
 
@@ -11496,7 +11484,7 @@ string emptyalgo(const string i_string)
  * @brief computes the Nilsimsa hash of the given data.
  * @arg data [IN] input data byte (char) array
  * @arg size [IN] input data size
- * @arg out [OUT] output hash string (must be allocated 
+ * @arg out [OUT] output hash string (must be allocated
  * to hold exactly 64 characters + 1 null character. So
  * total of 65 characters e.g. char hash[65])
  */
@@ -11516,7 +11504,7 @@ static int __hexchar_to_int(char digit);
 static const char* __int_to_hexchar(int num);
 #define ACCUM_LENGTH 256
 #define DIGEST_LENGTH 32
-#define WINDOW_LENGTH 4 
+#define WINDOW_LENGTH 4
 void nilsimsa_compute(const char* data, int n, char* out)
 {
     int accum[ACCUM_LENGTH] = { 0 };
@@ -11659,199 +11647,6 @@ static int __score(int num)
 {
     return __POPC[num];
 }
-
-
-/*
-	This implementation is a minor reworked of
-	https://github.com/System-Glitch/SHA256
-	Writing style very similar to mine, so it's no surprise that I liked it.
-	
-	Speed test against libzpaq (on my PC) just about 2% faster
-*/
-
-/*macos*/
-static uint32_t Kappa[] = {
-		0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,
-		0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,
-		0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,
-		0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,
-		0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,
-		0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,
-		0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,
-		0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,
-		0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,
-		0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,
-		0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,
-		0xd192e819,0xd6990624,0xf40e3585,0x106aa070,
-		0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,
-		0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,
-		0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,
-		0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2
-	};
-
-class franzSHA256 {
-
-public:
-	franzSHA256();
-	void update(const uint8_t * data, size_t length);
-	std::string gethex();
-
-private:
-	uint8_t  m_data[64];
-	uint32_t m_blocklen;
-	uint64_t m_bitlen;
-	uint32_t m_state[8]; //A, B, C, D, E, F, G, H
-
-
-	static uint32_t rotr(uint32_t x, uint32_t n);
-	static uint32_t choose(uint32_t e, uint32_t f, uint32_t g);
-	static uint32_t majority(uint32_t a, uint32_t b, uint32_t c);
-	static uint32_t sig0(uint32_t x);
-	static uint32_t sig1(uint32_t x);
-	void transform();
-	void pad();
-	void revert(uint8_t * hash);
-};
-
-franzSHA256::franzSHA256(): m_blocklen(0), m_bitlen(0) {
-	m_state[0] = 0x6a09e667;
-	m_state[1] = 0xbb67ae85;
-	m_state[2] = 0x3c6ef372;
-	m_state[3] = 0xa54ff53a;
-	m_state[4] = 0x510e527f;
-	m_state[5] = 0x9b05688c;
-	m_state[6] = 0x1f83d9ab;
-	m_state[7] = 0x5be0cd19;
-}
-
-void franzSHA256::update(const uint8_t * data, size_t length) {
-	for (size_t i = 0 ; i < length ; i++) {
-		m_data[m_blocklen++] = data[i];
-		if (m_blocklen == 64) {
-			transform();
-
-			// End of the block
-			m_bitlen += 512;
-			m_blocklen = 0;
-		}
-	}
-}
-
-uint32_t franzSHA256::rotr(uint32_t x, uint32_t n) {
-	return (x >> n) | (x << (32 - n));
-}
-
-uint32_t franzSHA256::choose(uint32_t e, uint32_t f, uint32_t g) {
-	return (e & f) ^ (~e & g);
-}
-
-uint32_t franzSHA256::majority(uint32_t a, uint32_t b, uint32_t c) {
-	return (a & (b | c)) | (b & c);
-}
-
-uint32_t franzSHA256::sig0(uint32_t x) {
-	return franzSHA256::rotr(x, 7) ^ franzSHA256::rotr(x, 18) ^ (x >> 3);
-}
-
-uint32_t franzSHA256::sig1(uint32_t x) {
-	return franzSHA256::rotr(x, 17) ^ franzSHA256::rotr(x, 19) ^ (x >> 10);
-}
-
-void franzSHA256::transform() {
-	uint32_t maj, xorA, ch, xorE, sum, newA, newE, m[64];
-	uint32_t state[8];
-
-	for (uint8_t i = 0, j = 0; i < 16; i++, j += 4) { // Split data in 32 bit blocks for the 16 first words
-		m[i] = (m_data[j] << 24) | (m_data[j + 1] << 16) | (m_data[j + 2] << 8) | (m_data[j + 3]);
-	}
-
-	for (uint8_t k = 16 ; k < 64; k++) { // Remaining 48 blocks
-		m[k] = franzSHA256::sig1(m[k - 2]) + m[k - 7] + franzSHA256::sig0(m[k - 15]) + m[k - 16];
-	}
-
-	for(uint8_t i = 0 ; i < 8 ; i++) {
-		state[i] = m_state[i];
-	}
-
-	for (uint8_t i = 0; i < 64; i++) {
-		maj   = franzSHA256::majority(state[0], state[1], state[2]);
-		xorA  = franzSHA256::rotr(state[0], 2) ^ franzSHA256::rotr(state[0], 13) ^ franzSHA256::rotr(state[0], 22);
-
-		ch = choose(state[4], state[5], state[6]);
-
-		xorE  = franzSHA256::rotr(state[4], 6) ^ franzSHA256::rotr(state[4], 11) ^ franzSHA256::rotr(state[4], 25);
-
-		sum  = m[i] + Kappa[i] + state[7] + ch + xorE;
-		newA = xorA + maj + sum;
-		newE = state[3] + sum;
-
-		state[7] = state[6];
-		state[6] = state[5];
-		state[5] = state[4];
-		state[4] = newE;
-		state[3] = state[2];
-		state[2] = state[1];
-		state[1] = state[0];
-		state[0] = newA;
-	}
-
-	for(uint8_t i = 0 ; i < 8 ; i++) {
-		m_state[i] += state[i];
-	}
-}
-
-void franzSHA256::pad() 
-{
-
-	uint64_t i = m_blocklen;
-	uint8_t end = m_blocklen < 56 ? 56 : 64;
-
-	m_data[i++] = 0x80; // Append a bit 1
-	while (i < end) {
-		m_data[i++] = 0x00; // Pad with zeros
-	}
-
-	if(m_blocklen >= 56) {
-		transform();
-		memset(m_data, 0, 56);
-	}
-
-	// Append to the padding the total message's length in bits and transform.
-	m_bitlen += m_blocklen * 8;
-	m_data[63] = m_bitlen;
-	m_data[62] = m_bitlen >> 8;
-	m_data[61] = m_bitlen >> 16;
-	m_data[60] = m_bitlen >> 24;
-	m_data[59] = m_bitlen >> 32;
-	m_data[58] = m_bitlen >> 40;
-	m_data[57] = m_bitlen >> 48;
-	m_data[56] = m_bitlen >> 56;
-	transform();
-}
-
-void franzSHA256::revert(uint8_t * hash) 
-{
-	// SHA uses big endian byte ordering
-	// Revert all bytes
-	for (uint8_t i = 0 ; i < 4 ; i++) {
-		for(uint8_t j = 0 ; j < 8 ; j++) {
-			hash[i + (j * 4)] = (m_state[j] >> (24 - i * 8)) & 0x000000ff;
-		}
-	}
-}
-
-std::string franzSHA256::gethex()
-{
-/// less include, smaller executable. Dirty, but quick and small
-	uint8_t * hash = new uint8_t[32];
-	pad();
-	revert(hash);
-	string risultato=binarytohex((const unsigned char*)hash,32);
-	delete[] hash;
-	return risultato;
-}
-
-
 
 
 
@@ -12059,11 +11854,11 @@ static uint64_t HighwayHashFinalize64(HighwayHashState* state) {
 
 static void HighwayHashFinalize128(HighwayHashState* state, uint64_t hash[2]) {
   int i;
-  
+
   for (i = 0; i < 6; i++) {
     PermuteAndUpdate(state);
   }
-  
+
   hash[0] = state->v0[0] + state->mul0[0] + state->v1[2] + state->mul1[2];
   hash[1] = state->v0[1] + state->mul0[1] + state->v1[3] + state->mul1[3];
 }
@@ -12502,7 +12297,7 @@ namespace
     return __builtin_bswap32(x);
 #endif
   }
- 
+
 #endif
 }
 /// process 64 bytes
@@ -13076,10 +12871,10 @@ INLINE_divsuf size_t compress_parents_parallel(const uint8_t *child_chaining_val
     parents_array_len += 1;
   }
   blake3_hash_many(parents_array, parents_array_len, 1, key,
-                   0, 
+                   0,
                    false, flags | PARENT,
-                   0, 
-                   0, 
+                   0,
+                   0,
                    out);
   if (num_chaining_values > 2 * parents_array_len) {
 	  memcpy(&out+(parents_array_len * BLAKE3_OUT_LEN),
@@ -13316,7 +13111,7 @@ void blake3_hash_many(const uint8_t *const *inputs, size_t num_inputs,
                             increment_counter, flags, flags_start, flags_end,
                             out);
 }
-size_t blake3_simd_degree(void) 
+size_t blake3_simd_degree(void)
 {
   return 1;
 }
@@ -13462,7 +13257,7 @@ void blake3_hash_many_portable(const uint8_t *const *inputs, size_t num_inputs,
     out = &out[BLAKE3_OUT_LEN];
   }
 }
-#else  
+#else
 #define BLAKE3_VERSION_STRING "1.0.0"
 #define BLAKE3_KEY_LEN 32
 #define BLAKE3_OUT_LEN 32
@@ -13508,7 +13303,7 @@ enum blake3_flags {
 #else
 #define INLINE static inline __attribute__((always_inline))
 #endif
-#if defined(__x86_64__) || defined(_M_X64) 
+#if defined(__x86_64__) || defined(_M_X64)
 #define IS_X86
 #define IS_X86_64
 #endif
@@ -13783,7 +13578,7 @@ enum cpu_feature {
 };
 #endif
 #if !defined(BLAKE3_TESTING)
-static 
+static
 #endif
 #ifdef FRANZFIX
     uint32_t g_cpu_features = UNDEFINED;
@@ -13824,16 +13619,16 @@ static
       features |= SSSE3;
     if (*ecx & (1UL << 19))
       features |= SSE41;
-    if (*ecx & (1UL << 27)) { 
+    if (*ecx & (1UL << 27)) {
       const uint64_t mask = xgetbv();
-      if ((mask & 6) == 6) { 
+      if ((mask & 6) == 6) {
         if (*ecx & (1UL << 28))
           features |= AVX;
         if (max_id >= 7) {
           cpuidex(regs, 7, 0);
           if (*ebx & (1UL << 5))
             features |= AVX2;
-          if ((mask & 224) == 224) { 
+          if ((mask & 224) == 224) {
             if (*ebx & (1UL << 31))
               features |= AVX512VL;
             if (*ebx & (1UL << 16))
@@ -13844,7 +13639,7 @@ static
     }
 	g_cpu_features = features;
 	if (flagdebug)
-	myprintf("CPU feature %04X\n",features); 
+	myprintf("CPU feature %04X\n",features);
     return features;
 #else
     return 0;
@@ -14322,10 +14117,10 @@ INLINE size_t compress_parents_parallel(const uint8_t *child_chaining_values,
     parents_array_len += 1;
   }
   blake3_hash_many(parents_array, parents_array_len, 1, key,
-                   0, 
+                   0,
                    false, flags | PARENT,
-                   0, 
-                   0, 
+                   0,
+                   0,
                    out);
   if (num_chaining_values > 2 * parents_array_len) {
     memcpy(&out[parents_array_len * BLAKE3_OUT_LEN],
@@ -14551,12 +14346,12 @@ typedef unsigned __int64 u64;
 typedef signed __int64 s64;
 #define LL(v)   (v##i64)
 #define ONE64   LL(0xffffffffffffffff)
-#else  
+#else
 typedef unsigned long long u64;
 typedef signed long long s64;
 #define LL(v)   (v##ULL)
 #define ONE64   LL(0xffffffffffffffff)
-#endif 
+#endif
 #define T64(x)  ((x) & ONE64)
 #define ROTR64(v, n)   (((v) >> (n)) | T64((v) << (64 - (n))))
 #define U8TO32_BIG(c)  (((u32)T8(*(c)) << 24) | ((u32)T8(*((c) + 1)) << 16) | ((u32)T8(*((c) + 2)) << 8) | ((u32)T8(*((c) + 3))))
@@ -14565,17 +14360,17 @@ typedef signed long long s64;
 #define U32TO8_LITTLE(c, v)    do { u32 x = (v); u8 *d = (c); d[0] = T8(x); d[1] = T8(x >> 8); d[2] = T8(x >> 16); d[3] = T8(x >> 24); } while (0)
 #define ROTL32(v, n)   (T32((v) << (n)) | ((v) >> (32 - (n))))
 #define DIGESTBYTES 64
-#define DIGESTBITS  (8*DIGESTBYTES) 
+#define DIGESTBITS  (8*DIGESTBYTES)
 #define WBLOCKBYTES 64
-#define WBLOCKBITS  (8*WBLOCKBYTES) 
+#define WBLOCKBITS  (8*WBLOCKBYTES)
 #define LENGTHBYTES 32
-#define LENGTHBITS  (8*LENGTHBYTES) 
+#define LENGTHBITS  (8*LENGTHBYTES)
 typedef struct NESSIEstruct {
-	u8  bitLength[LENGTHBYTES]; 
-	u8  buffer[WBLOCKBYTES];	
-	int bufferBits;		        
-	int bufferPos;		        
-	u64 hash[DIGESTBYTES/8];    
+	u8  bitLength[LENGTHBYTES];
+	u8  buffer[WBLOCKBYTES];
+	int bufferBits;
+	int bufferPos;
+	u64 hash[DIGESTBYTES/8];
 } NESSIEstruct;
 #define WHIRLPOOL_R 10
 static const u64 C0[256] = {
@@ -15121,9 +14916,9 @@ static const u64 rc[WHIRLPOOL_R + 1] = {
 };
 static void processBuffer(struct NESSIEstruct * const structpointer) {
     int i, r;
-    u64 K[8];        
-    u64 block[8];    
-    u64 state[8];    
+    u64 K[8];
+    u64 block[8];
+    u64 state[8];
     u64 L[8];
     u8 *buffer = structpointer->buffer;
     for (i = 0; i < 8; i++, buffer += 8) {
@@ -15329,17 +15124,17 @@ void NESSIEinit(struct NESSIEstruct * const structpointer) {
     int i;
     memset(structpointer->bitLength, 0, 32);
     structpointer->bufferBits = structpointer->bufferPos = 0;
-    structpointer->buffer[0] = 0; 
+    structpointer->buffer[0] = 0;
     for (i = 0; i < 8; i++) {
-        structpointer->hash[i] = 0L; 
+        structpointer->hash[i] = 0L;
     }
 }
 void NESSIEadd(const unsigned char * const source,
 			   unsigned long sourceBits,
                struct NESSIEstruct * const structpointer) {
-    int sourcePos    = 0; 
-    int sourceGap    = (8 - ((int)sourceBits & 7)) & 7; 
-	int bufferRem    = structpointer->bufferBits & 7; 
+    int sourcePos    = 0;
+    int sourceGap    = (8 - ((int)sourceBits & 7)) & 7;
+	int bufferRem    = structpointer->bufferBits & 7;
 	int i;
     u32 b, carry;
     u8 *buffer       = structpointer->buffer;
@@ -15357,7 +15152,7 @@ void NESSIEadd(const unsigned char * const source,
         b = ((source[sourcePos] << sourceGap) & 0xff) |
             ((source[sourcePos + 1] & 0xff) >> (8 - sourceGap));
         buffer[bufferPos++] |= (u8)(b >> bufferRem);
-        bufferBits += 8 - bufferRem; 
+        bufferBits += 8 - bufferRem;
         if (bufferBits == DIGESTBITS) {
             processBuffer(structpointer);
             bufferBits = bufferPos = 0;
@@ -15368,7 +15163,7 @@ void NESSIEadd(const unsigned char * const source,
         sourcePos++;
     }
     if (sourceBits > 0) {
-        b = (source[sourcePos] << sourceGap) & 0xff; 
+        b = (source[sourcePos] << sourceGap) & 0xff;
         buffer[bufferPos] |= b >> bufferRem;
     } else {
         b = 0;
@@ -15377,7 +15172,7 @@ void NESSIEadd(const unsigned char * const source,
         bufferBits += sourceBits;
     } else {
         bufferPos++;
-        bufferBits += 8 - bufferRem; 
+        bufferBits += 8 - bufferRem;
         sourceBits -= 8 - bufferRem;
         if (bufferBits == DIGESTBITS) {
             processBuffer(structpointer);
@@ -15392,9 +15187,9 @@ void NESSIEadd(const unsigned char * const source,
 void NESSIEadd64(const unsigned char * const source,
 			   uint64_t sourceBits,
                struct NESSIEstruct * const structpointer) {
-    int sourcePos    = 0; 
-    int sourceGap    = (8 - ((int)sourceBits & 7)) & 7; 
-    int bufferRem    = structpointer->bufferBits & 7; 
+    int sourcePos    = 0;
+    int sourceGap    = (8 - ((int)sourceBits & 7)) & 7;
+    int bufferRem    = structpointer->bufferBits & 7;
     int i;
     u32 b, carry;
     u8 *buffer       = structpointer->buffer;
@@ -15412,7 +15207,7 @@ void NESSIEadd64(const unsigned char * const source,
         b = ((source[sourcePos] << sourceGap) & 0xff) |
             ((source[sourcePos + 1] & 0xff) >> (8 - sourceGap));
         buffer[bufferPos++] |= (u8)(b >> bufferRem);
-        bufferBits += 8 - bufferRem; 
+        bufferBits += 8 - bufferRem;
         if (bufferBits == DIGESTBITS) {
             processBuffer(structpointer);
             bufferBits = bufferPos = 0;
@@ -15423,7 +15218,7 @@ void NESSIEadd64(const unsigned char * const source,
         sourcePos++;
     }
     if (sourceBits > 0) {
-        b = (source[sourcePos] << sourceGap) & 0xff; 
+        b = (source[sourcePos] << sourceGap) & 0xff;
         buffer[bufferPos] |= b >> bufferRem;
     } else {
         b = 0;
@@ -15432,7 +15227,7 @@ void NESSIEadd64(const unsigned char * const source,
         bufferBits += sourceBits;
     } else {
         bufferPos++;
-        bufferBits += 8 - bufferRem; 
+        bufferBits += 8 - bufferRem;
         sourceBits -= 8 - bufferRem;
         if (bufferBits == DIGESTBITS) {
             processBuffer(structpointer);
@@ -15453,7 +15248,7 @@ void NESSIEfinalize(struct NESSIEstruct * const structpointer,
     int bufferPos   = structpointer->bufferPos;
     u8 *digest      = result;
     buffer[bufferPos] |= 0x80U >> (bufferBits & 7);
-    bufferPos++; 
+    bufferPos++;
     if (bufferPos > WBLOCKBYTES - LENGTHBYTES) {
         if (bufferPos < WBLOCKBYTES) {
             memset(&buffer[bufferPos], 0, WBLOCKBYTES - bufferPos);
@@ -15489,7 +15284,7 @@ void NESSIEfinalize(struct NESSIEstruct * const structpointer,
 /* quick example:
    string s="fjsakfdsjkf";
    uint64_t hash=wyhash(s.c_str(), s.size(), 0, _wyp);
-   
+
    A bit reworked
 */
 //likely and unlikely macros
@@ -15504,7 +15299,7 @@ void NESSIEfinalize(struct NESSIEstruct * const structpointer,
 ///static inline uint64_t _wyrot(uint64_t x) { return (x>>32)|(x<<32); }
 static inline void _wymum(uint64_t *A, uint64_t *B){
 #if defined(__SIZEOF_INT128__)
-  __uint128_t r=*A; r*=*B; 
+  __uint128_t r=*A; r*=*B;
   *A=(uint64_t)r; *B=(uint64_t)(r>>64);
 #elif defined(_MSC_VER) && defined(_M_X64)
   *A=_umul128(*A,*B,B);
@@ -15528,8 +15323,8 @@ static inline uint64_t _wymix(uint64_t A, uint64_t B){ _wymum(&A,&B); return A^B
 static inline uint64_t _wyr8(const uint8_t *p) { uint64_t v; memcpy(&v, p, 8); return v;}
 static inline uint64_t _wyr4(const uint8_t *p) { uint32_t v; memcpy(&v, p, 4); return v;}
 #elif defined(__GNUC__) || defined(__INTEL_COMPILER) || defined(__clang__)
-static inline uint64_t _wyr8(const uint8_t *p) 
-{ uint64_t v; memcpy(&v, p, 8); 
+static inline uint64_t _wyr8(const uint8_t *p)
+{ uint64_t v; memcpy(&v, p, 8);
 #ifdef ANCIENT
   return  (v >> 56) |
            ((v >> 40) & 0x000000000000FF00ULL) |
@@ -15544,8 +15339,8 @@ static inline uint64_t _wyr8(const uint8_t *p)
 #endif
 
 }
-static inline uint64_t _wyr4(const uint8_t *p) 
-{ uint32_t v; memcpy(&v, p, 4); 
+static inline uint64_t _wyr4(const uint8_t *p)
+{ uint32_t v; memcpy(&v, p, 4);
 
 #ifdef ANCIENT
     return (v >> 24) |
@@ -15580,7 +15375,7 @@ static inline uint64_t wyhash(const void *key, size_t len, uint64_t seed, const 
     else a=b=0;
   }
   else{
-    size_t i=len; 
+    size_t i=len;
     if(_unlikely_(i>48)){
       uint64_t see1=seed, see2=seed;
       do{
@@ -19436,10 +19231,10 @@ size_t mimesize(const char *i_input)
 	size_t i;
 	len=strlen(i_input); // risky!
 	ret=len/4*3;
-	for (i=len; i-->0;) 
-		if (i_input[i] == '=') 
+	for (i=len; i-->0;)
+		if (i_input[i] == '=')
 			ret--;
-		else 
+		else
 			break;
 	return ret;
 }
@@ -19452,13 +19247,13 @@ int mime2binary(const char *i_in, unsigned char *o_out, size_t outlen)
 	size_t lunghezza=strlen(i_in);
 	if ((outlen<mimesize(i_in)) || (lunghezza % 4 != 0))
 		return 0;
-	for (unsigned int i=0; i<lunghezza; i++) 
-		if (!ismime(i_in[i])) 
+	for (unsigned int i=0; i<lunghezza; i++)
+		if (!ismime(i_in[i]))
 			return 0;
 	size_t i;
 	size_t j;
 	int    temp;
-	for (i=0,j=0;i<lunghezza;i+=4,j+=3) 
+	for (i=0,j=0;i<lunghezza;i+=4,j+=3)
 	{
 		temp= b64invs[i_in[i]-43];
 		temp= (temp << 6) | b64invs[i_in[i+1]-43];
@@ -19581,7 +19376,7 @@ private:
 
 
 #ifdef _WIN32
-int64_t mtime() 
+int64_t mtime()
 {
   int64_t t=GetTickCount();
   if (t<g_start) t+=0x100000000LL;
@@ -19614,7 +19409,7 @@ HRESULT ModifyPrivilege(
     }
     NewState.PrivilegeCount = 1;
     NewState.Privileges[0].Luid = luid;
-    NewState.Privileges[0].Attributes = 
+    NewState.Privileges[0].Attributes =
               (fEnable ? SE_PRIVILEGE_ENABLED : 0);
     if (!AdjustTokenPrivileges(hToken,
                                FALSE,
@@ -19690,7 +19485,7 @@ typedef struct _REPARSE_APPEXECLINK_READ_BUFFER { // For tag IO_REPARSE_TAG_APPE
 	Entry Point:	L"Microsoft.WindowsTerminal_8wekyb3d8bbwe!App"
 	Executable:	L"C:\Program Files\WindowsApps\Microsoft.WindowsTerminal_1.4.3243.0_x64__8wekyb3d8bbwe\wt.exe"
 	Applic. Type:	l"0"	// Integer as ASCII. "0" = Desktop bridge application; Else sandboxed UWP application
-  */     
+  */
 } APPEXECLINK_READ_BUFFER, *PAPPEXECLINK_READ_BUFFER;
 // LinuX Sub-System (LXSS) Symbolic Links
 typedef struct _REPARSE_LX_SYMLINK_BUFFER {
@@ -19707,7 +19502,7 @@ typedef struct _REPARSE_LX_SYMLINK_BUFFER {
 	#endif
 static HANDLE stdoutHandle;
 static DWORD outModeInit;
-void setupConsole(void) 
+void setupConsole(void)
 {
 	DWORD outMode 	= 0;
 	stdoutHandle 	= GetStdHandle(STD_OUTPUT_HANDLE);
@@ -19717,15 +19512,15 @@ void setupConsole(void)
 		exit(GetLastError());
 	outModeInit = outMode;
 	outMode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
-	if(!SetConsoleMode(stdoutHandle, outMode)) 
+	if(!SetConsoleMode(stdoutHandle, outMode))
 		exit(GetLastError());
 }
-void restoreConsole(void) 
+void restoreConsole(void)
 {
 	if (flagsilent)
 		return;
-	printf("\x1b[0m");	
-	if(!SetConsoleMode(stdoutHandle, outModeInit)) 
+	printf("\x1b[0m");
+	if(!SetConsoleMode(stdoutHandle, outModeInit))
 		exit(GetLastError());
 }
 // In Windows, convert 16-bit wide string to UTF-8 and \ to /
@@ -19771,7 +19566,7 @@ string win_getcomputername()
 		risultato=wtou(buffer);
 	return risultato;
 }
-string my_realpath(std::string const& i_path) 
+string my_realpath(std::string const& i_path)
 {
 	if (i_path=="")
 			return "";
@@ -19822,12 +19617,12 @@ string my_realpath(std::string const& i_path)
     CloseHandle(h);
     return "";
 }
-uint32_t convert_unicode_to_ansi_string(std::string& ansi,const wchar_t* unicode,const size_t unicode_size) 
+uint32_t convert_unicode_to_ansi_string(std::string& ansi,const wchar_t* unicode,const size_t unicode_size)
 	{
 		uint32_t error = 0;
-		do 
+		do
 		{
-			if ((nullptr == unicode) || (0 == unicode_size)) 
+			if ((nullptr == unicode) || (0 == unicode_size))
 			{
 				error = ERROR_INVALID_PARAMETER;
 				break;
@@ -19840,7 +19635,7 @@ uint32_t convert_unicode_to_ansi_string(std::string& ansi,const wchar_t* unicode
 									nullptr, 0,
 									nullptr, nullptr
 									);
-			if (required_cch==0) 
+			if (required_cch==0)
 			{
 				error=::GetLastError();
 				break;
@@ -19852,21 +19647,21 @@ uint32_t convert_unicode_to_ansi_string(std::string& ansi,const wchar_t* unicode
 						unicode, static_cast<int>(unicode_size),
 						const_cast<char*>(ansi.c_str()), static_cast<int>(ansi.size()),
 						nullptr, nullptr
-						)) 
+						))
 			{
 				error =::GetLastError();
 				break;
 			}
-		} 
+		}
 		while (false);
 		return error;
 	}
 uint32_t convert_utf8_to_unicode_string(std::wstring& unicode,const char* utf8,const size_t utf8_size)
 	{
 		uint32_t error = 0;
-		do 
+		do
 		{
-			if ((nullptr == utf8) || (0 == utf8_size)) 
+			if ((nullptr == utf8) || (0 == utf8_size))
 			{
 				error = ERROR_INVALID_PARAMETER;
 				break;
@@ -19878,7 +19673,7 @@ uint32_t convert_utf8_to_unicode_string(std::wstring& unicode,const char* utf8,c
 				utf8, static_cast<int>(utf8_size),
 				nullptr, 0
 			);
-			if (required_cch==0) 
+			if (required_cch==0)
 			{
 				error = ::GetLastError();
 				break;
@@ -19889,12 +19684,12 @@ uint32_t convert_utf8_to_unicode_string(std::wstring& unicode,const char* utf8,c
 						MB_ERR_INVALID_CHARS,
 						utf8, static_cast<int>(utf8_size),
 						const_cast<wchar_t*>(unicode.c_str()), static_cast<int>(unicode.size())
-						)) 
+						))
 			{
 				error=::GetLastError();
 				break;
 			}
-		} 
+		}
 		while (false);
 		return error;
 	}
@@ -20015,14 +19810,14 @@ int64_t	getwinattributes(string i_filename)
 	return 0;
 }
 /// reworked https://github.com/JFLarvoire/SysToolsLib/blob/master/C/MsvcLibX/src/readlink.c
-typedef struct _REPARSE_READ_BUFFER 
+typedef struct _REPARSE_READ_BUFFER
 {
 	DWORD  ReparseTag;
 	WORD   ReparseDataLength;
 	WORD   Reserved;
 	UCHAR  DataBuffer[1];
 } REPARSE_READ_BUFFER, *PREPARSE_READ_BUFFER;
-bool getreparsepointW(bool i_flagdebug,const string i_path, char *i_buf, size_t i_bufsize,size_t& o_byteletti,DWORD& o_tag,string& o_type) 
+bool getreparsepointW(bool i_flagdebug,const string i_path, char *i_buf, size_t i_bufsize,size_t& o_byteletti,DWORD& o_tag,string& o_type)
 {
 	o_byteletti	=0;
 	o_tag		=0;
@@ -20032,21 +19827,21 @@ bool getreparsepointW(bool i_flagdebug,const string i_path, char *i_buf, size_t 
 	wstring wi_path=utow(i_path.c_str());
 	PREPARSE_READ_BUFFER pIoctlBuf;
 	DWORD attributi = GetFileAttributesW(wi_path.c_str());
-	if (attributi==INVALID_FILE_ATTRIBUTES) 
+	if (attributi==INVALID_FILE_ATTRIBUTES)
 	{
 		myprintf("37390: failed GetFileAttributesW\n");
 		return false;
 	}
-	if (!(attributi & FILE_ATTRIBUTE_REPARSE_POINT)) 
+	if (!(attributi & FILE_ATTRIBUTE_REPARSE_POINT))
 	{
 		myprintf("37396: fake file is not a reparse point\n");
 		return false;
 	}
 	DWORD flag=FILE_FLAG_OPEN_REPARSE_POINT;
-	if (attributi & FILE_ATTRIBUTE_DIRECTORY) 
+	if (attributi & FILE_ATTRIBUTE_DIRECTORY)
 		flag|=FILE_FLAG_BACKUP_SEMANTICS;
 	HANDLE h=CreateFileW(wi_path.c_str(),0,FILE_SHARE_READ | FILE_SHARE_WRITE,NULL,OPEN_EXISTING,flag,NULL);
-	if (h==INVALID_HANDLE_VALUE) 
+	if (h==INVALID_HANDLE_VALUE)
 	{
 		myprintf("37413: cannot createfile on reparse point\n");
 		return false;
@@ -20054,12 +19849,12 @@ bool getreparsepointW(bool i_flagdebug,const string i_path, char *i_buf, size_t 
 	DWORD byteletti;
  	BOOL fattoio=DeviceIoControl(h,FSCTL_GET_REPARSE_POINT,NULL,0,i_buf,(DWORD)i_bufsize,&byteletti,NULL);
 	CloseHandle(h);
-	if (!fattoio) 
+	if (!fattoio)
 	{
 		myprintf("37429: DeviceIoControl kaputt\n");
 		return false;
 	}
-	if (byteletti<8) 
+	if (byteletti<8)
 	{
 		myprintf("37438: something wrong\n");
 		return false;
@@ -20067,9 +19862,9 @@ bool getreparsepointW(bool i_flagdebug,const string i_path, char *i_buf, size_t 
 	pIoctlBuf 	= (PREPARSE_READ_BUFFER)i_buf;
 	o_tag		=pIoctlBuf->ReparseTag;
 	o_byteletti	=pIoctlBuf->ReparseDataLength;
-    switch (o_tag) 
+    switch (o_tag)
 	{
-		case 0x00000000: 	o_type="Reserved0"; break;	
+		case 0x00000000: 	o_type="Reserved0"; break;
 		case 0x00000001: 	o_type="Reserved1"; break;
 		case 0x00000002: 	o_type="Reserved2"; break;
 		case 0xA0000003: 	o_type="Mount point or junction"; break;
@@ -20113,31 +19908,31 @@ bool getreparsepointW(bool i_flagdebug,const string i_path, char *i_buf, size_t 
     unsigned int ul;
     unsigned int u;
     unsigned int uMax;
-	for (ul = 0; ul < (unsigned)(pIoctlBuf->ReparseDataLength); ul += 16) 
+	for (ul = 0; ul < (unsigned)(pIoctlBuf->ReparseDataLength); ul += 16)
 	{
 		myprintf("%08X ", ul);
 		uMax = (unsigned)(pIoctlBuf->ReparseDataLength) - ul;
-		if (uMax > 16) 
+		if (uMax > 16)
 			uMax = 16;
       /* Display the hex dump */
-		for (u=0; u<16; u++) 
+		for (u=0; u<16; u++)
 		{
-			if (!(u&3)) 
+			if (!(u&3))
 				myprintf(" ");
-			if (u < uMax) 
+			if (u < uMax)
 				myprintf("%2.2X ", ((unsigned char *)pIoctlBuf->DataBuffer)[ul + u]);
-			else 
+			else
 				myprintf("   ");
 		}
       /* Display the ASCII characters dump */
-		for (u=0; u<16; u++) 
+		for (u=0; u<16; u++)
 		{
 			char c = ((char *)pIoctlBuf->DataBuffer)[ul + u];
-			if (!(u&7)) 
+			if (!(u&7))
 				myprintf(" ");
-			if (c < ' ') 
+			if (c < ' ')
 				c = ' ';
-			if ((unsigned char)c > '\x7F') 
+			if ((unsigned char)c > '\x7F')
 				c = ' ';
 			myprintf("%c", c);
 		}
@@ -20146,7 +19941,7 @@ bool getreparsepointW(bool i_flagdebug,const string i_path, char *i_buf, size_t 
 	return true;
 }
 #else // Houston, we have Unix
-int64_t mtime() 
+int64_t mtime()
 {
   timeval tv;
   gettimeofday(&tv, 0);
@@ -20156,10 +19951,10 @@ std::string utf8toansi(const std::string & utf8)
 {
 	return utf8;
 }
-void setupConsole(void) 
+void setupConsole(void)
 {
 }
-void restoreConsole(void) 
+void restoreConsole(void)
 {
 	if (flagsilent)
 		return;
@@ -20167,7 +19962,7 @@ void restoreConsole(void)
 }
 #endif
 
-int terminalwidth() 
+int terminalwidth()
 {
 #if defined(_WIN32)
     CONSOLE_SCREEN_BUFFER_INFO csbi;
@@ -20181,7 +19976,7 @@ int terminalwidth()
 	if (colonna>200)
 		colonna=200;
     return colonna;
-#endif 
+#endif
 }
 int terminalheight()
 {
@@ -20197,7 +19992,7 @@ int terminalheight()
 	if (riga>200)
 		riga=30;
     return riga;
-#endif 
+#endif
 }
 bool iskeypressed()
 {
@@ -20209,17 +20004,17 @@ bool iskeypressed()
     }
 	return false;
 #else
-	struct termios old_t; 
+	struct termios old_t;
 	struct termios new_t;
-	tcgetattr (0,&old_t); 
-	new_t = old_t; 
-	new_t.c_lflag &= ~( ICANON | ECHO ); 
+	tcgetattr (0,&old_t);
+	new_t = old_t;
+	new_t.c_lflag &= ~( ICANON | ECHO );
 	new_t.c_cc[VMIN] = 0;
 	new_t.c_cc[VTIME] = 0;
-	tcsetattr(0,TCSANOW,&new_t); 
+	tcsetattr(0,TCSANOW,&new_t);
 	char ch;
 	int letti=read(0,&ch,1);
-	tcsetattr(0,TCSANOW,&old_t); 
+	tcsetattr(0,TCSANOW,&old_t);
 	return (letti!=0);
 #endif
 }
@@ -20442,14 +20237,14 @@ bool isads(string i_filename)
 	if (i_filename.length()==0)
 		return false;
 	else
-		return strstr(i_filename.c_str(), ":$DATA")!=0;  
+		return strstr(i_filename.c_str(), ":$DATA")!=0;
 }
 bool iszfs(string i_filename)
 {
 	if (i_filename.length()==0)
 		return false;
 	else
-		return strstr(i_filename.c_str(), ".zfs")!=0;  
+		return strstr(i_filename.c_str(), ".zfs")!=0;
 }
 bool replace(std::string& str, const std::string& from, const std::string& to) {
     size_t start_pos = str.find(from);
@@ -20509,7 +20304,7 @@ string format_datetime(string i_formato,tm* t=NULL)
 	myreplaceall(i_formato,"$time",time);
 	return i_formato;
 }
-bool myreplace(string& i_str, const string& i_from, const string& i_to) 
+bool myreplace(string& i_str, const string& i_from, const string& i_to)
 {
     size_t start_pos = i_str.find(i_from);
     if(start_pos == std::string::npos)
@@ -20517,7 +20312,7 @@ bool myreplace(string& i_str, const string& i_from, const string& i_to)
     i_str.replace(start_pos, i_from.length(), i_to);
     return true;
 }
-int mypos(const string& i_substring,const string& i_string) 
+int mypos(const string& i_substring,const string& i_string)
 {
     size_t start_pos = i_string.find(i_substring);
     if	(start_pos==std::string::npos)
@@ -20525,18 +20320,18 @@ int mypos(const string& i_substring,const string& i_string)
 	else
 		return (int)start_pos;
 }
-std::string myright(std::string const& source, size_t const length) 
+std::string myright(std::string const& source, size_t const length)
 {
-  if (length >= source.size()) 
+  if (length >= source.size())
  	return source;
   return source.substr(source.size() - length);
-} 
-std::string myleft(std::string const& source, size_t const length) 
+}
+std::string myleft(std::string const& source, size_t const length)
 {
-  if (length >= source.size()) 
+  if (length >= source.size())
  	return source;
   return source.substr(0,length);
-} 
+}
 string mytrim(const string& i_str)
 {
 	size_t first = i_str.find_first_not_of(' ');
@@ -20590,24 +20385,24 @@ std::string myrtrim(const std::string &s)
     size_t end = s.find_last_not_of(WHITESPACE);
     return (end == std::string::npos) ? "" : s.substr(0, end + 1);
 }
-std::string mytrim2(const std::string &s) 
+std::string mytrim2(const std::string &s)
 {
     return myrtrim(myltrim(s));
 }
-string extractfilename(const string& i_string) 
+string extractfilename(const string& i_string)
 {
 	size_t i = i_string.rfind('/', i_string.length());
-	if (i != string::npos) 
+	if (i != string::npos)
 		return(i_string.substr(i+1, i_string.length() - i));
 	return(i_string);
 }
-string prendiestensione(const string& s) 
+string prendiestensione(const string& s)
 {
 	if (isdirectory(s))
 		return ("");
 	string nomefile=extractfilename(s);
 	size_t i = nomefile.rfind('.', nomefile.length());
-	if (i != string::npos) 
+	if (i != string::npos)
 	{
 		size_t lunghezzaestensione=nomefile.length() - i;
 /// sometimes it is hard to get the extension: pippo.plutopaperino
@@ -20617,26 +20412,26 @@ string prendiestensione(const string& s)
 	}
    return("");
 }
-string extractfilepath(const string& i_string) 
+string extractfilepath(const string& i_string)
 {
 	size_t i = i_string.rfind('/', i_string.length());
-	if (i != string::npos) 
+	if (i != string::npos)
 		return(i_string.substr(0, i+1));
 	return("");
 }
-string prendinomefileebasta(const string& s) 
+string prendinomefileebasta(const string& s)
 {
 	string nomefile=extractfilename(s);
 	size_t i = nomefile.rfind('.', nomefile.length());
-	if (i != string::npos) 
+	if (i != string::npos)
 		return(nomefile.substr(0,i));
 	return(nomefile);
 }
-string path(const string& fn) 
+string path(const string& fn)
 {
 	int n=0;
 	for (int i=0; fn[i]; ++i)
-		if (fn[i]=='/' || fn[i]=='\\') 
+		if (fn[i]=='/' || fn[i]=='\\')
 			n=i+1;
 	return fn.substr(0, n);
 }
@@ -20659,7 +20454,7 @@ string purgeansi(string i_string,bool i_keeppath=false)
 			purged+=i_string[i];
 		else
 		{
-			switch (i_string[i]) 
+			switch (i_string[i])
 			{
 /*
 very forbiden
@@ -20715,7 +20510,7 @@ very forbiden
 				break;
 				default:
 				purged+='_';
-				
+
 			}
 		}
 	}
@@ -20805,15 +20600,15 @@ void print_datetime(void)
 		myprintf("18457: guru on tm\n");
 		exit(0);
 	}
-	hours = local->tm_hour;			
-	minutes = local->tm_min;		
-	seconds = local->tm_sec;		
-	day = local->tm_mday;			
-	month = local->tm_mon + 1;		
-	year = local->tm_year + 1900;	
+	hours = local->tm_hour;
+	minutes = local->tm_min;
+	seconds = local->tm_sec;
+	day = local->tm_mday;
+	month = local->tm_mon + 1;
+	year = local->tm_year + 1900;
 	myprintf("%02d/%02d/%d %02d:%02d:%02d ", day, month, year, hours,minutes,seconds);
 }
-void printUTF8(const char* s, FILE* f=stdout) 
+void printUTF8(const char* s, FILE* f=stdout)
 {
 	assert(f);
 	assert(s);
@@ -20828,11 +20623,11 @@ void printUTF8(const char* s, FILE* f=stdout)
   DWORD ft=GetFileType(h);
   if (ft==FILE_TYPE_CHAR) {
     fflush(f);
-    std::wstring w=utow(s, '/'); 
+    std::wstring w=utow(s, '/');
     DWORD n=0;
     WriteConsole(h, w.c_str(), w.size(), &n, 0);
   }
-  else  
+  else
     fprintf(f, "%s", s);
 #endif
 }
@@ -20863,7 +20658,7 @@ int64_t prendidimensionehandle(FILE* i_handle)
 	fseeko(i_handle, 0, SEEK_END);
 	int64_t dimensione=ftello(i_handle);
 	fseeko(i_handle, 0, SEEK_SET);
-	return dimensione;	
+	return dimensione;
 }
 int64_t prendidimensionefile(const char* i_filename)
 {
@@ -20922,22 +20717,15 @@ string stringtolower(string i_stringa)
 	for (unsigned int i=0;i<i_stringa.size();i++)
 		i_stringa[i]=tolower(i_stringa[i]);
 	return i_stringa;
-}			
+}
 string stringtoupper(string i_stringa)
 {
 	for (unsigned int i=0;i<i_stringa.size();i++)
 		i_stringa[i]=toupper(i_stringa[i]);
 	return i_stringa;
-}			
+}
 
-
-
-
-
-
-
-
-int myposi(string i_substring,string i_string) 
+int myposi(string i_substring,string i_string)
 {
 	// not very quick...
 	i_substring=stringtolower(i_substring);
@@ -20957,7 +20745,7 @@ string timetohuman(int32_t i_seconds)
 {
 	if (i_seconds<=0)
 		return "00:00:00";
-	int h=(i_seconds/3600); 
+	int h=(i_seconds/3600);
 	int m=(i_seconds -(3600*h))/60;
 	int s=(i_seconds -(3600*h)-(m*60));
 	char	temporaneo[20];
@@ -20971,7 +20759,7 @@ inline char* tohuman(int64_t i_bytes)
 	char length = sizeof(myappend)/sizeof(myappend[0]);
 	double mybytes=i_bytes;
 	int i=0;
-	if (i_bytes > 1024) 
+	if (i_bytes > 1024)
 		for (i=0;(i_bytes / 1024) > 0 && i<length-1; i++, i_bytes /= 1024)
 			mybytes = i_bytes / 1024.0;
 	snprintf(io_buf,sizeof(io_buf),"%.02lf %s",mybytes,myappend[i]);
@@ -20984,7 +20772,7 @@ inline char* tohuman2(int64_t i_bytes)
 	char length = sizeof(myappend)/sizeof(myappend[0]);
 	double mybytes=i_bytes;
 	int i=0;
-	if (i_bytes > 1024) 
+	if (i_bytes > 1024)
 		for (i=0;(i_bytes / 1024) > 0 && i<length-1; i++, i_bytes /= 1024)
 			mybytes = i_bytes / 1024.0;
 	snprintf(io_buf,sizeof(io_buf),"%.02lf %s",mybytes,myappend[i]);
@@ -20997,7 +20785,7 @@ inline char* tohuman3(int64_t i_bytes)
 	char length = sizeof(myappend)/sizeof(myappend[0]);
 	double mybytes=i_bytes;
 	int i=0;
-	if (i_bytes > 1024) 
+	if (i_bytes > 1024)
 		for (i=0;(i_bytes / 1024) > 0 && i<length-1; i++, i_bytes /= 1024)
 			mybytes = i_bytes / 1024.0;
 	snprintf(io_buf,sizeof(io_buf),"%.02lf %s",mybytes,myappend[i]);
@@ -21010,7 +20798,7 @@ inline char* tohuman4(int64_t i_bytes)
 	char length = sizeof(myappend)/sizeof(myappend[0]);
 	double mybytes=i_bytes;
 	int i=0;
-	if (i_bytes > 1024) 
+	if (i_bytes > 1024)
 		for (i=0;(i_bytes / 1024) > 0 && i<length-1; i++, i_bytes /= 1024)
 			mybytes = i_bytes / 1024.0;
 	snprintf(io_buf,sizeof(io_buf),"%.02lf %s",mybytes,myappend[i]);
@@ -21023,7 +20811,7 @@ inline char* tohuman5(int64_t i_bytes)
 	char length = sizeof(myappend)/sizeof(myappend[0]);
 	double mybytes=i_bytes;
 	int i=0;
-	if (i_bytes > 1024) 
+	if (i_bytes > 1024)
 		for (i=0;(i_bytes / 1024) > 0 && i<length-1; i++, i_bytes /= 1024)
 			mybytes = i_bytes / 1024.0;
 	snprintf(io_buf,sizeof(io_buf),"%.02lf %s",mybytes,myappend[i]);
@@ -21058,7 +20846,7 @@ int64_t myatoll(const char * i_str)
 		myprintf("18634: text part        |%s|\n",thestring.c_str());
 	}
 	thestring=stringtoupper(thestring);
-	
+
 	if (thestring.size()==1)
 	{
 		if (toupper(thestring[0])=='K')
@@ -21120,13 +20908,13 @@ int64_t encodestringdate(string i_date,bool i_flagfrom)
 		myprintf("18638: datelength must be even (use leading zeros) (%d) |%s|\n",lunghezza,purged.c_str());
 		return -1;
 	}
-		 
-	int year	=0;///4
-	int month	=0;///2
-	int day		=0;///2
-	int hour	=0;///2
-	int minute	=0;///2
-	int second	=0;///2
+
+	int year	=0;
+	int month	=0;
+	int day		=0;
+	int hour	=0;
+	int minute	=0;
+	int second	=0;
 	if (lunghezza>=4)
 		year	=mystoi(purged.substr(0,4));
 	if (lunghezza>=6)
@@ -21139,7 +20927,7 @@ int64_t encodestringdate(string i_date,bool i_flagfrom)
 		minute	=mystoi(purged.substr(10,2));
 	if (lunghezza>=14)
 		second	=mystoi(purged.substr(12,2));
-	
+
 	if (i_flagfrom)
 	{
 		if (lunghezza==4) /// 2022
@@ -21194,16 +20982,16 @@ int64_t encodestringdate(string i_date,bool i_flagfrom)
 	{
 		myprintf("18713: minute >60\n");
 		return -1;
-	}	
+	}
 	if (second>60)
 	{
 		myprintf("18718: second >60\n");
 		return -1;
-	}	
+	}
 	bool isleap= (((year % 4 == 0) &&
          (year % 100 != 0)) ||
          (year % 400 == 0));
-	
+
     if (month == 2)
     {
         if (isleap)
@@ -21227,13 +21015,13 @@ int64_t encodestringdate(string i_date,bool i_flagfrom)
 			myprintf("18745: this month (%d) cannot have more than 30 days\n",month);
 			return -1;
 		}
-	
+
 	return 	year	*10000000000LL
-		+	month	*100000000LL 
-		+	day		*1000000		
-		+	hour	*10000 
-		+	minute	*100	
-		+	second;	
+		+	month	*100000000LL
+		+	day		*1000000
+		+	hour	*10000
+		+	minute	*100
+		+	second;
 }
 
 
@@ -21278,7 +21066,7 @@ string ConvertUtcToLocalTime(const string i_date)
 	if(tt != -1)
 	{
 		struct tm* t2=NULL;
-		t2 = &t; 
+		t2 = &t;
 		*t2 = *localtime(&tt);
 		char ds[24];
 		memset(ds, 0, 24);
@@ -21296,7 +21084,7 @@ string ConvertUtcToLocalTime(const string i_date)
 }
 // Convert 64 bit decimal YYYYMMDDHHMMSS to "YYYY-MM-DD HH:MM:SS"
 // where -1 = unknown date, 0 = deleted.
-string dateToString(bool i_flagutc,int64_t date,bool i_mylocal=false) 
+string dateToString(bool i_flagutc,int64_t date,bool i_mylocal=false)
 {
   if (date<=0) return "                   ";
   string s="0000-00-00 00:00:00";
@@ -21338,10 +21126,10 @@ int64_t now()
 	if (t==NULL)
 		return 0;
 	return	(t->tm_year+1900)	*10000000000LL
-		+	(t->tm_mon+1)		*100000000LL 
-		+	t->tm_mday			*1000000		
-		+	t->tm_hour			*10000 
-		+	t->tm_min			*100	
+		+	(t->tm_mon+1)		*100000000LL
+		+	t->tm_mday			*1000000
+		+	t->tm_hour			*10000
+		+	t->tm_min			*100
 		+	t->tm_sec;
 }
 
@@ -21427,7 +21215,7 @@ bool iswindowspath(const string& i_filename)
 	if (i_filename.size()>3)
 		if (isalpha(i_filename[0]))
 			if (i_filename[1]==':')
-				if ((i_filename[2]=='\\') || (i_filename[2]=='/')) 
+				if ((i_filename[2]=='\\') || (i_filename[2]=='/'))
 				{
 				//	printf("trueeeeeeeeeeeeeee\n");
 					return true;
@@ -21436,12 +21224,6 @@ bool iswindowspath(const string& i_filename)
 }
 bool iswindowsunc(const string& i_filename)
 {
-	/// //franzk/pippo/something
-	///printf("=========================== %s\n",i_filename.c_str());
-	///++++++++ //?/z:/long/_/alongpath/
-	///         0123456
-	///         //?/franzk/condivisione
-	///		z:/
 	if (i_filename=="")
 			return false;
 	if (i_filename.size()<3)
@@ -21454,7 +21236,7 @@ bool iswindowsunc(const string& i_filename)
 			if (i_filename[5]==':')
 				return false;
 		return true;
-	}	
+	}
 	bool	foundslash=false;
 	for (unsigned int i=3;i<i_filename.size();i++)
 		if (i_filename[i]=='/')
@@ -21462,7 +21244,7 @@ bool iswindowsunc(const string& i_filename)
 			foundslash=true;
 			break;
 		}
-		
+
 	return foundslash;
 }
 string getfirstwindowsuncdir(const string& i_filename)
@@ -21491,11 +21273,11 @@ string getfirstwindowsuncdir(const string& i_filename)
 		}
 	return theserver+firstshare;
 }
-bool direxists(string i_directory) 
+bool direxists(string i_directory)
 {
 #ifdef unix
 	struct stat sb;
-    return ((stat(i_directory.c_str(), &sb) == 0) && S_ISDIR(sb.st_mode)); 	
+    return ((stat(i_directory.c_str(), &sb) == 0) && S_ISDIR(sb.st_mode));
 #endif
 #ifdef _WIN32
 	HANDLE	myhandle;
@@ -21526,7 +21308,7 @@ string	makeshortpath(string i_path)
 	if (islongpath(i_path))
 		return myright(i_path,i_path.size()-4);
 	return i_path;
-}	
+}
 string makelongpath(string i_path)
 {
 #ifdef _WIN32
@@ -21534,12 +21316,12 @@ string makelongpath(string i_path)
 	{
 		///if (flagdebug)
 			///myprintf("19291: makelongpath of %s\n",i_path.c_str());
-		
+
 		if (iswindowspath(i_path))
 		{
 		///	if (flagdebug)
 			///	myprintf("19291: it is a windows path |%s|\n",i_path.c_str());
-			
+
 			if (!islongpath(i_path))
 			{
 				///if (flagdebug)
@@ -21551,7 +21333,7 @@ string makelongpath(string i_path)
 		{
 			///if (flagdebug)
 				///myprintf("19308: NOT a iswindowspath |%s|\n",i_path.c_str());
-		
+
 		}
 	}
 #endif
@@ -21560,10 +21342,8 @@ string makelongpath(string i_path)
 	return i_path;
 }
 /// it is not easy, at all, to take *nix free filesystem space
-/// https://searchcode.com/codesearch/view/17947198/
 int64_t getfreespace(string i_path)
 {
-	
 #ifndef _WIN32
 	if (i_path!="")
 		if (!direxists(i_path.c_str()))
@@ -21598,7 +21378,7 @@ int64_t getfreespace(string i_path)
 	if (flagdebug)
 		myprintf("BSD: getfreespace\n");
 	struct statfs stat;
-	if (statfs(i_path.c_str(),&stat)!=0) 
+	if (statfs(i_path.c_str(),&stat)!=0)
 		return 0;
 	static long blocksize = 0;
 	int dummy;
@@ -21611,7 +21391,7 @@ int64_t getfreespace(string i_path)
 	if (flagdebug)
 		myprintf("LINUX: getfreespace\n");
 	struct statvfs stat;
-	if (statvfs(i_path.c_str(),&stat)!=0) 
+	if (statvfs(i_path.c_str(),&stat)!=0)
 		return 0;
 	return stat.f_bsize * stat.f_bavail;
 #endif
@@ -21651,7 +21431,7 @@ int64_t getfreespace(string i_path)
 	return 0;
 }
 #ifdef unix
-void printerr(const char* i_where,const char* filename,int32_t i_fileattr) 
+void printerr(const char* i_where,const char* filename,int32_t i_fileattr)
 {
 	if (flagquiet)
 		return;
@@ -21717,9 +21497,9 @@ string	decodewinerror(DWORD	i_error,const char* i_filename)
 	else
 	if (i_error==2L) risultato="ERROR_FILE_NOT_FOUND";
 	else
-	if (i_error==3L) 
+	if (i_error==3L)
 	{
-			risultato="ERROR_PATH_NOT_FOUND"; 
+			risultato="ERROR_PATH_NOT_FOUND";
 			if (i_filename)
 				if (strlen(i_filename)>255)
 				{
@@ -34368,7 +34148,7 @@ void	enumerateerrors()
 		}
 	}
 }
-void printerr(const char* i_where,const char* filename,int32_t i_fileattr) 
+void printerr(const char* i_where,const char* filename,int32_t i_fileattr)
 {
 	int err=GetLastError();
 	MAPPAERRORS::iterator a=g_errors.find(err);
@@ -34416,7 +34196,7 @@ void printerr(const char* i_where,const char* filename,int32_t i_fileattr)
 	}
 }
 #endif
-void ioerr(const char* msg) 
+void ioerr(const char* msg)
 {
   printerr("11896",msg,0);
   throw std::runtime_error(msg);
@@ -34424,7 +34204,7 @@ void ioerr(const char* msg)
 /*
 	checksum section
 */
-/////////////////// calculate CRC32 
+/////////////////// calculate CRC32
 // //////////////////////////////////////////////////////////
 // Crc32.h
 // Copyright (c) 2011-2019 Stephan Brumme. All rights reserved.
@@ -35176,7 +34956,7 @@ typedef HANDLE FP;
 const FP FPNULL=INVALID_HANDLE_VALUE;
 typedef enum {RB, WB, RBPLUS, WBPLUS} MODE;  // fopen modes
 // Open file. Only modes "rb", "wb", "rb+" and "wb+" are supported on WINDOWS
-FP fopen(const char* filename, MODE mode) 
+FP fopen(const char* filename, MODE mode)
 {
   assert(filename);
   DWORD access=0;
@@ -35194,7 +34974,7 @@ FP fopen(const char* filename, MODE mode)
                     NULL, disp, FILE_ATTRIBUTE_NORMAL, NULL);
 }
 // Close file
-int fclose(FP fp) 
+int fclose(FP fp)
 {
   return CloseHandle(fp) ? 0 : EOF;
 }
@@ -35234,7 +35014,7 @@ uint32_t  	g_crc32_index			=0;
 
 // Write nobj objects of size size from ptr to fp. Return number written.
 // "overloaded" from fwrite() for flagfasttxt
-size_t myfwrite(const void* ptr, size_t size, size_t nobj, FP fp) 
+size_t myfwrite(const void* ptr, size_t size, size_t nobj, FP fp)
 {
 	if (fp==0)
 	{
@@ -35243,11 +35023,10 @@ size_t myfwrite(const void* ptr, size_t size, size_t nobj, FP fp)
 	}
 	if ((nobj*size)==0)
 		return 0;
-
-/*	
+/*
 	char mynomefile[100];
 	uint32_t crc=crc32_16bytes(ptr,nobj*size);
-			
+
 	if ((fp==g_fp_zpaq) || (g_fp_zpaq==0))
 		snprintf(mynomefile,sizeof(mynomefile),"z:\\d_%08d_start_%11s_size_%7s_%08X",g_crc32_sequence_data,migliaia3(ftello(fp)),migliaia2(nobj*size),crc);
 	else
@@ -35266,15 +35045,15 @@ size_t myfwrite(const void* ptr, size_t size, size_t nobj, FP fp)
 #ifdef _WIN32
 	DWORD r=0;
 	WriteFile(fp, ptr, size*nobj, &r, NULL);
-	
+
 ///	myprintf("35239: FP %s PTR %s size %s nobj %s r= %08d\n",migliaia(int64_t(fp)),migliaia2(int64_t(ptr)),migliaia3(int64_t(size)),migliaia4(int64_t(nobj)),r);
-	
+
 #else
 	size_t r=fwrite(ptr, size, nobj, fp);
 #endif
 	g_fexpected+=(size*nobj);
 	g_fwritten+=r;
-	
+
 	if (flagfasttxt)
 	{
 		if ((fp==g_fp_zpaq) || (g_fp_zpaq==0))
@@ -35284,7 +35063,7 @@ size_t myfwrite(const void* ptr, size_t size, size_t nobj, FP fp)
 				myprintf("36567: fwrite |%08d| pos %9s g_hep %s r=|%d| ",int(g_crc32_sequence_data),migliaia(ftello(fp)),migliaia2(g_header_pos),r);
 				myprintf("35255: g_crc_get_header %d\n",int(g_crc_getheader));
 			}
-			
+
 			if (g_crc32_sequence_data==0) // this is the header of an encrypted piece
 			{
 				if (r==32)
@@ -35301,7 +35080,7 @@ size_t myfwrite(const void* ptr, size_t size, size_t nobj, FP fp)
 					if (flagdebug)
 						myprintf(" SKIPPOZ 104 ");
 					g_veryfirst=false;
-				
+
 				}
 			}
 			else
@@ -35331,9 +35110,9 @@ size_t myfwrite(const void* ptr, size_t size, size_t nobj, FP fp)
 					if (flagdebug)
 						myprintf("BODY  %08X\n",g_crc_body);
 				}
-			}	
+			}
 			g_crc32_sequence_data++;
-			
+
 		}
 		else
 		{
@@ -35344,7 +35123,7 @@ size_t myfwrite(const void* ptr, size_t size, size_t nobj, FP fp)
 			g_crc32_sequence_index++;
 		}
 	}
-	
+
   if (flagdebug)
 		if ((size*nobj)!=r)
 			myprintf("20277: expected bytes != written (media full?)  %s vs  %s\n",migliaia((int64_t)(size*nobj)),migliaia2((int64_t)r));
@@ -35353,12 +35132,12 @@ size_t myfwrite(const void* ptr, size_t size, size_t nobj, FP fp)
 }
 
 
-bool fileexists(const string& i_filename) 
+bool fileexists(const string& i_filename)
 {
 #ifdef unix
 // true even for dirs no S_ISDIR
-  struct stat buffer;   
-  return (stat(i_filename.c_str(),&buffer)==0); 
+  struct stat buffer;
+  return (stat(i_filename.c_str(),&buffer)==0);
 #endif
 #ifdef _WIN32
 	HANDLE	myhandle;
@@ -35376,10 +35155,10 @@ bool fileexists(const string& i_filename)
 }
 
 // a bit different: check only for "real" files
-bool realfileexists(const string& i_filename) 
+bool realfileexists(const string& i_filename)
 {
 #ifdef unix
-  struct stat buffer;   
+  struct stat buffer;
   if (stat(i_filename.c_str(),&buffer)==0)
 	if (!S_ISDIR(buffer.st_mode))
 		return true;
@@ -35408,9 +35187,9 @@ bool getfileinfo(string i_filename,int64_t& o_size,int64_t& o_date,int64_t& o_at
 	o_attr=0;
 #ifdef unix
 	while (i_filename.size()>1 && i_filename[i_filename.size()-1]=='/')
-		i_filename=i_filename.substr(0, i_filename.size()-1);  
+		i_filename=i_filename.substr(0, i_filename.size()-1);
 	struct stat sb;
-	if (!lstat(i_filename.c_str(), &sb)) 
+	if (!lstat(i_filename.c_str(), &sb))
 	{
 		if (S_ISREG(sb.st_mode))
 		{
@@ -35424,12 +35203,12 @@ bool getfileinfo(string i_filename,int64_t& o_size,int64_t& o_date,int64_t& o_at
 #ifdef _WIN32
 	WIN32_FIND_DATA ffd;
 	string t=i_filename;
-	if (t.size()>0 && t[t.size()-1]=='/') 
+	if (t.size()>0 && t[t.size()-1]=='/')
 		t+="*";
 	HANDLE h=FindFirstFile(utow(t.c_str()).c_str(), &ffd);
 	if (h==INVALID_HANDLE_VALUE && GetLastError()!=ERROR_FILE_NOT_FOUND && GetLastError()!=ERROR_PATH_NOT_FOUND)
 			printerr("29617",t.c_str(),0);
-	if (h!=INVALID_HANDLE_VALUE) 
+	if (h!=INVALID_HANDLE_VALUE)
 	{
 		SYSTEMTIME st;
 		if (FileTimeToSystemTime(&ffd.ftLastWriteTime, &st))
@@ -35444,6 +35223,64 @@ bool getfileinfo(string i_filename,int64_t& o_size,int64_t& o_date,int64_t& o_at
 #endif
 	return false;
 }
+
+bool getdirinfo(string i_folder,int64_t& o_date,int64_t& o_attr)
+{
+	o_date=0;
+	o_attr=0;
+	if (!isdirectory(i_folder))
+	{
+		myprintf("35470: This is not a folder <<%");
+		printUTF8(i_folder.c_str());
+		myprintf("\n");
+		return false;
+	}
+#ifdef unix
+	struct stat sb;
+	if (!lstat(i_folder.c_str(), &sb))
+		if (S_ISDIR(sb.st_mode))
+		{
+			/*
+				time_t    st_atime;   // time of last access
+				time_t    st_mtime;   // time of last modification
+				time_t    st_ctime;   // time of last status change
+			*/
+			o_date=decimal_time(sb.st_mtime);
+			o_attr='u'+(sb.st_mode<<8);
+			return true;
+		}
+#endif
+#ifdef _WIN32
+	i_folder+="*.*";
+	WIN32_FIND_DATA ffd;
+	HANDLE h=FindFirstFile(utow(i_folder.c_str()).c_str(), &ffd);
+	if (h==INVALID_HANDLE_VALUE)
+	{
+		myprintf("35494: INVALID_HANDLE for <<%s>>\n",i_folder.c_str());
+		return false;
+	}
+	SYSTEMTIME st;
+	if (FileTimeToSystemTime(&ffd.ftLastWriteTime, &st))
+		o_date=st.wYear*10000000000LL+st.wMonth*100000000LL+st.wDay*1000000
+			+st.wHour*10000+st.wMinute*100+st.wSecond;
+
+
+/*
+	if (FileTimeToSystemTime(&ffd.ftCreationTime, &st))
+			creationdate=st.wYear*10000000000LL+st.wMonth*100000000LL+st.wDay*1000000
+				+st.wHour*10000+st.wMinute*100+st.wSecond;
+	if (FileTimeToSystemTime(&ffd.ftLastAccessTime, &st))
+			accessdate=st.wYear*10000000000LL+st.wMonth*100000000LL+st.wDay*1000000
+				+st.wHour*10000+st.wMinute*100+st.wSecond;
+*/
+
+	o_attr=ffd.dwFileAttributes;
+	FindClose(h);
+	return true;
+#endif
+	return false;
+}
+
 // Delete a file, return true if successful
 bool delete_file(const char* filename) {
 #ifdef unix
@@ -35469,11 +35306,11 @@ int erredbarras(const std::string &i_path)
 {
 		bool 	risultato=false;
 		DIR *d=opendir(i_path.c_str());
-		if (d) 
+		if (d)
 		{
 			struct dirent *p;
 			risultato=true;
-			while (risultato && (p=readdir(d))) 
+			while (risultato && (p=readdir(d)))
 			{
 				if (!strcmp(p->d_name, ".") || !strcmp(p->d_name, ".."))
 					continue;
@@ -35484,7 +35321,7 @@ int erredbarras(const std::string &i_path)
 					temp=i_path+p->d_name;
 				else
 					temp=i_path+"/"+p->d_name;
-				if (!stat(temp.c_str(), &statbuf)) 
+				if (!stat(temp.c_str(), &statbuf))
 				{
 					if (S_ISDIR(statbuf.st_mode))
 						risultato2=erredbarras(temp);
@@ -35541,9 +35378,9 @@ string nomedirseesistegia(string i_nomedir)
 	if (!direxists(i_nomedir))
 		return i_nomedir;
 	myprintf("Directory does not exists %s\n",i_nomedir.c_str());
-	
+
 	bool isdir=isdirectory(i_nomedir);
-	
+
 	string senzabarra=trimbarra(i_nomedir);
 	char numero[10];
 	for (int i=1;i<99999;i++)
@@ -35702,7 +35539,7 @@ string g_gettempdirectory()
 	if (GetTempPathW(MAX_PATH, charpath))
 	{
 		wstring ws(charpath);
-		string str(ws.begin(), ws.end());	
+		string str(ws.begin(), ws.end());
 		return str;
 	}
 	return temppath;
@@ -35720,10 +35557,10 @@ void waitexecute(string i_filename,string i_parameters,int i_show)
 	ShExecInfo.hwnd = NULL;
 	ShExecInfo.lpVerb = NULL;
 	ShExecInfo.lpFile = i_filename.c_str();
-	ShExecInfo.lpParameters = i_parameters.c_str();   
+	ShExecInfo.lpParameters = i_parameters.c_str();
 	ShExecInfo.lpDirectory = NULL;
 	ShExecInfo.nShow = i_show;
-	ShExecInfo.hInstApp = NULL; 
+	ShExecInfo.hInstApp = NULL;
 	ShellExecuteExA(&ShExecInfo);
 	WaitForSingleObject(ShExecInfo.hProcess, INFINITE);
 	CloseHandle(ShExecInfo.hProcess);
@@ -35740,7 +35577,7 @@ bool isadmin()
 		goto Cleanup; /// yessss!!! the migthy GOTO!!!!
 	}
 	if (!GetTokenInformation(hToken, TokenElevation, &elevation, sizeof(elevation), &dwSize))
-	{	
+	{
 		myprintf("\n19983: Failed to get Token Information\n");
 		goto Cleanup;
 	}
@@ -35751,7 +35588,7 @@ Cleanup:
 		CloseHandle(hToken);
 		hToken = NULL;
 	}
-	return fIsElevated; 
+	return fIsElevated;
 }
 //// VSS on Windows by... batchfile
 //// delete all kind of shadows copies (if any)
@@ -35809,19 +35646,19 @@ bool wintouch(string i_filename, int64_t i_date, int64_t i_creationdate)
 		return false;
 	if (strstr(i_filename.c_str(), ":$DATA")!=0)
 		return true;
-	
+
 	FP fp=CreateFile(utow(i_filename.c_str()).c_str(),
                     FILE_WRITE_ATTRIBUTES,
                     FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE,
                     NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, NULL);
-	if (fp==FPNULL) 
+	if (fp==FPNULL)
 	{
 		myprintf("19883: WARN cannot open ");
 		printUTF8(i_filename.c_str());
 		myprintf("\n");
 		return false;
 	}
-	
+
 	if (i_date>0)
 	{
 		SYSTEMTIME st;
@@ -35843,7 +35680,7 @@ bool wintouch(string i_filename, int64_t i_date, int64_t i_creationdate)
 			return false;
 		}
 	}
-	
+
 	if (i_creationdate>0)
 	{
 		SYSTEMTIME creation_st;
@@ -35867,8 +35704,8 @@ bool wintouch(string i_filename, int64_t i_date, int64_t i_creationdate)
 			return false;
 		}
 	}
-	
-	
+
+
 	CloseHandle(fp);
 	return true;
 }
@@ -35893,14 +35730,14 @@ bool close(const char* filename, int64_t date, int64_t attr, FP fp=FPNULL) {
 #else
 	const bool ads=strstr(filename, ":$DATA")!=0;  // alternate data stream?
 	bool allok=true;
-	if (date>0 && !ads) 
+	if (date>0 && !ads)
 	{
 		if (fp==FPNULL)		// Windows require HANDLE
 			fp=CreateFile(utow(filename).c_str(),
                     FILE_WRITE_ATTRIBUTES,
                     FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE,
                     NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, NULL);
-		if (fp!=FPNULL) 
+		if (fp!=FPNULL)
 		{
 			SYSTEMTIME st;
 			st.wYear=date/10000000000LL%10000;
@@ -35922,7 +35759,7 @@ bool close(const char* filename, int64_t date, int64_t attr, FP fp=FPNULL) {
 			}
 		}
 	}
-	if (fp!=FPNULL) 
+	if (fp!=FPNULL)
 		CloseHandle(fp);
 	if ((attr&255)=='w' && !ads)
 		if (fileexists(filename))
@@ -35947,7 +35784,7 @@ bool touch(const char* filename, int64_t date, int64_t attr)
 	if (filename==NULL)
 		return true;
 #ifdef unix
-	if (date>0) 
+	if (date>0)
 	{
 		struct utimbuf ub;
 		ub.actime=time(NULL);
@@ -35965,7 +35802,7 @@ bool touch(const char* filename, int64_t date, int64_t attr)
                     FILE_WRITE_ATTRIBUTES,
                     FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE,
                     NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, NULL);
-		if (fp!=FPNULL) 
+		if (fp!=FPNULL)
 		{
 			SYSTEMTIME st;
 			st.wYear			=date/10000000000LL%10000;
@@ -36071,14 +35908,14 @@ bool saggiascrivibilitacartella(string i_cartella)
 				myprintf("20574: empty folder to be checked\n");
 		return false;
 	}
-	if (flagdebug)		
+	if (flagdebug)
 		myprintf("20857: i_cartella %s\n",i_cartella.c_str());
 	i_cartella=extractfilepath(i_cartella);
-	if (flagdebug)		
+	if (flagdebug)
 		myprintf("20859: i_cartella %s\n",i_cartella.c_str());
 	if (!isdirectory(i_cartella))
 			i_cartella+="/";
-	if (flagdebug)		
+	if (flagdebug)
 		myprintf("20580: Folder %s\n",i_cartella.c_str());
 	string	percorso=extractfilepath(i_cartella);
 	if (flagdebug)
@@ -36157,7 +35994,7 @@ string getuname()
 #ifdef unix
 	struct utsname uts;
 	int err=uname(&uts);
-	if (err!=0) 
+	if (err!=0)
 	{
 		myprintf("19594: getuname error %d\n", err);
 		return "UNAME-ERROR";
@@ -36288,7 +36125,7 @@ bool	iswildcards(const string& i_string)
 	bool 	stars=strstr(i_string.c_str(), "*")!=0;			// for debug reason no "collapse"
 	bool 	questionmark=strstr(i_string.c_str(), "?")!=0;
 	return 	stars+questionmark;
-}						
+}
 bool check_if_password(string i_filename)
 {
 	if (flagdebug)
@@ -36298,18 +36135,18 @@ bool check_if_password(string i_filename)
 		if (flagdebug)
 			myprintf("21075: wildcard detected, no password check\n");
 		return	false;
-	}	
+	}
 	if (!fileexists(i_filename))
 		return false;
 	FILE* inFile = freadopen(i_filename.c_str());
-	if (inFile==NULL) 
+	if (inFile==NULL)
 	{
 #ifdef _WIN32
 		DWORD err=GetLastError();
 #else
 		int err=1;
 #endif
-		myprintf("\n19802: ERR <%s> kind %s\n",i_filename.c_str(),migliaia((int64_t)err)); 
+		myprintf("\n19802: ERR <%s> kind %s\n",i_filename.c_str(),migliaia((int64_t)err));
 		seppuku();
 		exit(0);
 	}
@@ -36338,7 +36175,7 @@ bool comparecrc32(s_fileandsize a, s_fileandsize b)
 bool comparesizehash(s_fileandsize a, s_fileandsize b)
 {
 	return (a.size < b.size) ||
-           ((a.size == b.size) && (a.hashhex > b.hashhex)) || 
+           ((a.size == b.size) && (a.hashhex > b.hashhex)) ||
            ((a.size == b.size) && (a.hashhex == b.hashhex) &&
               (a.filename<b.filename));
 			  ///(strcmp(a.filename.c_str(), b.filename.c_str()) <0));
@@ -36363,40 +36200,40 @@ struct s_stringpair
 	string			second;
 	s_stringpair(): index(0) {first="";second="";}
 };
-bool pairsortbyindex(	const s_stringpair &a, 
-					const s_stringpair &b) 
+bool pairsortbyindex(	const s_stringpair &a,
+					const s_stringpair &b)
 {
-	return (a.index < b.index); 
-} 
-bool pairsortbyval(	const s_stringpair &a, 
-					const s_stringpair &b) 
-{ 
+	return (a.index < b.index);
+}
+bool pairsortbyval(	const s_stringpair &a,
+					const s_stringpair &b)
+{
 	if (a.second==b.second)
 		return (a.first < b.first);
-	return (a.second < b.second); 
-} 
+	return (a.second < b.second);
+}
 struct s_pair_intstring
 {
 	uint64_t		first;
 	string			second;
 	s_pair_intstring(): first(0) {second="";}
 };
-bool pairsortbyfirst(const s_pair_intstring &a, 
-               const s_pair_intstring &b) 
-{ 
-    return (a.first < b.first); 
-} 
-bool pairsortbysecond(const s_pair_intstring &a, 
-               const s_pair_intstring &b) 
-{ 
-    return (b.first < a.first); 
-} 
+bool pairsortbyfirst(const s_pair_intstring &a,
+               const s_pair_intstring &b)
+{
+    return (a.first < b.first);
+}
+bool pairsortbysecond(const s_pair_intstring &a,
+               const s_pair_intstring &b)
+{
+    return (b.first < a.first);
+}
 
-bool sortbysize(const std::pair<uint64_t, string> &a, 
-               const std::pair<uint64_t, string> &b) 
-{ 
-    return (a.first < b.first); 
-} 
+bool sortbysize(const std::pair<uint64_t, string> &a,
+               const std::pair<uint64_t, string> &b)
+{
+    return (a.first < b.first);
+}
 /// possible problems with unsigned to calculate the differences. We do NOT want to link abs()
 int64_t myabs(int64_t i_first,int64_t i_second)
 {
@@ -36408,18 +36245,18 @@ int64_t myabs(int64_t i_first,int64_t i_second)
 /*
 	random section
 */
-struct xorshift128plus_key_s 
+struct xorshift128plus_key_s
 {
     uint64_t part1;
     uint64_t part2;
 };
 typedef struct xorshift128plus_key_s xorshift128plus_key_t;
-static inline void xorshift128plus_init(uint64_t key1, uint64_t key2, xorshift128plus_key_t *key) 
+static inline void xorshift128plus_init(uint64_t key1, uint64_t key2, xorshift128plus_key_t *key)
 {
   key->part1 = key1;
   key->part2 = key2;
 }
-uint64_t xorshift128plus(xorshift128plus_key_t * key) 
+uint64_t xorshift128plus(xorshift128plus_key_t * key)
 {
     uint64_t s1 = key->part1;
     const uint64_t s0 = key->part2;
@@ -36428,7 +36265,7 @@ uint64_t xorshift128plus(xorshift128plus_key_t * key)
     key->part2 = s1 ^ s0 ^ (s1 >> 18) ^ (s0 >> 5); // b, c
     return key->part2 + s0;
 }
-void populateRandom_xorshift128plus(uint32_t *answer, uint32_t size,uint64_t i_key1, uint64_t i_key2) 
+void populateRandom_xorshift128plus(uint32_t *answer, uint32_t size,uint64_t i_key1, uint64_t i_key2)
 {
 	xorshift128plus_key_t mykey; /// nowarning
 	mykey.part1 = i_key1;
@@ -36461,7 +36298,7 @@ void populateRandom_xorshift128plus(uint32_t *answer, uint32_t size,uint64_t i_k
   3. This notice may not be removed or altered from any source distribution.
   Mark Adler
   madler@alumni.caltech.edu
- 
+
  Reworked and fixed by me
 */
 #define POLY 0x82f63b78
@@ -36719,13 +36556,13 @@ uint32_t crc32c_sw_little(uint32_t crc, unsigned char const *buf, size_t len) {
 }
 
 /* Swap the bytes in a uint64_t.  (Only for big-endian.) */
-static inline uint64_t swap_crc32c(uint64_t x) 
+static inline uint64_t swap_crc32c(uint64_t x)
 {
-	x = 			((x <<  8) & (uint64_t)0xff00ff00ff00ff00ULL) 
+	x = 			((x <<  8) & (uint64_t)0xff00ff00ff00ff00ULL)
 	| 				((x >>  8) & (uint64_t)0xff00ff00ff00ffULL);
-    
-	x = 			((x << 16) & (uint64_t)0xffff0000ffff0000ULL) 
-	| 
+
+	x = 			((x << 16) & (uint64_t)0xffff0000ffff0000ULL)
+	|
 					((x >> 16) & (uint64_t)0xffff0000ffffULL);
     return (x << 32) | (x >> 32);
 }
@@ -36795,7 +36632,7 @@ uint32_t crc32c(uint32_t crc, const unsigned char *buf, size_t len)
     SSE42(sse42);
 	return sse42 ? crc32c_hw(crc, buf, len) : crc32c_sw_little(crc, buf, len);
 #else
-	
+
 #ifdef BIG
         return crc32c_sw_big(crc, buf, len);
 #else
@@ -36819,7 +36656,7 @@ public:
   ~ArchiveBase() {
     if (aes) delete aes;
     if (fp!=FPNULL) fclose(fp);
-  }  
+  }
   bool isopen() {return fp!=FPNULL;}
   FP	getthefp() { return fp;}
 };
@@ -36860,7 +36697,7 @@ public:
 	int64_t totalsize()
 	{
 		int64_t temp=0;
-		for (unsigned i=0; i<sz.size(); ++i) 
+		for (unsigned i=0; i<sz.size(); ++i)
 			temp+=sz[i];
 		return temp;
 	}
@@ -36946,7 +36783,7 @@ int inttoarray(int64_t i_number, char* i_buffer, int i_size)
 		seppuku();
 		return 0;
 	}
-	
+
 	for (int i=0;i<i_size;i++)
 	{
 		uint8_t numerino=(i_number&255);
@@ -36992,26 +36829,9 @@ int64_t arraytoint64(const char* i_buffer)
 		if (i>0)
 		risultato<<=8;
 	}
-	
+
 	return risultato;
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 #ifdef SERVER
 
@@ -37020,1711 +36840,6 @@ int64_t arraytoint64(const char* i_buffer)
 	Obviously it is under study and development, for now only for Windows
 	The ultimate goal is to have a ransomware-resistant backup system
 */
-
-/* 
- * Fast, portable, and easy-to-use Twofish implementation,  
- * Version 0.3. 
- * Copyright (c) 2002 by Niels Ferguson.  
- * (See further down for the almost-unrestricted licensing terms.) 
- */
-
-
-typedef unsigned char   Twofish_Byte; 
-typedef unsigned int    Twofish_UInt32; 
-typedef struct {Twofish_UInt32 s[4][256];Twofish_UInt32 K[40];} Twofish_key; 
-int Twofish_initialise(); 
-int Twofish_prepare_key(
-                                Twofish_Byte key[],
-                                int key_len,
-                                Twofish_key * xkey
-                                );
-void Twofish_encrypt(
-                            Twofish_key * xkey,
-                            Twofish_Byte p[16],
-                            Twofish_Byte c[16]
-                            ); 
-void Twofish_decrypt(
-                            Twofish_key * xkey,
-                            Twofish_Byte c[16],
-                            Twofish_Byte p[16]
-                            ); 
- 
-#define UINT32_MASK    ( (((Twofish_UInt32)2)<<31) - 1 ) 
- 
-#ifndef _MSC_VER 
-#define ROL32(x,n) ( (x)<<(n) | ((x) & UINT32_MASK) >> (32-(n)) ) 
-#define ROR32(x,n) ( (x)>>(n) | ((x) & UINT32_MASK) << (32-(n)) ) 
-#else 
-#define ROL32(x,n) (_lrotl((x), (n))) 
-#define ROR32(x,n) (_lrotr((x), (n))) 
-#endif 
-#define LARGE_Q_TABLE   0    /* default = 0 */ 
- 
-#define SELECT_BYTE_FROM_UINT32_IN_MEMORY    0    /* default = 0 */ 
-#define CONVERT_USING_CASTS    0    /* default = 0 */ 
-
-#define CPU_IS_BIG_ENDIAN    0 
-#define BSWAP(x) ((ROL32((x),8)&0x00ff00ff) | (ROR32((x),8) & 0xff00ff00)) 
- 
-#if CPU_IS_BIG_ENDIAN 
-#define ENDIAN_CONVERT(x)    BSWAP(x) 
-#else 
-#define ENDIAN_CONVERT(x)    (x) 
-#endif 
- 
-#if CPU_IS_BIG_ENDIAN 
-#define BYTE_OFFSET( n )  (sizeof(Twofish_UInt32) - 1 - (n) ) 
-#else 
-#define BYTE_OFFSET( n )  (n) 
-#endif 
- 
-#if SELECT_BYTE_FROM_UINT32_IN_MEMORY 
-    /* Pick the byte from the memory in which X is stored. */ 
-#define SELECT_BYTE( X, b ) (((Twofish_Byte *)(&(X)))[BYTE_OFFSET(b)]) 
-#else 
-    /* Portable solution: Pick the byte directly from the X value. */ 
-#define SELECT_BYTE( X, b ) (((X) >> (8*(b))) & 0xff) 
-#endif 
- 
- 
-/* Some shorthands because we use byte selection in large formulae. */ 
-#define b0(X)   SELECT_BYTE((X),0) 
-#define b1(X)   SELECT_BYTE((X),1) 
-#define b2(X)   SELECT_BYTE((X),2) 
-#define b3(X)   SELECT_BYTE((X),3) 
- 
- 
-/* 
- * We need macros to load and store UInt32 from/to byte arrays 
- * using the least-significant-byte-first convention. 
- * 
- * GET32( p ) gets a UInt32 in lsb-first form from four bytes pointed to 
- * by p. 
- * PUT32( v, p ) writes the UInt32 value v at address p in lsb-first form. 
- */ 
-#if CONVERT_USING_CASTS 
- 
-    /* Get UInt32 from four bytes pointed to by p. */ 
-#define GET32( p )    ENDIAN_CONVERT( *((Twofish_UInt32 *)(p)) ) 
-    /* Put UInt32 into four bytes pointed to by p */ 
-#define PUT32( v, p ) *((Twofish_UInt32 *)(p)) = ENDIAN_CONVERT(v) 
- 
-#else 
- 
-    /* Get UInt32 from four bytes pointed to by p. */ 
-#define GET32( p ) \
-    ( \
-      (Twofish_UInt32)((p)[0])     \
-    | (Twofish_UInt32)((p)[1])<< 8 \
-    | (Twofish_UInt32)((p)[2])<<16 \
-    | (Twofish_UInt32)((p)[3])<<24 \
-    ) 
-    /* Put UInt32 into four bytes pointed to by p */ 
-#define PUT32( v, p ) \
-    (p)[0] = (Twofish_Byte)(((v)      ) & 0xff); \
-    (p)[1] = (Twofish_Byte)(((v) >>  8) & 0xff); \
-    (p)[2] = (Twofish_Byte)(((v) >> 16) & 0xff); \
-    (p)[3] = (Twofish_Byte)(((v) >> 24) & 0xff)
- 
-#endif 
-
-int test_platform() 
-    { 
-    /* Buffer with test values. */ 
-    Twofish_Byte buf[] = {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0}; 
-    Twofish_UInt32 C; 
-    Twofish_UInt32 x,y; 
-    int i; 
- 
-    if( ((Twofish_UInt32)((Twofish_UInt32)1 << 31) == 0) || ((Twofish_UInt32)-1 < 0 ))  
-        { 
-	  printf( "Twofish code: Twofish_UInt32 type not suitable\n"); 
-	  exit(1);
-        } 
-    if( (sizeof( Twofish_Byte ) != 1) || (((Twofish_Byte)-1) < 0) )  
-        { 
-	  printf( "Twofish code: Twofish_Byte type not suitable\n"); 
-	  exit(1);
-        } 
- 
-    /*  
-     * Sanity-check the endianness conversions.  
-     * This is just an aid to find problems. If you do the endianness 
-     * conversion macros wrong you will fail the full cipher test, 
-     * but that does not help you find the error. 
-     * Always make it easy to find the bugs!  
-     * 
-     * Detail: There is no fully portable way of writing UInt32 constants, 
-     * as you don't know whether to use the U or UL suffix. Using only U you 
-     * might only be allowed 16-bit constants. Using UL you might get 64-bit 
-     * constants which cannot be stored in a UInt32 without warnings, and 
-     * which generally behave subtly different from a true UInt32. 
-     * As long as we're just comparing with the constant,  
-     * we can always use the UL suffix and at worst lose some efficiency.  
-     * I use a separate '32-bit constant' macro in most of my other code. 
-     * 
-     * I hate C. 
-     * 
-     * Start with testing GET32. We test it on all positions modulo 4  
-     * to make sure we can handly any position of inputs. (Some CPUs 
-     * do not allow non-aligned accesses which we would do if you used 
-     * the CONVERT_USING_CASTS option. 
-     */ 
-    if( (GET32( buf ) != 0x78563412UL) || (GET32(buf+1) != 0x9a785634UL)  
-        || (GET32( buf+2 ) != 0xbc9a7856UL) || (GET32(buf+3) != 0xdebc9a78UL) ) 
-        { 
-	  printf( "Twofish code: GET32 not implemented properly\n");
-	  exit(1);
-	    } 
- 
-    /*  
-     * We can now use GET32 to test PUT32. 
-     * We don't test the shifted versions. If GET32 can do that then 
-     * so should PUT32. 
-     */ 
-    C = GET32( buf ); 
-    PUT32( 3*C, buf ); 
-    if( GET32( buf ) != 0x69029c36UL ) 
-        { 
-	  printf( "Twofish code: PUT32 not implemented properly\n");
-	  exit(1);
-	    } 
- 
- 
-    /* Test ROL and ROR */ 
-    for( i=1; i<32; i++ )  
-        { 
-        /* Just a simple test. */ 
-        x = ROR32( C, i ); 
-        y = ROL32( C, i ); 
-        x ^= (C>>i) ^ (C<<(32-i)); 
-        /*y ^= (C<>(32-i));  */
-        y ^= (C<<i) ^ (C>>(32-i));
-        x |= y; 
-        /*  
-         * Now all we check is that x is zero in the least significant 
-         * 32 bits. Using the UL suffix is safe here, as it doesn't matter 
-         * if we get a larger type. 
-         */ 
-	if( (x & 0xffffffffUL) != 0 ) 
-            { 
-	      printf( "Twofish ROL or ROR not properly defined.\n");
-		  exit(1);
-		    } 
-        } 
- 
-    /* Test the BSWAP macro */ 
-    if( BSWAP(C) != 0x12345678UL ) 
-        { 
-        /* 
-         * The BSWAP macro should always work, even if you are not using it. 
-         * A smart optimising compiler will just remove this entire test. 
-         */ 
-	  printf( "BSWAP not properly defined.\n");
-	  exit(1);
-	    } 
- 
-    /* And we can test the b macros which use SELECT_BYTE. */ 
-    if( (b0(C)!=0x12) || (b1(C) != 0x34) || (b2(C) != 0x56) || (b3(C) != 0x78) ) 
-        { 
-        /* 
-         * There are many reasons why this could fail. 
-         * Most likely is that CPU_IS_BIG_ENDIAN has the wrong value.  
-         */ 
-	  printf( "Twofish code: SELECT_BYTE not implemented properly\n");
-	  exit(1);
-	    }
-    return 1;
-    } 
- 
-int test_vector( Twofish_Byte key[], int key_len, Twofish_Byte p[16], Twofish_Byte c[16] ) 
-    { 
-    Twofish_Byte tmp[16];               /* scratch pad. */ 
-    Twofish_key xkey;           /* The expanded key */ 
-    int i; 
- 
- 
-    /* Prepare the key */ 
-    if ((i = Twofish_prepare_key( key, key_len, &xkey)) < 0)
-	return i; 
- 
-    /*  
-     * We run the test twice to ensure that the xkey structure 
-     * is not damaged by the first encryption.  
-     * Those are hideous bugs to find if you get them in an application. 
-     */ 
-    for( i=0; i<2; i++ )  
-        { 
-        /* Encrypt and test */ 
-        Twofish_encrypt( &xkey, p, tmp ); 
-        if( memcmp( c, tmp, 16 ) != 0 )  
-            { 
-	      printf( "Twofish encryption failure\n");
-		  exit(1);
-		    } 
- 
-        /* Decrypt and test */ 
-        Twofish_decrypt( &xkey, c, tmp ); 
-        if( memcmp( p, tmp, 16 ) != 0 )  
-            { 
-	      printf( "Twofish decryption failure\n");
-		  exit(1);
-		    } 
-        } 
- 
-    /* The test keys are not secret, so we don't need to wipe xkey. */
-    return 1;
-    }
- 
- 
-int test_vectors() 
-    { 
-    static Twofish_Byte k128[] = { 
-        0x9F, 0x58, 0x9F, 0x5C, 0xF6, 0x12, 0x2C, 0x32,  
-        0xB6, 0xBF, 0xEC, 0x2F, 0x2A, 0xE8, 0xC3, 0x5A, 
-        }; 
-    static Twofish_Byte p128[] = { 
-        0xD4, 0x91, 0xDB, 0x16, 0xE7, 0xB1, 0xC3, 0x9E,  
-        0x86, 0xCB, 0x08, 0x6B, 0x78, 0x9F, 0x54, 0x19 
-        }; 
-    static Twofish_Byte c128[] = { 
-        0x01, 0x9F, 0x98, 0x09, 0xDE, 0x17, 0x11, 0x85,  
-        0x8F, 0xAA, 0xC3, 0xA3, 0xBA, 0x20, 0xFB, 0xC3 
-        }; 
- 
-    /* 192-bit test is the I=4 case of section B.2 of the Twofish book. */ 
-    static Twofish_Byte k192[] = { 
-        0x88, 0xB2, 0xB2, 0x70, 0x6B, 0x10, 0x5E, 0x36,  
-        0xB4, 0x46, 0xBB, 0x6D, 0x73, 0x1A, 0x1E, 0x88,  
-        0xEF, 0xA7, 0x1F, 0x78, 0x89, 0x65, 0xBD, 0x44 
-        }; 
-    static Twofish_Byte p192[] = { 
-        0x39, 0xDA, 0x69, 0xD6, 0xBA, 0x49, 0x97, 0xD5, 
-        0x85, 0xB6, 0xDC, 0x07, 0x3C, 0xA3, 0x41, 0xB2 
-        }; 
-    static Twofish_Byte c192[] = { 
-        0x18, 0x2B, 0x02, 0xD8, 0x14, 0x97, 0xEA, 0x45, 
-        0xF9, 0xDA, 0xAC, 0xDC, 0x29, 0x19, 0x3A, 0x65 
-        }; 
- 
-    /* 256-bit test is the I=4 case of section B.2 of the Twofish book. */ 
-    static Twofish_Byte k256[] = { 
-        0xD4, 0x3B, 0xB7, 0x55, 0x6E, 0xA3, 0x2E, 0x46,  
-        0xF2, 0xA2, 0x82, 0xB7, 0xD4, 0x5B, 0x4E, 0x0D, 
-        0x57, 0xFF, 0x73, 0x9D, 0x4D, 0xC9, 0x2C, 0x1B, 
-        0xD7, 0xFC, 0x01, 0x70, 0x0C, 0xC8, 0x21, 0x6F 
-        }; 
-    static Twofish_Byte p256[] = { 
-        0x90, 0xAF, 0xE9, 0x1B, 0xB2, 0x88, 0x54, 0x4F, 
-        0x2C, 0x32, 0xDC, 0x23, 0x9B, 0x26, 0x35, 0xE6 
-        }; 
-    static Twofish_Byte c256[] = { 
-        0x6C, 0xB4, 0x56, 0x1C, 0x40, 0xBF, 0x0A, 0x97, 
-        0x05, 0x93, 0x1C, 0xB6, 0xD4, 0x08, 0xE7, 0xFA 
-        }; 
-
-    int ret;
-
-    /* Run the actual tests. */ 
-    if ((ret = test_vector( k128, 16, p128, c128 )) < 0)
-      return ret; 
-    if ((ret = test_vector( k192, 24, p192, c192 )) < 0)
-      return ret; 
-    if ((ret = test_vector( k256, 32, p256, c256 )) < 0)
-      return ret;
-    return 1;
-    }    
- 
- 
-int test_sequence( int key_len, Twofish_Byte final_value[] ) 
-    { 
-    Twofish_Byte buf[ (50+3)*16 ];      /* Buffer to hold our computation values. */ 
-    Twofish_Byte tmp[16];               /* Temp for testing the decryption. */ 
-    Twofish_key xkey;           /* The expanded key */ 
-    int i, ret;
-    Twofish_Byte * p; 
- 
-    /* Wipe the buffer */ 
-    memset( buf, 0, sizeof( buf ) ); 
- 
-    /* 
-     * Because the recurrence relation is done in an inconvenient manner 
-     * we end up looping backwards over the buffer. 
-     */ 
- 
-    /* Pointer in buffer points to current plaintext. */ 
-    p = &buf[50*16]; 
-    for( i=1; i<50; i++ ) 
-        { 
-        /*  
-         * Prepare a key. 
-         * This automatically checks that key_len is valid. 
-         */ 
-	  if ((ret = Twofish_prepare_key( p+16, key_len, &xkey)) < 0)
-	    return ret; 
- 
-        /* Compute the next 16 bytes in the buffer */ 
-        Twofish_encrypt( &xkey, p, p-16 ); 
- 
-        /* Check that the decryption is correct. */ 
-        Twofish_decrypt( &xkey, p-16, tmp ); 
-        if( memcmp( tmp, p, 16 ) != 0 ) 
-            { 
-	      printf("Twofish decryption failure in sequence\n");
-		  exit(1);
-		    } 
-        /* Move on to next 16 bytes in the buffer. */ 
-        p -= 16; 
-        } 
- 
-    /* And check the final value. */ 
-    if( memcmp( p, final_value, 16 ) != 0 )  
-        { 
-	  printf( "Twofish encryption failure in sequence\n");
-	  exit(1);
-	    } 
- 
-    /* None of the data was secret, so there is no need to wipe anything. */
-    return 1;
-    } 
-int test_sequences() 
-    { 
-    static Twofish_Byte r128[] = { 
-        0x5D, 0x9D, 0x4E, 0xEF, 0xFA, 0x91, 0x51, 0x57, 
-        0x55, 0x24, 0xF1, 0x15, 0x81, 0x5A, 0x12, 0xE0 
-        }; 
-    static Twofish_Byte r192[] = { 
-        0xE7, 0x54, 0x49, 0x21, 0x2B, 0xEE, 0xF9, 0xF4, 
-        0xA3, 0x90, 0xBD, 0x86, 0x0A, 0x64, 0x09, 0x41 
-        }; 
-    static Twofish_Byte r256[] = { 
-        0x37, 0xFE, 0x26, 0xFF, 0x1C, 0xF6, 0x61, 0x75, 
-        0xF5, 0xDD, 0xF4, 0xC3, 0x3B, 0x97, 0xA2, 0x05 
-        }; 
- 
-    /* Run the three sequence test vectors */
-    int ret;
-    if ((ret = test_sequence( 16, r128)) < 0)
-      return ret; 
-    if ((ret = test_sequence( 24, r192)) < 0)
-      return ret; 
-    if ((ret = test_sequence( 32, r256)) < 0)
-      return ret;
-    return 1;
-    } 
- 
- 
-/* 
- * Test the odd-sized keys. 
- * 
- * Every odd-sized key is equivalent to a one of 128, 192, or 256 bits. 
- * The equivalent key is found by padding at the end with zero bytes 
- * until a regular key size is reached. 
- * 
- * We just test that the key expansion routine behaves properly. 
- * If the expanded keys are identical, then the encryptions and decryptions 
- * will behave the same. 
- */ 
-int test_odd_sized_keys() 
-    { 
-    Twofish_Byte buf[32]; 
-    Twofish_key xkey; 
-    Twofish_key xkey_two; 
-    int i, ret;
- 
-    /*  
-     * We first create an all-zero key to use as PRNG key.  
-     * Normally we would not have to fill the buffer with zeroes, as we could 
-     * just pass a zero key length to the Twofish_prepare_key function. 
-     * However, this relies on using odd-sized keys, and those are just the 
-     * ones we are testing here. We can't use an untested function to test  
-     * itself.  
-     */ 
-    memset( buf, 0, sizeof( buf ) ); 
-    if ((ret = Twofish_prepare_key( buf, 16, &xkey)) < 0)
-      return ret; 
- 
-    /* Fill buffer with pseudo-random data derived from two encryptions */ 
-    Twofish_encrypt( &xkey, buf, buf ); 
-    Twofish_encrypt( &xkey, buf, buf+16 ); 
- 
-    /* Create all possible shorter keys that are prefixes of the buffer. */ 
-    for( i=31; i>=0; i-- ) 
-        { 
-        /* Set a byte to zero. This is the new padding byte */ 
-        buf[i] = 0; 
- 
-        /* Expand the key with only i bytes of length */ 
-        if ((ret = Twofish_prepare_key( buf, i, &xkey)) < 0)
-	  return ret; 
- 
-        /* Expand the corresponding padded key of regular length */ 
-        if ((ret = Twofish_prepare_key( buf, i<=16 ? 16 : (i<= 24 ? 24 : 32), &xkey_two )) < 0)
-	  return ret; 
- 
-        /* Compare the two */ 
-        if( memcmp( &xkey, &xkey_two, sizeof( xkey ) ) != 0 ) 
-            { 
-	      printf( "Odd sized keys do not expand properly\n");
-		  exit(1);
-		    } 
-        } 
- 
-    /* None of the key values are secret, so we don't need to wipe them. */
-    return 1;
-    } 
- 
- 
-/* 
- * Test the Twofish implementation. 
- * 
- * This routine runs all the self tests, in order of importance. 
- * It is called by the Twofish_initialise routine. 
- *  
- * In almost all applications the cost of running the self tests during 
- * initialisation is insignificant, especially 
- * compared to the time it takes to load the application from disk.  
- * If you are very pressed for initialisation performance,  
- * you could remove some of the tests. Make sure you did run them 
- * once in the software and hardware configuration you are using. 
- */ 
-int self_test() 
-    {
-      int ret;
-    /* The three test vectors form an absolute minimal test set. */ 
-      if ((ret = test_vectors()) < 0)
-	return ret;
- 
-    /*  
-     * If at all possible you should run these tests too. They take 
-     * more time, but provide a more thorough coverage. 
-     */ 
-      if ((ret = test_sequences()) < 0)
-	return ret;
- 
-    /* Test the odd-sized keys. */ 
-      if ((ret = test_odd_sized_keys()) < 0)
-	return ret;
-      return 1;
-    } 
- 
- 
-/* 
- * And now, the actual Twofish implementation. 
- * 
- * This implementation generates all the tables during initialisation.  
- * I don't like large tables in the code, especially since they are easily  
- * damaged in the source without anyone noticing it. You need code to  
- * generate them anyway, and this way all the code is close together. 
- * Generating them in the application leads to a smaller executable  
- * (the code is smaller than the tables it generates) and a  
- * larger static memory footprint. 
- * 
- * Twofish can be implemented in many ways. I have chosen to  
- * use large tables with a relatively long key setup time. 
- * If you encrypt more than a few blocks of data it pays to pre-compute  
- * as much as possible. This implementation is relatively inefficient for  
- * applications that need to re-key every block or so. 
- */ 
- 
-/*  
- * We start with the t-tables, directly from the Twofish definition.  
- * These are nibble-tables, but merging them and putting them two nibbles  
- * in one byte is more work than it is worth. 
- */ 
-static Twofish_Byte t_table[2][4][16] = { 
-    { 
-        {0x8,0x1,0x7,0xD,0x6,0xF,0x3,0x2,0x0,0xB,0x5,0x9,0xE,0xC,0xA,0x4}, 
-        {0xE,0xC,0xB,0x8,0x1,0x2,0x3,0x5,0xF,0x4,0xA,0x6,0x7,0x0,0x9,0xD}, 
-        {0xB,0xA,0x5,0xE,0x6,0xD,0x9,0x0,0xC,0x8,0xF,0x3,0x2,0x4,0x7,0x1}, 
-        {0xD,0x7,0xF,0x4,0x1,0x2,0x6,0xE,0x9,0xB,0x3,0x0,0x8,0x5,0xC,0xA} 
-    }, 
-    { 
-        {0x2,0x8,0xB,0xD,0xF,0x7,0x6,0xE,0x3,0x1,0x9,0x4,0x0,0xA,0xC,0x5}, 
-        {0x1,0xE,0x2,0xB,0x4,0xC,0x3,0x7,0x6,0xD,0xA,0x5,0xF,0x9,0x0,0x8}, 
-        {0x4,0xC,0x7,0x5,0x1,0x6,0x9,0xA,0x0,0xE,0xD,0x8,0x2,0xB,0x3,0xF}, 
-        {0xB,0x9,0x5,0x1,0xC,0x3,0xD,0xE,0x6,0x4,0x7,0xF,0x2,0x0,0x8,0xA} 
-    } 
-}; 
- 
- 
-/* A 1-bit rotation of 4-bit values. Input must be in range 0..15 */ 
-#define ROR4BY1( x ) (((x)>>1) | (((x)<<3) & 0x8) ) 
- 
-/* 
- * The q-boxes are only used during the key schedule computations.  
- * These are 8->8 bit lookup tables. Some CPUs prefer to have 8->32 bit  
- * lookup tables as it is faster to load a 32-bit value than to load an  
- * 8-bit value and zero the rest of the register. 
- * The LARGE_Q_TABLE switch allows you to choose 32-bit entries in  
- * the q-tables. Here we just define the Qtype which is used to store  
- * the entries of the q-tables. 
- */ 
-#if LARGE_Q_TABLE 
-typedef Twofish_UInt32      Qtype; 
-#else 
-typedef Twofish_Byte        Qtype; 
-#endif 
- 
-/*  
- * The actual q-box tables.  
- * There are two q-boxes, each having 256 entries. 
- */ 
-static Qtype q_table[2][256]; 
- 
- 
-/* 
- * Now the function that converts a single t-table into a q-table. 
- * 
- * Arguments: 
- * t[4][16] : four 4->4bit lookup tables that define the q-box 
- * q[256]   : output parameter: the resulting q-box as a lookup table. 
- */ 
-static void make_q_table( Twofish_Byte t[4][16], Qtype q[256] ) 
-    { 
-    int ae,be,ao,bo;        /* Some temporaries. */ 
-    int i; 
-    /* Loop over all input values and compute the q-box result. */ 
-    for( i=0; i<256; i++ ) { 
-        /*  
-         * This is straight from the Twofish specifications.  
-         *  
-         * The ae variable is used for the a_i values from the specs 
-         * with even i, and ao for the odd i's. Similarly for the b's. 
-         */ 
-        ae = i>>4; be = i&0xf; 
-        ao = ae ^ be; bo = ae ^ ROR4BY1(be) ^ ((ae<<3)&8); 
-        ae = t[0][ao]; be = t[1][bo]; 
-        ao = ae ^ be; bo = ae ^ ROR4BY1(be) ^ ((ae<<3)&8); 
-        ae = t[2][ao]; be = t[3][bo]; 
- 
-        /* Store the result in the q-box table, the cast avoids a warning. */ 
-        q[i] = (Qtype) ((be<<4) | ae); 
-        } 
-    } 
- 
- 
-/*  
- * Initialise both q-box tables.  
- */ 
-static void initialise_q_boxes() { 
-    /* Initialise each of the q-boxes using the t-tables */ 
-    make_q_table( t_table[0], q_table[0] ); 
-    make_q_table( t_table[1], q_table[1] ); 
-    } 
- 
- 
-/* 
- * Next up is the MDS matrix multiplication. 
- * The MDS matrix multiplication operates in the field 
- * GF(2)[x]/p(x) with p(x)=x^8+x^6+x^5+x^3+1. 
- * If you don't understand this, read a book on finite fields. You cannot 
- * follow the finite-field computations without some background. 
- *  
- * In this field, multiplication by x is easy: shift left one bit  
- * and if bit 8 is set then xor the result with 0x169.  
- * 
- * The MDS coefficients use a multiplication by 1/x, 
- * or rather a division by x. This is easy too: first make the 
- * value 'even' (i.e. bit 0 is zero) by xorring with 0x169 if necessary,  
- * and then shift right one position.  
- * Even easier: shift right and xor with 0xb4 if the lsbit was set. 
- * 
- * The MDS coefficients are 1, EF, and 5B, and we use the fact that 
- *   EF = 1 + 1/x + 1/x^2 
- *   5B = 1       + 1/x^2 
- * in this field. This makes multiplication by EF and 5B relatively easy. 
- * 
- * This property is no accident, the MDS matrix was designed to allow 
- * this implementation technique to be used. 
- * 
- * We have four MDS tables, each mapping 8 bits to 32 bits. 
- * Each table performs one column of the matrix multiplication.  
- * As the MDS is always preceded by q-boxes, each of these tables 
- * also implements the q-box just previous to that column. 
- */ 
- 
-/* The actual MDS tables. */ 
-static Twofish_UInt32 MDS_table[4][256]; 
- 
-/* A small table to get easy conditional access to the 0xb4 constant. */ 
-static Twofish_UInt32 mds_poly_divx_const[] = {0,0xb4}; 
- 
-/* Function to initialise the MDS tables. */ 
-static void initialise_mds_tables() 
-    { 
-    int i; 
-    Twofish_UInt32 q,qef,q5b;       /* Temporary variables. */ 
- 
-    /* Loop over all 8-bit input values */ 
-    for( i=0; i<256; i++ )  
-        { 
-        /*  
-         * To save some work during the key expansion we include the last 
-         * of the q-box layers from the h() function in these MDS tables. 
-         */ 
- 
-        /* We first do the inputs that are mapped through the q0 table. */ 
-        q = q_table[0][i]; 
-        /* 
-         * Here we divide by x, note the table to get 0xb4 only if the  
-         * lsbit is set.  
-         * This sets qef = (1/x)*q in the finite field 
-         */ 
-        qef = (q >> 1) ^ mds_poly_divx_const[ q & 1 ]; 
-        /* 
-         * Divide by x again, and add q to get (1+1/x^2)*q.  
-         * Note that (1+1/x^2) =  5B in the field, and addition in the field 
-         * is exclusive or on the bits. 
-         */ 
-        q5b = (qef >> 1) ^ mds_poly_divx_const[ qef & 1 ] ^ q; 
-        /*  
-         * Add q5b to qef to set qef = (1+1/x+1/x^2)*q. 
-         * Again, (1+1/x+1/x^2) = EF in the field. 
-         */ 
-        qef ^= q5b; 
- 
-        /*  
-         * Now that we have q5b = 5B * q and qef = EF * q  
-         * we can fill two of the entries in the MDS matrix table.  
-         * See the Twofish specifications for the order of the constants. 
-         */ 
-        MDS_table[1][i] = (q  <<24) | (q5b<<16) | (qef<<8) | qef; 
-        MDS_table[3][i] = (q5b<<24) | (qef<<16) | (q  <<8) | q5b; 
- 
-        /* Now we do it all again for the two columns that have a q1 box. */ 
-        q = q_table[1][i]; 
-        qef = (q >> 1) ^ mds_poly_divx_const[ q & 1 ]; 
-        q5b = (qef >> 1) ^ mds_poly_divx_const[ qef & 1 ] ^ q; 
-        qef ^= q5b; 
- 
-        /* The other two columns use the coefficient in a different order. */ 
-        MDS_table[0][i] = (qef<<24) | (qef<<16) | (q5b<<8) | q  ; 
-        MDS_table[2][i] = (qef<<24) | (q  <<16) | (qef<<8) | q5b; 
-        } 
-    } 
- 
- 
-/* 
- * The h() function is the heart of the Twofish cipher.  
- * It is a complicated sequence of q-box lookups, key material xors,  
- * and finally the MDS matrix. 
- * We use lots of macros to make this reasonably fast. 
- */ 
- 
-/* First a shorthand for the two q-tables */ 
-#define q0  q_table[0] 
-#define q1  q_table[1] 
- 
-/* 
- * Each macro computes one column of the h for either 2, 3, or 4 stages. 
- * As there are 4 columns, we have 12 macros in all. 
- *  
- * The key bytes are stored in the Byte array L at offset  
- * 0,1,2,3,  8,9,10,11,  [16,17,18,19,   [24,25,26,27]] as this is the 
- * order we get the bytes from the user. If you look at the Twofish  
- * specs, you'll see that h() is applied to the even key words or the 
- * odd key words. The bytes of the even words appear in this spacing, 
- * and those of the odd key words too. 
- * 
- * These macros are the only place where the q-boxes and the MDS table 
- * are used. 
- */ 
-#define H02( y, L )  MDS_table[0][q0[q0[y]^L[ 8]]^L[0]] 
-#define H12( y, L )  MDS_table[1][q0[q1[y]^L[ 9]]^L[1]] 
-#define H22( y, L )  MDS_table[2][q1[q0[y]^L[10]]^L[2]] 
-#define H32( y, L )  MDS_table[3][q1[q1[y]^L[11]]^L[3]] 
-#define H03( y, L )  H02( q1[y]^L[16], L ) 
-#define H13( y, L )  H12( q1[y]^L[17], L ) 
-#define H23( y, L )  H22( q0[y]^L[18], L ) 
-#define H33( y, L )  H32( q0[y]^L[19], L ) 
-#define H04( y, L )  H03( q1[y]^L[24], L ) 
-#define H14( y, L )  H13( q0[y]^L[25], L ) 
-#define H24( y, L )  H23( q0[y]^L[26], L ) 
-#define H34( y, L )  H33( q1[y]^L[27], L ) 
- 
-/* 
- * Now we can define the h() function given an array of key bytes.  
- * This function is only used in the key schedule, and not to pre-compute 
- * the keyed S-boxes. 
- * 
- * In the key schedule, the input is always of the form k*(1+2^8+2^16+2^24) 
- * so we only provide k as an argument. 
- * 
- * Arguments: 
- * k        input to the h() function. 
- * L        pointer to array of key bytes at  
- *          offsets 0,1,2,3, ... 8,9,10,11, [16,17,18,19, [24,25,26,27]] 
- * kCycles  # key cycles, 2, 3, or 4. 
- */ 
-static Twofish_UInt32 h( int k, Twofish_Byte L[], int kCycles ) 
-    { 
-    switch( kCycles ) { 
-        /* We code all 3 cases separately for speed reasons. */ 
-    case 2: 
-        return H02(k,L) ^ H12(k,L) ^ H22(k,L) ^ H32(k,L); 
-    case 3: 
-        return H03(k,L) ^ H13(k,L) ^ H23(k,L) ^ H33(k,L); 
-    case 4: 
-        return H04(k,L) ^ H14(k,L) ^ H24(k,L) ^ H34(k,L); 
-    default:  
-        /* This is always a coding error, which is fatal. */ 
-      printf( "Twofish h(): Illegal argument\n");
-	  exit(1);
-        } 
-    } 
- 
- 
-/* 
- * Pre-compute the keyed S-boxes. 
- * Fill the pre-computed S-box array in the expanded key structure. 
- * Each pre-computed S-box maps 8 bits to 32 bits. 
- * 
- * The S argument contains half the number of bytes of the full key, but is 
- * derived from the full key. (See Twofish specifications for details.) 
- * S has the weird byte input order used by the Hxx macros. 
- * 
- * This function takes most of the time of a key expansion. 
- * 
- * Arguments: 
- * S        pointer to array of 8*kCycles Bytes containing the S vector. 
- * kCycles  number of key words, must be in the set {2,3,4} 
- * xkey     pointer to Twofish_key structure that will contain the S-boxes. 
- */ 
-int fill_keyed_sboxes( Twofish_Byte S[], int kCycles, Twofish_key * xkey ) 
-    { 
-    int i; 
-    switch( kCycles ) { 
-        /* We code all 3 cases separately for speed reasons. */ 
-    case 2: 
-        for( i=0; i<256; i++ ) 
-            { 
-            xkey->s[0][i]= H02( i, S ); 
-            xkey->s[1][i]= H12( i, S ); 
-            xkey->s[2][i]= H22( i, S ); 
-            xkey->s[3][i]= H32( i, S ); 
-            } 
-        break; 
-    case 3: 
-        for( i=0; i<256; i++ ) 
-            { 
-            xkey->s[0][i]= H03( i, S ); 
-            xkey->s[1][i]= H13( i, S ); 
-            xkey->s[2][i]= H23( i, S ); 
-            xkey->s[3][i]= H33( i, S ); 
-            } 
-        break; 
-    case 4: 
-        for( i=0; i<256; i++ ) 
-            { 
-            xkey->s[0][i]= H04( i, S ); 
-            xkey->s[1][i]= H14( i, S ); 
-            xkey->s[2][i]= H24( i, S ); 
-            xkey->s[3][i]= H34( i, S ); 
-            } 
-        break; 
-    default:  
-        /* This is always a coding error, which is fatal. */ 
-      printf( "Twofish fill_keyed_sboxes(): Illegal argument\n");
-	  exit(1);
-	    }
-    return 1;
-    }
- 
- 
-/* A flag to keep track of whether we have been initialised or not. */ 
-int g_Twofish_initialised = 0; 
- 
-/* 
- * Initialise the Twofish implementation. 
- * This function must be called before any other function in the 
- * Twofish implementation is called. 
- * This routine also does some sanity checks, to make sure that 
- * all the macros behave, and it tests the whole cipher. 
- */ 
-int Twofish_initialise() 
-{
-      int ret;
-    /* First test the various platform-specific definitions. */ 
-      if ((ret = test_platform()) < 0)
-	return ret;
- 
-    /* We can now generate our tables, in the right order of course. */ 
-    initialise_q_boxes(); 
-    initialise_mds_tables(); 
- 
-    /* We're finished with the initialisation itself. */ 
-    g_Twofish_initialised = 1; 
- 
-    /*  
-     * And run some tests on the whole cipher.  
-     * Yes, you need to do this every time you start your program.  
-     * It is called assurance; you have to be certain that your program 
-     * still works properly.  
-     */ 
-    return self_test(); 
-    } 
- 
- 
-/* 
- * The Twofish key schedule uses an Reed-Solomon code matrix multiply. 
- * Just like the MDS matrix, the RS-matrix is designed to be easy 
- * to implement. Details are below in the code.  
- * 
- * These constants make it easy to compute in the finite field used  
- * for the RS code. 
- * 
- * We use Bytes for the RS computation, but these are automatically 
- * widened to unsigned integers in the expressions. Having unsigned 
- * ints in these tables therefore provides the fastest access. 
- */ 
-static unsigned int rs_poly_const[] = {0, 0x14d}; 
-static unsigned int rs_poly_div_const[] = {0, 0xa6 }; 
- 
-/*
- * memset_volatile is a volatile pointer to the memset function.
- * You can call (*memset_volatile)(buf, val, len) or even
- * memset_volatile(buf, val, len) just as you would call
- * memset(buf, val, len), but the use of a volatile pointer
- * guarantees that the compiler will not optimise the call away.
- */
-static void * (*volatile memset_volatile)(void *, int, size_t) = memset;
-
-/* 
- * Prepare a key for use in encryption and decryption. 
- * Like most block ciphers, Twofish allows the key schedule  
- * to be pre-computed given only the key.  
- * Twofish has a fairly 'heavy' key schedule that takes a lot of time  
- * to compute. The main work is pre-computing the S-boxes used in the  
- * encryption and decryption. We feel that this makes the cipher much  
- * harder to attack. The attacker doesn't even know what the S-boxes  
- * contain without including the entire key schedule in the analysis.  
- * 
- * Unlike most Twofish implementations, this one allows any key size from 
- * 0 to 32 bytes. Odd key sizes are defined for Twofish (see the  
- * specifications); the key is simply padded with zeroes to the next real  
- * key size of 16, 24, or 32 bytes. 
- * Each odd-sized key is thus equivalent to a single normal-sized key. 
- * 
- * Arguments: 
- * key      array of key bytes 
- * key_len  number of bytes in the key, must be in the range 0,...,32. 
- * xkey     Pointer to an Twofish_key structure that will be filled  
- *             with the internal form of the cipher key. 
- */ 
-int Twofish_prepare_key( Twofish_Byte key[], int key_len, Twofish_key * xkey ) 
-    { 
-    /* We use a single array to store all key material in,  
-     * to simplify the wiping of the key material at the end. 
-     * The first 32 bytes contain the actual (padded) cipher key. 
-     * The next 32 bytes contain the S-vector in its weird format, 
-     * and we have 4 bytes of overrun necessary for the RS-reduction. 
-     */ 
-    Twofish_Byte K[32+32+4];  
- 
-    int kCycles;        /* # key cycles, 2,3, or 4. */ 
- 
-    int i; 
-    Twofish_UInt32 A, B;        /* Used to compute the round keys. */ 
- 
-    Twofish_Byte * kptr;        /* Three pointers for the RS computation. */ 
-    Twofish_Byte * sptr; 
-    Twofish_Byte * t; 
- 
-    Twofish_Byte b,bx,bxx;      /* Some more temporaries for the RS computation. */ 
-	///printf("k1\n");
-    /* Check that the Twofish implementation was initialised. */ 
-    if( g_Twofish_initialised == 0 ) 
-        { 
-		 printf("05371: not init\n");
-		 exit(1);
-	    for(;;);        /* Infinite loop, which beats being insecure. */ 
-        } 
- 
-    /* Check for valid key length. */ 
-    if( key_len < 0 || key_len > 32 ) 
-        { 
-        /*  
-         * This can only happen if a programmer didn't read the limitations 
-         * on the key size.  
-         */ 
-	  printf( "Twofish_prepare_key: illegal key length\n");
-	  exit(1);
-	    /*  
-         * A return statement just in case the fatal macro returns. 
-         * The rest of the code assumes that key_len is in range, and would 
-         * buffer-overflow if it wasn't.  
-         * 
-         * Why do we still use a programming language that has problems like 
-         * buffer overflows, when these problems were solved in 1960 with 
-         * the development of Algol? Have we not leared anything? 
-         */ 
-        } 
- 
-    /* Pad the key with zeroes to the next suitable key length. */ 
-    memcpy( K, key, key_len ); 
-    memset( K+key_len, 0, sizeof(K)-key_len ); 
- 
-    /*  
-     * Compute kCycles: the number of key cycles used in the cipher.  
-     * 2 for 128-bit keys, 3 for 192-bit keys, and 4 for 256-bit keys. 
-     */ 
-    kCycles = (key_len + 7) >> 3; 
-    /* Handle the special case of very short keys: minimum 2 cycles. */ 
-    if( kCycles < 2 ) 
-        { 
-        kCycles = 2; 
-        } 
- 
-    /*  
-     * From now on we just pretend to have 8*kCycles bytes of  
-     * key material in K. This handles all the key size cases.  
-     */ 
- 
-    /*  
-     * We first compute the 40 expanded key words,  
-     * formulas straight from the Twofish specifications. 
-     */ 
-    for( i=0; i<40; i+=2 ) 
-        { 
-        /*  
-         * Due to the byte spacing expected by the h() function  
-         * we can pick the bytes directly from the key K. 
-         * As we use bytes, we never have the little/big endian 
-         * problem. 
-         * 
-         * Note that we apply the rotation function only to simple 
-         * variables, as the rotation macro might evaluate its argument 
-         * more than once. 
-         */ 
-        A = h( i  , K  , kCycles ); 
-        B = h( i+1, K+4, kCycles ); 
-        B = ROL32( B, 8 ); 
- 
-        /* Compute and store the round keys. */ 
-        A += B; 
-        B += A; 
-        xkey->K[i]   = A; 
-        xkey->K[i+1] = ROL32( B, 9 ); 
-        } 
- 
-    /* Wipe variables that contained key material. */ 
-    A=B=0; 
- 
-    /*  
-     * And now the dreaded RS multiplication that few seem to understand. 
-     * The RS matrix is not random, and is specially designed to compute the 
-     * RS matrix multiplication in a simple way. 
-     * 
-     * We work in the field GF(2)[x]/x^8+x^6+x^3+x^2+1. Note that this is a 
-     * different field than used for the MDS matrix.  
-     * (At least, it is a different representation because all GF(2^8)  
-     * representations are equivalent in some form.) 
-     *  
-     * We take 8 consecutive bytes of the key and interpret them as  
-     * a polynomial k_0 + k_1 y + k_2 y^2 + ... + k_7 y^7 where  
-     * the k_i bytes are the key bytes and are elements of the finite field. 
-     * We multiply this polynomial by y^4 and reduce it modulo 
-     *     y^4 + (x + 1/x)y^3 + (x)y^2 + (x + 1/x)y + 1.  
-     * using straightforward polynomial modulo reduction. 
-     * The coefficients of the result are the result of the RS 
-     * matrix multiplication. When we wrote the Twofish specification,  
-     * the original RS definition used the polynomials,  
-     * but that requires much more mathematical knowledge.  
-     * We were already using matrix multiplication in a finite field for  
-     * the MDS matrix, so I re-wrote the RS operation as a matrix  
-     * multiplication to reduce the difficulty of understanding it.  
-     * Some implementors have not picked up on this simpler method of 
-     * computing the RS operation, even though it is mentioned in the 
-     * specifications. 
-     * 
-     * It is possible to perform these computations faster by using 32-bit  
-     * word operations, but that is not portable and this is not a speed- 
-     * critical area. 
-     * 
-     * We explained the 1/x computation when we did the MDS matrix.  
-     * 
-     * The S vector is stored in K[32..64]. 
-     * The S vector has to be reversed, so we loop cross-wise. 
-     * 
-     * Note the weird byte spacing of the S-vector, to match the even  
-     * or odd key words arrays. See the discussion at the Hxx macros for 
-     * details. 
-     */ 
-    kptr = K + 8*kCycles;           /* Start at end of key */ 
-    sptr = K + 32;                  /* Start at start of S */ 
- //printf("k2\n");
-    
-    /* Loop over all key material */ 
-    while( kptr > K )  
-        { 
-        kptr -= 8; 
-        /*  
-         * Initialise the polynimial in sptr[0..12] 
-         * The first four coefficients are 0 as we have to multiply by y^4. 
-         * The next 8 coefficients are from the key material. 
-         */ 
-        memset( sptr, 0, 4 ); 
-        memcpy( sptr+4, kptr, 8 ); 
- 
-        /*  
-         * The 12 bytes starting at sptr are now the coefficients of 
-         * the polynomial we need to reduce. 
-         */ 
- 
-        /* Loop over the polynomial coefficients from high to low */ 
-        t = sptr+11; 
-        /* Keep looping until polynomial is degree 3; */ 
-        while( t > sptr+3 ) 
-            { 
-            /* Pick up the highest coefficient of the poly. */ 
-            b = *t; 
- 
-            /*  
-             * Compute x and (x+1/x) times this coefficient.  
-             * See the MDS matrix implementation for a discussion of  
-             * multiplication by x and 1/x. We just use different  
-             * constants here as we are in a  
-             * different finite field representation. 
-             * 
-             * These two statements set  
-             * bx = (x) * b  
-             * bxx= (x + 1/x) * b 
-             */ 
-            bx = (Twofish_Byte)((b<<1) ^ rs_poly_const[ b>>7 ]); 
-            bxx= (Twofish_Byte)((b>>1) ^ rs_poly_div_const[ b&1 ] ^ bx); 
- 
-            /* 
-             * Subtract suitable multiple of  
-             * y^4 + (x + 1/x)y^3 + (x)y^2 + (x + 1/x)y + 1  
-             * from the polynomial, except that we don't bother 
-             * updating t[0] as it will become zero anyway. 
-             */ 
-            t[-1] ^= bxx; 
-            t[-2] ^= bx; 
-            t[-3] ^= bxx; 
-            t[-4] ^= b; 
-             
-            /* Go to the next coefficient. */ 
-            t--; 
-            } 
- 
-        /* Go to next S-vector word, obeying the weird spacing rules. */ 
-        sptr += 8; 
-        } 
- 
-    /* Wipe variables that contained key material. */ 
-    b = bx = bxx = 0; 
- 
-    /* And finally, we can compute the key-dependent S-boxes. */ 
-    fill_keyed_sboxes( &K[32], kCycles, xkey ); 
- 
- ///printf("k3\n");
-    
-    /* Wipe array that contained key material. */ 
-    (*memset_volatile)( K, 0, sizeof( K ) );
-	///printf("k4\n");
-    
-    return 1;
-    } 
- 
- 
-/* 
- * We can now start on the actual encryption and decryption code. 
- * As these are often speed-critical we will use a lot of macros. 
- */ 
- 
-/* 
- * The g() function is the heart of the round function. 
- * We have two versions of the g() function, one without an input 
- * rotation and one with. 
- * The pre-computed S-boxes make this pretty simple. 
- */ 
-#define g0(X,xkey) \
- (xkey->s[0][b0(X)]^xkey->s[1][b1(X)]^xkey->s[2][b2(X)]^xkey->s[3][b3(X)]) 
- 
-#define g1(X,xkey) \
- (xkey->s[0][b3(X)]^xkey->s[1][b0(X)]^xkey->s[2][b1(X)]^xkey->s[3][b2(X)]) 
- 
-/* 
- * A single round of Twofish. The A,B,C,D are the four state variables, 
- * T0 and T1 are temporaries, xkey is the expanded key, and r the  
- * round number. 
- * 
- * Note that this macro does not implement the swap at the end of the round. 
- */ 
-#define ENCRYPT_RND( A,B,C,D, T0, T1, xkey, r ) \
-    T0 = g0(A,xkey); T1 = g1(B,xkey);\
-    C ^= T0+T1+xkey->K[8+2*(r)]; C = ROR32(C,1);\
-    D = ROL32(D,1); D ^= T0+2*T1+xkey->K[8+2*(r)+1] 
- 
-/* 
- * Encrypt a single cycle, consisting of two rounds. 
- * This avoids the swapping of the two halves.  
- * Parameter r is now the cycle number. 
- */ 
-#define ENCRYPT_CYCLE( A, B, C, D, T0, T1, xkey, r ) \
-    ENCRYPT_RND( A,B,C,D,T0,T1,xkey,2*(r)   );\
-    ENCRYPT_RND( C,D,A,B,T0,T1,xkey,2*(r)+1 )
- 
-/* Full 16-round encryption */ 
-#define ENCRYPT( A,B,C,D,T0,T1,xkey ) \
-    ENCRYPT_CYCLE( A,B,C,D,T0,T1,xkey, 0 );\
-    ENCRYPT_CYCLE( A,B,C,D,T0,T1,xkey, 1 );\
-    ENCRYPT_CYCLE( A,B,C,D,T0,T1,xkey, 2 );\
-    ENCRYPT_CYCLE( A,B,C,D,T0,T1,xkey, 3 );\
-    ENCRYPT_CYCLE( A,B,C,D,T0,T1,xkey, 4 );\
-    ENCRYPT_CYCLE( A,B,C,D,T0,T1,xkey, 5 );\
-    ENCRYPT_CYCLE( A,B,C,D,T0,T1,xkey, 6 );\
-    ENCRYPT_CYCLE( A,B,C,D,T0,T1,xkey, 7 )
- 
-/* 
- * A single round of Twofish for decryption. It differs from 
- * ENCRYTP_RND only because of the 1-bit rotations. 
- */ 
-#define DECRYPT_RND( A,B,C,D, T0, T1, xkey, r ) \
-    T0 = g0(A,xkey); T1 = g1(B,xkey);\
-    C = ROL32(C,1); C ^= T0+T1+xkey->K[8+2*(r)];\
-    D ^= T0+2*T1+xkey->K[8+2*(r)+1]; D = ROR32(D,1)
- 
-/* 
- * Decrypt a single cycle, consisting of two rounds.  
- * This avoids the swapping of the two halves.  
- * Parameter r is now the cycle number. 
- */ 
-#define DECRYPT_CYCLE( A, B, C, D, T0, T1, xkey, r ) \
-    DECRYPT_RND( A,B,C,D,T0,T1,xkey,2*(r)+1 );\
-    DECRYPT_RND( C,D,A,B,T0,T1,xkey,2*(r)   )
- 
-/* Full 16-round decryption. */ 
-#define DECRYPT( A,B,C,D,T0,T1, xkey ) \
-    DECRYPT_CYCLE( A,B,C,D,T0,T1,xkey, 7 );\
-    DECRYPT_CYCLE( A,B,C,D,T0,T1,xkey, 6 );\
-    DECRYPT_CYCLE( A,B,C,D,T0,T1,xkey, 5 );\
-    DECRYPT_CYCLE( A,B,C,D,T0,T1,xkey, 4 );\
-    DECRYPT_CYCLE( A,B,C,D,T0,T1,xkey, 3 );\
-    DECRYPT_CYCLE( A,B,C,D,T0,T1,xkey, 2 );\
-    DECRYPT_CYCLE( A,B,C,D,T0,T1,xkey, 1 );\
-    DECRYPT_CYCLE( A,B,C,D,T0,T1,xkey, 0 ) 
-
-/* 
- * A macro to read the state from the plaintext and do the initial key xors. 
- * The koff argument allows us to use the same macro  
- * for the decryption which uses different key words at the start. 
- */ 
-#define GET_INPUT( src, A,B,C,D, xkey, koff ) \
-    A = GET32(src   )^xkey->K[  koff]; B = GET32(src+ 4)^xkey->K[1+koff]; \
-    C = GET32(src+ 8)^xkey->K[2+koff]; D = GET32(src+12)^xkey->K[3+koff]
- 
-/* 
- * Similar macro to put the ciphertext in the output buffer. 
- * We xor the keys into the state variables before we use the PUT32  
- * macro as the macro might use its argument multiple times. 
- */ 
-#define PUT_OUTPUT( A,B,C,D, dst, xkey, koff ) \
-    A ^= xkey->K[  koff]; B ^= xkey->K[1+koff]; \
-    C ^= xkey->K[2+koff]; D ^= xkey->K[3+koff]; \
-    PUT32( A, dst   ); PUT32( B, dst+ 4 ); \
-    PUT32( C, dst+8 ); PUT32( D, dst+12 )
- 
- 
-/* 
- * Twofish block encryption 
- * 
- * Arguments: 
- * xkey         expanded key array 
- * p            16 bytes of plaintext 
- * c            16 bytes in which to store the ciphertext 
- */ 
-void Twofish_encrypt( Twofish_key * xkey, Twofish_Byte p[16], Twofish_Byte c[16]) 
-    { 
-    Twofish_UInt32 A,B,C,D,T0,T1;       /* Working variables */ 
- 
-    /* Get the four plaintext words xorred with the key */ 
-    GET_INPUT( p, A,B,C,D, xkey, 0 ); 
- 
-    /* Do 8 cycles (= 16 rounds) */ 
-    ENCRYPT( A,B,C,D,T0,T1,xkey ); 
- 
-    /* Store them with the final swap and the output whitening. */ 
-    PUT_OUTPUT( C,D,A,B, c, xkey, 4 ); 
-    } 
- 
- 
-/* 
- * Twofish block decryption. 
- * 
- * Arguments: 
- * xkey         expanded key array 
- * p            16 bytes of plaintext 
- * c            16 bytes in which to store the ciphertext 
- */ 
-void Twofish_decrypt( Twofish_key * xkey, Twofish_Byte c[16], Twofish_Byte p[16]) 
-    { 
-    Twofish_UInt32 A,B,C,D,T0,T1;       /* Working variables */ 
- 
-    /* Get the four plaintext words xorred with the key */ 
-    GET_INPUT( c, A,B,C,D, xkey, 4 ); 
- 
-    /* Do 8 cycles (= 16 rounds) */ 
-    DECRYPT( A,B,C,D,T0,T1,xkey ); 
- 
-    /* Store them with the final swap and the output whitening. */ 
-    PUT_OUTPUT( C,D,A,B, p, xkey, 0 ); 
-    } 
- 
-
-
-/////////////////
-
-
-/*
-	This is the actual client-side
-	Beware: in final release everything will be length fixed, now it is forced to be multiple
-	        of 16 due Twofish
-*/
-
-#define HIGHVERSION 	2
-#define LOWVERSION 		2
-#define CLOUDBUFFSIZE 	16*1000
-
-Twofish_key 		g_mykey;		/// twofish keys are slow, big and painful, therefore a global one
-WSAData 			g_wsaData;
-struct addrinfo* 	g_addr;
-
-
-
-
-
-
-
-
-///   Twofish runs 16 bytes at time
-int	paddingto16(int i_number) 
-{ 
-	int bittini=i_number&15;
-	return 16-bittini;
-} 
-
-
-///		functions to be made BIG ENDIAN-compatible, just mockups
-void char8toarray(const char* i_char8,char* i_buffer)
-{
-	if (i_buffer==NULL)
-	{
-		myprintf("05837: guru i_buffer null\n");
-		seppuku();
-		exit(1);
-	}
-	if (i_char8==NULL)
-	{
-		myprintf("05842: guru i_char8 null\n");
-		seppuku();
-		exit(1);
-	}
-	memcpy(i_buffer,i_char8,8);
-}
-void arraytochar8(char* i_buffer,char* i_char8)
-{
-	if (i_buffer==NULL)
-	{
-		myprintf("05851: guru i_buffer null\n");
-		seppuku();
-		exit(1);
-	}
-	if (i_char8==NULL)
-	{
-		myprintf("05856: guru i_char8 null\n");
-		seppuku();
-		exit(1);
-	}
-	memcpy(i_char8,i_buffer,8);
-}
-int64_t arraytoint64(char* i_buffer)
-{
-	int64_t	risultato=0;
-	for (int i=7;i>=0;i--)
-	{
-		uint8_t numerino=*(i_buffer+i);
-		risultato=risultato+numerino;
-		if (i>0)
-		risultato<<=8;
-	}
-	return risultato;
-}
-
-bool maketwofishkey(std::string i_lachiave,Twofish_key*	o_thekey)
-{	
-	if (o_thekey==NULL)
-	{
-		myprintf("46203: o_thekey is null\n");
-		return false;
-	}
-	if (i_lachiave=="")
-	{
-		myprintf("46208: i_lachiave is empty!\n");
-		return false;
-	}
-	char	buflachiave[32];
-	memset(buflachiave,0,32);
-	snprintf(buflachiave,sizeof(buflachiave),"%s",i_lachiave.c_str());
-	return (Twofish_prepare_key((unsigned char*)buflachiave,i_lachiave.size(),o_thekey)==1);
-}
-
-
-
-
-
-#define FRANZOPACKET_HEADERSIZE			64
-#define	FRANZOPACKET_BUFSIZE			65536
-#define FRANZOPACKET_STAMPSIZE			16
-#define FRANZOPACKET_TYPECOMMAND_NEW 	'N'
-#define FRANZOPACKET_TYPECOMMAND_DATA 	'D'
-#define FRANZOPACKET_TYPECOMMAND_EOF 	'E'
-#define FRANZOPACKET_TYPECOMMAND_DEBUG 	'B'
-
-uint8_t		g_packet_start[16]={233,200,139,245,172, 35,223, 14,  5,235,126, 92, 68, 81,  1,160};
-uint8_t		g_packet_end	[16]={195, 20,249,239, 69, 71, 88, 64,103,254, 66,187,192, 33,  2,220};
-
-class franzpacket
-{
-	private:
-	int64_t		okhash;		// unencrypted
-
-////////// this is the "real packet": 8x8 bytes =16 (packet start)	+ 64 + 65536 (payload) + 16 (packet end)
-	int64_t		accepthash;
-	int64_t		buffersize;
-	char		type[8];
-	int64_t		bufferhash;
-	int64_t		bytes;
-	int64_t		number1;
-	int64_t		number2;
-	int64_t		number3;
-////////// for 64 bytes, then the payload
-
-	char		buffer[FRANZOPACKET_HEADERSIZE+FRANZOPACKET_BUFSIZE]; ///4064 + 16 + 16 = 4096
-
-	bool		flagencrypted;
-	
-	public:
-	
-	bool	sendtosocket()
-	{
-		twofish_encode(&g_mykey);
-		if (g_socket==0)
-			myprintf("\n\n23216: sendtosocket() on a 0 socket \n\n");
-		else
-		{
-			g_socket_packet	+=sizeof(buffer);
-			g_socket_packets++;
-			g_socket_hash.add(buffer,sizeof(buffer));
-			///printf("****************************************** %05d %08d %08X\n",g_socket_packets,g_socket_packet,g_socket_hash.hash());
-			
-			
-			char mynomefile[100];
-			snprintf(mynomefile,sizeof(mynomefile),"z:\\send_%08d_%08d_%08X",g_socket_sended,number3,g_socket_hash.hash());
-			FILE* myfile=fopen(mynomefile, "wb");
-			if (myfile==NULL)
-			{
-				myprintf("34399: cannot write on %s\n",mynomefile);
-				exit(0);
-			}
-	///		fwrite((const char*)g_packet_start, 1, FRANZOPACKET_STAMPSIZE, myfile);
-			fwrite(buffer, 1, sizeof(buffer), myfile);
-		///	fwrite((const char*)g_packet_end, 1, FRANZOPACKET_STAMPSIZE, myfile);
-			fclose(myfile);
-			///
-
-			
-			send(g_socket,(const char*)g_packet_start,FRANZOPACKET_STAMPSIZE,0);
-			send(g_socket,buffer,sizeof(buffer),0);
-			send(g_socket,(const char*)g_packet_end,FRANZOPACKET_STAMPSIZE,0);
-			return true;
-		}
-		bytes=0;
-		memset(buffer,	0,sizeof(buffer));
-		return false;
-	}
-	
-	franzpacket(): okhash(0),accepthash(0),buffersize(0),bufferhash(0),bytes(0),number2(0),number3(0),flagencrypted(false)
-	{
-		memset(buffer,	0,sizeof(buffer));
-		memset(type,	0,sizeof(type));
-	}
-	char*	get_payload()
-	{
-		return buffer+FRANZOPACKET_HEADERSIZE;
-	}
-	int64_t	get_bytes()
-	{
-		return bytes;
-	}
-	bool	put(int i_char)
-	{
-		if (i_char==EOF)
-		{
-			myprintf("45713: Operating a sendsocket EOF (from put)\n");
-			type[0]=FRANZOPACKET_TYPECOMMAND_EOF;
-			sendtosocket();
-			return true;
-		}
-
-		if ((uint64_t)(bytes+FRANZOPACKET_HEADERSIZE)<=sizeof(buffer))
-		{
-			*(buffer+FRANZOPACKET_HEADERSIZE+bytes)=i_char&255;
-			bytes++;
-		}
-		else
-		{
-			myprintf("45977: Ready to empty buffer sending to socket\n");
-			sendtosocket();
-			return true;
-		}
-	}
-	int64_t	get_accepthash()
-	{
-		return accepthash;
-	}
-	int64_t	get_buffersize()
-	{
-		return buffersize;
-	}
-	int64_t	get_bufferhash()
-	{
-		return bufferhash;
-	}
-	char get_type0()
-	{
-		return type[0];
-	}
-	bool	loadpayload(char* i_data,uint64_t i_datalen)
-	{
-		if (i_datalen<=0)
-		{
-			printf("Guru 5352: datalen <=0\n");
-			exit(0);
-		}
-		if (i_data==NULL)
-		{
-			printf("Guru 5347: i_data null\n");
-			exit(0);
-		}
-		if (i_datalen>sizeof(buffer))
-		{
-			printf("GURU 5342: packet too large\n");
-			exit(0);
-		}
-		memcpy(buffer+FRANZOPACKET_HEADERSIZE,i_data,i_datalen);
-		
-		bytes			=i_datalen;
-		buffersize		=sizeof(buffer);
-		flagencrypted	=false;
-		return true;
-	}
-	bool	setpacket(const int64_t i_accepthash,const char i_type,const int64_t i_number1,const int64_t i_number2,const int64_t i_number3,const string i_payload)
-	{
-		okhash		=0;
-		accepthash	=0;
-		buffersize	=0;
-		bufferhash	=0;
-		bytes		=0;
-		number1		=i_number1;
-		number2		=i_number2;
-		number3		=i_number3;
-		memset(type,0,8);
-		flagencrypted=false;
-			
-		if 	(
-			(i_type==FRANZOPACKET_TYPECOMMAND_NEW) 	||
-			(i_type==FRANZOPACKET_TYPECOMMAND_DATA) ||
-			(i_type==FRANZOPACKET_TYPECOMMAND_DEBUG) ||
-			(i_type==FRANZOPACKET_TYPECOMMAND_EOF) 	
-			)
-		{
-			okhash			=i_accepthash;
-			type[0]			=i_type;
-			/// only temporary!
-			memset(buffer+FRANZOPACKET_HEADERSIZE,0,sizeof(buffer)-FRANZOPACKET_HEADERSIZE);
-			
-			if (i_payload!="")
-				if (i_payload.size()<sizeof(buffer))
-				{
-					snprintf(buffer+FRANZOPACKET_HEADERSIZE,sizeof(buffer),"%s",i_payload.c_str());
-					bytes=i_payload.size();
-				}
-			return true;
-		}
-		return false;
-	}
-	
-	bool	twofish_encode(Twofish_key* i_thekey) ///ecb, quick and dirty
-	{
-		if (i_thekey==NULL)
-		{
-			myprintf("05954: i_thekey null\n");
-			return false;
-		}
-		if (buffer==NULL)
-		{
-			myprintf("05953: i_buffer null\n");
-			return false;
-		}
-		if (bytes<=0)
-		{
-			myprintf("05959: bytes is <=0\n");
-			exit(0);
-			return false;
-		}
-		if (flagencrypted)
-		{
-			myprintf("05964: buffersize already encrypted\n");
-			return false;
-		}
-		buffersize=FRANZOPACKET_HEADERSIZE+bytes;
-		Twofish_Byte criptato[16];
-		int chunks=(buffersize)/16;
-		if (buffersize%16!=0)
-			chunks++;
-			
-		int padding=paddingto16(buffersize);
-		if (flagdebug)
-			if (padding)
-				myprintf("23376: Chunks %03d Need some padding %d\n",chunks,padding);
-		memset(buffer+buffersize,00,padding);
-		buffersize+=padding;
-
-		uint64_t myseed	= 0;
-		XXHash64 myhash(myseed);
-		myhash.add(buffer+FRANZOPACKET_HEADERSIZE,bytes);
-		bufferhash		=myhash.hash();
-		inttoarray(okhash,		buffer+ 0,8);
-		inttoarray(buffersize,	buffer+ 8,8);
-		char8toarray(type,		buffer+16);
-		inttoarray(bufferhash,	buffer+24,8);
-		inttoarray(bytes,			buffer+32,8);
-		inttoarray(number1,		buffer+40,8);
-		inttoarray(number2,		buffer+48,8);
-		inttoarray(number3,		buffer+56,8);
-				
-/*
-		for (int i=0;i<16*chunks;i++)
-		{
-			printf("SOURCE %03d:%02X %c ",i,(unsigned char)buffer[i],(unsigned char)buffer[i]);
-			if (i%4==3)
-				printf("\n");
-		}
-*/
-		for (int i=0;i<chunks;i++)
-		{
-			Twofish_encrypt(i_thekey,(Twofish_Byte*)buffer+i*16,criptato);
-			memcpy(buffer+i*16,criptato,16);
-		}
-/*
-		for (int i=0;i<buffersize;i++)
-		{
-			printf("ENC %03d:%02X   ",i,(unsigned char)buffer[i]);
-			if (i%4==3)
-				printf("\n");
-		}
-*/
-		flagencrypted=true;
-		return true;
-	}
-
-	bool	twofish_decode(Twofish_key* i_thekey) ///ecb, quick and dirty
-	{
-		if (flagdebug)
-			myprintf("05531: Start decryt\n");
-		if (i_thekey==NULL)
-		{
-			myprintf("05967: i_thekey null\n");
-			return false;
-		}
-		if (buffer==NULL)
-		{
-			myprintf("05972: i_buffer null\n");
-			return false;
-		}
-		if (buffersize<=0)
-		{
-			myprintf("05977: buffersize is <=0\n");
-			return false;
-		}
-		if (!flagencrypted)
-		{
-			myprintf("05982: buffer NOT encrypted\n");
-			return false;
-		}
-
-		memset(type,0,8);
-		bufferhash	=0;
-		bytes		=0;
-		number1		=0;
-		number2		=0;
-		number3		=0;
-/*
-		for (int i=0;i<buffersize;i++)
-		{
-			printf("PACCHETTO %03d:%02X %c ",i,(unsigned char)buffer[i],(unsigned char)buffer[i]);
-			if (i%4==3)
-				printf("\n");
-		}
-*/
-		Twofish_Byte test[16];
-		Twofish_decrypt(i_thekey,(Twofish_Byte*)buffer,test);
-		accepthash=arraytoint64((char*)test);
-		if (accepthash!=okhash)
-		{
-			myprintf("06047: decrypt FAILED %lld vs ACCEPTED %lld!\n",accepthash,okhash);
-			return false;
-		}
-		
-		buffersize=arraytoint64((char*)test+8);
-		if (flagdebug)
-			myprintf("05574: Decoding from little header %d\n",buffersize);
-		Twofish_Byte decriptato[16];
-		int chunks=(buffersize)/16;
-		if (buffersize%16!=0)
-		{
-			chunks++;
-			myprintf("2347: NOT 16!\n");
-		}	
-
-		for (int i=0;i<chunks;i++)
-		{
-			Twofish_decrypt(i_thekey,(Twofish_Byte*)buffer+i*16,decriptato);
-			memcpy(buffer+i*16,decriptato,16);
-		}
-
-		arraytochar8((char*)buffer+16,type);
-		bufferhash	=arraytoint64(buffer+24);
-		bytes		=arraytoint64(buffer+32);
-		number1		=arraytoint64(buffer+40);
-		number2		=arraytoint64(buffer+48);
-		number3		=arraytoint64(buffer+56);
-		
-		uint64_t myseed	= 0;
-		XXHash64 myhash(myseed);
-		myhash.add(buffer+64,bytes);
-		int64_t recalcbufferhash		=myhash.hash();
-		
-		if (recalcbufferhash!=bufferhash)
-		{
-			myprintf("05514: hash check failed! decoded %08X vs recalc %08X\n",bufferhash,recalcbufferhash);
-			memset(type,0,8);
-			accepthash	=0;
-			bufferhash	=0;
-			bytes		=0;
-			number1		=0;
-			number2		=0;
-			number3		=0;
-			return false;
-		}
-		flagencrypted=false;
-		return true;
-	}
-	
-};
 franzpacket	g_flushpacket;
 #endif
 
@@ -38738,7 +36853,7 @@ class OutputArchive: public ArchiveBase, public libzpaq::Writer {
   char buf[BUFSIZE];  // I/O buffer
   string thefilename;
   bool	flagindex;
-  
+
 public:
   // Open. If password then encrypt output.
   OutputArchive(const char* filename, const char* password=0,
@@ -38753,28 +36868,28 @@ public:
 	if (g_socket!=0)
 		if (ptr>0)
 			if (thefilename!=g_indexname)
-			{	
+			{
 				g_socket_sended+=ptr;
 				g_flushpacket.setpacket(g_enter,FRANZOPACKET_TYPECOMMAND_DATA,g_socket_sended,5002,5003,"");
 				g_flushpacket.loadpayload(buf,ptr);
 				g_flushpacket.sendtosocket();
-					
+
 			}
 #endif
     ptr=0;
   }
   // Position the next read or write offset to p.
-  void seek(int64_t p, int whence) 
+  void seek(int64_t p, int whence)
   {
 		if (g_fakewrite)  /// ransomware
 		{
-			if (whence==SEEK_SET) 
+			if (whence==SEEK_SET)
 				off=p;
-			else 
+			else
 			off+=p;  // assume at end
 		}
-		
-		
+
+
     if (fp!=FPNULL) {
       flush();
       fseeko(fp, p, whence);
@@ -38783,19 +36898,19 @@ public:
     else off+=p;  // assume at end
   }
   // Return current file offset.
-  int64_t tell() const 
+  int64_t tell() const
   {
 	if (g_fakewrite)  /// ransomware
 		return off;
 
-    if (fp!=FPNULL) 
+    if (fp!=FPNULL)
 		return ftello(fp)+ptr;
-    else 
+    else
 		return off;
   }
-  
+
   // Write one byte
-  void put(int c) 
+  void put(int c)
   {
 	if (g_fakewrite)  /// ransomware
 	{
@@ -38809,15 +36924,15 @@ public:
     }
   }
   // Write buf[0..n-1]
-	void write(const char* ibuf, int len) 
+	void write(const char* ibuf, int len)
 	{
 		if (g_fakewrite) /// ransomware
 		{
 			off+=len;
 			return;
 		}
-	
-    if (fp==FPNULL) 
+
+    if (fp==FPNULL)
 		off+=len;
     else
 		while (len-->0) put(*ibuf++);
@@ -38843,10 +36958,10 @@ OutputArchive::OutputArchive(const char* filename, const char* password,
   off=off_;
   thefilename="";
   flagindex=false;
-  
+
   if (!*filename) return;
   thefilename=filename;
-	
+
 	// Open existing file
   char salt[32]={0};
 #ifdef BSD
@@ -38861,7 +36976,7 @@ OutputArchive::OutputArchive(const char* filename, const char* password,
 #else
 	fp=fopen(filename, RBPLUS);
 #endif
-  
+
   if (isopen()) {
     if (off!=0) error("file exists and off > 0");
     if (password) {
@@ -38914,8 +37029,8 @@ OutputArchive::OutputArchive(const char* filename, const char* password,
 #endif
     }
   }
-  
-  
+
+
 
 
 	if (thefilename!=g_indexname)
@@ -38925,7 +37040,7 @@ OutputArchive::OutputArchive(const char* filename, const char* password,
 		if (flagdebug)
 		myprintf("38478: ;;;;;;;;;;;;;;;;;;;;;;;;;; settato index %s %08d;;;;;;;;;;;;;\n",migliaia(int64_t(g_fp_zpaq)),int64_t(g_fp_zpaq));
 	}
-  
+
   if (flagindex)
   {
 	  if (flagdebug)
@@ -38936,7 +37051,7 @@ OutputArchive::OutputArchive(const char* filename, const char* password,
 	  if (flagdebug)
 		myprintf("38769: OutputArchive ZPAQ    %s %s\n",thefilename.c_str(),migliaia(int64_t(fp)));
   }
-  
+
   // Set up encryption
   if (password) {
     char key[32];
@@ -38960,26 +37075,26 @@ struct StringWriter: public libzpaq::Writer {
 ///static const int64_t HT_BAD=   -0x7FFFFFFFFFFFFFFALL;  // no such frag
 static const int64_t DEFAULT_VERSION=99999999999999LL; // unless -until
 // fragment hash table entry
-struct HT 
+struct HT
 {
 	uint32_t crc32;			// new: take the CRC-32 of the fragment
 	uint32_t crc32size;
 	unsigned char sha1[20]; // fragment hash
 	int usize;      		// uncompressed size, -1 if unknown, -2 if not init
 	int64_t csize;  		// if >=0 then block offset else -fragment number
-	HT(const char* s=0, int u=-2) 
+	HT(const char* s=0, int u=-2)
 	{
 		crc32=0;
 		crc32size=0;
 		csize=0;
-		if (s) 
+		if (s)
 			memcpy(sha1, s, 20);
-		else 
+		else
 			memset(sha1, 0, 20);
 		usize=u;
 	}
 };
-struct DTV 
+struct DTV
 {
   int64_t date;          // decimal YYYYMMDDHHMMSS (UT) or 0 if deleted
   int64_t size;          // size or -1 if unknown
@@ -39006,7 +37121,7 @@ class franzfs
 		if (!data)
 		{
 			myprintf("22938: Guru data is null\n");
-			return 0; 
+			return 0;
 		}
 		if ((position+i_size)>filesize)
 			i_size=filesize-position;
@@ -39028,7 +37143,7 @@ class franzfs
 		if (!data)
 		{
 			myprintf("35254: Guru data is null\n");
-			return 0; 
+			return 0;
 		}
 		position=i_offset;
 		if (position+i_size>filesize)
@@ -39041,7 +37156,7 @@ class franzfs
 		return i_size;
 	}
 	franzfs(){data=NULL;position=0;}
-	bool init(int64_t i_size) 
+	bool init(int64_t i_size)
 	{
 		data=(char*)franz_malloc(i_size);
 		if (data==NULL)
@@ -39056,7 +37171,7 @@ class franzfs
 			myprintf("23000: allocated %21s\n",migliaia(i_size));
 		return true;
 	}
-	bool reset() 
+	bool reset()
 	{
 		if (data==NULL)
 		{
@@ -39124,8 +37239,8 @@ struct DT   // if you get some warning here, update your compiler!
 	blake3_hasher 	*pfile_blake3;
 	NESSIEstruct	*pfile_whirlpool;
 	HighwayHashCat 	*pfile_highway64;
-	
-	
+
+
 	franzfs			*pramfile;
 	DT(): date(0), size(0), attr(0), data(0),creationdate(0),accessdate(0),written(-1),isordered(false),isselected(false),franz_block_size(FRANZOFFSETV3),file_crc32(0),hashedsize(0),chunk(-1),filefix(0),expectedsize(0),version(0),forceadd(false)
 	{
@@ -39181,7 +37296,7 @@ struct DT   // if you get some warning here, update your compiler!
 };
 typedef map<string, DT> DTMap;
 // list of blocks to extract
-struct Block 
+struct Block
 {
   int64_t offset;       // location in archive
   int64_t usize;        // uncompressed size, -1 if unknown (streaming)
@@ -39196,7 +37311,7 @@ struct Block
       size(0), frags(0), extracted(0), state(READY) {}
 };
 // Version info
-struct VER 
+struct VER
 {
   int64_t date;          // Date of C block, 0 if streaming
   int64_t lastdate;      // Latest date of any block
@@ -39225,9 +37340,9 @@ class CompressJob;
 
 typedef void (*callback_function)(char*); // type for conciseness
 
-// Do everything. 
+// Do everything.
 // Very weird approach, this is about plain-old C, almost zero ++
-class Jidac 
+class Jidac
 {
 public:
 	int		loadparameters(int argc, const char** argv);
@@ -39237,15 +37352,15 @@ public:
 	friend 	struct ExtractJob;
 	void usageall		(string i_command); // verbose help
 #ifdef GUI
-	int guilist();               			
+	int guilist();
 #endif
 	string 	archive;           			// archive name
-	
+
 #ifdef GUI
 	bool	iszpaqloaded;
 	string	gui_filtername;
 	int		gogui();
-#endif 
+#endif
 private:
 
 	string				fullcommandline;
@@ -39253,7 +37368,7 @@ private:
 	string	zpaqfranzexename;
 	string	fullzpaqexename;
 	MAPPAHELP help_map;					/// maps: string command, helpfunctions(bool,bool)
-	MAPPAHELP switches_map;	
+	MAPPAHELP switches_map;
 	string	fullarchive;
 	vector<string> 		files;     		// filename args
 	vector<int64_t> 	files_size;		// instead of a struct many vectors
@@ -39323,7 +37438,7 @@ private:
 	int append();						// anti-ramsomware (slow)
 	int extract();            			// extract, return 1 if error else 0
 	int multisomething();            	// extract/test with "*"
-	int setpassword();					// set or change password 
+	int setpassword();					// set or change password
 	int extractw();            			// chunked-extract, return 1 if error else 0
 	int info();							// wrap for list
 	int findj();						// find files
@@ -39415,7 +37530,7 @@ private:
 	int 		hashselect();
 	string 		win32_extract_resource(const string i_folder,const string i_filename,const char* i_mime64);
 //	string 		prepare_dd();
-#ifdef SERVER	
+#ifdef SERVER
 	int 		sendtocloudpaq(const int64_t i_extimated,const int i_version);
 #endif
 
@@ -39434,10 +37549,10 @@ private:
 
 	int 		get_filelist(callback_function i_advance,vector<DTMap::iterator>* o_filelist,int64_t& o_sizeuncompressed,int64_t& o_sizededuplicated,int64_t& o_sizecompressed,int64_t& o_sizeall,int64_t& o_dhsize,int64_t& o_dcsize);
 	void 		filter_filelist(vector<DTMap::iterator>* i_filelist,vector<DTMap::iterator>* o_filtered,string i_filtro,string i_ordine,string i_crc32,string i_hash);
-	bool 		searchunixfile();            			
+	bool 		searchunixfile();
 	string		get_lastfilename(string i_file,int64_t& o_totalfilesize);
 	int64_t		getzpaqsum(string i_archive,int64_t& o_usize,int64_t& o_allsize,int64_t& o_dtsize,int64_t& o_compressedsize);
-	
+
 	bool 		isbackuprunning();
 	bool 		parallelcrc32(string i_filename,unsigned int i_thread,uint32_t& o_crc32);
 
@@ -39451,7 +37566,7 @@ private:
 
 };
 #ifdef unix
-std::string exec(const char* cmd) 
+std::string exec(const char* cmd)
 {
 #ifdef ANCIENT
 	return "";
@@ -39459,14 +37574,14 @@ std::string exec(const char* cmd)
 	std::array<char, 128> buffer;
     std::string result;
     std::unique_ptr<FILE, decltype(&pclose)> pipe(popen(cmd, "r"), pclose);
-    while (fgets(buffer.data(), buffer.size(), pipe.get()) != nullptr) 
+    while (fgets(buffer.data(), buffer.size(), pipe.get()) != nullptr)
         result += buffer.data();
     return result;
 #endif
 }
 #else
 // a debug function
-string exec(const char* cmd) 
+string exec(const char* cmd)
 {
 	myprintf("Debug function (Windows does not have ZFS!)\n");
 	if (cmd==NULL) // compiler be quiet
@@ -39475,9 +37590,9 @@ string exec(const char* cmd)
 }
 #endif
 
-string tail(string const& i_source, size_t const i_length) 
+string tail(string const& i_source, size_t const i_length)
 {
-	if (i_length>=i_source.size()) 
+	if (i_length>=i_source.size())
 		return i_source;
 	return i_source.substr(i_source.size()-i_length);
 }
@@ -39508,7 +37623,7 @@ string x_one_vector(string i_command,string i_text,vector<string>& o_line)
 		{
 			myreplaceall(lineetta,std::string(1,10),"");
 			myreplaceall(lineetta,std::string(1,13),"");
-		
+
 			o_line.push_back(lineetta);
 			if (flagdebug)
 				myprintf("39166: Pushato |%s|\n",lineetta.c_str());
@@ -39522,7 +37637,7 @@ string x_one_vector(string i_command,string i_text,vector<string>& o_line)
 	}
 
 	return risultato;
-}	
+}
 
 
 string x_one(string i_command,string i_text)
@@ -39541,7 +37656,7 @@ string x_one(string i_command,string i_text)
 			myprintf("37726: x_one          %s => %s\n",i_command.c_str(),risultato.c_str());
 	}
 	return risultato;
-}	
+}
 int Jidac::zfsreceive()
 {
 	myprintf("zfsreceive\n",archive.c_str());
@@ -39552,18 +37667,18 @@ int Jidac::zfsreceive()
 		myprintf("[1]: zfsreceive /pippo.zpaq rpool/restored -script thescript.sh -snapshot mymark\n");
 		return 2;
 	}
-	
+
 	if (g_script=="")
 	{
 		myprintf("37423: you must specify an -script thescript.sh\n");
 		return 2;
 	}
 	string	myoutput=g_script;
-	
+
 	string 	themark		="franco";
 	if (snapmark!="")
 		themark=snapmark;
-	
+
 	string estensione=prendiestensione(archive);
 	if (estensione!="zpaq")
 	{
@@ -39598,7 +37713,7 @@ int Jidac::zfsreceive()
 	}
 
 	getpasswordifempty();
-		
+
 	int errors=0;
 	command='l';
 	g_optional="versum"; //force isselected
@@ -39607,7 +37722,7 @@ int Jidac::zfsreceive()
 	read_archive(NULL,archive.c_str(),&errors,1); /// AND NOW THE MAGIC ONE!
 	vector<string> filename;
 	vector<int64_t> filesize;
-	
+
 	for (DTMap::iterator a=dt.begin(); a!=dt.end(); ++a)
 	{
 		string temp=a->first.c_str();
@@ -39627,7 +37742,7 @@ int Jidac::zfsreceive()
 		}
 	}
 	char nomeatteso[20];
-		
+
 	for (unsigned int i=0;i<filename.size();i++)
 	{
 		snprintf(nomeatteso,sizeof(nomeatteso),"%08d.zfs",i+1);
@@ -39696,11 +37811,11 @@ int Jidac::zfsrestore()
 	}
 
 	string	myoutput=g_script;
-	
+
 	string 	themark		="franco";
 	if (snapmark!="")
 		themark=snapmark;
-	
+
 	string	thefolder	=files[0];
 	string 	thepool		=files[1];
 	int		howmanyslash=0;
@@ -39774,7 +37889,7 @@ int Jidac::zfsrestore()
 	if (fileexists("/bin/pv"))
 		pv="/bin/pv|";
 #endif
-		
+
 	for (unsigned int i=0;i<filename.size();i++)
 	{
 		if (flagverbose)
@@ -39784,13 +37899,13 @@ int Jidac::zfsrestore()
 	}
 	fclose(batch);
 #ifndef _WIN32
-	
+
 		if (chmod(myoutput.c_str(),0700)!=0)
 		{
 			myprintf("53105: Error on chmod 700 on %s\n",myoutput.c_str());
 			return 2;
 		}
-#endif	
+#endif
 	myprintf("53515: The script is <<");
 	printUTF8(myoutput.c_str());
 	myprintf(">>\n");
@@ -39822,7 +37937,7 @@ int Jidac::zfsbackup()
 	string themark	="zpaqfranz";
 	if (snapmark!="")
 		themark=snapmark;
-	
+
 	int				howmanyslash=0;
 	int				howmanyat	=0;
 	for (unsigned int i=0;i<thepool.size();i++)
@@ -39836,7 +37951,7 @@ int Jidac::zfsbackup()
 	for (unsigned int i=0;i<purgedpool.size();i++)
 		if (purgedpool[i]=='/')
 			purgedpool[i]='_';
-				
+
 	myprintf("53549: Archive        %s\n",archive.c_str());
 	myprintf("53550: Pool           %s\n",thepool.c_str());
 	myprintf("53551: Purged pool    %s\n",purgedpool.c_str());
@@ -39864,7 +37979,7 @@ int Jidac::zfsbackup()
 		}
 		char	buffer[1000];
 		snprintf(buffer,sizeof(buffer),"%s%08d",themark.c_str(),1);
-			
+
 		string thesnap=buffer;
 		string fullsnap=thepool+"@"+thesnap;
 		myprintf("53586: The snap |%s|\n",thesnap.c_str());
@@ -39912,7 +38027,7 @@ int Jidac::zfsbackup()
 			hashdeepposition.c_str(),
 			zfsfolder.c_str(),
 			hashofile.c_str());
-		}	
+		}
 		fprintf(batch,"zfs send %s@%s00000001 |%s a %s 00000001.zfs -stdin\n",thepool.c_str(),themark.c_str(),fullzpaqexename.c_str(),archive.c_str());
 		if (flaghashdeep)
 			fprintf(batch,"%s a %s %s\n",fullzpaqexename.c_str(),archive.c_str(),hashofile.c_str());
@@ -39932,14 +38047,14 @@ int Jidac::zfsbackup()
 			{
 				myprintf("53649: Deleting <<%s>>\n",filebatch.c_str());
 				delete_file(filebatch.c_str());
-				
+
 				if (hashofile!="")
 				{
 					myprintf("39631: Deleting hasho <<%s>>\n",hashofile.c_str());
 					delete_file(hashofile.c_str());
 				}
 			}
-			
+
 			return 0;
 		}
 		else
@@ -39947,7 +38062,7 @@ int Jidac::zfsbackup()
 			myprintf("53059: GURU, something seems wrong, filesize %s\n",migliaia(prendidimensionefile(archive.c_str())));
 			return 2;
 		}
-#endif	
+#endif
 		return 0;
 	}
 
@@ -39977,13 +38092,13 @@ int Jidac::zfsbackup()
 		if (snomeatteso!=filename[i])
 			myprintf("53027: Expected name @ index %d |%s| found |%s| => abort\n",i,snomeatteso.c_str(),filename[i].c_str());
 	}
-		
+
 	string	snomeatteso=myulltoa(filename.size(),8);
-	
+
 	string expectedsnapshot=themark+snomeatteso;
 	string fullexpectedsnapshot=thepool+'@'+themark+snomeatteso;
 	myprintf("53035: Searching for snapshot |%s|\n",fullexpectedsnapshot.c_str());
-	
+
 	vector<string> array_primachiocciola;
 	vector<string> array_dopochiocciola;
 	string risul=zfs_get_snaplist(thepool,themark,array_primachiocciola,array_dopochiocciola);
@@ -40010,14 +38125,14 @@ int Jidac::zfsbackup()
 		myprintf("53075: The founded index %d is < snapshot size %d, cowardly abort (not the LAST snapshot)\n",foundindex,array_primachiocciola.size());
 		return 2;
 	}
-	
+
 	string 	ultimo		=array_dopochiocciola[foundindex];
 	string	solocifre	="";
 	for (unsigned int i=0;i<ultimo.size();i++)
 		if (isdigit(ultimo[i]))
 			solocifre+=ultimo[i];
 	int	thelast=atoi(solocifre.c_str())+1;
-	
+
 	snprintf(nomeatteso,sizeof(nomeatteso),"%08d",thelast);
 	string	nuovonome=nomeatteso;
 	string nuovonomefull=thepool+'@'+themark+nuovonome;
@@ -40025,7 +38140,7 @@ int Jidac::zfsbackup()
 	myprintf("53145: Newname full |%s|\n",nuovonomefull.c_str());
 	string	exepath		=zpaqfranzexename;
 	myprintf("53154: Exename      |%s|\n",zpaqfranzexename.c_str());
-	
+
 	string filebatch="/tmp/backup_zfs_"+purgedpool+".sh";
 #ifdef _WIN32
 	filebatch="z:/1.txt";
@@ -40072,14 +38187,14 @@ int Jidac::zfsbackup()
 		hashdeepposition.c_str(),
 		zfsfolder.c_str(),
 		hashofile.c_str());
-	}	
+	}
 	fprintf(batch,"zfs send -i %s %s |%s a %s %s.zfs -stdin\n",fullexpectedsnapshot.c_str(),nuovonomefull.c_str(),fullzpaqexename.c_str(),archive.c_str(),nuovonome.c_str());
 	if (flaghashdeep)
 		fprintf(batch,"%s a %s %s\n",fullzpaqexename.c_str(),archive.c_str(),hashofile.c_str());
 	if (flagkill)
 		fprintf(batch,"zfs destroy %s\n",fullexpectedsnapshot.c_str());
 	fclose(batch);
-		
+
 #ifndef _WIN32
 
 	if (chmod(filebatch.c_str(),0700)!=0)
@@ -40089,7 +38204,7 @@ int Jidac::zfsbackup()
 	}
 	myprintf("53130: RUNNING   script %s\n",filebatch.c_str());
 	string runresult=exec(filebatch.c_str());
-// dirrrrty	
+// dirrrrty
 	if (mypos("(all OK)",runresult)!=0)
 	{
 		int64_t newsize=prendidimensionefile(archive.c_str());
@@ -40118,7 +38233,7 @@ uint64_t Jidac::hashastringa(const string i_string)
 	return myhash.hash();
 }
 /// change the key of a map is not so easy (slow)
-/// this is something like filesystem behavior: just add and mark as deleted 
+/// this is something like filesystem behavior: just add and mark as deleted
 /// note: this is find, not binary search. quite slow, but resilient
 void Jidac::changedtmapkey(string i_oldkey,string i_newkey)
 {
@@ -40137,7 +38252,7 @@ uint32_t Jidac::casekollision(DTMap& i_dtmap,vector<string>& o_collisions,bool i
 	uint32_t fixed=0;
 	o_collisions.clear();
 	vector<uint64_t>	hashedstrings;
-	for (DTMap::iterator p=i_dtmap.begin(); p!=i_dtmap.end(); ++p) 
+	for (DTMap::iterator p=i_dtmap.begin(); p!=i_dtmap.end(); ++p)
 		if (all || p->second.date)
 		{
 			string		fn			=rename(p->first);
@@ -40189,10 +38304,10 @@ uint32_t Jidac::casekollision(DTMap& i_dtmap,vector<string>& o_collisions,bool i
 ///macos
 
 			std::vector<uint64_t>::iterator it;
-			it = std::upper_bound(hashedstrings.begin(),hashedstrings.end(),hashato); 
+			it = std::upper_bound(hashedstrings.begin(),hashedstrings.end(),hashato);
 			hashedstrings.insert(it,hashato);
 /*
-			auto it = std::upper_bound(hashedstrings.cbegin(),hashedstrings.cend(),hashato); 
+			auto it = std::upper_bound(hashedstrings.cbegin(),hashedstrings.cend(),hashato);
 			hashedstrings.insert(it,hashato);
 */
 #endif
@@ -40204,7 +38319,7 @@ uint32_t Jidac::casekollision(DTMap& i_dtmap,vector<string>& o_collisions,bool i
 	return (fixed);
 }
 /// "smarter" joiner, to be implemented
-void Jidac::join_split() 
+void Jidac::join_split()
 {
 }
 string Jidac::getpasswordblind()
@@ -40212,7 +38327,7 @@ string Jidac::getpasswordblind()
 	string myresult="";
 	myprintf("\nEnter password :");
 		/*macos*/
-#if defined (__APPLE__)
+#if defined (unix)
 	///myprintf(" APPLE ");
 	struct termios oldt, newt;
 	tcgetattr ( STDIN_FILENO, &oldt );
@@ -40227,15 +38342,18 @@ string Jidac::getpasswordblind()
 		carattere=getchar();
 		if (carattere==10)
 			break;
+		tcsetattr ( STDIN_FILENO, TCSANOW, &oldt );
+		myprintf("*");
+		tcsetattr ( STDIN_FILENO, TCSANOW, &newt );
 #else	/// Windows
 		carattere=::getch();
 		if(carattere=='\r')
 			break;
 		myprintf("*");
-#endif	
+#endif
 		myresult+=carattere;
 	}
-#if defined (__APPLE__)
+#if defined (unix)
 	tcsetattr ( STDIN_FILENO, TCSANOW, &oldt );
 #endif
 	myprintf("\n");
@@ -40257,7 +38375,7 @@ void Jidac::getpasswordifempty()
 				password=password_string;
 			}
 		}
-}	
+}
 void Jidac::jidacreset()
 {
 	g_freeze="";
@@ -40277,7 +38395,7 @@ void Jidac::jidacreset()
 ///	tofiles.clear();
 ///	files.clear();
 }
-int Jidac::paranoid() 
+int Jidac::paranoid()
 ////////////////////////////////////////////////////////////////////////////
 ///////// This is a merge of unzpaq206.cpp, patched by me to become unz.cpp
 ///////// Now support FRANZOFFSET
@@ -40366,15 +38484,15 @@ public:
     if ((len0&511)==0) process();
   }
   double size() const {return len0/8+len1*536870912.0;} // size in bytes
-  const char* result();  
+  const char* result();
   unzSHA1() {init();}
 private:
-  void init();      
-  uint32_t len0, len1;   
-  uint32_t h[5];         
-  uint32_t w[80];        
-  char hbuf[20];   
-  void process();  
+  void init();
+  uint32_t len0, len1;
+  uint32_t h[5];
+  uint32_t w[80];
+  char hbuf[20];
+  void process();
 };
 // Start a new hash
 void unzSHA1::init() {
@@ -40461,12 +38579,12 @@ public:
   const char* result();  // get hash and reset
   unzSHA256() {init();}
 private:
-  void init();           
-  unsigned len0, len1;   
-  unsigned s[8];         
-  unsigned w[16];        
-  char hbuf[32];         
-  void process();        
+  void init();
+  unsigned len0, len1;
+  unsigned s[8];
+  unsigned w[16];
+  char hbuf[32];
+  void process();
 };
 void unzSHA256::init() {
   len0=len1=0;
@@ -40817,7 +38935,7 @@ void unzAES_CTR::encrypt(uint32_t s0, uint32_t s1, uint32_t s2, uint32_t s3, uns
     (Te4_3[unzbyte(t3, 3)]) ^
     (Te4_2[unzbyte(t0, 2)]) ^
     (Te4_1[unzbyte(t1, 1)]) ^
-    (Te4_0[unzbyte(t2, 0)]) ^ 
+    (Te4_0[unzbyte(t2, 0)]) ^
     rk[3];
   STORE32H(s3, ct+12);
 }
@@ -41791,7 +39909,7 @@ void unzPredictor::update(int y) {
         assert(0);
     }
     cp+=compsize[cp[0]];
-    assert(cp>=&z.header[7] && cp<&z.header[z.cend] 
+    assert(cp>=&z.header[7] && cp<&z.header[z.cend]
            && cp<&z.header[z.header.isize()-8]);
   }
   assert(cp[0]==NONE);
@@ -42254,11 +40372,11 @@ struct unzDT {		// if you get some warning here, update your compiler!
   unzDT(): date(0), attr(0) {sha1hex[0]=0x0;sha1decompressedhex[0]=0x0;sha1fromfile="";}
 };
 typedef std::map<std::string, unzDT> unzDTMap;
-bool unzcomparesha1hex(unzDTMap::iterator i_primo, unzDTMap::iterator i_secondo) 
+bool unzcomparesha1hex(unzDTMap::iterator i_primo, unzDTMap::iterator i_secondo)
 {
 	return (strcmp(i_primo->second.sha1hex,i_secondo->second.sha1hex)<0);
 }
-bool unzcompareprimo(unzDTMap::iterator i_primo, unzDTMap::iterator i_secondo) 
+bool unzcompareprimo(unzDTMap::iterator i_primo, unzDTMap::iterator i_secondo)
 {
 	return (i_primo->first<i_secondo->first);
 }
@@ -42282,7 +40400,7 @@ int decode_franz_block
 	o_version		=0;
 	if (o_posix)		// compiler be quiet, please
 		o_posix		=NULL;
-	
+
 	if (i_franz_block==NULL)
 		return -1;
 
@@ -42417,12 +40535,12 @@ int decode_franz_block
 							o_crc32value=i_franz_block+67;
 				}
 			}
-			
+
 ///	this is the FRANZOBLOCKV3 (upto 128 bytes+atime+ctime+vnumber+isordered) and the V4 (V3+posix structure)
 	if ((i_franz_block[0]=='3') || (i_franz_block[0]=='4'))
 	{
 		bool onlyheader=(i_franz_block[0]=='3');
-	
+
 		if (flagdebug)
 		{
 			if (onlyheader)
@@ -42442,8 +40560,8 @@ int decode_franz_block
 		int hashlen		=p->second.hashlen;
 		if (flagdebug)
 			myprintf("39670: expectedfranzotype %d => |%-15s| len %03d\n",expectedfranzotype,hashname.c_str(),hashlen);
-				
-		risultato	=expectedfranzotype; 
+
+		risultato	=expectedfranzotype;
 		o_hashtype	=hashname;
 		o_hashvalue	=i_franz_block+2;
 
@@ -42456,20 +40574,20 @@ int decode_franz_block
 		o_isordered=arraytoint32(i_franz_block+offsetcrc+8+2);
 		if (flagdebug)
 			myprintf("39724: Ordered stream %08d\n",o_isordered);
-	
+
 		o_version=arraytoint32(i_franz_block+offsetcrc+8+2+4);
 		if (flagdebug)
 			myprintf("39728: Version number %08d\n",o_version);
-	
+
 		o_creationtime	=arraytoint64(i_franz_block+offsetcrc+8+2+4+4);
 		o_accesstime	=arraytoint64(i_franz_block+offsetcrc+8+2+4+4+8);
-		
+
 		if (flagdebug)
 		{
 			myprintf("39734: cdate %s\n",migliaia(o_creationtime));
 			myprintf("39736: adate %s\n",migliaia(o_accesstime));
 		}
-		
+
 		if (!onlyheader)
 		{
 			int64_t offsetposix=offsetcrc+8+2+4+4+8+(8*4); // 8*4= future expansion
@@ -42479,9 +40597,9 @@ int decode_franz_block
 		}
 	}
 	return risultato;
-}				
+}
 ///https://gist.github.com/0x3f00/90edbec0c04616d0b8c21586762bf1ac
-static std::string base64encode(const std::string data) 
+static std::string base64encode(const std::string data)
 {
     static char sEncodingTable[] = {
       'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H',
@@ -42536,7 +40654,7 @@ static std::string base64encode(const std::string data)
 }
 string Jidac::sanitizzanomefile(string i_filename,int i_filelength,int& io_collisioni,MAPPAFILEHASH& io_mappacollisioni)
 {
-	
+
 	if  (i_filename=="")
 		return("");
 	string percorso			=extractfilepath(i_filename);
@@ -42552,7 +40670,7 @@ string Jidac::sanitizzanomefile(string i_filename,int i_filelength,int& io_colli
 	if (lunghezza<10)
 		lunghezza=10;
 	char numero[60];
-	if (flagparanoid) 
+	if (flagparanoid)
 	{
 		// make unique and short filename
 		snprintf(numero,sizeof(numero),"%08d_",++io_collisioni);
@@ -42594,7 +40712,7 @@ string Jidac::sanitizzanomefile(string i_filename,int i_filelength,int& io_colli
 	}
 	if (flagflat) /// desperate extract without path and filenames
 	{
-///		Stay safe		
+///		Stay safe
 		string temp=purgeansi(nome.substr(0, 20));
 		temp=base64encode(temp);
 		snprintf(numero,sizeof(numero),"%08d_%05d_",++io_collisioni,(unsigned int)i_filename.length());
@@ -42617,7 +40735,7 @@ string Jidac::sanitizzanomefile(string i_filename,int i_filelength,int& io_colli
 	{
 		string prenome=nome;
 // this is name, throw everything (FALSE)
-		nome=purgeansi(forcelatinansi(utf8toansi(nome)),false);		
+		nome=purgeansi(forcelatinansi(utf8toansi(nome)),false);
 		if (flagdebug)
 			if (nome!=prenome)
 			{
@@ -42650,7 +40768,7 @@ string Jidac::sanitizzanomefile(string i_filename,int i_filelength,int& io_colli
 		}
 /// this is a path, so keep \ and / (TRUE)
 		string prepercorso=percorso;
-		percorso=purgeansi(forcelatinansi(utf8toansi(percorso)),true);		
+		percorso=purgeansi(forcelatinansi(utf8toansi(percorso)),true);
 		if (flagdebug)
 			if (percorso!=prepercorso)
 			{
@@ -42688,7 +40806,7 @@ string Jidac::sanitizzanomefile(string i_filename,int i_filelength,int& io_colli
 					myprintf("18034: Barra %ld\n",(long int)barra);
 				if (barra==string::npos)
 					break;
-				if (flagdebug)		
+				if (flagdebug)
 					myprintf("18038: Eureka!!\n");
 				esploso.push_back(temppercorso.substr(0, barra));
 				temppercorso=temppercorso.substr(barra+1,temppercorso.length());
@@ -42721,7 +40839,7 @@ string Jidac::sanitizzanomefile(string i_filename,int i_filelength,int& io_colli
 			else
 			{
 				myprintf("18088: HOUSTON\n");
-			}						
+			}
 		}
 	}
 	newname=nome;
@@ -42748,8 +40866,8 @@ string Jidac::sanitizzanomefile(string i_filename,int i_filelength,int& io_colli
 	}
 	if (flagdebug)
 		myprintf("25570: candidato %s\n",candidato.c_str());
-	collisione=io_mappacollisioni.find(candidato); 
-	if (collisione!=io_mappacollisioni.end()) 
+	collisione=io_mappacollisioni.find(candidato);
+	if (collisione!=io_mappacollisioni.end())
 	{
 		if (flagdebug)
 			myprintf("18255 found  1 %s\n",candidato.c_str());
@@ -42783,13 +40901,13 @@ string Jidac::sanitizzanomefile(string i_filename,int i_filelength,int& io_colli
 	section: progress
 */
 // beware STATIC not good for M/T
-void print_progress(int64_t ts, int64_t td,int64_t i_scritti,int i_percentuale) 
+void print_progress(int64_t ts, int64_t td,int64_t i_scritti,int i_percentuale)
 {
 	static int ultimapercentuale=0;
 	static int ultimaeta=0;
 	if (flagnoeta==true)
 		return;
-	if (td>ts) 
+	if (td>ts)
 		td=ts;
 	if (td<1000000)
 		return;
@@ -42809,7 +40927,7 @@ void print_progress(int64_t ts, int64_t td,int64_t i_scritti,int i_percentuale)
 					int(eta/3600), int(eta/60)%60, int(eta)%60, migliaia(td), migliaia2(ts),migliaia3(td/secondi));
 				}
 	}
-	else 
+	else
 	{
 		if (int(eta)!=ultimaeta)
 			if (eta<350000)
@@ -42829,11 +40947,11 @@ void print_progress(int64_t ts, int64_t td,int64_t i_scritti,int i_percentuale)
 				}
 #else
 				int64_t projection=ts;
-	
+
 				if (command=='a')
 					if ((td>0) && (ts>0))
 						projection=i_scritti/(1.0*td/ts);
-	
+
 				if (i_percentuale>0)
 					myprintf("(%03d%%) %6.2f%% %02d:%02d:%02d  (%10s)->(%10s)=>(%10s) %10s/sec\r", i_percentuale,td*100.0/(ts+0.5),int(eta/3600), int(eta/60)%60, int(eta)%60, tohuman(td),tohuman2(i_scritti),tohuman3(projection),tohuman4(td/secondi));
 				else
@@ -42847,7 +40965,7 @@ void print_progress(int64_t ts, int64_t td,int64_t i_scritti,int i_percentuale)
 				}
 #endif
 			}
-	}				
+	}
 }
 /// work with a batch job
 void avanzamento(int64_t i_lavorati,int64_t i_totali,int64_t i_inizio)
@@ -42939,20 +41057,20 @@ bool compareFragmentList(DTMap::const_iterator p, DTMap::const_iterator q) {
   return p->first<q->first;
 }
 // Sort by sortkey, then by full path
-bool compareFilename(DTMap::iterator ap, DTMap::iterator bp) 
+bool compareFilename(DTMap::iterator ap, DTMap::iterator bp)
 {
   if (ap->second.data!=bp->second.data)
     return ap->second.data<bp->second.data;
   return ap->first<bp->first;
 }
-bool comparedatethenfilename(DTMap::iterator ap, DTMap::iterator bp) 
+bool comparedatethenfilename(DTMap::iterator ap, DTMap::iterator bp)
 {
 	if (ap->second.date!=bp->second.date)
 		return ap->second.date<bp->second.date;
 	return ap->first<bp->first;
 }
 
-bool comparesizethenfilename(DTMap::iterator ap, DTMap::iterator bp) 
+bool comparesizethenfilename(DTMap::iterator ap, DTMap::iterator bp)
 {
 	if (ap->second.size!=bp->second.size)
 		return ap->second.size<bp->second.size;
@@ -42962,7 +41080,7 @@ bool comparesizethenfilename(DTMap::iterator ap, DTMap::iterator bp)
 
 
 ////// ext;size;name;hash;date;data
-bool compareorderby(DTMap::iterator a, DTMap::iterator b) 
+bool compareorderby(DTMap::iterator a, DTMap::iterator b)
 {
 	if (orderby=="")
 		return false;
@@ -43032,12 +41150,12 @@ bool compareorderby(DTMap::iterator a, DTMap::iterator b)
 
 /// kind of "unrolled" for gui sort"
 
-bool singlecompareorderby(DTMap::iterator a, DTMap::iterator b) 
+bool singlecompareorderby(DTMap::iterator a, DTMap::iterator b)
 {
 	if (orderby=="")
 		return false;
-	
-	
+
+
 	/// full | size | date | ext |hash
 
 	if (orderby=="date")
@@ -43131,8 +41249,8 @@ void help_range()
 	moreprint("+ : -range X:Y    Range versions [X-Y]");
 	moreprint("+ : -range X:     Range versions [X-THE LAST]");
 	moreprint("+ : -range :X     Range versions [1-X]");
-	moreprint("+ : -range X      Range is single version X");	
-	moreprint("+ : -range ::X    Last X versions");	
+	moreprint("+ : -range X      Range is single version X");
+	moreprint("+ : -range ::X    Last X versions");
 }
 
 void help_date()
@@ -43177,7 +41295,7 @@ void help_printhashline(bool i_flagadd)
 		if (p->second.flagiszpaq)
 			risultato+=p->second.switchname+" ";
 	moreprint(risultato.c_str());
-	
+
 	if (!i_flagadd)
 	{
 		risultato="+ : ";
@@ -43242,7 +41360,7 @@ string help_autotest(bool i_usage,bool i_example)
 		moreprint("Prepare a z:\\pippo\\dotest.bat      autotest -all -verbose -to z:\\pippo");
 	}
 	return "Autotest for hidden errors after compiling from source";
-	
+
 }
 string help_isopen(bool i_usage,bool i_example)
 {
@@ -43257,7 +41375,7 @@ string help_isopen(bool i_usage,bool i_example)
 		moreprint("Check some thunderbird running       isopen c:\\pippo\\INBOX -exec_ok killthunderbird.bat");
 	}
 	return("Check if a file isopen (by other software)");
-	
+
 }
 string help_versum(bool i_usage,bool i_example)
 {
@@ -43296,11 +41414,11 @@ string help_versum(bool i_usage,bool i_example)
 		moreprint("Compare the crc32 with the .zpaq     versum \"*.zpaq\" -fasttxt");
 		moreprint("Compare the quick with the .zpaq     versum \"*.zpaq\" -fasttxt -quick");
 		moreprint("Automagically compare  .zpaq         versum \"*.zpaq\"");
-		
+
 	}
 	return("Hashdeep-like double check of hashes");
 }
-///zpaqfranz backup z:\prova_????.zpaq c:\zpaqfranz 
+///zpaqfranz backup z:\prova_????.zpaq c:\zpaqfranz
 
 
 string help_backup(bool i_usage,bool i_example)
@@ -43454,7 +41572,7 @@ string help_setpassword(bool i_usage,bool i_example)
 }
 string help_trim(bool i_usage,bool i_example)
 {
-		
+
 	if (i_usage)
 	{
 		moreprint("CMD   trim        Trim incomplete .zpaq file");
@@ -43472,7 +41590,7 @@ string help_trim(bool i_usage,bool i_example)
 		moreprint("Trim file w/verify:                  trim z:\\1.zpaq -to d:\\small.zpaq -verify");
 	}
 	return("Trim .zpaq archive from incomplete transaction");
-	
+
 }
 string help_a(bool i_usage,bool i_example)
 {
@@ -43529,7 +41647,7 @@ string help_a(bool i_usage,bool i_example)
 		moreprint("+ : -hashdeep     Add the hashdeep MD5 VFILE (-ssd for multithread)");
 		moreprint("+ : -fasttxt      Write out CRC32 on archivename_crc32.txt");
 		moreprint("+ : -fasttxt -verify Post-check of crc32.txt");
-		
+
 		help_orderby();
 #if defined(_WIN32)
 		moreprint("+ : -sfx autoz    Make SFX autoz.exe (on Win)");
@@ -43545,7 +41663,7 @@ string help_a(bool i_usage,bool i_example)
 		moreprint("+ : -image        Imaging a drive - ADMIN rights required");
 #endif
 	}
-	if (i_usage && i_example) 
+	if (i_usage && i_example)
 		moreprint("    Examples:");
 	if (i_example)
 	{
@@ -43589,7 +41707,7 @@ string help_a(bool i_usage,bool i_example)
 		moreprint("Raw imaging drive E with built in    a z:\\2.zpaq e: -image");
 		moreprint("Imaging C with pwd and big buffer    a z:\\2.zpaq c: -image -buffer 1MB -key pippo");
 		moreprint("Create VFILE-l-hashdeep.txt w/md5    a z:\\2.zpaq *.txt *.cpp -hashdeep -ssd");
-		
+
 #endif
 	}
 	return("Add or append files to archive");
@@ -43665,7 +41783,7 @@ string help_x(bool i_usage,bool i_example)
 		moreprint("+ : -all          All versions");
 		moreprint("+ : -all -comment Restore all versions with DATETIME and comment (if any)");
 		moreprint("+ : -checksum     force a full hash-code verify (if added with -checksum)");
-		moreprint("+ : -zero         extract to dummy, 0-length files. Da a empty-full restore.");
+		moreprint("+ : -zero         extract to dummy, 0-length files. Da an empty-full restore.");
 		moreprint("+ : -zero -debug  extract full-sized files, 0 filled (Dry restore)");
 		moreprint("+ : -zero -debug  -kill  Only extract filenames (0 bytes long)");
 		moreprint("+ : -utf          change everything non latin to latin (Linux/*Nix => NTFS compatibility)");
@@ -43690,7 +41808,9 @@ string help_x(bool i_usage,bool i_example)
 	if (i_usage && i_example) moreprint("    Examples:");
 	if (i_example)
 	{
-		moreprint("Extract into folder muz7:            x z:\\1.zpaq -to z:\\muz7\\");
+		moreprint("Single file to file extraction       x 1.zpaq \"/k/foo/b.md\" -to \"/tmp/restored/b.md\"");
+		moreprint("Single file to folder tree           x 1.zpaq -only \"*whatever\" -to /tmp/foldertree");
+		moreprint("Everything into folder muz7:         x z:\\1.zpaq -to z:\\muz7\\");
 		moreprint("0-bytes files (check restoration):   x z:\\1.zpaq -to z:\\muz7\\ -kill");
 		moreprint("Extract into single directory:       x z:\\1.zpaq -to z:\\muz7\\ -flat");
 		moreprint("Extract without utf,<255,.eml:       x z:\\1.zpaq -to z:\\muz7\\ -utf -fix255 -fixeml");
@@ -43703,7 +41823,7 @@ string help_x(bool i_usage,bool i_example)
 		moreprint("Extract all *.xls into new archive:  x z:\\1.zpaq *.xls -repack onlyxls.zpaq");
 		moreprint("Extract from a VSS (Windows):        x z:\\1.zpaq \\\\?\\GLOBALROOT\\Device\\HarddiskVolumeShadowCopy1\\path -to d:\\output");
 		moreprint("Replace path in extract              x 1.zpaq -find /tank/ -replace z:\\uno\\");
-		moreprint("Change path in extract, longpath     x 1.zpaq -replace z:\\uno\\ -longpath");		
+		moreprint("Change path in extract, longpath     x 1.zpaq -replace z:\\uno\\ -longpath");
 		moreprint("Create files' tree                   x 1.zpaq -to z:\\testdir\\ -debug -kill -zero -longpath");
 		moreprint("Range-extract version                x copia.zpaq -only *comp.pas -to z:\\allcomp -all -range 100:1000");
 		moreprint("Restore datetime and comments        x copia.zpaq -to z:\\prova\\ -all -comment");
@@ -43712,11 +41832,11 @@ string help_x(bool i_usage,bool i_example)
 		moreprint("Extract multiple zpaqs               x \"vu*.zpaq\" -to z:\\pippo\\");
 	}
 	return("Extract file(s)");
-	
+
 }
 string help_l(bool i_usage,bool i_example)
 {
-	
+
 	if (i_usage)
 	{
 		moreprint("CMD   l (list)");
@@ -43759,9 +41879,10 @@ string help_l(bool i_usage,bool i_example)
 		moreprint("List files >100M of 2017             l z:\\1.zpaq -minsize 100m -datefrom 2017 -dateto 2017");
 		moreprint("List ORDERED files (-stdout)         l z:\\1.zpaq -stdout");
 		moreprint("Compare to files on disk             l z:\\1.zpaq \"//192.168.1.100/scanner/\" -ssd");
+		moreprint("Find the versions of a file          l z:\\1.zpaq -only \"*/the/file.doc\" -all");
 	}
 	return("List file(s)");
-	
+
 }
 string help_i(bool i_usage,bool i_example)
 {
@@ -43771,6 +41892,7 @@ string help_i(bool i_usage,bool i_example)
 		moreprint("+ :               Directly shows the versions into the archive, with size and comments");
 		moreprint("+ : -comment      Shows comments (if any)");
 		moreprint("+ : -stat         Count 'weird' files");
+		help_range();
 	}
 	if (i_usage && i_example) moreprint("    Examples:");
 	if (i_example)
@@ -43778,9 +41900,11 @@ string help_i(bool i_usage,bool i_example)
 		moreprint("Show versions info (command i):      i z:\\1.zpaq");
 		moreprint("Count 'not good filenames':          i z:\\1.zpaq -stat");
 		moreprint("Shows version comment:               i z:\\1.zpaq -comment");
+		moreprint("Show version 153:                    i z:\\1.zpaq -range 153");
+		moreprint("Show last 5 versions:                i z:\\1.zpaq -range ::5");
 	}
 	return("File (archive) information");
-	
+
 }
 string help_q(bool i_usage,bool i_example)
 {
@@ -43809,11 +41933,11 @@ string help_q(bool i_usage,bool i_example)
 		moreprint("For multi-PC 'backup' on one zpaq    q z:\\1.zpaq -frugal -to c:\\snap_$pcname -verbose");
 	}
 	return("Windows archive of C: with VSS");
-	
+
 }
 string help_gui(bool i_usage,bool i_example)
 {
-	
+
 	if (i_usage)
 	{
 		moreprint("CMD   gui Start text-based GUI (experimental on Windows)");
@@ -43824,7 +41948,7 @@ string help_gui(bool i_usage,bool i_example)
 		moreprint("Launch the GUI                       gui");
 	}
 	return("Windows text-based GUI (listing-extraction)");
-	
+
 }
 string help_g(bool i_usage,bool i_example)
 {
@@ -43871,7 +41995,7 @@ string help_find(bool i_usage,bool i_example)
 }
 string help_e(bool i_usage,bool i_example)
 {
-		
+
 	if (i_usage)
 	{
 		moreprint("CMD   e Extract on current folder");
@@ -43935,7 +42059,7 @@ string help_rsync(bool i_usage,bool i_example)
 }
 string help_t(bool i_usage,bool i_example)
 {
-	
+
 	if (i_usage)
 	{
 		moreprint("CMD   t (test)");
@@ -43994,7 +42118,7 @@ string help_v(bool i_usage,bool i_example)
 }
 string help_p(bool i_usage,bool i_example)
 {
-		
+
 	if (i_usage)
 	{
 		moreprint("CMD   p (paranoid test)");
@@ -44016,11 +42140,11 @@ string help_p(bool i_usage,bool i_example)
 		moreprint("Very paranoid, use lots of RAM:      p z:\\1.zpaq -verify");
 	}
 	return("Paranoid test (slow, lot of RAM needed)");
-	
+
 }
 string help_c(bool i_usage,bool i_example)
 {
-		
+
 	if (i_usage)
 	{
 		moreprint("CMD   c (compare dirs)");
@@ -44035,7 +42159,7 @@ string help_c(bool i_usage,bool i_example)
 		moreprint("+ : -715          Work as 7.15 (with .zfs and ADS)");
 		moreprint("+ : -forcezfs     Include .zfs");
 		moreprint("+ : -verify       Run hash compare");
-		
+
 	}
 	if (i_usage && i_example) moreprint("    Examples:");
 	if (i_example)
@@ -44045,10 +42169,10 @@ string help_c(bool i_usage,bool i_example)
 		moreprint("Hashed compare d0 against d1,d2,d3:  c c:\\d0 k:\\d1 j:\\d2 p:\\d3 -verify");
 	}
 	return("Compare one master dir against one or more slave dir(s)");
-	
+
 }
 string help_s(bool i_usage,bool i_example)
-{		
+{
 	if (i_usage)
 	{
 		moreprint("CMD   s (size)");
@@ -44119,6 +42243,7 @@ string help_r(bool i_usage,bool i_example)
 		moreprint("+ : -zero         Fill all output file with zeros (for debug)");
 		moreprint("+ : -verbose      Show internal timings");
 		moreprint("+ : -buffer X     Use a input buffer of X bytes (default: 1MB)");
+		moreprint("+ : -pakka        Check-before-touch (faster for big tree over LAN)");
 #ifdef _WIN32
 		moreprint("+ : -big          Special Windows function for big files over LAN");
 #endif
@@ -44134,6 +42259,7 @@ string help_r(bool i_usage,bool i_example)
 		moreprint("Robocopy d0 in d1, forced (WET run): r c:\\d0 k:\\d1 j:\\d2 -kill -space");
 		moreprint("Robocopy append mode      (WET run): r c:\\d0 z:\\backup_$day -append -kill");
 		moreprint("Robocopy d0 in d1,w/infos (WET run): r c:\\d0 k:\\d1 -kill -verbose");
+		moreprint("Robocopy d0=>d1 over LAN  (WET run): r c:\\d0 \\\\nas\\d1 -kill -verbose -pakka");
 #ifdef _WIN32
 		moreprint("Huge file to NAS (Windows)(WET run): r c:\\d0 \\\\nas\\share\\d1 -kill -big");
 #endif
@@ -44164,7 +42290,7 @@ string help_cp(bool i_usage,bool i_example)
 		moreprint("Resumable copy (append only)         cp k:\\*.zpaq -to z:\\pluto -append");
 	}
 	return("Friendly file copy with ETA (resumable)");
-	
+
 }
 string help_zfs(bool i_usage,bool i_example)
 {
@@ -44199,7 +42325,7 @@ string help_zfsadd(bool i_usage,bool i_example)
 		moreprint("+ : -script pi.sh Write a script-ready on pi.sh (alias -out)");
 		moreprint("+ : -force        Do the freezing (wet run)");
 	}
-	if (i_usage && i_example) 
+	if (i_usage && i_example)
 		moreprint("    Examples:");
 	if (i_example)
 	{
@@ -44219,10 +42345,10 @@ string help_zfspurge(bool i_usage,bool i_example)
 {
 	if (i_usage)
 	{
-		moreprint("CMD   zfspurge    Destroy selected zfs snapshot (works like zfslist)");	
+		moreprint("CMD   zfspurge    Destroy selected zfs snapshot (works like zfslist)");
 		moreprint("+ : -script pi.sh Write a script-ready on pi.sh (alias -out)");
 	}
-	if (i_usage && i_example) 
+	if (i_usage && i_example)
 		moreprint("    Examples:");
 	if (i_example)
 	{
@@ -44243,10 +42369,10 @@ string help_zfslist(bool i_usage,bool i_example)
 {
 	if (i_usage)
 	{
-		moreprint("CMD   zfslist     Show (/filtering) existing zfs snapshot");	
+		moreprint("CMD   zfslist     Show (/filtering) existing zfs snapshot");
 		moreprint("+ : -script pi.sh Write a script-ready on pi.sh (alias -out)");
 	}
-	if (i_usage && i_example) 
+	if (i_usage && i_example)
 		moreprint("    Examples:");
 	if (i_example)
 	{
@@ -44277,9 +42403,9 @@ string help_zfsproxbackup(bool i_usage,bool i_example)
 		moreprint("+ : -kill         Remove snapshot (after backup)");
 		moreprint("+ : -all          Get all VM");
 		moreprint("+ : -not          Do not backup (exclude)");
-		moreprint("+ : -snapshot kj  Make 'snapname' to kj (default: francoproxmox)");	
+		moreprint("+ : -snapshot kj  Make 'snapname' to kj (default: francoproxmox)");
 	}
-	if (i_usage && i_example) 
+	if (i_usage && i_example)
 		moreprint("    Examples:");
 	if (i_example)
 	{
@@ -44303,7 +42429,7 @@ string help_zfsproxrestore(bool i_usage,bool i_example)
 		moreprint("+ : -kill         Remove snapshot (after backup)");
 		moreprint("+ : -not          Do not restore (exclude)");
 	}
-	if (i_usage && i_example) 
+	if (i_usage && i_example)
 		moreprint("    Examples:");
 	if (i_example)
 	{
@@ -44320,18 +42446,18 @@ string help_zfsbackup(bool i_usage,bool i_example)
 	{
 		moreprint("CMD   zfsbackup   Backup w/incremental zfs snapshots for long-term storage");
 		moreprint("+ :               Usually root privileges required");
-		moreprint("+ : -snapshot kj  Make 'snapname' to kj (default: zpaqfranco)");	
+		moreprint("+ : -snapshot kj  Make 'snapname' to kj (default: zpaqfranco)");
 	}
-	if (i_usage && i_example) 
+	if (i_usage && i_example)
 		moreprint("    Examples:");
 	if (i_example)
 	{
 			moreprint("Update tank/d backup,retain snapshot zfsbackup /tmp/incr.zpaq tank/d");
 			moreprint("Update tank backup,delete snapshot   zfsbackup /tmp/incr.zpaq tank -kill");
 			moreprint("Update tank/d backup,w/hashdeep      zfsbackup /tmp/incr.zpaq tank/d");
-			moreprint("Choose snapmark to 'mycopy'          zfsbackup /tmp/incr.zpaq tank/d -snapshot mycopy");		
+			moreprint("Choose snapmark to 'mycopy'          zfsbackup /tmp/incr.zpaq tank/d -snapshot mycopy");
 	}
-	return("backup of zfs' streams");
+	return("Backup of zfs' streams");
 }
 
 string help_zfsrestore(bool i_usage,bool i_example)
@@ -44339,9 +42465,9 @@ string help_zfsrestore(bool i_usage,bool i_example)
 	if (i_usage)
 	{
 		moreprint("CMD   zfsrestore  Prepare a script for restoring from EXTRACTED .zfs backup files");
-		moreprint("+ : -snapshot kj  Make 'snapname' to kj (default: franco)");	
+		moreprint("+ : -snapshot kj  Make 'snapname' to kj (default: franco)");
 	}
-	if (i_usage && i_example) 
+	if (i_usage && i_example)
 		moreprint("    Examples:");
 	if (i_example)
 	{
@@ -44356,9 +42482,9 @@ string help_zfsreceive(bool i_usage,bool i_example)
 	if (i_usage)
 	{
 		moreprint("CMD   zfsreceive  Prepare a script for restoring from zpaq archive");
-		moreprint("+ : -snapshot kj  Make 'snapname' to kj (default: franco)");	
+		moreprint("+ : -snapshot kj  Make 'snapname' to kj (default: franco)");
 	}
-	if (i_usage && i_example) 
+	if (i_usage && i_example)
 		moreprint("    Examples:");
 	if (i_example)
 	{
@@ -44398,7 +42524,7 @@ string help_m(bool i_usage,bool i_example)
 		moreprint("+ : -space            Ignore lack of free space");
 		moreprint("+ : -verify           Double-check (XXH3 hash test)");
 	}
-	if (i_usage && i_example) 
+	if (i_usage && i_example)
 		moreprint("    Examples:");
 	if (i_example)
 	{
@@ -44428,7 +42554,7 @@ string help_d(bool i_usage,bool i_example)
 		moreprint("Dedup WITHOUT MERCY (wet run,sha256):d c:\\d0\\ -force -sha256");
 	}
 	return("Deduplicate files inside a single folder WITHOUT MERCY");
-	
+
 }
 string help_utf(bool i_usage,bool i_example)
 {
@@ -44459,7 +42585,7 @@ string help_utf(bool i_usage,bool i_example)
 		*/
 	}
 	return("Convert filenames to latin, fix too long filenames etc");
-	
+
 }
 string help_f(bool i_usage,bool i_example)
 {
@@ -44482,7 +42608,7 @@ string help_f(bool i_usage,bool i_example)
 		moreprint("Zero free space (WITH verify):       f z:\\ -zero -verify");
 	}
 	return("Free disk space fill (=reliability test) or wipe (privacy)");
-	
+
 }
 string help_summa(bool i_usage,bool i_example)
 {
@@ -44526,7 +42652,7 @@ string help_summa(bool i_usage,bool i_example)
 		moreprint("like md5sum                          sum *.txt -md5 -pakka -noeta -stdout -nosort");
 	}
 	return("Calc hash/checksums, find duplicated files");
-	
+
 }
 string help_dir(bool i_usage,bool i_example)
 {
@@ -44557,7 +42683,7 @@ string help_dir(bool i_usage,bool i_example)
 		moreprint("Better than dir:                     dir c:\\*.cpp /s /os -n 100");
 	}
 	return("A better dir (yes, Windows' dir)");
-	
+
 }
 string help_k(bool i_usage,bool i_example)
 {
@@ -44579,7 +42705,7 @@ string help_k(bool i_usage,bool i_example)
 		moreprint("extract again (maybe it's huge):     k z:\\1.zpaq c:\\z -to z:\\knb");
 	}
 	return("Kill (delete) everything not in archive (RISKY!)");
-	
+
 }
 string help_n(bool i_usage,bool i_example)
 {
@@ -44737,7 +42863,7 @@ string help_voodooswitches(bool i_usage,bool i_example)
 		moreprint("  t8,24: MIX2 last 2 models, N1 context bits, learning rate N2");
 	}
 	return("Nerd's switches");
-	
+
 }
 void Jidac::load_help_map()
 {
@@ -44809,7 +42935,7 @@ void Jidac::load_help_map()
 }
 
 
-void Jidac::usage(bool i_flagdie=true) 
+void Jidac::usage(bool i_flagdie=true)
 {
 	moreprint("Usage: zpaqfranz command archive.zpaq files|directories -switches");
 	moreprint("       double quote for multipart archive name => \"test_???.zpaq\"");
@@ -44870,9 +42996,9 @@ void Jidac::helphelp()
 	moreprint(" ");
 #endif
 	moreprint("Extended help:   zpaqfranz h h                ALL IN:   zpaqfranz h full");
-}	
+}
 //// print a lot more
-void Jidac::usageall(string i_command) 
+void Jidac::usageall(string i_command)
 {
 	load_help_map();
 	if (i_command=="")
@@ -44881,14 +43007,14 @@ void Jidac::usageall(string i_command)
 		moreprint("    zpaqfranz   h a   => ask help and examples for command 'a'");
 		moreprint("    zpaqfranz -he a   => ask examples for command 'a'");
 		moreprint(" ");
-		for (MAPPAHELP::iterator p=help_map.begin(); p!=help_map.end(); ++p) 
+		for (MAPPAHELP::iterator p=help_map.begin(); p!=help_map.end(); ++p)
 		{
 			char linea[200];
 			string temp=(*p->second)(false,false);
 			snprintf(linea,sizeof(linea),"%-10s %s",p->first.c_str(),temp.c_str());
 			moreprint(linea);
 		}
-		for (MAPPAHELP::iterator p=switches_map.begin(); p!=switches_map.end(); ++p) 
+		for (MAPPAHELP::iterator p=switches_map.begin(); p!=switches_map.end(); ++p)
 		{
 			char linea[200];
 			string temp=(*p->second)(false,false);
@@ -44915,7 +43041,7 @@ void Jidac::usageall(string i_command)
 //	if not found => show everything
 		usage(false); // do not seppuku!
 		moreprint("Usage full:");
-		for (MAPPAHELP::iterator p=help_map.begin(); p!=help_map.end(); ++p) 
+		for (MAPPAHELP::iterator p=help_map.begin(); p!=help_map.end(); ++p)
 		{
 			(*p->second)(true,true);
 			morebar('-');
@@ -44937,14 +43063,14 @@ void Jidac::usageall(string i_command)
 	}
 	seppuku();
 }
-void Jidac::examples(string i_command) 
+void Jidac::examples(string i_command)
 {
 	load_help_map();	// not in the constructor!
 //	if not found => show everything
 	MAPPAHELP::iterator a=help_map.find(i_command);
 	if (a==help_map.end())
 	{
-		for (MAPPAHELP::iterator p=help_map.begin(); p!=help_map.end(); ++p) 
+		for (MAPPAHELP::iterator p=help_map.begin(); p!=help_map.end(); ++p)
 		{
 			(*p->second)(false,true);
 			morebar('-');
@@ -44968,11 +43094,11 @@ void open_output(string i_filename)
 		}
 }
 // Rename name using tofiles[]
-string Jidac::rename(string name) 
+string Jidac::rename(string name)
 {
 	if (searchfrom!="")
 	{
-		replace(name,searchfrom,replaceto);	
+		replace(name,searchfrom,replaceto);
 		if (flagdebug)
 			myprintf("27144: name after search - replace %s\n",name.c_str());
 	}
@@ -45001,7 +43127,7 @@ string Jidac::rename(string name)
 					printUTF8(name.c_str());
 					myprintf("| => fixed to |");
 				}
-				
+
 				if (name.size()>2) // fix for *nix relative paths
 					if (name[0]=='.')
 						if (name[1]=='/')
@@ -45018,7 +43144,7 @@ string Jidac::rename(string name)
 						if (name[1]==':')
 							if (name[2]=='/')
 								name[1]='_';
-									
+
 				string finale=includetrailingbackslash(tofiles[0])+name;
 				if (flagdebug)
 				{
@@ -45031,7 +43157,7 @@ string Jidac::rename(string name)
 	if (flagnopath)
 	{
 		string myname=name;
-		for (unsigned i=0; i<files.size(); ++i) 
+		for (unsigned i=0; i<files.size(); ++i)
 		{
 			string pathwithbar=includetrailingbackslash(extractfilepath(files[i]));
 			if (flagdebug)
@@ -45046,10 +43172,10 @@ string Jidac::rename(string name)
 	{
 		name=append_path(tofiles[0], name);
 	}
-	else 
+	else
 	{  // replace prefix files[i] with tofiles[i]
 		const int n=name.size();
-		for (unsigned i=0; i<files.size() && i<tofiles.size(); ++i) 
+		for (unsigned i=0; i<files.size() && i<tofiles.size(); ++i)
 		{
 			const int fn=files[i].size();
 			if (fn<=n && files[i]==name.substr(0, fn))
@@ -45058,7 +43184,7 @@ string Jidac::rename(string name)
 	}
 	myreplaceall(name,"/./","/_/");
 	myreplaceall(name,"/../","/__/");
-	
+
   return name;
 }
 string Jidac::getpassword()
@@ -45073,7 +43199,7 @@ string Jidac::getpassword()
 			return "";
 		}
 	return myresult;
-	
+
 	/*
 	while (1)
 	{
@@ -45112,7 +43238,7 @@ void decoderange(string i_range)
 -range 2:4 -> Extract all versions from 2 to 4
 -range 2: -> Extract all versions from 2 to <all that exist>
 -range :3 -> Extract all versions from 1 to 3 (equal to: 1:3)
--range 2 
+-range 2
 -range ::3 -> Extract the last 3
 */
 	g_rangefrom	=0;
@@ -45142,7 +43268,7 @@ void decoderange(string i_range)
 				}
 			}
 	}
-	
+
 	i=0;
 	while (i<i_range.size())
 	{
@@ -45164,7 +43290,7 @@ void decoderange(string i_range)
 		myprintf("26418: prima  |%s|\n",primaparte.c_str());
 	}
 	bool nodivider=(i==i_range.size());
-	
+
 	if (i<i_range.size())
 	{
 		i++;
@@ -45187,7 +43313,7 @@ void decoderange(string i_range)
 		g_rangefrom=1;
 	else
 		(g_rangefrom=atol(primaparte.c_str()));
-		
+
 	if (secondaparte=="")
 	{
 		if (nodivider)
@@ -45197,12 +43323,12 @@ void decoderange(string i_range)
 	}
 	else
 		(g_rangeto=atol(secondaparte.c_str()));
-	
+
 	if (flagdebug)
 	{
 		myprintf("26450: Rangefrom  %d\n",g_rangefrom);
 		myprintf("26451: Rangeto    %d\n",g_rangeto);
-	}	
+	}
 
 	if (g_rangeto<g_rangefrom)
 	{
@@ -45234,7 +43360,7 @@ void decoderange(string i_range)
 	report relative links (/home => usr/home)
 */
 #ifdef unix
-string my_realpath(std::string const& i_path) 
+string my_realpath(std::string const& i_path)
 {
 #ifdef ANCIENT
 	char buf[16384];
@@ -45246,11 +43372,11 @@ string my_realpath(std::string const& i_path)
 		error("33975:  realpath");
 	}
     char *res=realpath(i_path.c_str(),buf);
-    if (res) 
-	{ 
+    if (res)
+	{
 		return buf;
-    } 
-	else 
+    }
+	else
 	{
 		if (flagdebug)
 			myprintf("38761: error on realpath of %s\n",i_path.c_str());
@@ -45285,7 +43411,7 @@ string finalizza_xxhash64(void* p_hash)
 		return "";
 	XXHash64* casted=(XXHash64*)p_hash;
 	return bin2hex_64((*casted).hash());
-	
+
 	//	return binarytohex((const unsigned char*)(*casted).hash(),8);
 }
 string finalizza_sha1(void* p_hash)
@@ -45328,7 +43454,7 @@ string finalizza_blake3(void* p_hash)
 	blake3_hasher * casted=(blake3_hasher *)p_hash;
 	uint8_t output[BLAKE3_OUT_LEN];
 	blake3_hasher_finalize(casted,output,BLAKE3_OUT_LEN);
-	return binarytohex((const unsigned char*)output,BLAKE3_OUT_LEN);	
+	return binarytohex((const unsigned char*)output,BLAKE3_OUT_LEN);
 }
 string finalizza_whirlpool(void* p_hash)
 {
@@ -45354,7 +43480,7 @@ string finalizza_highway128(void* p_hash)
 	HighwayHashCat * casted=(HighwayHashCat *)p_hash;
 	uint64_t hash[2];
 	HighwayHashCatFinish128(casted,hash);
-	return binarytohex((const unsigned char*)&hash,16);	
+	return binarytohex((const unsigned char*)&hash,16);
 }
 string finalizza_highway256(void* p_hash)
 {
@@ -45363,7 +43489,7 @@ string finalizza_highway256(void* p_hash)
 	HighwayHashCat * casted=(HighwayHashCat *)p_hash;
 	uint64_t hash[4];
 	HighwayHashCatFinish256(casted,hash);
-	return binarytohex((const unsigned char*)&hash,32);	
+	return binarytohex((const unsigned char*)&hash,32);
 }
 
 string finalizza_crc32(void* p_hash)
@@ -45412,11 +43538,11 @@ bool Jidac::cli_filesandcommand(string i_opt,string i_string,char i_command,int 
 		seppuku();
 		return false;
 	}
-	
+
 	if (i_opt==i_string)
 	{
-		command=i_command; 
-		while (++(*i_i)<argc && argv[(*i_i)][0]!='-')  
+		command=i_command;
+		while (++(*i_i)<argc && argv[(*i_i)][0]!='-')
 			files.push_back(argv[(*i_i)]);
 		(*i_i)--;
 		if ((!flagpakka) && (!flagsilent) && (!flagstdout))
@@ -45484,7 +43610,7 @@ bool Jidac::cli_getstring	(string i_opt,string i_string,bool	i_flagoptional,stri
 	}
 	if ((i_flagoptional) && (i_short=="BEQUIET"))
 		return false;
-	if (i_opt==i_string) 
+	if (i_opt==i_string)
 	{
 		(*o_thestring)=i_default;
 		if ( ((*i_i)<argc-1)  )
@@ -45499,7 +43625,7 @@ bool Jidac::cli_getstring	(string i_opt,string i_string,bool	i_flagoptional,stri
 	if (i_short.size()==2)
 	{
 		if ((i_opt[0]=='-') && (isdigit(i_opt[2])))
-			if (i_opt[1]==i_short[1]) 
+			if (i_opt[1]==i_short[1])
 			{
 				(*o_thestring)=i_default;
 				(*o_thestring)=argv[(*i_i)]+2;
@@ -45508,7 +43634,7 @@ bool Jidac::cli_getstring	(string i_opt,string i_string,bool	i_flagoptional,stri
 				return true;
 			}
 	}
-	
+
 	return false;
 }
 
@@ -45521,10 +43647,10 @@ bool Jidac::cli_getarray(string i_opt,string i_string,int argc,const char** argv
 		seppuku();
 		return false;
 	}
-	
-	if (i_opt==i_string) 
-	{ 
-		while (++(*i_i)<(argc) && (argv[(*i_i)][0]!='-')) 
+
+	if (i_opt==i_string)
+	{
+		while (++(*i_i)<(argc) && (argv[(*i_i)][0]!='-'))
 		{
 			if (o_stringtype!=NULL)
 			{
@@ -45537,7 +43663,7 @@ bool Jidac::cli_getarray(string i_opt,string i_string,int argc,const char** argv
 				(*o_files).push_back(argv[(*i_i)]);
 		}
 		--(*i_i);
-		
+
 		if ((!flagpakka) && (!flagsilent) && (!flagstdout))
 			if ((*o_files).size()>0)
 			{
@@ -45560,7 +43686,7 @@ bool Jidac::cli_getint(string i_opt,string i_string,bool	i_flagoptional,string i
 	}
 
 
-	if (i_opt==i_string) 
+	if (i_opt==i_string)
 	{
 		(*o_thenumber)=i_default;
 		if (i_flagoptional)
@@ -45583,7 +43709,7 @@ bool Jidac::cli_getint(string i_opt,string i_string,bool	i_flagoptional,string i
 	if (i_short.size()==2)
 	{
 		if ((i_opt[0]=='-') && (isdigit(i_opt[2])))
-			if (i_opt[1]==i_short[1]) 
+			if (i_opt[1]==i_short[1])
 			{
 				(*o_thenumber)=i_default;
 				(*o_thenumber)=(int)myatoll(argv[(*i_i)]+2);
@@ -45605,7 +43731,7 @@ bool Jidac::cli_getint64(string i_opt,string i_string,bool	i_flagoptional,string
 
 	if (i_short=="BEQUIET")
 		return false;
-	if (i_opt==i_string) 
+	if (i_opt==i_string)
 	{
 		(*o_thenumber)=i_default;
 		if (i_flagoptional)
@@ -45637,8 +43763,8 @@ bool Jidac::cli_getuint(string i_opt,string i_string,bool	i_flagoptional,string 
 
 	if (i_short=="BEQUIET")
 		return false;
-		
-	if (i_opt==i_string) 
+
+	if (i_opt==i_string)
 	{
 		(*o_thenumber)=i_default;
 		if (i_flagoptional)
@@ -45668,7 +43794,7 @@ bool Jidac::cli_getuint64(string i_opt,string i_string,bool	i_flagoptional,strin
 	}
 	if (i_short=="BEQUIET")
 		return false;
-	if (i_opt==i_string) 
+	if (i_opt==i_string)
 	{
 		(*o_thenumber)=i_default;
 		if (i_flagoptional)
@@ -45704,7 +43830,7 @@ bool Jidac::cli_getdate(string i_opt,string i_string,int argc,const char** argv,
 				string mytimestamp=argv[(*i_i)+1];
 				(*i_i)++;
 				///format_datetime
-				
+
 				int64_t newdate=encodestringdate(mytimestamp,true);
 				if (newdate!=-1)
 				{
@@ -45727,7 +43853,7 @@ bool Jidac::cli_onlystring(string i_opt,string i_string,string i_alias,string& o
 	}
 	if (i_alias=="")
 		i_alias="@N3b12vc$fjvn4ba";
-	
+
 	if ((i_opt==i_string) || (i_opt==i_alias))
 	{
 		if (o_thefile=="")
@@ -45755,7 +43881,7 @@ bool Jidac::cli_onlystring(string i_opt,string i_string,string i_alias,string& o
 int Jidac::loadparameters(int argc, const char** argv)
 {
 	///printf("*********************** CARICO *******************\n");
-	
+
 	bool flagdummy=false;
 	g_programflags.add(&flag715,			"-715",					"Runs just about like zpaq 7.15",					"a;");
 	g_programflags.add(&flagappend,			"-append",				"Append-only (antiransomware, slow)",				"a;");
@@ -45810,7 +43936,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 	g_programflags.add(&flagvss,			"-vss",					"Enable Volume Shadow Copies",						"a;");
 	g_programflags.add(&flagzero,			"-zero",				"Flag zero",										"");
 	g_programflags.add(&flagquiet,			"-quiet",				"Do not show filesystem errors",												"");
-	
+
 	g_programflags.add(&g_sfxflagforce,		"-sfxforce",			"Sfx force",									"");
 	g_programflags.add(&g_sfxflagall,		"-sfxall",				"Sfx all",										"");
 
@@ -45833,33 +43959,33 @@ int Jidac::loadparameters(int argc, const char** argv)
 	for (int i=0; i<argc; i++)
 	{
 		const string parametro=argv[i];
-		
+
 		if (g_programflags.exists(parametro))
 			g_programflags.settrue(parametro);
-	}	
+	}
 	if (flagdebug)
 		g_programflags.debugga();
-	
+
 	// A bit of refactoring. The boolean differentiate hashes used inside zpaqfranz archive
 	g_mappatipohash.insert(std::pair<int, tipohash>(FRANZO_NONE		 ,	tipohash("NONE",		0,"Disable checksums",											true	,"-nochecksum",		&flagnochecksum,	&finalizza_none,		"")));
 	g_mappatipohash.insert(std::pair<int, tipohash>(FRANZO_CRC_32	 ,	tipohash("CRC-32",	 	8,"Old but ubiquitous, superfast, not very strong",				true	,"-crc32",			&flagcrc32,			&finalizza_crc32,		"")));
 	g_mappatipohash.insert(std::pair<int, tipohash>(FRANZO_XXHASH64	 ,	tipohash("XXHASH64",   16,"Very fast, low CPU usage, zpaqfranz's default",				true	,"-xxhash",			&flagxxhash64,		&finalizza_xxhash64,	"")));
-	g_mappatipohash.insert(std::pair<int, tipohash>(FRANZO_SHA_1	 ,	tipohash("SHA-1",	   40,"Fair speed, very reliable, some collisions known",			true	,"-sha1",			&flagsha1,			&finalizza_sha1,		"08")));	
-	g_mappatipohash.insert(std::pair<int, tipohash>(FRANZO_SHA_256	 ,	tipohash("SHA-256",	   64,"CPU intensive, one of the most reliable. Legal proof in EU",	true	,"-sha256",			&flagsha256,		&finalizza_sha256,		"04")));	
-	g_mappatipohash.insert(std::pair<int, tipohash>(FRANZO_XXH3		 ,	tipohash("XXH3",	   32,"Very fast and strong, zpaqfranz default for file comparing",	true	,"-xxh3",			&flagxxh3,			&finalizza_xxh3,		"02")));	
+	g_mappatipohash.insert(std::pair<int, tipohash>(FRANZO_SHA_1	 ,	tipohash("SHA-1",	   40,"Fair speed, very reliable, some collisions known",			true	,"-sha1",			&flagsha1,			&finalizza_sha1,		"08")));
+	g_mappatipohash.insert(std::pair<int, tipohash>(FRANZO_SHA_256	 ,	tipohash("SHA-256",	   64,"CPU intensive, one of the most reliable. Legal proof in EU",	true	,"-sha256",			&flagsha256,		&finalizza_sha256,		"04")));
+	g_mappatipohash.insert(std::pair<int, tipohash>(FRANZO_XXH3		 ,	tipohash("XXH3",	   32,"Very fast and strong, zpaqfranz default for file comparing",	true	,"-xxh3",			&flagxxh3,			&finalizza_xxh3,		"02")));
 	g_mappatipohash.insert(std::pair<int, tipohash>(FRANZO_MD5		 ,	tipohash("MD5",	       32,"Common, fast, hashdeep compatible. Not cryptographic good",	true	,"-md5",			&flagmd5,			&finalizza_md5,			"01")));
-	g_mappatipohash.insert(std::pair<int, tipohash>(FRANZO_BLAKE3	 ,	tipohash("BLAKE3",	   64,"Fast, CPU intensive (on Win64 HW acceleration), reliable",	true	,"-blake3",			&flagblake3,		&finalizza_blake3,		"03")));	
-	g_mappatipohash.insert(std::pair<int, tipohash>(FRANZO_SHA3		 ,	tipohash("SHA-3",	   64,"Latest NIST standard, very strong",							true	,"-sha3",			&flagsha3,			&finalizza_sha3,		"09")));	
-	g_mappatipohash.insert(std::pair<int, tipohash>(FRANZO_WHIRLPOOL ,	tipohash("WHIRLPOOL", 128,"Slow but very reliable",										true	,"-whirlpool",		&flagwhirlpool,		&finalizza_whirlpool,	"06")));		
-	g_mappatipohash.insert(std::pair<int, tipohash>(FRANZO_HIGHWAY64 ,	tipohash("HIGHWAY64",  16,"Experimental Google's HighwayHash, straight C,  64 bit",		true	,"-highway64",		&flaghighway64,		&finalizza_highway64,	"11")));		
-	g_mappatipohash.insert(std::pair<int, tipohash>(FRANZO_HIGHWAY128,	tipohash("HIGHWAY128", 32,"Experimental Google's HighwayHash, straight C, 128 bit",		true	,"-highway128",		&flaghighway128,	&finalizza_highway128,	"12")));		
-	g_mappatipohash.insert(std::pair<int, tipohash>(FRANZO_HIGHWAY256,	tipohash("HIGHWAY256", 64,"Experimental Google's HighwayHash, straight C, 256 bit",		true	,"-highway256",		&flaghighway256,	&finalizza_highway256,	"13")));		
-	g_mappatipohash.insert(std::pair<int, tipohash>(ALGO_CRC32C		 ,	tipohash("CRC-32C",	    8,"'Castagnoli' variation of CRC-32, HW accelerated",			false	,"-crc32c",			&flagcrc32c,		&finalizza_crc32c,		"")));		
-	g_mappatipohash.insert(std::pair<int, tipohash>(ALGO_WYHASH		 ,	tipohash("WYHASH",	   16,"Maybe the fastest, limited 'strength'",						false	,"-wyhash",			&flagwyhash,		&finalizza_wyhash,		"")));		
-	g_mappatipohash.insert(std::pair<int, tipohash>(ALGO_NILSIMSA	 ,	tipohash("NILSIMSA",  128,"Look for similarities, not differences",						false	,"-nilsimsa",		&flagnilsimsa,		&finalizza_nilsimsa,	"")));		
-	g_mappatipohash.insert(std::pair<int, tipohash>(ALGO_ENTROPY	 ,	tipohash("ENTROPY",     6,"Quick-and-dirty entropy estimator",							false	,"-entropy",		&flagentropy,		&finalizza_entropy,		"")));		
-	g_mappatipohash.insert(std::pair<int, tipohash>(ALGO_QUICK	 	 ,	tipohash("QUICK",      16,"Quick partial hasher",										false	,"-quick",			&flagquick,			&finalizza_xxhash64,	"")));		
-#ifdef _WIN32	
+	g_mappatipohash.insert(std::pair<int, tipohash>(FRANZO_BLAKE3	 ,	tipohash("BLAKE3",	   64,"Fast, CPU intensive (on Win64 HW acceleration), reliable",	true	,"-blake3",			&flagblake3,		&finalizza_blake3,		"03")));
+	g_mappatipohash.insert(std::pair<int, tipohash>(FRANZO_SHA3		 ,	tipohash("SHA-3",	   64,"Latest NIST standard, very strong",							true	,"-sha3",			&flagsha3,			&finalizza_sha3,		"09")));
+	g_mappatipohash.insert(std::pair<int, tipohash>(FRANZO_WHIRLPOOL ,	tipohash("WHIRLPOOL", 128,"Slow but very reliable",										true	,"-whirlpool",		&flagwhirlpool,		&finalizza_whirlpool,	"06")));
+	g_mappatipohash.insert(std::pair<int, tipohash>(FRANZO_HIGHWAY64 ,	tipohash("HIGHWAY64",  16,"Experimental Google's HighwayHash, straight C,  64 bit",		true	,"-highway64",		&flaghighway64,		&finalizza_highway64,	"11")));
+	g_mappatipohash.insert(std::pair<int, tipohash>(FRANZO_HIGHWAY128,	tipohash("HIGHWAY128", 32,"Experimental Google's HighwayHash, straight C, 128 bit",		true	,"-highway128",		&flaghighway128,	&finalizza_highway128,	"12")));
+	g_mappatipohash.insert(std::pair<int, tipohash>(FRANZO_HIGHWAY256,	tipohash("HIGHWAY256", 64,"Experimental Google's HighwayHash, straight C, 256 bit",		true	,"-highway256",		&flaghighway256,	&finalizza_highway256,	"13")));
+	g_mappatipohash.insert(std::pair<int, tipohash>(ALGO_CRC32C		 ,	tipohash("CRC-32C",	    8,"'Castagnoli' variation of CRC-32, HW accelerated",			false	,"-crc32c",			&flagcrc32c,		&finalizza_crc32c,		"")));
+	g_mappatipohash.insert(std::pair<int, tipohash>(ALGO_WYHASH		 ,	tipohash("WYHASH",	   16,"Maybe the fastest, limited 'strength'",						false	,"-wyhash",			&flagwyhash,		&finalizza_wyhash,		"")));
+	g_mappatipohash.insert(std::pair<int, tipohash>(ALGO_NILSIMSA	 ,	tipohash("NILSIMSA",  128,"Look for similarities, not differences",						false	,"-nilsimsa",		&flagnilsimsa,		&finalizza_nilsimsa,	"")));
+	g_mappatipohash.insert(std::pair<int, tipohash>(ALGO_ENTROPY	 ,	tipohash("ENTROPY",     6,"Quick-and-dirty entropy estimator",							false	,"-entropy",		&flagentropy,		&finalizza_entropy,		"")));
+	g_mappatipohash.insert(std::pair<int, tipohash>(ALGO_QUICK	 	 ,	tipohash("QUICK",      16,"Quick partial hasher",										false	,"-quick",			&flagquick,			&finalizza_xxhash64,	"")));
+#ifdef _WIN32
 	g_mappatipohash.insert(std::pair<int, tipohash>(FRANZO_WINHASH64,tipohash("WINHASH64", 	16,"Same as xxhash64 (with Windows' dates)",						true	,"-windate",		&flagwindate,		&finalizza_xxhash64,	"10")));
 #endif
 	// Initialize options to default values
@@ -45901,7 +44027,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 	dirlength			=0;
 	filelength			=0;
 	all					=0;
-	password			=0; 
+	password			=0;
 	index				=0;
 	method				="";
 	repack				="";
@@ -45911,7 +44037,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 	backuptxt			="";
 	backupindex			="";
 	new_password		=0;
-	summary				=-1; 
+	summary				=-1;
 	menoenne			=0;
 	versioncomment		="";
 	searchfrom			="";
@@ -45928,23 +44054,23 @@ int Jidac::loadparameters(int argc, const char** argv)
 	g_flagcreating		=false;
 
 	bool flagforzarobocopy=false;
-	
+
 #ifdef GUI
 	iszpaqloaded		=false;
 	gui_filtername		="";
-#endif	
+#endif
 	if (argc>1)
 		for (int i=1; i<argc; i++)
 			fullcommandline+=string(argv[i])+" ";
-		
-	
+
+
 	if (argc>0)
 	{
 		zpaqfranzexename=argv[0];
 #ifdef _WIN32
 		zpaqfranzexename+=".exe";
 #endif
-	}		
+	}
 
 
 
@@ -45957,8 +44083,8 @@ int Jidac::loadparameters(int argc, const char** argv)
 
 #ifdef unix
 	fullzpaqexename=my_realpath(zpaqfranzexename);
-	
-#ifdef BSD  // BSD 
+
+#ifdef BSD  // BSD
 #ifndef __OpenBSD__ 	// OpenBSD is not FreeBSD
 #ifndef __APPLE__   	// Mac is different (of course)
 	if (flagdebug)
@@ -45989,7 +44115,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 		///myprintf("something wrong!");
 #endif
 
-#ifdef SOLARIS 
+#ifdef SOLARIS
 	if (flagdebug)
 		myprintf("41578: Pretend to be Solaris\n");
 	fullzpaqexename=getexecname();
@@ -46018,12 +44144,12 @@ int Jidac::loadparameters(int argc, const char** argv)
 	}
 	if (myexename=="robocopy")
 		flagforzarobocopy=true;
-#endif	
+#endif
 
 	if (argc>=2) // early disable output
 		if  (stringcomparei(argv[1],"last"))
 			flagpakka=true;
-	
+
 	if (argc>=2) // early disable output
 		if  (stringcomparei(argv[1],"fzf"))
 		{
@@ -46037,7 +44163,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 	if (flagdebug)
 		printf("FULL exename <<%s>>\n",fullzpaqexename.c_str());
 
-	if (argc==2) // going early on gui 
+	if (argc==2) // going early on gui
 	{
 		const string parametro=argv[1];
 		if  (stringcomparei(parametro,"gui"))
@@ -46055,7 +44181,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 		usage();
 		seppuku();
 	}
-	if (argc==2) // only ONE 
+	if (argc==2) // only ONE
 	{
 		const string parametro=argv[1];
 		if  ((stringcomparei(parametro,"help"))
@@ -46089,7 +44215,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 				seppuku();
 			}
 	}
-	if (argc==3) // only TWO (-examples sha1) 
+	if (argc==3) // only TWO (-examples sha1)
 	{
 		const string parametro=argv[1];
 		const string comando=argv[2];
@@ -46109,7 +44235,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 			||
 			(stringcomparei(parametro,"-help")))
 			{
-				if (comando=="h") /// zpaqfranz h h 
+				if (comando=="h") /// zpaqfranz h h
 					usageall("");
 				else
 					usageall(comando);
@@ -46137,11 +44263,11 @@ int Jidac::loadparameters(int argc, const char** argv)
 	date=(t->tm_year+1900)*10000000000LL+(t->tm_mon+1)*100000000LL
       +t->tm_mday*1000000+t->tm_hour*10000+t->tm_min*100+t->tm_sec;
 	g_optional="";
-	
+
 	///	a bit of refactoring. getting, early, the hasher
 	string	dummyhash="-dummyhash";
 	int		howmanyhasher=0;
-	for (int i=1; i<argc; ++i) 
+	for (int i=1; i<argc; ++i)
 		for (MAPPATIPOHASH::iterator p=g_mappatipohash.begin(); p!=g_mappatipohash.end(); ++p)
 			if (argv[i]==(p->second.switchname))
 				if ((p->second.switchflag)!=NULL)
@@ -46174,10 +44300,10 @@ int Jidac::loadparameters(int argc, const char** argv)
 		}
 #endif
 // Get optional options. the hasher turned to -dummyhash
-	
+
 	string myrange="";
-		
-	for (int i=1; i<argc; ++i) 
+
+	for (int i=1; i<argc; ++i)
 	{
 		string opt=argv[i];  // read command
 		if (flagforzarobocopy)
@@ -46217,27 +44343,27 @@ int Jidac::loadparameters(int argc, const char** argv)
 #endif
 	else
 		if ((
-		opt=="add" 				|| 
-		opt=="backup"			|| 
-		opt=="append"			|| 
-		opt=="extract" 			|| 
-		opt=="last" 			|| 
-		opt=="list" 			|| 
-		opt=="fzf" 				|| 
-		opt=="k" 				|| 
-		opt=="a"  				|| 
-		opt=="e"  				|| 
-		opt=="x" 				|| 
-		opt=="p" 				|| 
+		opt=="add" 				||
+		opt=="backup"			||
+		opt=="append"			||
+		opt=="extract" 			||
+		opt=="last" 			||
+		opt=="list" 			||
+		opt=="fzf" 				||
+		opt=="k" 				||
+		opt=="a"  				||
+		opt=="e"  				||
+		opt=="x" 				||
+		opt=="p" 				||
 		opt=="t" 				||
-		opt=="test" 			|| 
-		opt=="l" 				|| 
+		opt=="test" 			||
+		opt=="l" 				||
 		opt=="v"				||
 		opt=="w"				||
-		opt=="i" 				|| 
-		opt=="q" 				|| 
-		opt=="g" 				|| 
-		opt=="sfx" 				|| 
+		opt=="i" 				||
+		opt=="q" 				||
+		opt=="g" 				||
+		opt=="sfx" 				||
 		opt=="m"				||
 		opt=="gui"				||
 		opt=="dirsize"  		||
@@ -46246,11 +44372,11 @@ int Jidac::loadparameters(int argc, const char** argv)
 		opt=="zfsproxbackup"  	||
 		opt=="zfsproxrestore"  	||
 		opt=="zfsbackup")
-        && i<argc-1 && argv[i+1][0]!='-' && command==0) 
+        && i<argc-1 && argv[i+1][0]!='-' && command==0)
 		{
 			command=opt[0];
 		///myprintf("comando %c\n",command);
-			if (opt=="append") 
+			if (opt=="append")
 			{
 				g_optional="ransomware";
 				flagappend=true;
@@ -46264,7 +44390,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 				command='G';
 			if (opt=="fzf")
 				command='F';
-		
+
 			if (opt=="backup")
 				command='Z';
 			if (opt=="last")
@@ -46280,9 +44406,9 @@ int Jidac::loadparameters(int argc, const char** argv)
 				command='=';
 			if (opt=="zfsproxrestore")
 				command='(';
-			if (opt=="extract") 
+			if (opt=="extract")
 				command='x';
-			if (opt=="test") 
+			if (opt=="test")
 				command='t';
 			if (opt=="sfx")
 				command='y';
@@ -46292,9 +44418,9 @@ int Jidac::loadparameters(int argc, const char** argv)
 				g_optional="dirsize";
 			}
 			archive=argv[++i];  // append ".zpaq" to archive if no extension
-			
+
 			fullarchive="";
-			
+
 			if ((command=='x') || (command=='t'))
 			{
 				const char* star	=strrchr(argv[i], '*');
@@ -46303,18 +44429,18 @@ int Jidac::loadparameters(int argc, const char** argv)
 				{
 					fullarchive=archive;
 					myprintf("43787: Jolly in archivename!\n");
-				}	
+				}
 			}
 			const char* slash	=strrchr(argv[i], '/');
 			const char* dot		=strrchr(slash ? slash : argv[i], '.');
-			if (!dot && archive!="") 
+			if (!dot && archive!="")
 				archive+=".zpaq";
-			while (++i<argc && argv[i][0]!='-')  
+			while (++i<argc && argv[i][0]!='-')
 				files.push_back(argv[i]);
 			--i;
 
-///zpaqfranz a z:\foo 
-///if file "./foo" or folder "./foo" does esists, create or update "z:\foo.zpaq" with the "./foo"			
+///zpaqfranz a z:\foo
+///if file "./foo" or folder "./foo" does esists, create or update "z:\foo.zpaq" with the "./foo"
 			if ((opt=="a") || (opt=="add"))
 				if (files.size()==0)
 					if (archive!="")
@@ -46330,20 +44456,20 @@ int Jidac::loadparameters(int argc, const char** argv)
 					}
 		}
 		else if (
-		(opt=="n") 			|| 
-		(opt=="f") 			|| 
-		(opt=="c") 			|| 
-		(opt=="s") 			|| 
-		(opt=="utf") 		|| 
-		(opt=="r") 			|| 
-		(opt=="robocopy") 	|| 
-		(opt=="cp") 	|| 
+		(opt=="n") 			||
+		(opt=="f") 			||
+		(opt=="c") 			||
+		(opt=="s") 			||
+		(opt=="utf") 		||
+		(opt=="r") 			||
+		(opt=="robocopy") 	||
+		(opt=="cp") 	||
 		opt=="z")
 		{
 			command=opt[0];
 			if (opt=="cp")
 					command='o';
-				
+
 			if (flagforzarobocopy)
 			{
 				///myprintf("46279: i=%d  argc %d\n",i,argc);
@@ -46421,43 +44547,43 @@ int Jidac::loadparameters(int argc, const char** argv)
 			{
 				myprintf("44072: Password        %s\n",	password);
 				myprintf("44073: Password string %s\n",	password_string);
-			}	
+			}
 		}
 		else if (cli_getkey		(opt,"-key2",												argc,argv,&i,&plainpassword2,	&new_password,	new_password_string));
 
 #ifdef SERVER
-		else if (opt=="-server" 		&& i<argc-1) 	
+		else if (opt=="-server" 		&& i<argc-1)
 		{
 			g_server=argv[++i];
 			flagserver=true;
 		}
-		else if (opt=="-port" 			&& i<argc-1) 	
+		else if (opt=="-port" 			&& i<argc-1)
 		{
 			g_port=argv[++i];
 		}
-		else if (opt=="-cloudkey" 		&& i<argc-1) 	
+		else if (opt=="-cloudkey" 		&& i<argc-1)
 		{
 			g_cloudkey=argv[++i];
 		}
 #endif
 
 		else
-		if (opt=="-repack" && i<argc-1) 
+		if (opt=="-repack" && i<argc-1)
 		{
 			repack=argv[++i];
 			string estensione=prendiestensione(repack);
 			if (estensione=="")
 				repack+=".zpaq";
-			if (i<argc-1 && argv[i+1][0]!='-') 
+			if (i<argc-1 && argv[i+1][0]!='-')
 			{
 				libzpaq::SHA256 sha256;
-				for (const char* p=argv[++i]; *p; ++p) 
+				for (const char* p=argv[++i]; *p; ++p)
 					sha256.put(*p);
 				memcpy(new_password_string, sha256.result(), 32);
 				new_password=new_password_string;
 			}
 		}
-		else if (opt=="-to") 
+		else if (opt=="-to")
 		{  // read tofiles. Possible collision with -tthread
 			while (++i<argc && argv[i][0]!='-')
 			{
@@ -46471,9 +44597,9 @@ int Jidac::loadparameters(int argc, const char** argv)
 				tofiles.push_back("");
 			--i;
 		}
-		else 
-		if (opt=="-until" && i+1<argc) 
-		{  
+		else
+		if (opt=="-until" && i+1<argc)
+		{
 			g_until=argv[i+1];
 		  // Read digits from multiple args and fill in leading zeros
 			version=0;
@@ -46485,18 +44611,18 @@ int Jidac::loadparameters(int argc, const char** argv)
 					usage();
 				++i;
 			}
-			else 
+			else
 			{  // positive version or date
-				while (++i<argc && argv[i][0]!='-') 
+				while (++i<argc && argv[i][0]!='-')
 				{
-					for (int j=0; ; ++j) 
+					for (int j=0; ; ++j)
 					{
-						if (isdigit(argv[i][j])) 
+						if (isdigit(argv[i][j]))
 						{
 							version=version*10+argv[i][j]-'0';
 							++digits;
 						}
-						else 
+						else
 						{
 							if (digits==1)
 								version=version/10*100+version%10;
@@ -46515,9 +44641,9 @@ int Jidac::loadparameters(int argc, const char** argv)
 				version=version*100+59;
 			if (version>=190000000000LL && version<=299912312359LL)
 				version=version*100+59;
-			if (version>9999999) 
+			if (version>9999999)
 			{
-				if (version<19000101000000LL || version>29991231235959LL) 
+				if (version<19000101000000LL || version>29991231235959LL)
 				{
 					fflush(stdout);
 					myprintf("Version date %1.0f must be 19000101000000 to 29991231235959\n",double(version));
@@ -46527,7 +44653,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 				date=version;
 			}
 		}
-		else 
+		else
 		{
 			if (!g_programflags.exists(argv[i]))
 				myprintf("Unknown option ignored: %s\n", argv[i]);
@@ -46555,7 +44681,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 			{
 				myprintf("\nImpossible to run VSS: admin rights required\n");
 				return 2;
-			}	
+			}
 		}
 	if (flagimage && flagstdin)
 	{
@@ -46573,22 +44699,22 @@ int Jidac::loadparameters(int argc, const char** argv)
 		myprintf("29896: -stdin incompatible with -dd\n");
 		return 2;
 	}
-*/	
+*/
 	if
 	(flagimage)
 		if (!isadmin())
 		{
 			myprintf("\nImpossible to image: admin rights required\n");
 			return 2;
-		}	
-#endif	
+		}
+#endif
 
 /*
 	fix some defaults
 */
 	if (flagdebug)
 		flagverbose=true;
-	
+
 	if (snapmark!="")
 	{
 		string newmark	="";
@@ -46622,12 +44748,12 @@ int Jidac::loadparameters(int argc, const char** argv)
 		Sha1Prepare(false);
 #endif
 
-	
+
 //	write franzs' parameters (if not very briefly)
 	if ((!flagpakka) && (!flagstdout))
 	{
 		string franzparameters="";
-	
+
 		for (MAPPATIPOHASH::iterator p=g_mappatipohash.begin(); p!=g_mappatipohash.end(); ++p)
 			if ((p->second.switchflag)!=NULL)
 				if (*(p->second.switchflag))
@@ -46653,15 +44779,15 @@ int Jidac::loadparameters(int argc, const char** argv)
 		}
 #endif
 	}
-	
-	if (howmanythreads<1) 
+
+	if (howmanythreads<1)
 		howmanythreads=numberOfProcessors();
 
   // Test date
 	if (now==-1 || date<19000000000000LL || date>30000000000000LL)
 		error("date is incorrect, use -until YYYY-MM-DD HH:MM:SS to set");
   // Adjust negative version
-	if (version<0) 
+	if (version<0)
 	{
 		Jidac jidac(*this);
 		jidac.version=DEFAULT_VERSION;
@@ -46676,13 +44802,13 @@ int Jidac::loadparameters(int argc, const char** argv)
 	for (unsigned int i=0;i<files.size();i++)
 		files[i]=format_datetime(files[i]);
 	versioncomment=format_datetime(versioncomment);
-	
+
 // Load dynamic functions in Windows Vista and later
 #ifndef unix
 	HMODULE h=GetModuleHandle(TEXT("kernel32.dll"));
-	if (h==NULL) 
+	if (h==NULL)
 		printerr("14717","GetModuleHandle",0);
-	else 
+	else
 	{
 		findFirstStreamW=(FindFirstStreamW_t)GetProcAddress(h, "FindFirstStreamW");
 		findNextStreamW=(FindNextStreamW_t)GetProcAddress(h, "FindNextStreamW");
@@ -46706,7 +44832,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 		flagfilelist		=false;
 		flaghashdeep		=false;
 		flagxxh3			=false;
-		flagxxhash64		=false; 
+		flagxxhash64		=false;
 		flagfixeml			=false;
 		flagfix255			=false;
 		flagtouch			=false;
@@ -46756,7 +44882,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 			printbar('$');
 	}
 #endif
-	
+
 	return 0;
 }
 
@@ -46780,9 +44906,9 @@ int Jidac::doCommand()
 		flagfixreserved		=false;
 #endif
 		flagflat			=false;
-		
+
 		g_franzotype=FRANZO_XXHASH64; // by default 2 (CRC32+XXHASH64)
-	
+
 		for (MAPPATIPOHASH::iterator p=g_mappatipohash.begin(); p!=g_mappatipohash.end(); ++p)
 			if (p->second.switchflag!=NULL)
 				if (*(p->second.switchflag))
@@ -46791,7 +44917,7 @@ int Jidac::doCommand()
 
 		if (flag715 || flagnochecksum)
 			g_franzotype=FRANZO_NONE;
-			
+
 		if (flagappend)
 			return append();
 		else
@@ -46836,7 +44962,7 @@ int Jidac::doCommand()
 	else if (command=='q') return windowsc();
 #endif
 	else if (command=='r') return robocopy();
-	else if (command=='s') return dircompare(true,false); 
+	else if (command=='s') return dircompare(true,false);
 	else if (command=='t') return multisomething();
 	else if (command=='u') return utf();
 	else if (command=='v') return verify(true);
@@ -46851,7 +44977,7 @@ int Jidac::doCommand()
 	else if (command==';') return zfsreceive();
 	else if (command==')') return oneonone();
 	else if (command=='F') return fzf();
-	
+
 	else usage();
 	return 0;
 }
@@ -46876,7 +45002,7 @@ bool Jidac::getfoldersize(string i_folder,uint64_t& o_totalsize,uint32_t & o_tot
 	scandir(true,mydestinationdir,i_folder);
 	printbar(' ',false);
 	myprintf("\r");
-	for (DTMap::iterator p=mydestinationdir.begin(); p!=mydestinationdir.end(); ++p) 
+	for (DTMap::iterator p=mydestinationdir.begin(); p!=mydestinationdir.end(); ++p)
 	{
 		string fn=p->first;
 		if (fn.size()>255)
@@ -46948,7 +45074,7 @@ int Jidac::rd()
 			if (longfiles)
 				myprintf("29891: *** WARNING: long files detected, but no -longpath switch ***\n\n");
 #endif
-		if (totalsize>0) 
+		if (totalsize>0)
 			if (!flagforce)
 			{
 				myprintf("29301: the folder size is not zero, use -force to bypass\n");
@@ -47014,7 +45140,7 @@ int*			o_relativepath)
 		{
 			(*o_utf8names)++;
 			risultato&=FIX_UTF8;
-		}	
+		}
 	if (o_reservedfilenames)
 	{
 		string fixed;
@@ -47022,7 +45148,7 @@ int*			o_relativepath)
 		{
 			(*o_reservedfilenames)++;
 			risultato&=FIX_RESERVED;
-		}	
+		}
 	}
 	if (o_windowspath)
 		if ((iswindowspath(i_filename)) || (islongpath(i_filename)))
@@ -47040,20 +45166,20 @@ int*			o_relativepath)
 	{
 		if (i_filename.size()>2) ///  ./pippo
 			if (i_filename[0]=='.')
-				if (i_filename[1]=='/') 
+				if (i_filename[1]=='/')
 					{
 						(*o_relativepath)++;
 						risultato&=FIX_RELATIVE;
 					}
 		if (i_filename.size()>3) ///  ../pippo
 			if (i_filename[0]=='.')
-				if (i_filename[1]=='.') 
+				if (i_filename[1]=='.')
 					if (i_filename[2]=='/')
 					{
 						(*o_relativepath)++;
 						risultato&=FIX_RELATIVE;
 					}
-	}					
+	}
 	return risultato;
 }
 bool isfileopen(string i_filename)
@@ -47075,13 +45201,13 @@ bool isfileopen(string i_filename)
 #endif
 }
 
-int compressfraglist(const vector<unsigned>& ptr, bool i_flagprint) 
+int compressfraglist(const vector<unsigned>& ptr, bool i_flagprint)
 {
 	int howmanyhypens	=0;
 	bool hyphen			=false;
-	for (unsigned int i=0; i<ptr.size(); ++i) 
+	for (unsigned int i=0; i<ptr.size(); ++i)
 	{
-		if ( (i==0) || (i==ptr.size()-1) || (ptr[i]!=ptr[i-1]+1) || (ptr[i]!=ptr[i+1]-1) ) 
+		if ( (i==0) || (i==ptr.size()-1) || (ptr[i]!=ptr[i-1]+1) || (ptr[i]!=ptr[i+1]-1) )
 		{
 			if (i_flagprint)
 				if (!hyphen)
@@ -47090,7 +45216,7 @@ int compressfraglist(const vector<unsigned>& ptr, bool i_flagprint)
 			if (i_flagprint)
 				myprintf("%d", ptr[i]);
 		}
-		else 
+		else
 		{
 			if	(!hyphen)
 			{
@@ -47107,14 +45233,14 @@ int compressfraglist(const vector<unsigned>& ptr, bool i_flagprint)
 /////////////////////////// read_archive //////////////////////////////
 // Read arc up to -date into ht, dt, ver. Return place to
 // append. If errors is not NULL then set it to number of errors found.
-int64_t Jidac::read_archive(callback_function i_advance,const char* arc, int *errors, int i_myappend,bool i_quiet) 
+int64_t Jidac::read_archive(callback_function i_advance,const char* arc, int *errors, int i_myappend,bool i_quiet)
 {
 	if (errors) *errors=0;
 	dcsize=dhsize=0;
 	assert(ver.size()==1);
 	const bool i_renamed=command=='l' || command=='a' || command=='5' ; ///5 for dirsize arrggghh hidden parameter!
 	const bool i_isinfo=(command=='i') && (!flagstat) && (!flagcomment); // -stat? Do a lot of work
-	
+
 	unsigned files=0;  // count
 //	abort if file is open (from something else)
 #ifdef _WIN32
@@ -47131,9 +45257,9 @@ int64_t Jidac::read_archive(callback_function i_advance,const char* arc, int *er
 #endif
 	// Open archive
 	InputArchive in(arc, password);
-	if (!in.isopen()) 
+	if (!in.isopen())
 	{
-		if (command!='a') 
+		if (command!='a')
 		{
 			fflush(stdout);
 			printUTF8(arc);
@@ -47150,7 +45276,7 @@ int64_t Jidac::read_archive(callback_function i_advance,const char* arc, int *er
 			{
 				printUTF8(arc);
 				if (version==DEFAULT_VERSION) myprintf(": ");
-					else 
+					else
 				myprintf(" -until %1.0f: ", version+0.0);
 				fflush(stdout);
 			}
@@ -47193,26 +45319,26 @@ int64_t Jidac::read_archive(callback_function i_advance,const char* arc, int *er
 	if (!i_quiet)
 		myprintf("\n");
 	int64_t startblock=mtime();
-	while (!done) 
+	while (!done)
 	{
 		libzpaq::Decompresser d;
-		try 
+		try
 		{
 			d.setInput(&in);
 			double mem=0;
-			while (d.findBlock(&mem)) 
+			while (d.findBlock(&mem))
 			{
 				found_data=true;
         // Read the segments in the current block
 				StringWriter filename, comment;
 				int segs=0;  // segments in block
 				bool skip=false;  // skip decompression?
-				while (d.findFilename(&filename)) 
+				while (d.findFilename(&filename))
 				{
-					if (filename.s.size()) 
+					if (filename.s.size())
 					{
 						for (unsigned i=0; i<filename.s.size(); ++i)
-							if (filename.s[i]=='\\') 
+							if (filename.s[i]=='\\')
 								filename.s[i]='/';
 						lastfile=filename.s.c_str();
 ///						if (flagdebug)
@@ -47222,19 +45348,19 @@ int64_t Jidac::read_archive(callback_function i_advance,const char* arc, int *er
 					d.readComment(&comment);
           // Test for JIDAC format. Filename is jDC<fdate>[cdhi]<num>
           // and comment ends with " jDC\x01". Skip d (data) blocks.
-					if (comment.s.size()>=4 && comment.s.substr(comment.s.size()-4)=="jDC\x01") 
+					if (comment.s.size()>=4 && comment.s.substr(comment.s.size()-4)=="jDC\x01")
 					{
 						if (filename.s.size()!=28 || filename.s.substr(0, 3)!="jDC")
 							error("bad journaling block name");
-						if (skip) 
+						if (skip)
 							error("mixed journaling and streaming block");
             // Read uncompressed size from comment
 						int64_t usize=0;
 						unsigned i;
-						for (i=0; i<comment.s.size() && isdigit(comment.s[i]); ++i) 
+						for (i=0; i<comment.s.size() && isdigit(comment.s[i]); ++i)
 						{
 							usize=usize*10+comment.s[i]-'0';
-							if (usize>0xffffffff) 
+							if (usize>0xffffffff)
 								error("journaling block too big");
 						}
             // Read the date and number in the filename
@@ -47245,7 +45371,7 @@ int64_t Jidac::read_archive(callback_function i_advance,const char* arc, int *er
 							error("bad date");
 						for (i=18; i<28 && isdigit(filename.s[i]); ++i)
 							num=num*10+filename.s[i]-'0';
-						if (i!=28 || num>0xffffffff) 
+						if (i!=28 || num>0xffffffff)
 							error("bad fragment");
             // Decompress the block.
 						os.resize(0);
@@ -47253,16 +45379,16 @@ int64_t Jidac::read_archive(callback_function i_advance,const char* arc, int *er
 						d.setOutput(&os);
 						libzpaq::SHA1 sha1;
 						d.setSHA1(&sha1);
-						if (strchr("chi", filename.s[17])) 
+						if (strchr("chi", filename.s[17]))
 						{
-							if (mem>1.5e9) 
+							if (mem>1.5e9)
 								error("index block requires too much memory");
 							d.decompress();
 							char sha1result[21]={0};
 							d.readSegmentEnd(sha1result);
-							if ((int64_t)os.size()!=usize) 
+							if ((int64_t)os.size()!=usize)
 								error("bad block size");
-							if (usize!=int64_t(sha1.usize())) 
+							if (usize!=int64_t(sha1.usize()))
 								error("bad checksum size");
 							if (sha1result[0] && memcmp(sha1result+1, sha1.result(), 20))
 								error("bad checksum");
@@ -47271,8 +45397,8 @@ int64_t Jidac::read_archive(callback_function i_advance,const char* arc, int *er
 									if (!i_quiet)
 									{
 										myprintf("Block %10s K %12s (block/s)\r",migliaia((uint64_t)(parts/1000)),migliaia2((parts/(((mtime()-startblock)+1)/1000.0))));
-									
-									
+
+
 										if (i_advance!=NULL)
 										{
 											char buf[1000];
@@ -47288,25 +45414,25 @@ int64_t Jidac::read_archive(callback_function i_advance,const char* arc, int *er
             // Transaction header (type c).
             // If in the future then stop here, else read 8 byte data size
             // from input and jump over it.
-						if (filename.s[17]=='c') 
+						if (filename.s[17]=='c')
 						{
-							if (os.size()<8) 
+							if (os.size()<8)
 								error("c block too small");
 							data_offset=in.tell()+1-d.buffered();
 							const char* s=os.c_str();
 							int64_t jmp=btol(s);
 							///if (flagdebug)
 								///myprintf("27424: jump %s\n",migliaia(jmp));
-							if (jmp<0) 
+							if (jmp<0)
 								myprintf("Incomplete transaction ignored\n");
-							if (jmp<0 || 
+							if (jmp<0 ||
 							(version<19000000000000LL && int64_t(ver.size())>version)
-							|| (version>=19000000000000LL && version<fdate)) 
+							|| (version>=19000000000000LL && version<fdate))
 							{
 								done=true;  // roll back to here
 								goto endblock;	// WOW, a goto! I never seen one from C-64 back 1985!
 							}
-							else 
+							else
 							{
 								dcsize+=jmp;
 								if (jmp) in.seek(data_offset+jmp, SEEK_SET);
@@ -47316,17 +45442,17 @@ int64_t Jidac::read_archive(callback_function i_advance,const char* arc, int *er
 								ver.back().data_offset=data_offset;
 								ver.back().date=ver.back().lastdate=fdate;
 								ver.back().csize=jmp;
-								if (all) 
+								if (all)
 								{
-									
+
 									string fn=itos(ver.size()-1, all)+"/";
-									if (i_renamed) 
+									if (i_renamed)
 										fn=rename(fn);
 									if (isselected(fn.c_str(), false,-1))
 										dt[fn].date=fdate;
 									///printf("FKA1 KKKKKKKKKKKKKKKKKK %s\n",fn.c_str());
 								}
-								if (jmp) 
+								if (jmp)
 									goto endblock;
 							}
 						}
@@ -47335,22 +45461,22 @@ int64_t Jidac::read_archive(callback_function i_advance,const char* arc, int *er
             // where bsize is the compressed block size.
             // Store in ht[].{sha1,usize}. Set ht[].csize to block offset
             // assuming N in ascending order.
-						else 
-						if (filename.s[17]=='h') 
+						else
+						if (filename.s[17]=='h')
 						{
 							assert(ver.size()>0);
-							if (fdate>ver.back().lastdate) 
+							if (fdate>ver.back().lastdate)
 								ver.back().lastdate=fdate;
-							if (os.size()%24!=4) 
+							if (os.size()%24!=4)
 								error("bad h block size");
 							const unsigned n=(os.size()-4)/24;
-							if (num<1 || num+n>0xffffffff) 
+							if (num<1 || num+n>0xffffffff)
 								error("bad h fragment");
 							const char* s=os.c_str();
 							const unsigned bsize=btoi(s);
 							dhsize+=bsize;
 							assert(ver.size()>0);
-							if (int64_t(ht.size())>num) 
+							if (int64_t(ht.size())>num)
 							{
 								fflush(stdout);
 								myprintf(
@@ -47358,22 +45484,22 @@ int64_t Jidac::read_archive(callback_function i_advance,const char* arc, int *er
 								  int(ht.size()), double(num));
 								 g_exec_text="Unordered fragment tables";
 							}
-							for (unsigned i=0; i<n; ++i) 
+							for (unsigned i=0; i<n; ++i)
 							{
-								if (i==0) 
+								if (i==0)
 								{
 									block.push_back(Block(num, data_offset));
 									block.back().usize=8;
 									block.back().bsize=bsize;
 									block.back().frags=os.size()/24;
 								}
-								while (int64_t(ht.size())<=num+i) 
+								while (int64_t(ht.size())<=num+i)
 									ht.push_back(HT());
 								memcpy(ht[num+i].sha1, s, 20);
 								s+=20;
 								assert(block.size()>0);
 								unsigned f=btoi(s);
-								if (f>0x7fffffff) 
+								if (f>0x7fffffff)
 									error("fragment too big");
 								block.back().usize+=(ht[num+i].usize=f)+4u;
 							 }
@@ -47383,30 +45509,30 @@ int64_t Jidac::read_archive(callback_function i_advance,const char* arc, int *er
             // Contents is: 0[8] filename 0 (deletion)
             // or:       date[8] filename 0 na[4] attr[na] ni[4] ptr[ni][4]
             // Read into DT
-						else 
-						if (filename.s[17]=='i') 
+						else
+						if (filename.s[17]=='i')
 						{
 							assert(ver.size()>0);
-							if (fdate>ver.back().lastdate) 
+							if (fdate>ver.back().lastdate)
 								ver.back().lastdate=fdate;
 							const char* s=os.c_str();
 							const char* const end=s+os.size();
-							while (s+9<=end) 
+							while (s+9<=end)
 							{
 								DT dtr;
 								dtr.version=ver.size()-1;
 
 								dtr.date=btol(s);  // date
-								if (dtr.date) 
+								if (dtr.date)
 									++ver.back().updates;
-								else 
+								else
 									++ver.back().deletes;
 								const int64_t len=strlen(s);
-								if (len>65535) 
+								if (len>65535)
 									error("filename too long");
 								string fn=s;  // filename ren
 								string	originalfilename=s;
-								
+
 								if (!i_isinfo)
 								{
 									if ((flagstat) && (command!='5') && (command!='6'))
@@ -47451,9 +45577,9 @@ int64_t Jidac::read_archive(callback_function i_advance,const char* arc, int *er
 									NULL);
 #else				// *nix can restore (almost) everything, no warnings needed by default
 #endif
-										if (all) 
+										if (all)
 										{
-											
+
 											if (i_myappend)
 												fn=itos(ver.size()-1, all)+"|$1"+fn;
 											else
@@ -47464,23 +45590,23 @@ int64_t Jidac::read_archive(callback_function i_advance,const char* arc, int *er
 					bool issel=false;
 					if (!i_isinfo)
 						issel=isselected(fn.c_str(), i_renamed,-1);
-					
+
 					if (g_rangefrom>0)
 						if (all)
 							if (((ver.size()-1)<(unsigned int)g_rangefrom) || ((ver.size()-1)>(unsigned int)g_rangeto))
 								issel=false;
-		
+
 					s+=len+1;  // skip filename
-					if (s>end) 
+					if (s>end)
 						error("filename too long");
-					if (dtr.date) 
+					if (dtr.date)
 					{
 						++files;
-						if (s+4>end) 
+						if (s+4>end)
 							error("missing attr");
 						unsigned na=0;
 						na=btoi(s);  // attr bytes
-						if (s+na>end || na>65535) 
+						if (s+na>end || na>65535)
 							error("attr too long");
 						if (!i_isinfo)
 							if (na>FRANZOFFSETV1) //Get FRANZOFFSETV1
@@ -47508,7 +45634,7 @@ int64_t Jidac::read_archive(callback_function i_advance,const char* arc, int *er
 									myaccesstime,
 									myisordered,
 									myversion,
-									myposix);	
+									myposix);
 									if (strstr(myhash.c_str(),"!ERROR!"))
 									{
 										if (flagforce)
@@ -47533,21 +45659,21 @@ int64_t Jidac::read_archive(callback_function i_advance,const char* arc, int *er
 								}
 							}
 						for (unsigned i=0; i<na; ++i, ++s)  // read attr
-							if (i<8) 
+							if (i<8)
 								dtr.attr+=int64_t(*s&255)<<(i*8);
-						if (flagnoattributes) 
+						if (flagnoattributes)
 							dtr.attr=0;
-						if (s+4>end) 
+						if (s+4>end)
 							error("missing ptr");
 						unsigned ni=btoi(s);  // ptr list size
-						if (ni>(end-s)/4u) 
+						if (ni>(end-s)/4u)
 							error("ptr list too long");
-						if (issel) 
+						if (issel)
 							dtr.ptr.resize(ni);
-						for (unsigned i=0; i<ni; ++i) 
+						for (unsigned i=0; i<ni; ++i)
 						{  // read ptr
 							const unsigned j=btoi(s);
-							if (issel) 
+							if (issel)
 							{
 								dtr.ptr[i]=j;
 							}
@@ -47573,7 +45699,7 @@ int64_t Jidac::read_archive(callback_function i_advance,const char* arc, int *er
 								}
 								else
 									aredisordered++;
-								
+
 								if (flagdebug)
 									myprintf("43464: fragchunks %08d for %s\n",fragchunks,fn.c_str());
 							}
@@ -47581,24 +45707,24 @@ int64_t Jidac::read_archive(callback_function i_advance,const char* arc, int *er
 								dtr.outputname=originalfilename;
 							dt[fn]=dtr;
 
-							
+
 						}
 			///		dt.insert(std::pair<string, DT>(fn,dtr));
 				}  // end while more files
             }  // end if 'i'
-            else 
+            else
 			{
 				myprintf("Skipping %s %s\n",filename.s.c_str(), comment.s.c_str());
 				error("Unexpected journaling block");
             }
           }  // end if journaling
           // Streaming format
-          else 
+          else
 		  {
             // If previous version does not exist, start a new one
-            if (ver.size()==1) 
+            if (ver.size()==1)
 			{
-				if (version<1) 
+				if (version<1)
 				{
 					done=true;
 					goto endblock;
@@ -47613,8 +45739,8 @@ int64_t Jidac::read_archive(callback_function i_advance,const char* arc, int *er
             skip=true;
             string fn=lastfile;
             if (all)
-			{	
-		
+			{
+
 				fn=append_path(itos(ver.size()-1, all), fn); ///peusa3
 			}
             if (isselected(fn.c_str(), i_renamed,-1)) {
@@ -47659,14 +45785,14 @@ endblock:;
 			if (!flagpakka)
 			{
 				if (flagverbose)
-				myprintf("%d vers, %s files, %s frags, %s blks, %s bytes (%s)\n", 
+				myprintf("%d vers, %s files, %s frags, %s blks, %s bytes (%s)\n",
 				int(ver.size()-1), migliaia(files), migliaia2(unsigned(ht.size())-1),
 				migliaia3(parts),migliaia4(block_offset),tohuman(block_offset));
 				else
-				myprintf("%d versions, %s files, %s bytes (%s)\n", 
-				int(ver.size()-1), migliaia(files), 
+				myprintf("%d versions, %s files, %s bytes (%s)\n",
+				int(ver.size()-1), migliaia(files),
 				migliaia4(block_offset),tohuman(block_offset));
-					
+
 			}
 	if (!i_quiet)
 	{
@@ -47690,12 +45816,12 @@ endblock:;
 			if (flagfixcase)
 				if (fixati>0)
 					myprintf("-fixcase fixed         %9s files\n",migliaia(fixati));
-			kollisioni.clear();	
+			kollisioni.clear();
 		}
 #endif
 		if (toolongfilenames)
 		{
-#ifdef _WIN32	
+#ifdef _WIN32
 			if (!flaglongpath)
 				if (!flagtest)
 					if (!flagvss)
@@ -47737,15 +45863,15 @@ endblock:;
 		}
 	}
   // Calculate file sizes
-	for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p) 
-		for (unsigned i=0; i<p->second.ptr.size(); ++i) 
+	for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p)
+		for (unsigned i=0; i<p->second.ptr.size(); ++i)
 		{
 			unsigned j=p->second.ptr[i];
-			if (j>0 && j<ht.size() && p->second.size>=0) 
+			if (j>0 && j<ht.size() && p->second.size>=0)
 			{
-				if (ht[j].usize>=0) 
+				if (ht[j].usize>=0)
 					p->second.size+=ht[j].usize;
-				else 
+				else
 					p->second.size=-1;  // unknown size
 			}
 		}
@@ -47754,7 +45880,7 @@ endblock:;
 // Test whether filename and attributes are selected by files, -only, and -not
 // If rn then test renamed filename.
 // if i_size >0 check file size too (minsize,maxsize)
-bool Jidac::isselected(const char* filename, bool rn,int64_t i_size) 
+bool Jidac::isselected(const char* filename, bool rn,int64_t i_size)
 {
 	if (g_optional=="versum")
 		return true; //dirsize, take ALL the stuff, for pos() filtering
@@ -47773,11 +45899,11 @@ bool Jidac::isselected(const char* filename, bool rn,int64_t i_size)
 			}
 	if (flagnoqnap) //this is an "automagically" exclude for qnap's snapshots
 		if (
-			(strstr(filename, "@Recently-Snapshot")) 
+			(strstr(filename, "@Recently-Snapshot"))
 			||
-			(strstr(filename, "@Recycle")) 
+			(strstr(filename, "@Recycle"))
 			||
-			(strstr(filename, "/.streams/")) 
+			(strstr(filename, "/.streams/"))
 			)
 			{
 				if (flagverbose)
@@ -47786,19 +45912,19 @@ bool Jidac::isselected(const char* filename, bool rn,int64_t i_size)
 			}
 	if (!flagforcewindows) //this "automagically" exclude anything with System Volume Information
 	{
-		if (strstr(filename, "System Volume Information")) 
+		if (strstr(filename, "System Volume Information"))
 		{
 			if (flagverbose)
 				myprintf("Verbose: Skip System Volume Information %s\n",filename);
 			return false;
 		}
-		if (strstr(filename, "$RECYCLE.BIN")) 
+		if (strstr(filename, "$RECYCLE.BIN"))
 		{
 			if (flagverbose)
 				myprintf("Verbose: Skip trash %s\n",filename);
 			return false;
 		}
-	}			
+	}
 /// search for fake file (ASCII versions)
 	if (isads(filename))
 	{
@@ -47837,20 +45963,20 @@ bool Jidac::isselected(const char* filename, bool rn,int64_t i_size)
     }
   }
   if (!matched) return false;
-  if (onlyfiles.size()>0) 
+  if (onlyfiles.size()>0)
   {
 	matched=false;
     for (unsigned i=0; i<onlyfiles.size() && !matched; ++i)
 	{
 		if (flagdebug)
 			myprintf("43569: check only %03d %s  on filename %s\n",i,onlyfiles[i].c_str(),filename);
-	
+
 	 if (ispath(onlyfiles[i].c_str(), filename))
         matched=true;
 	}
   }
   if (!matched) return false;
-  for (unsigned i=0; i<notfiles.size(); ++i) 
+  for (unsigned i=0; i<notfiles.size(); ++i)
   {
 	 if (flagdebug)
 		myprintf("43574: check notfiles %03d %s  on filename %s\n",i,notfiles[i].c_str(),filename);
@@ -47884,12 +46010,12 @@ bool Jidac::isselected(const char* filename, bool rn,int64_t i_size)
 int64_t dim(string i_filename)
 {
     FILE* inFile = freadopen(i_filename.c_str());
-    if (inFile==NULL) 
+    if (inFile==NULL)
 		return 0;
 	int64_t realsize=prendidimensionehandle(inFile);
 	fclose(inFile);
 	return realsize;
-}		
+}
 // Insert external filename (UTF-8 with "/") into dt if selected
 // by files, onlyfiles, and notfiles. If filename
 // is a directory then also insert its contents.
@@ -47929,36 +46055,36 @@ void Jidac::scandir(bool i_checkifselected,DTMap& i_edt,string filename, bool i_
 	while (filename.size()>1 && filename[filename.size()-1]=='/')
 		filename=filename.substr(0, filename.size()-1);  // remove trailing /
 	struct stat sb;
-	if (!lstat(filename.c_str(), &sb)) 
+	if (!lstat(filename.c_str(), &sb))
 	{
 		if (S_ISREG(sb.st_mode))
 			addfile(i_checkifselected,i_edt,filename, decimal_time(sb.st_mtime), sb.st_size,'u'+(sb.st_mode<<8),0,0);
     // Traverse directory
-		if (S_ISDIR(sb.st_mode)) 
+		if (S_ISDIR(sb.st_mode))
 		{
 			addfile(i_checkifselected,i_edt,filename=="/" ? "/" : filename+"/", decimal_time(sb.st_mtime),0, 'u'+(int64_t(sb.st_mode)<<8),0,0);
 			DIR* dirp=opendir(filename.c_str());
-			if (dirp) 
+			if (dirp)
 			{
-				for (dirent* dp=readdir(dirp); dp; dp=readdir(dirp)) 
+				for (dirent* dp=readdir(dirp); dp; dp=readdir(dirp))
 				{
-					if (strcmp(".", dp->d_name) && strcmp("..", dp->d_name)) 
+					if (strcmp(".", dp->d_name) && strcmp("..", dp->d_name))
 					{
 						string s=filename;
 						if (s!="/") s+="/";
 						s+=dp->d_name;
-						if (i_recursive)        
+						if (i_recursive)
 							scandir(i_checkifselected,i_edt,s);
 						else
 						{
-							if (!lstat(s.c_str(), &sb)) 
+							if (!lstat(s.c_str(), &sb))
 							{
 								if (S_ISREG(sb.st_mode))
 									addfile(i_checkifselected,i_edt,s, decimal_time(sb.st_mtime), sb.st_size,'u'+(sb.st_mode<<8),0,0);
-								if (S_ISDIR(sb.st_mode)) 
+								if (S_ISDIR(sb.st_mode))
 									addfile(i_checkifselected,i_edt,s=="/" ? "/" :s+"/", decimal_time(sb.st_mtime),0, 'u'+(int64_t(sb.st_mode)<<8),0,0);
 							}
-						}          			
+						}
 					}
 				}
 				closedir(dirp);
@@ -47975,7 +46101,7 @@ void Jidac::scandir(bool i_checkifselected,DTMap& i_edt,string filename, bool i_
   string t=filename;
   if (t.size()>0 && t[t.size()-1]=='/') t+="*";
   HANDLE h=FindFirstFile(utow(t.c_str()).c_str(), &ffd);
-  
+
   if (!flagverbose)
 	if (h==INVALID_HANDLE_VALUE)
 		if (GetLastError()==5) //ERROR_ACCESS_DENIED
@@ -47984,12 +46110,12 @@ void Jidac::scandir(bool i_checkifselected,DTMap& i_edt,string filename, bool i_
 				FindClose(h);
 				return;
 			}
-  
+
   if (h==INVALID_HANDLE_VALUE
       && GetLastError()!=ERROR_FILE_NOT_FOUND
       && GetLastError()!=ERROR_PATH_NOT_FOUND)
     printerr("15367",t.c_str(),0);
-	while (h!=INVALID_HANDLE_VALUE) 
+	while (h!=INVALID_HANDLE_VALUE)
 	{
 		// For each file, get name, date, size, attributes
 		SYSTEMTIME st;
@@ -48003,7 +46129,7 @@ void Jidac::scandir(bool i_checkifselected,DTMap& i_edt,string filename, bool i_
 		if (FileTimeToSystemTime(&ffd.ftLastWriteTime, &st))
 			edate=st.wYear*10000000000LL+st.wMonth*100000000LL+st.wDay*1000000
 				+st.wHour*10000+st.wMinute*100+st.wSecond;
-				
+
 		int64_t creationdate=0;
 		if (FileTimeToSystemTime(&ffd.ftCreationTime, &st))
 			creationdate=st.wYear*10000000000LL+st.wMonth*100000000LL+st.wDay*1000000
@@ -48013,9 +46139,9 @@ void Jidac::scandir(bool i_checkifselected,DTMap& i_edt,string filename, bool i_
 		if (FileTimeToSystemTime(&ffd.ftLastAccessTime, &st))
 			accessdate=st.wYear*10000000000LL+st.wMonth*100000000LL+st.wDay*1000000
 				+st.wHour*10000+st.wMinute*100+st.wSecond;
-*/			
-				
-				
+*/
+
+
 		int64_t esize=ffd.nFileSizeLow+(int64_t(ffd.nFileSizeHigh)<<32);
 		const int64_t eattr='w'+(int64_t(ffd.dwFileAttributes)<<8);
 		// Ignore links, the names "." and ".." or any unselected file
@@ -48050,7 +46176,7 @@ void Jidac::scandir(bool i_checkifselected,DTMap& i_edt,string filename, bool i_
 			string temp=decodewinattribute(ffd.dwFileAttributes);
 			myprintf("%s\n",temp.c_str());
 		}
-		if (t=="." || t=="..") 
+		if (t=="." || t=="..")
 			edate=0;  // don't add, of course
 	/*
 		OK, now test Windows crazy fake files
@@ -48102,10 +46228,10 @@ void Jidac::scandir(bool i_checkifselected,DTMap& i_edt,string filename, bool i_
 			///	A junction?
 			if ((ffd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) && (ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY))
 			{
-				
+
 				///https://bvckup2.com/support/forum/topic/981
 				///https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-fscc/c8e77b37-3909-4fe6-a4ea-2b9d423b1ee4
-				if 
+				if
 				(
 				(ffd.dwReserved0==MYIO_REPARSE_TAG_CLOUD)
 				||
@@ -48143,8 +46269,8 @@ void Jidac::scandir(bool i_checkifselected,DTMap& i_edt,string filename, bool i_
 					if (flagdebug)
 						myprintf("31184: this seems a ONEDRIVE-something, try to keep\n");
 				}
-				
-				
+
+
 				else
 				{
 					if (flagdebug)
@@ -48156,20 +46282,20 @@ void Jidac::scandir(bool i_checkifselected,DTMap& i_edt,string filename, bool i_
 		string fn=path(filename)+t;
 		// Save directory names with a trailing / and scan their contents
 		// Otherwise, save plain files
-		if (edate) 
+		if (edate)
 		{
 			if (ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) fn+="/";
 			addfile(i_checkifselected,i_edt,fn, edate, esize, eattr,creationdate,accessdate);
 			if (i_recursive)
 			{
-				if (ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) 
+				if (ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
 				{
 					fn+="*";
 					scandir(i_checkifselected,i_edt,fn);
 				}
 		  // enumerate alternate streams (Win2003/Vista or later)
-				else 
-				if (findFirstStreamW && findNextStreamW) 
+				else
+				if (findFirstStreamW && findNextStreamW)
 				{
 					if (flagforcewindows)
 					{
@@ -48184,7 +46310,7 @@ void Jidac::scandir(bool i_checkifselected,DTMap& i_edt,string filename, bool i_
 				}
 			}
 		}
-		if (!FindNextFile(h, &ffd)) 
+		if (!FindNextFile(h, &ffd))
 		{
 			if (GetLastError()!=ERROR_NO_MORE_FILES) printerr("15417",(fn+fn).c_str(),ffd.dwFileAttributes);
 				break;
@@ -48196,10 +46322,10 @@ void Jidac::scandir(bool i_checkifselected,DTMap& i_edt,string filename, bool i_
 // Add external file and its date, size, and attributes to dt
 void Jidac::addfile(bool i_checkifselected,DTMap& i_edt,string filename, int64_t edate,
                     int64_t esize, int64_t eattr,
-					int64_t i_creationdate,int64_t i_accessdate) 
+					int64_t i_creationdate,int64_t i_accessdate)
 {
 	if (i_checkifselected)
-		if (!isselected(filename.c_str(), false,esize)) 
+		if (!isselected(filename.c_str(), false,esize))
 			return;
 	//	OK, let's handle longpath on VSS by a kludge
 	//	cook some spaghetti code!
@@ -48224,7 +46350,7 @@ void Jidac::addfile(bool i_checkifselected,DTMap& i_edt,string filename, int64_t
 	d.data=0;
 	g_bytescanned+=esize;
 	g_filescanned++;
-	
+
 	static int ultimotempo	=-1;
 	double scantime			=(mtime()-g_start+1);
 	int iscantime			=scantime/1000;
@@ -48235,11 +46361,11 @@ void Jidac::addfile(bool i_checkifselected,DTMap& i_edt,string filename, int64_t
 			ultimotempo=iscantime;
 			printf("Scanned %10s %02d:%02d:%02d %10s file/s (%21s)\r",
 			migliaia((int64_t)i_edt.size()),
-			
+
 			int(iscantime/3600),
-			int(iscantime/60)%60, 
+			int(iscantime/60)%60,
 			int(iscantime)%60,
-			
+
 			migliaia3((int)(i_edt.size()/(scantime/1000.0))),migliaia2(g_bytescanned));
 			fflush(stdout);
 		}
@@ -48303,7 +46429,7 @@ public:
     empty.destroy();
     destroy_mutex(mutex);
     delete[] q;
-  }      
+  }
   void appendz(StringBuffer& s, const char* filename, string method,
              const char* comment=0);
   vector<int> csize;  // compressed block sizes
@@ -48432,7 +46558,7 @@ ThreadReturn writeThread(void* arg) {
 void writeJidacHeader(libzpaq::Writer *out, int64_t date,
                       int64_t cdata, unsigned htsize)
 {
-	
+
   if (!out) return;
   assert(date>=19000000000000LL && date<30000000000000LL);
   StringBuffer is;
@@ -48440,7 +46566,7 @@ void writeJidacHeader(libzpaq::Writer *out, int64_t date,
 
   libzpaq::compressBlock(&is, out, "0",
       ("jDC"+itos(date, 14)+"c"+itos(htsize, 10)).c_str(), "jDC\x01");
-	
+
 }
 /*
 int calcjidacheader(int64_t date,int64_t cdata, unsigned htsize,char* i_theheader,size_t i_theheadersize)
@@ -48458,7 +46584,7 @@ int calcjidacheader(int64_t date,int64_t cdata, unsigned htsize,char* i_theheade
 		seppuku();
 		return 0;
 	}
-	
+
 	assert(date>=19000000000000LL && date<30000000000000LL);
 	StringBuffer is;
 	puti(is, cdata, 8);
@@ -48467,7 +46593,7 @@ int calcjidacheader(int64_t date,int64_t cdata, unsigned htsize,char* i_theheade
       ("jDC"+itos(date, 14)+"c"+itos(htsize, 10)).c_str(), "jDC\x01");
 	printf("Fatto calcolo jidacheader\n");
 	printf("Size %d\n",theheader.size());
-	
+
 	if (i_theheadersize<theheader.size())
 	{
 		myprintf("29650: guru i_theheadersize %d too small vs real size %d\n",i_theheadersize,theheader.size());
@@ -48529,7 +46655,7 @@ public:
       }
       ++htsize;
     }
-  }    
+  }
 };
 // For writing to two archives at once
 struct WriterPair: public libzpaq::Writer {
@@ -48566,16 +46692,16 @@ void Jidac::write715attr(libzpaq::StringBuffer& i_sb, uint64_t i_data, unsigned 
 /// atime, ctime, flagisstdout, int version
 
 struct franz_posix
-{                              
- /// char mode		[8];                
+{
+ /// char mode		[8];
 	char typeflag	[8]; 	///Type of file (first byte), flaglink (second)
-	char uid		[8];    ///Owner user ID             
-	char gid		[8];    ///Owner group ID             
-	char uname		[32];              
-	char gname		[32];              
-	char devmajor	[8];            
+	char uid		[8];    ///Owner user ID
+	char gid		[8];    ///Owner group ID
+	char uname		[32];
+	char gname		[32];
+	char devmajor	[8];
 	char devminor	[8];
-	char linkname	[256];          
+	char linkname	[256];
 };
 
 void Jidac::writefranzattr(libzpaq::StringBuffer& i_sb, uint64_t i_data, unsigned int i_quanti,string i_filename,uint32_t i_crc32fromfragments,uint32_t i_crc32,string i_thehash,int64_t i_creationdate,int64_t i_accessdate,struct franz_posix* i_posix)
@@ -48590,7 +46716,7 @@ void Jidac::writefranzattr(libzpaq::StringBuffer& i_sb, uint64_t i_data, unsigne
 	else
 		writtencrc=i_crc32;
 	///FRANZO_WINHASH64
-	
+
 	if (g_franzotype==FRANZO_NONE) /*|| (i_thehash=="")*/	// 7.15
 	{
 		if (flagdebug)
@@ -48619,13 +46745,13 @@ void Jidac::writefranzattr(libzpaq::StringBuffer& i_sb, uint64_t i_data, unsigne
 			myprintf("Mode1: CRC32 by frag <<%s>> %s\n",mybuffer+41,i_filename.c_str());
 	}
 	else
-	if (g_franzotype==FRANZO_XXHASH64) 
+	if (g_franzotype==FRANZO_XXHASH64)
 	{
 		assert(i_thehash.length()==32);
 		char mybuffer[FRANZOFFSETV1]={0};
 		snprintf(mybuffer+8,sizeof(mybuffer)-8,	"%s",i_thehash.c_str());
 		snprintf(mybuffer+41,sizeof(mybuffer)-41,"%08X",writtencrc);
-		puti(i_sb, 8+FRANZOFFSETV1, 4); 	
+		puti(i_sb, 8+FRANZOFFSETV1, 4);
 		puti(i_sb, i_data, i_quanti);
 		puti(i_sb, 0, (8 - i_quanti));  // pad with zeros (for 7.15 little bug)
 		i_sb.write(mybuffer,FRANZOFFSETV1);
@@ -48643,7 +46769,7 @@ void Jidac::writefranzattr(libzpaq::StringBuffer& i_sb, uint64_t i_data, unsigne
 		puti(i_sb, 8+FRANZOFFSETV2, 4); 	// 8+FRANZOFFSETV1 block
 		puti(i_sb, i_data, i_quanti);
 		puti(i_sb, 0, (8 - i_quanti));  // pad with zeros (for 7.15 little bug)
-		i_sb.write(mybuffer,FRANZOFFSETV2); ///please note the dirty trick: start by +8		
+		i_sb.write(mybuffer,FRANZOFFSETV2); ///please note the dirty trick: start by +8
 		if (flagdebug)
 				myprintf("Model8: SHA1 <<%s>> CRC32 <<%s>> %s\n",mybuffer+2,mybuffer+67,i_filename.c_str());
 	}
@@ -48674,7 +46800,7 @@ void Jidac::writefranzattr(libzpaq::StringBuffer& i_sb, uint64_t i_data, unsigne
 		puti(i_sb, 8+FRANZOFFSETV2, 4); 	// 8+FRANZOFFSETV1 block
 		puti(i_sb, i_data, i_quanti);
 		puti(i_sb, 0, (8 - i_quanti));  // pad with zeros (for 7.15 little bug)
-		i_sb.write(mybuffer,FRANZOFFSETV2); ///please note the dirty trick: start by +8		
+		i_sb.write(mybuffer,FRANZOFFSETV2); ///please note the dirty trick: start by +8
 		if (flagdebug)
 				myprintf("Mode7: SHA3 <<%s>> CRC32 <<%s>> %s\n",mybuffer+2,mybuffer+67,i_filename.c_str());
 	}
@@ -48689,20 +46815,20 @@ void Jidac::writefranzattr(libzpaq::StringBuffer& i_sb, uint64_t i_data, unsigne
 		puti(i_sb, 8+FRANZOFFSETV2, 4); 	// 8+FRANZOFFSETV1 block
 		puti(i_sb, i_data, i_quanti);
 		puti(i_sb, 0, (8 - i_quanti));  // pad with zeros (for 7.15 little bug)
-		i_sb.write(mybuffer,FRANZOFFSETV2); ///please note the dirty trick: start by +8		
+		i_sb.write(mybuffer,FRANZOFFSETV2); ///please note the dirty trick: start by +8
 		if (flagdebug)
 				myprintf("Mode8: MD5 <<%s>> CRC32 <<%s>> %s\n",mybuffer+2,mybuffer+67,i_filename.c_str());
 	}
 	else
 	if ((g_franzotype==FRANZO_WHIRLPOOL) || (g_franzotype==FRANZO_HIGHWAY64) || (g_franzotype==FRANZO_HIGHWAY128) || (g_franzotype==FRANZO_HIGHWAY256)) ///1= 52 (01-MD5-0-CRC32)
 	{
-	
+
 		/// [0][1] +   0      2bytes long FRANZO_CODE
-		///        +   2    128 bytes hash 
+		///        +   2    128 bytes hash
 		///        +2+128+1   8 bytes CRC32
 		///                   8 bytes creationdate (binary)
 		///                   8 bytes accessdate   (binary)
-		
+
 		char mybuffer[FRANZOFFSETV3]={0};
 
 		if (flagdebug)
@@ -48711,7 +46837,7 @@ void Jidac::writefranzattr(libzpaq::StringBuffer& i_sb, uint64_t i_data, unsigne
 			myprintf("45487: thehash    %s\n",i_thehash.c_str());
 			myprintf("45487: writtencrc %08X\n",writtencrc);
 		}
-		
+
 		string mycode;
 		if (flagtar)
 			mycode=std::string()+"4"+char(g_franzotype+'A');
@@ -48725,26 +46851,26 @@ void Jidac::writefranzattr(libzpaq::StringBuffer& i_sb, uint64_t i_data, unsigne
 			seppuku();
 			return;
 		}
-		
+
 		int offsetcrc	=0;
 		int offset		=0;
 		snprintf(mybuffer+offset,sizeof(mybuffer)-offset,"%s",mycode.c_str()); //two bytes
 		offset+=mycode.size();
 		if (flagdebug)
 			myprintf("45503: Offset1 (after mycode) %3d\n",offset);
-		
+
 		snprintf(mybuffer+offset,sizeof(mybuffer)-offset,"%s",i_thehash.c_str());
 		offset+=i_thehash.size()+2;
 		if (flagdebug)
 			myprintf("45507: Offset2 (after hash)   %3d\n",offset);
-		
+
 		offsetcrc=offset;
 		snprintf(mybuffer+offset,sizeof(mybuffer)-offset,"%08X",writtencrc);
 		offset+=8+2;
-		
+
 		if (flagdebug)
 			myprintf("45512: Offset3 (after CRC)    %3d\n",offset);
-		
+
 		uint32_t  orderedstream=0;
 		if (flagstdin)
 			orderedstream=1;
@@ -48752,34 +46878,34 @@ void Jidac::writefranzattr(libzpaq::StringBuffer& i_sb, uint64_t i_data, unsigne
 
 		if (flagdebug)
 			myprintf("45512: Offset4 (after ordered)%3d\n",offset);
-		
+
 		// catch "holes" into multipart
 		uint32_t	versionnumber=1440408;
 		offset+=inttoarray(versionnumber	,mybuffer+offset,4);
 		if (flagdebug)
 		myprintf("45524: Offset5 (after version)%3d\n",offset);
-			
+
 		///i_creationdate=987654321L;
 		///i_accessdate=554433229944L;
-			
+
 		offset+=inttoarray(i_creationdate	,mybuffer+offset,8);
-		
+
 		if (flagdebug)
 			myprintf("45524: Offset6 (after cdate)  %3d\n",offset);
-		
+
 		offset+=inttoarray(i_accessdate		,mybuffer+offset,8);
-		
+
 		if (flagdebug)
 			myprintf("45531: Offset6 (after adate)  %3d\n",offset);
-				
-				
+
+
 		uint64_t azero=0;
 		for (int i=0;i<3;i++)
 			offset+=inttoarray(azero		,mybuffer+offset,8);
-		
+
 		if (flagdebug)
 			myprintf("45537: Offset7 (after spare)  %3d\n",offset);
-		
+
 		int		dascrivere=offset;
 		if (flagtar)
 			if (i_posix!=NULL)
@@ -48799,24 +46925,24 @@ void Jidac::writefranzattr(libzpaq::StringBuffer& i_sb, uint64_t i_data, unsigne
 		puti(i_sb, 8+dascrivere, 4); 	// 8+FRANZOFFSETV1 block
 		puti(i_sb, i_data, i_quanti);
 		puti(i_sb, 0, (8 - i_quanti));  // pad with zeros (for 7.15 little bug)
-		i_sb.write(mybuffer,dascrivere); ///please note the dirty trick: start by +8		
+		i_sb.write(mybuffer,dascrivere); ///please note the dirty trick: start by +8
 		if (flagdebug)
 			myprintf("45557: Mode |%s| %s <<%s>> CRC32 <<%s>> %s\n",mycode.c_str(),decodefranzoffset(g_franzotype).c_str(),mybuffer+2,mybuffer+offsetcrc,i_filename.c_str());
-		
+
 	}
 	else
 	if (g_franzotype==FRANZO_WINHASH64) ///10= 52 (10-XXHASH64-0-CRC32-0-creationwrite)
 	{
 		/// lpCreationTime, lpLastAccessTime,
 		/// 2  byte  10
-		///  bit 
+		///  bit
 		///	 	0-1 	10   type
 		/// 	2-66
 		///		66-67	0x0
 		///		68-72	CRC32 ASCII
 		///		73		0x
 		///printf("FRANZO WINNNNNNNNNN ENCODE\n");
-		
+
 		assert(i_thehash.length()==32);
 		char mybuffer[FRANZOFFSETV2]={0};
 		snprintf(mybuffer,sizeof(mybuffer),	"10"); //<<< look at this
@@ -48827,7 +46953,7 @@ void Jidac::writefranzattr(libzpaq::StringBuffer& i_sb, uint64_t i_data, unsigne
 		puti(i_sb, 8+FRANZOFFSETV2, 4); 	// 8+FRANZOFFSETV1 block
 		puti(i_sb, i_data, i_quanti);
 		puti(i_sb, 0, (8 - i_quanti));  // pad with zeros (for 7.15 little bug)
-		i_sb.write(mybuffer,FRANZOFFSETV2); ///please note the dirty trick: start by +8		
+		i_sb.write(mybuffer,FRANZOFFSETV2); ///please note the dirty trick: start by +8
 
 		if (flagdebug)
 				myprintf("Mode10: WINHASH64 <<%s>> CRC32 <<%s>> %s\n",mybuffer+2,mybuffer+67,i_filename.c_str());
@@ -48843,13 +46969,13 @@ void Jidac::writefranzattr(libzpaq::StringBuffer& i_sb, uint64_t i_data, unsigne
 		puti(i_sb, 8+FRANZOFFSETV2, 4); 	// 8+FRANZOFFSETV1 block
 		puti(i_sb, i_data, i_quanti);
 		puti(i_sb, 0, (8 - i_quanti));  // pad with zeros (for 7.15 little bug)
-		i_sb.write(mybuffer,FRANZOFFSETV2); ///please note the dirty trick: start by +8		
+		i_sb.write(mybuffer,FRANZOFFSETV2); ///please note the dirty trick: start by +8
 		if (flagdebug)
 				myprintf("Mode6: BLAKE3 <<%s>> CRC32 <<%s>> %s\n",mybuffer+2,mybuffer+67,i_filename.c_str());
 	}
 	else
 	if (g_franzotype==FRANZO_XXH3) ///5= 52 (00XXH3-0-CRC32)
-	{	
+	{
 		assert(i_thehash.length()==32);
 		char mybuffer[FRANZOFFSETV2]={0};
 		snprintf(mybuffer,sizeof(mybuffer),	"09"); //<<< look at this
@@ -48858,7 +46984,7 @@ void Jidac::writefranzattr(libzpaq::StringBuffer& i_sb, uint64_t i_data, unsigne
 		puti(i_sb, 8+FRANZOFFSETV2, 4); 	// 8+FRANZOFFSETV1 block
 		puti(i_sb, i_data, i_quanti);
 		puti(i_sb, 0, (8 - i_quanti));  // pad with zeros (for 7.15 little bug)
-		i_sb.write(mybuffer,FRANZOFFSETV2); ///please note the dirty trick: start by +8		
+		i_sb.write(mybuffer,FRANZOFFSETV2); ///please note the dirty trick: start by +8
 		/// please note the dirty trick: start by +8
 		if (flagdebug)
 				myprintf("Mode5: XXH3: <<%s>> CRC32 <<%s>> %s\n",mybuffer+2,mybuffer+67,i_filename.c_str());
@@ -49028,7 +47154,7 @@ ThreadReturn decompressThread(void* arg) {
       release(job.mutex);
       continue;
     }
-	
+
     // Write the files in dt that point to this block
     lock(job.write_mutex);
     for (unsigned ip=0; ip<b.files.size(); ++ip) {
@@ -49058,10 +47184,10 @@ ThreadReturn decompressThread(void* arg) {
         }
 		string filename;
         // Open file for output
-        if (job.lastdt==job.jd.dt.end()) 
+        if (job.lastdt==job.jd.dt.end())
 		{
 			filename=job.jd.rename(p->first);
-			
+
 			if (!flagstdout)
 				if (flagramdisk)
 					if (!isdirectory(filename))
@@ -49073,7 +47199,7 @@ ThreadReturn decompressThread(void* arg) {
 			assert(job.outf==FPNULL);
 			if ((p->second.data==0) && (!flagstdout))
 			{
-				if (!job.jd.flagtest) 
+				if (!job.jd.flagtest)
 				{
 					if (flagdebug)
 					{
@@ -49091,7 +47217,7 @@ ThreadReturn decompressThread(void* arg) {
 					print_progress(job.total_size, job.total_done,-1,-1);
 					release(job.mutex);
 				}
-				if (!job.jd.flagtest) 
+				if (!job.jd.flagtest)
 				{
 /// sometimes (in Windows) the path is not made (ex. path too long)
 /// let's try to make (is just a fix). Please note utw
@@ -49137,7 +47263,7 @@ ThreadReturn decompressThread(void* arg) {
 							if (!direxists(percorso))
 								myprintf("17620: percorso does not exists <<%s>>\n",percorso.c_str());
 					}
-#endif				
+#endif
 		///		filename=nomefileseesistegia(filename);
 		///printf("K1 +++\n");
 					if (flagstdout)
@@ -49145,7 +47271,7 @@ ThreadReturn decompressThread(void* arg) {
 					else
 						job.outf=fopen(filename.c_str(), WB);
 		///printf("K2 ---\n");
-					if (job.outf==FPNULL) 
+					if (job.outf==FPNULL)
 					{
 						lock(job.mutex);
 						printerr("17451",filename.c_str(),0);
@@ -49155,12 +47281,12 @@ ThreadReturn decompressThread(void* arg) {
               else if ((p->second.attr&0x200ff)==0x20000+'w') {  // sparse?
                 DWORD br=0;
 				///printf("K3 +++\n");
-		
+
                 if (!DeviceIoControl(job.outf, FSCTL_SET_SPARSE,
                     NULL, 0, NULL, 0, &br, NULL))  // set sparse attribute
                   printerr("17459",filename.c_str(),0);
 				 ///printf("K4 +++\n");
-		
+
               }
 #endif
             }
@@ -49169,7 +47295,7 @@ ThreadReturn decompressThread(void* arg) {
 		  {
 				if (flagstdout)
 					job.outf=stdout;
-				else	
+				else
 					job.outf=fopen(filename.c_str(), RBPLUS);  // update existing file
           }
 		  if (!job.jd.flagtest && job.outf==FPNULL) break;  // skip errors
@@ -49208,7 +47334,7 @@ ThreadReturn decompressThread(void* arg) {
         // does not include the last fragment.
         uint64_t nz=q;  // first nonzero byte in fragments to be written
         while (nz<q+usize && out.c_str()[nz]==0) ++nz;
-        if ((nz<q+usize || j+1==ptr.size())) 
+        if ((nz<q+usize || j+1==ptr.size()))
 			//if (stristr(job.lastdt->first.c_str(),"Globals.pas"))
 			//if (stristr(job.lastdt->first.c_str(),"globals.pas"))
 			{
@@ -49226,12 +47352,12 @@ ThreadReturn decompressThread(void* arg) {
 				g_crc32.push_back(myblock);
 
 			}
-		if (job.jd.flagtest && (nz<q+usize || j+1==ptr.size())) 
+		if (job.jd.flagtest && (nz<q+usize || j+1==ptr.size()))
 			if (flagramdisk)
 					if (!isdirectory(filename))
 						if (p->second.pramfile!=NULL)
 							(*p->second.pramfile).ramwrite(offset,(char*)out.c_str()+q,usize);
-		if (!job.jd.flagtest && (nz<q+usize || j+1==ptr.size())) 
+		if (!job.jd.flagtest && (nz<q+usize || j+1==ptr.size()))
 		{
 /// with -zero do not write
 			if (flagzero)
@@ -49246,7 +47372,7 @@ ThreadReturn decompressThread(void* arg) {
 					}
 			}
 			else
-			{				
+			{
 				if (flagdebug)
 					myprintf("17716:OFFSET-WRITE   %19s  size  %12s %s\n",migliaia((int64_t)offset),migliaia2(usize),job.lastdt->first.c_str());
 				if (flagramdisk)
@@ -49263,7 +47389,7 @@ ThreadReturn decompressThread(void* arg) {
 					/// print_progress cannot handle huge file (ex. vmdks) due to seek-and-write on
 					/// filesystems without "smartness"
 					/// example: seek @ 300GB and write 1KB
-					/// FS must write 300GB of zeros, then 1KB 
+					/// FS must write 300GB of zeros, then 1KB
 					/// with a slow spinning drive this can seems a "freeze"
 					/// =>when extracting this kind of file use -image and even -minsize something
 					/// if something is 1 all writes (and seeks) will be showed
@@ -49305,12 +47431,12 @@ ThreadReturn decompressThread(void* arg) {
 						}
 						else
 							fwrite(out.c_str()+q, 1, usize, stdout);
-						
-						
+
+
 					}
 				}
 			}
-		}	
+		}
         offset+=usize;
         lock(job.mutex);
         job.total_done+=usize;
@@ -49343,7 +47469,7 @@ ThreadReturn decompressThread(void* arg) {
   // Last block
   return 0;
 }
-ThreadReturn decompressthreadramdisk(void* arg) 
+ThreadReturn decompressthreadramdisk(void* arg)
 {
 	ExtractJob& job=*(ExtractJob*)arg;
 	int jobNumber=0;
@@ -49352,26 +47478,26 @@ ThreadReturn decompressthreadramdisk(void* arg)
 	jobNumber=++job.job;
 	release(job.mutex);
 	InputArchive in(job.jd.archive.c_str(), job.jd.password);
-	if (!in.isopen()) 
+	if (!in.isopen())
 		return 0;
 	StringBuffer out;
   // Look for next READY job.
 	int next=0;  // current job
-	while (true) 
+	while (true)
 	{
 		lock(job.mutex);
-		for (unsigned i=0; i<=job.jd.block.size(); ++i) 
+		for (unsigned i=0; i<=job.jd.block.size(); ++i)
 		{
 			unsigned k=i+next;
-			if (k>=job.jd.block.size()) 
+			if (k>=job.jd.block.size())
 				k-=job.jd.block.size();
-			if (i==job.jd.block.size()) 
+			if (i==job.jd.block.size())
 			{  // no more jobs?
 				release(job.mutex);
 				return 0;
 			}
 			Block& b=job.jd.block[k];
-			if (b.state==Block::READY && b.size>0 && b.usize>=0) 
+			if (b.state==Block::READY && b.size>0 && b.usize>=0)
 			{
 				b.state=Block::WORKING;
 				release(job.mutex);
@@ -49383,7 +47509,7 @@ ThreadReturn decompressthreadramdisk(void* arg)
     // Get uncompressed size of block
 		unsigned output_size=0;  // minimum size to decompress
 		assert(b.start>0);
-		for (unsigned j=0; j<b.size; ++j) 
+		for (unsigned j=0; j<b.size; ++j)
 		{
 			assert(b.start+j<job.jd.ht.size());
 			assert(job.jd.ht[b.start+j].usize>=0);
@@ -49391,7 +47517,7 @@ ThreadReturn decompressthreadramdisk(void* arg)
 		}
 		// Decompress
 		double mem=0;  // how much memory used to decompress
-		try 
+		try
 		{
 			assert(b.start>0);
 			assert(b.start<job.jd.ht.size());
@@ -49405,11 +47531,11 @@ ThreadReturn decompressthreadramdisk(void* arg)
 			assert(b.usize<=0xffffffffu);
 			out.setLimit(b.usize);
 			d.setOutput(&out);
-			if (!d.findBlock(&mem)) 
+			if (!d.findBlock(&mem))
 				error("31284 archive block not found");
-			if (mem>job.maxMemory) 
+			if (mem>job.maxMemory)
 				job.maxMemory=mem;
-			while (d.findFilename()) 
+			while (d.findFilename())
 			{
 				d.readComment();
 				while (out.size()<output_size && d.decompress(1<<14))
@@ -49422,7 +47548,7 @@ ThreadReturn decompressthreadramdisk(void* arg)
 					print_progress(job.total_size, job.total_done,-1,-1);
 					release(job.mutex);
 				}
-				if (out.size()>=output_size) 
+				if (out.size()>=output_size)
 					break;
 				d.readSegmentEnd();
 			}
@@ -49438,7 +47564,7 @@ ThreadReturn decompressthreadramdisk(void* arg)
 			uint64_t q=0;  // fragment start
 			libzpaq::SHA1 sha1;
 			assert(b.extracted==0);
-			for (unsigned j=b.start; j<b.start+b.size; ++j) 
+			for (unsigned j=b.start; j<b.start+b.size; ++j)
 			{
 				assert(j>0 && j<job.jd.ht.size());
 				assert(job.jd.ht[j].usize>=0);
@@ -49451,7 +47577,7 @@ ThreadReturn decompressthreadramdisk(void* arg)
 					sha1.write(out.c_str()+q, job.jd.ht[j].usize);
 					memcpy(sha1result, sha1.result(), 20);
 					q+=job.jd.ht[j].usize;
-					if (memcmp(sha1result, job.jd.ht[j].sha1, 20)) 
+					if (memcmp(sha1result, job.jd.ht[j].sha1, 20))
 					{
 						lock(job.mutex);
 						fflush(stdout);
@@ -49467,7 +47593,7 @@ ThreadReturn decompressthreadramdisk(void* arg)
 			}
 		}
 		// If out of memory, let another thread try
-		catch (std::bad_alloc& e) 
+		catch (std::bad_alloc& e)
 		{
 			lock(job.mutex);
 			fflush(stdout);
@@ -49480,7 +47606,7 @@ ThreadReturn decompressthreadramdisk(void* arg)
 			return 0;
 		}
 		// Other errors: assume bad input
-		catch (std::exception& e) 
+		catch (std::exception& e)
 		{
 			lock(job.mutex);
 			fflush(stdout);
@@ -49490,7 +47616,7 @@ ThreadReturn decompressthreadramdisk(void* arg)
 		}
     // Write the files in dt that point to this block
     lock(job.write_mutex);
-    for (unsigned ip=0; ip<b.files.size(); ++ip) 
+    for (unsigned ip=0; ip<b.files.size(); ++ip)
 	{
 		DTMap::iterator p=b.files[ip];
 		if (p->second.date==0 || p->second.data<0
@@ -49499,17 +47625,17 @@ ThreadReturn decompressthreadramdisk(void* arg)
       // Look for pointers to this block
 		const vector<unsigned>& ptr=p->second.ptr;
 		int64_t offset=0;  // write offset
-		for (unsigned j=0; j<ptr.size(); ++j) 
+		for (unsigned j=0; j<ptr.size(); ++j)
 		{
-			if (ptr[j]<b.start || ptr[j]>=b.start+b.extracted) 
+			if (ptr[j]<b.start || ptr[j]>=b.start+b.extracted)
 			{
 				offset+=job.jd.ht[ptr[j]].usize;
 				continue;
 			}
 			// Close last opened file if different
-			if (p!=job.lastdt) 
+			if (p!=job.lastdt)
 				job.lastdt=job.jd.dt.end();
-			if (job.lastdt==job.jd.dt.end()) 
+			if (job.lastdt==job.jd.dt.end())
 			{
 				if (!isdirectory(job.jd.rename(p->first)))
 					if (p->second.pramfile==NULL)
@@ -49519,7 +47645,7 @@ ThreadReturn decompressthreadramdisk(void* arg)
 					}
 				if (p->second.pramfile==NULL)
 					error("31399 cannot init ramdisk");
-				if (p->second.data==0) 
+				if (p->second.data==0)
 				{
 #ifdef _WIN32
 					if (!flagimage)
@@ -49535,11 +47661,11 @@ ThreadReturn decompressthreadramdisk(void* arg)
 			assert(job.lastdt==p);
 			// Find block offset of fragment
 			uint64_t q=0;  // fragment offset from start of block
-			for (unsigned k=b.start; k<ptr[j]; ++k) 
+			for (unsigned k=b.start; k<ptr[j]; ++k)
 			{
 				assert(k>0);
 				assert(k<job.jd.ht.size());
-				if (job.jd.ht[k].usize<0) 
+				if (job.jd.ht[k].usize<0)
 					error("31420 streaming fragment in file");
 				assert(job.jd.ht[k].usize>=0);
 				q+=job.jd.ht[k].usize;
@@ -49554,7 +47680,7 @@ ThreadReturn decompressthreadramdisk(void* arg)
 			while (j+1<ptr.size() && ptr[j+1]==ptr[j]+1
 				   && ptr[j+1]<b.start+b.size
 				   && job.jd.ht[ptr[j+1]].usize>=0
-				   && usize+job.jd.ht[ptr[j+1]].usize<=0x7fffffff) 
+				   && usize+job.jd.ht[ptr[j+1]].usize<=0x7fffffff)
 			{
 				++p->second.data;
 				assert(p->second.data<=int64_t(ptr.size()));
@@ -49567,7 +47693,7 @@ ThreadReturn decompressthreadramdisk(void* arg)
 			// does not include the last fragment.
 			uint64_t nz=q;  // first nonzero byte in fragments to be written
 			while (nz<q+usize && out.c_str()[nz]==0) ++nz;
-			if ((nz<q+usize || j+1==ptr.size())) 
+			if ((nz<q+usize || j+1==ptr.size()))
 			{
 				if (offset>g_scritti)
 					g_scritti=offset;
@@ -49579,7 +47705,7 @@ ThreadReturn decompressthreadramdisk(void* arg)
 			lock(job.mutex);
 			job.total_done+=usize;
 			release(job.mutex);
-			if (p->second.data==int64_t(ptr.size())) 
+			if (p->second.data==int64_t(ptr.size()))
 			{
 				assert(job.lastdt!=job.jd.dt.end());
 				job.lastdt=job.jd.dt.end();
@@ -49602,13 +47728,13 @@ struct OutputFile: public libzpaq::Writer {
   void write(const char* buf, int n) {if (f!=FPNULL) myfwrite(buf, 1, n, f);}
   OutputFile(FP out=FPNULL): f(out) {}
 };
-int64_t copywitheta(int64_t i_tobecopied,libzpaq::Reader& in, libzpaq::Writer& out, uint64_t n=~0ull) 
+int64_t copywitheta(int64_t i_tobecopied,libzpaq::Reader& in, libzpaq::Writer& out, uint64_t n=~0ull)
 {
   const unsigned BUFSIZE=4096;
   int64_t result=0;
   char buf[BUFSIZE];
   int64_t	inizio=mtime();
-  while (n>0) 
+  while (n>0)
   {
     int nc=n>BUFSIZE ? BUFSIZE : n;
     int nr=in.read(buf, nc);
@@ -49621,12 +47747,12 @@ int64_t copywitheta(int64_t i_tobecopied,libzpaq::Reader& in, libzpaq::Writer& o
   return result;
 }
 // Copy at most n bytes from in to out (default all). Return how many copied.
-int64_t copy(libzpaq::Reader& in, libzpaq::Writer& out, uint64_t n=~0ull) 
+int64_t copy(libzpaq::Reader& in, libzpaq::Writer& out, uint64_t n=~0ull)
 {
   const unsigned BUFSIZE=4096;
   int64_t result=0;
   char buf[BUFSIZE];
-  while (n>0) 
+  while (n>0)
   {
     int nc=n>BUFSIZE ? BUFSIZE : n;
     int nr=in.read(buf, nc);
@@ -49637,21 +47763,21 @@ int64_t copy(libzpaq::Reader& in, libzpaq::Writer& out, uint64_t n=~0ull)
   }
   return result;
 }
-uint32_t crchex2int(const char *hex) 
+uint32_t crchex2int(const char *hex)
 {
 	assert(hex);
 	uint32_t val = 0;
 	for (int i=0;i<8;i++)
 	{
-		uint8_t byte = *hex++; 
-        if (byte >= '0' && byte <= '9') 
+		uint8_t byte = *hex++;
+        if (byte >= '0' && byte <= '9')
 			byte = byte - '0';
-        else 
-		if (byte >= 'a' && byte <='f') 
+        else
+		if (byte >= 'a' && byte <='f')
 			byte = byte - 'a' + 10;
-        else 
-		if (byte >= 'A' && byte <='F') 
-			byte = byte - 'A' + 10;    
+        else
+		if (byte >= 'A' && byte <='F')
+			byte = byte - 'A' + 10;
         val = (val << 4) | (byte & 0xF);
     }
     return val;
@@ -49682,7 +47808,7 @@ void Jidac::printsanitizeflags()
 		myprintf("******\n\n");
 	}
 }
-int Jidac::testverify() 
+int Jidac::testverify()
 {
 	getpasswordifempty();
 	if (files.size()==0)
@@ -49708,34 +47834,37 @@ int Jidac::testverify()
  	for (unsigned i=0; i<files.size(); ++i)
 		if (isdirectory(files[i]))
 			myprintf("%9s in <<%s>>\n",migliaia((int64_t)files_count[i]),files[i].c_str());
-	if (files.size()) 
+	if (files.size())
 		myprintf("Total files found: %s\n", migliaia((int64_t)edt.size()));
 	myprintf("\n");
   // Compute directory sizes as the sum of their contents
 	DTMap* dp[2]={&dt, &edt};
-	for (int i=0; i<2; ++i) 
-		for (DTMap::iterator p=dp[i]->begin(); p!=dp[i]->end(); ++p) 
+	for (int i=0; i<2; ++i)
+		for (DTMap::iterator p=dp[i]->begin(); p!=dp[i]->end(); ++p)
 		{
 			int len=p->first.size();
-			if (len>0 && p->first[len]!='/') 
-				for (int j=0; j<len; ++j) 
-					if (p->first[j]=='/') 
+			if (len>0 && p->first[len]!='/')
+				for (int j=0; j<len; ++j)
+					if (p->first[j]=='/')
 					{
 						DTMap::iterator q=dp[i]->find(p->first.substr(0, j+1));
 						if (q!=dp[i]->end())
 							q->second.size+=p->second.size;
 					}
 		}
-		
-	for (DTMap::iterator p=edt.begin(); p!=edt.end(); ++p) 
+	if (flagdebug)
 	{
-		myprintf("49326: EDT  %s\n",p->first.c_str());
+		unsigned int edtct=0;
+		for (DTMap::iterator p=edt.begin(); p!=edt.end(); ++p)
+		{
+			myprintf("49326: %08d EDT  %s\n",edtct++,p->first.c_str());
+		}
 	}
 	vector<DTMap::iterator> filelist;
-	for (DTMap::iterator p=edt.begin(); p!=edt.end(); ++p) 
+	for (DTMap::iterator p=edt.begin(); p!=edt.end(); ++p)
 	{
 		DTMap::iterator a=dt.find(rename(p->first));
-		if (a!=dt.end() && (all || a->second.date)) 
+		if (a!=dt.end() && (all || a->second.date))
 		{
 			a->second.data='-';
 			filelist.push_back(a);
@@ -49743,8 +47872,8 @@ int Jidac::testverify()
 		p->second.data='+';
 		filelist.push_back(p);
 	}
-	for (DTMap::iterator a=dt.begin(); a!=dt.end(); ++a) 
-		if (a->second.data!='-' && (all || a->second.date)) 
+	for (DTMap::iterator a=dt.begin(); a!=dt.end(); ++a)
+		if (a->second.data!='-' && (all || a->second.date))
 		{
 			a->second.data='-';
 			filelist.push_back(a);
@@ -49759,7 +47888,7 @@ int Jidac::testverify()
 	char linebuffer[1000];
 	unsigned int ultimapercentuale=200;
 	unsigned int percentuale;
-	for (unsigned fi=0;fi<filelist.size(); ++fi) 
+	for (unsigned fi=0;fi<filelist.size(); ++fi)
 	{
 		DTMap::iterator p=filelist[fi];
 		if (menoenne)
@@ -49775,7 +47904,7 @@ int Jidac::testverify()
 			}
 		}
     // Compare external files
-		if (p->second.data=='-' && fi+1<filelist.size() && filelist[fi+1]->second.data=='+') 
+		if (p->second.data=='-' && fi+1<filelist.size() && filelist[fi+1]->second.data=='+')
 		{
 			DTMap::iterator p1=filelist[fi+1];
 			string myhashtype="";
@@ -49785,9 +47914,9 @@ int Jidac::testverify()
 			int64_t myaccesstime=0;
 			bool	myisordered=false;
 			int		myversion=0;
-			franz_posix* myposix=NULL;			
+			franz_posix* myposix=NULL;
 			string hashfromfile="";
-									
+
 			if (!isdirectory(p1->first))
 			{
 					decode_franz_block(false,p->second.franz_block,
@@ -49823,7 +47952,7 @@ int Jidac::testverify()
 							risultati_utf8.push_back(true);
 						}
 						else
-						{	
+						{
 							hashmatches++;
 							p->second.data='=';
 							++fi;
@@ -49846,7 +47975,7 @@ int Jidac::testverify()
 							risultati_utf8.push_back(true);
 						}
 						else
-						{	
+						{
 						/// if very, do a full hash verify!
 							p->second.data='=';
 							++fi;
@@ -49860,7 +47989,7 @@ int Jidac::testverify()
 						p->second.data='=';
 						++fi;
 					}
-				}	
+				}
 				else
 				{
 					/// directory always match
@@ -49878,7 +48007,7 @@ int Jidac::testverify()
 		if (p->second.data=='#') ++mismatches;
 		if (p->second.data=='-') ++internal;
 		if (p->second.data=='+') ++external;
-		if (p->second.data!='=') 
+		if (p->second.data!='=')
 		{
 			if (!isdirectory(p->first))
 				usize+=p->second.size;
@@ -49895,7 +48024,7 @@ int Jidac::testverify()
 				risultati_utf8.push_back(false);
 			}
 		}
-	}  
+	}
 	myprintf("\n\n");
 	bool myerror=false;
 	if (menoenne)
@@ -49943,18 +48072,18 @@ int Jidac::testverify()
 		myprintf("47452: use -verbose to get more details\n");
 		return 2;
 	}
-	
+
 	else
 		return 0;
 }
-int Jidac::info() 
+int Jidac::info()
 {
 	///flagcomment=true;
 	versioncomment="";
 	all=4;
 	return enumeratecomments();
 }
-int Jidac::zpaqdirsize() 
+int Jidac::zpaqdirsize()
 {
 	if (archive=="")
 	{
@@ -49973,14 +48102,14 @@ int Jidac::zpaqdirsize()
 		myprintf("\n\n31016: dtsize %s\n\n",migliaia((int64_t)dt.size()));
 /// just a bit... overkill
 	DTMap* dp[2]={&dt, &edt};
-	for (int i=0; i<2; ++i) 
-		for (DTMap::iterator p=dp[i]->begin(); p!=dp[i]->end(); ++p) 
+	for (int i=0; i<2; ++i)
+		for (DTMap::iterator p=dp[i]->begin(); p!=dp[i]->end(); ++p)
 		{
 			int len=p->first.size();
-			if (len>0 && p->first[len]!='/') 
-				for (int j=0; j<len; ++j) 
+			if (len>0 && p->first[len]!='/')
+				for (int j=0; j<len; ++j)
 				{
-					if (p->first[j]=='/') 
+					if (p->first[j]=='/')
 					{
 						DTMap::iterator q=dp[i]->find(p->first.substr(0, j+1));
 						if (q!=dp[i]->end())
@@ -50035,7 +48164,7 @@ int Jidac::zpaqdirsize()
 	}
 	sort(filelist.begin(), filelist.end(), compareFragmentList);
 	myprintf("\n\n");
-	for (unsigned fi=0;fi<filelist.size(); ++fi) 
+	for (unsigned fi=0;fi<filelist.size(); ++fi)
 	{
 		DTMap::iterator p=filelist[fi];
 		myprintf("%19s [%s] <<",migliaia(p->second.size),dateToString(flagutc,p->second.date).c_str());
@@ -50061,7 +48190,7 @@ void Jidac::decodelastversion()
 	{
 		myprintf("50100: You ask the last     %08d versions (...wait...)\n",g_rangelast);
 		int errors=0;
-		if (archive!="") 
+		if (archive!="")
 			read_archive(NULL,archive.c_str(),&errors,1,true); /// AND NOW THE MAGIC ONE!
 		int lastver=ver.size()-1;
 		myprintf("50104: Last version present %08d\n",lastver);
@@ -50078,7 +48207,7 @@ void Jidac::decodelastversion()
 }
 
 // List contents
-int Jidac::list() 
+int Jidac::list()
 {
 	int64_t csize=0;
 	getpasswordifempty();
@@ -50104,24 +48233,24 @@ int Jidac::list()
 		myprintf("Found version -until %d scanning again...\n",versione);
 		jidacreset();
 	}
-	
+
 
 	decodelastversion();
-	
+
 	if (files.size()>=1)
 		return testverify();
   // Read archive into dt, which may be "" for empty.
 	int errors=0;
 	bool flagshow;
-	if (archive!="") 
+	if (archive!="")
 		csize=read_archive(NULL,archive.c_str(),&errors,1); /// AND NOW THE MAGIC ONE!
 	myprintf("\n");
 	g_bytescanned	=0;
 	g_filescanned	=0;
 	g_worked		=0;
 	vector<DTMap::iterator> filelist;
-	for (DTMap::iterator a=dt.begin(); a!=dt.end(); ++a) 
-		if (a->second.data!='-' && (all || a->second.date)) 
+	for (DTMap::iterator a=dt.begin(); a!=dt.end(); ++a)
+		if (a->second.data!='-' && (all || a->second.date))
 		{
 			a->second.data='-';
 			filelist.push_back(a);
@@ -50138,14 +48267,14 @@ int Jidac::list()
 	myprintf("\n");
 	int64_t usize=0;
 	map<int, string> mappacommenti;
-	for (unsigned i=0;i<filelist.size();i++) 
+	for (unsigned i=0;i<filelist.size();i++)
 	{
 		DTMap::iterator p=filelist[i];
 		if (isads(p->first))
 		{
 			string fakefile=p->first;
 			myreplace(fakefile,":$DATA","");
-			size_t found = fakefile.find("VCOMMENT "); 
+			size_t found = fakefile.find("VCOMMENT ");
 			if (found != string::npos)
 			{
     			string numeroversione=fakefile.substr(found+9,8);
@@ -50156,7 +48285,7 @@ int Jidac::list()
 		}
 	}
 	unsigned fi;
-	for (fi=0;fi<filelist.size(); ++fi) 
+	for (fi=0;fi<filelist.size(); ++fi)
 	{
 		if (menoenne)
 			if (fi>=menoenne)
@@ -50177,7 +48306,7 @@ int Jidac::list()
 			if (isdirectory(p->first))
 				flagshow=false;
 		if (maxsize>0)
-			if (maxsize<(uint64_t)p->second.size) 
+			if (maxsize<(uint64_t)p->second.size)
 				flagshow=false;
 		if (minsize>0)
 			if (minsize>(uint64_t)p->second.size)
@@ -50189,7 +48318,7 @@ int Jidac::list()
 			if ((p->second.date)>=g_dateto)
 				flagshow=false;
 		if (flagshow)
-			if (!strchr(nottype.c_str(), p->second.data)) 
+			if (!strchr(nottype.c_str(), p->second.data))
 			{
 				if (p->first!="" && (!isdirectory(p->first)))
 					usize+=p->second.size;
@@ -50202,7 +48331,7 @@ int Jidac::list()
 				int64_t myaccesstime	=0;
 				bool	myisordered=false;
 				int		myversion=0;
-				franz_posix* myposix=NULL;	
+				franz_posix* myposix=NULL;
 #ifdef _WIN32
 				if (flagchecksum || flagwindate)
 #else
@@ -50259,9 +48388,9 @@ int Jidac::list()
 					{
 						if (tofiles.size()>0)
 							myfilename=rename(myfilename);
-						myfilename=myhash+mycrc32+myfilename;	
+						myfilename=myhash+mycrc32+myfilename;
 					}
-	/// search and replace, if requested	
+	/// search and replace, if requested
 					if (searchfrom!="")
 						replace(myfilename,searchfrom,replaceto);
 					if (flagstdout)
@@ -50269,11 +48398,11 @@ int Jidac::list()
 							myfilename="[STDOUT] "+myfilename;
 					printUTF8(myfilename.c_str());
 					unsigned v;  // list version updates, deletes, compressed size
-					if (all>0 && p->first.size()==all+1u && (v=atoi(p->first.c_str()))>0 && v<ver.size()) 
+					if (all>0 && p->first.size()==all+1u && (v=atoi(p->first.c_str()))>0 && v<ver.size())
 					{  // version info
 						std::map<int,string>::iterator commento;
-						commento=mappacommenti.find(v); 
-						if(commento== mappacommenti.end()) 
+						commento=mappacommenti.find(v);
+						if(commento== mappacommenti.end())
 							myprintf(" +%d -%d -> %s", ver[v].updates, ver[v].deletes,
 							(v+1<ver.size() ? migliaia(ver[v+1].offset-ver[v].offset) : migliaia(csize-ver[v].offset)));
 						else
@@ -50285,13 +48414,13 @@ int Jidac::list()
 			}
 	}  // end for i = each file version
 	int64_t 	allsize=0;
-	for (DTMap::const_iterator p=dt.begin(); p!=dt.end(); ++p) 
-		if (p->second.date) 
-			for (unsigned j=0; j<p->second.ptr.size(); ++j) 
+	for (DTMap::const_iterator p=dt.begin(); p!=dt.end(); ++p)
+		if (p->second.date)
+			for (unsigned j=0; j<p->second.ptr.size(); ++j)
 			{
 				unsigned k=p->second.ptr[j];
-				if (k>0 && k<ht.size()) 
-					if (ht[k].usize>=0) 
+				if (k>0 && k<ht.size())
+					if (ht[k].usize>=0)
 						allsize+=ht[k].usize;
 			}
 	myprintf("\n%21s (%s) of %s (%s) in %s files shown\n",migliaia(usize),tohuman(usize),migliaia2(allsize),tohuman2(allsize),migliaia3(fi));
@@ -50328,13 +48457,13 @@ string wyhash_calc_file(const char * i_filename,bool i_flagcalccrc32,uint32_t& o
 #else
 	wstring wfilename=utow(i_filename);
 	HANDLE myfile=CreateFile(wfilename.c_str(),GENERIC_READ,FILE_SHARE_READ | FILE_SHARE_WRITE,0,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,0);
-	if (myfile==INVALID_HANDLE_VALUE) 
+	if (myfile==INVALID_HANDLE_VALUE)
 	{
 		myprintf("25057: Invalid handle for %s\n",i_filename);
 		return "";
 	}
 	HANDLE mapping=CreateFileMapping(myfile,0,PAGE_READONLY, 0, 0, 0);
-	if (mapping==0) 
+	if (mapping==0)
 	{
 		if (myfile!=0)
 			CloseHandle(myfile);
@@ -50351,7 +48480,7 @@ string wyhash_calc_file(const char * i_filename,bool i_flagcalccrc32,uint32_t& o
 		risultato=bin2hex_64(mywyhash);
 		if (i_flagcalccrc32)
 			o_crc32=crc32_16bytes(data,lunghezza,o_crc32);
-		io_lavorati+=lunghezza;	
+		io_lavorati+=lunghezza;
 		letti+=lunghezza;
 		if (flagnoeta==false)
 			myavanzamentoby1sec(io_lavorati,i_totali,i_inizio,false);
@@ -50384,7 +48513,7 @@ string wyhash_calc_file(const char * i_filename,bool i_flagcalccrc32,uint32_t& o
 		if (myfile!=0)
 			CloseHandle(myfile);
 		return "";
-	}	
+	}
 	UnmapViewOfFile(data);
 	CloseHandle(mapping);
 	CloseHandle(myfile);
@@ -50434,13 +48563,13 @@ string mm_hash_calc_file(int i_algo,const char * i_filename,bool i_flagcalccrc32
 #else
 		wstring wfilename=utow(i_filename);
 		myfile=CreateFile(wfilename.c_str(),GENERIC_READ,FILE_SHARE_READ | FILE_SHARE_WRITE,0,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,0);
-		if (myfile==INVALID_HANDLE_VALUE) 
+		if (myfile==INVALID_HANDLE_VALUE)
 		{
 			myprintf("25057: Invalid handle for %s\n",i_filename);
 			return "26311:ERROR";
 		}
 		mapping=CreateFileMapping(myfile,0,PAGE_READONLY, 0, 0, 0);
-		if (mapping==0) 
+		if (mapping==0)
 		{
 			if (myfile!=0)
 				CloseHandle(myfile);
@@ -50558,13 +48687,13 @@ string mm_hash_calc_file(int i_algo,const char * i_filename,bool i_flagcalccrc32
 		{
 			perror("25087: unknown algo");
 		}
-		io_lavorati+=lunghezza;	
+		io_lavorati+=lunghezza;
 		if ((flagnoeta==false) && (i_inizio>0))
 			myavanzamentoby1sec(io_lavorati,i_totali,i_inizio,false);
 	}
 #ifdef unix
 	if (myfilehandle!=0)
-		close(myfilehandle);    
+		close(myfilehandle);
 	if (lunghezza>0)
 	{
 		int errore=munmap(data,lunghezza);
@@ -50580,7 +48709,7 @@ string mm_hash_calc_file(int i_algo,const char * i_filename,bool i_flagcalccrc32
 		if (myfile!=0)
 			CloseHandle(myfile);
 		return "26441: ERROR";
-	}	
+	}
 	if (lunghezza>0)
 		UnmapViewOfFile(data);
 	if (mapping!=0)
@@ -50589,7 +48718,7 @@ string mm_hash_calc_file(int i_algo,const char * i_filename,bool i_flagcalccrc32
 		CloseHandle(myfile);
 #endif
 	o_thefilesize=lunghezza;
-	
+
 	return risultato;
 }
 
@@ -50599,16 +48728,16 @@ string mm_hash_calc_file(int i_algo,const char * i_filename,bool i_flagcalccrc32
 class franz_do_hash
 {
 /*
-	do you think this is kind of "weird" C/C++/Delphi? 
+	do you think this is kind of "weird" C/C++/Delphi?
 	Well, we need to compile on gcc 3.4
 	therefore no C++20, no C++14, no... nothing
-	
+
 	franz_do_hash hashfrombuffer(par->algo[i]);
 	hashfrombuffer.init();
 	hashfrombuffer.update(par->data[i],par->filesize[i]);
 	hashstringato=hashfrombuffer.finalize();
-	
-	
+
+
 	franz_do_hash dummy(tmpalgo[i]);
 	string risu=dummy.filehash(work,false,par->inizio,par->dimensione);
 
@@ -50621,14 +48750,14 @@ class franz_do_hash
 	libzpaq::SHA1 	*p_sha1;
 	libzpaq::SHA256 *p_sha256;
 	SHA3			*p_sha3;
-	XXH3_state_t	*p_xxh3;  
+	XXH3_state_t	*p_xxh3;
 	MD5				*p_md5;
 	blake3_hasher 	*p_blake3;
 	NESSIEstruct 	*p_whihasher;
 	HighwayHashCat 	*p_highway64state;
 	uint32_t		*p_crc32;
 	uint32_t		*p_crc32c;
-	
+
 	finalize_function	ffinalize;
 
 	public:
@@ -50637,12 +48766,12 @@ class franz_do_hash
 	bool		flagcalccrc32;
 
 	bool		i_filehash;		// if false, do a RAM hash
-	
+
 	string		i_filename;
 	bool		i_flagmm;
 	int64_t		i_inizio;
 	int64_t		i_totali;
-	
+
 	int 		i_chunksize;
 	uint32_t* 	i_buffer8bit;
 
@@ -50653,12 +48782,12 @@ class franz_do_hash
 	string		o_hexcrc32;
 	uint32_t	o_crc32c;
 	string		o_hexcrc32c;
-	
+
 	void		init();
 	void		update(char *i_buffer,const int i_buflen);
 	string		finalize();
-	
-	franz_do_hash(string i_type): 
+
+	franz_do_hash(string i_type):
 	ihashtype(-1),
 	flagcalccrc32(false),
 	i_filehash(true),
@@ -50678,8 +48807,8 @@ class franz_do_hash
 ///			seppuku();
 			return;
 		}
-		
-		
+
+
 		for (MAPPATIPOHASH::iterator p=g_mappatipohash.begin(); p!=g_mappatipohash.end(); ++p)
 			if (stringtoupper(i_type)==(p->second.hashname))
 			{
@@ -50702,8 +48831,8 @@ class franz_do_hash
 		isinit				=false;
 		isfinalized			=false;
 	}
-	
-	franz_do_hash(int i_franzotype): 
+
+	franz_do_hash(int i_franzotype):
 	ihashtype(-1),
 	flagcalccrc32(false),
 	i_filehash(true),
@@ -50723,7 +48852,7 @@ class franz_do_hash
 			seppuku();
 			return;
 		}
-	
+
 		i_hashtype2			=p->second.hashname;
 		ihashtype			=i_franzotype;
 		o_status			="";
@@ -50745,7 +48874,7 @@ void franz_do_hash::init()
 	p_sha1			=NULL;
 	p_sha256		=NULL;
 	p_sha3			=NULL;
-	p_xxh3			=NULL;  
+	p_xxh3			=NULL;
 	p_md5			=NULL;
 	p_blake3		=NULL;
 	p_whihasher		=NULL;
@@ -50756,10 +48885,10 @@ void franz_do_hash::init()
 		seppuku();
 		return;
 	}
-	
+
 	if (i_hashtype2=="NONE")
 		return;
-	
+
 	if ((ihashtype==ALGO_XXHASH64) || (ihashtype==ALGO_WINHASH64))
 		p_xxhash64=new XXHash64(0);
 	else
@@ -50904,7 +49033,7 @@ void franz_do_hash::update(char *i_buffer,const int i_buflen)
 		seppuku();
 		return;
 	}
-	
+
 	if (isfinalized)
 	{
 		myprintf("47130: GURU hash finalized, cannot update\n");
@@ -50938,7 +49067,7 @@ void franz_do_hash::update(char *i_buffer,const int i_buflen)
 		*/
 		(*p_sha1).write(i_buffer,i_buflen);
 		return;
-	}	
+	}
 	else
 	if (ihashtype==ALGO_SHA256)
 	{
@@ -51092,32 +49221,32 @@ string	franz_do_hash::filehash(string i_filename,bool i_flagcalccrc32,int64_t i_
 		return "";
 	}
 	char temp[128];
-	
-	
+
+
 	if (ihashtype==ALGO_NILSIMSA)
 	{
 		o_hexhash=mm_hash_calc_file(ALGO_NILSIMSA,i_filename.c_str(),i_flagcalccrc32,o_crc32,i_inizio,i_totali,g_dimensione,o_thefilesize);
 		return o_hexhash;
 	}
-	
+
 	if (ihashtype==ALGO_WYHASH)
 	{
 		o_hexhash=mm_hash_calc_file(ALGO_WYHASH,i_filename.c_str(),i_flagcalccrc32,o_crc32,i_inizio,i_totali,g_dimensione,o_thefilesize);
 		return o_hexhash;
 	}
-	
+
 	FILE* myfilez = freadopen(i_filename.c_str());
-	
+
 	if	(myfilez==NULL)
 	{
-		
+
 #ifdef _WIN32
 		int err=GetLastError();
 		string codice=decodewinerror(err,NULL);
 		myprintf("48699: error kind %d %s opening <<",err,codice.c_str());
 		printUTF8(i_filename.c_str());
 		myprintf(">>\n");
-		
+
 #else
 		int err=1;
 		myprintf("62697: error kind %d opening <<",err);
@@ -51127,10 +49256,10 @@ string	franz_do_hash::filehash(string i_filename,bool i_flagcalccrc32,int64_t i_
 		o_status="62697: ERROR OPENING FILE";
 		return "";
 	}
-	
+
 	int64_t lunghezza	=prendidimensionefile(i_filename.c_str());//prendidimensionehandle(myfilez);
 	int64_t	letti		=0;
-	
+
 #ifdef __HAIKU__
 	const int BUFSIZE	=16384;
 #else
@@ -51140,20 +49269,20 @@ string	franz_do_hash::filehash(string i_filename,bool i_flagcalccrc32,int64_t i_
 	const int BUFSIZE	=65536*8;
 #endif
 #endif
-	
+
 	unsigned char 		unzBuf[BUFSIZE];
 	int 				n=BUFSIZE;
-	
+
 	uint64_t myseed = 0;
 	XXHash64 myhash(myseed);
-	
+
 /// just an extimate. If <64K get xxhash64
 //  otherwise get 16K head +16KB mid, +16KB tail =>xxhash64
-//	
+//
 	int mytype=ihashtype;
-	
-	
-	if (ihashtype==ALGO_QUICK) 
+
+
+	if (ihashtype==ALGO_QUICK)
 	{
 		if (lunghezza<65536)
 		{
@@ -51163,7 +49292,7 @@ string	franz_do_hash::filehash(string i_filename,bool i_flagcalccrc32,int64_t i_
 		{
 			n=16384;
 			int r=0;
-		
+
 			r=fread(unzBuf,1,n,myfilez);
 			if (r!=n)
 			{
@@ -51177,7 +49306,7 @@ string	franz_do_hash::filehash(string i_filename,bool i_flagcalccrc32,int64_t i_
 			myhash.add(unzBuf,r);
 
 			int64_t off=lunghezza/2;
-		
+
 			fseeko(myfilez,off,SEEK_SET);
 			r=fread(unzBuf,1,n, myfilez);
 			if (r!=n)
@@ -51209,15 +49338,15 @@ string	franz_do_hash::filehash(string i_filename,bool i_flagcalccrc32,int64_t i_
 
 			if ((flagnoeta==false) && (i_inizio>0) && (i_totali>0))
 				myavanzamentoby1sec(g_dimensione,i_totali,i_inizio,false);
-		
+
 			o_hexhash		=bin2hex_64(myhash.hash());
 			o_thefilesize	=lunghezza;
 			g_dimensione	+=lunghezza;
 			return o_hexhash;
 		}
 	}
-	
-	
+
+
 	libzpaq::SHA1 sha1;
 	MD5 md5;
 	libzpaq::SHA256 mysha256;
@@ -51234,7 +49363,7 @@ string	franz_do_hash::filehash(string i_filename,bool i_flagcalccrc32,int64_t i_
 	NESSIEstruct whihasher;
 	if (mytype==ALGO_WHIRLPOOL)
 		NESSIEinit(&whihasher);
-	
+
 	size_t f[256] = { 0 };
 
 	HighwayHashCat state;
@@ -51246,16 +49375,16 @@ string	franz_do_hash::filehash(string i_filename,bool i_flagcalccrc32,int64_t i_
 	if (mytype==ALGO_CRC32)
 		i_flagcalccrc32=true;
 
-			
+
 	if (mytype==ALGO_CRC32C)
 	{
 		ssize_t got;
 		size_t off, n;
 		uint32_t crc=0;
-		while ((got = fread(unzBuf,sizeof(char),BUFSIZE,myfilez)) > 0) 
+		while ((got = fread(unzBuf,sizeof(char),BUFSIZE,myfilez)) > 0)
 		{
 			off=0;
-			do 
+			do
 			{
 				n = (size_t)got - off;
 				if (n > BUFSIZE)
@@ -51263,24 +49392,24 @@ string	franz_do_hash::filehash(string i_filename,bool i_flagcalccrc32,int64_t i_
 				crc=crc32c(crc, (const unsigned char*)unzBuf+off,n);
 				off += n;
 			} while (off < (size_t)got);
-			
+
 			if (i_flagcalccrc32)
 				o_crc32=crc32_16bytes(unzBuf,got,o_crc32);
-		
+
 			g_dimensione+=got;
 			letti+=got;
-			
+
 			if ((flagnoeta==false) && (i_inizio>0) && (i_totali>0))
 				myavanzamentoby1sec(g_dimensione,i_totali,i_inizio,false);
 		}
-		snprintf(temp,sizeof(temp),"%08X",crc);	
+		snprintf(temp,sizeof(temp),"%08X",crc);
 		o_hexhash=temp;
 	}
 	else
 	while (1)
 	{
 		int r=fread(unzBuf, 1, n, myfilez);
-	
+
 		if (mytype==ALGO_XXHASH64)
 			myhash.add(unzBuf,r);
 		else
@@ -51313,26 +49442,26 @@ string	franz_do_hash::filehash(string i_filename,bool i_flagcalccrc32,int64_t i_
 		else
 		if ((mytype==ALGO_HIGHWAY64) || (mytype==ALGO_HIGHWAY128) || (mytype==ALGO_HIGHWAY256))
 			HighwayHashCatAppend((const uint8_t*)unzBuf,r,&state);
-		
+
 		if (i_flagcalccrc32)
 			o_crc32=crc32_16bytes(unzBuf,r,o_crc32);
-		
+
 		g_dimensione+=r;
 		letti+=r;
-		if (r!=n) 
+		if (r!=n)
 			break;
 		if ((flagnoeta==false) && (i_inizio>0) && (i_totali>0))
 			myavanzamentoby1sec(g_dimensione,i_totali,i_inizio,false);
 	}
 	if (myfilez!=NULL)
 		fclose(myfilez);
-	
+
 	if (i_flagcalccrc32)
 	{
 		snprintf(temp,sizeof(temp),"%08X",o_crc32);
 		o_hexcrc32 =temp;
 	}
-	
+
 	if (mytype==ALGO_CRC32)
 	{
 		snprintf(temp,sizeof(temp),"%08X",o_crc32);
@@ -51363,7 +49492,7 @@ string	franz_do_hash::filehash(string i_filename,bool i_flagcalccrc32,int64_t i_
 	{
 		uint8_t output[BLAKE3_OUT_LEN];
 		blake3_hasher_finalize(&hasher, output, BLAKE3_OUT_LEN);
-		o_hexhash=binarytohex((const unsigned char*)output,BLAKE3_OUT_LEN);	
+		o_hexhash=binarytohex((const unsigned char*)output,BLAKE3_OUT_LEN);
 	}
 	if (mytype==ALGO_MD5)
 		o_hexhash=md5.getHash();
@@ -51391,7 +49520,7 @@ string	franz_do_hash::filehash(string i_filename,bool i_flagcalccrc32,int64_t i_
 		else
 			snprintf(temp,sizeof(temp), "%8.4f", (float)0); ///quick "fix" for -0.0000
 		o_hexhash=temp;
-	}	
+	}
 
 	if (mytype==ALGO_HIGHWAY64)
 	{
@@ -51402,15 +49531,15 @@ string	franz_do_hash::filehash(string i_filename,bool i_flagcalccrc32,int64_t i_
 	{
 		uint64_t hash[2];
 		HighwayHashCatFinish128(&state,hash);
-		o_hexhash=binarytohex((const unsigned char*)hash,16);	
+		o_hexhash=binarytohex((const unsigned char*)hash,16);
 	}
 	if (mytype==ALGO_HIGHWAY256)
 	{
 		uint64_t hash[4];
 		HighwayHashCatFinish256(&state,hash);
-		o_hexhash=binarytohex((const unsigned char*)hash,32);	
+		o_hexhash=binarytohex((const unsigned char*)hash,32);
 	}
-	
+
 	if (lunghezza!=letti)
 	{
 		myprintf("\n62748: *** CORRUPTED FILE DETECTED! expected %s readed %s bytes *** ",migliaia(lunghezza),migliaia2(letti));
@@ -51429,17 +49558,17 @@ string	franz_do_hash::filehash(string i_filename,bool i_flagcalccrc32,int64_t i_
 // and external file contents are equal or neither exists.
 // If filename is 0 then return true if it is possible to compare.
 // In the meantime calc the crc32 of the entire file
-bool Jidac::equal(DTMap::const_iterator p, const char* filename,uint32_t &o_crc32,string i_myhashtype,string i_myhash,string& o_hash) 
+bool Jidac::equal(DTMap::const_iterator p, const char* filename,uint32_t &o_crc32,string i_myhashtype,string i_myhash,string& o_hash)
 {
 	o_crc32=0;
 	o_hash="";
 	if (i_myhash=="FAKE")
 		o_hash="FAKE";
   // test if all fragment sizes and hashes exist
-	if (filename==0) 
+	if (filename==0)
 	{
 		static const char zero[20]={0};
-		for (unsigned i=0; i<p->second.ptr.size(); ++i) 
+		for (unsigned i=0; i<p->second.ptr.size(); ++i)
 		{
 			unsigned j=p->second.ptr[i];
 			if (j<1 || j>=ht.size() || ht[j].usize<0 || !memcmp(ht[j].sha1, zero, 20))
@@ -51448,19 +49577,19 @@ bool Jidac::equal(DTMap::const_iterator p, const char* filename,uint32_t &o_crc3
 		return true;
 	}
   // internal or neither file exists
-	if (p->second.date==0) 
+	if (p->second.date==0)
 		return !exists(filename);
   // directories always match
 	if (p->first!="" && isdirectory(p->first))
 		return exists(filename);
   // compare sizes
 	FP in=fopen(filename, RB);
-	if (in==FPNULL) 
+	if (in==FPNULL)
 		return false;
-	if (in==NULL) 
+	if (in==NULL)
 		return false;
 	fseeko(in, 0, SEEK_END);
-	if (ftello(in)!=p->second.size) 
+	if (ftello(in)!=p->second.size)
 		return fclose(in), false;
   // compare hashes chunk by chunk.
 	fseeko(in, 0, SEEK_SET);
@@ -51475,22 +49604,22 @@ bool Jidac::equal(DTMap::const_iterator p, const char* filename,uint32_t &o_crc3
 		myprintf("\n");
 	int64_t 	done				=0;
 	int 		ultimapercentuale	=-1;
-	
+
 	/*
 	if (flagdebug)
 		myprintf("49125: franz_do_hash\n");
 	*/
 	if (i_myhashtype=="")		// a seppuku if myhashtype is ""
 		i_myhashtype="NONE";
-	
+
 	franz_do_hash hashfrombuffer(i_myhashtype);
 	hashfrombuffer.init();
-	
+
 	int64_t timestart=mtime();
-	for (unsigned i=0; i<p->second.ptr.size(); ++i) 
+	for (unsigned i=0; i<p->second.ptr.size(); ++i)
 	{
 		unsigned f=p->second.ptr[i];
-		if (f<1 || f>=ht.size() || ht[f].usize<0) 
+		if (f<1 || f>=ht.size() || ht[f].usize<0)
 			return fclose(in), false;
 		double percentuale=0;
 		if (flagshow)
@@ -51508,10 +49637,10 @@ bool Jidac::equal(DTMap::const_iterator p, const char* filename,uint32_t &o_crc3
 					ultimapercentuale=(int)percentuale;
 				}
 		}
-		for (int j=0; j<ht[f].usize;) 
+		for (int j=0; j<ht[f].usize;)
 		{
 			int n=ht[f].usize-j;
-			if (n>BUFSIZE) 
+			if (n>BUFSIZE)
 				n=BUFSIZE;
 			int r=fread(buf, 1, n, in);
 			o_crc32=crc32_16bytes(buf,r,o_crc32);
@@ -51519,19 +49648,19 @@ bool Jidac::equal(DTMap::const_iterator p, const char* filename,uint32_t &o_crc3
 			g_worked+=r;
 			if (flagchecksum)
 				hashfrombuffer.update(buf,r);
-			if (r!=n) 
+			if (r!=n)
 			{
 				return fclose(in), false;
 			}
 			sha1.write(buf, n);
 			j+=n;
 		}
-		if (memcmp(sha1.result(), ht[f].sha1, 20)!=0) 
-		{	
+		if (memcmp(sha1.result(), ht[f].sha1, 20)!=0)
+		{
 			return fclose(in), false;
 		}
 	}
-	if (fread(buf, 1, BUFSIZE, in)!=0) 
+	if (fread(buf, 1, BUFSIZE, in)!=0)
 		return fclose(in), false;
 	fclose(in);
 
@@ -51562,7 +49691,7 @@ bool isletterpath(const string& i_filename)
 				return true;
 	return false;
 }
-int Jidac::setpassword() 
+int Jidac::setpassword()
 {
 	if (files.size()!=2)
 	{
@@ -51576,8 +49705,8 @@ int Jidac::setpassword()
 	if (!iszpaq(repack))
 			repack+=".zpaq";
 	string part0=subpart(archive,0);
-	if (part0!=archive) 
-	{  
+	if (part0!=archive)
+	{
 		myprintf("32528: so sorry, this seems a multipart archive, abort\n");
 		return 2;
 	}
@@ -51626,12 +49755,12 @@ int Jidac::setpassword()
 			return 2;
 		}
 	}
-	if (flagforce) 
+	if (flagforce)
 		delete_file(repack.c_str());
-	if (exists(repack)) 
+	if (exists(repack))
 		error("32507: output file exists and no -force");
 	char salt[32]={0};
-	if (new_password) 
+	if (new_password)
 		libzpaq::random(salt, 32);
 	myprintf("Running for %s bytes\n",migliaia(in.totalsize()));
 	if (password!=NULL)
@@ -51710,14 +49839,14 @@ struct tparametriramtodisk
 	o_filecrcerror(0)	{}
 
 };
-void * scriviramtodisk(void *t) 
+void * scriviramtodisk(void *t)
 {
 	assert(t);
 	tparametriramtodisk* par= ((struct tparametriramtodisk*)(t));
 	char buffer[100];
 	string hashstringato;
 	string crc32fromram;
-	
+
 	par->o_crcsize			=0;
 	par->o_hashedsize		=0;
 	par->o_writtenbythread	=0;
@@ -51770,7 +49899,7 @@ void * scriviramtodisk(void *t)
 						{
 							///if (flagdebug)
 								///myprintf("49404: franz_do_hash\n");
-	
+
 							franz_do_hash hashfrombuffer(par->algo[i]);
 							hashfrombuffer.init();
 							hashfrombuffer.update(par->data[i],par->filesize[i]);
@@ -51779,7 +49908,7 @@ void * scriviramtodisk(void *t)
 						}
 						if (flagdebug)
 							myprintf("33966: INFO hash stored %s %s  from ram|%s| %s\n",par->algo[i].c_str(),par->filecrc[i].c_str(),hashstringato.c_str(),par->filenameondisk[i].c_str());
-						
+
 						///if (par->filehash[i]!="!ERROR!")
 						if (par->filehash[i]!=hashstringato)
 						{
@@ -51839,11 +49968,11 @@ void * scriviramtodisk(void *t)
 	pthread_exit(NULL);
 	return 0;
 }
-int Jidac::ecommand() 
+int Jidac::ecommand()
 {
 	myprintf("31558: Extracting on current directory\n");
 	tofiles.clear();
-	
+
 	string relative="./";
 #ifdef _WIN32
 	if (flaglongpath)
@@ -51859,14 +49988,14 @@ int Jidac::ecommand()
 }
 int myrename(string sfrom,string sto)
 {
-#ifdef _WIN32	
+#ifdef _WIN32
 	if (flaglongpath)
 	{
 			sfrom	=makelongpath(sfrom);
 			sto		=makelongpath(sto);
 	}
-	std::wstring wfrom	=utow(sfrom.c_str());  
-	std::wstring wto	=utow(sto.c_str());  
+	std::wstring wfrom	=utow(sfrom.c_str());
+	std::wstring wto	=utow(sto.c_str());
 	if (!MoveFileW(wfrom.c_str(),wto.c_str()))
 	{
 		myprintf("ERROR WIN renaming\n");
@@ -51878,7 +50007,7 @@ int myrename(string sfrom,string sto)
 		printUTF8(sfrom.c_str());
 		myprintf(">> to <<%s>>\n",sto.c_str());
 		decodewinerror(GetLastError(),"dummy");
-		
+
 			for (unsigned int j=0;j<sfrom.length();j++)
 				myprintf("%03d %03d %c\n",j,sto[j],sto[j]);
 		return 1;
@@ -51896,12 +50025,12 @@ int myrename(string sfrom,string sto)
 	}
 #endif
 	return 0;
-}			
+}
 
 bool Jidac::searchunixfile()
 {
 	bool risultato=false;
-	for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p) 
+	for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p)
         if ((p->second.attr&255)=='u') // unix attributes
 		{
 			risultato=true;
@@ -51910,7 +50039,7 @@ bool Jidac::searchunixfile()
 	return risultato;
 }
 
-int Jidac::extract() 
+int Jidac::extract()
 {
 	if (flagstdout)
 	{
@@ -51940,7 +50069,7 @@ int Jidac::extract()
 					break;
 				}
 			}
-			for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p) 
+			for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p)
 				if (iswindowsunc(p->first))
 				{
 					myprintf("31915: found UNC Windows, incompatible with -longpath, turning OFF %s\n",p->first.c_str());
@@ -51957,7 +50086,7 @@ int Jidac::extract()
 					for (unsigned int i=0;i<tofiles.size();i++)
 						myprintf("31879: Tofiles %d %s\n",i,tofiles[i].c_str());
 			}
-		}	
+		}
 	#endif
 	getpasswordifempty();
 	if (flagparanoid)
@@ -52031,23 +50160,23 @@ int Jidac::extract()
 	}
 	g_scritti=0;
   // Encrypt or decrypt whole archive
-	if ((repack!="") && all) 
+	if ((repack!="") && all)
 	{
 		if (files.size()>0 || tofiles.size()>0 || onlyfiles.size()>0 || flagnoattributes || version!=DEFAULT_VERSION || method!="")
 			error("-repack -all does not allow partial copy");
 		string part0=subpart(archive, 0);
-		if (part0!=archive) 
-		{  
+		if (part0!=archive)
+		{
 			myprintf("32528: so sorry, this seems a multipart archive, abort\n");
 			return 2;
 		}
 		InputArchive in(archive.c_str(), password);
-		if (flagforce) 
+		if (flagforce)
 			delete_file(repack.c_str());
-		if (exists(repack)) 
+		if (exists(repack))
 			error("output file exists");
     	char salt[32]={0};
-		if (new_password) 
+		if (new_password)
 			libzpaq::random(salt, 32);
 		myprintf("Changing password for %s bytes\n\n",migliaia(in.totalsize()));
 		OutputArchive out(repack.c_str(), new_password, salt, 0);
@@ -52070,14 +50199,14 @@ int Jidac::extract()
 	int	errors=0;
 	int64_t sz=read_archive(NULL,archive.c_str(),&errors,0,flagstdout); // we want to be quiet by stdout?
 	if (sz<1) error("archive not found");
-	
+
 	if (flagstdout)
 		flagsilent=true;
 ///myprintf("ZB\n");
 #ifdef _WIN32
 	if (flaglongpath)
 	{
-		if (searchfrom!="") 
+		if (searchfrom!="")
 		{
 			/// the rename() function will replace
 			if (flagdebug)
@@ -52096,7 +50225,7 @@ int Jidac::extract()
 					myprintf("32158: -longpath, check for some UNC\n");
 			/// extract longpath files, from UNC, is not so easy
 			/// spaghetti? well, it is not my fault, it is Windows' lasagna-code
-			for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p) 
+			for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p)
 				if (iswindowsunc(p->first))
 				{
 					myprintf("\n\n32133: WARNING: -longpath with Windows UNC, use ONE -to something /  -find -replace to manually adjust\n");
@@ -52184,7 +50313,7 @@ int Jidac::extract()
         myprintf("at %1.0f\n", ver[i].offset+.0);
         error("C block in weird format");
       }
-      memcpy(hdr+hsize-34, 
+      memcpy(hdr+hsize-34,
           "\x00\x00\x00\x00\x00\x00\x00\x00"  // csize = 0
           "\x00\x00\x00\x00"  // compressed data terminator
           "\xfd"  // start of hash marker
@@ -52235,11 +50364,11 @@ int Jidac::extract()
 					}
 			if (fixati>0)
 				myprintf("-fixcase fixed         %9s files\n",migliaia(fixati));
-			kollisioni.clear();	
+			kollisioni.clear();
 		}
 		else
 			myprintf("50138: No case collision (extracting Unix filenames on Windows)\n");
-		
+
 	}
 #endif
 	if ((flagutf) || (flagflat) || flagfix255 || flagfixcase || (flagparanoid))
@@ -52250,7 +50379,7 @@ int Jidac::extract()
 		int64_t filesbefore=0;
 		int64_t dirsbefore=0;
 		if (flagdebug)
-			for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p) 
+			for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p)
 			{
 				if ((p->second.date && p->first!="") && (!isdirectory(p->first)))
 					dirsbefore++;
@@ -52261,15 +50390,15 @@ int Jidac::extract()
 		MAPPAFILEHASH mappacollisioni;
 #ifndef ANCIENT
 		int kollisioni=0;
-		for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p) 
+		for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p)
 		{
 			/*macos*/
 			string newname=sanitizzanomefile(p->first,filelength,kollisioni,mappacollisioni);
-			
+
 			std::pair<map<string, DT>::iterator, bool> ret;
 			ret = mymap.insert( std::pair<string,DT>(newname,p->second) );
-			if (ret.second==false) 
-				myprintf("18298: KOLLISION! %s\n",newname.c_str());	
+			if (ret.second==false)
+				myprintf("18298: KOLLISION! %s\n",newname.c_str());
 		}
 #endif
 		dt=mymap;
@@ -52277,7 +50406,7 @@ int Jidac::extract()
 		{
 			int64_t filesafter=0;
 			int64_t dirsafter=0;
-			for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p) 
+			for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p)
 			{
 				if ((p->second.date && p->first!="") && (!isdirectory(p->first)))
 					dirsafter++;
@@ -52296,7 +50425,7 @@ int Jidac::extract()
 	}
 #ifdef _WIN32
 	if (!flaglongpath)
-		for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p) 
+		for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p)
 			if ((p->second.date && p->first!=""))
 			{
 				string filename=rename(p->first);
@@ -52311,11 +50440,11 @@ int Jidac::extract()
 
 	string	goingstdout="";
 	bool	isstdourordered=false;
-	
-	for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p) 
+
+	for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p)
 	{
 		p->second.data=-1;  // skip
-		if (p->second.date && p->first!="") 
+		if (p->second.date && p->first!="")
 		{
 			string fn=rename(p->first);
 			const bool isdir=isdirectory(p->first);
@@ -52323,7 +50452,7 @@ int Jidac::extract()
 				real_dirs++;
 			string dummy="";
 			///myprintf("49911\n");
-			if ((!flagstdout) && (repack=="") && !flagtest && flagforce && !isdir && equal(p, fn.c_str(),crc32fromfile,"","",dummy)) 
+			if ((!flagstdout) && (repack=="") && !flagtest && flagforce && !isdir && equal(p, fn.c_str(),crc32fromfile,"","",dummy))
 			{
 				// identical
 				if (flagverbose)
@@ -52335,9 +50464,9 @@ int Jidac::extract()
 				close(fn.c_str(), p->second.date, p->second.attr);
 				++skipped;
 			}
-			else 
-			if ((!flagstdout) && (repack=="") && !flagtest && !flagforce && exists(fn)) 
-			{  
+			else
+			if ((!flagstdout) && (repack=="") && !flagtest && !flagforce && exists(fn))
+			{
 				// exists, skip
 				if (flagverbose)
 				{
@@ -52347,18 +50476,18 @@ int Jidac::extract()
 				}
 				++skipped;
 			}
-			else 
+			else
 			if ((!flagstdout) && isdir)  // update directories later
 				p->second.data=0;
-			else 
-			if (block.size()>0) 
+			else
+			if (block.size()>0)
 			{  // files to decompress
 				p->second.data=0;
 				unsigned lo=0, hi=block.size()-1;  // block indexes for binary search
-				for (unsigned i=0; p->second.data>=0 && i<p->second.ptr.size(); ++i) 
+				for (unsigned i=0; p->second.data>=0 && i<p->second.ptr.size(); ++i)
 				{
 					unsigned j=p->second.ptr[i];  // fragment index
-					if (j==0 || j>=ht.size() || ht[j].usize<-1) 
+					if (j==0 || j>=ht.size() || ht[j].usize<-1)
 					{
 						fflush(stdout);
 						printUTF8(p->first.c_str());
@@ -52368,18 +50497,18 @@ int Jidac::extract()
 					}
 					assert(j>0 && j<ht.size());
 					if (lo!=hi || lo>=block.size() || j<block[lo].start
-						|| (lo+1<block.size() && j>=block[lo+1].start)) 
+						|| (lo+1<block.size() && j>=block[lo+1].start))
 					{
 						lo=0;  // find block with fragment j by binary search
 						hi=block.size()-1;
-						while (lo<hi) 
+						while (lo<hi)
 						{
 							unsigned mid=(lo+hi+1)/2;
 							assert(mid>lo);
 							assert(mid<=hi);
-							if (j<block[mid].start) 
+							if (j<block[mid].start)
 								hi=mid-1;
-							else 
+							else
 							(lo=mid);
 						}
 					}
@@ -52395,7 +50524,7 @@ int Jidac::extract()
 				++total_files;
 				goingstdout=p->first;
 				isstdourordered=p->second.isordered;
-				
+
 				job.total_size+=p->second.size;
 				///myprintf("FACCIO QUALCOSA SU %s per size %d\n",fn.c_str(),p->second.size);
 				if ((!flagtest) && (!flagstdout))
@@ -52416,8 +50545,8 @@ int Jidac::extract()
 			}
 		}  // end if selected
 	}  // end for
-	
-	
+
+
 	if (flagstdout)
 	{
 		if (total_files!=1)
@@ -52442,7 +50571,7 @@ int Jidac::extract()
 			return 2;
 		}
 	}
-	
+
 	if (!flagstdout)
 	{
 		if (!flagforce && skipped>0)
@@ -52455,7 +50584,7 @@ int Jidac::extract()
 			myprintf("**** GURU **** WE HAVE SOME HIGHLANDER!\n");
 	}
   // Repack to new archive
-	if (repack!="") 
+	if (repack!="")
 	{
     // Get total D block size
     if (ver.size()<2) error("cannot repack streaming archive");
@@ -52466,7 +50595,7 @@ int Jidac::extract()
     }
     InputArchive in(archive.c_str(), password);
     // Open output
-    if (!flagforce && exists(repack)) 
+    if (!flagforce && exists(repack))
 		error("repack output exists");
     delete_file(repack.c_str());
     char salt[32]={0};
@@ -52527,10 +50656,10 @@ int Jidac::extract()
         is.put(0);
         if ((p->second.attr&255)=='u') // unix attributes
 				write715attr(is,p->second.attr,3);
-		else 
+		else
 		if ((p->second.attr&255)=='w') // windows attributes
 				write715attr(is,p->second.attr,5);
-		else 
+		else
 			puti(is, 0, 4);  // no attributes
         puti(is, p->second.ptr.size(), 4);  // list of frag pointers
         for (unsigned i=0; i<p->second.ptr.size(); ++i)
@@ -52573,7 +50702,7 @@ int Jidac::extract()
   // Decompress archive in parallel
 	if (!flagstdout)
 		myprintf("Extract %s bytes (%s) in %s files (%s folders) / %d T\n",migliaia(job.total_size), tohuman(job.total_size),migliaia2(total_files), migliaia4(real_dirs),howmanythreads);
-	
+
 	if (!flagspace)
 		if (!flagzero)
 			if (tofiles.size()==1)
@@ -52625,7 +50754,7 @@ int Jidac::extract()
 		unsigned int longfolders	=0;
 		unsigned int longfiles		=0;
 		myprintf("Start counting...");
-		for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p) 
+		for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p)
 		{
 			string fn=rename(p->first);
 			if (isdirectory(fn))
@@ -52659,7 +50788,7 @@ int Jidac::extract()
 		unsigned int fatti			=0;
 		unsigned int createdfolders	=0;
 		unsigned int createdfiles	=0;
-		for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p) 
+		for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p)
 		{
 			fatti++;
 			if (!flagnoeta)
@@ -52668,7 +50797,7 @@ int Jidac::extract()
 			string fn=rename(p->first);
 			fn=makelongpath(fn);
 			///myprintf("50263: makepath %s\n",fn.c_str());
-			
+
 			makepath(fn);
 			if (!isdirectory(fn))
 				{
@@ -52701,7 +50830,7 @@ int Jidac::extract()
 		myprintf("Files    %12s\n",migliaia(createdfiles));
 		myprintf("Errors   %12s\n",migliaia(fileerrors));
 		return fileerrors;
-	}	
+	}
 	vector<ThreadID> tid(howmanythreads);
 	if (howmanythreads==1)
 	{
@@ -52711,42 +50840,42 @@ int Jidac::extract()
 	}
 	else
 	{
-		for (unsigned i=0; i<tid.size(); ++i) 
+		for (unsigned i=0; i<tid.size(); ++i)
 			run(tid[i], decompressThread, &job);
 	}
   // Extract streaming files
 	unsigned segments=0;  // count
 	InputArchive in(archive.c_str(), password);
 	///myprintf();
-	if (in.isopen()) 
+	if (in.isopen())
 	{
 		FP outf=FPNULL;
 		////myprintf(");
 		DTMap::iterator dtptr=dt.end();
-		for (unsigned i=0; i<block.size(); ++i) 
+		for (unsigned i=0; i<block.size(); ++i)
 		{
-			if (block[i].usize<0 && block[i].size>0) 
+			if (block[i].usize<0 && block[i].size>0)
 			{
 				Block& b=block[i];
-				try 
+				try
 				{
 					in.seek(b.offset, SEEK_SET);
 					libzpaq::Decompresser d;
 					d.setInput(&in);
-					if (!d.findBlock()) 
+					if (!d.findBlock())
 						error("block not found");
 					StringWriter filename;
-					for (unsigned j=0; j<b.size; ++j) 
+					for (unsigned j=0; j<b.size; ++j)
 					{
-						if (!d.findFilename(&filename)) 
+						if (!d.findFilename(&filename))
 							error("segment not found");
 						d.readComment();
 						// Start of new output file
-						if (filename.s!="" || segments==0) 
+						if (filename.s!="" || segments==0)
 						{
 							unsigned k;
 							///myprintf(");
-							for (k=0; k<b.files.size(); ++k) 
+							for (k=0; k<b.files.size(); ++k)
 							{  // find in dt
 								if (b.files[k]->second.ptr.size()>0
 									&& b.files[k]->second.ptr[0]==b.start+j
@@ -52754,10 +50883,10 @@ int Jidac::extract()
 									&& b.files[k]->second.data==0)
 										break;
 							}
-							if (k<b.files.size()) 
+							if (k<b.files.size())
 							{  // found new file
 								///myprintf();
-								if (outf!=FPNULL) 
+								if (outf!=FPNULL)
 									fclose(outf);
 								outf=FPNULL;
 								string outname=rename(b.files[k]->first);
@@ -52767,24 +50896,24 @@ int Jidac::extract()
 									printUTF8(outname.c_str());
 									myprintf("\n");
 									///myprintf(");
-									if (!flagtest) 
+									if (!flagtest)
 									{
 										///myprintf();
 										///myprintf("50366: makepath %s\n",outname.c_str());
-			
+
 										makepath(outname);
 										///myprintf();
 										outf=fopen(outname.c_str(), WB);
-										if (outf==FPNULL) 
+										if (outf==FPNULL)
 										{
 											printerr("18330",outname.c_str(),0);
 										}
 									}
 								release(job.mutex);
 							}
-							else 
+							else
 							{  // end of file
-								if (outf!=FPNULL) 
+								if (outf!=FPNULL)
 									fclose(outf);
 								outf=FPNULL;
 								dtptr=dt.end();
@@ -52799,22 +50928,22 @@ int Jidac::extract()
             // Verify checksum
 						char sha1result[21];
 						d.readSegmentEnd(sha1result);
-						if (sha1result[0]==1) 
+						if (sha1result[0]==1)
 						{
 							if (memcmp(sha1result+1, sha1.result(), 20)!=0)
 								error("checksum failed");
 						}
-						else 
+						else
 						if (sha1result[0]!=0)
 							error("unknown checksum type");
 						++b.extracted;
-						if (dtptr!=dt.end()) 
+						if (dtptr!=dt.end())
 							++dtptr->second.data;
 						filename.s="";
 						++segments;
 					}
 				}
-				catch(std::exception& e) 
+				catch(std::exception& e)
 				{
 					lock(job.mutex);
 					myprintf("Skipping block: %s\n", e.what());
@@ -52822,21 +50951,21 @@ int Jidac::extract()
 				}
 			}
 		}
-		if (outf!=FPNULL) 
+		if (outf!=FPNULL)
 			fclose(outf);
 	}
-	if (segments>0) 
+	if (segments>0)
 		myprintf("%u streaming segments extracted\n", segments);
 	///myprintf("Z6\n");
   // Wait for threads to finish
   if (howmanythreads>1)
-	  for (unsigned i=0; i<tid.size(); ++i) 
+	  for (unsigned i=0; i<tid.size(); ++i)
 		  join(tid[i]);
 ///myprintf("Z7\n");
   // Create empty directories and set file dates and attributes
-	if (!flagtest) 
-		for (DTMap::reverse_iterator p=dt.rbegin(); p!=dt.rend(); ++p) 
-			if (p->second.data>=0 && p->second.date && p->first!="") 
+	if (!flagtest)
+		for (DTMap::reverse_iterator p=dt.rbegin(); p!=dt.rend(); ++p)
+			if (p->second.data>=0 && p->second.date && p->first!="")
 			{
 				string s=rename(p->first);
 				if (p->first[p->first.size()-1]=='/')
@@ -52868,22 +50997,22 @@ int Jidac::extract()
 					if (createpath)
 						makepath(s, p->second.date, p->second.attr);
 				}
-				else 
+				else
 				if ((p->second.attr&0x1ff)=='w'+256)  // read-only?
 					close(s.c_str(), 0, p->second.attr);
 			}
 
-  
+
 	if (flagramdisk)
 	{
 		/// extract
 		myprintf("\n");
-		myprintf("RAM       %12s (heap memory used %s bytes)",tohuman(g_ramdisksize),migliaia(g_ramdisksize)); 
+		myprintf("RAM       %12s (heap memory used %s bytes)",tohuman(g_ramdisksize),migliaia(g_ramdisksize));
 		myprintf("34079: writing from ramdisk to disk\n");
 		int64_t startwrite=mtime();
 		uint64_t expected=0;
 		uint64_t written=0;
-		for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p) 
+		for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p)
 		{
 			string fn=rename(p->first);
 			makepath(fn);
@@ -52933,10 +51062,10 @@ int Jidac::extract()
 	if (!flagramdisk)
 	{
 		// Report failed extractions, plain old 715
-		for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p) 
+		for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p)
 		{
 			string fn=rename(p->first);
-			
+
 			if (flagverbose || flagstat)
 			{
 				checkfilename(fn,
@@ -52948,12 +51077,12 @@ int Jidac::extract()
 				&windowsunc,
 				&relativepath);
 			}
-			
+
 			if (p->second.data>=0 && p->second.date
-				&& fn!="" && fn[fn.size()-1]!='/') 
+				&& fn!="" && fn[fn.size()-1]!='/')
 			{
 				++extracted;
-				if (p->second.ptr.size()!=unsigned(p->second.data)) 
+				if (p->second.ptr.size()!=unsigned(p->second.data))
 				{
 					fflush(stdout);
 					if (++errors==1)
@@ -52967,8 +51096,8 @@ int Jidac::extract()
 	}
 	myprintf("\n");
 	if (kollision>0)
-		myprintf("\nFilenames collisions %08d\n",(int)kollision);	
-	if (errors>0) 
+		myprintf("\nFilenames collisions %08d\n",(int)kollision);
+	if (errors>0)
 	{
 		fflush(stdout);
 		myprintf("\nExtracted %s files (%s errors) using %s bytes x %d threads\n",
@@ -52987,7 +51116,7 @@ int Jidac::extract()
 		myprintf("Windows UNC    %12s\n",migliaia(windowsunc));
 	if (relativepath)
 		myprintf("Relative path  %12s\n",migliaia(relativepath));
-	
+
   	if (flagfilelist)
 		if (errors==0)
 		{
@@ -53002,7 +51131,7 @@ int Jidac::extract()
 					char data[65536*16];
 #endif
 					int got=0;
-					while ((got=fread(data,sizeof(char),sizeof(data),myfile)) > 0) 
+					while ((got=fread(data,sizeof(char),sizeof(data),myfile)) > 0)
 						fwrite(data,1,got,stdout);
 					fclose(myfile);
 					delete_file(kunfile.c_str());
@@ -53019,8 +51148,8 @@ int Jidac::extract()
 		myprintf("\n\nFULL-extract hashing check (aka:paranoid)\n");
 		int64_t	dimensionetotale=0;
 		int		dalavorare=0;
-		for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p) 
-			if (p->second.date && p->first!="") 
+		for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p)
+			if (p->second.date && p->first!="")
 			{
 				string fn=rename(p->first);
 				if (!isdirectory(fn))
@@ -53038,8 +51167,8 @@ int Jidac::extract()
 		int64_t lavorati	=0;
 		g_dimensione=0;
 
-		for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p) 
-			if (p->second.date && p->first!="") 
+		for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p)
+			if (p->second.date && p->first!="")
 			{
 				string fn=rename(p->first);
 				if (iszpaqfranzvirtualfile(p->first))
@@ -53054,6 +51183,8 @@ int Jidac::extract()
 						if (fileexists(fn))			// no fakefile-dirs
 						{
 							franz_do_hash dummy(p->second.hashtype);
+							if (flagdebug)
+								myprintf("53067: filehash on %s\n",fn.c_str());
 							string hashfromfile=dummy.filehash(fn.c_str(),false,inizio,dimensionetotale);
 							if (hashfromfile==p->second.hexhash)
 							{
@@ -53097,17 +51228,17 @@ int Jidac::extract()
 		int	percentuale			=0;
 		int	ultimapercentuale	=0;
 		myprintf("Touching files...\r");
-		
-		for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p) 
-			if (p->second.date && p->first!="") 
+
+		for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p)
+			if (p->second.date && p->first!="")
 			{
 				string fn=rename(p->first);
 				if ((!isads(fn)) && (!iszfs(fn)))
 					tobeworked++;
 			}
-		
-		for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p) 
-			if (p->second.date && p->first!="") 
+
+		for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p)
+			if (p->second.date && p->first!="")
 			{
 				string fn=rename(p->first);
 				/*
@@ -53133,7 +51264,7 @@ int Jidac::extract()
 						int64_t	myaccesstime	=0;
 						bool	myisordered=false;
 						int		myversion=0;
-						franz_posix* myposix=NULL;	
+						franz_posix* myposix=NULL;
 						decode_franz_block(false,p->second.franz_block,
 							myhashtype,
 							myhash,
@@ -53143,7 +51274,7 @@ int Jidac::extract()
 							myisordered,
 							myversion,
 							myposix);
-			
+
 						if (mycreationtime>0)
 							if (wintouch(fn,0,mycreationtime))
 								setted++;
@@ -53167,12 +51298,12 @@ int Jidac::extract()
 			int64_t	dasettare		=0;
 			int64_t	settati			=0;
 			int64_t	darinominare	=0;
-			int64_t	rinominati		=0; 
-			for (unsigned fi=0;fi<filelist.size(); ++fi) 
+			int64_t	rinominati		=0;
+			for (unsigned fi=0;fi<filelist.size(); ++fi)
 			{
 				DTMap::iterator p=filelist[fi];
-				unsigned v;  
-				if (p->first.size()==all+1u && (v=atoi(p->first.c_str()))>0 && v<ver.size()) 
+				unsigned v;
+				if (p->first.size()==all+1u && (v=atoi(p->first.c_str()))>0 && v<ver.size())
 				{
 					string versione=rename(itos(v, all));
 					dasettare++;
@@ -53185,7 +51316,7 @@ int Jidac::extract()
 					else
 						myprintf("[KO] ");
 					std::map<int,string>::iterator commento;
-					commento=mappacommenti.find(v); 
+					commento=mappacommenti.find(v);
 					if(commento!= mappacommenti.end())
 					{
 						darinominare++;
@@ -53197,7 +51328,7 @@ int Jidac::extract()
 							rinominati++;
 						}
 						else
-							myprintf("FAILED renamed to <<%s>>",finalpath.c_str());	
+							myprintf("FAILED renamed to <<%s>>",finalpath.c_str());
 					}
 					myprintf("\n");
 				}
@@ -53219,20 +51350,20 @@ int Jidac::searchcomments(string i_testo,vector<DTMap::iterator> &filelist)
 	unsigned int quanti=0;
 	int versione=-1;
 	filelist.clear();
-	for (DTMap::iterator a=dt.begin(); a!=dt.end(); ++a) 
+	for (DTMap::iterator a=dt.begin(); a!=dt.end(); ++a)
 	{
 		a->second.data='-';
 		filelist.push_back(a);
 	}
 	///VCOMMENT 00000002 seconda_versione:$DATA
-	for (unsigned i=0;i<filelist.size();i++) 
+	for (unsigned i=0;i<filelist.size();i++)
 	{
 		DTMap::iterator p=filelist[i];
 		if (isads(p->first))
 		{
 			string fakefile=p->first;
 			myreplace(fakefile,":$DATA","");
-			size_t found = fakefile.find("VCOMMENT "); 
+			size_t found = fakefile.find("VCOMMENT ");
 			if (found != string::npos)
 			{
 				string numeroversione=fakefile.substr(found+9,8);
@@ -53261,19 +51392,19 @@ int Jidac::enumeratecomments()
 	  // Read archive into dt, which may be "" for empty.
 	int64_t csize=0;
 	int errors=0;
-	if (archive!="") 
+	if (archive!="")
 		csize=read_archive(NULL,archive.c_str(),&errors,1); /// AND NOW THE MAGIC ONE!
 	if (command!='i')
 		myprintf("\nVersion(s) enumerator\n");
 	vector<DTMap::iterator> filelist;
 	searchcomments(versioncomment,filelist);
 	if (command!='i')
-		for (MAPPACOMMENTI::const_iterator p=mappacommenti.begin(); p!=mappacommenti.end(); ++p) 
+		for (MAPPACOMMENTI::const_iterator p=mappacommenti.begin(); p!=mappacommenti.end(); ++p)
 			myprintf("%08d <<%s>>\n",p->first,p->second.c_str());
-	for (DTMap::iterator p=edt.begin(); p!=edt.end(); ++p) 
+	for (DTMap::iterator p=edt.begin(); p!=edt.end(); ++p)
 	{
 		DTMap::iterator a=dt.find(rename(p->first));
-		if ((a!=dt.end()) && (a->second.date)) 
+		if ((a!=dt.end()) && (a->second.date))
 		{
 			a->second.data='-';
 			filelist.push_back(a);
@@ -53281,37 +51412,50 @@ int Jidac::enumeratecomments()
 		p->second.data='+';
 		filelist.push_back(p);
 	}
-	for (DTMap::iterator a=dt.begin(); a!=dt.end(); ++a) 
-		if (a->second.data!='-' && (a->second.date)) 
+	for (DTMap::iterator a=dt.begin(); a!=dt.end(); ++a)
+		if (a->second.data!='-' && (a->second.date))
 		{
 			a->second.data='-';
 			filelist.push_back(a);
 		}
 	if (all)
 	{
-		myprintf("-------------------------------------------------------------------------\n");
-		myprintf("< Ver  > <  date  > < time >  < added > <removed>    <    bytes added   >\n");
-		myprintf("-------------------------------------------------------------------------\n");
-		for (unsigned fi=0;fi<filelist.size() /*&& (true || int(fi)<summary)*/; ++fi) 
+		if (g_rangelast>0)
+		{
+			int lastver=ver.size()-1;
+			g_rangefrom	=lastver-g_rangelast+1;
+			g_rangeto	=lastver;
+		}
+		myprintf("--------------------------------------------------------------------------\n");
+		myprintf("<  Ver  > <  date  > < time >  < added > <removed>    <    bytes added   >\n");
+		myprintf("--------------------------------------------------------------------------\n");
+		for (unsigned fi=0;fi<filelist.size() /*&& (true || int(fi)<summary)*/; ++fi)
 		{
 			DTMap::iterator p=filelist[fi];
-			unsigned v;  
-			if (p->first.size()==all+1u && (v=atoi(p->first.c_str()))>0 && v<ver.size()) 
+			unsigned v;
+			if (p->first.size()==all+1u && (v=atoi(p->first.c_str()))>0 && v<ver.size())
 			{
-				myprintf("%08u %s ",v,dateToString(flagutc,p->second.date).c_str());
-				myprintf(" +%08d -%08d -> %20s", ver[v].updates, ver[v].deletes,
-					migliaia(((v+1<ver.size() ? ver[v+1].offset : csize)-ver[v].offset+0.0)));
-				std::map<int,string>::iterator commento;
-				commento=mappacommenti.find(v); 
-				if(commento!= mappacommenti.end()) 
-					myprintf(" <<%s>>", commento->second.c_str());
-				myprintf("\n");
+				bool show=true;
+				if (g_rangefrom>0)
+					if (!(((int)v>=(int)g_rangefrom) && ((int)v<=(int)g_rangeto)))
+						show=false;
+				if (show)
+				{
+					myprintf("V%08u %s ",v,dateToString(flagutc,p->second.date).c_str());
+					myprintf(" +%08d -%08d -> %20s", ver[v].updates, ver[v].deletes,
+						migliaia(((v+1<ver.size() ? ver[v+1].offset : csize)-ver[v].offset+0.0)));
+					std::map<int,string>::iterator commento;
+					commento=mappacommenti.find(v);
+					if(commento!= mappacommenti.end())
+						myprintf(" <<%s>>", commento->second.c_str());
+					myprintf("\n");
+				}
 			}
 		}
 	}
-	return 0;		   
+	return 0;
 }
-int Jidac::kill() 
+int Jidac::kill()
 {
 	getpasswordifempty();
 	myprintf("KILL of:");
@@ -53329,9 +51473,9 @@ int Jidac::kill()
 	edt.clear();
 	string cartellaoutput=tofiles[0];
 	scandir(false,edt,cartellaoutput);
-	if (edt.size()) 
+	if (edt.size())
 		myprintf("Total files found: %s\n", migliaia(edt.size()));
-	else	
+	else
 	{
 		myprintf("Found nothing in filesystem\n");
 		return 1;
@@ -53340,7 +51484,7 @@ int Jidac::kill()
 	vector<string> inzpaqrinominato;
 	vector<string> tobekilled;
 	vector<string> dirtobekilled;
-	for (DTMap::iterator a=dt.begin(); a!=dt.end(); ++a) 
+	for (DTMap::iterator a=dt.begin(); a!=dt.end(); ++a)
 	{
 		string dentrofile=a->first;
 		myreplace(dentrofile,files[0],tofiles[0]);
@@ -53356,7 +51500,7 @@ int Jidac::kill()
 	}
 	std::sort(inzpaqrinominato.begin(), inzpaqrinominato.end());
 	uint64_t		sizetobekilled=0;
-	for (DTMap::iterator a=edt.begin(); a!=edt.end(); ++a) 
+	for (DTMap::iterator a=edt.begin(); a!=edt.end(); ++a)
 		if (binary_search(inzpaqrinominato.begin(),inzpaqrinominato.end(),a->first)==false)
 		{
 			if (isdirectory(a->first))
@@ -53412,8 +51556,8 @@ int Jidac::kill()
 				killeddir++;
 	myprintf("Dir  to be removed %s -> killed %s\n",migliaia(dirtobekilled.size()),migliaia2(killeddir));
 	myprintf("File to be removed %s -> killed %s\n",migliaia(tobekilled.size()),migliaia2(killed));
-	if ((killeddir+killed)!=(dirtobekilled.size()+tobekilled.size())) 
-	{	
+	if ((killeddir+killed)!=(dirtobekilled.size()+tobekilled.size()))
+	{
 		myprintf("FAILED !! some highlander !!\n");
 		return 1;
 	}
@@ -53437,29 +51581,31 @@ struct tparametrihash
 	int64_t 		dimensione;
 	int				tnumber;
 };
-void * scansionahash(void *t) 
+void * scansionahash(void *t)
 {
 	assert(t);
 	tparametrihash* par= ((struct tparametrihash*)(t));
-	
+
 	vector<string>& tmpfilestobehashed	= par->filestobehashed;
 	vector<string>& tmpalgo				= par->algo;
-	
+
 	if (tmpfilestobehashed.size()!=tmpalgo.size())
 	{
 		myprintf("51569: FILETOBEHASHED != ALGO\n");
 		seppuku();
 	}
-	
+
 	vector<string>& tmphashcalculated	= par->o_hashcalculated;
 	vector<int64_t>& tmpsizegetted		= par->o_sizegetted;
 	g_dimensione=0;
 	for (unsigned int i=0;i<tmpfilestobehashed.size();i++)
 	{
-		
+
 		string work=tmpfilestobehashed[i];
-	
+
 		franz_do_hash dummy(tmpalgo[i]);
+		if (flagdebug)
+			myprintf("53488: filehash on %s\n",work.c_str());
 		string risu=dummy.filehash(work,false,par->inizio,par->dimensione);
 		///,g_dimensione,thefilesize);
 		tmphashcalculated.push_back(risu);
@@ -53477,8 +51623,8 @@ bool ischecksum()
 				if (*(p->second.switchflag))
 					return true;
 	return false;
-}	
-int Jidac::deduplicate() 
+}
+int Jidac::deduplicate()
 {
 	myprintf("*** DIRECTLY DELETE DUPLICATED FILES ***\n");
 	if (files.size()==0)
@@ -53523,10 +51669,10 @@ struct tparametribenchmark
 
 string do_benchmark(int i_tnumber,int i_timelimit,string i_runningalgo,int i_chunksize,uint32_t* buffer32bit,double& o_speed)
 {
-	int64_t 	starttutto		=mtime();	
+	int64_t 	starttutto		=mtime();
 	int64_t 	lavorati		=0;
 	uint64_t 	totalhashtime	=0;
-	int			ultimotrascorso	=0;	
+	int			ultimotrascorso	=0;
 	int			buffersize=i_chunksize*4-7;
 	MD5 md5;
 	libzpaq::SHA1 sha1;
@@ -53595,7 +51741,7 @@ string do_benchmark(int i_tnumber,int i_timelimit,string i_runningalgo,int i_chu
 		else
 		if ((i_runningalgo=="HIGHWAY64") || (i_runningalgo=="HIGHWAY128") || (i_runningalgo=="HIGHWAY256"))
 			HighwayHashCatAppend((const uint8_t*)buffer32bit,buffersize,&state);
-/*	
+/*
 	else
 		{
 			myprintf("49891: GURU unknown algo %s\n",i_runningalgo.c_str());
@@ -53631,7 +51777,7 @@ string do_benchmark(int i_tnumber,int i_timelimit,string i_runningalgo,int i_chu
 					restoreConsole();
 				}
 				myprintf("Thread %02d %03d s %12s: speed (%11s/s)",i_tnumber,trascorso,i_runningalgo.c_str(),tohuman3(o_speed));
-				pthread_mutex_unlock(&g_mylock);	
+				pthread_mutex_unlock(&g_mylock);
 			}
 			ultimotrascorso=trascorso;
 		}
@@ -53651,7 +51797,7 @@ string do_benchmark(int i_tnumber,int i_timelimit,string i_runningalgo,int i_chu
 	return risultato;
 }
 
-void * benchmark_thread(void *t) 
+void * benchmark_thread(void *t)
 {
 	assert(t);
 	tparametribenchmark* par= ((struct tparametribenchmark*)(t));
@@ -53708,7 +51854,7 @@ string filecopy(bool i_singlefile,bool i_append,const string i_infile,const stri
 	{
 		dimensioneoutput	=prendidimensionefile(filedefinitivo.c_str());
 		bytestoappend		=larghezzain-dimensioneoutput;
-		
+
 		if (bytestoappend>0)
 		{
 			if (dimensioneoutput>0)
@@ -53735,10 +51881,10 @@ string filecopy(bool i_singlefile,bool i_append,const string i_infile,const stri
 				myprintf("Source and destination filesize ==, exit\n");
 			return filedefinitivo;
 		}
-		
+
 	//// 100.000 => 80.000
 	///dimensionedacopiare 100.000
-	
+
 	}
 	else
 		bytestoappend=larghezzain;
@@ -53751,7 +51897,7 @@ string filecopy(bool i_singlefile,bool i_append,const string i_infile,const stri
 			return "";
 		}
 	}
-	FILE* outFile=NULL;	
+	FILE* outFile=NULL;
 #ifdef _WIN32
 	wstring widename=utow(filedefinitivo.c_str());
 	if (i_append)
@@ -53775,14 +51921,14 @@ string filecopy(bool i_singlefile,bool i_append,const string i_infile,const stri
 	XXH3_state_t state128;
     (void)XXH3_128bits_reset(&state128);
 	FILE* inFile = freadopen(i_infile.c_str());
-	if (inFile==NULL) 
+	if (inFile==NULL)
 	{
 #ifdef _WIN32
 		int err=GetLastError();
 #else
 		int err=1;
 #endif
-		myprintf("\n32849: ERR <%s> kind %d\n",i_infile.c_str(),err); 
+		myprintf("\n32849: ERR <%s> kind %d\n",i_infile.c_str(),err);
 		fclose(outFile);
 		return "";
 	}
@@ -53798,17 +51944,17 @@ string filecopy(bool i_singlefile,bool i_append,const string i_infile,const stri
 #else
 			int err=1;
 #endif
-			myprintf("\33248: seek ERR <%s> kind %d\n",i_infile.c_str(),err); 
+			myprintf("\33248: seek ERR <%s> kind %d\n",i_infile.c_str(),err);
 			fclose(outFile);
 			fclose(inFile);
 			return "";
 		}
-		
+
 	}
 	size_t readSize;
 	int64_t startcopy=mtime();
 	bool	hostampato=false;
-	while ((readSize = fread(buffer, 1, blockSize, inFile)) > 0) 
+	while ((readSize = fread(buffer, 1, blockSize, inFile)) > 0)
 	{
 		int64_t written=fwrite(buffer,1,readSize,outFile);
 		donesize+=written;
@@ -53843,7 +51989,7 @@ string filecopy(bool i_singlefile,bool i_append,const string i_infile,const stri
 		myprintf("33274: GURU input size %s != output size %s\n",migliaia(larghezzain),migliaia2(dimensioneoutput));
 		return "";
 	}
-	
+
 	if (i_verify)
 	{
 		if (!flagnoeta)
@@ -53861,7 +52007,7 @@ string filecopy(bool i_singlefile,bool i_append,const string i_infile,const stri
 			donesize=0;
 			bytestoappend=prendidimensionehandle(inFile);
 			startcopy=mtime();
-			while ((readSize = fread(buffer, 1, blockSize, inFile)) > 0) 
+			while ((readSize = fread(buffer, 1, blockSize, inFile)) > 0)
 			{
 				donesize+=readSize;
 				(void)XXH3_128bits_update(&state128, buffer, readSize);
@@ -53869,20 +52015,23 @@ string filecopy(bool i_singlefile,bool i_append,const string i_infile,const stri
 					hostampato |= myavanzamentoby1sec(donesize,bytestoappend,startcopy,false);
 			}
 		}
-				
+
 		XXH128_hash_t myhash=XXH3_128bits_digest(&state128);
 		char risultato[33];
 		snprintf(risultato,sizeof(risultato),"%s",bin2hex_128(myhash.high64,myhash.low64).c_str());
 		int64_t startverify=mtime();
-		
+
 		g_dimensione=0;
 		///if (flagdebug)
 			///myprintf("51429: franz_do_hash\n");
-	
+
 		franz_do_hash dummy("XXH3");
+		if (flagdebug)
+			myprintf("53909: filehash on %s\n",filedefinitivo.c_str());
+
 		string hashreloaded=dummy.filehash(filedefinitivo,false,startverify,larghezzain);
-		
-		
+
+
 		if (flagverbose || flagdebug)
 		{
 			myprintf("Expected   XXH3 hash of the output file %s\n",risultato);
@@ -53895,7 +52044,7 @@ string filecopy(bool i_singlefile,bool i_append,const string i_infile,const stri
 			return "";
 		}
 	}
-	
+
 	fclose(inFile);
 
 	return filedefinitivo;
@@ -53921,7 +52070,7 @@ int Jidac::trim()
   // Read archive or index into ht, dt, ver.
 	int errors=0;
 	string arcname=archive;  // input archive name
-	if (index) 
+	if (index)
 		arcname=index;
 	int64_t header_pos=0;
 	if (exists(subpart(arcname, 1).c_str()))
@@ -53930,13 +52079,13 @@ int Jidac::trim()
 	arcname=archive;  // output file name
 	int64_t offset=0;  // total size of existing parts
 	char salt[32]={0};  // encryption salt
-	if (password) 
+	if (password)
 		libzpaq::random(salt, 32);
   // Remote archive
-	if (index) 
+	if (index)
 		error("33709: cannot trim with an index");
     string part0=subpart(archive, 0);
-    if (part0!=archive) 
+    if (part0!=archive)
 	{  // multi-part?
 		myprintf("34084: so sorry, this seems a multipart archive, abort\n");
 		return 2;
@@ -54042,7 +52191,7 @@ int Jidac::trim()
 }
 int Jidac::purgersync()
 {
-	
+
 	myprintf("PURGING RSYNC TEMPORARY FILES ");
 	if (!flagkill)
 			myprintf(" : DRY RUN (no -kill)");
@@ -54063,7 +52212,7 @@ int Jidac::purgersync()
 	myprintf("Files to be checked %s\n",migliaia(myedt.size()));
 	int	erased=0;
 	int tobeerased=0;
-	for (DTMap::iterator p=myedt.begin(); p!=myedt.end(); ++p) 
+	for (DTMap::iterator p=myedt.begin(); p!=myedt.end(); ++p)
 	{
 		string	filename=p->first;
 		myreplaceall(filename,"\\","/");
@@ -54120,7 +52269,7 @@ int Jidac::purgersync()
 			return 0;
 		else
 			return 1;
-	}	
+	}
 	if (tobeerased>0)
 		return 0;
 	else
@@ -54141,28 +52290,28 @@ bool isfilesequal(string i_source,string i_destination,bool i_flagfast=false)
 	if (!fileexists(i_destination))
 		return false;
 	FILE* source_file = freadopen(i_source.c_str());
-	if (source_file==NULL) 
+	if (source_file==NULL)
 	{
 #ifdef _WIN32
 		int err=GetLastError();
 #else
 		int err=1;
 #endif
-		myprintf("\n27547 ERR <%s> kind %d\n",i_source.c_str(),err); 
+		myprintf("\n27547 ERR <%s> kind %d\n",i_source.c_str(),err);
 		return false;
 	}
 	fseeko(source_file, 0, SEEK_END);
 	int64_t sorgente_dimensione=ftello(source_file);
 	fseeko(source_file, 0, SEEK_SET);
 	FILE* destination_file = freadopen(i_destination.c_str());
-	if (destination_file==NULL) 
+	if (destination_file==NULL)
 	{
 #ifdef _WIN32
 		int err=GetLastError();
 #else
 		int err=1;
 #endif
-		myprintf("\n27555 ERR <%s> kind %d\n",i_destination.c_str(),err); 
+		myprintf("\n27555 ERR <%s> kind %d\n",i_destination.c_str(),err);
 		fclose(source_file);
 		return false;
 	}
@@ -54261,7 +52410,7 @@ bool isfilesequal(string i_source,string i_destination,bool i_flagfast=false)
 	}
 	else
 	{
-		while ((readsource = fread(buffersource, 1, blockSize, source_file)) > 0) 
+		while ((readsource = fread(buffersource, 1, blockSize, source_file)) > 0)
 		{
 			readdestination=fread(bufferdestination, 1, blockSize, destination_file);
 			if (readsource!=readdestination)
@@ -54321,7 +52470,7 @@ int Jidac::mycopy()
 	for (unsigned int i=0;i<files.size();i++)
 	{
 		scandir(false,edt,files[i].c_str(),false);
-		for (DTMap::iterator p=edt.begin(); p!=edt.end(); ++p) 
+		for (DTMap::iterator p=edt.begin(); p!=edt.end(); ++p)
 		{
 			if (!isdirectory(p->first))
 			{
@@ -54391,14 +52540,14 @@ int Jidac::mycopy()
 	}
 	if (allok)
 		return 0;
-	else	
+	else
 		return	2;
 }
 /*
 	This function is rather tricky: report the "just about free" memory of the system.
 	It depends on both the operating system and the compiler (and architecture)
 	It is needed for the -ramdisk switch
-	If you have compiling problems, for example because you are using a "strange" system, 
+	If you have compiling problems, for example because you are using a "strange" system,
 	just change the source code to return 0;
 	As today tested on (64 bit)
 	- Windows
@@ -54443,7 +52592,7 @@ int64_t internal_getramdisksize()
 	return 0;
 }
 #endif
-#ifdef SOLARIS 
+#ifdef SOLARIS
 //this is a reworked m_sunos5.c machine-specific top source code
 // need a -lkstat to build
 #include <kvm.h>
@@ -54499,7 +52648,7 @@ int64_t internal_getramdisksize()
 	struct uvmexp uvmexp;
 	size_t size;
 	size = sizeof(uvmexp);
-	if (sysctl(uvmexp_mib, 2, &uvmexp, &size, NULL, 0) == -1) 
+	if (sysctl(uvmexp_mib, 2, &uvmexp, &size, NULL, 0) == -1)
 		error("36445 sysctl failed");
 	int pagesize = getpagesize();
 	// yes, skip overflow on "strange" compilators. Slow, but who cares?
@@ -54528,7 +52677,7 @@ int64_t internal_getramdisksize()
 	return big_ram;
 }
 #endif
-#ifdef BSD  // FreeBSD 
+#ifdef BSD  // FreeBSD
 #ifndef __OpenBSD__ 	// OpenBSD does not have sysctlbyname (yet)
 #ifndef __APPLE__   	// Mac is different (of course)
 int64_t internal_getramdisksize()
@@ -54563,7 +52712,7 @@ int64_t internal_getramdisksize()
     char line[256];
     while(fgets(line, sizeof(line), meminfo))
     {
-		
+
         int ram;
 		string linea=line;
 		if (mypos("MemAvailable:",linea)!=-1)
@@ -54625,8 +52774,8 @@ string windows_get_free_letter()
 }
 bool isbigendian(void)
 {
-    union 
-	{	
+    union
+	{
 		uint32_t i;
 		char c[4];
     } bint = {0x01020304};
@@ -54636,8 +52785,8 @@ bool isbigendian(void)
 AUTOTEST file
 https://github.com/fcorbelli/zpaqfranz/tree/main/AUTOTEST
 
-This is a Windows binary test file, 
-where filenames (must/should be)== SHA-256 of content, 
+This is a Windows binary test file,
+where filenames (must/should be)== SHA-256 of content,
 packed with 256 "shuffled" pieces of the Iliade
 https://www.rodoni.ch/busoni/bibliotechina/nuovifiles/iliade_h/testo.htm
 
@@ -54660,13 +52809,13 @@ It is quickly possible to see what's inside this way
 zpaqfranz autotest -to z:\somewhere
 zpaqfranz x z:\somewhere\sha256.zpaq -to z:\extracted
 
-Short version: from version 55.16, instead of using deduplicated pseudorandom files, 
+Short version: from version 55.16, instead of using deduplicated pseudorandom files,
 I preferred plaintext, in order to dispel any doubts about the contents of the binary file
 
 I therefore believe it adheres to Debian rules for  binary files into source code
 
 */
-/// splitted for old C++ compilers. 
+/// splitted for old C++ compilers.
 ///DEBIANSTART
 char extract_test1[]={"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"};
 char extract_test2[]={"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"};
@@ -54695,7 +52844,7 @@ int Jidac::pause()
 		myprintf("\n\n**** Hit a key to continue ****\n");
 		while ((!iskeypressed()))
 			sleep(1);
-	
+
 	///	mygetch(false);
 	}
 	return 0;
@@ -54717,6 +52866,9 @@ int Jidac::autotest()
 		myprintf("32374: GURU cannot alloc the buffer8bit\n");
 		return 2;
 	}
+	if (flagdebug)
+		myprintf("54741: buffer8bit %s\n",migliaia(int64_t(buffer8bit)));
+
 	// why this strange thing? Because we want to debug on BIG ENDIAN, of course
 	uint32_t *buffer32bit = (uint32_t*)franz_malloc(chunksize*sizeof(uint32_t));
 	if (buffer32bit==0)
@@ -54725,6 +52877,9 @@ int Jidac::autotest()
 		franz_free(buffer8bit);
 		return 2;
 	}
+	if (flagdebug)
+		myprintf("54752: buffer32bit %s\n",migliaia(int64_t(buffer32bit)));
+
 	int64_t startcalc=mtime();
 	MAPPAAUTOCHECK myautocheck_map;
 	hash_autocheck myblock;
@@ -54736,7 +52891,7 @@ int Jidac::autotest()
 	myautocheck_map.insert(std::pair<string, hash_autocheck>("HIGHWAY128",myblock));
 	myblock.ok="6F9B44DF54E86972F2873FEFEBB06BD7E29CF9C7DB71096FF0270D72726088EF";
 	myautocheck_map.insert(std::pair<string, hash_autocheck>("HIGHWAY256",myblock));
-	
+
 	myblock.ok="5AF0D4BB454A7D349CE97EFAFFD93CAC3B200DF166BEB9BFE2EC1838F35396AD";
 	myautocheck_map.insert(std::pair<string, hash_autocheck>("BLAKE3",myblock));
 	myblock.ok="0D26839A";
@@ -54758,13 +52913,16 @@ int Jidac::autotest()
 	myblock.ok="93EA42CC35E379AD67927C4F3B7AB78EA038A7FD67D7B245975752FDF319B0A8C40E4F4AD30D9069CBB96777AE2CA6ED23A5FEB1DCF30487401317887E97584A";
 	myautocheck_map.insert(std::pair<string, hash_autocheck>("WHIRLPOOL",myblock));
 	myblock.ok="25F384F0514225C3878240045180B970";
-	myautocheck_map.insert(std::pair<string, hash_autocheck>("XXH3",myblock));		
+	myautocheck_map.insert(std::pair<string, hash_autocheck>("XXH3",myblock));
 	myblock.ok="996D383079195E18";
 	myautocheck_map.insert(std::pair<string, hash_autocheck>("XXHASH64",myblock));
 	myblock.ok="996D383079195E18";
 	myautocheck_map.insert(std::pair<string, hash_autocheck>("XXHASH64Y",myblock));
 	///myblock.ok="EMPTY";
 	///myautocheck_map.insert(std::pair<string, hash_autocheck>("WHYHASH",myblock));
+	if (flagdebug)
+		myprintf("54795: end of insert\n");
+
 	XXH3_state_t state128;
 	XXH3_128bits_reset(&state128);
 	libzpaq::SHA1 sha1;
@@ -54795,6 +52953,9 @@ int Jidac::autotest()
 	char mynomefile[260];
 	unsigned int chunk=0;
 	string extract1="";
+	if (flagdebug)
+		myprintf("54828: end of init\n");
+
 	if (tofiles.size()==1)
 	{
 		outfolder=includetrailingbackslash(tofiles[0]);
@@ -54805,6 +52966,9 @@ int Jidac::autotest()
 			return 2;
 		}
 #endif
+		if (flagdebug)
+			myprintf("54840: outfolder <<%s>>\n",outfolder.c_str());
+
 		if (mypos(" ",outfolder)>=0)
 		{
 			myprintf("33131: -to folder cannot contain spaces\n");
@@ -54819,11 +52983,19 @@ int Jidac::autotest()
 			franz_free(buffer32bit);
 			return 2;
 		}
+		else
+		{
+			if (flagdebug)
+				myprintf("54860: saggiascrivibilitacartella OK |%s|\n",outfolder.c_str());
+		}
 		uint64_t tofoldersize		=0;
 		uint32_t tofoldernumber		=0;
 		uint32_t tofolderfolder		=0;
 		uint32_t tofolderlongfiles	=0;
 		if (getfoldersize(outfolder,tofoldersize,tofoldernumber,tofolderfolder,tofolderlongfiles))
+		{
+			if (flagdebug)
+				myprintf("54869: getfoldersize OK, tofoldersize %s\n",migliaia(tofoldersize));
 			if (tofoldersize>0)
 			{
 				myprintf("33617: WARNING the folder <<");
@@ -54833,6 +53005,12 @@ int Jidac::autotest()
 				franz_free(buffer32bit);
 				return 1;
 			}
+		}
+		else
+		{
+			if (flagdebug)
+				myprintf("54880: getfoldersize failed!\n");
+		}
 		///warning: string literal of length 198756 exceeds maximum length 65536 that C++ compilers are required to suppor
 		extract1=extract_test1;
 		if (extract1=="DEBIAN")
@@ -54847,7 +53025,14 @@ int Jidac::autotest()
 			string extract3=extract_test3;
 			string extract4=extract_test4;
 			const string extract_test=extract1+extract2+extract3+extract4;
+			if (flagdebug)
+				myprintf("54878: extract_test size %s\n",migliaia(extract_test.size()));
+
 			size_t 	the_file_len=mimesize(extract_test.c_str());
+
+			if (flagdebug)
+				myprintf("54882: the_file_len %s\n",migliaia(the_file_len));
+
 			char*	the_file;
 			the_file=(char*)franz_malloc(the_file_len);
 			if (the_file==NULL)
@@ -54857,13 +53042,21 @@ int Jidac::autotest()
 				franz_free(buffer32bit);
 				return 2;
 			}
-			if (!mime2binary(extract_test.c_str(),(unsigned char *)the_file,the_file_len)) 
+			if (flagdebug)
+				myprintf("54893: the_file alloc OK %s\n",migliaia(int64_t(the_file)));
+
+			if (!mime2binary(extract_test.c_str(),(unsigned char *)the_file,the_file_len))
 			{
 				myprintf("33657: mime decoder kaputt!\n");
 				franz_free(the_file);
 				franz_free(buffer8bit);
 				franz_free(buffer32bit);
 				return 2;
+			}
+			else
+			{
+				if (flagdebug)
+					myprintf("54904: mime decoder OK on extract_test %s\n",extract_test.c_str());
 			}
 			outfile=outfolder+"sha256.zpaq";
 			myprintf("Creating autotest folder in <<");
@@ -54872,8 +53065,12 @@ int Jidac::autotest()
 	#ifdef _WIN32
 			std::wstring widename=utow(outfile.c_str());
 			FILE* outFile=_wfopen(widename.c_str(), L"wb");
+			if (flagdebug)
+				myprintf("54913: creato widename\n");
 	#else
 			FILE* outFile=fopen(outfile.c_str(),"wb");
+			if (flagdebug)
+				myprintf("54916: fopen non wide\n");
 	#endif
 			if (outFile==NULL)
 			{
@@ -54883,17 +53080,30 @@ int Jidac::autotest()
 				franz_free(buffer32bit);
 				return 2;
 			}
+			if (flagdebug)
+			{
+				myprintf("54926: outFile handle %s\n",migliaia(int64_t(outFile)));
+				myprintf("54927: sto per fare fwrite\n");
+				myprintf("54928: the_file       %s\n",migliaia(int64_t(the_file)));
+				myprintf("54928: the_file_len   %s\n",migliaia(int64_t(the_file_len)));
+				myprintf("54928: outFile handle %s\n",migliaia(int64_t(outFile)));
+			}
 			unsigned int scritti=fwrite(the_file,1,the_file_len,outFile);
+			if (flagdebug)
+				myprintf("54933: scritti %s\n",migliaia(scritti));
 			fclose(outFile);
+			if (flagdebug)
+				myprintf("54936: dopo fclose\n");
 			if (scritti!=the_file_len)
 			{
-				myprintf("33666: error extracting file .zpaq\n");
+				myprintf("33666: error extracting file .zpaq written %s expected %s => %s\n",migliaia(scritti),migliaia2(the_file_len),outfile.c_str());
 				franz_free(the_file);
 				franz_free(buffer8bit);
 				franz_free(buffer32bit);
 				return 2;
 			}
-			
+			if (flagdebug)
+				myprintf("54946: dimensione outfile %s\n",migliaia(prendidimensionefile(outfile.c_str())));
 		}
 	}
 	if (all)
@@ -54976,9 +53186,9 @@ int Jidac::autotest()
 					fwrite(buffer8bit, 1, chunksize, myfile);
 					fclose(myfile);
 				}
-				
+
 				XXH3_128bits_update(&state128, buffer8bit, chunksize);
-			
+
 				sha256write2.write((const char*)buffer8bit,chunksize);
 				for (int64_t l=0;l<chunksize;l++)
 					sha256put.put(*(buffer8bit+l));
@@ -54996,8 +53206,6 @@ int Jidac::autotest()
 					sha1put.put(*(buffer8bit+l));
 				XXH64_update(state, buffer8bit, chunksize);
 				HighwayHashCatAppend((const uint8_t*)buffer8bit,chunksize,&highway64state);
-		
-
 			}
 			chunksize/=3;
 		}
@@ -55017,7 +53225,7 @@ int Jidac::autotest()
 			chunksize=menoenne;
 		myprintf("Quick check chunsize %d: ",chunksize);
 		for (int j=0;j<chunksize;j++)
-			buffer8bit[j]='A'+j;	
+			buffer8bit[j]='A'+j;
 		if (chunksize<62)
 			for (int j=0;j<chunksize;j++)
 				myprintf("%c",buffer8bit[j]);
@@ -55040,9 +53248,11 @@ int Jidac::autotest()
 			sha1put.put(*(buffer8bit+l));
 		XXH64_update(state, buffer8bit, chunksize);
 		HighwayHashCatAppend((const uint8_t*)buffer8bit,chunksize,&highway64state);
-		
+
 //		mywyhash=wyhash(buffer8bit,chunksize,0,_wyp);
 	}
+	if (flagdebug)
+		myprintf("55125: myautocheck start\n");
 	MAPPAAUTOCHECK::iterator a;
 
 	a=myautocheck_map.find("HIGHWAY64");
@@ -55057,17 +53267,17 @@ int Jidac::autotest()
 		error("guru 52286 HIGHWAY128");
 	uint64_t hash_128[2];
 	HighwayHashCatFinish128(&highway64state,hash_128);
-	a->second.calculated=binarytohex((const unsigned char*)hash_128,16);	
-	
+	a->second.calculated=binarytohex((const unsigned char*)hash_128,16);
+
 
 	a=myautocheck_map.find("HIGHWAY256");
 	if (a==myautocheck_map.end())
 		error("guru 52286 HIGHWAY256");
 	uint64_t hash_256[4];
 	HighwayHashCatFinish256(&highway64state,hash_256);
-	a->second.calculated=binarytohex((const unsigned char*)hash_256,32);	
-	
-	
+	a->second.calculated=binarytohex((const unsigned char*)hash_256,32);
+
+
 
 	a=myautocheck_map.find("SHA-3");
 	if (a==myautocheck_map.end())
@@ -55093,20 +53303,20 @@ int Jidac::autotest()
 	if (a==myautocheck_map.end())
 		error("guru 32494 BLAKE3");
 	a->second.calculated=binarytohex((const unsigned char*)output,BLAKE3_OUT_LEN);
-	
+
 	memcpy(buffer,sha256put.result(), 32);
 	a=myautocheck_map.find("SHA-256-PUT");
 	if (a==myautocheck_map.end())
 		error("guru 54599 SHA-256-PUT");
 	a->second.calculated=binarytohex((const unsigned char*)buffer,32);
-	
+
 	memcpy(buffer,sha256write2.result(), 32);
 	a=myautocheck_map.find("SHA-256-WRITE");
 	if (a==myautocheck_map.end())
 		error("guru 54390 SHA-256-WRITE");
 	a->second.calculated=binarytohex((const unsigned char*)buffer,32);
-	
-	
+
+
 	a=myautocheck_map.find("XXHASH64");
 	if (a==myautocheck_map.end())
 		error("guru 32494 XXHASH64");
@@ -55136,6 +53346,10 @@ int Jidac::autotest()
 	if (a==myautocheck_map.end())
 		error("guru 32495 XXHASH64Y");
 	a->second.calculated=bin2hex_64(yann);
+
+	if (flagdebug)
+		myprintf("55222: end myautocheck\n");
+
 	int64_t endtime=mtime();
 	if (isbigendian())
 		myprintf("This seems a BIG ENDIAN CPU    (aka:'strange')\n");
@@ -55179,18 +53393,27 @@ int Jidac::autotest()
 				franz_free(buffer32bit);
 				return 1;
 			}
+		if (flagdebug)
+			myprintf("55268: filebatch %s\n",filebatch.c_str());
+
 		string filezpaq=outfolder+"testme.zpaq";
 #ifdef _WIN32
 		wchar_t myexepath[_MAX_PATH];
 		GetModuleFileName(NULL,myexepath,_MAX_PATH);
 		string myzpaqexe=wtou(myexepath);
 		myzpaqexe=linuxtowinpath(myzpaqexe);
+		if (flagdebug)
+			myprintf("55277: myzpaqexe %s\n",myzpaqexe.c_str());
+
 		FILE* batch=fopen(filebatch.c_str(), "wb");
 		if (batch==NULL)
 		{
 			myprintf("34570: cannot write on %s\n",filebatch.c_str());
 			exit(0);
 		}
+		if (flagdebug)
+			myprintf("55286: batch FILE* %s\n",migliaia(int64_t(batch)));
+
 		fprintf(batch,"@echo OFF\r\n");
 		fprintf(batch,"del \"%s\"\r\n",filezpaq.c_str());
 		fprintf(batch,"\"%s\" x \"%ssha256.zpaq\" -to \"%ste\"\r\n",myzpaqexe.c_str(),outfolder.c_str(),outfolder.c_str());
@@ -55232,15 +53455,24 @@ int Jidac::autotest()
 		if (!flagchanged)
 			fprintf(batch,"echo (4) You should read GLOBAL SHA256: 7B32DB3F6F0180062773C5A046A2C99D17BE7668202379BA136E7A4D134FFC26\r\n");
 		fprintf(batch,"\"%s\" pause -pakka\r\n",myzpaqexe.c_str());
+		if (flagdebug)
+			myprintf("55330: before fclose\n");
 		fclose(batch);
+		if (flagdebug)
+			myprintf("55333: after fclose\n");
 #else
 		string myzpaqexe="\""+my_realpath(zpaqfranzexename)+"\"";
+		if (flagdebug)
+			myprintf("55337: myzpaqexe %s\n",myzpaqexe.c_str());
 		FILE* batch=fopen(filebatch.c_str(), "wb");
 		if (batch==NULL)
 		{
 			myprintf("34615: cannot write on %s\n",filebatch.c_str());
 			exit(0);
 		}
+		if (flagdebug)
+			myprintf("55345: batch FILE* %s\n",migliaia(int64_t(batch)));
+
 		fprintf(batch,"rm \"%s\"\n",filezpaq.c_str());
 		if (extract1=="DEBIAN")
 			fprintf(batch,"echo \"(1) Sorry, no full test on Debian allowed. Download and compile source from github\"\n");
@@ -55286,14 +53518,30 @@ int Jidac::autotest()
 		if (!flagchanged)
 			fprintf(batch,"echo \"(4) You should read GLOBAL SHA256: 7B32DB3F6F0180062773C5A046A2C99D17BE7668202379BA136E7A4D134FFC26\"\n");
 		fprintf(batch,"%s pause -pakka\n",myzpaqexe.c_str());
+		if (flagdebug)
+			myprintf("55393: before fclose\n");
 		fclose(batch);
+		if (flagdebug)
+			myprintf("55396: after fclose\n");
 // ok we want the +x
 		chmod(filebatch.c_str(),0700);
+		if (flagdebug)
+			myprintf("55400: after chmod\n");
 #endif
 		myprintf("\n\nThe test batchfile is: %s\n",filebatch.c_str());
 	}
+
+	if (flagdebug)
+		myprintf("55407: franz_free buffer8bit %s\n",migliaia(int64_t(buffer8bit)));
+
 	franz_free(buffer8bit);
+
+	if (flagdebug)
+		myprintf("55411: franz_free buffer32bit %s\n",migliaia(int64_t(buffer32bit)));
 	franz_free(buffer32bit);
+
+	if (flagdebug)
+		myprintf("55414: allok %d\n",int(allok));
 	if (allok)
 		return 0;
 	else
@@ -55315,7 +53563,7 @@ int Jidac::findj()
 	}
 	if (files[0]==".")
 		files[0]+='/';
-	int64_t startscan=mtime();			
+	int64_t startscan=mtime();
 	for (unsigned int i=0;i<files.size();i++)
 		scandir(true,edt,files[i].c_str(),!flagnorecursion);
 	int64_t scantime=mtime()-startscan;
@@ -55324,7 +53572,7 @@ int Jidac::findj()
 	int64_t 	howmany		=0;
 	int64_t 	totalsize	=0;
 	vector<DTMap::iterator> filelist;
-	for (DTMap::iterator p=edt.begin(); p!=edt.end(); ++p) 
+	for (DTMap::iterator p=edt.begin(); p!=edt.end(); ++p)
 	{
 		bool flagshow=true;
 		if (searchfrom!="")
@@ -55337,7 +53585,7 @@ int Jidac::findj()
 			if ((p->second.date)>=g_dateto)
 				flagshow=false;
 		if (maxsize>0)
-			if (maxsize<(uint64_t)p->second.size) 
+			if (maxsize<(uint64_t)p->second.size)
 				flagshow=false;
 		if (minsize>0)
 			if (minsize>(uint64_t)p->second.size)
@@ -55364,7 +53612,7 @@ int Jidac::findj()
 		sort(filelist.begin(), filelist.end(), compareorderby);
 	}
 	for (unsigned int i=0;i<filelist.size();i++)
-	{		
+	{
 		if (menoenne) /// list -n 10 => sort by size and stop at 10
 			if (i>=menoenne)
 				break;
@@ -55375,7 +53623,7 @@ int Jidac::findj()
 		myprintf("\n");
 	}
 
-	
+
 	if (howmany)
 	{
 		printbar('=');
@@ -55390,7 +53638,7 @@ int Jidac::isopen()
 	{
 		myprintf("35476: for isopen() exactly 1 file needed\n");
 		return 2;
-	}		
+	}
 	if (!fileexists(files[0]))
 	{
 		myprintf("50580: file does not exists ");
@@ -55398,7 +53646,7 @@ int Jidac::isopen()
 		myprintf("\n");
 		return 1;
 	}
-	
+
 	if (isfileopen(files[0]))
 	{
 		myprintf("35481: file seems open ");
@@ -55427,11 +53675,11 @@ void my_handler(int s)
 		myprintf("54470: Closing file handle\n");
 		fclose(g_archivefp);
 	}
-	
+
 	bool flagalwayscheck=g_flagcreating;
 	if (command=='Z')
 		flagalwayscheck=true;
-	
+
 	if (flagalwayscheck)
 		if (fileexists(g_archive.c_str()))
 			if (prendidimensionefile(g_archive.c_str())>=0)
@@ -55453,12 +53701,12 @@ void my_handler(int s)
 		printUTF8(g_pidname.c_str());
 		myprintf(">>\n");
 	}
-	
+
 	// 2==control-C (maybe)
 	if (s==2)
-	{	
-		
-	
+	{
+
+
 
 #ifdef _WIN32
 		if (command=='q')
@@ -55475,18 +53723,18 @@ void my_handler(int s)
 			restoreConsole();
 		}
 	}
-	exit(1); 
+	exit(1);
 }
 // Convert argv to UTF-8 and replace \ with /
 #ifdef unix
-	int main(int argc, const char** argv) 
+	int main(int argc, const char** argv)
 	{
 #else
 	#ifdef _MSC_VER
-		int wmain(int argc, LPWSTR* argw) 
+		int wmain(int argc, LPWSTR* argw)
 		{
 	#else
-		int main() 
+		int main()
 		{
 /*
 			wchar_t *wc = GetCommandLineW();
@@ -55500,7 +53748,7 @@ void my_handler(int s)
 ///	This is Windows: take care of parameters
 	vector<string> args(argc);
 	libzpaq::Array<const char*> argp(argc);
-	for (int i=0; i<argc; ++i) 
+	for (int i=0; i<argc; ++i)
 	{
 		args[i]=wtou(argw[i]);
 		argp[i]=args[i].c_str();
@@ -55519,10 +53767,10 @@ void my_handler(int s)
 //// set UTF-8 for console
 	g_ConsoleCP			=GetConsoleCP();
 	g_ConsoleOutputCP	=GetConsoleOutputCP();
-	
+
 	SetConsoleCP		(65001);
 	SetConsoleOutputCP	(65001);
-	
+
 ///	myprintf("ConsoleCP %d ConsoleOutputCP %d\n",g_ConsoleCP,g_ConsoleOutputCP);
 	OSVERSIONINFO vi;// = {0};
 	vi.dwMajorVersion=0;
@@ -55535,7 +53783,7 @@ void my_handler(int s)
 
 //	infact unused, too slow
 	g_sse42=false;
-	
+
 #if  defined(_WIN64)
     int sse42;
     SSE42(sse42);
@@ -55546,21 +53794,21 @@ void my_handler(int s)
 	Jidac jidac;
 	pjidac=&jidac;
 	int risultatoparametri=jidac.loadparameters(argc,argv);
-	
+
 	if (risultatoparametri>0)
 		return risultatoparametri;
-#ifdef GUI	
+#ifdef GUI
 	if (command=='G')
 	{
 		return jidac.gogui();
 	}
 #endif
 	int errorcode=0;
-	try 
+	try
 	{
 		errorcode=jidac.doCommand();
 	}
-	catch (std::exception& e) 
+	catch (std::exception& e)
 	{
 		fflush(stdout);
 		myprintf( "23013: zpaqfranz error: %s\n", e.what());
@@ -55577,13 +53825,13 @@ void my_handler(int s)
 		printbar('*');
 		errorcode=2;
 	}
-	  
-	  
+
+
 ///	  exit(0);
 	if ((!flaghashdeep) && (!flagstdout) && (command!='L') && (command!='F')) /// we need to make output compatible with hashdeep?
 	{
 			myprintf( "\n%1.3f seconds (%s) ", (mtime()-g_start)/1000.0,timetohuman((uint32_t)((mtime()-g_start)/1000.0)).c_str());
-		 
+
 		if (command=='q')
 			myprintf( "on VSS operation\n");
 		else
@@ -55636,12 +53884,12 @@ void my_handler(int s)
 			}
 			if (g_exec_ok!="")
 				xcommand(g_exec_ok,g_exec_text);
-		}	
+		}
 	}
-	
+
 	if (g_output_handle!=0)
 		fclose(g_output_handle);
-	
+
 #ifdef _WIN32
 //// set back the console
 	SetConsoleCP		(g_ConsoleCP);
@@ -55650,8 +53898,8 @@ void my_handler(int s)
 #endif
 	return errorcode;
 }
-/// 55.10, reworked. Not 255-shrink, no dirnameifalreadyexists		
-int Jidac::utf() 
+/// 55.10, reworked. Not 255-shrink, no dirnameifalreadyexists
+int Jidac::utf()
 {
 	if (files.size()!=1)
 	{
@@ -55673,7 +53921,7 @@ int Jidac::utf()
 	unsigned int	howmanyfiles=0;
 	unsigned int	longfiles=0;
 	unsigned int	longdirs=0;
-	for (DTMap::iterator p=edt.begin(); p!=edt.end(); ++p) 
+	for (DTMap::iterator p=edt.begin(); p!=edt.end(); ++p)
 		if (isdirectory(p->first))
 		{
 			if (p->first.size()>250)
@@ -55687,7 +53935,7 @@ int Jidac::utf()
 				}
 			}
 			string	thedir=p->first;
-			string 	ansidir=purgeansi(forcelatinansi(utf8toansi(thedir)),true); //it is a path	
+			string 	ansidir=purgeansi(forcelatinansi(utf8toansi(thedir)),true); //it is a path
 			if (ansidir!=thedir)
 			{
 				if (flagverbose)
@@ -55712,9 +53960,9 @@ int Jidac::utf()
 					myprintf("\n");
 				}
 			}
-			
+
 			string	thefile=extractfilename(p->first);
-			string 	ansifile=purgeansi(forcelatinansi(utf8toansi(thefile)),true); //it is a path	
+			string 	ansifile=purgeansi(forcelatinansi(utf8toansi(thefile)),true); //it is a path
 			if (thefile!=ansifile)
 			{
 				howmanyfiles++;
@@ -55765,11 +54013,11 @@ int Jidac::utf()
 					if (j==mydirs.size())
 						break;
 				}
-				
+
 				if (j==i+1)
 				{
 					string  from=includetrailingbackslash(files[0])+thedir;
-					string 	sto=includetrailingbackslash(files[0])+purgeansi(forcelatinansi(utf8toansi(thedir)),true); //it is a path	
+					string 	sto=includetrailingbackslash(files[0])+purgeansi(forcelatinansi(utf8toansi(thedir)),true); //it is a path
 					if (myrename(from,sto)!=0)
 					{
 						if (flagverbose)
@@ -55795,9 +54043,9 @@ int Jidac::utf()
 				{
 					string  from=includetrailingbackslash(files[0])+thedir;
 					string 	nuovopadre=purgeansi(forcelatinansi(utf8toansi(thedir)),true);
-					string 	sto=includetrailingbackslash(files[0])+nuovopadre; //it is a path	
+					string 	sto=includetrailingbackslash(files[0])+nuovopadre; //it is a path
 					if (myrename(from,sto)!=0)
-					{	
+					{
 						if (flagverbose)
 						{
 							myprintf("===========> GURU renaming ");
@@ -55823,7 +54071,7 @@ int Jidac::utf()
 							j++;
 							if (j==mydirs.size())
 								break;
-						}	
+						}
 						j=i+1;
 						while (mypos(nuovopadre,mydirs[j])==0)
 						{
@@ -55868,11 +54116,11 @@ int Jidac::utf()
 			myprintf("Stage 3: fix filenames\n");
 			unsigned int filerenamed=0;
 
-			for (DTMap::iterator p=edt.begin(); p!=edt.end(); ++p) 
+			for (DTMap::iterator p=edt.begin(); p!=edt.end(); ++p)
 				if (!isdirectory(p->first))
 				{
 					string	thefile=extractfilename(p->first);
-					string 	ansifile=purgeansi(forcelatinansi(utf8toansi(thefile)),true); //it is a path	
+					string 	ansifile=purgeansi(forcelatinansi(utf8toansi(thefile)),true); //it is a path
 					if (thefile!=ansifile)
 					{
 						string  from	=includetrailingbackslash(extractfilepath(p->first))+thefile;
@@ -55935,36 +54183,36 @@ int unz(const char * archive,const char * key)
 	////unzOutputFile out;   // streaming output
 	bool done=false;  // stop reading?
 	bool firstSegment=true;
-	while (!done && d.findBlock()) 
+	while (!done && d.findBlock())
   {
 	unzBuf filename(65535);
-    while (!done && d.findFilename(&filename)) 
+    while (!done && d.findFilename(&filename))
 	{
 		unzBuf comment(65535);
 		d.readComment(&comment);
 		unzverify_utf8(filename.s.c_str());
 		// Test for journaling or streaming block. They cannot be mixed.
 		uint64_t jsize=0;  // journaling block size in comment
-		if (comment.s.size()>=4 && comment.s.substr(comment.s.size()-4)=="jDC\x01") 
+		if (comment.s.size()>=4 && comment.s.substr(comment.s.size()-4)=="jDC\x01")
 		{
         // read jsize = uncompressed size from comment as a decimal string
 			unsigned i;
-			for (i=0; i<comment.s.size()-5 && isdigit(comment.s[i]); ++i) 
+			for (i=0; i<comment.s.size()-5 && isdigit(comment.s[i]); ++i)
 			{
 				jsize=jsize*10+comment.s[i]-'0';
 				if (jsize>>32) unzerror("size in comment > 4294967295");
 			}
-			if (i<1) 
+			if (i<1)
 				unzerror("missing size in comment");
-			if (streaming) 
+			if (streaming)
 				unzerror("journaling block after streaming block");
 			journaling=true;
 		}
-		else 
+		else
 		{
-			if (journaling) 
+			if (journaling)
 			unzerror("streaming block after journaling block");
-			if (index) 
+			if (index)
 				unzerror("streaming block in index");
 			streaming=true;
 			///d.setOutput(&out);
@@ -55985,36 +54233,36 @@ int unz(const char * archive,const char * key)
 		char type=0;  // c,d,h,i
 		if (journaling)  // di solito
 		{
-			if (filename.s.size()!=28) 
+			if (filename.s.size()!=28)
 				unzerror("filename size not 28");
-			if (filename.s.substr(0, 3)!="jDC") 
+			if (filename.s.substr(0, 3)!="jDC")
 				unzerror("filename not jDC");
 			type=filename.s[17];
-			if (!strchr("cdhi", type)) 
+			if (!strchr("cdhi", type))
 				unzerror("type not c,d,h,i");
-			if (filename.s<=last_filename) 
+			if (filename.s<=last_filename)
 			unzerror("filenames out of order");
 			last_filename=filename.s;
         // Read date
-			for (int i=3; i<17; ++i) 
+			for (int i=3; i<17; ++i)
 			{
-				if (!isdigit(filename.s[i])) 
+				if (!isdigit(filename.s[i]))
 					unzerror("non-digit in date");
 				date=date*10+filename.s[i]-'0';
 			}
 			verify_date(date);
         // Read frag ID
-			for (int i=18; i<28; ++i) 
+			for (int i=18; i<28; ++i)
 			{
-				if (!isdigit(filename.s[i])) 
+				if (!isdigit(filename.s[i]))
 					unzerror("non-digit in fragment ID");
 				id=id*10+filename.s[i]-'0';
 			}
-			if (id<1 || id>4294967295llu) 
+			if (id<1 || id>4294967295llu)
 				unzerror("fragment ID out of range");
 		}
       // Select streaming output file
-		if (streaming && (firstSegment || filename.s!="")) 
+		if (streaming && (firstSegment || filename.s!=""))
 		{
 			std::string fn=filename.s;
 			/// out.open(fn.c_str());
@@ -56023,37 +54271,37 @@ int unz(const char * archive,const char * key)
 		// Decompress
 		fflush(stdout);
 		unzBuf seg(jsize);
-		if (journaling) 
+		if (journaling)
 			d.setOutput(&seg);
 		unzSHA1 sha1;
 		d.setSHA1(&sha1);
 		d.decompress();
-		if (journaling && seg.s.size()!=jsize) 
+		if (journaling && seg.s.size()!=jsize)
 			unzerror("incomplete output");
       // Verify checksum
 		char checksum[21];
 		d.readSegmentEnd(checksum);
 //		if (!noeta)
 ///		myprintf("s");
-		if (checksum[0]==1) 
+		if (checksum[0]==1)
 		{
-			if (memcmp(checksum+1, sha1.result(), 20)) 
+			if (memcmp(checksum+1, sha1.result(), 20))
 				unzerror("unzSHA1 mismatch");
       //  else myprintf("OK");
    ///   myprintf("\nZ1: SHA1 checksum OK\n");
 		}
-		else 
-		if (checksum[0]==0) 
+		else
+		if (checksum[0]==0)
 			myprintf("not checked");
 		else unzerror("invalid checksum type");
       ///myprintf("\n");
 		filename.s="";
       // check csize at first non-d block
-		if (csize && strchr("chi", type)) 
+		if (csize && strchr("chi", type))
 		{
-			if (csize!=offset) 
+			if (csize!=offset)
 			{
-				myprintf("Z2:    csize=%1.0f, offset=%1.0f\n",double(csize), double(offset));		
+				myprintf("Z2:    csize=%1.0f, offset=%1.0f\n",double(csize), double(offset));
 				unzerror("csize does not point here");
 			}
 			csize=0;
@@ -56061,9 +54309,9 @@ int unz(const char * archive,const char * key)
 ///myprintf("=======================================\n");
       // Get csize from c block
 		const size_t len=seg.s.size();
-		if (type=='c') 
+		if (type=='c')
 		{
-			if (len<8) 
+			if (len<8)
 				unzerror("c block too small");
 			csize=unzget8(seg.s.data());
 			lavorati+=csize;
@@ -56074,16 +54322,16 @@ int unz(const char * archive,const char * key)
 				myprintf("%20s (%20s)\n", migliaia(lavorati),migliaia(csize));
 			}
         // test for end of archive marker
-			if (csize>>63) 
+			if (csize>>63)
 			{
 				myprintf("Incomplete transaction at end of archive (OK)\n");
 				done=true;
 			}
-			else 
-			if (index && csize!=0) 
+			else
+			if (index && csize!=0)
 				unzerror("nonzero csize in index");
         // test for rollback
-			if (until && date>until) 
+			if (until && date>until)
 			{
 				myprintf("Rollback: %1.0f is after %1.0f\n",double(date), double(until));
 			done=true;
@@ -56093,50 +54341,50 @@ int unz(const char * archive,const char * key)
 			csize+=in.tell()+1;
 		}
       // Test and save d block
-		if (type=='d') 
+		if (type=='d')
 		{
-			if (index) 
+			if (index)
 				unzerror("d block in index");
 			bsize[id]=in.tell()+1-offset;  // compressed size
    ///     myprintf("    %u -> %1.0f ", bsize[id], double(seg.s.size()));
         // Test frag size list at end. The format is f[id..id+n-1] fid n
         // where fid may be id or 0. sizes must sum to the rest of block.
-			if (len<8) 
+			if (len<8)
 				unzerror("d block too small");
 			const char* end=seg.s.data()+len;  // end of block
 			uint32_t fid=unzget4(end-8);  // 0 or ID
 			const uint32_t n=unzget4(end-4);    // number of frags
-			if (fid==0) 
+			if (fid==0)
 			fid=id;
 			///if (!noeta)
 				//myprintf("u");
 				///myprintf(".");
         ///myprintf("[%u..%u) ", fid, fid+n);
-			if (fid!=id) 
+			if (fid!=id)
 				unzerror("missing ID");
-			if (n>(len-8)/4) 
+			if (n>(len-8)/4)
 				unzerror("frag list too big");
 			uint64_t sum=0;  // computed sum of frag sizes
-			for (unsigned i=0; i<n; ++i) 
+			for (unsigned i=0; i<n; ++i)
 				sum+=unzget4(end-12-4*i);
 		//if (!noeta)
 			//myprintf("");	//myprintf("m");
         ///myprintf("= %1.0f ", double(sum));
-			if (sum+n*4+8!=len) 
+			if (sum+n*4+8!=len)
 				unzerror("bad frag size list");
         // Save frag hashes and sizes. For output, save data too.
 			const char* data=seg.s.data();  // uncompressed data
 			const char* flist=data+sum;  // frag size list
 			assert(flist+n*4+8==end);
-			for (uint32_t i=0; i<n; ++i) 
+			for (uint32_t i=0; i<n; ++i)
 			{
-				while (frag.size()<=id+i) 
+				while (frag.size()<=id+i)
 					frag.push_back("");
-				if (frag[id+i]!="") 
+				if (frag[id+i]!="")
 					unzerror("duplicate frag ID");
 				uint32_t f=unzget4(flist);  // frag size
 				unzSHA1 sha1;
-				for (uint32_t j=0; j<f; ++j) 
+				for (uint32_t j=0; j<f; ++j)
 					sha1.put(data[j]);
 				const char* h=sha1.result();  // frag hash
 				frag[id+i]=std::string(h, h+20)+std::string(flist, flist+4);
@@ -56155,9 +54403,9 @@ int unz(const char * archive,const char * key)
       // where bsize is the compressed size of the d block with the same id,
       // and each size corresonds to a fragment in that block. The list
       // must match the list in the d block if present.
-		if (type=='h') 
+		if (type=='h')
 		{
-			if (len%24!=4) 
+			if (len%24!=4)
 			unzerror("bad h block size");
 			uint32_t b=unzget4(seg.s.data());
 			b++;
@@ -56167,18 +54415,18 @@ int unz(const char * archive,const char * key)
         // Compare hashes and sizes
 			const char* p=seg.s.data()+4;  // next hash, size
 ///			uint32_t sum=0;  // uncompressed size of all frags
-			for (uint32_t i=0; i<len/24; ++i) 
+			for (uint32_t i=0; i<len/24; ++i)
 			{
-				if (index) 
+				if (index)
 				{
 					while (frag.size()<=id+i) frag.push_back("");
 					if (frag[id+i]!="") unzerror("data in index");
 						frag[id+i]=std::string(p, p+24);
 				}
-				else 
+				else
 				if (id+i>=frag.size() || frag[id+i].size()<24)
 					unzerror("no matching d block");
-				else 
+				else
 				if (frag[id+i].substr(0, 24)!=std::string(p, p+24))
 					unzerror("frag size or hash mismatch");
 ///				sum+=unzget4(p+20);
@@ -56192,50 +54440,50 @@ int unz(const char * archive,const char * key)
       //   date filename 0 na attr[0..na) ni ptr[0..ni)   (to update)
       //   0    filename                                  (to delete)
       // Date is 64 bits in YYYYMMDDHHMMSS format.
-		if (type=='i') 
+		if (type=='i')
 		{
 			const char* p=seg.s.data();
 			const char* end=p+seg.s.size();
-			while (p<end) 
+			while (p<end)
 			{
           // read date
-				if (end-p<8) 
+				if (end-p<8)
 				unzerror("missing date");
 				unzDT f;
 				f.date=unzget8(p), p+=8;
-				if (f.date!=0) 
+				if (f.date!=0)
 					verify_date(f.date);
           // read filename
 				std::string fn;
-				
-				
-				while (p<end && *p) 
+
+
+				while (p<end && *p)
 				{
 				///		if (*p>=0 && *p<32) myprintf("^%c", *p+64);
        ///     else putchar(*p);
 					fn+=*p++;
 				}
-				if (p==end) 
+				if (p==end)
 					unzerror("missing NUL in filename");
 				++p;
-				if (fn.size()>65535) 
+				if (fn.size()>65535)
 				unzerror("filename size > 65535");
 				unzverify_utf8(fn.c_str());
-		
+
 				bool isvirtual=iszpaqfranzvirtualfile(fn);
 				if (isvirtual)
 					zpaqvirtualfile++;
           // read attr
 				if ((f.date>0) && (!isvirtual))
 				{
-					if (end-p<4) 
+					if (end-p<4)
 						unzerror("missing attr size");
 					uint32_t na=unzget4(p);
 					p+=4;
-					if (na>65535) 
+					if (na>65535)
 					unzerror("attr size > 65535");
 					///myprintf("2 NA VALE %d\n",na);
-					if (na>FRANZOFFSETV1) // houston we have a FRANZBLOCK? 
+					if (na>FRANZOFFSETV1) // houston we have a FRANZBLOCK?
 					{
 						assert((na-8)<FRANZOFFSETV3); // cannot work on too small buffer
 						/// paranoid works with SHA1, not CRC32. Get (if any)
@@ -56249,32 +54497,32 @@ int unz(const char * archive,const char * key)
 						f.sha1hex[0]=0x0;
 					///myprintf("---NORMAL OFFSET---\n");
 					}
-					for (unsigned i=0; i<na; ++i) 
+					for (unsigned i=0; i<na; ++i)
 					{
-						if (end-p<1) 
+						if (end-p<1)
 							unzerror("missing attr");
 						uint64_t a=*p++&255;
-						if (i<8) 
+						if (i<8)
 							f.attr|=a<<(i*8);
 					}
 					// read frag IDs
-					if (end-p<4) 
+					if (end-p<4)
 						unzerror("missing frag ptr size");
 					uint32_t ni=unzget4(p);
 					p+=4;
-					for (uint32_t i=0; i<ni; ++i) 
+					for (uint32_t i=0; i<ni; ++i)
 					{
-						if (end-p<4) 
+						if (end-p<4)
 							unzerror("missing frag ID");
 						uint32_t a=unzget4(p);
 						p+=4;
 						f.ptr.push_back(a);
 					// frag must refer to valid data except in an index
-						if (!index) 
+						if (!index)
 						{
-							if (a<1 || a>=frag.size()) 
+							if (a<1 || a>=frag.size())
 								unzerror("frag ID out of range");
-							if (frag[a]=="") 
+							if (frag[a]=="")
 								unzerror("missing frag data");
 						}
 					}
@@ -56300,21 +54548,21 @@ int unz(const char * archive,const char * key)
 	int64_t hashed=0;
 	int64_t iniziocalcolo=mtime();
 	int		unknownfranzo=0;
-	
+
 	for (p=unzdt.begin(); p!=unzdt.end(); ++p)
 		mappadt.push_back(p);
 	std::sort(mappadt.begin(), mappadt.end(),unzcompareprimo);
-	for (unsigned int i=0; i<mappadt.size(); ++i) 
+	for (unsigned int i=0; i<mappadt.size(); ++i)
 	{
 		unzDTMap::iterator p=mappadt[i];
 		unzDT f=p->second;
-		if (f.date) 
+		if (f.date)
 		{
 			uint64_t size=0;
 			for (uint32_t k=0; i<f.ptr.size(); ++i)
 				if (f.ptr[k]>0 && f.ptr[k]<frag.size() && frag[f.ptr[k]].size()>=24)
 					size+=unzget4(frag[f.ptr[k]].data()+20);
-			if (!index) 
+			if (!index)
 			{
 				std::string fn=p->first;
 				if ((!isads(fn)) && (!iszfs(fn)) && (!isdirectory(fn)))
@@ -56327,8 +54575,8 @@ int unz(const char * archive,const char * key)
 					int64_t myaccesstime=0;
 					bool	myisordered=false;
 					int		myversion=0;
-					franz_posix* myposix=NULL;	
-			
+					franz_posix* myposix=NULL;
+
 					int unzfranzotype=decode_franz_block(isdirectory(p->first),p->second.sha1hex,
 					myhashtype,
 					hashstoredinzpaq,
@@ -56342,7 +54590,7 @@ int unz(const char * archive,const char * key)
 					{
 						uint64_t myseed = 0;
 						XXHash64 myhash(myseed);
-						for (uint32_t i=0; i<f.ptr.size(); ++i) 
+						for (uint32_t i=0; i<f.ptr.size(); ++i)
 							if (f.ptr[i]<frag.size())
 								for (uint32_t j=24; j<frag[f.ptr[i]].size(); ++j)
 								{
@@ -56355,7 +54603,7 @@ int unz(const char * archive,const char * key)
 					if (unzfranzotype==FRANZO_SHA_1)
 					{
 						unzSHA1 mysha1;
-						for (uint32_t i=0; i<f.ptr.size(); ++i) 
+						for (uint32_t i=0; i<f.ptr.size(); ++i)
 							if (f.ptr[i]<frag.size())
 								for (uint32_t j=24; j<frag[f.ptr[i]].size(); ++j)
 								{
@@ -56372,7 +54620,7 @@ int unz(const char * archive,const char * key)
 					if (unzfranzotype==FRANZO_SHA_256)
 					{
 						unzSHA256 mysha256;
-						for (uint32_t i=0; i<f.ptr.size(); ++i) 
+						for (uint32_t i=0; i<f.ptr.size(); ++i)
 							if (f.ptr[i]<frag.size())
 								for (uint32_t j=24; j<frag[f.ptr[i]].size(); ++j)
 								{
@@ -56382,7 +54630,7 @@ int unz(const char * archive,const char * key)
 						char sha256result[32];
 						memcpy(sha256result, mysha256.result(), 32);
 					///	sha256result[43]='C';
-						
+
 						for (int j=0; j <= 31; j++)
 							snprintf(p->second.sha1decompressedhex+j*2,FRANZOFFSETV3-j*2,"%02X", (unsigned char)sha256result[j]);
 						p->second.sha1decompressedhex[64]=0x0;
@@ -56392,7 +54640,7 @@ int unz(const char * archive,const char * key)
 					{
 						blake3_hasher hasher;
 						blake3_hasher_init(&hasher);
-						for (uint32_t i=0; i<f.ptr.size(); ++i) 
+						for (uint32_t i=0; i<f.ptr.size(); ++i)
 							if (f.ptr[i]<frag.size())
 								for (uint32_t j=24; j<frag[f.ptr[i]].size(); ++j)
 								{
@@ -56409,7 +54657,7 @@ int unz(const char * archive,const char * key)
 					if (unzfranzotype==FRANZO_SHA3)
 					{
 						SHA3 hasher;
-						for (uint32_t i=0; i<f.ptr.size(); ++i) 
+						for (uint32_t i=0; i<f.ptr.size(); ++i)
 							if (f.ptr[i]<frag.size())
 								for (uint32_t j=24; j<frag[f.ptr[i]].size(); ++j)
 								{
@@ -56423,7 +54671,7 @@ int unz(const char * archive,const char * key)
 					if (unzfranzotype==FRANZO_MD5)
 					{
 						MD5 hasher;
-						for (uint32_t i=0; i<f.ptr.size(); ++i) 
+						for (uint32_t i=0; i<f.ptr.size(); ++i)
 							if (f.ptr[i]<frag.size())
 								for (uint32_t j=24; j<frag[f.ptr[i]].size(); ++j)
 								{
@@ -56438,7 +54686,7 @@ int unz(const char * archive,const char * key)
 					{
 						XXH3_state_t state128;
 						(void)XXH3_128bits_reset(&state128);
-						for (uint32_t i=0; i<f.ptr.size(); ++i) 
+						for (uint32_t i=0; i<f.ptr.size(); ++i)
 							if (f.ptr[i]<frag.size())
 								for (uint32_t j=24; j<frag[f.ptr[i]].size(); ++j)
 								{
@@ -56453,8 +54701,8 @@ int unz(const char * archive,const char * key)
 					{
 						NESSIEstruct hasher;
 						NESSIEinit(&hasher);
-						
-						for (uint32_t i=0; i<f.ptr.size(); ++i) 
+
+						for (uint32_t i=0; i<f.ptr.size(); ++i)
 							if (f.ptr[i]<frag.size())
 								for (uint32_t j=24; j<frag[f.ptr[i]].size(); ++j)
 								{
@@ -56465,7 +54713,7 @@ int unz(const char * archive,const char * key)
 						NESSIEfinalize(&hasher,(unsigned char*)buffer);
 						string nessie=binarytohex((const unsigned char*)buffer,64);
 						snprintf(p->second.sha1decompressedhex,sizeof(p->second.sha1decompressedhex),"%s",nessie.c_str());
-		
+
 					}
 					else
 					if ((unzfranzotype==FRANZO_HIGHWAY64) || (unzfranzotype==FRANZO_HIGHWAY128) || (unzfranzotype==FRANZO_HIGHWAY256))
@@ -56475,14 +54723,14 @@ int unz(const char * archive,const char * key)
 						HighwayHashCatStart(key,&highway64state);
 
 
-						for (uint32_t i=0; i<f.ptr.size(); ++i) 
+						for (uint32_t i=0; i<f.ptr.size(); ++i)
 							if (f.ptr[i]<frag.size())
 								for (uint32_t j=24; j<frag[f.ptr[i]].size(); ++j)
 								{
 									HighwayHashCatAppend((const uint8_t*)&frag[f.ptr[i]][j],1,&highway64state);
 									hashed++;
 								}
-								
+
 						if (unzfranzotype==FRANZO_HIGHWAY64)
 						{
 							uint64_t hash=HighwayHashCatFinish64(&highway64state);
@@ -56492,17 +54740,17 @@ int unz(const char * archive,const char * key)
 						{
 							uint64_t hash[2];
 							HighwayHashCatFinish128(&highway64state,hash);
-							string temp=binarytohex((const unsigned char*)hash,16);	
+							string temp=binarytohex((const unsigned char*)hash,16);
 							snprintf(p->second.sha1decompressedhex,sizeof(p->second.sha1decompressedhex),"%s",temp.c_str());
 						}
 						if (unzfranzotype==FRANZO_HIGHWAY256)
 						{
 							uint64_t hash[4];
 							HighwayHashCatFinish256(&highway64state,hash);
-							string temp=binarytohex((const unsigned char*)hash,32);	
+							string temp=binarytohex((const unsigned char*)hash,32);
 							snprintf(p->second.sha1decompressedhex,sizeof(p->second.sha1decompressedhex),"%s",temp.c_str());
 						}
-						
+
 					}
 					else
 					{
@@ -56541,7 +54789,7 @@ int unz(const char * archive,const char * key)
 
 		std::string hashfromfile;
 		int64_t starthash=mtime();
-		for (unsigned i=0; i<vf.size(); ++i) 
+		for (unsigned i=0; i<vf.size(); ++i)
 		{
 			unzDTMap::iterator p=vf[i];
 			string finalfile=p->first;
@@ -56554,13 +54802,13 @@ int unz(const char * archive,const char * key)
 			int64_t myaccesstime=0;
 			bool	myisordered=false;
 			int		myversion=0;
-			franz_posix* myposix=NULL;	
-			
+			franz_posix* myposix=NULL;
+
 			int myfranzo=decode_franz_block(isdirectory(p->first),p->second.sha1hex,
 					myhashtype,
 					hashstoredinzpaq,
 					mycrc32,mycreationtime,myaccesstime,myisordered,myversion,myposix);
-				
+
 			if (myfranzo==-1)
 				error("33351: archive use an unknown hasher (maybe a more advanced zpaqfraz)!");
 			string unzfranzostring="";
@@ -56573,11 +54821,11 @@ int unz(const char * archive,const char * key)
 						a=p;
 						break;
 					}
-	
+
 				if (a!=g_mappatipohash.end())
 				{
 					unzfranzostring=a->second.hashname;
-					myreplace(unzfranzostring,"+CRC-32","");				
+					myreplace(unzfranzostring,"+CRC-32","");
 					if (!fileexists(p->first.c_str()))
 					{
 							if (flagdebug)
@@ -56588,8 +54836,11 @@ int unz(const char * archive,const char * key)
 					{
 						///if (flagdebug)
 							///myprintf("54051: franz_do_hash\n");
-	
+
 						franz_do_hash dummy(a->first);
+						if (flagdebug)
+							myprintf("56720: filehash on %s\n",p->first.c_str());
+
 						hashfromfile=dummy.filehash(
 						p->first.c_str(),true,starthash,hashed);
 					}
@@ -56610,7 +54861,7 @@ int unz(const char * archive,const char * key)
 					status_1++;
 				else
 					localok=false;
-			}			
+			}
 			if (!hashfromfile.empty())
 			{
 				if (hashfromfile==hashdecompresso)
@@ -56672,15 +54923,15 @@ int unz(const char * archive,const char * key)
 ///
 /*
 ZPAQ does not store blocks of zeros at all.
-This means that they are not, materially, in the file, 
+This means that they are not, materially, in the file,
 and therefore cannot be used to calculate the CRC-32.
-This is a function capable of doing it, 
+This is a function capable of doing it,
 even for large sizes (hundreds of gigabytes or more in the case of thick virtual machine disks),
 up to ~9.000TB
-The function I wrote split a number into 
-its powers of 2, takes the CRC-32 code from a precomputed table, 
-and finally combines them. 
-It's not the most efficient method (some 10-20 iterations are typically needed), 
+The function I wrote split a number into
+its powers of 2, takes the CRC-32 code from a precomputed table,
+and finally combines them.
+It's not the most efficient method (some 10-20 iterations are typically needed),
 but it's still decent
 */
 const uint32_t zero_block_crc32[54] =
@@ -56693,7 +54944,7 @@ const uint32_t zero_block_crc32[54] =
 0x0D968558,0xB2AA7578,0xEFB5AF2E,0xF1E8BA9E,0xC71C0011,0xD8F49994,0xAB54D286,0x011FFCA6,
 0xD7978EEB,0x7EE8CDCD,0xE20EEA22,0x75660AAC,0xA738EA1C,0x8D89877E
 };
-uint32_t crc32ofzeroblock(uint64_t i_size) 
+uint32_t crc32ofzeroblock(uint64_t i_size)
 {
 	assert(i_size<9.007.199.254.740.992); //8D89877E 2^53 9.007.199.254.740.992
 	if (i_size==0)
@@ -56725,10 +54976,10 @@ int Jidac::consolidate(string i_archive)
 	vector<string>	chunk_name;
 	vector<int64_t>	chunk_size;
 	const string part0=subpart(i_archive, 0);
-	for (unsigned i=1; ;i++) 
+	for (unsigned i=1; ;i++)
 	{
 		const string parti=subpart(i_archive, i);
-		if (i>1 && parti==part0) 
+		if (i>1 && parti==part0)
 			break;
 		if (!fileexists(parti))
 			break;
@@ -56796,20 +55047,20 @@ int Jidac::consolidate(string i_archive)
 	{
 		string	sorgente_nome=chunk_name[i];
 		FILE* inFile = freadopen(sorgente_nome.c_str());
-		if (inFile==NULL) 
+		if (inFile==NULL)
 		{
 #ifdef _WIN32
 		int err=GetLastError();
 #else
 		int err=1;
 #endif
-		myprintf("\n29585: ERR <%s> kind %d\n",sorgente_nome.c_str(),err); 
+		myprintf("\n29585: ERR <%s> kind %d\n",sorgente_nome.c_str(),err);
 		return 2;
 		}
 		size_t readSize;
 		int64_t	chunk_readed=0;
 		int64_t	chunk_written=0;
-		while ((readSize = fread(buffer, 1, blockSize, inFile)) > 0) 
+		while ((readSize = fread(buffer, 1, blockSize, inFile)) > 0)
 		{
 			int64_t written=fwrite(buffer,1,readSize,outFile);
 			chunk_written+=written;
@@ -56847,10 +55098,13 @@ int Jidac::consolidate(string i_archive)
 		g_dimensione=0;
 		///if (flagdebug)
 			///myprintf("54310: franz_do_hash\n");
-	
+
 		franz_do_hash dummy("XXH3");
+		if (flagdebug)
+			myprintf("56981: filehash on %s\n",outfile.c_str());
+
 		string hashreloaded=dummy.filehash(outfile,false,startverify,total_size);
-		
+
 		///string hashreloaded=xxhash_calc_file(outfile.c_str(),false,dummycrc32,startverify,total_size,io_lavorati,thefilesize);
 		myprintf("Expected   XXH3 hash of the output file %s\n",risultato);
 		myprintf("Calculated XXH3 hash of the output file %s\n",hashreloaded.c_str());
@@ -56862,7 +55116,7 @@ int Jidac::consolidate(string i_archive)
 	}
 	return 0;
 }
-int Jidac::test() 
+int Jidac::test()
 {
 	getpasswordifempty();
 	if ((files.size()>0) && (!flagparanoid))
@@ -56890,7 +55144,7 @@ int Jidac::test()
 			{
 				myprintf("37333: WARNING the folder <<");
 				printUTF8(tofiles[0].c_str());
-				myprintf(">> contain %s bytes\n\n\n",migliaia(tofoldersize));		
+				myprintf(">> contain %s bytes\n\n\n",migliaia(tofoldersize));
 				if (!getcaptcha("withoutmercy","Extract-check-delete without confirmation"))
 					return 1;
 			}
@@ -56901,7 +55155,7 @@ int Jidac::test()
 	summary=1;
 	const int64_t sz=read_archive(NULL,archive.c_str());
 	if (sz<1) error("archive not found");
-	for (unsigned i=0; i<block.size(); ++i) 
+	for (unsigned i=0; i<block.size(); ++i)
 	{
 		if (block[i].bsize<0) error("negative block size");
 		if (block[i].start<1) error("block starts at fragment 0");
@@ -56917,26 +55171,26 @@ int Jidac::test()
   // Label files to extract with data=0.
   ExtractJob job(*this);
   int total_files=0;
-  for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p) 
+  for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p)
   {
 		p->second.data=-1;  // skip
-		if (p->second.date && p->first!="") 
+		if (p->second.date && p->first!="")
 		{
 			const string fn=rename(p->first);
 ///			myprintf("--------------------> %s\n",fn.c_str());
 			const bool isdir=p->first[p->first.size()-1]=='/';
 			if (isdir)  // update directories later
 				p->second.data=0;
-			else 
-				if (block.size()>0) 
+			else
+				if (block.size()>0)
 			{  // files to decompress
 				p->second.data=0;
 				unsigned lo=0, hi=block.size()-1;  // block indexes for binary search
-				for (unsigned i=0; p->second.data>=0 && i<p->second.ptr.size(); ++i) 
+				for (unsigned i=0; p->second.data>=0 && i<p->second.ptr.size(); ++i)
 				{
 					unsigned j=p->second.ptr[i];  // fragment index
 					///myprintf("Fragment index %lld\n",j);
-					if (j==0 || j>=ht.size() || ht[j].usize<-1) 
+					if (j==0 || j>=ht.size() || ht[j].usize<-1)
 					{
 						fflush(stdout);
 						printUTF8(p->first.c_str());
@@ -56946,18 +55200,18 @@ int Jidac::test()
 					}
 					assert(j>0 && j<ht.size());
 					if (lo!=hi || lo>=block.size() || j<block[lo].start
-						|| (lo+1<block.size() && j>=block[lo+1].start)) 
+						|| (lo+1<block.size() && j>=block[lo+1].start))
 						{
 							lo=0;  // find block with fragment j by binary search
 							hi=block.size()-1;
-							while (lo<hi) 
+							while (lo<hi)
 							{
 								unsigned mid=(lo+hi+1)/2;
 								assert(mid>lo);
 								assert(mid<=hi);
-								if (j<block[mid].start) 
+								if (j<block[mid].start)
 									hi=mid-1;
-								else 
+								else
 									(lo=mid);
 							}
 						}
@@ -56966,7 +55220,7 @@ int Jidac::test()
 						assert(j>=block[lo].start);
 						assert(lo+1==block.size() || j<block[lo+1].start);
 						unsigned c=j-block[lo].start+1;
-						if (block[lo].size<c) 
+						if (block[lo].size<c)
 							block[lo].size=c;
 						if (block[lo].files.size()==0 || block[lo].files.back()!=p)
 						{
@@ -56990,14 +55244,14 @@ int Jidac::test()
 	}
 	else
 	{
-		for (unsigned i=0; i<tid.size(); ++i) 
+		for (unsigned i=0; i<tid.size(); ++i)
 			run(tid[i], decompressThread, &job);
-		for (unsigned i=0; i<tid.size(); ++i) 
+		for (unsigned i=0; i<tid.size(); ++i)
 			join(tid[i]);
 	}
   // Report failed extractions
   unsigned extracted=0, errors=0;
-  for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p) 
+  for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p)
   {
     string fn=rename(p->first);
     if (p->second.data>=0 && p->second.date
@@ -57015,7 +55269,7 @@ int Jidac::test()
       }
     }
   }
-	if (errors>0) 
+	if (errors>0)
 	{
 		fflush(stdout);
 		myprintf(
@@ -57066,8 +55320,8 @@ int Jidac::test()
 		int64_t myaccesstime=0;
 		bool	myisordered=false;
 		int		myversion=0;
-		franz_posix* myposix=NULL;	
-			
+		franz_posix* myposix=NULL;
+
 		if (p != dt.end())
 		{
 			decode_franz_block(isdirectory(it.filename),p->second.franz_block,
@@ -57083,19 +55337,19 @@ int Jidac::test()
 			myprintf("Mycrc32      %s\n",mycrc32.c_str());
 			myprintf("\n");
 		}
-/// Houston, we have something that start with a sequence of zeros, let's compute the missing CRC		
+/// Houston, we have something that start with a sequence of zeros, let's compute the missing CRC
 		if (it.crc32start>0)
 		{
 			uint64_t holesize=it.crc32start;
 			uint32_t zerocrc	=crc32zeros(holesize);
 			currentcrc32		=crc32_combine(currentcrc32, zerocrc,holesize);
-			lavorati			+=holesize;	
+			lavorati			+=holesize;
 			zeroedblocks		+=holesize;
 			howmanyzero++;
 		}
 		currentcrc32=crc32_combine(currentcrc32, it.crc32,it.crc32size);
 		lavorati+=it.crc32size;
-		
+
 		if ((i+1)<g_crc32.size())
 			while (g_crc32[i].filename==g_crc32[i+1].filename)
 			{
@@ -57114,9 +55368,9 @@ int Jidac::test()
 				lavorati+=myit.crc32size;
 				parti++;
 			}
-		
+
 		string filedefinitivo=g_crc32[i].filename;
-		if (searchfrom!="") 
+		if (searchfrom!="")
 				replace(filedefinitivo,searchfrom,replaceto);
 		if (flagdebug)
 			myprintf("Stored %08X calculated %08X %s\n",crc32stored,currentcrc32,filedefinitivo.c_str());
@@ -57135,7 +55389,7 @@ int Jidac::test()
 					myprintf("ERROR:  STORED CRC-32 %08X != DECOMPRESSED %08X (ck %08d) %s\n",crc32stored,currentcrc32,parti,filedefinitivo.c_str());
 					status_e_blocks++;
 				}
-				
+
 			}
 		}
 		else
@@ -57192,13 +55446,13 @@ int Jidac::test()
   return (errors+status_e)>0;
 }
 /*
-We need something out of an object (Jidac), addfile() and scandir(), 
+We need something out of an object (Jidac), addfile() and scandir(),
 because pthread does not like very much objects.
 Yes, quick and dirty
 */
-void myaddfile(uint32_t i_tnumber,DTMap& i_edt,string i_filename, int64_t i_date,int64_t i_size, bool i_flagcalchash) 
+void myaddfile(uint32_t i_tnumber,DTMap& i_edt,string i_filename, int64_t i_date,int64_t i_size, bool i_flagcalchash)
 {
-	
+
 	///Raze to the ground ads and zfs as soon as possible
 	if (!flag715)
 		if (isads(i_filename))
@@ -57220,9 +55474,9 @@ void myaddfile(uint32_t i_tnumber,DTMap& i_edt,string i_filename, int64_t i_date
 				myprintf("27080: (-maxsize) too large %19s %s\n",migliaia(i_size),i_filename.c_str());
 			return;
 		}
-	
+
 	DT& d=i_edt[i_filename];
-	
+
 	d.date=i_date;
 	d.size=i_size;
 	d.attr=0;
@@ -57232,14 +55486,17 @@ void myaddfile(uint32_t i_tnumber,DTMap& i_edt,string i_filename, int64_t i_date
 		if (!isdirectory(i_filename))
 		{
 			int64_t starthash=mtime();
-			
+
 			g_dimensione=0;
 			///if (flagdebug)
 				///myprintf("54696: franz_do_hash\n");
-	
+
 			franz_do_hash dummy(g_thechosenhash);
+			if (flagdebug)
+				myprintf("57372: filehash on %s\n",i_filename.c_str());
+
 			d.hexhash=dummy.filehash(i_filename,false,mtime(),prendidimensionefile(i_filename.c_str()));
-		
+
 ///			d.hexhash=hash_calc_file(flag2algo(),i_filename.c_str(),false,dummycrc,mtime(),prendidimensionefile(i_filename.c_str()),dummy,thefilesize);
 			if (flagverbose)
 			{
@@ -57248,7 +55505,7 @@ void myaddfile(uint32_t i_tnumber,DTMap& i_edt,string i_filename, int64_t i_date
 				myprintf("\n");
 			}
 		}
-///  thread safe, but... who cares? 
+///  thread safe, but... who cares?
 	if (g_arraybytescanned.size()==0)
 	{
 		myprintf("52361: GURU g_arraybytescanned not pushed?\n");
@@ -57258,7 +55515,7 @@ void myaddfile(uint32_t i_tnumber,DTMap& i_edt,string i_filename, int64_t i_date
 	pthread_mutex_lock(&g_mylock);
 	g_arraybytescanned[i_tnumber]+=i_size;
 	g_arrayfilescanned[i_tnumber]++;
-	
+
 	if (!flagnoeta)
 	{
 		if (i_flagcalchash)
@@ -57318,36 +55575,36 @@ void myscandir(uint32_t i_tnumber,DTMap& i_edt,string filename, bool i_recursive
   while (filename.size()>1 && filename[filename.size()-1]=='/')
     filename=filename.substr(0, filename.size()-1);  // remove trailing /
 	struct stat sb;
-	if (!lstat(filename.c_str(), &sb)) 
+	if (!lstat(filename.c_str(), &sb))
 	{
 		if (S_ISREG(sb.st_mode))
 		myaddfile(i_tnumber,i_edt,filename, decimal_time(sb.st_mtime), sb.st_size,i_flagcalchash);
     // Traverse directory
-		if (S_ISDIR(sb.st_mode)) 
+		if (S_ISDIR(sb.st_mode))
 		{
 			myaddfile(i_tnumber,i_edt,filename=="/" ? "/" : filename+"/", decimal_time(sb.st_mtime),0, i_flagcalchash);
 			DIR* dirp=opendir(filename.c_str());
-			if (dirp) 
+			if (dirp)
 			{
-				for (dirent* dp=readdir(dirp); dp; dp=readdir(dirp)) 
+				for (dirent* dp=readdir(dirp); dp; dp=readdir(dirp))
 				{
-					if (strcmp(".", dp->d_name) && strcmp("..", dp->d_name)) 
+					if (strcmp(".", dp->d_name) && strcmp("..", dp->d_name))
 					{
 						string s=filename;
 						if (s!="/") s+="/";
 						s+=dp->d_name;
-						if (i_recursive)        
+						if (i_recursive)
 							myscandir(i_tnumber,i_edt,s,true,i_flagcalchash);
 						else
 						{
-							if (!lstat(s.c_str(), &sb)) 
+							if (!lstat(s.c_str(), &sb))
 							{
 								if (S_ISREG(sb.st_mode))
 									myaddfile(i_tnumber,i_edt,s, decimal_time(sb.st_mtime), sb.st_size,i_flagcalchash);
-								if (S_ISDIR(sb.st_mode)) 
+								if (S_ISDIR(sb.st_mode))
 									myaddfile(i_tnumber,i_edt,s=="/" ? "/" :s+"/", decimal_time(sb.st_mtime),0, i_flagcalchash);
 							}
-						}          			
+						}
 					}
 				}
 				closedir(dirp);
@@ -57363,14 +55620,14 @@ void myscandir(uint32_t i_tnumber,DTMap& i_edt,string filename, bool i_recursive
 	WIN32_FIND_DATA ffd;
 	string t=filename;
 ///	myprintf("t1:   %s\n",t.c_str());
-	if (t.size()>0 && t[t.size()-1]=='/') 
+	if (t.size()>0 && t[t.size()-1]=='/')
 		t+="*";
 	///myprintf("t2:   %s\n",t.c_str());
 	HANDLE h=FindFirstFile(utow(t.c_str()).c_str(), &ffd);
 	if (h==INVALID_HANDLE_VALUE && GetLastError()!=ERROR_FILE_NOT_FOUND && GetLastError()!=ERROR_PATH_NOT_FOUND)
 		printerr("29617",t.c_str(),0);
 ///	myprintf("t22:   %s\n",t.c_str());
-	while (h!=INVALID_HANDLE_VALUE) 
+	while (h!=INVALID_HANDLE_VALUE)
 	{
     // For each file, get name, date, size, attributes
 		SYSTEMTIME st;
@@ -57388,7 +55645,7 @@ void myscandir(uint32_t i_tnumber,DTMap& i_edt,string filename, bool i_recursive
 			myprintf("%s\n",temp.c_str());
 			myprintf("\n");
 		}
-		if (t=="." || t=="..") 
+		if (t=="." || t=="..")
 			edate=0;  // don't add, of course
 		if ((ffd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) && (!(ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)))
 		{
@@ -57404,26 +55661,26 @@ void myscandir(uint32_t i_tnumber,DTMap& i_edt,string filename, bool i_recursive
 				edate=0;  // don't add
 		}
 		string fn=path(filename)+t;
-		
+
     // Save directory names with a trailing / and scan their contents
     // Otherwise, save plain files
 		if (edate)
 		{
-			if (ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) 
+			if (ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
 				fn+="/";
 			myaddfile(i_tnumber,i_edt,fn, edate, esize, i_flagcalchash);
-			
+
 			if (i_recursive)
-				if (ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) 
+				if (ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
 				{
 					fn+="*";
 					myscandir(i_tnumber,i_edt,fn,true,i_flagcalchash);
 				}
 		}
-		
-		if (!FindNextFile(h, &ffd)) 
+
+		if (!FindNextFile(h, &ffd))
 		{
-			if (GetLastError()!=ERROR_NO_MORE_FILES) 
+			if (GetLastError()!=ERROR_NO_MORE_FILES)
 				printerr("29656",fn.c_str(),ffd.dwFileAttributes);
 			break;
 		}
@@ -57448,7 +55705,7 @@ int	getpartnumber(string i_thefilename)
 	int		risultato	=-1;
 	bool fileok			=true;
 	string candidato	=extractfilename(i_thefilename);
-	
+
 	if (candidato[candidato.size()-14]=='_')
 	{
 		unsigned int resto=candidato.size()-13;
@@ -57479,7 +55736,7 @@ int	getpartnumber(string i_thefilename)
 		if (flagdebug)
 			myprintf("84240: -14 is not '_' for |%s|\n",candidato.c_str());
 	}
-	return risultato;			
+	return risultato;
 }
 
 bool	isbackuppart(string i_partname,string i_mask)
@@ -57491,7 +55748,7 @@ bool	isbackuppart(string i_partname,string i_mask)
 
 	if (flagdebug)
 		myprintf("84250: i_partname |%s|  i_mask |%s|\n",i_partname.c_str(),i_mask.c_str());
-	
+
 	if (isdirectory(i_partname))
 	{
 		if (flagdebug)
@@ -57504,7 +55761,7 @@ bool	isbackuppart(string i_partname,string i_mask)
 			myprintf("84250: partname empty\n");
 		return false;
 	}
-	
+
 	if (!iszpaq(i_partname))
 	{
 		if (flagdebug)
@@ -57521,10 +55778,10 @@ bool	isbackuppart(string i_partname,string i_mask)
 			if (i_partname.size()>14)
 				i_mask=i_partname.substr(0,i_partname.size()-14);
 			myprintf("56922: new i_mask =>|%s|\n",i_mask.c_str());
-			
+
 		}
 	}
-	
+
 	string candidato=extractfilename(i_partname);
 	if (candidato.size()<14)
 	{
@@ -57550,14 +55807,14 @@ bool	isbackuppart(string i_partname,string i_mask)
 			myprintf("84280: cannot match |%s| in |%s|\n",onlyname.c_str(),candidato.c_str());
 		return false;
 	}
-	
+
 	if (candidato[candidato.size()-14]!='_')
 	{
 		if (flagdebug)
 			myprintf("84287: char -14 not _ in |%s|\n",candidato.c_str());
 		return false;
 	}
-	
+
 	int	thepart=getpartnumber(i_partname);
 	if (thepart<0)
 	{
@@ -57579,21 +55836,21 @@ class multipart
 {
 	private:
 	string			thefilename;
-	
+
 	public:
 	vector<s_fileandsize> 	filenamearray;
 	vector<s_fileandsize> 	partarray;
 
 	string	lastpart;
 	string	nextpart;
-	
+
 	int		howmanychunks;
 	bool	ismultipart;
 	bool	isgood;
 	int		howmanyjolly;
 	int64_t	filenamearray_size;
-	
-	multipart(string i_filename): 
+
+	multipart(string i_filename):
 	howmanychunks(0),
 	ismultipart(false),
 	isgood(false),
@@ -57609,7 +55866,7 @@ class multipart
 		thefilename	=i_filename;
 		lastpart	="";
 		nextpart	="";
-		
+
 		if (i_filename=="")
 		{
 			myprintf("84400: multipartfilename is empty\n");
@@ -57619,19 +55876,19 @@ class multipart
 			if (i_filename[i]=='?')
 				howmanyjolly++;
 		ismultipart=howmanyjolly>0;
-		
+
 		if (!ismultipart)
 			return;
 		enumerate();
-		
+
 		partarray.clear();
 		int parts	=0;  // number of existing parts in multipart
 		string part0=subpart(i_filename,0);
 		string thehole	="";
-		for (int i=1;; ++i) 
+		for (int i=1;; ++i)
 		{
 			string partname=subpart(i_filename,i);
-			if (partname==part0) 
+			if (partname==part0)
 				error("84285: too many archive parts");
 			if (!fileexists(partname.c_str()))
 			{
@@ -57653,14 +55910,14 @@ class multipart
 		}
 		std::sort(partarray.begin(),partarray.end(),comparefilename);
 		isgood=filenamearray.size()==partarray.size();
-		
+
 		if (!isgood)
 		{
 		///	myprintf("84478: PART NUMBER MISMATCH: disk %s vs part %s (HOLE IN %s)\n",migliaia(filenamearray.size()),migliaia2(partarray.size()),thehole.c_str());
 			myprintf("84478: AT LEAST ONE HOLE DETECTED! <<");
 			printUTF8(thehole.c_str());
 			myprintf(">>\n");
-			
+
 			if (filenamearray.size()>partarray.size()) // this should be
 				for (unsigned int i=0;i<filenamearray.size();i++)
 				{
@@ -57685,10 +55942,10 @@ class multipart
 		else
 			nextpart=subpart(i_filename, 1);
 	}
-	
+
 	string enumerate()
 	{
-		
+
 		/// UNIX get strange behaviour with folders and jolly
 		/// this "thing" is weird, but works on Win and *nix
 		DTMap thedt;
@@ -57701,31 +55958,31 @@ class multipart
 		string onlyname=extractfilename(thefilename);
 		myreplace(onlyname,"????????.zpaq","");
 		myreplace(onlyname,".zpaq","");
-		
+
 		if (flagdebug)
 		{
 			myprintf("84383: scan by   %s\n",onlypath.c_str());
 			myprintf("84383: filename  %s\n",thefilename.c_str());
 			myprintf("84384: onlyname  %s\n",onlyname.c_str());
 		}
-		
+
 		string temppath=onlypath;
 		if (mypos("/",temppath)==-1)
 			temppath="./"+temppath;
 
 		myscandir(0,thedt,temppath.c_str(),false,false);
-		
+
 		printbar(' ',false);
 		myprintf("\r");
-		
+
 		if (flagdebug)
 			myprintf("84316: scanned %s\n",migliaia(thedt.size()));
-		
+
 		if (thedt.size()==0)
 			return "";
-	
+
 		filenamearray.clear();
-		for (DTMap::iterator p=thedt.begin(); p!=thedt.end(); ++p) 
+		for (DTMap::iterator p=thedt.begin(); p!=thedt.end(); ++p)
 		{
 			s_fileandsize myblock;
 			string currentfilename=p->first;
@@ -57818,7 +56075,7 @@ int listfiles(string i_path,string i_extension,bool i_fullname,vector<string>* o
 				wfilepath=utow(i_path.c_str())/*+L"\\"*/+findfiledata.cFileName;
 			else
 				wfilepath=findfiledata.cFileName;
-				
+
 			const std::string s_wfilepath(wfilepath.begin(),wfilepath.end());
 			if (flagdebug)
 				myprintf("57379: Working on %s ",s_wfilepath.c_str());
@@ -57849,17 +56106,17 @@ int listfiles(string i_path,string i_extension,bool i_fullname,vector<string>* o
 #else
 	if (!isdirectory(i_path))
 		i_path+="/";
-		
+
 	DIR 	*dir;
 	struct 	dirent *ent;
-	if ((dir=opendir(i_path.c_str()))==NULL) 
+	if ((dir=opendir(i_path.c_str()))==NULL)
 	{
 		myprintf("54826: cannot scan in <<%s>>\n",i_path.c_str());
 		return 0;
 	}
-	
+
 	vector<string> tobesorted;
-	while ((ent=readdir(dir))!=NULL) 
+	while ((ent=readdir(dir))!=NULL)
 	{
 		string thename=ent->d_name;
 		if ((thename!=".") && (thename!="..") && (!isdirectory(thename)))
@@ -57869,7 +56126,7 @@ int listfiles(string i_path,string i_extension,bool i_fullname,vector<string>* o
 				fullname=i_path+thename;
 			else
 				fullname=thename;
-				
+
 			string estensione	=prendiestensione(thename);
 			if (flagdebug)
 			{
@@ -57879,7 +56136,7 @@ int listfiles(string i_path,string i_extension,bool i_fullname,vector<string>* o
 				myprintf("54850: estensione %s\n",estensione.c_str());
 			}
 			bool flagaggiungi=true;
-			
+
 			if (i_extension!="")
 				flagaggiungi=(estensione==i_extension);
 
@@ -57890,7 +56147,7 @@ int listfiles(string i_path,string i_extension,bool i_fullname,vector<string>* o
 				tobesorted.push_back(fullname);
 			}
 		}
-		
+
 	}
 	closedir (dir);
 
@@ -57899,7 +56156,7 @@ int listfiles(string i_path,string i_extension,bool i_fullname,vector<string>* o
 		(*o_thelist).push_back(tobesorted[i]);
 
 	return tobesorted.size();
-#endif	
+#endif
 }
 
 // just a bit of recursion
@@ -57921,7 +56178,7 @@ bool jollymatch(const char* i_pattern, const char* i_thestring)
 	return false;
 }
 
-int Jidac::multisomething() 
+int Jidac::multisomething()
 {
 	if (fullarchive=="")
 	{
@@ -57936,7 +56193,7 @@ int Jidac::multisomething()
 			return 2;
 		}
 	}
-	
+
 	string estensione=prendiestensione(fullarchive);
 	myprintf("Searching for jolly archive(s) in <<%s>> for extension <<%s>>\n",fullarchive.c_str(),estensione.c_str());
 
@@ -57945,7 +56202,7 @@ int Jidac::multisomething()
 	g_worked		=0;
 	flagskipzfs		=true;  // strip down zfs
 	DTMap		thedt;
-	
+
 #ifdef unix
 	if (flagdebug)
 		myprintf("57434: running on NIX\n");
@@ -57958,7 +56215,7 @@ int Jidac::multisomething()
 		string filename=candidate[i];
 		if (flagdebug)
 			myprintf("57441: filename %08d %s\n",i,filename.c_str());
-		
+
 		if (jollymatch(fullarchive.c_str(),filename.c_str()))
 		{
 			if (flagdebug)
@@ -57995,19 +56252,19 @@ int Jidac::multisomething()
 	myprintf("Founded %s archive(s), working\n",migliaia(thedt.size()));
 	int	risultato=0;
 	int therun=0;
-	for (DTMap::iterator p=thedt.begin(); p!=thedt.end(); ++p) 
+	for (DTMap::iterator p=thedt.begin(); p!=thedt.end(); ++p)
 	{
 		therun++;
 		jidacreset();
 		archive=p->first;
-		
+
 		int riscomando=0;
 		if (command=='x')
 			riscomando=extract();
 		else
 		if (command=='t')
 			riscomando=test();
-		
+
 		string stato="";
 		if (riscomando==0)
 			stato="OK";
@@ -58016,8 +56273,8 @@ int Jidac::multisomething()
 			stato="WARNING";
 		else
 			stato="ERROR";
-		
-		
+
+
 		printbar('-');
 		myprintf("\r");
 		myprintf("Status %08d/%08d: %d %s on <<",therun,thedt.size(),riscomando,stato.c_str());
@@ -58035,9 +56292,9 @@ int Jidac::multisomething()
 		}
 
 		printbar('-');
-		
+
 		risultato+=riscomando;
-	}	
+	}
 	return risultato;
 }
 
@@ -58054,7 +56311,7 @@ struct tparametri
 	int	tnumber;
 };
 ///	run a myscandir() instead of Jidac::scandir() (too hard to use a member)
-void * scansiona(void *t) 
+void * scansiona(void *t)
 {
 	assert(t);
 	tparametri* par= ((struct tparametri*)(t));
@@ -58091,37 +56348,37 @@ LPVOID lpData // from CopyFileEx
 )
 {
 	static int lastpercentuale=0;
-	
+
 	if (int64_t(dwStreamNumber)+int64_t(dwCallbackReason)+int64_t(hSourceFile)+int64_t(hDestinationFile)+int64_t(lpData)==12445)
 		if (StreamSize.HighPart==TotalBytesTransferred.HighPart)
 			if (StreamBytesTransferred.HighPart==StreamSize.HighPart)
 				lastpercentuale++; // compiler be quiet!
-			
+
 	int64_t numeratore	=(TotalBytesTransferred	.HighPart*2147483648+TotalBytesTransferred.LowPart)*100 ;
 	int64_t	denominatore=(TotalFileSize			.HighPart*2147483648+TotalFileSize.LowPart)+1;
 	if (denominatore>LARGEFILE)
 	{
 		int percentuale=numeratore/denominatore;
-		
+
 		if (percentuale==1)
 			myprintf("\r%s",tohuman(denominatore));
 		else
 			percentuale/=5;
-		
+
 		if (percentuale!=lastpercentuale)
 		{
 			myprintf(".");
 			lastpercentuale=percentuale;
 		}
 	}
-	
+
 	return  PROGRESS_CONTINUE;
 }
 bool windows_copy(string i_src_filename,string i_dest_filename,callback_avanzamento callback_fn)
 {
 	wstring in_widename=utow(i_src_filename.c_str());
 	wstring out_widename=utow(i_dest_filename.c_str());
-	
+
 	LPPROGRESS_ROUTINE prog_fn = (LPPROGRESS_ROUTINE) callback_fn;
 	if (callback_fn)
 		return (CopyFileEx (in_widename.c_str(),out_widename.c_str(),prog_fn,NULL,0,0)!=0);
@@ -58156,7 +56413,7 @@ size_t			i_buffersize
 		seppuku();
 		return "";
 	}
-	
+
 	static int ultimapercentuale=0;
 	if (flagdebug)
 	{
@@ -58168,7 +56425,7 @@ size_t			i_buffersize
 		return "30833:SOURCE-EMPTY";
 	if (i_outfilename=="")
 		return "30836:DEST-EMPTY";
-	
+
 	int64_t s1=mtime();
 	if (isdirectory(i_filename))
 	{
@@ -58176,7 +56433,7 @@ size_t			i_buffersize
 		return "OK";
 	}
 	g_robocopy_makepath+=mtime()-s1;
-	
+
 	int64_t sorgente_dimensione		=0;
 	int64_t sorgente_data			=0;
 	int64_t sorgente_attr			=0;
@@ -58224,10 +56481,10 @@ size_t			i_buffersize
 		if (isxls(i_filename))
 		{
 ///	Old Office (2000) can change xls (and ppt) metadata without "touching"
-/// Therefore size-and-date algo does not work, to detect change, making hash check fail 
+/// Therefore size-and-date algo does not work, to detect change, making hash check fail
 /// (zpaq, rsync, robocopy for example)
-/// The changes are in the beginning of the file, so a 64K block comparison is normally 
-/// faster than the full hash computation (for different files). 
+/// The changes are in the beginning of the file, so a 64K block comparison is normally
+/// faster than the full hash computation (for different files).
 /// Obviously for the very same files it is almost identical
 			if (flagdebug)
 				myprintf("27584: enforcing xls/ppt test %s\n",i_filename.c_str());
@@ -58278,7 +56535,7 @@ size_t			i_buffersize
 							{
 								int64_t s3=mtime();
 								close(i_outfilename.c_str(),sorgente_data,sorgente_attr);
-								g_robocopy_close2+=mtime()-s3;			
+								g_robocopy_close2+=mtime()-s3;
 							}
 						o_writtensize	+=sorgente_dimensione;
 						o_donesize		+=sorgente_dimensione;
@@ -58289,8 +56546,13 @@ size_t			i_buffersize
 							if (percentuale%10==0)
 								if (percentuale!=ultimapercentuale)
 								{
-									myprintf("Done %02d %% %12s /%12s (%11s /%11s)\n",percentuale,migliaia(o_donecount),migliaia2(i_totalcount),tohuman(o_donesize),tohuman2(i_totalsize));
 									ultimapercentuale=percentuale;
+									int percentualebyte=100*o_donesize/(i_totalsize+1);
+									double tempotrascorso=((mtime()-i_startcopy)/1000.0);
+									double tempototale=(100.0/percentuale)*tempotrascorso;
+									double tempoleft=tempototale-tempotrascorso;
+									myprintf("[%02d %%] %10s / %s (%11s / %s [%02d %%]) ETA %02d:%02d:%02d\n",percentuale,migliaia(o_donecount),migliaia2(i_totalcount),tohuman(o_donesize),tohuman2(i_totalsize),
+									percentualebyte,int(tempoleft/3600), int(tempoleft/60)%60, int(tempoleft)%60);
 								}
 						}
 						return "=";
@@ -58322,7 +56584,7 @@ size_t			i_buffersize
 		else
 			copyresult=windows_copy(i_filename,i_outfilename,win_avanzamento);
 		g_robocopy_fread+=mtime()-sw1;
-		
+
 		if (!flagnoeta)
 			if (sorgente_dimensione>LARGEFILE)
 				myprintf("\r                              \r");
@@ -58342,18 +56604,18 @@ size_t			i_buffersize
 			return "ERROR";
 	}
 #endif
-	
+
 	int64_t s5=mtime();
 	FILE* inFile = freadopen(i_filename.c_str());
 	g_robocopy_readopen+=mtime()-s5;
-	if (inFile==NULL) 
+	if (inFile==NULL)
 	{
 #ifdef _WIN32
 		int err=GetLastError();
 #else
 		int err=1;
 #endif
-		myprintf("\nERR <%s> kind %d\n",i_filename.c_str(),err); 
+		myprintf("\nERR <%s> kind %d\n",i_filename.c_str(),err);
 		return "KAPUTT";
 	}
 	if (flagappend)
@@ -58373,14 +56635,14 @@ size_t			i_buffersize
 		}
 	}
 	/// to fix excluded myaddfiles()
-	
+
 	int64_t s6=mtime();
 	///	makepath(i_outfilename);
 	string percorso=extractfilepath(i_outfilename);
 	if (!direxists(percorso))
 		makepath(i_outfilename);
 	g_robocopy_makepath2+=mtime()-s6;
-	
+
 	int64_t s7=mtime();
 	FILE* outFile=NULL;
 	if (flagdebug)
@@ -58417,11 +56679,11 @@ size_t			i_buffersize
 	else
 		outFile=fopen(i_outfilename.c_str(), "wb");
 #endif
-	if (outFile==NULL) 
+	if (outFile==NULL)
 		return "30847:CANNOT OPEN outfile "+i_outfilename;
-	
+
 	g_robocopy_openoutfile+=mtime()-s7;
-	
+
 	size_t readSize;
 	int larghezzaconsole=terminalwidth();
 	if (larghezzaconsole>=50)
@@ -58455,8 +56717,8 @@ size_t			i_buffersize
 	}
 	int64_t s8=mtime();
 
-	
-	while ((readSize = fread(i_buffer, 1, i_buffersize, inFile)) > 0) 
+
+	while ((readSize = fread(i_buffer, 1, i_buffersize, inFile)) > 0)
 	{
 		if (flagzero)
 			memset(i_buffer,0,i_buffersize);
@@ -58487,28 +56749,28 @@ size_t			i_buffersize
 		if (flagdebug)
 		{
 			myprintf("\nScritti %s\n",migliaia(scrittitotali));
-		}	
+		}
 	if (!flagnoeta)
 	{
 		if ((sorgente_dimensione>LARGEFILE) && (larghezzaconsole>0))
 			myprintf("\r                                                            \r");
 		myavanzamento(o_donesize,i_totalsize,i_startcopy);
 	}
-	
+
 	g_robocopy_fread+=mtime()-s8;
-	
+
 	int64_t s9=mtime();
 	fclose(inFile);
 	fclose(outFile);
 	g_robocopy_fclose+=mtime()-s9;
-	
+
 /// note: this is a "touch" for the attr
 	int64_t s10=mtime();
 	close(i_outfilename.c_str(),sorgente_data,sorgente_attr);
 	///touch(i_outfilename.c_str(),sorgente_data,sorgente_attr);
-	
+
 	g_robocopy_touch+=mtime()-s10;
-	
+
 	o_donecount++;
 	if (scrittitotali!=dascrivere)
 	{
@@ -58588,7 +56850,7 @@ string Jidac::zfs_get_snaplist(string i_header,const string i_footer,vector<stri
 							nomesnap=mytrim2(nomesnap);
 							o_array_dopochiocciola.push_back(nomesnap);
 							primachiocciola=mytrim2(primachiocciola);
-							o_array_primachiocciola.push_back(primachiocciola);	
+							o_array_primachiocciola.push_back(primachiocciola);
 						}
 					}
 				}
@@ -58603,7 +56865,7 @@ string Jidac::zfs_get_snaplist(string i_header,const string i_footer,vector<stri
 
 int Jidac::zfsenumerate(string i_command)
 {
-	
+
 	string 	header		=files[0];//"tank/d@2021";
 	string 	footer		="";
 	string	exepath		=zpaqfranzexename;
@@ -58631,7 +56893,7 @@ int Jidac::zfsenumerate(string i_command)
 		myprintf("32030: nothing to do. Do you use the doublequote?\n");
 		return 1;
 	}
-	
+
 	FILE* scripthandle=0;
 	string	myoutput=g_script;
 	if (myoutput!="")
@@ -58681,7 +56943,7 @@ int Jidac::zfsenumerate(string i_command)
 // ok we want the +x
 		chmod(myoutput.c_str(),0700);
 #endif
-	}	
+	}
 	return 0;
 }
 
@@ -58741,7 +57003,7 @@ int64_t getdatefromsnapshot(string i_snaptoget)
 	}
 	if (flagdebug)
 		myprintf("55525: |%s|\n",dategetted.c_str());
-	
+
 	int64_t unixdate=myatoll(dategetted.c_str());
 	if (flagdebug)
 		myprintf("55529: Unixxxx %s\n",migliaia(unixdate));
@@ -58756,7 +57018,7 @@ int Jidac::zfsadd()
 		help_zfsadd(true,true);
 		return 1;
 	}
-	
+
 	string 	header		=files[0];//"tank/d@2021";
 	string 	footer		="";
 	string	exepath		=zpaqfranzexename;
@@ -58781,7 +57043,7 @@ int Jidac::zfsadd()
 		myprintf("55552: nothing to do. Do you use the doublequote?\n");
 		return 1;
 	}
-	
+
 	FILE* scripthandle=0;
 	string	myoutput=g_script;
 	if (myoutput!="")
@@ -58805,10 +57067,10 @@ int Jidac::zfsadd()
 		onlysubdir=files[2];
 		if (flagdebug)
 			myprintf("55576: onlysubdir [1] %s\n",onlysubdir.c_str());
-		
-		if (onlysubdir[0]=='/') 
+
+		if (onlysubdir[0]=='/')
 			onlysubdir.erase(0,1);
-		
+
 		if (flagdebug)
 			myprintf("55581: onlysubdir [2] %s\n",onlysubdir.c_str());
 		if (onlysubdir!="")
@@ -58848,7 +57110,7 @@ int Jidac::zfsadd()
 			}
 		if (flagtrovato)
 		{
-			if (prima_chiocciola[0]!='/') 
+			if (prima_chiocciola[0]!='/')
 				prima_chiocciola="/"+prima_chiocciola;
 			string percorso		=prima_chiocciola+"/.zfs/snapshot/"+dopo_chiocciola+"/";
 			string timestamp	=dopo_chiocciola;
@@ -58886,7 +57148,7 @@ int Jidac::zfsadd()
 			return 2;
 		}
 	}
-	
+
 	if (scripthandle!=0)
 	{
 		fclose(scripthandle);
@@ -58941,7 +57203,8 @@ int Jidac::zero()
 	for (unsigned i=0; i<files.size(); ++i)
 		risultato+=removeemptydirs(files[i],flagkill);
 	return risultato;
-}	
+}
+
 /// robocopy /mir a master folder to one or more
 int Jidac::robocopy()
 {
@@ -59009,7 +57272,7 @@ int Jidac::robocopy()
 	int64_t s13=mtime();
 	franzparallelscandir(false,true,true);
 	int64_t timescandir=mtime()-s13;
-	
+
 ///27437: space needed
 	if (!flagspace)
 		if (files_size[0]>0)
@@ -59033,7 +57296,7 @@ int Jidac::robocopy()
 				return 1;
 			}
 		}
-	
+
 	int64_t 	startscan=mtime();
 	uint64_t 	strangethings;
 	myprintf("\nMaster  %s (%s files %s) <<%s>>\n",migliaia(files_size[0]),tohuman(files_size[0]),migliaia2(files_count[0]),files[0].c_str());
@@ -59053,7 +57316,7 @@ int Jidac::robocopy()
 	int64_t timedelete				=0;
 	int xlscopied					=0;
 	uint64_t xlscopiedsize			=0;
-	
+
 	g_robocopy_check_sorgente		=0;
 	g_robocopy_check_destinazione	=0;
 	g_robocopy_makepath				=0;
@@ -59069,18 +57332,21 @@ int Jidac::robocopy()
 	g_robocopy_fread				=0;
 	g_robocopy_fwrite				=0;
 
-	
+	int64_t	timegetfolderinfo		=0;
+	int64_t	timegetfolderinfo2		=0;
+	int64_t	timesetfolderinfo		=0;
+
 	int64_t timelocalexists			=0;
 	int64_t timelocalexists2		=0;
 	int64_t timelocalmakepath		=0;
-	
+
 	int 	timelocalexists_hm		=0;
 	int 	timelocalexists2_hm		=0;
 	int 	timelocalmakepath_hm	=0;
-	
+
 	if (g_ioBUFSIZE==4096)
 		g_ioBUFSIZE=1048576;
-	
+
 	unsigned char *buf=(unsigned char*)aligned_malloc(64, g_ioBUFSIZE);
 	if (buf==NULL)
 	{
@@ -59100,7 +57366,7 @@ int Jidac::robocopy()
 			int64_t s14=mtime();
 			bool exists1=exists(files[i]);
 			timelocalexists+=mtime()-s14;
-			
+
 			if (!exists1)
 			{
 				timelocalmakepath_hm++;
@@ -59113,7 +57379,7 @@ int Jidac::robocopy()
 		int64_t s16=mtime();
 		bool exists2=exists(files[i]);
 		timelocalexists2+=mtime()-s16;
-		
+
 		if (!exists2)
 		{
 			if (!flagkill)
@@ -59126,7 +57392,7 @@ int Jidac::robocopy()
 		{
 		///	first stage: delete everything in slave-i that is NOT i master-0
 			int64_t startdelete=mtime();
-			for (DTMap::iterator p=files_edt[i].begin(); p!=files_edt[i].end(); ++p) 
+			for (DTMap::iterator p=files_edt[i].begin(); p!=files_edt[i].end(); ++p)
 			{
 				string filenamei=p->first;
 				string filename0=filenamei;
@@ -59153,7 +57419,7 @@ int Jidac::robocopy()
 							riuscito=delete_dir(temp.c_str())==0;
 						}
 						else
-						{ 
+						{
 						/// delete without mercy!
 							/*riuscito*/delete_file(temp.c_str());
 						}
@@ -59172,11 +57438,12 @@ int Jidac::robocopy()
 						myprintf("30146: **** TOO MANY STRANGE THINGS (-n %d)  %s\n",menoenne,migliaia(strangethings));
 						break;
 					}
-			}	
+			}
 			/// OK now do the copy from master-0 to slave-i
 			timedelete=mtime()-startdelete;
 			int64_t globalstartcopy=mtime();
-			for (DTMap::iterator p=files_edt[0].begin(); p!=files_edt[0].end(); ++p) 
+
+			for (DTMap::iterator p=files_edt[0].begin(); p!=files_edt[0].end(); ++p)
 			{
 				string filename0=p->first;
 				string filenamei=filename0;
@@ -59247,17 +57514,133 @@ int Jidac::robocopy()
 					}
 			}
 		}
-	}	
-	
+	}
+
 	if (buf!=NULL)
 	{
 		aligned_free(buf);
 		buf=0;
 	}
-	
+
 	timecopy++; //avoid some div by zero
 	timedelete++;
 	myprintf("\n");
+
+
+	///	folders' touch
+
+	int	foldertoucherror=0;
+	int	foldertouched	=0;
+	int	folderworked	=0;
+	if (flagkill)
+	{
+		int quantifolder=0;
+		for (DTMap::iterator a=files_edt[0].begin(); a!=files_edt[0].end(); ++a)
+			if (isdirectory(a->first.c_str()))
+				quantifolder++;
+		int64_t starttouch	=mtime();
+		int64_t	ultimotempo	=0;
+
+		for (DTMap::iterator a=files_edt[0].begin(); a!=files_edt[0].end(); ++a)
+		{
+			string masterfolder=a->first;
+			if (isdirectory(masterfolder.c_str()))
+			{
+				folderworked++;
+				int secondi=(mtime()-starttouch)/1000;
+				if (secondi!=ultimotempo)
+				{
+					ultimotempo=secondi;
+					if (!flagnoeta)
+					{
+						myprintf("Touching  %12s / %s @ %8s touch/s\r",migliaia(folderworked),migliaia2(quantifolder),migliaia3(folderworked/(secondi+1)));
+						fflush(stdout);
+					}
+				}
+
+				int64_t folder_creationdate	=0;
+				int64_t	folder_attribute	=0;
+
+				int64_t s20=mtime();
+				bool gettedinfo=getdirinfo(masterfolder,folder_creationdate,folder_attribute);
+				timegetfolderinfo+=mtime()-s20;
+
+				if (!gettedinfo)
+				{
+					myprintf("57820: Cannot getdirinfo on ");
+					printUTF8(masterfolder.c_str());
+					myprintf("\n");
+					foldertoucherror++;
+					continue;
+				}
+
+				if (flagdebug)
+				{
+					string	creation_date =dateToString(flagutc,folder_creationdate);
+					myprintf("57819: MASTER Creation date %s for %s\n",creation_date.c_str(),masterfolder.c_str());
+				}
+
+				for (unsigned i=1; i<files.size(); ++i)
+				{
+					string slavefolder=masterfolder;
+					if (!myreplace(slavefolder,files[0],files[i]))
+					{
+						myprintf("57691: Cannot get slavefolder %d %s to %s\n",i,files[0].c_str(),files[i].c_str());
+						foldertoucherror++;
+					}
+					else
+					{
+						if (flagdebug)
+							myprintf("57695: SLAVE FOLDER %03d %s\n",i,slavefolder.c_str());
+						if (!direxists(slavefolder.c_str()))
+						{
+							myprintf("57700: Salve folder does not exists %d %s to %s\n",i,files[0].c_str(),files[i].c_str());
+							foldertoucherror++;
+						}
+						else
+						{
+							int64_t slave_folder_creationdate	=0;
+							int64_t	slave_folder_attribute		=0;
+							bool flagtocca=true;
+							if (flagpakka)
+							{
+								int64_t s22			=mtime();
+								bool gettedslave	=getdirinfo(slavefolder,slave_folder_creationdate,slave_folder_attribute);
+								timegetfolderinfo2	+=mtime()-s22;
+								if (gettedslave)
+									if (folder_attribute==slave_folder_attribute)
+										if (myabs(slave_folder_creationdate,folder_creationdate)<=2)
+											flagtocca=false;
+							}
+
+							bool touched=true;
+							if (flagtocca)
+							{
+								int64_t s21=mtime();
+								touched=close(slavefolder.c_str(),folder_creationdate,folder_attribute);
+								timesetfolderinfo+=mtime()-s21;
+							}
+
+							if (touched)
+							{
+								if (flagdebug)
+									myprintf("57703: Touch OK on slave %d %s\n",i,slavefolder.c_str());
+								if (flagtocca)
+									foldertouched++;
+							}
+							else
+							{
+								myprintf("57862: Touch KAPUTT on slave %d %s\n",i,slavefolder.c_str());
+								foldertoucherror++;
+							}
+						}
+					}
+				}
+			}
+		}
+		if (!flagnoeta)
+			myprintf("\n");
+	}
 	if (!flagkill)
 		myprintf("FAKE: dry run!\n");
 	if (roboequal>0)
@@ -59270,17 +57653,13 @@ int Jidac::robocopy()
 		myprintf("-   %12s %20s B in %9.2fs %15s/sec\n",migliaia(robodeleted),migliaia2(robodeletedsize),(timedelete/1000.0),migliaia3((robodeletedsize/(timedelete/1000.0))));
 	double tempo=(mtime()-startscan)+1;
 	tempo/=1000.0;
-	
+
 	myprintf("\nRobocopy time  %9.2f  - Slaves getinfo %9.2f s\n",tempo,g_robocopy_check_destinazione/1000.0);
-	
+
 	myprintf("Written bytes %s (%s) @ %s B/sec\n",migliaia(written_size),tohuman(written_size),migliaia2(written_size/tempo)
 	);
-
-/*
-	myprintf("localexists   %21s %08d\n",migliaia(timelocalexists),timelocalexists_hm);
-	myprintf("localexists2  %21s %08d\n",migliaia(timelocalexists2),timelocalexists2_hm);
-	myprintf("localmakepath %21s %08d\n",migliaia(timelocalmakepath),timelocalmakepath_hm);
-*/
+	if (foldertoucherror>0)
+		myprintf("57888: WARNING - SOME FOLDER TOUCH ERROR %s\n",migliaia(foldertoucherror));
 
 	if (flagverbose)
 	{
@@ -59291,7 +57670,14 @@ int Jidac::robocopy()
 		myprintf("makepath2    %10s isequal    %10s close    %10s\n",migliaia(g_robocopy_makepath2),migliaia2(g_robocopy_isequal),migliaia3(g_robocopy_close));
 		myprintf("close2       %10s touch      %10s delete   %10s\n",migliaia(g_robocopy_close2),migliaia2(g_robocopy_touch),migliaia3(g_robocopy_delete));
 		myprintf("readopen     %10s openout    %10s fclose   %10s\n",migliaia2(g_robocopy_readopen),migliaia2(g_robocopy_openoutfile),migliaia3(g_robocopy_fclose));
+		myprintf("getfolderinf %10s setfolder  %10s \n",migliaia2(timegetfolderinfo),migliaia2(timesetfolderinfo));
 		myprintf("buffersize   %10s scandir    %10s copy     %10s @ %s/s\n",tohuman(g_ioBUFSIZE),migliaia2(timescandir),migliaia3(g_robocopy_fread),migliaia4(realspeed));
+		if (flagpakka)
+			myprintf("FOLDER-TOUCH WITH -pakka (check-before-touch)\n");
+		else
+			myprintf("FOLDER-TOUCH-WITHOUT-MERCY PROFILE (try -pakka to check-before-set)\n");
+		myprintf("getfolder    %10s getfolder2 %10s setfold  %10s\n",migliaia(timegetfolderinfo),migliaia2(timegetfolderinfo2),migliaia3(timesetfolderinfo));
+		myprintf("touched      %10s totaltouch %10s\n",migliaia4(foldertouched),migliaia5(timegetfolderinfo+timegetfolderinfo2+timesetfolderinfo));
 	}
 	if (not flagverify)
 		return risultato;
@@ -59360,7 +57746,7 @@ int Jidac::dircompare(bool i_flagonlysize,bool i_flagrobocopy)
 	printbar('=');
 	myprintf("Total  |%21s| (%s)\n",migliaia(total_size),tohuman(total_size));
 	myprintf("Delta  |%21s| %21s|files\n",migliaia(delta_size),migliaia2(delta_files));
-/// only a s (size)? Done	
+/// only a s (size)? Done
 	if (i_flagonlysize)
 		return 0;
 	uint64_t strangethings;
@@ -59386,7 +57772,7 @@ int Jidac::dircompare(bool i_flagonlysize,bool i_flagrobocopy)
 				myprintf("Dir %d (slave) IS DIFFERENT time %6g <<%s>>\n",i,files_time[i]/1000.0,files[i].c_str());
 				myprintf("size  %24s (files %s)\n",migliaia(files_size[i]),migliaia2(files_count[i]));
 			}
-			for (DTMap::iterator p=files_edt[0].begin(); p!=files_edt[0].end(); ++p) 
+			for (DTMap::iterator p=files_edt[0].begin(); p!=files_edt[0].end(); ++p)
 			{
 				string filename0=p->first;
 				string filenamei=filename0;
@@ -59407,7 +57793,7 @@ int Jidac::dircompare(bool i_flagonlysize,bool i_flagrobocopy)
 						break;
 					}
 			}
-			for (DTMap::iterator p=files_edt[i].begin(); p!=files_edt[i].end(); ++p) 
+			for (DTMap::iterator p=files_edt[i].begin(); p!=files_edt[i].end(); ++p)
 			{
 				string filenamei=p->first;
 				string filename0=filenamei;
@@ -59427,8 +57813,8 @@ int Jidac::dircompare(bool i_flagonlysize,bool i_flagrobocopy)
 						myprintf("30146: **** TOO MANY STRANGE THINGS (-n %d)  %s\n",menoenne,migliaia(strangethings));
 						break;
 					}
-			}	
-			for (DTMap::iterator p=files_edt[0].begin(); p!=files_edt[0].end(); ++p) 
+			}
+			for (DTMap::iterator p=files_edt[0].begin(); p!=files_edt[0].end(); ++p)
 			{
 				string filename0=p->first;
 				string filenamei=filename0;
@@ -59466,12 +57852,12 @@ int Jidac::dircompare(bool i_flagonlysize,bool i_flagrobocopy)
 				if ((files_size[i]==files_size[0]) && (files_count[i]==files_count[0]))
 				{
 					myprintf("[%03d] == <<",i);
-					printUTF8(files[i].c_str());	
+					printUTF8(files[i].c_str());
 					myprintf(">>\n");
 				}
 			printbar('-');
 		}
-	}	
+	}
 	if (!flagerror)
 	{
 		if (flagchecksum)
@@ -59542,21 +57928,21 @@ int64_t Jidac::franzparallelscandir(bool i_flaghash,bool i_recursive,bool i_forc
 			if (!flagnoeta)
 		{
 			setupConsole();
-			printf("\033[?25l");	
+			printf("\033[?25l");
 			fflush(stdout);
 			restoreConsole();
 		}
-		for(unsigned int i = 0; i < files.size(); i++ ) 
+		for(unsigned int i = 0; i < files.size(); i++ )
 		{
 			print_datetime();
 			myprintf("Scan dir |%02d| <<%s>>\n",i,files[i].c_str());
 		}
-		for(unsigned int i = 0; i < files.size(); i++ ) 
+		for(unsigned int i = 0; i < files.size(); i++ )
 		{
 			g_arraybytescanned.push_back(0);
 			g_arrayfilescanned.push_back(0);
 			rc = pthread_create(&threads[i], &attr, scansiona, (void*)&vettoreparametri[i]);
-			if (rc) 
+			if (rc)
 			{
 				myprintf("37634: Error creating thread\n");
 				exit(-1);
@@ -59565,10 +57951,10 @@ int64_t Jidac::franzparallelscandir(bool i_flaghash,bool i_recursive,bool i_forc
 		myprintf("\n");
 		// free attribute and wait for the other threads
 		pthread_attr_destroy(&attr);
-		for(unsigned int i = 0; i < files.size(); i++ ) 
+		for(unsigned int i = 0; i < files.size(); i++ )
 		{
 			rc = pthread_join(threads[i], &status);
-			if (rc) 
+			if (rc)
 			{
 				error("Unable to join\n");
 				exit(-1);
@@ -59589,10 +57975,10 @@ int64_t Jidac::franzparallelscandir(bool i_flaghash,bool i_recursive,bool i_forc
 		{
 			uint64_t sizeofdir=0;
 			uint64_t dircount=0;
-			for (DTMap::iterator p=vettoreparametri[i].theDT.begin(); p!=vettoreparametri[i].theDT.end(); ++p) 
+			for (DTMap::iterator p=vettoreparametri[i].theDT.begin(); p!=vettoreparametri[i].theDT.end(); ++p)
 			{
 				string filename=rename(p->first);
-				if (p->second.date && p->first!="" && (!isdirectory(p->first)) && (!isads(filename))) 
+				if (p->second.date && p->first!="" && (!isdirectory(p->first)) && (!isads(filename)))
 				{
 					sizeofdir+=p->second.size;
 					dircount++;
@@ -59624,10 +58010,10 @@ int64_t Jidac::franzparallelscandir(bool i_flaghash,bool i_recursive,bool i_forc
 			myscandir(0,myblock,files[i].c_str(),i_recursive,i_flaghash);
 			uint64_t sizeofdir=0;
 			uint64_t dircount=0;
-			for (DTMap::iterator p=myblock.begin(); p!=myblock.end(); ++p) 
+			for (DTMap::iterator p=myblock.begin(); p!=myblock.end(); ++p)
 			{
 				string filename=rename(p->first);
-				if (p->second.date && p->first!="" && (!isdirectory(p->first)) && (!isads(filename))) 
+				if (p->second.date && p->first!="" && (!isdirectory(p->first)) && (!isads(filename)))
 				{
 					sizeofdir+=p->second.size;
 					dircount++;
@@ -59646,9 +58032,9 @@ int64_t Jidac::franzparallelscandir(bool i_flaghash,bool i_recursive,bool i_forc
 		}
 	}
 	return mtime()-startscan;
-}	
+}
 /// wipe free space-check if can write and read OK
-int Jidac::fillami() 
+int Jidac::fillami()
 {
 	if (files.size()!=1)
 	{
@@ -59717,13 +58103,13 @@ int Jidac::fillami()
 		myprintf("28628: GURU cannot alloc the buffer\n");
 		return 2;
 	}
-	int64_t starttutto=mtime();	
+	int64_t starttutto=mtime();
 	uint64_t hashtime=0;
 	uint64_t totaliotime=0;
 	uint64_t totalhashtime=0;
 	uint64_t totalrandtime=0;
-	vector<string> chunkfilename;     
-	vector<string> chunkhash;     
+	vector<string> chunkfilename;
+	vector<string> chunkhash;
 	assert(outputdir.size()<200);
 	char mynomefile[200+100];
 	memset(buffer32bit,0,chunksize*4);
@@ -59762,7 +58148,7 @@ int Jidac::fillami()
 			exit(0);
 		}
 		fwrite(buffer32bit, sizeof(uint32_t), chunksize, myfile);
-		fclose(myfile);			
+		fclose(myfile);
 		int64_t iotime=mtime()-startio;
 		uint64_t randspeed=(uint64_t)	(chunksize*sizeof(uint32_t)/((randtime+1)/1000.0));
 		uint64_t hashspeed=(uint64_t)	(chunksize*sizeof(uint32_t)/((hashtime+1)/1000.0));
@@ -59823,11 +58209,14 @@ int Jidac::fillami()
 			g_dimensione=0;
 			///if (flagdebug)
 				///myprintf("56279: franz_do_hash\n");
-	
+
 			franz_do_hash dummy("XXH3");
+			if (flagdebug)
+				myprintf("59961: filehash on %s\n",filename.c_str());
+
 			string filehash=dummy.filehash(filename,false,-1,-1);
 			lavorati+=dummy.o_thefilesize;
-			
+
 			uint64_t hashspeed=(uint64_t)(lavorati/((mtime()-startverify+1)/1000.0));
 			myprintf(" (%12s/s) ",tohuman(hashspeed));
 			bool flagerrore=(filehash!=chunkhash[i]);
@@ -59866,12 +58255,12 @@ int Jidac::fillami()
 		{
 			myprintf("REMEMBER: temp file in %s\n",outputdir.c_str());
 		}
-	}	
+	}
 	else
 		myprintf("ERROR: SOMETHING WRONG\n");
 	return 0;
 }
-int  Jidac::dir() 
+int  Jidac::dir()
 {
 
 	bool barras	=false;
@@ -59885,7 +58274,7 @@ int  Jidac::dir()
 		files.push_back(".");
 	}
 	string cartella=files[0];
-	
+
 	if ((cartella=="/s") || (cartella=="/os") || (cartella=="/od") || (cartella=="/a"))
 	{
 		files.push_back(cartella);
@@ -59896,7 +58285,7 @@ int  Jidac::dir()
 		///cartella+='/';
 	if (cartella==".")
 			cartella+='/';
-		
+
 	int posstella=mypos("*",cartella);
 	if (posstella>=0)
 	{
@@ -59911,7 +58300,7 @@ int  Jidac::dir()
 		onlyfiles.clear();
 		onlyfiles.push_back(partefinale);
 	}
-	
+
 	if (cartella=="")
 		cartella="./";
 #ifdef unix
@@ -59938,16 +58327,16 @@ int  Jidac::dir()
 			if (direxists(cartella))
 				cartella+='/';
 	if (files.size()>1)
-		for (unsigned i=0; i<files.size(); i++) 
+		for (unsigned i=0; i<files.size(); i++)
 		{
 				barras	|=(stringcomparei(files[i],"/s"));
 				barraos	|=(stringcomparei(files[i],"/os"));
 				barraod	|=(stringcomparei(files[i],"/od"));
 				barraa	|=(stringcomparei(files[i],"/a"));
 		}
-		
-	
-	
+
+
+
 	myprintf("==== Scanning dir <<");
 	printUTF8(cartella.c_str());
 	myprintf(">> ");
@@ -59959,10 +58348,10 @@ int  Jidac::dir()
 		myprintf(" /od");
 	if (barraa)
 		myprintf(" /a");
-	
+
 	if (onlyfiles.size()>0)
 		myprintf(" pattern %s ",onlyfiles[0].c_str());
-	
+
 	myprintf("\n");
 	bool		flagduplicati	=false;
 	int64_t 	total_size		=0;
@@ -59983,10 +58372,10 @@ int  Jidac::dir()
 	printbar(' ',false);
 	myprintf("\r");
 	vector <s_fileandsize> fileandsize;
-	for (DTMap::iterator p=edt.begin(); p!=edt.end(); ++p) 
+	for (DTMap::iterator p=edt.begin(); p!=edt.end(); ++p)
 	{
 		bool flagaggiungi=true;
-#ifdef _WIN32	
+#ifdef _WIN32
 		if (!barraa)
 			flagaggiungi=((int)attrToString(p->second.attr).find("H") < 0);
 		flagaggiungi &= (!isads(p->first));
@@ -60081,11 +58470,13 @@ int  Jidac::dir()
 						flagnoeta=true;
 						///if (flagdebug)
 							///myprintf("56509: franz_do_hash\n");
-	
+
 						franz_do_hash dummy(g_thechosenhash);
-		
+						if (flagdebug)
+							myprintf("60222: filehash on %s\n",fileandsize[i].filename.c_str());
+
 						string temp=dummy.filehash(fileandsize[i].filename,false,-1,-1);
-				
+
 						///string temp=hash_calc_file(flag2algo(),fileandsize[i].filename.c_str(),false,dummycrc,0,0,dummylavorati,thefilesize);
 						flagnoeta=saveeta;
 						fileandsize[i].hashhex=temp;
@@ -60121,8 +58512,11 @@ int  Jidac::dir()
 					///if (flagdebug)
 						///myprintf("56548: franz_do_hash\n");
 					franz_do_hash dummy(g_thechosenhash);
+					if (flagdebug)
+						myprintf("60261: filehash on %s\n",fileandsize[i+1].filename.c_str());
+
 					string temp=dummy.filehash(fileandsize[i+1].filename,false,-1,-1);
-					
+
 					///string temp=hash_calc_file(flag2algo(),fileandsize[i+1].filename.c_str(),false,dummycrc,0,0,dummylavorati,thefilesize);
 					flagnoeta=saveeta;
 					fileandsize[i+1].hashhex=temp;
@@ -60176,7 +58570,7 @@ int  Jidac::dir()
 			{
 				limite=i;
 				break;
-			}	
+			}
 		}
 		if (flagverbose)
 		myprintf("Limit founded %d\n",limite);
@@ -60272,8 +58666,11 @@ int  Jidac::dir()
 				{
 					///if (flagdebug)
 						///myprintf("56700: franz_do_hash\n");
-	
+
 					franz_do_hash dummy(g_thechosenhash);
+					if (flagdebug)
+						myprintf("60416: filehash on %s\n",fileandsize[i].filename.c_str());
+
 					string temp=dummy.filehash(fileandsize[i].filename,false,-1,-1);
 					myprintf("|| %s:%s ",g_thechosenhash_str.c_str(),temp.c_str());
 				}
@@ -60364,7 +58761,7 @@ int Jidac::decimation()
 	{
 		myprintf("Order by DATE (/od or default)\n");
 		vector<DTMap::iterator> filelist;
-		for (DTMap::iterator a=files_edt[0].begin(); a!=files_edt[0].end(); ++a) 
+		for (DTMap::iterator a=files_edt[0].begin(); a!=files_edt[0].end(); ++a)
 			filelist.push_back(a);
 		sort(filelist.begin(), filelist.end(), comparedatethenfilename);
 		for (unsigned int i=0; i<filelist.size();i++)
@@ -60373,7 +58770,7 @@ int Jidac::decimation()
 	else
 	{
 		myprintf("Order by NAME (/on)\n");
-		for (DTMap::iterator p=files_edt[0].begin(); p!=files_edt[0].end(); ++p) 
+		for (DTMap::iterator p=files_edt[0].begin(); p!=files_edt[0].end(); ++p)
 			scannedfiles.push_back(p->first);
 	}
 	if (scannedfiles.size()<=menoenne)
@@ -60414,7 +58811,7 @@ int Jidac::decimation()
 		myprintf("Executing  %s times <<%s>>\n",migliaia(tobedeleted.size()),g_exec.c_str());
 		for (unsigned int i=0;i<tobedeleted.size();i++)
 		{
-			#ifdef _WIN32	
+			#ifdef _WIN32
 				myreplaceall(tobedeleted[i],"/","\\");
 			#endif
 			myprintf("%08d with param <<%s>>\n",i+1,tobedeleted[i].c_str());
@@ -60448,7 +58845,7 @@ int Jidac::decimation()
 	if (highlander>0)
 		return 2;
 	return 0;
-}	
+}
 bool iswinroot(string i_path)
 {
 #ifdef _WIN32
@@ -60510,7 +58907,7 @@ bool iszpaqfranzfile(string i_filename,string i_header)
 {
 	if (flagdebug)
 		myprintf("59895: checking %s with %s\n",i_filename.c_str(),i_header.c_str());
-	
+
 	if (i_filename=="")
 		return false;
 	if (!fileexists(i_filename.c_str()))
@@ -60520,14 +58917,14 @@ bool iszpaqfranzfile(string i_filename,string i_header)
 		myprintf("\n");
 		return false;
 	}
-	
+
 	FILE* backupfile=fopen(i_filename.c_str(), "rb");
 	if (backupfile==NULL)
 	{
 		myprintf("58926: Cannot open file\n");
 		return false;
 	}
-	
+
 	char line[65536];
 	string linea="";
 	if (!fgets(line, sizeof(line), backupfile))
@@ -60562,7 +58959,7 @@ string getfirsthash(string i_theline)
 			break;
 	}
 	return stringtolower(hashletto);
-}		
+}
 
 bool getdatafromfasttxt(string i_filename,string& o_crc32,string& o_quick,string& o_precrc32,int64_t& o_size)
 {
@@ -60653,7 +59050,7 @@ bool getdatafromfasttxt(string i_filename,string& o_crc32,string& o_quick,string
 		if (isdigit(linea[i]))
 			sizefromtxt+=linea[i];
 		i++;
-	}		
+	}
 	fclose(backupfile);
 	if (flagdebug)
 	{
@@ -60709,7 +59106,7 @@ bool writedatainfasttxt(string i_filename,string i_archive,string i_crc32,string
 		myprintf("60106: i_presize negative\n");
 		return false;
 	}
-	
+
 	FILE* backupfile=fopen(i_filename.c_str(), "wb");
 	if (backupfile==NULL)
 	{
@@ -60720,12 +59117,12 @@ bool writedatainfasttxt(string i_filename,string i_archive,string i_crc32,string
 	fprintf(backupfile,"%s %s %s [%s] (%s)\n",i_crc32.c_str(),i_quick.c_str(),i_precrc32.c_str(),migliaia(i_size),migliaia2(i_presize));
 	fclose(backupfile);
 	return true;
-}			
+}
 
-int Jidac::append() 
+int Jidac::append()
 {
 	myprintf("Append 2-pass *** ALPHA STAGE *** ANTI-RANSOMWARE (FOR chflags sappend)\n");
-	
+
 	g_optional	="ransomware";
 	g_cdatasize	=0;
 	g_htsize	=0;
@@ -60733,7 +59130,7 @@ int Jidac::append()
 	g_fakewrite	=true;
 	int errore	=add();
 	g_fakewrite	=false;
-	
+
 	if (errore==0)
 	{
 		if (flagdebug)
@@ -60755,18 +59152,18 @@ int Jidac::append()
 	string	initialzpaqcrc32="";
 	string	prezpaqcrc32	="";
 	int64_t	prezpaqsize		=0;
-	
+
 */
-int	Jidac::makecrc32txt(string i_filename, 
+int	Jidac::makecrc32txt(string i_filename,
 string& 	o_initialquickhash,
 int64_t& 	o_initialzpaqsize,
-string& 	o_initialzpaqquick, 
+string& 	o_initialzpaqquick,
 string& 	o_initialzpaqcrc32,
 string& 	o_prezpaqcrc32,
 int64_t& 	o_prezpaqsize,
 string&		o_thecrcfile)
 {
-	
+
 	string 	percorso	=extractfilepath		(i_filename);
 	string	nome		=prendinomefileebasta	(i_filename);
 	o_thecrcfile		=percorso+nome+"_crc32.txt";
@@ -60775,6 +59172,9 @@ string&		o_thecrcfile)
 	if (fileexists(i_filename))
 	{
 		franz_do_hash dummyquick("QUICK");
+		if (flagdebug)
+			myprintf("60919: filehash on %s\n",i_filename.c_str());
+
 		o_initialquickhash=dummyquick.filehash(i_filename,false,-1,-1);
 		o_initialzpaqsize=prendidimensionefile(i_filename.c_str());
 	}
@@ -60796,7 +59196,7 @@ string&		o_thecrcfile)
 			printUTF8(o_thecrcfile.c_str());
 			myprintf("\n");
 		}
-		
+
 		if (!getdatafromfasttxt(o_thecrcfile,o_initialzpaqcrc32,o_initialzpaqquick,o_prezpaqcrc32,o_prezpaqsize))
 		{
 			myprintf("60865: Failed getting data from fasttxt!\n");
@@ -60825,12 +59225,12 @@ string&		o_thecrcfile)
 			fastisok=false;
 		}
 	}
-		
+
 	if (!fastisok)
 	{
 		if (!flagspace)
 			return 2;
-		
+
 		myprintf("60892: Rebuilding broken fasttxt (doing TRIM for incomplete transaction)\n");
 		if (i_filename!=g_indexname)
 		{
@@ -60838,20 +59238,26 @@ string&		o_thecrcfile)
 			jidacreset();
 			files.clear();
 			files.push_back(i_filename.c_str());
-			
+
 			trim();
 			myprintf("60897: TRIM done, recomputing hash and CRC-32\n");
 		}
 		int64_t startverify		=mtime();
 		franz_do_hash dummyquick("QUICK");
+		if (flagdebug)
+			myprintf("60990: filehash on %s\n",i_filename.c_str());
+
 		o_initialzpaqquick=dummyquick.filehash(i_filename,false,startverify,prendidimensionefile(i_filename.c_str()));
 		if (o_initialzpaqquick=="")
 		{
 			myprintf("60899: quick hash empty!\n");
 			return 2;
 		}
-		
+
 		franz_do_hash dummyquick2("CRC-32");
+		if (flagdebug)
+			myprintf("61000: filehash on %s\n",i_filename.c_str());
+
 		o_initialzpaqcrc32=dummyquick2.filehash(i_filename,false,startverify,prendidimensionefile(i_filename.c_str()));
 		if (o_initialzpaqcrc32=="")
 		{
@@ -60883,7 +59289,7 @@ string&		o_thecrcfile)
 // Add or delete files from archive. Return 1 if error else 0.
 // Note: by flagverify do a CRC32-integrity check (@zpaqfranz)
 ///zpaqfranz a z:\1 \\?\UNC\franzk\z\cb -longpath -debug
-int Jidac::add() 
+int Jidac::add()
 {
 	if (flaghashdeep && flagfilelist)
 	{
@@ -60897,7 +59303,7 @@ int Jidac::add()
 			myprintf("40090: with -stdin you must enter exactly ONE file\n");
 			return 2;
 		}
-	
+
 	if (flagparanoid && flagforce)
 	{
 		myprintf("42681: -paranoid and -force, disabling -paranoid and keeping -force\n");
@@ -60917,12 +59323,12 @@ int Jidac::add()
 			error("incompatible -vss and -nopath");
 	}
 
-	
+
 #ifdef _WIN32
 	char lettera=0;
 ///	if (flagdd)
 ///		return dd();
-#endif 
+#endif
 
 #ifdef _WIN32
 	if (flagimage)
@@ -60991,18 +59397,18 @@ int Jidac::add()
 					myprintf("38479: ERROR -findzpaq but MORE THEN one archive found (%d)\n",founded);
 					return 2;
 				}
-			
+
 				if (filefounded!="")
 				{
 					myprintf("38485: INFO -findzpaq in ");
 					printUTF8(filefounded.c_str());
 					myprintf("\n");
 					archive=filefounded;
-				}	
+				}
 			}
 			else
 				myprintf("38461: WARN -findzpaq but archive is not letter:/something\n");
-			
+
 		}
 #endif
 
@@ -61073,20 +59479,20 @@ int Jidac::add()
 					{
 						if (flagdebug)
 							myprintf("53598: NO ROOT  %s\n",files[i].c_str());
-						
+
 						/// some kludges for * *.*, folders etc
 						if (isdirectory(files[i].c_str()))
 						{
 							files[i].pop_back();
 							myprintf("59838: Trimmed last /  %s\n",files[i].c_str());
-						}							
+						}
 						string thefilename=extractfilename(files[i]);
 						if (flagdebug)
 							myprintf("59842: Thefilename |%s|\n",thefilename.c_str());
-						
+
 						if (thefilename=="*.*")
 							thefilename="*";
-						
+
 						if (thefilename=="*")
 						{
 							files[i]=extractfilepath(files[i]);
@@ -61106,7 +59512,7 @@ int Jidac::add()
 								return 1;
 							}
 						}
-						
+
 				/// very dirty trick to get the exact "caseness"
 				/// because some Windows does not like to mix
 				/// z:\NS, \\?\Z:\ns\ and z:\ns
@@ -61121,7 +59527,7 @@ int Jidac::add()
 								myprintf("38740: files %s\n",files[i].c_str());
 						}
 						if (isalpha(files[i][0]))
-						{					
+						{
 							string tobepushed=extractfilepath(files[i]);
 							if (flagdebug)
 								myprintf("38745: pusho on tofiles |%s|\n",tobepushed.c_str());
@@ -61135,8 +59541,8 @@ int Jidac::add()
 					/// with UNC, you are on your own
 					/// (very limited support)
 							myprintf("38748: WARNING: VERY LIMITED SUPPORT FOR UNC AND -LONGPATH\n");
-							
-							
+
+
 							/*
 							test for \\franzk\z to become \\franzk\z\
 							*/
@@ -61208,11 +59614,11 @@ int Jidac::add()
 	if (flagvss)
 	{
 #if defined(_WIN32)
-	
+
 ///	command q is hardcoded. Why? Because it is so much simplier
 /// the generic switch -vss is just about abandoned
 		if (command=='q')
-		{			
+		{
 			cartellalocale=g_franzsnap;
 			if (!flagspace)
 				if (direxists(cartellalocale))
@@ -61277,7 +59683,7 @@ int Jidac::add()
 			exit(0);
 		}
 		/* note that fgets don't strip the terminating \n (or \r\n) but we do not like it  */
-		while (fgets(line, sizeof(line), myoutput)) 
+		while (fgets(line, sizeof(line), myoutput))
         	if (strstr(line,"GLOBALROOT"))
 			{
 				globalroot=line;
@@ -61301,8 +59707,8 @@ int Jidac::add()
 		myreplaceall(g_vss_shadow,"\\","/");
 		if (flagdebug)
 			myprintf("VSS SHADOW <<<%s>>>\n",g_vss_shadow.c_str());
-		
-		
+
+
 		if (command!='a')
 		{
 			string	filesubba	=g_gettempdirectory()+"subba.bat";
@@ -61321,14 +59727,14 @@ int Jidac::add()
 			}
 			else
 				myprintf("54655: cartellalocale %s\n",cartellalocale.c_str());
-			
+
 			FILE* subbatch=fopen(filesubba.c_str(), "wb");
 			if (subbatch==NULL)
 			{
 				myprintf("39543: cannot write filesubba %s\n",filesubba.c_str());
 				exit(0);
 			}
-			
+
 			fprintf(subbatch,"@echo OFF\n");
 			fprintf(subbatch,"rmdir %s\n",linuxtowinpath(cartellalocale).c_str());
 			fprintf(subbatch,"mklink /d %s %s\\ \n",linuxtowinpath(cartellalocale).c_str(),vss_windows_style.c_str());
@@ -61345,7 +59751,7 @@ int Jidac::add()
 				return 2;
 			}
 		}
-		
+
 		if (command=='a')
 		{
 			if (flagdebug)
@@ -61365,7 +59771,7 @@ int Jidac::add()
 					myprintf("POST FILES %s\n",files[i].c_str());
 				if (strstr(files[i].c_str(), "GLOBALROOT")==0)
 					error("VSS fail: strange post files");
-			}	
+			}
 		}
 		else
 		{/// command q, windows c backup
@@ -61407,9 +59813,9 @@ int Jidac::add()
     header_pos=read_archive(NULL,arcname.c_str(), &errors);
   // Set arcname, offset, header_pos, and salt to open out archive
   arcname=archive;  // output file name
-	
 
-			
+
+
 	if (flagcomment)
 		if (versioncomment!="")
 		{
@@ -61421,7 +59827,7 @@ int Jidac::add()
 				return 2;
 			}
 		}
-  
+
   int64_t offset=0;  // total size of existing parts
   char salt[32]={0};  // encryption salt
   if (password) libzpaq::random(salt, 32);
@@ -61439,13 +59845,13 @@ int Jidac::add()
 	  g_exec_text+=" archive exists";
       error("archive exists");
     }
-    if (password) 
+    if (password)
 	{  // derive archive salt from index
       FP fp=fopen(index, RB);
-      if (fp!=FPNULL) 
+      if (fp!=FPNULL)
 			if (fp!=NULL) // COMPILER BE QUIET!
 			{
-				if (fread(salt, 1, 32, fp)!=32) 
+				if (fread(salt, 1, 32, fp)!=32)
 					error("cannot read salt from index");
 				salt[0]^='7'^'z';
 				fclose(fp);
@@ -61456,7 +59862,7 @@ int Jidac::add()
   else {
     int parts=0;  // number of existing parts in multipart
     string part0=subpart(archive, 0);
-	
+
     if (part0!=archive) {  // multi-part?
       for (int i=1;; ++i) {
         string partname=subpart(archive, i);
@@ -61468,15 +59874,15 @@ int Jidac::add()
         offset+=ftello(fp);
 		if (fp!=NULL)
 			fclose(fp);
-		
+
 
       }
       header_pos=32*(password && parts==0);
       arcname=subpart(archive, parts+1);
       if (exists(arcname)) error("part exists");
-	
+
 		g_flagmultipart=true;
-		
+
 		if (command=='Z') // backup
 		{
 			string lastpiece="";
@@ -61493,7 +59899,7 @@ int Jidac::add()
 					myprintf("60088:File lenght 0   |%s|\n",lastpiece.c_str());
 					myprintf("60091:Delete lastpiece|%s|\n",lastpiece.c_str());
 					delete_file(lastpiece.c_str());
-					
+
 					arcname=subpart(archive, parts);
 					myprintf("60090:Going back to   |%s|\n",arcname.c_str());
 				}
@@ -61508,16 +59914,16 @@ int Jidac::add()
 				if (flagdebug)
 					myprintf("60095: NOT a backup part |%s|\n",lastpiece.c_str());
 			}
-			
-	
+
+
 			string percorso=extractfilepath(part0);
 			string solonome=prendinomefileebasta(part0);
-			
+
 			g_indexname=percorso+solonome+"_backup.index";
-			
+
 			myreplaceall(g_indexname,"?","0");
 			index=g_indexname.c_str();
-			
+
 			backuptxt=percorso+solonome+"_backup.txt";
 			myreplaceall(backuptxt,"?","0");
 			if (flagverbose)
@@ -61525,15 +59931,15 @@ int Jidac::add()
 				myprintf("59944: Backup index     : <<");
 				printUTF8(g_indexname.c_str());
 				myprintf(">>\n");
-				
+
 				myprintf("59944: Backup txt       : <<");
 				printUTF8(backuptxt.c_str());
 				myprintf(">>\n");
-				
+
 				myprintf("60329: Pid file         : <<");
 				printUTF8(g_pidname.c_str());
 				myprintf(">>\n");
-				
+
 				myprintf("59499: Multipart archive: <<");
 				printUTF8(arcname.c_str());
 				myprintf(">>\n");
@@ -61548,9 +59954,9 @@ int Jidac::add()
 				}
 			}
 		}
-		
-    }	
-	
+
+    }
+
     // Get salt from first part if it exists
     if (password) {
       FP fp=fopen(subpart(archive, 1).c_str(), RB);
@@ -61578,14 +59984,14 @@ int Jidac::add()
 	string	initialzpaqcrc32		="";
 	string	prezpaqcrc32			="";
 	int64_t	prezpaqsize				=0;
-	
+
 	string 	indexinitialquickhash	="0";
 	int64_t indexinitialzpaqsize	=0;
 	string	indexinitialzpaqquick	="";
 	string	indexinitialzpaqcrc32	="";
 	string	indexprezpaqcrc32		="";
 	int64_t	indexprezpaqsize		=0;
-	
+
 	if (password!=NULL)
 		g_crc_getheader=true;
 	else
@@ -61595,12 +60001,12 @@ int Jidac::add()
 		if (g_crc_getheader)
 			g_crc_getheader=false;
 
-	if (g_header_pos>32) 
+	if (g_header_pos>32)
 		g_crc_getheader=false;
 
 	if (flagdebug)
 		myprintf("60645: g_crc_getheader %d\n",int(g_crc_getheader));
-	
+
 	if (flagchecktxt)
 		if (checktxt=="")
 		{
@@ -61633,7 +60039,7 @@ int Jidac::add()
 				indexprezpaqcrc32,
 				indexprezpaqsize,
 				indexfasttxt);
-					
+
 				if (flagdebug)
 				{
 					printbar('+');
@@ -61646,14 +60052,14 @@ int Jidac::add()
 					myprintf("61215: resultindex not zero\n");
 					return resultindex;
 				}
-				
+
 			}
 /*
 
-			
-			
-			
-			
+
+
+
+
 			string 	percorso	=extractfilepath		(g_archive);
 			string	nome		=prendinomefileebasta	(g_archive);
 			fasttxt				=percorso+nome+"_crc32.txt";
@@ -61679,7 +60085,7 @@ int Jidac::add()
 				myprintf("60855: Founded fasttxt ");
 				printUTF8(fasttxt.c_str());
 				myprintf("\n");
-					
+
 				if (!getdatafromfasttxt(fasttxt,initialzpaqcrc32,initialzpaqquick,prezpaqcrc32,sizefromtxt,prezpaqsize))
 				{
 					myprintf("60865: Failed getting data from fasttxt!\n");
@@ -61707,18 +60113,18 @@ int Jidac::add()
 					fastisok=false;
 				}
 			}
-				
+
 			if (!fastisok)
 			{
 				if (!flagspace)
 					return 2;
-				
+
 				myprintf("60892: Rebuilding broken fasttxt (doing TRIM for incomplete transaction)\n");
 				flagkill=true;
 				jidacreset();
 				files.clear();
 				files.push_back(g_archive.c_str());
-				
+
 				trim();
 				myprintf("60897: TRIM done, recomputing hash and CRC-32\n");
 				int64_t startverify		=mtime();
@@ -61729,7 +60135,7 @@ int Jidac::add()
 					myprintf("60899: quick hash empty!\n");
 					return 2;
 				}
-				
+
 				franz_do_hash dummyquick2("CRC-32");
 				initialzpaqcrc32=dummyquick2.filehash(g_archive,false,startverify,prendidimensionefile(g_archive.c_str()));
 				if (initialzpaqcrc32=="")
@@ -61737,7 +60143,7 @@ int Jidac::add()
 					myprintf("60907: CRC-32 empty!\n");
 					return 2;
 				}
-		
+
 				myprintf("62682: Rebuilding fasttxt (%s) ",initialzpaqcrc32.c_str());
 				printUTF8(fasttxt.c_str());
 				if (!writedatainfasttxt(fasttxt,g_archive,initialzpaqcrc32,initialzpaqquick,
@@ -61760,7 +60166,7 @@ int Jidac::add()
 			*/
 		}
 
-	
+
   // Set method
   if (method=="") method="1";
   if (method.size()==1) {  // set default blocksize
@@ -61796,16 +60202,16 @@ int Jidac::add()
 	g_bytescanned=0;
 	g_filescanned=0;
 	g_worked=0;
-	
+
 	for (unsigned i=0; i<files.size(); ++i)
 		scandir(true,edt,files[i].c_str(),!flagnorecursion);
 	printbar(' ',false);
 	myprintf("\r");
-	
+
 #ifdef _WIN32
 	unsigned int	maxfilelength=0;
 	if (!flaglongpath)
-		for (DTMap::iterator p=edt.begin(); p!=edt.end(); ++p) 
+		for (DTMap::iterator p=edt.begin(); p!=edt.end(); ++p)
 		{
 			string filename=rename(p->first);
 			if (filename.size()>maxfilelength)
@@ -61822,16 +60228,16 @@ int Jidac::add()
 		int i=0;
 		if (flagdebug)
 		{
-			for (DTMap::iterator p=edt.begin(); p!=edt.end(); ++p) 
+			for (DTMap::iterator p=edt.begin(); p!=edt.end(); ++p)
 			{
 				myprintf("%03d  first %s\n",i,p->first.c_str());
 				myprintf("%03d  date  %s\n",i,migliaia(p->second.date));
 				myprintf("%03d  size  %s\n",i,migliaia(p->second.size)); ///-1
-				myprintf("%03d  attr  %s\n",i,migliaia(p->second.attr)); 
-				myprintf("%03d  data  %s\n",i,migliaia(p->second.data)); 
-				myprintf("%03d  writ  %d\n",i,p->second.written); 
-				myprintf("%03d  ptrsi %s\n",i,migliaia(p->second.ptr.size())); 
-				myprintf("%03d  dtv   %s\n",i,migliaia(p->second.dtv.size())); 
+				myprintf("%03d  attr  %s\n",i,migliaia(p->second.attr));
+				myprintf("%03d  data  %s\n",i,migliaia(p->second.data));
+				myprintf("%03d  writ  %d\n",i,p->second.written);
+				myprintf("%03d  ptrsi %s\n",i,migliaia(p->second.ptr.size()));
+				myprintf("%03d  dtv   %s\n",i,migliaia(p->second.dtv.size()));
 				i++;
 			}
 		}
@@ -61895,13 +60301,13 @@ int Jidac::add()
 				}
 		}
 
-#endif	
+#endif
 		DT& d=edt[solonome];
 		int64_t myora=now();
 		d.date=myora;
 		d.creationdate=0;
 		d.accessdate=0;
-		d.size=4; 
+		d.size=4;
 #ifdef _WIN32
 		d.attr=8311;
 		if (flagimage)
@@ -61917,16 +60323,16 @@ int Jidac::add()
 		if (flagdebug)
 		{
 			printf("k2\n");
-			for (DTMap::iterator p=edt.begin(); p!=edt.end(); ++p) 
+			for (DTMap::iterator p=edt.begin(); p!=edt.end(); ++p)
 			{
 				myprintf("%03d  first %s\n",i,p->first.c_str());
 				myprintf("%03d  date  %s\n",i,migliaia(p->second.date));
 				myprintf("%03d  size  %s\n",i,migliaia(p->second.size)); ///-1
-				myprintf("%03d  attr  %s\n",i,migliaia(p->second.attr)); 
-				myprintf("%03d  data  %s\n",i,migliaia(p->second.data)); 
-				myprintf("%03d  writ  %d\n",i,p->second.written); 
-				myprintf("%03d  ptrsi %s\n",i,migliaia(p->second.ptr.size())); 
-				myprintf("%03d  dtv   %s\n",i,migliaia(p->second.dtv.size())); 
+				myprintf("%03d  attr  %s\n",i,migliaia(p->second.attr));
+				myprintf("%03d  data  %s\n",i,migliaia(p->second.data));
+				myprintf("%03d  writ  %d\n",i,p->second.written);
+				myprintf("%03d  ptrsi %s\n",i,migliaia(p->second.ptr.size()));
+				myprintf("%03d  dtv   %s\n",i,migliaia(p->second.dtv.size()));
 				i++;
 			}
 		}
@@ -61955,7 +60361,7 @@ int Jidac::add()
 		if (myoutfile)
 		{
 			fprintf(myoutfile,"This is filelist for version %s\n",migliaia(ver.size()));
-			for (DTMap::iterator p=edt.begin(); p!=edt.end(); ++p) 
+			for (DTMap::iterator p=edt.begin(); p!=edt.end(); ++p)
 			{
 				string filename=rename(p->first);
 				///myprintf("Filelist name %s\n",filename.c_str());
@@ -61975,7 +60381,7 @@ int Jidac::add()
 				addfile(false,edt,tempfile,dimensionedata,dimensionelista,dimensioneattr,0,0);
 			}
 		}
-	} 
+	}
 	else
 	if (flaghashdeep)
 	{
@@ -61983,12 +60389,12 @@ int Jidac::add()
 			myprintf("Making the hashdeep.txt file with md5 (multithread)...\n");
 		else
 			myprintf("Making the hashdeep.txt file with md5...\n");
-			
+
 		tempfile=g_gettempdirectory()+"VFILE-l-hashdeep.txt";
 		myreplaceall(tempfile,"\\","/");
 		if (flagverbose)
 			myprintf("\nTemp hashdeep <<%s>>\n",tempfile.c_str());
-		
+
 		string	oldout			=g_output;
 		FILE*	oldhandle		=g_output_handle;
 		bool	oldflaghashdeep	=flaghashdeep;
@@ -62026,12 +60432,12 @@ int Jidac::add()
 			return 2;
 		}
 	}
-	
-	
-	
-	
-	
-	
+
+
+
+
+
+
 	/// we are paranoid, so ve recalc ALL the hashesh of equal-sized file
 	/// just to take files that have the same size, same timestamp, but different data
 	if (flagparanoid)
@@ -62040,7 +60446,7 @@ int Jidac::add()
 		if (flagdebug)
 		{
 			myprintf("----files forced\n");
-			for (DTMap::iterator p=edt.begin(); p!=edt.end(); ++p) 
+			for (DTMap::iterator p=edt.begin(); p!=edt.end(); ++p)
 			{
 				if (p->second.forceadd)
 				{
@@ -62053,12 +60459,12 @@ int Jidac::add()
 	}
 	/*
 	if (flagstdin)
-		for (DTMap::iterator p=edt.begin(); p!=edt.end(); ++p) 
+		for (DTMap::iterator p=edt.begin(); p!=edt.end(); ++p)
 			vf.push_back(p);
-	
+
 	if (!flagstdin)
 		*/
-	for (DTMap::iterator p=edt.begin(); p!=edt.end(); ++p) 
+	for (DTMap::iterator p=edt.begin(); p!=edt.end(); ++p)
 	{
 			string filename=rename(p->first);
 			DTMap::iterator a=dt.find(filename);
@@ -62074,7 +60480,7 @@ int Jidac::add()
 			/// by default ALWAYS force XLS to be re-packed
 			/// this is because sometimes Excel change the metadata (then SHA1 & CRC32)
 			/// WITHOUT touching attr or filesize
-			if (!flagdonotforcexls) 
+			if (!flagdonotforcexls)
 				if (isxls(filename))
 				{
 					if (flagdebug)
@@ -62089,18 +60495,18 @@ int Jidac::add()
 			/// space and time wasted, but afterall about 10 SLOCs
 			if (flagtouch)
 				p->second.date+=1;  // just a little bit...
-			if (a!=dt.end()) 
+			if (a!=dt.end())
 				a->second.data=1;  // keep
 			if ((p->second.forceadd) || (
-					(p->second.date) && (p->first!="") && (p->first[p->first.size()-1]!='/') && 
+					(p->second.date) && (p->first!="") && (p->first[p->first.size()-1]!='/') &&
 					(
-						flagforce || 
-						a==dt.end() || 
-						( (!(isads(filename))) && (!flagdonotforcexls) && (isxls(filename))) || 
-						p->second.date!=a->second.date || 
+						flagforce ||
+						a==dt.end() ||
+						( (!(isads(filename))) && (!flagdonotforcexls) && (isxls(filename))) ||
+						p->second.date!=a->second.date ||
 						p->second.size!=a->second.size
 					)
-				)) 
+				))
 			{
 				total_size+=p->second.size;
 				// Key by first 5 bytes of filename extension, case insensitive
@@ -62119,13 +60525,13 @@ int Jidac::add()
 				p->second.data+=(1<<24)-s-1;
 				vf.push_back(p);
 			}
-	}  
+	}
 	if (menoenne>0) // zpaqfranz a ... -n 100 show top 10 files  to be added
 	{
 		int	dastampare=vf.size();
 		if (menoenne<(unsigned int)dastampare)
 				dastampare=menoenne;
-		for (int i=0;i<dastampare; i++) 
+		for (int i=0;i<dastampare; i++)
 			myprintf("PRE  %08d sort %19s |%s| |%s|\n",i,migliaia(vf[i]->second.size),vf[i]->second.hexhash.c_str(),vf[i]->first.c_str());
 	}
 	///	Changin' the order of file, before archiving
@@ -62147,7 +60553,7 @@ int Jidac::add()
 					(g_theorderby[i]!="name") &&
 					(g_theorderby[i]!="hash") &&
 					(g_theorderby[i]!="date") &&
-					(g_theorderby[i]!="data") 
+					(g_theorderby[i]!="data")
 					)
 				myprintf("\n38022: WARNING: discarded orderby |%s|\n",g_theorderby[i].c_str());
 			}
@@ -62156,17 +60562,20 @@ int Jidac::add()
 			int64_t starthashsort=mtime();
 			int64_t	hashed=0;
 			if ( std::find(g_theorderby.begin(), g_theorderby.end(), "hash") != g_theorderby.end() )
-			for (unsigned i=0; i<vf.size(); i++) 
+			for (unsigned i=0; i<vf.size(); i++)
 			{
 				DTMap::iterator p=vf[i];
 				string	filename=p->first;
 				g_dimensione=0;
 				///if (flagdebug)
 					///myprintf("57948: franz_do_hash\n");
-	
+
 				franz_do_hash dummy(ALGO_XXHASH64);
+				if (flagdebug)
+					myprintf("62315: filehash on %s\n",filename.c_str());
+
 				string thehash=dummy.filehash(filename,false,starthashsort,total_size);
-	
+
 				///string thehash=hash_calc_file(ALGO_XXHASH64,filename.c_str(),false,dummycrc,starthashsort,total_size,hashed,thefilesize);
 				if (thehash!="")
 					p->second.hexhash=thehash;
@@ -62176,7 +60585,7 @@ int Jidac::add()
 			if ( std::find(g_theorderby.begin(), g_theorderby.end(), "nilsimsa") != g_theorderby.end() )
 			{
 				myprintf("Getting nilsimsa digest\n");
-				for (unsigned i=0; i<vf.size(); i++) 
+				for (unsigned i=0; i<vf.size(); i++)
 				{
 					DTMap::iterator p=vf[i];
 					string	filename=p->first;
@@ -62207,10 +60616,10 @@ int Jidac::add()
 		if (menoenne<(unsigned int)dastampare)
 				dastampare=menoenne;
 		printbar('-');
-		for (int i=0;i<dastampare; i++) 
+		for (int i=0;i<dastampare; i++)
 			myprintf("POST %08d sort %19s |%s| |%s|\n",i,migliaia(vf[i]->second.size),vf[i]->second.hexhash.c_str(),vf[i]->first.c_str());
 	}
-	
+
 ///	Mmmhh... seems nothing to do. Exit early and quickly
 	if ((total_size==0) && (vf.size()==0) && (folders==0))
 	{
@@ -62221,19 +60630,19 @@ int Jidac::add()
 	if (flagdebug)
 	{
 		unsigned i=0;
-		for (DTMap::iterator p=edt.begin(); p!=edt.end(); ++p) 
+		for (DTMap::iterator p=edt.begin(); p!=edt.end(); ++p)
 		{
 			myprintf("%03d  first %s\n",i,p->first.c_str());
 			myprintf("%03d  date  %s\n",i,migliaia(p->second.date));
 			myprintf("%03d  size  %s\n",i,migliaia(p->second.size)); ///-1
-			myprintf("%03d  attr  %s\n",i,migliaia(p->second.attr)); 
-			myprintf("%03d  data  %s\n",i,migliaia(p->second.data)); 
-			myprintf("%03d  writ  %d\n",i,p->second.written); 
-			myprintf("%03d  ptrsi %s\n",i,migliaia(p->second.ptr.size())); 
-			myprintf("%03d  dtv   %s\n",i,migliaia(p->second.dtv.size())); 
+			myprintf("%03d  attr  %s\n",i,migliaia(p->second.attr));
+			myprintf("%03d  data  %s\n",i,migliaia(p->second.data));
+			myprintf("%03d  writ  %d\n",i,p->second.written);
+			myprintf("%03d  ptrsi %s\n",i,migliaia(p->second.ptr.size()));
+			myprintf("%03d  dtv   %s\n",i,migliaia(p->second.dtv.size()));
 			i++;
 		}
-	}	
+	}
 	if (flagstdin)
 	{
 #ifdef _WIN32
@@ -62243,41 +60652,41 @@ int Jidac::add()
 		if (flagdebug)
 		{
 			myprintf("vf size %d\n",vf.size());
-			for (unsigned i=0; i<vf.size(); i++) 
+			for (unsigned i=0; i<vf.size(); i++)
 			{
 				DTMap::iterator p=vf[i];
 				printf("%03d  first %s\n",i,p->first.c_str());
 				printf("%03d  date  %s\n",i,migliaia(p->second.date));
 				printf("%03d  size  %s\n",i,migliaia(p->second.size)); ///-1
-				printf("%03d  attr  %s\n",i,migliaia(p->second.attr)); 
-				printf("%03d  data  %s\n",i,migliaia(p->second.data)); 
-				printf("%03d  writ  %d\n",i,p->second.written); 
-				printf("%03d  ptrsi %s\n",i,migliaia(p->second.ptr.size())); 
-				printf("%03d  dtv   %s\n",i,migliaia(p->second.dtv.size())); 
+				printf("%03d  attr  %s\n",i,migliaia(p->second.attr));
+				printf("%03d  data  %s\n",i,migliaia(p->second.data));
+				printf("%03d  writ  %d\n",i,p->second.written);
+				printf("%03d  ptrsi %s\n",i,migliaia(p->second.ptr.size()));
+				printf("%03d  dtv   %s\n",i,migliaia(p->second.dtv.size()));
 			}
 		}
 	}
-		
+
   // Test for reliable access to archive
   if (archive_exists!=exists(subpart(archive, 1).c_str()))
     error("archive access is intermittent");
 	if (!g_fakewrite)
 	{
-		if (exists(arcname)) 
+		if (exists(arcname))
 		{
 			myprintf("Updating ");
 			g_flagcreating=false;
 		}
-		else 
+		else
 		{
 			myprintf("Creating ");
 			g_flagcreating=true;
 		}
 		printUTF8(arcname.c_str());
 		myprintf(" at offset %s + %s\n", migliaia(header_pos), migliaia2(offset));
-		
-		//long-waited 
-		
+
+		//long-waited
+
 		string percorso=extractfilepath(arcname.c_str());
 		if (percorso!="")
 		{
@@ -62341,14 +60750,14 @@ int Jidac::add()
 		}
 	}
 #endif
-	
-	
+
+
   // Open output
   OutputArchive out(arcname.c_str(), password, salt, offset);
   /// I know, we need something for a "goto-control-c"
   g_archivefp=out.getthefp();
-  
-  
+
+
   out.seek(header_pos, SEEK_SET);
   // Start compress and write jobs
   vector<ThreadID> tid(howmanythreads*2-1);
@@ -62366,7 +60775,7 @@ int Jidac::add()
 			myprintf("Adding drive image with %d T ",howmanythreads);
 #endif
 		else
-	
+
 			///myprintf("Add %s (%s) %s files (%s dirs), %d T ",migliaia(total_size), tohuman(total_size),migliaia2(int(vf.size())),migliaia3(folders),howmanythreads);
 		///	myprintf("Add %s %03dT %21s  (%10s) %s files (%s)",
 			myprintf("Add %s %9s%19s (%10s) %dT (%s dirs)",
@@ -62385,7 +60794,7 @@ int Jidac::add()
 		myprintf("Case collisions       %9s (-fix255)\n",migliaia(casecollision));
 	if (toolongfilenames)
 	{
-#ifdef _WIN32	
+#ifdef _WIN32
 	if (!flagvss)
 		if (!flaglongpath)
 			myprintf("Long filenames (>255) %9s *** WARNING *** (-fix255)\n",migliaia(toolongfilenames));
@@ -62397,7 +60806,7 @@ int Jidac::add()
 		myprintf("Non-latin (UTF-8)     %9s\n",migliaia(utf8names));
 	if (adsfilenames)
 		myprintf("ADS ($:DATA)          %9s\n",migliaia(adsfilenames));
-	
+
 	if (howmanythreads==1) // houston, we are on ESXi
 	{
 		if (flagverbose)
@@ -62405,15 +60814,15 @@ int Jidac::add()
 	}
 	else
 	{
-		for (unsigned i=0; i<tid.size(); ++i) 
+		for (unsigned i=0; i<tid.size(); ++i)
 			run(tid[i], compressThread, &job);
 		run(wid, writeThread, &job);
 	}
   // Append in streaming mode. Each file is a separate block. Large files
   // are split into blocks of size blocksize.
   int64_t dedupesize=0;  // input size after dedupe
-  
-  if (howmanythreads>1) 
+
+  if (howmanythreads>1)
   if (method[0]=='s') {
 
     StringBuffer sb(blocksize+4096-128);
@@ -62423,7 +60832,7 @@ int Jidac::add()
 	  if (!flagimage)
 #endif
 		print_progress(total_size, total_done,g_scritti,-1);
-/*     
+/*
 	 if (summary<=0) {
         myprintf("+ ");
         printUTF8(p->first.c_str());
@@ -62453,16 +60862,16 @@ int Jidac::add()
 		  if (in!=NULL)
 	  {
 			int r;
-		 
+
 		if (flagstdin)
 		{
-			
+
 			r=fread(buf, 1, g_ioBUFSIZE, stdin);
 			printf("Lett %d\n",r);
 		}
-		else		
+		else
 			r=fread(buf, 1, BUFSIZE, in);
-	
+
         sb.write(buf, r);
         i+=r;
         if (r==0 || sb.size()+BUFSIZE>blocksize) {
@@ -62517,7 +60926,7 @@ int Jidac::add()
   // Build htinv for fast lookups of sha1 in ht
   HTIndex htinv(ht, ht.size()+(total_size>>(10+fragment))+vf.size());
   const unsigned htsize=ht.size();  // fragments at start of update
-  // reserve space for the header block 
+  // reserve space for the header block
 
 	if (flagdebug)
 	if (flagappend)
@@ -62533,7 +60942,7 @@ int Jidac::add()
 			myprintf("Real write\n");
 		myprintf("39481: g_cdatasize  %s\n",migliaia(g_cdatasize));
 		myprintf("39482: g_htsize     %s\n",migliaia(g_htsize));
-	
+
 	}
 		if ((g_optional=="ransomware") && (g_cdatasize>0) && (g_htsize>0))
 	{
@@ -62586,7 +60995,7 @@ int Jidac::add()
  // For each file to be added
 	int64_t startstream=mtime();
 
-	
+
 	char *buf=(char*)aligned_malloc(64, g_ioBUFSIZE);
 	if (buf==NULL)
 	{
@@ -62596,26 +61005,26 @@ int Jidac::add()
 	}
 
 	///char buf[g_ioBUFSIZE];
-    for (unsigned fi=0; fi<=vf.size(); ++fi) 
+    for (unsigned fi=0; fi<=vf.size(); ++fi)
 	{
-    
+
 	FP in=FPNULL;
     int bufptr=0, buflen=0;  // read pointer and limit
 	DTMap::iterator p;
-    if (fi<vf.size()) 
+    if (fi<vf.size())
 	{
 		assert(vf[fi]->second.ptr.size()==0);
 		p=vf[fi];
 		bufptr=buflen=0;
-		
-		if ((!flagstdin) 
+
+		if ((!flagstdin)
 #ifdef _WIN32
 			&& (!flagimage)
 #endif
 		)
 		{
 			in=fopen(p->first.c_str(), RB);
-			if (in==FPNULL) 
+			if (in==FPNULL)
 			{  // skip if not found
 				p->second.date=0;
 				total_size-=p->second.size;
@@ -62629,7 +61038,7 @@ int Jidac::add()
 				++errors;
 				continue;
 			}
-		// get expected filesize. Slow down a bit. But I like very much 
+		// get expected filesize. Slow down a bit. But I like very much
 		///if (flagverbose)
 			{
 				fseeko(in, 0, SEEK_END);
@@ -62643,7 +61052,7 @@ int Jidac::add()
 	int		ultimotempo=0;
     // Read fragments
     int64_t fsize=0;  // file size after dedupe
-    for (unsigned fj=0; true; ++fj) 
+    for (unsigned fj=0; true; ++fj)
 	{
 		int64_t sz=0;  // fragment size;
 		unsigned hits=0;  // correct prediction count
@@ -62651,7 +61060,7 @@ int Jidac::add()
 		unsigned htptr=0;  // fragment index
 		char sha1result[20]={0};  // fragment hash
 		unsigned char o1[256]={0};  // order 1 context -> predicted byte
-		if (fi<vf.size()) 
+		if (fi<vf.size())
 		{
 			int c1=0;  // previous byte
 			unsigned h=0;  // rolling hash for finding fragment boundaries
@@ -62663,13 +61072,13 @@ int Jidac::add()
 			if (flagstdin)
 			{
 				///c:\nz\dd if="\\\\.\\c:" bs=1048576 count=100000000000 |c:\zpaqfranz\zpaqfranz a j:\image\prova cimage.img -stdin
-				while (true) 
+				while (true)
 				{
 					buflen=fread(buf, 1, g_ioBUFSIZE, stdin);
 					if (buflen==0)
 						break;
 					else
-					{					
+					{
 						total_size+=buflen;
 						if (!flagnoeta)
 						{
@@ -62681,7 +61090,7 @@ int Jidac::add()
 								fflush(stdout);
 								ultimotempo=secondi;
 							}
-						}						
+						}
 						if (g_franzotype>0)
 						{
 							p->second.hashedsize+=buflen;
@@ -62719,9 +61128,9 @@ int Jidac::add()
 						for (int j=0;j<buflen;j++)
 						{
 							c=(unsigned char)buf[j];
-							if (c==o1[c1]) 
+							if (c==o1[c1])
 								h=(h+c+1)*314159265u, ++hits;
-							else 
+							else
 								h=(h+c+1)*271828182u;
 							o1[c1]=c;
 							c1=c;
@@ -62732,13 +61141,13 @@ int Jidac::add()
 					if (sz>=MAX_FRAGMENT || (fragment<=22 && h<(1u<<(22-fragment)) && sz>=MIN_FRAGMENT))
 						break;
 				}
-			}	
+			}
 			else
 			{
-				while (true) 
+				while (true)
 				{
 #ifdef _WIN32
-					if (bufptr>=buflen) 
+					if (bufptr>=buflen)
 					{
 						bufptr=0;
 						if (flagimage)
@@ -62758,7 +61167,7 @@ int Jidac::add()
 								{
 									float ratio=100.0*g_scritti/(total_size+1);
 									float percentuale=100.0*total_done/(total_size+1);
-									
+
 									myprintf("Imaging %06.2f%% %10s of %s -> %10s (%6.2f %) @ %10s /s\r",percentuale,tohuman(total_done),tohuman2(total_size),tohuman3(g_scritti),ratio,tohuman4(total_done/secondi));
 									ultimotempo=secondi;
 								}
@@ -62782,11 +61191,11 @@ int Jidac::add()
 						}
 					if (g_franzotype>0)
 						if (bufptr==0)
-							if (buflen>0) 
+							if (buflen>0)
 							{
 								/// check for strange things (corrupted files, lost connection...)
 								p->second.hashedsize+=buflen;
-								///	this is why pre-get filesize: % of big files into global %				
+								///	this is why pre-get filesize: % of big files into global %
 								///if (flagverbose)
 								if (p->second.expectedsize>100000000)
 								{
@@ -62833,16 +61242,16 @@ int Jidac::add()
 									if (p->second.pfile_highway64)
 										HighwayHashCatAppend((const unsigned char*)buf,buflen,p->second.pfile_highway64);
 							}
-				
-					if (bufptr>=buflen) 
+
+					if (bufptr>=buflen)
 						c=EOF;
-					else 
+					else
 						c=(unsigned char)buf[bufptr++];
-					if (c!=EOF) 
+					if (c!=EOF)
 					{
-						if (c==o1[c1]) 
+						if (c==o1[c1])
 							h=(h+c+1)*314159265u, ++hits;
-						else 
+						else
 							h=(h+c+1)*271828182u;
 						o1[c1]=c;
 						c1=c;
@@ -62969,7 +61378,7 @@ int Jidac::add()
 			{
 /// on "very strange things" (NAS/ESxi) the -pthread does not work
 /// this is a "monothread" compression: we need job (compressjob) for the job.csize vector
-				try 
+				try
 				{
 					string comment="jDC\x01";
 					StringBuffer my_cj_in;       // uncompressed input
@@ -62977,14 +61386,14 @@ int Jidac::add()
 					my_cj_in.swap(sb);
 					libzpaq::compressBlock(&my_cj_in, &my_cj_out, m.c_str(),fn.c_str(), comment.c_str());
 					job.csize.push_back(my_cj_out.size());
-					if (job.out && my_cj_out.size()>0) 
+					if (job.out && my_cj_out.size()>0)
 					{
 						assert(my_cj_out.c_str());
 						const char* p=my_cj_out.c_str();
 						int64_t n=my_cj_out.size();
 						g_scritti+=n; // very rude
 						const int64_t N=1<<30;
-						while (n>N) 
+						while (n>N)
 						{
 						  job.out->write(p, N);
 						  p+=N;
@@ -62993,7 +61402,7 @@ int Jidac::add()
 						job.out->write(p, n);
 					}
 				}
-				catch (std::exception& e) 
+				catch (std::exception& e)
 				{
 					fflush(stdout);
 					g_exec_text="job error";
@@ -63024,7 +61433,7 @@ int Jidac::add()
         }
       }  // end if frag not matched or last block
       // Update HT and ptr list
-      if (fi<vf.size()) 
+      if (fi<vf.size())
 	  {
         if (htptr==0) {
           htptr=ht.size();
@@ -63045,13 +61454,13 @@ int Jidac::add()
 	}
       if (c==EOF) break;
 	}  // end for each fragment fj
-    
+
 	///printf("sono uscito\n");
-	if (fi<vf.size()) 
+	if (fi<vf.size())
 	{
 		dedupesize+=fsize;
-	  ///print_datetime();	
-	  /// check errori 
+	  ///print_datetime();
+	  /// check errori
   print_progress(total_size, total_done,g_scritti,ultimapercentuale);
       assert(in!=FPNULL);
 	  assert(in!=NULL);
@@ -63065,7 +61474,7 @@ int Jidac::add()
     }
   }  // end for each file fi
 	assert(sb.size()==0);
-	if (howmanythreads>1) 
+	if (howmanythreads>1)
 	{
 	// Wait for jobs to finish, NOT on ESXi
 		job.appendz(sb, 0, "");  // signal end of input
@@ -63101,12 +61510,12 @@ int Jidac::add()
 	StringBuffer is;
 	assert(blocklist.size()==job.csize.size());
 	blocklist.push_back(ht.size());
-	for (unsigned i=0; i<job.csize.size(); ++i) 
+	for (unsigned i=0; i<job.csize.size(); ++i)
 	{
-		if (blocklist[i]<blocklist[i+1]) 
+		if (blocklist[i]<blocklist[i+1])
 		{
 			puti(is, job.csize[i], 4);  // compressed size of block
-			for (unsigned j=blocklist[i]; j<blocklist[i+1]; ++j) 
+			for (unsigned j=blocklist[i]; j<blocklist[i+1]; ++j)
 			{
 				is.write((const char*)ht[j].sha1, 20);
 				puti(is, ht[j].usize, 4);
@@ -63118,28 +61527,28 @@ int Jidac::add()
   // Delete from archive
 	int dtcount=0;  // index block header name
 	int removed=0;  // count
-	for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p) 
+	for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p)
 	{
-		if (p->second.date && !p->second.data) 
+		if (p->second.date && !p->second.data)
 		{
 			puti(is, 0, 8);
 			is.write(p->first.c_str(), p->first.size()); //strlen(p->first.c_str()));
 			is.put(0);
 
 			++removed;
-			if (is.size()>16000) 
+			if (is.size()>16000)
 			{
 				libzpaq::compressBlock(&is, &wp, "1",("jDC"+itos(date)+"i"+itos(++dtcount, 10)).c_str(), "jDC\x01");
 				is.resize(0);
-				
+
 			}
 		}
 	}
   // Append compressed index to archive
 	int added=0;  // count
-	for (DTMap::iterator p=edt.begin();; ++p) 
+	for (DTMap::iterator p=edt.begin();; ++p)
 	{
-		if (p!=edt.end()) 
+		if (p!=edt.end())
 		{
 			string filename=rename(p->first);
 			/// Fix longpath on VSS ( reference the addfile() )
@@ -63154,8 +61563,8 @@ int Jidac::add()
 			|| a->second.date!=p->second.date  // date change
 			|| ((int32_t)a->second.attr && (int32_t)a->second.attr!=(int32_t)p->second.attr)  // attr ch. get less bits
 			|| a->second.size!=p->second.size  // size change
-			|| (p->second.data && a->second.ptr!=p->second.ptr))) 
-			{ 
+			|| (p->second.data && a->second.ptr!=p->second.ptr)))
+			{
 ///				we want to strip the path of VLIST
 				if (mypos("VFILE-",filename)>-1)
 				{
@@ -63169,18 +61578,18 @@ int Jidac::add()
 						currentcrc32=crc32_combine(currentcrc32, ht[p->second.ptr[i]].crc32,ht[p->second.ptr[i]].crc32size);
 					if (currentcrc32!=p->second.file_crc32)
 						myprintf("29604 SOMETHING WRONG ON %s\n",p->first.c_str());
-				}		
+				}
 				++added;
 ///				date and filename
 				puti(is, p->second.date, 8);
 				is.write(filename.c_str(), filename.size());//strlen(filename.c_str()));
 				is.put(0);
-				
+
 				string 	hashtobewritten	="";
 				string	hasherror		="";
 				string 	hashname		="";
-					
-				
+
+
 				///if (!isdirectory(p->first.c_str())) winhash!
 				if (!(flagdebug && flagzero && flagkill))
 				{
@@ -63226,7 +61635,7 @@ int Jidac::add()
 					else
 					if (g_franzotype==FRANZO_XXH3)
 						hashtobewritten=finalizza_xxh3(p->second.pfile_xxh3);
-				
+
 					MAPPATIPOHASH::iterator a=g_mappatipohash.find(g_franzotype);
 					if (a!=g_mappatipohash.end())
 					{
@@ -63238,8 +61647,8 @@ int Jidac::add()
 					///myprintf("|%s|\n",hasherror.c_str());
 					if (flagdebug)
 						myprintf("58739: |%s|: |%s| <<%s>>\n",hashname.c_str(),hashtobewritten.c_str(),p->first.c_str());
-					
-					///	intercept (some) strange things, enforcing a fake hash (will be reported on verify of course) 
+
+					///	intercept (some) strange things, enforcing a fake hash (will be reported on verify of course)
 					if (hashtobewritten!="")
 					{
 						p->second.hexhash=hashtobewritten;
@@ -63257,7 +61666,7 @@ int Jidac::add()
 						if (p->second.size!=p->second.hashedsize)
 						{
 							if ((!flagvss) && (!flagstdin)
-#ifdef _WIN32								
+#ifdef _WIN32
 								&& (!flagimage)
 #endif
 							)
@@ -63271,12 +61680,12 @@ int Jidac::add()
 				}
 				if ((p->second.attr&255)=='u')
 						writefranzattr(is,p->second.attr,3,filename,currentcrc32,p->second.file_crc32,hashtobewritten,0,0,NULL);
-				else 
+				else
 				if ((p->second.attr&255)=='w')
 						writefranzattr(is,p->second.attr,5,filename,currentcrc32,p->second.file_crc32,hashtobewritten,p->second.creationdate,p->second.accessdate,NULL);
-				else 
+				else
 					puti(is, 0, 4);  // no attributes
-				if (a==dt.end() || p->second.data) 
+				if (a==dt.end() || p->second.data)
 					a=p;  // use new frag pointers
 				puti(is, a->second.ptr.size(), 4);  // list of frag pointers
 				for (unsigned i=0; i<a->second.ptr.size(); ++i)
@@ -63287,10 +61696,10 @@ int Jidac::add()
 		{
 			if (versioncomment.length()>0)
 			{
-/// quickly store a fake file (for backward compatibility) with the version comment			
+/// quickly store a fake file (for backward compatibility) with the version comment
 				///VCOMMENT 00000002 seconda_versione:$DATA
 				string	versioni8=myulltoa(ver.size(),8);
-	
+
 				string fakefile="VCOMMENT "+versioni8+" "+versioncomment+":$DATA"; //hidden windows file
 				puti(is, 0, 8); // this is the "date". 0 is good, but do not pass paranoid compliance test. damn
 				is.write(fakefile.c_str(), fakefile.size()); ///strlen(fakefile.c_str()));
@@ -63299,15 +61708,15 @@ int Jidac::add()
 			///	puti(is, 0, 4);  // list of frag pointers
 			}
 		}
-		if (is.size()>16000 || (is.size()>0 && p==edt.end())) 
+		if (is.size()>16000 || (is.size()>0 && p==edt.end()))
 		{
 			libzpaq::compressBlock(&is, &wp, "1",
 				("jDC"+itos(date)+"i"+itos(++dtcount, 10)).c_str(), "jDC\x01");
 			is.resize(0);
 		}
-		if (p==edt.end()) 
+		if (p==edt.end())
 			break;
-	}	
+	}
 	printbar(' ',false);
 	myprintf("\r");
 	if (!g_fakewrite)
@@ -63316,7 +61725,7 @@ int Jidac::add()
   // Back up and write the header
 	outi.close();
 	int64_t archive_end=out.tell();
-	
+
 	if (flagdebug)
 		myprintf("**** 40036 calculated **** %s %s\n",migliaia(cdatasize),migliaia2(htsize));
 
@@ -63329,7 +61738,7 @@ int Jidac::add()
 	}
 	else
 	{
-		
+
 		if (flagdebug)
 			myprintf("40045: writeJidacHeader %s %s header %s\n",migliaia(cdatasize),migliaia2(htsize),migliaia3(header_pos));
 		out.seek(header_pos, SEEK_SET);
@@ -63344,83 +61753,31 @@ int Jidac::add()
 		debugpacket.sendtosocket();
 	}
 #endif
-		
+
 		writeJidacHeader(&out, date, cdatasize, htsize);
-		
+
 		out.flush(); //this is fundamental!
 		///avviso="POST-SCRITTURA 42192     ";
 		///send(g_socket,avviso.c_str(),avviso.size(),0);
 		out.seek(0, SEEK_END);
-		
+
 	}
 	int64_t archive_size=out.tell();
 
-/*
-#ifdef SERVER
-	if (g_socket!=0)
-	{
-		string 	stringtoserver="$start$fix;";
-		char	buffer[30];
-		string	temp;
-		
-		sprintf(buffer,"%lld",header_pos);
-		temp=buffer;
-		stringtoserver+=temp+';';
-		
-		sprintf(buffer,"%lld",date);
-		temp=buffer;
-		stringtoserver+=temp+';';
-		
-		sprintf(buffer,"%lld",cdatasize);
-		temp=buffer;
-		stringtoserver+=temp+';';
-		
-		sprintf(buffer,"%lld",(long long int)htsize);
-		temp=buffer;
-		stringtoserver+=temp+';';
-		
-		sprintf(buffer,"%lld",archive_end);
-		temp=buffer;
-		stringtoserver+=temp+';';
-		sprintf(buffer,"%lld",archive_size);
-		temp=buffer;
-		stringtoserver+=temp+';';
-		
-		stringtoserver+="$end$fix;";
-///		send(g_socket,stringtoserver.c_str(),stringtoserver.size(),0);
-///		myprintf("42166:stringtoserver |%s|\n",stringtoserver.c_str());
-
-		printf("FACCIO SOCKOUT JDA\n");
-		char myheader[1000];
-		
-		int myheadersize=calcjidacheader(date, cdatasize, htsize,myheader,sizeof(myheader));
-		if (myheadersize==0)
-		{
-			myprintf("42236: guru, jidacheadersize returned ==0\n");
-			seppuku();
-			return 2;
-		}			
-		 printf("My header grande %d\n",myheadersize);
-///	for (int i=0;i<myheadersize;i++)
-///		printf("header %03d  %03d %c\n",i,myheader[i],myheader[i]);
-///		send(g_socket,myheader,myheadersize,0);
-	}
-#endif
-*/
 
 	out.close();
   // Truncate empty update from archive (if not indexed)
-	if (!index) 
+	if (!index)
 	{
 		if (added+removed==0 && archive_end-header_pos==104) // no update
 			archive_end=header_pos;
-		if (archive_end<archive_size) 
+		if (archive_end<archive_size)
 		{
-			if (archive_end>0) 
+			if (archive_end>0)
 			{
 				if (flagverbose)
 					myprintf("62650: truncating archive from %s to %s\n",migliaia(archive_size), migliaia2(archive_end));
-				if (truncate(arcname.c_str(), archive_end)) 
+				if (truncate(arcname.c_str(), archive_end))
 					printerr("17092",archive.c_str(),0);
 				if (fasttxt!="")
 				{
@@ -63429,8 +61786,8 @@ int Jidac::add()
 					fasttxt="";
 				}
 			}
-			else 
-			if (archive_end==0) 
+			else
+			if (archive_end==0)
 			{
 				if (delete_file(arcname.c_str()))
 					if (flagverbose)
@@ -63482,7 +61839,7 @@ int Jidac::add()
 				myprintf("42972: deleting tempfile %s\n",tempfile.c_str());
 			delete_file(tempfile.c_str());
 		}
-	///do a second copy (ex. to USB)	
+	///do a second copy (ex. to USB)
 	if (errors==0)
 		if (g_copy!="")
 		{
@@ -63492,7 +61849,7 @@ int Jidac::add()
 			else
 				myprintf("34971: ERROR doing -copy from %s to %s\n",g_archive.c_str(),filescritto.c_str());
 		}
-	/// late -test    
+	/// late -test
 	if (flagtest)
 	{
 		printbar('=');
@@ -63501,7 +61858,7 @@ int Jidac::add()
 		all=false;
 		jidacreset();
 		errors=testverify();
-	}	
+	}
 	if (flagverify)
 	{
 		printbar('=');
@@ -63510,10 +61867,10 @@ int Jidac::add()
 		all=false;
 		jidacreset();
 		errors=verify(true); //re-read, again
-	}	
+	}
 	if (g_sfx!="")
 		errors+=writesfxmodule(g_sfx);
-	if ((!flagstdin) 
+	if ((!flagstdin)
 #ifdef _WIN32
 		&& (!flagimage)
 #endif
@@ -63539,7 +61896,7 @@ int Jidac::add()
 // this is a new thing: takes "strange" file access error, for debug (cannot access, denied etc)
 	if (flagverbose)
 		enumerateerrors();
-#endif 
+#endif
 
 #ifdef _WIN32
 	if (flagimage)
@@ -63579,31 +61936,34 @@ int Jidac::add()
 	if ((checktxt!="") || (backuptxt!=""))
 		if (fileexists(g_archive.c_str())) // with no changes no multipart file is created
 	{
-		
-		
+
+
 		int64_t startverify		=mtime();
 		int64_t larghezzain		=prendidimensionefile(g_archive.c_str());
 		g_dimensione			=0;
 		string hashreloaded		="";
-		
+
 		string thehash="MD5";
 		if (flagbackupxxh3)
 			thehash="XXH3";
-		
+
 		myprintf("Creating %s check txt on %s\n",thehash.c_str(),g_archive.c_str());
 		franz_do_hash dummy(thehash);
+		if (flagdebug)
+			myprintf("63744: filehash on %s\n",g_archive.c_str());
+
 		hashreloaded=dummy.filehash(g_archive,false,startverify,larghezzain);
 		myprintf("\n%s 44202: final %s: %s\n",hashreloaded.c_str(),thehash.c_str(),g_archive.c_str());
-		
+
 		if (hashreloaded=="")
-		{	
+		{
 			myprintf("61437: Guru calculating %s hash for <<",thehash.c_str());
 			printUTF8(g_archive.c_str());
 			myprintf(">>\n");
 			return 2;
 		}
 
-		if (checktxt!="") 
+		if (checktxt!="")
 		{
 			FILE* myoutput=fopen(checktxt.c_str(), "wb");
 			if (myoutput==NULL)
@@ -63614,14 +61974,14 @@ int Jidac::add()
 				return 2;
 			}
 			else
-			{	
+			{
 				fprintf(myoutput,"%s %s|[%21s] %s",stringtolower(hashreloaded).c_str(),checktxt.c_str(),migliaia(larghezzain),/*dateToString(true,now()).c_str(),*/g_archive.c_str());
 				if (flagverbose)
 					myprintf("44214: %s: checksum file done\n",thehash.c_str());
 			}
 			fclose(myoutput);
-		}			
-		
+		}
+
 		if (backuptxt!="")
 		{
 			if (flagverbose)
@@ -63652,8 +62012,11 @@ int Jidac::add()
 				myprintf("61367: Updating backup txt ");
 				printUTF8(backuptxt.c_str());
 				myprintf("\n");
-				
+
 				franz_do_hash dummyquick("QUICK");
+				if (flagdebug)
+					myprintf("63808: filehash on %s\n",g_archive.c_str());
+
 				string quickhash=dummyquick.filehash(g_archive,false,startverify,larghezzain);
 
 				FILE* backupfile=fopen(backuptxt.c_str(), "rb");
@@ -63682,7 +62045,7 @@ int Jidac::add()
 				}
 
 				string goodhash="MD5";
-				
+
 				if (mypos("|XXH3|",linea)>0)
 				{
 					myprintf("62319: Enabling XXH3 (in write) hasher\n");
@@ -63700,6 +62063,9 @@ int Jidac::add()
 				{
 					myprintf("62336: Rebuilding %s on %s\n",goodhash.c_str(),g_archive.c_str());
 					franz_do_hash dummyquick(goodhash);
+					if (flagdebug)
+						myprintf("63856: filehash on %s\n",g_archive.c_str());
+
 					hashreloaded=dummy.filehash(g_archive,false,startverify,larghezzain);
 				}
 
@@ -63721,13 +62087,13 @@ int Jidac::add()
 	}
 	if (buf!=NULL)
 		aligned_free(buf);
-	
+
 
 	int64_t dimensione_garchive=prendidimensionefile(g_archive.c_str());
 
-		
+
 	bool isfirstrun=false;
-	
+
 	if (password==NULL)
 	{
 		if (header_pos==0) /// FIRST run
@@ -63746,14 +62112,14 @@ int Jidac::add()
 				myprintf("62973: setting isfirstrun (pwd) [2]\n");
 		}
 	}
-	
+
 	if (initialzpaqsize==dimensione_garchive)
 	{
 		isfirstrun=true;
 		if (flagdebug)
 			myprintf("62973: setting isfirstrun (size) [3]\n");
 	}
-	
+
 
 	if (flagdebug)
 	{
@@ -63766,7 +62132,7 @@ int Jidac::add()
 		if (fileexists(g_archive.c_str()))
 			///if (isfirstrun)
 		{
-			
+
 			if (flagdebug)
 			{
 				myprintf("62598: archive_end %s\n",migliaia(archive_end));
@@ -63774,17 +62140,17 @@ int Jidac::add()
 				myprintf("62598: crc_2   %08X %s\n",g_crc_jidac,migliaia(header_pos));
 				myprintf("62598: crc_3   %08X\n",g_crc_body);
 			}
-	
+
 			int64_t	finalfile=dimensione_garchive;
-			
+
 			if (initialzpaqsize>0)
 				finalfile=initialzpaqsize;
-			
+
 			if (flagdebug)
 				myprintf("62820: Finalfile %s\n",migliaia(finalfile));
 
 			int64_t terzaparte=dimensione_garchive-finalfile-104;
-			
+
 			uint32_t totalcrc32		=0;
 			int64_t	initialoffset	=0;
 
@@ -63826,7 +62192,7 @@ int Jidac::add()
 			/// multipart, not part 0
 					if (flagdebug)
 						myprintf("62890: combine 2 (multipart, not 0) initial offset %s from %08X\n",migliaia(initialoffset),totalcrc32);
-				
+
 					totalcrc32=crc32_combine(totalcrc32,g_crc_jidac,	initialoffset+104);
 					totalcrc32=crc32_combine(totalcrc32,g_crc_body,		initialoffset+finalfile-104);
 				}
@@ -63835,7 +62201,7 @@ int Jidac::add()
 			/// multipart first part, or no multipart
 					if (flagdebug)
 						myprintf("62898: combine 3 (multipart1 | nomultipart) initialoffset %s from %08X\n",migliaia(initialoffset),totalcrc32);
-					
+
 					if (g_header_pos>32)
 					{
 						if (flagdebug)
@@ -63858,12 +62224,15 @@ int Jidac::add()
 			string scrc32post=temp;
 			if (flagverbose)
 				myprintf("62655: CRC-32 EXPECTED %s\n",scrc32post.c_str());
-			
+
 			string scrc32indexpost="";
-			
+
 			if (flagverify)
 			{
 				franz_do_hash dummy("CRC-32");
+				if (flagdebug)
+					myprintf("64022: filehash on %s\n",g_archive.c_str());
+
 				string hashreloaded=dummy.filehash(g_archive,false,0,finalfile);
 				myprintf("62659: CRC-32 FROM FS  %s %s\n",hashreloaded.c_str(),g_archive.c_str());
 				if (stringtoupper(hashreloaded)==stringtoupper(scrc32post))
@@ -63880,15 +62249,15 @@ int Jidac::add()
 					myprintf("63454: indexprezpaqcrc32 %s\n",indexinitialzpaqcrc32.c_str());
 					myprintf("63467: indexprezpaqsize  %s\n",migliaia(indexprezpaqsize));
 				}
-				
+
 				uint32_t newcrc32index=0;
 				sscanf(indexinitialzpaqcrc32.c_str(),"%x",&newcrc32index);
-				
+
 				if (flagdebug)
 					myprintf("63472: newcrc32index so far %08X\n",newcrc32index);
-			
+
 				g_crc32_index=crc32_combine(newcrc32index,g_crc32_index,prendidimensionefile(g_indexname.c_str())-indexprezpaqsize);
-				
+
 				snprintf(temp,sizeof(temp),"%08X",g_crc32_index);
 				scrc32indexpost=temp;
 				myprintf("63240: INDEX CRC-32 EXPECTED %s\n",scrc32indexpost.c_str());
@@ -63896,6 +62265,9 @@ int Jidac::add()
 				if (flagverify)
 				{
 					franz_do_hash dummy("CRC-32");
+					if (flagdebug)
+						myprintf("64056: filehash on %s\n",g_indexname.c_str());
+
 					string hashreloaded=dummy.filehash(g_indexname,false,0,finalfile);
 					myprintf("63261: INDEX CRC-32 FROM FS  %s %s\n",hashreloaded.c_str(),g_indexname.c_str());
 					if (stringtoupper(hashreloaded)==stringtoupper(scrc32indexpost))
@@ -63907,16 +62279,19 @@ int Jidac::add()
 
 			int64_t startverify		=mtime();
 			franz_do_hash dummyquick("QUICK");
+			if (flagdebug)
+				myprintf("64069: filehash on %s\n",g_archive.c_str());
+
 			string quickhash=dummyquick.filehash(g_archive,false,startverify,finalfile);
 			if (quickhash=="")
 			{
 				myprintf("62683: quick hash empty!\n");
 				return 2;
 			}
-			
+
 			myprintf("62682: Updating fasttxt       ");
 			printUTF8(fasttxt.c_str());
-			
+
 			if (!writedatainfasttxt(fasttxt,g_archive,scrc32post,quickhash,
 			initialzpaqcrc32,dimensione_garchive,initialzpaqsize))
 			{
@@ -63925,20 +62300,23 @@ int Jidac::add()
 			}
 			else
 				myprintf(" :OK\n");
-			
+
 			if (g_indexname!="")
 			{
 				myprintf("63490: Updating INDEX fasttxt ");
 				printUTF8(indexfasttxt.c_str());
-			
+
 				franz_do_hash dummyquick("QUICK");
+				if (flagdebug)
+					myprintf("64096: filehash on %s\n",g_indexname.c_str());
+
 				string quickhash=dummyquick.filehash(g_indexname,false,startverify,finalfile);
 				if (quickhash=="")
 				{
 					myprintf("63499: quick hash empty!\n");
 					return 2;
 				}
-				
+
 				if (!writedatainfasttxt(indexfasttxt,g_indexname,
 				scrc32indexpost,
 				quickhash,
@@ -63954,8 +62332,8 @@ int Jidac::add()
 			}
 		}
 
-	
-	
+
+
 	return errors;
 }
 /*
@@ -63968,11 +62346,11 @@ int Jidac::add()
 	Debian does not like embedded code, at all
 	Fix by sed
 */
-#if defined(_WIN32) && (defined(_WIN64))  
+#if defined(_WIN32) && (defined(_WIN64))
 char zsfx_mime64[]={"N2tTdKAxg9OMsiiw03pQUQEB/wAJEAAAFwMOCA4AAgn/AwUICwMIDgQIDgUIDgYIDgcIDggIDgkEEhQDDQgODAMNCA4OAw4IDhAHCAASGP8HEAATGP8GCBMSGP8JExQg/wYAFRQY/wASaIf/WHJFr9+PQa//5xovCl8ARpcUhQFwPwNfADRfAEpGGTtwXwI0XwM0XwNKRhk7CXAZOwlwGTsJcBk7CXAZOwlwGTsJcBk7CTtwXwtGlxiFAXBfDDRCrwE8SglEPF8MSkYZO3BfDjRCpwM8SgkJRDxfDkpGGTtwXxA0Qq8DPEoJCQlEPF8QSkYZO3BfEzRKBM8IhM8IcF8VNEoEzwiECc8IhNcFzwhwOAABADMyMTAyNAAA/2XSayxeiaCbJljJNrwec2Dy7pt1hH7aHnVrAlsSSKFUIyUH3T9ZR9iHhLnq+6h99Ho+WzOTpXR0iePMY4vogYrmy94qDHdXclPxgO9BLJLtPfg/OjGgFUHOUaOVQws4y+hpJdcMsTptZU83o0YsFWsmFID1jkDucoGi3mq7La9pCxNuD4dCSdt1DCzGMH1wkr0NWp3f0FS5CdY4mStItnKsaEHTyCH1+34ICHFmWBw/ey7PzwsMXyKoilwu85sPoCKb8LPd0Gt3UZDOBoNfYfuu6PtHx4NMom6+ZY3yZe+gT/CwFGavVAKqYu9GXH1F+gXVtiHjaoBFev08yxU5oOh8dnUkpUBn23TTAxYxVdizUGQaVHpsfUIID3YXBbBKfrmSR2MaNEiRBhjEK13vrt2JOzgRLON3PSnB8LQ4c168rCj1HWRcjwP7MuD83zFtalau/HFrNKU6oB3tHu6IXWlbFkIyUqDgc53wU164cuSbVBRF5eNAj1YuSAds+1F8lUBTQ+qbePKjSCfDR3BHFgUVlQubUarsXyOojd1bQ9h0/sYytPoFX+SzXY0OR57HZLXjFZp5lXf6iKouzLIL5RWIsFY+PSLlV7faCaZNp81HAAkpZrGPtahp5ZCk8CwKW6jbOU/HE6OzD0qtTTWwrACgos298e0zw3yAfFPWYgtdMfLnwoSk0thsfUDDJIO8KLXZ1DeEjJTPTXEH7C0XWsy3bsq6WPFp11PM7mg6mg0zGLYkEk1JljRGvp3vOqGi/4TlZSJ+TcYJawCKZy5bCUULKPXgVkIxv9yNbevJcOMRCCvGTcwzejqXnwgRZTeKhcVL/9cGtphZ1qXmjjv1xJkMvrTCdWFAXP5rlxs7F1YEeQm45FPGSJoEp4qYQdR3P4FlW7oYWMC0x9AjRGlX6fuO7k+yVbC+cu+jUWHDk+rc1DidTyqISGmYs84YOKKYxif54KjrM/Z7m+UguvZ4WliC6AHL1fg3H59xK+HiCfOhsNL/sn0tlJgHI1JXY7iEVbRxNXvaXji25PsIcC3ykqGpjPT3EEIbkgczquYtNWXNu/fY5Htp02n6k/Rsa64ZAmSwdm/RBCC9MxbPT2MKI0jl74Hih00VygWCTUrHD1iRzUwl9em5ZDpunbmQns1Ig7PLSlRk9ZXHCny3cnb+9sZlPeC8MUdFXvy+fnwE1U3vQQ30n1HAiTdrzfSvSyVY2xC3gqXLHmA/w4hUKhICTj3+xD+TRwo4znKXAo+85ot6uq2rcks3trhwk8Uwv2Me5yeeCxMJXpTX4eUETKABQc713Oeu4m+vdOzDLSFoEGMMt1p9xxGWnW5Xib4y+3BAAW42Y8nKM4UNA50TX+68RhIecmgl92srsyTcdpdDjdCMMKHWTxj/6AV7Hkt/FTaekikT5ljmZyDI7bEITq2Xcat+FtO9BOvHYym8rbPssZLSozJuKjOieHDSZWAdFr3otrKfNx4wBYlH/PpNuPkjwCYcPKKWq9fMJNbGXAtSmWoVcbQT5EWsMSXbB1fiTqegkPOc+mH0MwlJM9opApK7ii2cMxp/13XxsOHbgLREXijN537yuSaawcAI9ChgqWlNJSBQe5bDbsw648jslPjpde7+BrBU7fCLKsoqalqTd9Lw2Be8V3nDa0mNzxG6kqFdZS9lIFa7PDdx1yj9o7T2s0TsnFXxU08uf7p3tvcycM4SbACIsiBZwiRNmHxjSDdwM/uJCP50LHw9aWXCqnLtq0ON4Dg+epmvoJpMnZU2mzHp8jq0mUoUh9X2diNJcsuU3gVHwt7iNHJDw9rKwxRktJq+Uc5N8yJeAHGlk/Irduurg6YFYimS06soWkfWGXV/Sg1X9e8khYctTt/s8Tv3zb4zESRQhEOG5QzfG4hBq6nKTl+y9WKgrEww6E0Fvs5xyr2Ord/NZGmj04tggb7BEatF1en7bn1kotcXLjYcAKSZtmX8ZVXNYjQrjL0D4ZWBhwYONtg2PiznK3J05h8UATgZBHM9ydnl7IT3FTu+SE93Cy8jnJ379+xUrUCxf/K03sCMv5r0cCqqQQ8NwK9UxdcH+MaQ4HDetwstW4dm36K3KV+rd8grYwxEsKMlgSI0K7GFxz4+rztgQrHDJGaHnYowf9EHYM0X4xjQzDw9GgV6tD3SozAdibmP3n9zo3dMNnF02h21RuwEZ1/Zmr16ovUUfHQ1vk8liAJnPTIfjiHR5t36AlO8Dsf+CP86ojIBEpxlKx0UDxT/nvgwKE931rWDh8ESL09Oi0+u+4wmIV9hF/WHHMxIhW3UxdKTK+6Sycu7z6/Hsc+jugy6pgc0qfo9ukbYRj5SesmLhNtOKwRmGuEHNihSJeAFixjTsRMbOo9TlSU/nGVmnwyVoHz6jkcrfPkymGC+/T/0px3bKx+R2ZCho3dWifI561NPvt6W90KZk5B0nC5UgD3c976lV8BnRE954zSP78mz2hTlLnR/rCRXgfP5r7P2K2nSyOjWAe1zHvH+qbpRtGGOAHgsau4QpaMC2M8Ao3gOaHuoSyUtfR2deMipdoBfaiiqj+l5eJQw/XY65qL0Q2MvOcrf5h3WR+xBx8aS0aX1MJBOgc7o8VX46pztOSFuC5cYouf/42Y0Ea8A4DmSCAGeGRECqd6BqSBXy9yOGNBPBSpkQwbsXqCTC3O3EXx2kUObzY0GJfN1O5qEEMqc8zU8YblQiWMZeR6hSJy9+gDq1euTQbmJTbg1x6mSs81EDCGUUCs5Xh7T43Ya/OjxbqJOtyyLSN4b/eCXoWCdVesPzXBmT3+bBssbvUZCjxejJrAw1xL+afcxBHXwaMOk78okKmDQd5u60K6v4Nj23qwvvj8HsfYJRP1Gvpukowg32CReP09RBuGsUiW2Pmte4T4VsHxFCo/J+Zx8V8gIGST+B6U1I4Hl2Epqqf0ph0biVF+UrLnO9lEfmpsax+VXe9vI7S3Lx3ZMc7iZv9B4mw2ODmKQ+OLN/nluL1zLay1hGZ4OAnuq+bHo0fjpE6cL1iSl/dl4V1KM3yFG6V2kN4+I3GjLSXr7AIx7BD9Lm35+niRMJ/pkNrA1+ac58N6T/bH2JkqIo0beSCVapuehl+nx6sdNHkXhc+TJWRF/mHAOnffy22D1hZJzDugwl04bXBjXdZY9pW/ojId6kSrlh1UUK/g/HkVFnx9b1qAZvnxSbjzIrsstKzcenCN/CwI451Z08C+eO9W1NcRdOW7+FbcEdEWQJKm6hzMCUg2sGTdbcEPERaFebS/PYzHYsg/TwVmvclhYOY/k7Y3YogW/TSMlwVUOAEEHvpvwpCUBByLkRDKMiFjBTbYToU9fvytJjHwu1Rxs9RY7ZUUjDvKd1GA0+g1pQ2HtqBl4li2yX+hmmmabdgGN50zR06yQLHdkGXKGtSsEKKPpEHww89AJBMR+m6I8128k1qr52nHoJAkvLNPGRL0t0/XuE/G0QFLkJKeiWlFoxtDSiJUkLCpQZXiw6M936ZsJQ8nWuqIGKNLrioDBHfi+8AafV8CI75aV6dUT9oFuDeiJRkX5CFK4GQAkAyTuu8ydslFesp8EQvToqgMqnI/ddbDhnIO44FFCePWvGkmyZLFgXSlGS8CyxgfuJ0RAxd2grhot6b0i97dZOkF58Ri1fBsFJygDICEI1MrmkkLYThjyNbp9Fo0/3CeqSOyO9SyzhTkhewFXzK9ooBLoUlIyHmrazYyzEkdZP/EZ0gelBnt1GxdOGvjF1sjpUJR+jWVj3tDnX9cHJGQmWG52Q4ct1y90j58afW9uRZvNHiDPjGEp4+iSgQbr+B9yjEvZsm1skVtxB4/zbYY+rACBw1xSq6Pm9Q4RbSQwEb10KMin3ID2Lwsb+GOVcPld6z4QXCN1+YswOj4jBaAcjCYSKM76VDBQ1bJB9EUb3RvpWE87X3lvlJvXbGOFOaMzGId4dHyFl+MpYCOtW05xjUMfXXn0ZPg+Wa30aWwHISqnlqxxFOuTINHsSX8htPLSM4FPHbs82qWCWlFE1FmkjYNnxfIt0ZkdLocReITpjAPlZiaCCKirBKbeTYz0NAalMTSrE6KHNOZwrpazV9b67RnvgkrSx1150Qr0fX05t/MptCXbY0yLdaLO8VaYObD4Htuv0cRZ9YM+2vPpyHcIvfxcSHJSXS+KLKPN6UzWkmBU2pXv2PX445s+oPfQ4YSugYcE0+EIithfRBTkbpfY0x9wzKoyQ4QUpLeAWJyknpuZwPIADiaAWwWGD6/SzTW8jQdEvbM+7AcCoIhV3PshZG4cOMmXdXIPYCzhrJ537BdXNQ/Ks+jM4XUdRdhFzCMBztmytrpHfKr8maxR1z3LLWaAlJDSVaU+9tCghs7iTe7iHtg+ePRiX6GTSeWRGCXKh0RS8Rx5zbYNOUow2Dis5UW558oi9uHMKTfoby+Z0TEcNmZ/qDMNrLw7AyH7b/4esURes89AdXUBkzMNcy26sA8RTfQHHyA7gXqz+PxwdwgJC50dbhuBgc6KUy657hsr4lan2OM9NGZ5olBSk6kpRjJuBh1F6JR2MLk38+85iDP2pki0pi3BXcZ5eMxT0BpIlp6OpOjeM4mGZj18MoMRto/mKGaMJJEcFxUSkP9tYHi9Tanp2/NLRbiAp6pA93uOLUBgwnAsWUlZ+lG1QXd+Id7QjrMQi/az8af+jjt+ibZNO1HGworGkpXWwGVPAfVKyriqEHh83GyegNHqVzg2xsD8MnEPlMnolbwWqmwzV8BafXTnfsDdLuVPPHuAKU72WT+i4RT07UcQpO14m32KMlEz8xFg4Rm/zmZAJGXNs4AXUmSxYvidbM2bPvkylxA8yQDVtlqLGTHf3vvEg00hLOCDm04rWaco4F3ZPl5kFpZzCYsWprcyOzDgRfLzKTSrQaqc4P8bu0pWsVyBPQofaoq3uVR0sk/cGw5puQPjKDwZNcgYSlhH4Yk9QlcATgt3Fx/JnCnEFIWIbmD7XC/o3jf9Ywv2Oyrehmwr3HfPkbAmLk02+5bvRlVNIpQaCpUsfAsp2JpF+RYJI1gFjuBaEY361FrxnZET56cnn5JCwrQk80tPK5nXUVcvefHfsJnzNhb/I7wsTYuiUzW5HkHa1HYMhu3Yr6Mh7UHe0veRwatOrVC2iOkhKRZPzTQAMR5oahQYX+jKdr2jGK9J3xoPXa7zL0/7g31pbsVPuAf6Rgu2qOlmvYBJaa7WwY2CySL14RushIVrCXxG3f00LHQt33xwxTLot5hpFwfbxLtC28HV8hrhJxHCvRO8T30Hq1EDCtDhcGc+3z5uH2av9p4QSK36cRhosMgxhNc7LW7g0kbVp6WifTtRuH/0HD/kFnmMudEmMa5WsRDamKp4tfr3gxnkwzZIug99zJ0BJujqvznSX5h6rZKvQ+2F5hRAMIzUOga7eFvZTRWaL78QZZ6decqIh8DAeP6gQ7GR8EgP1IbhL9GOv2+g9UzLEN4xSH+56DkS8hLI/umakhQc4HFFTdU0drWkjkjWjCY1buNADBvsFm5CQiKoGa9YzB3gNdmUBcE8UdkfyepL9qnQJTY2Bcz4uYQXnAubICLZfp/Q8KLukCI/psLwbuYfLm9ppIyujHn/AF8tA2HBNFZs5q1zVViKBIvi7JbNKauWGo0Wt4AZYq74eOXRPXKRbjG8MHSpF66oxT3ELBBg8iHru/OUJWTt/EsLeTeb5ECsLPLlrGVbqcgJ03Pjq34u3c//0RNDKMeYNW3SoPGgJJZW9kg42R1pDbby1Ao0L3FUf2mpc52C7B9i4HqPM/taCz2Lm2c4ZhArJcBv8EEuHucXGgS7r63Cz02JwRDU9FNHwBdgLoyPoDfRTUrXnxLuGkfaw+XQmsicYNVcn8IO1wENE1+bUuLUX4ta9ofhWF2e1vRf7VRtZhw3W68sR9DqKGtWY38w1ctsXo4CwoJ9UOPLibLgtYZrl4ahVR7JaJWG9Cw15SDXpw/w81q2HtPy6T+nKTmjkuPT0BidgEeFPZ4o69LqSKt4m9iU5TN6YtaahwCCu8UhBrjyu4y7LhySrNzPMqJVurizopvDGD8XByz3PYXCrNHDPOR2QsjjoWlKjnpy45CKabAg4U37gSLVjO89as38QSw9PljnqNSH+crGPY34tqxDNW0M6yJzMXBPVGqK6LU+bPw88XAcItkOQz/cQ+YFLqDYf4RBN99iQF4XLaTs1gkCK31pEdl5lkTU5T2p9n1VRcuGUv5P+0T0h1KTsNO4MyRKu2bzMReGIZjg23buhIVOapHuryRzXJYBZJxvedSay29+7lhvpueWR9uVNyaSA0vJ1gBR6JhzCcs4fFK7WQdPS8Hd9B7fVM/KpCXm6CH4mhWs+UF9EH5/+SQR6ohWWftuEBdKJdc2fX/GA0WdUzK31PDpaniKkxqnb6abrS6/Vzgg19fWTd2XSdYltEQzYzQuSo6DLrbMtJv+QRvWy3C/xfOBURL/oxUsDJm89ZQc755kMV4hH6A/5qO6eS1bDwqltC5co4gGcQ/4JHypxkS7xSAO3zUiup8rS3NuosTaenYVcXlDj1x/qrIFvv60ppAi7XTMgTvI03smqxUgc+q/bnx9eR3KgUq7m0/J39ixm4TkBWqvIRm+8eaH26dnqfFCGYOgtCJPZOUKxYu+SHnG1r3e7HZ9mnN9tl56LuPIzwr88jQA4UaH6g/D60z1MdSF8zMmIQYgJPQbn/NaZErFs3BxA8X+J5ab9Rymn8SVe9Wk6PNOAbjqglv0K9en0w81xj+Z6C6kdKxxXzPLrjCPZw8egK8qxv8J6xvjFzOgsK6gddZvXDOJsgSWyqnTk1v9/qMvi12YSkvhA+xBqAxHRVzH7J/sJ0C/moQM4KoyE0Mh0PuN6C6Mq508O5+rRO2eyBD75iV9nufdbK5QVNaO88oLVGdBRifTatDl4ZBu3LpCvxkgTYmt1Nl2JSvJkdRwm50RgdGl4GX/QpwCPns+5AT7HMIW6Kox+s83QqsU+Stj+8Ru8yfqWiRFfiS9WiuVAsNHjzPc9jFwiM4VXORNA5E//c8xWAzQDimZQOI45/CK07WkQ9W9R1qzfedBpP4aemSCdOvbKmp4oEhPM86I4cWrJW6TK++7xOgg/ANjmy3lJXQGXIucApvoD0UQ5d4zhq9U7ZTot2lnUZ+2o7CsmWLbDYPDuqp9XSiDmY20ch+TqCl4S3D8EQNGC4z+lV7fvgh13r1NtJ7nCZKnbNgBVv4srpA5ZJz2zZAJYrFtDMDa0Ha0TQNx088mVbFvM9UhincuTggjIPhZvWM0q7KdFjwsNpv2JykNXVgWTq+JRiElJA/Pc5IZRPO3mSyxxMmYlBzJtB//uXCy+SDXWpZ3C2pDB42K/E9hgEtxq87exqivdiwK3t/QQqHBK+VABWGIK1Gecips8iT+6SIQthG/UlhFazXw2r1IbCXsm7R7WAZ6iwv10OhDlj5W87ksM4MII78ygrign8rds+rgUCb5KfyIdlqiZKNhaKAZ4Uwx3JP9Fc7feq9IpKPS/czn918iebhgA4rpgvQlVYXN6OWCdLWRTOBqkK/0rt1YhIKP/fnHZ7Y6BhVUKcMOM+l/j78uGXr9mu5RvVW6StiF7bfJeS1eo97XrN744xyY7BYE6N1+Qz/djmLRvWOWgYg4RpylB/oZD8434JRWM//Gl64e4M4kDP5PGPQXDlpAKffjn7E3RRvhV26iP2RVDhzHSCToi48gtze607A6inpbLRatVJB3BL70gqH0WE5J+IHFLjviz7B/B0qmcIIIDlmDQZCzagKE2tDjj7QMZGqw/RxpZoEHWvbQa3g5xOlxFGqX2p1KFRifQ/yo5OBp0baxXs91b+5slweHWqRhLuseNMoYW+sSAt+btLG9R9ymm18PKBHZYuq2PlalC4Wp9eSRaM3LyBXk4qLvWzoWRk891aAuj5SyN8gGItCcFA6ZNrIa7Fi7qLbhsqU54vgPuw66ocNdoVM/6L6ZliBdvN2Kl//Ceec7eVAdENqMxHpAGozJKYM0jsUJI+dvmhcgbY/S1MFKmLi4GJB9vL11GqnNOSmwIRFMVTeY0MTCITtX+HLMEfi+4qlexJnCMMEaTCLBCVIG+NoJleq7KNbmKlDHDCPBaWB+RN0ASHdW+7HBI/+s4O1mkqt+5PlsLUSS5TNu43tV7GL8kOS8z9lhtUwAJz6QDdZTe20yV/M9Jk/hd0PLCQrkVm8Neo+bBvlf7QBxIe2qG2CmA/MXsxz8yaUL836dHD3PNdA4tzKweZwyZoDrt914NMVWhTirycAYlCqGwn4t8gXmcCaRdylvwthGAnTxpqF3ZuNBKQXEshr3Y9Z7EbPGOOSNgHbjZqowOSb910gL6zw8h4vtJKg15kF66EtE2M+jgAcyzLZqtT5VlmARtEHwEDXilMGwsWtZ/0g6b6rqXSGDW5STz6XfE/zfwffzC0WlLo7rr1q/52Y3fFgLJtXahMpPXtA/yPHBHGGgN7WN2ID8HglcCVQ7EeN3WTxDEUhYcFduVGFzvtvgG/IDKhDcPX4ggL2hKenzfK+LvbbqqouurY/R53vQ/79JpczlqTDFRNNSHujJDENFuqu3cyz8jOG14tIIvhwgGfWxYNUs7Ec8Buvgv2nOb2lZfRlJg24W86OXoboYWORWOBaHnFxM/abKstsO9ceWxooYFomZ5m04jgRU7p87QnRPsvTqKkkNtq96hXf5SwmBepJEY6EqOhSK1Zq8VTdHn03C0nM1fiqZo25zsVyvQ+JB6/VNiNgwmbgPZkCwwynSbvvgqNB6pZx23m4HruzI4kwF2dreHAJI0fLAP0XtJ9lODSrSgWr4a6pfofqsz871y7ik1+Z6Upg77jUrMibRQNh2+b7vpwWhVmTqBuQO3NfNVn2cSkOgFQYTY0eoXizUoL/LnHW3GlWbQGVHsHi+VsGmNjmRYHe1KJubPGgsQlAzHC8y6Tvov6YGb5S5qLA36uCO1wCKS5qo4IcdsslmPJuvkqvE4oavQ5/FN6B16t6nqqJEkESFGPVvUklnWWTeUJqAFVBzjUejF/RwXQUFz0p1HokrMY29M4wsXT2JVM0vLsUGpnBWzEDH7qADjdZx2D23BplO4MqXtlBmzI87E9gEUDJsS1VKFnW6HDRPEbd8aVM/lf1egjylh8vmGu9ZKJpWESToA7IdwMZNWfaHvJ7WBuL+EF4Gr50yLGmKV908dQ9dXDr9FtDTg1VCzVS7xf4E/T6C7O2bq2sosdOurjEsY/9WEAGTzPyNQ545TZM7qaMVZhS0amTgSPuSZbveo7zxJpabmpHxp/4gZxHi6CJFBP2Uap6/RjvJ3YhzoqxzPj1iw5aoZ8aP7kTP9sV22/+o21DTizoINqq6r8lBvKL4SUMLp95p4eaMBCWuChp0l1NMohdaHPySdPAqFZfLW+MjSHEpsbcaTMaf0IViOx6lWXo10LJ1xE33xves064LE1aXdbYIR2pRdUaw97VSVTWSkUOdgJyypbIKb67a4+L9Meb8RcH1MsH3NY+hJhirFSi/vCtrpAB8XcNefRC6y48/r9+P4T468d2Eaiwf4Rb9wL7b1dnMi+g0fO/6cK6x0NC0fjQttBwD4hDG2rdjlSfI9IQ70SRzsAP3egeOhF2DDCy2ZscMQppKYaiBiN2rTPAtwi4WYfPjwhNxcbqOylcpeiLfV9MfaEs1It7XonfjhdkH15WYWA7Fl2iJbRdroohRK59b7EiYrKUH2eSKEDnpDl49LqLXsqPdLQbUwjzMkaFR8+mSvcwjrv84SWscodqMCeAKRsZhWf8rO6T3rZE8/OscLTIAZJnsbMq/koy5bANVjqr0rg1vLNThCY56v14LZ/sg8EOKskqtsPcc1CnkGBnk2j46A3TmlPrWD4dnG1cHEpbp81uoq1XAdmTCM86KY+YNhd9PyeYEUNtksKD3dS7xCs573A+cqxVFZco70HNSwLh7f4QMfgf8fbB5jcz0Mc1JN300H2zvKB66gTD+FOAeSaQ8qoBodgUUw/vwy0uGr15vjjR1eC1tWycwKOUxL5NAq5v5/a14CQ+l2+bHb55xgN5kawgi8S98BpfzHr5Gi6ioQixzSp5ZVEh1H+7H9yIr/VFl98+JVBa7Es/UHnwnST4uauGFCA+2MAtw+0XLhszW5Nd8QugdaSEKtRKAbFYWHpBUBxo6EqQjjC3T5ya3hxVMya2uRfb2evkaV2dJqD/NiHQAfNyb7EeJLRUKzef5X/jpgPaZ+KO2LBLwu5HGHw4iwDNCtdrT4/XpvKwuJlsRohu+T63m7+mprKSh4xfBZ42MaTSM/cBby7xq1QUrwfoye8FiWaPux9VrT8SpmkozomR9AGBEO6iy4mzlQ0VMO09UdKnpAtcPZgsjl5ceLiV/qV+JT5hqmdZd0iWxdjbcSyqlJ9jOb+tAjSfSd9Ti1tha2QHrFSTjkXrpXqnW20SyBCu8u7uNA/znQj67lIEDuja4Y2c5+b7jwX+jg8jCIcguG7D+VkqCQ+pVUsEqsaX1oiIzetJq4lirOiDrCvhN/WKNMtN573Sn3JeMZwdyqb6dHbs0RN3fsvakWWRAHSd7RXxgWQ+0NbwH3hUF6CFYFGUGrCIz9O488VVq/zVh7FyBhIxpp9xLSGFg1UZdxoXQHsqfdglYDWkaP0vMJZlxgsl6gLhWETap1pHL2WqrfYHGx5XGMJNKVinbPslsCiaKS59P4+JI2ML60vLd84t7bY9NSm78YK4rnZ1cCDvBAIwzDjQ2hGTOOYJv6T2tjiQq5xLyCWdCbaDB+NvlKwBxz6NNpsHCsAE75uABmqBCq+gZG+FIuoS3rKUNysdHJUfvrwS3/Fe5Rw8NMUNSBAmgFt8YQhbGYt8/VuBYwfl5QAiAHsz9jV0Z383Z7OJnL5Iae6YWGrZR+mvTuGpkbXsD1Y5KICnwDTjy5yH1ctMT0H3GUKh8VNtnu5Z2Gi1NUPH1Z/yeR7plIHQjII5DEOVKpNrX2gHYcKZAj5ONwAUgGyfTEkR0N95SQYJ1adnLMRMXIJBbClqQmtzb42laGWNvkUTbjnYz9mQG3YEbS7ieJLXkR7hPKgAA9F3zELVe2f9MVtB6+OkgPsPUSJadf10AHDyHNabxHQjsShA5twKuOchFUrdXP8RVWt4IqHkKR9e6i2MEgxHlUPBp7DJ+ZRpE3s2aUi8AsG8kWiI/ADYStfMdd5//j+uNt0U/sv0xtORcZUD9xLmVhEfmV0HNIfrgum8aCOmGVoszYsHnOa0xEW09+338RMtnQlTN9px+sgwV7othNMndYZ1mbHT6MDfVclswsmKTMBJt5V5oTX66kMm/m1iZ84IVtmcihm4yjQPvu3VNBIhKpQa6DrVbp4274Kgh6Sz39OEFZP1ux+XKU/kT5YQbFTdhQHAANJ2jyG7mRkC0/KkE66UgIoxcHJjkPpNbukK/rlp/RUjNSAqYpJWwb9Z3X1hxp1ESCCuF6JI+l2fmL8LlFJ4JOyG8Arr6YmZDA529/wqYIalVXBsVVAZ0rQKib2M/oD5hCyPkdWAtK6ABhefHD+XTGuFYaeEskuQWs2qoCei6/MxDP1AedW0nEBIF2QkKVFp0ckCJQsnvzcWiSn0WBUtt79Mx7bMEKmopsx/STpwpRukb7tDGC6gp/Lry5GbIsdFTWYN/BdaYGb5gf37pA5F+J5mGGNbOWFqoq1qN7LLJuE/E50AC9Z3W2YSYTs80iITYeataOJS/IsN+ayAriMhIHzGhaXGyGkakgu2msnTIgd3HSZ+cUOi2JVGDEw0SsbEHAP9bKb4uPY61hiUC83nytoGdzezBHQWDMmSy9n97vnwAvwFZ6MW8Go3QiY3lxY/xVWjp8bMvMfnMGlGBmWU6X4Xc2xE7rjV5gRIxqSZaYxfU1zlmEZFKGY9HcO2rjGh7uFMKgHRIOcPVFklQKQrVIOfHjQpw8Y4UFXNEe38cN/7bHG5nSKWVPezzPjDA41Rn1FOHKQjSi7dJLmC4L5AP4bjzhIJuTEtQjKs1q9TYecb2mucasKzMX7YXCuzCJAjwP/1CRbC7Rzbvfit2fVStCZvPtPHRkZTwpyXc0U9i+MYKpTClqX7mrq1emE7+VbAGjfoNNcd5ysbltnoiqIrvVwlm+YATrdNSvXObkoTskpXKTPPHJGuHOSw/61O4O4RECovmG/l7+zrzzRpeshnX8qXkCFwDxjhcDMrA1jHqnrtsjIFLwGYk3ExFUTh34axZsKxtY/3LqEaJNMqkha/K6IBk2OWYfQIw+6CS/Evp/m2flraZ/a4e7w2jvbeys139P/fs8lO8yUe1e+TzeIBv0lm0BVs8n+q6ddd7EbKLbGf6rMAClYkc3bZEzIkEQ1gS/BHmO4MAuVGax0CTrwTT9wF17/TOMIMiWpMysduvkYcj7FcU/feh8OZIXjhaSihtzWT1VfPOgslZzNG9DPo0LOnVg2mtY4xPQ9FENCpPnBmlelitkDKlH301G9gGVNEICvepF0R6TXliSkJVFi+RT28IsX6tWJGfBJTxIYswzgRPK2eQvro1PHLBUF7cYKWbJ6VNEW4Um/BxEUalSKV4CRy4JHPs3nhYfDC3A0jv0w4Q7OgIjqSP168ij87P2Wsf1zqopUk4AVSeckgK7eclgby/5av0TNyoojfcSJIYTPqtuVFJqUamwMEMufx4Pt2nbkMlg6iTl2TgRD8YZ6EKgllneDaDxFAMeM4MIqMrFtZqt5SM2xqpGxF2serrD1EvcIvXUyi7MMmd1Y0OYawuP9ZGC4qP+3kdTa9fZdUawCC4vCSPnGwzzWy5vbwo87Dz/R79PBDzgrsu1XxMmxIFoFcms1IVAg+CzJO4vDA9xsDI2f8+/dvtgd4deKoe+WEK9lKgjHZRKnUGtU3tglQnJTbe4UR8bG6ZgfRIWab5VdeZioYqL5pSi/t6Ip+tSM5V5kTxibmPjHioPsQbrU+8EeXIl2mDnk4cYovhJtkny/PuBe6VosgY242UYCBBDAIndQvfS7nGLKEsA91Yx+Zr5jC97EuC2FQYek9KZOpPiaX6Sbdpya//jgqPYxklOWRj5rLxPKso6mhQeUaUkedz4dKoM8rJ8nS9Im7savsBeJrqqMvUAoUs8xrupo83GHiPox3V5EE2suqg7CIxK4pOCYHmp3ppGRy8/qoWFqMK1hvxHIJ0wuBSmNJAKUYov6Y+a69qG8U05mVWksrqxVdnoQ7pP++UaR6dccnKUBdJY6nxFqF7kmJ13e4MLm2BDZ1SiDLc+roPgnkdCQJRtRfjlZIM1lsSoNCkz7f1x4mXFNW57d+G5T5ypqcOQswyV68DyA+lxtdns7ljvccZ7jegXmkMAqmyiWhqYSL+jtuzJXhf9s/To7l5SJtWaIktSwT84GWg3VF4S5B6hx8XmESeV8AOewJPF69Zi+SWMnRjEVlvh43Gvx2AAONLHCM9QI1nuXti0pJN8HNe/RXD0Uryg8hcqW3XEexlLjCr24NHThrawqh9Dcp4J/u0kEJtiFhWA8hzQz8b+SM6eQeuFQqUfdgzjha4rX7l77QZiZEwlHiIPJ3R8p+DKq/UEFZsmP2EjCTgZhy72CEKwcGAg2pz+OzvblaEEQaSCXhbx5RB8n0ZIOIdhbk3EqmvZxB2niDgybiYJxazJFXbbUWiClA9MmXTelljWRi/mGfO1l4ROv3PJ7VO0mWG0HscgieszpIgmmyjqj1BRnY4dubSqt6hnI3O+RtJywXRGchP8z3cUOnFTB1bFI+aevw13MBsAkB6/l8mHH7eTm2IUsgsvPf0NA76KQtTejjHlktyEH+NEJkW0uByC1K8iHs1APzyYR2SinPX0TAwvnEPvYBqosVNM9MXAZ1W4wTECjc8RvZF43CJs2XuLaR+W3820I5s7qpGlR/PudTU3p33aqk1HRji5t9Tp/qbX49/SJZ2ClZxSGWpDw2UJ6z4Uz62HMtLGjtm6MLPkjXCeTgvU3bK8FN4FlY63CTAwkhJEq1HzvUSxI3ejF+NH0hsP5Axv2NzBMG2VtyGJF4XqSgV1tX3Bbnda7zAs3eeici8fS+we2oX/Dhl1+EnlvDMSUQOojSLmtThIqoL1lYDJgh8OP/Qtgvcq3r8FNJ/mQKHo9DcXBtyHq5wJveMYc8Xqdx010xgY4o1lAthZyji3HMEjS5A0vPO4PyfwZRFEhMyL33us3Q1hBOz1iRrv9rhi8uNQtoUi2DcennRbCa0GzgriBVC/ETOnHQ51h3B6bonjZbhzT2/YaykeUXA7SxEkxsmm4EyCMaooqXDgTtQoZqq8Lr3uOZb2llvNqmfnWsz/kyaIzj2JLJGR3ot/0bBhsisZ9KIItDUTzHATFLsra1+pkUZDJRy/OwwK3bx8d9aVAjdtdX5N5pWS1xCh3dTxtDbvGKPDDRo4E4kM0nrW11fCpM7neZ1nTchz+IREvZU4HdqdYRoff0K3E6e8dGLZwIuPZsRe3lFC21CDjNUopL/IEpxltQNg2GQ0eLrjPsv2A+K/4GId6cS1kmYqF84n/IYroMPAR8G9h/eL5osz+ShcQQlnwhJ1IOYB3GqXOPN7Gurmqe4pkjcAtOBtU1o0GGadTjfjiJiA+a62k3pNUU5oHEclCGxvrksY6v8892ZVNy9/ISOEV7SPX5989X8Of9fLEaKezlXRAGuge+ANn3TtwhI26i7CHSH2vLWzEu2n5Gc545Xs1F+SKSk4FzWLMwkTydZ9SlzQNY8T4Ej0Qe4ZVgVQE+iu+84tYOWOafQBL4vZj48lYGqc+HOW/S9XFL81nN9TwNAuGnFl2dA7+vzlyi6lb+D0UVTqJcE2itDp21n4Dp6o+uEIks9RNitTyuaq/ocdi78eA+XIqXh974t8M4NBbyIOk66VtBzmFGQOhv1UcJhWQlHgjbA1fwSVrNGUHvskvIVfB0P8bzVHgrdf5Uv+T6AzJSwQ/yHSb6XX03DHfAf6S/8K0h9s2hmNBOESpH//Ueog4BC5mF0Dvfdz89BNJSO0JlNruMofqKDSZuyI37JUPkbKmMN47ephDo90pcvtlrX9eeZYsxYX/F4DSK4BHxEjlHwDS0xOClThD5IdvsfBE3Q3ZhdPupz2DZrhbd6Xmt1/PV6VsqDDGKYA5PKsnD6xSb6/GcG24IPhe/vVjZKysjuJkXOXMmSSV6Gxl+rpJgyRud7Y1cxUwqFrBkjWbTl3V8l9Qyyrd4Ss+mejX/hrwvFQi3xtpk/IYt3T3UgVehz1lny5zFrzlLmTCVdpi1tmcgHQ9JXVF5JaPanEQWkCVLlFe9doHFXBQakcI+5rQ0ly5ETZimPlzTHuVRQjClEfKUK6EBY4I+LAlK6HB8QnAr6YqerjjnO/o1HhWNlTWitBhFN5yE91xcIegExKkRBPdLAwlZcmaDMeS8yjCwkqeBHy/HMIYCm+cV4WU3UQlL4LQRlEVnm4HOLuyL2+9mZwUDGFjo/H2HrtZQrgsqVxRlYFZN6fTWmUEDLpGn8nHbGGMWr2NpUn9dvo/LDcsqbYrq2lWsrvXRByzAVQNrU2yy3Y+/bplR+gr17PkumBoHFfFOnBA3oEzu0O9VfxSreqHPu69Z8D1DrAtx2N9Y105/SqW0HNbU4j/fNh7BUjwEprg8Ae5TyfSqtNgX3bHksfw3uVQ1fYcXtTW2Sf1v/yZ9AnIzoSJlKhdY6+Y5iWzcPhJEXK+PRjx2LqeqAJk+ImzBefx8ZWskYKuBnc/R6aYj8FlhKHA1c5boj4iHYPG+0oV7A8q+D14YMiZAo9PXgia5GCThgJ9kmLs4HyFYRyJkUDrzGArUeKy7iaUrw8GanKKalxNQ3tQmJsMbp+vTgP119m3vQSYbrdgwaRCKSmK30y1dQ3fDcycaf4pxdKniIj6iMIX3LsU5SXXfvcDMz3sOEZNMmgDu3mNeUE8ctf1x0RfxGi2WzTijt0h8jQ+LvTNeGTbZJ/Az6+sYHyKFmC7DbzaTdMNOWFK5OZ2IsCakyo31lxeyPBjlbLA3MWYYwoOQWkHNeGYX5Gwsf27yDRaUVGGt/IWvUabZeqaZhKZ02TDShCJq7WAA5rIypureAOOwbd3TNZ5z89WXR+LsLC2XtpWX7SNWMZAWRxh3sM2NzS+Igj8Q8XYRk6isS+3zLthVCdZPLWmJ0EhWc1E64i5dZhmclnCfSiSN9qSfxQev8TRbGDV5r3bpxO/3iMSUfZ6yoypbjCiRRP0DGlvUPrSxwet8daa8US3rnfindxyi+D9iShYe71+rgxLVHzu0rSojGe1fJfWdE6QibO2AMsdAcn1AVq2uvO/caE2mS3VhnvMzYegfU3RkLt0z4ry0+kOqj7J0QT8izqjVp/MsfATIqx1sJ5EwCcsSW6vXpYSsk0BAidH+3MJBTCxXMDksQGqAdXuKEid7qoz4aLGYtElx1gb73wS+A+v9Bqn84451jQ1wPthfVSumNSo9H/TL9n25lo/ZVS0DcpAOL5zfUNcjxyH4hB2yuIDwrI1pmFiFBP7JAfHkoaSrfSZfLEH1FgLro1YKUAHMB4aZOjvzX3pC8ygi6XePzt31ANxiq+ZXYx+TH6Zqu2bUafSvGvbbCwmr6k31gtmxAXlL+bYFPRPSyXTWkjDWd1ZVElbaJZoJH+MyjL/71VYfjvFvl2RlpgNaDIq5PEcligwm0G+cbBqqF2aeFEAimNM6E8lNSxVwhSNcOmneG+iEM4NuUmjnKLWGpM8NuL+NUtuP7oT16qq0SHSAqpX8Yl6V3LK0fB9Lut7aOODhc+/UIM1Lk3jGGubu5eNpHm6e1UJwljKtgVZK5QmhydSACZrMnP/dsXkc/lCXe8Gisp+YWE8GrmGf5I8L14fzNu6l7+oytDHZ6vllbIky0FCuyXdOVPRa5Yydke3S5ScJJxcBKNDzgy8BtbRGkg1cWi7huOAozzlblDDgzNzB7rFwtK1BjE3HcfylfJDMSrdZjnLhe7CgowlFax24INvB0wESt8Jl7HPqLUnwglfigjl27sUZkNuRjsRe4Y1TdlnkrAxdKlkRM/ta+NFvY7B63YjpmpRrXowOpdJ+yR70Dfn8jVk5UbawikQnI8/l2LK30+tpOkJgBcFg+IqQBMTP5Rx/2HU1mBjHUFWU9chrTK0RwEpvX5dBTL77sHT+e1ImZ4g3vxwTScVWixugWvbKPxHDvdo39E40dLg9i6mBFHk2IxUXYVE1aWP8E/WCo4RSilQrkEdQsy0vUj58b8MmRlKCambChH8myBwxPqv87L+SPm/JKm+piTacWhk6IVu+NSstKrvyEVYs/e8lez5E8jBKfzD3oQ9LoHMTq12HLuCoV6kHC5tvKgLSZg7W55I9dWiu7QAhdOxSUWH3GXS1K7qIfrhvucm+ldc3qQY0bN5km5aa2kLQvMLYgG5JTrnpg+vnn5Foji9kYwtWL5nSdinfyfRMcrZHNduS0fRg9QH8ikxbkbx5cuO64OwJirT1m/odxhc7fea7bxgRtKcw+JY+PF1Np5n3GHQfmlN535I0XioMIzte/62+9g4EI1yIExuuhCIL/F/dRttyWD5/PMPFIbKm0tFXRni1HnjpN7C4gf8ymdAJKLvbbtc3bZvF4HbXhlH73BdL90lkaKQldU5kTGzjC0qP6GbclU+8L1jU3hKOuEy0b3L12KKobjBAv4yxcJd0ogBWyacByQ8oASZb2KpcNJFhp1rUtPayJkMikoJCrB1XKQBTCLzFNTgYwB7/cVOvX0bsShUyDkwr/Ui8070BL3MK60CvVzaKLASrgEwl342i7681NnNPi2T15nnaqJD2obmYvih+VuQkNd5hXeiJeiqho1rH6CyO07FfumKTgRxFa2+wsG8OEy29vz2Q1wqtuLJuWyp7urb73aT6l1qmqeOYWj1KugVcrzKatNDVlv+BrrpMXqq8f8czBFqVUlUoZ1olF1gJjE/Nc8I3KXW23bmzarDFjr3bkOwu5+Uw8mTd7I++996PDXIglhKWQTIu0DVr3LkFO8LhdAVSZ2qNkHkNedOeIt0zT1/lyqfRJDdJedWgb2mcoXJmvd8j6GkB3hCOuclmuxZSGygVvbf2aQXNlxzwL9wopGXq30uzK8n3heAE0/ISgqJUbYOTDYs7oJZafsMGEG0mNU9TO/tKwpJ8E5zt0ALej+4kigwL1rA7f18ltG6f2YH0OkzDGQo0mflEiCp+H+QEIWx0VV/P6a4D0croKwMDS/noA+y3jDtj1ebAthSbxf8G+LPObMbGOO3njCn0UsKUXKUOacYluHUjUbOjGxk5yN3ryeU3B32QjcyXE06uEQarMH3whpsdUdjTs4AF6W1lVQEyfe46lTM9tc1QYYe6wr4vR6cplzvxFPvSj++T/RQenCq1DAiuQsVIrB660wB9625/ePVZ1jXVqMzdOcWGFL9pecw0eu7NAUX/M5v9YeDIiB6I5D3uzFA0f57rGdf26F1I8HXzUzY0+Wj1UnZo7UHMsecqXnYq/xSHqgOqruyFZrfOQA6fFxaGIrBKIukz516E2KwQcIxGVtyJkHQ/g6PtJkQvcDuJCuWCbufkHi3A4CURfgOKXjUr3idI3mshDox21MdzzuVna7MvnaWVoxxl904bP+0tGw9O/DtnI3mBfjxafv/YtD3sd1CKfLv6gggKFAgoTZxABjJhAfzfaJJuxyStKB6A1p6lAQ3/K8JU8l6q3OrKGMxwVBzALERw01TAZ3vZ0vsaQQBbBkK99u9Zl6jf2ZYuQcFtZ2qfvNVGO+6WH/j3ZzIqlVaAOr5RIww22bgvQgJl21h/zlmi5Y6tAaPzW/NflF0TK+dFLi4H+2zW+vY1RE5/YvNNkBi5+1qMldL9PWBWJjcVa+MlrG9uH4xYBNiFEfEZhdoKcHvvU1Kv7bCmC83ieb0e3yIVfURhIIZ8gXWupQy2LKJmfYv2pRSO8yHJihhT652Tbm0UZ7wh9ls4FE9KYUt2edAA2+TcSJvx9oaRfqt0oKLGJMnvL+nP5MZ/7lgMZhVNjnNKH97Yg9wWeZ4Kx19eKnfE+TQUAzbMkbjCPt8x/7xNMlmVuUF/YJ2JXrclhEHoio8+rINtYoveQBVWeiLOutq/bvY5I0IrzB6gbFaFM7pqd5u93wB7nZPL1q5HfvwtvFDbUIpNVG6cONAmMxUNU7JI8y3F5ZEROsQYBPKlF/QRO8NpXMSN235EjaICbyNfKHiPrCuY6ZR3ohzbT+OgBCECfgefsD2IZTVnZN4Ut+5uPHveU7xdP+c2d0Nl8qpyYRqgf82EMglFaSBGmQwyxVVuPZD9QjprQV+hVyjzu/jI8hUT6cYZzjDn/Ih9C9Jvkc6ippS+4dzfBqhl04IzlcK0yjO3dTbS6S654oRBRb5ewe4rJBtV8YKecI5pJHU5wE1pEyEl1yLhlNxqiFQW6zJpcFSitRKuvGL1hKs25YPUU9ar0gHWJ29IPf4sFjiNAaEAZBiK43hUnFCrK/uRch+qtEkdgOTFVpkUrUpluV/2lJcuXt6U+ShfzAAh7Bul7sydBDTcCDESTDhn1LGsE5ECXDWjUqT2tOeLiKeuBvzQplksfM3+ALbtlCpcVHrNY7dJGUrqEtQlp4smy/d35h7djo/VArOFvjzb0hnHYloA6KCRRopvo7z2Ij4qKXFF9O30cYBsPYqtH37jFqKKPAB1651XdYOMaYs9mNuW879OKTSM8AHCPKrnDAx40iQ1/9zjULBh4+k1i+T62WctvOjBuF1HvleXLIzwtJaHirLj6JRg0TrJVBEMpoMOJ3b6w6HheP4EZbN3lb2D9zsLJ2Ae9JWhlf3q/Pdz4lp4DOVvrpm5U/ItT7di4lox+a1HJbV2xgRO/gY5eeOdo6UQ1J9bicA2B38MBozCPlhr2bwR2fJErfIswnWnKjA51+LuWJ8rbiIcbX7GCvUzMq1mP7EjWXP4tI3wdkfzxjh87LXi0H6WD6/d1//Zl9XUAPBiFZQaE6DQM5LQZt0CMYokYjA/Ohl4Omp1jeDBrylJLjfYAxhYCkzXPNQGEpQ37WjBApBriL9rjPor4m7RW5zKo46SiibHkWYdrA4ay07e8tJdqEAb66la4zBxmtgM/TxUJGDkvyWbA/cjJQzMfhaKr5cR2YX16I6RKDiLFaqSUo8ZT3a3jVqlB7hSx+N53F0jCAyZXzo7mL7o6AH+dWlEEHv/l3RcBRzm6zuxo97W0vmen9iHyRpF0OYE+wF2dO9oW3IPfIsFGyc3T6A6otJr1vHFZUQkWKjqfOaTQOAH4oaGRbJTnDzrVacJm9Bjsd644ZJsEcCw/YhVuRtMK4HI7P3s/2LfpI1bZYfjH1tJPmYf5AKVFHzPJHFGV/cFBZ0DRevyJoxhWD8hDWnXP6TksAE6V6RBDmvrahWELw6lufXO8BkMqUJO7DhmVBfUzANeJWLQL003y/iAyDA6R6DjbWMZ1x/1coQTCz9WoqLgGOAlvJ+qMr9dLhZT9KJcNtw24yItYy7SXcETIVQk/aofVq0vSGyTuzYChg4HJmJ+T0cmatH1ZMd3dY3tdgPUoSDBDurYETF0aZGkutYSo4PTyXkRsSPlvf0GXZo0384tlorixfvdG6R+smD2vQfNcKQJbasTQPjhAXAd8+T5ERzo1qxuxC++9MsOo5Q5SkDSUIQVdgutj128/f9nPPKNPADRhXVVg4pbsaxJs0KnSPjPSlEK/khp67ohUzw7BNLPnoq16rbrtFYpFd0d/LS0F9GxpYniTy0m2bGEFyFzRP0/tb8Y8IL3UjQxE/OhaoJBJcW8JvmrNLuNmOzYPj5Cp2oEXVMUoizWbSYo8wfloC45Q++QnnrCbspcs7hVoHcMB4zHhfyiPH3QU92+wh1qRmDImiJnJIlz0Q2nCvt1e5htKarHD1594YDYBp8x4YAUaz/jfLedsAxyOcV18peAL9XR5dpEyqWoq9CNcgYO49i3fXnVpEiEvceuyxaZpI1hq13z5ro9JJUN0/qZ+ph9hzvZJZzo8RajuY4BMIoo1eK83UZQpXHVYfvoJLpW11vo4nrNXSo/h0Ezaz8BfgtGkAAuXeJhe7iU/trFa18LiPy6ML9dDUM569nWf3JFw+FKuFB9QPjly1h6RBZPRRBM1zTCv6mZk+pPZkVfnwzCoSk/z6cv/uyPWJH+rzCwAvQGnoCkmBFEWwROEIIboKYE5DF0OIcMRAW/ll97ncyEQYlo7XBnfQKpyQGJpp0i0L9S4NU8bwbDte2FWfxN/DefkqucdFvVYKXnGvEAVbDyKy0ZQIVzQxPsqvaFyJCFylAQXd+B1MHp40thL2QKYxbloYxnFwblE1ZhudKtAYCN0cpZ4Y+hD0aEl3zuj2xXua5hgrbb5FM8leYFhlPGwj4TK+BcYJDtHQooK2HGpxDvonP0DXnIRW7rxS/Lr4JCtO2uS7PR9zca/5TC19xabXOdAjJdmdAGatYDO/7aQgrBvTiZ22NjAiN6FXwnGFNE1iksEWi5N1D+6078iqCM4qfSQHO/traTLDzoLwNzYtEt1+FySFctVDJUkPuRoDlJmlozYtOTgJCeFJ/+DWEmK1w6iKd741GRbNPyvNUKjt38tVqGI/l/QWRLIBGVG23CkGibhb2UoGKNSujyyKB4nv7lcXiP9KmcymDOzLzpsh7H+onmcmgupUHoyulR0ZGVmhRRt0dAMfjACEx9y7QPDCPsPXjtERISfoBzjwmsga3dZzPjDmQIuXT0Nk0oxkcnarznieIw1AADSgdGS7NC+zQ9RGNpAXBtndqYjfvcXSxQwJev75ITxT9W13yUDpyyjm19/6WySqSPuUOIBwmcbnpCSmAxjk+dixd7Pl0sZZtDET9V/ZvLimFmgV0+ZvNz3XHPfTSIFLgiHdbNrShqZtThY6xUVr0hmWO2IqZmlcBLf2R7Ub+hdffaaKgdjrGKYmCkArxDUjPzYOOiYq6ADq/h3kD3mo/7wRordxT7BYGpnTVDTtYwfr0sBvDwsRZc2nWB6tXhNUbYVeFy4RgsvV+0ovgRKi3Wv+Wm6MiaTu0w8EakzpeoJwogGT5wV3py/ywboIJx47mj2VGwM+7nNGJVbm+3Y32W5FduyZK4m7C6CsL78P1EJXkTBYf14Za58MqKyQFwLFpehy4JuVxpJPEfMEnCB3mJd5X02g6sQxBaHO9Mr8CyV2ADsP4yun/QrYOcLYZcyluWIR7iBehOrYxR+eiGiA4Ka8xFXCzZvUOR1gsKQifTMsgHRG8onlnDBWoLArszjI8EOxp+f+EOpsbdbij6H5eotKvb/MQcYx0WJfYTgoU8F6+UxJFPtHQMmeGxOoKttOXLHlaEWN58xYbj9H+ms7GTzUCFEzIQcfqgOZY0JZSaYmqhWbxvmAOc05DbSl4OiYcMlmmcHN6Vf/DyIZcDavFoN9I6RBgNrCii3pPbNzH2U5ECNKtp56Exk1I0Df/FdGelrnTDrqrWYluTNBh5k0av1Arw9bJS5msts7ubnDeD+XQtu2N8Owdm9HVfdCMrPuNFvbtbVdLiEM90GOuW1tNf2UdqIi8O179iuxPrHFXJN7k7Ipmy+/257VoZn+t+GICg5xMgBwJ5Za3Z/HiO8J2Yath8EraJcFigQxJhvMlJ0e70q0TtppoLgZuo9oLqRIsMyIasXZeLACqcTbQ2vlb5FBKhKXoWhlWOFM2cE+yQ3/f+PfeIuRRMo3epSwiFiU45msEku9nVWWI/OqQ19DRxo6eh0362t+OZJvk9zUGc0ximzITIufrYZneju4XIoC+k5/X94LyM4mFsMabUiEGZHwfJf3k6UU4OzfQjquM5GBT3Q2iT7XPwXKNDtrETxUr0ZRg1VyqTmlHqS9H7Or889kscjNEOgANtjyUGOg6t4oM5TZ4peutNMWvhUSKYK8QNyRYW99skVN/SSArVP7vNLm22ldn8wZoCO36VXDehg7AvO/00OgKKJwnIH2u6L/cd95cAietXSudChRjE6KRO+BHj2sHfjlHxLeW5PFADa5VnDHUD2PWpJ1uHQaIUdIzYaNeo7KreAm8MfCtia+CS+WsO48sHlOKqIOE/QlTgwAej07C5NIBE9Ehu9QCo5YCJgm5Mzw7E1G6cKls66fF9IziLIIiyFciqiEm3uCyKh92DBb72pUL/qeuruLEr2oD36Lkgf5HDHSZ5ll3Mm9EKARTmzWio90t1pR5XoII0gREypoGXlTUq0jZ96vI7EWl95Pb6QfhsvzV5tfB1nDVd6kVjFr04UBPM/p7xgMSnJ8vsXaIhKnCqvKVZ5spcrX6xfvyCjETx3tOqW7RRyDD31joqrj0DaJXsp4EVnO6EZxnuuba5aCpmHz0hkBOFddTu2eSW/2UPr38CJpniySrX1BRSDIWkt18gURO23BBRM08o9zYVSII2/kHUU8+UR7zYBwaYs6QFrFGw1FiamNCmXMBbMNaFwyn+DD52i3gi+RKb9IfRqfQQP6H2X5dyGCIY9Oy2ALGwe3DbrvAV4rKX6aCHSJpA67E+0oMSC4gYuxk46ivtnKWHAjuHx0hM33awosEHBV5mgIj6UlHYqK2XB5bXqQ0FC72CSjjcXJmrZnnXIQtLPmJ/4kKWgddvlhUQurXnKrcDojc/t9hDW7TvrFmddaBhphgZJ22at45zNPPaz/dTB8igWWe7YawNyrEph0o0iTHZ0Bk2FmgFnh8y+lXWo2gMGz0iqvmRKQCNzqSabAkmAy9S13DKwHvOMCoAgx/0vEBvLZDRW+La9HU0ZVO3VLnYE3zMdInqJcDdMRMJ7WN+59WOlHQh/qYDvDxLqFD9OmWUcyWHGanXzLZ1PQv9YtOiShR8fefQsmTpBX9I5fWwRHeQnjHkYfxZ3Iis0mDNmXD8kWDiyiwyCXDxx5yJRVP8JKXBmoctlJaJTSEhyhj5KF2hNNkXt01oLqpzN1Mh897vcibhB3s2opoZodDPfWfy+2WVLugEfn5du9AdN+Y0gUU/u6gzGqFxfUiSNSnY8M3I6JN8v3qy2jkno8VJPkv05TI34NZFgxt2mu7bwptC2ueLIhVu3vtdtiX70hG3Kk5onxu5TPDyZsocdvOMdmvTkpF4jON8H2wu5gGHjm4mqVT0rohFgea4AxuV1x0FipkhkVajbu/vBoSSy/GzzAOYaPaKhWnF3EYLN82uY4P7cKEnMbu9HMP6u+CIIDgpNOtNeiQ6JtQq0aBPoylhBgb1OBkU+ELhmwfhyDNEUuGQY1KZWmw+mjVkEU1I89VGnA7lvhTz1gPqm4ktbtJgJyttyEulbAUYmTcXsgcsE/c3buSgM2cLHqUJnDeer/eRWoGAeYQzq3NaXMlgEwHTZTlNdmM04noVMv/4EYWA4CLu07h4pskTGOBmgdnNyKQzawRiJgwRHe4Y5DH9yO5rMUG7pmMlXfSPn5ktVp7f3k159M9jbSLSU+zN1ROQyCVlJ1BXDsi15Qmt1no6BEFIAMN3nNC92NGOS4ehNsiZakuA7esb42X+jBuIUObKv/dtYmX/VN9U9iyBJ3Bs13OEcwQ4TCk6bl1Lg2+WrEkd++paWsuKPIeiOWNbkELG1g+CCPRajXlmn0zIe1ThmBPkPDuRzhP+jbU7I4C9rNLYP9rcMwFpJhWfJTtm+GD9TrZaWYa14whjlOzfY+dJ/oKVP+pqfYXr+5u+DcFhJ0eGmXJzdUB7MoKSn624levZVIrUxiSpYHFUxsWGPMV0MazBoLpfoj7G0g307cAkS/brSrxWhLetqvZ6gNIJ6YQlbCcfZTrDX4Y1f3NlGzKMecQ9L5GxSewDq1QEH/SNDBWGriqBgSQBSe3Jt9P0L/CV+fw/CThTNWtOdUugsBlTnOj7v8qBpLcewBjalPcfrY27Yu+uoestyTPsih10tvkJZfhovjj8Be2FEcJiUnOBs631Xi3TcQGfgnzdez4M8MfUtR8O30QNseycHiHnnfWkm7KLSlqhu+1xhyiK9xAUhWFUf4COmDpySt+KxlhlfWxrbgIGcWSP3tfIybZaeLFFw4Yzp2Tdd7XQZ5zQ2X9h6fvUxb7J897H2dBbKT27g7oROFVRi6y0czqAtMmH+94H1pXhx/YSZLaJJQI9labZzrRYBZlPY4eQzheF45U8YVwV+IDQCAo0RFUP9dtjyJ5jKiUUoosqLZJJm0oPsftoZG0Xx3Iq+tWe6s5eBMwuGj82td2kFOTlwzWltSLH2drub7BnSGgLLE4Ay+QkwVy5eu9jtirkBsTI325WdCNep2QriMwN1pCfEzu3SP+hcOqVqtB6l6fl3e7ZG5mQIQjGzAvYYTPxFA3cj3hTFFlrY3uEQ/zEx/vdHwsp2/TzsTeMCuNsMzgfy/o+kl9zdsgSvSFOi3UNN5fpR+zgPs7dNzIaNxXxQ2FyW3oI8p2Dj2DreMe9hOrvm6VG+hz/xhCv6oZYa7nUvEL6C49JKqct3BSx61WjcBnpov8UT5t4Ko6uvsqaYBm6hNIxkDY+xiLhnUE04XtEFD7NRiwCdZAR4791LfAanPyXzAAMF4F9WWbEYrpLL30KIWxgO03z98PuP08VoIfeXGf3LRjdkoFtwOPp2xas42mW01sWDO2TFP5olGvDQYNgQxiGKYR001yfLp7L9r4AiNHNdZROvI0cLp3mn7s8fvidjAHv3Nc1ymoWWYHvVFjd6qMZrEPOtqPM3HtwW4E87Tf2x+lO+wBNhglMQei0ce1zC9oxF/kebQyLBT1N96dSxw8sbndqBPJxoqozeLdsL3WBn6LAcIxWphWXTnzPN+0O6rBuTFI1a/A1GU0g42JFnBwOzP2pj968j6zSnX3qqpWGc9liCCHixj2lX6TIrFwyiDiJrKa/0ZJNIMr7nnUaTtip526ncHkvhVyxqjUUC6QsbCw9ZSDMJylOuICkYuujPZc0Ob+gpj1+66eNgrRRNWh3Ji7AMKRRmMKehy1v2r+lKb2KOj57W6dHkPeNPuUuoSknd/A0bAZKusONQs4jA/8phBVeG7qNJKMSb40eb1rJTVd11XttPC0gi3IQ7WIXbiM+4rbT0o7pGJ9DTG5lAttMblrtk9D4QN7x7dayWb0wLeEtmjPdJH2QDthsyCU4rlvK3LMdu7fMMYSEamVCIdaycNCFmJTNkjQT+JfC01DQTsZWj6BBaydenYCxbSorPQm2wLQTmZ9ZvqZJHOL94U1GLUEVE8RqWHlh+B8SURtk5fWt8C8vuJMk0L6RsUBo3QiTjtWatOr1zKV4fIjpuwq2oJkGK8rZiHUv2dGDmj7v5ELAzBCWQeXGM+3hyx6lRWqr4FK7XDnP4z/7BvzGHjYJOVVJGFK8dY+dODhPid5s99ZD2Nm3FLXiav9ZZM2ax/er5i7ckWxfI7o7Mwd/FdvV7vinTYl8xg4/w82wKTYc+xfFoSeyd59bRn3mUqP3ZB2RBWRmyOuH9WjnTtRpF/Ve6tK+8Py/4LtAn4PVfTYC8B/szIjprnWm3l+r1bpQEj6FA+VCFpWGcqTOjr6XxWngYTNEqaylDXziQ4UIZjJyNu9WP8EuV0NE8QTciE/fuSzSIbRPp1r8Su5YQjzFqdAAcwv1NP3+kb4UyuiZllbauXsQTUKdRDlEzkxgYM1xxlIo9UxHsRQdR+2rnCQz2gyN5KUekPN7nKoAcLhXU0PAIDKpPdIhkhRHM4y4/uo0bKgDM3d1crdaZ/G7vR+/Eijgq4pkwt3nwcAS/0s3FswUc3LSMJSwUbdIfblP6ap9WVbKwkkYE71toF/cda3FMxl14gH8G2jM4wj27l3bMX1q+4Nc2qoGeu5T1db9jFpWFu7sMPhGi0UK/UTxJFlBPl2swWZ4BWvSbM1/4L9+dxS/gr6jurJVyQLGzJN9n9RuVwLSWxECxJci2q6K1hIbVBOXUG2ZZdaZfNirC+5T1PpheCFDxlsMwpNrTaubd2GLB6RLlywc7hPDh52JqWZPmNkdWgh9tiPwHfizzaJEfOb6YFwSfOT85aCJ0jV3z/8eERmHR49x/4jJzRz1TSK0gp/Nz1xCGNH8HMGi5mC4GsLeVDcLNXiVdu4irWmmnAblw1kBTbhfoUVfwl/z8DvaZZ1i9oij3sz9GAFMHekkuoQ0VGJoPM7/u5I62UsAN1rv6mNttVRkSLBfOcW27KtA5gkwUjz8TVznUXPHZGcWeNWo47I2F1rlKlYOsQJWt4tCNF5sKCu/ybdw9QX0wyD79YjJmOcmuH0J6CT0ORtn9WJ8147Xr4vUDQOhK6K+yfWWIEtd6yNIJyyKNP2UdR60gzxdiWWGvYDjFeHfqmlhesTBCjgQdpilBUBM4m22nOIHA77Jc/Yh8KNmzUyZv288jejFQI1bmG9eYMzAd8M93j2CEeIWg3Bovl50YV2+T0jtCWm3jgUcUaa6NvPK3nW81K6S8o62xQ+M8qmfI703hTCox8FqFxInO0BOp6O81SatZSpiicaS2Xo0ogiFxvG3u6rir0kT2chzUxnOqKgJxCn1twUYU7fCdCTdmluSJIvpC/fheu+M2To/EoB3KpmEdlVKgRD8BRmc8b7ckx3FOdedEU/82UcRUdgA71mIkMbkEug5MNQLTgfmMrSbLgC7CxzdFjlWam0T7H746mztxT1tkD+epcuE2a+mjZIHBkGJc3VoWXLR7FoNLizrrJkKXZiMCulqIaY6B5lJ5xQtInALnziFnt/YgM7HGsUlHqZr9lRujZUNRR72WvbrViRBspiI1F1esE3YDuu+mSrhwbCedpoZGPWxlmRhI1d96r7KOsSQRd/V6BXLqxXVvRUQGEeBRHGGXqjjVOku2Vhs+eE9c/AYUvOuyMn/5E3rQoIoJAcH9JAyNYV3iX57aOiPlOPxL4ioya5vPabS+sMH63waM6gfWRvcWrs+URGbspEV4wvDV3JjsZKn/f2qBIk7VwC8gtjuwpuCty53RHKp265RPlC95QCIrD2N509sTu9P2j/VBV7Hm/dMpGYWUAb7jHDs7DQUaEBWW7fqRYs8mIYsRK3YT4+8Byg5L/qO5f93Os7gbsUmu+mXUUHLs/88hWMFbNTCfFlkEoNl/bqTSbogmq6mW41b5lsc2X9YcaBEgbeylSO1pClTBWBislPoE8mkRqjpAL54q+jF5krcj6stO8P2ohD0xeVXHKq0r/ATzveKHRENU0fpfBvIdh6++QtTYuYoZN606l3P9EiHqPr1zyYzJU0fDawjwyziHiEPNbuk+8QuFKZCOLCbiYXfT6mF1akRNwQVQz/ulOBgPAGh8LTa4h4XxymkOp9NM7TRhYNlaQdeIDPTAoLYDQ7cBuC3xbk0Xc2tePBZU3OhRyC+bAAO3lP0KmWW6HZVW8YJaorSYVsyV3e/QfddW1Gk6+j3hLBMF9ti6Pk9DG/ehqgMzyv6aVc+9WTlO0r3UawpOpeMQNPqn0pmiBmoRKiQUCBaVzENdKXoaGFa7FlksDmG8t3nLD2sg0tjiy/q2DRuGO3Lvk4fwy3CcfmfGnGpz3Z+WK5ZDDYlrwpbckO6l8xcBgAvS5/frci93Su5EV4G4+ESI2JOYB02W9iMqEAp6/B2VoEiOE+p+xWHl78F4QyPbQ2eB0ri55K6QSL4OJfth9nf2V9+cnMPt4KHcm37o4pysnSLrz0r9svIWwHKBDGH/3FeUQxzBZwpYaiLlAiixBgvLfG4W6YVDOMQOTzpHFPte1BQBE5yK3XUb+DM8FXznIUhdzctX5ft0h9nSZ8Hs22TTuk0Owm9VQq+OJGnpYFx2HuH+KLndBek6+knBEYKOzEcsWXqtn0FyVRRMIkM3TEyjspUrqF/AkSFaSSbKMRKixdLoEyUi6AfRRwlzMEssKzAw+Vu8X2KDcp7IdMNwwoG8GCTrJBiAOCfrk8KB8fWa4G+wvGKmr/mTaDW4Y/5/0wxsT79RG/aR4s/4nF0DgydpPTIjugg8dNyyAUTHZrwpt94bW/aLemAt49xoTa6VlQBGqdAEs6WIMfi2pikbk4FmBczxcGKFIQEF1tdpb8tnIp3fbx48Q3nqT/CCso/X43RSaW+42vKGcIEVvqRa74ylhFnpL05eXketHF/UtHJRLmuMfJP3HUEIQTYhFPmh4NXUGvCXRGePBGx0sUlUvxMXAdqF5GgV1vghbc3OEuChRAJWeqiP1FWjJEU9KxnQFBbRSDUbgrrGBzGc4OAkF31/uFZLP3uaOsXFEY1nJQjtPMfd/uTplwuf8PhYzwfqWIdUwYqEyAauSKMkvykPFdjgj/ps69aHYADBExWMOXYlRyt/pb08nsJACXlI9fjRiwCuw6OTl79AjFh9AqnyDhWwypTbv9PWRCuUNXpdV6xMD4t1FMQSW7P79PVLwnoqfZhywnt7yuI+cWidYT/9XJ3nm4+aFZThrmUhHvXM7qPC81i1TgpNAnlvAmhrnYDcJ+iHqQWQ6flmJdtC7DvAQB1WC0ShLBU6YNNrfWtV+1p1id1Di3frt8Eu/UmZhEOHrEm9JB1n5PIyT7L2c/LuI1k2fiVp40lxVzfYpn/pNxyVZIGexKhjKUmJVlmDHfuQrtDaZJ9YaquT6V94hdZy2rtZ9JnYQ8NuFD4ZLLd70c+nbfrn5aGS8YgCJV22MA4p55ZH2yAOfo7cQiiVmiQ0I2Bzw6TXiTqdZqPqj4Q6BqCJVvBJu/rOxCR1OdiN/AUnNxTIDmH4O2x4N7WFsSluU/kreKJtwjW6/eyhJ07zFQbZpTNrFCiFhGPN+vhA+FcWyxuzV3QGBCw8FnuR5aalgJ9Fljo/fqaFDcRar327U9OTmuBESeisfM8nZC2NMAUEuJwyrqtrbWBvymcZ6wcXLK8oWWvajyLEXBVd1EekOUcFbAsmJstiewfjI0xlNz8W6xIQYjGDtRSeuQeWt5892P9iqiEEEXgbIFYDQmnb7CMXARP8+EhvbL/LKj9+03E0VKP4inKbD/HHpo2Z1NNa/MN0rmiIPt/+Jvo3uB6PljKgiY8f7IQPPDOYYro5TfhBXM1RJukeBO8P4Jcvds+0/34qL/HYGk9uNx6Jm7RgaRo3O6ux9HOLBV0dSFyG+icgafukzXbuuny1i9tuDbulBO/2gPt0aUr4rHTuQzOpnzpJZj1MFnCEP+vLy6qmOgbZtrsqGyA74Ezhz01gPdJHKmf375Yt/xtFOc2ODNkXghi6/2Ax2epFGtO0xUEWDBtQ4E2X75wO9AbTEAjyaTwRczXxULN0Lr9CLpfHVRUCiwGy6OSr+0UaejMXv/dOT6bmlDtEwtqG9U/Xp6AYn3piTdLnvuItbu92ag+xjJGiWcuk+C4ijtinMhNLpl1Fwt8qjMprQzM18F3wlkml2ba+/lO3GvTtK+60UZarvB+qvUYS5pmCW5yNT77MgAjS6BjuSy0G06A7FLg8ViHsw2oKSwSGu3Kug3dG+yFDjm+zC2krx0ntd2ic4ylNXnVk2WsShbIuq+P2cFFm0XYzvBfgY9P3CTXu4zQcM2ejLob70DqvVS1T6n6jRUef725yUXzQzCCDzhIDafFtFtbbvj0mqe4VZUdpYabCb6cX8HkbZ6UEglD8md3b4gvLWP1i53De3QdffV4bHrFAgN24v2l6omWu6FmCnzDw8Ny7B+GMHJERoBruCck6iDtIrEOZjITmG26MO/u/lpnkZjA51z8dmM8mHyoEf+TQ3zM4ZGJBrGJ5mTNEaUUk61P9AJml/EsYHDvNwOa1OVW3pLAwXjEBEzCr735edUN6AjDR33W/usr/aehpS8ABuL1LTlgXgiFIF5hg68hxUoPqBQ01cFK0j6ObeZlr9WDm5Hyl3HlcqtAlbpu9c4yz4lRmgCJL2chH/0XreLo9R7mnSyurrDaFvByYisMP0Xfd6Wt6nXpbcg8cOWPbAIm83v/frlrwyK+5yAiJNeZxn9HBZ36k1334q6Axp4HVMxb6Qc8WYcoAiLYFhfIQucMRjnlLXBfblS411llHQLXEJgfINnv3DlRhh9vn25DEZEs2z3MLBcfaq+00+dT+TM26REBxheppR6W31p6Zat+0E9NGmV+dwxr3KCV1usFX2b3VkRPPNwD6/EN8OYlFzK/sKsryDJcv32zvEMUgMvziKSkr9eny4ga0L5Pp0T0Bzw/+QzQqb3BD0XP9qQrDNqXfLyBt1WakRRNjaiE7HtbS5BHdhOQEm7xsfWRwgW0dQe1u4pT2dgJdfWWV0PDDAA3yK22rlrzYRU6gJMP0FrtVyjbqvTft+kJTGgWHDgOQxCs/8K3/dqMib+rILflKn9wDlX10appP0UOOLMBFydlJYWPnf9qL3AOvvRXCoOJ5CvV8iWRzDH8CcLJbCbDd3R8BwFt+OeNre1ZJ9So2/FdLE4PJGgNxWP1xe2vAmMxuiXfCgyweplIKvg72hT79cLV08bvzyfiOuNncjl+CRI2wauYf6dKjll/jy2kVKKJyqHTwpsnVpr9PcAszDV/hHuUVy4ldpTN6nZUueRB/IFfw8O6Dln4Lfs1Xg8UkJ8cT5Vg7+XxnMlliGAvrW0y/s/LmQi4oiclidRbKXllD3FykuuWyjgBQvsRzeN3dYNk1wZd93aRYN9XAUjuE/SYtNw/aeJaRhlcA5KY02W/1CzjHMfLqFzAUeoF5VfzWr3IZXY8RuRmxi+AHh4pHVrNIfg4mm5gxNnKZDtZFGLkY1E/+nyJnrSABCDQKhSM+cmTct7xtzpGILJf+liCbMaxniyCmHIc88lqcdKYH0uTF6r+mFswVJzHCJdXgLtNxEYad6j+vSl4SORqB1klXDqk7l/7Lm2TF7i5ss7m1ypS7NDZ4Xr0QDfIWkDJOjHrLEVZuIMdMialJ+fydvkPeLD0yGxmoBtttnyfNwRegnnoZIW+rVCb5IOgSK2Kd8wCopPldKwYob5dTsu2+DRCAQJwfFLFB/dRirTD3j5V2Xd1j4Vf7fwSU7YRsVm2jKX4o/OvBaToFoExXBv+daNAKslzzA19K11saEgd63PSw8dVDzNUUVXbBFHDn+hiX0DtNj9+d6Ksx6mNrim79yIG3IjsL3SNTSb25RD7U5hsFNeDJMinl9iEBy0vmKC7KArDMS5EWRjuj/rBbemi9S6K+Lc87tJfSvjTSxLYtzyKzw35RF0+fWvQMkG5HCfQADVmA56LRynoY3xTzujljuWFfDMspxr9p6Nze4ReIfcIpILze8373XUdlRW9akp+3jwwPt2iZWaJAsF925E+TL6sLvlsXQogcr8XT+gT4xCU5XN1/Gt8LdQ4SOBIarQgmFsvGxUSnYf79Gx3qNZo6G7FQOqW62Q+4qVkeJUumDlNhYHyjpfQhOTd1FXQSrWI/je1GMSobQ18mqWsW2GvaIv0TAmOQrASilLlmJLIIoMiSHN/sJIQj+wFfk/m/e3pp9CjQ4BfzlzahLEzujDXqqgbkbp20yRd18UeslhKwtXRoHrbhD1L7bbcofvBpiL8liFmBd/pDoIRqiwfA+K5YUBzK50P0HhG7Zn4fw7DhVQEM0E78SFjAj1sTY2BifvvQwYpB+TCbStthCnhcD0+of1jRTG9tAQSIuFe6q4zXAuULUYEJ+X3n2uABU2b2mFRLJhiymvVjh3Mz+7yeWYzbWm3SaJW4bVqwr89jlLwiLhFM5kIzle87S0khnTWjaoZd56Dxb3RYAp6SytkJ21e0/2qz4WqgIkwfDXL7Qapw4AFW/AHPEfSSQZd70Ee0WdIeb88Eu9XWIGd9ZoMc0US9L4qZVfJJbRQteb9iNhO5XlEjIu3q4Qs5IUAbB2alMPQ77GNGe97MJy8KXEw7aUbn7TjG7LUyRGY39Dcd6oxWOeohkzB/ErbM9MlX9uAOT5kYm8Q8oP3NuFLNMygwQ7fSuhGUIBtwkNxJLosC7GGNS3sImrxJUBtIux6vcXuDhswST3xw1jJyNIHWtTR+iEdF4yi88a7AlpOiAFSJzSkEcLZD1f1wyLxDbyGLvMy+xWImf8iq1NwB2+H8zZZyqIuLkBLtHkexLie3suikzLSlGgFbHU9CLzj8MWhmKGyZUCRFYmBe8DM1SCji6SeVDRiNCoM/qVokrkPkT17gUttMkK9d/Twf8RREZ5E3wJMb7vETxAqyKiVzmal6N8NladddBxvFXVB/mnRTcOQP5fYblgP8k9eqv0EopJYyWmASg9FFGRKkVPj5wui8SnfgaqV5TdSvq/SgZgilW37Q5C9ySWU7hGgNl6qdGVxQytXVx7W6UwO7nPcew7/7oSPCOdbnlodpToyIzLiIni2InPUsSTDC3VJACi9e179qd0bOsBVeASOibp+JmmRIkd692606uyjeGeHHvYFhyV6DNMH14CpjMQDZU9yyr2NiqQ5aen+zkNTku94Ddj6jRgo26JfeCwPKHRtV7nQcNVSMCNBqJouhLS3uU85oVH9iYjxu6AkRe/XoJk4GoV20mCVcxQBbkcSl22Du2GKl3/PPPaVZyA68YVQ7PvG9g3koS1WaKdzctGJRdd0b2+kWLw58CWjKtONDEQ9FF9BLN4FZP4KGPkPurOeaut3WrBNXmYPwndATaG+1k+UWa8JHrOm530I8uiH1GmDc0ZUJO5vrxgPXbfWq4wzdyL2DY6Q1oNUzcvWC8h1UVUopyOfaj9EVV0+BIG+4jMUOLnAwGlgGfEGq/uhKo3QCPYpUs7UdHobyjWY+jUDlyHTL0acK0rwYdOtc2hp/Q/5PGFSIruHI2HEccMgrd1iuMzEsT+2aa1iDtFKpSci8EENW2e+tcHVmeYeYxxGmO4FfMcbNaJFznrkW4UQQxs60eGiosdH+O4d5D7MBQHLUnNtAn3sIl8Gz6fvGJ+3DPpV7G5FxM18vTcex6X2cURKtFIRb+S2ptfGwmqwW+37pxhI9bWKH9nZDgyzkfKrtrJ0XPMjhaRS5w1BlteeyyoAAgUcan0H/52kk/JCkWV04kC2OCMJk0xzBhso57cHbmjbL2ouGXeulZK+zIe/Xpp8QQtr2JwSvl/OxvWydc5M2eX0F0O1ZfoVUIXViaje2AwFylkfo8lW92PntvlqgrbsKEzxJ7yVRnZY5rwz4X9RnMkI3CG0KmKqlj5wi5SiQ2cgCi8mdFUyg8wpH9ZWHbjfUIK2H3D53uzl2c7P/a6VrMRCHJgJL32RxnUxo7OhLKtnVyF6RT8+JScnQfR9gWwa4RjH792CrvhDRq6q4gDG5hQ1Lm2qNDyvPV3yPnFoqpsTdN9+qL/5TBBusjsqumxRH0y0XRWWS9VmJIZbQObaZ2nyZlvTWcXP2s2UT5b6ANHSRw2mHMROtgqU5fe372SYUBBfevngxJvlPus+ONa4g2zq3WbfSRilp2tosECGyay0I6craC8W4VYzobyq2tiGvWmEntZlGiiEVDOFjCtBpAKSvW4TwHfSo0OfWWgfyV0NnlSDFmFjb/1W0lYExUpciN6mq9RMZILr2dv//AZmeBVMkxrqw+tWYV3jKIBLWsEa3aXJhfFs5Yn+8c/qbY8pPkQAvqZA8PBC8a2kxOeQ62Iyh3MEV+wiDmWEp/rIrWuf/U65B//v9N+oWHd8G29yQBzVmp8lJPFOxQwNuXplq/NlUKo+sPzo+tfZyPMMiSNeSrZZqkcdibZs2lcErHAAW4MbSB1m3xhAt6KDA+Dxr47Yh2x5Li+cMKdAlg+5dWG9DpNYDOpuK2imSmeINiOFzCu4BgUgqlOU9zd9hL/U2vjJz+c1FIe0X2xE+UlzXHgqyvPsYelgUW9hfApufuHtEwATtUjPMj9sdfA/8/j7xlsKJ8mvJp6JBCZUX9xXE3XisxblJhrvkIq3iJ3sdegyixnBTNvOL8wuioRIgXNUpSv/ZL68+XO6h3MN1ZjT58ccCzjjZkYBR5+KjDKyRmwHWua34PPbjxnLjA5AXMEcSM025lGR4dEyNrIQ40XEn0SBqnusFoztUmPDBfbAl6LtIPMhuCjJHhLMo56gpqSeVZqY20SX5vbH5RJkC62rxk4KRwist7OrIHN9YL+oDoLtlaiu+5pPT+wJeNd9766hpdLxLNy/GQBROOczaKfdDR4QkSM2NDdn3DoWBjzSSQbdDX8OtPU0pndnTkIxOxdJhW4DjYxg22qX7hIcoxKrXL+rlvX985cORva4mv3vQ4RwqPVYcS+of3xeN/JU8iri5RFjYioL/OZHvvkl96qzQj3n+rPyUrVFJJNghY8mlM2ljT/3dBYroq1TrVtsPBBT4RYa4roL4fyGbFK8aGamRe5r20hwNHL/RiN1JfMTk1eZGtK9w9/rjIJYCPiOVXrz7JclM/fniEkeNeR65NwKti/kEBdkTW55L4ICozxzHq1vIEZHudx3nNRtOpaKQ5fK9Z+RANI0BBVJ/Yo5XG91AdrGLZSoQdBOOwj6y5BN1ahCr8EGr+R2iCQql9U+Y84Fvsls5SXLdeulzCKJT4Ab+I1SjkCwEI2vOZx3PBqbtRTScZbIowvOxK8WnoMNXt8D+ZwyYUoD9spOqW5f8ic17duocnJI8/DOqeeN0Y44Et3JPJCkdZrZNRkTcJFmbjZe8u2Sx3Fx79/b6lNYqzJjagV1PKxsjt2ka8MmABm6Zh8ppmyEUQMamLGJR19AY3SkzIrrwsnwqOFKu4EnJ70UDdip+WG9SRbMFmg8ix96Inwv9c/KBSteCokvZec6Xzro8J7wfQeGYuUJtocWBdGCbNJ1kb9dyTUYS+NMe8m+JSl3ui2AFml2WPeZjghy0ZANxGj5oaVS2GuO5lTZ9k/iqTFyQvIyY+SsJg+IBaHCMps64J+0DHUNYMwuukt9WjmOvCFIPX5qhAGsnXRgq1Z+W+esZP/MpWHwtRtQOD4f6k/klTrlSp1Ln3yDxZqpk3FBvZZIzPcejvM4y4CQ1t22avk2cb2+f4jQ7mh2RvvLAxMJ660p2cl2sWNaALgfjp80Gq86O0Fo2aw/Qcg4Ef4ev1drLsYBgTleZZA3cNYNZj6MN4uWRv0WuocqIvuYwuNdNYXx/dx9JGkI8r94LxuYu5/3qZ9purAmj3hJnNcNBbVZ5bgO5/ICWYW6nzMUkdWaypgJ0WUNlnodJvSjqsIrTwRhUza0gaJvpFU+TZfIQFsFR6zDGLrKTChbniUMA1s4UT+h52pe62eR+ZoJUT+H4CbpD2o/FkvFBCSSWKXysVKOcp2u7me6Jc0ih9vnYVuXHzlxc01m9qgu960qGH9drrzxLKAPymKv7abD5o5A54rZR4Zqe5mBVt0C7tfZMDgFnT1sVboDvabWA+kgC1sXhCDxHuKr8+lTOq+/SKxt7w9rxJo7daNxllaoNDWE6F/e+ete6EzHLVajRI9w4HyZlHB+Yv3Fl3b2hOfREyf2jRu/l4rwF2tDj+EyQ1ztzPEJ6D/IEbgYsGqT/SBIc124Q2pJS1F2xvuknuTOXXkygn4nNwI14V0Oe24B/X/XNad9Q0vxbD6UE+p4e+o19ilQvmpxljlvifuacpW3fwbF/RlmfIhkpu2JQCAzxfei3I/SQx09wZyxibDpquIIMS39LYO5xDhgAOkQJobrMeIiGjeuUhnMmh97uf1PeMuBsKDWX87E26/9SuLxrulHEpIKzKWW4K/J5evj+QE3qLU0CYbaNxXZS67Y9ETRNFEt/AqjHMdTibApgDYGFB1FM/3mOQ8qP1srfTV7/Wqmt5JK3V/exfprfymvWtkDLgkVHPGGYzVMKhSQUTSHzDLMizAKHVUCiwP4GJJxoIGExWQy0XlFafe+nN82z4UnktaZ4YJuovXQoL+zaxKpbW3ploYM5crfAaRv1MmSGUmc9p4Lf4OS9vVOzv0j++kZ7Nd4hBzR54Eld216YcYic8/TlT5OPNBsJh4ebXt0+YXtME9CQdrYaGPAPGwGKQtamIIBu/P80F9wn1Jr7B1aQt25zuUqYsKEq2qM1lqUm1dX+RgzCgEodTmziTXjmKMl3CpRVy4RuoDMwmLLFQ1xiDymmbE1NSX0SjNsXiuurwWUZy1LoNjHtAFZNbpzDsFRlHxddMmMu6WiKulWZvg+Xg4XRHaw/OTdbJDluhRAanLluFuCnLIjBBhehFyETsegmuqs0LDFjngKvwaF1wDrmVipOJ6aQkGXpNoOBnKPlXSzp4Gl6oLaEGo/GdKoHZhu0PJw2eryu1HcvdB8XpxnOswUzGlEw/Nohz+CZh+gtDMHGffmzo1wbBo79gwi2vFfPmQUt8RWIOQN0uPydllk8IZiQPcPXmH3zEFO0Ad0AgrjLwTSvpPL5BcKDWS2pPbWrq5rWh/YWLXuTRiWkbh/iP7ehkZvlacqkHWQY9ikTShDxDr79eRs9DjCD8ucRN9imEiD6b03XgZlXzBY1I2e4rhjVDDI+y3kGGQMzQI8aBev1FPo1XEmg8LazG6feFRs7hWS+vfHSvaNyMlSnK0rOwV7ijq5ab7nzhsgw7fr7qTyAli9VpGJbCpUbjvPI86prwS6CL38fAShRJYg+1CRl2M2m1AGscXJAgKIp+8yIzHsbXzDKX3xqyMFdrK6t+cNxesxrD/F/d+dW46+JhWFv19sWL2iWE5T+OrebmH5S5jP4u7+utmZ2iFRRFTp32NVIq55WZGxzpGiEXqAZhyTpgPyQezwYd4tVzWEkQRzWVJH2Yf/JXMmvOdkXpSdXSIrFIPB8kQJAz0be+pqfQSoAnAUaWsJs59HzOGlvV3vUd0scCVPduagwH5QU7FAZEtLe9b9+YDBchD5YZWAvtO7v/hqESFDKMGxGi/l1MlgUKBemn+mSCsnIOBvt8PFpNbOCN3+ZCielR9HcKy1Ny9HBE+XsOhGtPrw75e7Eixc6yt2CS8S0TdW/CkhNUAJuZ4kSDyk2qie1kU0xL2keRNXzJRHy7RjZWmRMbRmOe0ZaxLLt/dXST2veCBuNE/apozSDBSxMNkM5rbQBVi7v8jV2Xx1LgBKx/GLbRQWCQ5cgCRq3p/pQKmlzA5U5Kl2e52fhJ/kzXFWVJegxS3pZqh1juD2auTDyDsLFAN+cdvmJx9haBzYatk6TfzSo6FLRLI/FWHGA48dahavz2sMlMg2kPscD08ATFSj20ZbiZ0nkt97qlVI1zB95yCkXCY1Y/Dc5H88BuTGX9cLw1e7ms3HkeGPQiIZvdvol1EplO4iNWSXrsznXJz2frbHd4qa3UhbCWwKVSVtrv7tO0H8rBYdRRADtz6AlOwmPdzzaNiCE9u848Ld4tHO0XrKKeYK5m59MdeDCFjW5lUpV7sGeraSqHCgyuVheokUEpkH52f+tIhedehLmdl6eTP3osWF1L1cBzWUKw/9u5oCDrIG/gcg/PkCOkvh9d0n9NKnn8GmCJawKfxdXIpu5OmRwvYmSxVNyFgPdy3W4UEDIC4E7WZ1GEj+7T1OZL/qC4oklxC+P+x6v2xsS5GhAVy4bPbIlwiaj8JpQoqeBSiI0CxnF6UGyAkGl3PJa9KYi1qoRW6GbsO7O1nJKXTxDinM46FyOfPX7WDrZ18wTDHhxr6Ge4w2tIFFY9ilcyWkac23wQUDYzgj/154qNBnjGa5P7K6VUZO/7HbRC64mOggqPXf4HFCtBcZfMK/g2oykwSC/epGguzAa1R36NTmqiRsdlwObCz5QuiVAgcuSLl1ZtiR+75n/545q2vAozxURZi6G18jjY+LMXitSFs9LYxwH7lAjuV/ObxCHO3CtFl4ZwTzvSqMzqnK0PfbtqIr2WvQQlngX9CYuZ9PKocJ/l3oYU6hrsFCs31bWfOrilCKdyFo7fI2hNQEf4MOrLQ/qQ67I5+6lSZiEKvo8qOmF5npNfcMvseE3G9EQTy9Ype+B8xOUEifpt/orQ+K87MuIo78Pqem2IvlnovSXeyclm38cvOl2fpIvOqr0T/k8MDPP6MEH2IntJobsItNWkxe5Dy7afPg0Lp8IiGCfffBVIkneRqsFQ8oJoML5Blm/OiqOi+zXStRdjexiI9hgojhbLfdp0mH93r6Tli1UqW5lN50DqcjuMyhzwTIGll2LJ+Aaxq08X1f0wW4MK5dY5X1hxWnxWu4kkA4VxFh5jYbdRjgUbXSp6fYsZTK/WmaWd+tu1LcxztHGk6SdWiTk1Merrym7UhCpma17oIQasLRF2WLuRqM7YmaT0xhUdWB9WipnGo15ILDOb+xuSvVRvHVc4119ryueZcK+Jhl73hsSz4SZSIzeAZfAuoIzwkbP7u2vyxo4/VOyHpNfBgYO6mnPk6GFBkOdIFq+4YuANaB3mg3jis/uLTq4W4hb5Q2Pevi+RUM6APpPHQvq68islWdr7vQ+qCwVmo3ayzVmgJuS9HAd03IR222tKy3RJy8rokeM3+yzdaQnyOZnY69rnQpz3txm5He5izMVOTW6J6Wqx+4wdgOdenSi6bLYP0bdxsyjaxwGN/t6u+mJb5wlozSz0z4gk+ZAj0bZz68TKurIbXsNj8+X/5vt5uVhJNiJAnn/16kxjcpo28KsIdqwRh1/JBSEkFhfMpHC5o83TeJjd86hOHkocrLaUQG4Wr9BCiwu3YoRTtff1EW/uKERR6ZN//El3VwgtJ2xMNyzFh536MqgRW6FbPtXoI9Y7/meisDI4vqqrBUcOKkxSi9+WewFRHnUwvfV/zu9N6k6jAoYZOOr0YEIpyegvc0bx7cc+KPIGzYCq0+t5kXl6ZiM6GKR3p7JXPQmytI7ok/zdIRg10sOcIiP1sNCBECHr2u7dp5yxClA8qHMhu5/D1zsK8acDpRW1DVUvQNKi4PXflGmbtogIzRY6YkS4bgJVm8azvuyMSDAknyPGY5ykkYAfmknxBa0updCbbUgBGE3Vr/o2faqJQjVeNkabQTQCKxrWPDUThmrw7LcH42LEw+79OsUBuhEYBZFOatXamIxLKRR3P8EyD0+qoK4zVlJBNONzSDUYeJKmviiwToQhoD3GJUDE9yIzkWhsU+2+mE7lENawIaVKrUeK2sYbLPsDe0RbbWb1WFnDUI/U2UaTruXtYyCg9CfLC5lF9lr8ccZJeHOljg53lsBtmednl//Mxn8lhHZ3lQsYbxPxk+pHRWcfT5cOYSIs04ZAzAHqaampVyH338+1OW8pWknkgUKklccdhWViC4zabu+TnzVHJOTwnhQGU19/tPLA7BHLzzAhpkIkEhf2QbGpFhooCLZHWcBlIl2dbYHm3zcO+6ma6RH/Wc6NfMzaGHBcdMk1k/0xvI7AWBodJ0wmdrc2SvggUDomcpGX0XpP410RJva6/3CC/t0je5WdsXrvLJ6+nvMsHeJcauEHDLu1jdP5EPe0c39kI840XaGiXLACk8lxKKmv69D8xRZ33RAMvNqZ0QQjHmqX/RusVq8IJQuiGOvfhglH6JKfR7LuEoPeKn9C62FKJp2GzTt/2hpy/CwgVaCdMpG8BIWj/7RBBtybQ6gFwdqMWdZiahGemRE0K4VQJCrb/27T/os2qcqHXyAwHcLTg89AeellG34zV8qfWDd+sUAnZdG7wI3+rcGRiNkjkEq6pf2us1SIdulpEq7zY64CV9bDWrwn3iIumrUX+YeF40ghX/GUw5o/XzTVpM7IOSep+sf8cB/4o69zj9pLech7CeNJF0Q0UpZJssaD7XMcH/LMYZF851WbJH7c2RO6t7m8p5z2cNciA3gdWjjWtupwf6Lo4bZEYTm63Cp/sU+/IO5O/L24BeGZMvwG+dC6D0/ZIGSJX4mTaySJqvx/dgVKfLKvnaHJB+kmaKb5hcYMK0lSPxUOuaDrPkDOw1xiF7C2XoDedjIWlgn5Ht7u71ZttLWmxEw/nbsiEkTdGOM5bK+cULnlPFqDXyEbvYAqdZw1OMaV04pivWQR6asv96yJ494IlmUkzSv8fT0DofmpHnywg+RUvs/TUISPpwI2WWdiMYQ6Q0v2t1bTSSHq+Ig0tojoVbR/mZ1D57cS5M7jhgDWRZuvKEx/NDE2bOGrxk53t88BlCF1dKXSDMYLz/FN469LTtd5+Ujuu8N76ngo8227nsiSsqxr895OLUNsjh1XdUhlDNwFFCVts4ZrpM84fSWo5r2gZsA8MrbHBft4XmSMcVvsa8FPBweY1jP7+eJb8Aq2Ij8ai6Y3hiE/PTuxGjmNpIq+R+jIrywKIPHlmkZdBcdeK9gDgukf+ZDhBFbRLUUOT93e+RJWrVzcI7t0AsnCTJbWX8W9pLialSICgG0TRIwXslTKNU1lqapAGtzlW+lWwzuvYskhRrWYNmBPz0phEFYeDTtmbEq2/K7iaAJV1SFL3aqvl++KMktkuy8b1qcHuKGxYA+uRFgag2+sbwExsJa2dIQlz675WhFl9qRF+dSwhk+5xaCliI/zatlMBWy5C8Mxn6eJsWfLTZMRiQEwceUVLoahsEfEkJfyb2qRYnNPdl5INIdu5sLzeLyWy90vdDERKbGwYaDk6GcGerL4Xbozy7Qtl8coysoQHSAEfgV41uAoricaRI5je5TWu/Idu41/chmyp9EnOdAteL9xrxE6LoLxfqmCdgXqcQfeVM8Z3ghAa60q11l+URKvvT82QSzqFTgNkIYnj+KSSACc7Rt87bcxMON3c/zNIOMvewx+x3pUcuQGDDYjiOg3fjYW64tZSmFyt7MEbxkblIp+Ft9RKl06Hb5FcoiaF7fURq6/O8f1wsqPQm3Sko/6CQFr5ZtQguEa+ynyVDW7IQeCt3bXHUYBQGVwVe6nTxWpP/koAAvRra3QBD0Q0CLhBx+ZtYjNllvsyJDFjDi1YnG32hDCemuXksN2xgsqtbyt+7bka5cxgmw8VIBnkpgg3EyE1S9qr8eKE/BFoNiOL/pwsd0/hoi89Th4Zr/uwHrOO3oWGzdVsCQ2sU6PY1A5aOJEWNM7wxAW3ttIK43nsT7sDDGuu/ErxtdYAyO+wBa95fri9rjnDLWDTGBfx777uZ3OGzpTgGe1w/z1mUGFLZE9Un5vRwuyCENSzlttYtwMG3rIEI59N6lhei6FSgqcxeOljV5uCQs/QrThH6aw/EGz8p4D5K3M0UqXb+KlJ3nptbTBA+6iGFmjQSwxeLVViiOhiLx8QZ6VzwLdLS+wcdfUnOuOjsg+05pFsiyGs78S+C4Hbo2LDNQT42QIUkTi+5aDNFahzlpSjanRWaaR1Rzwz2IVkkulh5ZHCT+DJYTPqP6ZUyXvzO13ZupAya1zlLf2KH1SY3bBn8uikhJUIqf7vQ3ZfupMFT3eoWjCsb2VXj29M+ZH3KZyLAg+cpLFK5qOwBDQ2sGFtE9MMAuCgZe9abc9imjeKdNmYMK/lsDUaWX4Q0Xn6t10GoDvIz0b2hH6U+t2mXBbCJ4VoftVJCspRmF1KZwZFfxCRanjMuUhrRhZbZS1Bj/kXWrt2E6N07KevqAwmqVh8ut/mGdaD8qERaca+LQbmdM6Po3ygREiJWWvs8WvGfE3t5aHMaVjKfVK8qb18n4UQIfWnczkftevwZrnOhdmgL1yj0p2mHybA9f0t7XAlERID3S8olv4lIBP/4V2zV31lMjuc4azuRke4jExkc+r46ais8xwt7CwsQF4TvEoehCAPSZSnTtt6HhlKO3Mqc0KjiYGpYBMNLKNlXPv2lP7rj9Ie6UF/yY2oFFzxd4fiJB7XR+Nms3zZa2rdh3wwooLoHwAbLweQsMuBXVB+q+qDvkpmVcuHpp65r9N2F6QPMLBQaxNh1SEygj2gYfvZqDileqsOEeeZiI3Ck5uTUdanPeUnR7JWXY79bxdF1EbpA1JqxqX9VhY9v6tJmP2sfvrWzWuIiI4Ll3cLCeP0ob9ib5uckNcjN0pIM8MWO3drB3DIYFqgRwV8kgFWzzuJVHaN0sRdF0oY8Ajm2Q40XsgY68Km4LTYBrKwi8rtbsmqAfvnhkofK6XeB7w37KoVHBaayFzPCM5t+SyVRek1IjoHMxxuxCxV/bO1i6a88FKU/sjUtNYMRIlZePAiwzg//zEerL74FjClvPDiDwpornk+X0DQRt/TnfXCqtiOx9ZL6g00ro1sH/9Gp+lc10msHGd2fCfYcG0K4wJSqgq8IRtvJ2MwXRGKLghsxBka+G5Gls7tW08Hs0CpNT0GRFfUDfWtPQ8cxASwIDBRjZsLKdPMAJ6rzFsCa2/lnO0P4aahb6G7m3KCTsVPFaI0dTKQHY/gZhazvFEHBF75DsE2zVSqKjHUvea11ajCBkQc2yeh1G446OArdG4jhNPy0aI18vedVVbmIRjH1TAP38d6kWdoMWz6xqthT0H33lW86Brab0RzmysKmmdD1ED8v8h/9KRFaTnI1K5gYLPbvX+OInxyQNMoNeOoalLvqJsZUFgYxDvosf5pkwKCyYN3aL03wUFDhNPurfdOOrc9WjV590VhU9fupe7KWwCW3Brlu+Ms5CkBVB5/Y26te8vHpo/cQW9qnMYzArRwJrjsSj+M+DH9M/YUM1R5orOnvdSmUi1VQaZ9dkeOO6/kNmp6MJ5CnwkK4xtsSmpBpYiQyNYXvou2ZEQJZRKQlfnnBrCND74HxEObNKb1Q2sVIz1dAkypvAze3Qpfu3mrsADU5U2AwisLHjDTcWPTZqjXyhYXWc81cLVLbR4e0sT7Wj9gcB+YS2T28gmBlzuOM/yBA3T8a88j6RU3l3n013V8mmr8SovUE70VhWQ+eYa4mcvfJd1+SDgJMtzyUz+WptuESwjsvwiM2w4ImMqK31AOOWNiiIaXUlYHkz/kxm4rfgR1SUUuSk/KsRq5rJKUIkRC1s2FUfQV7rDW1MIOtxwQqxekrpvcrhHZ9jb2qh8Hiow00+qvdzk/ppTeQLAjjmclWFXzgOBxLUf2ptOYv13yyUKJ8GjbqUU4uWLYWr8B7lrIBFP+V9CCM/U9lexkORuAG08YMz6Zav8qF7XEBrs1RhCUltUAzx+VcYVEDvqm4WUTMXhTvCjKd40CMbDlddhQqCAkVoniPxHhWzKjDroFNnwclVH90fTvWHbqQr5f+OaS9SpEIlhgfK5wal3cOGf8s6KKq1+/HU/xQNh7XTKda3VYD9szVSusfH6e+rzgxOKHPufeAemKgcx90Cqmsdzk82aYEGdcSMqVljrEkeGPaQYSJr0nh+JAwZbfHAhCLyPvnKY6ZyzdkkLnZG9maIWtCIPM6KLgc4K9IGcB4Vg0x2gI+jgh4w5DXDZC63SuQOHCjvUzOEg282y8mYVbu2pZXzPtEZzUcOPQIVxc+2xBSZDWFYLG3tY+iIZqzr8zs2jLKAeQjb3YT4F35SaS++u0Xw8M3THB6v5AgBL/mjc0jTsiC5O6iDIebIqCi3IdEDCNMgCsfUWkAShqikgDrjcpWcQlDWY9ELt+XfHu3YUPM3HWXeKYlsIIw6sdWQpytRAFuxvxRg7s2qvkn8Vgdv+iGPEi4NQ+vVqoLnlhvi5YIsEGOBCB55HNsOriUZkdWQePwgvsBKtfDrr27+NMpjExBir+pqkcG89MpIbhuoDOUeqMLz5CRLdFp1orax2hZ9x21OVG7XBftbJ3gj7RxqSt3ZGfKUDiR4blJT2R+2eb6cTqvhY8pK2G552ZHhp5i0BmY7iQ2qVmy0Ri8Xf2ZNR19+Pox2Z6daERTvo8QNDD0j9l3FJ5kX0qBwTUJcp5TMx2AAdep+PO93kV1Y2YMNelbWvJd2qqJkJCAqW12mPoMQAlkG6gRSbP8QCsUMuCPC+PSkuoXWnirS782WdpXmjtBCAVA1vdSYFJb+F3q22xDg7f59JAdsj5nJPDZGEzPJMuRXcmf8Bipc6F11D6HqovyKXQUPlH7uZAdaGwH9Fii/X0r6G/vXCooR6kuOpmZb6IxxzU77ImQ596YBL7GmqQt+a5ZJG98YPdwP4Kn5o0FtOpKELCZ+9BFguCteyUScHohRiLz5MgYEkr8Gc+1smCsiwFb2bILjoi14T1i19JblKpOE6zQ2sTJlm6BbMwZoFIrtjuO7MXCHdgDvijPRz0zUXOY9PCyJZUGf6RpieIN0vna7vt0jBJsb7y2q6uLutU03G2ANU0gkPf3t3Lt8gA9MvE7kxPQ69g7TIl00yoBNywWzCbnZc1ivCHSIJ9ZK8zTexV+AyXxHll6s5TNbFiK5F4iB7NENwhz4MGVWMW16dMFFTY2znsEVUwBBgRQR+/asXTxzOo8yqrtELT8HB8ngJPAl/ievDpUYQQn6Lw0F18yAVCy/ECnjzy+Wa+H3CviWtTkNX6RAvwTxIl/MmVM2kejyy3GMBxm7FcuejMGpXbp9Kt+SW/63mNrKvkX9Av9ubseo6cS/n7rdvLGTr/QxQFlEJgVeIlfL5NT6tg3OvvvNIOD9dhgGIFgBUQfcC00z8b/itfD4QAWTIw16yvi+BhBx3EAo9Aw7m5EF3cGsfxq5daq5he3opxaEr3Uj3mcUhfvIE4OC8UVI2xoRS5Jf1qPTKbxPrs7HkRD5Fm+aT2EsdOY/tu9JNJDD4FiRRy5gGLSZqJq+QExlWMsUtXWzquxb7duanYU2dxRxLdvwqbcZLHP0akwwnmhrXHGuKBunM3+2By+wRUWoZ9v47b5MApTrJ8P0KK/HjXyQq4P+pxmk5ZFBfP+zJL0LVm6Rv0WCkPNOe4XC9fnS924C/5HHCykLe2qsZmRArX2bR/Gbb1ZgdVzJ+2UNS2QIIjmNYR5L10EiEoYJU/sAf0NLXg8EhXrH2oPNEWdumpx0vf+nohX21/p6gm8XEwiOqoMzjxANwozaeXvdl6OMNCfrhj22ZHqOlAM9YRKQfCzYLzDPtcu0eUSFJtkVU8QSiUIVAxPfBwtqZX52XiSf5zQg7tmagcW0ndn4KjLq4Z9oXokUv+OUsZbsBxW5uJ2vsvVjOk9XlEDyrarB9ZWe6nhiQljmFjHWOxCEnnABFIUyFcz2c5li3yO330TyMeUpUubeWYMIMtxJXDe4BjqvvGEcHmX5Vznoh+5ZxnPHonjBAi3wr7Y9dtHWRtMYSlVmuCBW78nmKhylP7VTNe4v5YBLMWCb30r9gSsz3n+88BfJBlahkBW5kAVd0xP3J7oD5XmPsYP1xq1MCHzEkzhw2dD7TNYDjGFi/YfMxUOW45LSvcZW3EndBhfkVhytrBuIWQiqf3E+C3bj0odJ6CwjcL/Tr5UZaa4Pa2U95PMDQ21BQxXJq2NtO4yZJliYssCx4H/khyCshbyxpxck1HcnH8nlasEQdjwNpcNBexi6tXDslHC88ILfR4BKGHpF+0yHWzIAKriq5XFzkn3svYi81R8DtgxmD20UZ1kH6Is1Y4GxAC1SvIQM8QnVphYU79Eycfbmqzek4grhC388KWRNQQiQKPbbOaIfYDrRFKLnGQn6uchqXc0Xf7YwJ9sZwo0/a4tNzuPq3FoSRf5sGclbZrtuJzqXdhCqEwRuFLg7opQmETgrDoKnq4UqEeym78LJ+tmF346l0sGCd/PD4MkrHCUOz+JF3SxzdR6ljwBUJ5lNMarUNwlI6b2utcx6px7lY+bAX02ldas5TQcYOGoaZ6/4fcv0RudYiL6ipBV6r63sziBNNFsCqofOMWnAdhXiSEsqlDLpRf25fiKx/VHOpUQEk6ETbNsjYtwxqRYesKHV9fIgs8Yu1a2DmUIyQxEEH3IK8G9OraTfHeZklsHTLuGZuWjNjVLouLzb8b3ezC88AkfHU6ElXX4J8VeYZT6T4+Vt+jhQyBe+Amvq6SdkqFc2aUfQDdyJJQbvxCmG0yGcdbNgqJWdAIJm3RUTL5i8Dlw92XMBZWdR9aajuba/cD4heq35kNHfWbXEIZLwMyfLwGYgiu2VDWMjWfPcDY5YhSONe0FRy2K0umpPeo/OeWpdTIzYubU2hkey7X7Gj9DhxG0jnmsnP5aXFCYl1a/8eqJSuDvv/z24QKJdQftIIaW42PMEmIznmvn+NG+G+ZCjkj0dPRtffgRl+fBgGhf0qrXpjwfYp5vw5F+XrgD5kzZPNOAjtc5rLdzAKDYRMkyeRbbRybxa+/GE4mstzgQt28rF7zD25IFnxwqoVesVVsv153uUuaF5/mXtyM5IZBcqgvYUWWtLcWfkSsCT4NKGhsLsjSYDfDki5jifg6TX6UMh2KZ8NiKibkA/6wBCm92gFWZfpq+cwU3FfZQFNT+1C5xGbQ7vpW50Dal7433tk+GrHDcVvTKp70kOjRanHubV2OPvtdamZOAGfhF7/ZWxNdTvJhWCUEW5qWE9nP1NE12f9yPqEqQcvZ3yoP/SW+pQn+MTGkoVp+2vxb0FpW0Mo1sKe/xOpJWhHo2MbBuxss6QdokZO7gMJtG2T+NXGh+q1i/i60JhJrvJPxiPqpVRJSSQzfqfGHheWC06FXILirIhGsklkHzcbQCGD3++9aU1S50He8wIP+MKAygwN+yfwNFvC3XkXW7p3z1FbUZxjebA2Y5X+ygev1irtKhw3KMqobzEMr6iE9t03s8NVaBf/6PjDDQqw/ph/PGKOu+SK3ypScdXIF1FRYcC66RYN0ZO/X2qpdS/bicGdOwWYar/iSmhoxj1v+LQUzcOooEkahW3sFsm/+R3sSviS8tOxQry0t3khCpwIncrq+rny1XWHp3HtPFdgrnslEB6SLRNo5gAs2RW5K+BrbRp5CiFZ+I6E4zm7CS8a3NKNfHPI4HcUEmZY6vUfkwPK1Afa9N77s9Y/MDEZOO2KjgNl/dyPN75AHyeq2fOyt87ydOTErdQEB6hBKfJa6lOAKHvabd7Z/KWvvwPNt8tNlw0rorTwvhjUeggcs6pOx+sbWbpYuoV90XxnRY90yQvJQsHqRqiaA3BfOtpGymLjKvJmsXsBVSzTUU3iAAUpEoB259KSM+rxNEppjLUQPWOXpfFk7CFHkRy3qJTrP5R6X/Tkzf3gBcCuZngRiAyQBUoactRLehjJ7jBYCuRGkoKiViwUmiVQjzJY74jG42e5tlZutFsIDjQlEKk/QRKshk3woo6JHajkf4vRhTUtt0VlZyt1w4/izEX7ywnojxLNnEUt1lS6kJ2cqKndkFDBRQdvKNfp+92zKQq18qxDX6UXmSgMxHMcKnxxPnCC0tdZyzDoFtkeIsA/kieI3ybH0KMB8ow6RVFP92Q/GpqasuFDn1lami3D0YlWxjxy5v+EbMf3AJWcdfqMxqURbJeYIg9Sl1Jdw98zHtiYpRSYZ7auavSqQHu7wqDzj2MlPg8txocYRU8EWthtHLbCHwgfzdni+OXX94LPvT8ywvyZh4+ItesrVbtLJlUwUjWgw+OOtUAioLFTxyKy18LavC1a7m4JeNzYos0l3QIWSCC/bbMgGgeF8ns+/RwyuVcRdbg6hVAj/wcn7L2zCSlCib7X9pxrlVkbCPoNFkN5mOTTEQiphJ6KCClHx3kMdmGEmdaDbCITs4YGxcvJKIbFI2NvobjO8EfYfo7sMW58M7evJeb/MNufWU2QoDiXRQqMkYxqsj+gj5mxUuHhVmq5CMkqkt4wqv2KSe+OaWqWe3Pt7URWjoMiEFXRfVbgOyWpuTMoyq+22EDI2KHQTCHrjhdadeyz/s4SuX0dL7SNNLnIy3D1iJKoQCeNnW/zn+M3QCBiUwY9tRXk4QQ0te0bse7yjKxF1hcUI3uo3vBXv37LbBRDddtlffNMozvSARWN42nJ/g3zC4/m6lT09FVZAkfpIhrzN91aNtbMWarzV7Mz09NKndpMp3u2Q6A3WjU2gaPfpemaioVF5nnSqfqOZ/br4dWt++QRnO9ltSOdRqMFWLW5oP+02cehd1SsPSWOEsYBh1eBk2e8dFGf1NP2kEeAmVANkAoda2ULHKwSnA5R7775Bf0gokJekTzi1XvQiOZ4dO1v7moP6dVTY9c31KUEmJWh6tJ7ojwAMnc9XdDa20iFtLMd0eHtK74kIjMPx4oY9zzGCYJYlXDUzkMFD6merpgwSXyTSJ/VBZPaBUvjubE0sp7WSLJ5yrUeTEPC1y7TugHhawzedO5KFgB6Cp/9hwS6qGj9HzfEsb9VUZbO56wigZZQKEjoNp2Cl1rhEm0V6k0Exq6rqShqkE0aGMF8GfVgy3Rk2ZJQtXDFWr9idg9r7noxPlQLzQY3s3oC8niGk2uNQ5r15yRGQFuWhY1c8n4u235q0u4D6NR5kS+jG/WdiCTczUqpmJjLbASb/GTbRfMKE3ScMYvwoCZBfOpOFaA5wmyjy2F/gW87wQoRLNr8ZiUSwGcSGmTUi99xJatTf7iKy/yoMDdeUQnUgm/ty7m0WwrGOpJrsmEq34S0Ex4uVQW8hwkmdvZTmJlVMvYSwO9iyPiTpGW65TSLN+3cjgFqMWGctVutKg1I9Mq7SW18qtNLUsNB2JV91pludVFavX+lElSPLHb/ECnlhc85QRdA5Wv6/iKbgbqAjI20ymIb/Pb6qj6dvidxL9ZOI36s4vrcX9MwqqxlgPiFaT8ODjJOHPHrP28xy/lJtLPSlXb92xQBLx+0/Wx0dG9XJvPL9CG/ZOupk3dmmfR/Vkbl6xCninQkcR/mrNWS48uEUuRrsMmev3wOcZ9R4czTQQ/naSqe3RPTIHIXiooOZmCxXSoB+VcJQ8uCIkO2Z4wM5f1uP/zVdYR9BIbpwxXzj0JQBFox0hSyz0FuSZu7iku6+eM0KwRTiegcdT7IyuISVrXrJ+3JASiiziyQG3rbzv7fSr2TWB1Bakh8711ZwF3SULWaoDEsLdci3vZHMUROWz6lFcWueC27UP7UyF6mIgiuWz/iSXbdc0Yumarcxh+xtDBtrt+ef+eSe3N/zYRLw5ksBIJozZfqyIDIXqs2k7XZHAttsNIO2qDxAoQxhjM5JkXaDyZWIgj3qZZURxbuMFKAkyjfFoLK2Ci/9737gTqwAAnefY5aG9qllkWc/KkWvR0ZlvfMQJV1hr6GH9GYlWDvbA0ymiW2O2zDk53pwQHUsEXlEDxkbnwtp7NElKNIUp6KZ9Mk91015DE+QdeVaR/JFtGTZo1XsY2dEBwVUpn9vJV3SQn00Vfi0lYArPkeK+opFUq3K5E7GfpgW+xukfiT06A7oSbhXj+UqaPDXnHgmIZv8pgXlRva3Qj332FfVEPwqGHD+jgr514eo7yslLgW0x6Bfb2D/yPwH88QixkVV8NB8L4KvcP+sekq8x0QLpG0h390Js8DdQWaOxKvuEzcHhdBOg+wp5oLZW1o/C5dGJnSyDy+97IBOFNlLq0sCuYVT1N0wfylCqTzXJV182Xq1ul+yM+LnXzdmAqbw78tjP3DNxRaVwyU+Vk+CFtw5Ii6cFRDsv972y5Osh2zqySaaTQs5j5n3n/O2Fjx3vnbycBhcV6iq7J/Ex9mvJtborE7vpr2n1jCvTDjgmtaDYfif3CnstbiCubzABbW/xxZRh4GC2pgTJFne1i2cU4cMn000GRgJIa04k7NGloCcQgzYxW+ZabFkqY04WTWxvtzVDGdmTAaJQk77S/2a+WnYgRKpeR51Vgicb+Ox9cbHTcH57bA3KO7EDmlr5oo8Cmi4h6Ajd2kulr1xaF1hhZcMOhpqfnOXgVRIaCGMkq65LamrXr8K15wIS+TGMEpHuXKoP9xDYur0gaG8nCsOz5I0zWRPZLQC215XGQ58krebG38Anffrv92Eh8jq90dod+ZjY2bW1F5EqphBc0hH2okdIDl8+zhJnviXx4izY15gMLOZBYaTNAbplcThAC5MFFne4cBYC+PdKv8utMTwqVqPhYay1A0odvNga/ACA60Dq/vvB1mktYUvx/ljRHixFIyvHAtHB6eSg7iIH3qHsEV0Fyv9HEP8T7RHtX90iMxdgC1ghpQPX7gU9lPWE3TIGfTcbNLSlAMoFOIWWB9Aj+U+0ddoG7y70v3CZtsVj/44p3ZaK+V6h+gMRqFmaiB/EXAx8dhNUsE/uEviAwKBEUtUFcWGFbSUQVTPJkbusUPn7kjAkxepC/vDLFcqLbMTmKv6EMq9VW/jeIWkxRPkknqZCAaa2qYb3DvjuulRzFVF/Ylvc3dk7MWvxAvOyITVlJk9wPx/qdQ+6ECX7rEuHFkASamosp7Ydr/u8Bc8HCseXhWHuGguwr2wFVSDCBQof8KmMqbhMRkbJpqTXSygEHQn0P9UAPQk+Rsok0V4cxTpW6oNIXgwE6hKi2SBwZJL44gu72zCxQ2QDQA0KtbWkBCKnGlS9GFSZiNJCS0UiOGIN/afrNpCS/nCrVFpUl6yGwOsjKNMpq1+B+7kqS95FoOnRTS+kriJCsM6Jzv4Cm6BBc0+givXDR+EhxhBXor8zxsmzMP4ySWQHjKH3eOgBhNQT5g8uMVVa9/8fGwnXr5uKO1GdRjnB/imP8FmE0uISRtEqlS6Td4WxLd6dYy9WNFV9pygLBdWm7h8dsymKDEyEGTHEo4rxxEjnv25xECErPlPyzoacYCmogkTnVQ2gLWZWdLs/YIRf3oNeE8wIEjoabTg7zeyBgs/vUy1TnGguzfnq1wVDucQhusRWrgAxz7orn6faPRD5sMrTdYdfC6sfiu3T2CbHAGJhMm3NKiinwz7NDKgloS3NM59vNvTmtlunSE46Pq5wiB5RosI7JZj9nIZg73hAfnGdUawOPL092DucLcfcuhIC6LlvxmgPiZUYZ0yQkppdRnULsOJo5HQE4KkgPLPFNbWf05M1Mdxc2a/S5ZqDYHtiOqpqrPL1XcSwj/0iSBxPhRIcVtkbfsb5g85mIL/LWXdzximSmeHzHySABap3avjVC2GpTPA4Rlg4s/S59a3vLSp9DT7jqKJyc6IdUUve0EGt5yCr8i0XbySSFnNJoGJwcrwJIyK2sl3UR5euszUt0dUwnZVBBzhe4tdyQr3WUDdxglhDSPbEF13IuuA9Il3VlUvdNrsejZzMuAAn4CvhVUCCBhAdl68sCM8P85A7cXUUae7qfqbg+QhtvcWk42jvHIqChKEurMOji/2Nyx3wKR+5U6hexdEbqBvDq1lpESofeUwRZvPWFw/LzIqpFmmiXfoKeNs5eioBMu1TH53NfDxt73fuKkQsy52VeHIBdseiGyJczpD1xGjQz0BCUjPiLafEHDgJuf+OQGUQzT1skBi3U9WGLep/xQGPOexewXKoCn/8d3YTFuUQ2kITiDUL2mlVr5Va1NoDQiPDYMmHJZkswo/gQzab8JLiKl7ezoZvgl1OXMR0pi3WRDhYSe3olEn1vCAgiFLZIC54FkX+y+rAxT8IwKFO/H+Zmib5TcM1G4rpEzeatqNHjIkrObQXvaHk6G07Z6ou/L9Hq6oI1JHQTpWvC3ccfm7t+Vfem0TQXhzEZvE5tyxulGhvwFEpn3eIJhePMwXbQeZNpa/jWNRlnM/1R0Kv2CofcO5PKPhD9cV9sri+h4WGxUqYnmvl5OkeO/OXXiN9hit+1XuVUfgTQnW5AHuf3WDjziww98yFN+jvmJyPLZ2HRONE4YRlPn6r2JbKRHFXmV3WbNBkN5S7OZ1KLgk6vOqlvADfMsb0GBRo3VmCLwPf02WEt6DtDIEIdy80BjWlm6nZHNW5+eUjZxg6ugz+EoUF77C+57m/uayN3yP0oBHoCH2BE5kF0S0j/krQw3CXVl8HGu3uB4HC7WyVGz+MX+FAfksQqSK21wstiN0x5xoyoURURIZ4FY9fuwwlhA8FkIagXcy1k0QpDXPvEARizI8TORg133qHykL4FHZfwtMtu5lN6GBFmb4hfKkPoEf9MUvzH8pCQGjr92PB8PFm6bMfsn9jLrI2TTGVpOLjbWpZls2HkDid4FrVw8YeTNIIZHgxNGPE9Jt/+7Kw0PsONxgeB3wp1fy1yyFbGp40H8njTZyZTN8AGVfQw0wOhuEwKi2WLz/fc4DnWHd7jbe7JNw4ziygjrcRdOKahefm9EWzRdHif5LyAOwmM2eGmdWBGMmmN8KjLXS1vjmba+/UiFLkYOHi2e++/jhmAc8NsnaCJiN64I3yV97myApq6HQBWTrl1knDSwldv/YlVIGDY1BaaG32DQD5WH176aew1kzqXcrVEeM5IaCdDdbCdrpBuEKFUw8BcLXOW0NBgom2aApTrCXVZjVznZdybgDvlxK4UDC7bi2i1KlcFZUFeWDPA7VSpkw3MU0QJBoPIQhXlDXKgsgefprSthws9bEK9W6+W/Cz2fmHhydBi76MnKdzbwc45X6X7R6a6Et7CffhwTDxhRyPZq9dWu7A+/gWGNc98NZ4a2EOAUI3YUup3WdlhP5uF4n+ucZzKrm1hpAsQrO9DvDZl/rWjr0jrfGEB5isnmHMjwn/4ZBvU42vff5yAUjtkcuDrSY0Gx9j7aIabw/QCdeqI/km2GYV4LbJX7nNmEZz4/1ZpQxu2gN1HdVAMKYGnS+ZTHjhh2b8YJb/6Ej7KE9OlR4iljyoxqlzHQLvmGkc/9frGg6ClaAzzPGKddBqONr4MB4rj/wdVeVpWbiEPaVMNi/jFBNhd5QbJ/EdRN70pXr6A+OVQqcQGczqV7O6TbHSpp3UgxCNWdWGMQYDFKQNm1rqfh7y/eV7fk1xD4mCW4PJsYFXdyZVNCQH2hUaUHPNolKinDZeZ+huX2q7wCDsVyD6l60REu7SXrveQHuaQKgahoNY6P+mT9f+3sqfAAtEPqI+4wRwnL6/AvcetLMAdTfTO44nCJSzIZjUU+oRm132CkFhpkeA4tFNV65jho9k3eyIx2u0IB1ZbgmgVUunCAfHPIP1ZmjdGn09E7+ftWO70mrl24jsW+R8gC1aYDH2PfbJdreph/YPQ3t0xvAREo+yWRwoeb9zeTTyRiUWMUSMSrV4mYR/SN5++Xd17ktjAtwL6uSAmCm2gWFuByt7H5v4NYW70KrQ4EmzExEUmx2SzliKv1leoE8vgimvE7yucuqO5Z5q9f4+uXxOl4PhkrUN1XVWHl2vmPh1j4yOam3dHnbHF0JfnZLN8D086Oow5NRspJ35xVCB5dNFb3klm3IvrqHidlBM5tp95y1aNVJ1TKX4j3vkwsihDelPshVVaOrwhSgY7aJ6mFqLMh3PHhRmRY1e7M/rqa9xCoTPLZi1iClxGo8rKpoaO1l7Zuqg0sKhtyLWB7KXQpY+UvR0XhVg8smMydoJC2eDCZTl1ynuUO2LBcEnUue014zslBDh+x0LzxBlObCTMLg4BMjmGh0SuX33kDFimN3qSWZ65SOQv9eURL5wfCyvfynR6UOHfrybu0qMK4NDVBhPPfM5dTnvl0TUhbR4MoUURJ/msjadnlA+oHBAFAUl47KhglVY15c9hj5yI7bcWpLJQ2srnNcI43IyQ233BI5NiH8eN+tK+UEBIRAe7Yj8wut6fADMlCJnZaKupMMsk9t/Gx8mkZeR7EILzKi+MBTzY1hv29ipn18CH7EQFt2etmUpFJjSMbzGcXrQ//y08Uqp40/DP2PwGjsIxKzzWiNe4Fbneafw21h57Vb8YbbQcVvOHwE59ba09gFdVG2XPAs4MWkxfIUpvHOkzf+eLm6xoAfA1tKte9oEfWFhjLD0HUXPTUJW8HaZtscOSshNPkoGP1PwlJmFqr1p2YMOaqHmaIDisbldPrplp7U9LeuWRXktYtBRP1K+im3yU3qHBaz7tZjyfdZgKfLKYOMeh+SVED4HWx40i8eJeuxezcHxZdXHMkDArtkkQImYHh0IQLOUvCqeBjJ31fau9ThiS5c57kM26lsj/Y30+RpvwcmFzO/VIcVO+eYFlpPR0kWs8+gJoStMu14QLq9ZkGUqlP1c8M/Hl01W7N2hF9QZeXwJllSMQfGvdrI7j1Yb3ka73BIhzrnd1Kx0X3k5JdLlz9gdLWxH/Stn7DfvdYkY1+9s1qTYtJPJNOCmdFXNp7TfTDZgoldS6BGM/NZPfyEQi3V0KJJWOTQbbKg5EGGm672r3Czv/3wTxZYoVKC4znbimZHuTjEN/65vjdM5IgHAMvepoiJ9tA00xvMC8T/GQ2083gHvLxgFf69hJP/c4mW+2jp0+I+lNFGePch+47vzShO71pQ0IiFCA6AyAm+ob45T0GkERuCq6JFSuPGQWxpkbVQpJrc4rLQ7JM+0ibfjh8qJkhAHi5ygzgdNB/Qsj2fryMmy1YQT6e9GAof5aAmEx9xY84l3OWdHW0zvVeB/4ghf9JZnvCiEB75NSL1CuMkOuwpimSmlIhoJy9s20wY36rl2ipv0OAZo9pD6PiXCL6kxdiXcxdXcNVeNMtMBH/guDlNNE596KIZca9+zmd3zeewHvg1iIhXrEBmHOEZefcFXSymOfd8n9sZc9UEsjvhNXAhkwxF/ACdPozYrlAGqDV49fOWYGtqrnJHNKVkbtwz+6xXPFP559LCQLE59A+qn/cDunFFJNS4TbIw2DX1+hMwBHWlXnBvhmMbXbwNhce98oxFKYiZeDpZzImPF2GU9suZNDdbjHQrWjGQOgMrpzfpTMC4sWTvAJkrapcxyZbqzis1N0fbux/CAX92qS+R8urZSR+O/s2lp3sRwRS3s09DSt2XpPF5htlPHVNTcr4c0Tiyox0OZsm/X1n1SFwxx88dkVxoBMtiDZX0VK8GzOwaWQ25b04/3NzOltTVEcR/PJmaOkNwB9ERgPQxc5w9pHHyugnMTy/76ctqhdo1TAxQEQuEm6pI78VQmfaLucw6EFQt4sdKU09M3Fx2RiX3TEqABqSS3qg5Q3y27vzlxnY0CTBoea3Pbi4tebxXXwoTZvrqH5bv4i5GaE9qO20WJux8EjpZa0Ubz/NBp+EtgqtQFETdm8Ki7hxrFUX0ZJOV0JpMAwKNiWMQYARA2TkEws0N7PciFTKhAXRbOlXhLqHmjzApRl5tqY/OyOF5EvJbqnGe7EwrY0sQfLkpNfA1Nx9+mqHZPLMchM2R0NTHKgw9we5M2JfY4/1Yj57cK1hSSxo1M+5ljsMuAseAb8Uj/N6CdIJvRGk266u5XADY5wztyX2rTieNEiDNEeP1Hmep4whnqgBjsD7mpGNsFRHguDPErr+Dnvn99v8Y86ijACiJ/ONkay1x/2ZbXsLfEhstWpfIb4KMBRXTbU/WboVRo3dPQNOoUrBGQfnxdl4KK7gt4Ve377kSW1r4fVp/VJFuKxUFHzWWZbanmVlhQqA1gVHWBeoaJFYCnX2qhpW/kK7g00gWUH/5MCAL27F/yYm6YCjZyMEJpVXnpNIOsuLlydsbsvB/H3M3Tg6pOiuVKGmorH4N1sLBgISsBZnrWr/aTzh5FBgu7xNoexlT2nwzbfYQtWbULL2WNT1pbn5CZmbwr7yi6tOr7WGpoRU16zoyYmEuxOXI36Mil8Gr33GbQLV1LfaXIBpedU4EfxpB1D2Fz7iJWgYhYXKYpFbGw3041SuCsjo4vxz61vayII4lD9pg641lMDnTh6iYMIfI0UIPmywsXcEWqujmr86+kPBwmT6+rLH7lIF0lCWhB+AhAQBJ5XzdDni4N+AaKAwG3NJ1K5UD+juWwQoAdTCI0IyczGGJuzxCAOJcJqVe0/ig5XJ9SbF16Uw795iEO6SCp3DuwdnNJjvKYqgubgP+cOMBUJGYrZ0II69Tsn+ZYUS5w//KNVhyTtxLVNN7QtZ09azvOyZ2DNdVlgZImxbucdukR0xdzwPTrYJ0kfqm6HeKEUWbbrKg65AFvcY9uOfrYO3SW3TEkSCyjaofKqkDmBJO6he2IMmJz67u7qGrCKr8wRxBroWpp1dto5NGWpG4tAvTdh39UWINS/albuYorUFMxzHA50BpQ+rkxRbxvx4boB1Y7cn+vavbIZVtVeRh6q3obLD+2ZX64dpcvb1L4NGekTc2ZnbGuWQ8Na62uWIl9lh37U7cix6xicKSc9eg7Bo000T0KGoqEdC2flV5RCVfrW4kdLQ1Sobw9uUaSDGP5ooto8ZBicZtZYPzlvdzaexuZxQ/5QFsYdw87x9XYFXh0Cebw7qLxPhzaAPkuWqj3++DBABnX6q7FNwZ5x2wfoQ7SWeTUbqGTFycgR+0Zm5LB2vrWDJH7XkHBRWhGG9Nr9Qa/rF9dsWClTc7o3lqntr+udZQnts67FnFTyECOOh7Zi7f3zTYfiltZ3HJO6Gc9sDBQy4iirXyDJogixGPacTbYg1w9J884OSavN3N6IRi5Xooot7dnBozRbl7B8ob2xFc70l944dMid/vBsen6L55fzamaxS3GL6UOt99bAf3SwKh9dOjZ6SRp1neom7BAuZF2Al9cyxh7KwXRujbLu68q1qtlVHpgTkWeS2gb7BrEXxr3V6U7aLz0tOqwkCswnGIGYlCuCOFtVKX4rTqqGK0hIAn7KQ4XO85Tpv6RbBAJn9OFJxorB3mbVXAG8axnF6PaZ5FqlsaMDskJmso1aIU/kOuxXsePr/N4e0fReB5DleWs+KIto0Y6jOZhPj9KSDcYmWK4sNTmzM+xGMwg0O2ZVpxMYejEICiqTYtYD9MA6LqcsBwuZE80YXsTDC27MK/mEerANPHV4id/Hr7uQTYrJaRJBQTp1xwxlY/b3kZOsdeQhQsWx6WCuSVDNW9pemYNa6qcCjo4hXQD8mCOqbAN9MT9bf+y0PkP+1LVp6zSJI9rvGoXgpltu7u2G3t2KREkhvpb+/7SqPWFtSuFEjimG6dRtmK2qWGEbVlzzOKSw1k6ckPNGB7/P5ohDAgzt+IFPAJzaqR0d+g5HJmK2Q4EMWui2AJnxce2Nf7kl7FmDwlK1hP3Cea2oIql4NvltgKH3BPA87Sjy1x32Ib4OKblKMuikT+jlFf+Q1dIUQHRPJ93PgMRSA4xFVMc8WdP+FlWfv3Zxs39YJ0OGsTxuwe1BoBouwQpH1/maFkonV9FY1+z2z0L1AkEUxnt4YDb2tgsevAW+Ifc8k0mjPYEiLHrcLBHeFvnfaQl+i1PgoUKUr7z84Jrb4qNsVTgLj89sS2yE2r0IF9zY3Op39uHGSeRixnQiwIUDCgGqCp17XJDQtS8Fg0Cmp9e7XlFWMLCfSjmoIM3oo0HUCMVBR6ZtSMGV1ZjsR1/aQM6VHFN0kCYQ/rpkDSY+dlsJqxPWZ/ndI0wK/+A1X8UF0OY9vkS+6JAe2Wtr3lQuMTN1p1dSDOAEXMM3D/PHQKSRuXTaqg96BGqd3DogVOtI2tdbQqK3LVEEnjAN3HSJDNi+b0jpUTtf1Ih5KwU2czJ8DvSFd3Xlc6KSeSXwmbm0iQhbLWLJJVnB0r3l3SCXvRLHWYSTJ0F5Nt7m3t0vV2w6WmTFMavD1Tk2SJmpIVZErYtg/dnalAKT7sVIqUsrrygA3mqum51+3pfaBZSvc0FmkeXIswOW7bnFaNzIxOBymgwXOaNxUF65nAbCSrI7m/Z1peyL0ibywnHLnGpnqlyFsHyTGUk0vrdi/YysBWKJvl3VJUMZ+CdNjhOCGxy5PJJXcoBlR8swWf3V24JXhkH6zo6xAlBZ49ZVwAT2J9UCvKT7xc/IWS5QgJCBjLXfMzE9oKme3T1PKQENVrBAn69+0jrtsK8DbWCPh40aMUv8sQJQ4NAHN4b+5wO5GeTirIxTLhvT7M59Ack0sI66WYTBz3NkhLHjhnM89vXpByj+kjE0tliXzEiWyBzIvOKA5MhJ20x9EeBwon7B0XWqIoN8UAe7vWE6TsvcUf5umRKMkyTY4LFWPhpreLyQkLkYnVM32deq0Yz95cyNi9x+5O0FG/rFLXX5SEcjcb/3gyf74FF7itaex/U2nrkNP1yO1gV7bu9mVW5+F+RhBUcfQAieRKpE9qnscYjpvvNNi8bOGXRDpUzXCwesFODo2Oh9szfvnheDnO9LsL3iTnrbAVEUXX0Sm2psuQiczbX2m/Vhg7/rrsW7nPS+U4XiMPFMDucGM5WDh5jTP9ADulMnmQiT8bu5jTWQC5izgD8/uSz3DG8Kb7UAYiXzfqJq1TNmuD6hZvRbetjQdRwE3Rd1u+4PRnATiYqANXInJLBkKm8uaXB9AhToLsCF3CBeZAHcadBydBM1pQgVE2XQESwUXOgKZcclYoD0ubwo5RCSBMNxmXlDv4gjtOQBGRNeJxhd6KU9HdDfQ1RrHZhT8qCp+AtDm1JGMcJUQrY77PziXmIrhhh86cI+vj9Wm6ivDKsf3TbFTw61ySewpcCMFoi1nMxDSXtFk9jA0EC5qqCC4O+ehXsaQR7rpeAxfvyMRTliSviEDcsBKontcm0dxn7MhIRa2V2yAEEGXPmYwPc0IZBmnmYLx0Md+pYtGBDOSU7xuccDLLxL/Ekj0lgSRfdBsF7z+X61Etzm6w6oX32td8G9quVabs5dVpZXgsLWna5UekxBo30ZFkzdUvvsSQf6bKEU4gij/CpXyq4e8AXAQLSPexr+u+/8ukpWAbGkOehk6ki/ubEZJv5UhgO/AfelhvhROtuZ4NYEvu9K9M5RQpWQPOSp55rE+lHDBqdIJAfwQekVrSr9cw+45IGgjhqNzQN5azuDSov/+CTl6LSBjuGz5AbMFfPqJbylbRXyJCjsRrIbiyXI7AChVv3OHSIcr+urIh8XnrzRRd2yaUJrzCVGR+ab+FKSQQGia+7Vn8mQa7Z7EZq6WMRfiRrg6/VKbk66errGNY6MfhKcOmPtkY9Q9wg3PtVYWonvjMuzw4scckzmZAu08IdikQFSlae+7EiehmaGgKQJWSD1K386ZjrhoM8BA1/mVaDPAGyrDcmNsG+rprrLwu7dkPpbyx/gtQkWhQQ21aQ8JPNdEv5B0ZXD9GzEEvVfSSffvt4LXoEvlBQJcUcIdSxKiYUIGlicdQwPmKZFfMxHAqRbiTLTZh89hKpCUk3yKiO3qeTSa+pV6cQHS1kC08nYBq6PIOT2U3CrV8sNibi5VZuDozDBvKbDvGawWv2qB5V2hDRS/rgHO+r6+NvKhwfcQpDGCZXZt6BNJVgqb2vAQEJC3dO7qGLcoR26t8iUCiWNGoqHEsNDKFYUlZsgsx+Ik8+xAq1wNUnTDuOOvJZF2ZaDNUUQ3e3tHhmg3FZlTL33/ykVIOxlfnctysQhO6KNqHiq6DrjCMmwszp6aYuBIy8AsVx5jwsmWsWRtMyaQqNVDYOWFlcBL78g0cVNm80+eDNQ9UsQYIXKSd0Cd+zoK/4ifR8i4IioKjWOtNyKeY7ma/+pvbQbplwjws1cJ0rZGZvcTn5SlekkzZA4Qk7nF8cQhoZ9pznWzpO+9BK3YsKjxRsz6x0i34zaM1NeICtE6Y/CVYmfPJlUxWsNbBgdVAOtKtwnErOUUUSybm/UG9/ybj0cMRE+p+J8IF7J13Tvk2YL0gCGanP5f82xPZOpRb2dc3MURrQ6h5mP+5DjKyzQYCuhU3LR9hzO9m63/UHzrNPicBrp8R31EhwgmrX9GX8/k8Yx7QK3OHlcpZWnAKTJFPD6T79WLbWtBeOTJfy/7DwOvOToD7jDybgrlbESKzTDPcRH1ZbcsLYL2yST1ZWcTAixkdA/lo+9qrM5/cGo6iL+PEGJTy2fYNYMzgJdKsca932MDPsh98GAQc8+uwuUaSOXgNxlDYeHGEVYNS3CvnNZmWvj0GUuh0lYSSCLjglzLTrMVtqNCmHV51ovQINqmUjkLfEcjzg/GE7W49T2nmPJvSnOUyo4MpGdUWhRxVpmBbpgkpArNLGoSIKKkaxlf7KK+d0n8RoZYSR9FCovEBZX9Zbv1KLV5Pm52uSmS5NYJxWumtuS6ZSLSqGIYRFIf7g/67llUDnMhwNm3YYLfTLYSuENvIymFj8IWCVzXJFGWtr1LrYYbSxs9MBaR3jBz4UjPLDt+ql/s0dWzUKMCFkRrx6q+Cw80MRnuYBP4O+tBfMiija9X0GgtT0D1xElwGWc29w4Df85bfRhSURphDzXEQdDwLA34Y2JzhoB+EnBVZFFZDxpodQEnnrj8ZS6iL20aqtcE8gyamrfRm5ayeDmuHBuhnUUesV0B1tSCJ9QMaNziVmzF6A7/l6HG7zOk3pkzGd3B8+8rMK8YvIcdulDX38DglNgeE+BFRqdjwfn1g4tQDOfLPr0eDaASQ2wrikS9SGRtmywmp9JQ/G3/Qkymibz6ohH2VRFb0edgyn9yoeUzu8Yk0M210uUhATPlFpyFk9z3bzNw4bxwFweBhN+ZDukJKxIIIdc4YkNCy+A+d3Lvi3RxCehym+gRPyzjfwU3WsEPQLAHUqCSMIf/Y2IhxyWM1xddqxhG1PBicZmgGLMOAVpB3QY2Bm7A7heU9jNNKjXqSlSBwd1fOjYIeARbsjI6V2LXePgaiIiguatiVUIxnCSoth0qEtKc+45KunyAh5MwqDXqXA8c15iruUlIH9/YjYZwELwvjWZG0L1EPEtYNdAd2fUp1x7CX8s6NpTfLv2flzcM4P6wlRga6hh05XDgYMKDM1WK8ZFi27iphhRs9Z8b1i5SJmjF8+NBbnexDybYMIA7mX0chzuFpXEGF/u1E1oMUPpZ6E9P9Wi9y9eFvsXQXnXtO8BicZOBfS8PL6UzCfa9FToZvIxIi2ktGOdZpzyd0cOXA6lni9VV9aeEOmWZKrhha103j0glXDigYEoVshYf/swN2rKE4JbOBOBtuDHvfT29Dm6kc3PoHshcDlUgcw7TT9xm3/1IzCsZlqNRQgvjMAwILO9mt6QdNsmqhj5j4+R+RX30I9QzDh90iNI95qgs0roaPKpdP4A3tp/wm4gPxKCWh6Uts7lRSf3ym2CRv72Z6UapGoL/CrBN0vNQPWdRfoABYEI7op48eNMieksZcbER1EuALumx1/tHY1KUfXtuPr21BkPjAYXHv29U8Xj7TMtj7DP0YuW36jBEM+MVX3tQdmdc1qpbKyc+BPZDMGxbhHiUsUaf8DYfbC2Opyb473OS/IBDCaDqQ/2omHuS/zPjbXrhY239AqBLG1IFayBqaB5TEZIqmQhZgPSOB7s3npHZpXipP4S4eFyPLYrfzPnBTSR+AhbiOfD3iSm3ItHNmqbnrznMDyBqrFp1fbci6smUScUaehHx8VWxg7/36eM+03Ig6etXuycUab5QYLBA5Vz/VgfZvf5PkJWPZXI1UxkhNfPgl3x5/JlgHizr58yrybkBZ7T3OvKkYMv22PLqNtutAJEgkvydC3elqkGXvOB17rKLMzcAObZtEXwHhqAwOkbwdlqpm/r2pjdRlGeXmqnkC2GM8NnYft7MGTFcwaJ8D2iroozYBIf4eKLfCikqfJJywgOEEz9GQqtMUUr2gTe+Wt35qtEdZW/XjJg3ZIcEW7DZn32n1KNGDL0R/uznCi5w2OO0EJkEp/dSqgN9XWnffxcZ8Mj7b21HP7ak1Ecf3pWg9ojGQ5vngHxVeyYQ59TVf30D2dK9KSJ8jtJUiW93vTl/ndjSGvIDNaaQTAt4uq74d7C8mfnA2+sOsfVmJV/yF4xsuv2YTHMTn3RxXQzRiwsY/4FpOTvi+NdV7MDS7cxZ4C2YYCHXuqP8kcfMnbpNt0VTXHR49mb/9hz6kglBd9zHG5CQhJFy/4JLQJFRXRHaqODRgiBLzHUScOMragdJm5HfIcZlBCyzWKo80lEgpKQhyhUQHBhCdO45rfNzSRefk6XPmOhFbiPcwamU96y3SnH6jx6cg6+SIeiiwc1FrcSjp+JcCMif3Lz+HPgEGyYLGCmFbwPLQi+JrK8lf55L3NLp0qpYStKU7A12S4rDo9zpyUPWe22wMh/n9ZSuGbd1KVBZwCswQ94h21mkQMM2gBEh2EcMX9c2Uq9EZBKuPiMiWKQ1Cc/Cy0bGgI5ta+XpCDiwgqdKyoanSq1bdyIN10UM00JhLmJsmmxcd6ZLbO30ukJ2/rIyyGVsYsA9NQu/0Aj7goKQQ2a9SmUM3X+qb8mfYK7dwHH3pDkOzgyAS/MWk+zvHWSjB+A1e2G2wo/cDVCb3ddqvC91Wq/M3qBEbRa3+YGJGX4sUBbJTG7w8d2y8QwTp5voJxMCWXHd37e9HuPU1hh0VQ6P1aQY+/HNhRu4veTYlKf/A7KoshlPpG50GhGLU/AhktjIZbesCguWO/uTnGhmedpkuiFkT3Mh3utLxcArXxv/ySdJLPb80BZXWAI6Kn259k+4u/SDJ9cSNVA/42b17xDra7jeuyNuXRBeQ89+HhiCCLLEOA3KQAIZwd+xY6CBYjRmV+4ciuFXuJuZ/i9KeFJy1EojglxKaObbo1zs0DZnF5oA8fJc7Czhy8l1ZD0a9D/NWTyEGbE1jBX7DDWk75do1+KrIMa1Hd6verw6brbTvR/TY0IM0VB7Zp9jvkw+88ArPgZXFAQnWZ/l9dCc98rNzLZDAvsvB6mQ4gsbTRtB91S4GtzC8DPQG1q7nxGQrdq2tNdpR28HtpJAnqKMR+FiHHkV/TxwhL/293wLGyjwEpxzgVzpeuG3Hsu+O/ZhJvk3rO4t/VBuYeewOL+j6z327HxZNPODVWvp4v5ni5fUSJSmKKAFgO6YSe6D3t0xAjVl6wpkaYXK8ur/ND4OSy6wd1jNDsfdBecSqqc8dMk/jBcdRVAOxQB9K5ognq8Qvt0WPzliAwG7VudZ7K3CV6tvTCHjwmfup0I1XAU/0ZwLYprLI2otTtLgWeSjHzQNcBZqTwnT6nysKGoIIgfSLdpzn4ts8mp9PiZ4OSo31XZ25Cf2r/Uxavrx93z18+kZQDY6UdUxVNTdIrHisBgbHExLOJ6TqUdrKrN2jumsJqeqCfzkLwsx+5nsWZm7Q7GUGlvGrkKIAZMnOxAdVCeRONmvBgOp6obssChbGqEHNeBWxQSOlGV3hNCqGx3FLjHVNIUbmSjgU2VnzFFJL/lhvMG0bOCPVdTtnJq505Ef6VAf2JZjJC5Y10qXumiFZm/dG+8rEi53HmMEsWwbkgyjR0FKAZkZIIDTcPtPWLznFSt5fJgZoGiiEJVimRKmGYDSdFBsuHgc+a+BVG0+FmbetRkKu9eweij/3oiO0sNj6yufiBX+B2A2c2lem0toAhBdBf4d2pmMPsNG0SLh6fvgNzk2NyfPLjUnyeZL+mFXmH+3zT5ZKz1DEZ8e2EMVnyeOnrdHAd/wsN+LGpYMzrYia6Sy2/tNbbzUxKVzkXsc3bT1b7sQo0msNhi/6e+Qzrpit19aAw3yLhfR5vljyNdbtVgxYHLyTznOoU2YHO6d+7ty9afyMwcSQC2u/Vlfz/vMJDECfpx9EOLmFg67e8vG+1fq1RW0Yqx2YFuCwAWW8coFjM+MM9w/wzrqf17RwFCJcN2dfa7Lx6a9FrttC8ZlInQ7e0GWWGz112Df2KVPKDDdRN0QjmBVW5qcSL5vpUV7E1D2QSgI41EpkmCkEjIByBR5pXuakaK3xzV6mR3cDn2ahn9tXZKNGXgQNLdqhmg5Lut+PNtCR7sVk5e3uJaM1bxSVC1Ac+8xLCE/1rmS801r1tAyJwY+6SnlSnFlZAEGvwzB2r1vVaxFM4LOJYAugeRV0sIkGc2ZzFPoN0IXWLE4Lp7plhDl0IKPErj/LLaInIYKyjIA8VLReBJxMUzSibVy+v7ug5QCQ0/DKFZ81TmJTKiyYxTH//CT+Q1jZ9mR4PdUozWvNsTC5PdqGtKAmuSZ7oTw+kcfzBUH5MqzoUaH+tAbMRgYVAhPn4TpRyX7RWvc5OGSx0DiKB8tQxEwxAUmsn8XtM25qrwQeq/1xXQt918ndUHxRc12c0Sr5gsZMjjEwL3gFN6IvKyEITABpMWC3M4m3sajlKOWmzcNBNlWlY5H9hA3Je9iHYAGuSlmW0WTlNlHEG8uEHsZimjhpAV/KqvT2XCHwU/5DCHo8tf2ARJVRB2kP2tv2YKALbKZRDXzH4S9sQ5TPmJ346zXXGpkIJ+DhC6ohs8ssMBndNlJ0MyNsf50fcZBk1rgBQ2us2DAmXq5Oz8CTfKrMEPbYLNY/KTapSnrdLZtZ5engndyZ3MHGaHWIACTFj9sBFnhFbEmkQ/PcMWWnwb5IlW/ALAVq5R/+ZUR6rGAN/HeT0pN+Z0a6Ch4iNvm3P0uMEpyUgHunirzlLpkcGcGHfa0JIdiX371XVKH45qflibsIZWUbGfzAS3FbX4JN6bV71zEZXcGHu+8Qt+Gs9UwQMemVg1ye0oWRV6YKRxKINp2FzB/e1Bdn3M7FSL6dApH3awSqTENZnAJ+V1Uhl9JGALCfy3Gn/CZhYndTHtx3gxN7g+UaWJzTonydPcP4spXwQX3UzZrrA5ZuPeVBcez2MZ0LB5wFfcCAvOk6nACkvTkqMumF2XuVaAZFIlYsm6H8noIHuPw1s2iuRmN2beDfJHXIzrePyHxWRSkj+55MmW8jnnulYdhfa1RLKGPph+ZRMLlXLJWVqmUOhx895aMXfaGJ3tFg5JIelXYRBzZCRPlw7St/SPJL3HlQrQQxT8tYvsTjMbBE66xPCOGk5fVLhuiizBOmY0gUdDkymcKwPDC+JjvsKcXcMMOippGMm6T4rQ7AqTbU3zHaA6KvI5+lxPvTd6NCoUb0zukvmKk49UZbzOXiZaEdSSzkTRKLtIrZnFW0Poi9fNuFkwIEUEe4KRQj5vVKsthkZC2AN104uG9MHOSFp1o/p+MYcwmcTGweG5qTpl3ACGNW6G8AD6VteXTFzxXOrjbUBIEJ89V8i7gcGZD6qdb/44Jbisv3sNaQYONrWY0kgnaZKhNkD+J6c/y5nxUg+0sEccP0qlSo6cmulVOiesqxy2CSl6FHKHXQUkfkXmteOXUR276e1xJhNAAdocHZHmP0TzWI0Iis644DukMb+41mfVMUocH8sbbBJKQimCVTVj5qSalTqf98wtxdCx3PFfHdE0K/+ZTqYEbh6Hj1A8T9pc6P086pd+gOIV11N447jIT8PIC2bp0ljQpz7rw8eGZ00O9Z97oY7gWArUg6V0PXXxNWP69VI8lvD3BucwVdxlHlbiaq9UWqfBHOWBQ3fQ97bVE6fJErc3pPqjFR8OcnTbvah4mYiop8Z0bKaRDsKZnhDdf7T2rCqBxRtJ5vfSGfRi8b/H9wjyk1B/ZfGNx4+elHCa/4MX9oT5efZyyv5KvReWrfm+1szz6CAi50fUFO0D0cKDGCLaG+mAxThmH8zFacrEfwoNV7TupYs/G691FwwarZNXMqWpBvf7mKKPBUuo7IfpLmZRoyJ6u+4NUHTpgU/rqDg9iKqGLGz0dPeqpKz517uauDN0DkNbE2eYJwUOMBdqothQM4Dnp1/F8Y3QzZA05gCXkb/j1QQ+0pqPtNBWugbQGJXhnN2a78juav297nYLIRpc0vm3gdfhfgl+Z2upvoMCu8ewGfWusPUovfdX0HSOXSeElOniKRpFXuUiDmwirbEVhWSJ1uZcak+fEhmLJikJHeMkQ+a9Y74iqbqbu3/VfIivT5+5/6PAgjTGS8W14kpyy0Ifi63lTF/LEUTmncXZMUVZiagX82l2B4e5/QLe6dpNbrykAztFy8ljDNL899moPoSzPtMjg6ri/gSXUAolnPlVCOdqaqCUMFizHekWb3CQ7piwEVaqmzD87irhEn+2X2bfBppy1+KDMqWHfGQaqDn8FgHhKv9fIP8TutP6xHKz5LigYnhlIml0Nq2AM4quzdaME5eqs020Bl9iQKdO8VEH3jzqfbaDRULxmWwOIw/0ONJus5yws7j/jlWmrduEjbjEsskVEkNauFr9sq5jxhzzm4vhvrC+AzSEydYX9hvBYRNaB/CZcD0UFGFED5LF1U884X136TgodiQDl85vPJnUvRqfwzLLCCIoITSB07Xo04yhHqdj9OH7QArXZ6HW7FsKf341Hr8BlCENIrILppizJ7S1XsQqeYBDCTs26pr7UmENWvLa02PuCRpG9Ws4GCke3r3s5VvQ6bYtEAkUkna8/BLKOjRaJq4kOthJkkPgo5JR1Dg3aq6H5XGgnvhisKza6Ka/g4wFpnJA93SmdSGiNJDNMyUwl93srqAgbuFAl22t2drTVK/T92EmgsxFxMqrnzQEM1iqFvyTKHbQotx2MdqnzW6UI8N/euBxp0rQZNBiAo7ARKG6T6fus7CwJ0yzRmIB19/goFKbiSyvVoqCAHmefEIIfUuFizVcZ7TnPHogmL6BerjmT6hML6vghsJP5xoLbk2gJSGpwNhoR0J3C3Tjg2r8bK1txafLLeLegWcEfQk42tZe1ArLk6nsLQk96ig4NbPYB5arvDgQ/FD472s8vT/NEBQH0fYvHRWPe+E4+wvYKatuXjUInz8L/pW6Rxh3U6Lx8NpDCN0rg+i7NbmuHB8hx+fpI9WWoDll+0V88eA9kOTZyriVcaDaeZ5FyqaXJy9h6lR/s+MQ0fWYoec7YuFjhEq1qbgC2VolG9/bcRRbtTESRPXfyoj2vTmctocrc6KogAmZ0Su0dRKDCrKPxaVb2jYeAM0mTqNzr1IPMVvJsFJeFIEpAI6HqqHcmXTN1q3bZLbmU+rmFNE6m4PotH2aN2lj+Eu2wZUHporrRoTmMScZvTncloJ4CC1TKfGRxRYF23Z+6jlSOkTRZ6o3mEeA/JNFTa490vRIC5BCELwK5qsu4oPrVDyaUxJkVzQciciP3c9Kr+A0ABvqBfLUBptSgRiJO0yzr70q7VFcWP6PJNSqQbtqKDYt3eLzuifvp77KPdmm1zAX/ZlsB/QmmrxiU6qtcn3gY/lPT6RFC/O2sJjgHZv7C+hOPx3msi97EsNJyvQJhsDzWzkXB/LvAoe4s0DAR5ssWpL8lYF3PnHql9ASgj9UZ6jGVIInxQYTH3PUPd2JOIToucPwqgTRfFevJ76NdsHjDgPLwU7MyBE4u25QSXpYjQ0lGwCjCzLrZ3BgJPQctPYVWuPl3RtkZAPnhnCdP2vuldaUuWNl/UFAwG+GtB6aHAijQEdyGbQ611MbqxgCNjV9xyDa1L/1GeSj7SYSfFRBovIPJy+Epnw0E59VHMjWu7qY0jEvaUfKumeKaciPf0jRD4FD40W8JlEeRAofgDLwU5Y6uTjDL8VhEu3csBrug16JwxZR8kzrr76359M2cK5IbrQv7ZtbIQR+0sb4kZh4Mc29W33jUpTTD2FvHWJwv0/+oBpTrLXx4L1mR+deZFzhXb29WxScKH1XskzgL5x2UgywcmeDsf6gsyDpVBra4R9ieJVtMUm6IEz4h1G4sBrCnaJ2D2NdHQR/zXcrl3WXkeHKSLb7kNVuTXFfqPUiEI97yApd64diusyqAOlyhuu/+a8n2q6U3CoPijf/9Pnvh4GkpR5OP9w32Y7p9u5EKW7nCTc0Ps+uIlYkKRoEG3Qa9eYkyDzG7f4Ug9LSjhLqmnAWE9kzkItI23EknL+2N4OokSN531ee7wCb4zDaPyTXD5utVHx+EinoBTTofxOPnYMYlCfPAE1e+rAtn+gpIkFRkv5OsukI+RYksH3hhEVoFTOxzK32cpsYJboURtDxQoIahoTq9Jel0Bl1L0AhsSyIK1KGcmY6Xb8rdSQOAXHA74pccJcYiBWKWpDvQGa5Mucv/Qxjc3rP1T8Ad+v/H6Z1ETkYoe7dzWcullFp3yR64Y/5FZVeu/c8r1wIalMoG47yWSUuaNFBxOElcZAGIqevmFHtmOzd1gMgbBlCvNfxj8T0EoY7Y0/SBiJdEHtM75vETvZvKFQLolhUgwVf3xjKQMI/dYqYN1oXEgxKliRHtj2pITWSOwUPzZBP5pBgm4PxFuSM8RSE6r0RqMiP4XWc5Xt9yQxotaHr+R1QrBvtg4PwR/mxUdasVZIGer+9YeHdCyt1asxbDKbrZtmazG4fYv4ZTBUdi4tdpMJJr+i8rhz6qWTPZsEAFxkHgAXjZnvUpzT1PN1werGUAaBAt13mthRTHSQVuVfnlf055w6lFgaBq7PAfpmJhnMYFKIgGl/yUiUE/HpL13fEX5n1L54mdlr/fJJlurdLHDXVb939EVYxIkKmAx+vRmjy9G1HzKa8vOBQVstdwIvW7w4X1/RsEfjg4jNH6UMe/GtVYG3f3tFYxCgUFPahUl5z7SOMIa61E8l0orQcKbyAbRFQBEdFKTt5gFzztENuykWxVLC3J0gZWMrUDWHEi051SQTBZcyJbZ2KtAcWcPxTBzT57QnLHu5BlmyYz18Ljk+hlaLODS0trf3jXBF7HsWQ/oNTTEoMxSMMdxbR+e87YvElDMelBVlLGKVG/fsWn0+F7fftYgytAkWs/H2YZNKA/rFyI8SOYOMKtyKwwhU1E/QVT84LxIPDBbLw12IglnrPwUkZDD9tV9F0Vb9e4OsHaCaFVU0szl1m+fDRcjMfnFzboTz1ZMT+kIq15j/QmpRzRsIe5lQkgeECH+N/Oi9k9HWOzXtv3c4LqW+ArSidjEkyHgOx6A8dHuA2g1189ZWFZnN/GWAs3Pqi6J6Q96kPRdasPRr8JzKCEl3obw6VAKYu+yEIFwwYCA8yR/hNG7nrUhOJYmUK9cWOUX7kpMn2/EwGALgFi/MuMJc9ecBH7bRfswe0PHNmJstzTmRU4Klb2XTBPgLo19JmIqxJnwETRrEMMzKzfMndV55kOZ4quaRCM9z1U38NhwmAQ7d+HQZ61tPBDsGXOjXY+so84pgPxomXvertPplTVF9FZUWD5ZGHQLln3061llgq9ZWzJMduisfuY4GaAWfBvwCD1WiNancpVEmmkWhQBCf+RtQ+jwcHPMGNeXxHdmv8d30OFyN4Ro61bRvHL9llN1/jcH3Y/2Qzw3rtAJqnaLPyvQWqVspMU7DiBvsfJpCFyhwlfFQzlj6Yfcm1bhEmrbkm+oFOWWmI00hEm5y5TM6gC08/4hGX98pgY5tUFe4XTe9Ib1w5eyMw7geO/z1Yu0rXceQbe1xkxP9bM0Jm8Nbkt1h3+C0okKo9MD8MzWUT0NchWt8l29l5xzTOLwZrnR2KsxOs7NPGVSrRUgvGJU0fUOjl8UHweipA+yN3zWI+FbyHVEE+xWqI8jaHGx4TY4alAv91WtIc0NGKY8v5LpDXEdpJafTnPxN72QFCYLdNAy0xas3T5S0U3f3FrRoJDnk45SUzfwrGhxMlpdAEPiuEbzn8hPFWPdFlD9Fw2ZpuFcQ+iN61DVHiU/WQ9cTrsVBaW4nzUqTbsaXEJ9utVkVdhoZ0QrkhUi/wIwUa80DjUTZhizwkvCIeZnfyXFrrZ69PTXC3Y0DhGU2o38++c8PapqrlG2VduEIZwXB5E1mnJ0HaZ88s2ZdLjkxfpH1Ww1g3ZZpeBj93sxb+Jg+GjcQicQm9VYnLT7IWSNDO+e/34/uX95WaI67yAdzyhvMtsxniqYWESj4qgvjQ6dqrc4AkONN+jNsx8iUUeXJMAt58b3YiARSFXNvcGnxa/dxxWVrRorBtPDr30CBKVo13tfWey6/Iy33DKOe6EE4sdSINW0WcTzvf9revwNF7nOA2JWYOJDJsoK6KNfw9lz6uUgqeyNaVE3iJaGHwoVcENq4G8fnqUbWK2W+ksoiOTAeKqAvXkcjupI9q8b3uCtTsQ/wc6dyaS2a/1Dsya1Ad832itpRpgWTPzK3oJkSjT5DUL3gvCFKx4OjM3njU3vKk6z3h2d9VSHglaUL2zXUNu2eZz/mq7TbMSFNBUiByIsvppUmhgwrLE4QhbiDPkdLDMDPADon64qZWd9/QQMhe8ymqBN1Z1A5ahD4wbeS/wD3fzyyE9C/J/WyVI0OHCLCu+0O4mE5Ms4oPjudrl1pQj660FKTBQjRl50DhyfRO6xkLwymTVF2hLAkEGgfer7Jb2rFugZlGmt5HMJdvGu3D2PhTPV67sz/8yFViyqIsnNu7Un3Qj2JFzPYntNBuznjfiSM5VBOjk9LD0++7rroe/py1ngN2yiyn+5d4E8p7ABgpEYfOydAiwssiQYG79E2bl0f6EutntmHbr2T09K9SbQlVXpP8lreR3nO1uds8EH8cyIPLg0Up1OsGPF2uQNCdYb3kXZOnNiqU/PcKMhkX8xCrS58wLh3svhHhFcY/lg5yCB6YElWkEFMPEZBhZ/N/Iq1gd0lF2eGHhE36aS1D++Hj0jT3jwMhOR5YXIph85cdmf4ahw8GRInX9H6eZbt2NbLcfQygJVwBPJ4QsVggdlrfPLuNo0AybnPDSZBMYjVcp9kaD2C1bEivo81U2+xNy4GPqI1ukNxgrc/0s9tLH7HTK8Avd/KPQ387VG1PcO8P0ZJIjk86i44lKP9jfSwfTvBflYeTtFYtrhYuTSSK0GGEzkruldOj/4DM8C3XmAGjcpCURDnKNxNb4gYfFGArCMWC9/J5Fk2fXIZLOnweXtdd0NJaPC63DUrkMYybBf1Pff1zuNYtEKkTx7gqRfAkXeqj7fCThvN1d0Cszn9cGX0qZVv8gvf5H6RxcAS5WJ16qw2Whi2s6u2G/ucOu7DWuhRnT8Wo6tx7Sia1MusWFJtEXUC/6n5OgpMv2LwGdla0cfpPGyLBtlE2u7q9eq2og5uQku4am+VBO0FoRNrcIr7v8t24GfgvYbUknOR3uPCT48wY/oB1C7YxQWaVRub06Ot85LUANvkAWIlvElswwJuxxUP0zagEqAYMLnZXToVO7kKMQgiXuziu5jM13VFaN/bcveJs0oKbidN8pbs+8wIkQPFKKMQqaYEO27Q8QddeNQg2efdQiukGpjUD0zz/KGLlsK6KVjPP4ZPcbK7iM95sXlrmUJAofydty/8ff4jttG/qodF8xweMZJrb4g9C2SPzPDToFB8x2sbRhl8+xkEebzIaX+LlaQtNkBSP5AssN+F60ufTiscRcZ1iUU0LEolktI5y2GsA4bxMdQbQl9B3sYoxtQ/aE+ffA291gF7JNkzUAp2oPTQNnewFSh1OBEHi/uS1ehcRTaWkZywz3d6kpHZbVivTi+xs819ha3WaR4BP2c7NUeEZwy2gbQ8b0wfqzx6TL8SwI6A8V7vrSIUrw1UWPli6lniKo8HBqewiZr7CmOdUOKuOy3R9IDG2Z9dF7Ec5C5T1mFnrVlSRAkN1qVY1RHTGNN4cdSHOesCLEC4LE/+8ijDdsM8qYR0ZgVvFWbaYA5kg/q1a76WogYZdXguJ7U85uD6lNdYhj1J18icSS6mUNYDRkC6x7lA+LmG124M5sDNew+MGVxiSgivDAfhVh2RAOKAHUK50JY85r7i8qj6xWoHzw7SAW3Sk+o2tDcNDevGT6A8teh06LCAKMzP6LNJ65bLgyyAHtomQZB0pfUCCkBzR2iU4fGuHqkk7ZbhpgYHsAZ2HD1EAeTJb0Skr7VDlf/nJ+FmbXUwIIbKWu8otE6ki9et+fGZpd3yyuqs7E/mVilkiub8w9LPcmpnhmEoH6mNLonfjqtsXDCUozSkE61OSasIwZ82GWsYyZcKoRPwWgjZtqK9KhyVJNkF8yD51heuaYOt+bnXzRYuttGFWUibu+BDkxz8qssBAYnWNXDzvIyC3gCvLjPCpAmfWAJuiScWa3eel/33zMJqhJwxmXaOGT+yOH+tniYNlV0vLgD1fpN18plqTP/DxgoYxvJBCbAjpuk/Y0PLIfXbY5+TyFWZksREnSvS+PW1m1Ci59kusk28EAOKXiLXAGGmo/WH2xYRX9eN7qU8W9N8wjucHSr2TVDpuLpPh6epjGSZt2GRGcP9z0MYv3UoWglJyIG4iq1EvqDkRR3JE7xR+JvJDngv3jLl5ntuvf2MZHAYEMZOrPHcIRhDgcvGmNJ9cRM8uTpeFKSh6pMDOvzlxOQd0efd4uDbO4guOHam+nhyKvbn61GxcfjcGBqHUisM9S8s5IqwJTehHzNpCkXBVmMqoJqOrxMP8VGZjXj1wZ0r6XxTL9wiBLv+itXJkAg3Jf22lY6Xk9yJOkRU538gOmHOMZjBb7j3GK0I1IFnxOPuP4m00l8b9D/lwWq6x0aiLtsCRp/nLmGau1X13Elo+w2TVNmlxeJnYveBGJDIdU6+zuttO70ccAWBBneMo5rtB4SZ79rNyLaOcenA4lcTImNKVbM9G5fkb6Be7HD4nhWSL3OZUe3LRRRrwkRSgYDJQ7QT1x27pJq8SaF/vZNGDWrXqLSSQCfWctoRt9SqQkNtu5r61UZkWNzc684Z5OxEZIlBqoqHfMZB471VFnvSDO/1uPajEmb1CxUNpCde6pOehhqcRpJ2lJgv659xMNeWD0rrBvW+4gPil3HwXpkI6gjsrVbDT4KzOi6alQr7Y74NPKrLJdDfspw5eoaTGC1WIB47DuDGuu+OJSBfgyJvy1X2UMvRtWvBgpIz4SWvU+BaVkV4cuhn+5qsKqaq/VNrWYSpp3lZe5JzG8Pu/XP4hv5usL5AFXO/uMuTK/o5xtLsZDOiFI5sqXs93ZE6lJM/NwvRR7rLmZtWRs15jcfyQSF7GUSV2xZ8x92jTo4sHNja3YuRHf+bCP9OnObGWi/y8qWt2wZYNpHMs76wxsl5Z//FeTpBSocefhxwiuzr2ZKOgMqsPQXI0xqDS0CqWk7BfEvBUijTPysuA9PrNyfSKw8oFl3ozffFE+GEPaPbKMHfg3jG5JLHlyTq8keOh/hXQGcWlGAKMFvXRcGRjsd4XUdEiFT6RvyGZKsjvkXL0LtC6bjjHLlTqEW8XSc8xk8L265rK4g21W++s+TrQhqSDMC6pjtSq4b1uznCCAYcgiLoIPmjir0nq3Fuf8urqQdJkuAPriHFYQzAV3+v2HUdXzI3UN50D6wrPDd5OZSshxS6wTN9ix0gdshy+gbwJxytFHvqX0fR8TJJvD4KJAXrXH4GhMfj5QM2dXrn2JB/EacsGW6txknnjcHiPTIYIGGrPcIXZ8+D1+peAG96Z27Imru+SQDpXmVaWPi/zkoV1f/EyBld5GNvBfkFDNffJ4IAhHJv0IE2E1fdmuMyZvy/YNT/+X2JJeAZOtqMWl/mGR2C7WPxFitm5Vzbafz2psyULAHMH2Z1Z3zAWJWBW+1pHcUu9LwFVgSAqo0xIDWU7K5lFxOrJFo79rpOXKqVln/IIbLFJe/bG0waDa81LC4DJq+OlUrpK//4b5e7DZI4LlKN8j9Frm2aJIMH9tTZXtDb57+IK96u/nY47mxDOmpOnh1uK/oG6QTEI/CAqxdaYkX0vYKm8N3H/DeAfYyXC67CXU7DJsDV17A6QxB+TmTRIvzXPBwWhjbYqgGEqzK0JwJA7lqOYN5SZVRhyuAsiW3ZQ08U5mGkdaNuv9bU78tsol0mkxrtZOyR9m23OADmpXf3vE4jUxAGRUtEJfqHxAlhRODR+71Q4lKDsWYMV0s9IxH6gfX+iu9E/BMyvjVHeyLjxCC/Bv5xHdQG6CjR6s5wsr8eBK0oJ+ieurBK3r5/2oj4q7H0dJzjwZzy8UbTXo9+H8oU0bpjpBO7llnU1WwcUWAl2CmZKQBnMEdDh0007ucB/9woB0lW9Jy1ZmOgrl3gsQMeQx4vRsWTs1kWIWL5D9Uj0nf0QMm8gYALG7GTVqKBdDkSISXcosPCdUk77yZTX6FwF6knLC5W7lXR/MwkAEYpjQFdhopNgQ92jTz/bazamHAE1TDzprm8Grz9Ijr/obhvrZ5CiyswiqaukpTApgZppNdAuWhO400gsg258nApkBHfgognWpTS2adaNsTkX5Qbow5t1FyjJSiieCo+WVAHl0qQn8Vt2/rp234i+yvS1z3pok1LLcg5V1g2ZsiT+Hc6Ubp2EeuQmzGBLliv6NQUaPSoCOZ5/pDStuczs13Fnj8FCl01C3E/CkVzKQr3F1bfi6HCw3iIrk8Mk/mooVrbkTKgHek30Wlwp/anYbU4cHWTXoY37mivTlEZTsDhE926hv48gmVkODbpcbfkcPN3ocFkgBzLuWBxuNOOHspS4YbLGA98MyZp7Ca1LcBgJzOUz6K6RTzMqLzbGmpFpUilYeA4krZWc7c3NpOhqyDcVZdN3pLjwjzqZ78K6YkZMermJIIU+fhYlEvmwCgFmO8xVA06fNzCgLb1f71gqSFvSVRnBU6lHwRX7FlDgogAOimiKNgAHEuc3CXLviOVpm5ngeSAUA8hnugr7f05kNEiH3KSvzx9UkAqyB1z0H08xW5eiYrtGNHDhdaWvdeO4JIaSmz/1Vyxu5a3s2XTi0mOCdFk1cCcDvy6YWRqwYFlDZlxnvVt6GCrsj52Nnz6P0j8f155pBturHUhc1AKLqFh81uFDxlXc4PPHdojr9yzbVyKS+pcR6BGIu75mSFUqNHv4GMXbY7bNoLDGlV58p1iZK7ZzFcVtNK/tny8YyyJP0Q/AQpajfoy/ZIPyB9fVRIFs/Pb8tdHbGy0NaY4ci3sdzlAz8toVwkDAXbRiFEJI9KC2fJx2WCcpGx9eUUaqU4K3KFmUY7YQmbRbiZUE7NO2TYz/KmQlvAh+LJ4HofiXdjV7KpaHkhebbYxU3VWfd30UEz9woYHwbDUjITis0Wy+sv9AO1J7WZDSkKkxdqwXbnsxT1GbsQ5DtaEoD7jazfvvTGbtCXJ+CWJQa1H2EbWdV23DG198EVcwYkc4u0y/Iggvt/vuznFDWdxIz4p3N6stMU7UyPFw6SutmIc6/hSo1SfYkv7yoBfT9FmdEzGyLd1ClPmbwWMTlNK6HVks9EaU0254sohz6Dsv6qg7Z0r/mMzv5dsxPugWFDnxBrcf9GVd/A21eJdJAeTtPPekqqBBOF4g+PaGlwL66NYW5kX4R0zIK+ss8VY5LpKgGDbiQ3vjbAaWiNNxJy0qRBbAqKnnRaHgfvte5MHN6TpBdT1zMDSuwVArsPTT4ignN5F8vKljB/l3s/c0i3EVzyxZ5ohCUSzAqelzNTQYgISHx+0BszxiBrX26a9IcwQCDNmwN6HkTZ3c0Tyu4RFM6Mm0W68Qv5jHAheJK0xZupulPIyl35zpaUmN1OdUbIC2Jf7ZtTpxPq6ocXxa3zHtk4iFyc5Cm/wYbv8gu7pEcgzoTJfuV0grMtTxaKxRHTInBHk3uz7rop2hyXQ89OyHjAER0pg0u+eAgSaWn7QzDmTdg27/87OazGwf3lkq5+Dtx13eK6MeGWFyAGcCa6y7G/1ODnR2bMX/s+LAhEfRm/B5f7fKJMpkY55uz0M6ltspOxg3aLl76inLiwLPr8ca9+ruCEDBHtEmDHthsL6U6s4y1eJ2Anbd6jUn1qu1qg2Nxjk8K5Al3/mlXsPAAhJxdGfd73+U3+aXG3lkkZjmxNnf88PFLDMcEoKWL4ZlGpQk0/pBByMmZhEka1wCd6EJwyGPhqAaA+l3DsCSArCjIINCpDSGdywY8HpiscM4JJArLYv27/FkFFT+EaQgAGVyJUwtkV+XiQB/G5D91CweTk1gjB7RE2qwUT+htir1cf2okhJNCB8H6Pgq5Jaw+ZNEppcaEeEuSo3P1nRFxNahtfQpiYu93oKlnHDiFDMU9Ur5mkEWmDr9C6UtmPKenMXXJlSCnEMbnXN2xdpPuXS7lNxlRRnyBqdS/4ty7cqGknHIpWCd1AhpYt9gw4XqEHZeNef1o/pohr0vlf6ehy5m05z4aQaokp6su9nI5AzDwadbkDuCRaQh58IeiEFshqNRX6/eoHHNaCHVOtc+g+EW1pXD29H7Ji2A0os+0oBOF6D6HZbwRfr6QGz0prdFCPnNafnU+/QHFRDAjAKsYZ3ugbgQ478dMXVr8vRgG7szS3ISBIMyTI3cYeQ/GVCOYPk/j0lzkv7ErEpZ7L3PiRKYIX0i37WrtSQ22DK2Tpido161heEwGOkrfe6wiWAVKaSnJF4wexLjLPMHBpBqKwJRHbGDyeJJOV1FKyspafbAnCDRg+U2OzVMQhAdfnANqOEeGy2BTZegIuJczN4rPeLaAsjma8LrIN/CRkU+x53CiEtVX0DsQ3oh3aDTQESnfLCq81nzNKJEs1Fu6NV1gLbZ7X3IEzpXMEzJX3QzKTW7aKz59dg8TqXSWcOeWHsEppHlfTFswxGbZ9nEszjsTWdLylCQ4vVPEJcwm7zuiyeaSf0wpDCfKOGlWMn24MhbcFqmdQexmigxNRINGYdL6JGHDnkzZ6ZgYh4UtDRHbzyMqh9//Q2nYJrP8mFeJZm2lE5Bd0/SxKUvaoIC4FTKIh0iof+Hwy/iKKP50gSwEmkUAHpDz/uVnCayXlyV7THIiioC1eLL3qxGvoaf0bNHv1r4NsCcnyWOH46xri/n5DEaEMdiNnJI6CyEpHhI2iv+wu48gNYJ0Ebg3BCBxxGse1gs8tnnL7quZbCUSm0oUxg9KHp4QN1BDl9Y3ShG5E9dM0ttHb4QVwo9ntbmY8q8LSyKXo7RFq8iHJPhVUHNmaIvJmWPpIjKOW/8dHKQFOf6FItWLVxSz+IokPFCCOqwWwqk+V7W32EktL0CVK4GAV/tEp5Q4Yr/nu7DGW2yov9kDCHYgY93xExhMMOfAFZxZzm/5o9e9g7Ut2nyUBCF6LKhfBRCjOfIUfe25WODE8PYQXW73jWVguRUk7xGyWOzqQm4IioGDGJNSpdz/hfz9CgIcYZoS76/98QhOAeS6+6Wm+vVYwCveqhwjg5Bf4AbgV4ZJAbiQl0hhVHPcgNjlCffQqh1D9QrSkDE9c9vnBAQrDi5Sr6r0CuXe8jidbq3EWxKbARYl/miVebG4/ExE4lvdiN2KRAMdXoVDRzs+aje2kTUHoFZFnUIK2hzPP6TpRdoKlraMwZ8DRnC1+NLP0jZI2m9OlkmeO0jBTMQ8K/VHgCdGccm/ZbhxOeTxGEHStfxmiHRnPt1HuhCTy8MzoEJkW7Hw5f0A7z7nb5DTMmlzzzWoQymj+e2VCnPSJguKLpCQ2wESm0PLwOkDKol+MY8ySpEolIlLBFXkGDOJNTZCEPBRb8xL1B8SbKIaHQAL9dnjqFUBdAkAaz5W6MCneVbWbIM/y210bFg7VgyuOYlt5T8RpTFu67Oz41Fez35S6buh7uGq50j0DRIJSAqhSAeM7hNSlXs8SYk5H0tCS4FXgmf5yaBi/JSuMUYHRdso9QtQxSVdFyOevEynHmcTXtWL7U4THvnAwJ4bchtzwqU+d1n23tPaqRWdkg1hWB74lO1d48bCtAfkL3Qe4b62M+Mhn6FQXWlvY3yIXbCLvGcfFoxaMBw7VU1XbrM1kGdImVlLfeuC+Of6W8GlD7vU+qJk6u13HQkRj5w5xpBhnIC7R6biBQmP+iQoi910BHo7rmSLRnRUaDTw1vCC7cmejVeTcnnTWPuD6wEtsKvFoh8M8sMIse/HJKWJF5BJj092XRhfkg4ki9Ns92g+BxRUg6JOuO5hsQgAw0w5gcnkPgJ0tCoBjCBdAaf+440vacHGytingOhtcQMDaNTkO1KgaBVAtLnWWbk/wtU51A4rTSTGQGXhSo07kDi010GEIvNYm4z8+LsRb1am0WiYBsWfvbyWwg24hiTUZ6Y64PbMlRECCsVC2ikOf5TOfo+lohRZKflu4zxPgbO+H+IhpzLiPiI0IdDdVyKLIjTxf2qsOibsQTMobPBW/7TFN9V5lSeOHQ6ElHoHF9OyqC/QZuhnIKwUU4dxgXYBYj5hLswEi5ZNafID35R0Lcy/y0Wfyoi0Cy/I21da+0MTw2x2wNGgn3s+JAvBxqM0oAY58PQCrKQVGb7WdeNXSEbLcokuhXVw+gsn8yh1XZhrm5g94321bGXgilUOICQM8nST3c0y+Rm6PMuxg4Uhigg1c8fByGq9PW4P0tZ3u58GkMB3HKTjpeCYVJFuYfIxo7E2y5i4VMuQ7AfswzGzE30kEpz1+ug2wEeOTY87+Glr7NJuBQx7WgWmkfMJzIAf26ICzP0QivfVzWlzjpsrAKJGWB7zUBfZqEuqd9cygf5M8CHWwt10wsOOAr3Z7caTLx4UMLLm7sRNhoWKanVCB37Riq9KR8+kHT0hB0GfKTf6PHCTSPa3LB1fji5HUadqLH7vqs12x3dcHISJdeex+BShxyXiLl05Y+iKkAi63Xzk6LCQEYmjSms3wjtsKPosK2bEfPYLFWf+cuXjJ+CTmUR8n7f05vNOYSUyzTKfWX0cq/jBR+LFcl9iQmBvlI18vpX6+kbYmDEUqsjZ9m3qtOiI2DtkM8DaTI/h6RwH00EQeHuJ1gaABBBDyxhLr2m2V73Ed4f+CVfx/xnjgWtM+31GdoDBfRPksp/PxwhViZjk/L8MqN2t/tn8jb+X9nbRLVUxkp+7apoa42S/HXhLTUx2tXgtxRHPpczsoeTYE8W6HpKZaMA430itbaTrx/2toJxgYk30aloNdrqxl0ujGNFWgXepQoNl/yGOlx3K9be+vuAG9+cSBb4M8+EUHhcaaFtyZ9qCI9IqenhYF3Uwa0oewLl0C7fUXoxhuZR12JzcZcg2gIHglHegLRVGNYB/fALCEWWsZ1hcF7OBB0EdQ+RIMqjdnwHVMq8Iyk1QbrHImObzUT6Yuws/Q6FhLtdqIYfZDxucVk8j16W9LI7VtQAf+AU18uNRMYlB3MoZLjnf9Y5VYjNlstmlVMvAOL3XZQD70q76O7pawEn5n6iXl3f8pp8ZgJMT9eU5ZVmLo7OtUzGesToRyklsm9ip4S8NPNSyQULF+J19ItPhOaJLALQz7kcmuL9vO7OoFo+EQPi0hA4e4Q+7sHgt7D0G/HK/JgO23+F1Nvr7ZIdHErNP8xjbNgw43B+wjTB+eaxWoe0zSR//OLWN3UEQ7gDY+LA/xrDUXSesWKOGbwh+/wcOalQojtsAaNiuuwyj1SrsYLTZJ7iKv+MIQ1PODXFg6Tc7M01rQOVz8ttpZpJxahlJnHSewyC1qdrCJcE8oDnyYBN7aqTHOBmsLdgC/NaGFIMEf7JzdXWaj3/1ZZSFhgPqyBow340VTcsYnNzZ+jjhmuf0ndKNC7zOPKZNBH2DC9LDArIgK8X8WIPQTz+urnMYnS2rQdPxe4MKfJp4wfbdchyLfAiqGl/JgcLkS8VDJe5WKDOI2uOtG6kRRp1Km2HmLYAH0sWNYqw3orBSADvHpUOzqHNzH4NHPz8wsuFF7rl7n7xPnxrArPafipyUebyz5KIxza/+8U4GLh521kslRpEepMVT+d0hPJ+o3G88J/rr4GhDp84lX7njX9fEcyTxXv319XynzdHG1ZCSqt2OBs5JsW7Xe9gIdCafNgYmqi7FpIXIhgC3FqQTVTk219ARvustB6upKyItSiXmnEkH3LKlCkXBZIsm8kxS1y7/4dD6evmW8Nyk2OIR42Xk4X3N+xaYTCA5f7NwEUZBBzjkpjeAyaalrZF4/wAsmA48xA745HTXNzXipkO6AGRm5djxLe3r9TMkwkUTfhrWLZcVb+9Z51/VZBuHr+ysJsEeCxThFROKywLi+5xaR7eOsqQDf3TIRp/mUwRpHCwVX1IO5wyU0m6jg9IDuNGTWdHZhjcDkeaS7hwDXfoXu4FA4oi4Teyi9a0ba5unGRUlXah9ri7wJEgaYiMyw8hEbQoIOxfFGcgYpVz5qa8FTSjxDvtpvnrjzQugjek3epVmD5s4zpzEyvB4luL8TmI7wxMzuUZsf5wfRI8FJU1M9bQgdwwKRGuuozVNIMwAj50gif1h9SIHzIQFDT3Gw3FNQ/eDHGcpDYAj44WIofKb8vinluURsa3Jq9Li7Yldqk69WZFWPyMOktDOdrl3nUX2DiCLruQIyciWyVBR6Xp9PjxxFyd4kXP+NO4486Ct/UzK16jfQp15HetHXCzv53h3pQqc5admKpc0q6qt3nDV7XpvowwVm+KopkaYcdnIGrOEG0/dIoFAwdaIaDh+CBA7TVd0eA1FiYFaxNgMIMUD2HVzKgsV/qUWhkZfJVlP4/X5rFR3yNgiY4R8MB8HVHFmz7Jp7sj2KWibqrk3RH9zVotF9sHxVUkLPHv2b5M3W6liFsIIKUuodroBmvc64NYNZvnt1hP//h2XvtJ6tEu5peIXbCr/YmuthhrVpAK+UkbXjMU3MkmjRzXDW1JMSOctjs9fpollOdIWej01hpfa6J0Q4/rGHBIiXwVcjjGoOvrzF4YvgtZPEnAyys8446nlBS0d2LXhiqoWqOk6vcjfmIENt87LALTsk7fYEnZ9X4/53CviNYzIhhUKVDYuh1nQCx1hjLRLoc2xolXovwlNTdaVGIMwpiou8bmYBDF2NNWiXwR5bqWcZMYjMbhKIWFwMLQgvEGXfuQXKKEgurwBy4Cd55vy5XdU2ikJDSHXrUCxiWR5A80WUwDh8U+jjtpIPF4rOEhZgzXDguaNXNAyiFMFGjdXoWaN4slVTNLmGRewUngp+zVMOcSFySuvzUZcaPOhb6kLsT0+8rnziifFSADLcHxzacWil5NjbOhU62Y2hajS2hzCzKbdyhsB6BNOITIT8rbrOQLZ0PIxQWqDGN79IzLh+0voecyUAkFd74Q/rDTpXyiztLjygIrK2eL1I39AnGVdQJRa9dgdm/A5CSG2gOs0kzg/Dw2iN8tXmHLryGkvB8kCWpHRZbYHwmyFZJJK9M7bp1J/mA4/hMUdmRwWv0EwgqNVb4uRIo4yb/HkI/pjTliAKbqmMK23nWF73Noq9S/HYig2HA5QXMR6OEk3P2QGmgFbJf1Q10+hCMp3csKaTWC7SxKrNs/W8LqoZ03ehQN9SNljq/drVKCcRBT1j7VwOorCnY5jf7vLqPSZvN1DIukjQxP/dc9Vm0U1G8z1GogHasKBfza8oOY7essR8AdG/qGlIp1OtKeT0FT6m1sia4ZYRUozPQKkvy9n9ahF2qSreRzJn8ycz3IfSa0glFT7/ovWt1/J2+f8B4LYTohekGjqYoluYjJTjHuwJLKC/qC5LIjXHZh0AfWheC4t9kruzdo3ZkuaF24/lHVSw1o534dxI/3vT9pZ6zbKGXb65BjDRrXq/zwZJZwHoEiJr9hD2izCw4vLLtIgklRJ+haiVKj6vfxpqMk3PwouBHFC7ZoTLxrolblPWqp3Ddz8A8r4SZps2vAp8dScXSi1p9ZmjVchISeo28cRZiQzVbOW+4fFjCEw5YJry3kibgt49yrONwJV3jaQcI0Bub5u4of3TLK1wyYvsHB1kWRPVQxXjxgnDI2ZRoXJ6d4QmiwUlnbm6qMp6K/xBH6fHnX5IsJbJo90TaTlAgwVsc8viYRf7d8xyzPZ90EZlVdEmUJbcqi88tPvFsUTkSKSniK/78Av0KTq/klHH6WlmFBqKYEcTuxMRngq6+AETeiB/+KzWXQbQNEn+mcYts1PtXK3v0khCTxqVtPWPmzTjurmBCJTk5TqU8seN3iKsed0wd6fIr3tF4Ce9SO+5WZ2Ghw1Xfv4M2B0Gur/iCPkuIRRV5pbEQkIwwVUiynv8P3eb+nNDzA5ngN88omqQAPN198CtCSt4Z6W2fB/a0eaJkskBcbx+26sSk8shr8NN7wJK/pvwlB6ovJ73OM44mw3thuaNeGGVaK+/cw02y2G/EwuIUMG3dMjPR9J9VytPF3RRq2SEasNQIlK0fS6O20/Rp/ThfiRrMQ0AkzJuy2SyYL81Dzd32nQgqPCkQW2uWYQNZdOkysouJ7DLJrMiP0F00QY26py1PJiVPzveAAAXjIUIMQN3G3EaQ81J1oyMnJxANhL7qHle2OJ4Eb+RpxBNg2PjwiCcI8Vfdidx6jHn7SgqltLiZGWukb8ON95mOtYG93YmrCFRvrZ7kOxkNX9kg+QhojwhyKO/BShLfPIq6ArLOZVH0/U9DN73mtxyg4OMH9vNtBZBX3wrxtR8tDkr8yDMc7wjxoVyML9ZsU/yVHFJruwBuw1qZUpZzLemRJLxex96qh0Irg/N5n9KLE4oZZVJpOI4L23I2yq+rEJwkcSdgPccLo8guZbaZIxlv0umO63ZLOTWH1WzmueYux9GMDBv3Pt7z2L+MYT+5ilsohoItnVGgqHXbtH/pbiZfJyfxMpdMa/ahDygTIYj7+rqya5TufEGPA6ydn9W6PTEPOVtTVBpJq/d8OLIoTpRwAfJHFbucCBghLaXpbSxEvShRZ3aN8g1j+jBFPEUzg8QoN592O5zyYJMfseq/bOdMUJMveqOpIil4viG3G7PQlgXEEGdgFmc9YMCOYZEF0Lrf/bDZAgEA7MIsGJszGFAkcV3ZRfRdwKhrYLsmUSP7Dail7gB5wQ8hrLq/FuPnM7xbn75q3hxvWXZ7UaikSjSfrWKaWgXS1KsBBKA+/Che+aXpYXoIXgcHQXR09HQPUA02PRUbnnY3M57Z7wKBiDwpCq156WCqzrUMPmwUYRmKTRjfT6cf3vR0Ig09V7K+53vZ/jaluYz81YcrTLa9CG6w9bBs0DUEyhdElhZa2lfZgpnPbfJ1xh9Gw+7zqelmM37Rfho4onkqOTRmCDJhWURajv6wZfXeY/N0djglWCHoRJNZzML7hn+CU/aPjn4o5aPZYSWW6yoNON+RmmhKjs4/TOW1CgWqfT702TfWZUpmYRHgpsMUwdlEnaYxobn9k59IcQup938XZwCmAPYa1n65ykbQBeI3zDzLh9HWBt6rQjd2Vti3ziCEaBdImVO4qHgUKedn6LG/uOOCZokqXTikmEjFEFBacvd4C5lASzwPuIODFqb3XLyjfzz+KCDrh1sOpr/u7pAzLOoRlVL/wTauBXsDgnhoicyVXy+TwSmWXe2js4rSkvBpGjSxDIZswxUFxqlQKPbWMBjru5IeJ7q3pNQm3Z/BxKTbLfras0sUC9AhX7WazPwteX69E/vTk1djouVxK5lTX9CerMSWWeNnck+DBUogyxYwnCuqEciDDP5GZWvEEOQ5LUuj7sbCFc7eFfG7JrwzSrlmLpoHzJ+kamlGA2dOn8RHGhW46rPemHztfUVSoMq5bIp3jomzzRZApXB9VJULsL0TsnP8cXSH+rfPMJofz/AR1aEDBeIVxuV0SBOWjgRVpy2p6CTOKHq4okX0j8tFDFkzt21rrTZpY1Jpdq/xXkoVW9VqJ5mzvsrxLZBF8vF+oIgvvPeKSw/bUyOyMdCNdhSlZ7B4HDy+kI7xuTqEyVElhvB1Td88dWIdeagoYswqmCJAIIyIRRgPW47UBCBOaUFNl/hMlywPetSIrOio8gxfmOxSfDNaK+TCw+l9Z1dCigRvN9TwUO64MDmUKgiN2boGkPqeW/DdpBNxCh2BmDWkdbJRNh5nld+2fj4HS3Eah4hdb3tkRADpfDUHHb0GFnZ9rJtzwMLXxXrPZ3bS3n6UTIudRdFA1VBjhtNpvSLC8wDMP9V3MmsV5Rv18gh0ulLPGGTxjq2gg0KsyaTiovNbdkBrgvivGKPihDO3QdGJle/Oo4S34MTQwVFSwV+O5fWzNlH3VG7yQiUx1wj1kw/GjBj3Shim6PMhnqZZ+tixWJYUGR8lA2SHbKIvGG1FRC8Y8fJR7opQmcFSWLyPhrdbU8zrbrwylFLVFbViJfPVKlMRRCGo4IQAx1YAHmpX9YBJd8PO7RheESfp/VGitgc09VYkKDtRwqlkIeYJta9km6DfHHikLyX3UvQ13ywsdLwJS9RlZ5d8rY4kezwRVE6mMrHxvUVyPpDa95khlrZKePixO4tVElq4Z1btSquHR/dbkW8iXO0RswnLcAIKuL3j3EXmXQTd+BZitqnOdyE2eNVv6ZGWAkN/UYn+1VjPUXy/ZpDkXTw5LfhHPBMZSSHwNUOqBysgmNh/JvUBWcGnrAI7Sx1aBlrfuJjT8SDNSKPrllzqZw7ZO+XJ4VQeT0HetpEHy3Hvbk1J9WXErR3Mja/TYUlUtbWhAwsjZTDbt+cj3OKyq29NIyyyitj+n+j4zYaUTX/xMyplvOAl7WCiUhyWkhZXzeoew0o+yj85Xlt3iT0E8fs/4uee/N/RCJPUCjMwEB72qZaHwXcZad+6PmQ5pKGKiGfoVjZZaHVFdMe0LHVtt4XYyWamD3ntdo10Et2tLQQn/Xgrv9kNGVvoXO76rBqcQ68TOJNmAZXNCD2c4pYTkIEFjq6VwUGV23to2KTS69MlarMA1ieqXPXed2EhNTSGsIR84WGHcs+ibNKj9nQEXvkcJIHrWVaPjHAqjIOew8KPb0y6xym15y2KlOgmpwX2d0mMLvhQelqRQ0fnm+s2mGSe/Bj3RBDaNF8y3XqMI7zZlCWkVROdsH67p/yxOYbIcYxXVSn/03MbqoNFur2HjMzMTC7SWKjb7lchssOiRXQMqFmkqBRz1FEGwR+YWwydpckcrvGoLt8h69tf+0QPhUA1G7ocYoUC86YG5+92ssJv8+I1IwppHMDGfZqei1VRbmBGFDvp+BBNQHoSQ2YFnms8IWJ6AHQatJqsX/w12HHbHvOJOJn/q7VZcTfWUJ5hqAk3JqTrNJ4gB01vGJLrHjDZdk7x60hshmuFjzYerQx+UqSBRdHOv6bO/kFWQjXJ9P3DNhacEePbtMVBisFI3vo/jrvf0BQ5uV2/p3qEqEnfzuna0JTsBqUfHQPjxkE1alEdibrCwVl9/Ukiz8O4YJ8DOH/u88m/oz/2ixxaJcGukB6y2iw/pHK5EOFPJe8k5R7SnJw8Veel7hAsFaQJcJ1LL93on4dmeAU6mlSfN6O72VkiZ0V4YQjvlCXN1lFAgWi01/0cAIXzK6rOVCsZcY9nen5tnsdlLlhNXAeVSmdLIRCkkcX9JO5zpMND6k72g/fUrpirJV3xyZGiFNJeLT5U33G/ym6KIFyLiXZ59e0okgQDbsYEH7DSmt6FaSyCraD5wN518KvG3QPZ15IOva0r+UvRLAhSaOCBU0LaPnLHp4t7N2+MjbRpt1HDazmWmoecUWDA3TlPuUU+P3riwG8MqQqs4b8YXq6X+ilCZ/Nhp5Tu7tVKEGsqw+TJr54715UYUSxExZalj5b0j8KUWUS497TkJtKI59AIrrSXIDArKlB5U4U2rOEwYXntsv4lldYG3RiNWKH+9u1+QlOtdfPQQGjhvJFZ/WaoYJztC3RATh/o9lfBoRScfYeUdi7U1WJi0+wSAfhANREfIv4vD9nx/42YMxSGRUAjt1pvXbMk7ZNtgft4yuxzbzmgLmCde2EO242xMhHOmKKpSAQYQfhRboMqiGqh5lNzvkRUHzb9JE7h14I67PmnhwCkEic2Bv2WHs6dyB3CHV8nXkp1GrsGMTcPpMYkcPwEyuvj+AbTt8F3irxSLhYYUCCO8Uv5SrPyz1W5w18KVbE1h+ondjLuWD6G44yIloupbj7tjhIX+xtuHjHp4kNpnzNn8gnympA37jWFP0fHWtgjJmIvWGTOLOgmvsujiK71v4dflB0lBlbRQFdrpwqdP9T3djYLmLQdsaJJSne/0awWBDyDLD2Ph6tST8xa2EEv6ou1CP2bQvd5leEGhXWk0wUZTgVQsm23afL1l+Zb8R8Zi2lQudvA3CzxDU1yP4V8so7sGTq9xSFi5rSKkSgZHlq/qQbk/Ja95G0Xl4cGaJiJ3nYGunivqHYh8ZH8KOrBRszzw9CrbaP5PoXvLllYOulNKBbHh/0U85wfrhL2bWoMm5gYjaJHAaYqlbWhriwt5aZi2nv3ZIXQZ5y6HrR2l8KtCOJgANptxBYLJrt6Wc25+dg/iv9XiWqxjIDaACEe+OyQOofRPAE0C+lqLZ+PrI2OrPUYOcffUnxRK4eNol2D4TtAEuP6miS5NmMMBtbcMel6xC7TXi7xosuVkqqiGDF/Wb1QWE8DsA7QHFGy+Jf/9uqSQU4AHLX74Bg9DIo/G3+fTv5mM88p28eavqyXQDdnbtzDX7nHxINKirR7cw2ve7ahxNPfQBycaOKeVkEFmVjZAJhnD69qXew6cijbWE8YMAqNF/Betm1Md2CXhcYSWLfg0dCTCynAmW/j38a7sFUWT3qxl+L/G3TivNovi5tzTpKdBLZzDlm35rAZ5QA2RsK/szywx2jf3pswW06b9SZ0A6RhsIKOW5QVT4OGrt9gdzLF70XHzU3INBVlwTlz+MVebxar8ytRpKUJwwO9sYQwi659R7x8L9C7QyvTcDtgCXdNIjwMQgunrXOoBj63XqJQwZc/IG4wshkE1r8PMNR66xOJNTwBsh5BNg9Jj6cdPStjJHfcZqJxhhA90ahNTq9ikIv2+tzRYrOuRSSoLCtFsINm27yNaZ9W9OuhYMxsktCs7j3YbH9qMjUTq7u0x+nT+Y+XtcsB/5A3gczzgnmnDwrp7gKq6+Df1LGsouSFQqjRCBRO6/b/eTHV5ZKGI8v4hh/yqxpO1ggiVbzlVqbt5dpYqX1eV9F1CCujs7eepxQeTQAnox2bOLpKv2CeZ/wQ11dfT98DrmWfgNKCWZExDaDT/YnD2+5z79dQ9vu+PyiVzb9oZeTckyGfClHnx8u3/8hz+LGDe8H/iUcDlHz/6+OnzLfT2Ldi7/Un8szi67Qvlles6V+B/Rowz2LEsX29M6vfXqJOQ8A4uYRqV4dHE2nBIKGWtom2BECSiKRE60MAOn7pOwuwkuCa9MZ6i30dE25i5tys+FOC8dEoZMtF4PT/04pWtRFzShB+XXjElJTH9P8ZWhTkxC2gfTL3zERmg2zXRtEEY8wXFtOnJD3QBc9Ahw7dQJRvrFYw8W/VpcnO+AUM51fz5xtPkznX3Wpi3LTPw2Zo9rxaYCN463/TOCHIy1R84ZowGKBjLXe9s8f1xe5XkhZ+VlG38v6/Qq8iBww/8rq3eBAIxWMC4AusX5JNxh3gxvsNZgYMs79XTzbNg7/cIIcptD4eNF1MoDPg8HLf/ShnnP17yhCCXtWPb9b5m5vnClEc/D9exj3jQSyQ1U5MSk9ixNJMGQk/U3o42al1ZCzu22Lhiatj3yXcUBjXG5xZffqUa5L/zyKXPFVXu17rhiyHsMn4XHHXrny79uNXDYeAExBy6YY/OrtIMoeJ1id5BpnaAsaSPXRUO4/xBGOn3Hq+9gbunmiVr6Y/OIjihHg3uYBFzIiv3pxxyE2BoP6YKWx9ZuBf84TZrLTF3upAtlElheBM2mwLFL7jFwEwTuHfTMhP2IFai9LZ/LbuHmn3LzLWh0Id0OtCEz21nmxntesoKhDv8giqNRD5e73qYj7SiR/FHSBe1hrvduQvGdw91yW2DM6GwOdKXxivNhvbAkRmnq0jxcck74wSp/rOmU8aUSgZipf9exzIHV2BABH8fA1ydiq1an2M5KPIfcmgW2Vi96t06ql0BtfbyQ551ZSR/laVFKqQ7qmjc0JfVVbuEBpgUI0bQk34bFYgbNkGMyt5/omwF4+uWxBAd1e7OxWLVmEl1A6LRRaNhFRyZbjVcIngvOnMmpVbWyiNfR/t4+tcS+7pTqVtsHiwqHDUjz5n/dVdlEUyObf9576pLtFQd+xKmyPEZ+dAPYYJGvVBTafYBH1yHIwY1+zaV6ILtbsEvVNaeJ2hWTRSIPMXJ0ORFd7PlSjclOa74qbbJhB5z1f8JWUhinyMiZ1O5YW1hPSTTZPz52KO6Czxt3+b1CoTPbyqiOuH/ERBFWotnxzDKIn6ZwK0Ya6QvSofhYEzAniZiGKO7YjeFT/s+8QWrEXcQEadGY3l/5NyrfYAwpfvRSdQIbSUnGNwI4ZdcA3gD6UvfXUrQlgTMvSobh3dRuJZhed0ZWtLj/1hVknD82xJpjeBQq21uetjk//db1viBfNQ6EpWNTCnygTZIbWy6EnGvSj7/1i7OPaVdR0lUtLUEzEVVA28f1cFwAnT8+ha/Ok1lHPkcHv2T1/991WckxHqoMvIE/+cuQmmkYWOarsACqVZLUZNSeHf75VZOfTwCYtHA6OYkntYEnViNzXOSL1mWd8yE68pZ3fn+KQi2T0vgYmOoJ/j+zZLYbysXsy1UevK2Uatym6HxHNvUCYXp76cA10j2tN0mD/QkJEwk0PzrWUBOgMtJw59/+UN1Xz+Ir9KZKj5opxucK7CnYreSCqud9PkkFlmIt2Q9Ppjjj3XMohRfYOAbVtxobY8ACs4IfPkHeIu1hQxifVwyvpRM+GTP7lU0wWi2KjB6SfBEth4+jWTQ1GNndSpnnCRN5xaOSSmBeC1d0RCb1AysJUJnrBFF7zAkQGAi1Pa/DtP99jNB/R2jw2dW7dyNqo4vA6O23xMNWqPqnPAbi9EZ+/ejMjHeQ3ltEoEqhrDRYTeJE5mOqTHdbOeqS1AHs54Thi5BP/a8Pmb9WtIgBvp3EP9JfNx/c9h2cY7mVKKvI4L4m/wHzNrWLYMaWxOERu3sfU4H1lQF572/IHR02+avr94CN7njSu27BOQN0K7iS7aOLSxknTI3hHUDhVYsaBvtWrxl3ryFdvPa+RAYay8aRbv45htFiasCsLmbyFoFjUmow1DuF9jGpQ2uvwiZvHJVhgjylofpgoOQNs/cflWYTSJXGdC2r6db+2nOfbF46VZxNsLXMe6zelgVJG/BS005hiAWcCaMBycUTi1mW7AdDlrqOq8kSR2KRhyCVs0lv/VtxUR/FGYOTnMeuJSMcxpouEOfOO60gxPet7ERkOs2oRJdngKmOEJDm+VaggSMgFR9gy/Y55NqeQ4D3H5kCv7GB//kMktGWj3wo7Xgw7bVOQjcYNYthc6w4rShidyq/KokzGHMZPbgyOMO2U/INs3c+rQDdePnEPYMRYCsUpcDxMmh+f+WEQ2CQpOtt10SDwVn8yc4lDAyPvbJHxy9COE1ydyszATjFSOzk7fUS0gSn/kLC3DWmPCC4gP5SqJdgVDy09MYfRbhJwP5DNGjND8IlVhpGTCCqbyHKCfs8zVGgkQZtNOPg5a54zfjp4qlGtMsLgrj/iAxiTf+CzeazfatrcdgSpceBqfSO3bVi9/IZN+Uu6mvgqFMehTsHKKICo/tUoFDrfdMZEQyeJj9tcqnkGWOZxsY+aa22ITd16ofipYinxQ1DTPi7vi05pWRFoFzxNO8LMSwVJuCnAUer5jXpUFFKWt6hVNe5vdMzNxyXYaZD1qFUyNtMydmAp8Nzl7D/rXp4y5qKJuupx6KIk6nBesfzwZHCkuMGH01DGgiGDyakHfl7l+EG6rseqE4zefBXbQt2TfxNXTo6gnm6/lB7mvmErBZYq/n9yeURjAuDx//2eHO+6GDwJNIEEnP3QM3r/EwVUr4ZR3I57Hj6psCPDlz/Ti6nNxjEC6iGsnzethwMPtfvoUe3s9k7tpgpEt1FzoAiVTJqtfJOHwhYoSn/AW/85xJFW8oXAm2D3qbGxjtjUZbwYfMLzLc0CXNtX1d15cJ/GzWwA/n92pVFCS+KnZ+NFbqbM5QURL7F9A8LkNBpiEaVHRWT3NcgF6Fj4G0DhzzW6OjwlipdyTWfG6l7whJwG8InAt1GSeVfw1ulC2jfwZVZuzAB8YlpKx0Az87LS52JCQz5NaeZsQ+2vZy1HT/InwvO37CjmeFeTW14gIYQgj9uCNSL+CYmu21AdiRjNb/oqjQj7t+D3ikUXhy+a9pKCke2M3429I4awrT3QGjoSnsWeusCTvoRutBw7z8h7kuKD1X8BHrhbNHNkrW6F7lq9acEOe+ZV2jxKsaNrZmypxCr7f7vEQy+M9Zd+tSmC0JKY5Tu8i7eBCOCfUsxZmqIf1e7StnPwfsWYixnKTcC/NtEA3c/yW5ZHfvp4qg34ghncwoK6T1e+chtMBFpwhS4VP1ssMPbcsAKjrXduRDxT/Fh5QVaMVzBnkbzKO/gr0RkNnDHe/CjGZz7OukOWRFTB8U8E/+sm4sDj26L84pImxg3jOhvINXAlTHNXJ9B8l7h+m2Fno0C1ReOxqcR/hL2RYPAm766WNwuvP4ujYUuveRtDlX0HgdUnB84yD9Ezo7ZH1AilfUyLLBKqlQANgnXmJ7ZkaueHOHYgt6YXDyy1d8qMHQMCLJD0JH0vXKwJKZWOTw3UIxZqFaFTsnp+YG/yE06/nmCB1cWzZ9W/4nDqQPcJ1Bf0+R8vOiGdW1KzSymAqwtjzac4vUXhk/XN6IURPDwbPsDb8EznUj4PpyRsCzfS+UZDsmAQrIJM4WeCt2QtQDktunvzlDSBD9vpWnSTVnu5Utq3xR3n/ty8JG7jDjqPvA1mPieq0+xy2o1V+3yI/u7oyW/PncvbA9A/VzhE+neUQcMghAdJro3tFQYVFBp54djGReUSG9LGRc/BVbB9sMAc4tZHS0IbVKlvuxPZw73/kIH9ZnRVBwN21FChGP0HEvYCjLOSQSkVVbhkBe4spkszCp8Cv/xY9v5ymZ3caiTQSHxCmVErFXtS5D7rEh6GlmR1qqQpwT6OFDJlOMUNM6r+tIv4/0dBZHGeTd8T2FGBMbrBvBLO1KuF5EPk4YenkAZx5mbwsx7Pzc/UxRU1SRKDYjPFIceZxm6obLOMlayY5UHLk2yOhyjgbRj6682TUXKxSGAAWpq/NEpHzHkRqMd7pMZrVPHd7Q5dHv9N2LcFhURUentbv1b9UvbAYnGMm6OXy9IE5I/1iTRRMqbSfAD71K+A9R6zv5IpfqL7XVHHq74Yan3xPf32jH4vFDrqBG/FMjqPJl2aWve76XDIvkKb5P9k+q0jihmc/vyKbMvEne3wOUReqcC5VBV/NFJa9SdO8m/+en4IteuEAc58z/94OA0Ly01QmeU+l5m1a2t64nz0znf4tnm/JcdNpkMkrOoQZe1kG/Df7wjC7L9XB9VYMEzXYNnI+aEpwpujyBWeNAIGKvf/7hE9NWFiebWerCfkoIBWwifeuLUnwzvZ4hd9YDPBD/uhNua34c4c8wWdlamGUvJmdhylOMNYa0kBqcUsLWqKOfYU3GCS21pLT6nXvNBcN/QqWYN50dVyibsSvmcpOGOP7jeSxC1xAdkrju0zYUUy4rfUOkXFEtverfVkUYl727FDoqv1KopAzBZTNBkLm/YcPwMntr2qEUC3PhHBMt1bb6xc2JvfvU2pSaFbplDFbt9Ba8LjG6CXCBVZxkizdY/RL7qHUMy3yryYjpM384ax2f4JRzIr6yjPLlxOFn2ke6y4FOAyD3CTJZTVmiHDdpLgRgHpPl0nKq2FnPSf7IQzJ5qvGV78VkHJWxI4QE2/engUXomy5MDtSr1xl9BpyJddcVSudma+onbGS/PAUrwBiw2Z6uu6btHRPGKhLoekD+yOV2O3po0jp/NTok9+TrhL0zTgrWlpQEfOHv3iaya8uZVjuoFNnkQuP9IOWH4MIufDxs4Tm9mimT9OyCPZnPay/DQWBwG89wKeOrHvAjcoZfXPe0VhPwrkjM7ydIpcjvNOBHtTQw6I/EVxYPNQWMU+AWnw3SrGJVfqHAt8rJcNKLBq/I980f+BQFDeIrtaE+gptAx5EFRCYsNE9t+pdpEfRz1wBaKGrV6kdd4Lw+cmA6Ti/+iy0pEqBl8LNVNCp4SVQo5OdLKCGyYHzuERR3NIMAXUFoP5KBsLS+ilv72dTNJvmaGCzMZGoTen+PFC5VxILrM44tXkwOSagCmwC0DTOoSZl7u7/4Vuu++nqK4t/IRo3O4mVrlQZJ1U5ru43TTw3sGiTxp9MIebUdmAE3ORdevpIYeJWtgwJKSVhzh9zFSgnt3nOBPj4wNTz41cuEBAozg8rOO7Rdb7JnRQtmCM4ZaXg4biK+RcOFcRZY5akuLrXfWa4Xh6mhefnPTlH3wjTPx7IbAu3aGFlmIXqWbsp7RGSMbuOl4x7IyI6oJbvc++6g2ZraDw99jWqAoO/cd1Bq6unzZKHO9vVWT1qvG13fzpSCtgHb3yLnh2X7ymjvHWzyo8otChQpAWQsfrKYA85jv83vKbkemynjpKBhJoXgQ4mUru6uy8SGZo/ce86e6+7Bi4vZIynqpPQMhP6RsI5mW3YzIdccsEhAr8dUcnSPmEi10ym2zsB+n8vav1e8lT3HwTMjS/dV/Xn+II7HXpursBMB0N3a3B36UkFnXkhhm48Z0xFSsc7TuJdzxM7XyQZ3NMPi3krS5POrn3ZTZjL1JsTty9r0oY4XX3gfwTC6BDs/BCztHSc1D5w7B9hmDAFqZlJazCAu9v0zw/4hx+ShRY5fBJWSb3Y4pcKuZq/Pol5AHfnMQgnStEHUR9gMS/Abphi4u6yD4WXKg4k4kDE6oYOTckRq7rEcBmyvlcRcaetVgp0YwSTde/btspDkT9ZcOEdvwZibnVYNDE0oZkhrus6y0N+XGJfQQ1L72R2y4AlM8AGrjlmi2gbl8GWXAIl4VCMZZPFz+nM8WVv6IP4l4LeHSlOK+Sn5ESh1JVEi4Iuy758qTawX4Ju93iDKPRdRajJqmJhKz5HbylEmIbsF3rENdROlkan4R9KHi1CCTy8/yEOPms1xYThcA1GyzqmQKLb2z6pdDyhYw4Zkil+G1lW8Xbd4lu+NtuNebDyBf+sG37cNB3HZ60W2VV/HTrMkO+Ep12eBJvAEs3feKXpQBrjWHuqypgjnnXGiUN56tXteCZCM814SgCsCwIz1WzIgcYugjtqhGhJHK8vj/HYaQiYZxyq7wt/bn2VVmlOhBZz64EAdeUUPy3IUrmtEL5iWBX1B0PgtuQnK7VoKkomcsJKx2UACUzbSeQx26eb7dn4YAwyunRzQiRz6vb4SZl2U8CygPKUtpp8YrTHq1nVjUG21BWMsfT0mjAcgC/SfgPup5wIZlvEeA6iDMuHOA3R4R6N0GBLK8xWXRei8arZlqhhC2AiP6qIwEamZs2al4XaBOaLxRiNRlOY3anyrmhcU7aWtDV/v/wUyUZAnBe64m8/9LRFa/VQ4Ioiz/6UPNEjM6kBKtn5ITkZP6/zz04gdg5nASmQTwcaCN+cCVYYLkdFJrHvdQoeJ21kD3FFPRLSmP3whJIc4mlofIYG3Onm/Ti+baJlwJhC9Lws39QNtKjS6fc/5VHthZJpnhnUZOsA1mErsFehk0+YyY8DxHGWoSOZIAshQYIVpbwhuQy14iiSQcSN2KYTi3y/noJdfQffprev+obvOQPUYjBbxNJPQQPFeYFn9ZkZMXhczYxOjpRpHkPSfdpnULosAzGJfHS1PQooZKbgjhiWcLFW+lRv4BwiaOkgnhlx/sgB3bwIDcB4lRWagxSooG7yE4XSlEkckrJGtT6y0QXLTIZciZOKGmNKZB3SK0krDPQVToaSguKPERtVSvEnPYS3nj0a8/jjm6ar7uAI/u4FAst6lRfgLw5HAppZmwv9+rDUVl4GN3/9fDJD4gOU3/Mx1alemn0P07noZU+fWYclPSPUdjD7XJQgwXhE8wH5dLmzdK+TdNSixcy9ft2kBl33gWc0mp3Av+K28FUsnrB1dvl0jDdIMKKo4LPJLJsu3mTSwRNtHvkzzj9SgY2NEaunlzCErDu5NDdsWY0BRlO7cLLr2lTYEntfWpmDmz/kWFUhEtq378m6TrmMkpL07FViyScLD3I04rVFQukuMRBo62E6LPcbEm3dwQoj+TxpMEa21bgbBT2EVUavh/BUP3IQ2wB67o3cQV0lNctKsXGjUtzXkcmquBxLaQ/NpNVYejWDHEs2V4rf2iuAYTd4kBC3vzsRLeGkXQ4nQxByIKrzKYGNyhgKDTUJyrji/0VqjBPlatWCN2TFrIrBMMLNsGHCU1Jv9VatQU1WgtX2gbyJk12QZJhlTC8Ur4hz7orRcpoOANF6sBuK77G4PYy9i55DWJc1bt7PNJNqN8cDwc+scodMwm7bn/8oC2uYPtkb1Lzl9tIu+3SwuHJL5f1T9jC2nSX173D8v90z9TRO3jL1LmArk3m+aL8JcnRNE+pprHVPdVrC/q8OGvDqD6o9McsO3WZ7kserlEe+NtfKcML4SZe+ygREdyFePoL1IfXj8OWJ8zYtWtohzCwOmKxmVE/5Visa55BEuFdxPtzpIxDNCqsiPySvI2Lfz8CKBmYIkfRGoIQBmqhlIqWwvd5pO1nPwlHDqYIzTxoQd67TOyyLdE29jUL9yCMHl7CWhuvYKNoXfQYgEsO14GkkcK6TfqJLQl/WP11tdzg45iKcUz9cEnUn4GKxaAxye+TjSr6blouS7sOQlV4xdlCaRTJ1zGCPgIv6PRNicCibveqeJ8ou6DJAcLNmVtltUEsvBFcYa8OmnY68FReN6xejSD/SirS+b3eO/8ycKq3ruJcGnNVPzXINObKIHOTc385dLb1ZoH/yl1JsqIiPtLriNkY1ovQoUN4eOkQeBhXvVI9k4NqauhqkBYpPueClrKvVGWYR22srD/rl9lHkIF+aNDaio11Sd3CrlbcQDeqdlU+gGiDF/Kj4a3Ncc62/1krkHnmAbm2XZlKiJVpJmwo+gzHCbg8kEFPrR3vwreprxsn8uQWLcd1QFzy5b445234Oe3SWzBW4Uo7lwSBdDxsjEdifwFHp8XAe1JhVyqm0EnAP6JMrHYHvDtXeNQNUpms68LPtq8EEh+KYNOqWVh6LiP8H7xOzYiHvWPb0tXyJbDO6spUc8matDYS3LpUbAPeQeZI0DSZhEBbggmZzJz1s7pyq/glbtPvLXGF7gFk9urLBEyMf24kFD2T2MXEy8cL28DMr4LSMQ+11XThGgdWA7wpvNPCjsAyKHT+Q8CrIGjfhRL8xPXJhAF4tUKDU7Zx4O9oCV4bWKUSwvGvP79/RfANg8WjmYyb6gDXbK45NSiABP5yWM60hbnzNtcqfGvYq8QNx8UtAcVeyhXEOxaBHP+W7BIwm2FUXw0NpuY5jt5Sd36U8dlVxH2iNil9Sp+0eqE6D5mS2MlZarzkh+fDMs4Hu0fccCRkJegTQAL9eLt85eCDd8HzPRlWvJkKZ/1H/cyU//6XRIteHZUm4BK0VJ+Y25yphMOLCLBVRMl62ESqc5nQSgyE6h8uph+DpY0+zkwwsHZzH4J32RAVVxmUKC+PtNtdPA93yw1i63bbnRIAhVz5hiQTe6/vNuC9PUUVoeQPb1Q9uUw8bV8KDmxwrQbN2ojFsmqZIez3lQTPA8JBFM4ELPHZrLPhSVkDPFauizCyrdt3YSBmqQGBjM7pwPYt65tuL2CV2R4e6CJhisDKvGT31lFc4xvycKAGvWInkzYszmmUqHZtEcQVILATvrd40stUQxO4QPa5bweI056L+m9/GCJVNI2P9rKr87yyCdU6HDsDRBdOPtI1ELnFngMn7qxNdulcOJG2bFUMbtbJzwa1XaZI9OgBorlu+6WhzQ4+taD0SXLncfxAqo/IoegS5KSbBrZU9vLut2JC4d4JOuboiNtxQzujW2nmjb5FO8TLsUWV4Pdm4u63VALTkT81BkCGe+qKgcSogmuyXO5fRT72IjdNmu9J9NimTw802T3OyB3eN4DP6FfKqgEQBC5Cmp8xTBTUX7ayRGPjHZFYTZKv+Tuu7ntz1vCvW6X43f2T79BHjbNpG8B8P+zQ/goK6CZoQz00sqOplJiYUkHz6jnDuSuyakysBaRWzVulVCHRYhYuvEio1kZGlJrtAggcs1HAswEmU6rkzeWYaw6bQr7i4ccfTsK3pPqlzQnLKrpUGam8V0w2mKDzvuWz5tVHfi/EtCNB/VlJ/LW1PE75PErAtKgXmxKcs6D3kLyeAMid1549GEucWgwP7EUjWH8WtiJT8JmS/iqXy0mNBwVGnpGbw1zel1syfaPZTvekAUlyiipl5gHiHFHFvovhGaUeBg3TyrnFdQN/m50r62r5YObK7xVNND8idyGLrW6Z4tO8wq9cD5p5Xk7rRFrdx0hrW5m7qvcGaNGMm10adqqKXtYJo1QOUKv4oy8Xr6oGWWcPabYDSBEy45XbrWGklJo3xW5JYaBJZMWRY7n1WF05Kw9WK518KfQQUJhyQm5BHsYuxApulz07GA2pwLHq77l7PQytczgZ3naO6meqd9OzpHKtD1GljHtyUxqNG/TcZfaZEakDahN/atiHLGWklLjgl79k0Om2giR7mlrzQN/Nb9TC4eJc5gv3HxqQBEWCIU69Oox4PGnQ5j8Jgl/vAOCp8bZm6uKWqsAUot5Ub9y3910PZeNUcwkw2K3Qia/ogaYId9iDc23I9c8d5+Tq5HAjHsOvW47xcElyOwJXknsAt00xh+GNZ2Z81bHbWxxeAuJS7ZHCncFRrRUBUnYOjHQ5LqIJ7uBGLZ4W87380o80BqWQE7cW6vtAqh4A1Jba+7aZ49dU1P84ZntMPULg5KrDVSoGI97ebpMLDX1kdHDdQRyuCEBI+xgOoL7zqEVaYmJbY+Ska2Q2vQcdE5TAMThIyNYtmA/2aW7BtWVn/47GxnD8q0+MUGEBquPG0pF+7ARu9y2ExQgMETsAFiMY/rwN0tyuHJ3hKi8x30Sn3DVtLFrLwNon3WeADnpdtSTm8uouhvtGSYqrKHaBv4ui1WOPlWext9w2J+fxlNCVGpVhXsjX4L+xiOIU7ORhPLnL806hHEx5b5sCbOAugnVH2ui83foJlbd6JyFne7XEoHYAvTRfQg87znH2b3p6v6I2Go0NV+u7CK9YjXYv0jgDnNG+m6suQk6DJsWa3EDXtDpsRkH20i2GNA106XeUcf4FlCYcVljb7qYhdXlvxKLGcoqAzpOy+0XL39sfDGl5KK+4RcWZHKViVAMGunxV5eYSjt+R+zjmR7y6Gl5mksr6OhOMNji1M3yy0RO5B7EZLcGS57Ul00ipxcCoBRIBfVApo8KK8K67bZbG2B4n9QGMlLoPK/6pWKhCpQS9gwJOjmACMaz6/0eO/eni63mgV5dIzMMK1ZRJhBS6iO9EfNkG6hOKPck2U+c89RCCv7x6RQe0OqvAVmPKhsT1E6/rKQRVIv4qEycSweN0YejUlw3VtwOtKlWXS3GkD8P416bg5njW9UNqqFw2cP8+bY17QhSKgqm/nCJIQu08v5TwnZsqXub3iO87fEyMhJ3cjXUbdx/g/pti6FJbs7xvvH+SUcXhynasCAyfzj7JGHCBi4sfzxnEwyaVG2wT1zVcrwfpZ7pI9iaPmvXXNS4fEOmNUGCJwplISWN/MSVBOOYDfGxYv6awSTLPGf5ZzdM2bm8Nx0xvvt57JoXCNrAi67zpjCtDw+w9wUj8deXdKF48XpIUiLDfvjep4fJF8BBXPso6NDlUB6y0a/fJxxVUvrrwB87FFOrfBUWl0jimMl4WIdpjXEt8nWXqTTPuI4pi8mcq++ylYG8diX4h39a2cYcaN4EUovRx83ukYNHMb81CTwi1bsYy6jVMO1RXAg/dpdyUbQjgLpk/UM+5Nljdd3orEr/R7NmsHJKvKpLLoINncEzPZzqlAG0BL5sQGUL7WbWa5oWCTreUZXZ8wDUEljgSdmZ1n0jEoqdqwfSnYHjyEtcVwVuhDn8EP4k83qn4W1nx5owTnnu5zTBqYmCfyJx+PWZHjTWeDhYWWp63ogNXWimcXtXrK0eHjBxqYg+S4MY/ma1zrtG/1x0E2yrVzgLtSc0voaeWFXOaRq7w3F7mnidloZMnwIauXSzQC63xv49PF8Ixk9mxe38z/oqEkEebxWdgeBNJrp0vj20UYsOIlaaMyNb7DQoaFUKaXQPfzDp0Gd445sXoofSP7zCtcBRxTNgGhO9t6U8ckHDXnx3aAT52UHy20e9ReX0VUW+Y6bN0ZpH0BOpRqhoKovu7cPZUCwigi0vYdRgIKKHh7efdxYLPfvxWaStWHB+uyt2qifZutXgzp9kKUfHM88K6by2FQr7aQE78lML5ypxgZO5xCfLS52DYeW/rEt9Feq/9Y0ywTvZXSLEpyRcHicSX0/QM7R6uEStSw7QrCq9DVrx/34ymDCZrSJC2/xsfO/YzYer8HmfvJn++Uz0Vwcyt8eQbnSc/mVgEfXmYyjj0hcyTnxZ084OEVBavW/WDcNlhdh0oaDkJihgUoUTlf6YLXCYXUK/gYS6Pu/7jTpPU1VeyDZeFGLHP+MK3x86ekj5IZsFE/UDBTT3L5oueYZpJcg4TekuwtZ/7bjU/Hu2SV7cgZ6CHJccj3s4f18ra2Yl+49xESPSE2IIS/pBWpr7fTET1otnIemUAXMZ/znYYcl/A8SUJEOOyHwoCSXeBjBU6zoLtdbzkR3iZeZxe3FGhsA8VLiTfMgAwaZPW6M/rn6iAshbJCQXcurZrbFfwUauensU5mQz3pkkhq6Hjvad6csuL/vDNidt5KU40kE5i54SaG0vFWXk8vq7GGl5168v4ykLa5xekrjIoQresFbu1HQburK4YVhwdIKaOIJOJ8y1k11N2heePkBUm4GjDN6ANEk0tcbkuFnqG3W+BdGcOda7agfEI35/20Gd68iHLWDosuCTiv4JE+aLHWkXFA1+9iYTRTtWsyXRpg5EcRkS5nsA/awg193wC+x/5n1TqdPFPl0G477UronJcQXDlqsABbL95KRi101XEsOGZ/vZizmj6ZpJzJZbTfqy01G/wUsg4nYxSwn1PVe4wNdMiT5iyj6x8JXIsDWGpyqmeZ4BB9IkuFmRMV7WmEaI2K1eAE7pnSbPYpBRRHqCdTwrcxepb7402vjkXP8fTAwTnqx1Wb2NhEtwtxwpWP77hPBNVAUgSpSkSXdbEuCKNH0C3T8e0c7991VJo+JEeJWG8zokGnHxUFHLkyXlvNpLGcObj2hdXH8EvwhLCZdldXKl5DFyM/qmgEhmDk7Ym5a6YcWzD1sxY8b1gVg0uJlTmAH9es3GHoGjAvxeHsYx3erphFq6gO7fBhKsYNOFBT9RRPDw6k1SCmoQYzCLXYtSU8YVCgwjlWRc2z6SdeEDtEk/Tk+pBGXzRzl+rCVLpWC6LAmSm0obLcW/jFdMASeHZIHncNbeJD3XgF0qEhZWv/S12LfEa0ZUFUnJ09PUx384Iwutl/jh+emddnl5/Z4a/01g0OFIpTSAcad90unVw/iE6a+0XlTRm52N42s6+m0M7M+dnoiORHbJwpGwmczK0UPdtzcNhCXtXQljWe+tP+3bs/PL3ZNGPgFT2laRQLt+uIiEti+apScBNCFt8GtcSelM5hExw3EAfxHbFVoBEXbz1ano0F8vwrhd7AUeO3KnrfsrOhNqDustuyrtz93yNI/bdSFHk9P86JOtnYzpIqB0ItyrnvoM3fd0N90adGkRtD4WJHpECMH9jy49ZVepcOsNmK5AT+7t3JPIdxioBo/wugOCR0ZUnaUJ/Wo4h1YqjJdzwkXz4N/7VMRrg6LxNhAUpLMGfHrpoiuarPLD6vmUHo2MPWH0McAmD9fzTSqlhDCnMPvWT2XZILeVTCdmvohede0q91egYQGyLxso5p6dBzMYhRwP9BZtGCfUWv2hj5aAJ26NyKrOyWZJjeeKzlpjc6s3Mw/K0HOb4bVuId798LAp66jaYTA9xIhpeoqymUdRsA2rMtUr2/SNBrloaAP8GVUEpMxFCcZIdZ1fKW04nshIRaPB1eh/URtUFFXjy9wbmBN2FOJzNWto9sBZUDqb+yG9lDqHkhGkz0L7fmeaXwVwiOLRQ4LxJdzTly6Lc0dsnUdM8Hme+xWPnNZUaIsMWTJLDt9iSU1fCTzo6JpdhnwZ/zyV1JIoFRb62vXgNB3JPQ6hlvQET1HTcSFRYu7hn+xKE07qcCWqGpslYyRb9FclpRE4WQgDRpemBKYTmATnbJw98is70j/FMrgCAkd0TVOKZHNDjS0Hlfzeag7/+LzRWv8Ec1Ayl+OXSkgSc6fh9xdztDq/hcUuTxt1Gg+GHIYn/FXyma/w7+sGndZxbUn6dXGeSSs0LuvvKXvkxDDY3q2FbpCTSYtZXf8LCjBy83PakQdiuMQg5sTUdFImql0JccQGCz2mttu5Qh8+sNxHTCAYnZrS8nKVP53MjN3aF+8eMl//eR/ZCQGMReAIYG2yj0gub2T5kZl0ZqdKbRLKfsukciV5LmEShPocx9godqjXe2gCxw3sVnU9uKeIRTv34YNW1fxKO/fLP05sJ0NqaUsayMqyzReJ72zhzDxX+cSKOhqHB0Jrm+GXk71QIZg8LHpDCkC/RVn1/lqQDMybgY/7LjCxOYCw5iOq1nACvoV4TuQHuBxe9sO1c4Ji4VD1qzvQG4VN2Ogl9osjiKLHeh2pxqPL7cO/TvlR7i1gb27gx/RdRwpNk/tgPvSA/+7am/7vDzcyF055Z4z+X1lCYQ7sQ5Jy9aOYRLmLnl+YuZ2MDWVVP8CTGE8Xzwbq68t9e/fdCHmgl88+W3nMP5o06gMiAIY5LXNkuFt2xGIxzWflK7FMBV1M/tAAtzqfkXIiCccuFO+57jtIenDpqixvTrAEZy4t0qH2g1viVtvJf9Ztf+lsq+sh19eSmNWg4GphUg0sT4cUbX4w0qZKj/pykewZsT7G5hfr/kH4fK+wczSPk/C6FMXGHNjbxpQ4E3m7SAU5SEvquSjicWJys0QHgb4gBjaHDTZO9MyNXAVi5Ge1thDNYNvuPbhlYAGGq31P/UMDZ4GcQ+jN3ohcBSrG7Po1wc1BwfRjYiaF6pQlzypHdD2J01yQWGs+Lr4JxALINcUYI2mFwzFoTefSdqzA/55LKSNxPakuqaW0rN2OQ6+cPMaIPjnZLEzeibAzE5bmxoSYY1MHIly4MtJlKzJxmlVx4q0jteU/0CHmCxb9pQQz7J/XcFeMSK7zea19Ww/MFtxR6uXewKtLB1pNow/efLFv5PBE1UJguE/cmjdDLntxFtJQAkq+jrp61PDKyaUZLOeKpegVG2xiSTW+5PpfCVNQoqG2qS0Bgnwu/80IiiQoXLG+JS0h5RR6QPA04BUYwXcq3yOxJSg2/8x2C/PvDHuRB8vzWSoypiLN4Vf5WiuDSq3OMb2EZHCC6hCOpQ+8KJc1+35eVx9REj/4JQw/TuLQCdyZ3EywkYMqK5wypOS7jq+Mpf9GjJoNn8VC3FMxwYE4Bf0s8U2k5s3GKYZc4xRSyYW/Wj4WV3EbKGuy0NwZpxRJXcNfJmlOzwMcJNgxPi5FQOWZGfsnLql+amuC1iJ32lysegd4bXGEFw4pPYxeqmkOibhVNebMrS5hb+BJ+82jguvSJoP/nGW5dBebtebxm5N4qPuQswKegWhQDyNS4rTcYX2LsDl+Sy+AW3u1WxwY+J1S9PDI33JlRQZhdnMIY4vAUCiO6CA1Fi/uCQYkflVLJoPjArgDQEF4wgX3Y1iOfImvEwqUbffcI0jasfUkDrnd2UIv1EKLdAo8V0f0qjBv2j8DM+aQuwBGraaUaI6K/zxEHycHDPBiMvWJbReGv/4+bDUzKk9sWrLx219TbY/vZTb7yXDgJ29jeo6vUBcJCnBsyW9rJ6aEkQ+hF8L2QtFneLAbDOEQvr5axWhRlXigLqdaNtjZZWT6inTySS+rOeqln6HCMo8mhN864cWqvHQ/ybtK7BdD0inA//YRSMEz7+4H6WYDqycy5hYp5u7ASDOE4Aqg6X5tuPgusOIroqp6FQDYL4V1DgIG/sISA7uI5/lHB3VSYGiWznvXTk3vBcLg567Pzk8AzDPlQilX63+AgZPgXZYr7Op4cmGUJd2ShpOuQbi4SjXee0xKqU/7X7OeuDKBi3tEcYhQLlgdLJsLe3NcZPW1SaowZ6gD11Il+EDFqk66OPFvMhB97fd15HsqkFEReOpb+2C41zcRyzFT0mipDK6tQ9nTWdoqN8OEZlRT3H0Qz/QVq4Y0w2Qr24UlYISkDpdAiHsX5z9ZqCHgiQiTRYI19/SjWAFcp6nxW1xXABkZJ5IoFWiR9yyf0m662IVejt5+kFnBmoUVuMQhNZfzNsQPoWVEO1YVZJxaLVYrNoUBZffkl4C8WlNxBZ1zO6fKJoyn3KCq9ZqALOLmCHyXBuBSuitUgGwGrZaZoAH0eUjSrQbsXFbFGgJkM5F/pwbxFJXOCR9Vj2tt3ZPkrE0X/yBAmdyL9Az48s6/3PZ6UwP3I+XnHU3IJ3EYZzs8A3VOLJcUW7mPRbRECWmvi89mfiwdOpYBpZZ9kE9oyVhj8EHlvVDnuB85uS+fZezMAaSJWkQw2r6wVNunviD/SvgIk4hDVSj4lctNNi+c5J8hQYIwoW95+Q8vFD6NkHmbBNi4z4ME6SO1NNZAzGkeoT0IMSBLeSQcKa+swdfcG3Ir1JkJJstX/5pSl2eG2OOC3fvsxwAyA1151+4ivMQLU7RdIGa691g6iMAzJpXv1VwjgC867ax+57i/CVZi6qCsyNfximNJAIpkt/JyEgcVuqKlW/QIXgvWXOc8/7UU1uqki98fgo+24FED6rc/xlhNPTeXTGWAVxdqZahII00mpcPtr0vD6tzs+UTZ4/DCDUPGzxxtNqpUeMlaX0SHwhMvTd1a/D7pIPzV35IKp0zZ0WDzJNtODL912I21F2eblMqHNh51pZa3/ON9BQNSdOJxrJ+89qAX8ibqqr/+uJ61c8VB7VN3r94GbRHnouwUxxKV1Rg8zPhhgWYENl+WuP4RmGoLVc6ZnP7dsMRd/6at3+GD5LQnqknz32JWRUNMsatZMIs9JMsPorCOvCkaaYACygLpM3jeTp/migh+7m/1Rkc6jicl056yJHjPYVFPaaIOnbxhULhRiN9ZEWUsEsSET/QFFxshuIygRBgPDS3FjQuF5VU915exXSCWS4l8SruFiCebFqSxSTssFAR+Soa7WZ5mM74ZYec2TJzCZnBFj8ZipZ2uV5DEglv8JSNdHJx7mmXGiW/pZRZTq1AD3/F/DLFP2/uaIbd6DVB2DZIdk5T4tvkun1xVTdnB2qhgenU94Fx9Vf+PdMzApAopTP8Qu9YHokefXKGznssBns5GuirFXw/jGk6ZbuQ+VF5KgOuissnq7bQs76E5017eEg5S8equAV2kzBAVDKPtQSvMXwIFxMe3ndGuQWFI+6WEbB5eaMUZMDlYDfQ/yZvli7dDq+NNrU57wM5lcwxcMW7Ljih6rphgGQaiCYD0PF/fa9+9o2O6Dly1SEja4ritQPh4UhnNgbr0eg8U5mElb2VM1ikpaELqbAyRJRao38U9moxahgseyZnFMJlivoLBVcD/1St7j3U8J8jaqMfzPlb1Q01HCqVnm0U4TG19uxkUGPm6swTkz11OplZ/Flk3FXAifenOIoJaRlWqtyNT0cT4ux7dbiJ9kXD5i2AWLHb8WOAPi2yj9gIS51Jjge2/r0U6Aox9hNsUl/p046az+KkXjGiHhcyFAveQk8TekpDfQv0AAraC3oLrJgeFooBM7VOxCAcloTZ9sjIceFoBjqOVXpO0ikJtdjvzkbXNuAM3UkpLhEsXNJcYiWUgU7JhD+JKXKosYpFbc531ioG4lb/ETBUkPwp0rqOCFVFSpbDl7Ez+dMvPpib12jUaQt3VFQGogDPcN6sW8Kgj/wUZN/xGNaHz71DxvFIxnGfhK3LxQ87ZPlvKwizFl9t1YWoUmGqHmhmpG8i/dvsgUrhql/dkC3ma37iTVr+bHvS6iIwuZTZ6NbHeYFE3hmYckxyjnjR89VywyyngspdT4a9meVcr4DucRLqSGk1pjTJKs5RIj7z7y+aKJOlo6+WEIHHhBYUBnuV+Weoz9+2JYnxLPlRKhDNJ3sgp+dlVbDSetjmJsHSUw6ocNzij7556WGxixX9UYC3+kC3B3i0wMB4KHjW/SCqijrJlsGuD/ojBbjQ2DTZ+PVmxc5+GA9o7PKstQg9LDRjfLq8iTyLSvDsCmFJTMiml53cbhPXGIwYA9QhsYt027DC9vBnFmNKwaXOA5D9C6kCeYiULzBUlAPRBasklyj0HFlqrmdegCQZO5KqLLyByVekQOKeq2l4cNUPrO9tpsLUSnLDicffPil/JbaG7pxQxhvXQr5wn+Cy6LFQHY95+noyM1p6fFuyxEpd4xTgwWszoZS5v6Ce6wdnI3XqJFJCoYTxPy3fogOc3kFaPYf8VpikYHLNPOTB7Hirtvxna9zFpTKj0uBINfHD4zIQyHEkZfsrXPjL6UdGRR6ibI3THT3e3I+ww/2xjTWCaoXCT4FWXlujgT76YJs9jkzdcgmil/+ZIQX3yDEYRDEvhsfveeLOgs3edzQNRowMGL6AqfLp2CFxfiSIn0hGkfi42NktBIzmS/e6FcMj3dLubfMvFTupDYUA7ytpTafnimikknjdKDgmrixo28I7FzaplM4Qnp7uhd2ghHRiZSvRCulC6k6Cs5e/ZY1ymvOTgKPe9ZDBJeI/UuW+TdV+WPzHFI41GyMBx7DtoPbzXNhAmUtOC2JFTOI2Hy3vu20Rvfx6Qr6IIaXNcJzD4BicXkWxF/Fk/phBiUTomwn890FDBfYwUQgyc/Qhm+4xERE6WbiqQnT5B9qT0rXsERa0QB4txcHohFauY4GZC8TYt5hirjbl3WhONDod/jtq+rAv8+rGhiDSDCndcm6PGD4d6+sg2pVKvqCJjRxLKYxpFCccgeIiURIXWnK7fRp0p16jvyvUkqy5B3m1VOLh2t5D1De3ywc91qFwKi2/22WvPPnR0XrS+0bMq9pZhw73pA7DkP1Vyl98Lfq4qyTZPkejb0WUvYOTpFOiQRLqnthWxtBhBu3UJv/8V4OcjURiACHf+NuiLTolMZlYr6TJdruzbh7WlgmKHILJPdc289bdD2gWbG8WLiLAV3odzEqoK6nSXDB7clshY0WqhS+p2NDWAm0wfCDBFZw0AVLOM/Jxnfmit/hsCXcQ5ky0QLIB9OFyYcmA/HCVaUw5fyOU9jsx+xygjVP4FZZ4B0X5G3wcVSIU7gh11oMVIdqVXlhPduVdQR47AvRGZx+hlls5vyIP45jT7eyeQ4WG7TTpei+YjT1Vjj+coX18M9BFP3UhF6KxkhJkZwGnF7nawuMGSwdrNKXMFxH2thPwmF/+aN+CEgEzXloejV8qgS5ljpkv9GTPYWdG0IVEJJLx2UklX90OCAJ9RREt4qhFuDExXZids8slh1xWzv1NzCfwRdxhbl1LugpSa8EOsgbOLfQ34TI1ZKHrcsKz2xqRZ2wUU+9h+qrbuoQdR0H1/51R8Dx5AtSq2B90ZZPEfaYLy6PWl50LlX65tspmg5FagFaBAnplONrIenn16IU4zFjimpv/29fxTNS1++9vjZQTBHNCg9UrejTu2il49dwlDxonr/uOI4D9Fv6KHXguMpl9IyUmaUxbVghI1IWamNba4BL6Jf3hTHUb+j0SGqIcrbTWIuteM2fJJb0vC/qPw+pzr/0anC6YXVn93sqhpq+Bg/ENao4A/8nTKHctTOrz/Bjx28l/YgUjQ4j7/r+jFFk7iG4ShVWKRQC7481jjy3t9sGopBsjqEFlBqez2Ih4B3i8/B7UNb3yEMZp6KTvwXFvUKIycmx2H/VZnv7ClJos7iyPt+3P0IdglKv5+3B5syLt2y0HsLCcmLX89KiEkpQ9B1K5CzVBPBS/YZGFFyF4S7Z5wRxxvSExfFV6LFhz301ssrzZk2QW5SkrAlwfgq6juaQy1xTKrYrjIkLEKbHff/9rjHxQIEFMHkE5eLhoJBRVoRgKhiSBG6x4OJXnKuwjII1k3W0DCataBCU/XtXABgZUPa0kMbu6/mSUMMlYuqrqllNIPGIUB6Mc9tvhVzp4PNy5W8hzxrjoH0XxEtekP6XxKpnk0wReBfRoeG9d8i8cCaSmebhWCWLgVc3B8Ek/D5W3ADZ+Wj/uPXv23xJfzE3lbSL/4f9VbTyl/Xu6jBuRXGePFITe95v70Wsfcjo5GT0PFKZ1xVnOE7Wos4XX0ypICiRD9mJrfMBdgBLgF8lpA5JbDkmqDGuMH0wvgjcDYfhQJmn2ziI0gVIbJ/9DxPAMsN+t9mbhYOIjHecInpj9/X/uRkQUJ+15EEXuQeeUmH9Q15ZSvFpZnGi4mD4lwvovVAd9aR+Se9UDeUIx00mQDwjSjxnaVZRFkGHgoBeou/8EaG+XZ3U6G5tDpaQ2Wz+iL1PxlFuOXO9yMc66L3bGGynIgvEcGDfgg0F01epDq38AObn8RYdo7wcEltjilvWVRy+xQGD/pEpb+xjhQEjoepAl13xUQoyTblJGJ6PKjncX5Qj6DGK53T8Vv9mBfJZwIjjCiZWVfuc7I3RiQYzYhjgPagRbPntPaPbTdXT/AWDCIYVKP32jTlB4aPnk8AuXHx4XT2EAmwW/CubMdZeIj9QNHXma02Q09DiGIWtbH/rASFSwfuz1Eiym6KKzOc6rR+XenxLUs/nWUYZq0EXoeL00mDel3mnwk9ty+v4cqzrD4L+gkszyc3qaOanWEj9IGnLUBnAywSxie48kmHbU4IThKjbsQ6bw61kIySzQQ74UmU81RbERulKHFD9fX0F/43Yumn75CCDvDlMMLm90e2pqH1pmTuCyDzC6yJOa92CRhRiKNEw9gdd76WrATJ3J0JLLCMxZBmibXCNOerfqsyZO8qpJC33f50eFayzjrF2H25mVFMmYD0H9m5iwyO12T/S5aWpVvzr/EMbu4uHWyj/xRO3gr7fftr4VBfZTIUimKYyfNq9KdFcvDARh0hcPiKXYGkTGiU/UxVeKNVjHw9xDT0Jz3esSD/nqQaaJwi6PpsO5pBBeGDn2ruuIK9m1bvDwezZ8hHsu0tlP2+G9UgH72OxlbDX/fsqTPKkY/Sw5BH8c1+a9F7NcVAiHIfgCtW2WXAUY0dPvuaqbgoTwwrRnSoXMt1l/fPABXDrK2N+26Rikn0k4XSIc5DvEI7sOhaz0jMdAAPV59+wvxGUut1lyogrIepiV4I8bV6jNI8SHGMvdtpCl0Q2I45c/6fxTyHGqFlyv9hng0KGMT/i7WpMWC80siSqgxWucV9EaEgP1dpTL0qnuefUOZB5xBrlxgu0v0RYpIr3Fhfji3ezg2dSo3UYvq6CP0GmLEAiShY/eVE8P0z0A2nDTKj9RvPvYVrLG+7m83z4212C/ZcbD1/c1qkdMZDFnFd8YgDVyBSFruTkBRWkGcEDRNd8902Y8JLjPwC3UTXDAp4XIV7LZW7eG7uTlyJZG9RgoafZcRD//xvg9gKk2JZD9ahDFxjEUh0sf8uyYXMia0tAye68qkcp8o/aJnfv+XVY6ZsM02PA++s+ngnJ7UR29AEceZBdfI8duwhaa7ofoUJ9foT0ADuV3uDqp/Mj3fuej8VBThj/+2Rk+mrhvpRfqXfspmPMw0koKdW8K6KPoqu/NBlpvx1L0f4dDY1jHZ1IzX9Z2qhBpMKDlu54TqXjVmzoQj4W3x/NL+HamV/yfv5We3KCkepSJk3HPj0xds0xK91zUCn7M+Hh54BCog4OjuUFuQaa8lWwJwDnsGiSiwRGRzJHeWRWvsOSdg2hrk2dSCp7SiHualxaktwrP2D8sBYI3eA5FfjbNKpFTLdYpBIZJDEbZl/hpBfXHZxxYoCo2LNWn4rPqIfquJFBOquUqKdCcACwaR3PCtQsv8Jmh/4Bwm5BaMdUBRx6UaTTfjSEenJNAsdFsOkL4N5BEszhe4YQ7Pp3Qo24pdrm5dJfa8Ur+VwfcMnKsZdOnM9gh0aCVz/j4Yh0SjTs0sTR24lnJ+hE81sWRqrDz6yv6pPjjmtrO/uDehhmc0gCruHRynODX9zsUvQPYMfGXQQqel6TxjQzEPTWFbz/RMQ9HjnHDVmVQwNq8ECKMtvS90j4Ir/Ouo5vH9RkOrq9UlDD0JrjNZTinUOpSQKGlROaKR+grs5DeusVzg8894EHlmzuJlGnkeemZj2ZjtVti5Fx7Nlq+JlYzS+AV4gSM2MQgQFFvZacohVFhUn64kbFUmAJ2kkwHQyT1fzdzrUZ26KlWHH6UIWbVh4hM0CzUgiyCzoKK6t1JkErhjSm4NeroJp548Swz+LxDlol1t7ZiMC112IioKGVYoDK2sqPWIRU3uvz0yV1pgY2KgWDe+03QWE7/WjRfPzKAI1cRLD5OF1w4vs6y5/BS58qBa087+V513UH/6S+IKAfxNKfjf11MFqrK495/Xz6H8LgvbkBmnA+soibP04Evo92dUXxuPDclANZqqQBj7/CPsUsHgw+8nhJJOsYRwYErm+kKftF9r7h5IeprWO86ySyp82rzmXddF9Bt2aVy4Nd9JST8lDpdm0KAY/F7aFa8g/+3ygJ1NHTtaXMIttcW2WfIFUWqI8x9Q5gh2tu2pOysEGSam8Sn1WChAl6Breo4gY6TqPWyCE7u7PXFew3RgeQFz64P5YwAPLkDAaivE3WgU+z0KYpG5GXIKoW9Pmlth3ict/sTSV1Hhemo0TLbgK8m9Nop6vfU3ItdvanOE953eBf4xUktmuJijT/ncM1yEmzMEaziPLPJ2/bMQ1a3rfFwDJqg01JGlBTlUWq30Nj2pu5NKz+b1+TH1StkvenJZz3DerffozI8y0tQD8/495WBKZgFCGYlx/drImqHfr5A+2gx3XEEaiKOJUzR2tRPqUH4SrR+DCcvfbH/n50m08EGekfIwQ6v+prKEunU9T2Z/zz1AfoMCgJiw2OLzXNURDePUBkivkvLP9KAcFJOy7x87u8Ig5k1bKP3agHdxzHyIoTHoZwKtpXOaFOl2RVx15L9yiDhBxMqvthHTPdoR3VVP1ejcikVm0echMMjkyXeZl9qHghuII3hELyYQQYBXgyDpZWtpKo9q5/2r4cxSvtTXsXyDSRiwtIiOLs2bWIfMJSDFB7QeYOEC2Je0W91ZTE7HPybQmu9l21phs31WLlQGHS7Gv3Q1Fs+J/h0brJ653APfiN1yedlJZHdt8ozkqVELNzbDWqVXHNJHTCjflRK/rmhqfq8/57ZBCl1R4wEewaVcvVbd84fSamleDjMrCJdFTYlPoj/IfCwdWL7WEpiM9E9SFb/DsM51+V7supZWG1SP5IIJ5i0nlqhB0SSd+Lf0qhwQgALSc4f/X9KeBYsMBMmc22pDEKotwzdd3d/MpckOYUWPOGvx2yXRrOyn4aiPouVZ4VWkKlOhntr/uwYKK0tVFWmD1c6YU5i0xZOcJD5vf5ON0O7GNtDPjysSr277v8eBKvd8YTj1e228WZyLprE0+bcu8dXcO1pws1iAB7J0AedZw0G8it+4Sj7RQubUSbRsKIfkpNT0Z9vNGJt8LCyPe9UF7IBsVE9Dj1WYDfEuQqGZrEih+y30+2jEPt0lmCbCd0QU+iaX7PtPOWz1cP5Xeane98ezMOWh2KENYntmk5hH1cROaO5mQtc0hUQImJgi82ZXht1kQ6saQWs8NKIqBB3/OrDuEs4b41j30+uTysZGIyccdklrvCNy22mE0KMelnudYN8MkTjhIyA1HlYywQQc5qMOe14FpMtWpL2lzOWWkPYcI6mMiSu8zd16+DmnZJxKw58KXY8PUqkue1fcQLAVzaVecH7eERFMJcFc1JsDaP+zEKOKsKyuYnN/vv/J7kJ0Pp5nDhsN7t8/hk+vjOrkipHQDRzDwALXag5D1O777Gdk8/2+B1g3P0OylBmGS07KY3eI/6PdDGO8Z/7i3FFjCY53XqCsmRAPky5ePO1Q3q/4FhH/wBpPb6VZ3N6kNN7AU8PwGew7coZZZE2IfIZ62R2ChzI/lWHau2FO+OlPEVibgHuYEcpBDXXtw8LvIvBK2HE+RMQXhVknmecG7J5hT0/zoYxVY5j5+iOswfVx/4nzg4dAJhUEKDBhH+uOpjOY3RXVNnIPuz2EyWbWbaragVOk+7CznWFFlllj4RrFzWIs/07SNW38nC02h/fhl7N13/T6z5qckENzkW1spO/L8vxexL9CzBOkWF16WqlMwKtfL5tMoYBb+kfh3/Raf/xVxWgLEFPQx9cz2gtZz5uXCXHPoBnLp29ILnEepCPqwHq4K3vdptbw5jBY240tnTN2+JpVrLPKyrOu3RpgljLxO9Bdhyy5oHZUl/YQzhSy/qx45ganQ9hi5UC9oBUweQcODYsC2Nmze0ViHB9tbXorPR2gNZ0i3slJTksowvLbL4YrT+TUFAmVfVun23MkWrDysdpVQvR26bV/mRtomuO9JedKk4Gami99MEQFAhFtKH3HW8kVjWPG6KJpC/V4oHvS8TzRe10ctkttt1GdjfxKyCUJNZBHL+VGcZuC573qS2DSIBC2x+eRyoUwHM8YmTJ0ydswMMIBHPCWhFmtDZxrNA54SW2XiTcc4G4AqYcTN6XxmhcuvcC9Cqk+RhuLppVauJyaGNdkziTZmAkxo3on6gHrZbT5mHHJUA2VJe67sslfxqNPZxqQfjcEvMGYXDq5MbVsNCqVLeUutZ3HlS4+xYNENADW5GCM311Fx/oLOSHcqfC4f/VaGgsmx1+3naBmUv8/RLoVCnCCwO0QaqFuTncQqfGF/u03e7+QDo9mqY3khqCo156kvnw6hnjQD2ynvoreEgL/SWLopz2sd7Tpe9nW5jhgwBYaJEMRUiTCbCk/9orZKfV4yXX7WpB0A6FKNlSrnP8EbHyY9D2+So1qo9zLW3w2GFLtGYZ2rQSdhMpnRw9T5JQH1jBO2ME1fF35jaREHBiVeSNLudlSwTcA4qM8E0+yp2imN/d0Ds3+fqM8uUSDh/x1rS1eA7a2RxB3thzyAK9r8Fzdua/C5F+6CgzwtkwJdjHcaUiKuCGrXyC2FpldTPQ30tqCzdq1S1QfDxnJufxdQi3sPI93GdPXzv5ElENoatar3EnTEfMNDQ0oSYCZJ/R2lAKdWu9zqEEu2HiLhxKXAziMayNZCJu8Icy9VmNOKnwNDYxje649GxwzE8E/GLIJ4bWbAtmhGr9iXWMt2Daz7bpwhswnL/LQXQ+SlyF8k1b/m7wKdJ04piRxtZagUNnSU5cmQfF8V79NTu0UZB5hzeZLSxwKWR4qvT5NXhYfwwtB6LdWj/A+nni/Uxz8joI3jzQpHJxn7yegRryIB9WfH/b9dEfcX1+WXGHjqSZgL1EgVzLEhspVSYGUQ1UIFyruQj7wkKbNZEXcnOKtAwpTo84J3QuJEy3DrBVt3keonlhJaP5cIBYZFbvHPRt0qZzdXqWuOZcus/5D5cAAj+jB+Bk7+6+Y2Srj3wf7VNPZYf5oVsLzWFpwuazfoV45/k22ahRkfml1UiLVd5OOcdnYCegkloxrnQ8xi0NBHARjBl6CtUNybYCb03zpTftFLRO3XwyLSSZhcyNUUzJeI0VNhaN9Kpmh2/SAM93TwmFfnZP2IWgdn8+RgfuTcDN1cxP6HhihCqASkEFsnYtj862kHehP+veZ1j66Uct4pISxFsS+BwD4DgsqRKnNywW0+lh7zqBrFFrWgNFI+xBv6ubiXkyF9awJ/z6DN7/qls9kG+KOTWXBeswtxLTQ0ThQjsilABPJz88vtrPLgJR/fxRUN5dZQlKC4JD11CXn+7xRldPtOOkmeqOWr3SzBppaNrMBzr9KSQ+BOqBWNlDiv9XjZ9HovyM3k88hi5svD/UgDQ5vz7cbfoOvt5MVwvIbQ3Msn6X6bB5WdwNTcEEwGu+g5jsk+wG8UrV2K+/mMgjwhvVQEeatqwIYFXj0/FzH3dNR+cCJr2i+m15s3MNP19Vl853wmkFMes34ZRxrmCN2wpcPcMsUSilto5HPYByC8dElEU5PvJDy9Rq2BpuSAovl1y1071L/iM6OL1ydpopJMLmN2FEOreqFDwrgaIf8pj1n/XmiFulKbvTFyE2uRurcfaBuUq0SKB0+GRx68enyDktw4mXn810fPemxc++y66vZt+cox5+MU6f9a6xX25z2WUygGnjUpuYEAZFOEhPSiRl24cEqqP1HKnrDCJb/fV9Dahovi0rJejO/0xfFZwQ2s1WDqdw2005WF8VNJ3a3/u7ZWRuYeHR29MCNRzRDey7k2mdQ1WBy0W+fPahc/6FGndj9e4KKqWo71NkHSoQlEkFFjJia2nqcsJ1NcLqV6tj5uyS36bP5j4XgnGpp1EVkipwwYTiDP1OBaY8PeN8qBEveGMGTBWeVa5efCdK3ppO/DeQte2SI9sAUjejqSipb9PgSeWw5QVfUMt5h1Xc/OCumRt2dJ2dViihxLhtQ+Wr6R0QnUZdH6p1GkrO8laB/VaifxhhXW772CXiqN1OsHcAE9Gc02Z5Q0RrRxvGCxBrAKuTOD1O6FFCbxfg1+hGV+AIdmgVN31Cl66EcP3yDvkBT2AfgnkgY4dOCmZZZbKa05P/fBXEZAKmwwCC8Im8amV6FQCio7dr0hdcKQuPtKuR+xCHuBSW5lLjXo2cRbfNclsPT5/EGS2d6Ff8Ap17EgfyZOpvHNwR7y80fonUmf71KjEe+XvRX9hFg/gQGw2uMpe158QecuAv8AUQ8y7OAj/CKnLaXX78O2AATOcDGlHhPZOup07vtZvlBG3E9kJ1wc9JR0yOY85WUZYZgsJhkefbnQ/dq0AptVXAD8W6D2k6Y4Onj3N6QwhCowk84s8tjRwSUZukxAixGe84Z/kQD/6FBGg9927bGbV/qapyObrWEB+5T/4haH+84hEn1+sYyTVpSFD05jncWjFPtNJnwNP+EoadbnDtpdLq02abl9aTwFvUdid6RDyVHfssq7VGQtFpPA+8u9P9/advB54U2h2Kn6ZNqKKrK436RM0E8HvoVp+R9WYsrFFUQD18+qkZaud6Bhe/oYNFUB9rnHzIXQ9tHKnhsd9EY5QGgeAdclzglUtu/MXeGoaSwtVm6h/jfJOuMLwesPJdUp5sDdZIpuUt97pw8kT/rpuNTKH5I7AZepPkYKL7u2boO2j/CK991/ua0IMqzt6LZYY59OYo4Dq3fninmnU4QisTU/WEsiJOk/eateMad6baGkOqebiCG3wlPy/czncxSELPk2sdKBjqw+H/k9dyde518qBO7JvUAYtvG7Af5keBd4O7RRYOjiTQvXlWiR0pPgMyKsYR4z3mPXKYRdzssSclKeBDb9rZuUfFIcrw/e02ZRSnLsIm/5uewwz5xd5EVPH4WkF7fXIDDiAGMyfFoYgT0VTBiOAeFNp8+iPiC2JPWE5Y+kmrSUiVjqAigK/iGZWQt4UmYu+pHHwS+1wT0chM5xUUag/qmRNBgqP/Rco5eZ9UzvrjAK1qSuHiQlH5CAVy4zOm2TwZsTcR7YgRpBBOynkHPPZR6fWqJ9qpC9gYXvpDpCXDuVT5AuHbL9K1jBFMYoP2dx6iSIf0lENa7KtbVwYgRnHtJ5bPWL9HrHjFhDJrwuunM7A9PB1YLGaNQUP5BXULQnWL/zkUFs/MNPacZl52p6ud9GYOV7Q1ISjDxkBEOF/dzzRq9SRZfNaRJw+qjZle7QMYcWtmqs+aNaK0ldlCktFWfydv4vcwdtDoo89BdbrUQKnwWRDR0cnhwJhHbCsu1V/lhNjF6uL3oQPJwkU3MkpnS5TGJdnoX/fZXF6Pfz2XR073Eo0HleTEDxAgZQs71BLEvjcqkJfoiKrOCpUhz5cmDrmrGz4X80ZTJQOfTszVHSRsR/QV1pZGVmbAwLwjzaB/8nau4ZYJ3dIF92FZATb0JqpQibNo4PuAbjLq1fpYrRuZJkG75yawQ5xkxJhSXvn2lWS0LKLDBfY705IM5SD8I+yOr006/O1OVGoVhL33Db64O8qNaeqn0bxEtXYKPs43fRPHaVORtCuqtydPJ3bo2tRUG6rgTdbCpHoPFdctruIDMvZJQPwRaG32LUflrUM6rAF39h+k0WvVR+Uw3mlpGWtDPskfkrkMq203V3TjNgPQZaF9x6Y6tQyRYYOm6xtHxAYw7vSVv4K5BdpjvNksPjvaiu46oGpL0JL17jydmDTfC8l3n5WU4DU2X1fEcEskuxZ0Dnn/4k08Sc2Jyl2n7A3eg6qQiSm9ADB4J45tjP3USE4L/1uLF0A6Or1Ru249BGld3lPfNoVQnppHANcgIFRsa9jkRcMVyWFr4RJaQTD14HeXgsnCNANomuEZY55DU5zy2p938pfUtW5skAoo3b6C1n1r8NCQAqV2HxUWWvunFMFwiu0Meq9XTHExAjcDmhzRtNvWWZgxGZI/Rz2u/XvkQChNu9JDC8KkmSY820e3vYfgUWGgTWYbIqzkBdCmlGlPwwnoHQOr2aOATWLpFDjxvfIpwINB+tosIFeExYoIdWWG8tDUngyxV34RZoHB/+38FU0PFKPkQ8dtVrhPBz/rgdM8CMOUZNJgCJHxI8wsVhQszYbXVZ43ZKjdURdQqV527O4kvNllxAditnWPWPjtLwjJZBDVfhOdYDX5JQlySR5AVooVytkkFmhpEIyudADH1FsnZQtqYgrerOd/fPkphtGRtYIejFMkKe6JW1aZFspO08Bl+1YOP4pb66odBMRVRUX90QxUAzKEXJaWm+DMIDjemvp/YeoWZq/q2E4wKM4EpTtQzGKp+ibFJzyEe+d5HuxM6bRT71AIAwQmAqDJoxaTpfSBeWaN+3X0y0xAat2+An/cM4RfMicyboDF+R0smUzjvY98Q//eqFs1QyGAiChUUWwMAiYCyXItwORoBSq1xEMlou/uJ5Up7nRIYB2ChFt9SKTW4JmBtC1/eKWgHFDMdpAvAM0ODnXNPihEyFkWBqHvXqi9QcwaX0jAkZxuy18zzsLeukpM4ifcmTCvGj+KDwvIRB1urFCxSSpuN+yLdZTqoQzztk4FM1skwLffywFDGEXkWBhjM4Ln0YuxgIYxBhdqQ2fhi2zxT1yNbBoBcdxHXV6iE4m1WaBbrR6wNjztOpRIN4k4Zpp6L3k5sicVOnXfaFX/T1G6g2myYETJPztpJsmBWSoyfyQDYizZ4NXTSB9Dt6D25CKjVOwWb3WoCH577yceKo239TCA3IPkJ4YPiuiRRNTZMo7XuFQLO0OJ1bmZjmiaKSEJ+GjeNln9Jj78z/Az7GUozixPkGuxRHfQn+C+AJZ691p4Q40bsZlVZ1rbsX30oB0dVZBd0aDdGSu/rb+gI1jJNlr2Ciw1NhCtoZ6ejWo9u9xvufA8SCz/V/NILQfod118X74ap00sB0y2E6lqQmKf0FmX2SYsjn5mi8S4fzsruco8mcCMzfH5Ix3Tjmj2SIFTF9ejqiOcFvsQcsT634YrfK2wjwltSpU/XDyUWzJ2iL85LqLyczivmVxWGXm+SEdJXCoU2DTiR1r0njLjd1o0TWtZlwRXUu3Z2SIchgB8FHetGuYMWctnrr+fieGC8Wir2A0SnqpoginmEhpX9wQe0rdPDjavAYU3b7U8+gcsTMFVkP04GSgOSc2rQfhWdbVy6M6mkvNN7GwZZqoZ1xmIeln3JzJOlxoX+KUUrIrVqmNrKT8kGR8k2Mq1JMyniBYoUNlpCJT9my4ikvCeAUHBORoTbvahlSrOcfM6aEvIebBbSwyVmA4InL7fAe1XZAiO1UjTWwh0p/ZvhpLEjbpwPc70wt1V7BI7lbwkZs3koxKldeJlA+0PyKLBfi5rG3EOhwTt5Heo7FUWaeV0/eW2XweMS2xRMAbTHrgnHks5JObqjTbZWM+sIZt0CBw7/KNWOR5WBCtbYT2OvWmnDvJ5k6vNJjCMrADHSkyVV/D9dK6e7EIIvfjsAxpQPqWq7nV3SOJqi3V4kntD/4i3HX9TX86jrR+fzW4ZU4ZPaJv2jKvN1gxxu0Rr7prmWL2S1jXhemOXt0HYK2onqzjzE4SjrNW84jRvOCxLHjuiiWQdpWJD3kPyVTfZg6GaKzBOy/oXf1whCw1lNai6g1i7Yq3g9KuDItaDAEaOxaeUNPOsmSX2+SoqmECkSpY6mKxQ61iBgHL3tpAPdWOl3UjMsqvHVh44suxXt/vI9vFPlLAU5VeEOq8Co7vVq+GTiT8ZiQ+rdsGtTTl6MuXpUHcxTjfxNnmKCtjM0geeayoI9FgkM8tCjEHKxBoDAJm3L40Y5dQy4dYQnr/0PxOhPKnziZlaRhTLQljF2tMHpFOHvbkkvZ8glT+VRwL5j/4A+aiyD400QbE6Tpz+7jNIP6UPkH9CNunFKYq/zY6vTXI8h5z9SoXWzm4o12rzRWPDID6DjugQhQv+bhclS4S1iWGiOyyn2bawsTwzaMwZN2NN0g1BQvFlAKLoI0iax6bDRYyyuFQaUZtExdqp5Y0+3m9wsE+s6wwDCI0gFwu66apTFCu2ktBubUyWw5t5VmY+fh0ezC72YFy7yY+M+NjeeBZVflpF49KZbMSsT6UrdwOKWMQLdfEGi4CNIkKyphULx7vLysGzqEG955VTicoP7FlMS+GMuUMNLaK/eUqqV+JPwrowMHnR7z75QPFrxt9pnEqu2nXTxti59tzgLD876g3z8O4JeQrQbtGwWRkALmQvRfhfjGNVkEm41qbsRW8cegzW3wY6hfVeNQvDGmd1fimiWHrOiaPri9PYpQ/4q9uFPK8r0cVHDmxS+EPXVTm5H4uWOlT6LzmgfmO+9tJkRUAEFSCTnWyVznaGmHNsZq6IKwUNsbJnWQ3uYB1hJBmyzITvW3fg/Zih7e8wQ6ixrKwJa2ffEQw+CsEbam706YrcItgQJR/Exdmctv8F12ZLO4M+jvVepPPlaqKAffikZ9ZkSsae8gzUHmD4xMtjmbvOlzq7BBupRAqQcziGXxED0MQEL6Wj5fjvDGkvAe0XHzNI+TV0ESqMiWAWt2JvCEZ/nQ+U4kbEmwN8Spkp8DofanDJiCqTVDJhydsSu9ZPmY7LTHV+qNNwcgCQ82CqXWzFjJeTG9ezdHNMNRUAhXIK/pzDvnwNB+OVH9FtndfPotFiqfoT/6UWrk+Z0iPdw9aLBRq+0if6/ut4b4Q1jbbYKzNXEaMhg1eQAlLZqoY6GDveJzYYDQ9Zd3xlMLTwKqg5RgqEAElLXCy4X4QCNC5DVjTKOtnM/a98bvm2UxXc+WeGtPhX2hEi8rUB/8tIy7u5cW+CdvMi5KZkIzVgSLHV5fEbPtJxs1hySg5gSNmBvrSuELPXD61KDdNqAWaFUAfcZeeOuGvHhd9ECV57rf3i02LBXmnkuI+kQe+2bgpnRhCtsdUlAYEiVLLJvxDma0XrRGOBslpFqmgv9eyed9ol2KTULdy6TXq+s+n8DTnd76B2X90cxJnhk/W+7zRF2Dfdcvz3m0fNxe3U7lZh+n29DXlnoPZSOQZat5qZ7JpwuHB2StIeg6ohkEP5qF1LhUY3vXQl+220exLFhJrTXx+ZXhnv52OsUIq9ijIbZ0uxxY5y8Em/pPOeaT6seePz+4dAxebqd9B8CkUq4SkPPujip+S2RRTgD0QeSzCTKEzJmBIaljwb9/jz5QcD5uKs1Jfzol3kHj5qIYpdveOqqAeS6Li+k73zvRdqDSQHOL5w68+VTk7YTccPyMewHPnOJ8sbxfSKzv90tu4IrUp/C9W8KN4ZSPGQPz7Y7RsQwdbO0XXhKV7C8c7sNpDJ0bwwtbw82uEeozBYWWy2TWo7eDhZ1Fo7M1Qfd/AhAPl79f+CIwqndNnZCSVyPHrqM9I2o7oDHpqM3STQ8OWIbChkkjORXuWBldRLKx/igrp2OW4YrYH/yv4LtJlesOjUtQqiIO5DSi7y08K1ZTxfsNQ6JZEODhlDeskTzVAiuOXVAdhj8g4k2FdNKe6NUEsODbf7DpBBbjzq2/T0QpTTnR/5bu+IMOzoa5QRhUDF221QwyaibD9fIf2aoDDHg1Foyf2wbX8SdSFWpzle3KIn7fQi9lR++I4nfXBW2t1sNuh/sr+gXALXmauoWfASP1qOPaYQNtgzHMA/o4mhxm/Fio2568rV7A+BhmNs5SKTtvsSVW3OVMXs/9oMb+lk04eNy/bGbUY6Fu42glfXj2GpJAJMVQUT2su4kzw+SOXv2gnKMH4/1zZdsUQawWFETcuemYcuXaVTu6I7lLUEzsEa5SgAXY8wxrhkzj4IHLVNEu1PSeKmACEE2FGunBPlqv/3NA66A+JmSF1Fo7fgPa2qziXHoQE81f7v+5+LiIBGNb0bD/0OSKN4qbHVIqOy5LMDCycF+o4D7OyEITySHxAz8EahsCnD4O8tHLHPdVdWjGSt3TCOw2Ev4u9kvc46Ibb6vWvaiQqdtdZPAdg3ESjoquHwJeZcf17T3N6Fekov7AvqpEHbU2jco97feWtdhY+rEkFHhIRdvtk4KQIi2ql1vRAsNv5SjpHeR566ol7oGHGGKf51W3on0mteO9xuVHo1wqi4aR3fEMIBSniUgXXB/F7rMki3U7o0oNiK24FErPB9cSAUMq7iU1FxYae0BYDtGYrXGYMjGKml1h26+QsB4JRNEXWHkRBOocSlPoamCZY4oihPwwWBmo27pMBdNkdGqXrDnyRSaDb21r7ah0FqxmvXTk18+GKtf1rB8VYK1Hwl0HmXyEsMuGTqhHZN0KwO/MIWR/soi5p2SEtKpYRiL7ACx3Rtm3+ZSLrpM8B23MXuM4tVkRlR/4cJfNacD5Mq+9pDaqkjaV/iVMse6aljGyxZeqfva4FpsVXCLSXEMrky9ovnf8A23nn6gP2B9cRGYnu4pcPzJHY1hQZ8W8MnFyff0QScqiKIy/2x06SV3rc2ob8JGif4t35TbJsJsm1Vzce9Bv61Srd2UAFneFYaFUvxqoeyOcDyt0/A1laktySo1kuUNRHAojiSEGEGmYJtCtRjEtQSjgku9rG09SD0TkP12xDwYLjYa20dbOgu+6lXOmoDGuSkzGqFNo6x5fK7UUQjejNNMA53fMRiUeXbYe2GvrQzEV16vZX8rdeIk/RQDMJwZa2LqshHBQwMHhZjJOm3n49t88JGXkM3+/8PFe1UDNIHw/5PzrDFDLcJpgUVXhNvQoUTHMf7ZMoEUS22yCCaXuavRvGSuvSYdyi9t9Kk3a6lwdr+UvEmoUMQZrRyOBTG+S4VdXthEB5oTxOICMFGIv9fMB+AyHGm9x/ZdXJcR7QHozVvsLrclTqeCvXXfPyaflLEcg3m9r7lzq9kMUyrUWM6J7x6z27YNISdYNrm7lMK+Z7jCY4rcbLEV+bsA1kcw/CRHoPLk31io4x6MelG8pzYwuXg+c5btfJeu+7UdhEqRWcDyULK1STKut2LUAcmatxH8iOjqjajTFXztjaL2s7/bB/m+wRt8RooMtAXwFDXwjlKYJRLs09YPVJT351UJEfpzccKw5xCrA9gUokCOfEsnYHqZAgmNecIiCbU8xs1I2qRFZPgNIO0/e6iL7o1kHRp35d4QXTbzNypx5qbcWsVUUHIT9q5t0yId6vh6vP/bnu8ip5hZ7Dj3/o+amhihUyQQY1FND2H0hDlAZZ1WaTfjw3sacEi8NTDLDHFIH0l/Rb8KeuRt3++mJ97c6N+KykkFwc7/bRzmnWjaRWxnpW9ANgeZWni0tEnHZGqGZ5i/ga1k01xs83Fafvlin1eEFuSuiPTXM7GX3DPCpBpjBBXMb3Ucbe91iVAmHdajNLIE2uJvOFqFp5fbJaqVonIK+zoo/VyH2IWBu8nw1FPFeZ/3OzK4W+00wfvJz+pQal/znhleHLxYPhYwV5Mr78MeG4mTTeVlkAkLS6RcQtOmrWSOUd8JEZPb469PvIjfg58SFanW4x4ePQ1kHD9WJQuaGTpYVE2p7/T/T2s+5AeURoJGQh0g6cmI6KPglCCDPADSUyP9CYDyMJCvxrn/zO54OYhsJn9fvdYj2/RMXbzS/+pz5/dVKv8R8kswleQ+AiOxG+aB1t4iGTFoBKjCmVPad2EKYXjfbIQK8Hu2A6Ya1j6FIYEolfXxcpSSAYJrZVGHtKKNgcDZ7JZ8iucYioWLJZ0S/E4XEZoBWZA90Be+Fd6+eKDwxyXP1+tAYLFIBCe9Fg9uYSWmvJ4Me2sMSSIZSyjeevC2ny7rftTI7cu4TX/MjAJnzAv6JmPoI7YelHEVTyNLE+OROXZ5VDHHofq6TECXu19A+9G12KXfLmu5r0tms13MVrek7ajeNJr/BzJNdsudeAn/u0h6O48AOVhhm3f+C2D0s0cLs9r3hOVKeHj8CDHUOp4cmk/oSpZ3rWTZ7SohbnHxTGMg6sL/AeM1G/oOGIRlRkrMiVnYu5jbPh/2F5O+nSpSsOexeAwM0ZmuXjVqN2Gl5Q/n1APyqbH7+RcvpXO7WxdGG7eEtwXTTrYD3jTP/0CRslTxUQgYt/ebZJav5DIuY1BcJsi4yedP9+C1nWsuWvel0SsJgcvcKs1U4b+Y4Mc8pwwJExL1Yvnknvt+Vqbvx7kdzOQmXdAMj3S9Lj1PJ5N2BK+45SPEBvVTM20ni92tTUg19XAhs7yAAvvt4QF13X/a7BhD31JkwuNo4zSa6zEvihNqB/4l6dxptcVH8T9WLQVyVPyy6DjHc/cKnA4Q3C2TmeUsbh3Rzc9WFk5NaALPYAh4ejI6Nx2rCcFnqv5qnErVMkiF3yqfA93SuBJkxFcdL5C0AYL9uZ0ll35a4X0FhBBJ/JewVYarYEiNHqwdwbd4QmlEBOediSGL4WlT40Gyg1hEulTajKzKnMzNdFcvo4e7nqudzEFdyT6T+bWnxRgPavmgTO+hAOhaNmWAHOJmsKgaNno5c5QBpJBfXUJRx7sbSyDXL/vxmOLIP+pegjalBqFH6zK/r+nfEArv9qlnRIFnFSxE6mwhSUVq/uhXWN6syAGfZXw5zFp081blEXw2uVjXqdoZb0kF5AYigFJb9SZe4BiuwsNA4uA3oqjHGWXoRJFFPiAvBxVDiZepaUjxVtVUybStgjVNZGwudb2KqKVJhV8ZHtH7RJuheb4iKYMZg5YkXtzgxg4RMT5mGUVXsOajIwFz90yp/cLNHSE0X6wPtB9nvR39b5FyhkgQQZmYKLUnaNHF8hhMAv9+/nMZe22aQwwBDFods0nfxQeqQ6i+qY2gMAPyKAxs59UlTjYvj0rof+fa6igrZcNRiTgP4ahUwFMJ1zcHnvf8nfpK6MY4a8upwdbmENX4yxQ0CFkIziH0XoZbNjFmLG69aJ1Td1rWgjWdYkkwQ3K0uMTx1KcJrBvVAzmG15LVc2ogSUOVAnOBmJK4vHijmaCFNQjwCgpHrUm/Bs0xdkWRfGuUvrmdMr3hub+HLsdhQYzf5RJNvNgDcG6nLaDuFMt/hTbwY/iOFFX7MPhyZnwK3UxFXzKyHn6Fi4VqHkvyoac21XDBU8prGkS9u/xxjyuMax8N0ebZJusVr55Nf433ItuIF1zFCAloqpO4x4ONjIAuPkYPdi8iyAHsFzlNxGurMHlYj0FD+PopHP7wQTRgls6TCgnCpBcimE4nbQ6LEUu09qUMxfTkFBkDbfY8NVh5+G3fb9Pz7Vk2jYp28G1SkFAC7SZQ40i+ZbgsrGCLLi+lFy6rmibGljCVbiMbXFTkDzX1sXqGH43Ezs1DqOp1OqonDa+5c4qJvG0O9Jv5Vx9hZWN00cCh4zgJoaqududOorGxtfA3fNPPVLHvsuF3G+hM8U3koFkOisdpIKL6gQVDl6AvZUVw9k33IXZLmbsBWlprIsdVkgPdehj//NxZhDgptj52yrc1JaKGB1P9z5aHtf1fWtxt5S4c7/AbI0qv5NKun1AkYDnWo1O7MtyXfy9P91RTxx3X53zAxoEwpVE6VveaCgvdo/VkP0rdnsCKBwmZw9UqlTp01VjDWvGnEaKFv0lIYxEMbGAr4ub++2u/XwRcN654fapYHZ07CQovRXSiPuohybiioRKMHAuKnIHUSWOddMoPJvfwUHIQLtdFM+yRIFKHpQ7HhA1aOI6a/4s+ebqoSGE2HMFkRdsx+uhb4ikUA3BZ6cDmQ8Mxx+2t4nvswPugjfU/u6D7nlUyg2o6ni0hDzKhmX/VLlrpQ5H5zjcbKhXlrvKbmRFWeAJiMdviLqgc/QPsTQE3Y0qR+LTde4/2orYb19GiOBKmgRqPRd6qnUn0DSvLxziy1imhygV9rHQuxyt7fRbzgfeG0PjNtziBb1M6vWVhmSbnAkf8/ph5SzucUDsrMc6pVIaBVbBP/ODsfIHSmIk9hviY3RdshXUIGEmOV9ru0aroA3pHKz3K2jNs6NPevgcO6k5SHpqoWA0NmaDZ2gp5hXJMmnKqGSkwFHDdPq8ujhd2KNlwnV+vynVxebBJEGApEQScqZDp18a2Q9XPFNkJXg5m39Yzsn15q6ETN5o7pqLX/YcdjZX5Io3UZQkcVk/0W2r8rNSv6UvIio/CvxaGXZ8D6Qp/3JXX4FYXLmeGXTd0jnGjwlKrNWbgE/wuHD9NQwyfS+Y2/3H3bED7knSA/7HmNdNpwBYL/ORfaWFr/XmUQfLkCShPjB8TMmzeQJyiHQqHwhms+NvjyCyNYFD9q9lkl8k/IZFv58wzGy5IR1VOS6LNIriy9JiMzaASFh2LBpk8sbpOId8uiDmNyzQUNTrZ4HBPsZwQf4ngzfv9I1gtRva27zt+Ny6ZtRZ2RrvVnAFwyMS7jC58hTxdQVY15m8z0fV0PrAMqXmHbu2UeVeH/bllT2gRzHJbGG7C1s1u6RB7bodBWJkh8zWRbNtMWFTL0XxCs1sUQ4m+kYpwhaXv92onWclYJa5jUg2eQnUsfhFFmSXU8vbrqeSSNZVXaymFwW8HPa/MtLLxe4s6XmhKBXnm8cU2/7yMF9s+R/w2RevRzwPrFyhpoDxRYZDEsYV5OuOM2rOZg6AYn4RsL3EvjwyFmcncrvag23WQT6LwpjuXk7YtsupyVs/z02OUAixNj12S3gFxaemjRnOLnU0AUqhmGff7KFKPwJvz2a55LVmK5q1mr2P3WYrri7ztdTgHMStxyPW8kMJi4TioHlKerwKVKgMG8PHxkDC/AaGJE4ajegQ7BpBxzC9k6b7Frul9u7GDdwFTJnW822I7468B9uJLWdNJNS12j5Khbgh/vgazO9+ngOGkgZMJLYDAGzwX3yNS3GxXFdewwQ2X2b5mD9SH63fzmHwQQ2DvVCCCfGlVKhW/vI9OdMHjNtJKxX1W9UgtnvdJOoejQFzoZXKk/Ag+w4Bzj1w84wJQsZODg9OrbvLfkRl/Tn3xebeyI6ik94UA0zNinpqwhcBDk1l7FyWaz2WHPyvy87r8eApnLZiXhPYkq6NDbKOXbqkkO9zhIPwqpaW3/E4dWHsd5s985PAqFaJ1I/lycve0+6yKs4WDfBqALu4B9LHcoHQCiqZHnrB7yWyLZ+aVIEMCYl8yULNz9pOHAzSDkyrpdd1UQZ645JlgEmhaa6SfU+BlOYNJXub4f47l0gM6f2P1/8dhcTNbayqilrnva7UzYpkiADpVZ5QVkXwY84L/Oasj57H/D9ik8m3ztthHrT++pl4GaCJewzCqx8PDKVqE+4sv/wQ2oZV0osvh7Mq3azprskzOdxGquztL1q85ipWaJeWMe4n1Vin+SEBL5w72Vo7Z7m4cgEyBkJB49BQSaVPMouyNs50o2Mnk+tZhk9iHsh/4H3wqh04YriYwZAfICli2L75pnOfvfysdw0flBIXaFyApRbG1EZPSa8P4zpF4CfehUl/v7cx7KO0bmFbh6Te7eJ+SgTd30vpPNzLO/nXN0fcrdUbqpe/+T1WXFM0fr9Mr4RTyepz1nlEHbm/YXMRYUOFqWkcaO4WxGA2kzcrX1s+HV3KmvfH5D5YI0T5XzQhupgRulApxhGuzN2gmTkiu2fjiEGU8XyxB72tEIBv4pPJL8uuyceNVFUILqgYg76sAesH6AE/tTH2spce3WzQS4W9EJ1hxb4gJD8ZUeN+smgRRfm15eu3ASpFjtPl6oMUIVXzvM3ZBjsACU9mrnpTPU6en77xTqzLwyeWRn6/Zr6eud7FWVbzJtn2iCN8lbcOZh6luRIL+ca4p2l4fHSP5PxQI4VWARY0HgNNkN0z8828TCaK2j7Jia0JRymhowrSe4yQYx18dFaSius7EhmubA9/Btwf1grZunVp75B2V1PchOANHihJ6dz8p69E3WVFTlXyFKfXcVI1VvsdTOHEuoqMRVNa641Ta1HJa2Rp3lI4m8jKMVm6OL1BuAsr/+bFNPsn34Ksxa2ucubVz5yMpvTjYZ8OOiKZZ4NmHg4DisqFEZrZWg2VdygE6ZSq6mnBKiaeVIWnSUP3kvcklvIdlvwjaOsunoE01FYXku+PVPkHYWFOLnTCRxw4QkdV7ipZIE/9UtXsDDdz87zVgH727v44+YmHCSrRm8l2qbiKgiGSoj/ILz+BWQWvWXOiXBl4/6y6yPuxfwV6GrLJh+EneNvfp07D4L7+0TKHHbALmIF8gXQiL7g5/sP3j+SeoRytDlXRYuRNmdEnAKxca3EJSFfrWgTRdkQqDJPGattFpCpQGchYZsI1CgpRlSOGBm/y1BAR5P8v0XfxrHNb7BGcXvru3Ob/sxJvohOTNolm1eWyxJ8vrNNEfy21Jldiac8VqNsT3DVfETgh8b1G1v9TNEJowfCTjENK43j5Bd68FEr1a+U2+nagg0vhEj/5/jb524s3j0jN0iQn7qXX5ICCR4Opq2nsS91hSi+L/Xn5MEbTkM041Oj89DxC6vOVYCgYM0IuMDklmxZ+zkUA/vQbDv7dlw3IJpjb1os0ooqCVjplJUaD3x1AaTsXzV9+ILorOEthcoVd6J6dSNGRbfRgQq2jiF6e6eYJgdqRZPmVW2f/aa6YPn7qlGg/Bt9r4XC2wPZu98u6YRcpdQIxkONznF+quOEk/Inf5qQAFg15JHC/d9FDFtK0dh5rOoU36ZZbn4B7eEZt0Fp4VT1vENsgtaiMvaaIeCNBC53Eawwn/oLTaCQ5GYxis6BdOr9w5ns2P/PSOFQ6KE9tEFXa8PrNykXCHLR4V//gXwxxxmN4Bvoh/kfuIrqWDUkEU1KgJt6n9Cj9ALUmpOP2N/OfKV2rOfKPVCtxMjVBYUKHoQr+/PVIB6HcQADPk56tf9bTCRy9k6At02MgvsvjXmaRfZGPveN8gvOkf/26kOtRzEGsUdeYKhdgCnYPZ9CmqIOnrs0rQRX9UAks7kuQPU6ighI+k42l3oHnDqSI/rVd/aeLiO9b58lKxk8RuijNtmzDGDG+5QBpZv0x3N40bT/3S3XsME2fgfaSO9sXu5JjpERuNAkrP9i0W+MZutKaKl2I5AYetyNaqer1Zmy44ntCFDIl7JhrzeQueexYtxvbzAAAYQWqizY1Lc8fIjogf/H837NU3X1P2zkkoqvFR5kC7H2JeIxpxW2mH3SquRf2MTvIrufr9oXpcXvm0+Bt8hvR1TpWHqbZS53Aq4ShD7QtqtdKK7J7kiwhVw7pb9EdKiwgZebsWjmNbQ6NETa7oWBeNVQ8mqGeAujtJ37QP72hpAxa7qIi/t0uo5AX1/E0/lppap99w8EcN2IJ1by0/bF54od0J+QXuRnjpoOrH9y6zU/NjmadKZl5zoma7hfU2DyHGpXLgM2cS+UnurTgMYm5EpBdLW5Z7Qecm2yReq3H0vy6PkdF9244iDvBkDvEe1/b7GXgHHGkqoW8/NjHPQcU+QcO4IyjPinM0Q9lUofU6H263h02vcgiOK57V0dZvPqYDtXGJgwFylmQ5ZfnjqPfqyDFJjOPRWYrTgcHj9W7q52oi/nLGwzsXn1rqqII435WOVPH5+Ri7gtC7Slw/deoOyooKMWt5k/qGdhWbkBt0pCOQHeJVafTI22DOzMKPC/QFcchh6KHwWoM2gowxMJNKWsmxhCoB4kjuxcY9c+zy3EskqgWT7TGMMyLkBB2rpoRuikEgqg7cLDu504JbDsPKVIhBh1NJ3xKVSvEbg7bqXiGwQtq7fjE7zDY00wQrpe0qjuBLBVc8rEhUI+eiAqEJmeo6hTxZNDia7pxSyMQMvs+09ka/tvtE2tKYEpWz2gFpUFAYBSaNouGVsd3qOJlMEJUekf247rNrMrzeq6LAzgnepsfSM+VfWfUQl5zSn3BfvVceTaIIJtnAWv5AMjbbKr8xRRKGXVwQfxz1VC767Sl/hirA6hlNVLOiYZGkP+1TXLnuSytN1Smhibh7HvPYmqAMi8dUBzBJwfSCFCT9dEnwgwzvNoLmUCfRx6nYy+xKTvKReEXAmOFQjxdLPQMkZXpUEDKiu+bBNb1GrTPtDEbLIEYBsrUWYWowzk0J+qr5Gzd/x8fnm5f0vbVdi3MEbnKNU2ZvJb3Dt0bTBOBIsp3CscSLy4tRZMu3RdkkBZ6BUhLVSI25KmLiOnwmPjYxePrNHG/00HPOzc5kvj/Fg9KYmBdg0N1I6q56qRFW9wXZbfBt/FAuzjzpdxmBfrJOzvzdsClH10OrQqwkMXWCeFM0ljimeue6tbUctxuXA6IbI4qeUy1GRbiblxF4ZA3Hq2LzVX0xCdarsoru8UpU/stpO3sZkwZa/x/n8S6/g79ejDBxRIm+xEBvVcleQGnzbTNW//EdiIBLrKgwygDryeL6puXv7KCHB7oCcqaNtU7Mpnv7fjl+gc0WYyNjs+Zu4Td4lEXo0qRlErLXp/r7c+6T0mgCUyAm6Xgxh6VYekMyM6QtlmNjHT4lKVWCer/aShFJBgKJ/gLrXK59WThgt+KICGRST9/tPES1RwkTc2y7mumTYHzAxBCP+HYgTTfY9OmMbKdtvlcNWvTRpbsMsr82ZBaStkTWz1VzO9H020shW2+3ZiqfbUsXMbEP3TONTmkKNlTW5m6bnGOpPtnZL78w8I/MPSgEnKuSx5k6NmTytt350B43SFvjPK5kkD5NMmXTEgDU43JeBmfvTysmi5w0kjy3Sv1jf6355aG+tvYYrksWRsj1OSNr9dK5I43IKV4Uw2NVJUBGv0wB8nCV8UM91Yk+VH85avId8xo3Gh1O/JRIrgf4YMGdMpHsFU/ddTijT1x+VGDfmvZyHKTbmuV7w8Nn46fVIgeYiwSgRVaUET+4MzDM2ado4rlwTQdwnxsm+AHPTmmlJ1IKz3kUt+FRxTB+PlP6O4C8lyu/xg4mZ9TGlu9MlsR928+TptvI+Xb8af06mi/zdBnNpw9m6sUVyZOXMyXkkg8c7XFH3MBsMoqvzPqDO+GHxNPKqbXWWnZ0HgV5PA7DURqvAinxoiS/KexiyLwILQPZHHQs6xPETyRFzlNeOiBqdVf4Wgy1kd9L5oR2w2Zp38Ni9GJx/rauxieyA8B43ccgBrC2I1WcQnaQa295LiX5LAMX6PUmZ2DxLmZ+oT05CxHXSyFaWaoqoUnJvvBwEQv71koCz0UwOw+OOISPwWhsTvh/8Qezlv8eSsQTtp/znLF2WSGp4qaDyIgJ9UnRQ7N7AuBbtXsdXa2PcUtcC5ywc78wmOgf3glXDlBY1ME6VWcH9hg2A00ejWHw1rK4pY9avGiMywIMImQPNWDwuN8bqksDNRf3HXAluzA4FBxTiT01aUXOWpREg5qJl5it63c58xtUEa39NDgX55gcVgoVClrlGpPsHHlyHvtM7yBio+FfS2x4nVC6upH1N+wRH/7rQOVM3ZNAhwLG//wmlLlbqxjyUvdJ8wzNTQRn8LnnANGlJdTx48B8YCtCKMGwI8TidADhk/nbsbapa6JAOonNaxabIoQYbQbiihyETKAH33zeyw5eXyBMfJY07RfPp/YQ5Pjl1Gn9IOHrrxIRd9FOCNEZQvWV7fqDCvBAvN1obnqpCn4HVLl7t6OBYJu7BGtIO5bP1gOd2R+5fsWGkFql8/+wr71faCjJ8XnZiqM9gxZPPIv8eqrBTOzDl+EVE4PFp4jo5Py2+PBh0CTe8lHkOqoXfTd9u+tG3UXeDms0YVHu17pVxNS1KpkDc28aHoycB7aDcMNgO3JLLoWCa3IeAnrrgyYC21dS+MKjnqHsUUvBVyADcFVUAuyjxwloxiMdZQfZpJ87PJKFVkWRodWQpWQsxZRPdRIpCBVM5K3aVBBISurIUYoOKzsnximRyP10DPT+oirud7sQlLQoS22tcGIctoARw3QNKoruhruaMc4fetB7w2KzwI8U7zwgUlFs67uDRxr0RbYETUFKS79//CFZYYdah9AtL+mbB1YRcICHcZdEAdiYZFoggyjYxeBqPNwWEK0vI+UOHjJBedVXlqOxVB4k6ID0XzyW4ZWYaUAx1/QjYf3JskfyB/sUyq3pz6EXCUaz5gEiorgPmZn3FLI8KYxjEFnCnnvMK4ky6+S11e+z+AH7uBR/AY3A+Wp0gyibWJXhC5S0XPxiZk7jKsOdtxB12E5z1wyBROVgg1BPHujcFcKJKsM2FIzot38TlJcdxtCAzDT9Wlbtf0DIcq83leQa6lyT0PlSLUTFO1E4K/XnyrHmac8qh7CGshHo0tvUjqT1p2liRg24G/+prC+r0iBQeY9xKYJk0uXwaCY/QBQUBRhRYEkL92qa0X4I0EoQ+DTmowF/tH4qfx65aD85gqInM7fPcnbT3ZXRU4WJ80msQsOFuCniPXNNo1xK68ZvIzteeTcoy5QNGqXg7JfBw4j8EVfVnApniq4bwW0anBYutV+XBZh24YFjVRLwYRqvfncbr05DEOU7PVIFO1+BMGEPSoW9libsAut+Akt/Oc/N5GNA66Gwlh/bYq3OqYn/AISWZZGze3ohkUy8OEC+EGqG8FZIFx4GTy/UNNWT3PqO+YlSkE8XxYXxCCe1VX7ElxW4HWUdvU62VWEMsEiOr5Q+ZQ+z+3EtgJzZwMIo5HpiXY6etuv9aPmL7wp8/BoCnRLdECPJpKYHqi5iVxZNqTOTTChCfS9FsSqgOjfWoirGHXqlJRmHwDqWqaNjRfWBBsZTNUo8bCuMRG55HKShXXkMl36YSQFEX4lGOZ/Dvu9hpqsIo1SR3/+hNSa8RgYrfwYwhf+ziVJVkApNr9HTFB11jQdoGBw4CYyihrZpONPB31i9NOb7vpUBotJua/KhlMARHzQ85tCrroXyV6h9bJhGQys+ZzMkGiWrtl874O1KTqDH+8dUJW55W+dNYOA/aXHMlWXBE6nbBFX3BbTg4recS3LhIJF7cZ+OlMCiNX76Yvi4Au+VJz+FF1RkYJ9PsPgpDugYMRrCVEK4caOcz+zkwwd2IPdSBYuRuHFzyfMt/LszIruAkswNNtQdHsb8UWtJt97LVVT6aSbv5BddAUeN+CPfZKN/qEBsnDtFFWXCspfnSSTdSy/209G3wA6sN3ahLpv3aExae51LmXll2louPNuC/6FBQve0YhWI6n2C5MpNhQv6ktCjqnYxcRmn81rCtx03dDbV6wJtbtDlFoj38VLwjAXspVEEX1GVeQnQvk5mc+1aDx0c2pPzRQstBPiAUynYbPqFcCjyOHSmOATE2tD1hSB8sS0/8N21g594NMWcX11Az/q0mk8EPMCn6deOI+FNYZI3NhCCifEM+niU5RaDNuVzpAQVFll+BLYg6SfFK1AAFKnm/DpvNNfoSXEbB4FefXiidn12saJlAxzXMPBOD/EkY1RtMB2uM0Nm8q7e9QrCxoaAZMtWEiWhrojDX93C0G7VhW6TuWPj9Z88pRru3NEeimnUf4sbK1YSRm9Ecj/F7/3O24fYJq7/XNnRNp68x0weYtJ2H1RhYVOo372T7mORv3AB63IquMtSK3l/2bt7UftfYGx6Vp3oKGbt0X0f1LYl9nt8wwKHIGDk3RK70UM6ArqrbCTXqBuBrLm8w84sJORRubwhB9EKAykDtHAUVXxMyt2IzwcuIW/cnRhTwh1AKUo+RXA8UKIqIqAwZ17v96MMYmzR4OGOUGVe12CxjwKlq1LI6mhJf9URNi9q+v2ogj4ejuzrFV34j0c8m0gAiUCpdQjuHb1Xn+WjyPglEKuZLwJJTo43bS4S9Lg/Avl+9KVFUptd4AojnRqYu08VkX1wxzC9PwLRZXTsSbskjYUZP3xht/oihMykfwf0zBqA9cTxAq1wWGhCkuV2MSlc3MbEKLvQ9MAPEQKvt9mB3674E94YANxzT+pphgnLc9Cp5L85Y01ceAgLdBcFf6DP5jHpD6Rth6h/QRxSpP4GNU/sHXWOUh7tMF2JDjKhXOqKFoUe0MCEKnmplLfi6lt/UVb15p4d+FPAest0LO2cXLRUzviF0W3WoKUlE3pdqvIN6n1iCQlt1Uu3FNHnuBBUaTXQy1Y+R4sMGvmtOfL4lpMdelaU7mKn+26yt78qYf36pTvkdZBOsIXXVxdsIIepWcCmOX6kzzgw2t1FjmHCjVjkdzOIsVZ1ygjqzdA+/w/8Ki+81ikaE3v/C3A6O7plTdeK0Vyk01GpfzAxNew4ajbMqUFL1VdOop2BUsvyIRWwztu9EfyYGr+jyecuEQXSEe/hsnO0mPoW19cL+K8MQ5LjFHL4gQuSiLfEBZWOuoO2UTG4R2xa2n8s0d+ehbUAskytosx5tXoOfTR6UG/E52YK7RhBTWOOVyb8akd754tDT82IPqxUoI6BVOgb8Mmt5xkn32TCCdD3uKf3MG3V2LnSxaxFZ6rNB1bgIE4QM6f+EFrDMKuizKP0RRAnjhuaT63cY+/ArrUgw58g31ZeaBeXYrYnwL464Wo+hsVkDpWXgYqHN7nrYebmb48uDAU5srmbBNJ+ySiKDnKBlY53Xx4MmykGhatE+YIWRdzTO9iPPpEobBSD63fUmLhRDcpqF/bvJTzLdUW+LDcitP0cLnAPMsd4ZcjiMqAm6SNSoz69zxhHbSZLWnUm3CM88jhH+315TCx8ARoEt+fSRyPlgrnqDLPL0IQ/E1QpP8h9IgO0oO92aG0Mr9xfa78flUPAxh3PBSKvtWnuYR9tFEjcw0NU5VzjXT94yvaiaOfwIy4AoVm89ri57lAo4vjfedlJXa4UPfiMYc+4cLBwxevWGms2oB/cEwVRB+tQjaOUseXvsJhKGWcniK0HarUPD2q4T/hWxggttG3TUxipP0Bi1t7HSzLSul++E0nWtiWW7RisanYxUBRoBpyPz8Irf6dQW7ZUimzLFHMpW7qNuoRTqSmiFF5dt8d05x2VMCl/A0EUt4RTrmcK9jvRX/5Z4aPaGs987bQTav31DW5xFG328T8lUldXl6fY3zywPgY/qLShYtGuy/tgDPLgbBIZGMzOQ4n7FRkhwwE2nnyvKNaQM0gY8vif2nz1P2sbVSCBLU7ROfF/5wPkDmIn4AxsUm+9KTzkL0ziEHVhUorojGz1Pu3w/52riJQQlQLfOtQhIKeOT1hG/TIhWXzIklmctKLssWpigUp4SI/f6SJQfdNaJNiuPsNtOIua/pYb1SBwwHBcIGlUNiGK08TCcGrPRki2aCQpahpF3eYVFkt3gbytgdijVty00JABq+4i8TrYWC3w2CR/AMP2VOWQ2sL/AbDywmTBdascsj0QG1KdLFShVO2awoelBznEE+g9PbWVub2LRfkmw4Aw4K/cz/kykNy/69+B9E/dsUUIRrfScQ2Qd47Q/FynRv5GCiE5iHUENtmtb+jKI8hi6P2nFV8q/I4stqrtgWOzgXkZ5Oor5VVlJDWrVM6r1UoKfCGwjPMPZmKow9zXoH8xMj7Y9zUYbOUBIHGsilAaFqHL5TxsotW18DjqdULcr4hXZ0Ycwn5jgDM+pfYC+bzjvJ6HKCPYRhIwYY+GmP2XSeHYPszci8ZgYwvQs39n1/28yYBLDAFcG15spylOy2FUpbHR+rNhK4Su4a4ewAruuBFT5F+YAz+dy2W6PfSIvsuI5NfkpGXMma3l/9QvNRa8hpABxpCE3x1LnIiu7d/gyShMFC/gULt+p7yNEq6QMqqL3mJbkpWR9GHbyIjI08mqQgIhdS+RJPfy0sO8Opmc1OXZmnBCoWtOYAbWqB/kC8BTU61kP6yv9sk6z5msWf0FXYbxjaaiahSGiiqBdoJy3dlMsG0weODaKUB69opJ11Cd+4jiLCwqoRt4SrZVNFKCLBLdH5udmKb1lKUkZhnsjc8LWVrwhLR+1DMUjHQOguatsuOXhQ+WnBaqwZLLAkSoHTHfdfGdwVOUmxdgETv4ckbl0gLgD4xgjsY9Am+Y3CCJgqinyUvFOU47jC/v0WHj4USXH+Vb5fHtX5ED8RSHJzUV394dWHbS7zdHSc/o7x/C+CP86qryKP2EUXjWpsD7u3+Ia8iJRWNc2FyNENR/OXFw8oMA6fffnajJatIDWuH5e0tVrqHy0HH2VaAc0Ym/0V/p67RNiXgxmfkBx1HeU2Aeit/88uYwSNfiNmWaLyBn/33XctJMSH8gItrKiArF0GAUZ68TOmz1NuMAUDAMDWWfaGNjJsbe2dq4CDfpfeCtUZZS/YvWN5GnqMRJKcH9YRiXm2G4jrIpadPg63UIX7uG1dDGo3cXDRa1+BCqPP4UJfAte3G2nWslniuxhzSD2LI3T4ipyQeTHXvxh0yjApMEL3Yltac0UV4hgj1wcSiLbxUENHB50izMGNJkEkORil8xijxfzztcgai/0kUoOwyPBzXCtbZS/CUHhjTig0i8++lgF0ybbZwf+cnDrVgwUjE1WQDD8waSIkw9bFaGx9NVfC4K/5JwGyC+m251mYnc2biecbJo9YyOpyz7cdj7tyjog3XjJwvio0bYGzH5fTOqOEc/1NFA+1q3P8XxDZ7lekouf533LT8GX6WlMxh6tIkCAXjuvunkKB7O+xy0jDjj4xkFYm2jx0p56kBWnni4UWaZW7l3R68qkWQwfhcBAg0PEGs36flrhJtFmubjdjojcKRHcgl+nroZHAkQf1d6DI5kwjABC31i7X+HkGIsMBXO8IjKgVlUGi0mwYX6GdeCH+Ww+mePeLGIpHA4Tmj87ZGN75SwzH9wz9vezVyGJPloejmRzSzW49yiuWn4zDAG7DcUzdR7V68Z9dOa4v67YtWFhfwDvhae6kn0ZJ2yRKjnI0T4Vxc8v7b546KlUOsaO5bZui8HRHBICqmRGfmTMjaaynJXGsYqy5bZ+z427KZ4io9JRuQB060gjLLb6mJEcLxKkIOlm64ET9NH++GV/xc+NLKFjuBkd8xu3ME2hYip5MyFagO9XX+fqx7Hc3a6CaeNa3ydpdw4TED3fots3WGJb4+4+h5m+c+8K6p/0GtWFAJ0hDtG5ABIcdt5pxgURgmFCOM/NEJFqoXavUaaeBtg+0F/mM33BFfOyPOVVq0zOJZzyBPCdyk273tsdA9c67GCIrzOtpp2L0FH2kpueIti8kU9TQDFCvU4IXZPUbMaEQoOXuvGkY4RUKdfwOH/UUAm6aav8+Ltdf5TXs93jDkTf8sl5uhU+553lHXMBHWvNJSUrXABAstV0oP8f/Ny/izcJ2xB5aqF+NyPpgOaI8daifg3f5J0mVufFYc5cc5ZWZBXn90Lq2oRJye9HSj3HsiS/URyPbZTWQTgkC5DAW3qjDqbjC25D4kWqbHvNjdqZ9DTSbhxePA86YpS3mO9BK1beBeaFD4wfjVJSvy4jfELP+mORy75+yrvUDjrmPPkKaWHu3d1gkwTz1jvhztuKweS4W7mIEJ7nzEL6bJoe2LYHf6fBXvdPlAMGL5XA4LpHm1R4lTtHTYUNVbRYkPccL9PRzlW0Q4SjJfxignQ7ecVRKC6Mq0+HH8yVlBXiw3wmcIzPvTYCnIywdFKB5uradkqqSxutak8kSDFyxQa0/SqIHLoL+mnzwlL1HAIkfdAx0qxo8+dcqY/9FO9xPC/q4rNuedmo+12IgstmH8pOnVAjQFQcbmoDLe6YQn+jzZ+liushwutyKUrXUxGxMxobufkclpotKxvTJ81pe3eSCCC0JRwItPrEuV14e2jwbvH/RNq/c7/YFXY02KaijBryqtMPyj+1FhJBvjNkwNR26Om4l3z/sUbh160FlPl3Nnl7F7qX1+6Rs57dymDfIRr6Mfm+h0AkvDLkoAUNN8g55/U9vBuro8ROGVm9CB9GXu3EUws3ZMcZyP7vIU3L2ISE0xO+3vln2wmIBi+DClElIBkf7C/8shsToeBo567kuyQZjRoh+mI3P4siKwA+ErSS6ejyvbQHp2sAVFQzlyA7w2PLGHchSx7IZJLTjThDT7e32hsYKospaAOVxIIH72d7jhUnzNX6UNr9cQchPBlWsfVA4Fvr1brLmrF3FTJ/bW6YHRTv0+LWeSLK/jy92xRHZYAu7hGN5VdMAuxdL25zLQt5Hy3v/YoNyfhV6+iMPrZfh2gIJ1JTazpMVXP6bcYPL3M/Z45aZTgx6YZ5+Sc9vRqXNuHuY6xnKn+qYSMn+ToBafxFoWYjodcXVw+5VjUYDG2YE12yYEV1EMYjqOnAZujbwwkZhzYNJNMlqZGTDJ6NrkzIFz5nIA3V9lWsodTo5K8zgSStjAWD8oIUc/Y+LndtxnGtMBpNTeIrUXbAjOd83MDqjryIs/SfeApMQN1HTx1s1E4sfgC/xlDpW/G5P+cP6s0EO+QcCDsug31yb+mxtlLFZI6oWjOUqjhVL3fzQOabnps9sBP6Ab72aU5eUuhtIhMQGNrv/xaXZtc6uFBw4/jfB1CEl3cDLoI59k3jAeG3wS5ns6dF6Gie5mhRo+onwWC08NI/shS+J8KxqotA15wQBOTlZ1eSg2wjXE9a1EzjF9FS7oVH0Qzk5xueoagSeHOflp07ajr+SG4FzwuJMYFCHaypK3eD92nj5uO+JuoUvf2e5IvcB8cMhPzv84N2nZyUt6r0EWvk6kUMtP0PhE5xcjGu1fbibFqUqqFcQXryvL7Kx0+ad8QG6kb6RrAwQ5WpNh5BRISDsBBa3T7aBbOgg9LitQctdhBIjbkYvv8pQAkBq5dVKLJVFofKxmsfGsHQWw3dANDKMVH68wotzuhdjGchECGyE/qgKjPJhru/SbjydbCFHL9DlDerMb2lf0RllUUwUvRmfvTPqtGSsNX26viT6vXfx2SSa6cTLfnvzypNW2kPi/VE+/jR+hWaxmzMRko36TqMgvE41PGqEIZBR5FfRKvozNMwwE3lwHoqPE/wNluFTN4ZHyAcgrfrVFWNWMZJlRQNNe6fLAAvGbYc2OrPPO8YfRIGerKWGxixzQbCYTezlxLOSqWtOLKWVzb84AYSOOeDt0vUFH1bY+X/bjP/TbF0Dw/pzGzAkldU/+l20kws6iWj/zrPtC9Zt67/OooB4aWzeivGO3BkY6lcQheLaaR9dn7HQo7RKpQEE5OYBS3Y2peGIFQHN+jUZxUMqUGYyLCfymS8IhFL1lxUpUzXlq86Zrup4ol/KrxUFIUFhsUvwNOs8ZKlldriDKCqvAmaF5gj/d6nDQ3LTpQg0XY4zY+uS1c3To9PsZkIiJHKF3gUJoGyji/Ys7tnUg1yHnES+kN+GJRWqpAeX0j3sC1FzBpGv6xSUupCmICBq3eJhkgnGS+ZoTaR82Laui8tWaEFWccL6i5KrmL7kzF9iKBL5ICVFz2Fdzhkicu2LpzUM/qWXPjputisG71V4jrzsXWVOwwKxz/Y8VWD7seT9FK7bQHxSYw7seUiIMFcss+pGFYC8KHVymKA23Wg61s4y585CeXlbUjdljTB8lOwnRUWngEFyGwly/LEcIEjmJjOBkMmnUlX4VPUcVpBYIjkzFmdrep2oLzSCD8l6bqwTssMPnyD5EAoLlIybVMmCaBNX3pLud5jf5PTh35CDo1G9sVpFg65kA8epJTEDPGDsVgZEGf1E2DdDqiovaEQLi0g/BtdMW31xHuOX/h/27oGUL5jF+x0DJaAJuUrgvdqzukFDSHrozC5ZLvYmfMRyZaijj7pn8r6kCKB99UgXTyJ9tiT4uaoapPdpVyvsto2fLrA+UiRSCiSCOU3/UTilQ4lDo0GWy2JBEh/HRfHP6xV8e4oZwZzROYIgdc75bnWebTkGqij83/c0tOHWHuxtUaEnjfSmLTgeBE4JVKNkZ+budD/WmHGg38OY8VYvTTPLVs6tHMRF6xvkMyFWgtDLmLedVbNC6ge1PbGO64WVKjtrkVlH89zgAieZnt5v42ZuGWC8oW28CeJ10jXfJKjprcCPy6hM5prCGO4EztRJrDHTXrgxq4FHzD1trvLaA+ntwxr6UzduGkKqqjuqD/ee9fq2JFiKsYCxN7Sgoe9ft/iytxbV4ZmCnB99qppbiPfohysZCTSLQK0oFxphrBxbuAlU7ch10RD3DXHH1mpb1Nsdl3P5K3a5G+PUvw013m5su9NuCM3/5q9XbZCh5b8rAkWbWaZB+9k7EK7/snk+mueZFff75ycrdfYo+hqHBXL0ppF+8/EIl00e9i9JROtLX6MhUH1HziYwKV8gGNSesjr0WPMThfejKDBEwyqNcoKnsd2cBKrYu6d7g+yeeTH7NYqPCaH0PbXes8vhTCh6CDtOde+H/MjHHH6mKfYLKzvAlGziSUPZj+lS1ac5H4PB2YToAjdtUerGIvyK137dh7HAgfu0RhtT89KjgKIch4n9qIJb+6fsqPUwUOMCUfJiSLZLZNoTU9UWi8E2FkAVS7dMroXmcBJi2NZAOvWAlRbncNRD0BSDrgc2kLgTIuRq4M1A3zyWk7LK8EcVhDUEjhIasFid7AhMwKR17PGhsYPvH8NfkTSuU7lrhQZNcIU7RB5uNKhzWLXj0LEIitf9mfAoZ5JEbGoDjzvRSL94Xja2p4wk20+B88jENRBx2rO94FRPsWho42g38OBJ2mSLKG6bBJioqnXDJXicA8FPwWOXIonFx3dj5nbt59dKp7g6ov11Y2vWvCa9QQ1S1f/eBouf1eY9lEZ18EAuvitPNfWz4CmYe6PO7FF4hkwc+QnYcmshAWZuCQ0gSQZKNVKDRUIKOeRlQ5B0eQRskoAh60bKWpAU+bMJ+EDn7xAVvqlSKd6btN0VexpYCw4AVQvq9ouYGPppkpNRZu6uSMKHJG2A4Q1DbxKOJMVWdBUd/BOeXLYJrv7UMB9KHq7lsODOuSKnKIRblv3whnwPPVukjO4H/hU7hXGPrUCt1X3jcsg1NqJN6S5FhOf6iIxpr4jhgatdSEiEflKayOSgmjQcTLASJ01GBfeKBcRL6Gfb41OiISuejL2dLwJpZGgBito2BW3JjADBqDqJ1bmmGFlzgCbjQlPvIqzhD1lnlL/L9yYBYbH/eW1oPlHeZAVypOPH1SsB6Ucb/hvVOOHtX83Hnk+JxYdo4iospgeSiWdcncpBvdlIJ3IjJuYASLmRtRP4Up+SPAZgPCAzd//0x9cYFHzUZLb6oWO+TCVKAgvlDugItctiBLXYNXmgFDlgpGGvJCjNQi4S9PgstMikKlgOdqqNQ/ReFQV0I0JlXpclqD3XL6Rr1vEygrpmdgbdu9AADMh5lLr/3z65E0mYH5sIfPl3tkwfJAEuwNPfzESaCoH2jXq26gxNvoZMdlXrAKlSxczMPg3At4ohlA7Ij1zTbMRpl1r4Fcaq2cdLi5/MbQGdskBFXt+QODAp7mdqnO800TWeBg6+eQDuyzq9bjrvXb50Iy9XXhcf/aWuUon8hShwJdQNuStBlXzeSDAudKMRJMBRiSwdivWUxlxdqkVPza+T21Iedgw5MWFXn1x0CmG65lldhwzZ33OLaslgOLfM1aTAu/w9MAA+FCANfBv0cB14QpFOsaAxHye6w9OUriUYrBCl7apEW1QgoXxvOTsSkFQVR3rN2FbgZIy0ILa5ldMYU4ggmh8xFfsf4ev6HG8AKvGhsajUXiylNyTeKz+6NEvDCb67K4RBGqEJJAuaylt1pK0zzkhBz0OpgPtHhXb6JvWS5yL+a+lD/uAD06SjyPKI611u9b2VYyrpl3gIjDcOAf1ncWNsn/WR/92EEv8Wg6qp+VYwjlTAbTLlSowCRhkWTr32XiqeOJMk9QpFI+CrnrCkfYkCX72F1AJJb8X05QqoYJvIk6kJFbN2ZtMA5yQzggrDqEKE40KhwQfPTkmAoYwoGuyYckauLg8tuLTwH77B2azzGql+ceTKnZuAGjeuMrD+1i2XsTf6mF4piLRN5FMuq+hPdDZkEPsqsiuQIw5MzRBLPI8VycAziW72yKRPqRzJqE5sCWtVdy63Ao+KXtGUTBCqEQh6L25Y5N3nZTl4wB1iAgcF2d8KeX2MpEK8YyXam09QaP/xeWw5fZS+tAZKEsplZVsjn/u+MR1kpxLub5N4YORjq1WKg9i2AhQuFg7Jp/aGzqDUQ9wT9AcpYVowDGDTPFaAgqHpaC/jMr0DCQfO5TQ44hodV869TQ5AhFzQ5YcV2Kmx0JlPZs83tZ9/ZhjsTMRJLq+NJefiATUW1kyyQH8+QeCmarMupEUvLKnWDdABOtDIi2ht3Fx6v6fcDN6EPNtmlTpmFsg/YfL+53z8QU9s+iF9AIi7tAKF5+c2TVVzrxsC0CUBy/n/icXfoXdy8MhpxuzndTcO64+z3Pfz7pYUYcMkROQehtr51JdhU98+8+IaQwcgMxcdMVbWCEHkvo70Iwiwwf8/scx7FFRaUVayBBgr5Ipu0S1OayEA7rTFa9/ywOzRiJDpwotOqrggwWVOpgoV5K7edZXbQf05D6ZEguZq3okeIlvheu9cYwI/Cv7ZR7B4DtbrvGYhqjgaOW6fbRTqilRjowHI/KU671isqdtEnLSA8O4MZhRzoxVfguRW0HGzBkHu83oxDc7kA28r9/sPPR4ds9ZSb75jL4h56Uji7IMLGXNMN0jQtFVgHnedpKBuiL8PR93vzZBBxsdJ1LNaS1NhoJ8IF5rC5d+u1zHJgjOD3nbK9IhUyMzQCA++9ZZ5HlpY06Icf+sEPPqGbFf28EOb1CSYUhAO8C3iyOQbtgSABoDGkyZENQXDzHjbCsUgwIL8zPJwycDfTb6/3hzKqksH82BIG/3NPJMNgc8zFljNRA6Pg5MqFgv7LWVb5gRWdmm+wO0fpOSFd16OuM9kvQeBcweGkFmgngolxrHiGg15xuRPaBc6MALjFRQ5q//2baX8ilxixRfKPFihYYe2DLK12yrlHS78zLUUsVBiVLGoJ6luwmUOID/rFz9Bi4MWDRxh4jGm8ynS5kqBm1Ukhu2VFA/cvqwDm+w/ZPqmt+2eRK0uEVLN8RxkpHDSFwbMVRG7hl/+iCpdGw3e1OO3FeJMnrJGp5OZ521+MnSpdoES1nYboT/SIgA1kudPppt3DUfPPptjW8vSVLnpu6Dk0J1UThUFrgD5ZiSuv0pSl/6SJEU00bBjwcm4LcLh1kSDkNmo2op8kfQ0kD/trB0abZxWvaFZUs43Wxbv2XC+WfIobuvx75is79/oop+KHOLibAiJDw6Nv7dlPNaPbGzFCvAcPNAeX+nh+3UgR6Yo7Xu3M2ubLiC2/L7JK15eLesojvBQcDXae7PDGbSjR7XwkED9xrsONrwgE6UCA2INe01CB8oYC+H/UCN6Urh/kqLsosHgQEOekjpbJXpIIVKTx5lylGdLOdjyG8xmKE4/u1NOFRHFZP0NhvTGHAATE0duW1q/wnjBb4ADKQxUAS87jHuq7gTlgh6EUVqI2Fvx0bGki+nvKE11qQ+caEQAose37ussVVpcTyrVXoc0ZSvsyZReN/8HXnz3GyZIuSCJBduTAALNLmhH5r9rqSiNC4x6+gKAzOI6Jd2rbIQt+ja6o5yaHpZzFsA37D6/slKGWnpGXkZAj6CRylIV1hNrEnijk7O9D+1aaMRm0yefZcOURc26aVN4QvGeh0HkLTTt2VN349cDm6mHKUZEsuOLyyELUbQIQIvXF8iE88Cq9KoKXV0NgPfmKg7OMH7ATyl/QCp7E9KxsNlRLu+adcPTqZCmk/LYQyVyY8jLfwNvyrwJYK/ScIiZyDqNIPkbDyLJBNp6/4sufsIMxqdj74aupfj7vPKyOIYUJ/UCQiVhzAiXxdINY8yuw7CJuns4vsadvOOVYIMJS7qCdoSDId33PzBUWr5dm7ewdKqBNI92t/Pwl+EPP/nWM7XyawcuaOPx52pRUTQPojuho3QNHNx+4iFsEoUuep1odUnE+HxGvqK4j0Kb+Gka8upgpLqsiWkYxAOR7zZbc6vHwDFceqhOsuJbGbGN+OLmyvQGkTqRdGD5ELcMOIYae4nYsgTt3RBBlxEtbC+F6GjaIxA2oQplecqtkLh1mvET7z+5b8wIf2BewMjSTIY18OvFbadb9HPj1bfXhw9VBADoBNuHleXYyQe7nut5XyFsmob3jjfQ1rsA8tg955QcCvSnweMeDRec8iJOERzVyf1E4vfxfM5jH9kC/+waDzdWGP0cQtRQy6145W783PCVsa3mU7Pt413EiPXlt3S+UNId7ntfKKYDgGmvxrhcttHTy1in9R9vFjNDyUsDXONLKBPxbg8blDATklx1wIc8FNH5pBydQyTMJdTHtyZQvpnHhiLJxbA4oWTumjJPy7jW0NgeOqMVqdepDrYLS8k8hjLNP00V6PtAWga18ROw/5+xmOtwZ8QIMAL4iP6RF5uUmCuBbKqr/ajYAoyuYSw1SunPlK15mGHR6lyRVyvAKe+7+h5VJGh2syKl+b8d56Y7wB7gA6UHVUAv3w+lIfNQKT80AY1TJdPYRRf3yV9R/Ljr1pug7I9xZgTXush5qlWcuA72wNWxWgvD+kSpByGl+kcV5924AaTGbSMVSjCBcu9KVa3rEcXmm4SO3IrKI6C1m83ebxltR8c7e/WiV0zyi7LDFqo9kuB4WrXSKLdH4lw32SER9OSLMSgV18j5Zz7cNHsUqsV3mI/awD+vz62Y+NXEkxCruBWmV7lxxGiTM6BhlCJL9VRoG/6u0CsJsopyYP761RCmgRc/zcT+Hnp8CkMfJCMOwq73M3j/XvgitEyNjw1H3Ja9gnzbnUjaSAOXgW5KABW1fa7EzsZgbJ7/HZdZPaCNS13tNe4ltduyKwWHxyhPCJEMfLRqYShcyd5n76hLPRYpHZNFBVkwjyU/OaXRlLRRCrKYrTIPhk8Igit8WPnm3eKxaccoQUP1tCu/H9PxqFqFqGoN51+YYJ1Gc0WcajNIItR+Q/kGeuhreBzYMvn7gkPe3r4UsfBAZ/9ne37RkebX0thIk79yA19PCCrPlSiCF0MgiaA0nhnU2D5a3148doPpJCvGqGVpmSufvTRAAmTOjSqiy73v9JBsquWSsp12alLrAYlgVydaCid32oMQqry/B1ybeBrv22dudCakkZr0o6DoVZxTVEuQih/LFbFrnzxrXeKm7WnjLaKby8jJpCWWl0CdlZZT87NRpktGOMKDVwSUag5ZXaSI863HaNnAXa9pP2QPISJJo0SYRMGACRE+7W5ECqx7EszMn7jkf+Pas0MnMFYgkMq6WFNmeLxddI+rfYcCGMrF6Ch6AI62Z+BhfvGW2k0gg/LWKAjtAusKsdFn2/MlgbQ7pwyeTfaAUJ1+Vi0Bb+7ZN8pj2eHRn2PzKXHvm0Qnb5mvG7H8Em3xkhdIiInqHWezdDqjVsjfCWaZYBi34XyLjhQFrn2h3jjmazfraVA4djn3UJJJ3bWLJEJBZqrjaGWsY3MQF8k4JvbFfKJBmERIZOHQGd8Q9jDKaXYeliRHRn2h2vQk4AIpoZ70QnJhcNnlsGG1rtuEj/cycZXbNrF5C+FuZ4+Ij9ILztnxOyk3vJDcjP5c4NG9G90X1bCMVroCYNOH90eLddpxUFtuAgBbG1in1ckjmwDHeKUgJW8mKuqoUyNOREpYVJz4rPWEY1YFkrGhkP6F2k0rFnnCneS9DMwXPTw2qWyywDv+ROmD2sUQvv/cde/2BBmoXSCQZ6gHjmznZ0d43013iAAj+A4hJfag+kI5oZs0yyTyKzvO4uMfvhUGayOUgykVcE+WZFBHb/Kej0x20V0h4Hz9DxMjAAdV8aGWnFpQDjOUtGd4G+xRnGR/eRCnsEWjs3EwyxA9FU1LzbzPaIPfuvjRcOa2SM26K/QhT51s+T9C2Z/Hh+Y5jIfn/VlDShASqObn4Rmyzy7BJ1gG05K5rDhLu9Avy3wpHWLrgFz1Ge3Z9xfxihzqmv2U7jAeY9wPHyfeWy2r7IMkF/Pfg0Z9ET0q328Cq2XGaN6ZfXa3cL4HKNw/dynu16xOGnwpMQzL1Q401ZVKRTrEf+sboAh/CTny/IkdvTdGIDpQqIMsO7UzpVXlWmsZAGsY4A9tZqhKaHoNWei5Zds0ZincgBcBBvqZ2G+lRMArc0cJrcGEN3xJAtPvlahQQ75NGFW1E+Jw7E0Dv+ElyiDht1zahBunNzf2BOSK3MyPEU/jR2Hz9P5I19SdcC9IgaB8I6JwdIKkW8oZvqt4oyud5T4HnfV2OWC9ezTnA2tjOQWcnazglCQ/sSHJ0U0HV6ZzOSDRTvw2hpuOLsEpPPF8jCSJTr6M3zP1Cv97a2bPvWhBJSH7eBYUmKLQyD9X7NKZFc7Xwsv6GdBsdz2mIuzdK6VU4Z2vO0SWOepN26MYxQuy5qR5Fcojd2cJkTVNaaxbeWhjJ5TIxlUJrxBrLlTKl9z06hYMeDxWxOEydkECKcVUvgl7nFqS7NKoNrFO6GFSYR8PrOqkcK51x7Q0SnrYgBVUx7AzJUDCwERy/q2hqLBi5CE2XTFI5BG3H3b0dtfJuQ+IcEjTDKkRESpxfeP8ip+llh865BZF9Y31MOgEum4mW1Af7h2FuABAEYEiSyQDI33+SdRv2RLk5b+Kec8tLBqeEBVjMnpase8L+U9L85gH8rs3sOuneUC8MIeLSpmCmFTKq6FzXt2MEGo1XwLxj6/tMr2wEceKHn0hJ0JwKdH0Y/wkhHFouAQ64BBUjG/c4Am1PCHq3DBy7h3a6KTaliDqZqcm6w16a2xwJqrTJySenTPCzYXkGygGVMK9jUfV9mnvxbBfGL1+fo8XxZzmncXkJTmjrFtlWXYmI77UuYKyvSoorhtJP6ocqXXx2AI5VH4u2Xvcmmb3GIJcLeGBCFh7lEwxdWSZ6qg/2JhFFOuTUsC7qtwlJ9uM7eGrQLXAjCu4kZVBpOhs57svMhedgwC4Oq/IBcpm9rB175zM2vJNA8QSebmo5XyBjnNQP7UIXkeEO6RKt0F66rELJaKU8u068f0bO6+gQENHbi3N2fA45iCozXem7ynWYLSOLDhfPKSZFEvmEMsqCi0UAPHtLJHQLURygXmkqbRiD0Qpn3/PkEtwCliwepj6RTMyH/6Wlmi3vw8FFcoUggTKEtAbRKzU/1sjYNgEsSWUPphGyT3RvkhSUfLC/bp2wGanhH0hXQtaEka3dMsobmR+76lM1yzBIwWxvngfgr5/OeLa1F8udnc9u83BYfRTNshlcr7ADc3QNY6yWFX/yYw1aEuGvGy0vQWVxpSLkR3oActyySl4I+t9qiHeTM+oJsOiPqaLkzTBTB12VkyZRIXGUqrVyjn2TtFWngU9tMI6Dsf/CgjbAfRviOYB3+wTz7B8xHm9R4fC8DDHimIwoSCOOyOz3On+EaGJpLNqifLmF84eDHsOvBJSok7ooxcbtmc5tewbwBmzEjGHj1wgJc9hiu6ZKWVqYX4iFuRvXxFDZMJGpBdk1Yf5I/dG2lDl8k+OdPGrRZ6dwnmNb5dHFGb7MTULYnA25x25jGU2YfWbZ2wCOArvRYBGUMNCDDcxJ1VNPSqZv0tVZGsOC3V68yGKEMYHxnVQJGacXeVfvD/19b5o5IPdPiI4bQhffW0uzqv/bqkG2SrPxlbx2qi0LNUvh3VFlALTCpzNryEFg4JkcghYzTc+ykScYsO5VX7Epp1r0ac9FFY6zUD5MtEuV6yhe/GI05bJLmZz7WuteaIl0/KofnkZsRbtXzSSPjhJ2QcWhsr90ATOI84SGTrIW6qobDFc/3XzTid549BdFzC1Sf+GE7jyzFwfOVnldTc897N/EjoGQU1koz56NNrU3xV++oZsez/F7Tw2sgh6CHjWCoqFgSzpSpTxkrHJmuSG50Ss3YFr8bH7LxlRcbtYY6rn8b8EmiFQ/HA8qnmal2R+kfs7G578i+cwG5KLLdSZTOwQw5U33boCN/0sS1LChCqZzkcvxKRh0dsKJWBKTjla1SQJjjlU38729ZNZymu6QJRdBYkQp7URi9DX/a2Is6vqm1+tngvxTXEjmSeQIki6ZiRvLbJx10cNWBNMGDXeup/FAzGl3nIx4/j5m5BPvwKmzXfJR9xK0OlGpg5GezjqPEiqGb6FVqc7c4972wHKfdGKjIV8PVY8eb4Jbtaaj0lb/lnBqew8BpN4xKH4tjEyR9JDHHtonBfmLjb4VzmMYKM3zsHUuKWqG7scQqVP1r7hLRZM0fAr8t3fz8EnaX4WR6iJwEe7Lapv0Z1G1kyXv+uNm3oQzD9xwIv5Bl4iNLK1HR6s6Crtwbfc9gdMXGVRiEhdcZMPE+sUp1/0fIYlg+036YcI4cY4sWKgNLG4TocaH+OGrEkeQWNeQgVJthAy/1v0MO4RSVQSyaj+34yO/tDbtSkST7RQrDhrDbriA7k710pDNMgfh5BLJRnombXCVeaWbxycihfYkLxKc3kOCsoP8uvnp0e34t5rWId4x8GyyZS1Ad624usBYb0t+QnFWFGRJuGzIY9arWCs6aPdzP++JDc4TsvW/4+N0Lnkzsv49NldW57crVoPOJHYgT4rYncLCOpWbdkdQL3PM8PnwZlJn7jNwHIeMOGO/hOQm3ICT8gdbtFlKCUrM63SxGS8AsojNxbQ4leCNkePMyPryyNlBOXglGyhCmj0nQf+sReN8wxQpmqTDdWPN8iXHCNMgk4yIf+MFCq+U52eDKnMiEm7aBQ+ICGSJX9/pfFAyrM9rCNWVPH0Md+cbygSE8ECSbITub65rIRaA2bSuoWWYY5tG+Z7z3kvfF+td+vNBDHRKqQut9N//5Dqv7whCLj1HyMeGScRf8CQSsjR3904k/z+4W2FI78CTtMeSKpqATIZUxGdutsCq0G5zJz0IOMX5dMLmqiafwq9kH2nTW+6nuH8ToWfcPl/aYDrjDct7g8BRM7D/aL3wUKozIaHu99/wTi9hhyj9OVDzXFDutyAWHvh85YL+4mzfvgeTLPSPQIER6QutFBGuposs09OQFbK/ZeDEXjhcG1uv9RnWpfditymvB61qI2uvdHebmnUVLcZgqN3toBlhQE65OrWz1b6rBokFwbHMvCnr/qAATDsV7OoqiGMH+SMlMN0R8tFyaTSVXw24ZYOn+zr91o6LyoSQGQslVz9JwRmdH1q9PapVXEc5YE+R2+gmUmdlC3dAXJrrQHhK0KiSk3FhDQmnQi8NowgXDfIzYfrQ44e0RLvE53DIdB04KKy8myj8+kyyVgOiPKJU9dSA6uYszhT1IXLXArrZ8HflGcF/WqT0nk5YB+HqtDYFmdA3zDb4qCpJytEb7L++PRJ5g5yMKr4fqNn8YB/SWgxdgXX466VNfJ9YPkk9kA48pYhbfRgGUk1RwIAmmH3zIWIn5oxNnchM3egDCag9L1RqSotxkvOoavAiKzuEIyMRXlflpVDvCACslwsl2GoGltqPftjRtJRiLKCmk2rpxlF2A2mofx6u8raedzCl8yU88Ybf/W6TX3BWlw6ZC2SKUtx/FCpU2N8ORFl3oYyVOq5jmDkNbGWFMKUt1dYzuvvHwtp9vF4TGUQB5xfoWvmweVQcoJsb4tbP37d7v5GDOQTzqroGOlMPahLBGOcTe0TFLDlcsBL9y7Pcyl7++ujZyiIRpcmWe9z15mqKfcq35SFRf+7J6ubhMrFdxGkBbBiygLufyr040thOySErpY31FPOyZkgUmIFhBfq/GZ42QkSfEgos76eWmvkyT65agKbPsLVCfMswLIaUKQEulDWGmg+RalrzRrIaWbJCd35VbRAZ7WYoUgaieP0+bm+sN6YIJ2t8E3/N2vuafAGeGOulEcdsHt6hs5ff/ydagtZzPeMO34irGIiYwLuLVcrcHrmkbNyhpe30ulFOcTOB4Xn3ybGzsDwdtrJT6QkD7HiDM+s5PNTSA0b3/unrEXiBQPY7UbK8MSq2geKHjlbBR+3kLuSrekgXQXdhpmiODHvEKiPgur/mqrgVdSTzIWhkNxCpGCYa+P9TTxUJP8G9TrboB2wAAAAA/Y7uq+iPk9Zz3stIIpt0vvOQp4mx/w=="};
 string zsfx_hash="7537DEDC40B59AF9E8029D04D3390C2AA4EE5819E0D2CDD6467C20CDA287318C";
 #endif
-#if defined(_WIN32) && (!defined(_WIN64))  
+#if defined(_WIN32) && (!defined(_WIN64))
 char zsfx_mime64[]={"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"};
 string zsfx_hash="29CF5510EF6E1CCA159017D0FE101FD923499D7E0146B3F5D81CD29D3003E90C";
 #endif
@@ -63988,7 +62366,7 @@ string zsfx_hash="ERRORE";
 
 int Jidac::benchmark()
 {
-	
+
 /*
 	uint32_t calculatedcrc=0;
 	parallelcrc32("01.cpp",16,calculatedcrc);
@@ -64021,7 +62399,7 @@ int Jidac::benchmark()
 		myprintf("Cannot get free RAM\n");
 	else
 		myprintf("Free RAM seems %s\n",migliaia(myram));
-#ifdef HWSHA2	
+#ifdef HWSHA2
 	if (ihavehw())
 		myprintf("SHA1/2 seems supported by CPU\n");
 	else
@@ -64152,7 +62530,7 @@ int Jidac::benchmark()
 			hashes+="NILSIMSA;";
 		if (flagsha3)
 			hashes+="SHA-3;";
-		
+
 	}
 	explode(hashes,';',thehashes);
 	if (thehashes.size()==0)
@@ -64168,14 +62546,14 @@ int Jidac::benchmark()
 			franz_free(buffer32bit);
 			return 1;
 		}
-		
+
 	if (thehashes.size()==13)
 		if (flaghw)
 		{
 			myprintf("61522: HW disabled, because franzomips. Choose one to keep (ex -sha256)\n");
 			flaghw=false;
 		}
-	vector<s_benchmark> 			vettorerisultati;     
+	vector<s_benchmark> 			vettorerisultati;
 	vector<tparametribenchmark> 	vettoreparametribenchmark; // pthread
 	myprintf("Benchmarks: ");
 	for (unsigned int i=0;i<thehashes.size();i++)
@@ -64201,7 +62579,7 @@ int Jidac::benchmark()
 			else
 				myblock.runningalgo=thehashes[0];
 			vettoreparametribenchmark.push_back(myblock);
-		}	
+		}
 		int rc;
 		pthread_t* threads = new pthread_t[mythreads];
 		pthread_attr_t attr;
@@ -64215,20 +62593,20 @@ int Jidac::benchmark()
 			printf("\033[2J"); //cls
 			restoreConsole();
 		}
-		for(int i = 0; i < mythreads; i++ ) 
-		{	
+		for(int i = 0; i < mythreads; i++ )
+		{
 			rc 	= pthread_create(&threads[i], &attr, benchmark_thread, (void*)&vettoreparametribenchmark[i]);
-			if (rc) 
+			if (rc)
 			{
 				myprintf("34117: Error creating thread\n");
 				exit(-1);
 			}
 		}
 		pthread_attr_destroy(&attr);
-		for(int i = 0; i <mythreads; i++ ) 
+		for(int i = 0; i <mythreads; i++ )
 		{
 			rc = pthread_join(threads[i], &status);
-			if (rc) 
+			if (rc)
 			{
 				error("Unable to join\n");
 				exit(-1);
@@ -64290,7 +62668,7 @@ int Jidac::benchmark()
 	franz_free(buffer32bit);
 	///sysctl hw.model hw.machine hw.ncpu
 	if (thehashes.size()==13)
-	{			
+	{
 		if (all)
 			myprintf("\nfranzomips multi thread index %s ",migliaia((franzomips*7.0)));
 		else
@@ -64300,7 +62678,7 @@ int Jidac::benchmark()
 			if (all)
 				myprintf("%s %10.2f %%\n",array_cpu[i].c_str(),array_multi[i]);
 			else
-				myprintf("%s %10.2f %%\n",array_cpu[i].c_str(),array_single[i]);			
+				myprintf("%s %10.2f %%\n",array_cpu[i].c_str(),array_single[i]);
 	}
 	return 0;
 }
@@ -64348,7 +62726,7 @@ _Bool wildcard_strcmp(char *line, char *pattern)
             {
                 pattern = placeholder;
             }
-        } 
+        }
         else
         {
             return 0;
@@ -64400,7 +62778,7 @@ string	Jidac::get_lastfilename(string i_file,int64_t& o_totalfilesize)
 		myprintf("60541: Jolly in archivefile!\n");
 		myprintf("62517: Searching for jolly archive(s) in <<%s>>\n",i_file.c_str());
 	}
-	
+
 	DTMap thedt;
 	flagforcezfs=true;
 	g_arraybytescanned.clear();
@@ -64411,7 +62789,7 @@ string	Jidac::get_lastfilename(string i_file,int64_t& o_totalfilesize)
 	string onlyname=extractfilename(i_file);
 	myreplace(onlyname,"????????.zpaq","");
 	myreplace(onlyname,".zpaq","");
-	
+
 	if (flagdebug)
 	{
 		myprintf("62538: scan by   %s\n",onlypath.c_str());
@@ -64424,10 +62802,10 @@ string	Jidac::get_lastfilename(string i_file,int64_t& o_totalfilesize)
 		printbar(' ',false);
 		myprintf("\r");
 	}
-	
+
 	if (flagdebug)
 		myprintf("62548: scanned %s\n",migliaia(thedt.size()));
-	
+
 	if (thedt.size()==0)
 	{
 		myprintf("60553: no archive => quit\n");
@@ -64435,9 +62813,9 @@ string	Jidac::get_lastfilename(string i_file,int64_t& o_totalfilesize)
 	}
 	if (flagdebug)
 		myprintf("60560:Founded %s files(s), sorting\n",migliaia(thedt.size()));
-	
+
 	vector<string> filenamearray;
-	for (DTMap::iterator p=thedt.begin(); p!=thedt.end(); ++p) 
+	for (DTMap::iterator p=thedt.begin(); p!=thedt.end(); ++p)
 	{
 		string temp		=extractfilename(p->first);
 		if (isbackuppart(temp,onlyname))
@@ -64452,9 +62830,9 @@ string	Jidac::get_lastfilename(string i_file,int64_t& o_totalfilesize)
 			myprintf("62602: No single match\n");
 		return "";
 	}
-	
+
 	std::sort(filenamearray.begin(),filenamearray.end());
-	
+
 	string thelastone=filenamearray[filenamearray.size()-1];
 
 	string srisultato=extractfilepath(i_file)+thelastone;
@@ -64467,7 +62845,7 @@ string	Jidac::get_lastfilename(string i_file,int64_t& o_totalfilesize)
 	return srisultato;
 }
 
-int Jidac::summa() 
+int Jidac::summa()
 {
 	if (flaghashdeep)
 		if (g_output=="")
@@ -64490,7 +62868,7 @@ int Jidac::summa()
 			myprintf("60648: the lastzpaq |%s|\n",thelastzpaq.c_str());
 		}
 		string thelasttxt="";
-		
+
 
 		if (!fileexists(files[0].c_str()))
 		{
@@ -64509,13 +62887,13 @@ int Jidac::summa()
 			int64_t dummysize;
 			checktxt=get_lastfilename(checktxt,dummysize);
 			myprintf("60672: The lasttxt |%s|\n",checktxt.c_str());
-		}	
+		}
 
 		if (!fileexists(checktxt.c_str()))
 		{
 			myprintf("37871: Abort, -checktxt %s does not exists\n",checktxt.c_str());
 			return 2;
-		}		
+		}
 		myprintf("Checking MD5 (because of -checktxt) on %s\n",checktxt.c_str());
 
 		int64_t	dimensionefile=prendidimensionefile(checktxt.c_str());
@@ -64525,22 +62903,22 @@ int Jidac::summa()
 			myprintf("37878: The -checktxt file seems way too big %s\n",migliaia(dimensionefile));
 			return 2;
 		}
-		
+
 		if (dimensionefile<64)
 		{
 			myprintf("37884: The -checktxt file seems too small %s\n",migliaia(dimensionefile));
 			return 2;
 		}
-		
+
 		FILE* inFile = freadopen(checktxt.c_str());
-		if (inFile==NULL) 
+		if (inFile==NULL)
 		{
 #ifdef _WIN32
 		DWORD err=GetLastError();
 #else
 		int err=1;
 #endif
-			myprintf("\37885: ERR <%s> kind %s\n",checktxt.c_str(),migliaia((int64_t)err)); 
+			myprintf("\37885: ERR <%s> kind %s\n",checktxt.c_str(),migliaia((int64_t)err));
 			return 2;
 		}
 		const int letti=fread(linebuffer,1,sizeof(linebuffer),inFile);
@@ -64549,7 +62927,7 @@ int Jidac::summa()
 			myprintf("37914: Readed %d\n",letti);
 		string hashletto="";
 		int i=0;
-		
+
 		while (i<letti)
 		{
 			if (isdigit(linebuffer[i]) || (isalpha(linebuffer[i])))
@@ -64567,40 +62945,42 @@ int Jidac::summa()
 				break;
 		printUTF8(nomefile.c_str());
 		myprintf("\n");
-		
+
 ///dc0b4528c42b4e8d3e6e8b571a77b842 z:/pippo_0011_md5.txt|[            1.583.833] 2023-04-17 15:07:09
 
-		
+
 		int64_t startverify	=mtime();
 		int64_t larghezzain	=prendidimensionefile(thelastzpaq.c_str());
 		g_dimensione		=0;
 		franz_do_hash dummy("MD5");
-		
+		if (flagdebug)
+			myprintf("64742: filehash on %s\n",thelastzpaq.c_str());
+
 		string hashreloaded=dummy.filehash(thelastzpaq,false,startverify,larghezzain);
 
 		myprintf("MD5 recalculated       |%s| ",hashreloaded.c_str());
 		printUTF8(thelastzpaq.c_str());
 		myprintf("\n");
-		
-		
+
+
 		string temp=nomefile;
 		myreplace(temp,"_md5.txt","");
 		string solonomehash=stringtolower(prendinomefileebasta(temp));
 		string solonomefile=stringtolower(prendinomefileebasta(thelastzpaq));
-		
+
 		myprintf("Filename in checktxt   |");
 		printUTF8(solonomehash.c_str());
 		myprintf("|\n");
-		
-		
+
+
 		myprintf("Filename to test       |");
 		printUTF8(solonomefile.c_str());
 		myprintf("|\n");
 		printbar('-');
-		
+
 		hashreloaded=stringtolower(hashreloaded);
 		hashletto	=stringtolower(hashletto);
-		
+
 		if ((hashreloaded=="") || (hashreloaded!=hashletto))
 		{
 			myprintf("****  ERROR: FILE DOES NOT MATCH WITH THE CHECKSUM  ****\n");
@@ -64609,7 +62989,7 @@ int Jidac::summa()
 			return 2;
 		}
 		myprintf("MD5 matched\n");
-		
+
 		return 0;
 	}
 
@@ -64625,13 +63005,13 @@ int Jidac::summa()
 		if (flagforce)
 			if (!getcaptcha("iamsure","Delete files without confirmation"))
 				return 1;
-			
+
 	if (flagrename)
 		if (!flagforce)
 		{
 			if (!getcaptcha("y","Rename ALL FILES without confirmation?"))
 				return 1;
-		}	
+		}
 
 
 	if (flaghashdeep)
@@ -64660,7 +63040,7 @@ int Jidac::summa()
 		myprintf("## invoked @ ");
 		print_datetime();
 		myprintf("\n");
-		
+
 		for (unsigned int i=0;i<files.size();i++)
 		{
 			myprintf("## files %08d ",i);
@@ -64668,9 +63048,9 @@ int Jidac::summa()
 			myprintf("\n");
 		}
 		myprintf("##\n");
-	}	
+	}
 	int quantifiles					=0;
-	int64_t total_size				=0;  
+	int64_t total_size				=0;
 	unsigned int duplicated_files	=0;
 	uint64_t duplicated_size		=0;
 	uint64_t scannedsize			=0;
@@ -64690,9 +63070,9 @@ int Jidac::summa()
 			myprintf("Error: with -checksum exactly one directory can be searched\n");
 			return 1;
 		}
-		int64_t startscan=mtime();			
+		int64_t startscan=mtime();
 		scandir(false,edt,files[0].c_str(),false);
-		for (DTMap::iterator p=edt.begin(); p!=edt.end(); ++p) 
+		for (DTMap::iterator p=edt.begin(); p!=edt.end(); ++p)
 			if (p->first != files[0])
 			{
 			if (isdirectory(p->first))
@@ -64723,7 +63103,7 @@ int Jidac::summa()
 			scandir(true,edt,mydirs[i].c_str(),true);
 			scantime+=mtime()-startscan;
 			vec.clear();
-			for (DTMap::iterator p=edt.begin(); p!=edt.end(); ++p) 
+			for (DTMap::iterator p=edt.begin(); p!=edt.end(); ++p)
 				if (!isdirectory(p->first))
 				{
 					startscan=mtime();
@@ -64731,8 +63111,11 @@ int Jidac::summa()
 					mypair.first="dummy";
 					///if (flagdebug)
 						///myprintf("60046: franz_do_hash\n");
-	
+
 					franz_do_hash dummy(g_thechosenhash);
+					if (flagdebug)
+						myprintf("64901: filehash on %s\n",p->first.c_str());
+
 					mypair.second=dummy.filehash(p->first.c_str(),false,-1,-1);
 					vec.push_back(mypair);
 					///vec.push_back(make_pair("dummy",hash_calc_file(flag2algo(),p->first.c_str(),false,dummycrc,-1,-1,g_dimensione)));
@@ -64741,7 +63124,7 @@ int Jidac::summa()
 				}
 			std::sort(vec.begin(), vec.end(),pairsortbyval);
 			for (unsigned int j=0;j<vec.size();j++)
-				for (const char* p=vec[j].second.c_str(); *p; ++p) 
+				for (const char* p=vec[j].second.c_str(); *p; ++p)
 				{
 					sha256.put(*p);
 					globalesha256.put(*p);
@@ -64767,15 +63150,18 @@ int Jidac::summa()
 			mypair.first="dummy";
 			///if (flagdebug)
 				///myprintf("60082: franz_do_hash\n");
-	
+
 			franz_do_hash dummy(g_thechosenhash);
+			if (flagdebug)
+				myprintf("64939: filehash on %s\n",myfiles[i].c_str());
+
 			mypair.second=dummy.filehash(myfiles[i],false,-1,-1);
 			vec.push_back(mypair);
 		}
 		hashtime+=mtime()-startscan;
 		std::sort(vec.begin(), vec.end(),pairsortbyval);
 		for (unsigned int j=0;j<vec.size();j++)
-			for (const char* p=vec[j].second.c_str(); *p; ++p) 
+			for (const char* p=vec[j].second.c_str(); *p; ++p)
 					globalesha256.put(*p);
 		scantime=mtime();
 		char sha256result[32];
@@ -64805,8 +63191,8 @@ int Jidac::summa()
 		myprintf("\n*** Searching for duplicates with %s minsize %s ***\n",g_thechosenhash_str.c_str(),migliaia(minsize));
 // get size and name
 		std::vector<s_pair_intstring> filestobepurged;
-		for (DTMap::iterator p=edt.begin(); p!=edt.end(); ++p) 
-			if (p->second.date && p->first!="" && (!isdirectory(p->first)) && (!isads(p->first)) ) 
+		for (DTMap::iterator p=edt.begin(); p!=edt.end(); ++p)
+			if (p->second.date && p->first!="" && (!isdirectory(p->first)) && (!isads(p->first)) )
 			{
 				if (minsize>0)
 				{
@@ -64858,8 +63244,8 @@ int Jidac::summa()
 	else
 	{
 //	default: get everything
-		for (DTMap::iterator p=edt.begin(); p!=edt.end(); ++p) 
-			if (p->second.date && p->first!="" && (!isdirectory(p->first)) && (!isads(p->first)) ) 
+		for (DTMap::iterator p=edt.begin(); p!=edt.end(); ++p)
+			if (p->second.date && p->first!="" && (!isdirectory(p->first)) && (!isads(p->first)) )
 			{
 				if (minsize>0)
 				{
@@ -64878,7 +63264,7 @@ int Jidac::summa()
 				}
 			}
 		scannedsize=total_size;
-	}	
+	}
 	if (myfiles.size()==0)
 	{
 		myprintf("Nothing to do\n");
@@ -64898,7 +63284,7 @@ int Jidac::summa()
 		printbar(' ');
 		int64_t inizio		=mtime();
 		scantime=(inizio-startscan)/1000.0;
-		if (!flagnoeta) 
+		if (!flagnoeta)
 			myprintf("No multithread: Found (%s) => %s bytes (%s) / %s files in %f\n",tohuman2(scannedsize),migliaia(total_size),tohuman(total_size),migliaia2(quantifiles),scantime);
 		if ((flagverbose) && (!flaghashdeep))
 			myprintf("Total files %s\n",migliaia(myfiles.size()));
@@ -64909,8 +63295,11 @@ int Jidac::summa()
 		{
 			///if (flagdebug)
 				////myprintf("60224: franz_do_hash\n");
-	
+
 			franz_do_hash dummy(g_thechosenhash);
+			if (flagdebug)
+				myprintf("65083: filehash on %s\n",myfiles[i].c_str());
+
 			string risu=dummy.filehash(myfiles[i],false,inizio,total_size);
 			s_stringpair mypair;
 			mypair.first=myfiles[i];
@@ -64961,11 +63350,11 @@ int Jidac::summa()
 		if (!flagnoeta)
 			myprintf("\nCreating %d hashing thread(s) with %s\n",mythreads,g_thechosenhash_str.c_str());
 		iniziohash=mtime();
-		for(int i = 0; i < mythreads; i++ ) 
+		for(int i = 0; i < mythreads; i++ )
 		{
 			vettoreparametrihash[i].timestart=mtime();
 			rc = pthread_create(&threads[i], &attr, scansionahash, (void*)&vettoreparametrihash[i]);
-			if (rc) 
+			if (rc)
 			{
 				myprintf("34523: Error creating thread\n");
 				exit(-1);
@@ -64973,10 +63362,10 @@ int Jidac::summa()
 		}
 		pthread_attr_destroy(&attr);
 
-		for(int i = 0; i <mythreads; i++ ) 
+		for(int i = 0; i <mythreads; i++ )
 		{
 			rc = pthread_join(threads[i], &status);
-			if (rc) 
+			if (rc)
 			{
 				error("Unable to join\n");
 				exit(-1);
@@ -65020,7 +63409,7 @@ int Jidac::summa()
 			///seppuku();
 			///return 2;
 		}
-			
+
 		DTMap::iterator p=edt.find(filename);
 		if (p != edt.end())
 			testedbytes+=p->second.size;
@@ -65030,10 +63419,10 @@ int Jidac::summa()
 			seppuku();
 			return 2;
 		}
-		for (const char* p=vec[i].second.c_str(); *p; ++p) 
+		for (const char* p=vec[i].second.c_str(); *p; ++p)
 			sha256.put(*p);
 		if (searchfrom!="")
-				replace(filename,searchfrom,replaceto);	
+				replace(filename,searchfrom,replaceto);
 
 		if (flaghashdeep)
 		{
@@ -65044,12 +63433,12 @@ int Jidac::summa()
 		}
 		else
 		if (flagrename)
-		{		
+		{
 			if (vec[i].second!="")
 			{
 				string percorso=extractfilepath(filename);
 				string newfilename=percorso+vec[i].second.c_str();
-				
+
 				if (extractfilename(newfilename)!=extractfilename(filename))
 				{
 					undofrom.push_back(filename);
@@ -65097,7 +63486,7 @@ int Jidac::summa()
 			{
 				if (flagpakka)
 					myprintf("%s ",stringtolower(vec[i].second).c_str());
-					
+
 				else
 				{
 					myprintf("|%s: %s ",g_thechosenhash_str.c_str(),vec[i].second.c_str());
@@ -65106,13 +63495,13 @@ int Jidac::summa()
 				}
 			}
 			if (!flagnosort)
-			{			
+			{
 				if (i==0)
-				{	
+				{
 					if (!flagpakka)
 						if (summary<0)
 							myprintf("    ");
-				}	
+				}
 				else
 				{
 					if (vec[i-1].second==vec[i].second)
@@ -65168,7 +63557,7 @@ int Jidac::summa()
 		}
 		myprintf("Renamed     files  %s\n",migliaia(renamedfiles));
 		myprintf("NOT renamed files  %s\n",migliaia(notrenamed));
-		
+
 	}
 	if (summary>0)
 	{
@@ -65195,7 +63584,7 @@ int Jidac::summa()
 		if (flagforce)
 			if (deletedfiles)
 				myprintf("Duplicated deleted files %s for %s bytes\n",migliaia2(deletedfiles),migliaia(deletedsize));
-	
+
 	return errori;
 }
 
@@ -65212,10 +63601,10 @@ string Jidac::win32_extract_resource(string i_folder,string i_filename,const cha
 		myprintf("44628: i_folder empty\n");
 		return "";
 	}
-	
+
 	i_folder=wintolinuxpath(i_folder);
 	i_folder=includetrailingbackslash(i_folder);
-	
+
 	if (!saggiascrivibilitacartella(i_folder))
 	{
 		myprintf("37756: cannot write into %s\n",i_folder.c_str());
@@ -65245,7 +63634,7 @@ string ahahencrypt(string i_string)
 }
 /// this is a very quick and very dirty unzpaq from memory to file
 /// very slow, but we can get optional SHA-256
-struct Mymemreader: public libzpaq::Reader 
+struct Mymemreader: public libzpaq::Reader
 {
 	unsigned char*	thememory;
 	size_t			memorysize;
@@ -65259,7 +63648,7 @@ struct Mymemreader: public libzpaq::Reader
 		return -1;
  	}
 };
-struct Myfilewriter: public libzpaq::Writer 
+struct Myfilewriter: public libzpaq::Writer
 {
 	FILE* 	f;
 	size_t	tobewritten;
@@ -65267,7 +63656,7 @@ struct Myfilewriter: public libzpaq::Writer
 	bool	dosha256;
 	libzpaq::SHA256 thehash256;
 	Myfilewriter(FILE* f_,size_t i_tobewritten=0,bool i_dosha256=false): f(f_),tobewritten(i_tobewritten),written(0),dosha256(i_dosha256) {}
-  	void put(int c) 
+  	void put(int c)
 	{
 		if(f)
 			if (putc(c, f)!=EOF)
@@ -65308,7 +63697,7 @@ int Jidac::decompress_sfx_to_file(FILE* i_outfile)
 		myprintf("87420: error in malloc zsfx\n");
 		return 0;
 	}
-	if (!mime2binary(zsfx_mime64,(unsigned char *)zsfx_exe,zsfx_exe_len)) 
+	if (!mime2binary(zsfx_mime64,(unsigned char *)zsfx_exe,zsfx_exe_len))
 	{
 		myprintf("87425: mime decoder kaputt!\n");
 		return 0;
@@ -65319,7 +63708,7 @@ int Jidac::decompress_sfx_to_file(FILE* i_outfile)
 	franz_free(zsfx_exe);
 	printbar(' ');
 	myprintf("\r");
-	
+
 	char sha256result[32];
 	memcpy(sha256result,out.thehash256.result(), 32);
 	string calculatedhash=binarytohex((const unsigned char*)sha256result,32);
@@ -65352,7 +63741,7 @@ int Jidac::writesfxmodule(const string i_filename)
 		return 2;
 	}
 	if (!fileexists(archive))
-	{	
+	{
 		myprintf("40003: archive does not exists\n");
 		return 2;
 	}
@@ -65419,7 +63808,7 @@ int Jidac::writesfxmodule(const string i_filename)
 	unsigned char 	buffer[blockSize];
 	size_t 	readSize;
 	/// yes, one byte at time. Why? Because some too smart compilers can substitute too much
-	/// please note: the strings are already inverted 
+	/// please note: the strings are already inverted
 	for (unsigned int i=0;i<g_franzo_start.size();i++)
 		fwrite(&g_franzo_start[i],1,1,outFile);
 	/// High security!
@@ -65431,13 +63820,13 @@ int Jidac::writesfxmodule(const string i_filename)
 		fwrite(&g_franzo_end[i],1,1,outFile);
 	///	Now append the .zpaq. Please note: no handling for multipart (in fact, not too hard)
 	FILE* inFile = freadopen(archive.c_str());
-	if (inFile==NULL) 
+	if (inFile==NULL)
 	{
 		int err=GetLastError();
-		myprintf("\n2077: ERR <%s> on archive kind %d\n",archive.c_str(),err); 
+		myprintf("\n2077: ERR <%s> on archive kind %d\n",archive.c_str(),err);
 		return 2;
 	}
-	while ((readSize = fread(buffer, 1, blockSize, inFile)) > 0) 
+	while ((readSize = fread(buffer, 1, blockSize, inFile)) > 0)
 		fwrite(buffer,1,readSize,outFile);
 	fclose(outFile);
 	///	Just debug stuff
@@ -65512,7 +63901,7 @@ int Jidac::sfx()
 #endif
 	return 0;
 }
-/* 
+/*
 more general resource-like extraction (future)
 */
 int Jidac::decompress_mime64_to_file(FILE* i_outfile,const char* i_mime64)
@@ -65530,11 +63919,11 @@ int Jidac::decompress_mime64_to_file(FILE* i_outfile,const char* i_mime64)
 		myprintf("45953: error in malloc\n");
 		return 0;
 	}
-	if (!mime2binary(i_mime64,(unsigned char *)the_exe,the_exe_len)) 
+	if (!mime2binary(i_mime64,(unsigned char *)the_exe,the_exe_len))
 	{
 		myprintf("45960: mime decoder kaputt!\n");
 		return 0;
-	
+
 	}
 	Mymemreader 	in	(( unsigned char *)the_exe,the_exe_len);
 	Myfilewriter 	out	(i_outfile,the_exe_len);
@@ -65573,7 +63962,7 @@ int Jidac::writeresource(const string i_filename,bool i_force,const char* i_mime
 		myprintf("44972: error in malloc\n");
 		return 0;
 	}
-	if (!mime2binary(i_mime64,(unsigned char *)the_res,the_res_len)) 
+	if (!mime2binary(i_mime64,(unsigned char *)the_res,the_res_len))
 	{
 		myprintf("44977: mime decoder kaputt!\n");
 		return 0;
@@ -65604,7 +63993,7 @@ int Jidac::writeresource(const string i_filename,bool i_force,const char* i_mime
 	Section: verify and command w (chunked extraction)
 	         running on pthread
 */
-int Jidac::verify(bool i_readfile) 
+int Jidac::verify(bool i_readfile)
 {
 	getpasswordifempty();
 	flagforce		=true;
@@ -65615,10 +64004,10 @@ int Jidac::verify(bool i_readfile)
 	if (i_readfile)
 	{
 		const int64_t sz=read_archive(NULL,archive.c_str());
-		if (sz<1) 
+		if (sz<1)
 			error("archive not found");
 	}
-	all=myflagall;	
+	all=myflagall;
 	if (flagssd)
 		myprintf("\nVerify hashes of one version vs filesystem (multithreaded)\n");
 	else
@@ -65635,8 +64024,8 @@ int Jidac::verify(bool i_readfile)
 	vector<string> 	myfilesoriginal;		//in fact redundant
 	vector<string> 	myfilehash;
 	vector<string> 	myalgo;
-	for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p) 
-		if (p->second.date && p->first!="") 
+	for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p)
+		if (p->second.date && p->first!="")
 		{
 			string finalfile=rename(p->first);
 			if (!isdirectory(finalfile))
@@ -65652,7 +64041,7 @@ int Jidac::verify(bool i_readfile)
 				int64_t myaccesstime=0;
 				bool	myisordered=false;
 				int		myversion=0;
-				franz_posix* myposix=NULL;	
+				franz_posix* myposix=NULL;
 				decode_franz_block(false,p->second.franz_block,
 					myhashtype,
 					myhash,
@@ -65687,7 +64076,7 @@ int Jidac::verify(bool i_readfile)
 	}
 	else
 		mythreads=1;
-	
+
 	int64_t	startrunning=mtime();
 	vector<tparametrihash> 	vettoreparametrihash;
 	tparametrihash 	myblock;
@@ -65724,8 +64113,11 @@ int Jidac::verify(bool i_readfile)
 		{
 			///if (flagdebug)
 				///myprintf("61025: franz_do_hash\n");
-	
+
 			franz_do_hash dummy(myalgo[i]);
+			if (flagdebug)
+				myprintf("65900: filehash on %s\n",myfiles[i].c_str());
+
 			string risu=dummy.filehash(myfiles[i],false,inizio,hashtotali);
 			vettoreparametrihash[0].o_hashcalculated.push_back(risu);
 			vettoreparametrihash[0].o_sizegetted.push_back(dummy.o_thefilesize);
@@ -65742,21 +64134,21 @@ int Jidac::verify(bool i_readfile)
 		if (!flagnoeta)
 			myprintf("Total files %s -> in %03d threads -> %s to be checked\n",migliaia(myfiles.size()),mythreads,migliaia2(totfile));
 		startrunning=mtime();
-		for(unsigned int i=0; i<mythreads; i++ ) 
+		for(unsigned int i=0; i<mythreads; i++ )
 		{
 			vettoreparametrihash[i].timestart=mtime();
 			rc = pthread_create(&threads[i], &attr, scansionahash, (void*)&vettoreparametrihash[i]);
-			if (rc) 
+			if (rc)
 			{
 				myprintf("39264: Error creating thread\n");
 				exit(-1);
 			}
 		}
 		pthread_attr_destroy(&attr);
-		for(unsigned int i=0; i <mythreads; i++ ) 
+		for(unsigned int i=0; i <mythreads; i++ )
 		{
 			rc = pthread_join(threads[i], &status);
-			if (rc) 
+			if (rc)
 			{
 				error("39275: Unable to join\n");
 				exit(-1);
@@ -65764,13 +64156,13 @@ int Jidac::verify(bool i_readfile)
 		}
 		delete [] threads;
 	}
-	
+
 	if (flagverbose)
 		myprintf("Scan done, preparing report...\n");
 
 	for (MAPPATIPOHASH::iterator p=g_mappatipohash.begin(); p!=g_mappatipohash.end(); ++p)
 		p->second.resetcheckstat();
-	
+
 	for(unsigned int i=0;i<mythreads;i++)
 		for (unsigned int j=0;j<vettoreparametrihash[i].filestobehashed.size();j++)
 		{
@@ -65806,7 +64198,7 @@ int Jidac::verify(bool i_readfile)
 						///  a->second.checksize+=prendidimensionefile(finalfile.c_str());
 							DTMap::iterator p=dt.find(vettoreparametrihash[i].originalfilenames[j]);
 							if (p!=dt.end())
-								thehash->checksize+=p->second.size; 
+								thehash->checksize+=p->second.size;
 							else
 							{
 								if (flagdebug)
@@ -65839,10 +64231,10 @@ int Jidac::verify(bool i_readfile)
 	bool outsomething=(nohashfound>0);
 	if (nohashfound>0)
 		risultato=1;
-	
+
 	for (MAPPATIPOHASH::iterator p=g_mappatipohash.begin(); p!=g_mappatipohash.end(); ++p)
 		outsomething |= (p->second.checkedok+p->second.checkedfailed+p->second.checkednotfound);
-	
+
 	if (outsomething)
 	{
 		printbar('-');
@@ -65873,7 +64265,7 @@ int Jidac::verify(bool i_readfile)
 	return risultato;
 }
 void Jidac::handleflaglongpath()
-{ 
+{
 #ifdef _WIN32
 	if (!flaglongpath)
 			return;
@@ -65892,7 +64284,7 @@ void Jidac::handleflaglongpath()
 			break;
 		}
 	}
-	for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p) 
+	for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p)
 		if (iswindowsunc(p->first))
 		{
 			myprintf("44495: found UNC Windows, incompatible with -longpath, turning OFF %s\n",p->first.c_str());
@@ -65912,8 +64304,8 @@ void Jidac::handleflaglongpath()
 					myprintf("44508: tofiles %d %s\n",i,tofiles[i].c_str());
 		}
 #endif
-}	
-int Jidac::extractw() 
+}
+int Jidac::extractw()
 {
 	myprintf("**** CHUNKED EXTRACTION/TEST ****\n");
 	if (flagverify && flagtest)
@@ -65952,7 +64344,7 @@ int Jidac::extractw()
 			{
 				myprintf("42854: WARNING the folder <<");
 				printUTF8(tofiles[0].c_str());
-				myprintf(">> already contain %s bytes\n\n\n",migliaia(tofoldersize));		
+				myprintf(">> already contain %s bytes\n\n\n",migliaia(tofoldersize));
 				if (!getcaptcha("deleteall","Data can be overwritten, use EMPTY folder!"))
 					return 1;
 			}
@@ -65963,19 +64355,19 @@ int Jidac::extractw()
 	g_scritti		=0;
 	int	errors		=0;
 	int64_t sz=read_archive(NULL,archive.c_str(),&errors);
-	if (sz<1) 
+	if (sz<1)
 		error("44504: archive not found");
-	for (unsigned i=0; i<block.size(); ++i) 
+	for (unsigned i=0; i<block.size(); ++i)
 	{
-		if (block[i].bsize<0) 
+		if (block[i].bsize<0)
 			error("negative block size");
-		if (block[i].start<1) 
+		if (block[i].start<1)
 			error("block starts at fragment 0");
-		if (block[i].start>=ht.size()) 
+		if (block[i].start>=ht.size())
 			error("block start too high");
-		if (i>0 && block[i].start<block[i-1].start) 
+		if (i>0 && block[i].start<block[i-1].start)
 			error("unordered frags");
-		if (i>0 && block[i].start==block[i-1].start) 
+		if (i>0 && block[i].start==block[i-1].start)
 			error("empty block");
 		if (i>0 && block[i].offset<block[i-1].offset+block[i-1].bsize)
 		  error("unordered blocks");
@@ -65985,7 +64377,7 @@ int Jidac::extractw()
 	int64_t	totalarchive=0;
 	vector <s_fileandsize> fileandsize;
 	vector <s_fileandsize> chunkfile;
-	for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p) 
+	for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p)
 		if (!isdirectory(p->first))
 				if (p->second.size>0)
 				{
@@ -65997,8 +64389,8 @@ int Jidac::extractw()
 					int64_t myaccesstime=0;
 					bool	myisordered=false;
 					int		myversion=0;
-					franz_posix* myposix=NULL;	
-			
+					franz_posix* myposix=NULL;
+
 					decode_franz_block(false,p->second.franz_block,
 					myhashtype,
 					myhash,
@@ -66108,7 +64500,7 @@ int Jidac::extractw()
 			print_datetime();
 			myprintf("44567: creating folders tree and zero-bytes files\n");
 		}
-		for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p) 
+		for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p)
 		{
 			string thefolder=rename(p->first);
 			if (isdirectory(thefolder))
@@ -66133,7 +64525,7 @@ int Jidac::extractw()
 			print_datetime();
 			myprintf("44574: end\n");
 		}
-	}	
+	}
 //	reset and start from scratch
 	indice=0;
 	chunkcorrente=0;
@@ -66246,7 +64638,7 @@ bool Jidac::removetempdirifempty(string i_folder,bool i_deleteifsizezero=false)
 			printUTF8(i_folder.c_str());
 			myprintf(">>\n");
 		}
-		return stermina(i_folder,totalfile); 
+		return stermina(i_folder,totalfile);
 	}
 	return false;
 }
@@ -66261,10 +64653,10 @@ int Jidac::multiverify(vector <s_fileandsize>& i_arrayfilename)
 		return 2;
 	}
 	g_dimensione=0;
-	
+
 	for (MAPPATIPOHASH::iterator p=g_mappatipohash.begin(); p!=g_mappatipohash.end(); ++p)
 		p->second.resetcheckstat();
-	
+
 	uint64_t 	hashtotali		=0;
 	int			nohashfound		=0;
 	vector<string> 	myfiles;
@@ -66322,21 +64714,21 @@ int Jidac::multiverify(vector <s_fileandsize>& i_arrayfilename)
 	if (flagverbose)
 		myprintf("Total files %s -> in %03d threads -> %s to be checked\n",migliaia(myfiles.size()),mythreads,migliaia2(totfile));
 	int64_t	startrunning=mtime();
-	for(unsigned int i=0; i<mythreads; i++ ) 
+	for(unsigned int i=0; i<mythreads; i++ )
 	{
 		vettoreparametrihash[i].timestart=mtime();
 		rc = pthread_create(&threads[i], &attr, scansionahash, (void*)&vettoreparametrihash[i]);
-		if (rc) 
+		if (rc)
 		{
 			myprintf("39264: Error creating thread\n");
 			exit(-1);
 		}
 	}
 	pthread_attr_destroy(&attr);
-	for(unsigned int i=0; i <mythreads; i++ ) 
+	for(unsigned int i=0; i <mythreads; i++ )
 	{
 		rc = pthread_join(threads[i], &status);
-		if (rc) 
+		if (rc)
 		{
 			error("39275: Unable to join\n");
 			exit(-1);
@@ -66347,7 +64739,7 @@ int Jidac::multiverify(vector <s_fileandsize>& i_arrayfilename)
 		{
 			string finalfile		=vettoreparametrihash[i].filestobehashed[j];
 			string myhashtype		=vettoreparametrihash[i].algo[j];
-			
+
 			tipohash* thehash=franz_get_hash(myhashtype);
 			if (myhashtype=="")
 			{
@@ -66380,7 +64772,7 @@ int Jidac::multiverify(vector <s_fileandsize>& i_arrayfilename)
 						///  a->second.checksize+=prendidimensionefile(finalfile.c_str());
 							DTMap::iterator p=dt.find(vettoreparametrihash[i].originalfilenames[j]);
 							if (p!=dt.end())
-								thehash->checksize+=p->second.size; 
+								thehash->checksize+=p->second.size;
 							else
 							{
 								if (flagdebug)
@@ -66449,7 +64841,7 @@ int Jidac::multiverify(vector <s_fileandsize>& i_arrayfilename)
 	}
 	delete [] threads;
 	if (flagverify)
-		if (flagparanoid) 
+		if (flagparanoid)
 		{
 			if (flagdebug)
 				myprintf("44950: -paranoid, deleting files with OK matches\n");
@@ -66476,7 +64868,7 @@ int Jidac::multiverify(vector <s_fileandsize>& i_arrayfilename)
 					if (vettoreparametrihash[i].o_hashcalculated[j]!="")
 					{
 						if (vettoreparametrihash[i].o_hashcalculated[j]==vettoreparametrihash[i].filehash[j])
-						{	
+						{
 							if (!delete_file(vettoreparametrihash[i].filestobehashed[j].c_str()))
 							{
 								if (flagverbose || (g_output!=""))
@@ -66550,21 +64942,21 @@ int Jidac::extractqueue2(int i_chunk,int i_chunksize)
 	int	errors		=0;
 	int total_files	=0;
 	ExtractJob job(*this);
-	for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p) 
+	for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p)
 	{
 		p->second.data=-1;  // skip by default
-		if (std::binary_search(chunkfiles.begin(), chunkfiles.end(), p->first)) 
+		if (std::binary_search(chunkfiles.begin(), chunkfiles.end(), p->first))
 		{
 			string fn=rename(p->first);
 			string dummy="";
-			if (block.size()>0)  
+			if (block.size()>0)
 			{  // files to decompress
 				p->second.data=0;
 				unsigned lo=0, hi=block.size()-1;  // block indexes for binary search
-				for (unsigned i=0; p->second.data>=0 && i<p->second.ptr.size(); ++i) 
+				for (unsigned i=0; p->second.data>=0 && i<p->second.ptr.size(); ++i)
 				{
 					unsigned j=p->second.ptr[i];  // fragment index
-					if (j==0 || j>=ht.size() || ht[j].usize<-1) 
+					if (j==0 || j>=ht.size() || ht[j].usize<-1)
 					{
 						fflush(stdout);
 						printUTF8(p->first.c_str());
@@ -66574,18 +64966,18 @@ int Jidac::extractqueue2(int i_chunk,int i_chunksize)
 					}
 					assert(j>0 && j<ht.size());
 					if (lo!=hi || lo>=block.size() || j<block[lo].start
-						|| (lo+1<block.size() && j>=block[lo+1].start)) 
+						|| (lo+1<block.size() && j>=block[lo+1].start))
 					{
 						lo=0;  // find block with fragment j by binary search
 						hi=block.size()-1;
-						while (lo<hi) 
+						while (lo<hi)
 						{
 							unsigned mid=(lo+hi+1)/2;
 							assert(mid>lo);
 							assert(mid<=hi);
-							if (j<block[mid].start) 
+							if (j<block[mid].start)
 								hi=mid-1;
-							else 
+							else
 							(lo=mid);
 						}
 					}
@@ -66621,21 +65013,21 @@ int Jidac::extractqueue2(int i_chunk,int i_chunksize)
 			run(tid[i], decompressthreadramdisk, &job);
 		else
 			run(tid[i], decompressThread, &job);
-	for (unsigned i=0; i<tid.size(); ++i) 
+	for (unsigned i=0; i<tid.size(); ++i)
 		join(tid[i]);
 	printbar(' ',false);
-	myprintf("\r");	
+	myprintf("\r");
  // Report failed extractions (on filesystem)
 	if (!flagramdisk)
 	{
 		unsigned extracted=0;
-		for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p) 
+		for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p)
 		{
 			string fn=rename(p->first);
-			if (std::binary_search(chunkfiles.begin(), chunkfiles.end(), p->first)) 
+			if (std::binary_search(chunkfiles.begin(), chunkfiles.end(), p->first))
 			{
 				++extracted;
-				if (p->second.ptr.size()!=unsigned(p->second.data)) 
+				if (p->second.ptr.size()!=unsigned(p->second.data))
 				{
 					fflush(stdout);
 					if (++errors==1)
@@ -66646,7 +65038,7 @@ int Jidac::extractqueue2(int i_chunk,int i_chunksize)
 				}
 			}
 		}
-		if (errors>0) 
+		if (errors>0)
 		{
 			fflush(stdout);
 			myprintf("\nExtracted %s files (%s errors) using %s bytes x %d threads\n",
@@ -66662,7 +65054,7 @@ int Jidac::extractqueue2(int i_chunk,int i_chunksize)
 	double	time_extract=(endextract-startextract)*0.001+0.001;
 	if (flagverbose)
 	{
-		myprintf("RAMDISK       %21s bytes (%s) ",migliaia(g_ramdisksize),tohuman(g_ramdisksize)); 
+		myprintf("RAMDISK       %21s bytes (%s) ",migliaia(g_ramdisksize),tohuman(g_ramdisksize));
 		myprintf("time %.2f s @ %s (%s/s)\n",time_extract,migliaia((job.total_size/time_extract)),tohuman((job.total_size/time_extract)));
 	}
 	int64_t 	startwrite=mtime();
@@ -66676,8 +65068,8 @@ int Jidac::extractqueue2(int i_chunk,int i_chunksize)
 	vector<char*> 		mydata;
 	vector<int64_t> 	myfilesize;
 	vector<string> 		myfilecrc;
-	for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p) 
-		if (std::binary_search(chunkfiles.begin(), chunkfiles.end(), p->first)) 
+	for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p)
+		if (std::binary_search(chunkfiles.begin(), chunkfiles.end(), p->first))
 		{
 			string finalfile=rename(p->first);
 			if (searchfrom!="")
@@ -66689,9 +65081,9 @@ int Jidac::extractqueue2(int i_chunk,int i_chunksize)
 			int64_t myaccesstime=0;
 			bool	myisordered=false;
 			int		myversion=0;
-			franz_posix* myposix=NULL;	
+			franz_posix* myposix=NULL;
 			if (!isdirectory(finalfile))
-			{	
+			{
 				decode_franz_block(false,p->second.franz_block,
 					myhashtype,
 					myhash,
@@ -66778,7 +65170,7 @@ int Jidac::extractqueue2(int i_chunk,int i_chunksize)
 	myprintf("\r");
 	if (flagverbose)
 		myprintf("Running %d threads on %s files\n",mythreads,migliaia(myfiles.size()));
-	for(unsigned int i=0; i<mythreads; i++ ) 
+	for(unsigned int i=0; i<mythreads; i++ )
 	{
 		vettoreramtodisk[i].timestart=mtime();
 		rc = pthread_create(&threads[i], &attr, scriviramtodisk, (void*)&vettoreramtodisk[i]);
@@ -66789,10 +65181,10 @@ int Jidac::extractqueue2(int i_chunk,int i_chunksize)
 		}
 	}
 	pthread_attr_destroy(&attr);
-	for(unsigned int i=0; i <mythreads; i++ ) 
+	for(unsigned int i=0; i <mythreads; i++ )
 	{
 		rc = pthread_join(threads[i], &status);
-		if (rc) 
+		if (rc)
 		{
 			error("33821: Unable to join\n");
 			exit(-1);
@@ -66839,7 +65231,7 @@ int Jidac::extractqueue2(int i_chunk,int i_chunksize)
 	bool	issomething=(t_filecrcerror || t_fileerror || (t_crcsize!=expected) || t_filewithoutcrc || (t_hashedsize!=expected) || (t_filesnotchecked!=0) || (t_fileok!=file_expected));
 	if (flagverbose)
 	if (flagverify || flagchecksum)
-	{	
+	{
 		if (issomething)
 			printbar('-');
 		myprintf("CRC-32 %21s ",migliaia(t_crcsize));
@@ -66914,8 +65306,8 @@ int Jidac::extractqueue2(int i_chunk,int i_chunksize)
 		myprintf("\n");
 		myprintf("RAMDISK releasing  %21s bytes ",migliaia(g_ramdisksize));
 	}
-	for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p) 
-		if (std::binary_search(chunkfiles.begin(), chunkfiles.end(), p->first)) 
+	for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p)
+		if (std::binary_search(chunkfiles.begin(), chunkfiles.end(), p->first))
 			if (p->second.pramfile!=NULL)
 				(*p->second.pramfile).reset();
 	if (flagverbose)
@@ -66935,7 +65327,7 @@ int Jidac::removeemptydirs(string i_folder,bool i_kill)
 		if (iswindowspath(i_folder))
 			if (!islongpath(i_folder))
 				i_folder="//?/"+i_folder;
-#endif	
+#endif
 	if (isdirectory(i_folder))
 		i_folder=i_folder.substr(0,i_folder.size()-1);
 	DTMap mydestinationdir;
@@ -66949,7 +65341,7 @@ int Jidac::removeemptydirs(string i_folder,bool i_kill)
 	printbar(' ',false);
 	myprintf("\r");
 	vector<string> scannedfiles;
-	for (DTMap::iterator p=mydestinationdir.begin(); p!=mydestinationdir.end(); ++p) 
+	for (DTMap::iterator p=mydestinationdir.begin(); p!=mydestinationdir.end(); ++p)
 		scannedfiles.push_back(p->first);
 	if (flagverbose)
 		myprintf("Scanned files  (remove empty dir) %s\n",migliaia(scannedfiles.size()));
@@ -67010,7 +65402,7 @@ int Jidac::removeemptydirs(string i_folder,bool i_kill)
 		myprintf(">>\n");
 		myprintf("45347: dry run, exiting (no -kill)\n");
 		return 0;
-	}	
+	}
 	if (flagverbose)
 		myprintf("45291: Empty folders %12s ",migliaia(candidati));
 	int lastrun=tobedeleted.size();
@@ -67155,7 +65547,7 @@ int Jidac::windowsc()
 		flagforcewindows=true;
 		all=false;
 	}
-	else	
+	else
 	{
 		if (flagfrugal)
 		{
@@ -67204,13 +65596,13 @@ int Jidac::hashselect()
 	vector<string> myfiles;
 	vector<string> myhashestype;
 	vector<string> mydirs;
-	int64_t total_size				=0;  
+	int64_t total_size				=0;
 	///	decode franzblock for every edt (file to be added) that match a dt (already archived)
 	///	short version: fill dt (archived) hexhash and hashtype
 	///	prepare two arrays: myfiles and myhashestype (to be splitted against thread)
-	for (DTMap::iterator p=edt.begin(); p!=edt.end(); ++p) 
-		if (p->second.date) 
-			if((p->first!="") && (!isdirectory(p->first)) && (!isads(p->first))) 
+	for (DTMap::iterator p=edt.begin(); p!=edt.end(); ++p)
+		if (p->second.date)
+			if((p->first!="") && (!isdirectory(p->first)) && (!isads(p->first)))
 			{
 				string filename=rename(p->first);
 				DTMap::iterator a=dt.find(filename);
@@ -67221,8 +65613,8 @@ int Jidac::hashselect()
 				int64_t myaccesstime=0;
 				bool	myisordered=false;
 				int		myversion=0;
-				franz_posix* myposix=NULL;	
-			
+				franz_posix* myposix=NULL;
+
 				if (a!=dt.end())
 				{
 					decode_franz_block(isdirectory(filename),a->second.franz_block,
@@ -67285,21 +65677,21 @@ int Jidac::hashselect()
 	pthread_attr_init(&attr);
 	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
 	myprintf("Paranoid select: %8s files %21s (%s in %d threads)\n",migliaia(myfiles.size()),migliaia2(total_size),tohuman(total_size),mythreads);
-	for(unsigned int i=0;i<mythreads;i++ ) 
+	for(unsigned int i=0;i<mythreads;i++ )
 	{
 		vettoreparametrihash[i].timestart=mtime();
 		rc = pthread_create(&threads[i], &attr, scansionahash, (void*)&vettoreparametrihash[i]);
-		if (rc) 
+		if (rc)
 		{
 			myprintf("41951: Error creating thread\n");
 			exit(-1);
 		}
 	}
 	pthread_attr_destroy(&attr);
-	for(unsigned int i=0;i<mythreads;i++ ) 
+	for(unsigned int i=0;i<mythreads;i++ )
 	{
 		rc = pthread_join(threads[i], &status);
-		if (rc) 
+		if (rc)
 		{
 			error("Unable to join\n");
 			exit(-1);
@@ -67307,7 +65699,7 @@ int Jidac::hashselect()
 	///		myprintf("Thread completed %d status %d\n",i,status);
 	}
 	///	for every output of the hashing threads, with a nonempty hash,
-	///	check if a dt (already archive) exists, with same name 
+	///	check if a dt (already archive) exists, with same name
 	/// if different hash, mark the forceadd flag. Please note: so size check, to save a .find
 	/// (makes debug not so hard)
 	unsigned int forzati=0;
@@ -67388,7 +65780,7 @@ string	dnsresolve(string i_address)
 		inetAddr=inet_ntoa(((sockaddr_in *)res->ai_addr)->sin_addr);
 		string 	dummy=inetAddr;
 		return dummy;
-	}	
+	}
 	return "";
 }
 ///	future expansion: multiple interfaces enumeration
@@ -67407,7 +65799,7 @@ int addressing()
 	g_server=dnsresolve(g_server);
 	if (old_server!=g_server)
 		myprintf("45816: DNS resolved %s => IP %s\n",old_server.c_str(),g_server.c_str());
-	
+
 	result=getaddrinfo(g_server.c_str(),g_port.c_str(),&hints,&g_addr);
 
 	if(result!=0)
@@ -67422,25 +65814,25 @@ int addressing()
 	for(temp=g_addr;temp!=NULL;temp=temp->ai_next)
 	{
 		myprintf("[%02d] ",++i);
-		
+
 		if (temp->ai_family==AF_INET)
 			myprintf("AF_INET (v4) ");
-		
+
 		if (temp->ai_family==AF_INET6)
 			myprintf("AF_INET6 (v6) ");
-			
+
 		if (temp->ai_protocol==IPPROTO_TCP)
 			myprintf(" TCP ");
 
 		if (temp->ai_protocol==IPPROTO_UDP)
 			myprintf(" UDP ");
-			
+
 		if (temp->ai_socktype==SOCK_STREAM)
 			myprintf(" socket stream ");
-		
+
 		if (temp->ai_socktype==SOCK_DGRAM)
 			myprintf(" socket datagram ");
-		
+
 		myprintf("\n");
 	}
 	return 0;
@@ -67476,7 +65868,7 @@ int Jidac::sendtocloudpaq(const int64_t i_extimated,const int i_version)
 		}
 		else
 			myprintf("46162: Socket OK, try to connect...\n");
-		
+
 		if (connect(g_socket,g_addr->ai_addr,g_addr->ai_addrlen)!= 0)
 		{
 			myprintf("46199: Failed connect : %d %s\n" ,WSAGetLastError(),wtou(gai_strerror(WSAGetLastError())).c_str());
@@ -67487,7 +65879,7 @@ int Jidac::sendtocloudpaq(const int64_t i_extimated,const int i_version)
 			myprintf("46206: Connected to server (this is good)\n");
 	///	freeaddrinfo ( g_addr );
 	}
-	
+
 	/// just the "hello" message (the server version)
 	int bytesreceived;
 	char buff[CLOUDBUFFSIZE];
@@ -67501,7 +65893,7 @@ int Jidac::sendtocloudpaq(const int64_t i_extimated,const int i_version)
 		buff[bytesreceived]=0;
 		myprintf("46024: Message from server %d bytes |%s|\n",bytesreceived,buff);
 	}
-		
+
 	Twofish_initialise();
 	std::string		lachiave=g_cloudkey;
 	string			filename=extractfilename(g_indexname);
@@ -67512,13 +65904,13 @@ int Jidac::sendtocloudpaq(const int64_t i_extimated,const int i_version)
 	myhash.add(filename.c_str(),filename.size());
 	g_enter=myhash.hash();
 	myprintf("46221: Accepted code %08X\n",g_enter);
-	
+
 	maketwofishkey(lachiave,&g_mykey);
-	
+
 	franzpacket	mypacket;
 	mypacket.setpacket(g_enter,FRANZOPACKET_TYPECOMMAND_NEW,i_extimated,i_version,1003,"hello I am zpaqfranz");
 	mypacket.sendtosocket();
-	
+
 	myprintf("46237: Closing socket (after first packet sended)\n");
 	closesocket (g_socket);
 ///	rude check for connection stability over VPN or whatever: close and reopen
@@ -67570,8 +65962,8 @@ bool Jidac::getjollylist(string i_fullarchive,DTMap* o_thedt)
 		d.data			=0;
 		return true;
 	}
-	
-	
+
+
 	string estensione=prendiestensione(i_fullarchive);
 	myprintf("66136: Searching for jolly archive(s) in <<%s>> for extension <<%s>>\n",i_fullarchive.c_str(),estensione.c_str());
 
@@ -67579,7 +65971,7 @@ bool Jidac::getjollylist(string i_fullarchive,DTMap* o_thedt)
 	g_filescanned	=0;
 	g_worked		=0;
 	flagskipzfs		=true;  // strip down zfs
-	
+
 #ifdef unix
 	if (flagdebug)
 		myprintf("66145: running on NIX\n");
@@ -67592,7 +65984,7 @@ bool Jidac::getjollylist(string i_fullarchive,DTMap* o_thedt)
 		string filename=candidate[i];
 		if (flagdebug)
 			myprintf("66154: filename %08d %s\n",i,filename.c_str());
-		
+
 		if (jollymatch(i_fullarchive.c_str(),filename.c_str()))
 		{
 			if (flagdebug)
@@ -67632,7 +66024,7 @@ bool Jidac::getjollylist(string i_fullarchive,DTMap* o_thedt)
 bool	readfiletoarray(string i_filename,vector<string>& o_lines)
 {
 	o_lines.clear();
-	
+
 	if (!fileexists(i_filename.c_str()))
 	{
 		myprintf("85073: cannot find ");
@@ -67664,7 +66056,7 @@ bool	readfiletoarray(string i_filename,vector<string>& o_lines)
 }
 
 
-		
+
 
 
 typedef std::pair<string,string>  mycoppia;
@@ -67677,7 +66069,7 @@ int Jidac::zfsproxbackup()
 	myprintf("\n\nzfsproxmox-backup VERY EXPERIMENTAL!\n");
 	myprintf("Works only on %s VM disk(s)\n"	,storepath.c_str());
 	myprintf("and        on %s config(s)\n\n"	,theconf.c_str());
-	
+
 	if  (all)
 	{
 		if (files.size()!=0)
@@ -67685,7 +66077,7 @@ int Jidac::zfsproxbackup()
 			myprintf("38024: with -all cannot select VMids\n");
 			return 1;
 		}
-		
+
 		vector<string> candidate;
 		listfiles(theconf,"conf",false,&candidate);
 		files.clear();
@@ -67714,7 +66106,7 @@ int Jidac::zfsproxbackup()
 		}
 		for (unsigned int i=0;i<files.size();i++)
 			myprintf("63593: From -all getting %s\n",files[i].c_str());
-		
+
 		if (files.size()==0)
 		{
 			myprintf("38048: no .conf files founded in %s (not discarded by -not)\n",theconf.c_str());
@@ -67727,17 +66119,17 @@ int Jidac::zfsproxbackup()
 				myprintf("38052: Config file %03d %s\n",i,files[i].c_str());
 		}
 	}
-	else	
+	else
 	{
 		if (files.size()==0)
 		{
 			myprintf("38018: please use vmid(s) (ex. 200 300 400) or -all\n");
 			return 1;
-		}		
+		}
 	}
 
 	notfiles.clear();
-		
+
 	vector<string> conffiles;
 	for (unsigned int i=0;i<files.size();i++)
 	{
@@ -67750,12 +66142,12 @@ int Jidac::zfsproxbackup()
 			myprintf("38020: Abort because cannot find conf file %s, use -force to bypass\n",temp.c_str());
 			return 1;
 		}
-#endif	
+#endif
 	}
 
 	string thepool	="";
 	string listme	="zfs list";
-	
+
 #ifdef _WIN32
 /// debug
 	FILE *meminfo = fopen("c:/zpaqfranz/zfslist.txt", "rb");
@@ -67776,7 +66168,7 @@ int Jidac::zfsproxbackup()
 	vector<string> arraylist;
 	listresult=x_one_vector(listme,"Searching something",arraylist);
 	vector<mycoppia> name_mountpoint;
-	
+
 	for (unsigned int i=0;i<arraylist.size();i++)
 	{
 		string 	name		="";
@@ -67814,11 +66206,11 @@ int Jidac::zfsproxbackup()
 		else
 		name_mountpoint.push_back(std::pair<string,string>(name,mountpoint));
 	}
-	
+
 	string	mountpoint	="";
 	for (unsigned int i=0;i<name_mountpoint.size();i++)
 		myprintf("66507: <<%30s>> <<%30s>>\n",name_mountpoint[i].first.c_str(),name_mountpoint[i].second.c_str());
-	
+
 	/// first try
 	for (unsigned int i=0;i<name_mountpoint.size();i++)
 		if (name_mountpoint[i].second==storepath)
@@ -67861,22 +66253,22 @@ int Jidac::zfsproxbackup()
 	string themark	="francoproxmox";
 	if (snapmark!="")
 		themark=snapmark;
-	
+
 	int	howmanyat		=0;
 	for (unsigned int i=0;i<thepool.size();i++)
 		if (thepool[i]=='@')
 			howmanyat++;
-			
+
 	string purgedpool=thepool;
 	for (unsigned int i=0;i<purgedpool.size();i++)
 		if (purgedpool[i]=='/')
 			purgedpool[i]='_';
-	
+
 	myprintf("53549: Archive        %s\n",archive.c_str());
 	myprintf("53550: Pool           %s\n",thepool.c_str());
 	myprintf("53550: Purged Pool    %s\n",purgedpool.c_str());
 	myprintf("53552: Mark           %s\n",themark.c_str());
-	
+
 	if (howmanyat>0)
 	{
 		myprintf("52984: A pool-dataset |%s| cannot have @\n",thepool.c_str());
@@ -67896,10 +66288,10 @@ int Jidac::zfsproxbackup()
 			return 2;
 		}
 	}
-	
+
 	string 	destroy_result	=x_one("zfs destroy "	+fullexpectedsnapshot,"Destroy snapshot (if any)");
 	string 	runresult		=x_one("zfs snapshot "	+fullexpectedsnapshot,"Taking snapshot");
-	
+
 	if (mypos("cannot create",runresult)!=-1)
 	{
 		myprintf("38152: GURU, something seems wrong, %s\n",runresult.c_str());
@@ -67920,21 +66312,21 @@ int Jidac::zfsproxbackup()
 	files.clear();
 	for (unsigned int i=0;i<conffiles.size();i++)
 		files.push_back(conffiles[i]);
-	
+
 	for (unsigned int i=0;i<thedrives.size();i++)
 		files.push_back(thedrives[i]);
-	
+
 	command='a'; /// hidden parameter in read_archive with reflex on issel
-	
+
 	int risultato=add();
 
 	if (flagkill)
 		x_one("zfs destroy "+fullexpectedsnapshot,"Destroy snapshot (if any)");
 
 	return risultato;
-}	
+}
 
-				
+
 int Jidac::zfsproxrestore()
 {
 	all=false; // if no files => always all
@@ -67944,7 +66336,7 @@ int Jidac::zfsproxrestore()
 	myprintf("\n\nzfsproxmox-restore VERY EXPERIMENTAL!\n");
 	myprintf("Works only on %s VM disk(s)\n"		,storepath.c_str());
 	myprintf("and        on %s config(s)\n\n\n"		,theconf.c_str());
-	
+
 	if (onlyfiles.size()!=0)
 	{
 		myprintf("63704: sorry but you cannot use -only here\n");
@@ -67971,7 +66363,7 @@ int Jidac::zfsproxrestore()
 		{
 			myprintf("63719: store kaputt (-kill to bypass) <<%s>>\n",storepath.c_str());
 			return 1;
-			
+
 		}
 	}
 	onlyfiles.clear();
@@ -68104,7 +66496,7 @@ int Jidac::oneonone()
 		myprintf("\n");
 		return 2;
 	}
-	
+
 	if (files_edt[1].size()==0)
 	{
 		myprintf("63872: Cannot find files inside source destination folder ");
@@ -68112,9 +66504,9 @@ int Jidac::oneonone()
 		myprintf("\n");
 		return 2;
 	}
-	
+
 	vector<std::pair<uint64_t,string> > bysize;
-	for (DTMap::iterator p=files_edt[1].begin(); p!=files_edt[1].end(); ++p) 
+	for (DTMap::iterator p=files_edt[1].begin(); p!=files_edt[1].end(); ++p)
 		if (!isdirectory(p->first))
 		{
 			/*
@@ -68139,14 +66531,14 @@ int Jidac::oneonone()
 	vector<int64_t> tobehasheddest_size;
 
 	int64_t	totalsource	=0;
-	for (DTMap::iterator p=files_edt[0].begin(); p!=files_edt[0].end(); ++p) 
+	for (DTMap::iterator p=files_edt[0].begin(); p!=files_edt[0].end(); ++p)
 		if (!isdirectory(p->first))
 		{
 			bool flagaggiungi=true;
 /*
 			if (p->second.size==0)
 				flagaggiungi=flagzero;
-	*/					
+	*/
 			if (flagaggiungi)
 			{
 				vector<std::pair<uint64_t,string> >::iterator basso 	= std::lower_bound(bysize.begin(), bysize.end(), p->second.size,mycompareuint64string());
@@ -68155,7 +66547,7 @@ int Jidac::oneonone()
 					tobehashedsource.push_back(p->first);
 					tobehashedsource_size.push_back(p->second.size);
 					totalsource+=p->second.size;
-					
+
 					if (flagdebug)
 						myprintf("63868: source2ha %21s %s\n",migliaia(p->second.size),p->first.c_str());
 					vector<std::pair<uint64_t,string> >::iterator alto 	= std::upper_bound(bysize.begin(), bysize.end(), p->second.size,mycompareuint64string());
@@ -68165,8 +66557,8 @@ int Jidac::oneonone()
 							myprintf("   ADD2DEST %08d %s\n",a->first,a->second.c_str());
 						tobehasheddest.push_back(a->second);
 						tobehasheddest_size.push_back(a->first);
-					}					
-					
+					}
+
 				}
 			}
 		}
@@ -68179,12 +66571,12 @@ int Jidac::oneonone()
 		myprintf("63882: Source card %08d\n",tobehashedsource.size());
 		for (unsigned int i=0;i<tobehashedsource.size();i++)
 			myprintf("63886: To be hashed source %08d size %21s %s\n",i,migliaia(tobehashedsource_size[i]),tobehashedsource[i].c_str());
-	
+
 		myprintf("63887: Dest   card %08d\n",tobehasheddest.size());
 		for (unsigned int i=0;i<tobehasheddest.size();i++)
 			myprintf("63889: To be hashed dest   %08d size %21s %s\n",i,migliaia(tobehasheddest_size[i]),tobehasheddest[i].c_str());
 	}
-	
+
 	vector<std::pair<string,string> > tobehashedsource_hashname;
 	franzparallelhashfiles(g_thechosenhash_str,totalsource,tobehashedsource,tobehashedsource_hashname);
 	if (flagdebug)
@@ -68199,7 +66591,7 @@ int Jidac::oneonone()
 	tobehasheddest.erase( unique( tobehasheddest.begin(), tobehasheddest.end() ), tobehasheddest.end() );
 	if (flagdebug)
 		myprintf("63907: Deduplication                post %9s\n",migliaia(tobehasheddest.size()));
-	
+
 	vector<std::pair<string,string> > tobehasheddest_hashname;
 	franzparallelhashfiles(g_thechosenhash_str,totalsource,tobehasheddest,tobehasheddest_hashname);
 	if (flagdebug)
@@ -68209,7 +66601,7 @@ int Jidac::oneonone()
 	if (flagdebug)
 	{
 		myprintf("63916: dedup tobehashed_dest hashname post ----------------- %s\n",migliaia(tobehasheddest_hashname.size()));
-	
+
 		for (unsigned int i=0;i<tobehasheddest_hashname.size();i++)
 			myprintf("63920: DEST   %08d %s %s\n",i,tobehasheddest_hashname[i].first.c_str(),tobehasheddest_hashname[i].second.c_str());
 		printbar('-');
@@ -68226,13 +66618,13 @@ int Jidac::oneonone()
 	int lastpercentuale =0;
 	printbar(' ');
 	myprintf("\n");
-	
+
 	vector<uint64_t> temp;
 	for (unsigned int i=0;i<tobehashedsource_hashname.size();i++)
 	{
 		string cerco=tobehashedsource_hashname[i].first;
 		vector<std::pair<string,string> >::iterator basso 	= std::lower_bound(tobehasheddest_hashname.begin(), tobehasheddest_hashname.end(), cerco,mycomparestringstring());
-		if ((basso!=tobehasheddest_hashname.end())) 
+		if ((basso!=tobehasheddest_hashname.end()))
 		{
 			vector<std::pair<string,string> >::iterator alto 		= std::upper_bound(tobehasheddest_hashname.begin(), tobehasheddest_hashname.end(), cerco,mycomparestringstring());
 			string leftname=extractfilename(tobehashedsource_hashname[i].second);
@@ -68245,7 +66637,7 @@ int Jidac::oneonone()
 						flaguccidi=false;
 				if (flaguccidi)
 					temp.push_back(hashastringa(a->second.c_str()));
-			}				
+			}
 		}
 	}
 	if (flagdebug)
@@ -68255,15 +66647,15 @@ int Jidac::oneonone()
 	tobedeleted=temp.size();
 	if (flagdebug)
 		myprintf("64023: Temp size post %12s\n",migliaia(temp.size()));
-	
+
 	temp.clear();
-	
+
 	int64_t startdelete=mtime();
 	for (unsigned int i=0;i<tobehashedsource_hashname.size();i++)
 	{
 		string cerco=tobehashedsource_hashname[i].first;
 		vector<std::pair<string,string> >::iterator basso 	= std::lower_bound(tobehasheddest_hashname.begin(), tobehasheddest_hashname.end(), cerco,mycomparestringstring());
-		if ((basso!=tobehasheddest_hashname.end())) 
+		if ((basso!=tobehasheddest_hashname.end()))
 		{
 			vector<std::pair<string,string> >::iterator alto 		= std::upper_bound(tobehasheddest_hashname.begin(), tobehasheddest_hashname.end(), cerco,mycomparestringstring());
 			if (flagdebug)
@@ -68283,7 +66675,7 @@ int Jidac::oneonone()
 					if (!flagchecksum)
 						flaguccidi=false;
 				}
-				
+
 				/*
 				if (flaguccidi)
 					tobedeleted++;
@@ -68313,7 +66705,7 @@ int Jidac::oneonone()
 							temp.push_back(hashastringa(a->second.c_str()));
 							byteserased+=filesize; /// if file does not exists, filesize will be 0
 							if (flagverbose)
-								myprintf("        63941: DELETED   %08d %s (%s)\n",a-tobehasheddest_hashname.begin(),a->first.c_str(),a->second.c_str());	
+								myprintf("        63941: DELETED   %08d %s (%s)\n",a-tobehasheddest_hashname.begin(),a->first.c_str(),a->second.c_str());
 						}
 					}
 					else
@@ -68325,10 +66717,10 @@ int Jidac::oneonone()
 						if (flaguccidi)
 						{
 							byteserased+=prendidimensionefile(a->second.c_str());
-							myprintf("        63944: TO BE ERASED   %08d %s (%s)\n",a-tobehasheddest_hashname.begin(),a->first.c_str(),a->second.c_str());	
+							myprintf("        63944: TO BE ERASED   %08d %s (%s)\n",a-tobehasheddest_hashname.begin(),a->first.c_str(),a->second.c_str());
 						}
 				}
-			}					
+			}
 		}
 	}
 	std::sort(temp.begin(),temp.end());
@@ -68349,12 +66741,12 @@ int Jidac::oneonone()
 	}
 	else
 	myprintf("63995: To be deleted         %9s (=hash, because -checksum)\n",migliaia(tobedeleted));
-		
+
 	if (!flagkill)
 		myprintf("63996: DRY RUN because no -kill switch entered\n");
 	else
 	myprintf("63996: Deleted               %9s\n",migliaia(deleted));
-		
+
 	if (flagkill)
 	{
 		if (errors>0)
@@ -68364,7 +66756,7 @@ int Jidac::oneonone()
 	}
 	if ((byteserased>0) && (!flagkill))
 	myprintf("63999: Space to be freed %s (%s)\n",migliaia(byteserased),tohuman(byteserased));
-	
+
 	return errors;
 }
 
@@ -68401,7 +66793,7 @@ int64_t Jidac::franzparallelhashfiles(const string i_hashtype,int64_t i_totalsiz
 				myprintf("64012: Thread [%02d] files %s\n",i,migliaia(vettoreparametrihash[i].filestobehashed.size()));
 			totfile+=+vettoreparametrihash[i].filestobehashed.size();
 		}
-		
+
 		int rc;
 		pthread_t* threads = new pthread_t[mythreads];
 		pthread_attr_t attr;
@@ -68410,21 +66802,21 @@ int64_t Jidac::franzparallelhashfiles(const string i_hashtype,int64_t i_totalsiz
 		pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
 		if (!flagnoeta)
 			myprintf("64022: Files %14s -> %03d threads -> %14s to get\n",migliaia(i_thefiles.size()),mythreads,migliaia2(totfile));
-		for(unsigned int i=0; i<mythreads; i++ ) 
+		for(unsigned int i=0; i<mythreads; i++ )
 		{
 			vettoreparametrihash[i].timestart=mtime();
 			rc = pthread_create(&threads[i], &attr, scansionahash, (void*)&vettoreparametrihash[i]);
-			if (rc) 
+			if (rc)
 			{
 				myprintf("64031: Error creating thread\n");
 				exit(-1);
 			}
 		}
 		pthread_attr_destroy(&attr);
-		for(unsigned int i=0; i <mythreads; i++ ) 
+		for(unsigned int i=0; i <mythreads; i++ )
 		{
 			rc = pthread_join(threads[i], &status);
-			if (rc) 
+			if (rc)
 			{
 				error("64041: Unable to join\n");
 				exit(-1);
@@ -68440,13 +66832,16 @@ int64_t Jidac::franzparallelhashfiles(const string i_hashtype,int64_t i_totalsiz
 		franz_do_hash dummy(i_hashtype);
 		for (unsigned i=0; i<i_thefiles.size(); ++i)
 		{
+			if (flagdebug)
+				myprintf("68616: filehash on %s\n",i_thefiles[i].c_str());
+
 			string gettedhash=dummy.filehash(i_thefiles[i],false,
 			startscan,i_totalsize);
 			o_hashname.push_back(std::pair<string,string>(gettedhash,i_thefiles[i]));
 		}
 	}
 	return mtime()-startscan;
-}	
+}
 
 
 
@@ -68476,16 +66871,16 @@ JJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJ
 /*
 	This is the very first stage of a textual-GUI based WYSISWYG (!) extractor
 	For Windows, in future - maybe - *nix
-	
+
 	This is a reworked PDCursesMod
-	It is not so easy to interface 30-year-old C code with C++, 
-	the source would need a lot of refactoring, 
-	but I don't think I will do that. 
-	I have even implemented voluntary memory leaks (!) 
-	to avoid the warnings of modern compilers 
-	about the 'old' style of C code. 
+	It is not so easy to interface 30-year-old C code with C++,
+	the source would need a lot of refactoring,
+	but I don't think I will do that.
+	I have even implemented voluntary memory leaks (!)
+	to avoid the warnings of modern compilers
+	about the 'old' style of C code.
 We are talking about a few hundred bytes
-	
+
 */
 
 #ifdef GUI
@@ -70624,7 +69019,7 @@ extern bool pdc_conemu, pdc_wt, pdc_ansi;
 extern void PDC_blink_text(void);
 
 
-	 
+
 /*man-start**************************************************************
 
 inch
@@ -72365,7 +70760,7 @@ int wmove(WINDOW *win, int y, int x)
 
 
 
-	 
+
 /*man-start**************************************************************
 
 touch
@@ -72594,7 +70989,7 @@ int touchoverlap(const WINDOW *win1, WINDOW *win2)
 
 
 
-	 
+
 /*man-start**************************************************************
 
 overlay
@@ -82848,7 +81243,7 @@ static volatile int _beep_count = 0;
 static void beep_thread(LPVOID lpParameter)
 {
     INTENTIONALLY_UNUSED_PARAMETER( lpParameter);
-/* 
+/*
  while( _beep_count)
     {
         if (!PlaySound((LPCTSTR) SND_ALIAS_SYSTEMDEFAULT, NULL, SND_ALIAS_ID))
@@ -84212,7 +82607,7 @@ int flash(void)
 
 typedef void (*FUNC)(void);
 
-typedef struct 
+typedef struct
 {
     char *name; /* item label */
     FUNC  func; /* (pointer to) function */
@@ -84514,7 +82909,7 @@ static void mainmenu(menu *mp)
     menudim(mp, &nitems, &barlen);
     repaintmainmenu(barlen, mp);
 
-	if (pjidac!=NULL)	
+	if (pjidac!=NULL)
 		if ((*pjidac).archive!="")
 			if (fileexists((*pjidac).archive.c_str()))
 				(*pjidac).guilist();
@@ -84902,7 +83297,7 @@ int weditstr(WINDOW *win, char *buf, int field)
 		c = wgetch(wedit);
 		if (c==PADENTER)
 			c=10;
-		
+
         switch (c)
         {
         case ERR:
@@ -85088,10 +83483,10 @@ string getstring(string i_description, int i_maxlen,string i_default)
 	memset(buf,0,i_maxlen+10);
 	///if (i_default!="")
 	///snprintf(buf,sizeof(buf),"%s",i_default.c_str());
-	
+
 	mmax=i_description.size();
-	
-    nlines = 1 + 2; 
+
+    nlines = 1 + 2;
 	ncols = mmax + i_maxlen + 4;
     getyx(wbody, oldy, oldx);
     getmaxyx(wbody, maxy, maxx);
@@ -85161,7 +83556,7 @@ void gui_browsecommands()
 	while (c!=27)
 		c=wgetch(dialogo);
 	delwin(dialogo);
-    refresh(); 
+    refresh();
 }
 
 
@@ -85208,7 +83603,7 @@ void gui_help()
 	while (c!=27)
 		c=wgetch(dialogo);
 	delwin(dialogo);
-    refresh(); 
+    refresh();
 }
 void gui_about()
 {
@@ -85223,7 +83618,7 @@ void gui_about()
 	while (c!=27)
 		c=wgetch(dialogo);
 	delwin(dialogo);
-    refresh(); 
+    refresh();
 }
 
 ///	The menus, old-fashion way
@@ -85267,9 +83662,9 @@ void addmenu(menu i_menu[],int i_index,string i_name,FUNC i_func,string i_desc)
 		i_menu[i_index].name=NULL;
 	else
 	i_menu[i_index].name=memoryleak(i_name);
-	
+
 	i_menu[i_index].func=i_func;
-	
+
 	if (i_desc=="")
 		i_menu[i_index].desc=NULL;
 	else
@@ -85282,7 +83677,7 @@ int Jidac::gogui()
 	SetConsoleCP		(850);
 	SetConsoleOutputCP	(850);
     setlocale(LC_ALL, "");
-	
+
 	addmenu(MainMenu2,0,"File",				gui_browsezpaq,		"Browse zpaq archive");
 	addmenu(MainMenu2,1,"Help",				gui_help_menu,		"Houston, help me!");
 	addmenu(MainMenu2,2,"",(FUNC)0,"");
@@ -85295,7 +83690,7 @@ int Jidac::gogui()
 	addmenu(SubMenu2,0,"Help",				gui_help,			"Help");
 	addmenu(SubMenu2,1,"About",				gui_about,			"About");
 	addmenu(SubMenu2,2,"",(FUNC)0,"");
-	
+
 	startmenu(MainMenu2, memoryleak("zpaqfranz with (kind of) GUI"));
 	endwin();
     return 0;
@@ -85310,7 +83705,7 @@ int Jidac::get_filelist(callback_function i_advance,vector<DTMap::iterator>* o_f
 	o_sizeall			=0;
 	o_dhsize			=0;
 	o_dcsize			=0;
-	
+
 	if (archive=="")
 		return -1;
 	if (o_filelist==NULL)
@@ -85321,8 +83716,8 @@ int Jidac::get_filelist(callback_function i_advance,vector<DTMap::iterator>* o_f
 	}
 	if (!fileexists(archive.c_str()))
 		return -1;
-	
-	
+
+
 	int64_t csize=0;
 	getpasswordifempty();
 	if (flagcomment)
@@ -85357,10 +83752,10 @@ int Jidac::get_filelist(callback_function i_advance,vector<DTMap::iterator>* o_f
 	g_bytescanned	=0;
 	g_filescanned	=0;
 	g_worked		=0;
-	
-	
-	for (DTMap::iterator a=dt.begin(); a!=dt.end(); ++a) 
-		if (a->second.data!='-' && (all || a->second.date)) 
+
+
+	for (DTMap::iterator a=dt.begin(); a!=dt.end(); ++a)
+		if (a->second.data!='-' && (all || a->second.date))
 		{
 			a->second.data='-';
 			(*o_filelist).push_back(a);
@@ -85369,14 +83764,14 @@ int Jidac::get_filelist(callback_function i_advance,vector<DTMap::iterator>* o_f
 		///sort((*o_filelist).begin(), (*o_filelist).end(), compareorderby);
 	int64_t usize=0;
 	map<int, string> mappacommenti;
-	for (unsigned i=0;i<(*o_filelist).size();i++) 
+	for (unsigned i=0;i<(*o_filelist).size();i++)
 	{
 		DTMap::iterator p=(*o_filelist)[i];
 		if (isads(p->first))
 		{
 			string fakefile=p->first;
 			myreplace(fakefile,":$DATA","");
-			size_t found = fakefile.find("VCOMMENT "); 
+			size_t found = fakefile.find("VCOMMENT ");
 			if (found != string::npos)
 			{
     			string numeroversione=fakefile.substr(found+9,8);
@@ -85390,31 +83785,31 @@ int Jidac::get_filelist(callback_function i_advance,vector<DTMap::iterator>* o_f
 	int64_t ddsize=0, allsize=0;
 	unsigned nfiles=0, nfrags=0, unknown_frags=0, refs=0;
 	vector<bool> ref(ht.size());
-	for (DTMap::const_iterator p=dt.begin(); p!=dt.end(); ++p) 
-		if (p->second.date) 
+	for (DTMap::const_iterator p=dt.begin(); p!=dt.end(); ++p)
+		if (p->second.date)
 		{
 			++nfiles;
-			for (unsigned j=0; j<p->second.ptr.size(); ++j) 
+			for (unsigned j=0; j<p->second.ptr.size(); ++j)
 			{
 				unsigned k=p->second.ptr[j];
-				if (k>0 && k<ht.size()) 
+				if (k>0 && k<ht.size())
 				{
 					++refs;
 					if (ht[k].usize>=0) allsize+=ht[k].usize;
-					if (!ref[k]) 
+					if (!ref[k])
 					{
 						ref[k]=true;
 						++nfrags;
-						if (ht[k].usize>=0) 
+						if (ht[k].usize>=0)
 							ddsize+=ht[k].usize;
-						else 
+						else
 							++unknown_frags;
 					}
 				}
 			}
 		}
-	  
-  
+
+
 	o_sizeuncompressed	=usize;
 	o_sizededuplicated	=ddsize;
 	o_sizecompressed	=csize+dhsize-dcsize;
@@ -85423,7 +83818,7 @@ int Jidac::get_filelist(callback_function i_advance,vector<DTMap::iterator>* o_f
 	o_dcsize			=dcsize;
 
 	return (*o_filelist).size();
-}	
+}
 
 void avanzamento_read_archive(char* i_text)
 {
@@ -85448,7 +83843,7 @@ string i_filtro,string i_ordine,string i_crc32,string i_hash)
 		seppuku();
 		return;
 	}
-	
+
 	(*o_filtered).clear();
 	if (g_datefrom>g_dateto)
 	{
@@ -85465,66 +83860,66 @@ string i_filtro,string i_ordine,string i_crc32,string i_hash)
 			myfilename=p->second.outputname;
 		else
 			myfilename=p->first;
-		
+
 		bool flagshow=true;
-		
+
 		if (flagshow)
 			if (i_crc32!="")
 				if (p->second.hexcrc32!=i_crc32)
 					flagshow=false;
-		
+
 		if (flagshow)
 			if (i_hash!="")
 				if (p->second.hexhash!=i_hash)
 					flagshow=false;
-			
+
 		if (flagshow)
 			if (isads(p->first))
 				if (strstr(p->first.c_str(),"VCOMMENT "))
 					flagshow=false;
-		
+
 		if (flagshow)
 			if (searchfrom!="")
 				flagshow=stristr(p->first.c_str(),searchfrom.c_str());
-			
+
 		if (flagshow)
 			if (flagchecksum)
 				if (isdirectory(p->first))
 					flagshow=false;
-				
+
 		if (flagshow)
 			if ((minsize>0) || (maxsize>0))
 				if (isdirectory(p->first))
 					flagshow=false;
 		if (flagshow)
 			if (maxsize>0)
-				if (maxsize<(uint64_t)p->second.size) 
+				if (maxsize<(uint64_t)p->second.size)
 					flagshow=false;
-		
+
 		if (flagshow)
 			if (minsize>0)
 				if (minsize>(uint64_t)p->second.size)
 					flagshow=false;
-		
+
 		if (flagshow)
 			if (g_datefrom>0)
 				if ((p->second.date)<=g_datefrom)
 					flagshow=false;
-		
+
 		if (flagshow)
 			if (g_dateto>0)
 				if ((p->second.date)>=g_dateto)
 					flagshow=false;
-		
+
 		if (flagshow)
-			if (strchr(nottype.c_str(), p->second.data)) 
+			if (strchr(nottype.c_str(), p->second.data))
 				flagshow=false;
-		
+
 		if (flagshow)
 			if (i_filtro!="")
 				if (mypos(i_filtro,myfilename)==-1)
 					flagshow=false;
-		
+
 		if (flagshow)
 			(*o_filtered).push_back(p);
 	}
@@ -85539,13 +83934,13 @@ string i_filtro,string i_ordine,string i_crc32,string i_hash)
 	/// g_datefrom, g_dateto
 }
 
-int Jidac::guilist() 
+int Jidac::guilist()
 {
 	static vector<DTMap::iterator> globalfilelist;
 	string	filtronome="";//jidac.gui_filtername;
 	if (pjidac!=NULL)
 		filtronome=(*pjidac).gui_filtername;
-		
+
 	vector<DTMap::iterator> filelist;
 
 	WINDOW *wbody = bodywin();
@@ -85568,8 +83963,8 @@ int Jidac::guilist()
 		int64_t dcsize=0;
 		get_filelist(&avanzamento_read_archive,&globalfilelist,sizeuncompressed,sizededuplicated,sizecompressed,sizeall,dhsize,dcsize);
 		iszpaqloaded	=true;
-	
-		
+
+
 		for (unsigned int i=0;i<globalfilelist.size();i++)
 		{
 			globalfilelist[i]->second.isselected=false;
@@ -85580,8 +83975,8 @@ int Jidac::guilist()
 			int64_t myaccesstime	=0;
 			int		myversion		=0;
 			bool	myisordered		=false;
-			
-			franz_posix* myposix	=NULL;	
+
+			franz_posix* myposix	=NULL;
 
 			int franzotypedetected=
 					decode_franz_block(isdirectory(globalfilelist[i]->first),globalfilelist[i]->second.franz_block,
@@ -85602,48 +83997,48 @@ int Jidac::guilist()
 						globalfilelist[i]->second.hexcrc32	=mycrc32;
 					}
 		}
-	}	
-	
+	}
+
 
 	filter_filelist(&globalfilelist,&filelist,filtronome,"","","");
-	
+
 	string dummy="Arrow keys, top/end; +/-; f /; Q/ESC to exit";
     statusmsg((char*)dummy.c_str());
 	int mybh=bodylen()-1;
-	
+
 	char buf[MAXSTRLEN];
 
 	bool	showsize	=false;
 	bool	showdate	=false;
 	bool	showhash	=false;
 	bool	showstdout	=false;
-	
-	/// 0=no; 1 = ascending; 2= descending 
+
+	/// 0=no; 1 = ascending; 2= descending
 	int		sortbyfull	=0;
 	int		sortbysize	=0;
 	int		sortbydate	=0;
 	int		sortbyext	=0;
 	int		sortbyhash	=0;
-	
+
 	int	rigacorrente	=0;
 	int rigatop			=0;
 	int	cursore			=0;
-	
+
 	int		cursory_array	[100];
 	string	text_array		[100];
-	
+
 	string stemp;
 
 	while (1)
 	{
 		clsbody();
-	
+
 		int 	quanterighe		=(mybh-1);
 		int 	righestampate	=0;
 
 		rigacorrente=rigatop;
 		int miariga=0;
-		
+
 		for (int i=0;i<100;i++)
 			cursory_array	[i]=-1;
 
@@ -85652,7 +84047,7 @@ int Jidac::guilist()
 		{
 			rigatop			=filelist.size()-1;
 			rigacorrente	=rigatop;
-		}				
+		}
 		*/
 		if (rigatop<=0)
 		{
@@ -85667,8 +84062,8 @@ int Jidac::guilist()
 				rigatop=0;
 			if (rigacorrente<0)
 				rigacorrente=0;
-	
-		
+
+
 			string linea			="";
 			string myhash			="";
 			string mycrc32			="        ";
@@ -85687,7 +84082,7 @@ int Jidac::guilist()
 						myhash=p->second.hashtype+": "+p->second.hexhash+" ";
 					if (p->second.hexcrc32!="")
 						mycrc32="CRC32: "+p->second.hexcrc32+" ";
-					myfilename=myhash+mycrc32+myfilename;	
+					myfilename=myhash+mycrc32+myfilename;
 				}
 
 			if (showsize)
@@ -85708,14 +84103,14 @@ int Jidac::guilist()
 
 			if (all)
 				myfilename="v"+itos(filelist[rigacorrente]->second.version,all)+" "+myfilename;
-			
+
 			if (showstdout)
 				if (p->second.isordered)
 					myfilename="[STDOUT] "+myfilename;
-		
+
 			if (searchfrom!="")
 				replace(myfilename,searchfrom,replaceto);
-			
+
 			int curx,cury;
 			getyx(wbody,cury,curx);
 
@@ -85724,7 +84119,7 @@ int Jidac::guilist()
 			temp =buf;
 			text_array[cury]=temp;
 			int numerorighe=temp.size()/COLS+1;
-			
+
 			if (cury+numerorighe<=(mybh-1))
 			{
 				cursory_array[cury]=rigacorrente;
@@ -85737,7 +84132,7 @@ int Jidac::guilist()
 			}
 			else
 			break;
-			
+
 		}
 		/*
 		setcolor(wbody,1);
@@ -85761,7 +84156,7 @@ int Jidac::guilist()
 		string preso	="";
 
 		string a_date;
-		
+
 		if ((carattere==81) || (carattere==113) || (carattere==27))
 			break;
 		else
@@ -85792,7 +84187,7 @@ int Jidac::guilist()
 					/*
 					cursore++;
 					printf("Cursore +1 %d\n",cursore);
-					
+
 					while ((cursory_array[rigatop+cursore])==-1)
 						cursore++;
 					printf("Cursore post %d\n",cursore);
@@ -85822,7 +84217,7 @@ int Jidac::guilist()
 							snprintf(buf,sizeof(buf),"Ready %s",migliaia(filelist.size()));
 							statusmsg(buf);
 							wrefresh(wbody);
-						}	
+						}
 						break;
 			case	':':		// :
 						preso=getstring("Enter line number:",10,"");
@@ -85833,7 +84228,7 @@ int Jidac::guilist()
 							rigacorrente	=offset; ///-mybh;
 						}
 						break;
-						
+
 			case	KEY_UP:	//arrowup/pageup
 			case	KEY_PPAGE:
 						rigatop -=(mybh-1);
@@ -85844,7 +84239,7 @@ int Jidac::guilist()
 							rigacorrente=0;
 						cursore=0;
 						break;
-					
+
 			case	KEY_DOWN: ///arrowdown, pagedown, space
 			case  	KEY_NPAGE:
 			case	' ':
@@ -85855,7 +84250,7 @@ int Jidac::guilist()
 						}
 						cursore=0;
 						break;
-	
+
 			case	KEY_LEFT: // arrowleft
 						if (rigatop>0)
 						{
@@ -85864,7 +84259,7 @@ int Jidac::guilist()
 							cursore--;
 						}
 						break;
-			
+
 			case	KEY_RIGHT: //arrowright
 						if ((rigatop+1)<(int)filelist.size())
 						{
@@ -85883,7 +84278,7 @@ int Jidac::guilist()
 						rigacorrente	=rigatop;
 						cursore=0;
 						break;
-						
+
 			case	'+': //+ +keypad
 			case	PADPLUS:
 						preso=getstring("Enter +lines:",10,"");
@@ -85894,7 +84289,7 @@ int Jidac::guilist()
 							rigacorrente+=offset;
 						}
 						break;
-						
+
 			case	'-':
 			case	PADMINUS: // - - keypad
 						preso=getstring("Enter -lines:",10,"");
@@ -85922,7 +84317,7 @@ int Jidac::guilist()
 						snprintf(buf,sizeof(buf),"datefrom %s",a_date.c_str());
 						statusmsg(buf);
 						wrefresh(wbody);
-					
+
 						break;
 			case	'D': ///g_dateto
 						preso=getstring("Enter dateto:",20,"");
@@ -85940,7 +84335,7 @@ int Jidac::guilist()
 						snprintf(buf,sizeof(buf),"dateTO %s",a_date.c_str());
 						statusmsg(buf);
 						wrefresh(wbody);
-					
+
 						break;
 
 			case	'm': ///min
@@ -85952,7 +84347,7 @@ int Jidac::guilist()
 						filter_filelist(&globalfilelist,&filelist,filtronome,"","","");
 						rigatop			=0;
 						rigacorrente	=0;
-						
+
 						break;
 			case	'M': ///max
 						preso=getstring("Enter maxsize:",15,"");
@@ -86017,17 +84412,17 @@ int Jidac::guilist()
 							sortedby+="hash";
 						flagdesc=(sortbyhash==2);
 						break;
-			case KEY_F6:	
+			case KEY_F6:
 						showsize=!showsize; 	///F7 size
 						rigatop			=0;
 						rigacorrente	=0;
 						break;
-			case KEY_F7:	
+			case KEY_F7:
 						showdate=!showdate;  ///F8 date
 						rigatop			=0;
 						rigacorrente	=0;
 						break;
-			case KEY_F8:	
+			case KEY_F8:
 						showhash=!showhash;  ///F9 hash
 						rigatop			=0;
 						rigacorrente	=0;
@@ -86037,21 +84432,21 @@ int Jidac::guilist()
 						rigatop			=0;
 						rigacorrente	=0;
 						break;
-						
+
 			case	'S': //s (search)
 			case	's':
 					preso=getstring("Search:",50,"");
 					if (preso!="")
 						searchfrom=preso;
 					break;
-					
+
 			case	'R': //r (replace)
 			case	'r':
 					preso=getstring("Replace:",50,"");
 					if (preso!="")
 						replaceto=preso;
 					break;
-					
+
 			case	'T': //t
 			case	't':
 					preso=getstring("-to:",50,"");
@@ -86062,13 +84457,13 @@ int Jidac::guilist()
 						tofiles.push_back(preso);
 					}
 					break;
-	
+
 			case	'X': //x
 			case	'x':
 					string mydefault="";
 					if (tofiles.size()==1)
 						mydefault=tofiles[0];
-					
+
 					preso=getstring("Extract visible to:",50,mydefault);
 					if (preso!="")
 					{
@@ -86082,14 +84477,14 @@ int Jidac::guilist()
 								onlyfiles.push_back(filelist[i]->second.outputname);
 							else
 								onlyfiles.push_back(filelist[i]->first);
-						}	
+						}
 						snprintf(buf,sizeof(buf),"Extracting %s...",migliaia(filelist.size()));
 						statusmsg(buf);
 						wrefresh(wbody);
 						jidacreset();
 						extract();
 						exit(0);
-					}	
+					}
 					break;
 
 		}
@@ -86110,7 +84505,7 @@ int Jidac::guilist()
 			statusmsg(buf);
 			wrefresh(wbody);
 		}
-		
+
 	}
 	wrefresh(wbody);
 	return 0;
@@ -86156,21 +84551,21 @@ int Jidac::last2()
 			myprintf("\n");
 			return 2;
 		}
-		
+
 		FILE* myfile = freadopen(filename.c_str());
 		if (myfile==NULL)
 		{
 			myprintf("83861: guru cannot open the file\n");
 			return 2;
 		}
-		
+
 		char line[65536];
-		
+
 		while (fgets(line, sizeof(line), myfile))
 		{
 			if (flagdebug)
-				myprintf("83856: %08d %s", riga,line); 
-			riga++;	
+				myprintf("83856: %08d %s", riga,line);
+			riga++;
 		}
 		if (riga>0)
 		{
@@ -86180,8 +84575,8 @@ int Jidac::last2()
 			while (fgets(line, sizeof(line), myfile) && (riga!=penultima))
 			{
 				if (flagdebug)
-					myprintf("83868: %08d %08d %s", riga,penultima,line); 
-				riga++;	
+					myprintf("83868: %08d %08d %s", riga,penultima,line);
+				riga++;
 			}
 			string spenultima	="";
 			string sultima		="";
@@ -86199,14 +84594,14 @@ int Jidac::last2()
 
 			myprintf("83876:      |%s\n",spenultima.c_str());
 			myprintf("83877:      |%s\n",sultima.c_str());
-						
+
 			string hashpenultima="";
 			for (unsigned int i=0;i<spenultima.size();i++)
 				if ((isdigit(spenultima[i])) || (isalpha(spenultima[i])))
 					hashpenultima+=spenultima[i];
 				else
 					break;
-			
+
 			string hashultima="";
 			for (unsigned int i=0;i<sultima.size();i++)
 				if ((isdigit(sultima[i])) || (isalpha(sultima[i])))
@@ -86248,15 +84643,15 @@ int64_t Jidac::getzpaqsum(string i_archive,int64_t& o_usize,int64_t& o_allsize,i
 		if (p->first!="" && (!isdirectory(p->first)))
 			usize+=p->second.size;
 	int64_t 	allsize=0;
-	for (DTMap::const_iterator p=dt.begin(); p!=dt.end(); ++p) 
-		if (p->second.date) 
-			for (unsigned j=0; j<p->second.ptr.size(); ++j) 
+	for (DTMap::const_iterator p=dt.begin(); p!=dt.end(); ++p)
+		if (p->second.date)
+			for (unsigned j=0; j<p->second.ptr.size(); ++j)
 			{
 				unsigned k=p->second.ptr[j];
-				if (k>0 && k<ht.size()) 
-					if (ht[k].usize>=0) 
+				if (k>0 && k<ht.size())
+					if (ht[k].usize>=0)
 						allsize+=ht[k].usize;
-			}	
+			}
 	o_usize				=usize;
 	o_allsize			=allsize;
 	o_dtsize			=dt.size();
@@ -86290,7 +84685,7 @@ bool Jidac::isbackuprunning()
 	}
 
 	vector<string> pidfile;
-	
+
 	if (readfiletoarray(g_pidname,pidfile))
 	{
 		if (pidfile.size()>0)
@@ -86298,7 +84693,7 @@ bool Jidac::isbackuprunning()
 				myprintf("85101: PID %03d %s\n",i,pidfile[i].c_str());
 	}
 	return true;
-	
+
 }
 
 int Jidac::testbackup()
@@ -86306,7 +84701,7 @@ int Jidac::testbackup()
 	flagquick=true;
 	if (flagverify)
 		flagquick=false;
-	
+
 	if (files.size()!=1)
 	{
 		myprintf("84029: estbackup require one file parameter\n");
@@ -86347,11 +84742,11 @@ int Jidac::testbackup()
 	string 	filename	=extractfilepath(files[0])+prendinomefileebasta(files[0])+"_00000000_backup.txt";
 	string	firstzpaq	=extractfilepath(files[0])+prendinomefileebasta(files[0])+"_00000001.zpaq";
 	string	zpaqchunks	=extractfilepath(files[0])+prendinomefileebasta(files[0])+"_????????.zpaq";
-	
+
 	string 	onlyname=extractfilename(files[0]);
 	myreplace(onlyname,"????????.zpaq","");
 	myreplace(onlyname,".zpaq","");
-		
+
 	if (!exists(firstzpaq.c_str()))
 	{
 		myprintf("84398: Cannot find first zpaq ");
@@ -86367,7 +84762,7 @@ int Jidac::testbackup()
 		myprintf("\n");
 		return 2;
 	}
-	
+
 	int64_t starttime=mtime();
 	printbar('=');
 	multipart archivechunks(zpaqchunks);
@@ -86398,26 +84793,26 @@ int Jidac::testbackup()
 		return 2;
 	}
 	char 	line[65536];
-	int		riga	=0;	
+	int		riga	=0;
 	int		maxriga	=0;
 	string 	linea	="";
-	
+
 	while (fgets(line, sizeof(line), myfile))
 		maxriga++;
 	fseeko(myfile,0,SEEK_SET);
-	
+
 	if (g_rangefrom!=0)
 		myprintf("84578: Rangefrom %08d\n",g_rangefrom);
 	if (g_rangeto!=0)
 		myprintf("84579: Rangeto   %08d\n",g_rangeto);
-		
+
 	int	minimo	=g_rangefrom;
 	int massimo	=g_rangeto;
 	if (minimo<1)
 		minimo=1;
 	if ((massimo>maxriga-1) || (massimo<minimo))
 		massimo=maxriga-1;
-	
+
 	myprintf("84190: Rows in backup %08d from %08d to %08d\n",maxriga-1,minimo,massimo);
 	vector<string> 	filenames;
 	vector<int64_t>	filesizes;
@@ -86517,7 +84912,7 @@ int Jidac::testbackup()
 			}
 			if (flagdebug)
 				myprintf("84357: the quickhash |%s|\n",thequickhash.c_str());
-			
+
 			i++;
 			if (linea[i]!=' ')
 			{
@@ -86552,10 +84947,10 @@ int Jidac::testbackup()
 				filesizes.			push_back(filesize);
 			}
 		}
-		riga++;	
+		riga++;
 	}
 	fclose(myfile);
-	
+
 	if ((!flagverify) && (!flagquick))
 	{
 		myprintf("84283: First stage syntax check: OK\n");
@@ -86576,14 +84971,14 @@ int Jidac::testbackup()
 				string 	i_candidato		=extractfilename(filenames[i]);
 				string 	i_numerini_i	=i_candidato.substr(i_candidato.size()-13,8);
 				int64_t inumerini		=myatoll(i_numerini_i.c_str())+1;
-				
+
 				string 	ip_candidato	=extractfilename(filenames[i+1]);
 				string 	ip_numerini_i	=ip_candidato.substr(ip_candidato.size()-13,8);
 				int64_t ipnumerini		=myatoll(ip_numerini_i.c_str())-1;
 
 				string partetestuale=extractfilename(filenames[i]);
 				partetestuale=partetestuale.substr(0,partetestuale.size()-13);
-				
+
 				myprintf("84749: We have a hole in part numbers [%s..%s], checking if 0-bytes\n",migliaia(inumerini),migliaia2(ipnumerini));
 				for (unsigned int k=inumerini;k<=ipnumerini;k++)
 				{
@@ -86612,14 +85007,14 @@ int Jidac::testbackup()
 		string filedefinitivo=percorso+solonomefile;
 		if (searchfrom!="")
 			replace(filedefinitivo,searchfrom,replaceto);
-					
+
 		if (!flagnoeta)
 		{
 			myprintf("84221: Initial check part <<");
 			printUTF8(filedefinitivo.c_str());
 			myprintf(">>\r");
 		}
-		
+
 		if (!fileexists(filedefinitivo.c_str()))
 		{
 			myprintf("\n84221: File does not exists\n");
@@ -86702,7 +85097,7 @@ int Jidac::testbackup()
 				else
 					thehash="";
 			}
-		
+
 			///myprintf("85187: Found %s rows matched\n",migliaia(couple_hashname.size()));
 			for (unsigned int i=0;i<couple_hashname.size();i++)
 			{
@@ -86710,7 +85105,7 @@ int Jidac::testbackup()
 					myprintf("%08d |%s| |%s|\n",i,couple_hashname[i].first.c_str(),couple_hashname[i].second.c_str());
 				string filename=couple_hashname[i].second;
 				bool trovatodopotutto=false;
-				
+
 				for (unsigned int j=0;j<filenames.size();j++)
 				{
 					if (extractfilename(filename)==extractfilename(filenames[j]))
@@ -86736,7 +85131,7 @@ int Jidac::testbackup()
 							printUTF8(extractfilename(filename).c_str());
 							myprintf(">>\n");
 						}
-					}	
+					}
 				}
 				if (!trovatodopotutto)
 				{
@@ -86745,7 +85140,7 @@ int Jidac::testbackup()
 					printUTF8(extractfilename(filename).c_str());
 					myprintf("\n");
 				}
-				
+
 			}
 			myprintf("85212: %8s vs exp %8s :",migliaia(trovati),
 			migliaia2(couple_hashname.size()));
@@ -86753,25 +85148,25 @@ int Jidac::testbackup()
 				myprintf("THIS IS GOOD\n");
 			else
 				myprintf("NOT GOOD!\n");
-			
+
 			myprintf("85231: HASH OK     %12s :",migliaia(trovatihashok));
 			if (trovatihashok==trovati)
 				myprintf("THIS IS GOOD\n");
 			else
 				myprintf("NOT GOOD!\n");
-			
+
 			myprintf("85231: HASH KAPUTT %12s :",migliaia(trovatihashkaputt));
 			if (trovatihashkaputt==0)
 				myprintf("THIS IS GOOD\n");
 			else
 				myprintf("NOT GOOD!\n");
-			
+
 			myprintf("85231: NOT FOUND   %12s :",migliaia(nontrovati));
 			if (nontrovati==0)
 				myprintf("THIS IS GOOD\n");
 			else
 				myprintf("NOT GOOD!\n");
-			
+
 			if ((trovatihashok!=trovati) || (trovati!=couple_hashname.size() || (nontrovati>0)))
 			{
 				myprintf("85234: Something is wrong, exit (use -verbose or - debug)\n");
@@ -86819,7 +85214,7 @@ int Jidac::testbackup()
 			hashfromfile=stringtolower(filequickhashes[i]);
 		else
 			hashfromfile=stringtolower(filehashes[i]);
-			
+
 		if (hashfromfile!=stringtolower(tobehasheddest_hashname[i].first))
 		{
 			myprintf("KAPUTT!\n");
@@ -86863,7 +85258,7 @@ int Jidac::testbackup()
 			int64_t	chunk_dtsize		=0;
 			int64_t	chunk_compressedsize=0;
 			getzpaqsum(zpaqchunks,chunk_usize,chunk_allsize,chunk_dtsize,chunk_compressedsize);
-		
+
 			myprintf("85135: dtsize     %21s [i] %21s [c]:",migliaia(index_dtsize),migliaia2(chunk_dtsize));
 			if (index_dtsize==chunk_dtsize)
 				myprintf("OK\n");
@@ -86872,7 +85267,7 @@ int Jidac::testbackup()
 				myprintf("ERROR\n");
 				matchok=false;
 			}
-			
+
 			myprintf("85135: usize      %21s [i] %21s [c]:",migliaia(index_usize),migliaia2(chunk_usize));
 			if (index_usize==chunk_usize)
 				myprintf("OK\n");
@@ -86890,7 +85285,7 @@ int Jidac::testbackup()
 				matchok=false;
 			}
 			myprintf("85135: compressed %21s [i] %21s [c]:",migliaia(index_compressedsize),migliaia2(chunk_compressedsize));
-			
+
 			if (index_compressedsize==chunk_compressedsize)
 				myprintf("OK\n");
 			else
@@ -86973,7 +85368,7 @@ int Jidac::backup()
 		myprintf("\n");
 	}
 
-	
+
 	FILE* handlepid=fopen(g_pidname.c_str(), "wb");
 	if (handlepid==NULL)
 	{
@@ -86986,10 +85381,10 @@ int Jidac::backup()
 	fclose(handlepid);
 
 	int risultato=add();
-	
+
 	if (fileexists(g_pidname))
 		delete_file(g_pidname.c_str());
-	
+
 	return risultato;
 }
 
@@ -87000,7 +85395,7 @@ int Jidac::consolidatebackup()
 	flagquick=true;
 	if (flagverify)
 		flagquick=false;
-	
+
 	if (files.size()!=1)
 	{
 		myprintf("85827: consolidate require one file parameter\n");
@@ -87038,14 +85433,14 @@ int Jidac::consolidatebackup()
 	string	firstzpaq	=extractfilepath(files[0])+prendinomefileebasta(files[0])+"_00000001.zpaq";
 	string	zpaqchunks	=extractfilepath(files[0])+prendinomefileebasta(files[0])+"_????????.zpaq";
 	string	lonezpaq	=extractfilepath(files[0])+prendinomefileebasta(files[0])+".zpaq";
-	
+
 	string 	onlyname=extractfilename(files[0]);
 	myreplace(onlyname,"????????.zpaq","");
 	myreplace(onlyname,".zpaq","");
-		
+
 	bool esistelone			=fileexists(lonezpaq.c_str());
 	bool esistebackup		=fileexists(firstzpaq.c_str());
-	
+
 	if (esistelone && esistebackup)
 	{
 		myprintf("85871: I am confused (normal zpaq and backup does co-exists) ");
@@ -87070,7 +85465,7 @@ int Jidac::consolidatebackup()
 	string 	newfilename		=extractfilepath(tofilez)+prendinomefileebasta(tofilez)+"_00000000_backup.txt";
 	string	newfirstzpaq	=extractfilepath(tofilez)+prendinomefileebasta(tofilez)+"_00000001.zpaq";
 	string	newlonezpaq		=extractfilepath(tofilez)+prendinomefileebasta(tofilez)+".zpaq";
-	
+
 	bool esistenewindex		=fileexists(newindexname.c_str());
 	bool esistenewtxt		=fileexists(newfilename.c_str());
 	bool esistenewlonezpaq	=fileexists(newlonezpaq.c_str());
@@ -87111,7 +85506,7 @@ int Jidac::consolidatebackup()
 			return 2;
 		}
 	}
-		
+
 	files		.clear();
 	tofiles		.clear();
 	g_indexname	=newindexname;
@@ -87137,7 +85532,7 @@ int Jidac::consolidatebackup()
 			myprintf("85968: guru for consolidate\n");
 			return 2;
 		}
-		
+
 	}
 	else
 	{
@@ -87162,21 +85557,24 @@ int Jidac::consolidatebackup()
 
 	backuptxt	=newfilename;
 	g_archive	=newfirstzpaq;
-	
+
 	int64_t startverify	=mtime();
 	int64_t larghezzain	=prendidimensionefile(g_archive.c_str());
 	g_dimensione=0;
-	
-	
+
+
 	string thehash="MD5";
 	if (flagbackupxxh3)
 		thehash="XXH3";
 
 	myprintf("85975: Getting %s on %s\n",thehash.c_str(),g_archive.c_str());
-	
+
 	franz_do_hash dummy(thehash);
+	if (flagdebug)
+		myprintf("87353: filehash on %s\n",g_archive.c_str());
+
 	string hashreloaded=dummy.filehash(g_archive,false,startverify,larghezzain);
-			
+
 	if (hashreloaded=="")
 	{
 		myprintf("85984: Guru calculating %s hash for <<",thehash.c_str());
@@ -87198,6 +85596,9 @@ int Jidac::consolidatebackup()
 
 	fprintf(backupfile,"$zpaqfranz backupfile|1|%s|%s|%s\n",dateToString(true,now()).c_str(),thehash.c_str(),g_archive.c_str());
 	franz_do_hash dummyquick("QUICK");
+	if (flagdebug)
+		myprintf("87378: filehash on %s\n",g_archive.c_str());
+
 	string quickhash=dummyquick.filehash(g_archive,false,startverify,larghezzain);
 	fprintf(backupfile,"%s %s|[%21s] <%s> %s\r\n",stringtolower(hashreloaded).c_str(),checktxt.c_str(),migliaia(larghezzain),quickhash.c_str(),g_archive.c_str());
 	fclose(backupfile);
@@ -87235,8 +85636,8 @@ bool Jidac::parallelcrc32(string i_filename,unsigned int i_thread,uint32_t& o_cr
 		myprintf("87133: empty filename\n");
 		return false;
 	}
-	
-	
+
+
 	unsigned int mythreads=howmanythreads;
 	if (i_thread<mythreads)
 		mythreads=i_thread;
@@ -87246,18 +85647,18 @@ bool Jidac::parallelcrc32(string i_filename,unsigned int i_thread,uint32_t& o_cr
 		myprintf("87152: file size not positive\n");
 		return false;
 	}
-	
-	
+
+
 	if (filesize<1000)
 		mythreads=1;
-	
+
 	vector<tparametricrc32> 	vettoreparametrihash;
-	
+
 	int64_t dimensionechunk=filesize/mythreads;
-	
+
 	myprintf("87170: Chunksize %s\n",migliaia(dimensionechunk));
 	myprintf("87171: Threads   %03d\n",mythreads);
-	
+
 	int64_t startbyte	=0;
 	///int64_t	resto		=filesize;
 	tparametricrc32	myblock;
@@ -87267,15 +85668,15 @@ bool Jidac::parallelcrc32(string i_filename,unsigned int i_thread,uint32_t& o_cr
 		myblock.tnumber		=(i%mythreads);
 		myblock.byteiniziale=startbyte;
 		myblock.lunghezza	=dimensionechunk;
-		
+
 		myprintf("87183: %08d  start %s\n",migliaia(myblock.byteiniziale));
 		myprintf("87183: %08d  len   %s\n",migliaia(myblock.lunghezza));
 		vettoreparametrihash.push_back(myblock);
-		
+
 	}
 	return 0;
 	/*
-	
+
 	for (unsigned int i=0;i<i_thefiles.size();i++)
 	{
 		vettoreparametrihash[i%mythreads].filestobehashed.	push_back(i_thefiles[i]);
@@ -87290,7 +85691,7 @@ bool Jidac::parallelcrc32(string i_filename,unsigned int i_thread,uint32_t& o_cr
 			myprintf("64012: Thread [%02d] files %s\n",i,migliaia(vettoreparametrihash[i].filestobehashed.size()));
 		totfile+=+vettoreparametrihash[i].filestobehashed.size();
 	}
-	
+
 	int rc;
 	pthread_t* threads = new pthread_t[mythreads];
 	pthread_attr_t attr;
@@ -87299,21 +85700,21 @@ bool Jidac::parallelcrc32(string i_filename,unsigned int i_thread,uint32_t& o_cr
 	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
 	if (!flagnoeta)
 		myprintf("64022: Files %14s -> %03d threads -> %14s to get\n",migliaia(i_thefiles.size()),mythreads,migliaia2(totfile));
-	for(unsigned int i=0; i<mythreads; i++ ) 
+	for(unsigned int i=0; i<mythreads; i++ )
 	{
 		vettoreparametrihash[i].timestart=mtime();
 		rc = pthread_create(&threads[i], &attr, scansionahash, (void*)&vettoreparametrihash[i]);
-		if (rc) 
+		if (rc)
 		{
 			myprintf("64031: Error creating thread\n");
 			exit(-1);
 		}
 	}
 	pthread_attr_destroy(&attr);
-	for(unsigned int i=0; i <mythreads; i++ ) 
+	for(unsigned int i=0; i <mythreads; i++ )
 	{
 		rc = pthread_join(threads[i], &status);
-		if (rc) 
+		if (rc)
 		{
 			error("64041: Unable to join\n");
 			exit(-1);
@@ -87323,11 +85724,11 @@ bool Jidac::parallelcrc32(string i_filename,unsigned int i_thread,uint32_t& o_cr
 	for(unsigned int i=0;i<mythreads;i++)
 		for (unsigned int j=0;j<vettoreparametrihash[i].filestobehashed.size();j++)
 			o_hashname.push_back(std::pair<string,string>(vettoreparametrihash[i].o_hashcalculated[j],vettoreparametrihash[i].filestobehashed[j]));
-*/	
-}	
+*/
+}
 
 
-int Jidac::versum_hashdeep(FILE* i_thefile,	
+int Jidac::versum_hashdeep(FILE* i_thefile,
 vector<string>& 		o_files,
 vector<string>& 		o_filealgo,
 vector<string>& 		o_filehash,
@@ -87337,14 +85738,14 @@ int&					o_expected_file)
 {
 	o_expected_size=0;
 	o_expected_file=0;
-	
+
 	if (i_thefile==NULL)
 	{
 		myprintf("86494: file handle is null!\n");
 		return 2;
 	}
-	
-	
+
+
 	/// hardcoded file format
 	char line[65536];
 	string linea="";
@@ -87427,7 +85828,7 @@ int&					o_expected_file)
 		return 2;
 	}
 	if 	(
-		(pezzi[1]!="md5") && 
+		(pezzi[1]!="md5") &&
 		(pezzi[1]!="sha-1") &&
 		(pezzi[1]!="sha1") &&
 		(pezzi[1]!="sha256") &&
@@ -87437,10 +85838,10 @@ int&					o_expected_file)
 	{
 		myprintf("60453: sorry, algo must be md5|sha1|sha256|whirlpool\n");
 		return 2;
-	}	
+	}
 	myprintf("60451: Hasher selected: %s\n",pezzi[1].c_str());
 
-	while (fgets(line, sizeof(line), i_thefile)) 
+	while (fgets(line, sizeof(line), i_thefile))
 	{
 		linea=line;
 		if (flagdebug)
@@ -87461,11 +85862,11 @@ int&					o_expected_file)
 					else
 						break;
 					j++;
-				}	
-				
+				}
+
 				isizo=atoll(sizo.c_str());
 				j++;
-				
+
 				while (j<linea.size())
 				{
 					if (isxdigit(linea[j]))
@@ -87473,15 +85874,15 @@ int&					o_expected_file)
 					else
 						break;
 					j++;
-				}	
-				
+				}
+
 				j++;
 				while (j<linea.size())
 					if ((linea[j]!='\r') && (linea[j]!='\n'))
 						nomeo+=linea[j++];
 					else
 						break;
-				
+
 				algo	=pezzi[1];
 				hasho	=stringtoupper(hasho);
 				if (flagdebug)
@@ -87506,7 +85907,7 @@ int&					o_expected_file)
 	return 0;
 }
 
-int Jidac::versum_zpaqfranz(FILE* i_thefile,	
+int Jidac::versum_zpaqfranz(FILE* i_thefile,
 vector<string>& 		o_files,
 vector<string>& 		o_filealgo,
 vector<string>& 		o_filehash,
@@ -87516,7 +85917,7 @@ int&					o_expected_file)
 {
 	o_expected_size=0;
 	o_expected_file=0;
-	
+
 	if (i_thefile==NULL)
 	{
 		myprintf("86703: file handle is null!\n");
@@ -87525,7 +85926,7 @@ int&					o_expected_file)
 
 	char line[65536];
 
-	while (fgets(line, sizeof(line), i_thefile)) 
+	while (fgets(line, sizeof(line), i_thefile))
 	{
 		string linea=line;
 		if (linea.size()==0)
@@ -87533,7 +85934,7 @@ int&					o_expected_file)
 			myprintf("86735: linea.size==0\n");
 			return 2;
 		}
-		
+
 		if (linea[0]!='|')
 		{
 			myprintf("86741: linea[0] != |\n");
@@ -87564,7 +85965,7 @@ int&					o_expected_file)
 				break;
 			hasho+=linea[j];
 			j++;
-		}	
+		}
 		j+=2;
 		while (j<linea.size())
 		{
@@ -87573,7 +85974,7 @@ int&					o_expected_file)
 			if (isdigit(linea[j]))
 				sizo+=linea[j];
 			j++;
-		}	
+		}
 		isizo=atoll(sizo.c_str());
 		j+=2;
 		while (j<linea.size())
@@ -87624,27 +86025,27 @@ int Jidac::versum_againstzpaq(vector<string> i_myfiles,vector<string> i_filealgo
 	g_optional="versum"; //force isselected
 	read_archive(NULL,archive.c_str(),&errors,1,true);/// silent AND NOW THE MAGIC ONE!
 	myprintf("\n");
-	
+
 	myprintf("86880: Total files/fonder in zpaq %s, files in txt %s\n",migliaia(dt.size()),migliaia2(i_myfiles.size()));
-	
+
 	int emptyhash		=0;
 	int emptyhashtype	=0;
 	int mismatchalgo	=0;
-	
+
 	for (unsigned int i=0;i<i_myfiles.size();i++)
 	{
 		string	filename=wintolinuxpath(i_myfiles[i]);
 		if (searchfrom!="")
-			replace(filename,searchfrom,replaceto);	
-			
+			replace(filename,searchfrom,replaceto);
+
 		DTMap::iterator p=dt.find(filename);
-	
+
 	if (p==dt.end())
 		{
 			o_missing.push_back(filename);
 			continue;
 		}
-		
+
 		string myhashtype		="";
 		string myhash			="";
 		string mycrc32			="";
@@ -87652,8 +86053,8 @@ int Jidac::versum_againstzpaq(vector<string> i_myfiles,vector<string> i_filealgo
 		int64_t mycreationtime	=0;
 		bool	myisordered		=false;
 		int		myversion		=0;
-		franz_posix* myposix	=NULL;	
-		
+		franz_posix* myposix	=NULL;
+
 		decode_franz_block(false, //not a dir
 		p->second.franz_block,
 		myhashtype,
@@ -87661,7 +86062,7 @@ int Jidac::versum_againstzpaq(vector<string> i_myfiles,vector<string> i_filealgo
 		mycrc32,
 		mycreationtime,
 		myaccesstime,myisordered,myversion,myposix);
-		
+
 		if (myhashtype=="")
 		{
 			emptyhashtype++;
@@ -87669,7 +86070,7 @@ int Jidac::versum_againstzpaq(vector<string> i_myfiles,vector<string> i_filealgo
 				myprintf("60432: empty hashtype %s\n",filename.c_str());
 			continue;
 		}
-		
+
 		if (myhash=="")
 		{
 			emptyhash++;
@@ -87677,7 +86078,7 @@ int Jidac::versum_againstzpaq(vector<string> i_myfiles,vector<string> i_filealgo
 				myprintf("60430: empty hash %s\n",filename.c_str());
 			continue;
 		}
-		
+
 		if (stringtoupper(myhashtype)!=stringtoupper(i_filealgo[i]))
 		{
 			mismatchalgo++;
@@ -87685,7 +86086,7 @@ int Jidac::versum_againstzpaq(vector<string> i_myfiles,vector<string> i_filealgo
 				myprintf("60427: mismatch algo zpaq %s txt %s\n",myhashtype.c_str(),i_filealgo[i].c_str());
 			continue;
 		}
-		
+
 		if (stringtoupper(myhash)!=stringtoupper(i_filehash[i]))
 		{
 			myprintf("60413: ERROR %s |zpaq=%s|txt=%s| ",myhashtype.c_str(),i_filehash[i].c_str(),myhash.c_str());
@@ -87715,7 +86116,7 @@ int Jidac::versum()
 	/// versum z:\*.zpaq -checktxt
 	if ((flagchecktxt) || (flagfasttxt))
 		return fastquicktxt();
-	
+
 	for (unsigned int i=0;i<files.size();i++)
 		if (iszpaq(files[i]))
 		{
@@ -87724,7 +86125,7 @@ int Jidac::versum()
 			myprintf("\n");
 			return 2;
 		}
-	
+
 	if (tofiles.size()>1)
 	{
 		myprintf("60212: -to to exactly one .zpaq\n");
@@ -87759,11 +86160,11 @@ int Jidac::versum()
 			myprintf("60134: Working on hashdeep  format <<");
 		else
 			myprintf("60134: Working on zpaqfranz format <<");
-			
+
 		printUTF8(filename.c_str());
 		myprintf(">>\n");
 		FILE* myfile = freadopen(filename.c_str());
-		
+
 		if (myfile==0)
 		{
 			myprintf("60145: error cannot open ");
@@ -87775,7 +86176,7 @@ int Jidac::versum()
 
 		if (flaghashdeep)
 			risultato+=	versum_hashdeep	(myfile,myfiles,myfilealgo,myfilehash,myfilesize,expected_size,expected_file);
-		else 
+		else
 			risultato+=	versum_zpaqfranz(myfile,myfiles,myfilealgo,myfilehash,myfilesize,expected_size,expected_file);
 
 		if (myfile!=NULL)
@@ -87789,14 +86190,14 @@ int Jidac::versum()
 	{
 		myprintf("60228: abort, because some errors\n");
 		return risultato;
-	}	
+	}
 	if (myfiles.size()==0)
 	{
 		myprintf("60233: no files to be checked\n");
 		return 1;
 	}
 	int64_t	starthash=mtime();
-	
+
 	if (tofiles.size()==1)
 		risultato=versum_againstzpaq(myfiles,myfilealgo,myfilehash,missing,errori,total_hashed);
 	else		//filesystem check, one or more threads
@@ -87816,9 +86217,12 @@ int Jidac::versum()
 			{
 				string	filename=myfiles[i];
 				if (searchfrom!="")
-						replace(filename,searchfrom,replaceto);	
-	
+						replace(filename,searchfrom,replaceto);
+
 				franz_do_hash dummy(myfilealgo[i]);
+				if (flagdebug)
+					myprintf("88001: filehash on %s\n",filename.c_str());
+
 				string risu=dummy.filehash(filename,false,inizio,total_size);
 				if (risu!="")
 				{
@@ -87849,7 +86253,7 @@ int Jidac::versum()
 			{
 				string filename=myfiles[i];
 				if (searchfrom!="")
-					replace(filename,searchfrom,replaceto);	
+					replace(filename,searchfrom,replaceto);
 				vettoreparametrihash[i%mythreads].filestobehashed.push_back(filename);
 				vettoreparametrihash[i%mythreads].algo.push_back(myfilealgo[i]);
 				vettoreparametrihash[i%mythreads].originalindex.push_back(i);
@@ -87871,11 +86275,11 @@ int Jidac::versum()
 			pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
 			if (!flagnoeta)
 				myprintf("\n63411: Creating %d hashing thread(s)\n",mythreads);
-			for(int i = 0; i < mythreads; i++ ) 
+			for(int i = 0; i < mythreads; i++ )
 			{
 				vettoreparametrihash[i].timestart=mtime();
 				rc = pthread_create(&threads[i], &attr, scansionahash, (void*)&vettoreparametrihash[i]);
-				if (rc) 
+				if (rc)
 				{
 					myprintf("34523: Error creating thread\n");
 					exit(-1);
@@ -87883,10 +86287,10 @@ int Jidac::versum()
 			}
 			pthread_attr_destroy(&attr);
 
-			for(int i=0;i<mythreads; i++) 
+			for(int i=0;i<mythreads; i++)
 			{
 				rc = pthread_join(threads[i], &status);
-				if (rc) 
+				if (rc)
 				{
 					error("Unable to join\n");
 					exit(-1);
@@ -87910,7 +86314,7 @@ int Jidac::versum()
 		}
 	}
 	int64_t endhash=mtime();
-	
+
 	printbar(' ');
 	myprintf("\r");
 	if (missing.size()>0)
@@ -87934,7 +86338,7 @@ int Jidac::versum()
 	}
 	else
 		myprintf(" this is good");
-	
+
 	myprintf("\n");
 	myprintf("Bytes %21s vs exp %21s ",migliaia(total_hashed),migliaia2(expected_size));
 	if (total_hashed!=expected_size)
@@ -87944,7 +86348,7 @@ int Jidac::versum()
 	}
 	else
 		myprintf(" this is good");
-	
+
 	myprintf("\n");
 	printbar('-');
 	std::sort(vec.begin(),vec.end(),pairsortbyindex);
@@ -87970,7 +86374,7 @@ int Jidac::versum()
 	int64_t hashtime	=endhash-starthash;
 	int64_t myspeed		=(int64_t)(total_hashed*1000.0/(hashtime));
 	myprintf("Time  %15.3f s, average speed %s/s (%s/s)\n",hashtime/1000.0,migliaia(myspeed),tohuman(myspeed));
-	
+
 	if (errori==0)
 		return 0;
 	else
@@ -88006,7 +86410,7 @@ int Jidac::fastquicktxt()
 				else
 					myprintf(": NOTHING\n");
 			}
-	
+
 	if (flagchecktxt && flagfasttxt)
 	{
 		myprintf("87118: Confused by -checktxt and -fasttxt\n");
@@ -88042,9 +86446,9 @@ int Jidac::fastquicktxt()
 		myprintf("66282: Nothing to do (wrong file selection?)\n");
 		return 0;
 	}
-	
+
 	int64_t larghezzain			=0;
-	for (DTMap::iterator p=thedt.begin(); p!=thedt.end(); ++p) 
+	for (DTMap::iterator p=thedt.begin(); p!=thedt.end(); ++p)
 		larghezzain+=prendidimensionefile(p->first.c_str());
 
 	myprintf("87163: Bytes to be checked %s (%s) in files %s\n",migliaia(larghezzain),tohuman(larghezzain),migliaia2(thedt.size()));
@@ -88053,8 +86457,8 @@ int Jidac::fastquicktxt()
 	unsigned int	testwarning	=0;
 	unsigned int 	testerror	=0;
 	int64_t 	startverify		=mtime();
-	
-	for (DTMap::iterator p=thedt.begin(); p!=thedt.end(); ++p) 
+
+	for (DTMap::iterator p=thedt.begin(); p!=thedt.end(); ++p)
 	{
 		string 	thezpaq		=p->first;
 		string 	percorso	=extractfilepath		(thezpaq);
@@ -88068,7 +86472,7 @@ int Jidac::fastquicktxt()
 		}
 		else
 			mychecktxt=percorso+nome+"_crc32.txt";
-		
+
 		if (!fileexists(mychecktxt))
 		{
 			myprintf("66240: WARN for file ");
@@ -88079,14 +86483,14 @@ int Jidac::fastquicktxt()
 			testwarning++;
 			continue;
 		}
-		
+
 		if (flagverbose)
 		{
 			myprintf("66240: Getting %s on ",thehash.c_str());
 			printUTF8(thezpaq.c_str());
 			myprintf("\n");
 		}
-		
+
 		vector<string> checktxtlines;
 		if (!readfiletoarray(mychecktxt,checktxtlines))
 		{
@@ -88098,10 +86502,10 @@ int Jidac::fastquicktxt()
 
 		if (checktxtlines.size()<=startline)
 		{
-			myprintf("66270: checktxtlines.size %d <= %d\n",checktxtlines.size(),startline);		
+			myprintf("66270: checktxtlines.size %d <= %d\n",checktxtlines.size(),startline);
 			continue;
 		}
-				
+
 		string	firstline	=checktxtlines[startline];
 		string 	hashfromtxt	=getfirsthash(firstline);
 
@@ -88119,10 +86523,13 @@ int Jidac::fastquicktxt()
 		}
 
 		franz_do_hash dummy(thehash);
+		if (flagdebug)
+			myprintf("88303: filehash on %s\n",thezpaq.c_str());
+
 		string hashreloaded=dummy.filehash(thezpaq,false,startverify,larghezzain);
 		printbar(' ');
 		myprintf("\r");
-		
+
 		if (hashreloaded=="")
 		{
 			myprintf("66254: guru doing hash on ");
@@ -88146,7 +86553,7 @@ int Jidac::fastquicktxt()
 		{
 			myprintf("ERROR: reloaded %s vs txt %s ",hashreloaded.c_str(),hashfromtxt.c_str());
 			testerror++;
-		}	
+		}
 		printUTF8(thezpaq.c_str());
 		myprintf("\n");
 	}
@@ -88156,20 +86563,26 @@ int Jidac::fastquicktxt()
 	myprintf("66357: OK     %9s\n",migliaia(testok));
 	myprintf("66358: WARN   %9s\n",migliaia(testwarning));
 	myprintf("66359: ERROR  %9s\n",migliaia(testerror));
-	
+
 	if (testwarning>0)
 		if (testerror==0)
 			return 1;
-	
+
 	if (testerror>0)
 		return 2;
-	
+
 	return 0;
 }
+/*
 void niente_read_archive(char* i_text)
 {
-}
 
+	if (i_text==NULL)
+	{
+		i_text=1; // compiler be quiet!
+	}
+}
+*/
 int Jidac::fzf()
 {
 	vector<DTMap::iterator> localfilelist;
@@ -88200,9 +86613,9 @@ int Jidac::fzf()
 	}
 
 	int errors=0;
-	read_archive(niente_read_archive,archive.c_str(),&errors,1,true); /// AND NOW THE MAGIC ONE!
-	for (DTMap::iterator a=dt.begin(); a!=dt.end(); ++a) 
-		if (a->second.data!='-' && (all || a->second.date)) 
+	read_archive(NULL/*niente_read_archive*/,archive.c_str(),&errors,1,true); /// AND NOW THE MAGIC ONE!
+	for (DTMap::iterator a=dt.begin(); a!=dt.end(); ++a)
+		if (a->second.data!='-' && (all || a->second.date))
 		{
 			a->second.data='-';
 			localfilelist.push_back(a);

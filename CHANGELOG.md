@@ -1,3 +1,8 @@
+## [58.9.a] - 2023-08-16
+### Changed
+- This `CHANGELOG.md` file.
+
+
 ### 26-07-2022: 55.6
 ### Support for HW accelerated SHA1 instructions (Windows 64)  
 _Thanks to Igor Pavlov  (7-Zip's author) I introduce a new EXE: **zpaqfranzhw.exe** with the new switch **-hw**  to use (if any) CPU's HW SHA1 instructions.  

@@ -1,10 +1,9 @@
-prefix = /usr/local
 CFLAGS+=        -Dunix
-LDADD=          -pthread -lstdc++ -lm
+LDADD=          -pthread -lstdc++ -lm -z relro -z now
 
 all: src/zpaqfranz
 
-src/zpaqfranz: ../zpaqfranz-debian.cpp
+src/zpaqfranz: src/zpaqfranz.cpp
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(LDCFLAGS) -o $@ $^ ${LDADD}
 
 install: src/zpaqfranz

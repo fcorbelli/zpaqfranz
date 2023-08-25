@@ -1,6 +1,6 @@
 zpaqfranz has an internal self-testing mechanism, aimed at 'strange' systems, 
 i.e. with CPUs operating differently from Intel, such as Apple M1, M2, 
-PowerPC, sparc, ARM, BIG endians and so on.
+PowerPC, sparc,  ARM, BIG endians and so on.
 
 The command autotest -to extracts a binary file, 
 contained within the source, a (Windows-created) .zpaq archive 

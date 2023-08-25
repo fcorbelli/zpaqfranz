@@ -1,6 +1,15 @@
-This is a Windows binary test file, 
-where filenames (must/should be)== SHA-256 of content, 
-packed with 256 "shuffled" pieces of the Iliade
+zpaqfranz has an internal self-testing mechanism, aimed at 'strange' systems, 
+i.e. with CPUs operating differently from Intel, such as Apple M1, M2, 
+PowerPC, sparc, ARM, BIG endians and so on.
+
+The command autotest -to extracts a binary file, 
+contained within the source, a (Windows-created) .zpaq archive 
+for check whether the PAQL code (during extraction) is well processed.
+
+It is essentially an interoperability test between Windows 
+(taken as a known good-working model) and the "weird" host system.
+
+It is packed with 256 "shuffled" pieces of the Iliade
 https://www.rodoni.ch/busoni/bibliotechina/nuovifiles/iliade_h/testo.htm
 
 Cantami, o Diva, del Pelìde Achille
@@ -8,45 +17,29 @@ l'ira funesta che infiniti addusse
 lutti agli Achei, molte anzi tempo all'Orco
 generose travolse alme d'eroi...
 
+From version 55.16, instead of using deduplicated pseudorandom files, 
+I preferred plaintext, in order to dispel any doubts about the contents of 
+the binary archive: the theoretical coverage is minor, but it does not matter.
+
 The resulting archive (sha256.zpaq), compressed by -m5 on Windows,
-is mime64-encoded and "splitted" in 4 strings,
-becoming (into the source code)
+with every filenames == SHA-256(content),
+is mime64-encoded and "splitted" into 4 strings,
+becoming (inside the source code)
 
 char extract_test1[]={"N2tT...
 char extract_test2[]={"W1hY...
 char extract_test3[]={"+Au5...
 char extract_test4[]={"sFPj...
 
-It is quickly possible to see what's inside this way
+It is quickly possible to double-check this way (just in case...)
 
-zpaqfranz autotest -to z:\somewhere
-zpaqfranz x z:\somewhere\sha256.zpaq -to z:\extracted
+zpaqfranz autotest -to somewhere
+zpaqfranz x somewhere/sha256.zpaq -to extracted
 
-Short version: from version 55.16, instead of using deduplicated pseudorandom files, 
-I preferred plaintext, in order to dispel any doubts about the contents of the binary file
-
-
-
-zpaqfranz sum sha256.zpaq -sha256
-zpaqfranz v55.16a-experimental-JIT-L (HW BLAKE3), SFX64 v55.1, (20 Sep 2022)
-franz:-sha256
-Getting SHA-256 ignoring .zfs and :$DATA
-
-No multithread: Found (154.53 KB) => 158.239 bytes (154.53 KB) / 1 files in 0.015000
+The sha256.zpaq should be this one
 SHA-256: D90223FAEE2878D7854B9438864B4856A3C1F920C34EFB8C136A8949B54E5400 [            158.239]     sha256.zpaq
 
-0.015 seconds (00:00:00)  (all OK)
-
-
-
-
-zpaqfranz v55.16a-experimental-JIT-L (HW BLAKE3), SFX64 v55.1, (20 Sep 2022)
-franz:-sha256 -ssd 
-Getting SHA-256 ignoring .zfs and :$DATA
-                                                                                                
-Found (9.03 MB) => 9.472.000 bytes (9.03 MB) / 256 files in 0.000000
-
-Creating 32 hashing thread(s) with SHA-256
+With these files inside
 SHA-256: 00D478184C1851145A712B8054D04789DA164CDEE61EDB2240F124E0AC3501AA [             37.000]     00D478184C1851145A712B8054D04789DA164CDEE61EDB2240F124E0AC3501AA
 SHA-256: 010CE956B14903A000536ACEB4B12CF503B3D84E15985A5F6C5648DC772D8B54 [             37.000]     010CE956B14903A000536ACEB4B12CF503B3D84E15985A5F6C5648DC772D8B54
 SHA-256: 032EA211A2F1CA5F977A46BF3211FB9DF3DCBC29D13D6B1764EB4B2637819A6E [             37.000]     032EA211A2F1CA5F977A46BF3211FB9DF3DCBC29D13D6B1764EB4B2637819A6E
@@ -303,5 +296,3 @@ SHA-256: FB4AF47721D4449692F3D1339BCBEC8578A7FE53BA01AD3B1335764BFFEB60A0 [     
 SHA-256: FB732127DB2B907DCEF4E87D8979146A43FA7AD915DD7587A8A890455F51FCC1 [             37.000]     FB732127DB2B907DCEF4E87D8979146A43FA7AD915DD7587A8A890455F51FCC1
 SHA-256: FCA14D3C0B8CED91ACE33CCD96A13079E054311094D0B151BCB75622D768BADC [             37.000]     FCA14D3C0B8CED91ACE33CCD96A13079E054311094D0B151BCB75622D768BADC
 SHA-256: FCCE109C8360963EB18975B94BDBE434BE1A49D3F53BDD768A99093B3EB838D2 [             37.000]     FCCE109C8360963EB18975B94BDBE434BE1A49D3F53BDD768A99093B3EB838D2
-
-0.015 seconds (00:00:00)  (all OK)

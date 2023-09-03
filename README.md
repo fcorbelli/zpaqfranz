@@ -1,4 +1,4 @@
-# zpaqfranz: advanced multiversioned archiver, with SFX (on Windows), HW acceleration     
+# zpaqfranz: advanced multiversioned archiver, with HW acceleration and SFX (on Windows)      
 
 Swiss army knife for backup and disaster recovery, like 7z or RAR on steroids,with deduplicated "snapshots" (versions). Conceptually similar to Mac time machine, but much more efficiently, zpaq 7.15 fork.    
      

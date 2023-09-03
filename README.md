@@ -348,136 +348,11 @@ I rarely use Linux or MacOS or whatever (for compiling), so fixing may be needed
 As explained the program is single file, be careful to link the pthread library.  
 You need it for ESXi too, even if it doesn't work. Don't be afraid, zpaqfranz knows!
 
-### Almost "universal" (minimal) Makefile.  
-_Beware to change /usr/local/bin to /bin on some *nix!_
-```
-CC?=            cc
-INSTALL?=       install
-RM?=            rm
-PROG=           zpaqfranz
-CFLAGS+=        -O3 -Dunix
-LDADD=          -pthread -lstdc++ -lm
-BINDIR=         /usr/local/bin
-BSD_INSTALL_PROGRAM?=   install -m 0555
-
-all:    build
-
-build:  ${PROG}
-
-install:        ${PROG}
-	${BSD_INSTALL_PROGRAM} ${PROG} ${DESTDIR}${BINDIR}
-
-${PROG}:        ${OBJECTS}
-	${CC}  ${CFLAGS} zpaqfranz.cpp -o ${PROG} ${LDADD}
-clean:
-	${RM} -f ${PROG}
-```
-
-Quick and dirtier!
-```
-wget https://github.com/fcorbelli/zpaqfranz/raw/main/zpaqfranz.cpp
-wget https://github.com/fcorbelli/zpaqfranz/raw/main/NONWINDOWS/Makefile
-make install clean
-```
-
-Dirtiest (!) no SSL certificate (very old systems), get the nightly build
-```
-wget http://www.francocorbelli.it/zpaqfranz.cpp -O zpaqfranz.cpp
-```
-
-then... build (aka: compile)
-
-
-_Library dependencies are minimal:   libc,libc++,libcxxrt,libm,libgcc_s,libthr_
-
-DEFINEs at compile-time
-```
-(nothing)                          // Compile for INTEL Windows
--DHWBLAKE3 blake3_windows_gnu.S    // On Win64 enable HW accelerated BLAKE3 (with assembly)
--DHWSHA1                           // On Win64 enable HW SHA1 (-hw)
--DHWSHA2                           // Enable HW SHA2 (without assembly code to be linked)
--Dunix                             // Compile on "something different from Windows"
--DSOLARIS                          // Solaris is similar, but not equal, to BSD Unix
--DNOJIT                            // By default zpaqfranz works on Intel CPUs
-                                   // (for simplicity I'll call them Intel, meaning x86-SSE2 and amd64)
-                                   // On non-Intel a -NOJIT should runs fine on LITTLE ENDIANs
-                                   // like Linux aarch64, Android aarch64 etc
-                                   // On BIG ENDIAN or "strange things" like middle endian 
-                                   // (Honeywell 316) or little word (PDP-11)
-                                   // the autotest command is for you :)
--DANCIENT                          // Turn off some functions for compiling in very old systems
-                                   // consuming less RAM (ex. PowerPC Mac), no auto C++
--DBIG                              // Turn on BIG ENDIAN at compile time
--DDEBUG                            // Old 7.15, almost useless. Use -debug switch instead
--DESX                              // Yes, zpaqfranz run (kind of) on ESXi too :-)
--DALIGNMALLOC                      // Force malloc to be aligned at something (sparc64)
--DSERVER                           // Enable the cloudpaq client (for Windows)
--DGUI                              // Enable the gui (ncurses on Windows)
-```
-
-### HIDDEN GEMS
-If the (non Windows) executable is named "dir" act (just about)... like Windows' dir
-Beware of collisions with other software "dir".
-_It is way better than dir_
-
-### WARNINGS
-Some strange warnings with some compilers (too old, or too new), not MY fault
-
-### STRANGE THINGS
-
-_NOTE1: -, not -- (into switch)_
-
-_NOTE2: switches ARE case sensitive.   -maxsize <> -MAXSIZE_
-
-### THE JIT (just-in-time)
-zpaqfranz can translate ZPAQL opcodes into "real" Intel (amd64 or x86+SSE2) code, by default  
-On other systems a **-DNOJIT** (arm CPUs for example) will enforce software interpration
-
-### SHA-1 HARDWARE ACCELERATION
-Some CPUs does have SHA instructions (typically AMD, not very widespread on Intel).  
-So you can use a piece of 7-zip by Igor Pavlov (I am sure you know 7z) that is  
-not really useful, but just for fun (faster BUT with higher latency).  
-For performances reason, no run-time CPU compatibility checks, must be turn on   
-via optional -hw switch  
-On AMD 5950X runs ~1.86 GB/s vs ~951 MB/s  
-The obj can be assembled from the fixed source code with asmc64  
-https://github.com/nidud/asmc  
-asmc64.exe sha1ugo.asm 
-Then link the .obj and compile with -DHWSHA1  
-Short version:  not worth the effort for the GA release  
-From build 58+ there is a new -DHWSHA2, without linking of asm, that accelerate SHA256 too  
-
-### STATIC LINKING
-I like **-static** very much, there are a thousand arguments as to whether it is good or not. 
-There are strengths and weaknesses. 
-Normally I prefer it, you do as you prefer.
-
-### TO BE NATIVE OR NOT TO BE?
-The **-march=native**  is a switch that asks the compiler to activate all possible 
-optimizations for the CPU on which zpaqfranz is being compiled. 
-This is to obtain the maximum possible performance, 
-while binding the executable to the processor. 
-It should not be used if you intend, for some reason, 
-to transfer the object program to a different system.
-If you are compiling from source you can safely use it.
-
-### DEBIAN (and derivates)
-Debian does not "like" anything embedded https://wiki.debian.org/EmbeddedCopies
-zpaqfranz (on Windows) have two SFX modules (32 and 64)  
-and (every platform) a testfile (sha256.zpaq) for extraction autotest  
-(aka: weird CPUs)  
-It is possible to make a Debian-package-compliant source code  
-with some sed (or a single sed -e) (of course remove the |)
-```
-sed -i "/DEBIAN|START/,/\/\/\/DEBIA|NEND/d"  zpaqfranz.cpp
-sed -i "s/\/\/\/char ext|ract_test1/char ext|ract_test1/g" zpaqfranz.cpp
-```
-
-### Arch Linux
-I strongly advise against using zpaqfranz on this Linux distro(s).  
-There is a bizarre policy on compiling executables.  
-Obviously no one forbids it (**runs fine**), but just don't ask for help.  
-
+### [Almost "universal" (minimal) Makefile](https://github.com/fcorbelli/zpaqfranz/wiki/Quickstart-Makefile)
+### [Quicker and dirtier!](https://github.com/fcorbelli/zpaqfranz/wiki/Quickstart-quicker%E2%80%90and%E2%80%90dirtier)
+### [DEFINEs at compile-time](https://github.com/fcorbelli/zpaqfranz/wiki/Quickstart-How-to-Build)
+### [HIDDEN GEMS](https://github.com/fcorbelli/zpaqfranz/wiki/Quickstart-Hidden-gems)
+### [STRANGE THINGS](https://github.com/fcorbelli/zpaqfranz/wiki/Quickstart-Strange-Things)
 ### [TARGET EXAMPLES](https://github.com/fcorbelli/zpaqfranz/wiki/Quickstart-Target-examples)
 
 
@@ -540,3 +415,4 @@ main       Most used switches
 normal     Usual switches
 voodoo     Nerd's switches
 ```
+### [Wiki commands](https://github.com/fcorbelli/zpaqfranz/wiki/Command)

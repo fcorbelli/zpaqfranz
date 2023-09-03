@@ -5,11 +5,11 @@ Swiss army knife for backup and disaster recovery, like 7z or RAR on steroids,wi
 ###  Runs on: Windows 32/64, FreeBSD, OpenBSD, Linux, MacOS, Solaris, OmniOS, ESXi, QNAP-based NAS, Haiku OS
 
 .   
-[A freeware GUI (PAKKA) is available on Windows to make extraction easier](https://www.francocorbelli.it/pakka)
+[A freeware GUI (PAKKA) is available on Windows to make extraction easier](https://github.com/fcorbelli/zpaqfranz/wiki/PAKKA-Windows-32-bit-extractor)
 _Please note: PAKKA is a Windows 32 EXE packed with mpress. Therefore it is possible that some antiviruses report false positives. I always recommend, as with any executable program, to take it only from reputable sources. It is actually the database backup portion of one of my ERP software, that's why I can't make an opensource version of it, it means rewriting from scratch. ***To avoid risks I put directly the download link from my personal site, the download is not logged.***_
 
 ### [Wiki being written - be patient](https://github.com/fcorbelli/zpaqfranz/wiki)
-### [HELP](https://github.com/fcorbelli/zpaqfranz/wiki/HELP:-integrated)
+### [Integrated HELP](https://github.com/fcorbelli/zpaqfranz/wiki/HELP-integrated)
 ### [Binaries on sourceforge](https://sourceforge.net/projects/zpaqfranz/files/)  
 
 ### OpenBSD: `pkg_add zpaqfranz`
@@ -351,68 +351,10 @@ You need it for ESXi too, even if it doesn't work. Don't be afraid, zpaqfranz kn
 ### [Almost "universal" (minimal) Makefile](https://github.com/fcorbelli/zpaqfranz/wiki/Quickstart-Makefile)
 ### [Quicker and dirtier!](https://github.com/fcorbelli/zpaqfranz/wiki/Quickstart-quicker%E2%80%90and%E2%80%90dirtier)
 ### [DEFINEs at compile-time](https://github.com/fcorbelli/zpaqfranz/wiki/Quickstart-How-to-Build)
+### [TARGET EXAMPLES](https://github.com/fcorbelli/zpaqfranz/wiki/Quickstart-Target-examples)
 ### [HIDDEN GEMS](https://github.com/fcorbelli/zpaqfranz/wiki/Quickstart-Hidden-gems)
 ### [STRANGE THINGS](https://github.com/fcorbelli/zpaqfranz/wiki/Quickstart-Strange-Things)
-### [TARGET EXAMPLES](https://github.com/fcorbelli/zpaqfranz/wiki/Quickstart-Target-examples)
 
 
-### **Short help**
-```
-zpaqfranz h
-```
-
-
-**Long (full) help**
-```
-zpaqfranz h h
-```
-
-**Single help (a command or switch set)**
-```
-    zpaqfranz   h a   => ask help and examples for command 'a'
-    zpaqfranz -he a   => ask examples for command 'a'
- 
-1on1       Delete folder2's files with same name/hash of folder1
-a          Add or append files to archive
-autotest   Autotest for hidden errors after compiling from source
-b          CPU benchmark, speed index in (yes!) franzomips
-c          Compare one master dir against one or more slave dir(s)
-cp         Friendly file copy with ETA (resumable)
-d          Deduplicate files inside a single folder WITHOUT MERCY
-dir        A better dir (yes, Windows' dir)
-dirsize    Show cumulative folder(s) size
-e          Extract file(s) on current folder
-f          Free disk space fill (=reliability test) or wipe (privacy)
-find       Search file(s) with wildcards
-g          Windows C: archiver from a shell without admin rights
-gui        Windows text-based GUI (listing-extraction)
-i          File (archive) information
-isopen     Check if a file isopen (by other software)
-k          Kill (delete) everything not in archive (RISKY!)
-l          List file(s)
-m          Merge (consolidate) multipart archive into one
-n          Decimate (keeping the newer X) older files
-p          Paranoid test (slow, lot of RAM needed)
-password   Change/remove password of single archive (no multipart)
-pause      Halt script execution until time or keypress
-q          Windows archive of C: with VSS
-r          Robocopy one master to multiple slave folders
-rd         Remove hard-to-delete Windows' folder (ex. path too long)
-rsync      Delete rsync's dangling temporary files
-s          Get dir(s) size, return free disk space
-sfx        Create SFX module (with encryption support)
-sum        Calc hash/checksums, find duplicated files
-t          Test archive integrity
-trim       Trim .zpaq archive from incomplete transaction
-utf        Convert filenames to latin, fix too long filenames etc
-v          Verify archive (against filesystem)
-versum     Hashdeep-like double check of hashes
-w          Chunked extraction/test of very big files
-x          Extract file(s)
-z          Remove empty directories
-franz      Advanced switches
-main       Most used switches
-normal     Usual switches
-voodoo     Nerd's switches
-```
+### [Integrated HELP](https://github.com/fcorbelli/zpaqfranz/wiki/HELP-integrated)
 ### [Wiki commands](https://github.com/fcorbelli/zpaqfranz/wiki/Command)

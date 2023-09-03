@@ -1,13 +1,10 @@
-# zpaqfranz: advanced multiplatform fork of ZPAQ 7.15, with SFX (on Windows), HW acceleration     
+# zpaqfranz: advanced multiversioned archiver, with SFX (on Windows), HW acceleration     
 
-Swiss army knife for backup and disaster recovery, like 7z or RAR on steroids,with deduplicated "snapshots" (versions). Conceptually similar to Mac time machine, but much more efficiently.  
+Swiss army knife for backup and disaster recovery, like 7z or RAR on steroids,with deduplicated "snapshots" (versions). Conceptually similar to Mac time machine, but much more efficiently, zpaq 7.15 fork.    
      
-###  Runs on: Windows 32/64, FreeBSD, OpenBSD, Linux, MacOS, Solaris, OmniOS, ESXi, QNAP-based NAS, Haiku OS
-
-.   
-[A freeware GUI (PAKKA) is available on Windows to make extraction easier](https://github.com/fcorbelli/zpaqfranz/wiki/PAKKA-Windows-32-bit-extractor)
-_Please note: PAKKA is a Windows 32 EXE packed with mpress. Therefore it is possible that some antiviruses report false positives. I always recommend, as with any executable program, to take it only from reputable sources. It is actually the database backup portion of one of my ERP software, that's why I can't make an opensource version of it, it means rewriting from scratch. ***To avoid risks I put directly the download link from my personal site, the download is not logged.***_
-
+###  Multiplatform: Windows 32/64, FreeBSD, OpenBSD, Linux, MacOS, Solaris, OmniOS, ESXi, QNAP-based NAS, Haiku OS
+ 
+### [A freeware GUI (PAKKA) is available on Windows to make extraction easier](https://github.com/fcorbelli/zpaqfranz/wiki/PAKKA-Windows-32-bit-extractor)
 ### [Wiki being written - be patient](https://github.com/fcorbelli/zpaqfranz/wiki)
 ### [Integrated HELP](https://github.com/fcorbelli/zpaqfranz/wiki/HELP-integrated)
 ### [Binaries on sourceforge](https://sourceforge.net/projects/zpaqfranz/files/)  

@@ -10,65 +10,116 @@ zpaqfranz
                                                                     
     This is zpaqfranz, a patched  but (maybe) compatible fork of ZPAQ version 7.15 
     (http://mattmahoney.net/dc/zpaq.html)
+ 
+Portions of software by other authors, mentioned later, are included.
+As far as I know this is allowed by the licenses.
 
-    Portions of software by other authors, mentioned later, are included. 
-    Different licenses apply to different "pieces".
-    As far as I know this is allowed by the licenses. 
-    Some text comment stripped due the size limit for github,
-    but the various license-copyrights should be in place.
+**** I apologize if I have unintentionally violated any rule ****
+****    Please report and I will fix as soon as possible     ****
 
-    I apologize if I have unintentionally violated any rule.
-    Report it and I will fix as soon as possible.
-    
-  Credits and copyrights and licenses and links
 
- 0 [Public domain]                zpaq http://mattmahoney.net/dc/zpaq.html  
- 1 [Public domain]                zpaq.AES from libtomcrypt by Tom St Denis 
- 2 [Public domain]                zpaq.salsa20 by D. J. Bernstein 
+        _      _____ _____ ______ _   _  _____ ______  _____ 
+       | |    |_   _/ ____|  ____| \ | |/ ____|  ____|/ ____|
+       | |      | || |    | |__  |  \| | (___ | |__  | (___  
+       | |      | || |    |  __| | . ` |\___ \|  __|  \___ \ 
+       | |____ _| || |____| |____| |\  |____) | |____ ____) |
+       |______|_____\_____|______|_| \_|_____/|______|_____/ 
+                                                       
+Credits and copyrights and licenses and links and internal bookmarks
+
+ 0 [Public domain]                zpaq http://mattmahoney.net/dc/zpaq.html
+ 1 [Public domain]                zpaq.AES from libtomcrypt by Tom St Denis
+ /// LICENSE_START.1
+ /// LICENSE_END.1
+ 2 [Public domain]                zpaq.salsa20 by D. J. Bernstein
+ /// LICENSE_START.2
+ /// LICENSE_END.2
  3 [Public domain]                unzpaq206.cpp by Matt Mahoney
+ /// LICENSE_START.3
+ /// LICENSE_END.3
  4 [Public domain]                zpaq.Include mod by data man and reg2s patch from encode.su forum
- 5 [Public domain]                Sha1Opt.asm and 7zAsm.asm by Igor Pavlov 
- 6 [MIT license]                  zpaq.Code from libdivsufsort 2.0 (C) Yuta Mori, 2003-2008 
- 7 [MIT License]                  Embedded Artistry (memory-aligned malloc)           https://github.com/embeddedartistry 
- 8 [MIT License]                  redundand SHA256                                    https://github.com/System-Glitch/SHA256 
- 9 [MIT License]                  Nilsimsa implementation by Sepehr Laal              https://github.com/3p3r/nilsimsa-lite/blob/master/nilsimsa.c 
-10 [MIT License]                  zsfx by me                                          https://github.com/fcorbelli/zsfx
-11 [zlib license]                 Crc32.h Copyright (c) 2011-2019 Stephan Brumme      https://create.stephan-brumme.com/crc32/ 
-12 [zlib license]                 part of hash-library (MD5, SHA-3) by Stephan Brumme https://github.com/stbrumme/hash-library 
-13 [zlib license]                 crc32c.c Copyright (C) 2015 Mark Adler              https://github.com/madler/brotli/blob/master/crc32c.c
-14 [The Unlicense]                wyhash (experimental) WangYi                        https://github.com/wangyi-fudan/wyhash 
-15 [BSD 2-Clause license]         xxHash Copyright (C) 2012-2020 Yann Collet          https://github.com/memcached/memcached/blob/master/xxhash.h
-16 [CC0 1.0 / Apache License 2.0] BLAKE3 hasher                                       https://github.com/BLAKE3-team/BLAKE3 
-17 [nothing explicit, seems BSD]  Whirlpool by Paulo Barreto and Vincent Rijmen       https://web.archive.org/web/20171129084214/http://www.larc.usp.br/~pbarreto/WhirlpoolPage.html  
-18 [almost-unrestricted]          Twofish implementation,(c) 2002 by Niels Ferguson   https://github.com/wernerd/ZRTPCPP/blob/master/cryptcommon/twofish.c
-19 [Apache License 2.0]           HighWay64 hasher https://github.com/google/highwayhash  
-20 [Public domain]                The files in this directory are released to the Public Domain. https://github.com/Bill-Gray/PDCursesMod
-21 [GPL3+]                        Rufus: The Reliable USB Formatting Utility https://rufus.ie
+ 5 [Public domain]                Sha1Opt.asm and 7zAsm.asm by Igor Pavlov
+ /// LICENSE_START.5
+ /// LICENSE_END.5
+ 6 [MIT license]                  zpaq.Code from libdivsufsort 2.0 (C) Yuta Mori, 2003-2008
+ /// LICENSE_START.6
+ /// LICENSE_END.6
+ 7 [MIT License]                  Embedded Artistry (memory-aligned malloc)           https://github.com/embeddedartistry
+ /// LICENSE_START.7
+ /// LICENSE_END.7
+ 8 [MIT License]                  Nilsimsa implementation by Sepehr Laal              https://github.com/3p3r/nilsimsa-lite/blob/master/nilsimsa.c
+ /// LICENSE_START.8
+ /// LICENSE_END.8
+ 9 [MIT License]                  zsfx by ... me                                      https://github.com/fcorbelli/zsfx
+10 [zlib license]                 Crc32.h Copyright (c) 2011-2019 Stephan Brumme      https://create.stephan-brumme.com/crc32/
+ /// LICENSE_START.10
+ /// LICENSE_END.10
+11 [zlib license]                 part of hash-library (MD5, SHA-3) by Stephan Brumme https://github.com/stbrumme/hash-library
+ /// LICENSE_START.11
+ /// LICENSE_END.11
+12 [zlib license]                 crc32c.c Copyright (C) Mark Adler              https://github.com/madler/brotli/blob/master/crc32c.c
+ /// LICENSE_START.12
+ /// LICENSE_END.12
+13 [The Unlicense]                wyhash (experimental) WangYi                        https://github.com/wangyi-fudan/wyhash
+ /// LICENSE_START.13
+ /// LICENSE_END.13
+14 [BSD 2-Clause license]         xxHash Copyright (C) 2012-2020 Yann Collet          https://github.com/memcached/memcached/blob/master/xxhash.h
+ /// LICENSE_START.14
+ /// LICENSE_END.14
+15 [CC0 1.0 / Apache License 2.0] BLAKE3 hasher                                       https://github.com/BLAKE3-team/BLAKE3
+ /// LICENSE_START.15
+ /// LICENSE_END.15
+16 [nothing explicit, seems BSD]  Whirlpool by Paulo Barreto and Vincent Rijmen       https://web.archive.org/web/20171129084214/http://www.larc.usp.br/~pbarreto/WhirlpoolPage.html
+ /// LICENSE_START.16
+ /// LICENSE_END.16
+17 [almost-unrestricted]		  Twofish implementation,(c) 2002 by Niels Ferguson   https://github.com/wernerd/ZRTPCPP/blob/master/cryptcommon/twofish.c
+	**** This is part of currently not released zpaqfranz (future zpaq-over-IP)
+18 [Apache License 2.0] HighWay64 hasher                                       https://github.com/google/highwayhash
+ /// LICENSE_START.18
+ /// LICENSE_END.18
+19 [Public domain]                The files in this directory are released to the Public Domain.
+    *** NOTE: PDC is used only on Windows ***
+ /// LICENSE_START.19
+ /// LICENSE_END.19
+20 [Public domain]                CPU accelerated SHA code taken from SHA-Intrinsics
+ /// LICENSE_START.20
+ /// LICENSE_END.20
+   _____ _____  ______ ______ _______ _____ _   _  _____  _____ 
+  / ____|  __ \|  ____|  ____|__   __|_   _| \ | |/ ____|/ ____|
+ | |  __| |__) | |__  | |__     | |    | | |  \| | |  __| (___  
+ | | |_ |  _  /|  __| |  __|    | |    | | | . ` | | |_ |\___ \ 
+ | |__| | | \ \| |____| |____   | |   _| |_| |\  | |__| |____) |
+  \_____|_|  \_\______|______|  |_|  |_____|_| \_|\_____|_____/ 
+                                                                
 
 
-Greetings
- 0 Of course Dr. Matt Mahoney http://mattmahoney.net
- 1 Thanks to JFLarvoire for usefun (yes, usefun) informations https://github.com/JFLarvoire/SysToolsLib/blob/master/C/MsvcLibX/src/readlink.c
- 2 Thanks to Bulat Ziganshin for contribution on Slicing-by-16 for crc32
- 3 Thanks to SeDD user of the encode.ru forum   for SFX debugging
- 4 Thanks to Aki  user of forums.debian.net     for some Debian's packager help
- 5 Thanks to https://github.com/dertuxmalwieder for testing on various Unixes and OpenBSD port 
- 6 Thanks to Felix Palmen <zirias@freebsd.org>  for great help on FreeBSD "packaging"
- 7 Thanks to https://github.com/omar-polo       for a merged-unmerged-hardcoded NOJIT fix 
- 8 Thanks to https://github.com/Piqlet          for non-x86 help
- 9 Thanks to https://github.com/osmano807       for non-x86 help
-10 Thanks to Stephen Kitt <skitt@debian.org>    for supporting Debian "packaging"
-11 Thanks to Niels Ferguson                     for the Twofish implementation
-12 Thanks to Newcastle University               for some winsock related issues, Master Degree, Game Engineering
-13 Thanks to https://github.com/akumiszcza      for OneDrive issue
-14 Thanks to https://github.com/ratay           for help help fix, longpath
-15 Thanks to https://github.com/graphixillusion for "lost" -vss
+ 0 ****** It is worth mentioning that the initial developer, 
+   ****** the one who has the most credit is
+   ****** Dr. Matt Mahoney             http://mattmahoney.net
+   ****** If you like zpaq technology, HE is the one to thank
+ 
+ 1 Thanks to JFLarvoire 								for usefun (yes, usefun) informations https://github.com/JFLarvoire/SysToolsLib/blob/master/C/MsvcLibX/src/readlink.c
+ 2 Thanks to Bulat Ziganshin 							for contribution on Slicing-by-16 for crc32
+ 3 Thanks to SeDD user of the encode.ru forum   		for SFX debugging
+ 4 Thanks to Aki  user of forums.debian.net     		for some Debian's packager help
+ 5 Thanks to https://github.com/dertuxmalwieder 		for testing on various Unixes and OpenBSD port
+ 6 Thanks to Felix Palmen <zirias@freebsd.org>  		for great help on FreeBSD "packaging"
+ 7 Thanks to https://github.com/omar-polo       		for a merged-unmerged-hardcoded NOJIT fix
+ 8 Thanks to https://github.com/Piqlet          		for non-x86 help
+ 9 Thanks to https://github.com/osmano807       		for non-x86 help
+10 Thanks to Stephen Kitt <skitt@debian.org>    		for supporting Debian "packaging"
+11 Thanks to Niels Ferguson                     		for the Twofish implementation
+12 Thanks to Newcastle University						for some winsock related issues, Master Degree, Game Engineering
+13 Thanks to https://github.com/akumiszcza      		for OneDrive issue
+14 Thanks to https://github.com/ratay           		for help help fix, longpath
+15 Thanks to https://github.com/graphixillusion 		for "lost" -vss
 16 Thanks to https://discuss.haiku-os.org/u/PulkoMandy 	for Haiku help
-17 Thanks to https://github.com/Bill-Gray/      for PDCursesMod
-18 Thanks to https://github.com/justinormont    for the proposed Homebrew install formula for macOS and x64 Linux
-19 Thanks to https://github.com/alebcay         for coding the Homebrew install formula for macOS and x64 Linux
-20 Thanks to https://github.com/ZhongRuoyu      for __linux__ instead of older #defines
-21 Thanks to Coody user of encode.ru            for unexistent folder bug
-22 Thanks to https://github.com/ruptotus        for "hidden" overloaded fwrite() function bug, and -dryrun on robocopy fix
-23 Thanks to Karl Wagner                        for typo fixing and various suggestions
-24 Thanks to https://github.com/Erol-2022       for Windows 7 console-bug fixing
+17 Thanks to https://github.com/Bill-Gray/				for PDCursesMod
+18 Thanks to https://github.com/justinormont            for the proposed Homebrew install formula for macOS and x64 Linux
+19 Thanks to https://github.com/alebcay                 for coding the Homebrew install formula for macOS and x64 Linux
+20 Thanks to https://github.com/ZhongRuoyu				for __linux__ instead of older #defines
+21 Thanks to Coody user of encode.su					for unexistent folder bug
+22 Thanks to https://github.com/ruptotus				for "hidden" overloaded fwrite() function bug, and -dryrun on robocopy fix
+23 Thanks to Karl Wagner								for typo fixing and various suggestions
+24 Thanks to https://github.com/Erol-2022               for Windows 7 console-bug fixing
+25 Thanks to Martin Pluskal                             for OpenSUSE package

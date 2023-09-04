@@ -84,26 +84,26 @@ Credits and copyrights and licenses and links and internal bookmarks
  
  1 Thanks to JFLarvoire                                for usefun (yes, usefun) informations https://github.com/JFLarvoire/SysToolsLib/blob/master/C/MsvcLibX/src/readlink.c
  2 Thanks to Bulat Ziganshin                           for contribution on Slicing-by-16 for crc32
- 3 Thanks to SeDD user of the encode.ru forum   		 for SFX debugging
- 4 Thanks to Aki  user of forums.debian.net     		 for some Debian's packager help
- 5 Thanks to https://github.com/dertuxmalwieder 		 for testing on various Unixes and OpenBSD port
- 6 Thanks to Felix Palmen <zirias@freebsd.org>  		 for great help on FreeBSD "packaging"
- 7 Thanks to https://github.com/omar-polo       		 for a merged-unmerged-hardcoded NOJIT fix
- 8 Thanks to https://github.com/Piqlet          		 for non-x86 help
- 9 Thanks to https://github.com/osmano807       		 for non-x86 help
-10 Thanks to Stephen Kitt <skitt@debian.org>    		 for supporting Debian "packaging"
-11 Thanks to Niels Ferguson                     		 for the Twofish implementation
+ 3 Thanks to SeDD user of the encode.ru forum          for SFX debugging
+ 4 Thanks to Aki  user of forums.debian.net            for some Debian's packager help
+ 5 Thanks to https://github.com/dertuxmalwieder        for testing on various Unixes and OpenBSD port
+ 6 Thanks to Felix Palmen <zirias@freebsd.org>         for great help on FreeBSD "packaging"
+ 7 Thanks to https://github.com/omar-polo              for a merged-unmerged-hardcoded NOJIT fix
+ 8 Thanks to https://github.com/Piqlet                 for non-x86 help
+ 9 Thanks to https://github.com/osmano807              for non-x86 help
+10 Thanks to Stephen Kitt <skitt@debian.org>           for supporting Debian "packaging"
+11 Thanks to Niels Ferguson                            for the Twofish implementation
 12 Thanks to Newcastle University                      for some winsock related issues, Master Degree, Game Engineering
-13 Thanks to https://github.com/akumiszcza      		 for OneDrive issue
-14 Thanks to https://github.com/ratay           		 for help help fix, longpath
-15 Thanks to https://github.com/graphixillusion 		 for "lost" -vss
+13 Thanks to https://github.com/akumiszcza             for OneDrive issue
+14 Thanks to https://github.com/ratay                  for help help fix, longpath
+15 Thanks to https://github.com/graphixillusion        for "lost" -vss
 16 Thanks to https://discuss.haiku-os.org/u/PulkoMandy for Haiku help
-17 Thanks to https://github.com/Bill-Gray/             for PDCursesMod
+17 Thanks to https://github.com/Bill-Gray              for PDCursesMod
 18 Thanks to https://github.com/justinormont           for the proposed Homebrew install formula for macOS and x64 Linux
 19 Thanks to https://github.com/alebcay                for coding the Homebrew install formula for macOS and x64 Linux
 20 Thanks to https://github.com/ZhongRuoyu             for __linux__ instead of older #defines
 21 Thanks to Coody user of encode.su                   for unexistent folder bug
 22 Thanks to https://github.com/ruptotus               for "hidden" overloaded fwrite() function bug, and -dryrun on robocopy fix
-23 Thanks to Karl Wagner                                for typo fixing and various suggestions
-24 Thanks to https://github.com/Erol-2022               for Windows 7 console-bug fixing
-25 Thanks to Martin Pluskal                             for OpenSUSE package
+23 Thanks to Karl Wagner                               for typo fixing and various suggestions
+24 Thanks to https://github.com/Erol-2022              for Windows 7 console-bug fixing
+25 Thanks to Martin Pluskal                            for OpenSUSE package

@@ -29,61 +29,46 @@ Credits and copyrights and licenses and links and internal bookmarks
 
  0 [Public domain]                zpaq http://mattmahoney.net/dc/zpaq.html
  1 [Public domain]                zpaq.AES from libtomcrypt by Tom St Denis
- /// LICENSE_START.1
- /// LICENSE_END.1
+ /// LICENSE_START.1 LICENSE_END.1
  2 [Public domain]                zpaq.salsa20 by D. J. Bernstein
- /// LICENSE_START.2
- /// LICENSE_END.2
+ /// LICENSE_START.2 LICENSE_END.2
  3 [Public domain]                unzpaq206.cpp by Matt Mahoney
- /// LICENSE_START.3
- /// LICENSE_END.3
+ /// LICENSE_START.3 LICENSE_END.3
  4 [Public domain]                zpaq.Include mod by data man and reg2s patch from encode.su forum
  5 [Public domain]                Sha1Opt.asm and 7zAsm.asm by Igor Pavlov
- /// LICENSE_START.5
- /// LICENSE_END.5
+ /// LICENSE_START.5 LICENSE_END.5
  6 [MIT license]                  zpaq.Code from libdivsufsort 2.0 (C) Yuta Mori, 2003-2008
- /// LICENSE_START.6
- /// LICENSE_END.6
+ /// LICENSE_START.6 LICENSE_END.6
  7 [MIT License]                  Embedded Artistry (memory-aligned malloc)           https://github.com/embeddedartistry
- /// LICENSE_START.7
- /// LICENSE_END.7
+ /// LICENSE_START.7 LICENSE_END.7
  8 [MIT License]                  Nilsimsa implementation by Sepehr Laal              https://github.com/3p3r/nilsimsa-lite/blob/master/nilsimsa.c
- /// LICENSE_START.8
- /// LICENSE_END.8
+ /// LICENSE_START.8 LICENSE_END.8
  9 [MIT License]                  zsfx by ... me                                      https://github.com/fcorbelli/zsfx
 10 [zlib license]                 Crc32.h Copyright (c) 2011-2019 Stephan Brumme      https://create.stephan-brumme.com/crc32/
- /// LICENSE_START.10
- /// LICENSE_END.10
+ /// LICENSE_START.10 LICENSE_END.10
 11 [zlib license]                 part of hash-library (MD5, SHA-3) by Stephan Brumme https://github.com/stbrumme/hash-library
- /// LICENSE_START.11
- /// LICENSE_END.11
-12 [zlib license]                 crc32c.c Copyright (C) Mark Adler              https://github.com/madler/brotli/blob/master/crc32c.c
- /// LICENSE_START.12
- /// LICENSE_END.12
+ /// LICENSE_START.11 LICENSE_END.11
+12 [zlib license]                 crc32c.c Copyright (C) Mark Adler    https://github.com/madler/brotli/blob/master/crc32c.c
+ /// LICENSE_START.12 LICENSE_END.12
 13 [The Unlicense]                wyhash (experimental) WangYi                        https://github.com/wangyi-fudan/wyhash
  /// LICENSE_START.13
  /// LICENSE_END.13
 14 [BSD 2-Clause license]         xxHash Copyright (C) 2012-2020 Yann Collet          https://github.com/memcached/memcached/blob/master/xxhash.h
- /// LICENSE_START.14
- /// LICENSE_END.14
+ /// LICENSE_START.14 LICENSE_END.14
 15 [CC0 1.0 / Apache License 2.0] BLAKE3 hasher                                       https://github.com/BLAKE3-team/BLAKE3
- /// LICENSE_START.15
- /// LICENSE_END.15
+ /// LICENSE_START.15 LICENSE_END.15
 16 [nothing explicit, seems BSD]  Whirlpool by Paulo Barreto and Vincent Rijmen       https://web.archive.org/web/20171129084214/http://www.larc.usp.br/~pbarreto/WhirlpoolPage.html
- /// LICENSE_START.16
- /// LICENSE_END.16
+ /// LICENSE_START.16 LICENSE_END.16
 17 [almost-unrestricted]		  Twofish implementation,(c) 2002 by Niels Ferguson   https://github.com/wernerd/ZRTPCPP/blob/master/cryptcommon/twofish.c
 	**** This is part of currently not released zpaqfranz (future zpaq-over-IP)
 18 [Apache License 2.0] HighWay64 hasher                                       https://github.com/google/highwayhash
- /// LICENSE_START.18
- /// LICENSE_END.18
+ /// LICENSE_START.18 LICENSE_END.18
 19 [Public domain]                The files in this directory are released to the Public Domain.
     *** NOTE: PDC is used only on Windows ***
- /// LICENSE_START.19
- /// LICENSE_END.19
+ /// LICENSE_START.19 LICENSE_END.19
 20 [Public domain]                CPU accelerated SHA code taken from SHA-Intrinsics
- /// LICENSE_START.20
- /// LICENSE_END.20
+ /// LICENSE_START.20 LICENSE_END.20
+
    _____ _____  ______ ______ _______ _____ _   _  _____  _____ 
   / ____|  __ \|  ____|  ____|__   __|_   _| \ | |/ ____|/ ____|
  | |  __| |__) | |__  | |__     | |    | | |  \| | |  __| (___  

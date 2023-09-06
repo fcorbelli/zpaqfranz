@@ -1,1 +1,1 @@
-please go here
+please go to https://github.com/fcorbelli/zpaqfranz-stuff/tree/main/ZPIPE

@@ -52,7 +52,7 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 */
 
-#define ZPAQ_VERSION "58.10b"
+#define ZPAQ_VERSION "58.10e"
 #define ZPAQ_DATE "(2023-09-06)"  // cannot use __DATE__ on Debian!
 
 ///	optional align for malloc (sparc64) via -DALIGNMALLOC
@@ -1042,7 +1042,8 @@ Credits and copyrights and licenses and links and internal bookmarks
 23 Thanks to Karl Wagner								for typo fixing and various suggestions
 24 Thanks to https://github.com/Erol-2022               for Windows 7 console-bug fixing
 25 Thanks to Martin Pluskal                             for OpenSUSE package
-26 Thansk to Petr Pisar                                 for Fedora Package
+26 Thanks to Petr Pisar                                 for Fedora Package
+27 Thanks to Davide Moretti                             for -home
 
                 _____ _   _  _____ _______       _      _
                |_   _| \ | |/ ____|__   __|/\   | |    | |
@@ -11402,7 +11403,7 @@ bool flagverbose;
 bool flagverify;
 bool flagvss;
 bool flagzero;
-
+bool flaghome;
 bool flagfixcase;
 
 #ifdef _WIN32
@@ -21187,7 +21188,7 @@ bool stringcomparei(std::string str1, std::string str2)
 string timetohuman(int32_t i_seconds)
 {
 	if (i_seconds<=0)
-		return "00:00:00";
+		return "000:00:00";
 	int h=(i_seconds/3600);
 	int m=(i_seconds -(3600*h))/60;
 	int s=(i_seconds -(3600*h)-(m*60));
@@ -37881,6 +37882,7 @@ private:
 	vector<VER> ver;          			// version info
   // Commands
 	int add();                			// add, return 1 if error else 0
+	int addhome();                		// add, return 1 if error else 0
 	int list();               			// list (one parameter) / check (more than one)
 	int fzf();
 	int ecommand();						// extract on ./
@@ -38012,6 +38014,8 @@ private:
 
 	int			makecrc32txt(string i_filename, string& o_initialquickhash,int64_t& o_initialzpaqsize,string& o_initialzpaqquick, string& o_initialzpaqcrc32,string& o_prezpaqcrc32,int64_t& prezpaqsize,string& o_thecrcfile);
 	void 		decodelastversion();
+	bool 		acceptonlynot(string i_filename);
+	int 		listfolders(string i_path,vector<string>* o_thelist);
 
 };
 #ifdef unix
@@ -42096,6 +42100,7 @@ string help_a(bool i_usage,bool i_example)
 		moreprint("+ : -hashdeep     Add the hashdeep MD5 VFILE (-ssd for multithread)");
 		moreprint("+ : -fasttxt      Write out CRC32 on archivename_crc32.txt");
 		moreprint("+ : -fasttxt -verify Post-check of crc32.txt");
+		moreprint("+ : -home         Create one archive for folder (-not -only)");
 
 		help_orderby();
 #if defined(_WIN32)
@@ -42156,8 +42161,11 @@ string help_a(bool i_usage,bool i_example)
 		moreprint("Raw imaging drive E with built in    a z:\\2.zpaq e: -image");
 		moreprint("Imaging C with pwd and big buffer    a z:\\2.zpaq c: -image -buffer 1MB -key pippo");
 		moreprint("Create VFILE-l-hashdeep.txt w/md5    a z:\\2.zpaq *.txt *.cpp -hashdeep -ssd");
-
 #endif
+		moreprint("Multiple z:\\utenti_something.zpaq    a z:\\utenti.zpaq c:\\users -home");
+		moreprint("All users, but not franco            a /temp/test1 /home -home -not franco");
+		moreprint("Only SARA and NERI folders           a /temp/test2 /home -home -only \"*SARA\" -only \"*NERI\"");
+		
 	}
 	return("Add or append files to archive");
 }
@@ -44358,6 +44366,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 	g_programflags.add(&flagforcezfs,		"-forcezfs",			"Enforce using .zfs",								"");
 	g_programflags.add(&flagfrugal,			"-frugal",				"Frugal backup",									"");
 	g_programflags.add(&flaghashdeep,		"-hashdeep",			"Hashdeep",											"");
+	g_programflags.add(&flaghome,			"-home",				"Home",												"a;");
 	g_programflags.add(&flagkill,			"-kill",				"Kill",												"");
 	g_programflags.add(&flagmm,				"-mm",					"Memory mapped",									"");
 	g_programflags.add(&flagnoattributes,	"-noattributes",		"Nessun attributo",									"");
@@ -45374,6 +45383,8 @@ int Jidac::doCommand()
 
 		if (flagappend)
 			return append();
+		if (flaghome)
+			return addhome();
 		else
 			return add();
 	}
@@ -56639,6 +56650,139 @@ int listfiles(string i_path,string i_extension,bool i_fullname,vector<string>* o
 
 	return tobesorted.size();
 #endif
+}
+
+
+bool Jidac::acceptonlynot(string i_filename)
+{
+	if (i_filename=="")
+		return false;
+	bool matched=false;
+	if (notfiles.size()>0)
+		for (unsigned i=0; i<notfiles.size(); ++i)
+		{
+			if (flagdebug)
+				myprintf("56750: check notfiles %03d %s  on filename %s\n",i,notfiles[i].c_str(),i_filename.c_str());
+			if (ispath(notfiles[i].c_str(),i_filename.c_str()))
+			{
+				if (flagdebug)
+					myprintf("56666: discarded because ispath notfiles[i] %s %s\n",notfiles[i].c_str(),i_filename.c_str());
+				return false;
+			}
+		}
+
+	if (onlyfiles.size()>0)
+	{
+		matched=false;
+		for (unsigned i=0;i<onlyfiles.size() && !matched; ++i)
+		{
+			if (flagdebug)
+				myprintf("56733: check only %03d %s  on filename %s\n",i,onlyfiles[i].c_str(),i_filename.c_str());
+			if (ispath(onlyfiles[i].c_str(),i_filename.c_str()))
+				matched=true;
+		}
+		if (!matched)
+		{
+			if (flagdebug)
+				myprintf("56741: discarded because not onlyfiles\n");
+			return false;
+		}
+	}
+	return true;
+}
+// get first-level folders (no recursion).  NO FULL PATH!
+int Jidac::listfolders(string i_path,vector<string>* o_thelist)
+{
+	if (o_thelist==NULL)
+	{
+		myprintf("56655: GURU o_thelist is null\n");
+		return 0;
+	}
+	if (!isdirectory(i_path))
+		i_path+="/";
+	vector<string> tobesorted;
+
+#ifndef unix
+	if (flagdebug)
+		myprintf("56662: i_path      %s\n",i_path.c_str());
+	i_path=extractfilepath(i_path);
+	std::wstring wpattern = utow(i_path.c_str())+utow("*.*");
+	const std::string s_pattern(wpattern.begin(),wpattern.end());
+	if (flagdebug)
+		myprintf("56667: get handle for w pattern %s\n",wtou(wpattern.c_str()).c_str());
+	WIN32_FIND_DATAW findfiledata;
+	HANDLE myhandle=FindFirstFileW(wpattern.c_str(),&findfiledata);
+	if (myhandle==INVALID_HANDLE_VALUE)
+	{
+		if (flagdebug)
+			myprintf("56674: Invalid handle %s\n",s_pattern.c_str());
+		return 0;
+	}
+	do
+	{
+		std::string t=wtou(findfiledata.cFileName);
+		if ((t!=".") && (t!=".."))
+		{
+			std::wstring wfilepath;
+			///wfilepath=utow(i_path.c_str())/*+L"\\"*/+findfiledata.cFileName;
+			wfilepath=findfiledata.cFileName;
+			const std::string s_wfilepath(wfilepath.begin(),wfilepath.end());
+			if (flagdebug)
+				myprintf("56687: Working on %s ",s_wfilepath.c_str());
+			if (findfiledata.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+			{
+				if (flagdebug)
+					myprintf(": OK PUSH BACK FOLDER\n");
+				string readytopush=wtou(wfilepath.c_str());
+				if (acceptonlynot(t))
+					tobesorted.push_back(readytopush);
+			}
+		}
+	} while(FindNextFile(myhandle,&findfiledata)==TRUE);
+	if (myhandle)
+		FindClose(myhandle);
+#else
+	DIR 	*dir;
+	struct 	dirent *ent;
+	if ((dir=opendir(i_path.c_str()))==NULL)
+	{
+		myprintf("56724: cannot scan in <<%s>>\n",i_path.c_str());
+		return 0;
+	}
+	while ((ent=readdir(dir))!=NULL)
+	{
+		string thename=ent->d_name;
+		string fullname=i_path+thename;
+		if (flagdebug)
+			myprintf("56712: working on thename %s fullname %s\n",thename.c_str(),fullname.c_str());
+		if ((thename!=".") && (thename!="..") && (thename!=".zfs"))
+		{
+			if (acceptonlynot(thename))
+			{
+				if (direxists(fullname.c_str()))
+				{
+					tobesorted.push_back(thename);
+					if (flagdebug)
+						myprintf("56719: no direxists fullname %s\n",fullname.c_str());
+				}
+				else
+				{
+					if (flagdebug)
+						myprintf("56719: no direxists fullname %s\n",fullname.c_str());
+				}
+			}
+		}
+	}
+	closedir (dir);
+#endif
+
+	if (flagdebug)
+		for (unsigned int i=0;i<tobesorted.size();i++)
+			myprintf("56700: %03d  %s\n",i,tobesorted[i].c_str());
+	std::sort(tobesorted.begin(),tobesorted.end());
+	for (unsigned int i=0;i<tobesorted.size();i++)
+		(*o_thelist).push_back(tobesorted[i]);
+	return tobesorted.size();
 }
 
 // just a bit of recursion
@@ -87112,4 +87256,102 @@ int Jidac::fzf()
 			}
 	}
 	return 0;
+}
+
+int Jidac::addhome()
+{
+	myprintf("87200: Adding with -home switch\n");
+	if (archive=="")
+	{
+		myprintf("87127: archive empty => quit\n");
+		return 2;
+	}
+	
+	if (files.size()!=1)
+	{
+		myprintf("87133: you need exactly 1 folder selection => quit (ex. /home)\n");
+		return 2;
+	}
+
+	string	basehome=files[0];
+	if (!isdirectory(basehome))
+		basehome+="/";
+	vector<string> candidate;
+	listfolders(basehome,&candidate);
+	if (flagdebug)
+		myprintf("87220: candidate %s with pattern %s\n",migliaia(candidate.size()),fullarchive.c_str());
+	
+	if (candidate.size()==0)
+	{
+		myprintf("87222: Sorry, cannot find something in <<");
+		printUTF8(basehome.c_str());
+		myprintf(">>");
+	}
+	myprintf("87226: founded %s\n",migliaia(candidate.size()));
+	int	risultato	=0;
+	int therun		=0;
+
+	vector<string> outcome;
+	string basearchive=archive;
+	for (unsigned int i=0;i<candidate.size();i++)
+	{
+		string sourcepath=basehome+candidate[i];
+		if (!isdirectory(sourcepath))
+			sourcepath+="/";
+		files.clear();
+		files.push_back(sourcepath);
+		string sourcename=candidate[i];
+		therun++;
+		jidacreset();
+		archive=extractfilepath(basearchive)+prendinomefileebasta(basearchive)+"_"+sourcename+".zpaq";
+		
+		myprintf("87197: adding on <<");
+		printUTF8(archive.c_str());
+		myprintf(">> from folder <<");
+		printUTF8(sourcepath.c_str());
+		myprintf(">>\n");
+		
+		int64_t addstart	=mtime();
+		int 	riscomando	=add();
+		///int 	riscomando	=0;
+		int64_t addtime		=mtime()-addstart;
+		
+		string stato="";
+		if (riscomando==0)
+			stato="OK";
+		else
+		if (riscomando==1)
+			stato="WARNING";
+		else
+		{
+			stato="ERROR";
+			riscomando=2;
+		}
+		char	buffer[100];
+		snprintf(buffer,sizeof(buffer),"%05d: %d %7s %s %21s ",therun,riscomando,stato.c_str(),timetohuman((uint32_t)(addtime/1000.0)).c_str(),migliaia(prendidimensionefile(archive.c_str())));
+		
+		string risul=buffer;
+		risul+=archive;
+		outcome.push_back(risul);
+
+		risultato+=riscomando;
+	}
+	
+	printbar('-');
+	for (unsigned int i=0;i<outcome.size();i++)
+	{
+		printUTF8(outcome[i].c_str());
+		myprintf("\n");
+	}
+	if (flagbig)
+	{
+		if (risultato==0)
+			bigok();
+		else
+		if (risultato==1)
+			bigwarning();
+		else
+			bigerror();
+	}
+	return risultato;
 }

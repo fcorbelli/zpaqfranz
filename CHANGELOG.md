@@ -1,3 +1,9 @@
+## [58.10.a] - 2023-09-06
+### Changed
+- Stripped of about everything from zpaqfranz repository
+- Moved to zpaqfranz-stuff (for license reason when 'packaged')
+- Fixed some typo in zpaqfranz.cpp source code
+
 ## [58.9.a] - 2023-08-16
 ### Changed
 - This `CHANGELOG.md` file.

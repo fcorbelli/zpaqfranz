@@ -52,8 +52,8 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 */
 
-#define ZPAQ_VERSION "58.9e"
-#define ZPAQ_DATE "(2023-08-23)"  // cannot use __DATE__ on Debian!
+#define ZPAQ_VERSION "58.10b"
+#define ZPAQ_DATE "(2023-09-06)"  // cannot use __DATE__ on Debian!
 
 ///	optional align for malloc (sparc64) via -DALIGNMALLOC
 #define STR(a) #a
@@ -69,12 +69,52 @@ OTHER DEALINGS IN THE SOFTWARE.
 	#define TEXT_ALIGN ""
 #endif
 
+/*
+/// Uncomment for "automagically" compiling (well, sort of)
+/// NO Windows? => no HWBLAKE, NO GUI, NO SERVER, NOSHA1, YES unix
+#ifndef _WIN32
+	#undef 	HWBLAKE3
+	#undef 	HWSHA1
+	#undef 	SERVER
+	#undef 	GUI
+	#undef 	unix
+	#define unix
+#endif
+
+
+/// Windows? No solaris, no ancient, no big, no esx, no alignmalloc, no unix, YES GUI
+#ifdef _WIN32
+	#undef	SOLARIS
+	#undef	ANCIENT
+	#undef	BIG
+	#undef	ESX
+	#undef	ALIGNMALLOC
+	#undef	unix
+	#undef 	GUI
+	#define	GUI
+#endif
+
+
+#ifdef HWSHA1
+   #ifdef HWSHA2
+	   #undef HWSHA1
+   #endif
+#endif
+
+#if defined(_WIN32) && ( defined(HWSHA1) || defined(HWSHA2) )
+   #ifndef _WIN64
+	   #undef HWSHA1
+	   #undef HWSHA2
+   #endif
+#endif
+*/
+
 #if defined(_WIN64)
 	#define ZSFX_VERSION "SFX64 v55.1,"
 #endif
 
 #if defined(_WIN32) && (!defined(_WIN64))
-	#define ZSFX_VERSION "SFX32 v55.1,"
+	#define ZSFX_VERSION "-SFX32 v55.1,"
 #endif
 
 #if (!defined(_WIN32)) && (!defined(_WIN64))
@@ -119,7 +159,6 @@ OTHER DEALINGS IN THE SOFTWARE.
 
 
 #define LARGEFILE 100000000
-
 
 /// some compiler define, some not
 #define __LITTLE_ENDIAN 1234
@@ -1002,6 +1041,8 @@ Credits and copyrights and licenses and links and internal bookmarks
 22 Thanks to https://github.com/ruptotus				for "hidden" overloaded fwrite() function bug, and -dryrun on robocopy fix
 23 Thanks to Karl Wagner								for typo fixing and various suggestions
 24 Thanks to https://github.com/Erol-2022               for Windows 7 console-bug fixing
+25 Thanks to Martin Pluskal                             for OpenSUSE package
+26 Thansk to Petr Pisar                                 for Fedora Package
 
                 _____ _   _  _____ _______       _      _
                |_   _| \ | |/ ____|__   __|/\   | |    | |
@@ -1016,6 +1057,7 @@ Credits and copyrights and licenses and links and internal bookmarks
 OpenBSD: 		pkg_add zpaqfranz
 FreeBSD: 		pkg install zpaqfranz
 MacOS: 			brew install zpaqfranz  (same for Ubuntu 20 x64)
+OpenSUSE:       sudo zypper install zpaqfranz
 ===============================================================================
 
 
@@ -38809,7 +38851,7 @@ int Jidac::paranoid()
 {
 #ifdef _WIN32
 #ifndef _WIN64
-	myprintf("WARNING: paranoid test use lots of RAM, not good for Win32, better Win64\n");
+	myprintf("WARNING: paranoid test use a lot of RAM, not good for Win32, better Win64\n");
 #endif
 #endif
 	unz(archive.c_str(), password);
@@ -41766,7 +41808,7 @@ string help_autotest(bool i_usage,bool i_example)
 #endif
 		moreprint("Prepare a z:\\pippo\\dotest.bat      autotest -all -verbose -to z:\\pippo");
 	}
-	return "Autotest for hidden errors after compiling from source";
+	return "Check for hidden errors after compiling from source";
 
 }
 string help_isopen(bool i_usage,bool i_example)
@@ -41781,7 +41823,7 @@ string help_isopen(bool i_usage,bool i_example)
 	{
 		moreprint("Check some thunderbird running       isopen c:\\pippo\\INBOX -exec_ok killthunderbird.bat");
 	}
-	return("Check if a file isopen (by other software)");
+	return("Check if a file is open (by other software)");
 
 }
 string help_versum(bool i_usage,bool i_example)
@@ -41934,7 +41976,7 @@ string help_last(bool i_usage,bool i_example)
 	{
 		moreprint("Get the last partname               last z:\\prova_????????");
 	}
-	return("Get last multipart filename");
+	return("Get the last multipart filename");
 }
 
 string help_pause(bool i_usage,bool i_example)
@@ -41955,7 +41997,7 @@ string help_pause(bool i_usage,bool i_example)
 		moreprint("Wait 5 seconds (or key) small output pause -n 5 -pakka");
 		moreprint("Wait 5 seconds (or key) NO output    pause -n 5 -pakka -silent");
 	}
-	return("Halt script execution until time or keypress");
+	return("Halt script execution until timeout expires or keypress");
 }
 
 string help_setpassword(bool i_usage,bool i_example)
@@ -41996,7 +42038,7 @@ string help_trim(bool i_usage,bool i_example)
 		moreprint("Trim file on other (safer):          trim z:\\1.zpaq -to d:\\small.zpaq");
 		moreprint("Trim file w/verify:                  trim z:\\1.zpaq -to d:\\small.zpaq -verify");
 	}
-	return("Trim .zpaq archive from incomplete transaction");
+	return("Trim .zpaq archive from the incomplete transaction");
 
 }
 string help_a(bool i_usage,bool i_example)
@@ -42013,7 +42055,7 @@ string help_a(bool i_usage,bool i_example)
 		moreprint("<>:               By default every .XLS file is forcibily added (old Excel change metafiles).");
 		moreprint("+ : -verbose      Verbose output");
 		moreprint("+ : -n X          Show X files to be added, before and after sort");
-		moreprint("+ : -debug        Show LOTS of infos");
+		moreprint("+ : -debug        Show a LOT of infos");
 		moreprint("+ : -summary      Be brief");
 		moreprint("+ : -noeta        Do not show ETA (redirect output to log file)");
 		moreprint("+ : -pakka        New-style output (by chunks)");
@@ -42132,7 +42174,7 @@ string help_rd(bool i_usage,bool i_example)
 	if (i_usage && i_example) moreprint("    Examples:");
 	if (i_example)
 		moreprint("Remove folder z:\\kajo:     rd z:\\kajo -force -kill -space");
-	return ("Remove hard-to-delete Windows' folder (ex. path too long)");
+	return ("Remove hard-to-delete Windows' folder (ex. path too lengthy)");
 }
 string help_fzf(bool i_usage,bool i_example)
 {
@@ -42178,7 +42220,7 @@ string help_w(bool i_usage,bool i_example)
 		moreprint("Test in RAM (no disk write,M/T)      w z:\\1.zpaq -ramdisk -test -checksum -ssd -frugal");
 		moreprint("Top test (W/disk write on SSD z:\\)   w z:\\1.zpaq -to z:\\kajo -ramdisk -paranoid -verify -checksum -longpath -ssd");
 	}
-	return ("Chunked extraction/test of very big files");
+	return ("Very big files chunked extraction/test");
 }
 string help_x(bool i_usage,bool i_example)
 {
@@ -42238,7 +42280,7 @@ string help_x(bool i_usage,bool i_example)
 		moreprint("Single file to stdout                x copia.zpaq 00000015.zfs >z:\\15.zfs");
 		moreprint("Extract multiple zpaqs               x \"vu*.zpaq\" -to z:\\pippo\\");
 	}
-	return("Extract file(s)");
+	return("Extract the file(s)");
 
 }
 string help_l(bool i_usage,bool i_example)
@@ -42398,7 +42440,7 @@ string help_find(bool i_usage,bool i_example)
 		moreprint("Search every EXE file of 2017         find . *.exe -datefrom 2017 -dateto 2017");
 		moreprint("10 biggest cpp                        find . *.cpp -orderby size -desc -limit 10 -verbose");
 	}
-	return("Search file(s) with wildcards");
+	return("Search file(s) with the wildcards");
 }
 string help_e(bool i_usage,bool i_example)
 {
@@ -42413,7 +42455,7 @@ string help_e(bool i_usage,bool i_example)
 	{
 		moreprint("Extract everything 'here'             e z:\\1.zpaq -longpath");
 	}
-	return("Extract file(s) on current folder");
+	return("Extract the file(s) in the current folder");
 }
 string help_dirsize(bool i_usage,bool i_example)
 {
@@ -42508,7 +42550,7 @@ string help_v(bool i_usage,bool i_example)
 		moreprint("+ : -find pippo   For path-rework of verify");
 		moreprint("+ : -replace plu  For path-rework of verify (find and replace)");
 		moreprint("+ : -verbose      Show distinct errors");
-		moreprint("+ : -debug        Show lots of info");
+		moreprint("+ : -debug        Show a lot of info");
 		moreprint("+ : -output x.txt Put errors in x.txt (alias -out)");
 	}
 	if (i_usage && i_example) moreprint("    Examples:");
@@ -42521,7 +42563,7 @@ string help_v(bool i_usage,bool i_example)
 		moreprint("1st version, multithread:            v z:\\1.zpaq -until 1 -ssd");
 	}
 
-	return ("Verify archive (against filesystem)");
+	return ("Verify an archive (against filesystem)");
 }
 string help_p(bool i_usage,bool i_example)
 {
@@ -42543,10 +42585,10 @@ string help_p(bool i_usage,bool i_example)
 	if (i_usage && i_example) moreprint("    Examples:");
 	if (i_example)
 	{
-		moreprint("Paranoid, use lots of RAM:           p z:\\1.zpaq");
-		moreprint("Very paranoid, use lots of RAM:      p z:\\1.zpaq -verify");
+		moreprint("Paranoid, use a lot of RAM:          p z:\\1.zpaq");
+		moreprint("Very paranoid, use a lot of RAM:     p z:\\1.zpaq -verify");
 	}
-	return("Paranoid test (slow, lot of RAM needed)");
+	return("Paranoid test (slow, a lot of RAM needed)");
 
 }
 string help_c(bool i_usage,bool i_example)
@@ -42575,7 +42617,7 @@ string help_c(bool i_usage,bool i_example)
 		moreprint("Multithread compare:                 c c:\\d0 k:\\d1 j:\\d2 p:\\d3 -ssd");
 		moreprint("Hashed compare d0 against d1,d2,d3:  c c:\\d0 k:\\d1 j:\\d2 p:\\d3 -verify");
 	}
-	return("Compare one master dir against one or more slave dir(s)");
+	return("Compare one master dir against one or more slaves dir(s)");
 
 }
 string help_s(bool i_usage,bool i_example)
@@ -42633,7 +42675,7 @@ string help_r(bool i_usage,bool i_example)
 	{
 		moreprint("CMD   r ('robocopy')");
 		moreprint("+ :               Mirror a master folder, just like robocopy /mir or rsync -a --delete");
-		moreprint("                  to one or more slaves (destination) folders");
+		moreprint("                  to one or more slave (destination) folders");
 		moreprint("                  In archive and files substitute $hour $min $sec $weekday $year $month $day");
 		moreprint("                  $week $date $time $datetime $timestamp");
 		moreprint("                  ENFORCING XLS, ignore .zfs and ADS by default");
@@ -42746,7 +42788,7 @@ string help_zfsadd(bool i_usage,bool i_example)
 		moreprint("zfsadd /tmp/kong.zpaq \"tank/d@2021\" \"--60d\" \"scanner\" -force");
 		moreprint("zfsadd /tmp/kong.zpaq \"tank/d@2021\" \"--60d\" \"scanner\" -script ./dothejob.sh");
 	}
-	return("Freeze zfs' snapshots inside archive");
+	return("Freeze zfs' snapshots inside the archive");
 }
 string help_zfspurge(bool i_usage,bool i_example)
 {
@@ -42991,7 +43033,7 @@ string help_utf(bool i_usage,bool i_example)
 		moreprint("Fix .eml filenames (dry run):        utf z:\\knb -fixeml");
 		*/
 	}
-	return("Convert filenames to latin, fix too long filenames etc");
+	return("Convert filenames to Latin, fix too long filenames etc.");
 
 }
 string help_f(bool i_usage,bool i_example)
@@ -43014,7 +43056,7 @@ string help_f(bool i_usage,bool i_example)
 		moreprint("Zero free space (VM shrink):         f z:\\ -zero");
 		moreprint("Zero free space (WITH verify):       f z:\\ -zero -verify");
 	}
-	return("Free disk space fill (=reliability test) or wipe (privacy)");
+	return("Free disk space fills (=reliability test) or wipe (privacy)");
 
 }
 string help_summa(bool i_usage,bool i_example)
@@ -43111,7 +43153,7 @@ string help_k(bool i_usage,bool i_example)
 		moreprint("WITHOUT delete everything and ");
 		moreprint("extract again (maybe it's huge):     k z:\\1.zpaq c:\\z -to z:\\knb");
 	}
-	return("Kill (delete) everything not in archive (RISKY!)");
+	return("Kill (delete) everything not in the archive (RISKY!)");
 
 }
 string help_n(bool i_usage,bool i_example)
@@ -43397,9 +43439,10 @@ void Jidac::helphelp()
 	moreprint("     Windows, FreeBSD, OpenBSD, Linux, MacOS, Solaris, OmniOS and others");
     moreprint("WWW: https://sourceforge.net/projects/zpaqfranz");
 	moreprint(" ");
+	moreprint("       Provided as-is, with no warranty whatsoever, by Franco Corbelli");
 	moreprint("              Fiducia pecuniam amisi, diffidentia vero servavi");
 	moreprint(" ");
-
+	
 #ifdef HWSHA2
 	moreprint("     HW SHA1/2 acceleration will be autodetected;  manual -hw to enforce");
 	moreprint("     for CPUs AMD Zen+ | Intel core gen (mobile) 10+th / (desktop) 11+th");
@@ -52326,8 +52369,7 @@ string filecopy(bool i_singlefile,bool i_append,const string i_infile,const stri
 		myprintf("32827 :CANNOT OPEN outfile %s\n",filedefinitivo.c_str());
 		return "";
 	}
-	size_t const blockSize = 65536;
-	unsigned char buffer[blockSize];
+	
 	int64_t donesize=0;
 	XXH3_state_t state128;
     (void)XXH3_128bits_reset(&state128);
@@ -52365,7 +52407,21 @@ string filecopy(bool i_singlefile,bool i_append,const string i_infile,const stri
 	size_t readSize;
 	int64_t startcopy=mtime();
 	bool	hostampato=false;
-	while ((readSize = fread(buffer, 1, blockSize, inFile)) > 0)
+	
+	
+	if (g_ioBUFSIZE==4096)
+		g_ioBUFSIZE=1048576;
+	unsigned char *buffer=(unsigned char*)aligned_malloc(64, g_ioBUFSIZE);
+	if (buffer==NULL)
+	{
+		myprintf("52339 : GURU allocating io buf of size %s\n",g_ioBUFSIZE);
+		seppuku();
+		return "";
+	}
+	if (flagdebug)
+		myprintf("52381: Buffer size %s\n",migliaia(g_ioBUFSIZE));
+	
+	while ((readSize = fread(buffer, 1, g_ioBUFSIZE, inFile)) > 0)
 	{
 		int64_t written=fwrite(buffer,1,readSize,outFile);
 		donesize+=written;
@@ -52392,6 +52448,13 @@ string filecopy(bool i_singlefile,bool i_append,const string i_infile,const stri
 		return "";
 	}
 	fclose(outFile);
+	
+	if (buffer!=NULL)
+	{
+		aligned_free(buffer);
+		buffer=0;
+	}
+
 	dimensioneoutput	=prendidimensionefile(filedefinitivo.c_str());
 
 
@@ -52418,7 +52481,7 @@ string filecopy(bool i_singlefile,bool i_append,const string i_infile,const stri
 			donesize=0;
 			bytestoappend=prendidimensionehandle(inFile);
 			startcopy=mtime();
-			while ((readSize = fread(buffer, 1, blockSize, inFile)) > 0)
+			while ((readSize = fread(buffer, 1, g_ioBUFSIZE, inFile)) > 0)
 			{
 				donesize+=readSize;
 				(void)XXH3_128bits_update(&state128, buffer, readSize);
@@ -59175,7 +59238,7 @@ int Jidac::decimation()
 		if (!flagforce)
 			if (files_edt[0].size()>50)
 			{
-				myprintf("29024: founded lots of files (%s), no -force => quit (security measure)\n",migliaia(files_edt[0].size()));
+				myprintf("29024: founded a lot of files (%s), no -force => quit (security measure)\n",migliaia(files_edt[0].size()));
 				return 1;
 			}
 	vector<string> 		scannedfiles;

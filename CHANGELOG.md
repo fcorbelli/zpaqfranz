@@ -1,3 +1,7 @@
+## [58.10.e] - 2023-09-06
+### Added
+- New switch -home in a command (add)
+  
 ## [58.10.a] - 2023-09-06
 ### Changed
 - Stripped of about everything from zpaqfranz repository

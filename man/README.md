@@ -1,1 +1,1 @@
-### This is the "man" for zpaqfranz, written and released with MIT License by Franco Corbelli
+### This is the "man" for zpaqfranz, written and released to public domain by Franco Corbelli

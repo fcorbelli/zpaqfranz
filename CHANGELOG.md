@@ -2,7 +2,8 @@
 ### Changed
 - Stripped of about everything from zpaqfranz repository
 - Moved to zpaqfranz-stuff (for license reason when 'packaged')
-- Fixed some typo in zpaqfranz.cpp source code
+- the subfolders, much smaller git
+- Fixed some typo in zpaqfranz.cpp source code, added some greetings
 
 ## [58.9.a] - 2023-08-16
 ### Changed

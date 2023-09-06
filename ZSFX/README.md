@@ -16,10 +16,10 @@ and is **public domain**.
 
 The Salsa20/8 code for Scrypt is by D. Bernstein and is **public domain**.  
 
-All of the remaining software is provided as-is, with no warranty.  
-by Matt Mahoney, release this software into the **public domain**.  
+All of the remaining software is provided as-is, with no warranty  
+by Matt Mahoney, who release this software into the **public domain**.  
 
 ### libzpaq.h 
 is provided as-is, with no warranty, by  
-Matt Mahoney, release this software into the **public domain**     
+Matt Mahoney, who release this software into the **public domain**     
 This applies worldwide.

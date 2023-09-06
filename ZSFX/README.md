@@ -2,7 +2,7 @@
 
 ### Released by Franco Corbelli, with MIT License
 
-**zfs.cpp** use two files: **libzpaq.cpp** and **libzpaq.h**,  
+**zsfx.cpp** use two files: **libzpaq.cpp** and **libzpaq.h**,  
 with compatible licenses (MIT and public domain)  
 
 ### libzpaq.cpp 

@@ -52,8 +52,8 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 */
 
-#define ZPAQ_VERSION "58.10e"
-#define ZPAQ_DATE "(2023-09-06)"  // cannot use __DATE__ on Debian!
+#define ZPAQ_VERSION "58.10g"
+#define ZPAQ_DATE "(2023-09-12)"  // cannot use __DATE__ on Debian!
 
 ///	optional align for malloc (sparc64) via -DALIGNMALLOC
 #define STR(a) #a
@@ -1044,6 +1044,7 @@ Credits and copyrights and licenses and links and internal bookmarks
 25 Thanks to Martin Pluskal                             for OpenSUSE package
 26 Thanks to Petr Pisar                                 for Fedora Package
 27 Thanks to Davide Moretti                             for -home
+28 Thanks to https://github.com/DetourNetworkUK         for Mac PowerPC strnlen bug
 
                 _____ _   _  _____ _______       _      _
                |_   _| \ | |/ ____|__   __|/\   | |    | |
@@ -21261,13 +21262,40 @@ inline char* tohuman5(int64_t i_bytes)
 	snprintf(io_buf,sizeof(io_buf),"%.02lf %s",mybytes,myappend[i]);
 	return io_buf;
 }
+// fix for Mac PowerPC (yes, no strlen here)
+size_t mystrnlen(const char *i_string, size_t maxlen)
+{
+	if (i_string==NULL)
+	{
+		if (flagdebug)
+			myprintf("21270: GURU null string\n");
+		seppuku();  //safer to die
+		exit(0);
+		return 0;
+	}
+	if (maxlen==0)
+	{
+		if (flagdebug)
+			myprintf("21276: GURU maxlen 0\n");
+		seppuku();  //safer to die
+		exit(0);
+		return 0;
+	}
+	size_t len;
+	for (len=0;len<maxlen;len++,i_string++) 
+		if (!*i_string)
+			break;
+	return len;
+}
+
 int64_t myatoll(const char * i_str)
 {
 	if (i_str==NULL)
 		return 0;
-	if (strnlen(i_str,30)==30)
+	
+	if (mystrnlen(i_str,20)==20) /// this should be 21, 9999999...TB
 	{
-		myprintf("18619: GURU on very long number (longer than 30 chars)\n");
+		myprintf("18619: GURU on very long number (longer than 20 chars)\n");
 		seppuku();
 		exit(0);
 	}
@@ -21285,7 +21313,7 @@ int64_t myatoll(const char * i_str)
 	int64_t	risultato=atoll(thedigit.c_str());
 	if (flagdebug)
 	{
-		myprintf("18632: integer (string) |%s|\n",thedigit.c_str());
+		myprintf("18632: integer (string) |%s| %s\n",thedigit.c_str(),migliaia(thedigit.size()));
 		myprintf("18663: integer          |%lld|\n",risultato);
 		myprintf("18634: text part        |%s|\n",thestring.c_str());
 	}
@@ -21305,6 +21333,7 @@ int64_t myatoll(const char * i_str)
 		if (toupper(thestring[0])=='T')
 			risultato*=1000000000000LL;
 	}
+	else
 	if (thestring.size()==2)
 	{
 		if (thestring=="KB")
@@ -21319,8 +21348,22 @@ int64_t myatoll(const char * i_str)
 		if (thestring=="TB")
 			risultato*=1099511627776LL;
 	}
+	else
+	{
+		if (flagdebug)
+			myprintf("21350: ERROR string size not 1 or 2, ignoring [%s]\n",migliaia(thestring.size()));
+	}
+	
 	if (flagdebug)
 		myprintf("18667: final from %s to %s (%s)\n",i_str,migliaia(risultato),tohuman(risultato));
+	
+	if (risultato<0)
+	{
+		myprintf("21363: GURU NEGATIVE! final from %s to %s (%s)\n",i_str,migliaia(risultato),tohuman(risultato));
+		seppuku();
+		exit(0);
+		return 0;
+	}
 	return risultato;
 }
 /// no stoi() on old compiler
@@ -55303,13 +55346,14 @@ int unz(const char * archive,const char * key)
 			if (flagverify || flagparanoid)
 			{
 				MAPPATIPOHASH::iterator a=g_mappatipohash.end();
-				for (MAPPATIPOHASH::iterator p=g_mappatipohash.begin(); p!=g_mappatipohash.end(); ++p)
-					if (myhashtype==p->second.hashname)
+				for (MAPPATIPOHASH::iterator pp=g_mappatipohash.begin(); pp!=g_mappatipohash.end(); ++pp)
+					if (myhashtype==pp->second.hashname)
 					{
-						a=p;
+///						myprintf("55352: Faccio test 1 %s\n",pp->second.hashname.c_str());
+						a=pp;
 						break;
 					}
-
+				
 				if (a!=g_mappatipohash.end())
 				{
 					unzfranzostring=a->second.hashname;
@@ -66711,17 +66755,17 @@ int Jidac::zfsproxbackup()
 		vector<string> candidate;
 		listfiles(theconf,"conf",false,&candidate);
 		files.clear();
-		for (unsigned int i=0;i<candidate.size();i++)
+		for (unsigned int j=0;j<candidate.size();j++)
 		{
-			string onlydigit	=stringtosomething(candidate[i],isdigit);
+			string onlydigit	=stringtosomething(candidate[j],isdigit);
 			if (onlydigit!="")
 			{
 				bool flagescluso=false;
-				for (unsigned int i=0;i<notfiles.size();i++)
+				for (unsigned int ii=0;ii<notfiles.size();ii++)
 				{
-					string temp=stringtosomething(prendinomefileebasta(notfiles[i]),isdigit);
+					string temp=stringtosomething(prendinomefileebasta(notfiles[ii]),isdigit);
 					if (flagdebug)
-						myprintf("63548: notfiles  %03d temp |%s| ",i,temp.c_str());
+						myprintf("63548: notfiles  %03d temp |%s| ",ii,temp.c_str());
 					if (onlydigit==temp)
 					{
 						if (flagdebug)
@@ -66731,7 +66775,7 @@ int Jidac::zfsproxbackup()
 					}
 				}
 				if (!flagescluso)
-					files.push_back(candidate[i]);
+					files.push_back(candidate[j]);
 			}
 		}
 		for (unsigned int i=0;i<files.size();i++)

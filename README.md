@@ -10,7 +10,7 @@
 |  [FreeBSD](http://www.francocorbelli.it/zpaqfranz/freebsd)                 |`pkg install zpaqfranz`        |  |
 |  [MacOS](http://www.francocorbelli.it/zpaqfranz/mac)                       |`brew install zpaqfranz`       |  |
 |  [OpenSUSE](http://www.francocorbelli.it/zpaqfranz/opensuse)               |`sudo zypper install zpaqfranz`|  |
-|  [Debian (amd64)](http://www.francocorbelli.it/zpaqfranz/debian)      |                               |58.10g|
+|  [Debian (Ubuntu etc)](http://www.francocorbelli.it/zpaqfranz/debian)      |                               |58.10g|
 |  [Linux generic](http://www.francocorbelli.it/zpaqfranz/linux)             |                               |  |
 |  [Solaris](http://www.francocorbelli.it/zpaqfranz/solaris)                 |                               |  |
 |  [OmniOS](http://www.francocorbelli.it/zpaqfranz/omnios)                   |                               |  |

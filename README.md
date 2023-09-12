@@ -5,18 +5,18 @@
 
 |  Platform                                                           | OS package                    |  Version   |
 |  ----------                                                         | -----                         |  ----------|
-|  [Windows 32/64bit](www.sourceforge.net/projects/zpaqfranz/files)   |                               |  |      
-|  [OpenBSD](www.francocorbelli.it/zpaqfranz/openbsd)                 |`pkg_add zpaqfranz`            |  |
-|  [FreeBSD](www.francocorbelli.it/zpaqfranz/freebsd)                 |`pkg install zpaqfranz`        |  |
-|  [MacOS](www.francocorbelli.it/zpaqfranz/mac)                       |`brew install zpaqfranz`       |  |
-|  [OpenSUSE](www.francocorbelli.it/zpaqfranz/opensuse)               |`sudo zypper install zpaqfranz`|  |
-|  [Debian (Ubuntu etc)](www.francocorbelli.it/zpaqfranz/debian)      |                               |  |
-|  [Linux generic](www.francocorbelli.it/zpaqfranz/linux)             |                               |  |
-|  [Solaris](www.francocorbelli.it/zpaqfranz/solaris)                 |                               |  |
-|  [OmniOS](www.francocorbelli.it/zpaqfranz/omnios)                   |                               |  |
-|  [QNAP (Annapurna)](www.francocorbelli.it/zpaqfranz/qnap)           |                               |  | 
-|  [Haiku](www.francocorbelli.it/zpaqfranz/haiku)                     |                               |  |
-|  [ESXi](www.francocorbelli.it/zpaqfranz/esxi)                       |                               |  |
+|  [Windows 32/64bit](https://sourceforge.net/projects/zpaqfranz/files)   |                               |  |      
+|  [OpenBSD](http://www.francocorbelli.it/zpaqfranz/openbsd)                 |`pkg_add zpaqfranz`            |  |
+|  [FreeBSD](http://www.francocorbelli.it/zpaqfranz/freebsd)                 |`pkg install zpaqfranz`        |  |
+|  [MacOS](http://www.francocorbelli.it/zpaqfranz/mac)                       |`brew install zpaqfranz`       |  |
+|  [OpenSUSE](http://www.francocorbelli.it/zpaqfranz/opensuse)               |`sudo zypper install zpaqfranz`|  |
+|  [Debian (Ubuntu etc)](http://www.francocorbelli.it/zpaqfranz/debian)      |                               |  |
+|  [Linux generic](http://www.francocorbelli.it/zpaqfranz/linux)             |                               |  |
+|  [Solaris](http://www.francocorbelli.it/zpaqfranz/solaris)                 |                               |  |
+|  [OmniOS](http://www.francocorbelli.it/zpaqfranz/omnios)                   |                               |  |
+|  [QNAP (Annapurna)](http://www.francocorbelli.it/zpaqfranz/qnap)           |                               |  | 
+|  [Haiku](http://www.francocorbelli.it/zpaqfranz/haiku)                     |                               |  |
+|  [ESXi](http://www.francocorbelli.it/zpaqfranz/esxi)                       |                               |  |
 | [Freeware GUI for Windows](https://github.com/fcorbelli/zpaqfranz/wiki/PAKKA-Windows-32-bit-extractor) |   |34.2   |
 
 [![Wiki](https://github-production-user-asset-6210df.s3.amazonaws.com/77727889/267342908-7d4c5bb9-6ea2-4735-9226-4d8112c5d65d.jpg)](https://github.com/fcorbelli/zpaqfranz/wiki) [![Help](https://github-production-user-asset-6210df.s3.amazonaws.com/77727889/267348388-d539932d-55c6-454a-a27b-054a10ae5f35.jpg)](https://github.com/fcorbelli/zpaqfranz/wiki/HELP-integrated) [![Sourceforge](https://github-production-user-asset-6210df.s3.amazonaws.com/77727889/267350249-91c18ca6-8c74-4585-96f4-3c72fd2c6725.jpg)](https://sourceforge.net/projects/zpaqfranz/)

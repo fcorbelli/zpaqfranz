@@ -199,7 +199,7 @@ I<The Unlicense> for wyhash (experimental) by WangYi;
 I<BSD 2> for xxHash Copyright (C) 2012-2020 Yann Collet;
 I<CC0 1.0 / Apache License 2.0> for the BLAKE3 hasher and HighWay64 hasher;
 I<Nothing explicit, seems BSD> for Whirlpool by Paulo Barreto and Vincent Rijmen;
-I<almost-unrestricted> Twofish implementation by Niels Ferguson;
+I<almost-unrestricted> Twofish implementation by Niels Ferguson.
 
 
 =head1 EXAMPLE 1 create a temporary file, add /etc to mybackup.zpaq

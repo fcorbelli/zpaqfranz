@@ -19,7 +19,7 @@
 |  [ESXi](www.francocorbelli.it/zpaqfranz/esxi)                       |                               |  |
 | [Freeware GUI for Windows](https://github.com/fcorbelli/zpaqfranz/wiki/PAKKA-Windows-32-bit-extractor) |   |34.2   |
 
-### [Wiki](https://github.com/fcorbelli/zpaqfranz/wiki) [Integrated HELP](https://github.com/fcorbelli/zpaqfranz/wiki/HELP-integrated)
+[![Wiki](https://github-production-user-asset-6210df.s3.amazonaws.com/77727889/267342908-7d4c5bb9-6ea2-4735-9226-4d8112c5d65d.jpg)](https://github.com/fcorbelli/zpaqfranz/wiki) [![Help](https://github-production-user-asset-6210df.s3.amazonaws.com/77727889/267348388-d539932d-55c6-454a-a27b-054a10ae5f35.jpg)](https://github.com/fcorbelli/zpaqfranz/wiki/HELP-integrated) [![Sourceforge](https://github-production-user-asset-6210df.s3.amazonaws.com/77727889/267350249-91c18ca6-8c74-4585-96f4-3c72fd2c6725.jpg)](https://sourceforge.net/projects/zpaqfranz/)
 
 ## Classic archivers (tar, 7z, RAR etc) are obsolete, when used for repeated backups (daily etc), compared to the ZPAQ technology, that maintain "snapshots" (versions) of the data. [This is even more true in the case of ASCII dumps of databases (e.g. MySQL/MariaDB)](https://github.com/fcorbelli/zpaqfranz/wiki/Real-world:-SQL-dumps-(MySQL-MariaDB-Postgres-backup))
 

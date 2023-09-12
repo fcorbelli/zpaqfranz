@@ -5,7 +5,7 @@
 
 |  Platform                                                           | OS package                    |  Version    | Video|
 |  ----------                                                         | -----                         |  ---------- |  -------    |
-|  [Windows 32/64bit](https://sourceforge.net/projects/zpaqfranz/files)   |                                  |      |      |      
+|  [Windows 32/64bit](https://sourceforge.net/projects/zpaqfranz/files)   |                                  |![Badge](https://img.shields.io/github/v/release/fcorbelli/zpaqfranz)|      |      
 |  [OpenBSD](http://www.francocorbelli.it/zpaqfranz/openbsd)                 |`pkg_add zpaqfranz`            |      |      |
 |  [FreeBSD](http://www.francocorbelli.it/zpaqfranz/freebsd)                 |`pkg install zpaqfranz`        |      |      |
 |  [MacOS](http://www.francocorbelli.it/zpaqfranz/mac)                       |`brew install zpaqfranz`       |      |      |

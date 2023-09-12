@@ -1,18 +1,25 @@
 # zpaqfranz: advanced multiversioned archiver, with HW acceleration and SFX (on Windows)      
 
-Swiss army knife for backup and disaster recovery, like 7z or RAR on steroids,with deduplicated "snapshots" (versions). Conceptually similar to Mac time machine, but much more efficiently, zpaq 7.15 fork.    
+### Swiss army knife for backup and disaster recovery, like 7z or RAR on steroids, with deduplicated "snapshots" (versions). Conceptually similar to the Mac time machine, but much more efficiently. Multiplatform zpaq 7.15 fork.    
      
-###  Multiplatform: Windows 32/64, FreeBSD, OpenBSD, Linux, MacOS, Solaris, OmniOS, ESXi, QNAP-based NAS, Haiku OS
- 
-### [A freeware GUI (PAKKA) is available on Windows to make extraction easier](https://github.com/fcorbelli/zpaqfranz/wiki/PAKKA-Windows-32-bit-extractor)
-### [Wiki being written - be patient](https://github.com/fcorbelli/zpaqfranz/wiki)
-### [Integrated HELP](https://github.com/fcorbelli/zpaqfranz/wiki/HELP-integrated)
-### [Binaries on sourceforge](https://sourceforge.net/projects/zpaqfranz/files/)  
 
-### OpenBSD: `pkg_add zpaqfranz`
-### FreeBSD: `pkg install zpaqfranz`
-### MacOS: `brew install zpaqfranz`
-### OpenSUSE: `sudo zypper install zpaqfranz`
+|  Platform                                                           | OS package                    |  Version   |
+|  ----------                                                         | -----                         |  ----------|
+|  [Windows 32/64bit](www.sourceforge.net/projects/zpaqfranz/files)   |                               |  |      
+|  [OpenBSD](www.francocorbelli.it/zpaqfranz/openbsd)                 |`pkg_add zpaqfranz`            |  |
+|  [FreeBSD](www.francocorbelli.it/zpaqfranz/freebsd)                 |`pkg install zpaqfranz`        |  |
+|  [MacOS](www.francocorbelli.it/zpaqfranz/mac)                       |`brew install zpaqfranz`       |  |
+|  [OpenSUSE](www.francocorbelli.it/zpaqfranz/opensuse)               |`sudo zypper install zpaqfranz`|  |
+|  [Debian (Ubuntu etc)](www.francocorbelli.it/zpaqfranz/debian)      |                               |  |
+|  [Linux generic](www.francocorbelli.it/zpaqfranz/linux)             |                               |  |
+|  [Solaris](www.francocorbelli.it/zpaqfranz/solaris)                 |                               |  |
+|  [OmniOS](www.francocorbelli.it/zpaqfranz/omnios)                   |                               |  |
+|  [QNAP (Annapurna)](www.francocorbelli.it/zpaqfranz/qnap)           |                               |  | 
+|  [Haiku](www.francocorbelli.it/zpaqfranz/haiku)                     |                               |  |
+|  [ESXi](www.francocorbelli.it/zpaqfranz/esxi)                       |                               |  |
+| [Freeware GUI for Windows](https://github.com/fcorbelli/zpaqfranz/wiki/PAKKA-Windows-32-bit-extractor) |   |34.2   |
+
+### [Wiki](https://github.com/fcorbelli/zpaqfranz/wiki) [Integrated HELP](https://github.com/fcorbelli/zpaqfranz/wiki/HELP-integrated)
 
 ## Classic archivers (tar, 7z, RAR etc) are obsolete, when used for repeated backups (daily etc), compared to the ZPAQ technology, that maintain "snapshots" (versions) of the data. [This is even more true in the case of ASCII dumps of databases (e.g. MySQL/MariaDB)](https://github.com/fcorbelli/zpaqfranz/wiki/Real-world:-SQL-dumps-(MySQL-MariaDB-Postgres-backup))
 

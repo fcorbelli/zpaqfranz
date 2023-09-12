@@ -1,3 +1,7 @@
+## [58.10.f] - 2023-09-12
+### Fix
+- PowerPC fix
+
 ## [58.10.e] - 2023-09-06
 ### Added
 - New switch -home in a command (add)

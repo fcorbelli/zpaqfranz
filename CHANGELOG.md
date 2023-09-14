@@ -1,3 +1,9 @@
+## [58.10.i] - 2023-09-14
+### Fix
+- 32 bit gcc fix, or better workaroud https://bugzilla.redhat.com/show_bug.cgi?id=2238781
+- disclaimer after help for USE THE DOUBLE QUOTES, LUKE!
+- changed $day, $hour... to %day, %hour ( Linux does not like '$' very much )
+
 ## [58.10.g] - 2023-09-12
 ### Fix
 - PowerPC fix

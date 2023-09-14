@@ -52,8 +52,8 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 */
 
-#define ZPAQ_VERSION "58.10g"
-#define ZPAQ_DATE "(2023-09-12)"  // cannot use __DATE__ on Debian!
+#define ZPAQ_VERSION "58.10i"
+#define ZPAQ_DATE "(2023-09-14)"  // cannot use __DATE__ on Debian!
 
 ///	optional align for malloc (sparc64) via -DALIGNMALLOC
 #define STR(a) #a
@@ -12146,6 +12146,16 @@ supporting uint64_t.
 /* Internal implementation                                                    */
 /*////////////////////////////////////////////////////////////////////////////*/
 
+/// this is a weird "fix" for gcc bug https://github.com/fcorbelli/zpaqfranz/issues/71
+/// please don't ask anything, took a couple of hours
+
+void fixgcc(const char* fmt, ...)
+{
+   va_list args;
+   va_start(args, fmt);
+   va_end(args);
+}
+
 void HighwayHashReset(const uint64_t key[4], HighwayHashState* state) {
   state->mul0[0] = 0xdbe6d5d5fe4cce2full;
   state->mul0[1] = 0xa4093822299f31d0ull;
@@ -12162,6 +12172,7 @@ void HighwayHashReset(const uint64_t key[4], HighwayHashState* state) {
   state->v1[0] = state->mul1[0] ^ ((key[0] >> 32) | (key[0] << 32));
   state->v1[1] = state->mul1[1] ^ ((key[1] >> 32) | (key[1] << 32));
   state->v1[2] = state->mul1[2] ^ ((key[2] >> 32) | (key[2] << 32));
+	fixgcc("ciao");
   state->v1[3] = state->mul1[3] ^ ((key[3] >> 32) | (key[3] << 32));
 }
 
@@ -20735,18 +20746,18 @@ string format_datetime(string i_formato,tm* t=NULL)
 	string date=year+'-'+month+'-'+day;
 	string time=hour+'-'+min+'-'+sec;
 	string datetime=date+'_'+time;
-	myreplaceall(i_formato,"$hour",hour);
-	myreplaceall(i_formato,"$min",min);
-	myreplaceall(i_formato,"$sec",sec);
-	myreplaceall(i_formato,"$weekday",weekday);
-	myreplaceall(i_formato,"$year",year);
-	myreplaceall(i_formato,"$month",month);
-	myreplaceall(i_formato,"$day",day);
-	myreplaceall(i_formato,"$week",week);
-	myreplaceall(i_formato,"$timestamp",datetime);
-	myreplaceall(i_formato,"$datetime",datetime);
-	myreplaceall(i_formato,"$date",date);
-	myreplaceall(i_formato,"$time",time);
+	myreplaceall(i_formato,"%hour",hour);
+	myreplaceall(i_formato,"%min",min);
+	myreplaceall(i_formato,"%sec",sec);
+	myreplaceall(i_formato,"%weekday",weekday);
+	myreplaceall(i_formato,"%year",year);
+	myreplaceall(i_formato,"%month",month);
+	myreplaceall(i_formato,"%day",day);
+	myreplaceall(i_formato,"%week",week);
+	myreplaceall(i_formato,"%timestamp",datetime);
+	myreplaceall(i_formato,"%datetime",datetime);
+	myreplaceall(i_formato,"%date",date);
+	myreplaceall(i_formato,"%time",time);
 	return i_formato;
 }
 bool myreplace(string& i_str, const string& i_from, const string& i_to)
@@ -42088,6 +42099,17 @@ string help_trim(bool i_usage,bool i_example)
 	return("Trim .zpaq archive from the incomplete transaction");
 
 }
+void print_sub()
+{
+	moreprint("                  Substitute %hour %min %sec %weekday %year %month %day");
+	moreprint("                  %week %date %time %datetime %timestamp");
+}
+void print_doublequote()
+{
+	moreprint("************ REMEMBER TO USE DOUBLE QUOTES! ************");
+	moreprint("*** -not *.cpp    is bad,    -not \"*.cpp\"    is good ***");
+	moreprint("*** test_???.zpaq is bad,    \"test_???.zpaq\" is good ***");
+}
 string help_a(bool i_usage,bool i_example)
 {
 	if (i_usage)
@@ -42096,8 +42118,7 @@ string help_a(bool i_usage,bool i_example)
 		moreprint("<>:               zpaqfranz store CRC-32/XXH of each file, detecting SHA-1 collisions,");
 		moreprint("                  while zpaq cannot by design. Can be disabled by -crc32 or -715,");
 		moreprint("                  on modern CPU slow down ~10%.");
-		moreprint("                  In archive and files substitute $hour $min $sec $weekday $year $month $day");
-		moreprint("                  $week $date $time $datetime $timestamp");
+		print_sub();
 		moreprint("<>:               By default do NOT store ADSs on Windows (essentially useless).");
 		moreprint("<>:               By default every .XLS file is forcibily added (old Excel change metafiles).");
 		moreprint("+ : -verbose      Verbose output");
@@ -42417,7 +42438,7 @@ string help_q(bool i_usage,bool i_example)
 		moreprint("+ : -frugal       Exclude Windows, %programfiles% and %temp%");
 		moreprint("+ : -all          Get everything (except swapfile)");
 		moreprint("+ : -to c:\\piz    Use c:\\piz for snap (default c:\\franzsnap)");
-		moreprint("+ :               It is possible to use $pcname as placeholder");
+		moreprint("+ :               It is possible to use %pcname as placeholder");
 		moreprint("+ :               Just about all switches of add() (-key -m -only ...)");
 		moreprint("+ :               except files selection (always C:/*)");
 		moreprint("+ :     ****      The folder franzsnap MUST NOT EXIST and be on C:");
@@ -42430,7 +42451,7 @@ string help_q(bool i_usage,bool i_example)
 		moreprint("Everything NOT C:\\DROPBOX            q z:\\1.zpaq -all -not c:/franzsnap/dropbox");
 		moreprint("NOT C:\\WINDOWS, NOT %programs%       q z:\\1.zpaq -frugal");
 		moreprint("Only C/C++ files and header          q z:\\1.zpaq -only *.c* -only *.h*");
-		moreprint("For multi-PC 'backup' on one zpaq    q z:\\1.zpaq -frugal -to c:\\snap_$pcname -verbose");
+		moreprint("For multi-PC 'backup' on one zpaq    q z:\\1.zpaq -frugal -to c:\\snap_%pcname -verbose");
 	}
 	return("Windows archive of C: with VSS");
 
@@ -42727,8 +42748,7 @@ string help_r(bool i_usage,bool i_example)
 		moreprint("CMD   r ('robocopy')");
 		moreprint("+ :               Mirror a master folder, just like robocopy /mir or rsync -a --delete");
 		moreprint("                  to one or more slave (destination) folders");
-		moreprint("                  In archive and files substitute $hour $min $sec $weekday $year $month $day");
-		moreprint("                  $week $date $time $datetime $timestamp");
+		print_sub();
 		moreprint("                  ENFORCING XLS, ignore .zfs and ADS by default");
 		moreprint("+ : -kill         wet run (default: dry-run");
 		moreprint("+ : -space        do not exit if not enough space reported");
@@ -42757,7 +42777,7 @@ string help_r(bool i_usage,bool i_example)
 		moreprint("Robocopy with verify      (WET run): r c:\\d0 k:\\d1 j:\\d2 p:\\d3 -kill -verify");
 		moreprint("Robocopy with hash verify (WET run): r c:\\d0 k:\\d1 j:\\d2 p:\\d3 -kill -verify -checksum -xxh3");
 		moreprint("Robocopy d0 in d1, forced (WET run): r c:\\d0 k:\\d1 j:\\d2 -kill -space");
-		moreprint("Robocopy append mode      (WET run): r c:\\d0 z:\\backup_$day -append -kill");
+		moreprint("Robocopy append mode      (WET run): r c:\\d0 z:\\backup_%day -append -kill");
 		moreprint("Robocopy d0 in d1,w/infos (WET run): r c:\\d0 k:\\d1 -kill -verbose");
 		moreprint("Robocopy d0=>d1 over LAN  (WET run): r c:\\d0 \\\\nas\\d1 -kill -verbose -pakka");
 #ifdef _WIN32
@@ -43493,7 +43513,6 @@ void Jidac::helphelp()
 	moreprint("       Provided as-is, with no warranty whatsoever, by Franco Corbelli");
 	moreprint("              Fiducia pecuniam amisi, diffidentia vero servavi");
 	moreprint(" ");
-	
 #ifdef HWSHA2
 	moreprint("     HW SHA1/2 acceleration will be autodetected;  manual -hw to enforce");
 	moreprint("     for CPUs AMD Zen+ | Intel core gen (mobile) 10+th / (desktop) 11+th");
@@ -43565,6 +43584,7 @@ void Jidac::usageall(string i_command)
 		(*a->second)(true,true);
 		morebar('-');
 	}
+	print_doublequote();
 	seppuku();
 }
 void Jidac::examples(string i_command)
@@ -45302,7 +45322,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 		myprintf("Version %1.0f\n", version+.0);
 	}
 /*
-	Substitute $day into archive and files and comments
+	Substitute %day into archive and files and comments
 */
 	archive=format_datetime(archive);
 	for (unsigned int i=0;i<files.size();i++)
@@ -66177,14 +66197,14 @@ int Jidac::windowsc()
 		return 2;
 	}
 	if (tofiles.size()==0)
-		myprintf("Using default -to %s (you can use $PCNAME, ex -to c:\\snap_$PCNAME)\n",g_franzsnap.c_str());
+		myprintf("Using default -to %s (you can use %PCNAME, ex -to c:\\snap_%PCNAME)\n",g_franzsnap.c_str());
 	if (tofiles.size()==1)
 	{
 		string temp=tofiles[0];
 		string pcname=stringtolower(win_getcomputername());
 		temp=stringtolower(temp);
 		if (pcname!="")
-			myreplaceall(temp,"$pcname",pcname);
+			myreplaceall(temp,"%pcname",pcname);
 		if (!isletterpath(temp))
 		{
 			myprintf("46793: -to need to be a letter path (c:\\something)\n");

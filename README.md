@@ -10,7 +10,7 @@
 |  [FreeBSD](http://www.francocorbelli.it/zpaqfranz/freebsd)                 |`pkg install zpaqfranz`        |      |      |
 |  [MacOS](http://www.francocorbelli.it/zpaqfranz/mac)                       |`brew install zpaqfranz`       |![Badge](https://img.shields.io/homebrew/v/zpaqfranz)|      |
 |  [OpenSUSE](http://www.francocorbelli.it/zpaqfranz/opensuse)               |`sudo zypper install zpaqfranz`|      |      |
-|  [Debian (Ubuntu etc)](http://www.francocorbelli.it/zpaqfranz/debian)      |                               |58.10g|[Desktop](http://www.francocorbelli.it/zpaqfranz/video/debian-deb.mp4)      |
+|  [Debian (Ubuntu etc)](http://www.francocorbelli.it/zpaqfranz/debian)      |                               |58.10i|[Desktop](http://www.francocorbelli.it/zpaqfranz/video/debian-deb.mp4)      |
 |  [Linux generic](http://www.francocorbelli.it/zpaqfranz/linux)             |                               |58.10g|      |
 |  [Solaris](http://www.francocorbelli.it/zpaqfranz/solaris)                 |                               |      |      |
 |  [OmniOS](http://www.francocorbelli.it/zpaqfranz/omnios)                   |                               |      |      |

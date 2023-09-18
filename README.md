@@ -12,6 +12,7 @@
 |  [OpenSUSE](http://www.francocorbelli.it/zpaqfranz/opensuse)               |`sudo zypper install zpaqfranz`|      |      |
 |  [Debian (Ubuntu etc)](http://www.francocorbelli.it/zpaqfranz/debian)      |                               |58.10i|[Desktop](http://www.francocorbelli.it/zpaqfranz/video/debian-deb.mp4)      |
 |  [Linux generic](http://www.francocorbelli.it/zpaqfranz/linux)             |                               |58.10g|      |
+|  [Arch](http://www.francocorbelli.it/zpaqfranz/arch)                       |                               |latest|      |
 |  [Solaris](http://www.francocorbelli.it/zpaqfranz/solaris)                 |                               |      |      |
 |  [OmniOS](http://www.francocorbelli.it/zpaqfranz/omnios)                   |                               |      |      |
 |  [QNAP (Annapurna)](http://www.francocorbelli.it/zpaqfranz/qnap)           |                               |      |      | 

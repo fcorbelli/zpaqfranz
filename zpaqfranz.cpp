@@ -53393,20 +53393,10 @@ bool debugwritebuffertofile(string i_filename,void* i_buffer,size_t i_size)
 		seppuku();
 		return false;
 	}
-	if (i_filename.size()>30)
-	{
-		myprintf("53397: i_filenamesize >30\n");
-		seppuku();
-		return false;
-	}
-	
-	char mynomefile[100];
-	snprintf(mynomefile,sizeof(mynomefile),"z:\\%s.bin",i_filename.c_str());
-	
-	FILE* myfile=fopen(mynomefile, "wb");
+	FILE* myfile=fopen(i_filename.c_str(),"wb");
 	if (myfile==NULL)
 	{
-		myprintf("53408: cannot write on %s\n",mynomefile);
+		myprintf("53408: cannot write on %s\n",i_filename.c_str());
 		seppuku();
 		return false;
 	}
@@ -53717,22 +53707,18 @@ int Jidac::autotest()
 				buffer8bit[j]=(buffer32bit[j]) & 255;
 // dirty trick for border bytes BIG/LITTLE
 ///double-check for a fake gcc warning. Not my fault...
-///			myprintf("53678: 00000000000 buffer8bit  %s\n",(migliaia(chunksize*sizeof(uint8_t))));
-///			myprintf("53676: 00000000000 chunksize   %s\n",migliaia(chunksize));
-///			myprintf("53676: 00000000000 chunksize-8 %s\n",migliaia(chunksize-8));
 			for (int j=chunksize-8;j<chunksize;j++)
 			{
-///				myprintf("53676: 00000000000 j is %s\n",migliaia(j));
-				buffer8bit[j]=(uint8_t)77; /// You can get a fake compiler warning here
+///				buffer8bit[j]=(uint8_t)77; /// You can get a fake compiler warning here
 				memset(&buffer8bit[j],77,1);
 			}
-			/*
+/*		
 			char dummyname[200];
-			snprintf(dummyname,sizeof(dummyname),"parte_%i",i);
+			snprintf(dummyname,sizeof(dummyname),"z:\\parte_%i.bin",i);
 			string ttemp=dummyname;
 			if (debugwritebuffertofile(ttemp,buffer8bit,chunksize))
 				myprintf("53734: written on %s\n",ttemp.c_str());
-			*/
+*/			
 			if (flagverbose)
 			{
 				printbar('=');

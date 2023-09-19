@@ -52,8 +52,8 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 */
 
-#define ZPAQ_VERSION "58.10i"
-#define ZPAQ_DATE "(2023-09-14)"  // cannot use __DATE__ on Debian!
+#define ZPAQ_VERSION "58.10j"
+#define ZPAQ_DATE "(2023-09-19)"  // cannot use __DATE__ on Debian!
 
 ///	optional align for malloc (sparc64) via -DALIGNMALLOC
 #define STR(a) #a
@@ -1045,7 +1045,9 @@ Credits and copyrights and licenses and links and internal bookmarks
 26 Thanks to Petr Pisar                                 for Fedora Package
 27 Thanks to Davide Moretti                             for -home
 28 Thanks to https://github.com/DetourNetworkUK         for Mac PowerPC strnlen bug
-
+29 Thanks to Lone_Wolf (bbs.archlinux.org)              for reviewing PKGBUILD
+30 Thanks to Scimmia   (bbs.archlinux.org)              for reviewing PKGBUILD
+31 Thanks to Loqs      (bbs.archlinux.org)              for reviewing PKGBUILD
                 _____ _   _  _____ _______       _      _
                |_   _| \ | |/ ____|__   __|/\   | |    | |
                  | | |  \| | (___    | |  /  \  | |    | |
@@ -53370,6 +53372,49 @@ int Jidac::pause()
 	}
 	return 0;
 }
+
+bool debugwritebuffertofile(string i_filename,void* i_buffer,size_t i_size)
+{
+	if (i_buffer==NULL)
+	{
+		myprintf("53379: i_buffer null\n");
+		seppuku();
+		return false;
+	}
+	if (i_size==0)
+	{
+		myprintf("53385: i_size 0\n");
+		seppuku();
+		return false;
+	}
+	if (i_filename.size()<1)
+	{
+		myprintf("53391: i_filenamesize <1\n");
+		seppuku();
+		return false;
+	}
+	if (i_filename.size()>30)
+	{
+		myprintf("53397: i_filenamesize >30\n");
+		seppuku();
+		return false;
+	}
+	
+	char mynomefile[100];
+	snprintf(mynomefile,sizeof(mynomefile),"z:\\%s.bin",i_filename.c_str());
+	
+	FILE* myfile=fopen(mynomefile, "wb");
+	if (myfile==NULL)
+	{
+		myprintf("53408: cannot write on %s\n",mynomefile);
+		seppuku();
+		return false;
+	}
+	fwrite(i_buffer,i_size,1,myfile);
+	fclose(myfile);
+	return true;
+}
+
 int Jidac::autotest()
 {
 	myprintf("Self-test for correct internal functioning\n"); // for non-Intel CPU
@@ -53671,8 +53716,23 @@ int Jidac::autotest()
 			for (int j=0;j<chunksize;j++)
 				buffer8bit[j]=(buffer32bit[j]) & 255;
 // dirty trick for border bytes BIG/LITTLE
+///double-check for a fake gcc warning. Not my fault...
+///			myprintf("53678: 00000000000 buffer8bit  %s\n",(migliaia(chunksize*sizeof(uint8_t))));
+///			myprintf("53676: 00000000000 chunksize   %s\n",migliaia(chunksize));
+///			myprintf("53676: 00000000000 chunksize-8 %s\n",migliaia(chunksize-8));
 			for (int j=chunksize-8;j<chunksize;j++)
-				buffer8bit[j]=77;
+			{
+///				myprintf("53676: 00000000000 j is %s\n",migliaia(j));
+				buffer8bit[j]=(uint8_t)77; /// You can get a fake compiler warning here
+				memset(&buffer8bit[j],77,1);
+			}
+			/*
+			char dummyname[200];
+			snprintf(dummyname,sizeof(dummyname),"parte_%i",i);
+			string ttemp=dummyname;
+			if (debugwritebuffertofile(ttemp,buffer8bit,chunksize))
+				myprintf("53734: written on %s\n",ttemp.c_str());
+			*/
 			if (flagverbose)
 			{
 				printbar('=');

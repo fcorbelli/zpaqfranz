@@ -1,3 +1,7 @@
+## [58.10.j] - 2023-09-19
+### Fix
+- Removed a fake compiler warning
+  
 ## [58.10.i] - 2023-09-14
 ### Fix
 - 32 bit gcc fix, or better workaroud https://bugzilla.redhat.com/show_bug.cgi?id=2238781

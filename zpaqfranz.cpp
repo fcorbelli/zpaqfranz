@@ -1799,6 +1799,7 @@ SHA-256: FCCE109C8360963EB18975B94BDBE434BE1A49D3F53BDD768A99093B3EB838D2 [     
 	#include <math.h>
 	#include <memory>
 	#include <pthread.h>
+	#include <signal.h>
 	#include <stdarg.h>
 	#include <stdexcept>
 	#include <stdio.h>

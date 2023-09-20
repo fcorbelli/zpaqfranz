@@ -3,6 +3,7 @@
 CFLAGS = -Wall -O2
 CXXFLAGS = -std=c++11 -Wall -O2
 LDFLAGS =
+LIBS = -lpthread
 
 CC = gcc
 CXX = g++
@@ -20,7 +21,7 @@ all: $(BIN)
 	$(CXX) $(CXXFLAGS) -c -o $@ $<
 
 zpaqfranz: zpaqfranz.o
-	$(CXX) $(LDFLAGS) -o $@ $^
+	$(CXX) $(LDFLAGS) -o $@ $^ $(LIBS)
 
 clean:
 	-rm -f *.o $(BIN) core

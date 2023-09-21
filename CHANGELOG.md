@@ -1,3 +1,7 @@
+## [58.10.k] - 2023-09-21
+### Fix
+- Warning-hunting on 15+ years compiler
+
 ## [58.10.j] - 2023-09-19
 ### Fix
 - Removed a fake compiler warning

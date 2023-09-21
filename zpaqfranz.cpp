@@ -52,8 +52,8 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 */
 
-#define ZPAQ_VERSION "58.10j"
-#define ZPAQ_DATE "(2023-09-19)"  // cannot use __DATE__ on Debian!
+#define ZPAQ_VERSION "58.10k"
+#define ZPAQ_DATE "(2023-09-21)"  // cannot use __DATE__ on Debian!
 
 ///	optional align for malloc (sparc64) via -DALIGNMALLOC
 #define STR(a) #a
@@ -1048,6 +1048,8 @@ Credits and copyrights and licenses and links and internal bookmarks
 29 Thanks to Lone_Wolf (bbs.archlinux.org)              for reviewing PKGBUILD
 30 Thanks to Scimmia   (bbs.archlinux.org)              for reviewing PKGBUILD
 31 Thanks to Loqs      (bbs.archlinux.org)              for reviewing PKGBUILD
+32 Thanks to https://github.com/tansy                   for Slackware older compilers
+
                 _____ _   _  _____ _______       _      _
                |_   _| \ | |/ ____|__   __|/\   | |    | |
                  | | |  \| | (___    | |  /  \  | |    | |
@@ -1378,6 +1380,21 @@ Haiku R1/beta4, 64 bit (gcc 11.2.0), hrev56721
 Not very tested
 g++ -O3 -Dunix zpaqfranz.cpp -o zpaqfranz  -pthread -static
 
+Slackware 12.0 (32 bit)
+gcc 4.1.2
+g++ -O3 -DANCIENT -Dunix zpaqfranz.cpp -o zpaqfranz -pthread
+
+Slackware64 14.0
+gcc 5.3.0
+clang 3.8.0
+g++ -O3 -Dunix zpaqfranz.cpp -o zpaqfranz -pthread -std=c++11
+clang++ -O3 -Dunix zpaqfranz.cpp -o zpaqfranz -pthread -std=c++11
+
+Slackware64 15.0
+gcc 11.2.0
+g++ -O3 -Dunix zpaqfranz.cpp -o zpaqfranz -pthread -lstdc++ -lm
+clang 13.0.0
+clang++ -O3 -Dunix zpaqfranz.cpp -o zpaqfranz -pthread
 
 Beware of #definitions
 g++ -dM -E - < /dev/null
@@ -41459,7 +41476,7 @@ void print_progress(int64_t ts, int64_t td,int64_t i_scritti,int i_percentuale)
 
 				if (command=='a')
 					if ((td>0) && (ts>0))
-						projection=i_scritti/(1.0*td/ts);
+						projection=(int64_t)(i_scritti/(1.0*td/ts));
 
 				if (i_percentuale>0)
 					myprintf("(%03d%%) %6.2f%% %02d:%02d:%02d  (%10s)->(%10s)=>(%10s) %10s/sec\r", i_percentuale,td*100.0/(ts+0.5),int(eta/3600), int(eta/60)%60, int(eta)%60, tohuman(td),tohuman2(i_scritti),tohuman3(projection),tohuman4(td/secondi));
@@ -45926,7 +45943,7 @@ int64_t Jidac::read_archive(callback_function i_advance,const char* arc, int *er
 								if (!flagnoeta)
 									if (!i_quiet)
 									{
-										myprintf("Block %10s K %12s (block/s)\r",migliaia((uint64_t)(parts/1000)),migliaia2((parts/(((mtime()-startblock)+1)/1000.0))));
+										myprintf("Block %10s K %12s (block/s)\r",migliaia((uint64_t)(parts/1000)),migliaia2((int64_t)(parts/(((mtime()-startblock)+1)/1000.0))));
 
 
 										if (i_advance!=NULL)
@@ -45934,7 +45951,7 @@ int64_t Jidac::read_archive(callback_function i_advance,const char* arc, int *er
 											char buf[1000];
 											///
 	///										snprintf(buf,sizeof(buf),"Block %10s K %12s (block/s) %s",migliaia((uint64_t)(parts/1000)),migliaia2((parts/(((mtime()-startblock)+1)/1000.0))),migliaia3(dt.size()));
-											snprintf(buf,sizeof(buf),"Versions %s files %s (%s/s), longpath %s",migliaia4(ver.size()-1),migliaia((uint64_t)(dt.size())),migliaia3((dt.size()/(((mtime()-startblock)+1)/1000.0))),migliaia2(toolongfilenames));
+											snprintf(buf,sizeof(buf),"Versions %s files %s (%s/s), longpath %s",migliaia4(ver.size()-1),migliaia((uint64_t)(dt.size())),migliaia3((int64_t)(dt.size()/(((mtime()-startblock)+1)/1000.0))),migliaia2(toolongfilenames));
 											i_advance(buf);
 										}
 									}
@@ -46883,7 +46900,7 @@ void Jidac::addfile(bool i_checkifselected,DTMap& i_edt,string filename, int64_t
 
 	static int ultimotempo	=-1;
 	double scantime			=(mtime()-g_start+1);
-	int iscantime			=scantime/1000;
+	int iscantime			=(int64_t)(scantime/1000);
 
 	if (flagnoeta==false)
 		if (iscantime!=ultimotempo)
@@ -51580,7 +51597,7 @@ int Jidac::extract()
 			}
 		}
 		double writetime=(1+mtime()-startwrite)*0.001;
-		myprintf("34093: written %21s expected %21s time %f @ %s\n",migliaia(written),migliaia2(expected),writetime,migliaia3(((written/writetime))));
+		myprintf("34093: written %21s expected %21s time %f @ %s\n",migliaia(written),migliaia2(expected),writetime,migliaia3((int64_t)((written/writetime))));
 	}
 	unsigned 	extracted		=0;
 	int			toolongfilenames=0;
@@ -51631,7 +51648,7 @@ int Jidac::extract()
 	{
 		fflush(stdout);
 		myprintf("\nExtracted %s files (%s errors) using %s bytes x %d threads\n",
-			migliaia(extracted), migliaia3(errors), migliaia4(job.maxMemory),
+			migliaia(extracted), migliaia3(errors), migliaia4((int64_t)job.maxMemory),
 			int(tid.size()));
 	}
 	if (toolongfilenames)
@@ -51973,7 +51990,7 @@ int Jidac::enumeratecomments()
 				{
 					myprintf("V%08u %s ",v,dateToString(flagutc,p->second.date).c_str());
 					myprintf(" +%08d -%08d -> %20s", ver[v].updates, ver[v].deletes,
-						migliaia(((v+1<ver.size() ? ver[v+1].offset : csize)-ver[v].offset+0.0)));
+						migliaia((int64_t)((v+1<ver.size() ? ver[v+1].offset : csize)-ver[v].offset+0.0)));
 					std::map<int,string>::iterator commento;
 					commento=mappacommenti.find(v);
 					if(commento!= mappacommenti.end())
@@ -52291,7 +52308,7 @@ string do_benchmark(int i_tnumber,int i_timelimit,string i_runningalgo,int i_chu
 			if (i_tnumber<0) /// not a pthread
 			{
 				myprintf("%03d s %12s: speed (%11s/s) ",trascorso,i_runningalgo.c_str(),
-				tohuman3(o_speed));
+				tohuman3((int64_t)o_speed));
 				if (flagverbose)
 					myprintf("\n");
 				else
@@ -52306,7 +52323,7 @@ string do_benchmark(int i_tnumber,int i_timelimit,string i_runningalgo,int i_chu
 					printf("\033[%d;0H",(int)i_tnumber+1);
 					restoreConsole();
 				}
-				myprintf("Thread %02d %03d s %12s: speed (%11s/s)",i_tnumber,trascorso,i_runningalgo.c_str(),tohuman3(o_speed));
+				myprintf("Thread %02d %03d s %12s: speed (%11s/s)",i_tnumber,trascorso,i_runningalgo.c_str(),tohuman3((int64_t)o_speed));
 				pthread_mutex_unlock(&g_mylock);
 			}
 			ultimotrascorso=trascorso;
@@ -52319,10 +52336,10 @@ string do_benchmark(int i_tnumber,int i_timelimit,string i_runningalgo,int i_chu
 	o_speed=lavorati/hashingtime;
 	lavorati+=mtime()-starttutto;
 	int trascorso=(int)((mtime()-starttutto+1)/1000.0);
-	myprintf("%08d s %12s: speed (%11s/s) ",trascorso,i_runningalgo.c_str(),tohuman3(o_speed));
+	myprintf("%08d s %12s: speed (%11s/s) ",trascorso,i_runningalgo.c_str(),tohuman3((int64_t)o_speed));
 	myprintf("\n");
 	char buf[100];
-	snprintf(buf,sizeof(buf),"%12s: %11s/s (done %11s)",i_runningalgo.c_str(),tohuman(o_speed),tohuman2(lavorati));
+	snprintf(buf,sizeof(buf),"%12s: %11s/s (done %11s)",i_runningalgo.c_str(),tohuman((int64_t)o_speed),tohuman2(lavorati));
 	string risultato=buf;
 	return risultato;
 }
@@ -55880,7 +55897,7 @@ int Jidac::test()
 	}
 	else
 		myprintf("7.15 stage time %10.2f no error detected (RAM ~%s), try CRC-32 (if any)\n",
-	(mtime()-starttest)/1000.0,tohuman((tid.size()*job.maxMemory)));
+	(mtime()-starttest)/1000.0,tohuman((int64_t)(tid.size()*job.maxMemory)));
 //// OK now check against CRC32 and the entire World (if any)
 	int64_t startverify=mtime();
 	sort(g_crc32.begin(),g_crc32.end(),comparecrc32block);
@@ -56004,7 +56021,7 @@ int Jidac::test()
 	myprintf("\nCRC-32 time %14.2fs\n",(mtime()-startverify)/1000.0);
 	myprintf("Blocks %19s (%12s)\n",migliaia(dalavorare),migliaia2(g_crc32.size()));
 	myprintf("Zeros  %19s (%12s) %f s\n",migliaia(zeroedblocks),migliaia2(howmanyzero),(g_zerotime/1000.0));
-	myprintf("Total  %19s speed %s/sec (%s/s)\n",migliaia(dalavorare+zeroedblocks),migliaia2(((dalavorare+zeroedblocks)/((mtime()-startverify+1)/1000.0))),tohuman(((dalavorare+zeroedblocks)/((mtime()-startverify+1)/1000.0))));
+	myprintf("Total  %19s speed %s/sec (%s/s)\n",migliaia(dalavorare+zeroedblocks),migliaia2((int64_t)((dalavorare+zeroedblocks)/((mtime()-startverify+1)/1000.0))),tohuman((int64_t)((dalavorare+zeroedblocks)/((mtime()-startverify+1)/1000.0))));
 	if (checkedfiles>0)
 		myprintf("Checked         : %08d of %08d (zpaqfranz)\n",checkedfiles,total_files);
 	if (uncheckedfiles>0)
@@ -58380,17 +58397,17 @@ int Jidac::robocopy()
 	if (roboequal>0)
 		myprintf("=   %12s %20s B\n",migliaia(roboequal),migliaia2(roboequalsize));
 	if (robocopied>0)
-		myprintf("+   %12s %20s B in %9.2fs %15s/sec\n",migliaia(robocopied),migliaia2(robocopiedsize),(timecopy/1000.0),migliaia3((robocopiedsize/(timecopy/1000.0))));
+		myprintf("+   %12s %20s B in %9.2fs %15s/sec\n",migliaia(robocopied),migliaia2(robocopiedsize),(timecopy/1000.0),migliaia3((int64_t)(robocopiedsize/(timecopy/1000.0))));
 	if (xlscopied>0)
 		myprintf("xls %12s %20s B\n",migliaia(xlscopied),migliaia2(xlscopiedsize));
 	if (robodeleted)
-		myprintf("-   %12s %20s B in %9.2fs %15s/sec\n",migliaia(robodeleted),migliaia2(robodeletedsize),(timedelete/1000.0),migliaia3((robodeletedsize/(timedelete/1000.0))));
+		myprintf("-   %12s %20s B in %9.2fs %15s/sec\n",migliaia(robodeleted),migliaia2(robodeletedsize),(timedelete/1000.0),migliaia3((int64_t)(robodeletedsize/(timedelete/1000.0))));
 	double tempo=(mtime()-startscan)+1;
 	tempo/=1000.0;
 
 	myprintf("\nRobocopy time  %9.2f  - Slaves getinfo %9.2f s\n",tempo,g_robocopy_check_destinazione/1000.0);
 
-	myprintf("Written bytes %s (%s) @ %s B/sec\n",migliaia(written_size),tohuman(written_size),migliaia2(written_size/tempo)
+	myprintf("Written bytes %s (%s) @ %s B/sec\n",migliaia(written_size),tohuman(written_size),migliaia2((int64_t)(written_size/tempo))
 	);
 	if (foldertoucherror>0)
 		myprintf("57888: WARNING - SOME FOLDER TOUCH ERROR %s\n",migliaia(foldertoucherror));
@@ -58406,7 +58423,7 @@ int Jidac::robocopy()
 		myprintf("close2       %10s touch      %10s delete   %10s\n",migliaia(g_robocopy_close2),migliaia2(g_robocopy_touch),migliaia3(g_robocopy_delete));
 		myprintf("readopen     %10s openout    %10s fclose   %10s\n",migliaia2(g_robocopy_readopen),migliaia2(g_robocopy_openoutfile),migliaia3(g_robocopy_fclose));
 		myprintf("getfolderinf %10s setfolder  %10s \n",migliaia2(timegetfolderinfo),migliaia2(timesetfolderinfo));
-		myprintf("buffersize   %10s scandir    %10s copy     %10s @ %s/s\n",tohuman(g_ioBUFSIZE),migliaia2(timescandir),migliaia3(g_robocopy_fread),migliaia4(realspeed));
+		myprintf("buffersize   %10s scandir    %10s copy     %10s @ %s/s\n",tohuman(g_ioBUFSIZE),migliaia2((int64_t)timescandir),migliaia3(g_robocopy_fread),migliaia4((int64_t)realspeed));
 		if (flagpakka)
 			myprintf("FOLDER-TOUCH WITH -pakka (check-before-touch)\n");
 		else
@@ -58975,7 +58992,7 @@ int Jidac::fillami()
 		}
 		myprintf("\n");
 		int64_t verifytime=mtime()-startverify;
-		myprintf("Verify time %f (%10s) speed (%10s/s)\n",verifytime/1000.0,tohuman(lavorati),tohuman2((lavorati/(verifytime/1000.0))));
+		myprintf("Verify time %f (%10s) speed (%10s/s)\n",verifytime/1000.0,tohuman(lavorati),tohuman2((int64_t)(lavorati/(verifytime/1000.0))));
 	}
 	if (flagallok)
 	{
@@ -59437,7 +59454,7 @@ int  Jidac::dir()
 	if (flagduplicati)
 	{
 		myprintf("\n          Duplicated %19s byte\n",migliaia(tot_duplicati));
-		myprintf("Hashed %8s files %18s bytes in %f s %s /s\n",migliaia(quantihash),migliaia2(hash_calcolati),(finehash-iniziohash)/1000.0,migliaia2((hash_calcolati/((finehash-iniziohash+1)/1000.0))));
+		myprintf("Hashed %8s files %18s bytes in %f s %s /s\n",migliaia(quantihash),migliaia2((int64_t)hash_calcolati),(finehash-iniziohash)/1000.0,migliaia3((int64_t)(hash_calcolati/((finehash-iniziohash+1)/1000.0))));
 	}
 	return 0;
 }
@@ -63367,7 +63384,7 @@ int Jidac::benchmark()
 			total_speed+=vettoreparametribenchmark[i].speed;
 			franzomips+=vettoreparametribenchmark[i].speed;
 		}
-		myprintf("Total speed %s /s\n",tohuman(total_speed));
+		myprintf("Total speed %s /s\n",tohuman((int64_t)total_speed));
 		if (thehashes.size()==13)
 		{
 			franzomips/=1000000;
@@ -63410,10 +63427,10 @@ int Jidac::benchmark()
 	if (thehashes.size()==13)
 	{
 		if (all)
-			myprintf("\nfranzomips multi thread index %s ",migliaia((franzomips*7.0)));
+			myprintf("\nfranzomips multi thread index %s ",migliaia((int64_t)(franzomips*7.0)));
 		else
-			myprintf("\nfranzomips single thread index %s ",migliaia(franzomips));
-		myprintf("(quick CPU check, raw %s)\n",migliaia(franzomips));
+			myprintf("\nfranzomips single thread index %s ",migliaia((int64_t)franzomips));
+		myprintf("(quick CPU check, raw %s)\n",migliaia((int64_t)franzomips));
 		for (unsigned int i=0;i<array_cpu.size();i++)
 			if (all)
 				myprintf("%s %10.2f %%\n",array_cpu[i].c_str(),array_multi[i]);
@@ -65000,7 +65017,7 @@ int Jidac::verify(bool i_readfile)
 			myprintf("UNKNOWN/NOHASH: %08d of %08d (legacy 7.15 archive?)\n",nohashfound,tobechecked);
 		printbar('-');
 		if (flagverbose)
-		myprintf("Total hashed bytes %s @ %s B/s\n",migliaia(byteshashed),migliaia2((byteshashed/((mtime()-startrunning)/1000.0))));
+		myprintf("Total hashed bytes %s @ %s B/s\n",migliaia(byteshashed),migliaia2((int64_t)(byteshashed/((mtime()-startrunning)/1000.0))));
 	}
 	return risultato;
 }
@@ -65577,7 +65594,7 @@ int Jidac::multiverify(vector <s_fileandsize>& i_arrayfilename)
 			myprintf("UNKNOWN/NOHASH: %08d of %08d (legacy 7.15 archive?)\n",nohashfound,myfiles.size());
 		printbar('-');
 		if (flagverbose)
-			myprintf("Total hashed bytes %s @ %s B/s\n",migliaia(byteshashed),migliaia2((byteshashed/((mtime()-startrunning)/1000.0))));
+			myprintf("Total hashed bytes %s @ %s B/s\n",migliaia(byteshashed),migliaia2((int64_t)(byteshashed/((mtime()-startrunning)/1000.0))));
 	}
 	delete [] threads;
 	if (flagverify)
@@ -65782,7 +65799,7 @@ int Jidac::extractqueue2(int i_chunk,int i_chunksize)
 		{
 			fflush(stdout);
 			myprintf("\nExtracted %s files (%s errors) using %s bytes x %d threads\n",
-			migliaia(extracted), migliaia3(errors), migliaia4(job.maxMemory),
+			migliaia((int64_t)extracted), migliaia3(errors), migliaia4((int64_t)job.maxMemory),
 			int(tid.size()));
 		}
 		block=preblock; ///AARRRGHHH!!
@@ -65795,7 +65812,7 @@ int Jidac::extractqueue2(int i_chunk,int i_chunksize)
 	if (flagverbose)
 	{
 		myprintf("RAMDISK       %21s bytes (%s) ",migliaia(g_ramdisksize),tohuman(g_ramdisksize));
-		myprintf("time %.2f s @ %s (%s/s)\n",time_extract,migliaia((job.total_size/time_extract)),tohuman((job.total_size/time_extract)));
+		myprintf("time %.2f s @ %s (%s/s)\n",time_extract,migliaia((int64_t)(job.total_size/time_extract)),tohuman((int64_t)(job.total_size/time_extract)));
 	}
 	int64_t 	startwrite=mtime();
 	int64_t 	expected=0;
@@ -65979,7 +65996,7 @@ int Jidac::extractqueue2(int i_chunk,int i_chunksize)
 			myprintf("[OK] ");
 		else
 			myprintf("[WARN] ");
-		myprintf("(%8.2f s) @ %8s/s ",t_timecrc*0.001,tohuman((t_crcsize/(t_timecrc*0.001))));
+		myprintf("(%8.2f s) @ %8s/s ",t_timecrc*0.001,tohuman((int64_t)(t_crcsize/(t_timecrc*0.001))));
 		myprintf("UNKN %s ",migliaia(t_filewithoutcrc));
 		if (t_filewithoutcrc==0)
 			myprintf("[OK] ");
@@ -66001,7 +66018,7 @@ int Jidac::extractqueue2(int i_chunk,int i_chunksize)
 			myprintf("[OK] ");
 		else
 			myprintf("[WARN] ");
-		myprintf("(%8.2f s) @ %8s/s ",t_timehash*0.001,tohuman((t_hashedsize/(t_timehash*0.001))));
+		myprintf("(%8.2f s) @ %8s/s ",t_timehash*0.001,tohuman((int64_t)(t_hashedsize/(t_timehash*0.001))));
 		myprintf("UNKN %s ",migliaia(t_filesnotchecked));
 		if (t_filesnotchecked==0)
 			myprintf("[OK] ");
@@ -66024,7 +66041,7 @@ int Jidac::extractqueue2(int i_chunk,int i_chunksize)
 	{
 		if (flagverbose)
 		{
-			myprintf("Time on FS (%6.2f s) writing data (%6.2f s) @ %s/s\n",t_timefilesystem*0.001,t_timewrite*0.001,tohuman((t_writtenbythread/(t_timewrite*0.001))));
+			myprintf("Time on FS (%6.2f s) writing data (%6.2f s) @ %s/s\n",t_timefilesystem*0.001,t_timewrite*0.001,tohuman((int64_t)(t_writtenbythread/(t_timewrite*0.001))));
 			myprintf("Written by threads %21s / reported write errors %d ",migliaia(t_writtenbythread),t_writeerror);
 			if (t_writeerror==0)
 				myprintf("[OK] ");
@@ -66035,7 +66052,7 @@ int Jidac::extractqueue2(int i_chunk,int i_chunksize)
 	}
 	if (flagverbose)
 	{
-		myprintf("Bytes expected     %21s (%6.2f s) @ %s B/s ",migliaia2(expected),writetime,migliaia3((t_writtenbythread/writetime)));
+		myprintf("Bytes expected     %21s (%6.2f s) @ %s B/s ",migliaia2((int64_t)expected),writetime,migliaia3((int64_t)(t_writtenbythread/writetime)));
 		if (!flagtest)
 		{
 			if (t_writtenbythread==expected)
@@ -66473,7 +66490,7 @@ int Jidac::hashselect()
 	float tempo=(mtime()-startrecalc)/1000.0;
 	printbar(' ',false);
 	myprintf("\r");
-	myprintf("Time for paranoid select : %.2fs (speed %s/s), forced files %s\n",tempo,tohuman((total_size/tempo)),migliaia(forzati));
+	myprintf("Time for paranoid select : %.2fs (speed %s/s), forced files %s\n",tempo,tohuman((int64_t)(total_size/tempo)),migliaia(forzati));
 	return 0;
 }
 
@@ -85967,7 +85984,7 @@ int Jidac::testbackup()
 		double velocita=totalsize/((mtime()-starttime+1)/1000.0);
 		myprintf("84287: Chunks checked OK: %s (%s @ %s/s)\n",migliaia(tobehasheddest_hashname.size()),
 		migliaia2(totalsize),
-		migliaia3(velocita)
+		migliaia3((int64_t)velocita)
 		);
 	}
 	else

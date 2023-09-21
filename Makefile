@@ -1,28 +1,24 @@
-# makefile for zpaqfranz
+### generic Makefile. Look at BINDIR for the prefix (/usr/bin instead of /usr/local/bin)
+### Generally, but not always, /usr/local/bin is for "BSD-style" systems, while /usr/bin is for older Linux systems  
+### In reality, each platform has its own custom:cannot know "a priori"
 
-CFLAGS = -Wall -O2
-CXXFLAGS = -std=c++11 -Wall -O2
-LDFLAGS =
-LIBS = -lpthread
+CC?=            cc
+INSTALL?=       install
+RM?=            rm
+PROG=           zpaqfranz
+CFLAGS+=        -O3 -Dunix
+LDADD=          -pthread -lstdc++ -lm
+BINDIR=         /usr/local/bin
+BSD_INSTALL_PROGRAM?=   install -m 0555
 
-CC = gcc
-CXX = g++
+all:    build
 
-BIN = zpaqfranz
+build:  ${PROG}
 
-.PHONY: all clean
+install:        ${PROG}
+	${BSD_INSTALL_PROGRAM} ${PROG} ${DESTDIR}${BINDIR}
 
-all: $(BIN)
-
-%.o: %.c
-	$(CC) $(CFLAGS) -c -o $@ $<
-
-%.o: %.cpp
-	$(CXX) $(CXXFLAGS) -c -o $@ $<
-
-zpaqfranz: zpaqfranz.o
-	$(CXX) $(LDFLAGS) -o $@ $^ $(LIBS)
-
+${PROG}:        ${OBJECTS}
+	${CC}  ${CFLAGS} zpaqfranz.cpp -o ${PROG} ${LDADD}
 clean:
-	-rm -f *.o $(BIN) core
-
+	${RM} -f ${PROG}

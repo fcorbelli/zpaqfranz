@@ -52,8 +52,8 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 */
 
-#define ZPAQ_VERSION "58.10k"
-#define ZPAQ_DATE "(2023-09-21)"  // cannot use __DATE__ on Debian!
+#define ZPAQ_VERSION "58.10l"
+#define ZPAQ_DATE "(2023-09-22)"  // cannot use __DATE__ on Debian!
 
 ///	optional align for malloc (sparc64) via -DALIGNMALLOC
 #define STR(a) #a
@@ -2088,112 +2088,64 @@ std::string bin2hex_128(uint64_t i_high,uint64_t i_low)
 	std::string slow	=bin2hex_64(i_low);
 	return shigh+slow;
 }
-/// very quick and very dirty output
-inline char *  migliaia(int64_t n)
+
+char* mymigliaia(int64_t i_bytes,char* i_buffer,int i_buffersize)
 {
-	static char retbuf[30];
-	if (n<0)
+	if (i_buffer==NULL)
 	{
-		snprintf(retbuf,sizeof(retbuf),"negative");
-		return retbuf;
+		printf("02096: guru i_buffer null\n");
+		exit(0);
 	}
-	char *p = &retbuf[sizeof(retbuf)-1];
-	unsigned int i = 0;
-	*p = '\0';
-	do
+	if (i_buffersize<10)
 	{
-		if(i%3 == 0 && i != 0)
-			*--p = '.';
-		*--p = '0' + n % 10;
-		n /= 10;
-		i++;
-		} while(n != 0);
-	return p;
-}
-inline char *  migliaia2(int64_t n)
-{
-	static char retbuf[30];
-	if (n<0)
-	{
-		snprintf(retbuf,sizeof(retbuf),"negative");
-		return retbuf;
+		printf("02106: guru buffer too small\n");
+		exit(0);
 	}
-	char *p = &retbuf[sizeof(retbuf)-1];
-	unsigned int i = 0;
-	*p = '\0';
-	do
+		if (i_bytes<0)
 	{
-		if(i%3 == 0 && i != 0)
-			*--p = '.';
-		*--p = '0' + n % 10;
-		n /= 10;
-		i++;
-		} while(n != 0);
-	return p;
-}
-inline char *  migliaia3(int64_t n)
-{
-	static char retbuf[30];
-	if (n<0)
-	{
-		snprintf(retbuf,sizeof(retbuf),"negative");
-		return retbuf;
-	}
-	char *p = &retbuf[sizeof(retbuf)-1];
-	unsigned int i = 0;
-	*p = '\0';
-	do
-	{
-		if(i%3 == 0 && i != 0)
-			*--p = '.';
-		*--p = '0' + n % 10;
-		n /= 10;
-		i++;
-		} while(n != 0);
-	return p;
-}
-inline char *  migliaia4(int64_t n)
-{
-	static char retbuf[30];
-	if (n<0)
-	{
-		snprintf(retbuf,sizeof(retbuf),"negative");
-		return retbuf;
+		snprintf(i_buffer,10,"negative");
+		return i_buffer;
 	}
 
-	char *p = &retbuf[sizeof(retbuf)-1];
-	unsigned int i = 0;
-	*p = '\0';
+	char *p=&i_buffer[sizeof(i_buffer)-1];
+	unsigned int i=0;
+	*p='\0';
 	do
 	{
-		if(i%3 == 0 && i != 0)
-			*--p = '.';
-		*--p = '0' + n % 10;
-		n /= 10;
+		if ((i%3==0) && (i!=0))
+			*--p='.';
+		*--p='0'+i_bytes%10;
+		i_bytes/=10;
 		i++;
-		} while(n != 0);
+	} while(i_bytes!=0);
 	return p;
 }
-inline char *  migliaia5(int64_t n)
+
+/// very quick and very dirty output
+inline char* migliaia(int64_t n)
 {
 	static char retbuf[30];
-	if (n<0)
-	{
-		snprintf(retbuf,sizeof(retbuf),"negative");
-		return retbuf;
-	}
-	char *p = &retbuf[sizeof(retbuf)-1];
-	unsigned int i = 0;
-	*p = '\0';
-	do
-	{
-		if(i%3 == 0 && i != 0)
-			*--p = '.';
-		*--p = '0' + n % 10;
-		n /= 10;
-		i++;
-		} while(n != 0);
-	return p;
+	return mymigliaia(n,retbuf,30);
+}
+inline char* migliaia2(int64_t n)
+{
+	static char retbuf[30];
+	return mymigliaia(n,retbuf,30);
+}
+inline char* migliaia3(int64_t n)
+{
+	static char retbuf[30];
+	return mymigliaia(n,retbuf,30);
+}
+inline char* migliaia4(int64_t n)
+{
+	static char retbuf[30];
+	return mymigliaia(n,retbuf,30);
+}
+inline char* migliaia5(int64_t n)
+{
+	static char retbuf[30];
+	return mymigliaia(n,retbuf,30);
 }
 
 
@@ -13029,7 +12981,7 @@ enum blake3_flags {
   ROOT                = 1 << 3,
   KEYED_HASH          = 1 << 4,
   DERIVE_KEY_CONTEXT  = 1 << 5,
-  DERIVE_KEY_MATERIAL = 1 << 6,
+  DERIVE_KEY_MATERIAL = 1 << 6
 };
 #define MAX_SIMD_DEGREE 1
 #define MAX_SIMD_DEGREE_OR_2 (MAX_SIMD_DEGREE > 2 ? MAX_SIMD_DEGREE : 2)
@@ -21227,70 +21179,60 @@ string timetohuman(int32_t i_seconds)
 	snprintf(temporaneo,sizeof(temporaneo),"%03d:%02d:%02d",h,m,s);
 	return temporaneo;
 }
+
+char* mytohuman(int64_t i_bytes,char* i_buffer,int i_buffersize)
+{
+	if (i_buffer==NULL)
+	{
+		myprintf("21235: guru i_buffer null\n");
+		seppuku();
+	}
+	if (i_buffersize<5)
+	{
+		myprintf("21240: guru buffer too small\n");
+		seppuku();
+	}
+	if (i_bytes<0)
+	{
+		snprintf(i_buffer,5,"neg");
+		return i_buffer;
+	}
+	char 	const *myappend[] = {"B","KB","MB","GB","TB","PB"};
+	char 	length = sizeof(myappend)/sizeof(myappend[0]);
+	double 	mybytes=i_bytes;
+	int i=0;
+	if (i_bytes>1024)
+		for (i=0;(i_bytes/1024)> 0 && (i<length-1); i++,i_bytes/=1024)
+			mybytes=i_bytes/1024.0;
+///	snprintf(i_buffer,sizeof(i_buffer),"%.02lf %s",mybytes,myappend[i]);
+	snprintf(i_buffer,i_buffersize,"%.02f %s",mybytes,myappend[i]);
+	return i_buffer;
+}
+
 inline char* tohuman(int64_t i_bytes)
 {
 	static char io_buf[30];
-	char const *myappend[] = {"B","KB","MB","GB","TB","PB"};
-	char length = sizeof(myappend)/sizeof(myappend[0]);
-	double mybytes=i_bytes;
-	int i=0;
-	if (i_bytes > 1024)
-		for (i=0;(i_bytes / 1024) > 0 && i<length-1; i++, i_bytes /= 1024)
-			mybytes = i_bytes / 1024.0;
-	snprintf(io_buf,sizeof(io_buf),"%.02lf %s",mybytes,myappend[i]);
-	return io_buf;
+	return mytohuman(i_bytes,io_buf,30);
 }
 inline char* tohuman2(int64_t i_bytes)
 {
 	static char io_buf[30];
-	char const *myappend[] = {"B","KB","MB","GB","TB","PB"};
-	char length = sizeof(myappend)/sizeof(myappend[0]);
-	double mybytes=i_bytes;
-	int i=0;
-	if (i_bytes > 1024)
-		for (i=0;(i_bytes / 1024) > 0 && i<length-1; i++, i_bytes /= 1024)
-			mybytes = i_bytes / 1024.0;
-	snprintf(io_buf,sizeof(io_buf),"%.02lf %s",mybytes,myappend[i]);
-	return io_buf;
+	return mytohuman(i_bytes,io_buf,30);
 }
 inline char* tohuman3(int64_t i_bytes)
 {
 	static char io_buf[30];
-	char const *myappend[] = {"B","KB","MB","GB","TB","PB"};
-	char length = sizeof(myappend)/sizeof(myappend[0]);
-	double mybytes=i_bytes;
-	int i=0;
-	if (i_bytes > 1024)
-		for (i=0;(i_bytes / 1024) > 0 && i<length-1; i++, i_bytes /= 1024)
-			mybytes = i_bytes / 1024.0;
-	snprintf(io_buf,sizeof(io_buf),"%.02lf %s",mybytes,myappend[i]);
-	return io_buf;
+	return mytohuman(i_bytes,io_buf,30);
 }
 inline char* tohuman4(int64_t i_bytes)
 {
 	static char io_buf[30];
-	char const *myappend[] = {"B","KB","MB","GB","TB","PB"};
-	char length = sizeof(myappend)/sizeof(myappend[0]);
-	double mybytes=i_bytes;
-	int i=0;
-	if (i_bytes > 1024)
-		for (i=0;(i_bytes / 1024) > 0 && i<length-1; i++, i_bytes /= 1024)
-			mybytes = i_bytes / 1024.0;
-	snprintf(io_buf,sizeof(io_buf),"%.02lf %s",mybytes,myappend[i]);
-	return io_buf;
+	return mytohuman(i_bytes,io_buf,30);
 }
 inline char* tohuman5(int64_t i_bytes)
 {
 	static char io_buf[30];
-	char const *myappend[] = {"B","KB","MB","GB","TB","PB"};
-	char length = sizeof(myappend)/sizeof(myappend[0]);
-	double mybytes=i_bytes;
-	int i=0;
-	if (i_bytes > 1024)
-		for (i=0;(i_bytes / 1024) > 0 && i<length-1; i++, i_bytes /= 1024)
-			mybytes = i_bytes / 1024.0;
-	snprintf(io_buf,sizeof(io_buf),"%.02lf %s",mybytes,myappend[i]);
-	return io_buf;
+	return mytohuman(i_bytes,io_buf,30);
 }
 // fix for Mac PowerPC (yes, no strlen here)
 size_t mystrnlen(const char *i_string, size_t maxlen)
@@ -21711,7 +21653,7 @@ time_t unix_time(int64_t date) {
 /*
 	section: errors
 */
-long long fsbtoblk(int64_t num, uint64_t fsbs, u_long bs)
+int64_t fsbtoblk(int64_t num, uint64_t fsbs, u_long bs)
 {
 	return (num * (intmax_t) fsbs / (int64_t) bs);
 }
@@ -49934,7 +49876,7 @@ string	franz_do_hash::filehash(string i_filename,bool i_flagcalccrc32,int64_t i_
 			do
 			{
 				n = (size_t)got - off;
-				if (n > BUFSIZE)
+				if (n > (unsigned int)BUFSIZE)
 					n = BUFSIZE;
 				crc=crc32c(crc, (const unsigned char*)unzBuf+off,n);
 				off += n;

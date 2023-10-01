@@ -52,8 +52,8 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 */
 
-#define ZPAQ_VERSION "58.10l"
-#define ZPAQ_DATE "(2023-09-22)"  // cannot use __DATE__ on Debian!
+#define ZPAQ_VERSION "58.10o"
+#define ZPAQ_DATE "(2023-10-01)"  // cannot use __DATE__ on Debian!
 
 ///	optional align for malloc (sparc64) via -DALIGNMALLOC
 #define STR(a) #a
@@ -11263,7 +11263,7 @@ int64_t g_robocopy_fclose;
 int64_t g_robocopy_fread;
 int64_t g_robocopy_fwrite;
 
-
+bool	g_testifselected;
 
 int64_t g_start			=0;
 int64_t g_dimensione	=0;
@@ -37826,6 +37826,8 @@ public:
 	string	gui_filtername;
 	int		gogui();
 #endif
+	bool 		isselected(const char* filename, bool rn,int64_t i_size);// files, -only, -not
+	
 private:
 
 	string				fullcommandline;
@@ -37963,7 +37965,6 @@ private:
 	void 		printsanitizeflags();
 	string 		rename(string name);           // rename from -to
 	int64_t 	read_archive(callback_function i_advance,const char* arc, int *errors=0, int i_myappend=0,bool i_quiet=false);  // read arc
-	bool 		isselected(const char* filename, bool rn,int64_t i_size);// files, -only, -not
 	void 		scandir(bool i_checkifselected,DTMap& i_edt,string filename, bool i_recursive=true);        // scan dirs to dt
 	void 		addfile(bool i_checkifselected,DTMap& i_edt,string filename, int64_t edate, int64_t esize,int64_t eattr,int64_t i_creationdate,int64_t i_accessdate);          // add external file to dt
 	int64_t 	franzparallelscandir(bool i_flaghash,bool i_recursive,bool i_forcedir);
@@ -38031,6 +38032,19 @@ private:
 	void 		decodelastversion();
 	bool 		acceptonlynot(string i_filename);
 	int 		listfolders(string i_path,vector<string>* o_thelist);
+	void		franzreplace(string& i_filename);
+	string secure_copy_file(
+const string i_filename,const string i_outfilename,int64_t i_startcopy,int64_t i_totalsize,int64_t i_totalcount,int64_t& o_writtensize,int64_t& o_donesize,int64_t& o_donecount,
+int64_t i_sorgente_size,
+int64_t i_sorgente_date,
+int64_t i_sorgente_attr,
+int64_t i_destinazione_size,
+int64_t i_destinazione_date,
+int64_t i_destinazione_attr,
+unsigned char*	i_buffer,
+size_t			i_buffersize
+);
+
 
 };
 #ifdef unix
@@ -42190,7 +42204,8 @@ string help_a(bool i_usage,bool i_example)
 		moreprint("Multiple z:\\utenti_something.zpaq    a z:\\utenti.zpaq c:\\users -home");
 		moreprint("All users, but not franco            a /temp/test1 /home -home -not franco");
 		moreprint("Only SARA and NERI folders           a /temp/test2 /home -home -only \"*SARA\" -only \"*NERI\"");
-		
+		moreprint("Sort (orderby) before add            a z:\\test.txt c:\\dropbox -orderby ext;name");
+		moreprint("Sorting files from largest           a z:\\test.txt c:\\dropbox -orderby size -desc");
 	}
 	return("Add or append files to archive");
 }
@@ -42744,6 +42759,8 @@ string help_r(bool i_usage,bool i_example)
 #ifdef _WIN32
 		moreprint("Huge file to NAS (Windows)(WET run): r c:\\d0 \\\\nas\\share\\d1 -kill -big");
 #endif
+		moreprint("Robocopy only huge files  (WET run): r c:\\d0 z:\\dest -kill -minsize 10GB");
+		moreprint("Robocopy only E01 files   (WET run): r c:\\d0 z:\\dest -kill -only *.e01");
 	}
 	return("Robocopy one master to multiple slave folders");
 }
@@ -43581,19 +43598,8 @@ void open_output(string i_filename)
 // Rename name using tofiles[]
 string Jidac::rename(string name)
 {
-	if (searchfrom!="")
-	{
-		replace(name,searchfrom,replaceto);
-		if (flagdebug)
-			myprintf("27144: name after search - replace %s\n",name.c_str());
-	}
-	else
-	if (replaceto!="")
-	{
-		name=replaceto+name;
-		if (flagdebug)
-			myprintf("27192: name after replace %s\n",name.c_str());
-	}
+	franzreplace(name);
+	
 /*
 	kludge
 	extracting \\franzk\z\NS\something -to z:\pippo with longpath
@@ -44539,7 +44545,8 @@ int Jidac::loadparameters(int argc, const char** argv)
 	date				=0;
 	g_flagmultipart		=false;
 	g_flagcreating		=false;
-
+	g_testifselected	=false;
+	
 	bool flagforzarobocopy=false;
 
 #ifdef GUI
@@ -48880,8 +48887,7 @@ int Jidac::list()
 						myfilename=myhash+mycrc32+myfilename;
 					}
 	/// search and replace, if requested
-					if (searchfrom!="")
-						replace(myfilename,searchfrom,replaceto);
+					franzreplace(myfilename);
 					if (flagstdout)
 						if (p->second.isordered)
 							myfilename="[STDOUT] "+myfilename;
@@ -55929,8 +55935,7 @@ int Jidac::test()
 			}
 
 		string filedefinitivo=g_crc32[i].filename;
-		if (searchfrom!="")
-				replace(filedefinitivo,searchfrom,replaceto);
+		franzreplace(filedefinitivo);
 		if (flagdebug)
 			myprintf("Stored %08X calculated %08X %s\n",crc32stored,currentcrc32,filedefinitivo.c_str());
 		if (mycrc32!="")
@@ -56011,7 +56016,14 @@ Yes, quick and dirty
 */
 void myaddfile(uint32_t i_tnumber,DTMap& i_edt,string i_filename, int64_t i_date,int64_t i_size, bool i_flagcalchash)
 {
-
+	if (g_testifselected)
+		if (pjidac!=NULL)
+			if (!(*pjidac).isselected(i_filename.c_str(), false,i_size))
+			{
+				if (flagdebug)
+					myprintf("56021: discarded %s\n",i_filename.c_str());
+				return;
+			}
 	///Raze to the ground ads and zfs as soon as possible
 	if (!flag715)
 		if (isads(i_filename))
@@ -57084,7 +57096,7 @@ bool windows_copy(string i_src_filename,string i_dest_filename,callback_avanzame
 
 /// make a "robocopy" from source to destination file.
 /// if "someone" call with valid parameters do NOT do a getfileinfo (slow)
-string secure_copy_file(
+string Jidac::secure_copy_file(
 const string i_filename,const string i_outfilename,int64_t i_startcopy,int64_t i_totalsize,int64_t i_totalcount,int64_t& o_writtensize,int64_t& o_donesize,int64_t& o_donecount,
 int64_t i_sorgente_size,
 int64_t i_sorgente_date,
@@ -57963,9 +57975,10 @@ int Jidac::robocopy()
 			myprintf("40245: after %03d files[i] %s\n",i,files[i].c_str());
 #endif
 	int64_t s13=mtime();
+	g_testifselected=true;
 	franzparallelscandir(false,true,true);
+	g_testifselected=false;
 	int64_t timescandir=mtime()-s13;
-
 ///27437: space needed
 	if (!flagspace)
 		if (files_size[0]>0)
@@ -61062,9 +61075,7 @@ int Jidac::add()
 			for (DTMap::iterator p=edt.begin(); p!=edt.end(); ++p)
 			{
 				string filename=rename(p->first);
-				///myprintf("Filelist name %s\n",filename.c_str());
-				if (searchfrom!="")
-						replace(filename,searchfrom,replaceto);
+				///franzreplace(filename);
 				fprintf(myoutfile,"%s %19s ", dateToString(flagutc,p->second.date).c_str(), migliaia(p->second.size));
 				printUTF8(filename.c_str(),myoutfile);
 				fprintf(myoutfile,"\n");
@@ -62253,8 +62264,7 @@ int Jidac::add()
 			///	hardcoded, do you like it?
 			if (command=='q')
 				myreplace(filename,g_vss_shadow,g_franzsnap);
-			if (searchfrom!="")
-					replace(filename,searchfrom,replaceto);
+			franzreplace(filename);
 ///			by using FRANZOFFSETV1 we need to cut down the attr during this compare
 			DTMap::iterator a=dt.find(filename);
 			if (p->second.date && (a==dt.end() // new file
@@ -64120,9 +64130,8 @@ int Jidac::summa()
 		}
 		for (const char* p=vec[i].second.c_str(); *p; ++p)
 			sha256.put(*p);
-		if (searchfrom!="")
-				replace(filename,searchfrom,replaceto);
-
+		franzreplace(filename);
+		
 		if (flaghashdeep)
 		{
 			string lowhash=stringtolower(vec[i].second);
@@ -64750,8 +64759,7 @@ int Jidac::verify(bool i_readfile)
 					tipohash* thehash=franz_get_hash(myhashtype);
 					if (thehash!=NULL)
 					{
-						if (searchfrom!="")
-							replace(finalfile,searchfrom,replaceto);
+						franzreplace(finalfile);
 						myfiles.push_back(finalfile);
 						myfilesoriginal.push_back(p->first);
 						myfilehash.push_back(myhash);
@@ -65771,8 +65779,7 @@ int Jidac::extractqueue2(int i_chunk,int i_chunksize)
 		if (std::binary_search(chunkfiles.begin(), chunkfiles.end(), p->first))
 		{
 			string finalfile=rename(p->first);
-			if (searchfrom!="")
-				replace(finalfile,searchfrom,replaceto);
+			franzreplace(finalfile);
 			string myhashtype	="";
 			string myhash		="";
 			string mycrc32		="";
@@ -84793,8 +84800,7 @@ int Jidac::guilist()
 				if (p->second.isordered)
 					myfilename="[STDOUT] "+myfilename;
 
-			if (searchfrom!="")
-				replace(myfilename,searchfrom,replaceto);
+			franzreplace(myfilename);
 
 			int curx,cury;
 			getyx(wbody,cury,curx);
@@ -85697,8 +85703,7 @@ int Jidac::testbackup()
 		}
 		string solonomefile=extractfilename(filenames[i-1]);
 		string filedefinitivo=percorso+solonomefile;
-		if (searchfrom!="")
-			replace(filedefinitivo,searchfrom,replaceto);
+		franzreplace(filedefinitivo);
 
 		if (!flagnoeta)
 		{
@@ -86627,62 +86632,60 @@ int&					o_expected_file)
 			return 2;
 		}
 
-		if (linea[0]!='|')
+		if (linea[0]=='|')
 		{
-			myprintf("86741: linea[0] != |\n");
-			return 2;
+			string algo		="";
+			string hasho	="";
+			string sizo		="";
+			int64_t isizo	=0;
+			string nomeo	="";
+			unsigned int j=1;
+			while (j<linea.size())
+			{
+				if (linea[j]==':')
+					break;
+				algo+=linea[j];
+				j++;
+			}
+			if (algo=="")
+			{
+				myprintf("86761: algo is empty\n");
+				return 2;
+			}
+			j+=2;
+			while (j<linea.size())
+			{
+				if (linea[j]==' ')
+					break;
+				hasho+=linea[j];
+				j++;
+			}
+			j+=2;
+			while (j<linea.size())
+			{
+				if (linea[j]==']')
+					break;
+				if (isdigit(linea[j]))
+					sizo+=linea[j];
+				j++;
+			}
+			isizo=atoll(sizo.c_str());
+			j+=2;
+			while (j<linea.size())
+				if (linea[j++]=='|')
+					break;
+			while (j<linea.size())
+				if ((linea[j]!='\r') && (linea[j]!='\n'))
+					nomeo+=linea[j++];
+				else
+					break;
+			o_filesize	.push_back(isizo);
+			o_filealgo	.push_back(algo);
+			o_filehash	.push_back(hasho);
+			o_files		.push_back(nomeo);
+			o_expected_size+=isizo;
+			o_expected_file++;
 		}
-		string algo		="";
-		string hasho	="";
-		string sizo		="";
-		int64_t isizo	=0;
-		string nomeo	="";
-		unsigned int j=1;
-		while (j<linea.size())
-		{
-			if (linea[j]==':')
-				break;
-			algo+=linea[j];
-			j++;
-		}
-		if (algo=="")
-		{
-			myprintf("86761: algo is empty\n");
-			return 2;
-		}
-		j+=2;
-		while (j<linea.size())
-		{
-			if (linea[j]==' ')
-				break;
-			hasho+=linea[j];
-			j++;
-		}
-		j+=2;
-		while (j<linea.size())
-		{
-			if (linea[j]==']')
-				break;
-			if (isdigit(linea[j]))
-				sizo+=linea[j];
-			j++;
-		}
-		isizo=atoll(sizo.c_str());
-		j+=2;
-		while (j<linea.size())
-			if (linea[j++]=='|')
-				break;
-		while (j<linea.size())
-			if ((linea[j]!='\r') && (linea[j]!='\n'))
-				nomeo+=linea[j++];
-			else
-				break;
-		o_filesize	.push_back(isizo);
-		o_filealgo	.push_back(algo);
-		o_filehash	.push_back(hasho);
-		o_files		.push_back(nomeo);
-		o_expected_size+=isizo;
-		o_expected_file++;
 	}
 	return 0;
 }
@@ -86727,9 +86730,8 @@ int Jidac::versum_againstzpaq(vector<string> i_myfiles,vector<string> i_filealgo
 	for (unsigned int i=0;i<i_myfiles.size();i++)
 	{
 		string	filename=wintolinuxpath(i_myfiles[i]);
-		if (searchfrom!="")
-			replace(filename,searchfrom,replaceto);
-
+		franzreplace(filename);
+		
 		DTMap::iterator p=dt.find(filename);
 
 	if (p==dt.end())
@@ -86778,7 +86780,6 @@ int Jidac::versum_againstzpaq(vector<string> i_myfiles,vector<string> i_filealgo
 				myprintf("60427: mismatch algo zpaq %s txt %s\n",myhashtype.c_str(),i_filealgo[i].c_str());
 			continue;
 		}
-
 		if (stringtoupper(myhash)!=stringtoupper(i_filehash[i]))
 		{
 			myprintf("60413: ERROR %s |zpaq=%s|txt=%s| ",myhashtype.c_str(),i_filehash[i].c_str(),myhash.c_str());
@@ -86798,6 +86799,33 @@ int Jidac::versum_againstzpaq(vector<string> i_myfiles,vector<string> i_filealgo
 		myprintf("Cannot test     %9s\n",migliaia(emptyhashtype+emptyhash+mismatchalgo));
 	return 0;
 }
+void Jidac::franzreplace(string& i_filename)
+{
+	if ((searchfrom=="") && (replaceto==""))
+		return;
+	if (searchfrom!="")
+	{
+		if (flagdebug)
+			myprintf("86914: replace because searchfrom not empty on <<%s>>\n",i_filename.c_str());
+		replace(i_filename,searchfrom,replaceto);
+		if (flagdebug)
+			myprintf("86811: replaced to <<%s>>\n",i_filename.c_str());
+		return;
+	}
+	else
+	{
+		if (replaceto!="")
+		{
+			if (flagdebug)
+				myprintf("86818: adjust on <<%s>>\n",i_filename.c_str());
+			i_filename=replaceto+i_filename;
+			if (flagdebug)
+				myprintf("86821: adjusted to <<%s>>\n",i_filename.c_str());
+			return;
+		}
+	}
+}
+
 int Jidac::versum()
 {
 	if (files.size()==0)
@@ -86908,9 +86936,8 @@ int Jidac::versum()
 			for (unsigned int i=0;i<myfiles.size();i++)
 			{
 				string	filename=myfiles[i];
-				if (searchfrom!="")
-						replace(filename,searchfrom,replaceto);
-
+				(void)franzreplace(filename);
+				
 				franz_do_hash dummy(myfilealgo[i]);
 				if (flagdebug)
 					myprintf("88001: filehash on %s\n",filename.c_str());
@@ -86944,8 +86971,7 @@ int Jidac::versum()
 			for (unsigned int i=0;i<myfiles.size();i++)
 			{
 				string filename=myfiles[i];
-				if (searchfrom!="")
-					replace(filename,searchfrom,replaceto);
+				franzreplace(filename);
 				vettoreparametrihash[i%mythreads].filestobehashed.push_back(filename);
 				vettoreparametrihash[i%mythreads].algo.push_back(myfilealgo[i]);
 				vettoreparametrihash[i%mythreads].originalindex.push_back(i);

@@ -10,3 +10,4 @@
 - [ ] *Low* "Automagically" define. In the source, but need more tests
 - [ ] *Low* Better low-memory extractor. For ESXi servers
 - [ ] *Low* Better proxmox backup. "Smarter hunter" of image's dataset
+- [ ] *???* Inspect -stdin with -fragment

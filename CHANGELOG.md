@@ -1,3 +1,7 @@
+## [58.11.q] - 2023-10-08
+### collision command and -collision switch
+- Quickly check and (sometimes) recovery from SHA-1 collision
+
 ## [58.10.k] - 2023-09-21
 ### Fix
 - Warning-hunting on 15+ years compiler

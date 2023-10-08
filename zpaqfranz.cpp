@@ -52,8 +52,8 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 */
 
-#define ZPAQ_VERSION "58.10o"
-#define ZPAQ_DATE "(2023-10-01)"  // cannot use __DATE__ on Debian!
+#define ZPAQ_VERSION "58.11q"
+#define ZPAQ_DATE "(2023-10-08)"  // cannot use __DATE__ on Debian!
 
 ///	optional align for malloc (sparc64) via -DALIGNMALLOC
 #define STR(a) #a
@@ -1045,10 +1045,13 @@ Credits and copyrights and licenses and links and internal bookmarks
 26 Thanks to Petr Pisar                                 for Fedora Package
 27 Thanks to Davide Moretti                             for -home
 28 Thanks to https://github.com/DetourNetworkUK         for Mac PowerPC strnlen bug
-29 Thanks to Lone_Wolf (bbs.archlinux.org)              for reviewing PKGBUILD
-30 Thanks to Scimmia   (bbs.archlinux.org)              for reviewing PKGBUILD
-31 Thanks to Loqs      (bbs.archlinux.org)              for reviewing PKGBUILD
+29 Thanks to Lone_Wolf (bbs.archlinux.org)              for reviewing PKGBUILD on arch
+30 Thanks to Scimmia   (bbs.archlinux.org)              for reviewing PKGBUILD on arch
+31 Thanks to Loqs      (bbs.archlinux.org)              for reviewing PKGBUILD on arch
 32 Thanks to https://github.com/tansy                   for Slackware older compilers
+33 Thanks to https://github.com/janko-js                for idea on quick collision-detector
+34 Thanks to https://github.com/havocesp                for very useful ideas
+
 
                 _____ _   _  _____ _______       _      _
                |_   _| \ | |/ ____|__   __|/\   | |    | |
@@ -1313,9 +1316,9 @@ OpenBSD 7.1 clang++ 13.0.0
 clang++ -Dunix -O3 zpaqfranz.cpp -o zpaqfranz -pthread -static
 
 Arch Linux
-I strongly advise against using zpaqfranz on this Linux distro(s).
-There is a bizarre policy on compiling executables.
-Obviously no one forbids it (runs fine), but just don't ask for help.
+I made a little AUR package (with some help), this one
+https://aur.archlinux.org/packages/zpaqfranz-git
+Should be good enough
 
 Debian Linux (10/11) gcc 8.3.0
 ubuntu 21.04 desktop-amd64 gcc  10.3.0
@@ -2051,7 +2054,7 @@ std::string myulltoa(uint64_t value,int i_len)
 			risultato=std::string(i_len-risultato.size(), '0') + risultato;
 	return risultato;
 }
-
+/*
 std::string bin2hex(char *i_in,size_t i_len)
 {
     static const char dec2hex[16+1] = "0123456789ABCDEF";
@@ -2063,6 +2066,22 @@ std::string bin2hex(char *i_in,size_t i_len)
 		risultato+=dec2hex[i_in[i]&15];
   }
   return risultato;
+}
+*/
+std::string bin2hex_32(uint32_t i_thenumber)
+{
+    static const char dec2hex[16+1] = "0123456789ABCDEF";
+	char buf[16+1];
+	uint8_t numerino;
+	for (int j=3;j>=0;j--)
+	{
+		numerino=i_thenumber&255;
+		buf[j*2+1]	=dec2hex[numerino&15];
+		buf[j*2]	=dec2hex[(numerino>>4)&15];
+		i_thenumber>>=8;
+	}
+	buf[8]=0;
+	return buf;
 }
 
 std::string bin2hex_64(uint64_t i_thenumber)
@@ -11353,6 +11372,7 @@ bool flagnorecursion;
 bool flagnosort;
 bool flagpakka;
 bool flagparanoid;
+bool flagcollision;
 bool flagramdisk;
 bool flagrename;
 bool flagsilent;
@@ -37683,6 +37703,8 @@ struct DT   // if you get some warning here, update your compiler!
 	string 	hashtype;		// for paranoid()
 	string	listtext;		// text in list()
 	string	hexcrc32;
+	
+///	string	fragmentlisthash;
 ///new FRANZOFFSETV1
 
 	char 			franz_block[FRANZOFFSETV3];
@@ -37710,11 +37732,12 @@ struct DT   // if you get some warning here, update your compiler!
 	DT(): date(0), size(0), attr(0), data(0),creationdate(0),accessdate(0),written(-1),isordered(false),isselected(false),franz_block_size(FRANZOFFSETV3),file_crc32(0),hashedsize(0),chunk(-1),filefix(0),expectedsize(0),version(0),forceadd(false)
 	{
 		memset(franz_block,0,sizeof(franz_block));
-		hexhash		="";
-		hexcrc32	="";
-		hashtype	="";
-		outputname	="";
-		listtext	="";
+		hexhash			="";
+		hexcrc32		="";
+		hashtype		="";
+		outputname		="";
+		listtext		="";
+		///fragmentlisthash="";
 		pfile_highway64=NULL;
 		if ((g_franzotype==FRANZO_HIGHWAY64) || (g_franzotype==FRANZO_HIGHWAY128) || (g_franzotype==FRANZO_HIGHWAY256))
 		{
@@ -37799,6 +37822,7 @@ FindNextStreamW_t findNextStreamW=0;
 typedef BOOL (WINAPI* GetFinalPathNameByHandleW_t)(HANDLE, LPWSTR,DWORD,DWORD);
 GetFinalPathNameByHandleW_t getFinalPathNameByHandleW=0;
 #endif
+typedef map<int64_t,string> int64tstringmap;
 typedef map<string,string> stringstringmap;
 class CompressJob;
 
@@ -37897,10 +37921,12 @@ private:
 	DTMap edt;                			// set of external files to add or compare
 	vector<Block> block;      			// list of data blocks to extract
 	vector<VER> ver;          			// version info
+	int64tstringmap sha1collision;
   // Commands
 	int add();                			// add, return 1 if error else 0
 	int addhome();                		// add, return 1 if error else 0
 	int list();               			// list (one parameter) / check (more than one)
+	int collision(bool i_flagall);      // check for SHA-1 collisions
 	int fzf();
 	int ecommand();						// extract on ./
 	int append();						// anti-ramsomware (slow)
@@ -37973,7 +37999,7 @@ private:
 
 	bool 		equal(DTMap::const_iterator p, const char* filename, uint32_t &o_crc32,string i_myhashtype,string i_myhash,string& o_hash);// compare file contents with p
 	void 		write715attr(libzpaq::StringBuffer& i_sb, uint64_t i_data, unsigned int i_quanti);
-	void 		writefranzattr(libzpaq::StringBuffer& i_sb, uint64_t i_data, unsigned int i_quanti,string i_filename,uint32_t i_crc32fromfragments,uint32_t i_crc32,string i_thehash,int64_t i_creationdate,int64_t i_accessdate,struct franz_posix* i_posix);
+	void 		writefranzattr(DTMap::iterator i_dtmap,libzpaq::StringBuffer& i_sb, uint64_t i_data, unsigned int i_quanti,string i_filename,uint32_t i_crc32fromfragments,uint32_t i_crc32,string i_thehash,int64_t i_creationdate,int64_t i_accessdate,struct franz_posix* i_posix);
 	int 		enumeratecomments();
 	int 		searchcomments(string i_testo,vector<DTMap::iterator> &filelist);
 	string 		zfs_get_snaplist(string i_header,string i_footer,vector<string>& o_array_primachiocciola,vector<string>& o_array_dopochiocciola);
@@ -38044,7 +38070,7 @@ int64_t i_destinazione_attr,
 unsigned char*	i_buffer,
 size_t			i_buffersize
 );
-
+	int 		checksha1collision(DTMap& i_dtmap,bool i_decodefranzblock);
 
 };
 #ifdef unix
@@ -42140,6 +42166,7 @@ string help_a(bool i_usage,bool i_example)
 		moreprint("+ : -fasttxt      Write out CRC32 on archivename_crc32.txt");
 		moreprint("+ : -fasttxt -verify Post-check of crc32.txt");
 		moreprint("+ : -home         Create one archive for folder (-not -only)");
+		moreprint("+ : -collision    Double check for SHA-1 collisions");
 
 		help_orderby();
 #if defined(_WIN32)
@@ -42206,6 +42233,7 @@ string help_a(bool i_usage,bool i_example)
 		moreprint("Only SARA and NERI folders           a /temp/test2 /home -home -only \"*SARA\" -only \"*NERI\"");
 		moreprint("Sort (orderby) before add            a z:\\test.txt c:\\dropbox -orderby ext;name");
 		moreprint("Sorting files from largest           a z:\\test.txt c:\\dropbox -orderby size -desc");
+		moreprint("Manage SHA-1 collisions              a z:\\1.zpaq messageA messageB -collision");
 	}
 	return("Add or append files to archive");
 }
@@ -42238,6 +42266,19 @@ string help_fzf(bool i_usage,bool i_example)
 		moreprint("List filenames/pipe in fzf  fzf z:\\kajo.zpaq|fzf");
 	}
 	return ("List archive filenames 'plain-and-dirty'");
+}
+string help_collision(bool i_usage,bool i_example)
+{
+	if (i_usage)
+	{
+		moreprint("CMD   collision Inspect for SHA-1 collisions\n");
+	}
+	if (i_usage && i_example) moreprint("    Examples:");
+	if (i_example)
+	{
+		moreprint("Inspect file                collision z:\\kajo.zpaq");
+	}
+	return ("Inspect archive for SHA-1 collisions");
 }
 string help_w(bool i_usage,bool i_example)
 {
@@ -42569,6 +42610,8 @@ string help_t(bool i_usage,bool i_example)
 		moreprint("+ : -replace plu  For path-rework of verify (find and replace)");
 		moreprint("+ : -paranoid     Extract all into -to something, check every file with stored hash");
 		moreprint("+ :               delete every equal files");
+		moreprint("+ : -collision    Test collisions");
+		
 	}
 	if (i_usage && i_example) moreprint("    Examples:");
 	if (i_example)
@@ -42582,6 +42625,7 @@ string help_t(bool i_usage,bool i_example)
 		moreprint("Cnk-SHA1+hash (nz the source dir):   t z:\\1.zpaq c:\\nz -checksum");
 		moreprint("Multiple paranoid check (Win):       t *.zpaq -to z:\\temp\\ -paranoid -longpath -big");
 		moreprint("Multiple test (*NIX):                t \"/copie/*.zpaq\" ");
+		moreprint("All version SHA-1 collisions:        t z:\\1.zpaq -collision -all");
 	}
 	return("Test archive integrity");
 
@@ -43406,6 +43450,7 @@ void Jidac::load_help_map()
 	help_map.insert(std::pair<string, voidhelpfunction>("last2",			help_last2));
 	help_map.insert(std::pair<string, voidhelpfunction>("last",				help_last));
 	help_map.insert(std::pair<string, voidhelpfunction>("fzf",				help_fzf));
+	help_map.insert(std::pair<string, voidhelpfunction>("collision",		help_collision));
 #ifdef GUI
 	help_map.insert(std::pair<string, voidhelpfunction>("gui",help_gui));
 #endif
@@ -44408,6 +44453,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 	g_programflags.add(&flagnosort,			"-nosort",				"Do not sort file",									"");
 	g_programflags.add(&flagpakka,			"-pakka",				"New output",										"");
 	g_programflags.add(&flagparanoid,		"-paranoid",			"Paranoid",											"");
+	g_programflags.add(&flagcollision,		"-collision",			"Collision check",											"");
 	g_programflags.add(&flagramdisk,		"-ramdisk",				"ramdisk",											"");
 	g_programflags.add(&flagrename,			"-rename",				"Rename",											"");
 	g_programflags.add(&flagsilent,			"-silent",				"Silent",											"");
@@ -44843,6 +44889,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 		opt=="extract" 			||
 		opt=="last" 			||
 		opt=="list" 			||
+		opt=="collision"		||
 		opt=="fzf" 				||
 		opt=="k" 				||
 		opt=="a"  				||
@@ -44880,6 +44927,8 @@ int Jidac::loadparameters(int argc, const char** argv)
 				g_optional="zfsadd";
 				command='A';
 			}
+			if (opt=="collision")
+				command='K';
 			if (opt=="gui")
 				command='G';
 			if (opt=="fzf")
@@ -45343,6 +45392,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 		flagutf				=false;
 		flagflat			=false;
 		flagparanoid		=false;
+		flagcollision		=false;
 		flagnodedup			=false;
 		flagstdout			=false;
 		flagstdin			=false;
@@ -45473,7 +45523,7 @@ int Jidac::doCommand()
 	else if (command==';') return zfsreceive();
 	else if (command==')') return oneonone();
 	else if (command=='F') return fzf();
-
+	else if (command=='K') return collision(true);
 	else usage();
 	return 0;
 }
@@ -45726,653 +45776,8 @@ int compressfraglist(const vector<unsigned>& ptr, bool i_flagprint)
 	return howmanyhypens;
 }
 
-/////////////////////////// read_archive //////////////////////////////
-// Read arc up to -date into ht, dt, ver. Return place to
-// append. If errors is not NULL then set it to number of errors found.
-int64_t Jidac::read_archive(callback_function i_advance,const char* arc, int *errors, int i_myappend,bool i_quiet)
-{
-	if (errors) *errors=0;
-	dcsize=dhsize=0;
-	assert(ver.size()==1);
-	const bool i_renamed=command=='l' || command=='a' || command=='5' ; ///5 for dirsize arrggghh hidden parameter!
-	const bool i_isinfo=(command=='i') && (!flagstat) && (!flagcomment); // -stat? Do a lot of work
-
-	unsigned files=0;  // count
-//	abort if file is open (from something else)
-#ifdef _WIN32
-	if (flagopen)
-		if ((command=='a') || (command=='g') || (command=='q'))
-			if (isfileopen(arc))
-			{
-				myprintf("27668: GURU file seems open (-open) ");
-				printUTF8(arc);
-				myprintf("\n");
-				seppuku();
-				return 0;
-			}
-#endif
-	// Open archive
-	InputArchive in(arc, password);
-	if (!in.isopen())
-	{
-		if (command!='a')
-		{
-			fflush(stdout);
-			printUTF8(arc);
-			myprintf( " not found.\n");
-			g_exec_text=arc;
-			g_exec_text+=" not found";
-			if (errors) ++*errors;
-		}
-		return 0;
-	}
-	if (!g_fakewrite)
-		if (!i_quiet)
-			if (!flagpakka)
-			{
-				printUTF8(arc);
-				if (version==DEFAULT_VERSION) myprintf(": ");
-					else
-				myprintf(" -until %1.0f: ", version+0.0);
-				fflush(stdout);
-			}
-  // Test password
-	char s[4]={0};
-	const int nr=in.read(s, 4);
-	if (nr>0 && memcmp(s, "7kSt", 4) && (memcmp(s, "zPQ", 3) || s[3]<1))
-	{
-		myprintf("zpaqfranz error:password incorrect\n");
-		error("password incorrect");
-	}
-    in.seek(-nr, SEEK_CUR);
-	// Scan archive contents
-	string lastfile=archive; // last named file in streaming format
-	if (lastfile.size()>5 && lastfile.substr(lastfile.size()-5)==".zpaq")
-		lastfile=lastfile.substr(0, lastfile.size()-5); // drop .zpaq
-	int64_t block_offset=32*(password!=0);  // start of last block of any type
-	int64_t data_offset=block_offset;    // start of last block of d fragments
-	bool found_data=false;   // exit if nothing found
-	bool first=true;         // first segment in archive?
-	StringBuffer os(32832);  // decompressed block
-	int toolongfilenames	=0;
-	int adsfilenames		=0;
-	int utf8names			=0;
-#ifdef _WIN32
-	int casecollision		=0;
-#endif
-	int reservedfilenames	=0;
-	int windowsunc			=0;
-	int windowspath			=0;
-	int relativepath		=0;
-	uint64_t parts			=0;
-	int	areordered			=0;
-	int aredisordered		=0;
-  // Detect archive format and read the filenames, fragment sizes,
-  // and hashes. In JIDAC format, these are in the index blocks, allowing
-  // data to be skipped. Otherwise the whole archive is scanned to get
-  // this information from the segment headers and trailers.
-	bool done=false;
-	if (!i_quiet)
-		myprintf("\n");
-	int64_t startblock=mtime();
-	while (!done)
-	{
-		libzpaq::Decompresser d;
-		try
-		{
-			d.setInput(&in);
-			double mem=0;
-			while (d.findBlock(&mem))
-			{
-				found_data=true;
-        // Read the segments in the current block
-				StringWriter filename, comment;
-				int segs=0;  // segments in block
-				bool skip=false;  // skip decompression?
-				while (d.findFilename(&filename))
-				{
-					if (filename.s.size())
-					{
-						for (unsigned i=0; i<filename.s.size(); ++i)
-							if (filename.s[i]=='\\')
-								filename.s[i]='/';
-						lastfile=filename.s.c_str();
-///						if (flagdebug)
-///							myprintf("27357: K3  |%s|\n",lastfile.c_str());
-					}
-					comment.s="";
-					d.readComment(&comment);
-          // Test for JIDAC format. Filename is jDC<fdate>[cdhi]<num>
-          // and comment ends with " jDC\x01". Skip d (data) blocks.
-					if (comment.s.size()>=4 && comment.s.substr(comment.s.size()-4)=="jDC\x01")
-					{
-						if (filename.s.size()!=28 || filename.s.substr(0, 3)!="jDC")
-							error("bad journaling block name");
-						if (skip)
-							error("mixed journaling and streaming block");
-            // Read uncompressed size from comment
-						int64_t usize=0;
-						unsigned i;
-						for (i=0; i<comment.s.size() && isdigit(comment.s[i]); ++i)
-						{
-							usize=usize*10+comment.s[i]-'0';
-							if (usize>0xffffffff)
-								error("journaling block too big");
-						}
-            // Read the date and number in the filename
-						int64_t fdate=0, num=0;
-						for (i=3; i<17 && isdigit(filename.s[i]); ++i)
-							fdate=fdate*10+filename.s[i]-'0';
-						if (i!=17 || fdate<19000000000000LL || fdate>=30000000000000LL)
-							error("bad date");
-						for (i=18; i<28 && isdigit(filename.s[i]); ++i)
-							num=num*10+filename.s[i]-'0';
-						if (i!=28 || num>0xffffffff)
-							error("bad fragment");
-            // Decompress the block.
-						os.resize(0);
-						os.setLimit(usize);
-						d.setOutput(&os);
-						libzpaq::SHA1 sha1;
-						d.setSHA1(&sha1);
-						if (strchr("chi", filename.s[17]))
-						{
-							if (mem>1.5e9)
-								error("index block requires too much memory");
-							d.decompress();
-							char sha1result[21]={0};
-							d.readSegmentEnd(sha1result);
-							if ((int64_t)os.size()!=usize)
-								error("bad block size");
-							if (usize!=int64_t(sha1.usize()))
-								error("bad checksum size");
-							if (sha1result[0] && memcmp(sha1result+1, sha1.result(), 20))
-								error("bad checksum");
-							if ( ++parts % 1000 ==0)
-								if (!flagnoeta)
-									if (!i_quiet)
-									{
-										myprintf("Block %10s K %12s (block/s)\r",migliaia((uint64_t)(parts/1000)),migliaia2((int64_t)(parts/(((mtime()-startblock)+1)/1000.0))));
 
 
-										if (i_advance!=NULL)
-										{
-											char buf[1000];
-											///
-	///										snprintf(buf,sizeof(buf),"Block %10s K %12s (block/s) %s",migliaia((uint64_t)(parts/1000)),migliaia2((parts/(((mtime()-startblock)+1)/1000.0))),migliaia3(dt.size()));
-											snprintf(buf,sizeof(buf),"Versions %s files %s (%s/s), longpath %s",migliaia4(ver.size()-1),migliaia((uint64_t)(dt.size())),migliaia3((int64_t)(dt.size()/(((mtime()-startblock)+1)/1000.0))),migliaia2(toolongfilenames));
-											i_advance(buf);
-										}
-									}
-						}
-						else
-							d.readSegmentEnd();
-            // Transaction header (type c).
-            // If in the future then stop here, else read 8 byte data size
-            // from input and jump over it.
-						if (filename.s[17]=='c')
-						{
-							if (os.size()<8)
-								error("c block too small");
-							data_offset=in.tell()+1-d.buffered();
-							const char* s=os.c_str();
-							int64_t jmp=btol(s);
-							///if (flagdebug)
-								///myprintf("27424: jump %s\n",migliaia(jmp));
-							if (jmp<0)
-								myprintf("Incomplete transaction ignored\n");
-							if (jmp<0 ||
-							(version<19000000000000LL && int64_t(ver.size())>version)
-							|| (version>=19000000000000LL && version<fdate))
-							{
-								done=true;  // roll back to here
-								goto endblock;	// WOW, a goto! I never seen one from C-64 back 1985!
-							}
-							else
-							{
-								dcsize+=jmp;
-								if (jmp) in.seek(data_offset+jmp, SEEK_SET);
-								ver.push_back(VER());
-								ver.back().firstFragment=ht.size();
-								ver.back().offset=block_offset;
-								ver.back().data_offset=data_offset;
-								ver.back().date=ver.back().lastdate=fdate;
-								ver.back().csize=jmp;
-								if (all)
-								{
-
-									string fn=itos(ver.size()-1, all)+"/";
-									if (i_renamed)
-										fn=rename(fn);
-									if (isselected(fn.c_str(), false,-1))
-										dt[fn].date=fdate;
-									///printf("FKA1 KKKKKKKKKKKKKKKKKK %s\n",fn.c_str());
-								}
-								if (jmp)
-									goto endblock;
-							}
-						}
-            // Fragment table (type h).
-            // Contents is bsize[4] (sha1[20] usize[4])... for fragment N...
-            // where bsize is the compressed block size.
-            // Store in ht[].{sha1,usize}. Set ht[].csize to block offset
-            // assuming N in ascending order.
-						else
-						if (filename.s[17]=='h')
-						{
-							assert(ver.size()>0);
-							if (fdate>ver.back().lastdate)
-								ver.back().lastdate=fdate;
-							if (os.size()%24!=4)
-								error("bad h block size");
-							const unsigned n=(os.size()-4)/24;
-							if (num<1 || num+n>0xffffffff)
-								error("bad h fragment");
-							const char* s=os.c_str();
-							const unsigned bsize=btoi(s);
-							dhsize+=bsize;
-							assert(ver.size()>0);
-							if (int64_t(ht.size())>num)
-							{
-								fflush(stdout);
-								myprintf(
-								  "Unordered fragment tables: expected >= %d found %1.0f\n",
-								  int(ht.size()), double(num));
-								 g_exec_text="Unordered fragment tables";
-							}
-							for (unsigned i=0; i<n; ++i)
-							{
-								if (i==0)
-								{
-									block.push_back(Block(num, data_offset));
-									block.back().usize=8;
-									block.back().bsize=bsize;
-									block.back().frags=os.size()/24;
-								}
-								while (int64_t(ht.size())<=num+i)
-									ht.push_back(HT());
-								memcpy(ht[num+i].sha1, s, 20);
-								s+=20;
-								assert(block.size()>0);
-								unsigned f=btoi(s);
-								if (f>0x7fffffff)
-									error("fragment too big");
-								block.back().usize+=(ht[num+i].usize=f)+4u;
-							 }
-							data_offset+=bsize;
-						}
-            // Index (type i)
-            // Contents is: 0[8] filename 0 (deletion)
-            // or:       date[8] filename 0 na[4] attr[na] ni[4] ptr[ni][4]
-            // Read into DT
-						else
-						if (filename.s[17]=='i')
-						{
-							assert(ver.size()>0);
-							if (fdate>ver.back().lastdate)
-								ver.back().lastdate=fdate;
-							const char* s=os.c_str();
-							const char* const end=s+os.size();
-							while (s+9<=end)
-							{
-								DT dtr;
-								dtr.version=ver.size()-1;
-
-								dtr.date=btol(s);  // date
-								if (dtr.date)
-									++ver.back().updates;
-								else
-									++ver.back().deletes;
-								const int64_t len=strlen(s);
-								if (len>65535)
-									error("filename too long");
-								string fn=s;  // filename ren
-								string	originalfilename=s;
-
-								if (!i_isinfo)
-								{
-									if ((flagstat) && (command!='5') && (command!='6'))
-							//-stat, we ask for extended infos
-							//not useful with dirsize, setpassword, info
-									{
-										checkfilename(fn,
-										&toolongfilenames,
-										&adsfilenames,
-										&utf8names,
-										NULL,// reserved file names, only on WIN32
-										&windowspath,
-										&windowsunc,
-										&relativepath);
-										string fixed;
-#ifdef _WIN32
-										if (isreserved(fn,fixed))
-										{
-											reservedfilenames++;
-											if (flagfixreserved)
-											{
-												myprintf("29229: WARNING changed reserved <<");
-												printUTF8(fn.c_str());
-												myprintf(">>\n");
-												fn=fixed;
-												myprintf("29230: to filesystem compatible <<");
-												printUTF8(fn.c_str());
-												myprintf(">>\n");
-											}
-										}
-#endif
-									}
-									else
-#ifdef _WIN32
-									checkfilename(fn,  /// by default check only toolong and utf
-									&toolongfilenames,
-									NULL,
-									NULL,
-									NULL,
-									NULL,
-									NULL,
-									NULL);
-#else				// *nix can restore (almost) everything, no warnings needed by default
-#endif
-										if (all)
-										{
-
-											if (i_myappend)
-												fn=itos(ver.size()-1, all)+"|$1"+fn;
-											else
-												fn=append_path(itos(ver.size()-1, all), fn);
-											///printf("------------- %s\n",fn.c_str());
-										}
-								}
-					bool issel=false;
-					if (!i_isinfo)
-						issel=isselected(fn.c_str(), i_renamed,-1);
-
-					if (g_rangefrom>0)
-						if (all)
-							if (((ver.size()-1)<(unsigned int)g_rangefrom) || ((ver.size()-1)>(unsigned int)g_rangeto))
-								issel=false;
-
-					s+=len+1;  // skip filename
-					if (s>end)
-						error("filename too long");
-					if (dtr.date)
-					{
-						++files;
-						if (s+4>end)
-							error("missing attr");
-						unsigned na=0;
-						na=btoi(s);  // attr bytes
-						if (s+na>end || na>65535)
-							error("attr too long");
-						if (!i_isinfo)
-							if (na>FRANZOFFSETV1) //Get FRANZOFFSETV1
-							{
-								assert((na-8)<FRANZOFFSETV3); // cannot work on too small buffer
-								for (unsigned int i=0;i<(na-8);i++)
-									dtr.franz_block[i]=*(s+(na-(na-8))+i);
-								dtr.franz_block_size=(na-8);
-								dtr.franz_block[(na-8)]=0x0;
-								if (flagstat)
-								{
-									string myhashtype="";
-									string myhash="";
-									string mycrc32="";
-									int64_t mycreationtime=0;
-									int64_t myaccesstime=0;
-									bool	myisordered=false;
-									int		myversion=0;
-									franz_posix* myposix=NULL;
-									decode_franz_block(false,dtr.franz_block,
-									myhashtype,
-									myhash,
-									mycrc32,
-									mycreationtime,
-									myaccesstime,
-									myisordered,
-									myversion,
-									myposix);
-									if (strstr(myhash.c_str(),"!ERROR!"))
-									{
-										if (flagforce)
-										{
-											if (flagverbose)
-												myprintf("27752: *** 'strange' but -force     -> included ");
-										}
-										else
-										{
-											if (flagverbose)
-												myprintf("27754: *** 'strange' and NOT -force -> skipped  ");
-											issel=false;
-											if (errors)
-												(*errors)++;
-										}
-										if (flagverbose)
-										{
-											printUTF8(fn.c_str());
-											myprintf("\n");
-										}
-									}
-								}
-							}
-						for (unsigned i=0; i<na; ++i, ++s)  // read attr
-							if (i<8)
-								dtr.attr+=int64_t(*s&255)<<(i*8);
-						if (flagnoattributes)
-							dtr.attr=0;
-						if (s+4>end)
-							error("missing ptr");
-						unsigned ni=btoi(s);  // ptr list size
-						if (ni>(end-s)/4u)
-							error("ptr list too long");
-						if (issel)
-							dtr.ptr.resize(ni);
-						for (unsigned i=0; i<ni; ++i)
-						{  // read ptr
-							const unsigned j=btoi(s);
-							if (issel)
-							{
-								dtr.ptr[i]=j;
-							}
-						}
-					}
-/// UBUNTU
-					if (!i_isinfo)		//info command: we want versions, not files (2 times faster)
-						if (issel)
-						{
-							if (flagstdout)
-							{
-								int fragchunks=compressfraglist(dtr.ptr,flagdebug);
-								if (fragchunks<=1)
-								{
-									dtr.isordered=true;
-									if (flagverbose || flagdebug)
-									{
-										myprintf("43498: Good for stdout (isordered) ");
-										printUTF8(fn.c_str());
-										myprintf("\n");
-									}
-									areordered++;
-								}
-								else
-									aredisordered++;
-
-								if (flagdebug)
-									myprintf("43464: fragchunks %08d for %s\n",fragchunks,fn.c_str());
-							}
-							if (all)
-								dtr.outputname=originalfilename;
-							dt[fn]=dtr;
-
-
-						}
-			///		dt.insert(std::pair<string, DT>(fn,dtr));
-				}  // end while more files
-            }  // end if 'i'
-            else
-			{
-				myprintf("Skipping %s %s\n",filename.s.c_str(), comment.s.c_str());
-				error("Unexpected journaling block");
-            }
-          }  // end if journaling
-          // Streaming format
-          else
-		  {
-            // If previous version does not exist, start a new one
-            if (ver.size()==1)
-			{
-				if (version<1)
-				{
-					done=true;
-					goto endblock;
-				}
-				ver.push_back(VER());
-				ver.back().firstFragment=ht.size();
-				ver.back().offset=block_offset;
-				ver.back().csize=-1;
-			}
-			char sha1result[21]={0};
-			d.readSegmentEnd(sha1result);
-            skip=true;
-            string fn=lastfile;
-            if (all)
-			{
-
-				fn=append_path(itos(ver.size()-1, all), fn); ///peusa3
-			}
-            if (isselected(fn.c_str(), i_renamed,-1)) {
-              DT& dtr=dt[fn];
-              if (filename.s.size()>0 || first) {
-                ++files;
-                dtr.date=date;
-                dtr.attr=0;
-                dtr.ptr.resize(0);
-                ++ver.back().updates;
-              }
-              dtr.ptr.push_back(ht.size());
-            }
-            assert(ver.size()>0);
-            if (segs==0 || block.size()==0)
-              block.push_back(Block(ht.size(), block_offset));
-            assert(block.size()>0);
-            ht.push_back(HT(sha1result+1, -1));
-          }  // end else streaming
-          ++segs;
-          filename.s="";
-          first=false;
-        }  // end while findFilename
-        if (!done) block_offset=in.tell()-d.buffered();
-      }  // end while findBlock
-      done=true;
-    }  // end try
-    catch (std::exception& e) {
-      in.seek(-d.buffered(), SEEK_CUR);
-      fflush(stdout);
-      myprintf( "Skipping block at %1.0f: %s\n", double(block_offset),
-              e.what());
-		g_exec_text="Skipping block";
-      if (errors) ++*errors;
-    }
-endblock:;
-  }  // end while !done
-  if (in.tell()>32*(password!=0) && !found_data)
-    error("archive contains no data");
-	if (!g_fakewrite)
-		if (!i_quiet)
-			if (!flagpakka)
-			{
-				if (flagverbose)
-				myprintf("%d vers, %s files, %s frags, %s blks, %s bytes (%s)\n",
-				int(ver.size()-1), migliaia(files), migliaia2(unsigned(ht.size())-1),
-				migliaia3(parts),migliaia4(block_offset),tohuman(block_offset));
-				else
-				myprintf("%d versions, %s files, %s bytes (%s)\n",
-				int(ver.size()-1), migliaia(files),
-				migliaia4(block_offset),tohuman(block_offset));
-
-			}
-	if (!i_quiet)
-	{
-#ifdef _WIN32
-		if (flagstat)
-		{
-			vector<string> kollisioni;
-			uint32_t fixati=casekollision(dt,kollisioni,flagfixcase);
-			casecollision=kollisioni.size();
-			if (casecollision>0)
-			{
-				myprintf("Case collisions        %9s (try -fixcase)\n",migliaia(casecollision));
-				if (flagverbose)
-					for (unsigned int i=0;i<kollisioni.size();i++)
-					{
-						myprintf("     collision  <<");
-						printUTF8(kollisioni[i].c_str());
-						myprintf(">>\n");
-					}
-			}
-			if (flagfixcase)
-				if (fixati>0)
-					myprintf("-fixcase fixed         %9s files\n",migliaia(fixati));
-			kollisioni.clear();
-		}
-#endif
-		if (toolongfilenames)
-		{
-#ifdef _WIN32
-			if (!flaglongpath)
-				if (!flagtest)
-					if (!flagvss)
-						if (!flagstdout)
-							myprintf("Long filenames (>255)  %9s *** WARNING *** (suggest -longpath or -fix255 or -flat)\n",migliaia(toolongfilenames));
-#else
-			if (!flagtest)
-				if (!flagstdout)
-			myprintf("Long filenames (>255)  %9s\n",migliaia(toolongfilenames));
-#endif
-		}
-		if (!i_quiet)
-		{
-			if (flagstdout)
-			{
-				if (areordered)
-					myprintf("AVAILABLE -stdout      %9s\n",migliaia(areordered));
-				if (aredisordered)
-					myprintf("CANNOT    -stdout      %9s\n",migliaia(aredisordered));
-			}
-			if (utf8names)
-				myprintf("Non-latin (UTF-8)      %9s\n",migliaia(utf8names));
-			if (utf8names)
-				myprintf("Non-latin (UTF-8)      %9s\n",migliaia(utf8names));
-			if (adsfilenames)
-				myprintf("ADS ($:DATA)           %9s\n",migliaia(adsfilenames));
-			if (windowspath)
-				myprintf("Windows path           %9s\n",migliaia(windowspath));
-			if (windowsunc)
-				myprintf("Windows UNC            %9s\n",migliaia(windowsunc));
-			if (reservedfilenames)
-			{
-#ifdef _WIN32
-				myprintf("Reserved WIN filenames %9s *** WARNING *** (suggested -fixreserved or -flat) \n",migliaia(reservedfilenames));
-#else
-				myprintf("Reserved filenames     %9s\n",migliaia(reservedfilenames));
-#endif
-			}
-		}
-	}
-  // Calculate file sizes
-	for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p)
-		for (unsigned i=0; i<p->second.ptr.size(); ++i)
-		{
-			unsigned j=p->second.ptr[i];
-			if (j>0 && j<ht.size() && p->second.size>=0)
-			{
-				if (ht[j].usize>=0)
-					p->second.size+=ht[j].usize;
-				else
-					p->second.size=-1;  // unknown size
-			}
-		}
-	return block_offset;
-}
 // Test whether filename and attributes are selected by files, -only, and -not
 // If rn then test renamed filename.
 // if i_size >0 check file size too (minsize,maxsize)
@@ -47199,8 +46604,9 @@ struct franz_posix
 	char devminor	[8];
 	char linkname	[256];
 };
+///writefranzattr
 
-void Jidac::writefranzattr(libzpaq::StringBuffer& i_sb, uint64_t i_data, unsigned int i_quanti,string i_filename,uint32_t i_crc32fromfragments,uint32_t i_crc32,string i_thehash,int64_t i_creationdate,int64_t i_accessdate,struct franz_posix* i_posix)
+void Jidac::writefranzattr(DTMap::iterator i_dtmap,libzpaq::StringBuffer& i_sb, uint64_t i_data, unsigned int i_quanti,string i_filename,uint32_t i_crc32fromfragments,uint32_t i_crc32,string i_thehash,int64_t i_creationdate,int64_t i_accessdate,struct franz_posix* i_posix)
 {
 	assert(i_sb);
 	assert(i_filename.length()>0); 	// I do not like empty()
@@ -47213,6 +46619,8 @@ void Jidac::writefranzattr(libzpaq::StringBuffer& i_sb, uint64_t i_data, unsigne
 		writtencrc=i_crc32;
 	///FRANZO_WINHASH64
 
+	i_dtmap->second.hexcrc32=bin2hex_32(writtencrc);
+	
 	if (g_franzotype==FRANZO_NONE) /*|| (i_thehash=="")*/	// 7.15
 	{
 		if (flagdebug)
@@ -48741,6 +48149,7 @@ int Jidac::list()
 	if (archive!="")
 		csize=read_archive(NULL,archive.c_str(),&errors,1); /// AND NOW THE MAGIC ONE!
 	myprintf("\n");
+	
 	g_bytescanned	=0;
 	g_filescanned	=0;
 	g_worked		=0;
@@ -48923,6 +48332,10 @@ int Jidac::list()
 	if (dhsize!=dcsize)  // index?
 		myprintf("Note: %s of %s compressed bytes are in archive\n",
 			migliaia((int64_t)(dcsize+0.0)), migliaia2((int64_t)(dhsize+0.0)));
+			
+	if (flagcollision)
+		checksha1collision(dt,true);
+
 	return 0;
 }
 
@@ -55977,11 +55390,11 @@ int Jidac::test()
 			status_0=uncheckedfiles;
 	}
 	if (status_e_hash)
-	myprintf("ERRORS HASH   : %08d (ERROR verifyng hash from disk)\n",status_e_hash);
+	myprintf("ERRORS HASH     : %08d (ERROR verifyng hash from disk)\n",status_e_hash);
 	if (status_e_crc)
-	myprintf("ERRORS CRC FI : %08d (ERROR verifyng CRC-32 from disk)\n",status_e_crc);
+	myprintf("ERRORS CRC FI   : %08d (ERROR verifyng CRC-32 from disk)\n",status_e_crc);
 	if (status_e_blocks)
-	myprintf("ERRORS        : %08d (ERROR in rebuilded CRC-32, SHA-1 collisions?)\n",status_e_blocks);
+	myprintf("ERRORS          : %08d (ERROR in CRC-32, SHA-1 collisions?)\n",status_e_blocks);
 	status_e = status_e_hash+status_e_crc+status_e_blocks;
 	if (status_e)
 	printbar('-');
@@ -56007,7 +55420,9 @@ int Jidac::test()
 		myprintf("Re-testing (hashing) from filesystem (-verify) if possible\n");
 		errors+=verify(false);
 	}
-  return (errors+status_e)>0;
+	if (flagcollision)
+		collision(true);
+	return (errors+status_e)>0;
 }
 /*
 We need something out of an object (Jidac), addfile() and scandir(),
@@ -60002,6 +59417,15 @@ string&		o_thecrcfile)
 ///zpaqfranz a z:\1 \\?\UNC\franzk\z\cb -longpath -debug
 int Jidac::add()
 {
+	if (flagcollision)
+	{
+		if ((flagchecktxt) || (backuptxt!="") || (flagfasttxt))
+		{
+			myprintf("62064: -collision incompatible with checktxt, backuptxt, fasttxt\n");
+			return 2;
+		}
+	}
+
 	if (flaghashdeep && flagfilelist)
 	{
 		myprintf("54583: -hashdeep incompatible with -filelist, disabling -filelist and keeping -hashdeep\n");
@@ -60040,6 +59464,14 @@ int Jidac::add()
 ///	if (flagdd)
 ///		return dd();
 #endif
+
+	if (flagstdin)
+		if (fragment!=6)
+		{
+			fragment=6;
+			myprintf("59541: with -stdin fragment setted to %d\n",fragment);
+		}
+
 
 #ifdef _WIN32
 	if (flagimage)
@@ -62387,10 +61819,10 @@ int Jidac::add()
 					}
 				}
 				if ((p->second.attr&255)=='u')
-						writefranzattr(is,p->second.attr,3,filename,currentcrc32,p->second.file_crc32,hashtobewritten,0,0,NULL);
+						writefranzattr(p,is,p->second.attr,3,filename,currentcrc32,p->second.file_crc32,hashtobewritten,0,0,NULL);
 				else
 				if ((p->second.attr&255)=='w')
-						writefranzattr(is,p->second.attr,5,filename,currentcrc32,p->second.file_crc32,hashtobewritten,p->second.creationdate,p->second.accessdate,NULL);
+						writefranzattr(p,is,p->second.attr,5,filename,currentcrc32,p->second.file_crc32,hashtobewritten,p->second.creationdate,p->second.accessdate,NULL);
 				else
 					puti(is, 0, 4);  // no attributes
 				if (a==dt.end() || p->second.data)
@@ -62641,6 +62073,16 @@ int Jidac::add()
 		}
 	}
 #endif
+
+	if (flagcollision)
+		if (checksha1collision(edt,false)>0) // we get the crc32 from writefranzattr, so false
+		{
+			if (errors==0)
+				errors=1;
+			if (flagcollision)
+				myprintf("62431: WARNING: some files cannot be restored correctly due to a suspected SHA-1 collision(s).\n");
+		}
+
 	if ((checktxt!="") || (backuptxt!=""))
 		if (fileexists(g_archive.c_str())) // with no changes no multipart file is created
 	{
@@ -63039,8 +62481,8 @@ int Jidac::add()
 					myprintf(" :OK\n");
 			}
 		}
-
-
+	
+///	checksha1collision(dt,true);
 
 	return errors;
 }
@@ -87449,4 +86891,827 @@ int Jidac::addhome()
 			bigerror();
 	}
 	return risultato;
+}
+/////////////////////////// read_archive //////////////////////////////
+// Read arc up to -date into ht, dt, ver. Return place to
+// append. If errors is not NULL then set it to number of errors found.
+int64_t Jidac::read_archive(callback_function i_advance,const char* arc, int *errors, int i_myappend,bool i_quiet)
+{
+	if (errors) *errors=0;
+	dcsize=dhsize=0;
+	assert(ver.size()==1);
+	const bool i_renamed=command=='l' || command=='a' || command=='5' ; ///5 for dirsize arrggghh hidden parameter!
+	const bool i_isinfo=(command=='i') && (!flagstat) && (!flagcomment); // -stat? Do a lot of work
+
+	unsigned files=0;  // count
+//	abort if file is open (from something else)
+#ifdef _WIN32
+	if (flagopen)
+		if ((command=='a') || (command=='g') || (command=='q'))
+			if (isfileopen(arc))
+			{
+				myprintf("27668: GURU file seems open (-open) ");
+				printUTF8(arc);
+				myprintf("\n");
+				seppuku();
+				return 0;
+			}
+#endif
+	// Open archive
+	InputArchive in(arc, password);
+	if (!in.isopen())
+	{
+		if (command!='a')
+		{
+			fflush(stdout);
+			printUTF8(arc);
+			myprintf( " not found.\n");
+			g_exec_text=arc;
+			g_exec_text+=" not found";
+			if (errors) ++*errors;
+		}
+		return 0;
+	}
+	if (!g_fakewrite)
+		if (!i_quiet)
+			if (!flagpakka)
+			{
+				printUTF8(arc);
+				if (version==DEFAULT_VERSION) myprintf(": ");
+					else
+				myprintf(" -until %1.0f: ", version+0.0);
+				fflush(stdout);
+			}
+  // Test password
+	char s[4]={0};
+	const int nr=in.read(s, 4);
+	if (nr>0 && memcmp(s, "7kSt", 4) && (memcmp(s, "zPQ", 3) || s[3]<1))
+	{
+		myprintf("zpaqfranz error:password incorrect\n");
+		error("password incorrect");
+	}
+    in.seek(-nr, SEEK_CUR);
+	// Scan archive contents
+	string lastfile=archive; // last named file in streaming format
+	if (lastfile.size()>5 && lastfile.substr(lastfile.size()-5)==".zpaq")
+		lastfile=lastfile.substr(0, lastfile.size()-5); // drop .zpaq
+	int64_t block_offset=32*(password!=0);  // start of last block of any type
+	int64_t data_offset=block_offset;    // start of last block of d fragments
+	bool found_data=false;   // exit if nothing found
+	bool first=true;         // first segment in archive?
+	StringBuffer os(32832);  // decompressed block
+	int toolongfilenames	=0;
+	int adsfilenames		=0;
+	int utf8names			=0;
+#ifdef _WIN32
+	int casecollision		=0;
+#endif
+	int reservedfilenames	=0;
+	int windowsunc			=0;
+	int windowspath			=0;
+	int relativepath		=0;
+	uint64_t parts			=0;
+	int	areordered			=0;
+	int aredisordered		=0;
+  // Detect archive format and read the filenames, fragment sizes,
+  // and hashes. In JIDAC format, these are in the index blocks, allowing
+  // data to be skipped. Otherwise the whole archive is scanned to get
+  // this information from the segment headers and trailers.
+	bool done=false;
+	if (!i_quiet)
+		myprintf("\n");
+	int64_t startblock=mtime();
+	while (!done)
+	{
+		libzpaq::Decompresser d;
+		try
+		{
+			d.setInput(&in);
+			double mem=0;
+			while (d.findBlock(&mem))
+			{
+				found_data=true;
+        // Read the segments in the current block
+				StringWriter filename, comment;
+				int segs=0;  // segments in block
+				bool skip=false;  // skip decompression?
+				while (d.findFilename(&filename))
+				{
+					if (filename.s.size())
+					{
+						for (unsigned i=0; i<filename.s.size(); ++i)
+							if (filename.s[i]=='\\')
+								filename.s[i]='/';
+						lastfile=filename.s.c_str();
+///						if (flagdebug)
+///							myprintf("27357: K3  |%s|\n",lastfile.c_str());
+					}
+					comment.s="";
+					d.readComment(&comment);
+          // Test for JIDAC format. Filename is jDC<fdate>[cdhi]<num>
+          // and comment ends with " jDC\x01". Skip d (data) blocks.
+					if (comment.s.size()>=4 && comment.s.substr(comment.s.size()-4)=="jDC\x01")
+					{
+						if (filename.s.size()!=28 || filename.s.substr(0, 3)!="jDC")
+							error("bad journaling block name");
+						if (skip)
+							error("mixed journaling and streaming block");
+            // Read uncompressed size from comment
+						int64_t usize=0;
+						unsigned i;
+						for (i=0; i<comment.s.size() && isdigit(comment.s[i]); ++i)
+						{
+							usize=usize*10+comment.s[i]-'0';
+							if (usize>0xffffffff)
+								error("journaling block too big");
+						}
+            // Read the date and number in the filename
+						int64_t fdate=0, num=0;
+						for (i=3; i<17 && isdigit(filename.s[i]); ++i)
+							fdate=fdate*10+filename.s[i]-'0';
+						if (i!=17 || fdate<19000000000000LL || fdate>=30000000000000LL)
+							error("bad date");
+						for (i=18; i<28 && isdigit(filename.s[i]); ++i)
+							num=num*10+filename.s[i]-'0';
+						if (i!=28 || num>0xffffffff)
+							error("bad fragment");
+            // Decompress the block.
+						os.resize(0);
+						os.setLimit(usize);
+						d.setOutput(&os);
+						libzpaq::SHA1 sha1;
+						d.setSHA1(&sha1);
+						if (strchr("chi", filename.s[17]))
+						{
+							if (mem>1.5e9)
+								error("index block requires too much memory");
+							d.decompress();
+							char sha1result[21]={0};
+							d.readSegmentEnd(sha1result);
+							if ((int64_t)os.size()!=usize)
+								error("bad block size");
+							if (usize!=int64_t(sha1.usize()))
+								error("bad checksum size");
+							if (sha1result[0] && memcmp(sha1result+1, sha1.result(), 20))
+								error("bad checksum");
+							if ( ++parts % 1000 ==0)
+								if (!flagnoeta)
+									if (!i_quiet)
+									{
+										myprintf("Block %10s K %12s (block/s)\r",migliaia((uint64_t)(parts/1000)),migliaia2((int64_t)(parts/(((mtime()-startblock)+1)/1000.0))));
+
+
+										if (i_advance!=NULL)
+										{
+											char buf[1000];
+											///
+	///										snprintf(buf,sizeof(buf),"Block %10s K %12s (block/s) %s",migliaia((uint64_t)(parts/1000)),migliaia2((parts/(((mtime()-startblock)+1)/1000.0))),migliaia3(dt.size()));
+											snprintf(buf,sizeof(buf),"Versions %s files %s (%s/s), longpath %s",migliaia4(ver.size()-1),migliaia((uint64_t)(dt.size())),migliaia3((int64_t)(dt.size()/(((mtime()-startblock)+1)/1000.0))),migliaia2(toolongfilenames));
+											i_advance(buf);
+										}
+									}
+						}
+						else
+							d.readSegmentEnd();
+            // Transaction header (type c).
+            // If in the future then stop here, else read 8 byte data size
+            // from input and jump over it.
+						if (filename.s[17]=='c')
+						{
+							if (os.size()<8)
+								error("c block too small");
+							data_offset=in.tell()+1-d.buffered();
+							const char* s=os.c_str();
+							int64_t jmp=btol(s);
+							///if (flagdebug)
+								///myprintf("27424: jump %s\n",migliaia(jmp));
+							if (jmp<0)
+								myprintf("Incomplete transaction ignored\n");
+							if (jmp<0 ||
+							(version<19000000000000LL && int64_t(ver.size())>version)
+							|| (version>=19000000000000LL && version<fdate))
+							{
+								done=true;  // roll back to here
+								goto endblock;	// WOW, a goto! I never seen one from C-64 back 1985!
+							}
+							else
+							{
+								dcsize+=jmp;
+								if (jmp) in.seek(data_offset+jmp, SEEK_SET);
+								ver.push_back(VER());
+								ver.back().firstFragment=ht.size();
+								ver.back().offset=block_offset;
+								ver.back().data_offset=data_offset;
+								ver.back().date=ver.back().lastdate=fdate;
+								ver.back().csize=jmp;
+								if (all)
+								{
+
+									string fn=itos(ver.size()-1, all)+"/";
+									if (i_renamed)
+										fn=rename(fn);
+									if (isselected(fn.c_str(), false,-1))
+										dt[fn].date=fdate;
+									///printf("FKA1 KKKKKKKKKKKKKKKKKK %s\n",fn.c_str());
+								}
+								if (jmp)
+									goto endblock;
+							}
+						}
+            // Fragment table (type h).
+            // Contents is bsize[4] (sha1[20] usize[4])... for fragment N...
+            // where bsize is the compressed block size.
+            // Store in ht[].{sha1,usize}. Set ht[].csize to block offset
+            // assuming N in ascending order.
+						else
+						if (filename.s[17]=='h')
+						{
+							assert(ver.size()>0);
+							if (fdate>ver.back().lastdate)
+								ver.back().lastdate=fdate;
+							if (os.size()%24!=4)
+								error("bad h block size");
+							const unsigned n=(os.size()-4)/24;
+							if (num<1 || num+n>0xffffffff)
+								error("bad h fragment");
+							const char* s=os.c_str();
+							const unsigned bsize=btoi(s);
+							dhsize+=bsize;
+							assert(ver.size()>0);
+							if (int64_t(ht.size())>num)
+							{
+								fflush(stdout);
+								myprintf(
+								  "Unordered fragment tables: expected >= %d found %1.0f\n",
+								  int(ht.size()), double(num));
+								 g_exec_text="Unordered fragment tables";
+							}
+							for (unsigned i=0; i<n; ++i)
+							{
+								if (i==0)
+								{
+									block.push_back(Block(num, data_offset));
+									block.back().usize=8;
+									block.back().bsize=bsize;
+									block.back().frags=os.size()/24;
+								}
+								while (int64_t(ht.size())<=num+i)
+									ht.push_back(HT());
+								memcpy(ht[num+i].sha1, s, 20);
+								s+=20;
+								assert(block.size()>0);
+								unsigned f=btoi(s);
+								if (f>0x7fffffff)
+									error("fragment too big");
+								block.back().usize+=(ht[num+i].usize=f)+4u;
+							 }
+							data_offset+=bsize;
+						}
+            // Index (type i)
+            // Contents is: 0[8] filename 0 (deletion)
+            // or:       date[8] filename 0 na[4] attr[na] ni[4] ptr[ni][4]
+            // Read into DT
+						else
+						if (filename.s[17]=='i')
+						{
+							assert(ver.size()>0);
+							if (fdate>ver.back().lastdate)
+								ver.back().lastdate=fdate;
+							const char* s=os.c_str();
+							const char* const end=s+os.size();
+							while (s+9<=end)
+							{
+								DT dtr;
+								dtr.version=ver.size()-1;
+
+								dtr.date=btol(s);  // date
+								if (dtr.date)
+									++ver.back().updates;
+								else
+									++ver.back().deletes;
+								const int64_t len=strlen(s);
+								if (len>65535)
+									error("filename too long");
+								string fn=s;  // filename ren
+								string	originalfilename=s;
+
+								if (!i_isinfo)
+								{
+									if ((flagstat) && (command!='5') && (command!='6'))
+							//-stat, we ask for extended infos
+							//not useful with dirsize, setpassword, info
+									{
+										checkfilename(fn,
+										&toolongfilenames,
+										&adsfilenames,
+										&utf8names,
+										NULL,// reserved file names, only on WIN32
+										&windowspath,
+										&windowsunc,
+										&relativepath);
+										string fixed;
+#ifdef _WIN32
+										if (isreserved(fn,fixed))
+										{
+											reservedfilenames++;
+											if (flagfixreserved)
+											{
+												myprintf("29229: WARNING changed reserved <<");
+												printUTF8(fn.c_str());
+												myprintf(">>\n");
+												fn=fixed;
+												myprintf("29230: to filesystem compatible <<");
+												printUTF8(fn.c_str());
+												myprintf(">>\n");
+											}
+										}
+#endif
+									}
+									else
+#ifdef _WIN32
+									checkfilename(fn,  /// by default check only toolong and utf
+									&toolongfilenames,
+									NULL,
+									NULL,
+									NULL,
+									NULL,
+									NULL,
+									NULL);
+#else				// *nix can restore (almost) everything, no warnings needed by default
+#endif
+										if (all)
+										{
+
+											if (i_myappend)
+												fn=itos(ver.size()-1, all)+"|$1"+fn;
+											else
+												fn=append_path(itos(ver.size()-1, all), fn);
+											///printf("------------- %s\n",fn.c_str());
+										}
+								}
+					bool issel=false;
+					if (!i_isinfo)
+						issel=isselected(fn.c_str(), i_renamed,-1);
+
+					if (g_rangefrom>0)
+						if (all)
+							if (((ver.size()-1)<(unsigned int)g_rangefrom) || ((ver.size()-1)>(unsigned int)g_rangeto))
+								issel=false;
+
+					s+=len+1;  // skip filename
+					if (s>end)
+						error("filename too long");
+					if (dtr.date)
+					{
+						++files;
+						if (s+4>end)
+							error("missing attr");
+						unsigned na=0;
+						na=btoi(s);  // attr bytes
+						if (s+na>end || na>65535)
+							error("attr too long");
+						if (!i_isinfo)
+							if (na>FRANZOFFSETV1) //Get FRANZOFFSETV1
+							{
+								assert((na-8)<FRANZOFFSETV3); // cannot work on too small buffer
+								for (unsigned int i=0;i<(na-8);i++)
+									dtr.franz_block[i]=*(s+(na-(na-8))+i);
+								dtr.franz_block_size=(na-8);
+								dtr.franz_block[(na-8)]=0x0;
+								if (flagstat)
+								{
+									string myhashtype="";
+									string myhash="";
+									string mycrc32="";
+									int64_t mycreationtime=0;
+									int64_t myaccesstime=0;
+									bool	myisordered=false;
+									int		myversion=0;
+									franz_posix* myposix=NULL;
+									decode_franz_block(false,dtr.franz_block,
+									myhashtype,
+									myhash,
+									mycrc32,
+									mycreationtime,
+									myaccesstime,
+									myisordered,
+									myversion,
+									myposix);
+									if (strstr(myhash.c_str(),"!ERROR!"))
+									{
+										if (flagforce)
+										{
+											if (flagverbose)
+												myprintf("27752: *** 'strange' but -force     -> included ");
+										}
+										else
+										{
+											if (flagverbose)
+												myprintf("27754: *** 'strange' and NOT -force -> skipped  ");
+											issel=false;
+											if (errors)
+												(*errors)++;
+										}
+										if (flagverbose)
+										{
+											printUTF8(fn.c_str());
+											myprintf("\n");
+										}
+									}
+								}
+							}
+						for (unsigned i=0; i<na; ++i, ++s)  // read attr
+							if (i<8)
+								dtr.attr+=int64_t(*s&255)<<(i*8);
+						if (flagnoattributes)
+							dtr.attr=0;
+						if (s+4>end)
+							error("missing ptr");
+						unsigned ni=btoi(s);  // ptr list size
+						if (ni>(end-s)/4u)
+							error("ptr list too long");
+						if (issel)
+							dtr.ptr.resize(ni);
+						for (unsigned i=0; i<ni; ++i)
+						{  // read ptr
+							const unsigned j=btoi(s);
+							if (issel)
+							{
+								dtr.ptr[i]=j;
+							}
+						}
+					}
+/// UBUNTU
+					if (!i_isinfo)		//info command: we want versions, not files (2 times faster)
+						if (issel)
+						{
+							if (flagstdout)
+							{
+								int fragchunks=compressfraglist(dtr.ptr,flagdebug);
+								if (fragchunks<=1)
+								{
+									dtr.isordered=true;
+									if (flagverbose || flagdebug)
+									{
+										myprintf("43498: Good for stdout (isordered) ");
+										printUTF8(fn.c_str());
+										myprintf("\n");
+									}
+									areordered++;
+								}
+								else
+									aredisordered++;
+
+								if (flagdebug)
+									myprintf("43464: fragchunks %08d for %s\n",fragchunks,fn.c_str());
+							}
+							if (all)
+								dtr.outputname=originalfilename;
+							dt[fn]=dtr;
+
+
+						}
+			///		dt.insert(std::pair<string, DT>(fn,dtr));
+				}  // end while more files
+            }  // end if 'i'
+            else
+			{
+				myprintf("Skipping %s %s\n",filename.s.c_str(), comment.s.c_str());
+				error("Unexpected journaling block");
+            }
+          }  // end if journaling
+          // Streaming format
+          else
+		  {
+            // If previous version does not exist, start a new one
+            if (ver.size()==1)
+			{
+				if (version<1)
+				{
+					done=true;
+					goto endblock;
+				}
+				ver.push_back(VER());
+				ver.back().firstFragment=ht.size();
+				ver.back().offset=block_offset;
+				ver.back().csize=-1;
+			}
+			char sha1result[21]={0};
+			d.readSegmentEnd(sha1result);
+            skip=true;
+            string fn=lastfile;
+            if (all)
+			{
+
+				fn=append_path(itos(ver.size()-1, all), fn); ///peusa3
+			}
+            if (isselected(fn.c_str(), i_renamed,-1)) {
+              DT& dtr=dt[fn];
+              if (filename.s.size()>0 || first) {
+                ++files;
+                dtr.date=date;
+                dtr.attr=0;
+                dtr.ptr.resize(0);
+                ++ver.back().updates;
+              }
+              dtr.ptr.push_back(ht.size());
+            }
+            assert(ver.size()>0);
+            if (segs==0 || block.size()==0)
+              block.push_back(Block(ht.size(), block_offset));
+            assert(block.size()>0);
+            ht.push_back(HT(sha1result+1, -1));
+          }  // end else streaming
+          ++segs;
+          filename.s="";
+          first=false;
+        }  // end while findFilename
+        if (!done) block_offset=in.tell()-d.buffered();
+      }  // end while findBlock
+      done=true;
+    }  // end try
+    catch (std::exception& e) {
+      in.seek(-d.buffered(), SEEK_CUR);
+      fflush(stdout);
+      myprintf( "Skipping block at %1.0f: %s\n", double(block_offset),
+              e.what());
+		g_exec_text="Skipping block";
+      if (errors) ++*errors;
+    }
+endblock:;
+  }  // end while !done
+  if (in.tell()>32*(password!=0) && !found_data)
+    error("archive contains no data");
+	if (!g_fakewrite)
+		if (!i_quiet)
+			if (!flagpakka)
+			{
+				if (flagverbose)
+				myprintf("%d vers, %s files, %s frags, %s blks, %s bytes (%s)\n",
+				int(ver.size()-1), migliaia(files), migliaia2(unsigned(ht.size())-1),
+				migliaia3(parts),migliaia4(block_offset),tohuman(block_offset));
+				else
+				myprintf("%d versions, %s files, %s bytes (%s)\n",
+				int(ver.size()-1), migliaia(files),
+				migliaia4(block_offset),tohuman(block_offset));
+
+			}
+	if (!i_quiet)
+	{
+#ifdef _WIN32
+		if (flagstat)
+		{
+			vector<string> kollisioni;
+			uint32_t fixati=casekollision(dt,kollisioni,flagfixcase);
+			casecollision=kollisioni.size();
+			if (casecollision>0)
+			{
+				myprintf("Case collisions        %9s (try -fixcase)\n",migliaia(casecollision));
+				if (flagverbose)
+					for (unsigned int i=0;i<kollisioni.size();i++)
+					{
+						myprintf("     collision  <<");
+						printUTF8(kollisioni[i].c_str());
+						myprintf(">>\n");
+					}
+			}
+			if (flagfixcase)
+				if (fixati>0)
+					myprintf("-fixcase fixed         %9s files\n",migliaia(fixati));
+			kollisioni.clear();
+		}
+#endif
+		if (toolongfilenames)
+		{
+#ifdef _WIN32
+			if (!flaglongpath)
+				if (!flagtest)
+					if (!flagvss)
+						if (!flagstdout)
+							myprintf("Long filenames (>255)  %9s *** WARNING *** (suggest -longpath or -fix255 or -flat)\n",migliaia(toolongfilenames));
+#else
+			if (!flagtest)
+				if (!flagstdout)
+			myprintf("Long filenames (>255)  %9s\n",migliaia(toolongfilenames));
+#endif
+		}
+		if (!i_quiet)
+		{
+			if (flagstdout)
+			{
+				if (areordered)
+					myprintf("AVAILABLE -stdout      %9s\n",migliaia(areordered));
+				if (aredisordered)
+					myprintf("CANNOT    -stdout      %9s\n",migliaia(aredisordered));
+			}
+			if (utf8names)
+				myprintf("Non-latin (UTF-8)      %9s\n",migliaia(utf8names));
+			if (utf8names)
+				myprintf("Non-latin (UTF-8)      %9s\n",migliaia(utf8names));
+			if (adsfilenames)
+				myprintf("ADS ($:DATA)           %9s\n",migliaia(adsfilenames));
+			if (windowspath)
+				myprintf("Windows path           %9s\n",migliaia(windowspath));
+			if (windowsunc)
+				myprintf("Windows UNC            %9s\n",migliaia(windowsunc));
+			if (reservedfilenames)
+			{
+#ifdef _WIN32
+				myprintf("Reserved WIN filenames %9s *** WARNING *** (suggested -fixreserved or -flat) \n",migliaia(reservedfilenames));
+#else
+				myprintf("Reserved filenames     %9s\n",migliaia(reservedfilenames));
+#endif
+			}
+		}
+	}
+
+  // Calculate file sizes
+  
+	for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p)
+		for (unsigned i=0; i<p->second.ptr.size(); ++i)
+		{
+			unsigned j=p->second.ptr[i];
+			if (j>0 && j<ht.size() && p->second.size>=0)
+			{
+				if (ht[j].usize>=0)
+					p->second.size+=ht[j].usize;
+				else
+					p->second.size=-1;  // unknown size
+			}
+		}
+	
+
+	return block_offset;
+}
+
+int Jidac::checksha1collision(DTMap& i_dtmap,bool i_decodefranzblock)
+{
+	if ((flag715) || (flagnochecksum))
+		return 0;
+	int 	collisionfounded=0;
+	int64_t startcollision=mtime();
+	sha1collision.clear();
+	vector<string> secondpass;
+	
+	for (DTMap::iterator p=i_dtmap.begin(); p!=i_dtmap.end(); ++p)
+	{
+		///myprintf("87483: first  %s\n",p->first.c_str());
+		string mycrc32			="";
+		
+		if (i_decodefranzblock)
+		{
+			string myhashtype		="";
+			string myhash			="";
+			int64_t mycreationtime	=0;
+			int64_t myaccesstime	=0;
+			bool	myisordered		=false;
+			int		myversion		=0;
+			franz_posix* myposix	=NULL;
+			decode_franz_block(false,p->second.franz_block,
+			myhashtype,
+			myhash,
+			mycrc32,
+			mycreationtime,
+			myaccesstime,
+			myisordered,
+			myversion,
+			myposix);
+		}
+		else
+			mycrc32=p->second.hexcrc32.c_str();
+			
+		///myprintf("87501: mycrc32 %s\n",mycrc32.c_str());
+		if (mycrc32!="")
+			if (mycrc32!="00000000")
+			{
+				p->second.hexcrc32=mycrc32;
+				char* 	vectordata	=(char*)p->second.ptr.data();
+				size_t 	vectorbytes =sizeof(p->second.ptr[0])*p->second.ptr.size();
+				
+				uint64_t myseed = 0;
+				XXHash64 myhash(myseed);
+				myhash.add(vectordata,vectorbytes);
+				int64_t hashstringato=myhash.hash();
+				
+				std::pair<std::map<int64_t,string>::iterator,bool> risultato;
+				risultato=sha1collision.insert(std::pair<int64_t,string>(hashstringato,p->first.c_str()));
+				if (risultato.second==false) 
+				{
+					string precedente=risultato.first->second;
+					DTMap::iterator myp=i_dtmap.find(precedente);
+					if (myp==i_dtmap.end())
+						myprintf("87503: ERROR cannot find on dtmap! %s\n",precedente.c_str());
+					else
+					{
+						char* 	vectordata2		=(char*)myp->second.ptr.data();
+						size_t 	vectorbytes2 	=sizeof(myp->second.ptr[0])*myp->second.ptr.size();
+						
+						if ((vectordata2==NULL) || (vectordata==NULL))
+						{
+							myprintf("87563: GURU vectordata or vectordata2 null\n");
+							seppuku();
+							return 0;
+						}
+						if (flagdebug)
+						{
+							myprintf("85776: vectorbytes  %s\n",migliaia(vectorbytes));
+							myprintf("85776: vectorbytes2 %s\n",migliaia(vectorbytes2));
+						}
+						if (vectorbytes!=vectorbytes2)
+							myprintf("87566: ERROR vectorbytes does not match %s vs %s\n",migliaia((int64_t)vectorbytes),migliaia2((int64_t)vectorbytes2));
+						else
+						{
+							if (memcmp(vectordata,vectordata2,vectorbytes)!=0)
+								myprintf("87570: ERROR fragment lists does not match! (XXHASH64 collision?)\n");
+							else
+							{
+								string precedentecrc32=myp->second.hexcrc32;
+								if (precedentecrc32!=p->second.hexcrc32)
+								{
+									myprintf("\n");
+									printbar('#');
+									if (flagverbose)
+									{
+										myprintf("87487: **** SUSPECTED SHA-1 COLLISION %s ****\n",bin2hex_64(hashstringato).c_str());
+										myprintf("File   CRC-32 %s <<",p->second.hexcrc32.c_str());
+										printUTF8(p->first.c_str());
+										myprintf(">>\n");
+										myprintf("map to CRC-32 %s <<",precedentecrc32.c_str());
+										printUTF8(risultato.first->second.c_str());
+										myprintf(">>\n");
+									}
+									else
+									{
+										myprintf("87571: Restoring this file will get incorrect data due to suspected SHA-1 collision(s)\n");
+										string temp=p->first;
+										if (mypos("|$1",temp)>-1)
+										{
+											myreplace(temp,"|$1","|");
+											myprintf("       File template: <<version|filename>>\n");
+										}
+										else
+											secondpass.push_back(temp);
+										myprintf("<<");
+										printUTF8(temp.c_str());
+										myprintf(">>\n");
+									}
+									printbar('#');
+									myprintf("\n");
+									collisionfounded++;
+								}
+							}
+						}
+					}
+				}
+			}
+	}
+	///if (flagverbose)
+		myprintf("87538: SHA-1 collision detection time %s ms\n",migliaia(mtime()-startcollision));
+
+	if (command=='a')
+		if (secondpass.size()>0)
+		{
+			jidacreset();
+			tofiles	.clear();
+			files	.clear();
+			flagforce		=true;
+			flagstdout		=true;
+			flagnodedup		=true;
+			flagcollision	=false;
+			for (unsigned int i=0;i<secondpass.size();i++)
+			{
+				myprintf("87653: Need a second pass on <<");
+				printUTF8(secondpass[i].c_str());
+				myprintf(">>\n");
+				files.push_back(secondpass[i]);
+			}
+			return add();
+		}
+	return collisionfounded;
+}
+
+int Jidac::collision(bool i_flagall)
+{
+	if (archive=="")
+	{
+		myprintf("87628: archive not setted!\n");
+		return 2;
+	}
+	myprintf("Checking for SHA-1 collisions\n");
+	getpasswordifempty();
+	int errors		=0;
+	all				=i_flagall;
+	jidacreset();
+	read_archive(NULL,archive.c_str(),&errors,1); /// AND NOW THE MAGIC ONE!
+	myprintf("\nInspecting %s entries...\n",migliaia((int64_t)dt.size()));
+	int howmany=checksha1collision(dt,true);
+	myprintf("\n");
+	if (howmany>0)
+	{
+		myprintf("87642: WARNING: some files cannot be restored correctly due to a suspected SHA-1 collision(s).\n");
+		return 1;
+	}
+	else
+		myprintf("87653: No suspected collisions detected (this is good)\n");
+	return 0;
 }

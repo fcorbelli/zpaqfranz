@@ -1,3 +1,7 @@
+## [58.11.w] - 2023-11-01
+### dump command
+- Undocumented -collision -kill, to be implemented
+
 ## [58.11.q] - 2023-10-08
 ### collision command and -collision switch
 - Quickly check and (sometimes) recovery from SHA-1 collision

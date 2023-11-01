@@ -66,6 +66,9 @@ Credits and copyrights and licenses and links and internal bookmarks
  /// LICENSE_START.19 LICENSE_END.19
 20 [Public domain]                CPU accelerated SHA code taken from SHA-Intrinsics
  /// LICENSE_START.20 LICENSE_END.20
+21 [Public domain]                zpaqd v7.15 - ZPAQ compression development tool - Aug. 17, 2016.
+ /// LICENSE_START.21 LICENSE_END.21
+
 
    _____ _____  ______ ______ _______ _____ _   _  _____  _____ 
   / ____|  __ \|  ____|  ____|__   __|_   _| \ | |/ ____|/ ____|
@@ -107,3 +110,11 @@ Credits and copyrights and licenses and links and internal bookmarks
 25 Thanks to Martin Pluskal                            for OpenSUSE package
 26 Thanks to Petr Pisar                                for Fedora Package
 27 Thanks to Davide Moretti                            for good ideas
+28 Thanks to https://github.com/DetourNetworkUK        for Mac PowerPC strnlen bug
+29 Thanks to Lone_Wolf (bbs.archlinux.org)             for reviewing PKGBUILD on arch
+30 Thanks to Scimmia   (bbs.archlinux.org)             for reviewing PKGBUILD on arch
+31 Thanks to Loqs      (bbs.archlinux.org)             for reviewing PKGBUILD on arch
+32 Thanks to https://github.com/tansy                  for Slackware older compilers
+33 Thanks to https://github.com/janko-js               for idea on quick collision-detector
+34 Thanks to https://github.com/havocesp               for very useful ideas
+35 Thanks to https://github.com/luckman212             for a refactoring-induced bug detection

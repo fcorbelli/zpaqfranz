@@ -1,3 +1,4 @@
+///checkme
 /*
                                   __
            _____ __   __ _  __ _ / _|_ __ __ _ _ __  ____
@@ -52,8 +53,8 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 */
 
-#define ZPAQ_VERSION "58.11q"
-#define ZPAQ_DATE "(2023-10-08)"  // cannot use __DATE__ on Debian!
+#define ZPAQ_VERSION "58.11w"
+#define ZPAQ_DATE "(2023-11-01)"  // cannot use __DATE__ on Debian!
 
 ///	optional align for malloc (sparc64) via -DALIGNMALLOC
 #define STR(a) #a
@@ -1001,6 +1002,15 @@ Credits and copyrights and licenses and links and internal bookmarks
     Based on code from Intel, and by Sean Gulley for
     the miTLS project.
 
+21 [Public domain]                zpaqd v7.15 - ZPAQ compression development tool - Aug. 17, 2016.
+ /// LICENSE_START.21
+ /// LICENSE_END.21
+	This software is provided as-is, with no warranty.
+	I, Matt Mahoney, release this software into
+	the public domain.   This applies worldwide.
+	In some countries this may not be legally possible; if so:
+	I grant anyone the right to use this software for any purpose,
+	without any conditions, unless such conditions are required by law.
 
 
    _____ _____  ______ ______ _______ _____ _   _  _____  _____ 
@@ -1051,6 +1061,8 @@ Credits and copyrights and licenses and links and internal bookmarks
 32 Thanks to https://github.com/tansy                   for Slackware older compilers
 33 Thanks to https://github.com/janko-js                for idea on quick collision-detector
 34 Thanks to https://github.com/havocesp                for very useful ideas
+35 Thanks to https://github.com/luckman212              for a refactoring-induced bug detection
+
 
 
                 _____ _   _  _____ _______       _      _
@@ -2126,7 +2138,7 @@ char* mymigliaia(int64_t i_bytes,char* i_buffer,int i_buffersize)
 		return i_buffer;
 	}
 
-	char *p=&i_buffer[sizeof(i_buffer)-1];
+	char *p=&i_buffer[i_buffersize-1];
 	unsigned int i=0;
 	*p='\0';
 	do
@@ -35928,7 +35940,7 @@ bool isreserved(const string& i_filename,string& o_fixed)
 		}
 		for (unsigned int i=0;i<o_fixed.size();i++)
 			for (unsigned int j=0;j<forbiddencharsize;j++)
-				if ((o_fixed[i]==forbiddenchar[j]))
+				if (o_fixed[i]==forbiddenchar[j])
 				{
 					o_fixed[i]='_';
 					risultato=true;
@@ -37597,6 +37609,22 @@ class franzfs
 	char*		data;
 	uint64_t	filesize;
 	uint64_t 	position;
+	
+	void seekstart()
+	{
+		if (!data)
+		{
+			myprintf("37608: Guru data is null in seek start\n");
+			return;
+		}
+		if (filesize==0)
+		{
+			myprintf("37613: Guru filesize is zero seek start\n");
+			return;
+		}
+		position=0;
+	}
+
 	size_t ramread(size_t i_size,char* o_ptr)
 	{
 		if (o_ptr==NULL)
@@ -37608,10 +37636,12 @@ class franzfs
 			myprintf("22938: Guru data is null\n");
 			return 0;
 		}
+		
 		if ((position+i_size)>filesize)
 			i_size=filesize-position;
 		memcpy(o_ptr,data+position,i_size);
 		position+=i_size;
+	///	myprintf("37633: letti %21s posizione %21s\n",migliaia(i_size),migliaia2(position));
 		return i_size;
 	}
 	size_t ramwrite(uint64_t i_offset,char* i_ptr, size_t i_size)
@@ -38071,7 +38101,9 @@ unsigned char*	i_buffer,
 size_t			i_buffersize
 );
 	int 		checksha1collision(DTMap& i_dtmap,bool i_decodefranzblock);
-
+	void 		updatehash(DTMap::iterator* i_p,char* i_buf,int i_buflen);
+	int64_t 	get_dt(int *errors, const char* arc);
+	int 		dump();
 };
 #ifdef unix
 std::string exec(const char* cmd)
@@ -40838,7 +40870,16 @@ void verify_date(uint64_t date) {
   int sec=date%100;
   if (year<1900 || year>2999 || month<1 || month>12 || day<1 || day>31
       || hour<0 || hour>59 || min<0 || min>59 || sec<0 || sec>59)
-    unzerror("invalid date");
+	  {
+		  myprintf("\n\n40863: date %s\n",migliaia(date));
+		  myprintf("year   %d\n",year);
+		  myprintf("month  %d\n",month);
+		  myprintf("day    %d\n",day);
+		  myprintf("hour   %d\n",hour);
+		  myprintf("min    %d\n",min);
+		  myprintf("sec    %d\n",day);
+	///	unzerror("invalid date");
+	  }
 }
 // Test if string is valid UTF8
 void unzverify_utf8(const char* s) {
@@ -42280,6 +42321,24 @@ string help_collision(bool i_usage,bool i_example)
 	}
 	return ("Inspect archive for SHA-1 collisions");
 }
+string help_dump(bool i_usage,bool i_example)
+{
+	if (i_usage)
+	{
+		moreprint("dump  technical dump of a not-encrypted zpaq\n");
+		moreprint("+ : -verbose      Show useful infos");
+		moreprint("+ : -summary      Brief");
+	}
+	if (i_usage && i_example) moreprint("    Examples:");
+	if (i_example)
+	{
+		moreprint("Default infos               dump z:\\kajo.zpaq");
+		moreprint("More                        dump z:\\kajo.zpaq -verbose");
+		moreprint("Brief                       dump z:\\kajo.zpaq -summary");
+		moreprint("Cut filenames               dump z:\\kajo.zpaq -verbose -summary");
+	}
+	return ("Inspect archive for SHA-1 collisions");
+}
 string help_w(bool i_usage,bool i_example)
 {
 	if (i_usage)
@@ -43451,6 +43510,7 @@ void Jidac::load_help_map()
 	help_map.insert(std::pair<string, voidhelpfunction>("last",				help_last));
 	help_map.insert(std::pair<string, voidhelpfunction>("fzf",				help_fzf));
 	help_map.insert(std::pair<string, voidhelpfunction>("collision",		help_collision));
+	help_map.insert(std::pair<string, voidhelpfunction>("dump",				help_dump));
 #ifdef GUI
 	help_map.insert(std::pair<string, voidhelpfunction>("gui",help_gui));
 #endif
@@ -44889,6 +44949,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 		opt=="extract" 			||
 		opt=="last" 			||
 		opt=="list" 			||
+		opt=="dump" 			||
 		opt=="collision"		||
 		opt=="fzf" 				||
 		opt=="k" 				||
@@ -44927,6 +44988,8 @@ int Jidac::loadparameters(int argc, const char** argv)
 				g_optional="zfsadd";
 				command='A';
 			}
+			if (opt=="dump")
+				command='D';
 			if (opt=="collision")
 				command='K';
 			if (opt=="gui")
@@ -45524,6 +45587,7 @@ int Jidac::doCommand()
 	else if (command==')') return oneonone();
 	else if (command=='F') return fzf();
 	else if (command=='K') return collision(true);
+	else if (command=='D') return dump();
 	else usage();
 	return 0;
 }
@@ -45832,6 +45896,8 @@ bool Jidac::isselected(const char* filename, bool rn,int64_t i_size)
 		if (mypos("VCOMMENT ",filename)>-1)
 			return true;
 		if (mypos("VFILE-",filename)>-1)
+			return true;
+		if (mypos("MFILE-",filename)>-1)
 			return true;
 	}
 	if  (!flagforcewindows)
@@ -46260,7 +46326,7 @@ void Jidac::addfile(bool i_checkifselected,DTMap& i_edt,string filename, int64_t
 		if (iscantime!=ultimotempo)
 		{
 			ultimotempo=iscantime;
-			printf("Scanned %10s %02d:%02d:%02d %10s file/s (%21s)\r",
+			myprintf("Scanned %10s %02d:%02d:%02d %10s file/s (%21s)\r",
 			migliaia((int64_t)i_edt.size()),
 
 			int(iscantime/3600),
@@ -46613,7 +46679,7 @@ void Jidac::writefranzattr(DTMap::iterator i_dtmap,libzpaq::StringBuffer& i_sb, 
 	assert(i_quanti<8);				//just to be sure at least 1 zero pad, so < and not <=
 	assert(i_filename!="");
 	uint32_t writtencrc;
-	if (flagverify)
+	if (flagverify || flagcollision)
 		writtencrc=i_crc32fromfragments;
 	else
 		writtencrc=i_crc32;
@@ -46628,7 +46694,7 @@ void Jidac::writefranzattr(DTMap::iterator i_dtmap,libzpaq::StringBuffer& i_sb, 
 		write715attr(i_sb,i_data,i_quanti);
 		return;
 	}
-	if (flagverify)
+	if (flagverify || flagcollision)
 		if (i_crc32!=i_crc32fromfragments)
 		{
 			myprintf("\nGURU-C: on file %s\n",i_filename.c_str());
@@ -48110,6 +48176,32 @@ void Jidac::decodelastversion()
 	}
 }
 
+bool ismemfile(const string& i_filename)
+{
+	if (mypos("MFILE-",i_filename)>-1)
+		return true;
+	return false;
+}
+
+bool 	iszpaqfranzvirtualfile(const string& i_filename)
+{
+	if (mypos("VCOMMENT ",i_filename)>-1)
+		return true;
+	if (mypos("VFILE-",i_filename)>-1)
+		return true;
+	if (mypos("MFILE-",i_filename)>-1)
+		return true;
+	return false;
+}
+bool 	unziszpaqfranzvirtualfile(const string& i_filename)
+{
+	if (mypos("VCOMMENT ",i_filename)>-1)
+		return true;
+	if (mypos("VFILE-",i_filename)>-1)
+		return true;
+	return false;
+}
+
 // List contents
 int Jidac::list()
 {
@@ -48197,9 +48289,16 @@ int Jidac::list()
 				break;
 		DTMap::iterator p=filelist[fi];
 		flagshow=true;
+		/*
 		if (isads(p->first))
+		{
 			if (strstr(p->first.c_str(),"VCOMMENT "))
 				flagshow=false;
+		}
+		*/
+		if ((!flag715) && (!flagforcewindows) && (!all))
+			flagshow=!iszpaqfranzvirtualfile(p->first);
+		
 /// a little of change if -search is used
 		if (searchfrom!="")
 			flagshow=stristr(p->first.c_str(),searchfrom.c_str());
@@ -49577,14 +49676,6 @@ bool Jidac::equal(DTMap::const_iterator p, const char* filename,uint32_t &o_crc3
 	return true;
 }
 
-bool 	iszpaqfranzvirtualfile(const string& i_filename)
-{
-	if (mypos("VCOMMENT ",i_filename)>-1)
-		return true;
-	if (mypos("VFILE-",i_filename)>-1)
-		return true;
-	return false;
-}
 bool ishex(const char i_char)
 {
 	return (((i_char>=48) && (i_char<=57)) || ((i_char>=65) && (i_char<=70)) || ((i_char>=97) && (i_char<=102)));
@@ -54382,8 +54473,8 @@ int unz(const char * archive,const char * key)
 		{
 			if (len%24!=4)
 			unzerror("bad h block size");
-			uint32_t b=unzget4(seg.s.data());
-			b++;
+			///uint32_t b=unzget4(seg.s.data());
+			///b++;
 ///if (!noeta)
 				///myprintf("O");//myprintf("i");
         ///myprintf("    [%u..%u) %u ", uint32_t(id), uint32_t(id+len/24), b);
@@ -54445,7 +54536,7 @@ int unz(const char * archive,const char * key)
 				unzerror("filename size > 65535");
 				unzverify_utf8(fn.c_str());
 
-				bool isvirtual=iszpaqfranzvirtualfile(fn);
+				bool isvirtual=unziszpaqfranzvirtualfile(fn);
 				if (isvirtual)
 					zpaqvirtualfile++;
           // read attr
@@ -57461,9 +57552,6 @@ int Jidac::robocopy()
 	int64_t timelocalexists2		=0;
 	int64_t timelocalmakepath		=0;
 
-	int 	timelocalexists_hm		=0;
-	int 	timelocalexists2_hm		=0;
-	int 	timelocalmakepath_hm	=0;
 
 	if (g_ioBUFSIZE==4096)
 		g_ioBUFSIZE=1048576;
@@ -57483,20 +57571,17 @@ int Jidac::robocopy()
 		strangethings=0;
 		if (flagkill)
 		{
-			timelocalexists_hm++;
 			int64_t s14=mtime();
 			bool exists1=exists(files[i]);
 			timelocalexists+=mtime()-s14;
 
 			if (!exists1)
 			{
-				timelocalmakepath_hm++;
 				int64_t s15=mtime();
 				makepath(files[i]);
 				timelocalmakepath+=mtime()-s15;
 			}
 		}
-		timelocalexists2_hm++;
 		int64_t s16=mtime();
 		bool exists2=exists(files[i]);
 		timelocalexists2+=mtime()-s16;
@@ -59280,6 +59365,15 @@ int Jidac::append()
 	int64_t	prezpaqsize		=0;
 
 */
+
+
+struct twoint
+{
+	int32_t first;
+	int32_t second;
+};
+
+
 int	Jidac::makecrc32txt(string i_filename,
 string& 	o_initialquickhash,
 int64_t& 	o_initialzpaqsize,
@@ -59411,6 +59505,43 @@ string&		o_thecrcfile)
 		exit(0);
 	}
 	return 0;
+}
+
+void Jidac::updatehash(DTMap::iterator* i_p,char* i_buf,int i_buflen)
+{
+	if (i_p==NULL)
+		return;
+	if (i_buf==NULL)
+		return;
+	(*i_p)->second.hashedsize+=i_buflen;
+	(*i_p)->second.file_crc32=crc32_16bytes(i_buf,i_buflen,(*i_p)->second.file_crc32);
+	if (g_franzotype==FRANZO_XXHASH64)
+		if ((*i_p)->second.pfile_xxhash64)
+			(*(*i_p)->second.pfile_xxhash64).add(i_buf,i_buflen);
+	if (g_franzotype==FRANZO_SHA_1)
+		if ((*i_p)->second.pfile_sha1)
+			((*i_p)->second.pfile_sha1)->write(i_buf,i_buflen);
+	if (g_franzotype==FRANZO_SHA_256)
+		if ((*i_p)->second.pfile_sha256)
+			((*i_p)->second.pfile_sha256)->write(i_buf,i_buflen);
+	if (g_franzotype==FRANZO_XXH3)
+		if ((*i_p)->second.pfile_xxh3)
+			(void)XXH3_128bits_update((*i_p)->second.pfile_xxh3,i_buf,i_buflen);
+	if (g_franzotype==FRANZO_BLAKE3)
+		if ((*i_p)->second.pfile_blake3)
+			blake3_hasher_update((*i_p)->second.pfile_blake3,i_buf,i_buflen);
+	if (g_franzotype==FRANZO_SHA3)
+		if ((*i_p)->second.pfile_sha3)
+			(*(*i_p)->second.pfile_sha3).add(i_buf,i_buflen);
+	if (g_franzotype==FRANZO_MD5)
+		if ((*i_p)->second.pfile_md5)
+			(*(*i_p)->second.pfile_md5).add(i_buf,i_buflen);
+	if (g_franzotype==FRANZO_WHIRLPOOL)
+		if ((*i_p)->second.pfile_whirlpool)
+			NESSIEadd64((const unsigned char*)i_buf,i_buflen*8,(*i_p)->second.pfile_whirlpool);/// <-- whirlpool works on BITS, so *8
+	if ((g_franzotype==FRANZO_HIGHWAY64) || (g_franzotype==FRANZO_HIGHWAY128) || (g_franzotype==FRANZO_HIGHWAY256))
+		if ((*i_p)->second.pfile_highway64)
+			HighwayHashCatAppend((const unsigned char*)i_buf,i_buflen,(*i_p)->second.pfile_highway64);
 }
 // Add or delete files from archive. Return 1 if error else 0.
 // Note: by flagverify do a CRC32-integrity check (@zpaqfranz)
@@ -61145,130 +61276,301 @@ int Jidac::add()
 		return 2;
 	}
 
-	///char buf[g_ioBUFSIZE];
+
+///////////////////////////////////////////////////////////////
+/// EXPERIMENTAL: adding newdata to "extend" zpaq format
+/// without breaking compatibility; enabled by -collision -kill
+
+	if (flagcollision && flagkill)
+	{
+		char thetimestamp[30];
+		sprintf(thetimestamp,"%s",migliaia(now()));
+		string memfilename	="MFILE-memfile";
+		string stimestamp	=thetimestamp;
+		memfilename			+=stimestamp;
+		DT& d=edt[memfilename];
+		d.creationdate		=now();
+		d.accessdate		=now();
+		d.date				=now();
+		d.size				=10; //fake
+		d.data				=1;
+#ifdef _WIN32
+		d.attr				=8311;
+#else
+		d.attr				=8496245; //0644
+#endif
+///		it is very hard to add data as very last file in zpaq format
+///		(very long to explain why)
+///		so we make sure to do a push as the very last one
+		DTMap::iterator p=edt.find(memfilename);
+		if (p!=edt.end())
+		{
+			myprintf("61213: INFO => memfile %s\n",memfilename.c_str());
+			p->second.pramfile=new franzfs;
+			vf.push_back(p);
+		}
+		else
+		{
+			myprintf("61223: GURU cannot find MFILE-memfile %s\n",memfilename.c_str());
+			seppuku();
+		}
+	}
+
+///////////////////////////////////////////////////////////////
+
     for (unsigned fi=0; fi<=vf.size(); ++fi)
 	{
-
-	FP in=FPNULL;
-    int bufptr=0, buflen=0;  // read pointer and limit
-	DTMap::iterator p;
-    if (fi<vf.size())
-	{
-		assert(vf[fi]->second.ptr.size()==0);
-		p=vf[fi];
-		bufptr=buflen=0;
-
-		if ((!flagstdin)
-#ifdef _WIN32
-			&& (!flagimage)
-#endif
-		)
-		{
-			in=fopen(p->first.c_str(), RB);
-			if (in==FPNULL)
-			{  // skip if not found
-				p->second.date=0;
-				total_size-=p->second.size;
-///	Houston, we got an error. Try to figure why re-opening the file (on Windows)
-/// Microsoft filesystem is so complex, better some help
-				int64_t attrib=0;
-#ifdef _WIN32
-				attrib=getwinattributes(p->first);
-#endif
-				printerr("16672",p->first.c_str(),attrib);
-				++errors;
-				continue;
-			}
-		// get expected filesize. Slow down a bit. But I like very much
-		///if (flagverbose)
-			{
-				fseeko(in, 0, SEEK_END);
-				p->second.expectedsize=ftello(in);
-				fseeko(in, 0, SEEK_SET);
-			}
-		}
-		p->second.data=1;  // add in every case
-    }
-	int		ultimapercentuale=0;
-	int		ultimotempo=0;
-    // Read fragments
-    int64_t fsize=0;  // file size after dedupe
-    for (unsigned fj=0; true; ++fj)
-	{
-		int64_t sz=0;  // fragment size;
-		unsigned hits=0;  // correct prediction count
-		int c=EOF;  // current byte
-		unsigned htptr=0;  // fragment index
-		char sha1result[20]={0};  // fragment hash
-		unsigned char o1[256]={0};  // order 1 context -> predicted byte
+		FP in=FPNULL;
+		int bufptr=0, buflen=0;  // read pointer and limit
+		DTMap::iterator p;
+		bool flagmemfile=false;
+		
 		if (fi<vf.size())
 		{
-			int c1=0;  // previous byte
-			unsigned h=0;  // rolling hash for finding fragment boundaries
-			libzpaq::SHA1 sha1;
-			assert(in!=FPNULL);
-			assert(in!=NULL);
-			// this is a kind of "loop unrolling", do not want to check every time the flag inside the loop
+			assert(vf[fi]->second.ptr.size()==0);
+			p=vf[fi];
+			bufptr=buflen=0;
+			flagmemfile=ismemfile(p->first);
 
-			if (flagstdin)
+			if ((!flagmemfile) && (!flagstdin)
+#ifdef _WIN32
+				&& (!flagimage)
+#endif
+			)
 			{
-				///c:\nz\dd if="\\\\.\\c:" bs=1048576 count=100000000000 |c:\zpaqfranz\zpaqfranz a j:\image\prova cimage.img -stdin
-				while (true)
+				in=fopen(p->first.c_str(), RB);
+				if (in==FPNULL)
+				{  // skip if not found
+					p->second.date=0;
+					total_size-=p->second.size;
+	///	Houston, we got an error. Try to figure why re-opening the file (on Windows)
+	/// Microsoft filesystem is so complex, better some help
+					int64_t attrib=0;
+#ifdef _WIN32
+					attrib=getwinattributes(p->first);
+#endif
+					printerr("16672",p->first.c_str(),attrib);
+					++errors;
+					continue;
+				}
+			// get expected filesize. Slow down a bit. But I like very much
+			///if (flagverbose)
 				{
-					buflen=fread(buf, 1, g_ioBUFSIZE, stdin);
-					if (buflen==0)
-						break;
-					else
+					fseeko(in, 0, SEEK_END);
+					p->second.expectedsize=ftello(in);
+					fseeko(in, 0, SEEK_SET);
+				}
+			}
+			p->second.data=1;  // add in every case
+		}
+
+/// EXPERIMENTAL: just a mockup
+		if (flagmemfile)
+		{
+			vector<twoint> hashcrc32list;
+			twoint dummy;
+			
+///					char linea[1000];
+			unsigned int hashcrc32list_size=0;
+			myprintf("\n61361: Start building memfile for ht size %s\n",migliaia(ht.size()));
+			for (unsigned int i=1;i<ht.size();i++)
+			{
+/*
+				if (ht[i].usize!=ht[i].crc32size)
+				{
+					myprintf("61388: ERROR ht[i].size %s != ht[i].crc32size %s\n",migliaia(ht[i].usize),migliaia2(ht[i].crc32size));
+		///			myprintf("61409: ERROR ON RECOMPUTING CRC32!\n");
+		///			seppuku();
+			///		break;
+				}
+				string hexsha1=binarytohex(ht[i].sha1,20);
+				
+				snprintf(linea,sizeof(linea),"%09d|%s|%08X|%d|",i,hexsha1.c_str(),
+				ht[i].crc32,
+				ht[i].usize);
+				myprintf("61391: %s\n",linea);
+*/				
+				dummy.first=i;
+				dummy.second=ht[i].crc32;
+				hashcrc32list.push_back(dummy);
+			}
+			hashcrc32list_size=hashcrc32list.size()*sizeof(twoint);
+			myprintf("61411: memfile size %s\n",migliaia(hashcrc32list_size));
+			char* ramfile=(char*)hashcrc32list.data();
+			(*p->second.pramfile).init(hashcrc32list_size);
+			(*p->second.pramfile).ramwrite(0,(char*)ramfile,hashcrc32list_size);
+			(*p->second.pramfile).seekstart();
+			p->second.size=hashcrc32list_size;
+		}
+					
+		int		ultimapercentuale=0;
+		int		ultimotempo=0;
+		// Read fragments
+		int64_t fsize=0;  // file size after dedupe
+		for (unsigned fj=0; true; ++fj)
+		{
+			int64_t sz		=0;  // fragment size;
+			unsigned hits	=0;  // correct prediction count
+			unsigned htptr	=0;  // fragment index
+			char sha1result[20]={0};  // fragment hash
+			unsigned char o1[256]={0};  // order 1 context -> predicted byte
+			int c=EOF;  // current byte
+			if (fi<vf.size())
+			{
+				int c1=0;  // previous byte
+				unsigned h=0;  // rolling hash for finding fragment boundaries
+				libzpaq::SHA1 sha1;
+				assert(in!=FPNULL);
+				assert(in!=NULL);
+
+				if (flagmemfile)
+				{
+
+///					We simulate a "real" file by a franzfs object
+					while (true) 
 					{
-						total_size+=buflen;
-						if (!flagnoeta)
-						{
-							int secondi=(mtime()-startstream)/1000;
-							if (secondi!=ultimotempo)
+						if (bufptr>=buflen) 
+							bufptr=0, buflen=(*p->second.pramfile).ramread(g_ioBUFSIZE,buf);
+
+						if (g_franzotype>0)
+							if (bufptr==0)
+								if (buflen>0)
+									updatehash(&p,buf,buflen);
+
+						if ((bufptr>=buflen) || (buflen==0)) c=EOF;
+							else c=(unsigned char)buf[bufptr++];
+							if (c!=EOF) 
 							{
-								float ratio=100.0*g_scritti/(total_size+1);
-								myprintf("So far in=%10s out=%10s (ratio %8.2f %) @ %10s /s\r",tohuman(total_size),tohuman2(g_scritti),ratio,tohuman3(total_size/secondi));
-								fflush(stdout);
-								ultimotempo=secondi;
+								if (c==o1[c1]) h=(h+c+1)*314159265u, ++hits;
+								else h=(h+c+1)*271828182u;
+								o1[c1]=c;
+								c1=c;
+								sha1.put(c);
+								fragbuf[sz++]=c;
+							}
+							if (c==EOF
+							  || sz>=MAX_FRAGMENT
+							  || (fragment<=22 && h<(1u<<(22-fragment)) && sz>=MIN_FRAGMENT))
+							break;
+					}
+					total_size+=sz;
+				}
+				else
+				if (flagstdin)
+				{
+					///c:\nz\dd if="\\\\.\\c:" bs=1048576 count=100000000000 |c:\zpaqfranz\zpaqfranz a j:\image\prova cimage.img -stdin
+					while (true)
+					{
+						buflen=fread(buf, 1, g_ioBUFSIZE, stdin);
+						if (buflen==0)
+							break;
+						else
+						{
+							total_size+=buflen;
+							if (!flagnoeta)
+							{
+								int secondi=(mtime()-startstream)/1000;
+								if (secondi!=ultimotempo)
+								{
+									float ratio=100.0*g_scritti/(total_size+1);
+									myprintf("So far in=%10s out=%10s (ratio %8.2f %) @ %10s /s\r",tohuman(total_size),tohuman2(g_scritti),ratio,tohuman3(total_size/secondi));
+									fflush(stdout);
+									ultimotempo=secondi;
+								}
+							}
+							if (g_franzotype>0)
+								updatehash(&p,buf,buflen);
+							for (int j=0;j<buflen;j++)
+							{
+								c=(unsigned char)buf[j];
+								if (c==o1[c1])
+									h=(h+c+1)*314159265u, ++hits;
+								else
+									h=(h+c+1)*271828182u;
+								o1[c1]=c;
+								c1=c;
+								sha1.put(c);
+								fragbuf[sz++]=c;
 							}
 						}
-						if (g_franzotype>0)
+						if (sz>=MAX_FRAGMENT || (fragment<=22 && h<(1u<<(22-fragment)) && sz>=MIN_FRAGMENT))
+							break;
+					}
+				}
+				else
+				{
+					while (true)
+					{
+	#ifdef _WIN32
+						if (bufptr>=buflen)
 						{
-							p->second.hashedsize+=buflen;
-							p->second.file_crc32=crc32_16bytes(buf,buflen,p->second.file_crc32);
-							if (g_franzotype==FRANZO_XXHASH64)
-								if (p->second.pfile_xxhash64)
-									(*p->second.pfile_xxhash64).add(buf,buflen);
-							if (g_franzotype==FRANZO_SHA_1)
-								if (p->second.pfile_sha1)
-									(*p->second.pfile_sha1).write(buf,buflen);
-							if (g_franzotype==FRANZO_SHA_256)
-								if (p->second.pfile_sha256)
-								///	for (int i=0;i<buflen;i++)
-									///	(*p->second.pfile_sha256).put(*(buf+i));
-									(*p->second.pfile_sha256).write(buf,buflen);
-							if (g_franzotype==FRANZO_XXH3)
-								if (p->second.pfile_xxh3)
-									(void)XXH3_128bits_update(p->second.pfile_xxh3, buf,buflen);
-							if (g_franzotype==FRANZO_BLAKE3)
-								if (p->second.pfile_blake3)
-									blake3_hasher_update(p->second.pfile_blake3, buf,buflen);
-							if (g_franzotype==FRANZO_SHA3)
-								if (p->second.pfile_sha3)
-									(*p->second.pfile_sha3).add(buf,buflen);
-							if (g_franzotype==FRANZO_MD5)
-								if (p->second.pfile_md5)
-									(*p->second.pfile_md5).add(buf,buflen);
-							if (g_franzotype==FRANZO_WHIRLPOOL)
-								if (p->second.pfile_whirlpool)
-									NESSIEadd64((const unsigned char*)buf,buflen*8,p->second.pfile_whirlpool);/// <-- whirlpool works on BITS, so *8
-							if ((g_franzotype==FRANZO_HIGHWAY64) || (g_franzotype==FRANZO_HIGHWAY128) || (g_franzotype==FRANZO_HIGHWAY256))
-								if (p->second.pfile_highway64)
-									HighwayHashCatAppend((const unsigned char*)buf,buflen,p->second.pfile_highway64);
+							bufptr=0;
+							if (flagimage)
+							{
+								DWORD bytesread;
+								if (!ReadFile(device, buf, g_ioBUFSIZE, &bytesread, NULL))
+								{
+									myprintf("\n42979: READ FAIL!\n");
+									c=EOF;
+								}
+								else
+								buflen=bytesread;
+								if (!flagnoeta)
+								{
+									int secondi=(mtime()-startstream)/1000;
+									if (secondi!=ultimotempo)
+									{
+										float ratio=100.0*g_scritti/(total_size+1);
+										float percentuale=100.0*total_done/(total_size+1);
+
+										myprintf("Imaging %06.2f%% %10s of %s -> %10s (%6.2f %) @ %10s /s\r",percentuale,tohuman(total_done),tohuman2(total_size),tohuman3(g_scritti),ratio,tohuman4(total_done/secondi));
+										ultimotempo=secondi;
+									}
+								}
+							}
+							else
+								buflen=fread(buf, 1, g_ioBUFSIZE, in);
 						}
-						for (int j=0;j<buflen;j++)
+	#else
+						if (bufptr>=buflen) bufptr=0, buflen=fread(buf, 1, g_ioBUFSIZE, in);
+	#endif
+						///	zero-length file (-debug -zero -kill)
+						/// or zero-filled file (-debug -zero)
+						if (flagdebug)
+							if (flagzero)
+							{
+								if (flagkill)
+									bufptr=buflen;
+								else
+									memset(buf,0,buflen);
+							}
+						if (g_franzotype>0)
+							if (bufptr==0)
+								if (buflen>0)
+								{
+									updatehash(&p,buf,buflen);
+									///	this is why pre-get filesize: % of big files into global %
+									if (p->second.expectedsize>100000000)
+									{
+										int percentuale=(int)(100.0*p->second.hashedsize/p->second.expectedsize)+1;
+										int modulo=10;
+										if (p->second.expectedsize>1000000000)
+											modulo=1;
+										if (percentuale!=ultimapercentuale)
+										if (percentuale%modulo==0)
+										{
+											print_progress(total_size, total_done,g_scritti,ultimapercentuale);
+											ultimapercentuale=percentuale;
+										}
+									}
+								}
+
+						if (bufptr>=buflen)
+							c=EOF;
+						else
+							c=(unsigned char)buf[bufptr++];
+						if (c!=EOF)
 						{
-							c=(unsigned char)buf[j];
 							if (c==o1[c1])
 								h=(h+c+1)*314159265u, ++hits;
 							else
@@ -61278,342 +61580,233 @@ int Jidac::add()
 							sha1.put(c);
 							fragbuf[sz++]=c;
 						}
+						if (c==EOF
+							|| sz>=MAX_FRAGMENT
+							|| (fragment<=22 && h<(1u<<(22-fragment)) && sz>=MIN_FRAGMENT))
+							break;
 					}
-					if (sz>=MAX_FRAGMENT || (fragment<=22 && h<(1u<<(22-fragment)) && sz>=MIN_FRAGMENT))
-						break;
 				}
-			}
-			else
-			{
-				while (true)
-				{
-#ifdef _WIN32
-					if (bufptr>=buflen)
-					{
-						bufptr=0;
-						if (flagimage)
-						{
-							DWORD bytesread;
-							if (!ReadFile(device, buf, g_ioBUFSIZE, &bytesread, NULL))
-							{
-								myprintf("\n42979: READ FAIL!\n");
-								c=EOF;
-							}
-							else
-							buflen=bytesread;
-							if (!flagnoeta)
-							{
-								int secondi=(mtime()-startstream)/1000;
-								if (secondi!=ultimotempo)
-								{
-									float ratio=100.0*g_scritti/(total_size+1);
-									float percentuale=100.0*total_done/(total_size+1);
+				assert(sz<=MAX_FRAGMENT);
+				total_done+=sz;
+				// Look for matching fragment
+				assert(uint64_t(sz)==sha1.usize());
+				memcpy(sha1result, sha1.result(), 20);
+				if (flagnodedup)
+					htptr=0;
+				else
+					htptr=htinv.find(sha1result);
+			}  // end if fi<vf.size()
 
-									myprintf("Imaging %06.2f%% %10s of %s -> %10s (%6.2f %) @ %10s /s\r",percentuale,tohuman(total_done),tohuman2(total_size),tohuman3(g_scritti),ratio,tohuman4(total_done/secondi));
-									ultimotempo=secondi;
-								}
-							}
-						}
-						else
-							buflen=fread(buf, 1, g_ioBUFSIZE, in);
+	/// OK, lets RE-compute CRC-32 of the fragment, and store
+	/// used for debug
+			uint32_t crc=0;
+			if (flagverify || flagcollision)
+				if (g_franzotype>0)
+				{
+					crc=crc32_16bytes(&fragbuf[0],(uint32_t) sz);
+					if (htptr)
+					{
+						ht[htptr].crc32=crc;
+						ht[htptr].crc32size=sz;
 					}
-#else
-					if (bufptr>=buflen) bufptr=0, buflen=fread(buf, 1, g_ioBUFSIZE, in);
+				}
+			if (htptr==0) 
+			{  // not matched or last block
+				// Analyze fragment for redundancy, x86, text.
+				// Test for text: letters, digits, '.' and ',' followed by spaces
+				//   and no invalid UTF-8.
+				// Test for exe: 139 (mov reg, r/m) in lots of contexts.
+				// 4 tests for redundancy, measured as hits/sz. Take the highest of:
+				//   1. Successful prediction count in o1.
+				//   2. Non-uniform distribution in o1 (counted in o2).
+				//   3. Fraction of zeros in o1 (bytes never seen).
+				//   4. Fraction of matches between o1 and previous o1 (o1prev).
+				int text1=0, exe1=0;
+				int64_t h1=sz;
+				unsigned char o1ct[256]={0};  // counts of bytes in o1
+				static const unsigned char dt[256]=
+				{  // 32768/((i+1)*204)
+				  160,80,53,40,32,26,22,20,17,16,14,13,12,11,10,10,
+					9, 8, 8, 8, 7, 7, 6, 6, 6, 6, 5, 5, 5, 5, 5, 5,
+					4, 4, 4, 4, 4, 4, 4, 4, 3, 3, 3, 3, 3, 3, 3, 3,
+					3, 3, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+					2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+					1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+					1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+					1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+					1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+					1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
+				for (int i=0; i<256; ++i) 
+				{
+					if (o1ct[o1[i]]<255) h1-=(sz*dt[o1ct[o1[i]]++])>>15;
+					if (o1[i]==' ' && (isalnum(i) || i=='.' || i==',')) ++text1;
+					if (o1[i] && (i<9 || i==11 || i==12 || (i>=14 && i<=31) || i>=240))
+						--text1;
+					if (i>=192 && i<240 && o1[i] && (o1[i]<128 || o1[i]>=192))
+						--text1;
+					if (o1[i]==139) ++exe1;
+				}
+				text1=(text1>=3);
+				exe1=(exe1>=5);
+				if (sz>0) h1=h1*h1/sz; // Test 2: near 0 if random.
+				unsigned h2=h1;
+				if (h2>hits) hits=h2;
+				h2=o1ct[0]*sz/256;  // Test 3: bytes never seen or that predict 0.
+				if (h2>hits) hits=h2;
+				h2=0;
+				for (int i=0; i<256*ON; ++i)  // Test 4: compare to previous o1.
+				  h2+=o1prev[i]==o1[i&255];
+				h2=h2*sz/(256*ON);
+				if (h2>hits) hits=h2;
+				if (hits>sz) hits=sz;
+			// Start a new block if the current block is almost full, or at
+			// the start of a file that won't fit or doesn't share mutual
+			// information with the current block, or last file.
+				bool newblock=false;
+				if (frags>0 && fj==0 && fi<vf.size()) 
+				{
+					const int64_t esize=vf[fi]->second.size;
+					const int64_t newsize=sb.size()+esize+(esize>>14)+4096+frags*4;
+					if (newsize>blocksize/4 && redundancy<sb.size()/128) newblock=true;
+					if (newblock) 
+					{  // test for mutual information
+						unsigned ct=0;
+						for (unsigned i=0; i<256*ON; ++i)
+						  if (o1prev[i] && o1prev[i]==o1[i&255]) ++ct;
+						if (ct>ON*2) newblock=false;
+					  }
+					  if (newsize>=blocksize) newblock=true;  // won't fit?
+				}
+				if (sb.size()+sz+80+frags*4>=blocksize) newblock=true; // full?
+				if (fi==vf.size()) newblock=true;  // last file?
+				if (frags<1) newblock=false;  // block is empty?
+				// Pad sb with fragment size list, then compress
+				
+				if (newblock) 
+				{
+					assert(frags>0);
+					assert(frags<ht.size());
+					for (unsigned i=ht.size()-frags; i<ht.size(); ++i)
+						puti(sb, ht[i].usize, 4);  // list of frag sizes
+					puti(sb, 0, 4); // omit first frag ID to make block movable
+					puti(sb, frags, 4);  // number of frags
+					string m=method;
+					if (isdigit(method[0]))
+						m+=","+itos(redundancy/(sb.size()/256+1))
+							 +","+itos((exe>frags)*2+(text>frags));
+					string fn="jDC"+itos(date, 14)+"d"+itos(ht.size()-frags, 10);
+#ifdef _WIN32
+					if (!flagimage)
 #endif
-					///	zero-length file (-debug -zero -kill)
-					/// or zero-filled file (-debug -zero)
-					if (flagdebug)
-						if (flagzero)
+						print_progress(total_size, total_done,g_scritti,ultimapercentuale);
+
+					if (method[0]!='i')
+					{
+						if (howmanythreads>1)
+							job.appendz(sb, fn.c_str(), m);
+						else
 						{
-							if (flagkill)
-								bufptr=buflen;
-							else
-								memset(buf,0,buflen);
-						}
-					if (g_franzotype>0)
-						if (bufptr==0)
-							if (buflen>0)
+			/// on "very strange things" (NAS/ESxi) the -pthread does not work
+			/// this is a "monothread" compression: we need job (compressjob) for the job.csize vector
+							try
 							{
-								/// check for strange things (corrupted files, lost connection...)
-								p->second.hashedsize+=buflen;
-								///	this is why pre-get filesize: % of big files into global %
-								///if (flagverbose)
-								if (p->second.expectedsize>100000000)
+								string comment="jDC\x01";
+								StringBuffer my_cj_in;       // uncompressed input
+								StringBuffer my_cj_out;      // compressed output
+								my_cj_in.swap(sb);
+								libzpaq::compressBlock(&my_cj_in, &my_cj_out, m.c_str(),fn.c_str(), comment.c_str());
+								job.csize.push_back(my_cj_out.size());
+								if (job.out && my_cj_out.size()>0)
 								{
-									int percentuale=(int)(100.0*p->second.hashedsize/p->second.expectedsize)+1;
-									int modulo=10;
-									if (p->second.expectedsize>1000000000)
-										modulo=1;
-									if (percentuale!=ultimapercentuale)
-									if (percentuale%modulo==0)
+									assert(my_cj_out.c_str());
+									const char* p=my_cj_out.c_str();
+									int64_t n=my_cj_out.size();
+									g_scritti+=n; // very rude
+									const int64_t N=1<<30;
+									while (n>N)
 									{
-										print_progress(total_size, total_done,g_scritti,ultimapercentuale);
-										ultimapercentuale=percentuale;
+									  job.out->write(p, N);
+									  p+=N;
+									  n-=N;
 									}
+									job.out->write(p, n);
 								}
-							///	compute CRC-32 (always) in zpaqfranz, then the hash
-								p->second.file_crc32=crc32_16bytes(buf,buflen,p->second.file_crc32);
-								if (g_franzotype==FRANZO_XXHASH64)
-									if (p->second.pfile_xxhash64)
-										(*p->second.pfile_xxhash64).add(buf,buflen);
-								if (g_franzotype==FRANZO_SHA_1)
-									if (p->second.pfile_sha1)
-										(*p->second.pfile_sha1).write(buf,buflen);
-								if (g_franzotype==FRANZO_SHA_256)
-									if (p->second.pfile_sha256)
-										(*p->second.pfile_sha256).write(buf,buflen);
-										///for (int i=0;i<buflen;i++)
-											///(*p->second.pfile_sha256).put(*(buf+i));
-								if (g_franzotype==FRANZO_XXH3)
-									if (p->second.pfile_xxh3)
-										(void)XXH3_128bits_update(p->second.pfile_xxh3, buf,buflen);
-								if (g_franzotype==FRANZO_BLAKE3)
-									if (p->second.pfile_blake3)
-										blake3_hasher_update(p->second.pfile_blake3, buf,buflen);
-								if (g_franzotype==FRANZO_SHA3)
-									if (p->second.pfile_sha3)
-										(*p->second.pfile_sha3).add(buf,buflen);
-								if (g_franzotype==FRANZO_MD5)
-									if (p->second.pfile_md5)
-									(*p->second.pfile_md5).add(buf,buflen);
-								if (g_franzotype==FRANZO_WHIRLPOOL)
-									if (p->second.pfile_whirlpool)
-										NESSIEadd64((const unsigned char*)buf,buflen*8,p->second.pfile_whirlpool);/// <-- whirlpool works on BITS, so *8
-								if ((g_franzotype==FRANZO_HIGHWAY64) || (g_franzotype==FRANZO_HIGHWAY128) || (g_franzotype==FRANZO_HIGHWAY256))
-									if (p->second.pfile_highway64)
-										HighwayHashCatAppend((const unsigned char*)buf,buflen,p->second.pfile_highway64);
 							}
-
-					if (bufptr>=buflen)
-						c=EOF;
-					else
-						c=(unsigned char)buf[bufptr++];
-					if (c!=EOF)
-					{
-						if (c==o1[c1])
-							h=(h+c+1)*314159265u, ++hits;
-						else
-							h=(h+c+1)*271828182u;
-						o1[c1]=c;
-						c1=c;
-						sha1.put(c);
-						fragbuf[sz++]=c;
-					}
-					if (c==EOF
-						|| sz>=MAX_FRAGMENT
-						|| (fragment<=22 && h<(1u<<(22-fragment)) && sz>=MIN_FRAGMENT))
-						break;
-				}
-			}
-        assert(sz<=MAX_FRAGMENT);
-        total_done+=sz;
-        // Look for matching fragment
-        assert(uint64_t(sz)==sha1.usize());
-		memcpy(sha1result, sha1.result(), 20);
-		if (flagnodedup)
-			htptr=0;
-		else
-			htptr=htinv.find(sha1result);
-		}  // end if fi<vf.size()
-/// OK, lets RE-compute CRC-32 of the fragment, and store
-/// used for debug
-		uint32_t crc=0;
-		if (flagverify)
-			if (g_franzotype>0)
-			{
-				crc=crc32_16bytes(&fragbuf[0],(uint32_t) sz);
-				if (htptr)
-				{
-					ht[htptr].crc32=crc;
-					ht[htptr].crc32size=sz;
-				}
-			}
-      if (htptr==0) {  // not matched or last block
-        // Analyze fragment for redundancy, x86, text.
-        // Test for text: letters, digits, '.' and ',' followed by spaces
-        //   and no invalid UTF-8.
-        // Test for exe: 139 (mov reg, r/m) in lots of contexts.
-        // 4 tests for redundancy, measured as hits/sz. Take the highest of:
-        //   1. Successful prediction count in o1.
-        //   2. Non-uniform distribution in o1 (counted in o2).
-        //   3. Fraction of zeros in o1 (bytes never seen).
-        //   4. Fraction of matches between o1 and previous o1 (o1prev).
-        int text1=0, exe1=0;
-        int64_t h1=sz;
-        unsigned char o1ct[256]={0};  // counts of bytes in o1
-        static const unsigned char dt[256]={  // 32768/((i+1)*204)
-          160,80,53,40,32,26,22,20,17,16,14,13,12,11,10,10,
-            9, 8, 8, 8, 7, 7, 6, 6, 6, 6, 5, 5, 5, 5, 5, 5,
-            4, 4, 4, 4, 4, 4, 4, 4, 3, 3, 3, 3, 3, 3, 3, 3,
-            3, 3, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
-            2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
-            1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-            1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-            1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-            1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-            1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
-        for (int i=0; i<256; ++i) {
-          if (o1ct[o1[i]]<255) h1-=(sz*dt[o1ct[o1[i]]++])>>15;
-          if (o1[i]==' ' && (isalnum(i) || i=='.' || i==',')) ++text1;
-          if (o1[i] && (i<9 || i==11 || i==12 || (i>=14 && i<=31) || i>=240))
-            --text1;
-          if (i>=192 && i<240 && o1[i] && (o1[i]<128 || o1[i]>=192))
-            --text1;
-          if (o1[i]==139) ++exe1;
-        }
-        text1=(text1>=3);
-        exe1=(exe1>=5);
-        if (sz>0) h1=h1*h1/sz; // Test 2: near 0 if random.
-        unsigned h2=h1;
-        if (h2>hits) hits=h2;
-        h2=o1ct[0]*sz/256;  // Test 3: bytes never seen or that predict 0.
-        if (h2>hits) hits=h2;
-        h2=0;
-        for (int i=0; i<256*ON; ++i)  // Test 4: compare to previous o1.
-          h2+=o1prev[i]==o1[i&255];
-        h2=h2*sz/(256*ON);
-        if (h2>hits) hits=h2;
-        if (hits>sz) hits=sz;
-        // Start a new block if the current block is almost full, or at
-        // the start of a file that won't fit or doesn't share mutual
-        // information with the current block, or last file.
-        bool newblock=false;
-        if (frags>0 && fj==0 && fi<vf.size()) {
-          const int64_t esize=vf[fi]->second.size;
-          const int64_t newsize=sb.size()+esize+(esize>>14)+4096+frags*4;
-          if (newsize>blocksize/4 && redundancy<sb.size()/128) newblock=true;
-          if (newblock) {  // test for mutual information
-            unsigned ct=0;
-            for (unsigned i=0; i<256*ON; ++i)
-              if (o1prev[i] && o1prev[i]==o1[i&255]) ++ct;
-            if (ct>ON*2) newblock=false;
-          }
-          if (newsize>=blocksize) newblock=true;  // won't fit?
-        }
-        if (sb.size()+sz+80+frags*4>=blocksize) newblock=true; // full?
-        if (fi==vf.size()) newblock=true;  // last file?
-        if (frags<1) newblock=false;  // block is empty?
-        // Pad sb with fragment size list, then compress
-        if (newblock) {
-          assert(frags>0);
-          assert(frags<ht.size());
-          for (unsigned i=ht.size()-frags; i<ht.size(); ++i)
-            puti(sb, ht[i].usize, 4);  // list of frag sizes
-          puti(sb, 0, 4); // omit first frag ID to make block movable
-          puti(sb, frags, 4);  // number of frags
-          string m=method;
-          if (isdigit(method[0]))
-            m+=","+itos(redundancy/(sb.size()/256+1))
-                 +","+itos((exe>frags)*2+(text>frags));
-          string fn="jDC"+itos(date, 14)+"d"+itos(ht.size()-frags, 10);
-#ifdef _WIN32
-		  if (!flagimage)
-#endif
-			print_progress(total_size, total_done,g_scritti,ultimapercentuale);
-
-		if (method[0]!='i')
-		{
-			if (howmanythreads>1)
-				job.appendz(sb, fn.c_str(), m);
-			else
-			{
-/// on "very strange things" (NAS/ESxi) the -pthread does not work
-/// this is a "monothread" compression: we need job (compressjob) for the job.csize vector
-				try
-				{
-					string comment="jDC\x01";
-					StringBuffer my_cj_in;       // uncompressed input
-					StringBuffer my_cj_out;      // compressed output
-					my_cj_in.swap(sb);
-					libzpaq::compressBlock(&my_cj_in, &my_cj_out, m.c_str(),fn.c_str(), comment.c_str());
-					job.csize.push_back(my_cj_out.size());
-					if (job.out && my_cj_out.size()>0)
-					{
-						assert(my_cj_out.c_str());
-						const char* p=my_cj_out.c_str();
-						int64_t n=my_cj_out.size();
-						g_scritti+=n; // very rude
-						const int64_t N=1<<30;
-						while (n>N)
-						{
-						  job.out->write(p, N);
-						  p+=N;
-						  n-=N;
+							catch (std::exception& e)
+							{
+								fflush(stdout);
+								g_exec_text="job error";
+								exit(1);
+							}
 						}
-						job.out->write(p, n);
+
 					}
-				}
-				catch (std::exception& e)
+					else 
+					{  // index: don't compress data
+						job.csize.push_back(sb.size());
+						sb.resize(0);
+					}
+					assert(sb.size()==0);
+					blocklist.push_back(ht.size()-frags);  // mark block start
+					frags=redundancy=text=exe=0;
+					memset(o1prev, 0, sizeof(o1prev));
+				} // newblock
+			// Append fragbuf to sb and update block statistics
+				assert(sz==0 || fi<vf.size());
+				sb.write(&fragbuf[0], sz);
+				++frags;
+				redundancy+=hits;
+				exe+=exe1*4;
+				text+=text1*2;
+				if (sz>=MIN_FRAGMENT) 
 				{
-					fflush(stdout);
-					g_exec_text="job error";
-					exit(1);
+				  memmove(o1prev, o1prev+256, 256*(ON-1));
+				  memcpy(o1prev+256*(ON-1), o1, 256);
 				}
-			}
-
-		  }
-          else {  // index: don't compress data
-            job.csize.push_back(sb.size());
-            sb.resize(0);
-          }
-          assert(sb.size()==0);
-          blocklist.push_back(ht.size()-frags);  // mark block start
-		  frags=redundancy=text=exe=0;
-          memset(o1prev, 0, sizeof(o1prev));
-        }
-        // Append fragbuf to sb and update block statistics
-        assert(sz==0 || fi<vf.size());
-        sb.write(&fragbuf[0], sz);
-        ++frags;
-        redundancy+=hits;
-        exe+=exe1*4;
-        text+=text1*2;
-        if (sz>=MIN_FRAGMENT) {
-          memmove(o1prev, o1prev+256, 256*(ON-1));
-          memcpy(o1prev+256*(ON-1), o1, 256);
-        }
-      }  // end if frag not matched or last block
-      // Update HT and ptr list
-      if (fi<vf.size())
-	  {
-        if (htptr==0) {
-          htptr=ht.size();
-          ht.push_back(HT(sha1result, sz));
-          htinv.update();
-          fsize+=sz;
-        }
-        vf[fi]->second.ptr.push_back(htptr);
-///OK store the crc. Very dirty (to be fixed in future)
-		//crckanz++;
-		///crc=crc32_16bytes(&fragbuf[0],(uint32_t) sz);
-		if (flagverify)
-			if (g_franzotype>0)
+			}  // end if frag not matched or last block
+		  // Update HT and ptr list
+			if (fi<vf.size())
 			{
-				ht[htptr].crc32=crc;
-				ht[htptr].crc32size=sz;
+				if (htptr==0) 
+				{
+					htptr=ht.size();
+					ht.push_back(HT(sha1result, sz));
+					htinv.update();
+					fsize+=sz;
+				}
+				vf[fi]->second.ptr.push_back(htptr);
+		///OK store the crc. Very dirty (to be fixed in future)
+				//crckanz++;
+				///crc=crc32_16bytes(&fragbuf[0],(uint32_t) sz);
+				if (flagverify || flagcollision)
+					if (g_franzotype>0)
+					{
+						ht[htptr].crc32=crc;
+						ht[htptr].crc32size=sz;
+					}
 			}
-	}
-      if (c==EOF) break;
-	}  // end for each fragment fj
+			if (c==EOF) break;
+		}  // end for each fragment fj
 
-	///printf("sono uscito\n");
-	if (fi<vf.size())
-	{
-		dedupesize+=fsize;
-	  ///print_datetime();
-	  /// check errori
-  print_progress(total_size, total_done,g_scritti,ultimapercentuale);
-      assert(in!=FPNULL);
-	  assert(in!=NULL);
+		if (fi<vf.size())
+		{
+			dedupesize+=fsize;
+		  ///print_datetime();
+		  /// check errori
+			print_progress(total_size, total_done,g_scritti,ultimapercentuale);
+			assert(in!=FPNULL);
+			assert(in!=NULL);
 #ifdef _WIN32
-	  if ((!flagstdin) && (!flagimage))
+			if ((!flagstdin) && (!flagimage))
 #else
-	  if (!flagstdin)
+			if (!flagstdin)
 #endif
-		fclose(in);
-      in=FPNULL;
-    }
-  }  // end for each file fi
+			fclose(in);
+			in=FPNULL;
+		}
+	}  // end for each file fi
+
+
 	assert(sb.size()==0);
 	if (howmanythreads>1)
 	{
@@ -61705,6 +61898,13 @@ int Jidac::add()
 			|| a->second.size!=p->second.size  // size change
 			|| (p->second.data && a->second.ptr!=p->second.ptr)))
 			{
+				if (p->second.pramfile!=NULL)
+				{
+					if (flagdebug)
+						myprintf("61853: MEMFILE FIXING\n");
+					filename+=":$DATA";
+				}
+				
 ///				we want to strip the path of VLIST
 				if (mypos("VFILE-",filename)>-1)
 				{
@@ -61712,7 +61912,7 @@ int Jidac::add()
 					filename=extractfilename(filename);
 				}
 				uint32_t currentcrc32=0;
-				if (flagverify)
+				if (flagverify || flagcollision)
 				{
 					for (unsigned i=0; i<p->second.ptr.size(); ++i)
 						currentcrc32=crc32_combine(currentcrc32, ht[p->second.ptr[i]].crc32,ht[p->second.ptr[i]].crc32size);
@@ -61731,8 +61931,10 @@ int Jidac::add()
 
 
 				///if (!isdirectory(p->first.c_str())) winhash!
-				if (!(flagdebug && flagzero && flagkill))
+				///if (!ismemfile(filename))
+					if (!(flagdebug && flagzero && flagkill))
 				{
+
 ///				zpaqfranz: write hashes and/or CRC-32
 					if (g_franzotype==FRANZO_CRC_32) /// store only CRC-32
 					{
@@ -61784,16 +61986,17 @@ int Jidac::add()
 						p->second.hashtype=hashname;
 					}
 
-					///myprintf("|%s|\n",hasherror.c_str());
 					if (flagdebug)
 						myprintf("58739: |%s|: |%s| <<%s>>\n",hashname.c_str(),hashtobewritten.c_str(),p->first.c_str());
 
 					///	intercept (some) strange things, enforcing a fake hash (will be reported on verify of course)
 					if (hashtobewritten!="")
 					{
+						
 						p->second.hexhash=hashtobewritten;
 						if ((p->second.size!=p->second.hashedsize) && (p->second.hashedsize==0))
 						{
+						
 							if (!flagvss && (!flagstdin))
 							{
 								myprintf("38383: ERROR expected %19s getted 0 bytes  ",migliaia(p->second.size));
@@ -61805,6 +62008,7 @@ int Jidac::add()
 						else
 						if (p->second.size!=p->second.hashedsize)
 						{
+				
 							if ((!flagvss) && (!flagstdin)
 #ifdef _WIN32
 								&& (!flagimage)
@@ -61817,7 +62021,9 @@ int Jidac::add()
 							}
 						}
 					}
+					
 				}
+				///myprintf("62214: hastobewritten ............. %s %s |%08X|\n",p->first.c_str(),hashtobewritten.c_str(),p->second.file_crc32);
 				if ((p->second.attr&255)=='u')
 						writefranzattr(p,is,p->second.attr,3,filename,currentcrc32,p->second.file_crc32,hashtobewritten,0,0,NULL);
 				else
@@ -63534,7 +63740,7 @@ int Jidac::summa()
 	}
 	int64_t hashtime=mtime()-iniziohash+1;
 
-	if ((!flagnosort) || (flagverify))
+	if ((!flagnosort) || (flagverify) || (flagcollision))
 		std::sort(vec.begin(), vec.end(),pairsortbyval);
 
 	libzpaq::SHA256 sha256;
@@ -64180,7 +64386,7 @@ int Jidac::verify(bool i_readfile)
 			string finalfile=rename(p->first);
 			if (!isdirectory(finalfile))
 			if (p->second.size>0)
-			if (finalfile!="VFILE-l-filelist.txt")
+			if ((finalfile!="VFILE-l-filelist.txt") && (!ismemfile(finalfile)))
 			{
 				hashtotali+=p->second.size;
 				tobechecked++;
@@ -81166,7 +81372,7 @@ static void _set_ansi_color(short f, short b, attr_t attr)
 #define MAX_PACKET_SIZE 128
 
 #ifdef PDC_WIDE
-const chtype MAX_UNICODE = 0x10ffff;
+///const chtype MAX_UNICODE = 0x10ffff;
 const chtype DUMMY_CHAR_NEXT_TO_FULLWIDTH = 0x110000;
 
 #endif
@@ -83917,27 +84123,21 @@ int Jidac::get_filelist(callback_function i_advance,vector<DTMap::iterator>* o_f
 	}
 	///		stat stuff
 	int64_t ddsize=0, allsize=0;
-	unsigned nfiles=0, nfrags=0, unknown_frags=0, refs=0;
 	vector<bool> ref(ht.size());
 	for (DTMap::const_iterator p=dt.begin(); p!=dt.end(); ++p)
 		if (p->second.date)
 		{
-			++nfiles;
 			for (unsigned j=0; j<p->second.ptr.size(); ++j)
 			{
 				unsigned k=p->second.ptr[j];
 				if (k>0 && k<ht.size())
 				{
-					++refs;
 					if (ht[k].usize>=0) allsize+=ht[k].usize;
 					if (!ref[k])
 					{
 						ref[k]=true;
-						++nfrags;
 						if (ht[k].usize>=0)
 							ddsize+=ht[k].usize;
-						else
-							++unknown_frags;
 					}
 				}
 			}
@@ -84168,7 +84368,7 @@ int Jidac::guilist()
 		clsbody();
 
 		int 	quanterighe		=(mybh-1);
-		int 	righestampate	=0;
+		///int 	righestampate	=0;
 
 		rigacorrente=rigatop;
 		int miariga=0;
@@ -84257,7 +84457,7 @@ int Jidac::guilist()
 			{
 				cursory_array[cury]=rigacorrente;
 				waddstr(wbody,temp.c_str());
-				righestampate	+=numerorighe;
+				///righestampate	+=numerorighe;
 				quanterighe		-=numerorighe;
 				lastlineprinted	=rigacorrente;
 				rigacorrente++;
@@ -85814,56 +86014,6 @@ bool Jidac::parallelcrc32(string i_filename,unsigned int i_thread,uint32_t& o_cr
 
 	}
 	return 0;
-	/*
-
-	for (unsigned int i=0;i<i_thefiles.size();i++)
-	{
-		vettoreparametrihash[i%mythreads].filestobehashed.	push_back(i_thefiles[i]);
-		vettoreparametrihash[i%mythreads].algo.				push_back(i_hashtype);
-		vettoreparametrihash[i%mythreads].filehash.			push_back("dummy");
-		vettoreparametrihash[i%mythreads].originalfilenames.push_back("dummy");
-	}
-	int totfile=0;
-	for (unsigned int i=0;i<mythreads;i++)
-	{
-		if (flagdebug)
-			myprintf("64012: Thread [%02d] files %s\n",i,migliaia(vettoreparametrihash[i].filestobehashed.size()));
-		totfile+=+vettoreparametrihash[i].filestobehashed.size();
-	}
-
-	int rc;
-	pthread_t* threads = new pthread_t[mythreads];
-	pthread_attr_t attr;
-	void *status;
-	pthread_attr_init(&attr);
-	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
-	if (!flagnoeta)
-		myprintf("64022: Files %14s -> %03d threads -> %14s to get\n",migliaia(i_thefiles.size()),mythreads,migliaia2(totfile));
-	for(unsigned int i=0; i<mythreads; i++ )
-	{
-		vettoreparametrihash[i].timestart=mtime();
-		rc = pthread_create(&threads[i], &attr, scansionahash, (void*)&vettoreparametrihash[i]);
-		if (rc)
-		{
-			myprintf("64031: Error creating thread\n");
-			exit(-1);
-		}
-	}
-	pthread_attr_destroy(&attr);
-	for(unsigned int i=0; i <mythreads; i++ )
-	{
-		rc = pthread_join(threads[i], &status);
-		if (rc)
-		{
-			error("64041: Unable to join\n");
-			exit(-1);
-		}
-	}
-	delete [] threads;
-	for(unsigned int i=0;i<mythreads;i++)
-		for (unsigned int j=0;j<vettoreparametrihash[i].filestobehashed.size();j++)
-			o_hashname.push_back(std::pair<string,string>(vettoreparametrihash[i].o_hashcalculated[j],vettoreparametrihash[i].filestobehashed[j]));
-*/
 }
 
 
@@ -87715,3 +87865,347 @@ int Jidac::collision(bool i_flagall)
 		myprintf("87653: No suspected collisions detected (this is good)\n");
 	return 0;
 }
+
+//////////////////////////////////////////////////////////////////////////////////
+/// This is a reworked piece of zpaqd
+
+/// LICENSE_START.21
+
+
+// Base class of InputFile and OutputFile (OS independent)
+class File 
+{
+	protected:
+	enum {BUFSIZE=1<<16};  // buffer size
+	int ptr;  // next byte to read or write in buf
+	libzpaq::Array<char> buf;  // I/O buffer
+	File(): ptr(0), buf(BUFSIZE) {}
+};
+
+class InputFile: public File, public libzpaq::Reader 
+{
+  FILE* in;
+  int n;  // number of bytes in buf
+public:
+  InputFile(): in(0), n(0) {}
+
+  // Open file for reading. Return true if successful
+  bool open(const char* filename) 
+  {
+	in=fopen(filename, "rb");
+	if (!in) perror(filename);
+	n=ptr=0;
+	return in!=0;
+  }
+
+  // True if open
+  bool isopen() {return in!=0;}
+
+  // Read and return 1 byte (0..255) or EOF
+  int get() 
+  {
+	assert(in);
+	if (ptr>=n) 
+	{
+		assert(ptr==n);
+		n=fread(&buf[0], 1, BUFSIZE, in);
+		ptr=0;
+		if (!n) 
+			return EOF;
+    }
+    assert(ptr<n);
+    return buf[ptr++]&255;
+  }
+
+  // Read up to m bytes into p and return number read or 0 at EOF.
+  int read(char* p, int m) 
+  {
+    if (ptr==n) 
+	{
+		ptr=0;
+		n=fread(&buf[0], 1, BUFSIZE, in);
+    }
+    assert(n>=0 && n<=BUFSIZE);
+    assert(ptr>=0 && ptr<=n);
+    if (m>n-ptr) m=n-ptr;
+    memcpy(p, &buf[ptr], m);
+    ptr+=m;
+    return m;
+  }
+  // Return file position
+  int64_t tell() 
+  {
+	return ftello(in)-n+ptr;
+  }
+
+  // Close file if open
+  void close() 
+  {
+	if (in) 
+		fclose(in), in=0;
+	}
+  ~InputFile() {close();}
+};
+
+
+// Read 4 byte little-endian int and advance s
+int mybtoi(const char* &s) {
+  s+=4;
+  return (s[-4]&255)|((s[-3]&255)<<8)|((s[-2]&255)<<16)|((s[-1]&255)<<24);
+}
+
+// Read 8 byte little-endian int and advance s
+int64_t mybtol(const char* &s) {
+  int64_t r=unsigned(mybtoi(s));
+  return r+(int64_t(mybtoi(s))<<32);
+}
+
+// Display hcomp or pcomp section as ZPAQL source code
+void decompile_comp(string s) {
+  assert(s.size()<65536);
+  s+=char(0);
+  s+=char(0);
+
+  // Get a list of jump targets to print labels
+  libzpaq::Array<unsigned char> a(1<<16);
+  for (unsigned i=0; i+2<s.size(); ++i) {
+    if (s[i]==39 || s[i]==47 || s[i]==63)  // JT, JF, JMP
+      a[(i+2+s[i+1])&0xffff]=true;
+    if ((s[i]&255)==255)  // LJ
+      a[(s[i+1]&255)|((s[i+2]<<8)&0xff00)]=true, i+=2;
+    else if ((s[i]&7)==7)  // 2 byte opcode
+      ++i;
+  }
+
+  // Print ZPAQL source
+  for (unsigned i=0, j=0; i+2<s.size(); ++i) {
+    int c=s[i]&255;
+    if (a[i]) {  // print jump label as comment
+      if (j) myprintf("\n"), j=0;
+      myprintf(" (%d)", i);
+    }
+    myprintf(" %s", libzpaq::opcodelist[c]);
+    if (c==255)  // LJ
+      myprintf(" %d", (s[i+1]&255)|((s[i+2]<<8)&0xff00)), i+=2;
+    else if (c==39 || c==47 || c==63)  // JT, JF, JMP
+      myprintf(" %d (to %d)", s[i+1], i+2+s[i+1]), ++i;
+    else if (c%8==7)  // 2 byte opcode
+      myprintf(" %d", s[++i]&255);
+    if (++j>8 || i+3>=s.size())
+      myprintf("\n"), j=0;
+  }
+}
+
+// Display hcomp and pcomp as ZPAQL source code
+void decompile(const string& hcomp, const string& pcomp) {
+  if (hcomp.size()>6) {
+    int n=hcomp[6]&255;  // number of components
+    myprintf("\ncomp %d %d %d %d %d\n",
+      hcomp[2]&255, hcomp[3]&255, hcomp[4]&255, hcomp[5]&255, hcomp[6]&255);
+    int j=7;
+    for (int i=0; i<n && j<int(hcomp.size()); ++i) {
+      const int c=hcomp[j]&255;
+      myprintf("  %d %s", i, libzpaq::compname[c]);
+      for (int k=j+1; k<j+libzpaq::compsize[c] && k<int(hcomp.size()); ++k)
+        myprintf(" %d", hcomp[k]&255);
+      myprintf("\n");
+      j+=libzpaq::compsize[c];
+    }
+    myprintf("hcomp\n");
+    if (j<int(hcomp.size())-2)
+      decompile_comp(hcomp.substr(j+1, hcomp.size()-j-2));
+  }
+  if (pcomp.size()>=3) {
+    myprintf("pcomp ;\n");
+    decompile_comp(pcomp.substr(2, pcomp.size()-3));
+    myprintf("end\n");
+  }
+  else
+    myprintf("post 0 end\n");
+}
+
+int Jidac::dump() 
+{
+	InputFile in;
+	in.open(archive.c_str());
+	if (!in.isopen()) 
+		perror(archive.c_str()), exit(1);
+	libzpaq::Decompresser d;
+	libzpaq::SHA1 sha1;
+	d.setInput(&in);
+	d.setSHA1(&sha1);
+	double mem;
+	StringWriter filename, comment, buf;
+	char sha1result[21];
+	map<string, int> m;
+	int block				=0;
+	int64_t offset			=0;
+	unsigned int iblock		=0;
+	unsigned int hblock		=0;
+	unsigned int cblock		=0;
+	unsigned int dblock		=0;
+	unsigned int filecount	=0;
+  
+	while (d.findBlock(&mem)) 
+	{
+		myprintf("Block %08d at %21s: mem    %21s\n", ++block,migliaia(offset), migliaia2(mem));
+		bool first=true;
+		while (d.findFilename(&filename)) 
+		{
+			d.readComment(&comment);
+			if (first) 
+			{  // Print ZPAQL in header
+				StringWriter hcomp, pcomp;
+				d.hcomp(&hcomp);
+				d.setOutput(0);
+				d.decompress(0);
+				d.pcomp(&pcomp);
+				int& b=m[hcomp.s+pcomp.s];
+				if (b==0)
+				{
+					if (flagverbose)
+						decompile(hcomp.s, pcomp.s), b=block;
+				}
+				else
+				  myprintf(" (same model as block %d)\n", b);
+				first=false;
+				 // Decompress JIDAC index
+				if (comment.s.size()>=5
+					&& comment.s.substr(comment.s.size()-5)==" jDC\x01"
+					&& filename.s.size()==28
+					&& filename.s.substr(0, 3)=="jDC"
+					&& strchr("chi", filename.s[17])) 
+				{
+					sha1.result();  // init
+					d.setOutput(&buf);
+					d.decompress();
+				}
+			}
+			d.readSegmentEnd(sha1result);
+			if (buf.s.size()>0 && sha1result[0]==1 && memcmp(sha1.result(), sha1result+1, 20))
+				myprintf("88134: CHECKSUM ERROR!\n");
+			myprintf("  ");
+			for (int i=0; i<4; ++i) 
+			{
+				if(sha1result[0]) 
+					myprintf("%02x", sha1result[i+1]&255);
+				else 
+					myprintf("  ");
+			}
+			string purged=comment.s;
+	  
+			myreplace(purged,"jDC\x01","");
+			purged=mytrim(purged);
+			int64_t sizeint=myatoll(purged.c_str());
+			myprintf(" %s |%11s| ->  %11s ", filename.s.c_str(),migliaia2(sizeint), migliaia(in.tell()-d.buffered()-offset));
+			offset=in.tell()-d.buffered();
+			if (filename.s[17]=='d')  // d block
+			{
+				dblock++;
+				myprintf("D (data )\n");
+			}
+      // Display JIDAC index blocks
+			if (buf.s.size()) 
+			{
+				assert(filename.s.size()==28);
+				const char* p=buf.s.c_str();
+				const char* end=p+buf.s.size();
+			
+				if (filename.s[17]=='c')  // header
+				{
+					cblock++;
+					myprintf("C (jump ) %s\n", migliaia(mybtol(p)));
+				}
+				else if (filename.s[17]=='h') 
+				{  // fragment table
+					hblock++;
+					myprintf("H (hash ) %s\n", migliaia(mybtoi(p)));
+					if (summary<0)
+					{
+						int n=atoi(filename.s.c_str()+18);  // frag ID
+						while (p<=end-24) 
+						{
+							myprintf("%10d SHA1 ", n++);
+							for (int i=0; i<20; ++i)
+								myprintf("%02x", *p++&255);  // sha1 hash
+							myprintf(" %12s\n", migliaia(mybtoi(p)));  // fsize
+						}
+					}
+				}
+				else if (filename.s[17]=='i') 
+				{  // index
+					iblock++;
+					myprintf("I (index)\n");
+
+					while (p<end-8) 
+					{
+						const int64_t fdate=mybtol(p);
+						filecount++;
+						if (summary<=0)
+						{
+							myprintf("%s ", dateToString(false,fdate).c_str());
+							printUTF8(p);
+						}
+						while (p<end && *p) 
+							++p;  // skip filename
+						++p;
+						if (fdate) 
+						{
+							myprintf(" ");
+							if (p>end-4) break;
+							int n=mybtoi(p);  // na
+							while (n-->0 && p<end)
+								p++;
+							if (p>end-4) break;
+							n=mybtoi(p);  // ni
+						   
+							// print fragment pointers
+							vector<unsigned> ptr;
+							for (; n>0 && p<=end-4; --n)
+								ptr.push_back(mybtoi(p));
+							bool hyphen=false;
+							if (flagverbose)
+								myprintf(" FRAGS (#%d): ",ptr.size());
+							for (int i=0; i<int(ptr.size()); ++i) 
+							{
+								if (i==0 || i==int(ptr.size())-1 || ptr[i]!=ptr[i-1]+1 || ptr[i]!=ptr[i+1]-1) 
+								{
+									if (!hyphen) 
+										if (flagverbose)
+											myprintf(" ");
+									hyphen=false;
+									if (flagverbose)
+										myprintf("%d", ptr[i]);
+								}
+								else 
+								{
+									if (!hyphen) 
+										if (flagverbose)
+										myprintf("-");
+									hyphen=true;
+								}
+							}
+							if ((summary<=0) || (flagverbose))
+							myprintf("\n");
+						}
+					}	
+				}
+			}
+			buf.s		="";
+			filename.s	="";
+			comment.s	="";
+		}
+		offset=in.tell()-d.buffered();
+		myprintf("\n");
+	}
+	in.close();
+  
+	myprintf("88226: c block (jump)  %9s\n",migliaia(cblock));
+	myprintf("88227: d block (data)  %9s\n",migliaia(dblock));
+	myprintf("88228: h block (hash)  %9s\n",migliaia(hblock));
+	myprintf("88229: i block (index) %9s\n",migliaia(iblock));
+	myprintf("88230: file count      %9s\n",migliaia(filecount));
+  
+	return 0;
+}
+/// LICENSE_END.21

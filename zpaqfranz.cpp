@@ -1,4 +1,3 @@
-///checkme
 /*
                                   __
            _____ __   __ _  __ _ / _|_ __ __ _ _ __  ____
@@ -53,8 +52,8 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 */
 
-#define ZPAQ_VERSION "58.11w"
-#define ZPAQ_DATE "(2023-11-01)"  // cannot use __DATE__ on Debian!
+#define ZPAQ_VERSION "58.11z"
+#define ZPAQ_DATE "(2023-11-10)"  // cannot use __DATE__ on Debian!
 
 ///	optional align for malloc (sparc64) via -DALIGNMALLOC
 #define STR(a) #a
@@ -1062,6 +1061,7 @@ Credits and copyrights and licenses and links and internal bookmarks
 33 Thanks to https://github.com/janko-js                for idea on quick collision-detector
 34 Thanks to https://github.com/havocesp                for very useful ideas
 35 Thanks to https://github.com/luckman212              for a refactoring-induced bug detection
+36 Thanks to whiskytechfred user of the encode.su forum for truncate-touching
 
 
 
@@ -2066,20 +2066,6 @@ std::string myulltoa(uint64_t value,int i_len)
 			risultato=std::string(i_len-risultato.size(), '0') + risultato;
 	return risultato;
 }
-/*
-std::string bin2hex(char *i_in,size_t i_len)
-{
-    static const char dec2hex[16+1] = "0123456789ABCDEF";
-	std::string risultato="";
-	risultato.reserve(2*i_len);
-	for (unsigned int i=0;i<i_len;i++)
-	{
-		risultato+=dec2hex[(i_in[i]>>4)&15];
-		risultato+=dec2hex[i_in[i]&15];
-  }
-  return risultato;
-}
-*/
 std::string bin2hex_32(uint32_t i_thenumber)
 {
     static const char dec2hex[16+1] = "0123456789ABCDEF";
@@ -43389,8 +43375,9 @@ string help_franzswitches(bool i_usage,bool i_example)
 		moreprint("+ : -verify       Force re-read of file during t (test command) or c");
 		moreprint("+ : -noeta        Do not show ETA");
 		moreprint("+ : -pakka        Output for PAKKA (briefly)");
-		moreprint("+ : -verbose      Show more (alias -v)");
+		moreprint("+ : -verbose      Show more");
 		moreprint("+ : -silent       Be mute (!)");
+		moreprint("+ : -summary      Concise output");
 		moreprint("+ : -zfs          Skip paths including .zfs");
 		moreprint("+ : -forcezfs     Force paths including .zfs");
 		moreprint("+ : -noqnap       Skip path including @Recently-Snapshot and @Recycle");
@@ -43795,27 +43782,6 @@ string Jidac::getpassword()
 			return "";
 		}
 	return myresult;
-
-	/*
-	while (1)
-	{
-		while (( (c = getchar())!='\n') && (c!= EOF) && (i< sizeof(myline)-1) )
-			myline[i++] = c;
-		myline[i] = '\0';
-		myresult=myline;
-		if (myresult!="")
-		{
-			if (myresult[0]=='-')
-			{
-				myprintf("Password starting with - can be confused with switches, enter another one!\n");
-				i=0;
-				myresult="";
-			}
-			else
-				break;
-		}
-	}
-	*/
 }
 #ifdef _WIN32
 string	windows_fixbackslash(string i_command,string i_parameter)
@@ -46535,46 +46501,6 @@ void writeJidacHeader(libzpaq::Writer *out, int64_t date,
       ("jDC"+itos(date, 14)+"c"+itos(htsize, 10)).c_str(), "jDC\x01");
 
 }
-/*
-int calcjidacheader(int64_t date,int64_t cdata, unsigned htsize,char* i_theheader,size_t i_theheadersize)
-{
-	printf("Calcolo jidacheader\n");
-	if (i_theheader==NULL)
-	{
-		myprintf("29628: guru i_theheader is null\n");
-		seppuku();
-		return 0;
-	}
-	if (i_theheadersize<=0)
-	{
-		myprintf("29634: guru i_theheadersize <=0\n");
-		seppuku();
-		return 0;
-	}
-
-	assert(date>=19000000000000LL && date<30000000000000LL);
-	StringBuffer is;
-	puti(is, cdata, 8);
-	StringBuffer	theheader;
-	libzpaq::compressBlock(&is, &theheader, "0",
-      ("jDC"+itos(date, 14)+"c"+itos(htsize, 10)).c_str(), "jDC\x01");
-	printf("Fatto calcolo jidacheader\n");
-	printf("Size %d\n",theheader.size());
-
-	if (i_theheadersize<theheader.size())
-	{
-		myprintf("29650: guru i_theheadersize %d too small vs real size %d\n",i_theheadersize,theheader.size());
-		seppuku();
-		return 0;
-	}
-	const char* p=theheader.c_str();
-	memcpy(i_theheader,p,theheader.size());
-	return theheader.size();
-}
-*/
-
-
-
 
 // Maps sha1 -> fragment ID in ht with known size
 class HTIndex {
@@ -49454,9 +49380,13 @@ string	franz_do_hash::filehash(string i_filename,bool i_flagcalccrc32,int64_t i_
 			o_crc32=crc32_16bytes(unzBuf,r,o_crc32);
 
 		g_dimensione+=r;
+		if (g_dimensione>i_totali)
+			i_totali=g_dimensione;
 		letti+=r;
 		if (r!=n)
 			break;
+//////bool myavanzamentoby1sec(int64_t i_lavorati,int64_t i_totali,int64_t i_inizio,bool i_barran=true)
+
 		if ((flagnoeta==false) && (i_inizio>0) && (i_totali>0))
 			myavanzamentoby1sec(g_dimensione,i_totali,i_inizio,false);
 	}
@@ -50247,15 +50177,6 @@ int Jidac::extract()
 				myprintf("Found version -until %d scanning again...\n",versione);
 				version=versione;
 				jidacreset();
-				/*
-				ver.clear();
-				block.clear();
-				dt.clear();
-				ht.clear();
-				ht.resize(1);  // element 0 not used
-				ver.resize(1); // version 0
-				dhsize=dcsize=0;
-				*/
 				sz=read_archive(NULL,archive.c_str());
 			}
 			else
@@ -52750,13 +52671,6 @@ int64_t internal_getramdisksize()
             fclose(meminfo);
 			return ram*1024L;
 		}
-		/*
-        if(sscanf(line, "MemTotal: %d kB", &ram) == 1)
-        {
-            fclose(meminfo);
-            return ram*1024;
-        }
-		*/
     }
     fclose(meminfo);
     myprintf("44014: invalid /proc/meminfo format\n");
@@ -55551,10 +55465,7 @@ void myaddfile(uint32_t i_tnumber,DTMap& i_edt,string i_filename, int64_t i_date
 				myprintf("27080: (-maxsize) too large %19s %s\n",migliaia(i_size),i_filename.c_str());
 			return;
 		}
-/*
-	if (flaglongpath)
-		i_filename=makelongpath(i_filename);
-*/
+
 	DT& d=i_edt[i_filename];
 
 	d.date=i_date;
@@ -55562,20 +55473,19 @@ void myaddfile(uint32_t i_tnumber,DTMap& i_edt,string i_filename, int64_t i_date
 	d.attr=0;
 	d.data=0;
 	d.hexhash="";
+/// this seems weird, and it is. but mutex slow downs about 10x. So use -noeta to be sure no races
 	if (i_flagcalchash)
 		if (!isdirectory(i_filename))
 		{
 			int64_t starthash=mtime();
 
 			g_dimensione=0;
-			///if (flagdebug)
-				///myprintf("54696: franz_do_hash\n");
-
+			
 			franz_do_hash dummy(g_thechosenhash);
 			if (flagdebug)
 				myprintf("57372: filehash on %s\n",i_filename.c_str());
 
-			d.hexhash=dummy.filehash(i_filename,false,mtime(),prendidimensionefile(i_filename.c_str()));
+			d.hexhash=dummy.filehash(i_filename,false,0,prendidimensionefile(i_filename.c_str()));
 
 ///			d.hexhash=hash_calc_file(flag2algo(),i_filename.c_str(),false,dummycrc,mtime(),prendidimensionefile(i_filename.c_str()),dummy,thefilesize);
 			if (flagverbose)
@@ -55603,7 +55513,13 @@ void myaddfile(uint32_t i_tnumber,DTMap& i_edt,string i_filename, int64_t i_date
 			if (!(g_arrayfilescanned[i_tnumber] % 100))
 			{
 				for (unsigned int i=0; i<g_arraybytescanned.size();i++)
-					myprintf("Checksumming |%02d|%10s %12s\n",i,tohuman(g_arraybytescanned[i]),migliaia(g_arrayfilescanned[i]));
+				{
+					int tempo=(int)((mtime()-g_start)/1000.0);
+					if (tempo<=0)
+						tempo=1;
+					myprintf("%s |%02d|%10s %12s @ %10s/s\n",g_thechosenhash_str.c_str(),i,tohuman(g_arraybytescanned[i]),migliaia(g_arrayfilescanned[i]),
+					tohuman2(g_arraybytescanned[i]/tempo));
+				}
 				if ((!flagsilent) && (!flagnoconsole))
 				{
 					setupConsole();
@@ -59357,16 +59273,6 @@ int Jidac::append()
 }
 
 
-/*
-	int64_t initialzpaqsize	=0;
-	string	initialzpaqquick="";
-	string	initialzpaqcrc32="";
-	string	prezpaqcrc32	="";
-	int64_t	prezpaqsize		=0;
-
-*/
-
-
 struct twoint
 {
 	int32_t first;
@@ -60248,8 +60154,15 @@ int Jidac::add()
     }
   }
 	g_archive=arcname; /// for multipart the last
+	
+	int64_t	starting_zpaqdate=0;
+	int64_t starting_zpaqsize=0;
+	int64_t starting_zpaqattr=0;	
+	(void)getfileinfo(arcname,starting_zpaqsize,starting_zpaqdate,starting_zpaqattr);
+
+
 	g_header_pos=header_pos;
-		if (flagdebug)
+	if (flagdebug)
 		myprintf("60594: header_pos  %s\n",migliaia(g_header_pos));
 
 	string 	initialquickhash		="0";
@@ -60326,118 +60239,7 @@ int Jidac::add()
 					myprintf("61215: resultindex not zero\n");
 					return resultindex;
 				}
-
 			}
-/*
-
-
-
-
-
-			string 	percorso	=extractfilepath		(g_archive);
-			string	nome		=prendinomefileebasta	(g_archive);
-			fasttxt				=percorso+nome+"_crc32.txt";
-			if (fileexists(g_archive))
-			{
-				franz_do_hash dummyquick("QUICK");
-				initialquickhash=dummyquick.filehash(g_archive,false,-1,-1);
-				initialzpaqsize=prendidimensionefile(g_archive.c_str());
-			}
-			int64_t	sizefromtxt	=0;
-			bool	fastisok	=true;
-			if (fileexists(g_archive))
-				if (!fileexists(fasttxt.c_str()))
-				{
-					myprintf("60938: fasttxt does not exists ");
-					printUTF8(fasttxt.c_str());
-					myprintf("\n");
-					myprintf("60942: You can rebuild with -space\n");
-					fastisok=false;
-				}
-			if (fileexists(fasttxt.c_str()))
-			{
-				myprintf("60855: Founded fasttxt ");
-				printUTF8(fasttxt.c_str());
-				myprintf("\n");
-
-				if (!getdatafromfasttxt(fasttxt,initialzpaqcrc32,initialzpaqquick,prezpaqcrc32,sizefromtxt,prezpaqsize))
-				{
-					myprintf("60865: Failed getting data from fasttxt!\n");
-					return 2;
-				}
-				myprintf("60868: CRC32  %s QUICK %s SIZE %s\n",initialzpaqcrc32.c_str(),initialzpaqquick.c_str(),migliaia(sizefromtxt));
-				if (sizefromtxt!=initialzpaqsize)
-				{
-					myprintf("60873: size into fasttxt does not match %s vs %s\n",migliaia(sizefromtxt),migliaia2(initialzpaqsize));
-					if (!flagspace)
-					{
-						myprintf("60875: quitting now. You can override with -space\n");
-						return 2;
-					}
-					fastisok=false;
-				}
-				if (stringtoupper(initialquickhash)!=stringtoupper(initialzpaqquick))
-				{
-					myprintf("60879: quick fasttxt does not match %s vs %s\n",initialzpaqquick.c_str(),initialquickhash.c_str());
-					if (!flagspace)
-					{
-						myprintf("60887: quitting now. You can override with -space\n");
-						return 2;
-					}
-					fastisok=false;
-				}
-			}
-
-			if (!fastisok)
-			{
-				if (!flagspace)
-					return 2;
-
-				myprintf("60892: Rebuilding broken fasttxt (doing TRIM for incomplete transaction)\n");
-				flagkill=true;
-				jidacreset();
-				files.clear();
-				files.push_back(g_archive.c_str());
-
-				trim();
-				myprintf("60897: TRIM done, recomputing hash and CRC-32\n");
-				int64_t startverify		=mtime();
-				franz_do_hash dummyquick("QUICK");
-				initialzpaqquick=dummyquick.filehash(g_archive,false,startverify,prendidimensionefile(g_archive.c_str()));
-				if (initialzpaqquick=="")
-				{
-					myprintf("60899: quick hash empty!\n");
-					return 2;
-				}
-
-				franz_do_hash dummyquick2("CRC-32");
-				initialzpaqcrc32=dummyquick2.filehash(g_archive,false,startverify,prendidimensionefile(g_archive.c_str()));
-				if (initialzpaqcrc32=="")
-				{
-					myprintf("60907: CRC-32 empty!\n");
-					return 2;
-				}
-
-				myprintf("62682: Rebuilding fasttxt (%s) ",initialzpaqcrc32.c_str());
-				printUTF8(fasttxt.c_str());
-				if (!writedatainfasttxt(fasttxt,g_archive,initialzpaqcrc32,initialzpaqquick,
-				"0",prendidimensionefile(g_archive.c_str()),0))
-				{
-					myprintf(" :62957: something wrong!\n");
-					return 2;
-				}
-				else
-					myprintf(" :OK\n");
-				if (!getdatafromfasttxt(fasttxt,initialzpaqcrc32,initialzpaqquick,prezpaqcrc32,sizefromtxt,prezpaqsize))
-				{
-					myprintf("60865: Failed getting data from fasttxt!\n");
-					return 2;
-				}
-				myprintf("60907: REBUILDED CRC32  %s QUICK %s SIZE %s\n",initialzpaqcrc32.c_str(),initialzpaqquick.c_str(),migliaia(sizefromtxt));
-				seppuku();
-				exit(0);
-			}
-			*/
 		}
 
 
@@ -62131,6 +61933,13 @@ int Jidac::add()
 					flagfasttxt=false; // we do not want to update CRC-32!
 					fasttxt="";
 				}
+				if (starting_zpaqdate>0)
+				{
+					if (flagverbose)
+						myprintf("62144: touching back to %s\n",dateToString(false,starting_zpaqdate).c_str());
+					if (!touch(arcname.c_str(),starting_zpaqdate,starting_zpaqattr))
+						myprintf("62146: WARNING trouble in touching\n");
+				}
 			}
 			else
 			if (archive_end==0)
@@ -62723,31 +62532,6 @@ string zsfx_hash="ERRORE";
 
 int Jidac::benchmark()
 {
-
-/*
-	uint32_t calculatedcrc=0;
-	parallelcrc32("01.cpp",16,calculatedcrc);
-	myprintf("63152: calculated %08X\n",calculatedcrc);
-	return 0;
-	*/
-/*
-	files.push_back("c:.zpaq");
-	string fullarchive=files[0];
-	string estensione=prendiestensione(fullarchive);
-	vector<string> candidate;
-	listfiles(fullarchive,estensione,true,&candidate);
-	myprintf("57437: candidate %s with pattern %s\n",migliaia(candidate.size()),fullarchive.c_str());
-	for (unsigned int i=0;i<candidate.size();i++)
-	{
-		string filename=candidate[i];
-			myprintf("57441: filename %08d %s :",i,filename.c_str());
-		if (jollymatch(fullarchive.c_str(),filename.c_str()))
-			myprintf(" jolly match\n");
-		else
-			myprintf(" NO match\n");
-	}
-	return 0;
-*/
 	string myname=getuname();
 	myprintf("uname %s\n",myname.c_str());
 	myprintf("full exename seems <<%s>>\n",fullzpaqexename.c_str());
@@ -62810,11 +62594,6 @@ int Jidac::benchmark()
 	array_cpu	.push_back("i9-12900KS 56400 (phy) 16");
 	array_multi	.push_back(6928);
 	array_single.push_back(5403);
-	/*
-	array_cpu	.push_back("AMD-Ryzen 7 2700 (phy) 8");
-	array_multi	.push_back(1);
-	array_single.push_back(2933);
-	*/
 
 	int			chunksize=100000;
 	int			timelimit=5;
@@ -63052,71 +62831,7 @@ string stringtosomething(const string i_input,callback_issomething i_check)
 
 
 
-/*
-_Bool wildcard_strcmp(char *line, char *pattern)
-{
-    _Bool wildcard = 0;
-    char *placeholder;
 
-    do
-    {
-        if ((*pattern == *line) || (*pattern == '?'))
-        {
-            line++;
-            pattern++;
-        }
-        else if (*pattern == '*')
-        {
-            if (*(++pattern) == '\0')
-            {
-                return 1;
-            }
-            wildcard = 1;
-        }
-        else if (wildcard)
-        {
-            if (pattern == placeholder)
-            {
-                line++;
-            }
-            else
-            {
-                pattern = placeholder;
-            }
-        }
-        else
-        {
-            return 0;
-        }
-    } while (*line);
-
-    if (*pattern == '\0')
-    {
-        return 1;
-    }
-    else
-    {
-        return 0;
-    }
-}
-
-int main()
-{
-    char string[200] = "foobarfoobar";
-    char pattern[200] = "fo?*barfoo*";
-
-    if (wildcard_strcmp(string, pattern))
-    {
-        printf("Match\n");
-    }
-    else
-    {
-        printf("No Match\n");
-    }
-
-    return 0;
-}
-*/
 string	Jidac::get_lastfilename(string i_file,int64_t& o_totalfilesize)
 {
 	o_totalfilesize=0;

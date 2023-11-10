@@ -46605,7 +46605,7 @@ void Jidac::writefranzattr(DTMap::iterator i_dtmap,libzpaq::StringBuffer& i_sb, 
 	assert(i_quanti<8);				//just to be sure at least 1 zero pad, so < and not <=
 	assert(i_filename!="");
 	uint32_t writtencrc;
-	if (flagverify || flagcollision)
+	if (flagverify)
 		writtencrc=i_crc32fromfragments;
 	else
 		writtencrc=i_crc32;

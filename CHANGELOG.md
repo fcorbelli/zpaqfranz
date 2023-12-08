@@ -1,3 +1,6 @@
+## [58.12.s] - 2023-12-08
+### faster, redup
+
 ## [58.11.w] - 2023-11-01
 ### dump command
 - Undocumented -collision -kill, to be implemented

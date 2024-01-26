@@ -1,7 +1,6 @@
 # zpaqfranz: advanced multiversioned archiver, with HW acceleration and SFX (on Windows)      
 
 ### Swiss army knife for backup and disaster recovery, like 7z or RAR on steroids, with deduplicated "snapshots" (versions). Conceptually similar to the Mac time machine, but much more efficiently. zpaq 7.15 fork.    
-     
 
 |  Platform                                                           | OS package                    |  Version    | Video|
 |  ----------                                                         | -----                         |  ---------- |  -------    |
@@ -18,10 +17,10 @@
 |  [QNAP (Annapurna)](http://www.francocorbelli.it/zpaqfranz/qnap)           |                               |      |      | 
 |  [Haiku](http://www.francocorbelli.it/zpaqfranz/haiku)                     |                               |      |      |
 |  [ESXi](http://www.francocorbelli.it/zpaqfranz/esxi)                       |                               |      |      |
-| [Freeware GUI for Windows](https://github.com/fcorbelli/zpaqfranz/wiki/PAKKA-Windows-32-bit-extractor) |   |[35.2](http://www.francocorbelli.it/pakka/pakka_35_2.zip)  |      |
+| [Freeware GUI for Windows](https://github.com/fcorbelli/zpaqfranz/wiki/PAKKA-Windows-32-bit-extractor) |   |[latest](http://www.francocorbelli.it/pakka/build/latest/pakka_latest.zip)  |      |
 | [![ZpaqTreeView](https://github.com/fcorbelli/zpaqfranz/assets/77727889/2e155fa7-0565-416b-8bdd-b99c16ae896d)](https://github.com/EpicGazel/ZpaqTreeView)                                                                | Third Party Python software |      |
 
-
+[![Freeware GUI for Windows](https://github.com/fcorbelli/zpaqfranz/assets/77727889/e8243e14-b299-4224-b998-8c96a8e425d5)](https://github.com/fcorbelli/zpaqfranz/wiki/PAKKA-Windows-32-bit-extractor)
 [![Wiki](https://github-production-user-asset-6210df.s3.amazonaws.com/77727889/267342908-7d4c5bb9-6ea2-4735-9226-4d8112c5d65d.jpg)](https://github.com/fcorbelli/zpaqfranz/wiki) [![Help](https://github-production-user-asset-6210df.s3.amazonaws.com/77727889/267348388-d539932d-55c6-454a-a27b-054a10ae5f35.jpg)](https://github.com/fcorbelli/zpaqfranz/wiki/HELP-integrated) [![Sourceforge](https://github-production-user-asset-6210df.s3.amazonaws.com/77727889/267350249-91c18ca6-8c74-4585-96f4-3c72fd2c6725.jpg)](https://github.com/EpicGazel/ZpaqTreeView)
 
 ## Classic archivers (tar, 7z, RAR etc) are obsolete, when used for repeated backups (daily etc), compared to the ZPAQ technology, that maintain "snapshots" (versions) of the data. [This is even more true in the case of ASCII dumps of databases (e.g. MySQL/MariaDB)](https://github.com/fcorbelli/zpaqfranz/wiki/Real-world:-SQL-dumps-(MySQL-MariaDB-Postgres-backup))

@@ -18,7 +18,7 @@
 |  [QNAP (Annapurna)](http://www.francocorbelli.it/zpaqfranz/qnap)           |                               |      |      | 
 |  [Haiku](http://www.francocorbelli.it/zpaqfranz/haiku)                     |                               |      |      |
 |  [ESXi](http://www.francocorbelli.it/zpaqfranz/esxi)                       |                               |      |      |
-| [Freeware GUI for Windows](https://github.com/fcorbelli/zpaqfranz/wiki/PAKKA-Windows-32-bit-extractor) |   |34.2  |      |
+| [Freeware GUI for Windows](https://github.com/fcorbelli/zpaqfranz/wiki/PAKKA-Windows-32-bit-extractor) |   |[35.2](http://www.francocorbelli.it/pakka/pakka_35_2.zip)  |      |
 | [![ZpaqTreeView](https://github.com/fcorbelli/zpaqfranz/assets/77727889/2e155fa7-0565-416b-8bdd-b99c16ae896d)](https://github.com/EpicGazel/ZpaqTreeView)                                                                | Third Party Python software |      |
 
 

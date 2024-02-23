@@ -52,8 +52,8 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 */
 
-#define ZPAQ_VERSION "59.1a"
-#define ZPAQ_DATE "(2024-01-16)"  // cannot use __DATE__ on Debian!
+#define ZPAQ_VERSION "59.2q"
+#define ZPAQ_DATE "(2024-02-23)"  // cannot use __DATE__ on Debian!
 
 ///	optional align for malloc (sparc64) via -DALIGNMALLOC
 #define STR(a) #a
@@ -5276,12 +5276,13 @@ void Sha1Prepare(bool i_flaghardware)
 	Section: libzpaq
 */
 
-namespace libzpaq {
 // 1, 2, 4, 8 byte unsigned integers
 typedef uint8_t U8;
 typedef uint16_t U16;
 typedef uint32_t U32;
 typedef uint64_t U64;
+
+namespace libzpaq {
 // Tables for parsing ZPAQL source code
 extern const char* compname[256];    // list of ZPAQL component types
 extern const int compsize[256];      // number of bytes to encode a component
@@ -13172,6 +13173,7 @@ bool flagnoqnap;
 bool flagnorecursion;
 bool flagnosort;
 bool flagpakka;
+bool flagdistinct;
 bool flagparanoid;
 bool flagpaq;
 bool flagcollision;
@@ -13242,11 +13244,12 @@ string	g_thechosenhash_str;
 
 
 int g_console_attributes=-1;
+#ifdef _WIN32
+
 void color_save()
 {
 	if (flagnocolor)
 		return;
-#ifdef _WIN32
 	HANDLE hconsole=GetStdHandle(STD_OUTPUT_HANDLE);
 	if (hconsole==INVALID_HANDLE_VALUE)
 		return;
@@ -13277,10 +13280,9 @@ void color_save()
 	 (csbiInfo.wAttributes & MYFOREGROUND_GREEN) &&
 	 (csbiInfo.wAttributes & MYFOREGROUND_RED))
 		g_console_attributes=csbiInfo.wAttributes;
-
-#endif
 	return;
 }
+#endif
 void color_restore()
 {
 	if (flagnocolor)
@@ -13295,20 +13297,20 @@ void color_restore()
 #endif
 	return;
 }
+#ifdef _WIN32
 void color_something(int i_color)
 {
 	if (flagnocolor)
 		return;
 	if (g_console_attributes<0)
 		return;
-#ifdef _WIN32
 	HANDLE hconsole=GetStdHandle(STD_OUTPUT_HANDLE);
 	if (hconsole==INVALID_HANDLE_VALUE)
 		return;
 	SetConsoleTextAttribute(hconsole,i_color);
-#endif
 	return;
 }
+#endif
 void color_red()
 {
 #ifdef _WIN32
@@ -13369,56 +13371,72 @@ void myprintf(const char *fmt, ...)
 		return;
 	
 
-#ifdef _WIN32
 	if (flagnocolor)
 	{
 		printf("%s",buffer);
+#ifndef _WIN32
+		fflush(stdout);
+#endif
 		return;
 	}
-	else
-	{
-		if (strlen(buffer)<7)
-		{
-			printf("%s",buffer);
-			return;
-		}
 
-		if (buffer[5]!=':')
-		{
-			printf("%s",buffer);
-			return;
-		}			
-		if ( 	(!isdigit(buffer[0])) ||
-				(!isdigit(buffer[1])) ||
-				(!isdigit(buffer[2])) ||
-				(!isdigit(buffer[3])) ||
-				(!isdigit(buffer[4]))	)
-		{
-			printf("%s",buffer);
-			return;
-		}
-		if (flagdebug3)
-		{
-			color_yellow();
-			print_datetime();
-		}
-		if (flagdebug)
-		{
-			char salva=buffer[6];
-			buffer[6]=0;
-			color_green();
-			printf("%s",buffer);
-			color_restore();
-			buffer[6]=salva;
-			printf("%s",buffer+6);
-		}
-		else
-			printf("%s",buffer+7);
-			
-	}
-#else
-	printf("%s",buffer);
+	if (strlen(buffer)<7)
+	{
+		printf("%s",buffer);
+#ifndef _WIN32
+		fflush(stdout);
 #endif
+		return;
+	}
+
+	if (buffer[5]!=':')
+	{
+		printf("%s",buffer);
+#ifndef _WIN32
+		fflush(stdout);
+#endif
+		return;
+	}			
+	if ( 	(!isdigit(buffer[0])) ||
+			(!isdigit(buffer[1])) ||
+			(!isdigit(buffer[2])) ||
+			(!isdigit(buffer[3])) ||
+			(!isdigit(buffer[4]))	)
+	{
+		printf("%s",buffer);
+#ifndef _WIN32
+		fflush(stdout);
+#endif
+		return;
+	}
+	if (flagdebug3)
+	{
+#ifdef _WIN32
+		color_yellow();
+#endif
+		print_datetime();
+	}
+	if (flagdebug)
+	{
+		char salva=buffer[6];
+		buffer[6]=0;
+#ifdef _WIN32
+		color_green();
+#endif
+		printf("%s",buffer);
+#ifdef _WIN32		
+		color_restore();
+#endif
+		buffer[6]=salva;
+		printf("%s",buffer+6);
+	}
+	else
+		printf("%s",buffer+7);
+#ifndef _WIN32
+		fflush(stdout);
+#endif
+			
+	
 }
 
 bool ihavehw()
@@ -22776,7 +22794,7 @@ string	decodewinerror(DWORD	i_error,const char* i_filename)
 	else
 	if (i_error==152L) risultato="ERROR_TOO_MANY_MUXWAITERS";
 	else
-	if (i_error==153L) risultato="ERROR_INVALID_LIST_FORMAT";
+	if (i_error==153L) risultato="ERROR_INVALID_LISTFORMAT";
 	else
 	if (i_error==154L) risultato="ERROR_LABEL_TOO_LONG";
 	else
@@ -22906,7 +22924,7 @@ string	decodewinerror(DWORD	i_error,const char* i_filename)
 	else
 	if (i_error==254L) risultato="ERROR_INVALID_EA_NAME";
 	else
-	if (i_error==255L) risultato="ERROR_EA_LIST_INCONSISTENT";
+	if (i_error==255L) risultato="ERROR_EA_LISTINCONSISTENT";
 	else
 	if (i_error==258L) risultato="WAIT_TIMEOUT";
 	else
@@ -23266,7 +23284,7 @@ string	decodewinerror(DWORD	i_error,const char* i_filename)
 	else
 	if (i_error==620L) risultato="ERROR_INVALID_PLUGPLAY_DEVICE_PATH";
 	else
-	if (i_error==621L) risultato="ERROR_QUOTA_LIST_INCONSISTENT";
+	if (i_error==621L) risultato="ERROR_QUOTA_LISTINCONSISTENT";
 	else
 	if (i_error==622L) risultato="ERROR_EVALUATION_EXPIRATION";
 	else
@@ -23278,7 +23296,7 @@ string	decodewinerror(DWORD	i_error,const char* i_filename)
 	else
 	if (i_error==626L) risultato="ERROR_NO_MORE_MATCHES";
 	else
-	if (i_error==627L) risultato="ERROR_RANGE_LIST_CONFLICT";
+	if (i_error==627L) risultato="ERROR_RANGE_LISTCONFLICT";
 	else
 	if (i_error==628L) risultato="ERROR_SERVER_SID_MISMATCH";
 	else
@@ -30608,7 +30626,7 @@ string	decodewinerror(DWORD	i_error,const char* i_filename)
 	else
 	if (i_error==0x800F0211L) risultato="SPAPI_E_NO_DEVICE_SELECTED";
 	else
-	if (i_error==0x800F0212L) risultato="SPAPI_E_DEVINFO_LIST_LOCKED";
+	if (i_error==0x800F0212L) risultato="SPAPI_E_DEVINFO_LISTLOCKED";
 	else
 	if (i_error==0x800F0213L) risultato="SPAPI_E_DEVINFO_DATA_LOCKED";
 	else
@@ -32008,9 +32026,9 @@ string	decodewinerror(DWORD	i_error,const char* i_filename)
 	else
 	if (i_error==0x8029020CL) risultato="TBSIMP_E_OUT_OF_MEMORY";
 	else
-	if (i_error==0x8029020DL) risultato="TBSIMP_E_LIST_NO_MORE_ITEMS";
+	if (i_error==0x8029020DL) risultato="TBSIMP_E_LISTNO_MORE_ITEMS";
 	else
-	if (i_error==0x8029020EL) risultato="TBSIMP_E_LIST_NOT_FOUND";
+	if (i_error==0x8029020EL) risultato="TBSIMP_E_LISTNOT_FOUND";
 	else
 	if (i_error==0x8029020FL) risultato="TBSIMP_E_NOT_ENOUGH_SPACE";
 	else
@@ -32824,9 +32842,9 @@ string	decodewinerror(DWORD	i_error,const char* i_filename)
 	else
 	if (i_error==0x80342002L) risultato="ERROR_NDIS_DOT11_POWER_STATE_INVALID";
 	else
-	if (i_error==0x80342003L) risultato="ERROR_NDIS_PM_WOL_PATTERN_LIST_FULL";
+	if (i_error==0x80342003L) risultato="ERROR_NDIS_PM_WOL_PATTERN_LISTFULL";
 	else
-	if (i_error==0x80342004L) risultato="ERROR_NDIS_PM_PROTOCOL_OFFLOAD_LIST_FULL";
+	if (i_error==0x80342004L) risultato="ERROR_NDIS_PM_PROTOCOL_OFFLOAD_LISTFULL";
 	else
 	if (i_error==0x80342005L) risultato="ERROR_NDIS_DOT11_AP_CHANNEL_CURRENTLY_NOT_AVAILABLE";
 	else
@@ -33760,11 +33778,11 @@ string	decodewinerror(DWORD	i_error,const char* i_filename)
 	else
 	if (i_error==0x80660002L) risultato="E_HDAUDIO_EMPTY_CONNECTION_LIST";
 	else
-	if (i_error==0x80660003L) risultato="E_HDAUDIO_CONNECTION_LIST_NOT_SUPPORTED";
+	if (i_error==0x80660003L) risultato="E_HDAUDIO_CONNECTION_LISTNOT_SUPPORTED";
 	else
 	if (i_error==0x80660004L) risultato="E_HDAUDIO_NO_LOGICAL_DEVICES_CREATED";
 	else
-	if (i_error==0x80660005L) risultato="E_HDAUDIO_NULL_LINKED_LIST_ENTRY";
+	if (i_error==0x80660005L) risultato="E_HDAUDIO_NULL_LINKED_LISTENTRY";
 	else
 	if (i_error==0x80670001L) risultato="STATEREPOSITORY_E_CONCURRENCY_LOCKING_FAILURE";
 	else
@@ -38138,7 +38156,7 @@ public:
 				myprintf("37881: HERE WE ARE @ %12s on fp %12s  size %s\n",migliaia3(ftello(firstfp)),migliaia(int64_t(firstfp)),migliaia2(ptr));
 
 			char debugfilename[100];
-			FP debugoutf=FPNULL;
+			FP debugoutf;
 			if (flagdebug4)
 			{
 				snprintf(debugfilename,sizeof(debugfilename),"z:\\fp_%04d,%04d_u_%08d_size_%06d_%s.bin",(int)g_debug_sequence++,(int)int64_t(firstfp),(int)int64_t(ftello(firstfp)),ptr,nomefile.c_str());
@@ -38644,7 +38662,7 @@ class easymultipart
 		if (!iszpaq(i_filename))
 			i_filename+=".zpaq";
 #ifdef _WIN32
-		i_filename=stringtolower(i_filename);
+	///	i_filename=stringtolower(i_filename);
 #endif
 ///	we really want a path, even relative
 		thefilename	=i_filename;
@@ -38688,6 +38706,21 @@ class easymultipart
 			if (!fileexists(partname))
 			{
 				thehole=partname;
+				if (flagdebug3)
+					myprintf("38691: filenamearraysize %08d partname %08d does not exists\n",filenamearray.size(),i,partname.c_str());
+				if (i==1)
+					thehole="";
+				else
+				if ((filenamearray.size()>0) && (i>0))
+				{
+					if (flagdebug3)
+					{
+						myprintf("39693: last filenamearraysize %s\n",filenamearray[filenamearray.size()-1].filename.c_str());
+						myprintf("39695: i-1                    %s\n",subpart(i_filename,i-1).c_str());
+					}
+					if (filenamearray[filenamearray.size()-1].filename==subpart(i_filename,i-1)) 
+						thehole="";
+				}
 				break;
 			}
 			else
@@ -38706,12 +38739,12 @@ class easymultipart
 			++parts;
 		}
 		std::sort(partarray.begin(),partarray.end(),comparefilename);
-		isgood=filenamearray.size()==partarray.size();
+		isgood=(thehole==""); //filenamearray.size()==partarray.size();
 
-		if (!isgood)
+		if (thehole!="")
 		{
 		///	myprintf("84478: PART NUMBER MISMATCH: disk %s vs part %s (HOLE IN %s)\n",migliaia(filenamearray.size()),migliaia2(partarray.size()),thehole.c_str());
-			myprintf("84478: AT LEAST ONE HOLE DETECTED! <<");
+			myprintf("38716: [2] AT LEAST ONE HOLE DETECTED! <<");
 			printUTF8(thehole.c_str());
 			myprintf(">>\n");
 
@@ -38730,6 +38763,16 @@ class easymultipart
 							myprintf("84493: Filename not matched %s\n",filenamearray[i].filename.c_str());
 				}
 		}
+		
+		if (flagdebug3)
+		{
+			for (unsigned int i=0;i<filenamearray.size();i++)
+				myprintf("38738: filenamearray %08d %s\n",i,filenamearray[i].filename.c_str());
+				
+			for (unsigned int i=0;i<partarray.size();i++)
+				myprintf("38740: partarray %08d %s\n",i,partarray[i].filename.c_str());
+		}	
+			
 		if (partarray.size()>0)
 		{
 			if (fileexists(subpart(i_filename, parts)))
@@ -38750,18 +38793,23 @@ class easymultipart
 		listfiles(extractfilepath(thefilename),"zpaq",true,&candidate);
 		for (unsigned int i=0;i<candidate.size();i++)
 		{
+			if (flagdebug3)
+				myprintf("38763: candidate %08d %s\n",i,candidate[i].c_str());
+			
 			s_fileandsize myblock;
 			string currentfilename=candidate[i];
 #ifdef _WIN32
-			currentfilename=stringtolower(currentfilename);
+		///	currentfilename=stringtolower(currentfilename);
 #endif
 
 			if (jollymatch(thefilename.c_str(),candidate[i].c_str()))
 			{
+				if (flagdebug3)
+					myprintf("38773: jolly match filename %s candidate %08d %s\n",thefilename.c_str(),i,candidate[i].c_str());
+				
 				string onlydigit	=stringtosomething(currentfilename,isdigit);
 				if (onlydigit!="")
 				{
-	
 					myblock.filename		=currentfilename;
 					myblock.size			=prendidimensionefile(currentfilename.c_str());
 					myblock.attr			=0;
@@ -38769,7 +38817,8 @@ class easymultipart
 					myblock.isdir			=false;
 					myblock.flaghashstored	=false;
 					filenamearray.push_back(myblock);
-					///myprintf("38291: added %s\n",currentfilename.c_str());
+					if (flagdebug3)
+						myprintf("38291: added %s\n",currentfilename.c_str());
 				}
 			}
 			else
@@ -38888,13 +38937,17 @@ OutputArchive::OutputArchive(string i_thearchive,const char* filename, const cha
 			error("38583: file exists and off > 0 (maybe try to add to chunked?)");
 		}
     if (password) {
+		if (flagdebug2)
 		myprintf("38667: password, reading salt\n");
       if (fread(salt, 1, 32, fp)!=32) 
 		  error("38679: cannot read salt");
       if (salt_ && memcmp(salt, salt_, 32))
 		  error("salt mismatch");
 	  else
-		  myprintf("38638: sale letto!\n");
+	  {
+		if (flagdebug2)
+		  myprintf("38638: salt done!\n");
+	  }
 #ifdef SERVER
 		if (g_socket!=0)
 		{
@@ -39364,6 +39417,1039 @@ class CompressJob;
 
 typedef void (*callback_function)(char*); // type for conciseness
 
+
+/*
+
+Portion to list the contents of zpaq files in the most concise way possible, 
+to reduce the time necessary for subsequent uses (e.g. from GUIs written in other languages),
+on Windows.
+
+Like this https://github.com/fcorbelli/zpaqlist
+
+A classic method for an extracting GUI for zpaq is to redirect the output of the command
+zpaq l (list) to a temporary file, read it, parse and then process, but it takes time.
+
+The output of zpaqlist (or zpaqfranz with the brand-new pakka command) is composed by
+
+- version #
+!1266
+
+- version list
+|      1 2019-05-12 15:42:22
+|      2 2019-05-13 09:22:49
+|      3 2019-05-14 17:18:06
+|      4 2019-05-16 14:17:25
+|      5 2019-05-16 15:30:17
+|      6 2019-05-16 23:30:17
+(...)
+
+- total row number (with +)
++38915424
+
+- sorted by version and file name (for a time machine-like use) 
+- and, by default, does not duplicate identical file names.
+- version_number
+- datetime (or D for deleted)
+- size (with dots)
+- filename or ? (if not changed from previous)
+Example (two record)
+The file f:/zarc/ihsv/pakka/30_3/zpaqfranz.exe is 3.089.462 bytes long,
+and was found in the 946 version, @ 02/10/2020 14:25:34  (European-style date format)
+In the version 959 the file result deleted (not present)
+
+-946
+02/10/2020 14:25:34
+3.089.462
+f:/zarc/ihsv/pakka/30_3/zpaqfranz.exe
+-959
+D
+0
+?
+
+When the size of the output is large (and can even be hundreds of MB) 
+the savings both in writing (on magnetic disks), reading and parsing 
+can be considerable. 
+
+For small archives (KB) there is obviously no difference compared to zpaq
+*/
+
+#ifdef _WIN32
+namespace libzpaq2 {
+	
+/*
+This is similar, but NOT equal, to newer libzpaq
+A bit of Frankenstein, to incorporate older 6.60 inside 7.15-based source
+*/
+
+// Symbolic constants, instruction size, and names
+typedef enum {LIST_NONE,LIST_CONS,LIST_CM,ILIST_CM,LIST_MATCH,LIST_AVG,LIST_LIST_MIX2,
+LIST_MIX,LIST_ILIST_SSE,LIST_SSE} list_CompType;
+
+///////////////////////// Predictor //////////////////////////
+
+
+// Decoder decompresses using an arithmetic code
+class list_Decoder {
+public:
+  libzpaq::Reader* in;        // destination
+  list_Decoder(libzpaq::ZPAQL& z);
+  int decompress();  // return a byte or EOF
+  int skip();        // skip to the end of the segment, return next byte
+  void init();       // initialize at start of block
+  int stat(int x) {return pr.stat(x);}
+private:
+  U32 low, high;     // range
+  U32 curr;          // last 4 bytes of archive
+  libzpaq::Predictor pr;      // to get p
+  enum {BUFSIZE=1<<16};
+  libzpaq::Array<char> buf;   // input buffer of size BUFSIZE bytes
+    // of unmodeled data. buf[low..high-1] is input with curr
+    // remaining in sub-block.
+  int decode(int p); // return decoded bit (0..1) with prob. p (0..65535)
+  void loadbuf();    // read unmodeled data into buf to EOS
+};
+
+
+//////////////////////// list_Decompresser ////////////////////////
+
+// For decompression and listing archive contents
+class list_Decompresser {
+public:
+  list_Decompresser(): z(), dec(z), pp(), state(BLOCK), decode_state(FIRSTSEG) {}
+  void setInput(libzpaq::Reader* in) {dec.in=in;}
+  bool findBlock(double* memptr = 0);
+  void hcomp(libzpaq::Writer* out2) {z.write(out2, false);}
+  bool findFilename(libzpaq::Writer* = 0);
+  void readComment(libzpaq::Writer* = 0);
+  void setOutput(libzpaq::Writer* out) {pp.setOutput(out);}
+  void setSHA1(libzpaq::SHA1* sha1ptr) {pp.setSHA1(sha1ptr);}
+  bool decompress(int n = -1);  // n bytes, -1=all, return true until done
+  bool pcomp(libzpaq::Writer* out2) {return pp.z.write(out2, true);}
+  void readSegmentEnd(char* sha1string = 0);
+  int stat(int x) {return dec.stat(x);}
+private:
+  libzpaq::ZPAQL z;
+  list_Decoder dec;
+  libzpaq::PostProcessor pp;
+  enum {BLOCK, FILENAME, COMMENT, DATA, SEGEND} state;  // expected next
+  enum {FIRSTSEG, SEG, SKIP} decode_state;  // which segment in block?
+};
+/////////////////////// Decoder ///////////////////////
+
+list_Decoder::list_Decoder(libzpaq::ZPAQL& z):
+    in(0), low(1), high(0xFFFFFFFF), curr(0), pr(z), buf(BUFSIZE) {
+}
+
+void list_Decoder::init() {
+  pr.init();
+  if (pr.isModeled()) low=1, high=0xFFFFFFFF, curr=0;
+  else low=high=curr=0;
+}
+
+// Read un-modeled input into buf[low=0..high-1]
+// with curr remaining in subblock to read.
+void list_Decoder::loadbuf() {
+ 
+  if (curr==0) {
+    for (int i=0; i<4; ++i) {
+      int c=in->get();
+      if (c<0) libzpaq::error("unexpected end of input");
+      curr=curr<<8|c;
+    }
+  }
+  U32 n=buf.size();
+  if (n>curr) n=curr;
+  high=in->read(&buf[0], n);
+  curr-=high;
+  low=0;
+}
+
+// Return next bit of decoded input, which has 16 bit probability p of being 1
+int list_Decoder::decode(int p) {
+
+  if (curr<low || curr>high) libzpaq::error("archive corrupted");
+
+  U32 mid=low+U32(((high-low)*U64(U32(p)))>>16);  // split range
+ 
+  int y;
+  if (curr<=mid) y=1, high=mid;  // pick half
+  else y=0, low=mid+1;
+  while ((high^low)<0x1000000) { // shift out identical leading bytes
+    high=high<<8|255;
+    low=low<<8;
+    low+=(low==0);
+    int c=in->get();
+    if (c<0) libzpaq::error("unexpected end of file");
+    curr=curr<<8|c;
+  }
+  return y;
+}
+
+// Decompress 1 byte or -1 at end of input
+int list_Decoder::decompress() {
+  if (pr.isModeled()) {  // n>0 components?
+    if (curr==0) {  // segment initialization
+      for (int i=0; i<4; ++i)
+        curr=curr<<8|in->get();
+    }
+    if (decode(0)) {
+      if (curr!=0) libzpaq::error("decoding end of stream");
+      return -1;
+    }
+    else {
+      int c=1;
+      while (c<256) {  // get 8 bits
+        int p=pr.predict()*2+1;
+        c+=c+decode(p);
+        pr.update(c&1);
+      }
+      return c-256;
+    }
+  }
+  else {
+    if (low==high) loadbuf();
+    if (low==high) return -1;
+    return buf[low++]&255;
+  }
+}
+
+// Find end of compressed data and return next byte
+int list_Decoder::skip() {
+  int c=-1;
+  if (pr.isModeled()) {
+    while (curr==0)  // at start?
+      curr=in->get();
+    while (curr && (c=in->get())>=0)  // find 4 zeros
+      curr=curr<<8|c;
+    while ((c=in->get())==0) ;  // might be more than 4
+    return c;
+  }
+  else {
+    if (curr==0)  // at start?
+      for (int i=0; i<4 && (c=in->get())>=0; ++i) curr=curr<<8|c;
+    while (curr>0) {
+      U32 n=BUFSIZE;
+      if (n>curr) n=curr;
+      U32 n1=in->read(&buf[0], n);
+      curr-=n1;
+      if (n1<1) return -1;
+      if (curr==0)
+        for (int i=0; i<4 && (c=in->get())>=0; ++i) curr=curr<<8|c;
+    }
+    if (c>=0) c=in->get();
+    return c;
+  }
+}
+
+
+// Find the start of a block and return true if found. Set memptr
+// to memory used.
+bool list_Decompresser::findBlock(double* memptr) {
+  ///printf("08116: findblock\n");
+
+  // Find start of block
+  U32 h1=0x3D49B113, h2=0x29EB7F93, h3=0x2614BE13, h4=0x3828EB13;
+  // Rolling hashes initialized to hash of first 13 bytes
+  int c;
+  ///int64_t startct=0;
+  while ((c=dec.in->get())!=-1) {
+///	printf("08122: getted c %03d startct %08d\n",c,startct++);
+    h1=h1*12+c;
+    h2=h2*20+c;
+    h3=h3*28+c;
+    h4=h4*44+c;
+    if (h1==0xB16B88F1 && h2==0xFF5376F1 && h3==0x72AC5BF1 && h4==0x2F909AF1)
+      break;  // hash of 16 byte string
+  }
+  if (c==-1) return false;
+
+  // Read header
+  if ((c=dec.in->get())!=1 && c!=2) libzpaq::error("unsupported ZPAQ level");
+  if (dec.in->get()!=1) libzpaq::error("unsupported list_ZPAQL type");
+  z.read(dec.in);
+  if (c==1 && z.header.isize()>6 && z.header[6]==0)
+    libzpaq::error("ZPAQ level 1 requires at least 1 component");
+  if (memptr) *memptr=z.memory();
+  state=FILENAME;
+  decode_state=FIRSTSEG;
+  ///printf("08144: dec %08d\n",dec.in->ftell());
+    ///printf("08144: dec %08d\n",dec.in->tell());
+  return true;
+}
+
+// Read the start of a segment (1) or end of block code (255).
+// If a segment is found, write the filename and return true, else false.
+bool list_Decompresser::findFilename(libzpaq::Writer* filename) {
+
+  int c=dec.in->get();
+  if (c==1) {  // segment found
+    while (true) {
+      c=dec.in->get();
+      if (c==-1) libzpaq::error("unexpected EOF");
+      if (c==0) {
+        state=COMMENT;
+        return true;
+      }
+      if (filename) filename->put(c);
+    }
+  }
+  else if (c==255) {  // end of block found
+    state=BLOCK;
+    return false;
+  }
+  else
+    libzpaq::error("missing segment or end of block");
+  return false;
+}
+
+// Read the comment from the segment header
+void list_Decompresser::readComment(libzpaq::Writer* comment) {
+ 
+  state=DATA;
+  while (true) {
+    int c=dec.in->get();
+    if (c==-1) libzpaq::error("unexpected EOF");
+    if (c==0) break;
+    if (comment) comment->put(c);
+  }
+  if (dec.in->get()!=0) libzpaq::error("missing reserved byte");
+}
+
+// Decompress n bytes, or all if n < 0. Return false if done
+bool list_Decompresser::decompress(int n) {
+  
+
+  // Initialize models to start decompressing block
+  if (decode_state==FIRSTSEG) {
+    dec.init();
+   
+    pp.init(z.header[4], z.header[5]);
+    decode_state=SEG;
+  }
+
+  // Decompress and load PCOMP into postprocessor
+  while ((pp.getState()&3)!=1)
+    pp.write(dec.decompress());
+
+  // Decompress n bytes, or all if n < 0
+  while (n) {
+    int c=dec.decompress();
+    pp.write(c);
+    if (c==-1) {
+      state=SEGEND;
+      return false;
+    }
+    if (n>0) --n;
+  }
+  return true;
+}
+
+// Read end of block. If a SHA1 checksum is present, write 1 and the
+// 20 byte checksum into sha1string, else write 0 in first byte.
+// If sha1string is 0 then discard it.
+void list_Decompresser::readSegmentEnd(char* sha1string) {
+  // Skip remaining data if any and get next byte
+  int c=0;
+  if (state==DATA) {
+    c=dec.skip();
+    decode_state=SKIP;
+  }
+  else if (state==SEGEND)
+    c=dec.in->get();
+  state=FILENAME;
+
+  // Read checksum
+  if (c==254) {
+    if (sha1string) sha1string[0]=0;  // no checksum
+  }
+  else if (c==253) {
+    if (sha1string) sha1string[0]=1;
+    for (int i=1; i<=20; ++i) {
+      c=dec.in->get();
+      if (sha1string) sha1string[i]=c;
+    }
+  }
+  else
+    libzpaq::error("missing end of segment marker");
+}
+}  // end namespace libzpaq2
+
+
+
+
+
+// Global variables
+int64_t list_g_dimensione=0;
+
+FILE* list_outputlog=stdout;
+FILE* list_con=stdout;    // log output, can be stderr
+static const int64_t LIST_MAX_QUIET=0x7FFFFFFFFFFFFFFFLL;  // no output but errors
+int64_t list_global_start=0;  // set to mtime() at start of main()
+
+// signed size of a string or vector
+template <typename T> int list_size(const T& x) {
+  return x.size();
+}
+
+// In Windows, convert 16-bit wide string to UTF-8 and \ to /
+string list_wtou(const wchar_t* s) {
+
+  string r;
+  if (!s) return r;
+  for (; *s; ++s) {
+    if (*s=='\\') r+='/';
+    else if (*s<128) r+=*s;
+    else if (*s<2048) r+=192+*s/64, r+=128+*s%64;
+    else r+=224+*s/4096, r+=128+*s/64%64, r+=128+*s%64;
+  }
+  return r;
+}
+
+// In Windows, convert UTF-8 string to wide string ignoring
+// invalid UTF-8 or >64K. If doslash then convert "/" to "\".
+std::wstring list_utow(const char* ss, bool doslash=false) {
+
+
+  std::wstring r;
+  if (!ss) return r;
+  const unsigned char* s=(const unsigned char*)ss;
+  for (; s && *s; ++s) {
+    if (s[0]=='/' && doslash) r+='\\';
+    else if (s[0]<128) r+=s[0];
+    else if (s[0]>=192 && s[0]<224 && s[1]>=128 && s[1]<192)
+      r+=(s[0]-192)*64+s[1]-128, ++s;
+    else if (s[0]>=224 && s[0]<240 && s[1]>=128 && s[1]<192
+             && s[2]>=128 && s[2]<192)
+      r+=(s[0]-224)*4096+(s[1]-128)*64+s[2]-128, s+=2;
+  }
+  return r;
+}
+
+// Print a UTF-8 string to f (stdout, stderr) so it displays properly
+void list_printutf8(const char* s, FILE* f) {
+
+  const HANDLE h=(HANDLE)_get_osfhandle(_fileno(f));
+  DWORD ft=GetFileType(h);
+  if (ft==FILE_TYPE_CHAR) {
+    fflush(f);
+    std::wstring w=list_utow(s);  // Windows console: convert to UTF-16
+    DWORD n=0;
+    WriteConsole(h, w.c_str(), w.size(), &n, 0);
+  }
+  else  // stdout redirected to file
+    fprintf(f, "%s", s);
+}
+
+// Convert 64 bit decimal YYYYMMDDHHMMSS to "YYYY-MM-DD HH:MM:SS"
+// where -1 = unknown date, 0 = deleted.
+string list_dateToString(int64_t date) {
+  if (date<=0) return "                   ";
+  string s="0000-00-00 00:00:00";
+  static const int t[]={18,17,15,14,12,11,9,8,6,5,3,2,1,0};
+  for (int i=0; i<14; ++i) s[t[i]]+=int(date%10), date/=10;
+  return s;
+}
+string list_mydateToString(int64_t date) {
+  if (date<=0) return "                   ";
+  ///        0123456789012345678
+  string  s="0000-00-00 00:00:00";
+  string s2="00/00/0000 00:00:00";
+  
+  
+  static const int t[]={18,17,15,14,12,11,9,8,6,5,3,2,1,0};
+  for (int i=0; i<14; ++i) s[t[i]]+=int(date%10), date/=10;
+
+/// convert in european date format dd/mm/yyyy hh:mm:ss
+  s2[0]=s[8];
+  s2[1]=s[9];
+  s2[3]=s[5];
+  s2[4]=s[6];
+  s2[6]=s[0];
+  s2[7]=s[1];
+  s2[8]=s[2];
+  s2[9]=s[3];
+  
+  s2[11]=s[11];
+  s2[12]=s[12];
+  
+  s2[14]=s[14];
+  s2[15]=s[15];
+  
+  s2[17]=s[17];
+  s2[18]=s[18];
+  return s2;
+}
+
+
+
+/////////////////////////////// File //////////////////////////////////
+
+// Convert non-negative decimal number x to string of at least n digits
+string list_itos(int64_t x, int n=1) {
+
+  string r;
+  for (; x || n>0; x/=10, --n) r=string(1, '0'+x%10)+r;
+  return r;
+}
+
+// Replace * and ? in fn with part or digits of part
+string list_subpart(string fn, int part) {
+  for (int j=fn.size()-1; j>=0; --j) {
+    if (fn[j]=='?')
+      fn[j]='0'+part%10, part/=10;
+    else if (fn[j]=='*')
+      fn=fn.substr(0, j)+list_itos(part)+fn.substr(j+1), part=0;
+  }
+  return fn;
+}
+
+// Return true if a file or directory (UTF-8 without trailing /) list_exists.
+// If part>0 then replace * and ? in filename with part or its digits.
+bool list_exists(string filename, int part=0) {
+  if (part>0) filename=list_subpart(filename, part);
+  int len=filename.size();
+  if (len<1) return false;
+  if (filename[len-1]=='/') filename=filename.substr(0, len-1);
+  return GetFileAttributes(list_utow(filename.c_str(), true).c_str())
+         !=INVALID_FILE_ATTRIBUTES;
+}
+
+
+// Print error message
+void list_printerr(const char* filename) {
+  int err=GetLastError();
+  list_printutf8(filename, stderr);
+  if (err==ERROR_FILE_NOT_FOUND)
+    fprintf(stderr, ": file not found\n");
+  else if (err==ERROR_PATH_NOT_FOUND)
+    fprintf(stderr, ": path not found\n");
+  else if (err==ERROR_ACCESS_DENIED)
+    fprintf(stderr, ": access denied\n");
+  else if (err==ERROR_SHARING_VIOLATION)
+    fprintf(stderr, ": sharing violation\n");
+  else if (err==ERROR_BAD_PATHNAME)
+    fprintf(stderr, ": bad pathname\n");
+  else if (err==ERROR_INVALID_NAME)
+    fprintf(stderr, ": invalid name\n");
+  else
+    fprintf(stderr, ": Windows error %d\n", err);
+}
+
+// Base class of InputFile and list_OutputFile (OS independent)
+class list_File {
+protected:
+  enum {BUFSIZE=1<<16};  // buffer size
+  int ptr;  // next byte to read or write in buf
+  libzpaq::Array<char> buf;  // I/O buffer
+  libzpaq::AES_CTR *aes;  // if not NULL then encrypt
+  int64_t eoff;  // extra offset for multi-file encryption
+  list_File(): ptr(0), buf(BUFSIZE), aes(0), eoff(0) {}
+};
+
+// list_File types accepting UTF-8 filenames
+
+class list_InputFile: public list_File, public libzpaq::Reader {
+  HANDLE in;  // input file handle
+  DWORD n;    // buffer size
+public:
+  list_InputFile():
+    in(INVALID_HANDLE_VALUE), n(0) {}
+
+  // Open for reading. Return true if successful.
+  // Encrypt with aes+e if aes.
+  bool open(const char* filename, libzpaq::AES_CTR* a=0, int64_t e=0) {
+
+    n=ptr=0;
+    std::wstring w=list_utow(filename, true);
+    in=CreateFile(w.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL,
+                  OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (in==INVALID_HANDLE_VALUE) list_printerr(filename);
+    aes=a;
+    eoff=e;
+    return in!=INVALID_HANDLE_VALUE;
+  }
+
+  bool isopen() {return in!=INVALID_HANDLE_VALUE;}
+
+  // Read 1 byte
+  int get() {
+    if (ptr>=int(n)) {
+
+      ptr=0;
+      ReadFile(in, &buf[0], BUFSIZE, &n, NULL);
+      if (n==0) return EOF;
+      if (aes) {
+        int64_t off=tell()+eoff;
+        if (off<32) libzpaq::error("attempt to read salt");
+        aes->encrypt(&buf[0], n, off);
+      }
+    }
+
+    return buf[ptr++]&255;
+  }
+
+  // set file pointer
+  void seek(int64_t pos, int whence) {
+    if (whence==SEEK_SET) whence=FILE_BEGIN;
+    else if (whence==SEEK_END) whence=FILE_END;
+    else if (whence==SEEK_CUR) {
+      whence=FILE_BEGIN;
+      pos+=tell();
+    }
+    long offhigh=pos>>32;
+    SetFilePointer(in, pos, &offhigh, whence);
+    n=ptr=0;
+  }
+
+  // get file pointer
+  int64_t tell() {
+    long offhigh=0;
+    DWORD r=SetFilePointer(in, 0, &offhigh, FILE_CURRENT);
+    return (int64_t(offhigh)<<32)+r+ptr-n;
+  }
+
+  // Close handle if open
+  void close() {
+    if (in!=INVALID_HANDLE_VALUE) {
+      CloseHandle(in);
+      in=INVALID_HANDLE_VALUE;
+    }
+  }
+  ~list_InputFile() {close();}
+};
+
+
+/////////////////////////////// list_Archive ///////////////////////////////
+
+// An list_Archive is a multi-part file that supports encrypted input
+class list_Archive: public libzpaq::Reader, public libzpaq::Writer {
+  libzpaq::AES_CTR* aes;  // NULL if not encrypted
+  struct FE {  // list_File element for multi-part archives
+    string fn;    // file name
+    int64_t end;  // size of previous and current files
+    FE(): end(0) {}
+    FE(const string& s, int64_t e): fn(s), end(e) {}
+  };
+  vector<FE> files;  // list of parts. only last part is writable.
+  int fi;  // current file in files
+  int64_t listoff;  // total offset over all files
+  int mode;     // 'r' or 'w' for reading or writing or 0 if closed
+  list_InputFile in; // currently open input file
+///  list_OutputFile out;  // currently open output file
+public:
+
+  // Constructor
+  list_Archive(): aes(0), fi(0), listoff(0), mode(0) {}
+
+  // Destructor
+  ~list_Archive() {close();}
+
+  // Open filename for read and write. If filename contains wildards * or ?
+  // then replace * with part number 1, 2, 3... or ? with single digits
+  // up to the last existing file. Return true if at least one file is found.
+  // If password is not NULL then assume the concatenation of the files
+  // is in encrypted format. mode_ is 'r' for reading or 'w' for writing.
+  // If the filename contains wildcards then output is to the first
+  // non-existing file, else to filename. If newsize>=0 then truncate
+  // the output to newsize bytes. If password and offset>0 then encrypt
+  // output as if previous parts had size offset and salt salt.
+  bool open(const char* filename, const char* password=0, int mode_='r',
+            int64_t newsize=-1, int64_t offset=0, const char* salt=0);
+
+  // True if archive is open
+  bool isopen() const {return files.size()>0;}
+
+  // Position the next read or write offset to p.
+  void seek(int64_t p, int whence);
+
+  // Return current file offset.
+  int64_t tell() const {return listoff;}
+
+  // Read up to n bytes into buf at current offset. Return 0..n bytes
+  // actually read. 0 indicates EOF.
+  int read(char* buf, int n) {
+
+    if (fi>=list_size(files)) return 0;
+    if (!in.isopen()) return 0;
+    n=in.read(buf, n);
+    seek(n, SEEK_CUR);
+    return n;
+  }
+
+  // Read and return 1 byte or -1 (EOF)
+  int get() {
+
+    if (fi>=list_size(files)) return -1;
+    while (listoff==files[fi].end) {
+      in.close();
+      if (++fi>=list_size(files)) return -1;
+      if (!in.open(files[fi].fn.c_str(), aes, fi>0 ? files[fi-1].end : 0))
+        libzpaq::error("cannot read next archive part");
+    }
+    ++listoff;
+    return in.get();
+  }
+
+  // Write one byte
+  void put(int c) {
+    c+=3; /// nowarning please
+	++listoff;
+  }
+
+  // Write buf[0..n-1]
+
+  // Close any open part
+  void close() {
+    if (in.isopen()) in.close();
+    if (aes) {
+      delete aes;
+      aes=0;
+    }
+    files.clear();
+    fi=0;
+    listoff=0;
+    mode=0;
+  }
+};
+
+
+void list_print_datetime(void)
+{
+	int hours, minutes, seconds, day, month, year;
+
+	time_t now;
+	time(&now);
+	struct tm *local = localtime(&now);
+
+	hours = local->tm_hour;			// get hours since midnight	(0-23)
+	minutes = local->tm_min;		// get minutes passed after the hour (0-59)
+	seconds = local->tm_sec;		// get seconds passed after the minute (0-59)
+
+	day = local->tm_mday;			// get day of month (1 to 31)
+	month = local->tm_mon + 1;		// get month of year (0 to 11)
+	year = local->tm_year + 1900;	// get year since 1900
+
+	printf("%02d/%02d/%d %02d:%02d:%02d ", day, month, year, hours,minutes,seconds);
+
+}
+
+bool list_Archive::open(const char* filename, const char* password, int mode_,
+                   int64_t newsize, int64_t offset, const char* salt) {
+
+  mode=mode_;
+
+  list_g_dimensione=0;
+  
+  // Read part files and get sizes. Get salt from the first part.
+  string next;
+
+  int64_t startscan=mtime();
+  int i;
+  for (i=1; !offset; ++i) 
+  {
+    next=list_subpart(filename, i);
+    
+	if (!list_exists(next)) break;
+    if (files.size()>0 && files[0].fn==next) break; // part overflow
+	
+    // set up key from salt in first file
+    if (!in.open(next.c_str())) libzpaq::error("cannot read archive");
+    if (i==1 && password && newsize!=0) {
+      char slt[32], key[32];
+      if (in.read(slt, 32)!=32) libzpaq::error("no salt");
+      libzpaq::stretchKey(key, password, slt);
+      aes=new libzpaq::AES_CTR(key, 32, slt);
+    }
+
+	
+    // Get file size
+    in.seek(0, SEEK_END);
+    files.push_back(FE(next,
+        in.tell()+(files.size() ? files[files.size()-1].end : 0)));
+    
+	list_g_dimensione+=in.tell();
+	in.close();
+    if (next==filename) break;  // no wildcards
+  }
+	list_print_datetime();
+	printf("Multipart scan %f s chunks %d\n",(mtime()-startscan)/1000.0,i);
+ 	
+  // If offset is not 0 then use it for the part sizes and use
+  // salt as the salt of the first part.
+  if (offset>0) {
+    files.push_back(FE("", offset));
+    files.push_back(FE(filename, offset));
+    if (password) {
+
+      char key[32]={0};
+      libzpaq::stretchKey(key, password, salt);
+      aes=new libzpaq::AES_CTR(key, 32, salt);
+    }
+  }
+
+  // Open file for reading
+  fi=files.size();
+  if (mode=='r') {
+    seek(32*(password!=0), SEEK_SET);  // open first input file
+    return files.size()>0;
+  }
+	return false;
+}
+
+void list_Archive::seek(int64_t p, int whence) {
+  if (whence==SEEK_SET) listoff=p;
+  else if (whence==SEEK_CUR) listoff+=p;
+  else if (whence==SEEK_END) listoff=(files.size() ? files.back().end : 0)+p;
+  else exit(0);
+  if (mode=='r') {
+    int oldfi=fi;
+    for (fi=0; fi<list_size(files) && listoff>=files[fi].end; ++fi);
+    if (fi!=oldfi) {
+      in.close();
+      if (fi<list_size(files) && !in.open(files[fi].fn.c_str(), aes,
+          fi>0 ? files[fi-1].end : 0))
+        libzpaq::error("cannot reopen archive after seek");
+    }
+    if (fi<list_size(files)) in.seek(listoff-files[fi].end, SEEK_END);
+  }
+}
+
+///////////////////////// NumberOfProcessors ///////////////////////////
+
+// Guess number of cores. In 32 bit mode, max is 2.
+int list_numberOfProcessors() {
+  int rc=0;  // result
+  // In Windows return %NUMBER_OF_PROCESSORS%
+  const char* p=getenv("NUMBER_OF_PROCESSORS");
+  if (p) rc=atoi(p);
+  if (rc<1) rc=1;
+  if (sizeof(char*)==4 && rc>2) rc=2;
+  return rc;
+}
+
+////////////////////////////// StringBuffer //////////////////////////
+
+// For libzpaq output to a string
+struct list_StringWriter: public libzpaq::Writer {
+  string s;
+  void put(int c) {s+=char(c);}
+};
+
+
+
+// For (de)compressing to/from a string. Writing appends bytes
+// which can be later read.
+class list_StringBuffer: public libzpaq::Reader, public libzpaq::Writer {
+  unsigned char* p;  // allocated memory, not NUL terminated, may be NULL
+  size_t al;         // number of bytes allocated, 0 iff p is NULL
+  size_t wpos;       // index of next byte to write, wpos <= al
+  size_t rpos;       // index of next byte to read, rpos < wpos or return EOF.
+  size_t limit;      // max size, default = -1
+  const size_t init; // initial size on first use after reset
+
+  // Increase capacity to a without changing size
+  void reserve(size_t a) {
+
+    if (a<=al) return;
+    unsigned char* q=0;
+    if (a>0) q=(unsigned char*)(p ? realloc(p, a) : malloc(a));
+    if (a>0 && !q) {
+      printf( "list_StringBuffer realloc %1.0f to %1.0f at %p failed\n",
+          double(al), double(a), p);
+      libzpaq::error("Out of memory");
+    }
+    p=q;
+    al=a;
+  }
+
+  // Enlarge al to make room to write at least n bytes.
+  void lengthen(unsigned n) {
+
+    if (wpos+n>limit) libzpaq::error("list_StringBuffer overflow");
+    if (wpos+n<=al) return;
+    size_t a=al;
+    while (wpos+n>=a) a=a*2+init;
+    reserve(a);
+  }
+
+  // No assignment or copy
+  void operator=(const list_StringBuffer&);
+  list_StringBuffer(const list_StringBuffer&);
+
+public:
+
+  // Direct access to data
+  unsigned char* data() {return p;}
+
+  // Allocate no memory initially
+  list_StringBuffer(size_t n=0):
+      p(0), al(0), wpos(0), rpos(0), limit(size_t(-1)), init(n>128?n:128) {}
+
+  // Set output limit
+  void setLimit(size_t n) {limit=n;}
+
+  // Free memory
+  ~list_StringBuffer() {if (p) free(p);}
+
+  // Return number of bytes written.
+  size_t size() const {return wpos;}
+
+  // Return number of bytes left to read
+  size_t remaining() const {return wpos-rpos;}
+
+  // Reset size to 0.
+  void reset() {
+    if (p) free(p);
+    p=0;
+    al=rpos=wpos=0;
+  }
+
+  // Write a single byte.
+  void put(int c) {  // write 1 byte
+    lengthen(1);
+
+    p[wpos++]=c;
+  }
+
+  // Write buf[0..n-1]
+  void write(const char* buf, int n) {
+    if (n<1) return;
+    lengthen(n);
+    memcpy(p+wpos, buf, n);
+    wpos+=n;
+  }
+
+  // Read a single byte. Return EOF (-1) and reset at end of string.
+  int get() {
+
+    return rpos<wpos ? p[rpos++] : (reset(),-1);
+  }
+
+  // Read up to n bytes into buf[0..] or fewer if EOF is first.
+  // Return the number of bytes actually read.
+  int read(char* buf, int n) {
+
+    if (rpos+n>wpos) n=wpos-rpos;
+    if (n>0) memcpy(buf, p+rpos, n);
+    rpos+=n;
+    return n;
+  }
+
+  // Return the entire string as a read-only array.
+  const char* c_str() const {return (const char*)p;}
+
+  // Truncate the string to size i.
+  void resize(size_t i) {wpos=i;}
+
+  // Write a string.
+  void operator+=(const string& t) {write(t.data(), t.size());}
+
+  // Swap efficiently (init is not swapped)
+  void swap(list_StringBuffer& s) {
+    std::swap(p, s.p);
+    std::swap(al, s.al);
+    std::swap(wpos, s.wpos);
+    std::swap(rpos, s.rpos);
+    std::swap(limit, s.limit);
+  }
+};
+
+////////////////////////////// misc ///////////////////////////////////
+
+
+// Read 4 byte little-endian int and advance s
+int list_btoi(const char* &s) {
+  s+=4;
+  return (s[-4]&255)|((s[-3]&255)<<8)|((s[-2]&255)<<16)|((s[-1]&255)<<24);
+}
+
+// Read 8 byte little-endian int and advance s
+int64_t list_btol(const char* &s) {
+  int64_t r=unsigned(list_btoi(s));
+  return r+(int64_t(list_btoi(s))<<32);
+}
+
+
+
+/////////////////////////////// Jidac /////////////////////////////////
+
+// A Jidac object represents an archive contents: a list of file
+// fragments with hash, size, and archive offset, and a list of
+// files with date, attributes, and list of fragment pointers.
+// Methods add to, extract from, compare, and list the archive.
+
+// enum for list_HT::csize and version
+static const int64_t LIST_HT_BAD=   -0x7FFFFFFFFFFFFFFALL;  // no such frag
+static const int64_t LIST_DEFAULT_VERSION=99999999999999LL; // unless -until
+
+// fragment hash table entry
+struct list_HT {
+  unsigned char sha1[20];  // fragment hash
+  int usize;      // uncompressed size, -1 if unknown
+  int64_t csize;  // if >=0 then block offset else -fragment number
+  list_HT(const char* s=0, int u=-1, int64_t c=LIST_HT_BAD) {
+    if (s) memcpy(sha1, s, 20);
+    else memset(sha1, 0, 20);
+    usize=u; csize=c;
+  }
+};
+
+// filename version entry
+struct list_DTV {
+  int64_t date;          // decimal YYYYMMDDHHMMSS (UT) or 0 if deleted
+  int64_t size;          // size or -1 if unknown
+  int64_t attr;          // first 8 attribute bytes
+  double csize;          // approximate compressed size
+  vector<unsigned> ptr;  // list of fragment indexes to list_HT
+  int version;           // which transaction was it added?
+  list_DTV(): date(0), size(0), attr(0), csize(0), version(0) {}
+};
+
+// filename entry
+struct list_DT {
+  int64_t edate;         // date of external file, 0=not found
+  int64_t esize;         // size of external file
+  int64_t eattr;         // external file attributes ('u' or 'w' in low byte)
+  uint64_t sortkey;      // determines sort order for compression
+  vector<unsigned> eptr; // fragment list of external file to add
+  vector<list_DTV> dtv;       // list of versions
+  int written;           // 0..ptr.size() = fragments output. -1=ignore
+  list_DT(): edate(0), esize(0), eattr(0), sortkey(0), written(-1) {}
+};
+typedef map<string, list_DT> list_DTMap;
+
+// Version info
+struct list_VER {
+  int64_t date;          // 0 if not JIDAC
+  int64_t usize;         // uncompressed size of files
+  int64_t offset;        // start of transaction
+  int64_t csize;         // size of compressed data, -1 = no index
+  int updates;           // file updates
+  int deletes;           // file deletions
+  unsigned firstFragment;// first fragment ID
+  list_VER() {memset(this, 0, sizeof(*this));}
+};
+
+	
+inline void list_progress(int i_list_ver,int i_list_dt,int64_t ts, int64_t td) 
+{
+	static int ultimotempo=0;
+	int secondi=(mtime()-list_global_start)/1000;
+	if (td>ts) td=ts;
+	if (secondi!=ultimotempo)
+	{
+		ultimotempo=secondi;
+		list_print_datetime();
+		printf("V %06d (%08d) %5.2f%%  %s / %s\n",i_list_ver,i_list_dt,td*100.0/(ts+0.5),migliaia(td),migliaia2(ts));
+	}
+}
+
+#define LIST_NORMAL 0
+#define LIST_ERR 1
+#define LIST_RECOVER 2 
+#endif
+
+
 // Do everything.
 // Very weird approach, this is about plain-old C, almost zero ++
 class Jidac
@@ -39389,6 +40475,13 @@ public:
 ///	void 		internal_listpaqlevel();
 	
 private:
+#ifdef _WIN32  
+	vector<list_HT> 	list_ht;            // list of fragments
+	list_DTMap 		list_dt;                 // set of files
+	vector<list_VER> 	list_ver;          // version info
+	int64_t pakka_read_archive(const char* arc);  // read arc
+	int 	pakkalist();
+#endif
 
 	string				fullcommandline;
 	vector<string> 		results;     	// warning and errors
@@ -39549,8 +40642,10 @@ private:
 	int 		searchcomments(string i_testo,vector<DTMap::iterator> &filelist);
 	string 		zfs_get_snaplist(string i_header,string i_footer,vector<string>& o_array_primachiocciola,vector<string>& o_array_dopochiocciola);
 	string 		sanitizzanomefile(string i_filename,int i_filelength,int& io_collisioni,MAPPAFILEHASH& io_mappacollisioni);
-	///void 		getpasswordifempty();
-	///string 		getpasswordblind();
+#ifdef _WIN32
+	void 		getpasswordifempty();
+	string 		getpasswordblind();
+#endif
 	string 		getpassword();
 	int			writesfxmodule(string i_filename);
 #ifdef _WIN32
@@ -39632,7 +40727,6 @@ size_t			i_buffersize
 	void		htdecoder();
 	void		dtdecoder();
 	bool 		noselection();
-
 };
 
 Jidac* pjidac;
@@ -40396,7 +41490,7 @@ uint32_t Jidac::casekollision(DTMap& i_dtmap,vector<string>& o_collisions,bool i
 		myprintf("40075: done in %.2fs\n",(endkoll-startkoll)*0.001);
 	return (fixed);
 }
-/*
+#ifdef _WIN32
 string Jidac::getpasswordblind()
 {
 	string myresult="";
@@ -40434,8 +41528,9 @@ string Jidac::getpasswordblind()
 	myprintf("\n");
 	return myresult;
 }
-*/
-/*
+#endif
+
+#ifdef _WIN32
 void Jidac::getpasswordifempty()
 {
 	if (g_password==NULL)
@@ -40448,12 +41543,12 @@ void Jidac::getpasswordifempty()
 				libzpaq::SHA256 sha256;
 				for (unsigned int i=0;i<spassword.size();i++)
 					sha256.put(spassword[i]);
-				memcpy(password_string, sha256.result(), 32);
-				g_password=password_string;
+				memcpy(g_password_string, sha256.result(), 32);
+				g_password=g_password_string;
 			}
 		}
 }
-*/
+#endif
 void Jidac::jidacreset()
 {
 	g_freeze="";
@@ -43876,6 +44971,26 @@ string help_rd(bool i_usage,bool i_example)
 		moreprint("Remove folder z:\\kajo:     rd z:\\kajo -force -kill -space");
 	return ("Remove hard-to-delete Windows' folder (ex. path too lengthy)");
 }
+string help_pakka(bool i_usage,bool i_example)
+{
+	if (i_usage)
+	{
+		moreprint("CMD   pakka (create zpaqlist-compatible output)");
+		moreprint("+ :               Delete hard-to-remove dir (like rd /s or rm -r)");
+		moreprint("+ : -all          All version(s)");
+		moreprint("+ : -distinct     Do not deduplicate output");
+		moreprint("+ : -until X      Choose version X");
+		moreprint("+ : -out thefile  Write output on thefile");
+	}
+	if (i_usage && i_example) moreprint("    Examples:");
+	if (i_example)
+	{
+		moreprint("List to file                pakka h:\\zarc\\1.zpaq -out z:\\default.txt");
+		moreprint("Disable de-duplicator       pakka h:\\zarc\\1.zpaq -all -distinct -out z:\\default.txt");
+		moreprint("Get version 10              pakka h:\\zarc\\1.zpaq -until 10 -out z:\\10.txt");
+	}
+	return ("Auxiliary output for third-party extractor software");
+}
 #endif
 string help_fzf(bool i_usage,bool i_example)
 {
@@ -45213,6 +46328,7 @@ void Jidac::load_help_map()
 	help_map.insert(std::pair<string, voidhelpfunction>("gui",help_gui));
 #endif
 #if defined(_WIN32)
+	help_map.insert(std::pair<string, voidhelpfunction>("pakka",			help_pakka));
 	help_map.insert(std::pair<string, voidhelpfunction>("ads",help_ads));
 	help_map.insert(std::pair<string, voidhelpfunction>("g",help_g));
 	help_map.insert(std::pair<string, voidhelpfunction>("q",help_q));
@@ -46206,6 +47322,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 	g_programflags.add(&flagnorecursion,	"-norecursion",			"Do not recurse into folders (default: YES)",		"");
 	g_programflags.add(&flagnosort,			"-nosort",				"Do not sort file",									"");
 	g_programflags.add(&flagpakka,			"-pakka",				"New output",										"");
+	g_programflags.add(&flagdistinct,		"-distinct",			"PAKKA zpaqlist",										"");
 	g_programflags.add(&flagparanoid,		"-paranoid",			"Paranoid",											"");
 	///g_programflags.add(&flagpaq,			"-paq",					"Enable paq-levels",											"");
 	g_programflags.add(&flagcollision,		"-collision",			"Collision check",											"");
@@ -46666,6 +47783,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 #endif
 	else
 		if ((
+		opt=="pakka" 			||
 		opt=="add" 				||
 		opt=="backup"			||
 		opt=="append"			||
@@ -46727,6 +47845,8 @@ int Jidac::loadparameters(int argc, const char** argv)
 				command='L';
 				flagpakka=true;
 			}
+			if (opt=="pakka")
+				command='.';
 			if (opt=="zfsreceive")
 				command=';';
 			if (opt=="zfsbackup")
@@ -46943,6 +48063,9 @@ int Jidac::loadparameters(int argc, const char** argv)
 ///				string fixedstring=windows_fixbackslash("-to",mytemp);
 				myreplaceall(mytemp,"\"","");
 				tofiles.push_back(mytemp);
+				if ((!flagpakka) && (!flagsilent) && (!flagstdout))
+					myprintf("48042: franz:%-21s <<%s>>\n","-to",mytemp.c_str());
+
 			}
 			if (tofiles.size()==0)
 				tofiles.push_back("");
@@ -47263,6 +48386,11 @@ int Jidac::doCommand()
 			myprintf("46963: the archive must be multipart (with some ?) for -chunk\n");
 			return 2;
 		}
+		if (g_indexname!="")
+		{
+			myprintf("47268: -chunk incompatible with -index\n");
+			return 2;
+		}
 	}
   // Execute command
 	if ( (command=='a')  && files.size()>0) // enforce: we do not want to change anything when adding
@@ -47358,6 +48486,7 @@ int Jidac::doCommand()
 	else if (command=='D') return dump();
 	else if (command=='R') return redu();
 #ifdef _WIN32
+	else if (command=='.') return pakkalist();
 	else if (command=='S') return ads();
 #endif
 	
@@ -48079,7 +49208,7 @@ void Jidac::scandir(bool i_checkifselected,DTMap& i_edt,string filename, bool i_
 			/// Houston, we have a strange deduplicated .vhdx file?
 			/// add as by default
 			if (flagdebug)
-				myprintf("47812: Founded something strange (VHDX?) %s\n",t.c_str());
+				myprintf("47812: Something strange (VHDX?) FILE_ATTRIBUTE_REPARSE_POINT not DIR %s\n",t.c_str());
 		}
 		else
 		{
@@ -55973,7 +57102,7 @@ void my_handler(int s)
 
 
 ///	  exit(0);
-	if ((!flaghashdeep) && (!flagstdout) && (command!='L') && (command!='F')) /// we need to make output compatible with hashdeep?
+	if ((!flaghashdeep) && (!flagstdout) && (command!='L') && (command!='F') && (command!='.')) /// we need to make output compatible with hashdeep?
 	{
 		myprintf("55662: %1.3f seconds (%s) ", (mtime()-g_start)/1000.0,timetohuman((uint32_t)((mtime()-g_start)/1000.0)).c_str());
 
@@ -58015,15 +59144,35 @@ class multipart
 		partarray.clear();
 		int parts	=0;  // number of existing parts in multipart
 		string part0=subpart(i_filename,0);
+		myprintf("61956: part0 %s i_filename %s\n",part0.c_str(),i_filename.c_str());
+		
 		string thehole	="";
 		for (int i=1;; ++i)
 		{
 			string partname=subpart(i_filename,i);
+			if (flagdebug2)
+			myprintf("61962: partname on %08d %s\n",i,partname.c_str());
+			
 			if (partname==part0)
 				error("84285: too many archive parts");
 			if (!fileexists(partname))
 			{
 				thehole=partname;
+				if (flagdebug3)
+					myprintf("61990: filenamearraysize %08d partname %08d does not exists\n",filenamearray.size(),i,partname.c_str());
+				if (i==1)
+					thehole="";
+				else
+					if ((filenamearray.size()>0) && (i>0))
+				{
+					if (flagdebug3)
+					{
+						myprintf("61995: last filenamearraysize %s\n",filenamearray[filenamearray.size()-1].filename.c_str());
+						myprintf("61996: i-1                    %s\n",subpart(i_filename,i-1).c_str());
+					}
+					if (filenamearray[filenamearray.size()-1].filename==subpart(i_filename,i-1)) 
+						thehole="";
+				}
 				break;
 			}
 			else
@@ -58036,16 +59185,18 @@ class multipart
 				myblock.isdir=isdirectory(partname);
 				myblock.flaghashstored=false;
 				partarray.push_back(myblock);
+				if (flagdebug2)
+					myprintf("61928: pushing on partarray the partname %s\n",partname.c_str());
 			}
 			++parts;
 		}
 		std::sort(partarray.begin(),partarray.end(),comparefilename);
-		isgood=filenamearray.size()==partarray.size();
+		isgood=(thehole=="");// filenamearray.size()==partarray.size();
 
-		if (!isgood)
+		if (thehole!="")
 		{
 		///	myprintf("84478: PART NUMBER MISMATCH: disk %s vs part %s (HOLE IN %s)\n",migliaia(filenamearray.size()),migliaia2(partarray.size()),thehole.c_str());
-			myprintf("84478: AT LEAST ONE HOLE DETECTED! <<");
+			myprintf("84478: [1] AT LEAST ONE HOLE DETECTED! <<");
 			printUTF8(thehole.c_str());
 			myprintf(">>\n");
 
@@ -60872,11 +62023,13 @@ int Jidac::decimation()
 		myprintf("28966: only one dir can be elaborated\n");
 		return 1;
 	}
+#ifdef _WIN32
 	if (mypos("*",files[0])==-1)
 	{
 		myprintf("29053: * pattern requested (ex. /tmp/dump_*.sql)\n");
 		return 1;
 	}
+#endif
 	franzparallelscandir(false,false,false);
 	myprintf("\n");
 	if (files_edt[0].size()==0)
@@ -62219,6 +63372,8 @@ int Jidac::add()
 		else
 			libzpaq::random(salt, 32);
   }
+
+	int parts=0;  // number of existing parts in multipart
   // Remote archive
   if (index) {
     if (dcsize>0) error("index is a regular archive");
@@ -62249,7 +63404,6 @@ int Jidac::add()
   // Local single or multi-part archive
 	else 
 	{
-		int parts=0;  // number of existing parts in multipart
 		string part0=subpart(archive, 0);
 		///myprintf("61305: part0 %s   archive %s\n",part0.c_str(),archive.c_str());
 		
@@ -62270,7 +63424,8 @@ int Jidac::add()
 			
 			header_pos=32*(g_password && parts==0);
 			arcname=subpart(archive, parts+1);
-	///		myprintf("61321: archive %s arcname, parts+1 %s %d\n",archive.c_str(),arcname.c_str(),parts+1);
+			if (flagdebug3)
+				myprintf("61321: archive %s arcname, parts+1 %s %d\n",archive.c_str(),arcname.c_str(),parts+1);
 			if (exists(arcname)) 
 				error("part exists");
 
@@ -62369,6 +63524,9 @@ int Jidac::add()
 			}
 		}
 	}
+	
+	
+	
 	g_archive=arcname; /// for multipart the last
 	
 	int64_t	starting_zpaqdate=0;
@@ -62753,13 +63911,7 @@ int Jidac::add()
 			myprintf("----end files forced\n");
 		}
 	}
-	/*
-	if (flagstdin)
-		for (DTMap::iterator p=edt.begin(); p!=edt.end(); ++p)
-			vf.push_back(p);
-
-	if (!flagstdin)
-		*/
+	
 	for (DTMap::iterator p=edt.begin(); p!=edt.end(); ++p)
 	{
 			string filename=rename(p->first);
@@ -62942,6 +64094,60 @@ int Jidac::add()
 		return 1;
 	}
 
+
+	if (!flagspace)
+		if (g_chunk_size>0)
+		{
+			int64_t extsize=0;
+			for (DTMap::iterator p=edt.begin(); p!=edt.end(); ++p)
+				if (!isdirectory(p->first))
+					extsize+=p->second.size;
+
+			int64_t maxpart=10;
+			int		questioncounter=0;
+			for (unsigned int i=0;i<archive.size();i++)
+				if (archive[i]=='?')
+				{
+					maxpart*=10;
+					questioncounter++;
+				}
+			maxpart/=10;
+			maxpart--;
+			int64_t freepart=maxpart-parts-1;
+			if (flagdebug3)
+				myprintf("62775: maxpart can be %s\n",migliaia(maxpart));
+			int64_t availablepart=g_chunk_size*freepart;
+			if (availablepart<extsize)
+			{
+				myprintf("62968: Last used part %s / max %s w/archive pattern %s\n",migliaia(parts),migliaia2(maxpart),archive.c_str());
+				string frompart=itos(parts+1,questioncounter);
+				string topart=itos(maxpart,questioncounter);
+				
+				myprintf("62769: Parts [%s-%s] %s * (-chunk) %s = %s < %s (worst-case space needed)\n",
+				frompart.c_str(),topart.c_str(),
+				migliaia(freepart),
+				tohuman(g_chunk_size),tohuman2(availablepart),tohuman3(extsize));
+				int64_t suggestedsize=(extsize/freepart);//*110/100;
+				string ssuggested=tohuman(suggestedsize);
+				if (flagdebug3)
+					myprintf("62938: ssuggested |%s|\n",ssuggested.c_str());
+				string firstpart="";
+				unsigned int i=0;
+				while ((i<ssuggested.size()) && (isdigit(ssuggested[i])))
+					firstpart+=ssuggested[i++];
+				int64_t ifirst=myatoll(firstpart.c_str())+1;
+				string	rounded=itos(ifirst)+myright(ssuggested,2);
+				if (flagdebug3)
+				{
+					myprintf("62988: first   |%s|\n",firstpart.c_str());
+					myprintf("62988: ifirst  |%d|\n",ifirst);
+					myprintf("62988: rounded |%s|\n",rounded.c_str());
+				}
+				myprintf("62771: Bigger -chunk size needed (at least %s). Use -space to bypass\n",rounded.c_str());
+				return 2;
+			}		
+		}
+
 	if (flagdebug3)
 	{
 		unsigned i=0;
@@ -62982,6 +64188,7 @@ int Jidac::add()
 			}
 		}
 	}
+	
 
   // Test for reliable access to archive
   if (archive_exists!=exists(subpart(archive, 1).c_str()))
@@ -63069,7 +64276,7 @@ int Jidac::add()
 #endif
 
 	if (flagdebug2)
-		myprintf("62166: calling open archive %s arcnamae %s with offset %s\n",archive.c_str(),arcname.c_str(),migliaia(offset));
+		myprintf("62166: calling open archive %s arcname %s with offset %s\n",archive.c_str(),arcname.c_str(),migliaia(offset));
   // Open output
 	OutputArchive out(archive,arcname.c_str(), g_password, salt, offset);
 	if (flagdebug2)
@@ -64487,9 +65694,18 @@ int Jidac::add()
 			
 		int64_t myarchive_end=archive_end;		
 		string inchunks="";
+		string intotalsize="";
+		///fika
 			if (g_chunk_size>0)
-				inchunks="[CHUNKS]";
-			
+			{
+				inchunks="[CKS #"+itos(out.filepartnames.size()+1)+"]";
+				intotalsize="[TOT]";
+			}
+			else
+			if (g_flagmultipart)
+			{
+				intotalsize="[LAST]";
+			}
 		if (g_chunk_size>0)  // we have multiple output
 			if (out.filepartnames.size()>0)
 			{
@@ -64502,13 +65718,14 @@ int Jidac::add()
 						myarchive_end+=prendidimensionefile(out.filepartnames[i].c_str());
 				}
 			}
+		///myprintf("64112: ZZZ %21s myarchive_end initial_archive_size %s\n",migliaia4(myarchive_end),migliaia(initial_archive_size));
 			
 		if (flagverbose)
 		{
 			myprintf("64078: %21s starting size\n",migliaia(initial_archive_size));
 			myprintf("64110: %21s data to be added\n",migliaia2(total_size));
 			myprintf("64111: %21s after deduplication\n",migliaia3(dedupesize));
-			myprintf("64112:+%21s after compression %s\n",migliaia4(myarchive_end-initial_archive_size),inchunks.c_str());
+			myprintf("64112:+%21s after compression\n",migliaia4(myarchive_end));//-initial_archive_size),inchunks.c_str());
 			myprintf("64113: %21s total size %s\n",migliaia5(myarchive_end),inchunks.c_str());
 			myprintf("64114: Total speed %s/s\n",tohuman(speed));
 			myprintf("64115: IO buffer %s\n",migliaia6(g_ioBUFSIZE));
@@ -64522,14 +65739,19 @@ int Jidac::add()
 			}
 			else
 			{
+				int64_t global_file_len=prendidimensionefile(g_archive.c_str());
+
 				myprintf("\n");
-				myprintf("64037: %s + (%s -> %s -> %s %s) = %s @ %s/s\n",
+				if (g_chunk_size>0)  // we have multiple output
+						global_file_len=myarchive_end+initial_archive_size;
+				myprintf("64037: %s + (%s -> %s -> %s %s) = %s %s @ %s/s\n",
 						migliaia(initial_archive_size), 
 						migliaia2(total_size), 
 						migliaia3(dedupesize),
 						inchunks.c_str(),
-						migliaia4(myarchive_end-initial_archive_size), 
-						migliaia5(myarchive_end),
+						migliaia4(myarchive_end), 
+						migliaia5(global_file_len),
+						intotalsize.c_str(),
 						tohuman(speed));
 			}
 		}
@@ -66144,7 +67366,11 @@ int Jidac::summa()
 		return 0;
 	}
 	for (unsigned i=0; i<files.size(); ++i)
+	{
+	///	myprintf("67340: files %03d %s\n",i,files[i].c_str());
 		scandir(true,edt,files[i].c_str());
+	}
+	///myprintf("67341: edt size %s\n",migliaia(edt.size()));
 	if (flagverify)
 	{
 //	deduplication: I am very lazy, so do a lot of copy
@@ -86565,7 +87791,7 @@ void gui_about()
 	mvwprintw(dialogo,3,2,"Windows,FreeBSD,OpenBSD,Linux,MacOS,Solaris,OmniOS and others");
 	mvwprintw(dialogo,5,2,"         https://sourceforge.net/projects/zpaqfranz/");
 	mvwprintw(dialogo,7,2,"         Provided as-is, with no warranty whatsoever");
-	mvwprintw(dialogo,8,2,"           Copyright (c) 2021-2023 Franco Corbelli");
+	mvwprintw(dialogo,8,2,"           Copyright (c) 2021-2024 Franco Corbelli");
 	while (c!=27)
 		c=wgetch(dialogo);
 	delwin(dialogo);
@@ -89644,6 +90870,7 @@ int64_t Jidac::read_archive(callback_function i_advance,const char* arc, int *er
 		if (!i_quiet)
 			if (!flagpakka)
 			{
+				myprintf("\n");
 				myprintf("89319: ");
 				printUTF8(arc);
 				if (version==DEFAULT_VERSION) myprintf(": ");
@@ -92263,3 +93490,628 @@ void Jidac::blockdecoder()
 	}
 }	
 
+
+
+#ifdef _WIN32
+
+// Read arc (default: archive) up to -date into ht, dt, ver. Return place to
+// append. If errors is not NULL then set it to number of errors found.
+int64_t Jidac::pakka_read_archive(const char* arc) 
+{
+	int errors=0;
+	dcsize=dhsize=0;
+
+	///getpasswordifempty(); => we do not want console interaction
+	list_Archive in;
+	if (!in.open(arc, g_password)) 
+	{
+		list_printutf8(arc, stderr);
+		printf( " not found.\n");
+		return 2;
+	}
+  
+	list_print_datetime();
+
+	if (all)
+		printf(":all");
+	else
+	{
+		if (version==LIST_DEFAULT_VERSION) 
+			printf( ":default");
+		else 
+			printf( ":until %1.0f: ", version+0.0);
+	}
+	printf("\n");
+  
+  // Test password
+	if (g_password) 
+	{
+		char s[4]={0};
+		const int nr=in.read(s, 4);
+		if (nr>0 && memcmp(s, "7kSt", 4) && (memcmp(s, "zPQ", 3) || s[3]<1))
+		{
+			list_print_datetime();
+			printf( "zpaqlist:password incorrect\n");
+			exit(1);
+		}
+		in.seek(-nr, SEEK_CUR);
+	}
+
+	list_global_start=mtime();
+	
+	// Scan archive contents
+	string lastfile=arc; // last named file in streaming format
+	if (list_size(lastfile)>5)
+		lastfile=lastfile.substr(0, list_size(lastfile)-5); // drop .zpaq
+	int64_t block_offset=32*(g_password!=0);  // start of last block of any type
+	int64_t data_offset=block_offset;    // start of last block of d fragments
+	int64_t segment_offset=block_offset; // start of last segment
+	bool found_data=false;   // exit if nothing found
+	bool first=true;         // first segment in archive?
+	int  pass=LIST_NORMAL;  // recover ht from data blocks?
+	list_StringBuffer os(32832);  // decompressed block
+	map<int64_t, double> compressionRatio;  // block offset -> compression ratio
+
+	int lastver			=0;
+	int blocchini		=0;
+	int64_t total_time	=0;
+	
+	bool done=false;
+	while (!done) 
+	{
+		try {
+			/*
+				if (flagpakka)
+					if (lastver<1)
+					{
+						list_print_datetime(); 
+						printf( "S2\n");
+					}
+				*/
+      // If there is an error in the h blocks, scan a second time in RECOVER
+      // mode to recover the redundant fragment data from the d blocks.
+				libzpaq2::list_Decompresser d;
+				d.setInput(&in);
+				if (d.findBlock())
+					found_data=true;
+				else 
+				if (pass==LIST_ERR) 
+				{
+					segment_offset=block_offset=32*(g_password!=0);
+					in.seek(block_offset, SEEK_SET);
+					if (!d.findBlock()) break;
+					pass=LIST_RECOVER;
+					printf( "Attempting to recover fragment tables...\n");
+				}
+				else
+					break;
+	
+				if ((list_size(list_ver)-1)!=lastver)
+				{
+					if (flagpakka)
+					{
+						if (((list_size(list_ver)-1)%2))
+						{
+							int64_t startprintf=mtime();
+							
+							
+							///printf( "V %06d (%08d) ", list_size(list_ver)-1, list_size(list_dt));
+							///list_progress(list_g_dimensione,  block_offset);
+							list_progress(list_size(list_ver)-1,list_size(list_dt),list_g_dimensione,  block_offset);
+							fflush(stdout);
+							total_time+=mtime()-startprintf;
+						}
+					}
+					lastver=list_size(list_ver)-1;
+				}
+		
+		
+      // Read the segments in the current block
+				list_StringWriter filename, comment;
+				int segs=0;
+				while (d.findFilename(&filename)) 
+				{
+					if (filename.s.size()) 
+					{
+						for (unsigned i=0; i<filename.s.size(); ++i)
+							if (filename.s[i]=='\\') filename.s[i]='/';
+								lastfile=filename.s.c_str();
+					}
+					comment.s="";
+					d.readComment(&comment);
+					if (flagdebug3)
+					{
+						myprintf("04656: filename %s\n",filename.s.c_str());
+						myprintf("04656: comment  %s\n",comment.s.c_str());
+						myprintf("04958: in.tell 1 %d\n",in.tell());
+					}
+					
+					if (lastver<2)
+					{
+						if (flagpakka)
+						{
+							if (!(blocchini%1000))
+							{
+								int64_t startprintf=mtime();
+								list_print_datetime();
+								printf( "Current block %08d\n", blocchini);
+								fflush(stdout);
+								total_time+=mtime()-startprintf;
+							}
+						}
+						blocchini++;
+					}
+		
+
+					int64_t usize=0;  // read uncompressed size from comment or -1
+					int64_t fdate=0;  // read date from filename or -1
+					int64_t fattr=0;  // read attributes from comment as wN or uN
+					unsigned num=0;   // read fragment ID from filename
+					const char* p=comment.s.c_str();
+					for (; isdigit(*p); ++p)  // read size
+					  usize=usize*10+*p-'0';
+					if (p==comment.s.c_str()) usize=-1;  // size not found
+					for (; *p && fdate<19000000000000LL; ++p)  // read date
+					  if (isdigit(*p)) fdate=fdate*10+*p-'0';
+					if (fdate<19000000000000LL || fdate>=30000000000000LL) fdate=-1;
+
+					// Read the comment attribute wN or uN where N is a number
+					int attrchar=0;
+					for (; true; ++p) 
+					{
+						if (*p=='u' || *p=='w') 
+						{
+							attrchar=*p;
+							fattr=0;
+						}
+						else 
+						if (isdigit(*p) && (attrchar=='u' || attrchar=='w'))
+							fattr=fattr*10+*p-'0';
+						else 
+						if (attrchar) 
+						{
+							fattr=fattr*256+attrchar;
+							attrchar=0;
+						}
+						if (!*p) 
+							break;
+					}
+
+        // Test for JIDAC format. Filename is jDC<fdate>[cdhi]<num>
+        // and comment ends with " jDC\x01"
+					if (comment.s.size()>=4
+						&& usize>=0
+						&& comment.s.substr(comment.s.size()-4)=="jDC\x01"
+						&& filename.s.size()==28
+						&& filename.s.substr(0, 3)=="jDC"
+						&& strchr("cdhi", filename.s[17])) 
+						{
+
+						  // Read the date and number in the filename. Skip over zpaqfranz
+							num		=0;
+							fdate	=0;
+							for (unsigned i=3; i<17 && isdigit(filename.s[i]); ++i)
+								fdate=fdate*10+filename.s[i]-'0';
+							for (unsigned i=18; i<filename.s.size() && isdigit(filename.s[i]);++i)
+								num=num*10+filename.s[i]-'0';
+
+							// Decompress the block. In recovery mode, only decompress
+							// data blocks containing missing list_HT data.
+							os.reset();
+							os.setLimit(usize);
+							d.setOutput(&os);
+							libzpaq::SHA1 sha1;
+							d.setSHA1(&sha1);
+							if (pass!=LIST_RECOVER || (filename.s[17]=='d' && num>0 &&
+							  num<list_ht.size() && list_ht[num].csize==LIST_HT_BAD)) 
+								{
+									d.decompress();
+									char sha1result[21]={0};
+									d.readSegmentEnd(sha1result);
+									if (usize!=int64_t(sha1.usize())) 
+									{
+										printf( "%s size should be %1.0f, is %1.0f\n",
+											  filename.s.c_str(), double(usize),
+											  double(sha1.usize()));
+										libzpaq::error("incorrect block size");
+									}
+									if (sha1result[0] && memcmp(sha1result+1, sha1.result(), 20)) 
+									{
+										printf( "%s checksum error\n", filename.s.c_str());
+										libzpaq::error("bad checksum");
+									}
+								}
+							else
+							d.readSegmentEnd();
+
+							
+							  // Transaction header (type c).
+							  // If in the future then stop here, else read 8 byte data size
+							  // from input and jump over it.
+							if (filename.s[17]=='c' && fdate>=19000000000000LL
+								  && fdate<30000000000000LL && pass!=LIST_RECOVER) 
+								{
+									data_offset=in.tell()+1;
+									bool isbreak=version<19000000000000LL ? list_size(list_ver)>version :
+												 version<fdate;
+									int64_t jmp=0;
+									if (!isbreak && os.size()==8) 
+									{  // jump
+										const char* s=os.c_str();
+										jmp=list_btol(s);
+										if (jmp<0) 
+										{
+											printf( "Incomplete transaction ignored\n");
+											isbreak=true;
+										}
+										else 
+										if (jmp>0) 
+										{
+											dcsize+=jmp;
+											in.seek(jmp, SEEK_CUR);
+										}
+									}
+									if (os.size()!=8) 
+									{
+										printf( "Bad JIDAC header size: %d\n", list_size(os));
+										isbreak=true;
+										++errors;
+									}
+									if (isbreak) 
+									{
+										done=true;
+										break;
+									}
+									list_ver.push_back(list_VER());
+									list_ver.back().firstFragment=list_size(list_ht);
+									list_ver.back().offset=block_offset;
+									list_ver.back().date=fdate;
+									list_ver.back().csize=jmp;
+								}
+
+          // Fragment table (type h).
+          // Contents is bsize[4] (sha1[20] usize[4])... for fragment N...
+          // where bsize is the compressed block size.
+          // Store in ht[].{sha1,usize}. Set ht[].csize to block offset
+          // assuming N in ascending order.
+          else if (filename.s[17]=='h' && num>0 && os.size()>=4
+                   && pass!=LIST_RECOVER) {
+            const char* s=os.c_str();
+            const unsigned bsize=list_btoi(s);
+            dhsize+=bsize;
+
+            const unsigned n=(os.size()-4)/24;
+            if (list_ht.size()>num) {
+              printf(
+                "Unordered fragment tables: expected >= %d found %1.0f\n",
+                list_size(list_ht), double(num));
+              pass=LIST_ERR;
+            }
+            double usum=0;  // total uncompressed size
+            for (unsigned i=0; i<n; ++i) {
+              while (list_ht.size()<=num+i) list_ht.push_back(list_HT());
+              memcpy(list_ht[num+i].sha1, s, 20);
+              s+=20;
+              if (list_ht[num+i].csize!=LIST_HT_BAD) libzpaq::error("duplicate fragment ID");
+              usum+=list_ht[num+i].usize=list_btoi(s);
+              list_ht[num+i].csize=i?-int(i):data_offset;
+            }
+            if (usum>0) compressionRatio[data_offset]=bsize/usum;
+            data_offset+=bsize;
+          }
+
+          // Index (type i)
+          // Contents is: 0[8] filename 0 (deletion)
+          // or:       date[8] filename 0 na[4] attr[na] ni[4] ptr[ni][4]
+          // Read into list_DT
+          else if (filename.s[17]=='i' && pass!=LIST_RECOVER) {
+            const char* s=os.c_str();
+            const char* const end=s+os.size();
+            while (s<=end-9) {
+              const char* fp=s+8;  // filename
+              list_DT& dtr=list_dt[fp];
+              dtr.dtv.push_back(list_DTV());
+              list_DTV& dtv=dtr.dtv.back();
+              dtv.version=list_size(list_ver)-1;
+              dtv.date=list_btol(s);
+
+              if (dtv.date) ++list_ver.back().updates;
+              else ++list_ver.back().deletes;
+              s+=strlen(fp)+1;  // skip filename
+              if (dtv.date && s<=end-8) {
+                const unsigned na=list_btoi(s);
+                for (unsigned i=0; i<na && s<end; ++i, ++s)  // read attr
+                  if (i<8) dtv.attr+=int64_t(*s&255)<<(i*8);
+                if (s<=end-4) {
+                  const unsigned ni=list_btoi(s);
+                  dtv.ptr.resize(ni);
+                  for (unsigned i=0; i<ni && s<=end-4; ++i) {  // read ptr
+                    const unsigned j=dtv.ptr[i]=list_btoi(s);
+                    if (j<1 || j>=list_ht.size()+(1<<24))
+                      libzpaq::error("bad fragment ID");
+                    while (j>=list_ht.size()) {
+                      pass=LIST_ERR;
+                      list_ht.push_back(list_HT());
+                    }
+                    dtv.size+=list_ht[j].usize;
+                    list_ver.back().usize+=list_ht[j].usize;
+
+                    // Estimate compressed size
+                     {
+                      unsigned k=j;
+                      if (list_ht[j].csize<0 && list_ht[j].csize!=LIST_HT_BAD)
+                        k+=list_ht[j].csize;
+                      if (k>0 && k<list_ht.size() && list_ht[k].csize!=LIST_HT_BAD
+                          && list_ht[k].csize>=0)
+                        dtv.csize+=compressionRatio[list_ht[k].csize]*list_ht[j].usize;
+                    }
+                  }
+                }
+              }
+            }
+          }
+
+          // Recover fragment sizes and hashes from data block
+          else if (pass==LIST_RECOVER && filename.s[17]=='d' && num>0
+                   && num<list_ht.size()) {
+            if (os.size()>=8 && list_ht[num].csize==LIST_HT_BAD) {
+              const char* p=os.c_str()+os.size()-8;
+              unsigned n=list_btoi(p);  // first fragment == num or 0
+              if (n==0) n=num;
+              unsigned f=list_btoi(p);  // number of fragments
+              if (n!=num)
+                printf( "fragments %u-%u were moved to %u-%u\n",
+                    n, n+f-1, num, num+f-1);
+              n=num;
+              if (f && f*4+8<=os.size()) {
+                printf( "Recovering fragments %u-%u at %1.0f\n",
+                       n, n+f-1, double(block_offset));
+                while (list_ht.size()<=n+f) list_ht.push_back(list_HT());
+                p=os.c_str()+os.size()-8-4*f;
+
+                // read fragment sizes into ht[n..n+f-1].usize
+                unsigned sum=0;
+                for (unsigned i=0; i<f; ++i) {
+                  sum+=list_ht[n+i].usize=list_btoi(p);
+                  list_ht[n+i].csize=i ? -int(i) : block_offset;
+                }
+
+                // Compute hashes
+                if (sum+f*4+8==os.size()) {
+                  printf( "Computing hashes for %s bytes\n",migliaia(sum));
+                  libzpaq::SHA1 sha1;
+                  p=os.c_str();
+                  for (unsigned i=0; i<f; ++i) {
+                    for (int j=0; j<list_ht[n+i].usize; ++j) {
+
+                      sha1.put(*p++);
+                    }
+                    memcpy(list_ht[n+i].sha1, sha1.result(), 20);
+                  }
+
+                }
+              }
+            }
+
+            // Correct bad offsets
+
+            if (list_ht[num].csize!=block_offset) {
+              printf( "Changing block %s offset from %1.0f to %1.0f\n",
+                     migliaia(num), double(list_ht[num].csize), double(block_offset));
+              list_ht[num].csize=block_offset;
+            }
+          }
+
+          // Bad JIDAC block
+          else if (pass!=LIST_RECOVER) {
+            printf( "Bad JIDAC block ignored: %s %s\n",
+                    filename.s.c_str(), comment.s.c_str());
+            ++errors;
+          }
+        }
+
+        // Streaming format
+        else if (pass!=LIST_RECOVER) {
+
+          // If previous version does not exist, start a new one
+          if (list_size(list_ver)==1) {
+            if (list_size(list_ver)>version) {
+              done=true;
+              break;
+            }
+            list_ver.push_back(list_VER());
+            list_ver.back().firstFragment=list_size(list_ht);
+            list_ver.back().offset=block_offset;
+            list_ver.back().csize=-1;
+          }
+
+          char sha1result[21]={0};
+          d.readSegmentEnd(sha1result);
+          list_DT& dtr=list_dt[lastfile];
+          if (filename.s.size()>0 || first) {
+            dtr.dtv.push_back(list_DTV());
+            dtr.dtv.back().date=fdate;
+            dtr.dtv.back().attr=fattr;
+            dtr.dtv.back().version=list_size(list_ver)-1;
+            ++list_ver.back().updates;
+          }
+
+          dtr.dtv.back().ptr.push_back(list_size(list_ht));
+          if (usize>=0 && dtr.dtv.back().size>=0) dtr.dtv.back().size+=usize;
+          else dtr.dtv.back().size=-1;
+          dtr.dtv.back().csize+=in.tell()-segment_offset;
+          if (usize>=0) list_ver.back().usize+=usize;
+          list_ht.push_back(list_HT(sha1result+1, usize>0x7fffffff ? -1 : usize,
+                          segs ? -segs : block_offset));
+
+        }
+        ++segs;
+        filename.s="";
+        first=false;
+        segment_offset=in.tell();
+		
+		///printf("04966: segment_offset  %d\n",segment_offset);
+	
+      }  // end while findFilename
+      if (!done) segment_offset=block_offset=in.tell();
+    }  // end try
+    catch (std::exception& e) {
+      block_offset=in.tell();
+      printf( "Skipping block at %1.0f: %s\n", double(block_offset),
+              e.what());
+      ++errors;
+    }
+  }  // end while !done
+  if (in.tell()>32*(g_password!=0) && !found_data)
+  {
+	list_print_datetime();
+ printf("archive contains no data\n");
+  }
+  in.close();
+
+  // Recompute file sizes in recover mode
+  if (pass==LIST_RECOVER) {
+    printf( "Recomputing file sizes\n");
+    for (list_DTMap::iterator p=list_dt.begin(); p!=list_dt.end(); ++p) {
+      for (unsigned i=0; i<p->second.dtv.size(); ++i) {
+        p->second.dtv[i].size=0;
+        for (unsigned j=0; j<p->second.dtv[i].ptr.size(); ++j) {
+          unsigned k=p->second.dtv[i].ptr[j];
+          if (k>0 && k<list_ht.size())
+            p->second.dtv[i].size+=list_ht[k].usize;
+        }
+      }
+    }
+  }
+  
+	fprintf(list_outputlog, "!%d\n", list_size(list_ver)-1); 
+///	fprintf(list_outputlog, "$%s\n", atoi(block_offset)); 
+	list_print_datetime();
+	printf( "OUTPUT...V %d, F %d, %s bytes %d blocks Otime %1.3f s\n", 
+    list_size(list_ver)-1, list_size(list_dt), migliaia(block_offset),blocchini,(total_time/1000.0));
+ 	
+  return block_offset;
+}
+
+
+/////////////////////////////// mylist //////////////////////////////////
+// List contents
+int Jidac::pakkalist() 
+{
+	// Init archive state
+	list_ht.resize	(1);  // element 0 not used
+	list_ver.resize	(1); // version 0
+	dhsize=dcsize=0;
+
+	int64_t csize=0;
+	list_outputlog=stdout;
+	list_global_start=mtime();  // get start time
+		
+	if (g_output!="")
+		list_outputlog=fopen(g_output.c_str(),"w");
+	
+	if (list_outputlog==NULL)
+	{
+		myprintf("97108: GURU cannot open -out log ");
+		printUTF8(g_output.c_str());
+		myprintf("\n");
+		seppuku();
+	}
+	csize=pakka_read_archive(archive.c_str());
+	if (csize==0)
+	{
+		myprintf("97116: Readed archive size 0\n");
+		seppuku();
+	}
+
+	vector<list_DTMap::const_iterator> filelist;
+	for (list_DTMap::iterator p=list_dt.begin(); p!=list_dt.end(); ++p)
+	{
+		if (p->second.dtv.size()<1) 
+		{
+			printf( "Invalid index entry: %s\n", p->first.c_str());
+			libzpaq::error("corrupted index");
+		}
+		if (!strstr(p->first.c_str(), ":$DATA")) //fuck off windows metadata
+			filelist.push_back(p);
+	}
+	
+/// versions
+	for (int i=0; i<list_size(list_ver); ++i) 
+		if (!(i==0 && list_ver[i].updates==0 && list_ver[i].deletes==0 && list_ver[i].date==0 && list_ver[i].usize==0))
+			fprintf(list_outputlog, "| %6d %s\n", i,list_dateToString(list_ver[i].date).c_str());
+	  
+	string lastfile="?";
+
+	unsigned int dieci=1;
+	unsigned int righe=0;
+	for (unsigned fi=0; fi<filelist.size(); ++fi) 
+	{	
+		list_DTMap::const_iterator p=filelist[fi];
+		for (unsigned i=0; i<p->second.dtv.size(); ++i) 
+			if (p->second.dtv[i].version>=1 //since
+			&& (all || (i+1==p->second.dtv.size() && p->second.dtv[i].date))) 
+			if (!strstr(p->first.c_str(), ":$DATA"))
+				righe+=4;
+	
+	}
+	/// I need line numbers at the head, not at the tail, of the output
+	fprintf(list_outputlog, "+%d\n",(int)righe);
+	
+	unsigned int blocco = (filelist.size() / 10)+1;
+	int64_t startoutput=mtime();
+	for (unsigned fi=0; fi<filelist.size(); ++fi) 
+	{	
+
+		if ((fi+1) % blocco==0)
+		{
+			list_print_datetime();
+			printf("W %03d%% %08d/%.08d\n",int((dieci++)*10),int(fi+1),(int)filelist.size());
+		}
+		list_DTMap::const_iterator p=filelist[fi];
+		for (unsigned i=0; i<p->second.dtv.size(); ++i) 
+		{
+			if (p->second.dtv[i].version>=1 //since
+			&& (all || (i+1==p->second.dtv.size() && p->second.dtv[i].date))) 
+			{
+					fprintf(list_outputlog, "-%d\n", p->second.dtv[i].version);
+					if (p->second.dtv[i].date) 
+						fprintf(list_outputlog, "%s\n%s\n",
+							list_mydateToString(p->second.dtv[i].date).c_str(),
+							migliaia(p->second.dtv[i].size));
+					else 
+						fprintf(list_outputlog, "D\n0\n");
+				
+					if (flagdistinct)
+						list_printutf8(p->first.c_str(), list_outputlog);
+					else
+					{
+						if (lastfile!=p->first.c_str())
+						{
+							list_printutf8(p->first.c_str(), list_outputlog);
+							lastfile=p->first.c_str();
+						}
+						else
+							fprintf(list_outputlog,"?");
+					}
+					fprintf(list_outputlog, "\n");
+			}
+		}
+	}
+
+	if (g_output!="")
+	{
+		fseeko(list_outputlog, 0, SEEK_END);
+		uint64_t outsize=ftello(list_outputlog);
+		list_print_datetime();
+		printf("Output %s bytes / %s lines in %1.3f s\n",migliaia(outsize),migliaia2(righe),(mtime()-startoutput)/1000.0);
+		fclose (list_outputlog);
+	}
+	
+	
+	list_print_datetime();
+	printf( "T=%1.3fs", (mtime()-list_global_start)/1000.0);
+  	printf( " (all OK)\n");
+	return 0;
+}
+#endif

@@ -52,8 +52,8 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 */
 
-#define ZPAQ_VERSION "59.2q"
-#define ZPAQ_DATE "(2024-02-23)"  // cannot use __DATE__ on Debian!
+#define ZPAQ_VERSION "59.3q"
+#define ZPAQ_DATE "(2024-04-19)"  // cannot use __DATE__ on Debian!
 
 ///	optional align for malloc (sparc64) via -DALIGNMALLOC
 #define STR(a) #a
@@ -1312,32 +1312,35 @@ especially with multipart files.
 "test_????.zpaq" is good
 test_????.zpaq   is BAD
 
+
+NOTE: from 59_3 you need to link urlmon (with a -lurlmon) on Windows
+
 TARGET EXAMPLES
 ```
 Windows 64 (g++ 7.3.0)
-g++ -O3  zpaqfranz.cpp -o zpaqfranz
+g++ -O3  zpaqfranz.cpp -o zpaqfranz -lurlmon
 
 Windows 64 (g++ 10.3.0) MSYS2
-g++ -O3  zpaqfranz.cpp -o zpaqfranz -pthread -static
+g++ -O3  zpaqfranz.cpp -o zpaqfranz -pthread -static -lurlmon
 
 Windows 64 (g++, Hardware Blake3 implementation)
 In this case, of course, linking the .S file is mandatory
-g++ -O3 -DHWBLAKE3 blake3_windows_gnu.S zpaqfranz.cpp -o zpaqfranz -pthread -static
+g++ -O3 -DHWBLAKE3 blake3_windows_gnu.S zpaqfranz.cpp -o zpaqfranz -pthread -static -lurlmon
 
 Windows 64 (g++, Hardware Blake3 implementation PLUS HW SHA1)
-g++ -O3 -DHWBLAKE3 -DHWSHA1 blake3_windows_gnu.s zpaqfranz.cpp sha1ugo.obj -o zpaqfranzhw -pthread -static
+g++ -O3 -DHWBLAKE3 -DHWSHA1 blake3_windows_gnu.s zpaqfranz.cpp sha1ugo.obj -o zpaqfranzhw -pthread -static -lurlmon
 
 Windows 64 (g++, Hardware Blake3 implementation PLUS HW SHA1/2)
-g++ -O3 -DHWBLAKE3 -DHWSHA2 blake3_windows_gnu.s zpaqfranz.cpp -o zpaqfranzhw -pthread -static
+g++ -O3 -DHWBLAKE3 -DHWSHA2 blake3_windows_gnu.s zpaqfranz.cpp -o zpaqfranzhw -pthread -static -lurlmon
 
 Windows 64 (g++, Hardware Blake3 implementation PLUS HW SHA1/2 with GUI)
-g++ -O3 -DGUI -DHWBLAKE3 -DHWSHA2 blake3_windows_gnu.s zpaqfranz.cpp -o zpaqfranzhw -pthread -static -s
+g++ -O3 -DGUI -DHWBLAKE3 -DHWSHA2 blake3_windows_gnu.s zpaqfranz.cpp -o zpaqfranzhw -pthread -static -s -lurlmon
 
 Windows 32 (g++ 7.3.0 64 bit)
-c:\mingw32\bin\g++ -m32 -O3 zpaqfranz.cpp -o zpaqfranz32 -pthread -static
+c:\mingw32\bin\g++ -m32 -O3 zpaqfranz.cpp -o zpaqfranz32 -pthread -static -lurlmon
 
 Windows 64 (g++ 7.3.0), WITH cloud paq
-g++ -O3 -DSERVER zpaqfranz.cpp -o zpaqfranz -lwsock32 -lws2_32
+g++ -O3 -DSERVER zpaqfranz.cpp -o zpaqfranz -lwsock32 -lws2_32 -lurlmon
 
 FreeBSD (11.x) gcc 7
 gcc7 -O3 -Dunix zpaqfranz.cpp -lstdc++ -pthread -o zpaqfranz -static -lm
@@ -1893,6 +1896,11 @@ SHA-256: FCCE109C8360963EB18975B94BDBE434BE1A49D3F53BDD768A99093B3EB838D2 [     
 		#include <sys/sysctl.h>
 		#include <sys/mount.h>
 	#endif
+	
+	#include <netinet/in.h>
+	#include <sys/socket.h>
+	#include <netdb.h>
+
 #else  // Assume Windows
 	#include <assert.h>
 	#include <time.h>
@@ -13104,6 +13112,7 @@ int64_t g_ramdisksize	=0;
 int64_t g_rd			=0;
 int64_t g_rd_expected	=0;
 int64_t g_startrd		=0;
+int64_t g_startdownload	=0;
 int 	g_rd_ultimotempo=0;
 int64_t g_cdatasize		=0;
 unsigned g_htsize		=0;
@@ -20520,6 +20529,8 @@ static HANDLE stdoutHandle;
 static DWORD outModeInit;
 void setupConsole(void)
 {
+	if (flagnoconsole)
+		return;
 	DWORD outMode 	= 0;
 	stdoutHandle 	= GetStdHandle(STD_OUTPUT_HANDLE);
 	if(stdoutHandle == INVALID_HANDLE_VALUE)
@@ -20533,6 +20544,8 @@ void setupConsole(void)
 }
 void restoreConsole(void)
 {
+	if (flagnoconsole)
+		return;
 	if (flagsilent)
 		return;
 	printf("\x1b[0m");
@@ -21015,13 +21028,18 @@ int terminalheight()
     return riga;
 #endif
 }
-bool iskeypressed()
+bool iskeypressed(int i_thekey)
 {
 #ifdef _WIN32
     if (kbhit())
     {
-         ::getch();
-         return true;
+		int keypressed=::getch();
+		if (flagdebug)
+			printf("21029: WIN32 getch %d %c\n",keypressed,keypressed);
+        if (i_thekey==0)
+			return true;
+		else
+			return (i_thekey==keypressed);
     }
 	return false;
 #else
@@ -21036,7 +21054,10 @@ bool iskeypressed()
 	char ch;
 	int letti=read(0,&ch,1);
 	tcsetattr(0,TCSANOW,&old_t);
-	return (letti!=0);
+	if (i_thekey==0)
+		return (letti!=0);
+	else
+		return ((letti!=0) && (i_thekey==ch));
 #endif
 }
 int mygetch(bool i_flagmore)
@@ -36193,6 +36214,23 @@ bool fileexists(const string& i_filename)
   return (stat(i_filename.c_str(),&buffer)==0);
 #endif
 #ifdef _WIN32
+
+	if (flagads)
+		if (mypos(":",i_filename)!=-1)
+		{
+			if (flagdebug3)
+				myprintf("36200: flagads ON and : in i_filename\n");
+			HANDLE hFile = CreateFileW((utow(i_filename.c_str()).c_str()), GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+			if (hFile!=INVALID_HANDLE_VALUE)
+			{
+				if (flagdebug3)
+					myprintf("36204: ADS FOUNDED!\n");
+				CloseHandle(hFile);
+				return true;
+			}
+			return false;
+	}
+
 	HANDLE	myhandle;
 	WIN32_FIND_DATA findfiledata;
 	std::wstring wpattern=utow(i_filename.c_str());
@@ -38995,6 +39033,9 @@ OutputArchive::OutputArchive(string i_thearchive,const char* filename, const cha
 				ioerr(thefilename.c_str());
 			if (flagdebug3)
 				myprintf("38729: written SALT (32bytes) on %s\n",thefilename.c_str());
+#ifndef _WIN32
+			fflush(fp); /// unix fix
+#endif
 #ifdef SERVER
 	  if (g_socket!=0)
 			if (thefilename!=g_indexname)
@@ -40603,6 +40644,7 @@ private:
 	int benchmark();
 	int autotest();
 	int pause();
+	int update();
 	int isopen();
 	int	versum();
 	int last2();
@@ -40614,6 +40656,9 @@ private:
 	int zfspurge();
 	int zfsadd();
 	int zfsenumerate(const string& i_command);
+#ifdef _WIN64
+	int download();
+#endif
 
 #ifdef _WIN32
 	int windowsc();								// Backup (kind of) drive C:
@@ -40688,6 +40733,9 @@ private:
 #ifdef _WIN32
 	bool 		searchunixfile();
 	bool 		fill_ads(string i_filename,int64_t i_startiblock);
+	bool 		work_ads(string i_thefile,string i_adsname,string i_description);
+	bool 		isonly(string i_filename);
+	bool		exists_fasttxt_ads(string i_filename);
 #endif
 	string		get_lastfilename(string i_file,int64_t& o_totalfilesize);
 	int64_t		getzpaqsum(string i_archive,int64_t& o_usize,int64_t& o_allsize,int64_t& o_dtsize,int64_t& o_compressedsize);
@@ -40700,6 +40748,8 @@ private:
 	int 		versum_againstzpaq(vector<string> i_myfiles,vector<string> i_filealgo,vector<string> i_filehash,vector<string>& o_missing,int& o_errori,int64_t& o_total_hashed);
 
 	int			makecrc32txt(string i_filename, string& o_initialquickhash,int64_t& o_initialzpaqsize,string& o_initialzpaqquick, string& o_initialzpaqcrc32,string& o_prezpaqcrc32,int64_t& prezpaqsize,string& o_thecrcfile);
+	int			rebuildcrc32(string i_filename,string& o_prezpaqcrc32,int64_t& 	o_prezpaqsize,string& o_thecrcfile);
+
 	void 		decodelastversion();
 	bool 		acceptonlynot(string i_filename);
 	int 		listfolders(string i_path,vector<string>* o_thelist);
@@ -44533,6 +44583,7 @@ string help_b(bool i_usage,bool i_example)
 		moreprint("Benchmark all on 1MB:                b -minsize 1048576");
 		moreprint("Benchmark SHA256 and BLAKE3:         b -sha256 -blake 3 -minsize 1048576");
 		moreprint("Benchmark for 10 second each:        b -n 10 -sha256 -blake3 -minsize 1048576");
+		moreprint("CPU heater (cook the CPU)            b -all -n 10000");
 		moreprint("Cook the CPU (all cores):            b -all -n 20 -blake3");
 		moreprint("Cook the CPU (8 cores):              b -all -t8 -n 20 -blake3");
 	}
@@ -44742,13 +44793,16 @@ string help_pause(bool i_usage,bool i_example)
 		moreprint("<>: -n X          Wait X seconds, then proceed");
 		moreprint("<>: -pakka        Write less");
 		moreprint("<>: -silent       Write way less");
+		moreprint("<>: -find x       Way for key x");
 	}
 	if (i_usage && i_example) moreprint("    Examples:");
 	if (i_example)
 	{
-		moreprint("Wait for a key                       pause");
+		moreprint("Wait for any key                     pause");
+		moreprint("Wait for key z                       pause -find z");
 		moreprint("Wait for 5 seconds (or key)          pause -n 5");
 		moreprint("Wait 5 seconds (or key) small output pause -n 5 -pakka");
+		moreprint("Wait 5 seconds (or key) NO output    pause -n 5 -pakka -silent");
 		moreprint("Wait 5 seconds (or key) NO output    pause -n 5 -pakka -silent");
 	}
 	return("Halt script execution until timeout expires or keypress");
@@ -44955,6 +45009,57 @@ string help_a(bool i_usage,bool i_example)
 	}
 	return("Add or append files to archive");
 }
+string help_update(bool i_usage,bool i_example)
+{
+	if (i_usage)
+	{
+		moreprint("CMD   update (refresh zpaqfranz from Internet)");
+		moreprint("+ :               Check/download from http://www.francocorbelli.it/zpaqfranz");
+#ifdef _WIN64
+		moreprint("+ :               or from two user-entered URLs");
+		moreprint("+ : -force        Wet-run (do the update, default dry-run)");
+		moreprint("+ : -force -kill  Replace current zpaqfranz from Internet");
+#endif
+	}
+	if (i_usage && i_example) moreprint("    Examples:");
+	if (i_example)
+	{
+		moreprint("Check for updates           update");
+#ifdef _WIN64
+		moreprint("Check for updates           upgrade");
+		moreprint("Update (if any)             update -force");
+		moreprint("Get always from Internet    update -force -kill");
+		moreprint("Use specific URLs           update https://www.pippo.com/ugo.sha256 http://www.pluto.com/zpaqnew.exe");
+#endif
+	}
+#ifdef _WIN64
+	return ("Update zpaqfranz from Internet");
+#else
+	return ("Check for updated zpaqfranz from Internet");
+#endif
+}
+
+#ifdef _WIN64
+string help_download(bool i_usage,bool i_example)
+{
+	if (i_usage)
+	{
+		moreprint("CMD   download (get file from Internet)");
+		moreprint("+ : -force        Overwrite output file");
+		moreprint("+ : -space        Do not check the output path");
+		moreprint("+ : -checktxt z   Test hash in z file (len 32=MD5, 40=SHA-1, 64=SHA-256)");
+	}
+	if (i_usage && i_example) moreprint("    Examples:");
+	if (i_example)
+	{
+		moreprint("Download in ugo.txt         download https://www.1.it/2.cpp ./2.cpp");
+		moreprint("Download+check SHA256       download http://www.1.it/3.cpp z:\\3.cpp -checktxt http://www.1.it/3.sha256");
+		moreprint("Download+check MD5          download http://www.1.it/4.cpp z:\\4.cpp -checktxt http://www.1.it/4.md5");
+	}
+	return ("Download file from Internet");
+}
+#endif
+
 #ifdef _WIN32
 string help_rd(bool i_usage,bool i_example)
 {
@@ -45274,9 +45379,10 @@ string help_ads(bool i_usage,bool i_example)
 	if (i_usage && i_example) moreprint("    Examples:");
 	if (i_example)
 	{
-		moreprint("Show    ADS filelist                    ads z:\\1.zpaq");
+		moreprint("Show    ADS                             ads z:\\1.zpaq");
+		moreprint("Remove  ADS (all of them)               ads z:\\*.zpaq -kill");
+		moreprint("Remove  ADS (only one)                  ads z:\\*.zpaq -only fasttxt -kill");
 		moreprint("Rebuild ADS filelist                    ads z:\\1.zpaq -force");
-		moreprint("Remove  ADS filelist                    ads z:\\*.zpaq -kill");
 	}
 	return("ADS Alternate Data Stream manipulator");
 
@@ -46335,6 +46441,12 @@ void Jidac::load_help_map()
 	help_map.insert(std::pair<string, voidhelpfunction>("sfx",				help_sfx));
 	help_map.insert(std::pair<string, voidhelpfunction>("rd",				help_rd));
 #endif
+	help_map.insert(std::pair<string, voidhelpfunction>("update",			help_update));
+	help_map.insert(std::pair<string, voidhelpfunction>("upgrade",			help_update));
+#ifdef _WIN64
+	help_map.insert(std::pair<string, voidhelpfunction>("download",			help_download));
+#endif
+
 #if defined(unix)
 	help_map.insert(std::pair<string, voidhelpfunction>("zfs",				help_zfs));
 	help_map.insert(std::pair<string, voidhelpfunction>("zfsproxbackup",	help_zfsproxbackup));
@@ -46395,6 +46507,16 @@ void Jidac::usage(bool i_flagdie=true)
 	color_yellow();
 	moreprint("    More help: zpaqfranz h       Extended help: zpaqfranz h h");
 #endif
+
+	color_red();
+
+#ifdef _WIN64
+	moreprint("Update   : zpaqfranz update -force       Take newer Win64 version");
+#else
+	moreprint("Update   : zpaqfranz update                Look for newer version");
+#endif
+
+
 	color_restore();
 		
 	if (i_flagdie)
@@ -47494,7 +47616,8 @@ int Jidac::loadparameters(int argc, const char** argv)
 	{
 		zpaqfranzexename=argv[0];
 #ifdef _WIN32
-		zpaqfranzexename+=".exe";
+		if (!isextension(zpaqfranzexename.c_str(), ".exe"))
+			zpaqfranzexename+=".exe";
 #endif
 	}
 
@@ -47677,7 +47800,10 @@ int Jidac::loadparameters(int argc, const char** argv)
 				if (comando=="h") /// zpaqfranz h h
 					usageall("");
 				else
+				{
+					///myprintf("$$$$$$$$$$$$$ comando %s\n",comando.c_str());
 					usageall(comando);
+				}
 				seppuku();
 			}
 		if ((stringcomparei(parametro,"-he"))
@@ -47691,6 +47817,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 				examples(comando);
 				seppuku();
 			}
+			
 	}
   // Init archive state
 	ht.resize(1);  // element 0 not used
@@ -47916,18 +48043,33 @@ int Jidac::loadparameters(int argc, const char** argv)
 #ifdef _WIN32
 		(opt=="ads") 	||
 #endif
+#ifdef _WIN64
+		(opt=="download") 	||
+#endif
+		(opt=="update") 	||
+		(opt=="upgrade") 	||
 		(opt=="redu") ||
 		opt=="z")
 		{
 			command=opt[0];
 			if (opt=="cp")
-					command='o';
+				command='o';
+
+			if ((opt=="upgrade") || (opt=="update"))
+				command='U';
+
+#ifdef _WIN64
+			if (opt=="download")
+				command='W';
+#endif
 
 			if (opt=="redu")
 				command='R';
 #ifdef _WIN32
 			if (opt=="ads")
 				command='S';
+			if (opt=="update")
+				command='U';
 #endif
 			if (flagforzarobocopy)
 			{
@@ -48489,7 +48631,11 @@ int Jidac::doCommand()
 	else if (command=='.') return pakkalist();
 	else if (command=='S') return ads();
 #endif
-	
+	else if (command=='U') return update();
+#ifdef _WIN64
+	else if (command=='W') return download();
+#endif
+
 	else usage();
 	return 0;
 }
@@ -49261,7 +49407,12 @@ void Jidac::scandir(bool i_checkifselected,DTMap& i_edt,string filename, bool i_
 				else
 				{
 					if (flagdebug)
-						myprintf("30908: discard REPARSE POINT & DIRECTORY\n");
+					{
+						string myfn=path(filename)+t;
+						myprintf("30908: discard REPARSE POINT & DIRECTORY <<");
+						printUTF8(myfn.c_str());
+						myprintf(">>\n");
+					}
 					edate=0;  // don't add
 				}
 			}
@@ -52421,7 +52572,9 @@ string	franz_do_hash::filehash(string i_filename,bool i_flagcalccrc32,int64_t i_
 	}
 
 	FILE* myfilez = freadopen(i_filename.c_str());
-
+	if (flagdebug3)
+		myprintf("52451: myfilez FILE* is %s\n",migliaia(int64_t(myfilez)));
+	
 	if	(myfilez==NULL)
 	{
 
@@ -52443,6 +52596,8 @@ string	franz_do_hash::filehash(string i_filename,bool i_flagcalccrc32,int64_t i_
 	}
 
 	int64_t lunghezza	=prendidimensionefile(i_filename.c_str());//prendidimensionehandle(myfilez);
+	if (flagdebug3)
+		myprintf("52437: hashing lunghezza [prendidimensionefile] %s\n",migliaia(lunghezza));
 	int64_t	letti		=0;
 
 #ifdef __HAIKU__
@@ -52590,7 +52745,18 @@ string	franz_do_hash::filehash(string i_filename,bool i_flagcalccrc32,int64_t i_
 	while (1)
 	{
 		int r=fread(unzBuf, 1, n, myfilez);
-
+#ifdef _WIN32
+		if (flagdebug3)
+		{
+			myprintf("52622: hash fread %08d bytes returned r %08d\n",n,r);
+			if (r==0)
+			{
+				DWORD situation=GetLastError();
+				string lasterror=decodewinerror(situation,i_filename.c_str());
+				myprintf("52627: fread returned 0 bytes! situation %08d lasterror %s\n",situation,lasterror.c_str());
+			}
+		}
+#endif
 		if (mytype==ALGO_XXHASH64)
 			myhash.add(unzBuf,r);
 		else
@@ -55986,10 +56152,27 @@ char extract_test4[]={"sFPjBhOWQqV6WzrDglUFbQMK03yqJV1b8bQY72n3KHOSpOrBreBdxIX+k
 
 int Jidac::pause()
 {
+	int thekey=0;
+	if (searchfrom!="")
+	{
+		if (flagdebug)
+			myprintf("50102: searchfrom is <<%s>>\n",searchfrom.c_str());
+		if (searchfrom.size()==1)
+		{
+			thekey=searchfrom[0];
+			if (flagdebug)
+				myprintf("50107: thekey is %d %c\n",thekey,thekey);
+		}
+		else
+		{
+			if (flagdebug)
+				myprintf("56112: -find not 1 char long, ignoring!\n");
+		}
+	}
 	if (menoenne>0)
 	{
 		unsigned int	secondi=1;
-		while ((secondi<=menoenne) && (!iskeypressed()))
+		while ((secondi<=menoenne) && (!iskeypressed(thekey)))
 		{
 			myprintf("54579: Wait %03d seconds (or press any key)\r",(menoenne-secondi)+1);
 			fflush(stdout);
@@ -56002,8 +56185,11 @@ int Jidac::pause()
 	else
 	{
 		myprintf("\n\n");
-		myprintf("54612: **** Hit a key to continue ****\n");
-		while ((!iskeypressed()))
+		if (thekey!=0)
+			myprintf("56110: **** Hit the key %c to continue (beware of case) ****\n",thekey);
+		else
+			myprintf("54612: **** Hit a key to continue ****\n");
+		while ((!iskeypressed(thekey)))
 			sleep(1);
 
 	///	mygetch(false);
@@ -57006,12 +57192,12 @@ void my_handler(int s)
 	if ((*(ULONG*)(kusershareddata+0x26c))>=10)
 	{
 		if (flagdebug)
-			myprintf("53811: Windows 10 or later => keeping flagnoconsole |%d|\n",int(flagnoconsole));
+			myprintf("53811: ************ Windows 10 or later => keeping flagnoconsole |%d|\n",int(flagnoconsole));
 	}
 	else
 	{
 		if (flagdebug)
-			myprintf("53814: Previous of Windows 10 => enforcing flagnoconsole=true\n");
+			myprintf("53814: ************ Previous of Windows 10 => enforcing flagnoconsole=true\n");
 		flagnoconsole=true;
 	}
 #endif
@@ -57035,8 +57221,7 @@ void my_handler(int s)
 #endif
 #endif
 #ifdef _WIN32
-
-///	if (!flagnoconsole)
+	if (!flagnoconsole)
 	{
 //// set UTF-8 for console
 		g_ConsoleCP			=GetConsoleCP();
@@ -57174,11 +57359,11 @@ void my_handler(int s)
 		fclose(g_output_handle);
 
 #ifdef _WIN32
-	///if (!flagnoconsole)
+	if (!flagnoconsole)
 	{
 //// set back the console
-	SetConsoleCP		(g_ConsoleCP);
-	SetConsoleOutputCP	(g_ConsoleOutputCP);
+		SetConsoleCP		(g_ConsoleCP);
+		SetConsoleOutputCP	(g_ConsoleOutputCP);
 	///myprintf("55728: ConsoleCP %d ConsoleOutputCP %d\n",g_ConsoleCP,g_ConsoleOutputCP);
 	}
 #endif
@@ -62406,6 +62591,7 @@ bool writedatainfasttxt(string i_filename,string i_archive,string i_crc32,string
 	fprintf(backupfile,"$zpaqfranz fasttxt|1|%s|%s\n",dateToString(true,now()).c_str(),i_archive.c_str());
 	fprintf(backupfile,"%s %s %s [%s] (%s)\n",i_crc32.c_str(),i_quick.c_str(),i_precrc32.c_str(),migliaia(i_size),migliaia2(i_presize));
 	fclose(backupfile);
+	
 	return true;
 }
 
@@ -62442,6 +62628,72 @@ struct twoint
 	int32_t second;
 };
 
+int	Jidac::rebuildcrc32(string i_filename,string& o_prezpaqcrc32,int64_t& 	o_prezpaqsize,string& o_thecrcfile)
+{
+	myprintf("60892: Rebuilding broken fasttxt (TRIM for incomplete transaction) <<");
+	printUTF8(i_filename.c_str());
+	myprintf(">>\n");
+	
+	if (i_filename!=g_indexname)
+	{
+		if (flagads && check_if_password(i_filename))
+		{
+			myprintf("62482: TRIM skipped, -ads AND password\n");
+		}
+		else
+		{
+			flagkill=true;
+			jidacreset();
+			files.clear();
+			files.push_back(i_filename.c_str());
+			myprintf("60897: TRIM done, recomputing hash and CRC-32\n");
+		}
+	}
+	int64_t startverify		=mtime();
+	franz_do_hash dummyquick("QUICK");
+	if (flagdebug3)
+		myprintf("60990: filehash QUICK on %s\n",i_filename.c_str());
+
+	g_dimensione=0;
+	string o_initialzpaqquick=dummyquick.filehash(i_filename,false	,startverify,prendidimensionefile(i_filename.c_str()));
+	if (o_initialzpaqquick=="")
+	{
+		myprintf("60899: quick hash empty!\n");
+		return 2;
+	}
+
+
+	franz_do_hash dummyquick2("CRC-32");
+	if (flagdebug3)
+		myprintf("61000: filehash CRC-32 on %s\n",i_filename.c_str());
+
+	///myprintf("62504: 4444444444444 %s\n",tohuman(prendidimensionefile(i_filename.c_str())));
+	g_dimensione=0;
+	string o_initialzpaqcrc32=dummyquick2.filehash(i_filename,false,startverify,prendidimensionefile(i_filename.c_str()));
+	if (o_initialzpaqcrc32=="")
+	{
+		myprintf("60907: CRC-32 empty!\n");
+		return 2;
+	}
+
+	myprintf("62682: Rebuilding fasttxt (%s) ",o_initialzpaqcrc32.c_str());
+	printUTF8(o_thecrcfile.c_str());
+	if (!writedatainfasttxt(o_thecrcfile,i_filename,o_initialzpaqcrc32,o_initialzpaqquick,
+	"0",prendidimensionefile(i_filename.c_str()),0))
+	{
+		myprintf(" :62957: something wrong!\n");
+		return 2;
+	}
+	else
+		myprintf(" :OK\n");
+	if (!getdatafromfasttxt(o_thecrcfile,o_initialzpaqcrc32,o_initialzpaqquick,o_prezpaqcrc32,o_prezpaqsize))
+	{
+		myprintf("60865: Failed getting data from fasttxt!\n");
+		return 2;
+	}
+	myprintf("62530: REBUILDED CRC32     %s QUICK %s SIZE %s\n",o_initialzpaqcrc32.c_str(),o_initialzpaqquick.c_str(),migliaia(o_prezpaqsize));
+	return 0;
+}
 
 int	Jidac::makecrc32txt(string i_filename,
 string& 	o_initialquickhash,
@@ -62456,6 +62708,11 @@ string&		o_thecrcfile)
 	string 	percorso	=extractfilepath		(i_filename);
 	string	nome		=prendinomefileebasta	(i_filename);
 	o_thecrcfile		=percorso+nome+"_crc32.txt";
+	
+	if (flagads)
+		o_thecrcfile=i_filename+":fasttxt";
+	
+	
 	if (flagverbose)
 		myprintf("60362: Doing makecrc32txt on %s\n",o_thecrcfile.c_str());
 	if (fileexists(i_filename))
@@ -62519,57 +62776,8 @@ string&		o_thecrcfile)
 	{
 		if (!flagspace)
 			return 2;
-
-		myprintf("60892: Rebuilding broken fasttxt (doing TRIM for incomplete transaction)\n");
-		if (i_filename!=g_indexname)
-		{
-			flagkill=true;
-			jidacreset();
-			files.clear();
-			files.push_back(i_filename.c_str());
-
-			trim();
-			myprintf("60897: TRIM done, recomputing hash and CRC-32\n");
-		}
-		int64_t startverify		=mtime();
-		franz_do_hash dummyquick("QUICK");
-		if (flagdebug3)
-			myprintf("60990: filehash on %s\n",i_filename.c_str());
-
-		o_initialzpaqquick=dummyquick.filehash(i_filename,false,startverify,prendidimensionefile(i_filename.c_str()));
-		if (o_initialzpaqquick=="")
-		{
-			myprintf("60899: quick hash empty!\n");
-			return 2;
-		}
-
-		franz_do_hash dummyquick2("CRC-32");
-		if (flagdebug3)
-			myprintf("61000: filehash on %s\n",i_filename.c_str());
-
-		o_initialzpaqcrc32=dummyquick2.filehash(i_filename,false,startverify,prendidimensionefile(i_filename.c_str()));
-		if (o_initialzpaqcrc32=="")
-		{
-			myprintf("60907: CRC-32 empty!\n");
-			return 2;
-		}
-
-		myprintf("62682: Rebuilding fasttxt (%s) ",o_initialzpaqcrc32.c_str());
-		printUTF8(o_thecrcfile.c_str());
-		if (!writedatainfasttxt(o_thecrcfile,i_filename,o_initialzpaqcrc32,o_initialzpaqquick,
-		"0",prendidimensionefile(i_filename.c_str()),0))
-		{
-			myprintf(" :62957: something wrong!\n");
-			return 2;
-		}
-		else
-			myprintf(" :OK\n");
-		if (!getdatafromfasttxt(o_thecrcfile,o_initialzpaqcrc32,o_initialzpaqquick,o_prezpaqcrc32,o_prezpaqsize))
-		{
-			myprintf("60865: Failed getting data from fasttxt!\n");
-			return 2;
-		}
-		myprintf("60907: REBUILDED CRC32  %s QUICK %s SIZE %s\n",o_initialzpaqcrc32.c_str(),o_initialzpaqquick.c_str(),migliaia(o_prezpaqsize));
+		///rebuild the file
+		rebuildcrc32(i_filename,o_prezpaqcrc32,o_prezpaqsize,o_thecrcfile);
 		seppuku();
 		exit(0);
 	}
@@ -63109,7 +63317,19 @@ int Jidac::add()
 #endif
 
 ///	getpasswordifempty();
-
+#ifdef _WIN32
+	if (exists_fasttxt_ads(archive))
+	{
+		myprintf("63163: Founded a CRC-32 ADS, turning on fasttxt!\n");
+		flagfasttxt=true;
+		flagads=true;
+	}
+	else
+	{
+		if (flagdebug3)
+			myprintf("63166: cannot find fasttxt-ADS on %s\n",archive.c_str());
+	}
+#endif
 	if (g_freeze!="")
 	{
 		if (maxsize>0)
@@ -65435,8 +65655,11 @@ int Jidac::add()
 					}
 
 					if (flagdebug3)
-						myprintf("58739: |%s|: |%s| <<%s>>\n",hashname.c_str(),hashtobewritten.c_str(),p->first.c_str());
-
+					{
+						myprintf("65499: |%s|: |%s| <<%s>>\n",hashname.c_str(),hashtobewritten.c_str(),p->first.c_str());
+						myprintf("65500: p->second.size       %21s\n",migliaia(p->second.size));
+						myprintf("65501: p->second.hashedsize %21s\n",migliaia(p->second.hashedsize));
+					}
 					///	intercept (some) strange things, enforcing a fake hash (will be reported on verify of course)
 					if (hashtobewritten!="")
 					{
@@ -65450,6 +65673,11 @@ int Jidac::add()
 								myprintf("38383: ERROR expected %19s getted 0 bytes  ",migliaia(p->second.size));
 								printUTF8(filename.c_str());
 								myprintf("\n");
+								if (flagdebug3)
+								{
+									myprintf("65514: p->second.size       %21s\n",migliaia(p->second.size));
+									myprintf("65516: p->second.hashedsize %21s\n",migliaia(p->second.hashedsize));
+								}
 							}
 							hashtobewritten=hasherror;
 						}
@@ -65695,7 +65923,7 @@ int Jidac::add()
 		int64_t myarchive_end=archive_end;		
 		string inchunks="";
 		string intotalsize="";
-		///fika
+		
 			if (g_chunk_size>0)
 			{
 				inchunks="[CKS #"+itos(out.filepartnames.size()+1)+"]";
@@ -66338,7 +66566,7 @@ int Jidac::add()
 #endif
 
 #ifdef _WIN32
-	if (flagads)
+	if ((flagads) && (!flagfasttxt))
 		fill_ads(g_archive,start_iblock);
 #endif
 	return errors;
@@ -66347,15 +66575,23 @@ int Jidac::add()
 #ifdef _WIN32
 bool Jidac::fill_ads(string i_filename,int64_t i_startiblock)
 {
-	if (g_password!=NULL)
+	if (check_if_password(i_filename))
 	{
-		myprintf("63808: **** ADS does not work with encrypted archives ****\n");
+		myprintf("66395: SORRY, cannot do fill_ads on encrypted archive\n");
 		return false;
 	}
+	
 	if (flagverbose)
 		myprintf("61789: ADS: jump to index @ %s\n",migliaia(i_startiblock));
 	int64_t startingads=mtime();
 	read_archive2(i_startiblock,i_filename);
+	
+	if (g_password!=NULL)
+	{
+		myprintf("63808: **** ADS list does not work with encrypted archives ****\n");
+		return false;
+	}
+	
 	int64_t	listsize=0;
 	franz_ads theads(i_filename,"zpaqlist",'w');
 	if (theads.isopen())
@@ -66499,7 +66735,6 @@ string zsfx_hash="ERRORE";
 bool	readfiletoarray(string i_filename,vector<string>& o_lines)
 {
 	o_lines.clear();
-
 	if (!fileexists(i_filename))
 	{
 		myprintf("85073: cannot find ");
@@ -66712,6 +66947,9 @@ int Jidac::benchmark()
 	array_cpu	.push_back("i9-12900KS 56400 (phy) 16");
 	array_multi	.push_back(6928);
 	array_single.push_back(5403);
+	array_cpu	.push_back("AMD-7950X3D      (phy) 16");
+	array_multi	.push_back(7733);
+	array_single.push_back(5517);
 
 	int			chunksize=100000;
 	int			timelimit=5;
@@ -87854,7 +88092,6 @@ int Jidac::gogui()
 	SetConsoleCP		(850);
 	SetConsoleOutputCP	(850);
     setlocale(LC_ALL, "");
-
 	addmenu(MainMenu2,0,"File",				gui_browsezpaq,		"Browse zpaq archive");
 	addmenu(MainMenu2,1,"Help",				gui_help_menu,		"Houston, help me!");
 	addmenu(MainMenu2,2,"",(FUNC)0,"");
@@ -90204,15 +90441,23 @@ int Jidac::versum()
 		return 2;
 	}
 	/// versum z:\*.zpaq -checktxt
-	if ((flagchecktxt) || (flagfasttxt))
+	if ((flagchecktxt) || (flagfasttxt) || (flagads))
 		return fastquicktxt();
 
 	for (unsigned int i=0;i<files.size();i++)
 		if (iszpaq(files[i]))
 		{
-			myprintf("86505: Cannot load a zpaq (usually on .txt) ");
+			myprintf("86505: Cannot load a zpaq (usually on .txt or -ads) ");
 			printUTF8(files[i].c_str());
 			myprintf("\n");
+#ifdef _WIN32
+			if (exists_fasttxt_ads(files[i]))
+			{
+				myprintf("90285: Founded fasttxt on ADS!\n");
+				flagads=true;
+				return fastquicktxt();
+			}
+#endif
 			return 2;
 		}
 
@@ -90484,31 +90729,33 @@ int Jidac::fastquicktxt()
 		return 2;
 	}
 
-	if ((!flagchecktxt) && (!flagfasttxt))
-		if (!iswildcard(files[0]))
-			if (prendiestensione(files[0])=="zpaq")
-			{
-				myprintf("66843: Automagically search for .txt ");
-				string 	thezpaq		=files[0];
-				string 	percorso	=extractfilepath		(thezpaq);
-				string	nome		=prendinomefileebasta	(thezpaq);
-				if (fileexists(percorso+nome+"_md5.txt"))
-					flagchecktxt=true;
-				if (fileexists(percorso+nome+".md5"))
-					flagchecktxt=true;
-				if (fileexists(percorso+nome+"_crc32.txt"))
-					flagfasttxt=true;
-				if (flagchecktxt || flagfasttxt)
-					myprintf(": FOUNDED !\n");
-				else
-					myprintf(": NOTHING\n");
-			}
+	if (!flagads)
+		if ((!flagchecktxt) && (!flagfasttxt))
+			if (!iswildcard(files[0]))
+				if (prendiestensione(files[0])=="zpaq")
+				{
+					myprintf("66843: Automagically search for .txt ");
+					string 	thezpaq		=files[0];
+					string 	percorso	=extractfilepath		(thezpaq);
+					string	nome		=prendinomefileebasta	(thezpaq);
+					if (fileexists(percorso+nome+"_md5.txt"))
+						flagchecktxt=true;
+					if (fileexists(percorso+nome+".md5"))
+						flagchecktxt=true;
+					if (fileexists(percorso+nome+"_crc32.txt"))
+						flagfasttxt=true;
+					if (flagchecktxt || flagfasttxt)
+						myprintf(": FOUNDED !\n");
+					else
+						myprintf(": NOTHING\n");
+				}
 
 	if (flagchecktxt && flagfasttxt)
 	{
 		myprintf("87118: Confused by -checktxt and -fasttxt\n");
 		return 2;
 	}
+		
 	unsigned int	startline	=0;
 	string 			thehash		="MD5";
 	unsigned int	thehashlen	=32;
@@ -90528,7 +90775,12 @@ int Jidac::fastquicktxt()
 			thehash		="QUICK";
 			thehashlen	=8;
 		}
-		myprintf("66764: Test %s of .zpaq against _crc32.txt\n",thehash.c_str());
+		///myprintf("66764: Test %s of .zpaq against _crc32.txt\n",thehash.c_str());
+		if (!flagads)
+			myprintf("66764: Test %s of .zpaq against _crc32.txt %s\n",thehash.c_str());
+		else
+			myprintf("66764: Test %s of .zpaq against ADS %s\n",thehash.c_str());
+		
 	}
 	DTMap thedt;
 	for (unsigned int i=0;i<files.size();i++)
@@ -90566,6 +90818,9 @@ int Jidac::fastquicktxt()
 		else
 			mychecktxt=percorso+nome+"_crc32.txt";
 
+		if (flagads)
+			mychecktxt=thezpaq+":fasttxt";
+
 		if (!fileexists(mychecktxt))
 		{
 			myprintf("66240: WARN for file ");
@@ -90600,15 +90855,19 @@ int Jidac::fastquicktxt()
 		}
 
 		string	firstline	=checktxtlines[startline];
+		if (flagdebug3)
+			myprintf("90651: firstline   |%s|\n",firstline.c_str());
 		string 	hashfromtxt	=getfirsthash(firstline);
-
+		if (flagdebug3)
+			myprintf("90653: hashfromtxt |%s|\n",hashfromtxt.c_str());
+		
 		if (hashfromtxt.size()!=thehashlen)
 		{
 			myprintf("66370: hash size %d != %d %s\n",hashfromtxt.size(),thehashlen,firstline.c_str());
 			continue;
 		}
 
-		if (flagfasttxt && flagquick)
+		if ((flagfasttxt && flagquick) || (flagquick && flagads))
 		{
 			firstline	=mytrim(myright(firstline,firstline.size()-8));
 			firstline	=getfirsthash(firstline);
@@ -92711,13 +92970,59 @@ endblock:;
 #endif
 
 #ifdef _WIN32
+
+
+bool Jidac::exists_fasttxt_ads(string i_filename)
+{
+	return (exists(i_filename+":fasttxt"));
+}
+
+
+bool Jidac::isonly(string i_filename)
+{
+	for (unsigned i=0; i<onlyfiles.size();i++)
+		if (ispath(onlyfiles[i].c_str(),i_filename.c_str()))
+			return true;
+	return false;
+}
+
+bool Jidac::work_ads(string i_thefile,string i_adsname,string i_description)
+{
+	if (flagdebug3)
+		myprintf("92750: work ADS on %s:%s\n",i_thefile.c_str(),i_adsname.c_str());
+
+	if (onlyfiles.size()>0)
+		if (!isonly(i_adsname.c_str()))
+		{
+			if (flagdebug3)
+				myprintf("92755: i_adsname not selected %s\n",i_adsname.c_str());
+			return false;
+		}
+	
+	string thepath=i_thefile+":"+i_adsname;
+		
+	if (flagkill)
+	{
+		if (DeleteFile(utow(thepath.c_str()).c_str()))
+			myprintf("92753: ADS: successfully removed %s\n",thepath.c_str());
+		else
+			myprintf("92756: ADS: cannot remove %s\n",thepath.c_str());
+	}
+	else	/// just list
+	{
+		int64_t adssize=prendidimensionefile(thepath.c_str());
+		if (adssize>0)
+		{
+			myprintf("92763: %-10s => %-25s (%15s) <<",i_adsname.c_str(),i_description.c_str(),migliaia(adssize));
+			printUTF8(i_thefile.c_str());
+			myprintf(">>\n");
+			return true;
+		}
+	}
+	return false;
+}
 int Jidac::ads()
 {
-	if (g_password!=NULL)
-	{
-		myprintf("90177: ADS does not work with encrypted archive\n");
-		return 2;
-	}
 	if (files.size()!=1)
 	{
 		myprintf("90172: only a single file, please\n");
@@ -92747,29 +93052,23 @@ int Jidac::ads()
 	if (flagverbose)
 		myprintf("90209: Founded %s archive(s)\n",migliaia(thedt.size()));
 
-	int	risultato=0;
-	int therun=0;
+	int	risultato	=0;
+	int therun		=0;
+
 	for (DTMap::iterator p=thedt.begin(); p!=thedt.end(); ++p)
 	{
-		therun++;
-		string thefile=p->first;
-		string thepath=thefile+":zpaqlist";
-		if (flagdebug3)
-			myprintf("90244: Running on %s\n",thefile.c_str());
-		
-		if (flagkill)
+		work_ads(p->first,"zpaqlist",	"List of files in archive");
+		work_ads(p->first,"fasttxt",	"CRC-32 of the archive");
+	}
+	flagads=true;	// we really run on ADS
+	if (flagforce)
+		for (DTMap::iterator p=thedt.begin(); p!=thedt.end(); ++p)
 		{
-			if (DeleteFile(utow(thepath.c_str()).c_str()))
-				myprintf("90184: ADS: successfully removed %s\n",thepath.c_str());
-			else
-			{
-				myprintf("90186: ADS: cannot remove %s\n",thepath.c_str());
-				risultato++;
-			}
-		}
-		else
-		if (flagforce)
-		{
+			therun++;
+			string thefile=p->first;
+			string thepath=thefile+":zpaqlist";
+			if (flagdebug3)
+				myprintf("90244: Running on %s\n",thefile.c_str());
 			if (fill_ads(thefile,0))
 			{
 				myprintf("90177: ADS: rebuilded filelist on ");
@@ -92783,18 +93082,14 @@ int Jidac::ads()
 				myprintf("\n");
 				risultato++;
 			}
+
+			string o_thecrcfile	=thefile+":fasttxt";
+			string o_prezpaqcrc32="";
+			int64_t o_prezpaqsize=0;
+			
+			rebuildcrc32(thefile,o_prezpaqcrc32,o_prezpaqsize,o_thecrcfile);
+
 		}
-		else
-		{
-			int64_t adssize=prendidimensionefile(thepath.c_str());
-			if (adssize>0)
-			{
-				myprintf("90232: ADS: size %12s ",migliaia(adssize));
-				printUTF8(thepath.c_str());
-				myprintf("\n");
-			}
-		}
-	}
 	if  (risultato==0)
 		return 0;
 	return 2;
@@ -94114,4 +94409,704 @@ int Jidac::pakkalist()
   	printf( " (all OK)\n");
 	return 0;
 }
+
+#endif
+
+bool decode_zpaq_version(string i_string,string& o_maj,string& o_minor,string& o_letter)
+{
+	if (i_string=="") 
+		return false;
+	if (flagdebug2)
+		myprintf("94292: decoding zpaq version %s\n",i_string.c_str());
+	o_maj		="";
+	o_minor		="";
+	o_letter	="";
+	
+	unsigned int i=0;
+	
+	while (i<i_string.size())
+	{
+		if (isdigit(i_string[i]))
+			o_maj+=i_string[i++];
+		else
+			break;
+	}
+	i++;
+	while (i<i_string.size())
+	{
+		if (isdigit(i_string[i]))
+			o_minor+=i_string[i++];
+		else
+			break;
+	}
+	while (i<i_string.size())
+	{
+		if (isalpha(i_string[i]))
+			o_letter+=i_string[i++];
+		else
+			break;
+	}
+	if (flagdebug2)
+	{
+		myprintf("94322: maj |%s|\n",o_maj.c_str());
+		myprintf("94323: min |%s|\n",o_minor.c_str());
+		myprintf("94324: let |%s|\n",o_letter.c_str());
+	}
+	if ((o_maj.size()+o_minor.size()+o_letter.size())==0)
+		return false;
+	return true;
+}
+
+string generaterandomstring(unsigned int i_length) 
+{
+	if (i_length==0)
+	{
+		myprintf("94351: i_lenght in C5\n");
+		seppuku();
+	}
+    static const char characters[]="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+    char* randomstring=(char*)malloc(i_length+1);
+
+    if (randomstring==NULL) 
+	{
+        myprintf("94355: C5 on malloc\n");
+        seppuku();
+    }
+
+    srand((unsigned)time(NULL));
+	
+    for (unsigned int i=0;i<i_length;++i) 
+        randomstring[i]=characters[rand()%(sizeof(characters)-1)];
+    randomstring[i_length]='\0';
+	
+	string risultato=randomstring;
+	free(randomstring);
+    return risultato;
+}
+
+#ifdef _WIN64
+class downcallback:public IBindStatusCallback  
+{
+	private:
+	int64_t	startdownload;
+public:
+    downcallback() { startdownload=mtime();}
+
+    STDMETHOD(OnProgress)(ULONG ulProgress,ULONG ulProgressMax,ULONG ulStatusCode,LPCWSTR wszStatusText)
+    {
+		myavanzamentoby1sec(ulProgress,ulProgressMax,startdownload,false);
+        return S_OK;
+    }
+
+    STDMETHOD(OnStartBinding)(/* [in] */ DWORD dwReserved, /* [in] */ IBinding __RPC_FAR *pib)
+    { return E_NOTIMPL; }
+
+    STDMETHOD(GetPriority)(/* [out] */ LONG __RPC_FAR *pnPriority)
+    { return E_NOTIMPL; }
+
+    STDMETHOD(OnLowResource)(/* [in] */ DWORD reserved)
+    { return E_NOTIMPL; }
+
+    STDMETHOD(OnStopBinding)(/* [in] */ HRESULT hresult, /* [unique][in] */ LPCWSTR szError)
+    { return E_NOTIMPL; }
+
+    STDMETHOD(GetBindInfo)(/* [out] */ DWORD __RPC_FAR *grfBINDF, /* [unique][out][in] */ BINDINFO __RPC_FAR *pbindinfo)
+    { return E_NOTIMPL; }
+
+    STDMETHOD(OnDataAvailable)(/* [in] */ DWORD grfBSCF, /* [in] */ DWORD dwSize, /* [in] */ FORMATETC __RPC_FAR *pformatetc, /* [in] */ STGMEDIUM __RPC_FAR *pstgmed)
+    { return E_NOTIMPL; }
+
+    STDMETHOD(OnObjectAvailable)(/* [in] */ REFIID riid, /* [iid_is][in] */ IUnknown __RPC_FAR *punk)
+    { return E_NOTIMPL; }
+
+    STDMETHOD_(ULONG,AddRef)()
+    { return 0; }
+
+    STDMETHOD_(ULONG,Release)()
+    { return 0; }
+
+    STDMETHOD(QueryInterface)(/* [in] */ REFIID riid, /* [iid_is][out] */ void __RPC_FAR *__RPC_FAR *ppvObject)
+    { return E_NOTIMPL; }
+};
+#endif
+
+
+bool downloadfile(string i_verurl,string i_verfile,bool i_showupdate)
+{
+	if (i_verurl=="")
+	{
+		myprintf("94439: i_verurl empty\n");
+		return false;
+	}
+	if (i_verfile=="")
+	{
+		myprintf("94444: i_verfile empty\n");
+		return false;
+	}
+	
+	if (flagverbose)
+	{
+		myprintf("94450: Download from URL %s\n",i_verurl.c_str());
+		myprintf("94451: to file           %s\n",i_verfile.c_str());
+	}
+#ifdef _WIN32
+	if (flagdebug3)
+		myprintf("94455: WIN32 version of filedownload\n");
+
+#ifdef _WIN64
+	downcallback thecallback;
+	downcallback* p_thecallback=NULL;
+	
+	if (i_showupdate)
+		p_thecallback=&thecallback;
+	
+   if (S_OK != URLDownloadToFileW(NULL,utow(i_verurl.c_str()).c_str(),utow(i_verfile.c_str()).c_str(),0,
+	p_thecallback))
+#else
+   if (S_OK != URLDownloadToFileW(NULL,utow(i_verurl.c_str()).c_str(),utow(i_verfile.c_str()).c_str(),0,
+	0))
+#endif
+
+	{
+		myprintf("94455: Error C5: cannot download file (no internet?)\n");
+		return false;
+	}
+#else
+#define INTERNET_BUFFER_SIZE 1024
+
+	if (flagdebug)
+		myprintf("94473: starting *nix download\n");
+	
+	char buffer[INTERNET_BUFFER_SIZE];
+    char *hostname, *path;
+    const char *url=i_verurl.c_str();
+    if (flagdebug3)
+		myprintf("94480: before test1\n");
+	
+    if (strncmp(url,"http://",7)==0) 
+        hostname = strdup(url+7);
+	else 
+	{
+        myprintf("94485: Download work only on http\n");
+		return false;
+    }
+	if (flagdebug3)
+		myprintf("94489: before test2\n");
+	
+    path=strchr(hostname,'/');
+    if (path==NULL) 
+	{
+		myprintf("94494: cannot strchr / in hostname!\n");
+		return false;
+ 	}
+	else 
+	{
+		*path='\0';
+        path++;
+    }
+	if (flagdebug3)
+		myprintf("94494: path |%s|\n",path);
+	
+    int sockfd=socket(AF_INET,SOCK_STREAM,0);
+    if (sockfd < 0)
+	{
+        myprintf("94499: Error C5: socket kaputt\n");
+		return false;
+    }
+
+    struct hostent *server=gethostbyname(hostname);
+    if (server == NULL) 
+	{
+        myprintf("94506: cannot gethostyname %s\n",hostname);
+		return false;
+    }
+
+    struct sockaddr_in serv_addr;
+    memset((char *) &serv_addr, 0, sizeof(serv_addr));
+    serv_addr.sin_family = AF_INET;
+    bcopy((char *)server->h_addr, (char *)&serv_addr.sin_addr.s_addr, server->h_length);
+    serv_addr.sin_port = htons(80);
+
+    if (connect(sockfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0) 
+	{
+        myprintf("94520: C5 on connect\n");
+		return false;
+    }
+
+    sprintf(buffer, "GET /%s HTTP/1.1\r\nHost: %s\r\nConnection: close\r\n\r\n",path,hostname);
+    if (write(sockfd, buffer, strlen(buffer)) < 0) 
+	{
+        myprintf("94528: kaputt writing on socket\n");
+		return false;
+    }
+
+    FILE *file = fopen(i_verfile.c_str(), "wb");
+    if (file == NULL) 
+	{
+        myprintf("94535: cannot open file to write %s\n",i_verfile.c_str());
+		return false;
+    }
+    ssize_t n;
+    while ((n=read(sockfd,buffer,INTERNET_BUFFER_SIZE)) > 0) 
+	{
+		if (flagdebug3)
+			myprintf("94543: read %s from socket\n",migliaia(n));
+	    fwrite(buffer,1,n,file);
+	}
+    if (n<0) 
+	{
+        myprintf("94544: socket negative!\n");
+		return false;
+    }
+    fclose(file);
+    close(sockfd);
+	return (prendidimensionefile(i_verfile.c_str())>0);
+	
+#endif
+	return true;
+}
+
+bool isurl(string i_url)
+{
+	if ((mypos("http://",i_url)!=0) && (mypos("https://",i_url)!=0))
+		return false;
+
+	
+	if (myright(i_url,1)=="/")
+		return false;
+	
+	unsigned int barre=0;
+	for (unsigned int i=0;i<i_url.size();i++)
+		if (i_url[i]=='/')
+			barre++;
+	if (barre<3)
+	{
+		myprintf("94581: ERROR: at least 3 slashes needed founded %d\n",barre);
+		return false;
+	}
+    return true;
+}
+
+int Jidac::update()
+{
+	myprintf("94276: Checking internet update (-verbose for details)\n");
+	string randnocache="?"+generaterandomstring(10);
+
+#ifdef unix
+	randnocache="";
+#endif
+
+	if (flagdebug)
+		myprintf("94380: randnocache %s\n",randnocache.c_str());
+
+	string	http_url="http://www.francocorbelli.it/zpaqfranz/win64/zpaqfranz.sha256";
+	string	http_exe="http://www.francocorbelli.it/zpaqfranz/win64/zpaqfranz.exe";
+	
+	if (files.size()==2)
+	{
+		http_url=files[0];
+		http_exe=files[1];
+		myprintf("94587: Command-selected URL\n");
+		myprintf("94588: new http_url |%s|\n",http_url.c_str());
+		myprintf("94588: new http_exe |%s|\n",http_exe.c_str());
+	}
+	
+	if (!isurl(http_url))
+	{
+		myprintf("94642: http_url is not a url |%s|\n",http_url.c_str());
+		return 2;
+	}
+	if (!isurl(http_exe))
+	{
+		myprintf("94647: http_exe is not a url |%s|\n",http_exe.c_str());
+		return 2;
+	}
+	
+	
+	string 	verurl 	=http_url+randnocache;
+	string	verfile	=g_gettempdirectory()+"zpaqfranz_verfile.sha256";
+	verfile			=nomefileseesistegia(verfile);
+
+	if (!downloadfile(verurl,verfile,false))
+		return 2;
+	myprintf("\n");
+	myprintf("94300: Testing internet version...\n");
+	
+	vector<string> versioni;
+	readfiletoarray(verfile,versioni);
+	if (versioni.size()==0)
+	{
+		myprintf("94592: version file with 0 lines\n");
+		return 2;
+	}
+	
+	string linea;
+	
+#ifdef _WIN32
+	if (versioni.size()!=1)
+	{
+		myprintf("94314: version file should have 1 line instead of %s\n",migliaia(versioni.size()));
+		return 2;
+	}
+	linea=versioni[0];
+#else
+	linea=versioni[versioni.size()-1];
+	if (flagdebug3)
+		myprintf("94613: the last line |%s|\n",linea.c_str());
+#endif	
+	
+	if (linea.size()<70)
+	{
+		myprintf("94315: Line size should be >=70 %08s %s\n",migliaia(linea.size()),linea.c_str());
+		return 2;
+	}
+	
+	string thesha256="";
+	for (unsigned int i=0;i<64;i++)
+		if ((isdigit(linea[i]) || (isalpha(linea[i]))))
+			thesha256+=linea[i];
+	if (thesha256.size()!=64)
+	{
+		myprintf("94324: sha256 len expected 64 vs %s |%s|\n",migliaia(thesha256.size()),thesha256.c_str());
+		return 2;
+	}
+	string theversion	="";
+	string maj			="";
+	string minor		="";
+	string letter		="";
+	
+	unsigned int i=65;
+	
+	if (linea[i]=='*')
+		i++;
+	while (i<linea.size())
+	{
+		if ((isalnum(linea[i])) || (linea[i]=='.'))
+			theversion+=linea[i++];
+		else
+			break;
+	}
+	
+	string thedate=linea.substr(i+1,linea.size());
+
+	if (flagverbose)
+		myprintf("94390: Version to be decoded |%s| date |%s|\n",theversion.c_str(),thedate.c_str());
+	
+	if (!decode_zpaq_version(theversion,maj,minor,letter))
+	{
+		myprintf("94390: decode zpaq version failed!\n");
+		return 2;
+	}
+	
+	string	internal_version	=ZPAQ_VERSION;
+	string  internal_date		=ZPAQ_DATE;
+	string 	internal_maj		="";
+	string 	internal_minor		="";
+	string 	internal_letter		="";
+	if (!decode_zpaq_version(internal_version,internal_maj,internal_minor,internal_letter))
+	{
+		myprintf("94401: decode internal zpaq version failed!\n");
+		return 2;
+	}
+	bool flagnewer=false;
+
+	int	imaj			=atoi(maj.c_str());
+	int internal_imaj	=atoi(internal_maj.c_str());
+	
+	int iminor			=atoi(minor.c_str());
+	int internal_iminor	=atoi(internal_minor.c_str());
+	
+	flagnewer=
+	(imaj>internal_imaj)
+	|
+	((imaj==internal_imaj) && (iminor>internal_iminor))
+	|
+	((imaj==internal_imaj) && (iminor==internal_iminor) && (letter>internal_letter));
+	
+	if (flagverbose)
+	{
+		myprintf("94408: Current major  %4s =>  %4s\n",internal_maj.c_str(),maj.c_str());
+		myprintf("94408: Current minor  %4s =>  %4s\n",internal_minor.c_str(),minor.c_str());
+		myprintf("94408: Current letter %4s =>  %4s\n",internal_letter.c_str(),letter.c_str());
+	}
+#ifdef _WIN32
+	if ((!flagnewer) && (flagkill))
+	{
+		color_yellow();
+		myprintf("94488: Your %s %s is not older of %s %s BUT -kill => continue anyway\n",internal_version.c_str(),internal_date.c_str(),theversion.c_str(),thedate.c_str());
+		color_restore();
+	}
+	else
+#endif
+	if ((!flagnewer) && (!flagkill))
+	{
+		color_red();
+		myprintf("94418: Your %s %s is not older of %s %s => nothing to do\n",internal_version.c_str(),internal_date.c_str(),theversion.c_str(),thedate.c_str());
+		color_restore();
+		remove(verfile.c_str());
+		return 0;
+	}
+	
+#ifdef _WIN64
+	franz_do_hash myself("SHA-256");
+	if (flagdebug3)
+		myprintf("94710: filehash on %s\n",fullzpaqexename.c_str());
+
+	int64_t startmyself=mtime();
+	string myownsha256=myself.filehash(fullzpaqexename,false,startmyself,prendidimensionefile(fullzpaqexename.c_str()));
+	if (flagverbose)
+		myprintf("94714: myownsha256 %s\n",myownsha256.c_str());
+	
+	if (stringtolower(myownsha256)==stringtolower(thesha256))
+	{
+		myprintf("94718: Really nothing to do because your build is == to the internet one\n");
+		return 0;
+	}
+	
+	color_green();
+	myprintf("94416: Candidate %s of %s vs current %s of %s",theversion.c_str(),thedate.c_str(),internal_version.c_str(),internal_date.c_str());
+	color_restore();
+
+	if (!flagforce)
+	{
+		color_red();
+		myprintf(" Use -force to update!\n");
+		color_restore();
+		return 0;
+	}
+	myprintf("\n");
+	
+	string 	exeurl 	=http_exe+randnocache;
+	string	exefile	=g_gettempdirectory()+"zpaqfranz_exe.exe";
+	exefile			=nomefileseesistegia(exefile);
+
+	if (flagverbose)
+	{
+		myprintf("94449: from     %s\n",exeurl.c_str());
+		myprintf("94450: to file  %s\n",exefile.c_str());
+	}
+	myprintf("94513: Downloading from Internet...\n");
+
+	int64_t startdownload=mtime();
+
+	if (!downloadfile(exeurl,exefile,true))
+		return 2;
+	myprintf("\n");
+
+	int64_t dimensionescaricata=prendidimensionefile(exefile.c_str());
+	if (dimensionescaricata<=1000000)
+	{
+		myprintf("94476: Downloaded size small, abort (%s)\n",migliaia(dimensionescaricata));
+		return 2;
+	}
+	myprintf("94895: Time %5.2f s, now integrity check (%s bytes)\n",(mtime()-startdownload)/1000.0,migliaia(dimensionescaricata));
+	franz_do_hash dummy("SHA-256");
+	if (flagdebug3)
+		myprintf("94482: filehash on %s\n",exefile.c_str());
+
+	int64_t starthash=mtime();
+	string hashreloaded=dummy.filehash(exefile,false,starthash,dimensionescaricata);
+	if (flagverbose)
+	{
+		myprintf("94486: hash reloaded %s\n",hashreloaded.c_str());
+		myprintf("94487: expected hash %s\n",thesha256.c_str());
+	}
+	if (stringtolower(hashreloaded)!=stringtolower(thesha256))
+	{
+		myprintf("94490: Hash mismatch => error C5 => Kaputt\n");
+		return 2;
+	}
+	color_green();
+	myprintf("94493: OK => updating zpaqfranz\n");
+	color_restore();
+	if (flagverbose)
+	{
+		myprintf("94519: zpaqfranzexename %s\n",zpaqfranzexename.c_str());
+		myprintf("94520: fullzpaqexename  %s\n",fullzpaqexename.c_str());
+	}
+	
+	string	filebatch	=g_gettempdirectory()+"updatezpaqfranz.bat";
+	filebatch=nomefileseesistegia(filebatch);
+	if (fileexists(filebatch))
+		if (remove(filebatch.c_str())!=0)
+		{
+			myprintf("94501: Highlander batch  %s\n", filebatch.c_str());
+			return 2;
+		}
+	FILE* batch=fopen(filebatch.c_str(), "wb");
+	if (batch==NULL)
+	{
+		myprintf("94507: cannot write on %s\n",filebatch.c_str());
+		return 2;
+	}
+	
+	fullzpaqexename=linuxtowinpath(fullzpaqexename);
+	
+	fprintf(batch,"@echo OFF\r\n");
+    fprintf(batch,":again\r\n");
+	fprintf(batch,"taskkill /F /IM %s\r\n",zpaqfranzexename.c_str());
+	fprintf(batch,"del \"%s\"\r\n",fullzpaqexename.c_str());
+    fprintf(batch,"if exist \"%s\" goto again\r\n",fullzpaqexename.c_str());
+    fprintf(batch,"copy \"%s\" \"%s\" /y\r\n",exefile.c_str(),fullzpaqexename.c_str());
+    fprintf(batch,"del \"%s\"\r\n",verfile.c_str());
+    fprintf(batch,"del \"%s\"\r\n",exefile.c_str());
+    fprintf(batch,"del \"%s\"\r\n",filebatch.c_str());
+	fclose(batch);
+	waitexecute(filebatch,"",SW_HIDE);
+#endif
+	return 0;
+}
+
+
+#ifdef _WIN64
+int Jidac::download()
+{
+	myprintf("94959: Download file from Internet (something like wget)\n");
+	if (files.size()!=2)
+	{
+		myprintf("94963: Exactly 2 file-parameters required. URL and local file\n");
+		return 2;
+	}
+	
+	string randnocache="?"+generaterandomstring(10);
+#ifdef unix
+	randnocache="";
+#endif
+
+	if (flagdebug)
+		myprintf("94911: randnocache %s\n",randnocache.c_str());
+
+	string	thehashtype="";
+	string 	thehash="";
+	
+	if (flagchecktxt)
+		if (checktxt!="")
+		{
+			if (flagverbose)
+				myprintf("94976: Downloading the txt check file\n");
+			string http_url=checktxt;
+			if (!isurl(http_url))
+			{
+				myprintf("94981: http_url is not a url |%s|\n",http_url.c_str());
+				return 2;
+			}
+			http_url+=randnocache;
+			string	verfile	=g_gettempdirectory()+"zpaqfranz_verfile.txt";
+			verfile			=nomefileseesistegia(verfile);
+			if (!downloadfile(http_url,verfile,false))
+				return 2;
+			myprintf("\n");
+			if (flagverbose)
+				myprintf("94990: Loading hash data...\n");
+			
+			vector<string> versioni;
+			readfiletoarray(verfile,versioni);
+			if (versioni.size()==0)
+			{
+				myprintf("94996: version file with 0 lines\n");
+				return 2;
+			}
+			string linea;
+	
+			if (versioni.size()!=1)
+			{
+				myprintf("95003: version file should have 1 line instead of %s\n",migliaia(versioni.size()));
+				return 2;
+			}
+			linea=versioni[0];
+			if (flagverbose)
+				myprintf("95007: Line %s |%s|\n",migliaia(linea.size()),linea.c_str());
+
+			thehash=getfirsthash(linea);
+			
+			if (thehash.size()==32)
+				thehashtype="MD5";
+			if (thehash.size()==40)
+				thehashtype="SHA-1";
+			if (thehash.size()==64)
+				thehashtype="SHA-256";
+			
+			if (thehashtype=="")
+			{
+				myprintf("95018: Cannot recognize hash type len (%d). 32=MD5; 40=SHA1; 64=SHA-256\n",thehash.size());
+				return 2;
+			}
+			if (flagverbose)
+				myprintf("95016: Hash type |%s| %s |%s|\n",thehashtype.c_str(),migliaia(thehash.size()),thehash.c_str());
+
+			if (!flagforce)
+			{
+				if (flagverbose)
+					myprintf("95074: Deleting verfile (skip with -force)\n");
+				remove(verfile.c_str());
+			}
+		}
+		
+	string http_url=files[0];
+	if (!isurl(http_url))
+	{
+		myprintf("94924: http_url is not a url |%s|\n",http_url.c_str());
+		return 2;
+	}
+	http_url+=randnocache;
+	string output_file=files[1];
+	if (!flagforce)
+		output_file=nomefileseesistegia(output_file);
+	
+	if (!flagspace)
+		if (!saggiascrivibilitacartella(output_file))
+		{
+			myprintf("94931: Cannot write on %s (maybe lack of ./? bypass with -space)\n");
+			return 2;
+		}
+	int64_t startdownload=mtime();
+	if (!downloadfile(http_url,output_file,true))
+	{
+		myprintf("\n");
+		myprintf("94938: Something wrong on downloadfile()\n");
+		return 2;
+	}
+	myprintf("\n");
+	myprintf("94942: Downloaded filesize %s in %5.2f s\n",migliaia(prendidimensionefile(output_file.c_str())),(mtime()-startdownload)/1000.0);
+	myprintf("94945: Output file <<");
+	printUTF8(output_file.c_str());
+	myprintf(">>\n");
+	if (thehashtype!="")
+	{
+		franz_do_hash dummy(thehashtype);
+		if (flagdebug3)
+			myprintf("95057: hashing on %s\n",output_file.c_str());
+
+		int64_t starthash=mtime();
+		string hashreloaded=dummy.filehash(output_file,false,starthash,prendidimensionefile(output_file.c_str()));
+		myprintf("\n");
+		if (flagverbose)
+		{
+			myprintf("95063: hash reloaded %s\n",hashreloaded.c_str());
+			myprintf("95064: expected hash %s\n",thehash.c_str());
+		}
+		if (stringtolower(hashreloaded)!=stringtolower(thehash))
+		{
+			color_red();
+			myprintf("95068: GURU => downloaded hash does not match!\n");
+			myprintf("95080: hash type     %s\n",thehashtype.c_str());
+			myprintf("95081: hash expected %s\n",thehash.c_str());
+			myprintf("95082: hash founded  %s\n",hashreloaded.c_str());
+			
+			color_restore();
+			if (!flagforce)
+			{
+				myprintf("95074: Deleting corrupted file (skip with -force)\n");
+				remove(output_file.c_str());
+			}
+			return 2;
+		}
+		color_green();
+		myprintf("95057: Expected hash OK (this is very good)\n");
+		color_restore();
+	}
+	return 0;
+
+}
+
 #endif

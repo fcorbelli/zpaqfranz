@@ -52,7 +52,7 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 */
 
-#define ZPAQ_VERSION "59.4j"
+#define ZPAQ_VERSION "59.4k"
 #define ZPAQ_DATE "(2024-05-11)"  // cannot use __DATE__ on Debian!
 
 ///	optional align for malloc (sparc64) via -DALIGNMALLOC
@@ -92439,28 +92439,29 @@ int Jidac::dump()
 		myprintf("\n");
 	}
 ///	in.close();
-  
+
+	if (flagverbose)
+	{
+		if (cblock_position.size()>0)
+			for (unsigned int i=1;i<cblock_position.size();i++)
+				myprintf("92375: c block %08d %21s\n",i,migliaia(cblock_position[i]));
+		if (dblock_position.size()>0)
+			for (unsigned int i=0;i<dblock_position.size();i++)
+				myprintf("92376: d block %08d %21s\n",i,migliaia(dblock_position[i]));
+		if (hblock_position.size()>0)
+			for (unsigned int i=0;i<hblock_position.size();i++)
+				myprintf("92377: h block %08d %21s\n",i,migliaia(hblock_position[i]));
+		if (iblock_position.size()>0)
+			for (unsigned int i=0;i<iblock_position.size();i++)
+				myprintf("92378: i block %08d %21s\n",i,migliaia(iblock_position[i]));
+	}
+	
 	myprintf("88226: c block (jump)  %9s\n",migliaia(cblock));
 	myprintf("88227: d block (data)  %9s\n",migliaia(dblock));
 	myprintf("88228: h block (hash)  %9s\n",migliaia(hblock));
 	myprintf("88229: i block (index) %9s\n",migliaia(iblock));
 	myprintf("88230: file count      %9s\n",migliaia(filecount));
 
-	if (cblock_position.size()>0)
-		for (unsigned int i=1;i<cblock_position.size();i++)
-			myprintf("92375: c block %08d %21s\n",i,migliaia(cblock_position[i]));
-	
-	if (dblock_position.size()>0)
-		for (unsigned int i=0;i<dblock_position.size();i++)
-			myprintf("92375: d block %08d %21s\n",i,migliaia(dblock_position[i]));
-
-	if (hblock_position.size()>0)
-		for (unsigned int i=0;i<hblock_position.size();i++)
-			myprintf("92375: h block %08d %21s\n",i,migliaia(hblock_position[i]));
-	if (iblock_position.size()>0)
-		for (unsigned int i=0;i<iblock_position.size();i++)
-			myprintf("92375: i block %08d %21s\n",i,migliaia(iblock_position[i]));
-	
 	
 	return 0;
 }

@@ -52,8 +52,8 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 */
 
-#define ZPAQ_VERSION "59.3q"
-#define ZPAQ_DATE "(2024-04-19)"  // cannot use __DATE__ on Debian!
+#define ZPAQ_VERSION "59.4j"
+#define ZPAQ_DATE "(2024-05-11)"  // cannot use __DATE__ on Debian!
 
 ///	optional align for malloc (sparc64) via -DALIGNMALLOC
 #define STR(a) #a
@@ -1092,7 +1092,8 @@ Credits and copyrights and licenses and links and internal bookmarks
 35 Thanks to https://github.com/luckman212              for a refactoring-induced bug detection
 36 Thanks to whiskytechfred user of the encode.su forum for truncate-touching
 37 Thanks to Takayuki Matsuoka                          for LZ4 streaming API example : line-by-line logfile 
-			
+38 Thanks to whiskytechfred user of the encode.ru forum for vss filename fix
+	
                 _____ _   _  _____ _______       _      _
                |_   _| \ | |/ ____|__   __|/\   | |    | |
                  | | |  \| | (___    | |  /  \  | |    | |
@@ -13157,6 +13158,7 @@ bool flagappend;
 bool flagbig;
 bool flagchecksum;
 bool flagchecktxt;
+bool flagsfx;
 bool flagfasttxt;
 bool flagcomment;
 bool flagdesc;
@@ -13179,6 +13181,7 @@ bool flagnodedup;
 bool flagnoeta;
 bool flagnopath;
 bool flagnoqnap;
+bool flagnomac;
 bool flagnorecursion;
 bool flagnosort;
 bool flagpakka;
@@ -40574,15 +40577,15 @@ private:
 	string	indexfasttxt;
 	map<int, string> mappacommenti;
 	string versioncomment;
-	bool flagnoattributes;        		// -noattributes option
-	bool flagforce;               		// -force option
-	bool flagcomment;
+	///bool flagnoattributes;        		// -noattributes option
+	///bool flagforce;               		// -force option
+	///bool flagcomment;
 	bool flagtest;
-	bool flagskipzfs;
-	bool flagnoqnap;					// exclude @Recently-Snapshot and @Recycle
-	bool flagforcewindows;        		// force alterate data stream $DATA$, system volume information
-	bool flagnopath;					// do not store path
-	bool flagnosort;              		// do not sort files std::sort(vf.begin(), vf.end(), compareFilename);
+	///bool flagskipzfs;
+	///bool flagnoqnap;					// exclude @Recently-Snapshot and @Recycle
+	///bool flagforcewindows;        		// force alterate data stream $DATA$, system volume information
+	///bool flagnopath;					// do not store path
+	///bool flagnosort;              		// do not sort files std::sort(vf.begin(), vf.end(), compareFilename);
 	uint32_t filelength;
 	uint32_t dirlength;
 	string	snapmark;
@@ -40630,6 +40633,7 @@ private:
 	int mycopy();						// Like copy, but with progress
 	int zero();							// Delete empty directory
 	int trim();							// Trim incomplete transaction
+	int crop();							// Truncate
 	int rd();							// Remove dir (rd /s or rm-f)
 	int purgersync();					// Purge rsync temporary file
 	int sfx();							// Write autoextract module
@@ -40769,6 +40773,7 @@ size_t			i_buffersize
 	void 		updatehash(DTMap::iterator* i_p,char* i_buf,int i_buflen);
 	int64_t 	get_dt(int *errors, const char* arc);
 	int 		dump();
+
 ///	char 		getspecificlevel(const string& i_filename);
 ///	void 		loadpaqlevel();
 	int			loadzfsdiff(string i_filediff,vector<string>& o_added,vector<string>& o_deleted);
@@ -40777,6 +40782,8 @@ size_t			i_buffersize
 	void		htdecoder();
 	void		dtdecoder();
 	bool 		noselection();
+///	int 		scan_archive(vector<uint64_t>& cblock_position,vector<uint64_t>& dblock_position,vector<uint64_t>& hblock_position,vector<uint64_t>& iblock_position);
+
 };
 
 Jidac* pjidac;
@@ -44849,6 +44856,33 @@ string help_trim(bool i_usage,bool i_example)
 	return("Trim .zpaq archive from the incomplete transaction");
 
 }
+string help_crop(bool i_usage,bool i_example)
+{
+
+	if (i_usage)
+	{
+		moreprint("CMD   crop        Discard latest version(s)");
+		moreprint("<>:               Delete queued versions from the archive");
+		moreprint("                  up to the specified position or -until");
+		moreprint("                  By default DRY RUN (only test)");
+		moreprint("<>: -kill         Do a 'wet' (effective) run");
+		moreprint("<>: -to tiny.zpaq Reduce to tiny.zpaq (safer)");
+		moreprint("<>: -until X      Discard every versions >X");
+	    moreprint("+ : -maxsize  X   Manually cut at X (RISKY)");
+	    moreprint("+ : -force        Crop in-place (no backup: VERY RISKY!)");
+
+	}
+	if (i_usage && i_example) moreprint("    Examples:");
+	if (i_example)
+	{
+		moreprint("Reduce file (dry run, just infos):   crop z:\\1.zpaq");
+		moreprint("Reduce up to version 100:            crop z:\\1.zpaq -to d:\\2.zpaq -until 100 -kill");
+		moreprint("Reduce to first 100.000:             crop z:\\1.zpaq -to d:\\2.zpaq -maxsize 100k -kill");
+		moreprint("Crop in place (NO BACKUP! RISKY!):   crop z:\\1.zpaq -until 2 -kill -force");
+	}
+	return("Reduce .zpaq archive cropping (trimming) versions");
+
+}
 void print_sub()
 {
 	moreprint("                  Substitute %hour %min %sec %weekday %year %month %day");
@@ -45277,6 +45311,8 @@ string help_l(bool i_usage,bool i_example)
 		help_date();
 		help_size();
 		help_orderby();
+		help_range();
+
 	}
 	if (i_usage && i_example) moreprint("    Examples:");
 	if (i_example)
@@ -45298,6 +45334,8 @@ string help_l(bool i_usage,bool i_example)
 		moreprint("Find the versions of a file          l z:\\1.zpaq -only \"*/the/file.doc\" -all");
 		moreprint("Force recomputing list               l z:\\1.zpaq -ads");
 		moreprint("Try to get the fast filelist         l z:\\1.zpaq -fast");
+		moreprint("Files added in versions 2 and 3      l z:\\1.zpaq -range 2:3");
+		moreprint("Files added in last version          l z:\\1.zpaq -range ::1");
 	}
 	return("List file(s)");
 
@@ -45602,7 +45640,7 @@ string help_c(bool i_usage,bool i_example)
 		help_size();
 		moreprint("+ : -715          Work as 7.15 (with .zfs and ADS)");
 		moreprint("+ : -forcezfs     Include .zfs");
-		moreprint("+ : -verify       Run hash compare");
+		moreprint("+ : -checksum     Run hash compare");
 
 	}
 	if (i_usage && i_example) moreprint("    Examples:");
@@ -45610,7 +45648,7 @@ string help_c(bool i_usage,bool i_example)
 	{
 		moreprint("Compare master d0 against d1,d2,d3:  c c:\\d0 k:\\d1 j:\\d2 p:\\d3");
 		moreprint("Multithread compare:                 c c:\\d0 k:\\d1 j:\\d2 p:\\d3 -ssd");
-		moreprint("Hashed compare d0 against d1,d2,d3:  c c:\\d0 k:\\d1 j:\\d2 p:\\d3 -verify");
+		moreprint("Hashed compare d0 against d1,d2,d3:  c c:\\d0 k:\\d1 j:\\d2 p:\\d3 -checksum -xxh3");
 	}
 	return("Compare one master dir against one or more slaves dir(s)");
 
@@ -46239,6 +46277,7 @@ string help_franzswitches(bool i_usage,bool i_example)
 		moreprint("+ : -zfs          Skip paths including .zfs");
 		moreprint("+ : -forcezfs     Force paths including .zfs");
 		moreprint("+ : -noqnap       Skip path including @Recently-Snapshot and @Recycle");
+		moreprint("+ : -nomac        Skip ._something and .DS_Store and Thumbs.db");
 		moreprint("+ : -forcewindows Take $DATA$ and System Volume Information");
 		moreprint("+ : -xls          Do NOT always force XLS/PPT");
 		moreprint("+ : -nopath       Do not store path");
@@ -46410,6 +46449,7 @@ void Jidac::load_help_map()
 	help_map.insert(std::pair<string, voidhelpfunction>("z",help_z));
 	help_map.insert(std::pair<string, voidhelpfunction>("find",				help_find));
 	help_map.insert(std::pair<string, voidhelpfunction>("trim",				help_trim));
+	help_map.insert(std::pair<string, voidhelpfunction>("crop",				help_crop));
 	help_map.insert(std::pair<string, voidhelpfunction>("password",			help_setpassword));
 	help_map.insert(std::pair<string, voidhelpfunction>("dirsize",			help_dirsize));
 	help_map.insert(std::pair<string, voidhelpfunction>("cp",				help_cp));
@@ -46783,6 +46823,8 @@ void decoderange(string i_range)
 -range 2
 -range ::3 -> Extract the last 3
 */
+///myprintf("46825: entering decode\n");
+
 	g_rangefrom	=0;
 	g_rangeto	=0;
 	g_rangelast	=0;
@@ -47410,6 +47452,9 @@ int Jidac::loadparameters(int argc, const char** argv)
 	g_programflags.add(&flagbig,			"-big",					"Big",												"all;");
 	g_programflags.add(&flagchecksum,		"-checksum",			"Do checksums",										"");
 	g_programflags.add(&flagchecktxt,		"-checktxt",			"Checktxt (MD5)",									"");
+#ifdef _WIN32
+	g_programflags.add(&flagsfx,			"-sfx",					"Enable SFX module",								"");
+#endif
 	g_programflags.add(&flagfasttxt,		"-fasttxt",				"Create test .txt with CRC-32 and QUICK",											"");
 	g_programflags.add(&flagcomment,		"-comment",				"Comment version",									"");
 	g_programflags.add(&flagdebug,			"-debug",				"Show debug line number",							"");
@@ -47441,6 +47486,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 	g_programflags.add(&flagnoeta,			"-noeta",				"Do not show ETA",									"");
 	g_programflags.add(&flagnopath,			"-nopath",				"Do not store path",								"");
 	g_programflags.add(&flagnoqnap,			"-noqnap",				"Exclude QNAP snap & trash",						"a;");
+	g_programflags.add(&flagnomac,			"-nomac",				"Exclude Mac hidden files",						"a;");
 	g_programflags.add(&flagnorecursion,	"-norecursion",			"Do not recurse into folders (default: YES)",		"");
 	g_programflags.add(&flagnosort,			"-nosort",				"Do not sort file",									"");
 	g_programflags.add(&flagpakka,			"-pakka",				"New output",										"");
@@ -47934,6 +47980,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 		opt=="q" 				||
 		opt=="g" 				||
 		opt=="sfx" 				||
+		opt=="crop" 			||
 		opt=="m"				||
 		opt=="gui"				||
 		opt=="dirsize"  		||
@@ -47962,6 +48009,8 @@ int Jidac::loadparameters(int argc, const char** argv)
 				command='K';
 			if (opt=="gui")
 				command='G';
+			if (opt=="crop")
+				command='+';
 			if (opt=="fzf")
 				command='F';
 			
@@ -47994,7 +48043,15 @@ int Jidac::loadparameters(int argc, const char** argv)
 				g_optional="dirsize";
 			}
 			archive=argv[++i];  // append ".zpaq" to archive if no extension
-
+			
+			if (opt=="backup")
+			{
+				string percorso=extractfilepath(archive);
+				if (percorso=="")
+					archive="./"+archive;
+				if (flagdebug)
+					myprintf("48006: backup path |%s| archive |%s|\n",percorso.c_str(),archive.c_str());
+			}
 			fullarchive="";
 
 			if ((command=='x') || (command=='t'))
@@ -48015,6 +48072,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 				files.push_back(argv[i]);
 			--i;
 
+			
 ///zpaqfranz a z:\foo
 ///if file "./foo" or folder "./foo" does esists, create or update "z:\foo.zpaq" with the "./foo"
 			if ((opt=="a") || (opt=="add"))
@@ -48122,7 +48180,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 		else if (cli_onlystring	(opt,"-freeze",				"",				g_freeze,		argc,argv,&i,					NULL));
 		else if (cli_onlystring	(opt,"-output",				"-out",			g_output,		argc,argv,&i,					NULL));
 		else if (cli_onlystring	(opt,"-script",				"",				g_script,		argc,argv,&i,					NULL));
-		else if (cli_onlystring	(opt,"-sfx",				"",				g_sfx,			argc,argv,&i,					NULL));
+		else if (cli_onlystring	(opt,"-sfx",				"",				g_sfx,			argc,argv,&i,					&flagsfx));
 		else if (cli_onlystring	(opt,"-deleteinto",			"",				g_deleteinto,	argc,argv,&i,					NULL));
 		else if (cli_onlystring	(opt,"-sfxto",				"",				g_sfxto,		argc,argv,&i,					NULL));
 		else if (cli_onlystring	(opt,"-exec",				"",				g_exec,			argc,argv,&i,					NULL));
@@ -48635,7 +48693,8 @@ int Jidac::doCommand()
 #ifdef _WIN64
 	else if (command=='W') return download();
 #endif
-
+	else if (command=='+') return crop();
+	
 	else usage();
 	return 0;
 }
@@ -48892,7 +48951,31 @@ int compressfraglist(const vector<unsigned>& ptr, bool i_flagprint)
 }
 
 
-
+bool ismac(const string& i_stringa)
+{
+	string solonome=extractfilename(i_stringa);
+	///myprintf("48914: solonome |%s|\n",solonome.c_str());
+	if (solonome==".DS_Store")
+	{
+		if (flagverbose)
+			myprintf("48945: Skip Mac .DS_Store %s\n",i_stringa.c_str());
+		return true;
+	}
+	if (solonome=="Thumbs.db")
+	{
+		if (flagverbose)
+			myprintf("48925: Skip Mac Thumbs.db %s\n",i_stringa.c_str());
+		return true;
+	}
+	if (solonome.size()>2)
+		if ((solonome[0]=='.') && (solonome[1]=='_'))
+		{
+			if (flagverbose)
+				myprintf("48946: Skip Mac ._something %s\n",i_stringa.c_str());
+			return true;
+		}
+	return false;
+}	
 // Test whether filename and attributes are selected by files, -only, and -not
 // If rn then test renamed filename.
 // if i_size >0 check file size too (minsize,maxsize)
@@ -48913,6 +48996,12 @@ bool Jidac::isselected(const char* filename, bool rn,int64_t i_size)
 					myprintf("47274: Verbose: Skip .zfs %s\n",filename);
 				return false;
 			}
+	
+	if (flagnomac)
+		if (ismac(filename))
+			return false;
+
+	
 	if (flagnoqnap) //this is an "automagically" exclude for qnap's snapshots
 		if (
 			(strstr(filename, "@Recently-Snapshot"))
@@ -49168,6 +49257,10 @@ void Jidac::scandir(bool i_checkifselected,DTMap& i_edt,string filename, bool i_
 					myprintf("47624: Verbose: Skip .zfs ----> %s\n",filename.c_str());
 				return;
 			}
+	if (flagnomac)
+		if (ismac(filename))
+			return;
+
 	if (flagnoqnap)
 	{
 		if (filename.find("@Recently-Snapshot")!=std::string::npos)
@@ -49470,6 +49563,7 @@ void Jidac::addfile(bool i_checkifselected,DTMap& i_edt,string filename, int64_t
 	if (command=='q')
 		if (filename.size()>250)
 			myreplace(filename,g_franzsnap,g_vss_shadow);
+
 	if (command!='j')
 	{
 		if (g_datefrom>0)
@@ -51593,6 +51687,7 @@ bool Jidac::noselection()
 // List contents
 int Jidac::list()
 {
+
 	if (flagfast)
 	{
 		if (noselection())
@@ -51639,13 +51734,16 @@ int Jidac::list()
 
 
 	decodelastversion();
-
+	if (g_rangefrom>0)	// a version-range selection, stick with 8 hardcoded digit
+		all=8;	
+	
 	if (files.size()>=1)
 		return testverify();
-  // Read archive into dt, which may be "" for empty.
+
 	int errors=0;
 	bool flagshow;
 	
+  // Read archive into dt, which may be "" for empty.
 	if (archive!="")
 		csize=read_archive(NULL,archive.c_str(),&errors,1); /// AND NOW THE MAGIC ONE!
 	myprintf("\n");
@@ -51729,6 +51827,15 @@ int Jidac::list()
 		if (g_dateto>0)
 			if ((p->second.date)>=g_dateto)
 				flagshow=false;
+
+		if (g_rangefrom>0)
+			if (p->first.size()>8) //hardcoded 8
+			{
+				string inizio=myleft(p->first,8);
+				int iversion=atoll(inizio.c_str());
+				flagshow=((iversion>=g_rangefrom) && (iversion<=g_rangeto));
+			}
+
 		if (flagshow)
 			if (!strchr(nottype.c_str(), p->second.data))
 			{
@@ -54598,8 +54705,10 @@ int Jidac::extract()
 						tobesetted++, setted++;
 				*/
 				if ((!isads(fn)) && (!iszfs(fn)))
-					if (fileexists(fn))
+					///if (fileexists(fn))
 					{
+						if (flagdebug3)
+							myprintf("54691: Working on %s\n",fn.c_str());
 						tobesetted++;
 						percentuale=tobesetted*100/tobeworked;
 						if (ultimapercentuale!=percentuale)
@@ -54624,7 +54733,11 @@ int Jidac::extract()
 							myisordered,
 							myversion,
 							myposix);
-
+						if (flagdebug3)
+						{
+							myprintf("\n");
+							myprintf("54716: creation %s\n",migliaia(mycreationtime));
+						}
 						if (mycreationtime>0)
 							if (wintouch(fn,0,mycreationtime))
 								setted++;
@@ -54807,6 +54920,7 @@ int Jidac::enumeratecomments()
 		}
 	}
 	return 0;
+	
 }
 int Jidac::kill()
 {
@@ -55170,7 +55284,7 @@ bool compare_s_benchmark(const s_benchmark &a, const s_benchmark &b)
 {
     return a.speed < b.speed;
 }
-string filecopy(bool i_singlefile,bool i_append,const string& i_infile,const string& i_outfile,bool i_verify,bool i_donotcheckspace,bool i_overwrite)
+string filecopy(bool i_singlefile,bool i_append,const string& i_infile,const string& i_outfile,bool i_verify,bool i_donotcheckspace,bool i_overwrite,uint64_t i_maxoutputsize)
 {
 	if ((i_infile)=="")
 		return "";
@@ -55189,6 +55303,8 @@ string filecopy(bool i_singlefile,bool i_append,const string& i_infile,const str
 	if (!direxists(percorso))
 		makepath(percorso);
 	int64_t larghezzain	=prendidimensionefile(i_infile.c_str());
+	if (i_maxoutputsize>0)
+		larghezzain=i_maxoutputsize;
 	string solofile=extractfilename(i_infile);
 	string filedefinitivo=percorso+solofile;
 	if (i_singlefile)
@@ -55327,6 +55443,14 @@ string filecopy(bool i_singlefile,bool i_append,const string& i_infile,const str
 	
 	while ((readSize = fread(buffer, 1, g_ioBUFSIZE, inFile)) > 0)
 	{
+		if (i_maxoutputsize>0)
+			if ((donesize+readSize)>i_maxoutputsize)
+			{
+				int64_t bytestowrite=i_maxoutputsize-donesize;
+				int64_t written=fwrite(buffer,1,bytestowrite,outFile);
+				donesize+=written;
+				break;
+			}
 		int64_t written=fwrite(buffer,1,readSize,outFile);
 		donesize+=written;
 		if (!i_append)
@@ -55537,8 +55661,8 @@ int Jidac::trim()
 		archive,trimmeddestination,
 		flagverify, //verify
 		true,  //donocheckspace
-		false ///overwrite
-		); //overwrite
+		false, ///overwrite
+		0 ); //maxoutputsize
 		if (risultato=="")
 		{
 			myprintf("33729: ERROR: %s\n",risultato.c_str());
@@ -55897,7 +56021,8 @@ int Jidac::mycopy()
 		filesource,todirectory,
 		flagverify, //verify
 		true,  //donocheckspace
-		!flagparanoid); //overwrite
+		!flagparanoid, //overwrite
+		0); //maxoutputsize
 		if (risultato=="")
 		{
 			myprintf("54323: ERROR: %s\n",risultato.c_str());
@@ -63340,7 +63465,7 @@ int Jidac::add()
 				if (dimensionefile>(int64_t)maxsize)
 				{
 					myprintf("61560: Freezing archive size %s vs maxsize %s\n",migliaia(dimensionefile),migliaia2(maxsize));
-					string filescritto=filecopy(false,false,archive,g_freeze,true,false,false);
+					string filescritto=filecopy(false,false,archive,g_freeze,true,false,false,0);
 					if (filescritto!="")
 					{
 						myprintf("61561: Moved <<%s>> to <<%s>>\n",archive.c_str(),filescritto.c_str());
@@ -65579,6 +65704,23 @@ int Jidac::add()
 					myprintf("65375: We get a VFILE\n");
 					filename=extractfilename(filename);
 				}
+				
+				
+				if (command=='a')
+					if (flagvss)
+					{
+						if (flagdebug3)
+						{
+							myprintf("49483: pre filename     %s\n",filename.c_str());
+							myprintf("49484: pre g_franzsnap  %s\n",g_franzsnap.c_str());
+							myprintf("49485: pre g_vss_shadow %s\n",g_vss_shadow.c_str());
+						}
+						myreplace(filename,g_vss_shadow,g_franzsnap);
+						if (flagdebug)
+							myprintf("49486: sanitized vss    %s\n",filename.c_str());
+					}
+
+				
 				uint32_t currentcrc32=0;
 				if (flagverify || flagcollision)
 				{
@@ -66006,7 +66148,7 @@ int Jidac::add()
 	if (errors==0)
 		if (g_copy!="")
 		{
-			string filescritto=filecopy(false,false,g_archive,g_copy,true,false,false);
+			string filescritto=filecopy(false,false,g_archive,g_copy,true,false,false,0);
 			if (filescritto!="")
 				myprintf("64057: Copied <<%s>> to <<%s>>\n",g_archive.c_str(),filescritto.c_str());
 			else
@@ -66031,8 +66173,24 @@ int Jidac::add()
 		jidacreset();
 		errors=verify(true); //re-read, again
 	}
-	if (g_sfx!="")
-		errors+=writesfxmodule(g_sfx);
+	if (flagsfx)
+	{
+		if (g_sfx=="")
+		{
+			string exeoutput=extractfilepath(g_archive)+prendinomefileebasta(g_archive)+".exe";
+			if (exists(exeoutput.c_str()))
+				myprintf("66045: WARNING, EXE file already exists, skipping sfx ");
+			else
+			{
+				myprintf("66051: INFO -sfx selected => activating sfx ");
+				g_sfx=exeoutput;
+			}
+			printUTF8(exeoutput.c_str());
+			myprintf("\n");
+		}
+		if (g_sfx!="")
+			errors+=writesfxmodule(g_sfx);
+	}
 	if ((!flagstdin)
 #ifdef _WIN32
 		&& (!flagimage)
@@ -66902,6 +67060,10 @@ int Jidac::benchmark()
 	vector<string> 	array_cpu;
 	vector<float> 	array_single;
 	vector<float> 	array_multi;
+	array_cpu	.push_back("AL314 (A15) 1.7G (phy)  2");
+	array_multi	.push_back(51);
+	array_single.push_back(355);
+
 	array_cpu	.push_back("Atom N2800       (phy)  4");
 	array_multi	.push_back(113);
 	array_single.push_back(407);
@@ -66950,6 +67112,7 @@ int Jidac::benchmark()
 	array_cpu	.push_back("AMD-7950X3D      (phy) 16");
 	array_multi	.push_back(7733);
 	array_single.push_back(5517);
+
 
 	int			chunksize=100000;
 	int			timelimit=5;
@@ -68248,7 +68411,7 @@ int Jidac::writesfxmodule(const string i_filename)
 	myprintf("66332: Block1        : %19s\n",migliaia(g_franzo_start.size()));
 	myprintf("66333: Command       : %19s\n",migliaia(i_thecommands.size()));
 	myprintf("66334: Block2        : %19s\n",migliaia(g_franzo_end.size()));
-	myprintf("66335: Start         :                      %s\n",migliaia(sfxsize+g_franzo_start.size()+i_thecommands.size()+g_franzo_end.size()));
+	myprintf("66335: Start         : %19s\n",migliaia(sfxsize+g_franzo_start.size()+i_thecommands.size()+g_franzo_end.size()));
 	myprintf("66336: ZPAQ archive  : %19s\n",migliaia(zpaqsize));
 	myprintf("66337: Expected      : %19s\n",migliaia(sfxsize+zpaqsize+g_franzo_start.size()+g_franzo_end.size()+i_thecommands.size()));
 	myprintf("66338: Written       : %19s\n",migliaia(sfxtotal));
@@ -89956,7 +90119,8 @@ int Jidac::consolidatebackup()
 		newfirstzpaq,
 		flagverify, //verify
 		true,  //donocheckspace
-		true); //overwrite
+		true, //overwrite
+		0); 
 		if (risultato=="")
 		{
 			myprintf("85965: something wrong during filecopy, abort ");
@@ -92081,6 +92245,7 @@ void decompile(const string& hcomp, const string& pcomp) {
     myprintf("90100: post 0 end\n");
 }
 
+
 int Jidac::dump() 
 {
 ///	getpasswordifempty();
@@ -92108,12 +92273,16 @@ int Jidac::dump()
 	unsigned int cblock		=0;
 	unsigned int dblock		=0;
 	unsigned int filecount	=0;
-	
-	
+	vector<uint64_t> cblock_position;
+	vector<uint64_t> dblock_position;
+	vector<uint64_t> hblock_position;
+	vector<uint64_t> iblock_position;
+	uint64_t		block_position=0;
 	while (d.findBlock(&mem)) 
 	{
 		int64_t tellme=in.tell();
-			
+		block_position=myoffset;
+		
 		myprintf("90129: Block %08d at %21s: mem    %21s %s\n", ++block,migliaia(myoffset), migliaia2(mem),migliaia3(tellme));
 		bool first=true;
 		while (d.findFilename(&filename)) 
@@ -92169,6 +92338,8 @@ int Jidac::dump()
 			{
 				dblock++;
 				myprintf("90185: D (data )\n");
+				dblock_position.push_back(block_position);
+
 			}
       // Display JIDAC index blocks
 			if (buf.s.size()) 
@@ -92180,12 +92351,14 @@ int Jidac::dump()
 				if (filename.s[17]=='c')  // header
 				{
 					cblock++;
-					myprintf("90195: C (jump ) %s\n", migliaia(mybtol(p)));
+					myprintf("90195: C (jump ) %s [position %21s]\n", migliaia(mybtol(p)),migliaia2(block_position));
+					cblock_position.push_back(block_position);
 				}
 				else if (filename.s[17]=='h') 
 				{  // fragment table
 					hblock++;
 					myprintf("90202: H (hash ) %s\n", migliaia(mybtoi(p)));
+					hblock_position.push_back(block_position);
 					if (summary<0)
 					{
 						int n=atoi(filename.s.c_str()+18);  // frag ID
@@ -92202,6 +92375,7 @@ int Jidac::dump()
 				{  // index
 					iblock++;
 					myprintf("90218: I (index)\n");
+					iblock_position.push_back(block_position);
 
 					while (p<end-8) 
 					{
@@ -92271,7 +92445,23 @@ int Jidac::dump()
 	myprintf("88228: h block (hash)  %9s\n",migliaia(hblock));
 	myprintf("88229: i block (index) %9s\n",migliaia(iblock));
 	myprintf("88230: file count      %9s\n",migliaia(filecount));
-  
+
+	if (cblock_position.size()>0)
+		for (unsigned int i=1;i<cblock_position.size();i++)
+			myprintf("92375: c block %08d %21s\n",i,migliaia(cblock_position[i]));
+	
+	if (dblock_position.size()>0)
+		for (unsigned int i=0;i<dblock_position.size();i++)
+			myprintf("92375: d block %08d %21s\n",i,migliaia(dblock_position[i]));
+
+	if (hblock_position.size()>0)
+		for (unsigned int i=0;i<hblock_position.size();i++)
+			myprintf("92375: h block %08d %21s\n",i,migliaia(hblock_position[i]));
+	if (iblock_position.size()>0)
+		for (unsigned int i=0;i<iblock_position.size();i++)
+			myprintf("92375: i block %08d %21s\n",i,migliaia(iblock_position[i]));
+	
+	
 	return 0;
 }
 /// LICENSE_END.21
@@ -95110,3 +95300,228 @@ int Jidac::download()
 }
 
 #endif
+
+/*
+int Jidac::scan_archive(vector<uint64_t>& cblock_position,vector<uint64_t>& dblock_position,vector<uint64_t>& hblock_position,vector<uint64_t>& iblock_position)
+{
+	InputArchive in(archive.c_str());
+	if (!in.isopen()) 
+	{
+		myprintf("95248: GURU cannot open <<");
+		printUTF8(archive.c_str());
+		myprintf(">>\n");
+		return 2;
+	}
+	libzpaq::Decompresser d;
+	libzpaq::SHA1 sha1;
+	d.setInput(&in);
+	d.setSHA1(&sha1);
+	double mem;
+	StringWriter filename, comment, buf;
+	char sha1result[21];
+	map<string, int> m;
+	int block				=0;
+	int64_t myoffset		=0;
+	unsigned int iblock		=0;
+	unsigned int hblock		=0;
+	unsigned int cblock		=0;
+	unsigned int dblock		=0;
+	unsigned int filecount	=0;
+	uint64_t		block_position=0;
+	while (d.findBlock(&mem)) 
+	{
+		block_position=myoffset;
+		
+		while (d.findFilename(&filename)) 
+		{
+			string sfilename=filename.s;
+			///myprintf("%c\n",sfilename[17]);
+			if (sfilename[17]=='c')
+			{
+				myprintf("90129: Block %08d @ %21s c\n", ++block,migliaia(myoffset));
+				cblock++;
+				cblock_position.push_back(block_position);
+			}
+			else
+			if (sfilename[17]=='d')
+			{
+				dblock++;
+				dblock_position.push_back(block_position);
+			}
+			else
+			if (sfilename[17]=='h')
+			{
+				hblock++;
+				hblock_position.push_back(block_position);
+			}
+			else
+			if (sfilename[17]=='i')
+			{
+				iblock++;
+				iblock_position.push_back(block_position);
+			}
+			else
+			{
+				myprintf("\n");
+				myprintf("95305: strange block type\n");
+				seppuku();
+			}
+			d.readComment(&comment);
+			d.readSegmentEnd(sha1result);
+			if (buf.s.size()>0 && sha1result[0]==1 && memcmp(sha1.result(), sha1result+1, 20))
+				myprintf("95302: CHECKSUM ERROR!\n");
+			myoffset=in.tell()-d.buffered();
+			buf.s		="";
+			filename.s	="";
+			comment.s	="";
+		}
+		myoffset=in.tell()-d.buffered();
+	}
+///	in.close();
+  
+	myprintf("88226: c block (jump)  %9s\n",migliaia(cblock));
+	myprintf("88227: d block (data)  %9s\n",migliaia(dblock));
+	myprintf("88228: h block (hash)  %9s\n",migliaia(hblock));
+	myprintf("88229: i block (index) %9s\n",migliaia(iblock));
+	myprintf("88230: file count      %9s\n",migliaia(filecount));
+	
+	return 0;
+}
+*/
+int Jidac::crop()
+{
+	if (iswildcards(archive))
+	{
+		myprintf("95396: Cannot work on multipart archive\n");
+		return 2;
+	}
+	if ((flagkill) && (!flagforce))
+		if (tofiles.size()!=1)
+		{
+			myprintf("95346: Need a -to for the output\n");
+			return 2;
+		}
+	
+	vector<uint64_t> version_position;
+	version_position.push_back(0);
+	all					=4;
+	int64_t wheretotrim	=0;
+	int errors			=0;
+	int64_t csize=read_archive(NULL,archive.c_str(),&errors,1);
+
+	vector<DTMap::iterator> filelist;
+	for (DTMap::iterator a=dt.begin(); a!=dt.end(); ++a)
+		if (a->second.data!='-' && (a->second.date))
+		{
+			a->second.data='-';
+			filelist.push_back(a);
+		}
+	myprintf("53244: ---------------------------------------------------------------------------\n");
+	myprintf("53245: <  Ver  > <  date  > < time > <    version size    > < Offset (w/out encr)>\n");
+	int maxversion=0;
+	for (unsigned fi=0;fi<filelist.size() /*&& (true || int(fi)<summary)*/; ++fi)
+	{
+		DTMap::iterator p=filelist[fi];
+		unsigned v;
+		if (p->first.size()==all+1u && (v=atoi(p->first.c_str()))>0 && v<ver.size())
+		{
+			maxversion++;
+			wheretotrim=version_position.back()+(v+1<ver.size() ? ver[v+1].offset : csize)-ver[v].offset+0.0;
+			version_position.push_back(wheretotrim);
+			myprintf("53221: V%08u %s [%20s] @ %20s\n",v,dateToString(flagutc,p->second.date).c_str(),
+					migliaia((int64_t)((v+1<ver.size() ? ver[v+1].offset : csize)-ver[v].offset+0.0)),migliaia2(wheretotrim));
+		}
+	}
+	int iuntil=0;
+	
+	if (g_until!="")
+		iuntil=myatoll(g_until.c_str());
+
+	if (iuntil>maxversion)
+	{
+		myprintf("95434: -until %s too big (> maxversion %s) => exit\n",migliaia(iuntil),migliaia2(maxversion));
+		return 2;
+	}
+	if (!flagkill)
+	{
+		myprintf("95386: no -kill, this is just a dry run\n");
+		return 0;
+	}
+	int64_t archivesize=prendidimensionefile(archive.c_str());
+	if (maxsize>0)
+		wheretotrim=maxsize;
+	
+	if (wheretotrim==0)
+	{
+		myprintf("95381: Guru, wheretotrim == 0\n");
+		return 2;
+	}
+	if (g_password!=NULL)
+	{
+		wheretotrim+=32;
+		myprintf("95448: Due to encrypted archive done a +32 bytes\n");
+	}
+	if (wheretotrim>archivesize)
+	{
+		myprintf("95449: wheretotrim %s > archivesize %s\n",migliaia(wheretotrim),migliaia2(archivesize));
+		return 2;
+	}
+	
+	if (flagforce)
+	{
+		if (!getcaptcha("cropplease","Crop in place without backup"))
+				return 1;
+		if (truncate(archive.c_str(),wheretotrim))
+		{
+			myprintf("95460: something wrong truncating!\n");
+			return 2;
+		}
+		else
+			myprintf("95464: in-place crop done\n");
+		return 0;
+	}
+	
+	string	trimmeddestination=tofiles[0];
+	if (isdirectory(trimmeddestination))
+	{
+		myprintf("95394: error -to is a folder, must be a file\n");
+		return 2;
+	}
+	if (!iszpaq(trimmeddestination))
+		trimmeddestination+=".zpaq";
+	if (!flagspace)
+		if (!saggiascrivibilitacartella(trimmeddestination))
+		{
+			myprintf("95402: sorry -to folder seems not writeable. Use -space to bypass\n");
+			return 2;
+		}
+	int64_t spaziolibero=getfreespace(trimmeddestination);
+	if (!flagspace)
+		if (spaziolibero<archivesize)
+		{	
+			printbar('*');
+			myprintf("95410: WARNING FREE SPACE SEEMS %s NEEDED %s -space to bypass\n",migliaia(spaziolibero),migliaia2(archivesize));
+			printbar('*');
+			return 2;
+		}
+	myprintf("53955: Writing data...\n");
+	string risultato=filecopy(true,false,archive,trimmeddestination,flagverify,true,false,wheretotrim); 
+	if (risultato=="")
+	{
+		myprintf("95428: ERROR making copy %s\n",risultato.c_str());
+		return 2;
+	}
+	int64_t nuovadim=prendidimensionefile(risultato.c_str());
+	if (nuovadim==wheretotrim)
+	{
+		myprintf("95444: DONE on ");
+		printUTF8(risultato.c_str());
+		myprintf(" (%s)\n",migliaia(nuovadim));
+	}
+	else
+	{
+		myprintf("95494: Something goest wrong C5\n");
+		return 2;
+	}
+	return 0;
+}

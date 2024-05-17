@@ -38256,7 +38256,7 @@ public:
 			int64_t criptoposition=ftello(firstfp)+off;
 			
 			if (flagdebug4)
-				myprintf("38053: write104 at %s (fetello %s + off %s)  on file %s shoud thefilename %s\n",migliaia(ftello(firstfp)+off),migliaia2(ftello(firstfp)),migliaia3(off),debugfilename,thefilename.c_str());
+				myprintf("38053: write104 at %s (fetello %s + off %s)  on file %s should thefilename %s\n",migliaia(ftello(firstfp)+off),migliaia2(ftello(firstfp)),migliaia3(off),debugfilename,thefilename.c_str());
 
 			if (aes) 
 			{
@@ -56857,7 +56857,7 @@ int Jidac::autotest()
 		chunksize=5;
 		if (menoenne>0)
 			chunksize=menoenne;
-		myprintf("55015: Quick check chunsize %d: ",chunksize);
+		myprintf("55015: Quick check chunksize %d: ",chunksize);
 		for (int j=0;j<chunksize;j++)
 			buffer8bit[j]='A'+j;
 		if (chunksize<62)
@@ -63280,7 +63280,7 @@ int Jidac::add()
 		if (fragment!=6)
 		{
 			fragment=6;
-			myprintf("59541: with -stdin fragment setted to %d\n",fragment);
+			myprintf("59541: with -stdin fragment set to %d\n",fragment);
 		}
 
 
@@ -92253,7 +92253,7 @@ int Jidac::collision(bool i_flagall)
 {
 	if (archive=="")
 	{
-		myprintf("87628: archive not setted!\n");
+		myprintf("87628: archive not set!\n");
 		return 2;
 	}
 	myprintf("89924: Checking for SHA-1 collisions\n");

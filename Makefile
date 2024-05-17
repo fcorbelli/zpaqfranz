@@ -6,23 +6,26 @@
 ### make install clean
 ### is good enough
 
-CC?=            cc
+CXX?=           cc
 INSTALL?=       install
 RM?=            rm
 PROG=           zpaqfranz
-CFLAGS+=        -O3 -Dunix
-LDADD=          -pthread -lstdc++ -lm
+SOURCE=         zpaqfranz.cpp
+CPPFLAGS+=	-Dunix
+CXXFLAGS+=	-O3 -pthread
+LDLIBS=		-lm
 BINDIR=         /usr/local/bin
-BSD_INSTALL_PROGRAM?=   install -m 0555
+BSD_INSTALL_PROGRAM?=   ${INSTALL} -m 0755
 
 all:    build
 
 build:  ${PROG}
 
 install:        ${PROG}
-	${BSD_INSTALL_PROGRAM} ${PROG} ${DESTDIR}${BINDIR}
+	${BSD_INSTALL_PROGRAM} -d ${DESTDIR}${BINDIR}
+	${BSD_INSTALL_PROGRAM} $^ ${DESTDIR}${BINDIR}
 
-${PROG}:        ${OBJECTS}
-	${CC}  ${CFLAGS} zpaqfranz.cpp -o ${PROG} ${LDADD}
+${PROG}:        ${SOURCE}
+	${CXX} ${CPPFLAGS} ${CXXFLAGS} ${LDFLAGS} $^ ${LDLIBS} -o $@
 clean:
 	${RM} -f ${PROG}

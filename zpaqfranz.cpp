@@ -52,8 +52,8 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 */
 
-#define ZPAQ_VERSION "59.5h"
-#define ZPAQ_DATE "(2024-05-14)"  // cannot use __DATE__ on Debian!
+#define ZPAQ_VERSION "59.6d"
+#define ZPAQ_DATE "(2024-05-17)"  // cannot use __DATE__ on Debian!
 
 ///	optional align for malloc (sparc64) via -DALIGNMALLOC
 #define STR(a) #a
@@ -1106,7 +1106,8 @@ Credits and copyrights and licenses and links and internal bookmarks
 36 Thanks to whiskytechfred user of the encode.su forum for truncate-touching
 37 Thanks to Takayuki Matsuoka                          for LZ4 streaming API example : line-by-line logfile 
 38 Thanks to whiskytechfred user of the encode.ru forum for vss filename fix
-	
+39 Thanks to https://github.com/sergeevabc              for suggestions for hash command
+
                 _____ _   _  _____ _______       _      _
                |_   _| \ | |/ ____|__   __|/\   | |    | |
                  | | |  \| | (___    | |  /  \  | |    | |
@@ -40821,6 +40822,8 @@ size_t			i_buffersize
 	void		dtdecoder();
 	bool 		noselection();
 ///	int 		scan_archive(vector<uint64_t>& cblock_position,vector<uint64_t>& dblock_position,vector<uint64_t>& hblock_position,vector<uint64_t>& iblock_position);
+	bool		sanitizeline(string i_filename);
+	bool 		sanitizefile(string i_filename);
 
 };
 
@@ -69528,6 +69531,7 @@ int Jidac::multiverify(vector <s_fileandsize>& i_arrayfilename)
 		{
 			string finalfile		=vettoreparametrihash[i].filestobehashed[j];
 			string myhashtype		=vettoreparametrihash[i].algo[j];
+			if (flagdebug3)
 			myprintf("64829: myhashtype %s\n",myhashtype.c_str());
 			tipohash* thehash=franz_get_hash(myhashtype);
 			if (myhashtype=="")
@@ -92105,6 +92109,9 @@ endblock:;
 
 int Jidac::checksha1collision(DTMap& i_dtmap,bool i_decodefranzblock)
 {
+#ifdef ESX
+	return 0; ///ESXi old compiler does not like
+#else
 	if ((flag715) || (flagnochecksum))
 		return 0;
 	int 	collisionfounded=0;
@@ -92247,6 +92254,7 @@ int Jidac::checksha1collision(DTMap& i_dtmap,bool i_decodefranzblock)
 			return add();
 		}
 	return collisionfounded;
+#endif
 }
 
 int Jidac::collision(bool i_flagall)
@@ -92474,7 +92482,7 @@ int Jidac::dump()
 		int64_t tellme=in.tell();
 		block_position=myoffset;
 		
-		myprintf("90129: Block %08d at %21s: mem    %21s %s\n", ++block,migliaia(myoffset), migliaia2(mem),migliaia3(tellme));
+		myprintf("90129: Block %08d at %21s: mem    %21s %s\n", ++block,migliaia(myoffset), migliaia2(int64_t(mem)),migliaia3(tellme));
 		bool first=true;
 		while (d.findFilename(&filename)) 
 		{
@@ -93023,7 +93031,7 @@ int Jidac::redu()
 	myprintf("88807: Redu time %1.3f (%s) / %s (%s) @ %s/s\n",
 	seconds,timetohuman((uint32_t)(seconds)).c_str(),
 	migliaia(totalfilesize),tohuman(totalfilesize),
-	migliaia2(totalfilesize/seconds));
+	migliaia2((int64_t)(totalfilesize/seconds)));
 		
 	return risultato;
 }
@@ -95015,8 +95023,8 @@ bool downloadfile(string i_verurl,string i_verfile,bool i_showupdate)
 		return false;
     }
 
-    sprintf(buffer, "GET /%s HTTP/1.1\r\nHost: %s\r\nConnection: close\r\n\r\n",path,hostname);
-    if (write(sockfd, buffer, strlen(buffer)) < 0) 
+    snprintf(buffer,INTERNET_BUFFER_SIZE,"GET /%s HTTP/1.1\r\nHost: %s\r\nConnection: close\r\n\r\n",path,hostname);
+    if (write(sockfd,buffer,strlen(buffer)) < 0) 
 	{
         myprintf("94528: kaputt writing on socket\n");
 		return false;
@@ -95112,6 +95120,16 @@ int Jidac::update()
 	if (!downloadfile(verurl,verfile,false))
 		return 2;
 	myprintf("\n");
+	
+	///verfile="z:\\test.256";
+	if (!sanitizefile(verfile))
+	{
+		myprintf("95128: ERROR C5 strange downloaded file\n");
+		remove(verfile.c_str());
+		seppuku();
+		return 2;
+	}
+	
 	myprintf("94300: Testing internet version...\n");
 	
 	vector<string> versioni;
@@ -95137,9 +95155,18 @@ int Jidac::update()
 		myprintf("94613: the last line |%s|\n",linea.c_str());
 #endif	
 	
+	
 	if (linea.size()<70)
 	{
-		myprintf("94315: Line size should be >=70 %08s %s\n",migliaia(linea.size()),linea.c_str());
+		myprintf("94315: Line size should be >=70 %08s\n",migliaia(linea.size()));
+		return 2;
+	}
+	
+	if (!sanitizeline(linea))
+	{
+		myprintf("95123: ERROR C5 the downloaded file is not adherent to expected format\n");
+		remove(verfile.c_str());
+		seppuku();
 		return 2;
 	}
 	
@@ -95214,9 +95241,9 @@ int Jidac::update()
 	
 #ifdef unix
 	if (flagnewer)
-		myprintf("95205: Your %s %s is OLDER of %s %s => please update \n",internal_version.c_str(),internal_date.c_str(),theversion.c_str(),thedate.c_str());
+		myprintf("95205: PLEASE UPDATE: your %s %s is OLDER of %s %s\n",internal_version.c_str(),internal_date.c_str(),theversion.c_str(),thedate.c_str());
 	else
-		myprintf("95205: Your %s %s is not older of %s %s => nothing to do\n",internal_version.c_str(),internal_date.c_str(),theversion.c_str(),thedate.c_str());
+		myprintf("95205: NOTHING TO DO: your %s %s is not older of %s %s\n",internal_version.c_str(),internal_date.c_str(),theversion.c_str(),thedate.c_str());
 	remove(verfile.c_str());
 	return 0;
 #endif
@@ -95234,7 +95261,7 @@ int Jidac::update()
 	if ((!flagnewer) && (!flagkill))
 	{
 		color_red();
-		myprintf("94418: Your %s %s is not older of %s %s => nothing to do\n",internal_version.c_str(),internal_date.c_str(),theversion.c_str(),thedate.c_str());
+		myprintf("94418: NOTHING TO DO: your %s %s is not older of %s %s\n",internal_version.c_str(),internal_date.c_str(),theversion.c_str(),thedate.c_str());
 		color_restore();
 		remove(verfile.c_str());
 		return 0;
@@ -95629,7 +95656,7 @@ int Jidac::crop()
 		if (p->first.size()==all+1u && (v=atoi(p->first.c_str()))>0 && v<ver.size())
 		{
 			maxversion++;
-			wheretotrim=version_position.back()+(v+1<ver.size() ? ver[v+1].offset : csize)-ver[v].offset+0.0;
+			wheretotrim=(int64_t)(version_position.back()+(v+1<ver.size() ? ver[v+1].offset : csize)-ver[v].offset+0.0);
 			version_position.push_back(wheretotrim);
 			myprintf("53221: V%08u %s [%20s] @ %20s\n",v,dateToString(flagutc,p->second.date).c_str(),
 					migliaia((int64_t)((v+1<ver.size() ? ver[v+1].offset : csize)-ver[v].offset+0.0)),migliaia2(wheretotrim));
@@ -95979,10 +96006,137 @@ int Jidac::homesize()
 	printbar('-');
 	for (unsigned int i=0;i<files_size.size();i++)
 	{
-		myprintf("95946: %21s %08d %s\n",migliaia(files_size[i]),files_edt[i].size(),files[i].c_str());
+		myprintf("95946: %21s %12s   %08d %s\n",migliaia(files_size[i]),tohuman(files_size[i]),files_edt[i].size(),files[i].c_str());
 		totalsize+=files_size[i];
 		totalcount+=files_edt[i].size();
-	}	
+	}
+	printbar('-');
+	myprintf("95977: %21s %12s   %08d\n",migliaia(totalsize),tohuman(totalsize),totalcount);
 	return 0;
-	
 }
+
+bool isnotevil(int i_char)
+{
+	return (isdigit(i_char)) || (isalpha(i_char)) || (i_char=='_') || (i_char=='-') || (i_char=='.') || (i_char=='(') || (i_char==')') || (i_char==' ') || (i_char=='*') || (i_char==10) || (i_char==13)|| (i_char==':') || (i_char==',') || (i_char=='/');
+}
+
+bool Jidac::sanitizeline(string i_filename)
+{
+	if ((i_filename.size()<=83) || (i_filename.size()>87))
+	{
+		myprintf("96014: GURU file size must be [83..87] (founded %s)\n",migliaia(i_filename.size()));
+		seppuku();
+		return false;
+	}
+	for (unsigned int i=0;i<64;i++)
+	{
+		int thechar=i_filename[i];
+		if (thechar<0)
+		{
+			myprintf("96043: GURU unexpected end of file at %d\n",i);
+			seppuku();
+		}
+		if (thechar==EOF)
+		{
+			myprintf("96053: GURU unexpected end of file at %d\n",i);
+			seppuku();
+		}
+		
+		if (!ishex(thechar))
+		{
+			myprintf("96048: GURU not HEX char at %d\n",i);
+			seppuku();
+		}
+	}
+	if (i_filename[64]!=32)
+	{
+		myprintf("96055: GURU not space after hash!\n");
+		seppuku();
+	}
+	if (i_filename[65]!=42)
+	{
+		myprintf("96061: GURU not asterisk after space!\n");
+		seppuku();
+	}
+	int verchar;
+	for (unsigned int i=66;i<i_filename.size();i++)
+	{
+		verchar=i_filename[i];
+		if (verchar==EOF)
+			break;
+		if (verchar==10)
+			break;
+		if (verchar==13)
+			break;
+		if (!isnotevil(verchar))
+		{
+			myprintf("96080: GURU unallowed char founded at %d value %d\n",i,verchar);
+			seppuku();
+		}
+	} 
+	return true;
+}
+
+bool Jidac::sanitizefile(string i_filename)
+{
+	if (i_filename=="")
+	{
+		myprintf("96079: sanitize filename empty\n");
+		seppuku();
+		return false;
+	}
+	
+	FILE* myfile = freadopen(i_filename.c_str());
+	if (myfile==NULL)
+	{
+		myprintf("96022: GURU cannot fdreadopen %s\n",i_filename.c_str());
+		seppuku();
+	}
+/*
+    We really restrict file size, and we do not want buffer underrun
+    
+	
+	*nix
+	For compatibility reasons (e.g., ESXi, NAS) 
+	I used a “low-level” GET, generating a response file like this
+
+HTTP/1.1 200 OK
+date: Fri, 17 May 2024 09:16:40 GMT
+content-length: 85
+server: Apache
+last-modified: Fri, 17 May 2024 08:01:52 GMT
+accept-ranges: bytes
+x-iplb-request-id: 05C44D80:D712_5E174003:0050_66472078_71CB6:1523
+x-iplb-instance: 51915
+connection: close
+
+f5bd0843bcfbc7eda8c8a8bf5698dfd35bf79d140d5169ba7b7d8a705f3cb253 *59.6b_(2024-05-17)
+
+
+    Windows
+	Already "clear"
+	
+5ac9054c08c2f1890502f78c98cf7b88d8d007cddf101ca0e1446fea923de7f5 *59.5g_(2024-05-14)
+*/
+	int verchar;
+#ifdef unix
+	for (unsigned int i=0;i<600;i++)
+#else
+	for (unsigned int i=0;i<100;i++)
+#endif
+	{
+		verchar=fgetc(myfile);
+		if (verchar==EOF)
+			break;
+		if (!isnotevil(verchar))
+		{
+			myprintf("96080: GURU unallowed char founded at %d value %d\n",i,verchar);
+			seppuku();
+			return false;
+		}
+	} 
+	fclose(myfile);
+	return true;
+
+}
+

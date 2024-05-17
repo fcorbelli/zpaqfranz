@@ -795,9 +795,22 @@ Credits and copyrights and licenses and links and internal bookmarks
 	   See the License for the specific language governing permissions and
 	   limitations under the License.
 
-16 [nothing explicit, seems BSD]  Whirlpool by Paulo Barreto and Vincent Rijmen       https://web.archive.org/web/20171129084214/http://www.larc.usp.br/~pbarreto/WhirlpoolPage.html
+16 [Public domain]  Whirlpool by Paulo Barreto and Vincent Rijmen       https://web.archive.org/web/20171129084214/http://www.larc.usp.br/~pbarreto/WhirlpoolPage.html
  /// LICENSE_START.16
  /// LICENSE_END.16
+	The reference implementations are in the public domain.
+	But before you go and use it, please read the accompanying disclaimer:
+	THIS SOFTWARE IS PROVIDED BY THE AUTHORS ''AS IS'' AND ANY EXPRESS
+	OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+	WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+	ARE DISCLAIMED. IN NO EVENT SHALL THE AUTHORS OR CONTRIBUTORS BE
+	LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+	CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+	SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR
+	BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+	WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
+	OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
+	EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. 
 
 17 [almost-unrestricted]		  Twofish implementation,(c) 2002 by Niels Ferguson   https://github.com/wernerd/ZRTPCPP/blob/master/cryptcommon/twofish.c
 	**** This is part of currently not released zpaqfranz (future zpaq-over-IP)
@@ -1011,7 +1024,7 @@ Credits and copyrights and licenses and links and internal bookmarks
 	I grant anyone the right to use this software for any purpose,
 	without any conditions, unless such conditions are required by law.
 
-22 [Public domain]                LZ4 Copyright (C) 2011-2023, Yann Collet https://github.com/lz4/lz4
+22 [BSD 2-Clause license]                LZ4 Copyright (C) 2011-2023, Yann Collet https://github.com/lz4/lz4
  /// LICENSE_START.22
  /// LICENSE_END.22
 

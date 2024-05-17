@@ -52,7 +52,7 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 */
 
-#define ZPAQ_VERSION "59.6d"
+#define ZPAQ_VERSION "59.6e"
 #define ZPAQ_DATE "(2024-05-17)"  // cannot use __DATE__ on Debian!
 
 ///	optional align for malloc (sparc64) via -DALIGNMALLOC
@@ -95121,7 +95121,7 @@ int Jidac::update()
 		return 2;
 	myprintf("\n");
 	
-	///verfile="z:\\test.256";
+///	verfile="z:\\test.256";
 	if (!sanitizefile(verfile))
 	{
 		myprintf("95128: ERROR C5 strange downloaded file\n");
@@ -96086,6 +96086,18 @@ bool Jidac::sanitizefile(string i_filename)
 		return false;
 	}
 	
+	int dimensione=prendidimensionefile(i_filename.c_str());
+#ifdef unix
+	if (dimensione>600)
+#else
+	if (dimensione>100)
+#endif
+	{
+		myprintf("96140: GURU file too big %s\n",migliaia(dimensione));
+		seppuku();
+		return false;
+	}
+	
 	FILE* myfile = freadopen(i_filename.c_str());
 	if (myfile==NULL)
 	{
@@ -96095,9 +96107,8 @@ bool Jidac::sanitizefile(string i_filename)
 /*
     We really restrict file size, and we do not want buffer underrun
     
-	
 	*nix
-	For compatibility reasons (e.g., ESXi, NAS) 
+	For compatibility reasons (e.g., ESXi, NAS) not 100% hardened 
 	I used a “low-level” GET, generating a response file like this
 
 HTTP/1.1 200 OK
@@ -96119,6 +96130,7 @@ f5bd0843bcfbc7eda8c8a8bf5698dfd35bf79d140d5169ba7b7d8a705f3cb253 *59.6b_(2024-05
 5ac9054c08c2f1890502f78c98cf7b88d8d007cddf101ca0e1446fea923de7f5 *59.5g_(2024-05-14)
 */
 	int verchar;
+	int64_t letti;
 #ifdef unix
 	for (unsigned int i=0;i<600;i++)
 #else
@@ -96134,9 +96146,10 @@ f5bd0843bcfbc7eda8c8a8bf5698dfd35bf79d140d5169ba7b7d8a705f3cb253 *59.6b_(2024-05
 			seppuku();
 			return false;
 		}
-	} 
+		letti++;
+	}
+		
 	fclose(myfile);
 	return true;
-
 }
 

@@ -55,7 +55,7 @@ Credits and copyrights and licenses and links and internal bookmarks
  /// LICENSE_START.14 LICENSE_END.14
 15 [CC0 1.0 / Apache License 2.0] BLAKE3 hasher                                       https://github.com/BLAKE3-team/BLAKE3
  /// LICENSE_START.15 LICENSE_END.15
-16 [nothing explicit, seems BSD]  Whirlpool by Paulo Barreto and Vincent Rijmen       https://web.archive.org/web/20171129084214/http://www.larc.usp.br/~pbarreto/WhirlpoolPage.html
+16 [Public domain]  Whirlpool by Paulo Barreto and Vincent Rijmen       https://web.archive.org/web/20171129084214/http://www.larc.usp.br/~pbarreto/WhirlpoolPage.html
  /// LICENSE_START.16 LICENSE_END.16
 17 [almost-unrestricted]		  Twofish implementation,(c) 2002 by Niels Ferguson   https://github.com/wernerd/ZRTPCPP/blob/master/cryptcommon/twofish.c
 **** This is part of currently not released zpaqfranz (future zpaq-over-IP)
@@ -68,6 +68,8 @@ Credits and copyrights and licenses and links and internal bookmarks
  /// LICENSE_START.20 LICENSE_END.20
 21 [Public domain]                zpaqd v7.15 - ZPAQ compression development tool - Aug. 17, 2016.
  /// LICENSE_START.21 LICENSE_END.21
+22 [BSD 2-Clause license]                LZ4 Copyright (C) 2011-2023, Yann Collet https://github.com/lz4/lz4
+ /// LICENSE_START.22 LICENSE_END.22
 
 
    _____ _____  ______ ______ _______ _____ _   _  _____  _____ 
@@ -118,3 +120,7 @@ Credits and copyrights and licenses and links and internal bookmarks
 33 Thanks to https://github.com/janko-js               for idea on quick collision-detector
 34 Thanks to https://github.com/havocesp               for very useful ideas
 35 Thanks to https://github.com/luckman212             for a refactoring-induced bug detection
+36 Thanks to whiskytechfred user of the encode.su forum for truncate-touching
+37 Thanks to Takayuki Matsuoka                          for LZ4 streaming API example : line-by-line logfile 
+38 Thanks to whiskytechfred user of the encode.ru forum for vss filename fix
+39 Thanks to https://github.com/sergeevabc              for suggestions for hash command

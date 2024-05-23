@@ -123,4 +123,6 @@ Credits and copyrights and licenses and links and internal bookmarks
 36 Thanks to whiskytechfred user of the encode.su forum for truncate-touching
 37 Thanks to Takayuki Matsuoka                          for LZ4 streaming API example : line-by-line logfile 
 38 Thanks to whiskytechfred user of the encode.ru forum for vss filename fix
-39 Thanks to https://github.com/sergeevabc              for suggestions for hash command
+39 Thanks to https://github.com/sergeevabc              for suggestions on hash command
+40 Thanks to https://github.com/gitboogey               for ideas on -test and -verify with vss
+

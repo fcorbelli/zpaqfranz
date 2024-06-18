@@ -13,7 +13,7 @@
 |  [Linux generic (32/64)](http://www.francocorbelli.it/zpaqfranz/linux)             |                               |59.8i|      |
 |  [Arch](http://www.francocorbelli.it/zpaqfranz/arch)                       | [AUR user repository](https://aur.archlinux.org/packages/zpaqfranz-git)|58.10i|[Terminal](http://www.francocorbelli.it/zpaqfranz/video/arch.mp4)
 |  [Solaris 11-64](http://www.francocorbelli.it/zpaqfranz/solaris)                 |                               |59.8j|      |
-|  [OmniOS](http://www.francocorbelli.it/zpaqfranz/omnios)                   |                               |      |      |
+|  [OmniOS 64](http://www.francocorbelli.it/zpaqfranz/omnios)                   |                               |59.8j|      |
 |  [QNAP (Annapurna)](http://www.francocorbelli.it/zpaqfranz/qnap)           |                               |      |      | 
 |  [Haiku](http://www.francocorbelli.it/zpaqfranz/haiku)                     |                               |      |      |
 |  [ESXi](http://www.francocorbelli.it/zpaqfranz/esxi)                       |                               |59.8i |      |

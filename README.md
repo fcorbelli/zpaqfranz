@@ -14,7 +14,7 @@
 |  [Arch](http://www.francocorbelli.it/zpaqfranz/arch)                       | [AUR user repository](https://aur.archlinux.org/packages/zpaqfranz-git)|58.10i|[Terminal](http://www.francocorbelli.it/zpaqfranz/video/arch.mp4)
 |  [Solaris 11-64](http://www.francocorbelli.it/zpaqfranz/solaris)                 |                               |59.8j|      |
 |  [OmniOS 64](http://www.francocorbelli.it/zpaqfranz/omnios)                   |                               |59.8j|      |
-|  [QNAP (Annapurna)](http://www.francocorbelli.it/zpaqfranz/qnap)           |                               |      |      | 
+|  [QNAP (Annapurna)](http://www.francocorbelli.it/zpaqfranz/qnap)           |                               |59.8j|      | 
 |  [Haiku](http://www.francocorbelli.it/zpaqfranz/haiku)                     |                               |      |      |
 |  [ESXi](http://www.francocorbelli.it/zpaqfranz/esxi)                       |                               |59.8i |      |
 | [Freeware GUI for Windows](https://github.com/fcorbelli/zpaqfranz/wiki/PAKKA-Windows-32-bit-extractor) |   |[latest](http://www.francocorbelli.it/pakka/build/latest/pakka_latest.zip)  |      |

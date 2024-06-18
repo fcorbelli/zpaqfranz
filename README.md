@@ -12,7 +12,7 @@
 |  [Debian (Ubuntu etc)](http://www.francocorbelli.it/zpaqfranz/debian)      |                               |58.10i|[Desktop](http://www.francocorbelli.it/zpaqfranz/video/debian-deb.mp4)      |
 |  [Linux generic (32/64)](http://www.francocorbelli.it/zpaqfranz/linux)             |                               |59.8i|      |
 |  [Arch](http://www.francocorbelli.it/zpaqfranz/arch)                       | [AUR user repository](https://aur.archlinux.org/packages/zpaqfranz-git)|58.10i|[Terminal](http://www.francocorbelli.it/zpaqfranz/video/arch.mp4)
-|  [Solaris](http://www.francocorbelli.it/zpaqfranz/solaris)                 |                               |      |      |
+|  [Solaris 11-64](http://www.francocorbelli.it/zpaqfranz/solaris)                 |                               |59.8j|      |
 |  [OmniOS](http://www.francocorbelli.it/zpaqfranz/omnios)                   |                               |      |      |
 |  [QNAP (Annapurna)](http://www.francocorbelli.it/zpaqfranz/qnap)           |                               |      |      | 
 |  [Haiku](http://www.francocorbelli.it/zpaqfranz/haiku)                     |                               |      |      |

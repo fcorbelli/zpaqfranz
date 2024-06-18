@@ -16,7 +16,7 @@
 |  [OmniOS](http://www.francocorbelli.it/zpaqfranz/omnios)                   |                               |      |      |
 |  [QNAP (Annapurna)](http://www.francocorbelli.it/zpaqfranz/qnap)           |                               |      |      | 
 |  [Haiku](http://www.francocorbelli.it/zpaqfranz/haiku)                     |                               |      |      |
-|  [ESXi](http://www.francocorbelli.it/zpaqfranz/esxi)                       |                               |      |      |
+|  [ESXi](http://www.francocorbelli.it/zpaqfranz/esxi)                       |                               |59.8i |      |
 | [Freeware GUI for Windows](https://github.com/fcorbelli/zpaqfranz/wiki/PAKKA-Windows-32-bit-extractor) |   |[latest](http://www.francocorbelli.it/pakka/build/latest/pakka_latest.zip)  |      |
 | [![ZpaqTreeView](https://github.com/fcorbelli/zpaqfranz/assets/77727889/2e155fa7-0565-416b-8bdd-b99c16ae896d)](https://github.com/EpicGazel/ZpaqTreeView)                                                                | Third Party Python software |      |
 

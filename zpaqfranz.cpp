@@ -20,7 +20,8 @@ Windows, FreeBSD, OpenBSD, Linux, MacOS, Solaris, OmniOS and others
 
 WWW: https://github.com/fcorbelli/zpaqfranz
 
-EXPERIMENTAL BUILD: the source is a mess, strongly in development
+FACT: the best software for backup/disaster recovery your ever seen 
+      (just joking)
 
            Provided as-is, with no warranty whatsoever,
                      by Franco Corbelli
@@ -52,8 +53,8 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 */
 
-#define ZPAQ_VERSION "59.7p"
-#define ZPAQ_DATE "(2024-06-05)"  // cannot use __DATE__ on Debian!
+#define ZPAQ_VERSION "59.8j"
+#define ZPAQ_DATE "(2024-06-18)"  // cannot use __DATE__ on Debian!
 
 ///	optional align for malloc (sparc64) via -DALIGNMALLOC
 #define STR(a) #a
@@ -1873,6 +1874,9 @@ SHA-256: FCCE109C8360963EB18975B94BDBE434BE1A49D3F53BDD768A99093B3EB838D2 [     
 	#if defined(__linux__) || defined(SOLARIS)
 		#include <sys/statvfs.h>
 	#endif
+	#if defined(__linux__)
+		#include <mntent.h>
+	#endif
 	#include <algorithm>
 	#include <assert.h>
 	#include <cstddef>
@@ -1964,6 +1968,7 @@ int64_t	g_enter			=0;
 #endif
 
 
+static const int64_t LIST_HT_BAD=   -0x7FFFFFFFFFFFFFFALL;  // no such frag
 
 
 
@@ -13075,6 +13080,8 @@ string 	g_exec_text;
 string 	g_exec;
 int 	g_255;
 string 	g_output;
+string  g_ifexist;
+///string  g_ismounted;
 string 	g_script;
 string 	g_sfx;
 string 	g_sfxto;
@@ -13194,6 +13201,7 @@ bool flagfrugal;
 bool flaghashdeep;
 bool flagkill;
 bool flagmm;
+bool flagattr;
 bool flagnoattributes;
 bool flagnodedup;
 bool flagnoeta;
@@ -13264,6 +13272,7 @@ int 	g_ioBUFSIZE=1048576;
 int		g_thechosenhash;
 string	g_thechosenhash_str;
 
+#ifdef _WIN32
 #define MYFOREGROUND_BLUE            0x0001
 #define MYFOREGROUND_GREEN           0x0002
 #define MYFOREGROUND_RED             0x0004
@@ -13272,11 +13281,52 @@ string	g_thechosenhash_str;
 #define MYBACKGROUND_GREEN           0x0020
 #define MYBACKGROUND_RED             0x0040
 #define MYBACKGROUND_INTENSITY       0x0080
+#else
+/// *nix colors
+#define TEXT_BLACK   	"\x1b[30m"
+#define TEXT_RED     	"\x1b[31m"
+#define TEXT_GREEN   	"\x1b[32m"
+#define TEXT_YELLOW  	"\x1b[33m"
+#define TEXT_BLUE    	"\x1b[34m"
+#define TEXT_MAGENTA	"\x1b[35m"
+#define TEXT_CYAN		"\x1b[36m"
+#define TEXT_WHITE		"\x1b[37m"
+#define TEXT_RESET		"\x1b[0m"
+
+///#define TEXT_BLACK_BRIGHT   "\x1b[1;30m"
+
+#define TEXT_BLACK_BRIGHT   	"\x1b[1;30m"
+#define TEXT_RED_BRIGHT     	"\x1b[1;31m"
+#define TEXT_GREEN_BRIGHT   	"\x1b[1;32m"
+#define TEXT_YELLOW_BRIGHT  	"\x1b[1;33m"
+#define TEXT_BLUE_BRIGHT    	"\x1b[1;34m"
+#define TEXT_MAGENTA_BRIGHT		"\x1b[1;35m"
+#define TEXT_CYAN_BRIGHT		"\x1b[1;36m"
+#define TEXT_WHITE_BRIGHT		"\x1b[1;37m"
+#define TEXT_RESET_BRIGHT		"\x1b[1;0m"
+
+#define BG_BLACK   		"\x1b[40m"
+#define BG_RED     		"\x1b[41m"
+#define BG_GREEN   		"\x1b[42m"
+#define BG_YELLOW  		"\x1b[43m"
+#define BG_BLUE    		"\x1b[44m"
+#define BG_MAGENTA 		"\x1b[45m"
+#define BG_CYAN    		"\x1b[46m"
+#define BG_WHITE   		"\x1b[47m"
+
+#define BG_BLACK_BRIGHT			"\x1b[1;40m"
+#define BG_RED_BRIGHT     		"\x1b[1;41m"
+#define BG_GREEN_BRIGHT   		"\x1b[1;42m"
+#define BG_YELLOW_BRIGHT  		"\x1b[1;43m"
+#define BG_BLUE_BRIGHT    		"\x1b[1;44m"
+#define BG_MAGENTA_BRIGHT 		"\x1b[1;45m"
+#define BG_CYAN_BRIGHT    		"\x1b[1;46m"
+#define BG_WHITE_BRIGHT   		"\x1b[1;47m"
+#endif
 
 
 int g_console_attributes=-1;
 #ifdef _WIN32
-
 void color_save()
 {
 	if (flagnocolor)
@@ -13286,47 +13336,26 @@ void color_save()
 		return;
 	CONSOLE_SCREEN_BUFFER_INFO csbiInfo;
 	GetConsoleScreenBufferInfo(hconsole,&csbiInfo);
-/*
-    printf("13232: attribute %08d $%08X\n",csbiInfo.wAttributes,csbiInfo.wAttributes);
-
-	if (csbiInfo.wAttributes & MYFOREGROUND_BLUE)
-		printf("13233: FOREGROUND_BLUE            0x0001\n");
-	if (csbiInfo.wAttributes & MYFOREGROUND_GREEN)
-		printf("13234: FOREGROUND_GREEN           0x0002\n");
-	if (csbiInfo.wAttributes & MYFOREGROUND_RED)
-		printf("13235: FOREGROUND_RED             0x0004\n");
-	if (csbiInfo.wAttributes & MYFOREGROUND_INTENSITY)
-		printf("13236: FOREGROUND_INTENSITY       0x0008\n");
-	printf("\n\n");
-	if (csbiInfo.wAttributes & MYBACKGROUND_BLUE)
-		printf("13241: BACKGROUND_BLUE            0x0010\n");
-	if (csbiInfo.wAttributes & MYBACKGROUND_GREEN)
-		printf("13242: BACKGROUND_GREEN           0x0020\n");
-	if (csbiInfo.wAttributes & MYBACKGROUND_RED)
-		printf("13243: BACKGROUND_RED             0x0040\n");
-	if (csbiInfo.wAttributes & MYBACKGROUND_INTENSITY)
-		printf("13244: BACKGROUND_INTENSITY       0x0080\n");
-*/
 	if ((csbiInfo.wAttributes & MYFOREGROUND_BLUE) &&
 	 (csbiInfo.wAttributes & MYFOREGROUND_GREEN) &&
 	 (csbiInfo.wAttributes & MYFOREGROUND_RED))
 		g_console_attributes=csbiInfo.wAttributes;
-	return;
 }
 #endif
 void color_restore()
 {
 	if (flagnocolor)
 		return;
+#ifdef _WIN32
 	if (g_console_attributes<0)
 		return;
-#ifdef _WIN32
 	HANDLE hconsole=GetStdHandle(STD_OUTPUT_HANDLE);
 	if (hconsole==INVALID_HANDLE_VALUE)
 		return;
 	SetConsoleTextAttribute(hconsole,g_console_attributes);
+#else
+	printf(TEXT_RESET BG_BLACK);
 #endif
-	return;
 }
 #ifdef _WIN32
 void color_something(int i_color)
@@ -13344,30 +13373,43 @@ void color_something(int i_color)
 #endif
 void color_red()
 {
+	if (flagnocolor)
+		return;
 #ifdef _WIN32
-	if (!flagnocolor)
-		color_something(4);
+	color_something(4);
+#else
+	printf(TEXT_RED_BRIGHT);
 #endif
 }
 void color_green()
 {
+	if (flagnocolor)
+		return;
 #ifdef _WIN32
 	///getenv("WT_SESSION")
 	color_something(MYFOREGROUND_GREEN+MYFOREGROUND_INTENSITY);
+#else
+	printf(TEXT_GREEN_BRIGHT);
 #endif
 }
 void color_yellow()
 {
+	if (flagnocolor)
+		return;
 #ifdef _WIN32
-	if (!flagnocolor)
 		color_something(14);
+#else
+	printf(TEXT_YELLOW_BRIGHT);
 #endif
 }
 void color_blackongreen()
 {
+	if (flagnocolor)
+		return;
 #ifdef _WIN32
-	if (!flagnocolor)
-		color_something(160);
+	color_something(160);
+#else
+	printf("\x1b[30m" "\x1b[102m");
 #endif
 }
 
@@ -13401,16 +13443,6 @@ void myprintf(const char *fmt, ...)
 	if (flagsilent)
 		return;
 	
-
-	if (flagnocolor)
-	{
-		printf("%s",buffer);
-#ifndef _WIN32
-		fflush(stdout);
-#endif
-		return;
-	}
-
 	if (strlen(buffer)<7)
 	{
 		printf("%s",buffer);
@@ -13442,22 +13474,16 @@ void myprintf(const char *fmt, ...)
 	}
 	if (flagdebug3)
 	{
-#ifdef _WIN32
 		color_yellow();
-#endif
 		print_datetime();
 	}
 	if (flagdebug)
 	{
 		char salva=buffer[6];
 		buffer[6]=0;
-#ifdef _WIN32
 		color_green();
-#endif
 		printf("%s",buffer);
-#ifdef _WIN32		
 		color_restore();
-#endif
 		buffer[6]=salva;
 		printf("%s",buffer+6);
 	}
@@ -39173,11 +39199,13 @@ struct HT
 	unsigned char sha1[20]; // fragment hash
 	int usize;      		// uncompressed size, -1 if unknown, -2 if not init
 	int64_t csize;  		// if >=0 then block offset else -fragment number
+	double estimatedratio;
 	HT(const char* s=0, int u=-2)
 	{
 		crc32=0;
 		crc32size=0;
 		csize=0;
+		estimatedratio=0;
 		if (s)
 			memcpy(sha1, s, 20);
 		else
@@ -39185,16 +39213,7 @@ struct HT
 		usize=u;
 	}
 };
-struct DTV
-{
-  int64_t date;          // decimal YYYYMMDDHHMMSS (UT) or 0 if deleted
-  int64_t size;          // size or -1 if unknown
-  int64_t attr;          // first 8 attribute bytes
-  double csize;          // approximate compressed size
-  vector<unsigned> ptr;  // list of fragment indexes to HT
-  int version;           // which transaction was it added?
-  DTV(): date(0), size(0), attr(0), csize(0), version(0) {}
-};
+
 /// a "fake" class to mimic normal filesystem write, reducing coding complexity
 class franzfs
 {
@@ -39369,7 +39388,8 @@ struct DT   // if you get some warning here, update your compiler!
 
 
 	franzfs			*pramfile;
-	DT(): date(0), size(0), attr(0), data(0),creationdate(0),accessdate(0),written(-1),isordered(false),isselected(false),/*franz_block_size(FRANZOFFSETV3),*/file_crc32(0),hashedsize(0),chunk(-1),expectedsize(0),version(0),forceadd(false),is4(false),red_total(0),red_count(0),red_min(256),red_max(0),red_avg(0),red_candidate(0)
+	int64_t kompressedsize;
+	DT(): date(0), size(0), attr(0), data(0),creationdate(0),accessdate(0),written(-1),isordered(false),isselected(false),/*franz_block_size(FRANZOFFSETV3),*/file_crc32(0),hashedsize(0),chunk(-1),expectedsize(0),version(0),forceadd(false),is4(false),red_total(0),red_count(0),red_min(256),red_max(0),red_avg(0),red_candidate(0),kompressedsize(0)
 	{
 ///	let's save a bit of RAM
 		franz_block_size=FRANZOFFSETV2;
@@ -40529,7 +40549,6 @@ int64_t list_btol(const char* &s) {
 // Methods add to, extract from, compare, and list the archive.
 
 // enum for list_HT::csize and version
-static const int64_t LIST_HT_BAD=   -0x7FFFFFFFFFFFFFFALL;  // no such frag
 static const int64_t LIST_DEFAULT_VERSION=99999999999999LL; // unless -until
 
 // fragment hash table entry
@@ -40794,11 +40813,8 @@ private:
 	int zfsadd();
 	int zfsenumerate(const string& i_command);
 
-#ifdef _WIN64
-	int download();
-#endif
-
 #ifdef _WIN32
+	int download();
 	int windowsc();								// Backup (kind of) drive C:
 	int adminrun();								// Run windowsc()
 	int 		read_archive2(int64_t i_starthere,string i_filename);
@@ -40927,8 +40943,16 @@ public:
 	int64_t		get_edt_ram() 	{ return ram_of_map(&edt);}
 	int64_t		get_dt_count() 		{ return count_of_map(&dt); }
 	int64_t		get_edt_count() 	{ return count_of_map(&edt); }
+	///bool 		ismounted(const string i_path);
+	///int64_t		fragmenttoblockoffset(int i_fragment);
 	
-	
+	void list_datetime			(const int64_t i_datetime);
+	void list_filesize			(const int64_t i_filesize,int i_thesizesize);
+	void list_compressedfilesize(const int64_t i_compressedfilesize,const int64_t i_filesize,const bool i_flagnewversion,const bool i_isfolder);
+	void list_seconddata		(const char i_car);
+	void list_creationdate		(int64_t i_mycreationtime);
+	void list_attributes		(int64_t i_attributes);
+
 };
 
 Jidac* pjidac;
@@ -45139,6 +45163,7 @@ string help_a(bool i_usage,bool i_example)
 		moreprint("+ : -fast         Store filelist inside the archive (EXPERIMENTAL)");
 		moreprint("+ : -ignore       Do not show file access error");
 		moreprint("+ : -pause        Wait for key press after run");
+		moreprint("+ : -ifexist X    Abort if X folder does not exist");
 	}
 	if (i_usage && i_example)
 		moreprint("    Examples:");
@@ -45204,6 +45229,7 @@ string help_a(bool i_usage,bool i_example)
 		moreprint("Store (EXPERIMENTAL) filelist        a z:\\1.zpaq c:\\pippo -fast");
 		moreprint("Do not mess output with errors       a z:\\1.zpaq c:\\users -ignore");
 		moreprint("Wait for a key strike                a z:\\1.zpaq c:\\users -pause");
+		moreprint("Abort if /monta...rar does not exist a /1.zpaq /thefolder -ifexist /monta/nas1_nfs3/rar");
 	}
 	return("Add or append files to archive");
 }
@@ -45230,7 +45256,7 @@ string help_update(bool i_usage,bool i_example)
 		moreprint("Use specific URLs           update https://www.pippo.com/ugo.sha256 http://www.pluto.com/zpaqnew.exe");
 #endif
 	}
-#ifdef _WIN64
+#ifdef _WIN32
 	return ("Update zpaqfranz from Internet");
 #else
 	return ("Check for updated zpaqfranz from Internet");
@@ -46540,9 +46566,9 @@ string help_franzswitches(bool i_usage,bool i_example)
 		help_orderby();
 		moreprint("+ : -store        Store mode: turn off deduplication and compression");
 		moreprint("+ : -norecursion  Do not recurse into folders (default: YES)");
+		moreprint("+ : -nocolor      disable colors");
 #ifdef _WIN32
 		moreprint("+ : -longpath     add/extract on Windows filenames longer than 255");
-		moreprint("+ : -nocolor      disable colors");
 		moreprint("+ : -noconsole    disable console manipulation (older Windows)");
 		moreprint("+                 support env variable NO_CONSOLE (no-color.org)");
 #endif
@@ -46776,14 +46802,11 @@ void Jidac::usage(bool i_flagdie=true)
 #endif
 
 	color_red();
-
-#ifdef _WIN64
-	moreprint("Update   : zpaqfranz update -force       Take newer Win64 version");
+#if defined(_WIN32)
+	moreprint("Get newer Win version (Internet)  :    zpaqfranz update -force");
 #else
-	moreprint("Update   : zpaqfranz update                Look for newer version");
+	moreprint("Look for newer version  (Internet):             zpaqfranz update");
 #endif
-
-
 	color_restore();
 		
 	if (i_flagdie)
@@ -47710,7 +47733,8 @@ int Jidac::loadparameters(int argc, const char** argv)
 	g_programflags.add(&flaghome,			"-home",				"Home",												"a;");
 	g_programflags.add(&flagkill,			"-kill",				"Kill",												"");
 	g_programflags.add(&flagmm,				"-mm",					"Memory mapped",									"");
-	g_programflags.add(&flagnoattributes,	"-noattributes",		"Nessun attributo",									"");
+	g_programflags.add(&flagnoattributes,	"-noattributes",		"Do not store attribute",									"");
+	g_programflags.add(&flagattr,			"-attr",				"Show attribute (listing)",									"");
 	g_programflags.add(&flagnodedup,		"-nodedup",				"Turn off deduplicator",							"");
 	g_programflags.add(&flagnoeta,			"-noeta",				"Do not show ETA",									"");
 	g_programflags.add(&flagnopath,			"-nopath",				"Do not store path",								"");
@@ -47753,9 +47777,10 @@ int Jidac::loadparameters(int argc, const char** argv)
 	g_programflags.add(&flagbarraon,		"/on",					"Order by name",									"dir;");
 	g_programflags.add(&flagbarraos,		"/os",					"Order by size",									"dir;");
 
+	g_programflags.add(&flagnocolor,		"-nocolor",				"Monochrome output",								"",flagnocolor);
+
 #ifdef _WIN32
 ///	g_programflags.add(&flagdd,				"-dd",					"dd",												"");
-	g_programflags.add(&flagnocolor,		"-nocolor",				"Monochrome output",								"",flagnocolor);
 	g_programflags.add(&flagfindzpaq,		"-findzpaq",			"Search .zpaq in every drive letter (USB device)",	"");
 	g_programflags.add(&flagfixcase,		"-fixcase",				"Fix CAse",											"");
 	g_programflags.add(&flagfixreserved,	"-fixreserverd",		"fixreserverd",										"");
@@ -48412,6 +48437,8 @@ int Jidac::loadparameters(int argc, const char** argv)
 		else if (cli_onlystring	(opt,"-copy",				"",				g_copy,			argc,argv,&i,					NULL));
 		else if (cli_onlystring	(opt,"-freeze",				"",				g_freeze,		argc,argv,&i,					NULL));
 		else if (cli_onlystring	(opt,"-output",				"-out",			g_output,		argc,argv,&i,					NULL));
+		else if (cli_onlystring	(opt,"-ifexist",			"-ifexists",	g_ifexist,		argc,argv,&i,					NULL));
+		///else if (cli_onlystring	(opt,"-ismounted",			"",	g_ismounted,		argc,argv,&i,					NULL));
 		else if (cli_onlystring	(opt,"-script",				"",				g_script,		argc,argv,&i,					NULL));
 		else if (cli_onlystring	(opt,"-sfx",				"",				g_sfx,			argc,argv,&i,					&flagsfx));
 		else if (cli_onlystring	(opt,"-deleteinto",			"",				g_deleteinto,	argc,argv,&i,					NULL));
@@ -52063,6 +52090,82 @@ int Jidac::list()
 		}
 	}
 	flagchecksum=ischecksum();
+	
+	if (flagverbose)
+		flagattr=true;
+
+	int thesizesize=19;
+	if (!flagattr)
+	{
+		int64_t largest=0;
+		for (unsigned int i=0;i<filelist.size(); i++)
+		{
+			
+			if (all)
+			{
+				string myfilename=filelist[i]->first;
+				if (isdirectory(myfilename))
+				{
+					unsigned v;
+					int64_t sizetoprint=filelist[i]->second.size;
+					myfilename=myright(myfilename,myfilename.size()-all-3);
+					
+					if ((int)myfilename.length()==(all+1))
+					{
+						bool alldigit=true;
+						for (unsigned int i=0;i<myfilename.length()-1;i++)
+							if (!isdigit(myfilename[i]))
+							{
+								alldigit=false;
+								break;
+							}
+						if (alldigit)
+						{
+							if (all>0 && filelist[i]->first.size()==all+1u && (v=atoi(filelist[i]->first.c_str()))>0 && v<ver.size())
+								sizetoprint=v+1<ver.size() ? (ver[v+1].offset-ver[v].offset) : (csize-ver[v].offset);
+							if (sizetoprint>largest)
+								largest=sizetoprint;
+						}
+					}
+				}
+			}
+			else
+			{
+			if (filelist[i]->second.size>largest)
+				largest=filelist[i]->second.size;
+			}
+		}
+		
+		string temp=migliaia(largest);
+		thesizesize=temp.size()+1;
+		if (thesizesize<4)
+			thesizesize=4;
+		string sizeheader(thesizesize,'-');
+		if (flagdebug2)
+		{
+			myprintf("52107: largest %s  thesize %d\n",temp.c_str(),thesizesize);
+			myprintf("52115: |%s|\n",temp.c_str());
+			myprintf("52116: |%s|\n",sizeheader.c_str());
+			///return 0;
+		}
+
+		if (all)
+		{
+			string verheader(all,'-');
+			///myprintf("52091:    Date      Time   %*s Packed (est)%*s  Info\n",thesizesize,"Size",all,"Ver");
+			myprintf("52091:    Date      Time   %*s Ratio %*s Name/Info\n",thesizesize,"Size",all,"Ver");
+			myprintf("52092:----------- -------- %s ----- %s ----------\n",sizeheader.c_str(),verheader.c_str());
+		}
+		else
+		{
+			///myprintf("52088:    Date      Time   %*s Packed (est) Info\n",thesizesize,"Size");
+			myprintf("52088:    Date      Time   %*s Ratio Name\n",thesizesize,"Size");
+			myprintf("52089:----------- -------- %s ----- -----\n",sizeheader.c_str());
+		
+		}
+	}
+	
+	
 	unsigned fi;
 	for (fi=0;fi<filelist.size(); ++fi)
 	{
@@ -52168,48 +52271,89 @@ int Jidac::list()
 				}
 				if (summary<=0)
 				{
-#ifdef _WIN32
-					if (flagwindate)
-						myprintf("%c %s (C) %s %19s ", char(p->second.data),dateToString(flagutc,p->second.date).c_str(),dateToString(flagutc,mycreationtime).c_str(), migliaia(p->second.size));
-					else
-#endif
-					myprintf("%c %s %19s ", char(p->second.data),dateToString(flagutc,p->second.date).c_str(), migliaia(p->second.size));
-					if (!flagnoattributes)
-						myprintf("%s ", attrToString(p->second.attr).c_str());
+					string theversionnumber="";
+					bool flagnewversion=false;
+					bool isfolder=isdirectory(myfilename);
+					unsigned v;
+					
+					int64_t sizetoprint=p->second.size;
+					int64_t compressedtoprint=p->second.kompressedsize;
+					
 					if (all)
 					{
-						string rimpiazza="|";
-						if (!isdirectory(myfilename))
-						{
-							rimpiazza+=myhash;
-							rimpiazza+=mycrc32;
-						}
-						if (!myreplace(myfilename,"|$1",rimpiazza))
-							myreplace(myfilename,"/","|");
+						theversionnumber=myfilename.substr(0,all);
+						if (!isfolder)
+							myfilename=myfilename.substr(all+3,myfilename.size()-all-3);
+						else
+							myfilename=myright(myfilename,myfilename.size()-all-3);
+					
+						if ((int)myfilename.length()==(all+1))
+							if (myfilename[myfilename.length()-1]=='/')
+							{
+								bool alldigit=true;
+								for (unsigned int i=0;i<myfilename.length()-1;i++)
+									if (!isdigit(myfilename[i]))
+									{
+										alldigit=false;
+										break;
+									}
+								if (alldigit)
+								{
+									myfilename="";
+									flagnewversion=true;
+									if (all>0 && p->first.size()==all+1u && (v=atoi(p->first.c_str()))>0 && v<ver.size())
+										sizetoprint=v+1<ver.size() ? (ver[v+1].offset-ver[v].offset) : (csize-ver[v].offset);
+									compressedtoprint=sizetoprint;
+								}
+							}
 					}
 					else
 					{
 						if (tofiles.size()>0)
 							myfilename=rename(myfilename);
-						myfilename=myhash+mycrc32+myfilename;
 					}
+					
+					if (flagattr)
+						list_seconddata(p->second.data);
+					list_datetime(p->second.date);
+#ifdef _WIN32
+					if (flagwindate)
+						list_creationdate(mycreationtime);
+#endif
+					list_filesize(sizetoprint,thesizesize);
+
+					if (flagattr)
+						list_attributes(p->second.attr);
+					else
+						list_compressedfilesize(compressedtoprint,sizetoprint,flagnewversion,isfolder);
+					if (theversionnumber!="")
+						myprintf("%s|",theversionnumber.c_str());
+					
+					if ((myhash!="") || (mycrc32!=""))
+					{
+						color_yellow();
+						if (myhash!="")
+							myprintf("%s ",myhash.c_str());
+						if (mycrc32!="")
+							myprintf("%s ",mycrc32.c_str());
+						color_restore();
+					}
+
 	/// search and replace, if requested
 					franzreplace(myfilename);
 					if (flagstdout)
 						if (p->second.isordered)
 							myfilename="[STDOUT] "+myfilename;
 					printUTF8(myfilename.c_str());
-					unsigned v;  // list version updates, deletes, compressed size
+				
 					if (all>0 && p->first.size()==all+1u && (v=atoi(p->first.c_str()))>0 && v<ver.size())
-					{  // version info
-						std::map<int,string>::iterator commento;
-						commento=mappacommenti.find(v);
-						if(commento== mappacommenti.end())
-							myprintf(" +%d -%d -> %s", ver[v].updates, ver[v].deletes,
-							(v+1<ver.size() ? migliaia(ver[v+1].offset-ver[v].offset) : migliaia(csize-ver[v].offset)));
-						else
-							myprintf(" +%d -%d -> %s <<%s>>", ver[v].updates, ver[v].deletes,
-							(v+1<ver.size() ? migliaia(ver[v+1].offset-ver[v].offset) : migliaia(csize-ver[v].offset)),commento->second.c_str());
+					{  
+						std::map<int,string>::iterator commento=mappacommenti.find(v);
+						color_blackongreen();
+						myprintf("Files: added %s removed %s", migliaia(ver[v].updates),migliaia2(ver[v].deletes));
+						if(commento!= mappacommenti.end())
+							myprintf(" <<%s>>",commento->second.c_str());
+						color_restore();
 					}
 					myprintf("\n");
 				}
@@ -57635,6 +57779,9 @@ void my_handler(int s)
 #endif
 	pjidac=NULL;
 
+	if (!isatty(fileno(stdout))) 
+		flagnocolor=true;
+		
 	g_start=mtime();  		// get start time
 #ifndef SOLARIS // solaris does not like this things very much
 #ifndef ANCIENT
@@ -57706,7 +57853,7 @@ void my_handler(int s)
 		errorcode=2;
 	}
 
-	if (flagverbose)
+	if (flagdebug)
 	{
 		int64_t dt_ram	=jidac.get_dt_ram();
 		int64_t edt_ram	=jidac.get_edt_ram();
@@ -63370,6 +63517,29 @@ string	win_getlong(const string& i_file)
 ///zpaqfranz a z:\1 \\?\UNC\franzk\z\cb -longpath -debug
 int Jidac::add()
 {
+	/*
+	if (g_ismounted!="")
+	{
+		if (!ismounted(g_ismounted))
+		{
+			myprintf("63384: Abort because NOT -ismounted <<");
+			printUTF8(g_ismounted.c_str());
+			myprintf(">>\n");
+			return 2;
+		}
+		myprintf("63389: yep, ismounted\n");
+	}
+*/
+	if (g_ifexist!="")
+	{
+		if (!direxists(g_ifexist))
+		{
+			myprintf("63380: Abort because -ifexist <<");
+			printUTF8(g_ifexist.c_str());
+			myprintf(">>\n");
+			return 2;
+		}
+	}
 
 #ifdef unix
 	if (g_dataset!="")
@@ -91768,6 +91938,8 @@ int Jidac::addhome()
 	return risultato;
 }
 
+///static const int64_t LIST_HT_BAD=   -0x7FFFFFFFFFFFFFFALL;  // no such frag
+
 /////////////////////////// read_archive //////////////////////////////
 // Read arc up to -date into ht, dt, ver. Return place to
 // append. If errors is not NULL then set it to number of errors found.
@@ -91775,6 +91947,9 @@ int64_t Jidac::read_archive(callback_function i_advance,const char* arc, int *er
 {
 	if (errors) *errors=0;
 	dcsize=dhsize=0;
+	
+	map<int64_t, double> mycompressionratio;  // block offset -> compression ratio
+
 	assert(ver.size()==1);
 	const bool i_renamed=command=='l' || command=='a' || command=='5' ; ///5 for dirsize arrggghh hidden parameter!
 	const bool i_isinfo=(command=='i') && (!flagstat) && (!flagcomment); // -stat? Do a lot of work
@@ -92042,6 +92217,15 @@ int64_t Jidac::read_archive(callback_function i_advance,const char* arc, int *er
 									error("fragment too big");
 								block.back().usize+=(ht[num+ik].usize=f)+4u;
 							 }
+							double usum=0;  // total uncompressed size
+							for (unsigned i=0; i<n; ++i) 
+							  usum+=ht[num+i].usize;
+							if (usum>0) 
+							{
+								double theratio=bsize/usum;
+								for (unsigned i=0; i<n; ++i) 
+									ht[num+i].estimatedratio=theratio;
+							}
 							data_offset+=bsize;
 						}
             // Index (type i)
@@ -92216,6 +92400,11 @@ int64_t Jidac::read_archive(callback_function i_advance,const char* arc, int *er
 							if (issel)
 							{
 								dtr.ptr[ik]=j;
+								unsigned k=j;
+								if (ht[j].csize<0 && ht[j].csize!=LIST_HT_BAD)
+									k+=ht[j].csize;
+								if (k>0 && k<ht.size() && ht[k].csize!=LIST_HT_BAD && ht[k].csize>=0)
+									dtr.kompressedsize+=ht[j].estimatedratio*ht[j].usize;
 							}
 						}
 						if (flagads)
@@ -92427,7 +92616,6 @@ endblock:;
 			}
 		}
 	
-
 	return block_offset;
 }
 
@@ -94859,8 +95047,8 @@ int64_t Jidac::pakka_read_archive(const char* arc)
                   }
                 }
               }
-            }
           }
+	        }
 
           // Recover fragment sizes and hashes from data block
           else if (pass==LIST_RECOVER && filename.s[17]=='d' && num>0
@@ -95246,9 +95434,12 @@ public:
 };
 #endif
 
-
 bool downloadfile(string i_verurl,string i_verfile,bool i_showupdate)
 {
+#ifdef SOLARIS
+	return false;
+#else
+	
 	if (i_verurl=="")
 	{
 		myprintf("94439: i_verurl empty\n");
@@ -95400,11 +95591,18 @@ bool isurl(string i_url)
 		myprintf("94581: ERROR: at least 3 slashes needed founded %d\n",barre);
 		return false;
 	}
+#endif
     return true;
+	
 }
 
 int Jidac::update()
 {
+#ifdef SOLARIS
+	myprintf("95602: Cannot update SOLARIS\n");
+	return 0;
+#else
+	
 	myprintf("94276: Checking internet update (-verbose for details)\n");
 	string randnocache="?"+generaterandomstring(10);
 
@@ -95417,7 +95615,17 @@ int Jidac::update()
 
 	string	http_url="http://www.francocorbelli.it/zpaqfranz/win64/zpaqfranz.sha256";
 	string	http_exe="http://www.francocorbelli.it/zpaqfranz/win64/zpaqfranz.exe";
-	
+
+#if defined(_WIN32) && (!defined(_WIN64))
+	http_url="http://www.francocorbelli.it/zpaqfranz/win32/zpaqfranz32.sha256";
+	http_exe="http://www.francocorbelli.it/zpaqfranz/win32/zpaqfranz32.exe";
+#endif
+
+#if defined(_WIN64) && ( defined(HWSHA1))
+	http_url="http://www.francocorbelli.it/zpaqfranz/win64hw/zpaqfranzhw.sha256";
+	http_exe="http://www.francocorbelli.it/zpaqfranz/win64hw/zpaqfranzhw.exe";
+#endif
+
 	if (files.size()==2)
 	{
 		http_url=files[0];
@@ -95437,7 +95645,6 @@ int Jidac::update()
 		myprintf("94647: http_exe is not a url |%s|\n",http_exe.c_str());
 		return 2;
 	}
-	
 	
 	string 	verurl 	=http_url+randnocache;
 	string	verfile	=g_gettempdirectory()+"zpaqfranz_verfile.sha256";
@@ -95567,37 +95774,42 @@ int Jidac::update()
 	
 #ifdef unix
 	if (flagnewer)
+	{	color_red();
 		myprintf("95205: PLEASE UPDATE: your %s %s is OLDER of %s %s\n",internal_version.c_str(),internal_date.c_str(),theversion.c_str(),thedate.c_str());
+	}
 	else
+	{
+		color_green();
 		myprintf("95205: NOTHING TO DO: your %s %s is not older of %s %s\n",internal_version.c_str(),internal_date.c_str(),theversion.c_str(),thedate.c_str());
+	}
+	color_restore();
 	remove(verfile.c_str());
 	return 0;
-#endif
-	
-
-#ifdef _WIN32
+#else
 	if ((!flagnewer) && (flagkill))
 	{
 		color_yellow();
-		myprintf("94488: Your %s %s is not older of %s %s BUT -kill => continue anyway\n",internal_version.c_str(),internal_date.c_str(),theversion.c_str(),thedate.c_str());
+		myprintf("94488: Your %s %s is not older of %s %s BUT -kill => continue anyway\n",
+		internal_version.c_str(),
+		internal_date.c_str(),
+		theversion.c_str(),
+		thedate.c_str());
 		color_restore();
 	}
 	else
-#endif
 	if ((!flagnewer) && (!flagkill))
 	{
-		color_red();
+		color_green();
 		myprintf("94418: NOTHING TO DO: your %s %s is not older of %s %s\n",internal_version.c_str(),internal_date.c_str(),theversion.c_str(),thedate.c_str());
 		color_restore();
 		remove(verfile.c_str());
 		return 0;
 	}
 	
-#ifdef _WIN64
 	franz_do_hash myself("SHA-256");
 	if (flagdebug3)
 		myprintf("94710: filehash on %s\n",fullzpaqexename.c_str());
-
+	
 	int64_t startmyself=mtime();
 	string myownsha256=myself.filehash(fullzpaqexename,false,startmyself,prendidimensionefile(fullzpaqexename.c_str()));
 	if (flagverbose)
@@ -95605,7 +95817,9 @@ int Jidac::update()
 	
 	if (stringtolower(myownsha256)==stringtolower(thesha256))
 	{
+		color_yellow();
 		myprintf("94718: Really nothing to do because your build is == to the internet one\n");
+		color_restore();
 		return 0;
 	}
 	
@@ -95663,7 +95877,7 @@ int Jidac::update()
 		return 2;
 	}
 	color_green();
-	myprintf("94493: OK => updating zpaqfranz\n");
+	myprintf("94493: OK => updating ...\n");
 	color_restore();
 	if (flagverbose)
 	{
@@ -95700,11 +95914,13 @@ int Jidac::update()
 	fclose(batch);
 	waitexecute(filebatch,"",SW_HIDE);
 #endif
+
+#endif
 	return 0;
 }
 
 
-#ifdef _WIN64
+#ifdef _WIN32
 int Jidac::download()
 {
 	myprintf("94959: Download file from Internet (something like wget)\n");
@@ -96509,23 +96725,204 @@ void Jidac::runhigh(string i_addendum)
 }
 #endif
 
-
 /*
-wmic shadowcopy get ID, State /format:list
+bool Jidac::ismounted(const string i_path) 
+{
+	if (i_path=="")
+	{
+		myprintf("96531: i_path empty!\n");
+		return false;
+	}
+#ifdef _WIN32
+	return false;
+#else
+	
+    struct stat statbuf;
+    if (stat(i_path.c_str(), &statbuf) != 0) 
+	{
+        myprintf("96436: error in stat on %s\n",i_path.c_str());
+        seppuku();
+    }
+	if (flagdebug)
+		myprintf("96545: Ready to check OS\n");
+#if defined(__linux__)
+	if (flagdebug)
+		myprintf("96548: I am __linux__\n");
 
-    1 - Failed: La copia shadow è fallita.
-    12 - Preparing: La copia shadow è in fase di preparazione.
-    13 - Processing: La copia shadow è in fase di elaborazione.
-    14 - Committed: La copia shadow è stata confermata.
-    15 - Deleting: La copia shadow è in fase di eliminazione.
-    16 - Created: La copia shadow è stata creata.
-	C:\Windows\system32>wmic shadowcopy get ID, State /format:list
+    struct mntent *mnt;
+    FILE *fp;
+    fp = setmntent("/etc/mtab", "r");
+    if (fp == NULL) 
+	{
+		myprintf("96545: linux cannot read /etc/mtab\n");
+		seppuku();
+    }
+    while ((mnt=getmntent(fp))!=NULL) 
+	{
+        struct stat mnt_statbuf;
+        if (stat(mnt->mnt_dir, &mnt_statbuf) == 0) 
+            if (statbuf.st_dev == mnt_statbuf.st_dev) 
+		        if ((strstr(mnt->mnt_type, "nfs")!=NULL) 
+					||
+					(strstr(mnt->mnt_type, "cifs")!=NULL || strstr(mnt->mnt_type,"smbfs")!=NULL))
+					{
+						endmntent(fp);
+						return true;
+					}
+    }
+    endmntent(fp);
+	return false;
+#elif defined(__FreeBSD__) || defined(__APPLE__)
+	if (flagdebug)
+		myprintf("96575: I am __FreeBSD__ or __APPLE__\n");
+    struct statfs *mntbuf;
+    int nmounts=getmntinfo(&mntbuf, MNT_NOWAIT);
+    if (nmounts==0) 
+	{
+		myprintf("96580: bsd/apple getntinfo kaputt\n");
+		seppuku();
+    }
+    // Itera su tutte le voci ottenute
+    for (int i=0;i<nmounts;i++) 
+	{
+        struct stat mnt_statbuf;
+        if (stat(mntbuf[i].f_mntonname, &mnt_statbuf) == 0) 
+		{
+            if (statbuf.st_dev == mnt_statbuf.st_dev) 
+			{
+				if ((strstr(mntbuf[i].f_fstypename, "nfs")!=NULL) 
+					||
+				(strstr(mntbuf[i].f_fstypename,"cifs")!=NULL || 
+				strstr(mntbuf[i].f_fstypename, "smbfs")!= NULL))
+                return true;
+            }
+        }
+    }
+	return false;
+	
+#endif
+#endif
+
+#elif defined(__sun)
+    FILE *fp;
+    struct mnttab mnt;
+    struct stat mnt_statbuf;
+
+    // Apri il file /etc/mnttab per leggere le informazioni sui filesystem montati
+    fp = fopen("/etc/mnttab", "r");
+    if (fp == NULL) {
+        perror("fopen");
+        exit(EXIT_FAILURE);
+    }
+
+    // Itera su tutte le voci del file /etc/mnttab
+    while (getmntent(fp, &mnt) == 0) {
+        // Stat il punto di montaggio per confrontare il dispositivo
+        if (stat(mnt.mnt_mountp, &mnt_statbuf) == 0) {
+            if (statbuf.st_dev == mnt_statbuf.st_dev) {
+                // Abbiamo trovato il filesystem corretto
+                if (strstr(mnt.mnt_fstype, "nfs") != NULL) {
+                    printf("Il percorso '%s' è montato tramite NFS.\n", path);
+                } else if (strstr(mnt.mnt_fstype, "smbfs") != NULL) {
+                    printf("Il percorso '%s' è montato tramite Samba (CIFS/SMB).\n", path);
+                } else {
+                    printf("Il percorso '%s' è una cartella del filesystem locale (%s).\n", path, mnt.mnt_fstype);
+                }
+                fclose(fp);
+                return;
+            }
+        }
+    }
+
+    // Se arriviamo qui, non abbiamo trovato il percorso nel file /etc/mnttab
+    printf("Il percorso '%s' non è montato o non è stato trovato in /etc/mnttab.\n", path);
+    fclose(fp);
+}
 
 
-ID={4BB48469-0302-4520-8FD2-118773EB64D6}
-State=12
+int64_t Jidac::fragmenttoblockoffset(int i_fragment)
+{
+//	return -1;
+	if (i_fragment<0)
+		return -1;
+	if (block.size()==0)
+		return -1;
+	///myprintf("96758: start frag search\n");
+	
+	for (unsigned int i=0;i<block.size();i++)
+	{
+	//	myprintf("92320: $$$$$$$$$$$$ block %08d offset %19s start %10s frags %3s\n",i,migliaia(block[i].offset),migliaia2(block[i].start),migliaia3(block[i].frags));
+		if ((i_fragment>=block[i].start) && (i_fragment<=block[i].start+block[i].frags))
+		{
+			///myprintf("96765: EUREEEKAAAAA %s\n",migliaia(block[i].offset));
+			return i;//block[i].offset;
+			return block[i].offset;
+		}
+	}
+	
+	myprintf("96771: KAPUTT FRAG SEARCH!\n");
+	return -1;
+}
+*/
 
-
-
-
-	*/
+void Jidac::list_datetime(const int64_t i_seconddate)
+{
+	myprintf("%s ", dateToString(flagutc,i_seconddate).c_str());
+}
+void Jidac::list_filesize(const int64_t i_filesize,int i_thesizesize)
+{
+	if (i_thesizesize==0)
+		i_thesizesize=19;
+	myprintf("%*s ", i_thesizesize,migliaia(i_filesize));
+}
+void Jidac::list_compressedfilesize(const int64_t i_compressedfilesize,const int64_t i_filesize,const bool i_flagnewversion,const bool i_isfolder)
+{
+	
+	if (i_flagnewversion)
+	{
+		color_blackongreen();
+		myprintf("  Ver ");
+		return;
+	}
+	if (i_isfolder)
+	{
+		color_green();
+		myprintf("  dir ");
+		color_restore();
+		return;
+	}
+	
+	double ratio=0;
+	if (i_filesize!=0)
+		ratio=100.0*(double)i_compressedfilesize/(double)i_filesize;
+	if (ratio>999)
+	{
+		color_red();
+		myprintf(">999%% ");
+	}
+	else
+	if (ratio>100.0)
+	{
+		color_yellow();
+		myprintf("%4.0f%% ", (double)ratio);
+	}
+	else
+	{
+		color_green();
+		myprintf("%4.0f%% ", (double)ratio);
+	}
+	///myprintf("(%10s) ", tohuman(i_compressedfilesize));
+	color_restore();
+}
+void Jidac::list_seconddata(const char i_car)
+{
+	myprintf("%c ",char(i_car));
+}
+void Jidac::list_creationdate(int64_t i_mycreationtime)
+{
+	myprintf("(C) %s ", dateToString(flagutc,i_mycreationtime).c_str());
+}
+void Jidac::list_attributes(int64_t i_attributes)
+{
+	myprintf("%s ", attrToString(i_attributes).c_str());
+}

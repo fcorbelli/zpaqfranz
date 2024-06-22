@@ -53,8 +53,8 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 */
 
-#define ZPAQ_VERSION "59.8j"
-#define ZPAQ_DATE "(2024-06-18)"  // cannot use __DATE__ on Debian!
+#define ZPAQ_VERSION "59.9b"
+#define ZPAQ_DATE "(2024-06-21)"  // cannot use __DATE__ on Debian!
 
 ///	optional align for malloc (sparc64) via -DALIGNMALLOC
 #define STR(a) #a
@@ -13096,6 +13096,7 @@ bool	g_flagmultipart;
 string 	g_archive;
 string	g_indexname;
 string	g_pidname;
+string	g_backupposition;
 FILE* 	g_output_handle;
 int64_t g_robocopy_check_sorgente;
 int64_t g_robocopy_check_destinazione;
@@ -13202,6 +13203,7 @@ bool flaghashdeep;
 bool flagkill;
 bool flagmm;
 bool flagattr;
+bool flagthunderbird;
 bool flagnoattributes;
 bool flagnodedup;
 bool flagnoeta;
@@ -36140,6 +36142,11 @@ size_t fread(void* ptr, size_t size, size_t nobj, FP fp) {
 }
 // Get file position
 int64_t ftello(FP fp) {
+	if ((int64_t)fp==0)
+	{
+		myprintf("36145: ftello on FP zero\n");
+		return 0;
+	}
   LONG h=0;
   DWORD r=SetFilePointer(fp, 0, &h, FILE_CURRENT);
   return r+(uint64_t(h)<<32);
@@ -36172,7 +36179,8 @@ size_t myfwrite(const void* ptr, size_t size, size_t nobj, FP fp)
 {
 	if (fp==0)
 	{
-		myprintf("35208: FP NOT POSITIVE\n");
+		if (flagdebug3)
+			myprintf("35208: FP NOT POSITIVE\n");
 		return 0;
 	}
 	if ((nobj*size)==0)
@@ -38260,14 +38268,21 @@ public:
   // Write pending output
 	void flush() 
 	{
+		if (flagdebug3)
+			myprintf("38264: flush k1\n");
 		assert(fp!=FPNULL);
 		string nomefile=prendinomefileebasta(thefilename);
 		
 		g_archivefp=fp;
-
+		if (flagdebug3)
+			myprintf("38270: flush k2\n");
+		
 		if (ptr==104)
 			if (flagdebug4)
 				myprintf("38049: =============== g_write_on_first %d firstp %s\n",int(g_write_on_first),migliaia(int64_t(firstfp)));
+		
+		if (flagdebug3)
+			myprintf("38277: flush k3\n");
 		
 		if (g_write_on_first && (ptr==104) && (firstfp!=FPNULL))
 		{
@@ -38332,9 +38347,21 @@ public:
 			return;
 		}
 
+		if (flagdebug3)
+			myprintf("38343: flush k4\n");
+		
 
 		if (flagdebug3)
-			myprintf("37896: write @ %12s on fp %12s (%d) size %s\n",migliaia3(ftello(fp)),migliaia(int64_t(fp)),int64_t(fp),migliaia2(ptr));
+		{
+			if ((int64_t)fp!=0)
+			{
+				myprintf("38348: -pre fp %s\n",migliaia((int64_t)fp));
+				myprintf("37896: write @ %12s on fp %12s (%d) size %s\n",migliaia3(ftello(fp)),migliaia(int64_t(fp)),int64_t(fp),migliaia2(ptr));
+				myprintf("38349: -post\n");
+			}
+		}
+		if (flagdebug3)
+			myprintf("38343: flush k4bis\n");
 
 		char debugfilename[100];
 		FP debugoutf;
@@ -38346,15 +38373,22 @@ public:
 			fclose(debugoutf);
 		}
 		if (flagdebug3)
-			myprintf("38068: !!!!!!!!!!!!!!!!!!!!!! unecrypted on [ENCRYPT @ %s] %s\n",migliaia(ftello(fp)+off),debugfilename);
+			if ((int64_t)fp!=0)
+				myprintf("38068: !!!!!!!!!!!!!!!!!!!!!! unecrypted on [ENCRYPT @ %s] %s\n",migliaia(ftello(fp)+off),debugfilename);
 
-
+		if (flagdebug3)
+			myprintf("38343: flush k5\n");
+	
 		if (ptr==104)
 			if (flagdebug3)
-				myprintf("38999:-------------------------------------- regular 104 encrypt @%s\n",migliaia(int64_t(ftello(fp)+off)));
+				if ((int64_t)fp!=0)
+					myprintf("38999:-------------------------------------- regular 104 encrypt @%s\n",migliaia(int64_t(ftello(fp)+off)));
 		if (flagdebug3)
 			myprintf("38095: MMMMMMMMMMMMMMMMMMMMMMMMMMM off %s writtensofar %s onlast %s|\n",migliaia3(off),migliaia(writtensofar),migliaia2(writtenonlastchunk));
   
+		if (flagdebug3)
+			myprintf("38343: flush k6\n");
+	
 		int64_t cryptoffset;
 		if (g_chunk_size>0)
 		{
@@ -38363,12 +38397,20 @@ public:
 				cryptoffset+=32; ///primo run
 		}
 		else
-			cryptoffset=ftello(fp)+off;
-		
+		{
+			if ((int64_t)fp!=0)
+				cryptoffset=ftello(fp)+off;
+			else
+				cryptoffset=0;
+		}
+		if (flagdebug3)
+			myprintf("38343: flush k7\n");
+	
 		if (aes) 
 		{
 			if (flagdebug4)
-				myprintf("38101: AES seq %08d [size %6s] crypt %10s (ftello %10s + off %10s + written %10s) %s\n",
+				if ((int64_t)fp!=0)
+					myprintf("38101: AES seq %08d [size %6s] crypt %10s (ftello %10s + off %10s + written %10s) %s\n",
 							g_debug_sequence,
 							migliaia5(ptr),
 							migliaia(cryptoffset),
@@ -38390,6 +38432,9 @@ public:
 		myfwrite(buf, 1, ptr, fp);
 		writtensofar	+=ptr;
 		chunksize		+=ptr;
+
+		if (flagdebug3)
+			myprintf("38343: flush k8\n");
 		
 		if (g_chunk_size>0)
 			if (chunksize>g_chunk_size)
@@ -39391,17 +39436,22 @@ struct DT   // if you get some warning here, update your compiler!
 	int64_t kompressedsize;
 	DT(): date(0), size(0), attr(0), data(0),creationdate(0),accessdate(0),written(-1),isordered(false),isselected(false),/*franz_block_size(FRANZOFFSETV3),*/file_crc32(0),hashedsize(0),chunk(-1),expectedsize(0),version(0),forceadd(false),is4(false),red_total(0),red_count(0),red_min(256),red_max(0),red_avg(0),red_candidate(0),kompressedsize(0)
 	{
-///	let's save a bit of RAM
-		franz_block_size=FRANZOFFSETV2;
-		
-		if ((g_franzotype==FRANZO_CRC_32) || (g_franzotype==FRANZO_XXHASH64))
-			franz_block_size=FRANZOFFSETV1;
+///	let's save a bit of RAM (during compression)
+		if (command=='a')
+		{
+			franz_block_size=FRANZOFFSETV2;
+			if ((g_franzotype==FRANZO_CRC_32) || (g_franzotype==FRANZO_XXHASH64))
+				franz_block_size=FRANZOFFSETV1;
+			else
+			if ((g_franzotype==FRANZO_WHIRLPOOL) || (g_franzotype==FRANZO_HIGHWAY64) || (g_franzotype==FRANZO_HIGHWAY128) || (g_franzotype==FRANZO_HIGHWAY256)) 
+				franz_block_size=FRANZOFFSETV3;
+			if (flagnochecksum)
+				franz_block_size=0;
+		}
 		else
-		if ((g_franzotype==FRANZO_WHIRLPOOL) || (g_franzotype==FRANZO_HIGHWAY64) || (g_franzotype==FRANZO_HIGHWAY128) || (g_franzotype==FRANZO_HIGHWAY256)) 
 			franz_block_size=FRANZOFFSETV3;
-		
-		if (flagnochecksum)
-			franz_block_size=0;
+			
+///		myprintf("39451: franz_block_size %d  franzo_type %d |%c|\n",franz_block_size,g_franzotype,command);
 		
 		franz_block=NULL;
 		if (franz_block_size>0)
@@ -40697,7 +40747,7 @@ private:
 	int64_t date;             			// now as decimal YYYYMMDDHHMMSS (UT)
 	int64_t version;          			// version number or 14 digit date
 	string method;            			// default "1"
-	const char* index;        			// index option
+	 const char* index;        			// index option
 	string	plainpassword;
 	string	plainpassword2;
 	char new_password_string[32]; 		// -repack hashed password
@@ -45164,6 +45214,9 @@ string help_a(bool i_usage,bool i_example)
 		moreprint("+ : -ignore       Do not show file access error");
 		moreprint("+ : -pause        Wait for key press after run");
 		moreprint("+ : -ifexist X    Abort if X folder does not exist");
+#if defined(_WIN32)
+		moreprint("+ : -thunderbird  Take appdata local\\roaming thunderbird");
+#endif
 	}
 	if (i_usage && i_example)
 		moreprint("    Examples:");
@@ -45230,6 +45283,10 @@ string help_a(bool i_usage,bool i_example)
 		moreprint("Do not mess output with errors       a z:\\1.zpaq c:\\users -ignore");
 		moreprint("Wait for a key strike                a z:\\1.zpaq c:\\users -pause");
 		moreprint("Abort if /monta...rar does not exist a /1.zpaq /thefolder -ifexist /monta/nas1_nfs3/rar");
+#ifdef _WIN32
+		moreprint("Take Thunderbird email of utente     a z:\\1.zpaq c:\\users\\utente -thunderbird");
+		moreprint("Close and take Thunderbird email     a z:\\1.zpaq c:\\users\\utente -thunderbird -kill");
+#endif
 	}
 	return("Add or append files to archive");
 }
@@ -47735,6 +47792,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 	g_programflags.add(&flagmm,				"-mm",					"Memory mapped",									"");
 	g_programflags.add(&flagnoattributes,	"-noattributes",		"Do not store attribute",									"");
 	g_programflags.add(&flagattr,			"-attr",				"Show attribute (listing)",									"");
+	g_programflags.add(&flagthunderbird,	"-thunderbird",			"Thunderbird's e-mail",									"");
 	g_programflags.add(&flagnodedup,		"-nodedup",				"Turn off deduplicator",							"");
 	g_programflags.add(&flagnoeta,			"-noeta",				"Do not show ETA",									"");
 	g_programflags.add(&flagnopath,			"-nopath",				"Do not store path",								"");
@@ -47854,6 +47912,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 	g_archive			="";
 	g_indexname			="";
 	g_pidname			="";
+	g_backupposition	="";
 	g_output_handle		=NULL;
 	g_archivefp			=FPNULL;
 	g_output			="";
@@ -47924,10 +47983,10 @@ int Jidac::loadparameters(int argc, const char** argv)
 	}
 
 
-#ifdef _WIN32
 	char *no_color=getenv("NO_COLOR");
 	if ((no_color!=NULL) && (no_color[0]!='\0'))
 		flagnocolor=true;
+#ifdef _WIN32
 	color_save();
 	wchar_t myexepath[_MAX_PATH];
 	GetModuleFileName(NULL,myexepath,_MAX_PATH);
@@ -54479,7 +54538,7 @@ int Jidac::extract()
 	}
 #endif
 	if (flagdebug2)
-		myprintf("51605: writejidacheader 1\n");
+		myprintf("54482: writejidacheader 1\n");
     writeJidacHeader(&out, ver[1].date, -1, 1);
     int64_t dstart=out.tell();
     // Copy only referenced D blocks. If method then recompress.
@@ -54558,7 +54617,7 @@ int Jidac::extract()
 	}
 #endif
 	if (flagdebug2)
-		myprintf("51605: writejidacheader 2\n");
+		myprintf("54561: writejidacheader 2\n");
     
     writeJidacHeader(&out, ver[1].date, csize, 1);
     out.close();
@@ -63014,47 +63073,59 @@ bool iswinroot(const string& i_path)
 }
 #endif
 
-bool iszpaqfranzfile(string i_filename,string i_header)
+string prendiprimariga(string i_filename)
 {
 	if (flagdebug)
-		myprintf("59895: checking %s with %s\n",i_filename.c_str(),i_header.c_str());
-
+		myprintf("63074: getting first line  %s\n",i_filename.c_str());
+	
 	if (i_filename=="")
-		return false;
+		return "";
 	if (!fileexists(i_filename))
 	{
-		myprintf("58918: File not found ");
+		myprintf("63080: File not found ");
 		printUTF8(i_filename.c_str());
 		myprintf("\n");
-		return false;
+		return "";
 	}
 
 	FILE* backupfile=fopen(i_filename.c_str(), "rb");
 	if (backupfile==NULL)
 	{
-		myprintf("58926: Cannot open file\n");
-		return false;
+		myprintf("63089: Cannot open file\n");
+		return "";
 	}
 
 	char line[65536];
 	string linea="";
 	if (!fgets(line, sizeof(line), backupfile))
 	{
-		myprintf("58933: failed reading first line\n");
+		myprintf("63097: failed reading first line\n");
 		fclose(backupfile);
-		return false;
+		return "";
 	}
 	fclose(backupfile);
 
 	linea=line;
 	if (linea.size()==0)
 	{
-		myprintf("58939: first line empty\n");
+		myprintf("63106: first line empty\n");
+		return "";
+	}
+	return linea;
+}
+
+bool iszpaqfranzfile(string i_filename,string i_header)
+{
+		
+	string linea=prendiprimariga(i_filename);
+	if (linea.size()==0)
+	{
+		myprintf("63118: first line empty\n");
 		return false;
 	}
 	if (mypos(i_header,linea)==-1)
 	{
-		myprintf("58944: File does not seems by zpaqfranz %s\n",linea.c_str());
+		myprintf("63123: File does not seems by zpaqfranz %s\n",linea.c_str());
 		return false;
 	}
 	return true;
@@ -63530,6 +63601,65 @@ int Jidac::add()
 		myprintf("63389: yep, ismounted\n");
 	}
 */
+#ifdef _WIN32
+	if (flagthunderbird)
+	{
+		vector<string> thunfiles;
+	
+		for (unsigned int i=0;i<files.size();i++)
+		{
+			string temp=includetrailingbackslash(files[i]);
+			string applocal=temp+"appdata/local/thunderbird/";
+			string approaming=temp+"appdata/roaming/thunderbird/";
+			if ((direxists(applocal)) && (direxists(approaming)))
+			{
+				thunfiles.push_back(applocal);
+				thunfiles.push_back(approaming);
+			}
+			else
+				myprintf("63593: Cannot find thunderbird\n");
+			
+		}
+		if (thunfiles.size()==0)
+		{
+			myprintf("63600: Sorry, no Thunderbird folders added, quit!\n");
+			return 2;
+		}
+		files.clear();
+		for (unsigned int i=0;i<thunfiles.size();i++)
+		{
+			if (flagverbose)
+			{
+				myprintf("63606: Thunderbird folder %08d ",i);
+				printUTF8(thunfiles[i].c_str());
+				myprintf("\n");
+			}
+			files.push_back(thunfiles[i]);
+		}
+
+		if (flagkill)
+		{
+			string	filesubba	=g_gettempdirectory()+"thunkil.bat";
+			filesubba=nomefileseesistegia(filesubba);
+			if (fileexists(filesubba))
+				if (remove(filesubba.c_str())!=0)
+						error("Highlander thunkil.bat");
+			FILE* subbatch=fopen(filesubba.c_str(), "wb");
+			if (subbatch==NULL)
+			{
+				myprintf("63622: cannot write filesubba %s\n",filesubba.c_str());
+				seppuku();
+			}
+
+			fprintf(subbatch,"@taskkill /f /im thunderbird.exe\n");
+			fclose(subbatch);
+			waitexecute(filesubba,"",SW_HIDE);
+			delete_file(filesubba.c_str());
+		}
+	}
+#endif
+
+
 	if (g_ifexist!="")
 	{
 		if (!direxists(g_ifexist))
@@ -64361,6 +64491,9 @@ int Jidac::add()
 						myprintf("60095: NOT a backup part |%s|\n",lastpiece.c_str());
 				}
 				string percorso=extractfilepath(part0);
+				if (g_backupposition!="")
+					percorso=g_backupposition;
+				
 				string solonome=prendinomefileebasta(part0);
 
 				g_indexname=percorso+solonome+"_backup.index";
@@ -65402,7 +65535,7 @@ int Jidac::add()
 #endif
 
 		if (flagdebug3)
-			myprintf("51605: writejidacheader 3\n");
+			myprintf("65405: writejidacheader 3\n");
     
 		writeJidacHeader(&out, date, g_cdatasize, g_htsize);
 	}
@@ -65422,7 +65555,7 @@ int Jidac::add()
 	}
 #endif
 		if (flagdebug3)
-			myprintf("51605: writejidacheader 4\n");
+			myprintf("65425: writejidacheader 4\n");
 		writeJidacHeader(&out, date, -1, htsize);
 	}
 	
@@ -66150,7 +66283,7 @@ int Jidac::add()
 	}
 #endif
 	if (flagdebug3)
-		myprintf("51605: writejidacheader 5\n");
+		myprintf("66153: writejidacheader 5\n");
     
 	writeJidacHeader(&outi, date, 0, htsize);
 	// Append compressed fragment tables to archive
@@ -66507,20 +66640,26 @@ int Jidac::add()
 				}
 			}
 			if (flagdebug3)
-				myprintf("51605: writejidacheader 7 (finale,chunk) header_pos %s cdatasize %s htsize %s\n",migliaia3(header_pos),migliaia(cdatasize),migliaia(htsize));
+				myprintf("66510: writejidacheader 7 (finale,chunk) header_pos %s cdatasize %s htsize %s\n",migliaia3(header_pos),migliaia(cdatasize),migliaia(htsize));
 			writeJidacHeader(&out, date, cdatasize, htsize);
 		}
 		else
 		{
 			if (flagdebug3)
 			{
-				myprintf("51605: writejidacheader 6 (finale,stand) header_pos %s cdatasize %s htsize %s\n",migliaia3(header_pos),migliaia(cdatasize),migliaia(htsize));
+				myprintf("66517: writejidacheader 6 (finale,stand) header_pos %s cdatasize %s htsize %s\n",migliaia3(header_pos),migliaia(cdatasize),migliaia(htsize));
 				myprintf("64007: out.seek SEEK_SET at header_pos %s\n",migliaia(header_pos));
 			}
 			out.seek(header_pos, SEEK_SET);
 			writeJidacHeader(&out, date, cdatasize, htsize);
+			if (flagdebug3)
+				myprintf("66522: preflush\n");
 			out.flush(); //this is fundamental!
+			if (flagdebug3)
+				myprintf("66524: postflush\n");
 			out.seek(0, SEEK_END);
+			if (flagdebug3)
+				myprintf("66526: postseek\n");
 		}
 	}
 	int64_t archive_size=out.tell();
@@ -90003,8 +90142,33 @@ int Jidac::testbackup()
 		}
 
 
-	string 	indexname	=extractfilepath(files[0])+prendinomefileebasta(files[0])+"_00000000_backup.index";
-	string 	filename	=extractfilepath(files[0])+prendinomefileebasta(files[0])+"_00000000_backup.txt";
+	string	posizione=extractfilepath(files[0]);
+	
+	if (g_indexname!="")
+	{
+		g_backupposition=extractfilepath(includetrailingbackslash(g_indexname));
+		if (flagverbose)
+			myprintf("90131: -index automagically managed g_backuposition |%s|\n",g_backupposition.c_str());
+		if (!direxists(g_backupposition))
+		{
+			myprintf("90134: the folder (of -index) need to (already) exists ");
+			printUTF8(g_backupposition.c_str());
+			myprintf("\n");
+			return 2;
+		}
+		g_indexname="";
+		index=NULL;
+		posizione=g_backupposition;
+		if (!flagparanoid)
+		{
+			color_yellow();
+			myprintf("90143: *** WARNING: due to -index YOU SHOULD REALLY USE -paranoid ***\n");
+			color_restore();
+		}
+	}
+				
+	string 	indexname	=posizione+prendinomefileebasta(files[0])+"_00000000_backup.index";
+	string 	filename	=posizione+prendinomefileebasta(files[0])+"_00000000_backup.txt";
 	string	firstzpaq	=extractfilepath(files[0])+prendinomefileebasta(files[0])+"_00000001.zpaq";
 	string	zpaqchunks	=extractfilepath(files[0])+prendinomefileebasta(files[0])+"_????????.zpaq";
 
@@ -90028,6 +90192,41 @@ int Jidac::testbackup()
 		return 2;
 	}
 
+
+	if (!flagparanoid)
+	{
+		string primariga=prendiprimariga(filename);
+		if (primariga!="")
+		{
+			if (flagdebug3)
+				myprintf("90192: First row %s\n",primariga.c_str());
+			unsigned int lastpipe=primariga.size();
+			while (lastpipe>0)
+				if (primariga[lastpipe--]=='|')
+					break;
+			if (flagdebug3)
+				myprintf("90199: lastpipe %08d\n",lastpipe);
+			if (lastpipe>0)
+			{
+				string originalname=primariga.substr(lastpipe+2,primariga.size()-lastpipe-3);
+				if (flagdebug)
+					myprintf("90203: originalname |%s|\n",originalname.c_str());
+				string originalpath=extractfilepath(originalname);
+				string currentpath=extractfilepath(filename);
+				if (originalpath!=currentpath)
+				{
+					color_yellow();
+					myprintf("90209: *** WARNING: original backup path <<%s>> != current index path <<%s>>\n",originalpath.c_str(),currentpath.c_str());
+					myprintf("90210: *** I highly recommend using -paranoid! ***\n");
+					color_red();
+					myprintf("90211: *** I highly recommend using -paranoid! ***\n");
+					color_restore();
+					myprintf("90212: *** I highly recommend using -paranoid! ***\n");
+				}
+			}
+		}
+	}
+	
 	int64_t starttime=mtime();
 	printbar('=');
 	multipart archivechunks(zpaqchunks);
@@ -90590,14 +90789,29 @@ int Jidac::backup()
 		myprintf("84339: Backup is for managed multipart, do not use ?\n");
 		return 2;
 	}
+
+	g_backupposition=extractfilepath(archive);
 	if (g_indexname!="")
 	{
-		myprintf("85088: -index must be empty (managed) |%s|\n",g_indexname.c_str());
-		return 2;
+		g_backupposition=extractfilepath(includetrailingbackslash(g_indexname));
+		if (flagverbose)
+			myprintf("85088: -index automagically managed g_backuposition |%s|\n",g_backupposition.c_str());
+		if (!direxists(g_backupposition))
+		{
+			myprintf("90718: the folder (of -index) need to (already) exists ");
+			printUTF8(g_backupposition.c_str());
+			myprintf("\n");
+			return 2;
+		}
+		color_yellow();
+		myprintf("90747: *** WARNING: It's YOUR job to preserve _backup.index and _backup.txt! ***\n");
+		color_restore();
 	}
-
+	
+	g_indexname			="";
+	index=NULL;
 	archive=extractfilepath(archive)+prendinomefileebasta(archive)+"_????????.zpaq";
-	g_pidname=extractfilepath(archive)+prendinomefileebasta(archive)+".pid";
+	g_pidname=g_backupposition+prendinomefileebasta(archive)+".pid";
 	myreplaceall(g_pidname,"?","0");
 
 	if (!flagspace)
@@ -90640,7 +90854,7 @@ int Jidac::backup()
 	{
 		myprintf("85778: cannot write on pid ");
 		printUTF8(g_pidname.c_str());
-		myprintf("\n");
+		myprintf(" (no writeable folder?)\n");
 		return 2;
 	}
 	fprintf(handlepid,"Starting backup @ %s\n",dateToString(true,now()).c_str());

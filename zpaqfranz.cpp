@@ -97782,6 +97782,7 @@ int64_t Jidac::datacreazione(string i_file)
 */	
 #ifdef BSD  // BSD
 #ifndef __APPLE__   	// Mac is different (of course)
+#ifndef __OpenBSD__
     struct stat file_stat;
     if (stat(i_file.c_str(),&file_stat)==-1) 
 	{
@@ -97804,6 +97805,7 @@ int64_t Jidac::datacreazione(string i_file)
 	else 
 	    myprintf("97938: BSD cannot get creation (birth) time\n");
 	return 0;
+#endif
 #endif
 #endif
 

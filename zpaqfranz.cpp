@@ -48126,7 +48126,9 @@ int Jidac::loadparameters(int argc, const char** argv)
 	g_programflags.add(&flagbarraos,		"/os",					"Order by size",									"dir;");
 
 	g_programflags.add(&flagnocolor,		"-nocolor",				"Monochrome output",								"",flagnocolor);
-
+#if defined(__HAIKU__)
+	flagnocolor=true;
+#endif
 #ifdef _WIN32
 ///	g_programflags.add(&flagdd,				"-dd",					"dd",												"");
 	g_programflags.add(&flagfindzpaq,		"-findzpaq",			"Search .zpaq in every drive letter (USB device)",	"");

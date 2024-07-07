@@ -96392,8 +96392,8 @@ bool isurl(string i_url)
 
 int Jidac::update()
 {
-#if defined(SOLARIS) 
-	myprintf("95602: Cannot update SOLARIS\n");
+#if defined(SOLARIS) || defined(__HAIKU__)
+	myprintf("95602: Cannot update SOLARIS or HAIKU\n");
 	return 0;
 #else
 	

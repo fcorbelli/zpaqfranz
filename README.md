@@ -6,17 +6,17 @@
 |  ----------                                                         | -----                         |  ---------- |  -------    |
 |  [Windows 32/64bit](https://sourceforge.net/projects/zpaqfranz/files)   |                                  |![Badge](https://img.shields.io/github/v/release/fcorbelli/zpaqfranz)|      |      
 |  [OpenBSD](http://www.francocorbelli.it/zpaqfranz/openbsd)                 |`pkg_add zpaqfranz`            |![Badge](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fopenbsd.app%2F%3Fsearch%3Dzpaqfranz%26format%3Djson%26current%3Don&query=%24..FULLPKGNAME&label=openbsd)|      |
-|  [FreeBSD](http://www.francocorbelli.it/zpaqfranz/freebsd)                 |`pkg install zpaqfranz`        |      |      |
+|  [FreeBSD](http://www.francocorbelli.it/zpaqfranz/freebsd)                 |`pkg install zpaqfranz`        |60.3a |      |
 |  [MacOS](http://www.francocorbelli.it/zpaqfranz/mac)                       |`brew install zpaqfranz`       |![Badge](https://img.shields.io/homebrew/v/zpaqfranz)|      |
 |  [OpenSUSE](http://www.francocorbelli.it/zpaqfranz/opensuse)               |`sudo zypper install zpaqfranz`|      |      |
 |  [Debian (Ubuntu etc) .deb](http://www.francocorbelli.it/zpaqfranz/debian)      |                               |59.8j|[Desktop](http://www.francocorbelli.it/zpaqfranz/video/debian-deb.mp4)      |
-|  [Linux generic (32/64)](http://www.francocorbelli.it/zpaqfranz/linux)             |                               |59.8i|      |
+|  [Linux generic (32/64)](http://www.francocorbelli.it/zpaqfranz/linux)             |                               |60.3a|      |
 |  [Arch](http://www.francocorbelli.it/zpaqfranz/arch)                       | [AUR user repository](https://aur.archlinux.org/packages/zpaqfranz-git)|58.10i|[Terminal](http://www.francocorbelli.it/zpaqfranz/video/arch.mp4)
 |  [Solaris 11-64](http://www.francocorbelli.it/zpaqfranz/solaris)                 |                               |59.8j|      |
 |  [OmniOS 64](http://www.francocorbelli.it/zpaqfranz/omnios)                   |                               |59.8j|      |
-|  [QNAP (Annapurna)](http://www.francocorbelli.it/zpaqfranz/qnap)           |                               |59.8j|      | 
-|  [Haiku](http://www.francocorbelli.it/zpaqfranz/haiku)                     |                               |      |      |
-|  [ESXi](http://www.francocorbelli.it/zpaqfranz/esxi)                       |                               |59.8i |      |
+|  [QNAP (Annapurna)](http://www.francocorbelli.it/zpaqfranz/qnap)           |                               |60.3a|      | 
+|  [Haiku](http://www.francocorbelli.it/zpaqfranz/haiku)                     |                               |60.3a|      |
+|  [ESXi](http://www.francocorbelli.it/zpaqfranz/esxi)                       |                               |60.3a|
 | [Freeware GUI for Windows](https://github.com/fcorbelli/zpaqfranz/wiki/PAKKA-Windows-32-bit-extractor) |   |[latest](http://www.francocorbelli.it/pakka/build/latest/pakka_latest.zip)  |      |
 | [![ZpaqTreeView](https://github.com/fcorbelli/zpaqfranz/assets/77727889/2e155fa7-0565-416b-8bdd-b99c16ae896d)](https://github.com/EpicGazel/ZpaqTreeView)                                                                | Third Party Python software |      |
 

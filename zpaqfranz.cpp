@@ -53,8 +53,8 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 */
 
-#define ZPAQ_VERSION "60.1k"
-#define ZPAQ_DATE "(2024-07-01)"  // cannot use __DATE__ on Debian!
+#define ZPAQ_VERSION "60.3a"
+#define ZPAQ_DATE "(2024-07-07)"  // cannot use __DATE__ on Debian!
 
 ///	optional align for malloc (sparc64) via -DALIGNMALLOC
 #define STR(a) #a
@@ -109,6 +109,7 @@ OTHER DEALINGS IN THE SOFTWARE.
    #endif
 #endif
 */
+
 #if defined(_WIN64)
 	#define ZSFX_VERSION "SFX64 v55.1,"
 #endif
@@ -175,7 +176,9 @@ OTHER DEALINGS IN THE SOFTWARE.
 #ifdef ESX
 	#define unix 	1
 	#define ANCIENT 1
+	#undef  TEXT_NOJIT
 	#define TEXT_NOJIT "-ESX"
+	#undef  TEXT_BIG
 	#define TEXT_BIG ""
 #endif
 
@@ -13049,6 +13052,8 @@ typedef map<int, 	string> 			MAPPACOMMENTI;
 typedef map<string, string> 			MAPPAFILEHASH;
 typedef map<string, string> 			MAPPASTRINGASTRINGA;
 typedef map<int64_t,string> 			MAPPAINT64STRING;
+typedef map<string,int> 			MAPPASTRINGINTEGER;
+typedef map<int,int> 				MAPPAINTINT;
 struct	hash_check
 {
 	int		algotype;
@@ -37238,7 +37243,7 @@ string excludetrailingbackslash(string i_dir)
 {
 	if (i_dir=="")
 		return "";
-	if ((i_dir.back()=='\\') || (i_dir.back()=='/'))
+	if ((i_dir[i_dir.size()-1]=='\\') || (i_dir[i_dir.size()-1]=='/'))
 		 return i_dir.substr(0,i_dir.size()-1);
 	return "";
 }
@@ -38119,6 +38124,7 @@ public:
 // An InputArchive supports encrypted reading
 class InputArchive: public ArchiveBase, public libzpaq::Reader {
   vector<int64_t> sz;  // part sizes
+  int64_t		total_sz;
   int64_t off;  // current offset
   string fn;  // filename, possibly multi-part with wildcards
 public:
@@ -38130,6 +38136,14 @@ public:
   int get() {
     error("get() not implemented");
     return -1;
+  }
+  int get_chunknumber()
+  {
+	return sz.size();
+  }
+  int64_t get_totalsize()
+  {
+	return total_sz;
   }
   // Read up to len bytes into obuf at current offset. Return 0..len bytes
   // actually read. 0 indicates EOF.
@@ -38197,6 +38211,7 @@ InputArchive::InputArchive(const char* filename):fn(filename)
 	assert(filename);
 	lastfilename="";
 	off=0;
+	total_sz=0;
 	// Get file sizes
 	const string part0=subpart(filename, 0);
 	for (unsigned i=1; ; ++i) 
@@ -38211,6 +38226,7 @@ InputArchive::InputArchive(const char* filename):fn(filename)
 		lastfilename=parti;
 		fseeko(fp, 0, SEEK_END);
 		sz.push_back(ftello(fp));
+		total_sz+=sz.back();
 		if (fp!=NULL)
 			fclose(fp);
 	}
@@ -43992,7 +44008,7 @@ void hex2binary(const std::string& i_hexstr, char* i_bytearray,const unsigned in
         //std::string byteString=i_hexstr.substr(i,2);
 		///myprintf("Lavoro da indice length-i %d\n",length-i-2);
         std::string byteString=i_hexstr.substr(length-i-2,2);
-        i_bytearray[i/2]=(char)strtol(byteString.c_str(),nullptr,16); // Converte i 2 caratteri in un byte
+        i_bytearray[i/2]=(char)strtol(byteString.c_str(),NULL,16); // Converte i 2 caratteri in un byte
 		///myprintf("43902: i/2 %d valore %02X\n",i/2,i_bytearray[i/2]&255);
     }
 }
@@ -44668,7 +44684,7 @@ void print_progress(int64_t ts, int64_t td,int64_t i_scritti,int i_percentuale)
 #else
 				int64_t projection=ts;
 
-				if (command=='a')
+				if ((command=='a') || (command=='Z'))
 					if (ts>0)
 						projection=(int64_t)(i_scritti/(1.0*td/ts));
 
@@ -45667,9 +45683,14 @@ string help_dump(bool i_usage,bool i_example)
 {
 	if (i_usage)
 	{
-		moreprint("dump  technical dump of a not-encrypted zpaq\n");
-		moreprint("+ : -verbose      Show useful infos");
+		moreprint("dump  technical infos (not for huge archives!)\n");
+		moreprint("BTW will show archive compatibility level");
+		moreprint("    60+  = zpaqfranz from  v60 and more ~jul 2024");
+		moreprint("    <60  = zpaqfranz up to v59.x");
+		moreprint("    715  = standard  zpaq  7.15 (or zpaqfranz -715)");
 		moreprint("+ : -summary      Brief");
+		moreprint("+ : -verbose      Show useful infos");
+		moreprint("+ : -all          A bit deeper");
 	}
 	if (i_usage && i_example) moreprint("    Examples:");
 	if (i_example)
@@ -45677,9 +45698,9 @@ string help_dump(bool i_usage,bool i_example)
 		moreprint("Default infos               dump z:\\kajo.zpaq");
 		moreprint("More                        dump z:\\kajo.zpaq -verbose");
 		moreprint("Brief                       dump z:\\kajo.zpaq -summary");
-		moreprint("Cut filenames               dump z:\\kajo.zpaq -verbose -summary");
+		moreprint("A lot of things             dump z:\\kajo.zpaq -all");
 	}
-	return ("Inspect archive for SHA-1 collisions");
+	return ("Technical info (not for huge archives!)");
 }
 string help_redu(bool i_usage,bool i_example)
 {
@@ -47108,7 +47129,7 @@ void Jidac::usage(bool i_flagdie=true)
 	{
 		color_yellow();
 		moreprint("More help: zpaqfranz h  Extended help: zpaqfranz h h ",true);
-		color_blackongreen();
+		color_green();
 		moreprint("HW SHA1/2 ON");
 	}
 	else
@@ -47120,7 +47141,7 @@ void Jidac::usage(bool i_flagdie=true)
 	color_yellow();
 	moreprint("    More help: zpaqfranz h       Extended help: zpaqfranz h h");
 #endif
-
+	color_restore();
 	color_red();
 #if defined(_WIN32)
 	moreprint("Get newer Win version (Internet)  :    zpaqfranz update -force");
@@ -50481,6 +50502,7 @@ void writeJidacHeader(libzpaq::Writer *out, int64_t date,
       ("jDC"+itos(date, 14)+"c"+itos(htsize, 10)).c_str(), "jDC\x01");
 	if (flagdebug3)
 		myprintf("47552: ended writejidacheader\n");
+
 }
 
 // Maps sha1 -> fragment ID in ht with known size
@@ -66896,7 +66918,8 @@ int Jidac::add()
 						hashtobewritten=finalizza_xxh3(p->second.pfile_xxh3);
 					else
 					{
-						myprintf("66886: Sorry, unknown g_franzotype %d\n",g_franzotype);
+						if (g_franzotype!=FRANZO_NONE)
+							myprintf("66886: Sorry, unknown g_franzotype %d\n",g_franzotype);
 					}
 					MAPPATIPOHASH::iterator a=g_mappatipohash.find(g_franzotype);
 					if (a!=g_mappatipohash.end())
@@ -92613,14 +92636,14 @@ int64_t Jidac::read_archive(callback_function i_advance,const char* arc, int *er
 	map<int64_t, double> mycompressionratio;  // block offset -> compression ratio
 
 	assert(ver.size()==1);
-	const bool i_renamed=command=='l' || command=='a' || command=='5' ; ///5 for dirsize arrggghh hidden parameter!
+	const bool i_renamed=command=='l' || command=='a' || command=='5' || command=='Z'; ///5 for dirsize arrggghh hidden parameter!
 	const bool i_isinfo=(command=='i') && (!flagstat) && (!flagcomment); // -stat? Do a lot of work
 
 	unsigned files=0;  // count
 //	abort if file is open (from something else)
 #ifdef _WIN32
 	if (flagopen)
-		if ((command=='a') || (command=='g') || (command=='q'))
+		if ((command=='a') || (command=='g') || (command=='q') || (command=='Z'))
 			if (isfileopen(arc))
 			{
 				myprintf("27668: GURU file seems open (-open) ");
@@ -93628,7 +93651,6 @@ void decompile(const string& hcomp, const string& pcomp) {
 
 int Jidac::dump() 
 {
-///	getpasswordifempty();
 	InputArchive in(archive.c_str());
 	if (!in.isopen()) 
 	{
@@ -93637,7 +93659,11 @@ int Jidac::dump()
 		myprintf(">>\n");
 		return 2;
 	}
-
+	if (all)
+	{
+		flagverbose	=true;
+		summary		=-1;
+	}
 	libzpaq::Decompresser d;
 	libzpaq::SHA1 sha1;
 	d.setInput(&in);
@@ -93658,12 +93684,26 @@ int Jidac::dump()
 	vector<uint64_t> hblock_position;
 	vector<uint64_t> iblock_position;
 	uint64_t		block_position;
+	MAPPASTRINGINTEGER mappahash;
+	MAPPAINTINT mappafranzoblock;
+
+	int64_t expectedfilesize	=in.get_totalsize();//in.get_totalsize();	
+	int		expectedchunknumber	=in.get_chunknumber();
+	int		lastperc=0;
+	myprintf("93674: Expected %08d chunks for %21s bytes\n",expectedchunknumber,migliaia(expectedfilesize));
 	while (d.findBlock(&mem)) 
 	{
-		int64_t tellme=in.tell();
 		block_position=myoffset;
 		
-		myprintf("90129: Block %08d at %21s: mem    %21s %s\n", ++block,migliaia(myoffset), migliaia2(int64_t(mem)),migliaia3(tellme));
+		if (summary>0)
+		{
+			int percentuale=100*myoffset/expectedfilesize;
+			if ((percentuale%5==0) && (percentuale!=lastperc))
+			{
+				myprintf("93675: Scanning %03d% @              %21s\r",percentuale,migliaia(myoffset));
+				lastperc=percentuale;
+			}
+		}
 		bool first=true;
 		while (d.findFilename(&filename)) 
 		{
@@ -93678,11 +93718,11 @@ int Jidac::dump()
 				int& b=m[hcomp.s+pcomp.s];
 				if (b==0)
 				{
-					if (flagverbose)
+					if (all)
 						decompile(hcomp.s, pcomp.s), b=block;
 				}
 				else
-				  myprintf(" (same model as block %d)\n", b);
+					myprintf(" (same model as block %d)\n", b);
 				first=false;
 				 // Decompress JIDAC index
 				if (comment.s.size()>=5
@@ -93699,27 +93739,35 @@ int Jidac::dump()
 			d.readSegmentEnd(sha1result);
 			if (buf.s.size()>0 && sha1result[0]==1 && memcmp(sha1.result(), sha1result+1, 20))
 				myprintf("88134: CHECKSUM ERROR!\n");
-			myprintf("  ");
-			for (int i=0; i<4; ++i) 
-			{
-				if(sha1result[0]) 
-					myprintf("%02x", sha1result[i+1]&255);
-				else 
-					myprintf("  ");
-			}
 			string purged=comment.s;
-	  
+			
 			myreplace(purged,"jDC\x01","");
 			purged=mytrim(purged);
 			int64_t sizeint=myatoll(purged.c_str());
-			myprintf(" %s |%11s| ->  %11s ", filename.s.c_str(),migliaia2(sizeint), migliaia(in.tell()-d.buffered()-myoffset));
+			string type="UNKNOWN";
+			
+			if (filename.s[17]=='d')
+				type="D ";
+			else
+			if (filename.s[17]=='c')
+				type="C ";
+			else
+			if (filename.s[17]=='h')
+				type="H ";
+			else
+			if (filename.s[17]=='i')
+				type="I ";
+			///mem used for decompression
+			
+			if (summary<0)
+			myprintf("90129: %08d %s%s @ %20s:%11s [%14s] ",++block,type.c_str(),filename.s.c_str(),migliaia(myoffset), migliaia2(in.tell()-d.buffered()-myoffset),migliaia3(sizeint));
 			myoffset=in.tell()-d.buffered();
 			if (filename.s[17]=='d')  // d block
 			{
 				dblock++;
-				myprintf("90185: D (data )\n");
+				if (summary<0)
+					myprintf("\n");
 				dblock_position.push_back(block_position);
-
 			}
       // Display JIDAC index blocks
 			if (buf.s.size()) 
@@ -93727,53 +93775,93 @@ int Jidac::dump()
 				assert(filename.s.size()==28);
 				const char* p=buf.s.c_str();
 				const char* end=p+buf.s.size();
-			
 				if (filename.s[17]=='c')  // header
 				{
 					cblock++;
-					myprintf("90195: C (jump ) %s [position %21s]\n", migliaia(mybtol(p)),migliaia2(block_position));
+					if (summary<0)
+					myprintf("d-compr  %s\n", migliaia(mybtol(p)));
 					cblock_position.push_back(block_position);
 				}
 				else if (filename.s[17]=='h') 
 				{  // fragment table
 					hblock++;
-					myprintf("90202: H (hash ) %s\n", migliaia(mybtoi(p)));
 					hblock_position.push_back(block_position);
 					if (summary<0)
 					{
-						int n=atoi(filename.s.c_str()+18);  // frag ID
-						while (p<=end-24) 
+						myprintf("d-compr %s\n", migliaia(mybtoi(p)));
+						
+						if (flagverbose)
 						{
-							myprintf("%10d SHA1 ", n++);
-							for (int i=0; i<20; ++i)
-								myprintf("%02x", *p++&255);  // sha1 hash
-							myprintf(" %12s\n", migliaia(mybtoi(p)));  // fsize
+							int n=atoi(filename.s.c_str()+18);  // frag ID
+							while (p<=end-24) 
+							{
+								myprintf("93765: %10d SHA1 ", n++);
+								for (int i=0; i<20; ++i)
+									myprintf("%02x", *p++&255);  // sha1 hash
+								myprintf("      %12s (fragment size )\n", migliaia(mybtoi(p)));  // fsize
+							}
 						}
 					}
 				}
 				else if (filename.s[17]=='i') 
 				{  // index
 					iblock++;
-					myprintf("90218: I (index)\n");
 					iblock_position.push_back(block_position);
 
+					if (summary<0)
+						myprintf("\n");
 					while (p<end-8) 
 					{
 						const int64_t fdate=mybtol(p);
 						filecount++;
-						if (summary<=0)
-						{
-							myprintf("%s ", dateToString(false,fdate).c_str());
-							printUTF8(p);
-						}
+						if (summary<0)
+							if (flagverbose || all)
+							{
+								myprintf("%s ", dateToString(false,fdate).c_str());
+								printUTF8(p);
+							}
 						while (p<end && *p) 
 							++p;  // skip filename
 						++p;
 						if (fdate) 
 						{
-							myprintf(" ");
+							if (summary<0)
+								if (all)
+									myprintf(" ");
 							if (p>end-4) break;
 							int n=mybtoi(p);  // na
+							
+							if (n>FRANZOFFSETV1) //Get FRANZOFFSETV1
+							{
+								mappafranzoblock[n-8]=mappafranzoblock[n-8]+1;
+								DT dtr;
+								for (int ik=0;ik<(n-8);ik++)
+									dtr.franz_block[ik]=*(p+(n-(n-8))+ik);
+								dtr.franz_block[(n-8)]=0x0;
+								string myhashtype		="";
+								string myhash			="";
+								int64_t mycreationtime	=0;
+								int64_t myaccesstime	=0;
+								bool	myisordered		=false;
+								int		myversion		=0;
+								franz_posix* myposix	=NULL;
+								bool	myisadded		=false;
+								string	mycrc32			="";
+								decode_franz_block(false,dtr.franz_block,
+								myhashtype,
+								myhash,
+								mycrc32,
+								mycreationtime,
+								myaccesstime,
+								myisordered,
+								myversion,
+								myposix,myisadded);
+								if (myhashtype=="")
+									myhashtype="UNKNOWN";
+								mappahash[myhashtype]=mappahash[myhashtype]+1;
+								if (all)
+									myprintf(" |%s| ",myhashtype.c_str());
+							}
 							while (n-->0 && p<end)
 								p++;
 							if (p>end-4) break;
@@ -93784,29 +93872,34 @@ int Jidac::dump()
 							for (; n>0 && p<=end-4; --n)
 								ptr.push_back(mybtoi(p));
 							bool hyphen=false;
-							if (flagverbose)
-								myprintf(" FRAGS (#%d): ",ptr.size());
+							if (summary<0)
+								if (all)
+									myprintf(" FRAGS (#%d): ",ptr.size());
 							for (int i=0; i<int(ptr.size()); ++i) 
 							{
 								if (i==0 || i==int(ptr.size())-1 || ptr[i]!=ptr[i-1]+1 || ptr[i]!=ptr[i+1]-1) 
 								{
-									if (!hyphen) 
-										if (flagverbose)
-											myprintf(" ");
+										if (summary<0)
+											if (!hyphen) 
+											if (all)
+												myprintf(" ");
 									hyphen=false;
-									if (flagverbose)
-										myprintf("%d", ptr[i]);
+									if (summary<0)
+										if (all)
+											myprintf("%d", ptr[i]);
 								}
 								else 
 								{
-									if (!hyphen) 
-										if (flagverbose)
-										myprintf("-");
+									if (summary<0)
+										if (!hyphen) 
+											if (all)
+												myprintf("-");
 									hyphen=true;
 								}
 							}
-							if ((summary<=0) || (flagverbose))
-							myprintf("\n");
+							if (summary<0)
+								if (all || flagverbose)
+									myprintf("\n");
 						}
 					}	
 				}
@@ -93816,9 +93909,10 @@ int Jidac::dump()
 			comment.s	="";
 		}
 		myoffset=in.tell()-d.buffered();
-		myprintf("\n");
 	}
-///	in.close();
+	if (summary>0)
+	myprintf("93675: Scanning %03d% @              %21s\r",100,migliaia(expectedfilesize));
+	myprintf("\n");
 
 	if (flagverbose)
 	{
@@ -93836,13 +93930,44 @@ int Jidac::dump()
 				myprintf("92378: i block %08d %21s\n",i,migliaia(iblock_position[i]));
 	}
 	
-	myprintf("88226: c block (jump)  %9s\n",migliaia(cblock));
-	myprintf("88227: d block (data)  %9s\n",migliaia(dblock));
-	myprintf("88228: h block (hash)  %9s\n",migliaia(hblock));
-	myprintf("88229: i block (index) %9s\n",migliaia(iblock));
-	myprintf("88230: file count      %9s\n",migliaia(filecount));
+	myprintf("88226: c block (jump)  %11s\n",migliaia(cblock));
+	myprintf("88227: d block (data)  %11s\n",migliaia(dblock));
+	myprintf("88228: h block (hash)  %11s\n",migliaia(hblock));
+	myprintf("88229: i block (index) %11s\n",migliaia(iblock));
+	myprintf("88230: file count      %11s\n",migliaia(filecount));
 
+	if (mappafranzoblock.size()>0)
+		for (MAPPAINTINT::iterator p=mappafranzoblock.begin();p!=mappafranzoblock.end();++p)
+			myprintf("93911: FRANZOBLOCK             %03d %11s\n",p->first,migliaia(p->second));
+		else
+	myprintf("93912: This seems a 715 archive (original zpaq format)\n");
+	if (mappahash.size()>0)
+	{
+		bool zpaqfranz60=false;
+		for (MAPPASTRINGINTEGER::iterator p=mappahash.begin();p!=mappahash.end();++p)
+		{
+			if (p->first[p->first.size()-1]=='B')
+				zpaqfranz60=true;
+			myprintf("93909: HASHTYPE   %16s %11s\n",p->first.c_str(),migliaia(p->second));
+		}
+		if (mappafranzoblock.size()==mappahash.size())
+			color_green();
+		
+		if (zpaqfranz60)
+			myprintf("93923: This seems 60+ archive (newer zpaqfranz v60)\n");
+		else
+			myprintf("93925: This seems <60 archive (older zpaqfranz v59)\n");
 	
+		if (mappafranzoblock.size()==mappahash.size())
+			color_restore();
+		
+		if (mappahash.size()>1)
+		{
+			color_yellow();
+			myprintf("93928: *** WARNING DO NOT USE -frugal adding data to this archive!\n");
+			color_restore();
+		}
+	}
 	return 0;
 }
 /// LICENSE_END.21

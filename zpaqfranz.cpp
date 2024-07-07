@@ -96230,7 +96230,7 @@ public:
 
 bool downloadfile(string i_verurl,string i_verfile,bool i_showupdate)
 {
-#if defined(SOLARIS)
+#if defined(SOLARIS) || defined(__HAIKU__HWSHA1)
 	return false;
 #else
 	
@@ -97808,7 +97808,6 @@ int64_t Jidac::datacreazione(string i_file)
 #endif
 #endif
 #endif
-
 #ifdef __linux__
 	//myprintf("97795: Getting birth linux %s\n",i_file.c_str());
     struct statx statx_buf;

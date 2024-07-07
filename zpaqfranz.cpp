@@ -96230,7 +96230,7 @@ public:
 
 bool downloadfile(string i_verurl,string i_verfile,bool i_showupdate)
 {
-#if defined(SOLARIS) || defined(__HAIKU__HWSHA1)
+#if defined(SOLARIS) || defined(__HAIKU__)
 	return false;
 #else
 	

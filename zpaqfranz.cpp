@@ -53,8 +53,8 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 */
 
-#define ZPAQ_VERSION "60.3a"
-#define ZPAQ_DATE "(2024-07-07)"  // cannot use __DATE__ on Debian!
+#define ZPAQ_VERSION "60.4c"
+#define ZPAQ_DATE "(2024-07-13)"  // cannot use __DATE__ on Debian!
 
 ///	optional align for malloc (sparc64) via -DALIGNMALLOC
 #define STR(a) #a
@@ -1338,6 +1338,25 @@ while binding the executable to the processor.
 It should not be used if you intend, for some reason,
 to transfer the object program to a different system.
 If you are compiling from source you can safely use it.
+BTW on my PC native is faster in benchmark, but slower in real-world compression (!).
+
+CLANG OR GCC?
+It is hard to choose between these two compilers. 
+I generally prefer gcc for better performance. 
+However, this is not true all the time; it depends on a thousand things, including the CPU type. 
+For example on Arch and AMD 7950, running inside VM,
+clang 17.0.6 (4992) is much faster than gcc 14.1.1 (4584).
+BUT with -march=native
+gcc 14.1.1 (5595) is way faster clang 17.0.6 (5044)
+
+Short version: test yourself. 
+The b (benchmark) command is there for you.
+
+-O2 or -O3
+Who knows. Try yourself :)
+
+OTHER COMPILERS
+I do not know. Try yourself :)
 
 DEBIAN (and derivates)
 Debian does not "like" anything embedded https://wiki.debian.org/EmbeddedCopies
@@ -1406,6 +1425,21 @@ I made a little AUR package (with some help), this one
 https://aur.archlinux.org/packages/zpaqfranz-git
 Should be good enough
 
+For a fresh Manjaro 24.0.3 installation I suggest
+
+sudo pacman -Sy
+sudo pacman -S gcc (or sudo pacman -S clang)
+sudo pacman -S fakeroot
+sudo pacman -S yay
+yay zpaqfranz
+
+Answers to yay
+Packages to install ==> 1
+Packages to cleanBuild ==> A
+Diffs to show? ==> N
+Proceed with installation => y
+(insert sudo password)
+
 Debian Linux (10/11) gcc 8.3.0
 ubuntu 21.04 desktop-amd64 gcc  10.3.0
 manjaro 21.07 gcc 11.1.0
@@ -1434,6 +1468,7 @@ g++ -O3 -DSOLARIS zpaqfranz.cpp -o zpaqfranz  -pthread -static-libgcc -lkstat
 
 MacOS 11.0 gcc (clang) 12.0.5, INTEL
 MacOS 12.6 gcc (clang) 13.1.6, INTEL
+MacOS 12.7 gcc (clang) 14.0.0, INTEL
 Please note:
 No -static here
 "Apple does not support statically linked binaries on Mac OS X.
@@ -13095,6 +13130,8 @@ vector<s_crc32block> 	g_crc32;
 vector<uint64_t> 		g_arraybytescanned;
 vector<uint64_t> 		g_arrayfilescanned;
 MAPPAERRORS g_errors;
+string	g_processorname="";
+
 char* 	g_password;     				// points to password_string or NULL
 char 	g_password_string[32]; 			// hash of -key argument
 	
@@ -13249,6 +13286,7 @@ bool flagnoeta;
 bool flagnopath;
 bool flagnoqnap;
 bool flagnomac;
+bool flagnosynology;
 bool flagnorecursion;
 bool flagnosort;
 bool flagpakka;
@@ -13398,7 +13436,7 @@ void color_restore()
 		return;
 	SetConsoleTextAttribute(hconsole,g_console_attributes);
 #else
-	printf(TEXT_RESET BG_BLACK);
+	printf(TEXT_RESET);
 #endif
 }
 #ifdef _WIN32
@@ -13453,7 +13491,12 @@ void color_blackongreen()
 #ifdef _WIN32
 	color_something(160);
 #else
+	
+#if (defined(__APPLE__) && defined(__MACH__)) || defined(__HAIKU__)
+	color_green();
+#else
 	printf("\x1b[30m" "\x1b[102m");
+#endif
 #endif
 }
 
@@ -41115,7 +41158,8 @@ public:
 	void rename_a_dtmap(DTMap& i_source);
 	bool grep(string i_filename,string i_search);
 	int	checkautotest(string i_path);
-	
+	bool isjitable();
+
 
 };
 
@@ -46870,6 +46914,7 @@ string help_franzswitches(bool i_usage,bool i_example)
 		moreprint("+ : -forcezfs     Force paths including .zfs");
 		moreprint("+ : -noqnap       Skip path including @Recently-Snapshot and @Recycle");
 		moreprint("+ : -nomac        Skip ._something and .DS_Store and Thumbs.db");
+		moreprint("+ : -nosynology   Skip #snapshot, #recycle etc");
 		moreprint("+ : -forcewindows Take $DATA$ and System Volume Information");
 		moreprint("+ : -xls          Do NOT always force XLS/PPT");
 		moreprint("+ : -nopath       Do not store path");
@@ -48086,6 +48131,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 	g_programflags.add(&flagnopath,			"-nopath",				"Do not store path",								"");
 	g_programflags.add(&flagnoqnap,			"-noqnap",				"Exclude QNAP snap & trash",						"a;");
 	g_programflags.add(&flagnomac,			"-nomac",				"Exclude Mac hidden files",						"a;");
+	g_programflags.add(&flagnosynology,		"-nosynology",			"Exclude Synology system files",						"a;");
 	g_programflags.add(&flagnorecursion,	"-norecursion",			"Do not recurse into folders (default: YES)",		"");
 	g_programflags.add(&flagnosort,			"-nosort",				"Do not sort file",									"");
 	g_programflags.add(&flagpakka,			"-pakka",				"New output",										"");
@@ -48126,9 +48172,9 @@ int Jidac::loadparameters(int argc, const char** argv)
 	g_programflags.add(&flagbarraos,		"/os",					"Order by size",									"dir;");
 
 	g_programflags.add(&flagnocolor,		"-nocolor",				"Monochrome output",								"",flagnocolor);
-#if defined(__HAIKU__)
-	flagnocolor=true;
-#endif
+
+
+
 #ifdef _WIN32
 ///	g_programflags.add(&flagdd,				"-dd",					"dd",												"");
 	g_programflags.add(&flagfindzpaq,		"-findzpaq",			"Search .zpaq in every drive letter (USB device)",	"");
@@ -48957,7 +49003,38 @@ int Jidac::loadparameters(int argc, const char** argv)
 /*
 	Check from "weird" parameters
 */
-
+	if (flagnosynology)
+	{
+		myprintf("49006: Filling -not for -nosynology\n");
+		notfiles.push_back("*/@recycle/*");
+		notfiles.push_back("*/#recycle/*");
+		notfiles.push_back("*/#snapshot/*");
+		
+		notfiles.push_back("*/@ActiveBackup/*");
+		notfiles.push_back("*/@sharebin/*");
+		notfiles.push_back("*/@appconf/*");
+		notfiles.push_back("*/@appdata/*");
+		notfiles.push_back("*/@apphome/*");
+		notfiles.push_back("*/@appshare/*");
+		notfiles.push_back("*/@apptemp/*");
+		notfiles.push_back("*/@clamav/*");
+		notfiles.push_back("*/@database/*");
+		notfiles.push_back("*/@docker/*");
+		notfiles.push_back("*/@eaDir/*");
+		notfiles.push_back("*/@maillog/*");
+		notfiles.push_back("*/@MailScanner/*");
+		notfiles.push_back("*/@postfix/*");
+		notfiles.push_back("*/@S2S/*");
+		notfiles.push_back("*/@sharesnap/*");
+		notfiles.push_back("*/@synoconfd/*");
+		notfiles.push_back("*/@SynologyDrive/*");
+		notfiles.push_back("*/@SynoFinder-etc-volume/*");
+		notfiles.push_back("*/@SynoFinder-log/*");
+		notfiles.push_back("*/@tmp/*");
+		notfiles.push_back("*/@USBCopy/*");
+		notfiles.push_back("*/@userpreference/*");
+		
+	}
 	if (g_rangefrom>0)
 	{
 		if (g_until!="")
@@ -49620,7 +49697,8 @@ bool ismac(const string& i_stringa)
 			return true;
 		}
 	return false;
-}	
+}
+
 // Test whether filename and attributes are selected by files, -only, and -not
 // If rn then test renamed filename.
 // if i_size >0 check file size too (minsize,maxsize)
@@ -49645,7 +49723,11 @@ bool Jidac::isselected(const char* filename, bool rn,int64_t i_size)
 	if (flagnomac)
 		if (ismac(filename))
 			return false;
-
+/*
+	if (flagnosynology)
+		if (issynology(filename))
+			return false;
+*/
 	
 	if (flagnoqnap) //this is an "automagically" exclude for qnap's snapshots
 		if (
@@ -49905,7 +49987,11 @@ void Jidac::scandir(bool i_checkifselected,DTMap& i_edt,string filename, bool i_
 	if (flagnomac)
 		if (ismac(filename))
 			return;
-
+/*
+	if (flagnosynology)
+		if (issynology(filename))
+			return false;
+*/
 	if (flagnoqnap)
 	{
 		if (filename.find("@Recently-Snapshot")!=std::string::npos)
@@ -68262,7 +68348,25 @@ zfs diff -F
 
 int Jidac::benchmark()
 {
-
+	bool iamintel=isjitable();
+	if (iamintel)
+	{
+		myprintf("68453: This seems Intel/AMD 'normal' CPU\n");
+#ifdef NOJIT
+		color_green();
+		myprintf("68457: You can try to compile WITHOUT -DNOJIT\n");
+		color_restore();
+#endif
+	}
+	else
+	{
+		myprintf("68456: I am not sure this is Intel/AMD CPU (virtual? arm?)\n");
+#ifndef NOJIT
+		color_red();
+		myprintf("68467: WARNING: non Intel/AMD CPUs should be compiled with -DNOJIT\n");
+		color_restore();
+#endif
+	}
 	string myname=getuname();
 	myprintf("64991: uname %s\n",myname.c_str());
 	myprintf("64992: full exename seems <<%s>>\n",fullzpaqexename.c_str());
@@ -68280,13 +68384,17 @@ int Jidac::benchmark()
 	vector<string> 	array_cpu;
 	vector<float> 	array_single;
 	vector<float> 	array_multi;
+	
+
 	array_cpu	.push_back("AL314 (A15) 1.7G (phy)  2");
 	array_multi	.push_back(51);
 	array_single.push_back(355);
-
 	array_cpu	.push_back("Atom N2800       (phy)  4");
 	array_multi	.push_back(113);
 	array_single.push_back(407);
+	array_cpu	.push_back("Celeron J4125 2G (phy)  4");
+	array_multi	.push_back(487);
+	array_single.push_back(1302);
 	array_cpu	.push_back("Xeon E3 1245 V2  (vir)  4");
 	array_multi	.push_back(819);
 	array_single.push_back(2415);
@@ -98286,4 +98394,164 @@ int	Jidac::checkautotest(string i_path)
 		myprintf("98168: It is now safe to remove the test folder\n");
 	}
 	return 0;
+}
+
+bool Jidac::isjitable()
+{
+	bool	risultato=false;
+    char buffer		[1024];
+    
+#ifdef _WIN32
+    HKEY hKey;
+	char cpu_vendor	[1024];
+    DWORD buffer_size=sizeof(cpu_vendor);
+    LONG result;
+    result = RegOpenKeyEx(HKEY_LOCAL_MACHINE, utow("HARDWARE\\DESCRIPTION\\System\\CentralProcessor\\0").c_str(), 0, KEY_READ, &hKey);
+    if (result!=ERROR_SUCCESS) 
+	{
+        myprintf("98511: Windows: GURU opening registry key\n");
+        return false;
+    }
+
+    result = RegQueryValueEx(hKey, utow("VendorIdentifier").c_str(), NULL, NULL, (LPBYTE)cpu_vendor, &buffer_size);
+    if (result != ERROR_SUCCESS) 
+	{
+        myprintf("98518: Guru reading reading registry value\n");
+        RegCloseKey(hKey);
+        return false;
+    }
+		
+	buffer_size=1024;
+	result = RegQueryValueEx(hKey, utow("ProcessorNameString").c_str(), NULL, NULL, (LPBYTE)buffer, &buffer_size);
+    if (result != ERROR_SUCCESS) 
+	{
+        myprintf("98526: Guru reading reading registry value\n");
+        RegCloseKey(hKey);
+        return false;
+    }
+	
+    RegCloseKey(hKey);
+	
+	g_processorname=wtou((wchar_t*)buffer);
+
+	g_processorname=mytrim(g_processorname);
+	
+	myprintf("98537: Processor name |%s|\n",g_processorname.c_str());
+	
+	string uvendor=wtou((wchar_t*)cpu_vendor);
+	if (strstr(uvendor.c_str(), "GenuineIntel") != NULL) 
+	{
+		if (flagdebug)
+			myprintf("98528: Windows - the processor is Intel\n");
+		risultato=true;
+    } 
+	else 
+	if (strstr(uvendor.c_str(), "AuthenticAMD") != NULL) 
+	{
+    	if (flagdebug)
+			myprintf("98528: Windows - the processor is AMD\n");
+		risultato=true;
+    } 
+	else 
+	{
+        myprintf("98540: Windows - who knows: %s\n", uvendor.c_str());
+    }
+    return risultato;
+#elif __linux__
+	char vendor_id	[1024];
+    FILE *cpuinfo=fopen("/proc/cpuinfo", "r");
+
+    if (cpuinfo==NULL) 
+	{
+        myprintf("98491: Linux, error opening /proc/cpuinfo");
+        return false;
+    }
+    while (fgets(buffer,1024,cpuinfo)) 
+        if (sscanf(buffer, "vendor_id : %s", vendor_id) == 1) 
+		{
+            if (strcmp(vendor_id,"GenuineIntel") == 0) 
+			{
+				if (flagdebug)
+					myprintf("98501: Linux - the processor is Intel.\n");
+				risultato=true;
+            } 
+			else if (strcmp(vendor_id, "AuthenticAMD") == 0) 
+			{
+				if (flagdebug)
+					myprintf("98506: Linux - The processor is AMD.\n");
+				risultato=true;
+            } 
+			else 
+			{
+				if (flagdebug)
+					myprintf("98513: Linux not-intel vendor_id: %s\n", vendor_id);
+            }
+            break;
+        }
+    fclose(cpuinfo);
+    return risultato;
+
+#else
+
+    FILE *pipe=NULL;
+
+#ifdef BSD  // BSD
+#ifndef __APPLE__   	// Mac is different (of course)
+    pipe=popen("sysctl -n hw.model", "r");
+#endif
+#endif
+
+#if (defined(__APPLE__) && defined(__MACH__))
+    pipe=popen("sysctl -n machdep.cpu.brand_string","r");
+#endif
+
+#ifdef SOLARIS
+    pipe=popen("psrinfo -pv","r");
+#endif
+
+#ifdef HAIKU
+	pipe=popen("sysinfo -cpuid","r");
+#endif
+
+    if (pipe==NULL) 
+	{
+        myprintf("98532: Error opening pipe");
+        return false;
+    }
+
+    if (fgets(buffer,1024,pipe)==NULL) 
+	{
+        myprintf("98543: Error reading from pipe");
+        pclose(pipe);
+        return false;
+	}
+	
+	char cpu_vendor	[1024];
+
+	strncpy(cpu_vendor,buffer,1024);
+	cpu_vendor[strcspn(cpu_vendor,"\n")]=0;
+
+    pclose(pipe);
+
+    if (strstr(cpu_vendor, "Intel")!=NULL) 
+	{
+		if (flagdebug)
+			myprintf("98501: Multiple - the processor is Intel.\n");
+		risultato=true;
+	}
+    else if (strstr(cpu_vendor, "AMD") != NULL) 
+	{
+     	if (flagdebug)
+			myprintf("98560: Multiple - the processor is AMD.\n");
+		risultato=true;
+    } 
+	else 
+	{
+		if (flagdebug)
+			myprintf("98567: Multiple not-intel vendor_id: %s\n",cpu_vendor);
+    }
+
+    return risultato;
+#endif
+
 }

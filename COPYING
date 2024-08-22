@@ -125,4 +125,8 @@ Credits and copyrights and licenses and links and internal bookmarks
 38 Thanks to whiskytechfred user of the encode.ru forum for vss filename fix
 39 Thanks to https://github.com/sergeevabc              for suggestions on hash command
 40 Thanks to https://github.com/gitboogey               for ideas on -test and -verify with vss
+41 Thanks to https://github.com/bastiple                for -D_FORTIFY_SOURCE=3
+42 Thanks to https://github.com/sheckandar              for Synology 7.1 issue
+43 Thanks to https://github.com/adamantida              for improved similarity with zpaq for archives with only deletions
+44 Thanks to https://github.com/kskarlatos              for giving me an idea to improve stdin support
 

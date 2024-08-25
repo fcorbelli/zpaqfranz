@@ -53,8 +53,8 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 */
 
-#define ZPAQ_VERSION "60.5e"
-#define ZPAQ_DATE "(2024-07-20)"  // cannot use __DATE__ on Debian!
+#define ZPAQ_VERSION "60.6x"
+#define ZPAQ_DATE "(2024-08-25)"  // cannot use __DATE__ on Debian!
 
 ///	optional align for malloc (sparc64) via -DALIGNMALLOC
 #define STR(a) #a
@@ -1075,6 +1075,142 @@ Credits and copyrights and licenses and links and internal bookmarks
    (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
    OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+23 [CC0 1.0 Universal]                https://github.com/codewithnick/ascii-art
+ /// LICENSE_START.23
+ /// LICENSE_END.23
+
+Creative Commons Legal Code
+
+CC0 1.0 Universal
+
+    CREATIVE COMMONS CORPORATION IS NOT A LAW FIRM AND DOES NOT PROVIDE
+    LEGAL SERVICES. DISTRIBUTION OF THIS DOCUMENT DOES NOT CREATE AN
+    ATTORNEY-CLIENT RELATIONSHIP. CREATIVE COMMONS PROVIDES THIS
+    INFORMATION ON AN "AS-IS" BASIS. CREATIVE COMMONS MAKES NO WARRANTIES
+    REGARDING THE USE OF THIS DOCUMENT OR THE INFORMATION OR WORKS
+    PROVIDED HEREUNDER, AND DISCLAIMS LIABILITY FOR DAMAGES RESULTING FROM
+    THE USE OF THIS DOCUMENT OR THE INFORMATION OR WORKS PROVIDED
+    HEREUNDER.
+
+Statement of Purpose
+
+The laws of most jurisdictions throughout the world automatically confer
+exclusive Copyright and Related Rights (defined below) upon the creator
+and subsequent owner(s) (each and all, an "owner") of an original work of
+authorship and/or a database (each, a "Work").
+
+Certain owners wish to permanently relinquish those rights to a Work for
+the purpose of contributing to a commons of creative, cultural and
+scientific works ("Commons") that the public can reliably and without fear
+of later claims of infringement build upon, modify, incorporate in other
+works, reuse and redistribute as freely as possible in any form whatsoever
+and for any purposes, including without limitation commercial purposes.
+These owners may contribute to the Commons to promote the ideal of a free
+culture and the further production of creative, cultural and scientific
+works, or to gain reputation or greater distribution for their Work in
+part through the use and efforts of others.
+
+For these and/or other purposes and motivations, and without any
+expectation of additional consideration or compensation, the person
+associating CC0 with a Work (the "Affirmer"), to the extent that he or she
+is an owner of Copyright and Related Rights in the Work, voluntarily
+elects to apply CC0 to the Work and publicly distribute the Work under its
+terms, with knowledge of his or her Copyright and Related Rights in the
+Work and the meaning and intended legal effect of CC0 on those rights.
+
+1. Copyright and Related Rights. A Work made available under CC0 may be
+protected by copyright and related or neighboring rights ("Copyright and
+Related Rights"). Copyright and Related Rights include, but are not
+limited to, the following:
+
+  i. the right to reproduce, adapt, distribute, perform, display,
+     communicate, and translate a Work;
+ ii. moral rights retained by the original author(s) and/or performer(s);
+iii. publicity and privacy rights pertaining to a person's image or
+     likeness depicted in a Work;
+ iv. rights protecting against unfair competition in regards to a Work,
+     subject to the limitations in paragraph 4(a), below;
+  v. rights protecting the extraction, dissemination, use and reuse of data
+     in a Work;
+ vi. database rights (such as those arising under Directive 96/9/EC of the
+     European Parliament and of the Council of 11 March 1996 on the legal
+     protection of databases, and under any national implementation
+     thereof, including any amended or successor version of such
+     directive); and
+vii. other similar, equivalent or corresponding rights throughout the
+     world based on applicable law or treaty, and any national
+     implementations thereof.
+
+2. Waiver. To the greatest extent permitted by, but not in contravention
+of, applicable law, Affirmer hereby overtly, fully, permanently,
+irrevocably and unconditionally waives, abandons, and surrenders all of
+Affirmer's Copyright and Related Rights and associated claims and causes
+of action, whether now known or unknown (including existing as well as
+future claims and causes of action), in the Work (i) in all territories
+worldwide, (ii) for the maximum duration provided by applicable law or
+treaty (including future time extensions), (iii) in any current or future
+medium and for any number of copies, and (iv) for any purpose whatsoever,
+including without limitation commercial, advertising or promotional
+purposes (the "Waiver"). Affirmer makes the Waiver for the benefit of each
+member of the public at large and to the detriment of Affirmer's heirs and
+successors, fully intending that such Waiver shall not be subject to
+revocation, rescission, cancellation, termination, or any other legal or
+equitable action to disrupt the quiet enjoyment of the Work by the public
+as contemplated by Affirmer's express Statement of Purpose.
+
+3. Public License Fallback. Should any part of the Waiver for any reason
+be judged legally invalid or ineffective under applicable law, then the
+Waiver shall be preserved to the maximum extent permitted taking into
+account Affirmer's express Statement of Purpose. In addition, to the
+extent the Waiver is so judged Affirmer hereby grants to each affected
+person a royalty-free, non transferable, non sublicensable, non exclusive,
+irrevocable and unconditional license to exercise Affirmer's Copyright and
+Related Rights in the Work (i) in all territories worldwide, (ii) for the
+maximum duration provided by applicable law or treaty (including future
+time extensions), (iii) in any current or future medium and for any number
+of copies, and (iv) for any purpose whatsoever, including without
+limitation commercial, advertising or promotional purposes (the
+"License"). The License shall be deemed effective as of the date CC0 was
+applied by Affirmer to the Work. Should any part of the License for any
+reason be judged legally invalid or ineffective under applicable law, such
+partial invalidity or ineffectiveness shall not invalidate the remainder
+of the License, and in such case Affirmer hereby affirms that he or she
+will not (i) exercise any of his or her remaining Copyright and Related
+Rights in the Work or (ii) assert any associated claims and causes of
+action with respect to the Work, in either case contrary to Affirmer's
+express Statement of Purpose.
+
+4. Limitations and Disclaimers.
+
+ a. No trademark or patent rights held by Affirmer are waived, abandoned,
+    surrendered, licensed or otherwise affected by this document.
+ b. Affirmer offers the Work as-is and makes no representations or
+    warranties of any kind concerning the Work, express, implied,
+    statutory or otherwise, including without limitation warranties of
+    title, merchantability, fitness for a particular purpose, non
+    infringement, or the absence of latent or other defects, accuracy, or
+    the present or absence of errors, whether or not discoverable, all to
+    the greatest extent permissible under applicable law.
+ c. Affirmer disclaims responsibility for clearing rights of other persons
+    that may apply to the Work or any use thereof, including without
+    limitation any person's Copyright and Related Rights in the Work.
+    Further, Affirmer disclaims responsibility for obtaining any necessary
+    consents, permissions or other rights required for any use of the
+    Work.
+ d. Affirmer understands and acknowledges that Creative Commons is not a
+    party to this document and has no duty or obligation with respect to
+    this CC0 or use of the Work.
+
+
+simplified version:
+Creative Commons Attribution 4.0 International License (CC BY 4.0)
+
+You are free to:
+- Share — copy and redistribute the material in any medium or format
+- Adapt — remix, transform, and build upon the material for any purpose, even commercially.
+
+Under the following terms:
+- Attribution — You must give appropriate credit, provide a link to the license, and indicate if changes were made. You may do so in any reasonable manner, but not in any way that suggests the licensor endorses you or your use.
 
    _____ _____  ______ ______ _______ _____ _   _  _____  _____ 
   / ____|  __ \|  ____|  ____|__   __|_   _| \ | |/ ____|/ ____|
@@ -2011,6 +2147,12 @@ SHA-256: FCCE109C8360963EB18975B94BDBE434BE1A49D3F53BDD768A99093B3EB838D2 [     
 #endif
 
 
+bool	g_control_c=false;
+
+int64_t	g_starting_zpaqdate=0;
+int64_t g_starting_zpaqsize=0;
+int64_t g_starting_zpaqattr=0;	
+
 std::string g_thememfileblock="";
 std::string g_thememfileblock_h="";
 
@@ -2031,10 +2173,3435 @@ int64_t g_socket_packets=0;
 string 	g_cloudkey		="";
 int64_t	g_enter			=0;
 #endif
+FILE* 	g_output_handle;
+bool flagignore;
+bool flaghw;	// this slow down vs HWSHA1
+bool flagdebug;
+bool flagdebug2;
+bool flagdebug3;
+bool flagdebug4;
+bool flagdebug5;
+std::string	g_processorname="";
+
+char* 	g_password;     				// points to password_string or NULL
+char 	g_password_string[32]; 			// hash of -key argument
+	
+bool	g_flagcreating;
+char 	command;
+std::string	g_franzsnap;
+std::string 	g_vss_shadow;
+std::string  g_replaceme;
+std::string 	g_copy;
+std::string 	g_freeze;
+std::string 	g_exec_error;
+std::string  g_exec_warn;
+std::string 	g_exec_ok;
+std::string 	g_exec_text;
+std::string 	g_exec;
+int 	g_255;
+std::string 	g_output;
+std::string  g_ifexist;
+///string  g_ismounted;
+std::string 	g_script;
+std::string 	g_sfx;
+std::string 	g_sfxto;
+std::string 	g_sfxnot;
+std::string 	g_sfxonly;
+std::string 	g_sfxuntil;
+std::string 	g_deleteinto;
+bool 	g_sfxflagall;
+bool  	g_sfxflagforce;
+bool	g_sse42;
+bool	g_flagmultipart;
+std::string 	g_archive;
+std::string	g_indexname;
+std::string	g_externalname;
+std::string	g_csvstring;
+std::string	g_csvhf;
+std::string	g_pidname;
+FILE* 	g_pid_handle=0;
+std::string	g_backupposition;
+int64_t g_robocopy_check_sorgente;
+int64_t g_robocopy_check_destinazione;
+int64_t g_robocopy_makepath;
+int64_t g_robocopy_makepath2;
+int64_t g_robocopy_isequal;
+int64_t g_robocopy_close;
+int64_t g_robocopy_close2;
+int64_t g_robocopy_touch;
+int64_t g_robocopy_delete;
+int64_t	g_robocopy_readopen;
+int64_t	g_robocopy_openoutfile;
+int64_t g_robocopy_fclose;
+int64_t g_robocopy_fread;
+int64_t g_robocopy_fwrite;
+
+bool	g_testifselected;
+uint64_t g_chunk_size	=0;
+int64_t g_start			=0;
+int64_t g_dimensione	=0;
+int64_t g_scritti		=0;
+int64_t g_maxposition	=0;
+int64_t g_zerotime		=0;
+int64_t g_bytescanned	=0;
+int64_t g_filescanned	=0;
+int64_t g_worked		=0;
+int64_t g_fwritten		=0;
+int64_t g_fexpected		=0;
+int64_t g_fwrittencrc32	=0;
+
+int64_t 	g_header_pos	=0;
+bool		g_crc_getheader	=false; ///0 =  header; 1= jidac; 2=body
+bool		g_veryfirst		=true;
+uint32_t 	g_crc_header	=0;
+uint32_t 	g_crc_jidac		=0;
+uint32_t 	g_crc_body		=0;
+
+
+int64_t g_ramdisksize	=0;
+int64_t g_rd			=0;
+int64_t g_rd_expected	=0;
+int64_t g_startrd		=0;
+int64_t g_startdownload	=0;
+int 	g_rd_ultimotempo=0;
+int64_t g_cdatasize		=0;
+unsigned g_htsize		=0;
+bool	g_fakewrite		=false;	// in add() disable write (ransomware)
+uint64_t minsize;
+uint64_t maxsize;
+int64_t g_touch			=0;
+int64_t	g_datefrom		=0;
+int64_t g_dateto		=0;
+std::string	g_until;
+int		g_rangefrom		=0;
+int		g_rangeto		=0;
+int		g_rangelast		=0;
+///int		red4			=-1;
+#ifdef unix
+std::string g_tempsnapshot;
+std::string g_basesnapshot;
+std::string g_dataset;
+#endif
+bool flagnosymlink;
+bool flagnochecksum;
+bool flagcrc32;
+bool flagxxhash64;
+bool flagxxhash64b;
+bool flagsha1;
+bool flagsha256;
+bool flagsha256b;
+bool flagxxh3;
+bool flagmd5;
+bool flagmd5b;
+bool flagsha1b;
+bool flagxxh3b;
+bool flagblake3;
+bool flagblake3b;
+bool flagsha3;
+bool flagsha3b;
+bool flagwhirlpool;
+bool flaghighway64;
+bool flaghighway128;
+bool flaghighway256;
+bool flagcrc32c;
+bool flagwyhash;
+bool flagnilsimsa;
+bool flagentropy;
+bool flagwindate;
+
+
+bool flagbackupxxh3;
+bool flag715;
+bool flagappend;
+bool flagbig;
+bool flagchecksum;
+bool flagchecktxt;
+bool flagsfx;
+bool flagfasttxt;
+bool flagcomment;
+bool flagdesc;
+bool flagdonotforcexls;
+bool flagfilelist;
+bool flagexternal;
+bool flagads;
+bool flagfast;
+bool flagfix255;
+bool flagfixeml;
+bool flagflat;
+bool flagforce;
+bool flagforcewindows;
+bool flagforcezfs;
+bool flagfrugal;
+bool flaghashdeep;
+bool flagkill;
+bool flagmm;
+bool flagattr;
+bool flagthunderbird;
+bool flagnoattributes;
+bool flagnodedup;
+bool flagnoeta;
+bool flagnopath;
+bool flagnoqnap;
+bool flagnomac;
+bool flagnosynology;
+bool flagnorecursion;
+bool flagnosort;
+bool flagpakka;
+bool flagdistinct;
+bool flagparanoid;
+bool flagpaq;
+bool flagcollision;
+bool flagramdisk;
+bool flagrename;
+bool flagsilent;
+bool flagnoconsole;
+bool flagnocolor;
+bool flagskipzfs;
+bool flagspace;
+bool flagssd;
+bool flagquick;
+bool flagquiet;
+bool flagstat;
+bool flagstdin;
+bool flagterse;
+bool flagnodel;
+bool flagcsv;
+bool flagstdout;
+bool flagstore;
+bool flagtar;
+bool flagtest;
+bool flagtouch;
+bool flagutc;
+bool flagdate;
+bool flagutf;
+bool flagpause;
+bool flagverbose;
+bool flagverify;
+bool flagvss;
+bool flagzero;
+bool flaghome;
+bool flagfixcase;
+
+
+#ifdef _WIN32
+#define MYFOREGROUND_BLUE            0x0001
+#define MYFOREGROUND_GREEN           0x0002
+#define MYFOREGROUND_RED             0x0004
+#define MYFOREGROUND_INTENSITY       0x0008
+#define MYBACKGROUND_BLUE            0x0010
+#define MYBACKGROUND_GREEN           0x0020
+#define MYBACKGROUND_RED             0x0040
+#define MYBACKGROUND_INTENSITY       0x0080
+#else
+/// *nix colors
+#define TEXT_BLACK   	"\x1b[30m"
+#define TEXT_RED     	"\x1b[31m"
+#define TEXT_GREEN   	"\x1b[32m"
+#define TEXT_YELLOW  	"\x1b[33m"
+#define TEXT_BLUE    	"\x1b[34m"
+#define TEXT_MAGENTA	"\x1b[35m"
+#define TEXT_CYAN		"\x1b[36m"
+#define TEXT_WHITE		"\x1b[37m"
+#define TEXT_RESET		"\x1b[0m"
+
+///#define TEXT_BLACK_BRIGHT   "\x1b[1;30m"
+
+#define TEXT_BLACK_BRIGHT   	"\x1b[1;30m"
+#define TEXT_RED_BRIGHT     	"\x1b[1;31m"
+#define TEXT_GREEN_BRIGHT   	"\x1b[1;32m"
+#define TEXT_YELLOW_BRIGHT  	"\x1b[1;33m"
+#define TEXT_BLUE_BRIGHT    	"\x1b[1;34m"
+#define TEXT_MAGENTA_BRIGHT		"\x1b[1;35m"
+#define TEXT_CYAN_BRIGHT		"\x1b[1;36m"
+#define TEXT_WHITE_BRIGHT		"\x1b[1;37m"
+#define TEXT_RESET_BRIGHT		"\x1b[1;0m"
+
+#define BG_BLACK   		"\x1b[40m"
+#define BG_RED     		"\x1b[41m"
+#define BG_GREEN   		"\x1b[42m"
+#define BG_YELLOW  		"\x1b[43m"
+#define BG_BLUE    		"\x1b[44m"
+#define BG_MAGENTA 		"\x1b[45m"
+#define BG_CYAN    		"\x1b[46m"
+#define BG_WHITE   		"\x1b[47m"
+
+#define BG_BLACK_BRIGHT			"\x1b[1;40m"
+#define BG_RED_BRIGHT     		"\x1b[1;41m"
+#define BG_GREEN_BRIGHT   		"\x1b[1;42m"
+#define BG_YELLOW_BRIGHT  		"\x1b[1;43m"
+#define BG_BLUE_BRIGHT    		"\x1b[1;44m"
+#define BG_MAGENTA_BRIGHT 		"\x1b[1;45m"
+#define BG_CYAN_BRIGHT    		"\x1b[1;46m"
+#define BG_WHITE_BRIGHT   		"\x1b[1;47m"
+#endif
+
+
+int g_console_attributes=-1;
+#ifdef _WIN32
+void color_save()
+{
+	if (flagnocolor)
+		return;
+	HANDLE hconsole=GetStdHandle(STD_OUTPUT_HANDLE);
+	if (hconsole==INVALID_HANDLE_VALUE)
+		return;
+	CONSOLE_SCREEN_BUFFER_INFO csbiInfo;
+	GetConsoleScreenBufferInfo(hconsole,&csbiInfo);
+	if ((csbiInfo.wAttributes & MYFOREGROUND_BLUE) &&
+	 (csbiInfo.wAttributes & MYFOREGROUND_GREEN) &&
+	 (csbiInfo.wAttributes & MYFOREGROUND_RED))
+		g_console_attributes=csbiInfo.wAttributes;
+}
+#endif
+void color_restore()
+{
+	if (flagnocolor)
+		return;
+#ifdef _WIN32
+	if (g_console_attributes<0)
+		return;
+	HANDLE hconsole=GetStdHandle(STD_OUTPUT_HANDLE);
+	if (hconsole==INVALID_HANDLE_VALUE)
+		return;
+	SetConsoleTextAttribute(hconsole,g_console_attributes);
+#else
+	printf(TEXT_RESET);
+#endif
+}
+#ifdef _WIN32
+void color_something(int i_color)
+{
+	if (flagnocolor)
+		return;
+	if (g_console_attributes<0)
+		return;
+	HANDLE hconsole=GetStdHandle(STD_OUTPUT_HANDLE);
+	if (hconsole==INVALID_HANDLE_VALUE)
+		return;
+	SetConsoleTextAttribute(hconsole,i_color);
+	return;
+}
+#endif
+void color_red()
+{
+	if (flagnocolor)
+		return;
+#ifdef _WIN32
+	color_something(4);
+#else
+	printf(TEXT_RED_BRIGHT);
+#endif
+}
+void color_green()
+{
+	if (flagnocolor)
+		return;
+#ifdef _WIN32
+	///getenv("WT_SESSION")
+	color_something(MYFOREGROUND_GREEN+MYFOREGROUND_INTENSITY);
+#else
+	printf(TEXT_GREEN_BRIGHT);
+#endif
+}
+void color_yellow()
+{
+	if (flagnocolor)
+		return;
+#ifdef _WIN32
+		color_something(14);
+#else
+	printf(TEXT_YELLOW_BRIGHT);
+#endif
+}
+void color_blackongreen()
+{
+	if (flagnocolor)
+		return;
+#ifdef _WIN32
+	color_something(160);
+#else
+	
+#if (defined(__APPLE__) && defined(__MACH__)) || defined(__HAIKU__)
+	color_green();
+#else
+	printf("\x1b[30m" "\x1b[102m");
+#endif
+#endif
+}
 
 
 static const int64_t LIST_HT_BAD=   -0x7FFFFFFFFFFFFFFALL;  // no such frag
 
+
+std::string print_datetime(bool i_flagout=true);
+
+void myprintf(const char *fmt, ...)
+{
+	char buffer[4096];
+	va_list args;
+    va_start(args, fmt);
+    vsnprintf(buffer,sizeof(buffer),fmt,args);
+	if (g_output_handle!=0)
+	{
+		if (flagdebug3)
+		{
+			std::string temp=print_datetime(false);
+		///	printf("Ciaooo |%s|\n",temp.c_str());
+			fprintf(g_output_handle,"%s",temp.c_str());
+		}
+		fprintf(g_output_handle,"%s",buffer);
+	}
+	va_end(args);
+	
+	if (flagsilent)
+		return;
+	
+	if (strlen(buffer)<7)
+	{
+		printf("%s",buffer);
+#ifndef _WIN32
+		fflush(stdout);
+#endif
+		return;
+	}
+
+	if (buffer[5]!=':')
+	{
+		printf("%s",buffer);
+#ifndef _WIN32
+		fflush(stdout);
+#endif
+		return;
+	}			
+	if ( 	(!isdigit(buffer[0])) ||
+			(!isdigit(buffer[1])) ||
+			(!isdigit(buffer[2])) ||
+			(!isdigit(buffer[3])) ||
+			(!isdigit(buffer[4]))	)
+	{
+		printf("%s",buffer);
+#ifndef _WIN32
+		fflush(stdout);
+#endif
+		return;
+	}
+	if (flagdebug3)
+	{
+		color_yellow();
+		print_datetime();
+	}
+	if (flagdebug)
+	{
+		char salva=buffer[6];
+		buffer[6]=0;
+		color_green();
+		printf("%s",buffer);
+		color_restore();
+		buffer[6]=salva;
+		printf("%s",buffer+6);
+	}
+	else
+		printf("%s",buffer+7);
+#ifndef _WIN32
+		fflush(stdout);
+#endif
+			
+	
+}
+
+
+/// LICENSE_START.23
+
+//  This is a reworked https://github.com/codewithnick/ascii-art
+//  Just one font, different output char, no streams
+
+class Fonts
+{
+    unsigned int def_rows;
+    unsigned int def_cols;
+    unsigned int char_rows;
+    unsigned int char_cols;
+    unsigned int curr_col;
+    std::vector<std::vector<char> > letters;
+
+protected:
+    char **getCharGrid(unsigned int rows = 0, unsigned int cols = 0)
+    {
+        this->char_rows = rows ? rows : def_rows;
+        this->char_cols = cols ? cols : def_cols;
+
+        char **char_grid = new char *[char_rows];
+        for (unsigned int i = 0; i < char_rows; i++)
+        {
+            char_grid[i] = new char[char_cols];
+            for (unsigned int j = 0; j < char_cols; j++)
+                char_grid[i][j] = ' ';
+        }
+        return char_grid;
+    }
+
+public:
+    Fonts(int def_rows, int def_cols)
+    {
+        this->def_rows = def_rows;
+        this->def_cols = def_cols;
+
+        letters.reserve(def_rows);
+        for (int i = 0; i < def_rows; i++)
+        {
+            letters.emplace_back(100, ' '); // Create rows with 100 spaces each
+        }
+        curr_col = 0;
+    }
+
+    void pushChar(char **character)
+    {
+        if (!character)
+            return;
+
+        while (letters.size() < char_rows)
+        {
+            letters.emplace_back(100, ' ');
+        }
+
+        for (unsigned int i = 0; i < char_rows; i++)
+        {
+            for (unsigned int j = 0; j < char_cols; j++)
+            {
+                letters[i][j + curr_col] = character[i][j];
+            }
+        }
+        curr_col += (char_cols + 2);
+    }
+
+    std::vector<std::vector<char> > getletters()
+    {
+        return letters;
+    }
+    void printvector()
+    {
+        for (unsigned int i = 0; i < letters.size(); i++)
+        {
+			unsigned int lastspace=letters[0].size();
+            for (unsigned int j=letters[0].size()-1; j>0; j--)
+				if (letters[i][j]!=' ')
+				{
+					lastspace=j;
+					break;
+				}
+            ///for (unsigned int j = 0; j < letters[0].size(); j++)
+			for (unsigned int j = 0; j < lastspace; j++)
+				myprintf("%c",letters[i][j]);
+    		myprintf("\n");
+        }
+    }
+
+    /********************************adding virtual functions********************************/
+    // Virtual functions for space
+    virtual char **space()
+    {
+        return nullptr;
+    }
+
+    // Virtual functions for lowercase letters
+    virtual char **a()
+    {
+        return nullptr;
+    }
+    virtual char **b()
+    {
+        return nullptr;
+    }
+    virtual char **c()
+    {
+        return nullptr;
+    }
+    virtual char **d()
+    {
+        return nullptr;
+    }
+    virtual char **e()
+    {
+        return nullptr;
+    }
+    virtual char **f()
+    {
+        return nullptr;
+    }
+    virtual char **g()
+    {
+        return nullptr;
+    }
+    virtual char **h()
+    {
+        return nullptr;
+    }
+    virtual char **i()
+    {
+        return nullptr;
+    }
+    virtual char **j()
+    {
+        return nullptr;
+    }
+    virtual char **k()
+    {
+        return nullptr;
+    }
+    virtual char **l()
+    {
+
+        return nullptr;
+    }
+    virtual char **m()
+    {
+ 
+        return nullptr;
+    }
+    virtual char **n()
+    {
+        return nullptr;
+    }
+    virtual char **o()
+    {
+        return nullptr;
+    }
+    virtual char **p()
+    {
+        return nullptr;
+    }
+    virtual char **q()
+    {
+        return nullptr;
+    }
+    virtual char **r()
+    {
+        return nullptr;
+    }
+    virtual char **s()
+    {
+        return nullptr;
+    }
+    virtual char **t()
+    {
+        return nullptr;
+    }
+    virtual char **u()
+    {
+        return nullptr;
+    }
+    virtual char **v()
+    {
+        return nullptr;
+    }
+    virtual char **w()
+    {
+        return nullptr;
+    }
+    virtual char **x()
+    {
+        return nullptr;
+    }
+    virtual char **y()
+    {
+        return nullptr;
+    }
+    virtual char **z()
+    {
+        return nullptr;
+    }
+
+    // Virtual functions for uppercase letters
+    virtual char **A()
+    {
+        return nullptr;
+    }
+    virtual char **B()
+    {
+        return nullptr;
+    }
+    virtual char **C()
+    {
+        return nullptr;
+    }
+    virtual char **D()
+    {
+        return nullptr;
+    }
+    virtual char **E()
+    {
+        return nullptr;
+    }
+    virtual char **F()
+    {
+        return nullptr;
+    }
+    virtual char **G()
+    {
+        return nullptr;
+    }
+    virtual char **H()
+    {
+        return nullptr;
+    }
+    virtual char **I()
+    {
+        return nullptr;
+    }
+    virtual char **J()
+    {
+        return nullptr;
+    }
+    virtual char **K()
+    {
+        return nullptr;
+    }
+    virtual char **L()
+    {
+        return nullptr;
+    }
+    virtual char **M()
+    {
+        return nullptr;
+    }
+    virtual char **N()
+    {
+        return nullptr;
+    }
+    virtual char **O()
+    {
+        return nullptr;
+    }
+    virtual char **P()
+    {
+        return nullptr;
+    }
+    virtual char **Q()
+    {
+        return nullptr;
+    }
+    virtual char **R()
+    {
+        return nullptr;
+    }
+    virtual char **S()
+    {
+        return nullptr;
+    }
+    virtual char **T()
+    {
+        return nullptr;
+    }
+    virtual char **U()
+    {
+        return nullptr;
+    }
+    virtual char **V()
+    {
+        return nullptr;
+    }
+    virtual char **W()
+    {
+        return nullptr;
+    }
+    virtual char **X()
+    {
+        return nullptr;
+    }
+    virtual char **Y()
+    {
+        return nullptr;
+    }
+    virtual char **Z()
+    {
+        return nullptr;
+    }
+    virtual char **zero()
+    {
+        return nullptr;
+    }
+    virtual char **one()
+    {
+        return nullptr;
+    }
+    virtual char **two()
+    {
+        return nullptr;
+    }
+    virtual char **three()
+    {
+        return nullptr;
+    }
+    virtual char **four()
+    {
+        return nullptr;
+    }
+    virtual char **five()
+    {
+        return nullptr;
+    }
+    virtual char **six()
+    {
+        return nullptr;
+    }
+    virtual char **seven()
+    {
+        return nullptr;
+    }
+    virtual char **eight()
+    {
+        return nullptr;
+    }
+    virtual char **nine()
+    {
+        return nullptr;
+    }
+
+    /********************************done adding virtual functions********************************/
+    void destroyspace()
+    {
+        letters.clear();
+    }
+    ~Fonts()
+    {
+        destroyspace();
+    }
+};
+
+class SevenStar : public Fonts
+{
+	static const int rows = 7;
+	static const int cols = 7;
+
+public:
+	SevenStar() : Fonts(rows, cols) {}
+
+	char **A()
+	{
+		char **character = getCharGrid();
+
+		for (int i = 0; i < 7; i++)
+		{
+			for (int j = 0; j < 7; j++)
+			{
+				if (i == 0)
+				{
+					if (j == 2 || j == 3 || j == 4)
+						character[i][j] = 'A';
+					else
+						character[i][j] = ' ';
+				}
+
+				if (i == 1)
+				{
+					if (j % 3 == 0)
+					{
+						character[i][j] = ' ';
+					}
+					else
+						character[i][j] = 'A';
+				}
+
+				if (i == 2 || i == 3 || i == 5 || i == 6)
+				{
+					if (j == 0 || j == 1 || j == 5 || j == 6)
+					{
+						character[i][j] = 'A';
+					}
+					else
+					{
+						character[i][j] = ' ';
+					}
+				}
+
+				if (i == 4)
+				{
+
+					character[i][j] = 'A';
+				}
+			}
+		}
+
+		return character;
+	}
+	char **B()
+	{
+		char **character = getCharGrid();
+		for (int i = 0; i < 7; i++)
+		{
+			for (int j = 0; j < 7; j++)
+			{
+				if (i == 0 || i == 6)
+				{
+					if (j == 5 || j == 6)
+						character[i][j] = ' ';
+					else
+						character[i][j] = 'B';
+				}
+
+				if (i >= 1 && i <= 5 && i != 3)
+				{
+					if (j == 2 || j == 3 || j == 4)
+						character[i][j] = ' ';
+					else
+						character[i][j] = 'B';
+				}
+
+				if (i == 3)
+				{
+					if (j == 6)
+						character[i][j] = ' ';
+					else
+						character[i][j] = 'B';
+				}
+			}
+		}
+		return character;
+	}
+	char **C()
+	{
+		char **character = getCharGrid();
+		for (int i = 0; i < 7; i++)
+		{
+			for (int j = 0; j < 7; j++)
+			{
+				// first aur last line
+				if (i == 0 || i == 6)
+				{
+					if ((j % 7) % 3 != 0)
+					{
+						character[i][j] = 'C';
+					}
+					else
+					{
+						character[i][j] = ' ';
+					}
+				}
+
+				// second nd second last line
+
+				if (i == 1 || i == 5)
+				{
+					if (((j) % 7) < 2 || ((j) % 7) > 4)
+					{
+						character[i][j] = 'C';
+					}
+					else
+					{
+						character[i][j] = ' ';
+					}
+				}
+
+				// rest
+
+				if (i == 2 || i == 4 || i == 3)
+				{
+					if (((j) % 7) < 2)
+					{
+						character[i][j] = 'C';
+					}
+					else
+					{
+						character[i][j] = ' ';
+					}
+				}
+			}
+		}
+		return character;
+	}
+	char **D()
+	{
+		char **character = getCharGrid();
+		for (int i = 0; i < 7; i++)
+		{
+			for (int j = 0; j < 7; j++)
+			{
+				if (i == 0 || i == 6)
+				{
+					if (((j) % 7) != 0 && ((j) % 7) % 3 == 0)
+						character[i][j] = ' ';
+					else
+						character[i][j] = 'D';
+				}
+				else
+				{
+					if (((j) % 7) == 1 || ((j) % 7) == 2 || ((j) % 7) == 5 || ((j) % 7) == 6)
+						character[i][j] = 'D';
+					else
+						character[i][j] = ' ';
+				}
+			}
+		}
+		return character;
+	}
+	char **E()
+	{
+		char **character = getCharGrid();
+		for (int i = 0; i < 7; i++)
+		{
+			for (int j = 0; j < 7; j++)
+			{
+				if (i == 0 || i == 6)
+				{
+					character[i][j] = 'E';
+				}
+
+				if (i == 1 || i == 5)
+				{
+					if (j == 0 || j == 1 || j == 5 || j == 6)
+						character[i][j] = 'E';
+					else
+						character[i][j] = ' ';
+				}
+
+				if (i == 2 || i == 4)
+				{
+					if (j == 0 || j == 1)
+						character[i][j] = 'E';
+					else
+						character[i][j] = ' ';
+				}
+
+				if (i == 3)
+				{
+					if (j == 6)
+						character[i][j] = ' ';
+					else
+						character[i][j] = 'E';
+				}
+			}
+		}
+		return character;
+	}
+
+	char **F()
+	{
+		char **character = getCharGrid();
+		for (int i = 0; i < 7; i++)
+		{
+			for (int j = 0; j < 7; j++)
+			{
+				if (i == 0)
+				{
+					character[i][j] = 'F';
+				}
+
+				if (i == 2 || i == 5 || i == 6 || i == 1 || i == 4)
+				{
+					if (j == 0 || j == 1)
+						character[i][j] = 'F';
+					else
+						character[i][j] = ' ';
+				}
+
+				if (i == 3)
+				{
+					if (j == 6)
+						character[i][j] = ' ';
+					else
+						character[i][j] = 'F';
+				}
+			}
+
+			// cout<<endl;
+		}
+		return character;
+	}
+
+	char **G()
+	{
+		char **character = getCharGrid();
+		for (int i = 0; i < 7; i++)
+		{
+			for (int j = 0; j < 7; j++)
+			{
+				if (i == 0 || i == 6)
+				{
+					if (j == 0 || j == 6)
+						character[i][j] = ' ';
+					else
+						character[i][j] = 'G';
+				}
+
+				if (i == 1 || i == 5 || i == 4)
+				{
+					if (j == 0 || j == 1 || j == 5 || j == 6)
+						character[i][j] = 'G';
+					else
+						character[i][j] = ' ';
+				}
+
+				if (i == 3)
+				{
+					if (j == 2 || j == 3)
+						character[i][j] = ' ';
+					else
+						character[i][j] = 'G';
+				}
+
+				if (i == 2)
+				{
+					if (j == 0 || j == 1)
+						character[i][j] = 'G';
+					else
+						character[i][j] = ' ';
+				}
+			}
+		}
+		return character;
+	}
+
+	char **H()
+	{
+		char **character = getCharGrid();
+		for (int i = 0; i < 7; i++)
+		{
+			for (int j = 0; j < 7; j++)
+			{
+				if (i >= 0 && i <= 6)
+				{
+					if (j == 0 || j == 1 || j == 5 || j == 6)
+						character[i][j] = 'H';
+					else
+						character[i][j] = ' ';
+				}
+
+				if (i == 3)
+				{
+					if (j > 1 && j < 5)
+						character[i][j] = 'H';
+				}
+			}
+		}
+		return character;
+	}
+
+	char **I()
+	{
+		char **character = getCharGrid();
+		for (int i = 0; i < 7; i++)
+		{
+			for (int j = 0; j < 7; j++)
+			{
+				if (i == 0 || i == 6)
+				{
+					character[i][j] = 'I';
+				}
+				else
+				{
+					if (j == 2 || j == 3 || j == 4)
+					{
+						character[i][j] = 'I';
+					}
+					else
+						character[i][j] = ' ';
+				}
+			}
+		}
+		return character;
+	}
+	char **J()
+	{
+		char **character = getCharGrid();
+		for (int i = 0; i < 7; i++)
+		{
+			for (int j = 0; j < 7; j++)
+			{
+				if (i == 0)
+				{
+					if (j < 3)
+						character[i][j] = ' ';
+					else
+						character[i][j] = 'J';
+				}
+
+				if (i == 1 || i == 2 || i == 3)
+				{
+					if (j == 4 || j == 5)
+						character[i][j] = 'J';
+					else
+						character[i][j] = ' ';
+				}
+
+				if (i == 4 || i == 5)
+				{
+					if (j == 2 || j == 3 || j == 6)
+						character[i][j] = ' ';
+					else
+						character[i][j] = 'J';
+				}
+
+				if (i == 6)
+				{
+					if (j == 0 || j == 5 || j == 6)
+						character[i][j] = ' ';
+					else
+						character[i][j] = 'J';
+				}
+			}
+		}
+		return character;
+	}
+
+	char **K()
+	{
+		char **character = getCharGrid();
+		for (int i = 0; i < 7; i++)
+		{
+			for (int j = 0; j < 7; j++)
+			{
+				if (i == 0 || i == 6)
+				{
+					if (j == 2 || j == 3 || j == 4)
+						character[i][j] = ' ';
+					else
+						character[i][j] = 'K';
+				}
+
+				if (i == 1 || i == 5)
+				{
+					if (j == 2 || j == 3 || j == 6)
+						character[i][j] = ' ';
+					else
+						character[i][j] = 'K';
+				}
+
+				if (i == 3)
+				{
+					if (j == 4 || j == 5 || j == 6)
+						character[i][j] = ' ';
+					else
+						character[i][j] = 'K';
+				}
+
+				if (i == 2 || i == 4)
+				{
+					if (j == 2 || j == 5 || j == 6)
+						character[i][j] = ' ';
+					else
+						character[i][j] = 'K';
+				}
+			}
+		}
+		return character;
+	}
+
+	char **L()
+	{
+		char **character = getCharGrid();
+		for (int i = 0; i < 7; i++)
+		{
+			for (int j = 0; j < 7; j++)
+			{
+				if (i < 6)
+				{
+					if (j == 0 || j == 1)
+						character[i][j] = 'L';
+					else
+						character[i][j] = ' ';
+				}
+				else
+					character[i][j] = 'L';
+			}
+		}
+		return character;
+	}
+
+	char **M()
+	{
+		char **character = getCharGrid();
+		for (int i = 0; i < 7; i++)
+		{
+			for (int j = 0; j < 7; j++)
+			{
+				if (i == 0)
+				{
+					if (j == 2 || j == 3 || j == 4)
+						character[i][j] = ' ';
+					else
+						character[i][j] = 'M';
+				}
+
+				if (i == 1)
+				{
+					if (j == 3)
+					{
+						character[i][j] = ' ';
+					}
+					else
+						character[i][j] = 'M';
+				}
+
+				if (i == 2)
+				{
+					character[i][j] = 'M';
+				}
+
+				if (i == 3)
+				{
+					if (j == 2 || j == 4)
+						character[i][j] = ' ';
+					else
+						character[i][j] = 'M';
+				}
+
+				if (i >= 4 && i <= 6)
+				{
+					if (j == 2 || j == 3 || j == 4)
+						character[i][j] = ' ';
+					else
+						character[i][j] = 'M';
+				}
+			}
+		}
+		return character;
+	}
+
+	char **N()
+	{
+		char **character = getCharGrid();
+		for (int i = 0; i < 7; i++)
+		{
+			for (int j = 0; j < 7; j++)
+			{
+				if (i == 0 || i == 6)
+				{
+					if (j == 2 || j == 3 || j == 4)
+						character[i][j] = ' ';
+					else
+						character[i][j] = 'N';
+				}
+
+				if (i == 2 || i == 1)
+				{
+					if (j == 3 || j == 4)
+					{
+						character[i][j] = ' ';
+					}
+					else
+						character[i][j] = 'N';
+				}
+
+				if (i == 3)
+				{
+					if (j == 2 || j == 4)
+					{
+						character[i][j] = ' ';
+					}
+					else
+					{
+						character[i][j] = 'N';
+					}
+				}
+
+				if (i == 4 || i == 5)
+				{
+					if (j == 2 || j == 3)
+						character[i][j] = ' ';
+					else
+						character[i][j] = 'N';
+				}
+			}
+		}
+		return character;
+	}
+	char **O()
+	{
+		char **character = getCharGrid();
+		for (int i = 0; i < 7; i++)
+		{
+			for (int j = 0; j < 7; j++)
+			{
+				if (i == 6 || i == 0)
+				{
+					if (j == 0 || j == 6)
+						character[i][j] = ' ';
+					else
+						character[i][j] = 'O';
+				}
+				else
+				{
+					if (j == 2 || j == 3 || j == 4)
+						character[i][j] = ' ';
+					else
+						character[i][j] = 'O';
+				}
+			}
+
+			//	cout<<endl;
+		}
+		return character;
+	}
+
+	char **P()
+	{
+		char **character = getCharGrid();
+		for (int i = 0; i < 7; i++)
+		{
+			for (int j = 0; j < 7; j++)
+			{
+				if (i == 0 || i == 3)
+				{
+					if (j == 6)
+						character[i][j] = ' ';
+					else
+						character[i][j] = 'P';
+				}
+
+				if (i == 1 || i == 2)
+				{
+					if (j == 2 || j == 3 || j == 4)
+					{
+						character[i][j] = ' ';
+					}
+					else
+						character[i][j] = 'P';
+				}
+
+				if (i >= 4 && i <= 6)
+				{
+					if (j == 0 || j == 1)
+					{
+						character[i][j] = 'P';
+					}
+					else
+					{
+						character[i][j] = ' ';
+					}
+				}
+			}
+		}
+		return character;
+	}
+
+	char **Q()
+	{
+		char **character = getCharGrid();
+		for (int i = 0; i < 7; i++)
+		{
+			for (int j = 0; j < 7; j++)
+			{
+				if (i == 0)
+				{
+					if (j % 3 == 0)
+						character[i][j] = ' ';
+					else
+						character[i][j] = 'Q';
+				}
+
+				if (i >= 1 && i <= 4)
+				{
+					if (j == 2 || j == 3 || j == 4)
+						character[i][j] = ' ';
+					else
+						character[i][j] = 'Q';
+				}
+
+				if (i == 5)
+				{
+					if (j == 2 || j == 3 || j == 6)
+						character[i][j] = ' ';
+					else
+						character[i][j] = 'Q';
+				}
+				if (i == 6)
+				{
+					if (j == 0 || j == 3 || j == 4)
+						character[i][j] = ' ';
+					else
+						character[i][j] = 'Q';
+				}
+			}
+
+			// cout<<endl;
+		}
+		return character;
+	}
+
+	char **R()
+	{
+		char **character = getCharGrid();
+		for (int i = 0; i < 7; i++)
+		{
+			for (int j = 0; j < 7; j++)
+			{
+				if (i == 0 || i == 3)
+				{
+					if (j == 6)
+						character[i][j] = ' ';
+					else
+						character[i][j] = 'R';
+				}
+
+				if (i == 1 || i == 2 || i == 5 || i == 6)
+				{
+					if (j == 2 || j == 3 || j == 4)
+						character[i][j] = ' ';
+					else
+						character[i][j] = 'R';
+				}
+
+				if (i == 4)
+				{
+					if (j == 2 || j == 3 || j == 6)
+						character[i][j] = ' ';
+					else
+						character[i][j] = 'R';
+				}
+			}
+			// cout<<endl;
+		}
+		return character;
+	}
+
+	char **S()
+	{
+		char **character = getCharGrid();
+		for (int i = 0; i < 7; i++)
+		{
+			for (int j = 0; j < 7; j++)
+			{
+				if (i == 0 || i == 6)
+				{
+					if (j == 0 || j == 6)
+						character[i][j] = ' ';
+					else
+						character[i][j] = 'S';
+				}
+
+				if (i == 1 || i == 5)
+				{
+					if (j == 3 || j == 2 || j == 4)
+					{
+						character[i][j] = ' ';
+					}
+					else
+						character[i][j] = 'S';
+				}
+
+				if (i == 2)
+				{
+					if (j == 4 || j == 5 || j == 6)
+					{
+						character[i][j] = ' ';
+					}
+					else
+					{
+						character[i][j] = 'S';
+					}
+				}
+
+				if (i == 3)
+				{
+
+					if (j == 0 || j == 6)
+						character[i][j] = ' ';
+					else
+						character[i][j] = 'S';
+				}
+
+				if (i == 4)
+				{
+					if (j == 4 || j == 5 || j == 6)
+						character[i][j] = 'S';
+					else
+						character[i][j] = ' ';
+				}
+			}
+		}
+		return character;
+	}
+
+	char **T()
+	{
+		char **character = getCharGrid();
+		for (int i = 0; i < 7; i++)
+		{
+			for (int j = 0; j < 7; j++)
+			{
+				if (i == 0)
+				{
+					character[i][j] = 'T';
+				}
+
+				if (i >= 1 && i <= 6)
+				{
+					if (j == 3 || j == 2)
+						character[i][j] = 'T';
+					else
+						character[i][j] = ' ';
+				}
+			}
+
+			// cout<<endl;
+		}
+		return character;
+	}
+
+	char **U()
+	{
+		char **character = getCharGrid();
+		for (int i = 0; i < 7; i++)
+		{
+			for (int j = 0; j < 7; j++)
+			{
+				if (i <= 5)
+				{
+					if (j == 2 || j == 3 || j == 4)
+						character[i][j] = ' ';
+					else
+						character[i][j] = 'U';
+				}
+				else
+				{
+					if (j == 0 || j == 6)
+					{
+						character[i][j] = ' ';
+					}
+					else
+						character[i][j] = 'U';
+				}
+			}
+		}
+		return character;
+	}
+
+	char **V()
+	{
+		char **character = getCharGrid();
+		for (int i = 0; i < 7; i++)
+		{
+			for (int j = 0; j < 7; j++)
+			{
+				if (i == 6)
+				{
+					if (j == 2 || j == 3 || j == 4)
+						character[i][j] = 'V';
+					else
+						character[i][j] = ' ';
+				}
+
+				if (i == 5)
+				{
+					if (j % 3 == 0)
+					{
+						character[i][j] = ' ';
+					}
+					else
+						character[i][j] = 'V';
+				}
+				if (i < 5)
+				{
+					if (j == 0 || j == 1 || j == 5 || j == 6)
+					{
+						character[i][j] = 'V';
+					}
+					else
+					{
+						character[i][j] = ' ';
+					}
+				}
+			}
+		}
+		return character;
+	}
+
+	char **W()
+	{
+		char **character = getCharGrid();
+		for (int i = 0; i < 7; i++)
+		{
+			for (int j = 0; j < 7; j++)
+			{
+				if (i == 0 || i == 1 || i == 2 || i == 6)
+				{
+					if (j == 2 || j == 3 || j == 4)
+						character[i][j] = ' ';
+					else
+						character[i][j] = 'W';
+				}
+
+				if (i == 3)
+				{
+					if (j == 2 || j == 4)
+						character[i][j] = ' ';
+					else
+						character[i][j] = 'W';
+				}
+
+				if (i == 4)
+				{
+					character[i][j] = 'W';
+				}
+
+				if (i == 5)
+				{
+					if (j == 3)
+						character[i][j] = ' ';
+					else
+						character[i][j] = 'W';
+				}
+			}
+
+			// cout<<endl;
+		}
+		return character;
+	}
+
+	char **X()
+	{
+		char **character = getCharGrid();
+		for (int i = 0; i < 7; i++)
+		{
+			for (int j = 0; j < 7; j++)
+			{
+				if (i == 0 || i == 1 || i == 5 || i == 6)
+				{
+					if (j == 2 || j == 3 || j == 6)
+						character[i][j] = ' ';
+					else
+						character[i][j] = 'X';
+				}
+
+				if (i == 2 || i == 4)
+				{
+					if (j == 0 || j == 5 || j == 6)
+						character[i][j] = ' ';
+					else
+						character[i][j] = 'X';
+				}
+
+				if (i == 3)
+				{
+					if (j == 3 || j == 2)
+						character[i][j] = 'X';
+					else
+						character[i][j] = ' ';
+				}
+			}
+		}
+		return character;
+	}
+	char **Y()
+	{
+		char **character = getCharGrid();
+		for (int i = 0; i < 7; i++)
+		{
+
+			for (int j = 0; j < 7; j++)
+			{
+
+				if (i == 0 || i == 1 || i == 2)
+				{
+					if (j == 2 || j == 3 || j == 6)
+						character[i][j] = ' ';
+					else
+						character[i][j] = 'Y';
+				}
+
+				if (i == 3)
+				{
+					if (j == 0 || j == 5 || j == 6)
+						character[i][j] = ' ';
+					else
+						character[i][j] = 'Y';
+				}
+
+				if (i > 3)
+				{
+					if (j == 2 || j == 3)
+						character[i][j] = 'Y';
+					else
+						character[i][j] = ' ';
+				}
+			}
+		}
+		return character;
+	}
+
+	char **Z()
+	{
+		char **character = getCharGrid();
+		for (int i = 0; i < 7; i++)
+		{
+			for (int j = 0; j < 7; j++)
+			{
+				if (i == 0 || i == 6)
+				{
+					if (j > 0)
+						character[i][j] = 'Z';
+					else
+						character[i][j] = ' ';
+				}
+
+				if (i == 1)
+				{
+					if (j == 5 || j == 6)
+						character[i][j] = 'Z';
+					else
+						character[i][j] = ' ';
+				}
+
+				if (i == 2)
+				{
+					if (j == 4 || j == 5)
+						character[i][j] = 'Z';
+					else
+						character[i][j] = ' ';
+				}
+				if (i == 3)
+				{
+					if (j == 3 || j == 4)
+						character[i][j] = 'Z';
+					else
+						character[i][j] = ' ';
+				}
+				if (i == 4)
+				{
+					if (j == 3 || j == 2)
+						character[i][j] = 'Z';
+					else
+						character[i][j] = ' ';
+				}
+				if (i == 5)
+				{
+					if (j == 1 || j == 2)
+						character[i][j] = 'Z';
+					else
+						character[i][j] = ' ';
+				}
+			}
+
+			// cout<<endl;
+		}
+		return character;
+	}
+	// small letter
+	char **a()
+	{
+		char **character = getCharGrid();
+		for (int i = 0; i < 7; i++)
+		{
+			for (int j = 0; j < 7; j++)
+			{
+				if (i == 0)
+				{
+					if (j == 2 || j == 3 || j == 4)
+						character[i][j] = '%';
+					else
+						character[i][j] = ' ';
+				}
+
+				if (i == 1)
+				{
+					if (j % 3 == 0)
+					{
+						character[i][j] = ' ';
+					}
+					else
+						character[i][j] = '%';
+				}
+
+				if (i == 2 || i == 3 || i == 5 || i == 6)
+				{
+					if (j == 0 || j == 1 || j == 5 || j == 6)
+					{
+						character[i][j] = '%';
+					}
+					else
+					{
+						character[i][j] = ' ';
+					}
+				}
+
+				if (i == 4)
+				{
+
+					character[i][j] = '%';
+				}
+			}
+		}
+		return character;
+	}
+
+	char **b()
+	{
+		char **character = getCharGrid();
+		for (int i = 0; i < 7; i++)
+		{
+			for (int j = 0; j < 7; j++)
+			{
+				if (i == 0 || i == 6)
+				{
+					if (j == 5 || j == 6)
+						character[i][j] = ' ';
+					else
+						character[i][j] = '%';
+				}
+
+				if (i >= 1 && i <= 5 && i != 3)
+				{
+					if (j == 2 || j == 3 || j == 4)
+						character[i][j] = ' ';
+					else
+						character[i][j] = '%';
+				}
+
+				if (i == 3)
+				{
+					if (j == 6)
+						character[i][j] = ' ';
+					else
+						character[i][j] = '%';
+				}
+			}
+		}
+		return character;
+	}
+	char **c()
+	{
+		char **character = getCharGrid();
+		for (int i = 0; i < 7; i++)
+		{
+			for (int j = 0; j < 7; j++)
+			{
+				// first aur last line
+				if (i == 0 || i == 6)
+				{
+					if ((j % 7) % 3 != 0)
+					{
+						character[i][j] = '%';
+					}
+					else
+					{
+						character[i][j] = ' ';
+					}
+				}
+
+				// second nd second last line
+
+				if (i == 1 || i == 5)
+				{
+					if (((j) % 7) < 2 || ((j) % 7) > 4)
+					{
+						character[i][j] = '%';
+					}
+					else
+					{
+						character[i][j] = ' ';
+					}
+				}
+
+				// rest
+
+				if (i == 2 || i == 4 || i == 3)
+				{
+					if (((j) % 7) < 2)
+					{
+						character[i][j] = '%';
+					}
+					else
+					{
+						character[i][j] = ' ';
+					}
+				}
+			}
+		}
+		return character;
+	}
+	char **d()
+	{
+		char **character = getCharGrid();
+		for (int i = 0; i < 7; i++)
+		{
+			for (int j = 0; j < 7; j++)
+			{
+				if (i == 0 || i == 6)
+				{
+					if (((j) % 7) != 0 && ((j) % 7) % 3 == 0)
+						character[i][j] = ' ';
+					else
+						character[i][j] = '%';
+				}
+				else
+				{
+					if (((j) % 7) == 1 || ((j) % 7) == 2 || ((j) % 7) == 5 || ((j) % 7) == 6)
+						character[i][j] = '%';
+					else
+						character[i][j] = ' ';
+				}
+			}
+		}
+		return character;
+	}
+	char **e()
+	{
+		char **character = getCharGrid();
+		for (int i = 0; i < 7; i++)
+		{
+			for (int j = 0; j < 7; j++)
+			{
+				if (i == 0 || i == 6)
+				{
+					character[i][j] = '%';
+				}
+
+				if (i == 1 || i == 5)
+				{
+					if (j == 0 || j == 1 || j == 5 || j == 6)
+						character[i][j] = '%';
+					else
+						character[i][j] = ' ';
+				}
+
+				if (i == 2 || i == 4)
+				{
+					if (j == 0 || j == 1)
+						character[i][j] = '%';
+					else
+						character[i][j] = ' ';
+				}
+
+				if (i == 3)
+				{
+					if (j == 6)
+						character[i][j] = ' ';
+					else
+						character[i][j] = '%';
+				}
+			}
+		}
+		return character;
+	}
+
+	char **f()
+	{
+		char **character = getCharGrid();
+		for (int i = 0; i < 7; i++)
+		{
+			for (int j = 0; j < 7; j++)
+			{
+				if (i == 0)
+				{
+					character[i][j] = '%';
+				}
+
+				if (i == 2 || i == 5 || i == 6 || i == 1 || i == 4)
+				{
+					if (j == 0 || j == 1)
+						character[i][j] = '%';
+					else
+						character[i][j] = ' ';
+				}
+
+				if (i == 3)
+				{
+					if (j == 6)
+						character[i][j] = ' ';
+					else
+						character[i][j] = '%';
+				}
+			}
+
+			// cout<<endl;
+		}
+		return character;
+	}
+
+	char **g()
+	{
+		char **character = getCharGrid();
+		for (int i = 0; i < 7; i++)
+		{
+			for (int j = 0; j < 7; j++)
+			{
+				if (i == 0 || i == 6)
+				{
+					if (j == 0 || j == 6)
+						character[i][j] = ' ';
+					else
+						character[i][j] = '%';
+				}
+
+				if (i == 1 || i == 5 || i == 4)
+				{
+					if (j == 0 || j == 1 || j == 5 || j == 6)
+						character[i][j] = '%';
+					else
+						character[i][j] = ' ';
+				}
+
+				if (i == 3)
+				{
+					if (j == 2 || j == 3)
+						character[i][j] = ' ';
+					else
+						character[i][j] = '%';
+				}
+
+				if (i == 2)
+				{
+					if (j == 0 || j == 1)
+						character[i][j] = '%';
+					else
+						character[i][j] = ' ';
+				}
+			}
+		}
+		return character;
+	}
+
+	char **h()
+	{
+		char **character = getCharGrid();
+		for (int i = 0; i < 7; i++)
+		{
+			for (int j = 0; j < 7; j++)
+			{
+				if (i >= 0 && i <= 6)
+				{
+					if (j == 0 || j == 1 || j == 5 || j == 6)
+						character[i][j] = '%';
+					else
+						character[i][j] = ' ';
+				}
+
+				if (i == 3)
+				{
+					if (j > 1 && j < 5)
+						character[i][j] = '%';
+				}
+			}
+		}
+		return character;
+	}
+
+	char **i()
+	{
+		char **character = getCharGrid();
+		for (int i = 0; i < 7; i++)
+		{
+			for (int j = 0; j < 7; j++)
+			{
+				if (i == 0 || i == 6)
+				{
+					character[i][j] = '%';
+				}
+				else
+				{
+					if (j == 2 || j == 3 || j == 4)
+					{
+						character[i][j] = '%';
+					}
+					else
+						character[i][j] = ' ';
+				}
+			}
+		}
+		return character;
+	}
+	char **j()
+	{
+		char **character = getCharGrid();
+		for (int i = 0; i < 7; i++)
+		{
+			for (int j = 0; j < 7; j++)
+			{
+				if (i == 0)
+				{
+					if (j < 3)
+						character[i][j] = ' ';
+					else
+						character[i][j] = '%';
+				}
+
+				if (i == 1 || i == 2 || i == 3)
+				{
+					if (j == 4 || j == 5)
+						character[i][j] = '%';
+					else
+						character[i][j] = ' ';
+				}
+
+				if (i == 4 || i == 5)
+				{
+					if (j == 2 || j == 3 || j == 6)
+						character[i][j] = ' ';
+					else
+						character[i][j] = '%';
+				}
+
+				if (i == 6)
+				{
+					if (j == 0 || j == 5 || j == 6)
+						character[i][j] = ' ';
+					else
+						character[i][j] = '%';
+				}
+			}
+		}
+		return character;
+	}
+
+	char **k()
+	{
+		char **character = getCharGrid();
+		for (int i = 0; i < 7; i++)
+		{
+			for (int j = 0; j < 7; j++)
+			{
+				if (i == 0 || i == 6)
+				{
+					if (j == 2 || j == 3 || j == 4)
+						character[i][j] = ' ';
+					else
+						character[i][j] = '%';
+				}
+
+				if (i == 1 || i == 5)
+				{
+					if (j == 2 || j == 3 || j == 6)
+						character[i][j] = ' ';
+					else
+						character[i][j] = '%';
+				}
+
+				if (i == 3)
+				{
+					if (j == 4 || j == 5 || j == 6)
+						character[i][j] = ' ';
+					else
+						character[i][j] = '%';
+				}
+
+				if (i == 2 || i == 4)
+				{
+					if (j == 2 || j == 5 || j == 6)
+						character[i][j] = ' ';
+					else
+						character[i][j] = '%';
+				}
+			}
+		}
+		return character;
+	}
+
+	char **l()
+	{
+		char **character = getCharGrid();
+		for (int i = 0; i < 7; i++)
+		{
+			for (int j = 0; j < 7; j++)
+			{
+				if (i < 6)
+				{
+					if (j == 0 || j == 1)
+						character[i][j] = '%';
+					else
+						character[i][j] = ' ';
+				}
+				else
+					character[i][j] = '%';
+			}
+		}
+		return character;
+	}
+
+	char **m()
+	{
+		char **character = getCharGrid();
+		for (int i = 0; i < 7; i++)
+		{
+			for (int j = 0; j < 7; j++)
+			{
+				if (i == 0)
+				{
+					if (j == 2 || j == 3 || j == 4)
+						character[i][j] = ' ';
+					else
+						character[i][j] = '%';
+				}
+
+				if (i == 1)
+				{
+					if (j == 3)
+					{
+						character[i][j] = ' ';
+					}
+					else
+						character[i][j] = '%';
+				}
+
+				if (i == 2)
+				{
+					character[i][j] = '%';
+				}
+
+				if (i == 3)
+				{
+					if (j == 2 || j == 4)
+						character[i][j] = ' ';
+					else
+						character[i][j] = '%';
+				}
+
+				if (i >= 4 && i <= 6)
+				{
+					if (j == 2 || j == 3 || j == 4)
+						character[i][j] = ' ';
+					else
+						character[i][j] = '%';
+				}
+			}
+		}
+		return character;
+	}
+
+	char **n()
+	{
+		char **character = getCharGrid();
+		for (int i = 0; i < 7; i++)
+		{
+			for (int j = 0; j < 7; j++)
+			{
+				if (i == 0 || i == 6)
+				{
+					if (j == 2 || j == 3 || j == 4)
+						character[i][j] = ' ';
+					else
+						character[i][j] = '%';
+				}
+
+				if (i == 2 || i == 1)
+				{
+					if (j == 3 || j == 4)
+					{
+						character[i][j] = ' ';
+					}
+					else
+						character[i][j] = '%';
+				}
+
+				if (i == 3)
+				{
+					if (j == 2 || j == 4)
+					{
+						character[i][j] = ' ';
+					}
+					else
+					{
+						character[i][j] = '%';
+					}
+				}
+
+				if (i == 4 || i == 5)
+				{
+					if (j == 2 || j == 3)
+						character[i][j] = ' ';
+					else
+						character[i][j] = '%';
+				}
+			}
+		}
+		return character;
+	}
+	char **o()
+	{
+		char **character = getCharGrid();
+		for (int i = 0; i < 7; i++)
+		{
+			for (int j = 0; j < 7; j++)
+			{
+				if (i == 6 || i == 0)
+				{
+					if (j == 0 || j == 6)
+						character[i][j] = ' ';
+					else
+						character[i][j] = '%';
+				}
+				else
+				{
+					if (j == 2 || j == 3 || j == 4)
+						character[i][j] = ' ';
+					else
+						character[i][j] = '%';
+				}
+			}
+
+			//	cout<<endl;
+		}
+		return character;
+	}
+
+	char **p()
+	{
+		char **character = getCharGrid();
+		for (int i = 0; i < 7; i++)
+		{
+			for (int j = 0; j < 7; j++)
+			{
+				if (i == 0 || i == 3)
+				{
+					if (j == 6)
+						character[i][j] = ' ';
+					else
+						character[i][j] = '%';
+				}
+
+				if (i == 1 || i == 2)
+				{
+					if (j == 2 || j == 3 || j == 4)
+					{
+						character[i][j] = ' ';
+					}
+					else
+						character[i][j] = '%';
+				}
+
+				if (i >= 4 && i <= 6)
+				{
+					if (j == 0 || j == 1)
+					{
+						character[i][j] = '%';
+					}
+					else
+					{
+						character[i][j] = ' ';
+					}
+				}
+			}
+		}
+		return character;
+	}
+
+	char **q()
+	{
+		char **character = getCharGrid();
+		for (int i = 0; i < 7; i++)
+		{
+			for (int j = 0; j < 7; j++)
+			{
+				if (i == 0)
+				{
+					if (j % 3 == 0)
+						character[i][j] = ' ';
+					else
+						character[i][j] = '%';
+				}
+
+				if (i >= 1 && i <= 4)
+				{
+					if (j == 2 || j == 3 || j == 4)
+						character[i][j] = ' ';
+					else
+						character[i][j] = '%';
+				}
+
+				if (i == 5)
+				{
+					if (j == 2 || j == 3 || j == 6)
+						character[i][j] = ' ';
+					else
+						character[i][j] = '%';
+				}
+				if (i == 6)
+				{
+					if (j == 0 || j == 3 || j == 4)
+						character[i][j] = ' ';
+					else
+						character[i][j] = '%';
+				}
+			}
+
+			// cout<<endl;
+		}
+		return character;
+	}
+
+	char **r()
+	{
+		char **character = getCharGrid();
+		for (int i = 0; i < 7; i++)
+		{
+			for (int j = 0; j < 7; j++)
+			{
+				if (i == 0 || i == 3)
+				{
+					if (j == 6)
+						character[i][j] = ' ';
+					else
+						character[i][j] = '%';
+				}
+
+				if (i == 1 || i == 2 || i == 5 || i == 6)
+				{
+					if (j == 2 || j == 3 || j == 4)
+						character[i][j] = ' ';
+					else
+						character[i][j] = '%';
+				}
+
+				if (i == 4)
+				{
+					if (j == 2 || j == 3 || j == 6)
+						character[i][j] = ' ';
+					else
+						character[i][j] = '%';
+				}
+			}
+			// cout<<endl;
+		}
+		return character;
+	}
+
+	char **s()
+	{
+		char **character = getCharGrid();
+		for (int i = 0; i < 7; i++)
+		{
+			for (int j = 0; j < 7; j++)
+			{
+				if (i == 0 || i == 6)
+				{
+					if (j == 0 || j == 6)
+						character[i][j] = ' ';
+					else
+						character[i][j] = '%';
+				}
+
+				if (i == 1 || i == 5)
+				{
+					if (j == 3 || j == 2 || j == 4)
+					{
+						character[i][j] = ' ';
+					}
+					else
+						character[i][j] = '%';
+				}
+
+				if (i == 2)
+				{
+					if (j == 4 || j == 5 || j == 6)
+					{
+						character[i][j] = ' ';
+					}
+					else
+					{
+						character[i][j] = '%';
+					}
+				}
+
+				if (i == 3)
+				{
+
+					if (j == 0 || j == 6)
+						character[i][j] = ' ';
+					else
+						character[i][j] = '%';
+				}
+
+				if (i == 4)
+				{
+					if (j == 4 || j == 5 || j == 6)
+						character[i][j] = '%';
+					else
+						character[i][j] = ' ';
+				}
+			}
+		}
+		return character;
+	}
+
+	char **t()
+	{
+		char **character = getCharGrid();
+		for (int i = 0; i < 7; i++)
+		{
+			for (int j = 0; j < 7; j++)
+			{
+				if (i == 0)
+				{
+					character[i][j] = '%';
+				}
+
+				if (i >= 1 && i <= 6)
+				{
+					if (j == 3 || j == 2)
+						character[i][j] = '%';
+					else
+						character[i][j] = ' ';
+				}
+			}
+
+			// cout<<endl;
+		}
+		return character;
+	}
+
+	char **u()
+	{
+		char **character = getCharGrid();
+		for (int i = 0; i < 7; i++)
+		{
+			for (int j = 0; j < 7; j++)
+			{
+				if (i <= 5)
+				{
+					if (j == 2 || j == 3 || j == 4)
+						character[i][j] = ' ';
+					else
+						character[i][j] = '%';
+				}
+				else
+				{
+					if (j == 0 || j == 6)
+					{
+						character[i][j] = ' ';
+					}
+					else
+						character[i][j] = '%';
+				}
+			}
+		}
+		return character;
+	}
+
+	char **v()
+	{
+		char **character = getCharGrid();
+		for (int i = 0; i < 7; i++)
+		{
+			for (int j = 0; j < 7; j++)
+			{
+				if (i == 6)
+				{
+					if (j == 2 || j == 3 || j == 4)
+						character[i][j] = '%';
+					else
+						character[i][j] = ' ';
+				}
+
+				if (i == 5)
+				{
+					if (j % 3 == 0)
+					{
+						character[i][j] = ' ';
+					}
+					else
+						character[i][j] = '%';
+				}
+				if (i < 5)
+				{
+					if (j == 0 || j == 1 || j == 5 || j == 6)
+					{
+						character[i][j] = '%';
+					}
+					else
+					{
+						character[i][j] = ' ';
+					}
+				}
+			}
+		}
+		return character;
+	}
+
+	char **w()
+	{
+		char **character = getCharGrid();
+		for (int i = 0; i < 7; i++)
+		{
+			for (int j = 0; j < 7; j++)
+			{
+				if (i == 0 || i == 1 || i == 2 || i == 6)
+				{
+					if (j == 2 || j == 3 || j == 4)
+						character[i][j] = ' ';
+					else
+						character[i][j] = '%';
+				}
+
+				if (i == 3)
+				{
+					if (j == 2 || j == 4)
+						character[i][j] = ' ';
+					else
+						character[i][j] = '%';
+				}
+
+				if (i == 4)
+				{
+					character[i][j] = '%';
+				}
+
+				if (i == 5)
+				{
+					if (j == 3)
+						character[i][j] = ' ';
+					else
+						character[i][j] = '%';
+				}
+			}
+
+			// cout<<endl;
+		}
+		return character;
+	}
+
+	char **x()
+	{
+		char **character = getCharGrid();
+		for (int i = 0; i < 7; i++)
+		{
+			for (int j = 0; j < 7; j++)
+			{
+				if (i == 0 || i == 1 || i == 5 || i == 6)
+				{
+					if (j == 2 || j == 3 || j == 6)
+						character[i][j] = ' ';
+					else
+						character[i][j] = '%';
+				}
+
+				if (i == 2 || i == 4)
+				{
+					if (j == 0 || j == 5 || j == 6)
+						character[i][j] = ' ';
+					else
+						character[i][j] = '%';
+				}
+
+				if (i == 3)
+				{
+					if (j == 3 || j == 2)
+						character[i][j] = '%';
+					else
+						character[i][j] = ' ';
+				}
+			}
+		}
+		return character;
+	}
+	char **y()
+	{
+		char **character = getCharGrid();
+		for (int i = 0; i < 7; i++)
+		{
+
+			for (int j = 0; j < 7; j++)
+			{
+
+				if (i == 0 || i == 1 || i == 2)
+				{
+					if (j == 2 || j == 3 || j == 6)
+						character[i][j] = ' ';
+					else
+						character[i][j] = '%';
+				}
+
+				if (i == 3)
+				{
+					if (j == 0 || j == 5 || j == 6)
+						character[i][j] = ' ';
+					else
+						character[i][j] = '%';
+				}
+
+				if (i > 3)
+				{
+					if (j == 2 || j == 3)
+						character[i][j] = '%';
+					else
+						character[i][j] = ' ';
+				}
+			}
+		}
+		return character;
+	}
+
+	char **z()
+	{
+		char **character = getCharGrid();
+		for (int i = 0; i < 7; i++)
+		{
+			for (int j = 0; j < 7; j++)
+			{
+				if (i == 0 || i == 6)
+				{
+					if (j > 0)
+						character[i][j] = '%';
+					else
+						character[i][j] = ' ';
+				}
+
+				if (i == 1)
+				{
+					if (j == 5 || j == 6)
+						character[i][j] = '%';
+					else
+						character[i][j] = ' ';
+				}
+
+				if (i == 2)
+				{
+					if (j == 4 || j == 5)
+						character[i][j] = '%';
+					else
+						character[i][j] = ' ';
+				}
+				if (i == 3)
+				{
+					if (j == 3 || j == 4)
+						character[i][j] = '%';
+					else
+						character[i][j] = ' ';
+				}
+				if (i == 4)
+				{
+					if (j == 3 || j == 2)
+						character[i][j] = '%';
+					else
+						character[i][j] = ' ';
+				}
+				if (i == 5)
+				{
+					if (j == 1 || j == 2)
+						character[i][j] = '%';
+					else
+						character[i][j] = ' ';
+				}
+			}
+
+			// cout<<endl;
+		}
+		return character;
+	}
+
+	// digits
+	char **zero()
+	{
+		char **character = getCharGrid();
+		for (int i = 0; i < 7; i++)
+		{
+			for (int j = 0; j < 7; j++)
+			{
+				if (i == 0 || i == 6)
+				{
+					if (j == 1 || j == 2 || j == 4 || j == 5)
+						character[i][j] = '0';
+					else
+						character[i][j] = ' ';
+				}
+				if (i == 1 || i == 5)
+				{
+					if (j == 0 || j == 1 || j == 5 || j == 6)
+						character[i][j] = '0';
+					else
+						character[i][j] = ' ';
+				}
+				if (i == 2)
+				{
+					if (j == 0 || j == 1 || j == 4 || j == 5 || j == 6)
+						character[i][j] = '0';
+					else
+						character[i][j] = ' ';
+				}
+				if (i == 3)
+				{
+					if (j == 0 || j == 1 || j == 3 || j == 5 || j == 6)
+						character[i][j] = '0';
+					else
+						character[i][j] = ' ';
+				}
+				if (i == 4)
+				{
+					if (j == 0 || j == 1 || j == 2 || j == 5 || j == 6)
+						character[i][j] = '0';
+					else
+						character[i][j] = ' ';
+				}
+			}
+		}
+		return character;
+	}
+
+	char **one()
+	{
+		char **character = getCharGrid();
+		for (int i = 0; i < 7; i++)
+		{
+			for (int j = 0; j < 7; j++)
+			{
+				if (i == 0 || i == 2 || i == 3 || i == 4 || i == 5)
+				{
+					if (j == 2 || j == 3)
+						character[i][j] = '1';
+					else
+						character[i][j] = ' ';
+				}
+				if (i == 1)
+				{
+					if (j == 1 || j == 2 || j == 3)
+						character[i][j] = '1';
+					else
+						character[i][j] = ' ';
+				}
+				if (i == 6)
+				{
+					if (j == 1 || j == 2 || j == 3 || j == 4)
+						character[i][j] = '1';
+					else
+						character[i][j] = ' ';
+				}
+			}
+		}
+		return character;
+	}
+	char **two()
+	{
+		char **character = getCharGrid();
+		for (int i = 0; i < 7; i++)
+		{
+			for (int j = 0; j < 7; j++)
+			{
+				if (i == 0)
+				{
+					if (j == 0 || j == 1 || j == 3 || j == 4)
+						character[i][j] = '2';
+					else
+						character[i][j] = ' ';
+				}
+				if (i == 1)
+				{
+					if (j == 0 || j == 1 || j == 4 || j == 5)
+						character[i][j] = '2';
+					else
+						character[i][j] = ' ';
+				}
+				if (i == 2)
+				{
+					if (j == 4 || j == 5)
+						character[i][j] = '2';
+					else
+						character[i][j] = ' ';
+				}
+				if (i == 3)
+				{
+					if (j == 3 || j == 4)
+						character[i][j] = '2';
+					else
+						character[i][j] = ' ';
+				}
+				if (i == 4)
+				{
+					if (j == 2 || j == 3)
+						character[i][j] = '2';
+					else
+						character[i][j] = ' ';
+				}
+				if (i == 5)
+				{
+					if (j == 1 || j == 5 || j == 6)
+						character[i][j] = '2';
+					else
+						character[i][j] = ' ';
+				}
+				if (i == 6)
+				{
+					if (j == 0 || j == 1 || j == 2 || j == 3 || j == 4 || j == 5)
+						character[i][j] = '2';
+					else
+						character[i][j] = ' ';
+				}
+			}
+		}
+		return character;
+	}
+
+	char **three()
+	{
+		char **character = getCharGrid();
+		for (int i = 0; i < 7; i++)
+		{
+			for (int j = 0; j < 7; j++)
+			{
+				if (i == 0 || i == 6)
+				{
+					if (j == 1 || j == 2 || j == 4 || j == 5)
+						character[i][j] = '3';
+					else
+						character[i][j] = ' ';
+				}
+				if (i == 1 || i == 5)
+				{
+					if (j == 0 || j == 1 || j == 5 || j == 6)
+						character[i][j] = '3';
+					else
+						character[i][j] = ' ';
+				}
+				if (i == 2 || i == 4)
+				{
+					if (j == 5 || j == 6)
+						character[i][j] = '3';
+					else
+						character[i][j] = ' ';
+				}
+				if (i == 3)
+				{
+					if (j == 3 || j == 4 || j == 5)
+						character[i][j] = '3';
+					else
+						character[i][j] = ' ';
+				}
+			}
+		}
+		return character;
+	}
+
+	char **four()
+	{
+		char **character = getCharGrid();
+		for (int i = 0; i < 7; i++)
+		{
+			for (int j = 0; j < 7; j++)
+			{
+				if (i == 0 || i == 5 || i == 6)
+				{
+					if (j == 4 || j == 5)
+						character[i][j] = '4';
+					else
+						character[i][j] = ' ';
+				}
+				if (i == 1)
+				{
+					if (j == 2 || j == 4 || j == 5)
+						character[i][j] = '4';
+					else
+						character[i][j] = ' ';
+				}
+				if (i == 2)
+				{
+					if (j == 1 || j == 2 || j == 4 || j == 5)
+						character[i][j] = '4';
+					else
+						character[i][j] = ' ';
+				}
+				if (i == 3)
+				{
+					if (j == 0 || j == 1 || j == 4 || j == 5)
+						character[i][j] = '4';
+					else
+						character[i][j] = ' ';
+				}
+				if (i == 4)
+				{
+					if (j == 0 || j == 1 || j == 2 || j == 4 || j == 5 || j == 6)
+						character[i][j] = '4';
+					else
+						character[i][j] = ' ';
+				}
+			}
+		}
+		return character;
+	}
+
+	char **five()
+	{
+		char **character = getCharGrid();
+		for (int i = 0; i < 7; i++)
+		{
+			for (int j = 0; j < 7; j++)
+			{
+				if (i == 0)
+				{
+					if (j == 0 || j == 1 || j == 2 || j == 3 || j == 4 || j == 5)
+						character[i][j] = '5';
+					else
+						character[i][j] = ' ';
+				}
+				if (i == 1)
+				{
+					if (j == 0 || j == 1)
+						character[i][j] = '5';
+					else
+						character[i][j] = ' ';
+				}
+				if (i == 2)
+				{
+					if (j == 0 || j == 1 || j == 3 || j == 4)
+						character[i][j] = '5';
+					else
+						character[i][j] = ' ';
+				}
+				if (i == 3)
+				{
+					if (j == 4 || j == 5)
+						character[i][j] = '5';
+					else
+						character[i][j] = ' ';
+				}
+				if (i == 4 || i == 5)
+				{
+					if (j == 0 || j == 1 || j == 4 || j == 5)
+						character[i][j] = '5';
+					else
+						character[i][j] = ' ';
+				}
+				if (i == 6)
+				{
+					if (j == 2 || j == 3 || j == 4)
+						character[i][j] = '5';
+					else
+						character[i][j] = ' ';
+				}
+			}
+		}
+		return character;
+	}
+
+	char **six()
+	{
+		char **character = getCharGrid();
+		for (int i = 0; i < 7; i++)
+		{
+			for (int j = 0; j < 7; j++)
+			{
+				if (i == 0)
+				{
+					if (j == 1 || j == 2 || j == 4 || j == 5 || j == 6)
+						character[i][j] = '6';
+					else
+						character[i][j] = ' ';
+				}
+				if (i == 1 || i == 4 || i == 5)
+				{
+					if (j == 0 || j == 1 || j == 5 || j == 6)
+						character[i][j] = '6';
+					else
+						character[i][j] = ' ';
+				}
+				if (i == 2)
+				{
+					if (j == 0 || j == 1)
+						character[i][j] = '6';
+					else
+						character[i][j] = ' ';
+				}
+				if (i == 3)
+				{
+					if (j == 0 || j == 1 || j == 3 || j == 4 || j == 5)
+						character[i][j] = '6';
+					else
+						character[i][j] = ' ';
+				}
+				if (i == 6)
+				{
+					if (j == 1 || j == 2 || j == 4 || j == 5)
+						character[i][j] = '6';
+					else
+						character[i][j] = ' ';
+				}
+			}
+		}
+		return character;
+	}
+
+	char **seven()
+	{
+		char **character = getCharGrid();
+		for (int i = 0; i < 7; i++)
+		{
+			for (int j = 0; j < 7; j++)
+			{
+				if (i == 0)
+				{
+					if (j == 0 || j == 1 || j == 2 || j == 3 || j == 4 || j == 5)
+						character[i][j] = '7';
+					else
+						character[i][j] = ' ';
+				}
+				if (i == 1)
+				{
+					if (j == 0 || j == 1 || j == 5)
+						character[i][j] = '7';
+					else
+						character[i][j] = ' ';
+				}
+				if (i == 2)
+				{
+					if (j == 3 || j == 4)
+						character[i][j] = '7';
+					else
+						character[i][j] = ' ';
+				}
+				if (i == 3 || i == 4 || i == 5 || i == 6)
+				{
+					if (j == 2 || j == 3)
+						character[i][j] = '7';
+					else
+						character[i][j] = ' ';
+				}
+			}
+		}
+		return character;
+	}
+
+	char **eight()
+	{
+		char **character = getCharGrid();
+		for (int i = 0; i < 7; i++)
+		{
+			for (int j = 0; j < 7; j++)
+			{
+				if (i == 0 || i == 3 || i == 6)
+				{
+					if (j == 1 || j == 2 || j == 4 || j == 5)
+						character[i][j] = '8';
+					else
+						character[i][j] = ' ';
+				}
+				if (i == 1 || i == 2 || i == 4 || i == 5)
+				{
+					if (j == 0 || j == 1 || j == 5 || j == 6)
+						character[i][j] = '8';
+					else
+						character[i][j] = ' ';
+				}
+			}
+		}
+		return character;
+	}
+
+	char **nine()
+	{
+		char **character = getCharGrid();
+		for (int i = 0; i < 7; i++)
+		{
+			for (int j = 0; j < 7; j++)
+			{
+				if (i == 0 || i == 6)
+				{
+					if (j == 1 || j == 2 || j == 4 || j == 5)
+						character[i][j] = '9';
+					else
+						character[i][j] = ' ';
+				}
+				if (i == 1)
+				{
+					if (j == 1 || j == 5 || j == 6)
+						character[i][j] = '9';
+					else
+						character[i][j] = ' ';
+				}
+				if (i == 2)
+				{
+					if (j == 0 || j == 1 || j == 5 || j == 6)
+						character[i][j] = '9';
+					else
+						character[i][j] = ' ';
+				}
+				if (i == 3)
+				{
+					if (j == 1 || j == 2 || j == 4 || j == 5 || j == 6)
+						character[i][j] = '9';
+					else
+						character[i][j] = ' ';
+				}
+				if (i == 4)
+				{
+					if (j == 5 || j == 6)
+						character[i][j] = '9';
+					else
+						character[i][j] = ' ';
+				}
+				if (i == 5)
+				{
+					if (j == 0 || j == 1 || j == 5 || j == 6)
+						character[i][j] = '9';
+					else
+						character[i][j] = ' ';
+				}
+			}
+		}
+		return character;
+	}
+
+	 // for space
+     char **space()
+    {
+        char **character = getCharGrid(1,1);
+
+        character[0][0] = ' ';
+
+        return character;
+    }
+};
+
+
+namespace ascii
+{
+
+    class Ascii
+    {
+
+    public:
+        Fonts *font;
+        Ascii()
+        {
+            this->font = new SevenStar();
+        }
+        void print(const std::string &text)
+        {
+
+            char **character = nullptr;
+
+            for (size_t i = 0; i < text.size(); i++)
+            {
+                char c = text[i];
+
+                // Uppercase alphabets
+                if (c == 'A')
+                    character = font->A();
+                else if (c == 'B')
+                    character = font->B();
+                else if (c == 'C')
+                    character = font->C();
+                else if (c == 'D')
+                    character = font->D();
+                else if (c == 'E')
+                    character = font->E();
+                else if (c == 'F')
+                    character = font->F();
+                else if (c == 'G')
+                    character = font->G();
+                else if (c == 'H')
+                    character = font->H();
+                else if (c == 'I')
+                    character = font->I();
+                else if (c == 'J')
+                    character = font->J();
+                else if (c == 'K')
+                    character = font->K();
+                else if (c == 'L')
+                    character = font->L();
+                else if (c == 'M')
+                    character = font->M();
+                else if (c == 'N')
+                    character = font->N();
+                else if (c == 'O')
+                    character = font->O();
+                else if (c == 'P')
+                    character = font->P();
+                else if (c == 'Q')
+                    character = font->Q();
+                else if (c == 'R')
+                    character = font->R();
+                else if (c == 'S')
+                    character = font->S();
+                else if (c == 'T')
+                    character = font->T();
+                else if (c == 'U')
+                    character = font->U();
+                else if (c == 'V')
+                    character = font->V();
+                else if (c == 'W')
+                    character = font->W();
+                else if (c == 'X')
+                    character = font->X();
+                else if (c == 'Y')
+                    character = font->Y();
+                else if (c == 'Z')
+                    character = font->Z();
+
+                // Lowercase alphabets
+                else if (c == 'a')
+                    character = font->a();
+                else if (c == 'b')
+                    character = font->b();
+                else if (c == 'c')
+                    character = font->c();
+                else if (c == 'd')
+                    character = font->d();
+                else if (c == 'e')
+                    character = font->e();
+                else if (c == 'f')
+                    character = font->f();
+                else if (c == 'g')
+                    character = font->g();
+                else if (c == 'h')
+                    character = font->h();
+                else if (c == 'i')
+                    character = font->i();
+                else if (c == 'j')
+                    character = font->j();
+                else if (c == 'k')
+                    character = font->k();
+                else if (c == 'l')
+                    character = font->l();
+                else if (c == 'm')
+                    character = font->m();
+                else if (c == 'n')
+                    character = font->n();
+                else if (c == 'o')
+                    character = font->o();
+                else if (c == 'p')
+                    character = font->p();
+                else if (c == 'q')
+                    character = font->q();
+                else if (c == 'r')
+                    character = font->r();
+                else if (c == 's')
+                    character = font->s();
+                else if (c == 't')
+                    character = font->t();
+                else if (c == 'u')
+                    character = font->u();
+                else if (c == 'v')
+                    character = font->v();
+                else if (c == 'w')
+                    character = font->w();
+                else if (c == 'x')
+                    character = font->x();
+                else if (c == 'y')
+                    character = font->y();
+                else if (c == 'z')
+                    character = font->z();
+
+                // Numbers
+                else if (c == '0')
+                    character = font->zero();
+                else if (c == '1')
+                    character = font->one();
+                else if (c == '2')
+                    character = font->two();
+                else if (c == '3')
+                    character = font->three();
+                else if (c == '4')
+                    character = font->four();
+                else if (c == '5')
+                    character = font->five();
+                else if (c == '6')
+                    character = font->six();
+                else if (c == '7')
+                    character = font->seven();
+                else if (c == '8')
+                    character = font->eight();
+                else if (c == '9')
+                    character = font->nine();
+
+                // for space
+                else if (c == ' ')
+                    character = font->space();
+
+                font->pushChar(character);
+            }
+            font->printvector();
+            // font->destroyspace();
+        }
+    };
+} // namespace ascii
+
+/// LICENSE_END.23
 
 
 /// LICENSE_START.7
@@ -4094,13 +7661,6 @@ int LZ4_decompress_safe_continue (LZ4_streamDecode_t* LZ4_streamDecode, const ch
 /// LICENSE_END.22
 #endif
 
-bool flagignore;
-bool flaghw;	// this slow down vs HWSHA1
-bool flagdebug;
-bool flagdebug2;
-bool flagdebug3;
-bool flagdebug4;
-bool flagdebug5;
 
 #ifdef HWSHA2
 void getcpuid(uint32_t eax, uint32_t ecx, uint32_t& o_a,uint32_t& o_b,uint32_t& o_c,uint32_t& o_d)
@@ -13124,6 +16684,7 @@ struct s_error
 	vector<int32_t>	attrs;
 	s_error(): counter(0) {text="";}
 };
+
 typedef map<int,s_error> 	MAPPAERRORS;
 /// Global variables
 /// not in  for pthread that does not like class and methods
@@ -13132,198 +16693,6 @@ vector<s_crc32block> 	g_crc32;
 vector<uint64_t> 		g_arraybytescanned;
 vector<uint64_t> 		g_arrayfilescanned;
 MAPPAERRORS g_errors;
-string	g_processorname="";
-
-char* 	g_password;     				// points to password_string or NULL
-char 	g_password_string[32]; 			// hash of -key argument
-	
-bool	g_flagcreating;
-char 	command;
-string	g_franzsnap;
-string 	g_vss_shadow;
-string  g_replaceme;
-string 	g_copy;
-string 	g_freeze;
-string 	g_exec_error;
-string  g_exec_warn;
-string 	g_exec_ok;
-string 	g_exec_text;
-string 	g_exec;
-int 	g_255;
-string 	g_output;
-string  g_ifexist;
-///string  g_ismounted;
-string 	g_script;
-string 	g_sfx;
-string 	g_sfxto;
-string 	g_sfxnot;
-string 	g_sfxonly;
-string 	g_sfxuntil;
-string 	g_deleteinto;
-bool 	g_sfxflagall;
-bool  	g_sfxflagforce;
-bool	g_sse42;
-bool	g_flagmultipart;
-string 	g_archive;
-string	g_indexname;
-string	g_pidname;
-string	g_backupposition;
-FILE* 	g_output_handle;
-int64_t g_robocopy_check_sorgente;
-int64_t g_robocopy_check_destinazione;
-int64_t g_robocopy_makepath;
-int64_t g_robocopy_makepath2;
-int64_t g_robocopy_isequal;
-int64_t g_robocopy_close;
-int64_t g_robocopy_close2;
-int64_t g_robocopy_touch;
-int64_t g_robocopy_delete;
-int64_t	g_robocopy_readopen;
-int64_t	g_robocopy_openoutfile;
-int64_t g_robocopy_fclose;
-int64_t g_robocopy_fread;
-int64_t g_robocopy_fwrite;
-
-bool	g_testifselected;
-uint64_t g_chunk_size	=0;
-int64_t g_start			=0;
-int64_t g_dimensione	=0;
-int64_t g_scritti		=0;
-int64_t g_maxposition	=0;
-int64_t g_zerotime		=0;
-int64_t g_bytescanned	=0;
-int64_t g_filescanned	=0;
-int64_t g_worked		=0;
-int64_t g_fwritten		=0;
-int64_t g_fexpected		=0;
-int64_t g_fwrittencrc32	=0;
-
-int64_t 	g_header_pos	=0;
-bool		g_crc_getheader	=false; ///0 =  header; 1= jidac; 2=body
-bool		g_veryfirst		=true;
-uint32_t 	g_crc_header	=0;
-uint32_t 	g_crc_jidac		=0;
-uint32_t 	g_crc_body		=0;
-
-
-int64_t g_ramdisksize	=0;
-int64_t g_rd			=0;
-int64_t g_rd_expected	=0;
-int64_t g_startrd		=0;
-int64_t g_startdownload	=0;
-int 	g_rd_ultimotempo=0;
-int64_t g_cdatasize		=0;
-unsigned g_htsize		=0;
-bool	g_fakewrite		=false;	// in add() disable write (ransomware)
-uint64_t minsize;
-uint64_t maxsize;
-int64_t	g_datefrom		=0;
-int64_t g_dateto		=0;
-string	g_until;
-int		g_rangefrom		=0;
-int		g_rangeto		=0;
-int		g_rangelast		=0;
-///int		red4			=-1;
-#ifdef unix
-string g_tempsnapshot;
-string g_basesnapshot;
-string g_dataset;
-#endif
-bool flagnochecksum;
-bool flagcrc32;
-bool flagxxhash64;
-bool flagxxhash64b;
-bool flagsha1;
-bool flagsha256;
-bool flagsha256b;
-bool flagxxh3;
-bool flagmd5;
-bool flagmd5b;
-bool flagsha1b;
-bool flagxxh3b;
-bool flagblake3;
-bool flagblake3b;
-bool flagsha3;
-bool flagsha3b;
-bool flagwhirlpool;
-bool flaghighway64;
-bool flaghighway128;
-bool flaghighway256;
-bool flagcrc32c;
-bool flagwyhash;
-bool flagnilsimsa;
-bool flagentropy;
-bool flagwindate;
-
-
-bool flagbackupxxh3;
-bool flag715;
-bool flagappend;
-bool flagbig;
-bool flagchecksum;
-bool flagchecktxt;
-bool flagsfx;
-bool flagfasttxt;
-bool flagcomment;
-bool flagdesc;
-bool flagdonotforcexls;
-bool flagfilelist;
-bool flagads;
-bool flagfast;
-bool flagfix255;
-bool flagfixeml;
-bool flagflat;
-bool flagforce;
-bool flagforcewindows;
-bool flagforcezfs;
-bool flagfrugal;
-bool flaghashdeep;
-bool flagkill;
-bool flagmm;
-bool flagattr;
-bool flagthunderbird;
-bool flagnoattributes;
-bool flagnodedup;
-bool flagnoeta;
-bool flagnopath;
-bool flagnoqnap;
-bool flagnomac;
-bool flagnosynology;
-bool flagnorecursion;
-bool flagnosort;
-bool flagpakka;
-bool flagdistinct;
-bool flagparanoid;
-bool flagpaq;
-bool flagcollision;
-bool flagramdisk;
-bool flagrename;
-bool flagsilent;
-bool flagnoconsole;
-bool flagnocolor;
-bool flagskipzfs;
-bool flagspace;
-bool flagssd;
-bool flagquick;
-bool flagquiet;
-bool flagstat;
-bool flagstdin;
-bool flagterse;
-bool flagstdout;
-bool flagstore;
-bool flagtar;
-bool flagtest;
-bool flagtouch;
-bool flagutc;
-bool flagdate;
-bool flagutf;
-bool flagpause;
-bool flagverbose;
-bool flagverify;
-bool flagvss;
-bool flagzero;
-bool flaghome;
-bool flagfixcase;
 
 #ifdef _WIN32
 ///bool flagdd;
@@ -13356,233 +16725,12 @@ int 	g_ioBUFSIZE=1048576;
 int		g_thechosenhash;
 string	g_thechosenhash_str;
 
-#ifdef _WIN32
-#define MYFOREGROUND_BLUE            0x0001
-#define MYFOREGROUND_GREEN           0x0002
-#define MYFOREGROUND_RED             0x0004
-#define MYFOREGROUND_INTENSITY       0x0008
-#define MYBACKGROUND_BLUE            0x0010
-#define MYBACKGROUND_GREEN           0x0020
-#define MYBACKGROUND_RED             0x0040
-#define MYBACKGROUND_INTENSITY       0x0080
-#else
-/// *nix colors
-#define TEXT_BLACK   	"\x1b[30m"
-#define TEXT_RED     	"\x1b[31m"
-#define TEXT_GREEN   	"\x1b[32m"
-#define TEXT_YELLOW  	"\x1b[33m"
-#define TEXT_BLUE    	"\x1b[34m"
-#define TEXT_MAGENTA	"\x1b[35m"
-#define TEXT_CYAN		"\x1b[36m"
-#define TEXT_WHITE		"\x1b[37m"
-#define TEXT_RESET		"\x1b[0m"
-
-///#define TEXT_BLACK_BRIGHT   "\x1b[1;30m"
-
-#define TEXT_BLACK_BRIGHT   	"\x1b[1;30m"
-#define TEXT_RED_BRIGHT     	"\x1b[1;31m"
-#define TEXT_GREEN_BRIGHT   	"\x1b[1;32m"
-#define TEXT_YELLOW_BRIGHT  	"\x1b[1;33m"
-#define TEXT_BLUE_BRIGHT    	"\x1b[1;34m"
-#define TEXT_MAGENTA_BRIGHT		"\x1b[1;35m"
-#define TEXT_CYAN_BRIGHT		"\x1b[1;36m"
-#define TEXT_WHITE_BRIGHT		"\x1b[1;37m"
-#define TEXT_RESET_BRIGHT		"\x1b[1;0m"
-
-#define BG_BLACK   		"\x1b[40m"
-#define BG_RED     		"\x1b[41m"
-#define BG_GREEN   		"\x1b[42m"
-#define BG_YELLOW  		"\x1b[43m"
-#define BG_BLUE    		"\x1b[44m"
-#define BG_MAGENTA 		"\x1b[45m"
-#define BG_CYAN    		"\x1b[46m"
-#define BG_WHITE   		"\x1b[47m"
-
-#define BG_BLACK_BRIGHT			"\x1b[1;40m"
-#define BG_RED_BRIGHT     		"\x1b[1;41m"
-#define BG_GREEN_BRIGHT   		"\x1b[1;42m"
-#define BG_YELLOW_BRIGHT  		"\x1b[1;43m"
-#define BG_BLUE_BRIGHT    		"\x1b[1;44m"
-#define BG_MAGENTA_BRIGHT 		"\x1b[1;45m"
-#define BG_CYAN_BRIGHT    		"\x1b[1;46m"
-#define BG_WHITE_BRIGHT   		"\x1b[1;47m"
-#endif
-
-
-int g_console_attributes=-1;
-#ifdef _WIN32
-void color_save()
-{
-	if (flagnocolor)
-		return;
-	HANDLE hconsole=GetStdHandle(STD_OUTPUT_HANDLE);
-	if (hconsole==INVALID_HANDLE_VALUE)
-		return;
-	CONSOLE_SCREEN_BUFFER_INFO csbiInfo;
-	GetConsoleScreenBufferInfo(hconsole,&csbiInfo);
-	if ((csbiInfo.wAttributes & MYFOREGROUND_BLUE) &&
-	 (csbiInfo.wAttributes & MYFOREGROUND_GREEN) &&
-	 (csbiInfo.wAttributes & MYFOREGROUND_RED))
-		g_console_attributes=csbiInfo.wAttributes;
-}
-#endif
-void color_restore()
-{
-	if (flagnocolor)
-		return;
-#ifdef _WIN32
-	if (g_console_attributes<0)
-		return;
-	HANDLE hconsole=GetStdHandle(STD_OUTPUT_HANDLE);
-	if (hconsole==INVALID_HANDLE_VALUE)
-		return;
-	SetConsoleTextAttribute(hconsole,g_console_attributes);
-#else
-	printf(TEXT_RESET);
-#endif
-}
-#ifdef _WIN32
-void color_something(int i_color)
-{
-	if (flagnocolor)
-		return;
-	if (g_console_attributes<0)
-		return;
-	HANDLE hconsole=GetStdHandle(STD_OUTPUT_HANDLE);
-	if (hconsole==INVALID_HANDLE_VALUE)
-		return;
-	SetConsoleTextAttribute(hconsole,i_color);
-	return;
-}
-#endif
-void color_red()
-{
-	if (flagnocolor)
-		return;
-#ifdef _WIN32
-	color_something(4);
-#else
-	printf(TEXT_RED_BRIGHT);
-#endif
-}
-void color_green()
-{
-	if (flagnocolor)
-		return;
-#ifdef _WIN32
-	///getenv("WT_SESSION")
-	color_something(MYFOREGROUND_GREEN+MYFOREGROUND_INTENSITY);
-#else
-	printf(TEXT_GREEN_BRIGHT);
-#endif
-}
-void color_yellow()
-{
-	if (flagnocolor)
-		return;
-#ifdef _WIN32
-		color_something(14);
-#else
-	printf(TEXT_YELLOW_BRIGHT);
-#endif
-}
-void color_blackongreen()
-{
-	if (flagnocolor)
-		return;
-#ifdef _WIN32
-	color_something(160);
-#else
-	
-#if (defined(__APPLE__) && defined(__MACH__)) || defined(__HAIKU__)
-	color_green();
-#else
-	printf("\x1b[30m" "\x1b[102m");
-#endif
-#endif
-}
-
 void seppuku()
 {
 	if (g_output_handle)
 		fclose(g_output_handle);
 	color_restore();
 	exit(0);
-}
-string print_datetime(bool i_flagout=true);
-
-void myprintf(const char *fmt, ...)
-{
-	char buffer[4096];
-	va_list args;
-    va_start(args, fmt);
-    vsnprintf(buffer,sizeof(buffer),fmt,args);
-	if (g_output_handle!=0)
-	{
-		if (flagdebug3)
-		{
-			string temp=print_datetime(false);
-		///	printf("Ciaooo |%s|\n",temp.c_str());
-			fprintf(g_output_handle,"%s",temp.c_str());
-		}
-		fprintf(g_output_handle,"%s",buffer);
-	}
-	va_end(args);
-	
-	if (flagsilent)
-		return;
-	
-	if (strlen(buffer)<7)
-	{
-		printf("%s",buffer);
-#ifndef _WIN32
-		fflush(stdout);
-#endif
-		return;
-	}
-
-	if (buffer[5]!=':')
-	{
-		printf("%s",buffer);
-#ifndef _WIN32
-		fflush(stdout);
-#endif
-		return;
-	}			
-	if ( 	(!isdigit(buffer[0])) ||
-			(!isdigit(buffer[1])) ||
-			(!isdigit(buffer[2])) ||
-			(!isdigit(buffer[3])) ||
-			(!isdigit(buffer[4]))	)
-	{
-		printf("%s",buffer);
-#ifndef _WIN32
-		fflush(stdout);
-#endif
-		return;
-	}
-	if (flagdebug3)
-	{
-		color_yellow();
-		print_datetime();
-	}
-	if (flagdebug)
-	{
-		char salva=buffer[6];
-		buffer[6]=0;
-		color_green();
-		printf("%s",buffer);
-		color_restore();
-		buffer[6]=salva;
-		printf("%s",buffer+6);
-	}
-	else
-		printf("%s",buffer+7);
-#ifndef _WIN32
-		fflush(stdout);
-#endif
-			
-	
 }
 
 bool ihavehw()
@@ -13837,6 +16985,11 @@ struct tipohash
 		hashdescription	=i_hashdescription;
 		switchname		=i_switchname;
 		switchflag		=i_switchflag;
+		if (i_finalize==NULL)
+		{
+			myprintf("16989:  i_finalize NULL! %s\n",i_hashname.c_str());
+		}
+		
 		ffinalize		=i_finalize;
 		hashlen			=i_hashlen;
 		franzocode		="";
@@ -21540,6 +24693,19 @@ string format_datetime(string i_formato,tm* t=NULL)
 	myreplaceall(i_formato,"%datetime",datetime);
 	myreplaceall(i_formato,"%date",date);
 	myreplaceall(i_formato,"%time",time);
+	
+	myreplaceall(i_formato,"$hour",hour);
+	myreplaceall(i_formato,"$min",min);
+	myreplaceall(i_formato,"$sec",sec);
+	myreplaceall(i_formato,"$weekday",weekday);
+	myreplaceall(i_formato,"$year",year);
+	myreplaceall(i_formato,"$month",month);
+	myreplaceall(i_formato,"$day",day);
+	myreplaceall(i_formato,"$week",week);
+	myreplaceall(i_formato,"$timestamp",datetime);
+	myreplaceall(i_formato,"$datetime",datetime);
+	myreplaceall(i_formato,"$date",date);
+	myreplaceall(i_formato,"$time",time);
 	return i_formato;
 }
 bool myreplace(string& i_str, const string& i_from, const string& i_to)
@@ -21653,6 +24819,10 @@ string prendiestensione(const string& s)
 string extractfilepath(const string& i_string)
 {
 	size_t i = i_string.rfind('/', i_string.length());
+	if (i != string::npos)
+		return(i_string.substr(0, i+1));
+
+	i = i_string.rfind('\\', i_string.length());
 	if (i != string::npos)
 		return(i_string.substr(0, i+1));
 	return("");
@@ -36234,15 +39404,53 @@ const char* const WB="wb";
 const char* const RBPLUS="rb+";
 const char* const ABPLUS="ab+";
 const char* const AB="ab";
+vector<FP> 		g_write_fp;
+vector<string> 	g_write_filename;
+
+FP myfopen(const char* filename, const char* mode)
+{
+	if (g_control_c)
+	{
+		myprintf("\n\nThe house is closed by control-c!\n");
+		return FPNULL;
+	}
+	FP risultato=fopen(filename,mode);
+	if (risultato!=FPNULL)
+		if (g_chunk_size>0)
+			if (mode!=RB)
+			{
+				g_write_fp.push_back(risultato);
+				g_write_filename.push_back(filename);
+				if (flagdebug3)
+					myprintf("39396: write on               (pool %s)         |%s|         %s\n",migliaia(g_write_fp.size()),migliaia(int64_t(risultato)),filename);
+			}
+	return risultato;
+}
 
 int myfclose(FP* fp)
 {
-	if (flagdebug)
-		if ((*fp)==FPNULL)
-		{	
-			myprintf("06702: fclose on FPNULL ignored\n");
-			return EOF;
-		}
+	if ((*fp)==FPNULL)
+	{	
+		if (flagdebug)
+			myprintf("06702: fclose on unix FPNULL ignored\n");
+		return EOF;
+	}
+
+	if (g_chunk_size>0)
+	{
+		for (unsigned int i=0;i<g_write_fp.size();i++)
+			if ((*fp)==g_write_fp[i])
+			{
+				g_write_fp.erase(g_write_fp.begin()+i);
+				g_write_filename.erase(g_write_filename.begin()+i);
+				if (flagdebug3)
+				myprintf("39410: ***********=============== [3] %d EUREKONAAA %s\n",i,g_write_filename[i].c_str());
+				break;
+			}
+		if (flagdebug3)
+			myprintf("39414: EXIT da eliminazione fp %s\n",migliaia(int64_t(*fp)));
+	}
+
 	if (flagdebug3)
 		myprintf("06706: pre closing fp %s\n",migliaia(int64_t(*fp)));
 	int risultato=fclose(*fp);
@@ -36256,10 +39464,18 @@ int myfclose(FP* fp)
 #else // Windows
 typedef HANDLE FP;
 const FP FPNULL=INVALID_HANDLE_VALUE;
+vector<FP> 		g_write_fp;
+vector<string> 	g_write_filename;
+
 typedef enum {RB, WB, RBPLUS, WBPLUS} MODE;  // fopen modes
 // Open file. Only modes "rb", "wb", "rb+" and "wb+" are supported on WINDOWS
-FP fopen(const char* filename, MODE mode)
+FP myfopen(const char* filename, MODE mode)
 {
+	if (g_control_c)
+	{
+		myprintf("\n\nThe house is closed by control-c!\n");
+		return FPNULL;
+	}
   assert(filename);
   DWORD access=0;
   if (mode!=WB) access=GENERIC_READ;
@@ -36272,22 +39488,45 @@ FP fopen(const char* filename, MODE mode)
 	if (command=='q')
 		return CreateFile(utow(filename).c_str(), access, share,
                     NULL, disp, FILE_FLAG_BACKUP_SEMANTICS, NULL);
-  return CreateFile(utow(filename).c_str(), access, share,
-                    NULL, disp, FILE_ATTRIBUTE_NORMAL, NULL);
+					
+	FP risultato=CreateFile(utow(filename).c_str(), access, share,NULL, disp, FILE_ATTRIBUTE_NORMAL, NULL);
+	
+	if (g_chunk_size>0)
+		if ((mode==WB) || (mode==WBPLUS))
+		{
+			g_write_fp.push_back(risultato);
+			g_write_filename.push_back(filename);
+			if (flagdebug3)
+				myprintf("39405: write on               (pool %s)         |%s|         %s\n",migliaia(g_write_fp.size()),migliaia(int64_t(risultato)),filename);
+		}
+	return risultato;
+	
 }
-// Close file
-int fclose(FP fp)
-{
-  return CloseHandle(fp) ? 0 : EOF;
-}
+
 int myfclose(FP* fp)
 {
-	if (flagdebug)
-		if ((*fp)==FPNULL)
-		{	
+	if ((*fp)==FPNULL)
+	{	
+		if (flagdebug)
 			myprintf("36288: win fclose on FPNULL ignored\n");
-			return EOF;
-		}
+		return EOF;
+	}
+		
+	if (g_chunk_size>0)
+	{
+		for (unsigned int i=0;i<g_write_fp.size();i++)
+			if ((*fp)==g_write_fp[i])
+			{
+				g_write_fp.erase(g_write_fp.begin()+i);
+				g_write_filename.erase(g_write_filename.begin()+i);
+				if (flagdebug3)
+					myprintf("39492: ***********=============== [3] %d EUREKONAAA %s\n",i,g_write_filename[i].c_str());
+				break;
+			}
+		if (flagdebug3)
+			myprintf("49557: EXIT da eliminazione fp %s\n",migliaia(int64_t(*fp)));
+	}
+
 	if (flagdebug3)
 		myprintf("36292: pre closing fp %s\n",migliaia(int64_t(*fp)));
 	int risultato=CloseHandle(*fp) ? 0 : EOF;
@@ -36335,8 +39574,7 @@ FP 			g_fp_zpaq				=0;
 int			g_crc32_sequence_data	=0;
 int			g_crc32_sequence_index	=0;
 uint32_t  	g_crc32_index			=0;
-vector<FP>		g_addedfp;
-
+				
 
 // Write nobj objects of size size from ptr to fp. Return number written.
 // "overloaded" from fwrite() for flagfasttxt
@@ -36637,6 +39875,16 @@ bool delete_file(const char* filename) {
 	return DeleteFile(utow(filename).c_str());
 #endif
 }
+
+bool delete_file_no_mercy(const char* filename) 
+{
+#ifdef unix
+	return remove(filename)==0;
+#else
+	return DeleteFile(utow(filename).c_str());
+#endif
+
+}
 bool delete_dir(const char* i_directory) {
 #ifdef unix
   return remove(i_directory)==0;
@@ -36856,22 +40104,6 @@ void xcommand(string i_command,string i_parameter)
 	if (dummy==888888)
 		myprintf("36442: no-warning-please\n");
 }
-string g_gettempdirectory()
-{
-#if defined(_WIN32) || defined(_WIN64)
-	string temppath="";
-	wchar_t charpath[MAX_PATH];
-	if (GetTempPathW(MAX_PATH, charpath))
-	{
-		wstring ws(charpath);
-		string str(ws.begin(), ws.end());
-		return str;
-	}
-	return temppath;
-#else
-	return "/tmp/";
-#endif
-}
 #if defined(_WIN32)
 bool win32_writeads_buffer(string i_filename,string i_adsname,unsigned char* i_buffer,int i_len)
 {
@@ -37074,39 +40306,7 @@ Cleanup:
 	}
 	return fIsElevated;
 }
-//// VSS on Windows by... batchfile
-//// delete all kind of shadows copies (if any)
-void vss_deleteshadows(string i_cartella)
-{
-	if (flagvss)
-	{
-		i_cartella=linuxtowinpath(i_cartella);
-		string	filebatch	=g_gettempdirectory()+"vsz.bat";
-		filebatch=nomefileseesistegia(filebatch);
-		print_datetime();
-		myprintf("36670: VSS: starting release\n");
-		if (fileexists(filebatch))
-			if (remove(filebatch.c_str())!=0)
-			{
-				myprintf("21204: Highlander batch  %s\n", filebatch.c_str());
-				return;
-			}
-		FILE* batch=fopen(filebatch.c_str(), "wb");
-		if (batch==NULL)
-		{
-			myprintf("19889: cannot write on %s\n",filebatch.c_str());
-			exit(0);
-		}
-		fprintf(batch,"@echo OFF\n");
-		if (i_cartella!="")
-			fprintf(batch,"rmdir %s\n",i_cartella.c_str());
-		fprintf(batch,"@wmic shadowcopy delete /nointeractive\n");
-		fclose(batch);
-		waitexecute(filebatch,"",SW_HIDE);
-		print_datetime();
-		myprintf("36690: VSS: end releasing\n");
-	}
-}
+
 #endif
 // Return true if a file or directory (UTF-8 without trailing /) exists.
 bool exists(string filename) {
@@ -37409,6 +40609,8 @@ bool saggiascrivibilitacartella(string i_cartella)
 			myprintf("20587: percorso empty\n");
 		return false;
 	}
+	if (flagdebug3)
+		myprintf("40952: makepath of |%s|\n",percorso.c_str());
 	makepath(percorso);
 	string	testfile;
 	testfile=percorso+"test$$$.txt.me";
@@ -37427,11 +40629,80 @@ bool saggiascrivibilitacartella(string i_cartella)
 	delete_file(testfile.c_str());
 	return risultato;
 }
+string g_gettempdirectory()
+{
+#if defined(_WIN32) || defined(_WIN64)
+	string temppath="";
+	wchar_t charpath[MAX_PATH];
+	if (GetTempPathW(MAX_PATH, charpath))
+	{
+		wstring ws(charpath);
+		string str(ws.begin(), ws.end());
+		string randomfolder=str+"_zpaqfranz\\"+std::to_string(mtime())+'\\';
+		myreplaceall(randomfolder,"\\","/");
+		if (flagdebug3)
+			myprintf("69440: ********************** randomfolder [1] |%s|\n",randomfolder.c_str());
+		if (!saggiascrivibilitacartella(randomfolder))
+		{
+			myprintf("40097: Guru, cannot write inside randomfolder %s\n",randomfolder.c_str());
+			seppuku();
+		}
+		
+		return randomfolder;
+	}
+	return temppath;
+#else
+	string randomfolder="/tmp/_zpaqfranz/"+std::to_string(mtime())+'/';
+	if (flagdebug3)
+		myprintf("40635: LinuX ********************** randomfolder [1] |%s|\n",randomfolder.c_str());
+	if (!saggiascrivibilitacartella(randomfolder))
+	{
+		myprintf("40638: Guru, cannot write inside randomfolder %s\n",randomfolder.c_str());
+		seppuku();
+	}
+
+	return randomfolder;
+#endif
+}
+
 /*
 	some zpaq functions
 */
 
 #ifdef _WIN32
+//// VSS on Windows by... batchfile
+//// delete all kind of shadows copies (if any)
+void vss_deleteshadows(string i_cartella)
+{
+	if (flagvss)
+	{
+		i_cartella=linuxtowinpath(i_cartella);
+		string	filebatch	=g_gettempdirectory()+"vsz.bat";
+		filebatch=nomefileseesistegia(filebatch);
+		print_datetime();
+		myprintf("36670: VSS: starting release\n");
+		if (fileexists(filebatch))
+			if (remove(filebatch.c_str())!=0)
+			{
+				myprintf("21204: Highlander batch  %s\n", filebatch.c_str());
+				return;
+			}
+		FILE* batch=fopen(filebatch.c_str(), "wb");
+		if (batch==NULL)
+		{
+			myprintf("19889: cannot write on %s\n",filebatch.c_str());
+			exit(0);
+		}
+		fprintf(batch,"@echo OFF\n");
+		if (i_cartella!="")
+			fprintf(batch,"rmdir %s\n",i_cartella.c_str());
+		fprintf(batch,"@wmic shadowcopy delete /nointeractive\n");
+		fclose(batch);
+		waitexecute(filebatch,"",SW_HIDE);
+		print_datetime();
+		myprintf("36690: VSS: end releasing\n");
+	}
+}
 string relativetolongpath(string i_filename)
 {
 ///https://googleprojectzero.blogspot.com/2016/02/the-definitive-guide-on-win32-to-nt.html
@@ -38281,7 +41552,7 @@ void InputArchive::seek(int64_t p, int whence) {
   }
   const string next=subpart(fn, i+1);
   myfclose(&fp);
-  fp=fopen(next.c_str(), RB);
+  fp=myfopen(next.c_str(), RB);
   if (fp==FPNULL) ioerr(next.c_str());
   fseeko(fp, off-sum, SEEK_END);
 }
@@ -38301,7 +41572,7 @@ InputArchive::InputArchive(const char* filename):fn(filename)
 		const string parti=subpart(filename, i);
 		if (i>1 && parti==part0) 
 			break;
-	    fp=fopen(parti.c_str(), RB);
+	    fp=myfopen(parti.c_str(), RB);
 		if (fp==FPNULL) 
 			break;
 		filepartnames.push_back(parti);
@@ -38330,7 +41601,7 @@ InputArchive::InputArchive(const char* filename):fn(filename)
 				g_password=g_password_string;
 			}
 		}
-	fp=fopen(part1.c_str(), RB);
+	fp=myfopen(part1.c_str(), RB);
 	if (!isopen()) 
 		ioerr(part1.c_str());
 	assert(fp!=FPNULL);
@@ -38487,9 +41758,9 @@ public:
 			if (flagdebug4)
 			{
 				snprintf(debugfilename,sizeof(debugfilename),"z:\\fp_%04d,%04d_u_%08d_size_%06d_%s.bin",(int)g_debug_sequence++,(int)int64_t(firstfp),(int)int64_t(ftello(firstfp)),ptr,nomefile.c_str());
-				debugoutf=fopen(debugfilename,WB);
+				debugoutf=myfopen(debugfilename,WB);
 				myfwrite(buf,1,ptr,debugoutf);
-				fclose(debugoutf);
+				myfclose(&debugoutf);
 			}
 			
 			if (firstchunk)
@@ -38517,9 +41788,9 @@ public:
 			if (flagdebug4)
 			{
 				snprintf(debugfilename,sizeof(debugfilename),"z:\\enc_%04d,%04d_u_%08d_size_%06d_%s_at_%08d_due.bin",(int)g_debug_sequence++,(int)int64_t(fp),(int)int64_t(ftello(fp)),ptr,nomefile.c_str(),(int)criptoposition);
-				debugoutf=fopen(debugfilename,WB);
+				debugoutf=myfopen(debugfilename,WB);
 				myfwrite(buf,1,ptr,debugoutf);
-				fclose(debugoutf);
+				myfclose(&debugoutf);
 			}
 			if (flagdebug3)
 				myprintf("38093: realfwrite104 on firstfp %s @ftello %s\n",migliaia(int64_t(firstfp)),migliaia2(int64_t(ftello(firstfp))));
@@ -38528,7 +41799,6 @@ public:
 				myprintf("37838: closing the firstp %s\n",migliaia(int64_t(firstfp)));
 			myfclose(&firstfp);
 			firstfp=FPNULL;
-			/// fik
 			fp=FPNULL;
 			ptr=0;
 			return;
@@ -38555,9 +41825,9 @@ public:
 		if (flagdebug4)
 		{
 			snprintf(debugfilename,sizeof(debugfilename),"z:\\fp_%04d,%04d_u_%08d_size_%06d_%s.bin",(int)g_debug_sequence++,(int)int64_t(fp),(int)int64_t(ftello(fp)),ptr,nomefile.c_str());
-			debugoutf=fopen(debugfilename,WB);
+			debugoutf=myfopen(debugfilename,WB);
 			myfwrite(buf,1,ptr,debugoutf);
-			fclose(debugoutf);
+			myfclose(&debugoutf);
 		}
 		if (flagdebug3)
 			if ((int64_t)fp!=0)
@@ -38611,9 +41881,9 @@ public:
 		if (flagdebug4)
 		{
 			snprintf(debugfilename,sizeof(debugfilename),"z:\\enc_%04d,%04d_u_%08d_size_%06d_%s_at_%08d.bin",(int)g_debug_sequence++,(int)int64_t(fp),(int)int64_t(ftello(fp)),ptr,nomefile.c_str(),(int)cryptoffset);
-			debugoutf=fopen(debugfilename,WB);
+			debugoutf=myfopen(debugfilename,WB);
 			myfwrite(buf,1,ptr,debugoutf);
-			fclose(debugoutf);
+			myfclose(&debugoutf);
 		}
 
 		myfwrite(buf, 1, ptr, fp);
@@ -38639,7 +41909,7 @@ public:
 				thefilename=format_filename(++chunknumber);
 				if (flagdebug3)
 					myprintf("37839: the (new) filename %s\n",thefilename.c_str());
-				fp=fopen(thefilename.c_str(), WB);
+				fp=myfopen(thefilename.c_str(), WB);
 				if (!isopen()) 
 					ioerr(thefilename.c_str());
 				if (flagdebug3)
@@ -38647,9 +41917,8 @@ public:
 				chunksize=0;
 				writtenonlastchunk=writtensofar;
 				g_addedchunklist.push_back(thefilename);
+				///g_addedchunklist_fp.push_back(fp);
 				
-				if (std::find(g_addedfp.begin(),g_addedfp.end(),fp)!=g_addedfp.end())
-					g_addedfp.push_back(fp);
 
 			}
 #ifdef SERVER
@@ -38747,7 +42016,7 @@ public:
 			myprintf("37954: calling flush on fp=%s\n",migliaia(int64_t(fp)));
 		flush();
 		if (fp!=FPNULL)
-		{ ///fik
+		{ 
 			if (flagdebug3)
 				myprintf("37957: calling close %s\n",migliaia(int64_t(fp)));
 			myfclose(&fp);
@@ -39226,8 +42495,6 @@ OutputArchive::OutputArchive(string i_thearchive,const char* filename, const cha
 	previoussize=0;
 	if (g_chunk_size>0)
 	{
-		g_addedchunklist.push_back(filename);
-
 		firstfilename=i_thearchive;
 		easymultipart chunkedoutput(i_thearchive);
 		
@@ -39267,18 +42534,22 @@ OutputArchive::OutputArchive(string i_thearchive,const char* filename, const cha
 	{
 		if (flagdebug2)
 			myprintf("21180: try BSD ABPLUS\n");
-		fp=fopen(thefilename.c_str(), ABPLUS);
+		fp=myfopen(thefilename.c_str(), ABPLUS);
 	}
 	else
-	fp=fopen(thefilename.c_str(), RBPLUS);
+	fp=myfopen(thefilename.c_str(), RBPLUS);
 #else
-	fp=fopen(thefilename.c_str(), RBPLUS);
+	fp=myfopen(thefilename.c_str(), RBPLUS);
 #endif
 
 	if (flagdebug3)
 		myprintf("38660: ***********************************************************\n");
-	g_addedfp.push_back(fp);
-
+	if (g_chunk_size>0)
+	{
+		///g_addedchunklist_fp.push_back(fp);
+		g_addedchunklist.push_back(thefilename);
+	}		
+				
 	if (isopen()) 
 	{
 		if (flagdebug3)
@@ -39333,17 +42604,22 @@ OutputArchive::OutputArchive(string i_thearchive,const char* filename, const cha
 		{
 			if (flagdebug2)
 				myprintf("21192: try BSD flagappend\n");
-			fp=fopen(thefilename.c_str(), AB);
+			fp=myfopen(thefilename.c_str(), AB);
 		}
 		else
-		fp=fopen(thefilename.c_str(), WB);
+		fp=myfopen(thefilename.c_str(), WB);
 #else
-		fp=fopen(thefilename.c_str(), WB);
+		fp=myfopen(thefilename.c_str(), WB);
 #endif
 		if (!isopen()) 
 			ioerr(thefilename.c_str());
-		g_addedfp.push_back(fp);
-
+		
+		if (g_chunk_size>0)
+		{
+			///g_addedchunklist_fp.push_back(fp);
+			g_addedchunklist.push_back(thefilename);
+		}		
+	
 		if (password) 
 		{
 			if (!salt_)
@@ -41051,6 +44327,9 @@ private:
 	int last();
 	int testbackup();
 	int consolidatebackup();
+	int comparehex();
+	int work();
+	int count();
 	int backup();
 	int zfslist();
 	int zfspurge();
@@ -41119,7 +44398,7 @@ private:
 
 	bool 		cli_filesandcommand	(const string& i_opt,string i_string,char i_command,int argc,const char** argv, int* i_i);
 	bool 		cli_onlystring		(const string& i_opt,string i_string,string i_alias,string& o_thefile,int argc,const char** argv, int* i_i,bool* i_theflag);
-	bool 		cli_getdate			(const string& i_opt,string i_string,int argc,const char** argv, int* i_i,int64_t* o_date);
+	bool 		cli_getdate			(string& i_opt,string i_string,int argc,const char** argv, int* i_i,int64_t* o_date);
 	bool 		cli_getint			(const string& i_opt,string i_string,bool	i_flagoptional,const string& i_short,int argc,const char** argv, int* i_i,int i_default,int* o_thenumber);
 	bool 		cli_getuint			(const string& i_opt,string i_string,bool	i_flagoptional,const string& i_short,int argc,const char** argv, int* i_i,unsigned int i_default,unsigned int* o_thenumber);
 	bool 		cli_getuint64		(const string& i_opt,string i_string,bool	i_flagoptional,const string& i_short,int argc,const char** argv, int* i_i,uint64_t i_default,uint64_t* o_thenumber);
@@ -41203,7 +44482,9 @@ public:
 	bool grep(string i_filename,string i_search);
 	int	checkautotest(string i_path);
 	bool isjitable();
-
+	void tabba();
+	int	external();
+	
 
 };
 
@@ -41414,7 +44695,6 @@ int Jidac::zfsreceive()
 			return 2;
 		}
 	}
-
 	FILE* batch=fopen(myoutput.c_str(), "w");
 	if (batch==NULL)
 	{
@@ -41442,6 +44722,7 @@ int Jidac::zfsreceive()
 		fprintf(batch,"%s x %s %s -stdout |%s zfs receive %s@%s%08d\n",fullzpaqexename.c_str(),archive.c_str(),filename[i].c_str(),pv.c_str(),thepool.c_str(),themark.c_str(),(int)(i+1));
 	}
 	fclose(batch);
+	batch=NULL;
 #ifndef _WIN32
 
 		if (chmod(myoutput.c_str(),0700)!=0)
@@ -44126,8 +47407,7 @@ bool& o_isadded)
 			myprintf("40947: i_franz_block null\n");
 		return -1;
 	}
-	//fike
-	
+		
 	int	ricostruito	=(i_franz_block[0]-'0')*10+(i_franz_block[1]-'0');
 
 	if ((ricostruito==FRANZO_XXHASH64B) || (ricostruito==FRANZO_MD5B)||(ricostruito==FRANZO_BLAKE3B)||(ricostruito==FRANZO_SHA_256B)
@@ -45318,6 +48598,65 @@ string help_testbackup(bool i_usage,bool i_example)
 	}
 	return("Multipart hardening");
 }
+string help_work(bool i_usage,bool i_example)
+{
+	if (i_usage)
+	{
+		moreprint("CMD   work               Multiple commands (verb-noun)");
+		moreprint("noun  big                Output a big ASCII string");
+		moreprint("noun  pad                Left pad a number");
+		moreprint("noun  filepathnotrailing Get path without \\");
+		moreprint("noun  date               Write date/datetime");
+		moreprint("noun  printbar           Write out a row of chars");
+	}
+	if (i_usage && i_example) moreprint("    Examples:");
+	if (i_example)
+	{
+		moreprint("Write something big                  work big \"count the ok\" ");
+		moreprint("Write something big                  work big \"COUNT THE OK\" ");
+		moreprint("Write something big                  work big forza inter");
+		moreprint("Pad number 123 to 00000123           work pad 123");
+		moreprint("Pad number 123 to 0123               work pad 123 -n 4");
+		moreprint("Extract path                         work filepathnotrailing z:\\doc\\2\\3.eml");
+		moreprint("Write datetime                       work date -terse");
+		moreprint("Write year_month_day                 work date \"%year_%month_%day\" -terse");
+		moreprint("Write -----                          work printbar -terse");
+		moreprint("Write !!!!!                          work printbar \"!\" -terse");
+	}
+	return("Multiple commands");
+}
+string help_comparehex(bool i_usage,bool i_example)
+{
+	if (i_usage)
+	{
+		moreprint("CMD   comparehex  Compare HEX substs from two files");
+		moreprint("+ : First file    Name of first  text file");
+		moreprint("+ : Second file   Name of second text file");
+		moreprint("+ : Haystack      The string to be searched");
+		moreprint("+ : Expected len  Size of the hash");
+	}
+	if (i_usage && i_example) moreprint("    Examples:");
+	if (i_example)
+	{
+		moreprint("Quick check local backup             comparehex z:\\1.txt z:\\2.txt \"GLOBAL SHA256:\" 64");
+	}
+	return("Compare hex substrings from two files");
+}
+string help_count(bool i_usage,bool i_example)
+{
+	if (i_usage)
+	{
+		moreprint("CMD   count       Count strings inside files (just like grep)");
+	}
+	if (i_usage && i_example) moreprint("    Examples:");
+	if (i_example)
+	{
+		moreprint("I expect 3 all OK in logfiles        count z:\\*.txt 3 \"all OK\"");
+		moreprint("I expect 10 BIG OK in logfiles       count z:\\*.txt 10");
+	}
+	return("Count substrings in files");
+}
+
 string help_consolidatebackup(bool i_usage,bool i_example)
 {
 	if (i_usage)
@@ -45477,13 +48816,15 @@ string help_crop(bool i_usage,bool i_example)
 void print_sub()
 {
 	moreprint("                  Substitute %hour %min %sec %weekday %year %month %day");
-	moreprint("                  %week %date %time %datetime %timestamp");
+	moreprint("                  %week %date %time %datetime %timestamp (or $hour...)");
 }
 void print_doublequote()
 {
+	color_yellow();
 	moreprint("************ REMEMBER TO USE DOUBLE QUOTES! ************");
 	moreprint("*** -not *.cpp    is bad,    -not \"*.cpp\"    is good ***");
 	moreprint("*** test_???.zpaq is bad,    \"test_???.zpaq\" is good ***");
+	color_restore();
 }
 string help_a(bool i_usage,bool i_example)
 {
@@ -45577,6 +48918,8 @@ string help_a(bool i_usage,bool i_example)
 		moreprint("+ : -date         Store creation date (slower)");
 		moreprint("+ : -frugal       Use less RAM, but CANNOT WORK with mixed hashes");
 		moreprint("+ : -stat         Show external files added/updated");
+		moreprint("+ : -external X   Run X before add (replace %files or $files)");
+		moreprint("+ : -touch X      Change every filedate to be stored to X");
 	}
 	if (i_usage && i_example)
 		moreprint("    Examples:");
@@ -45649,6 +48992,8 @@ string help_a(bool i_usage,bool i_example)
 #endif
 		moreprint("Store creation date (slower)         a z:\\1.zpaq c:\\users\\utente -date");
 		moreprint("Use less RAM: DO NOT MIX HASHES!     a z:\\1.zpaq c:\\nz -frugal");
+		moreprint("Store external VFILE-l-external.txt  a z:\\2.zpaq c:\\nz -external \"c:\\nz\\hashdeep64 -r -c sha1 %files\"");
+		moreprint("Alter the filedate (piped)           type 1.txt|zpaqfranz a z:\\2.zpaq 1.sql -stdin -touch 2024_02_03");
 	}
 	return("Add or append files to archive");
 }
@@ -45865,6 +49210,7 @@ string help_x(bool i_usage,bool i_example)
 		moreprint("+ : -replace X    Juxtapose X to stored path");
 		moreprint("+ : -image        Change the progress to handle huge files (-minsize X default 20MB)");
 		moreprint("+ : -stdout       Output (if possible) a single file on stdout");
+		moreprint("+ : -external     show (if any) a stored external file");
 		help_range();
 	}
 	if (i_usage && i_example) moreprint("    Examples:");
@@ -45892,6 +49238,7 @@ string help_x(bool i_usage,bool i_example)
 		moreprint("Restore huge image w/smart progress  x copia.zpaq -to z:\\prova\\ -image");
 		moreprint("Single file to stdout                x copia.zpaq 00000015.zfs >z:\\15.zfs");
 		moreprint("Extract multiple zpaqs               x \"vu*.zpaq\" -to z:\\pippo\\");
+		moreprint("Show external VFILE                  x z:\\1.zpaq -external -silent");
 	}
 	return("Extract the file(s)");
 
@@ -45925,6 +49272,9 @@ string help_l(bool i_usage,bool i_example)
 		moreprint("+ : -date         Show creation date (if any)");
 		moreprint("+ : -attr         Show the attr");
 		moreprint("+ : -terse        Make a 'script-aware' output");
+		moreprint("+ : -nodel        Do not show deleted files (with -all)");
+		moreprint("+ : -csv \"some\"   Enable -csv delimiter  (\\t for TAB)");
+		moreprint("+ : -csvhf \"!\"    CSV line header/footer (\\t for TAB)");
 		help_date();
 		help_size();
 		help_orderby();
@@ -45955,6 +49305,9 @@ string help_l(bool i_usage,bool i_example)
 		moreprint("Files added in last version          l z:\\1.zpaq -range ::1");
 		moreprint("Show creation date (if any)          l z:\\1.zpaq -date");
 		moreprint("Fixed sized/no header and footer     l z:\\1.zpaq -terse");
+		moreprint("Where are the restorable versions?   l z:\\1.zpaq -find \"$$$$\" -all -nodel");
+		moreprint("TAB-delimited CSV output             l z:\\1.zpaq -terse -csv \"\\t\"");
+		moreprint("Enclose fields between double quote  l z:\\1.zpaq -terse -csv \"\\\",\\\"\" -csvhf \"\\\"\"");
 	}
 	return("List file(s)");
 
@@ -46161,8 +49514,10 @@ string help_t(bool i_usage,bool i_example)
 	if (i_usage)
 	{
 		moreprint("CMD   t (test)");
-		moreprint("+ :               Check that all block are OK, and the CRC-32s of the individual ");
-		moreprint("                  files corresponds to what would be generated by actually extracting.");
+		moreprint("+ :               NO PATH:   check all blocks, and CRC-32s of the files");
+		moreprint("                             corresponds to what would be generated by extracting");
+		moreprint("                  WITH PATH: compares files/folders in the path(s) with the");
+		moreprint("                             archive's content");
 		moreprint("+ : -checksum     Enable hash checksums");
 		moreprint("+ : -verify       Do a filesystem post-check: STORED CRC==DECOMPRESSED==FROM FILE.");
 		moreprint("+ : -verify -ssd  Multithread verify (do NOT use on spinning drives)");
@@ -46172,25 +49527,28 @@ string help_t(bool i_usage,bool i_example)
 		moreprint("+ :               delete every equal files");
 		moreprint("+ : -collision    Test collisions");
 		moreprint("+ : -quick        Do not check hash, only size/date");
-		
+		moreprint("+ : -crc32        Run a triple CRC-32 check (!) against the filesystem");
+		moreprint("+ :               Use -find/replace to fix path (if needed); -ssd for M/T");
 	}
 	if (i_usage && i_example) moreprint("    Examples:");
 	if (i_example)
 	{
 		moreprint("Last version:                        t z:\\1.zpaq");
 		moreprint("All versions:                        t z:\\1.zpaq -all");
-		moreprint("Compare against filesystem:          t z:\\1.zpaq -verify");
-		moreprint("Against filesystem, 4 threads:       t z:\\1.zpaq -verify -ssd -t4");
+		moreprint("Last+Against filesystem, 4 threads:  t z:\\1.zpaq -verify -ssd -t4");
 		moreprint("Real paranoid: extract all           t z:\\1.zpaq -to z:\\knb -paranoid");
-		moreprint("Fast-SHA1 (nz the source dir):       t z:\\1.zpaq c:\\nz");
-		moreprint("Cnk-SHA1+hash (nz the source dir):   t z:\\1.zpaq c:\\nz -checksum");
 		moreprint("Multiple paranoid check (Win):       t *.zpaq -to z:\\temp\\ -paranoid -longpath -big");
 		moreprint("Multiple test (*NIX):                t \"/copie/*.zpaq\" ");
-		moreprint("All version SHA-1 collisions:        t z:\\1.zpaq -collision -all");
 		moreprint("Compare with string manipulation:    t z:\\2 c:\\nz -find k:\\nz -replace c:\\nz -verify");
-		moreprint("Quick-and-dirty size/date            t z:\\1.zpaq c:\\nz -quick");
+		moreprint("All version SHA-1 collisions:        t z:\\1.zpaq -collision -all");
+		moreprint("Triple check CRC-32:                 t z:\\1.zpaq -crc32");
+		moreprint("3 check w/path manipulation:         t z:\\1.zpaq -crc32 -find \"x:/memme/\" -replace \"c:/nz/\"");
+		moreprint("BEWARE: path(s) changes the logic!");
+		moreprint("Fast-SHA1 (nz the source dir):       t z:\\1.zpaq c:\\nz");
+		moreprint("SHA1 + hash:                         t z:\\1.zpaq c:\\nz -verify");
+		moreprint("Quick-and-dirty size/date            t z:\\1.zpaq c:\\nz c:\\kz -quick");
 	}
-	return("Test archive integrity");
+	return("Test archive integrity/compare with filesystem");
 
 }
 string help_v(bool i_usage,bool i_example)
@@ -46847,6 +50205,7 @@ string help_dir(bool i_usage,bool i_example)
 		moreprint("Find duplicate, recurse by size:     dir z:\\cb /s /os -xxh3");
 		moreprint("Like dir:                            dir z:\\cb\\*.avi");
 		moreprint("Better than dir:                     dir c:\\*.cpp /s /os -n 100");
+		moreprint("Get last 5 backup files:             dir c:\\backup\\*.zpaq /on -n 5 -terse");
 	}
 	return("A better dir (yes, Windows' dir)");
 
@@ -47147,6 +50506,9 @@ void Jidac::load_help_map()
 	help_map.insert(std::pair<string, voidhelpfunction>("autotest",			help_autotest));
 	help_map.insert(std::pair<string, voidhelpfunction>("versum",			help_versum));
 	help_map.insert(std::pair<string, voidhelpfunction>("testbackup",		help_testbackup));
+	help_map.insert(std::pair<string, voidhelpfunction>("count",			help_count));
+	help_map.insert(std::pair<string, voidhelpfunction>("comparehex",		help_comparehex));
+	help_map.insert(std::pair<string, voidhelpfunction>("work",				help_work));
 	help_map.insert(std::pair<string, voidhelpfunction>("consolidatebackup",help_consolidatebackup));
 	help_map.insert(std::pair<string, voidhelpfunction>("backup",			help_backup));
 	help_map.insert(std::pair<string, voidhelpfunction>("last2",			help_last2));
@@ -48051,7 +51413,7 @@ bool Jidac::cli_getuint64(const string& i_opt,string i_string,bool	i_flagoptiona
 	return false;
 }
 
-bool Jidac::cli_getdate(const string& i_opt,string i_string,int argc,const char** argv, int* i_i,int64_t* o_date)
+bool Jidac::cli_getdate(string& i_opt,string i_string,int argc,const char** argv, int* i_i,int64_t* o_date)
 {
 	if ((argv==NULL) || (i_i==NULL) || (o_date==NULL))
 	{
@@ -48075,9 +51437,12 @@ bool Jidac::cli_getdate(const string& i_opt,string i_string,int argc,const char*
 					
 					if ((!flagpakka) && (!flagsilent) && (!flagstdout)  && (!flagterse))
 					{
-						myprintf("45772: franz: %s change from %s => %s\n",i_string.c_str(),dateToString(flagutc,*o_date).c_str(),dateToString(flagutc,newdate).c_str());
+						if (flagdebug3)
+							myprintf("45772: franz:%s change from %s => %s\n",i_string.c_str(),dateToString(flagutc,*o_date).c_str(),dateToString(flagutc,newdate).c_str());
 						myprintf("45775: franz:%-21s   <<%s>>\n",i_string.c_str(),dateToString(true,newdate).c_str());
 					}
+					i_opt="skipme";
+					
 				}
 			}
 	return false;
@@ -48126,7 +51491,12 @@ bool isbigendian(void)
     return bint.c[0] == 1;
 }
 
-
+void replacetabs(std::string &str) 
+{
+    std::string::size_type pos = 0;
+    while ((pos=str.find("\\t", pos))!=std::string::npos) 
+        str.replace(pos++,2,"\t");
+}
 
 int Jidac::loadparameters(int argc, const char** argv)
 {
@@ -48150,6 +51520,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 	g_programflags.add(&flagdebug4,			"-debug4",				"Write debug data on z:\\",							"");
 	g_programflags.add(&flagdebug5,			"-debug5",				"Show RAM usage",							"");
 	g_programflags.add(&flagdesc,			"-desc",				"Orderby desc",										"");
+	g_programflags.add(&flagnosymlink,		"-symlink",				"Ignore Windows REPARSE_POINT (Symlink)",										"");
 	g_programflags.add(&flagdonotforcexls,	"-xls",					"Do NOT force adding of XLS/PPT (default: NO)",		"a;");
 	g_programflags.add(&flagdummy,			"-debug -zero -kill",	"Add 0-byte long file (debugging)",					"");
 	g_programflags.add(&flagdummy,			"-debug -zero",			"Add files but zero-filled (debugging)",			"");
@@ -48196,6 +51567,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 	g_programflags.add(&flagstat,			"-stat",				"Statistics",										"");
 	g_programflags.add(&flagstdin,			"-stdin",				"stdin",											"");
 	g_programflags.add(&flagterse,			"-terse",				"Create output without header and footer",			"");
+	g_programflags.add(&flagnodel,			"-nodel",				"Do not show deleted files",			"");
 	g_programflags.add(&flagstdout,			"-stdout",				"stdout",											"");
 	g_programflags.add(&flagstore,			"-store",				"Store mode: no deduplication, no compression",		"");
 	g_programflags.add(&flagtar,			"-tar",					"TAR mode (store posix)",							"");
@@ -48219,8 +51591,6 @@ int Jidac::loadparameters(int argc, const char** argv)
 	g_programflags.add(&flagbarraos,		"/os",					"Order by size",									"dir;");
 
 	g_programflags.add(&flagnocolor,		"-nocolor",				"Monochrome output",								"",flagnocolor);
-
-
 
 #ifdef _WIN32
 ///	g_programflags.add(&flagdd,				"-dd",					"dd",												"");
@@ -48305,6 +51675,8 @@ int Jidac::loadparameters(int argc, const char** argv)
 	g_freeze			="";
 	g_archive			="";
 	g_indexname			="";
+	g_csvstring			="";
+	g_csvhf				="";
 	g_pidname			="";
 	g_backupposition	="";
 	g_output_handle		=NULL;
@@ -48657,6 +52029,10 @@ int Jidac::loadparameters(int argc, const char** argv)
 		else if (cli_filesandcommand(opt,"versum",		'|',argc,argv,&i));
 		else if (cli_filesandcommand(opt,"last2",		'^',argc,argv,&i));
 		else if (cli_filesandcommand(opt,"testbackup",	'_',argc,argv,&i));
+		else if (cli_filesandcommand(opt,"comparehex",	'?',argc,argv,&i));
+		else if (cli_filesandcommand(opt,"work",		']',argc,argv,&i));
+		else if (cli_filesandcommand(opt,"big",			'/',argc,argv,&i));
+		else if (cli_filesandcommand(opt,"count",	    '[',argc,argv,&i));
 		else if (cli_filesandcommand(opt,"consolidatebackup",	'Y',argc,argv,&i));
 		else if (cli_filesandcommand(opt,"zfsrestore",	'%',argc,argv,&i));
 		else if (cli_filesandcommand(opt,"zfslist",		'B',argc,argv,&i));
@@ -48873,6 +52249,8 @@ int Jidac::loadparameters(int argc, const char** argv)
 		else if (cli_getuint64	(opt,"-minsize",	false,	"",								argc,argv,&i,minsize,			&minsize));
 		else if (cli_getuint64	(opt,"-maxsize",	false,	"",								argc,argv,&i,maxsize,			&maxsize));
 		else if (cli_getstring	(opt,"-method",		false,	"-m",							argc,argv,&i,"",				&method));
+		else if (cli_getstring	(opt,"-csv",		false,	"-tab",							argc,argv,&i,"",				&g_csvstring));
+		else if (cli_getstring	(opt,"-csvhf",		false,	"",								argc,argv,&i,"",				&g_csvhf));
 		else if (cli_getint		(opt,"-threads",	false,	"-t",							argc,argv,&i,howmanythreads,	&howmanythreads));
 		else if (cli_getint		(opt,"-summary",	true, 	"",								argc,argv,&i,1,					&summary));
 		///else if (cli_getint		(opt,"-red4",		false, 	"",								argc,argv,&i,-1,				&red4));
@@ -48902,6 +52280,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 		else if (cli_onlystring	(opt,"-checktxt",			"",				checktxt,		argc,argv,&i,					&flagchecktxt));
 		else if (cli_onlystring	(opt,"-fasttxt",			"",				fasttxt,		argc,argv,&i,					&flagfasttxt));
 		else if (cli_getdate	(opt,"-timestamp",											argc,argv,&i,					&date));
+		else if (cli_getdate	(opt,"-touch",												argc,argv,&i,					&g_touch));
 		else if (cli_getdate	(opt,"-datefrom",											argc,argv,&i,					&g_datefrom));
 		else if (cli_getdate	(opt,"-dateto",												argc,argv,&i,					&g_dateto));
 		else if (cli_getarray	(opt,"-not",												argc,argv,&i,					&notfiles,		&nottype));
@@ -48924,6 +52303,10 @@ int Jidac::loadparameters(int argc, const char** argv)
 		else if (cli_getstring	(opt,"-index",		false,	"",								argc,argv,&i,"",				&g_indexname))
 		{
 			index =g_indexname.c_str();
+		}
+		else if (cli_getstring	(opt,"-external",		false,	"",								argc,argv,&i,"",				&g_externalname))
+		{
+			flagexternal=true;
 		}
 		else if (cli_getkey		(opt,"-key",												argc,argv,&i,&plainpassword,	&g_password,		g_password_string))
 		{
@@ -49041,6 +52424,10 @@ int Jidac::loadparameters(int argc, const char** argv)
 			}
 		}
 		else
+		if (opt=="skipme")
+		{
+		}
+		else
 		{
 			if (!g_programflags.exists(argv[i]))
 				myprintf("46671: Unknown option ignored: %s\n", argv[i]);
@@ -49092,6 +52479,12 @@ int Jidac::loadparameters(int argc, const char** argv)
 		all=8;
 	}
 
+	myreplaceall(g_csvstring,"/","\\");
+	replacetabs(g_csvstring);
+
+	myreplaceall(g_csvhf,"/","\\");
+	replacetabs(g_csvhf);
+	
 #ifdef _WIN32
 		if (flagvss)
 		{
@@ -49394,6 +52787,9 @@ int Jidac::doCommand()
 	else if (command=='|') return versum();
 	else if (command=='^') return last2();
 	else if (command=='_') return testbackup();
+	else if (command=='?') return comparehex();
+	else if (command=='[') return count();
+	else if (command==']') return work();
 	else if (command=='$') return zfsbackup();
 	else if (command=='=') return zfsproxbackup();
 	else if (command=='(') return zfsproxrestore();
@@ -50114,11 +53510,16 @@ void Jidac::scandir(bool i_checkifselected,DTMap& i_edt,string filename, bool i_
 				closedir(dirp);
 			}
 			else
-				perror(filename.c_str());
+			{
+					perror(filename.c_str());
+			}
 		}
 	}
 	else
-		perror(filename.c_str());
+	{
+		if (!flagstdin)
+			perror(filename.c_str());
+	}
 #else  // Windows: expand wildcards in filename
   // Expand wildcards
   WIN32_FIND_DATA ffd;
@@ -50245,7 +53646,14 @@ void Jidac::scandir(bool i_checkifselected,DTMap& i_edt,string filename, bool i_
 			/// Houston, we have a strange deduplicated .vhdx file?
 			/// add as by default
 			if (flagdebug)
-				myprintf("47812: Something strange (VHDX?) FILE_ATTRIBUTE_REPARSE_POINT not DIR %s\n",t.c_str());
+				myprintf("47812: Something strange (VHDX? SYMLINK?) FILE_ATTRIBUTE_REPARSE_POINT not DIR %s\n",t.c_str());
+		
+			if (flagnosymlink)
+			{
+				edate=0;
+				if (flagverbose)
+					myprintf("53490: Skipped due to -symlink REPARSE_POINT && !DIRECTORY\n");
+			}
 		}
 		else
 		{
@@ -50373,7 +53781,10 @@ void Jidac::addfile(bool i_checkifselected,DTMap& i_edt,string filename, int64_t
 				return;
 	}
 	DT& d=i_edt[filename];
-	d.date=edate;
+	if (g_touch!=0)
+		d.date=g_touch;
+	else
+		d.date=edate;
 	d.creationdate=i_creationdate;
 	d.accessdate=i_accessdate;
 	d.size=esize;
@@ -50564,6 +53975,7 @@ ThreadReturn compressThread(void* arg) {
 }
 // Write compressed data to the archive in the background
 ThreadReturn writeThread(void* arg) {
+	
   CompressJob& job=*(CompressJob*)arg;
   try {
     // work until done
@@ -50616,9 +54028,17 @@ ThreadReturn writeThread(void* arg) {
   }
   catch (std::exception& e) {
     fflush(stdout);
-    myprintf("48153: zpaqfranz exiting from writeThread: %s\n", e.what());
-	g_exec_text="exiting from writethread";
-    exit(1);
+	///this is a very dirty trick to do NOT check for control-C inside the thread
+    if (!g_control_c)
+	{
+		myprintf("48153: zpaqfranz exiting from writeThread: %s\n", e.what());
+		g_exec_text="exiting from writethread";
+		exit(1);
+	}
+	else
+	{
+		myprintf("\n*** WRITE THREAD GET A CONTROL-C !!!! ***\n");
+	}
   }
   return 0;
 }
@@ -51335,8 +54755,7 @@ ThreadReturn decompressThread(void* arg) {
             assert(job.lastdt->second.date);
             assert(job.lastdt->second.data
                    <int64_t(job.lastdt->second.ptr.size()));
-            fclose(job.outf);
-            job.outf=FPNULL;
+            myfclose(&job.outf);
           }
           job.lastdt=job.jd.dt.end();
         }
@@ -51430,7 +54849,7 @@ ThreadReturn decompressThread(void* arg) {
 					if (flagstdout)
 						job.outf=stdout;
 					else
-						job.outf=fopen(filename.c_str(), WB);
+						job.outf=myfopen(filename.c_str(), WB);
 		///printf("K2 ---\n");
 					if (job.outf==FPNULL)
 					{
@@ -51438,6 +54857,13 @@ ThreadReturn decompressThread(void* arg) {
 						printerr("17451",filename.c_str(),0);
 						release(job.mutex);
 					}
+					
+					if (g_chunk_size>0)
+					{
+						///g_addedchunklist_fp.push_back(job.outf);
+						g_addedchunklist.push_back(filename);
+					}		
+	
 #ifndef unix
               else if ((p->second.attr&0x200ff)==0x20000+'w') {  // sparse?
                 DWORD br=0;
@@ -51457,10 +54883,17 @@ ThreadReturn decompressThread(void* arg) {
 				if (flagstdout)
 					job.outf=stdout;
 				else
-					job.outf=fopen(filename.c_str(), RBPLUS);  // update existing file
+					job.outf=myfopen(filename.c_str(), RBPLUS);  // update existing file
           }
 		  if (!job.jd.flagtest && job.outf==FPNULL) break;  // skip errors
-          job.lastdt=p;
+          
+	 		if (g_chunk_size>0)
+			{
+				///g_addedchunklist_fp.push_back(job.outf);
+				g_addedchunklist.push_back(filename);
+			}		
+	
+		  job.lastdt=p;
           assert(job.jd.flagtest || job.outf!=FPNULL);
         }
         assert(job.lastdt==p);
@@ -51971,9 +55404,8 @@ void Jidac::printsanitizeflags()
 }
 int Jidac::info()
 {
-	///flagcomment=true;
 	versioncomment="";
-	all=4;
+	all=8;
 	return enumeratecomments();
 }
 int Jidac::zpaqdirsize()
@@ -52562,7 +55994,7 @@ int Jidac::list()
 		}
 		else
 		{
-			///fiko
+			
 			if (flagdate)
 			{
 				myprintf("52088:    Date      Time          Creation      %*s Ratio Name\n",thesizesize,"Size");
@@ -52575,7 +56007,6 @@ int Jidac::list()
 			}
 		}
 	}
-	
 	
 	unsigned fi;
 	for (fi=0;fi<filelist.size(); ++fi)
@@ -52629,6 +56060,10 @@ int Jidac::list()
 				int iversion=atoll(inizio.c_str());
 				flagshow=((iversion>=g_rangefrom) && (iversion<=g_rangeto));
 			}
+			
+		if (p->second.date==0)
+			if (flagnodel)
+				flagshow=false;
 
 		if (flagshow)
 			if (!strchr(nottype.c_str(), p->second.data))
@@ -52730,66 +56165,93 @@ int Jidac::list()
 ///					if (flagattr)
 	///					list_seconddata(p->second.data);
 					//
-					
-					list_datetime(p->second.date,flagnewversion);
 
-					if (flagdate)
-						list_creationdate(mycreationtime);
+					if ( !(flagterse && flagnewversion) )
+					{
+						if (g_csvhf!="")
+							myprintf(g_csvhf.c_str());
 
-					if (flagattr || flagterse)
-						list_attributes(p->second.attr);
+						list_datetime(p->second.date,flagnewversion);
+						tabba();
+						
+						if (flagdate)
+						{
+							list_creationdate(mycreationtime);
+							tabba();
+						}
+						if (flagattr || flagterse)
+						{
+							list_attributes(p->second.attr);
+							tabba();
+						}
+						
+						list_filesize(sizetoprint,thesizesize);
+						tabba();
+						
+						list_compressedfilesize(compressedtoprint,sizetoprint,flagnewversion,isfolder,p->second.date==0);
+						tabba();
+						
+						if (theversionnumber!="")
+						{	if (g_csvstring=="")
+							myprintf("%s|",theversionnumber.c_str());
+							else
+							myprintf("%s",theversionnumber.c_str());
+							if (g_csvstring!="")
+								tabba();
+						}
+						if ((myhash!="") || (mycrc32!=""))
+						{
+							color_yellow();
+							if (myhash!="")
+							{
+								myprintf("%s ",myhash.c_str());
+								tabba();
+							}
+							if (mycrc32!="")
+							{
+								myprintf("%s ",mycrc32.c_str());
+								tabba();
+							}
+							color_restore();
+						}
+						//if (flagattr||flagterse)
+							////myfilename=" "+myfilename;
+		/// search and replace, if requested
+						///franzreplace(myfilename);
+						if (flagstdout)
+							if (p->second.isordered)
+								myfilename="[STDOUT] "+myfilename;
+						string simbolino="+";
+						
+						if (p->second.date==0)
+							simbolino="-";
+						else
+						{
+							if (flaghoadded)
+								if (!myisadded)
+									simbolino="#";
+						}
+
+						if (all>0 && p->first.size()==all+1u && (v=atoi(p->first.c_str()))>0 && v<ver.size())
+							simbolino="";
+						myprintf("%s",simbolino.c_str());
+						tabba();
+						printUTF8(myfilename.c_str());
 		
-					list_filesize(sizetoprint,thesizesize);
+						if (all>0 && p->first.size()==all+1u && (v=atoi(p->first.c_str()))>0 && v<ver.size())
+						{  
+							std::map<int,string>::iterator commento=mappacommenti.find(v);
+							color_blackongreen();
+							myprintf("Files: changed/added %s removed %s", migliaia(ver[v].updates),migliaia2(ver[v].deletes));
+							if(commento!= mappacommenti.end())
+								myprintf(" <<%s>>",commento->second.c_str());
+							color_restore();
+						}
+						if (g_csvhf!="")
+							myprintf(g_csvhf.c_str());
 
-					list_compressedfilesize(compressedtoprint,sizetoprint,flagnewversion,isfolder,p->second.date==0);
-					
-					if (theversionnumber!="")
-						myprintf("%s|",theversionnumber.c_str());
-					
-					if ((myhash!="") || (mycrc32!=""))
-					{
-						color_yellow();
-						if (myhash!="")
-							myprintf("%s ",myhash.c_str());
-						if (mycrc32!="")
-							myprintf("%s ",mycrc32.c_str());
-						color_restore();
+						myprintf("\n");
 					}
-					if (flagattr||flagterse)
-						myfilename=" "+myfilename;
-	/// search and replace, if requested
-					///franzreplace(myfilename);
-					if (flagstdout)
-						if (p->second.isordered)
-							myfilename="[STDOUT] "+myfilename;
-					string simbolino="+ ";
-					
-					if (p->second.date==0)
-						simbolino="- ";
-					else
-					{
-						if (flaghoadded)
-							if (!myisadded)
-								simbolino="# ";
-					}
-
-					if (all>0 && p->first.size()==all+1u && (v=atoi(p->first.c_str()))>0 && v<ver.size())
-						simbolino="";
-					
-					myfilename=simbolino+myfilename;
-					
-					printUTF8(myfilename.c_str());
-				
-					if (all>0 && p->first.size()==all+1u && (v=atoi(p->first.c_str()))>0 && v<ver.size())
-					{  
-						std::map<int,string>::iterator commento=mappacommenti.find(v);
-						color_blackongreen();
-						myprintf("Files: changed/added %s removed %s", migliaia(ver[v].updates),migliaia2(ver[v].deletes));
-						if(commento!= mappacommenti.end())
-							myprintf(" <<%s>>",commento->second.c_str());
-						color_restore();
-					}
-					myprintf("\n");
 				}
 			}
 	}  // end for i = each file version
@@ -53190,7 +56652,7 @@ void franz_do_hash::init()
 
 	if (i_hashtype2=="NONE")
 		return;
-///fikona
+
 	if ((ihashtype==FRANZO_XXHASH64) || (ihashtype==FRANZO_WINHASH64) || (ihashtype==FRANZO_XXHASH64B))
 		p_xxhash64=new XXHash64(0);
 	else
@@ -53883,12 +57345,12 @@ string	franz_do_hash::filehash(string i_filename,bool i_flagcalccrc32,int64_t i_
 }
 
 
-
 /////////////////////////////// extract ///////////////////////////////
 // Return true if the internal file p
 // and external file contents are equal or neither exists.
 // If filename is 0 then return true if it is possible to compare.
 // In the meantime calc the crc32 of the entire file
+	
 bool Jidac::equal(DTMap::const_iterator p, const char* filename,uint32_t &o_crc32,string i_myhashtype,const string i_myhash,string& o_hash)
 {
 	if (flagdebug3)
@@ -53930,7 +57392,7 @@ bool Jidac::equal(DTMap::const_iterator p, const char* filename,uint32_t &o_crc3
 		return risultato;
 	}
   // compare sizes
-	FP in=fopen(filename, RB);
+	FP in=myfopen(filename, RB);
 	if ((in==NULL) || (in==FPNULL))
 	{
 		if (flagdebug3)
@@ -53942,12 +57404,14 @@ bool Jidac::equal(DTMap::const_iterator p, const char* filename,uint32_t &o_crc3
 	{
 		if (flagdebug3)
 			myprintf("53942: ftello(in) %s <> p second size %s\n",migliaia(ftello(in)),migliaia2(p->second.size));
-		return fclose(in), false;
+		///return oldfclose(in), false;
+		myfclose(&in);
+		return false;
 	}
 
 	if (flagquick)
 	{
-		fclose(in);
+		myfclose(&in);
 		if (flagdebug3)
 			myprintf("53950: flagquick, return true\n");
 		return true;
@@ -53981,7 +57445,10 @@ bool Jidac::equal(DTMap::const_iterator p, const char* filename,uint32_t &o_crc3
 	{
 		unsigned f=p->second.ptr[i];
 		if (f<1 || f>=ht.size() || ht[f].usize<0)
-			return fclose(in), false;
+		{
+			myfclose(&in);
+			return false;
+		}
 		double percentuale=0;
 		if (flagshow)
 		{
@@ -53994,7 +57461,11 @@ bool Jidac::equal(DTMap::const_iterator p, const char* filename,uint32_t &o_crc3
 							proper=100;
 					double tempo=(mtime()-timestart+1)/1000.0;
 					int myspeed=(int)(done/tempo);
-					myprintf("51415: SHA1 %03d %% (%12s) @ %12s/s\r",proper,tohuman(done),tohuman2(myspeed));
+					
+					if (flagchecksum || flagverify ||flagparanoid)
+						myprintf("54000: SHA1 %03d%%      %10s/%10s @ %10s/s + %s\r",proper,tohuman(done),tohuman3(p->second.size),tohuman2(myspeed),i_myhashtype.c_str());
+					else
+						myprintf("51415: SHA1 %03d%%      %10s/%10s @ %10s/s\r",proper,tohuman(done),tohuman3(p->second.size),tohuman2(myspeed));
 					ultimapercentuale=(int)percentuale;
 				}
 		}
@@ -54011,23 +57482,31 @@ bool Jidac::equal(DTMap::const_iterator p, const char* filename,uint32_t &o_crc3
 				hashfrombuffer.update(buf,r);
 			if (r!=n)
 			{
-				return fclose(in), false;
+				myfclose(&in);
+				return false;
 			}
 			sha1.write(buf, n);
 			j+=n;
 		}
 		if (memcmp(sha1.result(), ht[f].sha1, 20)!=0)
 		{
-			return fclose(in), false;
+			myfclose(&in);
+			return false;
 		}
 	}
 	if (fread(buf, 1, BUFSIZE, in)!=0)
-		return fclose(in), false;
-	fclose(in);
-
+	{
+		myfclose(&in);
+		return false;
+	}
+	myfclose(&in);
+	
 	if (flagchecksum || flagverify ||flagparanoid)
+	{
 		o_hash=hashfrombuffer.finalize();
-	//myprintf("54067: o_hash %s\n",o_hash.c_str());
+		if (flagdebug3)
+			myprintf("54067: o_hash in equal %s\n",o_hash.c_str());
+	}
 	return true;
 }
 
@@ -54287,7 +57766,7 @@ void * scriviramtodisk(void *t)
 			int64_t startfilesystem=mtime();
 			///myprintf("49443: makepath %s\n",par->filenameondisk[i]);
 			makepath(par->filenameondisk[i], par->filedate[i],par->fileattr[i]);
-			FP myfile=fopen(par->filenameondisk[i].c_str(), WB);
+			FP myfile=myfopen(par->filenameondisk[i].c_str(), WB);
 			if (myfile==FPNULL)
 			{
 				myprintf("51553: Hard guru during fopen!\n");
@@ -54311,7 +57790,7 @@ void * scriviramtodisk(void *t)
 			}
 			///size_t scritti=fwrite(par->data[i],1,par->filesize[i],myfile);
 			par->o_writtenbythread+=scritti;
-			fclose(myfile);
+			myfclose(&myfile);
 			close(par->filenameondisk[i].c_str(),par->filedate[i],par->fileattr[i]);
 			par->o_timewrite+=(mtime()-startwrite);
 			if (scritti!=par->filesize[i])
@@ -54403,6 +57882,7 @@ bool Jidac::searchunixfile()
 #endif
 int Jidac::extract()
 {
+	
 	if (flagstdout)
 	{
 		howmanythreads=1;
@@ -54508,6 +57988,7 @@ int Jidac::extract()
 		myprintf("51923: ****** Full-scale extraction test (UTF-8 strange filenames, path too long...)\n");
 		myprintf("51923: ****** Highly suggested output on RAMDISK\n\n");
 	}
+
 	string kunfile=g_gettempdirectory()+"VFILE-kun.txt";
 	myreplaceall(kunfile,"\\","/");
 	kunfile=nomefileseesistegia(kunfile);
@@ -54520,6 +58001,26 @@ int Jidac::extract()
 		tofiles.clear();
 		tofiles.push_back(kunfile);
 	}
+	
+	
+	string externalkunfile=g_gettempdirectory()+"VFILE-extern.txt";
+	myreplaceall(externalkunfile,"\\","/");
+	externalkunfile=nomefileseesistegia(externalkunfile);
+	if (flagexternal)
+	{
+		files.clear();
+		files.push_back("VFILE-l-external.txt");
+		flagforce=true;
+		tofiles.clear();
+		tofiles.push_back(externalkunfile);
+		myprintf("57984: Autoselect external to %s\n",externalkunfile.c_str()); // too slow DTMap::iterator a=dt.find("VFILE-l-filelist.txt");
+#ifdef unix
+		flagspace=true;
+#endif
+
+	}
+	
+	
 	g_scritti=0;
   // Encrypt or decrypt whole archive
 	if ((repack!="") && all)
@@ -54637,13 +58138,13 @@ int Jidac::extract()
     // Get salt
     char salt[32];
     if (ver[1].offset==32) {  // encrypted?
-      FP fp=fopen(subpart(archive, 1).c_str(), RB);
+      FP fp=myfopen(subpart(archive, 1).c_str(), RB);
       if (fp==FPNULL) error("cannot read part 1");
 	  if (fp!=NULL)
 	  {
 		  if (fread(salt, 1, 32, fp)!=32) error("cannot read salt");
 		  salt[0]^='7'^'z';  // for index
-		  fclose(fp);
+		  myfclose(&fp);
 	  }
     }
     InputArchive in(archive.c_str());
@@ -55240,7 +58741,7 @@ int Jidac::extract()
 							{  // found new file
 								///myprintf();
 								if (outf!=FPNULL)
-									fclose(outf);
+									myfclose(&outf);
 								outf=FPNULL;
 								string outname=rename(b.files[k]->first);
 								dtptr=b.files[k];
@@ -55256,18 +58757,19 @@ int Jidac::extract()
 
 										makepath(outname);
 										///myprintf();
-										outf=fopen(outname.c_str(), WB);
+										outf=myfopen(outname.c_str(), WB);
 										if (outf==FPNULL)
 										{
 											printerr("18330",outname.c_str(),0);
 										}
+
 									}
 								release(job.mutex);
 							}
 							else
 							{  // end of file
 								if (outf!=FPNULL)
-									fclose(outf);
+									myfclose(&outf);
 								outf=FPNULL;
 								dtptr=dt.end();
 							}
@@ -55305,7 +58807,7 @@ int Jidac::extract()
 			}
 		}
 		if (outf!=FPNULL)
-			fclose(outf);
+			myfclose(&outf);
 	}
 	if (segments>0)
 		myprintf("%u streaming segments extracted\n", segments);
@@ -55375,7 +58877,7 @@ int Jidac::extract()
 					expected+=(*p->second.pramfile).filesize;
 					if (flagdebug2)
 						myprintf("34092: ramdisk-out  %12s %s\n",migliaia((int64_t)(*p->second.pramfile).filesize),fn.c_str());
-					FP myfile=fopen(fn.c_str(), WB);
+					FP myfile=myfopen(fn.c_str(), WB);
 					if (myfile==FPNULL)
 					{
 						myprintf("32613: cannot fopen fn\n");
@@ -55396,7 +58898,7 @@ int Jidac::extract()
 					}
 					//size_t scritti=fwrite((*p->second.pramfile).data, 1, (*p->second.pramfile).filesize, myfile);
 					written+=scritti;
-					fclose(myfile);
+					myfclose(&myfile);
 				}
 			}
 		}
@@ -55498,10 +59000,42 @@ int Jidac::extract()
 			else
 			{
 				myprintf("\n");
-				myprintf("20543: Cannot work the filelist. Archive created without -filelist ?\n");
-				errors=1;
+				color_red();
+				myprintf("20543: filelist not good. Archive created without -filelist ?\n");
+				color_restore();
+				errors=2;
 			}
 		}
+  	if (flagexternal)
+		if (errors==0)
+		{
+			if (fileexists(externalkunfile))
+			{
+				FILE* myfile = freadopen(externalkunfile.c_str());
+				if (myfile!=NULL)
+				{
+#ifdef ANCIENT
+					char data[16384];
+#else
+					char data[65536*16];
+#endif
+					int got=0;
+					while ((got=fread(data,sizeof(char),sizeof(data),myfile)) > 0)
+						fwrite(data,1,got,stdout);
+					fclose(myfile);
+					delete_file(externalkunfile.c_str());
+				}
+			}
+			else
+			{
+				myprintf("\n");
+				color_red();
+				myprintf("58999: VFILE external not good. Archive created without -external ?\n");
+				color_restore();
+				errors=2;
+			}
+		}
+
 	if (flagparanoid)
 	{
 		myprintf("\n\n");
@@ -56631,7 +60165,7 @@ int Jidac::trim()
     }
     // Get salt from first part if it exists
     if (g_password) {
-      FP fp=fopen(subpart(archive, 1).c_str(), RB);
+      FP fp=myfopen(subpart(archive, 1).c_str(), RB);
       if (fp==FPNULL) {
         if (header_pos>32) error("archive first part not found");
         header_pos=32;
@@ -56640,7 +60174,7 @@ int Jidac::trim()
 		  if (fp!=NULL)
 		  {
 			if (fread(salt, 1, 32, fp)!=32) error("cannot read salt");
-			fclose(fp);
+			myfclose(&fp);
 		  }
       }
     }
@@ -58316,10 +61850,68 @@ int Jidac::isopen()
 /*
 	Section: main
 */
+
+/*
+#define MAX_FILE_PATH 1024
+void close_open_files() 
+{
+#ifdef __linux__
+	if (flagverbose)
+		myprintf("61619: Seems Linux, scanning proc\n");
+    char 			path[MAX_FILE_PATH];
+    DIR 			*dir;
+    struct dirent 	*ent;
+    char 			fd_path[MAX_FILE_PATH];
+    int fd;
+
+    pid_t pid=getpid();
+	
+    snprintf(path, sizeof(path), "/proc/%d/fd", pid);
+	
+	if (flagverbose)
+		myprintf("61628: mypid is %d path is |%s|\n",pid, path);
+
+    if ((dir=opendir(path))!=NULL)
+	{
+        while ((ent=readdir(dir))!=NULL) 
+		{
+			if (flagverbose)
+				myprintf("61626: File to be closed (. and .. skipped) %s\n",ent->d_name);
+            if ((strcmp(ent->d_name, ".")==0) || (strcmp(ent->d_name, "..")==0))
+                continue;
+			snprintf(fd_path,sizeof(fd_path),"/proc/%d/fd/%s",pid,ent->d_name);
+			fd=atoi(ent->d_name);
+			if (flagverbose)
+				myprintf("61631: fd %d  fd_path %s\n",fd,fd_path);
+            if (fd>2) 
+			{
+				if (flagverbose)
+					myprintf("61364: Closing fd (>2) %d\n", fd);
+                close(fd);
+            }
+        }
+        closedir(dir);
+    } 
+	else 
+	{
+        myprintf("61642: (strange Linux?) cannot open /proc/[pid]/fd %s\n",path);
+    }
+	return;
+#endif
+	if (flagverbose)
+		myprintf("61655: close_open_files() on non-Linux: do nothing\n");
+}
+*/
+
 /// control-c handler
 void my_handler(int s)
 {
-	myprintf("\n\n54760: CONTROL-C detected, try some housekeeping...\n");
+	g_control_c=true;	// block open new files for write
+	
+	color_restore();
+	fflush(stdout);
+	myprintf("\n\n");
+	myprintf("54760: CONTROL-C detected, try some housekeeping...\n");
 #ifdef unix
 	if (g_dataset!="")
 	{
@@ -58334,64 +61926,158 @@ void my_handler(int s)
 		if (flagdebug)
 			myprintf("59882: %s\n",take_base.c_str());
 	}
+	// control-C in blind password
+    struct termios tty;
+    tcgetattr(STDIN_FILENO, &tty);
+    tty.c_lflag |= ECHO;
+    tcsetattr(STDIN_FILENO, TCSANOW, &tty);
 #endif
-	if ((g_archivefp!=FPNULL) && (g_archivefp!=NULL))
+
+	if (g_chunk_size>0)
 	{
-		myprintf("54470: Closing file handle %s\n",migliaia(int64_t(g_archivefp)));
-		fclose(g_archivefp);
+		printbar('-');
+		myprintf("61810: OK we get a chunk size limit of %s on %s files\n",migliaia(g_chunk_size),migliaia2(g_addedchunklist.size()));
+		myprintf("61892: g_archivefp_first handle %21s\n",migliaia(int64_t(g_archivefp_first)));
+		myprintf("61892: g_archivefp       handle %21s\n",migliaia(int64_t(g_archivefp)));
+		if (g_write_fp.size()==2)
+			if (g_write_fp[0]==g_archivefp_first)
+				if (g_write_fp[1]==g_archivefp)
+					myprintf("61830: archivefp/first match (this is good)\n");
+
+		myprintf("61808: write pool before emergency close (should be 2 max 3)\n");
+		vector<FP> fp_da_chiudere;
+		for (unsigned int i=0;i<g_write_fp.size();i++)
+		{
+			myprintf("61810: write pool %08d %21s %s\n",i,migliaia((int64_t)(g_write_fp[i])),g_write_filename[i].c_str());
+			fp_da_chiudere.push_back(g_write_fp[i]);
+		}
+		printbar('-');
+		
+		if (fp_da_chiudere.size()>0)
+		{
+			myprintf("61814: Closing %08d handles\n",fp_da_chiudere.size());
+			for (unsigned int i=0;i<fp_da_chiudere.size();i++)
+			{
+				myprintf("61817: Closing (pool size %08d) FP %21s\n",g_write_fp.size(),migliaia(int64_t(fp_da_chiudere[i])));
+				myfclose(&fp_da_chiudere[i]);
+				if (flagdebug3)
+				myprintf("61824: Now pool size is   %08d\n",g_write_fp.size());
+			}
+			if (g_write_fp.size()==0)
+			myprintf("61822: Closing done, seems OK\n");
+			else
+			myprintf("61838: Closing done, something left\n");
+		}
+		
+		if (g_write_fp.size()!=0)
+		{
+			printbar('-');
+			myprintf("61849: write pool NOT empty (this could be bad)\n");
+			myprintf("61808: [2] write pool after close size %08d (should be zero)\n",g_write_fp.size());
+			for (unsigned int i=0;i<g_write_fp.size();i++)
+				myprintf("61810: write pool %08d %21s %s\n",i,migliaia((int64_t)(g_write_fp[i])),g_write_filename[i].c_str());
+			printbar('-');
+		}
 	}
-	if ((g_archivefp_first!=FPNULL) && (g_archivefp_first!=NULL))
-	{
-		myprintf("55687: Closing file handle first %s\n",migliaia(int64_t(g_archivefp_first)));
-		fclose(g_archivefp_first);
-	}
+
 
 	bool flagalwayscheck=g_flagcreating;
 	if (command=='Z')
 		flagalwayscheck=true;
 
-	if (flagalwayscheck)
-		if (fileexists(g_archive))
-			if (prendidimensionefile(g_archive.c_str())>=0)
-				{
-					if (delete_file(g_archive.c_str()))
-						myprintf("54766: Erased chunk <<");
-					else
-						myprintf("54767: *CANNOT DELETE* <<");
-					printUTF8(g_archive.c_str());
-					myprintf(">>\n");
-					
-				}
-
 	if (g_chunk_size>0)
 	{
-		myprintf("55718: Fixed-size chunk: (try) fclose (%s)\n",migliaia(g_addedfp.size()));
-		for (unsigned int i=0;i<g_addedfp.size();i++)
-			if (g_addedfp[i]!=FPNULL)
-				if (fclose(g_addedfp[i])==0)
-#ifdef _WIN32
-					myprintf("55725: Failed to fclose %s with error code %s\n",migliaia(int64_t(g_addedfp[i])),migliaia2((int64_t)GetLastError()));
-#else
-					myprintf("55729: Failed to fclose %s\n",migliaia(int64_t(g_addedfp[i])));
-#endif
-		myprintf("55699: Fixed-size chunk: (try) deleting all of them (%s)\n",migliaia(g_addedchunklist.size()));
+		unsigned int deleted	=0;
+		unsigned int expected	=0;
+
+		myprintf("55699: Fixed-size chunk: (try) deleting all of them (should be %s)\n",migliaia(g_addedchunklist.size()-1));
 		for (unsigned int i=0;i<g_addedchunklist.size();i++)
 		{
-			if (delete_file(g_addedchunklist[i].c_str()))
+			if (fileexists(g_addedchunklist[i].c_str()))
 			{
-		//		myprintf("55708: Erased chunk %08d <<",i);
+				expected++;
+				if (delete_file_no_mercy(g_addedchunklist[i].c_str()))
+				{
+					if (flagdebug3)
+						myprintf("55708: Erased chunk %08d <<",i);
+					deleted++;
+				}
+				else
+				{
+					myprintf("55711: *FAILED delete of %08d <<",i);
+					printUTF8(g_addedchunklist[i].c_str());
+					myprintf(">>\n");
+				}
 			}
 			else
 			{
-				myprintf("55711: *FAILED delete of %08d <<",i);
-				printUTF8(g_addedchunklist[i].c_str());
-				myprintf(">>\n");
+				if (flagdebug3)
+					myprintf("61916: file not found to be killed %s\n",g_addedchunklist[i].c_str());
+			}
+		}
+		if (expected==deleted)
+			color_green();
+		else
+			color_red();
+		myprintf("61754: Expected file %s deleted %s\n",migliaia(expected),migliaia2(deleted));
+		color_restore();
+	}
+	else
+	{
+		if ((g_archivefp!=FPNULL) && (g_archivefp!=NULL))
+		{
+			myprintf("54470: Closing file handle %s\n",migliaia(int64_t(g_archivefp)));
+			myfclose(&g_archivefp);
+			myprintf("61829: myfclose done on archivefp now %s\n",migliaia(int64_t(g_archivefp)));
+		}
+		if ((g_archivefp_first!=FPNULL) && (g_archivefp_first!=NULL))
+		{
+			myprintf("55687: Closing file handle first %s\n",migliaia(int64_t(g_archivefp_first)));
+			myfclose(&g_archivefp_first);
+			myprintf("61829: myfclose done on archivefp_first now %s\n",migliaia(int64_t(g_archivefp_first)));
+		}
+
+		if (flagalwayscheck)
+			if (fileexists(g_archive))
+				if (prendidimensionefile(g_archive.c_str())>=0)
+					{
+						if (delete_file(g_archive.c_str()))
+							myprintf("54766: Erased chunk <<");
+						else
+							myprintf("54767: *CANNOT DELETE* <<");
+						printUTF8(g_archive.c_str());
+						myprintf(">>\n");
+					}
+		// we must trim the index too!
+		if (!g_flagcreating)
+		{
+			int64_t newdim=prendidimensionefile(g_archive.c_str());
+			if (newdim>g_starting_zpaqsize)
+			{
+				myprintf("61913: should roll back %s from %s to %s\n",g_archive.c_str(),migliaia(newdim), migliaia2(g_starting_zpaqsize));
+
+///				if (truncate(g_archive.c_str(), g_starting_zpaqsize))
+	///				printerr("61920",g_archive.c_str(),0);
+		
+				if (g_starting_zpaqdate>0)
+				{
+					if (flagdebug3)
+					myprintf("62144: should touching back to %s\n",dateToString(false,g_starting_zpaqdate).c_str());
+						
+					///if (!touch(g_archive.c_str(),g_starting_zpaqdate,g_starting_zpaqattr))
+						///myprintf("61926: WARNING trouble in touching\n");
+				}
 			}
 		}
 	}
 
 	if (g_pidname!="")
 	{
+		if (g_pid_handle!=0)
+		{
+			myprintf("61905: Closing pid handle\n");
+			fclose(g_pid_handle);
+		}
 		if (delete_file(g_pidname.c_str()))
 			myprintf("54766: Erased pid   <<");
 		else
@@ -58403,8 +62089,6 @@ void my_handler(int s)
 	// 2==control-C (maybe)
 	if (s==2)
 	{
-
-
 
 #ifdef _WIN32
 		if (command=='q')
@@ -58422,6 +62106,12 @@ void my_handler(int s)
 		}
 	}
 	color_restore();
+	///fflush(stdout);
+#ifndef _WIN32
+		fflush(stdout);
+#endif
+
+	myprintf("\nGoodbye after %1.3f seconds (%s)\n",(mtime()-g_start)/1000.0,timetohuman((uint32_t)((mtime()-g_start)/1000.0)).c_str());
 	exit(1);
 }
 // Convert argv to UTF-8 and replace \ with /
@@ -58635,8 +62325,28 @@ void my_handler(int s)
 				xcommand(g_exec_ok,g_exec_text);
 		}
 	}
-
-	
+	else
+	{
+		if (flagbig)
+		{
+			if (errorcode==0)
+			{
+				color_green();
+				bigok();
+			}
+			else if (errorcode==1)
+			{
+				color_red();
+				bigwarning();
+			}
+			else
+			{
+				color_red();
+				bigerror();
+			}
+			color_restore();
+		}
+	}
 	
 	if (g_output_handle!=0)
 		fclose(g_output_handle);
@@ -60065,9 +63775,16 @@ int Jidac::test()
 	uint64_t 		dalavorare		=0;
 	uint32_t 		currentcrc32	=0;
 	uint32_t 		crc32stored;
+	uint32_t		triple_ok		=0;
+	uint32_t		triple_error	=0;
+///	uint32_t		missing_files	=0;
+///	uint32_t		different_size	=0;
+	vector<string> filestobecrced;
+
 	for (unsigned int i=0;i<g_crc32.size();i++)
 		dalavorare+=g_crc32[i].crc32size;
 	myprintf("57145: Checking %17s blocks with CRC-32 (%s not-0 bytes)\n",migliaia(g_crc32.size()),migliaia2(dalavorare));
+		
 	uint32_t 	parts=0;
 	uint64_t	zeroedblocks=0;
 	uint32_t	howmanyzero=0;
@@ -60148,7 +63865,74 @@ int Jidac::test()
 			{
 				if (flagdebug)
 					myprintf("57230: GOOD: STORED %08X = DECOMPRESSED %s\n",crc32stored,filedefinitivo.c_str());
-				status_1++;
+				if (flagcrc32)
+				{
+					if (fileexists(filedefinitivo.c_str()))
+					{
+						if (prendidimensionefile(filedefinitivo.c_str())!=p->second.size)
+						{
+							///different_size++;
+							triple_error++;
+							if (flagverbose)
+							{
+								myprintf("60251: ERROR: expected %s <> %s <<",
+								migliaia(p->second.size),migliaia2(prendidimensionefile(filedefinitivo.c_str())));
+								printUTF8(filedefinitivo.c_str());
+								myprintf(">>\n");
+							}
+						}
+						else
+						{
+							filestobecrced.push_back(filedefinitivo);
+							p->second.file_crc32=currentcrc32;
+						}
+					}
+					else
+					{
+						triple_error++;
+						if (flagverbose)
+						{
+							myprintf("60249: ERROR: cannot find <<");
+							printUTF8(filedefinitivo.c_str());
+							myprintf(">>\n");
+///							missing_files++;
+						}
+					}
+					
+	/*
+					else
+					{
+						franz_do_hash dummyquick2("CRC-32");
+						if (flagdebug3)
+							myprintf("61169: filehash CRC-32 on %s\n",filedefinitivo.c_str());
+						g_dimensione=0;
+						string 	crcfromfilesystem=dummyquick2.filehash(filedefinitivo,false,startverify,prendidimensionefile(filedefinitivo.c_str()));
+		
+						if (crcfromfilesystem!="")
+						{
+							uint32_t fromfilesystem=crchex2int(crcfromfilesystem.c_str());
+							if (flagdebug3)
+								myprintf("60175: stored %08X decompressed %08X from filesystem %08X\n",crc32stored,currentcrc32,fromfilesystem);
+							if (fromfilesystem==currentcrc32)
+							{
+								if (flagdebug3)
+									myprintf("60182: Triple == %08X for %s\n",fromfilesystem,filedefinitivo.c_str());
+								triple_ok++;
+							}
+							else
+							{
+								myprintf("60189: CRC-32 stored %08X decomp %08X file %08X <<",crc32stored,currentcrc32,fromfilesystem);
+								printUTF8(filedefinitivo.c_str());
+								myprintf(">>\n");
+								triple_error++;
+							}
+						}
+					}
+					*/
+				}
+				else
+					status_1++;
+				
 			}
 			else
 			{
@@ -60187,7 +63971,68 @@ int Jidac::test()
 	myprintf("57260: ERRORS CRC FI   : %08d (ERROR verifyng CRC-32 from disk)\n",status_e_crc);
 	if (status_e_blocks)
 	myprintf("57262: ERRORS          : %08d (ERROR in CRC-32, SHA-1 collisions?)\n",status_e_blocks);
-	status_e = status_e_hash+status_e_crc+status_e_blocks;
+	if (flagcrc32)
+	{
+		myprintf("60317: Triple checking CRC-32 on %s files (%s)\n",migliaia(filestobecrced.size()),tohuman(dalavorare+zeroedblocks));
+		
+		vector<std::pair<string,string> > crc32_pair;
+		int64_t starttriple=mtime();
+		franzparallelhashfiles("CRC-32",dalavorare+zeroedblocks,filestobecrced,crc32_pair);
+		printbar(' ');
+		myprintf("60349: Time doing CRC-32 %14.2fs\n",(mtime()-starttriple)/1000.0);
+	///	for (int i=0;i<filestobecrced.size();i++)
+		///	myprintf("60326: To be CRC-ed %s\n",filestobecrced[i].c_str());
+		
+	
+		if ((searchfrom!="") || (replaceto!=""))
+		{
+			myprintf("60293: due to -search/replace fixing dt\n");
+			rename_a_dtmap(dt);
+		}
+		
+		for (unsigned int i=0;i<crc32_pair.size();i++)
+		{
+			///if (i==7)
+				///crc32_pair[i].first="peppa";
+			string thefilename=crc32_pair[i].second;
+			DTMap::iterator p=dt.find(rename(thefilename));
+			if (p==dt.end())
+			{
+				triple_error++;
+				myprintf("60554: GURU cannot find thefilename in crc32_pair %s\n",thefilename.c_str());
+				///myprintf("%s\n",dt.begin()->first.c_str());
+				///seppuku();
+			}
+			else
+			{
+				uint32_t crc32fromfilesystem	=crchex2int(crc32_pair[i].first.c_str());
+				if (p->second.file_crc32==crc32fromfilesystem)
+				{
+					triple_ok++;
+					if (flagdebug3)
+						myprintf("63900: OK SOURCE %08d %s %s\n",(int)i,crc32_pair[i].first.c_str(),crc32_pair[i].second.c_str());
+				}
+				else
+				{
+					triple_error++;
+					if (flagverbose)
+					{
+						myprintf("63900: KAPUTT CRC-32 expected %08X founded %08X %s\n",
+						p->second.file_crc32,
+						crc32fromfilesystem,
+						crc32_pair[i].second.c_str());
+					}
+				}
+			}
+		}
+		color_green();
+		myprintf("60241: Triple OK       : %08d (CRC-32 stored, decompressed and filesystem)\n",triple_ok);
+		if (triple_error)
+			color_red();
+		myprintf("57262: Triple ERRORS   : %08d (-crc32 failed against filesystem)\n",triple_error);
+		color_restore();
+	}
+	status_e = status_e_hash+status_e_crc+status_e_blocks+triple_error;
 	if (status_e)
 	printbar('-');
 	if (status_0)
@@ -60214,6 +64059,203 @@ int Jidac::test()
 	}
 	if (flagcollision)
 		collision(true);
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+/*	
+	
+	
+	
+	
+	if ((searchfrom!="") || (replaceto!=""))
+	{
+		myprintf("600300: due to -search/replace fixing the filenames\n");
+		rename_a_dtmap(dt);
+	}
+	
+	uint64_t howmanyfiles	=0;
+	g_bytescanned			=0;
+	g_filescanned			=0;
+	g_worked				=0;
+
+	files_count.clear();
+	edt.clear();
+	for (unsigned i=0;i<files.size();++i)
+	{
+		myprintf("60368: scanning on %s\n",files[i].c_str());
+		scandir(true,edt,files[i].c_str());
+		files_count.push_back(edt.size()-howmanyfiles);
+		howmanyfiles=edt.size();
+	}
+	myprintf("\n");
+	printbar('-');
+ 	for (unsigned i=0; i<files.size(); ++i)
+		if (direxists(files[i]))
+			myprintf("97899: %9s in <<%s>>\n",migliaia((int64_t)files_count[i]),files[i].c_str());
+	printbar('-');
+	myprintf("97901: Total files found: %s\n", migliaia((int64_t)edt.size()));
+	myprintf("\n");
+	
+	if (flagdebug3)
+	{
+		for (DTMap::iterator p=edt.begin(); p!=edt.end(); ++p)
+			myprintf("97925: EDT  %s\n",p->first.c_str());
+		printbar('-');
+		for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p)
+			myprintf("97926: DT   %s\n",p->first.c_str());
+	}
+	vector<DTMap::iterator> filelist;
+	DTMap filelist_externalnotinzpaq;
+	DTMap filelist_inzpaqnotinexternal;
+	DTMap filelist_both;
+	
+	myprintf("60401: Comparing External to ZPAQ\n");
+	for (DTMap::iterator p=edt.begin(); p!=edt.end(); ++p)
+	{
+		DTMap::iterator a=dt.find(rename(p->first));
+		if (a==dt.end())
+			filelist_externalnotinzpaq[p->first]=p->second;
+		else
+			filelist_both[p->first]=p->second;
+	}
+
+	myprintf("60412: Comparing ZPAQ to External\n");
+	for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p)
+	{
+		string filename=rename(p->first);
+		///myprintf("60412: cerco (da dt) %s\n",filename.c_str());
+		DTMap::iterator a=edt.find(filename);
+		if (a==edt.end())
+		{
+		///	myprintf("60418: UNO in dt not in edt %s\n",p->first.c_str());
+			filelist_inzpaqnotinexternal[p->first]=p->second;
+		}
+		else
+		{
+	///		myprintf("60423: DUE in edt AND in dt %s\n",p->first.c_str());
+			filelist_both[p->first]=p->second;
+		}
+	}
+	myprintf("60411: External not in ZPAQ       %s\n",migliaia(filelist_externalnotinzpaq.size()));
+	myprintf("60411: Internal not on filesystem %s\n",migliaia(filelist_inzpaqnotinexternal.size()));
+	myprintf("60411: Files both                 %s\n",migliaia(filelist_both.size()));
+
+	vector<string> filestobecrced;
+
+	int64_t tobetested=0;
+	int		missingcrc=0;
+
+	int		ok_directory	=0;
+	int		kaputt_directory=0;
+	int		different_size	=0;
+	for (DTMap::iterator p=filelist_both.begin(); p!=filelist_both.end(); ++p)
+	{
+		string filename=rename(p->first);
+		p->second.hexcrc32		="";
+		p->second.file_crc32	=0;
+		p->second.expectedsize	=-1; // flag not checked
+		if (isdirectory(p->first))
+		{
+			bool risultato=exists(filename);
+			myprintf("53926: p->first isdirectory, check exists %d\n",(int)risultato);
+			if (risultato)
+			{
+				ok_directory++;
+				p->second.expectedsize	=1; // flag checked
+			}
+			else
+			{
+				kaputt_directory++;
+				p->second.expectedsize	=0; // flag checked
+			}
+		}
+		else
+		{
+			string 	myhashtype		="";
+			string 	myhash			="";
+			string 	mycrc32			="";
+			int64_t mycreationtime	=0;
+			int64_t myaccesstime	=0;
+			bool	myisordered		=false;
+			int		myversion		=0;
+			franz_posix* myposix	=NULL;
+			bool	myisadded		=false;
+			
+			string 	hashfromfile="";
+
+			decode_franz_block(false,p->second.franz_block,
+			myhashtype,
+			myhash,
+			mycrc32,
+			mycreationtime,
+			myaccesstime,
+			myisordered,
+			myversion,
+			myposix,myisadded);
+			tobetested+=p->second.size;
+			
+			p->second.outputname=filename;
+			if (mycrc32!="")
+			{
+				p->second.file_crc32	=crchex2int(mycrc32.c_str());
+				p->second.hexcrc32		=mycrc32;
+			
+				if (prendidimensionefile(filename.c_str())!=p->second.size)
+				{
+					p->second.expectedsize	=0; // flag checked
+					myprintf("53942: prendidimensionefile %s <> p second size %s\n",migliaia(prendidimensionefile(filename.c_str())),migliaia2(p->second.size));
+					different_size++;
+				}
+				else
+					filestobecrced.push_back(filename);
+			}
+		}
+	}
+ 
+	myprintf("60509: First pass, done\n");
+	myprintf("60545: different_size   %08d\n",different_size);
+	myprintf("60545: CRC to be done   %08d\n",filestobecrced.size());
+
+	
+	vector<std::pair<string,string> > crc32_pair;
+	
+	franzparallelhashfiles("CRC-32",tobetested,filestobecrced,crc32_pair);
+	///if (flagdebug3)
+	{
+		for (unsigned int i=0;i<crc32_pair.size();i++)
+		{
+			if (i==7)
+				crc32_pair[i].first="peppa";
+			
+			string thefilename=crc32_pair[i].second;
+			DTMap::iterator p=filelist_both.find(thefilename);
+			if (p==dt.end())
+			{
+				myprintf("60554: GURU cannot find thefilename in both %s\n",thefilename.c_str());
+			}
+			else
+			{
+				if (p->second.hexcrc32==crc32_pair[i].first)
+				{
+					p->second.expectedsize	=1; // flag checked
+				//myprintf("63900: OK SOURCE %08d %s %s\n",(int)i,crc32_pair[i].first.c_str(),crc32_pair[i].second.c_str());
+				}
+				else
+				{
+					p->second.expectedsize	=0; // flag checked
+					myprintf("63900: KAPUTT SOURCE %08d CRC-32 expected %s founded %s %s\n",(int)i,crc32_pair[i].first.c_str(),p->second.hexcrc32.c_str(),crc32_pair[i].second.c_str());
+				}
+			}
+		}
+	}
+	*/
 	return (errors+status_e)>0;
 }
 /*
@@ -60624,6 +64666,7 @@ class multipart
 		partarray.clear();
 		int parts	=0;  // number of existing parts in multipart
 		string part0=subpart(i_filename,0);
+		if (flagdebug3)
 		myprintf("61956: part0 %s i_filename %s\n",part0.c_str(),i_filename.c_str());
 		
 		string thehole	="";
@@ -63118,14 +67161,15 @@ int  Jidac::dir()
 		myprintf("38805: folder after %s\n",nuovacartella.c_str());
 	if	(!isdirectory(nuovacartella))
 		nuovacartella+='/';
-	if (cartella!=nuovacartella)
-	{
-		myprintf("38798: WARNING path : <<");
-		printUTF8(cartella.c_str());
-		myprintf(">>\nresolved to         : <<");
-		printUTF8(nuovacartella.c_str());
-		myprintf(">>\n");
-	}
+	if (!flagterse)
+		if (cartella!=nuovacartella)
+		{
+			myprintf("38798: WARNING path : <<");
+			printUTF8(cartella.c_str());
+			myprintf(">>\nresolved to         : <<");
+			printUTF8(nuovacartella.c_str());
+			myprintf(">>\n");
+		}
 	cartella=nuovacartella;
 	files[0]=cartella;
 #endif
@@ -63143,23 +67187,25 @@ int  Jidac::dir()
 		}
 
 
+	if (!flagterse)
+	{
+		myprintf("60197: ==== Scanning dir <<");
+		printUTF8(cartella.c_str());
+		myprintf(">> ");
+		if (barras)
+			myprintf(" /s");
+		if (barraos)
+			myprintf(" /os");
+		if (barraod)
+			myprintf(" /od");
+		if (barraa)
+			myprintf(" /a");
 
-	myprintf("60197: ==== Scanning dir <<");
-	printUTF8(cartella.c_str());
-	myprintf(">> ");
-	if (barras)
-		myprintf(" /s");
-	if (barraos)
-		myprintf(" /os");
-	if (barraod)
-		myprintf(" /od");
-	if (barraa)
-		myprintf(" /a");
+		if (onlyfiles.size()>0)
+			myprintf(" pattern %s ",onlyfiles[0].c_str());
 
-	if (onlyfiles.size()>0)
-		myprintf(" pattern %s ",onlyfiles[0].c_str());
-
-	myprintf("\n");
+		myprintf("\n");
+	}
 	bool		flagduplicati	=false;
 	int64_t 	total_size		=0;
 	int 		quantifiles		=0;
@@ -63486,11 +67532,14 @@ int  Jidac::dir()
 				myprintf("\n");
 			}
 		}
-	myprintf("    %10s File %20s byte\n",migliaia(quantifiles),migliaia2(total_size));
-	if (!flagduplicati)
-	myprintf("    %10s dir ",migliaia(quantedirectory));
-	else
-	myprintf("                   ");
+	if (!flagterse)
+	{
+		myprintf("    %10s File %20s byte\n",migliaia(quantifiles),migliaia2(total_size));
+		if (!flagduplicati)
+		myprintf("    %10s dir ",migliaia(quantedirectory));
+		else
+		myprintf("                   ");
+	}
 	if (!isdirectory(cartella))
 	{
 		string percorso=extractfilepath(cartella);
@@ -63501,8 +67550,11 @@ int  Jidac::dir()
 		///myprintf("60483: PERCO |%s|\n",percorso.c_str());
 	}
 	int64_t spazio=getfreespace(cartella);
-	myprintf(" %20s bytes (%s) free",migliaia(spazio),tohuman(spazio));
-	myprintf("\n");
+	if (!flagterse)
+	{
+		myprintf(" %20s bytes (%s) free",migliaia(spazio),tohuman(spazio));
+		myprintf("\n");
+	}
 	if (flagduplicati)
 	{
 		myprintf("\n");
@@ -64231,6 +68283,14 @@ string	win_getlong(const string& i_file)
 ///zpaqfranz a z:\1 \\?\UNC\franzk\z\cb -longpath -debug
 int Jidac::add()
 {
+	string externaloutputfile="";
+	if (g_externalname!="")
+	{
+		int risultato=external();
+		if (risultato!=0)
+			return risultato;
+	}
+	
 	/*
 	if (g_ismounted!="")
 	{
@@ -64469,8 +68529,6 @@ int Jidac::add()
 
 #ifdef _WIN32
 	char lettera=0;
-///	if (flagdd)
-///		return dd();
 #endif
 
 	if (flagstdin)
@@ -64479,7 +68537,6 @@ int Jidac::add()
 			fragment=6;
 			myprintf("59541: with -stdin fragment set to %d\n",fragment);
 		}
-
 
 #ifdef _WIN32
 	if (flagimage)
@@ -65061,14 +69118,15 @@ int Jidac::add()
     }
     if (g_password)
 	{  // derive archive salt from index
-      FP fp=fopen(index, RB);
+      FP fp=myfopen(index, RB);
       if (fp!=FPNULL)
 			if (fp!=NULL) // COMPILER BE QUIET!
 			{
 				if (fread(salt, 1, 32, fp)!=32)
 					error("cannot read salt from index");
 				salt[0]^='7'^'z';
-				fclose(fp);
+				myfclose(&fp);
+				
 			}
     }
   }
@@ -65084,13 +69142,16 @@ int Jidac::add()
 			{
 				string partname=subpart(archive, i);
 				if (partname==part0) error("too many archive parts");
-				FP fp=fopen(partname.c_str(), RB);
+				FP fp=myfopen(partname.c_str(), RB);
 				if (fp==FPNULL) break;
 				++parts;
 				fseeko(fp, 0, SEEK_END);
 				offset+=ftello(fp);
 				if (fp!=NULL)
-					fclose(fp);
+				{
+					myfclose(&fp);
+					
+				}
 			}
 			
 			header_pos=32*(g_password && parts==0);
@@ -65180,7 +69241,7 @@ int Jidac::add()
 		// Get salt from first part if it exists
 		if (g_password) 
 		{
-			FP fp=fopen(subpart(archive, 1).c_str(), RB);
+			FP fp=myfopen(subpart(archive, 1).c_str(), RB);
 			if (fp==FPNULL) 
 			{
 				if (header_pos>32) 
@@ -65193,7 +69254,7 @@ int Jidac::add()
 				{
 					if (fread(salt, 1, 32, fp)!=32) 
 						error("cannot read salt");
-					fclose(fp);
+					myfclose(&fp);
 				}
 			}
 		}
@@ -65203,10 +69264,7 @@ int Jidac::add()
 	
 	g_archive=arcname; /// for multipart the last
 	
-	int64_t	starting_zpaqdate=0;
-	int64_t starting_zpaqsize=0;
-	int64_t starting_zpaqattr=0;	
-	(void)getfileinfo(arcname,starting_zpaqsize,starting_zpaqdate,starting_zpaqattr);
+	(void)getfileinfo(arcname,g_starting_zpaqsize,g_starting_zpaqdate,g_starting_zpaqattr);
 
 
 	g_header_pos=header_pos;
@@ -65375,9 +69433,12 @@ int Jidac::add()
 		string solonome="";
 		if (flagstdin)
 		{
+			solonome=files[0];
+			/*
 			solonome=extractfilename(files[0]);
 			if (flagverbose)
 				myprintf("40587: REBUILDING STDIN filename to %s\n",solonome.c_str());
+			*/
 		}
 #ifdef _WIN32
 		if (flagimage)
@@ -65486,6 +69547,7 @@ int Jidac::add()
 /// Why? Because I am paranoid: this is THE file list, dt must be ==
 	if (flagfilelist)
 	{
+		
 		tempfile=g_gettempdirectory()+"VFILE-l-filelist.txt";
 		myreplaceall(tempfile,"\\","/");
 		myprintf("\n");
@@ -65542,7 +69604,13 @@ int Jidac::add()
 			flagsilent		=true;
 			summa();
 			fprintf(g_output_handle,"# This is hashdeep for version %s\n",migliaia(ver.size()));
+#ifdef unix		
+			myfclose(&g_output_handle);
+#else
 			fclose(g_output_handle);
+			g_output_handle=NULL;
+#endif
+
 			int64_t dimensionelista=0;
 			int64_t dimensionedata=0;
 			int64_t dimensioneattr=0;
@@ -65920,6 +69988,7 @@ int Jidac::add()
 				myprintf("\n");
 				return 2;
 			}
+			g_pid_handle=handlepid;
 			if (g_flagcreating)
 				fprintf(handlepid,"Creating backup %s\n",arcname.c_str());
 			else
@@ -66063,13 +70132,10 @@ int Jidac::add()
 	  */
 	  FP in;
 	  if (flagstdin)
-	  {
-		  myprintf("56163: go on stdin\n");
 		  in=stdin;
-	  }
 	  else
 	  {
-		  in=fopen(p->first.c_str(), RB);
+		  in=myfopen(p->first.c_str(), RB);
 		  if (in==FPNULL) {
 			printerr("16570",p->first.c_str(),0);
 			total_size-=p->second.size;
@@ -66120,7 +70186,7 @@ int Jidac::add()
 #else
 		  if (!flagstdin)
 #endif
-			fclose(in);
+			myfclose(&in);
     }
     // Wait for jobs to finish
     job.appendz(sb, 0, "");  // signal end of input
@@ -66378,33 +70444,44 @@ int Jidac::add()
 			
 	
 
-			if ((!flagmemfile) && (!flagstdin)
+			if ((!flagmemfile) 
 #ifdef _WIN32
 				&& (!flagimage)
 #endif
 			)
 			{
-				in=fopen(p->first.c_str(), RB);
-				if (in==FPNULL)
-				{  // skip if not found
-					p->second.date=0;
-					total_size-=p->second.size;
-	///	Houston, we got an error. Try to figure why re-opening the file (on Windows)
-	/// Microsoft filesystem is so complex, better some help
-					int64_t attrib=0;
-#ifdef _WIN32
-					attrib=getwinattributes(p->first);
-#endif
-					printerr("16672",p->first.c_str(),attrib);
-					++errors;
-					continue;
-				}
-			// get expected filesize. Slow down a bit. But I like very much
-			///if (flagverbose)
+				if (flagstdin)
 				{
-					fseeko(in, 0, SEEK_END);
-					p->second.expectedsize=ftello(in);
-					fseeko(in, 0, SEEK_SET);
+					in=stdin;
+					p->second.expectedsize=1;
+					if (g_touch!=0)
+						p->second.date=g_touch;
+					
+				}
+				else
+				{
+					in=myfopen(p->first.c_str(), RB);
+					if (in==FPNULL)
+					{  // skip if not found
+						p->second.date=0;
+						total_size-=p->second.size;
+		///	Houston, we got an error. Try to figure why re-opening the file (on Windows)
+		/// Microsoft filesystem is so complex, better some help
+						int64_t attrib=0;
+#ifdef _WIN32
+						attrib=getwinattributes(p->first);
+#endif
+						printerr("16672",p->first.c_str(),attrib);
+						++errors;
+						continue;
+					}
+				// get expected filesize. Slow down a bit. But I like very much
+				///if (flagverbose)
+					{
+						fseeko(in, 0, SEEK_END);
+						p->second.expectedsize=ftello(in);
+						fseeko(in, 0, SEEK_SET);
+					}
 				}
 			}
 			p->second.data=1;  // add in every case
@@ -66433,117 +70510,96 @@ int Jidac::add()
 				int c1=0;  // previous byte
 				unsigned h=0;  // rolling hash for finding fragment boundaries
 				libzpaq::SHA1 sha1;
-
-				if (flagstdin)
-				{
 					///c:\nz\dd if="\\\\.\\c:" bs=1048576 count=100000000000 |c:\zpaqfranz\zpaqfranz a j:\image\prova cimage.img -stdin
-					while (true)
+		
+				while (true)
+				{
+#ifdef _WIN32
+					if (bufptr>=buflen)
 					{
-						buflen=fread(buf, 1, g_ioBUFSIZE, stdin);
-						if (buflen==0)
-							break;
-						else
+						bufptr=0;
+						if (flagimage)
 						{
-							total_size+=buflen;
+							DWORD bytesread;
+							if (!ReadFile(device, buf, g_ioBUFSIZE, &bytesread, NULL))
+							{
+								myprintf("\n");
+								myprintf("42979: READ FAIL!\n");
+								c=EOF;
+							}
+							else
+							buflen=bytesread;
 							if (!flagnoeta)
 							{
 								int secondi=(mtime()-startstream)/1000;
 								if (secondi!=ultimotempo)
 								{
 									float ratio=100.0*g_scritti/(total_size+1);
-									myprintf("63103: So far in=%10s out=%10s (ratio %8.2f %) @ %10s /s\r",tohuman(total_size),tohuman2(g_scritti),ratio,tohuman3(total_size/secondi));
-									fflush(stdout);
+									float percentuale=100.0*total_done/(total_size+1);
+
+									myprintf("63163: Imaging %06.2f%% %10s of %s -> %10s (%6.2f %) @ %10s /s\r",percentuale,tohuman(total_done),tohuman2(total_size),tohuman3(g_scritti),ratio,tohuman4(total_done/secondi));
 									ultimotempo=secondi;
 								}
 							}
-							if (g_franzotype>0)
-								updatehash(&p,buf,buflen);
-							for (int j=0;j<buflen;j++)
-							{
-								c=(unsigned char)buf[j];
-								if (c==o1[c1])
-									h=(h+c+1)*314159265u, ++hits;
-								else
-									h=(h+c+1)*271828182u;
-								o1[c1]=c;
-								c1=c;
-								sha1.put(c);
-								fragbuf[sz++]=c;
-							}
 						}
-						if (sz>=MAX_FRAGMENT || (fragment<=22 && h<(1u<<(22-fragment)) && sz>=MIN_FRAGMENT))
-							break;
+						else
+						{
+							if (flagmemfile)
+								buflen=thefranzfs.ramread(g_ioBUFSIZE,buf);
+							else
+							if (flagstdin)
+								buflen=fread(buf,1,g_ioBUFSIZE,stdin);
+							else
+								buflen=fread(buf, 1, g_ioBUFSIZE, in);
+						}
 					}
-				}
-				else
-				{
-					while (true)
+#else
+					if (bufptr>=buflen)
 					{
-						
+						bufptr=0;
+						if (flagmemfile)
+							buflen=thefranzfs.ramread(g_ioBUFSIZE,buf);
+						else
+						if (flagstdin)
+							buflen=fread(buf,1,g_ioBUFSIZE,stdin);
+						else
+							buflen=fread(buf, 1, g_ioBUFSIZE, in);
+					}
+#endif
+					///	zero-length file (-debug -zero -kill)
+					/// or zero-filled file (-debug -zero)
+					if (flagdebug)
+						if (flagzero)
+						{
+							if (flagkill)
+								bufptr=buflen;
+							else
+								memset(buf,0,buflen);
+						}
 
-#ifdef _WIN32
-							if (bufptr>=buflen)
+					if (bufptr==0)
+						if (buflen>0)
 							{
-								bufptr=0;
-								if (flagimage)
+								if (g_franzotype>0)
+									updatehash(&p,buf,buflen);
+								///	this is why pre-get filesize: % of big files into global %
+								if (!flagnoeta)
 								{
-									DWORD bytesread;
-									if (!ReadFile(device, buf, g_ioBUFSIZE, &bytesread, NULL))
+									if (flagstdin)
 									{
-										myprintf("\n");
-										myprintf("42979: READ FAIL!\n");
-										c=EOF;
-									}
-									else
-									buflen=bytesread;
-									if (!flagnoeta)
-									{
+										total_size+=buflen;
+
 										int secondi=(mtime()-startstream)/1000;
 										if (secondi!=ultimotempo)
 										{
 											float ratio=100.0*g_scritti/(total_size+1);
-											float percentuale=100.0*total_done/(total_size+1);
-
-											myprintf("63163: Imaging %06.2f%% %10s of %s -> %10s (%6.2f %) @ %10s /s\r",percentuale,tohuman(total_done),tohuman2(total_size),tohuman3(g_scritti),ratio,tohuman4(total_done/secondi));
+											myprintf("63103: So far in=%10s out=%10s (ratio %8.2f %) @ %10s /s\r",tohuman(total_size),tohuman2(g_scritti),ratio,tohuman3(total_size/secondi));
+											fflush(stdout);
 											ultimotempo=secondi;
 										}
 									}
-								}
-								else
-								{
-									if (!flagmemfile)
-										buflen=fread(buf, 1, g_ioBUFSIZE, in);
 									else
-										buflen=thefranzfs.ramread(g_ioBUFSIZE,buf);
-								}
-							}
-		#else
-							if (bufptr>=buflen)
-							{
-								bufptr=0;
-								if (!flagmemfile)
-									buflen=fread(buf, 1, g_ioBUFSIZE, in);
-								else
-									buflen=thefranzfs.ramread(g_ioBUFSIZE,buf);
-							}
-		#endif
-							///	zero-length file (-debug -zero -kill)
-							/// or zero-filled file (-debug -zero)
-							if (flagdebug)
-								if (flagzero)
-								{
-									if (flagkill)
-										bufptr=buflen;
-									else
-										memset(buf,0,buflen);
-								}
-
-							if (g_franzotype>0)
-								if (bufptr==0)
-									if (buflen>0)
 									{
-										updatehash(&p,buf,buflen);
-										///	this is why pre-get filesize: % of big files into global %
 										if (p->second.expectedsize>100000000)
 										{
 											int percentuale=(int)(100.0*p->second.hashedsize/p->second.expectedsize)+1;
@@ -66558,37 +70614,36 @@ int Jidac::add()
 											}
 										}
 									}
-
-							if (bufptr>=buflen)
-								c=EOF;
-							else
-								c=(unsigned char)buf[bufptr++];
-							if (c!=EOF)
-							{
-								if (c==o1[c1])
-									h=(h+c+1)*314159265u, ++hits;
-								else
-									h=(h+c+1)*271828182u;
-								o1[c1]=c;
-								c1=c;
-					///			fina
-					///			sha1.put(c);
-								fragbuf[sz++]=c;	
+								}
 							}
-							if (c==EOF
-								|| sz>=MAX_FRAGMENT
-								|| (fragment<=22 && h<(1u<<(22-fragment)) && sz>=MIN_FRAGMENT))
-								break;
-						}
+
+					if (bufptr>=buflen)
+						c=EOF;
+					else
+						c=(unsigned char)buf[bufptr++];
+					if (c!=EOF)
+					{
+						if (c==o1[c1])
+							h=(h+c+1)*314159265u, ++hits;
+						else
+							h=(h+c+1)*271828182u;
+						o1[c1]=c;
+						c1=c;
+						fragbuf[sz++]=c;	
+					}
+					if (c==EOF
+						|| sz>=MAX_FRAGMENT
+						|| (fragment<=22 && h<(1u<<(22-fragment)) && sz>=MIN_FRAGMENT))
+						break;
 				}
+				
 				assert(sz<=MAX_FRAGMENT);
 				total_done+=sz;
-
-				
+		
 				// Look for matching fragment
 				assert(uint64_t(sz)==sha1.usize());
-				if (!flagstdin)
-					sha1.write(&fragbuf[0],sz);
+		///		if (!flagstdin)
+				sha1.write(&fragbuf[0],sz);
 				memcpy(sha1result, sha1.result(), 20);
 				if (flagnodedup || flagfast)
 					htptr=0;
@@ -66915,8 +70970,8 @@ int Jidac::add()
 #else
 			if (!flagstdin)
 #endif
-			fclose(in);
-			in=FPNULL;
+			myfclose(&in);
+			
 		}
 	}  // end for each file fi
 
@@ -67006,9 +71061,6 @@ int Jidac::add()
 #ifdef _WIN32
 	int64_t start_iblock=out.tell();
 #endif 
-
-
-	
   // Delete from archive
 	int dtcount=0;  // index block header name
 	int removed=0;  // count
@@ -67069,15 +71121,18 @@ int Jidac::add()
 					if (flagdebug3)
 						myprintf("61853: MEMFILE FIXING\n");
 					///filename+=":$DATA";
-					
 				}
 				
 ///				we want to strip the path of VLIST
 				if (mypos("VFILE-",filename)>-1)
 				{
 					myprintf("\n");
-					myprintf("65375: We get a VFILE\n");
+#ifdef _WIN32
+					myreplaceall(filename,"\\","/");
+#endif
 					filename=extractfilename(filename);
+					myprintf("65375: We get a VFILE %s\n",filename.c_str());
+				
 				}
 				
 				
@@ -67307,7 +71362,8 @@ int Jidac::add()
 	}
 	
 	if (!g_fakewrite)
-	myprintf("63963: %s +added, %s -removed.\n", migliaia(added), migliaia2(removed));
+		if (!flagstdin)
+			myprintf("63963: %s +added, %s -removed.\n", migliaia(added), migliaia2(removed));
 	assert(is.size()==0);
   // Back up and write the header
 	outi.close();
@@ -67441,11 +71497,11 @@ int Jidac::add()
 						flagfasttxt=false; // we do not want to update CRC-32!
 						fasttxt="";
 					}
-					if (starting_zpaqdate>0)
+					if (g_starting_zpaqdate>0)
 					{
 						if (flagverbose)
-							myprintf("62144: touching back to %s\n",dateToString(false,starting_zpaqdate).c_str());
-						if (!touch(arcname.c_str(),starting_zpaqdate,starting_zpaqattr))
+							myprintf("62144: touching back to %s\n",dateToString(false,g_starting_zpaqdate).c_str());
+						if (!touch(arcname.c_str(),g_starting_zpaqdate,g_starting_zpaqattr))
 							myprintf("62146: WARNING trouble in touching\n");
 					}
 				}
@@ -67529,8 +71585,7 @@ int Jidac::add()
 				myprintf("\n");
 				if (g_chunk_size>0)  // we have multiple output
 						global_file_len=myarchive_end+initial_archive_size;
-
-///fik						
+						
 				if (files_added+files_updated+removed>0)
 				myprintf("64037: %s + (%s -> %s -> %s %s) = %s %s @ %s/s\n",
 						migliaia(initial_archive_size), 
@@ -67545,24 +71600,24 @@ int Jidac::add()
 		}
 	}
 	
-
-	if (total_size!=total_done)
-		if (flagverbose)
-		{
-			printbar('!');
-			int64_t total_size_vf=0;
-			for (unsigned i=0; i<vf.size(); i++)
+	if (!flagstdin)
+		if (total_size!=total_done)
+			if (flagverbose)
 			{
-				DTMap::iterator p=vf[i];
-				if (p->second.size!=p->second.hashedsize)
-					myprintf("66383: exp %15s get %15s %s\n",migliaia(p->second.size),migliaia2(p->second.hashedsize),p->first.c_str());
-				total_size_vf =total_size_vf+p->second.hashedsize;
+				printbar('!');
+				int64_t total_size_vf=0;
+				for (unsigned i=0; i<vf.size(); i++)
+				{
+					DTMap::iterator p=vf[i];
+					if (p->second.size!=p->second.hashedsize)
+						myprintf("66383: exp %15s get %15s %s\n",migliaia(p->second.size),migliaia2(p->second.hashedsize),p->first.c_str());
+					total_size_vf =total_size_vf+p->second.hashedsize;
+				}
+				myprintf("66465: expected total_size %21s\n",migliaia(total_size));
+				myprintf("66465: hashed   total_size %21s\n",migliaia(total_size_vf));
+				printbar('!');
 			}
-			myprintf("66465: expected total_size %21s\n",migliaia(total_size));
-			myprintf("66465: hashed   total_size %21s\n",migliaia(total_size_vf));
-			printbar('!');
-		}
-	
+		
 	
 	
 	
@@ -67797,7 +71852,7 @@ int Jidac::add()
 					myprintf("61383: Cannot write on backupfile\n");
 					return 2;
 				}
-				fprintf(backupfile,"$zpaqfranz backupfile|1|%s|%s|%s\n",thehash.c_str(),dateToString(true,now()).c_str(),archive.c_str());
+				fprintf(backupfile,"$zpaqfranz backupfile|2|%s|%s|%s\n",thehash.c_str(),dateToString(true,now()).c_str(),archive.c_str());
 				fclose(backupfile);
 			}
 
@@ -67874,7 +71929,7 @@ int Jidac::add()
 					myprintf("61403: Cannot append on backupfile\n");
 					return 2;
 				}
-				fprintf(backupfile,"%s %s|[%21s] <%s> %s\r\n",stringtolower(hashreloaded).c_str(),checktxt.c_str(),migliaia(larghezzain),quickhash.c_str(),g_archive.c_str());
+				fprintf(backupfile,"%s %s|[%21s] <%s> $%s$ %s\r\n",stringtolower(hashreloaded).c_str(),checktxt.c_str(),migliaia(larghezzain),quickhash.c_str(),dateToString(true,now()).c_str(),g_archive.c_str());
 				fclose(backupfile);
 			}
 			else
@@ -68612,7 +72667,7 @@ int Jidac::benchmark()
 	array_multi	.push_back(819);
 	array_single.push_back(2415);
 	array_cpu	.push_back("Celeron N5105    (phy)  4");
-	array_multi	.push_back(18479);
+	array_multi	.push_back(479);
 	array_single.push_back(1818);
 	array_cpu	.push_back("i5-6200U         (phy)  2");
 	array_multi	.push_back(352);
@@ -68629,6 +72684,9 @@ int Jidac::benchmark()
 	array_cpu	.push_back("i5-3570          (phy)  4");
 	array_multi	.push_back(852);
 	array_single.push_back(2956);
+	array_cpu	.push_back("Intel N100       (phy)  4");
+	array_multi	.push_back(900);
+	array_single.push_back(3128);
 	array_cpu	.push_back("i7-4790K         (phy)  4");
 	array_multi	.push_back(1700);
 	array_single.push_back(3265);
@@ -91007,16 +95065,17 @@ int Jidac::testbackup()
 					myprintf("90203: originalname |%s|\n",originalname.c_str());
 				string originalpath=extractfilepath(originalname);
 				string currentpath=extractfilepath(filename);
-				if (originalpath!=currentpath)
-				{
-					color_yellow();
-					myprintf("90209: *** WARNING: original backup path <<%s>> != current index path <<%s>>\n",originalpath.c_str(),currentpath.c_str());
-					myprintf("90210: *** I highly recommend using -paranoid! ***\n");
-					color_red();
-					myprintf("90211: *** I highly recommend using -paranoid! ***\n");
-					color_restore();
-					myprintf("90212: *** I highly recommend using -paranoid! ***\n");
-				}
+				if (summary<0)
+					if (originalpath!=currentpath)
+					{
+						color_yellow();
+						myprintf("90209: *** WARNING: original backup path <<%s>> != current index path <<%s>>\n",originalpath.c_str(),currentpath.c_str());
+						myprintf("90210: *** I highly recommend using -paranoid! ***\n");
+						color_red();
+						myprintf("90211: *** I highly recommend using -paranoid! ***\n");
+						color_restore();
+						myprintf("90212: *** I highly recommend using -paranoid! ***\n");
+					}
 			}
 		}
 	}
@@ -91077,6 +95136,7 @@ int Jidac::testbackup()
 	vector<string>	filehashes;
 	vector<string>	filequickhashes;
 	vector<int64_t>	filenumbers;
+	vector<string>	filedate;
 	while (fgets(line, sizeof(line), myfile))
 	{
 		linea=line;
@@ -91178,6 +95238,18 @@ int Jidac::testbackup()
 				return 2;
 			}
 			i++;
+			string thedate="";
+			if (linea[i]=='$')
+				if ((i+22)<linea.size())
+					if (linea[i+20]=='$')
+					{
+						thedate=linea.substr(i+1,19);
+						i+=22;
+						if (flagdebug3)
+							myprintf("95107: The date $%s$\n",thedate.c_str());
+						filedate.push_back(thedate);
+					}
+				
 			thefilename="";
 			while (i<linea.size())
 			{
@@ -91321,6 +95393,7 @@ int Jidac::testbackup()
 				string	theline		=arraymd5[i];
 				string 	thehash		="";
 				string	thefilename	="";
+				string	thedate		="";
 				unsigned int j=0;
 				while (j<theline.size())
 				{
@@ -91453,7 +95526,6 @@ int Jidac::testbackup()
 		myprintf("84258: Report\n");
 
 	bool flagallok=true;
-///fika
 	libzpaq::SHA256 globalesha256;
 
 	for (unsigned int i=0;i<tobehasheddest_hashname.size();i++)
@@ -91495,7 +95567,7 @@ int Jidac::testbackup()
 	}
 	char sha256result[32];
 	memcpy(sha256result, globalesha256.result(), 32);
-	myprintf("91498: GLOBAL SHA256: ");
+	myprintf("91903: GLOBAL SHA256: ");
 	for (int j=0; j <= 31; j++)
 		myprintf("%02X", (unsigned char)sha256result[j]);
 	myprintf("\n");
@@ -91512,6 +95584,8 @@ int Jidac::testbackup()
 	{
 		myprintf("85118: *** ALREADY IN ERROR ***\n");
 	}
+	if (filedate.size()>0)
+		myprintf("95447: Last date %s\n",filedate[filedate.size()-1].c_str());
 	if (flagparanoid)
 	{
 		if (fileexists(indexname))
@@ -91663,6 +95737,7 @@ int Jidac::backup()
 		myprintf(" (no writeable folder?)\n");
 		return 2;
 	}
+	g_pid_handle=handlepid;
 	fprintf(handlepid,"Starting backup @ %s\n",dateToString(true,now()).c_str());
 	fclose(handlepid);
 
@@ -91880,13 +95955,15 @@ int Jidac::consolidatebackup()
 		return 2;
 	}
 
-	fprintf(backupfile,"$zpaqfranz backupfile|1|%s|%s|%s\n",dateToString(true,now()).c_str(),thehash.c_str(),g_archive.c_str());
+	fprintf(backupfile,"$zpaqfranz backupfile|2|%s|%s|%s\n",dateToString(true,now()).c_str(),thehash.c_str(),g_archive.c_str());
 	franz_do_hash dummyquick("QUICK");
 	if (flagdebug3)
 		myprintf("87378: filehash on %s\n",g_archive.c_str());
 
 	string quickhash=dummyquick.filehash(g_archive,false,startverify,larghezzain);
-	fprintf(backupfile,"%s %s|[%21s] <%s> %s\r\n",stringtolower(hashreloaded).c_str(),checktxt.c_str(),migliaia(larghezzain),quickhash.c_str(),g_archive.c_str());
+
+	fprintf(backupfile,"%s %s|[%21s] <%s> $%s$ %s\r\n",stringtolower(hashreloaded).c_str(),checktxt.c_str(),migliaia(larghezzain),quickhash.c_str(),dateToString(true,now()).c_str(),g_archive.c_str());
+///	fprintf(backupfile,"%s %s|[%21s] <%s> %s\r\n",     stringtolower(hashreloaded).c_str(),checktxt.c_str(),migliaia(larghezzain),quickhash.c_str(),g_archive.c_str());
 	fclose(backupfile);
 
 	archive=newlonezpaq;
@@ -91977,12 +96054,17 @@ int&					o_expected_file)
 		myprintf("60372: second line char 4 not space\n");
 		return 2;
 	}
-
-	myreplace(linea,"%%%% ","");
-	myreplace(linea,"\r","");
-	myreplace(linea,"\n","");
+	myreplaceall(linea,"%%%% ","");
+	myreplaceall(linea,"\r","");
+	myreplaceall(linea,"\n","");
+	if (flagdebug3)
+	myprintf("96036: $$$$$$$$$$$$ !%s! $$$$$$$$$$$\n",linea.c_str());
 	vector<string> pezzi;
 	explode(linea,',',pezzi);
+	if (flagdebug3)
+		for (unsigned int i=0;i<pezzi.size();i++)
+			myprintf("%08d !%s!\n",i,pezzi[i].c_str());
+	 
 	if (pezzi.size()!=3)
 	{
 		myprintf("60417: second line MUST be of 3 fields (%d here)\n",pezzi.size());
@@ -92058,9 +96140,16 @@ int&					o_expected_file)
 						nomeo+=linea[j++];
 					else
 						break;
+					
+				myreplaceall(nomeo,"\\","/");
+				franzreplace(nomeo);
 
 				algo	=pezzi[1];
 				hasho	=stringtoupper(hasho);
+			
+				myreplaceall(algo,"sha1","SHA-1");
+				myreplaceall(algo,"sha256","SHA-256");
+				
 				if (flagdebug3)
 				{
 					myprintf("63127: myfilesize %d\n",isizo);
@@ -92068,6 +96157,9 @@ int&					o_expected_file)
 					myprintf("63127: myfilehash %s\n",hasho.c_str());
 					myprintf("63127: myfiles    %s\n",nomeo.c_str());
 				}
+				myreplaceall(nomeo,"\\","/");
+				franzreplace(nomeo);
+
 				o_filesize	.push_back(isizo);
 				o_filealgo	.push_back(algo);
 				o_filehash	.push_back(hasho);
@@ -93430,7 +97522,7 @@ int64_t Jidac::read_archive(callback_function i_advance,const char* arc, int *er
 									k+=ht[j].csize;
 								if (k>0 && k<ht.size() && ht[k].csize!=LIST_HT_BAD && ht[k].csize>=0)
 									dtr.kompressedsize+=ht[j].estimatedratio*ht[j].usize;
-								///fik update version size
+								/// update version size
 								ver.back().usize+=ht[j].usize;
 							}
 						}
@@ -94439,7 +98531,7 @@ int reduz(vector<string>* i_files,DTMap* i_myedt,vector<DTMap::iterator>* i_vf)
 		{
 			p=(*i_vf)[fi];
 			bufptr=buflen=0;
-			in=fopen(p->first.c_str(), RB);
+			in=myfopen(p->first.c_str(), RB);
 			if (in==FPNULL)
 			{  // skip if not found
 				p->second.date=0;
@@ -94650,8 +98742,8 @@ int reduz(vector<string>* i_files,DTMap* i_myedt,vector<DTMap::iterator>* i_vf)
 		if (fi<(*i_vf).size())
 		{
 			print_progress(total_size, total_done,g_scritti,0);
-			fclose(in);
-			in=FPNULL;
+			myfclose(&in);
+			
 		}
 	}  // end for each file fi
 	sort((*i_vf).begin(),(*i_vf).end(),compareredallavgthenfilename);
@@ -96892,12 +100984,11 @@ int Jidac::update()
 	
 	int iminor			=atoi(minor.c_str());
 	int internal_iminor	=atoi(internal_minor.c_str());
-	
 	flagnewer=
 	(imaj>internal_imaj)
-	|
+	||
 	((imaj==internal_imaj) && (iminor>internal_iminor))
-	|
+	||
 	((imaj==internal_imaj) && (iminor==internal_iminor) && (letter>internal_letter));
 	
 	if (flagverbose)
@@ -97311,7 +101402,7 @@ int Jidac::crop()
 	
 	vector<uint64_t> version_position;
 	version_position.push_back(0);
-	all					=4;
+	all					=8;
 	int64_t wheretotrim	=0;
 	int errors			=0;
 	int64_t csize=read_archive(NULL,archive.c_str(),&errors,1);
@@ -98006,19 +102097,24 @@ void Jidac::list_datetime(const int64_t i_seconddate,const bool i_flagnewversion
 	{
 		color_yellow();
 		///myprintf("deleted /   internal");
-		   myprintf("deleted/inacessible ");
+		   myprintf("deleted/inacessible");
 		color_restore();
 		return;
 	}
 	if (i_flagnewversion)
 		color_blackongreen();
-	myprintf("%s ", dateToString(flagutc,i_seconddate).c_str());
+	myprintf("%s", dateToString(flagutc,i_seconddate).c_str());
 }
 void Jidac::list_filesize(const int64_t i_filesize,int i_thesizesize)
 {
+	if (g_csvstring!="")
+	{
+		myprintf("%s",migliaia(i_filesize));
+		return;
+	}
 	if (i_thesizesize==0)
 		i_thesizesize=19;
-	myprintf("%*s ", i_thesizesize,migliaia(i_filesize));
+	myprintf("%*s", i_thesizesize,migliaia(i_filesize));
 }
 void Jidac::list_compressedfilesize(const int64_t i_compressedfilesize,const int64_t i_filesize,const bool i_flagnewversion,const bool i_isfolder,const bool i_isdeleted)
 {
@@ -98026,20 +102122,29 @@ void Jidac::list_compressedfilesize(const int64_t i_compressedfilesize,const int
 	if (i_flagnewversion)
 	{
 		color_blackongreen();
-		myprintf("  Ver ");
+		if (g_csvstring!="")
+		myprintf("Ver");
+		else
+		myprintf("  Ver");
 		return;
 	}
 	if (i_isdeleted)
 	{
 		color_yellow();
-		myprintf("  del ");
+		if (g_csvstring!="")
+		myprintf("del");
+		else
+		myprintf("  del");
 		color_restore();
 		return;
 	}
 	if (i_isfolder)
 	{
 		color_green();
-		myprintf("  dir ");
+		if (g_csvstring!="")
+		myprintf("dir");
+		else
+		myprintf("  dir");
 		color_restore();
 		return;
 	}
@@ -98050,18 +102155,24 @@ void Jidac::list_compressedfilesize(const int64_t i_compressedfilesize,const int
 	if (ratio>999)
 	{
 		color_red();
-		myprintf(">999%% ");
+		myprintf(">999%%");
 	}
 	else
 	if (ratio>100.0)
 	{
 		color_yellow();
-		myprintf("%4.0f%% ", (double)ratio);
+		if (g_csvstring!="")
+		myprintf("%.0f%%", (double)ratio);
+		else
+		myprintf("%4.0f%%", (double)ratio);
 	}
 	else
 	{
 		color_green();
-		myprintf("%4.0f%% ", (double)ratio);
+		if (g_csvstring!="")
+		myprintf("%.0f%%", (double)ratio);
+		else
+		myprintf("%4.0f%%", (double)ratio);
 	}
 	///myprintf("(%10s) ", tohuman(i_compressedfilesize));
 	color_restore();
@@ -98081,7 +102192,10 @@ void Jidac::list_attributes(int64_t i_attributes)
 #ifdef _WIN32
 	myreplaceall(temp," ",".");
 #endif
-	myprintf("%s ", temp.c_str());
+	if (g_csvstring!="")
+		myreplaceall(temp," ","");
+		
+	myprintf("%s", temp.c_str());
 }
 
 
@@ -98284,6 +102398,7 @@ int Jidac::testverify()
 	char linebuffer[1000];
 	unsigned int ultimapercentuale=200;
 	unsigned int percentuale;
+	int64_t starttime=mtime();
 	for (unsigned fi=0;fi<filelist.size(); ++fi)
 	{
 		
@@ -98302,7 +102417,16 @@ int Jidac::testverify()
 			percentuale=100*fi/filelist.size();
 			if (ultimapercentuale!=percentuale)
 			{
-				myprintf("97969: Done %02d%% %10s of %10s, diff %s bytes so far\r",percentuale,tohuman(g_worked),tohuman2(g_bytescanned),migliaia2(usize));
+				int secondi=(mtime()-starttime)/1000;
+				if (secondi==0)
+					secondi=1;
+				if (percentuale==0)
+					percentuale=1;
+				double eta=(secondi*100/percentuale)-secondi;
+				
+				myprintf("97969: %03d%% %03d:%02d:%02d %10s/%10s @ %10s/s [+/- %19s]\r",
+				percentuale,int(eta/3600), int(eta/60)%60, int(eta)%60,
+				tohuman(g_worked),tohuman2(g_bytescanned),tohuman3(g_worked/secondi),migliaia2(usize));
 				ultimapercentuale=percentuale;
 			}
 		}
@@ -98337,7 +102461,7 @@ int Jidac::testverify()
 				tobetested+=p->second.size;
 			}
 			if (flagdebug2)
-				myprintf("98004:  |%s| %s\n",myhashtype.c_str(),p->first.c_str());
+				myprintf("98004:  |%s| |%s| %s\n",myhashtype.c_str(),myhash.c_str(),p->first.c_str());
 			
 			if (equal(p, p1->first.c_str(),crc32fromfile,myhashtype,myhash,hashfromfile)) //crc32 of second parameters
 			{
@@ -98345,6 +102469,7 @@ int Jidac::testverify()
 				{
 					p->second.data='=';
 					++fi;
+					g_worked+=p->second.size;
 				}
 				else
 				{
@@ -98448,6 +102573,17 @@ int Jidac::testverify()
 				risultati_utf8.push_back(false);
 			}
 		}
+	}
+	if (!flagnoeta)
+	{
+		int secondi=(mtime()-starttime)/1000;
+		if (secondi==0)
+			secondi=1;
+		myprintf("97969: %03d%% %03d:%02d:%02d %10s/%10s @ %10s/s [+/- %19s]\r",
+				100,0,0,0,
+				tohuman(g_worked),tohuman2(g_bytescanned),tohuman3(g_worked/secondi),migliaia2(usize));
+				
+	///	myprintf("98455: %03d%% %10s/%10s @ %10s/s [+/- %19s]\r",100,tohuman(g_worked),tohuman2(g_bytescanned),tohuman3(g_worked/secondi),migliaia2(usize));
 	}
 	myprintf("\n\n");
 	
@@ -98802,3 +102938,471 @@ bool Jidac::isjitable()
 #endif
 
 }
+
+void Jidac::tabba()
+{
+	if (g_csvstring!="")
+		myprintf(g_csvstring.c_str());
+	else
+		myprintf(" ");
+}
+
+string get_hash(string i_haystack,string i_line)
+{
+	if (i_line=="")
+	{
+		myprintf("99268: i_line empty!\n");
+		return "";
+	}
+	int start=mypos(i_haystack,i_line);
+	if (flagdebug)
+		myprintf("99273: start at %d\n",start);
+	if (start<0)
+		return "";
+	start+=i_haystack.size();
+	string	code;
+	unsigned int i=start;
+	
+	while (i<i_line.size())
+	{
+		if (i_line[i]==' ')
+			i++;
+		else
+		if (ishex(i_line[i]))
+			code+=i_line[i++];
+		else
+			break;
+	}
+	return stringtoupper(code);
+}
+int Jidac::comparehex()
+{
+	if (files.size()!=4)
+	{
+		myprintf("99268: You must enter FOUR parameters for comparehex\n");
+		myprintf("99268: File1 (ex. z:\\1.txt\n");
+		myprintf("99268: File2 (ex. z:\\2.txt\n");
+		myprintf("99268: The haystack (ex. \"GLOBAL SHA256:\"");
+		myprintf("99268: Expected len (ex. 64\n");
+		return 2;
+	}
+	
+	string 	file1		=files[0];
+	string 	file2		=files[1];
+	string	hashstring	=files[2];
+	int		expectedlen	=atoi(files[3].c_str());
+	
+	
+	myprintf("99273: File 1 <<");
+	printUTF8(file1.c_str());
+	myprintf(">>\n");
+	
+	myprintf("99305: File 2 <<");
+	printUTF8(file2.c_str());
+	myprintf(">>\n");
+	
+	if (flagdebug)
+	{	
+		myprintf("99308: Hashstring  |%s|\n",hashstring.c_str());
+		myprintf("99309: Expectedlen %d\n",expectedlen);
+	}
+	
+	if (!fileexists(file1.c_str()))
+	{
+		myprintf("99277: Sorry, file 1 does not exist\n");
+		return 2;
+	}
+	if (!fileexists(file2.c_str()))
+	{
+		myprintf("99282: Sorry, file 2 does not exist\n");
+		return 2;
+	}
+	vector<string> vector1;
+	vector<string> vector2;
+	
+	if (!readfiletoarray(file1,vector1))
+	{
+		myprintf("99290: Error, cannot read file1 in vector1\n");
+		return 2;
+	}
+	if (!readfiletoarray(file2,vector2))
+	{
+		myprintf("99295: Error, cannot read file2 in vector2\n");
+		return 2;
+	}
+	
+	string sha256_1;
+	string sha256_2;
+	
+	for (unsigned int i=vector1.size()-1; i>0; i--)
+		if (mypos(hashstring,vector1[i])>-1)
+		{
+			sha256_1=vector1[i];
+			break;
+		}
+
+	for (unsigned int i=vector2.size()-1; i>0; i--)
+		if (mypos(hashstring,vector2[i])>-1)
+		{
+			sha256_2=vector2[i];
+			break;
+		}
+	if (flagdebug)
+	{
+		myprintf("99315: SHA256_1 %s\n",sha256_1.c_str());
+		myprintf("99316: SHA256_2 %s\n",sha256_2.c_str());
+	}
+	if (sha256_1=="")
+	{
+		myprintf("99319: Cannot find |%s| in file1\n",hashstring.c_str());
+		return 2;
+	}
+	if (sha256_2=="")
+	{
+		myprintf("99367: Cannot find |%s| in file2\n",hashstring.c_str());
+		return 2;
+	}
+
+	string	code1=get_hash(hashstring,sha256_1);
+	string	code2=get_hash(hashstring,sha256_2);
+
+	int	risultato=2;
+	if ((code1==code2) && ((int)code1.size()==expectedlen))
+	{
+		color_green();
+		risultato=0;
+	}
+	else
+		color_red();
+	myprintf("99358: [1] exp len %d/found %d |%s|\n",expectedlen,code1.size(),code1.c_str());
+	myprintf("99365: [2] exp len %d/found %d |%s|\n",expectedlen,code2.size(),code2.c_str());
+	color_restore();
+	
+	return risultato;
+}
+
+int Jidac::count()
+{
+
+	if ((files.size()!=2) && (files.size()!=3))
+	{
+		myprintf("99432: You must enter TWO or THREE parameters for count\n");
+		myprintf("99433: [1] filename (ex. z:\\1.txt\n");
+		myprintf("99268: [2] count    (ex. 3)\n");
+		myprintf("99268: [3] thestring (optional, ex. \"(all OK)\"");
+		return 2;
+	}
+	
+	string 	file1		=files[0];
+	int		expectedlen	=atoi(files[1].c_str());
+	
+	string 	hashstring="#     # ###!";
+	if (files.size()==3)
+		hashstring	=files[2];
+	
+	if (!flagterse)
+	{
+		myprintf("99447: File 1 <<");
+		printUTF8(file1.c_str());
+		myprintf(">>\n");
+	}
+
+	if (flagverbose)
+		myprintf("99455: Searchstring |%s|\n",hashstring.c_str());
+
+	if (flagdebug)
+	{
+		myprintf("99456: Expectedcount %d\n",expectedlen);
+	}
+
+
+	g_bytescanned	=0;
+	g_filescanned	=0;
+	g_worked		=0;
+	flagskipzfs		=true;  // strip down zfs
+	DTMap			thedt;
+
+#ifdef unix
+	if (flagdebug)
+		myprintf("99486: running on NIX\n");
+	vector<string> candidate;
+	string estensione=prendiestensione(file1);
+
+	listfiles(extractfilepath(file1),estensione,true,&candidate);
+	if (flagdebug3)
+		myprintf("99492: candidate %s with pattern %s\n",migliaia(candidate.size()),file1.c_str());
+	for (unsigned int i=0;i<candidate.size();i++)
+	{
+		string filename=candidate[i];
+		if (flagdebug3)
+			myprintf("99497: filename %08d %s\n",(int)i,filename.c_str());
+
+		if (jollymatch(file1.c_str(),filename.c_str()))
+		{
+			if (flagdebug3)
+			{
+				myprintf("99503: matched <<");
+				printUTF8(filename.c_str());
+				myprintf("<<\n");
+			}
+			DT& d=thedt[filename];
+			d.date			=0;
+			d.creationdate	=0;
+			d.accessdate	=0;
+			d.size			=0;
+			d.attr			=0;
+			d.data			=0;
+		}
+		else
+		{
+			if (flagdebug3)
+				myprintf("99518: DISCARDED %s in %s\n",file1.c_str(),filename.c_str());
+		}
+	}
+#else
+
+	scandir(false,thedt,file1,false);
+	printbar(' ',false);
+	myprintf("\r");
+#endif
+
+	if (thedt.size()==0)
+	{
+		myprintf("99521: no archive founded => quit\n");
+		return 2;
+	}
+	if (flagverbose)
+	myprintf("58056: Founded %s archive(s), working\n",migliaia(thedt.size()));
+	int	founded		=0;
+///	int therun		=0;
+	vector<string> vector1;
+	
+	string filename;
+	for (DTMap::iterator p=thedt.begin(); p!=thedt.end(); ++p)
+	{
+///		therun++;
+		filename=p->first;
+		if (flagverbose)
+		myprintf("99523: Loading %s\n",filename.c_str());
+		vector1.clear();
+		if (!readfiletoarray(filename,vector1))
+		{
+			myprintf("99526: Error, cannot read file1 in vector1 %s\n",filename.c_str());
+			return 2;
+		}
+
+		for (unsigned int i=0;i<vector1.size();i++)
+			if (mypos(hashstring,vector1[i])>-1)
+				founded++;
+		
+	///	risultato+=riscomando;
+	}
+	
+	if (founded==expectedlen)
+		color_green();
+	myprintf("99538: Total founded %s (expected %s)  ",migliaia(founded),migliaia2(expectedlen));
+	if (founded==expectedlen)
+		myprintf(": THIS IS GOOD\n");
+	else
+		myprintf(": ERROR!!!\n");
+	
+	color_restore();
+	
+	
+	if (founded==expectedlen)
+		return 0;
+		
+	return 2;
+	
+}
+
+
+int Jidac::work()
+{
+	if (files.size()<1)
+	{
+		myprintf("02756: no parameter, sorry\n");
+		return 2;
+	}
+	
+	string mycommand=files[0];
+	
+	if ((mycommand=="date") || (mycommand=="datetime") || (mycommand=="time"))
+	{
+		if (files.size()==1)
+			myprintf("%s\n",dateToString(true,now()).c_str());
+		else
+		{
+			string thedate=format_datetime(files[1].c_str());
+			myprintf("%s\n",thedate.c_str());
+		}
+		return 0;
+	}
+	if (mycommand=="printbar")
+	{
+		if (files.size()==1)
+			printbar('-');
+		else
+			printbar(files[1].at(0));
+		return 0;
+	}
+	
+	if (mycommand=="big")
+	{
+		for (unsigned int i=1;i<files.size();i++)
+		{
+			ascii::Ascii font=ascii::Ascii();
+			font.print(files[i].c_str());
+		}
+		return 0;
+	}
+	
+	if (mycommand=="pad")
+	{
+		if (files.size()!=2)
+		{
+			myprintf("02677: pad command needs 1 more parameter\n");
+			return 2;
+		}
+		string thestring=files[1];
+		
+		for (unsigned int i=0;i<thestring.size();i++)
+			if (!isdigit(thestring[i]))
+			{
+				myprintf("02765: Only digits are allowed\n");
+				return 2;
+			}
+		if (menoenne==0)
+			menoenne=8;
+		while (thestring.size()<menoenne)
+			thestring="0"+thestring;
+		myprintf("%s\n",thestring.c_str());
+		return 0;
+	}
+	
+	if (mycommand=="filepathnotrailing")
+	{
+		if (files.size()!=2)
+		{
+			myprintf("02677: filepathnotrailing command needs 1 more parameter\n");
+			return 2;
+		}
+		string thestring=files[1];
+#ifdef _WIN32		
+		thestring=wintolinuxpath(thestring);
+#endif
+		thestring=extractfilepath(thestring);
+		
+#ifdef _WIN32		
+		thestring=linuxtowinpath(thestring);
+#endif
+		thestring=excludetrailingbackslash(thestring);
+		myprintf("%s\n",thestring.c_str());
+		return 0;
+	}
+
+	myprintf("02810: Do not understand the command\n");
+	return 2;
+}
+
+int	Jidac::external()
+{
+	if (g_externalname=="")
+	{
+		myprintf("03987: g_externalname empty\n");
+		return 2;
+	}
+	if (mypos(">",g_externalname)!=-1)
+	{
+		myprintf("03227: sorry, cannot use > in -external %s\n",g_externalname.c_str());
+		return 2;
+	}
+
+	string outputfile=g_gettempdirectory()+"VFILE-l-external.txt";
+#ifdef _WIN32
+	myreplaceall(outputfile,"\\","/");
+#endif
+	outputfile=nomefileseesistegia(outputfile);
+	string percorso=extractfilepath(outputfile);
+	if (!saggiascrivibilitacartella(percorso))
+	{
+		myprintf("03990: cannot write on |%s|\n",percorso.c_str());
+		return 2;
+	}
+	string thefiles="";
+	for (unsigned int i=0;i<files.size();i++)
+		thefiles+=files[i]+" ";
+	if (flagverbose)
+		myprintf("03236: Thefiles %d |%s|\n",files.size(),thefiles.c_str());
+	
+#ifdef _WIN32
+	myreplaceall(g_externalname,	"/","\\");
+	myreplaceall(outputfile,		"/","\\");
+#endif
+	if (flagverbose)
+		myprintf("03239: Params       |%s|\n",g_externalname.c_str());
+
+	string singleline=g_externalname+" >"+outputfile;
+	myreplaceall(singleline,"%files",thefiles);
+	myreplaceall(singleline,"$files",thefiles);
+	if (flagverbose)
+		myprintf("03255: executing %s\n",singleline.c_str());
+	
+	string	filebatch	=g_gettempdirectory()+"ext.bat";
+	filebatch=nomefileseesistegia(filebatch);
+	print_datetime();
+	myprintf("03265: Starting External \n");
+	if (fileexists(filebatch))
+		if (remove(filebatch.c_str())!=0)
+		{
+			myprintf("03272: Highlander batch  %s\n", filebatch.c_str());
+			return 2;
+		}
+	FILE* batch=fopen(filebatch.c_str(), "wb");
+	if (batch==NULL)
+	{
+		myprintf("03278: cannot write on %s\n",filebatch.c_str());
+		seppuku();
+	}
+
+#ifdef _WIN32
+	fprintf(batch,"@echo OFF\n");
+#endif
+	fprintf(batch,"%s\n",singleline.c_str());
+	fclose(batch);
+	int64_t startexternal=mtime();
+#ifdef _WIN32
+	waitexecute(filebatch,"",SW_HIDE);
+#else
+	if (chmod(filebatch.c_str(),0700)!=0)
+	{
+		myprintf("03373: error on chmod 700 on <<%s>>\n",filebatch.c_str());
+		return 2;
+	}
+	exec(filebatch.c_str());
+#endif
+	print_datetime();
+	myprintf("03287: External time %s output filesize %s\n",migliaia(mtime()-startexternal),migliaia2(prendidimensionefile(outputfile.c_str())));
+	
+	if (!fileexists(outputfile))
+	{
+		myprintf("06323: i_output file does not exists %s\n",outputfile.c_str());
+		return 2;
+	}
+	/*
+	if (prendidimensionefile(i_outputfile.c_str())==0)
+	{
+		myprintf("06328: i_output filesize is zero %s\n",i_outputfile.c_str());
+		return 2;
+	}
+	*/
+	
+	int64_t dimensionelista=0;
+	int64_t dimensionedata=0;
+	int64_t dimensioneattr=0;
+	if (getfileinfo(outputfile,dimensionelista,dimensionedata,dimensioneattr))
+		addfile(false,edt,outputfile,dimensionedata,dimensionelista,dimensioneattr,0,0);
+
+	return 0;
+}
+	

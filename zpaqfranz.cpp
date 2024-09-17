@@ -53,8 +53,8 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 */
 
-#define ZPAQ_VERSION "60.6x"
-#define ZPAQ_DATE "(2024-08-25)"  // cannot use __DATE__ on Debian!
+#define ZPAQ_VERSION "60.7j"
+#define ZPAQ_DATE "(2024-09-16)"  // cannot use __DATE__ on Debian!
 
 ///	optional align for malloc (sparc64) via -DALIGNMALLOC
 #define STR(a) #a
@@ -2174,6 +2174,7 @@ string 	g_cloudkey		="";
 int64_t	g_enter			=0;
 #endif
 FILE* 	g_output_handle;
+FILE* 	g_error_handle;
 bool flagignore;
 bool flaghw;	// this slow down vs HWSHA1
 bool flagdebug;
@@ -2200,6 +2201,7 @@ std::string 	g_exec_text;
 std::string 	g_exec;
 int 	g_255;
 std::string 	g_output;
+std::string 	g_error;
 std::string  g_ifexist;
 ///string  g_ismounted;
 std::string 	g_script;
@@ -2216,6 +2218,7 @@ bool	g_flagmultipart;
 std::string 	g_archive;
 std::string	g_indexname;
 std::string	g_externalname;
+std::string	g_input;
 std::string	g_csvstring;
 std::string	g_csvhf;
 std::string	g_pidname;
@@ -2323,6 +2326,7 @@ bool flagdesc;
 bool flagdonotforcexls;
 bool flagfilelist;
 bool flagexternal;
+bool flaginput;
 bool flagads;
 bool flagfast;
 bool flagfix255;
@@ -2535,12 +2539,60 @@ static const int64_t LIST_HT_BAD=   -0x7FFFFFFFFFFFFFFALL;  // no such frag
 
 std::string print_datetime(bool i_flagout=true);
 
-void myprintf(const char *fmt, ...)
+// In Windows, convert UTF-8 string to wide string ignoring
+// invalid UTF-8 or >64K. Convert "/" to slash (default "\").
+std::wstring utow(const char* ss, char slash='\\') {
+  assert(sizeof(wchar_t)==2);
+  assert((wchar_t)(-1)==65535);
+  std::wstring r;
+  if (!ss) return r;
+  const unsigned char* s=(const unsigned char*)ss;
+  for (; s && *s; ++s) {
+    if (s[0]=='/') r+=slash;
+    else if (s[0]<128) r+=s[0];
+    else if (s[0]>=192 && s[0]<224 && s[1]>=128 && s[1]<192)
+      r+=(s[0]-192)*64+s[1]-128, ++s;
+    else if (s[0]>=224 && s[0]<240 && s[1]>=128 && s[1]<192
+             && s[2]>=128 && s[2]<192)
+      r+=(s[0]-224)*4096+(s[1]-128)*64+s[2]-128, s+=2;
+  }
+  return r;
+}
+
+void printUTF8(const char* s, FILE* f=stdout)
+{
+	assert(f);
+	assert(s);
+	if (g_output_handle!=0)
+		fprintf(g_output_handle,"%s",s);
+	if (flagsilent)
+		return;
+#ifdef unix
+  fprintf(f, "%s", s);
+#else
+  const HANDLE h=(HANDLE)_get_osfhandle(_fileno(f));
+  DWORD ft=GetFileType(h);
+  if (ft==FILE_TYPE_CHAR) {
+    fflush(f);
+    std::wstring w=utow(s, '/');
+    DWORD n=0;
+    WriteConsole(h, w.c_str(), w.size(), &n, 0);
+  }
+  else
+    fprintf(f, "%s", s);
+#endif
+}
+
+
+void myprintf_old(const char *fmt, ...)
 {
 	char buffer[4096];
 	va_list args;
     va_start(args, fmt);
     vsnprintf(buffer,sizeof(buffer),fmt,args);
+	
+	int buffer_len=strlen(buffer);
+			
 	if (g_output_handle!=0)
 	{
 		if (flagdebug3)
@@ -2551,12 +2603,30 @@ void myprintf(const char *fmt, ...)
 		}
 		fprintf(g_output_handle,"%s",buffer);
 	}
+
+
+	bool	flagerror=false;
+	if (buffer_len>7)
+		flagerror=(buffer[5]=='!');
+	
+	if (flagerror)
+		if (g_error_handle!=0)
+		{
+			if (flagdebug3)
+			{
+				std::string temp=print_datetime(false);
+				fprintf(g_error_handle,"%s",temp.c_str());
+			}
+		fprintf(g_error_handle,"%s",buffer);
+		}
+	
+	
 	va_end(args);
 	
 	if (flagsilent)
 		return;
 	
-	if (strlen(buffer)<7)
+	if (buffer_len<7)
 	{
 		printf("%s",buffer);
 #ifndef _WIN32
@@ -2565,7 +2635,7 @@ void myprintf(const char *fmt, ...)
 		return;
 	}
 
-	if (buffer[5]!=':')
+	if ( (buffer[5]!=':') && (buffer[5]!='!') )
 	{
 		printf("%s",buffer);
 #ifndef _WIN32
@@ -2598,17 +2668,252 @@ void myprintf(const char *fmt, ...)
 		printf("%s",buffer);
 		color_restore();
 		buffer[6]=salva;
+		if (flagerror)
+			color_red();
 		printf("%s",buffer+6);
+		if (flagerror)
+			color_restore();
 	}
 	else
+	{
+		if (flagerror)
+			color_red();
 		printf("%s",buffer+7);
+		if (flagerror)
+			color_restore();
+	}
 #ifndef _WIN32
 		fflush(stdout);
 #endif
-			
-	
 }
 
+void	decode_print_flag(const char* i_buffer,bool& o_flagcolon,bool& o_flagerror)
+{
+	if (i_buffer==NULL)
+	{
+		printf("02734: i_buffer calcola flag NULL!\n");
+		exit(0);
+	}
+	o_flagcolon=false;
+	o_flagerror=false;
+	int format_len=strlen(i_buffer);
+
+	if (format_len>7)
+	{
+		bool fivedigits=(isdigit(i_buffer[0])) &&
+						(isdigit(i_buffer[1])) &&
+						(isdigit(i_buffer[2])) &&
+						(isdigit(i_buffer[3])) &&
+						(isdigit(i_buffer[4])) &&
+						((i_buffer[5]=='!') || (i_buffer[5]==':')) &&
+						(i_buffer[6]==' ');
+						
+		if (fivedigits)
+		{
+			o_flagerror=(i_buffer[5]=='!');
+			o_flagcolon=(i_buffer[5]==':');
+		}
+	}
+}
+
+void replacezwiths(const char *input, char *output) 
+{
+    const char *ptr = input;
+    char *out_ptr = output;
+
+    while (*ptr != '\0') {
+        // Controlla se troviamo la coppia "%Z"
+        if (ptr[0] == '%' && ptr[1] == 'Z') {
+            // Sostituisci con "%s"
+            *out_ptr++ = '%';
+            *out_ptr++ = 's';
+            ptr += 2; // Salta la coppia "%Z"
+        } else {
+            // Copia il carattere corrente
+            *out_ptr++ = *ptr++;
+        }
+    }
+    *out_ptr = '\0'; // Termina la stringa output
+}
+
+// La nostra funzione myprintf migliorata
+void myprintf(const char *format, ...) 
+{
+	bool	flagerror=false;
+	bool	flagcolon=false;
+    char buffer[4096]; // Buffer temporaneo per formati complessi
+	
+	
+	if (flagsilent)
+	{
+		char	fixata[4096];
+		replacezwiths(format,fixata);
+
+		va_list args2;
+		va_start(args2,format);
+		vsnprintf(buffer,sizeof(buffer),fixata,args2);
+		va_end(args2);
+		
+		decode_print_flag(buffer,flagcolon,flagerror);
+		if (g_output_handle!=0)
+			fprintf(g_output_handle,"%s",buffer);
+	
+		if (flagerror)
+			if (g_error_handle!=0)
+				fprintf(g_error_handle,"%s",buffer);
+		return;
+	}
+
+
+    va_list args;
+    va_start(args, format);
+
+	decode_print_flag(format,flagcolon,flagerror);
+	
+	if (flagcolon)
+	{
+		if (flagdebug)
+		{
+			color_green();
+			printf("%c%c%c%c%c: ",format[0],format[1],format[2],format[3],format[4]);
+			color_restore();
+		}
+		format+=7;
+	}
+		
+	if (flagerror)
+	{
+		color_red();
+	}
+    const char *p = format;
+    while (*p) 
+	{
+        if (*p == '%') 
+		{
+            p++;  // Passa al carattere successivo dopo '%'
+
+// Gestisce il caso di '%%' per stampare un singolo '%'
+            if (*p == '%') 
+			{
+                putchar('%');
+            } 
+			else 
+			{
+
+            char *b = buffer;
+            *b++ = '%'; // Aggiunge il carattere '%' nel buffer
+
+            // Gestisce eventuali flag come '-' o '0' per l'allineamento o padding
+            while (*p && (strchr("-+0 ", *p) != NULL)) 
+                *b++ = *p++;
+
+            // Gestisce larghezza del campo (es. 10 in %10s)
+            while (*p && (*p >= '0' && *p <= '9')) 
+                *b++ = *p++;
+
+            // Gestisce la precisione (es. .2 in %5.2f)
+            if (*p == '.') 
+			{
+                *b++ = *p++; // Aggiunge il '.'
+                while (*p && (*p >= '0' && *p <= '9')) 
+                    *b++ = *p++;
+            }
+
+            // Gestisce il carattere finale del formato (es. 'd', 's', 'f')
+            if (*p && strchr("diouxXfscZ", *p) != NULL) 
+			{
+                *b++ = *p;  // Aggiunge il carattere di conversione
+                *b = '\0';  // Termina la stringa nel buffer
+            }
+
+            // Ora gestiamo il formato accumulato nel buffer
+            if (*p == 'd' || *p == 'i') 
+			{
+                int i = va_arg(args, int);
+                printf(buffer, i);
+				if (g_output_handle!=0)
+					fprintf(g_output_handle,buffer,i);
+				if (g_error_handle!=0)
+					fprintf(g_error_handle,buffer,i);
+				
+            } 
+            else if (*p == 'u') 
+			{
+                unsigned int u = va_arg(args, unsigned int);
+                printf(buffer, u);
+				if (g_output_handle!=0)
+					fprintf(g_output_handle,buffer,u);
+				if (g_error_handle!=0)
+					fprintf(g_error_handle,buffer,u);
+				
+            } 
+            else if (*p == 'x' || *p == 'X') 
+			{
+                unsigned int x = va_arg(args, unsigned int);
+                printf(buffer, x);
+				if (g_output_handle!=0)
+					fprintf(g_output_handle,buffer,x);
+				if (g_error_handle!=0)
+					fprintf(g_error_handle,buffer,x);
+				
+            }
+            else if (*p == 'f') 
+			{
+                double f = va_arg(args, double);
+                printf(buffer, f);
+				if (g_output_handle!=0)
+					fprintf(g_output_handle,buffer,f);
+				if (g_error_handle!=0)
+					fprintf(g_error_handle,buffer,f);
+				
+            }
+            else if (*p == 's') 
+			{
+                char *s = va_arg(args, char *);
+                printf(buffer, s);
+				if (g_output_handle!=0)
+					fprintf(g_output_handle,buffer,s);
+				if (g_error_handle!=0)
+					fprintf(g_error_handle,buffer,s);
+				
+            }
+            else if (*p == 'c') 
+			{
+                int c = va_arg(args, int);
+                printf(buffer, c);
+				if (g_output_handle!=0)
+					fprintf(g_output_handle,buffer,c);
+				if (g_error_handle!=0)
+					fprintf(g_error_handle,buffer,c);
+            }
+            else if (*p == 'Z') 
+			{
+                // Gestione speciale del token %Z
+                char *s = va_arg(args, char *);
+                printUTF8(s);
+				if (g_error_handle!=0)
+					fprintf(g_error_handle,buffer,s);
+				
+            }
+			}
+        } 
+		else 
+		{
+            // Stampa un carattere normale (non un token di formato)
+            putchar(*p);
+			if (g_output_handle!=0)
+				fputc(*p,g_output_handle);
+        }
+
+        p++;  // Passiamo al carattere successivo nella stringa di formato
+    }
+    va_end(args);
+#ifndef _WIN32
+	fflush(stdout);
+#endif
+	if (flagerror)
+		color_restore();
+}
 
 /// LICENSE_START.23
 
@@ -16729,6 +17034,9 @@ void seppuku()
 {
 	if (g_output_handle)
 		fclose(g_output_handle);
+	if (g_error_handle)
+		fclose(g_error_handle);
+	
 	color_restore();
 	exit(0);
 }
@@ -16742,7 +17050,7 @@ bool ihavehw()
 	getcpuid(0,0,a,b,c,d);
    	if (a<7)
 	{
-		myprintf("11825: cpuid cannot get at least EAX 7\n");
+		myprintf("00001! cpuid cannot get at least EAX 7\n");
 		return false;
 	}
 
@@ -16754,28 +17062,28 @@ bool ihavehw()
 	supported_ssse3	=(c & (1UL << 9));
 	supported_sse41	=(c & (1UL << 19));
 	if (flagdebug3)
-		myprintf("01838: new ecx %d\n",(int)c);
+		myprintf("00002: new ecx %d\n",(int)c);
 
 	getcpuid(7,0,a,b,c,d);
 	supported_sha	=(b & (1UL << 29));
 	if (flagdebug3)
-		myprintf("01843: new ebx %d\n",(int)b);
+		myprintf("00003: new ebx %d\n",(int)b);
 
 	if (flagdebug)
 	{
-		myprintf("04058: SSSE3 :");
+		myprintf("00004: SSSE3 :");
 		if (supported_ssse3)
 			myprintf("OK\n");
 		else
 			myprintf("NO\n");
 
-		myprintf("04064: SSE41 :");
+		myprintf("00005: SSE41 :");
 		if (supported_sse41)
 			myprintf("OK\n");
 		else
 			myprintf("NO\n");
 
-		myprintf("04070: SHA   :");
+		myprintf("00006: SHA   :");
 		if (supported_sha)
 			myprintf("OK\n");
 		else
@@ -16793,7 +17101,7 @@ string print_datetime(bool i_flagout)
 	struct tm *local = localtime(&nowz);
 	if (local==NULL)
 	{
-		myprintf("18457: guru on tm\n");
+		myprintf("00007! guru on tm\n");
 		exit(0);
 	}
 	hours = local->tm_hour;
@@ -16987,7 +17295,7 @@ struct tipohash
 		switchflag		=i_switchflag;
 		if (i_finalize==NULL)
 		{
-			myprintf("16989:  i_finalize NULL! %s\n",i_hashname.c_str());
+			myprintf("00008! i_finalize NULL! %s\n",i_hashname.c_str());
 		}
 		
 		ffinalize		=i_finalize;
@@ -19328,7 +19636,7 @@ static
     }
 	g_cpu_features = features;
 	if (flagdebug3)
-		myprintf("15864: CPU feature %04X\n",features);
+		myprintf("00009: CPU feature %04X\n",features);
     return features;
 #else
     return 0;
@@ -23504,7 +23812,7 @@ XXH128_hash_t XXH3_128bits_digest (const XXH3_state_t* state)
     /* len <= XXH3_MIDSIZE_MAX : short code */
     if (state->seed)
 	{
-		myprintf("18402: GURU XXH NO SEED!\n");
+		myprintf("00010! GURU XXH NO SEED!\n");
 		seppuku();
 	}
     return XXH3_128bits_withSecret(state->buffer, (size_t)(state->totalLen),
@@ -23752,7 +24060,7 @@ HRESULT ModifyPrivilege(
                           TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY,
                           &hToken ))
     {
-        myprintf("20288: Failed OpenProcessToken\n");
+        myprintf("00011! Failed OpenProcessToken\n");
         return ERROR_FUNCTION_FAILED;
     }
     if ( !LookupPrivilegeValue( NULL,
@@ -23760,7 +24068,7 @@ HRESULT ModifyPrivilege(
                                 &luid ))
     {
         CloseHandle( hToken );
-        myprintf("20296: Failed LookupPrivilegeValue\n");
+        myprintf("00012!		Failed LookupPrivilegeValue\n");
         return ERROR_FUNCTION_FAILED;
     }
     NewState.PrivilegeCount = 1;
@@ -23774,7 +24082,7 @@ HRESULT ModifyPrivilege(
                                NULL,
                                NULL))
     {
-        myprintf("20310: Failed AdjustTokenPrivileges\n");
+        myprintf("00013! Failed AdjustTokenPrivileges\n");
         hr = ERROR_FUNCTION_FAILED;
     }
     CloseHandle(hToken);
@@ -23895,25 +24203,6 @@ string wtou(const wchar_t* s) {
     else if (*s<128) r+=*s;
     else if (*s<2048) r+=192+*s/64, r+=128+*s%64;
     else r+=224+*s/4096, r+=128+*s/64%64, r+=128+*s%64;
-  }
-  return r;
-}
-// In Windows, convert UTF-8 string to wide string ignoring
-// invalid UTF-8 or >64K. Convert "/" to slash (default "\").
-std::wstring utow(const char* ss, char slash='\\') {
-  assert(sizeof(wchar_t)==2);
-  assert((wchar_t)(-1)==65535);
-  std::wstring r;
-  if (!ss) return r;
-  const unsigned char* s=(const unsigned char*)ss;
-  for (; s && *s; ++s) {
-    if (s[0]=='/') r+=slash;
-    else if (s[0]<128) r+=s[0];
-    else if (s[0]>=192 && s[0]<224 && s[1]>=128 && s[1]<192)
-      r+=(s[0]-192)*64+s[1]-128, ++s;
-    else if (s[0]>=224 && s[0]<240 && s[1]>=128 && s[1]<192
-             && s[2]>=128 && s[2]<192)
-      r+=(s[0]-224)*4096+(s[1]-128)*64+s[2]-128, s+=2;
   }
   return r;
 }
@@ -24085,22 +24374,22 @@ int erredbarras(const std::wstring &wi_path)
 	std::wstring wpattern = wi_path+L"\\*.*";
 	const std::string s_pattern(wpattern.begin(),wpattern.end());
 	if (flagdebug)
-		myprintf("20762: get handle FOR %s\n",s_pattern.c_str());
+		myprintf("00014: get handle FOR %s\n",s_pattern.c_str());
 	int secondi=(mtime()-g_startrd)/1000;
 	if (secondi!=g_rd_ultimotempo)
 	{
 		g_rd_ultimotempo=secondi;
 		if (g_rd_expected)
-			myprintf("20605: Deleted objects %12s of (~) %12s @ %s/s\r",migliaia(g_rd),migliaia2(g_rd_expected),migliaia3(g_rd/secondi));
+			myprintf("00015: Deleted objects %12s of (~) %12s @ %s/s\r",migliaia(g_rd),migliaia2(g_rd_expected),migliaia3(g_rd/secondi));
 		else
-			myprintf("20607: Deleted objects %12s\r",migliaia(g_rd));
+			myprintf("00016: Deleted objects %12s\r",migliaia(g_rd));
 	}
 	WIN32_FIND_DATAW findfiledata;
 	HANDLE myhandle=FindFirstFileW(wpattern.c_str(),&findfiledata);
 	if (myhandle==INVALID_HANDLE_VALUE)
 	{
 		if (flagdebug)
-			myprintf("20767: Invalid handle %s\n",s_pattern.c_str());
+			myprintf("00017: Invalid handle %s\n",s_pattern.c_str());
 		return 0;
 	}
 	do
@@ -24111,13 +24400,13 @@ int erredbarras(const std::wstring &wi_path)
 			std::wstring wfilepath=wi_path+L"\\"+findfiledata.cFileName;
 			const std::string s_wfilepath(wfilepath.begin(),wfilepath.end());
 			if (flagdebug3)
-				myprintf("20780: Working on %s\n",s_wfilepath.c_str());
+				myprintf("00018: Working on %s\n",s_wfilepath.c_str());
 			if (findfiledata.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
 			{
 				if (flagdebug3)
 				{
 					myprintf("\n");
-					myprintf("20784: recurse on %s\n",s_wfilepath.c_str());
+					myprintf("00019: recurse on %s\n",s_wfilepath.c_str());
 				}
 				int myresult=erredbarras(wfilepath);
 				if (myresult)
@@ -24126,19 +24415,19 @@ int erredbarras(const std::wstring &wi_path)
 			else
 			{
 				if (flagdebug3)
-					myprintf("20792: set attribute on file %s\n",s_wfilepath.c_str());
+					myprintf("00020: set attribute on file %s\n",s_wfilepath.c_str());
 				if (SetFileAttributesW(wfilepath.c_str(),FILE_ATTRIBUTE_NORMAL) == FALSE)
 				{
 					if (flagdebug)
-						myprintf("31019: ERROR cannot change attr of %s\n",s_wfilepath.c_str());
+						myprintf("00021! ERROR cannot change attr of %s\n",s_wfilepath.c_str());
 					return GetLastError();
 				}
 				if (flagdebug3)
-					myprintf("20802: try to delete file %s\n",s_wfilepath.c_str());
+					myprintf("00022: try to delete file %s\n",s_wfilepath.c_str());
 				if (DeleteFileW(wfilepath.c_str())==FALSE)
 				{
 					if (flagdebug)
-						myprintf("31025: ERROR highlander file %s\n",s_wfilepath.c_str());
+						myprintf("00023! ERROR highlander file %s\n",s_wfilepath.c_str());
 					return GetLastError();
 				}
 				else
@@ -24153,19 +24442,19 @@ int erredbarras(const std::wstring &wi_path)
 	{
 		const std::string s_wipath(wi_path.begin(), wi_path.end());
 		if (flagdebug3)
-			myprintf("20824: Change folder attr  %s\n",s_wipath.c_str());
+			myprintf("00024: Change folder attr  %s\n",s_wipath.c_str());
 		if (SetFileAttributesW(wi_path.c_str(),FILE_ATTRIBUTE_NORMAL)==FALSE)
 		{
 			if (flagdebug)
-				myprintf("30135: ERROR cannot change folder attr %s\n",s_wipath.c_str());
+				myprintf("00025! ERROR cannot change folder attr %s\n",s_wipath.c_str());
 			return GetLastError();
 		}
 		if (flagdebug3)
-			myprintf("20834: RemoveDirectory  %s\n",s_wipath.c_str());
+			myprintf("00026: RemoveDirectory  %s\n",s_wipath.c_str());
 		if (RemoveDirectoryW(wi_path.c_str())==FALSE)
 		{
 			if (flagdebug)
-				myprintf("31047: ERROR highlander dir %s\n",s_wipath.c_str());
+				myprintf("00027! ERROR highlander dir %s\n",s_wipath.c_str());
 			return GetLastError();
 		}
 		else
@@ -24203,19 +24492,19 @@ bool getreparsepointW(bool i_flagdebug,const string i_path, char *i_buf, size_t 
 	o_byteletti	=0;
 	o_tag		=0;
 	o_type		="";
-	myprintf("20714: REPPAAA\n");
+	myprintf("00028: REPPAAA\n");
 	return true;
 	wstring wi_path=utow(i_path.c_str());
 	PREPARSE_READ_BUFFER pIoctlBuf;
 	DWORD attributi = GetFileAttributesW(wi_path.c_str());
 	if (attributi==INVALID_FILE_ATTRIBUTES)
 	{
-		myprintf("37390: failed GetFileAttributesW\n");
+		myprintf("00029! failed GetFileAttributesW\n");
 		return false;
 	}
 	if (!(attributi & FILE_ATTRIBUTE_REPARSE_POINT))
 	{
-		myprintf("37396: fake file is not a reparse point\n");
+		myprintf("00030! fake file is not a reparse point\n");
 		return false;
 	}
 	DWORD flag=FILE_FLAG_OPEN_REPARSE_POINT;
@@ -24224,7 +24513,7 @@ bool getreparsepointW(bool i_flagdebug,const string i_path, char *i_buf, size_t 
 	HANDLE h=CreateFileW(wi_path.c_str(),0,FILE_SHARE_READ | FILE_SHARE_WRITE,NULL,OPEN_EXISTING,flag,NULL);
 	if (h==INVALID_HANDLE_VALUE)
 	{
-		myprintf("37413: cannot createfile on reparse point\n");
+		myprintf("00031! cannot createfile on reparse point\n");
 		return false;
 	}
 	DWORD byteletti;
@@ -24232,12 +24521,12 @@ bool getreparsepointW(bool i_flagdebug,const string i_path, char *i_buf, size_t 
 	CloseHandle(h);
 	if (!fattoio)
 	{
-		myprintf("37429: DeviceIoControl kaputt\n");
+		myprintf("00032! DeviceIoControl kaputt\n");
 		return false;
 	}
 	if (byteletti<8)
 	{
-		myprintf("37438: something wrong\n");
+		myprintf("00033! something wrong\n");
 		return false;
 	}
 	pIoctlBuf 	= (PREPARSE_READ_BUFFER)i_buf;
@@ -24436,7 +24725,31 @@ int mygetch(bool i_flagmore)
 	}
 	return mychar;
 }
+/*
+void clear_from_cursor_to_end() 
+{
+    CONSOLE_SCREEN_BUFFER_INFO csbi;
+    HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
+    DWORD charsWritten;
+    DWORD consoleSize;
 
+    // Ottieni le informazioni sul buffer della console
+    if (GetConsoleScreenBufferInfo(hConsole, &csbi)) {
+        // Calcola il numero di caratteri dalla posizione corrente del cursore alla fine della riga
+        consoleSize = csbi.dwSize.X - csbi.dwCursorPosition.X;
+
+        // Riempie lo spazio con spazi vuoti
+        FillConsoleOutputCharacter(hConsole, ' ', consoleSize, csbi.dwCursorPosition, &charsWritten);
+        
+        // Riposiziona il cursore alla riga successiva
+        COORD newCursorPos = {0, csbi.dwCursorPosition.Y + 1};
+        SetConsoleCursorPosition(hConsole, newCursorPos);
+    } 
+	else {
+        printf("Errore nel recupero delle informazioni della console.\n");
+    }
+}
+*/
 void printbar(char i_carattere,bool i_printbarraenne=true)
 {
 	if (flagpakka)
@@ -24546,7 +24859,7 @@ bool getcaptcha(const string& i_captcha,const string& i_reason)
 		printf("Wrong captcha\n");
 		return false;
 	}
-	myprintf("21050: Captcha OK\n");
+	myprintf("00034: Captcha OK\n");
 	return true;
 }
 
@@ -24997,29 +25310,6 @@ string compressemlfilename(const string& i_string)
 	uniqfilename=percorso+uniqfilename;
 	return uniqfilename;
 }
-void printUTF8(const char* s, FILE* f=stdout)
-{
-	assert(f);
-	assert(s);
-	if (g_output_handle!=0)
-		fprintf(g_output_handle,"%s",s);
-	if (flagsilent)
-		return;
-#ifdef unix
-  fprintf(f, "%s", s);
-#else
-  const HANDLE h=(HANDLE)_get_osfhandle(_fileno(f));
-  DWORD ft=GetFileType(h);
-  if (ft==FILE_TYPE_CHAR) {
-    fflush(f);
-    std::wstring w=utow(s, '/');
-    DWORD n=0;
-    WriteConsole(h, w.c_str(), w.size(), &n, 0);
-  }
-  else
-    fprintf(f, "%s", s);
-#endif
-}
 FILE* freadopen(const char* i_filename)
 {
 #ifdef _WIN32
@@ -25033,9 +25323,13 @@ FILE* freadopen(const char* i_filename)
 		if (flagdebug)
 		{
 			myprintf("\n");
-			myprintf("21538: freadopen cannot open:");
+			myprintf("00035! freadopen cannot open: %Z\n",i_filename);
+/*
+			myprintf("\n");
+			myprintf("00036! freadopen cannot open:");
 			printUTF8(i_filename);
 			myprintf("\n");
+*/
 		}
 		return 0;
 	}
@@ -25163,12 +25457,12 @@ char* mytohuman(int64_t i_bytes,char* i_buffer,int i_buffersize)
 {
 	if (i_buffer==NULL)
 	{
-		myprintf("21235: guru i_buffer null\n");
+		myprintf("00037! guru i_buffer null\n");
 		seppuku();
 	}
 	if (i_buffersize<5)
 	{
-		myprintf("21240: guru buffer too small\n");
+		myprintf("00038! guru buffer too small\n");
 		seppuku();
 	}
 	if (i_bytes<0)
@@ -25221,7 +25515,7 @@ size_t mystrnlen(const char *i_string, size_t maxlen)
 	if (i_string==NULL)
 	{
 		if (flagdebug)
-			myprintf("21270: GURU null string\n");
+			myprintf("00039! GURU null string\n");
 		seppuku();  //safer to die
 		exit(0);
 		return 0;
@@ -25229,7 +25523,7 @@ size_t mystrnlen(const char *i_string, size_t maxlen)
 	if (maxlen==0)
 	{
 		if (flagdebug)
-			myprintf("21276: GURU maxlen 0\n");
+			myprintf("00040! GURU maxlen 0\n");
 		seppuku();  //safer to die
 		exit(0);
 		return 0;
@@ -25248,7 +25542,7 @@ int64_t myatoll(const char * i_str)
 	
 	if (mystrnlen(i_str,20)==20) /// this should be 21, 9999999...TB
 	{
-		myprintf("18619: GURU on very long number (longer than 20 chars)\n");
+		myprintf("00041! GURU on very long number (longer than 20 chars)\n");
 		seppuku();
 		exit(0);
 	}
@@ -25266,9 +25560,9 @@ int64_t myatoll(const char * i_str)
 	int64_t	risultato=atoll(thedigit.c_str());
 	if (flagdebug3)
 	{
-		myprintf("18632: integer (string) |%s| %s\n",thedigit.c_str(),migliaia(thedigit.size()));
-		myprintf("18663: integer          |%lld|\n",risultato);
-		myprintf("18634: text part        |%s|\n",thestring.c_str());
+		myprintf("00042: integer (string) |%s| %s\n",thedigit.c_str(),migliaia(thedigit.size()));
+		myprintf("00043: integer          |%lld|\n",risultato);
+		myprintf("00044: text part        |%s|\n",thestring.c_str());
 	}
 	thestring=stringtoupper(thestring);
 
@@ -25304,15 +25598,15 @@ int64_t myatoll(const char * i_str)
 	else
 	{
 		if (flagdebug)
-			myprintf("21350: ERROR string size not 1 or 2, ignoring [%s]\n",migliaia(thestring.size()));
+			myprintf("00045! ERROR string size not 1 or 2, ignoring [%s]\n",migliaia(thestring.size()));
 	}
 	
 	if (flagdebug)
-		myprintf("18667: final from %s to %s (%s)\n",i_str,migliaia(risultato),tohuman(risultato));
+		myprintf("00046: final from %s to %s (%s)\n",i_str,migliaia(risultato),tohuman(risultato));
 	
 	if (risultato<0)
 	{
-		myprintf("21363: GURU NEGATIVE! final from %s to %s (%s)\n",i_str,migliaia(risultato),tohuman(risultato));
+		myprintf("00047! GURU NEGATIVE! final from %s to %s (%s)\n",i_str,migliaia(risultato),tohuman(risultato));
 		seppuku();
 		exit(0);
 		return 0;
@@ -25340,12 +25634,12 @@ int64_t encodestringdate(string i_date,bool i_flagfrom)
 	int lunghezza=purged.length();
 	if ((lunghezza>14))
 	{
-		myprintf("18633: datelength >14 (%d) |%s|\n",lunghezza,purged.c_str());
+		myprintf("00048! datelength >14 (%d) |%s|\n",lunghezza,purged.c_str());
 		return -1;
 	}
 	if (lunghezza%2!=0)
 	{
-		myprintf("18638: datelength must be even (use leading zeros) (%d) |%s|\n",lunghezza,purged.c_str());
+		myprintf("00049! datelength must be even (use leading zeros) (%d) |%s|\n",lunghezza,purged.c_str());
 		return -1;
 	}
 
@@ -25397,35 +25691,35 @@ int64_t encodestringdate(string i_date,bool i_flagfrom)
 		}
 	}
 	if (flagdebug2)
-		myprintf("14669: date   %04d-%02d-%02d %02d:%02d:%02d\n",year,month,day,hour,minute,second);
+		myprintf("00050: date   %04d-%02d-%02d %02d:%02d:%02d\n",year,month,day,hour,minute,second);
 	if ((year<1970) || (year>2070))
 	{
-		myprintf("18693: year not from 1970 to 2070\n");
+		myprintf("00051! year not from 1970 to 2070\n");
 		return -1;
 	}
 	if ((month<1) || (month>12))
 	{
-		myprintf("11868: month not in [01..12]. Use leading zero (not 3 but 03)\n");
+		myprintf("00052! month not in [01..12]. Use leading zero (not 3 but 03)\n");
 		return -1;
 	}
 	if ((day<1) || (day>31))
 	{
-		myprintf("19703: day not in [01..31]. Use leading zero (not 4 but 04)\n");
+		myprintf("00053! day not in [01..31]. Use leading zero (not 4 but 04)\n");
 		return -1;
 	}
 	if (hour>24)
 	{
-		myprintf("18708: hour >24\n");
+		myprintf("00054! hour >24\n");
 		return -1;
 	}
 	if (minute>60)
 	{
-		myprintf("18713: minute >60\n");
+		myprintf("00055! minute >60\n");
 		return -1;
 	}
 	if (second>60)
 	{
-		myprintf("18718: second >60\n");
+		myprintf("00056! second >60\n");
 		return -1;
 	}
 	bool isleap= (((year % 4 == 0) &&
@@ -25438,21 +25732,21 @@ int64_t encodestringdate(string i_date,bool i_flagfrom)
 		{
 			if (!(day <=29))
 			{
-				myprintf("18731: leap year, feb must be <=29\n");
+				myprintf("00057! leap year, feb must be <=29\n");
 				return -1;
 			}
 		}
         else
 			if (!(day <=28))
 			{
-				myprintf("18738: NO leap year, feb must be <=28\n");
+				myprintf("00058! NO leap year, feb must be <=28\n");
 				return -1;
 			}
     }
     if ((month==4) || (month==6) || (month==9) || (month==11))
 		if (!(day <= 30))
 		{
-			myprintf("18745: this month (%d) cannot have more than 30 days\n",month);
+			myprintf("00059! this month (%d) cannot have more than 30 days\n",month);
 			return -1;
 		}
 
@@ -25490,7 +25784,7 @@ string ConvertUtcToLocalTime(const string& i_date)
 	if (flagdebug3)
 	{
 		myprintf("\n");
-		myprintf("20006: converting to localtime %s\n",i_date.c_str());
+		myprintf("00060: converting to localtime %s\n",i_date.c_str());
 	}
 #ifdef _WIN32
 	struct tm t;
@@ -25517,7 +25811,7 @@ string ConvertUtcToLocalTime(const string& i_date)
 		  t2->tm_mon + 1, t2->tm_mday, t2->tm_hour, t2->tm_min,
 		  t2->tm_sec);
 		if (flagdebug)
-			myprintf("20028: localtime is %s\n",ds);
+			myprintf("00061: localtime is %s\n",ds);
 		return ds;
 	}
 #else
@@ -25769,29 +26063,29 @@ string makelongpath(string i_path)
 	if (flaglongpath)
 	{
 		if (flagdebug3)
-			myprintf("19291: makelongpath of %s\n",i_path.c_str());
+			myprintf("00062: makelongpath of %s\n",i_path.c_str());
 
 		if (iswindowspath(i_path))
 		{
 			if (flagdebug3)
-				myprintf("19291: it is a windows path |%s|\n",i_path.c_str());
+				myprintf("00063: it is a windows path |%s|\n",i_path.c_str());
 
 			if (!islongpath(i_path))
 			{
 				if (flagdebug3)
-					myprintf("19295: this is NOT a longpath |%s|\n",i_path.c_str());
+					myprintf("00064: this is NOT a longpath |%s|\n",i_path.c_str());
 				return "//?/"+i_path;
 			}
 		}
 		else
 		{
 			if (flagdebug3)
-				myprintf("19308: NOT a iswindowspath |%s|\n",i_path.c_str());
+				myprintf("00065: NOT a iswindowspath |%s|\n",i_path.c_str());
 		}
 	}
 #endif
 	if (flagdebug2)
-		myprintf("19300: return makelongpath i_path |%s|\n",i_path.c_str());
+		myprintf("00066: return makelongpath i_path |%s|\n",i_path.c_str());
 	return i_path;
 }
 /// it is not easy, at all, to take *nix free filesystem space
@@ -25801,9 +26095,13 @@ int64_t getfreespace(string i_path)
 	if (i_path!="")
 		if (!direxists(i_path))
 		{
-			myprintf("21571: Path does not exists   ");
+			myprintf("00067! Path does not exists %Z\n",i_path.c_str());
+/*
+			myprintf("00068! Path does not exists   ");
 			printUTF8(i_path.c_str());
 			myprintf("\n");
+*/			
+			
 			vector<string> pezzi;
 			explode(i_path,'/',pezzi);
 			if (pezzi.size()>=2)
@@ -25813,12 +26111,19 @@ int64_t getfreespace(string i_path)
 					percorso+=pezzi[i]+"/";
 				if (percorso!="/")
 				{
+					/*
 					if (direxists(percorso))
-						myprintf("21584: Getting free space for ");
+						myprintf("00069: Getting free space for ");
 					else
-						myprintf("21589: Sorry: cannot find the path heuristically  ");
+						myprintf("00070! Sorry: cannot find the path heuristically  ");
 					printUTF8(percorso.c_str());
 					myprintf("\n");
+					*/
+					if (direxists(percorso))
+						myprintf("00071: Getting free space for %Z\n",percorso.c_str());
+					else
+						myprintf("00072! Sorry: cannot find the path heuristically %Z\n",percorso.c_str());
+										
 				}
 			}
 		}
@@ -25826,7 +26131,7 @@ int64_t getfreespace(string i_path)
 
 #ifdef BSD
 	if (flagdebug)
-		myprintf("22312: BSD: getfreespace\n");
+		myprintf("00073: BSD: getfreespace\n");
 	struct statfs stat;
 	if (statfs(i_path.c_str(),&stat)!=0)
 		return 0;
@@ -25839,7 +26144,7 @@ int64_t getfreespace(string i_path)
 #else
 #if defined(__linux__) || (defined(__APPLE__) && defined(__MACH__) && (!defined(__ppc__))) || defined(SOLARIS)
 	if (flagdebug)
-		myprintf("22325: LINUX: getfreespace\n");
+		myprintf("00074: LINUX: getfreespace\n");
 	struct statvfs stat;
 	if (statvfs(i_path.c_str(),&stat)!=0)
 		return 0;
@@ -25877,7 +26182,7 @@ int64_t getfreespace(string i_path)
 		spazio=i64FreeBytes;
 	return spazio; // Windows
 #endif
-	myprintf("19292: WARNING CANNOT GET FREE DISK SPACE!\n");
+	myprintf("00075! WARNING CANNOT GET FREE DISK SPACE!\n");
 	return 0;
 }
 #ifdef unix
@@ -25887,7 +26192,7 @@ void printerr(const char* i_where,const char* filename,int32_t i_fileattr)
 		return;
 	string lasterror=i_where;
 	string lasterror2=filename;
-	string risultato=lasterror+":"+lasterror2;
+	string risultato=lasterror+"!"+lasterror2;
 	if (i_fileattr==777442)
 		lasterror="COMPILER_BE_QUIET";
 	perror(risultato.c_str());
@@ -38579,14 +38884,14 @@ void	enumerateerrors()
 {
 	if (g_errors.size()==0)
 	{
-		myprintf("20650: no file errors tracked\n");
+		myprintf("00076: no file errors tracked\n");
 		return;
 	}
 	myprintf("\n");
-	myprintf("35069: File errors report\n");
+	myprintf("00077: File errors report\n");
 	for (MAPPAERRORS::iterator p=g_errors.begin(); p!=g_errors.end(); ++p)
 	{
-		myprintf("35071: Error %08d # %8s |%s| \n",p->first,migliaia((int64_t)p->second.counter),decodewinerror(p->first,NULL).c_str());
+		myprintf("00078! Error %08d # %8s |%s| \n",p->first,migliaia((int64_t)p->second.counter),decodewinerror(p->first,NULL).c_str());
 		if (flagdebug2)
 		{
 			for (unsigned int i=0;i<p->second.filenames.size();i++)
@@ -38626,12 +38931,14 @@ void printerr(const char* i_where,const char* filename,int32_t i_fileattr)
 		g_errors.insert(std::pair<int,s_error>(err,myblock));
 	}
 	string swhere=i_where;
+
 	g_exec_text=swhere+": "+decodewinerror(err,filename);
 	if (!flagquiet)
 	{
-		myprintf("%s ",g_exec_text.c_str());
-		printUTF8(filename);
-		myprintf("\n");
+		myprintf("\r");
+		printbar(' ',false);
+		myprintf("\r");
+		myprintf("00079! %s %Z\n",g_exec_text.c_str(),filename);
 	}
 	g_exec_text=g_exec_text+" "+filename;
 	if (filename)
@@ -38643,12 +38950,12 @@ void printerr(const char* i_where,const char* filename,int32_t i_fileattr)
 			if (direxists(mypath))
 			{
 				myprintf("\n\n");
-				myprintf("35125: MAYBE OUT OF FREE SPACE? %s\n",i_where);
+				myprintf("00080! MAYBE OUT OF FREE SPACE? %s\n",i_where);
 			}
 			else
 			{
 				myprintf("\n\n");
-				myprintf("35126: MAYBE OUT OF FREE SPACE OR INVALID PATH? %s\n",i_where);
+				myprintf("00081! MAYBE OUT OF FREE SPACE OR INVALID PATH? %s\n",i_where);
 			}
 		}
 	}
@@ -39422,7 +39729,7 @@ FP myfopen(const char* filename, const char* mode)
 				g_write_fp.push_back(risultato);
 				g_write_filename.push_back(filename);
 				if (flagdebug3)
-					myprintf("39396: write on               (pool %s)         |%s|         %s\n",migliaia(g_write_fp.size()),migliaia(int64_t(risultato)),filename);
+					myprintf("00082: write on               (pool %s)         |%s|         %s\n",migliaia(g_write_fp.size()),migliaia(int64_t(risultato)),filename);
 			}
 	return risultato;
 }
@@ -39432,7 +39739,7 @@ int myfclose(FP* fp)
 	if ((*fp)==FPNULL)
 	{	
 		if (flagdebug)
-			myprintf("06702: fclose on unix FPNULL ignored\n");
+			myprintf("00083: fclose on unix FPNULL ignored\n");
 		return EOF;
 	}
 
@@ -39444,21 +39751,21 @@ int myfclose(FP* fp)
 				g_write_fp.erase(g_write_fp.begin()+i);
 				g_write_filename.erase(g_write_filename.begin()+i);
 				if (flagdebug3)
-				myprintf("39410: ***********=============== [3] %d EUREKONAAA %s\n",i,g_write_filename[i].c_str());
+				myprintf("00084: ***********=============== [3] %d EUREKONAAA %s\n",i,g_write_filename[i].c_str());
 				break;
 			}
 		if (flagdebug3)
-			myprintf("39414: EXIT da eliminazione fp %s\n",migliaia(int64_t(*fp)));
+			myprintf("00085: EXIT da eliminazione fp %s\n",migliaia(int64_t(*fp)));
 	}
 
 	if (flagdebug3)
-		myprintf("06706: pre closing fp %s\n",migliaia(int64_t(*fp)));
+		myprintf("00086: pre closing fp %s\n",migliaia(int64_t(*fp)));
 	int risultato=fclose(*fp);
 	if (flagdebug3)
-		myprintf("06710: post closing fp %s result %d\n",migliaia(int64_t(*fp)),risultato);
+		myprintf("00087: post closing fp %s result %d\n",migliaia(int64_t(*fp)),risultato);
 	*fp=FPNULL;
 	if (flagdebug3)
-		myprintf("36253: fp now %s\n",migliaia(int64_t(*fp)));
+		myprintf("00088: fp now %s\n",migliaia(int64_t(*fp)));
 	return risultato;
 }
 #else // Windows
@@ -39488,16 +39795,18 @@ FP myfopen(const char* filename, MODE mode)
 	if (command=='q')
 		return CreateFile(utow(filename).c_str(), access, share,
                     NULL, disp, FILE_FLAG_BACKUP_SEMANTICS, NULL);
-					
+	if (flagdebug3)
+		myprintf("00089: CreateFile\n");
 	FP risultato=CreateFile(utow(filename).c_str(), access, share,NULL, disp, FILE_ATTRIBUTE_NORMAL, NULL);
-	
+	if (flagdebug3)
+		myprintf("00090: Createfile risultato %s\n",migliaia(int64_t(risultato)));
 	if (g_chunk_size>0)
 		if ((mode==WB) || (mode==WBPLUS))
 		{
 			g_write_fp.push_back(risultato);
 			g_write_filename.push_back(filename);
 			if (flagdebug3)
-				myprintf("39405: write on               (pool %s)         |%s|         %s\n",migliaia(g_write_fp.size()),migliaia(int64_t(risultato)),filename);
+				myprintf("00091: write on               (pool %s)         |%s|         %s\n",migliaia(g_write_fp.size()),migliaia(int64_t(risultato)),filename);
 		}
 	return risultato;
 	
@@ -39508,7 +39817,7 @@ int myfclose(FP* fp)
 	if ((*fp)==FPNULL)
 	{	
 		if (flagdebug)
-			myprintf("36288: win fclose on FPNULL ignored\n");
+			myprintf("00092: win fclose on FPNULL ignored\n");
 		return EOF;
 	}
 		
@@ -39520,21 +39829,21 @@ int myfclose(FP* fp)
 				g_write_fp.erase(g_write_fp.begin()+i);
 				g_write_filename.erase(g_write_filename.begin()+i);
 				if (flagdebug3)
-					myprintf("39492: ***********=============== [3] %d EUREKONAAA %s\n",i,g_write_filename[i].c_str());
+					myprintf("00093: ***********=============== [3] %d EUREKONAAA %s\n",i,g_write_filename[i].c_str());
 				break;
 			}
 		if (flagdebug3)
-			myprintf("49557: EXIT da eliminazione fp %s\n",migliaia(int64_t(*fp)));
+			myprintf("00094: EXIT da eliminazione fp %s\n",migliaia(int64_t(*fp)));
 	}
 
 	if (flagdebug3)
-		myprintf("36292: pre closing fp %s\n",migliaia(int64_t(*fp)));
+		myprintf("00095: pre closing fp %s\n",migliaia(int64_t(*fp)));
 	int risultato=CloseHandle(*fp) ? 0 : EOF;
 	if (flagdebug3)
-		myprintf("36295: post closing fp %s result %d\n",migliaia(int64_t(*fp)),risultato);
+		myprintf("00096: post closing fp %s result %d\n",migliaia(int64_t(*fp)),risultato);
 	*fp=FPNULL;
 	if (flagdebug3)
-		myprintf("36298: fp now %s\n",migliaia(int64_t(*fp)));
+		myprintf("00097: fp now %s\n",migliaia(int64_t(*fp)));
 	return risultato;
 }
 // Read nobj objects of size size into ptr. Return number of objects read.
@@ -39548,7 +39857,7 @@ size_t fread(void* ptr, size_t size, size_t nobj, FP fp) {
 int64_t ftello(FP fp) {
 	if ((int64_t)fp==0)
 	{
-		myprintf("36145: ftello on FP zero\n");
+		myprintf("00098! ftello on FP zero\n");
 		return 0;
 	}
   LONG h=0;
@@ -39583,7 +39892,7 @@ size_t myfwrite(const void* ptr, size_t size, size_t nobj, FP fp)
 	if (fp==0)
 	{
 		if (flagdebug3)
-			myprintf("35208: FP NOT POSITIVE\n");
+			myprintf("00099! FP NOT POSITIVE\n");
 		return 0;
 	}
 	if ((nobj*size)==0)
@@ -39600,7 +39909,7 @@ size_t myfwrite(const void* ptr, size_t size, size_t nobj, FP fp)
 	FILE* myfile=fopen(mynomefile, "wb");
 	if (myfile==NULL)
 	{
-		myprintf("34399: cannot write on %s\n",mynomefile);
+		myprintf("00100: cannot write on %s\n",mynomefile);
 		exit(0);
 	}
 	fwrite(ptr,size*nobj,1,myfile);
@@ -39610,7 +39919,7 @@ size_t myfwrite(const void* ptr, size_t size, size_t nobj, FP fp)
 #ifdef _WIN32
 	DWORD r=0;
 	if (flagdebug3)
-		myprintf("35239: WriteFile FP %s size %s nobj %s r= %08d FTELLO %s\n",migliaia(int64_t(fp)),migliaia3(int64_t(size)),migliaia4(int64_t(nobj)),r,migliaia2(ftello(fp)));
+		myprintf("00101: WriteFile FP %s size %s nobj %s r= %08d FTELLO %s\n",migliaia(int64_t(fp)),migliaia3(int64_t(size)),migliaia4(int64_t(nobj)),r,migliaia2(ftello(fp)));
 
 	WriteFile(fp, ptr, size*nobj, &r, NULL);
 
@@ -39626,8 +39935,8 @@ size_t myfwrite(const void* ptr, size_t size, size_t nobj, FP fp)
 		{
 			if (flagdebug3)
 			{
-				myprintf("36567: fwrite |%08d| pos %9s g_hep %s r=|%d| ",int(g_crc32_sequence_data),migliaia(ftello(fp)),migliaia2(g_header_pos),r);
-				myprintf("35255: g_crc_get_header %d\n",int(g_crc_getheader));
+				myprintf("00102: fwrite |%08d| pos %9s g_hep %s r=|%d| ",int(g_crc32_sequence_data),migliaia(ftello(fp)),migliaia2(g_header_pos),r);
+				myprintf("00103: g_crc_get_header %d\n",int(g_crc_getheader));
 			}
 
 			if (g_crc32_sequence_data==0) // this is the header of an encrypted piece
@@ -39636,7 +39945,7 @@ size_t myfwrite(const void* ptr, size_t size, size_t nobj, FP fp)
 				{
 					g_crc_header=crc32_16bytes(ptr,r);
 					if (flagdebug3)
-						myprintf("36002: HEADER  r=%08d %08X\n",r,g_crc_header);
+						myprintf("00104: HEADER  r=%08d %08X\n",r,g_crc_header);
 				}
 				else
 				{
@@ -39655,7 +39964,7 @@ size_t myfwrite(const void* ptr, size_t size, size_t nobj, FP fp)
 				{
 					g_crc_jidac=crc32_16bytes(ptr,r);
 					if (flagdebug3)
-						myprintf("36021: JIDAC r=%08d %08X\n",r,g_crc_jidac);
+						myprintf("00105: JIDAC r=%08d %08X\n",r,g_crc_jidac);
 				}
 				else
 				{
@@ -39674,7 +39983,7 @@ size_t myfwrite(const void* ptr, size_t size, size_t nobj, FP fp)
 						g_crc_body=crc32_combine(g_crc_body,crc,r);
 					}
 					if (flagdebug3)
-						myprintf("36040: BODY  %08X\n",g_crc_body);
+						myprintf("00106: BODY  %08X\n",g_crc_body);
 				}
 			}
 			g_crc32_sequence_data++;
@@ -39683,7 +39992,7 @@ size_t myfwrite(const void* ptr, size_t size, size_t nobj, FP fp)
 		else
 		{
 			if (flagdebug2)
-				myprintf("35322: Doing CRC-32 on index for bytes %s\n",migliaia(r));
+				myprintf("00107: Doing CRC-32 on index for bytes %s\n",migliaia(r));
 			uint32_t crc	=crc32_16bytes(ptr,r);
 			g_crc32_index	=crc32_combine(g_crc32_index,crc,r);
 			g_crc32_sequence_index++;
@@ -39692,7 +40001,7 @@ size_t myfwrite(const void* ptr, size_t size, size_t nobj, FP fp)
 
   if (flagdebug)
 		if ((size*nobj)!=r)
-			myprintf("20277: expected bytes != written (media full?)  %s vs  %s\n",migliaia((int64_t)(size*nobj)),migliaia2((int64_t)r));
+			myprintf("00108! expected bytes != written (media full?)  %s vs  %s\n",migliaia((int64_t)(size*nobj)),migliaia2((int64_t)r));
   if (size>1) r/=size;
   return r;
 }
@@ -39711,12 +40020,12 @@ bool fileexists(const string& i_filename)
 		if (mypos(":",i_filename)!=-1)
 		{
 			if (flagdebug3)
-				myprintf("36200: flagads ON and : in i_filename\n");
+				myprintf("00109: flagads ON and : in i_filename\n");
 			HANDLE hFile = CreateFileW((utow(i_filename.c_str()).c_str()), GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
 			if (hFile!=INVALID_HANDLE_VALUE)
 			{
 				if (flagdebug3)
-					myprintf("36204: ADS FOUNDED!\n");
+					myprintf("00110: ADS FOUNDED!\n");
 				CloseHandle(hFile);
 				return true;
 			}
@@ -39813,9 +40122,12 @@ bool getdirinfo(string i_folder,int64_t& o_date,int64_t& o_attr)
 	o_attr=0;
 	if (!isdirectory(i_folder))
 	{
-		myprintf("35470: This is not a folder <<%");
+		myprintf("00111! This is not a folder <<%Z>>\n",i_folder.c_str());
+		/*
+		myprintf("00112! This is not a folder <<%");
 		printUTF8(i_folder.c_str());
 		myprintf("\n");
+		*/
 		return false;
 	}
 #ifdef unix
@@ -39839,7 +40151,7 @@ bool getdirinfo(string i_folder,int64_t& o_date,int64_t& o_attr)
 	HANDLE h=FindFirstFile(utow(i_folder.c_str()).c_str(), &ffd);
 	if (h==INVALID_HANDLE_VALUE)
 	{
-		myprintf("35494: INVALID_HANDLE for <<%s>>\n",i_folder.c_str());
+		myprintf("00113! INVALID_HANDLE for <<%s>>\n",i_folder.c_str());
 		return false;
 	}
 	SYSTEMTIME st;
@@ -39921,7 +40233,7 @@ int erredbarras(const std::string &i_path)
 					else
 					{
 						if (flagdebug)
-							myprintf("20733: delete file %s\n",temp.c_str());
+							myprintf("00114: delete file %s\n",temp.c_str());
 						risultato2=delete_file(temp.c_str());
 					}
 				}
@@ -39932,7 +40244,7 @@ int erredbarras(const std::string &i_path)
 		if (risultato)
 		{
 			if (flagdebug)
-				myprintf("20745: delete dir  %s\n\n",i_path.c_str());
+				myprintf("00115: delete dir  %s\n\n",i_path.c_str());
 			delete_dir(i_path.c_str());
 		}
 	   return risultato;
@@ -39943,7 +40255,7 @@ bool stermina(string i_path,int32_t i_expectedfile=0)
 	if (i_path=="")
 		return false;
 	if (flagdebug2)
-		myprintf("20870: PRE  ------------------ %s ----------\n",i_path.c_str());
+		myprintf("00116: PRE  ------------------ %s ----------\n",i_path.c_str());
 #ifdef _WIN32
 	if (flaglongpath)
 		if (iswindowspath(i_path))
@@ -39953,7 +40265,7 @@ bool stermina(string i_path,int32_t i_expectedfile=0)
 	if (isdirectory(i_path))
 		i_path=i_path.substr(0, i_path.size()-1);
 	if (flagdebug2)
-		myprintf("20880: POST ------------------ %s ----------\n",i_path.c_str());
+		myprintf("00117: POST ------------------ %s ----------\n",i_path.c_str());
 	g_rd=0; // global file counter for huge dirs on slow media
 	g_rd_expected=i_expectedfile;
 	g_startrd=mtime();
@@ -40045,95 +40357,98 @@ void xcommand(string i_command,string i_parameter)
 {
 	if (flagdebug2)
 	{
-		myprintf("36385: Entering xcommand()\n");
-		myprintf("36386: i_command   |%s|\n",i_command.c_str());
-		myprintf("36387: i_parameter |%s|\n",i_parameter.c_str());
+		myprintf("00118: Entering xcommand()\n");
+		myprintf("00119: i_command   |%s|\n",i_command.c_str());
+		myprintf("00120: i_parameter |%s|\n",i_parameter.c_str());
 	}
 	if (i_command=="")
 	{
 		if (flagdebug)
-				myprintf("36392: Exit because empty i_command\n");
+			myprintf("00121: Exit because empty i_command\n");
 		return;
 	}
 	if (!fileexists(i_command))
 	{
 		if (flagdebug)
-				myprintf("36398: Exit because not fileexists  |%s|\n",i_command.c_str());
+			myprintf("00122! Exit because not fileexists  |%s|\n",i_command.c_str());
 		return;
 	}
 	int dummy;
 #if defined (_WIN32)
 	if (flagdebug3)
-			myprintf("36404: WIN32: Replacing before |%s|\n",i_command.c_str());
+			myprintf("00123: WIN32: Replacing before |%s|\n",i_command.c_str());
 	myreplaceall(i_command,"/","\\");
 	if (flagdebug3)
-			myprintf("36407: WIN32: After            |%s|\n",i_command.c_str());
+			myprintf("00124: WIN32: After            |%s|\n",i_command.c_str());
 #endif
 	string mycommand="";
 	if (i_parameter=="")
 	{
 		if (flagdebug)
-				myprintf("20273: i_parameter is empty\n");
+				myprintf("00125! i_parameter is empty\n");
 #if defined (_WIN32)
 		if (flagdebug3)
-			myprintf("20274: On Windows insert double-double quote for cmd /c\n");
+			myprintf("00126: On Windows insert double-double quote for cmd /c\n");
 		mycommand="\"\""+i_command+"\""+"\"";
 #else
 		if (flagdebug3)
-			myprintf("20278: On *unix insert single double quote\n");
+			myprintf("00127: On *unix insert single double quote\n");
 		mycommand="\""+i_command+"\"";
 #endif
 	}
 	else
 	{
 		if (flagdebug2)
-				myprintf("20291: i_parameter is NOT empty\n");
+			myprintf("00128: i_parameter is NOT empty\n");
 #if defined (_WIN32)
 		if (flagdebug3)
-			myprintf("20280: On Windows insert double-double quote\n");
+			myprintf("00129: On Windows insert double-double quote\n");
 		mycommand="\"\""+i_command+"\""+" \""+i_parameter+"\"\"";
 #else
 		if (flagdebug3)
-			myprintf("20284: On *unix insert single double quote for cmd /c\n");
+			myprintf("00130: On *unix insert single double quote for cmd /c\n");
 		mycommand="\""+i_command+"\""+" \""+i_parameter+"\"";
 #endif
 	}
 	if (flagdebug)
-		myprintf("20265: Do system on mycommand |%s|\n",mycommand.c_str());
+		myprintf("00131: Do system on mycommand |%s|\n",mycommand.c_str());
 	dummy=system(mycommand.c_str());
 	if (dummy==888888)
-		myprintf("36442: no-warning-please\n");
+		myprintf("00132: no-warning-please\n");
 }
 #if defined(_WIN32)
 bool win32_writeads_buffer(string i_filename,string i_adsname,unsigned char* i_buffer,int i_len)
 {
 	if (i_filename=="")
 	{
-		myprintf("61737: cannot ADS on ''\n");
+		myprintf("00133! cannot ADS on ''\n");
 		return false;
 	}
 	if (i_adsname=="")
 	{
-		myprintf("61738: ADS cannot be empty\n");
+		myprintf("00134! ADS cannot be empty\n");
 		return false;
 	}
 	if (i_buffer==NULL)
 	{
-		myprintf("34530: ADS payload empty\n");
+		myprintf("00135! ADS payload empty\n");
 		return false;
 	}
 	if (i_len<=0)
 	{
-		myprintf("35535: len <=0\n");
+		myprintf("00136! len <=0\n");
 		return false;
 	}
 	string thepath=i_filename+":"+i_adsname;
 	HANDLE hFile = CreateFileW((utow(thepath.c_str()).c_str()), GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
 	if (hFile==INVALID_HANDLE_VALUE)
 	{
-		myprintf("34542: invalid file handle on ");
+		myprintf("00137! invalid file handle on %Z\n",i_filename.c_str());
+		/*
+		myprintf("00138! invalid file handle on ");
 		printUTF8(i_filename.c_str());
 		myprintf("\n");
+		*/
 		return false;
 	}
 	DWORD bw;
@@ -40149,31 +40464,34 @@ bool win32_writeads(string i_filename,string i_adsname,string i_thepayload)
 {
 	if (i_filename=="")
 	{
-		myprintf("61737: cannot ADS on ''\n");
+		myprintf("00139! cannot ADS on ''\n");
 		return false;
 	}
 	if (i_adsname=="")
 	{
-		myprintf("61738: ADS cannot be empty\n");
+		myprintf("00140! ADS cannot be empty\n");
 		return false;
 	}
 	if (i_thepayload=="")
 	{
-		myprintf("61747: ADS payload empty\n");
+		myprintf("00141! ADS payload empty\n");
 		return false;
 	}
 	if  (i_thepayload.size()>4096)
 	{
-		myprintf("61752: payload too big (>4KB)\n");
+		myprintf("00142! payload too big (>4KB)\n");
 		return false;
 	}
 	string thepath=i_filename+":"+i_adsname;
 	HANDLE hFile = CreateFileW((utow(thepath.c_str()).c_str()), GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
 	if (hFile==INVALID_HANDLE_VALUE)
 	{
-		myprintf("61763: invalid file handle on ");
+		myprintf("00143! invalid file handle on %Z\n",i_filename.c_str());
+		/*
+		myprintf("00144! invalid file handle on ");
 		printUTF8(i_filename.c_str());
 		myprintf("\n");
+		*/
 		return false;
 	}
 	DWORD bw;
@@ -40189,12 +40507,12 @@ bool win32_readads(string i_filename,string i_adsname,string& o_thepayload)
 {
 	if (i_filename=="")
 	{
-		myprintf("61777: cannot ADS on ''\n");
+		myprintf("00145! cannot ADS on ''\n");
 		return false;
 	}
 	if (i_adsname=="")
 	{
-		myprintf("61782: ADS cannot be empty\n");
+		myprintf("00146! ADS cannot be empty\n");
 		return false;
 	}
 	o_thepayload="";
@@ -40202,9 +40520,12 @@ bool win32_readads(string i_filename,string i_adsname,string& o_thepayload)
 	HANDLE hFile = CreateFileW((utow(thepath.c_str()).c_str()), GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
 	if (hFile==INVALID_HANDLE_VALUE)
 	{
-		myprintf("61792: invalid file handle on ");
+		myprintf("00147! invalid file handle on %Z\n",i_filename.c_str());
+		/*
+		myprintf("00148! invalid file handle on ");
 		printUTF8(i_filename.c_str());
 		myprintf("\n");
+		*/
 		return false;
 	}
 	unsigned char buffer[4096]={0};
@@ -40223,17 +40544,17 @@ bool win32_readads_sb(string i_filename,string i_adsname,StringBuffer* o_stringb
 {
 	if (i_filename=="")
 	{
-		myprintf("34634: cannot ADS on ''\n");
+		myprintf("00149! cannot ADS on ''\n");
 		return false;
 	}
 	if (i_adsname=="")
 	{
-		myprintf("34639: ADS cannot be empty\n");
+		myprintf("00150! ADS cannot be empty\n");
 		return false;
 	}
 	if (o_stringbuffer==NULL)
 	{
-		myprintf("34644: stringbuffer null\n");
+		myprintf("00151! stringbuffer null\n");
 		return false;
 	}
 	
@@ -40241,9 +40562,12 @@ bool win32_readads_sb(string i_filename,string i_adsname,StringBuffer* o_stringb
 	HANDLE hFile = CreateFileW((utow(thepath.c_str()).c_str()), GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
 	if (hFile==INVALID_HANDLE_VALUE)
 	{
-		myprintf("34652: invalid file handle on ");
+		myprintf("00152! invalid file handle on %Z\n",i_filename.c_str());
+		/*
+		myprintf("00153! invalid file handle on ");
 		printUTF8(i_filename.c_str());
 		myprintf("\n");
+		*/
 		return false;
 	}
 	unsigned char buffer[4096]={0};
@@ -40251,7 +40575,7 @@ bool win32_readads_sb(string i_filename,string i_adsname,StringBuffer* o_stringb
 	
 	while (ReadFile(hFile,buffer,sizeof(buffer),&br,NULL))
 	{
-		///myprintf("34633: chunkino %s\n",migliaia(br));
+		///myprintf("00154: chunkino %s\n",migliaia(br));
 		if (br==0)
 			break;
 		(*o_stringbuffer).write((const char*)buffer,br);
@@ -40288,13 +40612,13 @@ bool isadmin()
 	if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &hToken))
 	{
 		myprintf("\n");
-		myprintf("19978: Failed to get Process Token\n");
+		myprintf("00155! Failed to get Process Token\n");
 		goto Cleanup; /// yessss!!! the migthy GOTO!!!!
 	}
 	if (!GetTokenInformation(hToken, TokenElevation, &elevation, sizeof(elevation), &dwSize))
 	{
 		myprintf("\n");
-		myprintf("19983: Failed to get Token Information\n");
+		myprintf("00156! Failed to get Token Information\n");
 		goto Cleanup;
 	}
 	fIsElevated = elevation.TokenIsElevated;
@@ -40337,9 +40661,12 @@ bool wintouch(string i_filename, int64_t i_date, int64_t i_creationdate)
                     NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, NULL);
 	if (fp==FPNULL)
 	{
-		myprintf("19883: WARN cannot open ");
+		myprintf("00157! WARN cannot open %Z\n",i_filename.c_str());
+		/*
+		myprintf("00158! WARN cannot open ");
 		printUTF8(i_filename.c_str());
 		myprintf("\n");
+		*/
 		return false;
 	}
 
@@ -40358,8 +40685,11 @@ bool wintouch(string i_filename, int64_t i_date, int64_t i_creationdate)
 		SystemTimeToFileTime(&st, &ft);
 		if (!SetFileTime(fp, NULL, NULL, &ft))
 		{
-			myprintf("19903: WARN cannot set filetime (error %s) on ",migliaia((int64_t)GetLastError()));
+			myprintf("00159! WARN cannot set filetime (error %s) on %Z\n",migliaia((int64_t)GetLastError()),i_filename.c_str());
+			/*
+			myprintf("00160! WARN cannot set filetime (error %s) on ",migliaia((int64_t)GetLastError()));
 			printUTF8(i_filename.c_str());
+			*/
 			CloseHandle(fp);
 			return false;
 		}
@@ -40381,9 +40711,12 @@ bool wintouch(string i_filename, int64_t i_date, int64_t i_creationdate)
 
 		if (!SetFileTime(fp, &creation_ft, NULL, NULL))
 		{
-			myprintf("19921: WARN cannot set creation/filetime (error %s) on ",migliaia((int64_t)GetLastError()));
+			myprintf("00161! WARN cannot set creation/filetime (error %s) on %Z\n",migliaia((int64_t)GetLastError()),i_filename.c_str());
+			/*
+			myprintf("00162! WARN cannot set creation/filetime (error %s) on ",migliaia((int64_t)GetLastError()));
 			printUTF8(i_filename.c_str());
 			myprintf("\n");
+			*/
 			CloseHandle(fp);
 			return false;
 		}
@@ -40436,9 +40769,12 @@ bool close(const char* filename, int64_t date, int64_t attr, FP fp=FPNULL) {
 			SystemTimeToFileTime(&st, &ft);
 			if (!SetFileTime(fp, NULL, NULL, &ft))
 			{
-				myprintf("21273: WARN cannot set filetime (error %s) on ",migliaia((int64_t)GetLastError()));
+				myprintf("00163! WARN cannot set filetime (error %s) on %Z\n",migliaia((int64_t)GetLastError()),filename);
+				/*
+				myprintf("00164! WARN cannot set filetime (error %s) on ",migliaia((int64_t)GetLastError()));
 				printUTF8(filename);
 				myprintf("\n");
+				*/
 				allok=false;
 			}
 		}
@@ -40454,9 +40790,12 @@ bool close(const char* filename, int64_t date, int64_t attr, FP fp=FPNULL) {
 #else
 		int err=1;
 #endif
-			myprintf("21290: WARN kind %s cannot set attributes on ",migliaia((int64_t)err));
+			myprintf("00165! WARN kind %s cannot set attributes on %Z\n",migliaia((int64_t)err),filename);
+/*
+			myprintf("00166! WARN kind %s cannot set attributes on ",migliaia((int64_t)err));
 			printUTF8(filename);
 			myprintf("\n");
+*/
 			allok=false;
 		}
 	return allok;
@@ -40501,17 +40840,23 @@ bool touch(const char* filename, int64_t date, int64_t attr)
 			SystemTimeToFileTime(&st, &ft);
 			if (!SetFileTime(fp, NULL, NULL, &ft))
 			{
-				myprintf("35951: WARN cannot set filetime (error %s) on ",migliaia((int64_t)GetLastError()));
+				myprintf("00167! WARN cannot set filetime (error %s) on %Z\n",migliaia((int64_t)GetLastError()),filename);
+				/*
+				myprintf("00168! WARN cannot set filetime (error %s) on ",migliaia((int64_t)GetLastError()));
 				printUTF8(filename);
 				myprintf("\n");
+				*/
 				allok=false;
 			}
 			CloseHandle(fp);
 			if (!SetFileAttributes(utow(filename).c_str(), attr>>8))
 			{
-				myprintf("35959: WARN kind %s cannot set attributes on ",migliaia((int64_t)GetLastError()));
+				myprintf("00169! WARN kind %s cannot set attributes on %Z\n",migliaia((int64_t)GetLastError()),filename);
+				/*
+				myprintf("00170! WARN kind %s cannot set attributes on ",migliaia((int64_t)GetLastError()));
 				printUTF8(filename);
 				myprintf("\n");
+				*/
 				allok=false;
 			}
 		}
@@ -40588,37 +40933,37 @@ bool saggiascrivibilitacartella(string i_cartella)
 	if (i_cartella=="")
 	{
 		if (flagdebug)
-			myprintf("20574: empty folder to be checked\n");
+			myprintf("00171! empty folder to be checked\n");
 		return false;
 	}
 	if (flagdebug3)
-		myprintf("20857: i_cartella %s\n",i_cartella.c_str());
+		myprintf("00172: i_cartella %s\n",i_cartella.c_str());
 	i_cartella=extractfilepath(i_cartella);
 	if (flagdebug3)
-		myprintf("20859: i_cartella %s\n",i_cartella.c_str());
+		myprintf("00173: i_cartella %s\n",i_cartella.c_str());
 	if (!isdirectory(i_cartella))
 			i_cartella+="/";
 	if (flagdebug3)
-		myprintf("20580: Folder %s\n",i_cartella.c_str());
+		myprintf("00174: Folder %s\n",i_cartella.c_str());
 	string	percorso=extractfilepath(i_cartella);
 	if (flagdebug2)
-		myprintf("20583: Percorso %s\n",percorso.c_str());
+		myprintf("00175: Percorso %s\n",percorso.c_str());
 	if  (percorso=="")
 	{
 		if (flagdebug)
-			myprintf("20587: percorso empty\n");
+			myprintf("00176: percorso empty\n");
 		return false;
 	}
 	if (flagdebug3)
-		myprintf("40952: makepath of |%s|\n",percorso.c_str());
+		myprintf("00177: makepath of |%s|\n",percorso.c_str());
 	makepath(percorso);
 	string	testfile;
 	testfile=percorso+"test$$$.txt.me";
 	if (flagdebug3)
-		myprintf("20593: TEST FILE PRE  <<%s>>\n",testfile.c_str());
+		myprintf("00178: TEST FILE PRE  <<%s>>\n",testfile.c_str());
 	testfile=nomefileseesistegia(testfile);
 	if (flagdebug2)
-	myprintf("20595: TEST FILE POST <<%s>>\n",testfile.c_str());
+	myprintf("00179: TEST FILE POST <<%s>>\n",testfile.c_str());
 	FILE* testbyte=fopen(testfile.c_str(), "wb");
 	if (testbyte!=NULL)
 	{
@@ -40629,6 +40974,25 @@ bool saggiascrivibilitacartella(string i_cartella)
 	delete_file(testfile.c_str());
 	return risultato;
 }
+
+string g_realtemp()
+{
+#if defined(_WIN32) || defined(_WIN64)
+	string temppath="";
+	wchar_t charpath[MAX_PATH];
+	if (GetTempPathW(MAX_PATH, charpath))
+	{
+		wstring ws(charpath);
+		string str(ws.begin(), ws.end());
+		return str;
+	}
+	return temppath;
+#else
+	return "/tmp/";
+#endif
+}
+
+
 string g_gettempdirectory()
 {
 #if defined(_WIN32) || defined(_WIN64)
@@ -40638,13 +41002,14 @@ string g_gettempdirectory()
 	{
 		wstring ws(charpath);
 		string str(ws.begin(), ws.end());
-		string randomfolder=str+"_zpaqfranz\\"+std::to_string(mtime())+'\\';
+		string randomfolder=str+"_zpaqfranz\\"+std::to_string(g_start)+'\\';
 		myreplaceall(randomfolder,"\\","/");
 		if (flagdebug3)
-			myprintf("69440: ********************** randomfolder [1] |%s|\n",randomfolder.c_str());
+			myprintf("00180: ********************** randomfolder [1] |%s|\n",randomfolder.c_str());
+	///	randomfolder="y:/";
 		if (!saggiascrivibilitacartella(randomfolder))
 		{
-			myprintf("40097: Guru, cannot write inside randomfolder %s\n",randomfolder.c_str());
+			myprintf("00181! Guru, cannot write inside randomfolder %s\n",randomfolder.c_str());
 			seppuku();
 		}
 		
@@ -40654,10 +41019,10 @@ string g_gettempdirectory()
 #else
 	string randomfolder="/tmp/_zpaqfranz/"+std::to_string(mtime())+'/';
 	if (flagdebug3)
-		myprintf("40635: LinuX ********************** randomfolder [1] |%s|\n",randomfolder.c_str());
+		myprintf("00182: LinuX ********************** randomfolder [1] |%s|\n",randomfolder.c_str());
 	if (!saggiascrivibilitacartella(randomfolder))
 	{
-		myprintf("40638: Guru, cannot write inside randomfolder %s\n",randomfolder.c_str());
+		myprintf("00183! Guru, cannot write inside randomfolder %s\n",randomfolder.c_str());
 		seppuku();
 	}
 
@@ -40668,6 +41033,44 @@ string g_gettempdirectory()
 /*
 	some zpaq functions
 */
+
+void remove_dir_if_empty(string i_path)
+{
+	if (i_path=="")
+		return;
+	if (i_path==".")
+		return;
+	if (i_path=="..")
+		return;
+#ifdef _WIN32
+	i_path=linuxtowinpath(i_path);
+	RemoveDirectoryW(utow(i_path.c_str()).c_str());
+#else
+	rmdir(i_path.c_str());
+#endif
+}
+
+void remove_temp_file(string i_thefile)
+{
+	if (i_thefile=="")
+	{
+		if (flagdebug3)
+			myprintf("00184! temp file empty\n");
+		return;
+	}
+	if (fileexists(i_thefile.c_str())==false)
+	{
+		if (flagdebug3)
+			myprintf("00185! remove_temp_file not found %s\n",i_thefile.c_str());
+		return;
+	}
+	string percorso=extractfilepath(i_thefile);
+	if (flagdebug3)
+		myprintf("00186: percorso %s\n",percorso.c_str());
+	delete_file(i_thefile.c_str());
+	remove_dir_if_empty(percorso);
+}
+
 
 #ifdef _WIN32
 //// VSS on Windows by... batchfile
@@ -40680,17 +41083,17 @@ void vss_deleteshadows(string i_cartella)
 		string	filebatch	=g_gettempdirectory()+"vsz.bat";
 		filebatch=nomefileseesistegia(filebatch);
 		print_datetime();
-		myprintf("36670: VSS: starting release\n");
+		myprintf("00187: VSS: starting release\n");
 		if (fileexists(filebatch))
 			if (remove(filebatch.c_str())!=0)
 			{
-				myprintf("21204: Highlander batch  %s\n", filebatch.c_str());
+				myprintf("00188! Highlander batch  %s\n", filebatch.c_str());
 				return;
 			}
 		FILE* batch=fopen(filebatch.c_str(), "wb");
 		if (batch==NULL)
 		{
-			myprintf("19889: cannot write on %s\n",filebatch.c_str());
+			myprintf("00189! cannot write on %s\n",filebatch.c_str());
 			exit(0);
 		}
 		fprintf(batch,"@echo OFF\n");
@@ -40700,7 +41103,8 @@ void vss_deleteshadows(string i_cartella)
 		fclose(batch);
 		waitexecute(filebatch,"",SW_HIDE);
 		print_datetime();
-		myprintf("36690: VSS: end releasing\n");
+		myprintf("00190: VSS: end releasing\n");
+		remove_temp_file(filebatch);
 	}
 }
 string relativetolongpath(string i_filename)
@@ -40714,7 +41118,7 @@ string relativetolongpath(string i_filename)
 		wchar_t* buf= (wchar_t*)franz_malloc((len)*sizeof(WCHAR));
 		if (buf==NULL)
 		{
-			myprintf("32965: guru in malloc\n");
+			myprintf("00191! guru in malloc\n");
 			seppuku();
 			return "";
 		}
@@ -40724,11 +41128,14 @@ string relativetolongpath(string i_filename)
 			string risultato=wtou(buf);
 			if (flagdebug || flagverbose)
 			{
-				myprintf("19611: WARNING converted RELATIVE to FULL path |");
+				myprintf("00192: WARNING converted RELATIVE to FULL path |%Z| => |%Z|\n",i_filename.c_str(),risultato.c_str());
+				/*
+				myprintf("00193: WARNING converted RELATIVE to FULL path |");
 				printUTF8(i_filename.c_str());
 				myprintf("| => ");
 				printUTF8(risultato.c_str());
 				myprintf("\n");
+				*/
 			}
 			franz_free(buf);
 			return risultato;
@@ -40752,16 +41159,16 @@ string getuname()
 	int err=uname(&uts);
 	if (err!=0)
 	{
-		myprintf("19594: getuname error %d\n", err);
+		myprintf("00194! getuname error %d\n", err);
 		return "UNAME-ERROR";
 	}
 	if (flagdebug2)
 	{
-		myprintf("37063: sysname : %s\n",uts.sysname);
-		myprintf("37064: nodename: %s\n",uts.nodename);
-		myprintf("37065: release : %s\n",uts.release);
-		myprintf("37066: version : %s\n",uts.version);
-		myprintf("37067: machine : %s\n",uts.machine);
+		myprintf("00195: sysname : %s\n",uts.sysname);
+		myprintf("00196: nodename: %s\n",uts.nodename);
+		myprintf("00197: release : %s\n",uts.release);
+		myprintf("00198: version : %s\n",uts.version);
+		myprintf("00199: machine : %s\n",uts.machine);
 	}
 	return uts.machine;
 #endif
@@ -40885,11 +41292,11 @@ bool	iswildcards(const string& i_string)
 bool check_if_password(string i_filename)
 {
 	if (flagdebug)
-		myprintf("21026: check_if_password of %s\n",i_filename.c_str());
+		myprintf("00200: check_if_password of %s\n",i_filename.c_str());
 	if (iswildcards(i_filename))
 	{
 		if (flagdebug2)
-			myprintf("21075: wildcard detected, no password check\n");
+			myprintf("00201: wildcard detected, no password check\n");
 		return	false;
 	}
 	if (!fileexists(i_filename))
@@ -40903,7 +41310,7 @@ bool check_if_password(string i_filename)
 		int err=1;
 #endif
 		myprintf("\n");
-		myprintf("19802: ERR <%s> kind %s\n",i_filename.c_str(),migliaia((int64_t)err));
+		myprintf("00202! ERR <%s> kind %s\n",i_filename.c_str(),migliaia((int64_t)err));
 		seppuku();
 		exit(0);
 	}
@@ -41418,7 +41825,7 @@ string mygetpasswordblind()
 {
 	string myresult="";
 	myprintf("\n");
-	myprintf("40097: Enter password :");
+	myprintf("00203: Enter password :");
 		/*macos*/
 #if defined (unix)
 	///myprintf(" APPLE ");
@@ -41510,7 +41917,7 @@ public:
     if (nr==0) return 0;
     if (aes) aes->encrypt(obuf, nr, off);
     off+=nr;
-///	myprintf("37758: BLOKKO len %d\n",len);
+///	myprintf("00204: BLOKKO len %d\n",len);
     return nr;
   }
   // Like fseeko()
@@ -41590,7 +41997,7 @@ InputArchive::InputArchive(const char* filename):fn(filename)
 	if (g_password==NULL)
 		if (check_if_password(part1.c_str()))
 		{
-			myprintf("37929: Archive seems encrypted (or corrupted)");
+			myprintf("00205! Archive seems encrypted (or corrupted)");
 			string spassword=mygetpasswordblind();
 			if (spassword!="")
 			{
@@ -41621,13 +42028,13 @@ int inttoarray(int64_t i_number, char* i_buffer, int i_size)
 {
 	if (i_buffer==NULL)
 	{
-		myprintf("29412: GURU buffer NULL!\n");
+		myprintf("00206! GURU buffer NULL!\n");
 		seppuku();
 		return 0;
 	}
 	if (i_size<=0)
 	{
-		myprintf("35003: GURU i_size not positive!\n");
+		myprintf("00207! GURU i_size not positive!\n");
 		seppuku();
 		return 0;
 	}
@@ -41645,7 +42052,7 @@ int32_t arraytoint32(const char* i_buffer)
 {
 	if (i_buffer==NULL)
 	{
-		myprintf("35024: i_buffer is NULL\n");
+		myprintf("00208! i_buffer is NULL\n");
 		seppuku();
 		return -1;
 	}
@@ -41664,7 +42071,7 @@ int64_t arraytoint64(const char* i_buffer)
 {
 	if (i_buffer==NULL)
 	{
-		myprintf("29297: i_buffer is NULL\n");
+		myprintf("00209! i_buffer is NULL\n");
 		seppuku();
 		return -1;
 	}
@@ -41725,33 +42132,33 @@ public:
 	void flush() 
 	{
 		if (flagdebug3)
-			myprintf("38264: flush k1\n");
+			myprintf("00210: flush k1\n");
 		assert(fp!=FPNULL);
 		string nomefile=prendinomefileebasta(thefilename);
 		
 		g_archivefp=fp;
 		if (flagdebug3)
-			myprintf("38270: flush k2\n");
+			myprintf("00211: flush k2\n");
 		
 		if (ptr==104)
 			if (flagdebug4)
-				myprintf("38049: =============== g_write_on_first %d firstp %s\n",int(g_write_on_first),migliaia(int64_t(firstfp)));
+				myprintf("00212: =============== g_write_on_first %d firstp %s\n",int(g_write_on_first),migliaia(int64_t(firstfp)));
 		
 		if (flagdebug3)
-			myprintf("38277: flush k3\n");
+			myprintf("00213: flush k3\n");
 		
 		if (g_write_on_first && (ptr==104) && (firstfp!=FPNULL))
 		{
 			if (flagdebug3)
-				myprintf("37815: ################ fixing on firstfp %s size %d @ %s\n",migliaia3(int64_t(firstfp)),ptr,migliaia(g_write_on_seek));
+				myprintf("00214: ################ fixing on firstfp %s size %d @ %s\n",migliaia3(int64_t(firstfp)),ptr,migliaia(g_write_on_seek));
 		
 			fseeko(firstfp,g_write_on_seek,SEEK_SET);
 		
 			if (flagdebug3)
-				myprintf("38042: ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ write on first, 104  ftello %s off %s encrypt @%s\n",migliaia(ftello(firstfp)),migliaia2(off),migliaia3(ftello(firstfp)+off));
+				myprintf("00215: ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ write on first, 104  ftello %s off %s encrypt @%s\n",migliaia(ftello(firstfp)),migliaia2(off),migliaia3(ftello(firstfp)+off));
 
 			if (flagdebug3)
-				myprintf("37881: HERE WE ARE @ %12s on fp %12s  size %s\n",migliaia3(ftello(firstfp)),migliaia(int64_t(firstfp)),migliaia2(ptr));
+				myprintf("00216: HERE WE ARE @ %12s on fp %12s  size %s\n",migliaia3(ftello(firstfp)),migliaia(int64_t(firstfp)),migliaia2(ptr));
 
 			char debugfilename[100];
 			FP debugoutf;
@@ -41766,23 +42173,23 @@ public:
 			if (firstchunk)
 			{
 				if (flagdebug3)
-					myprintf("38077: i am first chunk => off to zero\n");
+					myprintf("00217: i am first chunk => off to zero\n");
 				off=0;
 			}
 			else
 			{
 				if (flagdebug3)
-					myprintf("38081: not first chunk, off to %s\n",migliaia(off));
+					myprintf("00218: not first chunk, off to %s\n",migliaia(off));
 			}
 			int64_t criptoposition=ftello(firstfp)+off;
 			
 			if (flagdebug4)
-				myprintf("38053: write104 at %s (fetello %s + off %s)  on file %s should thefilename %s\n",migliaia(ftello(firstfp)+off),migliaia2(ftello(firstfp)),migliaia3(off),debugfilename,thefilename.c_str());
+				myprintf("00219: write104 at %s (fetello %s + off %s)  on file %s should thefilename %s\n",migliaia(ftello(firstfp)+off),migliaia2(ftello(firstfp)),migliaia3(off),debugfilename,thefilename.c_str());
 
 			if (aes) 
 			{
 				if (flagdebug3)
-					myprintf("38085: aes crypt size %s criptoposition %s\n",migliaia(ptr),migliaia2(criptoposition));
+					myprintf("00220: aes crypt size %s criptoposition %s\n",migliaia(ptr),migliaia2(criptoposition));
 				aes->encrypt(buf, ptr,criptoposition);
 			}
 			if (flagdebug4)
@@ -41793,10 +42200,10 @@ public:
 				myfclose(&debugoutf);
 			}
 			if (flagdebug3)
-				myprintf("38093: realfwrite104 on firstfp %s @ftello %s\n",migliaia(int64_t(firstfp)),migliaia2(int64_t(ftello(firstfp))));
+				myprintf("00221: realfwrite104 on firstfp %s @ftello %s\n",migliaia(int64_t(firstfp)),migliaia2(int64_t(ftello(firstfp))));
 			myfwrite(buf, 1, ptr, firstfp);
 			if (flagdebug3)
-				myprintf("37838: closing the firstp %s\n",migliaia(int64_t(firstfp)));
+				myprintf("00222: closing the firstp %s\n",migliaia(int64_t(firstfp)));
 			myfclose(&firstfp);
 			firstfp=FPNULL;
 			fp=FPNULL;
@@ -41805,20 +42212,20 @@ public:
 		}
 
 		if (flagdebug3)
-			myprintf("38343: flush k4\n");
+			myprintf("00223: flush k4\n");
 		
 
 		if (flagdebug3)
 		{
 			if ((int64_t)fp!=0)
 			{
-				myprintf("38348: -pre fp %s\n",migliaia((int64_t)fp));
-				myprintf("37896: write @ %12s on fp %12s (%d) size %s\n",migliaia3(ftello(fp)),migliaia(int64_t(fp)),int64_t(fp),migliaia2(ptr));
-				myprintf("38349: -post\n");
+				myprintf("00224: -pre fp %s\n",migliaia((int64_t)fp));
+				myprintf("00225: write @ %12s on fp %12s (%d) size %s\n",migliaia3(ftello(fp)),migliaia(int64_t(fp)),int64_t(fp),migliaia2(ptr));
+				myprintf("00226: -post\n");
 			}
 		}
 		if (flagdebug3)
-			myprintf("38343: flush k4bis\n");
+			myprintf("00227: flush k4bis\n");
 
 		char debugfilename[100];
 		FP debugoutf;
@@ -41831,20 +42238,20 @@ public:
 		}
 		if (flagdebug3)
 			if ((int64_t)fp!=0)
-				myprintf("38068: !!!!!!!!!!!!!!!!!!!!!! unecrypted on [ENCRYPT @ %s] %s\n",migliaia(ftello(fp)+off),debugfilename);
+				myprintf("00228: !!!!!!!!!!!!!!!!!!!!!! unecrypted on [ENCRYPT @ %s] %s\n",migliaia(ftello(fp)+off),debugfilename);
 
 		if (flagdebug3)
-			myprintf("38343: flush k5\n");
+			myprintf("00229: flush k5\n");
 	
 		if (ptr==104)
 			if (flagdebug3)
 				if ((int64_t)fp!=0)
-					myprintf("38999:-------------------------------------- regular 104 encrypt @%s\n",migliaia(int64_t(ftello(fp)+off)));
+					myprintf("00230:-------------------------------------- regular 104 encrypt @%s\n",migliaia(int64_t(ftello(fp)+off)));
 		if (flagdebug3)
-			myprintf("38095: MMMMMMMMMMMMMMMMMMMMMMMMMMM off %s writtensofar %s onlast %s|\n",migliaia3(off),migliaia(writtensofar),migliaia2(writtenonlastchunk));
+			myprintf("00231: MMMMMMMMMMMMMMMMMMMMMMMMMMM off %s writtensofar %s onlast %s|\n",migliaia3(off),migliaia(writtensofar),migliaia2(writtenonlastchunk));
   
 		if (flagdebug3)
-			myprintf("38343: flush k6\n");
+			myprintf("00232: flush k6\n");
 	
 		int64_t cryptoffset;
 		if (g_chunk_size>0)
@@ -41861,13 +42268,13 @@ public:
 				cryptoffset=0;
 		}
 		if (flagdebug3)
-			myprintf("38343: flush k7\n");
+			myprintf("00233: flush k7\n");
 	
 		if (aes) 
 		{
 			if (flagdebug4)
 				if ((int64_t)fp!=0)
-					myprintf("38101: AES seq %08d [size %6s] crypt %10s (ftello %10s + off %10s + written %10s) %s\n",
+					myprintf("00234: AES seq %08d [size %6s] crypt %10s (ftello %10s + off %10s + written %10s) %s\n",
 							g_debug_sequence,
 							migliaia5(ptr),
 							migliaia(cryptoffset),
@@ -41891,7 +42298,7 @@ public:
 		chunksize		+=ptr;
 
 		if (flagdebug3)
-			myprintf("38343: flush k8\n");
+			myprintf("00235: flush k8\n");
 		
 		if (g_chunk_size>0)
 			if (chunksize>g_chunk_size)
@@ -41902,18 +42309,18 @@ public:
 					{
 						myprintf("\r                                                                                \r");
 						myprintf("\r");
-						myprintf("37827: closing __________________________ %s |%s|\n",migliaia(int64_t(fp)),thefilename.c_str());
+						myprintf("00236: closing __________________________ %s |%s|\n",migliaia(int64_t(fp)),thefilename.c_str());
 					}
 					myfclose(&fp);
 				}
 				thefilename=format_filename(++chunknumber);
 				if (flagdebug3)
-					myprintf("37839: the (new) filename %s\n",thefilename.c_str());
+					myprintf("00237: the (new) filename %s\n",thefilename.c_str());
 				fp=myfopen(thefilename.c_str(), WB);
 				if (!isopen()) 
 					ioerr(thefilename.c_str());
 				if (flagdebug3)
-					myprintf("37844: file open and ready on fp %s!\n",migliaia(int64_t(fp)));
+					myprintf("00238: file open and ready on fp %s!\n",migliaia(int64_t(fp)));
 				chunksize=0;
 				writtenonlastchunk=writtensofar;
 				g_addedchunklist.push_back(thefilename);
@@ -41950,10 +42357,10 @@ public:
     if (fp!=FPNULL) 
 	{
 		if (flagdebug3)
-			myprintf("37890: calling flush from seek fp %s\n",migliaia(int64_t(fp)));
+			myprintf("00239: calling flush from seek fp %s\n",migliaia(int64_t(fp)));
 		flush();
 		if (flagdebug3)
-			myprintf("37892: calling fseeko for fp %s to %s\n",migliaia(int64_t(fp)),migliaia2(int64_t(p)));
+			myprintf("00240: calling fseeko for fp %s to %s\n",migliaia(int64_t(fp)),migliaia2(int64_t(p)));
 		fseeko(fp, p, whence);
     }
     else if (whence==SEEK_SET) off=p;
@@ -42013,12 +42420,12 @@ public:
     if (fp!=FPNULL) 
 	{
 		if (flagdebug3)
-			myprintf("37954: calling flush on fp=%s\n",migliaia(int64_t(fp)));
+			myprintf("00241: calling flush on fp=%s\n",migliaia(int64_t(fp)));
 		flush();
 		if (fp!=FPNULL)
 		{ 
 			if (flagdebug3)
-				myprintf("37957: calling close %s\n",migliaia(int64_t(fp)));
+				myprintf("00242: calling close %s\n",migliaia(int64_t(fp)));
 			myfclose(&fp);
 		}
     }
@@ -42033,23 +42440,23 @@ public:
 			if (firstfilename[i]=='?')
 				maxpart*=10;
 		maxpart/=10;
-		///myprintf("37896: maxpart can be %s\n",migliaia(maxpart));
+		///myprintf("00243: maxpart can be %s\n",migliaia(maxpart));
 		if (i_number>(maxpart-1))
 		{
-			myprintf("37989: GURU: the number %s cannot be stored in maxpart %s\n",migliaia(i_number),migliaia2(maxpart-1));
-			myprintf("37989: maybe you need a longer ? pattern <<%s>>\n",firstfilename.c_str());
+			myprintf("00244! GURU: the number %s cannot be stored in maxpart %s\n",migliaia(i_number),migliaia2(maxpart-1));
+			myprintf("00245! maybe you need a longer ? pattern <<%s>>\n",firstfilename.c_str());
 			seppuku();
 			return "";
 		}
 		string part0=subpart(firstfilename, 0);
 		if (flagdebug3)
-			myprintf("37961: i_number %d part0 %s   firstfilename %s\n",i_number,part0.c_str(),firstfilename.c_str());
+			myprintf("00246: i_number %d part0 %s   firstfilename %s\n",i_number,part0.c_str(),firstfilename.c_str());
 		
 		if (part0!=firstfilename) 
 		{	
 			string temp=subpart(firstfilename,i_number);
 			if (flagdebug2)
-				myprintf("37966: created by subpart %s\n",temp.c_str());
+				myprintf("00247: created by subpart %s\n",temp.c_str());
 			filepartnames.push_back(temp);
 			return temp;
 		}
@@ -42064,28 +42471,28 @@ int listfiles(string i_path,const string& i_extension,bool i_fullname,vector<str
 {
 	if (o_thelist==NULL)
 	{
-		myprintf("54816: GURU o_thelist is null\n");
+		myprintf("00248! GURU o_thelist is null\n");
 		return 0;
 	}
 #ifndef unix
 	vector<string> tobesorted;
 	if (flagdebug3)
 	{
-		myprintf("57355: i_path      %s\n",i_path.c_str());
-		myprintf("57355: i_extension %s\n",i_extension.c_str());
+		myprintf("00249: i_path      %s\n",i_path.c_str());
+		myprintf("00250: i_extension %s\n",i_extension.c_str());
 	}
 	i_path=extractfilepath(i_path);
 	std::wstring wpattern = utow(i_path.c_str())+utow("*.")+utow(i_extension.c_str());
 	const std::string s_pattern(wpattern.begin(),wpattern.end());
 	if (flagdebug)
-		myprintf("57357: get handle for w pattern %s\n",wtou(wpattern.c_str()).c_str());
+		myprintf("00251: get handle for w pattern %s\n",wtou(wpattern.c_str()).c_str());
 
 	WIN32_FIND_DATAW findfiledata;
 	HANDLE myhandle=FindFirstFileW(wpattern.c_str(),&findfiledata);
 	if (myhandle==INVALID_HANDLE_VALUE)
 	{
 		if (flagdebug)
-			myprintf("57363: Invalid handle %s\n",s_pattern.c_str());
+			myprintf("00252! Invalid handle %s\n",s_pattern.c_str());
 		return 0;
 	}
 	do
@@ -42101,7 +42508,7 @@ int listfiles(string i_path,const string& i_extension,bool i_fullname,vector<str
 
 			const std::string s_wfilepath(wfilepath.begin(),wfilepath.end());
 			if (flagdebug)
-				myprintf("57379: Working on %s ",s_wfilepath.c_str());
+				myprintf("00253: Working on %s ",s_wfilepath.c_str());
 			if (findfiledata.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
 			{
 				if (flagdebug)
@@ -42119,7 +42526,7 @@ int listfiles(string i_path,const string& i_extension,bool i_fullname,vector<str
 		FindClose(myhandle);
 	if (flagdebug3)
 		for (unsigned int i=0;i<tobesorted.size();i++)
-			myprintf("57418: %03d  %s\n",(int)i,tobesorted[i].c_str());
+			myprintf("00254: %03d  %s\n",(int)i,tobesorted[i].c_str());
 
 	std::sort(tobesorted.begin(),tobesorted.end());
 	for (unsigned int i=0;i<tobesorted.size();i++)
@@ -42134,7 +42541,7 @@ int listfiles(string i_path,const string& i_extension,bool i_fullname,vector<str
 	struct 	dirent *ent;
 	if ((dir=opendir(i_path.c_str()))==NULL)
 	{
-		myprintf("54826: cannot scan in <<%s>>\n",i_path.c_str());
+		myprintf("00255! cannot scan in <<%s>>\n",i_path.c_str());
 		return 0;
 	}
 
@@ -42153,10 +42560,10 @@ int listfiles(string i_path,const string& i_extension,bool i_fullname,vector<str
 			string estensione	=prendiestensione(thename);
 			if (flagdebug3)
 			{
-				myprintf("54847: i_path     %s\n",i_path.c_str());
-				myprintf("54848: thename    %s\n",thename.c_str());
-				myprintf("54849: fullname   %s\n",fullname.c_str());
-				myprintf("54850: estensione %s\n",estensione.c_str());
+				myprintf("00256: i_path     %s\n",i_path.c_str());
+				myprintf("00257: thename    %s\n",thename.c_str());
+				myprintf("00258: fullname   %s\n",fullname.c_str());
+				myprintf("00259: estensione %s\n",estensione.c_str());
 			}
 			bool flagaggiungi=true;
 
@@ -42166,7 +42573,7 @@ int listfiles(string i_path,const string& i_extension,bool i_fullname,vector<str
 			if (flagaggiungi)
 			{
 				if (flagdebug2)
-					myprintf("54860: ZZZZ %s\n", fullname.c_str());
+					myprintf("00260: ZZZZ %s\n", fullname.c_str());
 				tobesorted.push_back(fullname);
 			}
 		}
@@ -42206,7 +42613,7 @@ int	getpartnumber(string i_thefilename)
 	if (i_thefilename.size()<14)
 	{
 		if (flagdebug)
-			myprintf("84205: return -1 because size <14 |%s|\n",i_thefilename.c_str());
+			myprintf("00261! return -1 because size <14 |%s|\n",i_thefilename.c_str());
 		return -1;
 	}
 #ifdef _WIN32
@@ -42238,13 +42645,13 @@ int	getpartnumber(string i_thefilename)
 			if (numerini.size()>0)
 				risultato=atoi(numerini.c_str());
 			if (flagdebug3)
-				myprintf("84724: numerini |%s| int %s\n",numerini.c_str(),migliaia(risultato));
+				myprintf("00262: numerini |%s| int %s\n",numerini.c_str(),migliaia(risultato));
 		}
 	}
 	else
 	{
 		if (flagdebug)
-			myprintf("84240: -14 is not '_' for |%s|\n",candidato.c_str());
+			myprintf("00263! -14 is not '_' for |%s|\n",candidato.c_str());
 	}
 	return risultato;
 }
@@ -42302,7 +42709,7 @@ class easymultipart
 
 		if (i_filename=="")
 		{
-			myprintf("84400: multipartfilename is empty\n");
+			myprintf("00264! multipartfilename is empty\n");
 			return;
 		}
 		maxpart=10;
@@ -42316,7 +42723,7 @@ class easymultipart
 		ismultipart=howmanyjolly>0;
 		if (howmanyjolly>9)
 		{
-			myprintf("38270: too many jolly '?' (max 9), founded %d in %s\n",howmanyjolly,i_filename.c_str());
+			myprintf("00265! too many jolly '?' (max 9), founded %d in %s\n",howmanyjolly,i_filename.c_str());
 			seppuku();
 			return;
 		}
@@ -42338,7 +42745,7 @@ class easymultipart
 			{
 				thehole=partname;
 				if (flagdebug3)
-					myprintf("38691: filenamearraysize %08d partname %08d does not exists\n",filenamearray.size(),i,partname.c_str());
+					myprintf("00266: filenamearraysize %08d partname %08d does not exists\n",filenamearray.size(),i,partname.c_str());
 				if (i==1)
 					thehole="";
 				else
@@ -42346,8 +42753,8 @@ class easymultipart
 				{
 					if (flagdebug3)
 					{
-						myprintf("39693: last filenamearraysize %s\n",filenamearray[filenamearray.size()-1].filename.c_str());
-						myprintf("39695: i-1                    %s\n",subpart(i_filename,i-1).c_str());
+						myprintf("00267: last filenamearraysize %s\n",filenamearray[filenamearray.size()-1].filename.c_str());
+						myprintf("00268: i-1                    %s\n",subpart(i_filename,i-1).c_str());
 					}
 					if (filenamearray[filenamearray.size()-1].filename==subpart(i_filename,i-1)) 
 						thehole="";
@@ -42374,11 +42781,14 @@ class easymultipart
 
 		if (thehole!="")
 		{
-		///	myprintf("84478: PART NUMBER MISMATCH: disk %s vs part %s (HOLE IN %s)\n",migliaia(filenamearray.size()),migliaia2(partarray.size()),thehole.c_str());
-			myprintf("38716: [2] AT LEAST ONE HOLE DETECTED! <<");
+		///	myprintf("00269: PART NUMBER MISMATCH: disk %s vs part %s (HOLE IN %s)\n",migliaia(filenamearray.size()),migliaia2(partarray.size()),thehole.c_str());
+			
+			myprintf("00270! [2] AT LEAST ONE HOLE DETECTED! <<%Z>>\n",thehole.c_str());
+/*
+			myprintf("00271! [2] AT LEAST ONE HOLE DETECTED! <<");
 			printUTF8(thehole.c_str());
 			myprintf(">>\n");
-
+*/
 			if (filenamearray.size()>partarray.size()) // this should be
 				for (unsigned int i=0;i<filenamearray.size();i++)
 				{
@@ -42391,17 +42801,17 @@ class easymultipart
 						}
 					if (!trovato)
 						if (flagdebug2)
-							myprintf("84493: Filename not matched %s\n",filenamearray[i].filename.c_str());
+							myprintf("00272: Filename not matched %s\n",filenamearray[i].filename.c_str());
 				}
 		}
 		
 		if (flagdebug3)
 		{
 			for (unsigned int i=0;i<filenamearray.size();i++)
-				myprintf("38738: filenamearray %08d %s\n",i,filenamearray[i].filename.c_str());
+				myprintf("00273: filenamearray %08d %s\n",i,filenamearray[i].filename.c_str());
 				
 			for (unsigned int i=0;i<partarray.size();i++)
-				myprintf("38740: partarray %08d %s\n",i,partarray[i].filename.c_str());
+				myprintf("00274: partarray %08d %s\n",i,partarray[i].filename.c_str());
 		}	
 			
 		if (partarray.size()>0)
@@ -42425,7 +42835,7 @@ class easymultipart
 		for (unsigned int i=0;i<candidate.size();i++)
 		{
 			if (flagdebug3)
-				myprintf("38763: candidate %08d %s\n",i,candidate[i].c_str());
+				myprintf("00275: candidate %08d %s\n",i,candidate[i].c_str());
 			
 			s_fileandsize myblock;
 			string currentfilename=candidate[i];
@@ -42436,7 +42846,7 @@ class easymultipart
 			if (jollymatch(thefilename.c_str(),candidate[i].c_str()))
 			{
 				if (flagdebug3)
-					myprintf("38773: jolly match filename %s candidate %08d %s\n",thefilename.c_str(),i,candidate[i].c_str());
+					myprintf("00276: jolly match filename %s candidate %08d %s\n",thefilename.c_str(),i,candidate[i].c_str());
 				
 				string onlydigit	=stringtosomething(currentfilename,isdigit);
 				if (onlydigit!="")
@@ -42449,13 +42859,13 @@ class easymultipart
 					myblock.flaghashstored	=false;
 					filenamearray.push_back(myblock);
 					if (flagdebug3)
-						myprintf("38291: added %s\n",currentfilename.c_str());
+						myprintf("00277: added %s\n",currentfilename.c_str());
 				}
 			}
 			else
 			{
 				if (flagdebug2)
-					myprintf("38296: Not jolly part %s\n",currentfilename.c_str());
+					myprintf("00278: Not jolly part %s\n",currentfilename.c_str());
 			}
 		}
 		std::sort(filenamearray.begin(),filenamearray.end(),comparefilename);
@@ -42465,7 +42875,7 @@ class easymultipart
 		{
 			if (flagdebug3)
 				for (int unsigned i=0;i<filenamearray.size();i++)
-					myprintf("38307: filenamearray %08d %s\n",(int)i,filenamearray[i].filename.c_str());
+					myprintf("00279: filenamearray %08d %s\n",(int)i,filenamearray[i].filename.c_str());
 			return filenamearray[filenamearray.size()-1].filename;
 		}
 	}
@@ -42505,24 +42915,24 @@ OutputArchive::OutputArchive(string i_thearchive,const char* filename, const cha
 		
 		if (flagdebug4)
 		{
-			myprintf("38761: is firstchunk %d\n",(int)firstchunk);
-			myprintf("38402: chunkedoutput count %s total size %21s\n",migliaia(chunkedoutput.filenamearray.size()),migliaia2(chunkedoutput.totalchunksize));
-			myprintf("38404: last %s next %s\n",chunkedoutput.lastpart.c_str(),chunkedoutput.nextpart.c_str());
+			myprintf("00280: is firstchunk %d\n",(int)firstchunk);
+			myprintf("00281: chunkedoutput count %s total size %21s\n",migliaia(chunkedoutput.filenamearray.size()),migliaia2(chunkedoutput.totalchunksize));
+			myprintf("00282: last %s next %s\n",chunkedoutput.lastpart.c_str(),chunkedoutput.nextpart.c_str());
 		}
 		if (chunkedoutput.nextpart_integer>chunkedoutput.maxpart)
 		{
-			myprintf("38426: proposed next_partinteger %s is > maxpart %s\n",migliaia(chunkedoutput.nextpart_integer),migliaia2(chunkedoutput.maxpart));
+			myprintf("00283: proposed next_partinteger %s is > maxpart %s\n",migliaia(chunkedoutput.nextpart_integer),migliaia2(chunkedoutput.maxpart));
 			seppuku();
 			return;
 		}
 		chunknumber=chunkedoutput.nextpart_integer;
 		thefilename=chunkedoutput.nextpart;
 		if (flagdebug)
-			myprintf("37946: changed thefilename to %s\n",thefilename.c_str());
+			myprintf("00284: changed thefilename to %s\n",thefilename.c_str());
 		
 		previoussize=chunkedoutput.totalchunksize;
 		if (flagdebug4)
-			myprintf("38769: previoussize %s\n",migliaia(previoussize));
+			myprintf("00285: previoussize %s\n",migliaia(previoussize));
 
 
 	}	
@@ -42533,7 +42943,7 @@ OutputArchive::OutputArchive(string i_thearchive,const char* filename, const cha
 	if (flagappend)
 	{
 		if (flagdebug2)
-			myprintf("21180: try BSD ABPLUS\n");
+			myprintf("00286: try BSD ABPLUS\n");
 		fp=myfopen(thefilename.c_str(), ABPLUS);
 	}
 	else
@@ -42543,7 +42953,7 @@ OutputArchive::OutputArchive(string i_thearchive,const char* filename, const cha
 #endif
 
 	if (flagdebug3)
-		myprintf("38660: ***********************************************************\n");
+		myprintf("00287: ***********************************************************\n");
 	if (g_chunk_size>0)
 	{
 		///g_addedchunklist_fp.push_back(fp);
@@ -42555,23 +42965,23 @@ OutputArchive::OutputArchive(string i_thearchive,const char* filename, const cha
 		if (flagdebug3)
 		{
 			printbar('1');
-			myprintf("38663: off inside isopen is %s\n",migliaia(off));
+			myprintf("00288: off inside isopen is %s\n",migliaia(off));
 		}
 		if (off!=0) 
 		{
 			if (flagdebug)
 			{
-				myprintf("38051: thefilename is %s  %s\n",thefilename.c_str(),migliaia(off));
+				myprintf("00289: thefilename is %s  %s\n",thefilename.c_str(),migliaia(off));
 				if (fileexists(thefilename.c_str()))
-					myprintf("38053: does exists\n");
+					myprintf("00290: does exists\n");
 				else
-					myprintf("38056: does not exists\n");
+					myprintf("00291: does not exists\n");
 			}
 			error("38583: file exists and off > 0 (maybe try to add to chunked?)");
 		}
     if (password) {
 		if (flagdebug2)
-		myprintf("38667: password, reading salt\n");
+		myprintf("00292: password, reading salt\n");
       if (fread(salt, 1, 32, fp)!=32) 
 		  error("38679: cannot read salt");
       if (salt_ && memcmp(salt, salt_, 32))
@@ -42579,12 +42989,12 @@ OutputArchive::OutputArchive(string i_thearchive,const char* filename, const cha
 	  else
 	  {
 		if (flagdebug2)
-		  myprintf("38638: salt done!\n");
+		  myprintf("00293: salt done!\n");
 	  }
 #ifdef SERVER
 		if (g_socket!=0)
 		{
-			myprintf("21968: Sock write criptoheader\n");
+			myprintf("00294: Sock write criptoheader\n");
 			g_flushpacket.setpacket(g_enter,FRANZOPACKET_TYPECOMMAND_DATA,6001,6002,6003,"");
 			g_flushpacket.loadpayload(salt,32);
 			g_flushpacket.sendtosocket();
@@ -42598,12 +43008,12 @@ OutputArchive::OutputArchive(string i_thearchive,const char* filename, const cha
 	else 
 	{
 		if (flagdebug3)
-			myprintf("38704: not isopen\n");
+			myprintf("00295: not isopen\n");
 #ifdef BSD
 		if (flagappend)
 		{
 			if (flagdebug2)
-				myprintf("21192: try BSD flagappend\n");
+				myprintf("00296: try BSD flagappend\n");
 			fp=myfopen(thefilename.c_str(), AB);
 		}
 		else
@@ -42632,7 +43042,7 @@ OutputArchive::OutputArchive(string i_thearchive,const char* filename, const cha
 			if (off==0 && myfwrite(salt, 1, 32, fp)!=32)
 				ioerr(thefilename.c_str());
 			if (flagdebug3)
-				myprintf("38729: written SALT (32bytes) on %s\n",thefilename.c_str());
+				myprintf("00297: written SALT (32bytes) on %s\n",thefilename.c_str());
 #ifndef _WIN32
 			fflush(fp); /// unix fix
 #endif
@@ -42640,7 +43050,7 @@ OutputArchive::OutputArchive(string i_thearchive,const char* filename, const cha
 	  if (g_socket!=0)
 			if (thefilename!=g_indexname)
 			{
-				myprintf("22002: Sending cryptoheader to server\n");
+				myprintf("00298: Sending cryptoheader to server\n");
 				g_flushpacket.setpacket(g_enter,FRANZOPACKET_TYPECOMMAND_DATA,4001,4002,4003,"");
 				g_flushpacket.loadpayload(salt,32);
 				g_flushpacket.sendtosocket();
@@ -42649,7 +43059,7 @@ OutputArchive::OutputArchive(string i_thearchive,const char* filename, const cha
 		}
 	}
 	if (flagdebug)
-		myprintf("38061: opened 1 thefilename %s\n",thefilename.c_str());
+		myprintf("00299: opened 1 thefilename %s\n",thefilename.c_str());
 	firstfp=FPNULL;
 	chunksize=0;
 	
@@ -42658,7 +43068,7 @@ OutputArchive::OutputArchive(string i_thearchive,const char* filename, const cha
 		firstfp=fp;
 		g_archivefp_first=firstfp;
 		if (flagdebug3)
-			myprintf("38093: ))))))))))))))))))))  Take note: firstfp is %s\n",migliaia(int64_t(firstfp)));
+			myprintf("00300: ))))))))))))))))))))  Take note: firstfp is %s\n",migliaia(int64_t(firstfp)));
 	}
 		
 	if (thefilename!=g_indexname)
@@ -42666,18 +43076,18 @@ OutputArchive::OutputArchive(string i_thearchive,const char* filename, const cha
 		g_fp_zpaq	=fp;
 		flagindex=false;
 		if (flagdebug3)
-			myprintf("38478: ;;;;;;;;;;;;;;;;;;;;;;;;;; settato index %s %08d;;;;;;;;;;;;;\n",migliaia(int64_t(g_fp_zpaq)),int64_t(g_fp_zpaq));
+			myprintf("00301: ;;;;;;;;;;;;;;;;;;;;;;;;;; settato index %s %08d;;;;;;;;;;;;;\n",migliaia(int64_t(g_fp_zpaq)),int64_t(g_fp_zpaq));
 	}
 
   if (flagindex)
   {
 	  if (flagdebug)
-		myprintf("39681: OutputArchive ISINDEX %s %s\n",thefilename.c_str(),migliaia(int64_t(fp)));
+		myprintf("00302: OutputArchive ISINDEX %s %s\n",thefilename.c_str(),migliaia(int64_t(fp)));
   }
   else
   {
 	  if (flagdebug)
-		myprintf("38769: OutputArchive ZPAQ    %s %s\n",thefilename.c_str(),migliaia(int64_t(fp)));
+		myprintf("00303: OutputArchive ZPAQ    %s %s\n",thefilename.c_str(),migliaia(int64_t(fp)));
   }
 
   // Set up encryption
@@ -42739,12 +43149,12 @@ class franzfs
 	{
 		if (!data)
 		{
-			myprintf("37608: Guru data is null in seek start\n");
+			myprintf("00304! Guru data is null in seek start\n");
 			return;
 		}
 		if (filesize==0)
 		{
-			myprintf("37613: Guru filesize is zero seek start\n");
+			myprintf("00305! Guru filesize is zero seek start\n");
 			return;
 		}
 		position=0;
@@ -42758,7 +43168,7 @@ class franzfs
 			return 0;
 		if (!data)
 		{
-			myprintf("22938: Guru data is null\n");
+			myprintf("00306! Guru data is null\n");
 			return 0;
 		}
 		
@@ -42766,14 +43176,14 @@ class franzfs
 			i_size=filesize-position;
 		memcpy(o_ptr,data+position,i_size);
 		position+=i_size;
-	///	myprintf("37633: letti %21s posizione %21s\n",migliaia(i_size),migliaia2(position));
+	///	myprintf("00307: letti %21s posizione %21s\n",migliaia(i_size),migliaia2(position));
 		return i_size;
 	}
 	size_t ramwrite(uint64_t i_offset,char* i_ptr, size_t i_size)
 	{	
 		if (i_offset>filesize)
 		{
-			myprintf("22953: i_offset greater then filesize %s %s\n",migliaia((int64_t)i_offset),migliaia2((int64_t)filesize));
+			myprintf("00308: i_offset greater then filesize %s %s\n",migliaia((int64_t)i_offset),migliaia2((int64_t)filesize));
 			return 0;
 		}
 		if (i_ptr==NULL)
@@ -42784,14 +43194,14 @@ class franzfs
 		
 		if (!data)
 		{
-			myprintf("35254: Guru data is null\n");
+			myprintf("00309! Guru data is null\n");
 			seppuku();
 			return 0;
 		}
 		position=i_offset;
 		if (position+i_size>filesize)
 		{
-			myprintf("35248: cannot write beyond size %s %s %s\n",migliaia((int64_t)position),migliaia2((int64_t)i_size),migliaia3((int64_t)filesize));
+			myprintf("00310! cannot write beyond size %s %s %s\n",migliaia((int64_t)position),migliaia2((int64_t)i_size),migliaia3((int64_t)filesize));
 			return 0;
 		}
 		memcpy(data+position,i_ptr,i_size);
@@ -42801,41 +43211,41 @@ class franzfs
 	franzfs(){data=NULL;position=0;}
 	bool init(int64_t i_size)
 	{
-///		myprintf("38696: init1\n");
+///		myprintf("00311: init1\n");
 		data=(char*)franz_malloc(i_size);
-	///	myprintf("38696: init2\n");
+	///	myprintf("00312: init2\n");
 		if (data==NULL)
 		{
-			myprintf("35250: GURU on malloc\n");
+			myprintf("00313! GURU on malloc\n");
 			return false;
 		}
-		///myprintf("38696: init3\n");
+		///myprintf("00314: init3\n");
 		memset(data,0,i_size); // required by zpaq extraction method
-		///myprintf("38696: init4\n");
+		///myprintf("00315: init4\n");
 		
 		g_ramdisksize+=i_size;
 		filesize=i_size;
 		if (flagdebug2)
-			myprintf("23000: allocated %21s data %s\n",migliaia(i_size),migliaia2(int64_t(data)));
+			myprintf("00316: allocated %21s data %s\n",migliaia(i_size),migliaia2(int64_t(data)));
 		return true;
 	}
 	bool reset()
 	{
 		if (data==NULL)
 		{
-			myprintf("23001: GURU on reset\n");
+			myprintf("00317! GURU on reset\n");
 			return false;
 		}
 		if (filesize==0)
 		{
-			myprintf("23006: GURU on filesize\n");
+			myprintf("00318! GURU on filesize\n");
 			return false;
 		}
 		franz_free(data);
 		g_ramdisksize-=filesize;
 		filesize=0;
 		if (flagdebug2)
-			myprintf("38828: Deallocated  %s\n",migliaia((int64_t)filesize));
+			myprintf("00319: Deallocated  %s\n",migliaia((int64_t)filesize));
 		return true;
 	}
 };
@@ -42924,7 +43334,7 @@ struct DT   // if you get some warning here, update your compiler!
 					franz_block_size=0;
 			}
 			
-///		myprintf("39451: franz_block_size %d  franzo_type %d |%c|\n",franz_block_size,g_franzotype,command);
+///		myprintf("00320: franz_block_size %d  franzo_type %d |%c|\n",franz_block_size,g_franzotype,command);
 		
 		franz_block=NULL;
 		if (franz_block_size>0)
@@ -42932,7 +43342,7 @@ struct DT   // if you get some warning here, update your compiler!
 			franz_block=(char*)franz_malloc(franz_block_size);
 			if (franz_block==NULL)
 			{
-				myprintf("39381: cannot franz_malloc\n");
+				myprintf("00321! cannot franz_malloc\n");
 				seppuku();
 			}
 			memset(franz_block,0,franz_block_size);
@@ -44355,7 +44765,7 @@ private:
 	void 		scandir(bool i_checkifselected,DTMap& i_edt,string filename, bool i_recursive=true);        // scan dirs to dt
 	void 		addfile(bool i_checkifselected,DTMap& i_edt,string filename, int64_t edate, int64_t esize,int64_t eattr,int64_t i_creationdate,int64_t i_accessdate);          // add external file to dt
 	int64_t 	franzparallelscandir(bool i_flaghash,bool i_recursive,bool i_forcedir);
-	int64_t 	franzparallelhashfiles(string i_hashtype,int64_t i_totalsize,vector<string> i_thefiles,vector<std::pair<string,string> >& o_hashname);
+	int64_t 	franzparallelhashfiles(string i_hashtype,int64_t i_totalsize,vector<string> i_thefiles,bool i_silent,vector<std::pair<string,string> >& o_hashname);
 
 
 	bool 		equal(DTMap::const_iterator p, const char* filename, uint32_t &o_crc32,string i_myhashtype,string i_myhash,string& o_hash);// compare file contents with p
@@ -44484,8 +44894,8 @@ public:
 	bool isjitable();
 	void tabba();
 	int	external();
-	
-
+	string getbackupnameifany(string i_filename);
+	int sumhome();
 };
 
 Jidac* pjidac;
@@ -44502,14 +44912,14 @@ std::string exec(const char* cmd)
 	FILE* pipe = popen(cmd,"r");
 	if (!pipe) 
 	{
-		myprintf("40958: popen kaputt\n");
+		myprintf("00322! popen kaputt\n");
 		return "";
     }
 	while (fgets(buffer,sizeof(buffer),pipe)!=NULL) 
 		result+=buffer;
     if (pclose(pipe)==-1) 
 	{
-		myprintf("40981: pclose failed\n");
+		myprintf("00323! pclose failed\n");
         return "";
     }
     return result;
@@ -44519,7 +44929,7 @@ std::string exec(const char* cmd)
 // a debug function
 string exec(const char* cmd)
 {
-	myprintf("39337: Debug function (Windows does not have ZFS!)\n");
+	myprintf("00324: Debug function (Windows does not have ZFS!)\n");
 	if (cmd==NULL) // compiler be quiet
 		return "NULL";
 	return "";
@@ -44542,15 +44952,15 @@ string x_one_vector(string i_command,string i_text,vector<string>& o_line)
 	string 	risultato=exec(i_command.c_str());
 	if (i_text!="")
 		if (flagverbose)
-			myprintf("39147: running        %s\n",i_text.c_str());
+			myprintf("00325: running        %s\n",i_text.c_str());
 	if (risultato=="")
 	{
 		if (flagverbose)
-		myprintf("39149: x_one          %s\n",i_command.c_str());
+		myprintf("00326: x_one          %s\n",i_command.c_str());
 		return "";
 	}
 	if (flagdebug2)
-		myprintf("39153: x_one          %s => %s\n",i_command.c_str(),risultato.c_str());
+		myprintf("00327: x_one          %s => %s\n",i_command.c_str(),risultato.c_str());
 
 	unsigned int i=0;
 	string lineetta="";
@@ -44564,7 +44974,7 @@ string x_one_vector(string i_command,string i_text,vector<string>& o_line)
 
 			o_line.push_back(lineetta);
 			if (flagdebug2)
-				myprintf("39166: Pushato |%s|\n",lineetta.c_str());
+				myprintf("00328: Pushato |%s|\n",lineetta.c_str());
 			lineetta="";
 		}
 		else
@@ -44586,33 +44996,33 @@ string x_one(string i_command,string i_text)
 	string 	risultato=exec(i_command.c_str());
 	if (i_text!="")
 		if (flagverbose)
-			myprintf("37720: running        %s\n",i_text.c_str());
+			myprintf("00329: running        %s\n",i_text.c_str());
 	if (risultato=="")
 	{
 		if (flagverbose)
-		myprintf("38162: x_one          %s\n",i_command.c_str());
+		myprintf("00330: x_one          %s\n",i_command.c_str());
 	}
 	else
 	{
 		if (flagdebug2)
-			myprintf("37726: x_one          %s => %s\n",i_command.c_str(),risultato.c_str());
+			myprintf("00331: x_one          %s => %s\n",i_command.c_str(),risultato.c_str());
 	}
 	return risultato;
 }
 int Jidac::zfsreceive()
 {
-	myprintf("39419: zfsreceive\n",archive.c_str());
+	myprintf("00332: zfsreceive\n",archive.c_str());
 	if (files.size()!=1)
 	{
-		myprintf("39414: zfsreceive examples (count %d)\n",files.size());
-		myprintf("39415: [1]: zfsreceive /pippo.zpaq rpool/restored -script thescript.sh\n");
-		myprintf("39416: [1]: zfsreceive /pippo.zpaq rpool/restored -script thescript.sh -snapshot mymark\n");
+		myprintf("00333: zfsreceive examples (count %d)\n",files.size());
+		myprintf("00334: [1]: zfsreceive /pippo.zpaq rpool/restored -script thescript.sh\n");
+		myprintf("00335: [1]: zfsreceive /pippo.zpaq rpool/restored -script thescript.sh -snapshot mymark\n");
 		return 2;
 	}
 
 	if (g_script=="")
 	{
-		myprintf("37423: you must specify an -script thescript.sh\n");
+		myprintf("00336! you must specify an -script thescript.sh\n");
 		return 2;
 	}
 	string	myoutput=g_script;
@@ -44624,9 +45034,12 @@ int Jidac::zfsreceive()
 	string estensione=prendiestensione(archive);
 	if (estensione!="zpaq")
 	{
-		myprintf("53194: please use .zpaq extension on archive name <<%s>>");
+		myprintf("00337! please use .zpaq extension on archive name <<%Z>>\n",archive.c_str());
+		/*
+		myprintf("00338! please use .zpaq extension on archive name <<%s>>");
 		printUTF8(archive.c_str());
 		myprintf("\n");
+		*/
 		return 1;
 	}
 
@@ -44641,16 +45054,16 @@ int Jidac::zfsreceive()
 		if (thepool[i]=='@')
 			howmanyat++;
 	}
-	myprintf("39459: Pool   %s\n",thepool.c_str());
-	myprintf("39460: Mark   %s\n",themark.c_str());
+	myprintf("00339: Pool   %s\n",thepool.c_str());
+	myprintf("00340: Mark   %s\n",themark.c_str());
 	if (howmanyslash!=1)
 	{
-		myprintf("53212: a dataset |%s| must have exactly 1 '/' instead of %d\n",thepool.c_str(),howmanyslash);
+		myprintf("00341! a dataset |%s| must have exactly 1 '/' instead of %d\n",thepool.c_str(),howmanyslash);
 		return 2;
 	}
 	if (howmanyat>0)
 	{
-		myprintf("53217: a dataset |%s| cannot have @\n",thepool.c_str());
+		myprintf("00342! a dataset |%s| cannot have @\n",thepool.c_str());
 		return 2;
 	}
 
@@ -44678,7 +45091,7 @@ int Jidac::zfsreceive()
 			}
 			else
 			{
-				myprintf("53249: GURU file is not ordered <<%s>> \n",a->first.c_str());
+				myprintf("00343! GURU file is not ordered <<%s>> \n",a->first.c_str());
 				return 2;
 			}
 		}
@@ -44691,14 +45104,14 @@ int Jidac::zfsreceive()
 		string	snomeatteso=nomeatteso;
 		if (snomeatteso!=filename[i])
 		{
-			myprintf("53254: Expected name @ index %d |%s| found |%s| => abort\n",(int)i,snomeatteso.c_str(),filename[i].c_str());
+			myprintf("00344! Expected name @ index %d |%s| found |%s| => abort\n",(int)i,snomeatteso.c_str(),filename[i].c_str());
 			return 2;
 		}
 	}
 	FILE* batch=fopen(myoutput.c_str(), "w");
 	if (batch==NULL)
 	{
-		myprintf("53273: cannot write on script %s\n",myoutput.c_str());
+		myprintf("00345! cannot write on script %s\n",myoutput.c_str());
 		return 2;
 	}
 	string pv="";
@@ -44713,7 +45126,7 @@ int Jidac::zfsreceive()
 		pv="/bin/pv|";
 #endif
 	if (pv!="")
-		myprintf("37850: Activating pv on <<%s>>\n",pv.c_str());
+		myprintf("00346: Activating pv on <<%s>>\n",pv.c_str());
 	for (unsigned int i=0;i<filename.size();i++)
 	{
 		if (flagverbose)
@@ -44727,28 +45140,31 @@ int Jidac::zfsreceive()
 
 		if (chmod(myoutput.c_str(),0700)!=0)
 		{
-			myprintf("53298: Error on chmod 700 on %s\n",myoutput.c_str());
+			myprintf("00347! Error on chmod 700 on %s\n",myoutput.c_str());
 			return 2;
 		}
 #endif
-	myprintf("39549: The script is <<");
+	myprintf("00348: The script is <<%Z>>\n",myoutput.c_str());
+/*
+	myprintf("00349: The script is <<");
 	printUTF8(myoutput.c_str());
 	myprintf(">>\n");
+*/
 	return 0;
 }
 int Jidac::zfsrestore()
 {
-	myprintf("39336: zfsrestore\n");
+	myprintf("00350: zfsrestore\n");
 	if (files.size()!=2)
 	{
-		myprintf("39599: zfsrestore examples (count %d)\n",files.size());
-		myprintf("39560: [1]: zfsrestore /restoredzfsfolder rpool/restored -script thescript.sh\n");
-		myprintf("39561: [2]: zfsrestore /restoredzfsfonder rpool/restored -script thescript.sh -snapshot mymark\n");
+		myprintf("00351: zfsrestore examples (count %d)\n",files.size());
+		myprintf("00352: [1]: zfsrestore /restoredzfsfolder rpool/restored -script thescript.sh\n");
+		myprintf("00353: [2]: zfsrestore /restoredzfsfonder rpool/restored -script thescript.sh -snapshot mymark\n");
 		return 2;
 	}
 	if (g_script=="")
 	{
-		myprintf("37429: you must specify an -script thescript.sh\n");
+		myprintf("00354! you must specify an -script thescript.sh\n");
 		return 2;
 	}
 
@@ -44769,17 +45185,17 @@ int Jidac::zfsrestore()
 		if (thepool[i]=='@')
 			howmanyat++;
 	}
-	myprintf("39587: Folder %s\n",thefolder.c_str());
-	myprintf("39588: Pool   %s\n",thepool.c_str());
-	myprintf("39589: Mark   %s\n",themark.c_str());
+	myprintf("00355: Folder %s\n",thefolder.c_str());
+	myprintf("00356: Pool   %s\n",thepool.c_str());
+	myprintf("00357: Mark   %s\n",themark.c_str());
 	if (howmanyslash!=1)
 	{
-		myprintf("53039: You MUST select a dataset |%s| must have exactly 1 '/' instead of %d\n",thepool.c_str(),howmanyslash);
+		myprintf("00358! You MUST select a dataset |%s| must have exactly 1 '/' instead of %d\n",thepool.c_str(),howmanyslash);
 		return 2;
 	}
 	if (howmanyat>0)
 	{
-		myprintf("53044: a pool |%s| cannot have @\n",thepool.c_str());
+		myprintf("00359! a pool |%s| cannot have @\n",thepool.c_str());
 		return 2;
 	}
 	files.resize(1);
@@ -44787,7 +45203,7 @@ int Jidac::zfsrestore()
 	DTMap myblock;
 	g_arraybytescanned.push_back(0);
 	g_arrayfilescanned.push_back(0);
-	myprintf("39605: Searching files <<%s>>\n",files[0].c_str());
+	myprintf("00360: Searching files <<%s>>\n",files[0].c_str());
 	edt.clear();
 	scandir(false,edt,files[0].c_str(),false);
 	vector<string> filename;
@@ -44800,7 +45216,7 @@ int Jidac::zfsrestore()
 	}
 	if (filename.size()==0)
 	{
-		myprintf("53074: no .zfs files founded in archive\n");
+		myprintf("00361! no .zfs files founded in archive\n");
 		return 2;
 	}
 	char nomeatteso[20];
@@ -44810,14 +45226,14 @@ int Jidac::zfsrestore()
 		string	snomeatteso=nomeatteso;
 		if (snomeatteso!=extractfilename(filename[i]))
 		{
-			myprintf("53085: Expected name @ index %d |%s| found |%s| => abort\n",(int)i,snomeatteso.c_str(),filename[i].c_str());
+			myprintf("00362! Expected name @ index %d |%s| found |%s| => abort\n",(int)i,snomeatteso.c_str(),filename[i].c_str());
 			return 2;
 		}
 	}
 	FILE* batch=fopen(myoutput.c_str(), "w");
 	if (batch==NULL)
 	{
-		myprintf("53088: cannot write on script %s\n",myoutput.c_str());
+		myprintf("00363! cannot write on script %s\n",myoutput.c_str());
 		return 2;
 	}
 	string pv="";
@@ -44844,13 +45260,16 @@ int Jidac::zfsrestore()
 
 		if (chmod(myoutput.c_str(),0700)!=0)
 		{
-			myprintf("53105: Error on chmod 700 on %s\n",myoutput.c_str());
+			myprintf("00364! Error on chmod 700 on %s\n",myoutput.c_str());
 			return 2;
 		}
 #endif
-	myprintf("53515: The script is <<");
+	myprintf("00365: The script is <<%Z>>\n",myoutput.c_str());
+/*
+	myprintf("00366: The script is <<");
 	printUTF8(myoutput.c_str());
 	myprintf(">>\n");
+	*/
 	return 0;
 }
 
@@ -44859,21 +45278,24 @@ int Jidac::zfsbackup()
 	string 	estensione=prendiestensione(archive);
 	if (estensione!="zpaq")
 	{
-		myprintf("53522: please use .zpaq extension on archive name <<%s>>");
+		myprintf("00367! please use .zpaq extension on archive name <<%Z>>\n",archive.c_str());
+		/*
+		myprintf("00368! please use .zpaq extension on archive name <<%s>>");
 		printUTF8(archive.c_str());
 		myprintf("\n");
+		*/
 		return 1;
 	}
 	if (files.size()!=1)
 	{
-		myprintf("37426: please use 1 single pool/dataset\n");
+		myprintf("00369! please use 1 single pool/dataset\n");
 		return 1;
 	}
 	string thepool	=files[0];
 	if (isdirectory(thepool))
 	{
-		myprintf("53537: A pool-dataset |%s| cannot end with a / \n",thepool.c_str());
-		myprintf("53537: Good examples     tank     tank/d\n");
+		myprintf("00370! A pool-dataset |%s| cannot end with a / \n",thepool.c_str());
+		myprintf("00371: Good examples     tank     tank/d\n");
 		return 2;
 	}
 	string themark	="zpaqfranz";
@@ -44894,23 +45316,23 @@ int Jidac::zfsbackup()
 		if (purgedpool[i]=='/')
 			purgedpool[i]='_';
 
-	myprintf("53549: Archive        %s\n",archive.c_str());
-	myprintf("53550: Pool           %s\n",thepool.c_str());
-	myprintf("53551: Purged pool    %s\n",purgedpool.c_str());
-	myprintf("53552: Mark           %s\n",themark.c_str());
+	myprintf("00372: Archive        %s\n",archive.c_str());
+	myprintf("00373: Pool           %s\n",thepool.c_str());
+	myprintf("00374: Purged pool    %s\n",purgedpool.c_str());
+	myprintf("00375: Mark           %s\n",themark.c_str());
 	if (howmanyslash>1)
 	{
-		myprintf("53549: A pool-dataset |%s| must have exactly 0 or 1 / instead of %d\n",thepool.c_str(),howmanyslash);
+		myprintf("00376! A pool-dataset |%s| must have exactly 0 or 1 / instead of %d\n",thepool.c_str(),howmanyslash);
 		return 2;
 	}
 	if (howmanyat>0)
 	{
-		myprintf("52984: A pool-dataset |%s| cannot have @\n",thepool.c_str());
+		myprintf("00377! A pool-dataset |%s| cannot have @\n",thepool.c_str());
 		return 2;
 	}
 	if (!fileexists(archive))
 	{
-		myprintf("53015: The archive does not exist, checking for snapshots\n");
+		myprintf("00378: The archive does not exist, checking for snapshots\n");
 		vector<string> array_primachiocciola;
 		vector<string> array_dopochiocciola;
 		vector<string> array_size;
@@ -44918,7 +45340,7 @@ int Jidac::zfsbackup()
 		(void)zfs_get_snaplist(thepool,themark,array_primachiocciola,array_dopochiocciola,array_size);
 		if (array_primachiocciola.size()!=0)
 		{
-			myprintf("53022: Archive does not exists, but we got %d snapshots => abort\n",array_primachiocciola.size());
+			myprintf("00379! Archive does not exists, but we got %d snapshots => abort\n",array_primachiocciola.size());
 			return 2;
 		}
 		char	buffer[1000];
@@ -44926,17 +45348,17 @@ int Jidac::zfsbackup()
 
 		string thesnap=buffer;
 		string fullsnap=thepool+"@"+thesnap;
-		myprintf("53586: The snap |%s|\n",thesnap.c_str());
-		myprintf("53587: Fullsnap |%s|\n",fullsnap.c_str());
-		myprintf("53030: Exename  |%s|\n",zpaqfranzexename.c_str());
-		myprintf("53031: Now preparing a brand-new archive and snapshot (starting from 00000001)\n");
+		myprintf("00380: The snap |%s|\n",thesnap.c_str());
+		myprintf("00381: Fullsnap |%s|\n",fullsnap.c_str());
+		myprintf("00382: Exename  |%s|\n",zpaqfranzexename.c_str());
+		myprintf("00383: Now preparing a brand-new archive and snapshot (starting from 00000001)\n");
 		string filebatch="/tmp/newbackup_zfs_"+purgedpool+".sh";
 		filebatch=nomefileseesistegia(filebatch);
-		myprintf("53033: CREATING script %s\n",filebatch.c_str());
+		myprintf("00384: CREATING script %s\n",filebatch.c_str());
 		FILE* batch=fopen(filebatch.c_str(), "w");
 		if (batch==NULL)
 		{
-			myprintf("53037: cannot write on script %s\n",filebatch.c_str());
+			myprintf("00385! cannot write on script %s\n",filebatch.c_str());
 			return 2;
 		}
 		fprintf(batch,"zfs snapshot %s\n",fullsnap.c_str());
@@ -44954,18 +45376,18 @@ int Jidac::zfsbackup()
 			if (fileexists("/bin/pv"))
 			hashdeepposition="/bin/hashdeep";
 #endif
-			myprintf("53607: hashdeep <<%s>>\n",hashdeepposition.c_str());
+			myprintf("00386: hashdeep <<%s>>\n",hashdeepposition.c_str());
 			if (hashdeepposition=="")
 			{
-				myprintf("53612: Cannot locate hashdeep, abort!\n");
+				myprintf("00387! Cannot locate hashdeep, abort!\n");
 				fclose(batch);
 				return 2;
 			}
 			string zfsfolder="/"+thepool+"/.zfs/snapshot/"+thesnap+"/";
-			myprintf("53616: zfsfolder      <<%s>>\n",zfsfolder.c_str());
+			myprintf("00388: zfsfolder      <<%s>>\n",zfsfolder.c_str());
 			hashofile="/tmp/hasho_"+purgedpool+"_"+thesnap+".txt";
 			hashofile=nomefileseesistegia(hashofile);
-			myprintf("53603: Hash-o-file    <<%s>>\n",hashofile.c_str());
+			myprintf("00389: Hash-o-file    <<%s>>\n",hashofile.c_str());
 			fprintf(batch,"/sbin/zfs set snapdir=hidden %s\n",thepool.c_str());
 			fprintf(batch,"%s -c md5 -r %s >%s\n",
 			hashdeepposition.c_str(),
@@ -44979,22 +45401,22 @@ int Jidac::zfsbackup()
 #ifndef _WIN32
 		if (chmod(filebatch.c_str(),0700)!=0)
 		{
-			myprintf("53046: error on chmod 700 on <<%s>>\n",filebatch.c_str());
+			myprintf("00390! error on chmod 700 on <<%s>>\n",filebatch.c_str());
 			return 2;
 		}
-		myprintf("53049: RUNNING  script %s\n",filebatch.c_str());
+		myprintf("00391: RUNNING  script %s\n",filebatch.c_str());
 		string runresult=exec(filebatch.c_str());
 		if (mypos("(all OK)",runresult)!=0)
 		{
-			myprintf("53054: The run seems OK, filesize %s\n",migliaia(prendidimensionefile(archive.c_str())));
+			myprintf("00392: The run seems OK, filesize %s\n",migliaia(prendidimensionefile(archive.c_str())));
 			if (flagkill)
 			{
-				myprintf("53649: Deleting <<%s>>\n",filebatch.c_str());
+				myprintf("00393: Deleting <<%s>>\n",filebatch.c_str());
 				delete_file(filebatch.c_str());
 
 				if (hashofile!="")
 				{
-					myprintf("39631: Deleting hasho <<%s>>\n",hashofile.c_str());
+					myprintf("00394: Deleting hasho <<%s>>\n",hashofile.c_str());
 					delete_file(hashofile.c_str());
 				}
 			}
@@ -45003,7 +45425,7 @@ int Jidac::zfsbackup()
 		}
 		else
 		{
-			myprintf("53059: GURU, something seems wrong, filesize %s\n",migliaia(prendidimensionefile(archive.c_str())));
+			myprintf("00395! GURU, something seems wrong, filesize %s\n",migliaia(prendidimensionefile(archive.c_str())));
 			return 2;
 		}
 #endif
@@ -45011,7 +45433,7 @@ int Jidac::zfsbackup()
 	}
 
 // archive does exists
-	myprintf("52995: The archive exist, checking latest snapshot\n");
+	myprintf("00396: The archive exist, checking latest snapshot\n");
 	///getpasswordifempty();
 	int errors=0;
 	command='l';
@@ -45034,14 +45456,14 @@ int Jidac::zfsbackup()
 		snprintf(nomeatteso,sizeof(nomeatteso),"%08d.zfs",(int)(i+1));
 		string	snomeatteso=nomeatteso;
 		if (snomeatteso!=filename[i])
-			myprintf("53027: Expected name @ index %d |%s| found |%s| => abort\n",(int)i,snomeatteso.c_str(),filename[i].c_str());
+			myprintf("00397: Expected name @ index %d |%s| found |%s| => abort\n",(int)i,snomeatteso.c_str(),filename[i].c_str());
 	}
 
 	string	snomeatteso=myulltoa(filename.size(),8);
 
 	string expectedsnapshot=themark+snomeatteso;
 	string fullexpectedsnapshot=thepool+'@'+themark+snomeatteso;
-	myprintf("53035: Searching for snapshot |%s|\n",fullexpectedsnapshot.c_str());
+	myprintf("00398: Searching for snapshot |%s|\n",fullexpectedsnapshot.c_str());
 
 	vector<string> array_primachiocciola;
 	vector<string> array_dopochiocciola;
@@ -45051,24 +45473,24 @@ int Jidac::zfsbackup()
 
 	if (array_primachiocciola.size()==0)
 	{
-		myprintf("53051: Cannot find the expected snapshot |%s|\n",fullexpectedsnapshot.c_str());
+		myprintf("00399! Cannot find the expected snapshot |%s|\n",fullexpectedsnapshot.c_str());
 		return 2;
 	}
 	int	foundindex=-1;
 	for (unsigned int i=0;i<array_primachiocciola.size();i++)
 	{
 		if (flagverbose)
-			myprintf("53120: Array %08d => %s\n",(int)i,array_dopochiocciola[i].c_str());
+			myprintf("00400: Array %08d => %s\n",(int)i,array_dopochiocciola[i].c_str());
 		if (expectedsnapshot==array_dopochiocciola[i])
 		{
-			myprintf("53054: The expected snapshot exists (this is good) index %d |%s|\n",(int)i,expectedsnapshot.c_str());
+			myprintf("00401: The expected snapshot exists (this is good) index %d |%s|\n",(int)i,expectedsnapshot.c_str());
 			foundindex=i;
 			break;
 		}
 	}
 	if (((foundindex+1)!=(int)array_primachiocciola.size()) || (foundindex==-1))
 	{
-		myprintf("53075: The founded index %d is < snapshot size %d, cowardly abort (not the LAST snapshot)\n",foundindex,array_primachiocciola.size());
+		myprintf("00402! The founded index %d is < snapshot size %d, cowardly abort (not the LAST snapshot)\n",foundindex,array_primachiocciola.size());
 		return 2;
 	}
 
@@ -45082,21 +45504,21 @@ int Jidac::zfsbackup()
 	snprintf(nomeatteso,sizeof(nomeatteso),"%08d",thelast);
 	string	nuovonome=nomeatteso;
 	string nuovonomefull=thepool+'@'+themark+nuovonome;
-	myprintf("53144: Newname      |%s|\n",nuovonome.c_str());
-	myprintf("53145: Newname full |%s|\n",nuovonomefull.c_str());
+	myprintf("00403: Newname      |%s|\n",nuovonome.c_str());
+	myprintf("00404: Newname full |%s|\n",nuovonomefull.c_str());
 ///	string	exepath		=zpaqfranzexename;
-	myprintf("53154: Exename      |%s|\n",zpaqfranzexename.c_str());
+	myprintf("00405: Exename      |%s|\n",zpaqfranzexename.c_str());
 
 	string filebatch="/tmp/backup_zfs_"+purgedpool+".sh";
 #ifdef _WIN32
 	filebatch="z:/1.txt";
 #endif
 	filebatch=nomefileseesistegia(filebatch);
-	myprintf("36337: EXECUTING script %s\n",filebatch.c_str());
+	myprintf("00406: EXECUTING script %s\n",filebatch.c_str());
 	FILE* batch=fopen(filebatch.c_str(), "w");
 	if (batch==NULL)
 	{
-		myprintf("53110: cannot write on filebatch %s\n",filebatch.c_str());
+		myprintf("00407! cannot write on filebatch %s\n",filebatch.c_str());
 		return 2;
 	}
 	fprintf(batch,"zfs snapshot %s\n",nuovonomefull.c_str());
@@ -45115,19 +45537,19 @@ int Jidac::zfsbackup()
 		if (fileexists("/bin/pv"))
 		hashdeepposition="/bin/hashdeep";
 #endif
-		myprintf("53755: hashdeep position <<%s>>\n",hashdeepposition.c_str());
+		myprintf("00408: hashdeep position <<%s>>\n",hashdeepposition.c_str());
 		if (hashdeepposition=="")
 		{
-			myprintf("53758: cannot locate hashdeep, abort!\n");
+			myprintf("00409! cannot locate hashdeep, abort!\n");
 			fclose(batch);
 			return 2;
 		}
 		string thesnap=themark+nuovonome;
 		string zfsfolder="/"+thepool+"/.zfs/snapshot/"+thesnap+"/";
-		myprintf("53763: Zfsfolder    <<%s>>\n",zfsfolder.c_str());
+		myprintf("00410: Zfsfolder    <<%s>>\n",zfsfolder.c_str());
 		hashofile="/tmp/hasho_"+purgedpool+"_"+thesnap+".txt";
 		hashofile=nomefileseesistegia(hashofile);
-		myprintf("53766: Hashofile    <<%s>>\n",hashofile.c_str());
+		myprintf("00411: Hashofile    <<%s>>\n",hashofile.c_str());
 		fprintf(batch,"/sbin/zfs set snapdir=hidden %s\n",thepool.c_str());
 		fprintf(batch,"%s -c md5 -r %s >%s\n",
 		hashdeepposition.c_str(),
@@ -45145,26 +45567,26 @@ int Jidac::zfsbackup()
 
 	if (chmod(filebatch.c_str(),0700)!=0)
 	{
-		myprintf("53127: Error on chmod 700 on %s\n",filebatch.c_str());
+		myprintf("00412! Error on chmod 700 on %s\n",filebatch.c_str());
 		return 2;
 	}
-	myprintf("53130: RUNNING   script %s\n",filebatch.c_str());
+	myprintf("00413: RUNNING   script %s\n",filebatch.c_str());
 	string runresult=exec(filebatch.c_str());
 // dirrrrty
 	if (mypos("(all OK)",runresult)!=0)
 	{
 		int64_t newsize=prendidimensionefile(archive.c_str());
-		myprintf("53185: Seems OK, filesize %s => %s (%s)\n",migliaia(oldsize),migliaia2(newsize),migliaia3(myabs(newsize,oldsize)));
+		myprintf("00414: Seems OK, filesize %s => %s (%s)\n",migliaia(oldsize),migliaia2(newsize),migliaia3(myabs(newsize,oldsize)));
 		if (flagkill)
 		{
-			myprintf("53812: Deleting <<%s>>\n",filebatch.c_str());
+			myprintf("00415: Deleting <<%s>>\n",filebatch.c_str());
 			delete_file(filebatch.c_str());
 		}
 		return 0;
 	}
 	else
 	{
-		myprintf("53190: GURU, something seems wrong, filesize %s\n",migliaia(prendidimensionefile(archive.c_str())));
+		myprintf("00416! GURU, something seems wrong, filesize %s\n",migliaia(prendidimensionefile(archive.c_str())));
 		return 2;
 	}
 #endif
@@ -45194,7 +45616,7 @@ uint32_t Jidac::casekollision(DTMap& i_dtmap,vector<string>& o_collisions,bool i
 {
 		int64_t	startkoll=mtime();
 	if (flagverbose)
-		myprintf("40008: Case-collision checks on %s files ",migliaia((int64_t)i_dtmap.size()));
+		myprintf("00417: Case-collision checks on %s files ",migliaia((int64_t)i_dtmap.size()));
 	uint32_t fixed=0;
 	o_collisions.clear();
 	vector<uint64_t>	hashedstrings;
@@ -45236,9 +45658,12 @@ uint32_t Jidac::casekollision(DTMap& i_dtmap,vector<string>& o_collisions,bool i
 					}
 					else
 					{
-						myprintf("23507: ERROR IMPOSSIBLE TO 'DECASE' ");
+						myprintf("00418! ERROR IMPOSSIBLE TO 'DECASE' %Z\n",filename.c_str());
+						/*
+						myprintf("00419! ERROR IMPOSSIBLE TO 'DECASE' ");
 						printUTF8(filename.c_str());
 						myprintf("\n");
+						*/
 					}
 				}
 				else
@@ -45261,7 +45686,7 @@ uint32_t Jidac::casekollision(DTMap& i_dtmap,vector<string>& o_collisions,bool i
 		}
 	int64_t	endkoll=mtime();
 	if (flagverbose)
-		myprintf("40075: done in %.2fs\n",(endkoll-startkoll)*0.001);
+		myprintf("00420: done in %.2fs\n",(endkoll-startkoll)*0.001);
 	return (fixed);
 }
 #ifdef _WIN32
@@ -45269,7 +45694,7 @@ string Jidac::getpasswordblind()
 {
 	string myresult="";
 	myprintf("\n");
-	myprintf("40097: Enter password :");
+	myprintf("00421: Enter password :");
 #if defined (unix)
 	///myprintf(" APPLE ");
 	struct termios oldt, newt;
@@ -45310,7 +45735,7 @@ void Jidac::getpasswordifempty()
 	if (g_password==NULL)
 		if (check_if_password(archive))
 		{
-			myprintf("40120: Archive seems encrypted (or corrupted)");
+			myprintf("00422! Archive seems encrypted (or corrupted)");
 			string spassword=getpasswordblind();
 			if (spassword!="")
 			{
@@ -45349,7 +45774,7 @@ int Jidac::paranoid()
 {
 #ifdef _WIN32
 #ifndef _WIN64
-	myprintf("40158: WARNING: paranoid test use a lot of RAM, not good for Win32, better Win64\n");
+	myprintf("00423: WARNING: paranoid test use a lot of RAM, not good for Win32, better Win64\n");
 #endif
 #endif
 	unz(archive.c_str(), g_password);
@@ -47168,7 +47593,7 @@ uint64_t unzoffset=0;  // number of bytes input prior to current block
 // Handle errors
 void unzerror(const char* msg) {
   myprintf("\n");
-  myprintf("41975: Error at offset %1.0f: %s\n", double(unzoffset), msg);
+  myprintf("00424: Error at offset %1.0f: %s\n", double(unzoffset), msg);
   exit(1);
 }
 // Input archive
@@ -47246,7 +47671,7 @@ void unzOutputFile::open(const char* filename) {
   if (f) {
     fclose(f);
     f=0;
-    myprintf("42054: file exists: %s\n", filename);
+    myprintf("00425: file exists: %s\n", filename);
   }
   f=fopen(filename, "wb");
   if (!f) perror(filename);
@@ -47280,13 +47705,13 @@ void verify_date(uint64_t date) {
       || hour<0 || hour>59 || min<0 || min>59 || sec<0 || sec>59)
 	  {
 		  myprintf("\n\n");
-		  myprintf("40863: date %s\n",migliaia(date));
-		  myprintf("40863: year   %d\n",year);
-		  myprintf("40863: month  %d\n",month);
-		  myprintf("40863: day    %d\n",day);
-		  myprintf("40863: hour   %d\n",hour);
-		  myprintf("40863: min    %d\n",min);
-		  myprintf("40863: sec    %d\n",day);
+		  myprintf("00426: date %s\n",migliaia(date));
+		  myprintf("00427: year   %d\n",year);
+		  myprintf("00428: month  %d\n",month);
+		  myprintf("00429: day    %d\n",day);
+		  myprintf("00430: hour   %d\n",hour);
+		  myprintf("00431: min    %d\n",min);
+		  myprintf("00432: sec    %d\n",day);
 	///	unzerror("invalid date");
 	  }
 }
@@ -47347,28 +47772,28 @@ void hex2binary(const std::string& i_hexstr, char* i_bytearray,const unsigned in
 {
 	if (i_bytearray==NULL)
 	{
-		myprintf("43873: GURU: i_bytearray null\n");
+		myprintf("00433: GURU: i_bytearray null\n");
 		seppuku();
 	}
 	if (i_arraysize==0)
 	{
-		myprintf("43878: GURU: i_arraysize zero\n");
+		myprintf("00434: GURU: i_arraysize zero\n");
 		seppuku();
 	}
     size_t length = i_hexstr.length();
     if (length==0) 
 	{
-    	myprintf("43879: GURU: i_hexstr empty!\n");
+    	myprintf("00435: GURU: i_hexstr empty!\n");
 		seppuku();
     }
 	if (length%2!=0)
 	{
-    	myprintf("43884: GURU: i_hexstr length not even!\n");
+    	myprintf("00436: GURU: i_hexstr length not even!\n");
 		seppuku();
 	}
 	if ((length/2)!=i_arraysize)
 	{
-    	myprintf("43894: GURU: length/2 %s must be i_arraysize  %s!\n",migliaia(length/2),migliaia2(i_arraysize));
+    	myprintf("00437: GURU: length/2 %s must be i_arraysize  %s!\n",migliaia(length/2),migliaia2(i_arraysize));
 		seppuku();
 	
 	}
@@ -47378,7 +47803,7 @@ void hex2binary(const std::string& i_hexstr, char* i_bytearray,const unsigned in
 		///myprintf("Lavoro da indice length-i %d\n",length-i-2);
         std::string byteString=i_hexstr.substr(length-i-2,2);
         i_bytearray[i/2]=(char)strtol(byteString.c_str(),NULL,16); // Converte i 2 caratteri in un byte
-		///myprintf("43902: i/2 %d valore %02X\n",i/2,i_bytearray[i/2]&255);
+		///myprintf("00438: i/2 %d valore %02X\n",i/2,i_bytearray[i/2]&255);
     }
 }
 
@@ -47404,7 +47829,7 @@ bool& o_isadded)
 	if (i_franz_block==NULL)
 	{
 		if (flagdebug)
-			myprintf("40947: i_franz_block null\n");
+			myprintf("00439: i_franz_block null\n");
 		return -1;
 	}
 		
@@ -47414,10 +47839,10 @@ bool& o_isadded)
 		||(ricostruito==FRANZO_SHA3B)||(ricostruito==FRANZO_XXH3B)||(ricostruito==FRANZO_SHA_1B))
 	{
 		o_hashtype	=decodealgoname(ricostruito);
-		///myprintf("43981: o_hashtype decoded %s ricostruito %d\n",o_hashtype.c_str(),ricostruito);
+		///myprintf("00440: o_hashtype decoded %s ricostruito %d\n",o_hashtype.c_str(),ricostruito);
 		if (o_hashtype=="")
 		{
-			myprintf("43978: C5, cannot decode %d\n",ricostruito);
+			myprintf("00441: C5, cannot decode %d\n",ricostruito);
 			return 0;
 		}
 		risultato	=ricostruito;
@@ -47644,22 +48069,22 @@ offset 049 valore 000 00 * 1
 		if (flagdebug2)
 		{
 			if (onlyheader)
-				myprintf("39665: decode a FRANZOFFSETV3 only header\n");
+				myprintf("00442: decode a FRANZOFFSETV3 only header\n");
 			else
-				myprintf("39662: decode a FRANZOFFSETV3 with posix\n");
+				myprintf("00443: decode a FRANZOFFSETV3 with posix\n");
 		}
 		int expectedfranzotype=i_franz_block[1]-'A';
 		MAPPATIPOHASH::iterator p=g_mappatipohash.find(expectedfranzotype);
 		if (p==g_mappatipohash.end())
 		{
-			myprintf("39675: GURU cannot find expectedfranzotype %d\n",expectedfranzotype);
+			myprintf("00444: GURU cannot find expectedfranzotype %d\n",expectedfranzotype);
 			seppuku();
 			return 0;
 		}
 		string hashname	=p->second.hashname;
 		int hashlen		=p->second.hashlen;
 		if (flagdebug2)
-			myprintf("39670: expectedfranzotype %d => |%-15s| len %03d\n",expectedfranzotype,hashname.c_str(),hashlen);
+			myprintf("00445: expectedfranzotype %d => |%-15s| len %03d\n",expectedfranzotype,hashname.c_str(),hashlen);
 
 		risultato	=expectedfranzotype;
 		o_hashtype	=hashname;
@@ -47673,30 +48098,30 @@ offset 049 valore 000 00 * 1
 
 		o_isordered=arraytoint32(i_franz_block+offsetcrc+8+2);
 		if (flagdebug2)
-			myprintf("39724: Ordered stream %08d\n",o_isordered);
+			myprintf("00446: Ordered stream %08d\n",o_isordered);
 
 		o_version=arraytoint32(i_franz_block+offsetcrc+8+2+4);
 		if (flagdebug2)
-			myprintf("39728: Version number %08d\n",o_version);
+			myprintf("00447: Version number %08d\n",o_version);
 
 		o_creationtime	=arraytoint64(i_franz_block+offsetcrc+8+2+4+4);
 		o_accesstime	=arraytoint64(i_franz_block+offsetcrc+8+2+4+4+8);
 
 		if (flagdebug2)
 		{
-			myprintf("39734: cdate %s\n",migliaia(o_creationtime));
-			myprintf("39736: adate %s\n",migliaia(o_accesstime));
+			myprintf("00448: cdate %s\n",migliaia(o_creationtime));
+			myprintf("00449: adate %s\n",migliaia(o_accesstime));
 		}
 
 		if (!onlyheader)
 		{
 			int64_t offsetposix=offsetcrc+8+2+4+4+8+(8*4); // 8*4= future expansion
 			if (flagdebug2)
-				myprintf("39742: Taking posix too @ offset position %08d\n",offsetposix);
+				myprintf("00450: Taking posix too @ offset position %08d\n",offsetposix);
 			///o_posix=(franz_posix*) (i_franz_block+offsetposix);
 		}
 	}
-	///myprintf("41142: Risultato %s\n",o_crc32value.c_str());
+	///myprintf("00451: Risultato %s\n",o_crc32value.c_str());
 	return risultato;
 }
 ///https://gist.github.com/0x3f00/90edbec0c04616d0b8c21586762bf1ac
@@ -47808,9 +48233,9 @@ string Jidac::sanitizzanomefile(string i_filename,int i_filelength,int& io_colli
 				}
 		}
 		else
-			myprintf("24501: not found %s\n",i_filename.c_str());
+			myprintf("00452: not found %s\n",i_filename.c_str());
 		if (flagdebug3)
-			myprintf("24389: paranoid filename <<%s>>\n",newname.c_str());
+			myprintf("00453: paranoid filename <<%s>>\n",newname.c_str());
 		return newname;
 	}
 	if (flagflat) /// desperate extract without path and filenames
@@ -47831,7 +48256,7 @@ string Jidac::sanitizzanomefile(string i_filename,int i_filelength,int& io_colli
 		if (estensione!="")
 			newname+="."+estensione;
 		if (flagdebug3)
-			myprintf("25396: flatted filename <<%s>>\n",newname.c_str());
+			myprintf("00454: flatted filename <<%s>>\n",newname.c_str());
 		return newname;
 	}
 	if (flagutf)
@@ -47843,10 +48268,10 @@ string Jidac::sanitizzanomefile(string i_filename,int i_filelength,int& io_colli
 			if (nome!=prenome)
 			{
 				printbar('-');
-				myprintf("25410: flagutf pre  %s\n",prenome.c_str());
-				myprintf("25410: utf8toansi   %s\n",utf8toansi(nome).c_str());
-				myprintf("25410: force2ansi   %s\n",forcelatinansi(utf8toansi(nome)).c_str());
-				myprintf("25411: purgeansi    %s\n",nome.c_str());
+				myprintf("00455: flagutf pre  %s\n",prenome.c_str());
+				myprintf("00456: utf8toansi   %s\n",utf8toansi(nome).c_str());
+				myprintf("00457: force2ansi   %s\n",forcelatinansi(utf8toansi(nome)).c_str());
+				myprintf("00458: purgeansi    %s\n",nome.c_str());
 			}
 		if (flagfixeml)
 		{
@@ -47857,8 +48282,8 @@ string Jidac::sanitizzanomefile(string i_filename,int i_filelength,int& io_colli
 				{
 					if (flagdebug3)
 					{
-						myprintf("18109: eml pre  %s\n",nome.c_str());
-						myprintf("18110: eml post %s\n",prenome.c_str());
+						myprintf("00459: eml pre  %s\n",nome.c_str());
+						myprintf("00460: eml post %s\n",prenome.c_str());
 					}
 					nome=prenome;
 				}
@@ -47875,17 +48300,17 @@ string Jidac::sanitizzanomefile(string i_filename,int i_filelength,int& io_colli
 		if (flagdebug3)
 			if (percorso!=prepercorso)
 			{
-				myprintf("25452: flagutf pre  perc %s\n",prepercorso.c_str());
-				myprintf("25453: flagutf post perc %s\n",percorso.c_str());
+				myprintf("00461: flagutf pre  perc %s\n",prepercorso.c_str());
+				myprintf("00462: flagutf post perc %s\n",percorso.c_str());
 			}
 	}
 	if (flagdebug3)
 	{
-		myprintf("18041: First    %03d %s\n",(int)i_filename.length(),i_filename.c_str());
-		myprintf("18042: Percorso %03d %s\n",(int)percorso.length(),percorso.c_str());
-		myprintf("18043: nome     %03d %s\n",(int)nome.length(),nome.c_str());
-		myprintf("18044: ext      %03d %s\n",(int)estensione.length(),estensione.c_str());
-		myprintf("18045: Senza ex %03d %s\n",(int)senzaestensione.length(),senzaestensione.c_str());
+		myprintf("00463: First    %03d %s\n",(int)i_filename.length(),i_filename.c_str());
+		myprintf("00464: Percorso %03d %s\n",(int)percorso.length(),percorso.c_str());
+		myprintf("00465: nome     %03d %s\n",(int)nome.length(),nome.c_str());
+		myprintf("00466: ext      %03d %s\n",(int)estensione.length(),estensione.c_str());
+		myprintf("00467: Senza ex %03d %s\n",(int)senzaestensione.length(),senzaestensione.c_str());
 	}
 	if (flagfix255)
 	{
@@ -47895,8 +48320,8 @@ string Jidac::sanitizzanomefile(string i_filename,int i_filelength,int& io_colli
 			if (flagdebug3)
 			{
 				myprintf("\n\n\n");
-				myprintf("18046: Path too long: need shrink %08d %s\n",(int)percorso.length(),percorso.c_str());
-				myprintf("42556: lunghezzalibera %d\n",lunghezzalibera);
+				myprintf("00468: Path too long: need shrink %08d %s\n",(int)percorso.length(),percorso.c_str());
+				myprintf("00469: lunghezzalibera %d\n",lunghezzalibera);
 			}
 			vector<string> esploso;
 			string temppercorso=percorso;
@@ -47904,14 +48329,14 @@ string Jidac::sanitizzanomefile(string i_filename,int i_filelength,int& io_colli
 			while (1)
 			{
 				if (flagdebug3)
-					myprintf("18031: temppercorso %s\n",temppercorso.c_str());
+					myprintf("00470: temppercorso %s\n",temppercorso.c_str());
 				barra=temppercorso.find('/');
 				if (flagdebug3)
-					myprintf("18034: Barra %ld\n",(long int)barra);
+					myprintf("00471: Barra %ld\n",(long int)barra);
 				if (barra==string::npos)
 					break;
 				if (flagdebug3)
-					myprintf("18038: Eureka!!\n");
+					myprintf("00472: Eureka!!\n");
 				esploso.push_back(temppercorso.substr(0, barra));
 				temppercorso=temppercorso.substr(barra+1,temppercorso.length());
 			}
@@ -47925,7 +48350,7 @@ string Jidac::sanitizzanomefile(string i_filename,int i_filelength,int& io_colli
 					lunghezzamassima=esploso[i].length();
 				}
 				if (flagdebug3)
-					myprintf("18087: Esploso %d %03d %s\n",(int)i,(int)esploso[i].length(),esploso[i].c_str());
+					myprintf("00473: Esploso %d %03d %s\n",(int)i,(int)esploso[i].length(),esploso[i].c_str());
 			}
 			int lunghezzacheserve=lunghezza-10-(percorso.length()-lunghezzamassima);
 			if (lunghezzacheserve<lunghezzamassima)
@@ -47935,30 +48360,30 @@ string Jidac::sanitizzanomefile(string i_filename,int i_filelength,int& io_colli
 				for (unsigned 	int i=0;i<esploso.size();i++)
 					imploso+=esploso[i]+'/';
 				if (flagdebug3)
-					myprintf("18114: Imploso           %d %s\n",(int)imploso.length(),imploso.c_str());
+					myprintf("00474: Imploso           %d %s\n",(int)imploso.length(),imploso.c_str());
 				percorso=imploso;
 ///				lunghezzalibera=lunghezza-percorso.length();
 				makepath(percorso);
 			}
 			else
 			{
-				myprintf("18088: HOUSTON\n");
+				myprintf("00475: HOUSTON\n");
 			}
 		}
 	}
 	newname=nome;
 	int lunghezzalibera=lunghezza-percorso.length();
 	if (flagdebug2)
-		myprintf("18098: lunghezze per %03d nome %03d tot %03d\n",(int)percorso.length(),lunghezzalibera,(int)(percorso.length()+lunghezzalibera));
+		myprintf("00476: lunghezze per %03d nome %03d tot %03d\n",(int)percorso.length(),lunghezzalibera,(int)(percorso.length()+lunghezzalibera));
 	if (newname.length()>(unsigned int)lunghezzalibera)
 	{
 		newname=newname.substr(0,lunghezzalibera-9);
 		if (flagdebug3)
-			myprintf("18143: Trimmone newname %d %s\n",(int)newname.length(),newname.c_str());
+			myprintf("00477: Trimmone newname %d %s\n",(int)newname.length(),newname.c_str());
 	}
 	newname=percorso+newname;
 	if (flagdebug2)
-		myprintf("42617: %d: newname %s\n",__LINE__,newname.c_str());
+		myprintf("00478: %d: newname %s\n",__LINE__,newname.c_str());
 	std::map<string,string>::iterator collisione;
 	string candidato=newname;
 	if (estensione!="")
@@ -47969,34 +48394,34 @@ string Jidac::sanitizzanomefile(string i_filename,int i_filelength,int& io_colli
 		candidato=stringtolower(candidato);
 	}
 	if (flagdebug2)
-		myprintf("25570: candidato %s\n",candidato.c_str());
+		myprintf("00479: candidato %s\n",candidato.c_str());
 	collisione=io_mappacollisioni.find(candidato);
 	if (collisione!=io_mappacollisioni.end())
 	{
 		if (flagdebug2)
-			myprintf("18255: found  1 %s\n",candidato.c_str());
+			myprintf("00480: found  1 %s\n",candidato.c_str());
 		if (collisione->second!=candidato)
 		{
 			if (flagdebug3)
 			{
-				myprintf("25582: Collisione %s\n",collisione->second.c_str());
-				myprintf("25583: newname    %s\n",collisione->second.c_str());
+				myprintf("00481: Collisione %s\n",collisione->second.c_str());
+				myprintf("00482: newname    %s\n",collisione->second.c_str());
 			}
 			snprintf(numero,sizeof(numero),"_%d",io_collisioni++);
 			newname+=numero;
 			if (flagdebug2)
-				myprintf("18267: postname   %s\n\n\n\n\n",newname.c_str());
+				myprintf("00483: postname   %s\n\n\n\n\n",newname.c_str());
 		}
 	}
 	io_mappacollisioni.insert(std::pair<string, string>(candidato,i_filename));
 	if (estensione!="")
 		newname+="."+estensione;
 	if (flagdebug3)
-		myprintf("18195: Finalized %d %s\n",(int)newname.length(),newname.c_str());
+		myprintf("00484: Finalized %d %s\n",(int)newname.length(),newname.c_str());
 	if (newname.length()>255)
 	{
-		myprintf("18123: WARN pre  %08d   %s\n",(int)i_filename.length(),i_filename.c_str());
-		myprintf("18124: WARN post %08d   %s\n",(int)newname.length(),newname.c_str());
+		myprintf("00485: WARN pre  %08d   %s\n",(int)i_filename.length(),i_filename.c_str());
+		myprintf("00486: WARN post %08d   %s\n",(int)newname.length(),newname.c_str());
 		myprintf("\n");
 	}
 	return newname;
@@ -48920,6 +49345,7 @@ string help_a(bool i_usage,bool i_example)
 		moreprint("+ : -stat         Show external files added/updated");
 		moreprint("+ : -external X   Run X before add (replace %files or $files)");
 		moreprint("+ : -touch X      Change every filedate to be stored to X");
+		moreprint("+ : -input X      Load the X file as files to be added");
 	}
 	if (i_usage && i_example)
 		moreprint("    Examples:");
@@ -48994,6 +49420,7 @@ string help_a(bool i_usage,bool i_example)
 		moreprint("Use less RAM: DO NOT MIX HASHES!     a z:\\1.zpaq c:\\nz -frugal");
 		moreprint("Store external VFILE-l-external.txt  a z:\\2.zpaq c:\\nz -external \"c:\\nz\\hashdeep64 -r -c sha1 %files\"");
 		moreprint("Alter the filedate (piped)           type 1.txt|zpaqfranz a z:\\2.zpaq 1.sql -stdin -touch 2024_02_03");
+		moreprint("Load files from text file            a z:\\1.zpaq -input z:\\thelist.txt");
 	}
 	return("Add or append files to archive");
 }
@@ -50116,7 +50543,7 @@ string help_summa(bool i_usage,bool i_example)
 		moreprint("+ : -ssd          make N thread (do not use with spinning HDDs, but SSDs and NVMes)");
 		moreprint("+ : -mm           use memory mapped file instead of 'regular' fread");
 		moreprint("+ : -kill         show the files to be deleted to manually deduplicate");
-		moreprint("+ : -checksum     get a 1-level checksum, for comparing hierarchically user-organized folders.");
+		moreprint("+ : -home         get a 1-level checksum, for comparing hierarchically user-organized folders.");
 		moreprint("+ : -summary      show only GLOBAL (fast manual compare of directories)");
 		moreprint("+ : -rename       rename all files with the hash");
 		moreprint("+ : -forcezfs     force .zfs path (DEFAULT: skip)");
@@ -50138,7 +50565,7 @@ string help_summa(bool i_usage,bool i_example)
 		moreprint("Hashes to be compared (dir2):        sum z:\\knb -pakka -noeta -nosort -crc32c -find z:\\knb -replace bakdir >2.txt");
 		moreprint("Duplicated files with sha256:        sum z:\\knb -kill -sha256");
 		moreprint("Duplicated files minsize 1000000:    sum z:\\knb -kill -ssd -minsize 1000000");
-		moreprint("MAGIC cumulative hashes of 1-level:  sum p:\\staff -xxh3 -checksum");
+		moreprint("MAGIC cumulative hashes of 1-level:  sum p:\\staff -xxh3 -home -ssd");
 		moreprint("BLAKE3 multithread from memory map:  sum z:\\knb -ssd -blake3 -mm");
 		moreprint("MD5 quick check                      sum z:\\knb.zpaq -checktxt z:\\pippo.txt");
 		moreprint("hashdeep-compatible (multithread)    sum *.jpg *.cpp -hashdeep -ssd -out z:\\thehash.txt");
@@ -50751,6 +51178,17 @@ void open_output(string i_filename)
 				printf("28342: ERROR OPENING LOG FILE %s\n",i_filename.c_str());
 		}
 }
+void open_error(string i_filename)
+{
+	if (i_filename!="")
+		if (g_error_handle==0)
+		{
+			g_error=i_filename;
+			g_error_handle=fopen(i_filename.c_str(),"wb");
+			if (g_error_handle==NULL)
+				printf("50917: ERROR OPENING ERR FILE %s\n",i_filename.c_str());
+		}
+}
 // Rename name using tofiles[]
 string Jidac::rename(string name)
 {
@@ -50768,12 +51206,14 @@ string Jidac::rename(string name)
 		if ((command=='x') || (command=='w'))
 			if (tofiles.size()==1)
 			{
+					/*
 				if (flagdebug3)
 				{
-					myprintf("25787: longname |");
+					myprintf("00487: longname |");
 					printUTF8(name.c_str());
 					myprintf("| => fixed to |");
 				}
+					*/
 
 				if (name.size()>2) // fix for *nix relative paths
 					if (name[0]=='.')
@@ -50795,8 +51235,7 @@ string Jidac::rename(string name)
 				string finale=includetrailingbackslash(tofiles[0])+name;
 				if (flagdebug3)
 				{
-					printUTF8(finale.c_str());
-					myprintf("|\n");
+					myprintf("00488: longname |%Z| => fixed to |%Z|\n",name.c_str(),finale.c_str());
 				}
 				return finale;
 			}
@@ -50808,10 +51247,10 @@ string Jidac::rename(string name)
 		{
 			string pathwithbar=includetrailingbackslash(extractfilepath(files[i]));
 			if (flagdebug3)
-				myprintf("26108: pathwithbar %s\n",pathwithbar.c_str());
+				myprintf("00489: pathwithbar %s\n",pathwithbar.c_str());
 			myreplace(myname,pathwithbar,"");
 			if (flagdebug3)
-				myprintf("26110: cutting path <<%s>> file <<%s>> to <<%s>>\n",files[i].c_str(),name.c_str(),myname.c_str());
+				myprintf("00490: cutting path <<%s>> file <<%s>> to <<%s>>\n",files[i].c_str(),name.c_str(),myname.c_str());
 		}
 		return myname;
 	}
@@ -50837,12 +51276,12 @@ string Jidac::rename(string name)
 string Jidac::getpassword()
 {
 	myprintf("\n");
-	myprintf("45178: Please do NOT start with '-' (minus) ");
+	myprintf("00491: Please do NOT start with '-' (minus) ");
 	string myresult=mygetpasswordblind();
 	if (myresult!="")
 		if (myresult[0]=='-')
 		{
-			myprintf("45184: Password starting with - can be confused with switches, enter another one!\n");
+			myprintf("00492: Password starting with - can be confused with switches, enter another one!\n");
 			seppuku();
 			return "";
 		}
@@ -50853,9 +51292,9 @@ string	windows_fixbackslash(string i_command,string i_parameter)
 {
 	wchar_t *wc = GetCommandLineW();
 	string mycommandline=wtou(wc);
-	myprintf("45195: mycommandline  |%s|\n",mycommandline.c_str());
-	myprintf("45196: i_command      |%s|\n",i_command.c_str());
-	myprintf("45197: i_parameter    |%s|\n",i_parameter.c_str());
+	myprintf("00493: mycommandline  |%s|\n",mycommandline.c_str());
+	myprintf("00494: i_command      |%s|\n",i_command.c_str());
+	myprintf("00495: i_parameter    |%s|\n",i_parameter.c_str());
 	return "";
 }
 #endif
@@ -50868,7 +51307,7 @@ void decoderange(string i_range)
 -range 2
 -range ::3 -> Extract the last 3
 */
-///myprintf("46825: entering decode\n");
+///myprintf("00496: entering decode\n");
 
 	g_rangefrom	=0;
 	g_rangeto	=0;
@@ -50909,14 +51348,14 @@ void decoderange(string i_range)
 	}
 	if (primaparte=="0")
 	{
-		myprintf("26147: ERROR: 0 is not feasible as FROM in -range\n");
+		myprintf("00497: ERROR: 0 is not feasible as FROM in -range\n");
 		seppuku();
 	}
 	if (flagdebug3)
 	{
-		myprintf("26416: size vale %d\n",i_range.size());
-		myprintf("26417: i vale %d\n",i);
-		myprintf("26418: prima  |%s|\n",primaparte.c_str());
+		myprintf("00498: size vale %d\n",i_range.size());
+		myprintf("00499: i vale %d\n",i);
+		myprintf("00500: prima  |%s|\n",primaparte.c_str());
 	}
 	bool nodivider=(i==i_range.size());
 
@@ -50934,9 +51373,9 @@ void decoderange(string i_range)
 	}
 	if (flagdebug3)
 	{
-		myprintf("45274: dopo\n");
-		myprintf("45275: i vale %d\n",i);
-		myprintf("45276: seconda  |%s|\n",secondaparte.c_str());
+		myprintf("00501: dopo\n");
+		myprintf("00502: i vale %d\n",i);
+		myprintf("00503: seconda  |%s|\n",secondaparte.c_str());
 	}
 	if (primaparte=="")
 		g_rangefrom=1;
@@ -50955,13 +51394,13 @@ void decoderange(string i_range)
 
 	if (flagdebug2)
 	{
-		myprintf("26450: Rangefrom  %d\n",g_rangefrom);
-		myprintf("26451: Rangeto    %d\n",g_rangeto);
+		myprintf("00504: Rangefrom  %d\n",g_rangefrom);
+		myprintf("00505: Rangeto    %d\n",g_rangeto);
 	}
 
 	if (g_rangeto<g_rangefrom)
 	{
-		myprintf("26466: ERROR: TO (%d) must be > FROM (%d)\n",g_rangeto,g_rangefrom);
+		myprintf("00506: ERROR: TO (%d) must be > FROM (%d)\n",g_rangeto,g_rangefrom);
 		g_rangefrom	=0;
 		g_rangeto	=0;
 		seppuku();
@@ -50969,18 +51408,18 @@ void decoderange(string i_range)
 	if (flagdebug)
 	{
 		printbar('-');
-		myprintf("24661: final Rangefrom  %d\n",g_rangefrom);
-		myprintf("26462: final Rangeto    %d\n",g_rangeto);
+		myprintf("00507: final Rangefrom  %d\n",g_rangefrom);
+		myprintf("00508: final Rangeto    %d\n",g_rangeto);
 	}
 	if (g_rangefrom==0)
 	{
-		myprintf("26457: cannot decode range |%s| you should use something like 2:4 or 2: or :3\n",i_range.c_str());
+		myprintf("00509: cannot decode range |%s| you should use something like 2:4 or 2: or :3\n",i_range.c_str());
 		seppuku();
 	}
 	if ((!flagpakka) && (!flagsilent) && (!flagstdout) && (!flagterse))
 	{
-		myprintf("45319: franz:%-21s %21s\n","rangefrom (version)",migliaia(g_rangefrom));
-		myprintf("45320: franz:%-21s %21s\n","rangeto   (version)",migliaia(g_rangeto));
+		myprintf("00510: franz:%-21s %21s\n","rangefrom (version)",migliaia(g_rangefrom));
+		myprintf("00511: franz:%-21s %21s\n","rangeto   (version)",migliaia(g_rangeto));
 	}
 }
 
@@ -51008,7 +51447,7 @@ string my_realpath(std::string const& i_path)
 	else
 	{
 		if (flagdebug)
-			myprintf("38761: error on realpath of %s\n",i_path.c_str());
+			myprintf("00512: error on realpath of %s\n",i_path.c_str());
 		return i_path;
     }
 }
@@ -51163,7 +51602,7 @@ bool Jidac::cli_filesandcommand(const string& i_opt,string i_string,char i_comma
 {
 	if ((argv==NULL) || (i_i==NULL))
 	{
-		myprintf("43158: GURU null data\n");
+		myprintf("00513: GURU null data\n");
 		seppuku();
 		return false;
 	}
@@ -51175,7 +51614,7 @@ bool Jidac::cli_filesandcommand(const string& i_opt,string i_string,char i_comma
 			files.push_back(argv[(*i_i)]);
 		(*i_i)--;
 		if ((!flagpakka) && (!flagsilent) && (!flagstdout) && (!flagterse))
-			myprintf("45515: franz:%-21s %21c - command\n",i_string.c_str(),command);
+			myprintf("00514: franz:%-21s %21c - command\n",i_string.c_str(),command);
 
 		return true;
 	}
@@ -51186,7 +51625,7 @@ bool Jidac::cli_getkey	(const string& i_opt,string i_string,int argc,const char*
 {
 	if ((argv==NULL) || (i_i==NULL) || (o_plain==NULL) || (o_password_string==NULL))
 	{
-		myprintf("43181: GURU null data\n");
+		myprintf("00515: GURU null data\n");
 		seppuku();
 		return false;
 	}
@@ -51220,9 +51659,9 @@ bool Jidac::cli_getkey	(const string& i_opt,string i_string,int argc,const char*
 		if ((!flagpakka) && (!flagsilent) && (!flagstdout) && (!flagterse))
 		{
 			if (flagdebug)
-				myprintf("45560: franz:%-21s %21s\n",i_string.c_str(),(*o_plain).c_str());
+				myprintf("00516: franz:%-21s %21s\n",i_string.c_str(),(*o_plain).c_str());
 			else
-				myprintf("45562: franz:%-21s %21s\n",i_string.c_str(),"(hidden)");
+				myprintf("00517: franz:%-21s %21s\n",i_string.c_str(),"(hidden)");
 		}
 		return true;
 	}
@@ -51233,7 +51672,7 @@ bool Jidac::cli_getstring	(const string& i_opt,string i_string,bool	i_flagoption
 {
 	if ((argv==NULL) || (i_i==NULL) || (o_thestring==NULL))
 	{
-		myprintf("43229: GURU null data\n");
+		myprintf("00518: GURU null data\n");
 		seppuku();
 		return false;
 	}
@@ -51246,7 +51685,7 @@ bool Jidac::cli_getstring	(const string& i_opt,string i_string,bool	i_flagoption
 		{
 			(*o_thestring)=argv[++(*i_i)];
 			if ((!flagpakka) && (!flagsilent) && (!flagstdout) && (!flagterse))
-				myprintf("45586: franz:%-21s %21s\n",i_string.c_str(),(*o_thestring).c_str());
+				myprintf("00519: franz:%-21s %21s\n",i_string.c_str(),(*o_thestring).c_str());
 		}
 		return true;
 	}
@@ -51259,7 +51698,7 @@ bool Jidac::cli_getstring	(const string& i_opt,string i_string,bool	i_flagoption
 			///	(*o_thestring)=i_default;
 				(*o_thestring)=argv[(*i_i)]+2;
 					if ((!flagpakka) && (!flagsilent) && (!flagstdout) && (!flagterse))
-						myprintf("45599: franz:%-21s %21s\n",i_string.c_str(),(*o_thestring).c_str());
+						myprintf("00520: franz:%-21s %21s\n",i_string.c_str(),(*o_thestring).c_str());
 				return true;
 			}
 	}
@@ -51272,7 +51711,7 @@ bool Jidac::cli_getarray(const string& i_opt,string i_string,int argc,const char
 {
 	if ((argv==NULL) || (i_i==NULL) || (o_files==NULL))
 	{
-		myprintf("43270: GURU null data\n");
+		myprintf("00521: GURU null data\n");
 		seppuku();
 		return false;
 	}
@@ -51297,7 +51736,7 @@ bool Jidac::cli_getarray(const string& i_opt,string i_string,int argc,const char
 			if ((*o_files).size()>0)
 			{
 				for (unsigned int i=0;i<(*o_files).size();i++)
-					myprintf("45637: franz:%-21s %21s\n",i_string.c_str(),(*o_files)[i].c_str());
+					myprintf("00522: franz:%-21s %21s\n",i_string.c_str(),(*o_files)[i].c_str());
 				printbar('-');
 			}
 		return true;
@@ -51309,7 +51748,7 @@ bool Jidac::cli_getint(const string& i_opt,string i_string,bool	i_flagoptional,c
 {
 	if ((argv==NULL) || (i_i==NULL) || (o_thenumber==NULL))
 	{
-		myprintf("43307: GURU null data\n");
+		myprintf("00523: GURU null data\n");
 		seppuku();
 		return false;
 	}
@@ -51331,7 +51770,7 @@ bool Jidac::cli_getint(const string& i_opt,string i_string,bool	i_flagoptional,c
 		}
 
 		if ((!flagpakka) && (!flagsilent) && (!flagstdout) && (!flagterse))
-			myprintf("45671: franz:%-21s %21s\n",i_string.c_str(),migliaia(*o_thenumber));
+			myprintf("00524: franz:%-21s %21s\n",i_string.c_str(),migliaia(*o_thenumber));
 		return true;
 	}
 	else
@@ -51343,7 +51782,7 @@ bool Jidac::cli_getint(const string& i_opt,string i_string,bool	i_flagoptional,c
 				(*o_thenumber)=i_default;
 				(*o_thenumber)=(int)myatoll(argv[(*i_i)]+2);
 				if ((!flagpakka) && (!flagsilent) && (!flagstdout) && (!flagterse))
-					myprintf("45683: franz:%-21s %21s\n",i_string.c_str(),migliaia(*o_thenumber));
+					myprintf("00525: franz:%-21s %21s\n",i_string.c_str(),migliaia(*o_thenumber));
 				return true;
 			}
 	}
@@ -51354,7 +51793,7 @@ bool Jidac::cli_getuint(const string& i_opt,string i_string,bool	i_flagoptional,
 {
 	if ((argv==NULL) || (i_i==NULL) || (o_thenumber==NULL))
 	{
-		myprintf("43383: GURU null data\n");
+		myprintf("00526: GURU null data\n");
 		seppuku();
 		return false;
 	}
@@ -51377,7 +51816,7 @@ bool Jidac::cli_getuint(const string& i_opt,string i_string,bool	i_flagoptional,
 				(*o_thenumber)=(int)myatoll(argv[++(*i_i)]);
 		}
 		if ((!flagpakka) && (!flagsilent) && (!flagstdout) && (!flagterse))
-			myprintf("45717: franz:%-21s %21s\n",i_string.c_str(),migliaia(*o_thenumber));
+			myprintf("00527: franz:%-21s %21s\n",i_string.c_str(),migliaia(*o_thenumber));
 		return true;
 	}
 	return false;
@@ -51386,7 +51825,7 @@ bool Jidac::cli_getuint64(const string& i_opt,string i_string,bool	i_flagoptiona
 {
 	if ((argv==NULL) || (i_i==NULL) || (o_thenumber==NULL))
 	{
-		myprintf("43415: GURU null data\n");
+		myprintf("00528: GURU null data\n");
 		seppuku();
 		return false;
 	}
@@ -51407,7 +51846,7 @@ bool Jidac::cli_getuint64(const string& i_opt,string i_string,bool	i_flagoptiona
 				(*o_thenumber)=myatoll(argv[++(*i_i)]);
 		}
 		if ((!flagpakka) && (!flagsilent) && (!flagstdout)  && (!flagterse))
-			myprintf("45747: franz:%-21s %21s\n",i_string.c_str(),migliaia(*o_thenumber));
+			myprintf("00529: franz:%-21s %21s\n",i_string.c_str(),migliaia(*o_thenumber));
 		return true;
 	}
 	return false;
@@ -51417,7 +51856,7 @@ bool Jidac::cli_getdate(string& i_opt,string i_string,int argc,const char** argv
 {
 	if ((argv==NULL) || (i_i==NULL) || (o_date==NULL))
 	{
-		myprintf("43446: GURU null data\n");
+		myprintf("00530: GURU null data\n");
 		seppuku();
 		return false;
 	}
@@ -51438,8 +51877,8 @@ bool Jidac::cli_getdate(string& i_opt,string i_string,int argc,const char** argv
 					if ((!flagpakka) && (!flagsilent) && (!flagstdout)  && (!flagterse))
 					{
 						if (flagdebug3)
-							myprintf("45772: franz:%s change from %s => %s\n",i_string.c_str(),dateToString(flagutc,*o_date).c_str(),dateToString(flagutc,newdate).c_str());
-						myprintf("45775: franz:%-21s   <<%s>>\n",i_string.c_str(),dateToString(true,newdate).c_str());
+							myprintf("00531: franz:%s change from %s => %s\n",i_string.c_str(),dateToString(flagutc,*o_date).c_str(),dateToString(flagutc,newdate).c_str());
+						myprintf("00532: franz:%-21s   <<%s>>\n",i_string.c_str(),dateToString(true,newdate).c_str());
 					}
 					i_opt="skipme";
 					
@@ -51452,7 +51891,7 @@ bool Jidac::cli_onlystring(const string& i_opt,string i_string,string i_alias,st
 {
 	if ((argv==NULL) || (i_i==NULL))
 	{
-		myprintf("43474: GURU null data\n");
+		myprintf("00533: GURU null data\n");
 		seppuku();
 		return false;
 	}
@@ -51468,7 +51907,7 @@ bool Jidac::cli_onlystring(const string& i_opt,string i_string,string i_alias,st
 				o_thefile=argv[(*i_i)];
 
 				if ((!flagpakka) && (!flagsilent) && (!flagstdout) && (!flagterse))
-					myprintf("45801: franz:%-21s <<%s>>\n",i_string.c_str(),o_thefile.c_str());
+					myprintf("00534: franz:%-21s <<%s>>\n",i_string.c_str(),o_thefile.c_str());
 
 				if (i_theflag!=NULL)
 					(*i_theflag)=true;
@@ -51479,6 +51918,50 @@ bool Jidac::cli_onlystring(const string& i_opt,string i_string,string i_alias,st
 		return true;
 	}
 	return false;
+}
+
+bool	readfiletoarray(string i_filename,vector<string>& o_lines)
+{
+	o_lines.clear();
+	if (!fileexists(i_filename))
+	{
+		myprintf("00535! cannot find %Z\n",i_filename.c_str());
+		/*
+		myprintf("00536: cannot find ");
+		printUTF8(i_filename.c_str());
+		myprintf("\n");
+		*/
+		return false;
+	}
+	FILE* myfile = freadopen(i_filename.c_str());
+	if (myfile==NULL)
+	{
+		myprintf("00537: cannot open file %Z\n",i_filename.c_str());
+		/*
+		myprintf("00538: cannot open file ");
+		printUTF8(i_filename.c_str());
+		myprintf("\n");
+		*/
+		return false;
+	}
+#ifdef ANCIENT
+	char 	line[16384];
+#else
+	char 	line[65536];
+#endif
+
+	string 	linea;
+	while (fgets(line, sizeof(line), myfile))
+	{
+		linea=line;
+		if (flagdebug3)
+			myprintf("00539: line %s\n",linea.c_str());
+		myreplaceall(linea,std::string(1,10),"");
+		myreplaceall(linea,std::string(1,13),"");
+		o_lines.push_back(linea);
+	}
+	fclose(myfile);
+	return true;
 }
 
 bool isbigendian(void)
@@ -51680,8 +52163,10 @@ int Jidac::loadparameters(int argc, const char** argv)
 	g_pidname			="";
 	g_backupposition	="";
 	g_output_handle		=NULL;
+	g_error_handle		=NULL;
 	g_archivefp			=FPNULL;
 	g_output			="";
+	g_error				="";
 	g_exec_error		="";
 	g_exec_warn			="";
 	g_exec_ok			="";
@@ -51766,7 +52251,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 #ifndef __OpenBSD__ 	// OpenBSD is not FreeBSD
 #ifndef __APPLE__   	// Mac is different (of course)
 	if (flagdebug)
-		myprintf("41554: Pretend to be FreeBSD\n");
+		myprintf("00540: Pretend to be FreeBSD\n");
 	int mib[4];
 	mib[0]=CTL_KERN;
 	mib[1]=KERN_PROC;
@@ -51783,25 +52268,25 @@ int Jidac::loadparameters(int argc, const char** argv)
 
 #ifdef __linux__
 	if (flagdebug)
-		myprintf("41575: Pretend to be Linux\n");
+		myprintf("00541: Pretend to be Linux\n");
 	const size_t bufSize = PATH_MAX + 1;
 	char buf[bufSize]={0};
 	const char *linkName = "/proc/self/exe";
 	if (readlink(linkName, buf, bufSize - 1)>0)
 		fullzpaqexename=buf;
 	///else
-		///myprintf("46088: something wrong!");
+		///myprintf("00542: something wrong!");
 #endif
 
 #ifdef SOLARIS
 	if (flagdebug)
-		myprintf("41578: Pretend to be Solaris\n");
+		myprintf("00543: Pretend to be Solaris\n");
 	fullzpaqexename=getexecname();
 #endif
 
 #ifdef __APPLE__   	// Mac is different (of course)
 	if (flagdebug)
-		myprintf("41571: Pretend to be Mac\n");
+		myprintf("00544: Pretend to be Mac\n");
 	char buf[1024];
 	uint32_t size = sizeof(buf);
 	if (_NSGetExecutablePath(buf, &size) == 0)
@@ -51827,9 +52312,9 @@ int Jidac::loadparameters(int argc, const char** argv)
 	if (flagdebug)
 	{	
 		if (isbigendian())
-			myprintf("43946: This seems a BIG ENDIAN CPU    (aka:'strange')\n");
+			myprintf("00545: This seems a BIG ENDIAN CPU    (aka:'strange')\n");
 		else
-			myprintf("43948: This seems a LITTLE ENDIAN CPU (aka:'normal')\n");
+			myprintf("00546: This seems a LITTLE ENDIAN CPU (aka:'normal')\n");
 	}
 	if (argc>=2) // early disable output
 	{
@@ -51850,7 +52335,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 		color_restore();
 	}
 	if (flagdebug)
-		myprintf("46184: FULL exename <<%s>>\n",fullzpaqexename.c_str());
+		myprintf("00547: FULL exename <<%s>>\n",fullzpaqexename.c_str());
 
 	if (argc==2) // going early on gui
 	{
@@ -51974,7 +52459,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 	if (howmanyhasher>1)
 	{
 		myprintf("\n");
-		myprintf("42418: ABORT: you cannot choose more than ONE hasher, but you picked %d\n",howmanyhasher);
+		myprintf("00548: ABORT: you cannot choose more than ONE hasher, but you picked %d\n",howmanyhasher);
 		for (MAPPATIPOHASH::iterator p=g_mappatipohash.begin(); p!=g_mappatipohash.end(); ++p)
 			if (p->second.switchname!="")
 					myprintf("%s ",p->second.switchname.c_str());
@@ -51983,13 +52468,13 @@ int Jidac::loadparameters(int argc, const char** argv)
 		return 0;
 	}
 	if (flagdebug)
-		myprintf("42993: The chosen algo %d %s\n",g_thechosenhash,g_thechosenhash_str.c_str());
+		myprintf("00549: The chosen algo %d %s\n",g_thechosenhash,g_thechosenhash_str.c_str());
 
 #ifdef HWSHA2
 		if (ihavehw())
 		{
 			if (flagverbose)
-				myprintf("46282: DETECTED SHA1/2 HW INSTRUCTIONS\n");
+				myprintf("00550: DETECTED SHA1/2 HW INSTRUCTIONS\n");
 			flaghw=true;
 		}
 #endif
@@ -52079,7 +52564,7 @@ int Jidac::loadparameters(int argc, const char** argv)
         && i<argc-1 && argv[i+1][0]!='-' && command==0)
 		{
 			command=opt[0];
-		///myprintf("46363: comando %c\n",command);
+		///myprintf("00551: comando %c\n",command);
 			if (opt=="append")
 			{
 				g_optional="ransomware";
@@ -52100,7 +52585,6 @@ int Jidac::loadparameters(int argc, const char** argv)
 				command='+';
 			if (opt=="fzf")
 				command='F';
-			
 			if (opt=="backup")
 				command='Z';
 			if (opt=="last")
@@ -52137,7 +52621,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 				if (percorso=="")
 					archive="./"+archive;
 				if (flagdebug)
-					myprintf("48006: backup path |%s| archive |%s|\n",percorso.c_str(),archive.c_str());
+					myprintf("00552: backup path |%s| archive |%s|\n",percorso.c_str(),archive.c_str());
 			}
 			fullarchive="";
 
@@ -52148,7 +52632,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 				if ((star) /*|| (qmark)*/)
 				{
 					fullarchive=archive;
-					myprintf("43787: Jolly in archivename!\n");
+					myprintf("00553: Jolly in archivename!\n");
 				}
 			}
 			const char* slash	=strrchr(argv[i], '/');
@@ -52164,17 +52648,22 @@ int Jidac::loadparameters(int argc, const char** argv)
 ///if file "./foo" or folder "./foo" does esists, create or update "z:\foo.zpaq" with the "./foo"
 			if ((opt=="a") || (opt=="add"))
 				if (files.size()==0)
+				{
 					if (archive!="")
 					{
 						string candidate="./"+prendinomefileebasta(archive);
 						if (fileexists(candidate) || direxists(candidate))
 						{
 							files.push_back(candidate);
-							myprintf("60203: Founded ");
+							myprintf("00554: Founded %Z => automagically added\n",candidate.c_str());
+							/*
+							myprintf("00555: Founded ");
 							printUTF8(candidate.c_str());
 							myprintf(" => automagically added\n");
+							*/
 						}
 					}
+				}
 		}
 		else if (
 		(opt=="n") 			||
@@ -52218,7 +52707,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 #endif
 			if (flagforzarobocopy)
 			{
-				///myprintf("46279: i=%d  argc %d\n",(int)i,argc);
+				///myprintf("00556: i=%d  argc %d\n",(int)i,argc);
 				if (i==1)
 					i--;
 			}
@@ -52229,7 +52718,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 				cutdoublequote(candidate);
 				if (havedoublequote(candidate))
 				{
-					myprintf("46468: WARNING: double quote founded in command line and cutted\n");
+					myprintf("00557: WARNING: double quote founded in command line and cutted\n");
 					candidate=mypopback(candidate);
 					myprintf("||%s||\n",candidate.c_str());
 				}
@@ -52268,6 +52757,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 		else if (cli_onlystring	(opt,"-copy",				"",				g_copy,			argc,argv,&i,					NULL));
 		else if (cli_onlystring	(opt,"-freeze",				"",				g_freeze,		argc,argv,&i,					NULL));
 		else if (cli_onlystring	(opt,"-output",				"-out",			g_output,		argc,argv,&i,					NULL));
+		else if (cli_onlystring	(opt,"-errorlog",			"-error",		g_error,		argc,argv,&i,					NULL));
 		else if (cli_onlystring	(opt,"-ifexist",			"-ifexists",	g_ifexist,		argc,argv,&i,					NULL));
 		///else if (cli_onlystring	(opt,"-ismounted",			"",	g_ismounted,		argc,argv,&i,					NULL));
 		else if (cli_onlystring	(opt,"-script",				"",				g_script,		argc,argv,&i,					NULL));
@@ -52296,7 +52786,6 @@ int Jidac::loadparameters(int argc, const char** argv)
 		///else if (cli_getarray	(opt,"-level4",												argc,argv,&i,					&level4,		NULL));
 		///else if (cli_getarray	(opt,"-level5",												argc,argv,&i,					&level5,		NULL));
 		else if (cli_getstring	(opt,"-range",		false,	"",								argc,argv,&i,"",				&myrange))
-		
 		{
 			decoderange(myrange);
 		}
@@ -52308,12 +52797,16 @@ int Jidac::loadparameters(int argc, const char** argv)
 		{
 			flagexternal=true;
 		}
+		else if (cli_getstring	(opt,"-input",		false,	"",								argc,argv,&i,"",				&g_input))
+		{
+			flaginput=true;
+		}
 		else if (cli_getkey		(opt,"-key",												argc,argv,&i,&plainpassword,	&g_password,		g_password_string))
 		{
 			if (flagdebug3)
 			{
-				myprintf("44072: Password        %s\n",	g_password);
-				myprintf("44073: Password string %s\n",	g_password_string);
+				myprintf("00558: Password        %s\n",	g_password);
+				myprintf("00559: Password string %s\n",	g_password_string);
 			}
 		}
 		else if (cli_getkey		(opt,"-key2",												argc,argv,&i,&plainpassword2,	&new_password,	new_password_string));
@@ -52360,7 +52853,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 				myreplaceall(mytemp,"\"","");
 				tofiles.push_back(mytemp);
 				if ((!flagpakka) && (!flagsilent) && (!flagstdout) && (!flagterse))
-					myprintf("48042: franz:%-21s <<%s>>\n","-to",mytemp.c_str());
+					myprintf("00560: franz:%-21s <<%s>>\n","-to",mytemp.c_str());
 
 			}
 			if (tofiles.size()==0)
@@ -52416,7 +52909,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 				if (version<19000101000000LL || version>29991231235959LL)
 				{
 					fflush(stdout);
-					myprintf("46661: Version date %1.0f must be 19000101000000 to 29991231235959\n",double(version));
+					myprintf("00561: Version date %1.0f must be 19000101000000 to 29991231235959\n",double(version));
 					g_exec_text="Version date must be 19000101000000 to 29991231235959";
 					exit(1);
 				}
@@ -52430,7 +52923,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 		else
 		{
 			if (!g_programflags.exists(argv[i]))
-				myprintf("46671: Unknown option ignored: %s\n", argv[i]);
+				myprintf("00562: Unknown option ignored: %s\n", argv[i]);
 		}
 	}
 
@@ -52439,7 +52932,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 */
 	if (flagnosynology)
 	{
-		myprintf("49006: Filling -not for -nosynology\n");
+		myprintf("00563: Filling -not for -nosynology\n");
 		notfiles.push_back("*/@recycle/*");
 		notfiles.push_back("*/#recycle/*");
 		notfiles.push_back("*/#snapshot/*");
@@ -52473,7 +52966,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 	{
 		if (g_until!="")
 		{
-			myprintf("27334: -until incompatible with -range\n");
+			myprintf("00564! -until incompatible with -range\n");
 			return 2;
 		}
 		all=8;
@@ -52491,25 +52984,25 @@ int Jidac::loadparameters(int argc, const char** argv)
 			if (!isadmin())
 			{
 				myprintf("\n");
-				myprintf("46696: Admin rights required for VSS => runhigh()\n");
+				myprintf("00565: Admin rights required for VSS => runhigh()\n");
 				runhigh(" -pause");
 				return 2;
 			}
 		}
 	if (flagimage && flagstdin)
 	{
-		myprintf("29886: -image incompatible with -stdin\n");
+		myprintf("00566! -image incompatible with -stdin\n");
 		return 2;
 	}
 	/*
 	if (flagimage && flagdd)
 	{
-		myprintf("29891: -image incompatible with -dd\n");
+		myprintf("00567: -image incompatible with -dd\n");
 		return 2;
 	}
 	if (flagstdin && flagdd)
 	{
-		myprintf("29896: -stdin incompatible with -dd\n");
+		myprintf("00568: -stdin incompatible with -dd\n");
 		return 2;
 	}
 */
@@ -52518,7 +53011,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 		if (!isadmin())
 		{
 			myprintf("\n");
-			myprintf("46722: Impossible to image: admin rights required\n");
+			myprintf("00569! Impossible to image: admin rights required\n");
 			return 2;
 		}
 #endif
@@ -52543,12 +53036,14 @@ int Jidac::loadparameters(int argc, const char** argv)
 		if (newmark!="")
 		{
 			if (newmark!=snapmark)
-				myprintf("46774: franz:zfs snapshot mark to  |%s|\n",newmark.c_str());
+				myprintf("00570: franz:zfs snapshot mark to  |%s|\n",newmark.c_str());
 			snapmark=newmark;
 		}
 	}
 	if (g_output!="")
 		open_output(g_output);
+	if (g_error!="")
+		open_error(g_error);
 
 	if (flagforcezfs)
 		flagskipzfs=false; // win over skip
@@ -52575,17 +53070,17 @@ int Jidac::loadparameters(int argc, const char** argv)
 		franzparameters+=attivati;
 
 		if (franzparameters!="")
-			myprintf("46776: franz:%s\n",franzparameters.c_str());
+			myprintf("00571: franz:%s\n",franzparameters.c_str());
 
 #ifdef SERVER
 		if (flagserver)
 		{
-			myprintf("46781: franz:zpaqfranz-server %s\n",g_server.c_str());
-			myprintf("46872: franz:server port      %s\n",g_port.c_str());
+			myprintf("00572: franz:zpaqfranz-server %s\n",g_server.c_str());
+			myprintf("00573: franz:server port      %s\n",g_port.c_str());
 			int64_t myport=myatoll(g_port.c_str());
 			if (myport>65353)
 			{
-				myprintf("27952: server port must be [0..65353]\n");
+				myprintf("00574! server port must be [0..65353]\n");
 				return 2;
 			}
 		}
@@ -52605,7 +53100,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 		jidac.version=DEFAULT_VERSION;
 		jidac.read_archive(NULL,archive.c_str());
 		version+=jidac.ver.size()-1;
-		myprintf("46806: Version %1.0f\n", version+.0);
+		myprintf("00575: Version %1.0f\n", version+.0);
 	}
 /*
 	Substitute %day into archive and files and comments
@@ -52629,11 +53124,11 @@ int Jidac::loadparameters(int argc, const char** argv)
 	}
 	if (getFinalPathNameByHandleW==NULL)
 	{
-		myprintf("47705: GURU: getFinalPathNameByHandleW is NULL (very old windows?)\n");
+		myprintf("00576: GURU: getFinalPathNameByHandleW is NULL (very old windows?)\n");
 		seppuku();
 	}
 ///  if (!findFirstStreamW || !findNextStreamW)
-///broken XP parser    myprintf("46827: Alternate streams not supported in Windows XP.\n");
+///broken XP parser    myprintf("00577: Alternate streams not supported in Windows XP.\n");
 #endif
 
 	if (flag715)
@@ -52685,8 +53180,8 @@ int Jidac::loadparameters(int argc, const char** argv)
 		flagterse			=false;
 		g_franzotype		=0;
 		g_franzotypelen		=0;
-		myprintf("46870: **** Activated V7.15 mode ****\n");
-		myprintf("46871: T forcezfs,donotforcexls,forcewindows; F crc32,checksum,filelist,xxhash,xxh3,fixeml,fix255,fixreserved,longpath,utf,flat\n");
+		myprintf("00578: **** Activated V7.15 mode ****\n");
+		myprintf("00579: T forcezfs,donotforcexls,forcewindows; F crc32,checksum,filelist,xxhash,xxh3,fixeml,fix255,fixreserved,longpath,utf,flat\n");
 	}
 
 #ifdef _WIN32
@@ -52697,7 +53192,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 		for (unsigned int i=0;i<onlyfiles.size();i++)
 		{
 			if (flagdebug3)
-				myprintf("42616: onlyfiles %03d files |%s| ",i,onlyfiles[i].c_str());
+				myprintf("00580: onlyfiles %03d files |%s| ",i,onlyfiles[i].c_str());
 			onlyfiles[i]=makelongpath(onlyfiles[i]);
 			if (flagdebug3)
 				myprintf(" => long |%s|\n",onlyfiles[i].c_str());
@@ -52705,7 +53200,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 		for (unsigned int i=0;i<notfiles.size();i++)
 		{
 			if (flagdebug3)
-				myprintf("42624: notfiles  %03d files |%s| ",i,notfiles[i].c_str());
+				myprintf("00581: notfiles  %03d files |%s| ",i,notfiles[i].c_str());
 			notfiles[i]=makelongpath(notfiles[i]);
 			if (flagdebug3)
 				myprintf(" => long |%s|\n",notfiles[i].c_str());
@@ -52725,22 +53220,41 @@ int Jidac::doCommand()
 	{
 		if (command!='a')
 		{
-			myprintf("46957: -chunk works only with a command\n");
+			myprintf("00582! -chunk works only with a command\n");
 			return 2;
 		}
 		
 		if (!iswildcards(archive))
 		{
-			myprintf("46963: the archive must be multipart (with some ?) for -chunk\n");
+			myprintf("00583! the archive must be multipart (with some ?) for -chunk\n");
 			return 2;
 		}
 		if (g_indexname!="")
 		{
-			myprintf("47268: -chunk incompatible with -index\n");
+			myprintf("00584! -chunk incompatible with -index\n");
 			return 2;
 		}
 	}
   // Execute command
+	if (flaginput)
+	{
+		if (fileexists(g_input))
+		{
+			vector<string> inputfiles;
+			readfiletoarray(g_input,inputfiles);
+			myprintf("00585: Inputfiles count %s\n",migliaia(inputfiles.size()));
+			if (inputfiles.size()>0)
+				for (unsigned int i=0;i<inputfiles.size();i++)
+				{
+					files.push_back(inputfiles[i]);
+					if (flagdebug3)
+						myprintf("00586: inputfiles %08d %s\n",i,inputfiles[i].c_str());
+				}
+		}
+		else
+			myprintf("00587: -input file DOES NOT EXISTS! %s\n",g_input.c_str());
+	}
+
 	if ( (command=='a')  && files.size()>0) // enforce: we do not want to change anything when adding
 	{
 		if (flagstore)
@@ -52762,7 +53276,7 @@ int Jidac::doCommand()
 		g_franzotypelen=16;
 		for (MAPPATIPOHASH::iterator p=g_mappatipohash.begin(); p!=g_mappatipohash.end(); ++p)
 		{
-	///		myprintf("49122: iterator %d\n",p->first);
+	///		myprintf("00588: iterator %d\n",p->first);
 			if (p->second.switchflag!=NULL)
 				if (*(p->second.switchflag))
 					if (p->second.flagiszpaq)
@@ -52877,9 +53391,12 @@ bool Jidac::getfoldersize(string i_folder,uint64_t& o_totalsize,uint32_t & o_tot
 	DTMap mydestinationdir;
 	if (flagdebug)
 	{
-		myprintf("29247: Scanning dir <<");
+		myprintf("00589: Scanning dir <<%Z>>\n",i_folder.c_str());
+		/*
+		myprintf("00590: Scanning dir <<");
 		printUTF8(i_folder.c_str());
 		myprintf(">>\n");
+		*/
 	}
 	scandir(true,mydestinationdir,i_folder);
 	printbar(' ',false);
@@ -52898,17 +53415,17 @@ bool Jidac::getfoldersize(string i_folder,uint64_t& o_totalsize,uint32_t & o_tot
 			o_totaldir++;
 	}
 	if (flagdebug)
-		myprintf("29260: files %s dirs %s size %s long %s\n",migliaia((int64_t)o_totalfile),migliaia2((int64_t)o_totaldir),migliaia3((int64_t)o_totalsize),migliaia4((int64_t)o_longfiles));
+		myprintf("00591: files %s dirs %s size %s long %s\n",migliaia((int64_t)o_totalfile),migliaia2((int64_t)o_totaldir),migliaia3((int64_t)o_totalsize),migliaia4((int64_t)o_longfiles));
 	if (o_totalfile || o_totaldir || o_totalsize)
 		return true;
 	return false;
 }
 int Jidac::rd()
 {
-	myprintf("47048: Remove Directory ");
+	myprintf("00592: Remove Directory ");
 	if (files.size()==0)
 	{
-		myprintf("29241: rd exactly at least one folder\n");
+		myprintf("00593! rd exactly at least one folder\n");
 		return 2;
 	}
 	// cut the last / because we want longfile support on Windows
@@ -52929,39 +53446,48 @@ int Jidac::rd()
 		if (!direxists(files[i]))
 		{
 			myprintf("\n");
-			myprintf("47075: Folder %d does not exist? ",i);
+			myprintf("00594: Folder %d does not exist? %Z\n",i,files[i].c_str());
+			/*
+			myprintf("00595: Folder %d does not exist? ",i);
 			printUTF8(files[i].c_str());
 			myprintf("\n");
+			*/
 			return 1;
 		}
 		if (!getfoldersize(files[i],totalsize,totalfile,totaldir,longfiles))
 		{
-			myprintf("29284: cannot enumerate folder %d ",i);
+			myprintf("00596: cannot enumerate folder %d %Z\n",i,files[i].c_str());
+			/*
+			myprintf("00597: cannot enumerate folder %d ",i);
 			printUTF8(files[i].c_str());
 			myprintf("\n");
+			*/
 			return 1;
 		}
 		if (!flagspace)
 			if (!saggiascrivibilitacartella(files[i]))
 			{
 				myprintf("\n");
-				myprintf("29289: cannot write into %d ",i);
+				myprintf("00598: cannot write into %d %Z -space to bypass\n",i,files[i].c_str());
+				/*
+				myprintf("00599: cannot write into %d ",i);
 				printUTF8(files[i].c_str());
 				myprintf(" -space to bypass");
+				*/
 				return 1;
 			}
 		myprintf("\n");
 		printbar('=');
-		myprintf("47093: Files %s for %s bytes (%s) longpath %s\n",migliaia(totalfile),migliaia2((int64_t)totalsize),tohuman((int64_t)totalsize),migliaia3(longfiles));
+		myprintf("00600: Files %s for %s bytes (%s) longpath %s\n",migliaia(totalfile),migliaia2((int64_t)totalsize),tohuman((int64_t)totalsize),migliaia3(longfiles));
 #ifdef _WIN32
 		if (!flaglongpath)
 			if (longfiles)
-				myprintf("29891: *** WARNING: long files detected, but no -longpath switch ***\n\n");
+				myprintf("00601: *** WARNING: long files detected, but no -longpath switch ***\n\n");
 #endif
 		if (totalsize>0)
 			if (!flagforce)
 			{
-				myprintf("29301: the folder size is not zero, use -force to bypass\n");
+				myprintf("00602! the folder size is not zero, use -force to bypass\n");
 				return 2;
 			}
 		if (flagkill)
@@ -52972,23 +53498,26 @@ int Jidac::rd()
 			if (stermina(files[i],totalfile))
 			{
 				myprintf("\n");
-				myprintf("47118: OK: folder %i does not seems to exist anymore ",i);
+				myprintf("00603: OK: folder %i does not seems to exist anymore %Z\n",i,files[i].c_str());
+				/*
+				myprintf("00604: OK: folder %i does not seems to exist anymore ",i);
 				printUTF8(files[i].c_str());
 				myprintf("\n");
+				*/
 			}
 			else
 			{
 #ifdef _WIN32
 	if (!flaglongpath)
 		if (longfiles)
-			myprintf("47121: Try to use the -longpath switch to erase files >255 in length\n");
+			myprintf("00605: Try to use the -longpath switch to erase files >255 in length\n");
 #endif
 				return 2;
 			}
 		}
 		else
 		{
-			myprintf("29310: dry run. Use -kill for a wet-run\n");
+			myprintf("00606: dry run. Use -kill for a wet-run\n");
 			return 2;
 		}
 	}
@@ -53119,24 +53648,24 @@ int compressfraglist(const vector<unsigned>& ptr, bool i_flagprint)
 bool ismac(const string& i_stringa)
 {
 	string solonome=extractfilename(i_stringa);
-	///myprintf("48914: solonome |%s|\n",solonome.c_str());
+	///myprintf("00607: solonome |%s|\n",solonome.c_str());
 	if (solonome==".DS_Store")
 	{
 		if (flagverbose)
-			myprintf("48945: Skip Mac .DS_Store %s\n",i_stringa.c_str());
+			myprintf("00608: Skip Mac .DS_Store %s\n",i_stringa.c_str());
 		return true;
 	}
 	if (solonome=="Thumbs.db")
 	{
 		if (flagverbose)
-			myprintf("48925: Skip Mac Thumbs.db %s\n",i_stringa.c_str());
+			myprintf("00609: Skip Mac Thumbs.db %s\n",i_stringa.c_str());
 		return true;
 	}
 	if (solonome.size()>2)
 		if ((solonome[0]=='.') && (solonome[1]=='_'))
 		{
 			if (flagverbose)
-				myprintf("48946: Skip Mac ._something %s\n",i_stringa.c_str());
+				myprintf("00610: Skip Mac ._something %s\n",i_stringa.c_str());
 			return true;
 		}
 	return false;
@@ -53159,7 +53688,7 @@ bool Jidac::isselected(const char* filename, bool rn,int64_t i_size)
 			if (iszfs(filename))
 			{
 				if (flagverbose)
-					myprintf("47274: Verbose: Skip .zfs %s\n",filename);
+					myprintf("00611: Verbose: Skip .zfs %s\n",filename);
 				return false;
 			}
 	
@@ -53182,7 +53711,7 @@ bool Jidac::isselected(const char* filename, bool rn,int64_t i_size)
 			)
 			{
 				if (flagverbose)
-					myprintf("47287: Verbose: Skip qnap %s\n",filename);
+					myprintf("00612: Verbose: Skip qnap %s\n",filename);
 				return false;
 			}
 	if (!flagforcewindows) //this "automagically" exclude anything with System Volume Information
@@ -53190,13 +53719,13 @@ bool Jidac::isselected(const char* filename, bool rn,int64_t i_size)
 		if (strstr(filename, "System Volume Information"))
 		{
 			if (flagverbose)
-				myprintf("47295: Verbose: Skip System Volume Information %s\n",filename);
+				myprintf("00613: Verbose: Skip System Volume Information %s\n",filename);
 			return false;
 		}
 		if (strstr(filename, "$RECYCLE.BIN"))
 		{
 			if (flagverbose)
-				myprintf("47301: Verbose: Skip trash %s\n",filename);
+				myprintf("00614: Verbose: Skip trash %s\n",filename);
 			return false;
 		}
 	}
@@ -53219,14 +53748,14 @@ bool Jidac::isselected(const char* filename, bool rn,int64_t i_size)
 			if (maxsize<(uint64_t)i_size)
 			{
 				if (flagdebug)
-					myprintf("28449: (-maxsize) too big   %19s %s\n",migliaia(i_size),filename);
+					myprintf("00615: (-maxsize) too big   %19s %s\n",migliaia(i_size),filename);
 				return false;
 			}
 		if (minsize)
 			if (minsize>(uint64_t)i_size)
 			{
 				if (flagdebug)
-					myprintf("28456: (-minsize) too small %19s %s\n",migliaia(i_size),filename);
+					myprintf("00616: (-minsize) too small %19s %s\n",migliaia(i_size),filename);
 				return false;
 			}
 	}
@@ -53246,7 +53775,7 @@ bool Jidac::isselected(const char* filename, bool rn,int64_t i_size)
     for (unsigned i=0; i<onlyfiles.size() && !matched; ++i)
 	{
 		if (flagdebug3)
-			myprintf("43569: check only %03d %s  on filename %s\n",(int)i,onlyfiles[i].c_str(),filename);
+			myprintf("00617: check only %03d %s  on filename %s\n",(int)i,onlyfiles[i].c_str(),filename);
 
 	 if (ispath(onlyfiles[i].c_str(), filename))
         matched=true;
@@ -53256,7 +53785,7 @@ bool Jidac::isselected(const char* filename, bool rn,int64_t i_size)
   for (unsigned j=0; j<notfiles.size(); ++j)
   {
 	 if (flagdebug3)
-		myprintf("43574: check notfiles %03d %s  on filename %s\n",(int)j,notfiles[j].c_str(),filename);
+		myprintf("00618: check notfiles %03d %s  on filename %s\n",(int)j,notfiles[j].c_str(),filename);
 	if (ispath(notfiles[j].c_str(), filename))
       return false;
   }
@@ -53327,7 +53856,7 @@ char Jidac::getspecificlevel(const string& i_filename)
 	for (unsigned i=0;i<level0.size();i++)
 	{
 		if (flagdebug)
-			myprintf("45956: check level0 %03d %s  on filename %s\n",(int)i,level0[i].c_str(),i_filename.c_str());
+			myprintf("00619: check level0 %03d %s  on filename %s\n",(int)i,level0[i].c_str(),i_filename.c_str());
 		///if (isextension(i_filename.c_str(),level0[i].c_str()))
 		if (ispath(level0[i].c_str(),i_filename.c_str()))
 			return '0';
@@ -53335,7 +53864,7 @@ char Jidac::getspecificlevel(const string& i_filename)
 	for (unsigned i=0;i<level1.size();i++)
 	{
 		if (flagdebug)
-			myprintf("45956: check level1 %03d %s  on filename %s\n",(int)i,level1[i].c_str(),i_filename.c_str());
+			myprintf("00620: check level1 %03d %s  on filename %s\n",(int)i,level1[i].c_str(),i_filename.c_str());
 		///if (isextension(i_filename.c_str(),level1[i].c_str()))
 		if (ispath(level1[i].c_str(),i_filename.c_str()))
 			return '1';
@@ -53343,7 +53872,7 @@ char Jidac::getspecificlevel(const string& i_filename)
 	for (unsigned i=0;i<level2.size();i++)
 	{
 		if (flagdebug)
-			myprintf("45956: check level2 %03d %s  on filename %s\n",(int)i,level2[i].c_str(),i_filename.c_str());
+			myprintf("00621: check level2 %03d %s  on filename %s\n",(int)i,level2[i].c_str(),i_filename.c_str());
 		///if (isextension(i_filename.c_str(),level2[i].c_str()))
 		if (ispath(level2[i].c_str(),i_filename.c_str()))
 			return '2';
@@ -53351,7 +53880,7 @@ char Jidac::getspecificlevel(const string& i_filename)
 	for (unsigned i=0;i<level3.size();i++)
 	{
 		if (flagdebug)
-			myprintf("45956: check level3 %03d %s  on filename %s\n",(int)i,level3[i].c_str(),i_filename.c_str());
+			myprintf("00622: check level3 %03d %s  on filename %s\n",(int)i,level3[i].c_str(),i_filename.c_str());
 		///if (isextension(i_filename.c_str(),level3[i].c_str()))
 		if (ispath(level3[i].c_str(),i_filename.c_str()))
 			return '3';
@@ -53359,7 +53888,7 @@ char Jidac::getspecificlevel(const string& i_filename)
 	for (unsigned i=0;i<level4.size();i++)
 	{
 		if (flagdebug)
-			myprintf("45956: check level4 %03d %s  on filename %s\n",(int)i,level4[i].c_str(),i_filename.c_str());
+			myprintf("00623: check level4 %03d %s  on filename %s\n",(int)i,level4[i].c_str(),i_filename.c_str());
 		///if (isextension(i_filename.c_str(),level4[i].c_str()))
 		if (ispath(level4[i].c_str(),i_filename.c_str()))
 			return '4';
@@ -53367,7 +53896,7 @@ char Jidac::getspecificlevel(const string& i_filename)
 	for (unsigned i=0;i<level5.size();i++)
 	{
 		if (flagdebug)
-			myprintf("45956: check level5 %03d %s  on filename %s\n",(int)i,level5[i].c_str(),i_filename.c_str());
+			myprintf("00624: check level5 %03d %s  on filename %s\n",(int)i,level5[i].c_str(),i_filename.c_str());
 		///if (isextension(i_filename.c_str(),level5[i].c_str()))
 		if (ispath(level5[i].c_str(),i_filename.c_str()))
 			return '5';
@@ -53424,7 +53953,7 @@ void Jidac::scandir(bool i_checkifselected,DTMap& i_edt,string filename, bool i_
 			if (iszfs(filename))
 			{
 				if (flagverbose)
-					myprintf("47624: Verbose: Skip .zfs ----> %s\n",filename.c_str());
+					myprintf("00625: Verbose: Skip .zfs ----> %s\n",filename.c_str());
 				return;
 			}
 	if (flagnomac)
@@ -53440,13 +53969,13 @@ void Jidac::scandir(bool i_checkifselected,DTMap& i_edt,string filename, bool i_
 		if (filename.find("@Recently-Snapshot")!=std::string::npos)
 		{
 			if (flagverbose)
-				myprintf("47632: Verbose: Skip qnap snapshot ----> %s\n",filename.c_str());
+				myprintf("00626: Verbose: Skip qnap snapshot ----> %s\n",filename.c_str());
 			return;
 		}
 		if (filename.find("@Recycle")!=std::string::npos)
 		{
 			if (flagverbose)
-				myprintf("47638: Verbose: Skip qnap recycle ----> %s\n",filename.c_str());
+				myprintf("00627: Verbose: Skip qnap recycle ----> %s\n",filename.c_str());
 			return;
 		}
 	}
@@ -53465,7 +53994,7 @@ void Jidac::scandir(bool i_checkifselected,DTMap& i_edt,string filename, bool i_
 			{
 				creationdate=datacreazione(filename);
 				if (flagdebug3)
-					myprintf("49865: Birth date %s of %s\n",dateToString(flagutc,creationdate).c_str(),filename.c_str());
+					myprintf("00628: Birth date %s of %s\n",dateToString(flagutc,creationdate).c_str(),filename.c_str());
 			}
 			addfile(i_checkifselected,i_edt,filename, decimal_time(sb.st_mtime), sb.st_size,'u'+(sb.st_mode<<8),creationdate,0);
 		}
@@ -53497,7 +54026,7 @@ void Jidac::scandir(bool i_checkifselected,DTMap& i_edt,string filename, bool i_
 									{
 										creationdate=datacreazione(s);
 										if (flagdebug3)
-											myprintf("49897: Birth date %s of %s\n",dateToString(flagutc,creationdate).c_str(),s.c_str());
+											myprintf("00629: Birth date %s of %s\n",dateToString(flagutc,creationdate).c_str(),s.c_str());
 									}
 									addfile(i_checkifselected,i_edt,s, decimal_time(sb.st_mtime), sb.st_size,'u'+(sb.st_mode<<8),creationdate,0);
 								}
@@ -53595,11 +54124,9 @@ void Jidac::scandir(bool i_checkifselected,DTMap& i_edt,string filename, bool i_
 		if (flagdebug3) // sometimes Windows get very strange attributes
 		{
 			string myfn=path(filename)+t;
-			myprintf("47757: FATTR %08X RES0 %08X ",(unsigned int)ffd.dwFileAttributes,(unsigned int)ffd.dwReserved0);
-			printUTF8(myfn.c_str());
-			myprintf("\n");
+			myprintf("00630: FATTR %08X RES0 %08X %Z\n",(unsigned int)ffd.dwFileAttributes,(unsigned int)ffd.dwReserved0,myfn.c_str());
 			string temp=decodewinattribute(ffd.dwFileAttributes);
-			myprintf("47761: %s\n",temp.c_str());
+			myprintf("00631: %s\n",temp.c_str());
 		}
 		if (t=="." || t=="..")
 			edate=0;  // don't add, of course
@@ -53610,7 +54137,7 @@ void Jidac::scandir(bool i_checkifselected,DTMap& i_edt,string filename, bool i_
 		{
 			int64_t newsize=dim(filename);
 			if (flagdebug)
-				myprintf("29300: maybe Windows-symlinked file, fake size %s real size %s %s\n",migliaia(esize),migliaia(newsize),filename.c_str());
+				myprintf("00632: maybe Windows-symlinked file, fake size %s real size %s %s\n",migliaia(esize),migliaia(newsize),filename.c_str());
 			esize=newsize;
 		}
 		if (ffd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)
@@ -53625,19 +54152,19 @@ void Jidac::scandir(bool i_checkifselected,DTMap& i_edt,string filename, bool i_
 			string	tipo;
 			string thefile=path(filename)+t;
 			if (flagverbose)
-				myprintf("30908: try to get reparse point %s\n",thefile.c_str());
+				myprintf("00633: try to get reparse point %s\n",thefile.c_str());
 			if (getreparsepointW(false,thefile,buffer,bufsize,byteletti,tag,tipo))
 			{
 				if (flagverbose)
 				{
-					myprintf("30911: Reparse <<%s>>\n",thefile.c_str());
-					myprintf("30912: TAG %08X LEN %11s |%s|\n",tag,migliaia(byteletti),tipo.c_str());
+					myprintf("00634: Reparse <<%s>>\n",thefile.c_str());
+					myprintf("00635: TAG %08X LEN %11s |%s|\n",tag,migliaia(byteletti),tipo.c_str());
 				}
 			}
 			else
 			{
 				if (flagverbose)
-					myprintf("31072: fallito getreparsepointW %s\n",thefile.c_str());
+					myprintf("00636: fallito getreparsepointW %s\n",thefile.c_str());
 			}
 			*/
 		}
@@ -53646,13 +54173,13 @@ void Jidac::scandir(bool i_checkifselected,DTMap& i_edt,string filename, bool i_
 			/// Houston, we have a strange deduplicated .vhdx file?
 			/// add as by default
 			if (flagdebug)
-				myprintf("47812: Something strange (VHDX? SYMLINK?) FILE_ATTRIBUTE_REPARSE_POINT not DIR %s\n",t.c_str());
+				myprintf("00637: Something strange (VHDX? SYMLINK?) FILE_ATTRIBUTE_REPARSE_POINT not DIR %s\n",t.c_str());
 		
 			if (flagnosymlink)
 			{
 				edate=0;
 				if (flagverbose)
-					myprintf("53490: Skipped due to -symlink REPARSE_POINT && !DIRECTORY\n");
+					myprintf("00638: Skipped due to -symlink REPARSE_POINT && !DIRECTORY\n");
 			}
 		}
 		else
@@ -53699,7 +54226,7 @@ void Jidac::scandir(bool i_checkifselected,DTMap& i_edt,string filename, bool i_
 				)
 				{
 					if (flagdebug)
-						myprintf("31184: this seems a ONEDRIVE-something, try to keep\n");
+						myprintf("00639: this seems a ONEDRIVE-something, try to keep\n");
 				}
 
 
@@ -53708,9 +54235,12 @@ void Jidac::scandir(bool i_checkifselected,DTMap& i_edt,string filename, bool i_
 					if (flagdebug)
 					{
 						string myfn=path(filename)+t;
-						myprintf("30908: discard REPARSE POINT & DIRECTORY <<");
+						myprintf("00640: discard REPARSE POINT & DIRECTORY <<%Z>>\n",myfn.c_str());
+						/*
+						myprintf("00641: discard REPARSE POINT & DIRECTORY <<");
 						printUTF8(myfn.c_str());
 						myprintf(">>\n");
+						*/
 					}
 					edate=0;  // don't add
 				}
@@ -53806,7 +54336,7 @@ void Jidac::addfile(bool i_checkifselected,DTMap& i_edt,string filename, int64_t
 			int64_t edt_ram	=get_edt_ram();
 			int64_t extsize =(dt_ram+edt_ram+g_dt_ram)/100*165;
 			
-			myprintf("47951: Scanned %10s %02d:%02d:%02d %10s file/s (%21s) RAM~ %10s\n",
+			myprintf("00642: Scanned %10s %02d:%02d:%02d %10s file/s (%21s) RAM~ %10s\n",
 			migliaia((int64_t)i_edt.size()),
 			int(iscantime/3600),
 			int(iscantime/60)%60,
@@ -53826,7 +54356,7 @@ void Jidac::addfile(bool i_checkifselected,DTMap& i_edt,string filename, int64_t
 			
 			ultimotempo=iscantime;
 			
-			myprintf("47951: Scanned %10s %02d:%02d:%02d %10s file/s (%21s)\r",
+			myprintf("00643: Scanned %10s %02d:%02d:%02d %10s file/s (%21s)\r",
 			migliaia((int64_t)i_edt.size()),
 			int(iscantime/3600),
 			int(iscantime/60)%60,
@@ -53912,7 +54442,7 @@ void CompressJob::appendz(StringBuffer& s, const char* fn, const string& method,
       if (q[j=(i+front)%qsize].state==CJ::EMPTY) {
         q[j].filename=fn?fn:"";
         q[j].comment=comment?comment:"jDC\x01";
-//		myprintf("46392: the method |%s| fn |%s|\n",method.c_str(),fn);
+//		myprintf("00644: the method |%s| fn |%s|\n",method.c_str(),fn);
         q[j].method=method;
         q[j].in.resize(0);
         q[j].in.swap(s);
@@ -53951,12 +54481,12 @@ ThreadReturn compressThread(void* arg) {
       cj.state=CJ::COMPRESSING;
       release(job.mutex);
       job.compressors.wait();
-	  ///myprintf("46430: compressblock meth %s filena %s %s\n",cj.method.c_str(),cj.filename.c_str(),cj.comment.c_str());
+	  ///myprintf("00645: compressblock meth %s filena %s %s\n",cj.method.c_str(),cj.filename.c_str(),cj.comment.c_str());
 	       libzpaq::compressBlock(&cj.in, &cj.out, cj.method.c_str(),
           cj.filename.c_str(), cj.comment=="" ? 0 : cj.comment.c_str());
       cj.in.resize(0);
       lock(job.mutex);
-	///	myprintf("48108: Farei qualcosa <<%s>> %08X size %ld\n",myblock.filename.c_str(),myblock.crc32,myblock.crc32size);
+	///	myprintf("00646: Farei qualcosa <<%s>> %08X size %ld\n",myblock.filename.c_str(),myblock.crc32,myblock.crc32size);
 	  cj.state=CJ::COMPRESSED;
       cj.compressed.signal();
       job.compressors.signal();
@@ -53966,7 +54496,7 @@ ThreadReturn compressThread(void* arg) {
   catch (std::exception& e) {
     lock(job.mutex);
     fflush(stdout);
-    myprintf("48092: job %d: %s\n", jobNumber+1, e.what());
+    myprintf("00647: job %d: %s\n", jobNumber+1, e.what());
 	g_exec_text="job error";
     release(job.mutex);
     exit(1);
@@ -54007,7 +54537,7 @@ ThreadReturn writeThread(void* arg) {
 				if (g_thememfilestart==0)
 					g_thememfilestart=job.out->tell();
 				if (flagdebug3)
-					myprintf("47868: $$$$$$$$$$$$$$$$$$$$$ %s %s len=%s\n",migliaia(g_thememfilestart),cj.filename.c_str(),migliaia2(g_thememfilelength));
+					myprintf("00648: $$$$$$$$$$$$$$$$$$$$$ %s %s len=%s\n",migliaia(g_thememfilestart),cj.filename.c_str(),migliaia2(g_thememfilelength));
 			}
 
 		const int64_t N=1<<30;
@@ -54031,7 +54561,7 @@ ThreadReturn writeThread(void* arg) {
 	///this is a very dirty trick to do NOT check for control-C inside the thread
     if (!g_control_c)
 	{
-		myprintf("48153: zpaqfranz exiting from writeThread: %s\n", e.what());
+		myprintf("00649: zpaqfranz exiting from writeThread: %s\n", e.what());
 		g_exec_text="exiting from writethread";
 		exit(1);
 	}
@@ -54049,14 +54579,14 @@ void writeJidacHeader(libzpaq::Writer *out, int64_t date,
 {
 	if (!out) return;
 	if (flagdebug3)
-		myprintf("47502: start writejidacheader date %s  cdata %s  htsize %s\n",migliaia(date),migliaia2(cdata),migliaia3(htsize));
+		myprintf("00650: start writejidacheader date %s  cdata %s  htsize %s\n",migliaia(date),migliaia2(cdata),migliaia3(htsize));
 	assert(date>=19000000000000LL && date<30000000000000LL);
 	StringBuffer is;
 	puti(is, cdata, 8);
 	libzpaq::compressBlock(&is, out, "0",
       ("jDC"+itos(date, 14)+"c"+itos(htsize, 10)).c_str(), "jDC\x01");
 	if (flagdebug3)
-		myprintf("47552: ended writejidacheader\n");
+		myprintf("00651: ended writejidacheader\n");
 
 }
 
@@ -54157,12 +54687,12 @@ struct franz_posix
 
 void dump_franzattr(string i_thehash,int32_t i_writtencrc,char* i_buffer,int i_franzsize,int64_t i_creationdate,bool i_isadded)
 {
-	myprintf("50421: g_franzotype |%s|\n",migliaia(g_franzotype));
-	myprintf("50422: franzsize    |%s|\n",migliaia(i_franzsize));
-	myprintf("50423: hash         |%s|\n",i_thehash.c_str());
-	myprintf("50424: crc32        |%08X|\n",i_writtencrc);
-	myprintf("50425: creationdate |%s|\n",bin2hex_64(i_creationdate).c_str());
-	myprintf("50426: isadded      |%d|\n",(int)i_isadded);
+	myprintf("00652: g_franzotype |%s|\n",migliaia(g_franzotype));
+	myprintf("00653: franzsize    |%s|\n",migliaia(i_franzsize));
+	myprintf("00654: hash         |%s|\n",i_thehash.c_str());
+	myprintf("00655: crc32        |%08X|\n",i_writtencrc);
+	myprintf("00656: creationdate |%s|\n",bin2hex_64(i_creationdate).c_str());
+	myprintf("00657: isadded      |%d|\n",(int)i_isadded);
 	
 	for (int i=0;i<i_franzsize;i++)
 		if (isprint(i_buffer[i]))
@@ -54191,7 +54721,7 @@ void Jidac::writefranzattr(DTMap::iterator i_dtmap,libzpaq::StringBuffer& i_sb, 
 	if (g_franzotype==FRANZO_NONE) /*|| (i_thehash=="")*/	// 7.15
 	{
 		if (flagdebug3)
-			myprintf("44137: old-style attr with hash |%s|\n",i_thehash.c_str());
+			myprintf("00658: old-style attr with hash |%s|\n",i_thehash.c_str());
 		write715attr(i_sb,i_data,i_quanti);
 		return;
 	}
@@ -54199,9 +54729,9 @@ void Jidac::writefranzattr(DTMap::iterator i_dtmap,libzpaq::StringBuffer& i_sb, 
 		if (i_crc32!=i_crc32fromfragments)
 		{
 			myprintf("\n");
-			myprintf("48297: GURU-C: on file %s\n",i_filename.c_str());
-			myprintf("48298: GURU: CRC-32 from fragments %08X\n",i_crc32fromfragments);
-			myprintf("49299: GURU: CRC-32 from file      %08X\n",i_crc32);
+			myprintf("00659: GURU-C: on file %s\n",i_filename.c_str());
+			myprintf("00660: GURU: CRC-32 from fragments %08X\n",i_crc32fromfragments);
+			myprintf("00661: GURU: CRC-32 from file      %08X\n",i_crc32);
 //			if (!flagdebug)
 	///			error("Guru-C checking crc32");
 		}
@@ -54214,7 +54744,7 @@ void Jidac::writefranzattr(DTMap::iterator i_dtmap,libzpaq::StringBuffer& i_sb, 
 		puti(i_sb, 0, (8 - i_quanti));  // pad with zeros (for 7.15 little bug)
 		i_sb.write(mybuffer,FRANZOFFSETV1);
 		if (flagdebug3)
-			myprintf("48312: Mode1: CRC32 by frag <<%s>> %s\n",mybuffer+41,i_filename.c_str());
+			myprintf("00662: Mode1: CRC32 by frag <<%s>> %s\n",mybuffer+41,i_filename.c_str());
 	}
 	else
 	if ((g_franzotype==FRANZO_XXHASH64B) || (g_franzotype==FRANZO_MD5B) ||(g_franzotype==FRANZO_BLAKE3B)||(g_franzotype==FRANZO_SHA_256B)
@@ -54225,15 +54755,15 @@ void Jidac::writefranzattr(DTMap::iterator i_dtmap,libzpaq::StringBuffer& i_sb, 
 		char mybuffer[FRANZOFFSETV1]={0};
 		int	primobyte	=g_franzotype/10+'0';
 		int secondobyte	=g_franzotype%10+'0';
-		///myprintf("50494: primo %d secondo %d\n",primobyte,secondobyte);
+		///myprintf("00663: primo %d secondo %d\n",primobyte,secondobyte);
 		
 		mybuffer[0]=primobyte;
 		mybuffer[1]=secondobyte;
 		/*
 		if (primobyte==mybuffer[0])
-			myprintf("50500: uguale\n");
+			myprintf("00664: uguale\n");
 		else
-			myprintf("50502: diverso\n");
+			myprintf("00665: diverso\n");
 		seppuku();
 		*/
 		mybuffer[49]=1; // backward compatibility, not zero
@@ -54316,7 +54846,7 @@ offset 048 valore 000 00
 offset 049 valore 001 01 *
 */
 		if (flagdebug3)
-			myprintf("48327: Mode14:  BINARY: <<%s>> CRC32 <<%08X>> %s\n",i_thehash.c_str(),writtencrc,i_filename.c_str());
+			myprintf("00666: Mode14:  BINARY: <<%s>> CRC32 <<%08X>> %s\n",i_thehash.c_str(),writtencrc,i_filename.c_str());
 	
 	}
 	else
@@ -54333,7 +54863,7 @@ offset 049 valore 001 01 *
 		/// please note the dirty trick: start by +10
 			
 		if (flagdebug3)
-			myprintf("48327: Mode2:  XXHASH64: <<%s>> CRC32 <<%s>> %s\n",mybuffer+8,mybuffer+41,i_filename.c_str());
+			myprintf("00667: Mode2:  XXHASH64: <<%s>> CRC32 <<%s>> %s\n",mybuffer+8,mybuffer+41,i_filename.c_str());
 	}
 	else
 	if (g_franzotype==FRANZO_SHA_1)  //3= 51 (SHA1-0-CRC32)
@@ -54347,7 +54877,7 @@ offset 049 valore 001 01 *
 		puti(i_sb, 0, (8 - i_quanti));  // pad with zeros (for 7.15 little bug)
 		i_sb.write(mybuffer,FRANZOFFSETV2); ///please note the dirty trick: start by +8
 		if (flagdebug3)
-			myprintf("48341: Model8: SHA1 <<%s>> CRC32 <<%s>> %s\n",mybuffer+2,mybuffer+67,i_filename.c_str());
+			myprintf("00668: Model8: SHA1 <<%s>> CRC32 <<%s>> %s\n",mybuffer+2,mybuffer+67,i_filename.c_str());
 	}
 	else
 	if (g_franzotype==FRANZO_SHA_256) ///4= 52 (01-SHA256-0-CRC32)
@@ -54363,7 +54893,7 @@ offset 049 valore 001 01 *
 		i_sb.write(mybuffer,FRANZOFFSETV2);
 		/// please note the dirty trick: start by +8
 		if (flagdebug3)
-			myprintf("48357: Mode4: SHA256 <<%s>> CRC32 <<%s>> %s\n",mybuffer+2,mybuffer+67,i_filename.c_str());
+			myprintf("00669: Mode4: SHA256 <<%s>> CRC32 <<%s>> %s\n",mybuffer+2,mybuffer+67,i_filename.c_str());
 	}
 	else
 	if (g_franzotype==FRANZO_SHA3) ///2= 52 (01-SHA3-0-CRC32)
@@ -54378,7 +54908,7 @@ offset 049 valore 001 01 *
 		puti(i_sb, 0, (8 - i_quanti));  // pad with zeros (for 7.15 little bug)
 		i_sb.write(mybuffer,FRANZOFFSETV2); ///please note the dirty trick: start by +8
 		if (flagdebug3)
-			myprintf("48372: Mode7: SHA3 <<%s>> CRC32 <<%s>> %s\n",mybuffer+2,mybuffer+67,i_filename.c_str());
+			myprintf("00670: Mode7: SHA3 <<%s>> CRC32 <<%s>> %s\n",mybuffer+2,mybuffer+67,i_filename.c_str());
 	}
 	else
 	if (g_franzotype==FRANZO_MD5) ///1= 52 (01-MD5-0-CRC32)
@@ -54393,7 +54923,7 @@ offset 049 valore 001 01 *
 		puti(i_sb, 0, (8 - i_quanti));  // pad with zeros (for 7.15 little bug)
 		i_sb.write(mybuffer,FRANZOFFSETV2); ///please note the dirty trick: start by +8
 		if (flagdebug3)
-			myprintf("48387: Mode8: MD5 <<%s>> CRC32 <<%s>> %s\n",mybuffer+2,mybuffer+67,i_filename.c_str());
+			myprintf("00671: Mode8: MD5 <<%s>> CRC32 <<%s>> %s\n",mybuffer+2,mybuffer+67,i_filename.c_str());
 	}
 	else
 	if ((g_franzotype==FRANZO_WHIRLPOOL) || (g_franzotype==FRANZO_HIGHWAY64) || (g_franzotype==FRANZO_HIGHWAY128) || (g_franzotype==FRANZO_HIGHWAY256)) ///1= 52 (01-MD5-0-CRC32)
@@ -54410,8 +54940,8 @@ offset 049 valore 001 01 *
 		if (flagdebug3)
 		{
 			myprintf("\n");
-			myprintf("45487: thehash    %s\n",i_thehash.c_str());
-			myprintf("45487: writtencrc %08X\n",writtencrc);
+			myprintf("00672: thehash    %s\n",i_thehash.c_str());
+			myprintf("00673: writtencrc %08X\n",writtencrc);
 		}
 
 		string mycode;
@@ -54420,10 +54950,10 @@ offset 049 valore 001 01 *
 		else
 			mycode=std::string()+"3"+char(g_franzotype+'A');
 		if (flagdebug3)
-			myprintf("45492: MYCODE |%s|\n",mycode.c_str());
+			myprintf("00674: MYCODE |%s|\n",mycode.c_str());
 		if (mycode.size()!=2)
 		{
-			myprintf("45495: GURU mycode must be 2 chars!\n");
+			myprintf("00675: GURU mycode must be 2 chars!\n");
 			seppuku();
 			return;
 		}
@@ -54433,19 +54963,19 @@ offset 049 valore 001 01 *
 		snprintf(mybuffer+offset,sizeof(mybuffer)-offset,"%s",mycode.c_str()); //two bytes
 		offset+=mycode.size();
 		if (flagdebug3)
-			myprintf("45503: Offset1 (after mycode) %3d\n",offset);
+			myprintf("00676: Offset1 (after mycode) %3d\n",offset);
 
 		snprintf(mybuffer+offset,sizeof(mybuffer)-offset,"%s",i_thehash.c_str());
 		offset+=i_thehash.size()+2;
 		if (flagdebug3)
-			myprintf("45507: Offset2 (after hash)   %3d\n",offset);
+			myprintf("00677: Offset2 (after hash)   %3d\n",offset);
 
 		offsetcrc=offset;
 		snprintf(mybuffer+offset,sizeof(mybuffer)-offset,"%08X",writtencrc);
 		offset+=8+2;
 
 		if (flagdebug3)
-			myprintf("45512: Offset3 (after CRC)    %3d\n",offset);
+			myprintf("00678: Offset3 (after CRC)    %3d\n",offset);
 
 		uint32_t  orderedstream=0;
 		if (flagstdin)
@@ -54453,13 +54983,13 @@ offset 049 valore 001 01 *
 		offset+=inttoarray(orderedstream	,mybuffer+offset,4);
 
 		if (flagdebug3)
-			myprintf("45512: Offset4 (after ordered)%3d\n",offset);
+			myprintf("00679: Offset4 (after ordered)%3d\n",offset);
 
 		// catch "holes" into multipart
 		uint32_t	versionnumber=1440408;
 		offset+=inttoarray(versionnumber	,mybuffer+offset,4);
 		if (flagdebug3)
-		myprintf("45524: Offset5 (after version)%3d\n",offset);
+		myprintf("00680: Offset5 (after version)%3d\n",offset);
 
 		///i_creationdate=987654321L;
 		///i_accessdate=554433229944L;
@@ -54467,12 +54997,12 @@ offset 049 valore 001 01 *
 		offset+=inttoarray(i_creationdate	,mybuffer+offset,8);
 
 		if (flagdebug3)
-			myprintf("45524: Offset6 (after cdate)  %3d\n",offset);
+			myprintf("00681: Offset6 (after cdate)  %3d\n",offset);
 
 		offset+=inttoarray(i_accessdate		,mybuffer+offset,8);
 
 		if (flagdebug3)
-			myprintf("45531: Offset6 (after adate)  %3d\n",offset);
+			myprintf("00682: Offset6 (after adate)  %3d\n",offset);
 
 
 		uint64_t azero=0;
@@ -54480,21 +55010,21 @@ offset 049 valore 001 01 *
 			offset+=inttoarray(azero		,mybuffer+offset,8);
 
 		if (flagdebug3)
-			myprintf("45537: Offset7 (after spare)  %3d\n",offset);
+			myprintf("00683: Offset7 (after spare)  %3d\n",offset);
 
 		int		dascrivere=offset;
 		if (flagtar)
 			if (i_posix!=NULL)
 			{
 				if (flagdebug)
-					myprintf("45543: flagtar and posix not null, use all FRANZOFFSETV3\n");
+					myprintf("00684: flagtar and posix not null, use all FRANZOFFSETV3\n");
 				dascrivere=FRANZOFFSETV3;
 			}
 		if (flagdebug3)
-			myprintf("45546: To write %08d   header %08d + sizeof %08d\n",dascrivere,offset,sizeof(franz_posix));
+			myprintf("00685: To write %08d   header %08d + sizeof %08d\n",dascrivere,offset,sizeof(franz_posix));
 		if (dascrivere>FRANZOFFSETV3)
 		{
-			myprintf("45542: GURU dascrivere %08d > FRANZOFFSETV3 %08d\n",dascrivere,FRANZOFFSETV3);
+			myprintf("00686: GURU dascrivere %08d > FRANZOFFSETV3 %08d\n",dascrivere,FRANZOFFSETV3);
 			seppuku();
 			return;
 		}
@@ -54503,7 +55033,7 @@ offset 049 valore 001 01 *
 		puti(i_sb, 0, (8 - i_quanti));  // pad with zeros (for 7.15 little bug)
 		i_sb.write(mybuffer,dascrivere); ///please note the dirty trick: start by +8
 		if (flagdebug3)
-			myprintf("45557: Mode |%s| %s <<%s>> CRC32 <<%s>> %s\n",mycode.c_str(),decodefranzoffset(g_franzotype).c_str(),mybuffer+2,mybuffer+offsetcrc,i_filename.c_str());
+			myprintf("00687: Mode |%s| %s <<%s>> CRC32 <<%s>> %s\n",mycode.c_str(),decodefranzoffset(g_franzotype).c_str(),mybuffer+2,mybuffer+offsetcrc,i_filename.c_str());
 
 	}
 	else
@@ -54534,7 +55064,7 @@ offset 049 valore 001 01 *
 		puti(i_sb, 0, (8 - i_quanti));  // pad with zeros (for 7.15 little bug)
 		i_sb.write(mybuffer,FRANZOFFSETV2); ///please note the dirty trick: start by +8
 		if (flagdebug3)
-			myprintf("48572: Mode10: WINHASH64 <<%s>> CRC32 <<%s>> %s\n",mybuffer+2,mybuffer+67,i_filename.c_str());
+			myprintf("00688: Mode10: WINHASH64 <<%s>> CRC32 <<%s>> %s\n",mybuffer+2,mybuffer+67,i_filename.c_str());
 	}
 	else
 	if (g_franzotype==FRANZO_BLAKE3) ///3= 52 (01-BLAKE3-0-CRC32)
@@ -54549,7 +55079,7 @@ offset 049 valore 001 01 *
 		puti(i_sb, 0, (8 - i_quanti));  // pad with zeros (for 7.15 little bug)
 		i_sb.write(mybuffer,FRANZOFFSETV2); ///please note the dirty trick: start by +8
 		if (flagdebug)
-			myprintf("48541: Mode6: BLAKE3 <<%s>> CRC32 <<%s>> %s\n",mybuffer+2,mybuffer+67,i_filename.c_str());
+			myprintf("00689: Mode6: BLAKE3 <<%s>> CRC32 <<%s>> %s\n",mybuffer+2,mybuffer+67,i_filename.c_str());
 	}
 	else
 	if (g_franzotype==FRANZO_XXH3) ///5= 52 (00XXH3-0-CRC32)
@@ -54565,7 +55095,7 @@ offset 049 valore 001 01 *
 		i_sb.write(mybuffer,FRANZOFFSETV2); ///please note the dirty trick: start by +8
 		/// please note the dirty trick: start by +8
 		if (flagdebug)
-			myprintf("48557: Mode5: XXH3: <<%s>> CRC32 <<%s>> %s\n",mybuffer+2,mybuffer+67,i_filename.c_str());
+			myprintf("00690: Mode5: XXH3: <<%s>> CRC32 <<%s>> %s\n",mybuffer+2,mybuffer+67,i_filename.c_str());
 	}
 	else
 		perror("22144: unknown franzotype");
@@ -54607,7 +55137,7 @@ ThreadReturn decompressThread(void* arg) {
   lock(job.mutex);
   jobNumber=++job.job;
   release(job.mutex);
-  ///myprintf("48601: K1 %s\n",job.jd.archive.c_str());
+  ///myprintf("00691: K1 %s\n",job.jd.archive.c_str());
   // Open archive for reading
   InputArchive in(job.jd.archive.c_str()/*,job.jd.g_password*/);
   if (!in.isopen()) return 0;
@@ -54648,7 +55178,7 @@ ThreadReturn decompressThread(void* arg) {
       assert(b.start<job.jd.ht.size());
       assert(b.size>0);
       assert(b.start+b.size<=job.jd.ht.size());
-	  ///myprintf("48641: Andiamo su offset  %lld  %lld\n",b.offset,output_size);
+	  ///myprintf("00692: Andiamo su offset  %lld  %lld\n",b.offset,output_size);
       in.seek(b.offset, SEEK_SET);
       libzpaq::Decompresser d;
       d.setInput(&in);
@@ -54679,7 +55209,7 @@ ThreadReturn decompressThread(void* arg) {
       if (out.size()<output_size) {
         lock(job.mutex);
         fflush(stdout);
-        myprintf("48672: output [%u..%u] %d of %u bytes\n",
+        myprintf("00693: output [%u..%u] %d of %u bytes\n",
              b.start, b.start+b.size-1, int(out.size()), output_size);
         release(job.mutex);
         error("unexpected end of compressed data");
@@ -54701,7 +55231,7 @@ ThreadReturn decompressThread(void* arg) {
 		if (memcmp(sha1result, job.jd.ht[j].sha1, 20)) {
           lock(job.mutex);
           fflush(stdout);
-          myprintf("48567: Job %d: fragment %u size %d checksum failed\n",
+          myprintf("00694: Job %d: fragment %u size %d checksum failed\n",
                  jobNumber, j, job.jd.ht[j].usize);
 		g_exec_text="fragment checksum failed";
           release(job.mutex);
@@ -54714,7 +55244,7 @@ ThreadReturn decompressThread(void* arg) {
     catch (std::bad_alloc& e) {
       lock(job.mutex);
       fflush(stdout);
-      myprintf("28738: Job %d killed: %s\n", jobNumber, e.what());
+      myprintf("00695: Job %d killed: %s\n", jobNumber, e.what());
 	  g_exec_text="Job killed";
       b.state=Block::READY;
       b.extracted=0;
@@ -54726,7 +55256,7 @@ ThreadReturn decompressThread(void* arg) {
     catch (std::exception& e) {
       lock(job.mutex);
       fflush(stdout);
-      myprintf("48719: Job %d: skipping [%u..%u] at %1.0f: %s\n",
+      myprintf("00696: Job %d: skipping [%u..%u] at %1.0f: %s\n",
               jobNumber, b.start+b.extracted, b.start+b.size-1,
               b.offset+0.0, e.what());
       release(job.mutex);
@@ -54780,9 +55310,12 @@ ThreadReturn decompressThread(void* arg) {
 				{
 					if (flagdebug2)
 					{
-						myprintf("17544: MAKEPATH:");
+						myprintf("00697: MAKEPATH: %Z\n",filename.c_str());
+						/*
+						myprintf("00698: MAKEPATH:");
 						printUTF8(filename.c_str());
 						myprintf("\n");
+						*/
 					}
 					makepath(filename);
 				}
@@ -54807,7 +55340,7 @@ ThreadReturn decompressThread(void* arg) {
 						if (!direxists(percorso))
 						{
 							if (flagdebug)
-								myprintf("17577: ERROR DIRNOTEX %s\n",percorso.c_str());
+								myprintf("00699: ERROR DIRNOTEX %s\n",percorso.c_str());
 							string temppercorso=percorso;
 							size_t barra;
 							string percorsino;
@@ -54820,7 +55353,7 @@ ThreadReturn decompressThread(void* arg) {
 								if (direxists(percorsino))
 								{
 									if (flagdebug2)
-										myprintf("17583: Small path exists %s\n",percorsino.c_str());
+										myprintf("00700: Small path exists %s\n",percorsino.c_str());
 								}
 								else
 								{
@@ -54829,7 +55362,7 @@ ThreadReturn decompressThread(void* arg) {
 									if (flagdebug2)
 									{
 										myprintf("\n\n");
-										myprintf("17950: Make path of %03d\n---\n%s\n---\n",(int)dafare.length(),dafare.c_str());
+										myprintf("00701: Make path of %03d\n---\n%s\n---\n",(int)dafare.length(),dafare.c_str());
 									}
 									bool creazione=CreateDirectory(utow(dafare.c_str()).c_str(), 0);
 									if (!flaglongpath)
@@ -54841,7 +55374,7 @@ ThreadReturn decompressThread(void* arg) {
 						}
 						if (!flaglongpath)
 							if (!direxists(percorso))
-								myprintf("17620: percorso does not exists <<%s>>\n",percorso.c_str());
+								myprintf("00702: percorso does not exists <<%s>>\n",percorso.c_str());
 					}
 #endif
 		///		filename=nomefileseesistegia(filename);
@@ -54968,7 +55501,7 @@ ThreadReturn decompressThread(void* arg) {
 			else
 			{
 				if (flagdebug2)
-					myprintf("17716: OFFSET-WRITE   %19s  size  %12s %s\n",migliaia((int64_t)offset),migliaia2(usize),job.lastdt->first.c_str());
+					myprintf("00703: OFFSET-WRITE   %19s  size  %12s %s\n",migliaia((int64_t)offset),migliaia2(usize),job.lastdt->first.c_str());
 				if (flagramdisk)
 				{
 					/// do a "ramdisk" write
@@ -55019,7 +55552,7 @@ ThreadReturn decompressThread(void* arg) {
 						if (!flagstdout)
 						{
 							if (flagdebug3)
-								myprintf("58997: KA +++ seek offset %21s write %12s\n",migliaia(offset),migliaia2(offset));
+								myprintf("00704: KA +++ seek offset %21s write %12s\n",migliaia(offset),migliaia2(offset));
 							fseeko(job.outf, offset, SEEK_SET);
 							myfwrite(out.c_str()+q, 1, usize, job.outf);
 						}
@@ -55035,7 +55568,7 @@ ThreadReturn decompressThread(void* arg) {
         lock(job.mutex);
         job.total_done+=usize;
         release(job.mutex);
-		///myprintf("49012: Scrittoni %f\n",(double)job.total_done);
+		///myprintf("00705: Scrittoni %f\n",(double)job.total_done);
         // Close file. If this is the last fragment then set date and attr.
         // Do not set read-only attribute in Windows yet.
         if (p->second.data==int64_t(ptr.size())) {
@@ -55150,7 +55683,7 @@ ThreadReturn decompressthreadramdisk(void* arg)
 			{
 				lock(job.mutex);
 				fflush(stdout);
-				myprintf("31836: output [%u..%u] %d of %u bytes\n",b.start, b.start+b.size-1, int(out.size()), output_size);
+				myprintf("00706: output [%u..%u] %d of %u bytes\n",b.start, b.start+b.size-1, int(out.size()), output_size);
 				release(job.mutex);
 				error("31838 unexpected end of compressed data");
 			}
@@ -55175,7 +55708,7 @@ ThreadReturn decompressthreadramdisk(void* arg)
 					{
 						lock(job.mutex);
 						fflush(stdout);
-						myprintf("31327: Job %d: fragment %u size %d checksum failed\n",jobNumber, j, job.jd.ht[j].usize);
+						myprintf("00707: Job %d: fragment %u size %d checksum failed\n",jobNumber, j, job.jd.ht[j].usize);
 						g_exec_text="31327: fragment checksum failed";
 						release(job.mutex);
 						error("31330 bad checksum");
@@ -55191,7 +55724,7 @@ ThreadReturn decompressthreadramdisk(void* arg)
 		{
 			lock(job.mutex);
 			fflush(stdout);
-			myprintf("31341: Job %d killed: %s\n", jobNumber, e.what());
+			myprintf("00708: Job %d killed: %s\n", jobNumber, e.what());
 			g_exec_text="31341 Job killed";
 			b.state=Block::READY;
 			b.extracted=0;
@@ -55204,7 +55737,7 @@ ThreadReturn decompressthreadramdisk(void* arg)
 		{
 			lock(job.mutex);
 			fflush(stdout);
-			myprintf("31355: Job %d: skipping [%u..%u] at %1.0f: %s\n",jobNumber, b.start+b.extracted, b.start+b.size-1,b.offset+0.0, e.what());
+			myprintf("00709: Job %d: skipping [%u..%u] at %1.0f: %s\n",jobNumber, b.start+b.extracted, b.start+b.size-1,b.offset+0.0, e.what());
 			release(job.mutex);
 			continue;
 		}
@@ -55381,25 +55914,25 @@ void Jidac::printsanitizeflags()
 	if (flagflat || flagutf || flagfix255 || flagfixeml)
 	{
 		myprintf("\n");
-		myprintf("49358: ******\n");
+		myprintf("00710: ******\n");
 		if (flagflat)
-			myprintf("49359: ****** WARNING: all files FLATted, without non-latin chars, max %d length\n",(int)FRANZMAXPATH);
+			myprintf("00711: ****** WARNING: all files FLATted, without non-latin chars, max %d length\n",(int)FRANZMAXPATH);
 		else
 		{
 			if (flagutf)
-				myprintf("49364: ****** -utf    No Non-latin chars\n");
+				myprintf("00712: ****** -utf    No Non-latin chars\n");
 			if (flagfix255)
-				myprintf("49365: ****** -fix255 Shrink filenames to %d, case insensitive\n",(int)FRANZMAXPATH);
+				myprintf("00713: ****** -fix255 Shrink filenames to %d, case insensitive\n",(int)FRANZMAXPATH);
 			if (flagfixeml)
-				myprintf("49366: ****** -fixeml Heuristic compress .eml filenames (Fwd Fwd Fwd=>Fwd etc)\n");
+				myprintf("00714: ****** -fixeml Heuristic compress .eml filenames (Fwd Fwd Fwd=>Fwd etc)\n");
 #ifdef _WIN32
 			if (flagfixreserved)
-				myprintf("49367: ****** -fixreserved (fix LPT1 etc)\n");
+				myprintf("00715: ****** -fixreserved (fix LPT1 etc)\n");
 			if (flagfixcase)
-				myprintf("49368: ****** -fixcase (fix pippo.txt and PIPPO.txt)\n");
+				myprintf("00716: ****** -fixcase (fix pippo.txt and PIPPO.txt)\n");
 #endif
 		}
-		myprintf("49369: ******\n\n");
+		myprintf("00717: ******\n\n");
 	}
 }
 int Jidac::info()
@@ -55412,12 +55945,12 @@ int Jidac::zpaqdirsize()
 {
 	if (archive=="")
 	{
-		myprintf("31002: empty archive name\n");
+		myprintf("00718! empty archive name\n");
 		return 2;
 	}
 	if (files.size()==0)
 	{
-		myprintf("30969: at least one folder needed\n");
+		myprintf("00719! at least one folder needed\n");
 		return 2;
 	}
 ///	getpasswordifempty();
@@ -55426,7 +55959,7 @@ int Jidac::zpaqdirsize()
 	if (flagdebug3)
 	{
 		myprintf("\n\n");
-		myprintf("31016: dtsize %s\n\n",migliaia((int64_t)dt.size()));
+		myprintf("00720: dtsize %s\n\n",migliaia((int64_t)dt.size()));
 	}
 /// just a bit... overkill
 	DTMap* dp[2]={&dt, &edt};
@@ -55452,7 +55985,7 @@ int Jidac::zpaqdirsize()
 	myprintf("\n\n");
 	if (flagforce)
 	{
-		myprintf("31019: case sensitive == search, because of -force switch\n");
+		myprintf("00721: case sensitive == search, because of -force switch\n");
 		for (unsigned int i=0;i<files.size();i++)
 		{
 			if (!isdirectory(files[i]))
@@ -55463,14 +55996,14 @@ int Jidac::zpaqdirsize()
 			else
 			{
 				if (flagdebug)
-					myprintf("31004: WARNING cannot find folder in the zpaq %s\n",files[i].c_str());
+					myprintf("00722: WARNING cannot find folder in the zpaq %s\n",files[i].c_str());
 			}
 		}
 	}
 	else
 	{
 /// case insensitive. I know, very slow, but who cares?
-		myprintf("31038: case iNSeNsITIVE right search, because NO -force switch\n");
+		myprintf("00723: case iNSeNsITIVE right search, because NO -force switch\n");
 		for (unsigned int i=0;i<files.size();i++)
 		{
 			if (!isdirectory(files[i]))
@@ -55487,7 +56020,7 @@ int Jidac::zpaqdirsize()
 				}
 			if (flagdebug)
 				if (filelist.size()==oldsize)
-					myprintf("31053: WARNING cannot find folder in the zpaq <<%s>>\n",files[i].c_str());
+					myprintf("00724: WARNING cannot find folder in the zpaq <<%s>>\n",files[i].c_str());
 		}
 	}
 	sort(filelist.begin(), filelist.end(), compareFragmentList);
@@ -55495,9 +56028,12 @@ int Jidac::zpaqdirsize()
 	for (unsigned fi=0;fi<filelist.size(); ++fi)
 	{
 		DTMap::iterator p=filelist[fi];
+		myprintf("%19s [%s] <<%Z>>\n",migliaia(p->second.size),dateToString(flagutc,p->second.date).c_str(),p->first.c_str());
+		/*
 		myprintf("%19s [%s] <<",migliaia(p->second.size),dateToString(flagutc,p->second.date).c_str());
 		printUTF8(p->first.c_str());
 		myprintf(">>\n");
+		*/
 	}
 	if (flagforce) // .find() search
 	{
@@ -55505,7 +56041,7 @@ int Jidac::zpaqdirsize()
 			return 0;
 		else
 		{
-			myprintf("31094: folder searched %s != founded %s\n",migliaia((int64_t)files.size()),migliaia2((int64_t)filelist.size()));
+			myprintf("00725: folder searched %s != founded %s\n",migliaia((int64_t)files.size()),migliaia2((int64_t)filelist.size()));
 			return 1;
 		}
 	}
@@ -55516,21 +56052,21 @@ void Jidac::decodelastversion()
 {
 	if (g_rangelast>0)
 	{
-		myprintf("50100: You ask the last     %08d versions (...wait...)\n",g_rangelast);
+		myprintf("00726: You ask the last     %08d versions (...wait...)\n",g_rangelast);
 		int errors=0;
 		if (archive!="")
 			read_archive(NULL,archive.c_str(),&errors,1,true); /// AND NOW THE MAGIC ONE!
 		int lastver=ver.size()-1;
-		myprintf("50104: Last version present %08d\n",lastver);
+		myprintf("00727: Last version present %08d\n",lastver);
 		if (g_rangelast>lastver)
 		{
-			myprintf("50111: Quit because weird vers selection\n");
+			myprintf("00728: Quit because weird vers selection\n");
 			seppuku();
 		}
 		jidacreset();
 		g_rangefrom	=lastver-g_rangelast+1;
 		g_rangeto	=lastver;
-		myprintf("50122: From version         %08d to %08d\n",g_rangefrom,g_rangeto);
+		myprintf("00729: From version         %08d to %08d\n",g_rangefrom,g_rangeto);
 	}
 }
 
@@ -55588,16 +56124,16 @@ class franz_ads
 	DWORD write(char* i_buffer,int i_len)
 	{
 		if (flagdebug3)
-			myprintf("51464: entering write\n");
+			myprintf("00730: entering write\n");
 		if (!isopen())
 			return -1;
 		if (flagdebug3)
-			myprintf("51467: before write\n");
+			myprintf("00731: before write\n");
 		DWORD bw;
 		if (WriteFile(hFile,i_buffer,i_len,&bw,NULL))
 		{
 			if (flagdebug3)
-				myprintf("51474: done write\n");
+				myprintf("00732: done write\n");
 			written+=bw;
 			return bw;
 		}
@@ -55625,24 +56161,27 @@ class franz_ads
 	{
 		if ((i_mode!='r') && (i_mode!='w'))
 		{
-			myprintf("51054: ADS mode can be only r or w %c\n",i_mode);
+			myprintf("00733: ADS mode can be only r or w %c\n",i_mode);
 			return;
 		}
 		if (i_filename=="")
 		{
-			myprintf("51461: ADS i_filename empty\n");
+			myprintf("00734: ADS i_filename empty\n");
 			return;
 		}
 		if (i_adsname=="")
 		{
-			myprintf("51466: ADS i_adsname empty\n");
+			myprintf("00735: ADS i_adsname empty\n");
 			return;
 		}
 		if (!fileexists(i_filename))
 		{
-			myprintf("51471: ADS filename does not exits ");
+			myprintf("00736: ADS filename does not exits %Z\n",i_filename.c_str());
+			/*
+			myprintf("00737: ADS filename does not exits ");
 			printUTF8(i_filename.c_str());
 			myprintf("\n");
+			*/
 			return;
 		}
 		for (unsigned int i=0;i<i_adsname.size();i++)
@@ -55652,7 +56191,7 @@ class franz_ads
 
 		string thepath=i_filename+":"+adsname;
 		if (flagdebug2)
-			myprintf("51515: Working on %s\n",thepath.c_str());
+			myprintf("00738: Working on %s\n",thepath.c_str());
 		
 		if (i_mode=='r')
 			hFile=CreateFileW((utow(thepath.c_str()).c_str()), GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
@@ -55663,9 +56202,12 @@ class franz_ads
 		{
 			if (flagverbose)
 			{		
-				myprintf("51488: ADS invalid file handle mode %c on ",i_mode);
+				myprintf("00739: ADS invalid file handle mode %c on %Z\n",i_mode,i_filename.c_str());
+					/*
+				myprintf("00740: ADS invalid file handle mode %c on ",i_mode);
 				printUTF8(i_filename.c_str());
 				myprintf("\n");
+		*/
 			}
 			hFile=0;
 			return;
@@ -55687,7 +56229,7 @@ static void decompress_print(FILE* inpFp,size_t messageMaxBytes)
 {
 	if (inpFp==NULL)
 	{
-		myprintf("49189: infp not good\n");
+		myprintf("00741: infp not good\n");
 		seppuku();
 		return;
 	}
@@ -55698,14 +56240,14 @@ static void decompress_print(FILE* inpFp,size_t messageMaxBytes)
     char* const cmpBuf = (char*) malloc(LZ4_COMPRESSBOUND(messageMaxBytes));
 	if (cmpBuf==NULL)
 	{
-		myprintf("49192: guru allocating cmpBuf\n");
+		myprintf("00742: guru allocating cmpBuf\n");
 		seppuku();
 		return;
 	}
     char* const decBuf = (char*) malloc(ringBufferBytes);
 	if (decBuf==NULL)
 	{
-		myprintf("49199: guru allocating decBuf\n");
+		myprintf("00743: guru allocating decBuf\n");
 		seppuku();
 		return;
 	}
@@ -55749,8 +56291,8 @@ static void decompress_print(FILE* inpFp,size_t messageMaxBytes)
 	{
 		int64_t tempo=mtime()-startdecompress;
 		myprintf("\n");
-		myprintf("51089: ADS: Time %s (print %s) (wrk %s) # %s / %s bytes\n",migliaia(tempo),migliaia2(printtime),migliaia3(tempo-printtime),migliaia4(lines),migliaia5(bytesdecompressed));
-		myprintf("51090: Use the l (list) command with -ads to force a full rebuild of the list\n");
+		myprintf("00744: ADS: Time %s (print %s) (wrk %s) # %s / %s bytes\n",migliaia(tempo),migliaia2(printtime),migliaia3(tempo-printtime),migliaia4(lines),migliaia5(bytesdecompressed));
+		myprintf("00745: Use the l (list) command with -ads to force a full rebuild of the list\n");
     }
 	free(decBuf);
     free(cmpBuf);
@@ -55765,9 +56307,12 @@ bool win32_print_ads(string i_filename,string i_adsname,int i_maxmessagelen)
 	{
 		if (flagdebug)
 		{
-			myprintf("51178: cannot open ");
+			myprintf("00746! cannot open %Z\n",thepath.c_str());
+			/*
+			myprintf("00747: cannot open ");
 			printUTF8(thepath.c_str());
 			myprintf("\n");
+			*/
 		}
 		return false;
 	}
@@ -55811,16 +56356,18 @@ int Jidac::list()
 
 	if (archive=="")
 	{
-		myprintf("52411: archive is empty\n");
+		myprintf("00748! archive is empty\n");
 		return 2;
 	}
+
+	archive=getbackupnameifany(archive);
 	
 	if (flagfast)
 	{
 		if (noselection())
 			return listfast();
 		else
-			myprintf("49887: cannot do -fast because some selection in output\n");
+			myprintf("00749: cannot do -fast because some selection in output\n");
 	}
 		
 #ifdef _WIN32
@@ -55848,17 +56395,17 @@ int Jidac::list()
 		int versione=searchcomments(versioncomment,myfilelist);
 		if (versione==0)
 		{
-			myprintf("30291: cannot find version comment <<%s>>\n",versioncomment.c_str());
+			myprintf("00750: cannot find version comment <<%s>>\n",versioncomment.c_str());
 			return 1;
 		}
 		if (versione==-1)
 		{
-			myprintf("30303: multiple match for version comment <<%s>>\n",versioncomment.c_str());
+			myprintf("00751: multiple match for version comment <<%s>>\n",versioncomment.c_str());
 			return 1;
 		}
 		version=versione;
 		flagcomment=false;
-		myprintf("50080: Found version -until %d scanning again...\n",versione);
+		myprintf("00752: Found version -until %d scanning again...\n",versione);
 		jidacreset();
 	}
 
@@ -55892,7 +56439,7 @@ int Jidac::list()
 		}
 	if (orderby!="")
 	{
-		myprintf("50108: Sorting output  (orderby |%s|) ",orderby.c_str());
+		myprintf("00753: Sorting output  (orderby |%s|) ",orderby.c_str());
 		if (flagdesc)
 			myprintf(" descending ");
 		sort(filelist.begin(), filelist.end(), compareorderby);
@@ -55972,9 +56519,9 @@ int Jidac::list()
 		string sizeheader(thesizesize,'-');
 		if (flagdebug2)
 		{
-			myprintf("52107: largest %s  thesize %d\n",temp.c_str(),thesizesize);
-			myprintf("52115: |%s|\n",temp.c_str());
-			myprintf("52116: |%s|\n",sizeheader.c_str());
+			myprintf("00754: largest %s  thesize %d\n",temp.c_str(),thesizesize);
+			myprintf("00755: |%s|\n",temp.c_str());
+			myprintf("00756: |%s|\n",sizeheader.c_str());
 			///return 0;
 		}
 
@@ -55983,13 +56530,13 @@ int Jidac::list()
 			string verheader(all,'-');
 			if (flagdate)
 			{
-				myprintf("52091:    Date      Time          Creation      %*s Ratio %*s Name/Info\n",thesizesize,"Size",all,"Ver");
-				myprintf("52092:----------- --------  ------------------- %s ----- %s ----------\n",sizeheader.c_str(),verheader.c_str());
+				myprintf("00757:    Date      Time          Creation      %*s Ratio %*s Name/Info\n",thesizesize,"Size",all,"Ver");
+				myprintf("00758:----------- --------  ------------------- %s ----- %s ----------\n",sizeheader.c_str(),verheader.c_str());
 			}
 			else
 			{
-				myprintf("52091:    Date      Time   %*s Ratio %*s Name/Info\n",thesizesize,"Size",all,"Ver");
-				myprintf("52092:----------- -------- %s ----- %s ----------\n",sizeheader.c_str(),verheader.c_str());
+				myprintf("00759:    Date      Time   %*s Ratio %*s Name/Info\n",thesizesize,"Size",all,"Ver");
+				myprintf("00760:----------- -------- %s ----- %s ----------\n",sizeheader.c_str(),verheader.c_str());
 			}
 		}
 		else
@@ -55997,13 +56544,13 @@ int Jidac::list()
 			
 			if (flagdate)
 			{
-				myprintf("52088:    Date      Time          Creation      %*s Ratio Name\n",thesizesize,"Size");
-				myprintf("52089:----------- --------  ------------------- %s ----- -----\n",sizeheader.c_str());
+				myprintf("00761:    Date      Time          Creation      %*s Ratio Name\n",thesizesize,"Size");
+				myprintf("00762:----------- --------  ------------------- %s ----- -----\n",sizeheader.c_str());
 			}
 			else
 			{
-				myprintf("52088:    Date      Time   %*s Ratio Name\n",thesizesize,"Size");
-				myprintf("52089:----------- -------- %s ----- -----\n",sizeheader.c_str());
+				myprintf("00763:    Date      Time   %*s Ratio Name\n",thesizesize,"Size");
+				myprintf("00764:----------- -------- %s ----- -----\n",sizeheader.c_str());
 			}
 		}
 	}
@@ -56093,7 +56640,7 @@ int Jidac::list()
 					myversion,
 					myposix,myisadded);
 				if (flagdebug3)
-					myprintf("48299: franzotype %d myhashtype %s myhash %s mycrc32 %s myisadded %d\n",franzotypedetected,myhashtype.c_str(),myhash.c_str(),mycrc32.c_str(),(int)myisadded);
+					myprintf("00765: franzotype %d myhashtype %s myhash %s mycrc32 %s myisadded %d\n",franzotypedetected,myhashtype.c_str(),myhash.c_str(),mycrc32.c_str(),(int)myisadded);
 
 
 
@@ -56272,19 +56819,22 @@ int Jidac::list()
 	int64_t sizecompressed=(csize+dhsize-dcsize);
 	
 	myprintf("\n");
-	myprintf("48650: %21s (%s) of %s (%s) in %s files shown\n",migliaia(usize),tohuman(usize),migliaia2(allsize),tohuman2(allsize),migliaia3(fi));
-	myprintf("48651: %21s compressed ",migliaia(sizecompressed));
+	myprintf("00766: %21s (%s) of %s (%s) in %s files shown\n",migliaia(usize),tohuman(usize),migliaia2(allsize),tohuman2(allsize),migliaia3(fi));
+	myprintf("00767: %21s compressed ",migliaia(sizecompressed));
 	if (allsize>0)
 	{
 		double ratio=(double)sizecompressed/(double)allsize;
+		myprintf(" Ratio %.3f <<%Z>>\n",ratio,archive.c_str());
+		/*
 		myprintf(" Ratio %.3f <<",ratio);
 		printUTF8(archive.c_str());
 		myprintf(">>\n");
+		*/
 	}
 	else
 		myprintf("\n");
 	if (dhsize!=dcsize)  // index?
-		myprintf("50302: Note: %s of %s compressed bytes are in archive\n",
+		myprintf("00768: Note: %s of %s compressed bytes are in archive\n",
 			migliaia((int64_t)(dcsize+0.0)), migliaia2((int64_t)(dhsize+0.0)));
 	
 	if (flagcollision)
@@ -56330,7 +56880,7 @@ string mm_hash_calc_file(int i_algo,const char * i_filename,bool i_flagcalccrc32
 		myfile=CreateFile(wfilename.c_str(),GENERIC_READ,FILE_SHARE_READ | FILE_SHARE_WRITE,0,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,0);
 		if (myfile==INVALID_HANDLE_VALUE)
 		{
-			myprintf("25057: Invalid handle for %s\n",i_filename);
+			myprintf("00769: Invalid handle for %s\n",i_filename);
 			return "26311:ERROR";
 		}
 		mapping=CreateFileMapping(myfile,0,PAGE_READONLY, 0, 0, 0);
@@ -56468,7 +57018,7 @@ string mm_hash_calc_file(int i_algo,const char * i_filename,bool i_flagcalccrc32
 #else
 	else
 	{
-		myprintf("25095: data empty\n");
+		myprintf("00770: data empty\n");
 		if (mapping!=0)
 			CloseHandle(mapping);
 		if (myfile!=0)
@@ -56567,7 +57117,7 @@ class franz_do_hash
 		ffinalize	=NULL;
 		if (i_type=="")
 		{
-///			myprintf("48414: i_type empty\n");
+///			myprintf("00771: i_type empty\n");
 ///			seppuku();
 			return;
 		}
@@ -56583,7 +57133,7 @@ class franz_do_hash
 			}
 		if (ffinalize==NULL)
 		{
-			myprintf("47322: GURU cannot find finalize for %s\n",i_type.c_str());
+			myprintf("00772: GURU cannot find finalize for %s\n",i_type.c_str());
 			seppuku();
 			return;
 		}
@@ -56612,7 +57162,7 @@ class franz_do_hash
 		MAPPATIPOHASH::iterator p=g_mappatipohash.find(i_franzotype);
 		if (p==g_mappatipohash.end())
 		{
-			myprintf("62683: GURU, cannot convert int %d to ASCII!\n",i_franzotype);
+			myprintf("00773: GURU, cannot convert int %d to ASCII!\n",i_franzotype);
 			seppuku();
 			return;
 		}
@@ -56645,7 +57195,7 @@ void franz_do_hash::init()
 	p_highway64state=NULL;
 	if (ihashtype==-1)
 	{
-		myprintf("47299: GURU hashtype empty\n");
+		myprintf("00774: GURU hashtype empty\n");
 		seppuku();
 		return;
 	}
@@ -56702,7 +57252,7 @@ void franz_do_hash::init()
 	}
 	else
 	{
-		myprintf("47282: GURU hashtype unknown |%s| %d\n",i_hashtype2.c_str(),ihashtype);
+		myprintf("00775: GURU hashtype unknown |%s| %d\n",i_hashtype2.c_str(),ihashtype);
 		seppuku();
 		return;
 	}
@@ -56714,19 +57264,19 @@ string franz_do_hash::finalize()
 {
 	if (ihashtype==-1)
 	{
-		myprintf("47302: GURU hashtype empty\n");
+		myprintf("00776: GURU hashtype empty\n");
 		seppuku();
 		return "47302: GURU hashtype empty";
 	}
 	if (!isinit)
 	{
-		myprintf("47308: GURU not init!\n");
+		myprintf("00777: GURU not init!\n");
 		seppuku();
 		return "47308: GURU not init!";
 	}
 	if (isfinalized)
 	{
-		myprintf("47314: already finalized!\n");
+		myprintf("00778: already finalized!\n");
 		seppuku();
 		return "47314: already finalized!";
 	}
@@ -56773,7 +57323,7 @@ string franz_do_hash::finalize()
 		o_hexhash	=ffinalize(p_crc32c);
 	else
 	{
-		myprintf("47453: GURU hashtype unknown |%s|\n",i_hashtype2.c_str());
+		myprintf("00779: GURU hashtype unknown |%s|\n",i_hashtype2.c_str());
 		seppuku();
 		return "47453: GURU hashtype unknown |%s|";
 	}
@@ -56790,14 +57340,14 @@ void franz_do_hash::update(char *i_buffer,const int i_buflen)
 	/*
 	if (!isinit)
 	{
-		myprintf("47298: GURU hash not init\n");
+		myprintf("00780: GURU hash not init\n");
 		seppuku();
 		return;
 	}
 
 	if (isfinalized)
 	{
-		myprintf("47130: GURU hash finalized, cannot update\n");
+		myprintf("00781: GURU hash finalized, cannot update\n");
 		seppuku();
 		return;
 	}
@@ -56807,7 +57357,7 @@ void franz_do_hash::update(char *i_buffer,const int i_buflen)
 	/*
 		if (p_xxhash64==NULL)
 		{
-			myprintf("47307: guru pointer null %s\n",i_hashtype2.c_str());
+			myprintf("00782: guru pointer null %s\n",i_hashtype2.c_str());
 			seppuku();
 			return;
 		}
@@ -56821,7 +57371,7 @@ void franz_do_hash::update(char *i_buffer,const int i_buflen)
 		/*
 		if (p_sha1==NULL)
 		{
-			myprintf("47318: guru pointer null %s\n",i_hashtype2.c_str());
+			myprintf("00783: guru pointer null %s\n",i_hashtype2.c_str());
 			seppuku();
 			return;
 		}
@@ -56835,7 +57385,7 @@ void franz_do_hash::update(char *i_buffer,const int i_buflen)
 		/*
 		if (p_sha256==NULL)
 		{
-			myprintf("47329: guru pointer null %s\n",i_hashtype2.c_str());
+			myprintf("00784: guru pointer null %s\n",i_hashtype2.c_str());
 			seppuku();
 			return;
 		}
@@ -56852,7 +57402,7 @@ void franz_do_hash::update(char *i_buffer,const int i_buflen)
 		/*
 		if (p_xxh3==NULL)
 		{
-			myprintf("47341: guru pointer null %s\n",i_hashtype2.c_str());
+			myprintf("00785: guru pointer null %s\n",i_hashtype2.c_str());
 			seppuku();
 			return;
 		}
@@ -56866,7 +57416,7 @@ void franz_do_hash::update(char *i_buffer,const int i_buflen)
 		/*
 		if (p_md5==NULL)
 		{
-			myprintf("47353: guru pointer null %s\n",i_hashtype2.c_str());
+			myprintf("00786: guru pointer null %s\n",i_hashtype2.c_str());
 			seppuku();
 			return;
 		}
@@ -56880,7 +57430,7 @@ void franz_do_hash::update(char *i_buffer,const int i_buflen)
 		/*
 		if (p_sha3==NULL)
 		{
-			myprintf("47364: guru pointer null %s\n",i_hashtype2.c_str());
+			myprintf("00787: guru pointer null %s\n",i_hashtype2.c_str());
 			seppuku();
 			return;
 		}
@@ -56894,7 +57444,7 @@ void franz_do_hash::update(char *i_buffer,const int i_buflen)
 		/*
 		if (p_blake3==NULL)
 		{
-			myprintf("47376: guru pointer null %s\n",i_hashtype2.c_str());
+			myprintf("00788: guru pointer null %s\n",i_hashtype2.c_str());
 			seppuku();
 			return;
 		}
@@ -56908,7 +57458,7 @@ void franz_do_hash::update(char *i_buffer,const int i_buflen)
 		/*
 		if (p_whihasher==NULL)
 		{
-			myprintf("47386: guru pointer null %s\n",i_hashtype2.c_str());
+			myprintf("00789: guru pointer null %s\n",i_hashtype2.c_str());
 			seppuku();
 			return;
 		}
@@ -56922,7 +57472,7 @@ void franz_do_hash::update(char *i_buffer,const int i_buflen)
 		/*
 		if (p_highway64state==NULL)
 		{
-			myprintf("47572: guru pointer null %s\n",i_hashtype2.c_str());
+			myprintf("00790: guru pointer null %s\n",i_hashtype2.c_str());
 			seppuku();
 			return;
 		}
@@ -56943,7 +57493,7 @@ void franz_do_hash::update(char *i_buffer,const int i_buflen)
 	}
 	else
 	{
-		myprintf("47345: GURU hashtype unknown in update |%s|\n",i_hashtype2.c_str());
+		myprintf("00791: GURU hashtype unknown in update |%s|\n",i_hashtype2.c_str());
 		seppuku();
 		return;
 	}
@@ -56959,27 +57509,30 @@ string	franz_do_hash::filehash(string i_filename,bool i_flagcalccrc32,int64_t i_
 	o_status		="";
 	if (ihashtype==-1)
 	{
-		myprintf("62696: GURU EMPTY HASHTYPE\n");
+		myprintf("00792: GURU EMPTY HASHTYPE\n");
 		o_status="62696: EMPTY HASHTYPE";
 		return "";
 	}
 	if (ihashtype==0)
 	{
-		myprintf("62703: NONE HASHER\n");
+		myprintf("00793: NONE HASHER\n");
 		o_status="62703: NONE HASHER";
 		return "";
 	}
 	if (i_filename=="")
 	{
-		myprintf("62969: error empty filename\n");
+		myprintf("00794: error empty filename\n");
 		o_status="62969: ERROR EMPTY FILENAME";
 		return "";
 	}
 	if  ((isdirectory(i_filename)) || (i_filename==".") || (i_filename==".."))
 	{
-		myprintf("62703: cannot hash a folder <<");
+		myprintf("00795! cannot hash a folder <<%Z>>\n",i_filename.c_str());
+		/*
+		myprintf("00796: cannot hash a folder <<");
 		printUTF8(i_filename.c_str());
 		myprintf(">>\n");
+		*/
 		o_status="62703: CANNOT HASH A FOLDER";
 		return "";
 	}
@@ -57000,7 +57553,7 @@ string	franz_do_hash::filehash(string i_filename,bool i_flagcalccrc32,int64_t i_
 
 	FILE* myfilez = freadopen(i_filename.c_str());
 	if (flagdebug3)
-		myprintf("52451: myfilez FILE* is %s\n",migliaia(int64_t(myfilez)));
+		myprintf("00797: myfilez FILE* is %s\n",migliaia(int64_t(myfilez)));
 	
 	if	(myfilez==NULL)
 	{
@@ -57009,14 +57562,16 @@ string	franz_do_hash::filehash(string i_filename,bool i_flagcalccrc32,int64_t i_
 #ifdef _WIN32
 			int err=GetLastError();
 			string codice=decodewinerror(err,NULL);
-			myprintf("48699: error kind %d %s opening <<",err,codice.c_str());
-			printUTF8(i_filename.c_str());
-			myprintf(">>\n");
+			myprintf("00798! error kind %d %s opening <<%Z>>\n",err,codice.c_str(),i_filename.c_str());
 #else
 			int err=1;
-			myprintf("62697: error kind %d opening <<",err);
+			myprintf("00799! error kind %d opening <<%Z>>\n",err,i_filename.c_str());
+			
+		/*
+			myprintf("00800! error kind %d opening <<",err);
 			printUTF8(i_filename.c_str());
 			myprintf(">>\n");
+			*/
 #endif
 		}
 		o_status="62697: ERROR OPENING FILE";
@@ -57025,7 +57580,7 @@ string	franz_do_hash::filehash(string i_filename,bool i_flagcalccrc32,int64_t i_
 
 	int64_t lunghezza	=prendidimensionefile(i_filename.c_str());//prendidimensionehandle(myfilez);
 	if (flagdebug3)
-		myprintf("52437: hashing lunghezza [prendidimensionefile] %s\n",migliaia(lunghezza));
+		myprintf("00801: hashing lunghezza [prendidimensionefile] %s\n",migliaia(lunghezza));
 	int64_t	letti		=0;
 
 #ifdef __HAIKU__
@@ -57064,7 +57619,7 @@ string	franz_do_hash::filehash(string i_filename,bool i_flagcalccrc32,int64_t i_
 			r=fread(unzBuf,1,n,myfilez);
 			if (r!=n)
 			{
-				myprintf("84669: Error reading head\n");
+				myprintf("00802: Error reading head\n");
 				fclose(myfilez);
 				o_hexhash		="";
 				o_thefilesize	=0;
@@ -57078,7 +57633,7 @@ string	franz_do_hash::filehash(string i_filename,bool i_flagcalccrc32,int64_t i_
 			r=fread(unzBuf,1,n, myfilez);
 			if (r!=n)
 			{
-				myprintf("84698: Error reading mid\n");
+				myprintf("00803: Error reading mid\n");
 				fclose(myfilez);
 				o_hexhash		="";
 				o_thefilesize	=0;
@@ -57090,7 +57645,7 @@ string	franz_do_hash::filehash(string i_filename,bool i_flagcalccrc32,int64_t i_
 			r=fread(unzBuf,1,n,myfilez);
 			if (r!=n)
 			{
-				myprintf("84706: Error reading tail\n");
+				myprintf("00804: Error reading tail\n");
 				fclose(myfilez);
 				o_hexhash		="";
 				o_thefilesize	=0;
@@ -57176,12 +57731,12 @@ string	franz_do_hash::filehash(string i_filename,bool i_flagcalccrc32,int64_t i_
 #ifdef _WIN32
 		if (flagdebug3)
 		{
-			myprintf("52622: hash fread %08d bytes returned r %08d\n",n,r);
+			myprintf("00805: hash fread %08d bytes returned r %08d\n",n,r);
 			if (r==0)
 			{
 				DWORD situation=GetLastError();
 				string lasterror=decodewinerror(situation,i_filename.c_str());
-				myprintf("52627: fread returned 0 bytes! situation %08d lasterror %s\n",situation,lasterror.c_str());
+				myprintf("00806: fread returned 0 bytes! situation %08d lasterror %s\n",situation,lasterror.c_str());
 			}
 		}
 #endif
@@ -57199,14 +57754,14 @@ string	franz_do_hash::filehash(string i_filename,bool i_flagcalccrc32,int64_t i_
 		else
 		if ((mytype==FRANZO_XXH3)||(mytype==FRANZO_XXH3B))
 		{
-			///myprintf("53749: update XXH3!!!\n");
+			///myprintf("00807: update XXH3!!!\n");
 			(void)XXH3_128bits_update(&state128,unzBuf,r);
-			///myprintf("53749: update XXH3 done!!!\n");
+			///myprintf("00808: update XXH3 done!!!\n");
 		}
 		else
 		if ((mytype==FRANZO_BLAKE3)||(mytype==FRANZO_BLAKE3B))
 		{
-///			myprintf("53749: update BLAKE3!!!\n");
+///			myprintf("00809: update BLAKE3!!!\n");
 			blake3_hasher_update(&hasher,unzBuf,r);
 		}
 		else
@@ -57283,7 +57838,7 @@ string	franz_do_hash::filehash(string i_filename,bool i_flagcalccrc32,int64_t i_
 		uint8_t output[BLAKE3_OUT_LEN];
 		blake3_hasher_finalize(&hasher, output, BLAKE3_OUT_LEN);
 		o_hexhash=binarytohex((const unsigned char*)output,BLAKE3_OUT_LEN);
-		///myprintf("53749: finalizzo BLAKE3!!! %s\n",o_hexhash.c_str());
+		///myprintf("00810: finalizzo BLAKE3!!! %s\n",o_hexhash.c_str());
 	}
 	if ((mytype==FRANZO_MD5) || (mytype==FRANZO_MD5B))
 		o_hexhash=md5.getHash();
@@ -57335,12 +57890,15 @@ string	franz_do_hash::filehash(string i_filename,bool i_flagcalccrc32,int64_t i_
 		if (lunghezza!=letti)
 		{
 			myprintf("\n");
-			myprintf("62748: *** CORRUPTED FILE DETECTED! expected %s readed %s bytes *** ",migliaia(lunghezza),migliaia2(letti));
+			myprintf("00811: *** CORRUPTED FILE DETECTED! expected %s readed %s bytes *** %Z\n",migliaia(lunghezza),migliaia2(letti),i_filename.c_str());
+			/*
+			myprintf("00812: *** CORRUPTED FILE DETECTED! expected %s readed %s bytes *** ",migliaia(lunghezza),migliaia2(letti));
 			printUTF8(i_filename.c_str());
 			myprintf("\n");
+			*/
 		}
 	o_thefilesize=letti;
-	///myprintf("51329: ****************************** ritorno lunghezza %s\n",migliaia(lunghezza));
+	///myprintf("00813: ****************************** ritorno lunghezza %s\n",migliaia(lunghezza));
 	return o_hexhash;
 }
 
@@ -57356,8 +57914,8 @@ bool Jidac::equal(DTMap::const_iterator p, const char* filename,uint32_t &o_crc3
 	if (flagdebug3)
 	{	
 		myprintf("\n\n");
-		myprintf("53895: equal p first  %s\n",p->first.c_str());
-		myprintf("53896: equal filename %s\n",filename);
+		myprintf("00814: equal p first  %s\n",p->first.c_str());
+		myprintf("00815: equal filename %s\n",filename);
 	}
 	o_crc32=0;
 	o_hash="";
@@ -57380,7 +57938,7 @@ bool Jidac::equal(DTMap::const_iterator p, const char* filename,uint32_t &o_crc3
 	{
 		bool risultato=!exists(filename);
 		if (flagdebug3)
-			myprintf("53919: second date zero, risultato %d\n",(int)risultato);
+			myprintf("00816: second date zero, risultato %d\n",(int)risultato);
 		return risultato;
 	}
   // directories always match
@@ -57388,7 +57946,7 @@ bool Jidac::equal(DTMap::const_iterator p, const char* filename,uint32_t &o_crc3
 	{
 		bool risultato=exists(filename);
 		if (flagdebug3)
-			myprintf("53926: p->first isdirectory, check exists %d\n",(int)risultato);
+			myprintf("00817: p->first isdirectory, check exists %d\n",(int)risultato);
 		return risultato;
 	}
   // compare sizes
@@ -57396,14 +57954,14 @@ bool Jidac::equal(DTMap::const_iterator p, const char* filename,uint32_t &o_crc3
 	if ((in==NULL) || (in==FPNULL))
 	{
 		if (flagdebug3)
-		myprintf("53935: failed fopen %s\n",filename);
+		myprintf("00818: failed fopen %s\n",filename);
 		return false;
 	}
 	fseeko(in, 0, SEEK_END);
 	if (ftello(in)!=p->second.size)
 	{
 		if (flagdebug3)
-			myprintf("53942: ftello(in) %s <> p second size %s\n",migliaia(ftello(in)),migliaia2(p->second.size));
+			myprintf("00819: ftello(in) %s <> p second size %s\n",migliaia(ftello(in)),migliaia2(p->second.size));
 		///return oldfclose(in), false;
 		myfclose(&in);
 		return false;
@@ -57413,7 +57971,7 @@ bool Jidac::equal(DTMap::const_iterator p, const char* filename,uint32_t &o_crc3
 	{
 		myfclose(&in);
 		if (flagdebug3)
-			myprintf("53950: flagquick, return true\n");
+			myprintf("00820: flagquick, return true\n");
 		return true;
 	}
   // compare hashes chunk by chunk.
@@ -57432,7 +57990,7 @@ bool Jidac::equal(DTMap::const_iterator p, const char* filename,uint32_t &o_crc3
 
 	
 	if (flagdebug3)
-		myprintf("49125: franz_do_hash\n");
+		myprintf("00821: franz_do_hash\n");
 	
 	if (i_myhashtype=="")		// a seppuku if myhashtype is ""
 		i_myhashtype="NONE";
@@ -57463,9 +58021,9 @@ bool Jidac::equal(DTMap::const_iterator p, const char* filename,uint32_t &o_crc3
 					int myspeed=(int)(done/tempo);
 					
 					if (flagchecksum || flagverify ||flagparanoid)
-						myprintf("54000: SHA1 %03d%%      %10s/%10s @ %10s/s + %s\r",proper,tohuman(done),tohuman3(p->second.size),tohuman2(myspeed),i_myhashtype.c_str());
+						myprintf("00822: SHA1 %03d%%      %10s/%10s @ %10s/s + %s\r",proper,tohuman(done),tohuman3(p->second.size),tohuman2(myspeed),i_myhashtype.c_str());
 					else
-						myprintf("51415: SHA1 %03d%%      %10s/%10s @ %10s/s\r",proper,tohuman(done),tohuman3(p->second.size),tohuman2(myspeed));
+						myprintf("00823: SHA1 %03d%%      %10s/%10s @ %10s/s\r",proper,tohuman(done),tohuman3(p->second.size),tohuman2(myspeed));
 					ultimapercentuale=(int)percentuale;
 				}
 		}
@@ -57505,7 +58063,7 @@ bool Jidac::equal(DTMap::const_iterator p, const char* filename,uint32_t &o_crc3
 	{
 		o_hash=hashfrombuffer.finalize();
 		if (flagdebug3)
-			myprintf("54067: o_hash in equal %s\n",o_hash.c_str());
+			myprintf("00824: o_hash in equal %s\n",o_hash.c_str());
 	}
 	return true;
 }
@@ -57530,7 +58088,7 @@ int Jidac::setpassword()
 {
 	if (files.size()!=2)
 	{
-		myprintf("32447: setpassword require exactly two file-parameters: source and destination\n");
+		myprintf("00825! setpassword require exactly two file-parameters: source and destination\n");
 		return 2;
 	}
 	archive=files[0];
@@ -57542,31 +58100,31 @@ int Jidac::setpassword()
 	string part0=subpart(archive,0);
 	if (part0!=archive)
 	{
-		myprintf("32528: so sorry, this seems a multipart archive, abort\n");
+		myprintf("00826! so sorry, this seems a multipart archive, abort\n");
 		return 2;
 	}
 	if (!flagspace)
 		if (!saggiascrivibilitacartella(repack))
 		{
-			myprintf("32471: Cannot write on output %s\n",repack.c_str());
-			myprintf("32472: Aborting. Use -space to bypass and enforcing.\n");
+			myprintf("00827! Cannot write on output %s\n",repack.c_str());
+			myprintf("00828! Aborting. Use -space to bypass and enforcing.\n");
 			return 2;
 		}
 	myprintf("\n\n");
-	myprintf("51510: Opening the source archive\n");
+	myprintf("00829: Opening the source archive\n");
 ///	getpasswordifempty();
 	if (g_password!=NULL)
 	{
-		myprintf("32479: please take note: if the source password is incorrect\n");
-		myprintf("32480: the output file will be silently corrupted\n");
+		myprintf("00830: please take note: if the source password is incorrect\n");
+		myprintf("00831: the output file will be silently corrupted\n");
 		myprintf("\n\n");
 	}
 	if (new_password==NULL)
 	{
-		myprintf("51503: New password (-key2) empty, enter . for NO password\n");
+		myprintf("00832: New password (-key2) empty, enter . for NO password\n");
 		string spassword=getpassword();
 		if (spassword==".")
-			myprintf("32478: password in output removed\n");
+			myprintf("00833: password in output removed\n");
 		else
 		{
 			if (spassword!="")
@@ -57586,8 +58144,8 @@ int Jidac::setpassword()
 		int64_t spazio=getfreespace(repack);
 		if (spazio<lavoro+1024)
 		{
-			myprintf("32515: The free space seems tiny %s on %s\n",migliaia(spazio),repack.c_str());
-			myprintf("32516: Aborting. Use -space to bypass and enforcing.\n");
+			myprintf("00834! The free space seems tiny %s on %s\n",migliaia(spazio),repack.c_str());
+			myprintf("00835! Aborting. Use -space to bypass and enforcing.\n");
 			return 2;
 		}
 	}
@@ -57598,27 +58156,33 @@ int Jidac::setpassword()
 	char salt[32]={0};
 	if (new_password)
 		libzpaq::random(salt, 32);
-	myprintf("51541: Running for %s bytes\n",migliaia(in.totalsize()));
+	myprintf("00836: Running for %s bytes\n",migliaia(in.totalsize()));
 	if (g_password!=NULL)
-		myprintf("51542: Source password:       present\n");
+		myprintf("00837: Source password:       present\n");
 	else
-		myprintf("51543: Source password:       none\n");
+		myprintf("00838: Source password:       none\n");
 	if (new_password!=NULL)
-		myprintf("51545: Destination password:  present\n");
+		myprintf("00839: Destination password:  present\n");
 	else
-		myprintf("51546: Destination password:  none\n");
+		myprintf("00840: Destination password:  none\n");
 	OutputArchive out(archive,repack.c_str(), new_password, salt, 0);
 	copywitheta(lavoro,in, out);
 	myprintf("\n");
-	myprintf("51551: Source      %19s <<", migliaia(in.tell()));
+	
+	myprintf("00841: Source      %19s <<%Z>>\n", migliaia(in.tell()),archive.c_str());
+	myprintf("00842: Destination %19s <<%Z>>\n", migliaia(out.tell()),repack.c_str());
+	/*
+	myprintf("00843: Source      %19s <<", migliaia(in.tell()));
 	printUTF8(archive.c_str());
 	myprintf(">>\n");
-	myprintf("51552: Destination %19s <<", migliaia(out.tell()));
+	myprintf("00844: Destination %19s <<", migliaia(out.tell()));
 	printUTF8(repack.c_str());
 	myprintf(">>\n");
+	*/
+	
 	out.close();
 	myprintf("\n");
-	myprintf("51551: Now quick check of the output file\n");
+	myprintf("00845: Now quick check of the output file\n");
 	g_password=new_password;
 	read_archive(NULL,repack.c_str()); /// AND NOW THE MAGIC ONE!
 	return 0;
@@ -57720,7 +58284,7 @@ void * scriviramtodisk(void *t)
 								if (par->filecrc[i]!="00000000")
 								{
 									if (flagverbose)
-										myprintf("33162: ERROR CRC stored %s  from ram|%s|\n",par->filecrc[i].c_str(),crc32fromram.c_str());
+										myprintf("00846: ERROR CRC stored %s  from ram|%s|\n",par->filecrc[i].c_str(),crc32fromram.c_str());
 									par->o_filecrcerror++;
 								}
 							}
@@ -57735,7 +58299,7 @@ void * scriviramtodisk(void *t)
 						else
 						{
 							if (flagdebug3)
-								myprintf("49404: franz_do_hash\n");
+								myprintf("00847: franz_do_hash\n");
 
 							franz_do_hash hashfrombuffer(par->algo[i]);
 							hashfrombuffer.init();
@@ -57744,14 +58308,14 @@ void * scriviramtodisk(void *t)
 							par->o_hashedsize+=par->filesize[i];
 						}
 						if (flagdebug)
-							myprintf("33966: INFO hash stored %s %s  from ram|%s| %s\n",par->algo[i].c_str(),par->filecrc[i].c_str(),hashstringato.c_str(),par->filenameondisk[i].c_str());
+							myprintf("00848: INFO hash stored %s %s  from ram|%s| %s\n",par->algo[i].c_str(),par->filecrc[i].c_str(),hashstringato.c_str(),par->filenameondisk[i].c_str());
 
 						///if (par->filehash[i]!="!ERROR!")
 						if (par->filehash[i]!=hashstringato)
 						{
 							par->o_fileerror++;
 							if (flagverbose)
-								myprintf("33968: ERROR hash stored |%s| |%s|  from ram|%s| %s\n",par->algo[i].c_str(),par->filehash[i].c_str(),hashstringato.c_str(),par->filenameondisk[i].c_str());
+								myprintf("00849: ERROR hash stored |%s| |%s|  from ram|%s| %s\n",par->algo[i].c_str(),par->filehash[i].c_str(),hashstringato.c_str(),par->filenameondisk[i].c_str());
 						}
 						else
 						{
@@ -57764,12 +58328,12 @@ void * scriviramtodisk(void *t)
 		if (!par->flagtest)
 		{
 			int64_t startfilesystem=mtime();
-			///myprintf("49443: makepath %s\n",par->filenameondisk[i]);
+			///myprintf("00850: makepath %s\n",par->filenameondisk[i]);
 			makepath(par->filenameondisk[i], par->filedate[i],par->fileattr[i]);
 			FP myfile=myfopen(par->filenameondisk[i].c_str(), WB);
 			if (myfile==FPNULL)
 			{
-				myprintf("51553: Hard guru during fopen!\n");
+				myprintf("00851: Hard guru during fopen!\n");
 				seppuku();
 			}
 			par->o_timefilesystem+=(mtime()-startfilesystem);
@@ -57797,9 +58361,12 @@ void * scriviramtodisk(void *t)
 			{
 				if (flagverbose)
 				{
-					myprintf("33549: written != expected %21s %21s on ",migliaia(scritti),migliaia2(par->filesize[i]));
+					myprintf("00852: written != expected %21s %21s on %Z\n",migliaia(scritti),migliaia2(par->filesize[i]),par->filenameondisk[i].c_str());
+					/*
+					myprintf("00853: written != expected %21s %21s on ",migliaia(scritti),migliaia2(par->filesize[i]));
 					printUTF8(par->filenameondisk[i].c_str());
 					myprintf("\n");
+					*/
 				}
 				par->o_writeerror++;
 			}
@@ -57812,7 +58379,7 @@ void * scriviramtodisk(void *t)
 }
 int Jidac::ecommand()
 {
-	myprintf("31558: Extracting on current directory\n");
+	myprintf("00854: Extracting on current directory\n");
 	tofiles.clear();
 
 	string relative="./";
@@ -57820,9 +58387,12 @@ int Jidac::ecommand()
 	if (flaglongpath)
 	{
 		relative=relativetolongpath(relative);
+		myprintf("=> Windows longpath => %Z\n",relative.c_str());
+		/*
 		myprintf("=> Windows longpath => ");
 		printUTF8(relative.c_str());
 		myprintf("\n");
+		*/
 	}
 #endif
 	tofiles.push_back(relative);
@@ -57840,28 +58410,35 @@ int myrename(string sfrom,string sto)
 	std::wstring wto	=utow(sto.c_str());
 	if (!MoveFileW(wfrom.c_str(),wto.c_str()))
 	{
-		myprintf("51781: ERROR WIN renaming\n");
-		myprintf("51782: from <<");
+		myprintf("00855! ERROR WIN renaming\n");
+		myprintf("00856! from <<%Z>>\n",sfrom.c_str());
+		myprintf("00857! to   <<%Z>>\n",sto.c_str());
+		
+		/*
+		myprintf("00858: ERROR WIN renaming\n");
+		myprintf("00859: from <<");
 		printUTF8(sfrom.c_str());
 		myprintf(">>\n");
-		myprintf("51783: to   <<%s>>\n",sto.c_str());
-		myprintf("51784: ERROR renaming <<");
+		myprintf("00860: to   <<%s>>\n",sto.c_str());
+		myprintf("00861: ERROR renaming <<");
 		printUTF8(sfrom.c_str());
 		myprintf(">> to <<%s>>\n",sto.c_str());
+		*/
+		
 		decodewinerror(GetLastError(),"dummy");
 		for (unsigned int j=0;j<sfrom.length();j++)
-				myprintf("51791: %03d %03d %c\n",j,sto[j],sto[j]);
+				myprintf("00862: %03d %03d %c\n",j,sto[j],sto[j]);
 		return 1;
 	}
 #else
 	if (::rename(sfrom.c_str(), sto.c_str()) != 0)
 	{
-		myprintf("51797: ERROR NIX renaming\n");
-		myprintf("51798: from <<%s>>\n",sfrom.c_str());
-		myprintf("51799: to   <<%s>>\n",sto.c_str());
+		myprintf("00863: ERROR NIX renaming\n");
+		myprintf("00864: from <<%s>>\n",sfrom.c_str());
+		myprintf("00865: to   <<%s>>\n",sto.c_str());
 		if (flagverbose)
 			for (unsigned int j=0;j<sfrom.length();j++)
-				myprintf("51802: %03d %03d %c\n",j,sto[j],sto[j]);
+				myprintf("00866: %03d %03d %c\n",j,sto[j],sto[j]);
 		return 1;
 	}
 #endif
@@ -57882,6 +58459,8 @@ bool Jidac::searchunixfile()
 #endif
 int Jidac::extract()
 {
+	archive=getbackupnameifany(archive);
+
 	
 	if (flagstdout)
 	{
@@ -57901,12 +58480,12 @@ int Jidac::extract()
 			{
 				if (islonguncpath(tofiles[i]))
 				{
-					myprintf("31904: error, cannot extract on explicit UNC -to\n");
+					myprintf("00867! error, cannot extract on explicit UNC -to\n");
 					return 2;
 				}
 				if (iswindowsunc(tofiles[i]))
 				{
-					myprintf("31935: found UNC Windows, incompatible with -longpath, turning OFF %s\n",tofiles[i].c_str());
+					myprintf("00868: found UNC Windows, incompatible with -longpath, turning OFF %s\n",tofiles[i].c_str());
 					flaglongpath=false;
 					break;
 				}
@@ -57914,7 +58493,7 @@ int Jidac::extract()
 			for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p)
 				if (iswindowsunc(p->first))
 				{
-					myprintf("31915: found UNC Windows, incompatible with -longpath, turning OFF %s\n",p->first.c_str());
+					myprintf("00869: found UNC Windows, incompatible with -longpath, turning OFF %s\n",p->first.c_str());
 					flaglongpath=false;
 					break;
 				}
@@ -57923,10 +58502,10 @@ int Jidac::extract()
 				for (unsigned int i=0;i<tofiles.size();i++)
 					if (!islongpath(tofiles[i]))
 						tofiles[i]="//?/"+tofiles[i];
-				myprintf("31876: INFO: setting Windows' long filenames\n");
+				myprintf("00870: INFO: setting Windows' long filenames\n");
 				if (flagdebug3)
 					for (unsigned int i=0;i<tofiles.size();i++)
-						myprintf("31879: Tofiles %d %s\n",(int)i,tofiles[i].c_str());
+						myprintf("00871: Tofiles %d %s\n",(int)i,tofiles[i].c_str());
 			}
 		}
 	#endif
@@ -57935,12 +58514,12 @@ int Jidac::extract()
 	{
 		if (tofiles.size()==0)
 		{
-			myprintf("51874: -paranoid needs a -to\n");
+			myprintf("00872! -paranoid needs a -to\n");
 			return 2;
 		}
 		if (command=='x')
 		{
-			myprintf("30244: -paranoid is a t (test) thing\n");
+			myprintf("00873! -paranoid is a t (test) thing\n");
 			return 1;
 		}
 	}
@@ -57954,24 +58533,24 @@ int Jidac::extract()
 						if (iswildcards(files[0]))
 						{
 							if (flagdebug2)
-								myprintf("31745: wildcard in files[0]: do nothing\n");
+								myprintf("00874: wildcard in files[0]: do nothing\n");
 						}
 						else
 						{
 							if (flagdebug2)
-								myprintf("31749: no wildcard, check if a filename is selected\n");
+								myprintf("00875: no wildcard, check if a filename is selected\n");
 							string onlyname=extractfilename(files[0]);
 							if (onlyname!="")
 							{
 								tofiles[0]+=onlyname;
-								myprintf("31744: MAGIC: selected 1 file extracting to a folder => merge to %s\n",tofiles[0].c_str());
+								myprintf("00876: MAGIC: selected 1 file extracting to a folder => merge to %s\n",tofiles[0].c_str());
 							}
 						}
 					}
 			if (!saggiascrivibilitacartella(tofiles[0].c_str()))
 			{
-				myprintf("51909: Cannot write on <<-to %s>>\n",tofiles[0].c_str());
-				myprintf("519910: Aborting. Use -space to bypass and enforcing.\n");
+				myprintf("00877! Cannot write on <<-to %s>>\n",tofiles[0].c_str());
+				myprintf("00878: Aborting. Use -space to bypass and enforcing.\n");
 				return 2;
 				///error("Path seems not writeable");
 			}
@@ -57980,13 +58559,13 @@ int Jidac::extract()
 	{
 		if (flagforce)
 		{
-			myprintf("51919: -kill incompatible with -force\n");
+			myprintf("00879! -kill incompatible with -force\n");
 			return 2;
 		}
 		myprintf("\n");
-		myprintf("51923: ****** WARNING: -zero switch. Create 0 bytes files on filesystem\n");
-		myprintf("51923: ****** Full-scale extraction test (UTF-8 strange filenames, path too long...)\n");
-		myprintf("51923: ****** Highly suggested output on RAMDISK\n\n");
+		myprintf("00880: ****** WARNING: -zero switch. Create 0 bytes files on filesystem\n");
+		myprintf("00881: ****** Full-scale extraction test (UTF-8 strange filenames, path too long...)\n");
+		myprintf("00882: ****** Highly suggested output on RAMDISK\n\n");
 	}
 
 	string kunfile=g_gettempdirectory()+"VFILE-kun.txt";
@@ -57994,7 +58573,7 @@ int Jidac::extract()
 	kunfile=nomefileseesistegia(kunfile);
 	if (flagfilelist)
 	{
-		myprintf("51932: Autoselect\n"); // too slow DTMap::iterator a=dt.find("VFILE-l-filelist.txt");
+		myprintf("00883: Autoselect\n"); // too slow DTMap::iterator a=dt.find("VFILE-l-filelist.txt");
 			files.clear();
 		files.push_back("VFILE-l-filelist.txt");
 		flagforce=true;
@@ -58013,7 +58592,7 @@ int Jidac::extract()
 		flagforce=true;
 		tofiles.clear();
 		tofiles.push_back(externalkunfile);
-		myprintf("57984: Autoselect external to %s\n",externalkunfile.c_str()); // too slow DTMap::iterator a=dt.find("VFILE-l-filelist.txt");
+		myprintf("00884: Autoselect external to %s\n",externalkunfile.c_str()); // too slow DTMap::iterator a=dt.find("VFILE-l-filelist.txt");
 #ifdef unix
 		flagspace=true;
 #endif
@@ -58030,7 +58609,7 @@ int Jidac::extract()
 		string part0=subpart(archive, 0);
 		if (part0!=archive)
 		{
-			myprintf("32528: so sorry, this seems a multipart archive, abort\n");
+			myprintf("00885! so sorry, this seems a multipart archive, abort\n");
 			return 2;
 		}
 		InputArchive in(archive.c_str());
@@ -58041,16 +58620,20 @@ int Jidac::extract()
     	char salt[32]={0};
 		if (new_password)
 			libzpaq::random(salt, 32);
-		myprintf("51959: Changing password for %s bytes\n\n",migliaia(in.totalsize()));
+		myprintf("00886: Changing password for %s bytes\n\n",migliaia(in.totalsize()));
 		OutputArchive out(archive,repack.c_str(), new_password, salt, 0);
 		copywitheta(in.totalsize(),in, out);
 		myprintf("\n");
-		myprintf("51965: Source      %19s <<", migliaia(in.tell()));
+		myprintf("00887: Source      %19s <<%Z>>\n", migliaia(in.tell()),archive.c_str());
+		myprintf("00888: Destination %19s <<%Z>>\n", migliaia(out.tell()),repack.c_str());
+		/*
+		myprintf("00889: Source      %19s <<", migliaia(in.tell()));
 		printUTF8(archive.c_str());
 		myprintf(">>\n");
-		myprintf("51968: Destination %19s <<", migliaia(out.tell()));
+		myprintf("00890: Destination %19s <<", migliaia(out.tell()));
 		printUTF8(repack.c_str());
 		myprintf(">>\n");
+		*/
 		out.close();
 		return 0;
   }
@@ -58071,29 +58654,29 @@ int Jidac::extract()
 		{
 			/// the rename() function will replace
 			if (flagdebug)
-				myprintf("32146: -longpath and search and replace ON\n");
+				myprintf("00891: -longpath and search and replace ON\n");
 		}
 		else
 		if (tofiles.size()==1)
 		{
 			/// a special rename() kludge for tofiles.size==1 and flaglongpath
 			if (flagdebug)
-				myprintf("32152: -longpath and ONE to: deal with rename()\n");
+				myprintf("00892: -longpath and ONE to: deal with rename()\n");
 		}
 		else
 		{
 			if (flagdebug)
-				myprintf("32158: -longpath, check for some UNC\n");
+				myprintf("00893: -longpath, check for some UNC\n");
 			/// extract longpath files, from UNC, is not so easy
 			/// spaghetti? well, it is not my fault, it is Windows' lasagna-code
 			for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p)
 				if (iswindowsunc(p->first))
 				{
 					myprintf("\n\n");
-					myprintf("32133: WARNING: -longpath with Windows UNC, use ONE -to something /  -find -replace to manually adjust\n");
-					myprintf("32134: zpaqfranz x z:\\1.zpaq -find //franzk/z/NS -replace \\\\?\\z:\\here -longpath\n");
-					myprintf("32134: zpaqfranz x z:\\1.zpaq -find //franzk/z/NS -replace \\\\?\\UNC\\nas\\share\\somewhere -longpath\n");
-					myprintf("32135: zpaqfranz x z:\\1.zpaq -to z:\\here -longpath  [note: ONLY ONE local folder]\n\n");
+					myprintf("00894: WARNING: -longpath with Windows UNC, use ONE -to something /  -find -replace to manually adjust\n");
+					myprintf("00895: zpaqfranz x z:\\1.zpaq -find //franzk/z/NS -replace \\\\?\\z:\\here -longpath\n");
+					myprintf("00896: zpaqfranz x z:\\1.zpaq -find //franzk/z/NS -replace \\\\?\\UNC\\nas\\share\\somewhere -longpath\n");
+					myprintf("00897: zpaqfranz x z:\\1.zpaq -to z:\\here -longpath  [note: ONLY ONE local folder]\n\n");
 					break;
 				}
 		}
@@ -58107,7 +58690,7 @@ int Jidac::extract()
 			int versione=searchcomments(versioncomment,myfilelist);
 			if (versione>0)
 			{
-				myprintf("52027: Found version -until %d scanning again...\n",versione);
+				myprintf("00898: Found version -until %d scanning again...\n",versione);
 				version=versione;
 				jidacreset();
 				sz=read_archive(NULL,archive.c_str());
@@ -58160,7 +58743,7 @@ int Jidac::extract()
           || (hdr[hsize-22]&255)!=253  // start of SHA1 marker
           || (hdr[hsize-1]&255)!=255) {  // end of block marker
         for (int j=0; j<hsize; ++j)
-          myprintf("52081: %d%c", hdr[j]&255, j%10==9 ? '\n' : ' ');
+          myprintf("00899: %d%c", hdr[j]&255, j%10==9 ? '\n' : ' ');
         myprintf("at %1.0f\n", ver[i].offset+.0);
         error("C block in weird format");
       }
@@ -58198,26 +58781,29 @@ int Jidac::extract()
 	flagunix=searchunixfile();
 	if (flagunix)
 	{
-		myprintf("50087: Found Unix attributes on Windows => checking for collision\n");
+		myprintf("00900: Found Unix attributes on Windows => checking for collision\n");
 		vector<string> kollisioni;
 		uint32_t fixati		=casekollision(dt,kollisioni,true);
 		int casecollision	=kollisioni.size();
 		if (casecollision>0)
 		{
-			myprintf("52126: Case collisions        %9s (try -fixcase)\n",migliaia(casecollision));
+			myprintf("00901: Case collisions        %9s (try -fixcase)\n",migliaia(casecollision));
 			if (flagverbose)
 				for (unsigned int i=0;i<kollisioni.size();i++)
 					{
+						myprintf("     collision  <<%Z>>\n",kollisioni[i].c_str());
+						/*
 						myprintf("     collision  <<");
 						printUTF8(kollisioni[i].c_str());
 						myprintf(">>\n");
+						*/
 					}
 			if (fixati>0)
-				myprintf("52135: -fixcase fixed         %9s files\n",migliaia(fixati));
+				myprintf("00902: -fixcase fixed         %9s files\n",migliaia(fixati));
 			kollisioni.clear();
 		}
 		else
-			myprintf("50138: No unfixed case collision (extracting Unix filenames on Windows)\n");
+			myprintf("00903: No unfixed case collision (extracting Unix filenames on Windows)\n");
 
 	}
 #endif
@@ -58248,7 +58834,7 @@ int Jidac::extract()
 			std::pair<map<string, DT>::iterator, bool> ret;
 			ret = mymap.insert( std::pair<string,DT>(newname,p->second) );
 			if (ret.second==false)
-				myprintf("18298: KOLLISION! %s\n",newname.c_str());
+				myprintf("00904: KOLLISION! %s\n",newname.c_str());
 		}
 #endif
 		dt=mymap;
@@ -58263,13 +58849,13 @@ int Jidac::extract()
 				else
 					filesafter++;
 			}
-			myprintf("52217: size  before %12s\n",migliaia((int64_t)dt.size()));
-			myprintf("17995: Files before %12s\n",migliaia(filesbefore));
-			myprintf("17996: dirs  before %12s\n",migliaia(dirsbefore));
+			myprintf("00905: size  before %12s\n",migliaia((int64_t)dt.size()));
+			myprintf("00906: Files before %12s\n",migliaia(filesbefore));
+			myprintf("00907: dirs  before %12s\n",migliaia(dirsbefore));
 			myprintf("\n\n");
-			myprintf("18181: size  after  %12s\n",migliaia((int64_t)dt.size()));
-			myprintf("52218: Files before %12s\n",migliaia(filesafter));
-			myprintf("52219: dirs  before %12s\n",migliaia(dirsafter));
+			myprintf("00908: size  after  %12s\n",migliaia((int64_t)dt.size()));
+			myprintf("00909: Files before %12s\n",migliaia(filesafter));
+			myprintf("00910: dirs  before %12s\n",migliaia(dirsafter));
 		}
 	///if (flagdebug)
 	}
@@ -58281,9 +58867,12 @@ int Jidac::extract()
 				string filename=rename(p->first);
 				if (filename.length()>254)
 				{
-					myprintf("52203: WARN: path too long %03d ",(int)filename.length());
+					myprintf("00911: WARN: path too long %03d %Z\n",(int)filename.length(),filename.c_str());
+					/*
+					myprintf("00912: WARN: path too long %03d ",(int)filename.length());
 					printUTF8(filename.c_str());
 					myprintf("\n");
+					*/
 				}
 			}
 #endif
@@ -58307,9 +58896,12 @@ int Jidac::extract()
 				// identical
 				if (flagverbose)
 				{
+					myprintf("= %Z\n",fn.c_str());
+					/*
 					myprintf("= ");
 					printUTF8(fn.c_str());
 					myprintf("\n");
+					*/
 				}
 				close(fn.c_str(), p->second.date, p->second.attr);
 				++skipped;
@@ -58320,9 +58912,12 @@ int Jidac::extract()
 				// exists, skip
 				if (flagverbose)
 				{
+					myprintf("? %Z\n",fn.c_str());
+					/*
 					myprintf("? ");
 					printUTF8(fn.c_str());
 					myprintf("\n");
+					*/
 				}
 				++skipped;
 			}
@@ -58376,21 +58971,24 @@ int Jidac::extract()
 				isstdourordered=p->second.isordered;
 
 				job.total_size+=p->second.size;
-				///myprintf("52299: FACCIO QUALCOSA SU %s per size %d\n",fn.c_str(),p->second.size);
+				///myprintf("00913: FACCIO QUALCOSA SU %s per size %d\n",fn.c_str(),p->second.size);
 				if ((!flagtest) && (!flagstdout))
 					if (fileexists(fn))
 					{
 						if (flagverbose)
 						{
-							myprintf("52299: * ");
+							myprintf("00914: * %Z\n",fn.c_str());
+							/*
+							myprintf("00915: * ");
 							printUTF8(fn.c_str());
 							myprintf("\n");
+							*/
 						}
 						tobeerased++;
 						if (delete_file(fn.c_str()))
 							erased++;
 						else
-							myprintf("52307: ************ HIGHLANDER FILE! %s\n",fn.c_str());
+							myprintf("00916: ************ HIGHLANDER FILE! %s\n",fn.c_str());
 					}
 			}
 		}  // end if selected
@@ -58402,22 +59000,28 @@ int Jidac::extract()
 		if (total_files!=1)
 		{
 			if (flagdebug)
-				myprintf("47931: With -stdout only ONE file can be choosed\n");
+				myprintf("00917! With -stdout only ONE file can be choosed\n");
 			return 2;
 		}
 		if (flagdebug)
 		{
 			if (isstdourordered)
-				myprintf("47942: [ORDERED-THIS IS GOOD] ");
+				myprintf("00918: [ORDERED-THIS IS GOOD] %Z\n",goingstdout.c_str());
 			else
-				myprintf("47944: *** UNORDERED *** ");
+				myprintf("00919! *** UNORDERED *** %Z\n",goingstdout.c_str());
+			/*
+			if (isstdourordered)
+				myprintf("00920: [ORDERED-THIS IS GOOD] ");
+			else
+				myprintf("00921: *** UNORDERED *** ");
 			printUTF8(goingstdout.c_str());
 			myprintf("\n");
+			*/
 		}
 		if (!isstdourordered)
 		{
 			if (flagdebug)
-				myprintf("47949: GURU, sorry cannot stdout not ordered file\n");
+				myprintf("00922! GURU, sorry cannot stdout not ordered file\n");
 			return 2;
 		}
 	}
@@ -58431,7 +59035,7 @@ int Jidac::extract()
 		if (flagforce && tobeerased>0)
 			myprintf("%08d !=different files to be owerwritten => erased %08d\n",tobeerased,erased);
 		if (tobeerased!=erased)
-			myprintf("52348: **** GURU **** WE HAVE SOME HIGHLANDER!\n");
+			myprintf("00923: **** GURU **** WE HAVE SOME HIGHLANDER!\n");
 	}
   // Repack to new archive
 	if (repack!="")
@@ -58463,7 +59067,7 @@ int Jidac::extract()
 	}
 #endif
 	if (flagdebug2)
-		myprintf("54482: writejidacheader 1\n");
+		myprintf("00924: writejidacheader 1\n");
     writeJidacHeader(&out, ver[1].date, -1, 1);
     int64_t dstart=out.tell();
     // Copy only referenced D blocks. If method then recompress.
@@ -58473,7 +59077,7 @@ int Jidac::extract()
         copy(in, out, block[i].bsize);
       }
     }
-    myprintf("52938: Data %s -> ",migliaia(csize));
+    myprintf("00925: Data %s -> ",migliaia(csize));
     csize=out.tell()-dstart;
     myprintf(" %s\n", migliaia(csize));
     // Re-create referenced H blocks using latest date
@@ -58527,7 +59131,7 @@ int Jidac::extract()
     printUTF8(repack.c_str());
     myprintf(" %s\n", migliaia(out.tell()));
     // Rewrite C block
-	myprintf("52151: =============>>>>>>>>>> write C block at %s\n",migliaia(cstart));
+	myprintf("00926: =============>>>>>>>>>> write C block at %s\n",migliaia(cstart));
     out.seek(cstart, SEEK_SET);
 /*
 	avviso="AVVISOOOOOO 33175   ";
@@ -58542,7 +59146,7 @@ int Jidac::extract()
 	}
 #endif
 	if (flagdebug2)
-		myprintf("54561: writejidacheader 2\n");
+		myprintf("00927: writejidacheader 2\n");
     
     writeJidacHeader(&out, ver[1].date, csize, 1);
     out.close();
@@ -58551,7 +59155,7 @@ int Jidac::extract()
 	g_crc32.clear();
   // Decompress archive in parallel
 	if ((!flagstdout)&& (!flagterse))
-		myprintf("52478: Extract %s bytes (%s) in %s files (%s folders) / %d T\n",migliaia(job.total_size), tohuman(job.total_size),migliaia2(total_files), migliaia4(real_dirs),howmanythreads);
+		myprintf("00928: Extract %s bytes (%s) in %s files (%s folders) / %d T\n",migliaia(job.total_size), tohuman(job.total_size),migliaia2(total_files), migliaia4(real_dirs),howmanythreads);
 
 	if (!flagspace)
 		if (!flagzero)
@@ -58559,29 +59163,30 @@ int Jidac::extract()
 			{
 				if (!saggiascrivibilitacartella(tofiles[0].c_str()))
 				{
-					myprintf("52485: Cannot write on <<-to %s>>\n",tofiles[0].c_str());
-					myprintf("52486: Aborting. Use -space to bypass and enforcing.\n");
+					myprintf("00929: Cannot write on <<-to %s>>\n",tofiles[0].c_str());
+					myprintf("00930: Aborting. Use -space to bypass and enforcing.\n");
 					error("Path seems not writeable");
 				}
 				int64_t spazio=getfreespace(tofiles[0]);
 				if (spazio<job.total_size)
 				{
-					myprintf("52493: Free space on <<-to %s>>\n",tofiles[0].c_str());
-					myprintf("52494: is      %21s\n",migliaia(spazio));
-					myprintf("52495: needed  %21s\n",migliaia(job.total_size));
+					myprintf("00931: Free space on <<-to %s>>\n",tofiles[0].c_str());
+					myprintf("00932: is      %21s\n",migliaia(spazio));
+					myprintf("00933: needed  %21s\n",migliaia(job.total_size));
 					if (!isdirectory(tofiles[0]))
-						myprintf("33646: -to is a single file, NOT a folder. Maybe you miss the final /?\n");
-					myprintf("52487: Aborting extraction. Use -space to bypass and enforcing.\n");
-					error("Not enough free space");
+						myprintf("00934: -to is a single file, NOT a folder. Maybe you miss the final /?\n");
+					myprintf("00935! Not enough free space. Use -space to bypass and enforcing.\n");
+					///error("Not enough free space");
+					return 2;
 				}
 			}
 	if (flagdebug && flagzero && flagkill)
 	{
-		myprintf("52494: **** CREATING FILES AND FOLDER STRUCTURE  *****\n");
-		myprintf("52495: **** EXTRACTIBILITY TEST (ON FILESYSTEM)  *****\n");
+		myprintf("00936: **** CREATING FILES AND FOLDER STRUCTURE  *****\n");
+		myprintf("00937: **** EXTRACTIBILITY TEST (ON FILESYSTEM)  *****\n");
 		if (tofiles.size()!=1)
 		{
-			myprintf("31865: a single -to needed, quit\n");
+			myprintf("00938: a single -to needed, quit\n");
 			return 1;
 		}
 		if (!flagforce)
@@ -58594,7 +59199,7 @@ int Jidac::extract()
 			getfoldersize(outputfolder,totalsize,totalfile,totaldir,longfiles);
 			if (totalsize)
 			{
-				myprintf("29284: there is something in -to, and no -force. Abort\n");
+				myprintf("00939: there is something in -to, and no -force. Abort\n");
 				return 1;
 			}
 		}
@@ -58603,7 +59208,7 @@ int Jidac::extract()
 		unsigned int filestocreate	=0;
 		unsigned int longfolders	=0;
 		unsigned int longfiles		=0;
-		myprintf("52529: Start counting...");
+		myprintf("00940: Start counting...");
 		for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p)
 		{
 			string fn=rename(p->first);
@@ -58621,16 +59226,16 @@ int Jidac::extract()
 			}
 		}
 		myprintf(" done in %.2fs\n",(mtime()-startcreate)*0.001);
-		myprintf("52548: Folders  %12s (long %12s)\n",migliaia(folderstocreate),migliaia2(longfolders));
-		myprintf("52549: Files    %12s (long %12s)\n",migliaia(filestocreate),migliaia2(longfiles));
+		myprintf("00941: Folders  %12s (long %12s)\n",migliaia(folderstocreate),migliaia2(longfolders));
+		myprintf("00942: Files    %12s (long %12s)\n",migliaia(filestocreate),migliaia2(longfiles));
 #ifdef _WIN32
 		if ((longfiles+longfolders)>0)
 			if (!flaglongpath)
-				myprintf("31887: WARNING, maybe you want -longpath ?\n");
+				myprintf("00943: WARNING, maybe you want -longpath ?\n");
 #endif
 		if ((folderstocreate+filestocreate)==0)
 		{
-			myprintf("31894: nothing to do, quit\n");
+			myprintf("00944: nothing to do, quit\n");
 			return 1;
 		}
 		unsigned int totaledt		=dt.size();
@@ -58643,10 +59248,10 @@ int Jidac::extract()
 			fatti++;
 			if (!flagnoeta)
 				if (fatti % 1000==0)
-					myprintf("52571: Done %8sK / %s\r",migliaia(fatti/1000),migliaia2(totaledt));
+					myprintf("00945: Done %8sK / %s\r",migliaia(fatti/1000),migliaia2(totaledt));
 			string fn=rename(p->first);
 			fn=makelongpath(fn);
-			///myprintf("50263: makepath %s\n",fn.c_str());
+			///myprintf("00946: makepath %s\n",fn.c_str());
 
 			makepath(fn);
 			if (!isdirectory(fn))
@@ -58661,9 +59266,12 @@ int Jidac::extract()
 					if (handle==NULL)
 					{
 						fileerrors++;
-						myprintf("31870: ERROR OPENING ");
+						myprintf("00947! ERROR OPENING %Z\n",fn.c_str());
+						/*
+						myprintf("00948: ERROR OPENING ");
 						printUTF8(fn.c_str());
 						myprintf("\n");
+						*/
 					}
 					else
 						createdfiles++;
@@ -58674,22 +59282,22 @@ int Jidac::extract()
 		}
 		if (!flagnoeta)
 			myprintf("\n");
-		myprintf("52601: Time %16.2fs\n",(mtime()-startcreate)*0.001);
-		myprintf("52602: Total    %12s\n",migliaia(totaledt));
-		myprintf("52603: Folders  %12s\n",migliaia(createdfolders));
-		myprintf("52604: Files    %12s\n",migliaia(createdfiles));
-		myprintf("52605: Errors   %12s\n",migliaia(fileerrors));
+		myprintf("00949: Time %16.2fs\n",(mtime()-startcreate)*0.001);
+		myprintf("00950: Total    %12s\n",migliaia(totaledt));
+		myprintf("00951: Folders  %12s\n",migliaia(createdfolders));
+		myprintf("00952: Files    %12s\n",migliaia(createdfiles));
+		myprintf("00953: Errors   %12s\n",migliaia(fileerrors));
 		return fileerrors;
 	}
 	
-	///myprintf("52482: preparo per estrazione\n");
+	///myprintf("00954: preparo per estrazione\n");
 	///blockdecoder();
 	
 	vector<ThreadID> tid(howmanythreads);
 	if (howmanythreads==1)
 	{
 		if (flagverbose)
-			myprintf("31819: monothread decompress (extract)\n");
+			myprintf("00955: monothread decompress (extract)\n");
 		decompressThread(&job);
 	}
 	else
@@ -58746,14 +59354,17 @@ int Jidac::extract()
 								string outname=rename(b.files[k]->first);
 								dtptr=b.files[k];
 								lock(job.mutex);
+									myprintf("> %Z\n",outname.c_str());
+									/*
 									myprintf("> ");
 									printUTF8(outname.c_str());
 									myprintf("\n");
+*/									
 									///myprintf(");
 									if (!flagtest)
 									{
 										///myprintf();
-										///myprintf("50366: makepath %s\n",outname.c_str());
+										///myprintf("00956: makepath %s\n",outname.c_str());
 
 										makepath(outname);
 										///myprintf();
@@ -58801,7 +59412,7 @@ int Jidac::extract()
 				catch(std::exception& e)
 				{
 					lock(job.mutex);
-					myprintf("52726: Skipping block: %s\n", e.what());
+					myprintf("00957: Skipping block: %s\n", e.what());
 					release(job.mutex);
 				}
 			}
@@ -58825,7 +59436,7 @@ int Jidac::extract()
 				{
 					bool	createpath=true;
 					if (flagdebug2)
-						myprintf("50436: makepath %s  %d  %d\n",s.c_str(),g_rangefrom,g_rangeto);
+						myprintf("00958: makepath %s  %d  %d\n",s.c_str(),g_rangefrom,g_rangeto);
 					if (all)
 						if (g_rangefrom>0)
 						{
@@ -58860,8 +59471,8 @@ int Jidac::extract()
 	{
 		/// extract
 		myprintf("\n");
-		myprintf("52787: RAM       %12s (heap memory used %s bytes)",tohuman(g_ramdisksize),migliaia(g_ramdisksize));
-		myprintf("34079: writing from ramdisk to disk\n");
+		myprintf("00959: RAM       %12s (heap memory used %s bytes)",tohuman(g_ramdisksize),migliaia(g_ramdisksize));
+		myprintf("00960: writing from ramdisk to disk\n");
 		int64_t startwrite=mtime();
 		uint64_t expected=0;
 		uint64_t written=0;
@@ -58873,14 +59484,14 @@ int Jidac::extract()
 			{
 				if (p->second.pramfile!=NULL)
 				{
-					myprintf("52800: not dir %s\n",fn.c_str());
+					myprintf("00961: not dir %s\n",fn.c_str());
 					expected+=(*p->second.pramfile).filesize;
 					if (flagdebug2)
-						myprintf("34092: ramdisk-out  %12s %s\n",migliaia((int64_t)(*p->second.pramfile).filesize),fn.c_str());
+						myprintf("00962: ramdisk-out  %12s %s\n",migliaia((int64_t)(*p->second.pramfile).filesize),fn.c_str());
 					FP myfile=myfopen(fn.c_str(), WB);
 					if (myfile==FPNULL)
 					{
-						myprintf("32613: cannot fopen fn\n");
+						myprintf("00963: cannot fopen fn\n");
 						exit(0);
 					}
 					int64_t	scritti=0;
@@ -58903,7 +59514,7 @@ int Jidac::extract()
 			}
 		}
 		double writetime=(1+mtime()-startwrite)*0.001;
-		myprintf("34093: written %21s expected %21s time %f @ %s\n",migliaia(written),migliaia2(expected),writetime,migliaia3((int64_t)((written/writetime))));
+		myprintf("00964: written %21s expected %21s time %f @ %s\n",migliaia(written),migliaia2(expected),writetime,migliaia3((int64_t)((written/writetime))));
 	}
 	unsigned 	extracted		=0;
 	int			toolongfilenames=0;
@@ -58941,11 +59552,14 @@ int Jidac::extract()
 					if (++errors==1)
 					{
 						myprintf("\n");
-						myprintf("52875: Failed (extracted/total fragments, file):\n");
+						myprintf("00965: Failed (extracted/total fragments, file):\n");
 					}
-					myprintf("33783: UKONE %u/%u ",int(p->second.data), int(p->second.ptr.size()));
+					myprintf("00966! UKONE [very bad] %u/%u %Z\n",int(p->second.data), int(p->second.ptr.size()),fn.c_str());
+					/*
+					myprintf("00967: UKONE %u/%u ",int(p->second.data), int(p->second.ptr.size()));
 					printUTF8(fn.c_str());
 					myprintf("\n");
+					*/
 				}
 			}
 		 }
@@ -58954,28 +59568,28 @@ int Jidac::extract()
 	if (kollision>0)
 	{
 		myprintf("\n");
-		myprintf("52888: Filenames collisions %08d\n",(int)kollision);
+		myprintf("00968: Filenames collisions %08d\n",(int)kollision);
 	}
 	if (errors>0)
 	{
 		fflush(stdout);
 		myprintf("\n");
-		myprintf("52913: Extracted %s files (%s errors) using %s bytes x %d threads\n",
+		myprintf("00969: Extracted %s files (%s errors) using %s bytes x %d threads\n",
 			migliaia(extracted), migliaia3(errors), migliaia4((int64_t)job.maxMemory),
 			int(tid.size()));
 	}
 	if (toolongfilenames)
-		myprintf("52885: Long filenames %12s\n",migliaia(toolongfilenames));
+		myprintf("00970: Long filenames %12s\n",migliaia(toolongfilenames));
 	if (adsfilenames)
-		myprintf("52886: ADS            %12s\n",migliaia(adsfilenames));
+		myprintf("00971: ADS            %12s\n",migliaia(adsfilenames));
 	if (utf8names)
-		myprintf("52887: UTF-8          %12s\n",migliaia(utf8names));
+		myprintf("00972: UTF-8          %12s\n",migliaia(utf8names));
 	if (windowspath)
-		myprintf("52888: Windows path   %12s\n",migliaia(windowspath));
+		myprintf("00973: Windows path   %12s\n",migliaia(windowspath));
 	if (windowsunc)
-		myprintf("52889: Windows UNC    %12s\n",migliaia(windowsunc));
+		myprintf("00974: Windows UNC    %12s\n",migliaia(windowsunc));
 	if (relativepath)
-		myprintf("52884: Relative path  %12s\n",migliaia(relativepath));
+		myprintf("00975: Relative path  %12s\n",migliaia(relativepath));
 
   	if (flagfilelist)
 		if (errors==0)
@@ -59001,7 +59615,7 @@ int Jidac::extract()
 			{
 				myprintf("\n");
 				color_red();
-				myprintf("20543: filelist not good. Archive created without -filelist ?\n");
+				myprintf("00976: filelist not good. Archive created without -filelist ?\n");
 				color_restore();
 				errors=2;
 			}
@@ -59030,7 +59644,7 @@ int Jidac::extract()
 			{
 				myprintf("\n");
 				color_red();
-				myprintf("58999: VFILE external not good. Archive created without -external ?\n");
+				myprintf("00977: VFILE external not good. Archive created without -external ?\n");
 				color_restore();
 				errors=2;
 			}
@@ -59039,7 +59653,7 @@ int Jidac::extract()
 	if (flagparanoid)
 	{
 		myprintf("\n\n");
-		myprintf("52941: FULL-extract hashing check (aka:paranoid)\n");
+		myprintf("00978: FULL-extract hashing check (aka:paranoid)\n");
 		int64_t	dimensionetotale=0;
 		int		dalavorare=0;
 		
@@ -59069,7 +59683,7 @@ int Jidac::extract()
 				if (iszpaqfranzvirtualfile(p->first))
 				{
 					if (flagdebug2)
-					myprintf("33042: found a virtualfile %s\n",fn.c_str());
+					myprintf("00979: found a virtualfile %s\n",fn.c_str());
 					if (fileexists(fn))
 						delete_file(fn.c_str());
 				}
@@ -59079,7 +59693,7 @@ int Jidac::extract()
 						{
 							franz_do_hash dummy(p->second.hashtype);
 							if (flagdebug3)
-								myprintf("53067: filehash on %s\n",fn.c_str());
+								myprintf("00980: filehash on %s\n",fn.c_str());
 							string hashfromfile=dummy.filehash(fn.c_str(),false,inizio,dimensionetotale);
 							if (hashfromfile==p->second.hexhash)
 							{
@@ -59101,15 +59715,15 @@ int Jidac::extract()
 		{
 			printbar(' ');
 			myprintf("\r");
-			myprintf("52981: Total bytes          %21s (should be %s)\n",migliaia(dimensionetotale),migliaia2(lavorati));
-			myprintf("52982: Bytes checked        %21s (should be %s)\n",migliaia(lavorati),migliaia2(dimensionetotale));
-			myprintf("52983: Files to be checked  %21s\n",migliaia(dalavorare));
-			myprintf("52984: Files ==             %21s (should be %s)\n",migliaia(uguali),migliaia(dalavorare));
-			myprintf("52985: Files !=             %21s (should be zero)\n",migliaia(diversi));
-			myprintf("52986: Files deleted        %21s (should be %s)\n",migliaia(cancellati),migliaia2(dalavorare));
+			myprintf("00981: Total bytes          %21s (should be %s)\n",migliaia(dimensionetotale),migliaia2(lavorati));
+			myprintf("00982: Bytes checked        %21s (should be %s)\n",migliaia(lavorati),migliaia2(dimensionetotale));
+			myprintf("00983: Files to be checked  %21s\n",migliaia(dalavorare));
+			myprintf("00984: Files ==             %21s (should be %s)\n",migliaia(uguali),migliaia(dalavorare));
+			myprintf("00985: Files !=             %21s (should be zero)\n",migliaia(diversi));
+			myprintf("00986: Files deleted        %21s (should be %s)\n",migliaia(cancellati),migliaia2(dalavorare));
 			if ((dalavorare!=uguali) || (lavorati!=dimensionetotale) || (cancellati!=uguali))
 			{
-				myprintf("52993: *** ERROR IN PARANOID EXTRACT CHECK! ***\n");
+				myprintf("00987: *** ERROR IN PARANOID EXTRACT CHECK! ***\n");
 				errors=2;
 			}
 			removetempdirifempty(tofiles[0],true);
@@ -59123,7 +59737,7 @@ int Jidac::extract()
 		int setted				=0;
 		int	percentuale			=0;
 		int	ultimapercentuale	=0;
-		myprintf("53007: Touching files...\r");
+		myprintf("00988: Touching files...\r");
 
 		for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p)
 			if (p->second.date && p->first!="")
@@ -59147,12 +59761,12 @@ int Jidac::extract()
 					///if (fileexists(fn))
 					{
 						if (flagdebug3)
-							myprintf("54691: Working on %s\n",fn.c_str());
+							myprintf("00989: Working on %s\n",fn.c_str());
 						tobesetted++;
 						percentuale=tobesetted*100/tobeworked;
 						if (ultimapercentuale!=percentuale)
 						{
-							myprintf("53034: Touching files %03d %% done\r",percentuale);
+							myprintf("00990: Touching files %03d %% done\r",percentuale);
 							ultimapercentuale=percentuale;
 						}
 						string 	myhashtype		="";
@@ -59177,7 +59791,7 @@ int Jidac::extract()
 						if (flagdebug3)
 						{
 							myprintf("\n");
-							myprintf("54716: creation %s\n",migliaia(mycreationtime));
+							myprintf("00991: creation %s\n",migliaia(mycreationtime));
 						}
 						if (mycreationtime>0)
 							if (wintouch(fn,0,mycreationtime))
@@ -59188,7 +59802,7 @@ int Jidac::extract()
 		printbar(' ');
 		myprintf("\r");
 		if (tobesetted>0)
-			myprintf("53063: Files to be worked %s  => founded %s => OK %s\n",migliaia((int64_t)tobeworked),migliaia2((int64_t)tobesetted),migliaia3((int64_t)setted));
+			myprintf("00992: Files to be worked %s  => founded %s => OK %s\n",migliaia((int64_t)tobeworked),migliaia2((int64_t)tobesetted),migliaia3((int64_t)setted));
 	}
 #endif
 
@@ -59238,9 +59852,9 @@ int Jidac::extract()
 				}
 			}
 			if (dasettare>0)
-				myprintf("53116: Dir to be set  %s (OK %s)\n",migliaia(dasettare),migliaia2(settati));
+				myprintf("00993: Dir to be set  %s (OK %s)\n",migliaia(dasettare),migliaia2(settati));
 			if (darinominare>0)
-				myprintf("53117: Dir to be renamed %s (OK %s)\n",migliaia(darinominare),migliaia2(rinominati));
+				myprintf("00994: Dir to be renamed %s (OK %s)\n",migliaia(darinominare),migliaia2(rinominati));
 		}
 
   return errors>0;
@@ -59301,7 +59915,7 @@ int Jidac::enumeratecomments()
 	if (command!='i')
 	{
 		myprintf("\n");
-		myprintf("53193: Version(s) enumerator\n");
+		myprintf("00995: Version(s) enumerator\n");
 	}
 	vector<DTMap::iterator> filelist;
 	searchcomments(versioncomment,filelist);
@@ -59378,21 +59992,21 @@ int Jidac::enumeratecomments()
 			}
 		  }
 	 
-		myprintf("55817: Known uncompressed    %20s (%s)\n", migliaia(usize),tohuman(usize));
-		///myprintf("55768: Versions %s\n",migliaia(ver.size()-1));
-		///myprintf("55781: +/# %12s -%12s\n",migliaia(updates),migliaia2(deletes));
-		myprintf("55783: First   version %s last %s\n",dateToString(flagutc,earliest).c_str(),dateToString(flagutc,latest).c_str());
-		myprintf("55785: Undated version %s Out of sequence %s",migliaia(undated),migliaia2(errors));
+		myprintf("00996: Known uncompressed    %20s (%s)\n", migliaia(usize),tohuman(usize));
+		///myprintf("00997: Versions %s\n",migliaia(ver.size()-1));
+		///myprintf("00998: +/# %12s -%12s\n",migliaia(updates),migliaia2(deletes));
+		myprintf("00999: First   version %s last %s\n",dateToString(flagutc,earliest).c_str(),dateToString(flagutc,latest).c_str());
+		myprintf("01000: Undated version %s Out of sequence %s",migliaia(undated),migliaia2(errors));
 		if ((undated+errors)==0)
 			myprintf(": this is GOOD\n");
 		else
 			myprintf(": something WRONG\n");
-		myprintf("55817: Blocks %s blocks fragments %s highest frag %s\n", migliaia(blocks),migliaia2(used),migliaia3(ht.size()-1));
+		myprintf("01001: Blocks %s blocks fragments %s highest frag %s\n", migliaia(blocks),migliaia2(used),migliaia3(ht.size()-1));
 		if (used>0)
-		myprintf("55822: Average fragment size %1.3f\n", double(usize)/used);
-		myprintf("55822: Largest fragment size           %20s\n",migliaia(largestFragment));
-		myprintf("55822: Largest uncompressed block size %20s\n",migliaia(largestBlock));
-		myprintf("55822: Fragments of unknown size %s without hashes %s missing %s",migliaia(unknown),migliaia2(nohash),migliaia3(errors));
+		myprintf("01002: Average fragment size %1.3f\n", double(usize)/used);
+		myprintf("01003: Largest fragment size           %20s\n",migliaia(largestFragment));
+		myprintf("01004: Largest uncompressed block size %20s\n",migliaia(largestBlock));
+		myprintf("01005: Fragments of unknown size %s without hashes %s missing %s",migliaia(unknown),migliaia2(nohash),migliaia3(errors));
 		if ((unknown+nohash+errors)==0)
 			myprintf(": this is GOOD\n");
 		else
@@ -59413,15 +60027,15 @@ int Jidac::enumeratecomments()
 		
 		if (flagstat)
 		{
-			myprintf("55792: ----------------------------------------------------------------------------------------------\n");
-			myprintf("55793: <  Ver  > <  date  > < time >  < added > <removed> <    uncompressed   > <    compressed     >\n");
-			myprintf("55794: ----------------------------------------------------------------------------------------------\n");
+			myprintf("01006: ----------------------------------------------------------------------------------------------\n");
+			myprintf("01007: <  Ver  > <  date  > < time >  < added > <removed> <    uncompressed   > <    compressed     >\n");
+			myprintf("01008: ----------------------------------------------------------------------------------------------\n");
 		}
 		else
 		{
-			myprintf("53244: --------------------------------------------------------------------------\n");
-			myprintf("53245: <  Ver  > <  date  > < time >  < added > <removed>    <    bytes added   >\n");
-			myprintf("53246: --------------------------------------------------------------------------\n");
+			myprintf("01009: --------------------------------------------------------------------------\n");
+			myprintf("01010: <  Ver  > <  date  > < time >  < added > <removed>    <    bytes added   >\n");
+			myprintf("01011: --------------------------------------------------------------------------\n");
 		}
 		
 		for (unsigned fi=0;fi<filelist.size() /*&& (true || int(fi)<summary)*/; ++fi)
@@ -59436,7 +60050,7 @@ int Jidac::enumeratecomments()
 						show=false;
 				if (show)
 				{
-					myprintf("53221: V%08u %s ",v,dateToString(flagutc,p->second.date).c_str());
+					myprintf("01012: V%08u %s ",v,dateToString(flagutc,p->second.date).c_str());
 					
 					if (flagstat)
 						myprintf(" +%08d -%08d %20s [%20s]", ver[v].updates, ver[v].deletes,
@@ -59461,7 +60075,7 @@ int Jidac::enumeratecomments()
 int Jidac::kill()
 {
 ///	getpasswordifempty();
-	myprintf("53239: KILL of:");
+	myprintf("01013: KILL of:");
 	if (files.size()==0)
 		return -1;
 	if (archive=="")
@@ -59477,10 +60091,10 @@ int Jidac::kill()
 	string cartellaoutput=tofiles[0];
 	scandir(false,edt,cartellaoutput);
 	if (edt.size())
-		myprintf("53254: Total files found: %s\n", migliaia(edt.size()));
+		myprintf("01014: Total files found: %s\n", migliaia(edt.size()));
 	else
 	{
-		myprintf("53258: Found nothing in filesystem\n");
+		myprintf("01015: Found nothing in filesystem\n");
 		return 1;
 	}
 	myprintf("\n");
@@ -59494,12 +60108,12 @@ int Jidac::kill()
 		if (a->second.date==0)
 		{
 			if (flagverbose)
-				myprintf("53272: DELETED ");
+				myprintf("01016: DELETED ");
 		}
 		else
 			inzpaqrinominato.push_back(dentrofile);
 		if (flagverbose)
-			myprintf("53277: Into zpaq %s  > renamed %s\n",a->first.c_str(),dentrofile.c_str());
+			myprintf("01017: Into zpaq %s  > renamed %s\n",a->first.c_str(),dentrofile.c_str());
 	}
 	std::sort(inzpaqrinominato.begin(), inzpaqrinominato.end());
 	uint64_t		sizetobekilled=0;
@@ -59516,37 +60130,43 @@ int Jidac::kill()
 		}
 	for (unsigned int i=0;i<dirtobekilled.size();i++)
 	{
-		myprintf("53295: Dir  to be killed ");
+		myprintf("01018: Dir  to be killed %Z\n",dirtobekilled[i].c_str());
+		/*
+		myprintf("01019: Dir  to be killed ");
 		printUTF8(dirtobekilled[i].c_str());
 		myprintf("\n");
+		*/
 	}
 	for (unsigned int i=0;i<tobekilled.size();i++)
 	{
-		myprintf("53300: File to be killed ");
+		myprintf("01020: File to be killed %Z\n",tobekilled[i].c_str());
+		/*
+		myprintf("01021: File to be killed ");
 		printUTF8(tobekilled[i].c_str());
 		myprintf("\n");
+		*/
 	}
 	myprintf("\n");
 	unsigned int 	totaltobekilled=dirtobekilled.size()+tobekilled.size();
 	if (totaltobekilled==0)
 	{
-		myprintf("53307: Nothing to do\n");
+		myprintf("01022: Nothing to do\n");
 		return 0;
 	}
-	myprintf("53312: Directories to be removed %s\n",migliaia(dirtobekilled.size()));
-	myprintf("53313: Files       to be removed %s (%s bytes)\n",migliaia2(tobekilled.size()),migliaia(sizetobekilled));
+	myprintf("01023: Directories to be removed %s\n",migliaia(dirtobekilled.size()));
+	myprintf("01024: Files       to be removed %s (%s bytes)\n",migliaia2(tobekilled.size()),migliaia(sizetobekilled));
 	string captcha="kilL"+myto_string(dirtobekilled.size()+tobekilled.size()+sizetobekilled);
-	myprintf("53313: Captcha to continue %s\n",captcha.c_str());
+	myprintf("01025: Captcha to continue %s\n",captcha.c_str());
 	char myline[81];
     int dummy=scanf("%80s", myline);
 	if (dummy==888888)
-		myprintf("53317: no-warning-please\n");
+		myprintf("01026: no-warning-please\n");
 	if (myline!=captcha)
 	{
-		myprintf("53320: Wrong captcha\n");
+		myprintf("01027: Wrong captcha\n");
 		return 1;
 	}
-	myprintf("53323: Captcha OK\n");
+	myprintf("01028: Captcha OK\n");
 	unsigned int killed=0;
 	unsigned int killeddir=0;
 	for (unsigned int i=0;i<tobekilled.size();i++)
@@ -59557,11 +60177,11 @@ int Jidac::kill()
 		for (unsigned int i=0;i<dirtobekilled.size();i++)
 			if (delete_dir(dirtobekilled[i].c_str()))
 				killeddir++;
-	myprintf("53336: Dir  to be removed %s -> killed %s\n",migliaia(dirtobekilled.size()),migliaia2(killeddir));
-	myprintf("53367: File to be removed %s -> killed %s\n",migliaia(tobekilled.size()),migliaia2(killed));
+	myprintf("01029: Dir  to be removed %s -> killed %s\n",migliaia(dirtobekilled.size()),migliaia2(killeddir));
+	myprintf("01030: File to be removed %s -> killed %s\n",migliaia(tobekilled.size()),migliaia2(killed));
 	if ((killeddir+killed)!=(dirtobekilled.size()+tobekilled.size()))
 	{
-		myprintf("53339: FAILED !! some highlander !!\n");
+		myprintf("01031: FAILED !! some highlander !!\n");
 		return 1;
 	}
 	return 0;
@@ -59594,7 +60214,7 @@ void * scansionahash(void *t)
 
 	if (tmpfilestobehashed.size()!=tmpalgo.size())
 	{
-		myprintf("51569: FILETOBEHASHED != ALGO\n");
+		myprintf("01032: FILETOBEHASHED != ALGO\n");
 		seppuku();
 	}
 
@@ -59608,7 +60228,7 @@ void * scansionahash(void *t)
 		franz_do_hash dummy(tmpalgo[i]);
 		bool calcolacrc32=tmpalgo[i]=="CRC-32";
 		if (flagdebug2)
-			myprintf("53488: calccrc32 %d filehash type |%s| on %s\n",int(calcolacrc32),tmpalgo[i].c_str(),work.c_str());
+			myprintf("01033: calccrc32 %d filehash type |%s| on %s\n",int(calcolacrc32),tmpalgo[i].c_str(),work.c_str());
 		string risu=dummy.filehash(work,calcolacrc32,par->inizio,par->dimensione);
 		
 		if (!flaghashdeep)
@@ -59618,12 +60238,12 @@ void * scansionahash(void *t)
 				int printlen=0;
 				if (flagpakka)
 				{
-					myprintf("55083: %s ",stringtolower(risu).c_str());
+					myprintf("01034: %s ",stringtolower(risu).c_str());
 					printlen=risu.size()+2;
 				}
 				else
 				{
-					myprintf("55080: |%s: %s [%19s] |",tmpalgo[i].c_str(),risu.c_str(),migliaia(dummy.o_thefilesize));
+					myprintf("01035: |%s: %s [%19s] |",tmpalgo[i].c_str(),risu.c_str(),migliaia(dummy.o_thefilesize));
 					printlen=tmpalgo[i].size()+risu.size()+19+8;
 				}
 				
@@ -59640,7 +60260,7 @@ void * scansionahash(void *t)
 				pthread_mutex_unlock(&g_mylock);
 			}
 		
-		///myprintf("51541: risultato %s\n",risu.c_str());
+		///myprintf("01036: risultato %s\n",risu.c_str());
 		///,g_dimensione,thefilesize);
 		tmphashcalculated.push_back(risu);
 		tmpsizegetted.push_back(dummy.o_thefilesize);
@@ -59651,20 +60271,20 @@ void * scansionahash(void *t)
 }
 int Jidac::deduplicate()
 {
-	myprintf("53408: *** DIRECTLY DELETE DUPLICATED FILES ***\n");
+	myprintf("01037: *** DIRECTLY DELETE DUPLICATED FILES ***\n");
 	if (files.size()==0)
 	{
-		myprintf("53411: Sorry, works only on exactly 1 dir\n");
+		myprintf("01038: Sorry, works only on exactly 1 dir\n");
 		return 1;
 	}
 	if (files.size()>1)
 	{
-		myprintf("53416: Sorry, works only on exactly 1 dir\n");
+		myprintf("01039: Sorry, works only on exactly 1 dir\n");
 		return 1;
 	}
 	if (!isdirectory(files[0]))
 	{
-		myprintf("53421: Sorry, you must enter a directory\n");
+		myprintf("01040: Sorry, you must enter a directory\n");
 		return 1;
 	}
 	if (flagverbose)
@@ -59677,7 +60297,7 @@ int Jidac::deduplicate()
 		flagxxh3=true;
 	flagkill=true;
 	if (!flagforce)
-		myprintf("53434: -force not present: dry run\n");
+		myprintf("01041: -force not present: dry run\n");
 	return summa();
 }
 struct tparametribenchmark
@@ -59783,7 +60403,7 @@ string do_benchmark(int i_tnumber,int i_timelimit,string i_runningalgo,int i_chu
 /*
 	else
 		{
-			myprintf("49891: GURU unknown algo %s\n",i_runningalgo.c_str());
+			myprintf("01042: GURU unknown algo %s\n",i_runningalgo.c_str());
 			seppuku();
 			return 0;
 		}
@@ -59815,7 +60435,7 @@ string do_benchmark(int i_tnumber,int i_timelimit,string i_runningalgo,int i_chu
 					printf("\033[%d;0H",(int)i_tnumber+1);
 					restoreConsole();
 				}
-				myprintf("53558: Thread %02d %03d s %12s: speed (%11s/s)",i_tnumber,trascorso,i_runningalgo.c_str(),tohuman3((int64_t)o_speed));
+				myprintf("01043: Thread %02d %03d s %12s: speed (%11s/s)",i_tnumber,trascorso,i_runningalgo.c_str(),tohuman3((int64_t)o_speed));
 				pthread_mutex_unlock(&g_mylock);
 			}
 			ultimotrascorso=trascorso;
@@ -59882,13 +60502,13 @@ string filecopy(bool i_singlefile,bool i_append,const string& i_infile,const str
 	if (!i_overwrite)
 	{
 		if (flagdebug3)
-			myprintf("53623: Pre not overwrite %s\n",filedefinitivo.c_str());
+			myprintf("01044: Pre not overwrite %s\n",filedefinitivo.c_str());
 		filedefinitivo=nomefileseesistegia(filedefinitivo);
 		if (flagdebug3)
-			myprintf("53626: Post not overwrite %s\n",filedefinitivo.c_str());
+			myprintf("01045: Post not overwrite %s\n",filedefinitivo.c_str());
 	}
 	if (flagdebug2)
-		myprintf("53629: ready to make a copy in %s\n",filedefinitivo.c_str());
+		myprintf("01046: ready to make a copy in %s\n",filedefinitivo.c_str());
 	int64_t dimensioneoutput	=0;
 	int64_t	bytestoappend		=0;
 	if (i_append)
@@ -59899,17 +60519,20 @@ string filecopy(bool i_singlefile,bool i_append,const string& i_infile,const str
 		if (bytestoappend>0)
 		{
 			if (dimensioneoutput>0)
-				myprintf("53640: Ready to append %s bytes to %s => %s\n",migliaia(bytestoappend),migliaia2(dimensioneoutput),migliaia3(larghezzain));
+				myprintf("01047: Ready to append %s bytes to %s => %s\n",migliaia(bytestoappend),migliaia2(dimensioneoutput),migliaia3(larghezzain));
 		}
 		else
 		if (bytestoappend<0)
 		{
-			myprintf("33183: Destination file larger than source (-append), deleting ...\n");
+			myprintf("01048: Destination file larger than source (-append), deleting ...\n");
 			if (!delete_file(filedefinitivo.c_str()))
 			{
-				myprintf("33186: We get an highlander ");
+				myprintf("01049! We get an highlander %Z\n",filedefinitivo.c_str());
+				/*
+				myprintf("01050: We get an highlander ");
 				printUTF8(filedefinitivo.c_str());
 				myprintf("\n");
+				*/
 				return "";
 			}
 			bytestoappend	=larghezzain;
@@ -59919,7 +60542,7 @@ string filecopy(bool i_singlefile,bool i_append,const string& i_infile,const str
 		if (bytestoappend==0)
 		{
 			if (flagdebug2)
-				myprintf("53660: Source and destination filesize ==, exit\n");
+				myprintf("01051: Source and destination filesize ==, exit\n");
 			return filedefinitivo;
 		}
 
@@ -59934,7 +60557,7 @@ string filecopy(bool i_singlefile,bool i_append,const string& i_infile,const str
 		int64_t spaziolibero	=getfreespace(percorso);
 		if (spaziolibero<bytestoappend)
 		{
-			myprintf("34878: impossible to make a copy of %s insufficient free space %s on <<%s>>\n",migliaia(bytestoappend),migliaia2(spaziolibero),percorso.c_str());
+			myprintf("01052: impossible to make a copy of %s insufficient free space %s on <<%s>>\n",migliaia(bytestoappend),migliaia2(spaziolibero),percorso.c_str());
 			return "";
 		}
 	}
@@ -59953,7 +60576,7 @@ string filecopy(bool i_singlefile,bool i_append,const string& i_infile,const str
 #endif
 	if (outFile==NULL)
 	{
-		myprintf("32827: CANNOT OPEN outfile %s\n",filedefinitivo.c_str());
+		myprintf("01053: CANNOT OPEN outfile %s\n",filedefinitivo.c_str());
 		return "";
 	}
 	
@@ -59969,7 +60592,7 @@ string filecopy(bool i_singlefile,bool i_append,const string& i_infile,const str
 		int err=1;
 #endif
 		myprintf("\n");
-		myprintf("32849: ERR <%s> kind %d\n",i_infile.c_str(),err);
+		myprintf("01054: ERR <%s> kind %d\n",i_infile.c_str(),err);
 		fclose(outFile);
 		return "";
 	}
@@ -59977,7 +60600,7 @@ string filecopy(bool i_singlefile,bool i_append,const string& i_infile,const str
 	if (i_append)
 	{
 		if (flagdebug2)
-			myprintf("53717: Seeking input to %s because of -append\n",migliaia(dimensioneoutput));
+			myprintf("01055: Seeking input to %s because of -append\n",migliaia(dimensioneoutput));
 		if (fseeko(inFile,dimensioneoutput, SEEK_SET)!=0)
 		{
 #ifdef _WIN32
@@ -59986,7 +60609,7 @@ string filecopy(bool i_singlefile,bool i_append,const string& i_infile,const str
 			int err=1;
 #endif
 			myprintf("\n");
-			myprintf("33248: seek ERR <%s> kind %d\n",i_infile.c_str(),err);
+			myprintf("01056: seek ERR <%s> kind %d\n",i_infile.c_str(),err);
 			fclose(outFile);
 			fclose(inFile);
 			return "";
@@ -60004,12 +60627,12 @@ string filecopy(bool i_singlefile,bool i_append,const string& i_infile,const str
 	unsigned char *buffer=(unsigned char*)aligned_malloc(64, g_ioBUFSIZE);
 	if (buffer==NULL)
 	{
-		myprintf("52339: GURU allocating io buf of size %s\n",g_ioBUFSIZE);
+		myprintf("01057: GURU allocating io buf of size %s\n",g_ioBUFSIZE);
 		seppuku();
 		return "";
 	}
 	if (flagdebug3)
-		myprintf("52381: Buffer size %s\n",migliaia(g_ioBUFSIZE));
+		myprintf("01058: Buffer size %s\n",migliaia(g_ioBUFSIZE));
 	
 	while ((readSize = fread(buffer, 1, g_ioBUFSIZE, inFile)) > 0)
 	{
@@ -60036,13 +60659,13 @@ string filecopy(bool i_singlefile,bool i_append,const string& i_infile,const str
 	}
 	if (flagdebug2)
 	{
-		myprintf("53767: Done\n");
-		myprintf("53768: Written  %20s\n",migliaia(donesize));
-		myprintf("53769: Expected %20s\n\n",migliaia(bytestoappend));
+		myprintf("01059: Done\n");
+		myprintf("01060: Written  %20s\n",migliaia(donesize));
+		myprintf("01061: Expected %20s\n\n",migliaia(bytestoappend));
 	}
 	if (donesize!=bytestoappend)
 	{
-		myprintf("32876: GURU bytes written does not match expected\n");
+		myprintf("01062: GURU bytes written does not match expected\n");
 		return "";
 	}
 	fclose(outFile);
@@ -60058,7 +60681,7 @@ string filecopy(bool i_singlefile,bool i_append,const string& i_infile,const str
 
 	if (larghezzain!=dimensioneoutput)
 	{
-		myprintf("33274: GURU input size %s != output size %s\n",migliaia(larghezzain),migliaia2(dimensioneoutput));
+		myprintf("01063: GURU input size %s != output size %s\n",migliaia(larghezzain),migliaia2(dimensioneoutput));
 		return "";
 	}
 
@@ -60067,14 +60690,17 @@ string filecopy(bool i_singlefile,bool i_append,const string& i_infile,const str
 		if (!flagnoeta)
 		{
 			///printbar('=');
-			myprintf("53798: XXH3 verify of ");
+			myprintf("01064: XXH3 verify of %Z\n",filedefinitivo.c_str());
+			/*
+			myprintf("01065: XXH3 verify of ");
 			printUTF8(filedefinitivo.c_str());
 			myprintf("\n");
+			*/
 		}
 		if  (i_append)
 		{
 			if (flagdebug2)
-				myprintf("53806: Full re-read, because of -append\n");
+				myprintf("01066: Full re-read, because of -append\n");
 			fseeko(inFile,0,SEEK_SET);
 			donesize=0;
 			bytestoappend=prendidimensionehandle(inFile);
@@ -60095,23 +60721,23 @@ string filecopy(bool i_singlefile,bool i_append,const string& i_infile,const str
 
 		g_dimensione=0;
 		if (flagdebug3)
-			myprintf("51429: franz_do_hash\n");
+			myprintf("01067: franz_do_hash\n");
 
 		franz_do_hash dummy("XXH3");
 		if (flagdebug3)
-			myprintf("53909: filehash on %s\n",filedefinitivo.c_str());
+			myprintf("01068: filehash on %s\n",filedefinitivo.c_str());
 
 		string hashreloaded=dummy.filehash(filedefinitivo,false,startverify,larghezzain);
 
 
 		if (flagverbose || flagdebug)
 		{
-			myprintf("53837: Expected   XXH3 hash of the output file %s\n",risultato);
-			myprintf("53838: Calculated XXH3 hash of the output file %s\n",hashreloaded.c_str());
+			myprintf("01069: Expected   XXH3 hash of the output file %s\n",risultato);
+			myprintf("01070: Calculated XXH3 hash of the output file %s\n",hashreloaded.c_str());
 		}
 		if (hashreloaded!=risultato)
 		{
-			myprintf("29658: GURU hash of output file does not match!\n");
+			myprintf("01071: GURU hash of output file does not match!\n");
 			fclose(inFile);
 			return "";
 		}
@@ -60125,18 +60751,18 @@ int Jidac::trim()
 {
 	if (files.size()!=1)
 	{
-		myprintf("33679: TRIM works with ONLY one single .zpaq file (no multipart)\n");
+		myprintf("01072! TRIM works with ONLY one single .zpaq file (no multipart)\n");
 		return 2;
 	}
 	if (tofiles.size()>1)
 	{
-		myprintf("33856: TROM -to with only ONE output, please\n");
+		myprintf("01073! TROM -to with only ONE output, please\n");
 		return 2;
 	}
 	archive=files[0];  // append ".zpaq" to archive if no extension
 	if (!iszpaq(archive))
 			archive+=".zpaq";
-	myprintf("53867: TRIMMING on %s\n",archive.c_str());
+	myprintf("01074: TRIMMING on %s\n",archive.c_str());
 	int64_t archivesize=prendidimensionefile(archive.c_str());
 ///	getpasswordifempty();
   // Read archive or index into ht, dt, ver.
@@ -60160,7 +60786,7 @@ int Jidac::trim()
     string part0=subpart(archive, 0);
     if (part0!=archive)
 	{  // multi-part?
-		myprintf("34084: so sorry, this seems a multipart archive, abort\n");
+		myprintf("01075! so sorry, this seems a multipart archive, abort\n");
 		return 2;
     }
     // Get salt from first part if it exists
@@ -60180,21 +60806,24 @@ int Jidac::trim()
     }
 	if (!exists(arcname))
 	{
-		myprintf("33763: archive does not seems to exists ");
+		myprintf("01076! archive does not seems to exists %Z\n",arcname.c_str());
+		/*
+		myprintf("01077! archive does not seems to exists ");
 		printUTF8(arcname.c_str());
 		myprintf("\n");
+		*/
         ///fclose(fp);
 		return 2;
 	}
 	if (header_pos+offset>archivesize)
 	{
-		myprintf("33771: invalid offset %s vs filesize %s\n",migliaia(header_pos+offset),migliaia2(archivesize));
+		myprintf("01078! invalid offset %s vs filesize %s\n",migliaia(header_pos+offset),migliaia2(archivesize));
         ///fclose(fp);
 		return 2;
 	}
 	if (header_pos+offset==archivesize)
 	{
-		myprintf("33779: TRIM seems not necessary on size %s\n",migliaia(header_pos+offset));
+		myprintf("01079: TRIM seems not necessary on size %s\n",migliaia(header_pos+offset));
         ///fclose(fp);
 		return 1;
 	}
@@ -60203,7 +60832,7 @@ int Jidac::trim()
 		string	trimmeddestination=tofiles[0];
 		if (isdirectory(trimmeddestination))
 		{
-			myprintf("33962: error -to is a folder, must be a file\n");
+			myprintf("01080! error -to is a folder, must be a file\n");
 			return 2;
 		}
 		if (!iszpaq(trimmeddestination))
@@ -60211,7 +60840,7 @@ int Jidac::trim()
 		if (!flagforce)
 			if (!saggiascrivibilitacartella(trimmeddestination))
 			{
-				myprintf("33700: sorry -to folder seems not writeable. Use -force to bypass\n");
+				myprintf("01081! sorry -to folder seems not writeable. Use -force to bypass\n");
 				return 2;
 			}
 		int64_t spaziolibero=0;
@@ -60220,10 +60849,10 @@ int Jidac::trim()
 		{
 			myprintf("\n");
 			printbar('*');
-			myprintf("53951: WARNING FREE SPACE SEEMS %s NEEDED %s\n",migliaia(spaziolibero),migliaia2(archivesize));
+			myprintf("01082: WARNING FREE SPACE SEEMS %s NEEDED %s\n",migliaia(spaziolibero),migliaia2(archivesize));
 			printbar('*');
 		}
-		myprintf("53955: DOING COPY (before trimming)\n");
+		myprintf("01083: DOING COPY (before trimming)\n");
 		string risultato;
 		risultato=filecopy(
 		true, // singlefile
@@ -60235,54 +60864,64 @@ int Jidac::trim()
 		0 ); //maxoutputsize
 		if (risultato=="")
 		{
-			myprintf("33729: ERROR: %s\n",risultato.c_str());
+			myprintf("01084! ERROR: %s\n",risultato.c_str());
 			return 2;
 		}
 		arcname=risultato;
 	}
-	myprintf("53970: Trim ");
+	myprintf("01085: Trim %Z at offset %s + %s\n",arcname.c_str(),migliaia(header_pos), migliaia2(offset));
+	/*
+	myprintf("01086: Trim ");
 	printUTF8(arcname.c_str());
 	myprintf(" at offset %s + %s\n", migliaia(header_pos), migliaia2(offset));
+	*/
 	if ((tofiles.size()==0) && (!flagkill))
 	{
-		myprintf("33783: dry run without -to: -kill to execute in-place\n");
+		myprintf("01087: dry run without -to: -kill to execute in-place\n");
 		return 1;
 	}
 	if (truncate(arcname.c_str(),header_pos+offset))
 	{
-		myprintf("33772: something wrong in trimming\n");
+		myprintf("01088! something wrong in trimming\n");
 		return 2;
 	}
 	int64_t nuovadim=prendidimensionefile(arcname.c_str());
 	if (nuovadim==(header_pos+offset))
 	{
-		myprintf("34019: DONE on ");
+		/*
+		myprintf("01089: DONE on ");
 		printUTF8(arcname.c_str());
 		myprintf(" (%s)\n",migliaia(nuovadim));
+		*/
+		myprintf("01090: DONE on %Z (%s)\n",arcname.c_str(),migliaia(nuovadim));
+		
 	}
 	return 0;
 }
 int Jidac::purgersync()
 {
 
-	myprintf("53995: PURGING RSYNC TEMPORARY FILES ");
+	myprintf("01091: PURGING RSYNC TEMPORARY FILES ");
 	if (!flagkill)
 			myprintf(" : DRY RUN (no -kill)");
 	myprintf("\n");
 	if (files.size()==0)
 	{
-		myprintf("54001: No folder selected\n");
+		myprintf("01092: No folder selected\n");
 		return 1;
 	}
 	DTMap	myedt;
 	for (unsigned int i=0;i<files.size();i++)
 	{
-		myprintf("54007: SCAN FOLDER %02d ",i);
+		myprintf("01093: SCAN FOLDER %02d %Z\n",i,files[i].c_str());
+		/*
+		myprintf("01094: SCAN FOLDER %02d ",i);
 		printUTF8(files[i].c_str());
 		myprintf("\n");
+		*/
 		scandir(false,myedt,files[i].c_str(),true);
 	}
-	myprintf("54013: Files to be checked %s\n",migliaia(myedt.size()));
+	myprintf("01095: Files to be checked %s\n",migliaia(myedt.size()));
 	int	erased=0;
 	int tobeerased=0;
 	for (DTMap::iterator p=myedt.begin(); p!=myedt.end(); ++p)
@@ -60326,7 +60965,7 @@ int Jidac::purgersync()
 							tobeerased++;
 							if (flagkill)
 							{
-								myprintf("54058: Deleting...\n");
+								myprintf("01096: Deleting...\n");
 								if (delete_file(filetobepurged.c_str()))
 										erased++;
 							}
@@ -60337,7 +60976,7 @@ int Jidac::purgersync()
 	}
 	if (flagkill)
 	{
-		myprintf("54068: Erased  %08d / %08d\n",erased,tobeerased);
+		myprintf("01097: Erased  %08d / %08d\n",erased,tobeerased);
 		if (tobeerased==erased)
 			return 0;
 		else
@@ -60371,7 +61010,7 @@ bool isfilesequal(string i_source,string i_destination,bool i_flagfast=false)
 		int err=1;
 #endif
 		myprintf("\n");
-		myprintf("27547: ERR <%s> kind %d\n",i_source.c_str(),err);
+		myprintf("01098: ERR <%s> kind %d\n",i_source.c_str(),err);
 		return false;
 	}
 	fseeko(source_file, 0, SEEK_END);
@@ -60386,7 +61025,7 @@ bool isfilesequal(string i_source,string i_destination,bool i_flagfast=false)
 		int err=1;
 #endif
 		myprintf("\n");
-		myprintf("27555: ERR <%s> kind %d\n",i_destination.c_str(),err);
+		myprintf("01099: ERR <%s> kind %d\n",i_destination.c_str(),err);
 		fclose(source_file);
 		return false;
 	}
@@ -60398,7 +61037,7 @@ bool isfilesequal(string i_source,string i_destination,bool i_flagfast=false)
 		if (sorgente_dimensione<destinazione_dimensione)
 		{
 			if (flagdebug)
-				myprintf("32805: sorgente < destinazione\n");
+				myprintf("01100: sorgente < destinazione\n");
 			fclose(source_file);
 			fclose(destination_file);
 			return false;
@@ -60423,13 +61062,13 @@ bool isfilesequal(string i_source,string i_destination,bool i_flagfast=false)
 	if (i_flagfast)
 	{
 			if (flagdebug2)
-				myprintf("54151: Do a fast check!\n");
+				myprintf("01101: Do a fast check!\n");
 			readsource 		= 	fread(buffersource, 		1, blockSize, source_file);
 			readdestination	=	fread(bufferdestination, 	1, blockSize, destination_file);
 			if (readsource!=readdestination)
 			{
 				if (flagdebug)
-					myprintf("32823: head read source != read dest %s %s\n",migliaia(readsource),migliaia2(readdestination));
+					myprintf("01102: head read source != read dest %s %s\n",migliaia(readsource),migliaia2(readdestination));
 				fclose(source_file);
 				fclose(destination_file);
 				return false;
@@ -60437,7 +61076,7 @@ bool isfilesequal(string i_source,string i_destination,bool i_flagfast=false)
 			if (memcmp(buffersource, bufferdestination, readsource))
 			{
 				if (flagdebug)
-					myprintf("32831: head failed mem compare\n");
+					myprintf("01103: head failed mem compare\n");
 				fclose(source_file);
 				fclose(destination_file);
 				return false;
@@ -60449,7 +61088,7 @@ bool isfilesequal(string i_source,string i_destination,bool i_flagfast=false)
 			if (readsource!=readdestination)
 			{
 				if (flagdebug)
-					myprintf("32844: body read source != read dest %s %s\n",migliaia(readsource),migliaia2(readdestination));
+					myprintf("01104: body read source != read dest %s %s\n",migliaia(readsource),migliaia2(readdestination));
 				fclose(source_file);
 				fclose(destination_file);
 				return false;
@@ -60457,7 +61096,7 @@ bool isfilesequal(string i_source,string i_destination,bool i_flagfast=false)
 			if (memcmp(buffersource, bufferdestination, readsource))
 			{
 				if (flagdebug)
-					myprintf("32851: body failed mem compare\n");
+					myprintf("01105: body failed mem compare\n");
 				fclose(source_file);
 				fclose(destination_file);
 				return false;
@@ -60469,7 +61108,7 @@ bool isfilesequal(string i_source,string i_destination,bool i_flagfast=false)
 			if (readsource!=readdestination)
 			{
 				if (flagdebug)
-					myprintf("32867: tail read source != read dest %s %s\n",migliaia(readsource),migliaia2(readdestination));
+					myprintf("01106: tail read source != read dest %s %s\n",migliaia(readsource),migliaia2(readdestination));
 				fclose(source_file);
 				fclose(destination_file);
 				return false;
@@ -60477,7 +61116,7 @@ bool isfilesequal(string i_source,string i_destination,bool i_flagfast=false)
 			if (memcmp(buffersource, bufferdestination, readsource))
 			{
 				if (flagdebug)
-					myprintf("32874: tail failed mem compare\n");
+					myprintf("01107: tail failed mem compare\n");
 				fclose(source_file);
 				fclose(destination_file);
 				return false;
@@ -60490,14 +61129,14 @@ bool isfilesequal(string i_source,string i_destination,bool i_flagfast=false)
 			readdestination=fread(bufferdestination, 1, blockSize, destination_file);
 			if (readsource!=readdestination)
 			{
-				///myprintf("27631: read source != read dest %s %s\n",migliaia(readsource),migliaia2(readdestination));
+				///myprintf("01108: read source != read dest %s %s\n",migliaia(readsource),migliaia2(readdestination));
 				fclose(source_file);
 				fclose(destination_file);
 				return false;
 			}
 			if (memcmp(buffersource, bufferdestination, readsource))
 			{
-			///	myprintf("27640: failed mem compare\n");
+			///	myprintf("01109: failed mem compare\n");
 				fclose(source_file);
 				fclose(destination_file);
 				return false;
@@ -60509,12 +61148,12 @@ bool isfilesequal(string i_source,string i_destination,bool i_flagfast=false)
 	fclose(destination_file);
 	if (flagdebug)
 		if (i_flagfast)
-			myprintf("32929: fast files ==\n");
+			myprintf("01110: fast files ==\n");
 	return true;
 }
 int Jidac::mycopy()
 {
-	myprintf("54242: Your friendly neighborhood cp/copy ");
+	myprintf("01111: Your friendly neighborhood cp/copy ");
 	if (flagverify)
 		myprintf(" without a trusting attitude (-verify) ");
 	if (flagparanoid)
@@ -60522,12 +61161,12 @@ int Jidac::mycopy()
 	myprintf("\n");
 	if (files.size()==0)
 	{
-		myprintf("33433: No source files\n");
+		myprintf("01112! No source files\n");
 		return 2;
 	}
 	if (tofiles.size()!=1)
 	{
-		myprintf("33438: exactly one -to required\n");
+		myprintf("01113! exactly one -to required\n");
 		return 2;
 	}
 	string	todirectory=tofiles[0];
@@ -60536,7 +61175,7 @@ int Jidac::mycopy()
 	if (!flagforce)
 		if (!saggiascrivibilitacartella(todirectory))
 		{
-			myprintf("33493: sorry -to directory seems not writeable. Use -force to bypass\n");
+			myprintf("01114! sorry -to directory seems not writeable. Use -force to bypass\n");
 			return 2;
 		}
 	vector<string> 	sourcelist;
@@ -60557,7 +61196,7 @@ int Jidac::mycopy()
 	}
 	if (sourcelist.size()==0)
 	{
-		myprintf("33461: cannot build source file list\n");
+		myprintf("01115! cannot build source file list\n");
 		return 2;
 	}
 	int64_t spaziolibero=0;
@@ -60566,15 +61205,15 @@ int Jidac::mycopy()
 	{
 		myprintf("\n");
 		printbar('*');
-		myprintf("54294: WARNING FREE SPACE %s NEEDED %s\n",migliaia(spaziolibero),migliaia2(totalsourcesize));
+		myprintf("01116: WARNING FREE SPACE %s NEEDED %s\n",migliaia(spaziolibero),migliaia2(totalsourcesize));
 		printbar('*');
 		if (!flagspace)
 		{
-			myprintf("34794: quit because not enough space; -space to bypass\n");
+			myprintf("01117! quit because not enough space; -space to bypass\n");
 			return 2;
 		}
 	}
-	myprintf("54302:         Space needed             Space free\n");
+	myprintf("01118:         Space needed             Space free\n");
 	bool		allok=true;
 	int64_t		totalwritten=0;
 	int			fileswritten=0;
@@ -60595,7 +61234,7 @@ int Jidac::mycopy()
 		0); //maxoutputsize
 		if (risultato=="")
 		{
-			myprintf("54323: ERROR: %s\n",risultato.c_str());
+			myprintf("01119: ERROR: %s\n",risultato.c_str());
 			allok=false;
 		}
 		else
@@ -60611,7 +61250,7 @@ int Jidac::mycopy()
 	myprintf("%21s   files expected\n",		migliaia(sourcelist.size()));
 	if (totalwritten!=totalsourcesize)
 	{
-		myprintf("33497: Written %s != expected %s\n",migliaia(totalwritten),migliaia2(totalsourcesize));
+		myprintf("01120: Written %s != expected %s\n",migliaia(totalwritten),migliaia2(totalsourcesize));
 		allok=false;
 	}
 	if (allok)
@@ -60639,18 +61278,18 @@ int Jidac::mycopy()
 int64_t internal_getramdisksize()
 {
 	if (flagdebug2)
-		myprintf("54367: Haiku pagesize %s!\n",migliaia(B_PAGE_SIZE));
+		myprintf("01121: Haiku pagesize %s!\n",migliaia(B_PAGE_SIZE));
 	system_info haikuinfo;
 	get_system_info(&haikuinfo);
 	/*
 	uint64_t totali=haikuinfo.max_pages*B_PAGE_SIZE;
 	uint64_t usate=haikuinfo.used_pages*B_PAGE_SIZE;
 
-	myprintf("54373: Totali %s\n",migliaia(totali));
-	myprintf("54373: Usate  %s\n",migliaia(usate));
+	myprintf("01122: Totali %s\n",migliaia(totali));
+	myprintf("01123: Usate  %s\n",migliaia(usate));
 
-	myprintf("54373: cpu  %d\n",haikuinfo.cpu_count);
-	myprintf("54373: free      %s\n",migliaia(haikuinfo.free_memory));
+	myprintf("01124: cpu  %d\n",haikuinfo.cpu_count);
+	myprintf("01125: free      %s\n",migliaia(haikuinfo.free_memory));
 	*/
 	return haikuinfo.free_memory;
 }
@@ -60660,7 +61299,7 @@ int64_t internal_getramdisksize()
 int64_t internal_getramdisksize()
 {
 	if (flagdebug2)
-		myprintf("54388: Hello Windows\n");
+		myprintf("01126: Hello Windows\n");
 	MEMORYSTATUSEX statex;
 	statex.dwLength=sizeof(statex);
 	if (GlobalMemoryStatusEx(&statex))
@@ -60676,7 +61315,7 @@ int64_t internal_getramdisksize()
 int64_t internal_getramdisksize()
 {
 	if (flagdebug2)
-		myprintf("54404: Hello Solaris\n");
+		myprintf("01127: Hello Solaris\n");
 	long freemem;
     static kstat_t 		*ks = NULL;
 	kvm_t 				*kd;
@@ -60719,7 +61358,7 @@ int64_t internal_getramdisksize()
 int64_t internal_getramdisksize()
 {
 	if (flagdebug2)
-		myprintf("54447: Hello OpenBSD\n");
+		myprintf("01128: Hello OpenBSD\n");
 	static int uvmexp_mib[] = {CTL_VM, VM_UVMEXP};
 	struct uvmexp uvmexp;
 	size_t size;
@@ -60739,7 +61378,7 @@ int64_t internal_getramdisksize()
 int64_t internal_getramdisksize()
 {
 	if (flagdebug2)
-		myprintf("54467: Hello Mac\n");
+		myprintf("01129: Hello Mac\n");
 	kern_return_t	status;
 	unsigned int count = HOST_VM_INFO_COUNT;
 	static vm_statistics_data_t	vm_stats;
@@ -60759,7 +61398,7 @@ int64_t internal_getramdisksize()
 int64_t internal_getramdisksize()
 {
 	if (flagdebug2)
-		myprintf("54487: Hello FreeBSD\n");
+		myprintf("01130: Hello FreeBSD\n");
 	int pagesize	=0;
 	int inactive	=0;
 	int free		=0;
@@ -60778,11 +61417,11 @@ int64_t internal_getramdisksize()
 int64_t internal_getramdisksize()
 {
 	if (flagdebug2)
-		myprintf("54506: Hello Linux\n");
+		myprintf("01131: Hello Linux\n");
     FILE *meminfo = fopen("/proc/meminfo", "r");
     if(meminfo == NULL)
 	{
-		myprintf("43998: error, cannot open /proc/meminfo, maybe I am NOT running on Linux?\n");
+		myprintf("01132: error, cannot open /proc/meminfo, maybe I am NOT running on Linux?\n");
 		return 0;
 	}
     char line[256];
@@ -60794,22 +61433,22 @@ int64_t internal_getramdisksize()
 		if (mypos("MemAvailable:",linea)!=-1)
 		{
 			if (flagdebug3)
-				myprintf("54521: MemAvailable: |%s|\n",linea.c_str());
+				myprintf("01133: MemAvailable: |%s|\n",linea.c_str());
 			string onlynumber="";
 			for (unsigned int i=0;i<linea.size();i++)
 				if (isdigit(linea[i]))
 					onlynumber+=linea[i];
 			if (flagdebug3)
-				myprintf("54527: Onlynumber |%s|\n",onlynumber.c_str());
+				myprintf("01134: Onlynumber |%s|\n",onlynumber.c_str());
 			ram=atoi(onlynumber.c_str());
 			if (flagdebug3)
-				myprintf("54530: Atoi  %s\n",migliaia(ram));
+				myprintf("01135: Atoi  %s\n",migliaia(ram));
             fclose(meminfo);
 			return ram*1024L;
 		}
     }
     fclose(meminfo);
-    myprintf("44014: invalid /proc/meminfo format\n");
+    myprintf("01136: invalid /proc/meminfo format\n");
 	return 0;
 }
 #endif
@@ -60852,17 +61491,17 @@ int Jidac::pause()
 	if (searchfrom!="")
 	{
 		if (flagdebug)
-			myprintf("50102: searchfrom is <<%s>>\n",searchfrom.c_str());
+			myprintf("01137: searchfrom is <<%s>>\n",searchfrom.c_str());
 		if (searchfrom.size()==1)
 		{
 			thekey=searchfrom[0];
 			if (flagdebug)
-				myprintf("50107: thekey is %d %c\n",thekey,thekey);
+				myprintf("01138: thekey is %d %c\n",thekey,thekey);
 		}
 		else
 		{
 			if (flagdebug)
-				myprintf("56112: -find not 1 char long, ignoring!\n");
+				myprintf("01139: -find not 1 char long, ignoring!\n");
 		}
 	}
 	if (menoenne>0)
@@ -60870,7 +61509,7 @@ int Jidac::pause()
 		unsigned int	secondi=1;
 		while ((secondi<=menoenne) && (!iskeypressed(thekey)))
 		{
-			myprintf("54579: Wait %03d seconds (or press any key)\r",(menoenne-secondi)+1);
+			myprintf("01140: Wait %03d seconds (or press any key)\r",(menoenne-secondi)+1);
 			fflush(stdout);
 			sleep(1);
 			secondi++;
@@ -60882,9 +61521,9 @@ int Jidac::pause()
 	{
 		myprintf("\n\n");
 		if (thekey!=0)
-			myprintf("56110: **** Hit the key %c to continue (beware of case) ****\n",thekey);
+			myprintf("01141: **** Hit the key %c to continue (beware of case) ****\n",thekey);
 		else
-			myprintf("54612: **** Hit a key to continue ****\n");
+			myprintf("01142: **** Hit a key to continue ****\n");
 		while ((!iskeypressed(thekey)))
 			sleep(1);
 
@@ -60897,26 +61536,26 @@ bool debugwritebuffertofile(string i_filename,void* i_buffer,size_t i_size)
 {
 	if (i_buffer==NULL)
 	{
-		myprintf("53379: i_buffer null\n");
+		myprintf("01143: i_buffer null\n");
 		seppuku();
 		return false;
 	}
 	if (i_size==0)
 	{
-		myprintf("53385: i_size 0\n");
+		myprintf("01144: i_size 0\n");
 		seppuku();
 		return false;
 	}
 	if (i_filename.size()<1)
 	{
-		myprintf("53391: i_filenamesize <1\n");
+		myprintf("01145: i_filenamesize <1\n");
 		seppuku();
 		return false;
 	}
 	FILE* myfile=fopen(i_filename.c_str(),"wb");
 	if (myfile==NULL)
 	{
-		myprintf("53408: cannot write on %s\n",i_filename.c_str());
+		myprintf("01146: cannot write on %s\n",i_filename.c_str());
 		seppuku();
 		return false;
 	}
@@ -60927,7 +61566,7 @@ bool debugwritebuffertofile(string i_filename,void* i_buffer,size_t i_size)
 
 int Jidac::autotest()
 {
-	myprintf("54632: Self-test for correct internal functioning\n"); // for non-Intel CPU
+	myprintf("01147: Self-test for correct internal functioning\n"); // for non-Intel CPU
 
 	if (flagchecktxt)
 		if (checktxt!="")
@@ -60940,22 +61579,22 @@ int Jidac::autotest()
 	uint8_t *buffer8bit=(uint8_t*)franz_malloc(chunksize*sizeof(uint8_t));
 	if (buffer8bit==0)
 	{
-		myprintf("32374: GURU cannot alloc the buffer8bit\n");
+		myprintf("01148! GURU cannot alloc the buffer8bit\n");
 		return 2;
 	}
 	if (flagdebug)
-		myprintf("54741: buffer8bit %s\n",migliaia(int64_t(buffer8bit)));
+		myprintf("01149: buffer8bit %s\n",migliaia(int64_t(buffer8bit)));
 
 	// why this strange thing? Because we want to debug on BIG ENDIAN, of course
 	uint32_t *buffer32bit = (uint32_t*)franz_malloc(chunksize*sizeof(uint32_t));
 	if (buffer32bit==0)
 	{
-		myprintf("32394: GURU cannot alloc the buffer32bit\n");
 		franz_free(buffer8bit);
+		myprintf("01150! GURU cannot alloc the buffer32bit\n");
 		return 2;
 	}
 	if (flagdebug)
-		myprintf("54752: buffer32bit %s\n",migliaia(int64_t(buffer32bit)));
+		myprintf("01151: buffer32bit %s\n",migliaia(int64_t(buffer32bit)));
 
 	int64_t startcalc=mtime();
 	MAPPAAUTOCHECK myautocheck_map;
@@ -60998,7 +61637,7 @@ int Jidac::autotest()
 	///myblock.ok="EMPTY";
 	///myautocheck_map.insert(std::pair<string, hash_autocheck>("WHYHASH",myblock));
 	if (flagdebug3)
-		myprintf("54795: end of insert\n");
+		myprintf("01152: end of insert\n");
 
 	XXH3_state_t state128;
 	XXH3_128bits_reset(&state128);
@@ -61031,7 +61670,7 @@ int Jidac::autotest()
 	unsigned int chunk=0;
 	string extract1="";
 	if (flagdebug3)
-		myprintf("54828: end of init\n");
+		myprintf("01153: end of init\n");
 
 	if (tofiles.size()==1)
 	{
@@ -61039,31 +61678,31 @@ int Jidac::autotest()
 #ifdef unix
 		if (outfolder[0]!='/')
 		{
-			myprintf("33774: on non-Win full path required: -to /tmp/testfolder is OK    -to ./testdir NOT GOOD\n");
+			myprintf("01154! on non-Win full path required: -to /tmp/testfolder is OK    -to ./testdir NOT GOOD\n");
 			return 2;
 		}
 #endif
 		if (flagdebug2)
-			myprintf("54840: outfolder <<%s>>\n",outfolder.c_str());
+			myprintf("01155: outfolder <<%s>>\n",outfolder.c_str());
 
 		if (mypos(" ",outfolder)>=0)
 		{
-			myprintf("33131: -to folder cannot contain spaces\n");
 			franz_free(buffer8bit);
 			franz_free(buffer32bit);
+			myprintf("01156! -to folder cannot contain spaces\n");
 			return 2;
 		}
 		if (!saggiascrivibilitacartella(outfolder))
 		{
-			myprintf("33607: cannot write test data into -to\n");
 			franz_free(buffer8bit);
 			franz_free(buffer32bit);
+			myprintf("01157! cannot write test data into -to\n");
 			return 2;
 		}
 		else
 		{
 			if (flagdebug3)
-				myprintf("54860: saggiascrivibilitacartella OK |%s|\n",outfolder.c_str());
+				myprintf("01158: saggiascrivibilitacartella OK |%s|\n",outfolder.c_str());
 		}
 		uint64_t tofoldersize		=0;
 		uint32_t tofoldernumber		=0;
@@ -61072,12 +61711,15 @@ int Jidac::autotest()
 		if (getfoldersize(outfolder,tofoldersize,tofoldernumber,tofolderfolder,tofolderlongfiles))
 		{
 			if (flagdebug3)
-				myprintf("54869: getfoldersize OK, tofoldersize %s\n",migliaia(tofoldersize));
+				myprintf("01159: getfoldersize OK, tofoldersize %s\n",migliaia(tofoldersize));
 			if (tofoldersize>0)
 			{
-				myprintf("33617: WARNING the folder <<");
+				myprintf("01160! WARNING the folder <<%Z>>\n",outfolder.c_str());
+				/*
+				myprintf("01161! WARNING the folder <<");
 				printUTF8(outfolder.c_str());
 				myprintf(">> Must be empty. Quit\n\n\n");
+				*/
 				franz_free(buffer8bit);
 				franz_free(buffer32bit);
 				return 1;
@@ -61086,7 +61728,7 @@ int Jidac::autotest()
 		else
 		{
 			if (flagdebug)
-				myprintf("54880: getfoldersize failed!\n");
+				myprintf("01162: getfoldersize failed!\n");
 		}
 		
 		
@@ -61094,7 +61736,7 @@ int Jidac::autotest()
 		if ((spazio/1000000000)<15)
 			if (!flagspace)
 			{
-				myprintf("57262: You need at least 15GB free on %s (founded %s). Use -space to bypass\n",outfolder.c_str(),tohuman(spazio));
+				myprintf("01163! You need at least 15GB free on %s (founded %s). Use -space to bypass\n",outfolder.c_str(),tohuman(spazio));
 				return 2;
 			}
 
@@ -61103,9 +61745,9 @@ int Jidac::autotest()
 		if (extract1=="DEBIAN")
 		{
 			myprintf("\n\n");
-			myprintf("33565: *** This seems Debian: sorry, cannot make FULL autotest on this platform\n");
-			myprintf("33566: *** You need to download the full source code from github and manually\n");
-			myprintf("33567: *** compile\n\n");
+			myprintf("01164: *** This seems Debian: sorry, cannot make FULL autotest on this platform\n");
+			myprintf("01165: *** You need to download the full source code from github and manually\n");
+			myprintf("01166: *** compile\n\n");
 		}
 		else
 		{
@@ -61114,102 +61756,105 @@ int Jidac::autotest()
 			string extract4=extract_test4;
 			const string extract_test=extract1+extract2+extract3+extract4;
 			if (flagdebug3)
-				myprintf("54878: extract_test size %s\n",migliaia(extract_test.size()));
+				myprintf("01167: extract_test size %s\n",migliaia(extract_test.size()));
 
 			size_t 	the_file_len=mimesize(extract_test.c_str());
 
 			if (flagdebug3)
-				myprintf("54882: the_file_len %s\n",migliaia(the_file_len));
+				myprintf("01168: the_file_len %s\n",migliaia(the_file_len));
 
 			char*	the_file;
 			the_file=(char*)franz_malloc(the_file_len);
 			if (the_file==NULL)
 			{
-				myprintf("33652: error in malloc\n");
 				franz_free(buffer8bit);
 				franz_free(buffer32bit);
+				myprintf("01169! error in malloc\n");
 				return 2;
 			}
 			if (flagdebug3)
-				myprintf("54893: the_file alloc OK %s\n",migliaia(int64_t(the_file)));
+				myprintf("01170: the_file alloc OK %s\n",migliaia(int64_t(the_file)));
 
 			if (!mime2binary(extract_test.c_str(),(unsigned char *)the_file,the_file_len))
 			{
-				myprintf("33657: mime decoder kaputt!\n");
 				franz_free(the_file);
 				franz_free(buffer8bit);
 				franz_free(buffer32bit);
+				myprintf("01171! mime decoder kaputt!\n");
 				return 2;
 			}
 			else
 			{
 				if (flagdebug3)
-					myprintf("54904: mime decoder OK on extract_test %s\n",extract_test.c_str());
+					myprintf("01172: mime decoder OK on extract_test %s\n",extract_test.c_str());
 			}
 			outfile=outfolder+"sha256.zpaq";
-			myprintf("54840: Creating autotest folder in <<");
+			myprintf("01173: Creating autotest folder in <<%Z>>\n",outfolder.c_str());
+			/*
+			myprintf("01174: Creating autotest folder in <<");
 			printUTF8(outfolder.c_str());
 			myprintf(">>\n");
+			*/
 	#ifdef _WIN32
 			std::wstring widename=utow(outfile.c_str());
 			FILE* outFile=_wfopen(widename.c_str(), L"wb");
 			if (flagdebug3)
-				myprintf("54913: creato widename\n");
+				myprintf("01175: creato widename\n");
 	#else
 			FILE* outFile=fopen(outfile.c_str(),"wb");
 			if (flagdebug3)
-				myprintf("54916: fopen non wide\n");
+				myprintf("01176: fopen non wide\n");
 	#endif
 			if (outFile==NULL)
 			{
-				myprintf("33639: CANNOT OPEN outfile %s\n",outfile.c_str());
 				franz_free(the_file);
 				franz_free(buffer8bit);
 				franz_free(buffer32bit);
+				myprintf("01177! CANNOT OPEN outfile %s\n",outfile.c_str());
 				return 2;
 			}
 			if (flagdebug3)
 			{
-				myprintf("54926: outFile handle %s\n",migliaia(int64_t(outFile)));
-				myprintf("54927: sto per fare fwrite\n");
-				myprintf("54928: the_file       %s\n",migliaia(int64_t(the_file)));
-				myprintf("54928: the_file_len   %s\n",migliaia(int64_t(the_file_len)));
-				myprintf("54928: outFile handle %s\n",migliaia(int64_t(outFile)));
+				myprintf("01178: outFile handle %s\n",migliaia(int64_t(outFile)));
+				myprintf("01179: sto per fare fwrite\n");
+				myprintf("01180: the_file       %s\n",migliaia(int64_t(the_file)));
+				myprintf("01181: the_file_len   %s\n",migliaia(int64_t(the_file_len)));
+				myprintf("01182: outFile handle %s\n",migliaia(int64_t(outFile)));
 			}
 			unsigned int scritti=fwrite(the_file,1,the_file_len,outFile);
 			if (flagdebug3)
-				myprintf("54933: scritti %s\n",migliaia(scritti));
+				myprintf("01183: scritti %s\n",migliaia(scritti));
 			fclose(outFile);
 			if (flagdebug2)
-				myprintf("54936: dopo fclose\n");
+				myprintf("01184: dopo fclose\n");
 			if (scritti!=the_file_len)
 			{
-				myprintf("33666: error extracting file .zpaq written %s expected %s => %s\n",migliaia(scritti),migliaia2(the_file_len),outfile.c_str());
 				franz_free(the_file);
 				franz_free(buffer8bit);
 				franz_free(buffer32bit);
+				myprintf("01185! error extracting file .zpaq written %s expected %s => %s\n",migliaia(scritti),migliaia2(the_file_len),outfile.c_str());
 				return 2;
 			}
 			if (flagdebug2)
-				myprintf("54946: dimensione outfile %s\n",migliaia(prendidimensionefile(outfile.c_str())));
+				myprintf("01186: dimensione outfile %s\n",migliaia(prendidimensionefile(outfile.c_str())));
 		}
 	}
 	if (all)
 	{
 		for (int i=0;i<10;i++)
 		{
-			myprintf("54892: Iteration %d/9 chunksize %12s                               \n",(int)i,migliaia(chunksize));
+			myprintf("01187: Iteration %d/9 chunksize %12s                               \n",(int)i,migliaia(chunksize));
 			populateRandom_xorshift128plus(buffer32bit, chunksize,324+i,4444+i);
 			if (flagverbose)
 			{
-				myprintf("54896: King0  %08X\n",(uint32_t)buffer32bit[0]);
-				myprintf("54896: King1  %08X\n",(uint32_t)buffer32bit[1]);
-				myprintf("54896: King2  %08X\n",(uint32_t)buffer32bit[2]);
-				myprintf("54896: King3  %08X\n",(uint32_t)buffer32bit[3]);
-				myprintf("54896: King4  %08X\n",(uint32_t)buffer32bit[4]);
-				myprintf("54896: King5  %08X\n",(uint32_t)buffer32bit[5]);
-				myprintf("54896: King6  %08X\n",(uint32_t)buffer32bit[6]);
-				myprintf("54896: King7  %08X\n",(uint32_t)buffer32bit[7]);
+				myprintf("01188: King0  %08X\n",(uint32_t)buffer32bit[0]);
+				myprintf("01189: King1  %08X\n",(uint32_t)buffer32bit[1]);
+				myprintf("01190: King2  %08X\n",(uint32_t)buffer32bit[2]);
+				myprintf("01191: King3  %08X\n",(uint32_t)buffer32bit[3]);
+				myprintf("01192: King4  %08X\n",(uint32_t)buffer32bit[4]);
+				myprintf("01193: King5  %08X\n",(uint32_t)buffer32bit[5]);
+				myprintf("01194: King6  %08X\n",(uint32_t)buffer32bit[6]);
+				myprintf("01195: King7  %08X\n",(uint32_t)buffer32bit[7]);
 			}
 // yes we want to check BIG/LITTLE ENDIAN too
 #ifdef BIG
@@ -61225,14 +61870,14 @@ int Jidac::autotest()
 			}
 			if (flagverbose)
 			{
-				myprintf("54918: Queen0 %08X\n",(uint32_t)buffer32bit[0]);
-				myprintf("54918: Queen1 %08X\n",(uint32_t)buffer32bit[1]);
-				myprintf("54918: Queen2 %08X\n",(uint32_t)buffer32bit[2]);
-				myprintf("54918: Queen3 %08X\n",(uint32_t)buffer32bit[3]);
-				myprintf("54918: Queen4 %08X\n",(uint32_t)buffer32bit[4]);
-				myprintf("54918: Queen5 %08X\n",(uint32_t)buffer32bit[5]);
-				myprintf("54918: Queen6 %08X\n",(uint32_t)buffer32bit[6]);
-				myprintf("54918: Queen7 %08X\n",(uint32_t)buffer32bit[7]);
+				myprintf("01196: Queen0 %08X\n",(uint32_t)buffer32bit[0]);
+				myprintf("01197: Queen1 %08X\n",(uint32_t)buffer32bit[1]);
+				myprintf("01198: Queen2 %08X\n",(uint32_t)buffer32bit[2]);
+				myprintf("01199: Queen3 %08X\n",(uint32_t)buffer32bit[3]);
+				myprintf("01200: Queen4 %08X\n",(uint32_t)buffer32bit[4]);
+				myprintf("01201: Queen5 %08X\n",(uint32_t)buffer32bit[5]);
+				myprintf("01202: Queen6 %08X\n",(uint32_t)buffer32bit[6]);
+				myprintf("01203: Queen7 %08X\n",(uint32_t)buffer32bit[7]);
 			}
 #endif
 			for (int j=0;j<chunksize;j++)
@@ -61249,12 +61894,12 @@ int Jidac::autotest()
 			snprintf(dummyname,sizeof(dummyname),"z:\\parte_%i.bin",i);
 			string ttemp=dummyname;
 			if (debugwritebuffertofile(ttemp,buffer8bit,chunksize))
-				myprintf("53734: written on %s\n",ttemp.c_str());
+				myprintf("01204: written on %s\n",ttemp.c_str());
 */			
 			if (flagverbose)
 			{
 				printbar('=');
-				myprintf("54947: The Spartans %d\n",i);
+				myprintf("01205: The Spartans %d\n",i);
 				for (int j=0;j<300;j++)
 				{
 					myprintf("%02X ",buffer8bit[j]);
@@ -61275,11 +61920,11 @@ int Jidac::autotest()
 					snprintf(mynomefile,sizeof(mynomefile),"%s%02d/%04d/%05d.dat",outfolder.c_str(),i,k,(int)chunk);
 					makepath(mynomefile);
 					if (chunk %100==0)
-						myprintf("54968: Test file %s\r",mynomefile);
+						myprintf("01206: Test file %s\r",mynomefile);
 					FILE* myfile=fopen(mynomefile, "wb");
 					if (myfile==NULL)
 					{
-						myprintf("34399: cannot write on %s\n",mynomefile);
+						myprintf("01207: cannot write on %s\n",mynomefile);
 						exit(0);
 					}
 					fwrite(buffer8bit, 1, chunksize, myfile);
@@ -61313,16 +61958,16 @@ int Jidac::autotest()
 	{
 		if ((unsigned int)menoenne>(unsigned int)chunksize)
 		{
-			myprintf("34124: -n too big, max %s\n",migliaia(sizeof(chunksize)));
 			franz_free(buffer8bit);
 			franz_free(buffer32bit);
+			myprintf("01208! -n too big, max %s\n",migliaia(sizeof(chunksize)));
 			return 2;
 		}
 		flagverbose=true;
 		chunksize=5;
 		if (menoenne>0)
 			chunksize=menoenne;
-		myprintf("55015: Quick check chunksize %d: ",chunksize);
+		myprintf("01209: Quick check chunksize %d: ",chunksize);
 		for (int j=0;j<chunksize;j++)
 			buffer8bit[j]='A'+j;
 		if (chunksize<62)
@@ -61351,7 +61996,7 @@ int Jidac::autotest()
 //		mywyhash=wyhash(buffer8bit,chunksize,0,_wyp);
 	}
 	if (flagdebug)
-		myprintf("55125: myautocheck start\n");
+		myprintf("01210: myautocheck start\n");
 	MAPPAAUTOCHECK::iterator a;
 
 	a=myautocheck_map.find("HIGHWAY64");
@@ -61447,18 +62092,18 @@ int Jidac::autotest()
 	a->second.calculated=bin2hex_64(yann);
 
 	if (flagdebug3)
-		myprintf("55222: end myautocheck\n");
+		myprintf("01211: end myautocheck\n");
 
 	int64_t endtime=mtime();
 	if (isbigendian())
-		myprintf("55144: This seems a BIG ENDIAN CPU    (aka:'strange')\n");
+		myprintf("01212: This seems a BIG ENDIAN CPU    (aka:'strange')\n");
 	else
-		myprintf("55146: This seems a LITTLE ENDIAN CPU (aka:'normal')\n");
+		myprintf("01213: This seems a LITTLE ENDIAN CPU (aka:'normal')\n");
 	if (flagverbose)
 	{
 		printbar('-');
 		for (MAPPAAUTOCHECK::iterator p=myautocheck_map.begin(); p!=myautocheck_map.end(); ++p)
-			myprintf("55151: CALC %15s: %s\n",p->first.c_str(),p->second.calculated.c_str());
+			myprintf("01214: CALC %15s: %s\n",p->first.c_str(),p->second.calculated.c_str());
 		printbar('-');
 	}
 	bool	allok=true;
@@ -61473,7 +62118,7 @@ int Jidac::autotest()
 				allok=false;
 			}
 	}
-	myprintf("55166: Time %.2f seconds for bytes %s\n",(endtime-startcalc)*0.001,migliaia(total_hashed));
+	myprintf("01215: Time %.2f seconds for bytes %s\n",(endtime-startcalc)*0.001,migliaia(total_hashed));
 	if (outfolder!="")
 	{
 		
@@ -61485,10 +62130,10 @@ int Jidac::autotest()
 			FILE* myfile=fopen(mynomefile, "wb");
 			if (myfile==NULL)
 			{
-				myprintf("57651: cannot write on %s\n",mynomefile);
+				myprintf("01216: cannot write on %s\n",mynomefile);
 				seppuku();
 			}
-			myprintf("57647: Big file %s ",mynomefile);
+			myprintf("01217: Big file %s ",mynomefile);
 			for (unsigned int i=0;i<100;i++)
 			{
 				if (j==15)
@@ -61525,13 +62170,13 @@ int Jidac::autotest()
 		if (fileexists(filebatch))
 			if (remove(filebatch.c_str())!=0)
 			{
-				myprintf("33764: Highlander batch  %s\n", filebatch.c_str());
+				myprintf("01218: Highlander batch  %s\n", filebatch.c_str());
 				franz_free(buffer8bit);
 				franz_free(buffer32bit);
 				return 1;
 			}
 		if (flagdebug3)
-			myprintf("55268: filebatch %s\n",filebatch.c_str());
+			myprintf("01219: filebatch %s\n",filebatch.c_str());
 
 		string filezpaq=outfolder+"testme.zpaq";
 #ifdef _WIN32
@@ -61542,23 +62187,23 @@ int Jidac::autotest()
 #else
 		if (extract1=="DEBIAN")
 		{
-			myprintf("57703: Sorry, no full test on Debian allowed. Download and compile source from github\n");
+			myprintf("01220: Sorry, no full test on Debian allowed. Download and compile source from github\n");
 			seppuku();
 		}
 		string myzpaqexe=my_realpath(zpaqfranzexename);
 #endif
 
 		if (flagdebug2)
-			myprintf("55277: myzpaqexe %s\n",myzpaqexe.c_str());
+			myprintf("01221: myzpaqexe %s\n",myzpaqexe.c_str());
 
 		FILE* batch=fopen(filebatch.c_str(), "wb");
 		if (batch==NULL)
 		{
-			myprintf("34570: cannot write on %s\n",filebatch.c_str());
+			myprintf("01222: cannot write on %s\n",filebatch.c_str());
 			seppuku();
 		}
 		if (flagdebug2)
-			myprintf("55286: batch FILE* %s\n",migliaia(int64_t(batch)));
+			myprintf("01223: batch FILE* %s\n",migliaia(int64_t(batch)));
 
 #ifdef _WIN32
 		fprintf(batch,"@echo OFF\r\n");
@@ -61701,32 +62346,32 @@ int Jidac::autotest()
 		fprintf(batch,"\"%s\" autotest -checktxt \"%s\" %s",myzpaqexe.c_str(),temp.c_str(),acapo.c_str());
 		
 		if (flagdebug3)
-			myprintf("55330: before fclose\n");
+			myprintf("01224: before fclose\n");
 		fclose(batch);
 		if (flagdebug3)
-			myprintf("55333: after fclose\n");
+			myprintf("01225: after fclose\n");
 
 // ok we want the +x
 #ifdef unix
 		chmod(filebatch.c_str(),0700);
 		if (flagdebug3)
-			myprintf("55400: after chmod\n");
+			myprintf("01226: after chmod\n");
 #endif
 		myprintf("\n\n");
-		myprintf("55345: The test batchfile is: %s\n",filebatch.c_str());
+		myprintf("01227: The test batchfile is: %s\n",filebatch.c_str());
 	}
 
 	if (flagdebug3)
-		myprintf("55407: franz_free buffer8bit %s\n",migliaia(int64_t(buffer8bit)));
+		myprintf("01228: franz_free buffer8bit %s\n",migliaia(int64_t(buffer8bit)));
 
 	franz_free(buffer8bit);
 
 	if (flagdebug3)
-		myprintf("55411: franz_free buffer32bit %s\n",migliaia(int64_t(buffer32bit)));
+		myprintf("01229: franz_free buffer32bit %s\n",migliaia(int64_t(buffer32bit)));
 	franz_free(buffer32bit);
 
 	if (flagdebug2)
-		myprintf("55414: allok %d\n",int(allok));
+		myprintf("01230: allok %d\n",int(allok));
 	if (allok)
 		return 0;
 	else
@@ -61737,12 +62382,12 @@ int Jidac::findj()
 {
 	if (files.size()==0)
 	{
-		myprintf("34577: no files selected to find\n");
+		myprintf("01231: no files selected to find\n");
 		return 1;
 	}
 	if (files.size()==2)
 	{
-		myprintf("34584: magically search %s\n",files[1].c_str());
+		myprintf("01232: magically search %s\n",files[1].c_str());
 		onlyfiles.push_back(files[1]);
 		files.pop_back();
 	}
@@ -61753,7 +62398,7 @@ int Jidac::findj()
 		scandir(true,edt,files[i].c_str(),!flagnorecursion);
 	int64_t scantime=mtime()-startscan;
 	if (flagverbose)
-		myprintf("55360: Scantime %f\n",(scantime*0.001));
+		myprintf("01233: Scantime %f\n",(scantime*0.001));
 	int64_t 	howmany		=0;
 	int64_t 	totalsize	=0;
 	vector<DTMap::iterator> filelist;
@@ -61793,7 +62438,7 @@ int Jidac::findj()
 	}
 	if (orderby!="")
 	{
-		myprintf("34939: orderby |%s|\n",orderby.c_str());
+		myprintf("01234: orderby |%s|\n",orderby.c_str());
 		sort(filelist.begin(), filelist.end(), compareorderby);
 	}
 	for (unsigned int i=0;i<filelist.size();i++)
@@ -61812,7 +62457,7 @@ int Jidac::findj()
 	if (howmany)
 	{
 		printbar('=');
-		myprintf("55420: Files %s for %s bytes (%s)\n",migliaia((int64_t)howmany),migliaia((int64_t)totalsize),tohuman((int64_t)totalsize));
+		myprintf("01235: Files %s for %s bytes (%s)\n",migliaia((int64_t)howmany),migliaia((int64_t)totalsize),tohuman((int64_t)totalsize));
 	}
 	return 0;
 }
@@ -61821,28 +62466,37 @@ int Jidac::isopen()
 {
 	if (files.size()!=1)
 	{
-		myprintf("35476: for isopen() exactly 1 file needed\n");
+		myprintf("01236! for isopen() exactly 1 file needed\n");
 		return 2;
 	}
 	if (!fileexists(files[0]))
 	{
-		myprintf("50580: file does not exists ");
+		myprintf("01237! file does not exists %Z\n",files[0].c_str());
+		/*
+		myprintf("01238! file does not exists ");
 		printUTF8(files[0].c_str());
 		myprintf("\n");
+		*/
 		return 1;
 	}
 
 	if (isfileopen(files[0]))
 	{
-		myprintf("35481: file seems open ");
+		myprintf("01239: file seems open %Z\n",files[0].c_str());
+		/*
+		myprintf("01240: file seems open ");
 		printUTF8(files[0].c_str());
 		myprintf("\n");
+		*/
 		return 1;
 	}
-
-	myprintf("35487: file is NOT open ");
+	myprintf("01241: file is NOT open %Z\n",files[0].c_str());
+	
+/*
+	myprintf("01242: file is NOT open ");
 	printUTF8(files[0].c_str());
 	myprintf("\n");
+	*/
 	return 0;
 }
 
@@ -61857,7 +62511,7 @@ void close_open_files()
 {
 #ifdef __linux__
 	if (flagverbose)
-		myprintf("61619: Seems Linux, scanning proc\n");
+		myprintf("01243: Seems Linux, scanning proc\n");
     char 			path[MAX_FILE_PATH];
     DIR 			*dir;
     struct dirent 	*ent;
@@ -61869,24 +62523,24 @@ void close_open_files()
     snprintf(path, sizeof(path), "/proc/%d/fd", pid);
 	
 	if (flagverbose)
-		myprintf("61628: mypid is %d path is |%s|\n",pid, path);
+		myprintf("01244: mypid is %d path is |%s|\n",pid, path);
 
     if ((dir=opendir(path))!=NULL)
 	{
         while ((ent=readdir(dir))!=NULL) 
 		{
 			if (flagverbose)
-				myprintf("61626: File to be closed (. and .. skipped) %s\n",ent->d_name);
+				myprintf("01245: File to be closed (. and .. skipped) %s\n",ent->d_name);
             if ((strcmp(ent->d_name, ".")==0) || (strcmp(ent->d_name, "..")==0))
                 continue;
 			snprintf(fd_path,sizeof(fd_path),"/proc/%d/fd/%s",pid,ent->d_name);
 			fd=atoi(ent->d_name);
 			if (flagverbose)
-				myprintf("61631: fd %d  fd_path %s\n",fd,fd_path);
+				myprintf("01246: fd %d  fd_path %s\n",fd,fd_path);
             if (fd>2) 
 			{
 				if (flagverbose)
-					myprintf("61364: Closing fd (>2) %d\n", fd);
+					myprintf("01247: Closing fd (>2) %d\n", fd);
                 close(fd);
             }
         }
@@ -61894,12 +62548,12 @@ void close_open_files()
     } 
 	else 
 	{
-        myprintf("61642: (strange Linux?) cannot open /proc/[pid]/fd %s\n",path);
+        myprintf("01248: (strange Linux?) cannot open /proc/[pid]/fd %s\n",path);
     }
 	return;
 #endif
 	if (flagverbose)
-		myprintf("61655: close_open_files() on non-Linux: do nothing\n");
+		myprintf("01249: close_open_files() on non-Linux: do nothing\n");
 }
 */
 
@@ -61911,7 +62565,7 @@ void my_handler(int s)
 	color_restore();
 	fflush(stdout);
 	myprintf("\n\n");
-	myprintf("54760: CONTROL-C detected, try some housekeeping...\n");
+	myprintf("01250: CONTROL-C detected, try some housekeeping...\n");
 #ifdef unix
 	if (g_dataset!="")
 	{
@@ -61919,12 +62573,12 @@ void my_handler(int s)
 		string 	destroy_base	=x_one("zfs destroy "	+g_basesnapshot,"59870: Destroy base snapshot (if any)");
 		if (flagdebug)
 		{
-			myprintf("59877: %s\n",destroy_diff2.c_str());
-			myprintf("59878: %s\n",destroy_base.c_str());
+			myprintf("01251: %s\n",destroy_diff2.c_str());
+			myprintf("01252: %s\n",destroy_base.c_str());
 		}
 		string 	take_base		=x_one("zfs snapshot "	+g_basesnapshot,"Taking base snapshot");
 		if (flagdebug)
-			myprintf("59882: %s\n",take_base.c_str());
+			myprintf("01253: %s\n",take_base.c_str());
 	}
 	// control-C in blind password
     struct termios tty;
@@ -61936,46 +62590,46 @@ void my_handler(int s)
 	if (g_chunk_size>0)
 	{
 		printbar('-');
-		myprintf("61810: OK we get a chunk size limit of %s on %s files\n",migliaia(g_chunk_size),migliaia2(g_addedchunklist.size()));
-		myprintf("61892: g_archivefp_first handle %21s\n",migliaia(int64_t(g_archivefp_first)));
-		myprintf("61892: g_archivefp       handle %21s\n",migliaia(int64_t(g_archivefp)));
+		myprintf("01254: OK we get a chunk size limit of %s on %s files\n",migliaia(g_chunk_size),migliaia2(g_addedchunklist.size()));
+		myprintf("01255: g_archivefp_first handle %21s\n",migliaia(int64_t(g_archivefp_first)));
+		myprintf("01256: g_archivefp       handle %21s\n",migliaia(int64_t(g_archivefp)));
 		if (g_write_fp.size()==2)
 			if (g_write_fp[0]==g_archivefp_first)
 				if (g_write_fp[1]==g_archivefp)
-					myprintf("61830: archivefp/first match (this is good)\n");
+					myprintf("01257: archivefp/first match (this is good)\n");
 
-		myprintf("61808: write pool before emergency close (should be 2 max 3)\n");
+		myprintf("01258: write pool before emergency close (should be 2 max 3)\n");
 		vector<FP> fp_da_chiudere;
 		for (unsigned int i=0;i<g_write_fp.size();i++)
 		{
-			myprintf("61810: write pool %08d %21s %s\n",i,migliaia((int64_t)(g_write_fp[i])),g_write_filename[i].c_str());
+			myprintf("01259: write pool %08d %21s %s\n",i,migliaia((int64_t)(g_write_fp[i])),g_write_filename[i].c_str());
 			fp_da_chiudere.push_back(g_write_fp[i]);
 		}
 		printbar('-');
 		
 		if (fp_da_chiudere.size()>0)
 		{
-			myprintf("61814: Closing %08d handles\n",fp_da_chiudere.size());
+			myprintf("01260: Closing %08d handles\n",fp_da_chiudere.size());
 			for (unsigned int i=0;i<fp_da_chiudere.size();i++)
 			{
-				myprintf("61817: Closing (pool size %08d) FP %21s\n",g_write_fp.size(),migliaia(int64_t(fp_da_chiudere[i])));
+				myprintf("01261: Closing (pool size %08d) FP %21s\n",g_write_fp.size(),migliaia(int64_t(fp_da_chiudere[i])));
 				myfclose(&fp_da_chiudere[i]);
 				if (flagdebug3)
-				myprintf("61824: Now pool size is   %08d\n",g_write_fp.size());
+				myprintf("01262: Now pool size is   %08d\n",g_write_fp.size());
 			}
 			if (g_write_fp.size()==0)
-			myprintf("61822: Closing done, seems OK\n");
+			myprintf("01263: Closing done, seems OK\n");
 			else
-			myprintf("61838: Closing done, something left\n");
+			myprintf("01264: Closing done, something left\n");
 		}
 		
 		if (g_write_fp.size()!=0)
 		{
 			printbar('-');
-			myprintf("61849: write pool NOT empty (this could be bad)\n");
-			myprintf("61808: [2] write pool after close size %08d (should be zero)\n",g_write_fp.size());
+			myprintf("01265: write pool NOT empty (this could be bad)\n");
+			myprintf("01266: [2] write pool after close size %08d (should be zero)\n",g_write_fp.size());
 			for (unsigned int i=0;i<g_write_fp.size();i++)
-				myprintf("61810: write pool %08d %21s %s\n",i,migliaia((int64_t)(g_write_fp[i])),g_write_filename[i].c_str());
+				myprintf("01267: write pool %08d %21s %s\n",i,migliaia((int64_t)(g_write_fp[i])),g_write_filename[i].c_str());
 			printbar('-');
 		}
 	}
@@ -61990,7 +62644,7 @@ void my_handler(int s)
 		unsigned int deleted	=0;
 		unsigned int expected	=0;
 
-		myprintf("55699: Fixed-size chunk: (try) deleting all of them (should be %s)\n",migliaia(g_addedchunklist.size()-1));
+		myprintf("01268: Fixed-size chunk: (try) deleting all of them (should be %s)\n",migliaia(g_addedchunklist.size()-1));
 		for (unsigned int i=0;i<g_addedchunklist.size();i++)
 		{
 			if (fileexists(g_addedchunklist[i].c_str()))
@@ -61999,42 +62653,45 @@ void my_handler(int s)
 				if (delete_file_no_mercy(g_addedchunklist[i].c_str()))
 				{
 					if (flagdebug3)
-						myprintf("55708: Erased chunk %08d <<",i);
+						myprintf("01269: Erased chunk %08d <<",i);
 					deleted++;
 				}
 				else
 				{
-					myprintf("55711: *FAILED delete of %08d <<",i);
+					myprintf("01270: *FAILED delete of %08d <<%Z>>\n",i,g_addedchunklist[i].c_str());
+					/*
+					myprintf("01271: *FAILED delete of %08d <<",i);
 					printUTF8(g_addedchunklist[i].c_str());
 					myprintf(">>\n");
+					*/
 				}
 			}
 			else
 			{
 				if (flagdebug3)
-					myprintf("61916: file not found to be killed %s\n",g_addedchunklist[i].c_str());
+					myprintf("01272: file not found to be killed %s\n",g_addedchunklist[i].c_str());
 			}
 		}
 		if (expected==deleted)
 			color_green();
 		else
 			color_red();
-		myprintf("61754: Expected file %s deleted %s\n",migliaia(expected),migliaia2(deleted));
+		myprintf("01273: Expected file %s deleted %s\n",migliaia(expected),migliaia2(deleted));
 		color_restore();
 	}
 	else
 	{
 		if ((g_archivefp!=FPNULL) && (g_archivefp!=NULL))
 		{
-			myprintf("54470: Closing file handle %s\n",migliaia(int64_t(g_archivefp)));
+			myprintf("01274: Closing file handle %s\n",migliaia(int64_t(g_archivefp)));
 			myfclose(&g_archivefp);
-			myprintf("61829: myfclose done on archivefp now %s\n",migliaia(int64_t(g_archivefp)));
+			myprintf("01275: myfclose done on archivefp now %s\n",migliaia(int64_t(g_archivefp)));
 		}
 		if ((g_archivefp_first!=FPNULL) && (g_archivefp_first!=NULL))
 		{
-			myprintf("55687: Closing file handle first %s\n",migliaia(int64_t(g_archivefp_first)));
+			myprintf("01276: Closing file handle first %s\n",migliaia(int64_t(g_archivefp_first)));
 			myfclose(&g_archivefp_first);
-			myprintf("61829: myfclose done on archivefp_first now %s\n",migliaia(int64_t(g_archivefp_first)));
+			myprintf("01277: myfclose done on archivefp_first now %s\n",migliaia(int64_t(g_archivefp_first)));
 		}
 
 		if (flagalwayscheck)
@@ -62042,11 +62699,17 @@ void my_handler(int s)
 				if (prendidimensionefile(g_archive.c_str())>=0)
 					{
 						if (delete_file(g_archive.c_str()))
-							myprintf("54766: Erased chunk <<");
+							myprintf("01278: Erased chunk <<%Z>>\n",g_archive.c_str());
 						else
-							myprintf("54767: *CANNOT DELETE* <<");
+							myprintf("01279! *CANNOT DELETE* <<%Z>>\n",g_archive.c_str());
+						/*
+						if (delete_file(g_archive.c_str()))
+							myprintf("01280: Erased chunk <<");
+						else
+							myprintf("01281: *CANNOT DELETE* <<");
 						printUTF8(g_archive.c_str());
 						myprintf(">>\n");
+						*/
 					}
 		// we must trim the index too!
 		if (!g_flagcreating)
@@ -62054,7 +62717,7 @@ void my_handler(int s)
 			int64_t newdim=prendidimensionefile(g_archive.c_str());
 			if (newdim>g_starting_zpaqsize)
 			{
-				myprintf("61913: should roll back %s from %s to %s\n",g_archive.c_str(),migliaia(newdim), migliaia2(g_starting_zpaqsize));
+				myprintf("01282: should roll back %s from %s to %s\n",g_archive.c_str(),migliaia(newdim), migliaia2(g_starting_zpaqsize));
 
 ///				if (truncate(g_archive.c_str(), g_starting_zpaqsize))
 	///				printerr("61920",g_archive.c_str(),0);
@@ -62062,10 +62725,10 @@ void my_handler(int s)
 				if (g_starting_zpaqdate>0)
 				{
 					if (flagdebug3)
-					myprintf("62144: should touching back to %s\n",dateToString(false,g_starting_zpaqdate).c_str());
+					myprintf("01283: should touching back to %s\n",dateToString(false,g_starting_zpaqdate).c_str());
 						
 					///if (!touch(g_archive.c_str(),g_starting_zpaqdate,g_starting_zpaqattr))
-						///myprintf("61926: WARNING trouble in touching\n");
+						///myprintf("01284: WARNING trouble in touching\n");
 				}
 			}
 		}
@@ -62075,15 +62738,22 @@ void my_handler(int s)
 	{
 		if (g_pid_handle!=0)
 		{
-			myprintf("61905: Closing pid handle\n");
+			myprintf("01285: Closing pid handle\n");
 			fclose(g_pid_handle);
 		}
 		if (delete_file(g_pidname.c_str()))
-			myprintf("54766: Erased pid   <<");
+			myprintf("01286: Erased pid   <<%Z>>\n",g_pidname.c_str());
 		else
-			myprintf("54766: *FAILED* delete of <<");
+			myprintf("01287! *FAILED* delete of <<%Z>>\n",g_pidname.c_str());
+		
+		/*
+		if (delete_file(g_pidname.c_str()))
+			myprintf("01288: Erased pid   <<");
+		else
+			myprintf("01289: *FAILED* delete of <<");
 		printUTF8(g_pidname.c_str());
 		myprintf(">>\n");
+		*/
 	}
 
 	// 2==control-C (maybe)
@@ -62093,7 +62763,7 @@ void my_handler(int s)
 #ifdef _WIN32
 		if (command=='q')
 		{
-			myprintf("55506: *** VSS RUNNING, DETACHING\n");
+			myprintf("01290: *** VSS RUNNING, DETACHING\n");
 			vss_deleteshadows(linuxtowinpath(g_franzsnap));
 		}
 #endif
@@ -62140,12 +62810,12 @@ void my_handler(int s)
 	if ((*(ULONG*)(kusershareddata+0x26c))>=10)
 	{
 		if (flagdebug)
-			myprintf("53811: ************ Windows 10 or later => keeping flagnoconsole |%d|\n",int(flagnoconsole));
+			myprintf("01291: ************ Windows 10 or later => keeping flagnoconsole |%d|\n",int(flagnoconsole));
 	}
 	else
 	{
 		if (flagdebug)
-			myprintf("53814: ************ Previous of Windows 10 => enforcing flagnoconsole=true\n");
+			myprintf("01292: ************ Previous of Windows 10 => enforcing flagnoconsole=true\n");
 		flagnoconsole=true;
 	}
 #endif
@@ -62182,7 +62852,7 @@ void my_handler(int s)
 		SetConsoleCP		(65001);
 		SetConsoleOutputCP	(65001);
 	}
-///	myprintf("55597: ConsoleCP %d ConsoleOutputCP %d\n",g_ConsoleCP,g_ConsoleOutputCP);
+///	myprintf("01293: ConsoleCP %d ConsoleOutputCP %d\n",g_ConsoleCP,g_ConsoleOutputCP);
 	OSVERSIONINFO vi;// = {0};
 	vi.dwMajorVersion=0;
 	vi.dwMinorVersion=0;
@@ -62222,7 +62892,7 @@ void my_handler(int s)
 	catch (std::exception& e)
 	{
 		fflush(stdout);
-		myprintf("23013: zpaqfranz error: %s\n", e.what());
+		myprintf("01294: zpaqfranz error: %s\n", e.what());
 		errorcode=2;
 	}
 	fflush(stdout);
@@ -62230,9 +62900,9 @@ void my_handler(int s)
 	{
 		myprintf("\n");
 		printbar('*');
-		myprintf("55646: Something STRANGE happened. Archive seems corrupt. Media full?\n");
-		myprintf("55647: WRITTEN BYTES  %19s\n",migliaia(g_fwritten));
-		myprintf("55648: EXPECTED       %19s\n",migliaia(g_fexpected));
+		myprintf("01295: Something STRANGE happened. Archive seems corrupt. Media full?\n");
+		myprintf("01296: WRITTEN BYTES  %19s\n",migliaia(g_fwritten));
+		myprintf("01297: EXPECTED       %19s\n",migliaia(g_fexpected));
 		printbar('*');
 		errorcode=2;
 	}
@@ -62241,10 +62911,10 @@ void my_handler(int s)
 	{
 		int64_t dt_ram	=jidac.get_dt_ram();
 		int64_t edt_ram	=jidac.get_edt_ram();
-	///	myprintf("57752: RAM information: sizeof(DT) %s g_dt_ram %s\n",migliaia(sizeof(DT)),migliaia2(g_dt_ram));
-		myprintf("57753: internal  count %12s ~%18s\n",migliaia(jidac.get_dt_count()), migliaia2(dt_ram));
-		myprintf("57754: external  count %12s ~%18s\n",migliaia(jidac.get_edt_count()),migliaia2(jidac.get_edt_ram()));
-		myprintf("57755: RAM for files' data (approx) ~%18s\n",migliaia(dt_ram+edt_ram));
+	///	myprintf("01298: RAM information: sizeof(DT) %s g_dt_ram %s\n",migliaia(sizeof(DT)),migliaia2(g_dt_ram));
+		myprintf("01299: internal  count %12s ~%18s\n",migliaia(jidac.get_dt_count()), migliaia2(dt_ram));
+		myprintf("01300: external  count %12s ~%18s\n",migliaia(jidac.get_edt_count()),migliaia2(jidac.get_edt_ram()));
+		myprintf("01301: RAM for files' data (approx) ~%18s\n",migliaia(dt_ram+edt_ram));
 	
 	}
 	
@@ -62260,7 +62930,7 @@ void my_handler(int s)
 ///	  exit(0);
 	if ((!flaghashdeep) && (!flagstdout) && (command!='L') && (command!='F') && (command!='.') && (!flagterse)) /// we need to make output compatible with hashdeep?
 	{
-		myprintf("55662: %1.3f seconds (%s) ", (mtime()-g_start)/1000.0,timetohuman((uint32_t)((mtime()-g_start)/1000.0)).c_str());
+		myprintf("01302: %1.3f seconds (%s) ", (mtime()-g_start)/1000.0,timetohuman((uint32_t)((mtime()-g_start)/1000.0)).c_str());
 
 		if (command=='q')
 			myprintf(" on VSS operation\n");
@@ -62295,31 +62965,31 @@ void my_handler(int s)
 		if (g_255)
 		{
 			myprintf("\n");
-			myprintf("55695: Seems %08d errors by path/filename too long (>255)\n", g_255);
+			myprintf("01303: Seems %08d errors by path/filename too long (>255)\n", g_255);
 		}
 		if (errorcode==2)
 		{
 			if (flagdebug2)
-				myprintf("33026: call xcommand on errorcode==2\n");
+				myprintf("01304: call xcommand on errorcode==2\n");
 			xcommand(g_exec_error,g_exec_text);
 		}
 		else
 		if (errorcode==1)
 		{
 			if (flagdebug2)
-				myprintf("33033: call xcommand on errorcode==1\n");
+				myprintf("01305: call xcommand on errorcode==1\n");
 			xcommand(g_exec_warn,g_exec_text);
 		}
 		else
 		{
 			if (flagdebug2)
-				myprintf("33040: call xcommand with a different errorcode (not 1, not 2) %d\n",errorcode);
+				myprintf("01306: call xcommand with a different errorcode (not 1, not 2) %d\n",errorcode);
 	/// when adding multipart archive, and no errors, take the last filename
 			if (g_archive!="")
 			{
 				g_exec_text=g_archive;
 				if (flagdebug2)
-					myprintf("33047: g_archive not null, setting g_exec_text to %s\n",g_exec_text.c_str());
+					myprintf("01307: g_archive not null, setting g_exec_text to %s\n",g_exec_text.c_str());
 			}
 			if (g_exec_ok!="")
 				xcommand(g_exec_ok,g_exec_text);
@@ -62350,6 +63020,8 @@ void my_handler(int s)
 	
 	if (g_output_handle!=0)
 		fclose(g_output_handle);
+	if (g_error_handle!=0)
+		fclose(g_error_handle);
 
 #ifdef _WIN32
 	if (!flagnoconsole)
@@ -62357,7 +63029,7 @@ void my_handler(int s)
 //// set back the console
 		SetConsoleCP		(g_ConsoleCP);
 		SetConsoleOutputCP	(g_ConsoleOutputCP);
-	///myprintf("55728: ConsoleCP %d ConsoleOutputCP %d\n",g_ConsoleCP,g_ConsoleOutputCP);
+	///myprintf("01308: ConsoleCP %d ConsoleOutputCP %d\n",g_ConsoleCP,g_ConsoleOutputCP);
 	}
 #endif
 	color_restore();
@@ -62369,11 +63041,11 @@ int Jidac::utf()
 {
 	if (files.size()!=1)
 	{
-		myprintf("33467: you can fix exactly ONE folder at time\n");
+		myprintf("01309! you can fix exactly ONE folder at time\n");
 		return 2;
 	}
 	if (!flagkill)
-		myprintf("55745: Fix UTF-8 dry run (because no -kill)\n\n");
+		myprintf("01310: Fix UTF-8 dry run (because no -kill)\n\n");
 
 	g_bytescanned=0;
 	g_filescanned=0;
@@ -62395,9 +63067,11 @@ int Jidac::utf()
 				longdirs++;
 				if (flagfix255)
 				{
-					myprintf("55766: TOO LONG %08d ",p->first.size());
+					myprintf("01311: TOO LONG %08d %Z\n",p->first.size(),p->first.c_str());
+					/*
+					myprintf("01312: TOO LONG %08d ",p->first.size());
 					printUTF8(p->first.c_str());
-					myprintf("\n");
+					myprintf("\n");*/
 				}
 			}
 			string	thedir=p->first;
@@ -62406,9 +63080,12 @@ int Jidac::utf()
 			{
 				if (flagverbose)
 				{
-					myprintf("55779: Dir candidate ");
+					myprintf("01313: Dir candidate %Z\n",thedir.c_str());
+					/*
+					myprintf("01314: Dir candidate ");
 					printUTF8(thedir.c_str());
 					myprintf("\n");
+					*/
 				}
 				myreplace(thedir,includetrailingbackslash(files[0]),"");
 				mydirs.push_back(thedir);
@@ -62421,9 +63098,12 @@ int Jidac::utf()
 				longfiles++;
 				if (flagfix255)
 				{
-					myprintf("55792: TOO LONG %08d ",p->first.size());
+					myprintf("01315: TOO LONG %08d %Z\n",p->first.size(),p->first.c_str());
+					/*
+					myprintf("01316: TOO LONG %08d ",p->first.size());
 					printUTF8(p->first.c_str());
 					myprintf("\n");
+					*/
 				}
 			}
 
@@ -62434,18 +63114,18 @@ int Jidac::utf()
 				howmanyfiles++;
 			}
 		}
-	myprintf("55806: UTF-8 dirs:  %12s\n",migliaia(mydirs.size()));
-	myprintf("55807: UTF-8 files: %12s\n",migliaia(howmanyfiles));
+	myprintf("01317: UTF-8 dirs:  %12s\n",migliaia(mydirs.size()));
+	myprintf("01318: UTF-8 files: %12s\n",migliaia(howmanyfiles));
 	if (longdirs)
-		myprintf("55809: LONG  dirs:  %12s\n",migliaia(longdirs));
+		myprintf("01319: LONG  dirs:  %12s\n",migliaia(longdirs));
 	if (longfiles)
-		myprintf("55811: LONG  files: %12s\n",migliaia(longfiles));
+		myprintf("01320: LONG  files: %12s\n",migliaia(longfiles));
 #if defined(_WIN32)
 	if (!flaglongpath)
 			if ((longdirs+longfiles)>0)
 			{
 				myprintf("\n");
-				myprintf("55846: *** WINDOWS WARNING *** found long path. Suggestion: use -longpath switch\n");
+				myprintf("01321: *** WINDOWS WARNING *** found long path. Suggestion: use -longpath switch\n");
 			}
 #endif
 	int errori=0;
@@ -62453,7 +63133,7 @@ int Jidac::utf()
 	{
 		if (mydirs.size()>0)
 		{
-			myprintf("55822: First stage - try to fix (%s) folder names\n",migliaia(mydirs.size()));
+			myprintf("01322: First stage - try to fix (%s) folder names\n",migliaia(mydirs.size()));
 			unsigned int renameddir=0;
 			unsigned int i=0;
 			while (i<mydirs.size())
@@ -62465,18 +63145,24 @@ int Jidac::utf()
 					livellocorrente+=thedir[k++];
 				if (flagverbose)
 				{
-					myprintf("55834: Father ");
+					myprintf("01323: Father %Z\n",thedir.c_str());
+					/*
+					myprintf("01324: Father ");
 					printUTF8(thedir.c_str());
 					myprintf("\n");
+					*/
 				}
 				unsigned int j=i+1;
 				while (mypos(thedir,mydirs[j])==0)
 				{
 					if (flagverbose)
 					{
-						myprintf("55842: Son ");
+						myprintf("01325: Son %Z\n",mydirs[j].c_str());
+						/*
+						myprintf("01326: Son ");
 						printUTF8(mydirs[j].c_str());
 						myprintf("\n");
+						*/
 					}
 					j++;
 					if (j==mydirs.size())
@@ -62491,9 +63177,14 @@ int Jidac::utf()
 					{
 						if (flagverbose)
 						{
+							myprintf("===========> No son: ERROR renaming %Z => %Z\n",from.c_str(),sto.c_str());
+							printUTF8(from.c_str());
+							myprintf(" => %s\n",sto.c_str());
+							/*
 							myprintf("===========> No son: ERROR renaming ");
 							printUTF8(from.c_str());
 							myprintf(" => %s\n",sto.c_str());
+							*/
 						}
 						errori++;
 					}
@@ -62501,9 +63192,12 @@ int Jidac::utf()
 					{
 						if (flagverbose)
 						{
+							myprintf("===========> No son: successfully renamed %Z => %Z\n",from.c_str(),sto.c_str());
+							/*
 							myprintf("===========> No son: successfully renamed ");
 							printUTF8(from.c_str());
 							myprintf(" => %s\n",sto.c_str());
+							*/
 						}
 						renameddir++;
 					}
@@ -62530,7 +63224,7 @@ int Jidac::utf()
 							myprintf("===========> Successfully renamed father ");
 							printUTF8(from.c_str());
 							myprintf(" => %s\n",sto.c_str());
-							myprintf("55899: Fixing the sons\n");
+							myprintf("01327: Fixing the sons\n");
 						}
 						renameddir++;
 						unsigned int j=i+1;
@@ -62546,9 +63240,7 @@ int Jidac::utf()
 						{
 							if (flagverbose)
 							{
-								myprintf("55914: New son: ");
-								printUTF8(mydirs[j].c_str());
-								myprintf("\n");
+								myprintf("01328: New son: %Z\n",mydirs[j].c_str());
 							}
 							j++;
 							if (j==mydirs.size())
@@ -62562,18 +63254,18 @@ int Jidac::utf()
 				if (i>=mydirs.size())
 					break;
 			}
-			myprintf("55931: End of first stage, errors %s renamed %s\n",migliaia(errori),migliaia2(renameddir));
+			myprintf("01329: End of first stage, errors %s renamed %s\n",migliaia(errori),migliaia2(renameddir));
 			if ((errori>0) && (!flagforce))
 			{
-				myprintf("33603: errors found and not -force: quit\n");
+				myprintf("01330! errors found and not -force: quit\n");
 				return 2;
 			}
 			if (howmanyfiles==0)
 			{
-				myprintf("55938: No files to be renamed, quit\n");
+				myprintf("01331: No files to be renamed, quit\n");
 				return 0;
 			}
-			myprintf("55941: Stage 2: rescan filesystem\n");
+			myprintf("01332: Stage 2: rescan filesystem\n");
 			g_bytescanned	=0;
 			g_filescanned	=0;
 			g_worked		=0;
@@ -62582,7 +63274,7 @@ int Jidac::utf()
 				scandir(true,edt,files[ii].c_str());
 			printbar(' ');
 			myprintf("\r");
-			myprintf("55950: Stage 3: fix filenames\n");
+			myprintf("01333: Stage 3: fix filenames\n");
 			unsigned int filerenamed=0;
 
 			for (DTMap::iterator p=edt.begin(); p!=edt.end(); ++p)
@@ -62596,28 +63288,25 @@ int Jidac::utf()
 						string  sto		=includetrailingbackslash(extractfilepath(p->first))+ansifile;
 						if (myrename(from,sto)!=0)
 						{
-							myprintf("===========> KAPUTT RENAMING file ");
-							printUTF8(from.c_str());
-							myprintf(" => %s\n",sto.c_str());
+							myprintf("===========> KAPUTT RENAMING file %Z => %s\n",from.c_str(),sto.c_str());
 							errori++;
 						}
 						else
 						{
 							if (flagverbose)
 							{
-								myprintf("===========> GOOD: successfully renamed ");
-								printUTF8(from.c_str());
-								myprintf(" => %s\n",sto.c_str());
+								myprintf("===========> GOOD: successfully renamed %Z => %s\n",from.c_str(),sto.c_str());
+								
 							}
 							filerenamed++;
 						}
 					}
 				}
 			if (filerenamed==howmanyfiles)
-				myprintf("55983: File renamed == howmanyfiles == %s : this is GOOD\n",migliaia(filerenamed));
+				myprintf("01334: File renamed == howmanyfiles == %s : this is GOOD\n",migliaia(filerenamed));
 			else
 			{
-				myprintf("55986: ERROR: file renamed %s != howmanyfiles %s : this is BAD\n",migliaia(filerenamed),migliaia2(howmanyfiles));
+				myprintf("01335: ERROR: file renamed %s != howmanyfiles %s : this is BAD\n",migliaia(filerenamed),migliaia2(howmanyfiles));
 				errori++;
 			}
 		}
@@ -62633,7 +63322,7 @@ int unz(const char * archive,const char * key)
 		return 0;
 	uint64_t until=0;
 	bool index=false;
-	myprintf("56001: PARANOID TEST: working on %s\n",archive);
+	myprintf("01336: PARANOID TEST: working on %s\n",archive);
   // Journaling archive state
 	std::map<uint32_t, unsigned> bsize;  // frag ID -> d block compressed size
 	std::map<std::string, unzDT> unzdt;   // filename -> date, attr, frags
@@ -62691,9 +63380,9 @@ int unz(const char * archive,const char * key)
 		}
 		/*
 		if (streaming)
-		myprintf("56059: Streaming\n");
+		myprintf("01337: Streaming\n");
 		if (journaling)
-		myprintf("56062: journaling\n");
+		myprintf("01338: journaling\n");
 		*/
       // Test journaling filename. The format must be
       // jDC[YYYYMMDDHHMMSS][t][NNNNNNNNNN]
@@ -62758,11 +63447,11 @@ int unz(const char * archive,const char * key)
 		{
 			if (memcmp(checksum+1, sha1.result(), 20))
 				unzerror("unzSHA1 mismatch");
-      //  else myprintf("56126: OK");
+      //  else myprintf("01339: OK");
    	}
 		else
 		if (checksum[0]==0)
-			myprintf("56131: not checked");
+			myprintf("01340: not checked");
 		else unzerror("invalid checksum type");
       filename.s="";
       // check csize at first non-d block
@@ -62770,7 +63459,7 @@ int unz(const char * archive,const char * key)
 		{
 			if (csize!=unzoffset)
 			{
-				myprintf("56129: Z2:    csize=%1.0f, offset=%1.0f\n",double(csize), double(unzoffset));
+				myprintf("01341: Z2:    csize=%1.0f, offset=%1.0f\n",double(csize), double(unzoffset));
 				unzerror("csize does not point here");
 			}
 			csize=0;
@@ -62792,7 +63481,7 @@ int unz(const char * archive,const char * key)
         // test for end of archive marker
 			if (csize>>63)
 			{
-				myprintf("56164: Incomplete transaction at end of archive (OK)\n");
+				myprintf("01342: Incomplete transaction at end of archive (OK)\n");
 				done=true;
 			}
 			else
@@ -62801,7 +63490,7 @@ int unz(const char * archive,const char * key)
         // test for rollback
 			if (until && date>until)
 			{
-				myprintf("56172: Rollback: %1.0f is after %1.0f\n",double(date), double(until));
+				myprintf("01343: Rollback: %1.0f is after %1.0f\n",double(date), double(until));
 			done=true;
 			}
         // Set csize to expected offset of first non d block
@@ -62995,14 +63684,14 @@ int unz(const char * archive,const char * key)
 		}
 		///myprintf("\r");
 		///print_datetime();
-		myprintf("56367: Remaining %3s %% frags %12s (RAM used ~ %15s)\r",migliaia2(100-(unzoffset*100/(total_size+1))),migliaia(frag.size()),migliaia2(ramsize));
+		myprintf("01344: Remaining %3s %% frags %12s (RAM used ~ %15s)\r",migliaia2(100-(unzoffset*100/(total_size+1))),migliaia(frag.size()),migliaia2(ramsize));
     }  // end while findFilename
     unzoffset=in.tell();
   }  // end while findBlock
 	myprintf("\n");
-	myprintf("56401: %s bytes of %s tested\n", migliaia(in.tell()), archive);
+	myprintf("01345: %s bytes of %s tested\n", migliaia(in.tell()), archive);
 	printbar('-');
-	myprintf("56373: Second stage: rebuilding hashes\n");
+	myprintf("01346: Second stage: rebuilding hashes\n");
 	std::vector<unzDTMap::iterator> mappadt;
 	std::vector<unzDTMap::iterator> vf;
 	std::map<std::string, unzDT>::iterator p;
@@ -63217,12 +63906,12 @@ int unz(const char * archive,const char * key)
 					else
 					{
 						myprintf("\n");
-						myprintf("25904: WARN UNKNOWN UNZFRANZOTYPE %d (maybe newer zpaqfranz archive?)\n",unzfranzotype);
+						myprintf("01347: WARN UNKNOWN UNZFRANZOTYPE %d (maybe newer zpaqfranz archive?)\n",unzfranzotype);
 						unknownfranzo++;
 					}
 					vf.push_back(p);
 					if (flagverbose)
-						myprintf("56599: File <<%-20s>> %08u of %08lld (%20s) %1.3f %s\n",myhashtype.c_str(),i+1,(int64_t)mappadt.size(),migliaia(size),(mtime()-startrecalc)/1000.0,fn.c_str());
+						myprintf("01348: File <<%-20s>> %08u of %08lld (%20s) %1.3f %s\n",myhashtype.c_str(),i+1,(int64_t)mappadt.size(),migliaia(size),(mtime()-startrecalc)/1000.0,fn.c_str());
 				}
 			}
 		}
@@ -63230,13 +63919,13 @@ int unz(const char * archive,const char * key)
 	if (unknownfranzo>0)
 	{
 		myprintf("\n");
-		myprintf("53651: *** WARNING UNKNOWN FRANZOTYPE %s. Maybe the archive is done with a newer zpaqfranz version?\n",migliaia(unknownfranzo));
+		myprintf("01349: *** WARNING UNKNOWN FRANZOTYPE %s. Maybe the archive is done with a newer zpaqfranz version?\n",migliaia(unknownfranzo));
 	}
 	std::sort(vf.begin(), vf.end(), unzcomparesha1hex);
 	int64_t finecalcolo=mtime();
-	myprintf("56609: Calc time (hash rebuild from fragments) %f hashed bytes %s\n",(finecalcolo-iniziocalcolo)*0.001,migliaia(hashed));
+	myprintf("01350: Calc time (hash rebuild from fragments) %f hashed bytes %s\n",(finecalcolo-iniziocalcolo)*0.001,migliaia(hashed));
 	printbar('-');
-	myprintf("56604: Third stage");
+	myprintf("01351: Third stage");
 	if (flagverify || flagparanoid)
 		myprintf(": with check against filesystem");
 	myprintf("\n");
@@ -63284,7 +63973,7 @@ int unz(const char * archive,const char * key)
 				for (MAPPATIPOHASH::iterator pp=g_mappatipohash.begin(); pp!=g_mappatipohash.end(); ++pp)
 					if (myhashtype==pp->second.hashname)
 					{
-///						myprintf("55352: Faccio test 1 %s\n",pp->second.hashname.c_str());
+///						myprintf("01352: Faccio test 1 %s\n",pp->second.hashname.c_str());
 						a=pp;
 						break;
 					}
@@ -63296,17 +63985,17 @@ int unz(const char * archive,const char * key)
 					if (!fileexists(p->first))
 					{
 						if (flagdebug2)
-							myprintf("25919: FILE NOT FOUND on %s: FILE %s\n",myhashtype.c_str(),p->first.c_str());
+							myprintf("01353: FILE NOT FOUND on %s: FILE %s\n",myhashtype.c_str(),p->first.c_str());
 						status_filenotfound++;
 					}
 					else
 					{
 						if (flagdebug3)
-							myprintf("54051: franz_do_hash\n");
+							myprintf("01354: franz_do_hash\n");
 
 						franz_do_hash dummy(a->first);
 						if (flagdebug3)
-							myprintf("56720: filehash on %s\n",p->first.c_str());
+							myprintf("01355: filehash on %s\n",p->first.c_str());
 
 						hashfromfile=dummy.filehash(
 						p->first.c_str(),true,starthash,hashed);
@@ -63314,7 +64003,7 @@ int unz(const char * archive,const char * key)
 				}
 				else
 				{
-					myprintf("53126: Cannot find hasher %s\n",myhashtype.c_str());
+					myprintf("01356: Cannot find hasher %s\n",myhashtype.c_str());
 				}
 			}
 			std::string hashdecompresso=p->second.sha1decompressedhex;
@@ -63339,12 +64028,12 @@ int unz(const char * archive,const char * key)
 			if ((!localok) || (flagverbose))
 				if (unzfranzostring!="")
 				{
-					myprintf("56714: %14s: %s\n",myhashtype.c_str(),p->first.c_str());
-					myprintf("56715: DECOMPRESSED  : %s\n",hashdecompresso.c_str());
+					myprintf("01357: %14s: %s\n",myhashtype.c_str(),p->first.c_str());
+					myprintf("01358: DECOMPRESSED  : %s\n",hashdecompresso.c_str());
 					if (!hashstoredinzpaq.empty())
-					myprintf("56716: STORED IN ZPAQ: %s\n",hashstoredinzpaq.c_str());
+					myprintf("01359: STORED IN ZPAQ: %s\n",hashstoredinzpaq.c_str());
 					if (!hashfromfile.empty())
-					myprintf("56717: FROM FILE     : %s\n",hashfromfile.c_str());
+					myprintf("01360: FROM FILE     : %s\n",hashfromfile.c_str());
 					myprintf("\n");
 					if (!localok)
 						status_e++;
@@ -63354,35 +64043,35 @@ int unz(const char * archive,const char * key)
 	int64_t fine=mtime();
 	unsigned int total_files=vf.size();
 	myprintf("\n");
-	myprintf("56720: SUMMARY : %12.2f (total time)\n",(fine-inizio)/1000.0);
+	myprintf("01361: SUMMARY : %12.2f (total time)\n",(fine-inizio)/1000.0);
 	if (zpaqvirtualfile)
-	myprintf("56721: Virtual : %12s (skipped, does not exists in 7.15)\n",migliaia(zpaqvirtualfile));
-	myprintf("56722: Total   : %12s\n",migliaia(total_files));
+	myprintf("01362: Virtual : %12s (skipped, does not exists in 7.15)\n",migliaia(zpaqvirtualfile));
+	myprintf("01363: Total   : %12s\n",migliaia(total_files));
 	if (status_e>0)
-	myprintf("56723: ERRORS  : %12s (ERROR:  something WRONG)\n",migliaia(status_e));
+	myprintf("01364: ERRORS  : %12s (ERROR:  something WRONG)\n",migliaia(status_e));
 	if (status_nohash>0)
-	myprintf("56724: WARNING : %12s (UNKNOWN:cannot verify nohash)\n",migliaia(status_nohash));
+	myprintf("01365: WARNING : %12s (UNKNOWN:cannot verify nohash)\n",migliaia(status_nohash));
 	if (status_filenotfound>0)
-	myprintf("56725: WARNING : %12s (UNKNOWN:file not found)\n",migliaia(status_filenotfound));
+	myprintf("01366: WARNING : %12s (UNKNOWN:file not found)\n",migliaia(status_filenotfound));
 	if (status_1>0)
-	myprintf("56726: GOOD    : %12s of %12s (stored=decompressed)\n",migliaia(status_1),migliaia2(total_files));
+	myprintf("01367: GOOD    : %12s of %12s (stored=decompressed)\n",migliaia(status_1),migliaia2(total_files));
 	if (status_2>0)
-	myprintf("56727: SURE    : %12s of %12s (stored=decompressed=file on disk)\n",migliaia(status_2),migliaia(total_files));
+	myprintf("01368: SURE    : %12s of %12s (stored=decompressed=file on disk)\n",migliaia(status_2),migliaia(total_files));
 	if (status_e==0)
 	{
 		if (status_nohash+status_filenotfound)
-			myprintf("56745: Unknown (cannot verify)\n");
+			myprintf("01369: Unknown (cannot verify)\n");
 		else
 		{
 			if (flagverify || flagparanoid)
-			myprintf("56748: All OK (paranoid test with check against filesystem)\n");
+			myprintf("01370: All OK (paranoid test with check against filesystem)\n");
 			else
-			myprintf("56749: All OK (paranoid test)\n");
+			myprintf("01371: All OK (paranoid test)\n");
 		}
 	}
 	else
 	{
-		myprintf("56756: WITH ERRORS\n");
+		myprintf("01372! WITH ERRORS\n");
 		return 2;
 	}
 	return 0;
@@ -63443,7 +64132,7 @@ uint32_t crc32zeros(int64_t i_size)
 int Jidac::consolidate(string i_archive)
 {
 	assert(i_archive);
-	myprintf("56797: *** Merge (consolidate) ***\n");
+	myprintf("01373: *** Merge (consolidate) ***\n");
 	vector<string>	chunk_name;
 	vector<int64_t>	chunk_size;
 	const string part0=subpart(i_archive, 0);
@@ -63462,37 +64151,37 @@ int Jidac::consolidate(string i_archive)
 	}
 	if (chunk_name.size()==0)
 	{
-		myprintf("29515: Something strange: cannot find archive chunks\n");
+		myprintf("01374! Something strange: cannot find archive chunks\n");
 		return 2;
 	}
 	int64_t total_size=0;
 	for (int unsigned i=0;i<chunk_name.size();i++)
 	{
-		myprintf("56841: Chunk %08d %20s <<%s>>\n",(int)i,migliaia(chunk_size[i]),chunk_name[i].c_str());
+		myprintf("01375: Chunk %08d %20s <<%s>>\n",(int)i,migliaia(chunk_size[i]),chunk_name[i].c_str());
 		total_size+=chunk_size[i];
 	}
 	printbar('-');
-	myprintf("56838: Total %s %20s (%s)\n",migliaia2(chunk_name.size()),migliaia(total_size),tohuman(total_size));
+	myprintf("01376: Total %s %20s (%s)\n",migliaia2(chunk_name.size()),migliaia(total_size),tohuman(total_size));
 	if (files.size()!=1)
 	{
-		myprintf("29545: WARN exactly one file as output for merge needed\n");
+		myprintf("01377: WARN exactly one file as output for merge needed\n");
 		return 1;
 	}
 	string outfile=files[0];
 	if (fileexists(outfile))
 		if (!flagforce)
 		{
-			myprintf("29553: outfile exists, and no -force. Quit %s\n",outfile.c_str());
+			myprintf("01378: outfile exists, and no -force. Quit %s\n",outfile.c_str());
 			return 1;
 		}
 	int64_t spazio=getfreespace(outfile);
-	myprintf("56860: Outfile    <<%s>>\n",outfile.c_str());
-	myprintf("56860: Free space %20s\n",migliaia(spazio));
-	myprintf("56860: Needed     %20s\n",migliaia(total_size));
+	myprintf("01379: Outfile    <<%s>>\n",outfile.c_str());
+	myprintf("01380: Free space %20s\n",migliaia(spazio));
+	myprintf("01381: Needed     %20s\n",migliaia(total_size));
 	if (spazio<total_size)
 		if (!flagspace)
 		{
-			myprintf("29564: Free space seems < needed, and no -space. Quit\n");
+			myprintf("01382: Free space seems < needed, and no -space. Quit\n");
 			return 1;
 		}
 #ifdef _WIN32
@@ -63503,7 +64192,7 @@ int Jidac::consolidate(string i_archive)
 #endif
 	if (outFile==NULL)
 	{
-		myprintf("29579: CANNOT OPEN outfile %s\n",outfile.c_str());
+		myprintf("01383! CANNOT OPEN outfile %s\n",outfile.c_str());
 		return 2;
 	}
 	size_t const blockSize = 65536;
@@ -63513,7 +64202,7 @@ int Jidac::consolidate(string i_archive)
 	XXH3_state_t state128;
     (void)XXH3_128bits_reset(&state128);
 	if (flagverify)
-		myprintf("56892: -verify: trust, but check...\n");
+		myprintf("01384: -verify: trust, but check...\n");
 	for (int unsigned i=0;i<chunk_name.size();i++)
 	{
 		string	sorgente_nome=chunk_name[i];
@@ -63526,7 +64215,7 @@ int Jidac::consolidate(string i_archive)
 		int err=1;
 #endif
 		myprintf("\n");
-		myprintf("29585: ERR <%s> kind %d\n",sorgente_nome.c_str(),err);
+		myprintf("01385! ERR <%s> kind %d\n",sorgente_nome.c_str(),err);
 		return 2;
 		}
 		size_t readSize;
@@ -63544,45 +64233,45 @@ int Jidac::consolidate(string i_archive)
 		}
 		fclose(inFile);
 		if (flagverbose)
-			myprintf("56916: Chunk %08d R %20s W %20s E %20s\n",(int)i,migliaia(chunk_readed),migliaia2(chunk_written),migliaia3(chunk_size[i]));
+			myprintf("01386: Chunk %08d R %20s W %20s E %20s\n",(int)i,migliaia(chunk_readed),migliaia2(chunk_written),migliaia3(chunk_size[i]));
 		if ((chunk_readed!=chunk_written) || (chunk_readed!=chunk_size[i]))
 		{
-			myprintf("29632: GURU on chunk %d Read, Write, Expec not equal!\n",i);
+			myprintf("01387: GURU on chunk %d Read, Write, Expec not equal!\n",i);
 			return 1;
 		}
 	}
 	fclose(outFile);
-	myprintf("59926: Done\n");
-	myprintf("59927: Written  %20s\n",migliaia(donesize));
-	myprintf("59928: Expected %20s\n\n",migliaia(total_size));
+	myprintf("01388: Done\n");
+	myprintf("01389: Written  %20s\n",migliaia(donesize));
+	myprintf("01390: Expected %20s\n\n",migliaia(total_size));
 	if (donesize!=total_size)
 	{
-		myprintf("29645: GURU bytes written does not match expected\n");
+		myprintf("01391: GURU bytes written does not match expected\n");
 		return 1;
 	}
 	if (flagverify)
 	{
-		myprintf("56940: -flagverify: double check...\n");
+		myprintf("01392: -flagverify: double check...\n");
 		XXH128_hash_t myhash=XXH3_128bits_digest(&state128);
 		char risultato[33];
 		snprintf(risultato,sizeof(risultato),"%s",bin2hex_128(myhash.high64,myhash.low64).c_str());
 		int64_t startverify=mtime();
 		g_dimensione=0;
 		if (flagdebug3)
-			myprintf("54310: franz_do_hash\n");
+			myprintf("01393: franz_do_hash\n");
 
 		franz_do_hash dummy("XXH3");
 		if (flagdebug3)
-			myprintf("56981: filehash on %s\n",outfile.c_str());
+			myprintf("01394: filehash on %s\n",outfile.c_str());
 
 		string hashreloaded=dummy.filehash(outfile,false,startverify,total_size);
 
 		///string hashreloaded=xxhash_calc_file(outfile.c_str(),false,dummycrc32,startverify,total_size,io_lavorati,thefilesize);
-		myprintf("56950: Expected   XXH3 hash of the output file %s\n",risultato);
-		myprintf("56951: Calculated XXH3 hash of the output file %s\n",hashreloaded.c_str());
+		myprintf("01395: Expected   XXH3 hash of the output file %s\n",risultato);
+		myprintf("01396: Calculated XXH3 hash of the output file %s\n",hashreloaded.c_str());
 		if (hashreloaded!=risultato)
 		{
-			myprintf("29658: GURU hash of output file does not match!\n");
+			myprintf("01397: GURU hash of output file does not match!\n");
 			return 1;
 		}
 	}
@@ -63590,16 +64279,18 @@ int Jidac::consolidate(string i_archive)
 }
 int Jidac::test()
 {
+	archive=getbackupnameifany(archive);
+
 	if ((files.size()>0))
 	{
 		if (flagquick)
-			myprintf("59884: -quick and dirty (only date/size) test\n");
+			myprintf("01398: -quick and dirty (only date/size) test\n");
 		else
 		{
 			if (flagchecksum || flagverify || flagparanoid)
-				myprintf("56960: SHA-1-chunked verify+HASH checksum\n");
+				myprintf("01399: SHA-1-chunked verify+HASH checksum\n");
 			else
-				myprintf("56951: SHA-1-chunked verify\n");
+				myprintf("01400: SHA-1-chunked verify\n");
 		}
 		return testverify(); 
 	}
@@ -63608,7 +64299,7 @@ int Jidac::test()
 	{
 		if (tofiles.size()!=1)
 		{
-			myprintf("56982: -paranoid needs a -to\n");
+			myprintf("01401! -paranoid needs a -to\n");
 			return 2;
 		}
 		uint64_t tofoldersize=0;
@@ -63618,9 +64309,8 @@ int Jidac::test()
 		if (getfoldersize(tofiles[0],tofoldersize,tofoldernumber,tofolderfolder,tofolderlongfiles))
 			if (tofoldersize>0)
 			{
-				myprintf("37333: WARNING the folder <<");
-				printUTF8(tofiles[0].c_str());
-				myprintf(">> contain %s bytes\n\n\n",migliaia(tofoldersize));
+				myprintf("01402: WARNING the folder <<%Z>> contain %s bytes\n\n\n\n",
+				tofiles[0].c_str(),migliaia(tofoldersize));
 				if (!getcaptcha("withoutmercy","Extract-check-delete without confirmation"))
 					return 1;
 			}
@@ -63643,7 +64333,7 @@ int Jidac::test()
 		if (i>0 && block[i-1].offset+block[i-1].bsize>block[i].offset)
 			error("overlapping blocks");
 	}
-	///myprintf("57012: franz: fine test blocchi\n");
+	///myprintf("01403: franz: fine test blocchi\n");
   // Label files to extract with data=0.
   ExtractJob job(*this);
   int total_files=0;
@@ -63665,7 +64355,7 @@ int Jidac::test()
 				for (unsigned i=0; p->second.data>=0 && i<p->second.ptr.size(); ++i)
 				{
 					unsigned j=p->second.ptr[i];  // fragment index
-					///myprintf("57034: Fragment index %lld\n",j);
+					///myprintf("01404: Fragment index %lld\n",j);
 					if (j==0 || j>=ht.size() || ht[j].usize<-1)
 					{
 						fflush(stdout);
@@ -63710,12 +64400,12 @@ int Jidac::test()
 		}  // end if selected
   }  // end for
 ///	dimtotalefile=job.total_size;
-	myprintf("57071: To be checked %s in %s files (%d threads)\n",migliaia(job.total_size), migliaia2(total_files), howmanythreads);
+	myprintf("01405: To be checked %s in %s files (%d threads)\n",migliaia(job.total_size), migliaia2(total_files), howmanythreads);
 	vector<ThreadID> tid(howmanythreads);
 	if (howmanythreads==1)
 	{
 		if (flagverbose)
-			myprintf("36167: monothread decompress (test)\n");
+			myprintf("01406: monothread decompress (test)\n");
 		decompressThread(&job);
 	}
 	else
@@ -63740,10 +64430,8 @@ int Jidac::test()
         if (++errors==1)
           myprintf(
           "\n57113: Failed (extracted/total fragments, file):\n");
-        myprintf("57114: UJO %u/%u ",
-                int(p->second.data), int(p->second.ptr.size()));
-        printUTF8(fn.c_str());
-        myprintf("\n");
+        myprintf("01407! UJO %u/%u %Z\n",
+                int(p->second.data), int(p->second.ptr.size()),fn.c_str());
       }
     }
   }
@@ -63757,7 +64445,7 @@ int Jidac::test()
 			int(tid.size()));
 	}
 	else
-		myprintf("57170: 7.15 stage time %10.2f no error detected (RAM ~%s), try CRC-32 (if any)\n",
+		myprintf("01408: 7.15 stage time %10.2f no error detected (RAM ~%s), try CRC-32 (if any)\n",
 	(mtime()-starttest)/1000.0,tohuman((int64_t)(tid.size()*job.maxMemory)));
 //// OK now check against CRC32 and the entire World (if any)
 	int64_t startverify=mtime();
@@ -63783,7 +64471,7 @@ int Jidac::test()
 
 	for (unsigned int i=0;i<g_crc32.size();i++)
 		dalavorare+=g_crc32[i].crc32size;
-	myprintf("57145: Checking %17s blocks with CRC-32 (%s not-0 bytes)\n",migliaia(g_crc32.size()),migliaia2(dalavorare));
+	myprintf("01409: Checking %17s blocks with CRC-32 (%s not-0 bytes)\n",migliaia(g_crc32.size()),migliaia2(dalavorare));
 		
 	uint32_t 	parts=0;
 	uint64_t	zeroedblocks=0;
@@ -63794,7 +64482,7 @@ int Jidac::test()
 	{
 		if ( ++parts % 1000 ==0)
 			if (!flagnoeta)
-				myprintf("57155: Block %05uK %16s\r",i/1000,tohuman(lavorati));
+				myprintf("01410: Block %05uK %16s\r",i/1000,tohuman(lavorati));
 		s_crc32block it=g_crc32[i];
 		DTMap::iterator p=dt.find(it.filename);
 		crc32stored=0;
@@ -63818,9 +64506,9 @@ int Jidac::test()
 		}
 		if (flagdebug3)
 		{
-			myprintf("57184: MYhashtype   %s\n",myhashtype.c_str());
-			myprintf("57185: Myhash       %s\n",myhash.c_str());
-			myprintf("57186: Mycrc32      %s\n",mycrc32.c_str());
+			myprintf("01411: MYhashtype   %s\n",myhashtype.c_str());
+			myprintf("01412: Myhash       %s\n",myhash.c_str());
+			myprintf("01413: Mycrc32      %s\n",mycrc32.c_str());
 			myprintf("\n");
 		}
 /// Houston, we have something that start with a sequence of zeros, let's compute the missing CRC
@@ -63858,13 +64546,13 @@ int Jidac::test()
 		string filedefinitivo=g_crc32[i].filename;
 		franzreplace(filedefinitivo);
 		if (flagdebug)
-			myprintf("57224: Stored %08X calculated %08X %s\n",crc32stored,currentcrc32,filedefinitivo.c_str());
+			myprintf("01414: Stored %08X calculated %08X %s\n",crc32stored,currentcrc32,filedefinitivo.c_str());
 		if (mycrc32!="")
 		{
 			if (currentcrc32==crc32stored)
 			{
 				if (flagdebug)
-					myprintf("57230: GOOD: STORED %08X = DECOMPRESSED %s\n",crc32stored,filedefinitivo.c_str());
+					myprintf("01415: GOOD: STORED %08X = DECOMPRESSED %s\n",crc32stored,filedefinitivo.c_str());
 				if (flagcrc32)
 				{
 					if (fileexists(filedefinitivo.c_str()))
@@ -63875,10 +64563,8 @@ int Jidac::test()
 							triple_error++;
 							if (flagverbose)
 							{
-								myprintf("60251: ERROR: expected %s <> %s <<",
-								migliaia(p->second.size),migliaia2(prendidimensionefile(filedefinitivo.c_str())));
-								printUTF8(filedefinitivo.c_str());
-								myprintf(">>\n");
+								myprintf("01416: ERROR: expected %s <> %s <<%Z>>\n",
+								migliaia(p->second.size),migliaia2(prendidimensionefile(filedefinitivo.c_str())),filedefinitivo.c_str());
 							}
 						}
 						else
@@ -63892,9 +64578,7 @@ int Jidac::test()
 						triple_error++;
 						if (flagverbose)
 						{
-							myprintf("60249: ERROR: cannot find <<");
-							printUTF8(filedefinitivo.c_str());
-							myprintf(">>\n");
+							myprintf("01417: ERROR: cannot find <<%Z>>\n",filedefinitivo.c_str());
 ///							missing_files++;
 						}
 					}
@@ -63904,7 +64588,7 @@ int Jidac::test()
 					{
 						franz_do_hash dummyquick2("CRC-32");
 						if (flagdebug3)
-							myprintf("61169: filehash CRC-32 on %s\n",filedefinitivo.c_str());
+							myprintf("01418: filehash CRC-32 on %s\n",filedefinitivo.c_str());
 						g_dimensione=0;
 						string 	crcfromfilesystem=dummyquick2.filehash(filedefinitivo,false,startverify,prendidimensionefile(filedefinitivo.c_str()));
 		
@@ -63912,16 +64596,16 @@ int Jidac::test()
 						{
 							uint32_t fromfilesystem=crchex2int(crcfromfilesystem.c_str());
 							if (flagdebug3)
-								myprintf("60175: stored %08X decompressed %08X from filesystem %08X\n",crc32stored,currentcrc32,fromfilesystem);
+								myprintf("01419: stored %08X decompressed %08X from filesystem %08X\n",crc32stored,currentcrc32,fromfilesystem);
 							if (fromfilesystem==currentcrc32)
 							{
 								if (flagdebug3)
-									myprintf("60182: Triple == %08X for %s\n",fromfilesystem,filedefinitivo.c_str());
+									myprintf("01420: Triple == %08X for %s\n",fromfilesystem,filedefinitivo.c_str());
 								triple_ok++;
 							}
 							else
 							{
-								myprintf("60189: CRC-32 stored %08X decomp %08X file %08X <<",crc32stored,currentcrc32,fromfilesystem);
+								myprintf("01421: CRC-32 stored %08X decomp %08X file %08X <<",crc32stored,currentcrc32,fromfilesystem);
 								printUTF8(filedefinitivo.c_str());
 								myprintf(">>\n");
 								triple_error++;
@@ -63938,7 +64622,7 @@ int Jidac::test()
 			{
 				if (crc32stored!=0)
 				{
-					myprintf("57237: ERROR:  STORED CRC-32 %08X != DECOMPRESSED %08X (ck %08d) %s\n",crc32stored,currentcrc32,parti,filedefinitivo.c_str());
+					myprintf("01422: ERROR:  STORED CRC-32 %08X != DECOMPRESSED %08X (ck %08d) %s\n",crc32stored,currentcrc32,parti,filedefinitivo.c_str());
 					status_e_blocks++;
 				}
 
@@ -63947,46 +64631,46 @@ int Jidac::test()
 		else
 		{	// we have and old style ZPAQ without CRC32
 			uncheckedfiles++;
-			///myprintf("57240: CRC32: %08X %08X (parti %08d) %s\n",currentcrc32,chekkone,parti,filedefinitivo.c_str());
+			///myprintf("01423: CRC32: %08X %08X (parti %08d) %s\n",currentcrc32,chekkone,parti,filedefinitivo.c_str());
 		}
 		parti=1;
 		currentcrc32=0;
 		i++;
 	}
 	myprintf("\n");
-	myprintf("57246: CRC-32 time %14.2fs\n",(mtime()-startverify)/1000.0);
-	myprintf("57246: Blocks %19s (%12s)\n",migliaia(dalavorare),migliaia2(g_crc32.size()));
-	myprintf("57247: Zeros  %19s (%12s) %f s\n",migliaia(zeroedblocks),migliaia2(howmanyzero),(g_zerotime/1000.0));
-	myprintf("57248: Total  %19s speed %s/s (%s/s)\n",migliaia(dalavorare+zeroedblocks),migliaia2((int64_t)((dalavorare+zeroedblocks)/((mtime()-startverify+1)/1000.0))),tohuman((int64_t)((dalavorare+zeroedblocks)/((mtime()-startverify+1)/1000.0))));
+	myprintf("01424: CRC-32 time %14.2fs\n",(mtime()-startverify)/1000.0);
+	myprintf("01425: Blocks %19s (%12s)\n",migliaia(dalavorare),migliaia2(g_crc32.size()));
+	myprintf("01426: Zeros  %19s (%12s) %f s\n",migliaia(zeroedblocks),migliaia2(howmanyzero),(g_zerotime/1000.0));
+	myprintf("01427: Total  %19s speed %s/s (%s/s)\n",migliaia(dalavorare+zeroedblocks),migliaia2((int64_t)((dalavorare+zeroedblocks)/((mtime()-startverify+1)/1000.0))),tohuman((int64_t)((dalavorare+zeroedblocks)/((mtime()-startverify+1)/1000.0))));
 	if (checkedfiles>0)
-		myprintf("57251: Checked         : %08d of %08d (zpaqfranz)\n",checkedfiles,total_files);
+		myprintf("01428: Checked         : %08d of %08d (zpaqfranz)\n",checkedfiles,total_files);
 	if (uncheckedfiles>0)
 	{
-		myprintf("57254: UNcheck         : %08d of %08d (zpaq 7.15?)\n",uncheckedfiles,total_files);
+		myprintf("01429: UNcheck         : %08d of %08d (zpaq 7.15?)\n",uncheckedfiles,total_files);
 			status_0=uncheckedfiles;
 	}
 	if (status_e_hash)
-	myprintf("57258: ERRORS HASH     : %08d (ERROR verifyng hash from disk)\n",status_e_hash);
+	myprintf("01430: ERRORS HASH     : %08d (ERROR verifyng hash from disk)\n",status_e_hash);
 	if (status_e_crc)
-	myprintf("57260: ERRORS CRC FI   : %08d (ERROR verifyng CRC-32 from disk)\n",status_e_crc);
+	myprintf("01431: ERRORS CRC FI   : %08d (ERROR verifyng CRC-32 from disk)\n",status_e_crc);
 	if (status_e_blocks)
-	myprintf("57262: ERRORS          : %08d (ERROR in CRC-32, SHA-1 collisions?)\n",status_e_blocks);
+	myprintf("01432: ERRORS          : %08d (ERROR in CRC-32, SHA-1 collisions?)\n",status_e_blocks);
 	if (flagcrc32)
 	{
-		myprintf("60317: Triple checking CRC-32 on %s files (%s)\n",migliaia(filestobecrced.size()),tohuman(dalavorare+zeroedblocks));
+		myprintf("01433: Triple checking CRC-32 on %s files (%s)\n",migliaia(filestobecrced.size()),tohuman(dalavorare+zeroedblocks));
 		
 		vector<std::pair<string,string> > crc32_pair;
 		int64_t starttriple=mtime();
-		franzparallelhashfiles("CRC-32",dalavorare+zeroedblocks,filestobecrced,crc32_pair);
+		franzparallelhashfiles("CRC-32",dalavorare+zeroedblocks,filestobecrced,false,crc32_pair);
 		printbar(' ');
-		myprintf("60349: Time doing CRC-32 %14.2fs\n",(mtime()-starttriple)/1000.0);
+		myprintf("01434: Time doing CRC-32 %14.2fs\n",(mtime()-starttriple)/1000.0);
 	///	for (int i=0;i<filestobecrced.size();i++)
-		///	myprintf("60326: To be CRC-ed %s\n",filestobecrced[i].c_str());
+		///	myprintf("01435: To be CRC-ed %s\n",filestobecrced[i].c_str());
 		
 	
 		if ((searchfrom!="") || (replaceto!=""))
 		{
-			myprintf("60293: due to -search/replace fixing dt\n");
+			myprintf("01436: due to -search/replace fixing dt\n");
 			rename_a_dtmap(dt);
 		}
 		
@@ -63999,7 +64683,7 @@ int Jidac::test()
 			if (p==dt.end())
 			{
 				triple_error++;
-				myprintf("60554: GURU cannot find thefilename in crc32_pair %s\n",thefilename.c_str());
+				myprintf("01437: GURU cannot find thefilename in crc32_pair %s\n",thefilename.c_str());
 				///myprintf("%s\n",dt.begin()->first.c_str());
 				///seppuku();
 			}
@@ -64010,14 +64694,14 @@ int Jidac::test()
 				{
 					triple_ok++;
 					if (flagdebug3)
-						myprintf("63900: OK SOURCE %08d %s %s\n",(int)i,crc32_pair[i].first.c_str(),crc32_pair[i].second.c_str());
+						myprintf("01438: OK SOURCE %08d %s %s\n",(int)i,crc32_pair[i].first.c_str(),crc32_pair[i].second.c_str());
 				}
 				else
 				{
 					triple_error++;
 					if (flagverbose)
 					{
-						myprintf("63900: KAPUTT CRC-32 expected %08X founded %08X %s\n",
+						myprintf("01439: KAPUTT CRC-32 expected %08X founded %08X %s\n",
 						p->second.file_crc32,
 						crc32fromfilesystem,
 						crc32_pair[i].second.c_str());
@@ -64026,35 +64710,35 @@ int Jidac::test()
 			}
 		}
 		color_green();
-		myprintf("60241: Triple OK       : %08d (CRC-32 stored, decompressed and filesystem)\n",triple_ok);
+		myprintf("01440: Triple OK       : %08d (CRC-32 stored, decompressed and filesystem)\n",triple_ok);
 		if (triple_error)
 			color_red();
-		myprintf("57262: Triple ERRORS   : %08d (-crc32 failed against filesystem)\n",triple_error);
+		myprintf("01441: Triple ERRORS   : %08d (-crc32 failed against filesystem)\n",triple_error);
 		color_restore();
 	}
 	status_e = status_e_hash+status_e_crc+status_e_blocks+triple_error;
 	if (status_e)
 	printbar('-');
 	if (status_0)
-	myprintf("57267: WARNING         : %08d (Cannot say anything)\n",status_0);
+	myprintf("01442: WARNING         : %08d (Cannot say anything)\n",status_0);
 	if (status_1)
-	myprintf("57269: GOOD            : %08d of %08d (stored=decompressed)\n",status_1,total_files);
+	myprintf("01443: GOOD            : %08d of %08d (stored=decompressed)\n",status_1,total_files);
 	if (status_e==0)
 	{
 		if (status_0)
-			myprintf("57273: VERDICT         : UNKNOWN  (Cannot say anything)\n");
+			myprintf("01444: VERDICT         : UNKNOWN  (Cannot say anything)\n");
 		else
-			myprintf("57275: VERDICT         : OK                   (CRC-32 stored vs decompressed)\n");
+			myprintf("01445: VERDICT         : OK                   (CRC-32 stored vs decompressed)\n");
 	}
 	else
 	{
-		myprintf("57279: WITH ERRORS\n");
+		myprintf("01446: WITH ERRORS\n");
 		errors=2;
 	}
 	if (flagverify)
 	{
 		printbar('+');
-		myprintf("57285: Re-testing (hashing) from filesystem (-verify) if possible\n");
+		myprintf("01447: Re-testing (hashing) from filesystem (-verify) if possible\n");
 		errors+=verify(false);
 	}
 	if (flagcollision)
@@ -64089,7 +64773,7 @@ int Jidac::test()
 	edt.clear();
 	for (unsigned i=0;i<files.size();++i)
 	{
-		myprintf("60368: scanning on %s\n",files[i].c_str());
+		myprintf("01448: scanning on %s\n",files[i].c_str());
 		scandir(true,edt,files[i].c_str());
 		files_count.push_back(edt.size()-howmanyfiles);
 		howmanyfiles=edt.size();
@@ -64098,25 +64782,25 @@ int Jidac::test()
 	printbar('-');
  	for (unsigned i=0; i<files.size(); ++i)
 		if (direxists(files[i]))
-			myprintf("97899: %9s in <<%s>>\n",migliaia((int64_t)files_count[i]),files[i].c_str());
+			myprintf("01449: %9s in <<%s>>\n",migliaia((int64_t)files_count[i]),files[i].c_str());
 	printbar('-');
-	myprintf("97901: Total files found: %s\n", migliaia((int64_t)edt.size()));
+	myprintf("01450: Total files found: %s\n", migliaia((int64_t)edt.size()));
 	myprintf("\n");
 	
 	if (flagdebug3)
 	{
 		for (DTMap::iterator p=edt.begin(); p!=edt.end(); ++p)
-			myprintf("97925: EDT  %s\n",p->first.c_str());
+			myprintf("01451: EDT  %s\n",p->first.c_str());
 		printbar('-');
 		for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p)
-			myprintf("97926: DT   %s\n",p->first.c_str());
+			myprintf("01452: DT   %s\n",p->first.c_str());
 	}
 	vector<DTMap::iterator> filelist;
 	DTMap filelist_externalnotinzpaq;
 	DTMap filelist_inzpaqnotinexternal;
 	DTMap filelist_both;
 	
-	myprintf("60401: Comparing External to ZPAQ\n");
+	myprintf("01453: Comparing External to ZPAQ\n");
 	for (DTMap::iterator p=edt.begin(); p!=edt.end(); ++p)
 	{
 		DTMap::iterator a=dt.find(rename(p->first));
@@ -64126,26 +64810,26 @@ int Jidac::test()
 			filelist_both[p->first]=p->second;
 	}
 
-	myprintf("60412: Comparing ZPAQ to External\n");
+	myprintf("01454: Comparing ZPAQ to External\n");
 	for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p)
 	{
 		string filename=rename(p->first);
-		///myprintf("60412: cerco (da dt) %s\n",filename.c_str());
+		///myprintf("01455: cerco (da dt) %s\n",filename.c_str());
 		DTMap::iterator a=edt.find(filename);
 		if (a==edt.end())
 		{
-		///	myprintf("60418: UNO in dt not in edt %s\n",p->first.c_str());
+		///	myprintf("01456: UNO in dt not in edt %s\n",p->first.c_str());
 			filelist_inzpaqnotinexternal[p->first]=p->second;
 		}
 		else
 		{
-	///		myprintf("60423: DUE in edt AND in dt %s\n",p->first.c_str());
+	///		myprintf("01457: DUE in edt AND in dt %s\n",p->first.c_str());
 			filelist_both[p->first]=p->second;
 		}
 	}
-	myprintf("60411: External not in ZPAQ       %s\n",migliaia(filelist_externalnotinzpaq.size()));
-	myprintf("60411: Internal not on filesystem %s\n",migliaia(filelist_inzpaqnotinexternal.size()));
-	myprintf("60411: Files both                 %s\n",migliaia(filelist_both.size()));
+	myprintf("01458: External not in ZPAQ       %s\n",migliaia(filelist_externalnotinzpaq.size()));
+	myprintf("01459: Internal not on filesystem %s\n",migliaia(filelist_inzpaqnotinexternal.size()));
+	myprintf("01460: Files both                 %s\n",migliaia(filelist_both.size()));
 
 	vector<string> filestobecrced;
 
@@ -64164,7 +64848,7 @@ int Jidac::test()
 		if (isdirectory(p->first))
 		{
 			bool risultato=exists(filename);
-			myprintf("53926: p->first isdirectory, check exists %d\n",(int)risultato);
+			myprintf("01461: p->first isdirectory, check exists %d\n",(int)risultato);
 			if (risultato)
 			{
 				ok_directory++;
@@ -64210,7 +64894,7 @@ int Jidac::test()
 				if (prendidimensionefile(filename.c_str())!=p->second.size)
 				{
 					p->second.expectedsize	=0; // flag checked
-					myprintf("53942: prendidimensionefile %s <> p second size %s\n",migliaia(prendidimensionefile(filename.c_str())),migliaia2(p->second.size));
+					myprintf("01462: prendidimensionefile %s <> p second size %s\n",migliaia(prendidimensionefile(filename.c_str())),migliaia2(p->second.size));
 					different_size++;
 				}
 				else
@@ -64219,9 +64903,9 @@ int Jidac::test()
 		}
 	}
  
-	myprintf("60509: First pass, done\n");
-	myprintf("60545: different_size   %08d\n",different_size);
-	myprintf("60545: CRC to be done   %08d\n",filestobecrced.size());
+	myprintf("01463: First pass, done\n");
+	myprintf("01464: different_size   %08d\n",different_size);
+	myprintf("01465: CRC to be done   %08d\n",filestobecrced.size());
 
 	
 	vector<std::pair<string,string> > crc32_pair;
@@ -64238,19 +64922,19 @@ int Jidac::test()
 			DTMap::iterator p=filelist_both.find(thefilename);
 			if (p==dt.end())
 			{
-				myprintf("60554: GURU cannot find thefilename in both %s\n",thefilename.c_str());
+				myprintf("01466: GURU cannot find thefilename in both %s\n",thefilename.c_str());
 			}
 			else
 			{
 				if (p->second.hexcrc32==crc32_pair[i].first)
 				{
 					p->second.expectedsize	=1; // flag checked
-				//myprintf("63900: OK SOURCE %08d %s %s\n",(int)i,crc32_pair[i].first.c_str(),crc32_pair[i].second.c_str());
+				//myprintf("01467: OK SOURCE %08d %s %s\n",(int)i,crc32_pair[i].first.c_str(),crc32_pair[i].second.c_str());
 				}
 				else
 				{
 					p->second.expectedsize	=0; // flag checked
-					myprintf("63900: KAPUTT SOURCE %08d CRC-32 expected %s founded %s %s\n",(int)i,crc32_pair[i].first.c_str(),p->second.hexcrc32.c_str(),crc32_pair[i].second.c_str());
+					myprintf("01468: KAPUTT SOURCE %08d CRC-32 expected %s founded %s %s\n",(int)i,crc32_pair[i].first.c_str(),p->second.hexcrc32.c_str(),crc32_pair[i].second.c_str());
 				}
 			}
 		}
@@ -64270,7 +64954,7 @@ void myaddfile(uint32_t i_tnumber,DTMap& i_edt,string i_filename, int64_t i_date
 			if (!(*pjidac).isselected(i_filename.c_str(), false,i_size))
 			{
 				if (flagdebug3)
-					myprintf("56021: discarded %s\n",i_filename.c_str());
+					myprintf("01469: discarded %s\n",i_filename.c_str());
 				return;
 			}
 	///Raze to the ground ads and zfs as soon as possible
@@ -64284,14 +64968,14 @@ void myaddfile(uint32_t i_tnumber,DTMap& i_edt,string i_filename, int64_t i_date
 		if ((uint64_t)i_size<minsize)
 		{
 			if (flagdebug)
-				myprintf("27072: (-minsize) too small %19s %s\n",migliaia(i_size),i_filename.c_str());
+				myprintf("01470: (-minsize) too small %19s %s\n",migliaia(i_size),i_filename.c_str());
 			return;
 		}
 	if (maxsize>0)
 		if ((uint64_t)i_size>maxsize)
 		{
 			if (flagdebug)
-				myprintf("27080: (-maxsize) too large %19s %s\n",migliaia(i_size),i_filename.c_str());
+				myprintf("01471: (-maxsize) too large %19s %s\n",migliaia(i_size),i_filename.c_str());
 			return;
 		}
 
@@ -64312,22 +64996,20 @@ void myaddfile(uint32_t i_tnumber,DTMap& i_edt,string i_filename, int64_t i_date
 			
 			franz_do_hash dummy(g_thechosenhash);
 			if (flagdebug3)
-				myprintf("57372: filehash on %s\n",i_filename.c_str());
+				myprintf("01472: filehash on %s\n",i_filename.c_str());
 
 			d.hexhash=dummy.filehash(i_filename,false,0,prendidimensionefile(i_filename.c_str()));
 
 ///			d.hexhash=hash_calc_file(flag2algo(),i_filename.c_str(),false,dummycrc,mtime(),prendidimensionefile(i_filename.c_str()),dummy,thefilesize);
 			if (flagverbose)
 			{
-				myprintf("%s: |%s| [%d] %6.3f ",g_thechosenhash_str.c_str(),d.hexhash.c_str(),i_tnumber,(mtime()-starthash)/1000.0);
-				printUTF8(i_filename.c_str());
-				myprintf("\n");
+				myprintf("%s: |%s| [%d] %6.3f %Z\n",g_thechosenhash_str.c_str(),d.hexhash.c_str(),i_tnumber,(mtime()-starthash)/1000.0,i_filename.c_str());
 			}
 		}
 ///  thread safe, but... who cares?
 	if (g_arraybytescanned.size()==0)
 	{
-		myprintf("52361: GURU g_arraybytescanned not pushed?\n");
+		myprintf("01473: GURU g_arraybytescanned not pushed?\n");
 		seppuku();
 		return;
 	}
@@ -64379,20 +65061,20 @@ void myscandir(uint32_t i_tnumber,DTMap& i_edt,string filename, bool i_recursive
 {
 	if (!i_recursive)
 		if (flagdebug3)
-			myprintf("56571: myscandir of %s\n",filename.c_str());
+			myprintf("01474: myscandir of %s\n",filename.c_str());
 
 	///Raze to the ground ads and zfs as soon as possible
 	if (isads(filename))
 	{
 		if (flagverbose)
-			myprintf("57412: Skip :$DATA ----> %s\n",filename.c_str());
+			myprintf("01475: Skip :$DATA ----> %s\n",filename.c_str());
 		return;
 	}
 	if (!flagforcezfs)
 		if (iszfs(filename))
 		{
 			if (flagverbose)
-				myprintf("57419: Skip .zfs ----> %s\n",filename.c_str());
+				myprintf("01476: Skip .zfs ----> %s\n",filename.c_str());
 			return;
 		}
 #ifdef unix
@@ -64447,15 +65129,15 @@ void myscandir(uint32_t i_tnumber,DTMap& i_edt,string filename, bool i_recursive
   // Expand wildcards
 	WIN32_FIND_DATA ffd;
 	string t=filename;
-///	myprintf("57417:   %s\n",t.c_str());
+///	myprintf("01477:   %s\n",t.c_str());
 	if (t.size()>0 && t[t.size()-1]=='/')
 		t+="*";
-	///myprintf("57474:   %s\n",t.c_str());
+	///myprintf("01478:   %s\n",t.c_str());
 	HANDLE h=FindFirstFile(utow(t.c_str()).c_str(), &ffd);
 	if (h==INVALID_HANDLE_VALUE && GetLastError()!=ERROR_FILE_NOT_FOUND && GetLastError()!=ERROR_PATH_NOT_FOUND)
 		if (!flagignore)
 			printerr("59345",t.c_str(),0);
-///	myprintf("57474: 22:   %s\n",t.c_str());
+///	myprintf("01479: 22:   %s\n",t.c_str());
 	while (h!=INVALID_HANDLE_VALUE)
 	{
     // For each file, get name, date, size, attributes
@@ -64469,9 +65151,9 @@ void myscandir(uint32_t i_tnumber,DTMap& i_edt,string filename, bool i_recursive
 		t=wtou(ffd.cFileName);
 		if (flagdebug3) // sometimes Windows get very strange attributes
 		{
-			myprintf("57505: %08X MY new t2 %s\n",(unsigned int)ffd.dwFileAttributes,t.c_str());
+			myprintf("01480: %08X MY new t2 %s\n",(unsigned int)ffd.dwFileAttributes,t.c_str());
 			string temp=decodewinattribute(ffd.dwFileAttributes);
-			myprintf("57507: %s\n",temp.c_str());
+			myprintf("01481: %s\n",temp.c_str());
 			myprintf("\n");
 		}
 		if (t=="." || t=="..")
@@ -64481,7 +65163,7 @@ void myscandir(uint32_t i_tnumber,DTMap& i_edt,string filename, bool i_recursive
 				/// Houston, we have a strange deduplicated .vhdx file?
 				/// add as by default
 				if (flagverbose)
-					myprintf("57503: Verbose: found something strange2 (VHDX?) %s\n",t.c_str());
+					myprintf("01482: Verbose: found something strange2 (VHDX?) %s\n",t.c_str());
 		}
 		else
 		{
@@ -64529,25 +65211,25 @@ bool	isbackuppart(string i_partname,string i_mask)
 #endif
 
 	if (flagdebug2)
-		myprintf("84250: i_partname |%s|  i_mask |%s|\n",i_partname.c_str(),i_mask.c_str());
+		myprintf("01483: i_partname |%s|  i_mask |%s|\n",i_partname.c_str(),i_mask.c_str());
 
 	if (isdirectory(i_partname))
 	{
 		if (flagdebug)
-			myprintf("84252: i_partname is a folder |%s|\n",i_partname.c_str());
+			myprintf("01484: i_partname is a folder |%s|\n",i_partname.c_str());
 		return false;
 	}
 	if (i_partname=="")
 	{
 		if (flagdebug)
-			myprintf("84250: partname empty\n");
+			myprintf("01485: partname empty\n");
 		return false;
 	}
 
 	if (!iszpaq(i_partname))
 	{
 		if (flagdebug)
-			myprintf("84256: partname not a .zpaq |%s|\n",i_partname.c_str());
+			myprintf("01486: partname not a .zpaq |%s|\n",i_partname.c_str());
 		return false;
 	}
 
@@ -64555,11 +65237,11 @@ bool	isbackuppart(string i_partname,string i_mask)
 	{
 		if (flagdebug)
 		{
-			myprintf("84243: i_mask empty\n");
+			myprintf("01487: i_mask empty\n");
 			///string onlyname=extractfilename(i_partname);
 			if (i_partname.size()>14)
 				i_mask=i_partname.substr(0,i_partname.size()-14);
-			myprintf("56922: new i_mask =>|%s|\n",i_mask.c_str());
+			myprintf("01488: new i_mask =>|%s|\n",i_mask.c_str());
 
 		}
 	}
@@ -64568,7 +65250,7 @@ bool	isbackuppart(string i_partname,string i_mask)
 	if (candidato.size()<14)
 	{
 		if (flagdebug)
-			myprintf("84265: partname too short of |%s|\n",i_partname.c_str());
+			myprintf("01489: partname too short of |%s|\n",i_partname.c_str());
 		return false;
 	}
 
@@ -64579,21 +65261,21 @@ bool	isbackuppart(string i_partname,string i_mask)
 	if (onlyname.size()==0)
 	{
 		if (flagdebug)
-			myprintf("84273: onlyfilename empty of mask |%s|\n",i_mask.c_str());
+			myprintf("01490: onlyfilename empty of mask |%s|\n",i_mask.c_str());
 		return false;
 	}
 
 	if (mypos(onlyname,candidato)!=0)
 	{
 		if (flagdebug)
-			myprintf("84280: cannot match |%s| in |%s|\n",onlyname.c_str(),candidato.c_str());
+			myprintf("01491: cannot match |%s| in |%s|\n",onlyname.c_str(),candidato.c_str());
 		return false;
 	}
 
 	if (candidato[candidato.size()-14]!='_')
 	{
 		if (flagdebug)
-			myprintf("84287: char -14 not _ in |%s|\n",candidato.c_str());
+			myprintf("01492: char -14 not _ in |%s|\n",candidato.c_str());
 		return false;
 	}
 
@@ -64601,7 +65283,7 @@ bool	isbackuppart(string i_partname,string i_mask)
 	if (thepart<0)
 	{
 		if (flagdebug)
-			myprintf("84294: thepart <0 for %s\n",i_partname.c_str());
+			myprintf("01493: thepart <0 for %s\n",i_partname.c_str());
 		return false;
 	}
 	return true;
@@ -64651,7 +65333,7 @@ class multipart
 
 		if (i_filename=="")
 		{
-			myprintf("84400: multipartfilename is empty\n");
+			myprintf("01494: multipartfilename is empty\n");
 			return;
 		}
 		for (unsigned int i=0;i<i_filename.size();i++)
@@ -64667,14 +65349,14 @@ class multipart
 		int parts	=0;  // number of existing parts in multipart
 		string part0=subpart(i_filename,0);
 		if (flagdebug3)
-		myprintf("61956: part0 %s i_filename %s\n",part0.c_str(),i_filename.c_str());
+		myprintf("01495: part0 %s i_filename %s\n",part0.c_str(),i_filename.c_str());
 		
 		string thehole	="";
 		for (int i=1;; ++i)
 		{
 			string partname=subpart(i_filename,i);
 			if (flagdebug2)
-			myprintf("61962: partname on %08d %s\n",i,partname.c_str());
+			myprintf("01496: partname on %08d %s\n",i,partname.c_str());
 			
 			if (partname==part0)
 				error("84285: too many archive parts");
@@ -64682,7 +65364,7 @@ class multipart
 			{
 				thehole=partname;
 				if (flagdebug3)
-					myprintf("61990: filenamearraysize %08d partname %08d does not exists\n",filenamearray.size(),i,partname.c_str());
+					myprintf("01497: filenamearraysize %08d partname %08d does not exists\n",filenamearray.size(),i,partname.c_str());
 				if (i==1)
 					thehole="";
 				else
@@ -64690,8 +65372,8 @@ class multipart
 				{
 					if (flagdebug3)
 					{
-						myprintf("61995: last filenamearraysize %s\n",filenamearray[filenamearray.size()-1].filename.c_str());
-						myprintf("61996: i-1                    %s\n",subpart(i_filename,i-1).c_str());
+						myprintf("01498: last filenamearraysize %s\n",filenamearray[filenamearray.size()-1].filename.c_str());
+						myprintf("01499: i-1                    %s\n",subpart(i_filename,i-1).c_str());
 					}
 					if (filenamearray[filenamearray.size()-1].filename==subpart(i_filename,i-1)) 
 						thehole="";
@@ -64709,7 +65391,7 @@ class multipart
 				myblock.flaghashstored=false;
 				partarray.push_back(myblock);
 				if (flagdebug2)
-					myprintf("61928: pushing on partarray the partname %s\n",partname.c_str());
+					myprintf("01500: pushing on partarray the partname %s\n",partname.c_str());
 			}
 			++parts;
 		}
@@ -64718,11 +65400,9 @@ class multipart
 
 		if (thehole!="")
 		{
-		///	myprintf("84478: PART NUMBER MISMATCH: disk %s vs part %s (HOLE IN %s)\n",migliaia(filenamearray.size()),migliaia2(partarray.size()),thehole.c_str());
-			myprintf("84478: [1] AT LEAST ONE HOLE DETECTED! <<");
-			printUTF8(thehole.c_str());
-			myprintf(">>\n");
-
+		///	myprintf("01501: PART NUMBER MISMATCH: disk %s vs part %s (HOLE IN %s)\n",migliaia(filenamearray.size()),migliaia2(partarray.size()),thehole.c_str());
+			myprintf("01502: [1] AT LEAST ONE HOLE DETECTED! <<%Z>>\n",thehole.c_str());
+			
 			if (filenamearray.size()>partarray.size()) // this should be
 				for (unsigned int i=0;i<filenamearray.size();i++)
 				{
@@ -64735,7 +65415,7 @@ class multipart
 						}
 					if (!trovato)
 						if (flagdebug3)
-							myprintf("84493: Filename not matched %s\n",filenamearray[i].filename.c_str());
+							myprintf("01503: Filename not matched %s\n",filenamearray[i].filename.c_str());
 				}
 		}
 		if (partarray.size()>0)
@@ -64766,9 +65446,9 @@ class multipart
 
 		if (flagdebug3)
 		{
-			myprintf("84383: scan by   %s\n",onlypath.c_str());
-			myprintf("84383: filename  %s\n",thefilename.c_str());
-			myprintf("84384: onlyname  %s\n",onlyname.c_str());
+			myprintf("01504: scan by   %s\n",onlypath.c_str());
+			myprintf("01505: filename  %s\n",thefilename.c_str());
+			myprintf("01506: onlyname  %s\n",onlyname.c_str());
 		}
 
 		string temppath=onlypath;
@@ -64781,7 +65461,7 @@ class multipart
 		myprintf("\r");
 
 		if (flagdebug)
-			myprintf("84316: scanned %s\n",migliaia(thedt.size()));
+			myprintf("01507: scanned %s\n",migliaia(thedt.size()));
 
 		if (thedt.size()==0)
 			return "";
@@ -64806,18 +65486,18 @@ class multipart
 					myblock.isdir			=false;
 					myblock.flaghashstored	=false;
 					filenamearray.push_back(myblock);
-	///				myprintf("84406: %s %s\n",estensione.c_str(),p->first.c_str());
+	///				myprintf("01508: %s %s\n",estensione.c_str(),p->first.c_str());
 				}
 			}
 			else
 			{
 				if (flagdebug3)
-					myprintf("84591: Not backup part %s\n",currentfilename.c_str());
+					myprintf("01509: Not backup part %s\n",currentfilename.c_str());
 			}
 		}
 		std::sort(filenamearray.begin(),filenamearray.end(),comparefilename);
 		if (flagdebug2)
-			myprintf("84518: filenamearray size post %s\n",migliaia(filenamearray.size()));
+			myprintf("01510: filenamearray size post %s\n",migliaia(filenamearray.size()));
 
 		if (filenamearray.size()==0)
 			return "";
@@ -64825,7 +65505,7 @@ class multipart
 		{
 			if (flagdebug3)
 				for (int unsigned i=0;i<filenamearray.size();i++)
-					myprintf("84527: filenamearray %08d %s\n",(int)i,filenamearray[i].filename.c_str());
+					myprintf("01511: filenamearray %08d %s\n",(int)i,filenamearray[i].filename.c_str());
 			return filenamearray[filenamearray.size()-1].filename;
 		}
 	}
@@ -64853,11 +65533,11 @@ bool Jidac::acceptonlynot(string i_filename)
 		for (unsigned i=0; i<notfiles.size(); ++i)
 		{
 			if (flagdebug3)
-				myprintf("56750: check notfiles %03d %s  on filename %s\n",(int)i,notfiles[i].c_str(),i_filename.c_str());
+				myprintf("01512: check notfiles %03d %s  on filename %s\n",(int)i,notfiles[i].c_str(),i_filename.c_str());
 			if (ispath(notfiles[i].c_str(),i_filename.c_str()))
 			{
 				if (flagdebug3)
-					myprintf("56666: discarded because ispath notfiles[i] %s %s\n",notfiles[i].c_str(),i_filename.c_str());
+					myprintf("01513: discarded because ispath notfiles[i] %s %s\n",notfiles[i].c_str(),i_filename.c_str());
 				return false;
 			}
 		}
@@ -64868,14 +65548,14 @@ bool Jidac::acceptonlynot(string i_filename)
 		for (unsigned i=0;i<onlyfiles.size() && !matched; ++i)
 		{
 			if (flagdebug3)
-				myprintf("56733: check only %03d %s  on filename %s\n",(int)i,onlyfiles[i].c_str(),i_filename.c_str());
+				myprintf("01514: check only %03d %s  on filename %s\n",(int)i,onlyfiles[i].c_str(),i_filename.c_str());
 			if (ispath(onlyfiles[i].c_str(),i_filename.c_str()))
 				matched=true;
 		}
 		if (!matched)
 		{
 			if (flagdebug3)
-				myprintf("56741: discarded because not onlyfiles\n");
+				myprintf("01515: discarded because not onlyfiles\n");
 			return false;
 		}
 	}
@@ -64886,7 +65566,7 @@ int Jidac::listfolders(string i_path,vector<string>* o_thelist)
 {
 	if (o_thelist==NULL)
 	{
-		myprintf("56655: GURU o_thelist is null\n");
+		myprintf("01516: GURU o_thelist is null\n");
 		return 0;
 	}
 	if (!isdirectory(i_path))
@@ -64895,18 +65575,18 @@ int Jidac::listfolders(string i_path,vector<string>* o_thelist)
 
 #ifndef unix
 	if (flagdebug2)
-		myprintf("56662: i_path      %s\n",i_path.c_str());
+		myprintf("01517: i_path      %s\n",i_path.c_str());
 	i_path=extractfilepath(i_path);
 	std::wstring wpattern = utow(i_path.c_str())+utow("*.*");
 	const std::string s_pattern(wpattern.begin(),wpattern.end());
 	if (flagdebug3)
-		myprintf("56667: get handle for w pattern %s\n",wtou(wpattern.c_str()).c_str());
+		myprintf("01518: get handle for w pattern %s\n",wtou(wpattern.c_str()).c_str());
 	WIN32_FIND_DATAW findfiledata;
 	HANDLE myhandle=FindFirstFileW(wpattern.c_str(),&findfiledata);
 	if (myhandle==INVALID_HANDLE_VALUE)
 	{
 		if (flagdebug)
-			myprintf("56674: Invalid handle %s\n",s_pattern.c_str());
+			myprintf("01519: Invalid handle %s\n",s_pattern.c_str());
 		return 0;
 	}
 	do
@@ -64919,7 +65599,7 @@ int Jidac::listfolders(string i_path,vector<string>* o_thelist)
 			wfilepath=findfiledata.cFileName;
 			const std::string s_wfilepath(wfilepath.begin(),wfilepath.end());
 			if (flagdebug3)
-				myprintf("56687: Working on %s ",s_wfilepath.c_str());
+				myprintf("01520: Working on %s ",s_wfilepath.c_str());
 			if (findfiledata.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
 			{
 				if (flagdebug3)
@@ -64937,7 +65617,7 @@ int Jidac::listfolders(string i_path,vector<string>* o_thelist)
 	struct 	dirent *ent;
 	if ((dir=opendir(i_path.c_str()))==NULL)
 	{
-		myprintf("56724: cannot scan in <<%s>>\n",i_path.c_str());
+		myprintf("01521: cannot scan in <<%s>>\n",i_path.c_str());
 		return 0;
 	}
 	while ((ent=readdir(dir))!=NULL)
@@ -64945,7 +65625,7 @@ int Jidac::listfolders(string i_path,vector<string>* o_thelist)
 		string thename=ent->d_name;
 		string fullname=i_path+thename;
 		if (flagdebug3)
-			myprintf("56712: working on thename %s fullname %s\n",thename.c_str(),fullname.c_str());
+			myprintf("01522: working on thename %s fullname %s\n",thename.c_str(),fullname.c_str());
 		if ((thename!=".") && (thename!="..") && (thename!=".zfs"))
 		{
 			if (acceptonlynot(thename))
@@ -64954,12 +65634,12 @@ int Jidac::listfolders(string i_path,vector<string>* o_thelist)
 				{
 					tobesorted.push_back(thename);
 					if (flagdebug3)
-						myprintf("56719: no direxists fullname %s\n",fullname.c_str());
+						myprintf("01523: no direxists fullname %s\n",fullname.c_str());
 				}
 				else
 				{
 					if (flagdebug3)
-						myprintf("56719: no direxists fullname %s\n",fullname.c_str());
+						myprintf("01524: no direxists fullname %s\n",fullname.c_str());
 				}
 			}
 		}
@@ -64969,7 +65649,7 @@ int Jidac::listfolders(string i_path,vector<string>* o_thelist)
 
 	if (flagdebug)
 		for (unsigned int i=0;i<tobesorted.size();i++)
-			myprintf("56700: %03d  %s\n",(int)i,tobesorted[i].c_str());
+			myprintf("01525: %03d  %s\n",(int)i,tobesorted[i].c_str());
 	std::sort(tobesorted.begin(),tobesorted.end());
 	for (unsigned int i=0;i<tobesorted.size();i++)
 		(*o_thelist).push_back(tobesorted[i]);
@@ -64988,13 +65668,13 @@ int Jidac::multisomething()
 			return test();
 		else
 		{
-			myprintf("55152: unknown multisomething %c\n",command);
+			myprintf("01526! unknown multisomething %c\n",command);
 			return 2;
 		}
 	}
 
 	string estensione=prendiestensione(fullarchive);
-	myprintf("57994: Searching for jolly archive(s) in <<%s>> for extension <<%s>>\n",fullarchive.c_str(),estensione.c_str());
+	myprintf("01527: Searching for jolly archive(s) in <<%s>> for extension <<%s>>\n",fullarchive.c_str(),estensione.c_str());
 
 	g_bytescanned	=0;
 	g_filescanned	=0;
@@ -65004,24 +65684,22 @@ int Jidac::multisomething()
 
 #ifdef unix
 	if (flagdebug)
-		myprintf("57434: running on NIX\n");
+		myprintf("01528: running on NIX\n");
 	vector<string> candidate;
 	listfiles(extractfilepath(fullarchive),estensione,true,&candidate);
 	if (flagdebug3)
-		myprintf("57437: candidate %s with pattern %s\n",migliaia(candidate.size()),fullarchive.c_str());
+		myprintf("01529: candidate %s with pattern %s\n",migliaia(candidate.size()),fullarchive.c_str());
 	for (unsigned int i=0;i<candidate.size();i++)
 	{
 		string filename=candidate[i];
 		if (flagdebug3)
-			myprintf("57441: filename %08d %s\n",(int)i,filename.c_str());
+			myprintf("01530: filename %08d %s\n",(int)i,filename.c_str());
 
 		if (jollymatch(fullarchive.c_str(),filename.c_str()))
 		{
 			if (flagdebug3)
 			{
-				myprintf("57448: matched <<");
-				printUTF8(filename.c_str());
-				myprintf("<<\n");
+				myprintf("01531: matched <<%Z>>\n",filename.c_str());
 			}
 			DT& d=thedt[filename];
 			d.date			=0;
@@ -65034,7 +65712,7 @@ int Jidac::multisomething()
 		else
 		{
 			if (flagdebug3)
-				myprintf("57448: DISCARDED %s in %s\n",fullarchive.c_str(),filename.c_str());
+				myprintf("01532: DISCARDED %s in %s\n",fullarchive.c_str(),filename.c_str());
 		}
 	}
 #else
@@ -65045,10 +65723,10 @@ int Jidac::multisomething()
 
 	if (thedt.size()==0)
 	{
-		myprintf("54736: no archive founded => quit\n");
+		myprintf("01533: no archive founded => quit\n");
 		return 1;
 	}
-	myprintf("58056: Founded %s archive(s), working\n",migliaia(thedt.size()));
+	myprintf("01534: Founded %s archive(s), working\n",migliaia(thedt.size()));
 	int	risultato=0;
 	int therun=0;
 	for (DTMap::iterator p=thedt.begin(); p!=thedt.end(); ++p)
@@ -65076,9 +65754,7 @@ int Jidac::multisomething()
 
 		printbar('-');
 		myprintf("\r");
-		myprintf("58076: Status %08d/%08d: %d %s on <<",therun,thedt.size(),riscomando,stato.c_str());
-		printUTF8(archive.c_str());
-		myprintf(">>\n");
+		myprintf("01535: Status %08d/%08d: %d %s on <<%Z>>\n",therun,thedt.size(),riscomando,stato.c_str(),archive.c_str());
 		if (flagbig)
 		{
 			if (riscomando==0)
@@ -65202,13 +65878,13 @@ size_t			i_buffersize
 {
 	if (i_buffer==NULL)
 	{
-		myprintf("57886: GURU buffer null\n");
+		myprintf("01536: GURU buffer null\n");
 		seppuku();
 		return "";
 	}
 	if (i_buffersize==0)
 	{
-		myprintf("57892: buffer size 0\n");
+		myprintf("01537: buffer size 0\n");
 		seppuku();
 		return "";
 	}
@@ -65217,8 +65893,8 @@ size_t			i_buffersize
 	if (flagdebug3)
 	{
 		myprintf("\n");
-		myprintf("58230: From:   %s\n",i_filename.c_str());
-		myprintf("58231: To:     %s\n",i_outfilename.c_str());
+		myprintf("01538: From:   %s\n",i_filename.c_str());
+		myprintf("01539: To:     %s\n",i_outfilename.c_str());
 	}
 	if (i_filename=="")
 		return "30833:SOURCE-EMPTY";
@@ -65268,12 +65944,12 @@ size_t			i_buffersize
 	}
 	if (flagdebug3)
 	{
-		myprintf("58218: Sorgente     esiste  %d\n",(int)sorgente_esiste);
-		myprintf("58219: Sorgente     size    %s\n",migliaia(sorgente_dimensione));
-		myprintf("58220: Sorgente     data    %s\n",migliaia(sorgente_data));
-		myprintf("58221: Destinazione esiste  %d\n",(int)destinazione_esiste);
-		myprintf("58222: Destinazione size    %s\n",migliaia(destinazione_dimensione));
-		myprintf("58223: Destinazione data    %s\n",migliaia(destinazione_data));
+		myprintf("01540: Sorgente     esiste  %d\n",(int)sorgente_esiste);
+		myprintf("01541: Sorgente     size    %s\n",migliaia(sorgente_dimensione));
+		myprintf("01542: Sorgente     data    %s\n",migliaia(sorgente_data));
+		myprintf("01543: Destinazione esiste  %d\n",(int)destinazione_esiste);
+		myprintf("01544: Destinazione size    %s\n",migliaia(destinazione_dimensione));
+		myprintf("01545: Destinazione data    %s\n",migliaia(destinazione_data));
 		myprintf("\n");
 	}
 	if (!flagdonotforcexls)
@@ -65286,14 +65962,14 @@ size_t			i_buffersize
 /// faster than the full hash computation (for different files).
 /// Obviously for the very same files it is almost identical
 			if (flagdebug2)
-				myprintf("27584: enforcing xls/ppt test %s\n",i_filename.c_str());
+				myprintf("01546: enforcing xls/ppt test %s\n",i_filename.c_str());
 			int64_t s2=mtime();
 			destinazione_esiste=isfilesequal(i_filename,i_outfilename,flagzero);
 			g_robocopy_isequal+=mtime()-s2;
 			if (destinazione_esiste)
 			{
 				if (flagdebug2)
-					myprintf("58306: Equal XLS: skip %s\n",i_outfilename.c_str());
+					myprintf("01547: Equal XLS: skip %s\n",i_outfilename.c_str());
 				int64_t s3=mtime();
 				close(i_outfilename.c_str(),sorgente_data,sorgente_attr);
 				g_robocopy_close+=mtime()-s3;
@@ -65302,33 +65978,33 @@ size_t			i_buffersize
 			else
 			{
 				if (flagdebug2)
-					myprintf("58315: Different XLSs!\n");
+					myprintf("01548: Different XLSs!\n");
 			}
 		}
 	if (destinazione_esiste)
 	{
 		if (flagdebug3)
-			myprintf("58321: Esiste1\n");
+			myprintf("01549: Esiste1\n");
 		if (sorgente_esiste)
 		{
 			if (flagdebug3)
 			{
-				myprintf("58326: Esiste2\n");
+				myprintf("01550: Esiste2\n");
 			}
 				if (destinazione_dimensione==sorgente_dimensione)
 				{
 					if (flagdebug3)
-						myprintf("58331: Stessa dimensione\n");
+						myprintf("01551: Stessa dimensione\n");
 					if (flagdebug3)
 					{
-						myprintf("39590: PPP %s\n",migliaia(myabs(destinazione_data,sorgente_data)));
+						myprintf("01552: PPP %s\n",migliaia(myabs(destinazione_data,sorgente_data)));
 					}
 				/// this 2 is really important: it is the modulo-differences
 				/// 1 or even 0 is not good for NTFS or Windows
 					if (myabs(destinazione_data,sorgente_data)<=2)
 					{
 						if (flagdebug3)
-							myprintf("58341: Stessa data\n");
+							myprintf("01553: Stessa data\n");
 						if (flagkill)
 							if (sorgente_attr!=destinazione_attr)
 							{
@@ -65366,7 +66042,7 @@ size_t			i_buffersize
 				g_robocopy_delete+=mtime()-s4;
 
 				if (flagdebug3)
-					myprintf("58379: Cancellato %s\n",i_outfilename.c_str());
+					myprintf("01554: Cancellato %s\n",i_outfilename.c_str());
 			}
 	}
 	if (!flagkill)
@@ -65415,7 +66091,7 @@ size_t			i_buffersize
 		int err=1;
 #endif
 		myprintf("\n");
-		myprintf("58468: ERR <%s> kind %d\n",i_filename.c_str(),err);
+		myprintf("01555: ERR <%s> kind %d\n",i_filename.c_str(),err);
 		return "KAPUTT";
 	}
 	if (flagappend)
@@ -65425,13 +66101,13 @@ size_t			i_buffersize
 		if (!iszpaq(i_filename))
 		{
 			if (flagdebug)
-				myprintf("35672: not a ZPAQ / not flagappend!\n");
+				myprintf("01556: not a ZPAQ / not flagappend!\n");
 			flagappend=false;
 		}
 		else
 		{
 			if (flagdebug)
-				myprintf("35677: we have a ZPAQ and a --append!\n");
+				myprintf("01557: we have a ZPAQ and a --append!\n");
 		}
 	}
 	/// to fix excluded myaddfiles()
@@ -65448,15 +66124,15 @@ size_t			i_buffersize
 	if (flagdebug)
 	{
 		if (fileexists(i_outfilename))
-			myprintf("58460: ESISTE file %s\n",i_outfilename.c_str());
+			myprintf("01558: ESISTE file %s\n",i_outfilename.c_str());
 		else
-			myprintf("58462: NON ESISTE APPEND %s\n",i_outfilename.c_str());
+			myprintf("01559: NON ESISTE APPEND %s\n",i_outfilename.c_str());
 	}
 	if (flagappend)
 		if (!isfilesequal(i_filename,i_outfilename,true))
 		{
 			if (flagdebug)
-				myprintf("35768: fast check failed, turn back to full copy %s %s\n",i_filename.c_str(),i_outfilename.c_str());
+				myprintf("01560: fast check failed, turn back to full copy %s %s\n",i_filename.c_str(),i_outfilename.c_str());
 			flagappend=false;
 		}
 #ifdef _WIN32
@@ -65466,7 +66142,7 @@ size_t			i_buffersize
 		if (flagdebug)
 		{
 			myprintf("\n");
-			myprintf("58476: Apro con APPEND \n");
+			myprintf("01561: Apro con APPEND \n");
 		}
 		outFile=_wfopen(widename.c_str(), L"ab" );
 	}
@@ -65475,7 +66151,7 @@ size_t			i_buffersize
 		if (flagdebug)
 		{
 			myprintf("\n");
-			myprintf("58482: Apro con WRITE \n");
+			myprintf("01562: Apro con WRITE \n");
 		}
 		outFile=_wfopen(widename.c_str(), L"wb" );
 	}
@@ -65510,16 +66186,16 @@ size_t			i_buffersize
 			if (flagdebug3)
 			{
 				myprintf("\n");
-				myprintf("58515: Faccio APPEND\n");
-				myprintf("58516: Sorgente dimensione     %19s\n",migliaia(sorgente_dimensione));
-				myprintf("58517: Destinazione dimensione %19s\n",migliaia(destinazione_dimensione));
+				myprintf("01563: Faccio APPEND\n");
+				myprintf("01564: Sorgente dimensione     %19s\n",migliaia(sorgente_dimensione));
+				myprintf("01565: Destinazione dimensione %19s\n",migliaia(destinazione_dimensione));
 			}
 			fseeko(inFile	,destinazione_dimensione, SEEK_SET);
 			if (flagdebug3)
-				myprintf("58521: Seekato a %s\n",migliaia(destinazione_dimensione));
+				myprintf("01566: Seekato a %s\n",migliaia(destinazione_dimensione));
 			dascrivere=sorgente_dimensione-destinazione_dimensione;
 			if (flagdebug3)
-				myprintf("58524: Da scrivere             %19s\n",migliaia(dascrivere));
+				myprintf("01567: Da scrivere             %19s\n",migliaia(dascrivere));
 		}
 	}
 	int64_t s8=mtime();
@@ -65533,7 +66209,7 @@ size_t			i_buffersize
 		int scritti=fwrite(i_buffer,1,readSize,outFile);
 		g_robocopy_fwrite+=mtime()-s11;
 
-		///myprintf("58525: Scritti %19s\n",migliaia(scritti));
+		///myprintf("01568: Scritti %19s\n",migliaia(scritti));
 		scrittitotali	+=scritti;
 		o_donesize		+=scritti;
 		o_writtensize	+=scritti;
@@ -65556,7 +66232,7 @@ size_t			i_buffersize
 		if (flagdebug)
 		{
 			myprintf("\n");
-			myprintf("58260: Scrittitotali %s\n",migliaia(scrittitotali));
+			myprintf("01569: Scrittitotali %s\n",migliaia(scrittitotali));
 		}
 	if (!flagnoeta)
 	{
@@ -65583,8 +66259,8 @@ size_t			i_buffersize
 	if (scrittitotali!=dascrivere)
 	{
 		myprintf("\n");
-		myprintf("35107: HOUSTON something seems wrong: expected %s, done %s\n",migliaia(dascrivere),migliaia2(scrittitotali));
-		myprintf("35107: Corrupted source files? Lost connection? Cannot access? Media full?\n");
+		myprintf("01570: HOUSTON something seems wrong: expected %s, done %s\n",migliaia(dascrivere),migliaia2(scrittitotali));
+		myprintf("01571: Corrupted source files? Lost connection? Cannot access? Media full?\n");
 		return "35109: COPY CORRUPTED";
 	}
 	return "OK";
@@ -65611,11 +66287,11 @@ string Jidac::zfs_get_snaplist(string i_header,const string i_footer,vector<stri
 	string filebatch="/tmp/exec_zfs.sh";
 	filebatch=nomefileseesistegia(filebatch);
 	if (flagdebug)
-		myprintf("55311: script EXECUTING %s\n",filebatch.c_str());
+		myprintf("01572: script EXECUTING %s\n",filebatch.c_str());
 	FILE* batch=fopen(filebatch.c_str(), "wb");
 	if (batch==NULL)
 	{
-		myprintf("37643: cannot write on filebatch %s\n",filebatch.c_str());
+		myprintf("01573: cannot write on filebatch %s\n",filebatch.c_str());
 		exit(0);
 	}
 	fprintf(batch,"zfs list -t snapshot\n");
@@ -65703,7 +66379,7 @@ int Jidac::zfsenumerate(const string& i_command)
 	vector<string> array_size;
 	string risul=zfs_get_snaplist(header,footer,array_primachiocciola,array_dopochiocciola,array_size);
 	if (flagdebug3)
-		myprintf("55444: %s\n",risul.c_str());
+		myprintf("01574: %s\n",risul.c_str());
 	vector<string> thefile;
 //		this is a double check that the rebuilded snapshot name does really exists in the
 //		original file. Split one lines at time
@@ -65711,10 +66387,10 @@ int Jidac::zfsenumerate(const string& i_command)
 
 	if (flagdebug3)
 		for (unsigned int i=0;i<thefile.size();i++)
-			myprintf("55452: LINE   %08d |%s|\n",(int)i,thefile[i].c_str());
+			myprintf("01575: LINE   %08d |%s|\n",(int)i,thefile[i].c_str());
 	if (array_primachiocciola.size()==0)
 	{
-		myprintf("32030: nothing to do. Do you use the doublequote?\n");
+		myprintf("01576: nothing to do. Do you use the doublequote?\n");
 		return 1;
 	}
 
@@ -65722,11 +66398,11 @@ int Jidac::zfsenumerate(const string& i_command)
 	string	myoutput=g_script;
 	if (myoutput!="")
 	{
-		myprintf("55458: Writing on script <<%s>>\n",myoutput.c_str());
+		myprintf("01577: Writing on script <<%s>>\n",myoutput.c_str());
 		scripthandle=fopen(myoutput.c_str(),"wb");
 		if (scripthandle==NULL)
 		{
-			myprintf("55461: ERROR OPENING SCRIPT FILE %s\n",myoutput.c_str());
+			myprintf("01578! ERROR OPENING SCRIPT FILE %s\n",myoutput.c_str());
 			return 2;
 		}
 	}
@@ -65760,7 +66436,7 @@ int Jidac::zfsenumerate(const string& i_command)
 		}
 		else
 		{
-			myprintf("30816: guru evaluating <<%s>>\n",doublecheck.c_str());
+			myprintf("01579! guru evaluating <<%s>>\n",doublecheck.c_str());
 			return 2;
 		}
 	}
@@ -65781,8 +66457,8 @@ int Jidac::zfssize()
 {
 	if ((files.size()!=1) && (files.size()!=2))
 	{
-		myprintf("60702: zfssize needs 1 or 2 parameter(s)\n\n");
-		myprintf("60703: *** DO NOT FORGET THE DOUBLEQUOTE ***\n\n");
+		myprintf("01580: zfssize needs 1 or 2 parameter(s)\n\n");
+		myprintf("01581: *** DO NOT FORGET THE DOUBLEQUOTE ***\n\n");
 		help_zfssize(true,true);
 		return 1;
 	}
@@ -65793,8 +66469,8 @@ int Jidac::zfspurge()
 {
 	if ((files.size()!=1) && (files.size()!=2))
 	{
-		myprintf("58738: zfspurge needs 1 or 2 parameter(s)\n\n");
-		myprintf("58731: *** DO NOT FORGET THE DOUBLEQUOTE ***\n\n");
+		myprintf("01582: zfspurge needs 1 or 2 parameter(s)\n\n");
+		myprintf("01583: *** DO NOT FORGET THE DOUBLEQUOTE ***\n\n");
 		help_zfspurge(true,true);
 		return 1;
 	}
@@ -65804,8 +66480,8 @@ int Jidac::zfslist()
 {
 	if ((files.size()!=1) && (files.size()!=2))
 	{
-		myprintf("58479: zfslist needs 1 or 2 parameter(s)\n\n");
-		myprintf("58478: *** DO NOT FORGET THE DOUBLEQUOTE ***\n\n");
+		myprintf("01584: zfslist needs 1 or 2 parameter(s)\n\n");
+		myprintf("01585: *** DO NOT FORGET THE DOUBLEQUOTE ***\n\n");
 		help_zfslist(true,true);
 		return 1;
 	}
@@ -65822,14 +66498,14 @@ int64_t getdatefromsnapshot(string i_snaptoget)
 
 	if (creationresult=="")
 	{
-		myprintf("55509: Guru, cannot open snapshot %s\n",i_snaptoget.c_str());
+		myprintf("01586: Guru, cannot open snapshot %s\n",i_snaptoget.c_str());
 		seppuku();
 		return 2;
 	}
 	int poscreation=pos(creationresult," creation ");
 	if (poscreation<=0)
 	{
-		myprintf("55518: Guru, poscreation strange %d\n",poscreation);
+		myprintf("01587! Guru, poscreation strange %d\n",poscreation);
 		seppuku();
 		return 2;
 	}
@@ -65844,19 +66520,19 @@ int64_t getdatefromsnapshot(string i_snaptoget)
 		i++;
 	}
 	if (flagdebug3)
-		myprintf("55525: |%s|\n",dategetted.c_str());
+		myprintf("01588: |%s|\n",dategetted.c_str());
 
 	int64_t unixdate=myatoll(dategetted.c_str());
 	if (flagdebug)
-		myprintf("55529: Unixxxx %s\n",migliaia(unixdate));
+		myprintf("01589: Unixxxx %s\n",migliaia(unixdate));
 	return decimal_time(unixdate);
 }
 int Jidac::zfsadd()
 {
 	if ((files.size()!=1) && (files.size()!=2) && (files.size()!=3))
 	{
-		myprintf("58820: For zfsadd you need 1, 2 or 3 parameters\n\n");
-		myprintf("58821: *** DO NOT FORGET THE DOUBLEQUOTE ***\n\n");
+		myprintf("01590: For zfsadd you need 1, 2 or 3 parameters\n\n");
+		myprintf("01591: *** DO NOT FORGET THE DOUBLEQUOTE ***\n\n");
 		help_zfsadd(true,true);
 		return 1;
 	}
@@ -65877,13 +66553,13 @@ int Jidac::zfsadd()
 	vector<string> array_size;
 	string risul=zfs_get_snaplist(header,footer,array_primachiocciola,array_dopochiocciola,array_size);
 	if (flagdebug3)
-		myprintf("55521: %s\n",risul.c_str());
+		myprintf("01592: %s\n",risul.c_str());
 
 	vector<string> thefile;
 	explode(risul,'\n',thefile);
 	if (array_primachiocciola.size()==0)
 	{
-		myprintf("55552: nothing to do. Do you use the doublequote?\n");
+		myprintf("01593: nothing to do. Do you use the doublequote?\n");
 		return 1;
 	}
 
@@ -65891,17 +66567,17 @@ int Jidac::zfsadd()
 	string	myoutput=g_script;
 	if (myoutput!="")
 	{
-		myprintf("55458: Writing on script <<%s>>\n",myoutput.c_str());
+		myprintf("01594: Writing on script <<%s>>\n",myoutput.c_str());
 		scripthandle=fopen(myoutput.c_str(),"wb");
 		if (scripthandle==NULL)
 		{
-			myprintf("55461: ERROR OPENING SCRIPT FILE %s\n",myoutput.c_str());
+			myprintf("01595! ERROR OPENING SCRIPT FILE %s\n",myoutput.c_str());
 			return 2;
 		}
 	}
 	if (flagdebug3)
 		for (unsigned int i=0;i<files.size();i++)
-			myprintf("58865: Files  %d %s\n",(int)i,files[i].c_str());
+			myprintf("01596: Files  %d %s\n",(int)i,files[i].c_str());
 	zpaqfile	=archive; ///files[2];//"/temporaneo/kongo7.zpaq";
 
 
@@ -65909,29 +66585,29 @@ int Jidac::zfsadd()
 	{
 		onlysubdir=files[2];
 		if (flagdebug3)
-			myprintf("55576: onlysubdir [1] %s\n",onlysubdir.c_str());
+			myprintf("01597: onlysubdir [1] %s\n",onlysubdir.c_str());
 		if (onlysubdir[0]=='/')
 			onlysubdir.erase(0,1);
 		if (flagdebug3)
-			myprintf("55581: onlysubdir [2] %s\n",onlysubdir.c_str());
+			myprintf("01598: onlysubdir [2] %s\n",onlysubdir.c_str());
 		if (onlysubdir!="")
 			if (!isdirectory(onlysubdir))
 				onlysubdir+="/";
 		if (flagdebug3)
-			myprintf("55585: onlysubdir [3] %s\n",onlysubdir.c_str());
+			myprintf("01599: onlysubdir [3] %s\n",onlysubdir.c_str());
 	}
 
 	if (flagverbose)
 	{
-		myprintf("58892: Files siz: %d\n",files.size());
-		myprintf("58893: Exepath  : %s\n",exepath.c_str());
-		myprintf("58894: Zpaqfile : %s\n",zpaqfile.c_str());
-		myprintf("58895: Header   : %s\n",header.c_str());
-		myprintf("58896: Footer   : %s\n",footer.c_str());
+		myprintf("01600: Files siz: %d\n",files.size());
+		myprintf("01601: Exepath  : %s\n",exepath.c_str());
+		myprintf("01602: Zpaqfile : %s\n",zpaqfile.c_str());
+		myprintf("01603: Header   : %s\n",header.c_str());
+		myprintf("01604: Footer   : %s\n",footer.c_str());
 		if (onlysubdir!="")
-			myprintf("58886: Subdir   : %s\n",onlysubdir.c_str());
+			myprintf("01605: Subdir   : %s\n",onlysubdir.c_str());
 		if (myoutput!="")
-			myprintf("58887: Output on: %s\n",myoutput.c_str());
+			myprintf("01606: Output on: %s\n",myoutput.c_str());
 	}
 	vector<string> 	snapshot_folder;
 	vector<int64_t>	snapshot_date;
@@ -65959,16 +66635,16 @@ int Jidac::zfsadd()
 			int64_t testdate=-1; //=encodestringdate(timestamp,true);
 			if (testdate==-1)
 			{
-			///	myprintf("30640: timestamp is strange %s\n",timestamp.c_str());
+			///	myprintf("01607: timestamp is strange %s\n",timestamp.c_str());
 				testdate=getdatefromsnapshot(tutto);
 				if (testdate!=-1)
 					if (flagverbose)
-						myprintf("55644: Snapshot creation date %s\n",dateToString(false,testdate).c_str());
+						myprintf("01608: Snapshot creation date %s\n",dateToString(false,testdate).c_str());
 			}
 
 			if (testdate==-1)
 			{
-				myprintf("55617: testdate == -1 ! \n");
+				myprintf("01609! testdate == -1 ! \n");
 				return 2;
 			}
 			else
@@ -65985,7 +66661,7 @@ int Jidac::zfsadd()
 		}
 		else
 		{
-			myprintf("30816: guru evaluating <<%s>>\n",doublecheck.c_str());
+			myprintf("01610! guru evaluating <<%s>>\n",doublecheck.c_str());
 			return 2;
 		}
 	}
@@ -66005,9 +66681,9 @@ int Jidac::zfsadd()
 			for (unsigned int i=0;i<snapshot_date.size();i++)
 			{
 				printbar('-');
-				myprintf("55678: Freezing %s of %s snapshots\n",migliaia(i+1),migliaia2(snapshot_date.size()));
-				myprintf("55682: Folder %s\n",snapshot_folder[i].c_str());
-				myprintf("55683: To     %s\n",snapshot_to[i].c_str());
+				myprintf("01611: Freezing %s of %s snapshots\n",migliaia(i+1),migliaia2(snapshot_date.size()));
+				myprintf("01612: Folder %s\n",snapshot_folder[i].c_str());
+				myprintf("01613: To     %s\n",snapshot_to[i].c_str());
 
 				jidacreset();
 				tofiles	.clear();
@@ -66022,7 +66698,7 @@ int Jidac::zfsadd()
 			if (!allok)
 				return 2;
 		}
-	myprintf("55676: zfsadd done (use -verbose if you like)\n");
+	myprintf("01614: zfsadd done (use -verbose if you like)\n");
 	return 0;
 }
 /// find and delete 0-length dirs
@@ -66030,13 +66706,13 @@ int Jidac::zfsadd()
 /// to be merged with Jidac::removeemptydirs(string i_folder,bool i_kill)
 int Jidac::zero()
 {
-	myprintf("58974: *** Delete empty folders (zero length) *** ");
+	myprintf("01615: *** Delete empty folders (zero length) *** ");
 	if (!flagforcezfs)
 		myprintf(" * ignoring .zfs and :$DATA ");
 	myprintf("\n");
 	if (files.size()==0)
 	{
-		myprintf("40127: no folder selected\n");
+		myprintf("01616: no folder selected\n");
 		return 1;
 	}
 	flagverbose=true;
@@ -66050,30 +66726,30 @@ int Jidac::zero()
 int Jidac::robocopy()
 {
 	int risultato=0;
-	myprintf("58994: *** ROBOCOPY MODE *** ");
+	myprintf("01617: *** ROBOCOPY MODE *** ");
 #ifdef _WIN32
 	if (flagappend && flagbig)
 	{
-		myprintf("58876: On Windows you cannot run -append -big, removing -big\n");
-		myprintf("58876: (-big is a specific switch for... big files)\n");
+		myprintf("01618: On Windows you cannot run -append -big, removing -big\n");
+		myprintf("01619: (-big is a specific switch for... big files)\n");
 		flagbig=false;
 	}
 #endif
 	if (!flagkill)
-		myprintf("59004: *** -kill missing: dry run *** ");
+		myprintf("01620: *** -kill missing: dry run *** ");
 	if (!flagforcezfs)
-		myprintf("59005: *** ignoring .zfs and :$DATA ***");
+		myprintf("01621: *** ignoring .zfs and :$DATA ***");
 	myprintf("\n");
 	if (files.size()<2)
 	{
-		myprintf("40188: at least two folders needed (instead of %d)\n",files.size());
+		myprintf("01622: at least two folders needed (instead of %d)\n",files.size());
 		for (unsigned int i=0;i<files.size();i++)
-			myprintf("40189: %08d %s\n",(int)i,files[i].c_str());
+			myprintf("01623: %08d %s\n",(int)i,files[i].c_str());
 		return 1;
 	}
 	if (!direxists(files[0]))
 	{
-		myprintf("27420: Master dir does not exists <<%s>>\n",files[0].c_str());
+		myprintf("01624: Master dir does not exists <<%s>>\n",files[0].c_str());
 		return 1;
 	}
 	/// slow, but the cardinality is so small
@@ -66090,14 +66766,14 @@ int Jidac::robocopy()
 	}
 	if (flagdebug3)
 	{
-		myprintf("59059: Size checkdup %s\n",migliaia(checkdupe.size()));
+		myprintf("01625: Size checkdup %s\n",migliaia(checkdupe.size()));
 		for (unsigned int i=0;i<files.size();i++)
-			myprintf("40228: %03d files[i] %s  checkdupe [i] |%s|\n",(int)i,files[i].c_str(),checkdupe[i].c_str());
+			myprintf("01626: %03d files[i] %s  checkdupe [i] |%s|\n",(int)i,files[i].c_str(),checkdupe[i].c_str());
 	}
 	for (unsigned int i=1;i<files.size();i++)
 		if (checkdupe[0]==checkdupe[i])
 		{
-			myprintf("40222: a slave dir is == to the master, quit\n");
+			myprintf("01627: a slave dir is == to the master, quit\n");
 			return 1;
 		}
 #ifdef _WIN32
@@ -66106,7 +66782,7 @@ int Jidac::robocopy()
 			files[i]=makelongpath(files[i]);
 	if (flagdebug3)
 		for (unsigned int i=0;i<files.size();i++)
-			myprintf("40245: after %03d files[i] %s\n",(int)i,files[i].c_str());
+			myprintf("01628: after %03d files[i] %s\n",(int)i,files[i].c_str());
 #endif
 	int64_t s13=mtime();
 	g_testifselected=true;
@@ -66125,14 +66801,14 @@ int Jidac::robocopy()
 				{
 					if (files_size[0]>spaziolibero)
 					{
-						myprintf("27437: space needed %s but only %s reported free on <<%s>>\n",tohuman(files_size[0]),tohuman2(spaziolibero),files[i].c_str());
+						myprintf("01629: space needed %s but only %s reported free on <<%s>>\n",tohuman(files_size[0]),tohuman2(spaziolibero),files[i].c_str());
 						spazioinsufficiente=true;
 					}
 				}
 			}
 			if (spazioinsufficiente)
 			{
-				myprintf("27441: exit, not enough space/destination does not exists; use -space if you want\n");
+				myprintf("01630: exit, not enough space/destination does not exists; use -space if you want\n");
 				return 1;
 			}
 		}
@@ -66140,7 +66816,7 @@ int Jidac::robocopy()
 	int64_t 	startscan=mtime();
 	uint64_t 	strangethings;
 	myprintf("\n");
-	myprintf("59139: Master  %s (%s files %s) <<%s>>\n",migliaia(files_size[0]),tohuman(files_size[0]),migliaia2(files_count[0]),files[0].c_str());
+	myprintf("01631: Master  %s (%s files %s) <<%s>>\n",migliaia(files_size[0]),tohuman(files_size[0]),migliaia2(files_count[0]),files[0].c_str());
 	printbar('-');
 	int64_t total_size				=files_size[0];
 	int64_t total_count				=files_count[0];
@@ -66188,7 +66864,7 @@ int Jidac::robocopy()
 	unsigned char *buf=(unsigned char*)aligned_malloc(64, g_ioBUFSIZE);
 	if (buf==NULL)
 	{
-		myprintf(": GURU allocating io buf of size %s\n",g_ioBUFSIZE);
+		myprintf("01632! GURU allocating io buf of size %s\n",g_ioBUFSIZE);
 		seppuku();
 		return 2;
 	}
@@ -66219,7 +66895,7 @@ int Jidac::robocopy()
 		{
 			if (!flagkill)
 			{
-				myprintf("59183: Dir %d (slavez) DOES NOT EXISTS %s\n",(int)i,files[i].c_str());
+				myprintf("01633: Dir %d (slavez) DOES NOT EXISTS %s\n",(int)i,files[i].c_str());
 				risultato=1;
 			}
 		}
@@ -66236,7 +66912,7 @@ int Jidac::robocopy()
 				if  (cerca==files_edt[0].end())
 				{
 					if (flagdebug2)
-						myprintf("59204: Delete %s\n",p->first.c_str());
+						myprintf("01634: Delete %s\n",p->first.c_str());
 					if (!flagkill)
 					{
 							//fake: dry run
@@ -66246,7 +66922,7 @@ int Jidac::robocopy()
 					else
 					{
 						string temp=p->first;
-					///	myprintf("59208: AAAAAAAAAAAAAAAAAAAAA %s\n",temp.c_str());
+					///	myprintf("01635: AAAAAAAAAAAAAAAAAAAAA %s\n",temp.c_str());
 						bool riuscito=true;
 						if (isdirectory(temp))
 						{
@@ -66259,7 +66935,7 @@ int Jidac::robocopy()
 							/*riuscito*/delete_file(temp.c_str());
 						}
 						if (!riuscito)
-							myprintf("31293: ERROR DELETING  <%s>\n",p->first.c_str());
+							myprintf("01636: ERROR DELETING  <%s>\n",p->first.c_str());
 						else
 						{
 							robodeleted++;
@@ -66270,7 +66946,7 @@ int Jidac::robocopy()
 				if (menoenne>0)
 					if (strangethings>menoenne)
 					{
-						myprintf("30146: **** TOO MANY STRANGE THINGS (-n %d)  %s\n",menoenne,migliaia(strangethings));
+						myprintf("01637: **** TOO MANY STRANGE THINGS (-n %d)  %s\n",menoenne,migliaia(strangethings));
 						break;
 					}
 			}
@@ -66290,7 +66966,7 @@ int Jidac::robocopy()
 				if  (cerca==files_edt[i].end())
 				{
 					/// the file does not exists, maintain default -1 (=>secure_copy_file do yourself)
-					///myprintf("59252: NON ! %s\n",filenamei.c_str());
+					///myprintf("01638: NON ! %s\n",filenamei.c_str());
 				}
 				else
 				{
@@ -66315,7 +66991,7 @@ int Jidac::robocopy()
 					/// the return code can be OK (file copied) or = (file not copied because it is ==)
 					if ((copyfileresult!="OK") && (copyfileresult!="="))
 					{
-						myprintf("31170: error robocoping data  <%s> to %s\n",copyfileresult.c_str(),filenamei.c_str());
+						myprintf("01639: error robocoping data  <%s> to %s\n",copyfileresult.c_str(),filenamei.c_str());
 						risultato=2;
 					}
 					else
@@ -66344,7 +67020,7 @@ int Jidac::robocopy()
 				if (menoenne>0)
 					if (strangethings>menoenne)
 					{
-						myprintf("30125: **** TOO MANY STRANGE THINGS (-n %d)  %s\n",menoenne,migliaia(strangethings));
+						myprintf("01640: **** TOO MANY STRANGE THINGS (-n %d)  %s\n",menoenne,migliaia(strangethings));
 						break;
 					}
 			}
@@ -66386,7 +67062,7 @@ int Jidac::robocopy()
 					ultimotempo=secondi;
 					if (!flagnoeta)
 					{
-						myprintf("59341: Touching  %12s / %s @ %8s touch/s\r",migliaia(folderworked),migliaia2(quantifolder),migliaia3(folderworked/(secondi+1)));
+						myprintf("01641: Touching  %12s / %s @ %8s touch/s\r",migliaia(folderworked),migliaia2(quantifolder),migliaia3(folderworked/(secondi+1)));
 						fflush(stdout);
 					}
 				}
@@ -66400,9 +67076,7 @@ int Jidac::robocopy()
 
 				if (!gettedinfo)
 				{
-					myprintf("57820: Cannot getdirinfo on ");
-					printUTF8(masterfolder.c_str());
-					myprintf("\n");
+					myprintf("01642: Cannot getdirinfo on %Z\n",masterfolder.c_str());
 					foldertoucherror++;
 					continue;
 				}
@@ -66410,7 +67084,7 @@ int Jidac::robocopy()
 				if (flagdebug2)
 				{
 					string	creation_date =dateToString(flagutc,folder_creationdate);
-					myprintf("57819: MASTER Creation date %s for %s\n",creation_date.c_str(),masterfolder.c_str());
+					myprintf("01643: MASTER Creation date %s for %s\n",creation_date.c_str(),masterfolder.c_str());
 				}
 
 				for (unsigned i=1; i<files.size(); ++i)
@@ -66418,16 +67092,16 @@ int Jidac::robocopy()
 					string slavefolder=masterfolder;
 					if (!myreplace(slavefolder,files[0],files[i]))
 					{
-						myprintf("57691: Cannot get slavefolder %d %s to %s\n",(int)i,files[0].c_str(),files[i].c_str());
+						myprintf("01644: Cannot get slavefolder %d %s to %s\n",(int)i,files[0].c_str(),files[i].c_str());
 						foldertoucherror++;
 					}
 					else
 					{
 						if (flagdebug2)
-							myprintf("57695: SLAVE FOLDER %03d %s\n",(int)i,slavefolder.c_str());
+							myprintf("01645: SLAVE FOLDER %03d %s\n",(int)i,slavefolder.c_str());
 						if (!direxists(slavefolder))
 						{
-							myprintf("57700: Salve folder does not exists %d %s to %s\n",(int)i,files[0].c_str(),files[i].c_str());
+							myprintf("01646: Salve folder does not exists %d %s to %s\n",(int)i,files[0].c_str(),files[i].c_str());
 							foldertoucherror++;
 						}
 						else
@@ -66457,13 +67131,13 @@ int Jidac::robocopy()
 							if (touched)
 							{
 								if (flagdebug2)
-									myprintf("57703: Touch OK on slave %d %s\n",(int)i,slavefolder.c_str());
+									myprintf("01647: Touch OK on slave %d %s\n",(int)i,slavefolder.c_str());
 								if (flagtocca)
 									foldertouched++;
 							}
 							else
 							{
-								myprintf("57862: Touch KAPUTT on slave %d %s\n",(int)i,slavefolder.c_str());
+								myprintf("01648: Touch KAPUTT on slave %d %s\n",(int)i,slavefolder.c_str());
 								foldertoucherror++;
 							}
 						}
@@ -66475,48 +67149,48 @@ int Jidac::robocopy()
 			myprintf("\n");
 	}
 	if (!flagkill)
-		myprintf("59443: FAKE: dry run!\n");
+		myprintf("01649: FAKE: dry run!\n");
 	if (roboequal>0)
-		myprintf("59445: =   %12s %20s B\n",migliaia(roboequal),migliaia2(roboequalsize));
+		myprintf("01650: =   %12s %20s B\n",migliaia(roboequal),migliaia2(roboequalsize));
 	if (robocopied>0)
-		myprintf("59447: +   %12s %20s B in %9.2fs %15s/s\n",migliaia(robocopied),migliaia2(robocopiedsize),(timecopy/1000.0),migliaia3((int64_t)(robocopiedsize/(timecopy/1000.0))));
+		myprintf("01651: +   %12s %20s B in %9.2fs %15s/s\n",migliaia(robocopied),migliaia2(robocopiedsize),(timecopy/1000.0),migliaia3((int64_t)(robocopiedsize/(timecopy/1000.0))));
 	if (xlscopied>0)
-		myprintf("59449: xls %12s %20s B\n",migliaia(xlscopied),migliaia2(xlscopiedsize));
+		myprintf("01652: xls %12s %20s B\n",migliaia(xlscopied),migliaia2(xlscopiedsize));
 	if (robodeleted)
-		myprintf("59451: -   %12s %20s B in %9.2fs %15s/s\n",migliaia(robodeleted),migliaia2(robodeletedsize),(timedelete/1000.0),migliaia3((int64_t)(robodeletedsize/(timedelete/1000.0))));
+		myprintf("01653: -   %12s %20s B in %9.2fs %15s/s\n",migliaia(robodeleted),migliaia2(robodeletedsize),(timedelete/1000.0),migliaia3((int64_t)(robodeletedsize/(timedelete/1000.0))));
 	double tempo=(mtime()-startscan)+1;
 	tempo/=1000.0;
 
 	myprintf("\n");
-	myprintf("59455: Robocopy time  %9.2f  - Slaves getinfo %9.2f s\n",tempo,g_robocopy_check_destinazione/1000.0);
+	myprintf("01654: Robocopy time  %9.2f  - Slaves getinfo %9.2f s\n",tempo,g_robocopy_check_destinazione/1000.0);
 
-	myprintf("59457: Written bytes %s (%s) @ %s B/s\n",migliaia(written_size),tohuman(written_size),migliaia2((int64_t)(written_size/tempo))
+	myprintf("01655: Written bytes %s (%s) @ %s B/s\n",migliaia(written_size),tohuman(written_size),migliaia2((int64_t)(written_size/tempo))
 	);
 	if (foldertoucherror>0)
-		myprintf("57888: WARNING - SOME FOLDER TOUCH ERROR %s\n",migliaia(foldertoucherror));
+		myprintf("01656: WARNING - SOME FOLDER TOUCH ERROR %s\n",migliaia(foldertoucherror));
 
 	if (flagverbose)
 	{
 		g_robocopy_fread++;
 		double realspeed=written_size/(g_robocopy_fread/1000.0);
 		printbar('=');
-		myprintf("59461: localexists  %10s loc.exist2 %10s loc.make %10s\n",migliaia(timelocalexists),migliaia2(timelocalexists2),migliaia3(timelocalmakepath));
-		myprintf("59462: check_source %10s check_dest %10s makepath %10s\n",migliaia(g_robocopy_check_sorgente),migliaia2(g_robocopy_check_destinazione),migliaia3(g_robocopy_makepath));
-		myprintf("59463: makepath2    %10s isequal    %10s close    %10s\n",migliaia(g_robocopy_makepath2),migliaia2(g_robocopy_isequal),migliaia3(g_robocopy_close));
-		myprintf("59464: close2       %10s touch      %10s delete   %10s\n",migliaia(g_robocopy_close2),migliaia2(g_robocopy_touch),migliaia3(g_robocopy_delete));
-		myprintf("59465: readopen     %10s openout    %10s fclose   %10s\n",migliaia2(g_robocopy_readopen),migliaia2(g_robocopy_openoutfile),migliaia3(g_robocopy_fclose));
-		myprintf("59466: getfolderinf %10s setfolder  %10s \n",migliaia2(timegetfolderinfo),migliaia2(timesetfolderinfo));
-		myprintf("59467: buffersize   %10s scandir    %10s copy     %10s @ %s/s\n",tohuman(g_ioBUFSIZE),migliaia2((int64_t)timescandir),migliaia3(g_robocopy_fread),migliaia4((int64_t)realspeed));
+		myprintf("01657: localexists  %10s loc.exist2 %10s loc.make %10s\n",migliaia(timelocalexists),migliaia2(timelocalexists2),migliaia3(timelocalmakepath));
+		myprintf("01658: check_source %10s check_dest %10s makepath %10s\n",migliaia(g_robocopy_check_sorgente),migliaia2(g_robocopy_check_destinazione),migliaia3(g_robocopy_makepath));
+		myprintf("01659: makepath2    %10s isequal    %10s close    %10s\n",migliaia(g_robocopy_makepath2),migliaia2(g_robocopy_isequal),migliaia3(g_robocopy_close));
+		myprintf("01660: close2       %10s touch      %10s delete   %10s\n",migliaia(g_robocopy_close2),migliaia2(g_robocopy_touch),migliaia3(g_robocopy_delete));
+		myprintf("01661: readopen     %10s openout    %10s fclose   %10s\n",migliaia2(g_robocopy_readopen),migliaia2(g_robocopy_openoutfile),migliaia3(g_robocopy_fclose));
+		myprintf("01662: getfolderinf %10s setfolder  %10s \n",migliaia2(timegetfolderinfo),migliaia2(timesetfolderinfo));
+		myprintf("01663: buffersize   %10s scandir    %10s copy     %10s @ %s/s\n",tohuman(g_ioBUFSIZE),migliaia2((int64_t)timescandir),migliaia3(g_robocopy_fread),migliaia4((int64_t)realspeed));
 		if (flagpakka)
-			myprintf("59468: FOLDER-TOUCH WITH -pakka (check-before-touch)\n");
+			myprintf("01664: FOLDER-TOUCH WITH -pakka (check-before-touch)\n");
 		else
-			myprintf("59469: FOLDER-TOUCH-WITHOUT-MERCY PROFILE (try -pakka to check-before-set)\n");
-		myprintf("59472: getfolder    %10s getfolder2 %10s setfold  %10s\n",migliaia(timegetfolderinfo),migliaia2(timegetfolderinfo2),migliaia3(timesetfolderinfo));
-		myprintf("59473: touched      %10s totaltouch %10s\n",migliaia4(foldertouched),migliaia5(timegetfolderinfo+timegetfolderinfo2+timesetfolderinfo));
+			myprintf("01665: FOLDER-TOUCH-WITHOUT-MERCY PROFILE (try -pakka to check-before-set)\n");
+		myprintf("01666: getfolder    %10s getfolder2 %10s setfold  %10s\n",migliaia(timegetfolderinfo),migliaia2(timegetfolderinfo2),migliaia3(timesetfolderinfo));
+		myprintf("01667: touched      %10s totaltouch %10s\n",migliaia4(foldertouched),migliaia5(timegetfolderinfo+timegetfolderinfo2+timesetfolderinfo));
 	}
 	if (not flagverify)
 		return risultato;
-	myprintf("59008: *** ROBOCOPY: do a (-verify) ");
+	myprintf("01668: *** ROBOCOPY: do a (-verify) ");
 	if (!flagforcezfs)
 		myprintf(" ignoring .zfs and :$DATA");
 	myprintf("\n");
@@ -66536,11 +67210,11 @@ int Jidac::dircompare(bool i_flagonlysize,bool i_flagrobocopy)
 			flagxxh3=true;
 	int risultato=0;
 	if (i_flagonlysize)
-		myprintf("59494: Get directory size ");
+		myprintf("01669: Get directory size ");
 	else
 	{
 		if (!i_flagrobocopy)
-			myprintf("59499: Dir compare (%s dirs to be checked) ",migliaia(files.size()));
+			myprintf("01670: Dir compare (%s dirs to be checked) ",migliaia(files.size()));
 		if (files.size()<2)
 			error("28212: At least two directories required\n");
 	}
@@ -66553,15 +67227,15 @@ int Jidac::dircompare(bool i_flagonlysize,bool i_flagrobocopy)
 		int64_t spazio=getfreespace(files[i]);
 		if (spazio<0)
 			spazio=0;
-		myprintf("59511: Free %d %21s (%12s)  <<%s>>\n",(int)i,migliaia(spazio),tohuman(spazio),files[i].c_str());
+		myprintf("01671: Free %d %21s (%12s)  <<%s>>\n",(int)i,migliaia(spazio),tohuman(spazio),files[i].c_str());
 		if (minsize)
 			if (minsize>(uint64_t)spazio)
 			{
-				myprintf("59515: ***************************************\n");
-				myprintf("59515: |=|=|=|=|=|=|=|=|=|=|=|=|=|=|=|=|=|=|=|\n");
-				myprintf("59515: WARN: free space < of minsize   %19s  %19s\n",migliaia(spazio),migliaia2(minsize));
-				myprintf("59515: |=|=|=|=|=|=|=|=|=|=|=|=|=|=|=|=|=|=|=|\n");
-				myprintf("59515: ***************************************\n");
+				myprintf("01672: ***************************************\n");
+				myprintf("01673: |=|=|=|=|=|=|=|=|=|=|=|=|=|=|=|=|=|=|=|\n");
+				myprintf("01674: WARN: free space < of minsize   %19s  %19s\n",migliaia(spazio),migliaia2(minsize));
+				myprintf("01675: |=|=|=|=|=|=|=|=|=|=|=|=|=|=|=|=|=|=|=|\n");
+				myprintf("01676: ***************************************\n");
 			}
 	}
 	uint64_t total_size	=0;
@@ -66572,10 +67246,10 @@ int Jidac::dircompare(bool i_flagonlysize,bool i_flagrobocopy)
 	for (unsigned int i=0;i<files_size.size();i++)
 	{
 		if (i==0)
-			myprintf("59531: Dir  %d %21s |%12s| |%12s| %9.2f <<%s>>\n",(int)i,migliaia(files_size[i]),"Delta bytes",									 migliaia3(files_count[i]),files_time[i]/1000.0,files[i].c_str());
+			myprintf("01677: Dir  %d %21s |%12s| |%12s| %9.2f <<%s>>\n",(int)i,migliaia(files_size[i]),"Delta bytes",									 migliaia3(files_count[i]),files_time[i]/1000.0,files[i].c_str());
 		else
 		{
-			myprintf("59534: Dir  %d %21s |%12s| |%12s| %9.2f <<%s>>\n",(int)i,migliaia(files_size[i]),tohuman(myabs(files_size[0],files_size[i])),migliaia3(files_count[i]),files_time[i]/1000.0,files[i].c_str());
+			myprintf("01678: Dir  %d %21s |%12s| |%12s| %9.2f <<%s>>\n",(int)i,migliaia(files_size[i]),tohuman(myabs(files_size[0],files_size[i])),migliaia3(files_count[i]),files_time[i]/1000.0,files[i].c_str());
 			delta_size	+= myabs(files_size[0],files_size[i]);
 			delta_files	+= myabs(files_count[0],files_count[i]);
 		}
@@ -66583,14 +67257,14 @@ int Jidac::dircompare(bool i_flagonlysize,bool i_flagrobocopy)
 ///		total_files	+=files_count[i];
 	}
 	printbar('=');
-	myprintf("59542: Total  |%21s| (%s)\n",migliaia(total_size),tohuman(total_size));
-	myprintf("59542: Delta  |%21s| %21s|files\n",migliaia(delta_size),migliaia2(delta_files));
+	myprintf("01679: Total  |%21s| (%s)\n",migliaia(total_size),tohuman(total_size));
+	myprintf("01680: Delta  |%21s| %21s|files\n",migliaia(delta_size),migliaia2(delta_files));
 /// only a s (size)? Done
 	if (i_flagonlysize)
 		return 0;
 	uint64_t strangethings;
 	myprintf("\n");
-	myprintf("59585: Dir 0 (master) %s (files %s) <<%s>>\n",migliaia(files_size[0]),migliaia2(files_count[0]),files[0].c_str());
+	myprintf("01681: Dir 0 (master) %s (files %s) <<%s>>\n",migliaia(files_size[0]),migliaia2(files_count[0]),files[0].c_str());
 	printbar('-');
 	bool flagerror=false;
 /// check from 1 (the first slave)
@@ -66599,9 +67273,7 @@ int Jidac::dircompare(bool i_flagonlysize,bool i_flagrobocopy)
 		strangethings=0;
 		if (!exists(files[i]))
 		{
-			myprintf("[%03d] ERROR DOES NOT EXISTS <<",i);
-			printUTF8(files[i].c_str());
-			myprintf(">>\n");
+			myprintf("[%03d] ERROR DOES NOT EXISTS <<%Z>>\n",i,files[i].c_str());
 			flagerror=true;
 			risultato=1;
 		}
@@ -66609,8 +67281,8 @@ int Jidac::dircompare(bool i_flagonlysize,bool i_flagrobocopy)
 		{
 			if ((files_size[i]!=files_size[0]) || (files_count[i]!=files_count[0]))
 			{
-				myprintf("59567: Dir %d (slave) IS DIFFERENT time %6g <<%s>>\n",(int)i,files_time[i]/1000.0,files[i].c_str());
-				myprintf("59568: size  %24s (files %s)\n",migliaia(files_size[i]),migliaia2(files_count[i]));
+				myprintf("01682: Dir %d (slave) IS DIFFERENT time %f <<%s>>\n",(int)i,files_time[i]/1000.0,files[i].c_str());
+				myprintf("01683: size  %24s (files %s)\n",migliaia(files_size[i]),migliaia2(files_count[i]));
 			}
 			for (DTMap::iterator p=files_edt[0].begin(); p!=files_edt[0].end(); ++p)
 			{
@@ -66620,16 +67292,14 @@ int Jidac::dircompare(bool i_flagonlysize,bool i_flagrobocopy)
 				DTMap::iterator cerca=files_edt[i].find(filenamei);
 				if  (cerca==files_edt[i].end())
 				{
-					myprintf("59576: missing (not in %d) ",i);
-					printUTF8(filename0.c_str());
-					myprintf("\n");
+					myprintf("01684: missing (not in %d) %Z\n",i,filename0.c_str());
 					flagerror=true;
 					strangethings++;
 				}
 				if (menoenne>0)
 					if (strangethings>menoenne)
 					{
-						myprintf("30125: **** TOO MANY STRANGE THINGS (-n %d)  %s\n",menoenne,migliaia(strangethings));
+						myprintf("01685: **** TOO MANY STRANGE THINGS (-n %d)  %s\n",menoenne,migliaia(strangethings));
 						break;
 					}
 			}
@@ -66641,16 +67311,14 @@ int Jidac::dircompare(bool i_flagonlysize,bool i_flagrobocopy)
 				DTMap::iterator cerca=files_edt[0].find(filename0);
 				if  (cerca==files_edt[0].end())
 				{
-					myprintf("59598: excess  (not in 0) ");
-					printUTF8(filename0.c_str());
-					myprintf("\n");
+					myprintf("01686: excess  (not in 0) %Z\n",filename0.c_str());
 					flagerror=true;
 					strangethings++;
 				}
 				if (menoenne>0)
 					if (strangethings>menoenne)
 					{
-						myprintf("30146: **** TOO MANY STRANGE THINGS (-n %d)  %s\n",menoenne,migliaia(strangethings));
+						myprintf("01687: **** TOO MANY STRANGE THINGS (-n %d)  %s\n",menoenne,migliaia(strangethings));
 						break;
 					}
 			}
@@ -66664,7 +67332,7 @@ int Jidac::dircompare(bool i_flagonlysize,bool i_flagrobocopy)
 				{
 					if (p->second.size!=cerca->second.size)
 					{
-						myprintf("59622: diff size  %18s (0) %18s (%d) %s\n",migliaia(p->second.size),migliaia2(cerca->second.size),i,filename0.c_str());
+						myprintf("01688: diff size  %18s (0) %18s (%d) %s\n",migliaia(p->second.size),migliaia2(cerca->second.size),i,filename0.c_str());
 						flagerror=true;
 						strangethings++;
 					}
@@ -66673,9 +67341,7 @@ int Jidac::dircompare(bool i_flagonlysize,bool i_flagrobocopy)
 					{
 						if (p->second.hexhash!=cerca->second.hexhash)
 						{
-							myprintf("%s different %s (0) vs %s (%d) ",g_thechosenhash_str.c_str(),p->second.hexhash.c_str(),cerca->second.hexhash.c_str(),i);
-							printUTF8(filename0.c_str());
-							myprintf("\n");
+							myprintf("%s different %s (0) vs %s (%d) %Z\n",g_thechosenhash_str.c_str(),p->second.hexhash.c_str(),cerca->second.hexhash.c_str(),i,filename0.c_str());
 							flagerror=true;
 							strangethings++;
 						}
@@ -66684,16 +67350,14 @@ int Jidac::dircompare(bool i_flagonlysize,bool i_flagrobocopy)
 				if (menoenne>0)
 					if (strangethings>menoenne)
 					{
-						myprintf("30146: **** TOO MANY STRANGE THINGS (-n %d)  %s\n",menoenne,migliaia(strangethings));
+						myprintf("01689: **** TOO MANY STRANGE THINGS (-n %d)  %s\n",menoenne,migliaia(strangethings));
 						break;
 					}
 			}
 			if (!flagerror)
 				if ((files_size[i]==files_size[0]) && (files_count[i]==files_count[0]))
 				{
-					myprintf("[%03d] == <<",i);
-					printUTF8(files[i].c_str());
-					myprintf(">>\n");
+					myprintf("[%03d] == <<%Z>>\n",i,files[i].c_str());
 				}
 			printbar('-');
 		}
@@ -66701,13 +67365,13 @@ int Jidac::dircompare(bool i_flagonlysize,bool i_flagrobocopy)
 	if (!flagerror)
 	{
 		if (flagchecksum)
-			myprintf("59657: NO diff FOR SURE in slave dirs (checksum check %s)\n",g_thechosenhash_str.c_str());
+			myprintf("01690: NO diff FOR SURE in slave dirs (checksum check %s)\n",g_thechosenhash_str.c_str());
 		else
-			myprintf("59659: NO diff in slave dirs (fast check, only size)\n");
+			myprintf("01691: NO diff in slave dirs (fast check, only size)\n");
 	}
 	else
 	{
-		myprintf("59665: DIFFERENT SLAVE DIRS!!\n");
+		myprintf("01692: DIFFERENT SLAVE DIRS!!\n");
 		risultato=2;
 	}
 	return risultato;
@@ -66725,7 +67389,7 @@ int64_t Jidac::franzparallelscandir(bool i_flaghash,bool i_recursive,bool i_forc
 	if (files.size()==0)
 	{
 		if (flagdebug)
-			myprintf("28403: files.size zero\n");
+			myprintf("01693: files.size zero\n");
 		return 0;
 	}
 	if (i_forcedir)
@@ -66760,7 +67424,7 @@ int64_t Jidac::franzparallelscandir(bool i_flaghash,bool i_recursive,bool i_forc
 		// ini and set thread joinable
 		pthread_attr_init(&attr);
 		pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
-		myprintf("59716: Creating %s scan threads\n",migliaia(files.size()));
+		myprintf("01694: Creating %s scan threads\n",migliaia(files.size()));
 		if (!flagsilent)
 			if (!flagnoeta)
 				if (!flagnoconsole)
@@ -66774,7 +67438,7 @@ int64_t Jidac::franzparallelscandir(bool i_flaghash,bool i_recursive,bool i_forc
 			for(unsigned int i = 0; i < files.size(); i++ )
 			{
 				print_datetime();
-				myprintf("59722: Scan dir |%08d| <<%s>>\n",(int)i,files[i].c_str());
+				myprintf("01695: Scan dir |%08d| <<%s>>\n",(int)i,files[i].c_str());
 			}
 		for(unsigned int i = 0; i < files.size(); i++ )
 		{
@@ -66783,7 +67447,7 @@ int64_t Jidac::franzparallelscandir(bool i_flaghash,bool i_recursive,bool i_forc
 			rc = pthread_create(&threads[i], &attr, scansiona, (void*)&vettoreparametri[i]);
 			if (rc)
 			{
-				myprintf("37634: Error creating thread\n");
+				myprintf("01696: Error creating thread\n");
 				exit(-1);
 			}
 		}
@@ -66798,7 +67462,7 @@ int64_t Jidac::franzparallelscandir(bool i_flaghash,bool i_recursive,bool i_forc
 				error("Unable to join\n");
 				exit(-1);
 			}
-			///myprintf("59746: Thread completed %d status %d\n",(int)i,status);
+			///myprintf("01697: Thread completed %d status %d\n",(int)i,status);
 		}
 		if (!flagsilent)
 			if (!flagnoeta)
@@ -66811,7 +67475,7 @@ int64_t Jidac::franzparallelscandir(bool i_flaghash,bool i_recursive,bool i_forc
 			restoreConsole();
 		}
 		myprintf("\n");
-		myprintf("59805: Parallel scan ended in %f s\n",(mtime()-startscan)/1000.0);
+		myprintf("01698: Parallel scan ended in %f s\n",(mtime()-startscan)/1000.0);
 		for (unsigned i=0; i<files.size(); ++i)
 		{
 			uint64_t sizeofdir=0;
@@ -66828,8 +67492,7 @@ int64_t Jidac::franzparallelscandir(bool i_flaghash,bool i_recursive,bool i_forc
 				}
 				if (flagdebug3)
 				{
-					myprintf("57984: ");
-					printUTF8(filename.c_str());
+					myprintf("01699: %Z\n",filename.c_str());
 					myprintf("\n");
 				}
 			}
@@ -66850,7 +67513,7 @@ int64_t Jidac::franzparallelscandir(bool i_flaghash,bool i_recursive,bool i_forc
 			if (!flagnoeta)
 			{
 				print_datetime();
-				myprintf("59795: Scan dir <<%s>>\n",files[i].c_str());
+				myprintf("01700: Scan dir <<%s>>\n",files[i].c_str());
 			}
 			uint64_t blockstart=mtime();
 			myscandir(0,myblock,files[i],i_recursive,i_flaghash);
@@ -66869,9 +67532,7 @@ int64_t Jidac::franzparallelscandir(bool i_flaghash,bool i_recursive,bool i_forc
 				}
 				if (flagdebug3)
 				{
-					myprintf("58020: ");
-					printUTF8(filename.c_str());
-					myprintf("\n");
+					myprintf("01701: %Z\n",filename.c_str());
 				}
 			}
 			files_edt.push_back(myblock);
@@ -66887,12 +67548,12 @@ int Jidac::fillami()
 {
 	if (files.size()!=1)
 	{
-		myprintf("59839: FILL: exactly one directory\n");
+		myprintf("01702! FILL: exactly one directory\n");
 		return 2;
 	}
 	if (!isdirectory(files[0]))
 	{
-		myprintf("59844: FILL: you need to specify a directory, not a file (last bar)\n");
+		myprintf("01703! FILL: you need to specify a directory, not a file (last bar)\n");
 		return 2;
 	}
 	moreprint("");
@@ -66919,20 +67580,20 @@ int Jidac::fillami()
 	if (!direxists(outputdir))
 	{
 		myprintf("\n");
-		myprintf("28599: impossible to makepath %s\n",outputdir.c_str());
+		myprintf("01704! impossible to makepath %s\n",outputdir.c_str());
 		return 2;
 	}
 	unsigned int percent=99;
 	int64_t spazio=getfreespace(outputdir);
-	myprintf("59875: Free space %12s (%s) <<%s>>\n",migliaia(spazio),tohuman(spazio),outputdir.c_str());
+	myprintf("01705: Free space %12s (%s) <<%s>>\n",migliaia(spazio),tohuman(spazio),outputdir.c_str());
 	if (!flagzero)
 		if (spazio<600000000)
 		{
-			myprintf("28607: less than 600.000.000 bytes free on %s\n",outputdir.c_str());
+			myprintf("01706! less than 600.000.000 bytes free on %s\n",outputdir.c_str());
 			return 2;
 		}
 	uint64_t spacetowrite=spazio*percent/100;
-	myprintf("59875: To write   %12s (%s) %d percent\n",migliaia(spacetowrite),tohuman(spacetowrite),percent);
+	myprintf("01707: To write   %12s (%s) %d percent\n",migliaia(spacetowrite),tohuman(spacetowrite),percent);
 	uint32_t chunksize=(2<<28)/sizeof(uint32_t); //half gigabyte in 32 bits at time
 	int chunks=spacetowrite/(chunksize*sizeof(uint32_t));
 	chunks--; // just to be sure
@@ -66942,7 +67603,7 @@ int Jidac::fillami()
 			chunks=1;
 		else
 		{
-			myprintf("59892: Abort: there is something strange on free space (2GB+)\n");
+			myprintf("01708: Abort: there is something strange on free space (2GB+)\n");
 			return 1;
 		}
 	}
@@ -66950,7 +67611,7 @@ int Jidac::fillami()
 	uint32_t *buffer32bit = (uint32_t*)franz_malloc(chunksize*sizeof(uint32_t));
 	if (buffer32bit==0)
 	{
-		myprintf("28628: GURU cannot alloc the buffer\n");
+		myprintf("01709! GURU cannot alloc the buffer\n");
 		return 2;
 	}
 	int64_t starttutto=mtime();
@@ -66991,9 +67652,9 @@ int Jidac::fillami()
 		if (myfile==NULL)
 		{
 #ifdef _WIN32
-			myprintf("38604: myfile not open %s (error %s)\n",mynomefile,migliaia((int64_t)GetLastError()));
+			myprintf("01710: myfile not open %s (error %s)\n",mynomefile,migliaia((int64_t)GetLastError()));
 #else
-			myprintf("39540: myfile KO %s\n",mynomefile);
+			myprintf("01711: myfile KO %s\n",mynomefile);
 #endif
 			exit(0);
 		}
@@ -67025,16 +67686,16 @@ int Jidac::fillami()
 		totalhashtime	+=hashtime;
 	}
 	int64_t timetutto=mtime()-starttutto;
-	myprintf("59968: Total time %f  rnd %f  hash %f  write %f\n",timetutto/1000.0,totalrandtime/1000.0,totalhashtime/1000.0,totaliotime/1000.0);
+	myprintf("01712: Total time %f  rnd %f  hash %f  write %f\n",timetutto/1000.0,totalrandtime/1000.0,totalhashtime/1000.0,totaliotime/1000.0);
 	franz_free(buffer32bit);
 	if (chunkfilename.size()!=chunkhash.size())
 	{
-		myprintf("59980: Guru 23925: filename size != hash size\n");
+		myprintf("01713! Guru 23925: filename size != hash size\n");
 		return 2;
 	}
 	if (chunkfilename.size()!=(unsigned int)chunks)
 	{
-		myprintf("59984: Abort: expecting %d chunks but %d founded\n",chunks,(unsigned int)chunkfilename.size());
+		myprintf("01714! Abort: expecting %d chunks but %d founded\n",chunks,(unsigned int)chunkfilename.size());
 		return 2;
 	}
 	/// by default zero to shrink vmdks
@@ -67045,7 +67706,7 @@ int Jidac::fillami()
 			doverify=false;
 	if (doverify)
 	{
-		myprintf("59009: ******* VERIFY\n");
+		myprintf("01715: ******* VERIFY\n");
 		g_bytescanned=0;
 		g_filescanned=0;
 		g_worked=0;
@@ -67055,14 +67716,14 @@ int Jidac::fillami()
 		for (int unsigned i=0;i<chunkfilename.size();i++)
 		{
 			string filename=chunkfilename[i];
-			myprintf("59998: Reading chunk %05d ",i);
+			myprintf("01716: Reading chunk %05d ",i);
 			g_dimensione=0;
 			if (flagdebug3)
-				myprintf("56279: franz_do_hash\n");
+				myprintf("01717: franz_do_hash\n");
 
 			franz_do_hash dummy("XXH3");
 			if (flagdebug3)
-				myprintf("59961: filehash on %s\n",filename.c_str());
+				myprintf("01718: filehash on %s\n",filename.c_str());
 
 			string filehash=dummy.filehash(filename,false,-1,-1);
 			lavorati+=dummy.o_thefilesize;
@@ -67072,12 +67733,12 @@ int Jidac::fillami()
 			bool flagerrore=(filehash!=chunkhash[i]);
 			if (flagerrore)
 			{
-				myprintf("60023: ERROR\n");
+				myprintf("01719: ERROR\n");
 				flagallok=false;
 			}
 			else
 			{
-				myprintf("60020: OK %s",chunkhash[i].c_str());
+				myprintf("01720: OK %s",chunkhash[i].c_str());
 				if (flagverbose)
 					myprintf("\n");
 				else
@@ -67086,7 +67747,7 @@ int Jidac::fillami()
 		}
 		myprintf("\n");
 		int64_t verifytime=mtime()-startverify;
-		myprintf("60028: Verify time %f (%10s) speed (%10s/s)\n",verifytime/1000.0,tohuman(lavorati),tohuman2((int64_t)(lavorati/(verifytime/1000.0))));
+		myprintf("01721: Verify time %f (%10s) speed (%10s/s)\n",verifytime/1000.0,tohuman(lavorati),tohuman2((int64_t)(lavorati/(verifytime/1000.0))));
 	}
 	if (flagallok)
 	{
@@ -67096,18 +67757,18 @@ int Jidac::fillami()
 			for (int unsigned i=0;i<chunkfilename.size();i++)
 			{
 				delete_file(chunkfilename[i].c_str());
-				myprintf("60048: Deleting tempfile %05d / %05d\r",i,(unsigned int)chunkfilename.size()-1);
+				myprintf("01722: Deleting tempfile %05d / %05d\r",i,(unsigned int)chunkfilename.size()-1);
 			}
 			delete_dir(outputdir.c_str());
 			myprintf("\n");
 		}
 		else
 		{
-			myprintf("60046: REMEMBER: temp file in %s\n",outputdir.c_str());
+			myprintf("01723: REMEMBER: temp file in %s\n",outputdir.c_str());
 		}
 	}
 	else
-		myprintf("60058: ERROR: SOMETHING WRONG\n");
+		myprintf("01724: ERROR: SOMETHING WRONG\n");
 	return 0;
 }
 int  Jidac::dir()
@@ -67120,7 +67781,7 @@ int  Jidac::dir()
 	if (files.size()==0)
 	{
 		if (flagdebug)
-			myprintf("38759: push .\n");
+			myprintf("01725: push .\n");
 		files.push_back(".");
 	}
 	string cartella=files[0];
@@ -67143,8 +67804,8 @@ int  Jidac::dir()
 		string partefinale		=cartella.substr(posstella,cartella.size());
 		if (flagdebug2)
 		{
-			myprintf("56153: start |%s|\n",parteiniziale.c_str());
-			myprintf("56154: end   |%s|\n",partefinale.c_str());
+			myprintf("01726: start |%s|\n",parteiniziale.c_str());
+			myprintf("01727: end   |%s|\n",partefinale.c_str());
 		}
 		cartella=parteiniziale;
 		onlyfiles.clear();
@@ -67155,20 +67816,16 @@ int  Jidac::dir()
 		cartella="./";
 #ifdef unix
 	if (flagdebug2)
-		myprintf("38802: folder before %s\n",cartella.c_str());
+		myprintf("01728: folder before %s\n",cartella.c_str());
 	string nuovacartella=my_realpath(cartella);
 	if (flagdebug2)
-		myprintf("38805: folder after %s\n",nuovacartella.c_str());
+		myprintf("01729: folder after %s\n",nuovacartella.c_str());
 	if	(!isdirectory(nuovacartella))
 		nuovacartella+='/';
 	if (!flagterse)
 		if (cartella!=nuovacartella)
 		{
-			myprintf("38798: WARNING path : <<");
-			printUTF8(cartella.c_str());
-			myprintf(">>\nresolved to         : <<");
-			printUTF8(nuovacartella.c_str());
-			myprintf(">>\n");
+			myprintf("01730: WARNING path : <<%Z>>\nresolved to         : <<%Z>>\n",cartella.c_str(),nuovacartella.c_str());
 		}
 	cartella=nuovacartella;
 	files[0]=cartella;
@@ -67189,9 +67846,7 @@ int  Jidac::dir()
 
 	if (!flagterse)
 	{
-		myprintf("60197: ==== Scanning dir <<");
-		printUTF8(cartella.c_str());
-		myprintf(">> ");
+		myprintf("01731: ==== Scanning dir <<%Z>> ",cartella.c_str());
 		if (barras)
 			myprintf(" /s");
 		if (barraos)
@@ -67271,16 +67926,16 @@ int  Jidac::dir()
 	{
 		if (flagdebug3)
 		{
-			myprintf("60211: Pre-sort\n");
+			myprintf("01732: Pre-sort\n");
 			for (unsigned int i=0;i<fileandsize.size();i++)
-				myprintf("60213: PRE %08d  %s %s\n",(int)i,migliaia(fileandsize[i].size),fileandsize[i].filename.c_str());
+				myprintf("01733: PRE %08d  %s %s\n",(int)i,migliaia(fileandsize[i].size),fileandsize[i].filename.c_str());
 		}
 		sort(fileandsize.begin(),fileandsize.end(),comparefilenamesize);
 		if (flagdebug3)
 		{
-			myprintf("60218: Post-sort\n");
+			myprintf("01734: Post-sort\n");
 			for (unsigned int i=0;i<fileandsize.size();i++)
-				myprintf("60220: POST %08d  %s %s\n",(int)i,migliaia(fileandsize[i].size),fileandsize[i].filename.c_str());
+				myprintf("01735: POST %08d  %s %s\n",(int)i,migliaia(fileandsize[i].size),fileandsize[i].filename.c_str());
 		}
 		iniziohash=mtime();
 		int64_t dalavorare=0;
@@ -67302,7 +67957,7 @@ int  Jidac::dir()
 				}
 			}
 		myprintf("\n");
-		myprintf("60290: Start checksumming %s / %s bytes ...\n",migliaia(fileandsize.size()),migliaia2(dalavorare));
+		myprintf("01736: Start checksumming %s / %s bytes ...\n",migliaia(fileandsize.size()),migliaia2(dalavorare));
 		int larghezzaconsole=terminalwidth()-2;
 		if (larghezzaconsole<10)
 			larghezzaconsole=80;
@@ -67323,11 +67978,11 @@ int  Jidac::dir()
 						bool saveeta=flagnoeta;
 						flagnoeta=true;
 						if (flagdebug3)
-							myprintf("56509: franz_do_hash\n");
+							myprintf("01737: franz_do_hash\n");
 
 						franz_do_hash dummy(g_thechosenhash);
 						if (flagdebug3)
-							myprintf("60222: filehash on %s\n",fileandsize[i].filename.c_str());
+							myprintf("01738: filehash on %s\n",fileandsize[i].filename.c_str());
 
 						string temp=dummy.filehash(fileandsize[i].filename,false,-1,-1);
 
@@ -67339,14 +67994,14 @@ int  Jidac::dir()
 						hash_calcolati+=fileandsize[i].size;
 						entrato=true;
 						if (flagdebug3)
-							myprintf("60291: %08d HASH %s %s %19s %s\n",(int)i,fileandsize[i].hashhex.c_str(),dateToString(flagutc,fileandsize[i].date).c_str(),migliaia(fileandsize[i].size),fileandsize[i].filename.c_str());
+							myprintf("01739: %08d HASH %s %s %19s %s\n",(int)i,fileandsize[i].hashhex.c_str(),dateToString(flagutc,fileandsize[i].date).c_str(),migliaia(fileandsize[i].size),fileandsize[i].filename.c_str());
 						else
 						{
 							rapporto=larghezzaconsole*hash_calcolati/(dalavorare+1);
 							percentuale=100*hash_calcolati/(dalavorare+1);
 							if (!flagnoeta)
 							{
-								myprintf("60294: Done %03d ",(unsigned int)percentuale);
+								myprintf("01740: Done %03d ",(unsigned int)percentuale);
 								if (percentuale>ultimapercentuale)
 								{
 									if (rapporto>10)
@@ -67364,10 +68019,10 @@ int  Jidac::dir()
 					flagnoeta=true;
 					///string temp=hash_calc_file(flag2algo(),fileandsize[i+1].filename.c_str(),false,dummycrc,0,0,dummylavorati,thefilesize);
 					if (flagdebug3)
-						myprintf("56548: franz_do_hash\n");
+						myprintf("01741: franz_do_hash\n");
 					franz_do_hash dummy(g_thechosenhash);
 					if (flagdebug3)
-						myprintf("60261: filehash on %s\n",fileandsize[i+1].filename.c_str());
+						myprintf("01742: filehash on %s\n",fileandsize[i+1].filename.c_str());
 
 					string temp=dummy.filehash(fileandsize[i+1].filename,false,-1,-1);
 
@@ -67378,14 +68033,14 @@ int  Jidac::dir()
 					quantihash++;
 					hash_calcolati+=fileandsize[i+1].size;
 					if (flagdebug3)
-						myprintf("60330: %08d HASH-2 %s %s %19s %s\n",i+1,fileandsize[i+1].hashhex.c_str(),dateToString(flagutc,fileandsize[i+1].date).c_str(),migliaia(fileandsize[i+1].size),fileandsize[i+1].filename.c_str());
+						myprintf("01743: %08d HASH-2 %s %s %19s %s\n",i+1,fileandsize[i+1].hashhex.c_str(),dateToString(flagutc,fileandsize[i+1].date).c_str(),migliaia(fileandsize[i+1].size),fileandsize[i+1].filename.c_str());
 					else
 					{
 						rapporto=larghezzaconsole*hash_calcolati/(dalavorare+1);
 						percentuale=100*hash_calcolati/(dalavorare+1);
 						if (!flagnoeta)
 						{
-							myprintf("60333: Done %03d ",(unsigned int)percentuale);
+							myprintf("01744: Done %03d ",(unsigned int)percentuale);
 							if (percentuale>ultimapercentuale)
 								{
 									if (rapporto>10)
@@ -67409,17 +68064,17 @@ int  Jidac::dir()
 		sort(fileandsize.begin(),fileandsize.end(),comparecrc32);
 		if (flagdebug3)
 		{
-			myprintf("60361: Hash taken %08d %s\n",quantihash,migliaia(hash_calcolati));
-			myprintf("60362: Before shrink %s\n",migliaia(fileandsize.size()));
-			myprintf("60363: Time %f\n",(finehash-iniziohash)/1000.0);
+			myprintf("01745: Hash taken %08d %s\n",quantihash,migliaia(hash_calcolati));
+			myprintf("01746: Before shrink %s\n",migliaia(fileandsize.size()));
+			myprintf("01747: Time %f\n",(finehash-iniziohash)/1000.0);
 			for (unsigned int i=0;i<fileandsize.size();i++)
-				myprintf("60365: before shrink %08d  %s %s\n",(int)i,fileandsize[i].hashhex.c_str(),fileandsize[i].filename.c_str());
+				myprintf("01748: before shrink %08d  %s %s\n",(int)i,fileandsize[i].hashhex.c_str(),fileandsize[i].filename.c_str());
 		}
 		int limite=-1;
 		for (unsigned int i=0;i<fileandsize.size(); i++)
 		{
 			if (flagdebug3)
-				myprintf("60371: %d size %s <<%s>>\n",(int)i,migliaia(fileandsize.size()),fileandsize[i].hashhex.c_str());
+				myprintf("01749: %d size %s <<%s>>\n",(int)i,migliaia(fileandsize.size()),fileandsize[i].hashhex.c_str());
 			if (!fileandsize[i].flaghashstored)
 			{
 				limite=i;
@@ -67427,22 +68082,22 @@ int  Jidac::dir()
 			}
 		}
 		if (flagverbose)
-		myprintf("60374: Limit founded %d\n",limite);
+		myprintf("01750: Limit founded %d\n",limite);
 		if (limite>-1)
 			for (int i=fileandsize.size()-1;i>=limite;i--)
 				fileandsize.pop_back();
 		if (flagdebug3)
 		{
-			myprintf("60385: After shrink %s\n",migliaia(fileandsize.size()));
+			myprintf("01751: After shrink %s\n",migliaia(fileandsize.size()));
 			for (unsigned int i=0;i<fileandsize.size();i++)
-				myprintf("60387: After shrinking %08d  %s %s\n",(int)i,fileandsize[i].hashhex.c_str(),fileandsize[i].filename.c_str());
+				myprintf("01752: After shrinking %08d  %s %s\n",(int)i,fileandsize[i].hashhex.c_str(),fileandsize[i].filename.c_str());
 		}
 		sort(fileandsize.begin(),fileandsize.end(),comparesizehash);
 		if (flagdebug3)
 		{
-			myprintf("60392: After re-sort %s\n",migliaia(fileandsize.size()));
+			myprintf("01753: After re-sort %s\n",migliaia(fileandsize.size()));
 			for (unsigned int i=0;i<fileandsize.size();i++)
-				myprintf("60388: After re-sort %08d  %s %s\n",(int)i,fileandsize[i].hashhex.c_str(),fileandsize[i].filename.c_str());
+				myprintf("01754: After re-sort %08d  %s %s\n",(int)i,fileandsize[i].hashhex.c_str(),fileandsize[i].filename.c_str());
 		}
 	}
 	else
@@ -67519,11 +68174,11 @@ int  Jidac::dir()
 				if (flagchecksum)
 				{
 					if (flagdebug3)
-						myprintf("56700: franz_do_hash\n");
+						myprintf("01755: franz_do_hash\n");
 
 					franz_do_hash dummy(g_thechosenhash);
 					if (flagdebug3)
-						myprintf("60416: filehash on %s\n",fileandsize[i].filename.c_str());
+						myprintf("01756: filehash on %s\n",fileandsize[i].filename.c_str());
 
 					string temp=dummy.filehash(fileandsize[i].filename,false,-1,-1);
 					myprintf("|| %s:%s ",g_thechosenhash_str.c_str(),temp.c_str());
@@ -67547,7 +68202,7 @@ int  Jidac::dir()
 			cartella="./";
 		else
 			cartella=percorso;
-		///myprintf("60483: PERCO |%s|\n",percorso.c_str());
+		///myprintf("01757: PERCO |%s|\n",percorso.c_str());
 	}
 	int64_t spazio=getfreespace(cartella);
 	if (!flagterse)
@@ -67558,8 +68213,8 @@ int  Jidac::dir()
 	if (flagduplicati)
 	{
 		myprintf("\n");
-		myprintf("60488: Duplicated %19s byte\n",migliaia(tot_duplicati));
-		myprintf("60499: Hashed %8s files %18s bytes in %f s %s /s\n",migliaia(quantihash),migliaia2((int64_t)hash_calcolati),(finehash-iniziohash)/1000.0,migliaia3((int64_t)(hash_calcolati/((finehash-iniziohash+1)/1000.0))));
+		myprintf("01758: Duplicated %19s byte\n",migliaia(tot_duplicati));
+		myprintf("01759: Hashed %8s files %18s bytes in %f s %s /s\n",migliaia(quantihash),migliaia2((int64_t)hash_calcolati),(finehash-iniziohash)/1000.0,migliaia3((int64_t)(hash_calcolati/((finehash-iniziohash+1)/1000.0))));
 	}
 	return 0;
 }
@@ -67569,9 +68224,9 @@ int Jidac::decimation()
 	if (g_exec!="")
 		flagthelastone=true;
 	if (flagthelastone)
-		myprintf("60490: *** Run the last ones *** ");
+		myprintf("01760: *** Run the last ones *** ");
 	else
-		myprintf("60491: *** Decimation *** ");
+		myprintf("01761: *** Decimation *** ");
 	myprintf(" *** -kill missing: dry run *** ");
 	if (!flagforcezfs)
 		myprintf(" *** ignoring .zfs and :$DATA ***");
@@ -67579,7 +68234,7 @@ int Jidac::decimation()
 	if (g_exec!="")
 		if (!fileexists(g_exec))
 		{
-			myprintf("29066: -g_exec does not exists\n");
+			myprintf("01762! -g_exec does not exists\n");
 			return 2;
 		}
 	if (flagthelastone)
@@ -67587,7 +68242,7 @@ int Jidac::decimation()
 			menoenne=1;
 	if (menoenne==0)
 	{
-		myprintf("28960: -n or -limit not set\n");
+		myprintf("01763: -n or -limit not set\n");
 		return 1;
 	}
 	flagbarraod=true; // by default, sort by date
@@ -67595,13 +68250,13 @@ int Jidac::decimation()
 		flagbarraod=false; // if /on, sort by name
 	if (files.size()>1)
 	{
-		myprintf("28966: only one dir can be elaborated\n");
+		myprintf("01764: only one dir can be elaborated\n");
 		return 1;
 	}
 #ifdef _WIN32
 	if (mypos("*",files[0])==-1)
 	{
-		myprintf("29053: * pattern requested (ex. /tmp/dump_*.sql)\n");
+		myprintf("01765: * pattern requested (ex. /tmp/dump_*.sql)\n");
 		return 1;
 	}
 #endif
@@ -67609,20 +68264,20 @@ int Jidac::decimation()
 	myprintf("\n");
 	if (files_edt[0].size()==0)
 	{
-		myprintf("29048: empty result, nothing to do\n");
+		myprintf("01766: empty result, nothing to do\n");
 		return 0;
 	}
 	if (!flagthelastone)
 		if (!flagforce)
 			if (files_edt[0].size()>50)
 			{
-				myprintf("29024: founded a lot of files (%s), no -force => quit (security measure)\n",migliaia(files_edt[0].size()));
+				myprintf("01767: founded a lot of files (%s), no -force => quit (security measure)\n",migliaia(files_edt[0].size()));
 				return 1;
 			}
 	vector<string> 		scannedfiles;
 	if (flagbarraod)
 	{
-		myprintf("60553: Order by DATE (/od or default)\n");
+		myprintf("01768: Order by DATE (/od or default)\n");
 		vector<DTMap::iterator> filelist;
 		for (DTMap::iterator a=files_edt[0].begin(); a!=files_edt[0].end(); ++a)
 			filelist.push_back(a);
@@ -67632,7 +68287,7 @@ int Jidac::decimation()
 	}
 	else
 	{
-		myprintf("60563: Order by NAME (/on)\n");
+		myprintf("01769: Order by NAME (/on)\n");
 		for (DTMap::iterator p=files_edt[0].begin(); p!=files_edt[0].end(); ++p)
 			scannedfiles.push_back(p->first);
 	}
@@ -67642,7 +68297,7 @@ int Jidac::decimation()
 			menoenne=scannedfiles.size();
 		else
 		{
-			myprintf("28977: candidate %s less or equal to limit %s => do nothing\n",migliaia(menoenne),migliaia2(scannedfiles.size()));
+			myprintf("01770: candidate %s less or equal to limit %s => do nothing\n",migliaia(menoenne),migliaia2(scannedfiles.size()));
 			return 0;
 		}
 	}
@@ -67658,20 +68313,20 @@ int Jidac::decimation()
 			tobedeleted.push_back(scannedfiles[i]);
 		if (flagverbose)
 			for (unsigned int i=scannedfiles.size()-menoenne;i<scannedfiles.size();i++)
-				myprintf("60597: KEEP   %s\n",scannedfiles[i].c_str());
+				myprintf("01771: KEEP   %s\n",scannedfiles[i].c_str());
 	}
 	myprintf("\n");
-	myprintf("60598: Candidate (to be elaborated) %12s\n",migliaia(tobedeleted.size()));
+	myprintf("01772: Candidate (to be elaborated) %12s\n",migliaia(tobedeleted.size()));
 	if (tobedeleted.size()==0)
 	{
-		myprintf("28985: Nothing to do\n");
+		myprintf("01773: Nothing to do\n");
 		return 0;
 	}
 	if (!flagkill)
-		myprintf("28990: dry run (no -kill)\n");
+		myprintf("01774: dry run (no -kill)\n");
 	if (flagthelastone)
 	{
-		myprintf("60609: Executing  %s times <<%s>>\n",migliaia(tobedeleted.size()),g_exec.c_str());
+		myprintf("01775: Executing  %s times <<%s>>\n",migliaia(tobedeleted.size()),g_exec.c_str());
 		for (unsigned int i=0;i<tobedeleted.size();i++)
 		{
 			#ifdef _WIN32
@@ -67689,9 +68344,8 @@ int Jidac::decimation()
 	{
 		if (flagverbose)
 		{
-			myprintf("60628: DELETE <<");
-			printUTF8(tobedeleted[i].c_str());
-			myprintf(">>\n");
+			myprintf("01776: DELETE <<%Z>>\n",tobedeleted[i].c_str());
+			
 		}
 		if (flagkill)
 		{
@@ -67702,10 +68356,10 @@ int Jidac::decimation()
 		}
 	}
 	if (deleted>0)
-	myprintf("60641: Deleted                      %12s\n",migliaia(deleted));
+	myprintf("01777: Deleted                      %12s\n",migliaia(deleted));
 	if (highlander>0)
 	{
-		myprintf("60644: Highlander                   %12s\n",migliaia(highlander));
+		myprintf("01778! Highlander                   %12s\n",migliaia(highlander));
 		return 2;
 	}
 	return 0;
@@ -67721,48 +68375,48 @@ bool iswinroot(const string& i_path)
  	/// E:\*.*    6
 	/// 012345
 	if (flagdebug2)
-		myprintf("54362: iswinroot %s\n",i_path.c_str());
+		myprintf("01779: iswinroot %s\n",i_path.c_str());
 	if ((i_path.size()>6) || (i_path.size()<2) || (i_path.size()==5))
 		return false;
 	if (flagdebug3)
-		myprintf("60668: x1\n");
+		myprintf("01780: x1\n");
 	if (!isalpha(i_path[0]))
 		return false;
 	if (flagdebug3)
-		myprintf("60669: x2\n");
+		myprintf("01781: x2\n");
 	if (i_path[1]!=':')
 		return false;
 	if (flagdebug3)
-		myprintf("60676: x3\n");
+		myprintf("01782: x3\n");
 	if (i_path.size()==2)
 		return true;		// E:
 	if (flagdebug3)
-		myprintf("60680: x4\n");
+		myprintf("01783: x4\n");
 	if ((i_path[2]!='/') && (i_path[2]!='\\'))
 		return false;
 	if (flagdebug3)
-		myprintf("60684: x5\n");
+		myprintf("01784: x5\n");
 	if (i_path.size()==3)
 		return	true;		// E:\ E:/
 	if (flagdebug3)
-		myprintf("60688: x6\n");
+		myprintf("01785: x6\n");
 	if ((i_path[3]!='*'))
 		return false;
 	if (flagdebug3)
-		myprintf("60692: x7\n");
+		myprintf("01786: x7\n");
 	if (i_path.size()==4)
 		return true;		// E:\*, E:/*
 	if (flagdebug3)
-		myprintf("60696: x8\n");
+		myprintf("01787: x8\n");
 	if ((i_path[4]!='.'))
 		return false;
 	if (flagdebug3)
-		myprintf("60700: x9\n");
+		myprintf("01788: x9\n");
 	if (i_path.size()==6)
 		if (i_path[5]=='*')
 			return true;
 	if (flagdebug3)
-		myprintf("60705: x10\n");
+		myprintf("01789: x10\n");
 #endif
 	return false;
 }
@@ -67771,30 +68425,33 @@ bool iswinroot(const string& i_path)
 string prendiprimariga(string i_filename)
 {
 	if (flagdebug)
-		myprintf("63074: getting first line  %s\n",i_filename.c_str());
+		myprintf("01790: getting first line  %s\n",i_filename.c_str());
 	
 	if (i_filename=="")
 		return "";
 	if (!fileexists(i_filename))
 	{
-		myprintf("63080: File not found ");
-		printUTF8(i_filename.c_str());
-		myprintf("\n");
+		myprintf("01791: File not found %Z\n",i_filename.c_str());
 		return "";
 	}
 
 	FILE* backupfile=fopen(i_filename.c_str(), "rb");
 	if (backupfile==NULL)
 	{
-		myprintf("63089: Cannot open file\n");
+		myprintf("01792: Cannot open file\n");
 		return "";
 	}
 
-	char line[65536];
+#ifdef ANCIENT
+	char 	line[16384];
+#else
+	char 	line[65536];
+#endif
+
 	string linea="";
 	if (!fgets(line, sizeof(line), backupfile))
 	{
-		myprintf("63097: failed reading first line\n");
+		myprintf("01793: failed reading first line\n");
 		fclose(backupfile);
 		return "";
 	}
@@ -67803,7 +68460,7 @@ string prendiprimariga(string i_filename)
 	linea=line;
 	if (linea.size()==0)
 	{
-		myprintf("63106: first line empty\n");
+		myprintf("01794: first line empty\n");
 		return "";
 	}
 	return linea;
@@ -67815,12 +68472,12 @@ bool iszpaqfranzfile(string i_filename,string i_header)
 	string linea=prendiprimariga(i_filename);
 	if (linea.size()==0)
 	{
-		myprintf("63118: first line empty\n");
+		myprintf("01795: first line empty\n");
 		return false;
 	}
 	if (mypos(i_header,linea)==-1)
 	{
-		myprintf("63123: File does not seems by zpaqfranz %s\n",linea.c_str());
+		myprintf("01796: File does not seems by zpaqfranz %s\n",linea.c_str());
 		return false;
 	}
 	return true;
@@ -67848,56 +68505,58 @@ bool getdatafromfasttxt(string i_filename,string& o_crc32,string& o_quick,string
 	o_size		=0;
 	if (!iszpaqfranzfile(i_filename,"$zpaqfranz fasttxt|"))
 	{
-		myprintf("62699: Does not seems a zpaqfranz's fasttxt ");
-		printUTF8(i_filename.c_str());
-		myprintf("\n");
+		myprintf("01797: Does not seems a zpaqfranz's fasttxt %Z\n",i_filename.c_str());
 		return false;
 	}
 	FILE* backupfile=fopen(i_filename.c_str(), "rb");
 	if (backupfile==NULL)
 	{
-		myprintf("62712: Cannot open fasttxt\n");
+		myprintf("01798: Cannot open fasttxt\n");
 		return false;
 	}
-	char line[65536];
+#ifdef ANCIENT
+	char 	line[16384];
+#else
+	char 	line[65536];
+#endif
 	string linea="";
 	if (!fgets(line, sizeof(line), backupfile))
 	{
-		myprintf("62719: failed reading first line\n");
+		myprintf("01799: failed reading first line\n");
 		fclose(backupfile);
 		return false;
 	}
 	linea=line;
 	if (linea.size()==0)
 	{
-		myprintf("62725: first line empty\n");
+		myprintf("01800: first line empty\n");
 		fclose(backupfile);
 		return false;
 	}
 	if (mypos("$zpaqfranz fasttxt|",linea)==-1)
 	{
-		myprintf("62730: Abort: first line is strange %s\n",linea.c_str());
+		myprintf("01801: Abort: first line is strange %s\n",linea.c_str());
 		fclose(backupfile);
 		return false;
 
 	}
 	if (!fgets(line, sizeof(line), backupfile))
 	{
-		myprintf("62753: failed reading second line\n");
+		myprintf("01802: failed reading second line\n");
 		fclose(backupfile);
 		return false;
 	}
 	linea=line;
 	if (linea.size()==0)
 	{
-		myprintf("62759: second line empty\n");
+		myprintf("01803: second line empty\n");
 		fclose(backupfile);
 		return false;
 	}
 	string crc32fromtxt=getfirsthash(linea);
 	if (crc32fromtxt.size()!=8)
 	{
-		myprintf("62766: CRC32 from fasttxt length !=8 %s\n",crc32fromtxt.c_str());
+		myprintf("01804: CRC32 from fasttxt length !=8 %s\n",crc32fromtxt.c_str());
 		fclose(backupfile);
 		return false;
 	}
@@ -67906,7 +68565,7 @@ bool getdatafromfasttxt(string i_filename,string& o_crc32,string& o_quick,string
 	if (quickprefromtxt!="0")
 		if (quickprefromtxt.size()!=16)
 		{
-			myprintf("62766: quick pre from fasttxt length !=16 %s\n",quickprefromtxt.c_str());
+			myprintf("01805: quick pre from fasttxt length !=16 %s\n",quickprefromtxt.c_str());
 			fclose(backupfile);
 			return false;
 		}
@@ -67915,7 +68574,7 @@ bool getdatafromfasttxt(string i_filename,string& o_crc32,string& o_quick,string
 	if (crc32prefromtxt!="0")
 		if (crc32prefromtxt.size()!=8)
 		{
-			myprintf("62809: crcpre32 from fasttxt length !=8 %s\n",crc32prefromtxt.c_str());
+			myprintf("01806: crcpre32 from fasttxt length !=8 %s\n",crc32prefromtxt.c_str());
 			fclose(backupfile);
 			return false;
 		}
@@ -67933,10 +68592,10 @@ bool getdatafromfasttxt(string i_filename,string& o_crc32,string& o_quick,string
 	fclose(backupfile);
 	if (flagdebug3)
 	{
-		myprintf("62768: CRC32     FROM FASTTXT %s|\n",crc32fromtxt.c_str());
-		myprintf("62768: QUICKPRE  FROM FASTTXT %s|\n",quickprefromtxt.c_str());
-		myprintf("62768: CRC32PRE  FROM FASTTXT %s|\n",crc32prefromtxt.c_str());
-		myprintf("62768: SIZE      FROM FASTTXT %s|\n",sizefromtxt.c_str());
+		myprintf("01807: CRC32     FROM FASTTXT %s|\n",crc32fromtxt.c_str());
+		myprintf("01808: QUICKPRE  FROM FASTTXT %s|\n",quickprefromtxt.c_str());
+		myprintf("01809: CRC32PRE  FROM FASTTXT %s|\n",crc32prefromtxt.c_str());
+		myprintf("01810: SIZE      FROM FASTTXT %s|\n",sizefromtxt.c_str());
 	}
 	o_crc32	=crc32fromtxt;
 	o_precrc32=crc32prefromtxt;
@@ -67948,23 +68607,23 @@ bool writedatainfasttxt(string i_filename,string i_archive,string i_crc32,string
 {
 	if (i_filename=="")
 	{
-		myprintf("60056: i_filename empty\n");
+		myprintf("01811: i_filename empty\n");
 		return false;
 	}
 	if (i_archive=="")
 	{
-		myprintf("60061: i_archive empty\n");
+		myprintf("01812: i_archive empty\n");
 		return false;
 	}
 	if (i_crc32.size()!=8)
 	{
-		myprintf("60104: i_crc32 not 8 |%s|\n",i_crc32.c_str());
+		myprintf("01813: i_crc32 not 8 |%s|\n",i_crc32.c_str());
 		return false;
 	}
 	if (i_quick!="0")
 		if (i_quick.size()!=16)
 		{
-			myprintf("60949: i_quick not 16 |%s|\n",i_quick.c_str());
+			myprintf("01814: i_quick not 16 |%s|\n",i_quick.c_str());
 			return false;
 		}
 	if (i_precrc32=="")
@@ -67972,24 +68631,24 @@ bool writedatainfasttxt(string i_filename,string i_archive,string i_crc32,string
 	if (i_precrc32!="0")
 		if (i_precrc32.size()!=8)
 		{
-			myprintf("60096: i_precrc32 not 0 |%s|\n",i_precrc32.c_str());
+			myprintf("01815: i_precrc32 not 0 |%s|\n",i_precrc32.c_str());
 			return false;
 		}
 	if (i_size<0)
 	{
-		myprintf("60078: i_size negative\n");
+		myprintf("01816: i_size negative\n");
 		return false;
 	}
 	if (i_presize<0)
 	{
-		myprintf("60106: i_presize negative\n");
+		myprintf("01817: i_presize negative\n");
 		return false;
 	}
 
 	FILE* backupfile=fopen(i_filename.c_str(), "wb");
 	if (backupfile==NULL)
 	{
-		myprintf("62688: Cannot write on fasttxt\n");
+		myprintf("01818: Cannot write on fasttxt\n");
 		return false;
 	}
 	fprintf(backupfile,"$zpaqfranz fasttxt|1|%s|%s\n",dateToString(true,now()).c_str(),i_archive.c_str());
@@ -67999,9 +68658,10 @@ bool writedatainfasttxt(string i_filename,string i_archive,string i_crc32,string
 	return true;
 }
 
+
 int Jidac::append()
 {
-	myprintf("69023: Append 2-pass *** ALPHA STAGE *** ANTI-RANSOMWARE (FOR chflags sappend)\n");
+	myprintf("01819: Append 2-pass *** ALPHA STAGE *** ANTI-RANSOMWARE (FOR chflags sappend)\n");
 
 	g_optional	="ransomware";
 	g_cdatasize	=0;
@@ -68014,13 +68674,13 @@ int Jidac::append()
 	if (errore==0)
 	{
 		if (flagdebug3)
-			myprintf("38611: Second round cdatasize %s  htsize %s\n",migliaia(g_cdatasize),migliaia2(g_htsize));
+			myprintf("01820: Second round cdatasize %s  htsize %s\n",migliaia(g_cdatasize),migliaia2(g_htsize));
 		jidacreset();
 		return add();
 	}
 	else
 	{
-		myprintf("38594: append() something is wrong %d\n",errore);
+		myprintf("01821: append() something is wrong %d\n",errore);
 		return errore;
 	}
 }
@@ -68034,15 +68694,13 @@ struct twoint
 
 int	Jidac::rebuildcrc32(string i_filename,string& o_prezpaqcrc32,int64_t& 	o_prezpaqsize,string& o_thecrcfile)
 {
-	myprintf("60892: Rebuilding broken fasttxt (TRIM for incomplete transaction) <<");
-	printUTF8(i_filename.c_str());
-	myprintf(">>\n");
+	myprintf("01822: Rebuilding broken fasttxt (TRIM for incomplete transaction) <<%Z>>\n",i_filename.c_str());
 	
 	if (i_filename!=g_indexname)
 	{
 		if (flagads && check_if_password(i_filename))
 		{
-			myprintf("62482: TRIM skipped, -ads AND password\n");
+			myprintf("01823: TRIM skipped, -ads AND password\n");
 		}
 		else
 		{
@@ -68050,38 +68708,37 @@ int	Jidac::rebuildcrc32(string i_filename,string& o_prezpaqcrc32,int64_t& 	o_pre
 			jidacreset();
 			files.clear();
 			files.push_back(i_filename.c_str());
-			myprintf("60897: TRIM done, recomputing hash and CRC-32\n");
+			myprintf("01824: TRIM done, recomputing hash and CRC-32\n");
 		}
 	}
 	int64_t startverify		=mtime();
 	franz_do_hash dummyquick("QUICK");
 	if (flagdebug3)
-		myprintf("60990: filehash QUICK on %s\n",i_filename.c_str());
+		myprintf("01825: filehash QUICK on %s\n",i_filename.c_str());
 
 	g_dimensione=0;
 	string o_initialzpaqquick=dummyquick.filehash(i_filename,false	,startverify,prendidimensionefile(i_filename.c_str()));
 	if (o_initialzpaqquick=="")
 	{
-		myprintf("60899: quick hash empty!\n");
+		myprintf("01826! quick hash empty!\n");
 		return 2;
 	}
 
 
 	franz_do_hash dummyquick2("CRC-32");
 	if (flagdebug3)
-		myprintf("61000: filehash CRC-32 on %s\n",i_filename.c_str());
+		myprintf("01827: filehash CRC-32 on %s\n",i_filename.c_str());
 
-	///myprintf("62504: 4444444444444 %s\n",tohuman(prendidimensionefile(i_filename.c_str())));
+	///myprintf("01828: 4444444444444 %s\n",tohuman(prendidimensionefile(i_filename.c_str())));
 	g_dimensione=0;
 	string o_initialzpaqcrc32=dummyquick2.filehash(i_filename,false,startverify,prendidimensionefile(i_filename.c_str()));
 	if (o_initialzpaqcrc32=="")
 	{
-		myprintf("60907: CRC-32 empty!\n");
+		myprintf("01829! CRC-32 empty!\n");
 		return 2;
 	}
 
-	myprintf("62682: Rebuilding fasttxt (%s) ",o_initialzpaqcrc32.c_str());
-	printUTF8(o_thecrcfile.c_str());
+	myprintf("01830: Rebuilding fasttxt (%s) %Z",o_initialzpaqcrc32.c_str(),o_thecrcfile.c_str());
 	if (!writedatainfasttxt(o_thecrcfile,i_filename,o_initialzpaqcrc32,o_initialzpaqquick,
 	"0",prendidimensionefile(i_filename.c_str()),0))
 	{
@@ -68092,10 +68749,10 @@ int	Jidac::rebuildcrc32(string i_filename,string& o_prezpaqcrc32,int64_t& 	o_pre
 		myprintf(" :OK\n");
 	if (!getdatafromfasttxt(o_thecrcfile,o_initialzpaqcrc32,o_initialzpaqquick,o_prezpaqcrc32,o_prezpaqsize))
 	{
-		myprintf("60865: Failed getting data from fasttxt!\n");
+		myprintf("01831! Failed getting data from fasttxt!\n");
 		return 2;
 	}
-	myprintf("62530: REBUILDED CRC32     %s QUICK %s SIZE %s\n",o_initialzpaqcrc32.c_str(),o_initialzpaqquick.c_str(),migliaia(o_prezpaqsize));
+	myprintf("01832: REBUILDED CRC32     %s QUICK %s SIZE %s\n",o_initialzpaqcrc32.c_str(),o_initialzpaqquick.c_str(),migliaia(o_prezpaqsize));
 	return 0;
 }
 
@@ -68118,12 +68775,12 @@ string&		o_thecrcfile)
 	
 	
 	if (flagverbose)
-		myprintf("60362: Doing makecrc32txt on %s\n",o_thecrcfile.c_str());
+		myprintf("01833: Doing makecrc32txt on %s\n",o_thecrcfile.c_str());
 	if (fileexists(i_filename))
 	{
 		franz_do_hash dummyquick("QUICK");
 		if (flagdebug3)
-			myprintf("60919: filehash on %s\n",i_filename.c_str());
+			myprintf("01834: filehash on %s\n",i_filename.c_str());
 
 		o_initialquickhash=dummyquick.filehash(i_filename,false,-1,-1);
 		o_initialzpaqsize=prendidimensionefile(i_filename.c_str());
@@ -68132,44 +68789,40 @@ string&		o_thecrcfile)
 	if (fileexists(i_filename))
 		if (!fileexists(o_thecrcfile))
 		{
-			myprintf("60938: fasttxt does not exists ");
-			printUTF8(o_thecrcfile.c_str());
-			myprintf("\n");
-			myprintf("60942: You can rebuild with -space\n");
+			myprintf("01835! fasttxt does not exists %Z\n",o_thecrcfile.c_str());
+			myprintf("01836: You can rebuild with -space\n");
 			fastisok=false;
 		}
 	if (fileexists(o_thecrcfile))
 	{
 		if (flagverbose)
 		{
-			myprintf("60855: Founded fasttxt ");
-			printUTF8(o_thecrcfile.c_str());
-			myprintf("\n");
+			myprintf("01837: Founded fasttxt %Z\n",o_thecrcfile.c_str());
 		}
 
 		if (!getdatafromfasttxt(o_thecrcfile,o_initialzpaqcrc32,o_initialzpaqquick,o_prezpaqcrc32,o_prezpaqsize))
 		{
-			myprintf("60865: Failed getting data from fasttxt!\n");
+			myprintf("01838! Failed getting data from fasttxt!\n");
 			return 2;
 		}
 		if (flagverbose)
-			myprintf("60868: CRC32  %s QUICK %s SIZE %s\n",o_initialzpaqcrc32.c_str(),o_initialzpaqquick.c_str(),migliaia(o_prezpaqsize));
+			myprintf("01839: CRC32  %s QUICK %s SIZE %s\n",o_initialzpaqcrc32.c_str(),o_initialzpaqquick.c_str(),migliaia(o_prezpaqsize));
 		if (o_prezpaqsize!=o_initialzpaqsize)
 		{
-			myprintf("60873: size into fasttxt does not match %s vs %s\n",migliaia(o_prezpaqsize),migliaia2(o_initialzpaqsize));
+			myprintf("01840: size into fasttxt does not match %s vs %s\n",migliaia(o_prezpaqsize),migliaia2(o_initialzpaqsize));
 			if (!flagspace)
 			{
-				myprintf("60875: quitting now. You can override with -space\n");
+				myprintf("01841! quitting now. You can override with -space\n");
 				return 2;
 			}
 			fastisok=false;
 		}
 		if (stringtoupper(o_initialquickhash)!=stringtoupper(o_initialzpaqquick))
 		{
-			myprintf("60879: quick fasttxt does not match %s vs %s\n",o_initialzpaqquick.c_str(),o_initialquickhash.c_str());
+			myprintf("01842: quick fasttxt does not match %s vs %s\n",o_initialzpaqquick.c_str(),o_initialquickhash.c_str());
 			if (!flagspace)
 			{
-				myprintf("60887: quitting now. You can override with -space\n");
+				myprintf("01843! quitting now. You can override with -space\n");
 				return 2;
 			}
 			fastisok=false;
@@ -68250,7 +68903,7 @@ string	win_getlong(const string& i_file)
 	
 	if (getFinalPathNameByHandleW==NULL)
 	{
-		myprintf("61339: GURU: getFinalPathNameByHandleW is NULL (very old windows?)\n");
+		myprintf("01844: GURU: getFinalPathNameByHandleW is NULL (very old windows?)\n");
 		seppuku();
 		return "";
 	}
@@ -68260,7 +68913,7 @@ string	win_getlong(const string& i_file)
     if (hfile==INVALID_HANDLE_VALUE) 
 	{
 		if (flagdebug3)
-			myprintf("61341: hfile INVALID_HANDLE_VALUE %lu\n",GetLastError());
+			myprintf("01845: hfile INVALID_HANDLE_VALUE %lu\n",GetLastError());
         return "";
     }
 	//manual imported from DLL
@@ -68268,7 +68921,7 @@ string	win_getlong(const string& i_file)
     if (dwsize==0)
 	{
 		if (flagdebug3)
-			myprintf("61349: dwSize not good %lu\n",GetLastError());
+			myprintf("01846: dwSize not good %lu\n",GetLastError());
         CloseHandle(hfile);
         return "";
     }
@@ -68296,12 +68949,12 @@ int Jidac::add()
 	{
 		if (!ismounted(g_ismounted))
 		{
-			myprintf("63384: Abort because NOT -ismounted <<");
+			myprintf("01847: Abort because NOT -ismounted <<");
 			printUTF8(g_ismounted.c_str());
 			myprintf(">>\n");
 			return 2;
 		}
-		myprintf("63389: yep, ismounted\n");
+		myprintf("01848: yep, ismounted\n");
 	}
 */
 #ifdef _WIN32
@@ -68320,12 +68973,12 @@ int Jidac::add()
 				thunfiles.push_back(approaming);
 			}
 			else
-				myprintf("63593: Cannot find thunderbird\n");
+				myprintf("01849: Cannot find thunderbird\n");
 			
 		}
 		if (thunfiles.size()==0)
 		{
-			myprintf("63600: Sorry, no Thunderbird folders added, quit!\n");
+			myprintf("01850! Sorry, no Thunderbird folders added, quit!\n");
 			return 2;
 		}
 		files.clear();
@@ -68333,9 +68986,7 @@ int Jidac::add()
 		{
 			if (flagverbose)
 			{
-				myprintf("63606: Thunderbird folder %08d ",i);
-				printUTF8(thunfiles[i].c_str());
-				myprintf("\n");
+				myprintf("01851: Thunderbird folder %08d %Z\n",i,thunfiles[i].c_str());
 			}
 			files.push_back(thunfiles[i]);
 		}
@@ -68350,14 +69001,14 @@ int Jidac::add()
 			FILE* subbatch=fopen(filesubba.c_str(), "wb");
 			if (subbatch==NULL)
 			{
-				myprintf("63622: cannot write filesubba %s\n",filesubba.c_str());
+				myprintf("01852: cannot write filesubba %s\n",filesubba.c_str());
 				seppuku();
 			}
 
 			fprintf(subbatch,"@taskkill /f /im thunderbird.exe\n");
 			fclose(subbatch);
 			waitexecute(filesubba,"",SW_HIDE);
-			delete_file(filesubba.c_str());
+			remove_temp_file(filesubba);
 		}
 	}
 #endif
@@ -68367,9 +69018,7 @@ int Jidac::add()
 	{
 		if (!direxists(g_ifexist))
 		{
-			myprintf("63380: Abort because -ifexist <<");
-			printUTF8(g_ifexist.c_str());
-			myprintf(">>\n");
+			myprintf("01853! Abort because -ifexist <<%Z>>\n",g_ifexist.c_str());
 			return 2;
 		}
 	}
@@ -68379,12 +69028,12 @@ int Jidac::add()
 	{
 		if (!isalpha(g_dataset[0]))
 		{
-			myprintf("59843: error -dataset : first char must be alpha %s\n",g_dataset.c_str());
+			myprintf("01854! error -dataset : first char must be alpha %s\n",g_dataset.c_str());
 			return 2;
 		}
 		if (mypos("@",g_dataset)>-1)
 		{
-			myprintf("59848: error -dataset : no @ allowed %s\n",g_dataset.c_str());
+			myprintf("01855! error -dataset : no @ allowed %s\n",g_dataset.c_str());
 			return 2;
 		}
 		unsigned int howmanyslash=0;
@@ -68393,19 +69042,19 @@ int Jidac::add()
 				howmanyslash++;
 		if (howmanyslash>1)
 		{
-			myprintf("59857: error -dataset : max one / allowed %s\n",g_dataset.c_str());
+			myprintf("01856! error -dataset : max one / allowed %s\n",g_dataset.c_str());
 			return 2;
 		}
 	
-		myprintf("59901: zfs dataset    %s\n",g_dataset.c_str());
+		myprintf("01857: zfs dataset    %s\n",g_dataset.c_str());
 		
 		string dataset_path="/"+includetrailingbackslash(g_dataset);
 		myreplace(dataset_path,"@","/");
 		if (flagverbose)
-			myprintf("59839: dataset path   |%s|\n",dataset_path.c_str());
+			myprintf("01858: dataset path   |%s|\n",dataset_path.c_str());
 		string topath=dataset_path+".zfs/snapshot/franco_diff/";
 		if (flagverbose)
-			myprintf("59840: topath         |%s|\n",topath.c_str());
+			myprintf("01859: topath         |%s|\n",topath.c_str());
 				
 		string	tempdiff	=g_gettempdirectory()+"tempdiff.txt";
 		tempdiff=nomefileseesistegia(tempdiff);
@@ -68414,45 +69063,43 @@ int Jidac::add()
 		g_tempsnapshot=g_dataset+"@franco_diff";
 		if (flagverbose)
 		{
-			myprintf("59856: Base snapshot  %s\n",g_basesnapshot.c_str());
-			myprintf("59856: Temp snapshot  %s\n",g_tempsnapshot.c_str());
+			myprintf("01860: Base snapshot  %s\n",g_basesnapshot.c_str());
+			myprintf("01861: Temp snapshot  %s\n",g_tempsnapshot.c_str());
 		}
 		string 	destroy_diff1	=x_one("zfs destroy "	+g_tempsnapshot,"Destroy diff snapshot (if any)");
 		string 	take_diff		=x_one("zfs snapshot "	+g_tempsnapshot,"Taking  diff snapshot");
 
 		if (flagdebug3)
 		{
-			myprintf("59863: %s\n",destroy_diff1.c_str());
-			myprintf("59864: %s\n",take_diff.c_str());
+			myprintf("01862: %s\n",destroy_diff1.c_str());
+			myprintf("01863: %s\n",take_diff.c_str());
 		}
 		string	makediff="zfs diff -F "+g_basesnapshot+" "+g_tempsnapshot+" >"+tempdiff;
 		if (flagdebug3)
-			myprintf("59867: makediff |%s|\n",makediff.c_str());
+			myprintf("01864: makediff |%s|\n",makediff.c_str());
 		
 		vector<string> resultlist;
 		(void)x_one_vector(makediff,"Getting diff",resultlist);
 		/*
 		for (unsigned int i=0;i<resultlist.size();i++)
-			myprintf("59869: %08d %s\n",resultlist[i].c_str());
+			myprintf("01865: %08d %s\n",resultlist[i].c_str());
 		*/
 		if (flagverbose)
 		{
-			myprintf("59877: Load a zfsdiff %s bytes long file <<",migliaia(prendidimensionefile(tempdiff.c_str())));
-			printUTF8(tempdiff.c_str());
-			myprintf(">>\n");
+			myprintf("01866: Load a zfsdiff %s bytes long file <<%Z>>\n",
+			migliaia(prendidimensionefile(tempdiff.c_str())),tempdiff.c_str());
 		}
 		vector<string> tobedeleted;
 		files.clear();
 		int caricati=loadzfsdiff(tempdiff,files,tobedeleted);
-		myprintf("59883: zfsdiff to add %s\n",migliaia(caricati));
+		myprintf("01867: zfsdiff to add %s\n",migliaia(caricati));
 		
-		if (fileexists(tempdiff))
-			delete_file(tempdiff.c_str());
+		remove_temp_file(tempdiff);
 		
 		if (caricati==0)
 		{
 			if (flagverbose)
-			myprintf("59896: Nothing to do (from zfsdiff)\n");
+			myprintf("01868: Nothing to do (from zfsdiff)\n");
 			return 1;
 		}
 		myprintf("\n");
@@ -68460,7 +69107,7 @@ int Jidac::add()
 		{	
 			myreplace(files[i],dataset_path,topath);
 			if (flagverbose)
-				myprintf("59928: %08d <<%s>>\n",(int)i,files[i].c_str());
+				myprintf("01869: %08d <<%s>>\n",(int)i,files[i].c_str());
 		}
 		tofiles.clear();
 		searchfrom	=topath;
@@ -68472,27 +69119,27 @@ int Jidac::add()
 	{
 		if ((flagchecktxt) || (backuptxt!="") || (flagfasttxt))
 		{
-			myprintf("62064: -collision incompatible with checktxt, backuptxt, fasttxt\n");
+			myprintf("01870! -collision incompatible with checktxt, backuptxt, fasttxt\n");
 			return 2;
 		}
 	}
 
 	if (flaghashdeep && flagfilelist)
 	{
-		myprintf("54583: -hashdeep incompatible with -filelist, disabling -filelist and keeping -hashdeep\n");
+		myprintf("01871: -hashdeep incompatible with -filelist, disabling -filelist and keeping -hashdeep\n");
 		flagfilelist=false;
 	}
 
 	if (flagstdin)
 		if (files.size()!=1)
 		{
-			myprintf("40090: with -stdin you must enter exactly ONE file\n");
+			myprintf("01872! with -stdin you must enter exactly ONE file\n");
 			return 2;
 		}
 
 	if (flagparanoid && flagforce)
 	{
-		myprintf("42681: -paranoid and -force, disabling -paranoid and keeping -force\n");
+		myprintf("01873: -paranoid and -force, disabling -paranoid and keeping -force\n");
 		flagparanoid=false;
 	}
 
@@ -68511,7 +69158,7 @@ int Jidac::add()
 			for (unsigned int i=0;i<files.size();i++)
 			{
 				if (flagdebug3)
-					myprintf("63357: start %03d %s\n",i,files[i].c_str());
+					myprintf("01874: start %03d %s\n",i,files[i].c_str());
 				if (!isdirectory(files[i]))
 					if (direxists(files[i]))
 					{
@@ -68519,7 +69166,7 @@ int Jidac::add()
 					}
 				///files[i]=get_good_filename(files[i]);
 				if (flagdebug3)
-					myprintf("63361: fixed %03d %s\n",i,files[i].c_str());
+					myprintf("01875: fixed %03d %s\n",i,files[i].c_str());
 			}
 		}
 		
@@ -68535,7 +69182,7 @@ int Jidac::add()
 		if (fragment!=6)
 		{
 			fragment=6;
-			myprintf("59541: with -stdin fragment set to %d\n",fragment);
+			myprintf("01876: with -stdin fragment set to %d\n",fragment);
 		}
 
 #ifdef _WIN32
@@ -68544,25 +69191,25 @@ int Jidac::add()
 		if (!isadmin())
 		{
 			myprintf("\n");
-			myprintf("41667: you need admin rights, quit\n");
+			myprintf("01877! you need admin rights, quit\n");
 			return 2;
 		}
 		if (files.size()!=1)
 		{
-			myprintf("43815: -image requires exactly ONE drive-to-be-cloned\n");
+			myprintf("01878! -image requires exactly ONE drive-to-be-cloned\n");
 			return 2;
 		}
 		string	thearchive=archive;
 		string 	theunit=files[0];
 		if (theunit.size()>3)
 		{
-			myprintf("43822: -image requires a letter, a letter:, a letter:\\ (ex C  C:   E:\\)\n");
+			myprintf("01879! -image requires a letter, a letter:, a letter:\\ (ex C  C:   E:\\)\n");
 			return 2;
 		}
 		lettera=tolower(theunit[0]);
 		if ((lettera < 'a') || (lettera>'z'))
 		{
-			myprintf("43829: -image must be in ['a'..'z']\n");
+			myprintf("01880! -image must be in ['a'..'z']\n");
 			return 2;
 		}
 	}
@@ -68584,9 +69231,7 @@ int Jidac::add()
 					filename[0]='A'+i;
 					if (flagdebug3)
 					{
-						myprintf("61345: drive %c  %d  ",'A'+i,unita & 1);
-						printUTF8(filename.c_str());
-						myprintf("\n");
+						myprintf("01881: drive %c  %d  %Z\n",'A'+i,unita & 1,filename.c_str());
 					}
 					if (fileexists(filename))
 					{
@@ -68597,26 +69242,24 @@ int Jidac::add()
 				}
 				if (founded==0)
 				{
-					myprintf("38472: ERROR -findzpaq but archive is not found\n");
+					myprintf("01882! ERROR -findzpaq but archive is not found\n");
 					return 2;
 				}
 				else
 				if (founded>1)
 				{
-					myprintf("38479: ERROR -findzpaq but MORE THEN one archive found (%d)\n",founded);
+					myprintf("01883! ERROR -findzpaq but MORE THEN one archive found (%d)\n",founded);
 					return 2;
 				}
 
 				if (filefounded!="")
 				{
-					myprintf("38485: INFO -findzpaq in ");
-					printUTF8(filefounded.c_str());
-					myprintf("\n");
+					myprintf("01884: INFO -findzpaq in %Z\n",filefounded.c_str());
 					archive=filefounded;
 				}
 			}
 			else
-				myprintf("38461: WARN -findzpaq but archive is not letter:/something\n");
+				myprintf("01885: WARN -findzpaq but archive is not letter:/something\n");
 
 		}
 #endif
@@ -68628,18 +69271,18 @@ int Jidac::add()
 				if (iswindowsunc(files[i]))
 					if (!isdirectory(files[i]))
 					{
-						myprintf("54575: UNC files[%03d] not a folder, check for share |%s|\n",(int)i,files[i].c_str());
+						myprintf("01886: UNC files[%03d] not a folder, check for share |%s|\n",(int)i,files[i].c_str());
 						vector<string> pezzi;
 						explode(files[i],'/',pezzi);
 						if (flagdebug3)
 							for (unsigned int i=0;i<pezzi.size();i++)
-								myprintf("54579: %03d |%s|\n",(int)i,pezzi[i].c_str());
+								myprintf("01887: %03d |%s|\n",(int)i,pezzi[i].c_str());
 						if (pezzi.size()==4)
 							if (pezzi[0]=="")
 								if (pezzi[1]=="")
 								{
 									files[i]+='/';
-									myprintf("54585: added / to UNC path %03d |%s|\n",(int)i,files[i].c_str());
+									myprintf("01888: added / to UNC path %03d |%s|\n",(int)i,files[i].c_str());
 								}
 					}
 #endif
@@ -68650,7 +69293,7 @@ int Jidac::add()
 		{
 			if (flagdebug3)
 				for (unsigned int i=0;i<files.size();i++)
-					myprintf("59797: Before paths %d %s\n",(int)i,files[i].c_str());
+					myprintf("01889: Before paths %d %s\n",(int)i,files[i].c_str());
 			
 /*
 			for (unsigned int i=0;i<files.size();i++)
@@ -68658,7 +69301,7 @@ int Jidac::add()
 				if (fileexists(files[i].c_str()))
 					if (!direxists(files[i].c_str()))
 					{
-						myprintf("61607: -longpath gets PATH, not FILE, select A PATH! <<");
+						myprintf("01890: -longpath gets PATH, not FILE, select A PATH! <<");
 						printUTF8(files[i].c_str());
 						myprintf(">>\n");
 						return 1;
@@ -68670,31 +69313,31 @@ int Jidac::add()
 					files[i]=relativetolongpath(files[i]);
 			if (flagdebug3)
 				for (unsigned int i=0;i<files.size();i++)
-					myprintf("59803: After  paths %d %s\n",(int)i,files[i].c_str());
+					myprintf("01891: After  paths %d %s\n",(int)i,files[i].c_str());
 			unsigned int	howmanyshort=0;
 			for (unsigned int i=0;i<files.size();i++)
 				if ((!islongpath(files[i])) && (!islonguncpath(files[i])))
 					howmanyshort++;
 			if (flagdebug2)
-				myprintf("59809: Howmanyshort %s files.size %s\n",migliaia(howmanyshort),migliaia2(files.size()));
+				myprintf("01892: Howmanyshort %s files.size %s\n",migliaia(howmanyshort),migliaia2(files.size()));
 			if (howmanyshort==files.size())
 			{
-				myprintf("38992: INFO: getting Windows' long filenames\n");
+				myprintf("01893: INFO: getting Windows' long filenames\n");
 				if (flagdebug3)
 					for (unsigned int i=0;i<files.size();i++)
-						myprintf("38994: %03d From %s\n",(int)i,files[i].c_str());
+						myprintf("01894: %03d From %s\n",(int)i,files[i].c_str());
 				for (unsigned int i=0;i<files.size();i++)
 				{
 					if (iswinroot(files[i]))
 					{
 						if (flagdebug3)
-							myprintf("54592: WINROOT  %s\n",files[i].c_str());
+							myprintf("01895: WINROOT  %s\n",files[i].c_str());
 						char letter=files[i].front();
 						char tempo[10];
 						snprintf(tempo,sizeof(tempo),"%c:/",letter);
 						string tobepushed=tempo;
 						if (flagdebug3)
-							myprintf("54595: pusho WINROOT on tofiles |%s|\n",tobepushed.c_str());
+							myprintf("01896: pusho WINROOT on tofiles |%s|\n",tobepushed.c_str());
 						tofiles.push_back(tobepushed);
 						files[i]="//?/"+files[i];
 					}
@@ -68704,35 +69347,33 @@ int Jidac::add()
 						string maybelong=win_getlong(files[i]);
 						if (maybelong=="")
 						{
-							myprintf("61685: sorry, cannot get -longpath for this file <<");
-							printUTF8(files[i].c_str());
-							myprintf(">>\n");
-							myprintf("61686: -longpath is... for PATH, not FILE\n");
+							myprintf("01897! sorry, cannot get -longpath for this file <<%Z>>\n",files[i].c_str());
+							myprintf("01898: -longpath is... for PATH, not FILE\n");
 							return 1;
 						}
 						string tobepushed=(files[i]);
 						tofiles.push_back(tobepushed);
 						if (flagdebug3)
 						{
-							myprintf("61693: short   |%s| to long |%s|\n",files[i].c_str(),maybelong.c_str());
-							myprintf("61694: tofiles |%s|\n",tobepushed.c_str());
+							myprintf("01899: short   |%s| to long |%s|\n",files[i].c_str(),maybelong.c_str());
+							myprintf("01900: tofiles |%s|\n",tobepushed.c_str());
 						}
 						files[i]=maybelong;
 					}	
 					else
 					{
 						if (flagdebug3)
-							myprintf("53598: NO ROOT  %s\n",files[i].c_str());
+							myprintf("01901: NO ROOT  %s\n",files[i].c_str());
 
 						/// some kludges for * *.*, folders etc
 						if (isdirectory(files[i].c_str()))
 						{
 							files[i].pop_back();
-							myprintf("59838: Trimmed last /  %s\n",files[i].c_str());
+							myprintf("01902: Trimmed last /  %s\n",files[i].c_str());
 						}
 						string thefilename=extractfilename(files[i]);
 						if (flagdebug3)
-							myprintf("59842: Thefilename |%s|\n",thefilename.c_str());
+							myprintf("01903: Thefilename |%s|\n",thefilename.c_str());
 
 						if (thefilename=="*.*")
 							thefilename="*";
@@ -68741,18 +69382,18 @@ int Jidac::add()
 						{
 							files[i]=extractfilepath(files[i]);
 							files[i].pop_back();
-							myprintf("59848: Trimmed /* %s\n",files[i].c_str());
+							myprintf("01904: Trimmed /* %s\n",files[i].c_str());
 						}
 						else
 						{
 							if (mypos("*",files[i])!=-1)
 							{
-								myprintf("59854: -longpath does not work with *, select A PATH!\n");
+								myprintf("01905: -longpath does not work with *, select A PATH!\n");
 								return 1;
 							}
 							if (mypos("?",files[i])!=-1)
 							{
-								myprintf("59859: -longpath does not work with ?, select A PATH!\n");
+								myprintf("01906: -longpath does not work with ?, select A PATH!\n");
 								return 1;
 							}
 						}
@@ -68761,20 +69402,20 @@ int Jidac::add()
 				/// because some Windows does not like to mix
 				/// z:\NS, \\?\Z:\ns\ and z:\ns
 						if (flagdebug3)
-							myprintf("38733: scandir %s\n",files[i].c_str());
+							myprintf("01907: scandir %s\n",files[i].c_str());
 						DTMap	myedt;
 						scandir(false,myedt,files[i].c_str(),false);
 						if (myedt.size()>0)
 						{
 							files[i]=extractfilepath(myedt.begin()->first);
 							if (flagdebug3)
-								myprintf("38740: files %s\n",files[i].c_str());
+								myprintf("01908: files %s\n",files[i].c_str());
 						}
 						if (isalpha(files[i][0]))
 						{
 							string tobepushed=extractfilepath(files[i]);
 							if (flagdebug3)
-								myprintf("38745: pusho on tofiles |%s|\n",tobepushed.c_str());
+								myprintf("01909: pusho on tofiles |%s|\n",tobepushed.c_str());
 							tofiles.push_back(tobepushed);
 							files[i]="//?/"+files[i];
 							///tofiles.push_back(files[i]);
@@ -68784,7 +69425,7 @@ int Jidac::add()
 						{
 					/// with UNC, you are on your own
 					/// (very limited support)
-							myprintf("38748: WARNING: VERY LIMITED SUPPORT FOR UNC AND -LONGPATH\n");
+							myprintf("01910: WARNING: VERY LIMITED SUPPORT FOR UNC AND -LONGPATH\n");
 
 
 							/*
@@ -68792,18 +69433,18 @@ int Jidac::add()
 							*/
 							if (!isdirectory(files[i]))
 							{
-								myprintf("54643: LONG UNC files[%03d] not a folder, check for share |%s|\n",(int)i,files[i].c_str());
+								myprintf("01911: LONG UNC files[%03d] not a folder, check for share |%s|\n",(int)i,files[i].c_str());
 								vector<string> pezzi;
 								explode(files[i],'/',pezzi);
 								if (flagdebug3)
 									for (unsigned int i=0;i<pezzi.size();i++)
-										myprintf("54652: %03d |%s|\n",(int)i,pezzi[i].c_str());
+										myprintf("01912: %03d |%s|\n",(int)i,pezzi[i].c_str());
 								if (pezzi.size()==4)
 									if (pezzi[0]=="")
 										if (pezzi[1]=="")
 										{
 											files[i]+='/';
-											myprintf("54647: LONG UNC added / to path %03d |%s|\n",(int)i,files[i].c_str());
+											myprintf("01913: LONG UNC added / to path %03d |%s|\n",(int)i,files[i].c_str());
 										}
 							}
 							tofiles.push_back(files[i]);
@@ -68816,8 +69457,8 @@ int Jidac::add()
 					printbar('-');
 					for (unsigned int i=0;i<tofiles.size();i++)
 					{
-						myprintf("39027: %03d From %s\n",(int)i,files[i].c_str());
-						myprintf("39028: %03d To   %s\n",(int)i,tofiles[i].c_str());
+						myprintf("01914: %03d From %s\n",(int)i,files[i].c_str());
+						myprintf("01915: %03d To   %s\n",(int)i,tofiles[i].c_str());
 					}
 				}
 			}
@@ -68828,14 +69469,14 @@ int Jidac::add()
 #ifdef _WIN32
 	if (exists_fasttxt_ads(archive))
 	{
-		myprintf("63163: Founded a CRC-32 ADS, turning on fasttxt!\n");
+		myprintf("01916: Founded a CRC-32 ADS, turning on fasttxt!\n");
 		flagfasttxt=true;
 		flagads=true;
 	}
 	else
 	{
 		if (flagdebug3)
-			myprintf("63166: cannot find fasttxt-ADS on %s\n",archive.c_str());
+			myprintf("01917: cannot find fasttxt-ADS on %s\n",archive.c_str());
 	}
 #endif
 	if (g_freeze!="")
@@ -68847,16 +69488,16 @@ int Jidac::add()
 				int64_t dimensionefile=prendidimensionefile(archive.c_str());
 				if (dimensionefile>(int64_t)maxsize)
 				{
-					myprintf("61560: Freezing archive size %s vs maxsize %s\n",migliaia(dimensionefile),migliaia2(maxsize));
+					myprintf("01918: Freezing archive size %s vs maxsize %s\n",migliaia(dimensionefile),migliaia2(maxsize));
 					string filescritto=filecopy(false,false,archive,g_freeze,true,false,false,0);
 					if (filescritto!="")
 					{
-						myprintf("61561: Moved <<%s>> to <<%s>>\n",archive.c_str(),filescritto.c_str());
-						myprintf("61562: Deleting (by -freeze) <<%s>>\n",archive.c_str());
+						myprintf("01919: Moved <<%s>> to <<%s>>\n",archive.c_str(),filescritto.c_str());
+						myprintf("01920: Deleting (by -freeze) <<%s>>\n",archive.c_str());
 						delete_file(archive.c_str());
 					}
 					else
-						myprintf("34971: ERROR doing -freeze from %s to %s\n",archive.c_str(),filescritto.c_str());
+						myprintf("01921: ERROR doing -freeze from %s to %s\n",archive.c_str(),filescritto.c_str());
 				}
 			}
 		}
@@ -68879,8 +69520,8 @@ int Jidac::add()
 			if (!flagspace)
 				if (direxists(cartellalocale))
 				{
-					myprintf("42236: abort because folder already exists %s\n",cartellalocale.c_str());
-					myprintf("42236: you need to rename/delete or try -space to bypass\n");
+					myprintf("01922: abort because folder already exists %s\n",cartellalocale.c_str());
+					myprintf("01923: you need to rename/delete or try -space to bypass\n");
 					seppuku();
 				}
 		}
@@ -68909,7 +69550,7 @@ int Jidac::add()
 		fileoutput			=nomefileseesistegia(fileoutput); // this will proliferate batch files, but they are tiny
 		filebatch			=nomefileseesistegia(filebatch);
 		print_datetime();
-		myprintf("61610: VSS: starting\n");
+		myprintf("01924: VSS: starting\n");
 		if (fileexists(fileoutput))
 			if (remove(fileoutput.c_str())!=0)
 					error("Highlander outputz.txt");
@@ -68919,7 +69560,7 @@ int Jidac::add()
 		FILE* batch=fopen(filebatch.c_str(), "wb");
 		if (batch==NULL)
 		{
-			myprintf("39497: cannot write on filebatch %s\n",filebatch.c_str());
+			myprintf("01925: cannot write on filebatch %s\n",filebatch.c_str());
 			exit(0);
 		}
 		fprintf(batch,"@echo OFF\n");
@@ -68935,7 +69576,7 @@ int Jidac::add()
 		FILE* myoutput=fopen(fileoutput.c_str(), "rb");
 		if (myoutput==NULL)
 		{
-			myprintf("39508: cannot read from fileoutput %s\n",fileoutput.c_str());
+			myprintf("01926: cannot read from fileoutput %s\n",fileoutput.c_str());
 			exit(0);
 		}
 		/* note that fgets don't strip the terminating \n (or \r\n) but we do not like it  */
@@ -68949,7 +69590,7 @@ int Jidac::add()
 			}
 		fclose(myoutput);
 		if (flagdebug2)
-			myprintf("61663: Global root |%s|\n",globalroot.c_str());
+			myprintf("01927: Global root |%s|\n",globalroot.c_str());
 ///	sometimes VSS is not available
 		if (globalroot=="")
 			error("VSS cannot continue. Maybe impossible to take snapshot?");
@@ -68959,10 +69600,10 @@ int Jidac::add()
 			for (unsigned i=posstart; i<globalroot.length(); ++i)
 				g_vss_shadow=g_vss_shadow+globalroot.at(i);
 		if (flagdebug2)
-			myprintf("61673: VSS VOLUME <<<%s>>>\n",g_vss_shadow.c_str());
+			myprintf("01928: VSS VOLUME <<<%s>>>\n",g_vss_shadow.c_str());
 		myreplaceall(g_vss_shadow,"\\","/");
 		if (flagdebug2)
-			myprintf("61676: VSS SHADOW <<<%s>>>\n",g_vss_shadow.c_str());
+			myprintf("01929: VSS SHADOW <<<%s>>>\n",g_vss_shadow.c_str());
 
 
 		if (command!='a')
@@ -68970,7 +69611,7 @@ int Jidac::add()
 			string	filesubba	=g_gettempdirectory()+"subba.bat";
 			filesubba=nomefileseesistegia(filesubba);
 			print_datetime();
-			myprintf("61671: VSS: intermediate\n");
+			myprintf("01930: VSS: intermediate\n");
 			if (fileexists(filesubba))
 				if (remove(filesubba.c_str())!=0)
 						error("Highlander subba.txt");
@@ -68978,16 +69619,16 @@ int Jidac::add()
 			myreplaceall(vss_windows_style,"/","\\");
 			if (cartellalocale=="")
 			{
-				myprintf("54651: cartellalocale empty\n");
+				myprintf("01931: cartellalocale empty\n");
 				exit(0);
 			}
 			else
-				myprintf("54655: cartellalocale %s\n",cartellalocale.c_str());
+				myprintf("01932: cartellalocale %s\n",cartellalocale.c_str());
 
 			FILE* subbatch=fopen(filesubba.c_str(), "wb");
 			if (subbatch==NULL)
 			{
-				myprintf("39543: cannot write filesubba %s\n",filesubba.c_str());
+				myprintf("01933: cannot write filesubba %s\n",filesubba.c_str());
 				exit(0);
 			}
 
@@ -68999,11 +69640,11 @@ int Jidac::add()
 			waitexecute(filesubba,"",SW_HIDE);
 			///int64_t	liberavss=getfreespace(primalettera+":");
 			int64_t	liberavss=getfreespace(cartellalocale.c_str());
-			///myprintf("61701: spazio libero vss %s\n",migliaia(liberavss));
+			///myprintf("01934: spazio libero vss %s\n",migliaia(liberavss));
 			if (liberavss==0)
 			{
-				///myprintf("42360: something wrong preparing %s\n",primalettera.c_str());
-				myprintf("42360: something wrong preparing %s\n",cartellalocale.c_str());
+				///myprintf("01935: something wrong preparing %s\n",primalettera.c_str());
+				myprintf("01936! something wrong preparing %s\n",cartellalocale.c_str());
 				return 2;
 			}
 		}
@@ -69011,20 +69652,20 @@ int Jidac::add()
 		if (command=='a')
 		{
 			if (flagdebug)
-				myprintf("42139: tofiles because not q\n");
+				myprintf("01937: tofiles because not q\n");
 			tofiles.clear();
 			for (unsigned i=0; i<files.size(); ++i)
 				tofiles.push_back(files[i]);
 			g_replaceme=tofiles[0].substr(0,2);
 			if (flagdebug3)
-				myprintf("61731: -------------- %s -------\n",g_replaceme.c_str());
+				myprintf("01938: -------------- %s -------\n",g_replaceme.c_str());
 			for (unsigned i=0; i<files.size(); ++i)
 			{
 				if (flagdebug3)
-					myprintf("61723: PRE  FILES %s\n",files[i].c_str());
+					myprintf("01939: PRE  FILES %s\n",files[i].c_str());
 				myreplace(files[i],g_replaceme,g_vss_shadow);
 				if (flagdebug3)
-					myprintf("61726: POST FILES %s\n",files[i].c_str());
+					myprintf("01940: POST FILES %s\n",files[i].c_str());
 				if (strstr(files[i].c_str(), "GLOBALROOT")==0)
 					error("VSS fail: strange post files");
 			}
@@ -69041,23 +69682,23 @@ int Jidac::add()
 		if (flagdebug3)
 		{
 			for (unsigned i=0; i<files.size(); ++i)
-				myprintf("61755: files %s\n",files[i].c_str());
+				myprintf("01941: files %s\n",files[i].c_str());
 			myprintf("\n");
 			for (unsigned i=0; i<tofiles.size(); ++i)
-				myprintf("61758: TOFILESSS %s\n",tofiles[i].c_str());
+				myprintf("01942: TOFILESSS %s\n",tofiles[i].c_str());
 			myprintf("\n");
 		}
 #else
-		myprintf("61749: Volume Shadow Copies runs only on Windows\n");
+		myprintf("01943: Volume Shadow Copies runs only on Windows\n");
 #endif
 		print_datetime();
-		myprintf("61752: VSS: end\n");
+		myprintf("01944: VSS: end\n");
 	}
 	string ffranzotype=decodefranzoffset(g_franzotype);
 	if (flagverify)
 		ffranzotype+=" + CRC-32 by fragments";
 	if (flagverbose)
-	myprintf("61767: Integrity check type: %s\n",ffranzotype.c_str());
+	myprintf("01945: Integrity check type: %s\n",ffranzotype.c_str());
 
   // Read archive or index into ht, dt, ver.
   int errors=0;
@@ -69076,7 +69717,7 @@ int Jidac::add()
 			int versione=searchcomments(versioncomment,myfilelist);
 			if (versione!=0)
 			{
-				myprintf("38579: version comment must be unique, aborting <<%s>>\n",versioncomment.c_str());
+				myprintf("01946! version comment must be unique, aborting <<%s>>\n",versioncomment.c_str());
 				return 2;
 			}
 		}
@@ -69086,16 +69727,16 @@ int Jidac::add()
   if (g_password) 
   {
 		if (flagdebug3)
-			myprintf("61848: CREATING SALT____________________\n");
+			myprintf("01947: CREATING SALT____________________\n");
 		if (flagdebug4)
 		{
-			myprintf("62114: **** BEWARE SALT NULL BECAUSE -debug4 ****\n");
-			myprintf("62114: **** BEWARE SALT NULL BECAUSE -debug4 ****\n");
-			myprintf("62114: **** BEWARE SALT NULL BECAUSE -debug4 ****\n");
-			myprintf("62114: **** BEWARE SALT NULL BECAUSE -debug4 ****\n");
-			myprintf("62114: **** BEWARE SALT NULL BECAUSE -debug4 ****\n");
-			myprintf("62114: **** BEWARE SALT NULL BECAUSE -debug4 ****\n");
-			myprintf("62114: **** BEWARE SALT NULL BECAUSE -debug4 ****\n");
+			myprintf("01948: **** BEWARE SALT NULL BECAUSE -debug4 ****\n");
+			myprintf("01949: **** BEWARE SALT NULL BECAUSE -debug4 ****\n");
+			myprintf("01950: **** BEWARE SALT NULL BECAUSE -debug4 ****\n");
+			myprintf("01951: **** BEWARE SALT NULL BECAUSE -debug4 ****\n");
+			myprintf("01952: **** BEWARE SALT NULL BECAUSE -debug4 ****\n");
+			myprintf("01953: **** BEWARE SALT NULL BECAUSE -debug4 ****\n");
+			myprintf("01954: **** BEWARE SALT NULL BECAUSE -debug4 ****\n");
 		}
 		else
 			libzpaq::random(salt, 32);
@@ -69110,8 +69751,7 @@ int Jidac::add()
     header_pos=32*(g_password && offset==0);
     arcname=subpart(archive, ver.size());
     if (exists(arcname)) {
-      printUTF8(arcname.c_str());
-      myprintf(": archive exists\n");
+      myprintf("%Z: archive exists\n",arcname.c_str());
 	  g_exec_text=arcname;
 	  g_exec_text+=" archive exists";
       error("archive exists");
@@ -69134,7 +69774,7 @@ int Jidac::add()
 	else 
 	{
 		string part0=subpart(archive, 0);
-		///myprintf("61305: part0 %s   archive %s\n",part0.c_str(),archive.c_str());
+		///myprintf("01955: part0 %s   archive %s\n",part0.c_str(),archive.c_str());
 		
 		if (part0!=archive) 
 		{  // multi-part?
@@ -69157,7 +69797,7 @@ int Jidac::add()
 			header_pos=32*(g_password && parts==0);
 			arcname=subpart(archive, parts+1);
 			if (flagdebug3)
-				myprintf("61321: archive %s arcname, parts+1 %s %d\n",archive.c_str(),arcname.c_str(),parts+1);
+				myprintf("01956: archive %s arcname, parts+1 %s %d\n",archive.c_str(),arcname.c_str(),parts+1);
 			if (exists(arcname)) 
 				error("part exists");
 
@@ -69169,30 +69809,30 @@ int Jidac::add()
 				multipart thelastone(archive);
 				lastpiece=thelastone.enumerate();
 				if (flagdebug2)
-					myprintf("59752: the last piece |%s|\n",lastpiece.c_str());
+					myprintf("01957: the last piece |%s|\n",lastpiece.c_str());
 				if (isbackuppart(lastpiece,archive))
 				{
 					if (flagdebug3)
-						myprintf("60085: IS backup part |%s|\n",lastpiece.c_str());
+						myprintf("01958: IS backup part |%s|\n",lastpiece.c_str());
 					if (prendidimensionefile(lastpiece.c_str())==0)
 					{
-						myprintf("60088: File length 0   |%s|\n",lastpiece.c_str());
-						myprintf("60091: Delete lastpiece|%s|\n",lastpiece.c_str());
+						myprintf("01959: File length 0   |%s|\n",lastpiece.c_str());
+						myprintf("01960: Delete lastpiece|%s|\n",lastpiece.c_str());
 						delete_file(lastpiece.c_str());
 
 						arcname=subpart(archive, parts);
-						myprintf("60090: Going back to   |%s|\n",arcname.c_str());
+						myprintf("01961: Going back to   |%s|\n",arcname.c_str());
 					}
 					else
 					{
 						if (flagdebug3)
-							myprintf("60097: Last piece >0, do nothing  |%s|\n",lastpiece.c_str());
+							myprintf("01962: Last piece >0, do nothing  |%s|\n",lastpiece.c_str());
 					}
 				}
 				else
 				{
 					if (flagdebug3)
-						myprintf("60095: NOT a backup part |%s|\n",lastpiece.c_str());
+						myprintf("01963: NOT a backup part |%s|\n",lastpiece.c_str());
 				}
 				string percorso=extractfilepath(part0);
 				if (g_backupposition!="")
@@ -69209,29 +69849,18 @@ int Jidac::add()
 				myreplaceall(backuptxt,"?","0");
 				if (flagverbose)
 				{
-					myprintf("59944: Backup index     : <<");
-					printUTF8(g_indexname.c_str());
-					myprintf(">>\n");
-
-					myprintf("59944: Backup txt       : <<");
-					printUTF8(backuptxt.c_str());
-					myprintf(">>\n");
-
-					myprintf("60329: Pid file         : <<");
-					printUTF8(g_pidname.c_str());
-					myprintf(">>\n");
-
-					myprintf("59499: Multipart archive: <<");
-					printUTF8(arcname.c_str());
-					myprintf(">>\n");
+					myprintf("01964: Backup index     : <<%Z>>\n",g_indexname.c_str());
+					myprintf("01965: Backup txt       : <<%Z>>\n",backuptxt.c_str());
+					myprintf("01966: Pid file         : <<%Z>>\n",g_pidname.c_str());
+					myprintf("01967: Multipart archive: <<%Z>>\n",arcname.c_str());
+					
 				}
 				if (parts>0)
 				{
 					if (!fileexists(backuptxt))
 					{
-						myprintf("59526: Backup file does not exists! ");
-						printUTF8(backuptxt.c_str());
-						myprintf("\n");
+						myprintf("01968: Backup file does not exists! %Z\n",backuptxt.c_str());
+						
 					}
 				}
 			}
@@ -69269,7 +69898,7 @@ int Jidac::add()
 
 	g_header_pos=header_pos;
 	if (flagdebug2)
-		myprintf("60594: header_pos  %s\n",migliaia(g_header_pos));
+		myprintf("01969: header_pos  %s\n",migliaia(g_header_pos));
 
 	string 	initialquickhash		="0";
 	int64_t initialzpaqsize			=0;
@@ -69298,7 +69927,7 @@ int Jidac::add()
 		g_crc_getheader=false;
 
 	if (flagdebug2)
-		myprintf("60645: g_crc_getheader %d\n",int(g_crc_getheader));
+		myprintf("01970: g_crc_getheader %d\n",int(g_crc_getheader));
 
 	if (flagchecktxt)
 		if (checktxt=="")
@@ -69318,7 +69947,7 @@ int Jidac::add()
 			int resultzpaq=makecrc32txt(g_archive,initialquickhash,initialzpaqsize,initialzpaqquick,initialzpaqcrc32,prezpaqcrc32,prezpaqsize,fasttxt);
 			if (resultzpaq!=0)
 			{
-				myprintf("61207: resultzpaq not zero\n");
+				myprintf("01971: resultzpaq not zero\n");
 				return resultzpaq;
 			}
 			if (g_indexname!="")
@@ -69336,13 +69965,13 @@ int Jidac::add()
 				if (flagdebug3)
 				{
 					printbar('+');
-					myprintf("61218: indexprezpaqcrc32 %s\n",indexinitialzpaqcrc32.c_str());
-					myprintf("61219: indexprezpaqsize  %s\n",migliaia(indexprezpaqsize));
+					myprintf("01972: indexprezpaqcrc32 %s\n",indexinitialzpaqcrc32.c_str());
+					myprintf("01973: indexprezpaqsize  %s\n",migliaia(indexprezpaqsize));
 					printbar('+');
 				}
 				if (resultindex!=0)
 				{
-					myprintf("61215: resultindex not zero\n");
+					myprintf("01974: resultindex not zero\n");
 					return resultindex;
 				}
 			}
@@ -69381,9 +70010,10 @@ int Jidac::add()
 #ifdef _WIN32
 	HANDLE device=NULL;
 #endif
-	g_bytescanned=0;
-	g_filescanned=0;
-	g_worked=0;
+	g_bytescanned	=0;
+	g_filescanned	=0;
+	g_worked		=0;
+
 
 	for (unsigned i=0; i<files.size(); ++i)
 	{
@@ -69392,8 +70022,10 @@ int Jidac::add()
 		scandir(true,edt,files[i].c_str(),!flagnorecursion);
 		
 	}
+	
 	printbar(' ',false);
 	myprintf("\r");
+
 
 #ifdef _WIN32
 	unsigned int	maxfilelength=0;
@@ -69417,14 +70049,14 @@ int Jidac::add()
 		{
 			for (DTMap::iterator p=edt.begin(); p!=edt.end(); ++p)
 			{
-				myprintf("62113: %03d  first %s\n",(int)i,p->first.c_str());
-				myprintf("62113: %03d  date  %s\n",(int)i,migliaia(p->second.date));
-				myprintf("62113: %03d  size  %s\n",(int)i,migliaia(p->second.size)); ///-1
-				myprintf("62113: %03d  attr  %s\n",(int)i,migliaia(p->second.attr));
-				myprintf("62113: %03d  data  %s\n",(int)i,migliaia(p->second.data));
-				myprintf("62113: %03d  writ  %d\n",(int)i,p->second.written);
-				myprintf("62113: %03d  ptrsi %s\n",(int)i,migliaia(p->second.ptr.size()));
-				///myprintf("62113: %03d  dtv   %s\n",(int)i,migliaia(p->second.dtv.size()));
+				myprintf("01975: %03d  first %s\n",(int)i,p->first.c_str());
+				myprintf("01976: %03d  date  %s\n",(int)i,migliaia(p->second.date));
+				myprintf("01977: %03d  size  %s\n",(int)i,migliaia(p->second.size)); ///-1
+				myprintf("01978: %03d  attr  %s\n",(int)i,migliaia(p->second.attr));
+				myprintf("01979: %03d  data  %s\n",(int)i,migliaia(p->second.data));
+				myprintf("01980: %03d  writ  %d\n",(int)i,p->second.written);
+				myprintf("01981: %03d  ptrsi %s\n",(int)i,migliaia(p->second.ptr.size()));
+				///myprintf("01982: %03d  dtv   %s\n",(int)i,migliaia(p->second.dtv.size()));
 				i++;
 			}
 		}
@@ -69437,7 +70069,7 @@ int Jidac::add()
 			/*
 			solonome=extractfilename(files[0]);
 			if (flagverbose)
-				myprintf("40587: REBUILDING STDIN filename to %s\n",solonome.c_str());
+				myprintf("01983: REBUILDING STDIN filename to %s\n",solonome.c_str());
 			*/
 		}
 #ifdef _WIN32
@@ -69446,12 +70078,12 @@ int Jidac::add()
 			char	tempo[20];
 			snprintf(tempo,sizeof(tempo),"image_%c.img",lettera);
 			solonome=tempo;
-			myprintf("42165: REBUILDING IMAGE filename to %s\n",solonome.c_str());
-			myprintf("42743: opening drive %c:\n",lettera);
+			myprintf("01984: REBUILDING IMAGE filename to %s\n",solonome.c_str());
+			myprintf("01985: opening drive %c:\n",lettera);
 			snprintf(tempo,sizeof(tempo),"\\\\.\\%c:",lettera);
 			string	letterpath=tempo;
 			if (flagdebug2)
-				myprintf("42748: LETTER |%s|\n",letterpath.c_str());
+				myprintf("01986: LETTER |%s|\n",letterpath.c_str());
         	device=CreateFile(utow(letterpath.c_str()).c_str(),
                         GENERIC_READ,
                         FILE_SHARE_READ|FILE_SHARE_WRITE,
@@ -69462,12 +70094,12 @@ int Jidac::add()
 			if (device==INVALID_HANDLE_VALUE)
 			{
 				string	winerror=decodewinerror(GetLastError(),letterpath.c_str());
-				myprintf("42747: cannot open drive %c error %s\n", lettera,winerror.c_str());
+				myprintf("01987! cannot open drive %c error %s\n", lettera,winerror.c_str());
 				return 2;
 			}
 			if (SetFilePointer(device,0,NULL,FILE_BEGIN)==INVALID_SET_FILE_POINTER)
 			{
-				myprintf("42752: cannot setfilepointer. Antivirus? Not administrator?\n");
+				myprintf("01988! cannot setfilepointer. Antivirus? Not administrator?\n");
 				return 2;
 			}
 			///https://learn.microsoft.com/en-us/windows/win32/api/winioctl/ni-winioctl-ioctl_disk_get_length_info
@@ -69483,11 +70115,11 @@ int Jidac::add()
                             &dummy,
                             (LPOVERLAPPED) NULL))
 			total_size=sizeofletter.PartitionLength.QuadPart;
-			myprintf("42751: image size %s (%s)\n",migliaia(total_size),tohuman(total_size));
+			myprintf("01989: image size %s (%s)\n",migliaia(total_size),tohuman(total_size));
 			if (!flagspace)
 				if (total_size==0)
 				{
-					myprintf("42774: something wrong with lettersize. Use -space to bypass\n");
+					myprintf("01990! something wrong with lettersize. Use -space to bypass\n");
 					return 2;
 				}
 		}
@@ -69516,14 +70148,14 @@ int Jidac::add()
 			printf("k2\n");
 			for (DTMap::iterator p=edt.begin(); p!=edt.end(); ++p)
 			{
-				myprintf("62198: %03d  first %s\n",(int)i,p->first.c_str());
-				myprintf("62198: %03d  date  %s\n",(int)i,migliaia(p->second.date));
-				myprintf("62198: %03d  size  %s\n",(int)i,migliaia(p->second.size)); ///-1
-				myprintf("62198: %03d  attr  %s\n",(int)i,migliaia(p->second.attr));
-				myprintf("62198: %03d  data  %s\n",(int)i,migliaia(p->second.data));
-				myprintf("62198: %03d  writ  %d\n",(int)i,p->second.written);
-				myprintf("62198: %03d  ptrsi %s\n",(int)i,migliaia(p->second.ptr.size()));
-				///myprintf("62198: %03d  dtv   %s\n",(int)i,migliaia(p->second.dtv.size()));
+				myprintf("01991: %03d  first %s\n",(int)i,p->first.c_str());
+				myprintf("01992: %03d  date  %s\n",(int)i,migliaia(p->second.date));
+				myprintf("01993: %03d  size  %s\n",(int)i,migliaia(p->second.size)); ///-1
+				myprintf("01994: %03d  attr  %s\n",(int)i,migliaia(p->second.attr));
+				myprintf("01995: %03d  data  %s\n",(int)i,migliaia(p->second.data));
+				myprintf("01996: %03d  writ  %d\n",(int)i,p->second.written);
+				myprintf("01997: %03d  ptrsi %s\n",(int)i,migliaia(p->second.ptr.size()));
+				///myprintf("01998: %03d  dtv   %s\n",(int)i,migliaia(p->second.dtv.size()));
 				i++;
 			}
 		}
@@ -69551,7 +70183,7 @@ int Jidac::add()
 		tempfile=g_gettempdirectory()+"VFILE-l-filelist.txt";
 		myreplaceall(tempfile,"\\","/");
 		myprintf("\n");
-		myprintf("62270: Temp dir <<%s>>\n",tempfile.c_str());
+		myprintf("01999: Temp dir <<%s>>\n",tempfile.c_str());
 		myoutfile=fopen(tempfile.c_str(), "wb");
 		if (myoutfile)
 		{
@@ -69570,7 +70202,7 @@ int Jidac::add()
 			int64_t dimensioneattr=0;
 			if (getfileinfo(tempfile,dimensionelista,dimensionedata,dimensioneattr))
 			{
-				myprintf("62237: Uncompressed filelist size %s\n",migliaia(dimensionelista));
+				myprintf("02000: Uncompressed filelist size %s\n",migliaia(dimensionelista));
 				addfile(false,edt,tempfile,dimensionedata,dimensionelista,dimensioneattr,0,0);
 			}
 		}
@@ -69579,16 +70211,16 @@ int Jidac::add()
 	if (flaghashdeep)
 	{
 		if (flagssd)
-			myprintf("62254: Making the hashdeep.txt file with md5 (multithread)...\n");
+			myprintf("02001: Making the hashdeep.txt file with md5 (multithread)...\n");
 		else
-			myprintf("62256: Making the hashdeep.txt file with md5...\n");
+			myprintf("02002: Making the hashdeep.txt file with md5...\n");
 
 		tempfile=g_gettempdirectory()+"VFILE-l-hashdeep.txt";
 		myreplaceall(tempfile,"\\","/");
 		if (flagverbose)
 		{
 			myprintf("\n");
-			myprintf("63307: Temp hashdeep <<%s>>\n",tempfile.c_str());
+			myprintf("02003: Temp hashdeep <<%s>>\n",tempfile.c_str());
 		}
 		string	oldout			=g_output;
 		FILE*	oldhandle		=g_output_handle;
@@ -69616,7 +70248,7 @@ int Jidac::add()
 			int64_t dimensioneattr=0;
 			if (getfileinfo(tempfile,dimensionelista,dimensionedata,dimensioneattr))
 			{
-				myprintf("62275: Uncompressed hashdeep size %s\n",migliaia(dimensionelista));
+				myprintf("02004: Uncompressed hashdeep size %s\n",migliaia(dimensionelista));
 				addfile(false,edt,tempfile,dimensionedata,dimensionelista,dimensioneattr,0,0);
 			}
 			g_output		=oldout;
@@ -69628,7 +70260,7 @@ int Jidac::add()
 		}
 		else
 		{
-			myprintf("55389: guru with output handle null\n");
+			myprintf("02005! guru with output handle null\n");
 			seppuku();
 			return 2;
 		}
@@ -69646,13 +70278,13 @@ int Jidac::add()
 		hashselect();
 		if (flagdebug3)
 		{
-			myprintf("62318: ----files forced\n");
+			myprintf("02006: ----files forced\n");
 			for (DTMap::iterator p=edt.begin(); p!=edt.end(); ++p)
 			{
 				if (p->second.forceadd)
 				{
 					string filename=rename(p->first);
-					myprintf("43180: forceadd %s\n",filename.c_str());
+					myprintf("02007: forceadd %s\n",filename.c_str());
 				}
 			}
 			myprintf("----end files forced\n");
@@ -69681,7 +70313,7 @@ int Jidac::add()
 					if (flagdebug3)
 					{
 						myprintf("\n");
-						myprintf("62357: ENFORCING XLS/PPT %s\n",filename.c_str());
+						myprintf("02008: ENFORCING XLS/PPT %s\n",filename.c_str());
 					}
 					total_xls+=p->second.size;
 					file_xls++;
@@ -69728,7 +70360,7 @@ int Jidac::add()
 					p->second.specificmethod=carattere;
 					if (flagdebug)
 					{
-						myprintf("60627: Setting method |%c| for",carattere);
+						myprintf("02009: Setting method |%c| for",carattere);
 						printUTF8(filename.c_str());
 						
 					}
@@ -69743,7 +70375,7 @@ int Jidac::add()
 		if (menoenne<(unsigned int)dastampare)
 				dastampare=menoenne;
 		for (int i=0;i<dastampare; i++)
-			myprintf("62406: PRE  %08d sort %19s |%s| |%s|\n",(int)i,migliaia(vf[i]->second.size),vf[i]->second.hexhash.c_str(),vf[i]->first.c_str());
+			myprintf("02010: PRE  %08d sort %19s |%s| |%s|\n",(int)i,migliaia(vf[i]->second.size),vf[i]->second.hexhash.c_str(),vf[i]->first.c_str());
 	}
 	///	Changin' the order of file, before archiving
 	if (orderby.size()>0)
@@ -69767,10 +70399,10 @@ int Jidac::add()
 					(g_theorderby[i]!="data")
 					)
 				myprintf("\n");
-				myprintf("38022: WARNING: discarded orderby |%s|\n",g_theorderby[i].c_str());
+				myprintf("02011: WARNING: discarded orderby |%s|\n",g_theorderby[i].c_str());
 			}
 			myprintf("\n");
-			myprintf("62489: Making the orderby\n");
+			myprintf("02012: Making the orderby\n");
 			MAPPAFILEHASH mappacollisioni;
 			int64_t starthashsort=mtime();
 			int64_t	hashed=0;
@@ -69781,11 +70413,11 @@ int Jidac::add()
 				string	filename=p->first;
 				g_dimensione=0;
 				if (flagdebug3)
-					myprintf("57948: franz_do_hash\n");
+					myprintf("02013: franz_do_hash\n");
 
 				franz_do_hash dummy(FRANZO_XXHASH64);
 				if (flagdebug3)
-					myprintf("62315: filehash on %s\n",filename.c_str());
+					myprintf("02014: filehash on %s\n",filename.c_str());
 
 				string thehash=dummy.filehash(filename,false,starthashsort,total_size);
 
@@ -69793,11 +70425,11 @@ int Jidac::add()
 				if (thehash!="")
 					p->second.hexhash=thehash;
 				else
-					myprintf("38082: error taking hash %s\n",filename.c_str());
+					myprintf("02015: error taking hash %s\n",filename.c_str());
 			}
 			if ( std::find(g_theorderby.begin(), g_theorderby.end(), "nilsimsa") != g_theorderby.end() )
 			{
-				myprintf("62465: Getting nilsimsa digest\n");
+				myprintf("02016: Getting nilsimsa digest\n");
 				for (unsigned i=0; i<vf.size(); i++)
 				{
 					DTMap::iterator p=vf[i];
@@ -69808,7 +70440,7 @@ int Jidac::add()
 					if (thehash!="")
 						p->second.hexhash=thehash;
 					else
-						myprintf("38402: error taking hash %s\n",filename.c_str());
+						myprintf("02017: error taking hash %s\n",filename.c_str());
 				}
 			}
 			std::sort(vf.begin(), vf.end(), compareorderby);
@@ -69819,7 +70451,7 @@ int Jidac::add()
 		if (!flagnosort)
 		{
 			if (flagdebug2)
-				myprintf("62492: Default sort\n");
+				myprintf("02018: Default sort\n");
 			std::sort(vf.begin(), vf.end(), compareFilename);
 		}
 	}
@@ -69830,7 +70462,7 @@ int Jidac::add()
 				dastampare=menoenne;
 		printbar('-');
 		for (int i=0;i<dastampare; i++)
-			myprintf("62491: POST %08d sort %19s |%s| |%s|\n",(int)i,migliaia(vf[i]->second.size),vf[i]->second.hexhash.c_str(),vf[i]->first.c_str());
+			myprintf("02019: POST %08d sort %19s |%s| |%s|\n",(int)i,migliaia(vf[i]->second.size),vf[i]->second.hexhash.c_str(),vf[i]->first.c_str());
 	}
 
 ///	Mmmhh... seems nothing to do. Exit early and quickly
@@ -69839,12 +70471,12 @@ int Jidac::add()
 		if (p->second.date && !p->second.data)
 			++removedcount;
 	if (flagdebug)
-		myprintf("65140: Removed count %s\n",migliaia(removedcount));
+		myprintf("02020: Removed count %s\n",migliaia(removedcount));
 	
 	if ((total_size==0) && (vf.size()==0) && (folders==0) && (removedcount==0))
 	{
 		myprintf("\n");
-		myprintf("62556: QUIT: total size,file/folder count == zero. Already archived/wrong/inaccessible source?\n");
+		myprintf("02021: QUIT: total size,file/folder count == zero. Already archived/wrong/inaccessible source?\n");
 		return 1;
 	}
 
@@ -69868,22 +70500,22 @@ int Jidac::add()
 			maxpart--;
 			int64_t freepart=maxpart-parts-1;
 			if (flagdebug3)
-				myprintf("62775: maxpart can be %s\n",migliaia(maxpart));
+				myprintf("02022: maxpart can be %s\n",migliaia(maxpart));
 			int64_t availablepart=g_chunk_size*freepart;
 			if (availablepart<extsize)
 			{
-				myprintf("62968: Last used part %s / max %s w/archive pattern %s\n",migliaia(parts),migliaia2(maxpart),archive.c_str());
+				myprintf("02023: Last used part %s / max %s w/archive pattern %s\n",migliaia(parts),migliaia2(maxpart),archive.c_str());
 				string frompart=itos(parts+1,questioncounter);
 				string topart=itos(maxpart,questioncounter);
 				
-				myprintf("62769: Parts [%s-%s] %s * (-chunk) %s = %s < %s (worst-case space needed)\n",
+				myprintf("02024: Parts [%s-%s] %s * (-chunk) %s = %s < %s (worst-case space needed)\n",
 				frompart.c_str(),topart.c_str(),
 				migliaia(freepart),
 				tohuman(g_chunk_size),tohuman2(availablepart),tohuman3(extsize));
 				int64_t suggestedsize=(extsize/freepart);//*110/100;
 				string ssuggested=tohuman(suggestedsize);
 				if (flagdebug3)
-					myprintf("62938: ssuggested |%s|\n",ssuggested.c_str());
+					myprintf("02025: ssuggested |%s|\n",ssuggested.c_str());
 				string firstpart="";
 				unsigned int i=0;
 				while ((i<ssuggested.size()) && (isdigit(ssuggested[i])))
@@ -69892,11 +70524,11 @@ int Jidac::add()
 				string	rounded=itos(ifirst)+myright(ssuggested,2);
 				if (flagdebug3)
 				{
-					myprintf("62988: first   |%s|\n",firstpart.c_str());
-					myprintf("62988: ifirst  |%d|\n",ifirst);
-					myprintf("62988: rounded |%s|\n",rounded.c_str());
+					myprintf("02026: first   |%s|\n",firstpart.c_str());
+					myprintf("02027: ifirst  |%d|\n",ifirst);
+					myprintf("02028: rounded |%s|\n",rounded.c_str());
 				}
-				myprintf("62771: Bigger -chunk size needed (at least %s). Use -space to bypass\n",rounded.c_str());
+				myprintf("02029! Bigger -chunk size needed (at least %s). Use -space to bypass\n",rounded.c_str());
 				return 2;
 			}		
 		}
@@ -69906,14 +70538,14 @@ int Jidac::add()
 		unsigned i=0;
 		for (DTMap::iterator p=edt.begin(); p!=edt.end(); ++p)
 		{
-			myprintf("62518: %03d  first %s\n",(int)i,p->first.c_str());
-			myprintf("62518: %03d  date  %s\n",(int)i,migliaia(p->second.date));
-			myprintf("62518: %03d  size  %s\n",(int)i,migliaia(p->second.size)); ///-1
-			myprintf("62518: %03d  attr  %s\n",(int)i,migliaia(p->second.attr));
-			myprintf("62518: %03d  data  %s\n",(int)i,migliaia(p->second.data));
-			myprintf("62518: %03d  writ  %d\n",(int)i,p->second.written);
-			myprintf("62518: %03d  ptrsi %s\n",(int)i,migliaia(p->second.ptr.size()));
-			///myprintf("62518: %03d  dtv   %s\n",(int)i,migliaia(p->second.dtv.size()));
+			myprintf("02030: %03d  first %s\n",(int)i,p->first.c_str());
+			myprintf("02031: %03d  date  %s\n",(int)i,migliaia(p->second.date));
+			myprintf("02032: %03d  size  %s\n",(int)i,migliaia(p->second.size)); ///-1
+			myprintf("02033: %03d  attr  %s\n",(int)i,migliaia(p->second.attr));
+			myprintf("02034: %03d  data  %s\n",(int)i,migliaia(p->second.data));
+			myprintf("02035: %03d  writ  %d\n",(int)i,p->second.written);
+			myprintf("02036: %03d  ptrsi %s\n",(int)i,migliaia(p->second.ptr.size()));
+			///myprintf("02037: %03d  dtv   %s\n",(int)i,migliaia(p->second.dtv.size()));
 			i++;
 		}
 	}
@@ -69923,10 +70555,10 @@ int Jidac::add()
 		setmode(0, O_BINARY);  // yes, we want binary
 #endif
 		if (flagdebug) 
-			myprintf("40828: IMPORT FROM STDIN\n");
+			myprintf("02038: IMPORT FROM STDIN\n");
 		if (flagdebug3)
 		{
-			myprintf("62524: vf size %d\n",vf.size());
+			myprintf("02039: vf size %d\n",vf.size());
 			for (unsigned i=0; i<vf.size(); i++)
 			{
 				DTMap::iterator p=vf[i];
@@ -69950,16 +70582,14 @@ int Jidac::add()
 	{
 		if (exists(arcname))
 		{
-			myprintf("62554: Updating ");
+			myprintf("02040: Updating %Z at offset %s + %s\n",arcname.c_str(),migliaia(header_pos), migliaia2(offset));
 			g_flagcreating=false;
 		}
 		else
 		{
-			myprintf("62259: Creating ");
+			myprintf("02041: Creating %Z at offset %s + %s\n",arcname.c_str(),migliaia(header_pos), migliaia2(offset));
 			g_flagcreating=true;
 		}
-		printUTF8(arcname.c_str());
-		myprintf(" at offset %s + %s\n", migliaia(header_pos), migliaia2(offset));
 
 		//long-waited
 
@@ -69971,9 +70601,7 @@ int Jidac::add()
 			if (!flagspace)
 				if (!saggiascrivibilitacartella(percorso))
 				{
-					myprintf("60251: Cannot write, use -space to bypass, on <<");
-					printUTF8(percorso.c_str());
-					myprintf(">>\n");
+					myprintf("02042! Cannot write, use -space to bypass, on <<%Z>>\n",percorso.c_str());
 					return 2;
 				}
 		}
@@ -69983,9 +70611,7 @@ int Jidac::add()
 			FILE* handlepid=fopen(g_pidname.c_str(), "ab");
 			if (handlepid==NULL)
 			{
-				myprintf("60908: cannot append on pid ");
-				printUTF8(g_pidname.c_str());
-				myprintf("\n");
+				myprintf("02043! cannot append on pid %Z\n",g_pidname.c_str());
 				return 2;
 			}
 			g_pid_handle=handlepid;
@@ -70002,19 +70628,19 @@ int Jidac::add()
 	{
 		if (g_cloudkey=="")
 		{
-			myprintf("40401: in -server mode -cloudkey cannot be empty, ABORT\n");
+			myprintf("02044! in -server mode -cloudkey cannot be empty, ABORT\n");
 			return 2;
 		}
 		/*
 		if (password==0)
 		{
-			myprintf("40406: in -server mode -key cannot be empty, ABORT\n");
+			myprintf("02045: in -server mode -key cannot be empty, ABORT\n");
 			return 2;
 		}
 		*/
 		if (g_indexname=="")
 		{
-			myprintf("40411: in -server mode -index cannot be empty, ABORT\n");
+			myprintf("02046! in -server mode -index cannot be empty, ABORT\n");
 			return 2;
 		}
 		sendtocloudpaq(total_size,ver.size());
@@ -70022,19 +70648,19 @@ int Jidac::add()
 		{
 			printbar('*');
 			myprintf("\n\n");
-			myprintf("40452: **** Cannot work with cloudpaq server, something is wrong ****\n");
-			myprintf("40453: ****           Now running only on local                  ****\n\n\n");
+			myprintf("02047: **** Cannot work with cloudpaq server, something is wrong ****\n");
+			myprintf("02048: ****           Now running only on local                  ****\n\n\n");
 			printbar('*');
 		}
 	}
 #endif
 
 	if (flagdebug2)
-		myprintf("62166: calling open archive %s arcname %s with offset %s\n",archive.c_str(),arcname.c_str(),migliaia(offset));
+		myprintf("02049: calling open archive %s arcname %s with offset %s\n",archive.c_str(),arcname.c_str(),migliaia(offset));
   // Open output
 	OutputArchive out(archive,arcname.c_str(), g_password, salt, offset);
 	if (flagdebug2)
-		myprintf("62106: out on %s\n",arcname.c_str());
+		myprintf("02050: out on %s\n",arcname.c_str());
 	
 	
 	int64_t initial_archive_size=header_pos;
@@ -70044,7 +70670,7 @@ int Jidac::add()
 		InputArchive in(archive.c_str());
 		initial_archive_size=in.totalsize();
 		if (flagdebug3)
-			myprintf("62989: After inputarchive in.totalsize() is %s\n",migliaia(initial_archive_size));
+			myprintf("02051: After inputarchive in.totalsize() is %s\n",migliaia(initial_archive_size));
 	}
 	
 	/// I know, we need something for a "goto-control-c"
@@ -70058,18 +70684,18 @@ int Jidac::add()
   CompressJob job(howmanythreads, tid.size(), &out);
 
 	if (g_fakewrite)
-		myprintf("62643: Processing %s (%s) in %s files (%s dirs), %d T ",migliaia(total_size), tohuman(total_size),migliaia2(int(vf.size())),migliaia3(folders),howmanythreads);
+		myprintf("02052: Processing %s (%s) in %s files (%s dirs), %d T ",migliaia(total_size), tohuman(total_size),migliaia2(int(vf.size())),migliaia3(folders),howmanythreads);
 	else
 	{
 		if (flagstdin)
-			myprintf("62653: Stdin ");
+			myprintf("02053: Stdin ");
 #ifdef _WIN32
 		if (flagimage)
-			myprintf("62656: Image ");
+			myprintf("02054: Image ");
 #endif
 		else
 
-			myprintf("62660: Add %s %9s%19s (%10s) %dT (%s dirs)",
+			myprintf("02055: Add %s %9s%19s (%10s) %dT (%s dirs)",
 			dateToString(flagutc,date).c_str(),migliaia2(int(vf.size())),
 			migliaia(total_size), tohuman(total_size),howmanythreads,migliaia3(folders));
 		fflush(stdout);
@@ -70082,26 +70708,26 @@ int Jidac::add()
 			myprintf("<<%s>>",versioncomment.c_str());
 	myprintf("\n");
 	if (casecollision>0)
-		myprintf("62673: Case collisions       %9s (-fix255)\n",migliaia(casecollision));
+		myprintf("02056: Case collisions       %9s (-fix255)\n",migliaia(casecollision));
 	if (toolongfilenames)
 	{
 #ifdef _WIN32
 	if (!flagvss)
 		if (!flaglongpath)
-			myprintf("62679: Long filenames (>255) %9s *** WARNING *** (-fix255)\n",migliaia(toolongfilenames));
+			myprintf("02057: Long filenames (>255) %9s *** WARNING *** (-fix255)\n",migliaia(toolongfilenames));
 #else
-	myprintf("62681: Long filenames (>255) %9s\n",migliaia(toolongfilenames));
+	myprintf("02058: Long filenames (>255) %9s\n",migliaia(toolongfilenames));
 #endif
 	}
 	if (utf8names)
-		myprintf("62685: Non-latin (UTF-8)     %9s\n",migliaia(utf8names));
+		myprintf("02059: Non-latin (UTF-8)     %9s\n",migliaia(utf8names));
 	if (adsfilenames)
-		myprintf("62686: ADS ($:DATA)          %9s\n",migliaia(adsfilenames));
+		myprintf("02060: ADS ($:DATA)          %9s\n",migliaia(adsfilenames));
 
 	if (howmanythreads==1) // houston, we are on ESXi
 	{
 		if (flagverbose)
-			myprintf("39234: monothread compress\n");
+			myprintf("02061: monothread compress\n");
 	}
 	else
 	{
@@ -70206,7 +70832,7 @@ int Jidac::add()
   if (ver.size() && ver.back().lastdate>=date) {
     const int64_t newdate=decimal_time(unix_time(ver.back().lastdate)+1);
     fflush(stdout);
-    myprintf("62808: Warning: adjusting date from %s to %s\n",
+    myprintf("02062: Warning: adjusting date from %s to %s\n",
       dateToString(flagutc,date).c_str(), dateToString(flagutc,newdate).c_str());
     assert(newdate>date);
     date=newdate;
@@ -70219,23 +70845,23 @@ int Jidac::add()
 	if (flagdebug2)
 	if (flagappend)
 	{
-		myprintf("39421: append cdatasize %s htsize %s\n",migliaia(g_cdatasize),migliaia2(g_htsize));
-		myprintf("62822: g_optional |%s|\n",g_optional.c_str());
+		myprintf("02063: append cdatasize %s htsize %s\n",migliaia(g_cdatasize),migliaia2(g_htsize));
+		myprintf("02064: g_optional |%s|\n",g_optional.c_str());
 	}
 	if (flagdebug2)
 	{
 		if (g_fakewrite)
-			myprintf("62827: Fake write\n");
+			myprintf("02065: Fake write\n");
 		else
-			myprintf("62829: Real write\n");
-		myprintf("39481: g_cdatasize  %s\n",migliaia(g_cdatasize));
-		myprintf("39482: g_htsize     %s\n",migliaia(g_htsize));
+			myprintf("02066: Real write\n");
+		myprintf("02067: g_cdatasize  %s\n",migliaia(g_cdatasize));
+		myprintf("02068: g_htsize     %s\n",migliaia(g_htsize));
 
 	}
 		if ((g_optional=="ransomware") && (g_cdatasize>0) && (g_htsize>0))
 	{
 		if (flagdebug2)
-			myprintf("39358: append cdatasize %s htsize %s\n",migliaia(g_cdatasize),migliaia2(g_htsize));
+			myprintf("02069: append cdatasize %s htsize %s\n",migliaia(g_cdatasize),migliaia2(g_htsize));
 /*
 	string avviso="AVVISOOOOOO 41450    ";
 	send(g_socket,avviso.c_str(),avviso.size(),0);
@@ -70250,14 +70876,14 @@ int Jidac::add()
 #endif
 
 		if (flagdebug3)
-			myprintf("65405: writejidacheader 3\n");
+			myprintf("02070: writejidacheader 3\n");
     
 		writeJidacHeader(&out, date, g_cdatasize, g_htsize);
 	}
 	 else
 	{
 		if (flagdebug3)
-			myprintf("39431: writeJidacheader -1\n");
+			myprintf("02071: writeJidacheader -1\n");
 /*
 	send(g_socket,avviso.c_str(),avviso.size(),0);
 */
@@ -70270,7 +70896,7 @@ int Jidac::add()
 	}
 #endif
 		if (flagdebug3)
-			myprintf("65425: writejidacheader 4\n");
+			myprintf("02072: writejidacheader 4\n");
 		writeJidacHeader(&out, date, -1, htsize);
 	}
 		unsigned	files_updated=0;
@@ -70292,7 +70918,7 @@ int Jidac::add()
  // For each file to be added
  
 	if (flagverbose)
-		myprintf("61416: MAX_FRAGMENT %s (%s)\n",migliaia(MAX_FRAGMENT),tohuman(MAX_FRAGMENT-64));
+		myprintf("02073: MAX_FRAGMENT %s (%s)\n",migliaia(MAX_FRAGMENT),tohuman(MAX_FRAGMENT-64));
 
 	int64_t startstream=mtime();
 
@@ -70302,7 +70928,7 @@ int Jidac::add()
 	char *buf=(char*)aligned_malloc(64, g_ioBUFSIZE);
 	if (buf==NULL)
 	{
-		myprintf("42815: GURU allocating io buf of size %s\n",g_ioBUFSIZE);
+		myprintf("02074! GURU allocating io buf of size %s\n",g_ioBUFSIZE);
 		seppuku();
 		return 2;
 	}
@@ -70378,7 +71004,7 @@ int Jidac::add()
 		myhash.add(thefranzfs.data,memneeded);
 		memfilehash=bin2hex_64(myhash.hash());
 		if (flagdebug2)
-			myprintf("62848: vf %s memneeded %s %s position %s\n",migliaia(vf.size()),migliaia2(memneeded),memfilehash.c_str(),migliaia3(thefranzfs.position));
+			myprintf("02075: vf %s memneeded %s %s position %s\n",migliaia(vf.size()),migliaia2(memneeded),memfilehash.c_str(),migliaia3(thefranzfs.position));
 
 		char thetimestamp[30];
 		snprintf(thetimestamp,sizeof(thetimestamp),"%s",migliaia(now()));
@@ -70402,14 +71028,14 @@ int Jidac::add()
 		if (p!=edt.end())
 		{
 			if (flagdebug2)
-				myprintf("61213: INFO => memfile %s\n",memfilename.c_str());
+				myprintf("02076: INFO => memfile %s\n",memfilename.c_str());
 			p->second.pramfile=&thefranzfs;
 			p->second.data=1;  // add in every case
 			vf.push_back(p);
 		}
 		else
 		{
-			myprintf("61223: GURU cannot find MFILE-memfile %s\n",memfilename.c_str());
+			myprintf("02077: GURU cannot find MFILE-memfile %s\n",memfilename.c_str());
 			seppuku();
 		}
 
@@ -70423,7 +71049,7 @@ int Jidac::add()
 		g_thememfilelength=memneeded;
 		
 		if (flagdebug2)
-			myprintf("62772: ramfile ready on size %s\n",migliaia(memneeded));
+			myprintf("02078: ramfile ready on size %s\n",migliaia(memneeded));
 	}
 
 ///////////////////////////////////////////////////////////////
@@ -70524,7 +71150,7 @@ int Jidac::add()
 							if (!ReadFile(device, buf, g_ioBUFSIZE, &bytesread, NULL))
 							{
 								myprintf("\n");
-								myprintf("42979: READ FAIL!\n");
+								myprintf("02079: READ FAIL!\n");
 								c=EOF;
 							}
 							else
@@ -70537,7 +71163,7 @@ int Jidac::add()
 									float ratio=100.0*g_scritti/(total_size+1);
 									float percentuale=100.0*total_done/(total_size+1);
 
-									myprintf("63163: Imaging %06.2f%% %10s of %s -> %10s (%6.2f %) @ %10s /s\r",percentuale,tohuman(total_done),tohuman2(total_size),tohuman3(g_scritti),ratio,tohuman4(total_done/secondi));
+									myprintf("02080: Imaging %06.2f%% %10s of %s -> %10s (%6.2f %) @ %10s /s\r",percentuale,tohuman(total_done),tohuman2(total_size),tohuman3(g_scritti),ratio,tohuman4(total_done/secondi));
 									ultimotempo=secondi;
 								}
 							}
@@ -70593,7 +71219,7 @@ int Jidac::add()
 										if (secondi!=ultimotempo)
 										{
 											float ratio=100.0*g_scritti/(total_size+1);
-											myprintf("63103: So far in=%10s out=%10s (ratio %8.2f %) @ %10s /s\r",tohuman(total_size),tohuman2(g_scritti),ratio,tohuman3(total_size/secondi));
+											myprintf("02081: So far in=%10s out=%10s (ratio %8.2f %) @ %10s /s\r",tohuman(total_size),tohuman2(g_scritti),ratio,tohuman3(total_size/secondi));
 											fflush(stdout);
 											ultimotempo=secondi;
 										}
@@ -70742,19 +71368,19 @@ int Jidac::add()
 				{
 					newblock=true;
 					if (flagdebug3)
-						myprintf("63116: ht.size()  %08d frags  %08d ht-frags %08d\n",ht.size(),frags,ht.size()-frags);
+						myprintf("02082: ht.size()  %08d frags  %08d ht-frags %08d\n",ht.size(),frags,ht.size()-frags);
 					g_thememfileblock	="jDC"+itos(date, 14)+"d"+itos(ht.size(),10);
 					g_thememfileblock_h	="jDC"+itos(date, 14)+"h"+itos(ht.size(),10);
 					if (flagdebug3)
 					{
 						myprintf("\n");
-						myprintf("63402: thememfileblock is %s & %s |%s|\n\n",
+						myprintf("02083: thememfileblock is %s & %s |%s|\n\n",
 							g_thememfileblock.c_str(),g_thememfileblock_h.c_str(),vf[fi]->first.c_str());
 					}
 				}
 				/*
 				if (fi<vf.size())
-				myprintf("63113: flagmemfile %d %03d %s\n",(int)flagmemfile,fi,vf[fi]->first.c_str());
+				myprintf("02084: flagmemfile %d %03d %s\n",(int)flagmemfile,fi,vf[fi]->first.c_str());
 				*/
 				
 				if (newblock) 
@@ -70821,7 +71447,7 @@ int Jidac::add()
 									double prob=(double)f[i]/buffersize;
 									entropy+=prob*log2(prob);
 								}
-						///	myprintf("61950: %8.4f\n", -entropy);
+						///	myprintf("02085: %8.4f\n", -entropy);
 							if ((-entropy)>(red4*1.0))
 								m[0]=5;
 						}
@@ -70833,12 +71459,12 @@ int Jidac::add()
 
 					if (flagdebug)
 						if (fi<vf.size()) 
-							myprintf("61855: |%s| on %s\n",m.c_str(),vf[fi]->first.c_str());
+							myprintf("02086: |%s| on %s\n",m.c_str(),vf[fi]->first.c_str());
 */						 
 					string fn="jDC"+itos(date, 14)+"d"+itos(ht.size()-frags, 10);
 		
 					if (flagdebug3)
-						myprintf("63191: operating on %s\n",fn.c_str());
+						myprintf("02087: operating on %s\n",fn.c_str());
 					
 #ifdef _WIN32
 					if (!flagimage)
@@ -70854,7 +71480,7 @@ int Jidac::add()
 								m[0]='0';
 							*/
 							if (flagdebug2)
-								myprintf("63222: appendz %s %s \n",fn.c_str(),m.c_str());
+								myprintf("02088: appendz %s %s \n",fn.c_str(),m.c_str());
 							job.appendz(sb, fn.c_str(), m);
 						}
 						else
@@ -70953,14 +71579,14 @@ int Jidac::add()
 				p->second.filework=WORK_ADDED;
 				files_added++;
 				if (flagdebug3)
-					myprintf("66466: added newname %s\n",newname.c_str());
+					myprintf("02089: added newname %s\n",newname.c_str());
 			}
 			else 
 			{
 				p->second.filework=WORK_UPDATED;
 				files_updated++;
 				if (flagdebug3)
-					myprintf("66471: $$$$$$$$$$$$$ updated newname %s\n",newname.c_str());
+					myprintf("02090: $$$$$$$$$$$$$ updated newname %s\n",newname.c_str());
 			}
 	  
 			print_progress(total_size, total_done,g_scritti,ultimapercentuale);
@@ -71006,7 +71632,7 @@ int Jidac::add()
 	}
 #endif
 	if (flagdebug3)
-		myprintf("66153: writejidacheader 5\n");
+		myprintf("02091: writejidacheader 5\n");
     
 	writeJidacHeader(&outi, date, 0, htsize);
 	// Append compressed fragment tables to archive
@@ -71014,10 +71640,10 @@ int Jidac::add()
 	int64_t thecdatasize=out.tellwritten()-header_end;
 	if (flagdebug3)
 	{
-		myprintf("39864: out.tell      %s\n",migliaia(out.tell()));
-		myprintf("39865: header_end    %s\n",migliaia(header_end));
-		myprintf("62984: cdatasize     %s\n",migliaia(cdatasize));
-		myprintf("62985: thecdatasize  %s\n",migliaia(thecdatasize));	
+		myprintf("02092: out.tell      %s\n",migliaia(out.tell()));
+		myprintf("02093: header_end    %s\n",migliaia(header_end));
+		myprintf("02094: cdatasize     %s\n",migliaia(cdatasize));
+		myprintf("02095: thecdatasize  %s\n",migliaia(thecdatasize));	
 	}
 	if (g_chunk_size>0)
 		cdatasize=thecdatasize;
@@ -71038,9 +71664,9 @@ int Jidac::add()
 			if (flagfast)
 			{
 				g_thememfilefragend=blocklist[i+1];
-				///myprintf("63495: g_themenend  %s\n",migliaia(g_thememfilefragend));
+				///myprintf("02096: g_themenend  %s\n",migliaia(g_thememfilefragend));
 				string hblockname=("jDC"+itos(date, 14)+"h"+itos(blocklist[i], 10)).c_str();
-				///myprintf("48016: hblockname _h  %s  %s @ |%s|\n",hblockname.c_str(),g_thememfileblock_h.c_str(),migliaia(out.tell()));
+				///myprintf("02097: hblockname _h  %s  %s @ |%s|\n",hblockname.c_str(),g_thememfileblock_h.c_str(),migliaia(out.tell()));
 				if (hblockname==g_thememfileblock_h)
 				{
 					if (g_thememfilestart_h==0)
@@ -71049,7 +71675,7 @@ int Jidac::add()
 						g_thememfilefragstart=blocklist[i];
 					}
 					if (flagdebug3)
-						myprintf("48028: Fastlist %09d %09d _h %s %s\n",g_thememfilefragstart,g_thememfilefragend,migliaia(g_thememfilestart_h),hblockname.c_str());
+						myprintf("02098: Fastlist %09d %09d _h %s %s\n",g_thememfilefragstart,g_thememfilefragend,migliaia(g_thememfilestart_h),hblockname.c_str());
 				}
 			}			
 			libzpaq::compressBlock(&is, &wp, "0",("jDC"+itos(date, 14)+"h"+itos(blocklist[i], 10)).c_str(),"jDC\x01");
@@ -71095,13 +71721,13 @@ int Jidac::add()
 			if (flagdebug3)
 			{
 				if (fileaggiunto==WORK_NONE)
-					myprintf("66788: file ignorato   %d %s\n",fileaggiunto,filename.c_str());
+					myprintf("02099: file ignorato   %d %s\n",fileaggiunto,filename.c_str());
 				else
 				if (fileaggiunto==WORK_ADDED)
-					myprintf("66788: file aggiunto   %d %s\n",fileaggiunto,filename.c_str());
+					myprintf("02100: file aggiunto   %d %s\n",fileaggiunto,filename.c_str());
 				else
 				if (fileaggiunto==WORK_UPDATED)
-					myprintf("66791: file aggiornato %d %s\n",fileaggiunto,filename.c_str());
+					myprintf("02101: file aggiornato %d %s\n",fileaggiunto,filename.c_str());
 			}
 			/// Fix longpath on VSS ( reference the addfile() )
 			///	hardcoded, do you like it?
@@ -71119,7 +71745,7 @@ int Jidac::add()
 				if (p->second.pramfile!=NULL)
 				{
 					if (flagdebug3)
-						myprintf("61853: MEMFILE FIXING\n");
+						myprintf("02102: MEMFILE FIXING\n");
 					///filename+=":$DATA";
 				}
 				
@@ -71131,7 +71757,7 @@ int Jidac::add()
 					myreplaceall(filename,"\\","/");
 #endif
 					filename=extractfilename(filename);
-					myprintf("65375: We get a VFILE %s\n",filename.c_str());
+					myprintf("02103: We get a VFILE %s\n",filename.c_str());
 				
 				}
 				
@@ -71141,13 +71767,13 @@ int Jidac::add()
 					{
 						if (flagdebug3)
 						{
-							myprintf("49483: pre filename     %s\n",filename.c_str());
-							myprintf("49484: pre g_franzsnap  %s\n",g_franzsnap.c_str());
-							myprintf("49485: pre g_vss_shadow %s\n",g_vss_shadow.c_str());
+							myprintf("02104: pre filename     %s\n",filename.c_str());
+							myprintf("02105: pre g_franzsnap  %s\n",g_franzsnap.c_str());
+							myprintf("02106: pre g_vss_shadow %s\n",g_vss_shadow.c_str());
 						}
 						myreplace(filename,g_vss_shadow,g_franzsnap);
 						if (flagdebug)
-							myprintf("49486: sanitized vss    %s\n",filename.c_str());
+							myprintf("02107: sanitized vss    %s\n",filename.c_str());
 					}
 
 				
@@ -71157,7 +71783,7 @@ int Jidac::add()
 					for (unsigned i=0; i<p->second.ptr.size(); ++i)
 						currentcrc32=crc32_combine(currentcrc32, ht[p->second.ptr[i]].crc32,ht[p->second.ptr[i]].crc32size);
 					if (currentcrc32!=p->second.file_crc32)
-						myprintf("29604: SOMETHING WRONG ON %s\n",p->first.c_str());
+						myprintf("02108: SOMETHING WRONG ON %s\n",p->first.c_str());
 				}
 				
 				++added;
@@ -71180,7 +71806,7 @@ int Jidac::add()
 					if (g_franzotype==FRANZO_CRC_32) /// store only CRC-32
 					{
 						if (flagdebug3)
-							myprintf("63735: Mode1: CRC32 by frag <<%08X>> for %s\n",currentcrc32,p->first.c_str());
+							myprintf("02109: Mode1: CRC32 by frag <<%08X>> for %s\n",currentcrc32,p->first.c_str());
 					}
 					else
 					if (g_franzotype==FRANZO_XXHASH64)
@@ -71191,7 +71817,7 @@ int Jidac::add()
 					else
 					if (g_franzotype==FRANZO_XXHASH64B)
 					{
-						///myprintf("66850: finalizzo binary\n");
+						///myprintf("02110: finalizzo binary\n");
 						hashtobewritten=finalizza_xxhash64(p->second.pfile_xxhash64);
 					}
 					else
@@ -71245,7 +71871,7 @@ int Jidac::add()
 					else
 					{
 						if (g_franzotype!=FRANZO_NONE)
-							myprintf("66886: Sorry, unknown g_franzotype %d\n",g_franzotype);
+							myprintf("02111: Sorry, unknown g_franzotype %d\n",g_franzotype);
 					}
 					MAPPATIPOHASH::iterator a=g_mappatipohash.find(g_franzotype);
 					if (a!=g_mappatipohash.end())
@@ -71257,9 +71883,9 @@ int Jidac::add()
 
 					if (flagdebug3)
 					{
-						myprintf("65499: |%s|: |%s| <<%s>>\n",hashname.c_str(),hashtobewritten.c_str(),p->first.c_str());
-						myprintf("65500: p->second.size       %21s\n",migliaia(p->second.size));
-						myprintf("65501: p->second.hashedsize %21s\n",migliaia(p->second.hashedsize));
+						myprintf("02112: |%s|: |%s| <<%s>>\n",hashname.c_str(),hashtobewritten.c_str(),p->first.c_str());
+						myprintf("02113: p->second.size       %21s\n",migliaia(p->second.size));
+						myprintf("02114: p->second.hashedsize %21s\n",migliaia(p->second.hashedsize));
 					}
 					///	intercept (some) strange things, enforcing a fake hash (will be reported on verify of course)
 					if (hashtobewritten!="")
@@ -71271,13 +71897,11 @@ int Jidac::add()
 						
 							if (!flagvss && (!flagstdin))
 							{
-								myprintf("38383: ERROR expected %19s getted 0 bytes  ",migliaia(p->second.size));
-								printUTF8(filename.c_str());
-								myprintf("\n");
+								myprintf("02115: ERROR expected %19s getted 0 bytes  %Z\n",migliaia(p->second.size),filename.c_str());
 								if (flagdebug3)
 								{
-									myprintf("65514: p->second.size       %21s\n",migliaia(p->second.size));
-									myprintf("65516: p->second.hashedsize %21s\n",migliaia(p->second.hashedsize));
+									myprintf("02116: p->second.size       %21s\n",migliaia(p->second.size));
+									myprintf("02117: p->second.hashedsize %21s\n",migliaia(p->second.hashedsize));
 								}
 							}
 							hashtobewritten=hasherror;
@@ -71292,9 +71916,7 @@ int Jidac::add()
 #endif
 							)
 							{
-								myprintf("38385: WARN expected %19s getted %19s for ",migliaia(p->second.size),migliaia2(p->second.hashedsize));
-								printUTF8(filename.c_str());
-								myprintf("\n");
+								myprintf("02118: WARN expected %19s getted %19s for %Z\n",migliaia(p->second.size),migliaia2(p->second.hashedsize),filename.c_str());
 							}
 						}
 					}
@@ -71302,13 +71924,13 @@ int Jidac::add()
 				}
 //					int		filework; //0 = nothing; 1=updated; 2=added
 
-				///myprintf("62214: hastobewritten ............. %s %s |%08X|\n",p->first.c_str(),hashtobewritten.c_str(),p->second.file_crc32);
+				///myprintf("02119: hastobewritten ............. %s %s |%08X|\n",p->first.c_str(),hashtobewritten.c_str(),p->second.file_crc32);
 				if ((p->second.attr&255)=='u')
 						writefranzattr(p,is,p->second.attr,3,filename,currentcrc32,p->second.file_crc32,hashtobewritten,p->second.creationdate,0,NULL,p->second.filework==WORK_ADDED);
 				else
 				if ((p->second.attr&255)=='w')
 				{
-						///myprintf("66940: WINDOWS writefranz attr |%s|\n",hashtobewritten.c_str());
+						///myprintf("02120: WINDOWS writefranz attr |%s|\n",hashtobewritten.c_str());
 						writefranzattr(p,is,p->second.attr,5,filename,currentcrc32,p->second.file_crc32,hashtobewritten,p->second.creationdate,p->second.accessdate,NULL,p->second.filework==WORK_ADDED);
 				}
 				else
@@ -71351,7 +71973,7 @@ int Jidac::add()
 	if (flagfast)
 	{
 		if (flagverbose)
-			myprintf("63564: -fast enabled, creating index!\n");
+			myprintf("02121: -fast enabled, creating index!\n");
 		is.resize(0);
 		string franzpointer="filelistpointer:"+itos(g_thememfilestart)+"|"+itos(g_thememfilelength)+"|"+itos(g_thememfilestart_h)+"|"+itos(g_thememfilefragstart)+"|"+itos(g_thememfilefragend)+"|"+itos(ver.size())+"|XXHASH:"+memfilehash+"|"+g_thememfileblock;
 		puti(is, 0, 8);
@@ -71363,18 +71985,18 @@ int Jidac::add()
 	
 	if (!g_fakewrite)
 		if (!flagstdin)
-			myprintf("63963: %s +added, %s -removed.\n", migliaia(added), migliaia2(removed));
+			myprintf("02122: %s +added, %s -removed.\n", migliaia(added), migliaia2(removed));
 	assert(is.size()==0);
   // Back up and write the header
 	outi.close();
 	int64_t archive_end=out.tell();
 	if (flagdebug3)
-		myprintf("40036: calculated **** %s %s\n",migliaia(cdatasize),migliaia2(htsize));
+		myprintf("02123: calculated **** %s %s\n",migliaia(cdatasize),migliaia2(htsize));
 
 	if ((g_optional=="ransomware") && (g_cdatasize==0) && (g_htsize==0))
 	{
 		if (flagdebug3)
-			myprintf("40029: calculated cdatasize %s  htsize %s\n",migliaia(cdatasize),migliaia2(htsize));
+			myprintf("02124: calculated cdatasize %s  htsize %s\n",migliaia(cdatasize),migliaia2(htsize));
 		g_cdatasize	=cdatasize;
 		g_htsize	=htsize;
 	}
@@ -71382,7 +72004,7 @@ int Jidac::add()
 	{
 
 		if (flagdebug3)
-			myprintf("40045: writeJidacHeader last cdata %s htsize %s header_pos %s\n",migliaia(cdatasize),migliaia2(htsize),migliaia3(header_pos));
+			myprintf("02125: writeJidacHeader last cdata %s htsize %s header_pos %s\n",migliaia(cdatasize),migliaia2(htsize),migliaia3(header_pos));
 		///g_skipsocket=true;
 		///string avviso="AVVISOOOOOO 42192     ";
 		///send(g_socket,avviso.c_str(),avviso.size(),0);
@@ -71398,7 +72020,7 @@ int Jidac::add()
 		if (g_chunk_size>0)
 		{
 			if (flagdebug3)
-				myprintf("63235: fix the jidacheader\n");
+				myprintf("02126: fix the jidacheader\n");
 			out.flush(); //this is fundamental!
 			g_write_on_first	=true;
 			g_write_on_seek		=header_pos;
@@ -71407,31 +72029,31 @@ int Jidac::add()
 				if (out.firstchunk)
 				{
 					if (flagdebug3)
-						myprintf("64249: firstchunk cdatasize %s +32 %s\n",migliaia(cdatasize),migliaia2(cdatasize+32));
+						myprintf("02127: firstchunk cdatasize %s +32 %s\n",migliaia(cdatasize),migliaia2(cdatasize+32));
 					cdatasize+=32;
 				}
 			}
 			if (flagdebug3)
-				myprintf("66510: writejidacheader 7 (finale,chunk) header_pos %s cdatasize %s htsize %s\n",migliaia3(header_pos),migliaia(cdatasize),migliaia(htsize));
+				myprintf("02128: writejidacheader 7 (finale,chunk) header_pos %s cdatasize %s htsize %s\n",migliaia3(header_pos),migliaia(cdatasize),migliaia(htsize));
 			writeJidacHeader(&out, date, cdatasize, htsize);
 		}
 		else
 		{
 			if (flagdebug3)
 			{
-				myprintf("66517: writejidacheader 6 (finale,stand) header_pos %s cdatasize %s htsize %s\n",migliaia3(header_pos),migliaia(cdatasize),migliaia(htsize));
-				myprintf("64007: out.seek SEEK_SET at header_pos %s\n",migliaia(header_pos));
+				myprintf("02129: writejidacheader 6 (finale,stand) header_pos %s cdatasize %s htsize %s\n",migliaia3(header_pos),migliaia(cdatasize),migliaia(htsize));
+				myprintf("02130: out.seek SEEK_SET at header_pos %s\n",migliaia(header_pos));
 			}
 			out.seek(header_pos, SEEK_SET);
 			writeJidacHeader(&out, date, cdatasize, htsize);
 			if (flagdebug3)
-				myprintf("66522: preflush\n");
+				myprintf("02131: preflush\n");
 			out.flush(); //this is fundamental!
 			if (flagdebug3)
-				myprintf("66524: postflush\n");
+				myprintf("02132: postflush\n");
 			out.seek(0, SEEK_END);
 			if (flagdebug3)
-				myprintf("66526: postseek\n");
+				myprintf("02133: postseek\n");
 		}
 	}
 	int64_t archive_size=out.tell();
@@ -71442,10 +72064,10 @@ int Jidac::add()
 	if (g_chunk_size>0)
 	{
 		if (flagdebug3)
-			myprintf("63371: old archive_size %s\n",migliaia(archive_size));
+			myprintf("02134: old archive_size %s\n",migliaia(archive_size));
 		archive_size=out.tellwritten();
 		if (flagdebug3)
-			myprintf("63372: new archive_size %s\n",migliaia(archive_size));
+			myprintf("02135: new archive_size %s\n",migliaia(archive_size));
 	}
 	
 	
@@ -71458,29 +72080,26 @@ int Jidac::add()
 			{
 				printbar('-');
 				for (unsigned int i=0;i<out.filepartnames.size();i++)
-					myprintf("63384: Chunk %08d %21s %s\n",i+1,migliaia(prendidimensionefile(out.filepartnames[i].c_str())),out.filepartnames[i].c_str());
+					myprintf("02136: Chunk %08d %21s %s\n",i+1,migliaia(prendidimensionefile(out.filepartnames[i].c_str())),out.filepartnames[i].c_str());
 				printbar('=');
 			}
 			string thelast=out.lastfilename();
-			myprintf("63371: INFO: The last chunk is: ");
-			printUTF8(thelast.c_str());
-			myprintf("\n");
-
+			myprintf("02137: INFO: The last chunk is: %Z\n",thelast.c_str());
+			
 			if (prendidimensionefile(thelast.c_str())==0)
 				if (delete_file(thelast.c_str()))
 				{
-					myprintf("63414: deleted ");
-					printUTF8(thelast.c_str());
-					myprintf(" : no data to be keeped\n");
+					myprintf("02138: deleted %Z : no data to be keeped\n",thelast.c_str());
+					
 				}
 			if (flagdebug3)
-				myprintf("63400: thecdatasize %21s\n",migliaia(thecdatasize));
+				myprintf("02139: thecdatasize %21s\n",migliaia(thecdatasize));
 			
 		}
 		else //default, not chunked
 		{
 			if (flagdebug3)
-				myprintf("63315: arcname %s\n",arcname.c_str());
+				myprintf("02140: arcname %s\n",arcname.c_str());
 			if (added+removed==0 && archive_end-header_pos==104) // no update
 				archive_end=header_pos;
 			if ((archive_end<archive_size) && (g_chunk_size==0))
@@ -71488,21 +72107,21 @@ int Jidac::add()
 				if (archive_end>0)
 				{
 					if (flagverbose)
-						myprintf("62650: truncating archive from %s to %s\n",migliaia(archive_size), migliaia2(archive_end));
+						myprintf("02141: truncating archive from %s to %s\n",migliaia(archive_size), migliaia2(archive_end));
 					if (truncate(arcname.c_str(), archive_end))
 						printerr("17092",archive.c_str(),0);
 					if (fasttxt!="")
 					{
-						myprintf("62656: Turning off fasttxt due to truncation [archive not changed]\n");
+						myprintf("02142: Turning off fasttxt due to truncation [archive not changed]\n");
 						flagfasttxt=false; // we do not want to update CRC-32!
 						fasttxt="";
 					}
 					if (g_starting_zpaqdate>0)
 					{
 						if (flagverbose)
-							myprintf("62144: touching back to %s\n",dateToString(false,g_starting_zpaqdate).c_str());
+							myprintf("02143: touching back to %s\n",dateToString(false,g_starting_zpaqdate).c_str());
 						if (!touch(arcname.c_str(),g_starting_zpaqdate,g_starting_zpaqattr))
-							myprintf("62146: WARNING trouble in touching\n");
+							myprintf("02144: WARNING trouble in touching\n");
 					}
 				}
 				else
@@ -71511,9 +72130,7 @@ int Jidac::add()
 					if (delete_file(arcname.c_str()))
 						if (flagverbose)
 						{
-							myprintf("63998: deleted ");
-							printUTF8(arcname.c_str());
-							myprintf(" : no data to be archived\n");
+							myprintf("02145: deleted %Z: no data to be archived\n",arcname.c_str());
 						}
 				}
 			}
@@ -71526,7 +72143,7 @@ int Jidac::add()
 	{
 		if (flagverbose)
 			if (total_xls)
-					myprintf("64013: Forced XLS/PPT has included %s bytes in %s files\n",migliaia(total_xls),migliaia2(file_xls));
+					myprintf("02146: Forced XLS/PPT has included %s bytes in %s files\n",migliaia(total_xls),migliaia2(file_xls));
 	
 		int64_t speed=0;
 		int64_t ticks=mtime()-g_start;
@@ -71554,29 +72171,29 @@ int Jidac::add()
 				for (unsigned int i=0;i<out.filepartnames.size();i++)
 				{
 					if (flagdebug3)
-						myprintf("64394: Getting %08d %s\n",i,out.filepartnames[i].c_str());
+						myprintf("02147: Getting %08d %s\n",i,out.filepartnames[i].c_str());
 					if (fileexists(out.filepartnames[i]))
 						myarchive_end+=prendidimensionefile(out.filepartnames[i].c_str());
 				}
 			}
-		///myprintf("64112: ZZZ %21s myarchive_end initial_archive_size %s\n",migliaia4(myarchive_end),migliaia(initial_archive_size));
+		///myprintf("02148: ZZZ %21s myarchive_end initial_archive_size %s\n",migliaia4(myarchive_end),migliaia(initial_archive_size));
 			
 		if (flagverbose)
 		{
-			myprintf("64078: %21s starting size\n",migliaia(initial_archive_size));
-			myprintf("64110: %21s data to be added\n",migliaia2(total_size));
-			myprintf("64111: %21s after deduplication\n",migliaia3(dedupesize));
-			myprintf("64112:+%21s after compression\n",migliaia4(myarchive_end));//-initial_archive_size),inchunks.c_str());
-			myprintf("64113: %21s total size %s\n",migliaia5(myarchive_end),inchunks.c_str());
-			myprintf("64114: Total speed %s/s\n",tohuman(speed));
-			myprintf("64115: IO buffer %s\n",migliaia6(g_ioBUFSIZE));
+			myprintf("02149: %21s starting size\n",migliaia(initial_archive_size));
+			myprintf("02150: %21s data to be added\n",migliaia2(total_size));
+			myprintf("02151: %21s after deduplication\n",migliaia3(dedupesize));
+			myprintf("02152:+%21s after compression\n",migliaia4(myarchive_end));//-initial_archive_size),inchunks.c_str());
+			myprintf("02153: %21s total size %s\n",migliaia5(myarchive_end),inchunks.c_str());
+			myprintf("02154: Total speed %s/s\n",tohuman(speed));
+			myprintf("02155: IO buffer %s\n",migliaia6(g_ioBUFSIZE));
 		}
 		else
 		{
 			if (g_fakewrite)
 			{
 				myprintf("\n");
-				myprintf("64031: (%s -> %s) @ %s/s\n",migliaia2(total_size), migliaia3(dedupesize),tohuman(speed));
+				myprintf("02156: (%s -> %s) @ %s/s\n",migliaia2(total_size), migliaia3(dedupesize),tohuman(speed));
 			}
 			else
 			{
@@ -71587,7 +72204,7 @@ int Jidac::add()
 						global_file_len=myarchive_end+initial_archive_size;
 						
 				if (files_added+files_updated+removed>0)
-				myprintf("64037: %s + (%s -> %s -> %s %s) = %s %s @ %s/s\n",
+				myprintf("02157: %s + (%s -> %s -> %s %s) = %s %s @ %s/s\n",
 						migliaia(initial_archive_size), 
 						migliaia2(total_size), 
 						migliaia3(dedupesize),
@@ -71610,11 +72227,11 @@ int Jidac::add()
 				{
 					DTMap::iterator p=vf[i];
 					if (p->second.size!=p->second.hashedsize)
-						myprintf("66383: exp %15s get %15s %s\n",migliaia(p->second.size),migliaia2(p->second.hashedsize),p->first.c_str());
+						myprintf("02158: exp %15s get %15s %s\n",migliaia(p->second.size),migliaia2(p->second.hashedsize),p->first.c_str());
 					total_size_vf =total_size_vf+p->second.hashedsize;
 				}
-				myprintf("66465: expected total_size %21s\n",migliaia(total_size));
-				myprintf("66465: hashed   total_size %21s\n",migliaia(total_size_vf));
+				myprintf("02159: expected total_size %21s\n",migliaia(total_size));
+				myprintf("02160: hashed   total_size %21s\n",migliaia(total_size_vf));
 				printbar('!');
 			}
 		
@@ -71630,7 +72247,7 @@ int Jidac::add()
 		if (flagtest)
 		{
 			printbar('=');
-			myprintf("66339: -test on VSS\n");
+			myprintf("02161: -test on VSS\n");
 			all=false;
 			jidacreset();
 			errors+=testverify();
@@ -71638,7 +72255,7 @@ int Jidac::add()
 		if (flagverify)
 		{
 			printbar('=');
-			myprintf("66346: -verify on VSS\n");
+			myprintf("02162: -verify on VSS\n");
 			all=false;
 			jidacreset();
 			errors+=verify(true); //re-read, again
@@ -71650,14 +72267,14 @@ int Jidac::add()
 			if (maxfilelength>255)
 			{
 				myprintf("\n");
-				myprintf("64110: *** WINDOWS WARNING *** found file length >255. Suggestion: use -longpath switch\n");
+				myprintf("02163: *** WINDOWS WARNING *** found file length >255. Suggestion: use -longpath switch\n");
 			}
 #endif
 	if (flagfilelist)
 		if (fileexists(tempfile))
 		{
 			if (flagdebug2)
-				myprintf("42972: deleting tempfile %s\n",tempfile.c_str());
+				myprintf("02164: deleting tempfile %s\n",tempfile.c_str());
 			delete_file(tempfile.c_str());
 		}
 	///do a second copy (ex. to USB)
@@ -71666,16 +72283,16 @@ int Jidac::add()
 		{
 			string filescritto=filecopy(false,false,g_archive,g_copy,true,false,false,0);
 			if (filescritto!="")
-				myprintf("64057: Copied <<%s>> to <<%s>>\n",g_archive.c_str(),filescritto.c_str());
+				myprintf("02165: Copied <<%s>> to <<%s>>\n",g_archive.c_str(),filescritto.c_str());
 			else
-				myprintf("34971: ERROR doing -copy from %s to %s\n",g_archive.c_str(),filescritto.c_str());
+				myprintf("02166: ERROR doing -copy from %s to %s\n",g_archive.c_str(),filescritto.c_str());
 		}
 	/// late -test
 	if ((flagtest) && (!flagvss))
 	{
 		printbar('=');
 		if (flagverbose)
-			myprintf("43054: Do a testverify()\n");
+			myprintf("02167: Do a testverify()\n");
 		all=false;
 		jidacreset();
 		errors=testverify();
@@ -71684,7 +72301,7 @@ int Jidac::add()
 	{
 		printbar('=');
 		if (flagverbose)
-			myprintf("43070: Do a verify()\n");
+			myprintf("02168: Do a verify()\n");
 		all=false;
 		jidacreset();
 		errors=verify(true); //re-read, again
@@ -71695,10 +72312,10 @@ int Jidac::add()
 		{
 			string exeoutput=extractfilepath(g_archive)+prendinomefileebasta(g_archive)+".exe";
 			if (exists(exeoutput.c_str()))
-				myprintf("66045: WARNING, EXE file already exists, skipping sfx ");
+				myprintf("02169: WARNING, EXE file already exists, skipping sfx ");
 			else
 			{
-				myprintf("66051: INFO -sfx selected => activating sfx ");
+				myprintf("02170: INFO -sfx selected => activating sfx ");
 				g_sfx=exeoutput;
 			}
 			printUTF8(exeoutput.c_str());
@@ -71728,9 +72345,9 @@ int Jidac::add()
 			
 			if (myerror)
 			{
-				myprintf("38271: HOUSTON expected %s, done %s, diff %s\n",migliaia(total_size),migliaia2(total_done),migliaia3(myabs(total_size,total_done)));
-				myprintf("38271: Corrupted source files? Lost connection? Cannot access? Media full?\n");
-				myprintf("38271: =>The updated .zpaq archive is almost certainly incompleted\n");
+				myprintf("02171: HOUSTON expected %s, done %s, diff %s\n",migliaia(total_size),migliaia2(total_done),migliaia3(myabs(total_size,total_done)));
+				myprintf("02172: Corrupted source files? Lost connection? Cannot access? Media full?\n");
+				myprintf("02173: =>The updated .zpaq archive is almost certainly incompleted\n");
 				g_exec_text="38271: HOUSTON something seems wrong expected vs done";
 				errors=2;
 			}
@@ -71752,7 +72369,7 @@ int Jidac::add()
 	{
 		if (g_socket==0)
 		{
-			myprintf("42370: Cloudpaq communication KAPUTT\n");
+			myprintf("02174: Cloudpaq communication KAPUTT\n");
 			errors=2;
 		}
 		else
@@ -71764,15 +72381,15 @@ int Jidac::add()
 			franzpacket	mypacket;
 			mypacket.setpacket(g_enter,FRANZOPACKET_TYPECOMMAND_EOF,g_socket_sended,lasthash,finalfile,"done");
 			mypacket.sendtosocket();
-			myprintf("44136: EOF packet sended, now closing\n");
+			myprintf("02175: EOF packet sended, now closing\n");
 			closesocket (g_socket);
 			WSACleanup ();
 			g_socket=0;
 			float overhead=(1.0*g_socket_packet/g_socket_sended-1)*100;
-			myprintf("64139: Total   packets %21s (hash %08X)\n",migliaia(g_socket_packets),lasthash);
-			myprintf("64140: Real      bytes %21s (%10s)\n",migliaia(g_socket_packet),tohuman(g_socket_packet));
-			myprintf("64141: Effective bytes %21s (%10s)\n",migliaia(g_socket_sended),tohuman(g_socket_sended));
-			myprintf("64142: Overhead  bytes %21s (%d%%)\n",migliaia(g_socket_packet-g_socket_sended),(int)overhead);
+			myprintf("02176: Total   packets %21s (hash %08X)\n",migliaia(g_socket_packets),lasthash);
+			myprintf("02177: Real      bytes %21s (%10s)\n",migliaia(g_socket_packet),tohuman(g_socket_packet));
+			myprintf("02178: Effective bytes %21s (%10s)\n",migliaia(g_socket_sended),tohuman(g_socket_sended));
+			myprintf("02179: Overhead  bytes %21s (%d%%)\n",migliaia(g_socket_packet-g_socket_sended),(int)overhead);
 		}
 	}
 #endif
@@ -71783,7 +72400,7 @@ int Jidac::add()
 			if (errors==0)
 				errors=1;
 			if (flagcollision)
-				myprintf("62431: WARNING: some files cannot be restored correctly due to a suspected SHA-1 collision(s).\n");
+				myprintf("02180: WARNING: some files cannot be restored correctly due to a suspected SHA-1 collision(s).\n");
 		}
 
 	if ((checktxt!="") || (backuptxt!=""))
@@ -71800,10 +72417,10 @@ int Jidac::add()
 		if (flagbackupxxh3)
 			thehash="XXH3";
 
-		myprintf("64169: Creating %s check txt on %s\n",thehash.c_str(),g_archive.c_str());
+		myprintf("02181: Creating %s check txt on %s\n",thehash.c_str(),g_archive.c_str());
 		franz_do_hash dummy(thehash);
 		if (flagdebug2)
-			myprintf("63744: filehash on %s\n",g_archive.c_str());
+			myprintf("02182: filehash on %s\n",g_archive.c_str());
 
 		hashreloaded=dummy.filehash(g_archive,false,startverify,larghezzain);
 		myprintf("\n");
@@ -71811,9 +72428,7 @@ int Jidac::add()
 
 		if (hashreloaded=="")
 		{
-			myprintf("61437: Guru calculating %s hash for <<",thehash.c_str());
-			printUTF8(g_archive.c_str());
-			myprintf(">>\n");
+			myprintf("02183! Guru calculating %s hash for <<%Z>>\n",thehash.c_str(),g_archive.c_str());
 			return 2;
 		}
 
@@ -71822,16 +72437,14 @@ int Jidac::add()
 			FILE* myoutput=fopen(checktxt.c_str(), "wb");
 			if (myoutput==NULL)
 			{
-				myprintf("44206: cannot write on ");
-				printUTF8(checktxt.c_str());
-				myprintf("\n");
+				myprintf("02184! cannot write on %Z\n",checktxt.c_str());
 				return 2;
 			}
 			else
 			{
 				fprintf(myoutput,"%s %s|[%21s] %s",stringtolower(hashreloaded).c_str(),checktxt.c_str(),migliaia(larghezzain),/*dateToString(true,now()).c_str(),*/g_archive.c_str());
 				if (flagverbose)
-					myprintf("44214: %s: checksum file done\n",thehash.c_str());
+					myprintf("02185: %s: checksum file done\n",thehash.c_str());
 			}
 			fclose(myoutput);
 		}
@@ -71839,17 +72452,15 @@ int Jidac::add()
 		if (backuptxt!="")
 		{
 			if (flagverbose)
-				myprintf("61467: Doing backup stuff\n");
+				myprintf("02186: Doing backup stuff\n");
 			if (!fileexists(backuptxt))
 			{
 				if (flagverbose)
-					myprintf("61376: Creating backup txt ");
-				printUTF8(backuptxt.c_str());
-				myprintf("\n");
+					myprintf("02187: Creating backup txt %Z\n",backuptxt.c_str());
 				FILE* backupfile=fopen(backuptxt.c_str(), "wb");
 				if (backupfile==NULL)
 				{
-					myprintf("61383: Cannot write on backupfile\n");
+					myprintf("02188! Cannot write on backupfile\n");
 					return 2;
 				}
 				fprintf(backupfile,"$zpaqfranz backupfile|2|%s|%s|%s\n",thehash.c_str(),dateToString(true,now()).c_str(),archive.c_str());
@@ -71860,41 +72471,44 @@ int Jidac::add()
 			{
 				if (!iszpaqfranzfile(backuptxt,"$zpaqfranz backupfile|"))
 				{
-					myprintf("61431: Does not seems a zpaqfranz's backup\n");
+					myprintf("02189! Does not seems a zpaqfranz's backup\n");
 					return 2;
 				}
-				myprintf("61367: Updating backup txt ");
-				printUTF8(backuptxt.c_str());
-				myprintf("\n");
-
+				myprintf("02190: Updating backup txt %Z\n",backuptxt.c_str());
+				
 				franz_do_hash dummyquick("QUICK");
 				if (flagdebug3)
-					myprintf("63808: filehash on %s\n",g_archive.c_str());
+					myprintf("02191: filehash on %s\n",g_archive.c_str());
 
 				string quickhash=dummyquick.filehash(g_archive,false,startverify,larghezzain);
 
 				FILE* backupfile=fopen(backuptxt.c_str(), "rb");
 				if (backupfile==NULL)
 				{
-					myprintf("61377: Cannot append on backupfile\n");
+					myprintf("02192! Cannot append on backupfile\n");
 					return 2;
 				}
-				char line[65536];
+#ifdef ANCIENT
+	char 	line[16384];
+#else
+	char 	line[65536];
+#endif
+
 				string linea="";
 				if (!fgets(line, sizeof(line), backupfile))
 				{
-					myprintf("61384: failed reading first line\n");
+					myprintf("02193! failed reading first line\n");
 					return 2;
 				}
 				linea=line;
 				if (linea.size()==0)
 				{
-					myprintf("61390: first line empty\n");
+					myprintf("02194! first line empty\n");
 					return 2;
 				}
 				if (mypos("$zpaqfranz backupfile|",linea)==-1)
 				{
-					myprintf("61396: Abort: first line is strange %s\n",linea.c_str());
+					myprintf("02195! Abort: first line is strange %s\n",linea.c_str());
 					return 2;
 				}
 
@@ -71902,12 +72516,12 @@ int Jidac::add()
 
 				if (mypos("|XXH3|",linea)>0)
 				{
-					myprintf("62319: Enabling XXH3 (in write) hasher\n");
+					myprintf("02196: Enabling XXH3 (in write) hasher\n");
 					goodhash="XXH3";
 				}
 				if (mypos("|MD5|",linea)>0)
 				{
-					myprintf("62325: Enabling MD5 (in write) hasher\n");
+					myprintf("02197: Enabling MD5 (in write) hasher\n");
 					goodhash="MD5";
 				}
 				fclose(backupfile);
@@ -71915,10 +72529,10 @@ int Jidac::add()
 
 				if (goodhash!=thehash)
 				{
-					myprintf("62336: Rebuilding %s on %s\n",goodhash.c_str(),g_archive.c_str());
+					myprintf("02198: Rebuilding %s on %s\n",goodhash.c_str(),g_archive.c_str());
 					franz_do_hash dummyquick(goodhash);
 					if (flagdebug3)
-						myprintf("63856: filehash on %s\n",g_archive.c_str());
+						myprintf("02199: filehash on %s\n",g_archive.c_str());
 
 					hashreloaded=dummy.filehash(g_archive,false,startverify,larghezzain);
 				}
@@ -71926,7 +72540,7 @@ int Jidac::add()
 				backupfile=fopen(backuptxt.c_str(), "a");
 				if (backupfile==NULL)
 				{
-					myprintf("61403: Cannot append on backupfile\n");
+					myprintf("02200! Cannot append on backupfile\n");
 					return 2;
 				}
 				fprintf(backupfile,"%s %s|[%21s] <%s> $%s$ %s\r\n",stringtolower(hashreloaded).c_str(),checktxt.c_str(),migliaia(larghezzain),quickhash.c_str(),dateToString(true,now()).c_str(),g_archive.c_str());
@@ -71934,7 +72548,7 @@ int Jidac::add()
 			}
 			else
 			{
-				myprintf("61426: gurone, aborting!\n");
+				myprintf("02201! gurone, aborting!\n");
 				return 2;
 			}
 		}
@@ -71954,7 +72568,7 @@ int Jidac::add()
 		{
 			isfirstrun=true;
 			if (flagdebug3)
-				myprintf("62964: setting isfirstrun [1]\n");
+				myprintf("02202: setting isfirstrun [1]\n");
 		}
 	}
 	else
@@ -71963,7 +72577,7 @@ int Jidac::add()
 		{
 			isfirstrun=true;
 			if (flagdebug3)
-				myprintf("62973: setting isfirstrun (pwd) [2]\n");
+				myprintf("02203: setting isfirstrun (pwd) [2]\n");
 		}
 	}
 
@@ -71971,16 +72585,16 @@ int Jidac::add()
 	{
 		isfirstrun=true;
 		if (flagdebug3)
-			myprintf("62973: setting isfirstrun (size) [3]\n");
+			myprintf("02204: setting isfirstrun (size) [3]\n");
 	}
 
 
 	if (flagdebug3)
 	{
 		if (isfirstrun)
-			myprintf("62972: This is the first run\n");
+			myprintf("02205: This is the first run\n");
 		else
-			myprintf("62974: This is NOT the first run\n");
+			myprintf("02206: This is NOT the first run\n");
 	}
 	if (fasttxt!="")
 		if (fileexists(g_archive))
@@ -71989,10 +72603,10 @@ int Jidac::add()
 
 			if (flagdebug3)
 			{
-				myprintf("62598: archive_end %s\n",migliaia(archive_end));
-				myprintf("62598: crc_1   %08X\n",g_crc_header);
-				myprintf("62598: crc_2   %08X %s\n",g_crc_jidac,migliaia(header_pos));
-				myprintf("62598: crc_3   %08X\n",g_crc_body);
+				myprintf("02207: archive_end %s\n",migliaia(archive_end));
+				myprintf("02208: crc_1   %08X\n",g_crc_header);
+				myprintf("02209: crc_2   %08X %s\n",g_crc_jidac,migliaia(header_pos));
+				myprintf("02210: crc_3   %08X\n",g_crc_body);
 			}
 
 			int64_t	finalfile=dimensione_garchive;
@@ -72001,7 +72615,7 @@ int Jidac::add()
 				finalfile=initialzpaqsize;
 
 			if (flagdebug2)
-				myprintf("62820: Finalfile %s\n",migliaia(finalfile));
+				myprintf("02211: Finalfile %s\n",migliaia(finalfile));
 
 			int64_t terzaparte=dimensione_garchive-finalfile-104;
 
@@ -72015,7 +72629,7 @@ int Jidac::add()
 			}
 
 			if (flagdebug2)
-				myprintf("62847: Ioffset %s\n",migliaia(initialoffset));
+				myprintf("02212: Ioffset %s\n",migliaia(initialoffset));
 
 			sscanf(initialzpaqcrc32.c_str(),"%X",&totalcrc32);
 
@@ -72024,7 +72638,7 @@ int Jidac::add()
 				if (initialoffset==0) /// FIRST run
 				{
 					if (flagdebug2)
-						myprintf("62881: [1] NOPWD, first run  initial offset %s from %08X\n",migliaia(initialoffset),totalcrc32);
+						myprintf("02213: [1] NOPWD, first run  initial offset %s from %08X\n",migliaia(initialoffset),totalcrc32);
 					totalcrc32=crc32_combine(totalcrc32,g_crc_jidac,		initialoffset+104);
 					totalcrc32=crc32_combine(totalcrc32,g_crc_body,			initialoffset+finalfile-104);
 				}
@@ -72032,8 +72646,8 @@ int Jidac::add()
 				{
 					if (flagdebug2)
 					{
-						myprintf("62940: [2] NOPWD, other run initial offset %s from %08X\n",migliaia(initialoffset),totalcrc32);
-						myprintf("62938: t5 (g_header_pos>32) %s %08X con terzaparte %s\n",migliaia(g_header_pos),totalcrc32,migliaia(terzaparte));
+						myprintf("02214: [2] NOPWD, other run initial offset %s from %08X\n",migliaia(initialoffset),totalcrc32);
+						myprintf("02215: t5 (g_header_pos>32) %s %08X con terzaparte %s\n",migliaia(g_header_pos),totalcrc32,migliaia(terzaparte));
 					}
 					totalcrc32=crc32_combine(totalcrc32,g_crc_jidac,	104);
 					totalcrc32=crc32_combine(totalcrc32,g_crc_body,		terzaparte);
@@ -72045,7 +72659,7 @@ int Jidac::add()
 				{
 			/// multipart, not part 0
 					if (flagdebug2)
-						myprintf("62890: combine 2 (multipart, not 0) initial offset %s from %08X\n",migliaia(initialoffset),totalcrc32);
+						myprintf("02216: combine 2 (multipart, not 0) initial offset %s from %08X\n",migliaia(initialoffset),totalcrc32);
 
 					totalcrc32=crc32_combine(totalcrc32,g_crc_jidac,	initialoffset+104);
 					totalcrc32=crc32_combine(totalcrc32,g_crc_body,		initialoffset+finalfile-104);
@@ -72054,19 +72668,19 @@ int Jidac::add()
 				{
 			/// multipart first part, or no multipart
 					if (flagdebug2)
-						myprintf("62898: combine 3 (multipart1 | nomultipart) initialoffset %s from %08X\n",migliaia(initialoffset),totalcrc32);
+						myprintf("02217: combine 3 (multipart1 | nomultipart) initialoffset %s from %08X\n",migliaia(initialoffset),totalcrc32);
 
 					if (g_header_pos>32)
 					{
 						if (flagdebug2)
-							myprintf("62914: t1 (g_header_pos>32) %s %08X con terzaparte %s\n",migliaia(g_header_pos),totalcrc32,migliaia(terzaparte));
+							myprintf("02218: t1 (g_header_pos>32) %s %08X con terzaparte %s\n",migliaia(g_header_pos),totalcrc32,migliaia(terzaparte));
 						totalcrc32=crc32_combine(totalcrc32,g_crc_jidac,	104);
 						totalcrc32=crc32_combine(totalcrc32,g_crc_body,		terzaparte);
 					}
 					else
 					{
 						if (flagdebug2)
-							myprintf("62920: t2 (g_header_pos<32) %s %08X\n",migliaia(g_header_pos),totalcrc32);
+							myprintf("02219: t2 (g_header_pos<32) %s %08X\n",migliaia(g_header_pos),totalcrc32);
 						totalcrc32=crc32_combine(totalcrc32,g_crc_header,	initialoffset+32);
 						totalcrc32=crc32_combine(totalcrc32,g_crc_jidac,	initialoffset+104);
 						totalcrc32=crc32_combine(totalcrc32,g_crc_body,		initialoffset+finalfile-(32+104));
@@ -72077,7 +72691,7 @@ int Jidac::add()
 			snprintf(temp,sizeof(temp),"%08X",totalcrc32);
 			string scrc32post=temp;
 			if (flagverbose)
-				myprintf("62655: CRC-32 EXPECTED %s\n",scrc32post.c_str());
+				myprintf("02220: CRC-32 EXPECTED %s\n",scrc32post.c_str());
 
 			string scrc32indexpost="";
 
@@ -72085,16 +72699,16 @@ int Jidac::add()
 			{
 				franz_do_hash dummy("CRC-32");
 				if (flagdebug2)
-					myprintf("64022: filehash on %s\n",g_archive.c_str());
+					myprintf("02221: filehash on %s\n",g_archive.c_str());
 
 				string hashreloaded=dummy.filehash(g_archive,false,0,finalfile);
-				myprintf("62659: CRC-32 FROM FS  %s %s\n",hashreloaded.c_str(),g_archive.c_str());
+				myprintf("02222: CRC-32 FROM FS  %s %s\n",hashreloaded.c_str(),g_archive.c_str());
 				if (stringtoupper(hashreloaded)==stringtoupper(scrc32post))
-					myprintf("62943: CRC-32 MATCH, THIS IS GOOD!\n");
+					myprintf("02223: CRC-32 MATCH, THIS IS GOOD!\n");
 				else
 				{
 					myprintf("\n");
-					myprintf("62946: CRC-32 DOES NOT MATCH *** THIS IS BAD ***\n\n");
+					myprintf("02224: CRC-32 DOES NOT MATCH *** THIS IS BAD ***\n\n");
 				}
 			}
 
@@ -72103,36 +72717,36 @@ int Jidac::add()
 				if (flagdebug2)
 				{
 					printbar('=');
-					myprintf("63454: indexprezpaqcrc32 %s\n",indexinitialzpaqcrc32.c_str());
-					myprintf("63467: indexprezpaqsize  %s\n",migliaia(indexprezpaqsize));
+					myprintf("02225: indexprezpaqcrc32 %s\n",indexinitialzpaqcrc32.c_str());
+					myprintf("02226: indexprezpaqsize  %s\n",migliaia(indexprezpaqsize));
 				}
 
 				uint32_t newcrc32index=0;
 				sscanf(indexinitialzpaqcrc32.c_str(),"%x",&newcrc32index);
 
 				if (flagdebug2)
-					myprintf("63472: newcrc32index so far %08X\n",newcrc32index);
+					myprintf("02227: newcrc32index so far %08X\n",newcrc32index);
 
 				g_crc32_index=crc32_combine(newcrc32index,g_crc32_index,prendidimensionefile(g_indexname.c_str())-indexprezpaqsize);
 
 				snprintf(temp,sizeof(temp),"%08X",g_crc32_index);
 				scrc32indexpost=temp;
-				myprintf("63240: INDEX CRC-32 EXPECTED %s\n",scrc32indexpost.c_str());
+				myprintf("02228: INDEX CRC-32 EXPECTED %s\n",scrc32indexpost.c_str());
 
 				if (flagverify)
 				{
 					franz_do_hash dummy("CRC-32");
 					if (flagdebug2)
-						myprintf("64056: filehash on %s\n",g_indexname.c_str());
+						myprintf("02229: filehash on %s\n",g_indexname.c_str());
 
 					string hashreloaded=dummy.filehash(g_indexname,false,0,finalfile);
-					myprintf("63261: INDEX CRC-32 FROM FS  %s %s\n",hashreloaded.c_str(),g_indexname.c_str());
+					myprintf("02230: INDEX CRC-32 FROM FS  %s %s\n",hashreloaded.c_str(),g_indexname.c_str());
 					if (stringtoupper(hashreloaded)==stringtoupper(scrc32indexpost))
-						myprintf("63265: INDEX CRC-32 MATCH, THIS IS GOOD!\n");
+						myprintf("02231: INDEX CRC-32 MATCH, THIS IS GOOD!\n");
 					else
 					{
 						myprintf("\n");
-						myprintf("63268: INDEX CRC-32 DOES NOT MATCH *** THIS IS BAD ***\n\n");
+						myprintf("02232: INDEX CRC-32 DOES NOT MATCH *** THIS IS BAD ***\n\n");
 					}
 				}
 			}
@@ -72140,18 +72754,17 @@ int Jidac::add()
 			int64_t startverify		=mtime();
 			franz_do_hash dummyquick("QUICK");
 			if (flagdebug3)
-				myprintf("64069: filehash on %s\n",g_archive.c_str());
+				myprintf("02233: filehash on %s\n",g_archive.c_str());
 
 			string quickhash=dummyquick.filehash(g_archive,false,startverify,finalfile);
 			if (quickhash=="")
 			{
-				myprintf("62683: quick hash empty!\n");
+				myprintf("02234! quick hash empty!\n");
 				return 2;
 			}
 
-			myprintf("62682: Updating fasttxt       ");
-			printUTF8(fasttxt.c_str());
-
+			myprintf("02235: Updating fasttxt       %Z",fasttxt.c_str());
+			
 			if (!writedatainfasttxt(fasttxt,g_archive,scrc32post,quickhash,
 			initialzpaqcrc32,dimensione_garchive,initialzpaqsize))
 			{
@@ -72163,17 +72776,16 @@ int Jidac::add()
 
 			if (g_indexname!="")
 			{
-				myprintf("63490: Updating INDEX fasttxt ");
-				printUTF8(indexfasttxt.c_str());
-
+				myprintf("02236: Updating INDEX fasttxt %Z",indexfasttxt.c_str());
+				
 				franz_do_hash dummyquick("QUICK");
 				if (flagdebug3)
-					myprintf("64096: filehash on %s\n",g_indexname.c_str());
+					myprintf("02237: filehash on %s\n",g_indexname.c_str());
 
 				string quickhash=dummyquick.filehash(g_indexname,false,startverify,finalfile);
 				if (quickhash=="")
 				{
-					myprintf("63499: quick hash empty!\n");
+					myprintf("02238! quick hash empty!\n");
 					return 2;
 				}
 
@@ -72205,8 +72817,8 @@ int Jidac::add()
 			{
 				int64_t totallevel4=0;
 				vector<DTMap::iterator> filelist;
-				myprintf("62925: Average redundancy [0..255]. 0='random', 255='very compressible'\n");
-				myprintf("62926: Note: mixed case blocks can occour, size is just an extimate'\n");
+				myprintf("02239: Average redundancy [0..255]. 0='random', 255='very compressible'\n");
+				myprintf("02240: Note: mixed case blocks can occour, size is just an extimate'\n");
 				for (unsigned i=0;i<vf.size();i++)
 					if (vf[i]->second.is4)
 					{
@@ -72221,11 +72833,11 @@ int Jidac::add()
 						if (filelist[i]->second.red_count!=0)
 							avg=(filelist[i]->second.red_total/filelist[i]->second.red_count);
 						if (flagdebug)
-							myprintf("62891: red %12s # %12s avg %03d %s\n",migliaia(filelist[i]->second.red_total),migliaia2(filelist[i]->second.red_count),avg,filelist[i]->first.c_str());
+							myprintf("02241: red %12s # %12s avg %03d %s\n",migliaia(filelist[i]->second.red_total),migliaia2(filelist[i]->second.red_count),avg,filelist[i]->first.c_str());
 						else
-							myprintf("62891: %03d [%03d...%03d]/%6s %10s of %10s %s\n",avg,filelist[i]->second.red_min,filelist[i]->second.red_max,migliaia(filelist[i]->second.red_count),tohuman2(filelist[i]->second.red_candidate),tohuman(filelist[i]->second.size),filelist[i]->first.c_str());
+							myprintf("02242: %03d [%03d...%03d]/%6s %10s of %10s %s\n",avg,filelist[i]->second.red_min,filelist[i]->second.red_max,migliaia(filelist[i]->second.red_count),tohuman2(filelist[i]->second.red_candidate),tohuman(filelist[i]->second.size),filelist[i]->first.c_str());
 					}
-				myprintf("62910: Total red line %s total => level 4 %s\n",migliaia(quanti4),tohuman(totallevel4));
+				myprintf("02243: Total red line %s total => level 4 %s\n",migliaia(quanti4),tohuman(totallevel4));
 			}
 		}
 	*/
@@ -72236,12 +72848,12 @@ int Jidac::add()
 		string 	destroy_base	=x_one("zfs destroy "	+g_basesnapshot,"59870: Destroy base snapshot (if any)");
 		if (flagdebug2)
 		{
-			myprintf("63143: %s\n",destroy_diff2.c_str());
-			myprintf("63144: %s\n",destroy_base.c_str());
+			myprintf("02244: %s\n",destroy_diff2.c_str());
+			myprintf("02245: %s\n",destroy_base.c_str());
 		}
 		string 	take_base		=x_one("zfs snapshot "	+g_basesnapshot,"Taking base snapshot");
 		if (flagdebug2)
-			myprintf("63148: %s\n",take_base.c_str());
+			myprintf("02246: %s\n",take_base.c_str());
 	}
 #endif
 #ifdef _WIN32
@@ -72256,31 +72868,27 @@ int Jidac::add()
 		int	work_removed	=0;
 		for (DTMap::const_iterator p=edt.begin(); p!=edt.end(); ++p)
 		{
-			///myprintf("68222: filework %d %s\n",p->second.filework,p->first.c_str());
+			///myprintf("02247: filework %d %s\n",p->second.filework,p->first.c_str());
 			if (p->second.filework==WORK_ADDED)
 			{
-				myprintf("68223: + %08d ",++work_added);
-				printUTF8(p->first.c_str());
-				myprintf("\n");
+				myprintf("02248: + %08d %Z\n",++work_added,p->first.c_str());
+				
 			}
 		}
 		for (DTMap::const_iterator p=edt.begin(); p!=edt.end(); ++p)
 			if (p->second.filework==WORK_UPDATED)
 			{
-				myprintf("68231: # %08d ",++work_updated);
-				printUTF8(p->first.c_str());
-				myprintf("\n");
+				myprintf("02249: # %08d %Z\n",++work_updated,p->first.c_str());
 			}
 		for (DTMap::const_iterator p=dt.begin(); p!=dt.end(); ++p)
 			if (p->second.filework==WORK_REMOVED)
 			{
-				myprintf("68221: - %08d ",++work_removed);
-				printUTF8(p->first.c_str());
-				myprintf("\n");
+				myprintf("02250: - %08d %Z\n",++work_removed,p->first.c_str());
+				
 			}
 	}
 
-	string temp="67504: Files ";
+	string temp="";
 	string temp2="";
 	if (files_added>0)
 	{
@@ -72298,7 +72906,7 @@ int Jidac::add()
 		temp+=" removed -"+temp2;
 	}
 	if (files_added+files_updated+removed>0)
-		myprintf("%s\n",temp.c_str());
+		myprintf("02251: Files%s\n",temp.c_str());
 	
 	return errors;
 }
@@ -72308,18 +72916,18 @@ bool Jidac::fill_ads(string i_filename,int64_t i_startiblock)
 {
 	if (check_if_password(i_filename))
 	{
-		myprintf("66395: SORRY, cannot do fill_ads on encrypted archive\n");
+		myprintf("02252: SORRY, cannot do fill_ads on encrypted archive\n");
 		return false;
 	}
 	
 	if (flagverbose)
-		myprintf("61789: ADS: jump to index @ %s\n",migliaia(i_startiblock));
+		myprintf("02253: ADS: jump to index @ %s\n",migliaia(i_startiblock));
 	int64_t startingads=mtime();
 	read_archive2(i_startiblock,i_filename);
 	
 	if (g_password!=NULL)
 	{
-		myprintf("63808: **** ADS list does not work with encrypted archives ****\n");
+		myprintf("02254: **** ADS list does not work with encrypted archives ****\n");
 		return false;
 	}
 	
@@ -72338,14 +72946,14 @@ bool Jidac::fill_ads(string i_filename,int64_t i_startiblock)
 		char* const cmpBuf = (char*) malloc(cmpBufBytes);
 		if (cmpBuf==NULL)
 		{
-			myprintf("63841: GURU malloc cmpBuf\n");
+			myprintf("02255: GURU malloc cmpBuf\n");
 			seppuku();
 			return 0;
 		}
 		char* const inpBuf = (char*) malloc(ringBufferBytes);
 		if (inpBuf==NULL)
 		{
-			myprintf("63848: GURU malloc inpBuf\n");
+			myprintf("02256: GURU malloc inpBuf\n");
 			seppuku();
 			return 0;
 		}
@@ -72367,12 +72975,12 @@ bool Jidac::fill_ads(string i_filename,int64_t i_startiblock)
 				int inpBytes = 0;
 				sprintf(inpPtr,"%s",temp.c_str());
 				if (flagdebug2)
-					myprintf("65733: ready to compress\n");
+					myprintf("02257: ready to compress\n");
 				inpBytes = (int) strlen(inpPtr);
 				const int cmpBytes = LZ4_compress_fast_continue(lz4Stream, inpPtr, cmpBuf, inpBytes, (int) cmpBufBytes, 1);
 				if (cmpBytes <= 0)
 				{
-					myprintf("65742: guru on cmpbytes\n");
+					myprintf("02258! guru on cmpbytes\n");
 					seppuku();
 					return 2;
 				}
@@ -72415,7 +73023,7 @@ bool Jidac::fill_ads(string i_filename,int64_t i_startiblock)
 		const int cmpBytes = LZ4_compress_fast_continue(lz4Stream, inpPtr, cmpBuf, inpBytes, (int) cmpBufBytes, 1);
 		if (cmpBytes<=0)
 		{
-			myprintf("65786: guru on cmpbytes\n");
+			myprintf("02259! guru on cmpbytes\n");
 			return 2;
 		}
 		theads.write_uint16((uint16_t)cmpBytes);
@@ -72427,11 +73035,11 @@ bool Jidac::fill_ads(string i_filename,int64_t i_startiblock)
 		free(inpBuf);
 		free(cmpBuf);
 		LZ4_freeStream(lz4Stream);
-		myprintf("65795: ADS: done %s => %s bytes in %s ticks\n",migliaia3(listsize),migliaia(theads.size()),migliaia2(mtime()-startingads));
+		myprintf("02260: ADS: done %s => %s bytes in %s ticks\n",migliaia3(listsize),migliaia(theads.size()),migliaia2(mtime()-startingads));
 		return true;
 	}
 	else
-		myprintf("63929: ADS: cannot update. Maybe not a NTFS media?\n");
+		myprintf("02261: ADS: cannot update. Maybe not a NTFS media?\n");
 	
 	return false;
 }
@@ -72463,38 +73071,6 @@ char zsfx_mime64[]=
 string zsfx_hash="ERRORE";
 #endif
 
-bool	readfiletoarray(string i_filename,vector<string>& o_lines)
-{
-	o_lines.clear();
-	if (!fileexists(i_filename))
-	{
-		myprintf("85073: cannot find ");
-		printUTF8(i_filename.c_str());
-		myprintf("\n");
-		return false;
-	}
-	FILE* myfile = freadopen(i_filename.c_str());
-	if (myfile==NULL)
-	{
-		myprintf("85083: cannot open file ");
-		printUTF8(i_filename.c_str());
-		myprintf("\n");
-		return false;
-	}
-	char 	line[65536];
-	string 	linea;
-	while (fgets(line, sizeof(line), myfile))
-	{
-		linea=line;
-		if (flagdebug3)
-			myprintf("85102: line %s\n",linea.c_str());
-		myreplaceall(linea,std::string(1,10),"");
-		myreplaceall(linea,std::string(1,13),"");
-		o_lines.push_back(linea);
-	}
-	fclose(myfile);
-	return true;
-}
 
 void poke_octal(string& i_thestring)
 {
@@ -72514,7 +73090,7 @@ void poke_octal(string& i_thestring)
 					esc_valore=esc_valore*8+(i_thestring[posizionebarra]-'0');
 					posizionebarra++;
 				}		
-///			myprintf("64819: Escvalore %02X  |%s|\n",esc_valore,numerino.c_str());
+///			myprintf("02262: Escvalore %02X  |%s|\n",esc_valore,numerino.c_str());
 			string codificato="0";
 			codificato[0]=esc_valore;
 			myreplaceall(i_thestring,numerino,codificato);
@@ -72535,18 +73111,18 @@ zfs diff -F
 */
 	if (i_filediff=="")
 	{
-		myprintf("63097: Warning: filediff empty\n");
+		myprintf("02263: Warning: filediff empty\n");
 		return 0;
 	}
 	if (!fileexists(i_filediff))
 	{
-		myprintf("63102: Warning: filediff does not exists %s\n",i_filediff.c_str());
+		myprintf("02264: Warning: filediff does not exists %s\n",i_filediff.c_str());
 		return 0;
 	}
 	vector<string> diffz;
 	readfiletoarray(i_filediff,diffz);
 	if (flagverbose)
-		myprintf("63108: zfsdiff lines  %s\n",migliaia(diffz.size()));
+		myprintf("02265: zfsdiff lines  %s\n",migliaia(diffz.size()));
 	for (unsigned int i=0;i<diffz.size();i++)
 	{
 		///R	/	/tank/d/documenti/ANNA/betzov-generali\040-\040RO -> /tank/d/documenti/ANNA/betzov-generali\040-\0403\040GIUGNO\040DEP\040FOGLIO\040PC\040E\040RICHIESTA\040TERMINI
@@ -72569,7 +73145,7 @@ zfs diff -F
 							{
 								string sthething=theline.substr(4,theline.size());
 								if (flagverbose)
-									myprintf("63123: MOD |%s|\n",sthething.c_str());
+									myprintf("02266: MOD |%s|\n",sthething.c_str());
 								o_added.push_back(sthething);
 							}
 							else
@@ -72577,7 +73153,7 @@ zfs diff -F
 							{
 								string sthething=theline.substr(4,theline.size());
 								if (flagverbose)
-									myprintf("63088: DEL |%s|\n",sthething.c_str());
+									myprintf("02267: DEL |%s|\n",sthething.c_str());
 								o_deleted.push_back(sthething);
 							}
 							else
@@ -72585,7 +73161,7 @@ zfs diff -F
 							{
 								string sthething=theline.substr(4,theline.size());
 								if (flagverbose)
-									myprintf("63087: ADD |%s|\n",sthething.c_str());
+									myprintf("02268: ADD |%s|\n",sthething.c_str());
 								o_added.push_back(sthething);
 							}
 							else
@@ -72594,7 +73170,7 @@ zfs diff -F
 								int divider=mypos(" -> ",theline);
 								if (divider==-1)
 								{
-									myprintf("63090: error in parsing -> on line %08d\n",i);
+									myprintf("02269: error in parsing -> on line %08d\n",i);
 								}
 								else
 								{
@@ -72603,51 +73179,52 @@ zfs diff -F
 									o_deleted.push_back(sfrom);
 									o_added.push_back(sto);
 									if (flagverbose)
-										myprintf("63032: REN sfrom |%s| |%s|\n",sfrom.c_str(),sto.c_str());
+										myprintf("02270: REN sfrom |%s| |%s|\n",sfrom.c_str(),sto.c_str());
 								}
 							}
 						}
 		}
 	}
 	if (flagverbose)
-		myprintf("63119: + %14s - %14s\n",migliaia(o_added.size()),migliaia2(o_deleted.size()));
+		myprintf("02271: + %14s - %14s\n",migliaia(o_added.size()),migliaia2(o_deleted.size()));
 	return o_added.size();
 }
 
+
 int Jidac::benchmark()
 {
-	bool iamintel=isjitable();
+bool iamintel=isjitable();
 	if (iamintel)
 	{
-		myprintf("68453: This seems Intel/AMD 'normal' CPU\n");
+		myprintf("02272: This seems Intel/AMD 'normal' CPU\n");
 #ifdef NOJIT
 		color_green();
-		myprintf("68457: You can try to compile WITHOUT -DNOJIT\n");
+		myprintf("02273: You can try to compile WITHOUT -DNOJIT\n");
 		color_restore();
 #endif
 	}
 	else
 	{
-		myprintf("68456: I am not sure this is Intel/AMD CPU (virtual? arm?)\n");
+		myprintf("02274: I am not sure this is Intel/AMD CPU (virtual? arm?)\n");
 #ifndef NOJIT
 		color_red();
-		myprintf("68467: WARNING: non Intel/AMD CPUs should be compiled with -DNOJIT\n");
+		myprintf("02275: WARNING: non Intel/AMD CPUs should be compiled with -DNOJIT\n");
 		color_restore();
 #endif
 	}
 	string myname=getuname();
-	myprintf("64991: uname %s\n",myname.c_str());
-	myprintf("64992: full exename seems <<%s>>\n",fullzpaqexename.c_str());
+	myprintf("02276: uname %s\n",myname.c_str());
+	myprintf("02277: full exename seems <<%s>>\n",fullzpaqexename.c_str());
 	int64_t myram=getramdisksize();
 	if (myram<0)
-		myprintf("64994: Cannot get free RAM\n");
+		myprintf("02278: Cannot get free RAM\n");
 	else
-		myprintf("64997: Free RAM seems %s\n",migliaia(myram));
+		myprintf("02279: Free RAM seems %s\n",migliaia(myram));
 #ifdef HWSHA2
 	if (ihavehw())
-		myprintf("65000: SHA1/2 seems supported by CPU\n");
+		myprintf("02280: SHA1/2 seems supported by CPU\n");
 	else
-		myprintf("65001: No SHA1/2 (try -debug)\n");
+		myprintf("02281: No SHA1/2 (try -debug)\n");
 #endif
 	vector<string> 	array_cpu;
 	vector<float> 	array_single;
@@ -72726,7 +73303,7 @@ int Jidac::benchmark()
 			timelimit=menoenne;
 		else
 		{
-			myprintf("65056: Time limit (-n    -limit) must be <1000\n");
+			myprintf("02282: Time limit (-n    -limit) must be <1000\n");
 			return 1;
 		}
 	}
@@ -72736,20 +73313,20 @@ int Jidac::benchmark()
 			chunksize=minsize/4;
 		else
 		{
-			myprintf("65072: Chunk (-minsize) must be <= 2000000000 (2 billion)\n");
+			myprintf("02283: Chunk (-minsize) must be <= 2000000000 (2 billion)\n");
 			return 1;
 		}
 	}
 	uint32_t *buffer32bit = (uint32_t*)franz_malloc(chunksize*sizeof(uint32_t));
 	if (buffer32bit==0)
 	{
-		myprintf("21202: GURU cannot alloc the buffer32bit\n");
+		myprintf("02284: GURU cannot alloc the buffer32bit\n");
 		return 1;
 	}
 	uint8_t *buffer8bit=(uint8_t*)franz_malloc(chunksize*sizeof(uint8_t));
 	if (buffer8bit==0)
 	{
-		myprintf("34608: GURU cannot alloc the buffer8bit\n");
+		myprintf("02285! GURU cannot alloc the buffer8bit\n");
 		franz_free(buffer32bit);
 		return 2;
 	}
@@ -72792,14 +73369,14 @@ int Jidac::benchmark()
 	explode(hashes,';',thehashes);
 	if (thehashes.size()==0)
 	{
-		myprintf("27144: strange hash selection\n");
+		myprintf("02286: strange hash selection\n");
 		franz_free(buffer32bit);
 		return 1;
 	}
 	if (all)
 		if ((thehashes.size()!=1) && (thehashes.size()!=13))
 		{
-			myprintf("65128: When benchmarking with -all (multithread), ONE algo or nothing (all)\n");
+			myprintf("02287: When benchmarking with -all (multithread), ONE algo or nothing (all)\n");
 			franz_free(buffer32bit);
 			return 1;
 		}
@@ -72807,17 +73384,17 @@ int Jidac::benchmark()
 	if (thehashes.size()==13)
 		if (flaghw)
 		{
-			myprintf("61522: HW disabled, because franzomips. Choose one to keep (ex -sha256)\n");
+			myprintf("02288: HW disabled, because franzomips. Choose one to keep (ex -sha256)\n");
 			flaghw=false;
 		}
 	vector<s_benchmark> 			vettorerisultati;
 	vector<tparametribenchmark> 	vettoreparametribenchmark; // pthread
-	myprintf("65148: Benchmarks: ");
+	myprintf("02289: Benchmarks: ");
 	for (unsigned int i=0;i<thehashes.size();i++)
 		myprintf("%s ",thehashes[i].c_str());
 	myprintf("\n");
-	myprintf("65152: Time limit %10d s  (-n X)\n",timelimit);
-	myprintf("65153: Chunks of  %12s  (-minsize Y)\n",tohuman(chunksize*4));
+	myprintf("02290: Time limit %10d s  (-n X)\n",timelimit);
+	myprintf("02291: Chunks of  %12s  (-minsize Y)\n",tohuman(chunksize*4));
 	myprintf("\n");
 	double			franzomips=0;
 	if (all)
@@ -72855,7 +73432,7 @@ int Jidac::benchmark()
 			rc 	= pthread_create(&threads[i], &attr, benchmark_thread, (void*)&vettoreparametribenchmark[i]);
 			if (rc)
 			{
-				myprintf("34117: Error creating thread\n");
+				myprintf("02292: Error creating thread\n");
 				exit(-1);
 			}
 		}
@@ -72884,7 +73461,7 @@ int Jidac::benchmark()
 			total_speed+=vettoreparametribenchmark[i].speed;
 			franzomips+=vettoreparametribenchmark[i].speed;
 		}
-		myprintf("65214: Total speed %s /s\n",tohuman((int64_t)total_speed));
+		myprintf("02293: Total speed %s /s\n",tohuman((int64_t)total_speed));
 		if (thehashes.size()==13)
 		{
 			franzomips/=1000000;
@@ -72919,9 +73496,9 @@ int Jidac::benchmark()
 		}
 		std::sort(vettorerisultati.begin(), vettorerisultati.end(), compare_s_benchmark);
 		myprintf("\n");
-		myprintf("65350: Results:\n\n");
+		myprintf("02294: Results:\n\n");
 		for (unsigned int i=0;i<vettorerisultati.size();i++)
-			myprintf("65352: %s\n",vettorerisultati[i].risultati.c_str());
+			myprintf("02295: %s\n",vettorerisultati[i].risultati.c_str());
 	}
 	franz_free(buffer32bit);
 	///sysctl hw.model hw.machine hw.ncpu
@@ -72929,9 +73506,9 @@ int Jidac::benchmark()
 	{
 		myprintf("\n");
 		if (all)
-			myprintf("65359: franzomips multi thread index %s ",migliaia((int64_t)(franzomips*7.0)));
+			myprintf("02296: franzomips multi thread index %s ",migliaia((int64_t)(franzomips*7.0)));
 		else
-			myprintf("64361: franzomips single thread index %s ",migliaia((int64_t)franzomips));
+			myprintf("02297: franzomips single thread index %s ",migliaia((int64_t)franzomips));
 		myprintf(" (quick CPU check, raw %s)\n",migliaia((int64_t)franzomips));
 		for (unsigned int i=0;i<array_cpu.size();i++)
 			if (all)
@@ -72950,18 +73527,18 @@ string	Jidac::get_lastfilename(string i_file,int64_t& o_totalfilesize)
 	o_totalfilesize=0;
 	if (i_file=="")
 	{
-		myprintf("60537: empty filename\n");
+		myprintf("02298: empty filename\n");
 		return "";
 	}
 	if (!isjolly(i_file))
 	{
-		myprintf("60542: no jolly (you must insert some kind of ? sequence)\n");
+		myprintf("02299: no jolly (you must insert some kind of ? sequence)\n");
 		return i_file;
 	}
 	if (flagdebug)
 	{
-		myprintf("60541: Jolly in archivefile!\n");
-		myprintf("62517: Searching for jolly archive(s) in <<%s>>\n",i_file.c_str());
+		myprintf("02300: Jolly in archivefile!\n");
+		myprintf("02301: Searching for jolly archive(s) in <<%s>>\n",i_file.c_str());
 	}
 
 	DTMap thedt;
@@ -72977,9 +73554,9 @@ string	Jidac::get_lastfilename(string i_file,int64_t& o_totalfilesize)
 
 	if (flagdebug3)
 	{
-		myprintf("62538: scan by   %s\n",onlypath.c_str());
-		myprintf("62539: filename  %s\n",i_file.c_str());
-		myprintf("62540: onlyname  %s\n",onlyname.c_str());
+		myprintf("02302: scan by   %s\n",onlypath.c_str());
+		myprintf("02303: filename  %s\n",i_file.c_str());
+		myprintf("02304: onlyname  %s\n",onlyname.c_str());
 	}
 	myscandir(0,thedt,onlypath,false,false);
 	if (!flagpakka)
@@ -72989,15 +73566,15 @@ string	Jidac::get_lastfilename(string i_file,int64_t& o_totalfilesize)
 	}
 
 	if (flagdebug2)
-		myprintf("62548: scanned %s\n",migliaia(thedt.size()));
+		myprintf("02305: scanned %s\n",migliaia(thedt.size()));
 
 	if (thedt.size()==0)
 	{
-		myprintf("60553: no archive => quit\n");
+		myprintf("02306: no archive => quit\n");
 		return "";
 	}
 	if (flagdebug3)
-		myprintf("60560: Founded %s files(s), sorting\n",migliaia(thedt.size()));
+		myprintf("02307: Founded %s files(s), sorting\n",migliaia(thedt.size()));
 
 	vector<string> filenamearray;
 	for (DTMap::iterator p=thedt.begin(); p!=thedt.end(); ++p)
@@ -73012,7 +73589,7 @@ string	Jidac::get_lastfilename(string i_file,int64_t& o_totalfilesize)
 	if (filenamearray.size()==0)
 	{
 		if (flagdebug)
-			myprintf("62602: No single match\n");
+			myprintf("02308: No single match\n");
 		return "";
 	}
 
@@ -73024,13 +73601,16 @@ string	Jidac::get_lastfilename(string i_file,int64_t& o_totalfilesize)
 	if (!fileexists(srisultato))
 	{
 		if (flagdebug)
-			myprintf("62598: srisultato does not exits |%s|\n",srisultato.c_str());
+			myprintf("02309: srisultato does not exits |%s|\n",srisultato.c_str());
 		return "";
 	}
 	return srisultato;
 }
 int Jidac::summa()
 {
+	if (flaghome)
+		return sumhome();
+
 	if (orderby!="")
 		flagnosort=true;
 	
@@ -73041,14 +73621,14 @@ int Jidac::summa()
 	if (flaghashdeep)
 		if (g_output=="")
 		{
-			myprintf("57323: with -hashdeep you need an output file -out something.txt\n");
+			myprintf("02310! with -hashdeep you need an output file -out something.txt\n");
 			return 2;
 		}
 	if (checktxt!="")
 	{
 		if (files.size()!=1)
 		{
-			myprintf("37871: You need exactly ONE file to be checked\n");
+			myprintf("02311! You need exactly ONE file to be checked\n");
 			return 2;
 		}
 		string thelastzpaq=files[0];
@@ -73056,12 +73636,12 @@ int Jidac::summa()
 		{
 			int64_t dummysize;
 			thelastzpaq=get_lastfilename(files[0],dummysize);
-			myprintf("60648: the lastzpaq |%s|\n",thelastzpaq.c_str());
+			myprintf("02312: the lastzpaq |%s|\n",thelastzpaq.c_str());
 		}
 
 		if (!fileexists(files[0]))
 		{
-			myprintf("37876: Abort, the first file does not exists\n",checktxt.c_str());
+			myprintf("02313! Abort, the first file does not exists\n",checktxt.c_str());
 			return 2;
 		}
 		if (flagchecktxt)
@@ -73075,27 +73655,27 @@ int Jidac::summa()
 		{
 			int64_t dummysize;
 			checktxt=get_lastfilename(checktxt,dummysize);
-			myprintf("60672: The lasttxt |%s|\n",checktxt.c_str());
+			myprintf("02314: The lasttxt |%s|\n",checktxt.c_str());
 		}
 
 		if (!fileexists(checktxt))
 		{
-			myprintf("37871: Abort, -checktxt %s does not exists\n",checktxt.c_str());
+			myprintf("02315! Abort, -checktxt %s does not exists\n",checktxt.c_str());
 			return 2;
 		}
-		myprintf("65411: Checking MD5 (because of -checktxt) on %s\n",checktxt.c_str());
+		myprintf("02316: Checking MD5 (because of -checktxt) on %s\n",checktxt.c_str());
 
 		int64_t	dimensionefile=prendidimensionefile(checktxt.c_str());
 		char linebuffer[1000];
 		if ((uint64_t)dimensionefile>sizeof(linebuffer))
 		{
-			myprintf("37878: The -checktxt file seems way too big %s\n",migliaia(dimensionefile));
+			myprintf("02317! The -checktxt file seems way too big %s\n",migliaia(dimensionefile));
 			return 2;
 		}
 
 		if (dimensionefile<64)
 		{
-			myprintf("37884: The -checktxt file seems too small %s\n",migliaia(dimensionefile));
+			myprintf("02318! The -checktxt file seems too small %s\n",migliaia(dimensionefile));
 			return 2;
 		}
 
@@ -73108,13 +73688,13 @@ int Jidac::summa()
 		int err=1;
 #endif
 			myprintf("\n");
-			myprintf("37885: ERR <%s> kind %s\n",checktxt.c_str(),migliaia((int64_t)err));
+			myprintf("02319! ERR <%s> kind %s\n",checktxt.c_str(),migliaia((int64_t)err));
 			return 2;
 		}
 		const int letti=fread(linebuffer,1,sizeof(linebuffer),inFile);
 		fclose(inFile);
 		if (flagdebug3)
-			myprintf("37914: Readed %d\n",letti);
+			myprintf("02320: Readed %d\n",letti);
 		string hashletto="";
 		int i=0;
 
@@ -73125,7 +73705,7 @@ int Jidac::summa()
 			else
 				break;
 		}
-		myprintf("65453: MD5 hash from checktxt |%s| ",hashletto.c_str());
+		myprintf("02321: MD5 hash from checktxt |%s| ",hashletto.c_str());
 
 		string nomefile="";
 		for (int j=i+1;j<letti;j++)
@@ -73144,28 +73724,22 @@ int Jidac::summa()
 		g_dimensione		=0;
 		franz_do_hash dummy("MD5");
 		if (flagdebug3)
-			myprintf("64742: filehash on %s\n",thelastzpaq.c_str());
+			myprintf("02322: filehash on %s\n",thelastzpaq.c_str());
 
 		string hashreloaded=dummy.filehash(thelastzpaq,false,startverify,larghezzain);
 
-		myprintf("65476: MD5 recalculated       |%s| ",hashreloaded.c_str());
-		printUTF8(thelastzpaq.c_str());
-		myprintf("\n");
-
+		myprintf("02323: MD5 recalculated       |%s| %Z\n",hashreloaded.c_str(),thelastzpaq.c_str());
+		
 
 		string temp=nomefile;
 		myreplace(temp,"_md5.txt","");
 		string solonomehash=stringtolower(prendinomefileebasta(temp));
 		string solonomefile=stringtolower(prendinomefileebasta(thelastzpaq));
 
-		myprintf("65486: Filename in checktxt   |");
-		printUTF8(solonomehash.c_str());
-		myprintf("|\n");
+		myprintf("02324: Filename in checktxt   |%Z|\n",solonomehash.c_str());
+		
 
-
-		myprintf("65491: Filename to test       |");
-		printUTF8(solonomefile.c_str());
-		myprintf("|\n");
+		myprintf("02325: Filename to test       |%Z|\n",solonomefile.c_str());
 		printbar('-');
 
 		hashreloaded=stringtolower(hashreloaded);
@@ -73173,19 +73747,19 @@ int Jidac::summa()
 
 		if ((hashreloaded=="") || (hashreloaded!=hashletto))
 		{
-			myprintf("65501: ****  ERROR: FILE DOES NOT MATCH WITH THE CHECKSUM  ****\n");
-			myprintf("65502: ****               THIS IS VERY BAD                 ****\n");
+			myprintf("02326! ****  ERROR: FILE DOES NOT MATCH WITH THE CHECKSUM  ****\n");
+			myprintf("02327! ****               THIS IS VERY BAD                 ****\n");
 			myprintf("\n\n");
 			return 2;
 		}
-		myprintf("65506: MD5 matched\n");
+		myprintf("02328: MD5 matched\n");
 
 		return 0;
 	}
 
 	if ((!flagpakka) && (!flaghashdeep))
 	{
-		myprintf("65513: Getting %s",g_thechosenhash_str.c_str());
+		myprintf("02329: Getting %s",g_thechosenhash_str.c_str());
 		if (flagmm)
 			myprintf(" WITH MEMORY MAPPED FILES ");
 		if (!flagforcezfs)
@@ -73220,7 +73794,7 @@ int Jidac::summa()
 			hashdeepalgo="whirlpool";
 		else
 		{
-			myprintf("57440: hashdeep algos MUST be md5 | sha1 | sha256 | whirlpool\n");
+			myprintf("02330! hashdeep algos MUST be md5 | sha1 | sha256 | whirlpool\n");
 			return 2;
 		}
 		flagnoeta=true;
@@ -73233,9 +73807,7 @@ int Jidac::summa()
 
 		for (unsigned int i=0;i<files.size();i++)
 		{
-			myprintf("## files %08d ",i);
-			printUTF8(files[i].c_str());
-			myprintf("\n");
+			myprintf("## files %08d %Z\n",i,files[i].c_str());
 		}
 		myprintf("##\n");
 	}
@@ -73252,141 +73824,20 @@ int Jidac::summa()
 	g_dimensione=0;
 	g_worked=0;
 	vector<string> mydirs;
-	if (flagchecksum)
-	{
-		myprintf("65582: Getting cumulative 1-level SHA256\n");
-		if (files.size()!=1)
-		{
-			myprintf("65585: Error: with -checksum exactly one directory can be searched\n");
-			return 1;
-		}
-		int64_t startscan=mtime();
-		scandir(false,edt,files[0].c_str(),false);
-		for (DTMap::iterator p=edt.begin(); p!=edt.end(); ++p)
-			if (p->first != files[0])
-			{
-			if (isdirectory(p->first))
-				mydirs.push_back(p->first);
-			else
-				myfiles.push_back(p->first);
-			}
-		int64_t scantime=mtime()-startscan;
-		if (myfiles.size()+mydirs.size()==0)
-		{
-			myprintf("65601: Nothing to do\n");
-			return 0;
-		}
-		libzpaq::SHA256 sha256;
-		libzpaq::SHA256 globalesha256;
-		std::vector<s_stringpair> vec;
-		uint64_t hashtime=0;
-		uint64_t printtime=0;
-		uint64_t total_size=0;
-		g_dimensione=0;
 
-		for (unsigned int i=0;i<mydirs.size();i++)
-		{
-			if (!flagnoeta)
-				myprintf("65608: Scanning %s\r",mydirs[i].c_str());
-			edt.clear();
-			startscan=mtime();
-			scandir(true,edt,mydirs[i].c_str(),true);
-			scantime+=mtime()-startscan;
-			vec.clear();
-			for (DTMap::iterator p=edt.begin(); p!=edt.end(); ++p)
-				if (!isdirectory(p->first))
-				{
-					startscan=mtime();
-					s_stringpair mypair;
-					mypair.first="dummy";
-					if (flagdebug3)
-						myprintf("60046: franz_do_hash\n");
-
-					franz_do_hash dummy(g_thechosenhash);
-					if (flagdebug)
-						myprintf("64901: filehash on %s\n",p->first.c_str());
-
-					mypair.second=dummy.filehash(p->first.c_str(),false,-1,-1);
-					vec.push_back(mypair);
-					///vec.push_back(make_pair("dummy",hash_calc_file(flag2algo(),p->first.c_str(),false,dummycrc,-1,-1,g_dimensione)));
-					total_size+=p->second.size;
-					hashtime+=mtime()-startscan;
-				}
-			std::sort(vec.begin(), vec.end(),pairsortbyval);
-			for (unsigned int j=0;j<vec.size();j++)
-				for (const char* p=vec[j].second.c_str(); *p; ++p)
-				{
-					sha256.put(*p);
-					globalesha256.put(*p);
-				}
-			int64_t startprint=mtime();
-			char sha256result[32];
-			memcpy(sha256result, sha256.result(), 32);
-			myprintf("65650: MAGIC_%s: ",g_thechosenhash_str.c_str());
-			for (int j=0; j <= 31; j++)
-				myprintf("%02X", (unsigned char)sha256result[j]);
-			myprintf(" ");
-			string directorypurgata=mydirs[i];
-			myreplace(directorypurgata,files[0],"");
-			printUTF8(directorypurgata.c_str());
-			myprintf("\n");
-			printtime+=mtime()-startprint;
-		}
-		vec.clear();
-		startscan=mtime();
-		for (unsigned int i=0;i<myfiles.size();i++)
-		{
-			s_stringpair mypair;
-			mypair.first="dummy";
-			if (flagdebug3)
-				myprintf("60082: franz_do_hash\n");
-
-			franz_do_hash dummy(g_thechosenhash);
-			if (flagdebug3)
-				myprintf("64939: filehash on %s\n",myfiles[i].c_str());
-
-			mypair.second=dummy.filehash(myfiles[i],false,-1,-1);
-			vec.push_back(mypair);
-		}
-		hashtime+=mtime()-startscan;
-		std::sort(vec.begin(), vec.end(),pairsortbyval);
-		for (unsigned int j=0;j<vec.size();j++)
-			for (const char* p=vec[j].second.c_str(); *p; ++p)
-					globalesha256.put(*p);
-		scantime=mtime();
-		char sha256result[32];
-		memcpy(sha256result, globalesha256.result(), 32);
-		myprintf("\n");
-		myprintf("65779: GLOBAL_MAGIC_%s: ",g_thechosenhash_str.c_str());
-		for (int j=0; j <= 31; j++)
-			myprintf("%02X:", (unsigned char)sha256result[j]);
-		myprintf("\n");
-		printtime+=mtime()-scantime;
-		if (!flagnoeta)
-			{
-				myprintf("65690: Algo %s\n",g_thechosenhash_str.c_str());
-				myprintf("65691: Scanning filesystem time  %f s\n",scantime/1000.0);
-				myprintf("65692: Data transfer+CPU   time  %f s\n",hashtime/1000.0);
-				myprintf("65693: Data output         time  %f s\n",printtime/1000.0);
-				myprintf("65694: Total size  %19s (%10s)\n",migliaia(total_size),tohuman(total_size));
-				int64_t myspeed=(int64_t)(total_size*1000.0/(hashtime));
-				myprintf("65689: Worked on %s bytes avg speed (hashtime) %s B/s\n",migliaia(total_size),migliaia2(myspeed));
-			}
-		return 0;
-	}
 	for (unsigned i=0; i<files.size(); ++i)
 	{
-	///	myprintf("67340: files %03d %s\n",i,files[i].c_str());
+	///	myprintf("02331: files %03d %s\n",i,files[i].c_str());
 		scandir(true,edt,files[i].c_str());
 	}
 	
 
-	///myprintf("67341: edt size %s\n",migliaia(edt.size()));
+	///myprintf("02332: edt size %s\n",migliaia(edt.size()));
 	if (flagverify)
 	{
 //	deduplication: I am very lazy, so do a lot of copy
 		myprintf("\n");
-		myprintf("65801: *** Searching for duplicates with %s minsize %s ***\n",g_thechosenhash_str.c_str(),migliaia(minsize));
+		myprintf("02333: *** Searching for duplicates with %s minsize %s ***\n",g_thechosenhash_str.c_str(),migliaia(minsize));
 // get size and name
 		std::vector<s_pair_intstring> filestobepurged;
 		for (DTMap::iterator p=edt.begin(); p!=edt.end(); ++p)
@@ -73465,7 +73916,7 @@ int Jidac::summa()
 	}
 	if (myfiles.size()==0)
 	{
-		myprintf("65785: Nothing to do\n");
+		myprintf("02334: Nothing to do\n");
 		return 0;
 	}
 	vector<string> myhash;
@@ -73483,14 +73934,14 @@ int Jidac::summa()
 		{
 			if (flagverbose)
 			{
-				myprintf("50108: Sorting output  (orderby |%s|) ",orderby.c_str());
+				myprintf("02335: Sorting output  (orderby |%s|) ",orderby.c_str());
 				if (flagdesc)
 					myprintf(" descending");
 				myprintf("\n");
 			}
 			if (flagdebug3)
 				for (unsigned int i=0;i<myfiles.size();i++)
-					myprintf("67985: PRE  %s\n",myfiles[i].c_str());
+					myprintf("02336: PRE  %s\n",myfiles[i].c_str());
 			vector<DTMap::iterator> filelist;
 			for (unsigned int i=0;i<myfiles.size();i++)
 				filelist.push_back(edt.find(myfiles[i]));
@@ -73500,7 +73951,7 @@ int Jidac::summa()
 				myfiles.push_back(filelist[i]->first);
 			if (flagdebug3)
 				for (unsigned int i=0;i<myfiles.size();i++)
-					myprintf("67992: POST %s\n",myfiles[i].c_str());
+					myprintf("02337: POST %s\n",myfiles[i].c_str());
 		}
 
 
@@ -73510,20 +73961,20 @@ int Jidac::summa()
 		int64_t inizio		=mtime();
 		scantime=(inizio-startscan)/1000.0;
 		if (!flagnoeta)
-			myprintf("65803: No multithread: Found (%s) => %s bytes (%s) / %s files in %f\n",tohuman2(scannedsize),migliaia(total_size),tohuman(total_size),migliaia2(quantifiles),scantime);
+			myprintf("02338: No multithread: Found (%s) => %s bytes (%s) / %s files in %f\n",tohuman2(scannedsize),migliaia(total_size),tohuman(total_size),migliaia2(quantifiles),scantime);
 		if ((flagverbose) && (!flaghashdeep))
-			myprintf("65798: Total files %s\n",migliaia(myfiles.size()));
+			myprintf("02339: Total files %s\n",migliaia(myfiles.size()));
 		iniziohash=mtime();
 		g_dimensione=0;
 
 		for (unsigned int i=0;i<myfiles.size();i++)
 		{
 			if (flagdebug3)
-				myprintf("60224: franz_do_hash\n");
+				myprintf("02340: franz_do_hash\n");
 
 			franz_do_hash dummy(g_thechosenhash);
 			if (flagdebug3)
-				myprintf("65083: filehash on %s\n",myfiles[i].c_str());
+				myprintf("02341: filehash on %s\n",myfiles[i].c_str());
 
 			string risu=dummy.filehash(myfiles[i],false,inizio,total_size);
 			if ((!flaghashdeep) && (flagnosort))
@@ -73531,12 +73982,12 @@ int Jidac::summa()
 				int printlen=0;
 				if (flagpakka)
 				{
-					myprintf("68008: %s ",stringtolower(risu).c_str());
+					myprintf("02342: %s ",stringtolower(risu).c_str());
 					printlen=risu.size()+2;
 				}
 				else
 				{
-					myprintf("67911: |%s: %s [%19s] |",dummy.i_hashtype2.c_str(),risu.c_str(),migliaia(dummy.o_thefilesize));
+					myprintf("02343: |%s: %s [%19s] |",dummy.i_hashtype2.c_str(),risu.c_str(),migliaia(dummy.o_thefilesize));
 					printlen=dummy.i_hashtype2.size()+risu.size()+19+8;
 				}
 				
@@ -73575,7 +74026,7 @@ int Jidac::summa()
 		int64_t inizio		=mtime();
 		scantime=(inizio-startscan)/1000.0;
 		if (!flagnoeta)
-			myprintf("65842: Found (%s) => %s bytes (%s) / %s files in %f\n",tohuman2(scannedsize),migliaia(total_size),tohuman(total_size),migliaia2(quantifiles),scantime);
+			myprintf("02344: Found (%s) => %s bytes (%s) / %s files in %f\n",tohuman2(scannedsize),migliaia(total_size),tohuman(total_size),migliaia2(quantifiles),scantime);
 		for (unsigned int i=0;i<myfiles.size();i++)
 		{
 			vettoreparametrihash[i%mythreads].filestobehashed.push_back(myfiles[i]);
@@ -73585,11 +74036,11 @@ int Jidac::summa()
 		for (int i=0;i<mythreads;i++)
 		{
 			if (flagdebug3)
-				myprintf("65859: Thread [%02d] files %s\n",(int)i,migliaia(vettoreparametrihash[i].filestobehashed.size()));
+				myprintf("02345: Thread [%02d] files %s\n",(int)i,migliaia(vettoreparametrihash[i].filestobehashed.size()));
 			totfile+=+vettoreparametrihash[i].filestobehashed.size();
 		}
 		if (flagverbose)
-			myprintf("65849: Total files %s -> in threads %s\n",migliaia(myfiles.size()),migliaia2(totfile));
+			myprintf("02346: Total files %s -> in threads %s\n",migliaia(myfiles.size()),migliaia2(totfile));
 		int rc;
 		///pthread_t threads[mythreads];
 		pthread_t* threads = new pthread_t[mythreads];
@@ -73601,7 +74052,7 @@ int Jidac::summa()
 		if (!flagnoeta)
 		{
 			myprintf("\n");
-			myprintf("65962: Creating %d hashing thread(s) with %s\n",mythreads,g_thechosenhash_str.c_str());
+			myprintf("02347: Creating %d hashing thread(s) with %s\n",mythreads,g_thechosenhash_str.c_str());
 		}
 		iniziohash=mtime();
 		for(int i = 0; i < mythreads; i++ )
@@ -73610,7 +74061,7 @@ int Jidac::summa()
 			rc = pthread_create(&threads[i], &attr, scansionahash, (void*)&vettoreparametrihash[i]);
 			if (rc)
 			{
-				myprintf("34523: Error creating thread\n");
+				myprintf("02348: Error creating thread\n");
 				exit(-1);
 			}
 		}
@@ -73659,9 +74110,7 @@ int Jidac::summa()
 		if (!flagignore)
 		if (vec[i].second=="")
 		{
-			myprintf("57751: ERROR hash is empty <<");
-			printUTF8(filename.c_str());
-			myprintf(">>\n");
+			myprintf("02349: ERROR hash is empty <<%Z>>\n",filename.c_str());
 		}
 
 		DTMap::iterator p=edt.find(filename);
@@ -73669,7 +74118,7 @@ int Jidac::summa()
 			testedbytes+=p->second.size;
 		else
 		{
-			myprintf("57761: GURU edt not found %08d %s\n",(int)i,filename.c_str());
+			myprintf("02350! GURU edt not found %08d %s\n",(int)i,filename.c_str());
 			seppuku();
 			return 2;
 		}
@@ -73680,9 +74129,8 @@ int Jidac::summa()
 		if (flaghashdeep)
 		{
 			string lowhash=stringtolower(vec[i].second);
-			myprintf("%lld,%s,",p->second.size,lowhash.c_str());
-			printUTF8(filename.c_str());
-			myprintf("\n");
+			myprintf("%lld,%s,%Z\n",p->second.size,lowhash.c_str(),filename.c_str());
+			
 		}
 		else
 		if (flagrename)
@@ -73790,8 +74238,8 @@ int Jidac::summa()
 				if (vec[i].second==emptyalgo(g_thechosenhash_str))
 				{
 					myprintf("\n\n");
-					myprintf("32609: **** GURU ERROR non zero-length file get empty hash!\n");
-					myprintf("32609: **** A non-empty file have the same hash of empty one!\n");
+					myprintf("02351: **** GURU ERROR non zero-length file get empty hash!\n");
+					myprintf("02352: **** A non-empty file have the same hash of empty one!\n");
 					myprintf("\n\n");
 					errori=2;
 				}
@@ -73808,27 +74256,27 @@ int Jidac::summa()
 			printUTF8(undofrom[i].c_str());
 			myprintf("\n");
 		}
-		myprintf("66072: Renamed     files  %s\n",migliaia(renamedfiles));
-		myprintf("66073: NOT renamed files  %s\n",migliaia(notrenamed));
+		myprintf("02353: Renamed     files  %s\n",migliaia(renamedfiles));
+		myprintf("02354: NOT renamed files  %s\n",migliaia(notrenamed));
 
 	}
 	if (summary>0)
 	{
-		myprintf("66070: Scanning filesystem time  %15.3f s\n",scantime);
-		myprintf("66071: Data transfer+CPU   time  %15.3f s\n",hashtime/1000.0);
-		myprintf("66072: Data output         time  %15.3f s\n",printtime/1000.0);
-		myprintf("66073: Total size                %19s (%10s)\n",migliaia(scannedsize),tohuman(scannedsize));
-		myprintf("66074: Tested size               %19s (%10s)\n",migliaia(testedbytes),tohuman(testedbytes));
+		myprintf("02355: Scanning filesystem time  %15.3f s\n",scantime);
+		myprintf("02356: Data transfer+CPU   time  %15.3f s\n",hashtime/1000.0);
+		myprintf("02357: Data output         time  %15.3f s\n",printtime/1000.0);
+		myprintf("02358: Total size                %19s (%10s)\n",migliaia(scannedsize),tohuman(scannedsize));
+		myprintf("02359: Tested size               %19s (%10s)\n",migliaia(testedbytes),tohuman(testedbytes));
 		if (!flagnosort)
 		{
-		myprintf("66075: Duplicated size           %19s (%10s)\n",migliaia(duplicated_size),tohuman(duplicated_size));
-		myprintf("66076: Duplicated files          %19s\n",migliaia(duplicated_files));
+		myprintf("02360: Duplicated size           %19s (%10s)\n",migliaia(duplicated_size),tohuman(duplicated_size));
+		myprintf("02361: Duplicated files          %19s\n",migliaia(duplicated_files));
 		}
 		int64_t myspeed=(int64_t)(testedbytes*1000.0/(hashtime));
-		myprintf("66077: Worked on %s bytes avg speed (hashtime) %s B/s\n",migliaia(total_size),migliaia2(myspeed));
+		myprintf("02362: Worked on %s bytes avg speed (hashtime) %s B/s\n",migliaia(total_size),migliaia2(myspeed));
 		char sha256result[32];
 		memcpy(sha256result, sha256.result(), 32);
-		myprintf("66078: GLOBAL SHA256: ");
+		myprintf("02363: GLOBAL SHA256: ");
 		for (int j=0; j <= 31; j++)
 			myprintf("%02X", (unsigned char)sha256result[j]);
 		myprintf("\n");
@@ -73836,7 +74284,7 @@ int Jidac::summa()
 	if (flagkill)
 		if (flagforce)
 			if (deletedfiles)
-				myprintf("66079: Duplicated deleted files %s for %s bytes\n",migliaia2(deletedfiles),migliaia(deletedsize));
+				myprintf("02364: Duplicated deleted files %s for %s bytes\n",migliaia2(deletedfiles),migliaia(deletedsize));
 
 	return errori;
 }
@@ -73899,12 +74347,12 @@ struct Myfilewriter: public libzpaq::Writer
 				if (tobewritten)
 				{
 					if (written % 1000==0)
-						myprintf("66163: Extracted so far %12s/%s\r",migliaia(written),migliaia2(tobewritten));
+						myprintf("02365: Extracted so far %12s/%s\r",migliaia(written),migliaia2(tobewritten));
 				}
 				else
 				{
 					if (written % 1000==0)
-						myprintf("66168: Extracted so far %12s\r",migliaia(written));
+						myprintf("02366: Extracted so far %12s\r",migliaia(written));
 				}
 			}
 	}
@@ -73925,12 +74373,12 @@ int Jidac::decompress_sfx_to_file(FILE* i_outfile)
 	zsfx_exe=(char*)franz_malloc(zsfx_exe_len);
 	if (zsfx_exe==NULL)
 	{
-		myprintf("87420: error in malloc zsfx\n");
+		myprintf("02367: error in malloc zsfx\n");
 		return 0;
 	}
 	if (!mime2binary(zsfx_mime64,(unsigned char *)zsfx_exe,zsfx_exe_len))
 	{
-		myprintf("87425: mime decoder kaputt!\n");
+		myprintf("02368: mime decoder kaputt!\n");
 		return 0;
 	}
 	Mymemreader 	in	(( unsigned char *)zsfx_exe,zsfx_exe_len);
@@ -73948,7 +74396,7 @@ int Jidac::decompress_sfx_to_file(FILE* i_outfile)
 	if (calculatedhash!=zsfx_hash)
 	{
 		myprintf("\n");
-		myprintf("40015: GURU SHA-256 calculated %s != expected %s\n",calculatedhash.c_str(),zsfx_hash.c_str());
+		myprintf("02369: GURU SHA-256 calculated %s != expected %s\n",calculatedhash.c_str(),zsfx_hash.c_str());
 		exit(2);
 	}
 	return out.written;
@@ -73963,27 +74411,27 @@ int Jidac::writesfxmodule(const string i_filename)
 {
 #if defined(_WIN32)
 	myprintf("\n\n");
-	myprintf("66320: *** GOING SFX (zpaq resource)\n");
+	myprintf("02370: *** GOING SFX (zpaq resource)\n");
 	if (g_password!=NULL)
 	{
-		myprintf("64855: this kind of SFX-ZPAQ does NOT support encryption (yet)\n");
+		myprintf("02371: this kind of SFX-ZPAQ does NOT support encryption (yet)\n");
 		return 1;
 	}
 	if (i_filename=="")
 	{
-		myprintf("75396: sfx filename empty\n");
+		myprintf("02372! sfx filename empty\n");
 		return 2;
 	}
 	if (!fileexists(archive))
 	{
-		myprintf("40003: archive does not exists\n");
+		myprintf("02373! archive does not exists\n");
 		return 2;
 	}
 	int64_t dimensionezpaq=prendidimensionefile(archive.c_str());
 	if (dimensionezpaq>2000000000)
 	{
-		myprintf("75411: ZPAQ archive size %s\n",migliaia(dimensionezpaq));
-		myprintf("75412: max .EXE size 2.000.000.000, abort\n");
+		myprintf("02374! ZPAQ archive size %s\n",migliaia(dimensionezpaq));
+		myprintf("02375! max .EXE size 2.000.000.000, abort\n");
 		return 2;
 	}
 	string g_franzo_start	="dnE3pipUzeiUo8BMxVKlQTIfLjmskQbhlqBobVVr";
@@ -74011,30 +74459,30 @@ int Jidac::writesfxmodule(const string i_filename)
 	}
 	if (g_sfxuntil!="")
 		i_thecommands+=" -until "+g_sfxuntil;
-	myprintf("66272: Command line  : %s\n",i_thecommands.c_str());
-	myprintf("66272: Archive name  : %s\n",archive.c_str());
-	myprintf("66272: Output  name  : %s\n",i_filename.c_str());
+	myprintf("02376: Command line  : %s\n",i_thecommands.c_str());
+	myprintf("02377: Archive name  : %s\n",archive.c_str());
+	myprintf("02378: Output  name  : %s\n",i_filename.c_str());
 	string outfile	=prendinomefileebasta(i_filename);
 	string percorso	=extractfilepath(i_filename);
 	outfile=percorso+outfile+".exe";
 	if (fileexists(outfile))
 		if (!flagforce)
 		{
-			myprintf("64890: output file exists and no -force, abort %s\n",outfile.c_str());
+			myprintf("02379! output file exists and no -force, abort %s\n",outfile.c_str());
 			return 2;
 		}
-	myprintf("66277: Working on    : %s\n",outfile.c_str());
+	myprintf("02380: Working on    : %s\n",outfile.c_str());
 	std::wstring widename=utow(outfile.c_str());
 	FILE* outFile=_wfopen(widename.c_str(), L"wb" );
 	if (outFile==NULL)
 	{
-		myprintf("66393: CANNOT OPEN outfile %s\n",outfile.c_str());
+		myprintf("02381! CANNOT OPEN outfile %s\n",outfile.c_str());
 		return 2;
 	}
 	int zsfx_exe_len=decompress_sfx_to_file(outFile);
 	if (zsfx_exe_len==0)
 	{
-		myprintf("38944: guru extracting sfx\n");
+		myprintf("02382: guru extracting sfx\n");
 		fclose(outFile);
 		seppuku();
 	}
@@ -74058,28 +74506,28 @@ int Jidac::writesfxmodule(const string i_filename)
 	{
 		int err=GetLastError();
 		myprintf("\n");
-		myprintf("66414: ERR <%s> on archive kind %d\n",archive.c_str(),err);
+		myprintf("02383! ERR <%s> on archive kind %d\n",archive.c_str(),err);
 		return 2;
 	}
 	while ((readSize = fread(buffer, 1, blockSize, inFile)) > 0)
 		fwrite(buffer,1,readSize,outFile);
 	fclose(outFile);
 	///	Just debug stuff
-	myprintf("66319: SFX written on: %s\n",outfile.c_str());
+	myprintf("02384: SFX written on: %s\n",outfile.c_str());
 	myprintf("\n");
 	int64_t sfxsize	=zsfx_exe_len;
 	int64_t zpaqsize=prendidimensionefile(archive.c_str());
 	int64_t sfxtotal=prendidimensionefile(outfile.c_str());
-	myprintf("66331: SFX module    : %19s\n",migliaia(sfxsize));
-	myprintf("66332: Block1        : %19s\n",migliaia(g_franzo_start.size()));
-	myprintf("66333: Command       : %19s\n",migliaia(i_thecommands.size()));
-	myprintf("66334: Block2        : %19s\n",migliaia(g_franzo_end.size()));
-	myprintf("66335: Start         : %19s\n",migliaia(sfxsize+g_franzo_start.size()+i_thecommands.size()+g_franzo_end.size()));
-	myprintf("66336: ZPAQ archive  : %19s\n",migliaia(zpaqsize));
-	myprintf("66337: Expected      : %19s\n",migliaia(sfxsize+zpaqsize+g_franzo_start.size()+g_franzo_end.size()+i_thecommands.size()));
-	myprintf("66338: Written       : %19s\n",migliaia(sfxtotal));
+	myprintf("02385: SFX module    : %19s\n",migliaia(sfxsize));
+	myprintf("02386: Block1        : %19s\n",migliaia(g_franzo_start.size()));
+	myprintf("02387: Command       : %19s\n",migliaia(i_thecommands.size()));
+	myprintf("02388: Block2        : %19s\n",migliaia(g_franzo_end.size()));
+	myprintf("02389: Start         : %19s\n",migliaia(sfxsize+g_franzo_start.size()+i_thecommands.size()+g_franzo_end.size()));
+	myprintf("02390: ZPAQ archive  : %19s\n",migliaia(zpaqsize));
+	myprintf("02391: Expected      : %19s\n",migliaia(sfxsize+zpaqsize+g_franzo_start.size()+g_franzo_end.size()+i_thecommands.size()));
+	myprintf("02392: Written       : %19s\n",migliaia(sfxtotal));
 #else
-	myprintf("75371: sfx module supported only on Windows\n");
+	myprintf("02393: sfx module supported only on Windows\n");
 	return 0;
 #endif
 	if (i_filename=="GCC_COMP$ILER_BE_QUIET!!!")
@@ -74089,9 +74537,7 @@ int Jidac::writesfxmodule(const string i_filename)
 int Jidac::sfx()
 {
 #if defined(_WIN32)
-	myprintf("66349: Creating SFX module for archive ");
-	printUTF8(archive.c_str());
-	myprintf("\n");
+	myprintf("02394: Creating SFX module for archive %Z\n",archive.c_str());
 	if (g_sfx!="")
 	{
 		writesfxmodule(g_sfx);
@@ -74103,21 +74549,21 @@ int Jidac::sfx()
 	if (fileexists(outfile))
 		if (!flagforce)
 		{
-			myprintf("64979: output file exists and no -force, abort %s\n",outfile.c_str());
+			myprintf("02395! output file exists and no -force, abort %s\n",outfile.c_str());
 			return 2;
 		}
-	myprintf("66359: Working on    : %s\n",outfile.c_str());
+	myprintf("02396: Working on    : %s\n",outfile.c_str());
 	std::wstring widename=utow(outfile.c_str());
 	FILE* outFile=_wfopen(widename.c_str(), L"wb" );
 	if (outFile==NULL)
 	{
-		myprintf("64989: CANNOT OPEN outfile %s\n",outfile.c_str());
+		myprintf("02397! CANNOT OPEN outfile %s\n",outfile.c_str());
 		return 2;
 	}
 	int zsfx_exe_len=decompress_sfx_to_file(outFile);
 	if (zsfx_exe_len==0)
 	{
-		myprintf("39041: guru extracting sfx\n");
+		myprintf("02398: guru extracting sfx\n");
 		fclose(outFile);
 		seppuku();
 	}
@@ -74126,13 +74572,13 @@ int Jidac::sfx()
 	int64_t written=prendidimensionefile(outfile.c_str());
 	if (written==zsfx_exe_len)
 	{
-		myprintf("66380: SFX written   : %s bytes\n",migliaia(written));
+		myprintf("02399: SFX written   : %s bytes\n",migliaia(written));
 		return 0;
 	}
-	myprintf("65006: something wrong: written %s expected %s\n",migliaia(written),migliaia2(zsfx_exe_len));
+	myprintf("02400! something wrong: written %s expected %s\n",migliaia(written),migliaia2(zsfx_exe_len));
 	return 2;
 #else
-	myprintf("64969: sfx module supported only on Windows\n");
+	myprintf("02401: sfx module supported only on Windows\n");
 #endif
 	return 0;
 }
@@ -74152,12 +74598,12 @@ int Jidac::decompress_mime64_to_file(FILE* i_outfile,const char* i_mime64)
 	the_exe=(char*)franz_malloc(the_exe_len);
 	if (the_exe==NULL)
 	{
-		myprintf("45953: error in malloc\n");
+		myprintf("02402: error in malloc\n");
 		return 0;
 	}
 	if (!mime2binary(i_mime64,(unsigned char *)the_exe,the_exe_len))
 	{
-		myprintf("45960: mime decoder kaputt!\n");
+		myprintf("02403: mime decoder kaputt!\n");
 		return 0;
 
 	}
@@ -74180,19 +74626,19 @@ int Jidac::writeresource(const string i_filename,bool i_force,const char* i_mime
 #if defined(_WIN32)
 	if (i_filename=="")
 	{
-		myprintf("45987: resource filename empty\n");
+		myprintf("02404! resource filename empty\n");
 		return 2;
 	}
 	string outfile=i_filename;
 	if (flagverbose)
 	{
 		myprintf("\n\n");
-		myprintf("66542: *** WRITING RESOURCE %s\n",outfile.c_str());
+		myprintf("02405: *** WRITING RESOURCE %s\n",outfile.c_str());
 	}
 	if (fileexists(outfile))
 		if (!i_force)
 		{
-			myprintf("46001: output file exists and no -force, abort %s\n",outfile.c_str());
+			myprintf("02406! output file exists and no -force, abort %s\n",outfile.c_str());
 			return 2;
 		}
 	size_t 	the_res_len=mimesize(i_mime64);
@@ -74200,12 +74646,12 @@ int Jidac::writeresource(const string i_filename,bool i_force,const char* i_mime
 	the_res=(char*)franz_malloc(the_res_len);
 	if (the_res==NULL)
 	{
-		myprintf("44972: error in malloc\n");
+		myprintf("02407: error in malloc\n");
 		return 0;
 	}
 	if (!mime2binary(i_mime64,(unsigned char *)the_res,the_res_len))
 	{
-		myprintf("44977: mime decoder kaputt!\n");
+		myprintf("02408: mime decoder kaputt!\n");
 		return 0;
 	}
 
@@ -74213,14 +74659,14 @@ int Jidac::writeresource(const string i_filename,bool i_force,const char* i_mime
 	FILE* outFile=_wfopen(widename.c_str(), L"wb" );
 	if (outFile==NULL)
 	{
-		myprintf("46011: CANNOT OPEN outfile %s\n",outfile.c_str());
+		myprintf("02409! CANNOT OPEN outfile %s\n",outfile.c_str());
 		franz_free(the_res);
 		return 2;
 	}
 	size_t written=fwrite(the_res,1,the_res_len,outFile);
 	if (the_res_len!=written)
 	{
-		myprintf("44994: guru extracting resource\n");
+		myprintf("02410: guru extracting resource\n");
 		fclose(outFile);
 		franz_free(the_res);
 		seppuku();
@@ -74251,13 +74697,13 @@ int Jidac::verify(bool i_readfile)
 	all=myflagall;
 	myprintf("\n");
 	if (flagssd)
-		myprintf("66603: Verify hashes of one version vs filesystem (multithreaded)\n");
+		myprintf("02411: Verify hashes of one version vs filesystem (multithreaded)\n");
 	else
 	{
 		if (howmanythreads==1)
-			myprintf("66608: Verify hashes of one version vs filesystem (monothread)\n");
+			myprintf("02412: Verify hashes of one version vs filesystem (monothread)\n");
 		else
-			myprintf("66609: Verify hashes of one version vs filesystem (1 thread, -ssd for multithread)\n");
+			myprintf("02413: Verify hashes of one version vs filesystem (1 thread, -ssd for multithread)\n");
 	}
 	uint64_t 	hashtotali=0;
 	int			tobechecked=0;
@@ -74303,7 +74749,7 @@ int Jidac::verify(bool i_readfile)
 						myfiles.push_back(finalfile);
 						myfilesoriginal.push_back(p->first);
 						if (flagdebug3)
-							myprintf("64148:  ----___ myhash %s CRC32 %s type %s\n",myhash.c_str(),mycrc32.c_str(),myhashtype.c_str());
+							myprintf("02414:  ----___ myhash %s CRC32 %s type %s\n",myhash.c_str(),mycrc32.c_str(),myhashtype.c_str());
 						if ((myhashtype=="CRC-32") && (myhash==""))
 							myfilehash.push_back(mycrc32);
 						else
@@ -74311,7 +74757,7 @@ int Jidac::verify(bool i_readfile)
 						myalgo.push_back(myhashtype);
 					}
 					else
-						myprintf("39202: unknown algo |%s| for %s\n",myhashtype.c_str(),finalfile.c_str());
+						myprintf("02415: unknown algo |%s| for %s\n",myhashtype.c_str(),finalfile.c_str());
 				}
 				else
 					nohashfound++;
@@ -74344,13 +74790,13 @@ int Jidac::verify(bool i_readfile)
 		{
 			if (flagdebug3)
 			{
-				myprintf("69029: g_replaceme  |%s|\n",g_replaceme.c_str());
-				myprintf("69030: g_vss_shadow |%s|\n",g_vss_shadow.c_str());
-				myprintf("69031: thefilename  |%s|\n",myfiles[i].c_str());
+				myprintf("02416: g_replaceme  |%s|\n",g_replaceme.c_str());
+				myprintf("02417: g_vss_shadow |%s|\n",g_vss_shadow.c_str());
+				myprintf("02418: thefilename  |%s|\n",myfiles[i].c_str());
 			}
 			myreplace(myfiles[i],g_replaceme,g_vss_shadow);
 			if (flagdebug3)
-				myprintf("69032: thefilename  |%s|\n",myfiles[i].c_str());
+				myprintf("02419: thefilename  |%s|\n",myfiles[i].c_str());
 		}
 
 		vettoreparametrihash[i%mythreads].filestobehashed.	push_back(myfiles[i]);
@@ -74362,7 +74808,7 @@ int Jidac::verify(bool i_readfile)
 	for (unsigned int i=0;i<mythreads;i++)
 	{
 		if (flagdebug3)
-			myprintf("66611: Thread [%02d] files %s\n",(int)i,migliaia(vettoreparametrihash[i].filestobehashed.size()));
+			myprintf("02420: Thread [%02d] files %s\n",(int)i,migliaia(vettoreparametrihash[i].filestobehashed.size()));
 		totfile+=+vettoreparametrihash[i].filestobehashed.size();
 	}
 	if (mythreads==1)
@@ -74374,14 +74820,14 @@ int Jidac::verify(bool i_readfile)
 		for (unsigned int i=0;i<myfiles.size();i++)
 		{
 			if (flagdebug3)
-				myprintf("61025: franz_do_hash\n");
+				myprintf("02421: franz_do_hash\n");
 
 			franz_do_hash dummy(myalgo[i]);
 			
 			bool calcolacrc32=myalgo[i]=="CRC-32";
 			string risu=dummy.filehash(myfiles[i],calcolacrc32,inizio,hashtotali);
 			if (flagdebug3)
-				myprintf("64210: risu %s\n",risu.c_str());
+				myprintf("02422: risu %s\n",risu.c_str());
 			vettoreparametrihash[0].o_hashcalculated.push_back(risu);
 			vettoreparametrihash[0].o_sizegetted.push_back(dummy.o_thefilesize);
 		}
@@ -74395,7 +74841,7 @@ int Jidac::verify(bool i_readfile)
 		pthread_attr_init(&attr);
 		pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
 		if (!flagnoeta)
-			myprintf("66632: Total files %s -> in %03d threads -> %s to be checked\n",migliaia(myfiles.size()),mythreads,migliaia2(totfile));
+			myprintf("02423: Total files %s -> in %03d threads -> %s to be checked\n",migliaia(myfiles.size()),mythreads,migliaia2(totfile));
 		startrunning=mtime();
 		for(unsigned int i=0; i<mythreads; i++ )
 		{
@@ -74403,7 +74849,7 @@ int Jidac::verify(bool i_readfile)
 			rc = pthread_create(&threads[i], &attr, scansionahash, (void*)&vettoreparametrihash[i]);
 			if (rc)
 			{
-				myprintf("39264: Error creating thread\n");
+				myprintf("02424: Error creating thread\n");
 				exit(-1);
 			}
 		}
@@ -74420,7 +74866,7 @@ int Jidac::verify(bool i_readfile)
 		delete [] threads;
 	}
 	if (flagverbose)
-		myprintf("66658: Scan done, preparing report...\n");
+		myprintf("02425: Scan done, preparing report...\n");
 
 	for (MAPPATIPOHASH::iterator p=g_mappatipohash.begin(); p!=g_mappatipohash.end(); ++p)
 		p->second.resetcheckstat();
@@ -74435,7 +74881,7 @@ int Jidac::verify(bool i_readfile)
 			{
 				nohashfound++;
 				if (flagverbose)
-					myprintf("44039: NO hashtype %s\n",finalfile.c_str());
+					myprintf("02426: NO hashtype %s\n",finalfile.c_str());
 			}
 			else
 			{
@@ -74446,7 +74892,7 @@ int Jidac::verify(bool i_readfile)
 					if (vettoreparametrihash[i].o_hashcalculated[j]=="")
 					{
 						if (flagverbose || (g_output!=""))
-							myprintf("66691: FILE NOT FOUND on %s: FILE %s\n",myhashtype.c_str(),finalfile.c_str());
+							myprintf("02427: FILE NOT FOUND on %s: FILE %s\n",myhashtype.c_str(),finalfile.c_str());
 						thehash->checkednotfound++;
 					}
 					else
@@ -74454,7 +74900,7 @@ int Jidac::verify(bool i_readfile)
 						if (vettoreparametrihash[i].o_hashcalculated[j]==vettoreparametrihash[i].filehash[j])
 						{
 							if (flagdebug3)
-								myprintf("66706: GOOD %s:  STORED == FROM FILE %s\n",myhashtype.c_str(),finalfile.c_str());
+								myprintf("02428: GOOD %s:  STORED == FROM FILE %s\n",myhashtype.c_str(),finalfile.c_str());
 							thehash->checkedok++;
 						///	Getting the filesize is slow (very slow on network), then waste some RAM
 						///  a->second.checksize+=prendidimensionefile(finalfile.c_str());
@@ -74464,16 +74910,14 @@ int Jidac::verify(bool i_readfile)
 							else
 							{
 								if (flagdebug3)
-									myprintf("38931: Cannot find originalfilename %s\n",vettoreparametrihash[i].originalfilenames[j].c_str());
+									myprintf("02429: Cannot find originalfilename %s\n",vettoreparametrihash[i].originalfilenames[j].c_str());
 							}
 						}
 						else
 						{
 							if (flagverbose || (g_output!=""))
 							{
-								myprintf("66716: ERROR on %s: STORED HASH %s VS %s IN FILE ",myhashtype.c_str(),vettoreparametrihash[i].filehash[j].c_str(),vettoreparametrihash[i].o_hashcalculated[j].c_str());
-								printUTF8(finalfile.c_str());
-								myprintf("\n");
+								myprintf("02430: ERROR on %s: STORED HASH %s VS %s IN FILE %Z\n",myhashtype.c_str(),vettoreparametrihash[i].filehash[j].c_str(),vettoreparametrihash[i].o_hashcalculated[j].c_str(),finalfile.c_str());
 							}
 							thehash->checkedfailed++;
 						}
@@ -74483,7 +74927,7 @@ int Jidac::verify(bool i_readfile)
 				{
 					nohashfound++;
 					if (flagverbose)
-						myprintf("26620: algo unknown (or no algo!) %s\n",finalfile.c_str());
+						myprintf("02431: algo unknown (or no algo!) %s\n",finalfile.c_str());
 				}
 			}
 		}
@@ -74505,24 +74949,24 @@ int Jidac::verify(bool i_readfile)
 		{
 			byteshashed+=p->second.checksize;
 			if (p->second.checkedok)
-				myprintf("66754: OK   %12s : %08d of %08d (%12s hash check against file on disk)\n",p->second.hashname.c_str(),p->second.checkedok,tobechecked,tohuman(p->second.checksize));
+				myprintf("02432: OK   %12s : %08d of %08d (%12s hash check against file on disk)\n",p->second.hashname.c_str(),p->second.checkedok,tobechecked,tohuman(p->second.checksize));
 			if (p->second.checkedfailed)
 			{
-				myprintf("66753: FAIL %12s : %08d of %08d (   FAILED    hash check against file on disk)\n",p->second.hashname.c_str(),p->second.checkedfailed,tobechecked);
+				myprintf("02433: FAIL %12s : %08d of %08d (   FAILED    hash check against file on disk)\n",p->second.hashname.c_str(),p->second.checkedfailed,tobechecked);
 				risultato=2;
 			}
 			if (p->second.checkednotfound)
 			{
-				myprintf("66750: WARN %12s : %08d of %08d (file not found, cannot check hash)\n",p->second.hashname.c_str(),p->second.checkednotfound,tobechecked);
+				myprintf("02434: WARN %12s : %08d of %08d (file not found, cannot check hash)\n",p->second.hashname.c_str(),p->second.checkednotfound,tobechecked);
 				if (risultato!=2)
 					risultato=1;
 			}
 		}
 		if (nohashfound)
-			myprintf("66756: UNKNOWN/NOHASH: %08d of %08d (legacy 7.15 archive?)\n",nohashfound,tobechecked);
+			myprintf("02435: UNKNOWN/NOHASH: %08d of %08d (legacy 7.15 archive?)\n",nohashfound,tobechecked);
 		printbar('-');
 		if (flagverbose)
-		myprintf("66760: Total hashed bytes %s @ %s B/s\n",migliaia(byteshashed),migliaia2((int64_t)(byteshashed/((mtime()-startrunning)/1000.0))));
+		myprintf("02436: Total hashed bytes %s @ %s B/s\n",migliaia(byteshashed),migliaia2((int64_t)(byteshashed/((mtime()-startrunning)/1000.0))));
 	}
 	return risultato;
 }
@@ -74536,12 +74980,12 @@ void Jidac::handleflaglongpath()
 	{
 		if (islonguncpath(tofiles[i]))
 		{
-			myprintf("44480: error, cannot work on explicit UNC -to\n");
+			myprintf("02437: error, cannot work on explicit UNC -to\n");
 			error("explicit UNC -to");
 		}
 		if (iswindowsunc(tofiles[i]))
 		{
-			myprintf("44485: found UNC Windows, incompatible with -longpath, turning OFF %s\n",tofiles[i].c_str());
+			myprintf("02438: found UNC Windows, incompatible with -longpath, turning OFF %s\n",tofiles[i].c_str());
 			flaglongpath=false;
 			break;
 		}
@@ -74549,7 +74993,7 @@ void Jidac::handleflaglongpath()
 	for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p)
 		if (iswindowsunc(p->first))
 		{
-			myprintf("44495: found UNC Windows, incompatible with -longpath, turning OFF %s\n",p->first.c_str());
+			myprintf("02439: found UNC Windows, incompatible with -longpath, turning OFF %s\n",p->first.c_str());
 			flaglongpath=false;
 			break;
 		}
@@ -74560,31 +75004,31 @@ void Jidac::handleflaglongpath()
 				if (!islongpath(tofiles[i]))
 					tofiles[i]="//?/"+tofiles[i];
 			if (flagverbose || flagdebug)
-				myprintf("44505: INFO: setting Windows' long filenames\n");
+				myprintf("02440: INFO: setting Windows' long filenames\n");
 			if (flagdebug3)
 				for (unsigned int i=0;i<tofiles.size();i++)
-					myprintf("44508: tofiles %d %s\n",(int)i,tofiles[i].c_str());
+					myprintf("02441: tofiles %d %s\n",(int)i,tofiles[i].c_str());
 		}
 #endif
 }
 int Jidac::extractw()
 {
-	myprintf("66795: **** CHUNKED EXTRACTION/TEST ****\n");
+	myprintf("02442: **** CHUNKED EXTRACTION/TEST ****\n");
 	if (flagverify && flagtest)
 	{
-		myprintf("44477: -verify and -test incompatible (-test does not write on disk)\n");
-		myprintf("44477: maybe you mean -test -checksum ?\n");
+		myprintf("02443: -verify and -test incompatible (-test does not write on disk)\n");
+		myprintf("02444: maybe you mean -test -checksum ?\n");
 		return 1;
 	}
 	if (!flagtest)
 		if (tofiles.size()!=1)
 		{
-			myprintf("42845: you need exactly one -to\n");
+			myprintf("02445! you need exactly one -to\n");
 			return 2;
 		}
 	if (flagparanoid && !flagverify)
 	{
-		myprintf("44059: WARNING -paranoid without -verify: ignored\n");
+		myprintf("02446: WARNING -paranoid without -verify: ignored\n");
 		flagparanoid=false;
 	}
 	/// transform -tofiles on WIN32 (if neeeded)
@@ -74604,9 +75048,8 @@ int Jidac::extractw()
 		if (getfoldersize(tofiles[0],tofoldersize,tofoldernumber,tofolderfolder,tofolderlongfiles))
 			if (tofoldersize>0)
 			{
-				myprintf("42854: WARNING the folder <<");
-				printUTF8(tofiles[0].c_str());
-				myprintf(">> already contain %s bytes\n\n\n",migliaia(tofoldersize));
+				myprintf("02447: WARNING the folder <<%Z>> already contain %s bytes\n\n\n",
+				tofiles[0].c_str(),migliaia(tofoldersize));
 				if (!getcaptcha("deleteall","Data can be overwritten, use EMPTY folder!"))
 					return 1;
 			}
@@ -74678,14 +75121,14 @@ int Jidac::extractw()
 	sort(fileandsize.begin(),fileandsize.end(),comparefilenamesize);
 	int64_t biggestfile=(int64_t)(fileandsize[fileandsize.size()-1].size*1.1);
 	if (flagverbose)
-		myprintf("66923: Minimum needed  (+10%%) %21s %s\n",migliaia(biggestfile),fileandsize[fileandsize.size()-1].filename.c_str());
+		myprintf("02448: Minimum needed  (+10%%) %21s %s\n",migliaia(biggestfile),fileandsize[fileandsize.size()-1].filename.c_str());
 	int64_t freediskspace=0;
 	int64_t	freeramdisk=0;
 	if (flagramdisk)
 	{
 		freeramdisk=getramdisksize()*75/100;
 		if (flagverbose)
-			myprintf("66930: Free RAM (-25%%)        %21s (as reported by OS)\n",migliaia(freeramdisk));
+			myprintf("02449: Free RAM (-25%%)        %21s (as reported by OS)\n",migliaia(freeramdisk));
 	}
 	if (flagtest)
 		freediskspace=totalarchive;
@@ -74698,11 +75141,11 @@ int Jidac::extractw()
 			if (!flagspace)
 			{
 				if (flagverbose)
-					myprintf("66943: Free work space (-10%%) %21s on <<-to %s>>\n",migliaia(freediskspace),outputdirectory.c_str());
+					myprintf("02450: Free work space (-10%%) %21s on <<-to %s>>\n",migliaia(freediskspace),outputdirectory.c_str());
 				if (! (flagverify && flagparanoid))
 					if (freediskspace<totalarchive)
 					{
-						myprintf("41173: free space too small %s, at least %s (bypass with -space)\n",migliaia(freediskspace),migliaia2(totalarchive+1));
+						myprintf("02451: free space too small %s, at least %s (bypass with -space)\n",migliaia(freediskspace),migliaia2(totalarchive+1));
 						return 1;
 					}
 			}
@@ -74739,19 +75182,19 @@ int Jidac::extractw()
 	quantichunk++;
 	if (spazio>totalarchive)
 			spazio=totalarchive;
-	myprintf("66983: Chunks %04d x          %21s (total decompressed size %s)\n",quantichunk,migliaia(spazio),migliaia2(totalarchive));
+	myprintf("02452: Chunks %04d x          %21s (total decompressed size %s)\n",quantichunk,migliaia(spazio),migliaia2(totalarchive));
 	if (!flagspace)
 		if (!flagtest)
 		{
 			if (spazio<biggestfile)
 			{
-				myprintf("41165: chunk size (-maxsize) too small %s, at least %s needed (bypass with -space)\n",migliaia(spazio),migliaia2(biggestfile+1));
+				myprintf("02453: chunk size (-maxsize) too small %s, at least %s needed (bypass with -space)\n",migliaia(spazio),migliaia2(biggestfile+1));
 				return 1;
 			}
 			if (tofiles.size()>0)
 				if (freediskspace<spazio)
 				{
-					myprintf("41173: free disk space too small %s, at least %s (bypass with -space)\n",migliaia(freediskspace),migliaia2(spazio+1));
+					myprintf("02454: free disk space too small %s, at least %s (bypass with -space)\n",migliaia(freediskspace),migliaia2(spazio+1));
 					return 1;
 				}
 		}
@@ -74760,7 +75203,7 @@ int Jidac::extractw()
 		if (flagverbose)
 		{
 			print_datetime();
-			myprintf("44567: creating folders tree and zero-bytes files\n");
+			myprintf("02455: creating folders tree and zero-bytes files\n");
 		}
 		for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p)
 		{
@@ -74774,7 +75217,7 @@ int Jidac::extractw()
 					FILE* myfile=fopen(thefolder.c_str(), "wb");
 					if (myfile==NULL)
 					{
-						myprintf("41764: cannot write on thefolder %s\n",thefolder.c_str());
+						myprintf("02456: cannot write on thefolder %s\n",thefolder.c_str());
 						exit(0);
 					}
 					fclose(myfile);
@@ -74785,7 +75228,7 @@ int Jidac::extractw()
 		if (flagverbose)
 		{
 			print_datetime();
-			myprintf("44574: end\n");
+			myprintf("02457: end\n");
 		}
 	}
 //	reset and start from scratch
@@ -74800,9 +75243,9 @@ int Jidac::extractw()
 			if (flagverify)
 				errors+=multiverify(chunkfile);
 			if (errors==0)
-			myprintf("67038: Stage XTR %04d : errors  %d (0=good)\n",chunkinlavorazione,errors);
+			myprintf("02458: Stage XTR %04d : errors  %d (0=good)\n",chunkinlavorazione,errors);
 			else
-			myprintf("67040: Stage XTR %04d : errors  %d (0=good) *** NOT GOOD ***\n",chunkinlavorazione,errors);
+			myprintf("02459: Stage XTR %04d : errors  %d (0=good) *** NOT GOOD ***\n",chunkinlavorazione,errors);
 			chunkcorrente=0;
 			chunkscount++;
 			chunkfile.clear();
@@ -74835,9 +75278,9 @@ int Jidac::extractw()
 	if (flagverify)
 		errors+=multiverify(chunkfile);
 	if (errors==0)
-		myprintf("67073: Stage VEF %04d : errors  %d (0=good)\n",chunkinlavorazione,errors);
+		myprintf("02460: Stage VEF %04d : errors  %d (0=good)\n",chunkinlavorazione,errors);
 	else
-		myprintf("67074: VEF %04d : errors  %d (0=good) *** NOT GOOD ***\n",chunkinlavorazione,errors);
+		myprintf("02461: VEF %04d : errors  %d (0=good) *** NOT GOOD ***\n",chunkinlavorazione,errors);
 	printbar('=');
 	if (flagverify && flagparanoid)
 			if (!removetempdirifempty(outputdirectory,true))
@@ -74849,7 +75292,7 @@ bool Jidac::removetempdirifempty(string i_folder,bool i_deleteifsizezero=false)
 	if (flagdebug)
 	{
 		myprintf("\n");
-		myprintf("44385: removetempdirifempty on %s\n",i_folder.c_str());
+		myprintf("02462: removetempdirifempty on %s\n",i_folder.c_str());
 	}
 	if (i_folder=="")
 		return false;
@@ -74858,19 +75301,17 @@ bool Jidac::removetempdirifempty(string i_folder,bool i_deleteifsizezero=false)
 	if (flagdebug3)
 	{
 		myprintf("\n");
-		myprintf("44394: ready on %s\n",i_folder.c_str());
+		myprintf("02463: ready on %s\n",i_folder.c_str());
 	}
 	if (!direxists(i_folder))
 	{
-		myprintf("\nFolder does not exist? ");
-		printUTF8(i_folder.c_str());
-		myprintf("\n");
+		myprintf("\nFolder does not exist? %Z\n",i_folder.c_str());
 		return false;
 	}
 	if (flagdebug3)
 	{
 		myprintf("\n");
-		myprintf("44406: removeemptydirs on %s\n",i_folder.c_str());
+		myprintf("02464: removeemptydirs on %s\n",i_folder.c_str());
 	}
 	removeemptydirs(i_folder,true);
 	uint64_t 		totalsize=0;
@@ -74881,12 +75322,12 @@ bool Jidac::removetempdirifempty(string i_folder,bool i_deleteifsizezero=false)
 	if (flagdebug2)
 	{
 		myprintf("\n");
-		myprintf("44417: getfoldersize on %s\n",i_folder.c_str());
+		myprintf("02465: getfoldersize on %s\n",i_folder.c_str());
 	}
 	getfoldersize(i_folder,totalsize,totalfile,totaldir,totallongfiles);
 	if (flagdebug3)
 	{
-		myprintf("43308: files %s folders %s size %s ",migliaia(totalfile),migliaia2(totaldir),migliaia3(totalsize));
+		myprintf("02466: files %s folders %s size %s ",migliaia(totalfile),migliaia2(totaldir),migliaia3(totalsize));
 		if ((totalfile==0) && (totalsize==0))
 			myprintf(" THIS IS GOOD");
 		else
@@ -74902,15 +75343,14 @@ bool Jidac::removetempdirifempty(string i_folder,bool i_deleteifsizezero=false)
 			somefile=false;
 	if (somefile)
 	{
-		myprintf("41279: some files founded in %s, do nothing\n",i_folder.c_str());
+		myprintf("02467: some files founded in %s, do nothing\n",i_folder.c_str());
 	}
 	else
 	{
 		if (flagverbose)
 		{
-			myprintf("44445: No files found (this is good): deleting everything in <<");
-			printUTF8(i_folder.c_str());
-			myprintf(">>\n");
+			myprintf("02468: No files found (this is good): deleting everything in <<%Z>>\n",i_folder.c_str());
+			
 		}
 		return stermina(i_folder,totalfile);
 	}
@@ -74920,10 +75360,10 @@ int Jidac::multiverify(vector <s_fileandsize>& i_arrayfilename)
 {
 	printbar(' ');
 	myprintf("\r");
-	myprintf("67145: VERIFY (=re-read from filesystem) and compare hashes\n");
+	myprintf("02469: VERIFY (=re-read from filesystem) and compare hashes\n");
 	if (howmanythreads==1)
 	{
-		myprintf("41010: not yet implemented (for monothread)\n");
+		myprintf("02470! not yet implemented (for monothread)\n");
 		return 2;
 	}
 	g_dimensione=0;
@@ -74976,7 +75416,7 @@ int Jidac::multiverify(vector <s_fileandsize>& i_arrayfilename)
 	for (unsigned int i=0;i<mythreads;i++)
 	{
 		if (flagdebug3)
-			myprintf("67216: Thread [%02d] files %s\n",(int)i,migliaia(vettoreparametrihash[i].filestobehashed.size()));
+			myprintf("02471: Thread [%02d] files %s\n",(int)i,migliaia(vettoreparametrihash[i].filestobehashed.size()));
 		totfile+=+vettoreparametrihash[i].filestobehashed.size();
 	}
 	int rc;
@@ -74986,7 +75426,7 @@ int Jidac::multiverify(vector <s_fileandsize>& i_arrayfilename)
 	pthread_attr_init(&attr);
 	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
 	if (flagverbose)
-		myprintf("67212: Total files %s -> in %03d threads -> %s to be checked\n",migliaia(myfiles.size()),mythreads,migliaia2(totfile));
+		myprintf("02472: Total files %s -> in %03d threads -> %s to be checked\n",migliaia(myfiles.size()),mythreads,migliaia2(totfile));
 	int64_t	startrunning=mtime();
 	for(unsigned int i=0; i<mythreads; i++ )
 	{
@@ -74994,7 +75434,7 @@ int Jidac::multiverify(vector <s_fileandsize>& i_arrayfilename)
 		rc = pthread_create(&threads[i], &attr, scansionahash, (void*)&vettoreparametrihash[i]);
 		if (rc)
 		{
-			myprintf("39264: Error creating thread\n");
+			myprintf("02473: Error creating thread\n");
 			exit(-1);
 		}
 	}
@@ -75014,13 +75454,13 @@ int Jidac::multiverify(vector <s_fileandsize>& i_arrayfilename)
 			string finalfile		=vettoreparametrihash[i].filestobehashed[j];
 			string myhashtype		=vettoreparametrihash[i].algo[j];
 			if (flagdebug3)
-			myprintf("64829: myhashtype %s\n",myhashtype.c_str());
+			myprintf("02474: myhashtype %s\n",myhashtype.c_str());
 			tipohash* thehash=franz_get_hash(myhashtype);
 			if (myhashtype=="")
 			{
 				nohashfound++;
 				if (flagverbose)
-					myprintf("44695: NO hashtype %s\n",finalfile.c_str());
+					myprintf("02475: NO hashtype %s\n",finalfile.c_str());
 			}
 			else
 			{
@@ -75030,9 +75470,8 @@ int Jidac::multiverify(vector <s_fileandsize>& i_arrayfilename)
 				{
 					if (flagverbose || (g_output!=""))
 					{
-						myprintf("67262: FILE NOT FOUND on %s: FILE ",myhashtype.c_str());
-						printUTF8(finalfile.c_str());
-						myprintf("\n");
+						myprintf("02476: FILE NOT FOUND on %s: FILE %Z\n",myhashtype.c_str(),finalfile.c_str());
+						
 					}
 					thehash->checkednotfound++;
 				}
@@ -75041,7 +75480,7 @@ int Jidac::multiverify(vector <s_fileandsize>& i_arrayfilename)
 					if (vettoreparametrihash[i].o_hashcalculated[j]==vettoreparametrihash[i].filehash[j])
 						{
 							if (flagdebug)
-								myprintf("67280: GOOD %s:  STORED == FROM FILE %s\n",myhashtype.c_str(),finalfile.c_str());
+								myprintf("02477: GOOD %s:  STORED == FROM FILE %s\n",myhashtype.c_str(),finalfile.c_str());
 							thehash->checkedok++;
 						///	Getting the filesize is slow (very slow on network), then waste some RAM
 						///  a->second.checksize+=prendidimensionefile(finalfile.c_str());
@@ -75051,16 +75490,14 @@ int Jidac::multiverify(vector <s_fileandsize>& i_arrayfilename)
 							else
 							{
 								if (flagdebug3)
-									myprintf("38931: Cannot find originalfilename %s\n",vettoreparametrihash[i].originalfilenames[j].c_str());
+									myprintf("02478: Cannot find originalfilename %s\n",vettoreparametrihash[i].originalfilenames[j].c_str());
 							}
 						}
 						else
 						{
 							if (flagverbose || (g_output!=""))
 							{
-								myprintf("67290: ERROR on %s: STORED HASH %s VS %s IN FILE ",myhashtype.c_str(),vettoreparametrihash[i].filehash[j].c_str(),vettoreparametrihash[i].o_hashcalculated[j].c_str());
-								printUTF8(finalfile.c_str());
-								myprintf("\n");
+								myprintf("02479: ERROR on %s: STORED HASH %s VS %s IN FILE %Z\n",myhashtype.c_str(),vettoreparametrihash[i].filehash[j].c_str(),vettoreparametrihash[i].o_hashcalculated[j].c_str(),finalfile.c_str());
 							}
 							thehash->checkedfailed++;
 						}
@@ -75070,7 +75507,7 @@ int Jidac::multiverify(vector <s_fileandsize>& i_arrayfilename)
 				{
 					nohashfound++;
 					if (flagverbose)
-						myprintf("44750: algo unknown (or no algo!) %s\n",finalfile.c_str());
+						myprintf("02480: algo unknown (or no algo!) %s\n",finalfile.c_str());
 				}
 			}
 		}
@@ -75095,31 +75532,31 @@ int Jidac::multiverify(vector <s_fileandsize>& i_arrayfilename)
 			byteshashed+=p->second.checksize;
 			if (p->second.checkedok)
 				if (flagverbose)
-					myprintf("67320: OK   %8s : %08d of %08d (%12s hash check against file on disk)\n",p->second.hashname.c_str(),p->second.checkedok,(int)myfiles.size(),tohuman(p->second.checksize));
+					myprintf("02481: OK   %8s : %08d of %08d (%12s hash check against file on disk)\n",p->second.hashname.c_str(),p->second.checkedok,(int)myfiles.size(),tohuman(p->second.checksize));
 			if (p->second.checkedfailed)
 			{
-				myprintf("67330: FAIL %8s : %08d of %08d (   FAILED    hash check against file on disk) ***\n",p->second.hashname.c_str(),p->second.checkedfailed,myfiles.size());
+				myprintf("02482: FAIL %8s : %08d of %08d (   FAILED    hash check against file on disk) ***\n",p->second.hashname.c_str(),p->second.checkedfailed,myfiles.size());
 				risultato=2;
 			}
 			if (p->second.checkednotfound)
 			{
-				myprintf("67327: WARN %8s : %08d of %08d (file not found, cannot check hash)\n",p->second.hashname.c_str(),p->second.checkednotfound,myfiles.size());
+				myprintf("02483: WARN %8s : %08d of %08d (file not found, cannot check hash)\n",p->second.hashname.c_str(),p->second.checkednotfound,myfiles.size());
 				if (risultato!=2)
 					risultato=1;
 			}
 		}
 		if (nohashfound)
-			myprintf("66733: UNKNOWN/NOHASH: %08d of %08d (legacy 7.15 archive?)\n",nohashfound,myfiles.size());
+			myprintf("02484: UNKNOWN/NOHASH: %08d of %08d (legacy 7.15 archive?)\n",nohashfound,myfiles.size());
 		printbar('-');
 		if (flagverbose)
-			myprintf("67337: Total hashed bytes %s @ %s B/s\n",migliaia(byteshashed),migliaia2((int64_t)(byteshashed/((mtime()-startrunning)/1000.0))));
+			myprintf("02485: Total hashed bytes %s @ %s B/s\n",migliaia(byteshashed),migliaia2((int64_t)(byteshashed/((mtime()-startrunning)/1000.0))));
 	}
 	delete [] threads;
 	if (flagverify)
 		if (flagparanoid)
 		{
 			if (flagdebug)
-				myprintf("44950: -paranoid, deleting files with OK matches\n");
+				myprintf("02486: -paranoid, deleting files with OK matches\n");
 			bool	alldeleted=true;
 			uint32_t	tobedeleted=0;
 			for(unsigned int i=0;i<mythreads;i++)
@@ -75128,7 +75565,7 @@ int Jidac::multiverify(vector <s_fileandsize>& i_arrayfilename)
 			int			percentualestampata=0;
 			printbar(' ');
 			myprintf("\r");
-			myprintf("67353: Purging ");
+			myprintf("02487: Purging ");
 			for(unsigned int i=0;i<mythreads;i++)
 				for (unsigned int j=0;j<vettoreparametrihash[i].filestobehashed.size();j++)
 				{
@@ -75148,9 +75585,8 @@ int Jidac::multiverify(vector <s_fileandsize>& i_arrayfilename)
 							{
 								if (flagverbose || (g_output!=""))
 								{
-									myprintf("45256: cannot delete ");
-									printUTF8(vettoreparametrihash[i].filestobehashed[j].c_str());
-									myprintf("\n");
+									myprintf("02488: cannot delete %Z\n",vettoreparametrihash[i].filestobehashed[j].c_str());
+									
 								}
 								alldeleted=false;
 							}
@@ -75160,9 +75596,7 @@ int Jidac::multiverify(vector <s_fileandsize>& i_arrayfilename)
 							alldeleted=false;
 							if (flagverbose)
 							{
-								myprintf("44697: NON DELETED ");
-								printUTF8(vettoreparametrihash[i].filestobehashed[j].c_str());
-								myprintf("\n");
+								myprintf("02489: NON DELETED %Z\n",vettoreparametrihash[i].filestobehashed[j].c_str());
 							}
 						}
 					}
@@ -75176,14 +75610,12 @@ int Jidac::multiverify(vector <s_fileandsize>& i_arrayfilename)
 				if (!alldeleted)
 					bigguru();
 			if (flagverbose)
-				myprintf("44667: removing temp dir (if empty) %s\n",tofiles[0].c_str());
+				myprintf("02490: removing temp dir (if empty) %s\n",tofiles[0].c_str());
 			if (!removetempdirifempty(tofiles[0],false))
 			{
 				if (flagverbose)
 				{
-					myprintf("44719: something left in ");
-					printUTF8(tofiles[0].c_str());
-					myprintf("\n");
+					myprintf("02491: something left in %Z\n",tofiles[0].c_str());
 				}
 				risultato++;
 			}
@@ -75191,9 +75623,7 @@ int Jidac::multiverify(vector <s_fileandsize>& i_arrayfilename)
 			{
 				if (flagdebug3)
 				{
-					myprintf("44732: folder removed ");
-					printUTF8(tofiles[0].c_str());
-					myprintf("\n");
+					myprintf("02492: folder removed %Z\n",tofiles[0].c_str());
 				}
 			}
 		}
@@ -75203,12 +75633,12 @@ int Jidac::extractqueue2(int i_chunk,int i_chunksize)
 {
 	if (i_chunk<0)
 	{
-		myprintf("44664: chunk must be >=0\n");
+		myprintf("02493: chunk must be >=0\n");
 		return 0;
 	}
 	if (chunkfiles.size()==0)
 	{
-		myprintf("44669: WARN: chunfiles.size == 0\n");
+		myprintf("02494: WARN: chunfiles.size == 0\n");
 		return 0;
 	}
 	vector<Block> preblock=block;      			// this takes me about 3 full day of old-school debugging
@@ -75275,12 +75705,12 @@ int Jidac::extractqueue2(int i_chunk,int i_chunksize)
 				*/
 			}
 			else
-				myprintf("43406: BLOCK ZERO %s\n",fn.c_str());
+				myprintf("02495: BLOCK ZERO %s\n",fn.c_str());
 		}  // end if selected
 	}  // end for
 	g_crc32.clear();
 	if (flagverbose)
-	myprintf("67511: Chunk %03d/%03d %21s bytes (%s) in %s files by %d threads\n",i_chunk+1,i_chunksize,migliaia(job.total_size), tohuman(job.total_size),migliaia2(total_files),howmanythreads);
+	myprintf("02496: Chunk %03d/%03d %21s bytes (%s) in %s files by %d threads\n",i_chunk+1,i_chunksize,migliaia(job.total_size), tohuman(job.total_size),migliaia2(total_files),howmanythreads);
 	int64_t startextract=mtime();
 	vector<ThreadID> tid(howmanythreads);
 	for (unsigned i=0; i<tid.size(); ++i)
@@ -75308,11 +75738,9 @@ int Jidac::extractqueue2(int i_chunk,int i_chunksize)
 					if (++errors==1)
 					{
 						myprintf("\n");
-						myprintf("67634: Failed (extracted/total fragments, file):\n");
+						myprintf("02497: Failed (extracted/total fragments, file):\n");
 					}
-					myprintf("67546: SOK p->second.data %u / p->second.ptr.size() %u ",int(p->second.data), int(p->second.ptr.size()));
-					printUTF8(fn.c_str());
-					myprintf("\n");
+					myprintf("02498: SOK p->second.data %u / p->second.ptr.size() %u %Z\n",int(p->second.data), int(p->second.ptr.size()),fn.c_str());
 				}
 			}
 		}
@@ -75320,7 +75748,7 @@ int Jidac::extractqueue2(int i_chunk,int i_chunksize)
 		{
 			fflush(stdout);
 			myprintf("\n");
-			myprintf("67643: Extracted %s files (%s errors) using %s bytes x %d threads\n",
+			myprintf("02499: Extracted %s files (%s errors) using %s bytes x %d threads\n",
 			migliaia((int64_t)extracted), migliaia3(errors), migliaia4((int64_t)job.maxMemory),
 			int(tid.size()));
 		}
@@ -75333,8 +75761,8 @@ int Jidac::extractqueue2(int i_chunk,int i_chunksize)
 	double	time_extract=(endextract-startextract)*0.001+0.001;
 	if (flagverbose)
 	{
-		myprintf("67554: RAMDISK       %21s bytes (%s) ",migliaia(g_ramdisksize),tohuman(g_ramdisksize));
-		myprintf("67555: time %.2f s @ %s (%s/s)\n",time_extract,migliaia((int64_t)(job.total_size/time_extract)),tohuman((int64_t)(job.total_size/time_extract)));
+		myprintf("02500: RAMDISK       %21s bytes (%s) ",migliaia(g_ramdisksize),tohuman(g_ramdisksize));
+		myprintf("02501: time %.2f s @ %s (%s/s)\n",time_extract,migliaia((int64_t)(job.total_size/time_extract)),tohuman((int64_t)(job.total_size/time_extract)));
 	}
 	int64_t 	startwrite=mtime();
 	int64_t 	expected=0;
@@ -75407,14 +75835,14 @@ int Jidac::extractqueue2(int i_chunk,int i_chunksize)
 	}
 	if (flagdebug3)
 	{
-		myprintf("33817: myfiles    %12s\n",migliaia(myfiles.size()));
-		myprintf("33817: mydate     %12s\n",migliaia(mydate.size()));
-		myprintf("33817: myattr     %12s\n",migliaia(myattr.size()));
-		myprintf("33817: myalgo     %12s\n",migliaia(myalgo.size()));
-		myprintf("33817: myfilehash %12s\n",migliaia(myfilehash.size()));
-		myprintf("33817: mysize     %12s\n",migliaia(myfilesize.size()));
-		myprintf("33817: mydata     %12s\n",migliaia(mydata.size()));
-		myprintf("33817: mycrc32    %12s\n",migliaia(myfilecrc.size()));
+		myprintf("02502: myfiles    %12s\n",migliaia(myfiles.size()));
+		myprintf("02503: mydate     %12s\n",migliaia(mydate.size()));
+		myprintf("02504: myattr     %12s\n",migliaia(myattr.size()));
+		myprintf("02505: myalgo     %12s\n",migliaia(myalgo.size()));
+		myprintf("02506: myfilehash %12s\n",migliaia(myfilehash.size()));
+		myprintf("02507: mysize     %12s\n",migliaia(myfilesize.size()));
+		myprintf("02508: mydata     %12s\n",migliaia(mydata.size()));
+		myprintf("02509: mycrc32    %12s\n",migliaia(myfilecrc.size()));
 	}
 	for (unsigned int i=0;i<myfiles.size();i++)
 	{
@@ -75431,7 +75859,7 @@ int Jidac::extractqueue2(int i_chunk,int i_chunksize)
 	for (unsigned int i=0;i<mythreads;i++)
 	{
 		if (flagdebug3)
-			myprintf("67664: Thread [%02d] files %s\n",(int)i,migliaia(vettoreramtodisk[i].filenameondisk.size()));
+			myprintf("02510: Thread [%02d] files %s\n",(int)i,migliaia(vettoreramtodisk[i].filenameondisk.size()));
 		totfile+=+vettoreramtodisk[i].filenameondisk.size();
 	}
 	int rc;
@@ -75442,21 +75870,21 @@ int Jidac::extractqueue2(int i_chunk,int i_chunksize)
 	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
 	if (myfiles.size()!=totfile)
 	{
-		myprintf("64043: guru myfiles.size != totfile\n");
+		myprintf("02511: guru myfiles.size != totfile\n");
 		seppuku();
 		exit(0);
 	}
 	printbar(' ',false);
 	myprintf("\r");
 	if (flagverbose)
-		myprintf("67668: Running %d threads on %s files\n",mythreads,migliaia(myfiles.size()));
+		myprintf("02512: Running %d threads on %s files\n",mythreads,migliaia(myfiles.size()));
 	for(unsigned int i=0; i<mythreads; i++ )
 	{
 		vettoreramtodisk[i].timestart=mtime();
 		rc = pthread_create(&threads[i], &attr, scriviramtodisk, (void*)&vettoreramtodisk[i]);
 		if (rc)
 		{
-			myprintf("39264: Error creating thread\n");
+			myprintf("02513: Error creating thread\n");
 			exit(-1);
 		}
 	}
@@ -75514,7 +75942,7 @@ int Jidac::extractqueue2(int i_chunk,int i_chunksize)
 	{
 		if (issomething)
 			printbar('-');
-		myprintf("67739: CRC-32 %21s ",migliaia(t_crcsize));
+		myprintf("02514: CRC-32 %21s ",migliaia(t_crcsize));
 		if (t_crcsize==expected)
 			myprintf("[OK] ");
 		else
@@ -75536,7 +75964,7 @@ int Jidac::extractqueue2(int i_chunk,int i_chunksize)
 		else
 			myprintf("[FAULT: -verbose] ");
 		myprintf("\n");
-		myprintf("67763: HASHes %21s ",migliaia(t_hashedsize));
+		myprintf("02515: HASHes %21s ",migliaia(t_hashedsize));
 		if (t_hashedsize==expected)
 			myprintf("[OK] ");
 		else
@@ -75564,8 +75992,8 @@ int Jidac::extractqueue2(int i_chunk,int i_chunksize)
 	{
 		if (flagverbose)
 		{
-			myprintf("67783: Time on FS (%6.2f s) writing data (%6.2f s) @ %s/s\n",t_timefilesystem*0.001,t_timewrite*0.001,tohuman((int64_t)(t_writtenbythread/(t_timewrite*0.001))));
-			myprintf("67784: Written by threads %21s / reported write errors %d ",migliaia(t_writtenbythread),t_writeerror);
+			myprintf("02516: Time on FS (%6.2f s) writing data (%6.2f s) @ %s/s\n",t_timefilesystem*0.001,t_timewrite*0.001,tohuman((int64_t)(t_writtenbythread/(t_timewrite*0.001))));
+			myprintf("02517: Written by threads %21s / reported write errors %d ",migliaia(t_writtenbythread),t_writeerror);
 			if (t_writeerror==0)
 				myprintf("[OK] ");
 			else
@@ -75575,7 +76003,7 @@ int Jidac::extractqueue2(int i_chunk,int i_chunksize)
 	}
 	if (flagverbose)
 	{
-		myprintf("67800: Bytes expected     %21s (%6.2f s) @ %s B/s ",migliaia2((int64_t)expected),writetime,migliaia3((int64_t)(t_writtenbythread/writetime)));
+		myprintf("02518: Bytes expected     %21s (%6.2f s) @ %s B/s ",migliaia2((int64_t)expected),writetime,migliaia3((int64_t)(t_writtenbythread/writetime)));
 		if (!flagtest)
 		{
 			if (t_writtenbythread==expected)
@@ -75584,7 +76012,7 @@ int Jidac::extractqueue2(int i_chunk,int i_chunksize)
 				myprintf("[FAULT!] ");
 		}
 		myprintf("\n");
-		myprintf("67803: RAMDISK releasing  %21s bytes ",migliaia(g_ramdisksize));
+		myprintf("02519: RAMDISK releasing  %21s bytes ",migliaia(g_ramdisksize));
 	}
 	for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p)
 		if (std::binary_search(chunkfiles.begin(), chunkfiles.end(), p->first))
@@ -75595,7 +76023,7 @@ int Jidac::extractqueue2(int i_chunk,int i_chunksize)
 	if (g_ramdisksize!=0)
 	{
 		myprintf("\n\n");
-		myprintf("45519: WARNING SOMETHING WRONG WITH RAM!\n");
+		myprintf("02520: WARNING SOMETHING WRONG WITH RAM!\n");
 	}
 	block=preblock; ///AARRRGHHH!!
 	chunkfiles.clear();
@@ -75616,9 +76044,7 @@ int Jidac::removeemptydirs(string i_folder,bool i_kill)
 	DTMap mydestinationdir;
 	if (flagdebug)
 	{
-		myprintf("45124: Scanning dir <<");
-		printUTF8(i_folder.c_str());
-		myprintf(">>\n");
+		myprintf("02521: Scanning dir <<%Z>>\n",i_folder.c_str());
 	}
 	scandir(false,mydestinationdir,i_folder);
 	printbar(' ',false);
@@ -75627,7 +76053,7 @@ int Jidac::removeemptydirs(string i_folder,bool i_kill)
 	for (DTMap::iterator p=mydestinationdir.begin(); p!=mydestinationdir.end(); ++p)
 		scannedfiles.push_back(p->first);
 	if (flagverbose)
-		myprintf("67843: Scanned files  (remove empty dir) %s\n",migliaia(scannedfiles.size()));
+		myprintf("02522: Scanned files  (remove empty dir) %s\n",migliaia(scannedfiles.size()));
 	vector<string> tobedeleted;
 	int candidati=0;
 	for (unsigned int i=0;i<scannedfiles.size();i++)
@@ -75661,33 +76087,25 @@ int Jidac::removeemptydirs(string i_folder,bool i_kill)
 	{
 		printbar('-');
 		for (unsigned int i=0;i<tobedeleted.size();i++)
-		{
-			myprintf("45264: TO BE DELETED <<");
-			printUTF8(tobedeleted[i].c_str());
-			myprintf(">>\n");
-		}
+			myprintf("02523: TO BE DELETED <<%Z>>\n",tobedeleted[i].c_str());
 		printbar('-');
 	}
 	if (candidati==0)
 	{
 		if (flagverbose)
 		{
-			myprintf("45291: zero candidates <<");
-			printUTF8(i_folder.c_str());
-			myprintf(">>\n");
+			myprintf("02524: zero candidates <<%Z>>\n",i_folder.c_str());
 		}
 		return 0;
 	}
 	if (!i_kill)
 	{
-		myprintf("45344: Empty folders        %12s on <<",migliaia(candidati));
-		printUTF8(i_folder.c_str());
-		myprintf(">>\n");
-		myprintf("45347: dry run, exiting (no -kill)\n");
+		myprintf("02525: Empty folders        %12s on <<%Z>>\n",migliaia(candidati),i_folder.c_str());
+		myprintf("02526: dry run, exiting (no -kill)\n");
 		return 0;
 	}
 	if (flagverbose)
-		myprintf("45291: Empty folders %12s ",migliaia(candidati));
+		myprintf("02527: Empty folders %12s ",migliaia(candidati));
 	int lastrun=tobedeleted.size();
 	int newrun=0;
 	int64_t startdelete=mtime();
@@ -75706,7 +76124,7 @@ int Jidac::removeemptydirs(string i_folder,bool i_kill)
 		if (flagdebug3)
 		{
 			myprintf("\n");
-			myprintf("67934: lastrun - newrun %d %d\n",lastrun,newrun);
+			myprintf("02528: lastrun - newrun %d %d\n",lastrun,newrun);
 		}
 		if (lastrun>newrun)
 		{
@@ -75716,17 +76134,13 @@ int Jidac::removeemptydirs(string i_folder,bool i_kill)
 	}
 	if (flagverbose)
 	{
-		myprintf(" time %.2f sec, runs %04d, highlanders %s <<",(mtime()-startdelete)/1000.0,runs,migliaia(tobedeleted.size()));
-		printUTF8(i_folder.c_str());
-		myprintf(">>\n");
+		myprintf(" time %.2f sec, runs %04d, highlanders %s <<%Z>>\n",(mtime()-startdelete)/1000.0,runs,migliaia(tobedeleted.size()),i_folder.c_str());
 	}
 	if (tobedeleted.size()>0)
 		if (flagdebug3)
 			for (unsigned int i=0;i<tobedeleted.size();i++)
 			{
-				myprintf("67951: Highlander <<");
-				printUTF8(tobedeleted[i].c_str());
-				myprintf(">>\n");
+				myprintf("02529: Highlander <<%Z>>\n",tobedeleted[i].c_str());
 			}
 	if (tobedeleted.size()==0)
 		return 0;
@@ -75743,15 +76157,15 @@ int Jidac::removeemptydirs(string i_folder,bool i_kill)
 int Jidac::adminrun()
 {
 #ifdef _WIN32
-	myprintf("67944: *** LAUNCH C: ARCHIVING  ***\n");
+	myprintf("02530: *** LAUNCH C: ARCHIVING  ***\n");
 	if (archive=="")
 	{
-		myprintf("46458: need an archive (.zpaq)\n");
+		myprintf("02531! need an archive (.zpaq)\n");
 		return 2;
 	}
 	if (fullcommandline=="")
 	{
-		myprintf("46464: command line empty\n");
+		myprintf("02532! command line empty\n");
 		return 2;
 	}
 	replace(fullcommandline,"g ","q ");
@@ -75766,7 +76180,7 @@ int Jidac::adminrun()
 	waitexecute(runme,parms,SW_HIDE);
 	return 0;
 #else
-	myprintf("46452: Windows C: backup works... on Windows\n");
+	myprintf("02533! Windows C: backup works... on Windows\n");
 	return 2;
 #endif
 }
@@ -75776,27 +76190,27 @@ int Jidac::adminrun()
 int Jidac::windowsc()
 {
 #ifdef _WIN32
-	myprintf("67977: *** (KIND OF) WINDOWS C: BACKUP  ***\n");
+	myprintf("02534: *** (KIND OF) WINDOWS C: BACKUP  ***\n");
 	if (archive=="")
 	{
-		myprintf("45757: need an archive (.zpaq)\n");
+		myprintf("02535! need an archive (.zpaq)\n");
 		return 2;
 	}
 	if (tofiles.size()>1)
 	{
-		myprintf("46041: too many -to (max 1, default %s)\n",g_franzsnap.c_str());
+		myprintf("02536! too many -to (max 1, default %s)\n",g_franzsnap.c_str());
 		return 2;
 	}
 	if (files.size()!=0)
-		myprintf("46042: files ignored (try to copy all C:)\n");
+		myprintf("02537: files ignored (try to copy all C:)\n");
 	if (!isadmin())
 	{
 		myprintf("\n");
-		myprintf("46178: you need admin rights, quit (retry with g command)\n");
+		myprintf("02538! you need admin rights, quit (retry with g command)\n");
 		return 2;
 	}
 	if (tofiles.size()==0)
-		myprintf("68007: Using default -to %s (you can use %PCNAME, ex -to c:\\snap_%PCNAME)\n",g_franzsnap.c_str());
+		myprintf("02539: Using default -to %s (you can use %PCNAME, ex -to c:\\snap_%PCNAME)\n",g_franzsnap.c_str());
 	if (tofiles.size()==1)
 	{
 		string temp=tofiles[0];
@@ -75806,29 +76220,29 @@ int Jidac::windowsc()
 			myreplaceall(temp,"%pcname",pcname);
 		if (!isletterpath(temp))
 		{
-			myprintf("46793: -to need to be a letter path (c:\\something)\n");
+			myprintf("02540! -to need to be a letter path (c:\\something)\n");
 			return 2;
 		}
 		if ((temp[0]!='c') && (temp[0]!='C'))
 		{
-			myprintf("46798: -to must point to c  (c:\\something, not X:\\something)\n");
+			myprintf("02541! -to must point to c  (c:\\something, not X:\\something)\n");
 			return 2;
 		}
 		temp=trimbarra(temp);
 		g_franzsnap=temp;
 	}
 	if (flagverbose)
-		myprintf("68018: *** snapdir will be <<%s>> ***\n",g_franzsnap.c_str());
+		myprintf("02542: *** snapdir will be <<%s>> ***\n",g_franzsnap.c_str());
 	HRESULT hr;
 	hr=ModifyPrivilege(SE_BACKUP_NAME, TRUE);
     if (hr>0) 
-		myprintf("46406: Failed to become BACKUP\n");
+		myprintf("02543: Failed to become BACKUP\n");
 	hr=ModifyPrivilege(SE_AUDIT_NAME, TRUE);
     if (hr>0) 
-		myprintf("46414: Failed to become AUDIT\n");
+		myprintf("02544: Failed to become AUDIT\n");
 	hr=ModifyPrivilege(SE_SECURITY_NAME, TRUE);
     if (hr>0) 
-		myprintf("46414: Failed to become SECURITY\n");
+		myprintf("02545: Failed to become SECURITY\n");
 	tofiles.clear();
 	tofiles.push_back("c:/");
 	files.clear();
@@ -75837,7 +76251,7 @@ int Jidac::windowsc()
 	notfiles.push_back(g_franzsnap+"/swapfile.sys");
 	notfiles.push_back(g_franzsnap+"/System Volume Information/*");
 	notfiles.push_back("*/AppData/Local/Microsoft/WindowsApps/*");	// no full reparse point, yet
-	myprintf("68053: Excluding ALWAYS pagefile.sys, swapfile.sys, System Volume Information, WindowsApps\n");
+	myprintf("02546: Excluding ALWAYS pagefile.sys, swapfile.sys, System Volume Information, WindowsApps\n");
 	if (all)
 	{
 		flagforcewindows=true;
@@ -75852,26 +76266,26 @@ int Jidac::windowsc()
 			notfiles.push_back(g_franzsnap+"/ProgramData/Microsoft/Windows Defender/");
 			notfiles.push_back(g_franzsnap+"/ProgramData/Microsoft/Search/");
 			notfiles.push_back(g_franzsnap+"/ProgramData/Package Cache/");
-			myprintf("68068: Excluding        %%programfiles%% and x86, programdata/microsoft/windows defender, programdata/microsoft/search\n");
-			myprintf("68069: Excluding        programdata/package cache (because -frugal)\n");
+			myprintf("02547: Excluding        %%programfiles%% and x86, programdata/microsoft/windows defender, programdata/microsoft/search\n");
+			myprintf("02548: Excluding        programdata/package cache (because -frugal)\n");
 		}
 		if (!flagforcewindows)
 		{
 			notfiles.push_back(g_franzsnap+"/windows/*");
 			notfiles.push_back(g_franzsnap+"/$RECYCLE.BIN/*");
-			string tempdir=g_gettempdirectory();
+			string tempdir=g_realtemp();
 			myreplaceall(tempdir,"\\","/");
 			tempdir+="*";
 			if (flagdebug)
-				myprintf("68086: TEMP |%s|\n",tempdir.c_str());
+				myprintf("02549: TEMP |%s|\n",tempdir.c_str());
 			notfiles.push_back(tempdir);
-			myprintf("68081: Excluding        C:\\WINDOWS, TEMP, RECYCLE.BIN, ADS and .zfs bypass with -forcewindows\n");
+			myprintf("02550: Excluding        C:\\WINDOWS, TEMP, RECYCLE.BIN, ADS and .zfs bypass with -forcewindows\n");
 		}
 	}
 	flagvss=true;
 	return add();
 #else
-	myprintf("46173: Windows C: backup works... on Windows\n");
+	myprintf("02551! Windows C: backup works... on Windows\n");
 	return 2;
 #endif
 }
@@ -75885,7 +76299,7 @@ int Jidac::hashselect()
 {
 	if (howmanythreads==1)
 	{
-		myprintf("41949: hashselect() not yet implemented (for monothread)\n");
+		myprintf("02552: hashselect() not yet implemented (for monothread)\n");
 		return 0;
 	}
 	if (dt.size()==0)
@@ -75923,7 +76337,7 @@ int Jidac::hashselect()
 						if (myhash!="")
 						{
 							if (flagdebug3)
-								myprintf("41649: from dt myhashtype %s myhash %s file %s\n",myhashtype.c_str(),myhash.c_str(),p->first.c_str());
+								myprintf("02553: from dt myhashtype %s myhash %s file %s\n",myhashtype.c_str(),myhash.c_str(),p->first.c_str());
 							a->second.hexhash		=myhash;
 							a->second.hashtype		=myhashtype;
 							myfiles.push_back		(p->first);
@@ -75965,7 +76379,7 @@ int Jidac::hashselect()
 	for (unsigned int i=0;i<mythreads;i++)
 	{
 		if (flagdebug3)
-			myprintf("68188: Thread [%02d] files %s\n",(int)i,migliaia(vettoreparametrihash[i].filestobehashed.size()));
+			myprintf("02554: Thread [%02d] files %s\n",(int)i,migliaia(vettoreparametrihash[i].filestobehashed.size()));
 ///		totfile+=+vettoreparametrihash[i].filestobehashed.size();
 	}
 	int rc;
@@ -75974,14 +76388,14 @@ int Jidac::hashselect()
 	void *status;
 	pthread_attr_init(&attr);
 	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
-	myprintf("68183: Paranoid select: %8s files %21s (%s in %d threads)\n",migliaia(myfiles.size()),migliaia2(total_size),tohuman(total_size),mythreads);
+	myprintf("02555: Paranoid select: %8s files %21s (%s in %d threads)\n",migliaia(myfiles.size()),migliaia2(total_size),tohuman(total_size),mythreads);
 	for(unsigned int i=0;i<mythreads;i++ )
 	{
 		vettoreparametrihash[i].timestart=mtime();
 		rc = pthread_create(&threads[i], &attr, scansionahash, (void*)&vettoreparametrihash[i]);
 		if (rc)
 		{
-			myprintf("41951: Error creating thread\n");
+			myprintf("02556: Error creating thread\n");
 			exit(-1);
 		}
 	}
@@ -75994,7 +76408,7 @@ int Jidac::hashselect()
 			error("Unable to join\n");
 			exit(-1);
 		}
-	///		myprintf("68203: Thread completed %d status %d\n",(int)i,status);
+	///		myprintf("02557: Thread completed %d status %d\n",(int)i,status);
 	}
 	///	for every output of the hashing threads, with a nonempty hash,
 	///	check if a dt (already archive) exists, with same name
@@ -76019,9 +76433,7 @@ int Jidac::hashselect()
 							forzati++;
 							if (flagverbose)
 							{
-								myprintf("68236: DT hashtype |%s| hash |%s| filesystem |%s| ",a->second.hashtype.c_str(),a->second.hexhash.c_str(),hashfromfilesystem.c_str());
-								printUTF8(filename.c_str());
-								myprintf("\n");
+								myprintf("02558: DT hashtype |%s| hash |%s| filesystem |%s| %Z\n",a->second.hashtype.c_str(),a->second.hexhash.c_str(),hashfromfilesystem.c_str(),filename.c_str());
 							}
 						}
 					}
@@ -76031,7 +76443,7 @@ int Jidac::hashselect()
 	float tempo=(mtime()-startrecalc)/1000.0;
 	printbar(' ',false);
 	myprintf("\r");
-	myprintf("68240: Time for paranoid select : %.2fs (speed %s/s), forced files %s\n",tempo,tohuman((int64_t)(total_size/tempo)),migliaia(forzati));
+	myprintf("02559: Time for paranoid select : %.2fs (speed %s/s), forced files %s\n",tempo,tohuman((int64_t)(total_size/tempo)),migliaia(forzati));
 	return 0;
 }
 
@@ -76042,12 +76454,12 @@ int init ()
 	int error=WSAStartup(MAKEWORD(HIGHVERSION,LOWVERSION),&g_wsaData);
 	if(error!=0)
 	{
-		myprintf("45685: WSAStartup KO code %d\n",error);
+		myprintf("02560: WSAStartup KO code %d\n",error);
 		return 1;
 	}
 	if(LOBYTE(g_wsaData.wVersion)!=LOWVERSION||HIBYTE(g_wsaData.wVersion)!=HIGHVERSION)
 	{
-		myprintf("45691: version too old : %d.%d\n",LOBYTE(g_wsaData.wVersion),HIBYTE(g_wsaData.wVersion));
+		myprintf("02561: version too old : %d.%d\n",LOBYTE(g_wsaData.wVersion),HIBYTE(g_wsaData.wVersion));
 		WSACleanup();
 		return 1;
 	}
@@ -76070,7 +76482,7 @@ string	dnsresolve(string i_address)
 
 	if (getaddrinfo(i_address.c_str(),NULL,&hints2,&res)!=0)
 	{
-		myprintf("46229: Cannot resolve %s to IP address\n",i_address.c_str());
+		myprintf("02562: Cannot resolve %s to IP address\n",i_address.c_str());
 		return "";
 	}
 	else
@@ -76096,22 +76508,22 @@ int addressing()
 	string	old_server=g_server;
 	g_server=dnsresolve(g_server);
 	if (old_server!=g_server)
-		myprintf("45816: DNS resolved %s => IP %s\n",old_server.c_str(),g_server.c_str());
+		myprintf("02563: DNS resolved %s => IP %s\n",old_server.c_str(),g_server.c_str());
 
 	result=getaddrinfo(g_server.c_str(),g_port.c_str(),&hints,&g_addr);
 
 	if(result!=0)
 	{
-		myprintf("45715: getaddrinfo KO %d %s\n",result,wtou(gai_strerror(WSAGetLastError())).c_str());
+		myprintf("02564: getaddrinfo KO %d %s\n",result,wtou(gai_strerror(WSAGetLastError())).c_str());
 		WSACleanup();
 		return 1;
 	}
 
-	myprintf("45720: Cloudpaq Server %s:%s ",g_server.c_str(),g_port.c_str());
+	myprintf("02565: Cloudpaq Server %s:%s ",g_server.c_str(),g_port.c_str());
 	int i=0;
 	for(temp=g_addr;temp!=NULL;temp=temp->ai_next)
 	{
-		myprintf("68326: [%02d] ",++i);
+		myprintf("02566: [%02d] ",++i);
 
 		if (temp->ai_family==AF_INET)
 			myprintf(" AF_INET (v4) ");
@@ -76143,13 +76555,13 @@ int Jidac::sendtocloudpaq(const int64_t i_extimated,const int i_version)
 		printf("46174: -cloudkey is empty!\n");
 		return 1;
 	}
-	myprintf("46175: Going 'Internet' ");
+	myprintf("02567: Going 'Internet' ");
 	if (g_socket==0)
 	{
 		if(init())
 		{
 			myprintf("\n");
-			myprintf("46181: Winsock library KO\n");
+			myprintf("02568: Winsock library KO\n");
 			g_socket=0;
 			return 1;
 		}
@@ -76162,21 +76574,21 @@ int Jidac::sendtocloudpaq(const int64_t i_extimated,const int i_version)
 		if((g_socket=socket(g_addr->ai_family,g_addr->ai_socktype,g_addr->ai_protocol))==INVALID_SOCKET)
 		{
 			myprintf("\n");
-			myprintf("46190: Unable to make socket %d %s\n",WSAGetLastError(),wtou(gai_strerror(WSAGetLastError())).c_str());
+			myprintf("02569: Unable to make socket %d %s\n",WSAGetLastError(),wtou(gai_strerror(WSAGetLastError())).c_str());
 			g_socket=0;
 			return 1;
 		}
 		else
-			myprintf("46162: Socket OK, try to connect...\n");
+			myprintf("02570: Socket OK, try to connect...\n");
 
 		if (connect(g_socket,g_addr->ai_addr,g_addr->ai_addrlen)!= 0)
 		{
-			myprintf("46199: Failed connect : %d %s\n" ,WSAGetLastError(),wtou(gai_strerror(WSAGetLastError())).c_str());
+			myprintf("02571: Failed connect : %d %s\n" ,WSAGetLastError(),wtou(gai_strerror(WSAGetLastError())).c_str());
 			g_socket=0;
 			return 1;
 		}
 		else
-			myprintf("46206: Connected to server (this is good)\n");
+			myprintf("02572: Connected to server (this is good)\n");
 	///	freeaddrinfo ( g_addr );
 	}
 
@@ -76185,25 +76597,25 @@ int Jidac::sendtocloudpaq(const int64_t i_extimated,const int i_version)
 	char buff[CLOUDBUFFSIZE];
 	if ((bytesreceived=recv(g_socket,buff,CLOUDBUFFSIZE-1,0))==-1)
 	{
-		myprintf("46212: recv KO %d  %s\n" , WSAGetLastError () ,wtou(gai_strerror(WSAGetLastError())).c_str());
+		myprintf("02573: recv KO %d  %s\n" , WSAGetLastError () ,wtou(gai_strerror(WSAGetLastError())).c_str());
 		return 1;
 	}
 	else
 	{
 		buff[bytesreceived]=0;
-		myprintf("46024: Message from server %d bytes |%s|\n",bytesreceived,buff);
+		myprintf("02574: Message from server %d bytes |%s|\n",bytesreceived,buff);
 	}
 
 	Twofish_initialise();
 	std::string		lachiave=g_cloudkey;
 	string			filename=extractfilename(g_indexname);
-	myprintf("46418: Onlyfilename  %s\n",filename.c_str());
+	myprintf("02575: Onlyfilename  %s\n",filename.c_str());
 
 
 	XXHash64 myhash(0);
 	myhash.add(filename.c_str(),filename.size());
 	g_enter=myhash.hash();
-	myprintf("46221: Accepted code %08X\n",g_enter);
+	myprintf("02576: Accepted code %08X\n",g_enter);
 
 	maketwofishkey(lachiave,&g_mykey);
 
@@ -76211,23 +76623,23 @@ int Jidac::sendtocloudpaq(const int64_t i_extimated,const int i_version)
 	mypacket.setpacket(g_enter,FRANZOPACKET_TYPECOMMAND_NEW,i_extimated,i_version,1003,"hello I am zpaqfranz");
 	mypacket.sendtosocket();
 
-	myprintf("46237: Closing socket (after first packet sended)\n");
+	myprintf("02577: Closing socket (after first packet sended)\n");
 	closesocket (g_socket);
 ///	rude check for connection stability over VPN or whatever: close and reopen
 	if((g_socket=socket(g_addr->ai_family,g_addr->ai_socktype,g_addr->ai_protocol))==INVALID_SOCKET)
 	{
-		myprintf("46242: cannot open socket [2] %d %s\n",WSAGetLastError(),wtou(gai_strerror(WSAGetLastError())).c_str());
+		myprintf("02578: cannot open socket [2] %d %s\n",WSAGetLastError(),wtou(gai_strerror(WSAGetLastError())).c_str());
 		return 1;
 	}
 	else
-		myprintf("46246: Second socket OK\n");
+		myprintf("02579: Second socket OK\n");
 	if(connect(g_socket,g_addr->ai_addr,g_addr->ai_addrlen)!=0)
 	{
-		myprintf("46249: second connect KO %d %s\n" , WSAGetLastError () ,wtou(gai_strerror(WSAGetLastError())).c_str());
+		myprintf("02580: second connect KO %d %s\n" , WSAGetLastError () ,wtou(gai_strerror(WSAGetLastError())).c_str());
 		return 1;
 	}
 	else
-		myprintf("46252: Connected to server [2]: this is VERY good\n");
+		myprintf("02581: Connected to server [2]: this is VERY good\n");
 	return 0;
 }
 #endif
@@ -76241,18 +76653,18 @@ bool Jidac::getjollylist(string i_fullarchive,DTMap* o_thedt)
 {
 	if (i_fullarchive=="")
 	{
-		myprintf("66126: fullarchive empty\n");
+		myprintf("02582: fullarchive empty\n");
 		return false;
 	}
 	if (o_thedt==NULL)
 	{
-		myprintf("66131: o_thedt is null!\n");
+		myprintf("02583: o_thedt is null!\n");
 		return false;
 	}
 	if (!iswildcard(i_fullarchive))
 	{
 		if (flagdebug2)
-			myprintf("66138: no wildcard => singlefile\n");
+			myprintf("02584: no wildcard => singlefile\n");
 		DT& d=(*o_thedt)[i_fullarchive];
 		d.date			=0;
 		d.creationdate	=0;
@@ -76265,7 +76677,7 @@ bool Jidac::getjollylist(string i_fullarchive,DTMap* o_thedt)
 
 
 	string estensione=prendiestensione(i_fullarchive);
-	myprintf("66136: Searching for jolly archive(s) in <<%s>> for extension <<%s>>\n",i_fullarchive.c_str(),estensione.c_str());
+	myprintf("02585: Searching for jolly archive(s) in <<%s>> for extension <<%s>>\n",i_fullarchive.c_str(),estensione.c_str());
 
 	g_bytescanned	=0;
 	g_filescanned	=0;
@@ -76274,24 +76686,22 @@ bool Jidac::getjollylist(string i_fullarchive,DTMap* o_thedt)
 
 #ifdef unix
 	if (flagdebug)
-		myprintf("66145: running on NIX\n");
+		myprintf("02586: running on NIX\n");
 	vector<string> candidate;
 	listfiles(extractfilepath(i_fullarchive),estensione,true,&candidate);
 	if (flagdebug3)
-		myprintf("66149: candidate %s with pattern %s\n",migliaia(candidate.size()),i_fullarchive.c_str());
+		myprintf("02587: candidate %s with pattern %s\n",migliaia(candidate.size()),i_fullarchive.c_str());
 	for (unsigned int i=0;i<candidate.size();i++)
 	{
 		string filename=candidate[i];
 		if (flagdebug3)
-			myprintf("66154: filename %08d %s\n",(int)i,filename.c_str());
+			myprintf("02588: filename %08d %s\n",(int)i,filename.c_str());
 
 		if (jollymatch(i_fullarchive.c_str(),filename.c_str()))
 		{
 			if (flagdebug3)
 			{
-				myprintf("66160: matched <<");
-				printUTF8(filename.c_str());
-				myprintf("<<\n");
+				myprintf("02589: matched <<%Z>>\n",filename.c_str());
 			}
 			DT& d=(*o_thedt)[filename];
 			d.date			=0;
@@ -76304,7 +76714,7 @@ bool Jidac::getjollylist(string i_fullarchive,DTMap* o_thedt)
 		else
 		{
 			if (flagdebug3)
-				myprintf("66175: DISCARDED %s in %s\n",i_fullarchive.c_str(),filename.c_str());
+				myprintf("02590: DISCARDED %s in %s\n",i_fullarchive.c_str(),filename.c_str());
 		}
 	}
 #else
@@ -76315,7 +76725,7 @@ bool Jidac::getjollylist(string i_fullarchive,DTMap* o_thedt)
 
 	if ((*o_thedt).size()==0)
 	{
-		myprintf("66186: no archive founded => quit\n");
+		myprintf("02591: no archive founded => quit\n");
 		return false;
 	}
 	return true;
@@ -76334,15 +76744,15 @@ int Jidac::zfsproxbackup()
 	string 	theconf		="/etc/pve/qemu-server/";
 
 	myprintf("\n\n");
-	myprintf("68546: zfsproxmox-backup VERY EXPERIMENTAL!\n");
-	myprintf("68547: Works only on %s VM disk(s)\n"	,storepath.c_str());
-	myprintf("68548: and        on %s config(s)\n\n"	,theconf.c_str());
+	myprintf("02592: zfsproxmox-backup VERY EXPERIMENTAL!\n");
+	myprintf("02593: Works only on %s VM disk(s)\n"	,storepath.c_str());
+	myprintf("02594: and        on %s config(s)\n\n"	,theconf.c_str());
 
 	if  (all)
 	{
 		if (files.size()!=0)
 		{
-			myprintf("38024: with -all cannot select VMids\n");
+			myprintf("02595: with -all cannot select VMids\n");
 			return 1;
 		}
 
@@ -76359,11 +76769,11 @@ int Jidac::zfsproxbackup()
 				{
 					string temp=stringtosomething(prendinomefileebasta(notfiles[ii]),isdigit);
 					if (flagdebug3)
-						myprintf("63548: notfiles  %03d temp |%s| ",ii,temp.c_str());
+						myprintf("02596: notfiles  %03d temp |%s| ",ii,temp.c_str());
 					if (onlydigit==temp)
 					{
 						if (flagdebug3)
-							myprintf("63552: discarded because of -not %s %s\n",onlydigit.c_str(),temp.c_str());
+							myprintf("02597: discarded because of -not %s %s\n",onlydigit.c_str(),temp.c_str());
 						flagescluso=true;
 						break;
 					}
@@ -76373,25 +76783,25 @@ int Jidac::zfsproxbackup()
 			}
 		}
 		for (unsigned int i=0;i<files.size();i++)
-			myprintf("63593: From -all getting %s\n",files[i].c_str());
+			myprintf("02598: From -all getting %s\n",files[i].c_str());
 
 		if (files.size()==0)
 		{
-			myprintf("38048: no .conf files founded in %s (not discarded by -not)\n",theconf.c_str());
+			myprintf("02599! no .conf files founded in %s (not discarded by -not)\n",theconf.c_str());
 			return 2;
 		}
 		for (unsigned int i=0;i<files.size();i++)
 		{
 			myreplace(files[i],".conf","");
 			if (flagdebug3)
-				myprintf("38052: Config file %03d %s\n",(int)i,files[i].c_str());
+				myprintf("02600: Config file %03d %s\n",(int)i,files[i].c_str());
 		}
 	}
 	else
 	{
 		if (files.size()==0)
 		{
-			myprintf("38018: please use vmid(s) (ex. 200 300 400) or -all\n");
+			myprintf("02601: please use vmid(s) (ex. 200 300 400) or -all\n");
 			return 1;
 		}
 	}
@@ -76407,7 +76817,7 @@ int Jidac::zfsproxbackup()
 	if (!flagforce)
 		if (!fileexists(temp))
 		{
-			myprintf("38020: Abort because cannot find conf file %s, use -force to bypass\n",temp.c_str());
+			myprintf("02602: Abort because cannot find conf file %s, use -force to bypass\n",temp.c_str());
 			return 1;
 		}
 #endif
@@ -76421,7 +76831,7 @@ int Jidac::zfsproxbackup()
 	FILE *meminfo = fopen("c:/zpaqfranz/zfslist.txt", "rb");
     if(meminfo == NULL)
 	{
-		myprintf("43998: DEBUG KAPUTT?\n");
+		myprintf("02603! DEBUG KAPUTT?\n");
 		return 2;
 	}
     char line[65536];
@@ -76443,7 +76853,7 @@ int Jidac::zfsproxbackup()
 		string 	mountpoint	="";
 		string lavoro=arraylist[i];
 		if (flagdebug3)
-			myprintf("66470: %08d %s\n",(int)i,arraylist[i].c_str());
+			myprintf("02604: %08d %s\n",(int)i,arraylist[i].c_str());
 		unsigned int j=0;
 		while (j<lavoro.size())
 		{
@@ -76465,7 +76875,7 @@ int Jidac::zfsproxbackup()
 		for (unsigned int k=j+1;k<lavoro.size();k++)
 			mountpoint+=lavoro[k];
 		if (flagdebug3)
-			myprintf("66493: NAME       <<%s>> <<%s>>",name.c_str(),mountpoint.c_str());
+			myprintf("02605: NAME       <<%s>> <<%s>>",name.c_str(),mountpoint.c_str());
 		if (i==0)
 		{
 			if ((name!="NAME") || (mountpoint!="MOUNTPOINT"))
@@ -76477,7 +76887,7 @@ int Jidac::zfsproxbackup()
 
 	string	mountpoint	="";
 	for (unsigned int i=0;i<name_mountpoint.size();i++)
-		myprintf("66507: <<%30s>> <<%30s>>\n",name_mountpoint[i].first.c_str(),name_mountpoint[i].second.c_str());
+		myprintf("02606: <<%30s>> <<%30s>>\n",name_mountpoint[i].first.c_str(),name_mountpoint[i].second.c_str());
 
 	/// first try
 	for (unsigned int i=0;i<name_mountpoint.size();i++)
@@ -76490,7 +76900,7 @@ int Jidac::zfsproxbackup()
 
 	if (thepool=="")
 	{
-		myprintf("66517: cannot find store path %s, look for / \n",storepath.c_str());
+		myprintf("02607: cannot find store path %s, look for / \n",storepath.c_str());
 		for (unsigned int i=0;i<name_mountpoint.size();i++)
 			if (name_mountpoint[i].second=="/")
 			{
@@ -76499,23 +76909,23 @@ int Jidac::zfsproxbackup()
 				break;
 			}
 	}
-	myprintf("66511: thepool    |%s|\n",thepool.c_str());
+	myprintf("02608: thepool    |%s|\n",thepool.c_str());
 
 	if (!isdirectory(mountpoint))
 		mountpoint+='/';
 
-	myprintf("66516: mountpoint |%s|\n",mountpoint.c_str());
+	myprintf("02609: mountpoint |%s|\n",mountpoint.c_str());
 
 	if (thepool=="")
 	{
-		myprintf("38081: GURU: cannot reverse-lookup for %s\n",storepath.c_str());
+		myprintf("02610! GURU: cannot reverse-lookup for %s\n",storepath.c_str());
 		return 2;
 	}
 
 	if (isdirectory(thepool))
 	{
-		myprintf("38028: A pool-dataset |%s| cannot end with a / \n",thepool.c_str());
-		myprintf("38029: Good examples     zp0/zd0\n");
+		myprintf("02611! A pool-dataset |%s| cannot end with a / \n",thepool.c_str());
+		myprintf("02612! Good examples     zp0/zd0\n");
 		return 2;
 	}
 	string themark	="francoproxmox";
@@ -76532,14 +76942,14 @@ int Jidac::zfsproxbackup()
 		if (purgedpool[i]=='/')
 			purgedpool[i]='_';
 
-	myprintf("53549: Archive        %s\n",archive.c_str());
-	myprintf("53550: Pool           %s\n",thepool.c_str());
-	myprintf("53550: Purged Pool    %s\n",purgedpool.c_str());
-	myprintf("53552: Mark           %s\n",themark.c_str());
+	myprintf("02613: Archive        %s\n",archive.c_str());
+	myprintf("02614: Pool           %s\n",thepool.c_str());
+	myprintf("02615: Purged Pool    %s\n",purgedpool.c_str());
+	myprintf("02616: Mark           %s\n",themark.c_str());
 
 	if (howmanyat>0)
 	{
-		myprintf("52984: A pool-dataset |%s| cannot have @\n",thepool.c_str());
+		myprintf("02617! A pool-dataset |%s| cannot have @\n",thepool.c_str());
 		return 2;
 	}
 	string fullexpectedsnapshot=thepool+'@'+themark;
@@ -76553,7 +76963,7 @@ int Jidac::zfsproxbackup()
 
 		if (array_primachiocciola.size()!=0)
 		{
-			myprintf("53051: Found a zombie snapshot |%s| abort (-force to bypass)\n",fullexpectedsnapshot.c_str());
+			myprintf("02618! Found a zombie snapshot |%s| abort (-force to bypass)\n",fullexpectedsnapshot.c_str());
 			return 2;
 		}
 	}
@@ -76563,7 +76973,7 @@ int Jidac::zfsproxbackup()
 
 	if (mypos("cannot create",runresult)!=-1)
 	{
-		myprintf("38152: GURU, something seems wrong, %s\n",runresult.c_str());
+		myprintf("02619! GURU, something seems wrong, %s\n",runresult.c_str());
 		return 2;
 	}
 
@@ -76574,7 +76984,7 @@ int Jidac::zfsproxbackup()
 			percorso=mountpoint+".zfs/snapshot/"+themark+/*storepath*/+"/images/"+files[i];
 		else
 			percorso=mountpoint+".zfs/snapshot/"+themark+storepath+"/images/"+files[i];
-		myprintf("38135: VM Path        %03d  %s\n",(int)i,percorso.c_str());
+		myprintf("02620: VM Path        %03d  %s\n",(int)i,percorso.c_str());
 		thedrives.push_back(percorso);
 	}
 
@@ -76603,35 +77013,35 @@ int Jidac::zfsproxrestore()
 	string 	theconf		="/etc/pve/qemu-server/";
 
 	myprintf("\n\n");
-	myprintf("68813: zfsproxmox-restore VERY EXPERIMENTAL!\n");
-	myprintf("68814: Works only on %s VM disk(s)\n"		,storepath.c_str());
-	myprintf("68815: and        on %s config(s)\n\n\n"		,theconf.c_str());
+	myprintf("02621: zfsproxmox-restore VERY EXPERIMENTAL!\n");
+	myprintf("02622: Works only on %s VM disk(s)\n"		,storepath.c_str());
+	myprintf("02623: and        on %s config(s)\n\n\n"		,theconf.c_str());
 
 	if (onlyfiles.size()!=0)
 	{
-		myprintf("63704: sorry but you cannot use -only here\n");
+		myprintf("02624! sorry but you cannot use -only here\n");
 		return 2;
 	}
 	if (searchfrom!="")
 	{
-		myprintf("63704: sorry but you cannot use -searchfrom here\n");
+		myprintf("02625! sorry but you cannot use -searchfrom here\n");
 		return 2;
 	}
 	if (replaceto!="")
 	{
-		myprintf("63714: sorry but you cannot use -replaceto here\n");
+		myprintf("02626! sorry but you cannot use -replaceto here\n");
 		return 2;
 	}
 	if (!flagkill)
 	{
 		if (!direxists(theconf))
 		{
-			myprintf("63715: conf  kaputt (-kill to bypass) <<%s>>\n",theconf.c_str());
+			myprintf("02627: conf  kaputt (-kill to bypass) <<%s>>\n",theconf.c_str());
 			return 1;
 		}
 		if (!direxists(storepath))
 		{
-			myprintf("63719: store kaputt (-kill to bypass) <<%s>>\n",storepath.c_str());
+			myprintf("02628: store kaputt (-kill to bypass) <<%s>>\n",storepath.c_str());
 			return 1;
 
 		}
@@ -76641,7 +77051,7 @@ int Jidac::zfsproxrestore()
 	{
 		///	onlyfiles.push_back("*vm-*disk*");
 		/// onlyfiles.push_back("*.conf");
-		myprintf("63810: zfsproxmox restore all, getting VM configs...\n");
+		myprintf("02629: zfsproxmox restore all, getting VM configs...\n");
 ///		getpasswordifempty();
 		int errors	=0;
 		command		='l';
@@ -76656,7 +77066,7 @@ int Jidac::zfsproxrestore()
 
 	if  (files.size()==0)
 	{
-		myprintf("63792: cannot select VM to restore, quit\n");
+		myprintf("02630! cannot select VM to restore, quit\n");
 		return 2;
 	}
 
@@ -76669,11 +77079,11 @@ int Jidac::zfsproxrestore()
 			{
 				string temp=stringtosomething(prendinomefileebasta(notfiles[j]),isdigit);
 				if (flagdebug3)
-					myprintf("63767: notfiles  %03d temp |%s| ",(int)j,temp.c_str());
+					myprintf("02631: notfiles  %03d temp |%s| ",(int)j,temp.c_str());
 				if (onlydigit==temp)
 				{
 					if (flagdebug3)
-						myprintf("63780: discarded because of -not %s %s\n",onlydigit.c_str(),temp.c_str());
+						myprintf("02632: discarded because of -not %s %s\n",onlydigit.c_str(),temp.c_str());
 					flagadd=false;
 					break;
 				}
@@ -76683,14 +77093,14 @@ int Jidac::zfsproxrestore()
 		{
 			onlyfiles.push_back("*vm-"	+onlydigit+"-*disk*");
 			onlyfiles.push_back("*/"	+onlydigit+".conf");
-			myprintf("63757: Getting VM %10s\n",onlydigit.c_str());
+			myprintf("02633: Getting VM %10s\n",onlydigit.c_str());
 		}
 		else
-			myprintf("63781: Discarding %s\n",onlydigit.c_str());
+			myprintf("02634: Discarding %s\n",onlydigit.c_str());
 	}
 	if  (onlyfiles.size()==0)
 	{
-		myprintf("63752: VMIDs selection by digits (ex. 200 300 400) failed\n");
+		myprintf("02635! VMIDs selection by digits (ex. 200 300 400) failed\n");
 		return 2;
 	}
 	files	.clear();
@@ -76699,7 +77109,7 @@ int Jidac::zfsproxrestore()
 	replaceto	="";
 	if (flagdebug3)
 		for (unsigned int i=0;i<onlyfiles.size();i++)
-			myprintf("63727: onlyfiles %03d %s\n",(int)i,onlyfiles[i].c_str());
+			myprintf("02636: onlyfiles %03d %s\n",(int)i,onlyfiles[i].c_str());
 
 	return extract();
 }
@@ -76737,23 +77147,21 @@ struct mycompareuint64string
 /// -checksum (delete if == checksum)
 int Jidac::oneonone()
 {
-	myprintf("69083: 1on1 - Julius Erving and Larry Bird Go One on One\n");
+	myprintf("02637: 1on1 - Julius Erving and Larry Bird Go One on One\n");
 	if (g_deleteinto=="")
 	{
-		myprintf("63841: you must enter a -deleteinto folder\n");
+		myprintf("02638! you must enter a -deleteinto folder\n");
 		return 2;
 	}
 	if (!flagspace)
 		if (!saggiascrivibilitacartella(g_deleteinto))
 		{
-			myprintf("63849: Cannot write in -deleteinto folder <<");
-			printUTF8(g_deleteinto.c_str());
-			myprintf(">>, bypass with -space\n");
+			myprintf("02639! Cannot write in -deleteinto folder <<%Z>>, bypass with -space\n",g_deleteinto.c_str());
 			return 2;
 		}
 	if (files.size()!=1)
 	{
-		myprintf("63846: you must enter exactly ONE source folder\n");
+		myprintf("02640! you must enter exactly ONE source folder\n");
 		return 2;
 	}
 #ifdef _WIN32
@@ -76762,7 +77170,7 @@ int Jidac::oneonone()
 			files[i]=makelongpath(files[i]);
 	if (flagdebug3)
 		for (unsigned int i=0;i<files.size();i++)
-			myprintf("66495: after %03d files[i] %s\n",(int)i,files[i].c_str());
+			myprintf("02641: after %03d files[i] %s\n",(int)i,files[i].c_str());
 	g_deleteinto=makelongpath(g_deleteinto);
 	
 #endif
@@ -76771,17 +77179,13 @@ int Jidac::oneonone()
 	//printbar('Z');
 	if (files_edt[0].size()==0)
 	{
-		myprintf("63864: Cannot find files inside source folder ");
-		printUTF8(files[0].c_str());
-		myprintf("\n");
+		myprintf("02642! Cannot find files inside source folder %Z\n",files[0].c_str());
 		return 2;
 	}
 
 	if (files_edt[1].size()==0)
 	{
-		myprintf("63872: Cannot find files inside source destination folder ");
-		printUTF8(files[1].c_str());
-		myprintf("\n");
+		myprintf("02643! Cannot find files inside source destination folder %Z\n",files[1].c_str());
 		return 2;
 	}
 
@@ -76790,14 +77194,14 @@ int Jidac::oneonone()
 		if (!isdirectory(p->first))
 		{
 			if (flagdebug3)
-				myprintf("66253: pfirst %s\n",p->first.c_str());
+				myprintf("02644: pfirst %s\n",p->first.c_str());
 			bysize.push_back(std::pair<uint64_t,string>(p->second.size,makelongpath(p->first)));
 		}
 	std::sort(bysize.begin(),bysize.end());
 
 	if (flagdebug3)
 		for (unsigned int i=0;i<bysize.size();i++)
-			myprintf("63845: Destbysize  %08d %21s  %s\n",(int)i,migliaia(bysize[i].first),bysize[i].second.c_str());
+			myprintf("02645: Destbysize  %08d %21s  %s\n",(int)i,migliaia(bysize[i].first),bysize[i].second.c_str());
 
 	vector<string> 	tobehashedsource;
 	vector<int64_t> tobehashedsource_size;
@@ -76823,12 +77227,12 @@ int Jidac::oneonone()
 					totalsource+=p->second.size;
 
 					if (flagdebug3)
-						myprintf("63868: source2ha %21s %s\n",migliaia(p->second.size),p->first.c_str());
+						myprintf("02646: source2ha %21s %s\n",migliaia(p->second.size),p->first.c_str());
 					vector<std::pair<uint64_t,string> >::iterator alto 	= std::upper_bound(bysize.begin(), bysize.end(), p->second.size,mycompareuint64string());
 					for (vector<std::pair<uint64_t,string> >::iterator a=basso; a!=alto; ++a)
 					{
 						if (flagdebug3)
-							myprintf("69046:   ADD2DEST %08d %s\n",a->first,a->second.c_str());
+							myprintf("02647:   ADD2DEST %08d %s\n",a->first,a->second.c_str());
 						tobehasheddest.push_back(a->second);
 						tobehasheddest_size.push_back(a->first);
 					}
@@ -76840,48 +77244,48 @@ int Jidac::oneonone()
 	g_dimensione=0;  // for avanzamento
 	printbar(' ');
 	myprintf("\n");
-	myprintf("69145: Running on hash %s\n",g_thechosenhash_str.c_str());
+	myprintf("02648: Running on hash %s\n",g_thechosenhash_str.c_str());
 	if (flagdebug3)
 	{
-		myprintf("63882: Source card %08d\n",tobehashedsource.size());
+		myprintf("02649: Source card %08d\n",tobehashedsource.size());
 		for (unsigned int i=0;i<tobehashedsource.size();i++)
-			myprintf("63886: To be hashed source %08d size %21s %s\n",(int)i,migliaia(tobehashedsource_size[i]),tobehashedsource[i].c_str());
+			myprintf("02650: To be hashed source %08d size %21s %s\n",(int)i,migliaia(tobehashedsource_size[i]),tobehashedsource[i].c_str());
 
-		myprintf("63887: Dest   card %08d\n",tobehasheddest.size());
+		myprintf("02651: Dest   card %08d\n",tobehasheddest.size());
 		for (unsigned int i=0;i<tobehasheddest.size();i++)
-			myprintf("63889: To be hashed dest   %08d size %21s %s\n",(int)i,migliaia(tobehasheddest_size[i]),tobehasheddest[i].c_str());
+			myprintf("02652: To be hashed dest   %08d size %21s %s\n",(int)i,migliaia(tobehasheddest_size[i]),tobehasheddest[i].c_str());
 	}
 
 	vector<std::pair<string,string> > tobehashedsource_hashname;
-	franzparallelhashfiles(g_thechosenhash_str,totalsource,tobehashedsource,tobehashedsource_hashname);
+	franzparallelhashfiles(g_thechosenhash_str,totalsource,tobehashedsource,false,tobehashedsource_hashname);
 	if (flagdebug3)
 	{
-		myprintf("69073: ----------------- %s\n",migliaia(tobehashedsource_hashname.size()));
+		myprintf("02653: ----------------- %s\n",migliaia(tobehashedsource_hashname.size()));
 		for (unsigned int i=0;i<tobehashedsource_hashname.size();i++)
-			myprintf("63900: SOURCE %08d %s %s\n",(int)i,tobehashedsource_hashname[i].first.c_str(),tobehashedsource_hashname[i].second.c_str());
+			myprintf("02654: SOURCE %08d %s %s\n",(int)i,tobehashedsource_hashname[i].first.c_str(),tobehashedsource_hashname[i].second.c_str());
 
-		myprintf("63902: Deduplicating tobehasheddest pre  %9s\n",migliaia(tobehasheddest.size()));
+		myprintf("02655: Deduplicating tobehasheddest pre  %9s\n",migliaia(tobehasheddest.size()));
 	}
 	std::sort(tobehasheddest.begin(), tobehasheddest.end());
 	tobehasheddest.erase( unique( tobehasheddest.begin(), tobehasheddest.end() ), tobehasheddest.end() );
 	if (flagdebug3)
-		myprintf("63907: Deduplication                post %9s\n",migliaia(tobehasheddest.size()));
+		myprintf("02656: Deduplication                post %9s\n",migliaia(tobehasheddest.size()));
 
 	vector<std::pair<string,string> > tobehasheddest_hashname;
-	franzparallelhashfiles(g_thechosenhash_str,totalsource,tobehasheddest,tobehasheddest_hashname);
+	franzparallelhashfiles(g_thechosenhash_str,totalsource,tobehasheddest,false,tobehasheddest_hashname);
 	if (flagdebug3)
-		myprintf("63912: dedup tobehashed_dest hashname pre  ----------------- %s\n",migliaia(tobehasheddest_hashname.size()));
+		myprintf("02657: dedup tobehashed_dest hashname pre  ----------------- %s\n",migliaia(tobehasheddest_hashname.size()));
 	std::sort(tobehasheddest_hashname.begin(), tobehasheddest_hashname.end());
 	tobehasheddest_hashname.erase( unique( tobehasheddest_hashname.begin(), tobehasheddest_hashname.end() ), tobehasheddest_hashname.end() );
 	if (flagdebug3)
 	{
-		myprintf("63916: dedup tobehashed_dest hashname post ----------------- %s\n",migliaia(tobehasheddest_hashname.size()));
+		myprintf("02658: dedup tobehashed_dest hashname post ----------------- %s\n",migliaia(tobehasheddest_hashname.size()));
 
 		for (unsigned int i=0;i<tobehasheddest_hashname.size();i++)
-			myprintf("63920: DEST   %08d %s %s\n",(int)i,tobehasheddest_hashname[i].first.c_str(),tobehasheddest_hashname[i].second.c_str());
+			myprintf("02659: DEST   %08d %s %s\n",(int)i,tobehasheddest_hashname[i].first.c_str(),tobehasheddest_hashname[i].second.c_str());
 		printbar('-');
-		myprintf("69097: Source            cardinality %08d\n",tobehashedsource.size());
-		myprintf("69098: Source_hashname   cardinality %08d\n",tobehashedsource_hashname.size());
+		myprintf("02660: Source            cardinality %08d\n",tobehashedsource.size());
+		myprintf("02661: Source_hashname   cardinality %08d\n",tobehashedsource_hashname.size());
 	}
 	int	samehash		=0;
 	int	veryequal		=0;
@@ -76916,12 +77320,12 @@ int Jidac::oneonone()
 		}
 	}
 	if (flagdebug2)
-		myprintf("64016: Temp size pre  %12s\n",migliaia(temp.size()));
+		myprintf("02662: Temp size pre  %12s\n",migliaia(temp.size()));
 	std::sort(temp.begin(),temp.end());
 	temp.erase(unique(temp.begin(),temp.end()),temp.end());
 	tobedeleted=temp.size();
 	if (flagdebug2)
-		myprintf("64023: Temp size post %12s\n",migliaia(temp.size()));
+		myprintf("02663: Temp size post %12s\n",migliaia(temp.size()));
 
 	temp.clear();
 
@@ -76934,7 +77338,7 @@ int Jidac::oneonone()
 		{
 			vector<std::pair<string,string> >::iterator alto 		= std::upper_bound(tobehasheddest_hashname.begin(), tobehasheddest_hashname.end(), cerco,mycomparestringstring());
 			if (flagdebug3)
-				myprintf("63933: %08d search hash       %s (%s)\n",(int)i,cerco.c_str(),tobehashedsource_hashname[i].second.c_str());
+				myprintf("02664: %08d search hash       %s (%s)\n",(int)i,cerco.c_str(),tobehashedsource_hashname[i].second.c_str());
 			string leftname=extractfilename(tobehashedsource_hashname[i].second);
 			for (vector<std::pair<string,string> >::iterator a=basso; a<alto; ++a)
 			{
@@ -76965,7 +77369,7 @@ int Jidac::oneonone()
 							if (percentuale%5==0)
 								if (percentuale!=lastpercentuale)
 								{
-									myprintf("64026: Deleted so far %03d%% (%12s of %12s)\r",percentuale,migliaia(i),migliaia(tobehashedsource_hashname.size()));
+									myprintf("02665: Deleted so far %03d%% (%12s of %12s)\r",percentuale,migliaia(i),migliaia(tobehashedsource_hashname.size()));
 									lastpercentuale=percentuale;
 								}
 						}
@@ -77006,36 +77410,36 @@ int Jidac::oneonone()
 	myprintf("\n");
 	if (flagkill)
 		if (deleted>0)
-			myprintf("64065: Deleted %.0f files/s\n",(deleted/((mtime()-startdelete)/1000.0)));
-	myprintf("63992: Same hash             %9s (same name too) %s\n",migliaia(samehash),migliaia(veryequal));
+			myprintf("02666: Deleted %.0f files/s\n",(deleted/((mtime()-startdelete)/1000.0)));
+	myprintf("02667: Same hash             %9s (same name too) %s\n",migliaia(samehash),migliaia(veryequal));
 	if (!flagchecksum)
 	{
 		if (spared>0)
-		myprintf("63994: Spared (no -checksum) %9s\n",migliaia(spared));
-		myprintf("63995: To be deleted         %9s (same name, same hash)\n",migliaia(tobedeleted));
+		myprintf("02668: Spared (no -checksum) %9s\n",migliaia(spared));
+		myprintf("02669: To be deleted         %9s (same name, same hash)\n",migliaia(tobedeleted));
 	}
 	else
-	myprintf("63995: To be deleted         %9s (=hash, because -checksum)\n",migliaia(tobedeleted));
+	myprintf("02670: To be deleted         %9s (=hash, because -checksum)\n",migliaia(tobedeleted));
 
 	if (!flagkill)
-		myprintf("63996: DRY RUN because no -kill switch entered\n");
+		myprintf("02671: DRY RUN because no -kill switch entered\n");
 	else
-	myprintf("63996: Deleted               %9s\n",migliaia(deleted));
+	myprintf("02672: Deleted               %9s\n",migliaia(deleted));
 
 	if (flagkill)
 	{
 		if (errors>0)
-		myprintf("63997: Delete FAIL           %9s\n",migliaia(errors));
+		myprintf("02673: Delete FAIL           %9s\n",migliaia(errors));
 		if (byteserased>0)
-			myprintf("63998: Space freed       %s (%s)\n",migliaia(byteserased),tohuman(byteserased));
+			myprintf("02674: Space freed       %s (%s)\n",migliaia(byteserased),tohuman(byteserased));
 	}
 	if ((byteserased>0) && (!flagkill))
-	myprintf("63999: Space to be freed %s (%s)\n",migliaia(byteserased),tohuman(byteserased));
+	myprintf("02675: Space to be freed %s (%s)\n",migliaia(byteserased),tohuman(byteserased));
 
 	return errors;
 }
 
-int64_t Jidac::franzparallelhashfiles(const string i_hashtype,int64_t i_totalsize,vector<string> i_thefiles,vector<std::pair<string,string> >& o_hashname)
+int64_t Jidac::franzparallelhashfiles(const string i_hashtype,int64_t i_totalsize,vector<string> i_thefiles,bool i_silent,vector<std::pair<string,string> >& o_hashname)
 {
 	int64_t startscan=mtime();
 	unsigned int mythreads=howmanythreads;
@@ -77065,7 +77469,7 @@ int64_t Jidac::franzparallelhashfiles(const string i_hashtype,int64_t i_totalsiz
 		for (unsigned int i=0;i<mythreads;i++)
 		{
 			if (flagdebug3)
-				myprintf("64012: Thread [%02d] files %s\n",(int)i,migliaia(vettoreparametrihash[i].filestobehashed.size()));
+				myprintf("02676: Thread [%02d] files %s\n",(int)i,migliaia(vettoreparametrihash[i].filestobehashed.size()));
 			totfile+=+vettoreparametrihash[i].filestobehashed.size();
 		}
 
@@ -77075,15 +77479,16 @@ int64_t Jidac::franzparallelhashfiles(const string i_hashtype,int64_t i_totalsiz
 		void *status;
 		pthread_attr_init(&attr);
 		pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
-		if (!flagnoeta)
-			myprintf("64022: Files %14s -> %03d threads -> %14s to get\n",migliaia(i_thefiles.size()),mythreads,migliaia2(totfile));
+		if (!i_silent)
+			if (!flagnoeta)
+				myprintf("02677: Files %14s -> %03d threads -> %14s to get\n",migliaia(i_thefiles.size()),mythreads,migliaia2(totfile));
 		for(unsigned int i=0; i<mythreads; i++ )
 		{
 			vettoreparametrihash[i].timestart=mtime();
 			rc = pthread_create(&threads[i], &attr, scansionahash, (void*)&vettoreparametrihash[i]);
 			if (rc)
 			{
-				myprintf("64031: Error creating thread\n");
+				myprintf("02678: Error creating thread\n");
 				exit(-1);
 			}
 		}
@@ -77108,7 +77513,7 @@ int64_t Jidac::franzparallelhashfiles(const string i_hashtype,int64_t i_totalsiz
 		for (unsigned i=0; i<i_thefiles.size(); ++i)
 		{
 			if (flagdebug3)
-				myprintf("68616: filehash on %s\n",i_thefiles[i].c_str());
+				myprintf("02679: filehash on %s\n",i_thefiles[i].c_str());
 
 			string gettedhash=dummy.filehash(i_thefiles[i],false,
 			startscan,i_totalsize);
@@ -93898,14 +94303,14 @@ char*	memoryleak(string i_string)
 {
 	if (i_string=="")
 	{
-		myprintf("83428: GURU string empty\n");
+		myprintf("02680: GURU string empty\n");
 		seppuku();
 		return NULL;
 	}
 	char* theleak=(char*)malloc(i_string.size()+2);
 	if (theleak==NULL)
 	{
-		myprintf("83435: GURU cannot make leak string\n");
+		myprintf("02681: GURU cannot make leak string\n");
 		seppuku();
 		return NULL;
 	}
@@ -93966,7 +94371,7 @@ int Jidac::get_filelist(callback_function i_advance,vector<DTMap::iterator>* o_f
 		return -1;
 	if (o_filelist==NULL)
 	{
-		myprintf("64659: GURU o_files null\n");
+		myprintf("02682: GURU o_files null\n");
 		seppuku();
 		return -1;
 	}
@@ -93985,17 +94390,17 @@ int Jidac::get_filelist(callback_function i_advance,vector<DTMap::iterator>* o_f
 		int versione=searchcomments(versioncomment,myfilelist);
 		if (versione==0)
 		{
-			myprintf("30291: cannot find version comment <<%s>>\n",versioncomment.c_str());
+			myprintf("02683: cannot find version comment <<%s>>\n",versioncomment.c_str());
 			return 1;
 		}
 		if (versione==-1)
 		{
-			myprintf("30303: multiple match for version comment <<%s>>\n",versioncomment.c_str());
+			myprintf("02684: multiple match for version comment <<%s>>\n",versioncomment.c_str());
 			return 1;
 		}
 		version=versione;
 		flagcomment=false;
-		myprintf("86206: Found version -until %d scanning again...\n",versione);
+		myprintf("02685: Found version -until %d scanning again...\n",versione);
 		jidacreset();
 ///		sz=read_archive(archive.c_str());
 	}
@@ -94083,13 +94488,13 @@ string i_filtro,string i_ordine,string i_crc32,string i_hash)
 {
 	if (i_filelist==NULL)
 	{
-		myprintf("67941: GURU filelist i empty\n");
+		myprintf("02686: GURU filelist i empty\n");
 		seppuku();
 		return;
 	}
 	if (o_filtered==NULL)
 	{
-		myprintf("67947: GURU filelist o empty\n");
+		myprintf("02687: GURU filelist o empty\n");
 		seppuku();
 		return;
 	}
@@ -94199,7 +94604,7 @@ int Jidac::guilist()
 	printf("81757: GUI maxx %d maxy %d\n",maxx,maxy);
 	if (maxx<75)
 	{
-		myprintf("60070: Window too small (%d), width must be >75\n",maxx);
+		myprintf("02688: Window too small (%d), width must be >75\n",maxx);
 		seppuku();
 		return 0;
 	}
@@ -94768,7 +95173,7 @@ int Jidac::last()
 {
 	if (archive=="")
 	{
-		myprintf("84627: Need an archive name\n");
+		myprintf("02689! Need an archive name\n");
 		return 2;
 	}
 	flagpakka	=true; //suppress every output
@@ -94778,8 +95183,7 @@ int Jidac::last()
 	string ultimo	=get_lastfilename(archive,dummy);
 	if (ultimo=="")
 		return 2;
-	printUTF8(extractfilename(ultimo).c_str());
-	myprintf("\n");
+	myprintf("%Z\n",extractfilename(ultimo).c_str());
 	return 0;
 }
 
@@ -94787,7 +95191,7 @@ int Jidac::last2()
 {
 	if (files.size()!=1)
 	{
-		myprintf("83823: last2 require 1 file \n");
+		myprintf("02690! last2 require 1 file \n");
 		return 2;
 	}
 	int risultato=0;
@@ -94797,25 +95201,27 @@ int Jidac::last2()
 		string filename=files[0];
 		if (!fileexists(filename))
 		{
-			myprintf("83851: error file does not exists ");
-			printUTF8(filename.c_str());
-			myprintf("\n");
+			myprintf("02691! error file does not exists %Z\n",filename.c_str());
 			return 2;
 		}
 
 		FILE* myfile = freadopen(filename.c_str());
 		if (myfile==NULL)
 		{
-			myprintf("83861: guru cannot open the file\n");
+			myprintf("02692! guru cannot open the file\n");
 			return 2;
 		}
 
-		char line[65536];
+#ifdef ANCIENT
+	char 	line[16384];
+#else
+	char 	line[65536];
+#endif
 
 		while (fgets(line, sizeof(line), myfile))
 		{
 			if (flagdebug3)
-				myprintf("83856: %08d %s", riga,line);
+				myprintf("02693: %08d %s", riga,line);
 			riga++;
 		}
 		if (riga>0)
@@ -94826,7 +95232,7 @@ int Jidac::last2()
 			while (fgets(line, sizeof(line), myfile) && (riga!=penultima))
 			{
 				if (flagdebug3)
-					myprintf("83868: %08d %08d %s", riga,penultima,line);
+					myprintf("02694: %08d %08d %s", riga,penultima,line);
 				riga++;
 			}
 			string spenultima	="";
@@ -94834,7 +95240,7 @@ int Jidac::last2()
 			spenultima			=line;
 			if (fgets(line, sizeof(line), myfile)==NULL)
 			{
-				myprintf("84630: GURU running fgets\n");
+				myprintf("02695! GURU running fgets\n");
 				seppuku();
 				return 2;
 			}
@@ -94848,8 +95254,8 @@ int Jidac::last2()
 				if ((sultima[i]==10) || (sultima[i]==13))
 					sultima[i]=' ';
 
-			myprintf("83876:      |%s\n",spenultima.c_str());
-			myprintf("83877:      |%s\n",sultima.c_str());
+			myprintf("02696:      |%s\n",spenultima.c_str());
+			myprintf("02697:      |%s\n",sultima.c_str());
 
 			string hashpenultima="";
 			for (unsigned int i=0;i<spenultima.size();i++)
@@ -94866,8 +95272,8 @@ int Jidac::last2()
 					break;
 			hashpenultima=stringtolower(hashpenultima);
 			hashultima=stringtolower(hashultima);
-			myprintf("83896: n-1  |%s|\n",hashpenultima.c_str());
-			myprintf("83897: last |%s|\n",hashultima.c_str());
+			myprintf("02698: n-1  |%s|\n",hashpenultima.c_str());
+			myprintf("02699: last |%s|\n",hashultima.c_str());
 			if (hashultima=="")
 				risultato=2;
 			else
@@ -94914,10 +95320,10 @@ int64_t Jidac::getzpaqsum(string i_archive,int64_t& o_usize,int64_t& o_allsize,i
 	o_compressedsize	=(csize+dhsize-dcsize);
 	if (flagdebug3)
 	{
-		myprintf("84723: usize      : %21s\n",migliaia(usize));
-		myprintf("84724: allsize    : %21s\n",migliaia(allsize));
-		myprintf("84725: dtsize     : %21s\n",migliaia(dt.size()));
-		myprintf("84726: compressed : %21s\n",migliaia((csize+dhsize-dcsize)));
+		myprintf("02700: usize      : %21s\n",migliaia(usize));
+		myprintf("02701: allsize    : %21s\n",migliaia(allsize));
+		myprintf("02702: dtsize     : %21s\n",migliaia(dt.size()));
+		myprintf("02703: compressed : %21s\n",migliaia((csize+dhsize-dcsize)));
 	}
 	return csize;
 }
@@ -94928,15 +95334,15 @@ bool Jidac::isbackuprunning()
 	if (g_pidname=="")
 	{
 		if (flagdebug)
-			myprintf("85069: backupname is empty\n");
+			myprintf("02704: backupname is empty\n");
 		return false;
 	}
 	if (flagdebug)
-		myprintf("85098: Pid check |%s|\n",g_pidname.c_str());
+		myprintf("02705: Pid check |%s|\n",g_pidname.c_str());
 	if (!fileexists(g_pidname))
 	{
 		if (flagdebug)
-			myprintf("85091: pid does not exits %s\n",g_pidname.c_str());
+			myprintf("02706: pid does not exits %s\n",g_pidname.c_str());
 		return false;
 	}
 
@@ -94946,7 +95352,7 @@ bool Jidac::isbackuprunning()
 	{
 		if (pidfile.size()>0)
 			for (unsigned int i=0;i<pidfile.size();i++)
-				myprintf("85101: PID %03d %s\n",(int)i,pidfile[i].c_str());
+				myprintf("02707: PID %03d %s\n",(int)i,pidfile[i].c_str());
 	}
 	return true;
 
@@ -94960,25 +95366,23 @@ int Jidac::testbackup()
 
 	if (files.size()!=1)
 	{
-		myprintf("84029: estbackup require one file parameter\n");
+		myprintf("02708! estbackup require one file parameter\n");
 		return 2;
 	}
 	if (isjolly(files[0]))
 	{
-		myprintf("84364: Do not use ? for backups\n");
+		myprintf("02709! Do not use ? for backups\n");
 		return 2;
 	}
 	if (tofiles.size()>1)
 	{
-		myprintf("84034: testbackup require zero or one -to (where are the zpaqs?)\n");
+		myprintf("02710! testbackup require zero or one -to (where are the zpaqs?)\n");
 		return 2;
 	}
 	if (mypos("/",files[0])==-1)
 	{
 		files[0]="./"+files[0];
-		myprintf("57068: fixed filename ");
-		printUTF8(files[0].c_str());
-		myprintf("\n");
+		myprintf("02711: fixed filename %Z\n",files[0].c_str());
 	}
 
 	if (tofiles.size()==0)
@@ -94989,7 +95393,7 @@ int Jidac::testbackup()
 	if (!flagspace)
 		if (isbackuprunning())
 		{
-			myprintf("85144: Quit because backup seems running. -space to bypass\n");
+			myprintf("02712: Quit because backup seems running. -space to bypass\n");
 			return 1;
 		}
 
@@ -95000,12 +95404,10 @@ int Jidac::testbackup()
 	{
 		g_backupposition=extractfilepath(includetrailingbackslash(g_indexname));
 		if (flagverbose)
-			myprintf("90131: -index automagically managed g_backuposition |%s|\n",g_backupposition.c_str());
+			myprintf("02713: -index automagically managed g_backuposition |%s|\n",g_backupposition.c_str());
 		if (!direxists(g_backupposition))
 		{
-			myprintf("90134: the folder (of -index) need to (already) exists ");
-			printUTF8(g_backupposition.c_str());
-			myprintf("\n");
+			myprintf("02714! the folder (of -index) need to (already) exists %Z\n",g_backupposition.c_str());
 			return 2;
 		}
 		g_indexname="";
@@ -95014,7 +95416,7 @@ int Jidac::testbackup()
 		if (!flagparanoid)
 		{
 			color_yellow();
-			myprintf("90143: *** WARNING: due to -index YOU SHOULD REALLY USE -paranoid ***\n");
+			myprintf("02715: *** WARNING: due to -index YOU SHOULD REALLY USE -paranoid ***\n");
 			color_restore();
 		}
 	}
@@ -95030,17 +95432,13 @@ int Jidac::testbackup()
 
 	if (!exists(firstzpaq.c_str()))
 	{
-		myprintf("84398: Cannot find first zpaq ");
-		printUTF8(firstzpaq.c_str());
-		myprintf("\n");
+		myprintf("02716! Cannot find first zpaq %Z\n",firstzpaq.c_str());
 		return 2;
 	}
 
 	if (!exists(filename.c_str()))
 	{
-		myprintf("84406: Cannot find backup file ");
-		printUTF8(filename.c_str());
-		myprintf("\n");
+		myprintf("02717! Cannot find backup file %Z\n",filename.c_str());
 		return 2;
 	}
 
@@ -95051,30 +95449,30 @@ int Jidac::testbackup()
 		if (primariga!="")
 		{
 			if (flagdebug3)
-				myprintf("90192: First row %s\n",primariga.c_str());
+				myprintf("02718: First row %s\n",primariga.c_str());
 			unsigned int lastpipe=primariga.size();
 			while (lastpipe>0)
 				if (primariga[lastpipe--]=='|')
 					break;
 			if (flagdebug3)
-				myprintf("90199: lastpipe %08d\n",lastpipe);
+				myprintf("02719: lastpipe %08d\n",lastpipe);
 			if (lastpipe>0)
 			{
 				string originalname=primariga.substr(lastpipe+2,primariga.size()-lastpipe-3);
 				if (flagdebug)
-					myprintf("90203: originalname |%s|\n",originalname.c_str());
+					myprintf("02720: originalname |%s|\n",originalname.c_str());
 				string originalpath=extractfilepath(originalname);
 				string currentpath=extractfilepath(filename);
 				if (summary<0)
 					if (originalpath!=currentpath)
 					{
 						color_yellow();
-						myprintf("90209: *** WARNING: original backup path <<%s>> != current index path <<%s>>\n",originalpath.c_str(),currentpath.c_str());
-						myprintf("90210: *** I highly recommend using -paranoid! ***\n");
+						myprintf("02721: *** WARNING: original backup path <<%s>> != current index path <<%s>>\n",originalpath.c_str(),currentpath.c_str());
+						myprintf("02722: *** I highly recommend using -paranoid! ***\n");
 						color_red();
-						myprintf("90211: *** I highly recommend using -paranoid! ***\n");
+						myprintf("02723: *** I highly recommend using -paranoid! ***\n");
 						color_restore();
-						myprintf("90212: *** I highly recommend using -paranoid! ***\n");
+						myprintf("02724: *** I highly recommend using -paranoid! ***\n");
 					}
 			}
 		}
@@ -95084,32 +95482,35 @@ int Jidac::testbackup()
 	printbar('=');
 	multipart archivechunks(zpaqchunks);
 	if (archivechunks.isgood)
-		myprintf("84424: Multipart backup looks good\n");
+		myprintf("02725: Multipart backup looks good\n");
 	else
 	{
-		myprintf("84426: Multipart backup NOT GOOD\n");
+		myprintf("02726! Multipart backup NOT GOOD\n");
 		return 2;
 	}
-	myprintf("84040: Loading backupfile... ");
-	printUTF8(filename.c_str());
-	myprintf("\n");
+	myprintf("02727: Loading backupfile... %Z\n",filename.c_str());
 	if (!fileexists(filename))
 	{
-		myprintf("84044: backup file does not exists\n");
+		myprintf("02728! backup file does not exists\n");
 		return 2;
 	}
 	if (!iszpaqfranzfile(filename,"$zpaqfranz backupfile|"))
 	{
-		myprintf("84097: File does not seems zpaqfranz's backup\n");
+		myprintf("02729! File does not seems zpaqfranz's backup\n");
 		return 2;
 	}
 	FILE* myfile = freadopen(filename.c_str());
 	if (myfile==NULL)
 	{
-		myprintf("83861: guru cannot open the backup\n");
+		myprintf("02730! guru cannot open the backup\n");
 		return 2;
 	}
+#ifdef ANCIENT
+	char 	line[16384];
+#else
 	char 	line[65536];
+#endif
+
 	int		riga	=0;
 	int		maxriga	=0;
 	string 	linea;
@@ -95119,9 +95520,9 @@ int Jidac::testbackup()
 	fseeko(myfile,0,SEEK_SET);
 
 	if (g_rangefrom!=0)
-		myprintf("84578: Rangefrom %08d\n",g_rangefrom);
+		myprintf("02731: Rangefrom %08d\n",g_rangefrom);
 	if (g_rangeto!=0)
-		myprintf("84579: Rangeto   %08d\n",g_rangeto);
+		myprintf("02732: Rangeto   %08d\n",g_rangeto);
 
 	int	minimo	=g_rangefrom;
 	int massimo	=g_rangeto;
@@ -95130,7 +95531,7 @@ int Jidac::testbackup()
 	if ((massimo>maxriga-1) || (massimo<minimo))
 		massimo=maxriga-1;
 
-	myprintf("84190: Rows in backup %08d from %08d to %08d\n",maxriga-1,minimo,massimo);
+	myprintf("02733: Rows in backup %08d from %08d to %08d\n",maxriga-1,minimo,massimo);
 	vector<string> 	filenames;
 	vector<int64_t>	filesizes;
 	vector<string>	filehashes;
@@ -95141,17 +95542,17 @@ int Jidac::testbackup()
 	{
 		linea=line;
 		if (flagdebug3)
-			myprintf("84272: line %s\n",linea.c_str());
+			myprintf("02734: line %s\n",linea.c_str());
 		if (linea.size()<40)
 		{
-			myprintf("84446: getted a too small line |%s| |%s|\n",migliaia(linea.size()),linea.c_str());
+			myprintf("02735! getted a too small line |%s| |%s|\n",migliaia(linea.size()),linea.c_str());
 			return 2;
 		}
 		if (riga==0)
 		{
 			if (mypos("|XXH3|",linea)>0)
 			{
-				myprintf("85303: Enabling XXH3 (in reading) hasher\n");
+				myprintf("02736: Enabling XXH3 (in reading) hasher\n");
 				flagbackupxxh3=true;
 			}
 		}
@@ -95167,15 +95568,15 @@ int Jidac::testbackup()
 					break;
 			}
 			if (flagdebug3)
-				myprintf("84128: The hash |%s|\n",thehash.c_str());
+				myprintf("02737: The hash |%s|\n",thehash.c_str());
 			if (thehash.size()!=32)
 			{
-				myprintf("84131: Hash length not good\n");
+				myprintf("02738! Hash length not good\n");
 				return 2;
 			}
 			if (linea[i]!=' ')
 			{
-				myprintf("84131: Space not found\n");
+				myprintf("02739! Space not found\n");
 				return 2;
 			}
 			i++;
@@ -95188,14 +95589,12 @@ int Jidac::testbackup()
 			/// this is the file.txt, discard
 			if (flagdebug3)
 			{
-				myprintf("84153: The txt <<");
-				printUTF8(thefilename.c_str());
-				myprintf(">>\n");
+				myprintf("02740: The txt <<%Z>>\n",thefilename.c_str());
 			}
 			i++;
 			if (linea[i]!='[')
 			{
-				myprintf("84161: File len marker KO\n");
+				myprintf("02741! File len marker KO\n");
 				return 2;
 			}
 			string sfilesize="";
@@ -95210,12 +95609,12 @@ int Jidac::testbackup()
 			}
 			uint64_t filesize=myatoll(sfilesize.c_str());
 			if (flagdebug3)
-				myprintf("84173: filesize |%s|\n",migliaia(filesize));
+				myprintf("02742: filesize |%s|\n",migliaia(filesize));
 			i++;
 			i++;
 			if (linea[i]!='<')
 			{
-				myprintf("84336: < KO\n");
+				myprintf("02743! < KO\n");
 				return 2;
 			}
 			i++;
@@ -95229,12 +95628,12 @@ int Jidac::testbackup()
 				i++;
 			}
 			if (flagdebug3)
-				myprintf("84357: the quickhash |%s|\n",thequickhash.c_str());
+				myprintf("02744: the quickhash |%s|\n",thequickhash.c_str());
 
 			i++;
 			if (linea[i]!=' ')
 			{
-				myprintf("84185: Space filename KO\n");
+				myprintf("02745! Space filename KO\n");
 				return 2;
 			}
 			i++;
@@ -95246,7 +95645,7 @@ int Jidac::testbackup()
 						thedate=linea.substr(i+1,19);
 						i+=22;
 						if (flagdebug3)
-							myprintf("95107: The date $%s$\n",thedate.c_str());
+							myprintf("02746: The date $%s$\n",thedate.c_str());
 						filedate.push_back(thedate);
 					}
 				
@@ -95259,17 +95658,15 @@ int Jidac::testbackup()
 			}
 			if (flagdebug3)
 			{
-				myprintf("84191: The filename <<");
-				printUTF8(thefilename.c_str());
-				myprintf(">>\n");
+				myprintf("02747: The filename <<%Z>>\n",thefilename.c_str());
 			}
 			int	thepartnumber=getpartnumber(thefilename);
 			if (thepartnumber<0)
-				myprintf("84703: Houston thefilename is not ok %s\n",thefilename.c_str());
+				myprintf("02748: Houston thefilename is not ok %s\n",thefilename.c_str());
 			else
 			{
 				if (flagdebug3)
-					myprintf("84712: zpaq piece %s\n",migliaia(thepartnumber));
+					myprintf("02749: zpaq piece %s\n",migliaia(thepartnumber));
 				filenumbers.		push_back(thepartnumber);
 				filenames.			push_back(thefilename);
 				filequickhashes.	push_back(thequickhash);
@@ -95283,7 +95680,7 @@ int Jidac::testbackup()
 
 	if ((!flagverify) && (!flagquick))
 	{
-		myprintf("84283: First stage syntax check: OK\n");
+		myprintf("02750: First stage syntax check: OK\n");
 		return 0;
 	}
 	string percorso=tofiles[0];
@@ -95295,7 +95692,7 @@ int Jidac::testbackup()
 		if (i<filenames.size()-1)
 		{
 			if (flagverbose)
-				myprintf("84601: Working on %08d  %08d %s\n",(int)i,filenumbers[i],filenames[i].c_str());
+				myprintf("02751: Working on %08d  %08d %s\n",(int)i,filenumbers[i],filenames[i].c_str());
 			if (filenumbers[i]+1!=filenumbers[i+1])
 			{
 				string 	i_candidato		=extractfilename(filenames[i]);
@@ -95309,25 +95706,21 @@ int Jidac::testbackup()
 				string partetestuale=extractfilename(filenames[i]);
 				partetestuale=partetestuale.substr(0,partetestuale.size()-13);
 
-				myprintf("84749: We have a hole in part numbers [%s..%s], checking if 0-bytes\n",migliaia(inumerini),migliaia2(ipnumerini));
+				myprintf("02752: We have a hole in part numbers [%s..%s], checking if 0-bytes\n",migliaia(inumerini),migliaia2(ipnumerini));
 				for (unsigned int k=inumerini;k<=ipnumerini;k++)
 				{
 					char buffer[16];
 					snprintf(buffer,sizeof(buffer),"%08d",(int)k);
 					string fileinthehole=extractfilepath(filenames[i])+partetestuale+buffer+".zpaq";
-					myprintf("84767: File in the hole %s\n",fileinthehole.c_str());
+					myprintf("02753: File in the hole %s\n",fileinthehole.c_str());
 					if (!fileexists(fileinthehole))
 					{
-						myprintf("84769: Cannot find expected 'hole' ");
-						printUTF8(fileinthehole.c_str());
-						myprintf("\n");
+						myprintf("02754! Cannot find expected 'hole' %Z\n",fileinthehole.c_str());
 						return 2;
 					}
 					if (prendidimensionefile(fileinthehole.c_str())!=0)
 					{
-						myprintf("84776: Expected file not 0-bytes long ");
-						printUTF8(fileinthehole.c_str());
-						myprintf("\n");
+						myprintf("02755! Expected file not 0-bytes long %Z\n",fileinthehole.c_str());
 						return 2;
 					}
 				}
@@ -95339,22 +95732,25 @@ int Jidac::testbackup()
 
 		if (!flagnoeta)
 		{
-			myprintf("84221: Initial check part <<");
+			myprintf("02756: Initial check part <<%Z>>\r",filedefinitivo.c_str());
+			/*
+			myprintf("02757: Initial check part <<");
 			printUTF8(filedefinitivo.c_str());
 			myprintf(">>\r");
+			*/
 		}
 
 		if (!fileexists(filedefinitivo))
 		{
 			myprintf("\n");
-			myprintf("84221: File does not exists\n");
+			myprintf("02758! File does not exists\n");
 			return 2;
 		}
 		int64_t larghezzain=prendidimensionefile(filedefinitivo.c_str());
 		if (larghezzain!=filesizes[i-1])
 		{
 			myprintf("\n");
-			myprintf("84218: Filesize does not match real %s vs expected %s\n",migliaia(larghezzain),migliaia2(filesizes[i-1]));
+			myprintf("02759! Filesize does not match real %s vs expected %s\n",migliaia(larghezzain),migliaia2(filesizes[i-1]));
 			return 2;
 		}
 		filenames[i-1]=filedefinitivo;
@@ -95366,19 +95762,22 @@ int Jidac::testbackup()
 		if (checktxt!="")
 		{
 			printbar('*');
-			myprintf("85139: COMPARING CHECKTXT HASHES VS INDEX TXT\n");
+			myprintf("02760: COMPARING CHECKTXT HASHES VS INDEX TXT\n");
 			string md5file=checktxt;
 			if (!fileexists(md5file))
 			{
-				myprintf("85072: checksum file not found ");
+				myprintf("02761! checksum file not found %Z\n",md5file.c_str());
+				/*
+				myprintf("02762! checksum file not found ");
 				printUTF8(md5file.c_str());
 				myprintf("\n");
+				*/
 				return 2;
 			}
 			vector<string> arraymd5;
 			if (!readfiletoarray(md5file,arraymd5))
 			{
-				myprintf("85129: I quit, cannot read to array!\n");
+				myprintf("02763! I quit, cannot read to array!\n");
 				return 2;
 			}
 			unsigned int	trovati				=0;
@@ -95388,7 +95787,7 @@ int Jidac::testbackup()
 			for (unsigned int i=0;i<arraymd5.size();i++)
 			{
 				if (flagdebug3)
-					myprintf("85135: %08d %s\n",(int)i,arraymd5[i].c_str());
+					myprintf("02764: %08d %s\n",(int)i,arraymd5[i].c_str());
 
 				string	theline		=arraymd5[i];
 				string 	thehash		="";
@@ -95407,7 +95806,7 @@ int Jidac::testbackup()
 				{
 					if (theline[j]!=' ')
 					{
-						myprintf("85164: no space after hash\n");
+						myprintf("02765: no space after hash\n");
 						thehash="";
 					}
 					else
@@ -95430,7 +95829,7 @@ int Jidac::testbackup()
 					thehash="";
 			}
 
-			///myprintf("85187: Found %s rows matched\n",migliaia(couple_hashname.size()));
+			///myprintf("02766: Found %s rows matched\n",migliaia(couple_hashname.size()));
 			for (unsigned int i=0;i<couple_hashname.size();i++)
 			{
 				if (flagverbose)
@@ -95445,17 +95844,17 @@ int Jidac::testbackup()
 						trovatodopotutto=true;
 						trovati++;
 						if (flagverbose)
-							myprintf("85204: EUREKA : ");
+							myprintf("02767: EUREKA : ");
 						if (couple_hashname[i].first==filehashes[j])
 						{
 							if (flagverbose)
-							myprintf("87584: HASH MATCH <<");
+							myprintf("02768: HASH MATCH <<");
 							trovatihashok++;
 						}
 						else
 						{
 							if (flagverbose)
-								myprintf("87590: HASH KAPUTT %s %s <<",couple_hashname[i].first.c_str(),filehashes[j].c_str());
+								myprintf("02769: HASH KAPUTT %s %s <<",couple_hashname[i].first.c_str(),filehashes[j].c_str());
 							trovatihashkaputt++;
 						}
 						if (flagverbose)
@@ -95468,32 +95867,35 @@ int Jidac::testbackup()
 				if (!trovatodopotutto)
 				{
 					nontrovati++;
-					myprintf("85231: Cannot find ");
+					myprintf("02770: Cannot find %Z\n",extractfilename(filename).c_str());
+					/*
+					myprintf("02771: Cannot find ");
 					printUTF8(extractfilename(filename).c_str());
 					myprintf("\n");
+					*/
 				}
 
 			}
-			myprintf("85212: %8s vs exp %8s :",migliaia(trovati),
+			myprintf("02772: %8s vs exp %8s :",migliaia(trovati),
 			migliaia2(couple_hashname.size()));
 			if (trovati==couple_hashname.size())
 				myprintf(" THIS IS GOOD\n");
 			else
 				myprintf(" NOT GOOD!\n");
 
-			myprintf("85231: HASH OK     %12s :",migliaia(trovatihashok));
+			myprintf("02773: HASH OK     %12s :",migliaia(trovatihashok));
 			if (trovatihashok==trovati)
 				myprintf(" THIS IS GOOD\n");
 			else
 				myprintf(" NOT GOOD!\n");
 
-			myprintf("85231: HASH KAPUTT %12s :",migliaia(trovatihashkaputt));
+			myprintf("02774: HASH KAPUTT %12s :",migliaia(trovatihashkaputt));
 			if (trovatihashkaputt==0)
 				myprintf(" THIS IS GOOD\n");
 			else
 				myprintf(" NOT GOOD!\n");
 
-			myprintf("85231: NOT FOUND   %12s :",migliaia(nontrovati));
+			myprintf("02775: NOT FOUND   %12s :",migliaia(nontrovati));
 			if (nontrovati==0)
 				myprintf(" THIS IS GOOD\n");
 			else
@@ -95501,15 +95903,15 @@ int Jidac::testbackup()
 
 			if ((trovatihashok!=trovati) || (trovati!=couple_hashname.size() || (nontrovati>0)))
 			{
-				myprintf("85234: Something is wrong, exit (use -verbose or - debug)\n");
+				myprintf("02776! Something is wrong, exit (use -verbose or - debug)\n");
 				return 2;
 			}
 			printbar('!');
 		}
 	if (flagquick)
-		myprintf("84596: Quick hash check\n");
+		myprintf("02777: Quick hash check\n");
 	else
-		myprintf("84240: Now FULL hash check\n");
+		myprintf("02778: Now FULL hash check\n");
 	vector<mycoppia> tobehasheddest_hashname;
 
 	string myhashalgo="MD5";
@@ -95518,12 +95920,12 @@ int Jidac::testbackup()
 
 	if (flagquick)
 		myhashalgo="QUICK";
-	franzparallelhashfiles(myhashalgo,totalsize,filenames,tobehasheddest_hashname);
+	franzparallelhashfiles(myhashalgo,totalsize,filenames,false,tobehasheddest_hashname);
 
 	std::sort(tobehasheddest_hashname.begin(), tobehasheddest_hashname.end(), compare_second);
 	printbar(' ',true);
 	if (flagverbose)
-		myprintf("84258: Report\n");
+		myprintf("02779: Report\n");
 
 	bool flagallok=true;
 	libzpaq::SHA256 globalesha256;
@@ -95534,18 +95936,9 @@ int Jidac::testbackup()
 			globalesha256.put(*p);
 		
 		if (flagverbose)
-		{
-			myprintf("85505: ");
-			printUTF8(tobehasheddest_hashname[i].second.c_str());
-			myprintf(":");
-		}
-		if (flagverbose)
-		{
-			myprintf("%s:<",myhashalgo.c_str());
-			printUTF8(tobehasheddest_hashname[i].first.c_str() /*filehashes[i].c_str()*/);
-			myprintf(">");
-		}
-		string	hashfromfile="";
+			myprintf("02780: %Z:%s:<%Z>\n",tobehasheddest_hashname[i].second.c_str(),myhashalgo.c_str(),tobehasheddest_hashname[i].first.c_str());
+	
+	string	hashfromfile="";
 		if (flagquick)
 			hashfromfile=stringtolower(filequickhashes[i]);
 		else
@@ -95553,21 +95946,23 @@ int Jidac::testbackup()
 
 		if (hashfromfile!=stringtolower(tobehasheddest_hashname[i].first))
 		{
-			myprintf("87684: KAPUTT!\n");
-			myprintf("84261: ERROR: real hash %s vs expected %s on ",tobehasheddest_hashname[i].first.c_str(),filehashes[i].c_str());
+			myprintf("02781! ERROR: real hash %s vs expected %s on %Z\n",tobehasheddest_hashname[i].first.c_str(),filehashes[i].c_str(),tobehasheddest_hashname[i].second.c_str());
+			/*
+			myprintf("02782: ERROR: real hash %s vs expected %s on ",tobehasheddest_hashname[i].first.c_str(),filehashes[i].c_str());
 			printUTF8(tobehasheddest_hashname[i].second.c_str());
 			myprintf("\n");
+			*/
 			flagallok=false;
 		}
 		else
 		{
 			if (flagverbose)
-				myprintf("87685: OK\n");
+				myprintf("02783: OK\n");
 		}
 	}
 	char sha256result[32];
 	memcpy(sha256result, globalesha256.result(), 32);
-	myprintf("91903: GLOBAL SHA256: ");
+	myprintf("02784: GLOBAL SHA256: ");
 	for (int j=0; j <= 31; j++)
 		myprintf("%02X", (unsigned char)sha256result[j]);
 	myprintf("\n");
@@ -95575,17 +95970,17 @@ int Jidac::testbackup()
 	if (flagallok)
 	{
 		double velocita=totalsize/((mtime()-starttime+1)/1000.0);
-		myprintf("84287: Chunks checked OK: %s (%s @ %s/s)\n",migliaia(tobehasheddest_hashname.size()),
+		myprintf("02785: Chunks checked OK: %s (%s @ %s/s)\n",migliaia(tobehasheddest_hashname.size()),
 		migliaia2(totalsize),
 		migliaia3((int64_t)velocita)
 		);
 	}
 	else
 	{
-		myprintf("85118: *** ALREADY IN ERROR ***\n");
+		myprintf("02786: *** ALREADY IN ERROR ***\n");
 	}
 	if (filedate.size()>0)
-		myprintf("95447: Last date %s\n",filedate[filedate.size()-1].c_str());
+		myprintf("02787: Last date %s\n",filedate[filedate.size()-1].c_str());
 	if (flagparanoid)
 	{
 		if (fileexists(indexname))
@@ -95604,7 +95999,7 @@ int Jidac::testbackup()
 			int64_t	chunk_compressedsize=0;
 			getzpaqsum(zpaqchunks,chunk_usize,chunk_allsize,chunk_dtsize,chunk_compressedsize);
 
-			myprintf("85135: dtsize     %21s [i] %21s [c]:",migliaia(index_dtsize),migliaia2(chunk_dtsize));
+			myprintf("02788: dtsize     %21s [i] %21s [c]:",migliaia(index_dtsize),migliaia2(chunk_dtsize));
 			if (index_dtsize==chunk_dtsize)
 				myprintf(" OK\n");
 			else
@@ -95613,7 +96008,7 @@ int Jidac::testbackup()
 				matchok=false;
 			}
 
-			myprintf("85135: usize      %21s [i] %21s [c]:",migliaia(index_usize),migliaia2(chunk_usize));
+			myprintf("02789: usize      %21s [i] %21s [c]:",migliaia(index_usize),migliaia2(chunk_usize));
 			if (index_usize==chunk_usize)
 				myprintf(" OK\n");
 			else
@@ -95621,7 +96016,7 @@ int Jidac::testbackup()
 				myprintf(" ERROR\n");
 				matchok=false;
 			}
-			myprintf("85135: allsize    %21s [i] %21s [c]:",migliaia(index_allsize),migliaia2(chunk_allsize));
+			myprintf("02790: allsize    %21s [i] %21s [c]:",migliaia(index_allsize),migliaia2(chunk_allsize));
 			if (index_allsize==chunk_allsize)
 				myprintf(" OK\n");
 			else
@@ -95629,7 +96024,7 @@ int Jidac::testbackup()
 				myprintf(" ERROR\n");
 				matchok=false;
 			}
-			myprintf("85135: compressed %21s [i] %21s [c]:",migliaia(index_compressedsize),migliaia2(chunk_compressedsize));
+			myprintf("02791: compressed %21s [i] %21s [c]:",migliaia(index_compressedsize),migliaia2(chunk_compressedsize));
 
 			if (index_compressedsize==chunk_compressedsize)
 				myprintf(" OK\n");
@@ -95641,14 +96036,17 @@ int Jidac::testbackup()
 			if (!matchok)
 			{
 				flagallok=false;
-				myprintf("85177: Index data != chunks. Wrong append? Manual update?\n");
+				myprintf("02792: Index data != chunks. Wrong append? Manual update?\n");
 			}
 		}
 		else
 		{
-			myprintf("85060: index does not exists ");
+			myprintf("02793: index does not exists %Z\n",indexname.c_str());
+			/*
+			myprintf("02794: index does not exists ");
 			printUTF8(indexname.c_str());
 			myprintf("\n");
+			*/
 			flagallok=false;
 		}
 	}
@@ -95661,12 +96059,12 @@ int Jidac::backup()
 {
 	if (archive=="")
 	{
-		myprintf("84334: You need a non-empty archive name\n");
+		myprintf("02795! You need a non-empty archive name\n");
 		return 2;
 	}
 	if (strrchr(archive.c_str(), '?'))
 	{
-		myprintf("84339: Backup is for managed multipart, do not use ?\n");
+		myprintf("02796! Backup is for managed multipart, do not use ?\n");
 		return 2;
 	}
 
@@ -95675,16 +96073,19 @@ int Jidac::backup()
 	{
 		g_backupposition=extractfilepath(includetrailingbackslash(g_indexname));
 		if (flagverbose)
-			myprintf("85088: -index automagically managed g_backuposition |%s|\n",g_backupposition.c_str());
+			myprintf("02797: -index automagically managed g_backuposition |%s|\n",g_backupposition.c_str());
 		if (!direxists(g_backupposition))
 		{
-			myprintf("90718: the folder (of -index) need to (already) exists ");
+			myprintf("02798! the folder (of -index) need to (already) exists %Z\n",g_backupposition.c_str());
+			/*
+			myprintf("02799! the folder (of -index) need to (already) exists ");
 			printUTF8(g_backupposition.c_str());
 			myprintf("\n");
+			*/
 			return 2;
 		}
 		color_yellow();
-		myprintf("90747: *** WARNING: It's YOUR job to preserve _backup.index and _backup.txt! ***\n");
+		myprintf("02800: *** WARNING: It's YOUR job to preserve _backup.index and _backup.txt! ***\n");
 		color_restore();
 	}
 	
@@ -95697,7 +96098,7 @@ int Jidac::backup()
 	if (!flagspace)
 		if (isbackuprunning())
 		{
-			myprintf("85733: Quit because backup seems running. -space to bypass\n");
+			myprintf("02801: Quit because backup seems running. -space to bypass\n");
 			return 1;
 		}
 
@@ -95705,36 +96106,44 @@ int Jidac::backup()
 	printbar('+');
 	multipart archivechunks(archive);
 	if (archivechunks.isgood)
-		myprintf("84424: Multipart backup seems OK\n");
+		myprintf("02802: Multipart backup seems OK\n");
 	else
 	{
-		myprintf("84426: Multipart backup DOES NOT SEEMS GOOD!\n");
-		myprintf("84428: To prevent corruption no 'holes' in numeration allowed\n");
-		myprintf("84429: Manually fill with 0-bytes [ex touch] to bypass\n");
+		myprintf("02803! Multipart backup DOES NOT SEEMS GOOD!\n");
+		myprintf("02804! To prevent corruption no 'holes' in numeration allowed\n");
+		myprintf("02805! Manually fill with 0-bytes [ex touch] to bypass\n");
 		return 2;
 	}
 
 
 	if (flagverbose)
 	{
-		myprintf("84682: Last part ");
+		myprintf("02806: Last part %Z\n",archivechunks.lastpart.c_str());
+		myprintf("02807: Next part %Z\n",archivechunks.nextpart.c_str());
+		myprintf("02808: Pid       %Z\n",g_pidname.c_str());
+		/*
+		myprintf("02809: Last part ");
 		printUTF8(archivechunks.lastpart.c_str());
 		myprintf("\n");
-		myprintf("84683: Next part ");
+		myprintf("02810: Next part ");
 		printUTF8(archivechunks.nextpart.c_str());
 		myprintf("\n");
-		myprintf("85768: Pid       ");
+		myprintf("02811: Pid       ");
 		printUTF8(g_pidname.c_str());
 		myprintf("\n");
+		*/
 	}
 
 
 	FILE* handlepid=fopen(g_pidname.c_str(), "wb");
 	if (handlepid==NULL)
 	{
-		myprintf("85778: cannot write on pid ");
+		myprintf("02812! cannot write on pid %Z (no writeable folder?)\n",g_pidname.c_str());
+		/*
+		myprintf("02813! cannot write on pid ");
 		printUTF8(g_pidname.c_str());
 		myprintf(" (no writeable folder?)\n");
+		*/
 		return 2;
 	}
 	g_pid_handle=handlepid;
@@ -95759,25 +96168,28 @@ int Jidac::consolidatebackup()
 
 	if (files.size()!=1)
 	{
-		myprintf("85827: consolidate require one file parameter\n");
+		myprintf("02814! consolidate require one file parameter\n");
 		return 2;
 	}
 	if (isjolly(files[0]))
 	{
-		myprintf("85832: Do not use ? for backups\n");
+		myprintf("02815! Do not use ? for backups\n");
 		return 2;
 	}
 	if (tofiles.size()!=1)
 	{
-		myprintf("85837: consolidate require one -to (the output zpaq)\n");
+		myprintf("02816! consolidate require one -to (the output zpaq)\n");
 		return 2;
 	}
 	if (mypos("/",files[0])==-1)
 	{
 		files[0]="./"+files[0];
-		myprintf("85843: fixed filename ");
+		myprintf("02817: fixed filename %Z\n",files[0].c_str());
+		/*
+		myprintf("02818: fixed filename ");
 		printUTF8(files[0].c_str());
 		myprintf("\n");
+		*/
 	}
 
 	g_pidname	=extractfilepath(files[0])+prendinomefileebasta(files[0])+"_00000000.pid";
@@ -95785,7 +96197,7 @@ int Jidac::consolidatebackup()
 	if (!flagspace)
 		if (isbackuprunning())
 		{
-			myprintf("85853: Quit because backup seems running. -space to bypass\n");
+			myprintf("02819: Quit because backup seems running. -space to bypass\n");
 			return 1;
 		}
 
@@ -95802,20 +96214,26 @@ int Jidac::consolidatebackup()
 
 	if (esistelone && esistebackup)
 	{
-		myprintf("85871: I am confused (normal zpaq and backup does co-exists) ");
+		myprintf("02820! I am confused (normal zpaq and backup does co-exists) %Z <-> %Z\n",lonezpaq.c_str(),firstzpaq.c_str());
+		/*
+		myprintf("02821! I am confused (normal zpaq and backup does co-exists) ");
 		printUTF8(lonezpaq.c_str());
 		myprintf(" <-> ");
 		printUTF8(firstzpaq.c_str());
 		myprintf("\n");
+		*/
 		return 2;
 	}
 	if ((!esistelone) && (!esistebackup))
 	{
-		myprintf("85881: Cannot find normal zpaq or backup ");
+		myprintf("02822! Cannot find normal zpaq or backup %Z <-> %Z\n",lonezpaq.c_str(),firstzpaq.c_str());
+		/*
+		myprintf("02823! Cannot find normal zpaq or backup ");
 		printUTF8(lonezpaq.c_str());
 		myprintf(" <-> ");
 		printUTF8(firstzpaq.c_str());
 		myprintf("\n");
+		*/
 		return 2;
 	}
 
@@ -95832,36 +96250,47 @@ int Jidac::consolidatebackup()
 	if (esistenewtxt)
 	{
 		string	newtxt=nomefileseesistegia(newfilename+".bak");
-		myprintf("85898: Renaming txt   to ");
+		myprintf("02824: Renaming txt   to %Z\n",newtxt.c_str());
+		/*
+		myprintf("02825: Renaming txt   to ");
 		printUTF8(newtxt.c_str());
 		myprintf("\n");
+		*/
 		if (myrename(newfilename,newtxt)!=0)
 		{
-			myprintf("85903: ===========> KAPUTT RENAMING txt\n");
+			myprintf("02826! ===========> KAPUTT RENAMING txt\n");
 			return 2;
 		}
 	}
 	if (esistenewindex)
 	{
 		string	newindex=nomefileseesistegia(newindexname+".bak");
-		myprintf("85906: Renaming index to ");
+		
+		myprintf("02827: Renaming index to %Z\n",newindex.c_str());
+		/*
+		myprintf("02828: Renaming index to ");
 		printUTF8(newindex.c_str());
 		myprintf("\n");
+		*/
 		if (myrename(newindexname,newindex)!=0)
 		{
-			myprintf("85903: ===========> KAPUTT RENAMING index\n");
+			myprintf("02829! ===========> KAPUTT RENAMING index\n");
 			return 2;
 		}
 	}
 	if (esistenewlonezpaq)
 	{
 		string	newlo=nomefileseesistegia(newlonezpaq+".bak");
-		myprintf("85929: Renaming zpaq to ");
+		
+		myprintf("02830: Renaming zpaq to %Z\n",newlo.c_str());
+		/*
+		myprintf("02831: Renaming zpaq to ");
 		printUTF8(newlo.c_str());
 		myprintf("\n");
+		*/
 		if (myrename(newlonezpaq,newlo)!=0)
 		{
-			myprintf("85934: ===========> KAPUTT RENAMING zpaq\n");
+			myprintf("02832! ===========> KAPUTT RENAMING zpaq\n");
 			return 2;
 		}
 	}
@@ -95879,7 +96308,7 @@ int Jidac::consolidatebackup()
 	extract();
 	if (prendidimensionefile(newindexname.c_str())<104)
 	{
-		myprintf("85939: New index file size too small\n");
+		myprintf("02833! New index file size too small\n");
 		return 2;
 	}
 	if (esistebackup)
@@ -95888,7 +96317,7 @@ int Jidac::consolidatebackup()
 		files.push_back(newfirstzpaq);
 		if (consolidate(zpaqchunks)!=0)
 		{
-			myprintf("85968: guru for consolidate\n");
+			myprintf("02834! guru for consolidate\n");
 			return 2;
 		}
 
@@ -95906,11 +96335,14 @@ int Jidac::consolidatebackup()
 		0); 
 		if (risultato=="")
 		{
-			myprintf("85965: something wrong during filecopy, abort ");
+			myprintf("02835! something wrong during filecopy, abort %Z => %Z\n",lonezpaq.c_str(),newfirstzpaq.c_str());
+			/*
+			myprintf("02836! something wrong during filecopy, abort ");
 			printUTF8(lonezpaq.c_str());
 			myprintf("=> ");
 			printUTF8(newfirstzpaq.c_str());
 			myprintf("\n");
+			*/
 			return 2;
 		}
 	}
@@ -95927,38 +96359,44 @@ int Jidac::consolidatebackup()
 	if (flagbackupxxh3)
 		thehash="XXH3";
 
-	myprintf("85975: Getting %s on %s\n",thehash.c_str(),g_archive.c_str());
+	myprintf("02837: Getting %s on %s\n",thehash.c_str(),g_archive.c_str());
 
 	franz_do_hash dummy(thehash);
 	if (flagdebug3)
-		myprintf("87353: filehash on %s\n",g_archive.c_str());
+		myprintf("02838: filehash on %s\n",g_archive.c_str());
 
 	string hashreloaded=dummy.filehash(g_archive,false,startverify,larghezzain);
 
 	if (hashreloaded=="")
 	{
-		myprintf("85984: Guru calculating %s hash for <<",thehash.c_str());
+		myprintf("02839! Guru calculating %s hash for <<%Z>>\n",thehash.c_str(),g_archive.c_str());
+		/*
+		myprintf("02840! Guru calculating %s hash for <<",thehash.c_str());
 		printUTF8(g_archive.c_str());
 		myprintf(">>\n");
+		*/
 		return 2;
 	}
 	myprintf("\n");
-	myprintf("85989: final %s %s: %s\n",hashreloaded.c_str(),thehash.c_str(),g_archive.c_str());
-	myprintf("85990: Doing backup stuff\n");
-	myprintf("85994: Creating backup txt ");
+	myprintf("02841: final %s %s: %s\n",hashreloaded.c_str(),thehash.c_str(),g_archive.c_str());
+	myprintf("02842: Doing backup stuff\n");
+	myprintf("02843: Creating backup txt %Z\n",backuptxt.c_str());
+	/*
+	myprintf("02844: Creating backup txt ");
 	printUTF8(backuptxt.c_str());
 	myprintf("\n");
+	*/
 	FILE* backupfile=fopen(backuptxt.c_str(), "wb");
 	if (backupfile==NULL)
 	{
-		myprintf("86000: Cannot write on backupfile\n");
+		myprintf("02845! Cannot write on backupfile\n");
 		return 2;
 	}
 
 	fprintf(backupfile,"$zpaqfranz backupfile|2|%s|%s|%s\n",dateToString(true,now()).c_str(),thehash.c_str(),g_archive.c_str());
 	franz_do_hash dummyquick("QUICK");
 	if (flagdebug3)
-		myprintf("87378: filehash on %s\n",g_archive.c_str());
+		myprintf("02846: filehash on %s\n",g_archive.c_str());
 
 	string quickhash=dummyquick.filehash(g_archive,false,startverify,larghezzain);
 
@@ -95994,71 +96432,77 @@ int&					o_expected_file)
 
 	if (i_thefile==NULL)
 	{
-		myprintf("86494: file handle is null!\n");
+		myprintf("02847! file handle is null!\n");
 		return 2;
 	}
 
 
 	/// hardcoded file format
-	char line[65536];
+
+#ifdef ANCIENT
+	char 	line[16384];
+#else
+	char 	line[65536];
+#endif
+
 	string linea="";
 	if (!fgets(line, sizeof(line), i_thefile))
 	{
-		myprintf("60359: failed reading first line\n");
+		myprintf("02848! failed reading first line\n");
 		return 2;
 	}
 	linea=line;
 	if (linea.size()==0)
 	{
-		myprintf("60364: first line empty\n");
+		myprintf("02849! first line empty\n");
 		return 2;
 	}
 	if (!fgets(line, sizeof(line), i_thefile))
 	{
-		myprintf("60370: failed reading second line\n");
+		myprintf("02850! failed reading second line\n");
 		return 2;
 	}
 	linea=line;
 	if (linea.size()==0)
 	{
-		myprintf("60371: second line empty\n");
+		myprintf("02851! second line empty\n");
 		return 2;
 	}
 	if (linea.size()<6)
 	{
-		myprintf("60383: second line too short %d\n",linea.size());
+		myprintf("02852! second line too short %d\n",linea.size());
 		return 2;
 	}
 	if (linea[0]!='%')
 	{
-		myprintf("60372: second line char 0 not %%\n");
+		myprintf("02853! second line char 0 not %%\n");
 		return 2;
 	}
 	if (linea[1]!='%')
 	{
-		myprintf("60372: second line char 1 not %%\n");
+		myprintf("02854! second line char 1 not %%\n");
 		return 2;
 	}
 	if (linea[2]!='%')
 	{
-		myprintf("60372: second line char 2 not %%\n");
+		myprintf("02855! second line char 2 not %%\n");
 		return 2;
 	}
 	if (linea[3]!='%')
 	{
-		myprintf("60372: second line char 3 not %%\n");
+		myprintf("02856! second line char 3 not %%\n");
 		return 2;
 	}
 	if (linea[4]!=' ')
 	{
-		myprintf("60372: second line char 4 not space\n");
+		myprintf("02857! second line char 4 not space\n");
 		return 2;
 	}
 	myreplaceall(linea,"%%%% ","");
 	myreplaceall(linea,"\r","");
 	myreplaceall(linea,"\n","");
 	if (flagdebug3)
-	myprintf("96036: $$$$$$$$$$$$ !%s! $$$$$$$$$$$\n",linea.c_str());
+	myprintf("02858: $$$$$$$$$$$$ !%s! $$$$$$$$$$$\n",linea.c_str());
 	vector<string> pezzi;
 	explode(linea,',',pezzi);
 	if (flagdebug3)
@@ -96067,22 +96511,22 @@ int&					o_expected_file)
 	 
 	if (pezzi.size()!=3)
 	{
-		myprintf("60417: second line MUST be of 3 fields (%d here)\n",pezzi.size());
+		myprintf("02859! second line MUST be of 3 fields (%d here)\n",pezzi.size());
 		return 2;
 	}
 	if (pezzi[0]!="size")
 	{
-		myprintf("60442: first field is not size |%s|\n",pezzi[0].c_str());
+		myprintf("02860! first field is not size |%s|\n",pezzi[0].c_str());
 		return 2;
 	}
 	if (pezzi[2]!="filename")
 	{
-		myprintf("60442: third field is not filename |%s|\n",pezzi[2].c_str());
+		myprintf("02861! third field is not filename |%s|\n",pezzi[2].c_str());
 		return 2;
 	}
 	if (pezzi[1]=="tiger")
 	{
-		myprintf("60440: sorry, tiger hash not supported\n");
+		myprintf("02862! sorry, tiger hash not supported\n");
 		return 2;
 	}
 	if 	(
@@ -96094,16 +96538,16 @@ int&					o_expected_file)
 		(pezzi[1]!="whirlpool")
 		)
 	{
-		myprintf("60453: sorry, algo must be md5|sha1|sha256|whirlpool\n");
+		myprintf("02863! sorry, algo must be md5|sha1|sha256|whirlpool\n");
 		return 2;
 	}
-	myprintf("60451: Hasher selected: %s\n",pezzi[1].c_str());
+	myprintf("02864: Hasher selected: %s\n",pezzi[1].c_str());
 
 	while (fgets(line, sizeof(line), i_thefile))
 	{
 		linea=line;
 		if (flagdebug3)
-			myprintf("63087: <<%s>>\n",linea.c_str());
+			myprintf("02865: <<%s>>\n",linea.c_str());
 		if (linea.size()>0)
 			if  (linea[0]!='#')
 			{
@@ -96152,10 +96596,10 @@ int&					o_expected_file)
 				
 				if (flagdebug3)
 				{
-					myprintf("63127: myfilesize %d\n",isizo);
-					myprintf("63127: myfilealgo %s\n",algo.c_str());
-					myprintf("63127: myfilehash %s\n",hasho.c_str());
-					myprintf("63127: myfiles    %s\n",nomeo.c_str());
+					myprintf("02866: myfilesize %d\n",isizo);
+					myprintf("02867: myfilealgo %s\n",algo.c_str());
+					myprintf("02868: myfilehash %s\n",hasho.c_str());
+					myprintf("02869: myfiles    %s\n",nomeo.c_str());
 				}
 				myreplaceall(nomeo,"\\","/");
 				franzreplace(nomeo);
@@ -96165,13 +96609,13 @@ int&					o_expected_file)
 				o_filehash	.push_back(hasho);
 				o_files		.push_back(nomeo);
 				if (flagdebug3)
-					myprintf("63135: Pushed\n");
+					myprintf("02870: Pushed\n");
 				o_expected_size+=isizo;
 				o_expected_file++;
 			}
 	}
 	if (flagdebug3)
-		myprintf("63141: Out of while\n");
+		myprintf("02871: Out of while\n");
 	return 0;
 }
 
@@ -96188,18 +96632,22 @@ int&					o_expected_file)
 
 	if (i_thefile==NULL)
 	{
-		myprintf("86703: file handle is null!\n");
+		myprintf("02872! file handle is null!\n");
 		return 2;
 	}
 
-	char line[65536];
+#ifdef ANCIENT
+	char 	line[16384];
+#else
+	char 	line[65536];
+#endif
 
 	while (fgets(line, sizeof(line), i_thefile))
 	{
 		string linea=line;
 		if (linea.size()==0)
 		{
-			myprintf("86735: linea.size==0\n");
+			myprintf("02873! linea.size==0\n");
 			return 2;
 		}
 
@@ -96220,7 +96668,7 @@ int&					o_expected_file)
 			}
 			if (algo=="")
 			{
-				myprintf("86761: algo is empty\n");
+				myprintf("02874! algo is empty\n");
 				return 2;
 			}
 			j+=2;
@@ -96264,7 +96712,7 @@ int Jidac::versum_againstzpaq(vector<string> i_myfiles,vector<string> i_filealgo
 {
 	if (tofiles.size()==0)
 	{
-		myprintf("86763: tofiles size ==0\n");
+		myprintf("02875! tofiles size ==0\n");
 		return 2;
 	}
 	/// test against .zpaq
@@ -96272,16 +96720,22 @@ int Jidac::versum_againstzpaq(vector<string> i_myfiles,vector<string> i_filealgo
 	string estensione=prendiestensione(archive);
 	if (estensione!="zpaq")
 	{
-		myprintf("60342: -to must be a .zpaq archive ");
+		myprintf("02876! -to must be a .zpaq archive %Z\n",archive.c_str());
+		/*
+		myprintf("02877! -to must be a .zpaq archive ");
 		printUTF8(archive.c_str());
 		myprintf("\n");
+		*/
 		return 2;
 	}
 	if (!fileexists(archive))
 	{
-		myprintf("60341: archive does not exists ");
+		myprintf("02878! archive does not exists %Z\n",archive.c_str());
+		/*
+		myprintf("02879! archive does not exists ");
 		printUTF8(archive.c_str());
 		myprintf("\n");
+		*/
 		return 2;
 	}
 	tofiles.clear();
@@ -96292,7 +96746,7 @@ int Jidac::versum_againstzpaq(vector<string> i_myfiles,vector<string> i_filealgo
 	read_archive(NULL,archive.c_str(),&errors,1,true);/// silent AND NOW THE MAGIC ONE!
 	myprintf("\n");
 
-	myprintf("86880: Total files/fonder in zpaq %s, files in txt %s\n",migliaia(dt.size()),migliaia2(i_myfiles.size()));
+	myprintf("02880: Total files/fonder in zpaq %s, files in txt %s\n",migliaia(dt.size()),migliaia2(i_myfiles.size()));
 
 	int emptyhash		=0;
 	int emptyhashtype	=0;
@@ -96332,7 +96786,7 @@ int Jidac::versum_againstzpaq(vector<string> i_myfiles,vector<string> i_filealgo
 		{
 			emptyhashtype++;
 			if (flagverbose)
-				myprintf("60432: empty hashtype %s\n",filename.c_str());
+				myprintf("02881: empty hashtype %s\n",filename.c_str());
 			continue;
 		}
 
@@ -96340,7 +96794,7 @@ int Jidac::versum_againstzpaq(vector<string> i_myfiles,vector<string> i_filealgo
 		{
 			emptyhash++;
 			if (flagverbose)
-				myprintf("60430: empty hash %s\n",filename.c_str());
+				myprintf("02882: empty hash %s\n",filename.c_str());
 			continue;
 		}
 
@@ -96348,26 +96802,29 @@ int Jidac::versum_againstzpaq(vector<string> i_myfiles,vector<string> i_filealgo
 		{
 			mismatchalgo++;
 			if (flagverbose)
-				myprintf("60427: mismatch algo zpaq %s txt %s\n",myhashtype.c_str(),i_filealgo[i].c_str());
+				myprintf("02883: mismatch algo zpaq %s txt %s\n",myhashtype.c_str(),i_filealgo[i].c_str());
 			continue;
 		}
 		if (stringtoupper(myhash)!=stringtoupper(i_filehash[i]))
 		{
-			myprintf("60413: ERROR %s |zpaq=%s|txt=%s| ",myhashtype.c_str(),i_filehash[i].c_str(),myhash.c_str());
+			myprintf("02884! ERROR %s |zpaq=%s|txt=%s| %Z\n",myhashtype.c_str(),i_filehash[i].c_str(),myhash.c_str(),filename.c_str());
+			/*
+			myprintf("02885: ERROR %s |zpaq=%s|txt=%s| ",myhashtype.c_str(),i_filehash[i].c_str(),myhash.c_str());
 			printUTF8(filename.c_str());
 			myprintf("\n");
+			*/
 			o_errori++;
 		}
 		o_total_hashed+=p->second.size;
 	}
 	if (emptyhashtype>0)
-		myprintf("88446: Empty hash type %9s\n",migliaia(emptyhashtype));
+		myprintf("02886: Empty hash type %9s\n",migliaia(emptyhashtype));
 	if (emptyhash>0)
-		myprintf("88448: Empty hash      %9s\n",migliaia(emptyhash));
+		myprintf("02887: Empty hash      %9s\n",migliaia(emptyhash));
 	if (mismatchalgo>0)
-		myprintf("88450: Algo mismatch   %9s\n",migliaia(mismatchalgo));
+		myprintf("02888: Algo mismatch   %9s\n",migliaia(mismatchalgo));
 	if (emptyhashtype+emptyhash+mismatchalgo>0)
-		myprintf("88452: Cannot test     %9s\n",migliaia(emptyhashtype+emptyhash+mismatchalgo));
+		myprintf("02889: Cannot test     %9s\n",migliaia(emptyhashtype+emptyhash+mismatchalgo));
 	return 0;
 }
 void Jidac::franzreplace(string& i_filename)
@@ -96377,10 +96834,10 @@ void Jidac::franzreplace(string& i_filename)
 	if (searchfrom!="")
 	{
 		if (flagdebug3)
-			myprintf("86914: replace because searchfrom not empty on <<%s>>\n",i_filename.c_str());
+			myprintf("02890: replace because searchfrom not empty on <<%s>>\n",i_filename.c_str());
 		replace(i_filename,searchfrom,replaceto);
 		if (flagdebug3)
-			myprintf("86811: replaced to <<%s>>\n",i_filename.c_str());
+			myprintf("02891: replaced to <<%s>>\n",i_filename.c_str());
 		return;
 	}
 	else
@@ -96388,10 +96845,10 @@ void Jidac::franzreplace(string& i_filename)
 		if (replaceto!="")
 		{
 			if (flagdebug3)
-				myprintf("86818: adjust on <<%s>>\n",i_filename.c_str());
+				myprintf("02892: adjust on <<%s>>\n",i_filename.c_str());
 			i_filename=replaceto+i_filename;
 			if (flagdebug3)
-				myprintf("86821: adjusted to <<%s>>\n",i_filename.c_str());
+				myprintf("02893: adjusted to <<%s>>\n",i_filename.c_str());
 			return;
 		}
 	}
@@ -96401,7 +96858,7 @@ int Jidac::versum()
 {
 	if (files.size()==0)
 	{
-		myprintf("60120: no files selected to be compared\n");
+		myprintf("02894! no files selected to be compared\n");
 		return 2;
 	}
 	/// versum z:\*.zpaq -checktxt
@@ -96411,13 +96868,16 @@ int Jidac::versum()
 	for (unsigned int i=0;i<files.size();i++)
 		if (iszpaq(files[i]))
 		{
-			myprintf("86505: Cannot load a zpaq (usually on .txt or -ads) ");
+			myprintf("02895: Cannot load a zpaq (usually on .txt or -ads) %Z\n",files[i].c_str());
+			/*
+			myprintf("02896: Cannot load a zpaq (usually on .txt or -ads) ");
 			printUTF8(files[i].c_str());
 			myprintf("\n");
+			*/
 #ifdef _WIN32
 			if (exists_fasttxt_ads(files[i]))
 			{
-				myprintf("90285: Founded fasttxt on ADS!\n");
+				myprintf("02897: Founded fasttxt on ADS!\n");
 				flagads=true;
 				return fastquicktxt();
 			}
@@ -96427,10 +96887,10 @@ int Jidac::versum()
 
 	if (tofiles.size()>1)
 	{
-		myprintf("60212: -to to exactly one .zpaq\n");
+		myprintf("02898! -to to exactly one .zpaq\n");
 		return 2;
 	}
-	myprintf("86511: Loading text files\n");
+	myprintf("02899: Loading text files\n");
 	int	risultato			=0;
 	int64_t	total_size		=0;
 	int64_t	total_hashed	=0;
@@ -96449,26 +96909,30 @@ int Jidac::versum()
 		string filename=files[i];
 		if (!fileexists(filename))
 		{
-			myprintf("60128: error file does not exists ");
+			myprintf("02900: error file does not exists %Z\n",filename.c_str());
+			/*
+			myprintf("02901: error file does not exists ");
 			printUTF8(filename.c_str());
 			myprintf("\n");
+			*/
 			risultato=2;
 			continue;
 		}
 		if (flaghashdeep)
-			myprintf("60134: Working on hashdeep  format <<");
+			myprintf("02902: Working on hashdeep  format <<%Z>>\n",filename.c_str());
 		else
-			myprintf("60134: Working on zpaqfranz format <<");
+			myprintf("02903: Working on zpaqfranz format <<%Z>>\n",filename.c_str());
 
-		printUTF8(filename.c_str());
-		myprintf(">>\n");
 		FILE* myfile = freadopen(filename.c_str());
 
 		if (myfile==0)
 		{
-			myprintf("60145: error cannot open ");
+			myprintf("02904: error cannot open %Z\n",filename.c_str());
+			/*
+			myprintf("02905: error cannot open ");
 			printUTF8(filename.c_str());
 			myprintf("\n");
+			*/
 			risultato=2;
 			continue;
 		}
@@ -96484,15 +96948,15 @@ int Jidac::versum()
 			myfile=NULL;
 		}
 	}
-	myprintf("60188: Loading finished lines %s\n",migliaia(myfiles.size()));
+	myprintf("02906: Loading finished lines %s\n",migliaia(myfiles.size()));
 	if (risultato>0)
 	{
-		myprintf("60228: abort, because some errors\n");
+		myprintf("02907: abort, because some errors\n");
 		return risultato;
 	}
 	if (myfiles.size()==0)
 	{
-		myprintf("60233: no files to be checked\n");
+		myprintf("02908: no files to be checked\n");
 		return 1;
 	}
 	int64_t	starthash=mtime();
@@ -96511,7 +96975,7 @@ int Jidac::versum()
 			int64_t inizio		=mtime();
 			g_dimensione=0;
 
-			myprintf("60253: Total files %s (%s)\n",migliaia(myfiles.size()),tohuman(total_size));
+			myprintf("02909: Total files %s (%s)\n",migliaia(myfiles.size()),tohuman(total_size));
 			for (unsigned int i=0;i<myfiles.size();i++)
 			{
 				string	filename=myfiles[i];
@@ -96519,7 +96983,7 @@ int Jidac::versum()
 				
 				franz_do_hash dummy(myfilealgo[i]);
 				if (flagdebug3)
-					myprintf("88001: filehash on %s\n",filename.c_str());
+					myprintf("02910: filehash on %s\n",filename.c_str());
 
 				string risu=dummy.filehash(filename,false,inizio,total_size);
 				if (risu!="")
@@ -96559,11 +97023,11 @@ int Jidac::versum()
 			for (int i=0;i<mythreads;i++)
 			{
 				if (flagdebug3)
-					myprintf("88644: Thread [%02d] files %s\n",(int)i,migliaia(vettoreparametrihash[i].filestobehashed.size()));
+					myprintf("02911: Thread [%02d] files %s\n",(int)i,migliaia(vettoreparametrihash[i].filestobehashed.size()));
 				totfile+=+vettoreparametrihash[i].filestobehashed.size();
 			}
 			if (flagverbose)
-				myprintf("88634: Total files %s -> in threads %s\n",migliaia(myfiles.size()),migliaia2(totfile));
+				myprintf("02912: Total files %s -> in threads %s\n",migliaia(myfiles.size()),migliaia2(totfile));
 			int rc;
 			pthread_t* threads = new pthread_t[mythreads];
 			pthread_attr_t attr;
@@ -96573,7 +97037,7 @@ int Jidac::versum()
 			if (!flagnoeta)
 			{
 				myprintf("\n");
-				myprintf("63411: Creating %d hashing thread(s)\n",mythreads);
+				myprintf("02913: Creating %d hashing thread(s)\n",mythreads);
 			}
 			for(int i = 0; i < mythreads; i++ )
 			{
@@ -96581,7 +97045,7 @@ int Jidac::versum()
 				rc = pthread_create(&threads[i], &attr, scansionahash, (void*)&vettoreparametrihash[i]);
 				if (rc)
 				{
-					myprintf("34523: Error creating thread\n");
+					myprintf("02914: Error creating thread\n");
 					exit(-1);
 				}
 			}
@@ -96606,7 +97070,7 @@ int Jidac::versum()
 						mypair.first=vettoreparametrihash[i].filestobehashed[j];
 						mypair.second=vettoreparametrihash[i].o_hashcalculated[j];
 						vec.push_back(mypair);
-						///myprintf("63442: sizegetted %s\n",migliaia(vettoreparametrihash[i].o_sizegetted[j]));
+						///myprintf("02915: sizegetted %s\n",migliaia(vettoreparametrihash[i].o_sizegetted[j]));
 						total_hashed+=vettoreparametrihash[i].o_sizegetted[j];
 					}
 					else
@@ -96621,16 +97085,19 @@ int Jidac::versum()
 	{
 		expected_file	-=missing.size();
 		errori			+=missing.size();
-		myprintf("60360: we got %s missing files (in txt, not on filesystem)\n",migliaia(missing.size()));
+		myprintf("02916: we got %s missing files (in txt, not on filesystem)\n",migliaia(missing.size()));
 		for (unsigned int i=0;i<missing.size();i++)
 		{
-			myprintf("60363: missing ");
+			myprintf("02917: missing %Z\n",missing[i].c_str());
+			/*
+			myprintf("02918: missing ");
 			printUTF8(missing[i].c_str());
 			myprintf("\n");
+			*/
 		}
 	}
 	printbar('-');
-	myprintf("88705: Files %21s vs exp %21s ",migliaia(expected_file),migliaia2(myfiles.size()));
+	myprintf("02919: Files %21s vs exp %21s ",migliaia(expected_file),migliaia2(myfiles.size()));
 	if ((unsigned int)expected_file!=myfiles.size())
 	{
 		myprintf(" *** DIFFER %s ***",migliaia(myabs(myfiles.size(),expected_file)));
@@ -96640,7 +97107,7 @@ int Jidac::versum()
 		myprintf(" this is good");
 
 	myprintf("\n");
-	myprintf("88714: Bytes %21s vs exp %21s ",migliaia(total_hashed),migliaia2(expected_size));
+	myprintf("02920: Bytes %21s vs exp %21s ",migliaia(total_hashed),migliaia2(expected_size));
 	if (total_hashed!=expected_size)
 	{
 		myprintf(" *** DIFFER %s ***",migliaia(myabs(expected_size,total_hashed)));
@@ -96658,22 +97125,25 @@ int Jidac::versum()
 		string vec_hash		=vec[i].second;
 		if (vec_hash!=myfilehash[vec[i].index])
 		{
-			myprintf("60402: ERROR %s |file=%s|txt=%s| ",myfilealgo[i].c_str(),vec_hash.c_str(),myfilehash[i].c_str());
+			myprintf("02921: ERROR %s |file=%s|txt=%s| %Z\n",myfilealgo[i].c_str(),vec_hash.c_str(),myfilehash[i].c_str(),vec_filename.c_str());
+			/*
+			myprintf("02922: ERROR %s |file=%s|txt=%s| ",myfilealgo[i].c_str(),vec_hash.c_str(),myfilehash[i].c_str());
 			printUTF8(vec_filename.c_str());
 			myprintf("\n");
+			*/
 			errori++;
 		}
 		else
 		{
 			if (flagverbose)
-				myprintf("60413: hash OK in %08d  file %s  txt %s\n",vec[i].index,vec_hash.c_str(),vec_filename.c_str());
+				myprintf("02923: hash OK in %08d  file %s  txt %s\n",vec[i].index,vec_hash.c_str(),vec_filename.c_str());
 		}
 	}
 	if (errori>0)
 		printbar('-');
 	int64_t hashtime	=endhash-starthash;
 	int64_t myspeed		=(int64_t)(total_hashed*1000.0/(hashtime));
-	myprintf("88741: Time  %15.3f s, average speed %s/s (%s/s)\n",hashtime/1000.0,migliaia(myspeed),tohuman(myspeed));
+	myprintf("02924: Time  %15.3f s, average speed %s/s (%s/s)\n",hashtime/1000.0,migliaia(myspeed),tohuman(myspeed));
 
 	if (risultato==2)
 		return 2;
@@ -96689,7 +97159,7 @@ int Jidac::fastquicktxt()
 {
 	if (files.size()==0)
 	{
-		myprintf("87091: Files size must >1\n");
+		myprintf("02925! Files size must >1\n");
 		return 2;
 	}
 
@@ -96698,7 +97168,7 @@ int Jidac::fastquicktxt()
 			if (!iswildcard(files[0]))
 				if (prendiestensione(files[0])=="zpaq")
 				{
-					myprintf("66843: Automagically search for .txt ");
+					myprintf("02926: Automagically search for .txt ");
 					string 	thezpaq		=files[0];
 					string 	percorso	=extractfilepath		(thezpaq);
 					string	nome		=prendinomefileebasta	(thezpaq);
@@ -96716,7 +97186,7 @@ int Jidac::fastquicktxt()
 
 	if (flagchecktxt && flagfasttxt)
 	{
-		myprintf("87118: Confused by -checktxt and -fasttxt\n");
+		myprintf("02927! Confused by -checktxt and -fasttxt\n");
 		return 2;
 	}
 		
@@ -96725,7 +97195,7 @@ int Jidac::fastquicktxt()
 	unsigned int	thehashlen	=32;
 	if (flagchecktxt)
 	{
-		myprintf("66265: Test MD5 hashes of .zpaq against _md5.txt\n");
+		myprintf("02928: Test MD5 hashes of .zpaq against _md5.txt\n");
 		if (flagbackupxxh3)
 			thehash="XXH3";
 	}
@@ -96739,11 +97209,11 @@ int Jidac::fastquicktxt()
 			thehash		="QUICK";
 			thehashlen	=8;
 		}
-		///myprintf("66764: Test %s of .zpaq against _crc32.txt\n",thehash.c_str());
+		///myprintf("02929: Test %s of .zpaq against _crc32.txt\n",thehash.c_str());
 		if (!flagads)
-			myprintf("66764: Test %s of .zpaq against _crc32.txt %s\n",thehash.c_str());
+			myprintf("02930: Test %s of .zpaq against _crc32.txt %s\n",thehash.c_str());
 		else
-			myprintf("66764: Test %s of .zpaq against ADS %s\n",thehash.c_str());
+			myprintf("02931: Test %s of .zpaq against ADS %s\n",thehash.c_str());
 		
 	}
 	DTMap thedt;
@@ -96752,7 +97222,7 @@ int Jidac::fastquicktxt()
 
 	if (thedt.size()==0)
 	{
-		myprintf("66282: Nothing to do (wrong file selection?)\n");
+		myprintf("02932: Nothing to do (wrong file selection?)\n");
 		return 0;
 	}
 
@@ -96760,7 +97230,7 @@ int Jidac::fastquicktxt()
 	for (DTMap::iterator p=thedt.begin(); p!=thedt.end(); ++p)
 		larghezzain+=prendidimensionefile(p->first.c_str());
 
-	myprintf("87163: Bytes to be checked %s (%s) in files %s\n",migliaia(larghezzain),tohuman(larghezzain),migliaia2(thedt.size()));
+	myprintf("02933: Bytes to be checked %s (%s) in files %s\n",migliaia(larghezzain),tohuman(larghezzain),migliaia2(thedt.size()));
 
 	unsigned int	testok		=0;
 	unsigned int	testwarning	=0;
@@ -96787,47 +97257,56 @@ int Jidac::fastquicktxt()
 
 		if (!fileexists(mychecktxt))
 		{
-			myprintf("66240: WARN for file ");
+			myprintf("02934: WARN for file %Z missing %Z\n",thezpaq.c_str(),mychecktxt.c_str());
+			/*
+			myprintf("02935: WARN for file ");
 			printUTF8(thezpaq.c_str());
 			myprintf(" missing ");
 			printUTF8(mychecktxt.c_str());
 			myprintf("\n");
+			*/
 			testwarning++;
 			continue;
 		}
 
 		if (flagverbose)
 		{
-			myprintf("66240: Getting %s on ",thehash.c_str());
+			myprintf("02936: Getting %s on %Z\n",thehash.c_str(),thezpaq.c_str());
+			/*
+			myprintf("02937: Getting %s on ",thehash.c_str());
 			printUTF8(thezpaq.c_str());
 			myprintf("\n");
+			*/
 		}
 
 		vector<string> checktxtlines;
 		if (!readfiletoarray(mychecktxt,checktxtlines))
 		{
-			myprintf("66267: Guru readfiletoarray ");
+			myprintf("02938: Guru readfiletoarray %Z\n",mychecktxt.c_str());
+			/*
+			myprintf("02939: Guru readfiletoarray ");
 			printUTF8(mychecktxt.c_str());
 			myprintf("\n");
+			*/
 			continue;
 		}
 
 		if (checktxtlines.size()<=startline)
 		{
-			myprintf("66270: checktxtlines.size %d <= %d\n",checktxtlines.size(),startline);
+			myprintf("02940: checktxtlines.size %d <= %d\n",checktxtlines.size(),startline);
 			continue;
 		}
 
 		string	firstline	=checktxtlines[startline];
 		if (flagdebug3)
-			myprintf("90651: firstline   |%s|\n",firstline.c_str());
+			myprintf("02941: firstline   |%s|\n",firstline.c_str());
 		string 	hashfromtxt	=getfirsthash(firstline);
 		if (flagdebug3)
-			myprintf("90653: hashfromtxt |%s|\n",hashfromtxt.c_str());
+			myprintf("02942: hashfromtxt |%s|\n",hashfromtxt.c_str());
 		
 		if (hashfromtxt.size()!=thehashlen)
 		{
-			myprintf("66370: hash size %d != %d %s\n",hashfromtxt.size(),thehashlen,firstline.c_str());
+			myprintf("02943: hash size %d != %d %s\n",hashfromtxt.size(),thehashlen,firstline.c_str());
 			continue;
 		}
 
@@ -96840,7 +97319,7 @@ int Jidac::fastquicktxt()
 
 		franz_do_hash dummy(thehash);
 		if (flagdebug3)
-			myprintf("88303: filehash on %s\n",thezpaq.c_str());
+			myprintf("02944: filehash on %s\n",thezpaq.c_str());
 
 		string hashreloaded=dummy.filehash(thezpaq,false,startverify,larghezzain);
 		printbar(' ');
@@ -96848,37 +97327,44 @@ int Jidac::fastquicktxt()
 
 		if (hashreloaded=="")
 		{
-			myprintf("66254: guru doing hash on ");
+			myprintf("02945: guru doing hash on %Z\n",thezpaq.c_str());
+					/*
+			myprintf("02946: guru doing hash on ");
 			printUTF8(thezpaq.c_str());
 			myprintf("\n");
+			*/
 			continue;
 		}
 		if (flagdebug3)
 		{
-			myprintf("66248: %s: %s %s for file ",thehash.c_str(),hashreloaded.c_str(),hashfromtxt.c_str());
+			myprintf("02947: %s: %s %s for file %Z\n",thehash.c_str(),hashreloaded.c_str(),hashfromtxt.c_str(),thezpaq.c_str());
+			/*
+			myprintf("02948: %s: %s %s for file ",thehash.c_str(),hashreloaded.c_str(),hashfromtxt.c_str());
 			printUTF8(thezpaq.c_str());
 			myprintf("\n");
+			*/
 		}
-		myprintf("66323: ");
+		myprintf("02949: ");
 		if (stringtolower(hashreloaded)==stringtolower(hashfromtxt))
 		{
-			myprintf("88916: OK %s: ",thehash.c_str());
+			myprintf("02950: OK %s: ",thehash.c_str());
 			testok++;
 		}
 		else
 		{
-			myprintf("88928: ERROR: reloaded %s vs txt %s ",hashreloaded.c_str(),hashfromtxt.c_str());
+			myprintf("02951: ERROR: reloaded %s vs txt %s ",hashreloaded.c_str(),hashfromtxt.c_str());
 			testerror++;
 		}
-		printUTF8(thezpaq.c_str());
-		myprintf("\n");
+		myprintf("%s\n",thezpaq.c_str());
+		///printUTF8(thezpaq.c_str());
+		///myprintf("\n");
 	}
 	printbar('=');
 
-	myprintf("66356: TOTAL  %9s\n",migliaia(thedt.size()));
-	myprintf("66357: OK     %9s\n",migliaia(testok));
-	myprintf("66358: WARN   %9s\n",migliaia(testwarning));
-	myprintf("66359: ERROR  %9s\n",migliaia(testerror));
+	myprintf("02952: TOTAL  %9s\n",migliaia(thedt.size()));
+	myprintf("02953: OK     %9s\n",migliaia(testok));
+	myprintf("02954: WARN   %9s\n",migliaia(testwarning));
+	myprintf("02955: ERROR  %9s\n",migliaia(testerror));
 
 	if (testwarning>0)
 		if (testerror==0)
@@ -96915,12 +97401,12 @@ int Jidac::fzf()
 		int versione=searchcomments(versioncomment,myfilelist);
 		if (versione==0)
 		{
-			myprintf("88130: cannot find version comment <<%s>>\n",versioncomment.c_str());
+			myprintf("02956: cannot find version comment <<%s>>\n",versioncomment.c_str());
 			return 1;
 		}
 		if (versione==-1)
 		{
-			myprintf("88135: multiple match for version comment <<%s>>\n",versioncomment.c_str());
+			myprintf("02957: multiple match for version comment <<%s>>\n",versioncomment.c_str());
 			return 1;
 		}
 		version=versione;
@@ -96944,8 +97430,9 @@ int Jidac::fzf()
 		if (!isads(temp))
 			if (!isdirectory(temp))
 			{
-				printUTF8(temp.c_str());
-				myprintf("\n");
+				myprintf("%s\n",temp.c_str());
+				///printUTF8(temp.c_str());
+				///myprintf("\n");
 			}
 	}
 	return 0;
@@ -96953,16 +97440,16 @@ int Jidac::fzf()
 
 int Jidac::addhome()
 {
-	myprintf("87200: Adding with -home switch\n");
+	myprintf("02958: Adding with -home switch\n");
 	if (archive=="")
 	{
-		myprintf("87127: archive empty => quit\n");
+		myprintf("02959! archive empty => quit\n");
 		return 2;
 	}
 	
 	if (files.size()!=1)
 	{
-		myprintf("87133: you need exactly 1 folder selection => quit (ex. /home)\n");
+		myprintf("02960! you need exactly 1 folder selection => quit (ex. /home)\n");
 		return 2;
 	}
 
@@ -96972,15 +97459,18 @@ int Jidac::addhome()
 	vector<string> candidate;
 	listfolders(basehome,&candidate);
 	if (flagdebug)
-		myprintf("87220: candidate %s with pattern %s\n",migliaia(candidate.size()),fullarchive.c_str());
+		myprintf("02961: candidate %s with pattern %s\n",migliaia(candidate.size()),fullarchive.c_str());
 	
 	if (candidate.size()==0)
 	{
-		myprintf("87222: Sorry, cannot find something in <<");
+		myprintf("02962: Sorry, cannot find something in <<%Z>>\n",basehome.c_str());
+		/*
+		myprintf("02963: Sorry, cannot find something in <<");
 		printUTF8(basehome.c_str());
 		myprintf(">>");
+		*/
 	}
-	myprintf("87226: founded %s\n",migliaia(candidate.size()));
+	myprintf("02964: founded %s\n",migliaia(candidate.size()));
 	int	risultato	=0;
 	int therun		=0;
 
@@ -96999,12 +97489,14 @@ int Jidac::addhome()
 		jidacreset();
 		archive=extractfilepath(basearchive)+prendinomefileebasta(basearchive)+"_"+sourcename+".zpaq";
 		
-		myprintf("87197: adding on <<");
+		myprintf("02965: adding on <<%Z>> from folder <<%Z>>\n",archive.c_str(),sourcepath.c_str());
+		/*
+		myprintf("02966: adding on <<");
 		printUTF8(archive.c_str());
 		myprintf(">> from folder <<");
 		printUTF8(sourcepath.c_str());
 		myprintf(">>\n");
-		
+		*/
 		int64_t addstart	=mtime();
 		int 	riscomando	=add();
 		///int 	riscomando	=0;
@@ -97034,8 +97526,9 @@ int Jidac::addhome()
 	printbar('-');
 	for (unsigned int i=0;i<outcome.size();i++)
 	{
-		printUTF8(outcome[i].c_str());
-		myprintf("\n");
+		myprintf("%s\n",outcome[i].c_str());
+		///printUTF8(outcome[i].c_str());
+		///myprintf("\n");
 	}
 	if (flagbig)
 	{
@@ -97073,9 +97566,12 @@ int64_t Jidac::read_archive(callback_function i_advance,const char* arc, int *er
 		if ((command=='a') || (command=='g') || (command=='q') || (command=='Z'))
 			if (isfileopen(arc))
 			{
-				myprintf("27668: GURU file seems open (-open) ");
+				myprintf("02967: GURU file seems open (-open) %Z\n",arc);
+				/*
+				myprintf("02968: GURU file seems open (-open) ");
 				printUTF8(arc);
 				myprintf("\n");
+				*/
 				seppuku();
 				return 0;
 			}
@@ -97087,8 +97583,8 @@ int64_t Jidac::read_archive(callback_function i_advance,const char* arc, int *er
 		if (command!='a')
 		{
 			fflush(stdout);
-			printUTF8(arc);
-			myprintf(" not found.\n");
+			///printUTF8(arc);
+			myprintf(" %Z not found.\n",arc);
 			g_exec_text=arc;
 			g_exec_text+=" not found";
 			if (errors) ++*errors;
@@ -97100,11 +97596,11 @@ int64_t Jidac::read_archive(callback_function i_advance,const char* arc, int *er
 			if (!flagpakka)
 			{
 				myprintf("\n");
-				myprintf("89319: ");
-				printUTF8(arc);
-				if (version==DEFAULT_VERSION) myprintf(": ");
-					else
-				myprintf(" -until %1.0f: ", version+0.0);
+				myprintf("02969: <<%Z>>",arc);
+				if (version==DEFAULT_VERSION) 
+					myprintf(": ");
+				else
+					myprintf(" -until %1.0f: ", version+0.0);
 				fflush(stdout);
 			}
 			
@@ -97114,7 +97610,7 @@ int64_t Jidac::read_archive(callback_function i_advance,const char* arc, int *er
 	const int nr=in.read(s, 4);
 	if (nr>0 && memcmp(s, "7kSt", 4) && (memcmp(s, "zPQ", 3) || s[3]<1))
 	{
-		myprintf("89169: zpaqfranz error:password incorrect\n");
+		myprintf("02970: zpaqfranz error:password incorrect\n");
 		error("password incorrect");
 	}
     in.seek(-nr, SEEK_CUR);
@@ -97172,7 +97668,7 @@ int64_t Jidac::read_archive(callback_function i_advance,const char* arc, int *er
 								filename.s[i]='/';
 						lastfile=filename.s.c_str();
 						if (flagdebug3)
-							myprintf("27357: K3  |%s|\n",lastfile.c_str());
+							myprintf("02971: K3  |%s|\n",lastfile.c_str());
 					}
 					comment.s="";
 					d.readComment(&comment);
@@ -97228,7 +97724,7 @@ int64_t Jidac::read_archive(callback_function i_advance,const char* arc, int *er
 								if (!flagnoeta)
 									if (!i_quiet)
 									{
-										myprintf("89278: Block %10s K %12s (block/s)\r",migliaia((uint64_t)(parts/1000)),migliaia2((int64_t)(parts/(((mtime()-startblock)+1)/1000.0))));
+										myprintf("02972: Block %10s K %12s (block/s)\r",migliaia((uint64_t)(parts/1000)),migliaia2((int64_t)(parts/(((mtime()-startblock)+1)/1000.0))));
 
 										if (i_advance!=NULL)
 										{
@@ -97251,9 +97747,9 @@ int64_t Jidac::read_archive(callback_function i_advance,const char* arc, int *er
 							const char* s=os.c_str();
 							int64_t jmp=btol(s);
 							if (flagdebug3)
-								myprintf("27424: jump %s\n",migliaia(jmp));
+								myprintf("02973: jump %s\n",migliaia(jmp));
 							if (jmp<0)
-								myprintf("89305: Incomplete transaction ignored\n");
+								myprintf("02974: Incomplete transaction ignored\n");
 							if (jmp<0 ||
 							(version<19000000000000LL && int64_t(ver.size())>version)
 							|| (version>=19000000000000LL && version<fdate))
@@ -97392,13 +97888,19 @@ int64_t Jidac::read_archive(callback_function i_advance,const char* arc, int *er
 											reservedfilenames++;
 											if (flagfixreserved)
 											{
-												myprintf("29229: WARNING changed reserved <<");
+												myprintf("02975: WARNING changed reserved <<%Z>>\n",fn.c_str());
+												/*
+												myprintf("02976: WARNING changed reserved <<");
 												printUTF8(fn.c_str());
 												myprintf(">>\n");
+												*/
 												fn=fixed;
-												myprintf("29230: to filesystem compatible <<");
+												myprintf("02977: to filesystem compatible <<%Z>>\n",fn.c_str());
+												/*
+												myprintf("02978: to filesystem compatible <<");
 												printUTF8(fn.c_str());
 												myprintf(">>\n");
+												*/
 											}
 										}
 #endif
@@ -97481,20 +97983,21 @@ int64_t Jidac::read_archive(callback_function i_advance,const char* arc, int *er
 										if (flagforce)
 										{
 											if (flagverbose)
-												myprintf("27752: *** 'strange' but -force     -> included ");
+												myprintf("02979: *** 'strange' but -force     -> included ");
 										}
 										else
 										{
 											if (flagverbose)
-												myprintf("27754: *** 'strange' and NOT -force -> skipped  ");
+												myprintf("02980: *** 'strange' and NOT -force -> skipped  ");
 											issel=false;
 											if (errors)
 												(*errors)++;
 										}
 										if (flagverbose)
 										{
-											printUTF8(fn.c_str());
-											myprintf("\n");
+											myprintf("%Z\n",fn.c_str());
+											///printUTF8(fn.c_str());
+											///myprintf("\n");
 										}
 									}
 								}
@@ -97530,7 +98033,7 @@ int64_t Jidac::read_archive(callback_function i_advance,const char* arc, int *er
 						{
 							dt[fn]=dtr;
 							if (flagdebug3)
-								myprintf("86876: >>>>>>>>>>>>>>>>>> fn %s %s\n",fn.c_str(),migliaia(dt.size()));
+								myprintf("02981: >>>>>>>>>>>>>>>>>> fn %s %s\n",fn.c_str(),migliaia(dt.size()));
 						}
 					}
 /// UBUNTU
@@ -97545,9 +98048,12 @@ int64_t Jidac::read_archive(callback_function i_advance,const char* arc, int *er
 									dtr.isordered=true;
 									if (flagverbose || flagdebug)
 									{
-										myprintf("43498: Good for stdout (isordered) ");
+										myprintf("02982: Good for stdout (isordered) %Z\n",fn.c_str());
+										/*
+										myprintf("02983: Good for stdout (isordered) ");
 										printUTF8(fn.c_str());
 										myprintf("\n");
+										*/
 									}
 									areordered++;
 								}
@@ -97555,13 +98061,13 @@ int64_t Jidac::read_archive(callback_function i_advance,const char* arc, int *er
 									aredisordered++;
 
 								if (flagdebug3)
-									myprintf("43464: fragchunks %08d for %s\n",fragchunks,fn.c_str());
+									myprintf("02984: fragchunks %08d for %s\n",fragchunks,fn.c_str());
 							}
 							if (all)
 								dtr.outputname=originalfilename;
 							dt[fn]=dtr;
 							if (flagads && flagdebug)
-								myprintf("86713:  ((((((((((((((((((((((((((((((((((((( fn %s\n",fn.c_str());
+								myprintf("02985:  ((((((((((((((((((((((((((((((((((((( fn %s\n",fn.c_str());
 
 						}
 			///		dt.insert(std::pair<string, DT>(fn,dtr));
@@ -97569,7 +98075,7 @@ int64_t Jidac::read_archive(callback_function i_advance,const char* arc, int *er
             }  // end if 'i'
             else
 			{
-				myprintf("89595: Skipping %s %s\n",filename.s.c_str(), comment.s.c_str());
+				myprintf("02986: Skipping %s %s\n",filename.s.c_str(), comment.s.c_str());
 				error("Unexpected journaling block");
             }
           }  // end if journaling
@@ -97626,7 +98132,7 @@ int64_t Jidac::read_archive(callback_function i_advance,const char* arc, int *er
     catch (std::exception& e) {
       in.seek(-d.buffered(), SEEK_CUR);
       fflush(stdout);
-      myprintf("89666: Skipping block at %1.0f: %s\n", double(block_offset),
+      myprintf("02987: Skipping block at %1.0f: %s\n", double(block_offset),
               e.what());
 		g_exec_text="Skipping block";
       if (errors) ++*errors;
@@ -97640,15 +98146,15 @@ endblock:;
 			if (!flagpakka)
 			{
 				if (flagverbose)
-				myprintf("89836: %d vers, %s files, %s frags, %s blks, %s bytes (%s)\n",
+				myprintf("02988: %d vers, %s files, %s frags, %s blks, %s bytes (%s)\n",
 				int(ver.size()-1), migliaia(files), migliaia2(unsigned(ht.size())-1),
 				migliaia3(parts),migliaia4(block_offset),tohuman(block_offset));
 				else
-				myprintf("89840: %d versions, %s files, %s bytes (%s)\n",
+				myprintf("02989: %d versions, %s files, %s bytes (%s)\n",
 				int(ver.size()-1), migliaia(files),
 				migliaia4(block_offset),tohuman(block_offset));
 				if (flagdebug2)
-					myprintf("86897: dt size  %s\n",migliaia(dt.size()));
+					myprintf("02990: dt size  %s\n",migliaia(dt.size()));
 			}
 	if (!i_quiet)
 	{
@@ -97660,18 +98166,21 @@ endblock:;
 			casecollision=kollisioni.size();
 			if (casecollision>0)
 			{
-				myprintf("89692: Case collisions        %9s (try -fixcase)\n",migliaia(casecollision));
+				myprintf("02991: Case collisions        %9s (try -fixcase)\n",migliaia(casecollision));
 				if (flagverbose)
 					for (unsigned int i=0;i<kollisioni.size();i++)
 					{
+						myprintf("     collision  <<%Z>>\n",kollisioni[i].c_str());
+						/*
 						myprintf("     collision  <<");
 						printUTF8(kollisioni[i].c_str());
 						myprintf(">>\n");
+						*/
 					}
 			}
 			if (flagfixcase)
 				if (fixati>0)
-					myprintf("89711: -fixcase fixed         %9s files\n",migliaia(fixati));
+					myprintf("02992: -fixcase fixed         %9s files\n",migliaia(fixati));
 			kollisioni.clear();
 		}
 #endif
@@ -97683,12 +98192,12 @@ endblock:;
 					if (!flagvss)
 						if (!flagstdout)
 							if (!flagterse)
-							myprintf("89716: Long filenames (>255)  %9s *** WARNING *** (suggest -longpath or -fix255 or -flat)\n",migliaia(toolongfilenames));
+							myprintf("02993: Long filenames (>255)  %9s *** WARNING *** (suggest -longpath or -fix255 or -flat)\n",migliaia(toolongfilenames));
 #else
 			if (!flagtest)
 				if (!flagstdout)
 					if (!flagterse)
-			myprintf("89720: Long filenames (>255)  %9s\n",migliaia(toolongfilenames));
+			myprintf("02994: Long filenames (>255)  %9s\n",migliaia(toolongfilenames));
 #endif
 		}
 
@@ -97697,27 +98206,27 @@ endblock:;
 			if (flagstdout)
 			{
 				if (areordered)
-					myprintf("89726: AVAILABLE -stdout      %9s\n",migliaia(areordered));
+					myprintf("02995: AVAILABLE -stdout      %9s\n",migliaia(areordered));
 				if (aredisordered)
-					myprintf("89728: CANNOT    -stdout      %9s\n",migliaia(aredisordered));
+					myprintf("02996: CANNOT    -stdout      %9s\n",migliaia(aredisordered));
 			}
 			if (utf8names)
 			{
-				myprintf("89732: Non-latin (UTF-8)      %9s\n",migliaia(utf8names));
-				myprintf("89733: Non-latin (UTF-8)      %9s\n",migliaia(utf8names));
+				myprintf("02997: Non-latin (UTF-8)      %9s\n",migliaia(utf8names));
+				myprintf("02998: Non-latin (UTF-8)      %9s\n",migliaia(utf8names));
 			}
 			if (adsfilenames)
-				myprintf("89736: ADS ($:DATA)           %9s\n",migliaia(adsfilenames));
+				myprintf("02999: ADS ($:DATA)           %9s\n",migliaia(adsfilenames));
 			if (windowspath)
-				myprintf("89738: Windows path           %9s\n",migliaia(windowspath));
+				myprintf("03000: Windows path           %9s\n",migliaia(windowspath));
 			if (windowsunc)
-				myprintf("89740: Windows UNC            %9s\n",migliaia(windowsunc));
+				myprintf("03001: Windows UNC            %9s\n",migliaia(windowsunc));
 			if (reservedfilenames)
 			{
 #ifdef _WIN32
-				myprintf("89744: Reserved WIN filenames %9s *** WARNING *** (suggested -fixreserved or -flat) \n",migliaia(reservedfilenames));
+				myprintf("03002: Reserved WIN filenames %9s *** WARNING *** (suggested -fixreserved or -flat) \n",migliaia(reservedfilenames));
 #else
-				myprintf("89745: Reserved filenames     %9s\n",migliaia(reservedfilenames));
+				myprintf("03003: Reserved filenames     %9s\n",migliaia(reservedfilenames));
 #endif
 			}
 		}
@@ -97755,7 +98264,7 @@ int Jidac::checksha1collision(DTMap& i_dtmap,bool i_decodefranzblock)
 	
 	for (DTMap::iterator p=i_dtmap.begin(); p!=i_dtmap.end(); ++p)
 	{
-		///myprintf("87483: first  %s\n",p->first.c_str());
+		///myprintf("03004: first  %s\n",p->first.c_str());
 		string mycrc32			="";
 		
 		if (i_decodefranzblock)
@@ -97781,7 +98290,7 @@ int Jidac::checksha1collision(DTMap& i_dtmap,bool i_decodefranzblock)
 		else
 			mycrc32=p->second.hexcrc32.c_str();
 			
-		///myprintf("87501: mycrc32 %s\n",mycrc32.c_str());
+		///myprintf("03005: mycrc32 %s\n",mycrc32.c_str());
 		if (mycrc32!="")
 			if (mycrc32!="00000000")
 			{
@@ -97801,7 +98310,7 @@ int Jidac::checksha1collision(DTMap& i_dtmap,bool i_decodefranzblock)
 					string precedente=risultato.first->second;
 					DTMap::iterator myp=i_dtmap.find(precedente);
 					if (myp==i_dtmap.end())
-						myprintf("87503: ERROR cannot find on dtmap! %s\n",precedente.c_str());
+						myprintf("03006: ERROR cannot find on dtmap! %s\n",precedente.c_str());
 					else
 					{
 						char* 	vectordata2		=(char*)myp->second.ptr.data();
@@ -97809,21 +98318,21 @@ int Jidac::checksha1collision(DTMap& i_dtmap,bool i_decodefranzblock)
 						
 						if ((vectordata2==NULL) || (vectordata==NULL))
 						{
-							myprintf("87563: GURU vectordata or vectordata2 null\n");
+							myprintf("03007: GURU vectordata or vectordata2 null\n");
 							seppuku();
 							return 0;
 						}
 						if (flagdebug3)
 						{
-							myprintf("85776: vectorbytes  %s\n",migliaia(vectorbytes));
-							myprintf("85776: vectorbytes2 %s\n",migliaia(vectorbytes2));
+							myprintf("03008: vectorbytes  %s\n",migliaia(vectorbytes));
+							myprintf("03009: vectorbytes2 %s\n",migliaia(vectorbytes2));
 						}
 						if (vectorbytes!=vectorbytes2)
-							myprintf("87566: ERROR vectorbytes does not match %s vs %s\n",migliaia((int64_t)vectorbytes),migliaia2((int64_t)vectorbytes2));
+							myprintf("03010: ERROR vectorbytes does not match %s vs %s\n",migliaia((int64_t)vectorbytes),migliaia2((int64_t)vectorbytes2));
 						else
 						{
 							if (memcmp(vectordata,vectordata2,vectorbytes)!=0)
-								myprintf("87570: ERROR fragment lists does not match! (XXHASH64 collision?)\n");
+								myprintf("03011: ERROR fragment lists does not match! (XXHASH64 collision?)\n");
 							else
 							{
 								string precedentecrc32=myp->second.hexcrc32;
@@ -97833,17 +98342,23 @@ int Jidac::checksha1collision(DTMap& i_dtmap,bool i_decodefranzblock)
 									printbar('#');
 									if (flagverbose)
 									{
-										myprintf("87487: **** SUSPECTED SHA-1 COLLISION %s ****\n",bin2hex_64(hashstringato).c_str());
-										myprintf("87488: File   CRC-32 %s <<",p->second.hexcrc32.c_str());
+										myprintf("03012: **** SUSPECTED SHA-1 COLLISION %s ****\n",bin2hex_64(hashstringato).c_str());
+										/*
+										myprintf("03013: File   CRC-32 %s <<",p->second.hexcrc32.c_str());
 										printUTF8(p->first.c_str());
 										myprintf(">>\n");
-										myprintf("89864: map to CRC-32 %s <<",precedentecrc32.c_str());
+										*/
+										myprintf("03014: File   CRC-32 %s <<%Z>>\n",p->second.hexcrc32.c_str(),p->first.c_str());
+										myprintf("03015: map to CRC-32 %s <<%Z>>\n",precedentecrc32.c_str(),risultato.first->second.c_str());
+										/*
+										myprintf("03016: map to CRC-32 %s <<",precedentecrc32.c_str());
 										printUTF8(risultato.first->second.c_str());
 										myprintf(">>\n");
+										*/
 									}
 									else
 									{
-										myprintf("87571: Restoring this file will get incorrect data due to suspected SHA-1 collision(s)\n");
+										myprintf("03017: Restoring this file will get incorrect data due to suspected SHA-1 collision(s)\n");
 										string temp=p->first;
 										if (mypos("|$1",temp)>-1)
 										{
@@ -97852,9 +98367,12 @@ int Jidac::checksha1collision(DTMap& i_dtmap,bool i_decodefranzblock)
 										}
 										else
 											secondpass.push_back(temp);
+										myprintf("<<%Z>>\n",temp.c_str());
+										/*
 										myprintf("<<");
 										printUTF8(temp.c_str());
 										myprintf(">>\n");
+										*/
 									}
 									printbar('#');
 									myprintf("\n");
@@ -97867,7 +98385,7 @@ int Jidac::checksha1collision(DTMap& i_dtmap,bool i_decodefranzblock)
 			}
 	}
 	///if (flagverbose)
-		myprintf("87538: SHA-1 collision detection time %s ms\n",migliaia(mtime()-startcollision));
+		myprintf("03018: SHA-1 collision detection time %s ms\n",migliaia(mtime()-startcollision));
 
 	if (command=='a')
 		if (secondpass.size()>0)
@@ -97881,9 +98399,12 @@ int Jidac::checksha1collision(DTMap& i_dtmap,bool i_decodefranzblock)
 			flagcollision	=false;
 			for (unsigned int i=0;i<secondpass.size();i++)
 			{
-				myprintf("87653: Need a second pass on <<");
+				myprintf("03019: Need a second pass on <<%Z>>\n",secondpass[i].c_str());
+				/*
+				myprintf("03020: Need a second pass on <<");
 				printUTF8(secondpass[i].c_str());
 				myprintf(">>\n");
+				*/
 				files.push_back(secondpass[i]);
 			}
 			return add();
@@ -97896,26 +98417,26 @@ int Jidac::collision(bool i_flagall)
 {
 	if (archive=="")
 	{
-		myprintf("87628: archive not set!\n");
+		myprintf("03021! archive not set!\n");
 		return 2;
 	}
-	myprintf("89924: Checking for SHA-1 collisions\n");
+	myprintf("03022: Checking for SHA-1 collisions\n");
 ///	getpasswordifempty();
 	int errors		=0;
 	all				=i_flagall;
 	jidacreset();
 	read_archive(NULL,archive.c_str(),&errors,1); /// AND NOW THE MAGIC ONE!
 	myprintf("\n");
-	myprintf("90026: Inspecting %s entries...\n",migliaia((int64_t)dt.size()));
+	myprintf("03023: Inspecting %s entries...\n",migliaia((int64_t)dt.size()));
 	int howmany=checksha1collision(dt,true);
 	myprintf("\n");
 	if (howmany>0)
 	{
-		myprintf("87642: WARNING: some files cannot be restored correctly due to a suspected SHA-1 collision(s).\n");
+		myprintf("03024: WARNING: some files cannot be restored correctly due to a suspected SHA-1 collision(s).\n");
 		return 1;
 	}
 	else
-		myprintf("87653: No suspected collisions detected (this is good)\n");
+		myprintf("03025: No suspected collisions detected (this is good)\n");
 	return 0;
 }
 
@@ -98055,28 +98576,28 @@ void decompile(const string& hcomp, const string& pcomp) {
   if (hcomp.size()>6) {
     int n=hcomp[6]&255;  // number of components
     myprintf("\n");
-	myprintf("90174: comp %d %d %d %d %d\n",
+	myprintf("03026: comp %d %d %d %d %d\n",
       hcomp[2]&255, hcomp[3]&255, hcomp[4]&255, hcomp[5]&255, hcomp[6]&255);
     int j=7;
     for (int i=0; i<n && j<int(hcomp.size()); ++i) {
       const int c=hcomp[j]&255;
-      myprintf("90179:  %d %s", i, libzpaq::compname[c]);
+      myprintf("03027:  %d %s", i, libzpaq::compname[c]);
       for (int k=j+1; k<j+libzpaq::compsize[c] && k<int(hcomp.size()); ++k)
         myprintf(" %d", hcomp[k]&255);
       myprintf("\n");
       j+=libzpaq::compsize[c];
     }
-    myprintf("90091: hcomp\n");
+    myprintf("03028: hcomp\n");
     if (j<int(hcomp.size())-2)
       decompile_comp(hcomp.substr(j+1, hcomp.size()-j-2));
   }
   if (pcomp.size()>=3) {
-    myprintf("90095: pcomp ;\n");
+    myprintf("03029: pcomp ;\n");
     decompile_comp(pcomp.substr(2, pcomp.size()-3));
-    myprintf("90027: end\n");
+    myprintf("03030: end\n");
   }
   else
-    myprintf("90100: post 0 end\n");
+    myprintf("03031: post 0 end\n");
 }
 
 
@@ -98085,9 +98606,12 @@ int Jidac::dump()
 	InputArchive in(archive.c_str());
 	if (!in.isopen()) 
 	{
-		myprintf("90183: GURU cannot open <<");
+		myprintf("03032! GURU cannot open <<%Z>>\n",archive.c_str());
+		/*
+		myprintf("03033! GURU cannot open <<");
 		printUTF8(archive.c_str());
 		myprintf(">>\n");
+		*/
 		return 2;
 	}
 	///int64_t csize=in.get_totalsize();
@@ -98123,7 +98647,7 @@ int Jidac::dump()
 	int64_t expectedfilesize	=in.get_totalsize();//in.get_totalsize();	
 	int		expectedchunknumber	=in.get_chunknumber();
 	int		lastperc=0;
-	myprintf("93674: Expected %08d chunks for %21s bytes\n",expectedchunknumber,migliaia(expectedfilesize));
+	myprintf("03034: Expected %08d chunks for %21s bytes\n",expectedchunknumber,migliaia(expectedfilesize));
 	while (d.findBlock(&mem)) 
 	{
 		block_position=myoffset;
@@ -98133,7 +98657,7 @@ int Jidac::dump()
 			int percentuale=100*myoffset/expectedfilesize;
 			if ((percentuale%5==0) && (percentuale!=lastperc))
 			{
-				myprintf("93675: Scanning %03d% @              %21s\r",percentuale,migliaia(myoffset));
+				myprintf("03035: Scanning %03d% @              %21s\r",percentuale,migliaia(myoffset));
 				lastperc=percentuale;
 			}
 		}
@@ -98171,7 +98695,7 @@ int Jidac::dump()
 			}
 			d.readSegmentEnd(sha1result);
 			if (buf.s.size()>0 && sha1result[0]==1 && memcmp(sha1.result(), sha1result+1, 20))
-				myprintf("88134: CHECKSUM ERROR!\n");
+				myprintf("03036: CHECKSUM ERROR!\n");
 			string purged=comment.s;
 			
 			myreplace(purged,"jDC\x01","");
@@ -98193,7 +98717,7 @@ int Jidac::dump()
 			///mem used for decompression
 			
 			if (summary<0)
-			myprintf("90129: %08d %s%s @ %20s:%11s [%14s] ",++block,type.c_str(),filename.s.c_str(),migliaia(myoffset), migliaia2(in.tell()-d.buffered()-myoffset),migliaia3(sizeint));
+			myprintf("03037: %08d %s%s @ %20s:%11s [%14s] ",++block,type.c_str(),filename.s.c_str(),migliaia(myoffset), migliaia2(in.tell()-d.buffered()-myoffset),migliaia3(sizeint));
 			myoffset=in.tell()-d.buffered();
 			if (filename.s[17]=='d')  // d block
 			{
@@ -98228,7 +98752,7 @@ int Jidac::dump()
 							int n=atoi(filename.s.c_str()+18);  // frag ID
 							while (p<=end-24) 
 							{
-								myprintf("93765: %10d SHA1 ", n++);
+								myprintf("03038: %10d SHA1 ", n++);
 								for (int i=0; i<20; ++i)
 									myprintf("%02x", *p++&255);  // sha1 hash
 								myprintf("      %12s (fragment size )\n", migliaia(mybtoi(p)));  // fsize
@@ -98250,8 +98774,8 @@ int Jidac::dump()
 						if (summary<0)
 							if (flagverbose || all)
 							{
-								myprintf("%s ", dateToString(false,fdate).c_str());
-								printUTF8(p);
+								myprintf("%s %Z", dateToString(false,fdate).c_str(),p);
+								///printUTF8(p);
 							}
 						while (p<end && *p) 
 							++p;  // skip filename
@@ -98344,36 +98868,36 @@ int Jidac::dump()
 		myoffset=in.tell()-d.buffered();
 	}
 	if (summary>0)
-	myprintf("93675: Scanning %03d% @              %21s\r",100,migliaia(expectedfilesize));
+	myprintf("03039: Scanning %03d% @              %21s\r",100,migliaia(expectedfilesize));
 	myprintf("\n");
 
 	if (flagverbose)
 	{
 		if (cblock_position.size()>0)
 			for (unsigned int i=1;i<cblock_position.size();i++)
-				myprintf("92375: c block %08d %21s\n",i,migliaia(cblock_position[i]));
+				myprintf("03040: c block %08d %21s\n",i,migliaia(cblock_position[i]));
 		if (dblock_position.size()>0)
 			for (unsigned int i=0;i<dblock_position.size();i++)
-				myprintf("92376: d block %08d %21s\n",i,migliaia(dblock_position[i]));
+				myprintf("03041: d block %08d %21s\n",i,migliaia(dblock_position[i]));
 		if (hblock_position.size()>0)
 			for (unsigned int i=0;i<hblock_position.size();i++)
-				myprintf("92377: h block %08d %21s\n",i,migliaia(hblock_position[i]));
+				myprintf("03042: h block %08d %21s\n",i,migliaia(hblock_position[i]));
 		if (iblock_position.size()>0)
 			for (unsigned int i=0;i<iblock_position.size();i++)
-				myprintf("92378: i block %08d %21s\n",i,migliaia(iblock_position[i]));
+				myprintf("03043: i block %08d %21s\n",i,migliaia(iblock_position[i]));
 	}
 	
-	myprintf("88226: c block (jump)  %11s\n",migliaia(cblock));
-	myprintf("88227: d block (data)  %11s\n",migliaia(dblock));
-	myprintf("88228: h block (hash)  %11s\n",migliaia(hblock));
-	myprintf("88229: i block (index) %11s\n",migliaia(iblock));
-	myprintf("88230: file count      %11s\n",migliaia(filecount));
+	myprintf("03044: c block (jump)  %11s\n",migliaia(cblock));
+	myprintf("03045: d block (data)  %11s\n",migliaia(dblock));
+	myprintf("03046: h block (hash)  %11s\n",migliaia(hblock));
+	myprintf("03047: i block (index) %11s\n",migliaia(iblock));
+	myprintf("03048: file count      %11s\n",migliaia(filecount));
 
 	if (mappafranzoblock.size()>0)
 		for (MAPPAINTINT::iterator p=mappafranzoblock.begin();p!=mappafranzoblock.end();++p)
-			myprintf("93911: FRANZOBLOCK             %03d %11s\n",p->first,migliaia(p->second));
+			myprintf("03049: FRANZOBLOCK             %03d %11s\n",p->first,migliaia(p->second));
 		else
-	myprintf("93912: This seems a 715 archive (original zpaq format)\n");
+	myprintf("03050: This seems a 715 archive (original zpaq format)\n");
 	if (mappahash.size()>0)
 	{
 		bool zpaqfranz60=false;
@@ -98381,15 +98905,15 @@ int Jidac::dump()
 		{
 			if (p->first[p->first.size()-1]=='B')
 				zpaqfranz60=true;
-			myprintf("93909: HASHTYPE   %16s %11s\n",p->first.c_str(),migliaia(p->second));
+			myprintf("03051: HASHTYPE   %16s %11s\n",p->first.c_str(),migliaia(p->second));
 		}
 		if (mappafranzoblock.size()==mappahash.size())
 			color_green();
 		
 		if (zpaqfranz60)
-			myprintf("93923: This seems 60+ archive (newer zpaqfranz v60)\n");
+			myprintf("03052: This seems 60+ archive (newer zpaqfranz v60)\n");
 		else
-			myprintf("93925: This seems <60 archive (older zpaqfranz v59)\n");
+			myprintf("03053: This seems <60 archive (older zpaqfranz v59)\n");
 	
 		if (mappafranzoblock.size()==mappahash.size())
 			color_restore();
@@ -98397,7 +98921,7 @@ int Jidac::dump()
 		if (mappahash.size()>1)
 		{
 			color_yellow();
-			myprintf("93928: *** WARNING DO NOT USE -frugal adding data to this archive!\n");
+			myprintf("03054: *** WARNING DO NOT USE -frugal adding data to this archive!\n");
 			color_restore();
 		}
 	}
@@ -98413,19 +98937,19 @@ int reduz(vector<string>* i_files,DTMap* i_myedt,vector<DTMap::iterator>* i_vf)
 {
 	if (i_files==NULL)
 	{
-		myprintf("88460: GURU reduz i_files null\n");
+		myprintf("03055! GURU reduz i_files null\n");
 		seppuku();
 		return 2;
 	}
 	if (i_myedt==NULL)
 	{
-		myprintf("88466: GURU reduz i_myedt null\n");
+		myprintf("03056! GURU reduz i_myedt null\n");
 		seppuku();
 		return 2;
 	}
 	if (i_vf==NULL)
 	{
-		myprintf("88472: GURU reduz i_vf null\n");
+		myprintf("03057! GURU reduz i_vf null\n");
 		seppuku();
 		return 2;
 	}
@@ -98433,7 +98957,7 @@ int reduz(vector<string>* i_files,DTMap* i_myedt,vector<DTMap::iterator>* i_vf)
 	if ((*i_files).size()==0)
 	{
 		if (flagdebug)
-			myprintf("88480: reduz i_files size 0\n");
+			myprintf("03058: reduz i_files size 0\n");
 		return 0;
 	}
 	
@@ -98457,7 +98981,7 @@ int reduz(vector<string>* i_files,DTMap* i_myedt,vector<DTMap::iterator>* i_vf)
 	const unsigned MIN_FRAGMENT=myfragment>25 || (64u<<myfragment)>MAX_FRAGMENT
       ? MAX_FRAGMENT : 64u<<myfragment;
 
-	myprintf("88506: MIN_FRAGMENT %s MAX_FRAGMENT %s (%s)\n",migliaia2(MIN_FRAGMENT),migliaia(MAX_FRAGMENT),tohuman(MAX_FRAGMENT-64));
+	myprintf("03059: MIN_FRAGMENT %s MAX_FRAGMENT %s (%s)\n",migliaia2(MIN_FRAGMENT),migliaia(MAX_FRAGMENT),tohuman(MAX_FRAGMENT-64));
 
   	int64_t total_size	=0;  // size of all input
 	
@@ -98482,7 +99006,7 @@ int reduz(vector<string>* i_files,DTMap* i_myedt,vector<DTMap::iterator>* i_vf)
 
 	if (orderby!="")
 	{
-		myprintf("90362: Sorting files  (orderby |%s|) ",orderby.c_str());
+		myprintf("03060: Sorting files  (orderby |%s|) ",orderby.c_str());
 		if (flagdesc)
 			myprintf(" descending ");
 		std::sort((*i_vf).begin(), (*i_vf).end(), compareorderby);
@@ -98492,11 +99016,11 @@ int reduz(vector<string>* i_files,DTMap* i_myedt,vector<DTMap::iterator>* i_vf)
 
 	if (flagdebug3)
 		for (unsigned int i=0;i<(*i_vf).size();i++)
-			myprintf("88846: %08d %s\n",(int)i,(*i_vf)[i]->first.c_str());
+			myprintf("03061: %08d %s\n",(int)i,(*i_vf)[i]->first.c_str());
 	
 	OutputArchive out("","",NULL,NULL,0);
   
-	myprintf("90376: Processing %s (%s) in %s files\n",migliaia(total_size), tohuman(total_size),migliaia2(int((*i_vf).size())));
+	myprintf("03062: Processing %s (%s) in %s files\n",migliaia(total_size), tohuman(total_size),migliaia2(int((*i_vf).size())));
 
 	HTIndex htinv(myht,myht.size()+(total_size>>(10+myfragment))+(*i_vf).size());
 	const unsigned htsize=myht.size();  // fragments at start of update
@@ -98514,7 +99038,7 @@ int reduz(vector<string>* i_files,DTMap* i_myedt,vector<DTMap::iterator>* i_vf)
 	char *buf=(char*)aligned_malloc(64, g_ioBUFSIZE);
 	if (buf==NULL)
 	{
-		myprintf("88546: GURU allocating io buf of size %s\n",g_ioBUFSIZE);
+		myprintf("03063! GURU allocating io buf of size %s\n",g_ioBUFSIZE);
 		seppuku();
 		return 2;
 	}
@@ -98606,7 +99130,7 @@ int reduz(vector<string>* i_files,DTMap* i_myedt,vector<DTMap::iterator>* i_vf)
 
 			if (flagdebug2)
 				if (fi<(*i_vf).size()) 
-					myprintf("88677: done on %s\n",(*i_vf)[fi]->first.c_str());
+					myprintf("03064: done on %s\n",(*i_vf)[fi]->first.c_str());
 			if (htptr==0) 
 			{  
 				int text1=0, exe1=0;
@@ -98673,7 +99197,7 @@ int reduz(vector<string>* i_files,DTMap* i_myedt,vector<DTMap::iterator>* i_vf)
 				if (fi<(*i_vf).size()) 
 				{
 					if (flagdebug2)
-						myprintf("88741: %03d on %s\n",redz,(*i_vf)[fi]->first.c_str());
+						myprintf("03065: %03d on %s\n",redz,(*i_vf)[fi]->first.c_str());
 					(*i_vf)[fi]->second.red_total+=redz;
 					(*i_vf)[fi]->second.red_count++;
 					if (redz<(*i_vf)[fi]->second.red_min)
@@ -98712,7 +99236,7 @@ int reduz(vector<string>* i_files,DTMap* i_myedt,vector<DTMap::iterator>* i_vf)
 				{
 					int redz=255;
 					if (flagdebug)
-						myprintf("88789: dedup match on %s\n",(*i_vf)[fi]->first.c_str());
+						myprintf("03066: dedup match on %s\n",(*i_vf)[fi]->first.c_str());
 					(*i_vf)[fi]->second.red_total+=redz;
 					(*i_vf)[fi]->second.red_count++;
 					if (redz<(*i_vf)[fi]->second.red_min)
@@ -98760,14 +99284,14 @@ int Jidac::redu()
 	int64_t startredu=mtime();
 	int risultato=reduz(&files,&edt,&vf);
 	myprintf("\n");
-	myprintf("62925: Average redundancy [0..255]. 0='random', 255='very compressible'\n");
+	myprintf("03067: Average redundancy [0..255]. 0='random', 255='very compressible'\n");
 	for (unsigned i=0;i<vf.size();i++)
-		myprintf("62891: %03d [%03d...%03d] %10s %s\n",vf[i]->second.red_avg,vf[i]->second.red_min,vf[i]->second.red_max,tohuman(vf[i]->second.size),vf[i]->first.c_str());
+		myprintf("03068: %03d [%03d...%03d] %10s %s\n",vf[i]->second.red_avg,vf[i]->second.red_min,vf[i]->second.red_max,tohuman(vf[i]->second.size),vf[i]->first.c_str());
 	int64_t totalfilesize=0;
 	for (unsigned i=0;i<vf.size();i++)
 		totalfilesize+=vf[i]->second.size;
 	double seconds=(mtime()-startredu+1)/1000.0;
-	myprintf("88807: Redu time %1.3f (%s) / %s (%s) @ %s/s\n",
+	myprintf("03069: Redu time %1.3f (%s) / %s (%s) @ %s/s\n",
 	seconds,timetohuman((uint32_t)(seconds)).c_str(),
 	migliaia(totalfilesize),tohuman(totalfilesize),
 	migliaia2((int64_t)(totalfilesize/seconds)));
@@ -98782,7 +99306,7 @@ int Jidac::read_archive2(int64_t i_starthere,string i_filename)
 	dcsize=dhsize=0;
 	if (i_filename=="")
 	{
-		myprintf("87898: i_filename empty\n");
+		myprintf("03070! i_filename empty\n");
 		return 2;
 	}
 	
@@ -98791,7 +99315,7 @@ int Jidac::read_archive2(int64_t i_starthere,string i_filename)
 	InputArchive in(i_filename.c_str());
 	if (!in.isopen()) 
 	{
-		myprintf("87907: i_filename does not exits %s\n",i_filename.c_str());
+		myprintf("03071! i_filename does not exits %s\n",i_filename.c_str());
 		return 2;
 	}
  
@@ -98815,7 +99339,7 @@ int Jidac::read_archive2(int64_t i_starthere,string i_filename)
 	if (i_starthere>0)
 	{
 		if (flagdebug)
-			myprintf("87897: starthere %21s\n",migliaia(i_starthere));
+			myprintf("03072: starthere %21s\n",migliaia(i_starthere));
 		in.seek(i_starthere,SEEK_SET);
 	}
 	
@@ -98838,7 +99362,7 @@ int Jidac::read_archive2(int64_t i_starthere,string i_filename)
 			{
 				if ( ++parts % 1000 ==0)
 					if (!flagnoeta)
-						myprintf("90723: ADS: block %10s K %12s (block/s)\r",migliaia((uint64_t)(parts/1000)),migliaia2((int64_t)(parts/(((mtime()-startblock)+1)/1000.0))));
+						myprintf("03073: ADS: block %10s K %12s (block/s)\r",migliaia((uint64_t)(parts/1000)),migliaia2((int64_t)(parts/(((mtime()-startblock)+1)/1000.0))));
 				
 				found_data=true;
 
@@ -98921,7 +99445,7 @@ int Jidac::read_archive2(int64_t i_starthere,string i_filename)
 							const char* s=os.c_str();
 							int64_t jmp=btol(s);
 							///if (jmp<0) 
-								///myprintf("88030: Incomplete transaction ignored\n");
+								///myprintf("03074: Incomplete transaction ignored\n");
 							if (jmp<0
 							|| (version<19000000000000LL && int64_t(ver.size())>version)
 							|| (version>=19000000000000LL && version<fdate)) 
@@ -98966,7 +99490,7 @@ int Jidac::read_archive2(int64_t i_starthere,string i_filename)
 							assert(ver.size()>0);
 							
 							///if (int64_t(ht.size())>num) 
-								///myprintf("88035: Unordered fragment tables: expected >= %d found %1.0f\n",int(ht.size()), double(num));
+								///myprintf("03075: Unordered fragment tables: expected >= %d found %1.0f\n",int(ht.size()), double(num));
 							
 							for (unsigned i=0; i<n; ++i) 
 							{
@@ -99007,7 +99531,7 @@ int Jidac::read_archive2(int64_t i_starthere,string i_filename)
 								DT dtr;
 								dtr.date=btol(s);  // date
 								if (flagdebug3)
-									myprintf("88091: dtr.date %08d\n",dtr.date);
+									myprintf("03076: dtr.date %08d\n",dtr.date);
 								if (dtr.date) 
 									++ver.back().updates;
 								else 
@@ -99044,12 +99568,12 @@ int Jidac::read_archive2(int64_t i_starthere,string i_filename)
 								
 								dt[fn]=dtr;
 								if (flagdebug3)
-									myprintf("88119: dtsize %s dtr.date %08d\n",migliaia(dt.size()),dtr.date);
+									myprintf("03077: dtsize %s dtr.date %08d\n",migliaia(dt.size()),dtr.date);
 							}  // end while more files
 						}  // end if 'i'
 						else 
 						{
-							myprintf("88159: Skipping %s %s\n",filename.s.c_str(), comment.s.c_str());
+							myprintf("03078: Skipping %s %s\n",filename.s.c_str(), comment.s.c_str());
 							error("88160:Unexpected journaling block");
 						}
 					}  // end if journaling
@@ -99070,7 +99594,7 @@ int Jidac::read_archive2(int64_t i_starthere,string i_filename)
 		catch (std::exception& e) 
 		{
 			in.seek(-d.buffered(), SEEK_CUR);
-			myprintf("88182: Skipping block at %1.0f: %s\n", double(block_offset),e.what());
+			myprintf("03079! Skipping block at %1.0f: %s\n", double(block_offset),e.what());
 			return 2;
 		}
 endblock:;
@@ -99118,13 +99642,13 @@ bool Jidac::isonly(string i_filename)
 bool Jidac::work_ads(string i_thefile,string i_adsname,string i_description)
 {
 	if (flagdebug3)
-		myprintf("92750: work ADS on %s:%s\n",i_thefile.c_str(),i_adsname.c_str());
+		myprintf("03080: work ADS on %s:%s\n",i_thefile.c_str(),i_adsname.c_str());
 
 	if (onlyfiles.size()>0)
 		if (!isonly(i_adsname.c_str()))
 		{
 			if (flagdebug3)
-				myprintf("92755: i_adsname not selected %s\n",i_adsname.c_str());
+				myprintf("03081: i_adsname not selected %s\n",i_adsname.c_str());
 			return false;
 		}
 	
@@ -99133,18 +99657,21 @@ bool Jidac::work_ads(string i_thefile,string i_adsname,string i_description)
 	if (flagkill)
 	{
 		if (DeleteFile(utow(thepath.c_str()).c_str()))
-			myprintf("92753: ADS: successfully removed %s\n",thepath.c_str());
+			myprintf("03082: ADS: successfully removed %s\n",thepath.c_str());
 		else
-			myprintf("92756: ADS: cannot remove %s\n",thepath.c_str());
+			myprintf("03083: ADS: cannot remove %s\n",thepath.c_str());
 	}
 	else	/// just list
 	{
 		int64_t adssize=prendidimensionefile(thepath.c_str());
 		if (adssize>0)
 		{
-			myprintf("92763: %-10s => %-25s (%15s) <<",i_adsname.c_str(),i_description.c_str(),migliaia(adssize));
+			myprintf("03084: %-10s => %-25s (%15s) <<%Z>>\n",i_adsname.c_str(),i_description.c_str(),migliaia(adssize),i_thefile.c_str());
+/*
+			myprintf("03085: %-10s => %-25s (%15s) <<",i_adsname.c_str(),i_description.c_str(),migliaia(adssize));
 			printUTF8(i_thefile.c_str());
 			myprintf(">>\n");
+*/
 			return true;
 		}
 	}
@@ -99154,7 +99681,7 @@ int Jidac::ads()
 {
 	if (files.size()!=1)
 	{
-		myprintf("90172: only a single file, please\n");
+		myprintf("03086! only a single file, please\n");
 		return 2;
 	}
 	
@@ -99162,7 +99689,7 @@ int Jidac::ads()
 	string fullarchive=files[0];
 	string estensione=prendiestensione(fullarchive);
 	if (flagverbose)
-		myprintf("90215: Searching for jolly archive(s) in <<%s>> for extension <<%s>>\n",fullarchive.c_str(),estensione.c_str());
+		myprintf("03087: Searching for jolly archive(s) in <<%s>> for extension <<%s>>\n",fullarchive.c_str(),estensione.c_str());
 
 	g_bytescanned	=0;
 	g_filescanned	=0;
@@ -99175,11 +99702,11 @@ int Jidac::ads()
 	myprintf("\r");
 	if (thedt.size()==0)
 	{
-		myprintf("90229: no archive founded => quit\n");
+		myprintf("03088: no archive founded => quit\n");
 		return 1;
 	}
 	if (flagverbose)
-		myprintf("90209: Founded %s archive(s)\n",migliaia(thedt.size()));
+		myprintf("03089: Founded %s archive(s)\n",migliaia(thedt.size()));
 
 	int	risultato	=0;
 	int therun		=0;
@@ -99197,18 +99724,24 @@ int Jidac::ads()
 			string thefile=p->first;
 			string thepath=thefile+":zpaqlist";
 			if (flagdebug3)
-				myprintf("90244: Running on %s\n",thefile.c_str());
+				myprintf("03090: Running on %s\n",thefile.c_str());
 			if (fill_ads(thefile,0))
 			{
-				myprintf("90177: ADS: rebuilded filelist on ");
+				myprintf("03091: ADS: rebuilded filelist on %Z\n",thefile.c_str());
+				/*
+				myprintf("03092: ADS: rebuilded filelist on ");
 				printUTF8(thefile.c_str());
 				myprintf("\n");
+				*/
 			}
 			else
 			{
-				myprintf("90179: ADS: error on ");
+				myprintf("03093: ADS: error on %Z\n",thefile.c_str());
+				/*
+				myprintf("03094: ADS: error on ");
 				printUTF8(thefile.c_str());
 				myprintf("\n");
+				*/
 				risultato++;
 			}
 
@@ -99232,14 +99765,14 @@ int Jidac::listfast()
 {
 	if (!flagfast)
 	{
-		myprintf("91119: GURU. listfast but not -fast\n");
+		myprintf("03095! GURU. listfast but not -fast\n");
 		return 2;
 	}
 	if (flagdebug4)
 	{
-		myprintf("93572: flagdebug4 in listfast\n");
+		myprintf("03096: flagdebug4 in listfast\n");
 		read_archive(NULL,archive.c_str());
-		myprintf("91087: fine readarchive\n");
+		myprintf("03097: fine readarchive\n");
 		blockdecoder();
 		htdecoder();
 		dtdecoder();
@@ -99248,7 +99781,7 @@ int Jidac::listfast()
 	
 	if (archive=="")
 	{
-		myprintf("91206: archive cannot be empty!\n");
+		myprintf("03098! archive cannot be empty!\n");
 		return 2;
 	}
 ///	getpasswordifempty();
@@ -99256,9 +99789,12 @@ int Jidac::listfast()
 	InputArchive in(archive.c_str());
 	if (!in.isopen()) 
 	{
-		myprintf("91171: GURU cannot open <<");
+		myprintf("03099! GURU cannot open <<%Z>>\n",archive.c_str());
+		/*
+		myprintf("03100! GURU cannot open <<");
 		printUTF8(archive.c_str());
 		myprintf(">>\n");
+		*/
 		return 2;
 	}
  
@@ -99275,7 +99811,7 @@ int Jidac::listfast()
 /// get last the last 4KB of the archive
 	int64_t thefilesize=in.totalsize();
 	if (flagverbose)
-		myprintf("91205: Archive size %21s\n",migliaia(thefilesize));
+		myprintf("03101: Archive size %21s\n",migliaia(thefilesize));
 	size_t 	readSize;
 	size_t 	blockSize=4096;
 	if (thefilesize<(int64_t)blockSize)
@@ -99285,7 +99821,7 @@ int Jidac::listfast()
 	readSize=in.read(buffer,blockSize);
 	if (readSize!=blockSize)
 	{
-		myprintf("91085: GURU expected %s readed %s\n",migliaia(blockSize),migliaia2(readSize));
+		myprintf("03102! GURU expected %s readed %s\n",migliaia(blockSize),migliaia2(readSize));
 		return 2;
 	}
 
@@ -99300,13 +99836,13 @@ int Jidac::listfast()
 						thelastblock=thefilesize-blockSize+i;
 	if (thelastblock==0)
 	{
-		myprintf("91102: sorry, cannot find the last jidacblock => going to list()\n");
+		myprintf("03103: sorry, cannot find the last jidacblock => going to list()\n");
 		flagfast=false;
 		return list();
 	}
 
 	if (flagverbose)
-		myprintf("91104: The last jidacblock %s\n",migliaia(thelastblock));
+		myprintf("03104: The last jidacblock %s\n",migliaia(thelastblock));
 	
 /// jump to the very last block,
 	in.seek(thelastblock,SEEK_SET);
@@ -99380,7 +99916,7 @@ int Jidac::listfast()
 							d.readSegmentEnd();
 
 						if (flagverbose)
-							myprintf("91174: thefilename <<%s>>\n",filename.s.c_str());
+							myprintf("03105: thefilename <<%s>>\n",filename.s.c_str());
 						if (filename.s[17]=='i') 
 						{
 							const char* s=os.c_str();
@@ -99401,7 +99937,7 @@ int Jidac::listfast()
 						}
 						else 
 						{
-							myprintf("91289: Skipping %s %s\n",filename.s.c_str(), comment.s.c_str());
+							myprintf("03106: Skipping %s %s\n",filename.s.c_str(), comment.s.c_str());
 							error("91290: Unexpected journaling block, I want i");
 						}
 					}  // end if journaling
@@ -99418,7 +99954,7 @@ int Jidac::listfast()
 		catch (std::exception& e) 
 		{
 			in.seek(-d.buffered(), SEEK_CUR);
-			myprintf("91303: Skipping block at %1.0f: %s\n", double(block_offset),e.what());
+			myprintf("03107! Skipping block at %1.0f: %s\n", double(block_offset),e.what());
 			return 2;
 		}
 	} 
@@ -99427,7 +99963,7 @@ int Jidac::listfast()
 		error("91309: archive contains no data");
 	if (ifounded=="")
 	{
-		myprintf("91543: iname not founded\n");
+		myprintf("03108: iname not founded\n");
 		jidacreset();
 		flagfast=false;
 		return list();
@@ -99438,10 +99974,10 @@ int Jidac::listfast()
 	
 	string encodedstring=ifounded;
 	if (flagverbose)
-		myprintf("91543: encoded string |%s|\n",encodedstring.c_str());
+		myprintf("03109: encoded string |%s|\n",encodedstring.c_str());
 	if (mypos("filelistpointer:",encodedstring)==-1)
 	{
-		myprintf("91546: cannot find filelistpointer\n");
+		myprintf("03110: cannot find filelistpointer\n");
 		flagfast=false;
 		return list();
 	}
@@ -99525,61 +100061,61 @@ int Jidac::listfast()
 	myreplace(sthehash,"XXHASH:","");
 	if (flagverbose)
 	{
-		myprintf("91336: thepointer    %21s (start of data blocks)\n",migliaia(thepointer));
-		myprintf("91336: offset_h      %21s (start of hash blocks)\n",migliaia(thepointer_h));
-		myprintf("91336: fragstart     %21s (first monotonic fragment)\n",migliaia(fragstart));
-		myprintf("91336: fragend       %21s (last  monotonic fragment)\n",migliaia(fragend));
-		myprintf("91337: thesize       %21s (total bytes)\n",migliaia(thesize));
-		myprintf("91338: theversion    %21s (just for infos)\n",migliaia(theversion));
-		myprintf("91339: tag   |%s|\n",thetag.c_str());
-		myprintf("91340: hash  |%s|\n",sthehash.c_str());
+		myprintf("03111: thepointer    %21s (start of data blocks)\n",migliaia(thepointer));
+		myprintf("03112: offset_h      %21s (start of hash blocks)\n",migliaia(thepointer_h));
+		myprintf("03113: fragstart     %21s (first monotonic fragment)\n",migliaia(fragstart));
+		myprintf("03114: fragend       %21s (last  monotonic fragment)\n",migliaia(fragend));
+		myprintf("03115: thesize       %21s (total bytes)\n",migliaia(thesize));
+		myprintf("03116: theversion    %21s (just for infos)\n",migliaia(theversion));
+		myprintf("03117: tag   |%s|\n",thetag.c_str());
+		myprintf("03118: hash  |%s|\n",sthehash.c_str());
 	}
 	
 	if (thepointer==0)
 	{
-		myprintf("91306: strange thepointer\n");
+		myprintf("03119: strange thepointer\n");
 		jidacreset();
 		flagfast=false;
 		return list();
 	}
 	if (thepointer_h==0)
 	{
-		myprintf("91423: strange thepointer_h\n");
+		myprintf("03120: strange thepointer_h\n");
 		jidacreset();
 		flagfast=false;
 		return list();
 	}
 	if (fragstart==0)
 	{
-		myprintf("91429: strange fragstart\n");
+		myprintf("03121: strange fragstart\n");
 		jidacreset();
 		flagfast=false;
 		return list();
 	}
 	if (fragend==0)
 	{
-		myprintf("91435: strange fragend\n");
+		myprintf("03122: strange fragend\n");
 		jidacreset();
 		flagfast=false;
 		return list();
 	}
 	if (thesize==0)
 	{
-		myprintf("91441: strange thesize\n");
+		myprintf("03123: strange thesize\n");
 		jidacreset();
 		flagfast=false;
 		return list();
 	}
 	if (theversion==0)
 	{
-		myprintf("91447: strange theversion\n");
+		myprintf("03124: strange theversion\n");
 		jidacreset();
 		flagfast=false;
 		return list();
 	}
 	if (sthehash=="")
 	{
-		myprintf("91453: strange sthehash\n");
+		myprintf("03125: strange sthehash\n");
 		jidacreset();
 		flagfast=false;
 		return list();
@@ -99588,7 +100124,7 @@ int Jidac::listfast()
 	if (flagverbose)
 	{
 		printbar('+');
-		myprintf("91444: Going for the h blocks @ %s\n",migliaia(thepointer_h));
+		myprintf("03126: Going for the h blocks @ %s\n",migliaia(thepointer_h));
 		printbar('-');
 	}
 	in.seek(thepointer_h,SEEK_SET);
@@ -99664,7 +100200,7 @@ int Jidac::listfast()
 						if (filename.s[17]=='h') 
 						{
 							if (flagdebug3)
-								myprintf("91570: h block %s\n",filename.s.c_str());
+								myprintf("03127: h block %s\n",filename.s.c_str());
 							if (os.size()%24!=4) 
 								error("91540: bad h block size");
 							const unsigned n=(os.size()-4)/24;
@@ -99676,7 +100212,7 @@ int Jidac::listfast()
 							assert(ver.size()>0);
 							if (int64_t(ht.size())>num) 
 							{
-							  myprintf("91584: Unordered fragment tables: expected >= %d found %1.0f\n",int(ht.size()), double(num));
+							  myprintf("03128: Unordered fragment tables: expected >= %d found %1.0f\n",int(ht.size()), double(num));
 							}
 							for (unsigned i=0; i<n; ++i) 
 							{
@@ -99769,7 +100305,7 @@ int Jidac::listfast()
 	if (flagdebug3)
 	{
 		printbar('M');
-		myprintf("91777: block decoder prima lavoro\n");
+		myprintf("03129: block decoder prima lavoro\n");
 		blockdecoder();
 	}
 
@@ -99789,12 +100325,12 @@ int Jidac::listfast()
 	if (flagdebug3)
 	{
 		printbar('M');
-		myprintf("91389: block decoder after work\n");
+		myprintf("03130: block decoder after work\n");
 		blockdecoder();
 	}
   // Decompress archive in parallel
 
-	myprintf("91720: extracting %s with %d thread\n",migliaia(job.total_size),howmanythreads);
+	myprintf("03131: extracting %s with %d thread\n",migliaia(job.total_size),howmanythreads);
 
 ///	We will extract the MFILE-memfile to debug.txt in TEMP
 ///	Quite a lot of work ;)
@@ -99806,7 +100342,7 @@ int Jidac::listfast()
 	string kunfile=g_gettempdirectory()+"debug.txt";
 	myreplaceall(kunfile,"\\","/");
 	tofiles.push_back(nomefileseesistegia(kunfile));
-	myprintf("91226: Temp file %s\n",tofiles[0].c_str());
+	myprintf("03132: Temp file %s\n",tofiles[0].c_str());
 
 	vector<ThreadID> tid(howmanythreads);
 	for (unsigned i=0; i<tid.size(); ++i)
@@ -99820,8 +100356,8 @@ int Jidac::listfast()
 	string gettedhash=dummy.filehash(tofiles[0].c_str(),false,starthash,job.total_size);
 	if (gettedhash!=sthehash)
 	{
-		myprintf("91755: checksum by file %s\n",gettedhash.c_str());
-		myprintf("91856: checksum expecte %s\n",sthehash.c_str());
+		myprintf("03133! checksum by file %s\n",gettedhash.c_str());
+		myprintf("03134! checksum expecte %s\n",sthehash.c_str());
 		return 2;
 	}
 	FILE* myfile = freadopen(tofiles[0].c_str());
@@ -99838,7 +100374,7 @@ int Jidac::listfast()
 		fclose(myfile);
 	///		delete_file(kunfile.c_str());
 		myprintf("\n");
-		myprintf("91780: Fast file list for version %s\n",migliaia(theversion));
+		myprintf("03135: Fast file list for version %s\n",migliaia(theversion));
 
 	}
 	else
@@ -99849,26 +100385,26 @@ int Jidac::listfast()
 
 void Jidac::dtdecoder()
 {
-	myprintf("91598: *** dt decoder size %s\n",migliaia(dt.size()));
+	myprintf("03136: *** dt decoder size %s\n",migliaia(dt.size()));
 	for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p)
 	{
-		myprintf("91601: ht           %s\n",p->first.c_str());
-		myprintf("91601:         date %21s\n",migliaia(p->second.date));
-		myprintf("91601:         size %21s\n",migliaia(p->second.size));
-		myprintf("91601:         attr %21s\n",migliaia(p->second.attr));
-		myprintf("91601:         data %21s\n",migliaia(p->second.data));
-		myprintf("91601: ptr size     %21s\n",migliaia(p->second.ptr.size()));
+		myprintf("03137: ht           %s\n",p->first.c_str());
+		myprintf("03138:         date %21s\n",migliaia(p->second.date));
+		myprintf("03139:         size %21s\n",migliaia(p->second.size));
+		myprintf("03140:         attr %21s\n",migliaia(p->second.attr));
+		myprintf("03141:         data %21s\n",migliaia(p->second.data));
+		myprintf("03142: ptr size     %21s\n",migliaia(p->second.ptr.size()));
 		for (unsigned int j=0;j<p->second.ptr.size();j++)
-			myprintf("91601: %08d %21s\n",j,migliaia(p->second.ptr[j]));
+			myprintf("03143: %08d %21s\n",j,migliaia(p->second.ptr[j]));
 	}
 }
 
 void Jidac::htdecoder()
 {
-	myprintf("91595: *** ht decoder size %s\n",migliaia(ht.size()));
+	myprintf("03144: *** ht decoder size %s\n",migliaia(ht.size()));
 	for (unsigned int i=0;i<ht.size();i++)
 	{
-		myprintf("91647: ht %08d usize %10s ",i,migliaia(ht[i].usize));
+		myprintf("03145: ht %08d usize %10s ",i,migliaia(ht[i].usize));
 		for (int j=0;j<20;j++)
 			myprintf("%02x", ht[i].sha1[j]&255);
 		myprintf("\n");
@@ -99876,23 +100412,23 @@ void Jidac::htdecoder()
 }
 void Jidac::blockdecoder()
 {
-	myprintf("91621: *** block decoder size %s\n",migliaia(block.size()));
+	myprintf("03146: *** block decoder size %s\n",migliaia(block.size()));
 	for (unsigned int i=0;i<block.size();i++)
 	{
-		myprintf("91624: block %08d\n",i);
-		myprintf("91624: offset     %21s (location in archive)\n",migliaia(block[i].offset));
-		myprintf("91624: usize      %21s => bsize %s\n",migliaia(block[i].usize),migliaia2(block[i].bsize));
-		myprintf("91624: start      %21s (index in ht of first frag)\n",migliaia(block[i].start));
-		myprintf("91624: size       %21s (fragment to decompress)\n",migliaia(block[i].size));
-		myprintf("91624: frags      %21s (fragments in block)\n",migliaia(block[i].frags));
-		myprintf("91624: extracted  %21s (fragments decompressed OK)\n",migliaia(block[i].extracted));
-		myprintf("91624: state      %21s\n",migliaia(int64_t(block[i].state)));
-		myprintf("91624: files#     %21s (list of files pointing here)\n",migliaia(block[i].files.size()));
+		myprintf("03147: block %08d\n",i);
+		myprintf("03148: offset     %21s (location in archive)\n",migliaia(block[i].offset));
+		myprintf("03149: usize      %21s => bsize %s\n",migliaia(block[i].usize),migliaia2(block[i].bsize));
+		myprintf("03150: start      %21s (index in ht of first frag)\n",migliaia(block[i].start));
+		myprintf("03151: size       %21s (fragment to decompress)\n",migliaia(block[i].size));
+		myprintf("03152: frags      %21s (fragments in block)\n",migliaia(block[i].frags));
+		myprintf("03153: extracted  %21s (fragments decompressed OK)\n",migliaia(block[i].extracted));
+		myprintf("03154: state      %21s\n",migliaia(int64_t(block[i].state)));
+		myprintf("03155: files#     %21s (list of files pointing here)\n",migliaia(block[i].files.size()));
 		for (unsigned int j=0;j<block[i].files.size();j++)
 		{
-			myprintf("91624: %21s  %s\n",migliaia(block[i].files[j]->second.size),block[i].files[j]->first.c_str());
+			myprintf("03156: %21s  %s\n",migliaia(block[i].files[j]->second.size),block[i].files[j]->first.c_str());
 			unsigned fragcount=block[i].files[j]->second.ptr.size();
-			myprintf("91739:fragct %21s:",migliaia(fragcount));
+			myprintf("03157:fragct %21s:",migliaia(fragcount));
 		
 			bool hyphen=false;
 			for (int l=0;l<int(fragcount);l++) 
@@ -100047,9 +100583,9 @@ int64_t Jidac::pakka_read_archive(const char* arc)
 					d.readComment(&comment);
 					if (flagdebug3)
 					{
-						myprintf("04656: filename %s\n",filename.s.c_str());
-						myprintf("04656: comment  %s\n",comment.s.c_str());
-						myprintf("04958: in.tell 1 %d\n",in.tell());
+						myprintf("03158: filename %s\n",filename.s.c_str());
+						myprintf("03159: comment  %s\n",comment.s.c_str());
+						myprintf("03160: in.tell 1 %d\n",in.tell());
 					}
 					
 					if (lastver<2)
@@ -100438,15 +100974,18 @@ int Jidac::pakkalist()
 	
 	if (list_outputlog==NULL)
 	{
-		myprintf("97108: GURU cannot open -out log ");
+		myprintf("03161: GURU cannot open -out log %Z\n",g_output.c_str());
+		/*
+		myprintf("03162: GURU cannot open -out log ");
 		printUTF8(g_output.c_str());
 		myprintf("\n");
+		*/
 		seppuku();
 	}
 	csize=pakka_read_archive(archive.c_str());
 	if (csize==0)
 	{
-		myprintf("97116: Readed archive size 0\n");
+		myprintf("03163: Readed archive size 0\n");
 		seppuku();
 	}
 
@@ -100548,7 +101087,7 @@ bool decode_zpaq_version(string i_string,string& o_maj,string& o_minor,string& o
 	if (i_string=="") 
 		return false;
 	if (flagdebug2)
-		myprintf("94292: decoding zpaq version %s\n",i_string.c_str());
+		myprintf("03164: decoding zpaq version %s\n",i_string.c_str());
 	o_maj		="";
 	o_minor		="";
 	o_letter	="";
@@ -100579,9 +101118,9 @@ bool decode_zpaq_version(string i_string,string& o_maj,string& o_minor,string& o
 	}
 	if (flagdebug2)
 	{
-		myprintf("94322: maj |%s|\n",o_maj.c_str());
-		myprintf("94323: min |%s|\n",o_minor.c_str());
-		myprintf("94324: let |%s|\n",o_letter.c_str());
+		myprintf("03165: maj |%s|\n",o_maj.c_str());
+		myprintf("03166: min |%s|\n",o_minor.c_str());
+		myprintf("03167: let |%s|\n",o_letter.c_str());
 	}
 	if ((o_maj.size()+o_minor.size()+o_letter.size())==0)
 		return false;
@@ -100592,7 +101131,7 @@ string generaterandomstring(unsigned int i_length)
 {
 	if (i_length==0)
 	{
-		myprintf("94351: i_lenght in C5\n");
+		myprintf("03168: i_lenght in C5\n");
 		seppuku();
 	}
     static const char characters[]="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
@@ -100600,7 +101139,7 @@ string generaterandomstring(unsigned int i_length)
 
     if (randomstring==NULL) 
 	{
-        myprintf("94355: C5 on malloc\n");
+        myprintf("03169: C5 on malloc\n");
         seppuku();
     }
 
@@ -100669,23 +101208,23 @@ bool downloadfile(string i_verurl,string i_verfile,bool i_showupdate)
 	
 	if (i_verurl=="")
 	{
-		myprintf("94439: i_verurl empty\n");
+		myprintf("03170: i_verurl empty\n");
 		return false;
 	}
 	if (i_verfile=="")
 	{
-		myprintf("94444: i_verfile empty\n");
+		myprintf("03171: i_verfile empty\n");
 		return false;
 	}
 	
 	if (flagverbose)
 	{
-		myprintf("94450: Download from URL %s\n",i_verurl.c_str());
-		myprintf("94451: to file           %s\n",i_verfile.c_str());
+		myprintf("03172: Download from URL %s\n",i_verurl.c_str());
+		myprintf("03173: to file           %s\n",i_verfile.c_str());
 	}
 #ifdef _WIN32
 	if (flagdebug3)
-		myprintf("94455: WIN32 version of filedownload\n");
+		myprintf("03174: WIN32 version of filedownload\n");
 
 #ifdef _WIN64
 	downcallback thecallback;
@@ -100702,35 +101241,35 @@ bool downloadfile(string i_verurl,string i_verfile,bool i_showupdate)
 #endif
 
 	{
-		myprintf("94455: Error C5: cannot download file (no internet?)\n");
+		myprintf("03175: Error C5: cannot download file (no internet?)\n");
 		return false;
 	}
 #else
 #define INTERNET_BUFFER_SIZE 1024
 
 	if (flagdebug)
-		myprintf("94473: starting *nix download\n");
+		myprintf("03176: starting *nix download\n");
 	
 	char buffer[INTERNET_BUFFER_SIZE];
     char *hostname, *path;
     const char *url=i_verurl.c_str();
     if (flagdebug3)
-		myprintf("94480: before test1\n");
+		myprintf("03177: before test1\n");
 	
     if (strncmp(url,"http://",7)==0) 
         hostname = strdup(url+7);
 	else 
 	{
-        myprintf("94485: Download work only on http\n");
+        myprintf("03178: Download work only on http\n");
 		return false;
     }
 	if (flagdebug3)
-		myprintf("94489: before test2\n");
+		myprintf("03179: before test2\n");
 	
     path=strchr(hostname,'/');
     if (path==NULL) 
 	{
-		myprintf("94494: cannot strchr / in hostname!\n");
+		myprintf("03180: cannot strchr / in hostname!\n");
 		return false;
  	}
 	else 
@@ -100739,19 +101278,19 @@ bool downloadfile(string i_verurl,string i_verfile,bool i_showupdate)
         path++;
     }
 	if (flagdebug3)
-		myprintf("94494: path |%s|\n",path);
+		myprintf("03181: path |%s|\n",path);
 	
     int sockfd=socket(AF_INET,SOCK_STREAM,0);
     if (sockfd < 0)
 	{
-        myprintf("94499: Error C5: socket kaputt\n");
+        myprintf("03182: Error C5: socket kaputt\n");
 		return false;
     }
 
     struct hostent *server=gethostbyname(hostname);
     if (server == NULL) 
 	{
-        myprintf("94506: cannot gethostyname %s\n",hostname);
+        myprintf("03183: cannot gethostyname %s\n",hostname);
 		return false;
     }
 
@@ -100763,33 +101302,33 @@ bool downloadfile(string i_verurl,string i_verfile,bool i_showupdate)
 
     if (connect(sockfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0) 
 	{
-        myprintf("94520: C5 on connect\n");
+        myprintf("03184: C5 on connect\n");
 		return false;
     }
 
     snprintf(buffer,INTERNET_BUFFER_SIZE,"GET /%s HTTP/1.1\r\nHost: %s\r\nConnection: close\r\n\r\n",path,hostname);
     if (write(sockfd,buffer,strlen(buffer)) < 0) 
 	{
-        myprintf("94528: kaputt writing on socket\n");
+        myprintf("03185: kaputt writing on socket\n");
 		return false;
     }
 
     FILE *file = fopen(i_verfile.c_str(), "wb");
     if (file == NULL) 
 	{
-        myprintf("94535: cannot open file to write %s\n",i_verfile.c_str());
+        myprintf("03186: cannot open file to write %s\n",i_verfile.c_str());
 		return false;
     }
     ssize_t n;
     while ((n=read(sockfd,buffer,INTERNET_BUFFER_SIZE)) > 0) 
 	{
 		if (flagdebug3)
-			myprintf("94543: read %s from socket\n",migliaia(n));
+			myprintf("03187: read %s from socket\n",migliaia(n));
 	    fwrite(buffer,1,n,file);
 	}
     if (n<0) 
 	{
-        myprintf("94544: socket negative!\n");
+        myprintf("03188: socket negative!\n");
 		return false;
     }
     fclose(file);
@@ -100815,7 +101354,7 @@ bool isurl(string i_url)
 			barre++;
 	if (barre<3)
 	{
-		myprintf("94581: ERROR: at least 3 slashes needed founded %d\n",barre);
+		myprintf("03189: ERROR: at least 3 slashes needed founded %d\n",barre);
 		return false;
 	}
 #endif
@@ -100826,11 +101365,11 @@ bool isurl(string i_url)
 int Jidac::update()
 {
 #if defined(SOLARIS) || defined(__HAIKU__)
-	myprintf("95602: Cannot update SOLARIS or HAIKU\n");
+	myprintf("03190: Cannot update SOLARIS or HAIKU\n");
 	return 0;
 #else
 	
-	myprintf("94276: Checking internet update (-verbose for details)\n");
+	myprintf("03191: Checking internet update (-verbose for details)\n");
 	string randnocache="?"+generaterandomstring(10);
 
 #ifdef unix
@@ -100838,7 +101377,7 @@ int Jidac::update()
 #endif
 
 	if (flagdebug)
-		myprintf("94380: randnocache %s\n",randnocache.c_str());
+		myprintf("03192: randnocache %s\n",randnocache.c_str());
 
 	string	http_url="http://www.francocorbelli.it/zpaqfranz/win64/zpaqfranz.sha256";
 	string	http_exe="http://www.francocorbelli.it/zpaqfranz/win64/zpaqfranz.exe";
@@ -100857,19 +101396,19 @@ int Jidac::update()
 	{
 		http_url=files[0];
 		http_exe=files[1];
-		myprintf("94587: Command-selected URL\n");
-		myprintf("94588: new http_url |%s|\n",http_url.c_str());
-		myprintf("94588: new http_exe |%s|\n",http_exe.c_str());
+		myprintf("03193: Command-selected URL\n");
+		myprintf("03194: new http_url |%s|\n",http_url.c_str());
+		myprintf("03195: new http_exe |%s|\n",http_exe.c_str());
 	}
 	
 	if (!isurl(http_url))
 	{
-		myprintf("94642: http_url is not a url |%s|\n",http_url.c_str());
+		myprintf("03196! http_url is not a url |%s|\n",http_url.c_str());
 		return 2;
 	}
 	if (!isurl(http_exe))
 	{
-		myprintf("94647: http_exe is not a url |%s|\n",http_exe.c_str());
+		myprintf("03197! http_exe is not a url |%s|\n",http_exe.c_str());
 		return 2;
 	}
 	
@@ -100884,19 +101423,19 @@ int Jidac::update()
 ///	verfile="z:\\test.256";
 	if (!sanitizefile(verfile))
 	{
-		myprintf("95128: ERROR C5 strange downloaded file\n");
-		remove(verfile.c_str());
+		myprintf("03198! ERROR C5 strange downloaded file\n");
+		remove_temp_file(verfile.c_str());
 		seppuku();
 		return 2;
 	}
 	
-	myprintf("94300: Testing internet version...\n");
+	myprintf("03199: Testing internet version...\n");
 	
 	vector<string> versioni;
 	readfiletoarray(verfile,versioni);
 	if (versioni.size()==0)
 	{
-		myprintf("94592: version file with 0 lines\n");
+		myprintf("03200! version file with 0 lines\n");
 		return 2;
 	}
 	
@@ -100905,27 +101444,27 @@ int Jidac::update()
 #ifdef _WIN32
 	if (versioni.size()!=1)
 	{
-		myprintf("94314: version file should have 1 line instead of %s\n",migliaia(versioni.size()));
+		myprintf("03201! version file should have 1 line instead of %s\n",migliaia(versioni.size()));
 		return 2;
 	}
 	linea=versioni[0];
 #else
 	linea=versioni[versioni.size()-1];
 	if (flagdebug3)
-		myprintf("94613: the last line |%s|\n",linea.c_str());
+		myprintf("03202: the last line |%s|\n",linea.c_str());
 #endif	
 	
 	
 	if (linea.size()<70)
 	{
-		myprintf("94315: Line size should be >=70 %08s\n",migliaia(linea.size()));
+		myprintf("03203! Line size should be >=70 %08s\n",migliaia(linea.size()));
 		return 2;
 	}
 	
 	if (!sanitizeline(linea))
 	{
-		myprintf("95123: ERROR C5 the downloaded file is not adherent to expected format\n");
-		remove(verfile.c_str());
+		myprintf("03204! ERROR C5 the downloaded file is not adherent to expected format\n");
+		remove_temp_file(verfile.c_str());
 		seppuku();
 		return 2;
 	}
@@ -100936,7 +101475,7 @@ int Jidac::update()
 			thesha256+=linea[i];
 	if (thesha256.size()!=64)
 	{
-		myprintf("94324: sha256 len expected 64 vs %s |%s|\n",migliaia(thesha256.size()),thesha256.c_str());
+		myprintf("03205! sha256 len expected 64 vs %s |%s|\n",migliaia(thesha256.size()),thesha256.c_str());
 		return 2;
 	}
 	string theversion	="";
@@ -100959,11 +101498,11 @@ int Jidac::update()
 	string thedate=linea.substr(i+1,linea.size());
 
 	if (flagverbose)
-		myprintf("94390: Version to be decoded |%s| date |%s|\n",theversion.c_str(),thedate.c_str());
+		myprintf("03206: Version to be decoded |%s| date |%s|\n",theversion.c_str(),thedate.c_str());
 	
 	if (!decode_zpaq_version(theversion,maj,minor,letter))
 	{
-		myprintf("94390: decode zpaq version failed!\n");
+		myprintf("03207! decode zpaq version failed!\n");
 		return 2;
 	}
 	
@@ -100974,7 +101513,7 @@ int Jidac::update()
 	string 	internal_letter		="";
 	if (!decode_zpaq_version(internal_version,internal_maj,internal_minor,internal_letter))
 	{
-		myprintf("94401: decode internal zpaq version failed!\n");
+		myprintf("03208! decode internal zpaq version failed!\n");
 		return 2;
 	}
 	bool flagnewer=false;
@@ -100993,20 +101532,20 @@ int Jidac::update()
 	
 	if (flagverbose)
 	{
-		myprintf("94408: Current major  %4s =>  %4s\n",internal_maj.c_str(),maj.c_str());
-		myprintf("94408: Current minor  %4s =>  %4s\n",internal_minor.c_str(),minor.c_str());
-		myprintf("94408: Current letter %4s =>  %4s\n",internal_letter.c_str(),letter.c_str());
+		myprintf("03209: Current major  %4s =>  %4s\n",internal_maj.c_str(),maj.c_str());
+		myprintf("03210: Current minor  %4s =>  %4s\n",internal_minor.c_str(),minor.c_str());
+		myprintf("03211: Current letter %4s =>  %4s\n",internal_letter.c_str(),letter.c_str());
 	}
 	
 #ifdef unix
 	if (flagnewer)
 	{	color_red();
-		myprintf("95205: PLEASE UPDATE: your %s %s is OLDER of %s %s\n",internal_version.c_str(),internal_date.c_str(),theversion.c_str(),thedate.c_str());
+		myprintf("03212: PLEASE UPDATE: your %s %s is OLDER of %s %s\n",internal_version.c_str(),internal_date.c_str(),theversion.c_str(),thedate.c_str());
 	}
 	else
 	{
 		color_green();
-		myprintf("95205: NOTHING TO DO: your %s %s is not older of %s %s\n",internal_version.c_str(),internal_date.c_str(),theversion.c_str(),thedate.c_str());
+		myprintf("03213: NOTHING TO DO: your %s %s is not older of %s %s\n",internal_version.c_str(),internal_date.c_str(),theversion.c_str(),thedate.c_str());
 	}
 	color_restore();
 	remove(verfile.c_str());
@@ -101015,7 +101554,7 @@ int Jidac::update()
 	if ((!flagnewer) && (flagkill))
 	{
 		color_yellow();
-		myprintf("94488: Your %s %s is not older of %s %s BUT -kill => continue anyway\n",
+		myprintf("03214: Your %s %s is not older of %s %s BUT -kill => continue anyway\n",
 		internal_version.c_str(),
 		internal_date.c_str(),
 		theversion.c_str(),
@@ -101026,31 +101565,31 @@ int Jidac::update()
 	if ((!flagnewer) && (!flagkill))
 	{
 		color_green();
-		myprintf("94418: NOTHING TO DO: your %s %s is not older of %s %s\n",internal_version.c_str(),internal_date.c_str(),theversion.c_str(),thedate.c_str());
+		myprintf("03215: NOTHING TO DO: your %s %s is not older of %s %s\n",internal_version.c_str(),internal_date.c_str(),theversion.c_str(),thedate.c_str());
 		color_restore();
-		remove(verfile.c_str());
+		remove_temp_file(verfile.c_str());
 		return 0;
 	}
 	
 	franz_do_hash myself("SHA-256");
 	if (flagdebug3)
-		myprintf("94710: filehash on %s\n",fullzpaqexename.c_str());
+		myprintf("03216: filehash on %s\n",fullzpaqexename.c_str());
 	
 	int64_t startmyself=mtime();
 	string myownsha256=myself.filehash(fullzpaqexename,false,startmyself,prendidimensionefile(fullzpaqexename.c_str()));
 	if (flagverbose)
-		myprintf("94714: myownsha256 %s\n",myownsha256.c_str());
+		myprintf("03217: myownsha256 %s\n",myownsha256.c_str());
 	
 	if (stringtolower(myownsha256)==stringtolower(thesha256))
 	{
 		color_yellow();
-		myprintf("94718: Really nothing to do because your build is == to the internet one\n");
+		myprintf("03218: Really nothing to do because your build is == to the internet one\n");
 		color_restore();
 		return 0;
 	}
 	
 	color_green();
-	myprintf("94416: Candidate %s of %s vs current %s of %s",theversion.c_str(),thedate.c_str(),internal_version.c_str(),internal_date.c_str());
+	myprintf("03219: Candidate %s of %s vs current %s of %s",theversion.c_str(),thedate.c_str(),internal_version.c_str(),internal_date.c_str());
 	color_restore();
 
 	if (!flagforce)
@@ -101068,10 +101607,10 @@ int Jidac::update()
 
 	if (flagverbose)
 	{
-		myprintf("94449: from     %s\n",exeurl.c_str());
-		myprintf("94450: to file  %s\n",exefile.c_str());
+		myprintf("03220: from     %s\n",exeurl.c_str());
+		myprintf("03221: to file  %s\n",exefile.c_str());
 	}
-	myprintf("94513: Downloading from Internet...\n");
+	myprintf("03222: Downloading from Internet...\n");
 
 	int64_t startdownload=mtime();
 
@@ -101082,33 +101621,33 @@ int Jidac::update()
 	int64_t dimensionescaricata=prendidimensionefile(exefile.c_str());
 	if (dimensionescaricata<=1000000)
 	{
-		myprintf("94476: Downloaded size small, abort (%s)\n",migliaia(dimensionescaricata));
+		myprintf("03223! Downloaded size small, abort (%s)\n",migliaia(dimensionescaricata));
 		return 2;
 	}
-	myprintf("94895: Time %5.2f s, now integrity check (%s bytes)\n",(mtime()-startdownload)/1000.0,migliaia(dimensionescaricata));
+	myprintf("03224: Time %5.2f s, now integrity check (%s bytes)\n",(mtime()-startdownload)/1000.0,migliaia(dimensionescaricata));
 	franz_do_hash dummy("SHA-256");
 	if (flagdebug3)
-		myprintf("94482: filehash on %s\n",exefile.c_str());
+		myprintf("03225: filehash on %s\n",exefile.c_str());
 
 	int64_t starthash=mtime();
 	string hashreloaded=dummy.filehash(exefile,false,starthash,dimensionescaricata);
 	if (flagverbose)
 	{
-		myprintf("94486: hash reloaded %s\n",hashreloaded.c_str());
-		myprintf("94487: expected hash %s\n",thesha256.c_str());
+		myprintf("03226: hash reloaded %s\n",hashreloaded.c_str());
+		myprintf("03227: expected hash %s\n",thesha256.c_str());
 	}
 	if (stringtolower(hashreloaded)!=stringtolower(thesha256))
 	{
-		myprintf("94490: Hash mismatch => error C5 => Kaputt\n");
+		myprintf("03228! Hash mismatch => error C5 => Kaputt\n");
 		return 2;
 	}
 	color_green();
-	myprintf("94493: OK => updating ...\n");
+	myprintf("03229: OK => updating ...\n");
 	color_restore();
 	if (flagverbose)
 	{
-		myprintf("94519: zpaqfranzexename %s\n",zpaqfranzexename.c_str());
-		myprintf("94520: fullzpaqexename  %s\n",fullzpaqexename.c_str());
+		myprintf("03230: zpaqfranzexename %s\n",zpaqfranzexename.c_str());
+		myprintf("03231: fullzpaqexename  %s\n",fullzpaqexename.c_str());
 	}
 	
 	string	filebatch	=g_gettempdirectory()+"updatezpaqfranz.bat";
@@ -101116,18 +101655,20 @@ int Jidac::update()
 	if (fileexists(filebatch))
 		if (remove(filebatch.c_str())!=0)
 		{
-			myprintf("94501: Highlander batch  %s\n", filebatch.c_str());
+			myprintf("03232! Highlander batch  %s\n", filebatch.c_str());
 			return 2;
 		}
 	FILE* batch=fopen(filebatch.c_str(), "wb");
 	if (batch==NULL)
 	{
-		myprintf("94507: cannot write on %s\n",filebatch.c_str());
+		myprintf("03233! cannot write on %s\n",filebatch.c_str());
 		return 2;
 	}
 	
-	fullzpaqexename=linuxtowinpath(fullzpaqexename);
-	
+	fullzpaqexename	=linuxtowinpath(fullzpaqexename);
+	exefile			=linuxtowinpath(exefile);
+	verfile			=linuxtowinpath(verfile);
+	filebatch		=linuxtowinpath(filebatch);
 	fprintf(batch,"@echo OFF\r\n");
     fprintf(batch,":again\r\n");
 	fprintf(batch,"taskkill /F /IM %s\r\n",zpaqfranzexename.c_str());
@@ -101138,6 +101679,7 @@ int Jidac::update()
     fprintf(batch,"del \"%s\"\r\n",exefile.c_str());
     fprintf(batch,"del \"%s\"\r\n",filebatch.c_str());
 	fclose(batch);
+	myprintf("03234: filebatch %s\n",filebatch.c_str());
 	waitexecute(filebatch,"",SW_HIDE);
 #endif
 
@@ -101149,10 +101691,10 @@ int Jidac::update()
 #ifdef _WIN32
 int Jidac::download()
 {
-	myprintf("94959: Download file from Internet (something like wget)\n");
+	myprintf("03235: Download file from Internet (something like wget)\n");
 	if (files.size()!=2)
 	{
-		myprintf("94963: Exactly 2 file-parameters required. URL and local file\n");
+		myprintf("03236! Exactly 2 file-parameters required. URL and local file\n");
 		return 2;
 	}
 	
@@ -101162,7 +101704,7 @@ int Jidac::download()
 #endif
 
 	if (flagdebug)
-		myprintf("94911: randnocache %s\n",randnocache.c_str());
+		myprintf("03237: randnocache %s\n",randnocache.c_str());
 
 	string	thehashtype="";
 	string 	thehash="";
@@ -101171,11 +101713,11 @@ int Jidac::download()
 		if (checktxt!="")
 		{
 			if (flagverbose)
-				myprintf("94976: Downloading the txt check file\n");
+				myprintf("03238: Downloading the txt check file\n");
 			string http_url=checktxt;
 			if (!isurl(http_url))
 			{
-				myprintf("94981: http_url is not a url |%s|\n",http_url.c_str());
+				myprintf("03239! http_url is not a url |%s|\n",http_url.c_str());
 				return 2;
 			}
 			http_url+=randnocache;
@@ -101185,25 +101727,25 @@ int Jidac::download()
 				return 2;
 			myprintf("\n");
 			if (flagverbose)
-				myprintf("94990: Loading hash data...\n");
+				myprintf("03240: Loading hash data...\n");
 			
 			vector<string> versioni;
 			readfiletoarray(verfile,versioni);
 			if (versioni.size()==0)
 			{
-				myprintf("94996: version file with 0 lines\n");
+				myprintf("03241! version file with 0 lines\n");
 				return 2;
 			}
 			string linea;
 	
 			if (versioni.size()!=1)
 			{
-				myprintf("95003: version file should have 1 line instead of %s\n",migliaia(versioni.size()));
+				myprintf("03242! version file should have 1 line instead of %s\n",migliaia(versioni.size()));
 				return 2;
 			}
 			linea=versioni[0];
 			if (flagverbose)
-				myprintf("95007: Line %s |%s|\n",migliaia(linea.size()),linea.c_str());
+				myprintf("03243: Line %s |%s|\n",migliaia(linea.size()),linea.c_str());
 
 			thehash=getfirsthash(linea);
 			
@@ -101216,16 +101758,16 @@ int Jidac::download()
 			
 			if (thehashtype=="")
 			{
-				myprintf("95018: Cannot recognize hash type len (%d). 32=MD5; 40=SHA1; 64=SHA-256\n",thehash.size());
+				myprintf("03244! Cannot recognize hash type len (%d). 32=MD5; 40=SHA1; 64=SHA-256\n",thehash.size());
 				return 2;
 			}
 			if (flagverbose)
-				myprintf("95016: Hash type |%s| %s |%s|\n",thehashtype.c_str(),migliaia(thehash.size()),thehash.c_str());
+				myprintf("03245: Hash type |%s| %s |%s|\n",thehashtype.c_str(),migliaia(thehash.size()),thehash.c_str());
 
 			if (!flagforce)
 			{
 				if (flagverbose)
-					myprintf("95074: Deleting verfile (skip with -force)\n");
+					myprintf("03246: Deleting verfile (skip with -force)\n");
 				remove(verfile.c_str());
 			}
 		}
@@ -101233,7 +101775,7 @@ int Jidac::download()
 	string http_url=files[0];
 	if (!isurl(http_url))
 	{
-		myprintf("94924: http_url is not a url |%s|\n",http_url.c_str());
+		myprintf("03247! http_url is not a url |%s|\n",http_url.c_str());
 		return 2;
 	}
 	http_url+=randnocache;
@@ -101244,53 +101786,51 @@ int Jidac::download()
 	if (!flagspace)
 		if (!saggiascrivibilitacartella(output_file))
 		{
-			myprintf("94931: Cannot write on %s (maybe lack of ./? bypass with -space)\n");
+			myprintf("03248! Cannot write on %s (maybe lack of ./? bypass with -space)\n");
 			return 2;
 		}
 	int64_t startdownload=mtime();
 	if (!downloadfile(http_url,output_file,true))
 	{
 		myprintf("\n");
-		myprintf("94938: Something wrong on downloadfile()\n");
+		myprintf("03249! Something wrong on downloadfile()\n");
 		return 2;
 	}
 	myprintf("\n");
-	myprintf("94942: Downloaded filesize %s in %5.2f s\n",migliaia(prendidimensionefile(output_file.c_str())),(mtime()-startdownload)/1000.0);
-	myprintf("94945: Output file <<");
-	printUTF8(output_file.c_str());
-	myprintf(">>\n");
+	myprintf("03250: Downloaded filesize %s in %5.2f s\n",migliaia(prendidimensionefile(output_file.c_str())),(mtime()-startdownload)/1000.0);
+	myprintf("03251: Output file <<%Z>>\n",output_file.c_str());
 	if (thehashtype!="")
 	{
 		franz_do_hash dummy(thehashtype);
 		if (flagdebug3)
-			myprintf("95057: hashing on %s\n",output_file.c_str());
+			myprintf("03252: hashing on %s\n",output_file.c_str());
 
 		int64_t starthash=mtime();
 		string hashreloaded=dummy.filehash(output_file,false,starthash,prendidimensionefile(output_file.c_str()));
 		myprintf("\n");
 		if (flagverbose)
 		{
-			myprintf("95063: hash reloaded %s\n",hashreloaded.c_str());
-			myprintf("95064: expected hash %s\n",thehash.c_str());
+			myprintf("03253: hash reloaded %s\n",hashreloaded.c_str());
+			myprintf("03254: expected hash %s\n",thehash.c_str());
 		}
 		if (stringtolower(hashreloaded)!=stringtolower(thehash))
 		{
 			color_red();
-			myprintf("95068: GURU => downloaded hash does not match!\n");
-			myprintf("95080: hash type     %s\n",thehashtype.c_str());
-			myprintf("95081: hash expected %s\n",thehash.c_str());
-			myprintf("95082: hash founded  %s\n",hashreloaded.c_str());
+			myprintf("03255! GURU => downloaded hash does not match!\n");
+			myprintf("03256: hash type     %s\n",thehashtype.c_str());
+			myprintf("03257: hash expected %s\n",thehash.c_str());
+			myprintf("03258: hash founded  %s\n",hashreloaded.c_str());
 			
 			color_restore();
 			if (!flagforce)
 			{
-				myprintf("95074: Deleting corrupted file (skip with -force)\n");
+				myprintf("03259: Deleting corrupted file (skip with -force)\n");
 				remove(output_file.c_str());
 			}
 			return 2;
 		}
 		color_green();
-		myprintf("95057: Expected hash OK (this is very good)\n");
+		myprintf("03260: Expected hash OK (this is very good)\n");
 		color_restore();
 	}
 	return 0;
@@ -101299,104 +101839,17 @@ int Jidac::download()
 
 #endif
 
-/*
-int Jidac::scan_archive(vector<uint64_t>& cblock_position,vector<uint64_t>& dblock_position,vector<uint64_t>& hblock_position,vector<uint64_t>& iblock_position)
-{
-	InputArchive in(archive.c_str());
-	if (!in.isopen()) 
-	{
-		myprintf("95248: GURU cannot open <<");
-		printUTF8(archive.c_str());
-		myprintf(">>\n");
-		return 2;
-	}
-	libzpaq::Decompresser d;
-	libzpaq::SHA1 sha1;
-	d.setInput(&in);
-	d.setSHA1(&sha1);
-	double mem;
-	StringWriter filename, comment, buf;
-	char sha1result[21];
-	map<string, int> m;
-	int block				=0;
-	int64_t myoffset		=0;
-	unsigned int iblock		=0;
-	unsigned int hblock		=0;
-	unsigned int cblock		=0;
-	unsigned int dblock		=0;
-	unsigned int filecount	=0;
-	uint64_t		block_position=0;
-	while (d.findBlock(&mem)) 
-	{
-		block_position=myoffset;
-		
-		while (d.findFilename(&filename)) 
-		{
-			string sfilename=filename.s;
-			///myprintf("%c\n",sfilename[17]);
-			if (sfilename[17]=='c')
-			{
-				myprintf("90129: Block %08d @ %21s c\n", ++block,migliaia(myoffset));
-				cblock++;
-				cblock_position.push_back(block_position);
-			}
-			else
-			if (sfilename[17]=='d')
-			{
-				dblock++;
-				dblock_position.push_back(block_position);
-			}
-			else
-			if (sfilename[17]=='h')
-			{
-				hblock++;
-				hblock_position.push_back(block_position);
-			}
-			else
-			if (sfilename[17]=='i')
-			{
-				iblock++;
-				iblock_position.push_back(block_position);
-			}
-			else
-			{
-				myprintf("\n");
-				myprintf("95305: strange block type\n");
-				seppuku();
-			}
-			d.readComment(&comment);
-			d.readSegmentEnd(sha1result);
-			if (buf.s.size()>0 && sha1result[0]==1 && memcmp(sha1.result(), sha1result+1, 20))
-				myprintf("95302: CHECKSUM ERROR!\n");
-			myoffset=in.tell()-d.buffered();
-			buf.s		="";
-			filename.s	="";
-			comment.s	="";
-		}
-		myoffset=in.tell()-d.buffered();
-	}
-///	in.close();
-  
-	myprintf("88226: c block (jump)  %9s\n",migliaia(cblock));
-	myprintf("88227: d block (data)  %9s\n",migliaia(dblock));
-	myprintf("88228: h block (hash)  %9s\n",migliaia(hblock));
-	myprintf("88229: i block (index) %9s\n",migliaia(iblock));
-	myprintf("88230: file count      %9s\n",migliaia(filecount));
-	
-	return 0;
-}
-*/
 int Jidac::crop()
 {
 	if (iswildcards(archive))
 	{
-		myprintf("95396: Cannot work on multipart archive\n");
+		myprintf("03261! Cannot work on multipart archive\n");
 		return 2;
 	}
 	if ((flagkill) && (!flagforce))
 		if (tofiles.size()!=1)
 		{
-			myprintf("95346: Need a -to for the output\n");
+			myprintf("03262! Need a -to for the output\n");
 			return 2;
 		}
 	
@@ -101414,8 +101867,8 @@ int Jidac::crop()
 			a->second.data='-';
 			filelist.push_back(a);
 		}
-	myprintf("53244: ---------------------------------------------------------------------------\n");
-	myprintf("53245: <  Ver  > <  date  > < time > <    version size    > < Offset (w/out encr)>\n");
+	myprintf("03263: ---------------------------------------------------------------------------\n");
+	myprintf("03264: <  Ver  > <  date  > < time > <    version size    > < Offset (w/out encr)>\n");
 	int maxversion=0;
 	for (unsigned fi=0;fi<filelist.size() /*&& (true || int(fi)<summary)*/; ++fi)
 	{
@@ -101426,7 +101879,7 @@ int Jidac::crop()
 			maxversion++;
 			wheretotrim=(int64_t)(version_position.back()+(v+1<ver.size() ? ver[v+1].offset : csize)-ver[v].offset+0.0);
 			version_position.push_back(wheretotrim);
-			myprintf("53221: V%08u %s [%20s] @ %20s\n",v,dateToString(flagutc,p->second.date).c_str(),
+			myprintf("03265: V%08u %s [%20s] @ %20s\n",v,dateToString(flagutc,p->second.date).c_str(),
 					migliaia((int64_t)((v+1<ver.size() ? ver[v+1].offset : csize)-ver[v].offset+0.0)),migliaia2(wheretotrim));
 		}
 	}
@@ -101437,12 +101890,12 @@ int Jidac::crop()
 
 	if (iuntil>maxversion)
 	{
-		myprintf("95434: -until %s too big (> maxversion %s) => exit\n",migliaia(iuntil),migliaia2(maxversion));
+		myprintf("03266! -until %s too big (> maxversion %s) => exit\n",migliaia(iuntil),migliaia2(maxversion));
 		return 2;
 	}
 	if (!flagkill)
 	{
-		myprintf("95386: no -kill, this is just a dry run\n");
+		myprintf("03267: no -kill, this is just a dry run\n");
 		return 0;
 	}
 	int64_t archivesize=prendidimensionefile(archive.c_str());
@@ -101451,17 +101904,17 @@ int Jidac::crop()
 	
 	if (wheretotrim==0)
 	{
-		myprintf("95381: Guru, wheretotrim == 0\n");
+		myprintf("03268! Guru, wheretotrim == 0\n");
 		return 2;
 	}
 	if (g_password!=NULL)
 	{
 		wheretotrim+=32;
-		myprintf("95448: Due to encrypted archive done a +32 bytes\n");
+		myprintf("03269: Due to encrypted archive done a +32 bytes\n");
 	}
 	if (wheretotrim>archivesize)
 	{
-		myprintf("95449: wheretotrim %s > archivesize %s\n",migliaia(wheretotrim),migliaia2(archivesize));
+		myprintf("03270! wheretotrim %s > archivesize %s\n",migliaia(wheretotrim),migliaia2(archivesize));
 		return 2;
 	}
 	
@@ -101471,18 +101924,18 @@ int Jidac::crop()
 				return 1;
 		if (truncate(archive.c_str(),wheretotrim))
 		{
-			myprintf("95460: something wrong truncating!\n");
+			myprintf("03271! something wrong truncating!\n");
 			return 2;
 		}
 		else
-			myprintf("95464: in-place crop done\n");
+			myprintf("03272: in-place crop done\n");
 		return 0;
 	}
 	
 	string	trimmeddestination=tofiles[0];
 	if (isdirectory(trimmeddestination))
 	{
-		myprintf("95394: error -to is a folder, must be a file\n");
+		myprintf("03273! error -to is a folder, must be a file\n");
 		return 2;
 	}
 	if (!iszpaq(trimmeddestination))
@@ -101490,7 +101943,7 @@ int Jidac::crop()
 	if (!flagspace)
 		if (!saggiascrivibilitacartella(trimmeddestination))
 		{
-			myprintf("95402: sorry -to folder seems not writeable. Use -space to bypass\n");
+			myprintf("03274! sorry -to folder seems not writeable. Use -space to bypass\n");
 			return 2;
 		}
 	int64_t spaziolibero=getfreespace(trimmeddestination);
@@ -101498,27 +101951,30 @@ int Jidac::crop()
 		if (spaziolibero<archivesize)
 		{	
 			printbar('*');
-			myprintf("95410: WARNING FREE SPACE SEEMS %s NEEDED %s -space to bypass\n",migliaia(spaziolibero),migliaia2(archivesize));
+			myprintf("03275! WARNING FREE SPACE SEEMS %s NEEDED %s -space to bypass\n",migliaia(spaziolibero),migliaia2(archivesize));
 			printbar('*');
 			return 2;
 		}
-	myprintf("53955: Writing data...\n");
+	myprintf("03276: Writing data...\n");
 	string risultato=filecopy(true,false,archive,trimmeddestination,flagverify,true,false,wheretotrim); 
 	if (risultato=="")
 	{
-		myprintf("95428: ERROR making copy %s\n",risultato.c_str());
+		myprintf("03277! ERROR making copy %s\n",risultato.c_str());
 		return 2;
 	}
 	int64_t nuovadim=prendidimensionefile(risultato.c_str());
 	if (nuovadim==wheretotrim)
 	{
-		myprintf("95444: DONE on ");
+		myprintf("03278: DONE on %Z (%s)\n",risultato.c_str(),migliaia(nuovadim));
+		/*
+		myprintf("03279: DONE on ");
 		printUTF8(risultato.c_str());
 		myprintf(" (%s)\n",migliaia(nuovadim));
+		*/
 	}
 	else
 	{
-		myprintf("95494: Something goest wrong C5\n");
+		myprintf("03280! Something goest wrong C5\n");
 		return 2;
 	}
 	return 0;
@@ -101532,7 +101988,7 @@ int Jidac::hasha()
 		flagnoeta=true;
 	if ((!flagpakka) && (!flagstdout) && (!flagterse))
 	{
-		myprintf("95686: Hashing %s",g_thechosenhash_str.c_str());
+		myprintf("03281: Hashing %s",g_thechosenhash_str.c_str());
 		if (flagmm)
 			myprintf(" WITH MEMORY MAPPED FILES ");
 		if (!flagforcezfs)
@@ -101577,7 +102033,7 @@ int Jidac::hasha()
 
 	if (myfiles.size()==0)
 	{
-		myprintf("95734: Nothing to do\n");
+		myprintf("03282: Nothing to do\n");
 		return 0;
 	}
 	vector<string> myhash;
@@ -101597,25 +102053,25 @@ int Jidac::hasha()
 		scantime=(inizio-startscan)/1000.0;
 		if (flagverbose)
 		{
-			myprintf("95752: No multithread: Found (%s) => %s bytes (%s) / %s files in %f\n",tohuman2(scannedsize),migliaia(total_size),tohuman(total_size),migliaia2(quantifiles),scantime);
-			myprintf("95754: Total files %s\n",migliaia(myfiles.size()));
+			myprintf("03283: No multithread: Found (%s) => %s bytes (%s) / %s files in %f\n",tohuman2(scannedsize),migliaia(total_size),tohuman(total_size),migliaia2(quantifiles),scantime);
+			myprintf("03284: Total files %s\n",migliaia(myfiles.size()));
 		}
 		g_dimensione=0;
 
 		for (unsigned int i=0;i<myfiles.size();i++)
 		{
 			if (flagdebug3)
-				myprintf("95761: franz_do_hash\n");
+				myprintf("03285: franz_do_hash\n");
 
 			franz_do_hash dummy(g_thechosenhash);
 			if (flagdebug3)
-				myprintf("95765: filehash on %s\n",myfiles[i].c_str());
+				myprintf("03286: filehash on %s\n",myfiles[i].c_str());
 			string risu=dummy.filehash(myfiles[i],false,inizio,total_size);
 			int printlen=0;
 			if (flagstdout)
 				myprintf("%s ",stringtolower(risu).c_str());
 			else
-				myprintf("95759: %s ",stringtolower(risu).c_str());
+				myprintf("03287: %s ",stringtolower(risu).c_str());
 			printlen=risu.size()+2;
 			printUTF8(myfiles[i].c_str());
 			printlen+=myfiles[i].size();
@@ -101650,7 +102106,7 @@ int Jidac::hasha()
 	int64_t inizio		=mtime();
 	scantime=(inizio-startscan)/1000.0;
 	if (flagverbose)
-		myprintf("95802: Found (%s) => %s bytes (%s) / %s files in %f\n",tohuman2(scannedsize),migliaia(total_size),tohuman(total_size),migliaia2(quantifiles),scantime);
+		myprintf("03288: Found (%s) => %s bytes (%s) / %s files in %f\n",tohuman2(scannedsize),migliaia(total_size),tohuman(total_size),migliaia2(quantifiles),scantime);
 	for (unsigned int i=0;i<myfiles.size();i++)
 	{
 		vettoreparametrihash[i%mythreads].filestobehashed.push_back(myfiles[i]);
@@ -101660,11 +102116,11 @@ int Jidac::hasha()
 	for (int i=0;i<mythreads;i++)
 	{
 		if (flagdebug3)
-			myprintf("95812: Thread [%02d] files %s\n",(int)i,migliaia(vettoreparametrihash[i].filestobehashed.size()));
+			myprintf("03289: Thread [%02d] files %s\n",(int)i,migliaia(vettoreparametrihash[i].filestobehashed.size()));
 		totfile+=+vettoreparametrihash[i].filestobehashed.size();
 	}
 	if (flagverbose)
-		myprintf("95819: Total files %s -> in threads %s\n",migliaia(myfiles.size()),migliaia2(totfile));
+		myprintf("03290: Total files %s -> in threads %s\n",migliaia(myfiles.size()),migliaia2(totfile));
 	int rc;
 	///pthread_t threads[mythreads];
 	pthread_t* threads = new pthread_t[mythreads];
@@ -101676,7 +102132,7 @@ int Jidac::hasha()
 	if (flagverbose)
 	{
 		myprintf("\n");
-		myprintf("95831: Creating %d hashing thread(s) with %s\n",mythreads,g_thechosenhash_str.c_str());
+		myprintf("03291: Creating %d hashing thread(s) with %s\n",mythreads,g_thechosenhash_str.c_str());
 	}
 	for(int i = 0; i < mythreads; i++ )
 	{
@@ -101684,7 +102140,7 @@ int Jidac::hasha()
 		rc = pthread_create(&threads[i], &attr, scansionahash, (void*)&vettoreparametrihash[i]);
 		if (rc)
 		{
-			myprintf("95840: Error creating thread\n");
+			myprintf("03292! Error creating thread\n");
 			exit(-1);
 		}
 	}
@@ -101724,10 +102180,10 @@ int Jidac::hasha()
 
 int Jidac::homesize()
 {
-	myprintf("95893: homesize\n");
+	myprintf("03293: homesize\n");
 	if (files.size()!=1)
 	{
-		myprintf("95895: Just 1 home folder required => quit (ex. /home)\n");
+		myprintf("03294! Just 1 home folder required => quit (ex. /home)\n");
 		return 2;
 	}
 
@@ -101737,13 +102193,16 @@ int Jidac::homesize()
 	vector<string> candidate;
 	listfolders(basehome,&candidate);
 	if (flagdebug)
-		myprintf("95907: candidate %s with pattern %s\n",migliaia(candidate.size()),fullarchive.c_str());
+		myprintf("03295: candidate %s with pattern %s\n",migliaia(candidate.size()),fullarchive.c_str());
 	
 	if (candidate.size()==0)
 	{
-		myprintf("95911: Sorry, cannot find something in <<");
+		myprintf("03296: Sorry, cannot find something in <<%Z>>\n",basehome.c_str());
+		/*
+		myprintf("03297: Sorry, cannot find something in <<");
 		printUTF8(basehome.c_str());
 		myprintf(">>");
+		*/
 	}
 
 	files.clear();
@@ -101757,13 +102216,17 @@ int Jidac::homesize()
 			sourcepath+="/";
 		if (flagdebug3)
 		{
-			myprintf("95929: >> from folder <<");
+			myprintf("03298: >> from folder <<%Z>>\n",sourcepath.c_str());
+			
+/*
+			myprintf("03299: >> from folder <<");
 			printUTF8(sourcepath.c_str());
 			myprintf(">>\n");
+			*/
 		}
 		files.push_back(sourcepath);
 	}
-	myprintf("95915: Scanning %s subfolders...\n",migliaia(candidate.size()));
+	myprintf("03300: Scanning %s subfolders...\n",migliaia(candidate.size()));
 	sort(files.begin(),files.end());
 	
 	if (!flagverbose)
@@ -101774,12 +102237,12 @@ int Jidac::homesize()
 	printbar('-');
 	for (unsigned int i=0;i<files_size.size();i++)
 	{
-		myprintf("95946: %21s %12s   %08d %s\n",migliaia(files_size[i]),tohuman(files_size[i]),files_edt[i].size(),files[i].c_str());
+		myprintf("03301: %21s %12s   %08d %s\n",migliaia(files_size[i]),tohuman(files_size[i]),files_edt[i].size(),files[i].c_str());
 		totalsize+=files_size[i];
 		totalcount+=files_edt[i].size();
 	}
 	printbar('-');
-	myprintf("95977: %21s %12s   %08d\n",migliaia(totalsize),tohuman(totalsize),totalcount);
+	myprintf("03302: %21s %12s   %08d\n",migliaia(totalsize),tohuman(totalsize),totalcount);
 	return 0;
 }
 
@@ -101792,7 +102255,7 @@ bool Jidac::sanitizeline(string i_filename)
 {
 	if ((i_filename.size()<=83) || (i_filename.size()>87))
 	{
-		myprintf("96014: GURU file size must be [83..87] (founded %s)\n",migliaia(i_filename.size()));
+		myprintf("03303: GURU file size must be [83..87] (founded %s)\n",migliaia(i_filename.size()));
 		seppuku();
 		return false;
 	}
@@ -101801,29 +102264,29 @@ bool Jidac::sanitizeline(string i_filename)
 		int thechar=i_filename[i];
 		if (thechar<0)
 		{
-			myprintf("96043: GURU unexpected end of file at %d\n",i);
+			myprintf("03304! GURU unexpected end of file at %d\n",i);
 			seppuku();
 		}
 		if (thechar==EOF)
 		{
-			myprintf("96053: GURU unexpected end of file at %d\n",i);
+			myprintf("03305! GURU unexpected end of file at %d\n",i);
 			seppuku();
 		}
 		
 		if (!ishex(thechar))
 		{
-			myprintf("96048: GURU not HEX char at %d\n",i);
+			myprintf("03306! GURU not HEX char at %d\n",i);
 			seppuku();
 		}
 	}
 	if (i_filename[64]!=32)
 	{
-		myprintf("96055: GURU not space after hash!\n");
+		myprintf("03307! GURU not space after hash!\n");
 		seppuku();
 	}
 	if (i_filename[65]!=42)
 	{
-		myprintf("96061: GURU not asterisk after space!\n");
+		myprintf("03308! GURU not asterisk after space!\n");
 		seppuku();
 	}
 	int verchar;
@@ -101838,7 +102301,7 @@ bool Jidac::sanitizeline(string i_filename)
 			break;
 		if (!isnotevil(verchar))
 		{
-			myprintf("96080: GURU unallowed char founded at %d value %d\n",i,verchar);
+			myprintf("03309! GURU unallowed char founded at %d value %d\n",i,verchar);
 			seppuku();
 		}
 	} 
@@ -101849,7 +102312,7 @@ bool Jidac::sanitizefile(string i_filename)
 {
 	if (i_filename=="")
 	{
-		myprintf("96079: sanitize filename empty\n");
+		myprintf("03310! sanitize filename empty\n");
 		seppuku();
 		return false;
 	}
@@ -101861,7 +102324,7 @@ bool Jidac::sanitizefile(string i_filename)
 	if (dimensione>100)
 #endif
 	{
-		myprintf("96140: GURU file too big %s\n",migliaia(dimensione));
+		myprintf("03311! GURU file too big %s\n",migliaia(dimensione));
 		seppuku();
 		return false;
 	}
@@ -101869,7 +102332,7 @@ bool Jidac::sanitizefile(string i_filename)
 	FILE* myfile = freadopen(i_filename.c_str());
 	if (myfile==NULL)
 	{
-		myprintf("96022: GURU cannot fdreadopen %s\n",i_filename.c_str());
+		myprintf("03312! GURU cannot fdreadopen %s\n",i_filename.c_str());
 		seppuku();
 	}
 /*
@@ -101909,7 +102372,7 @@ f5bd0843bcfbc7eda8c8a8bf5698dfd35bf79d140d5169ba7b7d8a705f3cb253 *59.6b_(2024-05
 			break;
 		if (!isnotevil(verchar))
 		{
-			myprintf("96080: GURU unallowed char founded at %d value %d\n",i,verchar);
+			myprintf("03313! GURU unallowed char founded at %d value %d\n",i,verchar);
 			seppuku();
 			return false;
 		}
@@ -101925,7 +102388,7 @@ void Jidac::runhigh(string i_addendum)
 {
 	if (fullcommandline=="")
 	{
-		myprintf("96348: fullcommand line empty\n");
+		myprintf("03314! fullcommand line empty\n");
 		return;
 	}
 	string myexename=fullzpaqexename;
@@ -101937,15 +102400,15 @@ void Jidac::runhigh(string i_addendum)
 #endif
 	if (!fileexists(runme))
 	{
-		myprintf("96360: Sorry, cannot find runme %s\n",runme.c_str());
+		myprintf("03315! Sorry, cannot find runme %s\n",runme.c_str());
 		return;
 	}
 	fullcommandline+=i_addendum;
 	string parms="-Command \"Start-Process '"+myexename+"' '"+fullcommandline+"' -Wait -Verb runAs\"";
 	if (flagdebug2)
 	{
-		myprintf("96382: runme %s\n",runme.c_str());
-		myprintf("96383: parms %s\n",parms.c_str());
+		myprintf("03316: runme %s\n",runme.c_str());
+		myprintf("03317: parms %s\n",parms.c_str());
 	}
 	waitexecute(runme,parms,SW_HIDE);
 }
@@ -101956,7 +102419,7 @@ bool Jidac::ismounted(const string i_path)
 {
 	if (i_path=="")
 	{
-		myprintf("96531: i_path empty!\n");
+		myprintf("03318: i_path empty!\n");
 		return false;
 	}
 #ifdef _WIN32
@@ -101966,21 +102429,21 @@ bool Jidac::ismounted(const string i_path)
     struct stat statbuf;
     if (stat(i_path.c_str(), &statbuf) != 0) 
 	{
-        myprintf("96436: error in stat on %s\n",i_path.c_str());
+        myprintf("03319: error in stat on %s\n",i_path.c_str());
         seppuku();
     }
 	if (flagdebug)
-		myprintf("96545: Ready to check OS\n");
+		myprintf("03320: Ready to check OS\n");
 #if defined(__linux__)
 	if (flagdebug)
-		myprintf("96548: I am __linux__\n");
+		myprintf("03321: I am __linux__\n");
 
     struct mntent *mnt;
     FILE *fp;
     fp = setmntent("/etc/mtab", "r");
     if (fp == NULL) 
 	{
-		myprintf("96545: linux cannot read /etc/mtab\n");
+		myprintf("03322: linux cannot read /etc/mtab\n");
 		seppuku();
     }
     while ((mnt=getmntent(fp))!=NULL) 
@@ -102000,12 +102463,12 @@ bool Jidac::ismounted(const string i_path)
 	return false;
 #elif defined(__FreeBSD__) || defined(__APPLE__)
 	if (flagdebug)
-		myprintf("96575: I am __FreeBSD__ or __APPLE__\n");
+		myprintf("03323: I am __FreeBSD__ or __APPLE__\n");
     struct statfs *mntbuf;
     int nmounts=getmntinfo(&mntbuf, MNT_NOWAIT);
     if (nmounts==0) 
 	{
-		myprintf("96580: bsd/apple getntinfo kaputt\n");
+		myprintf("03324: bsd/apple getntinfo kaputt\n");
 		seppuku();
     }
     // Itera su tutte le voci ottenute
@@ -102073,20 +102536,20 @@ int64_t Jidac::fragmenttoblockoffset(int i_fragment)
 		return -1;
 	if (block.size()==0)
 		return -1;
-	///myprintf("96758: start frag search\n");
+	///myprintf("03325: start frag search\n");
 	
 	for (unsigned int i=0;i<block.size();i++)
 	{
-	//	myprintf("92320: $$$$$$$$$$$$ block %08d offset %19s start %10s frags %3s\n",i,migliaia(block[i].offset),migliaia2(block[i].start),migliaia3(block[i].frags));
+	//	myprintf("03326: $$$$$$$$$$$$ block %08d offset %19s start %10s frags %3s\n",i,migliaia(block[i].offset),migliaia2(block[i].start),migliaia3(block[i].frags));
 		if ((i_fragment>=block[i].start) && (i_fragment<=block[i].start+block[i].frags))
 		{
-			///myprintf("96765: EUREEEKAAAAA %s\n",migliaia(block[i].offset));
+			///myprintf("03327: EUREEEKAAAAA %s\n",migliaia(block[i].offset));
 			return i;//block[i].offset;
 			return block[i].offset;
 		}
 	}
 	
-	myprintf("96771: KAPUTT FRAG SEARCH!\n");
+	myprintf("03328: KAPUTT FRAG SEARCH!\n");
 	return -1;
 }
 */
@@ -102209,7 +102672,7 @@ int64_t Jidac::datacreazione(string i_file)
    struct stat file_stat;
     if (stat(i_file.c_str(),&file_stat)==-1) 
 	{
-        myprintf("97927: stat KAPUTT (Mac)\n");
+        myprintf("03329! stat KAPUTT (Mac)\n");
         return 0;
     }
     struct tm *t;
@@ -102226,7 +102689,7 @@ int64_t Jidac::datacreazione(string i_file)
 			+	t->tm_sec;
     } 
 	else 
-	    myprintf("97945: MAC cannot get creation (birth) time\n");
+	    myprintf("03330! MAC cannot get creation (birth) time\n");
 	return 0;
 #endif
 
@@ -102241,7 +102704,7 @@ int64_t Jidac::datacreazione(string i_file)
     struct stat file_stat;
     if (stat(i_file.c_str(),&file_stat)==-1) 
 	{
-        myprintf("97924: stat KAPUTT (BSD)\n");
+        myprintf("03331! stat KAPUTT (BSD)\n");
         return 0;
     }
     struct tm *t;
@@ -102258,17 +102721,17 @@ int64_t Jidac::datacreazione(string i_file)
 			+	t->tm_sec;
     } 
 	else 
-	    myprintf("97938: BSD cannot get creation (birth) time\n");
+	    myprintf("03332! BSD cannot get creation (birth) time\n");
 	return 0;
 #endif
 #endif
 #endif
 #ifdef __linux__
-	//myprintf("97795: Getting birth linux %s\n",i_file.c_str());
+	//myprintf("03333: Getting birth linux %s\n",i_file.c_str());
     struct statx statx_buf;
     if (statx(AT_FDCWD,i_file.c_str(),AT_STATX_SYNC_AS_STAT, STATX_BTIME, &statx_buf) == -1) 
 	{
-        myprintf("97956: statx KAPUTT (Linux)\n");
+        myprintf("03334! statx KAPUTT (Linux)\n");
         return 0;
     }
     if (statx_buf.stx_mask & STATX_BTIME) 
@@ -102286,11 +102749,11 @@ int64_t Jidac::datacreazione(string i_file)
 			+	t->tm_sec;
 	} 
 	else 
-        myprintf("97957: cannot get birth time (linux)\n");
+        myprintf("03335! cannot get birth time (linux)\n");
 #endif
 
 #endif // ANCIENT
-	myprintf("97564: for some reason cannot get birth time\n");
+	myprintf("03336! for some reason cannot get birth time\n");
 	return 0;
 }
 
@@ -102311,30 +102774,30 @@ int Jidac::testverify()
 {
 	if (files.size()==0)
 	{
-		myprintf("97874: no files[] selected\n");
+		myprintf("03337! no files[] selected\n");
 		return 2;
 	}
 	if (archive=="")
 	{
-		myprintf("97879: archive empty\n");
+		myprintf("03338! archive empty\n");
 		return 2;
 	}
-	myprintf("97882: Comparing archive content to folder(s)\n");
+	myprintf("03339: Comparing archive content to folder(s)\n");
 
 	command		='l';
 	g_optional	="versum"; //force isselected
 	int errors	=0;
 	int64_t csize=read_archive(NULL,archive.c_str(),&errors,1); 
 	if (flagdebug)
-		myprintf("97908: dtsize %d\n",dt.size());
+		myprintf("03340: dtsize %d\n",dt.size());
 	if (csize==0)
 	{
-		myprintf("97915: cannot read_archive\n");
+		myprintf("03341! cannot read_archive\n");
 		return 2;
 	}
 	if ((searchfrom!="") || (replaceto!=""))
 	{
-		myprintf("97900: due to -search/replace fixing the filenames\n");
+		myprintf("03342: due to -search/replace fixing the filenames\n");
 		rename_a_dtmap(dt);
 	}
 	
@@ -102354,19 +102817,19 @@ int Jidac::testverify()
 	printbar('-');
  	for (unsigned i=0; i<files.size(); ++i)
 		if (direxists(files[i]))
-			myprintf("97899: %9s in <<%s>>\n",migliaia((int64_t)files_count[i]),files[i].c_str());
+			myprintf("03343: %9s in <<%s>>\n",migliaia((int64_t)files_count[i]),files[i].c_str());
 	printbar('-');
-	myprintf("97901: Total files found: %s\n", migliaia((int64_t)edt.size()));
+	myprintf("03344: Total files found: %s\n", migliaia((int64_t)edt.size()));
 	myprintf("\n");
 	
 	
 	if (flagdebug3)
 	{
 		for (DTMap::iterator p=edt.begin(); p!=edt.end(); ++p)
-			myprintf("97925: EDT  %s\n",p->first.c_str());
+			myprintf("03345: EDT  %s\n",p->first.c_str());
 		printbar('-');
 		for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p)
-			myprintf("97926: DT   %s\n",p->first.c_str());
+			myprintf("03346: DT   %s\n",p->first.c_str());
 	}
 	
 	vector<DTMap::iterator> filelist;
@@ -102424,7 +102887,7 @@ int Jidac::testverify()
 					percentuale=1;
 				double eta=(secondi*100/percentuale)-secondi;
 				
-				myprintf("97969: %03d%% %03d:%02d:%02d %10s/%10s @ %10s/s [+/- %19s]\r",
+				myprintf("03347: %03d%% %03d:%02d:%02d %10s/%10s @ %10s/s [+/- %19s]\r",
 				percentuale,int(eta/3600), int(eta/60)%60, int(eta)%60,
 				tohuman(g_worked),tohuman2(g_bytescanned),tohuman3(g_worked/secondi),migliaia2(usize));
 				ultimapercentuale=percentuale;
@@ -102461,7 +102924,7 @@ int Jidac::testverify()
 				tobetested+=p->second.size;
 			}
 			if (flagdebug2)
-				myprintf("98004:  |%s| |%s| %s\n",myhashtype.c_str(),myhash.c_str(),p->first.c_str());
+				myprintf("03348:  |%s| |%s| %s\n",myhashtype.c_str(),myhash.c_str(),p->first.c_str());
 			
 			if (equal(p, p1->first.c_str(),crc32fromfile,myhashtype,myhash,hashfromfile)) //crc32 of second parameters
 			{
@@ -102478,7 +102941,7 @@ int Jidac::testverify()
 						if (hashfromfile!="")
 						{
 							if (flagdebug2)
-								myprintf("49508: Check hash for %s\n",p->first.c_str());
+								myprintf("03349: Check hash for %s\n",p->first.c_str());
 							hashchecked+=p->second.size;
 							if (hashfromfile!=myhash)
 							{
@@ -102501,7 +102964,7 @@ int Jidac::testverify()
 						if (mycrc32!="")
 						{
 							if (flagdebug2)
-								myprintf("98035: Check CRC-32 for %s\n",p->first.c_str());
+								myprintf("03350: Check CRC-32 for %s\n",p->first.c_str());
 							uint32_t crc32stored=crchex2int(mycrc32.c_str());
 							if (crc32stored!=crc32fromfile)
 							{
@@ -102523,7 +102986,7 @@ int Jidac::testverify()
 						else
 						{
 							if (flagdebug2)
-								myprintf("98057: No zpaqfranz check for %s\n",p->first.c_str());
+								myprintf("03351: No zpaqfranz check for %s\n",p->first.c_str());
 							/// crc-32 is not stored in the archive, cannot tell anything
 							p->second.data='=';
 							++fi;
@@ -102579,24 +103042,24 @@ int Jidac::testverify()
 		int secondi=(mtime()-starttime)/1000;
 		if (secondi==0)
 			secondi=1;
-		myprintf("97969: %03d%% %03d:%02d:%02d %10s/%10s @ %10s/s [+/- %19s]\r",
+		myprintf("03352: %03d%% %03d:%02d:%02d %10s/%10s @ %10s/s [+/- %19s]\r",
 				100,0,0,0,
 				tohuman(g_worked),tohuman2(g_bytescanned),tohuman3(g_worked/secondi),migliaia2(usize));
 				
-	///	myprintf("98455: %03d%% %10s/%10s @ %10s/s [+/- %19s]\r",100,tohuman(g_worked),tohuman2(g_bytescanned),tohuman3(g_worked/secondi),migliaia2(usize));
+	///	myprintf("03353: %03d%% %10s/%10s @ %10s/s [+/- %19s]\r",100,tohuman(g_worked),tohuman2(g_bytescanned),tohuman3(g_worked/secondi),migliaia2(usize));
 	}
 	myprintf("\n\n");
 	
 	if (flagquick)
 	{
 		color_yellow();
-		myprintf("98380: WARNING -quick only compare file size/date, NOT hash!\n");
+		myprintf("03354: WARNING -quick only compare file size/date, NOT hash!\n");
 		color_restore();
 	}
 	bool myerror=false;
 	if (menoenne)
 		if ((mismatches+externalfile+externalfolder+internal)>menoenne)
-			myprintf("49598: **** STOPPED BY TOO MANY ERRORS -n %d\n",menoenne);
+			myprintf("03355! **** STOPPED BY TOO MANY ERRORS -n %d\n",menoenne);
 	if  (mismatches || externalfile ||externalfolder || internal)
 		for (unsigned int i=0;i<risultati.size();i++)
 		{
@@ -102619,9 +103082,9 @@ int Jidac::testverify()
 			color_yellow();
 			myprintf("%08d == very same files %19s\n",hashmatches,migliaia(hashchecked));
 			myprintf("            expected        %19s\n",migliaia(tobetested));
-			myprintf("98114: ****** WARN something strange (hash checking)  *******\n");
-			myprintf("98115: ******      some file(s) stored without hash?  *******\n");
-			myprintf("98116: ******      hash does not match? unknown hash? *******\n");
+			myprintf("03356: ****** WARN something strange (hash checking)  *******\n");
+			myprintf("03357: ******      some file(s) stored without hash?  *******\n");
+			myprintf("03358: ******      hash does not match? unknown hash? *******\n");
 		}
 		color_restore();
 	}
@@ -102650,7 +103113,7 @@ int Jidac::testverify()
 		color_yellow();
 	if (usize>0)
 		color_red();
-	myprintf("49635: Total different file size: %s bytes\n",migliaia(usize));
+	myprintf("03359: Total different file size: %s bytes\n",migliaia(usize));
 	color_restore();
 	
  	if  (myerror)
@@ -102658,14 +103121,14 @@ int Jidac::testverify()
 		if (usize==0)
 		{
 			color_yellow();
-			myprintf("98187: Files seems good, maybe folder mismatch? -verbose for details\n");
+			myprintf("03360: Files seems good, maybe folder mismatch? -verbose for details\n");
 			color_restore();
 			return 1;
 		}
 		else
 		{
 			color_red();
-			myprintf("47452: use -verbose to get more details\n");
+			myprintf("03361: use -verbose to get more details\n");
 			color_restore();
 			return 2;
 		}
@@ -102677,19 +103140,19 @@ bool Jidac::grep(string i_filename,string i_search)
 {
 	if (i_filename=="")
 	{
-		myprintf("98018: i_filename empty\n");
+		myprintf("03362! i_filename empty\n");
 		return false;
 	}
 	if (i_search=="")
 	{
-		myprintf("98023: i_search empty\n");
+		myprintf("03363! i_search empty\n");
 		return false;
 	}
 		
     FILE *file=freadopen(i_filename.c_str());
     if (file==NULL) 
 	{
-        myprintf("98030: cannot fdreadopen file %s\n",i_filename.c_str());
+        myprintf("03364! cannot fdreadopen file %s\n",i_filename.c_str());
 		return false;
     }
     
@@ -102701,7 +103164,7 @@ bool Jidac::grep(string i_filename,string i_search)
         if (strstr(line,i_search.c_str())!=NULL) 
 		{
 			if (flagdebug)
-				myprintf("98059: Founded @ line %d: %s", line_number, line);
+				myprintf("03365: Founded @ line %d: %s", line_number, line);
 			found=true;
 			break;
         }
@@ -102716,12 +103179,12 @@ int	Jidac::checkautotest(string i_path)
 {
 	if (i_path=="")
 	{
-		myprintf("98064: i_path empty\n");
+		myprintf("03366! i_path empty\n");
 		return 2;
 	}
 	if (!direxists(i_path))
 	{
-		myprintf("98070: autotest path does not exist %s\n",i_path.c_str());
+		myprintf("03367! autotest path does not exist %s\n",i_path.c_str());
 		return 2;
 	}
 	stringstringmap elencorisultati;
@@ -102749,14 +103212,16 @@ int	Jidac::checkautotest(string i_path)
 
 	i_path=wintolinuxpath(i_path);
 	i_path=includetrailingbackslash(i_path);
-	myprintf("98080: Checking results (in ");
+	myprintf("03368: Checking results (in %Z)\n",i_path.c_str());
+	/*
+	myprintf("03369: Checking results (in ");
 	printUTF8(i_path.c_str());
 	myprintf(")\n");
-	
+	*/
 	int	errori=0;
 	for (stringstringmap::iterator p=elencorisultati.begin();p!=elencorisultati.end();++p)
 	{
-		myprintf("98082: %s :",p->first.c_str());
+		myprintf("03370: %s :",p->first.c_str());
 		bool trovato=grep(i_path+p->first,p->second);
 		if (trovato)
 			myprintf(" OK\n");
@@ -102768,13 +103233,13 @@ int	Jidac::checkautotest(string i_path)
 	}
 	if (errori>0)
 	{
-		myprintf("98101: ERRORS %s\n",migliaia(errori));
+		myprintf("03371! ERRORS %s\n",migliaia(errori));
 		return 2;
 	}
 	else
 	{
-		myprintf("98106: Everything is OK (this is good)\n");
-		myprintf("98168: It is now safe to remove the test folder\n");
+		myprintf("03372: Everything is OK (this is good)\n");
+		myprintf("03373: It is now safe to remove the test folder\n");
 	}
 	return 0;
 }
@@ -102792,14 +103257,14 @@ bool Jidac::isjitable()
     result = RegOpenKeyEx(HKEY_LOCAL_MACHINE, utow("HARDWARE\\DESCRIPTION\\System\\CentralProcessor\\0").c_str(), 0, KEY_READ, &hKey);
     if (result!=ERROR_SUCCESS) 
 	{
-        myprintf("98511: Windows: GURU opening registry key\n");
+        myprintf("03374! Windows: GURU opening registry key\n");
         return false;
     }
 
     result = RegQueryValueEx(hKey, utow("VendorIdentifier").c_str(), NULL, NULL, (LPBYTE)cpu_vendor, &buffer_size);
     if (result != ERROR_SUCCESS) 
 	{
-        myprintf("98518: Guru reading reading registry value\n");
+        myprintf("03375! Guru reading reading registry value\n");
         RegCloseKey(hKey);
         return false;
     }
@@ -102808,7 +103273,7 @@ bool Jidac::isjitable()
 	result = RegQueryValueEx(hKey, utow("ProcessorNameString").c_str(), NULL, NULL, (LPBYTE)buffer, &buffer_size);
     if (result != ERROR_SUCCESS) 
 	{
-        myprintf("98526: Guru reading reading registry value\n");
+        myprintf("03376! Guru reading reading registry value\n");
         RegCloseKey(hKey);
         return false;
     }
@@ -102819,25 +103284,25 @@ bool Jidac::isjitable()
 
 	g_processorname=mytrim(g_processorname);
 	
-	myprintf("98537: Processor name |%s|\n",g_processorname.c_str());
+	myprintf("03377: Processor name |%s|\n",g_processorname.c_str());
 	
 	string uvendor=wtou((wchar_t*)cpu_vendor);
 	if (strstr(uvendor.c_str(), "GenuineIntel") != NULL) 
 	{
 		if (flagdebug)
-			myprintf("98528: Windows - the processor is Intel\n");
+			myprintf("03378: Windows - the processor is Intel\n");
 		risultato=true;
     } 
 	else 
 	if (strstr(uvendor.c_str(), "AuthenticAMD") != NULL) 
 	{
     	if (flagdebug)
-			myprintf("98528: Windows - the processor is AMD\n");
+			myprintf("03379: Windows - the processor is AMD\n");
 		risultato=true;
     } 
 	else 
 	{
-        myprintf("98540: Windows - who knows: %s\n", uvendor.c_str());
+        myprintf("03380: Windows - who knows: %s\n", uvendor.c_str());
     }
     return risultato;
 #elif __linux__
@@ -102846,7 +103311,7 @@ bool Jidac::isjitable()
 
     if (cpuinfo==NULL) 
 	{
-        myprintf("98491: Linux, error opening /proc/cpuinfo");
+        myprintf("03381! Linux, error opening /proc/cpuinfo");
         return false;
     }
     while (fgets(buffer,1024,cpuinfo)) 
@@ -102855,19 +103320,19 @@ bool Jidac::isjitable()
             if (strcmp(vendor_id,"GenuineIntel") == 0) 
 			{
 				if (flagdebug)
-					myprintf("98501: Linux - the processor is Intel.\n");
+					myprintf("03382: Linux - the processor is Intel.\n");
 				risultato=true;
             } 
 			else if (strcmp(vendor_id, "AuthenticAMD") == 0) 
 			{
 				if (flagdebug)
-					myprintf("98506: Linux - The processor is AMD.\n");
+					myprintf("03383: Linux - The processor is AMD.\n");
 				risultato=true;
             } 
 			else 
 			{
 				if (flagdebug)
-					myprintf("98513: Linux not-intel vendor_id: %s\n", vendor_id);
+					myprintf("03384: Linux not-intel vendor_id: %s\n", vendor_id);
             }
             break;
         }
@@ -102898,13 +103363,13 @@ bool Jidac::isjitable()
 
     if (pipe==NULL) 
 	{
-        myprintf("98532: Error opening pipe");
+        myprintf("03385! Error opening pipe");
         return false;
     }
 
     if (fgets(buffer,1024,pipe)==NULL) 
 	{
-        myprintf("98543: Error reading from pipe");
+        myprintf("03386! Error reading from pipe");
         pclose(pipe);
         return false;
 	}
@@ -102919,19 +103384,19 @@ bool Jidac::isjitable()
     if (strstr(cpu_vendor, "Intel")!=NULL) 
 	{
 		if (flagdebug)
-			myprintf("98501: Multiple - the processor is Intel.\n");
+			myprintf("03387: Multiple - the processor is Intel.\n");
 		risultato=true;
 	}
     else if (strstr(cpu_vendor, "AMD") != NULL) 
 	{
      	if (flagdebug)
-			myprintf("98560: Multiple - the processor is AMD.\n");
+			myprintf("03388: Multiple - the processor is AMD.\n");
 		risultato=true;
     } 
 	else 
 	{
 		if (flagdebug)
-			myprintf("98567: Multiple not-intel vendor_id: %s\n",cpu_vendor);
+			myprintf("03389: Multiple not-intel vendor_id: %s\n",cpu_vendor);
     }
 
     return risultato;
@@ -102951,12 +103416,12 @@ string get_hash(string i_haystack,string i_line)
 {
 	if (i_line=="")
 	{
-		myprintf("99268: i_line empty!\n");
+		myprintf("03390! i_line empty!\n");
 		return "";
 	}
 	int start=mypos(i_haystack,i_line);
 	if (flagdebug)
-		myprintf("99273: start at %d\n",start);
+		myprintf("03391: start at %d\n",start);
 	if (start<0)
 		return "";
 	start+=i_haystack.size();
@@ -102979,11 +103444,11 @@ int Jidac::comparehex()
 {
 	if (files.size()!=4)
 	{
-		myprintf("99268: You must enter FOUR parameters for comparehex\n");
-		myprintf("99268: File1 (ex. z:\\1.txt\n");
-		myprintf("99268: File2 (ex. z:\\2.txt\n");
-		myprintf("99268: The haystack (ex. \"GLOBAL SHA256:\"");
-		myprintf("99268: Expected len (ex. 64\n");
+		myprintf("03392! You must enter FOUR parameters for comparehex\n");
+		myprintf("03393: File1 (ex. z:\\1.txt\n");
+		myprintf("03394: File2 (ex. z:\\2.txt\n");
+		myprintf("03395: The haystack (ex. \"GLOBAL SHA256:\"");
+		myprintf("03396: Expected len (ex. 64\n");
 		return 2;
 	}
 	
@@ -102992,29 +103457,31 @@ int Jidac::comparehex()
 	string	hashstring	=files[2];
 	int		expectedlen	=atoi(files[3].c_str());
 	
-	
-	myprintf("99273: File 1 <<");
+	myprintf("03397: File 1 <<%Z>>\n",file1.c_str());
+	myprintf("03398: File 2 <<%Z>>\n",file2.c_str());
+	/*
+	myprintf("03399: File 1 <<");
 	printUTF8(file1.c_str());
 	myprintf(">>\n");
 	
-	myprintf("99305: File 2 <<");
+	myprintf("03400: File 2 <<");
 	printUTF8(file2.c_str());
 	myprintf(">>\n");
-	
+	*/
 	if (flagdebug)
 	{	
-		myprintf("99308: Hashstring  |%s|\n",hashstring.c_str());
-		myprintf("99309: Expectedlen %d\n",expectedlen);
+		myprintf("03401: Hashstring  |%s|\n",hashstring.c_str());
+		myprintf("03402: Expectedlen %d\n",expectedlen);
 	}
 	
 	if (!fileexists(file1.c_str()))
 	{
-		myprintf("99277: Sorry, file 1 does not exist\n");
+		myprintf("03403! Sorry, file 1 does not exist\n");
 		return 2;
 	}
 	if (!fileexists(file2.c_str()))
 	{
-		myprintf("99282: Sorry, file 2 does not exist\n");
+		myprintf("03404! Sorry, file 2 does not exist\n");
 		return 2;
 	}
 	vector<string> vector1;
@@ -103022,12 +103489,12 @@ int Jidac::comparehex()
 	
 	if (!readfiletoarray(file1,vector1))
 	{
-		myprintf("99290: Error, cannot read file1 in vector1\n");
+		myprintf("03405! Error, cannot read file1 in vector1\n");
 		return 2;
 	}
 	if (!readfiletoarray(file2,vector2))
 	{
-		myprintf("99295: Error, cannot read file2 in vector2\n");
+		myprintf("03406! Error, cannot read file2 in vector2\n");
 		return 2;
 	}
 	
@@ -103049,17 +103516,17 @@ int Jidac::comparehex()
 		}
 	if (flagdebug)
 	{
-		myprintf("99315: SHA256_1 %s\n",sha256_1.c_str());
-		myprintf("99316: SHA256_2 %s\n",sha256_2.c_str());
+		myprintf("03407: SHA256_1 %s\n",sha256_1.c_str());
+		myprintf("03408: SHA256_2 %s\n",sha256_2.c_str());
 	}
 	if (sha256_1=="")
 	{
-		myprintf("99319: Cannot find |%s| in file1\n",hashstring.c_str());
+		myprintf("03409! Cannot find |%s| in file1\n",hashstring.c_str());
 		return 2;
 	}
 	if (sha256_2=="")
 	{
-		myprintf("99367: Cannot find |%s| in file2\n",hashstring.c_str());
+		myprintf("03410! Cannot find |%s| in file2\n",hashstring.c_str());
 		return 2;
 	}
 
@@ -103074,8 +103541,8 @@ int Jidac::comparehex()
 	}
 	else
 		color_red();
-	myprintf("99358: [1] exp len %d/found %d |%s|\n",expectedlen,code1.size(),code1.c_str());
-	myprintf("99365: [2] exp len %d/found %d |%s|\n",expectedlen,code2.size(),code2.c_str());
+	myprintf("03411: [1] exp len %d/found %d |%s|\n",expectedlen,code1.size(),code1.c_str());
+	myprintf("03412: [2] exp len %d/found %d |%s|\n",expectedlen,code2.size(),code2.c_str());
 	color_restore();
 	
 	return risultato;
@@ -103086,10 +103553,10 @@ int Jidac::count()
 
 	if ((files.size()!=2) && (files.size()!=3))
 	{
-		myprintf("99432: You must enter TWO or THREE parameters for count\n");
-		myprintf("99433: [1] filename (ex. z:\\1.txt\n");
-		myprintf("99268: [2] count    (ex. 3)\n");
-		myprintf("99268: [3] thestring (optional, ex. \"(all OK)\"");
+		myprintf("03413! You must enter TWO or THREE parameters for count\n");
+		myprintf("03414: [1] filename (ex. z:\\1.txt\n");
+		myprintf("03415: [2] count    (ex. 3)\n");
+		myprintf("03416: [3] thestring (optional, ex. \"(all OK)\"");
 		return 2;
 	}
 	
@@ -103102,17 +103569,20 @@ int Jidac::count()
 	
 	if (!flagterse)
 	{
-		myprintf("99447: File 1 <<");
+		myprintf("03417: File 1 <<%Z>>\n",file1.c_str());
+		/*
+		myprintf("03418: File 1 <<");
 		printUTF8(file1.c_str());
 		myprintf(">>\n");
+		*/
 	}
 
 	if (flagverbose)
-		myprintf("99455: Searchstring |%s|\n",hashstring.c_str());
+		myprintf("03419: Searchstring |%s|\n",hashstring.c_str());
 
 	if (flagdebug)
 	{
-		myprintf("99456: Expectedcount %d\n",expectedlen);
+		myprintf("03420: Expectedcount %d\n",expectedlen);
 	}
 
 
@@ -103124,26 +103594,29 @@ int Jidac::count()
 
 #ifdef unix
 	if (flagdebug)
-		myprintf("99486: running on NIX\n");
+		myprintf("03421: running on NIX\n");
 	vector<string> candidate;
 	string estensione=prendiestensione(file1);
 
 	listfiles(extractfilepath(file1),estensione,true,&candidate);
 	if (flagdebug3)
-		myprintf("99492: candidate %s with pattern %s\n",migliaia(candidate.size()),file1.c_str());
+		myprintf("03422: candidate %s with pattern %s\n",migliaia(candidate.size()),file1.c_str());
 	for (unsigned int i=0;i<candidate.size();i++)
 	{
 		string filename=candidate[i];
 		if (flagdebug3)
-			myprintf("99497: filename %08d %s\n",(int)i,filename.c_str());
+			myprintf("03423: filename %08d %s\n",(int)i,filename.c_str());
 
 		if (jollymatch(file1.c_str(),filename.c_str()))
 		{
 			if (flagdebug3)
 			{
-				myprintf("99503: matched <<");
+				myprintf("03424: matched <<%Z>>\n",filename.c_str());
+				/*
+				myprintf("03425: matched <<");
 				printUTF8(filename.c_str());
 				myprintf("<<\n");
+				*/
 			}
 			DT& d=thedt[filename];
 			d.date			=0;
@@ -103156,7 +103629,7 @@ int Jidac::count()
 		else
 		{
 			if (flagdebug3)
-				myprintf("99518: DISCARDED %s in %s\n",file1.c_str(),filename.c_str());
+				myprintf("03426: DISCARDED %s in %s\n",file1.c_str(),filename.c_str());
 		}
 	}
 #else
@@ -103168,11 +103641,11 @@ int Jidac::count()
 
 	if (thedt.size()==0)
 	{
-		myprintf("99521: no archive founded => quit\n");
+		myprintf("03427! no archive founded => quit\n");
 		return 2;
 	}
 	if (flagverbose)
-	myprintf("58056: Founded %s archive(s), working\n",migliaia(thedt.size()));
+	myprintf("03428: Founded %s archive(s), working\n",migliaia(thedt.size()));
 	int	founded		=0;
 ///	int therun		=0;
 	vector<string> vector1;
@@ -103183,11 +103656,11 @@ int Jidac::count()
 ///		therun++;
 		filename=p->first;
 		if (flagverbose)
-		myprintf("99523: Loading %s\n",filename.c_str());
+		myprintf("03429: Loading %s\n",filename.c_str());
 		vector1.clear();
 		if (!readfiletoarray(filename,vector1))
 		{
-			myprintf("99526: Error, cannot read file1 in vector1 %s\n",filename.c_str());
+			myprintf("03430! Error, cannot read file1 in vector1 %s\n",filename.c_str());
 			return 2;
 		}
 
@@ -103200,7 +103673,7 @@ int Jidac::count()
 	
 	if (founded==expectedlen)
 		color_green();
-	myprintf("99538: Total founded %s (expected %s)  ",migliaia(founded),migliaia2(expectedlen));
+	myprintf("03431: Total founded %s (expected %s)  ",migliaia(founded),migliaia2(expectedlen));
 	if (founded==expectedlen)
 		myprintf(": THIS IS GOOD\n");
 	else
@@ -103221,7 +103694,7 @@ int Jidac::work()
 {
 	if (files.size()<1)
 	{
-		myprintf("02756: no parameter, sorry\n");
+		myprintf("03432! no parameter, sorry\n");
 		return 2;
 	}
 	
@@ -103261,7 +103734,7 @@ int Jidac::work()
 	{
 		if (files.size()!=2)
 		{
-			myprintf("02677: pad command needs 1 more parameter\n");
+			myprintf("03433! pad command needs 1 more parameter\n");
 			return 2;
 		}
 		string thestring=files[1];
@@ -103269,7 +103742,7 @@ int Jidac::work()
 		for (unsigned int i=0;i<thestring.size();i++)
 			if (!isdigit(thestring[i]))
 			{
-				myprintf("02765: Only digits are allowed\n");
+				myprintf("03434! Only digits are allowed\n");
 				return 2;
 			}
 		if (menoenne==0)
@@ -103284,7 +103757,7 @@ int Jidac::work()
 	{
 		if (files.size()!=2)
 		{
-			myprintf("02677: filepathnotrailing command needs 1 more parameter\n");
+			myprintf("03435! filepathnotrailing command needs 1 more parameter\n");
 			return 2;
 		}
 		string thestring=files[1];
@@ -103301,7 +103774,76 @@ int Jidac::work()
 		return 0;
 	}
 
-	myprintf("02810: Do not understand the command\n");
+	if (mycommand=="fileexists")
+	{
+		if (files.size()!=2)
+		{
+			myprintf("03436! fileexists command needs 1 more parameter\n");
+			return 2;
+		}
+		string thefile=files[1];
+		if (fileexists(thefile.c_str()))
+			return 0;
+		return 2;
+	}
+	if (mycommand=="nomefileseesistegia")
+	{
+		if (files.size()!=2)
+		{
+			myprintf("03437! nomefileseesistegia command needs 1 more parameter\n");
+			return 2;
+		}
+		string thefile=files[1];
+		string newfile=nomefileseesistegia(thefile.c_str());
+		myprintf("%s\n",newfile.c_str());
+		return 0;
+	}
+	if (mycommand=="prendinomefileebasta")
+	{
+		if (files.size()!=2)
+		{
+			myprintf("03438! prendinomefileebasta command needs 1 more parameter\n");
+			return 2;
+		}
+		string thefile=files[1];
+		string newfile=prendinomefileebasta(thefile.c_str());
+		myprintf("%s\n",newfile.c_str());
+		return 0;
+	}
+	if (mycommand=="linuxtowindows")
+	{
+		if (files.size()!=2)
+		{
+			myprintf("03439! linuxtowindows command needs 1 more parameter\n");
+			return 2;
+		}
+		string thefile=files[1];
+		myreplaceall(thefile,"/","\\");
+		myprintf("%s\n",thefile.c_str());
+		return 0;
+	}
+
+	if (mycommand=="includetrailingbackslash")
+	{
+		if (files.size()!=2)
+		{
+			myprintf("03440! includetrailingbackslash command needs 1 more parameter\n");
+			return 2;
+		}
+		string thestring=files[1];
+#ifdef _WIN32		
+		thestring=wintolinuxpath(thestring);
+#endif
+		thestring=includetrailingbackslash(thestring);
+		
+#ifdef _WIN32		
+		thestring=linuxtowinpath(thestring);
+#endif
+		myprintf("%s\n",thestring.c_str());
+		return 0;
+	}
+
+	myprintf("03441! Do not understand the command\n");
 	return 2;
 }
 
@@ -103309,12 +103851,12 @@ int	Jidac::external()
 {
 	if (g_externalname=="")
 	{
-		myprintf("03987: g_externalname empty\n");
+		myprintf("03442! g_externalname empty\n");
 		return 2;
 	}
 	if (mypos(">",g_externalname)!=-1)
 	{
-		myprintf("03227: sorry, cannot use > in -external %s\n",g_externalname.c_str());
+		myprintf("03443! sorry, cannot use > in -external %s\n",g_externalname.c_str());
 		return 2;
 	}
 
@@ -103326,42 +103868,42 @@ int	Jidac::external()
 	string percorso=extractfilepath(outputfile);
 	if (!saggiascrivibilitacartella(percorso))
 	{
-		myprintf("03990: cannot write on |%s|\n",percorso.c_str());
+		myprintf("03444! cannot write on |%s|\n",percorso.c_str());
 		return 2;
 	}
 	string thefiles="";
 	for (unsigned int i=0;i<files.size();i++)
 		thefiles+=files[i]+" ";
 	if (flagverbose)
-		myprintf("03236: Thefiles %d |%s|\n",files.size(),thefiles.c_str());
+		myprintf("03445: Thefiles %d |%s|\n",files.size(),thefiles.c_str());
 	
 #ifdef _WIN32
 	myreplaceall(g_externalname,	"/","\\");
 	myreplaceall(outputfile,		"/","\\");
 #endif
 	if (flagverbose)
-		myprintf("03239: Params       |%s|\n",g_externalname.c_str());
+		myprintf("03446: Params       |%s|\n",g_externalname.c_str());
 
 	string singleline=g_externalname+" >"+outputfile;
 	myreplaceall(singleline,"%files",thefiles);
 	myreplaceall(singleline,"$files",thefiles);
 	if (flagverbose)
-		myprintf("03255: executing %s\n",singleline.c_str());
+		myprintf("03447: executing %s\n",singleline.c_str());
 	
 	string	filebatch	=g_gettempdirectory()+"ext.bat";
 	filebatch=nomefileseesistegia(filebatch);
 	print_datetime();
-	myprintf("03265: Starting External \n");
+	myprintf("03448: Starting External \n");
 	if (fileexists(filebatch))
 		if (remove(filebatch.c_str())!=0)
 		{
-			myprintf("03272: Highlander batch  %s\n", filebatch.c_str());
+			myprintf("03449! Highlander batch  %s\n", filebatch.c_str());
 			return 2;
 		}
 	FILE* batch=fopen(filebatch.c_str(), "wb");
 	if (batch==NULL)
 	{
-		myprintf("03278: cannot write on %s\n",filebatch.c_str());
+		myprintf("03450! cannot write on %s\n",filebatch.c_str());
 		seppuku();
 	}
 
@@ -103376,26 +103918,19 @@ int	Jidac::external()
 #else
 	if (chmod(filebatch.c_str(),0700)!=0)
 	{
-		myprintf("03373: error on chmod 700 on <<%s>>\n",filebatch.c_str());
+		myprintf("03451! error on chmod 700 on <<%s>>\n",filebatch.c_str());
 		return 2;
 	}
 	exec(filebatch.c_str());
 #endif
 	print_datetime();
-	myprintf("03287: External time %s output filesize %s\n",migliaia(mtime()-startexternal),migliaia2(prendidimensionefile(outputfile.c_str())));
+	myprintf("03452: External time %s output filesize %s\n",migliaia(mtime()-startexternal),migliaia2(prendidimensionefile(outputfile.c_str())));
 	
 	if (!fileexists(outputfile))
 	{
-		myprintf("06323: i_output file does not exists %s\n",outputfile.c_str());
+		myprintf("03453! i_output file does not exists %s\n",outputfile.c_str());
 		return 2;
 	}
-	/*
-	if (prendidimensionefile(i_outputfile.c_str())==0)
-	{
-		myprintf("06328: i_output filesize is zero %s\n",i_outputfile.c_str());
-		return 2;
-	}
-	*/
 	
 	int64_t dimensionelista=0;
 	int64_t dimensionedata=0;
@@ -103405,4 +103940,213 @@ int	Jidac::external()
 
 	return 0;
 }
+
+string Jidac::getbackupnameifany(string i_filename)
+{
+	if (flagdebug)
+		myprintf("03454: getbackupname %Z\n",i_filename.c_str());
 	
+	if (i_filename=="")
+	{
+		if (flagdebug)
+			myprintf("03455! getbackupnameifany empty\n");
+		return "";
+	}
+	if (iswildcards(i_filename))
+	{
+		if (flagdebug)
+			myprintf("03456: getbackupnameifany wildcards <<%Z>>\n",i_filename.c_str());
+		return i_filename;
+	}
+	string temp	=extractfilepath(i_filename)+prendinomefileebasta(i_filename)+"_00000001.zpaq";
+	string temp2=extractfilepath(i_filename)+prendinomefileebasta(i_filename)+"_00000000_backup.index";
+	string temp3=extractfilepath(i_filename)+prendinomefileebasta(i_filename)+"_00000000_backup.txt";
+
+	if (fileexists(temp))
+	{
+		if (flagdebug)
+			myprintf("03457: temp backup file name EXIST <<%Z>>\n",temp.c_str());
+		if (fileexists(temp2))
+		{
+			if (flagdebug)
+				myprintf("03458: temp2 backup file name EXIST <<%Z>>\n",temp2.c_str());
+			if (fileexists(temp3))
+			{
+				if (flagdebug)
+					myprintf("03459: temp3 backup file name EXIST <<%Z>>\n",temp3.c_str());
+				string finale	=extractfilepath(i_filename)+prendinomefileebasta(i_filename)+"_????????.zpaq";
+	
+				return finale;
+			}
+		}
+	}
+	if (flagdebug)
+		myprintf("03460: cannot find backup files\n");
+	return i_filename;
+}
+
+
+bool compareSecond(const std::pair<std::string, std::string> &a,
+                   const std::pair<std::string, std::string> &b) {
+    return a.second < b.second;
+}
+
+string shrinkstring(string i_string,unsigned int i_len)
+{
+	/// 8 ABCDEFGHIJKL ABC...KL
+	if (i_string=="")
+		return "";
+	if (i_len==0)
+		return "";
+	if (i_len>i_string.size())
+		return i_string;
+	 if (i_len < 4) 
+        return i_string.substr(0, i_len);  // Taglia semplicemente ai primi i_len caratteri
+    int head_len = (i_len - 3) / 2;
+    int tail_len = i_len - 3 - head_len;
+    return i_string.substr(0, head_len)+"..."+i_string.substr(i_string.length() - tail_len);
+}
+
+
+int Jidac::sumhome()
+{
+	if (files.size()!=1)
+	{
+		myprintf("03462! you need exactly 1 folder selection => quit (ex. /home)\n");
+		return 2;
+	}
+
+	string	basehome=files[0];
+	if (!isdirectory(basehome))
+		basehome+="/";
+	vector<string> candidate;
+	listfolders(basehome,&candidate);
+	if (flagdebug)
+		myprintf("03463: candidate %s with pattern %s\n",migliaia(candidate.size()),fullarchive.c_str());
+	
+	if (candidate.size()==0)
+	{
+		myprintf("03464: Sorry, cannot find FOLDERS in <<%Z>>\n",basehome.c_str());
+		return 1;
+	}
+	myprintf("03465: Founded %s folders, running on %s\n",migliaia(candidate.size()),g_thechosenhash_str.c_str());
+	
+	
+	vector<string> 			outcome;
+	vector<s_stringpair> 	risultati;
+	string 	basearchive		=archive;
+	int64_t starthome		=mtime();
+	int64_t	totaldalavorare	=0;
+	int		totalfiles		=0;
+	
+	for (unsigned int i=0;i<candidate.size();i++)
+	{
+		string sourcepath=basehome+candidate[i];
+		if (!isdirectory(sourcepath))
+			sourcepath+="/";
+		printbar('-');
+		string temp=sourcepath;
+		replace(temp,files[0],"");
+		myprintf("03466: Working on %08d/%08d  <<%Z>>\n",i+1,candidate.size(),temp.c_str());
+
+		edt.clear();
+		int64_t startscan=mtime();
+		scandir(false,edt,sourcepath.c_str(),true);
+		int64_t scantime=mtime()-startscan;
+		
+		vector<string> filearray;
+		int64_t dalavorare=0;
+		for (DTMap::iterator p=edt.begin(); p!=edt.end(); ++p)
+			if (!isdirectory(p->first))
+			{
+				dalavorare+=p->second.size;
+				filearray.push_back(p->first);
+				totalfiles++;
+			}
+		totaldalavorare+=dalavorare;
+		myprintf("03467: %-10s%19s (%10s) in %s files (t=%.2fs)       \n",g_thechosenhash_str.c_str(),migliaia(dalavorare),tohuman(dalavorare),migliaia2(filearray.size()),scantime/1000.0);
+		
+		vector<std::pair<string,string> > hash_pair;
+
+		int64_t starthash=mtime();
+		franzparallelhashfiles(g_thechosenhash_str,dalavorare,filearray,true,hash_pair);
+
+		int64_t tempospeso=mtime()-starthash;
+		if (tempospeso==0)
+			tempospeso++;
+		
+		if (flagdebug3)
+		{
+			myprintf("03468: Before sort\n");
+			for (unsigned int i=0;i<hash_pair.size();i++)
+				myprintf("03469: hash_pair %08d second %s first %s\n",i,hash_pair[i].second.c_str(),hash_pair[i].first.c_str());
+		}
+		
+		std::sort(hash_pair.begin(), hash_pair.end(), compareSecond);
+  	
+		if (flagdebug3)
+		{
+			myprintf("03470: After sort\n");
+			for (unsigned int i=0;i<hash_pair.size();i++)
+				myprintf("03471: hash_pair %08d second %s first %s\n",i,hash_pair[i].second.c_str(),hash_pair[i].first.c_str());
+		}
+	
+		libzpaq::SHA256 sha256;
+		for (unsigned int j=0;j<hash_pair.size();j++)
+			for (const char* p=hash_pair[j].first.c_str(); *p; ++p)
+				sha256.put(*p);
+		
+		char sha256result[32];
+		memcpy(sha256result, sha256.result(), 32);
+		string s_home=binarytohex((const unsigned char*)sha256result,32);
+
+		string tagliato=shrinkstring(s_home,16*2+3);
+		myprintf("03472: MAGIC: %s t=%.2fs @ %9s B/s\n",tagliato.c_str(),tempospeso/1000.0,
+		migliaia(dalavorare/(tempospeso/1000.0)));
+			
+		s_stringpair mypair;
+		mypair.first	=sourcepath;
+		mypair.second	=s_home;
+		risultati.push_back(mypair);
+		if (flagdebug3)
+			myprintf("03473: pushed first %s second %s\n",mypair.first.c_str(),mypair.second.c_str());
+		
+	}
+
+	std::sort(risultati.begin(), risultati.end(),pairsortbyval);
+	libzpaq::SHA256 globalesha256;
+	if (flagdebug3)
+		myprintf("03474: Risultati size %d\n",risultati.size());	
+	for (unsigned int j=0;j<risultati.size();j++)
+	{
+		if (flagdebug3)
+			myprintf("03475: Global %03d second %s\n",j,risultati[j].second.c_str());
+		for (const char* p=risultati[j].second.c_str(); *p; ++p)
+			globalesha256.put(*p);
+			
+	}
+	char sha256result[32];
+	memcpy(sha256result,globalesha256.result(),32);
+	string s_tutto=binarytohex((const unsigned char*)sha256result,32);
+	
+	printbar('-');
+	myprintf("03476: Base folder <<%Z>>\n",files[0].c_str());
+	for (unsigned int i=0;i<risultati.size();i++)
+	{
+		string temp=risultati[i].first;
+		replace(temp,files[0],"");
+		myprintf("03477: %s  <<%Z>>\n",risultati[i].second.c_str(),temp.c_str());
+	}
+	myprintf("\n");
+	myprintf("03478: GLOBAL_MAGIC:      %s\n",s_tutto.c_str());
+	
+	int64_t miotempo=mtime()-starthome;
+	if (miotempo==0)
+		miotempo++;
+	myprintf("03479: Hashed %10s: %s for %s bytes (%s) in %.2fs @ %s B/s\n",g_thechosenhash_str.c_str(),
+	migliaia3(totalfiles),
+	migliaia(totaldalavorare),
+	tohuman(totaldalavorare),(miotempo/1000.0),migliaia2(totaldalavorare/(miotempo/1000.0)));
+
+	return 0;
+}

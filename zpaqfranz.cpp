@@ -53,8 +53,8 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 */
 
-#define ZPAQ_VERSION "60.7j"
-#define ZPAQ_DATE "(2024-09-16)"  // cannot use __DATE__ on Debian!
+#define ZPAQ_VERSION "60.7m"
+#define ZPAQ_DATE "(2024-09-25)"  // cannot use __DATE__ on Debian!
 
 ///	optional align for malloc (sparc64) via -DALIGNMALLOC
 #define STR(a) #a
@@ -2584,108 +2584,6 @@ void printUTF8(const char* s, FILE* f=stdout)
 }
 
 
-void myprintf_old(const char *fmt, ...)
-{
-	char buffer[4096];
-	va_list args;
-    va_start(args, fmt);
-    vsnprintf(buffer,sizeof(buffer),fmt,args);
-	
-	int buffer_len=strlen(buffer);
-			
-	if (g_output_handle!=0)
-	{
-		if (flagdebug3)
-		{
-			std::string temp=print_datetime(false);
-		///	printf("Ciaooo |%s|\n",temp.c_str());
-			fprintf(g_output_handle,"%s",temp.c_str());
-		}
-		fprintf(g_output_handle,"%s",buffer);
-	}
-
-
-	bool	flagerror=false;
-	if (buffer_len>7)
-		flagerror=(buffer[5]=='!');
-	
-	if (flagerror)
-		if (g_error_handle!=0)
-		{
-			if (flagdebug3)
-			{
-				std::string temp=print_datetime(false);
-				fprintf(g_error_handle,"%s",temp.c_str());
-			}
-		fprintf(g_error_handle,"%s",buffer);
-		}
-	
-	
-	va_end(args);
-	
-	if (flagsilent)
-		return;
-	
-	if (buffer_len<7)
-	{
-		printf("%s",buffer);
-#ifndef _WIN32
-		fflush(stdout);
-#endif
-		return;
-	}
-
-	if ( (buffer[5]!=':') && (buffer[5]!='!') )
-	{
-		printf("%s",buffer);
-#ifndef _WIN32
-		fflush(stdout);
-#endif
-		return;
-	}			
-	if ( 	(!isdigit(buffer[0])) ||
-			(!isdigit(buffer[1])) ||
-			(!isdigit(buffer[2])) ||
-			(!isdigit(buffer[3])) ||
-			(!isdigit(buffer[4]))	)
-	{
-		printf("%s",buffer);
-#ifndef _WIN32
-		fflush(stdout);
-#endif
-		return;
-	}
-	if (flagdebug3)
-	{
-		color_yellow();
-		print_datetime();
-	}
-	if (flagdebug)
-	{
-		char salva=buffer[6];
-		buffer[6]=0;
-		color_green();
-		printf("%s",buffer);
-		color_restore();
-		buffer[6]=salva;
-		if (flagerror)
-			color_red();
-		printf("%s",buffer+6);
-		if (flagerror)
-			color_restore();
-	}
-	else
-	{
-		if (flagerror)
-			color_red();
-		printf("%s",buffer+7);
-		if (flagerror)
-			color_restore();
-	}
-#ifndef _WIN32
-		fflush(stdout);
-#endif
-}
 
 void	decode_print_flag(const char* i_buffer,bool& o_flagcolon,bool& o_flagerror)
 {
@@ -2736,6 +2634,137 @@ void replacezwiths(const char *input, char *output)
     *out_ptr = '\0'; // Termina la stringa output
 }
 
+int mypos(const std::string& i_substring,const std::string& i_string)
+{
+    size_t start_pos = i_string.find(i_substring);
+    if	(start_pos==std::string::npos)
+        return -1;
+	else
+		return (int)start_pos;
+}
+
+bool fileexists(const std::string& i_filename)
+{
+#ifdef unix
+// true even for dirs no S_ISDIR
+  struct stat buffer;
+  return (stat(i_filename.c_str(),&buffer)==0);
+#endif
+#ifdef _WIN32
+
+	if (flagads)
+		if (mypos(":",i_filename)!=-1)
+		{
+			if (flagdebug3)
+				printf("00109: flagads ON and : in i_filename\n");
+			HANDLE hFile = CreateFileW((utow(i_filename.c_str()).c_str()), GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+			if (hFile!=INVALID_HANDLE_VALUE)
+			{
+				if (flagdebug3)
+					printf("00110: ADS FOUNDED!\n");
+				CloseHandle(hFile);
+				return true;
+			}
+			return false;
+	}
+
+	HANDLE	myhandle;
+	WIN32_FIND_DATA findfiledata;
+	std::wstring wpattern=utow(i_filename.c_str());
+	myhandle=FindFirstFile(wpattern.c_str(),&findfiledata);
+	if (myhandle!=INVALID_HANDLE_VALUE)
+	{
+		FindClose(myhandle);
+		return true;
+	}
+	return false;
+#endif
+	return false;
+}
+
+// Delete a file, return true if successful
+bool delete_file(const char* filename) {
+#ifdef unix
+	return remove(filename)==0;
+#else
+	if (!fileexists(filename))
+		return true;
+	SetFileAttributes(utow(filename).c_str(),FILE_ATTRIBUTE_NORMAL);
+	return DeleteFile(utow(filename).c_str());
+#endif
+}
+
+bool prepare_error_log()
+{
+	if (g_error=="")
+		return false;
+	
+	if (g_error_handle==0)
+	{
+		if (flagverbose)
+			printf("02747: OPENING ERROR FILE %s\n",g_error.c_str());
+		g_error_handle=fopen(g_error.c_str(),"wb");
+	}
+
+	if (g_error_handle==0)
+		return false;
+	
+	return true;
+	
+}
+void my_print_on_error_z(char* i_input)
+{
+	if (i_input==NULL)
+		return;
+	if (prepare_error_log())
+	{
+		fprintf(g_error_handle,"%s",i_input);
+		fflush(g_error_handle);
+	}
+}
+void my_print_on_error_s(char* i_buffer,char* i_input)
+{
+	if (i_buffer==NULL)
+		return;
+	if (i_input==NULL)
+		return;
+	if (prepare_error_log())
+	{
+		fprintf(g_error_handle,i_buffer,i_input);
+		fflush(g_error_handle);
+	}
+}
+void my_print_on_error_i(char* i_buffer,int i_input)
+{
+	if (i_buffer==NULL)
+		return;
+	if (prepare_error_log())
+	{
+		fprintf(g_error_handle,i_buffer,i_input);
+		fflush(g_error_handle);
+	}
+}
+void my_print_on_error_u(char* i_buffer,unsigned int i_input)
+{
+	if (i_buffer==NULL)
+		return;
+	if (prepare_error_log())
+	{
+		fprintf(g_error_handle,i_buffer,i_input);
+		fflush(g_error_handle);
+	}
+}
+void my_print_on_error_d(char* i_buffer,double i_input)
+{
+	if (i_buffer==NULL)
+		return;
+	if (prepare_error_log())
+	{
+		fprintf(g_error_handle,i_buffer,i_input);
+		fflush(g_error_handle);
+	}
+}
+
 // La nostra funzione myprintf migliorata
 void myprintf(const char *format, ...) 
 {
@@ -2759,8 +2788,8 @@ void myprintf(const char *format, ...)
 			fprintf(g_output_handle,"%s",buffer);
 	
 		if (flagerror)
-			if (g_error_handle!=0)
-				fprintf(g_error_handle,"%s",buffer);
+			my_print_on_error_z(buffer);
+
 		return;
 	}
 
@@ -2800,101 +2829,99 @@ void myprintf(const char *format, ...)
 			else 
 			{
 
-            char *b = buffer;
-            *b++ = '%'; // Aggiunge il carattere '%' nel buffer
+				char *b = buffer;
+				*b++ = '%'; // Aggiunge il carattere '%' nel buffer
 
-            // Gestisce eventuali flag come '-' o '0' per l'allineamento o padding
-            while (*p && (strchr("-+0 ", *p) != NULL)) 
-                *b++ = *p++;
+				// Gestisce eventuali flag come '-' o '0' per l'allineamento o padding
+				while (*p && (strchr("-+0 ", *p) != NULL)) 
+					*b++ = *p++;
 
-            // Gestisce larghezza del campo (es. 10 in %10s)
-            while (*p && (*p >= '0' && *p <= '9')) 
-                *b++ = *p++;
+				// Gestisce larghezza del campo (es. 10 in %10s)
+				while (*p && (*p >= '0' && *p <= '9')) 
+					*b++ = *p++;
 
-            // Gestisce la precisione (es. .2 in %5.2f)
-            if (*p == '.') 
-			{
-                *b++ = *p++; // Aggiunge il '.'
-                while (*p && (*p >= '0' && *p <= '9')) 
-                    *b++ = *p++;
-            }
+				// Gestisce la precisione (es. .2 in %5.2f)
+				if (*p == '.') 
+				{
+					*b++ = *p++; // Aggiunge il '.'
+					while (*p && (*p >= '0' && *p <= '9')) 
+						*b++ = *p++;
+				}
 
-            // Gestisce il carattere finale del formato (es. 'd', 's', 'f')
-            if (*p && strchr("diouxXfscZ", *p) != NULL) 
-			{
-                *b++ = *p;  // Aggiunge il carattere di conversione
-                *b = '\0';  // Termina la stringa nel buffer
-            }
+				// Gestisce il carattere finale del formato (es. 'd', 's', 'f')
+				if (*p && strchr("diouxXfscZ", *p) != NULL) 
+				{
+					*b++ = *p;  // Aggiunge il carattere di conversione
+					*b = '\0';  // Termina la stringa nel buffer
+				}
 
-            // Ora gestiamo il formato accumulato nel buffer
-            if (*p == 'd' || *p == 'i') 
-			{
-                int i = va_arg(args, int);
-                printf(buffer, i);
-				if (g_output_handle!=0)
-					fprintf(g_output_handle,buffer,i);
-				if (g_error_handle!=0)
-					fprintf(g_error_handle,buffer,i);
-				
-            } 
-            else if (*p == 'u') 
-			{
-                unsigned int u = va_arg(args, unsigned int);
-                printf(buffer, u);
-				if (g_output_handle!=0)
-					fprintf(g_output_handle,buffer,u);
-				if (g_error_handle!=0)
-					fprintf(g_error_handle,buffer,u);
-				
-            } 
-            else if (*p == 'x' || *p == 'X') 
-			{
-                unsigned int x = va_arg(args, unsigned int);
-                printf(buffer, x);
-				if (g_output_handle!=0)
-					fprintf(g_output_handle,buffer,x);
-				if (g_error_handle!=0)
-					fprintf(g_error_handle,buffer,x);
-				
-            }
-            else if (*p == 'f') 
-			{
-                double f = va_arg(args, double);
-                printf(buffer, f);
-				if (g_output_handle!=0)
-					fprintf(g_output_handle,buffer,f);
-				if (g_error_handle!=0)
-					fprintf(g_error_handle,buffer,f);
-				
-            }
-            else if (*p == 's') 
-			{
-                char *s = va_arg(args, char *);
-                printf(buffer, s);
-				if (g_output_handle!=0)
-					fprintf(g_output_handle,buffer,s);
-				if (g_error_handle!=0)
-					fprintf(g_error_handle,buffer,s);
-				
-            }
-            else if (*p == 'c') 
-			{
-                int c = va_arg(args, int);
-                printf(buffer, c);
-				if (g_output_handle!=0)
-					fprintf(g_output_handle,buffer,c);
-				if (g_error_handle!=0)
-					fprintf(g_error_handle,buffer,c);
-            }
-            else if (*p == 'Z') 
-			{
-                // Gestione speciale del token %Z
-                char *s = va_arg(args, char *);
-                printUTF8(s);
-				if (g_error_handle!=0)
-					fprintf(g_error_handle,buffer,s);
-				
-            }
+				// Ora gestiamo il formato accumulato nel buffer
+				if (*p == 'd' || *p == 'i') 
+				{
+					int i = va_arg(args, int);
+					printf(buffer, i);
+					if (g_output_handle!=0)
+						fprintf(g_output_handle,buffer,i);
+					if (flagerror)
+						my_print_on_error_i(buffer,i);
+					
+				} 
+				else if (*p == 'u') 
+				{
+					unsigned int u = va_arg(args, unsigned int);
+					printf(buffer, u);
+					if (g_output_handle!=0)
+						fprintf(g_output_handle,buffer,u);
+					if (flagerror)
+						my_print_on_error_u(buffer,u);
+					
+				} 
+				else if (*p == 'x' || *p == 'X') 
+				{
+					unsigned int x = va_arg(args, unsigned int);
+					printf(buffer, x);
+					if (g_output_handle!=0)
+						fprintf(g_output_handle,buffer,x);
+					if (flagerror)
+						my_print_on_error_u(buffer,x);
+				}
+				else if (*p == 'f') 
+				{
+					double f = va_arg(args, double);
+					printf(buffer, f);
+					if (g_output_handle!=0)
+						fprintf(g_output_handle,buffer,f);
+					if (flagerror)
+						my_print_on_error_d(buffer,f);
+					
+				}
+				else if (*p == 's') 
+				{
+					char *s = va_arg(args, char *);
+					printf(buffer, s);
+					if (g_output_handle!=0)
+						fprintf(g_output_handle,buffer,s);
+					if (flagerror)
+						my_print_on_error_s(buffer,s);
+					
+				}
+				else if (*p == 'c') 
+				{
+					int c = va_arg(args, int);
+					printf(buffer, c);
+					if (g_output_handle!=0)
+						fprintf(g_output_handle,buffer,c);
+					if (flagerror)
+						my_print_on_error_i(buffer,c);
+				}
+				else if (*p == 'Z') 
+				{
+					// Gestione speciale del token %Z
+					char *s = va_arg(args, char *);
+					printUTF8(s);
+					if (flagerror)
+						my_print_on_error_z(s);
+				}
 			}
         } 
 		else 
@@ -2903,6 +2930,11 @@ void myprintf(const char *format, ...)
             putchar(*p);
 			if (g_output_handle!=0)
 				fputc(*p,g_output_handle);
+			if (flagerror)
+			{
+				if (prepare_error_log())
+				fputc(*p,g_error_handle);
+			}
         }
 
         p++;  // Passiamo al carattere successivo nella stringa di formato
@@ -25029,14 +25061,6 @@ bool myreplace(string& i_str, const string& i_from, const string& i_to)
     i_str.replace(start_pos, i_from.length(), i_to);
     return true;
 }
-int mypos(const string& i_substring,const string& i_string)
-{
-    size_t start_pos = i_string.find(i_substring);
-    if	(start_pos==std::string::npos)
-        return -1;
-	else
-		return (int)start_pos;
-}
 std::string myright(std::string const& source, size_t const length)
 {
   if (length >= source.size())
@@ -40007,44 +40031,6 @@ size_t myfwrite(const void* ptr, size_t size, size_t nobj, FP fp)
 }
 
 
-bool fileexists(const string& i_filename)
-{
-#ifdef unix
-// true even for dirs no S_ISDIR
-  struct stat buffer;
-  return (stat(i_filename.c_str(),&buffer)==0);
-#endif
-#ifdef _WIN32
-
-	if (flagads)
-		if (mypos(":",i_filename)!=-1)
-		{
-			if (flagdebug3)
-				myprintf("00109: flagads ON and : in i_filename\n");
-			HANDLE hFile = CreateFileW((utow(i_filename.c_str()).c_str()), GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-			if (hFile!=INVALID_HANDLE_VALUE)
-			{
-				if (flagdebug3)
-					myprintf("00110: ADS FOUNDED!\n");
-				CloseHandle(hFile);
-				return true;
-			}
-			return false;
-	}
-
-	HANDLE	myhandle;
-	WIN32_FIND_DATA findfiledata;
-	std::wstring wpattern=utow(i_filename.c_str());
-	myhandle=FindFirstFile(wpattern.c_str(),&findfiledata);
-	if (myhandle!=INVALID_HANDLE_VALUE)
-	{
-		FindClose(myhandle);
-		return true;
-	}
-	return false;
-#endif
-	return false;
-}
 
 // a bit different: check only for "real" files
 bool realfileexists(const string& i_filename)
@@ -40176,17 +40162,6 @@ bool getdirinfo(string i_folder,int64_t& o_date,int64_t& o_attr)
 	return false;
 }
 
-// Delete a file, return true if successful
-bool delete_file(const char* filename) {
-#ifdef unix
-	return remove(filename)==0;
-#else
-	if (!fileexists(filename))
-		return true;
-	SetFileAttributes(utow(filename).c_str(),FILE_ATTRIBUTE_NORMAL);
-	return DeleteFile(utow(filename).c_str());
-#endif
-}
 
 bool delete_file_no_mercy(const char* filename) 
 {
@@ -49346,6 +49321,7 @@ string help_a(bool i_usage,bool i_example)
 		moreprint("+ : -external X   Run X before add (replace %files or $files)");
 		moreprint("+ : -touch X      Change every filedate to be stored to X");
 		moreprint("+ : -input X      Load the X file as files to be added");
+		moreprint("+ : -errorlog X   Write the errors on the X file");
 	}
 	if (i_usage && i_example)
 		moreprint("    Examples:");
@@ -49421,6 +49397,8 @@ string help_a(bool i_usage,bool i_example)
 		moreprint("Store external VFILE-l-external.txt  a z:\\2.zpaq c:\\nz -external \"c:\\nz\\hashdeep64 -r -c sha1 %files\"");
 		moreprint("Alter the filedate (piped)           type 1.txt|zpaqfranz a z:\\2.zpaq 1.sql -stdin -touch 2024_02_03");
 		moreprint("Load files from text file            a z:\\1.zpaq -input z:\\thelist.txt");
+		moreprint("Write errors                         a z:\\1.zpaq c:\\windows\\system32 -errorlog z:\\errors.txt -silent");
+		
 	}
 	return("Add or append files to archive");
 }
@@ -51176,17 +51154,6 @@ void open_output(string i_filename)
 			g_output_handle=fopen(i_filename.c_str(),"wb");
 			if (g_output_handle==NULL)
 				printf("28342: ERROR OPENING LOG FILE %s\n",i_filename.c_str());
-		}
-}
-void open_error(string i_filename)
-{
-	if (i_filename!="")
-		if (g_error_handle==0)
-		{
-			g_error=i_filename;
-			g_error_handle=fopen(i_filename.c_str(),"wb");
-			if (g_error_handle==NULL)
-				printf("50917: ERROR OPENING ERR FILE %s\n",i_filename.c_str());
 		}
 }
 // Rename name using tofiles[]
@@ -53042,9 +53009,14 @@ int Jidac::loadparameters(int argc, const char** argv)
 	}
 	if (g_output!="")
 		open_output(g_output);
-	if (g_error!="")
-		open_error(g_error);
 
+	if (g_error!="")
+		if (fileexists(g_error.c_str()))
+		{
+			if (flagverbose)
+				printf("02743: DELETING ERROR FILE %s\n",g_error.c_str());
+			delete_file(g_error.c_str());
+		}
 	if (flagforcezfs)
 		flagskipzfs=false; // win over skip
 
@@ -104150,3 +104122,4 @@ int Jidac::sumhome()
 
 	return 0;
 }
+

@@ -14,7 +14,7 @@
 |  [OpenSUSE](http://www.francocorbelli.it/zpaqfranz/opensuse)               |`sudo zypper install zpaqfranz`|      |      |
 |  [Debian (Ubuntu etc) .deb](http://www.francocorbelli.it/zpaqfranz/debian)      |                               |59.8j|[Desktop](http://www.francocorbelli.it/zpaqfranz/video/debian-deb.mp4)      |
 |  [Linux generic (32/64)](http://www.francocorbelli.it/zpaqfranz/linux)             |                               |60.7u|      |
-|  [Arch](http://www.francocorbelli.it/zpaqfranz/arch)                       | [AUR user repository](https://aur.archlinux.org/packages/zpaqfranz-git)|58.10i|[Terminal](http://www.francocorbelli.it/zpaqfranz/video/arch.mp4)
+|  [Arch](http://www.francocorbelli.it/zpaqfranz/arch)                       | [AUR user repository (latest)](https://aur.archlinux.org/packages/zpaqfranz-git)|58.10i|[Terminal](http://www.francocorbelli.it/zpaqfranz/video/arch.mp4)
 |  [Solaris 11-64](http://www.francocorbelli.it/zpaqfranz/solaris)                 |                               |60.7u|      |
 |  [OmniOS 64](http://www.francocorbelli.it/zpaqfranz/omnios)                   |                               |60.7u|      |
 |  [NAS (Intel, Synology...)](http://www.francocorbelli.it/zpaqfranz/nas)           |                               |60.7u|      | 

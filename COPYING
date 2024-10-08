@@ -70,6 +70,8 @@ Credits and copyrights and licenses and links and internal bookmarks
  /// LICENSE_START.21 LICENSE_END.21
 22 [BSD 2-Clause license]                LZ4 Copyright (C) 2011-2023, Yann Collet https://github.com/lz4/lz4
  /// LICENSE_START.22 LICENSE_END.22
+23 [MIT License]                https://github.com/codewithnick/ascii-art
+ /// LICENSE_START.23 LICENSE_END.23
 
 
    _____ _____  ______ ______ _______ _____ _   _  _____  _____ 
@@ -129,4 +131,5 @@ Credits and copyrights and licenses and links and internal bookmarks
 42 Thanks to https://github.com/sheckandar              for Synology 7.1 issue
 43 Thanks to https://github.com/adamantida              for improved similarity with zpaq for archives with only deletions
 44 Thanks to https://github.com/kskarlatos              for giving me an idea to improve stdin support
+45 Thanks to https://github.com/codewithnick            for change his license to a Fedora-friendly one
 

@@ -5,21 +5,21 @@
 |  Platform                                                           | OS package                    |  Version    | Video|
 |  ----------                                                         | -----                         |  ---------- |  -------    |
 |  [Windows 32/64bit (sourceforge)](https://sourceforge.net/projects/zpaqfranz/files)   |                                  |![Badge](https://img.shields.io/github/v/release/fcorbelli/zpaqfranz)|      |      
-|  [Windows 32 (direct)](http://www.francocorbelli.it/zpaqfranz/nas)           |                               |latest|      | 
-|  [Windows 64 (direct)](http://www.francocorbelli.it/zpaqfranz/nas)           |                               |latest|      | 
-|  [Windows 64 (HW accelerated)](http://www.francocorbelli.it/zpaqfranz/nas)           |                       |latest|      |
+|  [Windows 32 (direct)](http://www.francocorbelli.it/zpaqfranz/win32)           |                               |latest|      | 
+|  [Windows 64 (direct)](http://www.francocorbelli.it/zpaqfranz/win64)           |                               |latest|      | 
+|  [Windows 64 (HW accelerated)](http://www.francocorbelli.it/zpaqfranz/win64hw)           |                       |latest|      |
 |  [OpenBSD](http://www.francocorbelli.it/zpaqfranz/openbsd)                 |`pkg_add zpaqfranz`            |![Badge](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fopenbsd.app%2F%3Fsearch%3Dzpaqfranz%26format%3Djson%26current%3Don&query=%24..FULLPKGNAME&label=openbsd)|      |
 |  [FreeBSD](http://www.francocorbelli.it/zpaqfranz/freebsd)                 |`pkg install zpaqfranz`        |60.3a |      |
 |  [MacOS](http://www.francocorbelli.it/zpaqfranz/mac)                       |`brew install zpaqfranz`       |![Badge](https://img.shields.io/homebrew/v/zpaqfranz)|      |
 |  [OpenSUSE](http://www.francocorbelli.it/zpaqfranz/opensuse)               |`sudo zypper install zpaqfranz`|      |      |
 |  [Debian (Ubuntu etc) .deb](http://www.francocorbelli.it/zpaqfranz/debian)      |                               |59.8j|[Desktop](http://www.francocorbelli.it/zpaqfranz/video/debian-deb.mp4)      |
-|  [Linux generic (32/64)](http://www.francocorbelli.it/zpaqfranz/linux)             |                               |60.3a|      |
+|  [Linux generic (32/64)](http://www.francocorbelli.it/zpaqfranz/linux)             |                               |60.7u|      |
 |  [Arch](http://www.francocorbelli.it/zpaqfranz/arch)                       | [AUR user repository](https://aur.archlinux.org/packages/zpaqfranz-git)|58.10i|[Terminal](http://www.francocorbelli.it/zpaqfranz/video/arch.mp4)
-|  [Solaris 11-64](http://www.francocorbelli.it/zpaqfranz/solaris)                 |                               |60.4a|      |
-|  [OmniOS 64](http://www.francocorbelli.it/zpaqfranz/omnios)                   |                               |60.4a|      |
-|  [NAS (Intel)](http://www.francocorbelli.it/zpaqfranz/nas)           |                               |60.3a|      | 
-|  [NAS (armv8)](http://www.francocorbelli.it/zpaqfranz/qnap)           |                               |60.3a|      | 
-|  [NAS (arm Cortex-C57,QNAP TS433...)](http://www.francocorbelli.it/zpaqfranz/57c)           |                               |60.7k|      | 
+|  [Solaris 11-64](http://www.francocorbelli.it/zpaqfranz/solaris)                 |                               |60.7u|      |
+|  [OmniOS 64](http://www.francocorbelli.it/zpaqfranz/omnios)                   |                               |60.7u|      |
+|  [NAS (Intel)](http://www.francocorbelli.it/zpaqfranz/nas)           |                               |60.7u|      | 
+|  [NAS (armv8)](http://www.francocorbelli.it/zpaqfranz/qnap)           |                               |60.7u|      | 
+|  [NAS (arm Cortex-C57,QNAP TS433...)](http://www.francocorbelli.it/zpaqfranz/57c)           |                               |60.7u|      | 
 |  [Haiku](http://www.francocorbelli.it/zpaqfranz/haiku)                     |                               |60.3a|      |
 |  [ESXi](http://www.francocorbelli.it/zpaqfranz/esxi)                       |                               |60.3a|
 | [Freeware GUI for Windows](https://github.com/fcorbelli/zpaqfranz/wiki/PAKKA-Windows-32-bit-extractor) |   |[latest](http://www.francocorbelli.it/pakka/build/latest/pakka_latest.zip)  |      |

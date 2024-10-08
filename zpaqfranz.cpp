@@ -53,7 +53,7 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 */
 
-#define ZPAQ_VERSION "60.7t"
+#define ZPAQ_VERSION "60.7u"
 #define ZPAQ_DATE "(2024-10-08)"  // cannot use __DATE__ on Debian!
 
 ///	optional align for malloc (sparc64) via -DALIGNMALLOC
@@ -2882,9 +2882,7 @@ public:
 
         letters.reserve(def_rows);
         for (int i = 0; i < def_rows; i++)
-        {
-            letters.emplace_back(100, ' '); // Create rows with 100 spaces each
-        }
+            letters.push_back(std::vector<char>(100, ' ')); // Create rows with 100 spaces each
         curr_col = 0;
     }
 
@@ -2894,11 +2892,9 @@ public:
             return;
 
         while (letters.size() < char_rows)
-        {
-            letters.emplace_back(100, ' ');
-        }
+            letters.push_back(std::vector<char>(100, ' ')); // Create rows with 100 spaces each
 
-        for (unsigned int i = 0; i < char_rows; i++)
+		for (unsigned int i = 0; i < char_rows; i++)
         {
             for (unsigned int j = 0; j < char_cols; j++)
             {
@@ -2934,261 +2930,261 @@ public:
     // Virtual functions for space
     virtual char **space()
     {
-        return nullptr;
+        return 0;
     }
 
     // Virtual functions for lowercase letters
     virtual char **a()
     {
-        return nullptr;
+        return 0;
     }
     virtual char **b()
     {
-        return nullptr;
+        return 0;
     }
     virtual char **c()
     {
-        return nullptr;
+        return 0;
     }
     virtual char **d()
     {
-        return nullptr;
+        return 0;
     }
     virtual char **e()
     {
-        return nullptr;
+        return 0;
     }
     virtual char **f()
     {
-        return nullptr;
+        return 0;
     }
     virtual char **g()
     {
-        return nullptr;
+        return 0;
     }
     virtual char **h()
     {
-        return nullptr;
+        return 0;
     }
     virtual char **i()
     {
-        return nullptr;
+        return 0;
     }
     virtual char **j()
     {
-        return nullptr;
+        return 0;
     }
     virtual char **k()
     {
-        return nullptr;
+        return 0;
     }
     virtual char **l()
     {
 
-        return nullptr;
+        return 0;
     }
     virtual char **m()
     {
  
-        return nullptr;
+        return 0;
     }
     virtual char **n()
     {
-        return nullptr;
+        return 0;
     }
     virtual char **o()
     {
-        return nullptr;
+        return 0;
     }
     virtual char **p()
     {
-        return nullptr;
+        return 0;
     }
     virtual char **q()
     {
-        return nullptr;
+        return 0;
     }
     virtual char **r()
     {
-        return nullptr;
+        return 0;
     }
     virtual char **s()
     {
-        return nullptr;
+        return 0;
     }
     virtual char **t()
     {
-        return nullptr;
+        return 0;
     }
     virtual char **u()
     {
-        return nullptr;
+        return 0;
     }
     virtual char **v()
     {
-        return nullptr;
+        return 0;
     }
     virtual char **w()
     {
-        return nullptr;
+        return 0;
     }
     virtual char **x()
     {
-        return nullptr;
+        return 0;
     }
     virtual char **y()
     {
-        return nullptr;
+        return 0;
     }
     virtual char **z()
     {
-        return nullptr;
+        return 0;
     }
 
     // Virtual functions for uppercase letters
     virtual char **A()
     {
-        return nullptr;
+        return 0;
     }
     virtual char **B()
     {
-        return nullptr;
+        return 0;
     }
     virtual char **C()
     {
-        return nullptr;
+        return 0;
     }
     virtual char **D()
     {
-        return nullptr;
+        return 0;
     }
     virtual char **E()
     {
-        return nullptr;
+        return 0;
     }
     virtual char **F()
     {
-        return nullptr;
+        return 0;
     }
     virtual char **G()
     {
-        return nullptr;
+        return 0;
     }
     virtual char **H()
     {
-        return nullptr;
+        return 0;
     }
     virtual char **I()
     {
-        return nullptr;
+        return 0;
     }
     virtual char **J()
     {
-        return nullptr;
+        return 0;
     }
     virtual char **K()
     {
-        return nullptr;
+        return 0;
     }
     virtual char **L()
     {
-        return nullptr;
+        return 0;
     }
     virtual char **M()
     {
-        return nullptr;
+        return 0;
     }
     virtual char **N()
     {
-        return nullptr;
+        return 0;
     }
     virtual char **O()
     {
-        return nullptr;
+        return 0;
     }
     virtual char **P()
     {
-        return nullptr;
+        return 0;
     }
     virtual char **Q()
     {
-        return nullptr;
+        return 0;
     }
     virtual char **R()
     {
-        return nullptr;
+        return 0;
     }
     virtual char **S()
     {
-        return nullptr;
+        return 0;
     }
     virtual char **T()
     {
-        return nullptr;
+        return 0;
     }
     virtual char **U()
     {
-        return nullptr;
+        return 0;
     }
     virtual char **V()
     {
-        return nullptr;
+        return 0;
     }
     virtual char **W()
     {
-        return nullptr;
+        return 0;
     }
     virtual char **X()
     {
-        return nullptr;
+        return 0;
     }
     virtual char **Y()
     {
-        return nullptr;
+        return 0;
     }
     virtual char **Z()
     {
-        return nullptr;
+        return 0;
     }
     virtual char **zero()
     {
-        return nullptr;
+        return 0;
     }
     virtual char **one()
     {
-        return nullptr;
+        return 0;
     }
     virtual char **two()
     {
-        return nullptr;
+        return 0;
     }
     virtual char **three()
     {
-        return nullptr;
+        return 0;
     }
     virtual char **four()
     {
-        return nullptr;
+        return 0;
     }
     virtual char **five()
     {
-        return nullptr;
+        return 0;
     }
     virtual char **six()
     {
-        return nullptr;
+        return 0;
     }
     virtual char **seven()
     {
-        return nullptr;
+        return 0;
     }
     virtual char **eight()
     {
-        return nullptr;
+        return 0;
     }
     virtual char **nine()
     {
-        return nullptr;
+        return 0;
     }
 
     /********************************done adding virtual functions********************************/
@@ -5687,7 +5683,7 @@ namespace ascii
         void print(const std::string &text)
         {
 
-            char **character = nullptr;
+            char **character = 0;
 
             for (size_t i = 0; i < text.size(); i++)
             {
@@ -40922,7 +40918,13 @@ string g_gettempdirectory()
 	}
 	return temppath;
 #else
+	
+#ifdef ESX
+	string randomfolder="/tmp/_zpaqfranz/";
+#else
 	string randomfolder="/tmp/_zpaqfranz/"+std::to_string(mtime())+'/';
+#endif
+
 	if (flagdebug3)
 		myprintf("00182: LinuX ********************** randomfolder [1] |%s|\n",randomfolder.c_str());
 	if (!saggiascrivibilitacartella(randomfolder))
@@ -41128,6 +41130,19 @@ int numberOfProcessors()
 		rc=logical_cpu_count;
 	}
 #endif
+
+
+
+#if (defined(__APPLE__))
+		size_t len 			= sizeof(rc);
+
+		if (sysctlbyname("hw.physicalcpu", &rc, &len, NULL, 0) < 0) 
+		{
+			myprintf("41210! hw.physicalcpu KAPUTT\n");
+			return 1;
+		}
+
+#else
 #ifdef BSD  // BSD or Mac OS/X
 	if (flaght)
 	{
@@ -41139,15 +41154,6 @@ int numberOfProcessors()
 	else
 	{
 		size_t len 			= sizeof(rc);
-#if (defined(__APPLE__))
-
-		if (sysctlbyname("hw.physicalcpu", &rc, &len, NULL, 0) < 0) 
-		{
-			myprintf("41210! hw.physicalcpu KAPUTT\n");
-			return 1;
-		}
-#endif
-
 #if defined(__FreeBSD__) || defined(__OpenBSD__)
 		if (sysctlbyname("hw.ncpu", &rc, &len, NULL, 0) < 0) 
 		{
@@ -41155,6 +41161,7 @@ int numberOfProcessors()
 			return 1;
 		}
 	}
+#endif
 #endif
 #endif //BSD
 

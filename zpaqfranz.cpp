@@ -53,8 +53,8 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 */
 
-#define ZPAQ_VERSION "60.7m"
-#define ZPAQ_DATE "(2024-09-25)"  // cannot use __DATE__ on Debian!
+#define ZPAQ_VERSION "60.7t"
+#define ZPAQ_DATE "(2024-10-08)"  // cannot use __DATE__ on Debian!
 
 ///	optional align for malloc (sparc64) via -DALIGNMALLOC
 #define STR(a) #a
@@ -1075,142 +1075,31 @@ Credits and copyrights and licenses and links and internal bookmarks
    (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
    OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-23 [CC0 1.0 Universal]                https://github.com/codewithnick/ascii-art
+23 [MIT License]                https://github.com/codewithnick/ascii-art
  /// LICENSE_START.23
  /// LICENSE_END.23
 
-Creative Commons Legal Code
+MIT License
 
-CC0 1.0 Universal
+Copyright (c) 2024 codewithnick
 
-    CREATIVE COMMONS CORPORATION IS NOT A LAW FIRM AND DOES NOT PROVIDE
-    LEGAL SERVICES. DISTRIBUTION OF THIS DOCUMENT DOES NOT CREATE AN
-    ATTORNEY-CLIENT RELATIONSHIP. CREATIVE COMMONS PROVIDES THIS
-    INFORMATION ON AN "AS-IS" BASIS. CREATIVE COMMONS MAKES NO WARRANTIES
-    REGARDING THE USE OF THIS DOCUMENT OR THE INFORMATION OR WORKS
-    PROVIDED HEREUNDER, AND DISCLAIMS LIABILITY FOR DAMAGES RESULTING FROM
-    THE USE OF THIS DOCUMENT OR THE INFORMATION OR WORKS PROVIDED
-    HEREUNDER.
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
 
-Statement of Purpose
+1. The above copyright notice and this permission notice shall be included in
+   all copies or substantial portions of the Software.
 
-The laws of most jurisdictions throughout the world automatically confer
-exclusive Copyright and Related Rights (defined below) upon the creator
-and subsequent owner(s) (each and all, an "owner") of an original work of
-authorship and/or a database (each, a "Work").
-
-Certain owners wish to permanently relinquish those rights to a Work for
-the purpose of contributing to a commons of creative, cultural and
-scientific works ("Commons") that the public can reliably and without fear
-of later claims of infringement build upon, modify, incorporate in other
-works, reuse and redistribute as freely as possible in any form whatsoever
-and for any purposes, including without limitation commercial purposes.
-These owners may contribute to the Commons to promote the ideal of a free
-culture and the further production of creative, cultural and scientific
-works, or to gain reputation or greater distribution for their Work in
-part through the use and efforts of others.
-
-For these and/or other purposes and motivations, and without any
-expectation of additional consideration or compensation, the person
-associating CC0 with a Work (the "Affirmer"), to the extent that he or she
-is an owner of Copyright and Related Rights in the Work, voluntarily
-elects to apply CC0 to the Work and publicly distribute the Work under its
-terms, with knowledge of his or her Copyright and Related Rights in the
-Work and the meaning and intended legal effect of CC0 on those rights.
-
-1. Copyright and Related Rights. A Work made available under CC0 may be
-protected by copyright and related or neighboring rights ("Copyright and
-Related Rights"). Copyright and Related Rights include, but are not
-limited to, the following:
-
-  i. the right to reproduce, adapt, distribute, perform, display,
-     communicate, and translate a Work;
- ii. moral rights retained by the original author(s) and/or performer(s);
-iii. publicity and privacy rights pertaining to a person's image or
-     likeness depicted in a Work;
- iv. rights protecting against unfair competition in regards to a Work,
-     subject to the limitations in paragraph 4(a), below;
-  v. rights protecting the extraction, dissemination, use and reuse of data
-     in a Work;
- vi. database rights (such as those arising under Directive 96/9/EC of the
-     European Parliament and of the Council of 11 March 1996 on the legal
-     protection of databases, and under any national implementation
-     thereof, including any amended or successor version of such
-     directive); and
-vii. other similar, equivalent or corresponding rights throughout the
-     world based on applicable law or treaty, and any national
-     implementations thereof.
-
-2. Waiver. To the greatest extent permitted by, but not in contravention
-of, applicable law, Affirmer hereby overtly, fully, permanently,
-irrevocably and unconditionally waives, abandons, and surrenders all of
-Affirmer's Copyright and Related Rights and associated claims and causes
-of action, whether now known or unknown (including existing as well as
-future claims and causes of action), in the Work (i) in all territories
-worldwide, (ii) for the maximum duration provided by applicable law or
-treaty (including future time extensions), (iii) in any current or future
-medium and for any number of copies, and (iv) for any purpose whatsoever,
-including without limitation commercial, advertising or promotional
-purposes (the "Waiver"). Affirmer makes the Waiver for the benefit of each
-member of the public at large and to the detriment of Affirmer's heirs and
-successors, fully intending that such Waiver shall not be subject to
-revocation, rescission, cancellation, termination, or any other legal or
-equitable action to disrupt the quiet enjoyment of the Work by the public
-as contemplated by Affirmer's express Statement of Purpose.
-
-3. Public License Fallback. Should any part of the Waiver for any reason
-be judged legally invalid or ineffective under applicable law, then the
-Waiver shall be preserved to the maximum extent permitted taking into
-account Affirmer's express Statement of Purpose. In addition, to the
-extent the Waiver is so judged Affirmer hereby grants to each affected
-person a royalty-free, non transferable, non sublicensable, non exclusive,
-irrevocable and unconditional license to exercise Affirmer's Copyright and
-Related Rights in the Work (i) in all territories worldwide, (ii) for the
-maximum duration provided by applicable law or treaty (including future
-time extensions), (iii) in any current or future medium and for any number
-of copies, and (iv) for any purpose whatsoever, including without
-limitation commercial, advertising or promotional purposes (the
-"License"). The License shall be deemed effective as of the date CC0 was
-applied by Affirmer to the Work. Should any part of the License for any
-reason be judged legally invalid or ineffective under applicable law, such
-partial invalidity or ineffectiveness shall not invalidate the remainder
-of the License, and in such case Affirmer hereby affirms that he or she
-will not (i) exercise any of his or her remaining Copyright and Related
-Rights in the Work or (ii) assert any associated claims and causes of
-action with respect to the Work, in either case contrary to Affirmer's
-express Statement of Purpose.
-
-4. Limitations and Disclaimers.
-
- a. No trademark or patent rights held by Affirmer are waived, abandoned,
-    surrendered, licensed or otherwise affected by this document.
- b. Affirmer offers the Work as-is and makes no representations or
-    warranties of any kind concerning the Work, express, implied,
-    statutory or otherwise, including without limitation warranties of
-    title, merchantability, fitness for a particular purpose, non
-    infringement, or the absence of latent or other defects, accuracy, or
-    the present or absence of errors, whether or not discoverable, all to
-    the greatest extent permissible under applicable law.
- c. Affirmer disclaims responsibility for clearing rights of other persons
-    that may apply to the Work or any use thereof, including without
-    limitation any person's Copyright and Related Rights in the Work.
-    Further, Affirmer disclaims responsibility for obtaining any necessary
-    consents, permissions or other rights required for any use of the
-    Work.
- d. Affirmer understands and acknowledges that Creative Commons is not a
-    party to this document and has no duty or obligation with respect to
-    this CC0 or use of the Work.
-
-
-simplified version:
-Creative Commons Attribution 4.0 International License (CC BY 4.0)
-
-You are free to:
-- Share — copy and redistribute the material in any medium or format
-- Adapt — remix, transform, and build upon the material for any purpose, even commercially.
-
-Under the following terms:
-- Attribution — You must give appropriate credit, provide a link to the license, and indicate if changes were made. You may do so in any reasonable manner, but not in any way that suggests the licensor endorses you or your use.
+2. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+   AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+   SOFTWARE.
 
    _____ _____  ______ ______ _______ _____ _   _  _____  _____ 
   / ____|  __ \|  ____|  ____|__   __|_   _| \ | |/ ____|/ ____|
@@ -1269,6 +1158,9 @@ Under the following terms:
 41 Thanks to https://github.com/bastiple                for -D_FORTIFY_SOURCE=3
 42 Thanks to https://github.com/sheckandar              for Synology 7.1 issue
 43 Thanks to https://github.com/adamantida              for improved similarity with zpaq for archives with only deletions
+44 Thanks to https://github.com/kskarlatos              for giving me an idea to improve stdin support
+45 Thanks to https://github.com/codewithnick            for change his license to a Fedora-friendly one
+46 Thanks to https://github.com/mirogeorg               for various suggestions
 
                 _____ _   _  _____ _______       _      _
                |_   _| \ | |/ ____|__   __|/\   | |    | |
@@ -2072,6 +1964,9 @@ SHA-256: FCCE109C8360963EB18975B94BDBE434BE1A49D3F53BDD768A99093B3EB838D2 [     
 	#ifndef ANCIENT
 		#include <array>
 	#endif
+	#if defined(SOLARIS)
+		#include <kstat.h>
+	#endif
 	#if defined(__linux__) || defined(SOLARIS)
 		#include <sys/statvfs.h>
 	#endif
@@ -2338,6 +2233,8 @@ bool flagforcezfs;
 bool flagfrugal;
 bool flaghashdeep;
 bool flagkill;
+bool flaght;
+bool flagnocaptcha;
 bool flagmm;
 bool flagattr;
 bool flagthunderbird;
@@ -5940,6 +5837,8 @@ namespace ascii
 
 /// LICENSE_END.23
 
+int64_t g_allocatedram=0;
+int64_t g_arrayram=0;
 
 /// LICENSE_START.7
 /// OK we need a fix for 64-byte-align problem on some Linux compiler
@@ -6050,6 +5949,7 @@ static void* franz_extend(void* i_mem,size_t i_size,size_t i_oldsize)
 ///#ifdef DEBUG
 		printf("01205: realloc from empty, allocating %08d\n",(int)i_size);
 ///#endif
+		g_allocatedram+=i_size;
         return franz_malloc(i_size);
 	}
 	if (i_oldsize<i_size)
@@ -6062,6 +5962,8 @@ static void* franz_extend(void* i_mem,size_t i_size,size_t i_oldsize)
 			return NULL;
 		memcpy(new_mem,i_mem,i_oldsize);
 		franz_free(i_mem);
+		g_allocatedram+=i_size;
+		g_allocatedram-=i_oldsize;
 		return new_mem;
 	}
 ///#ifdef DEBUG
@@ -6072,6 +5974,8 @@ static void* franz_extend(void* i_mem,size_t i_size,size_t i_oldsize)
 #else
 	if (i_oldsize>0)
 		i_oldsize++; /// compiler be quiet!
+	g_allocatedram+=i_size;
+	g_allocatedram-=i_oldsize;
 	return realloc(i_mem,i_size);
 #endif
 }
@@ -7264,6 +7168,7 @@ LZ4_FORCE_INLINE int LZ4_compress_generic(
 LZ4_stream_t* LZ4_createStream(void)
 {
     LZ4_stream_t* const lz4s = (LZ4_stream_t*)ALLOC(sizeof(LZ4_stream_t));
+	g_allocatedram+=sizeof(LZ4_stream_t);
     LZ4_STATIC_ASSERT(sizeof(LZ4_stream_t) >= sizeof(LZ4_stream_t_internal));
     DEBUGLOG(4, "LZ4_createStream %p", lz4s);
     if (lz4s == NULL) return NULL;
@@ -7937,6 +7842,7 @@ int LZ4_decompress_safe_doubleDict(const char* source, char* dest, int compresse
 LZ4_streamDecode_t* LZ4_createStreamDecode(void)
 {
     LZ4_STATIC_ASSERT(sizeof(LZ4_streamDecode_t) >= sizeof(LZ4_streamDecode_t_internal));
+	g_allocatedram+=sizeof(LZ4_streamDecode_t);
     return (LZ4_streamDecode_t*) ALLOC_AND_ZERO(sizeof(LZ4_streamDecode_t));
 }
 
@@ -9335,6 +9241,8 @@ void Array<T>::resize(size_t sz, int ex) {
     assert(offset>0 && offset<=64);
     assert((char*)data-offset);
     ::free((char*)data-offset);
+	 g_arrayram-=n;
+ 
   }
   n=0;
   offset=0;
@@ -9343,6 +9251,7 @@ void Array<T>::resize(size_t sz, int ex) {
   const size_t nb=128+n*sizeof(T);  // test for overflow
   if (nb<=128 || (nb-128)/sizeof(T)!=n) n=0, error("Array too big");
   data=(T*)::calloc(nb, 1);
+  g_arrayram+=nb;
   if (!data) n=0, error("Out of memory");
   offset=64-(((char*)data-(char*)0)&63);
   assert(offset>0 && offset<=64);
@@ -10091,6 +10000,7 @@ class StringBuffer: public libzpaq::Reader, public libzpaq::Writer {
   void reserve(size_t a) {
     assert(!al==!p);
     if (a<=al) return;
+	g_allocatedram+=a;
     unsigned char* q=0;
     if (a>0) q=(unsigned char*)(p ? franz_extend(p,a,al) : franz_malloc(a));
     if (a>0 && !q) error("Out of memory");
@@ -10118,14 +10028,18 @@ public:
   // Set output limit
   void setLimit(size_t n) {limit=n;}
   // Free memory
-  ~StringBuffer() {if (p) franz_free(p);}
+  ~StringBuffer() {if (p) {franz_free(p);g_allocatedram-=al;}}
   // Return number of bytes written.
   size_t size() const {return wpos;}
   // Return number of bytes left to read
   ///size_t remaining() const {return wpos-rpos;}
   // Reset size to 0 and free memory.
   void reset() {
-    if (p) franz_free(p);
+	  
+    if (p) 
+	{franz_free(p);
+	g_allocatedram-=al;
+	}
     p=0;
     al=rpos=wpos=0;
   }
@@ -10224,6 +10138,7 @@ void allocx(U8* &p, int &n, int newsize) {
 #else // Windows
       VirtualFree(p, 0, MEM_RELEASE);
 #endif
+	g_allocatedram-=n;
     p=0;
     n=0;
   }
@@ -10237,7 +10152,10 @@ void allocx(U8* &p, int &n, int newsize) {
                         PAGE_EXECUTE_READWRITE);
 #endif
     if (p)
+	{
+	  g_allocatedram+=newsize;
       n=newsize;
+	}
     else {
       n=0;
 		std::string nsize=migliaia(newsize);
@@ -15727,6 +15645,9 @@ divsufsort(const unsigned char *T, int *SA, int n) {
   else if(n == 2) { m = (T[0] < T[1]); SA[m ^ 1] = 0, SA[m] = 1; return 0; }
   bucket_A = (int *)franz_malloc(BUCKET_A_SIZE * sizeof(int));
   bucket_B = (int *)franz_malloc(BUCKET_B_SIZE * sizeof(int));
+  
+//	g_allocatedram+=BUCKET_A_SIZE * sizeof(int)+BUCKET_B_SIZE * sizeof(int);
+
   /* Suffixsort. */
   if((bucket_A != NULL) && (bucket_B != NULL)) {
     m = sort_typeBstar(T, SA, bucket_A, bucket_B, n);
@@ -21656,7 +21577,7 @@ XXH128_hash_t XXH128(const void* data, size_t len, XXH64_hash_t seed);
  * different memory routines for malloc() and free()
  */
 
-static void* XXH_malloc(size_t s) { return franz_malloc(s); }
+static void* XXH_malloc(size_t s) {  g_allocatedram+=s;return franz_malloc(s);}
 /*! and for memcpy() */
 static void* XXH_memcpy(void* dest, const void* src, size_t size)
 {
@@ -22152,6 +22073,7 @@ XXH64_finalize(xxh_u64 h64, const xxh_u8* ptr, size_t len, XXH_alignment align)
 
 XXH64_state_t* XXH64_createState(void)
 {
+	 g_allocatedram+=sizeof(XXH64_state_t);
     return (XXH64_state_t*)XXH_malloc(sizeof(XXH64_state_t));
 }
 
@@ -24873,6 +24795,8 @@ void morebar(const char i_carattere)
 }
 bool getcaptcha(const string& i_captcha,const string& i_reason)
 {
+	if (flagnocaptcha)
+		return true;
 	if (i_captcha=="")
 		return false;
 	if (i_reason=="")
@@ -24964,6 +24888,12 @@ bool iszpaq(string i_filename)
 {
 	return isextension(i_filename.c_str(), ".zpaq");
 }
+#ifdef _WIN32
+bool isexe(string i_filename)
+{
+	return isextension(i_filename.c_str(), ".exe");
+}
+#endif
 bool isxls(string i_filename)
 {
 	return (isextension(i_filename.c_str(), ".xls") || isextension(i_filename.c_str(), ".ppt") || isextension(i_filename.c_str(), ".pps"));
@@ -41091,6 +41021,7 @@ string relativetolongpath(string i_filename)
 	if (uint64_t len=GetFullPathNameW(utow(i_filename.c_str()).c_str(),0,0,0))
 	{
 		wchar_t* buf= (wchar_t*)franz_malloc((len)*sizeof(WCHAR));
+		g_allocatedram+=(len)*sizeof(WCHAR);
 		if (buf==NULL)
 		{
 			myprintf("00191! guru in malloc\n");
@@ -41113,6 +41044,8 @@ string relativetolongpath(string i_filename)
 				*/
 			}
 			franz_free(buf);
+			g_allocatedram-=(len)*sizeof(WCHAR);
+	
 			return risultato;
 		}
 	}
@@ -41149,51 +41082,181 @@ string getuname()
 #endif
 	return "";
 }
+
 // Guess number of cores. In 32 bit mode, max is 2.
-int numberOfProcessors() {
+int numberOfProcessors() 
+{
+
 #ifdef __HAIKU__
 	system_info haikuinfo;
 	get_system_info(&haikuinfo);
 	return haikuinfo.cpu_count;
 #endif
+
 #ifdef ESX
 	return 1;
 #endif
+
   int rc=0;  // result
-#ifdef unix
-#ifdef BSD  // BSD or Mac OS/X
-  size_t rclen=sizeof(rc);
-  int mib[2]={CTL_HW, HW_NCPU};
-  if (sysctl(mib, 2, &rc, &rclen, 0, 0)!=0)
-    perror("sysctl");
-#else  // Linux
-  // Count lines of the form "processor\t: %d\n" in /proc/cpuinfo
-  // where %d is 0, 1, 2,..., rc-1
-  FILE *in=fopen("/proc/cpuinfo", "r");
-  if (!in) return 1;
-  std::string s;
-  int c;
-  while ((c=getc(in))!=EOF) {
-    if (c>='A' && c<='Z') c+='a'-'A';  // convert to lowercase
-    if (c>' ') s+=c;  // remove white space
-    if (c=='\n') {  // end of line?
-      if (s.size()>10 && s.substr(0, 10)=="processor:") {
-        c=atoi(s.c_str()+10);
-        if (c==rc) ++rc;
-      }
-      s="";
-    }
-  }
-  fclose(in);
+  
+#ifdef SOLARIS
+	if (flagdebug3)
+		myprintf("41105: SOLARIS number of processors\n");
+	if (flaght)
+	{
+	}
+	else
+	{
+		/// decoding non-HT in SOLARIS is hard, sorry...
+		kstat_ctl_t *kc;
+		kstat_t *ksp;
+		kstat_named_t *knp;
+		int logical_cpu_count = 0;
+
+		kc = kstat_open();
+		if (kc == NULL) 
+		{
+			myprintf("41214! ktstat_open KAPUTT\n");
+			return 1;
+		}
+		char cpu_info[] = "cpu_info";
+		for (ksp = kc->kc_chain; ksp != NULL; ksp = ksp->ks_next) 
+			if (strcmp(ksp->ks_module, cpu_info) == 0) 
+				logical_cpu_count++;
+		kstat_close(kc);
+		
+		rc=logical_cpu_count;
+	}
 #endif
-#else
+#ifdef BSD  // BSD or Mac OS/X
+	if (flaght)
+	{
+		size_t rclen=sizeof(rc);
+		int mib[2]={CTL_HW, HW_NCPU};
+		if (sysctl(mib, 2, &rc, &rclen, 0, 0)!=0)
+			perror("sysctl");
+	}
+	else
+	{
+		size_t len 			= sizeof(rc);
+#if (defined(__APPLE__))
+
+		if (sysctlbyname("hw.physicalcpu", &rc, &len, NULL, 0) < 0) 
+		{
+			myprintf("41210! hw.physicalcpu KAPUTT\n");
+			return 1;
+		}
+#endif
+
+#if defined(__FreeBSD__) || defined(__OpenBSD__)
+		if (sysctlbyname("hw.ncpu", &rc, &len, NULL, 0) < 0) 
+		{
+			myprintf("41220! hw.ncpu KAPUTT\n");
+			return 1;
+		}
+	}
+#endif
+#endif //BSD
+
+#if defined(__linux__) 
+	if (flaght)
+	{
+		  // Count lines of the form "processor\t: %d\n" in /proc/cpuinfo
+		  // where %d is 0, 1, 2,..., rc-1
+		  FILE *in=fopen("/proc/cpuinfo", "r");
+		  if (!in) return 1;
+		  std::string s;
+		  int c;
+		  while ((c=getc(in))!=EOF) {
+			if (c>='A' && c<='Z') c+='a'-'A';  // convert to lowercase
+			if (c>' ') s+=c;  // remove white space
+			if (c=='\n') {  // end of line?
+			  if (s.size()>10 && s.substr(0, 10)=="processor:") {
+				c=atoi(s.c_str()+10);
+				if (c==rc) ++rc;
+			  }
+			  s="";
+			}
+		  }
+		  fclose(in);
+	}
+	else
+	{
+		FILE *cpuinfo = fopen("/proc/cpuinfo", "r");
+		if (cpuinfo == NULL) 
+		{
+			myprintf("41229: /proc/cpuinfo KAPUTT\n");
+			return 1;
+		}
+
+		char line[1024];
+		int cpu_cores = 0;
+		int siblings = 0;
+		int logical_cores=0;
+
+		while (fgets(line, sizeof(line), cpuinfo) != NULL) 
+			if (strncmp(line, "processor", 9) == 0) 
+				logical_cores++;
+			else if (strncmp(line, "cpu cores", 9) == 0) 
+				sscanf(line, "cpu cores : %d", &cpu_cores);
+			else if (strncmp(line, "siblings", 8) == 0) 
+				sscanf(line, "siblings : %d", &siblings);
+		fclose(cpuinfo);
+
+		rc=cpu_cores;
+    
+    // Se siblings è maggiore di cpu_cores,
+	}
+#endif
+
+#ifdef _WIN32
   // In Windows return %NUMBER_OF_PROCESSORS%
-  //const char* p=getenv("NUMBER_OF_PROCESSORS");
-  //if (p) rc=atoi(p);
-  ///SYSTEM_INFO si={0};
-  SYSTEM_INFO si= SYSTEM_INFO();
-  GetSystemInfo(&si);
-  rc=si.dwNumberOfProcessors;
+
+	if (flaght)
+	{
+		SYSTEM_INFO si= SYSTEM_INFO();
+		GetSystemInfo(&si);
+		rc=si.dwNumberOfProcessors;
+	}
+	else
+	{
+		
+		int physical_cores 	= 0;
+		///int logical_cores 	= 0;
+
+		SYSTEM_INFO sysInfo;
+		GetSystemInfo(&sysInfo);
+		///logical_cores = sysInfo.dwNumberOfProcessors;
+
+		DWORD length = 0;
+		GetLogicalProcessorInformation(NULL, &length);
+		if (length == 0) 
+		{
+			myprintf("41244! GetLogicalProcessorInformation KAPUTT\n");
+			return 1;
+		}
+
+		PSYSTEM_LOGICAL_PROCESSOR_INFORMATION buffer = (PSYSTEM_LOGICAL_PROCESSOR_INFORMATION)malloc(length);
+		if (buffer == NULL) 
+		{
+			myprintf("41251! malloc KAPUTT\n");
+			return 1;
+		}
+
+		if (GetLogicalProcessorInformation(buffer, &length) == FALSE) 
+		{
+			myprintf("41257: GetLogical (2) kaputt!\n");
+			free(buffer);
+			return 1;
+		}
+
+		for (DWORD i = 0; i < length / sizeof(SYSTEM_LOGICAL_PROCESSOR_INFORMATION); i++) 
+			if (buffer[i].Relationship == RelationProcessorCore)
+				physical_cores++;
+
+		free(buffer);
+		rc=physical_cores;
+	}
 #endif
   if (rc<1) rc=1; /// numero massimo core 32bit
   if (sizeof(char*)==4 && rc>2) rc=2;
@@ -41995,6 +42058,7 @@ InputArchive::InputArchive(const char* filename):fn(filename)
 			error("37992: cannot read salt");
 		libzpaq::stretchKey(key,g_password, salt);
 		aes=new libzpaq::AES_CTR(key, 32, salt);
+		g_allocatedram+=sizeof(libzpaq::AES_CTR);
 		off=32;
 	}
 }
@@ -43070,6 +43134,8 @@ OutputArchive::OutputArchive(string i_thearchive,const char* filename, const cha
     char key[32];
     libzpaq::stretchKey(key, password, salt);
     aes=new libzpaq::AES_CTR(key, 32, salt);
+	g_allocatedram+=sizeof(libzpaq::AES_CTR);
+		
   }
 
 
@@ -43188,6 +43254,7 @@ class franzfs
 	{
 ///		myprintf("00311: init1\n");
 		data=(char*)franz_malloc(i_size);
+		g_allocatedram+=i_size;
 	///	myprintf("00312: init2\n");
 		if (data==NULL)
 		{
@@ -43322,6 +43389,7 @@ struct DT   // if you get some warning here, update your compiler!
 			}
 			memset(franz_block,0,franz_block_size);
 			g_dt_ram+=franz_block_size;
+			g_allocatedram-=franz_block_size; // (updated in franz_malloc)
 		}
 		//g_dt_ram+=franz_block_size+sizeof(DT);
 		
@@ -44235,6 +44303,8 @@ bool list_Archive::open(const char* filename, const char* password, int mode_,
       if (in.read(slt, 32)!=32) libzpaq::error("no salt");
       libzpaq::stretchKey(key, password, slt);
       aes=new libzpaq::AES_CTR(key, 32, slt);
+	  g_allocatedram+=sizeof(libzpaq::AES_CTR);
+		
     }
 
 	
@@ -44260,6 +44330,8 @@ bool list_Archive::open(const char* filename, const char* password, int mode_,
       char key[32]={0};
       libzpaq::stretchKey(key, password, salt);
       aes=new libzpaq::AES_CTR(key, 32, salt);
+	  g_allocatedram+=sizeof(libzpaq::AES_CTR);
+		
     }
   }
 
@@ -44328,6 +44400,7 @@ class list_StringBuffer: public libzpaq::Reader, public libzpaq::Writer {
 
     if (a<=al) return;
     unsigned char* q=0;
+	g_allocatedram+=a;
     if (a>0) q=(unsigned char*)(p ? realloc(p, a) : malloc(a));
     if (a>0 && !q) {
       printf( "list_StringBuffer realloc %1.0f to %1.0f at %p failed\n",
@@ -44661,6 +44734,7 @@ private:
 	int add();                			// add, return 1 if error else 0
 	int addhome();                		// add, return 1 if error else 0
 	int list();               			// list (one parameter) / check (more than one)
+	int list715();
 	int collision(bool i_flagall);      // check for SHA-1 collisions
 	int fzf();
 	int ecommand();						// extract on ./
@@ -44848,8 +44922,8 @@ size_t			i_buffersize
 	void		runhigh(string i_addendum);
 #endif
 public:
-	int64_t		get_dt_ram() 	{ return ram_of_map(&dt);}
-	int64_t		get_edt_ram() 	{ return ram_of_map(&edt);}
+	int64_t		get_dt_ram() 		{ return ram_of_map(&dt);}
+	int64_t		get_edt_ram() 		{ return ram_of_map(&edt);}
 	int64_t		get_dt_count() 		{ return count_of_map(&dt); }
 	int64_t		get_edt_count() 	{ return count_of_map(&edt); }
 	///bool 		ismounted(const string i_path);
@@ -44862,15 +44936,15 @@ public:
 	void list_creationdate		(int64_t i_mycreationtime);
 	void list_attributes		(int64_t i_attributes);
 
-	int64_t datacreazione(string i_file);
-	void rename_a_dtmap(DTMap& i_source);
-	bool grep(string i_filename,string i_search);
-	int	checkautotest(string i_path);
-	bool isjitable();
-	void tabba();
-	int	external();
-	string getbackupnameifany(string i_filename);
-	int sumhome();
+	int64_t 					datacreazione(string i_file);
+	void 						rename_a_dtmap(DTMap& i_source);
+	bool 						grep(string i_filename,string i_search);
+	int							checkautotest(string i_path);
+	bool 						isjitable();
+	void 						tabba();
+	int							external();
+	string 						getbackupnameifany(string i_filename);
+	int 						sumhome();
 };
 
 Jidac* pjidac;
@@ -45813,6 +45887,8 @@ void Array<T>::resize(size_t sz, int ex) {
   const size_t nb=128+n*sizeof(T);  // test for overflow
   if (nb<=128 || (nb-128)/sizeof(T)!=n) unzerror("Array too big");
   data=(T*)calloc(nb, 1);
+  g_allocatedram+=nb;
+  
   if (!data) unzerror("out of memory");
   // Align array on a 64 byte address.
   // This optimization is NOT required by the ZPAQ standard.
@@ -47616,6 +47692,8 @@ void unzInputFile::open(const char* filename, const char* key) {
     while (*key) sha256.put(*key++);
     stretchKey(stretched_key, sha256.result(), salt);
     aes=new unzAES_CTR(stretched_key, 32, salt);
+	g_allocatedram+=sizeof(unzAES_CTR);
+		
     if (!aes) unzerror("out of memory");
     aes->encrypt(unzBuf, end, 0);
   }
@@ -48158,11 +48236,25 @@ string Jidac::sanitizzanomefile(string i_filename,int i_filelength,int& io_colli
 
 	if  (i_filename=="")
 		return("");
+	
+#ifdef _WIN32
+	if (flagfixreserved)
+	{
+		const std::string caratteriNonValidi = "\\:*?\"<>|";
+		for (char& c:i_filename) 
+			if (caratteriNonValidi.find(c)!=std::string::npos) 
+					c = '_';
+	}
+#endif
+
 	string percorso			=extractfilepath(i_filename);
 	string nome				=prendinomefileebasta(i_filename);
 	string estensione		=prendiestensione(i_filename);
 	string senzaestensione	=percorso+nome;
 	string newname;
+	
+	
+	
 	int lunghezza=FRANZMAXPATH;
 	if (i_filelength>0)
 		if (i_filelength<FRANZMAXPATH)
@@ -48289,6 +48381,7 @@ string Jidac::sanitizzanomefile(string i_filename,int i_filelength,int& io_colli
 	}
 	if (flagfix255)
 	{
+
 		int	lunghezzalibera=lunghezza-percorso.length();//%08d_
 		if (lunghezzalibera<10)
 		{
@@ -48393,12 +48486,13 @@ string Jidac::sanitizzanomefile(string i_filename,int i_filelength,int& io_colli
 		newname+="."+estensione;
 	if (flagdebug3)
 		myprintf("00484: Finalized %d %s\n",(int)newname.length(),newname.c_str());
-	if (newname.length()>255)
-	{
-		myprintf("00485: WARN pre  %08d   %s\n",(int)i_filename.length(),i_filename.c_str());
-		myprintf("00486: WARN post %08d   %s\n",(int)newname.length(),newname.c_str());
-		myprintf("\n");
-	}
+	if (flagdebug3)
+		if (newname.length()>255)
+		{
+			myprintf("00485: WARN pre  %08d   %s\n",(int)i_filename.length(),i_filename.c_str());
+			myprintf("00486: WARN post %08d   %s\n",(int)newname.length(),newname.c_str());
+			myprintf("\n");
+		}
 	return newname;
 }
 /*
@@ -49322,6 +49416,7 @@ string help_a(bool i_usage,bool i_example)
 		moreprint("+ : -touch X      Change every filedate to be stored to X");
 		moreprint("+ : -input X      Load the X file as files to be added");
 		moreprint("+ : -errorlog X   Write the errors on the X file");
+		moreprint("+ : -ht           Enable HyperThread (if any)");
 	}
 	if (i_usage && i_example)
 		moreprint("    Examples:");
@@ -49684,7 +49779,8 @@ string help_l(bool i_usage,bool i_example)
 		help_size();
 		help_orderby();
 		help_range();
-
+		moreprint("+ : -715          Binary-compatible zpaq 7.15 output");
+		
 	}
 	if (i_usage && i_example) moreprint("    Examples:");
 	if (i_example)
@@ -49713,6 +49809,7 @@ string help_l(bool i_usage,bool i_example)
 		moreprint("Where are the restorable versions?   l z:\\1.zpaq -find \"$$$$\" -all -nodel");
 		moreprint("TAB-delimited CSV output             l z:\\1.zpaq -terse -csv \"\\t\"");
 		moreprint("Enclose fields between double quote  l z:\\1.zpaq -terse -csv \"\\\",\\\"\" -csvhf \"\\\"\"");
+		moreprint("Output just like zpaq 7.15           l z:\\1.zpaq -715");
 	}
 	return("List file(s)");
 
@@ -49887,6 +49984,7 @@ string help_sfx(bool i_usage,bool i_example)
 		moreprint("CMD   sfx (sfx module, with encryption support)");
 		moreprint("+ :               (no switch): Write SFX along the .zpaq");
 		moreprint("                  (w/switch) : Convert .zpaq (max 2GB) to Windows .EXE");
+		moreprint("+ : -to X         Extract the .zpaq from a .exe into X");
 	}
 	if (i_usage && i_example) moreprint("    Examples:");
 	if (i_example)
@@ -49894,6 +49992,7 @@ string help_sfx(bool i_usage,bool i_example)
 		moreprint("Create  z:\\1.exe               :      sfx z:\\1.zpaq");
 		moreprint("Convert 1.zpaq to 2.exe        :      sfx z:\\1.zpaq -sfx z:\\2.exe");
 		moreprint("Extract sfx module             :      sfx z:\\64bit.exe");
+		moreprint("Extract the zpaq (if any)      :      sfx z:\\1.exe -to z:\\1.zpaq -space -force");
 	}
 	return("Create SFX module (with encryption support)");
 }
@@ -51265,6 +51364,11 @@ string	windows_fixbackslash(string i_command,string i_parameter)
 	return "";
 }
 #endif
+
+bool do_not_print_headers()
+{
+	return ((!flagpakka) && (!flagsilent) && (!flagstdout) && (!flagterse) && ((command=='l') && (flag715)));
+}
 void decoderange(string i_range)
 {
 /*
@@ -51383,7 +51487,7 @@ void decoderange(string i_range)
 		myprintf("00509: cannot decode range |%s| you should use something like 2:4 or 2: or :3\n",i_range.c_str());
 		seppuku();
 	}
-	if ((!flagpakka) && (!flagsilent) && (!flagstdout) && (!flagterse))
+	if (!do_not_print_headers())
 	{
 		myprintf("00510: franz:%-21s %21s\n","rangefrom (version)",migliaia(g_rangefrom));
 		myprintf("00511: franz:%-21s %21s\n","rangeto   (version)",migliaia(g_rangeto));
@@ -51580,8 +51684,8 @@ bool Jidac::cli_filesandcommand(const string& i_opt,string i_string,char i_comma
 		while (++(*i_i)<argc && argv[(*i_i)][0]!='-')
 			files.push_back(argv[(*i_i)]);
 		(*i_i)--;
-		if ((!flagpakka) && (!flagsilent) && (!flagstdout) && (!flagterse))
-			myprintf("00514: franz:%-21s %21c - command\n",i_string.c_str(),command);
+		if (!do_not_print_headers())
+				myprintf("00514: franz:%-21s %21c - command\n",i_string.c_str(),command);
 
 		return true;
 	}
@@ -51623,7 +51727,7 @@ bool Jidac::cli_getkey	(const string& i_opt,string i_string,int argc,const char*
 				(*o_password)=o_password_string;
 			}
 		}
-		if ((!flagpakka) && (!flagsilent) && (!flagstdout) && (!flagterse))
+		if (!do_not_print_headers())
 		{
 			if (flagdebug)
 				myprintf("00516: franz:%-21s %21s\n",i_string.c_str(),(*o_plain).c_str());
@@ -51651,7 +51755,7 @@ bool Jidac::cli_getstring	(const string& i_opt,string i_string,bool	i_flagoption
 		if ( ((*i_i)<argc-1)  )
 		{
 			(*o_thestring)=argv[++(*i_i)];
-			if ((!flagpakka) && (!flagsilent) && (!flagstdout) && (!flagterse))
+			if (!do_not_print_headers())
 				myprintf("00519: franz:%-21s %21s\n",i_string.c_str(),(*o_thestring).c_str());
 		}
 		return true;
@@ -51664,8 +51768,8 @@ bool Jidac::cli_getstring	(const string& i_opt,string i_string,bool	i_flagoption
 			{
 			///	(*o_thestring)=i_default;
 				(*o_thestring)=argv[(*i_i)]+2;
-					if ((!flagpakka) && (!flagsilent) && (!flagstdout) && (!flagterse))
-						myprintf("00520: franz:%-21s %21s\n",i_string.c_str(),(*o_thestring).c_str());
+				if (!do_not_print_headers())
+					myprintf("00520: franz:%-21s %21s\n",i_string.c_str(),(*o_thestring).c_str());
 				return true;
 			}
 	}
@@ -51699,7 +51803,7 @@ bool Jidac::cli_getarray(const string& i_opt,string i_string,int argc,const char
 		}
 		--(*i_i);
 
-		if ((!flagpakka) && (!flagsilent) && (!flagstdout) && (!flagterse))
+		if (!do_not_print_headers())
 			if ((*o_files).size()>0)
 			{
 				for (unsigned int i=0;i<(*o_files).size();i++)
@@ -51736,7 +51840,7 @@ bool Jidac::cli_getint(const string& i_opt,string i_string,bool	i_flagoptional,c
 				(*o_thenumber)=(int)myatoll(argv[++(*i_i)]);
 		}
 
-		if ((!flagpakka) && (!flagsilent) && (!flagstdout) && (!flagterse))
+		if (!do_not_print_headers())
 			myprintf("00524: franz:%-21s %21s\n",i_string.c_str(),migliaia(*o_thenumber));
 		return true;
 	}
@@ -51748,7 +51852,7 @@ bool Jidac::cli_getint(const string& i_opt,string i_string,bool	i_flagoptional,c
 			{
 				(*o_thenumber)=i_default;
 				(*o_thenumber)=(int)myatoll(argv[(*i_i)]+2);
-				if ((!flagpakka) && (!flagsilent) && (!flagstdout) && (!flagterse))
+				if (!do_not_print_headers())
 					myprintf("00525: franz:%-21s %21s\n",i_string.c_str(),migliaia(*o_thenumber));
 				return true;
 			}
@@ -51782,7 +51886,7 @@ bool Jidac::cli_getuint(const string& i_opt,string i_string,bool	i_flagoptional,
 			if ( ((*i_i)<argc-1) && (isdigit(argv[(*i_i)+1][0])) )
 				(*o_thenumber)=(int)myatoll(argv[++(*i_i)]);
 		}
-		if ((!flagpakka) && (!flagsilent) && (!flagstdout) && (!flagterse))
+		if (!do_not_print_headers())
 			myprintf("00527: franz:%-21s %21s\n",i_string.c_str(),migliaia(*o_thenumber));
 		return true;
 	}
@@ -51812,7 +51916,7 @@ bool Jidac::cli_getuint64(const string& i_opt,string i_string,bool	i_flagoptiona
 			if ( ((*i_i)<argc-1) && (isdigit(argv[(*i_i)+1][0])) )
 				(*o_thenumber)=myatoll(argv[++(*i_i)]);
 		}
-		if ((!flagpakka) && (!flagsilent) && (!flagstdout)  && (!flagterse))
+		if (!do_not_print_headers())
 			myprintf("00529: franz:%-21s %21s\n",i_string.c_str(),migliaia(*o_thenumber));
 		return true;
 	}
@@ -51841,7 +51945,7 @@ bool Jidac::cli_getdate(string& i_opt,string i_string,int argc,const char** argv
 					
 					(*o_date)=newdate;
 					
-					if ((!flagpakka) && (!flagsilent) && (!flagstdout)  && (!flagterse))
+					if (!do_not_print_headers())
 					{
 						if (flagdebug3)
 							myprintf("00531: franz:%s change from %s => %s\n",i_string.c_str(),dateToString(flagutc,*o_date).c_str(),dateToString(flagutc,newdate).c_str());
@@ -51873,7 +51977,7 @@ bool Jidac::cli_onlystring(const string& i_opt,string i_string,string i_alias,st
 			{
 				o_thefile=argv[(*i_i)];
 
-				if ((!flagpakka) && (!flagsilent) && (!flagstdout) && (!flagterse))
+				if (!do_not_print_headers())
 					myprintf("00534: franz:%-21s <<%s>>\n",i_string.c_str(),o_thefile.c_str());
 
 				if (i_theflag!=NULL)
@@ -51990,6 +52094,8 @@ int Jidac::loadparameters(int argc, const char** argv)
 	g_programflags.add(&flagignore,			"-ignore",				"Ignore (do not show) file errors",												"a;");
 	g_programflags.add(&flaghome,			"-home",				"Home",												"a;");
 	g_programflags.add(&flagkill,			"-kill",				"Kill",												"");
+	g_programflags.add(&flaght,				"-ht",					"Enable Hyperthread (if any)",												"");
+	g_programflags.add(&flagnocaptcha,		"-nocaptcha",			"Skip chaptcha",												"");
 	g_programflags.add(&flagmm,				"-mm",					"Memory mapped",									"");
 	g_programflags.add(&flagnoattributes,	"-noattributes",		"Do not store attribute",									"");
 	g_programflags.add(&flagattr,			"-attr",				"Show attribute (listing)",									"");
@@ -52046,7 +52152,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 ///	g_programflags.add(&flagdd,				"-dd",					"dd",												"");
 	g_programflags.add(&flagfindzpaq,		"-findzpaq",			"Search .zpaq in every drive letter (USB device)",	"");
 	g_programflags.add(&flagfixcase,		"-fixcase",				"Fix CAse",											"");
-	g_programflags.add(&flagfixreserved,	"-fixreserverd",		"fixreserverd",										"");
+	g_programflags.add(&flagfixreserved,	"-fixreserved",			"fixreserved",										"");
 	g_programflags.add(&flagimage,			"-image",				"Drive image",										"");
 	g_programflags.add(&flaglongpath,		"-longpath",			"Longpath",											"");
 	g_programflags.add(&flagopen,			"-open",				"open",												"");
@@ -52295,11 +52401,16 @@ int Jidac::loadparameters(int argc, const char** argv)
 			flagnoeta=true;
 		}
 	}
-	if ((!flagpakka) && (!flagstdout) && (!flagterse))
+	if (flag715)
+		myprintf("52511: zpaq v7.15 journaling archiver, compiled Aug 17 2016\n");
+	else
 	{
-		color_green();
-		moreprint("zpaqfranz v" ZPAQ_VERSION TEXT_NOJIT TEXT_GUI TEXT_BIG TEXT_SERVER TEXT_ALIGN TEXT_HWPRE TEXT_HWBLAKE3 TEXT_HWSHA1 TEXT_HWSHA2 ZSFX_VERSION ZPAQ_DATE); /// FAKE COMPILER WARNING
-		color_restore();
+		if ((!flagpakka) && (!flagstdout) && (!flagterse))
+		{
+			color_green();
+			moreprint("zpaqfranz v" ZPAQ_VERSION TEXT_NOJIT TEXT_GUI TEXT_BIG TEXT_SERVER TEXT_ALIGN TEXT_HWPRE TEXT_HWBLAKE3 TEXT_HWSHA1 TEXT_HWSHA2 ZSFX_VERSION ZPAQ_DATE); /// FAKE COMPILER WARNING
+			color_restore();
+		}
 	}
 	if (flagdebug)
 		myprintf("00547: FULL exename <<%s>>\n",fullzpaqexename.c_str());
@@ -52819,7 +52930,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 ///				string fixedstring=windows_fixbackslash("-to",mytemp);
 				myreplaceall(mytemp,"\"","");
 				tofiles.push_back(mytemp);
-				if ((!flagpakka) && (!flagsilent) && (!flagstdout) && (!flagterse))
+				if (!do_not_print_headers())
 					myprintf("00560: franz:%-21s <<%s>>\n","-to",mytemp.c_str());
 
 			}
@@ -52890,7 +53001,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 		else
 		{
 			if (!g_programflags.exists(argv[i]))
-				myprintf("00562: Unknown option ignored: %s\n", argv[i]);
+				myprintf("00562! Unknown option ignored: %s\n", argv[i]);
 		}
 	}
 
@@ -53042,7 +53153,8 @@ int Jidac::loadparameters(int argc, const char** argv)
 		franzparameters+=attivati;
 
 		if (franzparameters!="")
-			myprintf("00571: franz:%s\n",franzparameters.c_str());
+			if (!do_not_print_headers())
+				myprintf("00571: franz:%s\n",franzparameters.c_str());
 
 #ifdef SERVER
 		if (flagserver)
@@ -53152,8 +53264,11 @@ int Jidac::loadparameters(int argc, const char** argv)
 		flagterse			=false;
 		g_franzotype		=0;
 		g_franzotypelen		=0;
-		myprintf("00578: **** Activated V7.15 mode ****\n");
-		myprintf("00579: T forcezfs,donotforcexls,forcewindows; F crc32,checksum,filelist,xxhash,xxh3,fixeml,fix255,fixreserved,longpath,utf,flat\n");
+		if ((command!='l') && (!flag715))
+		{
+			myprintf("00578: **** Activated V7.15 mode ****\n");
+			myprintf("00579: T forcezfs,donotforcexls,forcewindows; F crc32,checksum,filelist,xxhash,xxh3,fixeml,fix255,fixreserved,longpath,utf,flat\n");
+		}
 	}
 
 #ifdef _WIN32
@@ -54378,6 +54493,8 @@ public:
   CompressJob(int threads, int buffers, OutputArchive * f):
       out(f),job(0), q(0), qsize(buffers), front(0)  {
     q=new CJ[buffers];
+	g_allocatedram+=sizeof(CJ)*buffers;
+		
     if (!q) throw std::bad_alloc();
     init_mutex(mutex);
     empty.init(buffers);
@@ -55274,6 +55391,7 @@ ThreadReturn decompressThread(void* arg) {
 						{
 							p->second.pramfile=new franzfs;
 							(*p->second.pramfile).init(p->second.size);
+							g_allocatedram+=sizeof(franzfs);
 						}
 			assert(job.outf==FPNULL);
 			if ((p->second.data==0) && (!flagstdout))
@@ -55741,6 +55859,8 @@ ThreadReturn decompressthreadramdisk(void* arg)
 					{
 						p->second.pramfile=new franzfs;
 						(*p->second.pramfile).init(p->second.size);
+						g_allocatedram+=sizeof(franzfs);
+
 					}
 				if (p->second.pramfile==NULL)
 					error("31399 cannot init ramdisk");
@@ -55899,7 +56019,7 @@ void Jidac::printsanitizeflags()
 				myprintf("00714: ****** -fixeml Heuristic compress .eml filenames (Fwd Fwd Fwd=>Fwd etc)\n");
 #ifdef _WIN32
 			if (flagfixreserved)
-				myprintf("00715: ****** -fixreserved (fix LPT1 etc)\n");
+				myprintf("00715: ****** -fixreserved (fix LPT1, : etc)\n");
 			if (flagfixcase)
 				myprintf("00716: ****** -fixcase (fix pippo.txt and PIPPO.txt)\n");
 #endif
@@ -56210,6 +56330,7 @@ static void decompress_print(FILE* inpFp,size_t messageMaxBytes)
  	int64_t startdecompress=mtime();
     LZ4_streamDecode_t* const lz4StreamDecode = LZ4_createStreamDecode();
     char* const cmpBuf = (char*) malloc(LZ4_COMPRESSBOUND(messageMaxBytes));
+	g_allocatedram+=LZ4_COMPRESSBOUND(messageMaxBytes);
 	if (cmpBuf==NULL)
 	{
 		myprintf("00742: guru allocating cmpBuf\n");
@@ -56217,6 +56338,8 @@ static void decompress_print(FILE* inpFp,size_t messageMaxBytes)
 		return;
 	}
     char* const decBuf = (char*) malloc(ringBufferBytes);
+	g_allocatedram+=ringBufferBytes;
+	
 	if (decBuf==NULL)
 	{
 		myprintf("00743: guru allocating decBuf\n");
@@ -56325,7 +56448,11 @@ bool Jidac::noselection()
 // List contents
 int Jidac::list()
 {
-
+	if (flag715)
+	{
+		summary=0;
+		return list715();
+	}
 	if (archive=="")
 	{
 		myprintf("00748! archive is empty\n");
@@ -57176,36 +57303,59 @@ void franz_do_hash::init()
 		return;
 
 	if ((ihashtype==FRANZO_XXHASH64) || (ihashtype==FRANZO_WINHASH64) || (ihashtype==FRANZO_XXHASH64B))
+	{
 		p_xxhash64=new XXHash64(0);
+		g_allocatedram+=sizeof(XXHash64);
+
+	}
 	else
 	if ((ihashtype==FRANZO_SHA_1)||(ihashtype==FRANZO_SHA_1B))
+	{
 		p_sha1=new libzpaq::SHA1; ///You get this warning before C++17
+		g_allocatedram+=sizeof(libzpaq::SHA1);
+
+	}
 	else
 	if ((ihashtype==FRANZO_SHA_256)||(ihashtype==FRANZO_SHA_256B))
+	{
 		p_sha256=new libzpaq::SHA256; ///You get this warning before C++17
+		g_allocatedram+=sizeof(libzpaq::SHA256);
+
+	}
 	else
 	if ((ihashtype==FRANZO_XXH3)||(ihashtype==FRANZO_XXH3B))
 	{
 		p_xxh3=(XXH3_state_t*)aligned_malloc(64, sizeof(XXH3_state_t));
 		(void)XXH3_128bits_reset(p_xxh3);
+		g_allocatedram+=sizeof(XXH3_state_t);
 	}
 	else
 	if ((ihashtype==FRANZO_MD5) || (ihashtype==FRANZO_MD5B))
+	{
 		p_md5=new MD5;
+		g_allocatedram+=sizeof(MD5);
+	}
 	else
 	if ((ihashtype==FRANZO_SHA3)||(ihashtype==FRANZO_SHA3B))
+	{
 		p_sha3=new SHA3;
+		g_allocatedram+=sizeof(SHA3);
+		
+	}
 	else
 	if ((ihashtype==FRANZO_BLAKE3)||(ihashtype==FRANZO_BLAKE3B))
 	{
 		p_blake3=(blake3_hasher*)franz_malloc(sizeof(blake3_hasher));
 		blake3_hasher_init(p_blake3);
+		g_allocatedram+=sizeof(blake3_hasher);
 	}
 	else
 	if (ihashtype==FRANZO_WHIRLPOOL)
 	{
 		p_whihasher=new NESSIEstruct;
 		NESSIEinit(p_whihasher);
+		g_allocatedram+=sizeof(NESSIEstruct);
+
 	}
 	else
 	if ((ihashtype==FRANZO_HIGHWAY64) || (ihashtype==FRANZO_HIGHWAY128) || (ihashtype==FRANZO_HIGHWAY256))
@@ -57213,6 +57363,8 @@ void franz_do_hash::init()
 		p_highway64state=new HighwayHashCat;
 		uint64_t key[4] = {1, 2, 3, 4};
 		HighwayHashCatStart(key,p_highway64state);
+		g_allocatedram+=sizeof(HighwayHashCat);
+
 	}
 	else
 	if (ihashtype==FRANZO_CRC_32)
@@ -58305,7 +58457,8 @@ void * scriviramtodisk(void *t)
 			FP myfile=myfopen(par->filenameondisk[i].c_str(), WB);
 			if (myfile==FPNULL)
 			{
-				myprintf("00851: Hard guru during fopen!\n");
+				myprintf("\n");
+				myprintf("00851! Hard guru during fopen (no free RAM?)!\n");
 				seppuku();
 			}
 			par->o_timefilesystem+=(mtime()-startfilesystem);
@@ -58779,7 +58932,12 @@ int Jidac::extract()
 
 	}
 #endif
-	if ((flagutf) || (flagflat) || flagfix255 || flagfixcase || (flagparanoid))
+
+#ifdef _WIN32
+	if ((flagutf) || (flagflat) || flagfix255 || flagfixcase || (flagparanoid) || (flagfixreserved))
+#else
+	if ((flagutf) || (flagflat) || flagfix255 || flagfixcase || (flagparanoid) )
+#endif
 	{
 /// we make a copy of the map (dt) into mymap, changing the filenames
 /// wy do not in rename()? Because we need very dirty string manipulations
@@ -60597,6 +60755,8 @@ string filecopy(bool i_singlefile,bool i_append,const string& i_infile,const str
 		g_ioBUFSIZE=1048576;
 */
 	unsigned char *buffer=(unsigned char*)aligned_malloc(64, g_ioBUFSIZE);
+	g_allocatedram+=g_ioBUFSIZE;
+
 	if (buffer==NULL)
 	{
 		myprintf("01057: GURU allocating io buf of size %s\n",g_ioBUFSIZE);
@@ -61456,7 +61616,6 @@ char extract_test4[]={"sFPjBhOWQqV6WzrDglUFbQMK03yqJV1b8bQY72n3KHOSpOrBreBdxIX+k
 ///DEBIANEND
 ///char extract_test1[]={"DEBIAN"};char extract_test2[]={""};char extract_test3[]={""};char extract_test4[]={""};
 
-
 int Jidac::pause()
 {
 	int thekey=0;
@@ -61549,6 +61708,7 @@ int Jidac::autotest()
 		if (menoenne>=200000)
 			chunksize=menoenne;
 	uint8_t *buffer8bit=(uint8_t*)franz_malloc(chunksize*sizeof(uint8_t));
+	g_allocatedram+=chunksize*sizeof(uint8_t);
 	if (buffer8bit==0)
 	{
 		myprintf("01148! GURU cannot alloc the buffer8bit\n");
@@ -61559,6 +61719,7 @@ int Jidac::autotest()
 
 	// why this strange thing? Because we want to debug on BIG ENDIAN, of course
 	uint32_t *buffer32bit = (uint32_t*)franz_malloc(chunksize*sizeof(uint32_t));
+	g_allocatedram+=chunksize*sizeof(uint32_t);
 	if (buffer32bit==0)
 	{
 		franz_free(buffer8bit);
@@ -61737,6 +61898,7 @@ int Jidac::autotest()
 
 			char*	the_file;
 			the_file=(char*)franz_malloc(the_file_len);
+			g_allocatedram+=the_file_len;
 			if (the_file==NULL)
 			{
 				franz_free(buffer8bit);
@@ -62902,12 +63064,42 @@ void my_handler(int s)
 ///	  exit(0);
 	if ((!flaghashdeep) && (!flagstdout) && (command!='L') && (command!='F') && (command!='.') && (!flagterse)) /// we need to make output compatible with hashdeep?
 	{
-		myprintf("01302: %1.3f seconds (%s) ", (mtime()-g_start)/1000.0,timetohuman((uint32_t)((mtime()-g_start)/1000.0)).c_str());
-
-		if (command=='q')
-			myprintf(" on VSS operation\n");
-		else
+		if (g_allocatedram<0)
+			g_allocatedram=0;
+		if (g_arrayram<0)
+			g_arrayram=0;
+		
+		if ((command!='l') && (!flag715))
 		{
+			///myprintf("62944: RAM: heap %s +array %s +files %s = %s\n",tohuman(g_allocatedram),tohuman2(g_arrayram),tohuman3(g_dt_ram),tohuman4(g_allocatedram+g_dt_ram+g_arrayram));
+			///myprintf("01302: %1.3f seconds (%s) ", (mtime()-g_start)/1000.0,timetohuman((uint32_t)((mtime()-g_start)/1000.0)).c_str());
+			
+			string mem_heap=tohuman(g_allocatedram);
+			myreplaceall(mem_heap," ","");
+			myreplaceall(mem_heap,"0.00B","0");
+			myreplaceall(mem_heap,".00B","");
+			
+			string mem_array=tohuman(g_arrayram);
+			myreplaceall(mem_array," ","");
+			myreplaceall(mem_array,"0.00B","0");
+			myreplaceall(mem_array,".00B","");
+
+			string mem_dt=tohuman(g_dt_ram);
+			myreplaceall(mem_dt," ","");
+			myreplaceall(mem_dt,"0.00B","0");
+			myreplaceall(mem_dt,".00B","");
+
+			string mem_all=tohuman(g_allocatedram+g_dt_ram+g_arrayram);
+			myreplaceall(mem_all," ","");
+			myreplaceall(mem_all,"0.00B","0");
+			myreplaceall(mem_all,".00B","");
+			
+			myprintf("01302: %1.3fs (%s,heap %s|array %s|dt %s=>%s) ", (mtime()-g_start)/1000.0,timetohuman((uint32_t)((mtime()-g_start)/1000.0)).c_str(),
+			mem_heap.c_str(),mem_array.c_str(),mem_dt.c_str(),mem_all.c_str());
+			if (command=='q')
+				myprintf(" on VSS operation\n");
+			else
+			{
 				if (errorcode==0)
 				{
 					color_green();
@@ -62932,7 +63124,7 @@ void my_handler(int s)
 						bigerror();
 					color_restore();
 				}
-
+			}
 		}
 		if (g_255)
 		{
@@ -64291,7 +64483,11 @@ int Jidac::test()
 	int64_t starttest=mtime();
 	flagtest=true;
 	summary=1;
-	const int64_t sz=read_archive(NULL,archive.c_str());
+	int read_errors=0;
+
+	const int64_t sz=read_archive(NULL,archive.c_str(),&read_errors);
+	if (read_errors>0)
+		myprintf("65757! cannot read_archive (%s) THIS IS VERY BAD!!!\n",migliaia(read_errors));
 	if (sz<1) error("archive not found");
 	for (unsigned i=0; i<block.size(); ++i)
 	{
@@ -64390,7 +64586,7 @@ int Jidac::test()
 	
 	
   // Report failed extractions
-  unsigned extracted=0, errors=0;
+  unsigned extracted=0,errors=0;
   for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p)
   {
     string fn=rename(p->first);
@@ -64912,6 +65108,8 @@ int Jidac::test()
 		}
 	}
 	*/
+	if (read_errors)
+		return 2;
 	return (errors+status_e)>0;
 }
 /*
@@ -66834,6 +67032,7 @@ int Jidac::robocopy()
 		g_ioBUFSIZE=1048576;
 */
 	unsigned char *buf=(unsigned char*)aligned_malloc(64, g_ioBUFSIZE);
+	g_allocatedram+=g_ioBUFSIZE;
 	if (buf==NULL)
 	{
 		myprintf("01632! GURU allocating io buf of size %s\n",g_ioBUFSIZE);
@@ -67391,6 +67590,7 @@ int64_t Jidac::franzparallelscandir(bool i_flaghash,bool i_recursive,bool i_forc
 		}
 		int rc;
 		pthread_t* threads = new pthread_t[files.size()];
+		g_allocatedram+=sizeof(pthread_t)*files.size();
 		pthread_attr_t attr;
 		void *status;
 		// ini and set thread joinable
@@ -67581,6 +67781,7 @@ int Jidac::fillami()
 	}
 	myprintf("%d chunks of (%s) will be written\n",chunks,tohuman(chunksize*sizeof(uint32_t)));
 	uint32_t *buffer32bit = (uint32_t*)franz_malloc(chunksize*sizeof(uint32_t));
+	g_allocatedram+=chunksize*sizeof(uint32_t);
 	if (buffer32bit==0)
 	{
 		myprintf("01709! GURU cannot alloc the buffer\n");
@@ -70890,14 +71091,15 @@ int Jidac::add()
  // For each file to be added
  
 	if (flagverbose)
-		myprintf("02073: MAX_FRAGMENT %s (%s)\n",migliaia(MAX_FRAGMENT),tohuman(MAX_FRAGMENT-64));
-
+		myprintf("02073: MAX_FRAGMENT %s (%s) MIN %s (%s)\n",migliaia(MAX_FRAGMENT),tohuman(MAX_FRAGMENT),migliaia2(MIN_FRAGMENT),tohuman2(MIN_FRAGMENT));
 	int64_t startstream=mtime();
 
 	if (flagstdin) // larger buffer not good
 		g_ioBUFSIZE=4096;
 
 	char *buf=(char*)aligned_malloc(64, g_ioBUFSIZE);
+	g_allocatedram+=sizeof(g_ioBUFSIZE);
+
 	if (buf==NULL)
 	{
 		myprintf("02074! GURU allocating io buf of size %s\n",g_ioBUFSIZE);
@@ -72916,6 +73118,7 @@ bool Jidac::fill_ads(string i_filename,int64_t i_startiblock)
 		LZ4_stream_t* const lz4Stream = LZ4_createStream();
 		const size_t cmpBufBytes = LZ4_COMPRESSBOUND(messageMaxBytes);
 		char* const cmpBuf = (char*) malloc(cmpBufBytes);
+		g_allocatedram+=cmpBufBytes;
 		if (cmpBuf==NULL)
 		{
 			myprintf("02255: GURU malloc cmpBuf\n");
@@ -72923,6 +73126,7 @@ bool Jidac::fill_ads(string i_filename,int64_t i_startiblock)
 			return 0;
 		}
 		char* const inpBuf = (char*) malloc(ringBufferBytes);
+		g_allocatedram+=ringBufferBytes;
 		if (inpBuf==NULL)
 		{
 			myprintf("02256: GURU malloc inpBuf\n");
@@ -73165,7 +73369,7 @@ zfs diff -F
 
 int Jidac::benchmark()
 {
-bool iamintel=isjitable();
+	bool iamintel=isjitable();
 	if (iamintel)
 	{
 		myprintf("02272: This seems Intel/AMD 'normal' CPU\n");
@@ -73194,10 +73398,18 @@ bool iamintel=isjitable();
 		myprintf("02279: Free RAM seems %s\n",migliaia(myram));
 #ifdef HWSHA2
 	if (ihavehw())
-		myprintf("02280: SHA1/2 seems supported by CPU\n");
+		myprintf("02280: SHA1/2 seems supported by the CPU\n");
 	else
 		myprintf("02281: No SHA1/2 (try -debug)\n");
 #endif
+
+	int myproc=numberOfProcessors();
+	if (flaght)
+		myprintf("02283: Number of threads (with HT if any) %d\n",myproc);
+	else
+		myprintf("02284: Number of processors (without HT) %d\n",myproc);
+		
+
 	vector<string> 	array_cpu;
 	vector<float> 	array_single;
 	vector<float> 	array_multi;
@@ -73290,12 +73502,14 @@ bool iamintel=isjitable();
 		}
 	}
 	uint32_t *buffer32bit = (uint32_t*)franz_malloc(chunksize*sizeof(uint32_t));
+	g_allocatedram+=chunksize*sizeof(uint32_t);
 	if (buffer32bit==0)
 	{
 		myprintf("02284: GURU cannot alloc the buffer32bit\n");
 		return 1;
 	}
 	uint8_t *buffer8bit=(uint8_t*)franz_malloc(chunksize*sizeof(uint8_t));
+	g_allocatedram+=chunksize*sizeof(uint8_t);
 	if (buffer8bit==0)
 	{
 		myprintf("02285! GURU cannot alloc the buffer8bit\n");
@@ -73371,6 +73585,7 @@ bool iamintel=isjitable();
 	double			franzomips=0;
 	if (all)
 	{
+		flaght=true; //we want to cook!
 		int mythreads=howmanythreads;
 		tparametribenchmark	myblock;
 		for (int i=0;i<mythreads;i++)
@@ -73388,6 +73603,7 @@ bool iamintel=isjitable();
 		}
 		int rc;
 		pthread_t* threads = new pthread_t[mythreads];
+		g_allocatedram+=sizeof(pthread_t)*mythreads;
 		pthread_attr_t attr;
 		void *status;
 		// ini and set thread joinable
@@ -74016,6 +74232,7 @@ int Jidac::summa()
 		int rc;
 		///pthread_t threads[mythreads];
 		pthread_t* threads = new pthread_t[mythreads];
+		g_allocatedram+=sizeof(pthread_t)*mythreads;
 		pthread_attr_t attr;
 		void *status;
 			// ini and set thread joinable
@@ -74343,6 +74560,7 @@ int Jidac::decompress_sfx_to_file(FILE* i_outfile)
 	size_t 	zsfx_exe_len=mimesize(zsfx_mime64);
 	char*	zsfx_exe;
 	zsfx_exe=(char*)franz_malloc(zsfx_exe_len);
+	g_allocatedram+=zsfx_exe_len;
 	if (zsfx_exe==NULL)
 	{
 		myprintf("02367: error in malloc zsfx\n");
@@ -74506,9 +74724,155 @@ int Jidac::writesfxmodule(const string i_filename)
 		return 1;
 	return 0;
 }
+#ifdef _WIN32
+unsigned char *memmem(unsigned char *i_haystack,const size_t i_haystack_len,const char *i_needle,const size_t i_needle_len)
+{
+    int needle_first;
+    unsigned char *p = i_haystack;
+    size_t plen = i_haystack_len;
+    if (!i_needle_len)
+        return NULL;
+    needle_first = *(unsigned char *)i_needle;
+    while (plen >= i_needle_len && (p = (unsigned char*)memchr(p,needle_first,plen-i_needle_len + 1)))
+    {
+        if (!memcmp(p,i_needle,i_needle_len))
+            return (unsigned char *)p;
+        p++;
+        plen=i_haystack_len-(p-i_haystack);
+    }
+    return NULL;
+}
+#endif
+
 int Jidac::sfx()
 {
 #if defined(_WIN32)
+
+	if (isexe(archive))
+	{
+		if (tofiles.size()!=1)
+		{
+			myprintf("74718: You must use exactly one -to something\n");
+			return 2;
+		}
+		myprintf("74715: Extracting .zpaq <<%Z>> from .exe <<%Z>>\n",tofiles[0].c_str(),archive.c_str());
+		if (!flagforce)
+			if (fileexists(tofiles[0]))
+			{
+				myprintf("74744: Abort, because the -to file already exists. -force to overrule\n");
+				return 2;
+			}
+		if (!flagspace)
+			if (!saggiascrivibilitacartella(tofiles[0]))
+			{
+				myprintf("\n");
+				myprintf("00535: cannot write into <<%Z>> -space to bypass\n",tofiles[0].c_str());
+				return 1;
+			}
+		int64_t exesize=prendidimensionefile(archive.c_str());
+		if (exesize<100000)
+		{
+			myprintf("74745: Exe size way too small\n");
+			return 2;
+		}
+		FILE* inFile=freadopen(archive.c_str());
+		if (inFile==NULL) 
+		{
+			myprintf("20573! ERROR opening <<%Z>>\n",archive.c_str());
+			return 2;
+		}
+		
+
+	/// Assumption: the SFX module is smaller then 3MB
+		size_t const blockSize = 3000000;
+		size_t 	readSize;
+		unsigned char *buffer=(unsigned char*)franz_malloc(blockSize);
+		if (buffer==NULL)
+		{
+			myprintf("2281! cannot allocate memory, GURU!\n");
+			seppuku();
+		}
+		
+		myprintf("74768: Reading %s from <<%Z>>\n",migliaia(blockSize),archive.c_str());
+		readSize = fread(buffer, 1, blockSize, inFile);
+
+		if (readSize<=0)
+		{
+			myprintf("74774: very strange readsize\n");
+			seppuku();
+		}
+	
+		string g_franzo_end		="xzUpA6PsHSE0N5Xe4ctJ2Gz7QTNLDyOXAp4kiEOo";
+		scambia(g_franzo_end);
+		myprintf("74785: Searching end block...\n");
+		unsigned char* endblock=memmem(buffer,readSize,g_franzo_end.c_str(),g_franzo_end.size());
+	
+		if (endblock==NULL)
+		{
+			myprintf("12316: cannot find endblock, does not seems a zpaqfranz sfx\n");
+			fclose(inFile);
+			franz_free(buffer);
+			return 2;
+		}
+	
+		int64_t offsetfromstart=(endblock-&buffer[0])+g_franzo_end.size();
+		myprintf("74794: End founded, this is good, offset %s\n",migliaia(offsetfromstart));
+		
+		if (offsetfromstart>=exesize)
+		{
+			myprintf("74803: offset %s > exesize %s, this is not good\n",migliaia(offsetfromstart),migliaia2(exesize));
+			fclose(inFile);
+			franz_free(buffer);
+			return 2;
+		}
+
+		int64_t expectedsize=exesize-offsetfromstart;
+		fseeko(inFile,offsetfromstart,SEEK_SET);
+
+		FILE* outFile=NULL;
+		outFile=_wfopen(utow(tofiles[0].c_str()).c_str(), L"wb" );
+		if (outFile==NULL)
+		{
+			myprintf("12345: CANNOT OPEN outfile <<%Z>>\n",tofiles[0].c_str());
+			seppuku();
+		}
+	
+		int64_t donesize=0;
+		bool hostampato=false;
+		int64_t startcopy=mtime();
+		while ((readSize = fread(buffer,1, sizeof(buffer),inFile))>0)
+		{
+			int64_t written=fwrite(buffer,1,readSize,outFile);
+			donesize+=written;
+			if (!flagnoeta)
+				hostampato |= myavanzamentoby1sec(donesize,expectedsize,startcopy,false);
+		}
+		if (hostampato)
+		{	
+			printbar(' ');
+			myprintf("\r");
+		}
+		
+		if (donesize!=expectedsize)
+		{
+			myprintf("0103: GURU bytes written does not match expected\n");
+			seppuku();
+		}
+		fclose(inFile);
+		fclose(outFile);
+	
+		if (buffer!=NULL)
+		{
+			franz_free(buffer);
+			buffer=0;
+		}
+		myprintf("74852: Done, written %s\n",migliaia(donesize));
+		return 0;
+	}
+
+
+
+
 	myprintf("02394: Creating SFX module for archive %Z\n",archive.c_str());
 	if (g_sfx!="")
 	{
@@ -74568,6 +74932,7 @@ int Jidac::decompress_mime64_to_file(FILE* i_outfile,const char* i_mime64)
 	size_t 	the_exe_len=mimesize(i_mime64);
 	char*	the_exe;
 	the_exe=(char*)franz_malloc(the_exe_len);
+	g_allocatedram+=the_exe_len;
 	if (the_exe==NULL)
 	{
 		myprintf("02402: error in malloc\n");
@@ -74616,6 +74981,7 @@ int Jidac::writeresource(const string i_filename,bool i_force,const char* i_mime
 	size_t 	the_res_len=mimesize(i_mime64);
 	char*	the_res;
 	the_res=(char*)franz_malloc(the_res_len);
+	g_allocatedram+=the_res_len;
 	if (the_res==NULL)
 	{
 		myprintf("02407: error in malloc\n");
@@ -74808,6 +75174,7 @@ int Jidac::verify(bool i_readfile)
 	{
 		int rc;
 		pthread_t* threads = new pthread_t[mythreads];
+		g_allocatedram+=sizeof(pthread_t)*mythreads;
 		pthread_attr_t attr;
 		void *status;
 		pthread_attr_init(&attr);
@@ -75393,6 +75760,7 @@ int Jidac::multiverify(vector <s_fileandsize>& i_arrayfilename)
 	}
 	int rc;
 	pthread_t* threads = new pthread_t[mythreads];
+	g_allocatedram+=sizeof(pthread_t)*mythreads;
 	pthread_attr_t attr;
 	void *status;
 	pthread_attr_init(&attr);
@@ -75836,6 +76204,7 @@ int Jidac::extractqueue2(int i_chunk,int i_chunksize)
 	}
 	int rc;
 	pthread_t* threads = new pthread_t[mythreads];
+	g_allocatedram+=sizeof(pthread_t)*mythreads;
 	pthread_attr_t attr;
 	void *status;
 	pthread_attr_init(&attr);
@@ -76356,6 +76725,7 @@ int Jidac::hashselect()
 	}
 	int rc;
 	pthread_t* threads = new pthread_t[mythreads];
+	g_allocatedram+=sizeof(pthread_t)*mythreads;
 	pthread_attr_t attr;
 	void *status;
 	pthread_attr_init(&attr);
@@ -77447,6 +77817,7 @@ int64_t Jidac::franzparallelhashfiles(const string i_hashtype,int64_t i_totalsiz
 
 		int rc;
 		pthread_t* threads = new pthread_t[mythreads];
+		g_allocatedram+=sizeof(pthread_t)*mythreads;
 		pthread_attr_t attr;
 		void *status;
 		pthread_attr_init(&attr);
@@ -97002,6 +97373,8 @@ int Jidac::versum()
 				myprintf("02912: Total files %s -> in threads %s\n",migliaia(myfiles.size()),migliaia2(totfile));
 			int rc;
 			pthread_t* threads = new pthread_t[mythreads];
+			g_allocatedram+=sizeof(pthread_t)*mythreads;
+		
 			pthread_attr_t attr;
 			void *status;
 			pthread_attr_init(&attr);
@@ -97563,19 +97936,30 @@ int64_t Jidac::read_archive(callback_function i_advance,const char* arc, int *er
 		}
 		return 0;
 	}
-	if (!g_fakewrite)
-		if (!i_quiet)
-			if (!flagpakka)
-			{
-				myprintf("\n");
-				myprintf("02969: <<%Z>>",arc);
-				if (version==DEFAULT_VERSION) 
-					myprintf(": ");
-				else
-					myprintf(" -until %1.0f: ", version+0.0);
-				fflush(stdout);
-			}
-			
+	if ((command=='l') && (flag715))
+	{
+		myprintf("%Z",arc);
+		if (version==DEFAULT_VERSION) 
+			myprintf(": ");
+		else 
+			myprintf(" -until %1.0f: ", version+0.0);
+	  fflush(stdout);
+	}
+	else
+	{
+		if (!g_fakewrite)
+			if (!i_quiet)
+				if (!flagpakka)
+				{
+					myprintf("\n");
+					myprintf("02969: <<%Z>>",arc);
+					if (version==DEFAULT_VERSION) 
+						myprintf(": ");
+					else
+						myprintf(" -until %1.0f: ", version+0.0);
+					fflush(stdout);
+				}
+	}		
 
   // Test password
 	char s[4]={0};
@@ -97613,8 +97997,10 @@ int64_t Jidac::read_archive(callback_function i_advance,const char* arc, int *er
   // data to be skipped. Otherwise the whole archive is scanned to get
   // this information from the segment headers and trailers.
 	bool done=false;
-	if ((!i_quiet) && (!flagterse))
-		myprintf("\n");
+	
+	if ((command!='l') && (!flag715))
+		if ((!i_quiet) && (!flagterse))
+			myprintf("\n");
 		
 	int64_t startblock=mtime();
 	while (!done)
@@ -97681,7 +98067,12 @@ int64_t Jidac::read_archive(callback_function i_advance,const char* arc, int *er
 						if (strchr("chi", filename.s[17]))
 						{
 							if (mem>1.5e9)
-								error("index block requires too much memory");
+							///if (mem>100)
+							{
+								myprintf("98003! too much mem for block %s %18s\n",lastfile.c_str(),migliaia(mem));
+								if (errors)
+									(*errors)++;
+							}
 							d.decompress();
 							char sha1result[21]={0};
 							d.readSegmentEnd(sha1result);
@@ -97696,7 +98087,8 @@ int64_t Jidac::read_archive(callback_function i_advance,const char* arc, int *er
 								if (!flagnoeta)
 									if (!i_quiet)
 									{
-										myprintf("02972: Block %10s K %12s (block/s)\r",migliaia((uint64_t)(parts/1000)),migliaia2((int64_t)(parts/(((mtime()-startblock)+1)/1000.0))));
+										if ((command!='l') && (!flag715))
+											myprintf("02972: Block %10s K %12s (block/s)\r",migliaia((uint64_t)(parts/1000)),migliaia2((int64_t)(parts/(((mtime()-startblock)+1)/1000.0))));
 
 										if (i_advance!=NULL)
 										{
@@ -97854,6 +98246,7 @@ int64_t Jidac::read_archive(callback_function i_advance,const char* arc, int *er
 										&windowsunc,
 										&relativepath);
 										string fixed;
+	
 #ifdef _WIN32
 										if (isreserved(fn,fixed))
 										{
@@ -97887,15 +98280,26 @@ int64_t Jidac::read_archive(callback_function i_advance,const char* arc, int *er
 									NULL,
 									NULL,
 									NULL);
+								
 #else				// *nix can restore (almost) everything, no warnings needed by default
 #endif
 										if (all)
 										{
-
-											if (i_myappend)
-												fn=itos(ver.size()-1, all)+"|$1"+fn;
+											if ((command=='l') && (flag715))
+											{
+												myreplaceall(fn,":","");
+												if (i_myappend)
+													fn=itos(ver.size()-1, all)+"/"+fn;
+												else
+													fn=append_path(itos(ver.size()-1, all), fn);
+											}
 											else
-												fn=append_path(itos(ver.size()-1, all), fn);
+											{
+												if (i_myappend)
+													fn=itos(ver.size()-1, all)+"|$1"+fn;
+												else
+													fn=append_path(itos(ver.size()-1, all), fn);
+											}
 											///printf("------------- %s\n",fn.c_str());
 										}
 								}
@@ -98113,21 +98517,31 @@ endblock:;
   }  // end while !done
   if (in.tell()>32*(g_password!=0) && !found_data)
     error("archive contains no data");
-	if (!g_fakewrite)
-		if (!i_quiet)
-			if (!flagpakka)
-			{
-				if (flagverbose)
-				myprintf("02988: %d vers, %s files, %s frags, %s blks, %s bytes (%s)\n",
-				int(ver.size()-1), migliaia(files), migliaia2(unsigned(ht.size())-1),
-				migliaia3(parts),migliaia4(block_offset),tohuman(block_offset));
-				else
-				myprintf("02989: %d versions, %s files, %s bytes (%s)\n",
-				int(ver.size()-1), migliaia(files),
-				migliaia4(block_offset),tohuman(block_offset));
-				if (flagdebug2)
-					myprintf("02990: dt size  %s\n",migliaia(dt.size()));
-			}
+
+	if ((command=='l') && (flag715))
+	{
+		myprintf("%d versions, %u files, %u fragments, %1.6f MB\n", 
+		int(ver.size()-1), files, unsigned(ht.size())-1,
+		block_offset/1000000.0);
+	}
+	else
+	{
+		if (!g_fakewrite)
+			if (!i_quiet)
+				if (!flagpakka)
+				{
+					if (flagverbose)
+					myprintf("02988: %d vers, %s files, %s frags, %s blks, %s bytes (%s)\n",
+					int(ver.size()-1), migliaia(files), migliaia2(unsigned(ht.size())-1),
+					migliaia3(parts),migliaia4(block_offset),tohuman(block_offset));
+					else
+					myprintf("02989: %d versions, %s files, %s bytes (%s)\n",
+					int(ver.size()-1), migliaia(files),
+					migliaia4(block_offset),tohuman(block_offset));
+					if (flagdebug2)
+						myprintf("02990: dt size  %s\n",migliaia(dt.size()));
+				}
+	}
 	if (!i_quiet)
 	{
 #ifdef _WIN32
@@ -99008,6 +99422,7 @@ int reduz(vector<string>* i_files,DTMap* i_myedt,vector<DTMap::iterator>* i_vf)
 	libzpaq::Array<char> fragbuf(MAX_FRAGMENT);
  
 	char *buf=(char*)aligned_malloc(64, g_ioBUFSIZE);
+	g_allocatedram+=g_ioBUFSIZE;
 	if (buf==NULL)
 	{
 		myprintf("03063! GURU allocating io buf of size %s\n",g_ioBUFSIZE);
@@ -99392,7 +99807,7 @@ int Jidac::read_archive2(int64_t i_starthere,string i_filename)
 						if (strchr("chi", filename.s[17])) 
 						{
 							if (mem>1.5e9)
-								error("88006: index block requires too much memory");
+								error("88006: index block requires too much memory (88006)");
 							d.decompress();
 							char sha1result[21]={0};
 							d.readSegmentEnd(sha1result);
@@ -99573,8 +99988,10 @@ endblock:;
 	}  // end while !done
 	if (in.tell()>32*(g_password!=0) && !found_data)
 		error("88187: archive contains no data");
-  /*
-  printf("%d versions, %u files, %u fragments, %1.6f MB\n", 
+	
+	/*
+	if ((command=='l') && (flag715))
+	printf("%d versions, %u files, %u fragments, %1.6f MB\n", 
       int(ver.size()-1), files, unsigned(ht.size())-1,
       block_offset/1000000.0);
 */
@@ -99873,7 +100290,7 @@ int Jidac::listfast()
 						if (strchr("chi", filename.s[17])) 
 						{
 							if (mem>1.5e9)
-								error("91251: index block requires too much memory");
+								error("91251: index block requires too much memory (91251)");
 							d.decompress();
 							char sha1result[21]={0};
 							d.readSegmentEnd(sha1result);
@@ -100156,7 +100573,7 @@ int Jidac::listfast()
 						if (strchr("chi", filename.s[17])) 
 						{
 							if (mem>1.5e9) 
-								error("91522: index block requires too much memory");
+								error("91522: index block requires too much memory (91522)");
 							d.decompress();
 							char sha1result[21]={0};
 							d.readSegmentEnd(sha1result);
@@ -100891,7 +101308,7 @@ int64_t Jidac::pakka_read_archive(const char* arc)
     }  // end try
     catch (std::exception& e) {
       block_offset=in.tell();
-      printf( "Skipping block at %1.0f: %s\n", double(block_offset),
+      printf( "100918 Skipping block at %1.0f: %s\n", double(block_offset),
               e.what());
       ++errors;
     }
@@ -101108,7 +101525,7 @@ string generaterandomstring(unsigned int i_length)
 	}
     static const char characters[]="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
     char* randomstring=(char*)malloc(i_length+1);
-
+	g_allocatedram+=i_length+1;
     if (randomstring==NULL) 
 	{
         myprintf("03169: C5 on malloc\n");
@@ -102096,6 +102513,8 @@ int Jidac::hasha()
 	int rc;
 	///pthread_t threads[mythreads];
 	pthread_t* threads = new pthread_t[mythreads];
+	g_allocatedram+=sizeof(pthread_t)*mythreads;
+		
 	pthread_attr_t attr;
 	void *status;
 		// ini and set thread joinable
@@ -104123,3 +104542,187 @@ int Jidac::sumhome()
 	return 0;
 }
 
+/*
+	backward-compatible file list
+*/
+int Jidac::list715() 
+{
+  // Read archive into dt, which may be "" for empty.
+  int64_t csize=0;
+	  	int errors=0;
+  if (archive!="") 
+	  csize=read_archive(NULL,archive.c_str(),&errors,1);
+
+  // Read external files into edt
+  for (unsigned i=0; i<files.size(); ++i)
+	scandir(true,edt,files[i].c_str(),true);        // scan dirs to edt
+  if (files.size()) printf("%d external files.\n", int(edt.size()));
+  printf("\n");
+
+  // Compute directory sizes as the sum of their contents
+  DTMap* dp[2]={&dt, &edt};
+  for (int i=0; i<2; ++i) {
+    for (DTMap::iterator p=dp[i]->begin(); p!=dp[i]->end(); ++p) {
+      int len=p->first.size();
+      if (len>0 && p->first[len]!='/') {
+        for (int j=0; j<len; ++j) {
+          if (p->first[j]=='/') {
+            DTMap::iterator q=dp[i]->find(p->first.substr(0, j+1));
+            if (q!=dp[i]->end())
+              q->second.size+=p->second.size;
+          }
+        }
+      }
+    }
+  }
+
+  // Make list of files to list. List each external file preceded
+  // by the matching internal file, if any. Then list any unmatched
+  // internal files at the end.
+  vector<DTMap::iterator> filelist;
+  for (DTMap::iterator p=edt.begin(); p!=edt.end(); ++p) {
+    DTMap::iterator a=dt.find(rename(p->first));
+    if (a!=dt.end() && (all || a->second.date)) {
+      a->second.data='-';
+      filelist.push_back(a);
+    }
+    p->second.data='+';
+    filelist.push_back(p);
+  }
+  for (DTMap::iterator a=dt.begin(); a!=dt.end(); ++a) {
+    if (a->second.data!='-' && (all || a->second.date)) {
+      a->second.data='-';
+      filelist.push_back(a);
+    }
+  }
+
+  // Sort
+  if (summary>0)
+    sort(filelist.begin(), filelist.end(), compareFragmentList);
+
+  // List
+  int64_t usize=0;
+  unsigned matches=0, mismatches=0, internal=0, external=0,
+           duplicates=0;  // counts
+  for (unsigned fi=0;
+       fi<filelist.size() && (summary<=0 || int(fi)<summary); ++fi) {
+    DTMap::iterator p=filelist[fi];
+
+    // Compare external files
+    if (summary<=0 && p->second.data=='-' && fi+1<filelist.size()
+        && filelist[fi+1]->second.data=='+') {
+      DTMap::const_iterator p1=filelist[fi+1];
+	  
+	  ///bool 		equal(DTMap::const_iterator p, const char* filename, uint32_t &o_crc32,string i_myhashtype,string i_myhash,string& o_hash);// compare file contents with p
+		uint32_t thecrc32=0;
+		string dummy;
+      if ((flagforce && equal(p, p1->first.c_str(),thecrc32,"","",dummy))
+          || (!flagforce && p->second.date==p1->second.date
+              && p->second.size==p1->second.size
+              && (!p->second.attr || !p1->second.attr
+                  || p->second.attr==p1->second.attr))) {
+        p->second.data='=';
+        ++fi;
+      }
+      else
+        p->second.data='#';
+    }
+
+    // Compare with previous file in summary
+    if (summary>0 && fi>0 && p->second.date && p->first!=""
+        && p->first[p->first.size()-1]!='/'
+        && p->second.ptr.size()
+        && filelist[fi-1]->second.ptr==p->second.ptr)
+      p->second.data='^';
+
+    if (p->second.data=='=') ++matches;
+    if (p->second.data=='#') ++mismatches;
+    if (p->second.data=='-') ++internal;
+    if (p->second.data=='+') ++external;
+    if (p->second.data=='^') ++duplicates;
+
+    // List selected comparison results
+    if (!strchr(nottype.c_str(), p->second.data)) {
+      if (p->first!="" && p->first[p->first.size()-1]!='/')
+        usize+=p->second.size;
+      printf("%c %s %12.0f ", char(p->second.data),
+          dateToString(flagutc,p->second.date).c_str(), p->second.size+0.0);
+      if (!flagnoattributes)
+        printf("%s ", attrToString(p->second.attr).c_str());
+      printUTF8(p->first.c_str());
+	  /*
+      if (summary<0) {  // frag pointers
+        const vector<unsigned>& ptr=p->second.ptr;
+        bool hyphen=false;
+        for (int j=0; j<int(ptr.size()); ++j) {
+          if (j==0 || j==int(ptr.size())-1 || ptr[j]!=ptr[j-1]+1
+              || ptr[j]!=ptr[j+1]-1) {
+            if (!hyphen) printf(" ");
+            hyphen=false;
+            printf("%d", ptr[j]);
+          }
+          else {
+            if (!hyphen) printf("-");
+            hyphen=true;
+          }
+        }
+      }
+	  */
+      unsigned v;  // list version updates, deletes, compressed size
+      if (all>0 && p->first.size()==all+1u && (v=atoi(p->first.c_str()))>0
+          && v<ver.size()) {  // version info
+        printf(" +%d -%d -> %1.0f", ver[v].updates, ver[v].deletes,
+            (v+1<ver.size() ? ver[v+1].offset : csize)-ver[v].offset+0.0);
+        if (summary<0)  // print fragment range
+          printf(" %u-%u", ver[v].firstFragment,
+              v+1<ver.size()?ver[v+1].firstFragment-1:unsigned(ht.size())-1);
+      }
+      printf("\n");
+    }
+  }  // end for i = each file version
+
+  // Compute dedupe size
+  int64_t ddsize=0, allsize=0;
+  unsigned nfiles=0, nfrags=0, unknown_frags=0, refs=0;
+  vector<bool> ref(ht.size());
+  for (DTMap::const_iterator p=dt.begin(); p!=dt.end(); ++p) {
+    if (p->second.date) {
+      ++nfiles;
+      for (unsigned j=0; j<p->second.ptr.size(); ++j) {
+        unsigned k=p->second.ptr[j];
+        if (k>0 && k<ht.size()) {
+          ++refs;
+          if (ht[k].usize>=0) allsize+=ht[k].usize;
+          if (!ref[k]) {
+            ref[k]=true;
+            ++nfrags;
+            if (ht[k].usize>=0) ddsize+=ht[k].usize;
+            else ++unknown_frags;
+          }
+        }
+      }
+    }
+  }
+
+  // Print archive statistics
+  printf("\n"
+      "%1.6f MB of %1.6f MB (%d files) shown\n"
+      "  -> %1.6f MB (%u refs to %u of %u frags) after dedupe\n"
+      "  -> %1.6f MB compressed.\n",
+       usize/1000000.0, allsize/1000000.0, nfiles, 
+       ddsize/1000000.0, refs, nfrags, unsigned(ht.size())-1,
+       (csize+dhsize-dcsize)/1000000.0);
+  if (unknown_frags)
+    printf("%d fragments have unknown size\n", unknown_frags);
+  if (files.size())
+    printf(
+       "%d =same, %d #different, %d +external, %d -internal\n",
+        matches, mismatches, external, internal);
+  if (summary>0)
+    printf("%d of largest %d files are ^duplicates\n",
+        duplicates, summary);
+  if (dhsize!=dcsize)  // index?
+    printf("Note: %1.0f of %1.0f compressed bytes are in archive\n",
+        dcsize+0.0, dhsize+0.0);
+  return 0;
+}

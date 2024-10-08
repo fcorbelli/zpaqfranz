@@ -5,6 +5,9 @@
 |  Platform                                                           | OS package                    |  Version    | Video|
 |  ----------                                                         | -----                         |  ---------- |  -------    |
 |  [Windows 32/64bit (sourceforge)](https://sourceforge.net/projects/zpaqfranz/files)   |                                  |![Badge](https://img.shields.io/github/v/release/fcorbelli/zpaqfranz)|      |      
+|  [Windows 32 (direct)](http://www.francocorbelli.it/zpaqfranz/nas)           |                               |latest|      | 
+|  [Windows 64 (direct)](http://www.francocorbelli.it/zpaqfranz/nas)           |                               |latest|      | 
+|  [Windows 64 (HW accelerated)](http://www.francocorbelli.it/zpaqfranz/nas)           |                       |latest|      |
 |  [OpenBSD](http://www.francocorbelli.it/zpaqfranz/openbsd)                 |`pkg_add zpaqfranz`            |![Badge](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fopenbsd.app%2F%3Fsearch%3Dzpaqfranz%26format%3Djson%26current%3Don&query=%24..FULLPKGNAME&label=openbsd)|      |
 |  [FreeBSD](http://www.francocorbelli.it/zpaqfranz/freebsd)                 |`pkg install zpaqfranz`        |60.3a |      |
 |  [MacOS](http://www.francocorbelli.it/zpaqfranz/mac)                       |`brew install zpaqfranz`       |![Badge](https://img.shields.io/homebrew/v/zpaqfranz)|      |

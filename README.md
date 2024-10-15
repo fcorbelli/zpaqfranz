@@ -12,7 +12,7 @@
 |  [FreeBSD](http://www.francocorbelli.it/zpaqfranz/freebsd)                 |`pkg install zpaqfranz`        |60.3a |      |
 |  [MacOS](http://www.francocorbelli.it/zpaqfranz/mac)                       |`brew install zpaqfranz`       |![Badge](https://img.shields.io/homebrew/v/zpaqfranz)|      |
 |  [OpenSUSE](http://www.francocorbelli.it/zpaqfranz/opensuse)               |`sudo zypper install zpaqfranz`|      |      |
-|  [Debian (Ubuntu etc) .deb](http://www.francocorbelli.it/zpaqfranz/debian)      |                               |59.8j|[Desktop](http://www.francocorbelli.it/zpaqfranz/video/debian-deb.mp4)      |
+|  [Debian (Ubuntu etc) .deb](http://www.francocorbelli.it/zpaqfranz/debian)      | `sudo apt install zpaqfranz`  |59.8j / 60.7|[Desktop](http://www.francocorbelli.it/zpaqfranz/video/debian-deb.mp4)      |
 |  [Linux generic (32/64)](http://www.francocorbelli.it/zpaqfranz/linux)             |                               |60.7u|      |
 |  [Arch](http://www.francocorbelli.it/zpaqfranz/arch)                       | [AUR user repository (latest)](https://aur.archlinux.org/packages/zpaqfranz-git)|58.10i|[Terminal](http://www.francocorbelli.it/zpaqfranz/video/arch.mp4)
 |  [Solaris 11-64](http://www.francocorbelli.it/zpaqfranz/solaris)                 |                               |60.7u|      |
@@ -342,7 +342,10 @@ You can get a "not too old" zpaqfranz with a `pkg install zpaqfranz`
 
 On **OpenBSD** `pkg_add zpaqfranz` is usually rather updated
 
-On **Debian** [there is a zpaq 7.15 package](https://packages.debian.org/sid/utils/zpaq)  
+On **Debian** [there is a zpaq 7.15
+package](https://packages.debian.org/zpaq), and starting with Debian
+13 [zpaqfranz is available too](https://packages.debian.org/zpaqfranz).
+
 You can download the original version (7.15 of 2016) directly from the author's website, and compile it, or get the same from github.  
 In this case be careful, because the source is divided into 3 source files, but nothing difficult for the compilation.  
 

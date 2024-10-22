@@ -41137,17 +41137,29 @@ int numberOfProcessors()
 	if (flaght)
 	{
 		size_t rclen=sizeof(rc);
+#ifdef HW_NCPUONLINE
+		int mib[2]={CTL_HW, HW_NCPUONLINE};
+#else
 		int mib[2]={CTL_HW, HW_NCPU};
+#endif
 		if (sysctl(mib, 2, &rc, &rclen, 0, 0)!=0)
 			perror("sysctl");
 	}
 	else
 	{
 		size_t len 			= sizeof(rc);
-#if defined(__FreeBSD__) || defined(__OpenBSD__)
+#if defined(__FreeBSD__)
 		if (sysctlbyname("hw.ncpu", &rc, &len, NULL, 0) < 0) 
 		{
 			myprintf("41220! hw.ncpu KAPUTT\n");
+			return 1;
+		}
+	}
+#elif defined(__OpenBSD__)
+		int mib[2]={CTL_HW, HW_NCPUONLINE};
+		if (sysctl(mib, 2, &rc, &len, NULL, 0) < 0)
+		{
+			myprintf("41220! HW_NCPUONLINE KAPUTT\n");
 			return 1;
 		}
 	}

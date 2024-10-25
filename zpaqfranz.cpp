@@ -53,7 +53,7 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 */
 
-#define ZPAQ_VERSION "60.9b"
+#define ZPAQ_VERSION "60.9c"
 #define ZPAQ_DATE "(2024-10-25)"  // cannot use __DATE__ on Debian!
 
 ///	optional align for malloc (sparc64) via -DALIGNMALLOC
@@ -1301,7 +1301,9 @@ DEFINEs at compile-time: IT IS UP TO YOU NOT TO MIX LOGICAL INCOMPATIBLE DEFINIT
 
 -DSERVER							// Enable the cloudpaq client (for Windows)
 
--DIPV6								// Do not force IPv4
+-DIPV6								// Do not force IPv4. I don't have an IPv6 connection at home, 
+                                    // I struggle with testing and debugging. So for now, 
+									// the default is IPv4, unless further switched
 
 -DGUI								// Enable the gui (ncurses on Windows)
 
@@ -100152,30 +100154,33 @@ bool downloadfile(string i_verurl,string i_verfile,bool i_showupdate)
 
     if (connect(sockfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0) 
 	{
-        myprintf("03184: C5 on connect\n");
+        myprintf("03184$ C5 on connect\n");
 		return false;
     }
 #else
-    const struct addrinfo hints = {
-        .ai_flags = AI_ADDRCONFIG|AI_NUMERICSERV,
-        .ai_family = AF_UNSPEC,
-        .ai_socktype = SOCK_STREAM,
-        .ai_protocol = 0,
-        .ai_addrlen = 0,
-        .ai_addr = NULL,
-        .ai_canonname = NULL,
-        .ai_next = NULL
-    };
+	struct addrinfo hints;
+	memset(&hints,0,sizeof(hints));  // Pleonastico
+	hints.ai_flags 		= AI_ADDRCONFIG|AI_NUMERICSERV;
+	hints.ai_family 	= AF_UNSPEC;
+	hints.ai_socktype 	= SOCK_STREAM;
+	hints.ai_protocol 	= 0;
+	hints.ai_addrlen 	= 0;
+	hints.ai_addr 		= NULL;
+	hints.ai_canonname 	= NULL;
+	hints.ai_next 		= NULL;
+
     struct addrinfo *addresses = NULL;
     int ret = getaddrinfo(hostname, "80", &hints, &addresses);
-    if (ret) {
-        myprintf("03183: cannot resolve %s: %s\n", hostname, gai_strerror(ret));
+    if (ret) 
+	{
+        myprintf("03183$ IPV6 cannot resolve %s: %s\n", hostname, gai_strerror(ret));
 		return false;
     }
 
     int sockfd;
     struct addrinfo *address;
-    for (address = addresses; address; address = address->ai_next) {
+    for (address = addresses; address; address = address->ai_next) 
+	{
         sockfd = socket(address->ai_family, address->ai_socktype, address->ai_protocol);
         if (sockfd == -1)
             continue;
@@ -100184,8 +100189,9 @@ bool downloadfile(string i_verurl,string i_verfile,bool i_showupdate)
         close(sockfd);
     }
     freeaddrinfo(addresses);
-    if (address == NULL) {
-        myprintf("03184: C5 on connect\n");
+    if (address == NULL) 
+	{
+        myprintf("39345$ IPV6 C5 on connect\n");
 		return false;
     }
 #endif

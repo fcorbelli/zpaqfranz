@@ -53,8 +53,8 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 */
 
-#define ZPAQ_VERSION "60.8o"
-#define ZPAQ_DATE "(2024-10-21)"  // cannot use __DATE__ on Debian!
+#define ZPAQ_VERSION "60.9b"
+#define ZPAQ_DATE "(2024-10-25)"  // cannot use __DATE__ on Debian!
 
 ///	optional align for malloc (sparc64) via -DALIGNMALLOC
 #define STR(a) #a
@@ -24238,10 +24238,19 @@ string get_good_filename(string i_filename)
 */
 string win_getcomputername()
 {
-	wchar_t buffer[32768];
-	DWORD 	size=32768;
+	wchar_t buffer[256];
+	DWORD 	size=256;
 	string risultato="";
 	if (GetComputerName(buffer,&size))
+		risultato=wtou(buffer);
+	return risultato;
+}
+string win_getusername()
+{
+	wchar_t buffer[256];
+	DWORD 	size=256;
+	string risultato="";
+	if (GetUserName(buffer,&size))
 		risultato=wtou(buffer);
 	return risultato;
 }
@@ -24986,6 +24995,13 @@ void myreplaceall(std::string& str, const std::string& from, const std::string& 
         start_pos += to.length(); // In case 'to' contains 'from', like replacing 'x' with 'yx'
     }
 }
+string stringtolower(string i_stringa)
+{
+	for (unsigned int i=0;i<i_stringa.size();i++)
+		i_stringa[i]=tolower(i_stringa[i]);
+	return i_stringa;
+}
+
 
 string format_datetime(string i_formato,tm* t=NULL)
 {
@@ -25039,6 +25055,15 @@ string format_datetime(string i_formato,tm* t=NULL)
 	myreplaceall(i_formato,"$datetime",datetime);
 	myreplaceall(i_formato,"$date",date);
 	myreplaceall(i_formato,"$time",time);
+
+#ifdef _WIN32	
+	string pcname=stringtolower(win_getcomputername());
+	myreplaceall(i_formato,"$pcname",pcname);
+	myreplaceall(i_formato,"$computername",pcname);
+	string username=stringtolower(win_getusername());
+	myreplaceall(i_formato,"$username",username);
+#endif
+
 	return i_formato;
 }
 bool myreplace(string& i_str, const string& i_from, const string& i_to)
@@ -25403,12 +25428,6 @@ bool comparechar(char c1, char c2)
     else if (std::toupper(c1) == std::toupper(c2))
         return true;
     return false;
-}
-string stringtolower(string i_stringa)
-{
-	for (unsigned int i=0;i<i_stringa.size();i++)
-		i_stringa[i]=tolower(i_stringa[i]);
-	return i_stringa;
 }
 string stringtoupper(string i_stringa)
 {
@@ -70680,13 +70699,13 @@ int Jidac::add()
 						if (p->second.size!=p->second.hashedsize)
 						{
 				
-							if ((!flagvss) && (!flagstdin) && (!flagfast)
+							if ((!flagvss) && (!flagstdin) && (!flagfast) && (!flagquiet)
 #ifdef _WIN32
 								&& (!flagimage)
 #endif
 							)
 							{
-								myprintf("02118: WARN expected %19s getted %19s for %Z\n",migliaia(p->second.size),migliaia2(p->second.hashedsize),filename.c_str());
+								myprintf("02118$ WARN expected %19s getted %19s for %Z\n",migliaia(p->second.size),migliaia2(p->second.hashedsize),filename.c_str());
 							}
 						}
 					}
@@ -71115,9 +71134,12 @@ int Jidac::add()
 			
 			if (myerror)
 			{
-				myprintf("02171: HOUSTON expected %s, done %s, diff %s\n",migliaia(total_size),migliaia2(total_done),migliaia3(myabs(total_size,total_done)));
-				myprintf("02172: Corrupted source files? Lost connection? Cannot access? Media full?\n");
-				myprintf("02173: =>The updated .zpaq archive is almost certainly incompleted\n");
+				if (!flagquiet)
+				{
+					myprintf("02171$ HOUSTON expected %s, done %s, diff %s\n",migliaia(total_size),migliaia2(total_done),migliaia3(myabs(total_size,total_done)));
+					myprintf("02172$ Corrupted source files? Lost connection? Cannot access? Media full?\n");
+					myprintf("02173$ =>The updated .zpaq archive is almost certainly incompleted\n");
+				}
 				g_exec_text="38271: HOUSTON something seems wrong expected vs done";
 				errors=2;
 			}
@@ -95076,6 +95098,8 @@ int Jidac::backup()
 		return 2;
 	}
 
+	archive=format_datetime(archive);
+
 	g_backupposition=extractfilepath(archive);
 	if (g_indexname!="")
 	{
@@ -95126,7 +95150,8 @@ int Jidac::backup()
 		myprintf("02808: Pid       %Z\n",g_pidname.c_str());
 	}
 
-
+	if (!saggiascrivibilitacartella(g_pidname.c_str()))
+		myprintf("95143$ cannot write pid <<%Z>>\n",g_pidname.c_str());
 	FILE* handlepid=fopen(g_pidname.c_str(), "wb");
 	if (handlepid==NULL)
 	{
@@ -100115,7 +100140,7 @@ bool downloadfile(string i_verurl,string i_verfile,bool i_showupdate)
     struct hostent *server=gethostbyname(hostname);
     if (server == NULL) 
 	{
-        myprintf("03183: cannot resolve %s\n",hostname);
+        myprintf("03183$ cannot resolve %s\n",hostname);
 		return false;
     }
 

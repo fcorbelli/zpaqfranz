@@ -123,13 +123,13 @@ OTHER DEALINGS IN THE SOFTWARE.
 #endif
 
 #ifdef NOJIT
-	#define TEXT_NOJIT "-NOJIT"
+	#define TEXT_NOJIT "-NOJIT,"
 #else
-	#define TEXT_NOJIT "-JIT"
+	#define TEXT_NOJIT "-JIT,"
 #endif
 
 #ifdef GUI
-	#define TEXT_GUI "-GUI"
+	#define TEXT_GUI "-GUI,"
 #else
 	#define TEXT_GUI ""
 #endif
@@ -158,6 +158,11 @@ OTHER DEALINGS IN THE SOFTWARE.
 	#define TEXT_HWPRE ""
 #endif
 
+#ifdef IPV6
+	#define TEXT_IPV "6,"
+#else
+	#define TEXT_IPV "4,"
+#endif
 
 #define LARGEFILE 100000000
 
@@ -177,9 +182,12 @@ OTHER DEALINGS IN THE SOFTWARE.
 	#define unix 	1
 	#define ANCIENT 1
 	#undef  TEXT_NOJIT
-	#define TEXT_NOJIT "-ESX"
+	#define TEXT_NOJIT "-ESX,"
 	#undef  TEXT_BIG
 	#define TEXT_BIG ""
+	#undef  TEXT_IPV
+	#define TEXT_IPV "4,"
+	#undef  IPV6
 #endif
 
 #ifndef _WIN32
@@ -195,7 +203,7 @@ OTHER DEALINGS IN THE SOFTWARE.
 #ifdef NAS
 	#define ANCIENT
 	#undef  TEXT_NOJIT 
-	#define TEXT_NOJIT "-NAS"
+	#define TEXT_NOJIT "-NAS,"
 	#undef HWSHA1
 	#undef HWSHA2
 	#undef HWBLAKE3
@@ -1301,9 +1309,7 @@ DEFINEs at compile-time: IT IS UP TO YOU NOT TO MIX LOGICAL INCOMPATIBLE DEFINIT
 
 -DSERVER							// Enable the cloudpaq client (for Windows)
 
--DIPV6								// Do not force IPv4. I don't have an IPv6 connection at home, 
-                                    // I struggle with testing and debugging. So for now, 
-									// the default is IPv4, unless further switched
+-DIPV6								// Do not force IPv4 (the current default)
 
 -DGUI								// Enable the gui (ncurses on Windows)
 
@@ -52519,7 +52525,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 		if ((!flagpakka) && (!flagstdout) && (!flagterse))
 		{
 			color_green();
-			moreprint("zpaqfranz v" ZPAQ_VERSION TEXT_NOJIT TEXT_GUI TEXT_BIG TEXT_SERVER TEXT_ALIGN TEXT_HWPRE TEXT_HWBLAKE3 TEXT_HWSHA1 TEXT_HWSHA2 ZSFX_VERSION ZPAQ_DATE); /// FAKE COMPILER WARNING
+			moreprint("zpaqfranz v" ZPAQ_VERSION TEXT_NOJIT TEXT_GUI TEXT_BIG TEXT_SERVER TEXT_ALIGN TEXT_HWPRE TEXT_HWBLAKE3 TEXT_HWSHA1 TEXT_HWSHA2 TEXT_IPV ZSFX_VERSION ZPAQ_DATE); /// FAKE COMPILER WARNING
 			color_restore();
 		}
 	}

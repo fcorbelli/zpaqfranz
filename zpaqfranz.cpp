@@ -53,7 +53,7 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 */
 
-#define ZPAQ_VERSION "60.9c"
+#define ZPAQ_VERSION "60.9d"
 #define ZPAQ_DATE "(2024-10-25)"  // cannot use __DATE__ on Debian!
 
 ///	optional align for malloc (sparc64) via -DALIGNMALLOC
@@ -1969,9 +1969,6 @@ SHA-256: FCCE109C8360963EB18975B94BDBE434BE1A49D3F53BDD768A99093B3EB838D2 [     
 #endif
 
 #ifdef IPV6
-    #ifndef _POSIX_C_SOURCE
-        #define _POSIX_C_SOURCE 200112L
-    #endif
     #include <sys/types.h>
     #include <sys/socket.h>
     #include <netdb.h>

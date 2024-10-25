@@ -1301,6 +1301,8 @@ DEFINEs at compile-time: IT IS UP TO YOU NOT TO MIX LOGICAL INCOMPATIBLE DEFINIT
 
 -DSERVER							// Enable the cloudpaq client (for Windows)
 
+-DIPV6								// Do not force IPv4
+
 -DGUI								// Enable the gui (ncurses on Windows)
 
 HIDDEN GEMS
@@ -1964,6 +1966,14 @@ SHA-256: FCCE109C8360963EB18975B94BDBE434BE1A49D3F53BDD768A99093B3EB838D2 [     
 	#endif
 #endif
 
+#ifdef IPV6
+    #ifndef _POSIX_C_SOURCE
+        #define _POSIX_C_SOURCE 200112L
+    #endif
+    #include <sys/types.h>
+    #include <sys/socket.h>
+    #include <netdb.h>
+#endif
 
 /// On Windows you need to link -lwsock32 -lws2_32
 #ifdef SERVER
@@ -100093,7 +100103,8 @@ bool downloadfile(string i_verurl,string i_verfile,bool i_showupdate)
     }
 	if (flagdebug3)
 		myprintf("03181: path |%s|\n",path);
-	
+
+#ifndef IPV6
     int sockfd=socket(AF_INET,SOCK_STREAM,0);
     if (sockfd < 0)
 	{
@@ -100104,7 +100115,7 @@ bool downloadfile(string i_verurl,string i_verfile,bool i_showupdate)
     struct hostent *server=gethostbyname(hostname);
     if (server == NULL) 
 	{
-        myprintf("03183: cannot gethostyname %s\n",hostname);
+        myprintf("03183: cannot resolve %s\n",hostname);
 		return false;
     }
 
@@ -100119,6 +100130,40 @@ bool downloadfile(string i_verurl,string i_verfile,bool i_showupdate)
         myprintf("03184: C5 on connect\n");
 		return false;
     }
+#else
+    const struct addrinfo hints = {
+        .ai_flags = AI_ADDRCONFIG|AI_NUMERICSERV,
+        .ai_family = AF_UNSPEC,
+        .ai_socktype = SOCK_STREAM,
+        .ai_protocol = 0,
+        .ai_addrlen = 0,
+        .ai_addr = NULL,
+        .ai_canonname = NULL,
+        .ai_next = NULL
+    };
+    struct addrinfo *addresses = NULL;
+    int ret = getaddrinfo(hostname, "80", &hints, &addresses);
+    if (ret) {
+        myprintf("03183: cannot resolve %s: %s\n", hostname, gai_strerror(ret));
+		return false;
+    }
+
+    int sockfd;
+    struct addrinfo *address;
+    for (address = addresses; address; address = address->ai_next) {
+        sockfd = socket(address->ai_family, address->ai_socktype, address->ai_protocol);
+        if (sockfd == -1)
+            continue;
+        if (!connect(sockfd, address->ai_addr, address->ai_addrlen))
+            break;
+        close(sockfd);
+    }
+    freeaddrinfo(addresses);
+    if (address == NULL) {
+        myprintf("03184: C5 on connect\n");
+		return false;
+    }
+#endif
 
     snprintf(buffer,INTERNET_BUFFER_SIZE,"GET /%s HTTP/1.1\r\nHost: %s\r\nConnection: close\r\n\r\n",path,hostname);
     if (write(sockfd,buffer,strlen(buffer)) < 0) 

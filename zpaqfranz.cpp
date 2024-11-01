@@ -53,8 +53,8 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 */
 
-#define ZPAQ_VERSION "60.9d"
-#define ZPAQ_DATE "(2024-10-25)"  // cannot use __DATE__ on Debian!
+#define ZPAQ_VERSION "60.9g"
+#define ZPAQ_DATE "(2024-11-01)"  // cannot use __DATE__ on Debian!
 
 ///	optional align for malloc (sparc64) via -DALIGNMALLOC
 #define STR(a) #a
@@ -41972,46 +41972,353 @@ uint32_t crc32c(uint32_t crc, const unsigned char *buf, size_t len)
 }
 /// LICENSE_END.12
 
-string mygetpasswordblind()
+
+
+#define MAX_PWD_LEN 32000
+
+void disable_terminal_echo() 
 {
-	string myresult="";
-	myprintf("\n");
-	myprintf("00203: Enter password :");
-		/*macos*/
-#if defined (unix)
-	///myprintf(" APPLE ");
-	struct termios oldt, newt;
-	tcgetattr ( STDIN_FILENO, &oldt );
-	newt = oldt;
-	newt.c_lflag &= ~( ICANON | ECHO );
-	tcsetattr ( STDIN_FILENO, TCSANOW, &newt );
+#ifndef _WIN32
+	struct termios term;
+	tcgetattr(STDIN_FILENO, &term);
+	term.c_lflag &= ~(ECHO | ICANON);
+	tcsetattr(STDIN_FILENO, TCSANOW, &term);
 #endif
-	char carattere;
-	while (1)
+}
+
+void restore_terminal_echo() 
+{
+#ifndef _WIN32
+	struct termios term;
+	tcgetattr(STDIN_FILENO, &term);
+	term.c_lflag |= ECHO | ICANON;
+	tcsetattr(STDIN_FILENO, TCSANOW, &term);
+#endif
+}
+
+int read_char() 
+{
+#ifdef _WIN32
+	return _getch();
+#else
+	return getchar();
+#endif
+}
+
+bool iscontrolsomething(int i_char)
+{
+	return 
+	(
+		(i_char==27) || 
+		((i_char>=0) && (i_char<=7)) || 
+		(i_char==9) || 
+		(i_char==11) || 
+		(i_char==12) || 
+		((i_char>=14) && (i_char<=26)) || 
+		((i_char>=28) && (i_char<=31)) || 
+		(i_char==45)
+	);
+}
+
+typedef struct 
+{
+    char buffer[MAX_PWD_LEN];
+    int cursor_pos;
+    int length;
+} sinputstate;
+
+
+#ifdef _WIN32
+void enable_raw_mode() 
+{
+    HANDLE hStdin = GetStdHandle(STD_INPUT_HANDLE);
+    SetConsoleMode(hStdin, ENABLE_PROCESSED_INPUT);
+}
+
+void disable_raw_mode() 
+{
+    HANDLE hStdin = GetStdHandle(STD_INPUT_HANDLE);
+    SetConsoleMode(hStdin, ENABLE_ECHO_INPUT | ENABLE_LINE_INPUT | ENABLE_PROCESSED_INPUT);
+}
+
+int read_key() 
+{
+    int ch=_getch();
+    if (iscontrolsomething(ch)) ///ESC, control-C
 	{
-#if defined(unix)
-		carattere=getchar();
-		if (carattere==10)
-			break;
-		tcsetattr ( STDIN_FILENO, TCSANOW, &oldt );
-		myprintf("*");
-		tcsetattr ( STDIN_FILENO, TCSANOW, &newt );
-#else	/// Windows
-		carattere=::getch();
-		if(carattere=='\r')
-			break;
-		myprintf("*");
-#endif
-		myresult+=carattere;
+		restore_terminal_echo();
+		myprintf("\n");
+		myprintf("42262: Win: exiting due to strange key pressed |%d|\n",ch&255);
+		seppuku();
 	}
-#if defined (unix)
-	tcsetattr ( STDIN_FILENO, TCSANOW, &oldt );
+	
+    if ((ch==224) || (ch==0)) 
+	{  
+        ch=_getch();
+        switch (ch) 
+		{
+            case 75: return 1000;  // left
+			case 77: return 1001;  // right
+			case 72: return 1002;  // up
+			case 80: return 1003;  // down
+			case 83: return 1004;  // Canc
+            case 82: return 1005;  // Ins
+            default: return ch;
+        }
+    }
+    return ch;
+}
+
+#else
+struct termios orig_termios;
+
+void enable_raw_mode() 
+{
+    struct termios raw;
+    tcgetattr(STDIN_FILENO, &orig_termios);
+    raw = orig_termios;
+    raw.c_lflag &= ~(ECHO | ICANON);
+    raw.c_cc[VMIN] = 1;
+    raw.c_cc[VTIME] = 0;
+    tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
+}
+
+void disable_raw_mode() 
+{
+    tcsetattr(STDIN_FILENO, TCSAFLUSH, &orig_termios);
+}
+
+int read_key() 
+{
+    int ch=getchar();
+    if (iscontrolsomething(ch)) ///ESC, control-C
+	{
+		restore_terminal_echo();
+		myprintf("\n");
+		myprintf("42099: *nix exiting due to strange key pressed |%d|\n",ch&255);
+		seppuku();
+	}
+
+    if (ch==27) 
+        if (getchar()=='[') 
+            switch (getchar()) 
+			{
+                case 'D': return 1000;  // left
+				case 'C': return 1001;  // right
+				case 'A': return 1002;  // up
+				case 'B': return 1003;  // down
+				case '3': // Canc (longer escape)
+						  getchar();  // final ~
+						  return 1004;
+                case '2': //  Ins
+						  getchar();  // final ~
+						  return 1005;
+            }
+    return ch;
+}
 #endif
+
+// Funzioni generiche di gestione input
+void insert_char(sinputstate *state, char ch) 
+{
+    if (state->length < MAX_PWD_LEN - 1) 
+	{
+        // move to right
+		memmove(state->buffer + state->cursor_pos + 1, 
+                state->buffer + state->cursor_pos, 
+                state->length - state->cursor_pos);
+        state->buffer[state->cursor_pos] = ch;
+        state->cursor_pos++;
+        state->length++;
+        state->buffer[state->length] = '\0';
+    }
+}
+
+void delete_char(sinputstate *state) 
+{
+    // backspace
+    if (state->cursor_pos > 0) 
+    {
+        // move to left
+		memmove(state->buffer + state->cursor_pos - 1, 
+                state->buffer + state->cursor_pos, 
+                state->length - state->cursor_pos + 1);  // +1 per includere il terminatore
+        state->cursor_pos--;
+        state->length--;
+    }
+}
+
+void delete_char_forward(sinputstate *state)
+{
+    // Canc
+    if (state->cursor_pos < state->length)
+    {
+        // move to left from current pos
+		memmove(state->buffer + state->cursor_pos, 
+                state->buffer + state->cursor_pos + 1,
+                state->length - state->cursor_pos);
+        
+        state->length--;
+    }
+}
+
+void move_cursor(sinputstate *state, int direction) 
+{
+    switch (direction) 
+	{
+        case 1000:  // left
+					if (state->cursor_pos > 0) 
+						state->cursor_pos--;
+					break;
+        case 1001:  // right
+		
+					if (state->cursor_pos < state->length) 
+						state->cursor_pos++;
+					break;
+    }
+}
+
+void redraw_input(sinputstate *state,string i_testo) 
+{
+	printf("\r");
+
+    setupConsole();
+    printf("\033[K");  // clear up to end
+	restoreConsole();
+	
+    color_yellow();
+    myprintf("%s", i_testo.c_str());
+    color_restore();
+
+    // Stampa il contenuto del buffer
+    for (int i = 0; i < state->length; i++) 
+		if (flagdebug)
+			printf("%c", state->buffer[i]);
+		else
+			printf("*");
+    
+    printf("\r");
+    setupConsole();
+    for (int unsigned i=0;i<i_testo.size()+state->cursor_pos;i++)
+        printf("\033[C");  // toright
+	
+    restoreConsole();
+    fflush(stdout);
+}
+
+string internal_password_withcursor(string i_default)
+{
+	string myresult	="";
+    sinputstate state;
+	memset(&state,0,sizeof(state));
+    int ch;
+
 	myprintf("\n");
+	if (i_default=="")
+		i_default="Enter password :";
+	redraw_input(&state,i_default);
+    enable_raw_mode();
+
+    while (1) 
+	{
+        ch = read_key();
+		
+		if ((ch=='\n') || (ch== '\r'))
+			break;  // CR
+		
+		if ((ch==127) || (ch=='\b') || (ch==8))   // Backspace
+			delete_char(&state);
+		else if ((ch==1000)|| (ch== 1001))   // left/right
+			move_cursor(&state, ch);
+		else if (ch==1004)   // Canc
+			delete_char_forward(&state);
+		else if (isprint(ch))   // goodchar
+			insert_char(&state, ch);
+        redraw_input(&state,i_default);
+    }
+
+    disable_raw_mode();
+    myprintf("\n");
+    myresult=state.buffer;
+	if (flagdebug)
+		myprintf("42074: Password |%s|\n",myresult.c_str());
 	return myresult;
 }
 
 
+string internal_password_nocursor(string i_default)
+{
+	string myresult="";
+	myprintf("\n");
+	color_yellow();
+	if (i_default!="")
+		myprintf("42040: %s :",i_default.c_str());	
+	else
+		myprintf("42025: Enter password :");
+	color_restore();
+	
+    char password[MAX_PWD_LEN];
+	memset(password,0,MAX_PWD_LEN);
+    int pos=0;
+    int ch;
+
+    disable_terminal_echo();
+
+    while (1)
+	{
+		ch=read_char();
+		
+		if ((ch=='\n') || (ch== '\r'))
+			break;  // CR
+
+///		printf(" |%03d| \n",ch&255);
+        // backspace
+        if ((ch==127) || (ch=='\b') || (ch==8)) 
+		{ 
+            if (pos>0) 
+			{
+                pos--;
+                password[pos] = '\0';
+                printf("\b \b");  // Cancella l'ultimo asterisco
+                fflush(stdout);
+            }
+        }
+        // Caratteri normali
+        else
+		if (iscontrolsomething(ch)) ///ESC, control-C
+		{
+			restore_terminal_echo();
+			myprintf("\n");
+			myprintf("02053: Exiting due to strange key pressed |%d|\n",ch&255);
+			seppuku();
+		}
+		else
+		if (isprint(ch))
+			if (pos<MAX_PWD_LEN-1) 
+			{
+				password[pos] = ch;
+				pos++;
+				printf("*");
+				fflush(stdout);
+			}
+    }
+
+    restore_terminal_echo();
+    myprintf("\n");
+    myresult=password;
+	if (flagdebug)
+		myprintf("42074: Password |%s|\n",myresult.c_str());
+	return myresult;
+}
+
+
+
+string mygetpasswordblind(string i_default)
+{
+	if (flagnocolor)
+		return internal_password_nocursor(i_default);
+	return internal_password_withcursor(i_default);
+}
 FP 		g_archivefp;
 FP 		g_archivefp_first;
 bool 	g_write_on_first=false;
@@ -42149,7 +42456,7 @@ InputArchive::InputArchive(const char* filename):fn(filename)
 		if (check_if_password(part1.c_str()))
 		{
 			myprintf("00205! Archive seems encrypted (or corrupted)");
-			string spassword=mygetpasswordblind();
+			string spassword=mygetpasswordblind("");
 			if (spassword!="")
 			{
 				libzpaq::SHA256 sha256;
@@ -44961,11 +45268,6 @@ private:
 	int 		searchcomments(string i_testo,vector<DTMap::iterator> &filelist);
 	string 		zfs_get_snaplist(string i_header,string i_footer,vector<string>& o_array_primachiocciola,vector<string>& o_array_dopochiocciola,vector<string>& o_array_size);
 	string 		sanitizzanomefile(string i_filename,int i_filelength,int& io_collisioni,MAPPAFILEHASH& io_mappacollisioni);
-#ifdef _WIN32
-	void 		getpasswordifempty();
-	string 		getpasswordblind();
-#endif
-	string 		getpassword();
 	int			writesfxmodule(string i_filename);
 #ifdef _WIN32
 	int 		decompress_sfx_to_file(FILE* i_outfile);
@@ -45248,7 +45550,6 @@ int Jidac::zfsreceive()
 		return 2;
 	}
 
-///	getpasswordifempty();
 
 	int errors=0;
 	command='l';
@@ -45600,7 +45901,6 @@ int Jidac::zfsbackup()
 
 // archive does exists
 	myprintf("00396: The archive exist, checking latest snapshot\n");
-	///getpasswordifempty();
 	int errors=0;
 	command='l';
 	g_optional="versum"; //force isselected
@@ -45850,65 +46150,8 @@ uint32_t Jidac::casekollision(DTMap& i_dtmap,vector<string>& o_collisions,bool i
 		myprintf("00420: done in %.2fs\n",(endkoll-startkoll)*0.001);
 	return (fixed);
 }
-#ifdef _WIN32
-string Jidac::getpasswordblind()
-{
-	string myresult="";
-	myprintf("\n");
-	myprintf("00421: Enter password :");
-#if defined (unix)
-	///myprintf(" APPLE ");
-	struct termios oldt, newt;
-	tcgetattr ( STDIN_FILENO, &oldt );
-	newt = oldt;
-	newt.c_lflag &= ~( ICANON | ECHO );
-	tcsetattr ( STDIN_FILENO, TCSANOW, &newt );
-#endif
-	char carattere;
-	while (1)
-	{
-#if defined(unix)
-		carattere=getchar();
-		if (carattere==10)
-			break;
-		tcsetattr ( STDIN_FILENO, TCSANOW, &oldt );
-		myprintf("*");
-		tcsetattr ( STDIN_FILENO, TCSANOW, &newt );
-#else	/// Windows
-		carattere=::getch();
-		if(carattere=='\r')
-			break;
-		myprintf("*");
-#endif
-		myresult+=carattere;
-	}
-#if defined (unix)
-	tcsetattr ( STDIN_FILENO, TCSANOW, &oldt );
-#endif
-	myprintf("\n");
-	return myresult;
-}
-#endif
 
-#ifdef _WIN32
-void Jidac::getpasswordifempty()
-{
-	if (g_password==NULL)
-		if (check_if_password(archive))
-		{
-			myprintf("00422! Archive seems encrypted (or corrupted)");
-			string spassword=getpasswordblind();
-			if (spassword!="")
-			{
-				libzpaq::SHA256 sha256;
-				for (unsigned int i=0;i<spassword.size();i++)
-					sha256.put(spassword[i]);
-				memcpy(g_password_string, sha256.result(), 32);
-				g_password=g_password_string;
-			}
-		}
-}
-#endif
+
 void Jidac::jidacreset()
 {
 	g_freeze="";
@@ -51460,20 +51703,6 @@ string Jidac::rename(string name)
 
   return name;
 }
-string Jidac::getpassword()
-{
-	myprintf("\n");
-	myprintf("00491: Please do NOT start with '-' (minus) ");
-	string myresult=mygetpasswordblind();
-	if (myresult!="")
-		if (myresult[0]=='-')
-		{
-			myprintf("00492: Password starting with - can be confused with switches, enter another one!\n");
-			seppuku();
-			return "";
-		}
-	return myresult;
-}
 #ifdef _WIN32
 string	windows_fixbackslash(string i_command,string i_parameter)
 {
@@ -51815,6 +52044,7 @@ bool Jidac::cli_filesandcommand(const string& i_opt,string i_string,char i_comma
 
 bool Jidac::cli_getkey	(const string& i_opt,string i_string,int argc,const char** argv, int* i_i,string* o_plain,char**	o_password,char*	o_password_string)
 {
+	
 	if ((argv==NULL) || (i_i==NULL) || (o_plain==NULL) || (o_password_string==NULL))
 	{
 		myprintf("00515: GURU null data\n");
@@ -51838,9 +52068,20 @@ bool Jidac::cli_getkey	(const string& i_opt,string i_string,int argc,const char*
 			}
 		if ((*o_password)==NULL)
 		{
-			string spassword=getpassword();
+			
+			string spassword=mygetpasswordblind("");
 			if (spassword!="")
 			{
+				if ((command=='a') || (command=='Z'))
+				{
+					string doublepwd=mygetpasswordblind("Password,again :");
+					if (doublepwd!=spassword)
+					{
+						myprintf("\n");
+						myprintf("51852! You must enter the exact password TWICE\n");
+						seppuku();
+					}
+				}
 				libzpaq::SHA256 sha256;
 				for (unsigned int i=0;i<spassword.size();i++)
 					sha256.put(spassword[i]);
@@ -56167,7 +56408,6 @@ int Jidac::zpaqdirsize()
 		myprintf("00719! at least one folder needed\n");
 		return 2;
 	}
-///	getpasswordifempty();
 	int errors=0;
 	read_archive(NULL,archive.c_str(),&errors,0,true); /// note: kudged isselected
 	if (flagdebug3)
@@ -56617,7 +56857,6 @@ int Jidac::list()
 	if (flagterse)
 		flagattr=true;
 	
-///	getpasswordifempty();
 	int64_t csize=0;
 	if (flagcomment)
 	{
@@ -58404,7 +58643,6 @@ int Jidac::setpassword()
 		}
 	myprintf("\n\n");
 	myprintf("00829: Opening the source archive\n");
-///	getpasswordifempty();
 	if (g_password!=NULL)
 	{
 		myprintf("00830: please take note: if the source password is incorrect\n");
@@ -58414,7 +58652,7 @@ int Jidac::setpassword()
 	if (new_password==NULL)
 	{
 		myprintf("00832: New password (-key2) empty, enter . for NO password\n");
-		string spassword=getpassword();
+		string spassword=mygetpasswordblind("");
 		if (spassword==".")
 			myprintf("00833: password in output removed\n");
 		else
@@ -58767,7 +59005,6 @@ int Jidac::searchcomments(string i_testo,vector<DTMap::iterator> &filelist)
 }
 int Jidac::enumeratecomments()
 {
-///	getpasswordifempty();
 	  // Read archive into dt, which may be "" for empty.
 	int64_t csize=0;
 	int errors=0;
@@ -58935,7 +59172,6 @@ int Jidac::enumeratecomments()
 }
 int Jidac::kill()
 {
-///	getpasswordifempty();
 	myprintf("01013: KILL of:");
 	if (files.size()==0)
 		return -1;
@@ -59607,7 +59843,6 @@ int Jidac::trim()
 			archive+=".zpaq";
 	myprintf("01074: TRIMMING on %s\n",archive.c_str());
 	int64_t archivesize=prendidimensionefile(archive.c_str());
-///	getpasswordifempty();
   // Read archive or index into ht, dt, ver.
 	int errors=0;
 	string arcname=archive;  // input archive name
@@ -61554,7 +61789,6 @@ void my_handler(int s)
 		}
 	}
 	color_restore();
-	///fflush(stdout);
 #ifndef _WIN32
 		fflush(stdout);
 #endif
@@ -68255,7 +68489,6 @@ int Jidac::add()
 		}
 #endif
 
-///	getpasswordifempty();
 #ifdef _WIN32
 	if (exists_fasttxt_ads(archive))
 	{
@@ -73721,7 +73954,6 @@ int Jidac::writeresource(const string i_filename,bool i_force,const char* i_mime
 */
 int Jidac::verify(bool i_readfile)
 {
-///	getpasswordifempty();
 	flagforce		=true;
 	flagtest		=true;
 	summary			=1;
@@ -74096,7 +74328,6 @@ int Jidac::extractw()
 	}
 	if (flagverify && flagparanoid)
 		tofiles[0]+="zfranz/";
-///	getpasswordifempty();
 	g_scritti		=0;
 	int	errors		=0;
 	int64_t sz=read_archive(NULL,archive.c_str(),&errors);
@@ -76095,7 +76326,6 @@ int Jidac::zfsproxrestore()
 		///	onlyfiles.push_back("*vm-*disk*");
 		/// onlyfiles.push_back("*.conf");
 		myprintf("02629: zfsproxmox restore all, getting VM configs...\n");
-///		getpasswordifempty();
 		int errors	=0;
 		command		='l';
 		g_optional	="versum"; //force isselected
@@ -93404,7 +93634,6 @@ int Jidac::get_filelist(callback_function i_advance,vector<DTMap::iterator>* o_f
 
 
 	int64_t csize=0;
-///	getpasswordifempty();
 	if (flagcomment)
 	{
 		if (versioncomment=="")
@@ -94319,7 +94548,6 @@ int64_t Jidac::getzpaqsum(string i_archive,int64_t& o_usize,int64_t& o_allsize,i
 	int errors			=0;
 	g_optional			="versum"; //force isselected
 
-///	getpasswordifempty();
 	jidacreset();
 
 	int64_t csize=read_archive(NULL,i_archive.c_str(),&errors,1); /// AND NOW THE MAGIC ONE!
@@ -95695,7 +95923,6 @@ int Jidac::versum_againstzpaq(vector<string> i_myfiles,vector<string> i_filealgo
 		return 2;
 	}
 	tofiles.clear();
-///	getpasswordifempty();
 	int errors=0;
 	command='l';
 	g_optional="versum"; //force isselected
@@ -96292,7 +96519,6 @@ int Jidac::fzf()
 
 	if (!fileexists(archive))
 		return -1;
-///	getpasswordifempty();
 	if (flagcomment)
 	{
 		if (versioncomment=="")
@@ -97308,7 +97534,6 @@ int Jidac::collision(bool i_flagall)
 		return 2;
 	}
 	myprintf("03022: Checking for SHA-1 collisions\n");
-///	getpasswordifempty();
 	int errors		=0;
 	all				=i_flagall;
 	jidacreset();
@@ -98656,7 +98881,6 @@ int Jidac::listfast()
 		myprintf("03098! archive cannot be empty!\n");
 		return 2;
 	}
-///	getpasswordifempty();
 	
 	InputArchive in(archive.c_str());
 	if (!in.isopen()) 
@@ -99330,7 +99554,6 @@ int64_t Jidac::pakka_read_archive(const char* arc)
 	int errors=0;
 	dcsize=dhsize=0;
 
-	///getpasswordifempty(); => we do not want console interaction
 	list_Archive in;
 	if (!in.open(arc, g_password)) 
 	{
@@ -100274,16 +100497,25 @@ int Jidac::update()
 
 	string	http_url="http://www.francocorbelli.it/zpaqfranz/win64/zpaqfranz.sha256";
 	string	http_exe="http://www.francocorbelli.it/zpaqfranz/win64/zpaqfranz.exe";
-
+	string	http_p7m="http://www.francocorbelli.it/zpaqfranz/win64/zpaqfranz.sha256.p7m";
+	
 #if defined(_WIN32) && (!defined(_WIN64))
 	http_url="http://www.francocorbelli.it/zpaqfranz/win32/zpaqfranz32.sha256";
 	http_exe="http://www.francocorbelli.it/zpaqfranz/win32/zpaqfranz32.exe";
+	http_p7m="http://www.francocorbelli.it/zpaqfranz/win32/zpaqfranz32.sha256.p7m";
 #endif
 
 #if defined(_WIN64) && ( defined(HWSHA1))
 	http_url="http://www.francocorbelli.it/zpaqfranz/win64hw/zpaqfranzhw.sha256";
 	http_exe="http://www.francocorbelli.it/zpaqfranz/win64hw/zpaqfranzhw.exe";
+	http_p7m="http://www.francocorbelli.it/zpaqfranz/win64hw/zpaqfranzhw.sha256.p7m";
 #endif
+
+
+	string 	p7murl 	=http_p7m+randnocache;
+	string	p7mfile	=g_gettempdirectory()+"zpaqfranz_verfile.sha256.p7m";
+	p7mfile			=nomefileseesistegia(p7mfile);
+	string hashfromp7m;
 
 	if (files.size()==2)
 	{
@@ -100293,6 +100525,98 @@ int Jidac::update()
 		myprintf("03194: new http_url |%s|\n",http_url.c_str());
 		myprintf("03195: new http_exe |%s|\n",http_exe.c_str());
 	}
+	else
+	{
+		if (!downloadfile(p7murl,p7mfile,false))
+			myprintf("00551! Cannot download the signature file!\n");
+		else
+		{
+			myprintf("\n");
+			myprintf("00533: Ready to extract from p7m\n");
+		
+			int 	p7msize=prendidimensionefile(p7mfile.c_str());
+			if (p7msize>4000)
+			{
+				myprintf("03344! The p7m size is too big (%s)\n",migliaia(p7msize));
+				return 2;
+			}
+		
+			FILE* p7m_handle=fopen(p7mfile.c_str(), "rb");
+			if (p7m_handle==FPNULL)
+			{
+				myprintf("01926$ cannot read from p7m <<%Z>>\n",p7mfile.c_str());
+				return 2;
+			}
+			fseeko(p7m_handle,0x3C,SEEK_SET);
+			char ch;
+			while ((ch = fgetc(p7m_handle)) != EOF) 
+			{
+				if (!ishex(ch))
+					break;
+				hashfromp7m+=ch;
+			}
+		
+			fclose(p7m_handle);
+			if (hashfromp7m.size()!=64)
+			{
+				myprintf("00586! The hash from .p7m is not 64 chars long, but %d\n",hashfromp7m.size());
+				return 2;
+			}
+		}
+#ifdef _WIN32
+		if (flagparanoid)
+		{
+			myprintf("\n");
+			color_yellow();
+			printbar('+');
+			myprintf("10034: Due to -paranoid you can check yourself the (Italian) digital sign of the sha256 hash\n");
+			myprintf("10035: This is a Qualified Electronic Signature (FEQ) in CAdES format\n");
+			myprintf("10034: https://www.agid.gov.it/it/piattaforme/firma-elettronica-qualificata/software-verifica\n");
+			printbar('+');
+			color_restore();
+			string winp7m=linuxtowinpath(p7mfile);
+			if (OpenClipboard(NULL)) 
+			{
+				EmptyClipboard();
+				const size_t len = winp7m.size()+1;
+				HGLOBAL hMem = GlobalAlloc(GMEM_MOVEABLE, len);
+				if (hMem==NULL) 
+				{
+					myprintf("03335$ Error allocating Global!\n");
+					CloseClipboard();
+				}
+				else
+				{
+					memcpy(GlobalLock(hMem),winp7m.c_str(), len);
+					GlobalUnlock(hMem);
+					SetClipboardData(CF_TEXT, hMem);
+					CloseClipboard();
+				}
+			}
+			myprintf("\n");
+			myprintf("03322: Two options\n");
+			color_green();
+			myprintf("03322: (1) if you have openssl installed => run\n");
+			myprintf("03342: openssl smime -verify -in \"%s\" -inform DER  -noverify\n",winp7m.c_str());
+			
+			const char *notariato = "https://vol.ca.notariato.it/it";
+			myprintf("\n");
+			myprintf("03322: (2) or paste the clipboard (control-v) on 'Scegli un file firmato'\n");
+			myprintf("03333: of the site %s, then click 'Verifica'\n",notariato);
+			color_restore();
+			printbar('-');
+			myprintf("03344: If the digital sign is good repeat the upgrade without -paranoid\n");
+			color_yellow();
+			myprintf("*** PRESS ANY KEY TO CONTINUE (the default browser will be launched) ***\n");
+			color_restore();
+			while ((!iskeypressed(0)))
+			sleep(1);
+			ShellExecuteA(NULL,"open",notariato,NULL,NULL,SW_SHOWNORMAL);
+			return 0;
+		}
+#endif
+	}
+
 	
 	if (!isurl(http_url))
 	{
@@ -100534,9 +100858,18 @@ int Jidac::update()
 		myprintf("03228! Hash mismatch => error C5 => Kaputt\n");
 		return 2;
 	}
+	
+	if (hashfromp7m!=thesha256)
+	{
+		myprintf("0587: Hash from .p7m %s does not match expected %s\n",hashfromp7m.c_str(),thesha256.c_str());
+		return 2;
+	}
+
+	myprintf("\n");
 	color_green();
 	myprintf("03229: OK => updating ...\n");
 	color_restore();
+
 	if (flagverbose)
 	{
 		myprintf("03230: zpaqfranzexename %s\n",zpaqfranzexename.c_str());
@@ -100572,7 +100905,8 @@ int Jidac::update()
     fprintf(batch,"del \"%s\"\r\n",exefile.c_str());
     fprintf(batch,"del \"%s\"\r\n",filebatch.c_str());
 	fclose(batch);
-	myprintf("03234: filebatch %s\n",filebatch.c_str());
+	if (flagverbose)
+		myprintf("03234: filebatch %s\n",filebatch.c_str());
 	waitexecute(filebatch,"",SW_HIDE);
 #endif
 
@@ -103245,7 +103579,6 @@ int Jidac::extract()
 			}
 		}
 	#endif
-///	getpasswordifempty();
 	if (flagparanoid)
 	{
 		if (tofiles.size()==0)

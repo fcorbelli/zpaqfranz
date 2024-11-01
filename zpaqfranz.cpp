@@ -53,7 +53,7 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 */
 
-#define ZPAQ_VERSION "60.9g"
+#define ZPAQ_VERSION "60.9j"
 #define ZPAQ_DATE "(2024-11-01)"  // cannot use __DATE__ on Debian!
 
 ///	optional align for malloc (sparc64) via -DALIGNMALLOC
@@ -120,6 +120,18 @@ OTHER DEALINGS IN THE SOFTWARE.
 
 #if (!defined(_WIN32)) && (!defined(_WIN64))
 	#define ZSFX_VERSION ""
+#endif
+
+/*
+****
+Please note: you can get memory error, without -DNOJIT, on "strange" (non FreeBSD) machines
+because mmap does not like PROT_EXEC
+****
+*/
+
+#if defined(__OpenBSD__) || defined(__NetBSD__) || defined(__DragonFly__)
+	#undef 	NOJIT
+	#define NOJIT 1
 #endif
 
 #ifdef NOJIT
@@ -1460,6 +1472,10 @@ clang++ -O3 -Dunix zpaqfranz.cpp  -pthread -o zpaqfranz -static
 OpenBSD 6.6 clang++ 8.0.1
 OpenBSD 7.1 clang++ 13.0.0
 WARNING: with very old g++ compiler try -DANCIENT
+****
+Please note: you can get memory error, without -DNOJIT, on "strange" (non FreeBSD) machines
+because mmap does not like PROT_EXEC
+****
 clang++ -Dunix -O3 zpaqfranz.cpp -o zpaqfranz -pthread -static
 
 Arch Linux
@@ -1578,10 +1594,16 @@ arm-linux-gnueabihf-g++ -O3 -DNOJIT -DANCIENT zpaqfranz.cpp -o zpaqqnapv8 -stati
 
 DragonFlyBSD 6.4.0
 gcc 8.3
+****
+Please note: you can get memory error, without -DNOJIT, on "strange" (non FreeBSD) machines
+****
 g++ -Dunix -O3 zpaqfranz.cpp -o zpaqfranz -pthread -static
 
 NetBSD 10
 gcc 10.5.0
+****
+Please note: you can get memory error, without -DNOJIT, on "strange" (non FreeBSD) machines
+****
 g++ -DHWSHA2 -Dunix -O3 zpaqfranz.cpp -o zpaqfranz -pthread -static
 
 
@@ -10213,6 +10235,9 @@ void Writer::write(const char* buf, int n) {
   for (int i=0; i<n; ++i)
     put(U8(buf[i]));
 }
+
+///fika
+
 ///////////////////////// allocx //////////////////////
 // Allocate newsize > 0 bytes of executable memory and update
 // p to point to it and newsize = n. Free any previously
@@ -10220,10 +10245,11 @@ void Writer::write(const char* buf, int n) {
 // Call error in case of failure. If NOJIT, ignore newsize
 // and set p=0, n=0 without allocating memory.
 void allocx(U8* &p, int &n, int newsize) {
-#ifdef NOJIT
+#if defined(NOJIT) || defined(__OpenBSD__) || defined(__NetBSD__) || defined(__DragonFly__)
   p=0;
   n=0;
 #else
+
   if (p || n) {
     if (p)
 #ifdef unix
@@ -10235,11 +10261,20 @@ void allocx(U8* &p, int &n, int newsize) {
     p=0;
     n=0;
   }
-  if (newsize>0) {
+  if (newsize>0) 
+  {
 #ifdef unix
+	///myprintf("BEFORE mmap of newsize %s\n",migliaia(newsize));
+
     p=(U8*)mmap(0, newsize, PROT_READ|PROT_WRITE|PROT_EXEC,
                 MAP_PRIVATE|MAP_ANON, -1, 0);
-    if ((void*)p==MAP_FAILED) p=0;
+	////myprintf("AFTER mmap\n");
+
+    if ((void*)p==MAP_FAILED) 
+	{
+		///myprintf("10253$ MAP FAILED!n");
+		p=0;
+	}
 #else
     p=(U8*)VirtualAlloc(0, newsize, MEM_RESERVE|MEM_COMMIT,
                         PAGE_EXECUTE_READWRITE);
@@ -25816,7 +25851,13 @@ string ConvertUtcToLocalTime(const string& i_date)
 		myprintf("\n");
 		myprintf("00060: converting to localtime %s\n",i_date.c_str());
 	}
-#ifdef _WIN32
+	
+	if (i_date.length()!=19)
+	{
+		myprintf("25854$ i_date is not 19 chars long |%s|\n",i_date.c_str());
+		return i_date;
+	}
+
 	struct tm t;
 	memset(&t,0,sizeof(t));
 	t.tm_year 	= atoi(i_date.c_str())-1900;
@@ -25825,29 +25866,35 @@ string ConvertUtcToLocalTime(const string& i_date)
 	t.tm_hour 	= atoi(i_date.c_str()+11);
 	t.tm_min 	= atoi(i_date.c_str()+14);
 	t.tm_sec 	= atoi(i_date.c_str()+17);
+
+#ifdef _WIN32
+//
 #ifdef _WIN64
 	time_t tt = _mkgmtime64(&t);
 #else
 	time_t tt = _mkgmtime32(&t);
 #endif
-	if(tt != -1)
-	{
-		struct tm* t2=NULL;
-		t2 = &t;
-		*t2 = *localtime(&tt);
-		char ds[24];
-		memset(ds, 0, 24);
-		snprintf(ds,sizeof(ds),"%.4d-%.2d-%.2d %.2d:%.2d:%.2d", t2->tm_year + 1900,
-		  t2->tm_mon + 1, t2->tm_mday, t2->tm_hour, t2->tm_min,
-		  t2->tm_sec);
-		if (flagdebug)
-			myprintf("00061: localtime is %s\n",ds);
-		return ds;
-	}
+	if (tt==-1)
+		return i_date;
+	struct tm* t2=NULL;
+	t2 = &t;
+	*t2 = *localtime(&tt);
 #else
-	return i_date;
+	/// not Windows
+	time_t utcTime = timegm(&t); // converte in UTC
+	struct tm* t2 = localtime(&utcTime);
+	if (t2==NULL)
+	{
+		myprintf("25871$ ERROR in localtime!\n");
+		return i_date;
+	}
 #endif
-	return "";
+	char ds[24];
+	memset(ds,0,24);
+	snprintf(ds,sizeof(ds),"%.4d-%.2d-%.2d %.2d:%.2d:%.2d", t2->tm_year + 1900,t2->tm_mon + 1, t2->tm_mday, t2->tm_hour, t2->tm_min, t2->tm_sec);
+	if (flagdebug)
+		myprintf("00061: localtime is %s\n",ds);
+	return ds;
 }
 // Convert 64 bit decimal YYYYMMDDHHMMSS to "YYYY-MM-DD HH:MM:SS"
 // where -1 = unknown date, 0 = deleted.

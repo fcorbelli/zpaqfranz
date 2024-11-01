@@ -53,7 +53,7 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 */
 
-#define ZPAQ_VERSION "60.9j"
+#define ZPAQ_VERSION "60.9k"
 #define ZPAQ_DATE "(2024-11-01)"  // cannot use __DATE__ on Debian!
 
 ///	optional align for malloc (sparc64) via -DALIGNMALLOC
@@ -10236,7 +10236,7 @@ void Writer::write(const char* buf, int n) {
     put(U8(buf[i]));
 }
 
-///fika
+///fik
 
 ///////////////////////// allocx //////////////////////
 // Allocate newsize > 0 bytes of executable memory and update
@@ -42051,12 +42051,14 @@ int read_char()
 	return getchar();
 #endif
 }
-
+///fik
 bool iscontrolsomething(int i_char)
 {
 	return 
 	(
+#ifdef _WIN32
 		(i_char==27) || 
+#endif
 		((i_char>=0) && (i_char<=7)) || 
 		(i_char==9) || 
 		(i_char==11) || 
@@ -95454,6 +95456,13 @@ int Jidac::backup()
 
 int Jidac::consolidatebackup()
 {
+	if (flagbackupzeta)
+	{
+		myprintf("95459! Cannot consolidate with -backupzeta, sorry. Try -backupxxh3\n");
+		return 2;
+	}
+	
+	
 	flagquick=true;
 	if (flagverify)
 		flagquick=false;
@@ -95609,6 +95618,8 @@ int Jidac::consolidatebackup()
 	string thehash="MD5";
 	if (flagbackupxxh3)
 		thehash="XXH3";
+	if (flagbackupzeta)
+		thehash="ZETA";
 
 	myprintf("02837: Getting %s on %s\n",thehash.c_str(),g_archive.c_str());
 
@@ -95640,11 +95651,24 @@ int Jidac::consolidatebackup()
 		myprintf("02846: filehash on %s\n",g_archive.c_str());
 
 	string quickhash=dummyquick.filehash(g_archive,false,startverify,larghezzain);
-
+///fik
+/*
+	if (flagbackupzeta)
+	{
+		franz_do_hash dummyquick("CRC-32");
+		if (flagdebug3)
+			myprintf("95652: CRC-32 on %s\n",g_archive.c_str());
+		startverify=mtime();
+		string zetacrc32=dummyquick.filehash(g_archive,false,startverify,larghezzain);
+		hashreloaded="zzzz"+bin2hex_64(g_franzhash_file.hash())+"wwww"+zetacrc32;
+	}
+	*/
 	fprintf(backupfile,"%s %s|[%21s] <%s> $%s$ %s\r\n",stringtolower(hashreloaded).c_str(),checktxt.c_str(),migliaia(larghezzain),quickhash.c_str(),dateToString(true,now()).c_str(),g_archive.c_str());
 ///	fprintf(backupfile,"%s %s|[%21s] <%s> %s\r\n",     stringtolower(hashreloaded).c_str(),checktxt.c_str(),migliaia(larghezzain),quickhash.c_str(),g_archive.c_str());
 	fclose(backupfile);
 
+///fik
+	g_indexname="";
 	archive=newlonezpaq;
 	tofiles.push_back(extractfilepath(tofilez));
 	files.clear();

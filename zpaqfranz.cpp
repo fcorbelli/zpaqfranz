@@ -53,8 +53,8 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 */
 
-#define ZPAQ_VERSION "60.9k"
-#define ZPAQ_DATE "(2024-11-01)"  // cannot use __DATE__ on Debian!
+#define ZPAQ_VERSION "60.9p"
+#define ZPAQ_DATE "(2024-11-02)"  // cannot use __DATE__ on Debian!
 
 ///	optional align for malloc (sparc64) via -DALIGNMALLOC
 #define STR(a) #a
@@ -10272,7 +10272,7 @@ void allocx(U8* &p, int &n, int newsize) {
 
     if ((void*)p==MAP_FAILED) 
 	{
-		///myprintf("10253$ MAP FAILED!n");
+		///myprintf("10253$ MAP FAILED!\n");
 		p=0;
 	}
 #else
@@ -25844,6 +25844,7 @@ string subpart(string fn, int part) {
 }
 // Return relative time in milliseconds
 /// Slow, working on string instead of char *. But who cares?
+#define NO_WARNING_PLEASE 36
 string ConvertUtcToLocalTime(const string& i_date)
 {
 	if (flagdebug3)
@@ -25889,9 +25890,18 @@ string ConvertUtcToLocalTime(const string& i_date)
 		return i_date;
 	}
 #endif
-	char ds[24];
-	memset(ds,0,24);
-	snprintf(ds,sizeof(ds),"%.4d-%.2d-%.2d %.2d:%.2d:%.2d", t2->tm_year + 1900,t2->tm_mon + 1, t2->tm_mday, t2->tm_hour, t2->tm_min, t2->tm_sec);
+	char ds[NO_WARNING_PLEASE];
+	memset(ds,0,NO_WARNING_PLEASE);
+	
+	snprintf(ds,NO_WARNING_PLEASE, "%04d-%02d-%02d %02d:%02d:%02d",
+         t2->tm_year + 1900,
+         t2->tm_mon + 1,
+         t2->tm_mday,
+         t2->tm_hour,
+         t2->tm_min,
+         t2->tm_sec);
+		 
+	///snprintf(ds,sizeof(ds),"%.4d-%.2d-%.2d %.2d:%.2d:%.2d", t2->tm_year + 1900,t2->tm_mon + 1, t2->tm_mday, t2->tm_hour, t2->tm_min, t2->tm_sec);
 	if (flagdebug)
 		myprintf("00061: localtime is %s\n",ds);
 	return ds;
@@ -42051,7 +42061,6 @@ int read_char()
 	return getchar();
 #endif
 }
-///fik
 bool iscontrolsomething(int i_char)
 {
 	return 
@@ -49561,14 +49570,14 @@ string help_consolidatebackup(bool i_usage,bool i_example)
 {
 	if (i_usage)
 	{
-		moreprint("CMD consolidatebackup  Merge multipart-managed backup in one");
+		moreprint("CMD consolidate        Merge multipart-managed backup in one");
 		moreprint("                       or convert a standard .zpaq to backup");
 		moreprint("+ : -to something New backup file");
 	}
 	if (i_usage && i_example) moreprint("    Examples:");
 	if (i_example)
 	{
-		moreprint("Convert archive to backup            consolidatebackup z:\\foo.zpaq -to k:\\newbackup -key pippo");
+		moreprint("Convert archive to backup            consolidate z:\\foo.zpaq -to k:\\newbackup -key pippo");
 	}
 	return("Consolidate multipart backup");
 }
@@ -51426,7 +51435,7 @@ void Jidac::load_help_map()
 	help_map.insert(std::pair<string, voidhelpfunction>("count",			help_count));
 	help_map.insert(std::pair<string, voidhelpfunction>("comparehex",		help_comparehex));
 	help_map.insert(std::pair<string, voidhelpfunction>("work",				help_work));
-	help_map.insert(std::pair<string, voidhelpfunction>("consolidatebackup",help_consolidatebackup));
+	help_map.insert(std::pair<string, voidhelpfunction>("consolidate",		help_consolidatebackup));
 	help_map.insert(std::pair<string, voidhelpfunction>("backup",			help_backup));
 	help_map.insert(std::pair<string, voidhelpfunction>("last2",			help_last2));
 	help_map.insert(std::pair<string, voidhelpfunction>("last",				help_last));
@@ -51577,7 +51586,7 @@ void Jidac::usageall(string i_command)
 		{
 			char linea[200];
 			string temp=(*p->second)(false,false);
-			snprintf(linea,sizeof(linea),"%-10s",p->first.c_str());
+			snprintf(linea,sizeof(linea),"%-12s",p->first.c_str());
 			color_green();
 			moreprint(linea,true);
 			color_restore();
@@ -51588,7 +51597,7 @@ void Jidac::usageall(string i_command)
 		{
 			char linea[200];
 			string temp=(*p->second)(false,false);
-			snprintf(linea,sizeof(linea),"%-10s",p->first.c_str());
+			snprintf(linea,sizeof(linea),"%-12s",p->first.c_str());
 			color_green();
 			moreprint(linea,true);
 			color_restore();
@@ -53003,7 +53012,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 		else if (cli_filesandcommand(opt,"work",		']',argc,argv,&i));
 		else if (cli_filesandcommand(opt,"big",			'/',argc,argv,&i));
 		else if (cli_filesandcommand(opt,"count",	    '[',argc,argv,&i));
-		else if (cli_filesandcommand(opt,"consolidatebackup",	'Y',argc,argv,&i));
+		else if (cli_filesandcommand(opt,"consolidate",	'Y',argc,argv,&i));
 		else if (cli_filesandcommand(opt,"zfsrestore",	'%',argc,argv,&i));
 		else if (cli_filesandcommand(opt,"zfslist",		'B',argc,argv,&i));
 		else if (cli_filesandcommand(opt,"zfspurge",	'C',argc,argv,&i));
@@ -54898,6 +54907,11 @@ public:
   friend ThreadReturn writeThread(void* arg);
   CompressJob(int threads, int buffers, OutputArchive * f):
       out(f),job(0), q(0), qsize(buffers), front(0)  {
+	if (buffers<=0)
+	{
+		myprintf("54912! Invalid buffers! %s\n",migliaia(buffers));
+		throw std::invalid_argument("54913: Invalid buffer size");
+	}
     q=new CJ[buffers];
 	g_allocatedram+=sizeof(CJ)*buffers;
 		

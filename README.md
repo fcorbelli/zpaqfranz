@@ -12,6 +12,7 @@
 |  [FreeBSD](http://www.francocorbelli.it/zpaqfranz/freebsd)                 |`pkg install zpaqfranz`        |60.3a |      |
 |  [MacOS](http://www.francocorbelli.it/zpaqfranz/mac)                       |`brew install zpaqfranz`       |![Badge](https://img.shields.io/homebrew/v/zpaqfranz)|      |
 |  [OpenSUSE](http://www.francocorbelli.it/zpaqfranz/opensuse)               |`sudo zypper install zpaqfranz`|      |      |
+|  [Debian 13+ (Ubuntu etc) ](https://packages.debian.org/trixie/utils/zpaqfranz)      | `apt-get install zpaqfranz`  |60.7|      |
 |  [Debian (Ubuntu etc) .deb](http://www.francocorbelli.it/zpaqfranz/debian)      | `sudo apt install zpaqfranz`  |59.8j / 60.7|[Desktop](http://www.francocorbelli.it/zpaqfranz/video/debian-deb.mp4)      |
 |  [Linux generic (32/64)](http://www.francocorbelli.it/zpaqfranz/linux)             |                               |60.7u|      |
 |  [Arch](http://www.francocorbelli.it/zpaqfranz/arch)                       | [AUR user repository (latest)](https://aur.archlinux.org/packages/zpaqfranz-git)|58.10i|[Terminal](http://www.francocorbelli.it/zpaqfranz/video/arch.mp4)

@@ -53,8 +53,8 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 */
 
-#define ZPAQ_VERSION "60.9p"
-#define ZPAQ_DATE "(2024-11-02)"  // cannot use __DATE__ on Debian!
+#define ZPAQ_VERSION "60.9t"
+#define ZPAQ_DATE "(2024-11-04)"  // cannot use __DATE__ on Debian!
 
 ///	optional align for malloc (sparc64) via -DALIGNMALLOC
 #define STR(a) #a
@@ -122,24 +122,6 @@ OTHER DEALINGS IN THE SOFTWARE.
 	#define ZSFX_VERSION ""
 #endif
 
-/*
-****
-Please note: you can get memory error, without -DNOJIT, on "strange" (non FreeBSD) machines
-because mmap does not like PROT_EXEC
-****
-*/
-
-#if defined(__OpenBSD__) || defined(__NetBSD__) || defined(__DragonFly__)
-	#undef 	NOJIT
-	#define NOJIT 1
-#endif
-
-#ifdef NOJIT
-	#define TEXT_NOJIT "-NOJIT,"
-#else
-	#define TEXT_NOJIT "-JIT,"
-#endif
-
 #ifdef GUI
 	#define TEXT_GUI "-GUI,"
 #else
@@ -193,8 +175,6 @@ because mmap does not like PROT_EXEC
 #ifdef ESX
 	#define unix 	1
 	#define ANCIENT 1
-	#undef  TEXT_NOJIT
-	#define TEXT_NOJIT "-ESX,"
 	#undef  TEXT_BIG
 	#define TEXT_BIG ""
 	#undef  TEXT_IPV
@@ -214,8 +194,6 @@ because mmap does not like PROT_EXEC
 
 #ifdef NAS
 	#define ANCIENT
-	#undef  TEXT_NOJIT 
-	#define TEXT_NOJIT "-NAS,"
 	#undef HWSHA1
 	#undef HWSHA2
 	#undef HWBLAKE3
@@ -1305,6 +1283,10 @@ DEFINEs at compile-time: IT IS UP TO YOU NOT TO MIX LOGICAL INCOMPATIBLE DEFINIT
 									// (Honeywell 316) or little word (PDP-11)
 									// the autotest command is for you :)
 									// https://gcc.gnu.org/legacy-ml/gcc-help/2007-07/msg00343.html
+									
+									// From 60.9s if compiled without -DNOJIT there is a switch -nojit
+									// Translation: even if you have an executable compiled with default
+									// you can turn off the JIT
 
 -DANCIENT							// Turn off some functions for compiling in very old systems
 									// consuming less RAM (ex. PowerPC Mac, Synology 7.1), no auto C++
@@ -1351,7 +1333,7 @@ NOTE1: -, not -- (into switch)
 NOTE2: switches ARE case sensitive.   -maxsize <> -MAXSIZE
 
 THE JIT (just-in-time)
-zpaqfranz translate (by default) PAQL opcodes into "real" Intel (amd64 or x86+SSE2) machine code.
+zpaqfranz translate (by default) ZPAQL opcodes into "real" Intel (amd64 or x86+SSE2) machine code.
 On other systems a -DNOJIT (ARM/Apple CPUs for example) will enforce software interpretation.
 I write it BIG, #1 FAQ with newer Macintosh (M1/M2) is forgetting -DNOJIT
 
@@ -1361,7 +1343,22 @@ I write it BIG, #1 FAQ with newer Macintosh (M1/M2) is forgetting -DNOJIT
  | |\  | |_| | |\  |  | || |\  | | | | |___| |___  |_____/ / |_____| |_| | |\  | |_| | |_| || |  | |  
  |_| \_|\___/|_| \_| |___|_| \_| |_| |_____|_____|      /_/        |____/|_| \_|\___/ \___/|___| |_|  
                                                                                                       
+Starting from version 60.9, the same zpaqfranz code is used even if compiled **without** `-DNOJIT`. 
+In this case, you can disable it with the `-nojit` switch. 
+Remember that JIT availability does not affect or slow down **compression** but has 
+a significant impact on **decompression**.
 
+To summarize: If you’re sure your system does not support JIT (for example Apple Mx), 
+compile with `-DNOJIT` as before.
+Otherwise, compile without special -D. 
+If, during extraction, the process fails because the JIT is kaputt,
+add the `-nojit` switch (e.g., zpaqfranz x z:\pippo.zpaq -to z:\ugo -nojit).
+
+Why this change? Because there are Intel platforms (which do support JIT) 
+where executing code from allocated memory is not allowed for security reasons. 
+Classic examples include certain BSD types (OpenBSD, NetBSD). 
+In such cases, even if the CPU is compatible, the operating system is not.
+Not my fault :)
 
 
 SHA-1 HARDWARE ACCELERATION
@@ -1474,7 +1471,7 @@ OpenBSD 7.1 clang++ 13.0.0
 WARNING: with very old g++ compiler try -DANCIENT
 ****
 Please note: you can get memory error, without -DNOJIT, on "strange" (non FreeBSD) machines
-because mmap does not like PROT_EXEC
+because mmap does not like PROT_EXEC. On newer zpaqfranz use -nojit switch
 ****
 clang++ -Dunix -O3 zpaqfranz.cpp -o zpaqfranz -pthread -static
 
@@ -2130,6 +2127,7 @@ bool flagdebug3;
 bool flagdebug4;
 bool flagdebug5;
 std::string	g_processorname="";
+bool flagnojit;
 
 char* 	g_password;     				// points to password_string or NULL
 char 	g_password_string[32]; 			// hash of -key argument
@@ -2260,7 +2258,7 @@ bool flagnilsimsa;
 bool flagentropy;
 bool flagwindate;
 
-
+bool flagtmp;
 bool flagbackupxxh3;
 bool flagbackupzeta;
 bool flag715;
@@ -9827,9 +9825,7 @@ private:
   int assemble();  // put JIT code in rcode
   void init(int hbits, int mbits);  // initialize H and M sizes
   int execute();  // interpret 1 instruction, return 0 after HALT, else 1
-#ifdef NOJIT
   void run0(U32 input);  // default run() if not JIT
-#endif
   void zdiv(U32 x) {if (x) a/=x; else a=0;}
   void mod(U32 x) {if (x) a%=x; else a=0;}
   void swap(U32& x) {a^=x; x^=a; a^=x;}
@@ -9891,10 +9887,8 @@ private:
   Component comp[256];  // the model, includes P
   bool initTables;      // are tables initialized?
   // Modeling support functions
-#ifdef NOJIT
   int predict0();       // default
   void update0(int y);  // default
-#endif
   int dt2k[256];        // division table for match: dt2k[i] = 2^12/i
   int dt[1024];         // division table for cm: dt[i] = 2^16/(i+1.5)
   U16 squasht[4096];    // squash() lookup table
@@ -10245,10 +10239,13 @@ void Writer::write(const char* buf, int n) {
 // Call error in case of failure. If NOJIT, ignore newsize
 // and set p=0, n=0 without allocating memory.
 void allocx(U8* &p, int &n, int newsize) {
-#if defined(NOJIT) || defined(__OpenBSD__) || defined(__NetBSD__) || defined(__DragonFly__)
-  p=0;
-  n=0;
-#else
+	if (flagnojit)
+	{
+		p=0;
+		n=0;
+	}
+	else
+	{
 
   if (p || n) {
     if (p)
@@ -10265,33 +10262,36 @@ void allocx(U8* &p, int &n, int newsize) {
   {
 #ifdef unix
 	///myprintf("BEFORE mmap of newsize %s\n",migliaia(newsize));
-
-    p=(U8*)mmap(0, newsize, PROT_READ|PROT_WRITE|PROT_EXEC,
-                MAP_PRIVATE|MAP_ANON, -1, 0);
+	/// PROT_EXEC can be stopped
+    p=(U8*)mmap(0, newsize, PROT_READ|PROT_WRITE|PROT_EXEC,MAP_PRIVATE|MAP_ANON, -1, 0);
 	////myprintf("AFTER mmap\n");
 
     if ((void*)p==MAP_FAILED) 
 	{
-		///myprintf("10253$ MAP FAILED!\n");
+		if (flagdebug3)
+			myprintf("10253$ MAP FAILED!\n");
 		p=0;
 	}
 #else
-    p=(U8*)VirtualAlloc(0, newsize, MEM_RESERVE|MEM_COMMIT,
-                        PAGE_EXECUTE_READWRITE);
+    p=(U8*)VirtualAlloc(0, newsize, MEM_RESERVE|MEM_COMMIT,PAGE_EXECUTE_READWRITE);
 #endif
+
     if (p)
 	{
 	  g_allocatedram+=newsize;
       n=newsize;
 	}
-    else {
-      n=0;
-		std::string nsize=migliaia(newsize);
-		std::string errorone=" 2249: allocx failed for "+nsize+" (maybe non-Intel CPU? try compiling with -DNOJIT)";
-      error(errorone.c_str());
+    else 
+	{
+		n=0;
+		myprintf("\n\n");
+		myprintf("02249! allocx KO for %s (maybe non-Intel CPU? Unsupported OS?)\n",migliaia(newsize));
+		myprintf("02250! try to run with -nojit or compile using -DNOJIT\n\n");
+		color_restore();
+		exit(0);
     }
   }
-#endif
+	}
 }
 
 /// LICENSE_START.1
@@ -10967,7 +10967,7 @@ void ZPAQL::init(int hbits, int mbits) {
   r.resize(256);
   a=b=c=d=pc=f=0;
 }
-#ifdef NOJIT
+
 // Run program on input by interpreting header
 void ZPAQL::run0(U32 input) {
   assert(cend>6);
@@ -10981,7 +10981,6 @@ void ZPAQL::run0(U32 input) {
   a=input;
   while (execute()) ;
 }
-#endif
 
 // Execute one instruction, return 0 after HALT else 1
 int ZPAQL::execute() {
@@ -11778,7 +11777,6 @@ void Predictor::init() {
     assert(cp>=&z.header[7] && cp<&z.header[z.cend]);
   }
 }
-#ifdef NOJIT
 // Return next bit prediction using interpreted COMP code
 int Predictor::predict0() {
   assert(initTables);
@@ -11877,8 +11875,6 @@ int Predictor::predict0() {
   assert(cp[0]==NONE);
   return squash(p[n-1]);
 }
-#endif
-#ifdef NOJIT
 // Update model with decoded bit y (0...1)
 void Predictor::update0(int y) {
   assert(initTables);
@@ -11991,7 +11987,6 @@ void Predictor::update0(int y) {
   else
     hmap4=(hmap4&0x1f0)|(((hmap4&0xf)*2+y)&0xf);
 }
-#endif
 // Find cxt row in hash table ht. ht has rows of 16 indexed by the
 // low sizebits of cxt with element 0 having the next higher 8 bits for
 // collision detection. If not found after 3 adjacent tries, replace the
@@ -12866,7 +12861,6 @@ void Compressor::endBlock() {
   state=INIT;
 }
 //////////////////////// ZPAQL::assemble() ////////////////////
-#ifndef NOJIT
 /*
 assemble();
 Assembles the ZPAQL code in hcomp[0..hlen-1] and stores x86-32 or x86-64
@@ -14305,13 +14299,14 @@ int Predictor::assemble_p() {
   put1(0xc3);                 // ret
   return o;
 }
-#endif // ifndef NOJIT
+
+
 // Return a prediction of the next bit in range 0..32767
 // Use JIT code starting at pcode[0] if available, or else create it.
 int Predictor::predict() {
-#ifdef NOJIT
-  return predict0();
-#else
+	if (flagnojit)
+		return predict0();
+	
   if (!pcode) {
     allocx(pcode, pcode_size, (z.cend*100+4096)&-4096);
     int n=assemble_p();
@@ -14324,14 +14319,15 @@ int Predictor::predict() {
   }
   assert(pcode && pcode[0]);
   return ((int(*)(Predictor*))&pcode[10])(this);
-#endif
 }
 // Update the model with bit y = 0..1
 // Use the JIT code starting at pcode[5].
 void Predictor::update(int y) {
-#ifdef NOJIT
-  update0(y);
-#else
+	if (flagnojit)
+	{
+		update0(y);
+		return;
+	}
   assert(pcode && pcode[5]);
   ((void(*)(Predictor*, int))&pcode[5])(this, y);
   // Save bit y in c8, hmap4 (not implemented in JIT)
@@ -14346,14 +14342,15 @@ void Predictor::update(int y) {
     hmap4=(hmap4&0xf)<<5|y<<4|1;
   else
     hmap4=(hmap4&0x1f0)|(((hmap4&0xf)*2+y)&0xf);
-#endif
 }
 // Execute the ZPAQL code with input byte or -1 for EOF.
 // Use JIT code at rcode if available, or else create it.
 void ZPAQL::run(U32 input) {
-#ifdef NOJIT
-  run0(input);
-#else
+	if (flagnojit)
+	{
+		run0(input);
+		return;
+	}
   if (!rcode) {
     allocx(rcode, rcode_size, (hend*10+4096)&-4096);
     int n=assemble();
@@ -14371,7 +14368,6 @@ void ZPAQL::run(U32 input) {
   else if (rc==2) libzpaq::error("Out of memory");
   else if (rc==3) libzpaq::error("Write error");
   else libzpaq::error("ZPAQL execution error");
-#endif
 }
 
 /// LICENSE_START.6
@@ -43448,7 +43444,6 @@ OutputArchive::OutputArchive(string i_thearchive,const char* filename, const cha
 	{
 		firstfilename=i_thearchive;
 		easymultipart chunkedoutput(i_thearchive);
-		
 		if (chunkedoutput.filenamearray.size()==0)
 			firstchunk=true;
 		else
@@ -43474,8 +43469,6 @@ OutputArchive::OutputArchive(string i_thearchive,const char* filename, const cha
 		previoussize=chunkedoutput.totalchunksize;
 		if (flagdebug4)
 			myprintf("00285: previoussize %s\n",migliaia(previoussize));
-
-
 	}	
 	
 	// Open existing file
@@ -49465,7 +49458,7 @@ string help_backup(bool i_usage,bool i_example)
 		moreprint("+ : -backupxxh3   Store XXH3 instead of default MD5");
 		moreprint("+ : -backupzeta   Store ZETA instead of default MD5 [UNENCRYPTED]");
 		moreprint("+ : -index X      Store index (and .pid) files in X folder (for WORM drive)");
-				
+		moreprint("+ : -tmp          .tmp instead of .zpaq for running multipart");
 	}
 	if (i_usage && i_example) moreprint("    Examples:");
 	if (i_example)
@@ -49474,6 +49467,7 @@ string help_backup(bool i_usage,bool i_example)
 		moreprint("Store XXH3 (instead of MD5)          backup z:\\prova.zpaq *.txt -backupxxh3");
 		moreprint("Write index in c:\\temp               backup z:\\prova.zpaq c:\\nz -index c:\\temp");
 		moreprint("Store ZETA (instead of MD5)          backup z:\\prova.zpaq *.txt -backupzeta");
+		moreprint("Rename to .zpaq after completing     backup z:\\prova.zpaq *.txt -tmp");
 	}
 	return("Backup with hardened multipart");
 }
@@ -52540,6 +52534,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 	g_programflags.add(&flagstdout,			"-stdout",				"stdout",											"");
 	g_programflags.add(&flagstore,			"-store",				"Store mode: no deduplication, no compression",		"");
 	g_programflags.add(&flagtar,			"-tar",					"TAR mode (store posix)",							"");
+	g_programflags.add(&flagtmp,			"-tmp",					"Use .tmp instead of .zpaq during backup",			"");
 	g_programflags.add(&flagtest,			"-test",				"Only do test",										"");
 	g_programflags.add(&flagtouch,			"-touch",				"Force 'touch' on date (7.15 to zpaqfranz)",		"");
 	g_programflags.add(&flagutc,			"-utc",					"Use UTC time",										"");
@@ -52573,6 +52568,8 @@ int Jidac::loadparameters(int argc, const char** argv)
 #endif
 
 	g_programflags.add(&flaghw,				"-hw",					"Use HW SHA1",										"a;x;");
+	g_programflags.add(&flagnojit,			"-nojit",				"Do not use JIT",									"");
+
 
 	for (int i=0; i<argc; i++)
 	{
@@ -52817,14 +52814,65 @@ int Jidac::loadparameters(int argc, const char** argv)
 			flagnoeta=true;
 		}
 	}
+	
+
+#ifdef unix
+	if (flagdebug)
+		myprintf("52588: UNIX: try to allocate 8K with PROT_EXEC\n");
+    void* p=(void*)mmap(0,8192, PROT_READ|PROT_WRITE|PROT_EXEC,MAP_PRIVATE|MAP_ANON, -1, 0);
+	if (p==MAP_FAILED) 
+	{
+		if (flagverbose)
+			myprintf("52594$ OS unsupported, turning off flagjit\n");
+		flagnojit=true;
+	}
+	else
+		munmap(p,8192);
+	
+	/*
+	  void* p = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    if (p == MAP_FAILED) 
+	{
+        return NULL;
+    }
+
+    // Modifica i permessi per attivare PROT_EXEC
+    if (mprotect(p, size, PROT_READ | PROT_WRITE | PROT_EXEC) != 0) {
+        munmap(p, size);
+        return NULL;
+    }
+	*/
+#endif
+
+#if defined(NOJIT) || defined(BIG) // those are really "strange"
+	flagnojit=true;
+#endif
+
+
+	string textnojit="-JIT,";
+	if (flagnojit)
+		textnojit="-NOJIT,";
+		
+#ifdef ESX
+	textnojit="-ESX,";
+#endif
+
+#ifdef NAS
+	textnojit="-NAS,";
+#endif
+
+
 	if (flag715)
 		myprintf("52511: zpaq v7.15 journaling archiver, compiled Aug 17 2016\n");
 	else
 	{
 		if ((!flagpakka) && (!flagstdout) && (!flagterse))
 		{
+			char buffer[300];
+			
+			snprintf(buffer,sizeof(buffer),"zpaqfranz v" ZPAQ_VERSION "%s" TEXT_GUI TEXT_BIG TEXT_SERVER TEXT_ALIGN TEXT_HWPRE TEXT_HWBLAKE3 TEXT_HWSHA1 TEXT_HWSHA2 TEXT_IPV ZSFX_VERSION ZPAQ_DATE,textnojit.c_str()); 
 			color_green();
-			moreprint("zpaqfranz v" ZPAQ_VERSION TEXT_NOJIT TEXT_GUI TEXT_BIG TEXT_SERVER TEXT_ALIGN TEXT_HWPRE TEXT_HWBLAKE3 TEXT_HWSHA1 TEXT_HWSHA2 TEXT_IPV ZSFX_VERSION ZPAQ_DATE); /// FAKE COMPILER WARNING
+			moreprint(buffer);
 			color_restore();
 		}
 	}
@@ -53632,6 +53680,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 
 	if (flag715)
 	{
+		flagtmp				=false;
 		flagnodelete		=false;
 		flagdate			=false;
 		flagutc				=true;
@@ -62010,7 +62059,7 @@ void my_handler(int s)
 		if (g_arrayram<0)
 			g_arrayram=0;
 		
-		if ((command!='l') && (!flag715))
+		if (  !((command=='l') && (flag715)) )
 		{
 					
 			///myprintf("62944: RAM: heap %s +array %s +files %s = %s\n",tohuman(g_allocatedram),tohuman2(g_arrayram),tohuman3(g_dt_ram),tohuman4(g_allocatedram+g_dt_ram+g_arrayram));
@@ -68017,6 +68066,11 @@ string	win_getlong(const string& i_file)
 ///zpaqfranz a z:\1 \\?\UNC\franzk\z\cb -longpath -debug
 int Jidac::add()
 {
+	if ((g_chunk_size>0) && (flagtmp))
+	{
+		myprintf("62802! Sorry -tmp does not work with -chunk\n");
+		return 2;
+	}
 	if ((g_password!=NULL) && (flagbackupzeta))
 	{
 		myprintf("67649! Sorry, -backupzeta does not work with encryption\n");
@@ -68971,8 +69025,16 @@ int Jidac::add()
 	}
 	
 	
+	if (g_flagmultipart && flagtmp)
+	{
+		string oldname=arcname;
+		myreplace(arcname,".zpaq",".tmp");
+		if (flagverbose)
+			myprintf("68984$ Changed <<%Z>> to <<%Z>>\n",oldname.c_str(),arcname.c_str());
+	}
 	
 	g_archive=arcname; /// for multipart the last
+	
 	
 	(void)getfileinfo(arcname,g_starting_zpaqsize,g_starting_zpaqdate,g_starting_zpaqattr);
 
@@ -71325,11 +71387,30 @@ int Jidac::add()
 				printbar('!');
 			}
 		
-	
-	
-	
-	
-	
+
+	if (g_flagmultipart && flagtmp)
+		if (fileexists(arcname))
+		{
+			string sto=arcname;
+			myreplace(sto,".tmp",".zpaq");
+			if (flagverbose)
+				myprintf("68938$ Renaming  <<%Z>> to <<%Z>>\n",arcname.c_str(),sto.c_str());
+			if (myrename(arcname,sto)!=0)
+			{
+				myprintf("71350$ GURU CANNOT RENAME <<%Z>> to <<%Z>>\n",arcname.c_str(),sto.c_str());
+				return 2;
+			}
+			else
+			{
+				if (flagverbose)
+				{
+					color_green();
+					myprintf("71354: Renaming done\n");
+					color_restore();
+				}
+				g_archive=sto;
+			}
+		}
 	
 #if defined(_WIN32)
 	if (flagvss)
@@ -72368,20 +72449,22 @@ int Jidac::benchmark()
 	if (iamintel)
 	{
 		myprintf("02272: This seems Intel/AMD 'normal' CPU\n");
-#ifdef NOJIT
-		color_green();
-		myprintf("02273: You can try to compile WITHOUT -DNOJIT\n");
-		color_restore();
-#endif
+		if (flagnojit)
+		{
+			color_green();
+			myprintf("02273: You can try EXTRACT without -nojit\n");
+			color_restore();
+		}
 	}
 	else
 	{
 		myprintf("02274: I am not sure this is Intel/AMD CPU (virtual? arm?)\n");
-#ifndef NOJIT
-		color_red();
-		myprintf("02275: WARNING: non Intel/AMD CPUs should be compiled with -DNOJIT\n");
-		color_restore();
-#endif
+		if (!flagnojit)
+		{
+			color_yellow();
+			myprintf("02275: WARNING: non Intel/AMD CPUs should be compiled with -DNOJIT or run with -nojit\n");
+			color_restore();
+		}
 	}
 	string myname=getuname();
 	myprintf("02276: uname %s\n",myname.c_str());
@@ -100610,6 +100693,7 @@ int Jidac::update()
 		myprintf("03194: new http_url |%s|\n",http_url.c_str());
 		myprintf("03195: new http_exe |%s|\n",http_exe.c_str());
 	}
+#ifdef _WIN32
 	else
 	{
 		if (!downloadfile(p7murl,p7mfile,false))
@@ -100648,7 +100732,6 @@ int Jidac::update()
 				return 2;
 			}
 		}
-#ifdef _WIN32
 		if (flagparanoid)
 		{
 			myprintf("\n");
@@ -100699,8 +100782,8 @@ int Jidac::update()
 			ShellExecuteA(NULL,"open",notariato,NULL,NULL,SW_SHOWNORMAL);
 			return 0;
 		}
-#endif
 	}
+#endif
 
 	
 	if (!isurl(http_url))

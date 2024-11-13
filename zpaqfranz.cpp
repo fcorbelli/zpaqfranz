@@ -53,10 +53,10 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 */
 
-#define ZPAQ_VERSION "60.9t"
-#define ZPAQ_DATE "(2024-11-04)"  // cannot use __DATE__ on Debian!
+#define ZPAQ_VERSION "60.9z"
+#define ZPAQ_DATE "(2024-11-13)"  // cannot use __DATE__ on Debian!
 
-///	optional align for malloc (sparc64) via -DALIGNMALLOC
+///	optional align for malloc (sparc64,HPPA) via -DALIGNMALLOC
 #define STR(a) #a
 #define XSTR(a) STR(a)
 
@@ -70,8 +70,7 @@ OTHER DEALINGS IN THE SOFTWARE.
 	#define TEXT_ALIGN ""
 #endif
 
-/*
-/// Uncomment for "automagically" compiling (well, sort of)
+/// "automagically" compiling (well, sort of)
 /// NO Windows? => no HWBLAKE, NO GUI, NO SERVER, NOSHA1, YES unix
 #ifndef _WIN32
 	#undef 	HWBLAKE3
@@ -82,8 +81,6 @@ OTHER DEALINGS IN THE SOFTWARE.
 	#define unix
 #endif
 
-
-/// Windows? No solaris, no ancient, no big, no esx, no alignmalloc, no unix, YES GUI
 #ifdef _WIN32
 	#undef	SOLARIS
 	#undef	ANCIENT
@@ -95,11 +92,16 @@ OTHER DEALINGS IN THE SOFTWARE.
 	#define	GUI
 #endif
 
+#ifdef _WIN64
+	#undef  HWSHA2
+	#define HWSHA2
 
 #ifdef HWSHA1
    #ifdef HWSHA2
-	   #undef HWSHA1
+	   #undef HWSHA2
    #endif
+#endif
+
 #endif
 
 #if defined(_WIN32) && ( defined(HWSHA1) || defined(HWSHA2) )
@@ -108,7 +110,6 @@ OTHER DEALINGS IN THE SOFTWARE.
 	   #undef HWSHA2
    #endif
 #endif
-*/
 
 #if defined(_WIN64)
 	#define ZSFX_VERSION "SFX64 v55.1,"
@@ -1162,6 +1163,7 @@ furnished to do so, subject to the following conditions:
 45 Thanks to https://github.com/codewithnick            for change his license to a Fedora-friendly one
 46 Thanks to https://github.com/mirogeorg               for various suggestions
 47 Thanks to https://github.com/brad0                   for OpenBSD fix
+48 Thanks to Carlo, Debian user                         for debugging support
 
                 _____ _   _  _____ _______       _      _
                |_   _| \ | |/ ____|__   __|/\   | |    | |
@@ -1299,7 +1301,7 @@ DEFINEs at compile-time: IT IS UP TO YOU NOT TO MIX LOGICAL INCOMPATIBLE DEFINIT
 
 -DESX								// Yes, zpaqfranz run (kind of) on ESXi too :-)
 
--DALIGNMALLOC 						// Force malloc to be aligned at something (sparc64)
+-DALIGNMALLOC 						// Force malloc to be aligned at something (sparc64). Use naive CRC-32
 
 -DSERVER							// Enable the cloudpaq client (for Windows)
 
@@ -1348,15 +1350,15 @@ In this case, you can disable it with the `-nojit` switch.
 Remember that JIT availability does not affect or slow down **compression** but has 
 a significant impact on **decompression**.
 
-To summarize: If you’re sure your system does not support JIT (for example Apple Mx), 
+To summarize: If you’re sure your system does not support JIT (for example Apple silicon), 
 compile with `-DNOJIT` as before.
-Otherwise, compile without special -D. 
+Otherwise, compile: zpaqfranz will "automagically" turn on -nojit if CPU (or OS) is not OK. 
 If, during extraction, the process fails because the JIT is kaputt,
 add the `-nojit` switch (e.g., zpaqfranz x z:\pippo.zpaq -to z:\ugo -nojit).
 
 Why this change? Because there are Intel platforms (which do support JIT) 
 where executing code from allocated memory is not allowed for security reasons. 
-Classic examples include certain BSD types (OpenBSD, NetBSD). 
+Classic examples include certain BSD types (OpenBSD, NetBSD...). 
 In such cases, even if the CPU is compatible, the operating system is not.
 Not my fault :)
 
@@ -1602,6 +1604,18 @@ gcc 10.5.0
 Please note: you can get memory error, without -DNOJIT, on "strange" (non FreeBSD) machines
 ****
 g++ -DHWSHA2 -Dunix -O3 zpaqfranz.cpp -o zpaqfranz -pthread -static
+
+
+HPPA gcc version 14.2.0 (Debian 14.2.0-8)
+This type of CPU is quite particular, often requiring memory alignment, 
+which is not very compatible with the CRC-32 calculation function using 16-byte slices. 
+In this case, the "classic" algorithm is used, much slower but expected to work. 
+I don't have access to hardware for thorough testing.
+g++ -O3 -DBIG -DALIGNMALLOC zpaqfranz.cpp -o zpaqfranz -pthread
+
+
+PowerPC (Debian gcc 4.9.1)
+g++ -O3 -DBIG -DANCIENT zpaqfranz.cpp -o zpaqfranz -pthread -static -s
 
 
 Beware of #definitions
@@ -2314,6 +2328,7 @@ bool flagnodelete;
 bool flagskipzfs;
 bool flagspace;
 bool flagssd;
+bool flagnomore;
 bool flagsalt;
 bool flaghdd;
 bool flagquick;
@@ -2920,7 +2935,11 @@ class Fonts
     unsigned int char_cols;
     unsigned int curr_col;
     std::vector<std::vector<char> > letters;
+/*
 
+zpaqfranz.cpp:2930:25: note: the layout of aggregates containing vectors with 8-byte alignment has changed in GCC 5
+ 2930 |         this->char_rows = rows ? rows : def_rows;
+ */
 protected:
     char **getCharGrid(unsigned int rows = 0, unsigned int cols = 0)
     {
@@ -2935,6 +2954,10 @@ protected:
                 char_grid[i][j] = ' ';
         }
         return char_grid;
+    }
+	void destroyspace()
+    {
+        letters.clear();
     }
 
 public:
@@ -3251,14 +3274,16 @@ public:
     }
 
     /********************************done adding virtual functions********************************/
-    void destroyspace()
+	virtual ~Fonts()
     {
-        letters.clear();
+        destroyspace();
     }
+/*
     ~Fonts()
     {
         destroyspace();
     }
+	*/
 };
 
 class SevenStar : public Fonts
@@ -6014,7 +6039,8 @@ static void* franz_extend(void* i_mem,size_t i_size,size_t i_oldsize)
 	if (i_oldsize<i_size)
 	{
 ///#ifdef DEBUG
-		printf("01211: realloc from %08d to %08d\n",(int)i_oldsize,(int)i_size);
+		if (flagdebug)
+			myprintf("01211: realloc from %08d to %08d\n",(int)i_oldsize,(int)i_size);
 ///#endif
         new_mem=franz_malloc(i_size);
         if (new_mem==NULL)
@@ -17204,134 +17230,6 @@ string print_datetime(bool i_flagout)
 typedef map<string, bool*> 	MAPPAFLAGS;
 typedef map<string, string> HELPFLAGS;
 
-/*
-struct	franz_flag
-{
-	string	name;
-	string	help;
-	string	scope;
-	bool	*theflag;
-	franz_flag(string i_name, string i_help, bool* i_flag)
-	{
-		if (i_name=="")
-		{
-			printf("48111: GURU i_name empty\n");
-			seppuku();
-		}
-		if (i_flag==NULL)
-		{
-			printf("48107: GURU i_flag NULL\n");
-			seppuku();
-		}
-		name=i_name;
-		help=i_help;
-		theflag=i_flag;
-	};
-};
-*/
-
-class franz_flags
-{
-	public:
-	MAPPAFLAGS 	mappaflags;
-	HELPFLAGS 	helpflags;
-	HELPFLAGS 	helpflagsscope;
-
-	bool get(const string& i_name)
-	{
-		MAPPAFLAGS::iterator p=mappaflags.find(i_name);
-		if (p==mappaflags.end())
-		{
-			printf("42098: guru doing getflag %s \n",i_name.c_str());
-			seppuku();
-		}
-		if (p->second==NULL)
-		{
-			printf("42913: guru empty pointer flag%s\n",i_name.c_str());
-			seppuku();
-		}
-		return (*p->second);
-	}
-	bool exists(const string& i_name)
-	{
-		return (mappaflags.find(i_name)!=mappaflags.end());
-	}
-	void set(string i_name, bool i_value)
-	{
-
-		MAPPAFLAGS::iterator p=mappaflags.find(i_name);
-		if (p==mappaflags.end())
-		{
-		}
-		if (p==mappaflags.end())
-		{
-			printf("42923: GURU doing setflag %s \n",i_name.c_str());
-			seppuku();
-		}
-		if (p->second==NULL)
-		{
-			printf("42928: guru empty pointer flag%s\n",i_name.c_str());
-			seppuku();
-		}
-
-		(*p->second)=i_value;
-	}
-	void settrue(const string& i_name)
-	{
-		set(i_name,true);
-	}
-	void debugga()
-	{
-		printf("48149: array franz flag size %s\n",migliaia(mappaflags.size()));
-
-		for (MAPPAFLAGS::iterator p=mappaflags.begin(); p!=mappaflags.end(); ++p)
-		{
-			printf("48150: %-20s   %d ",p->first.c_str(),(int)*p->second);
-			HELPFLAGS::iterator a=helpflags.find(p->first);
-			if (p!=mappaflags.end())
-				printf(" <<%s>>",a->second.c_str());
-			printf("\n");
-		}
-	}
-
-	string compact()
-	{
-
-		string risultato="";
-		for (MAPPAFLAGS::iterator p=mappaflags.begin(); p!=mappaflags.end(); ++p)
-			if (*p->second)
-				risultato+=p->first+' ';
-		return risultato;
-	}
-
-	void add(bool* i_thebool,string i_name,string i_help,string i_helpscope,bool i_default=false)
-	{
-		if (i_name=="")
-		{
-			printf("48125: GURU i_name empty\n");
-			seppuku();
-		}
-		if (i_thebool==NULL)
-		{
-			printf("09778: GURU thebool NULL\n");
-			seppuku();
-		}
-
-		MAPPAFLAGS::iterator p=mappaflags.find(i_name);
-		if (p==mappaflags.end())
-		{
-			*(i_thebool)=i_default;
-			mappaflags.insert(std::pair<string, bool*>(i_name, i_thebool));
-			if (i_help!="")
-				helpflags.insert(std::pair<string, string>(i_name, i_help));
-			if (i_helpscope!="")
-				helpflags.insert(std::pair<string, string>(i_name, i_helpscope));
-		}
-	}
-
-};
-
-franz_flags	g_programflags;
 
 
 
@@ -18115,13 +18013,13 @@ namespace
 void SHA3::processBlock(const void* data)
 {
 #ifdef BIG
-#define MYLITTLEENDIAN(x) swap(x)
+#define MYLITTLEENDIAN2(x) swap(x)
 #else
-#define MYLITTLEENDIAN(x) (x)
+#define MYLITTLEENDIAN2(x) (x)
 #endif
   const uint64_t* data64 = (const uint64_t*) data;
   for (unsigned int i = 0; i < m_blockSize / 8; i++)
-    m_hash[i] ^= MYLITTLEENDIAN(data64[i]);
+    m_hash[i] ^= MYLITTLEENDIAN2(data64[i]);
   for (unsigned int round = 0; round < Rounds; round++)
   {
     uint64_t coefficients[5];
@@ -24807,6 +24705,7 @@ void clear_from_cursor_to_end()
     }
 }
 */
+
 void printbar(char i_carattere,bool i_printbarraenne=true)
 {
 	if (flagpakka)
@@ -24835,6 +24734,15 @@ void moreprint(const char* i_stringa,bool i_nocr=false)
 	static int righestampate=0;
 	if (!i_stringa)
 		return;
+	if (flagnomore)
+	{
+		if (i_nocr)
+			printf("%s",i_stringa);
+		else
+			printf("%s\n",i_stringa);
+		return;
+	}
+		
 	if ((larghezzaconsole<0) || (altezzaconsole<0))
 	{
 		if (i_nocr)
@@ -24921,6 +24829,127 @@ bool getcaptcha(const string& i_captcha,const string& i_reason)
 	myprintf("00034: Captcha OK\n");
 	return true;
 }
+
+class franz_flags
+{
+	public:
+	MAPPAFLAGS 	mappaflags;
+	HELPFLAGS 	helpflags;
+	HELPFLAGS 	helpflagsscope;
+
+	bool get(const string& i_name)
+	{
+		MAPPAFLAGS::iterator p=mappaflags.find(i_name);
+		if (p==mappaflags.end())
+		{
+			printf("42098: guru doing getflag %s \n",i_name.c_str());
+			seppuku();
+		}
+		if (p->second==NULL)
+		{
+			printf("42913: guru empty pointer flag%s\n",i_name.c_str());
+			seppuku();
+		}
+		return (*p->second);
+	}
+	bool exists(const string& i_name)
+	{
+		return (mappaflags.find(i_name)!=mappaflags.end());
+	}
+	void set(string i_name, bool i_value)
+	{
+
+		MAPPAFLAGS::iterator p=mappaflags.find(i_name);
+		if (p==mappaflags.end())
+		{
+		}
+		if (p==mappaflags.end())
+		{
+			printf("42923: GURU doing setflag %s \n",i_name.c_str());
+			seppuku();
+		}
+		if (p->second==NULL)
+		{
+			printf("42928: guru empty pointer flag%s\n",i_name.c_str());
+			seppuku();
+		}
+
+		(*p->second)=i_value;
+	}
+	void settrue(const string& i_name)
+	{
+		set(i_name,true);
+	}
+	void debugga()
+	{
+///		printf("48149: array franz flag size %s\n",migliaia(mappaflags.size()));
+
+		for (MAPPAFLAGS::iterator p=mappaflags.begin(); p!=mappaflags.end(); ++p)
+		{
+			myprintf("48150: %-20s   %d ",p->first.c_str(),(int)*p->second);
+			HELPFLAGS::iterator a=helpflags.find(p->first);
+			if (p!=mappaflags.end())
+				myprintf(" <<%s>>",a->second.c_str());
+			myprintf("\n");
+		}
+	}
+	void tutti()
+	{
+		for (MAPPAFLAGS::iterator p=mappaflags.begin(); p!=mappaflags.end(); ++p)
+		{
+			char buffer[200];
+			HELPFLAGS::iterator a=helpflags.find(p->first);
+			if (p!=mappaflags.end())
+			{
+				color_green();
+				snprintf(buffer,sizeof(buffer),"%-20s",p->first.c_str());
+				moreprint(buffer,true);
+				color_restore();
+				snprintf(buffer,sizeof(buffer)," %s",a->second.c_str());
+				moreprint(buffer);
+			}
+		}
+	}
+
+	string compact()
+	{
+
+		string risultato="";
+		for (MAPPAFLAGS::iterator p=mappaflags.begin(); p!=mappaflags.end(); ++p)
+			if (*p->second)
+				risultato+=p->first+' ';
+		return risultato;
+	}
+
+	void add(bool* i_thebool,string i_name,string i_help,string i_helpscope,bool i_default=false)
+	{
+		if (i_name=="")
+		{
+			printf("48125: GURU i_name empty\n");
+			seppuku();
+		}
+		if (i_thebool==NULL)
+		{
+			printf("09778: GURU thebool NULL\n");
+			seppuku();
+		}
+
+		MAPPAFLAGS::iterator p=mappaflags.find(i_name);
+		if (p==mappaflags.end())
+		{
+			*(i_thebool)=i_default;
+			mappaflags.insert(std::pair<string, bool*>(i_name, i_thebool));
+			if (i_help!="")
+				helpflags.insert(std::pair<string, string>(i_name, i_help));
+			if (i_helpscope!="")
+				helpflags.insert(std::pair<string, string>(i_name, i_helpscope));
+		}
+	}
+
+};
+
+franz_flags	g_programflags;
+
 
 char* stristr(const char* str1,const char* str2)
 {
@@ -39095,15 +39124,29 @@ namespace
   const size_t MaxSlice = 16;
 } // anonymous namespace
 extern const uint32_t Crc32Lookup[MaxSlice][256]; // extern is needed to keep compiler happy
+
+#define POLYNOMIAL 0xEDB88320
+
 uint32_t crc32_16bytes(const void* data, size_t length, uint32_t previousCrc32)
 {
-	/*
-#if __BYTE_ORDER == __BIG_ENDIAN
-	printf("N1: BIG ENDIAN\n");
+#ifdef ALIGNMALLOC
+{
+    const uint8_t* bytes = (const uint8_t*) data;
+    uint32_t crc = ~previousCrc32;
+    while (length--) 
+	{
+        crc ^= *bytes++;
+        for (int i = 0; i < 8; i++) 
+		if (crc & 1) 
+		  crc = (crc >> 1) ^ POLYNOMIAL;
+		else 
+			crc >>= 1;
+    }
+    return ~crc;
+}
+
 #else
-	printf("N1: LITTLE ENDIAN\n");
-#endif
-*/
+
   uint32_t crc = ~previousCrc32; // same as previousCrc32 ^ 0xFFFFFFFF
   const uint32_t* current = (const uint32_t*) data;
   // enabling optimization (at least -O2) automatically unrolls the inner for-loop
@@ -39164,6 +39207,7 @@ uint32_t crc32_16bytes(const void* data, size_t length, uint32_t previousCrc32)
   while (length-- != 0)
     crc = (crc >> 8) ^ Crc32Lookup[0][(crc & 0xFF) ^ *currentChar++];
   return ~crc; // same as crc ^ 0xFFFFFFFF
+#endif
 }
 /// merge two CRC32 such that result = crc32(dataB, lengthB, crc32(dataA, lengthA))
 uint32_t crc32_combine(uint32_t crcA, uint32_t crcB, size_t lengthB)
@@ -39823,7 +39867,10 @@ FP myfopen(const char* filename, const char* mode,int64_t i_date=0)
 				if (futimes(fileno(risultato),times)!=0)
 					myprintf("39787! WARN Linux myfopen futimes error!\n");
 				else
-					myprintf("39791: Linux setting times OK at %s\n",migliaia(i_date));
+				{
+					if (flagverbose)
+						myprintf("39791: Linux setting times OK at %s\n",migliaia(i_date));
+				}
 			}
 #endif
 		if (g_chunk_size>0)
@@ -42937,24 +42984,19 @@ public:
 		flush();
 		if (fp!=FPNULL)
 		{ 
-			int64_t date=now();
+
 #ifdef _WIN32
 			if (flagdebug)
 				myprintf("42547: Windows setdate\n");
 			SYSTEMTIME st;
-			st.wYear			=date/10000000000LL%10000;
-			st.wMonth			=date/100000000%100;
-			st.wDayOfWeek		=0;  // ignored
-			st.wDay				=date/1000000%100;
-			st.wHour			=date/10000%100;
-			st.wMinute			=date/100%100;
-			st.wSecond			=date%100;
-			st.wMilliseconds	=0;
-			FILETIME ft;
+			GetLocalTime(&st);
+			FILETIME ft,ftutc;
 			SystemTimeToFileTime(&st, &ft);
-			if (!SetFileTime(fp, NULL, NULL, &ft))
+			LocalFileTimeToFileTime(&ft, &ftutc);
+			if (!SetFileTime(fp, NULL, NULL, &ftutc))
 				myprintf("42558! WARN Outputarchive cannot set filetime (error %s)\n",migliaia((int64_t)GetLastError()));
 #else
+			int64_t date=now();
 	#if (!defined(SOLARIS))
 			struct timeval times[2];
 			times[0].tv_sec 	= unix_time(date);  // atime
@@ -46147,7 +46189,7 @@ uint32_t Jidac::casekollision(DTMap& i_dtmap,vector<string>& o_collisions,bool i
 			{
 				if (i_fix)
 				{
-					char	buf[10];
+					char	buf[32];
 					string 	percorso	=extractfilepath(fn);
 					string	nomefile	=prendinomefileebasta(fn);
 					string	estensione	=prendiestensione(fn);
@@ -49750,7 +49792,7 @@ string help_a(bool i_usage,bool i_example)
 		moreprint("<>: -xls          Do NOT force adding of XLS/PPT (default: NO)");
 		moreprint("<>: -forcezfs     Do NOT ignore .zfs             (default: YES)");
 		moreprint("<>: -715          Runs just about like 7.15");
-		moreprint("+ : -debug -zero       Add files but zero-filled (debugging)");
+		moreprint("+ : -debug -zero  Add files but zero-filled (debugging)");
 		moreprint("+ : -debug -zero -kill Add 0-byte long file (debugging)");
 		moreprint("+ : -nochecksum   Disable zpaqfranz additional checks (faster, less sure)");
 		moreprint("+ : -nodedup      Turn off deduplicator");
@@ -51222,11 +51264,19 @@ string help_switches(bool i_usage,bool i_example)
 	}
 	return("Usual switches");
 }
+string help_commonswitches(bool i_usage,bool i_example)
+{
+	if ((i_usage) || (i_example))
+		g_programflags.tutti();
+	
+	return("(Almost) all common switches");
+}
+
 string help_franzswitches(bool i_usage,bool i_example)
 {
 	if ((i_usage) || (i_example))
 	{
-		moreprint("+ : -big          ASCII art on final result");
+		moreprint("+ : f-big          ASCII art on final result");
 		moreprint("+ : -utc          Do not convert to localtime (use UTC, like 715)");
 		moreprint("+ : -715          Works just about like v7.15");
 		moreprint("+ : -checksum     Store SHA1+CRC32 for every file");
@@ -51469,6 +51519,7 @@ void Jidac::load_help_map()
 	switches_map.insert(std::pair<string, voidhelpfunction>("main",			help_mainswitches));
 	switches_map.insert(std::pair<string, voidhelpfunction>("normal",		help_switches));
 	switches_map.insert(std::pair<string, voidhelpfunction>("franz",		help_franzswitches));
+	switches_map.insert(std::pair<string, voidhelpfunction>("common",		help_commonswitches));
 	///switches_map.insert(std::pair<string, voidhelpfunction>("paq",			help_paq));
 	switches_map.insert(std::pair<string, voidhelpfunction>("voodoo",		help_voodooswitches));
 }
@@ -51573,14 +51624,15 @@ void Jidac::usageall(string i_command)
 	if (i_command=="")
 	{
 		moreprint("Get help for one command with zpaqfranz h something");
-		moreprint("    zpaqfranz   h a   => ask help and examples for command 'a'");
-		moreprint("    zpaqfranz -he a   => ask examples for command 'a'");
+		moreprint(" zpaqfranz   h all -nomore => everything, ready to be pipep");
+		moreprint(" zpaqfranz   h a           => ask help and examples for command 'a'");
+		moreprint(" zpaqfranz -he a           => ask examples for command 'a'");
 		moreprint(" ");
 		for (MAPPAHELP::iterator p=help_map.begin(); p!=help_map.end(); ++p)
 		{
 			char linea[200];
 			string temp=(*p->second)(false,false);
-			snprintf(linea,sizeof(linea),"%-12s",p->first.c_str());
+			snprintf(linea,sizeof(linea),"%-15s",p->first.c_str());
 			color_green();
 			moreprint(linea,true);
 			color_restore();
@@ -51591,7 +51643,7 @@ void Jidac::usageall(string i_command)
 		{
 			char linea[200];
 			string temp=(*p->second)(false,false);
-			snprintf(linea,sizeof(linea),"%-12s",p->first.c_str());
+			snprintf(linea,sizeof(linea),"%-15s",p->first.c_str());
 			color_green();
 			moreprint(linea,true);
 			color_restore();
@@ -51769,7 +51821,12 @@ string	windows_fixbackslash(string i_command,string i_parameter)
 
 bool do_not_print_headers()
 {
-	return ((!flagpakka) && (!flagsilent) && (!flagstdout) && (!flagterse) && ((command=='l') && (flag715)));
+///	return ((!flagpakka) && (!flagsilent) && (!flagstdout) && (!flagterse) && ((command=='l') && (flag715)));
+	bool risultato=(flagpakka || (flagsilent) || (flagstdout) || (flagterse) || ((command=='l') && (flag715)));
+	if (flagdebug)
+		myprintf("51790: do_not_print_headers %d\n",int(risultato));
+	return risultato;
+	
 }
 void decoderange(string i_range)
 {
@@ -52165,12 +52222,13 @@ bool Jidac::cli_getstring	(const string& i_opt,string i_string,bool	i_flagoption
 		return false;
 	if (i_opt==i_string)
 	{
+		///myprintf("$$$$$$$$$$$ %s\n",i_opt.c_str());
 		(*o_thestring)=i_default;
 		if ( ((*i_i)<argc-1)  )
 		{
 			(*o_thestring)=argv[++(*i_i)];
 			if (!do_not_print_headers())
-				myprintf("00519: franz:%-21s %21s\n",i_string.c_str(),(*o_thestring).c_str());
+				myprintf("00519: franz:%-21s %21s %d\n",i_string.c_str(),(*o_thestring).c_str(),int(flagterse));
 		}
 		return true;
 	}
@@ -52465,9 +52523,9 @@ int Jidac::loadparameters(int argc, const char** argv)
 	g_programflags.add(&flagappend,			"-append",				"Append-only (antiransomware, slow)",				"a;");
 	g_programflags.add(&flagbackupxxh3,		"-backupxxh3",			"Use XXH3 in backup instead of MD5",				"");
 	g_programflags.add(&flagbackupzeta,		"-backupzeta",			"Use ZETA in backup instead of MD5",				"");
-	g_programflags.add(&flagbig,			"-big",					"Big",												"all;");
+	g_programflags.add(&flagbig,			"-big",					"Write the result of the processing in large text",	"all;");
 	g_programflags.add(&flagchecksum,		"-checksum",			"Do checksums",										"");
-	g_programflags.add(&flagchecktxt,		"-checktxt",			"Checktxt (MD5)",									"");
+	g_programflags.add(&flagchecktxt,		"-checktxt",			"Create Checktxt.txt",								"");
 #ifdef _WIN32
 	g_programflags.add(&flagsfx,			"-sfx",					"Enable SFX module",								"");
 #endif
@@ -52491,18 +52549,18 @@ int Jidac::loadparameters(int argc, const char** argv)
 	g_programflags.add(&flagfix255,			"-fix255",				"Fix 255",											"");
 	g_programflags.add(&flagfixeml,			"-fixeml",				"Fix eml filenames",								"");
 	g_programflags.add(&flagflat,			"-flat",				"Flat filenames",									"");
-	g_programflags.add(&flagforce,			"-force",				"Force",											"");
+	g_programflags.add(&flagforce,			"-force",				"Force (usually overwrite)",											"");
 	g_programflags.add(&flagforcewindows,	"-forcewindows",		"Store ADS stuff                (default: NO)",		"a;");
 	g_programflags.add(&flagforcezfs,		"-forcezfs",			"Enforce using .zfs",								"");
 	g_programflags.add(&flagfrugal,			"-frugal",				"Frugal backup",									"");
 	g_programflags.add(&flaghashdeep,		"-hashdeep",			"Hashdeep",											"");
 	g_programflags.add(&flagignore,			"-ignore",				"Ignore (do not show) file errors",												"a;");
-	g_programflags.add(&flaghome,			"-home",				"Home",												"a;");
-	g_programflags.add(&flagkill,			"-kill",				"Kill",												"");
+	g_programflags.add(&flaghome,			"-home",				"Divide into multiple files, one for each folder.",												"a;");
+	g_programflags.add(&flagkill,			"-kill",				"It usually means 'do something dangerous.'",												"");
 	g_programflags.add(&flaght,				"-ht",					"Enable Hyperthread (if any)",												"");
 	g_programflags.add(&flagnocaptcha,		"-nocaptcha",			"Skip chaptcha",												"");
-	g_programflags.add(&flagmm,				"-mm",					"Memory mapped",									"");
-	g_programflags.add(&flagnoattributes,	"-noattributes",		"Do not store attribute",									"");
+	g_programflags.add(&flagmm,				"-mm",					"Memory mapped file",									"");
+	g_programflags.add(&flagnoattributes,	"-noattributes",		"Do not store file attribute",									"");
 	g_programflags.add(&flagattr,			"-attr",				"Show attribute (listing)",									"");
 	g_programflags.add(&flagthunderbird,	"-thunderbird",			"Thunderbird's e-mail",									"");
 	g_programflags.add(&flagnodedup,		"-nodedup",				"Turn off deduplicator",							"");
@@ -52513,25 +52571,26 @@ int Jidac::loadparameters(int argc, const char** argv)
 	g_programflags.add(&flagnosynology,		"-nosynology",			"Exclude Synology system files",						"a;");
 	g_programflags.add(&flagnorecursion,	"-norecursion",			"Do not recurse into folders (default: YES)",		"");
 	g_programflags.add(&flagnosort,			"-nosort",				"Do not sort file",									"");
-	g_programflags.add(&flagpakka,			"-pakka",				"New output",										"");
+	g_programflags.add(&flagpakka,			"-pakka",				"New output style",										"");
 	g_programflags.add(&flagdistinct,		"-distinct",			"PAKKA zpaqlist",										"");
-	g_programflags.add(&flagparanoid,		"-paranoid",			"Paranoid",											"");
+	g_programflags.add(&flagparanoid,		"-paranoid",			"Paranoid 'something'",											"");
 	///g_programflags.add(&flagpaq,			"-paq",					"Enable paq-levels",											"");
 	g_programflags.add(&flagcollision,		"-collision",			"Collision check",											"");
 	g_programflags.add(&flagramdisk,		"-ramdisk",				"Ramdisk (really: heap)",											"");
 	g_programflags.add(&flagrename,			"-rename",				"Rename",											"");
-	g_programflags.add(&flagsilent,			"-silent",				"Silent",											"");
+	g_programflags.add(&flagsilent,			"-silent",				"Silent (no) output",											"");
 	g_programflags.add(&flagnoconsole,		"-noconsole",			"Do not manipulate console",						"",flagnoconsole);
 	g_programflags.add(&flagskipzfs,		"-zfs",					"Do NOT ignore .zfs             (default: YES)",	""); //flagskipzfs
 	g_programflags.add(&flagspace,			"-space",				"Do not check space/writeability",					"");
-	g_programflags.add(&flagssd,			"-ssd",					"SSD",												"");
+	g_programflags.add(&flagssd,			"-ssd",					"Reads the files with multithreading from the solid-state drive",												"");
+	g_programflags.add(&flagnomore,			"-nomore",				"Disable internal 'more' (ex |less)",				"");
 	g_programflags.add(&flagsalt,			"-salt",				"Fix encryption salt to 0",												"");
 	g_programflags.add(&flaghdd,			"-hdd",					"HDD (use if possible RAM before drive)",												"");
-	g_programflags.add(&flagstat,			"-stat",				"Statistics",										"");
-	g_programflags.add(&flagstdin,			"-stdin",				"stdin",											"");
+	g_programflags.add(&flagstat,			"-stat",				"Shows statistics",										"");
+	g_programflags.add(&flagstdin,			"-stdin",				"Reads the data to be compressed from stdin",											"");
 	g_programflags.add(&flagterse,			"-terse",				"Create output without header and footer",			"");
-	g_programflags.add(&flagnodel,			"-nodel",				"Do not show deleted files",			"");
-	g_programflags.add(&flagstdout,			"-stdout",				"stdout",											"");
+	g_programflags.add(&flagnodel,			"-nodel",				"Do not show deleted files (in listing)",			"");
+	g_programflags.add(&flagstdout,			"-stdout",				"File suitable for extraction via piping to stdout (reduces efficiency).",											"");
 	g_programflags.add(&flagstore,			"-store",				"Store mode: no deduplication, no compression",		"");
 	g_programflags.add(&flagtar,			"-tar",					"TAR mode (store posix)",							"");
 	g_programflags.add(&flagtmp,			"-tmp",					"Use .tmp instead of .zpaq during backup",			"");
@@ -52541,9 +52600,9 @@ int Jidac::loadparameters(int argc, const char** argv)
 	g_programflags.add(&flagdate,			"-date",				"Show/save creation date (if possible)",			"");
 	g_programflags.add(&flagutf,			"-utf",					"UTF-8",											"");
 	g_programflags.add(&flagverbose,		"-verbose",				"Verbose output",									"");
-	g_programflags.add(&flagverify,			"-verify",				"Verify",											"");
+	g_programflags.add(&flagverify,			"-verify",				"Verify (read from filesystem)",					"");
 	g_programflags.add(&flagvss,			"-vss",					"Enable Volume Shadow Copies",						"a;");
-	g_programflags.add(&flagzero,			"-zero",				"Flag zero",										"");
+	g_programflags.add(&flagzero,			"-zero",				"Zeroing something",										"");
 	g_programflags.add(&flagpause,			"-pause",				"Pause after run (for runhigh)",					"");
 	g_programflags.add(&flagquiet,			"-quiet",				"Do not show filesystem errors",												"");
 
@@ -52564,7 +52623,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 	g_programflags.add(&flagfixreserved,	"-fixreserved",			"fixreserved",										"");
 	g_programflags.add(&flagimage,			"-image",				"Drive image",										"");
 	g_programflags.add(&flaglongpath,		"-longpath",			"Longpath",											"");
-	g_programflags.add(&flagopen,			"-open",				"open",												"");
+	g_programflags.add(&flagopen,			"-open",				"Abort if archive seems already opened",												"");
 #endif
 
 	g_programflags.add(&flaghw,				"-hw",					"Use HW SHA1",										"a;x;");
@@ -52814,40 +52873,49 @@ int Jidac::loadparameters(int argc, const char** argv)
 			flagnoeta=true;
 		}
 	}
-	
 
+	if (flagdebug)
+		myprintf("52860: k0 flagnojit %d\n",int(flagnojit));
+
+#if defined(__amd64__) || defined(__i386__)
+	if (flagdebug)
+		myprintf("52820: This seems amd64/i386, turning OFF flagnojit\n");
+	flagnojit=false;
+	
 #ifdef unix
 	if (flagdebug)
-		myprintf("52588: UNIX: try to allocate 8K with PROT_EXEC\n");
+		myprintf("52588: UNIX: checking OS support for JIT\n");
     void* p=(void*)mmap(0,8192, PROT_READ|PROT_WRITE|PROT_EXEC,MAP_PRIVATE|MAP_ANON, -1, 0);
 	if (p==MAP_FAILED) 
 	{
 		if (flagverbose)
-			myprintf("52594$ OS unsupported, turning off flagjit\n");
+			myprintf("52594$ OS unsupported, turning ON flagnojit\n");
 		flagnojit=true;
 	}
 	else
-		munmap(p,8192);
-	
-	/*
-	  void* p = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-    if (p == MAP_FAILED) 
 	{
-        return NULL;
-    }
-
-    // Modifica i permessi per attivare PROT_EXEC
-    if (mprotect(p, size, PROT_READ | PROT_WRITE | PROT_EXEC) != 0) {
-        munmap(p, size);
-        return NULL;
-    }
-	*/
+		if (flagdebug)
+			myprintf("52850: mmap OK, releasing\n");
+		munmap(p,8192);
+	}
 #endif
-
-#if defined(NOJIT) || defined(BIG) // those are really "strange"
+#else
+	if (flagdebug)
+		myprintf("52824: CPU not amd64/i386, turning ON flagnojit\n");
 	flagnojit=true;
 #endif
 
+	if (flagdebug)
+		myprintf("52861: k1 flagnojit %d\n",int(flagnojit));
+
+#if defined(NOJIT) || defined(BIG) // those are really "strange"
+	if (flagdebug)
+		myprintf("52847: -DNOJIT or -DBIG => turning on flagnojit\n");
+	flagnojit=true;
+#endif
+
+	if (flagdebug)
+		myprintf("52862: k2 flagnojit %d\n",int(flagnojit));
 
 	string textnojit="-JIT,";
 	if (flagnojit)
@@ -52860,7 +52928,6 @@ int Jidac::loadparameters(int argc, const char** argv)
 #ifdef NAS
 	textnojit="-NAS,";
 #endif
-
 
 	if (flag715)
 		myprintf("52511: zpaq v7.15 journaling archiver, compiled Aug 17 2016\n");
@@ -52889,6 +52956,31 @@ int Jidac::loadparameters(int argc, const char** argv)
 		}
 	}
 
+	for (int i=1;i<argc;i++)
+		if  (stringcomparei(argv[i],"-nomore"))
+		{
+			flagnomore=true;
+			break;
+		}
+		
+#ifdef _WIN64
+	if (flagnomore)
+	{
+		// Abilita l'uso delle large page
+		HANDLE hProcess=GetCurrentProcess();
+		SIZE_T largePageMinimum=GetLargePageMinimum();
+		if (largePageMinimum>0) 
+		{
+			BOOL success=SetProcessWorkingSetSize(hProcess,largePageMinimum,largePageMinimum);
+			if (success) 
+				myprintf("52927: Large page OK %s\n",migliaia(largePageMinimum));
+			 else 
+				myprintf("52929! Large page KAPUTT %s\n",migliaia(largePageMinimum));
+		} 
+		else 
+			myprintf("52930$ Large page support not available on this system\n");
+	}	
+#endif
 
 /// check some magic to show help in heuristic way
 /// I know, it's bad, but help is always needed!
@@ -52931,10 +53023,10 @@ int Jidac::loadparameters(int argc, const char** argv)
 				seppuku();
 			}
 	}
-	if (argc==3) // only TWO (-examples sha1)
+	if ((argc==3)||(argc==4)) // only TWO (-examples sha1)
 	{
-		const string parametro=argv[1];
-		const string comando=argv[2];
+		const string parametro	=argv[1];
+		const string comando	=argv[2];
 		if  ((stringcomparei(parametro,"help"))
 			||
 			(stringcomparei(parametro,"-h"))
@@ -53196,6 +53288,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 						string candidate="./"+prendinomefileebasta(archive);
 						if (fileexists(candidate) || direxists(candidate))
 						{
+							candidate=prendinomefileebasta(archive);
 							files.push_back(candidate);
 							myprintf("00554: Founded %Z => automagically added\n",candidate.c_str());
 						}
@@ -53794,7 +53887,8 @@ int Jidac::doCommand()
 		{
 			vector<string> inputfiles;
 			readfiletoarray(g_input,inputfiles);
-			myprintf("00585: Inputfiles count  %s\n",migliaia(inputfiles.size()));
+			if (!do_not_print_headers())
+				myprintf("00585: Inputfiles count  %s\n",migliaia(inputfiles.size()));
 			if (inputfiles.size()>0)
 				for (unsigned int i=0;i<inputfiles.size();i++)
 				{
@@ -53817,7 +53911,8 @@ int Jidac::doCommand()
 		{
 			vector<string> destinationfiles;
 			readfiletoarray(g_destination,destinationfiles);
-			myprintf("00323: Destination count %s\n",migliaia(destinationfiles.size()));
+			if (!do_not_print_headers())
+				myprintf("00323: Destination count %s\n",migliaia(destinationfiles.size()));
 			if (destinationfiles.size()>0)
 				for (unsigned int i=0;i<destinationfiles.size();i++)
 				{
@@ -57051,7 +57146,7 @@ int Jidac::list()
 			}
 		}
 	}
-	flagchecksum=ischecksum();
+	flagchecksum=ischecksum() || flagchecksum;
 	
 	
 	int thesizesize=19;
@@ -57060,7 +57155,6 @@ int Jidac::list()
 		int64_t largest=0;
 		for (unsigned int i=0;i<filelist.size(); i++)
 		{
-			
 			if (all)
 			{
 				string myfilename=filelist[i]->first;
@@ -57073,8 +57167,8 @@ int Jidac::list()
 					if ((int)myfilename.length()==(all+1))
 					{
 						bool alldigit=true;
-						for (unsigned int i=0;i<myfilename.length()-1;i++)
-							if (!isdigit(myfilename[i]))
+						for (unsigned int jj=0;jj<myfilename.length()-1;jj++)
+							if (!isdigit(myfilename[jj]))
 							{
 								alldigit=false;
 								break;
@@ -59833,7 +59927,7 @@ string filecopy(bool i_singlefile,bool i_append,const string& i_infile,const str
 	while ((readSize = fread(buffer, 1, g_ioBUFSIZE, inFile)) > 0)
 	{
 		if (i_maxoutputsize>0)
-			if ((donesize+readSize)>i_maxoutputsize)
+			if (uint64_t(donesize+readSize)>i_maxoutputsize)
 			{
 				int64_t bytestowrite=i_maxoutputsize-donesize;
 				int64_t written=fwrite(buffer,1,bytestowrite,outFile);
@@ -68066,6 +68160,11 @@ string	win_getlong(const string& i_file)
 ///zpaqfranz a z:\1 \\?\UNC\franzk\z\cb -longpath -debug
 int Jidac::add()
 {
+#ifdef _WIN32
+	if (flaglongpath && (tofiles.size()>0))
+		if (!do_not_print_headers())
+			myprintf("68130$ WARNING: -longpath turned off, incompatible with -to\n");
+#endif	
 	if ((g_chunk_size>0) && (flagtmp))
 	{
 		myprintf("62802! Sorry -tmp does not work with -chunk\n");
@@ -97000,7 +97099,7 @@ int64_t Jidac::read_archive(callback_function i_advance,const char* arc, int *er
 							if (mem>1.5e9)
 							///if (mem>100)
 							{
-								myprintf("98003! too much mem for block %s %18s\n",lastfile.c_str(),migliaia(mem));
+								myprintf("98003! too much mem for block %s %18s\n",lastfile.c_str(),migliaia(int64_t(mem)));
 								if (errors)
 									(*errors)++;
 							}
@@ -97322,7 +97421,7 @@ int64_t Jidac::read_archive(callback_function i_advance,const char* arc, int *er
 								if (ht[j].csize<0 && ht[j].csize!=LIST_HT_BAD)
 									k+=ht[j].csize;
 								if (k>0 && k<ht.size() && ht[k].csize!=LIST_HT_BAD && ht[k].csize>=0)
-									dtr.kompressedsize+=ht[j].estimatedratio*ht[j].usize;
+									dtr.kompressedsize+=int64_t(ht[j].estimatedratio*ht[j].usize);
 								/// update version size
 								ver.back().usize+=ht[j].usize;
 							}
@@ -103461,7 +103560,7 @@ int Jidac::sumhome()
 
 		string tagliato=shrinkstring(s_home,16*2+3);
 		myprintf("03472: MAGIC: %s t=%.2fs @ %9s B/s\n",tagliato.c_str(),tempospeso/1000.0,
-		migliaia(dalavorare/(tempospeso/1000.0)));
+		migliaia(int64_t(dalavorare/(tempospeso/1000.0))));
 			
 		s_stringpair mypair;
 		mypair.first	=sourcepath;
@@ -103505,7 +103604,7 @@ int Jidac::sumhome()
 	myprintf("03479: Hashed %10s: %s for %s bytes (%s) in %.2fs @ %s B/s\n",g_thechosenhash_str.c_str(),
 	migliaia3(totalfiles),
 	migliaia(totaldalavorare),
-	tohuman(totaldalavorare),(miotempo/1000.0),migliaia2(totaldalavorare/(miotempo/1000.0)));
+	tohuman(totaldalavorare),(miotempo/1000.0),migliaia2(int64_t(totaldalavorare/(miotempo/1000.0))));
 
 	return 0;
 }
@@ -104367,21 +104466,20 @@ int Jidac::extract()
 			if (job.total_size>freeramdisk)
 			{
 				color_yellow();
-				myprintf("03360: Free RAM (-25%%) %s > required %s, turning OFF HDD (-space to bypass)\n",tohuman(freeramdisk),tohuman2(job.total_size));
+				myprintf("03360: Free RAM (-25%%) %s > required %s, turning OFF ramdisk (-space to bypass)\n",tohuman(freeramdisk),tohuman2(job.total_size));
 				flaghdd		=false;
 				flagramdisk	=false;
 			}
 			else
 			{
 				color_green();
-				myprintf("03364: Enough RAM %s vs %s, going HDD!\n",tohuman(freeramdisk),tohuman2(job.total_size));
+				myprintf("03364: Enough RAM %s vs %s, going ramdisk!\n",tohuman(freeramdisk),tohuman2(job.total_size));
 				flagramdisk	=true;
 			}
 			color_restore();
 		}
 
 	if (flagramdisk)
-	{
 		if (g_ramdisksize>freeramdisk)
 		{
 			color_yellow();
@@ -104389,7 +104487,6 @@ int Jidac::extract()
 			myprintf("59613: Free RAM (-25%%) %21s (as reported by OS) vs required %s\n",tohuman(freeramdisk),tohuman2(g_ramdisksize));
 			color_restore();
 		}
-	}
 
 
 	if (!flagspace)

@@ -53,7 +53,7 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 */
 
-#define ZPAQ_VERSION "60.10v"
+#define ZPAQ_VERSION "60.10w"
 #define ZPAQ_DATE "(2024-12-15)"  // cannot use __DATE__ on Debian!
 
 ///	optional align for malloc (sparc64,HPPA) via -DALIGNMALLOC
@@ -43789,7 +43789,7 @@ OutputArchive::OutputArchive(string i_thearchive,const char* filename, const cha
 				else
 					myprintf("00291: does not exists\n");
 			}
-			error("38583: file exists and off > 0 (maybe try to add to chunked?)");
+			error("38583$ file exists and off > 0 (maybe try to add to chunked?)");
 		}
     if (password) {
 		if (flagdebug2)
@@ -53605,7 +53605,10 @@ int Jidac::loadparameters(int argc, const char** argv)
 			if (opt=="fzf")
 				command='F';
 			if (opt=="backup")
+			{
+				flagtmp=true;
 				command='Z';
+			}
 			if (opt=="last")
 			{
 				command='L';
@@ -69572,7 +69575,7 @@ int Jidac::add()
 						return 2;
 					}
 					arcname=subpart(archive,parts);
-					if (index)
+					if (command=='Z')
 					{
 						color_yellow();
 						ascii::Ascii font=ascii::Ascii();
@@ -69679,6 +69682,22 @@ int Jidac::add()
 		myreplace(arcname,".zpaq",".tmp");
 		if (flagverbose)
 			myprintf("68984$ Changed <<%Z>> to <<%Z>>\n",oldname.c_str(),arcname.c_str());
+	
+		//if (mypos("_00000001.tmp",arcname)==-1)
+		{
+			if (fileexists(arcname))
+			{
+				string renamedfile=arcname;
+				forceextension(renamedfile,".spaz");
+				renamedfile=nomefileseesistegia(renamedfile);
+				
+				myprintf("69687! The not-01 tmp part does exists <<%Z>> => renaming to <<%Z>>\n",arcname.c_str(),renamedfile.c_str());
+				if (myrename(arcname,renamedfile)!=0)
+				{
+					error("69691$ Impossible to rename");
+				}
+			}
+		}
 	}
 	
 	g_archive=arcname; /// for multipart the last
@@ -70379,6 +70398,8 @@ int Jidac::add()
   // Test for reliable access to archive
   if (archive_exists!=exists(subpart(archive, 1)))
     error("archive access is intermittent");
+
+
 	if (!g_fakewrite)
 	{
 		if (exists(arcname))
@@ -72087,7 +72108,6 @@ int Jidac::add()
 				printbar('!');
 			}
 		
-
 	if (g_flagmultipart && flagtmp)
 		if (fileexists(arcname))
 		{

@@ -53,8 +53,8 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 */
 
-#define ZPAQ_VERSION "60.10w"
-#define ZPAQ_DATE "(2024-12-15)"  // cannot use __DATE__ on Debian!
+#define ZPAQ_VERSION "60.11f"
+#define ZPAQ_DATE "(2024-12-27)"  // cannot use __DATE__ on Debian!
 
 ///	optional align for malloc (sparc64,HPPA) via -DALIGNMALLOC
 #define STR(a) #a
@@ -1625,6 +1625,11 @@ Windows XP
 Newer zpaqfranz32.exe (>=60.10) more or less works on XP
 Please do not use "strange" things (ADS & whatever)
 
+Rockylinux 9
+gcc 11.5.0
+g++ -O3 zpaqfranz.cpp -o zpaqfranz -pthread
+
+
 
 Beware of #definitions
 g++ -dM -E - < /dev/null
@@ -2772,7 +2777,7 @@ void myprintf(const char *format, ...)
 	bool	flagwarning	=false;
     char buffer[4096]; // Buffer temporaneo per formati complessi
 	
-	
+
 	if (flagsilent)
 	{
 		char	fixata[4096];
@@ -2900,12 +2905,36 @@ void myprintf(const char *format, ...)
 				}
 				else if (*p == 's') 
 				{
+					/*
 					char *s = va_arg(args, char *);
 					printf(buffer, s);
 					if (g_output_handle!=0)
 						fprintf(g_output_handle,buffer,s);
 					if (flagerror)
 						my_print_on_error_s(buffer,s);
+					*/
+					    // Se c'è un asterisco nella formattazione
+
+					if (strchr(buffer, '*') != NULL) 
+					{
+///						printf("TROVATOOOO\n");
+	///					exit(0);
+						int width = va_arg(args, int);       // Legge la larghezza
+						char *s = va_arg(args, char *);      // Legge la stringa
+						printf(buffer, width, s);
+						if (g_output_handle != 0)
+							fprintf(g_output_handle, buffer, width, s);
+						if (flagerror)
+							my_print_on_error_s(buffer, s);  // Nota: potrebbe richiedere adattamenti per width
+					} else {
+						char *s = va_arg(args, char *);
+						printf(buffer, s);
+						if (g_output_handle != 0)
+							fprintf(g_output_handle, buffer, s);
+						if (flagerror)
+							my_print_on_error_s(buffer, s);
+					}
+	
 					
 				}
 				else if (*p == 'c') 
@@ -17256,6 +17285,8 @@ struct s_error
 
 typedef map<int,s_error> 	MAPPAERRORS;
 /// Global variables
+
+
 /// not in  for pthread that does not like class and methods
 pthread_mutex_t g_mylock = PTHREAD_MUTEX_INITIALIZER;
 vector<s_crc32block> 	g_crc32;
@@ -23957,11 +23988,11 @@ public:
 	~XXHash64()
     {
 		
-        if (state != nullptr)
+        if (state != NULL)
         {
 			///myprintf("23865: DESTROY XXHASH64\n");
             franz_free(state);
-            state=nullptr;
+            state=NULL;
         }
     }
 
@@ -24148,6 +24179,78 @@ private:
   HANDLE h;  // Windows semaphore
 };
 #endif
+
+string stringtolower(string i_stringa)
+{
+	for (unsigned int i=0;i<i_stringa.size();i++)
+		i_stringa[i]=tolower(i_stringa[i]);
+	return i_stringa;
+}
+
+string decode_command(const char i_command)
+{
+	if (i_command=='a')
+		return "add (updating/creating archive)";
+	else
+	if (i_command=='Z')
+		return "backup command is running";
+	else
+	if (i_command=='A')
+		return "zfsadd";
+	else
+	if (i_command=='$')
+		return "zfsbackup";
+	else
+	if (i_command=='=')
+		return "zfsproxbackup";
+	else
+		return "";
+}
+
+
+bool theonlyone(const char i_command,string i_archive)
+{
+#ifdef unix
+	return true;
+#endif
+
+
+	if (i_archive=="")
+		return true;
+	
+	string decodedcommand=decode_command(i_command);
+	if (decodedcommand=="")
+		return true;
+#ifdef _WIN32
+	i_archive=stringtolower(i_archive);
+#endif
+
+	uint64_t myseed = 0;
+	XXHash64 myhash(myseed);
+	myhash.add(i_archive.c_str(),i_archive.size());
+	string hashato=bin2hex_64(myhash.hash());
+
+#ifdef _WIN32
+	std::wstring baseName = L"Global\\ZPAQFRANZ_";
+	std::wstring hashWstr(hashato.begin(), hashato.end());
+	std::wstring eventName = baseName + hashWstr;
+	HANDLE myevent=CreateEventW(NULL,FALSE,FALSE,eventName.c_str());
+	if(myevent==NULL)
+	{
+		CloseHandle(myevent); 
+		return false;
+	}
+	if (GetLastError()==ERROR_ALREADY_EXISTS) 
+	{
+		CloseHandle(myevent); 
+		myprintf("17264$ Running %s on (%s) <<%Z>>\n",decodedcommand.c_str(),hashato.c_str(),i_archive.c_str());
+		myprintf("17276! Sorry, another zpaqfranz is running, we need to abort\n");
+		exit(0);
+		return false;
+	}
+#endif
+	return true;
+}
 
 
 
@@ -24586,6 +24689,11 @@ int erredbarras(const std::wstring &wi_path)
 	return 0;
 }
 
+
+
+
+
+ 
 
 int64_t	getwinattributes(string i_filename)
 {
@@ -25224,12 +25332,6 @@ void myreplaceall(std::string& str, const std::string& from, const std::string& 
         str.replace(start_pos, from.length(), to);
         start_pos += to.length(); // In case 'to' contains 'from', like replacing 'x' with 'yx'
     }
-}
-string stringtolower(string i_stringa)
-{
-	for (unsigned int i=0;i<i_stringa.size();i++)
-		i_stringa[i]=tolower(i_stringa[i]);
-	return i_stringa;
 }
 
 
@@ -40031,17 +40133,26 @@ FP myfopen(const char* filename, const char* mode,int64_t i_date=0)
 			if (strcmp(mode, WB) == 0 || strcmp(mode, AB) == 0 || strcmp(mode, ABPLUS) == 0) 
 			{
 				struct timeval times[2];
-				times[0].tv_sec 	= unix_time(i_date);  // atime
-				times[0].tv_usec 	= 0;
-				times[1].tv_sec 	= unix_time(i_date);  // mtime
-				times[1].tv_usec 	= 0;
-
-				if (futimes(fileno(risultato),times)!=0)
-					myprintf("39787! WARN Linux myfopen futimes error!\n");
-				else
+				time_t nowz;
+				time(&nowz);
+				const struct tm *local = localtime(&nowz);
+				if (local == NULL) 
 				{
-					if (flagverbose)
-						myprintf("39791: Linux setting times OK at %s\n",migliaia(i_date));
+					myprintf("40525! guru on tm\n");
+				} 
+				else 
+				{
+					times[0].tv_sec 	= unix_time(i_date) - local->tm_gmtoff;  // atime
+					times[0].tv_usec 	= 0;
+					times[1].tv_sec 	= unix_time(i_date) - - local->tm_gmtoff;  // mtime
+					times[1].tv_usec 	= 0;
+					if (futimes(fileno(risultato),times)!=0)
+						myprintf("39787! WARN Linux myfopen futimes error!\n");
+					else
+					{
+						if (flagverbose)
+							myprintf("39791: Linux setting times OK at %s\n",migliaia(i_date));
+					}
 				}
 			}
 #endif
@@ -43232,16 +43343,26 @@ public:
 			if (!SetFileTime(fp, NULL, NULL, &ftutc))
 				myprintf("42558! WARN Outputarchive cannot set filetime (error %s)\n",migliaia((int64_t)GetLastError()));
 #else
-			int64_t date=now();
-	#if (!defined(SOLARIS))
+		int64_t date=now();
+		#if (!defined(SOLARIS))
 			struct timeval times[2];
-			times[0].tv_sec 	= unix_time(date);  // atime
-			times[0].tv_usec 	= 0;
-			times[1].tv_sec 	= unix_time(date);  // mtime
-			times[1].tv_usec 	= 0;
-			if (futimes(fileno(fp), times) != 0) 
-				myprintf("42572! WARN Linux outputarchive futimes error!\n");
-	#endif
+			time_t nowz;
+			time(&nowz);
+			const struct tm *local = localtime(&nowz);
+			if (local == NULL) 
+			{
+				myprintf("43713! guru on tm\n");
+			} 
+			else 
+			{
+				times[0].tv_sec = unix_time(date) - local->tm_gmtoff;  // atime
+				times[0].tv_usec = 0;
+				times[1].tv_sec = unix_time(date) - local->tm_gmtoff;  // mtime 
+				times[1].tv_usec = 0;
+				if (futimes(fileno(fp), times) != 0) 
+					myprintf("42572! WARN Linux outputarchive futimes error!\n");
+			}
+		#endif
 #endif
 
 			if (flagdebug3)
@@ -53331,6 +53452,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 	if (flagdebug)
 		myprintf("00547: FULL exename <<%s>>\n",fullzpaqexename.c_str());
 
+	
 	if (argc==2) // going early on gui
 	{
 		const string parametro=argv[1];
@@ -54324,6 +54446,7 @@ int Jidac::doCommand()
 	}
 
 
+	theonlyone(command,archive);
 
 	if ( (command=='a')  && files.size()>0) // enforce: we do not want to change anything when adding
 	{
@@ -57568,31 +57691,35 @@ int Jidac::list()
 			///return 0;
 		}
 
+		char lineatemp[200];
 		if (all)
 		{
 			string verheader(all,'-');
 			if (flagdate)
 			{
-				myprintf("00757:    Date      Time          Creation      %*s Ratio %*s Name/Info\n",thesizesize,"Size",all,"Ver");
-				myprintf("00758: ---------- --------  ------------------- %s ----- %s ----------\n",sizeheader.c_str(),verheader.c_str());
+				snprintf(lineatemp,sizeof(lineatemp),"    Date     Time           Creation      %*s Ratio %*s Name/Info",thesizesize,"Size",all,"Ver");
+				myprintf("00757: %s\n",lineatemp);
+				myprintf("00758: ---------- --------  -------------------- %s ----- %s ----------\n",sizeheader.c_str(),verheader.c_str());
 			}
 			else
 			{
-				myprintf("00759:    Date      Time   %*s Ratio %*s Name/Info\n",thesizesize,"Size",all,"Ver");
+				snprintf(lineatemp,sizeof(lineatemp),"   Date      Time   %*s Ratio %*s Name/Info",thesizesize,"Size",all,"Ver");
+				myprintf("00759: %s\n",lineatemp);
 				myprintf("00760: ---------- -------- %s ----- %s ----------\n",sizeheader.c_str(),verheader.c_str());
 			}
 		}
 		else
 		{
-			
 			if (flagdate)
 			{
-				myprintf("00761:    Date      Time          Creation      %*s Ratio Name\n",thesizesize,"Size");
-				myprintf("00762: ---------- --------  ------------------- %s ----- -----\n",sizeheader.c_str());
+				snprintf(lineatemp,sizeof(lineatemp),"    Date      Time          Creation      %*s Ratio Name",thesizesize,"Size");
+				myprintf("00761: %s\n",lineatemp);
+				myprintf("00762: ---------- --------  -------------------- %s ----- -----\n",sizeheader.c_str());
 			}
 			else
 			{
-				myprintf("00763:    Date      Time   %*s Ratio Name\n",thesizesize,"Size");
+				snprintf(lineatemp,sizeof(lineatemp),"   Date      Time   %*s Ratio Name",thesizesize,"Size");
+				myprintf("00763: %s\n",lineatemp);
 				myprintf("00764: ---------- -------- %s ----- -----\n",sizeheader.c_str());
 			}
 		}
@@ -96329,13 +96456,12 @@ string from_delimiter(const string& s, string delim)
     
     // Rimuovi i caratteri #10 (Line Feed) e #13 (Carriage Return)
     string cleaned_result;
-    for (char c : result) {
-        if (c != '\n' && c != '\r') {
-            cleaned_result += c;
-        }
-    }
+    for (size_t i=0;i<result.length(); i++) 
+        if (result[i] != '\n' && result[i] != '\r') 
+            cleaned_result += result[i];
     
     return cleaned_result;
+
 }
 
 
@@ -96367,7 +96493,7 @@ bool is_same_path(const std::string& i_old, const std::string& i_new)
 	}
 	return (_wcsicmp(old_resolved, new_resolved) == 0);
 #else
-	char old_resolved[PATH_MAX], new_resolved[PATH_MAX];
+	char old_resolved[32768], new_resolved[32768];
 	const char* old_full = realpath(i_old.c_str(), old_resolved);
 	const char* new_full = realpath(i_new.c_str(), new_resolved);
 	
@@ -103048,7 +103174,10 @@ void Jidac::list_filesize(const int64_t i_filesize,int i_thesizesize)
 	}
 	if (i_thesizesize==0)
 		i_thesizesize=19;
-	myprintf("%*s", i_thesizesize,migliaia(i_filesize));
+	char lineatemp[200];
+	snprintf(lineatemp,sizeof(lineatemp),"%*s", i_thesizesize,migliaia(i_filesize));
+			
+	myprintf(lineatemp);
 }
 void Jidac::list_compressedfilesize(const int64_t i_compressedfilesize,const int64_t i_filesize,const bool i_flagnewversion,const bool i_isfolder,const bool i_isdeleted)
 {
@@ -103148,6 +103277,7 @@ int64_t Jidac::datacreazione(const string i_file)
         myprintf("03329! stat KAPUTT (Mac)\n");
         return 0;
     }
+
     struct tm *t;
 	if (file_stat.st_birthtimespec.tv_sec!=0) 
 	{
@@ -103175,57 +103305,71 @@ int64_t Jidac::datacreazione(const string i_file)
 #ifndef __APPLE__   	// Mac is different (of course)
 #ifndef __OpenBSD__
 #ifndef  __DragonFly__
-    struct stat file_stat;
-    if (stat(i_file.c_str(),&file_stat)==-1) 
+	struct stat file_stat;
+	if (stat(i_file.c_str(), &file_stat) == -1) 
 	{
-        myprintf("03331! stat KAPUTT (BSD)\n");
-        return 0;
-    }
-    struct tm *t;
-	if (file_stat.st_birthtime!=0) 
+       myprintf("03331! stat KAPUTT (BSD)\n");
+       return 0;
+	}
+   
+	if (file_stat.st_birthtime != 0) 
 	{
-        t=localtime(&file_stat.st_birthtime);
-		if (t==NULL)
-			return 0;
-		return	(t->tm_year+1900)	*10000000000LL
-			+	(t->tm_mon+1)		*100000000LL
-			+	t->tm_mday			*1000000
-			+	t->tm_hour			*10000
-			+	t->tm_min			*100
-			+	t->tm_sec;
-    } 
-	else 
-	    myprintf("03332! BSD cannot get creation (birth) time\n");
-	return 0;
+       struct tm *t = gmtime(&file_stat.st_birthtime); // Changed to gmtime for UTC
+       if (t == NULL)
+           return 0;
+           
+       return (t->tm_year+1900) *10000000000LL
+            + (t->tm_mon+1)     *100000000LL
+            + t->tm_mday        *1000000
+            + t->tm_hour        *10000
+            + t->tm_min         *100
+            + t->tm_sec;
+	} 
+   myprintf("03332! BSD cannot get creation (birth) time\n");
+   return 0;
 #endif
 #endif
 #endif
 #endif
 #ifdef __linux__
-	//myprintf("03333: Getting birth linux %s\n",i_file.c_str());
-    struct statx statx_buf;
-    if (statx(AT_FDCWD,i_file.c_str(),AT_STATX_SYNC_AS_STAT, STATX_BTIME, &statx_buf) == -1) 
-	{
-        myprintf("03334! statx KAPUTT (Linux)\n");
-        return 0;
-    }
-    if (statx_buf.stx_mask & STATX_BTIME) 
-	{
-        struct tm *t;
- 		time_t btime_sec = (time_t)statx_buf.stx_btime.tv_sec;
-        t = localtime(&btime_sec);
-		if (t==NULL)
-			return 0;
-		return	(t->tm_year+1900)	*10000000000LL
-			+	(t->tm_mon+1)		*100000000LL
-			+	t->tm_mday			*1000000
-			+	t->tm_hour			*10000
-			+	t->tm_min			*100
-			+	t->tm_sec;
-	} 
-	else 
-        myprintf("03335! cannot get birth time (linux)\n");
-#endif
+	///myprintf("03333: Getting birth linux %s\n", i_file.c_str());
+   struct statx statx_buf;
+   
+   if (statx(AT_FDCWD, i_file.c_str(), AT_STATX_SYNC_AS_STAT, STATX_BTIME, &statx_buf) == -1) {
+       myprintf("03334! statx KAPUTT (Linux)\n");
+       return 0;
+   }
+
+   if (statx_buf.stx_mask & STATX_BTIME) {
+       tzset();
+       time_t btime_sec = (time_t)statx_buf.stx_btime.tv_sec;
+       
+       ///myprintf("Raw timestamp: %ld\n", btime_sec);
+       ///struct tm *t = localtime(&btime_sec);
+	   
+	   struct tm *t =  gmtime(&btime_sec);
+	   
+       
+       if (t == NULL) {
+           myprintf("03336! localtime failed\n");
+           return 0;
+       }
+
+       ///myprintf("Local time: year=%d month=%d day=%d hour=%d\n",
+         ///      t->tm_year+1900, t->tm_mon+1, t->tm_mday, t->tm_hour);
+		int64_t risultato=(t->tm_year+1900) *10000000000LL
+            + (t->tm_mon+1)     *100000000LL
+            + t->tm_mday        *1000000
+            + t->tm_hour        *10000
+            + t->tm_min         *100
+            + t->tm_sec;
+			///myprintf("03724: risultato %s\n",migliaia(risultato));
+			return risultato;
+   }
+
+   myprintf("03335! cannot get birth time (linux)\n");
+   return 0;
+   #endif
 
 #endif // ANCIENT
 	myprintf("03336! for some reason cannot get birth time\n");
@@ -106861,9 +107005,3 @@ int Jidac::fix(string i_thearchive)
 	
 	return theresult;
 }
-/*
-47738
-47740
-58842
-
-*/

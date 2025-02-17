@@ -269,7 +269,7 @@ Credits and copyrights and licenses and links and internal bookmarks
 	I grant anyone the right to use this software for any purpose,
 	without any conditions, unless such conditions are required by law.
 
- 1 [Public domain]                zpaq.AES from libtomcrypt by Tom St Denis
+ 1 [The Unlicense]                zpaq.AES from libtomcrypt by Tom St Denis
  /// LICENSE_START.1
  /// LICENSE_END.1
 	The LibTom license

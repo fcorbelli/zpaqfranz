@@ -52,8 +52,8 @@ WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 */
-#define ZPAQ_VERSION "61.2c"
-#define ZPAQ_DATE "(2025-04-01)"  // cannot use __DATE__ on Debian!
+#define ZPAQ_VERSION "61.2d"
+#define ZPAQ_DATE "(2025-04-02)"  // cannot use __DATE__ on Debian!
 
 ///	optional align for malloc (sparc64,HPPA) via -DALIGNMALLOC
 #define STR(a) #a
@@ -51576,7 +51576,7 @@ bool downloadfile(string i_verurl, string i_verfile, bool i_showupdate)
     return (prendidimensionefile(i_verfile.c_str()) > 0);
 #endif
 #endif
-	return false;
+	return true;
 }
 
 string mm_hash_calc_file(int i_algo,const char * i_filename,bool i_flagcalccrc32,uint32_t& o_crc32,const int64_t i_inizio,const int64_t i_totali,int64_t& io_lavorati,int64_t& o_thefilesize)

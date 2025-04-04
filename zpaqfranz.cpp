@@ -52,8 +52,8 @@ WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 */
-#define ZPAQ_VERSION "61.2d"
-#define ZPAQ_DATE "(2025-04-02)"  // cannot use __DATE__ on Debian!
+#define ZPAQ_VERSION "61.3e"
+#define ZPAQ_DATE "(2025-04-04)"  // cannot use __DATE__ on Debian!
 
 ///	optional align for malloc (sparc64,HPPA) via -DALIGNMALLOC
 #define STR(a) #a
@@ -8052,6 +8052,11 @@ bool flagcollision;
 bool flagramdisk;
 bool flagrename;
 bool flagsilent;
+bool flagslow;
+bool flagshutdown;
+#ifdef _WIN32
+bool flagmonitoroff;
+#endif
 bool flagnoconsole;
 bool flagnocolor;
 bool flagnodelete;
@@ -54277,6 +54282,9 @@ public:
 #ifdef _WIN32
 	bool 						getmysqlfrominternet();
 #endif
+	int 						maxcpu(int i_percent);
+	int 						systemshutdown();
+
 };
 
 Jidac* pjidac;
@@ -58014,8 +58022,8 @@ void help_size()
 }
 void help_orderby()
 {
-	moreprint("+ : -orderby x    Sort files by (one or more of) ext;name;full;fullname;hash;size;\n");
-	moreprint("+ :                                              attr;date;creation;access;\n");
+	moreprint("+ : -orderby x    Sort files by (one or more of) ext;name;full;fullname;hash;size;");
+	moreprint("+ :                                              attr;date;creation;access;");
 	moreprint("+ : -desc         Descending sort (if -orderby)");
 }
 void help_printhash(bool i_flagadd)
@@ -58233,26 +58241,37 @@ string help_work(bool i_usage,bool i_example)
 {
 	if (i_usage)
 	{
-		moreprint("CMD   work               Multiple commands (verb-noun)");
-		moreprint("noun  big                Output a big ASCII string");
-		moreprint("noun  pad                Left pad a number");
-		moreprint("noun  filepathnotrailing Get path without \\");
-		moreprint("noun  date               Write date/datetime");
-		moreprint("noun  printbar           Write out a row of chars");
+		moreprint("CMD   work               Execute multiple commands (verb-noun format)");
+        moreprint("      Available nouns:");
+        moreprint("      big                Outputs a large ASCII string from input text");
+        moreprint("      pad                Left-pads a number with zeros");
+        moreprint("      filepathnotrailing Returns a file path without trailing backslash");
+        moreprint("      date               Displays current date or datetime");
+        moreprint("      printbar           Prints a row of repeated characters");
+        moreprint("      turbo              Sets CPU power to maximum (enables Turbo Boost)");
+        moreprint("      noturbo            Reduces CPU speed (limits Turbo Boost)");
+        moreprint("      monitoroff         Turns off the monitor");
+        moreprint("      monitoron          Turns on the monitor");
+        moreprint("      shutdown           (Try to) shutdown");
+		
+		
 	}
 	if (i_usage && i_example) moreprint("    Examples:");
 	if (i_example)
 	{
-		moreprint("Write something big                  work big \"count the ok\" ");
-		moreprint("Write something big                  work big \"COUNT THE OK\" ");
-		moreprint("Write something big                  work big forza inter");
-		moreprint("Pad number 123 to 00000123           work pad 123");
-		moreprint("Pad number 123 to 0123               work pad 123 -n 4");
-		moreprint("Extract path                         work filepathnotrailing z:\\doc\\2\\3.eml");
-		moreprint("Write datetime                       work date -terse");
-		moreprint("Write year_month_day                 work date \"%year_%month_%day\" -terse");
-		moreprint("Write -----                          work printbar -terse");
-		moreprint("Write !!!!!                          work printbar \"!\" -terse");
+		moreprint("Write a large ASCII string:          work big \"count the ok\"");
+        moreprint("Write in uppercase ASCII:            work big \"COUNT THE OK\"");
+        moreprint("Write a custom big string:           work big \"forza inter\"");
+        moreprint("Pad number to 8 digits:              work pad 123");
+        moreprint("Pad number to 4 digits:              work pad 123 -n 4");
+        moreprint("Remove trailing backslash:           work filepathnotrailing \"z:\\doc\\2\\3.eml\"");
+        moreprint("Show concise datetime:               work date -terse");
+        moreprint("Format date as year_month_day:       work date \"%year_%month_%day\" -terse");
+        moreprint("Print a line of dashes:              work printbar -terse");
+        moreprint("Print a line of exclamation marks:   work printbar \"!\" -terse");
+        moreprint("Reduce CPU speed (and power usage):  work noturbo");
+        moreprint("Turn off monitor:                    work monitoroff");
+        moreprint("Shutdown:                            work shutdown");
 	}
 	return("Multiple commands");
 }
@@ -58596,8 +58615,11 @@ string help_a(bool i_usage,bool i_example)
 		moreprint("+ : -notrim       DISABLE autotrim of incomplete transaction (not with -chunk)");
 #ifdef _WIN32
 		moreprint("+ : -noonedrive   Do NOT add onedrive placeholders");
+		moreprint("+ : -monitor      Turn off the monitor (Windows)");
 #endif
-	}
+		moreprint("+ : -slow         Reduce CPU power (experimental on Linux)");
+		moreprint("+ : -shutdown     (Try to) shutdown when completed");
+		}
 	if (i_usage && i_example)
 		moreprint("    Examples:");
 	if (i_example)
@@ -58676,6 +58698,7 @@ string help_a(bool i_usage,bool i_example)
 		moreprint("Load files/to from text files        a z:\\1.zpaq -input z:\\input.txt -destination z:\\destination.txt");
 #ifdef _WIN32
 		moreprint("Do NOT add onedrive placeholder      a z:\\1.zpaq c:\\users\\utente\\onedrive -onedrive");
+		moreprint("Reduce CPU power, turn off           a z:\\1.zpaq c:\\pippo -slow -monitor -shutdown");
 #endif
 	}
 	return("Add or append files to archive");
@@ -61438,9 +61461,12 @@ int Jidac::loadparameters(int argc, const char** argv)
 
 	g_programflags.add(&flagnocolor,		"-nocolor",				"Monochrome output",								"",flagnocolor);
 	g_programflags.add(&flagnodelete,		"-nodelete",			"Do not logical delete files",						"");
+	g_programflags.add(&flagslow,			"-slow",				"Reduce CPU usage",											"");
+	g_programflags.add(&flagshutdown,		"-shutdown",			"Shutdown-after-add",											"");
 
 #ifdef _WIN32
 ///	g_programflags.add(&flagdd,				"-dd",					"dd",												"");
+	g_programflags.add(&flagmonitoroff,		"-monitor",				"Turn off monitor",											"");
 	g_programflags.add(&flagfindzpaq,		"-findzpaq",			"Search .zpaq in every drive letter (USB device)",	"");
 	g_programflags.add(&flagfixcase,		"-fixcase",				"Fix CAse",											"");
 	g_programflags.add(&flagfixreserved,	"-fixreserved",			"fixreserved",										"");
@@ -62603,6 +62629,10 @@ int Jidac::loadparameters(int argc, const char** argv)
 
 	if (flag715)
 	{
+		flagslow			=false;
+#ifdef _WIN32
+		flagmonitoroff		=false;
+#endif
 		flagonedrive		=false;
 		flagnotrim			=true;
 		flagtmp				=false;
@@ -62766,7 +62796,20 @@ int Jidac::doCommand()
 
 	
 	theonlyone(command,archive);
+	if (flagslow)
+	{
+		myprintf("62776$ Due to -slow reducing CPU usage (turn off TurboBoost)\n");
+		maxcpu(99);
+	}
 	
+#ifdef _WIN32
+	if (flagmonitoroff)
+	{
+		myprintf("62736$ Due to -monitorff => turning off monitor\n");
+		SendMessage(HWND_BROADCAST, WM_SYSCOMMAND, SC_MONITORPOWER,2);
+	}
+#endif
+
 	if ( (command=='a')  && files.size()>0) // enforce: we do not want to change anything when adding
 	{
 		if (flagstore)
@@ -69839,10 +69882,12 @@ void my_handler(int s)
 			restoreConsole();
 		}
 	}
+
 	color_restore();
 #ifndef _WIN32
 		fflush(stdout);
 #endif // corresponds to #ifndef (#ifndef _WIN32)
+
 
 	myprintf("\nGoodbye after %1.3f seconds (%s)\n",(mtime()-g_start)/1000.0,timetohuman((uint32_t)((mtime()-g_start)/1000.0)).c_str());
 	exit(1);
@@ -70082,6 +70127,15 @@ void my_handler(int s)
 			myprintf("\n");
 			myprintf("01303: Seems %08d errors by path/filename too long (>255)\n", g_255);
 		}
+		if (pjidac!=NULL)
+		{	
+			if (flagslow)
+			{
+				myprintf("70131$ Due to -slow setting CPU to full power\n");
+				(*pjidac).maxcpu(100);
+			}
+		}
+		
 		if (errorcode>=2)
 		{
 			if (flagdebug2)
@@ -70149,6 +70203,10 @@ void my_handler(int s)
 #endif // corresponds to #ifdef (#ifdef _WIN32)
 	color_restore();
 
+	if (pjidac!=NULL)
+		if (flagshutdown)
+			return (*pjidac).systemshutdown();
+		
 	return errorcode;
 }
 /// 55.10, reworked. Not 255-shrink, no dirnameifalreadyexists
@@ -93479,7 +93537,20 @@ int Jidac::work()
 			printbar(files[1].at(0));
 		return 0;
 	}
-	
+#ifdef _WIN32	
+	if (mycommand=="monitoroff")
+	{
+		SendMessage(HWND_BROADCAST, WM_SYSCOMMAND, SC_MONITORPOWER,2);
+		return 0;
+	}
+	if (mycommand=="monitoron")
+	{
+		SendMessage(HWND_BROADCAST, WM_SYSCOMMAND, SC_MONITORPOWER,-1);
+		return 0;
+	}
+#endif
+
+
 	if (mycommand=="big")
 	{
 		for (unsigned int i=1;i<files.size();i++)
@@ -93489,7 +93560,22 @@ int Jidac::work()
 		}
 		return 0;
 	}
+	if (mycommand=="shutdown")
+		return systemshutdown();
 	
+	if (mycommand=="turbo")
+	{
+		myprintf("69833$ Setting CPU to full power\n");
+		maxcpu(100);
+		return 0;
+	}
+	if (mycommand=="noturbo")
+	{
+		myprintf("93232$ Limit CPU power (disable TurboBoost)\n");
+		maxcpu(99);
+		return 0;
+	}
+		
 	if (mycommand=="pad")
 	{
 		if (files.size()!=2)
@@ -96924,9 +97010,17 @@ int get_key()
 		FD_SET(STDIN_FILENO, &fds);
 		
 		if (select(STDIN_FILENO + 1, &fds, NULL, NULL, &tv) > 0) {
-			read(STDIN_FILENO, &buf[1], 1);
+			if (read(STDIN_FILENO, &buf[1], 1)!=1)
+			{
+				tcsetattr(STDIN_FILENO, TCSANOW, &old_settings);
+				return -1;
+			}
 			if (buf[1] == '[') {
-				read(STDIN_FILENO, &buf[2], 1);
+				if (read(STDIN_FILENO, &buf[2], 1)!=1)
+				{
+					tcsetattr(STDIN_FILENO, TCSANOW, &old_settings);
+					return -1;
+				}
 				
 				switch (buf[2]) {
 					case 'A': ch = 'k'; break;  // Freccia su
@@ -96934,20 +97028,67 @@ int get_key()
 					case 'H': ch = 'h'; break;  // Home
 					case 'F': ch = 'e'; break;  // End
 					case '5': 
-						read(STDIN_FILENO, &buf[3], 1);  // Read '~'
+						if (read(STDIN_FILENO, &buf[3], 1)!=1)  // Read '~'
+						{
+							tcsetattr(STDIN_FILENO, TCSANOW, &old_settings);
+							return -1;
+						}
+				
 						ch = 'u'; break;  // PagSu
 					case '6': 
-						read(STDIN_FILENO, &buf[3], 1);  // Read '~'
+						if (read(STDIN_FILENO, &buf[3], 1)!=1) // Read '~'
+						{
+							tcsetattr(STDIN_FILENO, TCSANOW, &old_settings);
+							return -1;
+						}
+				
 						ch = 'd'; break;  // PagGiù
 					case '1':
-						read(STDIN_FILENO, &buf[3], 1);
+						if (read(STDIN_FILENO, &buf[3], 1)!=1)
+									{
+										tcsetattr(STDIN_FILENO, TCSANOW, &old_settings);
+										return -1;
+									}
+							
 						switch(buf[3]) {
-							case '1': read(STDIN_FILENO, &buf[3], 1); ch = 128; break; // F1
-							case '2': read(STDIN_FILENO, &buf[3], 1); ch = 129; break; // F2
-							case '3': read(STDIN_FILENO, &buf[3], 1); ch = 130; break; // F3
-							case '4': read(STDIN_FILENO, &buf[3], 1); ch = 131; break; // F4
-							case '5': read(STDIN_FILENO, &buf[3], 1); ch = 132; break; // F5
-							case '7': read(STDIN_FILENO, &buf[3], 1); ch = 133; break; // F6
+							case '1': if (read(STDIN_FILENO, &buf[3], 1)!=1)
+									{
+										tcsetattr(STDIN_FILENO, TCSANOW, &old_settings);
+										return -1;
+									}
+									ch = 128; break; // F1
+							case '2': 		
+									if (read(STDIN_FILENO, &buf[3], 1)!=1)
+									{
+										tcsetattr(STDIN_FILENO, TCSANOW, &old_settings);
+										return -1;
+									}
+							
+										ch = 129; break; // F2
+							case '3': if (read(STDIN_FILENO, &buf[3], 1)!=1)
+									{
+										tcsetattr(STDIN_FILENO, TCSANOW, &old_settings);
+										return -1;
+									} 
+										ch = 130; break; // F3
+							case '4': if (read(STDIN_FILENO, &buf[3], 1)!=1)
+									{
+										tcsetattr(STDIN_FILENO, TCSANOW, &old_settings);
+										return -1;
+									} 
+									ch = 131; break; // F4
+							case '5': if (read(STDIN_FILENO, &buf[3], 1)!=1)
+									{
+										tcsetattr(STDIN_FILENO, TCSANOW, &old_settings);
+										return -1;
+									}; 
+									ch = 132; break; // F5
+							case '7': if (read(STDIN_FILENO, &buf[3], 1)!=1)
+									{
+										tcsetattr(STDIN_FILENO, TCSANOW, &old_settings);
+										return -1;
+									} 
+							ch = 133; break; // F6
 						}
 						break;
 				}
@@ -100402,4 +100543,294 @@ int Jidac::mysql()
 		remove_temp_file(filebatch);
 
 	return 0;
+}
+
+#ifdef _WIN32
+int Jidac::maxcpu(int i_percent)
+{
+    if (i_percent != 100)
+        i_percent = 99;
+    
+    string filebatch = g_gettempdirectory() + "notb.bat";
+    filebatch = nomefileseesistegia(filebatch);
+    if (fileexists(filebatch))
+        if (remove(filebatch.c_str()) != 0)
+        {
+            myprintf("99673! Highlander batch  %s\n", filebatch.c_str());
+            return 2;
+        }
+    FILE* batch = fopen(filebatch.c_str(), "wb");
+    if (batch == NULL)
+    {
+        myprintf("99672! cannot write on %s\n", filebatch.c_str());
+        return 2;
+    }
+    
+    // Uso di -WindowStyle Hidden in tutti i comandi PowerShell nel batch
+    fprintf(batch, "@echo off\n");
+    fprintf(batch, "powershell -WindowStyle Hidden -Command \"$guid = (Get-CimInstance -ClassName Win32_PowerPlan -Namespace 'root\\cimv2\\power' | Where-Object { $_.IsActive -eq $true }).InstanceID.ToString().Split('{')[1].Split('}')[0]\"\n");
+    fprintf(batch, "powershell -WindowStyle Hidden -Command \"powercfg -setacvalueindex scheme_current sub_processor PROCTHROTTLEMAX %d\"\n", i_percent);
+    fprintf(batch, "powershell -WindowStyle Hidden -Command \"powercfg -setdcvalueindex scheme_current sub_processor PROCTHROTTLEMAX %d\"\n", i_percent);
+    fprintf(batch, "powershell -WindowStyle Hidden -Command \"powercfg -setactive scheme_current\"\n");
+    fclose(batch);
+ 
+    string runme = "c:\\Windows\\system32\\WindowsPowerShell\\v1.0\\powershell.exe";
+#ifdef _WIN64
+    runme = "c:\\Windows\\SysWOW64\\WindowsPowerShell\\v1.0\\powershell.exe";
+#endif // corresponds to #ifdef (_WIN64)
+	if (!fileexists(runme))
+	{
+		myprintf("10044: cannot find runme %Z. Strange Windows?\n",runme.c_str());
+		return 2;
+	}
+    // Aggiungi -WindowStyle Hidden al comando PowerShell principale
+    string parms = "-WindowStyle Hidden -Command \"Start-Process '" + filebatch + "' -WindowStyle Hidden -Wait -Verb runAs\"";
+    
+    // Dichiarazione della struttura ShExecInfo
+    SHELLEXECUTEINFOA ShExecInfo;
+    memset(&ShExecInfo, 0, sizeof(SHELLEXECUTEINFOA));
+    ShExecInfo.cbSize = sizeof(SHELLEXECUTEINFOA);
+    ShExecInfo.fMask = SEE_MASK_NOCLOSEPROCESS;
+    ShExecInfo.lpFile = runme.c_str();
+    ShExecInfo.lpParameters = parms.c_str();
+    ShExecInfo.nShow = SW_HIDE;
+    
+    ShellExecuteExA(&ShExecInfo);
+    WaitForSingleObject(ShExecInfo.hProcess, INFINITE);
+    CloseHandle(ShExecInfo.hProcess);
+    
+    if (!flagdebug)
+        remove_temp_file(filebatch);
+    
+    return 0;
+}
+#else
+	
+#if defined(__linux__)
+int Jidac::maxcpu(int i_percent)
+{
+    if (i_percent != 100)
+        i_percent = 99;
+    
+    string script_path = g_gettempdirectory() + "cpu_limit.sh";
+    script_path = nomefileseesistegia(script_path);
+    
+    // Rimuovi file esistente se necessario
+    if (fileexists(script_path))
+        if (remove(script_path.c_str()) != 0)
+        {
+            myprintf("99673! Cannot remove existing script: %s\n", script_path.c_str());
+            return 2;
+        }
+    
+    // Crea lo script shell
+    FILE* script = fopen(script_path.c_str(), "wb");
+    if (script == NULL)
+    {
+        myprintf("99672! Cannot write script: %s\n", script_path.c_str());
+        return 2;
+    }
+    
+    // Contenuto dello script per limitare la CPU in Linux
+    fprintf(script, "#!/bin/bash\n\n");
+    
+    // Verifica se turbo boost è supportato
+    fprintf(script, "# Verifica supporto Turbo Boost\n");
+    fprintf(script, "INTEL_PSTATE=\"/sys/devices/system/cpu/intel_pstate\"\n");
+    fprintf(script, "CPU_BOOST=\"/sys/devices/system/cpu/cpufreq/boost\"\n");
+    fprintf(script, "INTEL_BOOST=\"${INTEL_PSTATE}/no_turbo\"\n\n");
+    
+    // Imposta limiti CPU usando diverse strade possibili
+    fprintf(script, "# Funzione per limitare la CPU\n");
+    fprintf(script, "limit_cpu() {\n");
+    fprintf(script, "  if [ -d \"$INTEL_PSTATE\" ]; then\n");
+    fprintf(script, "    # Intel pstate driver\n");
+    if (i_percent == 100)
+        fprintf(script, "    echo 0 |  tee \"$INTEL_BOOST\" > /dev/null\n");
+    else
+        fprintf(script, "    echo 1 |  tee \"$INTEL_BOOST\" > /dev/null\n");
+    fprintf(script, "    RESULT=$?\n");
+    fprintf(script, "    if [ $RESULT -eq 0 ]; then\n");
+    fprintf(script, "      echo \"CPU Turbo Boost %s via intel_pstate\"\n", (i_percent == 100) ? "enabled" : "disabled");
+    fprintf(script, "      return 0\n");
+    fprintf(script, "    fi\n");
+    fprintf(script, "  elif [ -f \"$CPU_BOOST\" ]; then\n");
+    fprintf(script, "    # Generic CPU boost control\n");
+    if (i_percent == 100)
+        fprintf(script, "    echo 1 |  tee \"$CPU_BOOST\" > /dev/null\n");
+    else
+        fprintf(script, "    echo 0 |  tee \"$CPU_BOOST\" > /dev/null\n");
+    fprintf(script, "    RESULT=$?\n");
+    fprintf(script, "    if [ $RESULT -eq 0 ]; then\n");
+    fprintf(script, "      echo \"CPU Turbo Boost %s via cpufreq\"\n", (i_percent == 100) ? "enabled" : "disabled");
+    fprintf(script, "      return 0\n");
+    fprintf(script, "    fi\n");
+    fprintf(script, "  else\n");
+    fprintf(script, "    # Fallback usando CPUfreq governor\n");
+    fprintf(script, "    for cpu in /sys/devices/system/cpu/cpu[0-9]*; do\n");
+    fprintf(script, "      if [ -f \"$cpu/cpufreq/scaling_governor\" ]; then\n");
+    if (i_percent == 100)
+        fprintf(script, "        echo \"performance\" |  tee \"$cpu/cpufreq/scaling_governor\" > /dev/null\n");
+    else
+        fprintf(script, "        echo \"powersave\" |  tee \"$cpu/cpufreq/scaling_governor\" > /dev/null\n");
+    fprintf(script, "      fi\n");
+    fprintf(script, "    done\n");
+    fprintf(script, "    echo \"CPU at %d%% scaling governor\"\n", i_percent);
+    fprintf(script, "    return 0\n");
+    fprintf(script, "  fi\n");
+    fprintf(script, "  return 1\n");
+    fprintf(script, "}\n\n");
+    
+    // Esegui la funzione e verifica il risultato
+    fprintf(script, "# Esegui la limitazione\n");
+    fprintf(script, "limit_cpu\n");
+    fprintf(script, "EXIT_CODE=$?\n\n");
+    
+    // Pulisci ed esci
+    fprintf(script, "exit $EXIT_CODE\n");
+    
+    fclose(script);
+    
+    // Rendi lo script eseguibile
+    chmod(script_path.c_str(), S_IRWXU);
+    
+    // Esegui lo script con privilegi di amministratore usando pkexec o sudo
+    int result = 0;
+    
+    if (flagverbose)
+        myprintf("93958: Executing CPU limit script %s\n", script_path.c_str());
+    
+    // Prova prima con pkexec, se disponibile (più user-friendly)
+    string command = "pkexec " + script_path + " 2>/dev/null";
+    result = system(command.c_str());
+    
+    // Se pkexec fallisce o non è disponibile, prova con sudo
+    if (result != 0) 
+	{
+		if (flagdebug)
+			myprintf("10053! Try with sudo\n");
+        command = "sudo " + script_path + " 2>/dev/null";;
+        result = system(command.c_str());
+    }
+    if (result != 0) 
+	{
+		if (flagdebug)
+			myprintf("10054! Try without sudo\n");
+        command = script_path + " 2>/dev/null";;
+        result = system(command.c_str());
+
+    }
+    
+    // Pulizia
+    if (!flagdebug)
+        remove_temp_file(script_path);
+    
+    // Verifica il risultato
+    if (result != 0) 
+	{
+        myprintf("99679! Failed to set CPU maximum to %d%%\n", i_percent);
+        return 2;
+    }
+    
+    return 0;
+}
+#else
+int Jidac::maxcpu(int i_percent)
+{
+	myprintf("10054! Sorry, cannot set maxcpu (not Windows, not Linux)\n");
+}	
+#endif
+#endif
+
+
+int Jidac::systemshutdown()
+{
+#ifdef _WIN32
+    // Windows: usa un file batch e PowerShell con runAs
+    string filebatch = g_gettempdirectory() + "shutdown.bat";
+    filebatch = nomefileseesistegia(filebatch);
+
+    if (fileexists(filebatch))
+        if (remove(filebatch.c_str()) != 0)
+        {
+            myprintf("99674! Errore rimozione batch temporaneo %s\n", filebatch.c_str());
+            return 2;
+        }
+
+    FILE* batch = fopen(filebatch.c_str(), "wb");
+    if (batch == NULL)
+    {
+        myprintf("99675! Impossibile creare il file batch %s\n", filebatch.c_str());
+        return 2;
+    }
+
+    fprintf(batch, "@echo off\n");
+    fprintf(batch, "shutdown -s -f -t 0\n"); // Spegnimento forzato immediato
+    fclose(batch);
+
+    string runme = "c:\\Windows\\system32\\WindowsPowerShell\\v1.0\\powershell.exe";
+#ifdef _WIN64
+    runme = "c:\\Windows\\SysWOW64\\WindowsPowerShell\\v1.0\\powershell.exe";
+#endif
+    if (!fileexists(runme))
+    {
+        myprintf("10045! Impossibile trovare PowerShell in %s\n", runme.c_str());
+        return 2;
+    }
+
+    string parms = "-WindowStyle Hidden -Command \"Start-Process '" + filebatch + "' -WindowStyle Hidden -Wait -Verb runAs\"";
+
+    SHELLEXECUTEINFOA ShExecInfo;
+    memset(&ShExecInfo, 0, sizeof(SHELLEXECUTEINFOA));
+    ShExecInfo.cbSize = sizeof(SHELLEXECUTEINFOA);
+    ShExecInfo.fMask = SEE_MASK_NOCLOSEPROCESS;
+    ShExecInfo.lpFile = runme.c_str();
+    ShExecInfo.lpParameters = parms.c_str();
+    ShExecInfo.nShow = SW_HIDE;
+
+    if (!ShellExecuteExA(&ShExecInfo))
+    {
+        myprintf("99676! Errore nell'esecuzione del batch: %d\n", GetLastError());
+        return 1;
+    }
+
+    WaitForSingleObject(ShExecInfo.hProcess, INFINITE);
+    CloseHandle(ShExecInfo.hProcess);
+// we hardly get here
+    if (!flagdebug)
+        remove_temp_file(filebatch);
+
+    return 0;
+
+#elif defined(__linux__)
+    // Linux: usa il comando 'shutdown' o 'poweroff'
+    system("sudo shutdown -h now"); // -h = halt (spegnimento), now = immediato
+    system("shutdown -h now"); // -h = halt (spegnimento), now = immediato
+    return 0;
+
+#elif defined(__FreeBSD__)
+    // FreeBSD: usa il comando 'shutdown'
+    system("sudo shutdown -p now"); // -p = power off, now = immediato
+    system("shutdown -p now"); // -p = power off, now = immediato
+    return 0;
+
+#elif defined(__APPLE__)
+    // macOS: usa il comando 'shutdown'
+    system("sudo shutdown -h now"); // -h = halt (spegnimento), now = immediato
+    system("shutdown -h now"); // -h = halt (spegnimento), now = immediato
+    return 0;
+
+#elif defined(__sun)
+    // Solaris: usa il comando 'init' o 'poweroff'
+    system("sudo poweroff"); // Spegnimento immediato
+    system("poweroff"); // Spegnimento immediato
+    return 0;
+
+#else
+    // Sistema non supportato
+    myprintf("99677! Sistema operativo non supportato per lo spegnimento\n");
+    return 1;
+#endif
+	return 2;
+
 }

@@ -1,3 +1,34 @@
+## [61.3] - 2025-04-05
+
+### Added
+- **Power-Saving Features**: Introduced new switches and functions to reduce energy consumption during operations.
+  - **`-slow` Switch**: Disables TurboBoost on modern CPUs (tested on AMD, untested on Intel) to limit maximum frequency.
+    - Reduces power consumption by up to 30% during deduplication-heavy tasks (e.g., SHA1 calculation) with minimal impact on execution time.
+    - Decreases noise on systems with variable cooling (fans, pumps).
+    - Reliable on Windows; experimental on Linux (hardware interaction varies).
+  - **`-monitor` Switch (Windows only)**: Puts the monitor into standby mode to save power during long sessions.
+    - Not tested on multi-monitor setups (planned for future testing).
+    - Not implemented for non-Windows systems due to complexity (X, non-X, consoles, etc.).
+  - **`-shutdown` Switch**: Performs a "merciless" system shutdown after completing an `add` command.
+    - Windows: Attempts to terminate all processes (success not guaranteed).
+    - Non-Windows: Uses heuristic methods to handle `sudo` availability (not universally present).
+  - **New `work` Commands**:
+    - `zpaqfranz work shutdown`: Triggers a merciless system shutdown.
+    - `zpaqfranz work big turbo`: Activates CPU turbo mode.
+    - `zpaqfranz work big noturbo`: Deactivates CPU turbo mode (same as `-slow`).
+    - `zpaqfranz work monitoroff`: Turns off the monitor (Windows only).
+    - `zpaqfranz work monitoron`: Turns on the monitor (Windows only).
+- **Example Usage**: `zpaqfranz a z:\1.zpaq c:\pippo -slow -monitor -shutdown`
+
+### Changed
+- **Shutdown Logic**: Improved system shutdown mechanism with platform-specific heuristics (e.g., `sudo` detection on non-Windows systems).
+
+### Notes
+- The `-slow` switch is most effective when deduplication dominates over compression, offering power savings with negligible performance impact.
+- The `-monitor` feature is Windows-only due to the complexity of non-Windows display systems; no plans to extend it currently.
+- The `-shutdown` feature may not always succeed on Windows due to process termination challenges.
+- Feedback or suggestions are welcome via GitHub issues or direct contact.
+
 ## [61.2] - 2025-04-05
 
 ### Added

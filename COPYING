@@ -62,7 +62,7 @@ Credits and copyrights and licenses and links and internal bookmarks
 18 [Apache License 2.0] HighWay64 hasher                                       https://github.com/google/highwayhash
  /// LICENSE_START.18 LICENSE_END.18
 19 [Public domain]                The files in this directory are released to the Public Domain.
-    *** NOTE: PDC is used only on Windows ***
+    No more GUI
  /// LICENSE_START.19 LICENSE_END.19
 20 [Public domain]                CPU accelerated SHA code taken from SHA-Intrinsics
  /// LICENSE_START.20 LICENSE_END.20
@@ -72,7 +72,8 @@ Credits and copyrights and licenses and links and internal bookmarks
  /// LICENSE_START.22 LICENSE_END.22
 23 [MIT License]                https://github.com/codewithnick/ascii-art
  /// LICENSE_START.23 LICENSE_END.23
-
+24 [MIT-like]           curl command line tool and library        https://curl.se/
+ /// LICENSE_START.24 LICENSE_END.24
 
    _____ _____  ______ ______ _______ _____ _   _  _____  _____ 
   / ____|  __ \|  ____|  ____|__   __|_   _| \ | |/ ____|/ ____|
@@ -134,4 +135,6 @@ Credits and copyrights and licenses and links and internal bookmarks
 45 Thanks to https://github.com/codewithnick            for change his license to a Fedora-friendly one
 46 Thanks to https://github.com/mirogeorg               for various suggestions
 47 Thanks to https://github.com/brad0                   for OpenBSD fix
+48 Thanks to Carlo, Debian user                         for debugging support
+49 Thanks to https://github.com/KnightAR                for -stdin bug from 60.7 to 60.8
 

@@ -1,3 +1,38 @@
+## [61.2] - 2025-04-05
+
+### Added
+- **New `mysqldump` Command**: Introduced a new command to automatically generate backup scripts for MySQL/MariaDB databases, saving each database as a separate file within a single `.zpaq` archive.
+  - Default behavior: Dumps all databases (excluding system databases like `information_schema`, `performance_schema`, and `sys`) as the root user.
+  - Filtering options:
+    - `-only <pattern>`: Include only databases matching the specified pattern (e.g., `-only 2015` matches `db2015`, `test2015prod`).
+    - `-not <pattern>`: Exclude databases matching the specified pattern (e.g., `-not temp` excludes `temporary`, `temp_db`).
+  - Compression and encryption support via `-mX` (compression level 0-5) and `-key <pwd>` (archive encryption).
+  - Heuristic executable detection:
+    - **Windows**: Searches `c:\program files` for `mysql.exe` and `mysqldump.exe`. Use `-space` to download 64-bit versions from [www.francocorbelli.it](http://www.francocorbelli.it/) or `-bin <path>` to specify a custom location.
+    - **Non-Windows**: Searches typical directories (`/bin`, `/usr/local/bin`, etc.) or allows manual specification with `-bin <path>`.
+  - Connection options: `-u <user>`, `-p <password>`, `-h <host>`, `-P <port>`.
+  - Verbose mode with `-verbose`.
+  - Example usage:
+    - Windows: `mysqldump z:\1.zpaq -u root -p pluto -h 127.0.0.1 -P 3306 -key pippo -m2`
+    - Linux: `mysqldump /tmp/test.zpaq -u root -p pluto -bin "/bin"`
+    - Filtered: `mysqldump test.zpaq -u root -p pluto -only prod -not backup`
+- **Solaris Compatibility**: Added support for Solaris systems.
+- **ESXi Support**: Included compatibility improvements for ESXi environments.
+
+### Changed
+- **Deduplication Optimization**: Emphasized that deduplication occurs before compression, significantly speeding up subsequent backups of unchanged databases, especially with high compression levels like `-m4`.
+
+### Fixed
+- Minor bug fixes (details not specified in the release notes).
+
+### Notes
+- The `mysqldump` command is still under development but already provides significant utility.
+- The `-fragment` switch is not compatible with this command due to its piping mode.
+- Parallel dumping was considered but not implemented to maintain a single `.zpaq` file per RDBMS for convenience.
+- Suggestions and issues can be reported via GitHub or direct contact.
+
+
+
 ## [58.12.s] - 2023-12-08
 ### faster, redup
 

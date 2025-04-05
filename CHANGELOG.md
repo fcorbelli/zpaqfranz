@@ -29,6 +29,8 @@
 - The `-shutdown` feature may not always succeed on Windows due to process termination challenges.
 - Feedback or suggestions are welcome via GitHub issues or direct contact.
 
+---
+
 ## [61.2] - 2025-04-05
 
 ### Added
@@ -62,6 +64,7 @@
 - Parallel dumping was considered but not implemented to maintain a single `.zpaq` file per RDBMS for convenience.
 - Suggestions and issues can be reported via GitHub or direct contact.
 
+---
 
 ## [61.1] - 2025-02-14
 
@@ -107,14 +110,12 @@
   - macOS: `brew install curl`
   - See documentation for full list of package manager commands.
 
-### Download
-- Available at [SourceForge](https://sourceforge.net/projects/zpaqfranz/files/61.1/zpaqfranz.cpp/download)
-
-
 ## [Unreleased]
 - Planned SFTP key file support.
 - Multi-monitor testing for future releases.
 - Enhanced `tui` and `ls` functionality (e.g., TAB support for `ls`).
+
+---
 
 ## [60.10] - 2024-12-20
 
@@ -150,10 +151,10 @@
 - For further details or to report issues, refer to the GitHub issues section.
 - Future plans include a switch to convert "normal" `.zpaq` archives directly into backups.
 
----
-
 ## [Unreleased]
 - Planned switch to convert "normal" `.zpaq` archives into backups.
+
+---
 
 ## [60.9] - 2024-11-13
 
@@ -191,12 +192,12 @@
 - **Hints**: Additional context for changes can be found in [GitHub issues](https://github.com/fcorbelli/zpaqfranz/issues?q=is%3Aissue).
 - **Request**: Testing on Apple Silicon (Mx) systems is desired; contact the author if you can provide access.
 
----
-
 ## [Unreleased]
 - Planned `forcejit` switch for overriding JIT detection.
 - Support for `-backupzeta` with encrypted multipart archives.
 - Potential removal of `-nomore` LargePages experiment.
+
+---
 
 
 ## [60.8] - 2024-10-21
@@ -234,10 +235,10 @@
 - The `-salt` switch is intended for development and debugging, not end-user scenarios.
 - Additional context and explanations for many features can be found in the linked GitHub issues.
 
----
-
 ## [Unreleased]
 - Planned support for `-backupzeta` with encrypted volumes.
+
+---
 
 ## [60.7] - 2024-10-08
 
@@ -271,6 +272,7 @@
 - Feedback and bug reports are welcome via [GitHub issues](https://github.com/fcorbelli/zpaqfranz/issues).
 
 ---
+
 ## [60.6] - 2024-08-25
 
 ### Added
@@ -315,11 +317,12 @@
 - New features may introduce bugs; users should verify archive integrity after use.
 - Report issues or suggestions at [GitHub issues](https://github.com/fcorbelli/zpaqfranz/issues).
 
----
-
 ## [Unreleased]
 - Potential `.zpaq` rollback on Control-C termination.
 - Future evolution of `-symlink` handling.
+
+---
+
 
 ## [60.5] - 2024-07-20
 
@@ -347,7 +350,6 @@
 - Performance improvements are most notable on Windows 64-bit systems, particularly with AMD CPUs.
 - The global SHA256 in `testbackup` provides a fast integrity check; use `-paranoid` or `-verify` for deeper verification, especially if backup paths differ.
 - Report bugs or feedback at [GitHub issues](https://github.com/fcorbelli/zpaqfranz/issues).
-
 
 ---
 

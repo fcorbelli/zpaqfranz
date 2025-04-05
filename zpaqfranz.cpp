@@ -53,7 +53,7 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 */
 #define ZPAQ_VERSION "61.3e"
-#define ZPAQ_DATE "(2025-04-04)"  // cannot use __DATE__ on Debian!
+#define ZPAQ_DATE "(2025-04-05)"  // cannot use __DATE__ on Debian!
 
 ///	optional align for malloc (sparc64,HPPA) via -DALIGNMALLOC
 #define STR(a) #a
@@ -100746,91 +100746,216 @@ int Jidac::maxcpu(int i_percent)
 int Jidac::systemshutdown()
 {
 #ifdef _WIN32
-    // Windows: usa un file batch e PowerShell con runAs
-    string filebatch = g_gettempdirectory() + "shutdown.bat";
-    filebatch = nomefileseesistegia(filebatch);
-
-    if (fileexists(filebatch))
-        if (remove(filebatch.c_str()) != 0)
-        {
-            myprintf("99674! Errore rimozione batch temporaneo %s\n", filebatch.c_str());
-            return 2;
-        }
-
-    FILE* batch = fopen(filebatch.c_str(), "wb");
-    if (batch == NULL)
-    {
-        myprintf("99675! Impossibile creare il file batch %s\n", filebatch.c_str());
-        return 2;
-    }
-
-    fprintf(batch, "@echo off\n");
-    fprintf(batch, "shutdown -s -f -t 0\n"); // Spegnimento forzato immediato
-    fclose(batch);
-
+    // Windows: use PowerShell directly for shutdown
     string runme = "c:\\Windows\\system32\\WindowsPowerShell\\v1.0\\powershell.exe";
 #ifdef _WIN64
     runme = "c:\\Windows\\SysWOW64\\WindowsPowerShell\\v1.0\\powershell.exe";
 #endif
     if (!fileexists(runme))
     {
-        myprintf("10045! Impossibile trovare PowerShell in %s\n", runme.c_str());
+        myprintf("10045! Error: PowerShell not found at %s\n", runme.c_str());
+        // Fallback to cmd.exe shutdown
+        string cmdPath = "c:\\Windows\\system32\\cmd.exe";
+        if (fileexists(cmdPath))
+        {
+            string cmdParms = "/c shutdown /s /f /t 0";
+            SHELLEXECUTEINFOA ShExecInfoCmd{};
+            ShExecInfoCmd.cbSize = sizeof(SHELLEXECUTEINFOA);
+            ShExecInfoCmd.fMask = SEE_MASK_NOCLOSEPROCESS;
+            ShExecInfoCmd.lpFile = cmdPath.c_str();
+            ShExecInfoCmd.lpParameters = cmdParms.c_str();
+            ShExecInfoCmd.lpVerb = "runAs";
+            ShExecInfoCmd.nShow = SW_HIDE;
+            
+            if (!ShellExecuteExA(&ShExecInfoCmd))
+            {
+                myprintf("10046! Error: Fallback CMD shutdown failed: %d\n", GetLastError());
+                return 2;
+            }
+            
+            WaitForSingleObject(ShExecInfoCmd.hProcess, 30000);
+            CloseHandle(ShExecInfoCmd.hProcess);
+            return 0;
+        }
         return 2;
     }
-
-    string parms = "-WindowStyle Hidden -Command \"Start-Process '" + filebatch + "' -WindowStyle Hidden -Wait -Verb runAs\"";
-
-    SHELLEXECUTEINFOA ShExecInfo;
-    memset(&ShExecInfo, 0, sizeof(SHELLEXECUTEINFOA));
+    string parms = "-WindowStyle Hidden -Command \"Stop-Computer -Force\"";
+    SHELLEXECUTEINFOA ShExecInfo{};
     ShExecInfo.cbSize = sizeof(SHELLEXECUTEINFOA);
     ShExecInfo.fMask = SEE_MASK_NOCLOSEPROCESS;
     ShExecInfo.lpFile = runme.c_str();
     ShExecInfo.lpParameters = parms.c_str();
+    ShExecInfo.lpVerb = "runAs";
     ShExecInfo.nShow = SW_HIDE;
-
     if (!ShellExecuteExA(&ShExecInfo))
     {
-        myprintf("99676! Errore nell'esecuzione del batch: %d\n", GetLastError());
+        myprintf("99676! Error executing PowerShell shutdown: %d\n", GetLastError());
         return 1;
     }
-
-    WaitForSingleObject(ShExecInfo.hProcess, INFINITE);
+    DWORD waitResult = WaitForSingleObject(ShExecInfo.hProcess, 30000); // Timeout 30s
+    if (waitResult != WAIT_OBJECT_0)
+        myprintf("99677! Warning: PowerShell shutdown process wait timed out or failed: %d\n", GetLastError());
+    
     CloseHandle(ShExecInfo.hProcess);
-// we hardly get here
-    if (!flagdebug)
-        remove_temp_file(filebatch);
-
-    return 0;
-
-#elif defined(__linux__)
-    // Linux: usa il comando 'shutdown' o 'poweroff'
-    system("sudo shutdown -h now"); // -h = halt (spegnimento), now = immediato
-    system("shutdown -h now"); // -h = halt (spegnimento), now = immediato
-    return 0;
-
-#elif defined(__FreeBSD__)
-    // FreeBSD: usa il comando 'shutdown'
-    system("sudo shutdown -p now"); // -p = power off, now = immediato
-    system("shutdown -p now"); // -p = power off, now = immediato
-    return 0;
-
-#elif defined(__APPLE__)
-    // macOS: usa il comando 'shutdown'
-    system("sudo shutdown -h now"); // -h = halt (spegnimento), now = immediato
-    system("shutdown -h now"); // -h = halt (spegnimento), now = immediato
-    return 0;
-
-#elif defined(__sun)
-    // Solaris: usa il comando 'init' o 'poweroff'
-    system("sudo poweroff"); // Spegnimento immediato
-    system("poweroff"); // Spegnimento immediato
-    return 0;
-
+    return 2;
 #else
-    // Sistema non supportato
-    myprintf("99677! Sistema operativo non supportato per lo spegnimento\n");
-    return 1;
-#endif
-	return 2;
+    // Unified Unix-like OS shutdown approach
+    const char* os_name = "Unknown";
+    const char* shutdown_cmd = NULL;
+    const char* alt_shutdown_cmd = NULL;  // Alternative command if first fails
+    int error_base = 99677; // Base per i codici di errore
 
+#if defined(__linux__)
+    os_name = "Linux";
+    shutdown_cmd = "shutdown -h now";
+    alt_shutdown_cmd = "poweroff";
+    error_base = 99678;
+#elif defined(__FreeBSD__)
+    os_name = "FreeBSD";
+    shutdown_cmd = "shutdown -p now";
+    alt_shutdown_cmd = "poweroff";
+    error_base = 99682;
+#elif defined(__APPLE__)
+    os_name = "macOS";
+    shutdown_cmd = "shutdown -h now";
+    alt_shutdown_cmd = "halt";
+    error_base = 99686;
+#elif defined(__sun)
+    os_name = "Solaris";
+    shutdown_cmd = "poweroff";
+    alt_shutdown_cmd = "halt";
+    error_base = 99690;
+#elif defined(__AIX__)
+    os_name = "AIX";
+    shutdown_cmd = "shutdown -F -h now";
+    alt_shutdown_cmd = "halt";
+    error_base = 99694;
+#elif defined(__hpux) || defined(hpux) || defined(__HPUX__)
+    os_name = "HP-UX";
+    shutdown_cmd = "shutdown -h now";
+    alt_shutdown_cmd = "halt";
+    error_base = 99698;
+#elif defined(__sgi) || defined(sgi) || defined(__IRIX__)
+    os_name = "IRIX";
+    shutdown_cmd = "halt";
+    alt_shutdown_cmd = "poweroff";
+    error_base = 99702;
+#elif defined(_AIX)
+    os_name = "AIX";
+    shutdown_cmd = "shutdown -F -h now";
+    alt_shutdown_cmd = "halt";
+    error_base = 99706;
+#elif defined(__DragonFly__)
+    os_name = "DragonFly BSD";
+    shutdown_cmd = "shutdown -p now";
+    alt_shutdown_cmd = "halt -p";
+    error_base = 99710;
+#elif defined(__NetBSD__)
+    os_name = "NetBSD";
+    shutdown_cmd = "shutdown -p now";
+    alt_shutdown_cmd = "halt -p";
+    error_base = 99714;
+#elif defined(__OpenBSD__)
+    os_name = "OpenBSD";
+    shutdown_cmd = "shutdown -p now";
+    alt_shutdown_cmd = "halt -p";
+    error_base = 99718;
+#elif defined(__HAIKU__)
+    os_name = "Haiku";
+    shutdown_cmd = "shutdown";
+    alt_shutdown_cmd = "shutdown -r"; // Haiku doesn't have a separate halt command
+    error_base = 99722;
+#else
+    myprintf("99677! Error: Operating system not supported for shutdown\n");
+    return 2;
+#endif
+
+    // Try direct shutdown
+    int result = system(shutdown_cmd);
+    if (result == 0) 
+        return 0; // Success
+    
+    if (result == -1) 
+        myprintf("%d! Error: %s: %s failed - fork error\n", error_base, os_name, shutdown_cmd);
+    else
+        myprintf("%d! Error: %s: %s failed with result %d\n", error_base, os_name, shutdown_cmd, result);
+    
+    // Try alternative command if available
+    if (alt_shutdown_cmd != NULL)
+    {
+        myprintf("%d! Info: %s: Trying alternative command: %s\n", error_base + 5, os_name, alt_shutdown_cmd);
+        result = system(alt_shutdown_cmd);
+        if (result == 0)
+            return 0; // Success with alternative command
+    }
+    
+    // Check if sudo is available (alternative if 'command' is not present)
+    bool sudo_available = false;
+    if (system("command -v sudo >/dev/null 2>&1") == 0) 
+    {
+        sudo_available = true;
+    } 
+    else if (system("which sudo >/dev/null 2>&1") == 0) 
+    { // Fallback per sistemi senza 'command'
+        sudo_available = true;
+    }
+    
+    if (sudo_available) 
+    {
+        // Try primary command with sudo
+        char sudo_cmd[256];
+        if (snprintf(sudo_cmd, sizeof(sudo_cmd), "sudo %s", shutdown_cmd) >= sizeof(sudo_cmd)) 
+            myprintf("%d! Error: %s: Command too long for buffer\n", error_base + 4, os_name);
+        else
+        {
+            result = system(sudo_cmd);
+            if (result == 0) 
+                return 0; // Success with sudo
+                
+            if (result == -1) 
+                myprintf("%d! Error: %s: sudo %s failed - fork error\n", error_base + 1, os_name, shutdown_cmd);
+            else 
+                myprintf("%d! Error: %s: %s failed even with sudo: %d\n", error_base + 2, os_name, shutdown_cmd, result);
+            
+            // Try alternative command with sudo if primary failed
+            if (alt_shutdown_cmd != NULL)
+            {
+                if (snprintf(sudo_cmd, sizeof(sudo_cmd), "sudo %s", alt_shutdown_cmd) >= sizeof(sudo_cmd)) 
+                {
+                    myprintf("%d! Error: %s: Alternative command too long for buffer\n", error_base + 4, os_name);
+                }
+                else
+                {
+                    myprintf("%d! Info: %s: Trying alternative command with sudo: %s\n", error_base + 6, os_name, alt_shutdown_cmd);
+                    result = system(sudo_cmd);
+                    if (result == 0)
+                        return 0; // Success with sudo alternative command
+                }
+            }
+        }
+    } 
+    else 
+        myprintf("%d! Error: %s: %s failed and sudo not available\n", error_base + 3, os_name, shutdown_cmd);
+    
+    // Last resort - try systemctl if available (mostly for modern Linux systems)
+    if (system("command -v systemctl >/dev/null 2>&1") == 0 || 
+        system("which systemctl >/dev/null 2>&1") == 0)
+    {
+        myprintf("%d! Info: %s: Trying systemctl poweroff\n", error_base + 7, os_name);
+        result = system("systemctl poweroff");
+        if (result == 0)
+            return 0;
+            
+        if (sudo_available)
+        {
+            myprintf("%d! Info: %s: Trying sudo systemctl poweroff\n", error_base + 8, os_name);
+            result = system("sudo systemctl poweroff");
+            if (result == 0)
+                return 0;
+        }
+    }
+    
+    myprintf("%d! Error: %s: All shutdown attempts failed\n", error_base + 9, os_name);
+    return 2;
+#endif
 }

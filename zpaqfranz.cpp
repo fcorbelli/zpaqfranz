@@ -52,7 +52,7 @@ WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 */
-#define ZPAQ_VERSION "61.3e"
+#define ZPAQ_VERSION "61.4a"
 #define ZPAQ_DATE "(2025-04-05)"  // cannot use __DATE__ on Debian!
 
 ///	optional align for malloc (sparc64,HPPA) via -DALIGNMALLOC
@@ -100904,8 +100904,8 @@ int Jidac::systemshutdown()
     {
         // Try primary command with sudo
         char sudo_cmd[256];
-        if (snprintf(sudo_cmd, sizeof(sudo_cmd), "sudo %s", shutdown_cmd) >= sizeof(sudo_cmd)) 
-            myprintf("%d! Error: %s: Command too long for buffer\n", error_base + 4, os_name);
+		if ((size_t)snprintf(sudo_cmd, sizeof(sudo_cmd), "sudo %s", shutdown_cmd) >= sizeof(sudo_cmd)) 
+           myprintf("%d! Error: %s: Command too long for buffer\n", error_base + 4, os_name);
         else
         {
             result = system(sudo_cmd);
@@ -100920,7 +100920,7 @@ int Jidac::systemshutdown()
             // Try alternative command with sudo if primary failed
             if (alt_shutdown_cmd != NULL)
             {
-                if (snprintf(sudo_cmd, sizeof(sudo_cmd), "sudo %s", alt_shutdown_cmd) >= sizeof(sudo_cmd)) 
+                if ((size_t)snprintf(sudo_cmd, sizeof(sudo_cmd), "sudo %s", alt_shutdown_cmd) >= sizeof(sudo_cmd)) 
                 {
                     myprintf("%d! Error: %s: Alternative command too long for buffer\n", error_base + 4, os_name);
                 }

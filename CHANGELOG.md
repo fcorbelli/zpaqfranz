@@ -155,6 +155,49 @@
 ## [Unreleased]
 - Planned switch to convert "normal" `.zpaq` archives into backups.
 
+## [60.9] - 2024-11-13
+
+### Added
+- **`-nojit` Switch**: Replaces the `-DNOJIT` compilation flag. Automatically detects JIT support at both CPU and OS levels (e.g., NetBSD may block `PROT_EXEC`).
+  - JIT accelerates data extraction (compression speed unaffected).
+  - Not fully tested on virtualized systems with "fake" CPUs; a `forcejit` switch is planned for the future.
+- **`-tmp` Switch for Multipart Files**: Names multipart files as `.tmp` during creation, renaming them to `.zpaq` upon completion.
+  - Enables parallel testing/updates and compatibility with file-sync tools like Syncthing.
+- **Improved Password Handling**: Enhanced `-key` switch with support for delete key and cursor movement.
+  - Prompts for password twice during archive creation to ensure consistency (e.g., `zpaqfranz a z:\1.zpaq *.cpp -key`).
+- **1980 Timestamp**: Sets file dates to 1/1/1980 during creation, updated only when the `jidac` header is written, aiding identification of incomplete files.
+- **Windows Placeholders**: Added filename placeholders `$pcname`, `$computername`, and `$username` (e.g., `zpaqfranz a z:\pippo_$username c:\nz`).
+- **ZETA Hasher with `-backupzeta`**: New pseudo XXHASH64 hash calculation during backup generation.
+  - Avoids re-reading large multipart files (e.g., virtual disks) for integrity checks, also calculates CRC-32.
+  - Not yet supported for encrypted multipart archives (planned for future).
+- **`-nomore` Switch**: Disables the internal `more` command for faster external text processing (e.g., `zpaqfranz h h -nomore | less`).
+  - On 64-bit Windows, enables experimental LargePages support (no noticeable improvement; may be removed).
+- **Common Switches List**: Accessible via `zpaqfranz h common`.
+- **P7M Signature Check**: Windows option to verify FEQ digital signatures for hash files during updates (see [wiki](https://github.com/fcorbelli/zpaqfranz/wiki/Windows-update)).
+- **IPv6 Support**: Experimental support with `-DIVP6` compilation flag for the upgrade command (untested due to lack of IPv6 environment).
+
+### Changed
+- **JIT Handling**: Moved from compile-time `-DNOJIT` to runtime `-nojit` switch for broader compatibility.
+- **Command Rename**: `consolidatebackup` renamed to `consolidate`.
+
+### Fixed
+- **Old Compiler Compatibility**: Minor fixes for very old compilers (e.g., Slackware) and 32-bit systems.
+- **HPPA CPU Support**: Resolved a potential CRC-32 alignment issue on strict-memory CPUs (e.g., 32-bit HP RISC), slightly slower but more reliable.
+
+### Notes
+- **Compatibility Efforts**: Ongoing support for old systems and compilers remains a challenge but is maintained with minimal divergence from modern versions.
+- **ZETA Hasher Details**: See GitHub issues for a full explanation of `-backupzeta` functionality.
+- **IPv6**: Untested due to lack of test environment; feedback welcome.
+- **Hints**: Additional context for changes can be found in [GitHub issues](https://github.com/fcorbelli/zpaqfranz/issues?q=is%3Aissue).
+- **Request**: Testing on Apple Silicon (Mx) systems is desired; contact the author if you can provide access.
+
+---
+
+## [Unreleased]
+- Planned `forcejit` switch for overriding JIT detection.
+- Support for `-backupzeta` with encrypted multipart archives.
+- Potential removal of `-nomore` LargePages experiment.
+
   
 ## [58.12.s] - 2023-12-08
 ### faster, redup

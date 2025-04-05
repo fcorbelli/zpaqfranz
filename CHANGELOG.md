@@ -403,12 +403,234 @@
 
 ---
 
-
 # Changelog
 
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [60.2] - 2024-07-03
+
+### Added
+- **Improved `dump` Command**: Enhanced to display archive technical details in a more readable format.
+  - Shows archive format type and compatibility level:
+    - `60+`: zpaqfranz v60 and later (circa July 2024).
+    - `<60`: zpaqfranz up to v59.x.
+    - `715`: Standard zpaq 7.15 or zpaqfranz with `-715`.
+  - Switches:
+    - **`-summary`**: Brief output.
+    - **`-verbose`**: Detailed useful information.
+    - **`-all`**: Deeper technical details.
+  - Examples:
+    - `zpaqfranz dump z:\715.zpaq -summary`: Identifies as `715 archive (original zpaq format)`.
+    - `zpaqfranz dump z:\v59.zpaq -summary`: Shows `<60 archive (older zpaqfranz v59)` with `XXHASH64`.
+    - `zpaqfranz dump z:\v60.zpaq -summary`: Shows `60+ archive (newer zpaqfranz v60)` with `XXHASH64B`.
+    - `zpaqfranz dump z:\v60_mixed.zpaq -summary`: Detects mixed block sizes (`050`, `190`) and hash types (`WHIRLPOOL`, `XXHASH64B`), warns against `-frugal`.
+
+### Fixed
+- **Backup Command Bug**: Prevented creation of unnecessarily large backup files when no files were added.
+
+### Notes
+- The `dump` command is a debugging tool, not designed for large (multi-gigabyte) archives; it may crash due to its naive implementation. Future improvements are possible but not prioritized.
+- Mixed block sizes/hashes (e.g., `v60_mixed.zpaq`) can cause crashes with `-frugal` unless explicitly managed. Use `-frugal` only if you understand the implications; automatic controls may be added later.
+
+---
+
+## [60.1] - 2024-07-01
+
+### Added
+- **New Binary FRANZBLOCK Format**: Smaller storage format for FRANZBLOCKs.
+  - Slightly reduces archive size; default is `-xxhash64b`.
+  - New switches with `b` suffix (e.g., `-blake3b`); old formats (e.g., `-blake3`) retained.
+  - Warning: `-xxhash64b` is default; explicitly specify old formats (e.g., `-xxhash64`) for pre-v60 compatibility.
+- **`-frugal` Switch**: Reduces memory usage for large archives (10M–100M files).
+  - Risk of crashes if mixing FRANZBLOCK sizes/hashes (e.g., `blake3`, `whirlpool`, `sha3`).
+  - Safe with consistent hashes; unnecessary for smaller archives.
+- **`-date` Switch**: Stores file creation dates in new format.
+  - Default on Windows; optional on *nix with `-date` (slower processing).
+  - Uses heuristics for *nix birth dates (accuracy not guaranteed).
+- **File Change Tracking**: Stores counts of added, modified, and deleted files per version.
+- **Enhanced `l` (list) Command**: Rewritten with richer output.
+  - Displays compression ratio, file counts (`+` added, `#` modified, `-` deleted).
+  - Auto-resizes columns; uses colors (disabled with `NO_COLOR` or `-nocolor`).
+  - Supports `-attr`, `-checksum` (e.g., `-crc32`), `-date`, `-terse`.
+  - Slower due to added features; faster version may be considered later.
+  - Details: [GitHub #111](https://github.com/fcorbelli/zpaqfranz/issues/111).
+- **Backup with `-index`**: Detachable index files for Worm systems.
+  - Indexes storable separately (e.g., `-index <path>`); fragile if mismatched.
+  - Details: [GitHub #109](https://github.com/fcorbelli/zpaqfranz/issues/109).
+- **Enhanced `t` (test) Command**: Supports `-test` with `-find`, `-replace`, `-to`.
+  - Enables string substitution during testing; see [GitHub #112](https://github.com/fcorbelli/zpaqfranz/issues/112).
+- **`-DNAS` Compilation Switch**: Optimizes memory usage for NAS (e.g., Synology, QNAP).
+- **Extended `autotest`**: Enhanced `autotest -all -to <path>`.
+  - More tests, including expected failures; requires ~15GB.
+  - Tested on Windows, Debian, FreeBSD, QNAP ARM; untested on macOS, Solaris.
+  - May produce false positives; runtime varies (minutes to hours on slow NAS).
+
+### Changed
+- **Backward Compatibility**: New format readable by zpaq and zpaqfranz ≤ v59 for listing, extraction, and addition.
+  - Pre-v60 cannot test CRC32 or read hashes from v60 archives.
+  - Use non-`b` switches (e.g., `-xxhash64`) for full v59 compatibility.
+- **`l` (list) Command**: Slower due to enhanced features and operations.
+
+### Notes
+- This branch introduces new features and potential bugs; use with caution.
+- `-frugal` is for advanced users with consistent hashes and massive file counts; avoid mixing hash types.
+- ADS management not yet updated for new format; recalculation can be forced.
+- Autotest reliability depends on system; feedback encouraged for untested platforms.
+
+---
+
+## [59.9] - 2024-06-22
+
+### Added
+- **`-index` for `backup` Command**: Allows storing backup indexes in a separate folder for WORM storage.
+  - User must ensure correct file pairing.
+  - Example: `zpaqfranz backup z:\pippo *.cpp -index c:\temp`.
+- **`-thunderbird` Flag (Windows)**: Automatically includes Thunderbird folders from `AppData\Local` and `AppData\Roaming`.
+  - Optionally terminates `thunderbird.exe` before backup with `-kill`.
+  - Example: `zpaqfranz a z:\email.zpaq c:\users\utente -thunderbird -kill`.
+- **NO_COLOR Support on *nix**: Disables output coloring via shell variable `NO_COLOR`.
+
+### Fixed
+- Resolved an error when listing non-standard hashes.
+
+### Notes
+- Use `-index` with caution to avoid mismatching indexes and `.zpaq` files.
+- Download: [SourceForge](https://sourceforge.net/projects/zpaqfranz/files/59.9/).
+
+ ---
+
+## [59.8] - 2024-06-19
+
+### Added
+- **`-ifexist <X>` Switch in `a` (add)**: Prevents adding files if folder `X` does not exist.
+  - Useful for *nix systems to avoid backups to local disk when external mounts (e.g., NFS) fail.
+  - Example: `zpaqfranz a /monta/mygoodnas/thebackup.zpaq /home -ifexist /monta/mygoodnas/rar`.
+- **Console Color Support on *nix**: Adds color output to console; intended to work across most *nix systems.
+- **`-nocolors` on Redirect**: Automatically disables colors when output is redirected to a file.
+
+### Changed
+- **New `l` (list) Format**: Updated display format.
+  - Autosizes file size column.
+  - Shows estimated compression ratio.
+  - Provides enhanced details with `-all`; hides attributes by default.
+  - Reverts to old format with `-attr`.
+- **Win32/Win64hw Updates**: `zpaqfranz32.exe` (32-bit) and `zpaqfranzhw.exe` (64-bit SHA-1 ASM-accelerated) now support automatic updates via the `upgrade` command.
+
+### Notes
+- `-ifexist` helps prevent disk saturation on *nix by checking for sentinel folders (e.g., `/monta/mygoodnas/rar`) on mounted filesystems.
+- Visual examples of the new `l` format and `-attr` behavior available in GitHub assets: [Image 1](https://github.com/fcorbelli/zpaqfranz/assets/77727889/df8e60c6-a6a3-4071-93c8-31c9982fb467), [Image 2](https://github.com/fcorbelli/zpaqfranz/assets/77727889/242b07ec-941f-462d-877d-ecd44c17fd11), [Image 3](https://github.com/fcorbelli/zpaqfranz/assets/77727889/3164b036-f779-4be9-be60-cf80b543434c).
+
+---
+
+## [59.7] - 2024-06-06
+
+### Added
+- **`zfssize` Command**: Displays the size of ZFS snapshots quickly.
+- **`-pause` Switch in `a` (add)**: Pauses the archiver, waiting for a keystroke before proceeding.
+- **Runhigh with VSS (Windows)**: Automatically elevates privileges for `-vss` add operations from a non-elevated command line.
+- **AMD 3950X Benchmark**: Added performance benchmark for AMD Ryzen 3950X.
+
+### Changed
+- **Reduced RAM Usage for File Enumeration**: Now uses ~400 bytes per file on average.
+  - Example: ~4GB RAM for 10 million files.
+  - Details: [GitHub #104](https://github.com/fcorbelli/zpaqfranz/issues/104).
+- **VSS Info Update**: Less alarming messages displayed during Volume Shadow Copy Service (VSS) operations.
+- **Compiler Compatibility**: Refactored code for better support with modern compilers and fortification layers.
+
+
+---
+
+## [59.6] - 2024-05-17
+
+### Fixed
+- Minor bugs resolved, including warnings encountered with some cross-compilers.
+- Improved Debian compatibility for better integration with Debian-based systems.
+
+### Notes
+- Released on a Friday the 17th.
+
+---
+
+## [59.5] - 2024-05-14
+
+### Added
+- **`hash` Command**: New simplified command for file hashing.
+  - Outputs hashes as computed with alphabetical sorting (unlike `sum` which processes all files first).
+  - Supports: `-ssd` (multithread), `-xxh3`, `-sha256`, `-stdout`, `-out <file>`.
+  - Examples:
+    - `hash z:\knb`: SHA1 of all files.
+    - `hash z:\knb -ssd -xxh3`: XXH3 multithreaded.
+    - `hash z:\knb -ssd -sha256 -stdout -out 1.txt`: SHA256 to file.
+  - Without `-ssd`, hashes are written immediately.
+- **`-home` Switch in `s` Command**: Calculates total folder size from depth 1.
+  - Useful for sizing `/home`, `/users`, or VM stores.
+  - Example: `zpaqfranz s c:\users -home -ignore`.
+- **`-orderby` in `hash` Command**: Sorts output (e.g., by size with `-desc`).
+  - Example: `zpaqfranz sum * -xxh3 -orderby size -desc`.
+- **`-ignore` Switch**: Suppresses error messages (e.g., permission issues) during scanning.
+  - Example: `zpaqfranz hash c:\users -ignore` vs. verbose errors with `-ssd`.
+
+### Changed
+- **Time Format**: Simplified `timetohuman` output (e.g., `00:00:00` instead of `0:00:00:00`).
+- **Speed Units**: Replaced `/sec` with `/s` in speed information.
+
+### Fixed
+- Minor issues in `-noeta` switch.
+- Improved update command on *nix systems.
+  - Provides clearer update availability info (e.g., `Your 59.5h (2024-05-14) is not older...`).
+
+### Notes
+- Released version: `zpaqfranz v59.5h-JIT-GUI-L,HW BLAKE3,SHA1/2,SFX64 v55.1`.
+- `-ignore` is risky as it hides errors; use cautiously.
+
+---
+
+## [59.4] - 2024-05-11
+
+### Added
+- **`crop` Command**: Deletes the latest version(s) from a non-multipart archive.
+  - Dry run by default (test only).
+  - Switches:
+    - **`-kill`**: Performs an effective (wet) run.
+    - **`-to <file>`**: Outputs to a new file (e.g., `tiny.zpaq`).
+    - **`-until X`**: Discards versions beyond `X`.
+    - **`-maxsize X`**: Cuts at size `X` (risky).
+    - **`-force`**: Crops in-place without backup (very risky).
+  - Examples:
+    - `crop z:\1.zpaq`: Dry run info.
+    - `crop z:\1.zpaq -to d:\2.zpaq -until 100 -kill`: Reduce to version 100.
+    - `crop z:\1.zpaq -to d:\2.zpaq -maxsize 100k -kill`: Reduce to 100,000 bytes.
+    - `crop z:\1.zpaq -until 2 -kill -force`: In-place crop to version 2.
+- **Range in `l` (list) Command**: Filters files by version range.
+  - Syntax:
+    - `-range X:Y`: Versions X to Y.
+    - `-range X:`: Versions X to last.
+    - `-range :X`: Versions 1 to X.
+    - `-range X`: Single version X.
+    - `-range ::X`: Last X versions.
+  - Examples:
+    - `l z:\1.zpaq -range 2:3`: Files from versions 2–3.
+    - `l z:\1.zpaq -range ::1`: Files from last version.
+- **`-sfx` Flag (Win32)**: Creates a self-extracting archive directly.
+  - Example: `zpaqfranz a z:\test.zpaq *.cpp -sfx`.
+- **`-nomac` Flag**: Skips macOS `.DS_Store`, `Thumbs.db`, and similar files.
+- **Cortex `franzomips` Benchmark**: Added benchmark for QNAP low-cost NAS CPUs.
+- **`-verbose` in `dump` Command**: Now displays block offsets from file start.
+
+### Changed
+- **`c` Command**: Renamed `-verify` switch to `-checksum` to avoid collisions.
+
+### Fixed
+- **Backup Command on *nix**: Improved `./` auto-add functionality.
+- **VSS Filename Handling (Win32)**: Automatically renames Volume Shadow Copy Service files.
+
+### Notes
+- Use `-force` and `-maxsize` in `crop` with caution due to risk of data loss.
+- `-nomac` addresses clutter from macOS files on Samba NAS shares.
+
+---
 
 ## [58.12.s] - 2023-12-08
 

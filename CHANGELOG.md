@@ -198,7 +198,80 @@
 - Support for `-backupzeta` with encrypted multipart archives.
 - Potential removal of `-nomore` LargePages experiment.
 
-  
+
+## [60.8] - 2024-10-21
+
+### Added
+- **`-backupzeta` Switch**: Generates checksums (almost XXHASH64 and CRC-32) on-the-fly during `.zpaq` file creation in the backup command.
+  - Saves time by avoiding post-creation reads, especially on slow HDDs.
+  - Future support planned for encrypted volumes ([issue #139](https://github.com/fcorbelli/zpaqfranz/issues/139)).
+- **Creation Date Set to 1/1/1980**: `.zpaq` archives are now stamped with 1/1/1980 to easily identify incomplete files ([issue #138](https://github.com/fcorbelli/zpaqfranz/issues/138)).
+- **New Hash Algorithms**: Added ZETA and ZETAENC, selectable with `-zeta` and `-zetaenc`.
+  - Details in [issue #139, comment](https://github.com/fcorbelli/zpaqfranz/issues/139#issuecomment-2425010093).
+- **`-destination` Switch**: Allows loading multiple `-to` options from a text file for batch processing.
+  - Explanation in [issue #136, comment](https://github.com/fcorbelli/zpaqfranz/issues/136#issuecomment-2422947782).
+- **`-nodelete` Switch**: Prevents marking files as deleted if not found during path scanning, useful for bulk file list manipulation.
+  - Details in [issue #136, comment](https://github.com/fcorbelli/zpaqfranz/issues/136#issuecomment-2416220823).
+- **`-salt` Switch**: Forces an empty salt (32 zero bytes) for development purposes (not recommended for general use).
+- **`-hdd` Switch**: Uses RAM (including virtual memory/swap) to buffer extracted data before sequential writing to HDD.
+  - Reduces seek times on HDDs, halving extraction time for medium-sized files (not suitable for very large files).
+  - Details in [issue #135](https://github.com/fcorbelli/zpaqfranz/issues/135).
+- **`-ramdisk`**: Internal support for `-hdd` functionality.
+
+### Changed
+- **Build Compatibility**: Improved support for BSD operating systems:
+  - OpenBSD
+  - NetBSD
+  - DragonFly BSD
+- **Warnings Display**: Warnings are now highlighted in yellow for better visibility.
+
+### Fixed
+- **`-input` Bug**: Minor fix for Windows-specific issue with the `-input` switch.
+
+### Notes
+- The `-backupzeta` switch significantly improves performance on slow drives by eliminating the need to re-read files for checksums.
+- The `-hdd` switch leverages RAM/SSD speed for faster HDD writes but is limited by available memory for large files.
+- The `-salt` switch is intended for development and debugging, not end-user scenarios.
+- Additional context and explanations for many features can be found in the linked GitHub issues.
+
+---
+
+## [Unreleased]
+- Planned support for `-backupzeta` with encrypted volumes.
+
+## [60.7] - 2024-10-08
+
+### Added
+- **`-errorlog` Switch**: Creates a file listing errors to reduce log clutter.
+- **`-nocaptcha` Switch**: Bypasses captchas during operations.
+- **`-ht` Switch**: Overrides the default use of physical CPU cores (no Hyperthreading) to revert to the previous Hyperthreading-enabled method.
+- **`-input` Switch**: Loads a list of files to be added from a specified input file.
+- **`-715` Switch in `l` (list) Command**: Restores an output nearly identical (binary-wise) to zpaq 7.15.
+- **`-to` Switch in `sfx` Command (Windows)**: Extracts the `.zpaq` file from a self-extracting executable.
+- **`-home` Switch in `sum` Command**: Replaces the previous `-checksum` switch.
+- **`-fixreserved` Switch (Windows)**: Removes the `:` character from filenames during extraction to handle reserved character issues.
+- **Memory Usage Tracking**: Displays approximate memory usage in the final output line.
+- **UTF8 Output Work Command**: Added a new `work` command for improved UTF8 file output handling on Windows.
+
+### Changed
+- **License Update**: Modified the license of one component to comply with Fedora policies.
+- **CPU Detection**:
+  - Now defaults to using physical CPU cores only (no Hyperthreading); use `-ht` to revert.
+  - Improved CPU count detection on Solaris (untested).
+- **Error Messages**: 
+  - Displayed in red by default for better visibility.
+  - More descriptive messages for out-of-memory errors caused by overly small fragments.
+- **UTF8 File Output**: Completely rewritten for Windows to enhance compatibility and functionality.
+- **Output Lines**: Renumbered for clarity.
+- **Backup Naming**: Heuristically adopts the name of an existing backup in some cases.
+
+### Notes
+- This release introduces numerous features; expect potential bugs as testing continues.
+- The wiki is being updated with more details; for now, this changelog provides a high-level overview.
+- Feedback and bug reports are welcome via [GitHub issues](https://github.com/fcorbelli/zpaqfranz/issues).
+
+---
+
 ## [58.12.s] - 2023-12-08
 ### faster, redup
 

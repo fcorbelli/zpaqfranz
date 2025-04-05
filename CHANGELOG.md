@@ -63,7 +63,58 @@
 - Suggestions and issues can be reported via GitHub or direct contact.
 
 
+## [61.1] - 2025-02-14
 
+### Added
+- **SFTP Support with libcurl**: Enabled SFTP functionality by compiling with `-DSFTP` to dynamically use the libcurl library.
+  - **Windows**: Automatically downloads `libcurl-x64.dll`/`libcurl.dll` from the author's website (`zpaqfranz sftp`) if not found.
+  - **Non-Windows**: Requires manual installation of `libcurl.so` (e.g., `apt install libcurl` on Debian, `pkg install curl` on FreeBSD). Searches heuristically in common paths (`/usr/lib/`, `/usr/local/lib/`, etc.).
+  - **Use Case**: Direct uploads to SFTP servers (username/password only; key file support planned), reducing ransomware risks compared to Samba shares.
+  - **Note**: Do not use `-static` with `-DSFTP` on *nix systems due to inconsistent behavior across platforms.
+- **TUI Command**: Added a minimal text-based user interface (`tui`) to list, select, and extract files from archives.
+  - Replaces the previous ncurses-based GUI with a simpler, DOS-like interface.
+  - Works on most *nix systems (not very old ones). Use `h` or `?` for help.
+  - Development status: ~50% complete, with many edge cases still needing debugging.
+- **LS Command**: Introduced the `ls` command to navigate `.zpaq` archives like a filesystem.
+  - Supports `ls (/dir)` to list directories, `cd` to change directories, and `get` to extract files.
+  - Development status: ~30% complete, very immature, lacks TAB support and requires significant work.
+  - Use `help` or `?` for command list.
+- **New Switches**:
+  - `-noonedrive`: Disables Windows OneDrive placeholders to prevent automatic downloads to the local drive.
+  - `-norecursion` with `-only` in `list`: Prevents recursion into folders when listing with `-only` (fixes [issue #156](https://github.com/fcorbelli/zpaqfranz/issues/156)).
+  - `-DNOLM` (experimental): Uses a software implementation for numeric functions, bypassing the `lm` library for compatibility with unusual systems.
+
+### Removed
+- **Server Code**: Dropped `zpaqfranz-over-TCP` functionality, replaced by SFTP.
+- **Windows GUI with ncurses**: Replaced by the new `tui` command.
+
+### Fixed
+- **Linuxsettime Issues**: Addressed some unspecified bugs in `linuxsettime` functionality.
+
+### Changed
+- **Branch Introduction**: This release marks the start of branch 61 with significant new features and potential instability.
+
+### Notes
+- **Development Status**:
+  - `sftp`: ~70% complete and tested.
+  - `tui`: ~50% complete, needs extensive debugging.
+  - `ls`: ~30% complete, highly experimental.
+- **User Feedback**: As this is the first release of branch 61, bugs are expected. Please report issues on GitHub to help improve stability and functionality.
+- **SFTP Installation Examples**:
+  - Debian: `apt install libcurl`
+  - Fedora: `dnf install libcurl`
+  - FreeBSD: `pkg install curl`
+  - macOS: `brew install curl`
+  - See documentation for full list of package manager commands.
+
+### Download
+- Available at [SourceForge](https://sourceforge.net/projects/zpaqfranz/files/61.1/zpaqfranz.cpp/download)
+
+
+## [Unreleased]
+- Planned SFTP key file support.
+- Multi-monitor testing for future releases.
+- Enhanced `tui` and `ls` functionality (e.g., TAB support for `ls`).
 ## [58.12.s] - 2023-12-08
 ### faster, redup
 

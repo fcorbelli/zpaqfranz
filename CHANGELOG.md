@@ -115,6 +115,47 @@
 - Planned SFTP key file support.
 - Multi-monitor testing for future releases.
 - Enhanced `tui` and `ls` functionality (e.g., TAB support for `ls`).
+
+## [60.10] - 2024-12-20
+
+### Added
+- **`-tmp` Switch**: Now enabled by default for backups. Creates archives with a `.tmp` extension during compression, renaming them to `.zpaq` only upon successful completion.
+  - Mitigates corruption risks from unexpected shutdowns or crashes by ensuring incomplete archives remain as `.tmp`.
+  - On restart, existing `.tmp` files are "parked," allowing the process to resume and complete.
+- **`-notrim` Flag**: Disables automatic correction of incomplete transactions in the last transaction, restoring zpaq 7.15 behavior.
+- **`-destination` Switch in `consolidate` Command**: Allows renaming of `.zpaq` backup files (e.g., from `pippo` to `pluto`).
+  - Complements the existing `-to` switch, which merges multipart files into a single file (labeled 01).
+  - **Warning**: Always use full paths (e.g., `c:\zpaqfranz\pippo.zpaq`) with `consolidate`.
+- **Enhanced `i` (info) Command**:
+  - Now displays totals by default.
+  - Added `-n` switch to show the last few lines of info output.
+- **`-nopid` Switch**: Disables creation of `.pid` files during backups to prevent multiple executions.
+- **Windows Progress Display**: Shows download progress in the calling console during updates from the author's website.
+- **`-big` Switch Enhancement**: During backups, displays the last day of the backup in a larger format for easier log checking.
+
+### Changed
+- **Default Backup Behavior**: Backup command now uses `.tmp` files by default to protect against corruption from interruptions.
+- **Incomplete Transaction Handling**: 
+  - zpaqfranz now issues a prominent warning for incomplete transactions.
+  - Automatically attempts to correct the archive if the interrupted transaction is the last one (unless `-notrim` is used).
+  - For severe cases, users can use `consolidate` (multipart) or `trim` (single file) to remove corrupted parts.
+
+### Fixed
+- **`-stdin` Bug**: Resolved an issue that disabled the deduplicator when using `-stdin`.
+- **Windows XP Support**: Restored compatibility for the 32-bit version on Windows XP.
+- **Minor Source Code Fixes**: Addressed various unspecified issues in the codebase.
+
+### Notes
+- The `.tmp` feature addresses zpaq's historical fragility with corrupted archives due to shutdowns or crashes, improving reliability for both single and multipart backups.
+- For further details or to report issues, refer to the GitHub issues section.
+- Future plans include a switch to convert "normal" `.zpaq` archives directly into backups.
+
+---
+
+## [Unreleased]
+- Planned switch to convert "normal" `.zpaq` archives into backups.
+
+  
 ## [58.12.s] - 2023-12-08
 ### faster, redup
 

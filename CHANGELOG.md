@@ -271,6 +271,136 @@
 - Feedback and bug reports are welcome via [GitHub issues](https://github.com/fcorbelli/zpaqfranz/issues).
 
 ---
+## [60.6] - 2024-08-25
+
+### Added
+- **Improved `-stdin` Management**: Files added via `-stdin` are now deduplicated as efficiently as manually added files.
+- **`comparehex` Command**: Compares hexadecimal hash codes between two files, exiting with "OK" if they match.
+  - Ignores non-hex characters; optional hash length specification.
+  - Example: `zpaqfranz comparehex z:\1.txt z:\2.txt "GLOBAL SHA256:" 64`
+- **`count` Command**: Counts occurrences of a string across multiple files, returning "OK" if the count matches the expected value.
+  - Defaults to counting "OK" with `-big` if no string is specified.
+  - Example: `zpaqfranz count z:\*.txt 3 "all OK"`
+- **`work` Command Verbs**: Added utility functions for log automation.
+  - Examples: `work big "count the ok"`, `work pad 123 -n 4`, `work date "%year_%month_%day" -terse`.
+- **`-crc32` Switch for `t` (test) Command**: Performs a triple CRC-32 check against the filesystem.
+  - Compares original, recomputed, and re-read CRC-32 values for integrity verification.
+  - Supports `-find`/`-replace` for path adjustments and `-ssd` for multithreading.
+  - Example: `t z:\\1.zpaq -crc32 -find "x:/memme/" -replace "c:/nz/"`
+- **`-terse` Switch**: Reduces output verbosity across commands for easier redirection.
+- **`-csv` and `-csvhf` Switches for `l` (list) Command**: Outputs file lists in a CSV-like format.
+  - `-csvhf` adds header/footer strings; uses `\t` for TABs.
+  - Example: `l z:\1.zpaq -terse -csv "\",\"" -csvhf "\""`
+- **`-external` Switch in `a` (add) Command**: Executes an external command before adding files, saving its output to a virtual file (e.g., `VFILE-l-external.txt`).
+  - Useful for snapshots or independent hash checks (e.g., with `hashdeep`).
+  - Example: `zpaqfranz a z:\2.zpaq c:\nz -external "c:\nz\hashdeep64 -r -c sha256 %files"`
+- **`-external` Switch in `x` (extract) Command**: Extracts the virtual external file directly.
+  - Example: `x z:\2.zpaq -external -silent > mygoodoutput.txt`
+- **`-symlink` Switch in `a` (add) Command (Windows)**: Ignores NTFS symlinks during addition.
+- **`-touch X` Switch**: Forces a specific timestamp (date or date+time) on files added during the `a` command, including `-stdin`.
+- **Execution Dates in Backups**: Stores execution dates in backups; `testbackup` shows the latest date.
+- **Franzomips CPU Support**: Added new CPUs to the `franzomips` list.
+
+### Changed
+- **Control-C Handling**: Improved cleanup of `-chunk` files and potential `.zpaq` rollback on termination (portability unconfirmed).
+- **`gettempdirectory`**: Creates temporary files in timestamped subfolders to avoid collisions with multiple `zpaqfranz` instances.
+- **Output with `-big`**: Ensures the final "OK" output remains visible even with reduced verbosity switches.
+- **Maximum Versions in `i` Command**: Increased the limit of displayed versions.
+
+### Fixed
+- Various minor bugs (unspecified).
+
+### Notes
+- This release adds many features tailored to the developer's needs, potentially replicable with tools like `awk` or `grep`, but integrated for convenience in environments lacking such utilities (e.g., ESXi, NAS).
+- New features may introduce bugs; users should verify archive integrity after use.
+- Report issues or suggestions at [GitHub issues](https://github.com/fcorbelli/zpaqfranz/issues).
+
+---
+
+## [Unreleased]
+- Potential `.zpaq` rollback on Control-C termination.
+- Future evolution of `-symlink` handling.
+
+## [60.5] - 2024-07-20
+
+### Added
+- **Faster Windows 64-bit Binary**: Improved performance on AMD CPUs, with average speed gains of 5% and up to 20% in best cases.
+  - Example: Compression time reduced from 21.938s (v60.1k) to 18.875s (v60.5d) for identical tasks.
+- **`-stat` Switch in `a` (add) Command**: Displays statistics on files added, removed, or updated.
+  - Example: `zpaqfranz a z:\test.zpaq c:\zpaqfranz\*.cpp -stat`
+- **`-stat` Switch in `i` (info) Command**: Shows uncompressed data size (slower operation).
+  - Example: `zpaqfranz i z:\test.zpaq -stat`
+- **`-quick` Switch in `t` (test) Command with Paths**: Performs a quick test using only file size and date, skipping hash computation.
+  - Example: `zpaqfranz t z:\test.zpaq c:\zpaqfranz\*.cpp -quick`
+- **`testbackup` Command Enhancement**: Now displays a global SHA256 hash of backup hashes during verification.
+  - Facilitates quick comparison between local and remote backups (e.g., Synology vs. FreeBSD server).
+  - Example output shows identical SHA256 (`EDBEE1D3...`) for consistency checks.
+  - Full rehashing available with `-verify` for thorough validation.
+
+### Changed
+- **`fclose()` De-overloading**: Modified to assist with debugging, reducing potential conflicts.
+
+### Fixed
+- **Chunked Add Bug**: Resolved a possible double file close issue in chunked addition operations.
+
+### Notes
+- Performance improvements are most notable on Windows 64-bit systems, particularly with AMD CPUs.
+- The global SHA256 in `testbackup` provides a fast integrity check; use `-paranoid` or `-verify` for deeper verification, especially if backup paths differ.
+- Report bugs or feedback at [GitHub issues](https://github.com/fcorbelli/zpaqfranz/issues).
+
+
+---
+
+## [60.4] - 2024-07-14
+
+### Added
+- **`-nosynology` Switch**: Excludes hidden Synology system folders during the `a` (add) command.
+  - Ignores paths like `*/@recycle/*`, `*/#snapshot/*`, `*/@SynologyDrive/*`, etc. (full list in documentation).
+- **`isjitable` in `b` (benchmark) Command**: Issues a warning if compiled without `-DNOJIT` but the CPU does not appear to be Intel/AMD (e.g., virtual or ARM CPUs).
+  - Enhanced with `-debug` for additional CPU information (e.g., vendor ID, endianness).
+  - Examples:
+    - `zpaqfranz b` (normal Intel/AMD CPU detection).
+    - `zpaqfranz b -debug` (detailed output with warning for non-Intel/AMD CPUs).
+- **Celeron J4125 Benchmark**: Added `franzomips` support for Synology DS224+ NAS with Celeron J4125 CPU.
+
+### Fixed
+- **Compatibility Fixes**: Resolved issues for "strange" platforms, ensuring compilation and execution on:
+  - Haiku
+  - Macintosh
+  - Solaris
+
+### Notes
+- The `-nosynology` switch improves usability on Synology NAS systems by skipping system-specific folders.
+- CPU detection in `isjitable` is not fully reliable across all platforms due to portability challenges; future improvements are planned.
+- Report bugs or suggestions at [GitHub issues](https://github.com/fcorbelli/zpaqfranz/issues).
+
+---
+
+## [60.3] - 2024-07-07
+
+### Fixed
+- **Microfixes for Compilability**: Applied small corrections to ensure compatibility across various systems.
+  - Supported builds:
+    - `zpaqfranz.exe`: Windows 64-bit
+    - `zpaqfranz32.exe`: Windows 32-bit
+    - `zpaqfranzhw.exe`: Windows 64-bit with SHA-1 assembly optimizations (AMD)
+    - `zpaqfranz_armv8`: ARM-NAS compatible build (e.g., QNAP, Synology)
+    - `zpaqfranz_esxi`: ESXi build
+    - `zpaqfranz_freebsd`: FreeBSD 64-bit
+    - `zpaqfranz_linux32`: Generic Linux 32-bit
+    - `zpaqfranz_linux64`: Generic Linux 64-bit
+    - `zpaqfranz_nas`: Generic Linux 64-bit for Intel-powered NAS
+    - `zpaqfranz_openbsd`: OpenBSD 64-bit
+    - `zpaqfranz_haiku`: Haiku 64-bit
+
+### Notes
+- No macOS build included in this release ("Sorry, no Mac today 😄").
+- These microfixes enhance portability; specific changes are minor and focused on compilation stability.
+- Report issues or feedback at [GitHub issues](https://github.com/fcorbelli/zpaqfranz/issues).
+
+
+---
+
 
 ## [58.12.s] - 2023-12-08
 ### faster, redup

@@ -632,6 +632,106 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ---
 
+## [59.3] - 2024-04-19
+
+### Added
+- **`update`/`upgrade` Command**: Checks for newer zpaqfranz versions across platforms; downloads and updates on Win64.
+  - Default source: `http://www.francocorbelli.it/zpaqfranz`.
+  - Examples:
+    - `zpaqfranz update`: Check for updates (all platforms).
+    - `zpaqfranz update -force`: Update if newer (Win64).
+    - `zpaqfranz update -force -kill`: Force download (Win64).
+    - `zpaqfranz update <hash_url> <exe_url>`: Custom source (e.g., `https://www.pippo.com/ugo.sha256 http://www.pluto.com/zpaqnew.exe`).
+- **`download` Command (Win64)**: Downloads files with optional hash verification.
+  - Supports MD5/SHA-1/SHA-256; detects hash type by length (32=MD5, 40=SHA-1, 64=SHA-256).
+  - Defaults: No overwrite (use `-force`), checks output path (use `-space` to bypass).
+  - Examples:
+    - `zpaqfranz download https://www.1.it/2.cpp ./2.cpp`: Download to `./2.cpp`.
+    - `zpaqfranz download http://www.1.it/3.cpp z:\3.cpp -checktxt http://www.1.it/3.sha256`: Download with SHA-256 check.
+    - `zpaqfranz download http://www.francocorbelli.it/zpaqfranz/win64/zpaqfranz.exe ./thenewfile.exe -checktxt http://www.francocorbelli.it/zpaqfranz/win64/zpaqfranz.md5`: Download with MD5 check.
+- **Enhanced `ads` Command (Windows)**: Manages Alternate Data Streams (ADS).
+  - Options: List (`ads z:\1.zpaq`), remove all (`-kill`), remove specific (`-only <name> -kill`), rebuild (`-force`).
+  - Example: `zpaqfranz ads z:\*.zpaq -kill`.
+- **`-fasttxt` with ADS**: Stores updated CRC-32 in ADS for archive integrity checks without decryption.
+  - Example: `zpaqfranz a z:\pippo.zpaq c:\dropbox -fasttxt -ads -key pippo`, then `zpaqfranz versum z:\pippo.zpaq`.
+- **`pause` Command Enhancement**: Waits for a specific keypress.
+  - Example: `zpaqfranz pause -find z` (waits for 'z').
+- **Updated `franzomips` Benchmark**: Added AMD Ryzen 7950X3D CPU results.
+
+### Fixed
+- Improved compatibility and stability for Windows 7 64-bit.
+
+### Notes
+- **Security Warning**: Use trusted sources for `update`/`download` (e.g., GitHub, SourceForge, or `https://www.francocorbelli.it/zpaqfranz/win64/`).
+- `ads` command is under development; expect further refinements.
+- `-fasttxt` enables fast integrity checks (e.g., >2GB/s on NVMe) without needing encryption keys; Samba/PAKKA integration in progress.
+- `franzomips` disables HW-acceleration by default; use specific flags (e.g., `-sha256`) for HW benchmarks.
+
+---
+
+## [59.2] - 2024-02-23
+
+### Added
+- **`pakka` Command**: Integrates with PAKKA, a Windows GUI for zpaqfranz.
+  - Supports newer PAKKA versions without requiring `zpaqlist`.
+  - Features in development: file addition, testing, and full functionality beyond extraction.
+  - Examples:
+    - `zpaqfranz pakka h:\zarc\1.zpaq -out z:\default.txt`: Lists to file.
+    - `zpaqfranz pakka h:\zarc\1.zpaq -all -distinct -out z:\default.txt`: Lists without deduplication.
+    - `zpaqfranz pakka h:\zarc\1.zpaq -until 10 -out z:\10.txt`: Lists up to version 10.
+
+### Fixed
+- Minor unspecified issues.
+
+### Notes
+- PAKKA is a freeware Windows GUI available at [https://www.francocorbelli.it/pakka/build/latest/pakka_latest.zip](https://www.francocorbelli.it/pakka/build/latest/pakka_latest.zip) with built-in auto-update functionality.
+- Ongoing development includes online help and ADS (Alternate Data Stream) support for small NAS systems like TrueNAS.
+- PAKKA, written in Delphi, evolves faster than zpaqfranz core.
+
+---
+## [59.1] - 2024-01-16
+
+### Added
+- **`-chunk` Switch in `a` (add)**: Creates fixed-size multipart archives.
+  - Supports sizes: raw numbers (e.g., `2000000`), `K`/`M`/`G`, `KB`/`MB`/`GB` (e.g., `-chunk 1G`, `-chunk 500MB`).
+  - Chunks approximate multiples of 64KB; not fully integrated (e.g., unsupported in `backup`).
+  - Examples:
+    - `zpaqfranz a z:\ronko_?? whatever-you-like -chunk 1G`.
+    - `zpaqfranz a z:\ronko_?? who-knows -chunk 500m`.
+- **ADS Filelists (Windows, NTFS)**: Stores file lists in Alternate Data Streams for unencrypted archives.
+  - Uses LZ4 compression for speed and chunked storage.
+  - Example: `zpaqfranz a z:\1.zpaq *.cpp -ads`, then `zpaqfranz l z:\1.zpaq`.
+  - Force standard listing: `zpaqfranz l z:\1.zpaq -ads`.
+- **`ads` Command (Windows)**: Manipulates ADS filelists.
+  - Show: `ads z:\1.zpaq`.
+  - Rebuild: `ads z:\1.zpaq -force`.
+  - Remove: `ads z:\*.zpaq -kill`.
+- **`-fast` Switch in `a` (add)**: Experimental feature to store a partial file list in the archive.
+  - Aims for faster extraction; maintains compatibility with zpaq 7.15.
+  - Example: `zpaqfranz a z:\1.zpaq c:\dropbox -fast`, then `zpaqfranz l z:\1.zpaq` (auto-detects `-fast`, else `-fast` to force).
+- **Console Colors (Windows)**: Limited color support for black-background consoles.
+  - Disabled with `NO_COLOR` env variable or `-nocolor` switch.
+- **Debug Switches**: Enhanced debugging options.
+  - `-debug`, `-debug2`, `-debug3`: Increasing verbosity.
+  - `-debug4`: Writes debug files to `z:\` if available.
+- **`-longpath` for Files**: Rudimentary support for individual files >255 characters on Windows.
+  - Uses `GetFinalPathNameByHandleW` from `KERNEL32.DLL`.
+  - Details: [GitHub #90](https://github.com/fcorbelli/zpaqfranz/issues/90).
+
+### Changed
+- **Password Prompt**: Unified at the file-handling class level.
+  - Applies to all commands (e.g., `dump`); prompts if `-key` omitted, avoiding command history exposure.
+
+### Notes
+- This is a new branch with untested features; bugs are expected—report them at [GitHub Issues](https://github.com/fcorbelli/zpaqfranz/issues).
+- `-chunk` aims for optical media compatibility (e.g., Blu-ray); Ctrl+C handling and part estimation are incomplete.
+- ADS with LZ4 enables potential filesystem mounting in future; encryption support untested.
+- `-fast` is experimental and currently provides minimal utility; full implementation is complex.
+- Color support on *nix is under consideration but challenging due to interoperability.
+- Additional discussions: [Color Support](https://encode.su/threads/4182-Color-or-not), [Format Hacking](https://encode.su/threads/4178-hacking-zpaq-file-format-(!)), [Data Storage](https://encode.su/threads/4168-Virus-like-data-storage-(!)).
+
+---
+ 
 ## [58.12.s] - 2023-12-08
 
 ### Changed

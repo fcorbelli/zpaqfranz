@@ -491,7 +491,6 @@
 
 ### Notes
 - Use `-index` with caution to avoid mismatching indexes and `.zpaq` files.
-- Download: [SourceForge](https://sourceforge.net/projects/zpaqfranz/files/59.9/).
 
  ---
 

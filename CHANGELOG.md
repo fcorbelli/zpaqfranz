@@ -730,79 +730,122 @@
 
 ### Changed
 - Improved execution speed and deduplication (`redup`).
+- Utilizes point-in-time copy mechanisms (e.g., hourly snapshots), eliminating the need to scan the entire filesystem.
+- Previously, ZFS backup support operated at the block level, requiring full restoration to recover individual files. The new `-dataset` switch enables efficient file-level updates by leveraging ZFS snapshots.
+- Ideal for large fileservers or systems with magnetic disks where filesystem scans are slow (e.g., tar, 7z, srep, etc.).
+
+### Performance Example
+- For a mid-sized file server with 1M files:
+- Spinning drives: ~500 files/sec → ~30 minutes just to enumerate files.
+- SSDs: ~5K files/sec.
+- NVMe: ~30K files/sec.
+- Traditional tools require full enumeration before processing, making frequent backups (e.g., every 10 minutes) impractical.
+- With `-dataset`, `zpaqfranz` uses ZFS snapshots to identify changes instantly, enabling rapid updates.
+
+### How It Works
+- On first run: Creates a base snapshot (e.g., `tank/d@franco_base`).
+- Subsequent runs: Generates a temporary snapshot (e.g., `tank/d@franco_diff`), compares it with the base, and processes only changed files.
+- Example output:
+---
+
+
+## [58.11.s] - 2023-11-10
+
+## Big "news": Developing (underway) to handle SHA-1 collisions
+- Work in progress to address SHA-1 collision handling in `zpaqfranz`.
+
+### Disclaimer: Is this a real issue? Can my backups become broken?
+- SHA-1 collisions have been demonstrated in controlled lab environments, but in real-world scenarios, they are extremely unlikely (bordering on impossible).
+- Backups made with `zpaqfranz` are considered safe. The `t` command has included collision detection for years, ensuring archive integrity.
+- The new `collision` command offers a faster collision-specific test compared to the comprehensive `t` command, which also checks file integrity.
+- Paranoid-level commands and switches are available for extra caution.
+- Maintaining backward compatibility with `zpaq 7.15` remains a significant challenge.
+
+## New switch `-collision` in add
+- `zpaqfranz` can now recover from SHA-1 collisions within the current archive version, ensuring correct file extraction for paranoid users.
+
+### Collision-aware `zpaqfranz` in action: Detecting and fixing
+#### Older `zpaqfranz` (default behavior):
+- No collision detection by default:
 
 ---
 
-## [58.11.w] - 2023-11-01
 
-### Added
-- **`dump` Command**: Initial implementation.
-  - Undocumented switches `-collision` and `-kill` planned for future development.
+## [58.10] - 2023-09-21
 
----
+## New `-home` switch for add
+- Enables archiving different folders into separate `.zpaq` files, useful for splitting individual users (e.g., within `/home` or `c:\users`) into distinct archives.
+- Examples:
+```
+  zpaqfranz a z:\utenti.zpaq c:\users -home
+  zpaqfranz a /temp/test1 /home -home -not franco
+  zpaqfranz a /temp/test2 /home -home -only "*SARA" -only "*NERI"
+```
 
-## [58.11.q] - 2023-10-08
+## Support for selections in `r` (robocopy) command
+- File selection now mirrors the `add` command functionality.
+- Examples:
+```
+  zpaqfranz r c:\d0 z:\dest -kill -minsize 10GB
+  zpaqfranz r c:\d0 z:\dest -kill -only *.e01 -only *.zip
+```
 
-### Added
-- **`collision` Command and `-collision` Switch**: Enables quick SHA-1 collision checks and partial recovery.
+## Fixes and Improvements
+### Fix for Mac PowerPC
+- Added support for compiling `zpaqfranz` on PowerPC Macs.
 
----
+### Improved compatibility with ancient compilers on Slackware
+- Enhanced support for very old GCC versions commonly used in Slackware.
 
-## [58.10.k] - 2023-09-21
+### Workaround for buggy GCC versions
+- Addressed issues in newer GCC releases.
 
-### Fixed
-- Reduced compiler warnings on 15+ year-old compilers.
+### Refactoring
+- Codebase cleaned up for better maintainability, though slightly slower.
 
----
+## Variable Replacements
+### Replaced `$` with `%` in variables
+- Linux scripts do not handle `$` well, so variables now use `%`.
+- Supported variables:
+- `%hour`
+- `%min`
+- `%sec`
+- `%weekday`
+- `%year`
+- `%month`
+- `%day`
+- `%week`
+- `%timestamp`
+- `%datetime`
+- `%date`
+- `%time`
+- Example:
+```
+  zpaqfranz r c:\d0 z:\backup_%day -kill
+```
 
-## [58.10.j] - 2023-09-19
+## Enhanced `-orderby` switch in `add`
+- Examples:
+```
+  zpaqfranz a z:\test.txt c:\dropbox -orderby ext;name
+  zpaqfranz a z:\test.txt c:\dropbox -orderby size -desc
+```
 
-### Fixed
-- Removed a false compiler warning.
+## Filecopy with variable buffer size (`-buffer`)
+- Added for testing across different platforms.
 
----
+## Updated `versum` command
+- Now processes only files starting with `|`.
 
-## [58.10.i] - 2023-09-14
+## New Disclaimer After Help
+- Added reminder to use double quotes for arguments:
+```
+  ************ REMEMBER TO USE DOUBLE QUOTES! ************
+  *** -not .cpp    is bad,    -not ".cpp"    is good ***
+  *** test_???.zpaq is bad,    "test_???.zpaq" is good ***
+```
 
-### Fixed
-- Workaround for 32-bit GCC issue ([Red Hat bug #2238781](https://bugzilla.redhat.com/show_bug.cgi?id=2238781)).
-- Added help disclaimer emphasizing double quotes for commands.
-- Renamed `$day`, `$hour` to `%day`, `%hour` for Linux compatibility.
 
----
-
-## [58.10.g] - 2023-09-12
-
-### Fixed
-- Improved compatibility with PowerPC systems.
-
----
-
-## [58.10.e] - 2023-09-06
-
-### Added
-- **`-home` Switch**: New option in `a` (add) command.
-
----
-
-## [58.10.a] - 2023-09-06
-
-### Changed
-- Stripped non-essential content from the `zpaqfranz` repository.
-- Moved additional resources to `zpaqfranz-stuff` for licensing compliance.
-- Reduced Git subfolder size.
-
-### Fixed
-- Corrected typos in `zpaqfranz.cpp` and added greetings.
-
----
-
-## [58.9.a] - 2023-08-16
-
-### Changed
-- Introduced this `CHANGELOG.md` file.
-
----
 
 ## [55.6] - 2022-07-26
 

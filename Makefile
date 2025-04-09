@@ -1,5 +1,5 @@
 # Universal Makefile for zpaqfranz
-# Build 1.0a 2025-04-06
+# Build 1.0b 2025-04-09
 # By Franco Corbelli, under MIT License
 # Tested on modern Linux (e.g., Debian 13 with g++ 14), BSD, macOS, Solaris, etc.
 
@@ -58,6 +58,7 @@ SOURCE_URL := http://www.francocorbelli.it/zpaqfranz/win64/zpaqfranz.cpp
 CXXFLAGS ?= -O3 -Wall -pthread -s
 
 # Default preprocessor flags (customizable via environment or command line)
+# Beware: do NOT use -static with -DSFTP
 CPPFLAGS ?= -DSFTP -DHWSHA2
 
 # Intel-specific flags (can be removed with nointel target)
@@ -65,6 +66,11 @@ INTEL_FLAGS := -DHWSHA2
 
 # Default libraries
 LDLIBS ?= -lm
+
+# Check if SFTP is enabled and add -ldl ( "DLL" style ) if needed
+ifneq (,$(findstring -DSFTP,$(CPPFLAGS)))
+  LDLIBS += -ldl
+endif
 
 # Install directories (customizable via PREFIX)
 PREFIX ?= /usr/local

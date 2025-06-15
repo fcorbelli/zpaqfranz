@@ -137,4 +137,4 @@ Credits and copyrights and licenses and links and internal bookmarks
 47 Thanks to https://github.com/brad0                   for OpenBSD fix
 48 Thanks to Carlo, Debian user                         for debugging support
 49 Thanks to https://github.com/KnightAR                for -stdin bug from 60.7 to 60.8
-
+50 Thanks to https://github.com/kskarlatos              for a very nasty bug on g++ with -tar

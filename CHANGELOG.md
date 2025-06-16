@@ -1,3 +1,54 @@
+### [61.4] - 2025-06-16
+
+# - Many features in this release (e.g., `-image`, `-ntfs`, `ntfs` command, `work resetacl`) are experimental and not fully tested. Use with caution and report issues.
+
+#### Added
+
+##### For *nix (Linux, etc.)
+- **`-image` Switch**: Added to the `a` (add) command to create a sector-by-sector copy of a device, similar to the `dd` command.
+  - Restored images can be mounted on Linux using a snippet like:
+    ```bash
+    fdisk -l image.img
+    losetup -fP _dev_sda.img
+    losetup -a
+    mkdir -p /ripristinato
+    mount /dev/loop0p1 /ripristinato
+    (...)
+    umount /ripristinato
+    losetup -d /dev/loop0
+    ```
+  - Experimental feature; not thoroughly tested.
+- **`-tar` Switch**: Available during archive creation (`a`) and extraction (`x`) to preserve file access rights, group, and user metadata.
+  - When used with the `l` (list) command, displays the added metadata.
+  - Simplifies metadata restoration for *nix systems.
+- **Improved ZFS Backup Handling**: Enhanced automatic integration with `pv` for better user feedback on backup progress during ZFS operations.
+
+##### For Windows
+- **`-ntfs` Switch**: When used with `-image`, stores only the used sectors of an NTFS partition in the zpaq archive.
+  - Format is experimental and not yet optimized.
+  - Intended for emergency image-based backups of Windows systems.
+- **New `ntfs` Command**: Regenerates the original file from a zpaqfranz-created image, filling unused sectors with zeros.
+  - Experimental and under active development.
+- **`-ntfs` Switch (without `-image`)**: Scans an NTFS drive by reading and decoding its NTFS data directly, bypassing file-by-file enumeration.
+  - Similar to the behavior of the "Everything" utility.
+  - Significantly speeds up file enumeration on large, slow servers with magnetic disks.
+- **New `work resetacl` Command**: Generates a batch file to reset folder permissions to administrators.
+  - Useful for normalizing access after restoring NTFS folders with restricted permissions.
+  - Experimental; intended to address post-restore access issues.
+
+#### Changed
+- **Code Refactoring**: Reduced compilation warnings for both Windows and *nix platforms.
+- **Dropbox Cache Handling**: Skips `.dropbox.cache` folders during operations to avoid unnecessary processing.
+- **Command Path Detection (*nix)**: Adopted a smarter strategy to locate *nix commands in likely directories, improving reliability.
+
+#### Notes
+- The `-ntfs` switch is designed for specific use cases like large server enumeration or emergency backups but may evolve in future releases.
+- The `-tar` switch enhances metadata handling for *nix, making it easier to restore complex file permissions.
+- The `pv` integration for ZFS backups improves user experience but requires `pv` to be installed.
+- Feedback and bug reports are welcome via GitHub issues.
+
+  
+
 ## [61.3] - 2025-04-05
 
 ### Added

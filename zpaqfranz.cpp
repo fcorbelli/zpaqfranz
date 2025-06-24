@@ -52,8 +52,8 @@ WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 */
-#define ZPAQ_VERSION "61.4u"
-#define ZPAQ_DATE "(2025-06-15)"  // cannot use __DATE__ on Debian!
+#define ZPAQ_VERSION "61.5e"
+#define ZPAQ_DATE "(2025-06-24)"  // cannot use __DATE__ on Debian!
 
 ///	optional align for malloc (sparc64,HPPA) via -DALIGNMALLOC
 #define STR(a) #a
@@ -7881,6 +7881,8 @@ int g_thememfilefragend			=0;
 FILE* 	g_output_handle;
 FILE* 	g_error_handle;
 bool flagignore;
+bool flagappendoutput;
+bool flagwriteonconsole;
 bool flagnotrim;
 bool flagonedrive;
 bool flaghw;	// this slow down vs HWSHA1
@@ -8081,6 +8083,7 @@ bool flagnomac;
 bool flagnosynology;
 bool flagnorecursion;
 bool flagnosort;
+bool flaglast;
 bool flagpakka;
 bool flagdistinct;
 bool flagparanoid;
@@ -11125,6 +11128,7 @@ public:
 	// digits
 	char **zero()
 	{
+		char code='#';
 		char **character = getCharGrid();
 		for (int i = 0; i < 7; i++)
 		{
@@ -11133,35 +11137,35 @@ public:
 				if (i == 0 || i == 6)
 				{
 					if (j == 1 || j == 2 || j == 4 || j == 5)
-						character[i][j] = '0';
+						character[i][j] = code;
 					else
 						character[i][j] = ' ';
 				}
 				if (i == 1 || i == 5)
 				{
 					if (j == 0 || j == 1 || j == 5 || j == 6)
-						character[i][j] = '0';
+						character[i][j] = code;
 					else
 						character[i][j] = ' ';
 				}
 				if (i == 2)
 				{
 					if (j == 0 || j == 1 || j == 4 || j == 5 || j == 6)
-						character[i][j] = '0';
+						character[i][j] = code;
 					else
 						character[i][j] = ' ';
 				}
 				if (i == 3)
 				{
 					if (j == 0 || j == 1 || j == 3 || j == 5 || j == 6)
-						character[i][j] = '0';
+						character[i][j] = code;
 					else
 						character[i][j] = ' ';
 				}
 				if (i == 4)
 				{
 					if (j == 0 || j == 1 || j == 2 || j == 5 || j == 6)
-						character[i][j] = '0';
+						character[i][j] = code;
 					else
 						character[i][j] = ' ';
 				}
@@ -11172,6 +11176,7 @@ public:
 
 	char **one()
 	{
+		char code='#';//'1';
 		char **character = getCharGrid();
 		for (int i = 0; i < 7; i++)
 		{
@@ -11180,21 +11185,21 @@ public:
 				if (i == 0 || i == 2 || i == 3 || i == 4 || i == 5)
 				{
 					if (j == 2 || j == 3)
-						character[i][j] = '1';
+						character[i][j] = code;
 					else
 						character[i][j] = ' ';
 				}
 				if (i == 1)
 				{
 					if (j == 1 || j == 2 || j == 3)
-						character[i][j] = '1';
+						character[i][j] = code;
 					else
 						character[i][j] = ' ';
 				}
 				if (i == 6)
 				{
 					if (j == 1 || j == 2 || j == 3 || j == 4)
-						character[i][j] = '1';
+						character[i][j] = code;
 					else
 						character[i][j] = ' ';
 				}
@@ -11204,6 +11209,7 @@ public:
 	}
 	char **two()
 	{
+		char code='#';//'2';
 		char **character = getCharGrid();
 		for (int i = 0; i < 7; i++)
 		{
@@ -11212,49 +11218,49 @@ public:
 				if (i == 0)
 				{
 					if (j == 0 || j == 1 || j == 3 || j == 4)
-						character[i][j] = '2';
+						character[i][j] = code;
 					else
 						character[i][j] = ' ';
 				}
 				if (i == 1)
 				{
 					if (j == 0 || j == 1 || j == 4 || j == 5)
-						character[i][j] = '2';
+						character[i][j] = code;
 					else
 						character[i][j] = ' ';
 				}
 				if (i == 2)
 				{
 					if (j == 4 || j == 5)
-						character[i][j] = '2';
+						character[i][j] = code;
 					else
 						character[i][j] = ' ';
 				}
 				if (i == 3)
 				{
 					if (j == 3 || j == 4)
-						character[i][j] = '2';
+						character[i][j] = code;
 					else
 						character[i][j] = ' ';
 				}
 				if (i == 4)
 				{
 					if (j == 2 || j == 3)
-						character[i][j] = '2';
+						character[i][j] = code;
 					else
 						character[i][j] = ' ';
 				}
 				if (i == 5)
 				{
 					if (j == 1 || j == 5 || j == 6)
-						character[i][j] = '2';
+						character[i][j] = code;
 					else
 						character[i][j] = ' ';
 				}
 				if (i == 6)
 				{
 					if (j == 0 || j == 1 || j == 2 || j == 3 || j == 4 || j == 5)
-						character[i][j] = '2';
+						character[i][j] = code;
 					else
 						character[i][j] = ' ';
 				}
@@ -11265,6 +11271,7 @@ public:
 
 	char **three()
 	{
+		char code='#';//'3';
 		char **character = getCharGrid();
 		for (int i = 0; i < 7; i++)
 		{
@@ -11273,28 +11280,28 @@ public:
 				if (i == 0 || i == 6)
 				{
 					if (j == 1 || j == 2 || j == 4 || j == 5)
-						character[i][j] = '3';
+						character[i][j] = code;
 					else
 						character[i][j] = ' ';
 				}
 				if (i == 1 || i == 5)
 				{
 					if (j == 0 || j == 1 || j == 5 || j == 6)
-						character[i][j] = '3';
+						character[i][j] = code;
 					else
 						character[i][j] = ' ';
 				}
 				if (i == 2 || i == 4)
 				{
 					if (j == 5 || j == 6)
-						character[i][j] = '3';
+						character[i][j] = code;
 					else
 						character[i][j] = ' ';
 				}
 				if (i == 3)
 				{
 					if (j == 3 || j == 4 || j == 5)
-						character[i][j] = '3';
+						character[i][j] = code;
 					else
 						character[i][j] = ' ';
 				}
@@ -11305,6 +11312,7 @@ public:
 
 	char **four()
 	{
+		char code='#';//'4';
 		char **character = getCharGrid();
 		for (int i = 0; i < 7; i++)
 		{
@@ -11313,35 +11321,35 @@ public:
 				if (i == 0 || i == 5 || i == 6)
 				{
 					if (j == 4 || j == 5)
-						character[i][j] = '4';
+						character[i][j] = code;
 					else
 						character[i][j] = ' ';
 				}
 				if (i == 1)
 				{
 					if (j == 2 || j == 4 || j == 5)
-						character[i][j] = '4';
+						character[i][j] = code;
 					else
 						character[i][j] = ' ';
 				}
 				if (i == 2)
 				{
 					if (j == 1 || j == 2 || j == 4 || j == 5)
-						character[i][j] = '4';
+						character[i][j] = code;
 					else
 						character[i][j] = ' ';
 				}
 				if (i == 3)
 				{
 					if (j == 0 || j == 1 || j == 4 || j == 5)
-						character[i][j] = '4';
+						character[i][j] = code;
 					else
 						character[i][j] = ' ';
 				}
 				if (i == 4)
 				{
 					if (j == 0 || j == 1 || j == 2 || j == 4 || j == 5 || j == 6)
-						character[i][j] = '4';
+						character[i][j] = code;
 					else
 						character[i][j] = ' ';
 				}
@@ -11352,6 +11360,7 @@ public:
 
 	char **five()
 	{
+		char code='#';//'5';
 		char **character = getCharGrid();
 		for (int i = 0; i < 7; i++)
 		{
@@ -11360,42 +11369,42 @@ public:
 				if (i == 0)
 				{
 					if (j == 0 || j == 1 || j == 2 || j == 3 || j == 4 || j == 5)
-						character[i][j] = '5';
+						character[i][j] = code;
 					else
 						character[i][j] = ' ';
 				}
 				if (i == 1)
 				{
 					if (j == 0 || j == 1)
-						character[i][j] = '5';
+						character[i][j] = code;
 					else
 						character[i][j] = ' ';
 				}
 				if (i == 2)
 				{
 					if (j == 0 || j == 1 || j == 3 || j == 4)
-						character[i][j] = '5';
+						character[i][j] = code;
 					else
 						character[i][j] = ' ';
 				}
 				if (i == 3)
 				{
 					if (j == 4 || j == 5)
-						character[i][j] = '5';
+						character[i][j] = code;
 					else
 						character[i][j] = ' ';
 				}
 				if (i == 4 || i == 5)
 				{
 					if (j == 0 || j == 1 || j == 4 || j == 5)
-						character[i][j] = '5';
+						character[i][j] = code;
 					else
 						character[i][j] = ' ';
 				}
 				if (i == 6)
 				{
 					if (j == 2 || j == 3 || j == 4)
-						character[i][j] = '5';
+						character[i][j] = code;
 					else
 						character[i][j] = ' ';
 				}
@@ -11406,6 +11415,7 @@ public:
 
 	char **six()
 	{
+		char code='#';//'6';//'6';
 		char **character = getCharGrid();
 		for (int i = 0; i < 7; i++)
 		{
@@ -11414,35 +11424,35 @@ public:
 				if (i == 0)
 				{
 					if (j == 1 || j == 2 || j == 4 || j == 5 || j == 6)
-						character[i][j] = '6';
+						character[i][j] = code;
 					else
 						character[i][j] = ' ';
 				}
 				if (i == 1 || i == 4 || i == 5)
 				{
 					if (j == 0 || j == 1 || j == 5 || j == 6)
-						character[i][j] = '6';
+						character[i][j] = code;
 					else
 						character[i][j] = ' ';
 				}
 				if (i == 2)
 				{
 					if (j == 0 || j == 1)
-						character[i][j] = '6';
+						character[i][j] = code;
 					else
 						character[i][j] = ' ';
 				}
 				if (i == 3)
 				{
 					if (j == 0 || j == 1 || j == 3 || j == 4 || j == 5)
-						character[i][j] = '6';
+						character[i][j] = code;
 					else
 						character[i][j] = ' ';
 				}
 				if (i == 6)
 				{
 					if (j == 1 || j == 2 || j == 4 || j == 5)
-						character[i][j] = '6';
+						character[i][j] = code;
 					else
 						character[i][j] = ' ';
 				}
@@ -11453,6 +11463,7 @@ public:
 
 	char **seven()
 	{
+		char code='#';//'7';
 		char **character = getCharGrid();
 		for (int i = 0; i < 7; i++)
 		{
@@ -11461,28 +11472,28 @@ public:
 				if (i == 0)
 				{
 					if (j == 0 || j == 1 || j == 2 || j == 3 || j == 4 || j == 5)
-						character[i][j] = '7';
+						character[i][j] = code;
 					else
 						character[i][j] = ' ';
 				}
 				if (i == 1)
 				{
 					if (j == 0 || j == 1 || j == 5)
-						character[i][j] = '7';
+						character[i][j] = code;
 					else
 						character[i][j] = ' ';
 				}
 				if (i == 2)
 				{
 					if (j == 3 || j == 4)
-						character[i][j] = '7';
+						character[i][j] = code;
 					else
 						character[i][j] = ' ';
 				}
 				if (i == 3 || i == 4 || i == 5 || i == 6)
 				{
 					if (j == 2 || j == 3)
-						character[i][j] = '7';
+						character[i][j] = code;
 					else
 						character[i][j] = ' ';
 				}
@@ -11493,6 +11504,7 @@ public:
 
 	char **eight()
 	{
+		char code='#';//'8';
 		char **character = getCharGrid();
 		for (int i = 0; i < 7; i++)
 		{
@@ -11501,14 +11513,14 @@ public:
 				if (i == 0 || i == 3 || i == 6)
 				{
 					if (j == 1 || j == 2 || j == 4 || j == 5)
-						character[i][j] = '8';
+						character[i][j] = code;
 					else
 						character[i][j] = ' ';
 				}
 				if (i == 1 || i == 2 || i == 4 || i == 5)
 				{
 					if (j == 0 || j == 1 || j == 5 || j == 6)
-						character[i][j] = '8';
+						character[i][j] = code;
 					else
 						character[i][j] = ' ';
 				}
@@ -11519,6 +11531,7 @@ public:
 
 	char **nine()
 	{
+		char code='#';//'9';
 		char **character = getCharGrid();
 		for (int i = 0; i < 7; i++)
 		{
@@ -11527,42 +11540,42 @@ public:
 				if (i == 0 || i == 6)
 				{
 					if (j == 1 || j == 2 || j == 4 || j == 5)
-						character[i][j] = '9';
+						character[i][j] = code;
 					else
 						character[i][j] = ' ';
 				}
 				if (i == 1)
 				{
 					if (j == 1 || j == 5 || j == 6)
-						character[i][j] = '9';
+						character[i][j] = code;
 					else
 						character[i][j] = ' ';
 				}
 				if (i == 2)
 				{
 					if (j == 0 || j == 1 || j == 5 || j == 6)
-						character[i][j] = '9';
+						character[i][j] = code;
 					else
 						character[i][j] = ' ';
 				}
 				if (i == 3)
 				{
 					if (j == 1 || j == 2 || j == 4 || j == 5 || j == 6)
-						character[i][j] = '9';
+						character[i][j] = code;
 					else
 						character[i][j] = ' ';
 				}
 				if (i == 4)
 				{
 					if (j == 5 || j == 6)
-						character[i][j] = '9';
+						character[i][j] = code;
 					else
 						character[i][j] = ' ';
 				}
 				if (i == 5)
 				{
 					if (j == 0 || j == 1 || j == 5 || j == 6)
-						character[i][j] = '9';
+						character[i][j] = code;
 					else
 						character[i][j] = ' ';
 				}
@@ -18302,6 +18315,70 @@ bool Compiler::matchToken(const char* word) {
   return !*word && (*a<=' ' || *a=='(');
 }
 // Print error message and exit
+
+#if defined(__OpenBSD__)
+
+void Compiler::syntaxError(const char* msg, const char* expected) {
+    Array<char> sbuf(128); // Buffer per il messaggio di errore
+    char* s = &sbuf[0];
+    s[0] = '\0'; // Inizializza il buffer vuoto
+
+    // Concatena "Config line "
+    if (strlcat(s, "Config line ", sizeof(sbuf)) >= sizeof(sbuf)) {
+        error("Buffer overflow in syntaxError");
+        return;
+    }
+
+    // Aggiungi il numero di linea
+    char line_buf[16];
+    snprintf(line_buf, sizeof(line_buf), "%d", line);
+    if (strlcat(s, line_buf, sizeof(sbuf)) >= sizeof(sbuf)) {
+        error("Buffer overflow in syntaxError");
+        return;
+    }
+
+    // Concatena " at "
+    if (strlcat(s, " at ", sizeof(sbuf)) >= sizeof(sbuf)) {
+        error("Buffer overflow in syntaxError");
+        return;
+    }
+
+    // Aggiungi il token trovato (limitato a 40 caratteri)
+    size_t len = strlen(s);
+    size_t i;
+    for (i = 0; i < 40 && len + i < sizeof(sbuf) - 1 && *in > ' '; ++i) {
+        s[len + i] = *in++;
+    }
+    s[len + i] = '\0'; // Termina la stringa
+
+    // Concatena ": "
+    if (strlcat(s, ": ", sizeof(sbuf)) >= sizeof(sbuf)) {
+        error("Buffer overflow in syntaxError");
+        return;
+    }
+
+    // Aggiungi il messaggio (limitato a 40 caratteri)
+    if (strlcat(s, msg, sizeof(sbuf)) >= sizeof(sbuf)) {
+        error("Buffer overflow in syntaxError");
+        return;
+    }
+
+    // Aggiungi l'expected, se presente
+    if (expected) {
+        if (strlcat(s, ", expected: ", sizeof(sbuf)) >= sizeof(sbuf)) {
+            error("Buffer overflow in syntaxError");
+            return;
+        }
+        if (strlcat(s, expected, sizeof(sbuf)) >= sizeof(sbuf)) {
+            error("Buffer overflow in syntaxError");
+            return;
+        }
+    }
+
+    error(s);
+}
+#else
+	
 void Compiler::syntaxError(const char* msg, const char* expected) {
   Array<char> sbuf(128);  // error message to report
   char* s=&sbuf[0];
@@ -18319,6 +18396,7 @@ void Compiler::syntaxError(const char* msg, const char* expected) {
   }
   error(s);
 }
+#endif
 // Read a token, which must be in the NULL terminated list or else
 // exit with an error. If found, return its index.
 int Compiler::rtoken(const char* list[]) {
@@ -32461,12645 +32539,136 @@ string decodewinattribute(int32_t i_attribute)
 		risultato+="VIRTUAL;";
 	return risultato;
 }
-string	decodewinerror(DWORD	i_error,const char* i_filename)
+string decodewinerror(DWORD i_error, const char* i_filename)
 {
-	string 	risultato	="";
-	char buffer[100];
-
-	if (i_error==0L) risultato="ERROR_SUCCESS";
-	else
-	if (i_error==1L) risultato="ERROR_INVALID_FUNCTION";
-	else
-	if (i_error==2L) risultato="ERROR_FILE_NOT_FOUND";
-	else
-	if (i_error==3L)
+    string risultato = "";
+    char buffer[100];
+    
+    // Usa FormatMessage per ottenere automaticamente la descrizione dell'errore
+    LPSTR messageBuffer = nullptr;
+    size_t size = FormatMessageA(
+        FORMAT_MESSAGE_ALLOCATE_BUFFER | 
+        FORMAT_MESSAGE_FROM_SYSTEM | 
+        FORMAT_MESSAGE_IGNORE_INSERTS,
+        NULL,
+        i_error,
+        MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+        (LPSTR)&messageBuffer,
+        0,
+        NULL
+    );
+    
+    if (size > 0 && messageBuffer != nullptr) 
 	{
-			risultato="ERROR_PATH_NOT_FOUND";
-			if (i_filename)
-				if (strlen(i_filename)>255)
+        // Converti il messaggio in string e rimuovi eventuali \r\n finali
+        risultato = string(messageBuffer, size);
+        LocalFree(messageBuffer);
+        
+        // Rimuovi caratteri di fine riga
+        while (!risultato.empty() && (risultato.back() == '\n' || risultato.back() == '\r')) 
+		    risultato.pop_back();
+        
+        
+        // Sanitizza caratteri non ASCII e sostituisci spazi con underscore
+        string sanitized = "";
+        for (char c : risultato) 
+		{
+			if (c=='.')
+			{
+			}
+			else
+            if (static_cast<unsigned char>(c) >= 128) 
+			{
+                // Carattere non ASCII - sostituisci con equivalente ASCII
+                switch (static_cast<unsigned char>(c)) 
 				{
-					snprintf(buffer,sizeof(buffer),"%08d",(int)strlen(i_filename));
-					string lunghezza=buffer;
-					risultato+=" : maybe length "+lunghezza+" >255?";
-					g_255++;
+                    case 0xC0: case 0xC1: case 0xC2: case 0xC3: case 0xC4: case 0xC5: // À Á Â Ã Ä Å
+                        sanitized += 'A'; break;
+                    case 0xE0: case 0xE1: case 0xE2: case 0xE3: case 0xE4: case 0xE5: // à á â ã ä å
+                        sanitized += 'A'; break;
+                    case 0xC8: case 0xC9: case 0xCA: case 0xCB: // È É Ê Ë
+                        sanitized += 'E'; break;
+                    case 0xE8: case 0xE9: case 0xEA: case 0xEB: // è é ê ë
+                        sanitized += 'E'; break;
+                    case 0xCC: case 0xCD: case 0xCE: case 0xCF: // Ì Í Î Ï
+                        sanitized += 'I'; break;
+                    case 0xEC: case 0xED: case 0xEE: case 0xEF: // ì í î ï
+                        sanitized += 'I'; break;
+                    case 0xD2: case 0xD3: case 0xD4: case 0xD5: case 0xD6: case 0xD8: // Ò Ó Ô Õ Ö Ø
+                        sanitized += 'O'; break;
+                    case 0xF2: case 0xF3: case 0xF4: case 0xF5: case 0xF6: case 0xF8: // ò ó ô õ ö ø
+                        sanitized += 'O'; break;
+                    case 0xD9: case 0xDA: case 0xDB: case 0xDC: // Ù Ú Û Ü
+                        sanitized += 'U'; break;
+                    case 0xF9: case 0xFA: case 0xFB: case 0xFC: // ù ú û ü
+                        sanitized += 'U'; break;
+                    case 0xD1: // Ñ
+                        sanitized += 'N'; break;
+                    case 0xF1: // ñ
+                        sanitized += 'N'; break;
+                    case 0xC7: // Ç
+                        sanitized += 'C'; break;
+                    case 0xE7: // ç
+                        sanitized += 'C'; break;
+                    default:
+                        sanitized += '?'; // Carattere sconosciuto
+                        break;
 				}
-	}
-	else
-	if (i_error==4L) risultato="ERROR_TOO_MANY_OPEN_FILES";
-	else
-	if (i_error==5L) risultato="ERROR_ACCESS_DENIED";
-	else
-	if (i_error==6L) risultato="ERROR_INVALID_HANDLE";
-	else
-	if (i_error==7L) risultato="ERROR_ARENA_TRASHED";
-	else
-	if (i_error==8L) risultato="ERROR_NOT_ENOUGH_MEMORY";
-	else
-	if (i_error==9L) risultato="ERROR_INVALID_BLOCK";
-	else
-	if (i_error==10L) risultato="ERROR_BAD_ENVIRONMENT";
-	else
-	if (i_error==11L) risultato="ERROR_BAD_FORMAT";
-	else
-	if (i_error==12L) risultato="ERROR_INVALID_ACCESS";
-	else
-	if (i_error==13L) risultato="ERROR_INVALID_DATA";
-	else
-	if (i_error==14L) risultato="ERROR_OUTOFMEMORY";
-	else
-	if (i_error==15L) risultato="ERROR_INVALID_DRIVE";
-	else
-	if (i_error==16L) risultato="ERROR_CURRENT_DIRECTORY";
-	else
-	if (i_error==17L) risultato="ERROR_NOT_SAME_DEVICE";
-	else
-	if (i_error==18L) risultato="ERROR_NO_MORE_FILES";
-	else
-	if (i_error==19L) risultato="ERROR_WRITE_PROTECT";
-	else
-	if (i_error==20L) risultato="ERROR_BAD_UNIT";
-	else
-	if (i_error==21L) risultato="ERROR_NOT_READY";
-	else
-	if (i_error==22L) risultato="ERROR_BAD_COMMAND";
-	else
-	if (i_error==23L) risultato="ERROR_CRC";
-	else
-	if (i_error==24L) risultato="ERROR_BAD_LENGTH";
-	else
-	if (i_error==25L) risultato="ERROR_SEEK";
-	else
-	if (i_error==26L) risultato="ERROR_NOT_DOS_DISK";
-	else
-	if (i_error==27L) risultato="ERROR_SECTOR_NOT_FOUND";
-	else
-	if (i_error==28L) risultato="ERROR_OUT_OF_PAPER";
-	else
-	if (i_error==29L) risultato="ERROR_WRITE_FAULT";
-	else
-	if (i_error==30L) risultato="ERROR_READ_FAULT";
-	else
-	if (i_error==31L) risultato="ERROR_GEN_FAILURE";
-	else
-	if (i_error==32L) risultato="ERROR_SHARING_VIOLATION";
-	else
-	if (i_error==33L) risultato="ERROR_LOCK_VIOLATION";
-	else
-	if (i_error==34L) risultato="ERROR_WRONG_DISK";
-	else
-	if (i_error==36L) risultato="ERROR_SHARING_BUFFER_EXCEEDED";
-	else
-	if (i_error==38L) risultato="ERROR_HANDLE_EOF";
-	else
-	if (i_error==39L) risultato="ERROR_HANDLE_DISK_FULL";
-	else
-	if (i_error==50L) risultato="ERROR_NOT_SUPPORTED";
-	else
-	if (i_error==51L) risultato="ERROR_REM_NOT_LIST";
-	else
-	if (i_error==52L) risultato="ERROR_DUP_NAME";
-	else
-	if (i_error==53L) risultato="ERROR_BAD_NETPATH";
-	else
-	if (i_error==54L) risultato="ERROR_NETWORK_BUSY";
-	else
-	if (i_error==55L) risultato="ERROR_DEV_NOT_EXIST";
-	else
-	if (i_error==56L) risultato="ERROR_TOO_MANY_CMDS";
-	else
-	if (i_error==57L) risultato="ERROR_ADAP_HDW_ERR";
-	else
-	if (i_error==58L) risultato="ERROR_BAD_NET_RESP";
-	else
-	if (i_error==59L) risultato="ERROR_UNEXP_NET_ERR";
-	else
-	if (i_error==60L) risultato="ERROR_BAD_REM_ADAP";
-	else
-	if (i_error==61L) risultato="ERROR_PRINTQ_FULL";
-	else
-	if (i_error==62L) risultato="ERROR_NO_SPOOL_SPACE";
-	else
-	if (i_error==63L) risultato="ERROR_PRINT_CANCELLED";
-	else
-	if (i_error==64L) risultato="ERROR_NETNAME_DELETED";
-	else
-	if (i_error==65L) risultato="ERROR_NETWORK_ACCESS_DENIED";
-	else
-	if (i_error==66L) risultato="ERROR_BAD_DEV_TYPE";
-	else
-	if (i_error==67L) risultato="ERROR_BAD_NET_NAME";
-	else
-	if (i_error==68L) risultato="ERROR_TOO_MANY_NAMES";
-	else
-	if (i_error==69L) risultato="ERROR_TOO_MANY_SESS";
-	else
-	if (i_error==70L) risultato="ERROR_SHARING_PAUSED";
-	else
-	if (i_error==71L) risultato="ERROR_REQ_NOT_ACCEP";
-	else
-	if (i_error==72L) risultato="ERROR_REDIR_PAUSED";
-	else
-	if (i_error==80L) risultato="ERROR_FILE_EXISTS";
-	else
-	if (i_error==82L) risultato="ERROR_CANNOT_MAKE";
-	else
-	if (i_error==83L) risultato="ERROR_FAIL_I24";
-	else
-	if (i_error==84L) risultato="ERROR_OUT_OF_STRUCTURES";
-	else
-	if (i_error==85L) risultato="ERROR_ALREADY_ASSIGNED";
-	else
-	if (i_error==86L) risultato="ERROR_INVALID_PASSWORD";
-	else
-	if (i_error==87L) risultato="ERROR_INVALID_PARAMETER";
-	else
-	if (i_error==88L) risultato="ERROR_NET_WRITE_FAULT";
-	else
-	if (i_error==89L) risultato="ERROR_NO_PROC_SLOTS";
-	else
-	if (i_error==100L) risultato="ERROR_TOO_MANY_SEMAPHORES";
-	else
-	if (i_error==101L) risultato="ERROR_EXCL_SEM_ALREADY_OWNED";
-	else
-	if (i_error==102L) risultato="ERROR_SEM_IS_SET";
-	else
-	if (i_error==103L) risultato="ERROR_TOO_MANY_SEM_REQUESTS";
-	else
-	if (i_error==104L) risultato="ERROR_INVALID_AT_INTERRUPT_TIME";
-	else
-	if (i_error==105L) risultato="ERROR_SEM_OWNER_DIED";
-	else
-	if (i_error==106L) risultato="ERROR_SEM_USER_LIMIT";
-	else
-	if (i_error==107L) risultato="ERROR_DISK_CHANGE";
-	else
-	if (i_error==108L) risultato="ERROR_DRIVE_LOCKED";
-	else
-	if (i_error==109L) risultato="ERROR_BROKEN_PIPE";
-	else
-	if (i_error==110L) risultato="ERROR_OPEN_FAILED";
-	else
-	if (i_error==111L) risultato="ERROR_BUFFER_OVERFLOW";
-	else
-	if (i_error==112L) risultato="ERROR_DISK_FULL";
-	else
-	if (i_error==113L) risultato="ERROR_NO_MORE_SEARCH_HANDLES";
-	else
-	if (i_error==114L) risultato="ERROR_INVALID_TARGET_HANDLE";
-	else
-	if (i_error==117L) risultato="ERROR_INVALID_CATEGORY";
-	else
-	if (i_error==118L) risultato="ERROR_INVALID_VERIFY_SWITCH";
-	else
-	if (i_error==119L) risultato="ERROR_BAD_DRIVER_LEVEL";
-	else
-	if (i_error==120L) risultato="ERROR_CALL_NOT_IMPLEMENTED";
-	else
-	if (i_error==121L) risultato="ERROR_SEM_TIMEOUT";
-	else
-	if (i_error==122L) risultato="ERROR_INSUFFICIENT_BUFFER";
-	else
-	if (i_error==123L) risultato="ERROR_INVALID_NAME";
-	else
-	if (i_error==124L) risultato="ERROR_INVALID_LEVEL";
-	else
-	if (i_error==125L) risultato="ERROR_NO_VOLUME_LABEL";
-	else
-	if (i_error==126L) risultato="ERROR_MOD_NOT_FOUND";
-	else
-	if (i_error==127L) risultato="ERROR_PROC_NOT_FOUND";
-	else
-	if (i_error==128L) risultato="ERROR_WAIT_NO_CHILDREN";
-	else
-	if (i_error==129L) risultato="ERROR_CHILD_NOT_COMPLETE";
-	else
-	if (i_error==130L) risultato="ERROR_DIRECT_ACCESS_HANDLE";
-	else
-	if (i_error==131L) risultato="ERROR_NEGATIVE_SEEK";
-	else
-	if (i_error==132L) risultato="ERROR_SEEK_ON_DEVICE";
-	else
-	if (i_error==133L) risultato="ERROR_IS_JOIN_TARGET";
-	else
-	if (i_error==134L) risultato="ERROR_IS_JOINED";
-	else
-	if (i_error==135L) risultato="ERROR_IS_SUBSTED";
-	else
-	if (i_error==136L) risultato="ERROR_NOT_JOINED";
-	else
-	if (i_error==137L) risultato="ERROR_NOT_SUBSTED";
-	else
-	if (i_error==138L) risultato="ERROR_JOIN_TO_JOIN";
-	else
-	if (i_error==139L) risultato="ERROR_SUBST_TO_SUBST";
-	else
-	if (i_error==140L) risultato="ERROR_JOIN_TO_SUBST";
-	else
-	if (i_error==141L) risultato="ERROR_SUBST_TO_JOIN";
-	else
-	if (i_error==142L) risultato="ERROR_BUSY_DRIVE";
-	else
-	if (i_error==143L) risultato="ERROR_SAME_DRIVE";
-	else
-	if (i_error==144L) risultato="ERROR_DIR_NOT_ROOT";
-	else
-	if (i_error==145L) risultato="ERROR_DIR_NOT_EMPTY";
-	else
-	if (i_error==146L) risultato="ERROR_IS_SUBST_PATH";
-	else
-	if (i_error==147L) risultato="ERROR_IS_JOIN_PATH";
-	else
-	if (i_error==148L) risultato="ERROR_PATH_BUSY";
-	else
-	if (i_error==149L) risultato="ERROR_IS_SUBST_TARGET";
-	else
-	if (i_error==150L) risultato="ERROR_SYSTEM_TRACE";
-	else
-	if (i_error==151L) risultato="ERROR_INVALID_EVENT_COUNT";
-	else
-	if (i_error==152L) risultato="ERROR_TOO_MANY_MUXWAITERS";
-	else
-	if (i_error==153L) risultato="ERROR_INVALID_LISTFORMAT";
-	else
-	if (i_error==154L) risultato="ERROR_LABEL_TOO_LONG";
-	else
-	if (i_error==155L) risultato="ERROR_TOO_MANY_TCBS";
-	else
-	if (i_error==156L) risultato="ERROR_SIGNAL_REFUSED";
-	else
-	if (i_error==157L) risultato="ERROR_DISCARDED";
-	else
-	if (i_error==158L) risultato="ERROR_NOT_LOCKED";
-	else
-	if (i_error==159L) risultato="ERROR_BAD_THREADID_ADDR";
-	else
-	if (i_error==160L) risultato="ERROR_BAD_ARGUMENTS";
-	else
-	if (i_error==161L) risultato="ERROR_BAD_PATHNAME";
-	else
-	if (i_error==162L) risultato="ERROR_SIGNAL_PENDING";
-	else
-	if (i_error==164L) risultato="ERROR_MAX_THRDS_REACHED";
-	else
-	if (i_error==167L) risultato="ERROR_LOCK_FAILED";
-	else
-	if (i_error==170L) risultato="ERROR_BUSY";
-	else
-	if (i_error==171L) risultato="ERROR_DEVICE_SUPPORT_IN_PROGRESS";
-	else
-	if (i_error==173L) risultato="ERROR_CANCEL_VIOLATION";
-	else
-	if (i_error==174L) risultato="ERROR_ATOMIC_LOCKS_NOT_SUPPORTED";
-	else
-	if (i_error==180L) risultato="ERROR_INVALID_SEGMENT_NUMBER";
-	else
-	if (i_error==182L) risultato="ERROR_INVALID_ORDINAL";
-	else
-	if (i_error==183L) risultato="ERROR_ALREADY_EXISTS";
-	else
-	if (i_error==186L) risultato="ERROR_INVALID_FLAG_NUMBER";
-	else
-	if (i_error==187L) risultato="ERROR_SEM_NOT_FOUND";
-	else
-	if (i_error==188L) risultato="ERROR_INVALID_STARTING_CODESEG";
-	else
-	if (i_error==189L) risultato="ERROR_INVALID_STACKSEG";
-	else
-	if (i_error==190L) risultato="ERROR_INVALID_MODULETYPE";
-	else
-	if (i_error==191L) risultato="ERROR_INVALID_EXE_SIGNATURE";
-	else
-	if (i_error==192L) risultato="ERROR_EXE_MARKED_INVALID";
-	else
-	if (i_error==193L) risultato="ERROR_BAD_EXE_FORMAT";
-	else
-	if (i_error==194L) risultato="ERROR_ITERATED_DATA_EXCEEDS_64k";
-	else
-	if (i_error==195L) risultato="ERROR_INVALID_MINALLOCSIZE";
-	else
-	if (i_error==196L) risultato="ERROR_DYNLINK_FROM_INVALID_RING";
-	else
-	if (i_error==197L) risultato="ERROR_IOPL_NOT_ENABLED";
-	else
-	if (i_error==198L) risultato="ERROR_INVALID_SEGDPL";
-	else
-	if (i_error==199L) risultato="ERROR_AUTODATASEG_EXCEEDS_64k";
-	else
-	if (i_error==200L) risultato="ERROR_RING2SEG_MUST_BE_MOVABLE";
-	else
-	if (i_error==201L) risultato="ERROR_RELOC_CHAIN_XEEDS_SEGLIM";
-	else
-	if (i_error==202L) risultato="ERROR_INFLOOP_IN_RELOC_CHAIN";
-	else
-	if (i_error==203L) risultato="ERROR_ENVVAR_NOT_FOUND";
-	else
-	if (i_error==205L) risultato="ERROR_NO_SIGNAL_SENT";
-	else
-	if (i_error==206L) risultato="ERROR_FILENAME_EXCED_RANGE";
-	else
-	if (i_error==207L) risultato="ERROR_RING2_STACK_IN_USE";
-	else
-	if (i_error==208L) risultato="ERROR_META_EXPANSION_TOO_LONG";
-	else
-	if (i_error==209L) risultato="ERROR_INVALID_SIGNAL_NUMBER";
-	else
-	if (i_error==210L) risultato="ERROR_THREAD_1_INACTIVE";
-	else
-	if (i_error==212L) risultato="ERROR_LOCKED";
-	else
-	if (i_error==214L) risultato="ERROR_TOO_MANY_MODULES";
-	else
-	if (i_error==215L) risultato="ERROR_NESTING_NOT_ALLOWED";
-	else
-	if (i_error==216L) risultato="ERROR_EXE_MACHINE_TYPE_MISMATCH";
-	else
-	if (i_error==217L) risultato="ERROR_EXE_CANNOT_MODIFY_SIGNED_BINARY";
-	else
-	if (i_error==218L) risultato="ERROR_EXE_CANNOT_MODIFY_STRONG_SIGNED_BINARY";
-	else
-	if (i_error==220L) risultato="ERROR_FILE_CHECKED_OUT";
-	else
-	if (i_error==221L) risultato="ERROR_CHECKOUT_REQUIRED";
-	else
-	if (i_error==222L) risultato="ERROR_BAD_FILE_TYPE";
-	else
-	if (i_error==223L) risultato="ERROR_FILE_TOO_LARGE";
-	else
-	if (i_error==224L) risultato="ERROR_FORMS_AUTH_REQUIRED";
-	else
-	if (i_error==225L) risultato="ERROR_VIRUS_INFECTED";
-	else
-	if (i_error==226L) risultato="ERROR_VIRUS_DELETED";
-	else
-	if (i_error==229L) risultato="ERROR_PIPE_LOCAL";
-	else
-	if (i_error==230L) risultato="ERROR_BAD_PIPE";
-	else
-	if (i_error==231L) risultato="ERROR_PIPE_BUSY";
-	else
-	if (i_error==232L) risultato="ERROR_NO_DATA";
-	else
-	if (i_error==233L) risultato="ERROR_PIPE_NOT_CONNECTED";
-	else
-	if (i_error==234L) risultato="ERROR_MORE_DATA";
-	else
-	if (i_error==235L) risultato="ERROR_NO_WORK_DONE";
-	else
-	if (i_error==240L) risultato="ERROR_VC_DISCONNECTED";
-	else
-	if (i_error==254L) risultato="ERROR_INVALID_EA_NAME";
-	else
-	if (i_error==255L) risultato="ERROR_EA_LISTINCONSISTENT";
-	else
-	if (i_error==258L) risultato="WAIT_TIMEOUT";
-	else
-	if (i_error==259L) risultato="ERROR_NO_MORE_ITEMS";
-	else
-	if (i_error==266L) risultato="ERROR_CANNOT_COPY";
-	else
-	if (i_error==267L) risultato="ERROR_DIRECTORY";
-	else
-	if (i_error==275L) risultato="ERROR_EAS_DIDNT_FIT";
-	else
-	if (i_error==276L) risultato="ERROR_EA_FILE_CORRUPT";
-	else
-	if (i_error==277L) risultato="ERROR_EA_TABLE_FULL";
-	else
-	if (i_error==278L) risultato="ERROR_INVALID_EA_HANDLE";
-	else
-	if (i_error==282L) risultato="ERROR_EAS_NOT_SUPPORTED";
-	else
-	if (i_error==288L) risultato="ERROR_NOT_OWNER";
-	else
-	if (i_error==298L) risultato="ERROR_TOO_MANY_POSTS";
-	else
-	if (i_error==299L) risultato="ERROR_PARTIAL_COPY";
-	else
-	if (i_error==300L) risultato="ERROR_OPLOCK_NOT_GRANTED";
-	else
-	if (i_error==301L) risultato="ERROR_INVALID_OPLOCK_PROTOCOL";
-	else
-	if (i_error==302L) risultato="ERROR_DISK_TOO_FRAGMENTED";
-	else
-	if (i_error==303L) risultato="ERROR_DELETE_PENDING";
-	else
-	if (i_error==304L) risultato="ERROR_INCOMPATIBLE_WITH_GLOBAL_SHORT_NAME_REGISTRY_SETTING";
-	else
-	if (i_error==305L) risultato="ERROR_SHORT_NAMES_NOT_ENABLED_ON_VOLUME";
-	else
-	if (i_error==306L) risultato="ERROR_SECURITY_STREAM_IS_INCONSISTENT";
-	else
-	if (i_error==307L) risultato="ERROR_INVALID_LOCK_RANGE";
-	else
-	if (i_error==308L) risultato="ERROR_IMAGE_SUBSYSTEM_NOT_PRESENT";
-	else
-	if (i_error==309L) risultato="ERROR_NOTIFICATION_GUID_ALREADY_DEFINED";
-	else
-	if (i_error==310L) risultato="ERROR_INVALID_EXCEPTION_HANDLER";
-	else
-	if (i_error==311L) risultato="ERROR_DUPLICATE_PRIVILEGES";
-	else
-	if (i_error==312L) risultato="ERROR_NO_RANGES_PROCESSED";
-	else
-	if (i_error==313L) risultato="ERROR_NOT_ALLOWED_ON_SYSTEM_FILE";
-	else
-	if (i_error==314L) risultato="ERROR_DISK_RESOURCES_EXHAUSTED";
-	else
-	if (i_error==315L) risultato="ERROR_INVALID_TOKEN";
-	else
-	if (i_error==316L) risultato="ERROR_DEVICE_FEATURE_NOT_SUPPORTED";
-	else
-	if (i_error==317L) risultato="ERROR_MR_MID_NOT_FOUND";
-	else
-	if (i_error==318L) risultato="ERROR_SCOPE_NOT_FOUND";
-	else
-	if (i_error==319L) risultato="ERROR_UNDEFINED_SCOPE";
-	else
-	if (i_error==320L) risultato="ERROR_INVALID_CAP";
-	else
-	if (i_error==321L) risultato="ERROR_DEVICE_UNREACHABLE";
-	else
-	if (i_error==322L) risultato="ERROR_DEVICE_NO_RESOURCES";
-	else
-	if (i_error==323L) risultato="ERROR_DATA_CHECKSUM_ERROR";
-	else
-	if (i_error==324L) risultato="ERROR_INTERMIXED_KERNEL_EA_OPERATION";
-	else
-	if (i_error==326L) risultato="ERROR_FILE_LEVEL_TRIM_NOT_SUPPORTED";
-	else
-	if (i_error==327L) risultato="ERROR_OFFSET_ALIGNMENT_VIOLATION";
-	else
-	if (i_error==328L) risultato="ERROR_INVALID_FIELD_IN_PARAMETER_LIST";
-	else
-	if (i_error==329L) risultato="ERROR_OPERATION_IN_PROGRESS";
-	else
-	if (i_error==330L) risultato="ERROR_BAD_DEVICE_PATH";
-	else
-	if (i_error==331L) risultato="ERROR_TOO_MANY_DESCRIPTORS";
-	else
-	if (i_error==332L) risultato="ERROR_SCRUB_DATA_DISABLED";
-	else
-	if (i_error==333L) risultato="ERROR_NOT_REDUNDANT_STORAGE";
-	else
-	if (i_error==334L) risultato="ERROR_RESIDENT_FILE_NOT_SUPPORTED";
-	else
-	if (i_error==335L) risultato="ERROR_COMPRESSED_FILE_NOT_SUPPORTED";
-	else
-	if (i_error==336L) risultato="ERROR_DIRECTORY_NOT_SUPPORTED";
-	else
-	if (i_error==337L) risultato="ERROR_NOT_READ_FROM_COPY";
-	else
-	if (i_error==338L) risultato="ERROR_FT_WRITE_FAILURE";
-	else
-	if (i_error==339L) risultato="ERROR_FT_DI_SCAN_REQUIRED";
-	else
-	if (i_error==340L) risultato="ERROR_INVALID_KERNEL_INFO_VERSION";
-	else
-	if (i_error==341L) risultato="ERROR_INVALID_PEP_INFO_VERSION";
-	else
-	if (i_error==342L) risultato="ERROR_OBJECT_NOT_EXTERNALLY_BACKED";
-	else
-	if (i_error==343L) risultato="ERROR_EXTERNAL_BACKING_PROVIDER_UNKNOWN";
-	else
-	if (i_error==344L) risultato="ERROR_COMPRESSION_NOT_BENEFICIAL";
-	else
-	if (i_error==345L) risultato="ERROR_STORAGE_TOPOLOGY_ID_MISMATCH";
-	else
-	if (i_error==346L) risultato="ERROR_BLOCKED_BY_PARENTAL_CONTROLS";
-	else
-	if (i_error==347L) risultato="ERROR_BLOCK_TOO_MANY_REFERENCES";
-	else
-	if (i_error==348L) risultato="ERROR_MARKED_TO_DISALLOW_WRITES";
-	else
-	if (i_error==349L) risultato="ERROR_ENCLAVE_FAILURE";
-	else
-	if (i_error==350L) risultato="ERROR_FAIL_NOACTION_REBOOT";
-	else
-	if (i_error==351L) risultato="ERROR_FAIL_SHUTDOWN";
-	else
-	if (i_error==352L) risultato="ERROR_FAIL_RESTART";
-	else
-	if (i_error==353L) risultato="ERROR_MAX_SESSIONS_REACHED";
-	else
-	if (i_error==354L) risultato="ERROR_NETWORK_ACCESS_DENIED_EDP";
-	else
-	if (i_error==355L) risultato="ERROR_DEVICE_HINT_NAME_BUFFER_TOO_SMALL";
-	else
-	if (i_error==356L) risultato="ERROR_EDP_POLICY_DENIES_OPERATION";
-	else
-	if (i_error==357L) risultato="ERROR_EDP_DPL_POLICY_CANT_BE_SATISFIED";
-	else
-	if (i_error==358L) risultato="ERROR_CLOUD_FILE_PROVIDER_UNKNOWN";
-	else
-	if (i_error==359L) risultato="ERROR_DEVICE_IN_MAINTENANCE";
-	else
-	if (i_error==360L) risultato="ERROR_NOT_SUPPORTED_ON_DAX";
-	else
-	if (i_error==361L) risultato="ERROR_DAX_MAPPING_EXISTS";
-	else
-	if (i_error==362L) risultato="ERROR_CLOUD_FILE_PROVIDER_NOT_RUNNING";
-	else
-	if (i_error==363L) risultato="ERROR_CLOUD_FILE_METADATA_CORRUPT";
-	else
-	if (i_error==364L) risultato="ERROR_CLOUD_FILE_METADATA_TOO_LARGE";
-	else
-	if (i_error==365L) risultato="ERROR_CLOUD_FILE_PROPERTY_BLOB_TOO_LARGE";
-	else
-	if (i_error==366L) risultato="ERROR_CLOUD_FILE_PROPERTY_BLOB_CHECKSUM_MISMATCH";
-	else
-	if (i_error==367L) risultato="ERROR_CHILD_PROCESS_BLOCKED";
-	else
-	if (i_error==368L) risultato="ERROR_STORAGE_LOST_DATA_PERSISTENCE";
-	else
-	if (i_error==400L) risultato="ERROR_THREAD_MODE_ALREADY_BACKGROUND";
-	else
-	if (i_error==401L) risultato="ERROR_THREAD_MODE_NOT_BACKGROUND";
-	else
-	if (i_error==402L) risultato="ERROR_PROCESS_MODE_ALREADY_BACKGROUND";
-	else
-	if (i_error==403L) risultato="ERROR_PROCESS_MODE_NOT_BACKGROUND";
-	else
-	if (i_error==450L) risultato="ERROR_CAPAUTHZ_NOT_DEVUNLOCKED";
-	else
-	if (i_error==451L) risultato="ERROR_CAPAUTHZ_CHANGE_TYPE";
-	else
-	if (i_error==452L) risultato="ERROR_CAPAUTHZ_NOT_PROVISIONED";
-	else
-	if (i_error==453L) risultato="ERROR_CAPAUTHZ_NOT_AUTHORIZED";
-	else
-	if (i_error==454L) risultato="ERROR_CAPAUTHZ_NO_POLICY";
-	else
-	if (i_error==455L) risultato="ERROR_CAPAUTHZ_DB_CORRUPTED";
-	else
-	if (i_error==483L) risultato="ERROR_DEVICE_HARDWARE_ERROR";
-	else
-	if (i_error==487L) risultato="ERROR_INVALID_ADDRESS";
-	else
-	if (i_error==500L) risultato="ERROR_USER_PROFILE_LOAD";
-	else
-	if (i_error==534L) risultato="ERROR_ARITHMETIC_OVERFLOW";
-	else
-	if (i_error==535L) risultato="ERROR_PIPE_CONNECTED";
-	else
-	if (i_error==536L) risultato="ERROR_PIPE_LISTENING";
-	else
-	if (i_error==537L) risultato="ERROR_VERIFIER_STOP";
-	else
-	if (i_error==538L) risultato="ERROR_ABIOS_ERROR";
-	else
-	if (i_error==539L) risultato="ERROR_WX86_WARNING";
-	else
-	if (i_error==540L) risultato="ERROR_WX86_ERROR";
-	else
-	if (i_error==541L) risultato="ERROR_TIMER_NOT_CANCELED";
-	else
-	if (i_error==542L) risultato="ERROR_UNWIND";
-	else
-	if (i_error==543L) risultato="ERROR_BAD_STACK";
-	else
-	if (i_error==544L) risultato="ERROR_INVALID_UNWIND_TARGET";
-	else
-	if (i_error==545L) risultato="ERROR_INVALID_PORT_ATTRIBUTES";
-	else
-	if (i_error==546L) risultato="ERROR_PORT_MESSAGE_TOO_LONG";
-	else
-	if (i_error==547L) risultato="ERROR_INVALID_QUOTA_LOWER";
-	else
-	if (i_error==548L) risultato="ERROR_DEVICE_ALREADY_ATTACHED";
-	else
-	if (i_error==549L) risultato="ERROR_INSTRUCTION_MISALIGNMENT";
-	else
-	if (i_error==550L) risultato="ERROR_PROFILING_NOT_STARTED";
-	else
-	if (i_error==551L) risultato="ERROR_PROFILING_NOT_STOPPED";
-	else
-	if (i_error==552L) risultato="ERROR_COULD_NOT_INTERPRET";
-	else
-	if (i_error==553L) risultato="ERROR_PROFILING_AT_LIMIT";
-	else
-	if (i_error==554L) risultato="ERROR_CANT_WAIT";
-	else
-	if (i_error==555L) risultato="ERROR_CANT_TERMINATE_SELF";
-	else
-	if (i_error==556L) risultato="ERROR_UNEXPECTED_MM_CREATE_ERR";
-	else
-	if (i_error==557L) risultato="ERROR_UNEXPECTED_MM_MAP_ERROR";
-	else
-	if (i_error==558L) risultato="ERROR_UNEXPECTED_MM_EXTEND_ERR";
-	else
-	if (i_error==559L) risultato="ERROR_BAD_FUNCTION_TABLE";
-	else
-	if (i_error==560L) risultato="ERROR_NO_GUID_TRANSLATION";
-	else
-	if (i_error==561L) risultato="ERROR_INVALID_LDT_SIZE";
-	else
-	if (i_error==563L) risultato="ERROR_INVALID_LDT_OFFSET";
-	else
-	if (i_error==564L) risultato="ERROR_INVALID_LDT_DESCRIPTOR";
-	else
-	if (i_error==565L) risultato="ERROR_TOO_MANY_THREADS";
-	else
-	if (i_error==566L) risultato="ERROR_THREAD_NOT_IN_PROCESS";
-	else
-	if (i_error==567L) risultato="ERROR_PAGEFILE_QUOTA_EXCEEDED";
-	else
-	if (i_error==568L) risultato="ERROR_LOGON_SERVER_CONFLICT";
-	else
-	if (i_error==569L) risultato="ERROR_SYNCHRONIZATION_REQUIRED";
-	else
-	if (i_error==570L) risultato="ERROR_NET_OPEN_FAILED";
-	else
-	if (i_error==571L) risultato="ERROR_IO_PRIVILEGE_FAILED";
-	else
-	if (i_error==572L) risultato="ERROR_CONTROL_C_EXIT";
-	else
-	if (i_error==573L) risultato="ERROR_MISSING_SYSTEMFILE";
-	else
-	if (i_error==574L) risultato="ERROR_UNHANDLED_EXCEPTION";
-	else
-	if (i_error==575L) risultato="ERROR_APP_INIT_FAILURE";
-	else
-	if (i_error==576L) risultato="ERROR_PAGEFILE_CREATE_FAILED";
-	else
-	if (i_error==577L) risultato="ERROR_INVALID_IMAGE_HASH";
-	else
-	if (i_error==578L) risultato="ERROR_NO_PAGEFILE";
-	else
-	if (i_error==579L) risultato="ERROR_ILLEGAL_FLOAT_CONTEXT";
-	else
-	if (i_error==580L) risultato="ERROR_NO_EVENT_PAIR";
-	else
-	if (i_error==581L) risultato="ERROR_DOMAIN_CTRLR_CONFIG_ERROR";
-	else
-	if (i_error==582L) risultato="ERROR_ILLEGAL_CHARACTER";
-	else
-	if (i_error==583L) risultato="ERROR_UNDEFINED_CHARACTER";
-	else
-	if (i_error==584L) risultato="ERROR_FLOPPY_VOLUME";
-	else
-	if (i_error==585L) risultato="ERROR_BIOS_FAILED_TO_CONNECT_INTERRUPT";
-	else
-	if (i_error==586L) risultato="ERROR_BACKUP_CONTROLLER";
-	else
-	if (i_error==587L) risultato="ERROR_MUTANT_LIMIT_EXCEEDED";
-	else
-	if (i_error==588L) risultato="ERROR_FS_DRIVER_REQUIRED";
-	else
-	if (i_error==589L) risultato="ERROR_CANNOT_LOAD_REGISTRY_FILE";
-	else
-	if (i_error==590L) risultato="ERROR_DEBUG_ATTACH_FAILED";
-	else
-	if (i_error==591L) risultato="ERROR_SYSTEM_PROCESS_TERMINATED";
-	else
-	if (i_error==592L) risultato="ERROR_DATA_NOT_ACCEPTED";
-	else
-	if (i_error==593L) risultato="ERROR_VDM_HARD_ERROR";
-	else
-	if (i_error==594L) risultato="ERROR_DRIVER_CANCEL_TIMEOUT";
-	else
-	if (i_error==595L) risultato="ERROR_REPLY_MESSAGE_MISMATCH";
-	else
-	if (i_error==596L) risultato="ERROR_LOST_WRITEBEHIND_DATA";
-	else
-	if (i_error==597L) risultato="ERROR_CLIENT_SERVER_PARAMETERS_INVALID";
-	else
-	if (i_error==598L) risultato="ERROR_NOT_TINY_STREAM";
-	else
-	if (i_error==599L) risultato="ERROR_STACK_OVERFLOW_READ";
-	else
-	if (i_error==600L) risultato="ERROR_CONVERT_TO_LARGE";
-	else
-	if (i_error==601L) risultato="ERROR_FOUND_OUT_OF_SCOPE";
-	else
-	if (i_error==602L) risultato="ERROR_ALLOCATE_BUCKET";
-	else
-	if (i_error==603L) risultato="ERROR_MARSHALL_OVERFLOW";
-	else
-	if (i_error==604L) risultato="ERROR_INVALID_VARIANT";
-	else
-	if (i_error==605L) risultato="ERROR_BAD_COMPRESSION_BUFFER";
-	else
-	if (i_error==606L) risultato="ERROR_AUDIT_FAILED";
-	else
-	if (i_error==607L) risultato="ERROR_TIMER_RESOLUTION_NOT_SET";
-	else
-	if (i_error==608L) risultato="ERROR_INSUFFICIENT_LOGON_INFO";
-	else
-	if (i_error==609L) risultato="ERROR_BAD_DLL_ENTRYPOINT";
-	else
-	if (i_error==610L) risultato="ERROR_BAD_SERVICE_ENTRYPOINT";
-	else
-	if (i_error==611L) risultato="ERROR_IP_ADDRESS_CONFLICT1";
-	else
-	if (i_error==612L) risultato="ERROR_IP_ADDRESS_CONFLICT2";
-	else
-	if (i_error==613L) risultato="ERROR_REGISTRY_QUOTA_LIMIT";
-	else
-	if (i_error==614L) risultato="ERROR_NO_CALLBACK_ACTIVE";
-	else
-	if (i_error==615L) risultato="ERROR_PWD_TOO_SHORT";
-	else
-	if (i_error==616L) risultato="ERROR_PWD_TOO_RECENT";
-	else
-	if (i_error==617L) risultato="ERROR_PWD_HISTORY_CONFLICT";
-	else
-	if (i_error==618L) risultato="ERROR_UNSUPPORTED_COMPRESSION";
-	else
-	if (i_error==619L) risultato="ERROR_INVALID_HW_PROFILE";
-	else
-	if (i_error==620L) risultato="ERROR_INVALID_PLUGPLAY_DEVICE_PATH";
-	else
-	if (i_error==621L) risultato="ERROR_QUOTA_LISTINCONSISTENT";
-	else
-	if (i_error==622L) risultato="ERROR_EVALUATION_EXPIRATION";
-	else
-	if (i_error==623L) risultato="ERROR_ILLEGAL_DLL_RELOCATION";
-	else
-	if (i_error==624L) risultato="ERROR_DLL_INIT_FAILED_LOGOFF";
-	else
-	if (i_error==625L) risultato="ERROR_VALIDATE_CONTINUE";
-	else
-	if (i_error==626L) risultato="ERROR_NO_MORE_MATCHES";
-	else
-	if (i_error==627L) risultato="ERROR_RANGE_LISTCONFLICT";
-	else
-	if (i_error==628L) risultato="ERROR_SERVER_SID_MISMATCH";
-	else
-	if (i_error==629L) risultato="ERROR_CANT_ENABLE_DENY_ONLY";
-	else
-	if (i_error==630L) risultato="ERROR_FLOAT_MULTIPLE_FAULTS";
-	else
-	if (i_error==631L) risultato="ERROR_FLOAT_MULTIPLE_TRAPS";
-	else
-	if (i_error==632L) risultato="ERROR_NOINTERFACE";
-	else
-	if (i_error==633L) risultato="ERROR_DRIVER_FAILED_SLEEP";
-	else
-	if (i_error==634L) risultato="ERROR_CORRUPT_SYSTEM_FILE";
-	else
-	if (i_error==635L) risultato="ERROR_COMMITMENT_MINIMUM";
-	else
-	if (i_error==636L) risultato="ERROR_PNP_RESTART_ENUMERATION";
-	else
-	if (i_error==637L) risultato="ERROR_SYSTEM_IMAGE_BAD_SIGNATURE";
-	else
-	if (i_error==638L) risultato="ERROR_PNP_REBOOT_REQUIRED";
-	else
-	if (i_error==639L) risultato="ERROR_INSUFFICIENT_POWER";
-	else
-	if (i_error==640L) risultato="ERROR_MULTIPLE_FAULT_VIOLATION";
-	else
-	if (i_error==641L) risultato="ERROR_SYSTEM_SHUTDOWN";
-	else
-	if (i_error==642L) risultato="ERROR_PORT_NOT_SET";
-	else
-	if (i_error==643L) risultato="ERROR_DS_VERSION_CHECK_FAILURE";
-	else
-	if (i_error==644L) risultato="ERROR_RANGE_NOT_FOUND";
-	else
-	if (i_error==646L) risultato="ERROR_NOT_SAFE_MODE_DRIVER";
-	else
-	if (i_error==647L) risultato="ERROR_FAILED_DRIVER_ENTRY";
-	else
-	if (i_error==648L) risultato="ERROR_DEVICE_ENUMERATION_ERROR";
-	else
-	if (i_error==649L) risultato="ERROR_MOUNT_POINT_NOT_RESOLVED";
-	else
-	if (i_error==650L) risultato="ERROR_INVALID_DEVICE_OBJECT_PARAMETER";
-	else
-	if (i_error==651L) risultato="ERROR_MCA_OCCURED";
-	else
-	if (i_error==652L) risultato="ERROR_DRIVER_DATABASE_ERROR";
-	else
-	if (i_error==653L) risultato="ERROR_SYSTEM_HIVE_TOO_LARGE";
-	else
-	if (i_error==654L) risultato="ERROR_DRIVER_FAILED_PRIOR_UNLOAD";
-	else
-	if (i_error==655L) risultato="ERROR_VOLSNAP_PREPARE_HIBERNATE";
-	else
-	if (i_error==656L) risultato="ERROR_HIBERNATION_FAILURE";
-	else
-	if (i_error==657L) risultato="ERROR_PWD_TOO_LONG";
-	else
-	if (i_error==665L) risultato="ERROR_FILE_SYSTEM_LIMITATION";
-	else
-	if (i_error==668L) risultato="ERROR_ASSERTION_FAILURE";
-	else
-	if (i_error==669L) risultato="ERROR_ACPI_ERROR";
-	else
-	if (i_error==670L) risultato="ERROR_WOW_ASSERTION";
-	else
-	if (i_error==671L) risultato="ERROR_PNP_BAD_MPS_TABLE";
-	else
-	if (i_error==672L) risultato="ERROR_PNP_TRANSLATION_FAILED";
-	else
-	if (i_error==673L) risultato="ERROR_PNP_IRQ_TRANSLATION_FAILED";
-	else
-	if (i_error==674L) risultato="ERROR_PNP_INVALID_ID";
-	else
-	if (i_error==675L) risultato="ERROR_WAKE_SYSTEM_DEBUGGER";
-	else
-	if (i_error==676L) risultato="ERROR_HANDLES_CLOSED";
-	else
-	if (i_error==677L) risultato="ERROR_EXTRANEOUS_INFORMATION";
-	else
-	if (i_error==678L) risultato="ERROR_RXACT_COMMIT_NECESSARY";
-	else
-	if (i_error==679L) risultato="ERROR_MEDIA_CHECK";
-	else
-	if (i_error==680L) risultato="ERROR_GUID_SUBSTITUTION_MADE";
-	else
-	if (i_error==681L) risultato="ERROR_STOPPED_ON_SYMLINK";
-	else
-	if (i_error==682L) risultato="ERROR_LONGJUMP";
-	else
-	if (i_error==683L) risultato="ERROR_PLUGPLAY_QUERY_VETOED";
-	else
-	if (i_error==684L) risultato="ERROR_UNWIND_CONSOLIDATE";
-	else
-	if (i_error==685L) risultato="ERROR_REGISTRY_HIVE_RECOVERED";
-	else
-	if (i_error==686L) risultato="ERROR_DLL_MIGHT_BE_INSECURE";
-	else
-	if (i_error==687L) risultato="ERROR_DLL_MIGHT_BE_INCOMPATIBLE";
-	else
-	if (i_error==688L) risultato="ERROR_DBG_EXCEPTION_NOT_HANDLED";
-	else
-	if (i_error==689L) risultato="ERROR_DBG_REPLY_LATER";
-	else
-	if (i_error==690L) risultato="ERROR_DBG_UNABLE_TO_PROVIDE_HANDLE";
-	else
-	if (i_error==691L) risultato="ERROR_DBG_TERMINATE_THREAD";
-	else
-	if (i_error==692L) risultato="ERROR_DBG_TERMINATE_PROCESS";
-	else
-	if (i_error==693L) risultato="ERROR_DBG_CONTROL_C";
-	else
-	if (i_error==694L) risultato="ERROR_DBG_PRINTEXCEPTION_C";
-	else
-	if (i_error==695L) risultato="ERROR_DBG_RIPEXCEPTION";
-	else
-	if (i_error==696L) risultato="ERROR_DBG_CONTROL_BREAK";
-	else
-	if (i_error==697L) risultato="ERROR_DBG_COMMAND_EXCEPTION";
-	else
-	if (i_error==698L) risultato="ERROR_OBJECT_NAME_EXISTS";
-	else
-	if (i_error==699L) risultato="ERROR_THREAD_WAS_SUSPENDED";
-	else
-	if (i_error==700L) risultato="ERROR_IMAGE_NOT_AT_BASE";
-	else
-	if (i_error==701L) risultato="ERROR_RXACT_STATE_CREATED";
-	else
-	if (i_error==702L) risultato="ERROR_SEGMENT_NOTIFICATION";
-	else
-	if (i_error==703L) risultato="ERROR_BAD_CURRENT_DIRECTORY";
-	else
-	if (i_error==704L) risultato="ERROR_FT_READ_RECOVERY_FROM_BACKUP";
-	else
-	if (i_error==705L) risultato="ERROR_FT_WRITE_RECOVERY";
-	else
-	if (i_error==706L) risultato="ERROR_IMAGE_MACHINE_TYPE_MISMATCH";
-	else
-	if (i_error==707L) risultato="ERROR_RECEIVE_PARTIAL";
-	else
-	if (i_error==708L) risultato="ERROR_RECEIVE_EXPEDITED";
-	else
-	if (i_error==709L) risultato="ERROR_RECEIVE_PARTIAL_EXPEDITED";
-	else
-	if (i_error==710L) risultato="ERROR_EVENT_DONE";
-	else
-	if (i_error==711L) risultato="ERROR_EVENT_PENDING";
-	else
-	if (i_error==712L) risultato="ERROR_CHECKING_FILE_SYSTEM";
-	else
-	if (i_error==713L) risultato="ERROR_FATAL_APP_EXIT";
-	else
-	if (i_error==714L) risultato="ERROR_PREDEFINED_HANDLE";
-	else
-	if (i_error==715L) risultato="ERROR_WAS_UNLOCKED";
-	else
-	if (i_error==716L) risultato="ERROR_SERVICE_NOTIFICATION";
-	else
-	if (i_error==717L) risultato="ERROR_WAS_LOCKED";
-	else
-	if (i_error==718L) risultato="ERROR_LOG_HARD_ERROR";
-	else
-	if (i_error==719L) risultato="ERROR_ALREADY_WIN32";
-	else
-	if (i_error==720L) risultato="ERROR_IMAGE_MACHINE_TYPE_MISMATCH_EXE";
-	else
-	if (i_error==721L) risultato="ERROR_NO_YIELD_PERFORMED";
-	else
-	if (i_error==722L) risultato="ERROR_TIMER_RESUME_IGNORED";
-	else
-	if (i_error==723L) risultato="ERROR_ARBITRATION_UNHANDLED";
-	else
-	if (i_error==724L) risultato="ERROR_CARDBUS_NOT_SUPPORTED";
-	else
-	if (i_error==725L) risultato="ERROR_MP_PROCESSOR_MISMATCH";
-	else
-	if (i_error==726L) risultato="ERROR_HIBERNATED";
-	else
-	if (i_error==727L) risultato="ERROR_RESUME_HIBERNATION";
-	else
-	if (i_error==728L) risultato="ERROR_FIRMWARE_UPDATED";
-	else
-	if (i_error==729L) risultato="ERROR_DRIVERS_LEAKING_LOCKED_PAGES";
-	else
-	if (i_error==730L) risultato="ERROR_WAKE_SYSTEM";
-	else
-	if (i_error==731L) risultato="ERROR_WAIT_1";
-	else
-	if (i_error==732L) risultato="ERROR_WAIT_2";
-	else
-	if (i_error==733L) risultato="ERROR_WAIT_3";
-	else
-	if (i_error==734L) risultato="ERROR_WAIT_63";
-	else
-	if (i_error==735L) risultato="ERROR_ABANDONED_WAIT_0";
-	else
-	if (i_error==736L) risultato="ERROR_ABANDONED_WAIT_63";
-	else
-	if (i_error==737L) risultato="ERROR_USER_APC";
-	else
-	if (i_error==738L) risultato="ERROR_KERNEL_APC";
-	else
-	if (i_error==739L) risultato="ERROR_ALERTED";
-	else
-	if (i_error==740L) risultato="ERROR_ELEVATION_REQUIRED";
-	else
-	if (i_error==741L) risultato="ERROR_REPARSE";
-	else
-	if (i_error==742L) risultato="ERROR_OPLOCK_BREAK_IN_PROGRESS";
-	else
-	if (i_error==743L) risultato="ERROR_VOLUME_MOUNTED";
-	else
-	if (i_error==744L) risultato="ERROR_RXACT_COMMITTED";
-	else
-	if (i_error==745L) risultato="ERROR_NOTIFY_CLEANUP";
-	else
-	if (i_error==746L) risultato="ERROR_PRIMARY_TRANSPORT_CONNECT_FAILED";
-	else
-	if (i_error==747L) risultato="ERROR_PAGE_FAULT_TRANSITION";
-	else
-	if (i_error==748L) risultato="ERROR_PAGE_FAULT_DEMAND_ZERO";
-	else
-	if (i_error==749L) risultato="ERROR_PAGE_FAULT_COPY_ON_WRITE";
-	else
-	if (i_error==750L) risultato="ERROR_PAGE_FAULT_GUARD_PAGE";
-	else
-	if (i_error==751L) risultato="ERROR_PAGE_FAULT_PAGING_FILE";
-	else
-	if (i_error==752L) risultato="ERROR_CACHE_PAGE_LOCKED";
-	else
-	if (i_error==753L) risultato="ERROR_CRASH_DUMP";
-	else
-	if (i_error==754L) risultato="ERROR_BUFFER_ALL_ZEROS";
-	else
-	if (i_error==755L) risultato="ERROR_REPARSE_OBJECT";
-	else
-	if (i_error==756L) risultato="ERROR_RESOURCE_REQUIREMENTS_CHANGED";
-	else
-	if (i_error==757L) risultato="ERROR_TRANSLATION_COMPLETE";
-	else
-	if (i_error==758L) risultato="ERROR_NOTHING_TO_TERMINATE";
-	else
-	if (i_error==759L) risultato="ERROR_PROCESS_NOT_IN_JOB";
-	else
-	if (i_error==760L) risultato="ERROR_PROCESS_IN_JOB";
-	else
-	if (i_error==761L) risultato="ERROR_VOLSNAP_HIBERNATE_READY";
-	else
-	if (i_error==762L) risultato="ERROR_FSFILTER_OP_COMPLETED_SUCCESSFULLY";
-	else
-	if (i_error==763L) risultato="ERROR_INTERRUPT_VECTOR_ALREADY_CONNECTED";
-	else
-	if (i_error==764L) risultato="ERROR_INTERRUPT_STILL_CONNECTED";
-	else
-	if (i_error==765L) risultato="ERROR_WAIT_FOR_OPLOCK";
-	else
-	if (i_error==766L) risultato="ERROR_DBG_EXCEPTION_HANDLED";
-	else
-	if (i_error==767L) risultato="ERROR_DBG_CONTINUE";
-	else
-	if (i_error==768L) risultato="ERROR_CALLBACK_POP_STACK";
-	else
-	if (i_error==769L) risultato="ERROR_COMPRESSION_DISABLED";
-	else
-	if (i_error==770L) risultato="ERROR_CANTFETCHBACKWARDS";
-	else
-	if (i_error==771L) risultato="ERROR_CANTSCROLLBACKWARDS";
-	else
-	if (i_error==772L) risultato="ERROR_ROWSNOTRELEASED";
-	else
-	if (i_error==773L) risultato="ERROR_BAD_ACCESSOR_FLAGS";
-	else
-	if (i_error==774L) risultato="ERROR_ERRORS_ENCOUNTERED";
-	else
-	if (i_error==775L) risultato="ERROR_NOT_CAPABLE";
-	else
-	if (i_error==776L) risultato="ERROR_REQUEST_OUT_OF_SEQUENCE";
-	else
-	if (i_error==777L) risultato="ERROR_VERSION_PARSE_ERROR";
-	else
-	if (i_error==778L) risultato="ERROR_BADSTARTPOSITION";
-	else
-	if (i_error==779L) risultato="ERROR_MEMORY_HARDWARE";
-	else
-	if (i_error==780L) risultato="ERROR_DISK_REPAIR_DISABLED";
-	else
-	if (i_error==781L) risultato="ERROR_INSUFFICIENT_RESOURCE_FOR_SPECIFIED_SHARED_SECTION_SIZE";
-	else
-	if (i_error==782L) risultato="ERROR_SYSTEM_POWERSTATE_TRANSITION";
-	else
-	if (i_error==783L) risultato="ERROR_SYSTEM_POWERSTATE_COMPLEX_TRANSITION";
-	else
-	if (i_error==784L) risultato="ERROR_MCA_EXCEPTION";
-	else
-	if (i_error==785L) risultato="ERROR_ACCESS_AUDIT_BY_POLICY";
-	else
-	if (i_error==786L) risultato="ERROR_ACCESS_DISABLED_NO_SAFER_UI_BY_POLICY";
-	else
-	if (i_error==787L) risultato="ERROR_ABANDON_HIBERFILE";
-	else
-	if (i_error==788L) risultato="ERROR_LOST_WRITEBEHIND_DATA_NETWORK_DISCONNECTED";
-	else
-	if (i_error==789L) risultato="ERROR_LOST_WRITEBEHIND_DATA_NETWORK_SERVER_ERROR";
-	else
-	if (i_error==790L) risultato="ERROR_LOST_WRITEBEHIND_DATA_LOCAL_DISK_ERROR";
-	else
-	if (i_error==791L) risultato="ERROR_BAD_MCFG_TABLE";
-	else
-	if (i_error==792L) risultato="ERROR_DISK_REPAIR_REDIRECTED";
-	else
-	if (i_error==793L) risultato="ERROR_DISK_REPAIR_UNSUCCESSFUL";
-	else
-	if (i_error==794L) risultato="ERROR_CORRUPT_LOG_OVERFULL";
-	else
-	if (i_error==795L) risultato="ERROR_CORRUPT_LOG_CORRUPTED";
-	else
-	if (i_error==796L) risultato="ERROR_CORRUPT_LOG_UNAVAILABLE";
-	else
-	if (i_error==797L) risultato="ERROR_CORRUPT_LOG_DELETED_FULL";
-	else
-	if (i_error==798L) risultato="ERROR_CORRUPT_LOG_CLEARED";
-	else
-	if (i_error==799L) risultato="ERROR_ORPHAN_NAME_EXHAUSTED";
-	else
-	if (i_error==800L) risultato="ERROR_OPLOCK_SWITCHED_TO_NEW_HANDLE";
-	else
-	if (i_error==801L) risultato="ERROR_CANNOT_GRANT_REQUESTED_OPLOCK";
-	else
-	if (i_error==802L) risultato="ERROR_CANNOT_BREAK_OPLOCK";
-	else
-	if (i_error==803L) risultato="ERROR_OPLOCK_HANDLE_CLOSED";
-	else
-	if (i_error==804L) risultato="ERROR_NO_ACE_CONDITION";
-	else
-	if (i_error==805L) risultato="ERROR_INVALID_ACE_CONDITION";
-	else
-	if (i_error==806L) risultato="ERROR_FILE_HANDLE_REVOKED";
-	else
-	if (i_error==807L) risultato="ERROR_IMAGE_AT_DIFFERENT_BASE";
-	else
-	if (i_error==808L) risultato="ERROR_ENCRYPTED_IO_NOT_POSSIBLE";
-	else
-	if (i_error==809L) risultato="ERROR_FILE_METADATA_OPTIMIZATION_IN_PROGRESS";
-	else
-	if (i_error==810L) risultato="ERROR_QUOTA_ACTIVITY";
-	else
-	if (i_error==811L) risultato="ERROR_HANDLE_REVOKED";
-	else
-	if (i_error==812L) risultato="ERROR_CALLBACK_INVOKE_INLINE";
-	else
-	if (i_error==813L) risultato="ERROR_CPU_SET_INVALID";
-	else
-	if (i_error==994L) risultato="ERROR_EA_ACCESS_DENIED";
-	else
-	if (i_error==995L) risultato="ERROR_OPERATION_ABORTED";
-	else
-	if (i_error==996L) risultato="ERROR_IO_INCOMPLETE";
-	else
-	if (i_error==997L) risultato="ERROR_IO_PENDING";
-	else
-	if (i_error==998L) risultato="ERROR_NOACCESS";
-	else
-	if (i_error==999L) risultato="ERROR_SWAPERROR";
-	else
-	if (i_error==1001L) risultato="ERROR_STACK_OVERFLOW";
-	else
-	if (i_error==1002L) risultato="ERROR_INVALID_MESSAGE";
-	else
-	if (i_error==1003L) risultato="ERROR_CAN_NOT_COMPLETE";
-	else
-	if (i_error==1004L) risultato="ERROR_INVALID_FLAGS";
-	else
-	if (i_error==1005L) risultato="ERROR_UNRECOGNIZED_VOLUME";
-	else
-	if (i_error==1006L) risultato="ERROR_FILE_INVALID";
-	else
-	if (i_error==1007L) risultato="ERROR_FULLSCREEN_MODE";
-	else
-	if (i_error==1008L) risultato="ERROR_NO_TOKEN";
-	else
-	if (i_error==1009L) risultato="ERROR_BADDB";
-	else
-	if (i_error==1010L) risultato="ERROR_BADKEY";
-	else
-	if (i_error==1011L) risultato="ERROR_CANTOPEN";
-	else
-	if (i_error==1012L) risultato="ERROR_CANTREAD";
-	else
-	if (i_error==1013L) risultato="ERROR_CANTWRITE";
-	else
-	if (i_error==1014L) risultato="ERROR_REGISTRY_RECOVERED";
-	else
-	if (i_error==1015L) risultato="ERROR_REGISTRY_CORRUPT";
-	else
-	if (i_error==1016L) risultato="ERROR_REGISTRY_IO_FAILED";
-	else
-	if (i_error==1017L) risultato="ERROR_NOT_REGISTRY_FILE";
-	else
-	if (i_error==1018L) risultato="ERROR_KEY_DELETED";
-	else
-	if (i_error==1019L) risultato="ERROR_NO_LOG_SPACE";
-	else
-	if (i_error==1020L) risultato="ERROR_KEY_HAS_CHILDREN";
-	else
-	if (i_error==1021L) risultato="ERROR_CHILD_MUST_BE_VOLATILE";
-	else
-	if (i_error==1022L) risultato="ERROR_NOTIFY_ENUM_DIR";
-	else
-	if (i_error==1051L) risultato="ERROR_DEPENDENT_SERVICES_RUNNING";
-	else
-	if (i_error==1052L) risultato="ERROR_INVALID_SERVICE_CONTROL";
-	else
-	if (i_error==1053L) risultato="ERROR_SERVICE_REQUEST_TIMEOUT";
-	else
-	if (i_error==1054L) risultato="ERROR_SERVICE_NO_THREAD";
-	else
-	if (i_error==1055L) risultato="ERROR_SERVICE_DATABASE_LOCKED";
-	else
-	if (i_error==1056L) risultato="ERROR_SERVICE_ALREADY_RUNNING";
-	else
-	if (i_error==1057L) risultato="ERROR_INVALID_SERVICE_ACCOUNT";
-	else
-	if (i_error==1058L) risultato="ERROR_SERVICE_DISABLED";
-	else
-	if (i_error==1059L) risultato="ERROR_CIRCULAR_DEPENDENCY";
-	else
-	if (i_error==1060L) risultato="ERROR_SERVICE_DOES_NOT_EXIST";
-	else
-	if (i_error==1061L) risultato="ERROR_SERVICE_CANNOT_ACCEPT_CTRL";
-	else
-	if (i_error==1062L) risultato="ERROR_SERVICE_NOT_ACTIVE";
-	else
-	if (i_error==1063L) risultato="ERROR_FAILED_SERVICE_CONTROLLER_CONNECT";
-	else
-	if (i_error==1064L) risultato="ERROR_EXCEPTION_IN_SERVICE";
-	else
-	if (i_error==1065L) risultato="ERROR_DATABASE_DOES_NOT_EXIST";
-	else
-	if (i_error==1066L) risultato="ERROR_SERVICE_SPECIFIC_ERROR";
-	else
-	if (i_error==1067L) risultato="ERROR_PROCESS_ABORTED";
-	else
-	if (i_error==1068L) risultato="ERROR_SERVICE_DEPENDENCY_FAIL";
-	else
-	if (i_error==1069L) risultato="ERROR_SERVICE_LOGON_FAILED";
-	else
-	if (i_error==1070L) risultato="ERROR_SERVICE_START_HANG";
-	else
-	if (i_error==1071L) risultato="ERROR_INVALID_SERVICE_LOCK";
-	else
-	if (i_error==1072L) risultato="ERROR_SERVICE_MARKED_FOR_DELETE";
-	else
-	if (i_error==1073L) risultato="ERROR_SERVICE_EXISTS";
-	else
-	if (i_error==1074L) risultato="ERROR_ALREADY_RUNNING_LKG";
-	else
-	if (i_error==1075L) risultato="ERROR_SERVICE_DEPENDENCY_DELETED";
-	else
-	if (i_error==1076L) risultato="ERROR_BOOT_ALREADY_ACCEPTED";
-	else
-	if (i_error==1077L) risultato="ERROR_SERVICE_NEVER_STARTED";
-	else
-	if (i_error==1078L) risultato="ERROR_DUPLICATE_SERVICE_NAME";
-	else
-	if (i_error==1079L) risultato="ERROR_DIFFERENT_SERVICE_ACCOUNT";
-	else
-	if (i_error==1080L) risultato="ERROR_CANNOT_DETECT_DRIVER_FAILURE";
-	else
-	if (i_error==1081L) risultato="ERROR_CANNOT_DETECT_PROCESS_ABORT";
-	else
-	if (i_error==1082L) risultato="ERROR_NO_RECOVERY_PROGRAM";
-	else
-	if (i_error==1083L) risultato="ERROR_SERVICE_NOT_IN_EXE";
-	else
-	if (i_error==1084L) risultato="ERROR_NOT_SAFEBOOT_SERVICE";
-	else
-	if (i_error==1100L) risultato="ERROR_END_OF_MEDIA";
-	else
-	if (i_error==1101L) risultato="ERROR_FILEMARK_DETECTED";
-	else
-	if (i_error==1102L) risultato="ERROR_BEGINNING_OF_MEDIA";
-	else
-	if (i_error==1103L) risultato="ERROR_SETMARK_DETECTED";
-	else
-	if (i_error==1104L) risultato="ERROR_NO_DATA_DETECTED";
-	else
-	if (i_error==1105L) risultato="ERROR_PARTITION_FAILURE";
-	else
-	if (i_error==1106L) risultato="ERROR_INVALID_BLOCK_LENGTH";
-	else
-	if (i_error==1107L) risultato="ERROR_DEVICE_NOT_PARTITIONED";
-	else
-	if (i_error==1108L) risultato="ERROR_UNABLE_TO_LOCK_MEDIA";
-	else
-	if (i_error==1109L) risultato="ERROR_UNABLE_TO_UNLOAD_MEDIA";
-	else
-	if (i_error==1110L) risultato="ERROR_MEDIA_CHANGED";
-	else
-	if (i_error==1111L) risultato="ERROR_BUS_RESET";
-	else
-	if (i_error==1112L) risultato="ERROR_NO_MEDIA_IN_DRIVE";
-	else
-	if (i_error==1113L) risultato="ERROR_NO_UNICODE_TRANSLATION";
-	else
-	if (i_error==1114L) risultato="ERROR_DLL_INIT_FAILED";
-	else
-	if (i_error==1115L) risultato="ERROR_SHUTDOWN_IN_PROGRESS";
-	else
-	if (i_error==1116L) risultato="ERROR_NO_SHUTDOWN_IN_PROGRESS";
-	else
-	if (i_error==1117L) risultato="ERROR_IO_DEVICE";
-	else
-	if (i_error==1118L) risultato="ERROR_SERIAL_NO_DEVICE";
-	else
-	if (i_error==1119L) risultato="ERROR_IRQ_BUSY";
-	else
-	if (i_error==1120L) risultato="ERROR_MORE_WRITES";
-	else
-	if (i_error==1121L) risultato="ERROR_COUNTER_TIMEOUT";
-	else
-	if (i_error==1122L) risultato="ERROR_FLOPPY_ID_MARK_NOT_FOUND";
-	else
-	if (i_error==1123L) risultato="ERROR_FLOPPY_WRONG_CYLINDER";
-	else
-	if (i_error==1124L) risultato="ERROR_FLOPPY_UNKNOWN_ERROR";
-	else
-	if (i_error==1125L) risultato="ERROR_FLOPPY_BAD_REGISTERS";
-	else
-	if (i_error==1126L) risultato="ERROR_DISK_RECALIBRATE_FAILED";
-	else
-	if (i_error==1127L) risultato="ERROR_DISK_OPERATION_FAILED";
-	else
-	if (i_error==1128L) risultato="ERROR_DISK_RESET_FAILED";
-	else
-	if (i_error==1129L) risultato="ERROR_EOM_OVERFLOW";
-	else
-	if (i_error==1130L) risultato="ERROR_NOT_ENOUGH_SERVER_MEMORY";
-	else
-	if (i_error==1131L) risultato="ERROR_POSSIBLE_DEADLOCK";
-	else
-	if (i_error==1132L) risultato="ERROR_MAPPED_ALIGNMENT";
-	else
-	if (i_error==1140L) risultato="ERROR_SET_POWER_STATE_VETOED";
-	else
-	if (i_error==1141L) risultato="ERROR_SET_POWER_STATE_FAILED";
-	else
-	if (i_error==1142L) risultato="ERROR_TOO_MANY_LINKS";
-	else
-	if (i_error==1150L) risultato="ERROR_OLD_WIN_VERSION";
-	else
-	if (i_error==1151L) risultato="ERROR_APP_WRONG_OS";
-	else
-	if (i_error==1152L) risultato="ERROR_SINGLE_INSTANCE_APP";
-	else
-	if (i_error==1153L) risultato="ERROR_RMODE_APP";
-	else
-	if (i_error==1154L) risultato="ERROR_INVALID_DLL";
-	else
-	if (i_error==1155L) risultato="ERROR_NO_ASSOCIATION";
-	else
-	if (i_error==1156L) risultato="ERROR_DDE_FAIL";
-	else
-	if (i_error==1157L) risultato="ERROR_DLL_NOT_FOUND";
-	else
-	if (i_error==1158L) risultato="ERROR_NO_MORE_USER_HANDLES";
-	else
-	if (i_error==1159L) risultato="ERROR_MESSAGE_SYNC_ONLY";
-	else
-	if (i_error==1160L) risultato="ERROR_SOURCE_ELEMENT_EMPTY";
-	else
-	if (i_error==1161L) risultato="ERROR_DESTINATION_ELEMENT_FULL";
-	else
-	if (i_error==1162L) risultato="ERROR_ILLEGAL_ELEMENT_ADDRESS";
-	else
-	if (i_error==1163L) risultato="ERROR_MAGAZINE_NOT_PRESENT";
-	else
-	if (i_error==1164L) risultato="ERROR_DEVICE_REINITIALIZATION_NEEDED";
-	else
-	if (i_error==1165L) risultato="ERROR_DEVICE_REQUIRES_CLEANING";
-	else
-	if (i_error==1166L) risultato="ERROR_DEVICE_DOOR_OPEN";
-	else
-	if (i_error==1167L) risultato="ERROR_DEVICE_NOT_CONNECTED";
-	else
-	if (i_error==1168L) risultato="ERROR_NOT_FOUND";
-	else
-	if (i_error==1169L) risultato="ERROR_NO_MATCH";
-	else
-	if (i_error==1170L) risultato="ERROR_SET_NOT_FOUND";
-	else
-	if (i_error==1171L) risultato="ERROR_POINT_NOT_FOUND";
-	else
-	if (i_error==1172L) risultato="ERROR_NO_TRACKING_SERVICE";
-	else
-	if (i_error==1173L) risultato="ERROR_NO_VOLUME_ID";
-	else
-	if (i_error==1175L) risultato="ERROR_UNABLE_TO_REMOVE_REPLACED";
-	else
-	if (i_error==1176L) risultato="ERROR_UNABLE_TO_MOVE_REPLACEMENT";
-	else
-	if (i_error==1177L) risultato="ERROR_UNABLE_TO_MOVE_REPLACEMENT_2";
-	else
-	if (i_error==1178L) risultato="ERROR_JOURNAL_DELETE_IN_PROGRESS";
-	else
-	if (i_error==1179L) risultato="ERROR_JOURNAL_NOT_ACTIVE";
-	else
-	if (i_error==1180L) risultato="ERROR_POTENTIAL_FILE_FOUND";
-	else
-	if (i_error==1181L) risultato="ERROR_JOURNAL_ENTRY_DELETED";
-	else
-	if (i_error==1190L) risultato="ERROR_SHUTDOWN_IS_SCHEDULED";
-	else
-	if (i_error==1191L) risultato="ERROR_SHUTDOWN_USERS_LOGGED_ON";
-	else
-	if (i_error==1200L) risultato="ERROR_BAD_DEVICE";
-	else
-	if (i_error==1201L) risultato="ERROR_CONNECTION_UNAVAIL";
-	else
-	if (i_error==1202L) risultato="ERROR_DEVICE_ALREADY_REMEMBERED";
-	else
-	if (i_error==1203L) risultato="ERROR_NO_NET_OR_BAD_PATH";
-	else
-	if (i_error==1204L) risultato="ERROR_BAD_PROVIDER";
-	else
-	if (i_error==1205L) risultato="ERROR_CANNOT_OPEN_PROFILE";
-	else
-	if (i_error==1206L) risultato="ERROR_BAD_PROFILE";
-	else
-	if (i_error==1207L) risultato="ERROR_NOT_CONTAINER";
-	else
-	if (i_error==1208L) risultato="ERROR_EXTENDED_ERROR";
-	else
-	if (i_error==1209L) risultato="ERROR_INVALID_GROUPNAME";
-	else
-	if (i_error==1210L) risultato="ERROR_INVALID_COMPUTERNAME";
-	else
-	if (i_error==1211L) risultato="ERROR_INVALID_EVENTNAME";
-	else
-	if (i_error==1212L) risultato="ERROR_INVALID_DOMAINNAME";
-	else
-	if (i_error==1213L) risultato="ERROR_INVALID_SERVICENAME";
-	else
-	if (i_error==1214L) risultato="ERROR_INVALID_NETNAME";
-	else
-	if (i_error==1215L) risultato="ERROR_INVALID_SHARENAME";
-	else
-	if (i_error==1216L) risultato="ERROR_INVALID_PASSWORDNAME";
-	else
-	if (i_error==1217L) risultato="ERROR_INVALID_MESSAGENAME";
-	else
-	if (i_error==1218L) risultato="ERROR_INVALID_MESSAGEDEST";
-	else
-	if (i_error==1219L) risultato="ERROR_SESSION_CREDENTIAL_CONFLICT";
-	else
-	if (i_error==1220L) risultato="ERROR_REMOTE_SESSION_LIMIT_EXCEEDED";
-	else
-	if (i_error==1221L) risultato="ERROR_DUP_DOMAINNAME";
-	else
-	if (i_error==1222L) risultato="ERROR_NO_NETWORK";
-	else
-	if (i_error==1223L) risultato="ERROR_CANCELLED";
-	else
-	if (i_error==1224L) risultato="ERROR_USER_MAPPED_FILE";
-	else
-	if (i_error==1225L) risultato="ERROR_CONNECTION_REFUSED";
-	else
-	if (i_error==1226L) risultato="ERROR_GRACEFUL_DISCONNECT";
-	else
-	if (i_error==1227L) risultato="ERROR_ADDRESS_ALREADY_ASSOCIATED";
-	else
-	if (i_error==1228L) risultato="ERROR_ADDRESS_NOT_ASSOCIATED";
-	else
-	if (i_error==1229L) risultato="ERROR_CONNECTION_INVALID";
-	else
-	if (i_error==1230L) risultato="ERROR_CONNECTION_ACTIVE";
-	else
-	if (i_error==1231L) risultato="ERROR_NETWORK_UNREACHABLE";
-	else
-	if (i_error==1232L) risultato="ERROR_HOST_UNREACHABLE";
-	else
-	if (i_error==1233L) risultato="ERROR_PROTOCOL_UNREACHABLE";
-	else
-	if (i_error==1234L) risultato="ERROR_PORT_UNREACHABLE";
-	else
-	if (i_error==1235L) risultato="ERROR_REQUEST_ABORTED";
-	else
-	if (i_error==1236L) risultato="ERROR_CONNECTION_ABORTED";
-	else
-	if (i_error==1237L) risultato="ERROR_RETRY";
-	else
-	if (i_error==1238L) risultato="ERROR_CONNECTION_COUNT_LIMIT";
-	else
-	if (i_error==1239L) risultato="ERROR_LOGIN_TIME_RESTRICTION";
-	else
-	if (i_error==1240L) risultato="ERROR_LOGIN_WKSTA_RESTRICTION";
-	else
-	if (i_error==1241L) risultato="ERROR_INCORRECT_ADDRESS";
-	else
-	if (i_error==1242L) risultato="ERROR_ALREADY_REGISTERED";
-	else
-	if (i_error==1243L) risultato="ERROR_SERVICE_NOT_FOUND";
-	else
-	if (i_error==1244L) risultato="ERROR_NOT_AUTHENTICATED";
-	else
-	if (i_error==1245L) risultato="ERROR_NOT_LOGGED_ON";
-	else
-	if (i_error==1246L) risultato="ERROR_CONTINUE";
-	else
-	if (i_error==1247L) risultato="ERROR_ALREADY_INITIALIZED";
-	else
-	if (i_error==1248L) risultato="ERROR_NO_MORE_DEVICES";
-	else
-	if (i_error==1249L) risultato="ERROR_NO_SUCH_SITE";
-	else
-	if (i_error==1250L) risultato="ERROR_DOMAIN_CONTROLLER_EXISTS";
-	else
-	if (i_error==1251L) risultato="ERROR_ONLY_IF_CONNECTED";
-	else
-	if (i_error==1252L) risultato="ERROR_OVERRIDE_NOCHANGES";
-	else
-	if (i_error==1253L) risultato="ERROR_BAD_USER_PROFILE";
-	else
-	if (i_error==1254L) risultato="ERROR_NOT_SUPPORTED_ON_SBS";
-	else
-	if (i_error==1255L) risultato="ERROR_SERVER_SHUTDOWN_IN_PROGRESS";
-	else
-	if (i_error==1256L) risultato="ERROR_HOST_DOWN";
-	else
-	if (i_error==1257L) risultato="ERROR_NON_ACCOUNT_SID";
-	else
-	if (i_error==1258L) risultato="ERROR_NON_DOMAIN_SID";
-	else
-	if (i_error==1259L) risultato="ERROR_APPHELP_BLOCK";
-	else
-	if (i_error==1260L) risultato="ERROR_ACCESS_DISABLED_BY_POLICY";
-	else
-	if (i_error==1261L) risultato="ERROR_REG_NAT_CONSUMPTION";
-	else
-	if (i_error==1262L) risultato="ERROR_CSCSHARE_OFFLINE";
-	else
-	if (i_error==1263L) risultato="ERROR_PKINIT_FAILURE";
-	else
-	if (i_error==1264L) risultato="ERROR_SMARTCARD_SUBSYSTEM_FAILURE";
-	else
-	if (i_error==1265L) risultato="ERROR_DOWNGRADE_DETECTED";
-	else
-	if (i_error==1271L) risultato="ERROR_MACHINE_LOCKED";
-	else
-	if (i_error==1272L) risultato="ERROR_SMB_GUEST_LOGON_BLOCKED";
-	else
-	if (i_error==1273L) risultato="ERROR_CALLBACK_SUPPLIED_INVALID_DATA";
-	else
-	if (i_error==1274L) risultato="ERROR_SYNC_FOREGROUND_REFRESH_REQUIRED";
-	else
-	if (i_error==1275L) risultato="ERROR_DRIVER_BLOCKED";
-	else
-	if (i_error==1276L) risultato="ERROR_INVALID_IMPORT_OF_NON_DLL";
-	else
-	if (i_error==1277L) risultato="ERROR_ACCESS_DISABLED_WEBBLADE";
-	else
-	if (i_error==1278L) risultato="ERROR_ACCESS_DISABLED_WEBBLADE_TAMPER";
-	else
-	if (i_error==1279L) risultato="ERROR_RECOVERY_FAILURE";
-	else
-	if (i_error==1280L) risultato="ERROR_ALREADY_FIBER";
-	else
-	if (i_error==1281L) risultato="ERROR_ALREADY_THREAD";
-	else
-	if (i_error==1282L) risultato="ERROR_STACK_BUFFER_OVERRUN";
-	else
-	if (i_error==1283L) risultato="ERROR_PARAMETER_QUOTA_EXCEEDED";
-	else
-	if (i_error==1284L) risultato="ERROR_DEBUGGER_INACTIVE";
-	else
-	if (i_error==1285L) risultato="ERROR_DELAY_LOAD_FAILED";
-	else
-	if (i_error==1286L) risultato="ERROR_VDM_DISALLOWED";
-	else
-	if (i_error==1287L) risultato="ERROR_UNIDENTIFIED_ERROR";
-	else
-	if (i_error==1288L) risultato="ERROR_INVALID_CRUNTIME_PARAMETER";
-	else
-	if (i_error==1289L) risultato="ERROR_BEYOND_VDL";
-	else
-	if (i_error==1290L) risultato="ERROR_INCOMPATIBLE_SERVICE_SID_TYPE";
-	else
-	if (i_error==1291L) risultato="ERROR_DRIVER_PROCESS_TERMINATED";
-	else
-	if (i_error==1292L) risultato="ERROR_IMPLEMENTATION_LIMIT";
-	else
-	if (i_error==1293L) risultato="ERROR_PROCESS_IS_PROTECTED";
-	else
-	if (i_error==1294L) risultato="ERROR_SERVICE_NOTIFY_CLIENT_LAGGING";
-	else
-	if (i_error==1295L) risultato="ERROR_DISK_QUOTA_EXCEEDED";
-	else
-	if (i_error==1296L) risultato="ERROR_CONTENT_BLOCKED";
-	else
-	if (i_error==1297L) risultato="ERROR_INCOMPATIBLE_SERVICE_PRIVILEGE";
-	else
-	if (i_error==1298L) risultato="ERROR_APP_HANG";
-	else
-	if (i_error==1299L) risultato="ERROR_INVALID_LABEL";
-	else
-	if (i_error==1300L) risultato="ERROR_NOT_ALL_ASSIGNED";
-	else
-	if (i_error==1301L) risultato="ERROR_SOME_NOT_MAPPED";
-	else
-	if (i_error==1302L) risultato="ERROR_NO_QUOTAS_FOR_ACCOUNT";
-	else
-	if (i_error==1303L) risultato="ERROR_LOCAL_USER_SESSION_KEY";
-	else
-	if (i_error==1304L) risultato="ERROR_NULL_LM_PASSWORD";
-	else
-	if (i_error==1305L) risultato="ERROR_UNKNOWN_REVISION";
-	else
-	if (i_error==1306L) risultato="ERROR_REVISION_MISMATCH";
-	else
-	if (i_error==1307L) risultato="ERROR_INVALID_OWNER";
-	else
-	if (i_error==1308L) risultato="ERROR_INVALID_PRIMARY_GROUP";
-	else
-	if (i_error==1309L) risultato="ERROR_NO_IMPERSONATION_TOKEN";
-	else
-	if (i_error==1310L) risultato="ERROR_CANT_DISABLE_MANDATORY";
-	else
-	if (i_error==1311L) risultato="ERROR_NO_LOGON_SERVERS";
-	else
-	if (i_error==1312L) risultato="ERROR_NO_SUCH_LOGON_SESSION";
-	else
-	if (i_error==1313L) risultato="ERROR_NO_SUCH_PRIVILEGE";
-	else
-	if (i_error==1314L) risultato="ERROR_PRIVILEGE_NOT_HELD";
-	else
-	if (i_error==1315L) risultato="ERROR_INVALID_ACCOUNT_NAME";
-	else
-	if (i_error==1316L) risultato="ERROR_USER_EXISTS";
-	else
-	if (i_error==1317L) risultato="ERROR_NO_SUCH_USER";
-	else
-	if (i_error==1318L) risultato="ERROR_GROUP_EXISTS";
-	else
-	if (i_error==1319L) risultato="ERROR_NO_SUCH_GROUP";
-	else
-	if (i_error==1320L) risultato="ERROR_MEMBER_IN_GROUP";
-	else
-	if (i_error==1321L) risultato="ERROR_MEMBER_NOT_IN_GROUP";
-	else
-	if (i_error==1322L) risultato="ERROR_LAST_ADMIN";
-	else
-	if (i_error==1323L) risultato="ERROR_WRONG_PASSWORD";
-	else
-	if (i_error==1324L) risultato="ERROR_ILL_FORMED_PASSWORD";
-	else
-	if (i_error==1325L) risultato="ERROR_PASSWORD_RESTRICTION";
-	else
-	if (i_error==1326L) risultato="ERROR_LOGON_FAILURE";
-	else
-	if (i_error==1327L) risultato="ERROR_ACCOUNT_RESTRICTION";
-	else
-	if (i_error==1328L) risultato="ERROR_INVALID_LOGON_HOURS";
-	else
-	if (i_error==1329L) risultato="ERROR_INVALID_WORKSTATION";
-	else
-	if (i_error==1330L) risultato="ERROR_PASSWORD_EXPIRED";
-	else
-	if (i_error==1331L) risultato="ERROR_ACCOUNT_DISABLED";
-	else
-	if (i_error==1332L) risultato="ERROR_NONE_MAPPED";
-	else
-	if (i_error==1333L) risultato="ERROR_TOO_MANY_LUIDS_REQUESTED";
-	else
-	if (i_error==1334L) risultato="ERROR_LUIDS_EXHAUSTED";
-	else
-	if (i_error==1335L) risultato="ERROR_INVALID_SUB_AUTHORITY";
-	else
-	if (i_error==1336L) risultato="ERROR_INVALID_ACL";
-	else
-	if (i_error==1337L) risultato="ERROR_INVALID_SID";
-	else
-	if (i_error==1338L) risultato="ERROR_INVALID_SECURITY_DESCR";
-	else
-	if (i_error==1340L) risultato="ERROR_BAD_INHERITANCE_ACL";
-	else
-	if (i_error==1341L) risultato="ERROR_SERVER_DISABLED";
-	else
-	if (i_error==1342L) risultato="ERROR_SERVER_NOT_DISABLED";
-	else
-	if (i_error==1343L) risultato="ERROR_INVALID_ID_AUTHORITY";
-	else
-	if (i_error==1344L) risultato="ERROR_ALLOTTED_SPACE_EXCEEDED";
-	else
-	if (i_error==1345L) risultato="ERROR_INVALID_GROUP_ATTRIBUTES";
-	else
-	if (i_error==1346L) risultato="ERROR_BAD_IMPERSONATION_LEVEL";
-	else
-	if (i_error==1347L) risultato="ERROR_CANT_OPEN_ANONYMOUS";
-	else
-	if (i_error==1348L) risultato="ERROR_BAD_VALIDATION_CLASS";
-	else
-	if (i_error==1349L) risultato="ERROR_BAD_TOKEN_TYPE";
-	else
-	if (i_error==1350L) risultato="ERROR_NO_SECURITY_ON_OBJECT";
-	else
-	if (i_error==1351L) risultato="ERROR_CANT_ACCESS_DOMAIN_INFO";
-	else
-	if (i_error==1352L) risultato="ERROR_INVALID_SERVER_STATE";
-	else
-	if (i_error==1353L) risultato="ERROR_INVALID_DOMAIN_STATE";
-	else
-	if (i_error==1354L) risultato="ERROR_INVALID_DOMAIN_ROLE";
-	else
-	if (i_error==1355L) risultato="ERROR_NO_SUCH_DOMAIN";
-	else
-	if (i_error==1356L) risultato="ERROR_DOMAIN_EXISTS";
-	else
-	if (i_error==1357L) risultato="ERROR_DOMAIN_LIMIT_EXCEEDED";
-	else
-	if (i_error==1358L) risultato="ERROR_INTERNAL_DB_CORRUPTION";
-	else
-	if (i_error==1359L) risultato="ERROR_INTERNAL_ERROR";
-	else
-	if (i_error==1360L) risultato="ERROR_GENERIC_NOT_MAPPED";
-	else
-	if (i_error==1361L) risultato="ERROR_BAD_DESCRIPTOR_FORMAT";
-	else
-	if (i_error==1362L) risultato="ERROR_NOT_LOGON_PROCESS";
-	else
-	if (i_error==1363L) risultato="ERROR_LOGON_SESSION_EXISTS";
-	else
-	if (i_error==1364L) risultato="ERROR_NO_SUCH_PACKAGE";
-	else
-	if (i_error==1365L) risultato="ERROR_BAD_LOGON_SESSION_STATE";
-	else
-	if (i_error==1366L) risultato="ERROR_LOGON_SESSION_COLLISION";
-	else
-	if (i_error==1367L) risultato="ERROR_INVALID_LOGON_TYPE";
-	else
-	if (i_error==1368L) risultato="ERROR_CANNOT_IMPERSONATE";
-	else
-	if (i_error==1369L) risultato="ERROR_RXACT_INVALID_STATE";
-	else
-	if (i_error==1370L) risultato="ERROR_RXACT_COMMIT_FAILURE";
-	else
-	if (i_error==1371L) risultato="ERROR_SPECIAL_ACCOUNT";
-	else
-	if (i_error==1372L) risultato="ERROR_SPECIAL_GROUP";
-	else
-	if (i_error==1373L) risultato="ERROR_SPECIAL_USER";
-	else
-	if (i_error==1374L) risultato="ERROR_MEMBERS_PRIMARY_GROUP";
-	else
-	if (i_error==1375L) risultato="ERROR_TOKEN_ALREADY_IN_USE";
-	else
-	if (i_error==1376L) risultato="ERROR_NO_SUCH_ALIAS";
-	else
-	if (i_error==1377L) risultato="ERROR_MEMBER_NOT_IN_ALIAS";
-	else
-	if (i_error==1378L) risultato="ERROR_MEMBER_IN_ALIAS";
-	else
-	if (i_error==1379L) risultato="ERROR_ALIAS_EXISTS";
-	else
-	if (i_error==1380L) risultato="ERROR_LOGON_NOT_GRANTED";
-	else
-	if (i_error==1381L) risultato="ERROR_TOO_MANY_SECRETS";
-	else
-	if (i_error==1382L) risultato="ERROR_SECRET_TOO_LONG";
-	else
-	if (i_error==1383L) risultato="ERROR_INTERNAL_DB_ERROR";
-	else
-	if (i_error==1384L) risultato="ERROR_TOO_MANY_CONTEXT_IDS";
-	else
-	if (i_error==1385L) risultato="ERROR_LOGON_TYPE_NOT_GRANTED";
-	else
-	if (i_error==1386L) risultato="ERROR_NT_CROSS_ENCRYPTION_REQUIRED";
-	else
-	if (i_error==1387L) risultato="ERROR_NO_SUCH_MEMBER";
-	else
-	if (i_error==1388L) risultato="ERROR_INVALID_MEMBER";
-	else
-	if (i_error==1389L) risultato="ERROR_TOO_MANY_SIDS";
-	else
-	if (i_error==1390L) risultato="ERROR_LM_CROSS_ENCRYPTION_REQUIRED";
-	else
-	if (i_error==1391L) risultato="ERROR_NO_INHERITANCE";
-	else
-	if (i_error==1392L) risultato="ERROR_FILE_CORRUPT";
-	else
-	if (i_error==1393L) risultato="ERROR_DISK_CORRUPT";
-	else
-	if (i_error==1394L) risultato="ERROR_NO_USER_SESSION_KEY";
-	else
-	if (i_error==1395L) risultato="ERROR_LICENSE_QUOTA_EXCEEDED";
-	else
-	if (i_error==1396L) risultato="ERROR_WRONG_TARGET_NAME";
-	else
-	if (i_error==1397L) risultato="ERROR_MUTUAL_AUTH_FAILED";
-	else
-	if (i_error==1398L) risultato="ERROR_TIME_SKEW";
-	else
-	if (i_error==1399L) risultato="ERROR_CURRENT_DOMAIN_NOT_ALLOWED";
-	else
-	if (i_error==1400L) risultato="ERROR_INVALID_WINDOW_HANDLE";
-	else
-	if (i_error==1401L) risultato="ERROR_INVALID_MENU_HANDLE";
-	else
-	if (i_error==1402L) risultato="ERROR_INVALID_CURSOR_HANDLE";
-	else
-	if (i_error==1403L) risultato="ERROR_INVALID_ACCEL_HANDLE";
-	else
-	if (i_error==1404L) risultato="ERROR_INVALID_HOOK_HANDLE";
-	else
-	if (i_error==1405L) risultato="ERROR_INVALID_DWP_HANDLE";
-	else
-	if (i_error==1406L) risultato="ERROR_TLW_WITH_WSCHILD";
-	else
-	if (i_error==1407L) risultato="ERROR_CANNOT_FIND_WND_CLASS";
-	else
-	if (i_error==1408L) risultato="ERROR_WINDOW_OF_OTHER_THREAD";
-	else
-	if (i_error==1409L) risultato="ERROR_HOTKEY_ALREADY_REGISTERED";
-	else
-	if (i_error==1410L) risultato="ERROR_CLASS_ALREADY_EXISTS";
-	else
-	if (i_error==1411L) risultato="ERROR_CLASS_DOES_NOT_EXIST";
-	else
-	if (i_error==1412L) risultato="ERROR_CLASS_HAS_WINDOWS";
-	else
-	if (i_error==1413L) risultato="ERROR_INVALID_INDEX";
-	else
-	if (i_error==1414L) risultato="ERROR_INVALID_ICON_HANDLE";
-	else
-	if (i_error==1415L) risultato="ERROR_PRIVATE_DIALOG_INDEX";
-	else
-	if (i_error==1416L) risultato="ERROR_LISTBOX_ID_NOT_FOUND";
-	else
-	if (i_error==1417L) risultato="ERROR_NO_WILDCARD_CHARACTERS";
-	else
-	if (i_error==1418L) risultato="ERROR_CLIPBOARD_NOT_OPEN";
-	else
-	if (i_error==1419L) risultato="ERROR_HOTKEY_NOT_REGISTERED";
-	else
-	if (i_error==1420L) risultato="ERROR_WINDOW_NOT_DIALOG";
-	else
-	if (i_error==1421L) risultato="ERROR_CONTROL_ID_NOT_FOUND";
-	else
-	if (i_error==1422L) risultato="ERROR_INVALID_COMBOBOX_MESSAGE";
-	else
-	if (i_error==1423L) risultato="ERROR_WINDOW_NOT_COMBOBOX";
-	else
-	if (i_error==1424L) risultato="ERROR_INVALID_EDIT_HEIGHT";
-	else
-	if (i_error==1425L) risultato="ERROR_DC_NOT_FOUND";
-	else
-	if (i_error==1426L) risultato="ERROR_INVALID_HOOK_FILTER";
-	else
-	if (i_error==1427L) risultato="ERROR_INVALID_FILTER_PROC";
-	else
-	if (i_error==1428L) risultato="ERROR_HOOK_NEEDS_HMOD";
-	else
-	if (i_error==1429L) risultato="ERROR_GLOBAL_ONLY_HOOK";
-	else
-	if (i_error==1430L) risultato="ERROR_JOURNAL_HOOK_SET";
-	else
-	if (i_error==1431L) risultato="ERROR_HOOK_NOT_INSTALLED";
-	else
-	if (i_error==1432L) risultato="ERROR_INVALID_LB_MESSAGE";
-	else
-	if (i_error==1433L) risultato="ERROR_SETCOUNT_ON_BAD_LB";
-	else
-	if (i_error==1434L) risultato="ERROR_LB_WITHOUT_TABSTOPS";
-	else
-	if (i_error==1435L) risultato="ERROR_DESTROY_OBJECT_OF_OTHER_THREAD";
-	else
-	if (i_error==1436L) risultato="ERROR_CHILD_WINDOW_MENU";
-	else
-	if (i_error==1437L) risultato="ERROR_NO_SYSTEM_MENU";
-	else
-	if (i_error==1438L) risultato="ERROR_INVALID_MSGBOX_STYLE";
-	else
-	if (i_error==1439L) risultato="ERROR_INVALID_SPI_VALUE";
-	else
-	if (i_error==1440L) risultato="ERROR_SCREEN_ALREADY_LOCKED";
-	else
-	if (i_error==1441L) risultato="ERROR_HWNDS_HAVE_DIFF_PARENT";
-	else
-	if (i_error==1442L) risultato="ERROR_NOT_CHILD_WINDOW";
-	else
-	if (i_error==1443L) risultato="ERROR_INVALID_GW_COMMAND";
-	else
-	if (i_error==1444L) risultato="ERROR_INVALID_THREAD_ID";
-	else
-	if (i_error==1445L) risultato="ERROR_NON_MDICHILD_WINDOW";
-	else
-	if (i_error==1446L) risultato="ERROR_POPUP_ALREADY_ACTIVE";
-	else
-	if (i_error==1447L) risultato="ERROR_NO_SCROLLBARS";
-	else
-	if (i_error==1448L) risultato="ERROR_INVALID_SCROLLBAR_RANGE";
-	else
-	if (i_error==1449L) risultato="ERROR_INVALID_SHOWWIN_COMMAND";
-	else
-	if (i_error==1450L) risultato="ERROR_NO_SYSTEM_RESOURCES";
-	else
-	if (i_error==1451L) risultato="ERROR_NONPAGED_SYSTEM_RESOURCES";
-	else
-	if (i_error==1452L) risultato="ERROR_PAGED_SYSTEM_RESOURCES";
-	else
-	if (i_error==1453L) risultato="ERROR_WORKING_SET_QUOTA";
-	else
-	if (i_error==1454L) risultato="ERROR_PAGEFILE_QUOTA";
-	else
-	if (i_error==1455L) risultato="ERROR_COMMITMENT_LIMIT";
-	else
-	if (i_error==1456L) risultato="ERROR_MENU_ITEM_NOT_FOUND";
-	else
-	if (i_error==1457L) risultato="ERROR_INVALID_KEYBOARD_HANDLE";
-	else
-	if (i_error==1458L) risultato="ERROR_HOOK_TYPE_NOT_ALLOWED";
-	else
-	if (i_error==1459L) risultato="ERROR_REQUIRES_INTERACTIVE_WINDOWSTATION";
-	else
-	if (i_error==1460L) risultato="ERROR_TIMEOUT";
-	else
-	if (i_error==1461L) risultato="ERROR_INVALID_MONITOR_HANDLE";
-	else
-	if (i_error==1462L) risultato="ERROR_INCORRECT_SIZE";
-	else
-	if (i_error==1463L) risultato="ERROR_SYMLINK_CLASS_DISABLED";
-	else
-	if (i_error==1464L) risultato="ERROR_SYMLINK_NOT_SUPPORTED";
-	else
-	if (i_error==1465L) risultato="ERROR_XML_PARSE_ERROR";
-	else
-	if (i_error==1466L) risultato="ERROR_XMLDSIG_ERROR";
-	else
-	if (i_error==1467L) risultato="ERROR_RESTART_APPLICATION";
-	else
-	if (i_error==1468L) risultato="ERROR_WRONG_COMPARTMENT";
-	else
-	if (i_error==1469L) risultato="ERROR_AUTHIP_FAILURE";
-	else
-	if (i_error==1470L) risultato="ERROR_NO_NVRAM_RESOURCES";
-	else
-	if (i_error==1471L) risultato="ERROR_NOT_GUI_PROCESS";
-	else
-	if (i_error==1500L) risultato="ERROR_EVENTLOG_FILE_CORRUPT";
-	else
-	if (i_error==1501L) risultato="ERROR_EVENTLOG_CANT_START";
-	else
-	if (i_error==1502L) risultato="ERROR_LOG_FILE_FULL";
-	else
-	if (i_error==1503L) risultato="ERROR_EVENTLOG_FILE_CHANGED";
-	else
-	if (i_error==1504L) risultato="ERROR_CONTAINER_ASSIGNED";
-	else
-	if (i_error==1505L) risultato="ERROR_JOB_NO_CONTAINER";
-	else
-	if (i_error==1550L) risultato="ERROR_INVALID_TASK_NAME";
-	else
-	if (i_error==1551L) risultato="ERROR_INVALID_TASK_INDEX";
-	else
-	if (i_error==1552L) risultato="ERROR_THREAD_ALREADY_IN_TASK";
-	else
-	if (i_error==1601L) risultato="ERROR_INSTALL_SERVICE_FAILURE";
-	else
-	if (i_error==1602L) risultato="ERROR_INSTALL_USEREXIT";
-	else
-	if (i_error==1603L) risultato="ERROR_INSTALL_FAILURE";
-	else
-	if (i_error==1604L) risultato="ERROR_INSTALL_SUSPEND";
-	else
-	if (i_error==1605L) risultato="ERROR_UNKNOWN_PRODUCT";
-	else
-	if (i_error==1606L) risultato="ERROR_UNKNOWN_FEATURE";
-	else
-	if (i_error==1607L) risultato="ERROR_UNKNOWN_COMPONENT";
-	else
-	if (i_error==1608L) risultato="ERROR_UNKNOWN_PROPERTY";
-	else
-	if (i_error==1609L) risultato="ERROR_INVALID_HANDLE_STATE";
-	else
-	if (i_error==1610L) risultato="ERROR_BAD_CONFIGURATION";
-	else
-	if (i_error==1611L) risultato="ERROR_INDEX_ABSENT";
-	else
-	if (i_error==1612L) risultato="ERROR_INSTALL_SOURCE_ABSENT";
-	else
-	if (i_error==1613L) risultato="ERROR_INSTALL_PACKAGE_VERSION";
-	else
-	if (i_error==1614L) risultato="ERROR_PRODUCT_UNINSTALLED";
-	else
-	if (i_error==1615L) risultato="ERROR_BAD_QUERY_SYNTAX";
-	else
-	if (i_error==1616L) risultato="ERROR_INVALID_FIELD";
-	else
-	if (i_error==1617L) risultato="ERROR_DEVICE_REMOVED";
-	else
-	if (i_error==1618L) risultato="ERROR_INSTALL_ALREADY_RUNNING";
-	else
-	if (i_error==1619L) risultato="ERROR_INSTALL_PACKAGE_OPEN_FAILED";
-	else
-	if (i_error==1620L) risultato="ERROR_INSTALL_PACKAGE_INVALID";
-	else
-	if (i_error==1621L) risultato="ERROR_INSTALL_UI_FAILURE";
-	else
-	if (i_error==1622L) risultato="ERROR_INSTALL_LOG_FAILURE";
-	else
-	if (i_error==1623L) risultato="ERROR_INSTALL_LANGUAGE_UNSUPPORTED";
-	else
-	if (i_error==1624L) risultato="ERROR_INSTALL_TRANSFORM_FAILURE";
-	else
-	if (i_error==1625L) risultato="ERROR_INSTALL_PACKAGE_REJECTED";
-	else
-	if (i_error==1626L) risultato="ERROR_FUNCTION_NOT_CALLED";
-	else
-	if (i_error==1627L) risultato="ERROR_FUNCTION_FAILED";
-	else
-	if (i_error==1628L) risultato="ERROR_INVALID_TABLE";
-	else
-	if (i_error==1629L) risultato="ERROR_DATATYPE_MISMATCH";
-	else
-	if (i_error==1630L) risultato="ERROR_UNSUPPORTED_TYPE";
-	else
-	if (i_error==1631L) risultato="ERROR_CREATE_FAILED";
-	else
-	if (i_error==1632L) risultato="ERROR_INSTALL_TEMP_UNWRITABLE";
-	else
-	if (i_error==1633L) risultato="ERROR_INSTALL_PLATFORM_UNSUPPORTED";
-	else
-	if (i_error==1634L) risultato="ERROR_INSTALL_NOTUSED";
-	else
-	if (i_error==1635L) risultato="ERROR_PATCH_PACKAGE_OPEN_FAILED";
-	else
-	if (i_error==1636L) risultato="ERROR_PATCH_PACKAGE_INVALID";
-	else
-	if (i_error==1637L) risultato="ERROR_PATCH_PACKAGE_UNSUPPORTED";
-	else
-	if (i_error==1638L) risultato="ERROR_PRODUCT_VERSION";
-	else
-	if (i_error==1639L) risultato="ERROR_INVALID_COMMAND_LINE";
-	else
-	if (i_error==1640L) risultato="ERROR_INSTALL_REMOTE_DISALLOWED";
-	else
-	if (i_error==1641L) risultato="ERROR_SUCCESS_REBOOT_INITIATED";
-	else
-	if (i_error==1642L) risultato="ERROR_PATCH_TARGET_NOT_FOUND";
-	else
-	if (i_error==1643L) risultato="ERROR_PATCH_PACKAGE_REJECTED";
-	else
-	if (i_error==1644L) risultato="ERROR_INSTALL_TRANSFORM_REJECTED";
-	else
-	if (i_error==1645L) risultato="ERROR_INSTALL_REMOTE_PROHIBITED";
-	else
-	if (i_error==1646L) risultato="ERROR_PATCH_REMOVAL_UNSUPPORTED";
-	else
-	if (i_error==1647L) risultato="ERROR_UNKNOWN_PATCH";
-	else
-	if (i_error==1648L) risultato="ERROR_PATCH_NO_SEQUENCE";
-	else
-	if (i_error==1649L) risultato="ERROR_PATCH_REMOVAL_DISALLOWED";
-	else
-	if (i_error==1650L) risultato="ERROR_INVALID_PATCH_XML";
-	else
-	if (i_error==1651L) risultato="ERROR_PATCH_MANAGED_ADVERTISED_PRODUCT";
-	else
-	if (i_error==1652L) risultato="ERROR_INSTALL_SERVICE_SAFEBOOT";
-	else
-	if (i_error==1653L) risultato="ERROR_FAIL_FAST_EXCEPTION";
-	else
-	if (i_error==1654L) risultato="ERROR_INSTALL_REJECTED";
-	else
-	if (i_error==1655L) risultato="ERROR_DYNAMIC_CODE_BLOCKED";
-	else
-	if (i_error==1656L) risultato="ERROR_NOT_SAME_OBJECT";
-	else
-	if (i_error==1700L) risultato="RPC_S_INVALID_STRING_BINDING";
-	else
-	if (i_error==1701L) risultato="RPC_S_WRONG_KIND_OF_BINDING";
-	else
-	if (i_error==1702L) risultato="RPC_S_INVALID_BINDING";
-	else
-	if (i_error==1703L) risultato="RPC_S_PROTSEQ_NOT_SUPPORTED";
-	else
-	if (i_error==1704L) risultato="RPC_S_INVALID_RPC_PROTSEQ";
-	else
-	if (i_error==1705L) risultato="RPC_S_INVALID_STRING_UUID";
-	else
-	if (i_error==1706L) risultato="RPC_S_INVALID_ENDPOINT_FORMAT";
-	else
-	if (i_error==1707L) risultato="RPC_S_INVALID_NET_ADDR";
-	else
-	if (i_error==1708L) risultato="RPC_S_NO_ENDPOINT_FOUND";
-	else
-	if (i_error==1709L) risultato="RPC_S_INVALID_TIMEOUT";
-	else
-	if (i_error==1710L) risultato="RPC_S_OBJECT_NOT_FOUND";
-	else
-	if (i_error==1711L) risultato="RPC_S_ALREADY_REGISTERED";
-	else
-	if (i_error==1712L) risultato="RPC_S_TYPE_ALREADY_REGISTERED";
-	else
-	if (i_error==1713L) risultato="RPC_S_ALREADY_LISTENING";
-	else
-	if (i_error==1714L) risultato="RPC_S_NO_PROTSEQS_REGISTERED";
-	else
-	if (i_error==1715L) risultato="RPC_S_NOT_LISTENING";
-	else
-	if (i_error==1716L) risultato="RPC_S_UNKNOWN_MGR_TYPE";
-	else
-	if (i_error==1717L) risultato="RPC_S_UNKNOWN_IF";
-	else
-	if (i_error==1718L) risultato="RPC_S_NO_BINDINGS";
-	else
-	if (i_error==1719L) risultato="RPC_S_NO_PROTSEQS";
-	else
-	if (i_error==1720L) risultato="RPC_S_CANT_CREATE_ENDPOINT";
-	else
-	if (i_error==1721L) risultato="RPC_S_OUT_OF_RESOURCES";
-	else
-	if (i_error==1722L) risultato="RPC_S_SERVER_UNAVAILABLE";
-	else
-	if (i_error==1723L) risultato="RPC_S_SERVER_TOO_BUSY";
-	else
-	if (i_error==1724L) risultato="RPC_S_INVALID_NETWORK_OPTIONS";
-	else
-	if (i_error==1725L) risultato="RPC_S_NO_CALL_ACTIVE";
-	else
-	if (i_error==1726L) risultato="RPC_S_CALL_FAILED";
-	else
-	if (i_error==1727L) risultato="RPC_S_CALL_FAILED_DNE";
-	else
-	if (i_error==1728L) risultato="RPC_S_PROTOCOL_ERROR";
-	else
-	if (i_error==1729L) risultato="RPC_S_PROXY_ACCESS_DENIED";
-	else
-	if (i_error==1730L) risultato="RPC_S_UNSUPPORTED_TRANS_SYN";
-	else
-	if (i_error==1732L) risultato="RPC_S_UNSUPPORTED_TYPE";
-	else
-	if (i_error==1733L) risultato="RPC_S_INVALID_TAG";
-	else
-	if (i_error==1734L) risultato="RPC_S_INVALID_BOUND";
-	else
-	if (i_error==1735L) risultato="RPC_S_NO_ENTRY_NAME";
-	else
-	if (i_error==1736L) risultato="RPC_S_INVALID_NAME_SYNTAX";
-	else
-	if (i_error==1737L) risultato="RPC_S_UNSUPPORTED_NAME_SYNTAX";
-	else
-	if (i_error==1739L) risultato="RPC_S_UUID_NO_ADDRESS";
-	else
-	if (i_error==1740L) risultato="RPC_S_DUPLICATE_ENDPOINT";
-	else
-	if (i_error==1741L) risultato="RPC_S_UNKNOWN_AUTHN_TYPE";
-	else
-	if (i_error==1742L) risultato="RPC_S_MAX_CALLS_TOO_SMALL";
-	else
-	if (i_error==1743L) risultato="RPC_S_STRING_TOO_LONG";
-	else
-	if (i_error==1744L) risultato="RPC_S_PROTSEQ_NOT_FOUND";
-	else
-	if (i_error==1745L) risultato="RPC_S_PROCNUM_OUT_OF_RANGE";
-	else
-	if (i_error==1746L) risultato="RPC_S_BINDING_HAS_NO_AUTH";
-	else
-	if (i_error==1747L) risultato="RPC_S_UNKNOWN_AUTHN_SERVICE";
-	else
-	if (i_error==1748L) risultato="RPC_S_UNKNOWN_AUTHN_LEVEL";
-	else
-	if (i_error==1749L) risultato="RPC_S_INVALID_AUTH_IDENTITY";
-	else
-	if (i_error==1750L) risultato="RPC_S_UNKNOWN_AUTHZ_SERVICE";
-	else
-	if (i_error==1751L) risultato="EPT_S_INVALID_ENTRY";
-	else
-	if (i_error==1752L) risultato="EPT_S_CANT_PERFORM_OP";
-	else
-	if (i_error==1753L) risultato="EPT_S_NOT_REGISTERED";
-	else
-	if (i_error==1754L) risultato="RPC_S_NOTHING_TO_EXPORT";
-	else
-	if (i_error==1755L) risultato="RPC_S_INCOMPLETE_NAME";
-	else
-	if (i_error==1756L) risultato="RPC_S_INVALID_VERS_OPTION";
-	else
-	if (i_error==1757L) risultato="RPC_S_NO_MORE_MEMBERS";
-	else
-	if (i_error==1758L) risultato="RPC_S_NOT_ALL_OBJS_UNEXPORTED";
-	else
-	if (i_error==1759L) risultato="RPC_S_INTERFACE_NOT_FOUND";
-	else
-	if (i_error==1760L) risultato="RPC_S_ENTRY_ALREADY_EXISTS";
-	else
-	if (i_error==1761L) risultato="RPC_S_ENTRY_NOT_FOUND";
-	else
-	if (i_error==1762L) risultato="RPC_S_NAME_SERVICE_UNAVAILABLE";
-	else
-	if (i_error==1763L) risultato="RPC_S_INVALID_NAF_ID";
-	else
-	if (i_error==1764L) risultato="RPC_S_CANNOT_SUPPORT";
-	else
-	if (i_error==1765L) risultato="RPC_S_NO_CONTEXT_AVAILABLE";
-	else
-	if (i_error==1766L) risultato="RPC_S_INTERNAL_ERROR";
-	else
-	if (i_error==1767L) risultato="RPC_S_ZERO_DIVIDE";
-	else
-	if (i_error==1768L) risultato="RPC_S_ADDRESS_ERROR";
-	else
-	if (i_error==1769L) risultato="RPC_S_FP_DIV_ZERO";
-	else
-	if (i_error==1770L) risultato="RPC_S_FP_UNDERFLOW";
-	else
-	if (i_error==1771L) risultato="RPC_S_FP_OVERFLOW";
-	else
-	if (i_error==1772L) risultato="RPC_X_NO_MORE_ENTRIES";
-	else
-	if (i_error==1773L) risultato="RPC_X_SS_CHAR_TRANS_OPEN_FAIL";
-	else
-	if (i_error==1774L) risultato="RPC_X_SS_CHAR_TRANS_SHORT_FILE";
-	else
-	if (i_error==1775L) risultato="RPC_X_SS_IN_NULL_CONTEXT";
-	else
-	if (i_error==1777L) risultato="RPC_X_SS_CONTEXT_DAMAGED";
-	else
-	if (i_error==1778L) risultato="RPC_X_SS_HANDLES_MISMATCH";
-	else
-	if (i_error==1779L) risultato="RPC_X_SS_CANNOT_GET_CALL_HANDLE";
-	else
-	if (i_error==1780L) risultato="RPC_X_NULL_REF_POINTER";
-	else
-	if (i_error==1781L) risultato="RPC_X_ENUM_VALUE_OUT_OF_RANGE";
-	else
-	if (i_error==1782L) risultato="RPC_X_BYTE_COUNT_TOO_SMALL";
-	else
-	if (i_error==1783L) risultato="RPC_X_BAD_STUB_DATA";
-	else
-	if (i_error==1784L) risultato="ERROR_INVALID_USER_BUFFER";
-	else
-	if (i_error==1785L) risultato="ERROR_UNRECOGNIZED_MEDIA";
-	else
-	if (i_error==1786L) risultato="ERROR_NO_TRUST_LSA_SECRET";
-	else
-	if (i_error==1787L) risultato="ERROR_NO_TRUST_SAM_ACCOUNT";
-	else
-	if (i_error==1788L) risultato="ERROR_TRUSTED_DOMAIN_FAILURE";
-	else
-	if (i_error==1789L) risultato="ERROR_TRUSTED_RELATIONSHIP_FAILURE";
-	else
-	if (i_error==1790L) risultato="ERROR_TRUST_FAILURE";
-	else
-	if (i_error==1791L) risultato="RPC_S_CALL_IN_PROGRESS";
-	else
-	if (i_error==1792L) risultato="ERROR_NETLOGON_NOT_STARTED";
-	else
-	if (i_error==1793L) risultato="ERROR_ACCOUNT_EXPIRED";
-	else
-	if (i_error==1794L) risultato="ERROR_REDIRECTOR_HAS_OPEN_HANDLES";
-	else
-	if (i_error==1795L) risultato="ERROR_PRINTER_DRIVER_ALREADY_INSTALLED";
-	else
-	if (i_error==1796L) risultato="ERROR_UNKNOWN_PORT";
-	else
-	if (i_error==1797L) risultato="ERROR_UNKNOWN_PRINTER_DRIVER";
-	else
-	if (i_error==1798L) risultato="ERROR_UNKNOWN_PRINTPROCESSOR";
-	else
-	if (i_error==1799L) risultato="ERROR_INVALID_SEPARATOR_FILE";
-	else
-	if (i_error==1800L) risultato="ERROR_INVALID_PRIORITY";
-	else
-	if (i_error==1801L) risultato="ERROR_INVALID_PRINTER_NAME";
-	else
-	if (i_error==1802L) risultato="ERROR_PRINTER_ALREADY_EXISTS";
-	else
-	if (i_error==1803L) risultato="ERROR_INVALID_PRINTER_COMMAND";
-	else
-	if (i_error==1804L) risultato="ERROR_INVALID_DATATYPE";
-	else
-	if (i_error==1805L) risultato="ERROR_INVALID_ENVIRONMENT";
-	else
-	if (i_error==1806L) risultato="RPC_S_NO_MORE_BINDINGS";
-	else
-	if (i_error==1807L) risultato="ERROR_NOLOGON_INTERDOMAIN_TRUST_ACCOUNT";
-	else
-	if (i_error==1808L) risultato="ERROR_NOLOGON_WORKSTATION_TRUST_ACCOUNT";
-	else
-	if (i_error==1809L) risultato="ERROR_NOLOGON_SERVER_TRUST_ACCOUNT";
-	else
-	if (i_error==1810L) risultato="ERROR_DOMAIN_TRUST_INCONSISTENT";
-	else
-	if (i_error==1811L) risultato="ERROR_SERVER_HAS_OPEN_HANDLES";
-	else
-	if (i_error==1812L) risultato="ERROR_RESOURCE_DATA_NOT_FOUND";
-	else
-	if (i_error==1813L) risultato="ERROR_RESOURCE_TYPE_NOT_FOUND";
-	else
-	if (i_error==1814L) risultato="ERROR_RESOURCE_NAME_NOT_FOUND";
-	else
-	if (i_error==1815L) risultato="ERROR_RESOURCE_LANG_NOT_FOUND";
-	else
-	if (i_error==1816L) risultato="ERROR_NOT_ENOUGH_QUOTA";
-	else
-	if (i_error==1817L) risultato="RPC_S_NO_INTERFACES";
-	else
-	if (i_error==1818L) risultato="RPC_S_CALL_CANCELLED";
-	else
-	if (i_error==1819L) risultato="RPC_S_BINDING_INCOMPLETE";
-	else
-	if (i_error==1820L) risultato="RPC_S_COMM_FAILURE";
-	else
-	if (i_error==1821L) risultato="RPC_S_UNSUPPORTED_AUTHN_LEVEL";
-	else
-	if (i_error==1822L) risultato="RPC_S_NO_PRINC_NAME";
-	else
-	if (i_error==1823L) risultato="RPC_S_NOT_RPC_ERROR";
-	else
-	if (i_error==1824L) risultato="RPC_S_UUID_LOCAL_ONLY";
-	else
-	if (i_error==1825L) risultato="RPC_S_SEC_PKG_ERROR";
-	else
-	if (i_error==1826L) risultato="RPC_S_NOT_CANCELLED";
-	else
-	if (i_error==1827L) risultato="RPC_X_INVALID_ES_ACTION";
-	else
-	if (i_error==1828L) risultato="RPC_X_WRONG_ES_VERSION";
-	else
-	if (i_error==1829L) risultato="RPC_X_WRONG_STUB_VERSION";
-	else
-	if (i_error==1830L) risultato="RPC_X_INVALID_PIPE_OBJECT";
-	else
-	if (i_error==1831L) risultato="RPC_X_WRONG_PIPE_ORDER";
-	else
-	if (i_error==1832L) risultato="RPC_X_WRONG_PIPE_VERSION";
-	else
-	if (i_error==1833L) risultato="RPC_S_COOKIE_AUTH_FAILED";
-	else
-	if (i_error==1834L) risultato="RPC_S_DO_NOT_DISTURB";
-	else
-	if (i_error==1835L) risultato="RPC_S_SYSTEM_HANDLE_COUNT_EXCEEDED";
-	else
-	if (i_error==1836L) risultato="RPC_S_SYSTEM_HANDLE_TYPE_MISMATCH";
-	else
-	if (i_error==1898L) risultato="RPC_S_GROUP_MEMBER_NOT_FOUND";
-	else
-	if (i_error==1899L) risultato="EPT_S_CANT_CREATE";
-	else
-	if (i_error==1900L) risultato="RPC_S_INVALID_OBJECT";
-	else
-	if (i_error==1901L) risultato="ERROR_INVALID_TIME";
-	else
-	if (i_error==1902L) risultato="ERROR_INVALID_FORM_NAME";
-	else
-	if (i_error==1903L) risultato="ERROR_INVALID_FORM_SIZE";
-	else
-	if (i_error==1904L) risultato="ERROR_ALREADY_WAITING";
-	else
-	if (i_error==1905L) risultato="ERROR_PRINTER_DELETED";
-	else
-	if (i_error==1906L) risultato="ERROR_INVALID_PRINTER_STATE";
-	else
-	if (i_error==1907L) risultato="ERROR_PASSWORD_MUST_CHANGE";
-	else
-	if (i_error==1908L) risultato="ERROR_DOMAIN_CONTROLLER_NOT_FOUND";
-	else
-	if (i_error==1909L) risultato="ERROR_ACCOUNT_LOCKED_OUT";
-	else
-	if (i_error==1910L) risultato="OR_INVALID_OXID";
-	else
-	if (i_error==1911L) risultato="OR_INVALID_OID";
-	else
-	if (i_error==1912L) risultato="OR_INVALID_SET";
-	else
-	if (i_error==1913L) risultato="RPC_S_SEND_INCOMPLETE";
-	else
-	if (i_error==1914L) risultato="RPC_S_INVALID_ASYNC_HANDLE";
-	else
-	if (i_error==1915L) risultato="RPC_S_INVALID_ASYNC_CALL";
-	else
-	if (i_error==1916L) risultato="RPC_X_PIPE_CLOSED";
-	else
-	if (i_error==1917L) risultato="RPC_X_PIPE_DISCIPLINE_ERROR";
-	else
-	if (i_error==1918L) risultato="RPC_X_PIPE_EMPTY";
-	else
-	if (i_error==1919L) risultato="ERROR_NO_SITENAME";
-	else
-	if (i_error==1920L) risultato="ERROR_CANT_ACCESS_FILE";
-	else
-	if (i_error==1921L) risultato="ERROR_CANT_RESOLVE_FILENAME";
-	else
-	if (i_error==1922L) risultato="RPC_S_ENTRY_TYPE_MISMATCH";
-	else
-	if (i_error==1923L) risultato="RPC_S_NOT_ALL_OBJS_EXPORTED";
-	else
-	if (i_error==1924L) risultato="RPC_S_INTERFACE_NOT_EXPORTED";
-	else
-	if (i_error==1925L) risultato="RPC_S_PROFILE_NOT_ADDED";
-	else
-	if (i_error==1926L) risultato="RPC_S_PRF_ELT_NOT_ADDED";
-	else
-	if (i_error==1927L) risultato="RPC_S_PRF_ELT_NOT_REMOVED";
-	else
-	if (i_error==1928L) risultato="RPC_S_GRP_ELT_NOT_ADDED";
-	else
-	if (i_error==1929L) risultato="RPC_S_GRP_ELT_NOT_REMOVED";
-	else
-	if (i_error==1930L) risultato="ERROR_KM_DRIVER_BLOCKED";
-	else
-	if (i_error==1931L) risultato="ERROR_CONTEXT_EXPIRED";
-	else
-	if (i_error==1932L) risultato="ERROR_PER_USER_TRUST_QUOTA_EXCEEDED";
-	else
-	if (i_error==1933L) risultato="ERROR_ALL_USER_TRUST_QUOTA_EXCEEDED";
-	else
-	if (i_error==1934L) risultato="ERROR_USER_DELETE_TRUST_QUOTA_EXCEEDED";
-	else
-	if (i_error==1935L) risultato="ERROR_AUTHENTICATION_FIREWALL_FAILED";
-	else
-	if (i_error==1936L) risultato="ERROR_REMOTE_PRINT_CONNECTIONS_BLOCKED";
-	else
-	if (i_error==1937L) risultato="ERROR_NTLM_BLOCKED";
-	else
-	if (i_error==1938L) risultato="ERROR_PASSWORD_CHANGE_REQUIRED";
-	else
-	if (i_error==2000L) risultato="ERROR_INVALID_PIXEL_FORMAT";
-	else
-	if (i_error==2001L) risultato="ERROR_BAD_DRIVER";
-	else
-	if (i_error==2002L) risultato="ERROR_INVALID_WINDOW_STYLE";
-	else
-	if (i_error==2003L) risultato="ERROR_METAFILE_NOT_SUPPORTED";
-	else
-	if (i_error==2004L) risultato="ERROR_TRANSFORM_NOT_SUPPORTED";
-	else
-	if (i_error==2005L) risultato="ERROR_CLIPPING_NOT_SUPPORTED";
-	else
-	if (i_error==2010L) risultato="ERROR_INVALID_CMM";
-	else
-	if (i_error==2011L) risultato="ERROR_INVALID_PROFILE";
-	else
-	if (i_error==2012L) risultato="ERROR_TAG_NOT_FOUND";
-	else
-	if (i_error==2013L) risultato="ERROR_TAG_NOT_PRESENT";
-	else
-	if (i_error==2014L) risultato="ERROR_DUPLICATE_TAG";
-	else
-	if (i_error==2015L) risultato="ERROR_PROFILE_NOT_ASSOCIATED_WITH_DEVICE";
-	else
-	if (i_error==2016L) risultato="ERROR_PROFILE_NOT_FOUND";
-	else
-	if (i_error==2017L) risultato="ERROR_INVALID_COLORSPACE";
-	else
-	if (i_error==2018L) risultato="ERROR_ICM_NOT_ENABLED";
-	else
-	if (i_error==2019L) risultato="ERROR_DELETING_ICM_XFORM";
-	else
-	if (i_error==2020L) risultato="ERROR_INVALID_TRANSFORM";
-	else
-	if (i_error==2021L) risultato="ERROR_COLORSPACE_MISMATCH";
-	else
-	if (i_error==2022L) risultato="ERROR_INVALID_COLORINDEX";
-	else
-	if (i_error==2023L) risultato="ERROR_PROFILE_DOES_NOT_MATCH_DEVICE";
-	else
-	if (i_error==2108L) risultato="ERROR_CONNECTED_OTHER_PASSWORD";
-	else
-	if (i_error==2109L) risultato="ERROR_CONNECTED_OTHER_PASSWORD_DEFAULT";
-	else
-	if (i_error==2202L) risultato="ERROR_BAD_USERNAME";
-	else
-	if (i_error==2250L) risultato="ERROR_NOT_CONNECTED";
-	else
-	if (i_error==2401L) risultato="ERROR_OPEN_FILES";
-	else
-	if (i_error==2402L) risultato="ERROR_ACTIVE_CONNECTIONS";
-	else
-	if (i_error==2404L) risultato="ERROR_DEVICE_IN_USE";
-	else
-	if (i_error==3000L) risultato="ERROR_UNKNOWN_PRINT_MONITOR";
-	else
-	if (i_error==3001L) risultato="ERROR_PRINTER_DRIVER_IN_USE";
-	else
-	if (i_error==3002L) risultato="ERROR_SPOOL_FILE_NOT_FOUND";
-	else
-	if (i_error==3003L) risultato="ERROR_SPL_NO_STARTDOC";
-	else
-	if (i_error==3004L) risultato="ERROR_SPL_NO_ADDJOB";
-	else
-	if (i_error==3005L) risultato="ERROR_PRINT_PROCESSOR_ALREADY_INSTALLED";
-	else
-	if (i_error==3006L) risultato="ERROR_PRINT_MONITOR_ALREADY_INSTALLED";
-	else
-	if (i_error==3007L) risultato="ERROR_INVALID_PRINT_MONITOR";
-	else
-	if (i_error==3008L) risultato="ERROR_PRINT_MONITOR_IN_USE";
-	else
-	if (i_error==3009L) risultato="ERROR_PRINTER_HAS_JOBS_QUEUED";
-	else
-	if (i_error==3010L) risultato="ERROR_SUCCESS_REBOOT_REQUIRED";
-	else
-	if (i_error==3011L) risultato="ERROR_SUCCESS_RESTART_REQUIRED";
-	else
-	if (i_error==3012L) risultato="ERROR_PRINTER_NOT_FOUND";
-	else
-	if (i_error==3013L) risultato="ERROR_PRINTER_DRIVER_WARNED";
-	else
-	if (i_error==3014L) risultato="ERROR_PRINTER_DRIVER_BLOCKED";
-	else
-	if (i_error==3015L) risultato="ERROR_PRINTER_DRIVER_PACKAGE_IN_USE";
-	else
-	if (i_error==3016L) risultato="ERROR_CORE_DRIVER_PACKAGE_NOT_FOUND";
-	else
-	if (i_error==3017L) risultato="ERROR_FAIL_REBOOT_REQUIRED";
-	else
-	if (i_error==3018L) risultato="ERROR_FAIL_REBOOT_INITIATED";
-	else
-	if (i_error==3019L) risultato="ERROR_PRINTER_DRIVER_DOWNLOAD_NEEDED";
-	else
-	if (i_error==3020L) risultato="ERROR_PRINT_JOB_RESTART_REQUIRED";
-	else
-	if (i_error==3021L) risultato="ERROR_INVALID_PRINTER_DRIVER_MANIFEST";
-	else
-	if (i_error==3022L) risultato="ERROR_PRINTER_NOT_SHAREABLE";
-	else
-	if (i_error==3050L) risultato="ERROR_REQUEST_PAUSED";
-	else
-	if (i_error==3950L) risultato="ERROR_IO_REISSUE_AS_CACHED";
-	else
-	if (i_error==4000L) risultato="ERROR_WINS_INTERNAL";
-	else
-	if (i_error==4001L) risultato="ERROR_CAN_NOT_DEL_LOCAL_WINS";
-	else
-	if (i_error==4002L) risultato="ERROR_STATIC_INIT";
-	else
-	if (i_error==4003L) risultato="ERROR_INC_BACKUP";
-	else
-	if (i_error==4004L) risultato="ERROR_FULL_BACKUP";
-	else
-	if (i_error==4005L) risultato="ERROR_REC_NON_EXISTENT";
-	else
-	if (i_error==4006L) risultato="ERROR_RPL_NOT_ALLOWED";
-	else
-	if (i_error==4050L) risultato="PEERDIST_ERROR_CONTENTINFO_VERSION_UNSUPPORTED";
-	else
-	if (i_error==4051L) risultato="PEERDIST_ERROR_CANNOT_PARSE_CONTENTINFO";
-	else
-	if (i_error==4052L) risultato="PEERDIST_ERROR_MISSING_DATA";
-	else
-	if (i_error==4053L) risultato="PEERDIST_ERROR_NO_MORE";
-	else
-	if (i_error==4054L) risultato="PEERDIST_ERROR_NOT_INITIALIZED";
-	else
-	if (i_error==4055L) risultato="PEERDIST_ERROR_ALREADY_INITIALIZED";
-	else
-	if (i_error==4056L) risultato="PEERDIST_ERROR_SHUTDOWN_IN_PROGRESS";
-	else
-	if (i_error==4057L) risultato="PEERDIST_ERROR_INVALIDATED";
-	else
-	if (i_error==4058L) risultato="PEERDIST_ERROR_ALREADY_EXISTS";
-	else
-	if (i_error==4059L) risultato="PEERDIST_ERROR_OPERATION_NOTFOUND";
-	else
-	if (i_error==4060L) risultato="PEERDIST_ERROR_ALREADY_COMPLETED";
-	else
-	if (i_error==4061L) risultato="PEERDIST_ERROR_OUT_OF_BOUNDS";
-	else
-	if (i_error==4062L) risultato="PEERDIST_ERROR_VERSION_UNSUPPORTED";
-	else
-	if (i_error==4063L) risultato="PEERDIST_ERROR_INVALID_CONFIGURATION";
-	else
-	if (i_error==4064L) risultato="PEERDIST_ERROR_NOT_LICENSED";
-	else
-	if (i_error==4065L) risultato="PEERDIST_ERROR_SERVICE_UNAVAILABLE";
-	else
-	if (i_error==4066L) risultato="PEERDIST_ERROR_TRUST_FAILURE";
-	else
-	if (i_error==4100L) risultato="ERROR_DHCP_ADDRESS_CONFLICT";
-	else
-	if (i_error==4200L) risultato="ERROR_WMI_GUID_NOT_FOUND";
-	else
-	if (i_error==4201L) risultato="ERROR_WMI_INSTANCE_NOT_FOUND";
-	else
-	if (i_error==4202L) risultato="ERROR_WMI_ITEMID_NOT_FOUND";
-	else
-	if (i_error==4203L) risultato="ERROR_WMI_TRY_AGAIN";
-	else
-	if (i_error==4204L) risultato="ERROR_WMI_DP_NOT_FOUND";
-	else
-	if (i_error==4205L) risultato="ERROR_WMI_UNRESOLVED_INSTANCE_REF";
-	else
-	if (i_error==4206L) risultato="ERROR_WMI_ALREADY_ENABLED";
-	else
-	if (i_error==4207L) risultato="ERROR_WMI_GUID_DISCONNECTED";
-	else
-	if (i_error==4208L) risultato="ERROR_WMI_SERVER_UNAVAILABLE";
-	else
-	if (i_error==4209L) risultato="ERROR_WMI_DP_FAILED";
-	else
-	if (i_error==4210L) risultato="ERROR_WMI_INVALID_MOF";
-	else
-	if (i_error==4211L) risultato="ERROR_WMI_INVALID_REGINFO";
-	else
-	if (i_error==4212L) risultato="ERROR_WMI_ALREADY_DISABLED";
-	else
-	if (i_error==4213L) risultato="ERROR_WMI_READ_ONLY";
-	else
-	if (i_error==4214L) risultato="ERROR_WMI_SET_FAILURE";
-	else
-	if (i_error==4250L) risultato="ERROR_NOT_APPCONTAINER";
-	else
-	if (i_error==4251L) risultato="ERROR_APPCONTAINER_REQUIRED";
-	else
-	if (i_error==4252L) risultato="ERROR_NOT_SUPPORTED_IN_APPCONTAINER";
-	else
-	if (i_error==4253L) risultato="ERROR_INVALID_PACKAGE_SID_LENGTH";
-	else
-	if (i_error==4300L) risultato="ERROR_INVALID_MEDIA";
-	else
-	if (i_error==4301L) risultato="ERROR_INVALID_LIBRARY";
-	else
-	if (i_error==4302L) risultato="ERROR_INVALID_MEDIA_POOL";
-	else
-	if (i_error==4303L) risultato="ERROR_DRIVE_MEDIA_MISMATCH";
-	else
-	if (i_error==4304L) risultato="ERROR_MEDIA_OFFLINE";
-	else
-	if (i_error==4305L) risultato="ERROR_LIBRARY_OFFLINE";
-	else
-	if (i_error==4306L) risultato="ERROR_EMPTY";
-	else
-	if (i_error==4307L) risultato="ERROR_NOT_EMPTY";
-	else
-	if (i_error==4308L) risultato="ERROR_MEDIA_UNAVAILABLE";
-	else
-	if (i_error==4309L) risultato="ERROR_RESOURCE_DISABLED";
-	else
-	if (i_error==4310L) risultato="ERROR_INVALID_CLEANER";
-	else
-	if (i_error==4311L) risultato="ERROR_UNABLE_TO_CLEAN";
-	else
-	if (i_error==4312L) risultato="ERROR_OBJECT_NOT_FOUND";
-	else
-	if (i_error==4313L) risultato="ERROR_DATABASE_FAILURE";
-	else
-	if (i_error==4314L) risultato="ERROR_DATABASE_FULL";
-	else
-	if (i_error==4315L) risultato="ERROR_MEDIA_INCOMPATIBLE";
-	else
-	if (i_error==4316L) risultato="ERROR_RESOURCE_NOT_PRESENT";
-	else
-	if (i_error==4317L) risultato="ERROR_INVALID_OPERATION";
-	else
-	if (i_error==4318L) risultato="ERROR_MEDIA_NOT_AVAILABLE";
-	else
-	if (i_error==4319L) risultato="ERROR_DEVICE_NOT_AVAILABLE";
-	else
-	if (i_error==4320L) risultato="ERROR_REQUEST_REFUSED";
-	else
-	if (i_error==4321L) risultato="ERROR_INVALID_DRIVE_OBJECT";
-	else
-	if (i_error==4322L) risultato="ERROR_LIBRARY_FULL";
-	else
-	if (i_error==4323L) risultato="ERROR_MEDIUM_NOT_ACCESSIBLE";
-	else
-	if (i_error==4324L) risultato="ERROR_UNABLE_TO_LOAD_MEDIUM";
-	else
-	if (i_error==4325L) risultato="ERROR_UNABLE_TO_INVENTORY_DRIVE";
-	else
-	if (i_error==4326L) risultato="ERROR_UNABLE_TO_INVENTORY_SLOT";
-	else
-	if (i_error==4327L) risultato="ERROR_UNABLE_TO_INVENTORY_TRANSPORT";
-	else
-	if (i_error==4328L) risultato="ERROR_TRANSPORT_FULL";
-	else
-	if (i_error==4329L) risultato="ERROR_CONTROLLING_IEPORT";
-	else
-	if (i_error==4330L) risultato="ERROR_UNABLE_TO_EJECT_MOUNTED_MEDIA";
-	else
-	if (i_error==4331L) risultato="ERROR_CLEANER_SLOT_SET";
-	else
-	if (i_error==4332L) risultato="ERROR_CLEANER_SLOT_NOT_SET";
-	else
-	if (i_error==4333L) risultato="ERROR_CLEANER_CARTRIDGE_SPENT";
-	else
-	if (i_error==4334L) risultato="ERROR_UNEXPECTED_OMID";
-	else
-	if (i_error==4335L) risultato="ERROR_CANT_DELETE_LAST_ITEM";
-	else
-	if (i_error==4336L) risultato="ERROR_MESSAGE_EXCEEDS_MAX_SIZE";
-	else
-	if (i_error==4337L) risultato="ERROR_VOLUME_CONTAINS_SYS_FILES";
-	else
-	if (i_error==4338L) risultato="ERROR_INDIGENOUS_TYPE";
-	else
-	if (i_error==4339L) risultato="ERROR_NO_SUPPORTING_DRIVES";
-	else
-	if (i_error==4340L) risultato="ERROR_CLEANER_CARTRIDGE_INSTALLED";
-	else
-	if (i_error==4341L) risultato="ERROR_IEPORT_FULL";
-	else
-	if (i_error==4350L) risultato="ERROR_FILE_OFFLINE";
-	else
-	if (i_error==4351L) risultato="ERROR_REMOTE_STORAGE_NOT_ACTIVE";
-	else
-	if (i_error==4352L) risultato="ERROR_REMOTE_STORAGE_MEDIA_ERROR";
-	else
-	if (i_error==4390L) risultato="ERROR_NOT_A_REPARSE_POINT";
-	else
-	if (i_error==4391L) risultato="ERROR_REPARSE_ATTRIBUTE_CONFLICT";
-	else
-	if (i_error==4392L) risultato="ERROR_INVALID_REPARSE_DATA";
-	else
-	if (i_error==4393L) risultato="ERROR_REPARSE_TAG_INVALID";
-	else
-	if (i_error==4394L) risultato="ERROR_REPARSE_TAG_MISMATCH";
-	else
-	if (i_error==4395L) risultato="ERROR_REPARSE_POINT_ENCOUNTERED";
-	else
-	if (i_error==4400L) risultato="ERROR_APP_DATA_NOT_FOUND";
-	else
-	if (i_error==4401L) risultato="ERROR_APP_DATA_EXPIRED";
-	else
-	if (i_error==4402L) risultato="ERROR_APP_DATA_CORRUPT";
-	else
-	if (i_error==4403L) risultato="ERROR_APP_DATA_LIMIT_EXCEEDED";
-	else
-	if (i_error==4404L) risultato="ERROR_APP_DATA_REBOOT_REQUIRED";
-	else
-	if (i_error==4420L) risultato="ERROR_SECUREBOOT_ROLLBACK_DETECTED";
-	else
-	if (i_error==4421L) risultato="ERROR_SECUREBOOT_POLICY_VIOLATION";
-	else
-	if (i_error==4422L) risultato="ERROR_SECUREBOOT_INVALID_POLICY";
-	else
-	if (i_error==4423L) risultato="ERROR_SECUREBOOT_POLICY_PUBLISHER_NOT_FOUND";
-	else
-	if (i_error==4424L) risultato="ERROR_SECUREBOOT_POLICY_NOT_SIGNED";
-	else
-	if (i_error==4425L) risultato="ERROR_SECUREBOOT_NOT_ENABLED";
-	else
-	if (i_error==4426L) risultato="ERROR_SECUREBOOT_FILE_REPLACED";
-	else
-	if (i_error==4427L) risultato="ERROR_SECUREBOOT_POLICY_NOT_AUTHORIZED";
-	else
-	if (i_error==4428L) risultato="ERROR_SECUREBOOT_POLICY_UNKNOWN";
-	else
-	if (i_error==4429L) risultato="ERROR_SECUREBOOT_POLICY_MISSING_ANTIROLLBACKVERSION";
-	else
-	if (i_error==4430L) risultato="ERROR_SECUREBOOT_PLATFORM_ID_MISMATCH";
-	else
-	if (i_error==4431L) risultato="ERROR_SECUREBOOT_POLICY_ROLLBACK_DETECTED";
-	else
-	if (i_error==4432L) risultato="ERROR_SECUREBOOT_POLICY_UPGRADE_MISMATCH";
-	else
-	if (i_error==4433L) risultato="ERROR_SECUREBOOT_REQUIRED_POLICY_FILE_MISSING";
-	else
-	if (i_error==4434L) risultato="ERROR_SECUREBOOT_NOT_BASE_POLICY";
-	else
-	if (i_error==4435L) risultato="ERROR_SECUREBOOT_NOT_SUPPLEMENTAL_POLICY";
-	else
-	if (i_error==4440L) risultato="ERROR_OFFLOAD_READ_FLT_NOT_SUPPORTED";
-	else
-	if (i_error==4441L) risultato="ERROR_OFFLOAD_WRITE_FLT_NOT_SUPPORTED";
-	else
-	if (i_error==4442L) risultato="ERROR_OFFLOAD_READ_FILE_NOT_SUPPORTED";
-	else
-	if (i_error==4443L) risultato="ERROR_OFFLOAD_WRITE_FILE_NOT_SUPPORTED";
-	else
-	if (i_error==4500L) risultato="ERROR_VOLUME_NOT_SIS_ENABLED";
-	else
-	if (i_error==4550L) risultato="ERROR_SYSTEM_INTEGRITY_ROLLBACK_DETECTED";
-	else
-	if (i_error==4551L) risultato="ERROR_SYSTEM_INTEGRITY_POLICY_VIOLATION";
-	else
-	if (i_error==4552L) risultato="ERROR_SYSTEM_INTEGRITY_INVALID_POLICY";
-	else
-	if (i_error==4553L) risultato="ERROR_SYSTEM_INTEGRITY_POLICY_NOT_SIGNED";
-	else
-	if (i_error==4560L) risultato="ERROR_VSM_NOT_INITIALIZED";
-	else
-	if (i_error==4561L) risultato="ERROR_VSM_DMA_PROTECTION_NOT_IN_USE";
-	else
-	if (i_error==4570L) risultato="ERROR_PLATFORM_MANIFEST_NOT_AUTHORIZED";
-	else
-	if (i_error==4571L) risultato="ERROR_PLATFORM_MANIFEST_INVALID";
-	else
-	if (i_error==4572L) risultato="ERROR_PLATFORM_MANIFEST_FILE_NOT_AUTHORIZED";
-	else
-	if (i_error==4573L) risultato="ERROR_PLATFORM_MANIFEST_CATALOG_NOT_AUTHORIZED";
-	else
-	if (i_error==4574L) risultato="ERROR_PLATFORM_MANIFEST_BINARY_ID_NOT_FOUND";
-	else
-	if (i_error==4575L) risultato="ERROR_PLATFORM_MANIFEST_NOT_ACTIVE";
-	else
-	if (i_error==4576L) risultato="ERROR_PLATFORM_MANIFEST_NOT_SIGNED";
-	else
-	if (i_error==5001L) risultato="ERROR_DEPENDENT_RESOURCE_EXISTS";
-	else
-	if (i_error==5002L) risultato="ERROR_DEPENDENCY_NOT_FOUND";
-	else
-	if (i_error==5003L) risultato="ERROR_DEPENDENCY_ALREADY_EXISTS";
-	else
-	if (i_error==5004L) risultato="ERROR_RESOURCE_NOT_ONLINE";
-	else
-	if (i_error==5005L) risultato="ERROR_HOST_NODE_NOT_AVAILABLE";
-	else
-	if (i_error==5006L) risultato="ERROR_RESOURCE_NOT_AVAILABLE";
-	else
-	if (i_error==5007L) risultato="ERROR_RESOURCE_NOT_FOUND";
-	else
-	if (i_error==5008L) risultato="ERROR_SHUTDOWN_CLUSTER";
-	else
-	if (i_error==5009L) risultato="ERROR_CANT_EVICT_ACTIVE_NODE";
-	else
-	if (i_error==5010L) risultato="ERROR_OBJECT_ALREADY_EXISTS";
-	else
-	if (i_error==5011L) risultato="ERROR_OBJECT_IN_LIST";
-	else
-	if (i_error==5012L) risultato="ERROR_GROUP_NOT_AVAILABLE";
-	else
-	if (i_error==5013L) risultato="ERROR_GROUP_NOT_FOUND";
-	else
-	if (i_error==5014L) risultato="ERROR_GROUP_NOT_ONLINE";
-	else
-	if (i_error==5015L) risultato="ERROR_HOST_NODE_NOT_RESOURCE_OWNER";
-	else
-	if (i_error==5016L) risultato="ERROR_HOST_NODE_NOT_GROUP_OWNER";
-	else
-	if (i_error==5017L) risultato="ERROR_RESMON_CREATE_FAILED";
-	else
-	if (i_error==5018L) risultato="ERROR_RESMON_ONLINE_FAILED";
-	else
-	if (i_error==5019L) risultato="ERROR_RESOURCE_ONLINE";
-	else
-	if (i_error==5020L) risultato="ERROR_QUORUM_RESOURCE";
-	else
-	if (i_error==5021L) risultato="ERROR_NOT_QUORUM_CAPABLE";
-	else
-	if (i_error==5022L) risultato="ERROR_CLUSTER_SHUTTING_DOWN";
-	else
-	if (i_error==5023L) risultato="ERROR_INVALID_STATE";
-	else
-	if (i_error==5024L) risultato="ERROR_RESOURCE_PROPERTIES_STORED";
-	else
-	if (i_error==5025L) risultato="ERROR_NOT_QUORUM_CLASS";
-	else
-	if (i_error==5026L) risultato="ERROR_CORE_RESOURCE";
-	else
-	if (i_error==5027L) risultato="ERROR_QUORUM_RESOURCE_ONLINE_FAILED";
-	else
-	if (i_error==5028L) risultato="ERROR_QUORUMLOG_OPEN_FAILED";
-	else
-	if (i_error==5029L) risultato="ERROR_CLUSTERLOG_CORRUPT";
-	else
-	if (i_error==5030L) risultato="ERROR_CLUSTERLOG_RECORD_EXCEEDS_MAXSIZE";
-	else
-	if (i_error==5031L) risultato="ERROR_CLUSTERLOG_EXCEEDS_MAXSIZE";
-	else
-	if (i_error==5032L) risultato="ERROR_CLUSTERLOG_CHKPOINT_NOT_FOUND";
-	else
-	if (i_error==5033L) risultato="ERROR_CLUSTERLOG_NOT_ENOUGH_SPACE";
-	else
-	if (i_error==5034L) risultato="ERROR_QUORUM_OWNER_ALIVE";
-	else
-	if (i_error==5035L) risultato="ERROR_NETWORK_NOT_AVAILABLE";
-	else
-	if (i_error==5036L) risultato="ERROR_NODE_NOT_AVAILABLE";
-	else
-	if (i_error==5037L) risultato="ERROR_ALL_NODES_NOT_AVAILABLE";
-	else
-	if (i_error==5038L) risultato="ERROR_RESOURCE_FAILED";
-	else
-	if (i_error==5039L) risultato="ERROR_CLUSTER_INVALID_NODE";
-	else
-	if (i_error==5040L) risultato="ERROR_CLUSTER_NODE_EXISTS";
-	else
-	if (i_error==5041L) risultato="ERROR_CLUSTER_JOIN_IN_PROGRESS";
-	else
-	if (i_error==5042L) risultato="ERROR_CLUSTER_NODE_NOT_FOUND";
-	else
-	if (i_error==5043L) risultato="ERROR_CLUSTER_LOCAL_NODE_NOT_FOUND";
-	else
-	if (i_error==5044L) risultato="ERROR_CLUSTER_NETWORK_EXISTS";
-	else
-	if (i_error==5045L) risultato="ERROR_CLUSTER_NETWORK_NOT_FOUND";
-	else
-	if (i_error==5046L) risultato="ERROR_CLUSTER_NETINTERFACE_EXISTS";
-	else
-	if (i_error==5047L) risultato="ERROR_CLUSTER_NETINTERFACE_NOT_FOUND";
-	else
-	if (i_error==5048L) risultato="ERROR_CLUSTER_INVALID_REQUEST";
-	else
-	if (i_error==5049L) risultato="ERROR_CLUSTER_INVALID_NETWORK_PROVIDER";
-	else
-	if (i_error==5050L) risultato="ERROR_CLUSTER_NODE_DOWN";
-	else
-	if (i_error==5051L) risultato="ERROR_CLUSTER_NODE_UNREACHABLE";
-	else
-	if (i_error==5052L) risultato="ERROR_CLUSTER_NODE_NOT_MEMBER";
-	else
-	if (i_error==5053L) risultato="ERROR_CLUSTER_JOIN_NOT_IN_PROGRESS";
-	else
-	if (i_error==5054L) risultato="ERROR_CLUSTER_INVALID_NETWORK";
-	else
-	if (i_error==5056L) risultato="ERROR_CLUSTER_NODE_UP";
-	else
-	if (i_error==5057L) risultato="ERROR_CLUSTER_IPADDR_IN_USE";
-	else
-	if (i_error==5058L) risultato="ERROR_CLUSTER_NODE_NOT_PAUSED";
-	else
-	if (i_error==5059L) risultato="ERROR_CLUSTER_NO_SECURITY_CONTEXT";
-	else
-	if (i_error==5060L) risultato="ERROR_CLUSTER_NETWORK_NOT_INTERNAL";
-	else
-	if (i_error==5061L) risultato="ERROR_CLUSTER_NODE_ALREADY_UP";
-	else
-	if (i_error==5062L) risultato="ERROR_CLUSTER_NODE_ALREADY_DOWN";
-	else
-	if (i_error==5063L) risultato="ERROR_CLUSTER_NETWORK_ALREADY_ONLINE";
-	else
-	if (i_error==5064L) risultato="ERROR_CLUSTER_NETWORK_ALREADY_OFFLINE";
-	else
-	if (i_error==5065L) risultato="ERROR_CLUSTER_NODE_ALREADY_MEMBER";
-	else
-	if (i_error==5066L) risultato="ERROR_CLUSTER_LAST_INTERNAL_NETWORK";
-	else
-	if (i_error==5067L) risultato="ERROR_CLUSTER_NETWORK_HAS_DEPENDENTS";
-	else
-	if (i_error==5068L) risultato="ERROR_INVALID_OPERATION_ON_QUORUM";
-	else
-	if (i_error==5069L) risultato="ERROR_DEPENDENCY_NOT_ALLOWED";
-	else
-	if (i_error==5070L) risultato="ERROR_CLUSTER_NODE_PAUSED";
-	else
-	if (i_error==5071L) risultato="ERROR_NODE_CANT_HOST_RESOURCE";
-	else
-	if (i_error==5072L) risultato="ERROR_CLUSTER_NODE_NOT_READY";
-	else
-	if (i_error==5073L) risultato="ERROR_CLUSTER_NODE_SHUTTING_DOWN";
-	else
-	if (i_error==5074L) risultato="ERROR_CLUSTER_JOIN_ABORTED";
-	else
-	if (i_error==5075L) risultato="ERROR_CLUSTER_INCOMPATIBLE_VERSIONS";
-	else
-	if (i_error==5076L) risultato="ERROR_CLUSTER_MAXNUM_OF_RESOURCES_EXCEEDED";
-	else
-	if (i_error==5077L) risultato="ERROR_CLUSTER_SYSTEM_CONFIG_CHANGED";
-	else
-	if (i_error==5078L) risultato="ERROR_CLUSTER_RESOURCE_TYPE_NOT_FOUND";
-	else
-	if (i_error==5079L) risultato="ERROR_CLUSTER_RESTYPE_NOT_SUPPORTED";
-	else
-	if (i_error==5080L) risultato="ERROR_CLUSTER_RESNAME_NOT_FOUND";
-	else
-	if (i_error==5081L) risultato="ERROR_CLUSTER_NO_RPC_PACKAGES_REGISTERED";
-	else
-	if (i_error==5082L) risultato="ERROR_CLUSTER_OWNER_NOT_IN_PREFLIST";
-	else
-	if (i_error==5083L) risultato="ERROR_CLUSTER_DATABASE_SEQMISMATCH";
-	else
-	if (i_error==5084L) risultato="ERROR_RESMON_INVALID_STATE";
-	else
-	if (i_error==5085L) risultato="ERROR_CLUSTER_GUM_NOT_LOCKER";
-	else
-	if (i_error==5086L) risultato="ERROR_QUORUM_DISK_NOT_FOUND";
-	else
-	if (i_error==5087L) risultato="ERROR_DATABASE_BACKUP_CORRUPT";
-	else
-	if (i_error==5088L) risultato="ERROR_CLUSTER_NODE_ALREADY_HAS_DFS_ROOT";
-	else
-	if (i_error==5089L) risultato="ERROR_RESOURCE_PROPERTY_UNCHANGEABLE";
-	else
-	if (i_error==5090L) risultato="ERROR_NO_ADMIN_ACCESS_POINT";
-	else
-	if (i_error==5890L) risultato="ERROR_CLUSTER_MEMBERSHIP_INVALID_STATE";
-	else
-	if (i_error==5891L) risultato="ERROR_CLUSTER_QUORUMLOG_NOT_FOUND";
-	else
-	if (i_error==5892L) risultato="ERROR_CLUSTER_MEMBERSHIP_HALT";
-	else
-	if (i_error==5893L) risultato="ERROR_CLUSTER_INSTANCE_ID_MISMATCH";
-	else
-	if (i_error==5894L) risultato="ERROR_CLUSTER_NETWORK_NOT_FOUND_FOR_IP";
-	else
-	if (i_error==5895L) risultato="ERROR_CLUSTER_PROPERTY_DATA_TYPE_MISMATCH";
-	else
-	if (i_error==5896L) risultato="ERROR_CLUSTER_EVICT_WITHOUT_CLEANUP";
-	else
-	if (i_error==5897L) risultato="ERROR_CLUSTER_PARAMETER_MISMATCH";
-	else
-	if (i_error==5898L) risultato="ERROR_NODE_CANNOT_BE_CLUSTERED";
-	else
-	if (i_error==5899L) risultato="ERROR_CLUSTER_WRONG_OS_VERSION";
-	else
-	if (i_error==5900L) risultato="ERROR_CLUSTER_CANT_CREATE_DUP_CLUSTER_NAME";
-	else
-	if (i_error==5901L) risultato="ERROR_CLUSCFG_ALREADY_COMMITTED";
-	else
-	if (i_error==5902L) risultato="ERROR_CLUSCFG_ROLLBACK_FAILED";
-	else
-	if (i_error==5903L) risultato="ERROR_CLUSCFG_SYSTEM_DISK_DRIVE_LETTER_CONFLICT";
-	else
-	if (i_error==5904L) risultato="ERROR_CLUSTER_OLD_VERSION";
-	else
-	if (i_error==5905L) risultato="ERROR_CLUSTER_MISMATCHED_COMPUTER_ACCT_NAME";
-	else
-	if (i_error==5906L) risultato="ERROR_CLUSTER_NO_NET_ADAPTERS";
-	else
-	if (i_error==5907L) risultato="ERROR_CLUSTER_POISONED";
-	else
-	if (i_error==5908L) risultato="ERROR_CLUSTER_GROUP_MOVING";
-	else
-	if (i_error==5909L) risultato="ERROR_CLUSTER_RESOURCE_TYPE_BUSY";
-	else
-	if (i_error==5910L) risultato="ERROR_RESOURCE_CALL_TIMED_OUT";
-	else
-	if (i_error==5911L) risultato="ERROR_INVALID_CLUSTER_IPV6_ADDRESS";
-	else
-	if (i_error==5912L) risultato="ERROR_CLUSTER_INTERNAL_INVALID_FUNCTION";
-	else
-	if (i_error==5913L) risultato="ERROR_CLUSTER_PARAMETER_OUT_OF_BOUNDS";
-	else
-	if (i_error==5914L) risultato="ERROR_CLUSTER_PARTIAL_SEND";
-	else
-	if (i_error==5915L) risultato="ERROR_CLUSTER_REGISTRY_INVALID_FUNCTION";
-	else
-	if (i_error==5916L) risultato="ERROR_CLUSTER_INVALID_STRING_TERMINATION";
-	else
-	if (i_error==5917L) risultato="ERROR_CLUSTER_INVALID_STRING_FORMAT";
-	else
-	if (i_error==5918L) risultato="ERROR_CLUSTER_DATABASE_TRANSACTION_IN_PROGRESS";
-	else
-	if (i_error==5919L) risultato="ERROR_CLUSTER_DATABASE_TRANSACTION_NOT_IN_PROGRESS";
-	else
-	if (i_error==5920L) risultato="ERROR_CLUSTER_NULL_DATA";
-	else
-	if (i_error==5921L) risultato="ERROR_CLUSTER_PARTIAL_READ";
-	else
-	if (i_error==5922L) risultato="ERROR_CLUSTER_PARTIAL_WRITE";
-	else
-	if (i_error==5923L) risultato="ERROR_CLUSTER_CANT_DESERIALIZE_DATA";
-	else
-	if (i_error==5924L) risultato="ERROR_DEPENDENT_RESOURCE_PROPERTY_CONFLICT";
-	else
-	if (i_error==5925L) risultato="ERROR_CLUSTER_NO_QUORUM";
-	else
-	if (i_error==5926L) risultato="ERROR_CLUSTER_INVALID_IPV6_NETWORK";
-	else
-	if (i_error==5927L) risultato="ERROR_CLUSTER_INVALID_IPV6_TUNNEL_NETWORK";
-	else
-	if (i_error==5928L) risultato="ERROR_QUORUM_NOT_ALLOWED_IN_THIS_GROUP";
-	else
-	if (i_error==5929L) risultato="ERROR_DEPENDENCY_TREE_TOO_COMPLEX";
-	else
-	if (i_error==5930L) risultato="ERROR_EXCEPTION_IN_RESOURCE_CALL";
-	else
-	if (i_error==5931L) risultato="ERROR_CLUSTER_RHS_FAILED_INITIALIZATION";
-	else
-	if (i_error==5932L) risultato="ERROR_CLUSTER_NOT_INSTALLED";
-	else
-	if (i_error==5933L) risultato="ERROR_CLUSTER_RESOURCES_MUST_BE_ONLINE_ON_THE_SAME_NODE";
-	else
-	if (i_error==5934L) risultato="ERROR_CLUSTER_MAX_NODES_IN_CLUSTER";
-	else
-	if (i_error==5935L) risultato="ERROR_CLUSTER_TOO_MANY_NODES";
-	else
-	if (i_error==5936L) risultato="ERROR_CLUSTER_OBJECT_ALREADY_USED";
-	else
-	if (i_error==5937L) risultato="ERROR_NONCORE_GROUPS_FOUND";
-	else
-	if (i_error==5938L) risultato="ERROR_FILE_SHARE_RESOURCE_CONFLICT";
-	else
-	if (i_error==5939L) risultato="ERROR_CLUSTER_EVICT_INVALID_REQUEST";
-	else
-	if (i_error==5940L) risultato="ERROR_CLUSTER_SINGLETON_RESOURCE";
-	else
-	if (i_error==5941L) risultato="ERROR_CLUSTER_GROUP_SINGLETON_RESOURCE";
-	else
-	if (i_error==5942L) risultato="ERROR_CLUSTER_RESOURCE_PROVIDER_FAILED";
-	else
-	if (i_error==5943L) risultato="ERROR_CLUSTER_RESOURCE_CONFIGURATION_ERROR";
-	else
-	if (i_error==5944L) risultato="ERROR_CLUSTER_GROUP_BUSY";
-	else
-	if (i_error==5945L) risultato="ERROR_CLUSTER_NOT_SHARED_VOLUME";
-	else
-	if (i_error==5946L) risultato="ERROR_CLUSTER_INVALID_SECURITY_DESCRIPTOR";
-	else
-	if (i_error==5947L) risultato="ERROR_CLUSTER_SHARED_VOLUMES_IN_USE";
-	else
-	if (i_error==5948L) risultato="ERROR_CLUSTER_USE_SHARED_VOLUMES_API";
-	else
-	if (i_error==5949L) risultato="ERROR_CLUSTER_BACKUP_IN_PROGRESS";
-	else
-	if (i_error==5950L) risultato="ERROR_NON_CSV_PATH";
-	else
-	if (i_error==5951L) risultato="ERROR_CSV_VOLUME_NOT_LOCAL";
-	else
-	if (i_error==5952L) risultato="ERROR_CLUSTER_WATCHDOG_TERMINATING";
-	else
-	if (i_error==5953L) risultato="ERROR_CLUSTER_RESOURCE_VETOED_MOVE_INCOMPATIBLE_NODES";
-	else
-	if (i_error==5954L) risultato="ERROR_CLUSTER_INVALID_NODE_WEIGHT";
-	else
-	if (i_error==5955L) risultato="ERROR_CLUSTER_RESOURCE_VETOED_CALL";
-	else
-	if (i_error==5956L) risultato="ERROR_RESMON_SYSTEM_RESOURCES_LACKING";
-	else
-	if (i_error==5957L) risultato="ERROR_CLUSTER_RESOURCE_VETOED_MOVE_NOT_ENOUGH_RESOURCES_ON_DESTINATION";
-	else
-	if (i_error==5958L) risultato="ERROR_CLUSTER_RESOURCE_VETOED_MOVE_NOT_ENOUGH_RESOURCES_ON_SOURCE";
-	else
-	if (i_error==5959L) risultato="ERROR_CLUSTER_GROUP_QUEUED";
-	else
-	if (i_error==5960L) risultato="ERROR_CLUSTER_RESOURCE_LOCKED_STATUS";
-	else
-	if (i_error==5961L) risultato="ERROR_CLUSTER_SHARED_VOLUME_FAILOVER_NOT_ALLOWED";
-	else
-	if (i_error==5962L) risultato="ERROR_CLUSTER_NODE_DRAIN_IN_PROGRESS";
-	else
-	if (i_error==5963L) risultato="ERROR_CLUSTER_DISK_NOT_CONNECTED";
-	else
-	if (i_error==5964L) risultato="ERROR_DISK_NOT_CSV_CAPABLE";
-	else
-	if (i_error==5965L) risultato="ERROR_RESOURCE_NOT_IN_AVAILABLE_STORAGE";
-	else
-	if (i_error==5966L) risultato="ERROR_CLUSTER_SHARED_VOLUME_REDIRECTED";
-	else
-	if (i_error==5967L) risultato="ERROR_CLUSTER_SHARED_VOLUME_NOT_REDIRECTED";
-	else
-	if (i_error==5968L) risultato="ERROR_CLUSTER_CANNOT_RETURN_PROPERTIES";
-	else
-	if (i_error==5969L) risultato="ERROR_CLUSTER_RESOURCE_CONTAINS_UNSUPPORTED_DIFF_AREA_FOR_SHARED_VOLUMES";
-	else
-	if (i_error==5970L) risultato="ERROR_CLUSTER_RESOURCE_IS_IN_MAINTENANCE_MODE";
-	else
-	if (i_error==5971L) risultato="ERROR_CLUSTER_AFFINITY_CONFLICT";
-	else
-	if (i_error==5972L) risultato="ERROR_CLUSTER_RESOURCE_IS_REPLICA_VIRTUAL_MACHINE";
-	else
-	if (i_error==5973L) risultato="ERROR_CLUSTER_UPGRADE_INCOMPATIBLE_VERSIONS";
-	else
-	if (i_error==5974L) risultato="ERROR_CLUSTER_UPGRADE_FIX_QUORUM_NOT_SUPPORTED";
-	else
-	if (i_error==5975L) risultato="ERROR_CLUSTER_UPGRADE_RESTART_REQUIRED";
-	else
-	if (i_error==5976L) risultato="ERROR_CLUSTER_UPGRADE_IN_PROGRESS";
-	else
-	if (i_error==5977L) risultato="ERROR_CLUSTER_UPGRADE_INCOMPLETE";
-	else
-	if (i_error==5978L) risultato="ERROR_CLUSTER_NODE_IN_GRACE_PERIOD";
-	else
-	if (i_error==5979L) risultato="ERROR_CLUSTER_CSV_IO_PAUSE_TIMEOUT";
-	else
-	if (i_error==5980L) risultato="ERROR_NODE_NOT_ACTIVE_CLUSTER_MEMBER";
-	else
-	if (i_error==5981L) risultato="ERROR_CLUSTER_RESOURCE_NOT_MONITORED";
-	else
-	if (i_error==5982L) risultato="ERROR_CLUSTER_RESOURCE_DOES_NOT_SUPPORT_UNMONITORED";
-	else
-	if (i_error==5983L) risultato="ERROR_CLUSTER_RESOURCE_IS_REPLICATED";
-	else
-	if (i_error==5984L) risultato="ERROR_CLUSTER_NODE_ISOLATED";
-	else
-	if (i_error==5985L) risultato="ERROR_CLUSTER_NODE_QUARANTINED";
-	else
-	if (i_error==5986L) risultato="ERROR_CLUSTER_DATABASE_UPDATE_CONDITION_FAILED";
-	else
-	if (i_error==5987L) risultato="ERROR_CLUSTER_SPACE_DEGRADED";
-	else
-	if (i_error==5988L) risultato="ERROR_CLUSTER_TOKEN_DELEGATION_NOT_SUPPORTED";
-	else
-	if (i_error==5989L) risultato="ERROR_CLUSTER_CSV_INVALID_HANDLE";
-	else
-	if (i_error==5990L) risultato="ERROR_CLUSTER_CSV_SUPPORTED_ONLY_ON_COORDINATOR";
-	else
-	if (i_error==5991L) risultato="ERROR_GROUPSET_NOT_AVAILABLE";
-	else
-	if (i_error==5992L) risultato="ERROR_GROUPSET_NOT_FOUND";
-	else
-	if (i_error==5993L) risultato="ERROR_GROUPSET_CANT_PROVIDE";
-	else
-	if (i_error==5994L) risultato="ERROR_CLUSTER_FAULT_DOMAIN_PARENT_NOT_FOUND";
-	else
-	if (i_error==5995L) risultato="ERROR_CLUSTER_FAULT_DOMAIN_INVALID_HIERARCHY";
-	else
-	if (i_error==5996L) risultato="ERROR_CLUSTER_FAULT_DOMAIN_FAILED_S2D_VALIDATION";
-	else
-	if (i_error==5997L) risultato="ERROR_CLUSTER_FAULT_DOMAIN_S2D_CONNECTIVITY_LOSS";
-	else
-	if (i_error==6000L) risultato="ERROR_ENCRYPTION_FAILED";
-	else
-	if (i_error==6001L) risultato="ERROR_DECRYPTION_FAILED";
-	else
-	if (i_error==6002L) risultato="ERROR_FILE_ENCRYPTED";
-	else
-	if (i_error==6003L) risultato="ERROR_NO_RECOVERY_POLICY";
-	else
-	if (i_error==6004L) risultato="ERROR_NO_EFS";
-	else
-	if (i_error==6005L) risultato="ERROR_WRONG_EFS";
-	else
-	if (i_error==6006L) risultato="ERROR_NO_USER_KEYS";
-	else
-	if (i_error==6007L) risultato="ERROR_FILE_NOT_ENCRYPTED";
-	else
-	if (i_error==6008L) risultato="ERROR_NOT_EXPORT_FORMAT";
-	else
-	if (i_error==6009L) risultato="ERROR_FILE_READ_ONLY";
-	else
-	if (i_error==6010L) risultato="ERROR_DIR_EFS_DISALLOWED";
-	else
-	if (i_error==6011L) risultato="ERROR_EFS_SERVER_NOT_TRUSTED";
-	else
-	if (i_error==6012L) risultato="ERROR_BAD_RECOVERY_POLICY";
-	else
-	if (i_error==6013L) risultato="ERROR_EFS_ALG_BLOB_TOO_BIG";
-	else
-	if (i_error==6014L) risultato="ERROR_VOLUME_NOT_SUPPORT_EFS";
-	else
-	if (i_error==6015L) risultato="ERROR_EFS_DISABLED";
-	else
-	if (i_error==6016L) risultato="ERROR_EFS_VERSION_NOT_SUPPORT";
-	else
-	if (i_error==6017L) risultato="ERROR_CS_ENCRYPTION_INVALID_SERVER_RESPONSE";
-	else
-	if (i_error==6018L) risultato="ERROR_CS_ENCRYPTION_UNSUPPORTED_SERVER";
-	else
-	if (i_error==6019L) risultato="ERROR_CS_ENCRYPTION_EXISTING_ENCRYPTED_FILE";
-	else
-	if (i_error==6020L) risultato="ERROR_CS_ENCRYPTION_NEW_ENCRYPTED_FILE";
-	else
-	if (i_error==6021L) risultato="ERROR_CS_ENCRYPTION_FILE_NOT_CSE";
-	else
-	if (i_error==6022L) risultato="ERROR_ENCRYPTION_POLICY_DENIES_OPERATION";
-	else
-	if (i_error==6118L) risultato="ERROR_NO_BROWSER_SERVERS_FOUND";
-	else
-	if (i_error==6200L) risultato="SCHED_E_SERVICE_NOT_LOCALSYSTEM";
-	else
-	if (i_error==6600L) risultato="ERROR_LOG_SECTOR_INVALID";
-	else
-	if (i_error==6601L) risultato="ERROR_LOG_SECTOR_PARITY_INVALID";
-	else
-	if (i_error==6602L) risultato="ERROR_LOG_SECTOR_REMAPPED";
-	else
-	if (i_error==6603L) risultato="ERROR_LOG_BLOCK_INCOMPLETE";
-	else
-	if (i_error==6604L) risultato="ERROR_LOG_INVALID_RANGE";
-	else
-	if (i_error==6605L) risultato="ERROR_LOG_BLOCKS_EXHAUSTED";
-	else
-	if (i_error==6606L) risultato="ERROR_LOG_READ_CONTEXT_INVALID";
-	else
-	if (i_error==6607L) risultato="ERROR_LOG_RESTART_INVALID";
-	else
-	if (i_error==6608L) risultato="ERROR_LOG_BLOCK_VERSION";
-	else
-	if (i_error==6609L) risultato="ERROR_LOG_BLOCK_INVALID";
-	else
-	if (i_error==6610L) risultato="ERROR_LOG_READ_MODE_INVALID";
-	else
-	if (i_error==6611L) risultato="ERROR_LOG_NO_RESTART";
-	else
-	if (i_error==6612L) risultato="ERROR_LOG_METADATA_CORRUPT";
-	else
-	if (i_error==6613L) risultato="ERROR_LOG_METADATA_INVALID";
-	else
-	if (i_error==6614L) risultato="ERROR_LOG_METADATA_INCONSISTENT";
-	else
-	if (i_error==6615L) risultato="ERROR_LOG_RESERVATION_INVALID";
-	else
-	if (i_error==6616L) risultato="ERROR_LOG_CANT_DELETE";
-	else
-	if (i_error==6617L) risultato="ERROR_LOG_CONTAINER_LIMIT_EXCEEDED";
-	else
-	if (i_error==6618L) risultato="ERROR_LOG_START_OF_LOG";
-	else
-	if (i_error==6619L) risultato="ERROR_LOG_POLICY_ALREADY_INSTALLED";
-	else
-	if (i_error==6620L) risultato="ERROR_LOG_POLICY_NOT_INSTALLED";
-	else
-	if (i_error==6621L) risultato="ERROR_LOG_POLICY_INVALID";
-	else
-	if (i_error==6622L) risultato="ERROR_LOG_POLICY_CONFLICT";
-	else
-	if (i_error==6623L) risultato="ERROR_LOG_PINNED_ARCHIVE_TAIL";
-	else
-	if (i_error==6624L) risultato="ERROR_LOG_RECORD_NONEXISTENT";
-	else
-	if (i_error==6625L) risultato="ERROR_LOG_RECORDS_RESERVED_INVALID";
-	else
-	if (i_error==6626L) risultato="ERROR_LOG_SPACE_RESERVED_INVALID";
-	else
-	if (i_error==6627L) risultato="ERROR_LOG_TAIL_INVALID";
-	else
-	if (i_error==6628L) risultato="ERROR_LOG_FULL";
-	else
-	if (i_error==6629L) risultato="ERROR_COULD_NOT_RESIZE_LOG";
-	else
-	if (i_error==6630L) risultato="ERROR_LOG_MULTIPLEXED";
-	else
-	if (i_error==6631L) risultato="ERROR_LOG_DEDICATED";
-	else
-	if (i_error==6632L) risultato="ERROR_LOG_ARCHIVE_NOT_IN_PROGRESS";
-	else
-	if (i_error==6633L) risultato="ERROR_LOG_ARCHIVE_IN_PROGRESS";
-	else
-	if (i_error==6634L) risultato="ERROR_LOG_EPHEMERAL";
-	else
-	if (i_error==6635L) risultato="ERROR_LOG_NOT_ENOUGH_CONTAINERS";
-	else
-	if (i_error==6636L) risultato="ERROR_LOG_CLIENT_ALREADY_REGISTERED";
-	else
-	if (i_error==6637L) risultato="ERROR_LOG_CLIENT_NOT_REGISTERED";
-	else
-	if (i_error==6638L) risultato="ERROR_LOG_FULL_HANDLER_IN_PROGRESS";
-	else
-	if (i_error==6639L) risultato="ERROR_LOG_CONTAINER_READ_FAILED";
-	else
-	if (i_error==6640L) risultato="ERROR_LOG_CONTAINER_WRITE_FAILED";
-	else
-	if (i_error==6641L) risultato="ERROR_LOG_CONTAINER_OPEN_FAILED";
-	else
-	if (i_error==6642L) risultato="ERROR_LOG_CONTAINER_STATE_INVALID";
-	else
-	if (i_error==6643L) risultato="ERROR_LOG_STATE_INVALID";
-	else
-	if (i_error==6644L) risultato="ERROR_LOG_PINNED";
-	else
-	if (i_error==6645L) risultato="ERROR_LOG_METADATA_FLUSH_FAILED";
-	else
-	if (i_error==6646L) risultato="ERROR_LOG_INCONSISTENT_SECURITY";
-	else
-	if (i_error==6647L) risultato="ERROR_LOG_APPENDED_FLUSH_FAILED";
-	else
-	if (i_error==6648L) risultato="ERROR_LOG_PINNED_RESERVATION";
-	else
-	if (i_error==6700L) risultato="ERROR_INVALID_TRANSACTION";
-	else
-	if (i_error==6701L) risultato="ERROR_TRANSACTION_NOT_ACTIVE";
-	else
-	if (i_error==6702L) risultato="ERROR_TRANSACTION_REQUEST_NOT_VALID";
-	else
-	if (i_error==6703L) risultato="ERROR_TRANSACTION_NOT_REQUESTED";
-	else
-	if (i_error==6704L) risultato="ERROR_TRANSACTION_ALREADY_ABORTED";
-	else
-	if (i_error==6705L) risultato="ERROR_TRANSACTION_ALREADY_COMMITTED";
-	else
-	if (i_error==6706L) risultato="ERROR_TM_INITIALIZATION_FAILED";
-	else
-	if (i_error==6707L) risultato="ERROR_RESOURCEMANAGER_READ_ONLY";
-	else
-	if (i_error==6708L) risultato="ERROR_TRANSACTION_NOT_JOINED";
-	else
-	if (i_error==6709L) risultato="ERROR_TRANSACTION_SUPERIOR_EXISTS";
-	else
-	if (i_error==6710L) risultato="ERROR_CRM_PROTOCOL_ALREADY_EXISTS";
-	else
-	if (i_error==6711L) risultato="ERROR_TRANSACTION_PROPAGATION_FAILED";
-	else
-	if (i_error==6712L) risultato="ERROR_CRM_PROTOCOL_NOT_FOUND";
-	else
-	if (i_error==6713L) risultato="ERROR_TRANSACTION_INVALID_MARSHALL_BUFFER";
-	else
-	if (i_error==6714L) risultato="ERROR_CURRENT_TRANSACTION_NOT_VALID";
-	else
-	if (i_error==6715L) risultato="ERROR_TRANSACTION_NOT_FOUND";
-	else
-	if (i_error==6716L) risultato="ERROR_RESOURCEMANAGER_NOT_FOUND";
-	else
-	if (i_error==6717L) risultato="ERROR_ENLISTMENT_NOT_FOUND";
-	else
-	if (i_error==6718L) risultato="ERROR_TRANSACTIONMANAGER_NOT_FOUND";
-	else
-	if (i_error==6719L) risultato="ERROR_TRANSACTIONMANAGER_NOT_ONLINE";
-	else
-	if (i_error==6720L) risultato="ERROR_TRANSACTIONMANAGER_RECOVERY_NAME_COLLISION";
-	else
-	if (i_error==6721L) risultato="ERROR_TRANSACTION_NOT_ROOT";
-	else
-	if (i_error==6722L) risultato="ERROR_TRANSACTION_OBJECT_EXPIRED";
-	else
-	if (i_error==6723L) risultato="ERROR_TRANSACTION_RESPONSE_NOT_ENLISTED";
-	else
-	if (i_error==6724L) risultato="ERROR_TRANSACTION_RECORD_TOO_LONG";
-	else
-	if (i_error==6725L) risultato="ERROR_IMPLICIT_TRANSACTION_NOT_SUPPORTED";
-	else
-	if (i_error==6726L) risultato="ERROR_TRANSACTION_INTEGRITY_VIOLATED";
-	else
-	if (i_error==6727L) risultato="ERROR_TRANSACTIONMANAGER_IDENTITY_MISMATCH";
-	else
-	if (i_error==6728L) risultato="ERROR_RM_CANNOT_BE_FROZEN_FOR_SNAPSHOT";
-	else
-	if (i_error==6729L) risultato="ERROR_TRANSACTION_MUST_WRITETHROUGH";
-	else
-	if (i_error==6730L) risultato="ERROR_TRANSACTION_NO_SUPERIOR";
-	else
-	if (i_error==6731L) risultato="ERROR_HEURISTIC_DAMAGE_POSSIBLE";
-	else
-	if (i_error==6800L) risultato="ERROR_TRANSACTIONAL_CONFLICT";
-	else
-	if (i_error==6801L) risultato="ERROR_RM_NOT_ACTIVE";
-	else
-	if (i_error==6802L) risultato="ERROR_RM_METADATA_CORRUPT";
-	else
-	if (i_error==6803L) risultato="ERROR_DIRECTORY_NOT_RM";
-	else
-	if (i_error==6805L) risultato="ERROR_TRANSACTIONS_UNSUPPORTED_REMOTE";
-	else
-	if (i_error==6806L) risultato="ERROR_LOG_RESIZE_INVALID_SIZE";
-	else
-	if (i_error==6807L) risultato="ERROR_OBJECT_NO_LONGER_EXISTS";
-	else
-	if (i_error==6808L) risultato="ERROR_STREAM_MINIVERSION_NOT_FOUND";
-	else
-	if (i_error==6809L) risultato="ERROR_STREAM_MINIVERSION_NOT_VALID";
-	else
-	if (i_error==6810L) risultato="ERROR_MINIVERSION_INACCESSIBLE_FROM_SPECIFIED_TRANSACTION";
-	else
-	if (i_error==6811L) risultato="ERROR_CANT_OPEN_MINIVERSION_WITH_MODIFY_INTENT";
-	else
-	if (i_error==6812L) risultato="ERROR_CANT_CREATE_MORE_STREAM_MINIVERSIONS";
-	else
-	if (i_error==6814L) risultato="ERROR_REMOTE_FILE_VERSION_MISMATCH";
-	else
-	if (i_error==6815L) risultato="ERROR_HANDLE_NO_LONGER_VALID";
-	else
-	if (i_error==6816L) risultato="ERROR_NO_TXF_METADATA";
-	else
-	if (i_error==6817L) risultato="ERROR_LOG_CORRUPTION_DETECTED";
-	else
-	if (i_error==6818L) risultato="ERROR_CANT_RECOVER_WITH_HANDLE_OPEN";
-	else
-	if (i_error==6819L) risultato="ERROR_RM_DISCONNECTED";
-	else
-	if (i_error==6820L) risultato="ERROR_ENLISTMENT_NOT_SUPERIOR";
-	else
-	if (i_error==6821L) risultato="ERROR_RECOVERY_NOT_NEEDED";
-	else
-	if (i_error==6822L) risultato="ERROR_RM_ALREADY_STARTED";
-	else
-	if (i_error==6823L) risultato="ERROR_FILE_IDENTITY_NOT_PERSISTENT";
-	else
-	if (i_error==6824L) risultato="ERROR_CANT_BREAK_TRANSACTIONAL_DEPENDENCY";
-	else
-	if (i_error==6825L) risultato="ERROR_CANT_CROSS_RM_BOUNDARY";
-	else
-	if (i_error==6826L) risultato="ERROR_TXF_DIR_NOT_EMPTY";
-	else
-	if (i_error==6827L) risultato="ERROR_INDOUBT_TRANSACTIONS_EXIST";
-	else
-	if (i_error==6828L) risultato="ERROR_TM_VOLATILE";
-	else
-	if (i_error==6829L) risultato="ERROR_ROLLBACK_TIMER_EXPIRED";
-	else
-	if (i_error==6830L) risultato="ERROR_TXF_ATTRIBUTE_CORRUPT";
-	else
-	if (i_error==6831L) risultato="ERROR_EFS_NOT_ALLOWED_IN_TRANSACTION";
-	else
-	if (i_error==6832L) risultato="ERROR_TRANSACTIONAL_OPEN_NOT_ALLOWED";
-	else
-	if (i_error==6833L) risultato="ERROR_LOG_GROWTH_FAILED";
-	else
-	if (i_error==6834L) risultato="ERROR_TRANSACTED_MAPPING_UNSUPPORTED_REMOTE";
-	else
-	if (i_error==6835L) risultato="ERROR_TXF_METADATA_ALREADY_PRESENT";
-	else
-	if (i_error==6836L) risultato="ERROR_TRANSACTION_SCOPE_CALLBACKS_NOT_SET";
-	else
-	if (i_error==6837L) risultato="ERROR_TRANSACTION_REQUIRED_PROMOTION";
-	else
-	if (i_error==6838L) risultato="ERROR_CANNOT_EXECUTE_FILE_IN_TRANSACTION";
-	else
-	if (i_error==6839L) risultato="ERROR_TRANSACTIONS_NOT_FROZEN";
-	else
-	if (i_error==6840L) risultato="ERROR_TRANSACTION_FREEZE_IN_PROGRESS";
-	else
-	if (i_error==6841L) risultato="ERROR_NOT_SNAPSHOT_VOLUME";
-	else
-	if (i_error==6842L) risultato="ERROR_NO_SAVEPOINT_WITH_OPEN_FILES";
-	else
-	if (i_error==6843L) risultato="ERROR_DATA_LOST_REPAIR";
-	else
-	if (i_error==6844L) risultato="ERROR_SPARSE_NOT_ALLOWED_IN_TRANSACTION";
-	else
-	if (i_error==6845L) risultato="ERROR_TM_IDENTITY_MISMATCH";
-	else
-	if (i_error==6846L) risultato="ERROR_FLOATED_SECTION";
-	else
-	if (i_error==6847L) risultato="ERROR_CANNOT_ACCEPT_TRANSACTED_WORK";
-	else
-	if (i_error==6848L) risultato="ERROR_CANNOT_ABORT_TRANSACTIONS";
-	else
-	if (i_error==6849L) risultato="ERROR_BAD_CLUSTERS";
-	else
-	if (i_error==6850L) risultato="ERROR_COMPRESSION_NOT_ALLOWED_IN_TRANSACTION";
-	else
-	if (i_error==6851L) risultato="ERROR_VOLUME_DIRTY";
-	else
-	if (i_error==6852L) risultato="ERROR_NO_LINK_TRACKING_IN_TRANSACTION";
-	else
-	if (i_error==6853L) risultato="ERROR_OPERATION_NOT_SUPPORTED_IN_TRANSACTION";
-	else
-	if (i_error==6854L) risultato="ERROR_EXPIRED_HANDLE";
-	else
-	if (i_error==6855L) risultato="ERROR_TRANSACTION_NOT_ENLISTED";
-	else
-	if (i_error==7001L) risultato="ERROR_CTX_WINSTATION_NAME_INVALID";
-	else
-	if (i_error==7002L) risultato="ERROR_CTX_INVALID_PD";
-	else
-	if (i_error==7003L) risultato="ERROR_CTX_PD_NOT_FOUND";
-	else
-	if (i_error==7004L) risultato="ERROR_CTX_WD_NOT_FOUND";
-	else
-	if (i_error==7005L) risultato="ERROR_CTX_CANNOT_MAKE_EVENTLOG_ENTRY";
-	else
-	if (i_error==7006L) risultato="ERROR_CTX_SERVICE_NAME_COLLISION";
-	else
-	if (i_error==7007L) risultato="ERROR_CTX_CLOSE_PENDING";
-	else
-	if (i_error==7008L) risultato="ERROR_CTX_NO_OUTBUF";
-	else
-	if (i_error==7009L) risultato="ERROR_CTX_MODEM_INF_NOT_FOUND";
-	else
-	if (i_error==7010L) risultato="ERROR_CTX_INVALID_MODEMNAME";
-	else
-	if (i_error==7011L) risultato="ERROR_CTX_MODEM_RESPONSE_ERROR";
-	else
-	if (i_error==7012L) risultato="ERROR_CTX_MODEM_RESPONSE_TIMEOUT";
-	else
-	if (i_error==7013L) risultato="ERROR_CTX_MODEM_RESPONSE_NO_CARRIER";
-	else
-	if (i_error==7014L) risultato="ERROR_CTX_MODEM_RESPONSE_NO_DIALTONE";
-	else
-	if (i_error==7015L) risultato="ERROR_CTX_MODEM_RESPONSE_BUSY";
-	else
-	if (i_error==7016L) risultato="ERROR_CTX_MODEM_RESPONSE_VOICE";
-	else
-	if (i_error==7017L) risultato="ERROR_CTX_TD_ERROR";
-	else
-	if (i_error==7022L) risultato="ERROR_CTX_WINSTATION_NOT_FOUND";
-	else
-	if (i_error==7023L) risultato="ERROR_CTX_WINSTATION_ALREADY_EXISTS";
-	else
-	if (i_error==7024L) risultato="ERROR_CTX_WINSTATION_BUSY";
-	else
-	if (i_error==7025L) risultato="ERROR_CTX_BAD_VIDEO_MODE";
-	else
-	if (i_error==7035L) risultato="ERROR_CTX_GRAPHICS_INVALID";
-	else
-	if (i_error==7037L) risultato="ERROR_CTX_LOGON_DISABLED";
-	else
-	if (i_error==7038L) risultato="ERROR_CTX_NOT_CONSOLE";
-	else
-	if (i_error==7040L) risultato="ERROR_CTX_CLIENT_QUERY_TIMEOUT";
-	else
-	if (i_error==7041L) risultato="ERROR_CTX_CONSOLE_DISCONNECT";
-	else
-	if (i_error==7042L) risultato="ERROR_CTX_CONSOLE_CONNECT";
-	else
-	if (i_error==7044L) risultato="ERROR_CTX_SHADOW_DENIED";
-	else
-	if (i_error==7045L) risultato="ERROR_CTX_WINSTATION_ACCESS_DENIED";
-	else
-	if (i_error==7049L) risultato="ERROR_CTX_INVALID_WD";
-	else
-	if (i_error==7050L) risultato="ERROR_CTX_SHADOW_INVALID";
-	else
-	if (i_error==7051L) risultato="ERROR_CTX_SHADOW_DISABLED";
-	else
-	if (i_error==7052L) risultato="ERROR_CTX_CLIENT_LICENSE_IN_USE";
-	else
-	if (i_error==7053L) risultato="ERROR_CTX_CLIENT_LICENSE_NOT_SET";
-	else
-	if (i_error==7054L) risultato="ERROR_CTX_LICENSE_NOT_AVAILABLE";
-	else
-	if (i_error==7055L) risultato="ERROR_CTX_LICENSE_CLIENT_INVALID";
-	else
-	if (i_error==7056L) risultato="ERROR_CTX_LICENSE_EXPIRED";
-	else
-	if (i_error==7057L) risultato="ERROR_CTX_SHADOW_NOT_RUNNING";
-	else
-	if (i_error==7058L) risultato="ERROR_CTX_SHADOW_ENDED_BY_MODE_CHANGE";
-	else
-	if (i_error==7059L) risultato="ERROR_ACTIVATION_COUNT_EXCEEDED";
-	else
-	if (i_error==7060L) risultato="ERROR_CTX_WINSTATIONS_DISABLED";
-	else
-	if (i_error==7061L) risultato="ERROR_CTX_ENCRYPTION_LEVEL_REQUIRED";
-	else
-	if (i_error==7062L) risultato="ERROR_CTX_SESSION_IN_USE";
-	else
-	if (i_error==7063L) risultato="ERROR_CTX_NO_FORCE_LOGOFF";
-	else
-	if (i_error==7064L) risultato="ERROR_CTX_ACCOUNT_RESTRICTION";
-	else
-	if (i_error==7065L) risultato="ERROR_RDP_PROTOCOL_ERROR";
-	else
-	if (i_error==7066L) risultato="ERROR_CTX_CDM_CONNECT";
-	else
-	if (i_error==7067L) risultato="ERROR_CTX_CDM_DISCONNECT";
-	else
-	if (i_error==7068L) risultato="ERROR_CTX_SECURITY_LAYER_ERROR";
-	else
-	if (i_error==7069L) risultato="ERROR_TS_INCOMPATIBLE_SESSIONS";
-	else
-	if (i_error==7070L) risultato="ERROR_TS_VIDEO_SUBSYSTEM_ERROR";
-	else
-	if (i_error==8001L) risultato="FRS_ERR_INVALID_API_SEQUENCE";
-	else
-	if (i_error==8002L) risultato="FRS_ERR_STARTING_SERVICE";
-	else
-	if (i_error==8003L) risultato="FRS_ERR_STOPPING_SERVICE";
-	else
-	if (i_error==8004L) risultato="FRS_ERR_INTERNAL_API";
-	else
-	if (i_error==8005L) risultato="FRS_ERR_INTERNAL";
-	else
-	if (i_error==8006L) risultato="FRS_ERR_SERVICE_COMM";
-	else
-	if (i_error==8007L) risultato="FRS_ERR_INSUFFICIENT_PRIV";
-	else
-	if (i_error==8008L) risultato="FRS_ERR_AUTHENTICATION";
-	else
-	if (i_error==8009L) risultato="FRS_ERR_PARENT_INSUFFICIENT_PRIV";
-	else
-	if (i_error==8010L) risultato="FRS_ERR_PARENT_AUTHENTICATION";
-	else
-	if (i_error==8011L) risultato="FRS_ERR_CHILD_TO_PARENT_COMM";
-	else
-	if (i_error==8012L) risultato="FRS_ERR_PARENT_TO_CHILD_COMM";
-	else
-	if (i_error==8013L) risultato="FRS_ERR_SYSVOL_POPULATE";
-	else
-	if (i_error==8014L) risultato="FRS_ERR_SYSVOL_POPULATE_TIMEOUT";
-	else
-	if (i_error==8015L) risultato="FRS_ERR_SYSVOL_IS_BUSY";
-	else
-	if (i_error==8016L) risultato="FRS_ERR_SYSVOL_DEMOTE";
-	else
-	if (i_error==8017L) risultato="FRS_ERR_INVALID_SERVICE_PARAMETER";
-	else
-	if (i_error==NO_ERROR) risultato="DS_S_SUCCESS";
-	else
-	if (i_error==8200L) risultato="ERROR_DS_NOT_INSTALLED";
-	else
-	if (i_error==8201L) risultato="ERROR_DS_MEMBERSHIP_EVALUATED_LOCALLY";
-	else
-	if (i_error==8202L) risultato="ERROR_DS_NO_ATTRIBUTE_OR_VALUE";
-	else
-	if (i_error==8203L) risultato="ERROR_DS_INVALID_ATTRIBUTE_SYNTAX";
-	else
-	if (i_error==8204L) risultato="ERROR_DS_ATTRIBUTE_TYPE_UNDEFINED";
-	else
-	if (i_error==8205L) risultato="ERROR_DS_ATTRIBUTE_OR_VALUE_EXISTS";
-	else
-	if (i_error==8206L) risultato="ERROR_DS_BUSY";
-	else
-	if (i_error==8207L) risultato="ERROR_DS_UNAVAILABLE";
-	else
-	if (i_error==8208L) risultato="ERROR_DS_NO_RIDS_ALLOCATED";
-	else
-	if (i_error==8209L) risultato="ERROR_DS_NO_MORE_RIDS";
-	else
-	if (i_error==8210L) risultato="ERROR_DS_INCORRECT_ROLE_OWNER";
-	else
-	if (i_error==8211L) risultato="ERROR_DS_RIDMGR_INIT_ERROR";
-	else
-	if (i_error==8212L) risultato="ERROR_DS_OBJ_CLASS_VIOLATION";
-	else
-	if (i_error==8213L) risultato="ERROR_DS_CANT_ON_NON_LEAF";
-	else
-	if (i_error==8214L) risultato="ERROR_DS_CANT_ON_RDN";
-	else
-	if (i_error==8215L) risultato="ERROR_DS_CANT_MOD_OBJ_CLASS";
-	else
-	if (i_error==8216L) risultato="ERROR_DS_CROSS_DOM_MOVE_ERROR";
-	else
-	if (i_error==8217L) risultato="ERROR_DS_GC_NOT_AVAILABLE";
-	else
-	if (i_error==8218L) risultato="ERROR_SHARED_POLICY";
-	else
-	if (i_error==8219L) risultato="ERROR_POLICY_OBJECT_NOT_FOUND";
-	else
-	if (i_error==8220L) risultato="ERROR_POLICY_ONLY_IN_DS";
-	else
-	if (i_error==8221L) risultato="ERROR_PROMOTION_ACTIVE";
-	else
-	if (i_error==8222L) risultato="ERROR_NO_PROMOTION_ACTIVE";
-	else
-	if (i_error==8224L) risultato="ERROR_DS_OPERATIONS_ERROR";
-	else
-	if (i_error==8225L) risultato="ERROR_DS_PROTOCOL_ERROR";
-	else
-	if (i_error==8226L) risultato="ERROR_DS_TIMELIMIT_EXCEEDED";
-	else
-	if (i_error==8227L) risultato="ERROR_DS_SIZELIMIT_EXCEEDED";
-	else
-	if (i_error==8228L) risultato="ERROR_DS_ADMIN_LIMIT_EXCEEDED";
-	else
-	if (i_error==8229L) risultato="ERROR_DS_COMPARE_FALSE";
-	else
-	if (i_error==8230L) risultato="ERROR_DS_COMPARE_TRUE";
-	else
-	if (i_error==8231L) risultato="ERROR_DS_AUTH_METHOD_NOT_SUPPORTED";
-	else
-	if (i_error==8232L) risultato="ERROR_DS_STRONG_AUTH_REQUIRED";
-	else
-	if (i_error==8233L) risultato="ERROR_DS_INAPPROPRIATE_AUTH";
-	else
-	if (i_error==8234L) risultato="ERROR_DS_AUTH_UNKNOWN";
-	else
-	if (i_error==8235L) risultato="ERROR_DS_REFERRAL";
-	else
-	if (i_error==8236L) risultato="ERROR_DS_UNAVAILABLE_CRIT_EXTENSION";
-	else
-	if (i_error==8237L) risultato="ERROR_DS_CONFIDENTIALITY_REQUIRED";
-	else
-	if (i_error==8238L) risultato="ERROR_DS_INAPPROPRIATE_MATCHING";
-	else
-	if (i_error==8239L) risultato="ERROR_DS_CONSTRAINT_VIOLATION";
-	else
-	if (i_error==8240L) risultato="ERROR_DS_NO_SUCH_OBJECT";
-	else
-	if (i_error==8241L) risultato="ERROR_DS_ALIAS_PROBLEM";
-	else
-	if (i_error==8242L) risultato="ERROR_DS_INVALID_DN_SYNTAX";
-	else
-	if (i_error==8243L) risultato="ERROR_DS_IS_LEAF";
-	else
-	if (i_error==8244L) risultato="ERROR_DS_ALIAS_DEREF_PROBLEM";
-	else
-	if (i_error==8245L) risultato="ERROR_DS_UNWILLING_TO_PERFORM";
-	else
-	if (i_error==8246L) risultato="ERROR_DS_LOOP_DETECT";
-	else
-	if (i_error==8247L) risultato="ERROR_DS_NAMING_VIOLATION";
-	else
-	if (i_error==8248L) risultato="ERROR_DS_OBJECT_RESULTS_TOO_LARGE";
-	else
-	if (i_error==8249L) risultato="ERROR_DS_AFFECTS_MULTIPLE_DSAS";
-	else
-	if (i_error==8250L) risultato="ERROR_DS_SERVER_DOWN";
-	else
-	if (i_error==8251L) risultato="ERROR_DS_LOCAL_ERROR";
-	else
-	if (i_error==8252L) risultato="ERROR_DS_ENCODING_ERROR";
-	else
-	if (i_error==8253L) risultato="ERROR_DS_DECODING_ERROR";
-	else
-	if (i_error==8254L) risultato="ERROR_DS_FILTER_UNKNOWN";
-	else
-	if (i_error==8255L) risultato="ERROR_DS_PARAM_ERROR";
-	else
-	if (i_error==8256L) risultato="ERROR_DS_NOT_SUPPORTED";
-	else
-	if (i_error==8257L) risultato="ERROR_DS_NO_RESULTS_RETURNED";
-	else
-	if (i_error==8258L) risultato="ERROR_DS_CONTROL_NOT_FOUND";
-	else
-	if (i_error==8259L) risultato="ERROR_DS_CLIENT_LOOP";
-	else
-	if (i_error==8260L) risultato="ERROR_DS_REFERRAL_LIMIT_EXCEEDED";
-	else
-	if (i_error==8261L) risultato="ERROR_DS_SORT_CONTROL_MISSING";
-	else
-	if (i_error==8262L) risultato="ERROR_DS_OFFSET_RANGE_ERROR";
-	else
-	if (i_error==8263L) risultato="ERROR_DS_RIDMGR_DISABLED";
-	else
-	if (i_error==8301L) risultato="ERROR_DS_ROOT_MUST_BE_NC";
-	else
-	if (i_error==8302L) risultato="ERROR_DS_ADD_REPLICA_INHIBITED";
-	else
-	if (i_error==8303L) risultato="ERROR_DS_ATT_NOT_DEF_IN_SCHEMA";
-	else
-	if (i_error==8304L) risultato="ERROR_DS_MAX_OBJ_SIZE_EXCEEDED";
-	else
-	if (i_error==8305L) risultato="ERROR_DS_OBJ_STRING_NAME_EXISTS";
-	else
-	if (i_error==8306L) risultato="ERROR_DS_NO_RDN_DEFINED_IN_SCHEMA";
-	else
-	if (i_error==8307L) risultato="ERROR_DS_RDN_DOESNT_MATCH_SCHEMA";
-	else
-	if (i_error==8308L) risultato="ERROR_DS_NO_REQUESTED_ATTS_FOUND";
-	else
-	if (i_error==8309L) risultato="ERROR_DS_USER_BUFFER_TO_SMALL";
-	else
-	if (i_error==8310L) risultato="ERROR_DS_ATT_IS_NOT_ON_OBJ";
-	else
-	if (i_error==8311L) risultato="ERROR_DS_ILLEGAL_MOD_OPERATION";
-	else
-	if (i_error==8312L) risultato="ERROR_DS_OBJ_TOO_LARGE";
-	else
-	if (i_error==8313L) risultato="ERROR_DS_BAD_INSTANCE_TYPE";
-	else
-	if (i_error==8314L) risultato="ERROR_DS_MASTERDSA_REQUIRED";
-	else
-	if (i_error==8315L) risultato="ERROR_DS_OBJECT_CLASS_REQUIRED";
-	else
-	if (i_error==8316L) risultato="ERROR_DS_MISSING_REQUIRED_ATT";
-	else
-	if (i_error==8317L) risultato="ERROR_DS_ATT_NOT_DEF_FOR_CLASS";
-	else
-	if (i_error==8318L) risultato="ERROR_DS_ATT_ALREADY_EXISTS";
-	else
-	if (i_error==8320L) risultato="ERROR_DS_CANT_ADD_ATT_VALUES";
-	else
-	if (i_error==8321L) risultato="ERROR_DS_SINGLE_VALUE_CONSTRAINT";
-	else
-	if (i_error==8322L) risultato="ERROR_DS_RANGE_CONSTRAINT";
-	else
-	if (i_error==8323L) risultato="ERROR_DS_ATT_VAL_ALREADY_EXISTS";
-	else
-	if (i_error==8324L) risultato="ERROR_DS_CANT_REM_MISSING_ATT";
-	else
-	if (i_error==8325L) risultato="ERROR_DS_CANT_REM_MISSING_ATT_VAL";
-	else
-	if (i_error==8326L) risultato="ERROR_DS_ROOT_CANT_BE_SUBREF";
-	else
-	if (i_error==8327L) risultato="ERROR_DS_NO_CHAINING";
-	else
-	if (i_error==8328L) risultato="ERROR_DS_NO_CHAINED_EVAL";
-	else
-	if (i_error==8329L) risultato="ERROR_DS_NO_PARENT_OBJECT";
-	else
-	if (i_error==8330L) risultato="ERROR_DS_PARENT_IS_AN_ALIAS";
-	else
-	if (i_error==8331L) risultato="ERROR_DS_CANT_MIX_MASTER_AND_REPS";
-	else
-	if (i_error==8332L) risultato="ERROR_DS_CHILDREN_EXIST";
-	else
-	if (i_error==8333L) risultato="ERROR_DS_OBJ_NOT_FOUND";
-	else
-	if (i_error==8334L) risultato="ERROR_DS_ALIASED_OBJ_MISSING";
-	else
-	if (i_error==8335L) risultato="ERROR_DS_BAD_NAME_SYNTAX";
-	else
-	if (i_error==8336L) risultato="ERROR_DS_ALIAS_POINTS_TO_ALIAS";
-	else
-	if (i_error==8337L) risultato="ERROR_DS_CANT_DEREF_ALIAS";
-	else
-	if (i_error==8338L) risultato="ERROR_DS_OUT_OF_SCOPE";
-	else
-	if (i_error==8339L) risultato="ERROR_DS_OBJECT_BEING_REMOVED";
-	else
-	if (i_error==8340L) risultato="ERROR_DS_CANT_DELETE_DSA_OBJ";
-	else
-	if (i_error==8341L) risultato="ERROR_DS_GENERIC_ERROR";
-	else
-	if (i_error==8342L) risultato="ERROR_DS_DSA_MUST_BE_INT_MASTER";
-	else
-	if (i_error==8343L) risultato="ERROR_DS_CLASS_NOT_DSA";
-	else
-	if (i_error==8344L) risultato="ERROR_DS_INSUFF_ACCESS_RIGHTS";
-	else
-	if (i_error==8345L) risultato="ERROR_DS_ILLEGAL_SUPERIOR";
-	else
-	if (i_error==8346L) risultato="ERROR_DS_ATTRIBUTE_OWNED_BY_SAM";
-	else
-	if (i_error==8347L) risultato="ERROR_DS_NAME_TOO_MANY_PARTS";
-	else
-	if (i_error==8348L) risultato="ERROR_DS_NAME_TOO_LONG";
-	else
-	if (i_error==8349L) risultato="ERROR_DS_NAME_VALUE_TOO_LONG";
-	else
-	if (i_error==8350L) risultato="ERROR_DS_NAME_UNPARSEABLE";
-	else
-	if (i_error==8351L) risultato="ERROR_DS_NAME_TYPE_UNKNOWN";
-	else
-	if (i_error==8352L) risultato="ERROR_DS_NOT_AN_OBJECT";
-	else
-	if (i_error==8353L) risultato="ERROR_DS_SEC_DESC_TOO_SHORT";
-	else
-	if (i_error==8354L) risultato="ERROR_DS_SEC_DESC_INVALID";
-	else
-	if (i_error==8355L) risultato="ERROR_DS_NO_DELETED_NAME";
-	else
-	if (i_error==8356L) risultato="ERROR_DS_SUBREF_MUST_HAVE_PARENT";
-	else
-	if (i_error==8357L) risultato="ERROR_DS_NCNAME_MUST_BE_NC";
-	else
-	if (i_error==8358L) risultato="ERROR_DS_CANT_ADD_SYSTEM_ONLY";
-	else
-	if (i_error==8359L) risultato="ERROR_DS_CLASS_MUST_BE_CONCRETE";
-	else
-	if (i_error==8360L) risultato="ERROR_DS_INVALID_DMD";
-	else
-	if (i_error==8361L) risultato="ERROR_DS_OBJ_GUID_EXISTS";
-	else
-	if (i_error==8362L) risultato="ERROR_DS_NOT_ON_BACKLINK";
-	else
-	if (i_error==8363L) risultato="ERROR_DS_NO_CROSSREF_FOR_NC";
-	else
-	if (i_error==8364L) risultato="ERROR_DS_SHUTTING_DOWN";
-	else
-	if (i_error==8365L) risultato="ERROR_DS_UNKNOWN_OPERATION";
-	else
-	if (i_error==8366L) risultato="ERROR_DS_INVALID_ROLE_OWNER";
-	else
-	if (i_error==8367L) risultato="ERROR_DS_COULDNT_CONTACT_FSMO";
-	else
-	if (i_error==8368L) risultato="ERROR_DS_CROSS_NC_DN_RENAME";
-	else
-	if (i_error==8369L) risultato="ERROR_DS_CANT_MOD_SYSTEM_ONLY";
-	else
-	if (i_error==8370L) risultato="ERROR_DS_REPLICATOR_ONLY";
-	else
-	if (i_error==8371L) risultato="ERROR_DS_OBJ_CLASS_NOT_DEFINED";
-	else
-	if (i_error==8372L) risultato="ERROR_DS_OBJ_CLASS_NOT_SUBCLASS";
-	else
-	if (i_error==8373L) risultato="ERROR_DS_NAME_REFERENCE_INVALID";
-	else
-	if (i_error==8374L) risultato="ERROR_DS_CROSS_REF_EXISTS";
-	else
-	if (i_error==8375L) risultato="ERROR_DS_CANT_DEL_MASTER_CROSSREF";
-	else
-	if (i_error==8376L) risultato="ERROR_DS_SUBTREE_NOTIFY_NOT_NC_HEAD";
-	else
-	if (i_error==8377L) risultato="ERROR_DS_NOTIFY_FILTER_TOO_COMPLEX";
-	else
-	if (i_error==8378L) risultato="ERROR_DS_DUP_RDN";
-	else
-	if (i_error==8379L) risultato="ERROR_DS_DUP_OID";
-	else
-	if (i_error==8380L) risultato="ERROR_DS_DUP_MAPI_ID";
-	else
-	if (i_error==8381L) risultato="ERROR_DS_DUP_SCHEMA_ID_GUID";
-	else
-	if (i_error==8382L) risultato="ERROR_DS_DUP_LDAP_DISPLAY_NAME";
-	else
-	if (i_error==8383L) risultato="ERROR_DS_SEMANTIC_ATT_TEST";
-	else
-	if (i_error==8384L) risultato="ERROR_DS_SYNTAX_MISMATCH";
-	else
-	if (i_error==8385L) risultato="ERROR_DS_EXISTS_IN_MUST_HAVE";
-	else
-	if (i_error==8386L) risultato="ERROR_DS_EXISTS_IN_MAY_HAVE";
-	else
-	if (i_error==8387L) risultato="ERROR_DS_NONEXISTENT_MAY_HAVE";
-	else
-	if (i_error==8388L) risultato="ERROR_DS_NONEXISTENT_MUST_HAVE";
-	else
-	if (i_error==8389L) risultato="ERROR_DS_AUX_CLS_TEST_FAIL";
-	else
-	if (i_error==8390L) risultato="ERROR_DS_NONEXISTENT_POSS_SUP";
-	else
-	if (i_error==8391L) risultato="ERROR_DS_SUB_CLS_TEST_FAIL";
-	else
-	if (i_error==8392L) risultato="ERROR_DS_BAD_RDN_ATT_ID_SYNTAX";
-	else
-	if (i_error==8393L) risultato="ERROR_DS_EXISTS_IN_AUX_CLS";
-	else
-	if (i_error==8394L) risultato="ERROR_DS_EXISTS_IN_SUB_CLS";
-	else
-	if (i_error==8395L) risultato="ERROR_DS_EXISTS_IN_POSS_SUP";
-	else
-	if (i_error==8396L) risultato="ERROR_DS_RECALCSCHEMA_FAILED";
-	else
-	if (i_error==8397L) risultato="ERROR_DS_TREE_DELETE_NOT_FINISHED";
-	else
-	if (i_error==8398L) risultato="ERROR_DS_CANT_DELETE";
-	else
-	if (i_error==8399L) risultato="ERROR_DS_ATT_SCHEMA_REQ_ID";
-	else
-	if (i_error==8400L) risultato="ERROR_DS_BAD_ATT_SCHEMA_SYNTAX";
-	else
-	if (i_error==8401L) risultato="ERROR_DS_CANT_CACHE_ATT";
-	else
-	if (i_error==8402L) risultato="ERROR_DS_CANT_CACHE_CLASS";
-	else
-	if (i_error==8403L) risultato="ERROR_DS_CANT_REMOVE_ATT_CACHE";
-	else
-	if (i_error==8404L) risultato="ERROR_DS_CANT_REMOVE_CLASS_CACHE";
-	else
-	if (i_error==8405L) risultato="ERROR_DS_CANT_RETRIEVE_DN";
-	else
-	if (i_error==8406L) risultato="ERROR_DS_MISSING_SUPREF";
-	else
-	if (i_error==8407L) risultato="ERROR_DS_CANT_RETRIEVE_INSTANCE";
-	else
-	if (i_error==8408L) risultato="ERROR_DS_CODE_INCONSISTENCY";
-	else
-	if (i_error==8409L) risultato="ERROR_DS_DATABASE_ERROR";
-	else
-	if (i_error==8410L) risultato="ERROR_DS_GOVERNSID_MISSING";
-	else
-	if (i_error==8411L) risultato="ERROR_DS_MISSING_EXPECTED_ATT";
-	else
-	if (i_error==8412L) risultato="ERROR_DS_NCNAME_MISSING_CR_REF";
-	else
-	if (i_error==8413L) risultato="ERROR_DS_SECURITY_CHECKING_ERROR";
-	else
-	if (i_error==8414L) risultato="ERROR_DS_SCHEMA_NOT_LOADED";
-	else
-	if (i_error==8415L) risultato="ERROR_DS_SCHEMA_ALLOC_FAILED";
-	else
-	if (i_error==8416L) risultato="ERROR_DS_ATT_SCHEMA_REQ_SYNTAX";
-	else
-	if (i_error==8417L) risultato="ERROR_DS_GCVERIFY_ERROR";
-	else
-	if (i_error==8418L) risultato="ERROR_DS_DRA_SCHEMA_MISMATCH";
-	else
-	if (i_error==8419L) risultato="ERROR_DS_CANT_FIND_DSA_OBJ";
-	else
-	if (i_error==8420L) risultato="ERROR_DS_CANT_FIND_EXPECTED_NC";
-	else
-	if (i_error==8421L) risultato="ERROR_DS_CANT_FIND_NC_IN_CACHE";
-	else
-	if (i_error==8422L) risultato="ERROR_DS_CANT_RETRIEVE_CHILD";
-	else
-	if (i_error==8423L) risultato="ERROR_DS_SECURITY_ILLEGAL_MODIFY";
-	else
-	if (i_error==8424L) risultato="ERROR_DS_CANT_REPLACE_HIDDEN_REC";
-	else
-	if (i_error==8425L) risultato="ERROR_DS_BAD_HIERARCHY_FILE";
-	else
-	if (i_error==8426L) risultato="ERROR_DS_BUILD_HIERARCHY_TABLE_FAILED";
-	else
-	if (i_error==8427L) risultato="ERROR_DS_CONFIG_PARAM_MISSING";
-	else
-	if (i_error==8428L) risultato="ERROR_DS_COUNTING_AB_INDICES_FAILED";
-	else
-	if (i_error==8429L) risultato="ERROR_DS_HIERARCHY_TABLE_MALLOC_FAILED";
-	else
-	if (i_error==8430L) risultato="ERROR_DS_INTERNAL_FAILURE";
-	else
-	if (i_error==8431L) risultato="ERROR_DS_UNKNOWN_ERROR";
-	else
-	if (i_error==8432L) risultato="ERROR_DS_ROOT_REQUIRES_CLASS_TOP";
-	else
-	if (i_error==8433L) risultato="ERROR_DS_REFUSING_FSMO_ROLES";
-	else
-	if (i_error==8434L) risultato="ERROR_DS_MISSING_FSMO_SETTINGS";
-	else
-	if (i_error==8435L) risultato="ERROR_DS_UNABLE_TO_SURRENDER_ROLES";
-	else
-	if (i_error==8436L) risultato="ERROR_DS_DRA_GENERIC";
-	else
-	if (i_error==8437L) risultato="ERROR_DS_DRA_INVALID_PARAMETER";
-	else
-	if (i_error==8438L) risultato="ERROR_DS_DRA_BUSY";
-	else
-	if (i_error==8439L) risultato="ERROR_DS_DRA_BAD_DN";
-	else
-	if (i_error==8440L) risultato="ERROR_DS_DRA_BAD_NC";
-	else
-	if (i_error==8441L) risultato="ERROR_DS_DRA_DN_EXISTS";
-	else
-	if (i_error==8442L) risultato="ERROR_DS_DRA_INTERNAL_ERROR";
-	else
-	if (i_error==8443L) risultato="ERROR_DS_DRA_INCONSISTENT_DIT";
-	else
-	if (i_error==8444L) risultato="ERROR_DS_DRA_CONNECTION_FAILED";
-	else
-	if (i_error==8445L) risultato="ERROR_DS_DRA_BAD_INSTANCE_TYPE";
-	else
-	if (i_error==8446L) risultato="ERROR_DS_DRA_OUT_OF_MEM";
-	else
-	if (i_error==8447L) risultato="ERROR_DS_DRA_MAIL_PROBLEM";
-	else
-	if (i_error==8448L) risultato="ERROR_DS_DRA_REF_ALREADY_EXISTS";
-	else
-	if (i_error==8449L) risultato="ERROR_DS_DRA_REF_NOT_FOUND";
-	else
-	if (i_error==8450L) risultato="ERROR_DS_DRA_OBJ_IS_REP_SOURCE";
-	else
-	if (i_error==8451L) risultato="ERROR_DS_DRA_DB_ERROR";
-	else
-	if (i_error==8452L) risultato="ERROR_DS_DRA_NO_REPLICA";
-	else
-	if (i_error==8453L) risultato="ERROR_DS_DRA_ACCESS_DENIED";
-	else
-	if (i_error==8454L) risultato="ERROR_DS_DRA_NOT_SUPPORTED";
-	else
-	if (i_error==8455L) risultato="ERROR_DS_DRA_RPC_CANCELLED";
-	else
-	if (i_error==8456L) risultato="ERROR_DS_DRA_SOURCE_DISABLED";
-	else
-	if (i_error==8457L) risultato="ERROR_DS_DRA_SINK_DISABLED";
-	else
-	if (i_error==8458L) risultato="ERROR_DS_DRA_NAME_COLLISION";
-	else
-	if (i_error==8459L) risultato="ERROR_DS_DRA_SOURCE_REINSTALLED";
-	else
-	if (i_error==8460L) risultato="ERROR_DS_DRA_MISSING_PARENT";
-	else
-	if (i_error==8461L) risultato="ERROR_DS_DRA_PREEMPTED";
-	else
-	if (i_error==8462L) risultato="ERROR_DS_DRA_ABANDON_SYNC";
-	else
-	if (i_error==8463L) risultato="ERROR_DS_DRA_SHUTDOWN";
-	else
-	if (i_error==8464L) risultato="ERROR_DS_DRA_INCOMPATIBLE_PARTIAL_SET";
-	else
-	if (i_error==8465L) risultato="ERROR_DS_DRA_SOURCE_IS_PARTIAL_REPLICA";
-	else
-	if (i_error==8466L) risultato="ERROR_DS_DRA_EXTN_CONNECTION_FAILED";
-	else
-	if (i_error==8467L) risultato="ERROR_DS_INSTALL_SCHEMA_MISMATCH";
-	else
-	if (i_error==8468L) risultato="ERROR_DS_DUP_LINK_ID";
-	else
-	if (i_error==8469L) risultato="ERROR_DS_NAME_ERROR_RESOLVING";
-	else
-	if (i_error==8470L) risultato="ERROR_DS_NAME_ERROR_NOT_FOUND";
-	else
-	if (i_error==8471L) risultato="ERROR_DS_NAME_ERROR_NOT_UNIQUE";
-	else
-	if (i_error==8472L) risultato="ERROR_DS_NAME_ERROR_NO_MAPPING";
-	else
-	if (i_error==8473L) risultato="ERROR_DS_NAME_ERROR_DOMAIN_ONLY";
-	else
-	if (i_error==8474L) risultato="ERROR_DS_NAME_ERROR_NO_SYNTACTICAL_MAPPING";
-	else
-	if (i_error==8475L) risultato="ERROR_DS_CONSTRUCTED_ATT_MOD";
-	else
-	if (i_error==8476L) risultato="ERROR_DS_WRONG_OM_OBJ_CLASS";
-	else
-	if (i_error==8477L) risultato="ERROR_DS_DRA_REPL_PENDING";
-	else
-	if (i_error==8478L) risultato="ERROR_DS_DS_REQUIRED";
-	else
-	if (i_error==8479L) risultato="ERROR_DS_INVALID_LDAP_DISPLAY_NAME";
-	else
-	if (i_error==8480L) risultato="ERROR_DS_NON_BASE_SEARCH";
-	else
-	if (i_error==8481L) risultato="ERROR_DS_CANT_RETRIEVE_ATTS";
-	else
-	if (i_error==8482L) risultato="ERROR_DS_BACKLINK_WITHOUT_LINK";
-	else
-	if (i_error==8483L) risultato="ERROR_DS_EPOCH_MISMATCH";
-	else
-	if (i_error==8484L) risultato="ERROR_DS_SRC_NAME_MISMATCH";
-	else
-	if (i_error==8485L) risultato="ERROR_DS_SRC_AND_DST_NC_IDENTICAL";
-	else
-	if (i_error==8486L) risultato="ERROR_DS_DST_NC_MISMATCH";
-	else
-	if (i_error==8487L) risultato="ERROR_DS_NOT_AUTHORITIVE_FOR_DST_NC";
-	else
-	if (i_error==8488L) risultato="ERROR_DS_SRC_GUID_MISMATCH";
-	else
-	if (i_error==8489L) risultato="ERROR_DS_CANT_MOVE_DELETED_OBJECT";
-	else
-	if (i_error==8490L) risultato="ERROR_DS_PDC_OPERATION_IN_PROGRESS";
-	else
-	if (i_error==8491L) risultato="ERROR_DS_CROSS_DOMAIN_CLEANUP_REQD";
-	else
-	if (i_error==8492L) risultato="ERROR_DS_ILLEGAL_XDOM_MOVE_OPERATION";
-	else
-	if (i_error==8493L) risultato="ERROR_DS_CANT_WITH_ACCT_GROUP_MEMBERSHPS";
-	else
-	if (i_error==8494L) risultato="ERROR_DS_NC_MUST_HAVE_NC_PARENT";
-	else
-	if (i_error==8495L) risultato="ERROR_DS_CR_IMPOSSIBLE_TO_VALIDATE";
-	else
-	if (i_error==8496L) risultato="ERROR_DS_DST_DOMAIN_NOT_NATIVE";
-	else
-	if (i_error==8497L) risultato="ERROR_DS_MISSING_INFRASTRUCTURE_CONTAINER";
-	else
-	if (i_error==8498L) risultato="ERROR_DS_CANT_MOVE_ACCOUNT_GROUP";
-	else
-	if (i_error==8499L) risultato="ERROR_DS_CANT_MOVE_RESOURCE_GROUP";
-	else
-	if (i_error==8500L) risultato="ERROR_DS_INVALID_SEARCH_FLAG";
-	else
-	if (i_error==8501L) risultato="ERROR_DS_NO_TREE_DELETE_ABOVE_NC";
-	else
-	if (i_error==8502L) risultato="ERROR_DS_COULDNT_LOCK_TREE_FOR_DELETE";
-	else
-	if (i_error==8503L) risultato="ERROR_DS_COULDNT_IDENTIFY_OBJECTS_FOR_TREE_DELETE";
-	else
-	if (i_error==8504L) risultato="ERROR_DS_SAM_INIT_FAILURE";
-	else
-	if (i_error==8505L) risultato="ERROR_DS_SENSITIVE_GROUP_VIOLATION";
-	else
-	if (i_error==8506L) risultato="ERROR_DS_CANT_MOD_PRIMARYGROUPID";
-	else
-	if (i_error==8507L) risultato="ERROR_DS_ILLEGAL_BASE_SCHEMA_MOD";
-	else
-	if (i_error==8508L) risultato="ERROR_DS_NONSAFE_SCHEMA_CHANGE";
-	else
-	if (i_error==8509L) risultato="ERROR_DS_SCHEMA_UPDATE_DISALLOWED";
-	else
-	if (i_error==8510L) risultato="ERROR_DS_CANT_CREATE_UNDER_SCHEMA";
-	else
-	if (i_error==8511L) risultato="ERROR_DS_INSTALL_NO_SRC_SCH_VERSION";
-	else
-	if (i_error==8512L) risultato="ERROR_DS_INSTALL_NO_SCH_VERSION_IN_INIFILE";
-	else
-	if (i_error==8513L) risultato="ERROR_DS_INVALID_GROUP_TYPE";
-	else
-	if (i_error==8514L) risultato="ERROR_DS_NO_NEST_GLOBALGROUP_IN_MIXEDDOMAIN";
-	else
-	if (i_error==8515L) risultato="ERROR_DS_NO_NEST_LOCALGROUP_IN_MIXEDDOMAIN";
-	else
-	if (i_error==8516L) risultato="ERROR_DS_GLOBAL_CANT_HAVE_LOCAL_MEMBER";
-	else
-	if (i_error==8517L) risultato="ERROR_DS_GLOBAL_CANT_HAVE_UNIVERSAL_MEMBER";
-	else
-	if (i_error==8518L) risultato="ERROR_DS_UNIVERSAL_CANT_HAVE_LOCAL_MEMBER";
-	else
-	if (i_error==8519L) risultato="ERROR_DS_GLOBAL_CANT_HAVE_CROSSDOMAIN_MEMBER";
-	else
-	if (i_error==8520L) risultato="ERROR_DS_LOCAL_CANT_HAVE_CROSSDOMAIN_LOCAL_MEMBER";
-	else
-	if (i_error==8521L) risultato="ERROR_DS_HAVE_PRIMARY_MEMBERS";
-	else
-	if (i_error==8522L) risultato="ERROR_DS_STRING_SD_CONVERSION_FAILED";
-	else
-	if (i_error==8523L) risultato="ERROR_DS_NAMING_MASTER_GC";
-	else
-	if (i_error==8524L) risultato="ERROR_DS_DNS_LOOKUP_FAILURE";
-	else
-	if (i_error==8525L) risultato="ERROR_DS_COULDNT_UPDATE_SPNS";
-	else
-	if (i_error==8526L) risultato="ERROR_DS_CANT_RETRIEVE_SD";
-	else
-	if (i_error==8527L) risultato="ERROR_DS_KEY_NOT_UNIQUE";
-	else
-	if (i_error==8528L) risultato="ERROR_DS_WRONG_LINKED_ATT_SYNTAX";
-	else
-	if (i_error==8529L) risultato="ERROR_DS_SAM_NEED_BOOTKEY_PASSWORD";
-	else
-	if (i_error==8530L) risultato="ERROR_DS_SAM_NEED_BOOTKEY_FLOPPY";
-	else
-	if (i_error==8531L) risultato="ERROR_DS_CANT_START";
-	else
-	if (i_error==8532L) risultato="ERROR_DS_INIT_FAILURE";
-	else
-	if (i_error==8533L) risultato="ERROR_DS_NO_PKT_PRIVACY_ON_CONNECTION";
-	else
-	if (i_error==8534L) risultato="ERROR_DS_SOURCE_DOMAIN_IN_FOREST";
-	else
-	if (i_error==8535L) risultato="ERROR_DS_DESTINATION_DOMAIN_NOT_IN_FOREST";
-	else
-	if (i_error==8536L) risultato="ERROR_DS_DESTINATION_AUDITING_NOT_ENABLED";
-	else
-	if (i_error==8537L) risultato="ERROR_DS_CANT_FIND_DC_FOR_SRC_DOMAIN";
-	else
-	if (i_error==8538L) risultato="ERROR_DS_SRC_OBJ_NOT_GROUP_OR_USER";
-	else
-	if (i_error==8539L) risultato="ERROR_DS_SRC_SID_EXISTS_IN_FOREST";
-	else
-	if (i_error==8540L) risultato="ERROR_DS_SRC_AND_DST_OBJECT_CLASS_MISMATCH";
-	else
-	if (i_error==8541L) risultato="ERROR_SAM_INIT_FAILURE";
-	else
-	if (i_error==8542L) risultato="ERROR_DS_DRA_SCHEMA_INFO_SHIP";
-	else
-	if (i_error==8543L) risultato="ERROR_DS_DRA_SCHEMA_CONFLICT";
-	else
-	if (i_error==8544L) risultato="ERROR_DS_DRA_EARLIER_SCHEMA_CONFLICT";
-	else
-	if (i_error==8545L) risultato="ERROR_DS_DRA_OBJ_NC_MISMATCH";
-	else
-	if (i_error==8546L) risultato="ERROR_DS_NC_STILL_HAS_DSAS";
-	else
-	if (i_error==8547L) risultato="ERROR_DS_GC_REQUIRED";
-	else
-	if (i_error==8548L) risultato="ERROR_DS_LOCAL_MEMBER_OF_LOCAL_ONLY";
-	else
-	if (i_error==8549L) risultato="ERROR_DS_NO_FPO_IN_UNIVERSAL_GROUPS";
-	else
-	if (i_error==8550L) risultato="ERROR_DS_CANT_ADD_TO_GC";
-	else
-	if (i_error==8551L) risultato="ERROR_DS_NO_CHECKPOINT_WITH_PDC";
-	else
-	if (i_error==8552L) risultato="ERROR_DS_SOURCE_AUDITING_NOT_ENABLED";
-	else
-	if (i_error==8553L) risultato="ERROR_DS_CANT_CREATE_IN_NONDOMAIN_NC";
-	else
-	if (i_error==8554L) risultato="ERROR_DS_INVALID_NAME_FOR_SPN";
-	else
-	if (i_error==8555L) risultato="ERROR_DS_FILTER_USES_CONTRUCTED_ATTRS";
-	else
-	if (i_error==8556L) risultato="ERROR_DS_UNICODEPWD_NOT_IN_QUOTES";
-	else
-	if (i_error==8557L) risultato="ERROR_DS_MACHINE_ACCOUNT_QUOTA_EXCEEDED";
-	else
-	if (i_error==8558L) risultato="ERROR_DS_MUST_BE_RUN_ON_DST_DC";
-	else
-	if (i_error==8559L) risultato="ERROR_DS_SRC_DC_MUST_BE_SP4_OR_GREATER";
-	else
-	if (i_error==8560L) risultato="ERROR_DS_CANT_TREE_DELETE_CRITICAL_OBJ";
-	else
-	if (i_error==8561L) risultato="ERROR_DS_INIT_FAILURE_CONSOLE";
-	else
-	if (i_error==8562L) risultato="ERROR_DS_SAM_INIT_FAILURE_CONSOLE";
-	else
-	if (i_error==8563L) risultato="ERROR_DS_FOREST_VERSION_TOO_HIGH";
-	else
-	if (i_error==8564L) risultato="ERROR_DS_DOMAIN_VERSION_TOO_HIGH";
-	else
-	if (i_error==8565L) risultato="ERROR_DS_FOREST_VERSION_TOO_LOW";
-	else
-	if (i_error==8566L) risultato="ERROR_DS_DOMAIN_VERSION_TOO_LOW";
-	else
-	if (i_error==8567L) risultato="ERROR_DS_INCOMPATIBLE_VERSION";
-	else
-	if (i_error==8568L) risultato="ERROR_DS_LOW_DSA_VERSION";
-	else
-	if (i_error==8569L) risultato="ERROR_DS_NO_BEHAVIOR_VERSION_IN_MIXEDDOMAIN";
-	else
-	if (i_error==8570L) risultato="ERROR_DS_NOT_SUPPORTED_SORT_ORDER";
-	else
-	if (i_error==8571L) risultato="ERROR_DS_NAME_NOT_UNIQUE";
-	else
-	if (i_error==8572L) risultato="ERROR_DS_MACHINE_ACCOUNT_CREATED_PRENT4";
-	else
-	if (i_error==8573L) risultato="ERROR_DS_OUT_OF_VERSION_STORE";
-	else
-	if (i_error==8574L) risultato="ERROR_DS_INCOMPATIBLE_CONTROLS_USED";
-	else
-	if (i_error==8575L) risultato="ERROR_DS_NO_REF_DOMAIN";
-	else
-	if (i_error==8576L) risultato="ERROR_DS_RESERVED_LINK_ID";
-	else
-	if (i_error==8577L) risultato="ERROR_DS_LINK_ID_NOT_AVAILABLE";
-	else
-	if (i_error==8578L) risultato="ERROR_DS_AG_CANT_HAVE_UNIVERSAL_MEMBER";
-	else
-	if (i_error==8579L) risultato="ERROR_DS_MODIFYDN_DISALLOWED_BY_INSTANCE_TYPE";
-	else
-	if (i_error==8580L) risultato="ERROR_DS_NO_OBJECT_MOVE_IN_SCHEMA_NC";
-	else
-	if (i_error==8581L) risultato="ERROR_DS_MODIFYDN_DISALLOWED_BY_FLAG";
-	else
-	if (i_error==8582L) risultato="ERROR_DS_MODIFYDN_WRONG_GRANDPARENT";
-	else
-	if (i_error==8583L) risultato="ERROR_DS_NAME_ERROR_TRUST_REFERRAL";
-	else
-	if (i_error==8584L) risultato="ERROR_NOT_SUPPORTED_ON_STANDARD_SERVER";
-	else
-	if (i_error==8585L) risultato="ERROR_DS_CANT_ACCESS_REMOTE_PART_OF_AD";
-	else
-	if (i_error==8586L) risultato="ERROR_DS_CR_IMPOSSIBLE_TO_VALIDATE_V2";
-	else
-	if (i_error==8587L) risultato="ERROR_DS_THREAD_LIMIT_EXCEEDED";
-	else
-	if (i_error==8588L) risultato="ERROR_DS_NOT_CLOSEST";
-	else
-	if (i_error==8589L) risultato="ERROR_DS_CANT_DERIVE_SPN_WITHOUT_SERVER_REF";
-	else
-	if (i_error==8590L) risultato="ERROR_DS_SINGLE_USER_MODE_FAILED";
-	else
-	if (i_error==8591L) risultato="ERROR_DS_NTDSCRIPT_SYNTAX_ERROR";
-	else
-	if (i_error==8592L) risultato="ERROR_DS_NTDSCRIPT_PROCESS_ERROR";
-	else
-	if (i_error==8593L) risultato="ERROR_DS_DIFFERENT_REPL_EPOCHS";
-	else
-	if (i_error==8594L) risultato="ERROR_DS_DRS_EXTENSIONS_CHANGED";
-	else
-	if (i_error==8595L) risultato="ERROR_DS_REPLICA_SET_CHANGE_NOT_ALLOWED_ON_DISABLED_CR";
-	else
-	if (i_error==8596L) risultato="ERROR_DS_NO_MSDS_INTID";
-	else
-	if (i_error==8597L) risultato="ERROR_DS_DUP_MSDS_INTID";
-	else
-	if (i_error==8598L) risultato="ERROR_DS_EXISTS_IN_RDNATTID";
-	else
-	if (i_error==8599L) risultato="ERROR_DS_AUTHORIZATION_FAILED";
-	else
-	if (i_error==8600L) risultato="ERROR_DS_INVALID_SCRIPT";
-	else
-	if (i_error==8601L) risultato="ERROR_DS_REMOTE_CROSSREF_OP_FAILED";
-	else
-	if (i_error==8602L) risultato="ERROR_DS_CROSS_REF_BUSY";
-	else
-	if (i_error==8603L) risultato="ERROR_DS_CANT_DERIVE_SPN_FOR_DELETED_DOMAIN";
-	else
-	if (i_error==8604L) risultato="ERROR_DS_CANT_DEMOTE_WITH_WRITEABLE_NC";
-	else
-	if (i_error==8605L) risultato="ERROR_DS_DUPLICATE_ID_FOUND";
-	else
-	if (i_error==8606L) risultato="ERROR_DS_INSUFFICIENT_ATTR_TO_CREATE_OBJECT";
-	else
-	if (i_error==8607L) risultato="ERROR_DS_GROUP_CONVERSION_ERROR";
-	else
-	if (i_error==8608L) risultato="ERROR_DS_CANT_MOVE_APP_BASIC_GROUP";
-	else
-	if (i_error==8609L) risultato="ERROR_DS_CANT_MOVE_APP_QUERY_GROUP";
-	else
-	if (i_error==8610L) risultato="ERROR_DS_ROLE_NOT_VERIFIED";
-	else
-	if (i_error==8611L) risultato="ERROR_DS_WKO_CONTAINER_CANNOT_BE_SPECIAL";
-	else
-	if (i_error==8612L) risultato="ERROR_DS_DOMAIN_RENAME_IN_PROGRESS";
-	else
-	if (i_error==8613L) risultato="ERROR_DS_EXISTING_AD_CHILD_NC";
-	else
-	if (i_error==8614L) risultato="ERROR_DS_REPL_LIFETIME_EXCEEDED";
-	else
-	if (i_error==8615L) risultato="ERROR_DS_DISALLOWED_IN_SYSTEM_CONTAINER";
-	else
-	if (i_error==8616L) risultato="ERROR_DS_LDAP_SEND_QUEUE_FULL";
-	else
-	if (i_error==8617L) risultato="ERROR_DS_DRA_OUT_SCHEDULE_WINDOW";
-	else
-	if (i_error==8618L) risultato="ERROR_DS_POLICY_NOT_KNOWN";
-	else
-	if (i_error==8619L) risultato="ERROR_NO_SITE_SETTINGS_OBJECT";
-	else
-	if (i_error==8620L) risultato="ERROR_NO_SECRETS";
-	else
-	if (i_error==8621L) risultato="ERROR_NO_WRITABLE_DC_FOUND";
-	else
-	if (i_error==8622L) risultato="ERROR_DS_NO_SERVER_OBJECT";
-	else
-	if (i_error==8623L) risultato="ERROR_DS_NO_NTDSA_OBJECT";
-	else
-	if (i_error==8624L) risultato="ERROR_DS_NON_ASQ_SEARCH";
-	else
-	if (i_error==8625L) risultato="ERROR_DS_AUDIT_FAILURE";
-	else
-	if (i_error==8626L) risultato="ERROR_DS_INVALID_SEARCH_FLAG_SUBTREE";
-	else
-	if (i_error==8627L) risultato="ERROR_DS_INVALID_SEARCH_FLAG_TUPLE";
-	else
-	if (i_error==8628L) risultato="ERROR_DS_HIERARCHY_TABLE_TOO_DEEP";
-	else
-	if (i_error==8629L) risultato="ERROR_DS_DRA_CORRUPT_UTD_VECTOR";
-	else
-	if (i_error==8630L) risultato="ERROR_DS_DRA_SECRETS_DENIED";
-	else
-	if (i_error==8631L) risultato="ERROR_DS_RESERVED_MAPI_ID";
-	else
-	if (i_error==8632L) risultato="ERROR_DS_MAPI_ID_NOT_AVAILABLE";
-	else
-	if (i_error==8633L) risultato="ERROR_DS_DRA_MISSING_KRBTGT_SECRET";
-	else
-	if (i_error==8634L) risultato="ERROR_DS_DOMAIN_NAME_EXISTS_IN_FOREST";
-	else
-	if (i_error==8635L) risultato="ERROR_DS_FLAT_NAME_EXISTS_IN_FOREST";
-	else
-	if (i_error==8636L) risultato="ERROR_INVALID_USER_PRINCIPAL_NAME";
-	else
-	if (i_error==8637L) risultato="ERROR_DS_OID_MAPPED_GROUP_CANT_HAVE_MEMBERS";
-	else
-	if (i_error==8638L) risultato="ERROR_DS_OID_NOT_FOUND";
-	else
-	if (i_error==8639L) risultato="ERROR_DS_DRA_RECYCLED_TARGET";
-	else
-	if (i_error==8640L) risultato="ERROR_DS_DISALLOWED_NC_REDIRECT";
-	else
-	if (i_error==8641L) risultato="ERROR_DS_HIGH_ADLDS_FFL";
-	else
-	if (i_error==8642L) risultato="ERROR_DS_HIGH_DSA_VERSION";
-	else
-	if (i_error==8643L) risultato="ERROR_DS_LOW_ADLDS_FFL";
-	else
-	if (i_error==8644L) risultato="ERROR_DOMAIN_SID_SAME_AS_LOCAL_WORKSTATION";
-	else
-	if (i_error==8645L) risultato="ERROR_DS_UNDELETE_SAM_VALIDATION_FAILED";
-	else
-	if (i_error==8646L) risultato="ERROR_INCORRECT_ACCOUNT_TYPE";
-	else
-	if (i_error==8647L) risultato="ERROR_DS_SPN_VALUE_NOT_UNIQUE_IN_FOREST";
-	else
-	if (i_error==8648L) risultato="ERROR_DS_UPN_VALUE_NOT_UNIQUE_IN_FOREST";
-	else
-	if (i_error==8649L) risultato="ERROR_DS_MISSING_FOREST_TRUST";
-	else
-	if (i_error==8650L) risultato="ERROR_DS_VALUE_KEY_NOT_UNIQUE";
-	else
-	if (i_error==9000) risultato="DNS_ERROR_RESPONSE_CODES_BASE";
-	else
-	if (i_error==NO_ERROR) risultato="DNS_ERROR_RCODE_NO_ERROR";
-	else
-	if (i_error==0x00002328) risultato="DNS_ERROR_MASK";
-	else
-	if (i_error==9001L) risultato="DNS_ERROR_RCODE_FORMAT_ERROR";
-	else
-	if (i_error==9002L) risultato="DNS_ERROR_RCODE_SERVER_FAILURE";
-	else
-	if (i_error==9003L) risultato="DNS_ERROR_RCODE_NAME_ERROR";
-	else
-	if (i_error==9004L) risultato="DNS_ERROR_RCODE_NOT_IMPLEMENTED";
-	else
-	if (i_error==9005L) risultato="DNS_ERROR_RCODE_REFUSED";
-	else
-	if (i_error==9006L) risultato="DNS_ERROR_RCODE_YXDOMAIN";
-	else
-	if (i_error==9007L) risultato="DNS_ERROR_RCODE_YXRRSET";
-	else
-	if (i_error==9008L) risultato="DNS_ERROR_RCODE_NXRRSET";
-	else
-	if (i_error==9009L) risultato="DNS_ERROR_RCODE_NOTAUTH";
-	else
-	if (i_error==9010L) risultato="DNS_ERROR_RCODE_NOTZONE";
-	else
-	if (i_error==9016L) risultato="DNS_ERROR_RCODE_BADSIG";
-	else
-	if (i_error==9017L) risultato="DNS_ERROR_RCODE_BADKEY";
-	else
-	if (i_error==9018L) risultato="DNS_ERROR_RCODE_BADTIME";
-	else
-	if (i_error==DNS_ERROR_RCODE_BADTIME) risultato="DNS_ERROR_RCODE_LAST";
-	else
-	if (i_error==9100) risultato="DNS_ERROR_DNSSEC_BASE";
-	else
-	if (i_error==9101L) risultato="DNS_ERROR_KEYMASTER_REQUIRED";
-	else
-	if (i_error==9102L) risultato="DNS_ERROR_NOT_ALLOWED_ON_SIGNED_ZONE";
-	else
-	if (i_error==9103L) risultato="DNS_ERROR_NSEC3_INCOMPATIBLE_WITH_RSA_SHA1";
-	else
-	if (i_error==9104L) risultato="DNS_ERROR_NOT_ENOUGH_SIGNING_KEY_DESCRIPTORS";
-	else
-	if (i_error==9105L) risultato="DNS_ERROR_UNSUPPORTED_ALGORITHM";
-	else
-	if (i_error==9106L) risultato="DNS_ERROR_INVALID_KEY_SIZE";
-	else
-	if (i_error==9107L) risultato="DNS_ERROR_SIGNING_KEY_NOT_ACCESSIBLE";
-	else
-	if (i_error==9108L) risultato="DNS_ERROR_KSP_DOES_NOT_SUPPORT_PROTECTION";
-	else
-	if (i_error==9109L) risultato="DNS_ERROR_UNEXPECTED_DATA_PROTECTION_ERROR";
-	else
-	if (i_error==9110L) risultato="DNS_ERROR_UNEXPECTED_CNG_ERROR";
-	else
-	if (i_error==9111L) risultato="DNS_ERROR_UNKNOWN_SIGNING_PARAMETER_VERSION";
-	else
-	if (i_error==9112L) risultato="DNS_ERROR_KSP_NOT_ACCESSIBLE";
-	else
-	if (i_error==9113L) risultato="DNS_ERROR_TOO_MANY_SKDS";
-	else
-	if (i_error==9114L) risultato="DNS_ERROR_INVALID_ROLLOVER_PERIOD";
-	else
-	if (i_error==9115L) risultato="DNS_ERROR_INVALID_INITIAL_ROLLOVER_OFFSET";
-	else
-	if (i_error==9116L) risultato="DNS_ERROR_ROLLOVER_IN_PROGRESS";
-	else
-	if (i_error==9117L) risultato="DNS_ERROR_STANDBY_KEY_NOT_PRESENT";
-	else
-	if (i_error==9118L) risultato="DNS_ERROR_NOT_ALLOWED_ON_ZSK";
-	else
-	if (i_error==9119L) risultato="DNS_ERROR_NOT_ALLOWED_ON_ACTIVE_SKD";
-	else
-	if (i_error==9120L) risultato="DNS_ERROR_ROLLOVER_ALREADY_QUEUED";
-	else
-	if (i_error==9121L) risultato="DNS_ERROR_NOT_ALLOWED_ON_UNSIGNED_ZONE";
-	else
-	if (i_error==9122L) risultato="DNS_ERROR_BAD_KEYMASTER";
-	else
-	if (i_error==9123L) risultato="DNS_ERROR_INVALID_SIGNATURE_VALIDITY_PERIOD";
-	else
-	if (i_error==9124L) risultato="DNS_ERROR_INVALID_NSEC3_ITERATION_COUNT";
-	else
-	if (i_error==9125L) risultato="DNS_ERROR_DNSSEC_IS_DISABLED";
-	else
-	if (i_error==9126L) risultato="DNS_ERROR_INVALID_XML";
-	else
-	if (i_error==9127L) risultato="DNS_ERROR_NO_VALID_TRUST_ANCHORS";
-	else
-	if (i_error==9128L) risultato="DNS_ERROR_ROLLOVER_NOT_POKEABLE";
-	else
-	if (i_error==9129L) risultato="DNS_ERROR_NSEC3_NAME_COLLISION";
-	else
-	if (i_error==9130L) risultato="DNS_ERROR_NSEC_INCOMPATIBLE_WITH_NSEC3_RSA_SHA1";
-	else
-	if (i_error==9500) risultato="DNS_ERROR_PACKET_FMT_BASE";
-	else
-	if (i_error==9501L) risultato="DNS_INFO_NO_RECORDS";
-	else
-	if (i_error==9502L) risultato="DNS_ERROR_BAD_PACKET";
-	else
-	if (i_error==9503L) risultato="DNS_ERROR_NO_PACKET";
-	else
-	if (i_error==9504L) risultato="DNS_ERROR_RCODE";
-	else
-	if (i_error==9505L) risultato="DNS_ERROR_UNSECURE_PACKET";
-	else
-	if (i_error==DNS_ERROR_UNSECURE_PACKET) risultato="DNS_STATUS_PACKET_UNSECURE";
-	else
-	if (i_error==9506L) risultato="DNS_REQUEST_PENDING";
-	else
-	if (i_error==ERROR_OUTOFMEMORY) risultato="DNS_ERROR_NO_MEMORY";
-	else
-	if (i_error==ERROR_INVALID_NAME) risultato="DNS_ERROR_INVALID_NAME";
-	else
-	if (i_error==ERROR_INVALID_DATA) risultato="DNS_ERROR_INVALID_DATA";
-	else
-	if (i_error==9550) risultato="DNS_ERROR_GENERAL_API_BASE";
-	else
-	if (i_error==9551L) risultato="DNS_ERROR_INVALID_TYPE";
-	else
-	if (i_error==9552L) risultato="DNS_ERROR_INVALID_IP_ADDRESS";
-	else
-	if (i_error==9553L) risultato="DNS_ERROR_INVALID_PROPERTY";
-	else
-	if (i_error==9554L) risultato="DNS_ERROR_TRY_AGAIN_LATER";
-	else
-	if (i_error==9555L) risultato="DNS_ERROR_NOT_UNIQUE";
-	else
-	if (i_error==9556L) risultato="DNS_ERROR_NON_RFC_NAME";
-	else
-	if (i_error==9557L) risultato="DNS_STATUS_FQDN";
-	else
-	if (i_error==9558L) risultato="DNS_STATUS_DOTTED_NAME";
-	else
-	if (i_error==9559L) risultato="DNS_STATUS_SINGLE_PART_NAME";
-	else
-	if (i_error==9560L) risultato="DNS_ERROR_INVALID_NAME_CHAR";
-	else
-	if (i_error==9561L) risultato="DNS_ERROR_NUMERIC_NAME";
-	else
-	if (i_error==9562L) risultato="DNS_ERROR_NOT_ALLOWED_ON_ROOT_SERVER";
-	else
-	if (i_error==9563L) risultato="DNS_ERROR_NOT_ALLOWED_UNDER_DELEGATION";
-	else
-	if (i_error==9564L) risultato="DNS_ERROR_CANNOT_FIND_ROOT_HINTS";
-	else
-	if (i_error==9565L) risultato="DNS_ERROR_INCONSISTENT_ROOT_HINTS";
-	else
-	if (i_error==9566L) risultato="DNS_ERROR_DWORD_VALUE_TOO_SMALL";
-	else
-	if (i_error==9567L) risultato="DNS_ERROR_DWORD_VALUE_TOO_LARGE";
-	else
-	if (i_error==9568L) risultato="DNS_ERROR_BACKGROUND_LOADING";
-	else
-	if (i_error==9569L) risultato="DNS_ERROR_NOT_ALLOWED_ON_RODC";
-	else
-	if (i_error==9570L) risultato="DNS_ERROR_NOT_ALLOWED_UNDER_DNAME";
-	else
-	if (i_error==9571L) risultato="DNS_ERROR_DELEGATION_REQUIRED";
-	else
-	if (i_error==9572L) risultato="DNS_ERROR_INVALID_POLICY_TABLE";
-	else
-	if (i_error==9573L) risultato="DNS_ERROR_ADDRESS_REQUIRED";
-	else
-	if (i_error==9600) risultato="DNS_ERROR_ZONE_BASE";
-	else
-	if (i_error==9601L) risultato="DNS_ERROR_ZONE_DOES_NOT_EXIST";
-	else
-	if (i_error==9602L) risultato="DNS_ERROR_NO_ZONE_INFO";
-	else
-	if (i_error==9603L) risultato="DNS_ERROR_INVALID_ZONE_OPERATION";
-	else
-	if (i_error==9604L) risultato="DNS_ERROR_ZONE_CONFIGURATION_ERROR";
-	else
-	if (i_error==9605L) risultato="DNS_ERROR_ZONE_HAS_NO_SOA_RECORD";
-	else
-	if (i_error==9606L) risultato="DNS_ERROR_ZONE_HAS_NO_NS_RECORDS";
-	else
-	if (i_error==9607L) risultato="DNS_ERROR_ZONE_LOCKED";
-	else
-	if (i_error==9608L) risultato="DNS_ERROR_ZONE_CREATION_FAILED";
-	else
-	if (i_error==9609L) risultato="DNS_ERROR_ZONE_ALREADY_EXISTS";
-	else
-	if (i_error==9610L) risultato="DNS_ERROR_AUTOZONE_ALREADY_EXISTS";
-	else
-	if (i_error==9611L) risultato="DNS_ERROR_INVALID_ZONE_TYPE";
-	else
-	if (i_error==9612L) risultato="DNS_ERROR_SECONDARY_REQUIRES_MASTER_IP";
-	else
-	if (i_error==9613L) risultato="DNS_ERROR_ZONE_NOT_SECONDARY";
-	else
-	if (i_error==9614L) risultato="DNS_ERROR_NEED_SECONDARY_ADDRESSES";
-	else
-	if (i_error==9615L) risultato="DNS_ERROR_WINS_INIT_FAILED";
-	else
-	if (i_error==9616L) risultato="DNS_ERROR_NEED_WINS_SERVERS";
-	else
-	if (i_error==9617L) risultato="DNS_ERROR_NBSTAT_INIT_FAILED";
-	else
-	if (i_error==9618L) risultato="DNS_ERROR_SOA_DELETE_INVALID";
-	else
-	if (i_error==9619L) risultato="DNS_ERROR_FORWARDER_ALREADY_EXISTS";
-	else
-	if (i_error==9620L) risultato="DNS_ERROR_ZONE_REQUIRES_MASTER_IP";
-	else
-	if (i_error==9621L) risultato="DNS_ERROR_ZONE_IS_SHUTDOWN";
-	else
-	if (i_error==9622L) risultato="DNS_ERROR_ZONE_LOCKED_FOR_SIGNING";
-	else
-	if (i_error==9650) risultato="DNS_ERROR_DATAFILE_BASE";
-	else
-	if (i_error==9651L) risultato="DNS_ERROR_PRIMARY_REQUIRES_DATAFILE";
-	else
-	if (i_error==9652L) risultato="DNS_ERROR_INVALID_DATAFILE_NAME";
-	else
-	if (i_error==9653L) risultato="DNS_ERROR_DATAFILE_OPEN_FAILURE";
-	else
-	if (i_error==9654L) risultato="DNS_ERROR_FILE_WRITEBACK_FAILED";
-	else
-	if (i_error==9655L) risultato="DNS_ERROR_DATAFILE_PARSING";
-	else
-	if (i_error==9700) risultato="DNS_ERROR_DATABASE_BASE";
-	else
-	if (i_error==9701L) risultato="DNS_ERROR_RECORD_DOES_NOT_EXIST";
-	else
-	if (i_error==9702L) risultato="DNS_ERROR_RECORD_FORMAT";
-	else
-	if (i_error==9703L) risultato="DNS_ERROR_NODE_CREATION_FAILED";
-	else
-	if (i_error==9704L) risultato="DNS_ERROR_UNKNOWN_RECORD_TYPE";
-	else
-	if (i_error==9705L) risultato="DNS_ERROR_RECORD_TIMED_OUT";
-	else
-	if (i_error==9706L) risultato="DNS_ERROR_NAME_NOT_IN_ZONE";
-	else
-	if (i_error==9707L) risultato="DNS_ERROR_CNAME_LOOP";
-	else
-	if (i_error==9708L) risultato="DNS_ERROR_NODE_IS_CNAME";
-	else
-	if (i_error==9709L) risultato="DNS_ERROR_CNAME_COLLISION";
-	else
-	if (i_error==9710L) risultato="DNS_ERROR_RECORD_ONLY_AT_ZONE_ROOT";
-	else
-	if (i_error==9711L) risultato="DNS_ERROR_RECORD_ALREADY_EXISTS";
-	else
-	if (i_error==9712L) risultato="DNS_ERROR_SECONDARY_DATA";
-	else
-	if (i_error==9713L) risultato="DNS_ERROR_NO_CREATE_CACHE_DATA";
-	else
-	if (i_error==9714L) risultato="DNS_ERROR_NAME_DOES_NOT_EXIST";
-	else
-	if (i_error==9715L) risultato="DNS_WARNING_PTR_CREATE_FAILED";
-	else
-	if (i_error==9716L) risultato="DNS_WARNING_DOMAIN_UNDELETED";
-	else
-	if (i_error==9717L) risultato="DNS_ERROR_DS_UNAVAILABLE";
-	else
-	if (i_error==9718L) risultato="DNS_ERROR_DS_ZONE_ALREADY_EXISTS";
-	else
-	if (i_error==9719L) risultato="DNS_ERROR_NO_BOOTFILE_IF_DS_ZONE";
-	else
-	if (i_error==9720L) risultato="DNS_ERROR_NODE_IS_DNAME";
-	else
-	if (i_error==9721L) risultato="DNS_ERROR_DNAME_COLLISION";
-	else
-	if (i_error==9722L) risultato="DNS_ERROR_ALIAS_LOOP";
-	else
-	if (i_error==9750) risultato="DNS_ERROR_OPERATION_BASE";
-	else
-	if (i_error==9751L) risultato="DNS_INFO_AXFR_COMPLETE";
-	else
-	if (i_error==9752L) risultato="DNS_ERROR_AXFR";
-	else
-	if (i_error==9753L) risultato="DNS_INFO_ADDED_LOCAL_WINS";
-	else
-	if (i_error==9800) risultato="DNS_ERROR_SECURE_BASE";
-	else
-	if (i_error==9801L) risultato="DNS_STATUS_CONTINUE_NEEDED";
-	else
-	if (i_error==9850) risultato="DNS_ERROR_SETUP_BASE";
-	else
-	if (i_error==9851L) risultato="DNS_ERROR_NO_TCPIP";
-	else
-	if (i_error==9852L) risultato="DNS_ERROR_NO_DNS_SERVERS";
-	else
-	if (i_error==9900) risultato="DNS_ERROR_DP_BASE";
-	else
-	if (i_error==9901L) risultato="DNS_ERROR_DP_DOES_NOT_EXIST";
-	else
-	if (i_error==9902L) risultato="DNS_ERROR_DP_ALREADY_EXISTS";
-	else
-	if (i_error==9903L) risultato="DNS_ERROR_DP_NOT_ENLISTED";
-	else
-	if (i_error==9904L) risultato="DNS_ERROR_DP_ALREADY_ENLISTED";
-	else
-	if (i_error==9905L) risultato="DNS_ERROR_DP_NOT_AVAILABLE";
-	else
-	if (i_error==9906L) risultato="DNS_ERROR_DP_FSMO_ERROR";
-	else
-	if (i_error==9911L) risultato="DNS_ERROR_RRL_NOT_ENABLED";
-	else
-	if (i_error==9912L) risultato="DNS_ERROR_RRL_INVALID_WINDOW_SIZE";
-	else
-	if (i_error==9913L) risultato="DNS_ERROR_RRL_INVALID_IPV4_PREFIX";
-	else
-	if (i_error==9914L) risultato="DNS_ERROR_RRL_INVALID_IPV6_PREFIX";
-	else
-	if (i_error==9915L) risultato="DNS_ERROR_RRL_INVALID_TC_RATE";
-	else
-	if (i_error==9916L) risultato="DNS_ERROR_RRL_INVALID_LEAK_RATE";
-	else
-	if (i_error==9917L) risultato="DNS_ERROR_RRL_LEAK_RATE_LESSTHAN_TC_RATE";
-	else
-	if (i_error==9921L) risultato="DNS_ERROR_VIRTUALIZATION_INSTANCE_ALREADY_EXISTS";
-	else
-	if (i_error==9922L) risultato="DNS_ERROR_VIRTUALIZATION_INSTANCE_DOES_NOT_EXIST";
-	else
-	if (i_error==9923L) risultato="DNS_ERROR_VIRTUALIZATION_TREE_LOCKED";
-	else
-	if (i_error==9924L) risultato="DNS_ERROR_INVAILD_VIRTUALIZATION_INSTANCE_NAME";
-	else
-	if (i_error==9925L) risultato="DNS_ERROR_DEFAULT_VIRTUALIZATION_INSTANCE";
-	else
-	if (i_error==9951L) risultato="DNS_ERROR_ZONESCOPE_ALREADY_EXISTS";
-	else
-	if (i_error==9952L) risultato="DNS_ERROR_ZONESCOPE_DOES_NOT_EXIST";
-	else
-	if (i_error==9953L) risultato="DNS_ERROR_DEFAULT_ZONESCOPE";
-	else
-	if (i_error==9954L) risultato="DNS_ERROR_INVALID_ZONESCOPE_NAME";
-	else
-	if (i_error==9955L) risultato="DNS_ERROR_NOT_ALLOWED_WITH_ZONESCOPES";
-	else
-	if (i_error==9956L) risultato="DNS_ERROR_LOAD_ZONESCOPE_FAILED";
-	else
-	if (i_error==9957L) risultato="DNS_ERROR_ZONESCOPE_FILE_WRITEBACK_FAILED";
-	else
-	if (i_error==9958L) risultato="DNS_ERROR_INVALID_SCOPE_NAME";
-	else
-	if (i_error==9959L) risultato="DNS_ERROR_SCOPE_DOES_NOT_EXIST";
-	else
-	if (i_error==9960L) risultato="DNS_ERROR_DEFAULT_SCOPE";
-	else
-	if (i_error==9961L) risultato="DNS_ERROR_INVALID_SCOPE_OPERATION";
-	else
-	if (i_error==9962L) risultato="DNS_ERROR_SCOPE_LOCKED";
-	else
-	if (i_error==9963L) risultato="DNS_ERROR_SCOPE_ALREADY_EXISTS";
-	else
-	if (i_error==9971L) risultato="DNS_ERROR_POLICY_ALREADY_EXISTS";
-	else
-	if (i_error==9972L) risultato="DNS_ERROR_POLICY_DOES_NOT_EXIST";
-	else
-	if (i_error==9973L) risultato="DNS_ERROR_POLICY_INVALID_CRITERIA";
-	else
-	if (i_error==9974L) risultato="DNS_ERROR_POLICY_INVALID_SETTINGS";
-	else
-	if (i_error==9975L) risultato="DNS_ERROR_CLIENT_SUBNET_IS_ACCESSED";
-	else
-	if (i_error==9976L) risultato="DNS_ERROR_CLIENT_SUBNET_DOES_NOT_EXIST";
-	else
-	if (i_error==9977L) risultato="DNS_ERROR_CLIENT_SUBNET_ALREADY_EXISTS";
-	else
-	if (i_error==9978L) risultato="DNS_ERROR_SUBNET_DOES_NOT_EXIST";
-	else
-	if (i_error==9979L) risultato="DNS_ERROR_SUBNET_ALREADY_EXISTS";
-	else
-	if (i_error==9980L) risultato="DNS_ERROR_POLICY_LOCKED";
-	else
-	if (i_error==9981L) risultato="DNS_ERROR_POLICY_INVALID_WEIGHT";
-	else
-	if (i_error==9982L) risultato="DNS_ERROR_POLICY_INVALID_NAME";
-	else
-	if (i_error==9983L) risultato="DNS_ERROR_POLICY_MISSING_CRITERIA";
-	else
-	if (i_error==9984L) risultato="DNS_ERROR_INVALID_CLIENT_SUBNET_NAME";
-	else
-	if (i_error==9985L) risultato="DNS_ERROR_POLICY_PROCESSING_ORDER_INVALID";
-	else
-	if (i_error==9986L) risultato="DNS_ERROR_POLICY_SCOPE_MISSING";
-	else
-	if (i_error==9987L) risultato="DNS_ERROR_POLICY_SCOPE_NOT_ALLOWED";
-	else
-	if (i_error==9988L) risultato="DNS_ERROR_SERVERSCOPE_IS_REFERENCED";
-	else
-	if (i_error==9989L) risultato="DNS_ERROR_ZONESCOPE_IS_REFERENCED";
-	else
-	if (i_error==9990L) risultato="DNS_ERROR_POLICY_INVALID_CRITERIA_CLIENT_SUBNET";
-	else
-	if (i_error==9991L) risultato="DNS_ERROR_POLICY_INVALID_CRITERIA_TRANSPORT_PROTOCOL";
-	else
-	if (i_error==9992L) risultato="DNS_ERROR_POLICY_INVALID_CRITERIA_NETWORK_PROTOCOL";
-	else
-	if (i_error==9993L) risultato="DNS_ERROR_POLICY_INVALID_CRITERIA_INTERFACE";
-	else
-	if (i_error==9994L) risultato="DNS_ERROR_POLICY_INVALID_CRITERIA_FQDN";
-	else
-	if (i_error==9995L) risultato="DNS_ERROR_POLICY_INVALID_CRITERIA_QUERY_TYPE";
-	else
-	if (i_error==9996L) risultato="DNS_ERROR_POLICY_INVALID_CRITERIA_TIME_OF_DAY";
-	else
-	if (i_error==10000) risultato="WSABASEERR";
-	else
-	if (i_error==10004L) risultato="WSAEINTR";
-	else
-	if (i_error==10009L) risultato="WSAEBADF";
-	else
-	if (i_error==10013L) risultato="WSAEACCES";
-	else
-	if (i_error==10014L) risultato="WSAEFAULT";
-	else
-	if (i_error==10022L) risultato="WSAEINVAL";
-	else
-	if (i_error==10024L) risultato="WSAEMFILE";
-	else
-	if (i_error==10035L) risultato="WSAEWOULDBLOCK";
-	else
-	if (i_error==10036L) risultato="WSAEINPROGRESS";
-	else
-	if (i_error==10037L) risultato="WSAEALREADY";
-	else
-	if (i_error==10038L) risultato="WSAENOTSOCK";
-	else
-	if (i_error==10039L) risultato="WSAEDESTADDRREQ";
-	else
-	if (i_error==10040L) risultato="WSAEMSGSIZE";
-	else
-	if (i_error==10041L) risultato="WSAEPROTOTYPE";
-	else
-	if (i_error==10042L) risultato="WSAENOPROTOOPT";
-	else
-	if (i_error==10043L) risultato="WSAEPROTONOSUPPORT";
-	else
-	if (i_error==10044L) risultato="WSAESOCKTNOSUPPORT";
-	else
-	if (i_error==10045L) risultato="WSAEOPNOTSUPP";
-	else
-	if (i_error==10046L) risultato="WSAEPFNOSUPPORT";
-	else
-	if (i_error==10047L) risultato="WSAEAFNOSUPPORT";
-	else
-	if (i_error==10048L) risultato="WSAEADDRINUSE";
-	else
-	if (i_error==10049L) risultato="WSAEADDRNOTAVAIL";
-	else
-	if (i_error==10050L) risultato="WSAENETDOWN";
-	else
-	if (i_error==10051L) risultato="WSAENETUNREACH";
-	else
-	if (i_error==10052L) risultato="WSAENETRESET";
-	else
-	if (i_error==10053L) risultato="WSAECONNABORTED";
-	else
-	if (i_error==10054L) risultato="WSAECONNRESET";
-	else
-	if (i_error==10055L) risultato="WSAENOBUFS";
-	else
-	if (i_error==10056L) risultato="WSAEISCONN";
-	else
-	if (i_error==10057L) risultato="WSAENOTCONN";
-	else
-	if (i_error==10058L) risultato="WSAESHUTDOWN";
-	else
-	if (i_error==10059L) risultato="WSAETOOMANYREFS";
-	else
-	if (i_error==10060L) risultato="WSAETIMEDOUT";
-	else
-	if (i_error==10061L) risultato="WSAECONNREFUSED";
-	else
-	if (i_error==10062L) risultato="WSAELOOP";
-	else
-	if (i_error==10063L) risultato="WSAENAMETOOLONG";
-	else
-	if (i_error==10064L) risultato="WSAEHOSTDOWN";
-	else
-	if (i_error==10065L) risultato="WSAEHOSTUNREACH";
-	else
-	if (i_error==10066L) risultato="WSAENOTEMPTY";
-	else
-	if (i_error==10067L) risultato="WSAEPROCLIM";
-	else
-	if (i_error==10068L) risultato="WSAEUSERS";
-	else
-	if (i_error==10069L) risultato="WSAEDQUOT";
-	else
-	if (i_error==10070L) risultato="WSAESTALE";
-	else
-	if (i_error==10071L) risultato="WSAEREMOTE";
-	else
-	if (i_error==10091L) risultato="WSASYSNOTREADY";
-	else
-	if (i_error==10092L) risultato="WSAVERNOTSUPPORTED";
-	else
-	if (i_error==10093L) risultato="WSANOTINITIALISED";
-	else
-	if (i_error==10101L) risultato="WSAEDISCON";
-	else
-	if (i_error==10102L) risultato="WSAENOMORE";
-	else
-	if (i_error==10103L) risultato="WSAECANCELLED";
-	else
-	if (i_error==10104L) risultato="WSAEINVALIDPROCTABLE";
-	else
-	if (i_error==10105L) risultato="WSAEINVALIDPROVIDER";
-	else
-	if (i_error==10106L) risultato="WSAEPROVIDERFAILEDINIT";
-	else
-	if (i_error==10107L) risultato="WSASYSCALLFAILURE";
-	else
-	if (i_error==10108L) risultato="WSASERVICE_NOT_FOUND";
-	else
-	if (i_error==10109L) risultato="WSATYPE_NOT_FOUND";
-	else
-	if (i_error==10110L) risultato="WSA_E_NO_MORE";
-	else
-	if (i_error==10111L) risultato="WSA_E_CANCELLED";
-	else
-	if (i_error==10112L) risultato="WSAEREFUSED";
-	else
-	if (i_error==11001L) risultato="WSAHOST_NOT_FOUND";
-	else
-	if (i_error==11002L) risultato="WSATRY_AGAIN";
-	else
-	if (i_error==11003L) risultato="WSANO_RECOVERY";
-	else
-	if (i_error==11004L) risultato="WSANO_DATA";
-	else
-	if (i_error==11005L) risultato="WSA_QOS_RECEIVERS";
-	else
-	if (i_error==11006L) risultato="WSA_QOS_SENDERS";
-	else
-	if (i_error==11007L) risultato="WSA_QOS_NO_SENDERS";
-	else
-	if (i_error==11008L) risultato="WSA_QOS_NO_RECEIVERS";
-	else
-	if (i_error==11009L) risultato="WSA_QOS_REQUEST_CONFIRMED";
-	else
-	if (i_error==11010L) risultato="WSA_QOS_ADMISSION_FAILURE";
-	else
-	if (i_error==11011L) risultato="WSA_QOS_POLICY_FAILURE";
-	else
-	if (i_error==11012L) risultato="WSA_QOS_BAD_STYLE";
-	else
-	if (i_error==11013L) risultato="WSA_QOS_BAD_OBJECT";
-	else
-	if (i_error==11014L) risultato="WSA_QOS_TRAFFIC_CTRL_ERROR";
-	else
-	if (i_error==11015L) risultato="WSA_QOS_GENERIC_ERROR";
-	else
-	if (i_error==11016L) risultato="WSA_QOS_ESERVICETYPE";
-	else
-	if (i_error==11017L) risultato="WSA_QOS_EFLOWSPEC";
-	else
-	if (i_error==11018L) risultato="WSA_QOS_EPROVSPECBUF";
-	else
-	if (i_error==11019L) risultato="WSA_QOS_EFILTERSTYLE";
-	else
-	if (i_error==11020L) risultato="WSA_QOS_EFILTERTYPE";
-	else
-	if (i_error==11021L) risultato="WSA_QOS_EFILTERCOUNT";
-	else
-	if (i_error==11022L) risultato="WSA_QOS_EOBJLENGTH";
-	else
-	if (i_error==11023L) risultato="WSA_QOS_EFLOWCOUNT";
-	else
-	if (i_error==11024L) risultato="WSA_QOS_EUNKOWNPSOBJ";
-	else
-	if (i_error==11025L) risultato="WSA_QOS_EPOLICYOBJ";
-	else
-	if (i_error==11026L) risultato="WSA_QOS_EFLOWDESC";
-	else
-	if (i_error==11027L) risultato="WSA_QOS_EPSFLOWSPEC";
-	else
-	if (i_error==11028L) risultato="WSA_QOS_EPSFILTERSPEC";
-	else
-	if (i_error==11029L) risultato="WSA_QOS_ESDMODEOBJ";
-	else
-	if (i_error==11030L) risultato="WSA_QOS_ESHAPERATEOBJ";
-	else
-	if (i_error==11031L) risultato="WSA_QOS_RESERVED_PETYPE";
-	else
-	if (i_error==11032L) risultato="WSA_SECURE_HOST_NOT_FOUND";
-	else
-	if (i_error==11033L) risultato="WSA_IPSEC_NAME_POLICY_ERROR";
-	else
-	if (i_error==13000L) risultato="ERROR_IPSEC_QM_POLICY_EXISTS";
-	else
-	if (i_error==13001L) risultato="ERROR_IPSEC_QM_POLICY_NOT_FOUND";
-	else
-	if (i_error==13002L) risultato="ERROR_IPSEC_QM_POLICY_IN_USE";
-	else
-	if (i_error==13003L) risultato="ERROR_IPSEC_MM_POLICY_EXISTS";
-	else
-	if (i_error==13004L) risultato="ERROR_IPSEC_MM_POLICY_NOT_FOUND";
-	else
-	if (i_error==13005L) risultato="ERROR_IPSEC_MM_POLICY_IN_USE";
-	else
-	if (i_error==13006L) risultato="ERROR_IPSEC_MM_FILTER_EXISTS";
-	else
-	if (i_error==13007L) risultato="ERROR_IPSEC_MM_FILTER_NOT_FOUND";
-	else
-	if (i_error==13008L) risultato="ERROR_IPSEC_TRANSPORT_FILTER_EXISTS";
-	else
-	if (i_error==13009L) risultato="ERROR_IPSEC_TRANSPORT_FILTER_NOT_FOUND";
-	else
-	if (i_error==13010L) risultato="ERROR_IPSEC_MM_AUTH_EXISTS";
-	else
-	if (i_error==13011L) risultato="ERROR_IPSEC_MM_AUTH_NOT_FOUND";
-	else
-	if (i_error==13012L) risultato="ERROR_IPSEC_MM_AUTH_IN_USE";
-	else
-	if (i_error==13013L) risultato="ERROR_IPSEC_DEFAULT_MM_POLICY_NOT_FOUND";
-	else
-	if (i_error==13014L) risultato="ERROR_IPSEC_DEFAULT_MM_AUTH_NOT_FOUND";
-	else
-	if (i_error==13015L) risultato="ERROR_IPSEC_DEFAULT_QM_POLICY_NOT_FOUND";
-	else
-	if (i_error==13016L) risultato="ERROR_IPSEC_TUNNEL_FILTER_EXISTS";
-	else
-	if (i_error==13017L) risultato="ERROR_IPSEC_TUNNEL_FILTER_NOT_FOUND";
-	else
-	if (i_error==13018L) risultato="ERROR_IPSEC_MM_FILTER_PENDING_DELETION";
-	else
-	if (i_error==13019L) risultato="ERROR_IPSEC_TRANSPORT_FILTER_PENDING_DELETION";
-	else
-	if (i_error==13020L) risultato="ERROR_IPSEC_TUNNEL_FILTER_PENDING_DELETION";
-	else
-	if (i_error==13021L) risultato="ERROR_IPSEC_MM_POLICY_PENDING_DELETION";
-	else
-	if (i_error==13022L) risultato="ERROR_IPSEC_MM_AUTH_PENDING_DELETION";
-	else
-	if (i_error==13023L) risultato="ERROR_IPSEC_QM_POLICY_PENDING_DELETION";
-	else
-	if (i_error==13024L) risultato="WARNING_IPSEC_MM_POLICY_PRUNED";
-	else
-	if (i_error==13025L) risultato="WARNING_IPSEC_QM_POLICY_PRUNED";
-	else
-	if (i_error==13800L) risultato="ERROR_IPSEC_IKE_NEG_STATUS_BEGIN";
-	else
-	if (i_error==13801L) risultato="ERROR_IPSEC_IKE_AUTH_FAIL";
-	else
-	if (i_error==13802L) risultato="ERROR_IPSEC_IKE_ATTRIB_FAIL";
-	else
-	if (i_error==13803L) risultato="ERROR_IPSEC_IKE_NEGOTIATION_PENDING";
-	else
-	if (i_error==13804L) risultato="ERROR_IPSEC_IKE_GENERAL_PROCESSING_ERROR";
-	else
-	if (i_error==13805L) risultato="ERROR_IPSEC_IKE_TIMED_OUT";
-	else
-	if (i_error==13806L) risultato="ERROR_IPSEC_IKE_NO_CERT";
-	else
-	if (i_error==13807L) risultato="ERROR_IPSEC_IKE_SA_DELETED";
-	else
-	if (i_error==13808L) risultato="ERROR_IPSEC_IKE_SA_REAPED";
-	else
-	if (i_error==13809L) risultato="ERROR_IPSEC_IKE_MM_ACQUIRE_DROP";
-	else
-	if (i_error==13810L) risultato="ERROR_IPSEC_IKE_QM_ACQUIRE_DROP";
-	else
-	if (i_error==13811L) risultato="ERROR_IPSEC_IKE_QUEUE_DROP_MM";
-	else
-	if (i_error==13812L) risultato="ERROR_IPSEC_IKE_QUEUE_DROP_NO_MM";
-	else
-	if (i_error==13813L) risultato="ERROR_IPSEC_IKE_DROP_NO_RESPONSE";
-	else
-	if (i_error==13814L) risultato="ERROR_IPSEC_IKE_MM_DELAY_DROP";
-	else
-	if (i_error==13815L) risultato="ERROR_IPSEC_IKE_QM_DELAY_DROP";
-	else
-	if (i_error==13816L) risultato="ERROR_IPSEC_IKE_ERROR";
-	else
-	if (i_error==13817L) risultato="ERROR_IPSEC_IKE_CRL_FAILED";
-	else
-	if (i_error==13818L) risultato="ERROR_IPSEC_IKE_INVALID_KEY_USAGE";
-	else
-	if (i_error==13819L) risultato="ERROR_IPSEC_IKE_INVALID_CERT_TYPE";
-	else
-	if (i_error==13820L) risultato="ERROR_IPSEC_IKE_NO_PRIVATE_KEY";
-	else
-	if (i_error==13821L) risultato="ERROR_IPSEC_IKE_SIMULTANEOUS_REKEY";
-	else
-	if (i_error==13822L) risultato="ERROR_IPSEC_IKE_DH_FAIL";
-	else
-	if (i_error==13823L) risultato="ERROR_IPSEC_IKE_CRITICAL_PAYLOAD_NOT_RECOGNIZED";
-	else
-	if (i_error==13824L) risultato="ERROR_IPSEC_IKE_INVALID_HEADER";
-	else
-	if (i_error==13825L) risultato="ERROR_IPSEC_IKE_NO_POLICY";
-	else
-	if (i_error==13826L) risultato="ERROR_IPSEC_IKE_INVALID_SIGNATURE";
-	else
-	if (i_error==13827L) risultato="ERROR_IPSEC_IKE_KERBEROS_ERROR";
-	else
-	if (i_error==13828L) risultato="ERROR_IPSEC_IKE_NO_PUBLIC_KEY";
-	else
-	if (i_error==13829L) risultato="ERROR_IPSEC_IKE_PROCESS_ERR";
-	else
-	if (i_error==13830L) risultato="ERROR_IPSEC_IKE_PROCESS_ERR_SA";
-	else
-	if (i_error==13831L) risultato="ERROR_IPSEC_IKE_PROCESS_ERR_PROP";
-	else
-	if (i_error==13832L) risultato="ERROR_IPSEC_IKE_PROCESS_ERR_TRANS";
-	else
-	if (i_error==13833L) risultato="ERROR_IPSEC_IKE_PROCESS_ERR_KE";
-	else
-	if (i_error==13834L) risultato="ERROR_IPSEC_IKE_PROCESS_ERR_ID";
-	else
-	if (i_error==13835L) risultato="ERROR_IPSEC_IKE_PROCESS_ERR_CERT";
-	else
-	if (i_error==13836L) risultato="ERROR_IPSEC_IKE_PROCESS_ERR_CERT_REQ";
-	else
-	if (i_error==13837L) risultato="ERROR_IPSEC_IKE_PROCESS_ERR_HASH";
-	else
-	if (i_error==13838L) risultato="ERROR_IPSEC_IKE_PROCESS_ERR_SIG";
-	else
-	if (i_error==13839L) risultato="ERROR_IPSEC_IKE_PROCESS_ERR_NONCE";
-	else
-	if (i_error==13840L) risultato="ERROR_IPSEC_IKE_PROCESS_ERR_NOTIFY";
-	else
-	if (i_error==13841L) risultato="ERROR_IPSEC_IKE_PROCESS_ERR_DELETE";
-	else
-	if (i_error==13842L) risultato="ERROR_IPSEC_IKE_PROCESS_ERR_VENDOR";
-	else
-	if (i_error==13843L) risultato="ERROR_IPSEC_IKE_INVALID_PAYLOAD";
-	else
-	if (i_error==13844L) risultato="ERROR_IPSEC_IKE_LOAD_SOFT_SA";
-	else
-	if (i_error==13845L) risultato="ERROR_IPSEC_IKE_SOFT_SA_TORN_DOWN";
-	else
-	if (i_error==13846L) risultato="ERROR_IPSEC_IKE_INVALID_COOKIE";
-	else
-	if (i_error==13847L) risultato="ERROR_IPSEC_IKE_NO_PEER_CERT";
-	else
-	if (i_error==13848L) risultato="ERROR_IPSEC_IKE_PEER_CRL_FAILED";
-	else
-	if (i_error==13849L) risultato="ERROR_IPSEC_IKE_POLICY_CHANGE";
-	else
-	if (i_error==13850L) risultato="ERROR_IPSEC_IKE_NO_MM_POLICY";
-	else
-	if (i_error==13851L) risultato="ERROR_IPSEC_IKE_NOTCBPRIV";
-	else
-	if (i_error==13852L) risultato="ERROR_IPSEC_IKE_SECLOADFAIL";
-	else
-	if (i_error==13853L) risultato="ERROR_IPSEC_IKE_FAILSSPINIT";
-	else
-	if (i_error==13854L) risultato="ERROR_IPSEC_IKE_FAILQUERYSSP";
-	else
-	if (i_error==13855L) risultato="ERROR_IPSEC_IKE_SRVACQFAIL";
-	else
-	if (i_error==13856L) risultato="ERROR_IPSEC_IKE_SRVQUERYCRED";
-	else
-	if (i_error==13857L) risultato="ERROR_IPSEC_IKE_GETSPIFAIL";
-	else
-	if (i_error==13858L) risultato="ERROR_IPSEC_IKE_INVALID_FILTER";
-	else
-	if (i_error==13859L) risultato="ERROR_IPSEC_IKE_OUT_OF_MEMORY";
-	else
-	if (i_error==13860L) risultato="ERROR_IPSEC_IKE_ADD_UPDATE_KEY_FAILED";
-	else
-	if (i_error==13861L) risultato="ERROR_IPSEC_IKE_INVALID_POLICY";
-	else
-	if (i_error==13862L) risultato="ERROR_IPSEC_IKE_UNKNOWN_DOI";
-	else
-	if (i_error==13863L) risultato="ERROR_IPSEC_IKE_INVALID_SITUATION";
-	else
-	if (i_error==13864L) risultato="ERROR_IPSEC_IKE_DH_FAILURE";
-	else
-	if (i_error==13865L) risultato="ERROR_IPSEC_IKE_INVALID_GROUP";
-	else
-	if (i_error==13866L) risultato="ERROR_IPSEC_IKE_ENCRYPT";
-	else
-	if (i_error==13867L) risultato="ERROR_IPSEC_IKE_DECRYPT";
-	else
-	if (i_error==13868L) risultato="ERROR_IPSEC_IKE_POLICY_MATCH";
-	else
-	if (i_error==13869L) risultato="ERROR_IPSEC_IKE_UNSUPPORTED_ID";
-	else
-	if (i_error==13870L) risultato="ERROR_IPSEC_IKE_INVALID_HASH";
-	else
-	if (i_error==13871L) risultato="ERROR_IPSEC_IKE_INVALID_HASH_ALG";
-	else
-	if (i_error==13872L) risultato="ERROR_IPSEC_IKE_INVALID_HASH_SIZE";
-	else
-	if (i_error==13873L) risultato="ERROR_IPSEC_IKE_INVALID_ENCRYPT_ALG";
-	else
-	if (i_error==13874L) risultato="ERROR_IPSEC_IKE_INVALID_AUTH_ALG";
-	else
-	if (i_error==13875L) risultato="ERROR_IPSEC_IKE_INVALID_SIG";
-	else
-	if (i_error==13876L) risultato="ERROR_IPSEC_IKE_LOAD_FAILED";
-	else
-	if (i_error==13877L) risultato="ERROR_IPSEC_IKE_RPC_DELETE";
-	else
-	if (i_error==13878L) risultato="ERROR_IPSEC_IKE_BENIGN_REINIT";
-	else
-	if (i_error==13879L) risultato="ERROR_IPSEC_IKE_INVALID_RESPONDER_LIFETIME_NOTIFY";
-	else
-	if (i_error==13880L) risultato="ERROR_IPSEC_IKE_INVALID_MAJOR_VERSION";
-	else
-	if (i_error==13881L) risultato="ERROR_IPSEC_IKE_INVALID_CERT_KEYLEN";
-	else
-	if (i_error==13882L) risultato="ERROR_IPSEC_IKE_MM_LIMIT";
-	else
-	if (i_error==13883L) risultato="ERROR_IPSEC_IKE_NEGOTIATION_DISABLED";
-	else
-	if (i_error==13884L) risultato="ERROR_IPSEC_IKE_QM_LIMIT";
-	else
-	if (i_error==13885L) risultato="ERROR_IPSEC_IKE_MM_EXPIRED";
-	else
-	if (i_error==13886L) risultato="ERROR_IPSEC_IKE_PEER_MM_ASSUMED_INVALID";
-	else
-	if (i_error==13887L) risultato="ERROR_IPSEC_IKE_CERT_CHAIN_POLICY_MISMATCH";
-	else
-	if (i_error==13888L) risultato="ERROR_IPSEC_IKE_UNEXPECTED_MESSAGE_ID";
-	else
-	if (i_error==13889L) risultato="ERROR_IPSEC_IKE_INVALID_AUTH_PAYLOAD";
-	else
-	if (i_error==13890L) risultato="ERROR_IPSEC_IKE_DOS_COOKIE_SENT";
-	else
-	if (i_error==13891L) risultato="ERROR_IPSEC_IKE_SHUTTING_DOWN";
-	else
-	if (i_error==13892L) risultato="ERROR_IPSEC_IKE_CGA_AUTH_FAILED";
-	else
-	if (i_error==13893L) risultato="ERROR_IPSEC_IKE_PROCESS_ERR_NATOA";
-	else
-	if (i_error==13894L) risultato="ERROR_IPSEC_IKE_INVALID_MM_FOR_QM";
-	else
-	if (i_error==13895L) risultato="ERROR_IPSEC_IKE_QM_EXPIRED";
-	else
-	if (i_error==13896L) risultato="ERROR_IPSEC_IKE_TOO_MANY_FILTERS";
-	else
-	if (i_error==13897L) risultato="ERROR_IPSEC_IKE_NEG_STATUS_END";
-	else
-	if (i_error==13898L) risultato="ERROR_IPSEC_IKE_KILL_DUMMY_NAP_TUNNEL";
-	else
-	if (i_error==13899L) risultato="ERROR_IPSEC_IKE_INNER_IP_ASSIGNMENT_FAILURE";
-	else
-	if (i_error==13900L) risultato="ERROR_IPSEC_IKE_REQUIRE_CP_PAYLOAD_MISSING";
-	else
-	if (i_error==13901L) risultato="ERROR_IPSEC_KEY_MODULE_IMPERSONATION_NEGOTIATION_PENDING";
-	else
-	if (i_error==13902L) risultato="ERROR_IPSEC_IKE_COEXISTENCE_SUPPRESS";
-	else
-	if (i_error==13903L) risultato="ERROR_IPSEC_IKE_RATELIMIT_DROP";
-	else
-	if (i_error==13904L) risultato="ERROR_IPSEC_IKE_PEER_DOESNT_SUPPORT_MOBIKE";
-	else
-	if (i_error==13905L) risultato="ERROR_IPSEC_IKE_AUTHORIZATION_FAILURE";
-	else
-	if (i_error==13906L) risultato="ERROR_IPSEC_IKE_STRONG_CRED_AUTHORIZATION_FAILURE";
-	else
-	if (i_error==13907L) risultato="ERROR_IPSEC_IKE_AUTHORIZATION_FAILURE_WITH_OPTIONAL_RETRY";
-	else
-	if (i_error==13908L) risultato="ERROR_IPSEC_IKE_STRONG_CRED_AUTHORIZATION_AND_CERTMAP_FAILURE";
-	else
-	if (i_error==13909L) risultato="ERROR_IPSEC_IKE_NEG_STATUS_EXTENDED_END";
-	else
-	if (i_error==13910L) risultato="ERROR_IPSEC_BAD_SPI";
-	else
-	if (i_error==13911L) risultato="ERROR_IPSEC_SA_LIFETIME_EXPIRED";
-	else
-	if (i_error==13912L) risultato="ERROR_IPSEC_WRONG_SA";
-	else
-	if (i_error==13913L) risultato="ERROR_IPSEC_REPLAY_CHECK_FAILED";
-	else
-	if (i_error==13914L) risultato="ERROR_IPSEC_INVALID_PACKET";
-	else
-	if (i_error==13915L) risultato="ERROR_IPSEC_INTEGRITY_CHECK_FAILED";
-	else
-	if (i_error==13916L) risultato="ERROR_IPSEC_CLEAR_TEXT_DROP";
-	else
-	if (i_error==13917L) risultato="ERROR_IPSEC_AUTH_FIREWALL_DROP";
-	else
-	if (i_error==13918L) risultato="ERROR_IPSEC_THROTTLE_DROP";
-	else
-	if (i_error==13925L) risultato="ERROR_IPSEC_DOSP_BLOCK";
-	else
-	if (i_error==13926L) risultato="ERROR_IPSEC_DOSP_RECEIVED_MULTICAST";
-	else
-	if (i_error==13927L) risultato="ERROR_IPSEC_DOSP_INVALID_PACKET";
-	else
-	if (i_error==13928L) risultato="ERROR_IPSEC_DOSP_STATE_LOOKUP_FAILED";
-	else
-	if (i_error==13929L) risultato="ERROR_IPSEC_DOSP_MAX_ENTRIES";
-	else
-	if (i_error==13930L) risultato="ERROR_IPSEC_DOSP_KEYMOD_NOT_ALLOWED";
-	else
-	if (i_error==13931L) risultato="ERROR_IPSEC_DOSP_NOT_INSTALLED";
-	else
-	if (i_error==13932L) risultato="ERROR_IPSEC_DOSP_MAX_PER_IP_RATELIMIT_QUEUES";
-	else
-	if (i_error==14000L) risultato="ERROR_SXS_SECTION_NOT_FOUND";
-	else
-	if (i_error==14001L) risultato="ERROR_SXS_CANT_GEN_ACTCTX";
-	else
-	if (i_error==14002L) risultato="ERROR_SXS_INVALID_ACTCTXDATA_FORMAT";
-	else
-	if (i_error==14003L) risultato="ERROR_SXS_ASSEMBLY_NOT_FOUND";
-	else
-	if (i_error==14004L) risultato="ERROR_SXS_MANIFEST_FORMAT_ERROR";
-	else
-	if (i_error==14005L) risultato="ERROR_SXS_MANIFEST_PARSE_ERROR";
-	else
-	if (i_error==14006L) risultato="ERROR_SXS_ACTIVATION_CONTEXT_DISABLED";
-	else
-	if (i_error==14007L) risultato="ERROR_SXS_KEY_NOT_FOUND";
-	else
-	if (i_error==14008L) risultato="ERROR_SXS_VERSION_CONFLICT";
-	else
-	if (i_error==14009L) risultato="ERROR_SXS_WRONG_SECTION_TYPE";
-	else
-	if (i_error==14010L) risultato="ERROR_SXS_THREAD_QUERIES_DISABLED";
-	else
-	if (i_error==14011L) risultato="ERROR_SXS_PROCESS_DEFAULT_ALREADY_SET";
-	else
-	if (i_error==14012L) risultato="ERROR_SXS_UNKNOWN_ENCODING_GROUP";
-	else
-	if (i_error==14013L) risultato="ERROR_SXS_UNKNOWN_ENCODING";
-	else
-	if (i_error==14014L) risultato="ERROR_SXS_INVALID_XML_NAMESPACE_URI";
-	else
-	if (i_error==14015L) risultato="ERROR_SXS_ROOT_MANIFEST_DEPENDENCY_NOT_INSTALLED";
-	else
-	if (i_error==14016L) risultato="ERROR_SXS_LEAF_MANIFEST_DEPENDENCY_NOT_INSTALLED";
-	else
-	if (i_error==14017L) risultato="ERROR_SXS_INVALID_ASSEMBLY_IDENTITY_ATTRIBUTE";
-	else
-	if (i_error==14018L) risultato="ERROR_SXS_MANIFEST_MISSING_REQUIRED_DEFAULT_NAMESPACE";
-	else
-	if (i_error==14019L) risultato="ERROR_SXS_MANIFEST_INVALID_REQUIRED_DEFAULT_NAMESPACE";
-	else
-	if (i_error==14020L) risultato="ERROR_SXS_PRIVATE_MANIFEST_CROSS_PATH_WITH_REPARSE_POINT";
-	else
-	if (i_error==14021L) risultato="ERROR_SXS_DUPLICATE_DLL_NAME";
-	else
-	if (i_error==14022L) risultato="ERROR_SXS_DUPLICATE_WINDOWCLASS_NAME";
-	else
-	if (i_error==14023L) risultato="ERROR_SXS_DUPLICATE_CLSID";
-	else
-	if (i_error==14024L) risultato="ERROR_SXS_DUPLICATE_IID";
-	else
-	if (i_error==14025L) risultato="ERROR_SXS_DUPLICATE_TLBID";
-	else
-	if (i_error==14026L) risultato="ERROR_SXS_DUPLICATE_PROGID";
-	else
-	if (i_error==14027L) risultato="ERROR_SXS_DUPLICATE_ASSEMBLY_NAME";
-	else
-	if (i_error==14028L) risultato="ERROR_SXS_FILE_HASH_MISMATCH";
-	else
-	if (i_error==14029L) risultato="ERROR_SXS_POLICY_PARSE_ERROR";
-	else
-	if (i_error==14030L) risultato="ERROR_SXS_XML_E_MISSINGQUOTE";
-	else
-	if (i_error==14031L) risultato="ERROR_SXS_XML_E_COMMENTSYNTAX";
-	else
-	if (i_error==14032L) risultato="ERROR_SXS_XML_E_BADSTARTNAMECHAR";
-	else
-	if (i_error==14033L) risultato="ERROR_SXS_XML_E_BADNAMECHAR";
-	else
-	if (i_error==14034L) risultato="ERROR_SXS_XML_E_BADCHARINSTRING";
-	else
-	if (i_error==14035L) risultato="ERROR_SXS_XML_E_XMLDECLSYNTAX";
-	else
-	if (i_error==14036L) risultato="ERROR_SXS_XML_E_BADCHARDATA";
-	else
-	if (i_error==14037L) risultato="ERROR_SXS_XML_E_MISSINGWHITESPACE";
-	else
-	if (i_error==14038L) risultato="ERROR_SXS_XML_E_EXPECTINGTAGEND";
-	else
-	if (i_error==14039L) risultato="ERROR_SXS_XML_E_MISSINGSEMICOLON";
-	else
-	if (i_error==14040L) risultato="ERROR_SXS_XML_E_UNBALANCEDPAREN";
-	else
-	if (i_error==14041L) risultato="ERROR_SXS_XML_E_INTERNALERROR";
-	else
-	if (i_error==14042L) risultato="ERROR_SXS_XML_E_UNEXPECTED_WHITESPACE";
-	else
-	if (i_error==14043L) risultato="ERROR_SXS_XML_E_INCOMPLETE_ENCODING";
-	else
-	if (i_error==14044L) risultato="ERROR_SXS_XML_E_MISSING_PAREN";
-	else
-	if (i_error==14045L) risultato="ERROR_SXS_XML_E_EXPECTINGCLOSEQUOTE";
-	else
-	if (i_error==14046L) risultato="ERROR_SXS_XML_E_MULTIPLE_COLONS";
-	else
-	if (i_error==14047L) risultato="ERROR_SXS_XML_E_INVALID_DECIMAL";
-	else
-	if (i_error==14048L) risultato="ERROR_SXS_XML_E_INVALID_HEXIDECIMAL";
-	else
-	if (i_error==14049L) risultato="ERROR_SXS_XML_E_INVALID_UNICODE";
-	else
-	if (i_error==14050L) risultato="ERROR_SXS_XML_E_WHITESPACEORQUESTIONMARK";
-	else
-	if (i_error==14051L) risultato="ERROR_SXS_XML_E_UNEXPECTEDENDTAG";
-	else
-	if (i_error==14052L) risultato="ERROR_SXS_XML_E_UNCLOSEDTAG";
-	else
-	if (i_error==14053L) risultato="ERROR_SXS_XML_E_DUPLICATEATTRIBUTE";
-	else
-	if (i_error==14054L) risultato="ERROR_SXS_XML_E_MULTIPLEROOTS";
-	else
-	if (i_error==14055L) risultato="ERROR_SXS_XML_E_INVALIDATROOTLEVEL";
-	else
-	if (i_error==14056L) risultato="ERROR_SXS_XML_E_BADXMLDECL";
-	else
-	if (i_error==14057L) risultato="ERROR_SXS_XML_E_MISSINGROOT";
-	else
-	if (i_error==14058L) risultato="ERROR_SXS_XML_E_UNEXPECTEDEOF";
-	else
-	if (i_error==14059L) risultato="ERROR_SXS_XML_E_BADPEREFINSUBSET";
-	else
-	if (i_error==14060L) risultato="ERROR_SXS_XML_E_UNCLOSEDSTARTTAG";
-	else
-	if (i_error==14061L) risultato="ERROR_SXS_XML_E_UNCLOSEDENDTAG";
-	else
-	if (i_error==14062L) risultato="ERROR_SXS_XML_E_UNCLOSEDSTRING";
-	else
-	if (i_error==14063L) risultato="ERROR_SXS_XML_E_UNCLOSEDCOMMENT";
-	else
-	if (i_error==14064L) risultato="ERROR_SXS_XML_E_UNCLOSEDDECL";
-	else
-	if (i_error==14065L) risultato="ERROR_SXS_XML_E_UNCLOSEDCDATA";
-	else
-	if (i_error==14066L) risultato="ERROR_SXS_XML_E_RESERVEDNAMESPACE";
-	else
-	if (i_error==14067L) risultato="ERROR_SXS_XML_E_INVALIDENCODING";
-	else
-	if (i_error==14068L) risultato="ERROR_SXS_XML_E_INVALIDSWITCH";
-	else
-	if (i_error==14069L) risultato="ERROR_SXS_XML_E_BADXMLCASE";
-	else
-	if (i_error==14070L) risultato="ERROR_SXS_XML_E_INVALID_STANDALONE";
-	else
-	if (i_error==14071L) risultato="ERROR_SXS_XML_E_UNEXPECTED_STANDALONE";
-	else
-	if (i_error==14072L) risultato="ERROR_SXS_XML_E_INVALID_VERSION";
-	else
-	if (i_error==14073L) risultato="ERROR_SXS_XML_E_MISSINGEQUALS";
-	else
-	if (i_error==14074L) risultato="ERROR_SXS_PROTECTION_RECOVERY_FAILED";
-	else
-	if (i_error==14075L) risultato="ERROR_SXS_PROTECTION_PUBLIC_KEY_TOO_SHORT";
-	else
-	if (i_error==14076L) risultato="ERROR_SXS_PROTECTION_CATALOG_NOT_VALID";
-	else
-	if (i_error==14077L) risultato="ERROR_SXS_UNTRANSLATABLE_HRESULT";
-	else
-	if (i_error==14078L) risultato="ERROR_SXS_PROTECTION_CATALOG_FILE_MISSING";
-	else
-	if (i_error==14079L) risultato="ERROR_SXS_MISSING_ASSEMBLY_IDENTITY_ATTRIBUTE";
-	else
-	if (i_error==14080L) risultato="ERROR_SXS_INVALID_ASSEMBLY_IDENTITY_ATTRIBUTE_NAME";
-	else
-	if (i_error==14081L) risultato="ERROR_SXS_ASSEMBLY_MISSING";
-	else
-	if (i_error==14082L) risultato="ERROR_SXS_CORRUPT_ACTIVATION_STACK";
-	else
-	if (i_error==14083L) risultato="ERROR_SXS_CORRUPTION";
-	else
-	if (i_error==14084L) risultato="ERROR_SXS_EARLY_DEACTIVATION";
-	else
-	if (i_error==14085L) risultato="ERROR_SXS_INVALID_DEACTIVATION";
-	else
-	if (i_error==14086L) risultato="ERROR_SXS_MULTIPLE_DEACTIVATION";
-	else
-	if (i_error==14087L) risultato="ERROR_SXS_PROCESS_TERMINATION_REQUESTED";
-	else
-	if (i_error==14088L) risultato="ERROR_SXS_RELEASE_ACTIVATION_CONTEXT";
-	else
-	if (i_error==14089L) risultato="ERROR_SXS_SYSTEM_DEFAULT_ACTIVATION_CONTEXT_EMPTY";
-	else
-	if (i_error==14090L) risultato="ERROR_SXS_INVALID_IDENTITY_ATTRIBUTE_VALUE";
-	else
-	if (i_error==14091L) risultato="ERROR_SXS_INVALID_IDENTITY_ATTRIBUTE_NAME";
-	else
-	if (i_error==14092L) risultato="ERROR_SXS_IDENTITY_DUPLICATE_ATTRIBUTE";
-	else
-	if (i_error==14093L) risultato="ERROR_SXS_IDENTITY_PARSE_ERROR";
-	else
-	if (i_error==14094L) risultato="ERROR_MALFORMED_SUBSTITUTION_STRING";
-	else
-	if (i_error==14095L) risultato="ERROR_SXS_INCORRECT_PUBLIC_KEY_TOKEN";
-	else
-	if (i_error==14096L) risultato="ERROR_UNMAPPED_SUBSTITUTION_STRING";
-	else
-	if (i_error==14097L) risultato="ERROR_SXS_ASSEMBLY_NOT_LOCKED";
-	else
-	if (i_error==14098L) risultato="ERROR_SXS_COMPONENT_STORE_CORRUPT";
-	else
-	if (i_error==14099L) risultato="ERROR_ADVANCED_INSTALLER_FAILED";
-	else
-	if (i_error==14100L) risultato="ERROR_XML_ENCODING_MISMATCH";
-	else
-	if (i_error==14101L) risultato="ERROR_SXS_MANIFEST_IDENTITY_SAME_BUT_CONTENTS_DIFFERENT";
-	else
-	if (i_error==14102L) risultato="ERROR_SXS_IDENTITIES_DIFFERENT";
-	else
-	if (i_error==14103L) risultato="ERROR_SXS_ASSEMBLY_IS_NOT_A_DEPLOYMENT";
-	else
-	if (i_error==14104L) risultato="ERROR_SXS_FILE_NOT_PART_OF_ASSEMBLY";
-	else
-	if (i_error==14105L) risultato="ERROR_SXS_MANIFEST_TOO_BIG";
-	else
-	if (i_error==14106L) risultato="ERROR_SXS_SETTING_NOT_REGISTERED";
-	else
-	if (i_error==14107L) risultato="ERROR_SXS_TRANSACTION_CLOSURE_INCOMPLETE";
-	else
-	if (i_error==14108L) risultato="ERROR_SMI_PRIMITIVE_INSTALLER_FAILED";
-	else
-	if (i_error==14109L) risultato="ERROR_GENERIC_COMMAND_FAILED";
-	else
-	if (i_error==14110L) risultato="ERROR_SXS_FILE_HASH_MISSING";
-	else
-	if (i_error==15000L) risultato="ERROR_EVT_INVALID_CHANNEL_PATH";
-	else
-	if (i_error==15001L) risultato="ERROR_EVT_INVALID_QUERY";
-	else
-	if (i_error==15002L) risultato="ERROR_EVT_PUBLISHER_METADATA_NOT_FOUND";
-	else
-	if (i_error==15003L) risultato="ERROR_EVT_EVENT_TEMPLATE_NOT_FOUND";
-	else
-	if (i_error==15004L) risultato="ERROR_EVT_INVALID_PUBLISHER_NAME";
-	else
-	if (i_error==15005L) risultato="ERROR_EVT_INVALID_EVENT_DATA";
-	else
-	if (i_error==15007L) risultato="ERROR_EVT_CHANNEL_NOT_FOUND";
-	else
-	if (i_error==15008L) risultato="ERROR_EVT_MALFORMED_XML_TEXT";
-	else
-	if (i_error==15009L) risultato="ERROR_EVT_SUBSCRIPTION_TO_DIRECT_CHANNEL";
-	else
-	if (i_error==15010L) risultato="ERROR_EVT_CONFIGURATION_ERROR";
-	else
-	if (i_error==15011L) risultato="ERROR_EVT_QUERY_RESULT_STALE";
-	else
-	if (i_error==15012L) risultato="ERROR_EVT_QUERY_RESULT_INVALID_POSITION";
-	else
-	if (i_error==15013L) risultato="ERROR_EVT_NON_VALIDATING_MSXML";
-	else
-	if (i_error==15014L) risultato="ERROR_EVT_FILTER_ALREADYSCOPED";
-	else
-	if (i_error==15015L) risultato="ERROR_EVT_FILTER_NOTELTSET";
-	else
-	if (i_error==15016L) risultato="ERROR_EVT_FILTER_INVARG";
-	else
-	if (i_error==15017L) risultato="ERROR_EVT_FILTER_INVTEST";
-	else
-	if (i_error==15018L) risultato="ERROR_EVT_FILTER_INVTYPE";
-	else
-	if (i_error==15019L) risultato="ERROR_EVT_FILTER_PARSEERR";
-	else
-	if (i_error==15020L) risultato="ERROR_EVT_FILTER_UNSUPPORTEDOP";
-	else
-	if (i_error==15021L) risultato="ERROR_EVT_FILTER_UNEXPECTEDTOKEN";
-	else
-	if (i_error==15022L) risultato="ERROR_EVT_INVALID_OPERATION_OVER_ENABLED_DIRECT_CHANNEL";
-	else
-	if (i_error==15023L) risultato="ERROR_EVT_INVALID_CHANNEL_PROPERTY_VALUE";
-	else
-	if (i_error==15024L) risultato="ERROR_EVT_INVALID_PUBLISHER_PROPERTY_VALUE";
-	else
-	if (i_error==15025L) risultato="ERROR_EVT_CHANNEL_CANNOT_ACTIVATE";
-	else
-	if (i_error==15026L) risultato="ERROR_EVT_FILTER_TOO_COMPLEX";
-	else
-	if (i_error==15027L) risultato="ERROR_EVT_MESSAGE_NOT_FOUND";
-	else
-	if (i_error==15028L) risultato="ERROR_EVT_MESSAGE_ID_NOT_FOUND";
-	else
-	if (i_error==15029L) risultato="ERROR_EVT_UNRESOLVED_VALUE_INSERT";
-	else
-	if (i_error==15030L) risultato="ERROR_EVT_UNRESOLVED_PARAMETER_INSERT";
-	else
-	if (i_error==15031L) risultato="ERROR_EVT_MAX_INSERTS_REACHED";
-	else
-	if (i_error==15032L) risultato="ERROR_EVT_EVENT_DEFINITION_NOT_FOUND";
-	else
-	if (i_error==15033L) risultato="ERROR_EVT_MESSAGE_LOCALE_NOT_FOUND";
-	else
-	if (i_error==15034L) risultato="ERROR_EVT_VERSION_TOO_OLD";
-	else
-	if (i_error==15035L) risultato="ERROR_EVT_VERSION_TOO_NEW";
-	else
-	if (i_error==15036L) risultato="ERROR_EVT_CANNOT_OPEN_CHANNEL_OF_QUERY";
-	else
-	if (i_error==15037L) risultato="ERROR_EVT_PUBLISHER_DISABLED";
-	else
-	if (i_error==15038L) risultato="ERROR_EVT_FILTER_OUT_OF_RANGE";
-	else
-	if (i_error==15080L) risultato="ERROR_EC_SUBSCRIPTION_CANNOT_ACTIVATE";
-	else
-	if (i_error==15081L) risultato="ERROR_EC_LOG_DISABLED";
-	else
-	if (i_error==15082L) risultato="ERROR_EC_CIRCULAR_FORWARDING";
-	else
-	if (i_error==15083L) risultato="ERROR_EC_CREDSTORE_FULL";
-	else
-	if (i_error==15084L) risultato="ERROR_EC_CRED_NOT_FOUND";
-	else
-	if (i_error==15085L) risultato="ERROR_EC_NO_ACTIVE_CHANNEL";
-	else
-	if (i_error==15100L) risultato="ERROR_MUI_FILE_NOT_FOUND";
-	else
-	if (i_error==15101L) risultato="ERROR_MUI_INVALID_FILE";
-	else
-	if (i_error==15102L) risultato="ERROR_MUI_INVALID_RC_CONFIG";
-	else
-	if (i_error==15103L) risultato="ERROR_MUI_INVALID_LOCALE_NAME";
-	else
-	if (i_error==15104L) risultato="ERROR_MUI_INVALID_ULTIMATEFALLBACK_NAME";
-	else
-	if (i_error==15105L) risultato="ERROR_MUI_FILE_NOT_LOADED";
-	else
-	if (i_error==15106L) risultato="ERROR_RESOURCE_ENUM_USER_STOP";
-	else
-	if (i_error==15107L) risultato="ERROR_MUI_INTLSETTINGS_UILANG_NOT_INSTALLED";
-	else
-	if (i_error==15108L) risultato="ERROR_MUI_INTLSETTINGS_INVALID_LOCALE_NAME";
-	else
-	if (i_error==15110L) risultato="ERROR_MRM_RUNTIME_NO_DEFAULT_OR_NEUTRAL_RESOURCE";
-	else
-	if (i_error==15111L) risultato="ERROR_MRM_INVALID_PRICONFIG";
-	else
-	if (i_error==15112L) risultato="ERROR_MRM_INVALID_FILE_TYPE";
-	else
-	if (i_error==15113L) risultato="ERROR_MRM_UNKNOWN_QUALIFIER";
-	else
-	if (i_error==15114L) risultato="ERROR_MRM_INVALID_QUALIFIER_VALUE";
-	else
-	if (i_error==15115L) risultato="ERROR_MRM_NO_CANDIDATE";
-	else
-	if (i_error==15116L) risultato="ERROR_MRM_NO_MATCH_OR_DEFAULT_CANDIDATE";
-	else
-	if (i_error==15117L) risultato="ERROR_MRM_RESOURCE_TYPE_MISMATCH";
-	else
-	if (i_error==15118L) risultato="ERROR_MRM_DUPLICATE_MAP_NAME";
-	else
-	if (i_error==15119L) risultato="ERROR_MRM_DUPLICATE_ENTRY";
-	else
-	if (i_error==15120L) risultato="ERROR_MRM_INVALID_RESOURCE_IDENTIFIER";
-	else
-	if (i_error==15121L) risultato="ERROR_MRM_FILEPATH_TOO_LONG";
-	else
-	if (i_error==15122L) risultato="ERROR_MRM_UNSUPPORTED_DIRECTORY_TYPE";
-	else
-	if (i_error==15126L) risultato="ERROR_MRM_INVALID_PRI_FILE";
-	else
-	if (i_error==15127L) risultato="ERROR_MRM_NAMED_RESOURCE_NOT_FOUND";
-	else
-	if (i_error==15135L) risultato="ERROR_MRM_MAP_NOT_FOUND";
-	else
-	if (i_error==15136L) risultato="ERROR_MRM_UNSUPPORTED_PROFILE_TYPE";
-	else
-	if (i_error==15137L) risultato="ERROR_MRM_INVALID_QUALIFIER_OPERATOR";
-	else
-	if (i_error==15138L) risultato="ERROR_MRM_INDETERMINATE_QUALIFIER_VALUE";
-	else
-	if (i_error==15139L) risultato="ERROR_MRM_AUTOMERGE_ENABLED";
-	else
-	if (i_error==15140L) risultato="ERROR_MRM_TOO_MANY_RESOURCES";
-	else
-	if (i_error==15141L) risultato="ERROR_MRM_UNSUPPORTED_FILE_TYPE_FOR_MERGE";
-	else
-	if (i_error==15142L) risultato="ERROR_MRM_UNSUPPORTED_FILE_TYPE_FOR_LOAD_UNLOAD_PRI_FILE";
-	else
-	if (i_error==15143L) risultato="ERROR_MRM_NO_CURRENT_VIEW_ON_THREAD";
-	else
-	if (i_error==15144L) risultato="ERROR_DIFFERENT_PROFILE_RESOURCE_MANAGER_EXIST";
-	else
-	if (i_error==15145L) risultato="ERROR_OPERATION_NOT_ALLOWED_FROM_SYSTEM_COMPONENT";
-	else
-	if (i_error==15146L) risultato="ERROR_MRM_DIRECT_REF_TO_NON_DEFAULT_RESOURCE";
-	else
-	if (i_error==15147L) risultato="ERROR_MRM_GENERATION_COUNT_MISMATCH";
-	else
-	if (i_error==15148L) risultato="ERROR_PRI_MERGE_VERSION_MISMATCH";
-	else
-	if (i_error==15149L) risultato="ERROR_PRI_MERGE_MISSING_SCHEMA";
-	else
-	if (i_error==15150L) risultato="ERROR_PRI_MERGE_LOAD_FILE_FAILED";
-	else
-	if (i_error==15151L) risultato="ERROR_PRI_MERGE_ADD_FILE_FAILED";
-	else
-	if (i_error==15152L) risultato="ERROR_PRI_MERGE_WRITE_FILE_FAILED";
-	else
-	if (i_error==15200L) risultato="ERROR_MCA_INVALID_CAPABILITIES_STRING";
-	else
-	if (i_error==15201L) risultato="ERROR_MCA_INVALID_VCP_VERSION";
-	else
-	if (i_error==15202L) risultato="ERROR_MCA_MONITOR_VIOLATES_MCCS_SPECIFICATION";
-	else
-	if (i_error==15203L) risultato="ERROR_MCA_MCCS_VERSION_MISMATCH";
-	else
-	if (i_error==15204L) risultato="ERROR_MCA_UNSUPPORTED_MCCS_VERSION";
-	else
-	if (i_error==15205L) risultato="ERROR_MCA_INTERNAL_ERROR";
-	else
-	if (i_error==15206L) risultato="ERROR_MCA_INVALID_TECHNOLOGY_TYPE_RETURNED";
-	else
-	if (i_error==15207L) risultato="ERROR_MCA_UNSUPPORTED_COLOR_TEMPERATURE";
-	else
-	if (i_error==15250L) risultato="ERROR_AMBIGUOUS_SYSTEM_DEVICE";
-	else
-	if (i_error==15299L) risultato="ERROR_SYSTEM_DEVICE_NOT_FOUND";
-	else
-	if (i_error==15300L) risultato="ERROR_HASH_NOT_SUPPORTED";
-	else
-	if (i_error==15301L) risultato="ERROR_HASH_NOT_PRESENT";
-	else
-	if (i_error==15321L) risultato="ERROR_SECONDARY_IC_PROVIDER_NOT_REGISTERED";
-	else
-	if (i_error==15322L) risultato="ERROR_GPIO_CLIENT_INFORMATION_INVALID";
-	else
-	if (i_error==15323L) risultato="ERROR_GPIO_VERSION_NOT_SUPPORTED";
-	else
-	if (i_error==15324L) risultato="ERROR_GPIO_INVALID_REGISTRATION_PACKET";
-	else
-	if (i_error==15325L) risultato="ERROR_GPIO_OPERATION_DENIED";
-	else
-	if (i_error==15326L) risultato="ERROR_GPIO_INCOMPATIBLE_CONNECT_MODE";
-	else
-	if (i_error==15327L) risultato="ERROR_GPIO_INTERRUPT_ALREADY_UNMASKED";
-	else
-	if (i_error==15400L) risultato="ERROR_CANNOT_SWITCH_RUNLEVEL";
-	else
-	if (i_error==15401L) risultato="ERROR_INVALID_RUNLEVEL_SETTING";
-	else
-	if (i_error==15402L) risultato="ERROR_RUNLEVEL_SWITCH_TIMEOUT";
-	else
-	if (i_error==15403L) risultato="ERROR_RUNLEVEL_SWITCH_AGENT_TIMEOUT";
-	else
-	if (i_error==15404L) risultato="ERROR_RUNLEVEL_SWITCH_IN_PROGRESS";
-	else
-	if (i_error==15405L) risultato="ERROR_SERVICES_FAILED_AUTOSTART";
-	else
-	if (i_error==15501L) risultato="ERROR_COM_TASK_STOP_PENDING";
-	else
-	if (i_error==15600L) risultato="ERROR_INSTALL_OPEN_PACKAGE_FAILED";
-	else
-	if (i_error==15601L) risultato="ERROR_INSTALL_PACKAGE_NOT_FOUND";
-	else
-	if (i_error==15602L) risultato="ERROR_INSTALL_INVALID_PACKAGE";
-	else
-	if (i_error==15603L) risultato="ERROR_INSTALL_RESOLVE_DEPENDENCY_FAILED";
-	else
-	if (i_error==15604L) risultato="ERROR_INSTALL_OUT_OF_DISK_SPACE";
-	else
-	if (i_error==15605L) risultato="ERROR_INSTALL_NETWORK_FAILURE";
-	else
-	if (i_error==15606L) risultato="ERROR_INSTALL_REGISTRATION_FAILURE";
-	else
-	if (i_error==15607L) risultato="ERROR_INSTALL_DEREGISTRATION_FAILURE";
-	else
-	if (i_error==15608L) risultato="ERROR_INSTALL_CANCEL";
-	else
-	if (i_error==15609L) risultato="ERROR_INSTALL_FAILED";
-	else
-	if (i_error==15610L) risultato="ERROR_REMOVE_FAILED";
-	else
-	if (i_error==15611L) risultato="ERROR_PACKAGE_ALREADY_EXISTS";
-	else
-	if (i_error==15612L) risultato="ERROR_NEEDS_REMEDIATION";
-	else
-	if (i_error==15613L) risultato="ERROR_INSTALL_PREREQUISITE_FAILED";
-	else
-	if (i_error==15614L) risultato="ERROR_PACKAGE_REPOSITORY_CORRUPTED";
-	else
-	if (i_error==15615L) risultato="ERROR_INSTALL_POLICY_FAILURE";
-	else
-	if (i_error==15616L) risultato="ERROR_PACKAGE_UPDATING";
-	else
-	if (i_error==15617L) risultato="ERROR_DEPLOYMENT_BLOCKED_BY_POLICY";
-	else
-	if (i_error==15618L) risultato="ERROR_PACKAGES_IN_USE";
-	else
-	if (i_error==15619L) risultato="ERROR_RECOVERY_FILE_CORRUPT";
-	else
-	if (i_error==15620L) risultato="ERROR_INVALID_STAGED_SIGNATURE";
-	else
-	if (i_error==15621L) risultato="ERROR_DELETING_EXISTING_APPLICATIONDATA_STORE_FAILED";
-	else
-	if (i_error==15622L) risultato="ERROR_INSTALL_PACKAGE_DOWNGRADE";
-	else
-	if (i_error==15623L) risultato="ERROR_SYSTEM_NEEDS_REMEDIATION";
-	else
-	if (i_error==15624L) risultato="ERROR_APPX_INTEGRITY_FAILURE_CLR_NGEN";
-	else
-	if (i_error==15625L) risultato="ERROR_RESILIENCY_FILE_CORRUPT";
-	else
-	if (i_error==15626L) risultato="ERROR_INSTALL_FIREWALL_SERVICE_NOT_RUNNING";
-	else
-	if (i_error==15627L) risultato="ERROR_PACKAGE_MOVE_FAILED";
-	else
-	if (i_error==15628L) risultato="ERROR_INSTALL_VOLUME_NOT_EMPTY";
-	else
-	if (i_error==15629L) risultato="ERROR_INSTALL_VOLUME_OFFLINE";
-	else
-	if (i_error==15630L) risultato="ERROR_INSTALL_VOLUME_CORRUPT";
-	else
-	if (i_error==15631L) risultato="ERROR_NEEDS_REGISTRATION";
-	else
-	if (i_error==15632L) risultato="ERROR_INSTALL_WRONG_PROCESSOR_ARCHITECTURE";
-	else
-	if (i_error==15633L) risultato="ERROR_DEV_SIDELOAD_LIMIT_EXCEEDED";
-	else
-	if (i_error==15634L) risultato="ERROR_INSTALL_OPTIONAL_PACKAGE_REQUIRES_MAIN_PACKAGE";
-	else
-	if (i_error==15635L) risultato="ERROR_PACKAGE_NOT_SUPPORTED_ON_FILESYSTEM";
-	else
-	if (i_error==15700L) risultato="APPMODEL_ERROR_NO_PACKAGE";
-	else
-	if (i_error==15701L) risultato="APPMODEL_ERROR_PACKAGE_RUNTIME_CORRUPT";
-	else
-	if (i_error==15702L) risultato="APPMODEL_ERROR_PACKAGE_IDENTITY_CORRUPT";
-	else
-	if (i_error==15703L) risultato="APPMODEL_ERROR_NO_APPLICATION";
-	else
-	if (i_error==15704L) risultato="APPMODEL_ERROR_DYNAMIC_PROPERTY_READ_FAILED";
-	else
-	if (i_error==15705L) risultato="APPMODEL_ERROR_DYNAMIC_PROPERTY_INVALID";
-	else
-	if (i_error==15706L) risultato="APPMODEL_ERROR_PACKAGE_NOT_AVAILABLE";
-	else
-	if (i_error==15800L) risultato="ERROR_STATE_LOAD_STORE_FAILED";
-	else
-	if (i_error==15801L) risultato="ERROR_STATE_GET_VERSION_FAILED";
-	else
-	if (i_error==15802L) risultato="ERROR_STATE_SET_VERSION_FAILED";
-	else
-	if (i_error==15803L) risultato="ERROR_STATE_STRUCTURED_RESET_FAILED";
-	else
-	if (i_error==15804L) risultato="ERROR_STATE_OPEN_CONTAINER_FAILED";
-	else
-	if (i_error==15805L) risultato="ERROR_STATE_CREATE_CONTAINER_FAILED";
-	else
-	if (i_error==15806L) risultato="ERROR_STATE_DELETE_CONTAINER_FAILED";
-	else
-	if (i_error==15807L) risultato="ERROR_STATE_READ_SETTING_FAILED";
-	else
-	if (i_error==15808L) risultato="ERROR_STATE_WRITE_SETTING_FAILED";
-	else
-	if (i_error==15809L) risultato="ERROR_STATE_DELETE_SETTING_FAILED";
-	else
-	if (i_error==15810L) risultato="ERROR_STATE_QUERY_SETTING_FAILED";
-	else
-	if (i_error==15811L) risultato="ERROR_STATE_READ_COMPOSITE_SETTING_FAILED";
-	else
-	if (i_error==15812L) risultato="ERROR_STATE_WRITE_COMPOSITE_SETTING_FAILED";
-	else
-	if (i_error==15813L) risultato="ERROR_STATE_ENUMERATE_CONTAINER_FAILED";
-	else
-	if (i_error==15814L) risultato="ERROR_STATE_ENUMERATE_SETTINGS_FAILED";
-	else
-	if (i_error==15815L) risultato="ERROR_STATE_COMPOSITE_SETTING_VALUE_SIZE_LIMIT_EXCEEDED";
-	else
-	if (i_error==15816L) risultato="ERROR_STATE_SETTING_VALUE_SIZE_LIMIT_EXCEEDED";
-	else
-	if (i_error==15817L) risultato="ERROR_STATE_SETTING_NAME_SIZE_LIMIT_EXCEEDED";
-	else
-	if (i_error==15818L) risultato="ERROR_STATE_CONTAINER_NAME_SIZE_LIMIT_EXCEEDED";
-	else
-	if (i_error==15841L) risultato="ERROR_API_UNAVAILABLE";
-	else
-	if (i_error==15861L) risultato="STORE_ERROR_UNLICENSED";
-	else
-	if (i_error==15862L) risultato="STORE_ERROR_UNLICENSED_USER";
-	else
-	if (i_error==15863L) risultato="STORE_ERROR_PENDING_COM_TRANSACTION";
-	else
-	if (i_error==15864L) risultato="STORE_ERROR_LICENSE_REVOKED";
-	else
-	if (i_error==0x8000FFFFL) risultato="E_UNEXPECTED";
-	else
-	if (i_error==0x80004001L) risultato="E_NOTIMPL";
-	else
-	if (i_error==0x8007000EL) risultato="E_OUTOFMEMORY";
-	else
-	if (i_error==0x80070057L) risultato="E_INVALIDARG";
-	else
-	if (i_error==0x80004002L) risultato="E_NOINTERFACE";
-	else
-	if (i_error==0x80004003L) risultato="E_POINTER";
-	else
-	if (i_error==0x80070006L) risultato="E_HANDLE";
-	else
-	if (i_error==0x80004004L) risultato="E_ABORT";
-	else
-	if (i_error==0x80004005L) risultato="E_FAIL";
-	else
-	if (i_error==0x80070005L) risultato="E_ACCESSDENIED";
-	else
-	if (i_error==0x80000001L) risultato="E_NOTIMPL";
-	else
-	if (i_error==0x80000002L) risultato="E_OUTOFMEMORY";
-	else
-	if (i_error==0x80000003L) risultato="E_INVALIDARG";
-	else
-	if (i_error==0x80000004L) risultato="E_NOINTERFACE";
-	else
-	if (i_error==0x80000005L) risultato="E_POINTER";
-	else
-	if (i_error==0x80000006L) risultato="E_HANDLE";
-	else
-	if (i_error==0x80000007L) risultato="E_ABORT";
-	else
-	if (i_error==0x80000008L) risultato="E_FAIL";
-	else
-	if (i_error==0x80000009L) risultato="E_ACCESSDENIED";
-	else
-	if (i_error==0x8000000AL) risultato="E_PENDING";
-	else
-	if (i_error==0x8000000BL) risultato="E_BOUNDS";
-	else
-	if (i_error==0x8000000CL) risultato="E_CHANGED_STATE";
-	else
-	if (i_error==0x8000000DL) risultato="E_ILLEGAL_STATE_CHANGE";
-	else
-	if (i_error==0x8000000EL) risultato="E_ILLEGAL_METHOD_CALL";
-	else
-	if (i_error==0x8000000FL) risultato="RO_E_METADATA_NAME_NOT_FOUND";
-	else
-	if (i_error==0x80000010L) risultato="RO_E_METADATA_NAME_IS_NAMESPACE";
-	else
-	if (i_error==0x80000011L) risultato="RO_E_METADATA_INVALID_TYPE_FORMAT";
-	else
-	if (i_error==0x80000012L) risultato="RO_E_INVALID_METADATA_FILE";
-	else
-	if (i_error==0x80000013L) risultato="RO_E_CLOSED";
-	else
-	if (i_error==0x80000014L) risultato="RO_E_EXCLUSIVE_WRITE";
-	else
-	if (i_error==0x80000015L) risultato="RO_E_CHANGE_NOTIFICATION_IN_PROGRESS";
-	else
-	if (i_error==0x80000016L) risultato="RO_E_ERROR_STRING_NOT_FOUND";
-	else
-	if (i_error==0x80000017L) risultato="E_STRING_NOT_NULL_TERMINATED";
-	else
-	if (i_error==0x80000018L) risultato="E_ILLEGAL_DELEGATE_ASSIGNMENT";
-	else
-	if (i_error==0x80000019L) risultato="E_ASYNC_OPERATION_NOT_STARTED";
-	else
-	if (i_error==0x8000001AL) risultato="E_APPLICATION_EXITING";
-	else
-	if (i_error==0x8000001BL) risultato="E_APPLICATION_VIEW_EXITING";
-	else
-	if (i_error==0x8000001CL) risultato="RO_E_MUST_BE_AGILE";
-	else
-	if (i_error==0x8000001DL) risultato="RO_E_UNSUPPORTED_FROM_MTA";
-	else
-	if (i_error==0x8000001EL) risultato="RO_E_COMMITTED";
-	else
-	if (i_error==0x8000001FL) risultato="RO_E_BLOCKED_CROSS_ASTA_CALL";
-	else
-	if (i_error==0x80004006L) risultato="CO_E_INIT_TLS";
-	else
-	if (i_error==0x80004007L) risultato="CO_E_INIT_SHARED_ALLOCATOR";
-	else
-	if (i_error==0x80004008L) risultato="CO_E_INIT_MEMORY_ALLOCATOR";
-	else
-	if (i_error==0x80004009L) risultato="CO_E_INIT_CLASS_CACHE";
-	else
-	if (i_error==0x8000400AL) risultato="CO_E_INIT_RPC_CHANNEL";
-	else
-	if (i_error==0x8000400BL) risultato="CO_E_INIT_TLS_SET_CHANNEL_CONTROL";
-	else
-	if (i_error==0x8000400CL) risultato="CO_E_INIT_TLS_CHANNEL_CONTROL";
-	else
-	if (i_error==0x8000400DL) risultato="CO_E_INIT_UNACCEPTED_USER_ALLOCATOR";
-	else
-	if (i_error==0x8000400EL) risultato="CO_E_INIT_SCM_MUTEX_EXISTS";
-	else
-	if (i_error==0x8000400FL) risultato="CO_E_INIT_SCM_FILE_MAPPING_EXISTS";
-	else
-	if (i_error==0x80004010L) risultato="CO_E_INIT_SCM_MAP_VIEW_OF_FILE";
-	else
-	if (i_error==0x80004011L) risultato="CO_E_INIT_SCM_EXEC_FAILURE";
-	else
-	if (i_error==0x80004012L) risultato="CO_E_INIT_ONLY_SINGLE_THREADED";
-	else
-	if (i_error==0x80004013L) risultato="CO_E_CANT_REMOTE";
-	else
-	if (i_error==0x80004014L) risultato="CO_E_BAD_SERVER_NAME";
-	else
-	if (i_error==0x80004015L) risultato="CO_E_WRONG_SERVER_IDENTITY";
-	else
-	if (i_error==0x80004016L) risultato="CO_E_OLE1DDE_DISABLED";
-	else
-	if (i_error==0x80004017L) risultato="CO_E_RUNAS_SYNTAX";
-	else
-	if (i_error==0x80004018L) risultato="CO_E_CREATEPROCESS_FAILURE";
-	else
-	if (i_error==0x80004019L) risultato="CO_E_RUNAS_CREATEPROCESS_FAILURE";
-	else
-	if (i_error==0x8000401AL) risultato="CO_E_RUNAS_LOGON_FAILURE";
-	else
-	if (i_error==0x8000401BL) risultato="CO_E_LAUNCH_PERMSSION_DENIED";
-	else
-	if (i_error==0x8000401CL) risultato="CO_E_START_SERVICE_FAILURE";
-	else
-	if (i_error==0x8000401DL) risultato="CO_E_REMOTE_COMMUNICATION_FAILURE";
-	else
-	if (i_error==0x8000401EL) risultato="CO_E_SERVER_START_TIMEOUT";
-	else
-	if (i_error==0x8000401FL) risultato="CO_E_CLSREG_INCONSISTENT";
-	else
-	if (i_error==0x80004020L) risultato="CO_E_IIDREG_INCONSISTENT";
-	else
-	if (i_error==0x80004021L) risultato="CO_E_NOT_SUPPORTED";
-	else
-	if (i_error==0x80004022L) risultato="CO_E_RELOAD_DLL";
-	else
-	if (i_error==0x80004023L) risultato="CO_E_MSI_ERROR";
-	else
-	if (i_error==0x80004024L) risultato="CO_E_ATTEMPT_TO_CREATE_OUTSIDE_CLIENT_CONTEXT";
-	else
-	if (i_error==0x80004025L) risultato="CO_E_SERVER_PAUSED";
-	else
-	if (i_error==0x80004026L) risultato="CO_E_SERVER_NOT_PAUSED";
-	else
-	if (i_error==0x80004027L) risultato="CO_E_CLASS_DISABLED";
-	else
-	if (i_error==0x80004028L) risultato="CO_E_CLRNOTAVAILABLE";
-	else
-	if (i_error==0x80004029L) risultato="CO_E_ASYNC_WORK_REJECTED";
-	else
-	if (i_error==0x8000402AL) risultato="CO_E_SERVER_INIT_TIMEOUT";
-	else
-	if (i_error==0x8000402BL) risultato="CO_E_NO_SECCTX_IN_ACTIVATE";
-	else
-	if (i_error==0x80004030L) risultato="CO_E_TRACKER_CONFIG";
-	else
-	if (i_error==0x80004031L) risultato="CO_E_THREADPOOL_CONFIG";
-	else
-	if (i_error==0x80004032L) risultato="CO_E_SXS_CONFIG";
-	else
-	if (i_error==0x80004033L) risultato="CO_E_MALFORMED_SPN";
-	else
-	if (i_error==0x80004034L) risultato="CO_E_UNREVOKED_REGISTRATION_ON_APARTMENT_SHUTDOWN";
-	else
-	if (i_error==0x80004035L) risultato="CO_E_PREMATURE_STUB_RUNDOWN";
-	else
-	if (i_error==0x80040000L) risultato="OLE_E_FIRST";
-	else
-	if (i_error==0x800400FFL) risultato="OLE_E_LAST";
-	else
-	if (i_error==0x00040000L) risultato="OLE_S_FIRST";
-	else
-	if (i_error==0x000400FFL) risultato="OLE_S_LAST";
-	else
-	if (i_error==0x80040000L) risultato="OLE_E_OLEVERB";
-	else
-	if (i_error==0x80040001L) risultato="OLE_E_ADVF";
-	else
-	if (i_error==0x80040002L) risultato="OLE_E_ENUM_NOMORE";
-	else
-	if (i_error==0x80040003L) risultato="OLE_E_ADVISENOTSUPPORTED";
-	else
-	if (i_error==0x80040004L) risultato="OLE_E_NOCONNECTION";
-	else
-	if (i_error==0x80040005L) risultato="OLE_E_NOTRUNNING";
-	else
-	if (i_error==0x80040006L) risultato="OLE_E_NOCACHE";
-	else
-	if (i_error==0x80040007L) risultato="OLE_E_BLANK";
-	else
-	if (i_error==0x80040008L) risultato="OLE_E_CLASSDIFF";
-	else
-	if (i_error==0x80040009L) risultato="OLE_E_CANT_GETMONIKER";
-	else
-	if (i_error==0x8004000AL) risultato="OLE_E_CANT_BINDTOSOURCE";
-	else
-	if (i_error==0x8004000BL) risultato="OLE_E_STATIC";
-	else
-	if (i_error==0x8004000CL) risultato="OLE_E_PROMPTSAVECANCELLED";
-	else
-	if (i_error==0x8004000DL) risultato="OLE_E_INVALIDRECT";
-	else
-	if (i_error==0x8004000EL) risultato="OLE_E_WRONGCOMPOBJ";
-	else
-	if (i_error==0x8004000FL) risultato="OLE_E_INVALIDHWND";
-	else
-	if (i_error==0x80040010L) risultato="OLE_E_NOT_INPLACEACTIVE";
-	else
-	if (i_error==0x80040011L) risultato="OLE_E_CANTCONVERT";
-	else
-	if (i_error==0x80040012L) risultato="OLE_E_NOSTORAGE";
-	else
-	if (i_error==0x80040064L) risultato="DV_E_FORMATETC";
-	else
-	if (i_error==0x80040065L) risultato="DV_E_DVTARGETDEVICE";
-	else
-	if (i_error==0x80040066L) risultato="DV_E_STGMEDIUM";
-	else
-	if (i_error==0x80040067L) risultato="DV_E_STATDATA";
-	else
-	if (i_error==0x80040068L) risultato="DV_E_LINDEX";
-	else
-	if (i_error==0x80040069L) risultato="DV_E_TYMED";
-	else
-	if (i_error==0x8004006AL) risultato="DV_E_CLIPFORMAT";
-	else
-	if (i_error==0x8004006BL) risultato="DV_E_DVASPECT";
-	else
-	if (i_error==0x8004006CL) risultato="DV_E_DVTARGETDEVICE_SIZE";
-	else
-	if (i_error==0x8004006DL) risultato="DV_E_NOIVIEWOBJECT";
-	else
-	if (i_error==0x80040100L) risultato="DRAGDROP_E_FIRST";
-	else
-	if (i_error==0x8004010FL) risultato="DRAGDROP_E_LAST";
-	else
-	if (i_error==0x00040100L) risultato="DRAGDROP_S_FIRST";
-	else
-	if (i_error==0x0004010FL) risultato="DRAGDROP_S_LAST";
-	else
-	if (i_error==0x80040100L) risultato="DRAGDROP_E_NOTREGISTERED";
-	else
-	if (i_error==0x80040101L) risultato="DRAGDROP_E_ALREADYREGISTERED";
-	else
-	if (i_error==0x80040102L) risultato="DRAGDROP_E_INVALIDHWND";
-	else
-	if (i_error==0x80040103L) risultato="DRAGDROP_E_CONCURRENT_DRAG_ATTEMPTED";
-	else
-	if (i_error==0x80040110L) risultato="CLASSFACTORY_E_FIRST";
-	else
-	if (i_error==0x8004011FL) risultato="CLASSFACTORY_E_LAST";
-	else
-	if (i_error==0x00040110L) risultato="CLASSFACTORY_S_FIRST";
-	else
-	if (i_error==0x0004011FL) risultato="CLASSFACTORY_S_LAST";
-	else
-	if (i_error==0x80040110L) risultato="CLASS_E_NOAGGREGATION";
-	else
-	if (i_error==0x80040111L) risultato="CLASS_E_CLASSNOTAVAILABLE";
-	else
-	if (i_error==0x80040112L) risultato="CLASS_E_NOTLICENSED";
-	else
-	if (i_error==0x80040120L) risultato="MARSHAL_E_FIRST";
-	else
-	if (i_error==0x8004012FL) risultato="MARSHAL_E_LAST";
-	else
-	if (i_error==0x00040120L) risultato="MARSHAL_S_FIRST";
-	else
-	if (i_error==0x0004012FL) risultato="MARSHAL_S_LAST";
-	else
-	if (i_error==0x80040130L) risultato="DATA_E_FIRST";
-	else
-	if (i_error==0x8004013FL) risultato="DATA_E_LAST";
-	else
-	if (i_error==0x00040130L) risultato="DATA_S_FIRST";
-	else
-	if (i_error==0x0004013FL) risultato="DATA_S_LAST";
-	else
-	if (i_error==0x80040140L) risultato="VIEW_E_FIRST";
-	else
-	if (i_error==0x8004014FL) risultato="VIEW_E_LAST";
-	else
-	if (i_error==0x00040140L) risultato="VIEW_S_FIRST";
-	else
-	if (i_error==0x0004014FL) risultato="VIEW_S_LAST";
-	else
-	if (i_error==0x80040140L) risultato="VIEW_E_DRAW";
-	else
-	if (i_error==0x80040150L) risultato="REGDB_E_FIRST";
-	else
-	if (i_error==0x8004015FL) risultato="REGDB_E_LAST";
-	else
-	if (i_error==0x00040150L) risultato="REGDB_S_FIRST";
-	else
-	if (i_error==0x0004015FL) risultato="REGDB_S_LAST";
-	else
-	if (i_error==0x80040150L) risultato="REGDB_E_READREGDB";
-	else
-	if (i_error==0x80040151L) risultato="REGDB_E_WRITEREGDB";
-	else
-	if (i_error==0x80040152L) risultato="REGDB_E_KEYMISSING";
-	else
-	if (i_error==0x80040153L) risultato="REGDB_E_INVALIDVALUE";
-	else
-	if (i_error==0x80040154L) risultato="REGDB_E_CLASSNOTREG";
-	else
-	if (i_error==0x80040155L) risultato="REGDB_E_IIDNOTREG";
-	else
-	if (i_error==0x80040156L) risultato="REGDB_E_BADTHREADINGMODEL";
-	else
-	if (i_error==0x80040157L) risultato="REGDB_E_PACKAGEPOLICYVIOLATION";
-	else
-	if (i_error==0x80040160L) risultato="CAT_E_FIRST";
-	else
-	if (i_error==0x80040161L) risultato="CAT_E_LAST";
-	else
-	if (i_error==0x80040160L) risultato="CAT_E_CATIDNOEXIST";
-	else
-	if (i_error==0x80040161L) risultato="CAT_E_NODESCRIPTION";
-	else
-	if (i_error==0x80040164L) risultato="CS_E_FIRST";
-	else
-	if (i_error==0x8004016FL) risultato="CS_E_LAST";
-	else
-	if (i_error==0x80040164L) risultato="CS_E_PACKAGE_NOTFOUND";
-	else
-	if (i_error==0x80040165L) risultato="CS_E_NOT_DELETABLE";
-	else
-	if (i_error==0x80040166L) risultato="CS_E_CLASS_NOTFOUND";
-	else
-	if (i_error==0x80040167L) risultato="CS_E_INVALID_VERSION";
-	else
-	if (i_error==0x80040168L) risultato="CS_E_NO_CLASSSTORE";
-	else
-	if (i_error==0x80040169L) risultato="CS_E_OBJECT_NOTFOUND";
-	else
-	if (i_error==0x8004016AL) risultato="CS_E_OBJECT_ALREADY_EXISTS";
-	else
-	if (i_error==0x8004016BL) risultato="CS_E_INVALID_PATH";
-	else
-	if (i_error==0x8004016CL) risultato="CS_E_NETWORK_ERROR";
-	else
-	if (i_error==0x8004016DL) risultato="CS_E_ADMIN_LIMIT_EXCEEDED";
-	else
-	if (i_error==0x8004016EL) risultato="CS_E_SCHEMA_MISMATCH";
-	else
-	if (i_error==0x8004016FL) risultato="CS_E_INTERNAL_ERROR";
-	else
-	if (i_error==0x80040170L) risultato="CACHE_E_FIRST";
-	else
-	if (i_error==0x8004017FL) risultato="CACHE_E_LAST";
-	else
-	if (i_error==0x00040170L) risultato="CACHE_S_FIRST";
-	else
-	if (i_error==0x0004017FL) risultato="CACHE_S_LAST";
-	else
-	if (i_error==0x80040170L) risultato="CACHE_E_NOCACHE_UPDATED";
-	else
-	if (i_error==0x80040180L) risultato="OLEOBJ_E_FIRST";
-	else
-	if (i_error==0x8004018FL) risultato="OLEOBJ_E_LAST";
-	else
-	if (i_error==0x00040180L) risultato="OLEOBJ_S_FIRST";
-	else
-	if (i_error==0x0004018FL) risultato="OLEOBJ_S_LAST";
-	else
-	if (i_error==0x80040180L) risultato="OLEOBJ_E_NOVERBS";
-	else
-	if (i_error==0x80040181L) risultato="OLEOBJ_E_INVALIDVERB";
-	else
-	if (i_error==0x80040190L) risultato="CLIENTSITE_E_FIRST";
-	else
-	if (i_error==0x8004019FL) risultato="CLIENTSITE_E_LAST";
-	else
-	if (i_error==0x00040190L) risultato="CLIENTSITE_S_FIRST";
-	else
-	if (i_error==0x0004019FL) risultato="CLIENTSITE_S_LAST";
-	else
-	if (i_error==0x800401A0L) risultato="INPLACE_E_NOTUNDOABLE";
-	else
-	if (i_error==0x800401A1L) risultato="INPLACE_E_NOTOOLSPACE";
-	else
-	if (i_error==0x800401A0L) risultato="INPLACE_E_FIRST";
-	else
-	if (i_error==0x800401AFL) risultato="INPLACE_E_LAST";
-	else
-	if (i_error==0x000401A0L) risultato="INPLACE_S_FIRST";
-	else
-	if (i_error==0x000401AFL) risultato="INPLACE_S_LAST";
-	else
-	if (i_error==0x800401B0L) risultato="ENUM_E_FIRST";
-	else
-	if (i_error==0x800401BFL) risultato="ENUM_E_LAST";
-	else
-	if (i_error==0x000401B0L) risultato="ENUM_S_FIRST";
-	else
-	if (i_error==0x000401BFL) risultato="ENUM_S_LAST";
-	else
-	if (i_error==0x800401C0L) risultato="CONVERT10_E_FIRST";
-	else
-	if (i_error==0x800401CFL) risultato="CONVERT10_E_LAST";
-	else
-	if (i_error==0x000401C0L) risultato="CONVERT10_S_FIRST";
-	else
-	if (i_error==0x000401CFL) risultato="CONVERT10_S_LAST";
-	else
-	if (i_error==0x800401C0L) risultato="CONVERT10_E_OLESTREAM_GET";
-	else
-	if (i_error==0x800401C1L) risultato="CONVERT10_E_OLESTREAM_PUT";
-	else
-	if (i_error==0x800401C2L) risultato="CONVERT10_E_OLESTREAM_FMT";
-	else
-	if (i_error==0x800401C3L) risultato="CONVERT10_E_OLESTREAM_BITMAP_TO_DIB";
-	else
-	if (i_error==0x800401C4L) risultato="CONVERT10_E_STG_FMT";
-	else
-	if (i_error==0x800401C5L) risultato="CONVERT10_E_STG_NO_STD_STREAM";
-	else
-	if (i_error==0x800401C6L) risultato="CONVERT10_E_STG_DIB_TO_BITMAP";
-	else
-	if (i_error==0x800401D0L) risultato="CLIPBRD_E_FIRST";
-	else
-	if (i_error==0x800401DFL) risultato="CLIPBRD_E_LAST";
-	else
-	if (i_error==0x000401D0L) risultato="CLIPBRD_S_FIRST";
-	else
-	if (i_error==0x000401DFL) risultato="CLIPBRD_S_LAST";
-	else
-	if (i_error==0x800401D0L) risultato="CLIPBRD_E_CANT_OPEN";
-	else
-	if (i_error==0x800401D1L) risultato="CLIPBRD_E_CANT_EMPTY";
-	else
-	if (i_error==0x800401D2L) risultato="CLIPBRD_E_CANT_SET";
-	else
-	if (i_error==0x800401D3L) risultato="CLIPBRD_E_BAD_DATA";
-	else
-	if (i_error==0x800401D4L) risultato="CLIPBRD_E_CANT_CLOSE";
-	else
-	if (i_error==0x800401E0L) risultato="MK_E_FIRST";
-	else
-	if (i_error==0x800401EFL) risultato="MK_E_LAST";
-	else
-	if (i_error==0x000401E0L) risultato="MK_S_FIRST";
-	else
-	if (i_error==0x000401EFL) risultato="MK_S_LAST";
-	else
-	if (i_error==0x800401E0L) risultato="MK_E_CONNECTMANUALLY";
-	else
-	if (i_error==0x800401E1L) risultato="MK_E_EXCEEDEDDEADLINE";
-	else
-	if (i_error==0x800401E2L) risultato="MK_E_NEEDGENERIC";
-	else
-	if (i_error==0x800401E3L) risultato="MK_E_UNAVAILABLE";
-	else
-	if (i_error==0x800401E4L) risultato="MK_E_SYNTAX";
-	else
-	if (i_error==0x800401E5L) risultato="MK_E_NOOBJECT";
-	else
-	if (i_error==0x800401E6L) risultato="MK_E_INVALIDEXTENSION";
-	else
-	if (i_error==0x800401E7L) risultato="MK_E_INTERMEDIATEINTERFACENOTSUPPORTED";
-	else
-	if (i_error==0x800401E8L) risultato="MK_E_NOTBINDABLE";
-	else
-	if (i_error==0x800401E9L) risultato="MK_E_NOTBOUND";
-	else
-	if (i_error==0x800401EAL) risultato="MK_E_CANTOPENFILE";
-	else
-	if (i_error==0x800401EBL) risultato="MK_E_MUSTBOTHERUSER";
-	else
-	if (i_error==0x800401ECL) risultato="MK_E_NOINVERSE";
-	else
-	if (i_error==0x800401EDL) risultato="MK_E_NOSTORAGE";
-	else
-	if (i_error==0x800401EEL) risultato="MK_E_NOPREFIX";
-	else
-	if (i_error==0x800401EFL) risultato="MK_E_ENUMERATION_FAILED";
-	else
-	if (i_error==0x800401F0L) risultato="CO_E_FIRST";
-	else
-	if (i_error==0x800401FFL) risultato="CO_E_LAST";
-	else
-	if (i_error==0x000401F0L) risultato="CO_S_FIRST";
-	else
-	if (i_error==0x000401FFL) risultato="CO_S_LAST";
-	else
-	if (i_error==0x800401F0L) risultato="CO_E_NOTINITIALIZED";
-	else
-	if (i_error==0x800401F1L) risultato="CO_E_ALREADYINITIALIZED";
-	else
-	if (i_error==0x800401F2L) risultato="CO_E_CANTDETERMINECLASS";
-	else
-	if (i_error==0x800401F3L) risultato="CO_E_CLASSSTRING";
-	else
-	if (i_error==0x800401F4L) risultato="CO_E_IIDSTRING";
-	else
-	if (i_error==0x800401F5L) risultato="CO_E_APPNOTFOUND";
-	else
-	if (i_error==0x800401F6L) risultato="CO_E_APPSINGLEUSE";
-	else
-	if (i_error==0x800401F7L) risultato="CO_E_ERRORINAPP";
-	else
-	if (i_error==0x800401F8L) risultato="CO_E_DLLNOTFOUND";
-	else
-	if (i_error==0x800401F9L) risultato="CO_E_ERRORINDLL";
-	else
-	if (i_error==0x800401FAL) risultato="CO_E_WRONGOSFORAPP";
-	else
-	if (i_error==0x800401FBL) risultato="CO_E_OBJNOTREG";
-	else
-	if (i_error==0x800401FCL) risultato="CO_E_OBJISREG";
-	else
-	if (i_error==0x800401FDL) risultato="CO_E_OBJNOTCONNECTED";
-	else
-	if (i_error==0x800401FEL) risultato="CO_E_APPDIDNTREG";
-	else
-	if (i_error==0x800401FFL) risultato="CO_E_RELEASED";
-	else
-	if (i_error==0x80040200L) risultato="EVENT_E_FIRST";
-	else
-	if (i_error==0x8004021FL) risultato="EVENT_E_LAST";
-	else
-	if (i_error==0x00040200L) risultato="EVENT_S_FIRST";
-	else
-	if (i_error==0x0004021FL) risultato="EVENT_S_LAST";
-	else
-	if (i_error==0x00040200L) risultato="EVENT_S_SOME_SUBSCRIBERS_FAILED";
-	else
-	if (i_error==0x80040201L) risultato="EVENT_E_ALL_SUBSCRIBERS_FAILED";
-	else
-	if (i_error==0x00040202L) risultato="EVENT_S_NOSUBSCRIBERS";
-	else
-	if (i_error==0x80040203L) risultato="EVENT_E_QUERYSYNTAX";
-	else
-	if (i_error==0x80040204L) risultato="EVENT_E_QUERYFIELD";
-	else
-	if (i_error==0x80040205L) risultato="EVENT_E_INTERNALEXCEPTION";
-	else
-	if (i_error==0x80040206L) risultato="EVENT_E_INTERNALERROR";
-	else
-	if (i_error==0x80040207L) risultato="EVENT_E_INVALID_PER_USER_SID";
-	else
-	if (i_error==0x80040208L) risultato="EVENT_E_USER_EXCEPTION";
-	else
-	if (i_error==0x80040209L) risultato="EVENT_E_TOO_MANY_METHODS";
-	else
-	if (i_error==0x8004020AL) risultato="EVENT_E_MISSING_EVENTCLASS";
-	else
-	if (i_error==0x8004020BL) risultato="EVENT_E_NOT_ALL_REMOVED";
-	else
-	if (i_error==0x8004020CL) risultato="EVENT_E_COMPLUS_NOT_INSTALLED";
-	else
-	if (i_error==0x8004020DL) risultato="EVENT_E_CANT_MODIFY_OR_DELETE_UNCONFIGURED_OBJECT";
-	else
-	if (i_error==0x8004020EL) risultato="EVENT_E_CANT_MODIFY_OR_DELETE_CONFIGURED_OBJECT";
-	else
-	if (i_error==0x8004020FL) risultato="EVENT_E_INVALID_EVENT_CLASS_PARTITION";
-	else
-	if (i_error==0x80040210L) risultato="EVENT_E_PER_USER_SID_NOT_LOGGED_ON";
-	else
-	if (i_error==0x80040241L) risultato="TPC_E_INVALID_PROPERTY";
-	else
-	if (i_error==0x80040212L) risultato="TPC_E_NO_DEFAULT_TABLET";
-	else
-	if (i_error==0x8004021BL) risultato="TPC_E_UNKNOWN_PROPERTY";
-	else
-	if (i_error==0x80040219L) risultato="TPC_E_INVALID_INPUT_RECT";
-	else
-	if (i_error==0x80040222L) risultato="TPC_E_INVALID_STROKE";
-	else
-	if (i_error==0x80040223L) risultato="TPC_E_INITIALIZE_FAIL";
-	else
-	if (i_error==0x80040232L) risultato="TPC_E_NOT_RELEVANT";
-	else
-	if (i_error==0x80040233L) risultato="TPC_E_INVALID_PACKET_DESCRIPTION";
-	else
-	if (i_error==0x80040235L) risultato="TPC_E_RECOGNIZER_NOT_REGISTERED";
-	else
-	if (i_error==0x80040236L) risultato="TPC_E_INVALID_RIGHTS";
-	else
-	if (i_error==0x80040237L) risultato="TPC_E_OUT_OF_ORDER_CALL";
-	else
-	if (i_error==0x80040238L) risultato="TPC_E_QUEUE_FULL";
-	else
-	if (i_error==0x80040239L) risultato="TPC_E_INVALID_CONFIGURATION";
-	else
-	if (i_error==0x8004023AL) risultato="TPC_E_INVALID_DATA_FROM_RECOGNIZER";
-	else
-	if (i_error==0x00040252L) risultato="TPC_S_TRUNCATED";
-	else
-	if (i_error==0x00040253L) risultato="TPC_S_INTERRUPTED";
-	else
-	if (i_error==0x00040254L) risultato="TPC_S_NO_DATA_TO_PROCESS";
-	else
-	if (i_error==0x8004D000) risultato="XACT_E_FIRST";
-	else
-	if (i_error==0x8004D02B) risultato="XACT_E_LAST";
-	else
-	if (i_error==0x0004D000) risultato="XACT_S_FIRST";
-	else
-	if (i_error==0x0004D010) risultato="XACT_S_LAST";
-	else
-	if (i_error==0x8004D000L) risultato="XACT_E_ALREADYOTHERSINGLEPHASE";
-	else
-	if (i_error==0x8004D001L) risultato="XACT_E_CANTRETAIN";
-	else
-	if (i_error==0x8004D002L) risultato="XACT_E_COMMITFAILED";
-	else
-	if (i_error==0x8004D003L) risultato="XACT_E_COMMITPREVENTED";
-	else
-	if (i_error==0x8004D004L) risultato="XACT_E_HEURISTICABORT";
-	else
-	if (i_error==0x8004D005L) risultato="XACT_E_HEURISTICCOMMIT";
-	else
-	if (i_error==0x8004D006L) risultato="XACT_E_HEURISTICDAMAGE";
-	else
-	if (i_error==0x8004D007L) risultato="XACT_E_HEURISTICDANGER";
-	else
-	if (i_error==0x8004D008L) risultato="XACT_E_ISOLATIONLEVEL";
-	else
-	if (i_error==0x8004D009L) risultato="XACT_E_NOASYNC";
-	else
-	if (i_error==0x8004D00AL) risultato="XACT_E_NOENLIST";
-	else
-	if (i_error==0x8004D00BL) risultato="XACT_E_NOISORETAIN";
-	else
-	if (i_error==0x8004D00CL) risultato="XACT_E_NORESOURCE";
-	else
-	if (i_error==0x8004D00DL) risultato="XACT_E_NOTCURRENT";
-	else
-	if (i_error==0x8004D00EL) risultato="XACT_E_NOTRANSACTION";
-	else
-	if (i_error==0x8004D00FL) risultato="XACT_E_NOTSUPPORTED";
-	else
-	if (i_error==0x8004D010L) risultato="XACT_E_UNKNOWNRMGRID";
-	else
-	if (i_error==0x8004D011L) risultato="XACT_E_WRONGSTATE";
-	else
-	if (i_error==0x8004D012L) risultato="XACT_E_WRONGUOW";
-	else
-	if (i_error==0x8004D013L) risultato="XACT_E_XTIONEXISTS";
-	else
-	if (i_error==0x8004D014L) risultato="XACT_E_NOIMPORTOBJECT";
-	else
-	if (i_error==0x8004D015L) risultato="XACT_E_INVALIDCOOKIE";
-	else
-	if (i_error==0x8004D016L) risultato="XACT_E_INDOUBT";
-	else
-	if (i_error==0x8004D017L) risultato="XACT_E_NOTIMEOUT";
-	else
-	if (i_error==0x8004D018L) risultato="XACT_E_ALREADYINPROGRESS";
-	else
-	if (i_error==0x8004D019L) risultato="XACT_E_ABORTED";
-	else
-	if (i_error==0x8004D01AL) risultato="XACT_E_LOGFULL";
-	else
-	if (i_error==0x8004D01BL) risultato="XACT_E_TMNOTAVAILABLE";
-	else
-	if (i_error==0x8004D01CL) risultato="XACT_E_CONNECTION_DOWN";
-	else
-	if (i_error==0x8004D01DL) risultato="XACT_E_CONNECTION_DENIED";
-	else
-	if (i_error==0x8004D01EL) risultato="XACT_E_REENLISTTIMEOUT";
-	else
-	if (i_error==0x8004D01FL) risultato="XACT_E_TIP_CONNECT_FAILED";
-	else
-	if (i_error==0x8004D020L) risultato="XACT_E_TIP_PROTOCOL_ERROR";
-	else
-	if (i_error==0x8004D021L) risultato="XACT_E_TIP_PULL_FAILED";
-	else
-	if (i_error==0x8004D022L) risultato="XACT_E_DEST_TMNOTAVAILABLE";
-	else
-	if (i_error==0x8004D023L) risultato="XACT_E_TIP_DISABLED";
-	else
-	if (i_error==0x8004D024L) risultato="XACT_E_NETWORK_TX_DISABLED";
-	else
-	if (i_error==0x8004D025L) risultato="XACT_E_PARTNER_NETWORK_TX_DISABLED";
-	else
-	if (i_error==0x8004D026L) risultato="XACT_E_XA_TX_DISABLED";
-	else
-	if (i_error==0x8004D027L) risultato="XACT_E_UNABLE_TO_READ_DTC_CONFIG";
-	else
-	if (i_error==0x8004D028L) risultato="XACT_E_UNABLE_TO_LOAD_DTC_PROXY";
-	else
-	if (i_error==0x8004D029L) risultato="XACT_E_ABORTING";
-	else
-	if (i_error==0x8004D02AL) risultato="XACT_E_PUSH_COMM_FAILURE";
-	else
-	if (i_error==0x8004D02BL) risultato="XACT_E_PULL_COMM_FAILURE";
-	else
-	if (i_error==0x8004D02CL) risultato="XACT_E_LU_TX_DISABLED";
-	else
-	if (i_error==0x8004D080L) risultato="XACT_E_CLERKNOTFOUND";
-	else
-	if (i_error==0x8004D081L) risultato="XACT_E_CLERKEXISTS";
-	else
-	if (i_error==0x8004D082L) risultato="XACT_E_RECOVERYINPROGRESS";
-	else
-	if (i_error==0x8004D083L) risultato="XACT_E_TRANSACTIONCLOSED";
-	else
-	if (i_error==0x8004D084L) risultato="XACT_E_INVALIDLSN";
-	else
-	if (i_error==0x8004D085L) risultato="XACT_E_REPLAYREQUEST";
-	else
-	if (i_error==0x0004D000L) risultato="XACT_S_ASYNC";
-	else
-	if (i_error==0x0004D001L) risultato="XACT_S_DEFECT";
-	else
-	if (i_error==0x0004D002L) risultato="XACT_S_READONLY";
-	else
-	if (i_error==0x0004D003L) risultato="XACT_S_SOMENORETAIN";
-	else
-	if (i_error==0x0004D004L) risultato="XACT_S_OKINFORM";
-	else
-	if (i_error==0x0004D005L) risultato="XACT_S_MADECHANGESCONTENT";
-	else
-	if (i_error==0x0004D006L) risultato="XACT_S_MADECHANGESINFORM";
-	else
-	if (i_error==0x0004D007L) risultato="XACT_S_ALLNORETAIN";
-	else
-	if (i_error==0x0004D008L) risultato="XACT_S_ABORTING";
-	else
-	if (i_error==0x0004D009L) risultato="XACT_S_SINGLEPHASE";
-	else
-	if (i_error==0x0004D00AL) risultato="XACT_S_LOCALLY_OK";
-	else
-	if (i_error==0x0004D010L) risultato="XACT_S_LASTRESOURCEMANAGER";
-	else
-	if (i_error==0x8004E000L) risultato="CONTEXT_E_FIRST";
-	else
-	if (i_error==0x8004E02FL) risultato="CONTEXT_E_LAST";
-	else
-	if (i_error==0x0004E000L) risultato="CONTEXT_S_FIRST";
-	else
-	if (i_error==0x0004E02FL) risultato="CONTEXT_S_LAST";
-	else
-	if (i_error==0x8004E002L) risultato="CONTEXT_E_ABORTED";
-	else
-	if (i_error==0x8004E003L) risultato="CONTEXT_E_ABORTING";
-	else
-	if (i_error==0x8004E004L) risultato="CONTEXT_E_NOCONTEXT";
-	else
-	if (i_error==0x8004E005L) risultato="CONTEXT_E_WOULD_DEADLOCK";
-	else
-	if (i_error==0x8004E006L) risultato="CONTEXT_E_SYNCH_TIMEOUT";
-	else
-	if (i_error==0x8004E007L) risultato="CONTEXT_E_OLDREF";
-	else
-	if (i_error==0x8004E00CL) risultato="CONTEXT_E_ROLENOTFOUND";
-	else
-	if (i_error==0x8004E00FL) risultato="CONTEXT_E_TMNOTAVAILABLE";
-	else
-	if (i_error==0x8004E021L) risultato="CO_E_ACTIVATIONFAILED";
-	else
-	if (i_error==0x8004E022L) risultato="CO_E_ACTIVATIONFAILED_EVENTLOGGED";
-	else
-	if (i_error==0x8004E023L) risultato="CO_E_ACTIVATIONFAILED_CATALOGERROR";
-	else
-	if (i_error==0x8004E024L) risultato="CO_E_ACTIVATIONFAILED_TIMEOUT";
-	else
-	if (i_error==0x8004E025L) risultato="CO_E_INITIALIZATIONFAILED";
-	else
-	if (i_error==0x8004E026L) risultato="CONTEXT_E_NOJIT";
-	else
-	if (i_error==0x8004E027L) risultato="CONTEXT_E_NOTRANSACTION";
-	else
-	if (i_error==0x8004E028L) risultato="CO_E_THREADINGMODEL_CHANGED";
-	else
-	if (i_error==0x8004E029L) risultato="CO_E_NOIISINTRINSICS";
-	else
-	if (i_error==0x8004E02AL) risultato="CO_E_NOCOOKIES";
-	else
-	if (i_error==0x8004E02BL) risultato="CO_E_DBERROR";
-	else
-	if (i_error==0x8004E02CL) risultato="CO_E_NOTPOOLED";
-	else
-	if (i_error==0x8004E02DL) risultato="CO_E_NOTCONSTRUCTED";
-	else
-	if (i_error==0x8004E02EL) risultato="CO_E_NOSYNCHRONIZATION";
-	else
-	if (i_error==0x8004E02FL) risultato="CO_E_ISOLEVELMISMATCH";
-	else
-	if (i_error==0x8004E030L) risultato="CO_E_CALL_OUT_OF_TX_SCOPE_NOT_ALLOWED";
-	else
-	if (i_error==0x8004E031L) risultato="CO_E_EXIT_TRANSACTION_SCOPE_NOT_CALLED";
-	else
-	if (i_error==0x00040000L) risultato="OLE_S_USEREG";
-	else
-	if (i_error==0x00040001L) risultato="OLE_S_STATIC";
-	else
-	if (i_error==0x00040002L) risultato="OLE_S_MAC_CLIPFORMAT";
-	else
-	if (i_error==0x00040100L) risultato="DRAGDROP_S_DROP";
-	else
-	if (i_error==0x00040101L) risultato="DRAGDROP_S_CANCEL";
-	else
-	if (i_error==0x00040102L) risultato="DRAGDROP_S_USEDEFAULTCURSORS";
-	else
-	if (i_error==0x00040130L) risultato="DATA_S_SAMEFORMATETC";
-	else
-	if (i_error==0x00040140L) risultato="VIEW_S_ALREADY_FROZEN";
-	else
-	if (i_error==0x00040170L) risultato="CACHE_S_FORMATETC_NOTSUPPORTED";
-	else
-	if (i_error==0x00040171L) risultato="CACHE_S_SAMECACHE";
-	else
-	if (i_error==0x00040172L) risultato="CACHE_S_SOMECACHES_NOTUPDATED";
-	else
-	if (i_error==0x00040180L) risultato="OLEOBJ_S_INVALIDVERB";
-	else
-	if (i_error==0x00040181L) risultato="OLEOBJ_S_CANNOT_DOVERB_NOW";
-	else
-	if (i_error==0x00040182L) risultato="OLEOBJ_S_INVALIDHWND";
-	else
-	if (i_error==0x000401A0L) risultato="INPLACE_S_TRUNCATED";
-	else
-	if (i_error==0x000401C0L) risultato="CONVERT10_S_NO_PRESENTATION";
-	else
-	if (i_error==0x000401E2L) risultato="MK_S_REDUCED_TO_SELF";
-	else
-	if (i_error==0x000401E4L) risultato="MK_S_ME";
-	else
-	if (i_error==0x000401E5L) risultato="MK_S_HIM";
-	else
-	if (i_error==0x000401E6L) risultato="MK_S_US";
-	else
-	if (i_error==0x000401E7L) risultato="MK_S_MONIKERALREADYREGISTERED";
-	else
-	if (i_error==0x00041300L) risultato="SCHED_S_TASK_READY";
-	else
-	if (i_error==0x00041301L) risultato="SCHED_S_TASK_RUNNING";
-	else
-	if (i_error==0x00041302L) risultato="SCHED_S_TASK_DISABLED";
-	else
-	if (i_error==0x00041303L) risultato="SCHED_S_TASK_HAS_NOT_RUN";
-	else
-	if (i_error==0x00041304L) risultato="SCHED_S_TASK_NO_MORE_RUNS";
-	else
-	if (i_error==0x00041305L) risultato="SCHED_S_TASK_NOT_SCHEDULED";
-	else
-	if (i_error==0x00041306L) risultato="SCHED_S_TASK_TERMINATED";
-	else
-	if (i_error==0x00041307L) risultato="SCHED_S_TASK_NO_VALID_TRIGGERS";
-	else
-	if (i_error==0x00041308L) risultato="SCHED_S_EVENT_TRIGGER";
-	else
-	if (i_error==0x80041309L) risultato="SCHED_E_TRIGGER_NOT_FOUND";
-	else
-	if (i_error==0x8004130AL) risultato="SCHED_E_TASK_NOT_READY";
-	else
-	if (i_error==0x8004130BL) risultato="SCHED_E_TASK_NOT_RUNNING";
-	else
-	if (i_error==0x8004130CL) risultato="SCHED_E_SERVICE_NOT_INSTALLED";
-	else
-	if (i_error==0x8004130DL) risultato="SCHED_E_CANNOT_OPEN_TASK";
-	else
-	if (i_error==0x8004130EL) risultato="SCHED_E_INVALID_TASK";
-	else
-	if (i_error==0x8004130FL) risultato="SCHED_E_ACCOUNT_INFORMATION_NOT_SET";
-	else
-	if (i_error==0x80041310L) risultato="SCHED_E_ACCOUNT_NAME_NOT_FOUND";
-	else
-	if (i_error==0x80041311L) risultato="SCHED_E_ACCOUNT_DBASE_CORRUPT";
-	else
-	if (i_error==0x80041312L) risultato="SCHED_E_NO_SECURITY_SERVICES";
-	else
-	if (i_error==0x80041313L) risultato="SCHED_E_UNKNOWN_OBJECT_VERSION";
-	else
-	if (i_error==0x80041314L) risultato="SCHED_E_UNSUPPORTED_ACCOUNT_OPTION";
-	else
-	if (i_error==0x80041315L) risultato="SCHED_E_SERVICE_NOT_RUNNING";
-	else
-	if (i_error==0x80041316L) risultato="SCHED_E_UNEXPECTEDNODE";
-	else
-	if (i_error==0x80041317L) risultato="SCHED_E_NAMESPACE";
-	else
-	if (i_error==0x80041318L) risultato="SCHED_E_INVALIDVALUE";
-	else
-	if (i_error==0x80041319L) risultato="SCHED_E_MISSINGNODE";
-	else
-	if (i_error==0x8004131AL) risultato="SCHED_E_MALFORMEDXML";
-	else
-	if (i_error==0x0004131BL) risultato="SCHED_S_SOME_TRIGGERS_FAILED";
-	else
-	if (i_error==0x0004131CL) risultato="SCHED_S_BATCH_LOGON_PROBLEM";
-	else
-	if (i_error==0x8004131DL) risultato="SCHED_E_TOO_MANY_NODES";
-	else
-	if (i_error==0x8004131EL) risultato="SCHED_E_PAST_END_BOUNDARY";
-	else
-	if (i_error==0x8004131FL) risultato="SCHED_E_ALREADY_RUNNING";
-	else
-	if (i_error==0x80041320L) risultato="SCHED_E_USER_NOT_LOGGED_ON";
-	else
-	if (i_error==0x80041321L) risultato="SCHED_E_INVALID_TASK_HASH";
-	else
-	if (i_error==0x80041322L) risultato="SCHED_E_SERVICE_NOT_AVAILABLE";
-	else
-	if (i_error==0x80041323L) risultato="SCHED_E_SERVICE_TOO_BUSY";
-	else
-	if (i_error==0x80041324L) risultato="SCHED_E_TASK_ATTEMPTED";
-	else
-	if (i_error==0x00041325L) risultato="SCHED_S_TASK_QUEUED";
-	else
-	if (i_error==0x80041326L) risultato="SCHED_E_TASK_DISABLED";
-	else
-	if (i_error==0x80041327L) risultato="SCHED_E_TASK_NOT_V1_COMPAT";
-	else
-	if (i_error==0x80041328L) risultato="SCHED_E_START_ON_DEMAND";
-	else
-	if (i_error==0x80041329L) risultato="SCHED_E_TASK_NOT_UBPM_COMPAT";
-	else
-	if (i_error==0x80041330L) risultato="SCHED_E_DEPRECATED_FEATURE_USED";
-	else
-	if (i_error==0x80080001L) risultato="CO_E_CLASS_CREATE_FAILED";
-	else
-	if (i_error==0x80080002L) risultato="CO_E_SCM_ERROR";
-	else
-	if (i_error==0x80080003L) risultato="CO_E_SCM_RPC_FAILURE";
-	else
-	if (i_error==0x80080004L) risultato="CO_E_BAD_PATH";
-	else
-	if (i_error==0x80080005L) risultato="CO_E_SERVER_EXEC_FAILURE";
-	else
-	if (i_error==0x80080006L) risultato="CO_E_OBJSRV_RPC_FAILURE";
-	else
-	if (i_error==0x80080007L) risultato="MK_E_NO_NORMALIZED";
-	else
-	if (i_error==0x80080008L) risultato="CO_E_SERVER_STOPPING";
-	else
-	if (i_error==0x80080009L) risultato="MEM_E_INVALID_ROOT";
-	else
-	if (i_error==0x80080010L) risultato="MEM_E_INVALID_LINK";
-	else
-	if (i_error==0x80080011L) risultato="MEM_E_INVALID_SIZE";
-	else
-	if (i_error==0x00080012L) risultato="CO_S_NOTALLINTERFACES";
-	else
-	if (i_error==0x00080013L) risultato="CO_S_MACHINENAMENOTFOUND";
-	else
-	if (i_error==0x80080015L) risultato="CO_E_MISSING_DISPLAYNAME";
-	else
-	if (i_error==0x80080016L) risultato="CO_E_RUNAS_VALUE_MUST_BE_AAA";
-	else
-	if (i_error==0x80080017L) risultato="CO_E_ELEVATION_DISABLED";
-	else
-	if (i_error==0x80080200L) risultato="APPX_E_PACKAGING_INTERNAL";
-	else
-	if (i_error==0x80080201L) risultato="APPX_E_INTERLEAVING_NOT_ALLOWED";
-	else
-	if (i_error==0x80080202L) risultato="APPX_E_RELATIONSHIPS_NOT_ALLOWED";
-	else
-	if (i_error==0x80080203L) risultato="APPX_E_MISSING_REQUIRED_FILE";
-	else
-	if (i_error==0x80080204L) risultato="APPX_E_INVALID_MANIFEST";
-	else
-	if (i_error==0x80080205L) risultato="APPX_E_INVALID_BLOCKMAP";
-	else
-	if (i_error==0x80080206L) risultato="APPX_E_CORRUPT_CONTENT";
-	else
-	if (i_error==0x80080207L) risultato="APPX_E_BLOCK_HASH_INVALID";
-	else
-	if (i_error==0x80080208L) risultato="APPX_E_REQUESTED_RANGE_TOO_LARGE";
-	else
-	if (i_error==0x80080209L) risultato="APPX_E_INVALID_SIP_CLIENT_DATA";
-	else
-	if (i_error==0x8008020AL) risultato="APPX_E_INVALID_KEY_INFO";
-	else
-	if (i_error==0x80080300L) risultato="BT_E_SPURIOUS_ACTIVATION";
-	else
-	if (i_error==0x80020001L) risultato="DISP_E_UNKNOWNINTERFACE";
-	else
-	if (i_error==0x80020003L) risultato="DISP_E_MEMBERNOTFOUND";
-	else
-	if (i_error==0x80020004L) risultato="DISP_E_PARAMNOTFOUND";
-	else
-	if (i_error==0x80020005L) risultato="DISP_E_TYPEMISMATCH";
-	else
-	if (i_error==0x80020006L) risultato="DISP_E_UNKNOWNNAME";
-	else
-	if (i_error==0x80020007L) risultato="DISP_E_NONAMEDARGS";
-	else
-	if (i_error==0x80020008L) risultato="DISP_E_BADVARTYPE";
-	else
-	if (i_error==0x80020009L) risultato="DISP_E_EXCEPTION";
-	else
-	if (i_error==0x8002000AL) risultato="DISP_E_OVERFLOW";
-	else
-	if (i_error==0x8002000BL) risultato="DISP_E_BADINDEX";
-	else
-	if (i_error==0x8002000CL) risultato="DISP_E_UNKNOWNLCID";
-	else
-	if (i_error==0x8002000DL) risultato="DISP_E_ARRAYISLOCKED";
-	else
-	if (i_error==0x8002000EL) risultato="DISP_E_BADPARAMCOUNT";
-	else
-	if (i_error==0x8002000FL) risultato="DISP_E_PARAMNOTOPTIONAL";
-	else
-	if (i_error==0x80020010L) risultato="DISP_E_BADCALLEE";
-	else
-	if (i_error==0x80020011L) risultato="DISP_E_NOTACOLLECTION";
-	else
-	if (i_error==0x80020012L) risultato="DISP_E_DIVBYZERO";
-	else
-	if (i_error==0x80020013L) risultato="DISP_E_BUFFERTOOSMALL";
-	else
-	if (i_error==0x80028016L) risultato="TYPE_E_BUFFERTOOSMALL";
-	else
-	if (i_error==0x80028017L) risultato="TYPE_E_FIELDNOTFOUND";
-	else
-	if (i_error==0x80028018L) risultato="TYPE_E_INVDATAREAD";
-	else
-	if (i_error==0x80028019L) risultato="TYPE_E_UNSUPFORMAT";
-	else
-	if (i_error==0x8002801CL) risultato="TYPE_E_REGISTRYACCESS";
-	else
-	if (i_error==0x8002801DL) risultato="TYPE_E_LIBNOTREGISTERED";
-	else
-	if (i_error==0x80028027L) risultato="TYPE_E_UNDEFINEDTYPE";
-	else
-	if (i_error==0x80028028L) risultato="TYPE_E_QUALIFIEDNAMEDISALLOWED";
-	else
-	if (i_error==0x80028029L) risultato="TYPE_E_INVALIDSTATE";
-	else
-	if (i_error==0x8002802AL) risultato="TYPE_E_WRONGTYPEKIND";
-	else
-	if (i_error==0x8002802BL) risultato="TYPE_E_ELEMENTNOTFOUND";
-	else
-	if (i_error==0x8002802CL) risultato="TYPE_E_AMBIGUOUSNAME";
-	else
-	if (i_error==0x8002802DL) risultato="TYPE_E_NAMECONFLICT";
-	else
-	if (i_error==0x8002802EL) risultato="TYPE_E_UNKNOWNLCID";
-	else
-	if (i_error==0x8002802FL) risultato="TYPE_E_DLLFUNCTIONNOTFOUND";
-	else
-	if (i_error==0x800288BDL) risultato="TYPE_E_BADMODULEKIND";
-	else
-	if (i_error==0x800288C5L) risultato="TYPE_E_SIZETOOBIG";
-	else
-	if (i_error==0x800288C6L) risultato="TYPE_E_DUPLICATEID";
-	else
-	if (i_error==0x800288CFL) risultato="TYPE_E_INVALIDID";
-	else
-	if (i_error==0x80028CA0L) risultato="TYPE_E_TYPEMISMATCH";
-	else
-	if (i_error==0x80028CA1L) risultato="TYPE_E_OUTOFBOUNDS";
-	else
-	if (i_error==0x80028CA2L) risultato="TYPE_E_IOERROR";
-	else
-	if (i_error==0x80028CA3L) risultato="TYPE_E_CANTCREATETMPFILE";
-	else
-	if (i_error==0x80029C4AL) risultato="TYPE_E_CANTLOADLIBRARY";
-	else
-	if (i_error==0x80029C83L) risultato="TYPE_E_INCONSISTENTPROPFUNCS";
-	else
-	if (i_error==0x80029C84L) risultato="TYPE_E_CIRCULARTYPE";
-	else
-	if (i_error==0x80030001L) risultato="STG_E_INVALIDFUNCTION";
-	else
-	if (i_error==0x80030002L) risultato="STG_E_FILENOTFOUND";
-	else
-	if (i_error==0x80030003L) risultato="STG_E_PATHNOTFOUND";
-	else
-	if (i_error==0x80030004L) risultato="STG_E_TOOMANYOPENFILES";
-	else
-	if (i_error==0x80030005L) risultato="STG_E_ACCESSDENIED";
-	else
-	if (i_error==0x80030006L) risultato="STG_E_INVALIDHANDLE";
-	else
-	if (i_error==0x80030008L) risultato="STG_E_INSUFFICIENTMEMORY";
-	else
-	if (i_error==0x80030009L) risultato="STG_E_INVALIDPOINTER";
-	else
-	if (i_error==0x80030012L) risultato="STG_E_NOMOREFILES";
-	else
-	if (i_error==0x80030013L) risultato="STG_E_DISKISWRITEPROTECTED";
-	else
-	if (i_error==0x80030019L) risultato="STG_E_SEEKERROR";
-	else
-	if (i_error==0x8003001DL) risultato="STG_E_WRITEFAULT";
-	else
-	if (i_error==0x8003001EL) risultato="STG_E_READFAULT";
-	else
-	if (i_error==0x80030020L) risultato="STG_E_SHAREVIOLATION";
-	else
-	if (i_error==0x80030021L) risultato="STG_E_LOCKVIOLATION";
-	else
-	if (i_error==0x80030050L) risultato="STG_E_FILEALREADYEXISTS";
-	else
-	if (i_error==0x80030057L) risultato="STG_E_INVALIDPARAMETER";
-	else
-	if (i_error==0x80030070L) risultato="STG_E_MEDIUMFULL";
-	else
-	if (i_error==0x800300F0L) risultato="STG_E_PROPSETMISMATCHED";
-	else
-	if (i_error==0x800300FAL) risultato="STG_E_ABNORMALAPIEXIT";
-	else
-	if (i_error==0x800300FBL) risultato="STG_E_INVALIDHEADER";
-	else
-	if (i_error==0x800300FCL) risultato="STG_E_INVALIDNAME";
-	else
-	if (i_error==0x800300FDL) risultato="STG_E_UNKNOWN";
-	else
-	if (i_error==0x800300FEL) risultato="STG_E_UNIMPLEMENTEDFUNCTION";
-	else
-	if (i_error==0x800300FFL) risultato="STG_E_INVALIDFLAG";
-	else
-	if (i_error==0x80030100L) risultato="STG_E_INUSE";
-	else
-	if (i_error==0x80030101L) risultato="STG_E_NOTCURRENT";
-	else
-	if (i_error==0x80030102L) risultato="STG_E_REVERTED";
-	else
-	if (i_error==0x80030103L) risultato="STG_E_CANTSAVE";
-	else
-	if (i_error==0x80030104L) risultato="STG_E_OLDFORMAT";
-	else
-	if (i_error==0x80030105L) risultato="STG_E_OLDDLL";
-	else
-	if (i_error==0x80030106L) risultato="STG_E_SHAREREQUIRED";
-	else
-	if (i_error==0x80030107L) risultato="STG_E_NOTFILEBASEDSTORAGE";
-	else
-	if (i_error==0x80030108L) risultato="STG_E_EXTANTMARSHALLINGS";
-	else
-	if (i_error==0x80030109L) risultato="STG_E_DOCFILECORRUPT";
-	else
-	if (i_error==0x80030110L) risultato="STG_E_BADBASEADDRESS";
-	else
-	if (i_error==0x80030111L) risultato="STG_E_DOCFILETOOLARGE";
-	else
-	if (i_error==0x80030112L) risultato="STG_E_NOTSIMPLEFORMAT";
-	else
-	if (i_error==0x80030201L) risultato="STG_E_INCOMPLETE";
-	else
-	if (i_error==0x80030202L) risultato="STG_E_TERMINATED";
-	else
-	if (i_error==0x00030200L) risultato="STG_S_CONVERTED";
-	else
-	if (i_error==0x00030201L) risultato="STG_S_BLOCK";
-	else
-	if (i_error==0x00030202L) risultato="STG_S_RETRYNOW";
-	else
-	if (i_error==0x00030203L) risultato="STG_S_MONITORING";
-	else
-	if (i_error==0x00030204L) risultato="STG_S_MULTIPLEOPENS";
-	else
-	if (i_error==0x00030205L) risultato="STG_S_CONSOLIDATIONFAILED";
-	else
-	if (i_error==0x00030206L) risultato="STG_S_CANNOTCONSOLIDATE";
-	else
-	if (i_error==0x00030207L) risultato="STG_S_POWER_CYCLE_REQUIRED";
-	else
-	if (i_error==0x80030208L) risultato="STG_E_FIRMWARE_SLOT_INVALID";
-	else
-	if (i_error==0x80030209L) risultato="STG_E_FIRMWARE_IMAGE_INVALID";
-	else
-	if (i_error==0x8003020AL) risultato="STG_E_DEVICE_UNRESPONSIVE";
-	else
-	if (i_error==0x80030305L) risultato="STG_E_STATUS_COPY_PROTECTION_FAILURE";
-	else
-	if (i_error==0x80030306L) risultato="STG_E_CSS_AUTHENTICATION_FAILURE";
-	else
-	if (i_error==0x80030307L) risultato="STG_E_CSS_KEY_NOT_PRESENT";
-	else
-	if (i_error==0x80030308L) risultato="STG_E_CSS_KEY_NOT_ESTABLISHED";
-	else
-	if (i_error==0x80030309L) risultato="STG_E_CSS_SCRAMBLED_SECTOR";
-	else
-	if (i_error==0x8003030AL) risultato="STG_E_CSS_REGION_MISMATCH";
-	else
-	if (i_error==0x8003030BL) risultato="STG_E_RESETS_EXHAUSTED";
-	else
-	if (i_error==0x80010001L) risultato="RPC_E_CALL_REJECTED";
-	else
-	if (i_error==0x80010002L) risultato="RPC_E_CALL_CANCELED";
-	else
-	if (i_error==0x80010003L) risultato="RPC_E_CANTPOST_INSENDCALL";
-	else
-	if (i_error==0x80010004L) risultato="RPC_E_CANTCALLOUT_INASYNCCALL";
-	else
-	if (i_error==0x80010005L) risultato="RPC_E_CANTCALLOUT_INEXTERNALCALL";
-	else
-	if (i_error==0x80010006L) risultato="RPC_E_CONNECTION_TERMINATED";
-	else
-	if (i_error==0x80010007L) risultato="RPC_E_SERVER_DIED";
-	else
-	if (i_error==0x80010008L) risultato="RPC_E_CLIENT_DIED";
-	else
-	if (i_error==0x80010009L) risultato="RPC_E_INVALID_DATAPACKET";
-	else
-	if (i_error==0x8001000AL) risultato="RPC_E_CANTTRANSMIT_CALL";
-	else
-	if (i_error==0x8001000BL) risultato="RPC_E_CLIENT_CANTMARSHAL_DATA";
-	else
-	if (i_error==0x8001000CL) risultato="RPC_E_CLIENT_CANTUNMARSHAL_DATA";
-	else
-	if (i_error==0x8001000DL) risultato="RPC_E_SERVER_CANTMARSHAL_DATA";
-	else
-	if (i_error==0x8001000EL) risultato="RPC_E_SERVER_CANTUNMARSHAL_DATA";
-	else
-	if (i_error==0x8001000FL) risultato="RPC_E_INVALID_DATA";
-	else
-	if (i_error==0x80010010L) risultato="RPC_E_INVALID_PARAMETER";
-	else
-	if (i_error==0x80010011L) risultato="RPC_E_CANTCALLOUT_AGAIN";
-	else
-	if (i_error==0x80010012L) risultato="RPC_E_SERVER_DIED_DNE";
-	else
-	if (i_error==0x80010100L) risultato="RPC_E_SYS_CALL_FAILED";
-	else
-	if (i_error==0x80010101L) risultato="RPC_E_OUT_OF_RESOURCES";
-	else
-	if (i_error==0x80010102L) risultato="RPC_E_ATTEMPTED_MULTITHREAD";
-	else
-	if (i_error==0x80010103L) risultato="RPC_E_NOT_REGISTERED";
-	else
-	if (i_error==0x80010104L) risultato="RPC_E_FAULT";
-	else
-	if (i_error==0x80010105L) risultato="RPC_E_SERVERFAULT";
-	else
-	if (i_error==0x80010106L) risultato="RPC_E_CHANGED_MODE";
-	else
-	if (i_error==0x80010107L) risultato="RPC_E_INVALIDMETHOD";
-	else
-	if (i_error==0x80010108L) risultato="RPC_E_DISCONNECTED";
-	else
-	if (i_error==0x80010109L) risultato="RPC_E_RETRY";
-	else
-	if (i_error==0x8001010AL) risultato="RPC_E_SERVERCALL_RETRYLATER";
-	else
-	if (i_error==0x8001010BL) risultato="RPC_E_SERVERCALL_REJECTED";
-	else
-	if (i_error==0x8001010CL) risultato="RPC_E_INVALID_CALLDATA";
-	else
-	if (i_error==0x8001010DL) risultato="RPC_E_CANTCALLOUT_ININPUTSYNCCALL";
-	else
-	if (i_error==0x8001010EL) risultato="RPC_E_WRONG_THREAD";
-	else
-	if (i_error==0x8001010FL) risultato="RPC_E_THREAD_NOT_INIT";
-	else
-	if (i_error==0x80010110L) risultato="RPC_E_VERSION_MISMATCH";
-	else
-	if (i_error==0x80010111L) risultato="RPC_E_INVALID_HEADER";
-	else
-	if (i_error==0x80010112L) risultato="RPC_E_INVALID_EXTENSION";
-	else
-	if (i_error==0x80010113L) risultato="RPC_E_INVALID_IPID";
-	else
-	if (i_error==0x80010114L) risultato="RPC_E_INVALID_OBJECT";
-	else
-	if (i_error==0x80010115L) risultato="RPC_S_CALLPENDING";
-	else
-	if (i_error==0x80010116L) risultato="RPC_S_WAITONTIMER";
-	else
-	if (i_error==0x80010117L) risultato="RPC_E_CALL_COMPLETE";
-	else
-	if (i_error==0x80010118L) risultato="RPC_E_UNSECURE_CALL";
-	else
-	if (i_error==0x80010119L) risultato="RPC_E_TOO_LATE";
-	else
-	if (i_error==0x8001011AL) risultato="RPC_E_NO_GOOD_SECURITY_PACKAGES";
-	else
-	if (i_error==0x8001011BL) risultato="RPC_E_ACCESS_DENIED";
-	else
-	if (i_error==0x8001011CL) risultato="RPC_E_REMOTE_DISABLED";
-	else
-	if (i_error==0x8001011DL) risultato="RPC_E_INVALID_OBJREF";
-	else
-	if (i_error==0x8001011EL) risultato="RPC_E_NO_CONTEXT";
-	else
-	if (i_error==0x8001011FL) risultato="RPC_E_TIMEOUT";
-	else
-	if (i_error==0x80010120L) risultato="RPC_E_NO_SYNC";
-	else
-	if (i_error==0x80010121L) risultato="RPC_E_FULLSIC_REQUIRED";
-	else
-	if (i_error==0x80010122L) risultato="RPC_E_INVALID_STD_NAME";
-	else
-	if (i_error==0x80010123L) risultato="CO_E_FAILEDTOIMPERSONATE";
-	else
-	if (i_error==0x80010124L) risultato="CO_E_FAILEDTOGETSECCTX";
-	else
-	if (i_error==0x80010125L) risultato="CO_E_FAILEDTOOPENTHREADTOKEN";
-	else
-	if (i_error==0x80010126L) risultato="CO_E_FAILEDTOGETTOKENINFO";
-	else
-	if (i_error==0x80010127L) risultato="CO_E_TRUSTEEDOESNTMATCHCLIENT";
-	else
-	if (i_error==0x80010128L) risultato="CO_E_FAILEDTOQUERYCLIENTBLANKET";
-	else
-	if (i_error==0x80010129L) risultato="CO_E_FAILEDTOSETDACL";
-	else
-	if (i_error==0x8001012AL) risultato="CO_E_ACCESSCHECKFAILED";
-	else
-	if (i_error==0x8001012BL) risultato="CO_E_NETACCESSAPIFAILED";
-	else
-	if (i_error==0x8001012CL) risultato="CO_E_WRONGTRUSTEENAMESYNTAX";
-	else
-	if (i_error==0x8001012DL) risultato="CO_E_INVALIDSID";
-	else
-	if (i_error==0x8001012EL) risultato="CO_E_CONVERSIONFAILED";
-	else
-	if (i_error==0x8001012FL) risultato="CO_E_NOMATCHINGSIDFOUND";
-	else
-	if (i_error==0x80010130L) risultato="CO_E_LOOKUPACCSIDFAILED";
-	else
-	if (i_error==0x80010131L) risultato="CO_E_NOMATCHINGNAMEFOUND";
-	else
-	if (i_error==0x80010132L) risultato="CO_E_LOOKUPACCNAMEFAILED";
-	else
-	if (i_error==0x80010133L) risultato="CO_E_SETSERLHNDLFAILED";
-	else
-	if (i_error==0x80010134L) risultato="CO_E_FAILEDTOGETWINDIR";
-	else
-	if (i_error==0x80010135L) risultato="CO_E_PATHTOOLONG";
-	else
-	if (i_error==0x80010136L) risultato="CO_E_FAILEDTOGENUUID";
-	else
-	if (i_error==0x80010137L) risultato="CO_E_FAILEDTOCREATEFILE";
-	else
-	if (i_error==0x80010138L) risultato="CO_E_FAILEDTOCLOSEHANDLE";
-	else
-	if (i_error==0x80010139L) risultato="CO_E_EXCEEDSYSACLLIMIT";
-	else
-	if (i_error==0x8001013AL) risultato="CO_E_ACESINWRONGORDER";
-	else
-	if (i_error==0x8001013BL) risultato="CO_E_INCOMPATIBLESTREAMVERSION";
-	else
-	if (i_error==0x8001013CL) risultato="CO_E_FAILEDTOOPENPROCESSTOKEN";
-	else
-	if (i_error==0x8001013DL) risultato="CO_E_DECODEFAILED";
-	else
-	if (i_error==0x8001013FL) risultato="CO_E_ACNOTINITIALIZED";
-	else
-	if (i_error==0x80010140L) risultato="CO_E_CANCEL_DISABLED";
-	else
-	if (i_error==0x8001FFFFL) risultato="RPC_E_UNEXPECTED";
-	else
-	if (i_error==0xC0090001L) risultato="ERROR_AUDITING_DISABLED";
-	else
-	if (i_error==0xC0090002L) risultato="ERROR_ALL_SIDS_FILTERED";
-	else
-	if (i_error==0xC0090003L) risultato="ERROR_BIZRULES_NOT_ENABLED";
-	else
-	if (i_error==0x80090001L) risultato="NTE_BAD_UID";
-	else
-	if (i_error==0x80090002L) risultato="NTE_BAD_HASH";
-	else
-	if (i_error==0x80090003L) risultato="NTE_BAD_KEY";
-	else
-	if (i_error==0x80090004L) risultato="NTE_BAD_LEN";
-	else
-	if (i_error==0x80090005L) risultato="NTE_BAD_DATA";
-	else
-	if (i_error==0x80090006L) risultato="NTE_BAD_SIGNATURE";
-	else
-	if (i_error==0x80090007L) risultato="NTE_BAD_VER";
-	else
-	if (i_error==0x80090008L) risultato="NTE_BAD_ALGID";
-	else
-	if (i_error==0x80090009L) risultato="NTE_BAD_FLAGS";
-	else
-	if (i_error==0x8009000AL) risultato="NTE_BAD_TYPE";
-	else
-	if (i_error==0x8009000BL) risultato="NTE_BAD_KEY_STATE";
-	else
-	if (i_error==0x8009000CL) risultato="NTE_BAD_HASH_STATE";
-	else
-	if (i_error==0x8009000DL) risultato="NTE_NO_KEY";
-	else
-	if (i_error==0x8009000EL) risultato="NTE_NO_MEMORY";
-	else
-	if (i_error==0x8009000FL) risultato="NTE_EXISTS";
-	else
-	if (i_error==0x80090010L) risultato="NTE_PERM";
-	else
-	if (i_error==0x80090011L) risultato="NTE_NOT_FOUND";
-	else
-	if (i_error==0x80090012L) risultato="NTE_DOUBLE_ENCRYPT";
-	else
-	if (i_error==0x80090013L) risultato="NTE_BAD_PROVIDER";
-	else
-	if (i_error==0x80090014L) risultato="NTE_BAD_PROV_TYPE";
-	else
-	if (i_error==0x80090015L) risultato="NTE_BAD_PUBLIC_KEY";
-	else
-	if (i_error==0x80090016L) risultato="NTE_BAD_KEYSET";
-	else
-	if (i_error==0x80090017L) risultato="NTE_PROV_TYPE_NOT_DEF";
-	else
-	if (i_error==0x80090018L) risultato="NTE_PROV_TYPE_ENTRY_BAD";
-	else
-	if (i_error==0x80090019L) risultato="NTE_KEYSET_NOT_DEF";
-	else
-	if (i_error==0x8009001AL) risultato="NTE_KEYSET_ENTRY_BAD";
-	else
-	if (i_error==0x8009001BL) risultato="NTE_PROV_TYPE_NO_MATCH";
-	else
-	if (i_error==0x8009001CL) risultato="NTE_SIGNATURE_FILE_BAD";
-	else
-	if (i_error==0x8009001DL) risultato="NTE_PROVIDER_DLL_FAIL";
-	else
-	if (i_error==0x8009001EL) risultato="NTE_PROV_DLL_NOT_FOUND";
-	else
-	if (i_error==0x8009001FL) risultato="NTE_BAD_KEYSET_PARAM";
-	else
-	if (i_error==0x80090020L) risultato="NTE_FAIL";
-	else
-	if (i_error==0x80090021L) risultato="NTE_SYS_ERR";
-	else
-	if (i_error==0x80090022L) risultato="NTE_SILENT_CONTEXT";
-	else
-	if (i_error==0x80090023L) risultato="NTE_TOKEN_KEYSET_STORAGE_FULL";
-	else
-	if (i_error==0x80090024L) risultato="NTE_TEMPORARY_PROFILE";
-	else
-	if (i_error==0x80090025L) risultato="NTE_FIXEDPARAMETER";
-	else
-	if (i_error==0x80090026L) risultato="NTE_INVALID_HANDLE";
-	else
-	if (i_error==0x80090027L) risultato="NTE_INVALID_PARAMETER";
-	else
-	if (i_error==0x80090028L) risultato="NTE_BUFFER_TOO_SMALL";
-	else
-	if (i_error==0x80090029L) risultato="NTE_NOT_SUPPORTED";
-	else
-	if (i_error==0x8009002AL) risultato="NTE_NO_MORE_ITEMS";
-	else
-	if (i_error==0x8009002BL) risultato="NTE_BUFFERS_OVERLAP";
-	else
-	if (i_error==0x8009002CL) risultato="NTE_DECRYPTION_FAILURE";
-	else
-	if (i_error==0x8009002DL) risultato="NTE_INTERNAL_ERROR";
-	else
-	if (i_error==0x8009002EL) risultato="NTE_UI_REQUIRED";
-	else
-	if (i_error==0x8009002FL) risultato="NTE_HMAC_NOT_SUPPORTED";
-	else
-	if (i_error==0x80090030L) risultato="NTE_DEVICE_NOT_READY";
-	else
-	if (i_error==0x80090031L) risultato="NTE_AUTHENTICATION_IGNORED";
-	else
-	if (i_error==0x80090032L) risultato="NTE_VALIDATION_FAILED";
-	else
-	if (i_error==0x80090033L) risultato="NTE_INCORRECT_PASSWORD";
-	else
-	if (i_error==0x80090034L) risultato="NTE_ENCRYPTION_FAILURE";
-	else
-	if (i_error==0x80090035L) risultato="NTE_DEVICE_NOT_FOUND";
-	else
-	if (i_error==0x80090036L) risultato="NTE_USER_CANCELLED";
-	else
-	if (i_error==0x80090037L) risultato="NTE_PASSWORD_CHANGE_REQUIRED";
-	else
-	if (i_error==0x80090038L) risultato="NTE_NOT_ACTIVE_CONSOLE";
-	else
-	if (i_error==0x80090300L) risultato="SEC_E_INSUFFICIENT_MEMORY";
-	else
-	if (i_error==0x80090301L) risultato="SEC_E_INVALID_HANDLE";
-	else
-	if (i_error==0x80090302L) risultato="SEC_E_UNSUPPORTED_FUNCTION";
-	else
-	if (i_error==0x80090303L) risultato="SEC_E_TARGET_UNKNOWN";
-	else
-	if (i_error==0x80090304L) risultato="SEC_E_INTERNAL_ERROR";
-	else
-	if (i_error==0x80090305L) risultato="SEC_E_SECPKG_NOT_FOUND";
-	else
-	if (i_error==0x80090306L) risultato="SEC_E_NOT_OWNER";
-	else
-	if (i_error==0x80090307L) risultato="SEC_E_CANNOT_INSTALL";
-	else
-	if (i_error==0x80090308L) risultato="SEC_E_INVALID_TOKEN";
-	else
-	if (i_error==0x80090309L) risultato="SEC_E_CANNOT_PACK";
-	else
-	if (i_error==0x8009030AL) risultato="SEC_E_QOP_NOT_SUPPORTED";
-	else
-	if (i_error==0x8009030BL) risultato="SEC_E_NO_IMPERSONATION";
-	else
-	if (i_error==0x8009030CL) risultato="SEC_E_LOGON_DENIED";
-	else
-	if (i_error==0x8009030DL) risultato="SEC_E_UNKNOWN_CREDENTIALS";
-	else
-	if (i_error==0x8009030EL) risultato="SEC_E_NO_CREDENTIALS";
-	else
-	if (i_error==0x8009030FL) risultato="SEC_E_MESSAGE_ALTERED";
-	else
-	if (i_error==0x80090310L) risultato="SEC_E_OUT_OF_SEQUENCE";
-	else
-	if (i_error==0x80090311L) risultato="SEC_E_NO_AUTHENTICATING_AUTHORITY";
-	else
-	if (i_error==0x00090312L) risultato="SEC_I_CONTINUE_NEEDED";
-	else
-	if (i_error==0x00090313L) risultato="SEC_I_COMPLETE_NEEDED";
-	else
-	if (i_error==0x00090314L) risultato="SEC_I_COMPLETE_AND_CONTINUE";
-	else
-	if (i_error==0x00090315L) risultato="SEC_I_LOCAL_LOGON";
-	else
-	if (i_error==0x80090316L) risultato="SEC_E_BAD_PKGID";
-	else
-	if (i_error==0x80090317L) risultato="SEC_E_CONTEXT_EXPIRED";
-	else
-	if (i_error==0x00090317L) risultato="SEC_I_CONTEXT_EXPIRED";
-	else
-	if (i_error==0x80090318L) risultato="SEC_E_INCOMPLETE_MESSAGE";
-	else
-	if (i_error==0x80090320L) risultato="SEC_E_INCOMPLETE_CREDENTIALS";
-	else
-	if (i_error==0x80090321L) risultato="SEC_E_BUFFER_TOO_SMALL";
-	else
-	if (i_error==0x00090320L) risultato="SEC_I_INCOMPLETE_CREDENTIALS";
-	else
-	if (i_error==0x00090321L) risultato="SEC_I_RENEGOTIATE";
-	else
-	if (i_error==0x80090322L) risultato="SEC_E_WRONG_PRINCIPAL";
-	else
-	if (i_error==0x00090323L) risultato="SEC_I_NO_LSA_CONTEXT";
-	else
-	if (i_error==0x80090324L) risultato="SEC_E_TIME_SKEW";
-	else
-	if (i_error==0x80090325L) risultato="SEC_E_UNTRUSTED_ROOT";
-	else
-	if (i_error==0x80090326L) risultato="SEC_E_ILLEGAL_MESSAGE";
-	else
-	if (i_error==0x80090327L) risultato="SEC_E_CERT_UNKNOWN";
-	else
-	if (i_error==0x80090328L) risultato="SEC_E_CERT_EXPIRED";
-	else
-	if (i_error==0x80090329L) risultato="SEC_E_ENCRYPT_FAILURE";
-	else
-	if (i_error==0x80090330L) risultato="SEC_E_DECRYPT_FAILURE";
-	else
-	if (i_error==0x80090331L) risultato="SEC_E_ALGORITHM_MISMATCH";
-	else
-	if (i_error==0x80090332L) risultato="SEC_E_SECURITY_QOS_FAILED";
-	else
-	if (i_error==0x80090333L) risultato="SEC_E_UNFINISHED_CONTEXT_DELETED";
-	else
-	if (i_error==0x80090334L) risultato="SEC_E_NO_TGT_REPLY";
-	else
-	if (i_error==0x80090335L) risultato="SEC_E_NO_IP_ADDRESSES";
-	else
-	if (i_error==0x80090336L) risultato="SEC_E_WRONG_CREDENTIAL_HANDLE";
-	else
-	if (i_error==0x80090337L) risultato="SEC_E_CRYPTO_SYSTEM_INVALID";
-	else
-	if (i_error==0x80090338L) risultato="SEC_E_MAX_REFERRALS_EXCEEDED";
-	else
-	if (i_error==0x80090339L) risultato="SEC_E_MUST_BE_KDC";
-	else
-	if (i_error==0x8009033AL) risultato="SEC_E_STRONG_CRYPTO_NOT_SUPPORTED";
-	else
-	if (i_error==0x8009033BL) risultato="SEC_E_TOO_MANY_PRINCIPALS";
-	else
-	if (i_error==0x8009033CL) risultato="SEC_E_NO_PA_DATA";
-	else
-	if (i_error==0x8009033DL) risultato="SEC_E_PKINIT_NAME_MISMATCH";
-	else
-	if (i_error==0x8009033EL) risultato="SEC_E_SMARTCARD_LOGON_REQUIRED";
-	else
-	if (i_error==0x8009033FL) risultato="SEC_E_SHUTDOWN_IN_PROGRESS";
-	else
-	if (i_error==0x80090340L) risultato="SEC_E_KDC_INVALID_REQUEST";
-	else
-	if (i_error==0x80090341L) risultato="SEC_E_KDC_UNABLE_TO_REFER";
-	else
-	if (i_error==0x80090342L) risultato="SEC_E_KDC_UNKNOWN_ETYPE";
-	else
-	if (i_error==0x80090343L) risultato="SEC_E_UNSUPPORTED_PREAUTH";
-	else
-	if (i_error==0x80090345L) risultato="SEC_E_DELEGATION_REQUIRED";
-	else
-	if (i_error==0x80090346L) risultato="SEC_E_BAD_BINDINGS";
-	else
-	if (i_error==0x80090347L) risultato="SEC_E_MULTIPLE_ACCOUNTS";
-	else
-	if (i_error==0x80090348L) risultato="SEC_E_NO_KERB_KEY";
-	else
-	if (i_error==0x80090349L) risultato="SEC_E_CERT_WRONG_USAGE";
-	else
-	if (i_error==0x80090350L) risultato="SEC_E_DOWNGRADE_DETECTED";
-	else
-	if (i_error==0x80090351L) risultato="SEC_E_SMARTCARD_CERT_REVOKED";
-	else
-	if (i_error==0x80090352L) risultato="SEC_E_ISSUING_CA_UNTRUSTED";
-	else
-	if (i_error==0x80090353L) risultato="SEC_E_REVOCATION_OFFLINE_C";
-	else
-	if (i_error==0x80090354L) risultato="SEC_E_PKINIT_CLIENT_FAILURE";
-	else
-	if (i_error==0x80090355L) risultato="SEC_E_SMARTCARD_CERT_EXPIRED";
-	else
-	if (i_error==0x80090356L) risultato="SEC_E_NO_S4U_PROT_SUPPORT";
-	else
-	if (i_error==0x80090357L) risultato="SEC_E_CROSSREALM_DELEGATION_FAILURE";
-	else
-	if (i_error==0x80090358L) risultato="SEC_E_REVOCATION_OFFLINE_KDC";
-	else
-	if (i_error==0x80090359L) risultato="SEC_E_ISSUING_CA_UNTRUSTED_KDC";
-	else
-	if (i_error==0x8009035AL) risultato="SEC_E_KDC_CERT_EXPIRED";
-	else
-	if (i_error==0x8009035BL) risultato="SEC_E_KDC_CERT_REVOKED";
-	else
-	if (i_error==0x0009035CL) risultato="SEC_I_SIGNATURE_NEEDED";
-	else
-	if (i_error==0x8009035DL) risultato="SEC_E_INVALID_PARAMETER";
-	else
-	if (i_error==0x8009035EL) risultato="SEC_E_DELEGATION_POLICY";
-	else
-	if (i_error==0x8009035FL) risultato="SEC_E_POLICY_NLTM_ONLY";
-	else
-	if (i_error==0x00090360L) risultato="SEC_I_NO_RENEGOTIATION";
-	else
-	if (i_error==0x80090361L) risultato="SEC_E_NO_CONTEXT";
-	else
-	if (i_error==0x80090362L) risultato="SEC_E_PKU2U_CERT_FAILURE";
-	else
-	if (i_error==0x80090363L) risultato="SEC_E_MUTUAL_AUTH_FAILED";
-	else
-	if (i_error==0x00090364L) risultato="SEC_I_MESSAGE_FRAGMENT";
-	else
-	if (i_error==0x80090365L) risultato="SEC_E_ONLY_HTTPS_ALLOWED";
-	else
-	if (i_error==0x00090366L) risultato="SEC_I_CONTINUE_NEEDED_MESSAGE_OK";
-	else
-	if (i_error==0x80090367L) risultato="SEC_E_APPLICATION_PROTOCOL_MISMATCH";
-	else
-	if (i_error==0x00090368L) risultato="SEC_I_ASYNC_CALL_PENDING";
-	else
-	if (i_error==0x80090369L) risultato="SEC_E_INVALID_UPN_NAME";
-	else
-	if (i_error==0x80091001L) risultato="CRYPT_E_MSG_ERROR";
-	else
-	if (i_error==0x80091002L) risultato="CRYPT_E_UNKNOWN_ALGO";
-	else
-	if (i_error==0x80091003L) risultato="CRYPT_E_OID_FORMAT";
-	else
-	if (i_error==0x80091004L) risultato="CRYPT_E_INVALID_MSG_TYPE";
-	else
-	if (i_error==0x80091005L) risultato="CRYPT_E_UNEXPECTED_ENCODING";
-	else
-	if (i_error==0x80091006L) risultato="CRYPT_E_AUTH_ATTR_MISSING";
-	else
-	if (i_error==0x80091007L) risultato="CRYPT_E_HASH_VALUE";
-	else
-	if (i_error==0x80091008L) risultato="CRYPT_E_INVALID_INDEX";
-	else
-	if (i_error==0x80091009L) risultato="CRYPT_E_ALREADY_DECRYPTED";
-	else
-	if (i_error==0x8009100AL) risultato="CRYPT_E_NOT_DECRYPTED";
-	else
-	if (i_error==0x8009100BL) risultato="CRYPT_E_RECIPIENT_NOT_FOUND";
-	else
-	if (i_error==0x8009100CL) risultato="CRYPT_E_CONTROL_TYPE";
-	else
-	if (i_error==0x8009100DL) risultato="CRYPT_E_ISSUER_SERIALNUMBER";
-	else
-	if (i_error==0x8009100EL) risultato="CRYPT_E_SIGNER_NOT_FOUND";
-	else
-	if (i_error==0x8009100FL) risultato="CRYPT_E_ATTRIBUTES_MISSING";
-	else
-	if (i_error==0x80091010L) risultato="CRYPT_E_STREAM_MSG_NOT_READY";
-	else
-	if (i_error==0x80091011L) risultato="CRYPT_E_STREAM_INSUFFICIENT_DATA";
-	else
-	if (i_error==0x00091012L) risultato="CRYPT_I_NEW_PROTECTION_REQUIRED";
-	else
-	if (i_error==0x80092001L) risultato="CRYPT_E_BAD_LEN";
-	else
-	if (i_error==0x80092002L) risultato="CRYPT_E_BAD_ENCODE";
-	else
-	if (i_error==0x80092003L) risultato="CRYPT_E_FILE_ERROR";
-	else
-	if (i_error==0x80092004L) risultato="CRYPT_E_NOT_FOUND";
-	else
-	if (i_error==0x80092005L) risultato="CRYPT_E_EXISTS";
-	else
-	if (i_error==0x80092006L) risultato="CRYPT_E_NO_PROVIDER";
-	else
-	if (i_error==0x80092007L) risultato="CRYPT_E_SELF_SIGNED";
-	else
-	if (i_error==0x80092008L) risultato="CRYPT_E_DELETED_PREV";
-	else
-	if (i_error==0x80092009L) risultato="CRYPT_E_NO_MATCH";
-	else
-	if (i_error==0x8009200AL) risultato="CRYPT_E_UNEXPECTED_MSG_TYPE";
-	else
-	if (i_error==0x8009200BL) risultato="CRYPT_E_NO_KEY_PROPERTY";
-	else
-	if (i_error==0x8009200CL) risultato="CRYPT_E_NO_DECRYPT_CERT";
-	else
-	if (i_error==0x8009200DL) risultato="CRYPT_E_BAD_MSG";
-	else
-	if (i_error==0x8009200EL) risultato="CRYPT_E_NO_SIGNER";
-	else
-	if (i_error==0x8009200FL) risultato="CRYPT_E_PENDING_CLOSE";
-	else
-	if (i_error==0x80092010L) risultato="CRYPT_E_REVOKED";
-	else
-	if (i_error==0x80092011L) risultato="CRYPT_E_NO_REVOCATION_DLL";
-	else
-	if (i_error==0x80092012L) risultato="CRYPT_E_NO_REVOCATION_CHECK";
-	else
-	if (i_error==0x80092013L) risultato="CRYPT_E_REVOCATION_OFFLINE";
-	else
-	if (i_error==0x80092014L) risultato="CRYPT_E_NOT_IN_REVOCATION_DATABASE";
-	else
-	if (i_error==0x80092020L) risultato="CRYPT_E_INVALID_NUMERIC_STRING";
-	else
-	if (i_error==0x80092021L) risultato="CRYPT_E_INVALID_PRINTABLE_STRING";
-	else
-	if (i_error==0x80092022L) risultato="CRYPT_E_INVALID_IA5_STRING";
-	else
-	if (i_error==0x80092023L) risultato="CRYPT_E_INVALID_X500_STRING";
-	else
-	if (i_error==0x80092024L) risultato="CRYPT_E_NOT_CHAR_STRING";
-	else
-	if (i_error==0x80092025L) risultato="CRYPT_E_FILERESIZED";
-	else
-	if (i_error==0x80092026L) risultato="CRYPT_E_SECURITY_SETTINGS";
-	else
-	if (i_error==0x80092027L) risultato="CRYPT_E_NO_VERIFY_USAGE_DLL";
-	else
-	if (i_error==0x80092028L) risultato="CRYPT_E_NO_VERIFY_USAGE_CHECK";
-	else
-	if (i_error==0x80092029L) risultato="CRYPT_E_VERIFY_USAGE_OFFLINE";
-	else
-	if (i_error==0x8009202AL) risultato="CRYPT_E_NOT_IN_CTL";
-	else
-	if (i_error==0x8009202BL) risultato="CRYPT_E_NO_TRUSTED_SIGNER";
-	else
-	if (i_error==0x8009202CL) risultato="CRYPT_E_MISSING_PUBKEY_PARA";
-	else
-	if (i_error==0x8009202DL) risultato="CRYPT_E_OBJECT_LOCATOR_OBJECT_NOT_FOUND";
-	else
-	if (i_error==0x80093000L) risultato="CRYPT_E_OSS_ERROR";
-	else
-	if (i_error==0x80093001L) risultato="OSS_MORE_BUF";
-	else
-	if (i_error==0x80093002L) risultato="OSS_NEGATIVE_UINTEGER";
-	else
-	if (i_error==0x80093003L) risultato="OSS_PDU_RANGE";
-	else
-	if (i_error==0x80093004L) risultato="OSS_MORE_INPUT";
-	else
-	if (i_error==0x80093005L) risultato="OSS_DATA_ERROR";
-	else
-	if (i_error==0x80093006L) risultato="OSS_BAD_ARG";
-	else
-	if (i_error==0x80093007L) risultato="OSS_BAD_VERSION";
-	else
-	if (i_error==0x80093008L) risultato="OSS_OUT_MEMORY";
-	else
-	if (i_error==0x80093009L) risultato="OSS_PDU_MISMATCH";
-	else
-	if (i_error==0x8009300AL) risultato="OSS_LIMITED";
-	else
-	if (i_error==0x8009300BL) risultato="OSS_BAD_PTR";
-	else
-	if (i_error==0x8009300CL) risultato="OSS_BAD_TIME";
-	else
-	if (i_error==0x8009300DL) risultato="OSS_INDEFINITE_NOT_SUPPORTED";
-	else
-	if (i_error==0x8009300EL) risultato="OSS_MEM_ERROR";
-	else
-	if (i_error==0x8009300FL) risultato="OSS_BAD_TABLE";
-	else
-	if (i_error==0x80093010L) risultato="OSS_TOO_LONG";
-	else
-	if (i_error==0x80093011L) risultato="OSS_CONSTRAINT_VIOLATED";
-	else
-	if (i_error==0x80093012L) risultato="OSS_FATAL_ERROR";
-	else
-	if (i_error==0x80093013L) risultato="OSS_ACCESS_SERIALIZATION_ERROR";
-	else
-	if (i_error==0x80093014L) risultato="OSS_NULL_TBL";
-	else
-	if (i_error==0x80093015L) risultato="OSS_NULL_FCN";
-	else
-	if (i_error==0x80093016L) risultato="OSS_BAD_ENCRULES";
-	else
-	if (i_error==0x80093017L) risultato="OSS_UNAVAIL_ENCRULES";
-	else
-	if (i_error==0x80093018L) risultato="OSS_CANT_OPEN_TRACE_WINDOW";
-	else
-	if (i_error==0x80093019L) risultato="OSS_UNIMPLEMENTED";
-	else
-	if (i_error==0x8009301AL) risultato="OSS_OID_DLL_NOT_LINKED";
-	else
-	if (i_error==0x8009301BL) risultato="OSS_CANT_OPEN_TRACE_FILE";
-	else
-	if (i_error==0x8009301CL) risultato="OSS_TRACE_FILE_ALREADY_OPEN";
-	else
-	if (i_error==0x8009301DL) risultato="OSS_TABLE_MISMATCH";
-	else
-	if (i_error==0x8009301EL) risultato="OSS_TYPE_NOT_SUPPORTED";
-	else
-	if (i_error==0x8009301FL) risultato="OSS_REAL_DLL_NOT_LINKED";
-	else
-	if (i_error==0x80093020L) risultato="OSS_REAL_CODE_NOT_LINKED";
-	else
-	if (i_error==0x80093021L) risultato="OSS_OUT_OF_RANGE";
-	else
-	if (i_error==0x80093022L) risultato="OSS_COPIER_DLL_NOT_LINKED";
-	else
-	if (i_error==0x80093023L) risultato="OSS_CONSTRAINT_DLL_NOT_LINKED";
-	else
-	if (i_error==0x80093024L) risultato="OSS_COMPARATOR_DLL_NOT_LINKED";
-	else
-	if (i_error==0x80093025L) risultato="OSS_COMPARATOR_CODE_NOT_LINKED";
-	else
-	if (i_error==0x80093026L) risultato="OSS_MEM_MGR_DLL_NOT_LINKED";
-	else
-	if (i_error==0x80093027L) risultato="OSS_PDV_DLL_NOT_LINKED";
-	else
-	if (i_error==0x80093028L) risultato="OSS_PDV_CODE_NOT_LINKED";
-	else
-	if (i_error==0x80093029L) risultato="OSS_API_DLL_NOT_LINKED";
-	else
-	if (i_error==0x8009302AL) risultato="OSS_BERDER_DLL_NOT_LINKED";
-	else
-	if (i_error==0x8009302BL) risultato="OSS_PER_DLL_NOT_LINKED";
-	else
-	if (i_error==0x8009302CL) risultato="OSS_OPEN_TYPE_ERROR";
-	else
-	if (i_error==0x8009302DL) risultato="OSS_MUTEX_NOT_CREATED";
-	else
-	if (i_error==0x8009302EL) risultato="OSS_CANT_CLOSE_TRACE_FILE";
-	else
-	if (i_error==0x80093100L) risultato="CRYPT_E_ASN1_ERROR";
-	else
-	if (i_error==0x80093101L) risultato="CRYPT_E_ASN1_INTERNAL";
-	else
-	if (i_error==0x80093102L) risultato="CRYPT_E_ASN1_EOD";
-	else
-	if (i_error==0x80093103L) risultato="CRYPT_E_ASN1_CORRUPT";
-	else
-	if (i_error==0x80093104L) risultato="CRYPT_E_ASN1_LARGE";
-	else
-	if (i_error==0x80093105L) risultato="CRYPT_E_ASN1_CONSTRAINT";
-	else
-	if (i_error==0x80093106L) risultato="CRYPT_E_ASN1_MEMORY";
-	else
-	if (i_error==0x80093107L) risultato="CRYPT_E_ASN1_OVERFLOW";
-	else
-	if (i_error==0x80093108L) risultato="CRYPT_E_ASN1_BADPDU";
-	else
-	if (i_error==0x80093109L) risultato="CRYPT_E_ASN1_BADARGS";
-	else
-	if (i_error==0x8009310AL) risultato="CRYPT_E_ASN1_BADREAL";
-	else
-	if (i_error==0x8009310BL) risultato="CRYPT_E_ASN1_BADTAG";
-	else
-	if (i_error==0x8009310CL) risultato="CRYPT_E_ASN1_CHOICE";
-	else
-	if (i_error==0x8009310DL) risultato="CRYPT_E_ASN1_RULE";
-	else
-	if (i_error==0x8009310EL) risultato="CRYPT_E_ASN1_UTF8";
-	else
-	if (i_error==0x80093133L) risultato="CRYPT_E_ASN1_PDU_TYPE";
-	else
-	if (i_error==0x80093134L) risultato="CRYPT_E_ASN1_NYI";
-	else
-	if (i_error==0x80093201L) risultato="CRYPT_E_ASN1_EXTENDED";
-	else
-	if (i_error==0x80093202L) risultato="CRYPT_E_ASN1_NOEOD";
-	else
-	if (i_error==0x80094001L) risultato="CERTSRV_E_BAD_REQUESTSUBJECT";
-	else
-	if (i_error==0x80094002L) risultato="CERTSRV_E_NO_REQUEST";
-	else
-	if (i_error==0x80094003L) risultato="CERTSRV_E_BAD_REQUESTSTATUS";
-	else
-	if (i_error==0x80094004L) risultato="CERTSRV_E_PROPERTY_EMPTY";
-	else
-	if (i_error==0x80094005L) risultato="CERTSRV_E_INVALID_CA_CERTIFICATE";
-	else
-	if (i_error==0x80094006L) risultato="CERTSRV_E_SERVER_SUSPENDED";
-	else
-	if (i_error==0x80094007L) risultato="CERTSRV_E_ENCODING_LENGTH";
-	else
-	if (i_error==0x80094008L) risultato="CERTSRV_E_ROLECONFLICT";
-	else
-	if (i_error==0x80094009L) risultato="CERTSRV_E_RESTRICTEDOFFICER";
-	else
-	if (i_error==0x8009400AL) risultato="CERTSRV_E_KEY_ARCHIVAL_NOT_CONFIGURED";
-	else
-	if (i_error==0x8009400BL) risultato="CERTSRV_E_NO_VALID_KRA";
-	else
-	if (i_error==0x8009400CL) risultato="CERTSRV_E_BAD_REQUEST_KEY_ARCHIVAL";
-	else
-	if (i_error==0x8009400DL) risultato="CERTSRV_E_NO_CAADMIN_DEFINED";
-	else
-	if (i_error==0x8009400EL) risultato="CERTSRV_E_BAD_RENEWAL_CERT_ATTRIBUTE";
-	else
-	if (i_error==0x8009400FL) risultato="CERTSRV_E_NO_DB_SESSIONS";
-	else
-	if (i_error==0x80094010L) risultato="CERTSRV_E_ALIGNMENT_FAULT";
-	else
-	if (i_error==0x80094011L) risultato="CERTSRV_E_ENROLL_DENIED";
-	else
-	if (i_error==0x80094012L) risultato="CERTSRV_E_TEMPLATE_DENIED";
-	else
-	if (i_error==0x80094013L) risultato="CERTSRV_E_DOWNLEVEL_DC_SSL_OR_UPGRADE";
-	else
-	if (i_error==0x80094014L) risultato="CERTSRV_E_ADMIN_DENIED_REQUEST";
-	else
-	if (i_error==0x80094015L) risultato="CERTSRV_E_NO_POLICY_SERVER";
-	else
-	if (i_error==0x80094016L) risultato="CERTSRV_E_WEAK_SIGNATURE_OR_KEY";
-	else
-	if (i_error==0x80094017L) risultato="CERTSRV_E_KEY_ATTESTATION_NOT_SUPPORTED";
-	else
-	if (i_error==0x80094018L) risultato="CERTSRV_E_ENCRYPTION_CERT_REQUIRED";
-	else
-	if (i_error==0x80094800L) risultato="CERTSRV_E_UNSUPPORTED_CERT_TYPE";
-	else
-	if (i_error==0x80094801L) risultato="CERTSRV_E_NO_CERT_TYPE";
-	else
-	if (i_error==0x80094802L) risultato="CERTSRV_E_TEMPLATE_CONFLICT";
-	else
-	if (i_error==0x80094803L) risultato="CERTSRV_E_SUBJECT_ALT_NAME_REQUIRED";
-	else
-	if (i_error==0x80094804L) risultato="CERTSRV_E_ARCHIVED_KEY_REQUIRED";
-	else
-	if (i_error==0x80094805L) risultato="CERTSRV_E_SMIME_REQUIRED";
-	else
-	if (i_error==0x80094806L) risultato="CERTSRV_E_BAD_RENEWAL_SUBJECT";
-	else
-	if (i_error==0x80094807L) risultato="CERTSRV_E_BAD_TEMPLATE_VERSION";
-	else
-	if (i_error==0x80094808L) risultato="CERTSRV_E_TEMPLATE_POLICY_REQUIRED";
-	else
-	if (i_error==0x80094809L) risultato="CERTSRV_E_SIGNATURE_POLICY_REQUIRED";
-	else
-	if (i_error==0x8009480AL) risultato="CERTSRV_E_SIGNATURE_COUNT";
-	else
-	if (i_error==0x8009480BL) risultato="CERTSRV_E_SIGNATURE_REJECTED";
-	else
-	if (i_error==0x8009480CL) risultato="CERTSRV_E_ISSUANCE_POLICY_REQUIRED";
-	else
-	if (i_error==0x8009480DL) risultato="CERTSRV_E_SUBJECT_UPN_REQUIRED";
-	else
-	if (i_error==0x8009480EL) risultato="CERTSRV_E_SUBJECT_DIRECTORY_GUID_REQUIRED";
-	else
-	if (i_error==0x8009480FL) risultato="CERTSRV_E_SUBJECT_DNS_REQUIRED";
-	else
-	if (i_error==0x80094810L) risultato="CERTSRV_E_ARCHIVED_KEY_UNEXPECTED";
-	else
-	if (i_error==0x80094811L) risultato="CERTSRV_E_KEY_LENGTH";
-	else
-	if (i_error==0x80094812L) risultato="CERTSRV_E_SUBJECT_EMAIL_REQUIRED";
-	else
-	if (i_error==0x80094813L) risultato="CERTSRV_E_UNKNOWN_CERT_TYPE";
-	else
-	if (i_error==0x80094814L) risultato="CERTSRV_E_CERT_TYPE_OVERLAP";
-	else
-	if (i_error==0x80094815L) risultato="CERTSRV_E_TOO_MANY_SIGNATURES";
-	else
-	if (i_error==0x80094816L) risultato="CERTSRV_E_RENEWAL_BAD_PUBLIC_KEY";
-	else
-	if (i_error==0x80094817L) risultato="CERTSRV_E_INVALID_EK";
-	else
-	if (i_error==0x80094818L) risultato="CERTSRV_E_INVALID_IDBINDING";
-	else
-	if (i_error==0x80094819L) risultato="CERTSRV_E_INVALID_ATTESTATION";
-	else
-	if (i_error==0x8009481AL) risultato="CERTSRV_E_KEY_ATTESTATION";
-	else
-	if (i_error==0x8009481BL) risultato="CERTSRV_E_CORRUPT_KEY_ATTESTATION";
-	else
-	if (i_error==0x8009481CL) risultato="CERTSRV_E_EXPIRED_CHALLENGE";
-	else
-	if (i_error==0x8009481DL) risultato="CERTSRV_E_INVALID_RESPONSE";
-	else
-	if (i_error==0x8009481EL) risultato="CERTSRV_E_INVALID_REQUESTID";
-	else
-	if (i_error==0x80095000L) risultato="XENROLL_E_KEY_NOT_EXPORTABLE";
-	else
-	if (i_error==0x80095001L) risultato="XENROLL_E_CANNOT_ADD_ROOT_CERT";
-	else
-	if (i_error==0x80095002L) risultato="XENROLL_E_RESPONSE_KA_HASH_NOT_FOUND";
-	else
-	if (i_error==0x80095003L) risultato="XENROLL_E_RESPONSE_UNEXPECTED_KA_HASH";
-	else
-	if (i_error==0x80095004L) risultato="XENROLL_E_RESPONSE_KA_HASH_MISMATCH";
-	else
-	if (i_error==0x80095005L) risultato="XENROLL_E_KEYSPEC_SMIME_MISMATCH";
-	else
-	if (i_error==0x80096001L) risultato="TRUST_E_SYSTEM_ERROR";
-	else
-	if (i_error==0x80096002L) risultato="TRUST_E_NO_SIGNER_CERT";
-	else
-	if (i_error==0x80096003L) risultato="TRUST_E_COUNTER_SIGNER";
-	else
-	if (i_error==0x80096004L) risultato="TRUST_E_CERT_SIGNATURE";
-	else
-	if (i_error==0x80096005L) risultato="TRUST_E_TIME_STAMP";
-	else
-	if (i_error==0x80096010L) risultato="TRUST_E_BAD_DIGEST";
-	else
-	if (i_error==0x80096011L) risultato="TRUST_E_MALFORMED_SIGNATURE";
-	else
-	if (i_error==0x80096019L) risultato="TRUST_E_BASIC_CONSTRAINTS";
-	else
-	if (i_error==0x8009601EL) risultato="TRUST_E_FINANCIAL_CRITERIA";
-	else
-	if (i_error==0x80097001L) risultato="MSSIPOTF_E_OUTOFMEMRANGE";
-	else
-	if (i_error==0x80097002L) risultato="MSSIPOTF_E_CANTGETOBJECT";
-	else
-	if (i_error==0x80097003L) risultato="MSSIPOTF_E_NOHEADTABLE";
-	else
-	if (i_error==0x80097004L) risultato="MSSIPOTF_E_BAD_MAGICNUMBER";
-	else
-	if (i_error==0x80097005L) risultato="MSSIPOTF_E_BAD_OFFSET_TABLE";
-	else
-	if (i_error==0x80097006L) risultato="MSSIPOTF_E_TABLE_TAGORDER";
-	else
-	if (i_error==0x80097007L) risultato="MSSIPOTF_E_TABLE_LONGWORD";
-	else
-	if (i_error==0x80097008L) risultato="MSSIPOTF_E_BAD_FIRST_TABLE_PLACEMENT";
-	else
-	if (i_error==0x80097009L) risultato="MSSIPOTF_E_TABLES_OVERLAP";
-	else
-	if (i_error==0x8009700AL) risultato="MSSIPOTF_E_TABLE_PADBYTES";
-	else
-	if (i_error==0x8009700BL) risultato="MSSIPOTF_E_FILETOOSMALL";
-	else
-	if (i_error==0x8009700CL) risultato="MSSIPOTF_E_TABLE_CHECKSUM";
-	else
-	if (i_error==0x8009700DL) risultato="MSSIPOTF_E_FILE_CHECKSUM";
-	else
-	if (i_error==0x80097010L) risultato="MSSIPOTF_E_FAILED_POLICY";
-	else
-	if (i_error==0x80097011L) risultato="MSSIPOTF_E_FAILED_HINTS_CHECK";
-	else
-	if (i_error==0x80097012L) risultato="MSSIPOTF_E_NOT_OPENTYPE";
-	else
-	if (i_error==0x80097013L) risultato="MSSIPOTF_E_FILE";
-	else
-	if (i_error==0x80097014L) risultato="MSSIPOTF_E_CRYPT";
-	else
-	if (i_error==0x80097015L) risultato="MSSIPOTF_E_BADVERSION";
-	else
-	if (i_error==0x80097016L) risultato="MSSIPOTF_E_DSIG_STRUCTURE";
-	else
-	if (i_error==0x80097017L) risultato="MSSIPOTF_E_PCONST_CHECK";
-	else
-	if (i_error==0x80097018L) risultato="MSSIPOTF_E_STRUCTURE";
-	else
-	if (i_error==0x80097019L) risultato="ERROR_CRED_REQUIRES_CONFIRMATION";
-	else
-	if (i_error==0) risultato="NTE_OP_OK";
-	else
-	if (i_error==0x800B0001L) risultato="TRUST_E_PROVIDER_UNKNOWN";
-	else
-	if (i_error==0x800B0002L) risultato="TRUST_E_ACTION_UNKNOWN";
-	else
-	if (i_error==0x800B0003L) risultato="TRUST_E_SUBJECT_FORM_UNKNOWN";
-	else
-	if (i_error==0x800B0004L) risultato="TRUST_E_SUBJECT_NOT_TRUSTED";
-	else
-	if (i_error==0x800B0005L) risultato="DIGSIG_E_ENCODE";
-	else
-	if (i_error==0x800B0006L) risultato="DIGSIG_E_DECODE";
-	else
-	if (i_error==0x800B0007L) risultato="DIGSIG_E_EXTENSIBILITY";
-	else
-	if (i_error==0x800B0008L) risultato="DIGSIG_E_CRYPTO";
-	else
-	if (i_error==0x800B0009L) risultato="PERSIST_E_SIZEDEFINITE";
-	else
-	if (i_error==0x800B000AL) risultato="PERSIST_E_SIZEINDEFINITE";
-	else
-	if (i_error==0x800B000BL) risultato="PERSIST_E_NOTSELFSIZING";
-	else
-	if (i_error==0x800B0100L) risultato="TRUST_E_NOSIGNATURE";
-	else
-	if (i_error==0x800B0101L) risultato="CERT_E_EXPIRED";
-	else
-	if (i_error==0x800B0102L) risultato="CERT_E_VALIDITYPERIODNESTING";
-	else
-	if (i_error==0x800B0103L) risultato="CERT_E_ROLE";
-	else
-	if (i_error==0x800B0104L) risultato="CERT_E_PATHLENCONST";
-	else
-	if (i_error==0x800B0105L) risultato="CERT_E_CRITICAL";
-	else
-	if (i_error==0x800B0106L) risultato="CERT_E_PURPOSE";
-	else
-	if (i_error==0x800B0107L) risultato="CERT_E_ISSUERCHAINING";
-	else
-	if (i_error==0x800B0108L) risultato="CERT_E_MALFORMED";
-	else
-	if (i_error==0x800B0109L) risultato="CERT_E_UNTRUSTEDROOT";
-	else
-	if (i_error==0x800B010AL) risultato="CERT_E_CHAINING";
-	else
-	if (i_error==0x800B010BL) risultato="TRUST_E_FAIL";
-	else
-	if (i_error==0x800B010CL) risultato="CERT_E_REVOKED";
-	else
-	if (i_error==0x800B010DL) risultato="CERT_E_UNTRUSTEDTESTROOT";
-	else
-	if (i_error==0x800B010EL) risultato="CERT_E_REVOCATION_FAILURE";
-	else
-	if (i_error==0x800B010FL) risultato="CERT_E_CN_NO_MATCH";
-	else
-	if (i_error==0x800B0110L) risultato="CERT_E_WRONG_USAGE";
-	else
-	if (i_error==0x800B0111L) risultato="TRUST_E_EXPLICIT_DISTRUST";
-	else
-	if (i_error==0x800B0112L) risultato="CERT_E_UNTRUSTEDCA";
-	else
-	if (i_error==0x800B0113L) risultato="CERT_E_INVALID_POLICY";
-	else
-	if (i_error==0x800B0114L) risultato="CERT_E_INVALID_NAME";
-	else
-	if (i_error==0x800F0000L) risultato="SPAPI_E_EXPECTED_SECTION_NAME";
-	else
-	if (i_error==0x800F0001L) risultato="SPAPI_E_BAD_SECTION_NAME_LINE";
-	else
-	if (i_error==0x800F0002L) risultato="SPAPI_E_SECTION_NAME_TOO_LONG";
-	else
-	if (i_error==0x800F0003L) risultato="SPAPI_E_GENERAL_SYNTAX";
-	else
-	if (i_error==0x800F0100L) risultato="SPAPI_E_WRONG_INF_STYLE";
-	else
-	if (i_error==0x800F0101L) risultato="SPAPI_E_SECTION_NOT_FOUND";
-	else
-	if (i_error==0x800F0102L) risultato="SPAPI_E_LINE_NOT_FOUND";
-	else
-	if (i_error==0x800F0103L) risultato="SPAPI_E_NO_BACKUP";
-	else
-	if (i_error==0x800F0200L) risultato="SPAPI_E_NO_ASSOCIATED_CLASS";
-	else
-	if (i_error==0x800F0201L) risultato="SPAPI_E_CLASS_MISMATCH";
-	else
-	if (i_error==0x800F0202L) risultato="SPAPI_E_DUPLICATE_FOUND";
-	else
-	if (i_error==0x800F0203L) risultato="SPAPI_E_NO_DRIVER_SELECTED";
-	else
-	if (i_error==0x800F0204L) risultato="SPAPI_E_KEY_DOES_NOT_EXIST";
-	else
-	if (i_error==0x800F0205L) risultato="SPAPI_E_INVALID_DEVINST_NAME";
-	else
-	if (i_error==0x800F0206L) risultato="SPAPI_E_INVALID_CLASS";
-	else
-	if (i_error==0x800F0207L) risultato="SPAPI_E_DEVINST_ALREADY_EXISTS";
-	else
-	if (i_error==0x800F0208L) risultato="SPAPI_E_DEVINFO_NOT_REGISTERED";
-	else
-	if (i_error==0x800F0209L) risultato="SPAPI_E_INVALID_REG_PROPERTY";
-	else
-	if (i_error==0x800F020AL) risultato="SPAPI_E_NO_INF";
-	else
-	if (i_error==0x800F020BL) risultato="SPAPI_E_NO_SUCH_DEVINST";
-	else
-	if (i_error==0x800F020CL) risultato="SPAPI_E_CANT_LOAD_CLASS_ICON";
-	else
-	if (i_error==0x800F020DL) risultato="SPAPI_E_INVALID_CLASS_INSTALLER";
-	else
-	if (i_error==0x800F020EL) risultato="SPAPI_E_DI_DO_DEFAULT";
-	else
-	if (i_error==0x800F020FL) risultato="SPAPI_E_DI_NOFILECOPY";
-	else
-	if (i_error==0x800F0210L) risultato="SPAPI_E_INVALID_HWPROFILE";
-	else
-	if (i_error==0x800F0211L) risultato="SPAPI_E_NO_DEVICE_SELECTED";
-	else
-	if (i_error==0x800F0212L) risultato="SPAPI_E_DEVINFO_LISTLOCKED";
-	else
-	if (i_error==0x800F0213L) risultato="SPAPI_E_DEVINFO_DATA_LOCKED";
-	else
-	if (i_error==0x800F0214L) risultato="SPAPI_E_DI_BAD_PATH";
-	else
-	if (i_error==0x800F0215L) risultato="SPAPI_E_NO_CLASSINSTALL_PARAMS";
-	else
-	if (i_error==0x800F0216L) risultato="SPAPI_E_FILEQUEUE_LOCKED";
-	else
-	if (i_error==0x800F0217L) risultato="SPAPI_E_BAD_SERVICE_INSTALLSECT";
-	else
-	if (i_error==0x800F0218L) risultato="SPAPI_E_NO_CLASS_DRIVER_LIST";
-	else
-	if (i_error==0x800F0219L) risultato="SPAPI_E_NO_ASSOCIATED_SERVICE";
-	else
-	if (i_error==0x800F021AL) risultato="SPAPI_E_NO_DEFAULT_DEVICE_INTERFACE";
-	else
-	if (i_error==0x800F021BL) risultato="SPAPI_E_DEVICE_INTERFACE_ACTIVE";
-	else
-	if (i_error==0x800F021CL) risultato="SPAPI_E_DEVICE_INTERFACE_REMOVED";
-	else
-	if (i_error==0x800F021DL) risultato="SPAPI_E_BAD_INTERFACE_INSTALLSECT";
-	else
-	if (i_error==0x800F021EL) risultato="SPAPI_E_NO_SUCH_INTERFACE_CLASS";
-	else
-	if (i_error==0x800F021FL) risultato="SPAPI_E_INVALID_REFERENCE_STRING";
-	else
-	if (i_error==0x800F0220L) risultato="SPAPI_E_INVALID_MACHINENAME";
-	else
-	if (i_error==0x800F0221L) risultato="SPAPI_E_REMOTE_COMM_FAILURE";
-	else
-	if (i_error==0x800F0222L) risultato="SPAPI_E_MACHINE_UNAVAILABLE";
-	else
-	if (i_error==0x800F0223L) risultato="SPAPI_E_NO_CONFIGMGR_SERVICES";
-	else
-	if (i_error==0x800F0224L) risultato="SPAPI_E_INVALID_PROPPAGE_PROVIDER";
-	else
-	if (i_error==0x800F0225L) risultato="SPAPI_E_NO_SUCH_DEVICE_INTERFACE";
-	else
-	if (i_error==0x800F0226L) risultato="SPAPI_E_DI_POSTPROCESSING_REQUIRED";
-	else
-	if (i_error==0x800F0227L) risultato="SPAPI_E_INVALID_COINSTALLER";
-	else
-	if (i_error==0x800F0228L) risultato="SPAPI_E_NO_COMPAT_DRIVERS";
-	else
-	if (i_error==0x800F0229L) risultato="SPAPI_E_NO_DEVICE_ICON";
-	else
-	if (i_error==0x800F022AL) risultato="SPAPI_E_INVALID_INF_LOGCONFIG";
-	else
-	if (i_error==0x800F022BL) risultato="SPAPI_E_DI_DONT_INSTALL";
-	else
-	if (i_error==0x800F022CL) risultato="SPAPI_E_INVALID_FILTER_DRIVER";
-	else
-	if (i_error==0x800F022DL) risultato="SPAPI_E_NON_WINDOWS_NT_DRIVER";
-	else
-	if (i_error==0x800F022EL) risultato="SPAPI_E_NON_WINDOWS_DRIVER";
-	else
-	if (i_error==0x800F022FL) risultato="SPAPI_E_NO_CATALOG_FOR_OEM_INF";
-	else
-	if (i_error==0x800F0230L) risultato="SPAPI_E_DEVINSTALL_QUEUE_NONNATIVE";
-	else
-	if (i_error==0x800F0231L) risultato="SPAPI_E_NOT_DISABLEABLE";
-	else
-	if (i_error==0x800F0232L) risultato="SPAPI_E_CANT_REMOVE_DEVINST";
-	else
-	if (i_error==0x800F0233L) risultato="SPAPI_E_INVALID_TARGET";
-	else
-	if (i_error==0x800F0234L) risultato="SPAPI_E_DRIVER_NONNATIVE";
-	else
-	if (i_error==0x800F0235L) risultato="SPAPI_E_IN_WOW64";
-	else
-	if (i_error==0x800F0236L) risultato="SPAPI_E_SET_SYSTEM_RESTORE_POINT";
-	else
-	if (i_error==0x800F0237L) risultato="SPAPI_E_INCORRECTLY_COPIED_INF";
-	else
-	if (i_error==0x800F0238L) risultato="SPAPI_E_SCE_DISABLED";
-	else
-	if (i_error==0x800F0239L) risultato="SPAPI_E_UNKNOWN_EXCEPTION";
-	else
-	if (i_error==0x800F023AL) risultato="SPAPI_E_PNP_REGISTRY_ERROR";
-	else
-	if (i_error==0x800F023BL) risultato="SPAPI_E_REMOTE_REQUEST_UNSUPPORTED";
-	else
-	if (i_error==0x800F023CL) risultato="SPAPI_E_NOT_AN_INSTALLED_OEM_INF";
-	else
-	if (i_error==0x800F023DL) risultato="SPAPI_E_INF_IN_USE_BY_DEVICES";
-	else
-	if (i_error==0x800F023EL) risultato="SPAPI_E_DI_FUNCTION_OBSOLETE";
-	else
-	if (i_error==0x800F023FL) risultato="SPAPI_E_NO_AUTHENTICODE_CATALOG";
-	else
-	if (i_error==0x800F0240L) risultato="SPAPI_E_AUTHENTICODE_DISALLOWED";
-	else
-	if (i_error==0x800F0241L) risultato="SPAPI_E_AUTHENTICODE_TRUSTED_PUBLISHER";
-	else
-	if (i_error==0x800F0242L) risultato="SPAPI_E_AUTHENTICODE_TRUST_NOT_ESTABLISHED";
-	else
-	if (i_error==0x800F0243L) risultato="SPAPI_E_AUTHENTICODE_PUBLISHER_NOT_TRUSTED";
-	else
-	if (i_error==0x800F0244L) risultato="SPAPI_E_SIGNATURE_OSATTRIBUTE_MISMATCH";
-	else
-	if (i_error==0x800F0245L) risultato="SPAPI_E_ONLY_VALIDATE_VIA_AUTHENTICODE";
-	else
-	if (i_error==0x800F0246L) risultato="SPAPI_E_DEVICE_INSTALLER_NOT_READY";
-	else
-	if (i_error==0x800F0247L) risultato="SPAPI_E_DRIVER_STORE_ADD_FAILED";
-	else
-	if (i_error==0x800F0248L) risultato="SPAPI_E_DEVICE_INSTALL_BLOCKED";
-	else
-	if (i_error==0x800F0249L) risultato="SPAPI_E_DRIVER_INSTALL_BLOCKED";
-	else
-	if (i_error==0x800F024AL) risultato="SPAPI_E_WRONG_INF_TYPE";
-	else
-	if (i_error==0x800F024BL) risultato="SPAPI_E_FILE_HASH_NOT_IN_CATALOG";
-	else
-	if (i_error==0x800F024CL) risultato="SPAPI_E_DRIVER_STORE_DELETE_FAILED";
-	else
-	if (i_error==0x800F0300L) risultato="SPAPI_E_UNRECOVERABLE_STACK_OVERFLOW";
-	else
-	if (i_error==0x800F1000L) risultato="SPAPI_E_ERROR_NOT_INSTALLED";
-	else
-	if (i_error==NO_ERROR) risultato="SCARD_S_SUCCESS";
-	else
-	if (i_error==0x80100001L) risultato="SCARD_F_INTERNAL_ERROR";
-	else
-	if (i_error==0x80100002L) risultato="SCARD_E_CANCELLED";
-	else
-	if (i_error==0x80100003L) risultato="SCARD_E_INVALID_HANDLE";
-	else
-	if (i_error==0x80100004L) risultato="SCARD_E_INVALID_PARAMETER";
-	else
-	if (i_error==0x80100005L) risultato="SCARD_E_INVALID_TARGET";
-	else
-	if (i_error==0x80100006L) risultato="SCARD_E_NO_MEMORY";
-	else
-	if (i_error==0x80100007L) risultato="SCARD_F_WAITED_TOO_LONG";
-	else
-	if (i_error==0x80100008L) risultato="SCARD_E_INSUFFICIENT_BUFFER";
-	else
-	if (i_error==0x80100009L) risultato="SCARD_E_UNKNOWN_READER";
-	else
-	if (i_error==0x8010000AL) risultato="SCARD_E_TIMEOUT";
-	else
-	if (i_error==0x8010000BL) risultato="SCARD_E_SHARING_VIOLATION";
-	else
-	if (i_error==0x8010000CL) risultato="SCARD_E_NO_SMARTCARD";
-	else
-	if (i_error==0x8010000DL) risultato="SCARD_E_UNKNOWN_CARD";
-	else
-	if (i_error==0x8010000EL) risultato="SCARD_E_CANT_DISPOSE";
-	else
-	if (i_error==0x8010000FL) risultato="SCARD_E_PROTO_MISMATCH";
-	else
-	if (i_error==0x80100010L) risultato="SCARD_E_NOT_READY";
-	else
-	if (i_error==0x80100011L) risultato="SCARD_E_INVALID_VALUE";
-	else
-	if (i_error==0x80100012L) risultato="SCARD_E_SYSTEM_CANCELLED";
-	else
-	if (i_error==0x80100013L) risultato="SCARD_F_COMM_ERROR";
-	else
-	if (i_error==0x80100014L) risultato="SCARD_F_UNKNOWN_ERROR";
-	else
-	if (i_error==0x80100015L) risultato="SCARD_E_INVALID_ATR";
-	else
-	if (i_error==0x80100016L) risultato="SCARD_E_NOT_TRANSACTED";
-	else
-	if (i_error==0x80100017L) risultato="SCARD_E_READER_UNAVAILABLE";
-	else
-	if (i_error==0x80100018L) risultato="SCARD_P_SHUTDOWN";
-	else
-	if (i_error==0x80100019L) risultato="SCARD_E_PCI_TOO_SMALL";
-	else
-	if (i_error==0x8010001AL) risultato="SCARD_E_READER_UNSUPPORTED";
-	else
-	if (i_error==0x8010001BL) risultato="SCARD_E_DUPLICATE_READER";
-	else
-	if (i_error==0x8010001CL) risultato="SCARD_E_CARD_UNSUPPORTED";
-	else
-	if (i_error==0x8010001DL) risultato="SCARD_E_NO_SERVICE";
-	else
-	if (i_error==0x8010001EL) risultato="SCARD_E_SERVICE_STOPPED";
-	else
-	if (i_error==0x8010001FL) risultato="SCARD_E_UNEXPECTED";
-	else
-	if (i_error==0x80100020L) risultato="SCARD_E_ICC_INSTALLATION";
-	else
-	if (i_error==0x80100021L) risultato="SCARD_E_ICC_CREATEORDER";
-	else
-	if (i_error==0x80100022L) risultato="SCARD_E_UNSUPPORTED_FEATURE";
-	else
-	if (i_error==0x80100023L) risultato="SCARD_E_DIR_NOT_FOUND";
-	else
-	if (i_error==0x80100024L) risultato="SCARD_E_FILE_NOT_FOUND";
-	else
-	if (i_error==0x80100025L) risultato="SCARD_E_NO_DIR";
-	else
-	if (i_error==0x80100026L) risultato="SCARD_E_NO_FILE";
-	else
-	if (i_error==0x80100027L) risultato="SCARD_E_NO_ACCESS";
-	else
-	if (i_error==0x80100028L) risultato="SCARD_E_WRITE_TOO_MANY";
-	else
-	if (i_error==0x80100029L) risultato="SCARD_E_BAD_SEEK";
-	else
-	if (i_error==0x8010002AL) risultato="SCARD_E_INVALID_CHV";
-	else
-	if (i_error==0x8010002BL) risultato="SCARD_E_UNKNOWN_RES_MNG";
-	else
-	if (i_error==0x8010002CL) risultato="SCARD_E_NO_SUCH_CERTIFICATE";
-	else
-	if (i_error==0x8010002DL) risultato="SCARD_E_CERTIFICATE_UNAVAILABLE";
-	else
-	if (i_error==0x8010002EL) risultato="SCARD_E_NO_READERS_AVAILABLE";
-	else
-	if (i_error==0x8010002FL) risultato="SCARD_E_COMM_DATA_LOST";
-	else
-	if (i_error==0x80100030L) risultato="SCARD_E_NO_KEY_CONTAINER";
-	else
-	if (i_error==0x80100031L) risultato="SCARD_E_SERVER_TOO_BUSY";
-	else
-	if (i_error==0x80100032L) risultato="SCARD_E_PIN_CACHE_EXPIRED";
-	else
-	if (i_error==0x80100033L) risultato="SCARD_E_NO_PIN_CACHE";
-	else
-	if (i_error==0x80100034L) risultato="SCARD_E_READ_ONLY_CARD";
-	else
-	if (i_error==0x80100065L) risultato="SCARD_W_UNSUPPORTED_CARD";
-	else
-	if (i_error==0x80100066L) risultato="SCARD_W_UNRESPONSIVE_CARD";
-	else
-	if (i_error==0x80100067L) risultato="SCARD_W_UNPOWERED_CARD";
-	else
-	if (i_error==0x80100068L) risultato="SCARD_W_RESET_CARD";
-	else
-	if (i_error==0x80100069L) risultato="SCARD_W_REMOVED_CARD";
-	else
-	if (i_error==0x8010006AL) risultato="SCARD_W_SECURITY_VIOLATION";
-	else
-	if (i_error==0x8010006BL) risultato="SCARD_W_WRONG_CHV";
-	else
-	if (i_error==0x8010006CL) risultato="SCARD_W_CHV_BLOCKED";
-	else
-	if (i_error==0x8010006DL) risultato="SCARD_W_EOF";
-	else
-	if (i_error==0x8010006EL) risultato="SCARD_W_CANCELLED_BY_USER";
-	else
-	if (i_error==0x8010006FL) risultato="SCARD_W_CARD_NOT_AUTHENTICATED";
-	else
-	if (i_error==0x80100070L) risultato="SCARD_W_CACHE_ITEM_NOT_FOUND";
-	else
-	if (i_error==0x80100071L) risultato="SCARD_W_CACHE_ITEM_STALE";
-	else
-	if (i_error==0x80100072L) risultato="SCARD_W_CACHE_ITEM_TOO_BIG";
-	else
-	if (i_error==0x80110401L) risultato="COMADMIN_E_OBJECTERRORS";
-	else
-	if (i_error==0x80110402L) risultato="COMADMIN_E_OBJECTINVALID";
-	else
-	if (i_error==0x80110403L) risultato="COMADMIN_E_KEYMISSING";
-	else
-	if (i_error==0x80110404L) risultato="COMADMIN_E_ALREADYINSTALLED";
-	else
-	if (i_error==0x80110407L) risultato="COMADMIN_E_APP_FILE_WRITEFAIL";
-	else
-	if (i_error==0x80110408L) risultato="COMADMIN_E_APP_FILE_READFAIL";
-	else
-	if (i_error==0x80110409L) risultato="COMADMIN_E_APP_FILE_VERSION";
-	else
-	if (i_error==0x8011040AL) risultato="COMADMIN_E_BADPATH";
-	else
-	if (i_error==0x8011040BL) risultato="COMADMIN_E_APPLICATIONEXISTS";
-	else
-	if (i_error==0x8011040CL) risultato="COMADMIN_E_ROLEEXISTS";
-	else
-	if (i_error==0x8011040DL) risultato="COMADMIN_E_CANTCOPYFILE";
-	else
-	if (i_error==0x8011040FL) risultato="COMADMIN_E_NOUSER";
-	else
-	if (i_error==0x80110410L) risultato="COMADMIN_E_INVALIDUSERIDS";
-	else
-	if (i_error==0x80110411L) risultato="COMADMIN_E_NOREGISTRYCLSID";
-	else
-	if (i_error==0x80110412L) risultato="COMADMIN_E_BADREGISTRYPROGID";
-	else
-	if (i_error==0x80110413L) risultato="COMADMIN_E_AUTHENTICATIONLEVEL";
-	else
-	if (i_error==0x80110414L) risultato="COMADMIN_E_USERPASSWDNOTVALID";
-	else
-	if (i_error==0x80110418L) risultato="COMADMIN_E_CLSIDORIIDMISMATCH";
-	else
-	if (i_error==0x80110419L) risultato="COMADMIN_E_REMOTEINTERFACE";
-	else
-	if (i_error==0x8011041AL) risultato="COMADMIN_E_DLLREGISTERSERVER";
-	else
-	if (i_error==0x8011041BL) risultato="COMADMIN_E_NOSERVERSHARE";
-	else
-	if (i_error==0x8011041DL) risultato="COMADMIN_E_DLLLOADFAILED";
-	else
-	if (i_error==0x8011041EL) risultato="COMADMIN_E_BADREGISTRYLIBID";
-	else
-	if (i_error==0x8011041FL) risultato="COMADMIN_E_APPDIRNOTFOUND";
-	else
-	if (i_error==0x80110423L) risultato="COMADMIN_E_REGISTRARFAILED";
-	else
-	if (i_error==0x80110424L) risultato="COMADMIN_E_COMPFILE_DOESNOTEXIST";
-	else
-	if (i_error==0x80110425L) risultato="COMADMIN_E_COMPFILE_LOADDLLFAIL";
-	else
-	if (i_error==0x80110426L) risultato="COMADMIN_E_COMPFILE_GETCLASSOBJ";
-	else
-	if (i_error==0x80110427L) risultato="COMADMIN_E_COMPFILE_CLASSNOTAVAIL";
-	else
-	if (i_error==0x80110428L) risultato="COMADMIN_E_COMPFILE_BADTLB";
-	else
-	if (i_error==0x80110429L) risultato="COMADMIN_E_COMPFILE_NOTINSTALLABLE";
-	else
-	if (i_error==0x8011042AL) risultato="COMADMIN_E_NOTCHANGEABLE";
-	else
-	if (i_error==0x8011042BL) risultato="COMADMIN_E_NOTDELETEABLE";
-	else
-	if (i_error==0x8011042CL) risultato="COMADMIN_E_SESSION";
-	else
-	if (i_error==0x8011042DL) risultato="COMADMIN_E_COMP_MOVE_LOCKED";
-	else
-	if (i_error==0x8011042EL) risultato="COMADMIN_E_COMP_MOVE_BAD_DEST";
-	else
-	if (i_error==0x80110430L) risultato="COMADMIN_E_REGISTERTLB";
-	else
-	if (i_error==0x80110433L) risultato="COMADMIN_E_SYSTEMAPP";
-	else
-	if (i_error==0x80110434L) risultato="COMADMIN_E_COMPFILE_NOREGISTRAR";
-	else
-	if (i_error==0x80110435L) risultato="COMADMIN_E_COREQCOMPINSTALLED";
-	else
-	if (i_error==0x80110436L) risultato="COMADMIN_E_SERVICENOTINSTALLED";
-	else
-	if (i_error==0x80110437L) risultato="COMADMIN_E_PROPERTYSAVEFAILED";
-	else
-	if (i_error==0x80110438L) risultato="COMADMIN_E_OBJECTEXISTS";
-	else
-	if (i_error==0x80110439L) risultato="COMADMIN_E_COMPONENTEXISTS";
-	else
-	if (i_error==0x8011043BL) risultato="COMADMIN_E_REGFILE_CORRUPT";
-	else
-	if (i_error==0x8011043CL) risultato="COMADMIN_E_PROPERTY_OVERFLOW";
-	else
-	if (i_error==0x8011043EL) risultato="COMADMIN_E_NOTINREGISTRY";
-	else
-	if (i_error==0x8011043FL) risultato="COMADMIN_E_OBJECTNOTPOOLABLE";
-	else
-	if (i_error==0x80110446L) risultato="COMADMIN_E_APPLID_MATCHES_CLSID";
-	else
-	if (i_error==0x80110447L) risultato="COMADMIN_E_ROLE_DOES_NOT_EXIST";
-	else
-	if (i_error==0x80110448L) risultato="COMADMIN_E_START_APP_NEEDS_COMPONENTS";
-	else
-	if (i_error==0x80110449L) risultato="COMADMIN_E_REQUIRES_DIFFERENT_PLATFORM";
-	else
-	if (i_error==0x8011044AL) risultato="COMADMIN_E_CAN_NOT_EXPORT_APP_PROXY";
-	else
-	if (i_error==0x8011044BL) risultato="COMADMIN_E_CAN_NOT_START_APP";
-	else
-	if (i_error==0x8011044CL) risultato="COMADMIN_E_CAN_NOT_EXPORT_SYS_APP";
-	else
-	if (i_error==0x8011044DL) risultato="COMADMIN_E_CANT_SUBSCRIBE_TO_COMPONENT";
-	else
-	if (i_error==0x8011044EL) risultato="COMADMIN_E_EVENTCLASS_CANT_BE_SUBSCRIBER";
-	else
-	if (i_error==0x8011044FL) risultato="COMADMIN_E_LIB_APP_PROXY_INCOMPATIBLE";
-	else
-	if (i_error==0x80110450L) risultato="COMADMIN_E_BASE_PARTITION_ONLY";
-	else
-	if (i_error==0x80110451L) risultato="COMADMIN_E_START_APP_DISABLED";
-	else
-	if (i_error==0x80110457L) risultato="COMADMIN_E_CAT_DUPLICATE_PARTITION_NAME";
-	else
-	if (i_error==0x80110458L) risultato="COMADMIN_E_CAT_INVALID_PARTITION_NAME";
-	else
-	if (i_error==0x80110459L) risultato="COMADMIN_E_CAT_PARTITION_IN_USE";
-	else
-	if (i_error==0x8011045AL) risultato="COMADMIN_E_FILE_PARTITION_DUPLICATE_FILES";
-	else
-	if (i_error==0x8011045BL) risultato="COMADMIN_E_CAT_IMPORTED_COMPONENTS_NOT_ALLOWED";
-	else
-	if (i_error==0x8011045CL) risultato="COMADMIN_E_AMBIGUOUS_APPLICATION_NAME";
-	else
-	if (i_error==0x8011045DL) risultato="COMADMIN_E_AMBIGUOUS_PARTITION_NAME";
-	else
-	if (i_error==0x80110472L) risultato="COMADMIN_E_REGDB_NOTINITIALIZED";
-	else
-	if (i_error==0x80110473L) risultato="COMADMIN_E_REGDB_NOTOPEN";
-	else
-	if (i_error==0x80110474L) risultato="COMADMIN_E_REGDB_SYSTEMERR";
-	else
-	if (i_error==0x80110475L) risultato="COMADMIN_E_REGDB_ALREADYRUNNING";
-	else
-	if (i_error==0x80110480L) risultato="COMADMIN_E_MIG_VERSIONNOTSUPPORTED";
-	else
-	if (i_error==0x80110481L) risultato="COMADMIN_E_MIG_SCHEMANOTFOUND";
-	else
-	if (i_error==0x80110482L) risultato="COMADMIN_E_CAT_BITNESSMISMATCH";
-	else
-	if (i_error==0x80110483L) risultato="COMADMIN_E_CAT_UNACCEPTABLEBITNESS";
-	else
-	if (i_error==0x80110484L) risultato="COMADMIN_E_CAT_WRONGAPPBITNESS";
-	else
-	if (i_error==0x80110485L) risultato="COMADMIN_E_CAT_PAUSE_RESUME_NOT_SUPPORTED";
-	else
-	if (i_error==0x80110486L) risultato="COMADMIN_E_CAT_SERVERFAULT";
-	else
-	if (i_error==0x80110600L) risultato="COMQC_E_APPLICATION_NOT_QUEUED";
-	else
-	if (i_error==0x80110601L) risultato="COMQC_E_NO_QUEUEABLE_INTERFACES";
-	else
-	if (i_error==0x80110602L) risultato="COMQC_E_QUEUING_SERVICE_NOT_AVAILABLE";
-	else
-	if (i_error==0x80110603L) risultato="COMQC_E_NO_IPERSISTSTREAM";
-	else
-	if (i_error==0x80110604L) risultato="COMQC_E_BAD_MESSAGE";
-	else
-	if (i_error==0x80110605L) risultato="COMQC_E_UNAUTHENTICATED";
-	else
-	if (i_error==0x80110606L) risultato="COMQC_E_UNTRUSTED_ENQUEUER";
-	else
-	if (i_error==0x80110701L) risultato="MSDTC_E_DUPLICATE_RESOURCE";
-	else
-	if (i_error==0x80110808L) risultato="COMADMIN_E_OBJECT_PARENT_MISSING";
-	else
-	if (i_error==0x80110809L) risultato="COMADMIN_E_OBJECT_DOES_NOT_EXIST";
-	else
-	if (i_error==0x8011080AL) risultato="COMADMIN_E_APP_NOT_RUNNING";
-	else
-	if (i_error==0x8011080BL) risultato="COMADMIN_E_INVALID_PARTITION";
-	else
-	if (i_error==0x8011080DL) risultato="COMADMIN_E_SVCAPP_NOT_POOLABLE_OR_RECYCLABLE";
-	else
-	if (i_error==0x8011080EL) risultato="COMADMIN_E_USER_IN_SET";
-	else
-	if (i_error==0x8011080FL) risultato="COMADMIN_E_CANTRECYCLELIBRARYAPPS";
-	else
-	if (i_error==0x80110811L) risultato="COMADMIN_E_CANTRECYCLESERVICEAPPS";
-	else
-	if (i_error==0x80110812L) risultato="COMADMIN_E_PROCESSALREADYRECYCLED";
-	else
-	if (i_error==0x80110813L) risultato="COMADMIN_E_PAUSEDPROCESSMAYNOTBERECYCLED";
-	else
-	if (i_error==0x80110814L) risultato="COMADMIN_E_CANTMAKEINPROCSERVICE";
-	else
-	if (i_error==0x80110815L) risultato="COMADMIN_E_PROGIDINUSEBYCLSID";
-	else
-	if (i_error==0x80110816L) risultato="COMADMIN_E_DEFAULT_PARTITION_NOT_IN_SET";
-	else
-	if (i_error==0x80110817L) risultato="COMADMIN_E_RECYCLEDPROCESSMAYNOTBEPAUSED";
-	else
-	if (i_error==0x80110818L) risultato="COMADMIN_E_PARTITION_ACCESSDENIED";
-	else
-	if (i_error==0x80110819L) risultato="COMADMIN_E_PARTITION_MSI_ONLY";
-	else
-	if (i_error==0x8011081AL) risultato="COMADMIN_E_LEGACYCOMPS_NOT_ALLOWED_IN_1_0_FORMAT";
-	else
-	if (i_error==0x8011081BL) risultato="COMADMIN_E_LEGACYCOMPS_NOT_ALLOWED_IN_NONBASE_PARTITIONS";
-	else
-	if (i_error==0x8011081CL) risultato="COMADMIN_E_COMP_MOVE_SOURCE";
-	else
-	if (i_error==0x8011081DL) risultato="COMADMIN_E_COMP_MOVE_DEST";
-	else
-	if (i_error==0x8011081EL) risultato="COMADMIN_E_COMP_MOVE_PRIVATE";
-	else
-	if (i_error==0x8011081FL) risultato="COMADMIN_E_BASEPARTITION_REQUIRED_IN_SET";
-	else
-	if (i_error==0x80110820L) risultato="COMADMIN_E_CANNOT_ALIAS_EVENTCLASS";
-	else
-	if (i_error==0x80110821L) risultato="COMADMIN_E_PRIVATE_ACCESSDENIED";
-	else
-	if (i_error==0x80110822L) risultato="COMADMIN_E_SAFERINVALID";
-	else
-	if (i_error==0x80110823L) risultato="COMADMIN_E_REGISTRY_ACCESSDENIED";
-	else
-	if (i_error==0x80110824L) risultato="COMADMIN_E_PARTITIONS_DISABLED";
-	else
-	if (i_error==0x001B0000L) risultato="WER_S_REPORT_DEBUG";
-	else
-	if (i_error==0x001B0001L) risultato="WER_S_REPORT_UPLOADED";
-	else
-	if (i_error==0x001B0002L) risultato="WER_S_REPORT_QUEUED";
-	else
-	if (i_error==0x001B0003L) risultato="WER_S_DISABLED";
-	else
-	if (i_error==0x001B0004L) risultato="WER_S_SUSPENDED_UPLOAD";
-	else
-	if (i_error==0x001B0005L) risultato="WER_S_DISABLED_QUEUE";
-	else
-	if (i_error==0x001B0006L) risultato="WER_S_DISABLED_ARCHIVE";
-	else
-	if (i_error==0x001B0007L) risultato="WER_S_REPORT_ASYNC";
-	else
-	if (i_error==0x001B0008L) risultato="WER_S_IGNORE_ASSERT_INSTANCE";
-	else
-	if (i_error==0x001B0009L) risultato="WER_S_IGNORE_ALL_ASSERTS";
-	else
-	if (i_error==0x001B000AL) risultato="WER_S_ASSERT_CONTINUE";
-	else
-	if (i_error==0x001B000BL) risultato="WER_S_THROTTLED";
-	else
-	if (i_error==0x001B000CL) risultato="WER_S_REPORT_UPLOADED_CAB";
-	else
-	if (i_error==0x801B8000L) risultato="WER_E_CRASH_FAILURE";
-	else
-	if (i_error==0x801B8001L) risultato="WER_E_CANCELED";
-	else
-	if (i_error==0x801B8002L) risultato="WER_E_NETWORK_FAILURE";
-	else
-	if (i_error==0x801B8003L) risultato="WER_E_NOT_INITIALIZED";
-	else
-	if (i_error==0x801B8004L) risultato="WER_E_ALREADY_REPORTING";
-	else
-	if (i_error==0x801B8005L) risultato="WER_E_DUMP_THROTTLED";
-	else
-	if (i_error==0x801B8006L) risultato="WER_E_INSUFFICIENT_CONSENT";
-	else
-	if (i_error==0x001F0001L) risultato="ERROR_FLT_IO_COMPLETE";
-	else
-	if (i_error==0x801F0001L) risultato="ERROR_FLT_NO_HANDLER_DEFINED";
-	else
-	if (i_error==0x801F0002L) risultato="ERROR_FLT_CONTEXT_ALREADY_DEFINED";
-	else
-	if (i_error==0x801F0003L) risultato="ERROR_FLT_INVALID_ASYNCHRONOUS_REQUEST";
-	else
-	if (i_error==0x801F0004L) risultato="ERROR_FLT_DISALLOW_FAST_IO";
-	else
-	if (i_error==0x801F0005L) risultato="ERROR_FLT_INVALID_NAME_REQUEST";
-	else
-	if (i_error==0x801F0006L) risultato="ERROR_FLT_NOT_SAFE_TO_POST_OPERATION";
-	else
-	if (i_error==0x801F0007L) risultato="ERROR_FLT_NOT_INITIALIZED";
-	else
-	if (i_error==0x801F0008L) risultato="ERROR_FLT_FILTER_NOT_READY";
-	else
-	if (i_error==0x801F0009L) risultato="ERROR_FLT_POST_OPERATION_CLEANUP";
-	else
-	if (i_error==0x801F000AL) risultato="ERROR_FLT_INTERNAL_ERROR";
-	else
-	if (i_error==0x801F000BL) risultato="ERROR_FLT_DELETING_OBJECT";
-	else
-	if (i_error==0x801F000CL) risultato="ERROR_FLT_MUST_BE_NONPAGED_POOL";
-	else
-	if (i_error==0x801F000DL) risultato="ERROR_FLT_DUPLICATE_ENTRY";
-	else
-	if (i_error==0x801F000EL) risultato="ERROR_FLT_CBDQ_DISABLED";
-	else
-	if (i_error==0x801F000FL) risultato="ERROR_FLT_DO_NOT_ATTACH";
-	else
-	if (i_error==0x801F0010L) risultato="ERROR_FLT_DO_NOT_DETACH";
-	else
-	if (i_error==0x801F0011L) risultato="ERROR_FLT_INSTANCE_ALTITUDE_COLLISION";
-	else
-	if (i_error==0x801F0012L) risultato="ERROR_FLT_INSTANCE_NAME_COLLISION";
-	else
-	if (i_error==0x801F0013L) risultato="ERROR_FLT_FILTER_NOT_FOUND";
-	else
-	if (i_error==0x801F0014L) risultato="ERROR_FLT_VOLUME_NOT_FOUND";
-	else
-	if (i_error==0x801F0015L) risultato="ERROR_FLT_INSTANCE_NOT_FOUND";
-	else
-	if (i_error==0x801F0016L) risultato="ERROR_FLT_CONTEXT_ALLOCATION_NOT_FOUND";
-	else
-	if (i_error==0x801F0017L) risultato="ERROR_FLT_INVALID_CONTEXT_REGISTRATION";
-	else
-	if (i_error==0x801F0018L) risultato="ERROR_FLT_NAME_CACHE_MISS";
-	else
-	if (i_error==0x801F0019L) risultato="ERROR_FLT_NO_DEVICE_OBJECT";
-	else
-	if (i_error==0x801F001AL) risultato="ERROR_FLT_VOLUME_ALREADY_MOUNTED";
-	else
-	if (i_error==0x801F001BL) risultato="ERROR_FLT_ALREADY_ENLISTED";
-	else
-	if (i_error==0x801F001CL) risultato="ERROR_FLT_CONTEXT_ALREADY_LINKED";
-	else
-	if (i_error==0x801F0020L) risultato="ERROR_FLT_NO_WAITER_FOR_REPLY";
-	else
-	if (i_error==0x801F0023L) risultato="ERROR_FLT_REGISTRATION_BUSY";
-	else
-	if (i_error==0x80260001L) risultato="ERROR_HUNG_DISPLAY_DRIVER_THREAD";
-	else
-	if (i_error==0x80263001L) risultato="DWM_E_COMPOSITIONDISABLED";
-	else
-	if (i_error==0x80263002L) risultato="DWM_E_REMOTING_NOT_SUPPORTED";
-	else
-	if (i_error==0x80263003L) risultato="DWM_E_NO_REDIRECTION_SURFACE_AVAILABLE";
-	else
-	if (i_error==0x80263004L) risultato="DWM_E_NOT_QUEUING_PRESENTS";
-	else
-	if (i_error==0x80263005L) risultato="DWM_E_ADAPTER_NOT_FOUND";
-	else
-	if (i_error==0x00263005L) risultato="DWM_S_GDI_REDIRECTION_SURFACE";
-	else
-	if (i_error==0x80263007L) risultato="DWM_E_TEXTURE_TOO_LARGE";
-	else
-	if (i_error==0x00263008L) risultato="DWM_S_GDI_REDIRECTION_SURFACE_BLT_VIA_GDI";
-	else
-	if (i_error==0x00261001L) risultato="ERROR_MONITOR_NO_DESCRIPTOR";
-	else
-	if (i_error==0x00261002L) risultato="ERROR_MONITOR_UNKNOWN_DESCRIPTOR_FORMAT";
-	else
-	if (i_error==0xC0261003L) risultato="ERROR_MONITOR_INVALID_DESCRIPTOR_CHECKSUM";
-	else
-	if (i_error==0xC0261004L) risultato="ERROR_MONITOR_INVALID_STANDARD_TIMING_BLOCK";
-	else
-	if (i_error==0xC0261005L) risultato="ERROR_MONITOR_WMI_DATABLOCK_REGISTRATION_FAILED";
-	else
-	if (i_error==0xC0261006L) risultato="ERROR_MONITOR_INVALID_SERIAL_NUMBER_MONDSC_BLOCK";
-	else
-	if (i_error==0xC0261007L) risultato="ERROR_MONITOR_INVALID_USER_FRIENDLY_MONDSC_BLOCK";
-	else
-	if (i_error==0xC0261008L) risultato="ERROR_MONITOR_NO_MORE_DESCRIPTOR_DATA";
-	else
-	if (i_error==0xC0261009L) risultato="ERROR_MONITOR_INVALID_DETAILED_TIMING_BLOCK";
-	else
-	if (i_error==0xC026100AL) risultato="ERROR_MONITOR_INVALID_MANUFACTURE_DATE";
-	else
-	if (i_error==0xC0262000L) risultato="ERROR_GRAPHICS_NOT_EXCLUSIVE_MODE_OWNER";
-	else
-	if (i_error==0xC0262001L) risultato="ERROR_GRAPHICS_INSUFFICIENT_DMA_BUFFER";
-	else
-	if (i_error==0xC0262002L) risultato="ERROR_GRAPHICS_INVALID_DISPLAY_ADAPTER";
-	else
-	if (i_error==0xC0262003L) risultato="ERROR_GRAPHICS_ADAPTER_WAS_RESET";
-	else
-	if (i_error==0xC0262004L) risultato="ERROR_GRAPHICS_INVALID_DRIVER_MODEL";
-	else
-	if (i_error==0xC0262005L) risultato="ERROR_GRAPHICS_PRESENT_MODE_CHANGED";
-	else
-	if (i_error==0xC0262006L) risultato="ERROR_GRAPHICS_PRESENT_OCCLUDED";
-	else
-	if (i_error==0xC0262007L) risultato="ERROR_GRAPHICS_PRESENT_DENIED";
-	else
-	if (i_error==0xC0262008L) risultato="ERROR_GRAPHICS_CANNOTCOLORCONVERT";
-	else
-	if (i_error==0xC0262009L) risultato="ERROR_GRAPHICS_DRIVER_MISMATCH";
-	else
-	if (i_error==0x4026200AL) risultato="ERROR_GRAPHICS_PARTIAL_DATA_POPULATED";
-	else
-	if (i_error==0xC026200BL) risultato="ERROR_GRAPHICS_PRESENT_REDIRECTION_DISABLED";
-	else
-	if (i_error==0xC026200CL) risultato="ERROR_GRAPHICS_PRESENT_UNOCCLUDED";
-	else
-	if (i_error==0xC026200DL) risultato="ERROR_GRAPHICS_WINDOWDC_NOT_AVAILABLE";
-	else
-	if (i_error==0xC026200EL) risultato="ERROR_GRAPHICS_WINDOWLESS_PRESENT_DISABLED";
-	else
-	if (i_error==0xC0262100L) risultato="ERROR_GRAPHICS_NO_VIDEO_MEMORY";
-	else
-	if (i_error==0xC0262101L) risultato="ERROR_GRAPHICS_CANT_LOCK_MEMORY";
-	else
-	if (i_error==0xC0262102L) risultato="ERROR_GRAPHICS_ALLOCATION_BUSY";
-	else
-	if (i_error==0xC0262103L) risultato="ERROR_GRAPHICS_TOO_MANY_REFERENCES";
-	else
-	if (i_error==0xC0262104L) risultato="ERROR_GRAPHICS_TRY_AGAIN_LATER";
-	else
-	if (i_error==0xC0262105L) risultato="ERROR_GRAPHICS_TRY_AGAIN_NOW";
-	else
-	if (i_error==0xC0262106L) risultato="ERROR_GRAPHICS_ALLOCATION_INVALID";
-	else
-	if (i_error==0xC0262107L) risultato="ERROR_GRAPHICS_UNSWIZZLING_APERTURE_UNAVAILABLE";
-	else
-	if (i_error==0xC0262108L) risultato="ERROR_GRAPHICS_UNSWIZZLING_APERTURE_UNSUPPORTED";
-	else
-	if (i_error==0xC0262109L) risultato="ERROR_GRAPHICS_CANT_EVICT_PINNED_ALLOCATION";
-	else
-	if (i_error==0xC0262110L) risultato="ERROR_GRAPHICS_INVALID_ALLOCATION_USAGE";
-	else
-	if (i_error==0xC0262111L) risultato="ERROR_GRAPHICS_CANT_RENDER_LOCKED_ALLOCATION";
-	else
-	if (i_error==0xC0262112L) risultato="ERROR_GRAPHICS_ALLOCATION_CLOSED";
-	else
-	if (i_error==0xC0262113L) risultato="ERROR_GRAPHICS_INVALID_ALLOCATION_INSTANCE";
-	else
-	if (i_error==0xC0262114L) risultato="ERROR_GRAPHICS_INVALID_ALLOCATION_HANDLE";
-	else
-	if (i_error==0xC0262115L) risultato="ERROR_GRAPHICS_WRONG_ALLOCATION_DEVICE";
-	else
-	if (i_error==0xC0262116L) risultato="ERROR_GRAPHICS_ALLOCATION_CONTENT_LOST";
-	else
-	if (i_error==0xC0262200L) risultato="ERROR_GRAPHICS_GPU_EXCEPTION_ON_DEVICE";
-	else
-	if (i_error==0x40262201L) risultato="ERROR_GRAPHICS_SKIP_ALLOCATION_PREPARATION";
-	else
-	if (i_error==0xC0262300L) risultato="ERROR_GRAPHICS_INVALID_VIDPN_TOPOLOGY";
-	else
-	if (i_error==0xC0262301L) risultato="ERROR_GRAPHICS_VIDPN_TOPOLOGY_NOT_SUPPORTED";
-	else
-	if (i_error==0xC0262302L) risultato="ERROR_GRAPHICS_VIDPN_TOPOLOGY_CURRENTLY_NOT_SUPPORTED";
-	else
-	if (i_error==0xC0262303L) risultato="ERROR_GRAPHICS_INVALID_VIDPN";
-	else
-	if (i_error==0xC0262304L) risultato="ERROR_GRAPHICS_INVALID_VIDEO_PRESENT_SOURCE";
-	else
-	if (i_error==0xC0262305L) risultato="ERROR_GRAPHICS_INVALID_VIDEO_PRESENT_TARGET";
-	else
-	if (i_error==0xC0262306L) risultato="ERROR_GRAPHICS_VIDPN_MODALITY_NOT_SUPPORTED";
-	else
-	if (i_error==0x00262307L) risultato="ERROR_GRAPHICS_MODE_NOT_PINNED";
-	else
-	if (i_error==0xC0262308L) risultato="ERROR_GRAPHICS_INVALID_VIDPN_SOURCEMODESET";
-	else
-	if (i_error==0xC0262309L) risultato="ERROR_GRAPHICS_INVALID_VIDPN_TARGETMODESET";
-	else
-	if (i_error==0xC026230AL) risultato="ERROR_GRAPHICS_INVALID_FREQUENCY";
-	else
-	if (i_error==0xC026230BL) risultato="ERROR_GRAPHICS_INVALID_ACTIVE_REGION";
-	else
-	if (i_error==0xC026230CL) risultato="ERROR_GRAPHICS_INVALID_TOTAL_REGION";
-	else
-	if (i_error==0xC0262310L) risultato="ERROR_GRAPHICS_INVALID_VIDEO_PRESENT_SOURCE_MODE";
-	else
-	if (i_error==0xC0262311L) risultato="ERROR_GRAPHICS_INVALID_VIDEO_PRESENT_TARGET_MODE";
-	else
-	if (i_error==0xC0262312L) risultato="ERROR_GRAPHICS_PINNED_MODE_MUST_REMAIN_IN_SET";
-	else
-	if (i_error==0xC0262313L) risultato="ERROR_GRAPHICS_PATH_ALREADY_IN_TOPOLOGY";
-	else
-	if (i_error==0xC0262314L) risultato="ERROR_GRAPHICS_MODE_ALREADY_IN_MODESET";
-	else
-	if (i_error==0xC0262315L) risultato="ERROR_GRAPHICS_INVALID_VIDEOPRESENTSOURCESET";
-	else
-	if (i_error==0xC0262316L) risultato="ERROR_GRAPHICS_INVALID_VIDEOPRESENTTARGETSET";
-	else
-	if (i_error==0xC0262317L) risultato="ERROR_GRAPHICS_SOURCE_ALREADY_IN_SET";
-	else
-	if (i_error==0xC0262318L) risultato="ERROR_GRAPHICS_TARGET_ALREADY_IN_SET";
-	else
-	if (i_error==0xC0262319L) risultato="ERROR_GRAPHICS_INVALID_VIDPN_PRESENT_PATH";
-	else
-	if (i_error==0xC026231AL) risultato="ERROR_GRAPHICS_NO_RECOMMENDED_VIDPN_TOPOLOGY";
-	else
-	if (i_error==0xC026231BL) risultato="ERROR_GRAPHICS_INVALID_MONITOR_FREQUENCYRANGESET";
-	else
-	if (i_error==0xC026231CL) risultato="ERROR_GRAPHICS_INVALID_MONITOR_FREQUENCYRANGE";
-	else
-	if (i_error==0xC026231DL) risultato="ERROR_GRAPHICS_FREQUENCYRANGE_NOT_IN_SET";
-	else
-	if (i_error==0x0026231EL) risultato="ERROR_GRAPHICS_NO_PREFERRED_MODE";
-	else
-	if (i_error==0xC026231FL) risultato="ERROR_GRAPHICS_FREQUENCYRANGE_ALREADY_IN_SET";
-	else
-	if (i_error==0xC0262320L) risultato="ERROR_GRAPHICS_STALE_MODESET";
-	else
-	if (i_error==0xC0262321L) risultato="ERROR_GRAPHICS_INVALID_MONITOR_SOURCEMODESET";
-	else
-	if (i_error==0xC0262322L) risultato="ERROR_GRAPHICS_INVALID_MONITOR_SOURCE_MODE";
-	else
-	if (i_error==0xC0262323L) risultato="ERROR_GRAPHICS_NO_RECOMMENDED_FUNCTIONAL_VIDPN";
-	else
-	if (i_error==0xC0262324L) risultato="ERROR_GRAPHICS_MODE_ID_MUST_BE_UNIQUE";
-	else
-	if (i_error==0xC0262325L) risultato="ERROR_GRAPHICS_EMPTY_ADAPTER_MONITOR_MODE_SUPPORT_INTERSECTION";
-	else
-	if (i_error==0xC0262326L) risultato="ERROR_GRAPHICS_VIDEO_PRESENT_TARGETS_LESS_THAN_SOURCES";
-	else
-	if (i_error==0xC0262327L) risultato="ERROR_GRAPHICS_PATH_NOT_IN_TOPOLOGY";
-	else
-	if (i_error==0xC0262328L) risultato="ERROR_GRAPHICS_ADAPTER_MUST_HAVE_AT_LEAST_ONE_SOURCE";
-	else
-	if (i_error==0xC0262329L) risultato="ERROR_GRAPHICS_ADAPTER_MUST_HAVE_AT_LEAST_ONE_TARGET";
-	else
-	if (i_error==0xC026232AL) risultato="ERROR_GRAPHICS_INVALID_MONITORDESCRIPTORSET";
-	else
-	if (i_error==0xC026232BL) risultato="ERROR_GRAPHICS_INVALID_MONITORDESCRIPTOR";
-	else
-	if (i_error==0xC026232CL) risultato="ERROR_GRAPHICS_MONITORDESCRIPTOR_NOT_IN_SET";
-	else
-	if (i_error==0xC026232DL) risultato="ERROR_GRAPHICS_MONITORDESCRIPTOR_ALREADY_IN_SET";
-	else
-	if (i_error==0xC026232EL) risultato="ERROR_GRAPHICS_MONITORDESCRIPTOR_ID_MUST_BE_UNIQUE";
-	else
-	if (i_error==0xC026232FL) risultato="ERROR_GRAPHICS_INVALID_VIDPN_TARGET_SUBSET_TYPE";
-	else
-	if (i_error==0xC0262330L) risultato="ERROR_GRAPHICS_RESOURCES_NOT_RELATED";
-	else
-	if (i_error==0xC0262331L) risultato="ERROR_GRAPHICS_SOURCE_ID_MUST_BE_UNIQUE";
-	else
-	if (i_error==0xC0262332L) risultato="ERROR_GRAPHICS_TARGET_ID_MUST_BE_UNIQUE";
-	else
-	if (i_error==0xC0262333L) risultato="ERROR_GRAPHICS_NO_AVAILABLE_VIDPN_TARGET";
-	else
-	if (i_error==0xC0262334L) risultato="ERROR_GRAPHICS_MONITOR_COULD_NOT_BE_ASSOCIATED_WITH_ADAPTER";
-	else
-	if (i_error==0xC0262335L) risultato="ERROR_GRAPHICS_NO_VIDPNMGR";
-	else
-	if (i_error==0xC0262336L) risultato="ERROR_GRAPHICS_NO_ACTIVE_VIDPN";
-	else
-	if (i_error==0xC0262337L) risultato="ERROR_GRAPHICS_STALE_VIDPN_TOPOLOGY";
-	else
-	if (i_error==0xC0262338L) risultato="ERROR_GRAPHICS_MONITOR_NOT_CONNECTED";
-	else
-	if (i_error==0xC0262339L) risultato="ERROR_GRAPHICS_SOURCE_NOT_IN_TOPOLOGY";
-	else
-	if (i_error==0xC026233AL) risultato="ERROR_GRAPHICS_INVALID_PRIMARYSURFACE_SIZE";
-	else
-	if (i_error==0xC026233BL) risultato="ERROR_GRAPHICS_INVALID_VISIBLEREGION_SIZE";
-	else
-	if (i_error==0xC026233CL) risultato="ERROR_GRAPHICS_INVALID_STRIDE";
-	else
-	if (i_error==0xC026233DL) risultato="ERROR_GRAPHICS_INVALID_PIXELFORMAT";
-	else
-	if (i_error==0xC026233EL) risultato="ERROR_GRAPHICS_INVALID_COLORBASIS";
-	else
-	if (i_error==0xC026233FL) risultato="ERROR_GRAPHICS_INVALID_PIXELVALUEACCESSMODE";
-	else
-	if (i_error==0xC0262340L) risultato="ERROR_GRAPHICS_TARGET_NOT_IN_TOPOLOGY";
-	else
-	if (i_error==0xC0262341L) risultato="ERROR_GRAPHICS_NO_DISPLAY_MODE_MANAGEMENT_SUPPORT";
-	else
-	if (i_error==0xC0262342L) risultato="ERROR_GRAPHICS_VIDPN_SOURCE_IN_USE";
-	else
-	if (i_error==0xC0262343L) risultato="ERROR_GRAPHICS_CANT_ACCESS_ACTIVE_VIDPN";
-	else
-	if (i_error==0xC0262344L) risultato="ERROR_GRAPHICS_INVALID_PATH_IMPORTANCE_ORDINAL";
-	else
-	if (i_error==0xC0262345L) risultato="ERROR_GRAPHICS_INVALID_PATH_CONTENT_GEOMETRY_TRANSFORMATION";
-	else
-	if (i_error==0xC0262346L) risultato="ERROR_GRAPHICS_PATH_CONTENT_GEOMETRY_TRANSFORMATION_NOT_SUPPORTED";
-	else
-	if (i_error==0xC0262347L) risultato="ERROR_GRAPHICS_INVALID_GAMMA_RAMP";
-	else
-	if (i_error==0xC0262348L) risultato="ERROR_GRAPHICS_GAMMA_RAMP_NOT_SUPPORTED";
-	else
-	if (i_error==0xC0262349L) risultato="ERROR_GRAPHICS_MULTISAMPLING_NOT_SUPPORTED";
-	else
-	if (i_error==0xC026234AL) risultato="ERROR_GRAPHICS_MODE_NOT_IN_MODESET";
-	else
-	if (i_error==0x0026234BL) risultato="ERROR_GRAPHICS_DATASET_IS_EMPTY";
-	else
-	if (i_error==0x0026234CL) risultato="ERROR_GRAPHICS_NO_MORE_ELEMENTS_IN_DATASET";
-	else
-	if (i_error==0xC026234DL) risultato="ERROR_GRAPHICS_INVALID_VIDPN_TOPOLOGY_RECOMMENDATION_REASON";
-	else
-	if (i_error==0xC026234EL) risultato="ERROR_GRAPHICS_INVALID_PATH_CONTENT_TYPE";
-	else
-	if (i_error==0xC026234FL) risultato="ERROR_GRAPHICS_INVALID_COPYPROTECTION_TYPE";
-	else
-	if (i_error==0xC0262350L) risultato="ERROR_GRAPHICS_UNASSIGNED_MODESET_ALREADY_EXISTS";
-	else
-	if (i_error==0x00262351L) risultato="ERROR_GRAPHICS_PATH_CONTENT_GEOMETRY_TRANSFORMATION_NOT_PINNED";
-	else
-	if (i_error==0xC0262352L) risultato="ERROR_GRAPHICS_INVALID_SCANLINE_ORDERING";
-	else
-	if (i_error==0xC0262353L) risultato="ERROR_GRAPHICS_TOPOLOGY_CHANGES_NOT_ALLOWED";
-	else
-	if (i_error==0xC0262354L) risultato="ERROR_GRAPHICS_NO_AVAILABLE_IMPORTANCE_ORDINALS";
-	else
-	if (i_error==0xC0262355L) risultato="ERROR_GRAPHICS_INCOMPATIBLE_PRIVATE_FORMAT";
-	else
-	if (i_error==0xC0262356L) risultato="ERROR_GRAPHICS_INVALID_MODE_PRUNING_ALGORITHM";
-	else
-	if (i_error==0xC0262357L) risultato="ERROR_GRAPHICS_INVALID_MONITOR_CAPABILITY_ORIGIN";
-	else
-	if (i_error==0xC0262358L) risultato="ERROR_GRAPHICS_INVALID_MONITOR_FREQUENCYRANGE_CONSTRAINT";
-	else
-	if (i_error==0xC0262359L) risultato="ERROR_GRAPHICS_MAX_NUM_PATHS_REACHED";
-	else
-	if (i_error==0xC026235AL) risultato="ERROR_GRAPHICS_CANCEL_VIDPN_TOPOLOGY_AUGMENTATION";
-	else
-	if (i_error==0xC026235BL) risultato="ERROR_GRAPHICS_INVALID_CLIENT_TYPE";
-	else
-	if (i_error==0xC026235CL) risultato="ERROR_GRAPHICS_CLIENTVIDPN_NOT_SET";
-	else
-	if (i_error==0xC0262400L) risultato="ERROR_GRAPHICS_SPECIFIED_CHILD_ALREADY_CONNECTED";
-	else
-	if (i_error==0xC0262401L) risultato="ERROR_GRAPHICS_CHILD_DESCRIPTOR_NOT_SUPPORTED";
-	else
-	if (i_error==0x4026242FL) risultato="ERROR_GRAPHICS_UNKNOWN_CHILD_STATUS";
-	else
-	if (i_error==0xC0262430L) risultato="ERROR_GRAPHICS_NOT_A_LINKED_ADAPTER";
-	else
-	if (i_error==0xC0262431L) risultato="ERROR_GRAPHICS_LEADLINK_NOT_ENUMERATED";
-	else
-	if (i_error==0xC0262432L) risultato="ERROR_GRAPHICS_CHAINLINKS_NOT_ENUMERATED";
-	else
-	if (i_error==0xC0262433L) risultato="ERROR_GRAPHICS_ADAPTER_CHAIN_NOT_READY";
-	else
-	if (i_error==0xC0262434L) risultato="ERROR_GRAPHICS_CHAINLINKS_NOT_STARTED";
-	else
-	if (i_error==0xC0262435L) risultato="ERROR_GRAPHICS_CHAINLINKS_NOT_POWERED_ON";
-	else
-	if (i_error==0xC0262436L) risultato="ERROR_GRAPHICS_INCONSISTENT_DEVICE_LINK_STATE";
-	else
-	if (i_error==0x40262437L) risultato="ERROR_GRAPHICS_LEADLINK_START_DEFERRED";
-	else
-	if (i_error==0xC0262438L) risultato="ERROR_GRAPHICS_NOT_POST_DEVICE_DRIVER";
-	else
-	if (i_error==0x40262439L) risultato="ERROR_GRAPHICS_POLLING_TOO_FREQUENTLY";
-	else
-	if (i_error==0x4026243AL) risultato="ERROR_GRAPHICS_START_DEFERRED";
-	else
-	if (i_error==0xC026243BL) risultato="ERROR_GRAPHICS_ADAPTER_ACCESS_NOT_EXCLUDED";
-	else
-	if (i_error==0x4026243CL) risultato="ERROR_GRAPHICS_DEPENDABLE_CHILD_STATUS";
-	else
-	if (i_error==0xC0262500L) risultato="ERROR_GRAPHICS_OPM_NOT_SUPPORTED";
-	else
-	if (i_error==0xC0262501L) risultato="ERROR_GRAPHICS_COPP_NOT_SUPPORTED";
-	else
-	if (i_error==0xC0262502L) risultato="ERROR_GRAPHICS_UAB_NOT_SUPPORTED";
-	else
-	if (i_error==0xC0262503L) risultato="ERROR_GRAPHICS_OPM_INVALID_ENCRYPTED_PARAMETERS";
-	else
-	if (i_error==0xC0262505L) risultato="ERROR_GRAPHICS_OPM_NO_VIDEO_OUTPUTS_EXIST";
-	else
-	if (i_error==0xC026250BL) risultato="ERROR_GRAPHICS_OPM_INTERNAL_ERROR";
-	else
-	if (i_error==0xC026250CL) risultato="ERROR_GRAPHICS_OPM_INVALID_HANDLE";
-	else
-	if (i_error==0xC026250EL) risultato="ERROR_GRAPHICS_PVP_INVALID_CERTIFICATE_LENGTH";
-	else
-	if (i_error==0xC026250FL) risultato="ERROR_GRAPHICS_OPM_SPANNING_MODE_ENABLED";
-	else
-	if (i_error==0xC0262510L) risultato="ERROR_GRAPHICS_OPM_THEATER_MODE_ENABLED";
-	else
-	if (i_error==0xC0262511L) risultato="ERROR_GRAPHICS_PVP_HFS_FAILED";
-	else
-	if (i_error==0xC0262512L) risultato="ERROR_GRAPHICS_OPM_INVALID_SRM";
-	else
-	if (i_error==0xC0262513L) risultato="ERROR_GRAPHICS_OPM_OUTPUT_DOES_NOT_SUPPORT_HDCP";
-	else
-	if (i_error==0xC0262514L) risultato="ERROR_GRAPHICS_OPM_OUTPUT_DOES_NOT_SUPPORT_ACP";
-	else
-	if (i_error==0xC0262515L) risultato="ERROR_GRAPHICS_OPM_OUTPUT_DOES_NOT_SUPPORT_CGMSA";
-	else
-	if (i_error==0xC0262516L) risultato="ERROR_GRAPHICS_OPM_HDCP_SRM_NEVER_SET";
-	else
-	if (i_error==0xC0262517L) risultato="ERROR_GRAPHICS_OPM_RESOLUTION_TOO_HIGH";
-	else
-	if (i_error==0xC0262518L) risultato="ERROR_GRAPHICS_OPM_ALL_HDCP_HARDWARE_ALREADY_IN_USE";
-	else
-	if (i_error==0xC026251AL) risultato="ERROR_GRAPHICS_OPM_VIDEO_OUTPUT_NO_LONGER_EXISTS";
-	else
-	if (i_error==0xC026251BL) risultato="ERROR_GRAPHICS_OPM_SESSION_TYPE_CHANGE_IN_PROGRESS";
-	else
-	if (i_error==0xC026251CL) risultato="ERROR_GRAPHICS_OPM_VIDEO_OUTPUT_DOES_NOT_HAVE_COPP_SEMANTICS";
-	else
-	if (i_error==0xC026251DL) risultato="ERROR_GRAPHICS_OPM_INVALID_INFORMATION_REQUEST";
-	else
-	if (i_error==0xC026251EL) risultato="ERROR_GRAPHICS_OPM_DRIVER_INTERNAL_ERROR";
-	else
-	if (i_error==0xC026251FL) risultato="ERROR_GRAPHICS_OPM_VIDEO_OUTPUT_DOES_NOT_HAVE_OPM_SEMANTICS";
-	else
-	if (i_error==0xC0262520L) risultato="ERROR_GRAPHICS_OPM_SIGNALING_NOT_SUPPORTED";
-	else
-	if (i_error==0xC0262521L) risultato="ERROR_GRAPHICS_OPM_INVALID_CONFIGURATION_REQUEST";
-	else
-	if (i_error==0xC0262580L) risultato="ERROR_GRAPHICS_I2C_NOT_SUPPORTED";
-	else
-	if (i_error==0xC0262581L) risultato="ERROR_GRAPHICS_I2C_DEVICE_DOES_NOT_EXIST";
-	else
-	if (i_error==0xC0262582L) risultato="ERROR_GRAPHICS_I2C_ERROR_TRANSMITTING_DATA";
-	else
-	if (i_error==0xC0262583L) risultato="ERROR_GRAPHICS_I2C_ERROR_RECEIVING_DATA";
-	else
-	if (i_error==0xC0262584L) risultato="ERROR_GRAPHICS_DDCCI_VCP_NOT_SUPPORTED";
-	else
-	if (i_error==0xC0262585L) risultato="ERROR_GRAPHICS_DDCCI_INVALID_DATA";
-	else
-	if (i_error==0xC0262586L) risultato="ERROR_GRAPHICS_DDCCI_MONITOR_RETURNED_INVALID_TIMING_STATUS_BYTE";
-	else
-	if (i_error==0xC0262587L) risultato="ERROR_GRAPHICS_MCA_INVALID_CAPABILITIES_STRING";
-	else
-	if (i_error==0xC0262588L) risultato="ERROR_GRAPHICS_MCA_INTERNAL_ERROR";
-	else
-	if (i_error==0xC0262589L) risultato="ERROR_GRAPHICS_DDCCI_INVALID_MESSAGE_COMMAND";
-	else
-	if (i_error==0xC026258AL) risultato="ERROR_GRAPHICS_DDCCI_INVALID_MESSAGE_LENGTH";
-	else
-	if (i_error==0xC026258BL) risultato="ERROR_GRAPHICS_DDCCI_INVALID_MESSAGE_CHECKSUM";
-	else
-	if (i_error==0xC026258CL) risultato="ERROR_GRAPHICS_INVALID_PHYSICAL_MONITOR_HANDLE";
-	else
-	if (i_error==0xC026258DL) risultato="ERROR_GRAPHICS_MONITOR_NO_LONGER_EXISTS";
-	else
-	if (i_error==0xC02625D8L) risultato="ERROR_GRAPHICS_DDCCI_CURRENT_CURRENT_VALUE_GREATER_THAN_MAXIMUM_VALUE";
-	else
-	if (i_error==0xC02625D9L) risultato="ERROR_GRAPHICS_MCA_INVALID_VCP_VERSION";
-	else
-	if (i_error==0xC02625DAL) risultato="ERROR_GRAPHICS_MCA_MONITOR_VIOLATES_MCCS_SPECIFICATION";
-	else
-	if (i_error==0xC02625DBL) risultato="ERROR_GRAPHICS_MCA_MCCS_VERSION_MISMATCH";
-	else
-	if (i_error==0xC02625DCL) risultato="ERROR_GRAPHICS_MCA_UNSUPPORTED_MCCS_VERSION";
-	else
-	if (i_error==0xC02625DEL) risultato="ERROR_GRAPHICS_MCA_INVALID_TECHNOLOGY_TYPE_RETURNED";
-	else
-	if (i_error==0xC02625DFL) risultato="ERROR_GRAPHICS_MCA_UNSUPPORTED_COLOR_TEMPERATURE";
-	else
-	if (i_error==0xC02625E0L) risultato="ERROR_GRAPHICS_ONLY_CONSOLE_SESSION_SUPPORTED";
-	else
-	if (i_error==0xC02625E1L) risultato="ERROR_GRAPHICS_NO_DISPLAY_DEVICE_CORRESPONDS_TO_NAME";
-	else
-	if (i_error==0xC02625E2L) risultato="ERROR_GRAPHICS_DISPLAY_DEVICE_NOT_ATTACHED_TO_DESKTOP";
-	else
-	if (i_error==0xC02625E3L) risultato="ERROR_GRAPHICS_MIRRORING_DEVICES_NOT_SUPPORTED";
-	else
-	if (i_error==0xC02625E4L) risultato="ERROR_GRAPHICS_INVALID_POINTER";
-	else
-	if (i_error==0xC02625E5L) risultato="ERROR_GRAPHICS_NO_MONITORS_CORRESPOND_TO_DISPLAY_DEVICE";
-	else
-	if (i_error==0xC02625E6L) risultato="ERROR_GRAPHICS_PARAMETER_ARRAY_TOO_SMALL";
-	else
-	if (i_error==0xC02625E7L) risultato="ERROR_GRAPHICS_INTERNAL_ERROR";
-	else
-	if (i_error==0xC02605E8L) risultato="ERROR_GRAPHICS_SESSION_TYPE_CHANGE_IN_PROGRESS";
-	else
-	if (i_error==0x80270001L) risultato="NAP_E_INVALID_PACKET";
-	else
-	if (i_error==0x80270002L) risultato="NAP_E_MISSING_SOH";
-	else
-	if (i_error==0x80270003L) risultato="NAP_E_CONFLICTING_ID";
-	else
-	if (i_error==0x80270004L) risultato="NAP_E_NO_CACHED_SOH";
-	else
-	if (i_error==0x80270005L) risultato="NAP_E_STILL_BOUND";
-	else
-	if (i_error==0x80270006L) risultato="NAP_E_NOT_REGISTERED";
-	else
-	if (i_error==0x80270007L) risultato="NAP_E_NOT_INITIALIZED";
-	else
-	if (i_error==0x80270008L) risultato="NAP_E_MISMATCHED_ID";
-	else
-	if (i_error==0x80270009L) risultato="NAP_E_NOT_PENDING";
-	else
-	if (i_error==0x8027000AL) risultato="NAP_E_ID_NOT_FOUND";
-	else
-	if (i_error==0x8027000BL) risultato="NAP_E_MAXSIZE_TOO_SMALL";
-	else
-	if (i_error==0x8027000CL) risultato="NAP_E_SERVICE_NOT_RUNNING";
-	else
-	if (i_error==0x0027000DL) risultato="NAP_S_CERT_ALREADY_PRESENT";
-	else
-	if (i_error==0x8027000EL) risultato="NAP_E_ENTITY_DISABLED";
-	else
-	if (i_error==0x8027000FL) risultato="NAP_E_NETSH_GROUPPOLICY_ERROR";
-	else
-	if (i_error==0x80270010L) risultato="NAP_E_TOO_MANY_CALLS";
-	else
-	if (i_error==0x80270011L) risultato="NAP_E_SHV_CONFIG_EXISTED";
-	else
-	if (i_error==0x80270012L) risultato="NAP_E_SHV_CONFIG_NOT_FOUND";
-	else
-	if (i_error==0x80270013L) risultato="NAP_E_SHV_TIMEOUT";
-	else
-	if (i_error==0x80280000L) risultato="TPM_E_ERROR_MASK";
-	else
-	if (i_error==0x80280001L) risultato="TPM_E_AUTHFAIL";
-	else
-	if (i_error==0x80280002L) risultato="TPM_E_BADINDEX";
-	else
-	if (i_error==0x80280003L) risultato="TPM_E_BAD_PARAMETER";
-	else
-	if (i_error==0x80280004L) risultato="TPM_E_AUDITFAILURE";
-	else
-	if (i_error==0x80280005L) risultato="TPM_E_CLEAR_DISABLED";
-	else
-	if (i_error==0x80280006L) risultato="TPM_E_DEACTIVATED";
-	else
-	if (i_error==0x80280007L) risultato="TPM_E_DISABLED";
-	else
-	if (i_error==0x80280008L) risultato="TPM_E_DISABLED_CMD";
-	else
-	if (i_error==0x80280009L) risultato="TPM_E_FAIL";
-	else
-	if (i_error==0x8028000AL) risultato="TPM_E_BAD_ORDINAL";
-	else
-	if (i_error==0x8028000BL) risultato="TPM_E_INSTALL_DISABLED";
-	else
-	if (i_error==0x8028000CL) risultato="TPM_E_INVALID_KEYHANDLE";
-	else
-	if (i_error==0x8028000DL) risultato="TPM_E_KEYNOTFOUND";
-	else
-	if (i_error==0x8028000EL) risultato="TPM_E_INAPPROPRIATE_ENC";
-	else
-	if (i_error==0x8028000FL) risultato="TPM_E_MIGRATEFAIL";
-	else
-	if (i_error==0x80280010L) risultato="TPM_E_INVALID_PCR_INFO";
-	else
-	if (i_error==0x80280011L) risultato="TPM_E_NOSPACE";
-	else
-	if (i_error==0x80280012L) risultato="TPM_E_NOSRK";
-	else
-	if (i_error==0x80280013L) risultato="TPM_E_NOTSEALED_BLOB";
-	else
-	if (i_error==0x80280014L) risultato="TPM_E_OWNER_SET";
-	else
-	if (i_error==0x80280015L) risultato="TPM_E_RESOURCES";
-	else
-	if (i_error==0x80280016L) risultato="TPM_E_SHORTRANDOM";
-	else
-	if (i_error==0x80280017L) risultato="TPM_E_SIZE";
-	else
-	if (i_error==0x80280018L) risultato="TPM_E_WRONGPCRVAL";
-	else
-	if (i_error==0x80280019L) risultato="TPM_E_BAD_PARAM_SIZE";
-	else
-	if (i_error==0x8028001AL) risultato="TPM_E_SHA_THREAD";
-	else
-	if (i_error==0x8028001BL) risultato="TPM_E_SHA_ERROR";
-	else
-	if (i_error==0x8028001CL) risultato="TPM_E_FAILEDSELFTEST";
-	else
-	if (i_error==0x8028001DL) risultato="TPM_E_AUTH2FAIL";
-	else
-	if (i_error==0x8028001EL) risultato="TPM_E_BADTAG";
-	else
-	if (i_error==0x8028001FL) risultato="TPM_E_IOERROR";
-	else
-	if (i_error==0x80280020L) risultato="TPM_E_ENCRYPT_ERROR";
-	else
-	if (i_error==0x80280021L) risultato="TPM_E_DECRYPT_ERROR";
-	else
-	if (i_error==0x80280022L) risultato="TPM_E_INVALID_AUTHHANDLE";
-	else
-	if (i_error==0x80280023L) risultato="TPM_E_NO_ENDORSEMENT";
-	else
-	if (i_error==0x80280024L) risultato="TPM_E_INVALID_KEYUSAGE";
-	else
-	if (i_error==0x80280025L) risultato="TPM_E_WRONG_ENTITYTYPE";
-	else
-	if (i_error==0x80280026L) risultato="TPM_E_INVALID_POSTINIT";
-	else
-	if (i_error==0x80280027L) risultato="TPM_E_INAPPROPRIATE_SIG";
-	else
-	if (i_error==0x80280028L) risultato="TPM_E_BAD_KEY_PROPERTY";
-	else
-	if (i_error==0x80280029L) risultato="TPM_E_BAD_MIGRATION";
-	else
-	if (i_error==0x8028002AL) risultato="TPM_E_BAD_SCHEME";
-	else
-	if (i_error==0x8028002BL) risultato="TPM_E_BAD_DATASIZE";
-	else
-	if (i_error==0x8028002CL) risultato="TPM_E_BAD_MODE";
-	else
-	if (i_error==0x8028002DL) risultato="TPM_E_BAD_PRESENCE";
-	else
-	if (i_error==0x8028002EL) risultato="TPM_E_BAD_VERSION";
-	else
-	if (i_error==0x8028002FL) risultato="TPM_E_NO_WRAP_TRANSPORT";
-	else
-	if (i_error==0x80280030L) risultato="TPM_E_AUDITFAIL_UNSUCCESSFUL";
-	else
-	if (i_error==0x80280031L) risultato="TPM_E_AUDITFAIL_SUCCESSFUL";
-	else
-	if (i_error==0x80280032L) risultato="TPM_E_NOTRESETABLE";
-	else
-	if (i_error==0x80280033L) risultato="TPM_E_NOTLOCAL";
-	else
-	if (i_error==0x80280034L) risultato="TPM_E_BAD_TYPE";
-	else
-	if (i_error==0x80280035L) risultato="TPM_E_INVALID_RESOURCE";
-	else
-	if (i_error==0x80280036L) risultato="TPM_E_NOTFIPS";
-	else
-	if (i_error==0x80280037L) risultato="TPM_E_INVALID_FAMILY";
-	else
-	if (i_error==0x80280038L) risultato="TPM_E_NO_NV_PERMISSION";
-	else
-	if (i_error==0x80280039L) risultato="TPM_E_REQUIRES_SIGN";
-	else
-	if (i_error==0x8028003AL) risultato="TPM_E_KEY_NOTSUPPORTED";
-	else
-	if (i_error==0x8028003BL) risultato="TPM_E_AUTH_CONFLICT";
-	else
-	if (i_error==0x8028003CL) risultato="TPM_E_AREA_LOCKED";
-	else
-	if (i_error==0x8028003DL) risultato="TPM_E_BAD_LOCALITY";
-	else
-	if (i_error==0x8028003EL) risultato="TPM_E_READ_ONLY";
-	else
-	if (i_error==0x8028003FL) risultato="TPM_E_PER_NOWRITE";
-	else
-	if (i_error==0x80280040L) risultato="TPM_E_FAMILYCOUNT";
-	else
-	if (i_error==0x80280041L) risultato="TPM_E_WRITE_LOCKED";
-	else
-	if (i_error==0x80280042L) risultato="TPM_E_BAD_ATTRIBUTES";
-	else
-	if (i_error==0x80280043L) risultato="TPM_E_INVALID_STRUCTURE";
-	else
-	if (i_error==0x80280044L) risultato="TPM_E_KEY_OWNER_CONTROL";
-	else
-	if (i_error==0x80280045L) risultato="TPM_E_BAD_COUNTER";
-	else
-	if (i_error==0x80280046L) risultato="TPM_E_NOT_FULLWRITE";
-	else
-	if (i_error==0x80280047L) risultato="TPM_E_CONTEXT_GAP";
-	else
-	if (i_error==0x80280048L) risultato="TPM_E_MAXNVWRITES";
-	else
-	if (i_error==0x80280049L) risultato="TPM_E_NOOPERATOR";
-	else
-	if (i_error==0x8028004AL) risultato="TPM_E_RESOURCEMISSING";
-	else
-	if (i_error==0x8028004BL) risultato="TPM_E_DELEGATE_LOCK";
-	else
-	if (i_error==0x8028004CL) risultato="TPM_E_DELEGATE_FAMILY";
-	else
-	if (i_error==0x8028004DL) risultato="TPM_E_DELEGATE_ADMIN";
-	else
-	if (i_error==0x8028004EL) risultato="TPM_E_TRANSPORT_NOTEXCLUSIVE";
-	else
-	if (i_error==0x8028004FL) risultato="TPM_E_OWNER_CONTROL";
-	else
-	if (i_error==0x80280050L) risultato="TPM_E_DAA_RESOURCES";
-	else
-	if (i_error==0x80280051L) risultato="TPM_E_DAA_INPUT_DATA0";
-	else
-	if (i_error==0x80280052L) risultato="TPM_E_DAA_INPUT_DATA1";
-	else
-	if (i_error==0x80280053L) risultato="TPM_E_DAA_ISSUER_SETTINGS";
-	else
-	if (i_error==0x80280054L) risultato="TPM_E_DAA_TPM_SETTINGS";
-	else
-	if (i_error==0x80280055L) risultato="TPM_E_DAA_STAGE";
-	else
-	if (i_error==0x80280056L) risultato="TPM_E_DAA_ISSUER_VALIDITY";
-	else
-	if (i_error==0x80280057L) risultato="TPM_E_DAA_WRONG_W";
-	else
-	if (i_error==0x80280058L) risultato="TPM_E_BAD_HANDLE";
-	else
-	if (i_error==0x80280059L) risultato="TPM_E_BAD_DELEGATE";
-	else
-	if (i_error==0x8028005AL) risultato="TPM_E_BADCONTEXT";
-	else
-	if (i_error==0x8028005BL) risultato="TPM_E_TOOMANYCONTEXTS";
-	else
-	if (i_error==0x8028005CL) risultato="TPM_E_MA_TICKET_SIGNATURE";
-	else
-	if (i_error==0x8028005DL) risultato="TPM_E_MA_DESTINATION";
-	else
-	if (i_error==0x8028005EL) risultato="TPM_E_MA_SOURCE";
-	else
-	if (i_error==0x8028005FL) risultato="TPM_E_MA_AUTHORITY";
-	else
-	if (i_error==0x80280061L) risultato="TPM_E_PERMANENTEK";
-	else
-	if (i_error==0x80280062L) risultato="TPM_E_BAD_SIGNATURE";
-	else
-	if (i_error==0x80280063L) risultato="TPM_E_NOCONTEXTSPACE";
-	else
-	if (i_error==0x80280400L) risultato="TPM_E_COMMAND_BLOCKED";
-	else
-	if (i_error==0x80280401L) risultato="TPM_E_INVALID_HANDLE";
-	else
-	if (i_error==0x80280402L) risultato="TPM_E_DUPLICATE_VHANDLE";
-	else
-	if (i_error==0x80280403L) risultato="TPM_E_EMBEDDED_COMMAND_BLOCKED";
-	else
-	if (i_error==0x80280404L) risultato="TPM_E_EMBEDDED_COMMAND_UNSUPPORTED";
-	else
-	if (i_error==0x80280800L) risultato="TPM_E_RETRY";
-	else
-	if (i_error==0x80280801L) risultato="TPM_E_NEEDS_SELFTEST";
-	else
-	if (i_error==0x80280802L) risultato="TPM_E_DOING_SELFTEST";
-	else
-	if (i_error==0x80280803L) risultato="TPM_E_DEFEND_LOCK_RUNNING";
-	else
-	if (i_error==0x80284001L) risultato="TBS_E_INTERNAL_ERROR";
-	else
-	if (i_error==0x80284002L) risultato="TBS_E_BAD_PARAMETER";
-	else
-	if (i_error==0x80284003L) risultato="TBS_E_INVALID_OUTPUT_POINTER";
-	else
-	if (i_error==0x80284004L) risultato="TBS_E_INVALID_CONTEXT";
-	else
-	if (i_error==0x80284005L) risultato="TBS_E_INSUFFICIENT_BUFFER";
-	else
-	if (i_error==0x80284006L) risultato="TBS_E_IOERROR";
-	else
-	if (i_error==0x80284007L) risultato="TBS_E_INVALID_CONTEXT_PARAM";
-	else
-	if (i_error==0x80284008L) risultato="TBS_E_SERVICE_NOT_RUNNING";
-	else
-	if (i_error==0x80284009L) risultato="TBS_E_TOO_MANY_TBS_CONTEXTS";
-	else
-	if (i_error==0x8028400AL) risultato="TBS_E_TOO_MANY_RESOURCES";
-	else
-	if (i_error==0x8028400BL) risultato="TBS_E_SERVICE_START_PENDING";
-	else
-	if (i_error==0x8028400CL) risultato="TBS_E_PPI_NOT_SUPPORTED";
-	else
-	if (i_error==0x8028400DL) risultato="TBS_E_COMMAND_CANCELED";
-	else
-	if (i_error==0x8028400EL) risultato="TBS_E_BUFFER_TOO_LARGE";
-	else
-	if (i_error==0x8028400FL) risultato="TBS_E_TPM_NOT_FOUND";
-	else
-	if (i_error==0x80284010L) risultato="TBS_E_SERVICE_DISABLED";
-	else
-	if (i_error==0x80284011L) risultato="TBS_E_NO_EVENT_LOG";
-	else
-	if (i_error==0x80284012L) risultato="TBS_E_ACCESS_DENIED";
-	else
-	if (i_error==0x80284013L) risultato="TBS_E_PROVISIONING_NOT_ALLOWED";
-	else
-	if (i_error==0x80284014L) risultato="TBS_E_PPI_FUNCTION_UNSUPPORTED";
-	else
-	if (i_error==0x80284015L) risultato="TBS_E_OWNERAUTH_NOT_FOUND";
-	else
-	if (i_error==0x80284016L) risultato="TBS_E_PROVISIONING_INCOMPLETE";
-	else
-	if (i_error==0x80290100L) risultato="TPMAPI_E_INVALID_STATE";
-	else
-	if (i_error==0x80290101L) risultato="TPMAPI_E_NOT_ENOUGH_DATA";
-	else
-	if (i_error==0x80290102L) risultato="TPMAPI_E_TOO_MUCH_DATA";
-	else
-	if (i_error==0x80290103L) risultato="TPMAPI_E_INVALID_OUTPUT_POINTER";
-	else
-	if (i_error==0x80290104L) risultato="TPMAPI_E_INVALID_PARAMETER";
-	else
-	if (i_error==0x80290105L) risultato="TPMAPI_E_OUT_OF_MEMORY";
-	else
-	if (i_error==0x80290106L) risultato="TPMAPI_E_BUFFER_TOO_SMALL";
-	else
-	if (i_error==0x80290107L) risultato="TPMAPI_E_INTERNAL_ERROR";
-	else
-	if (i_error==0x80290108L) risultato="TPMAPI_E_ACCESS_DENIED";
-	else
-	if (i_error==0x80290109L) risultato="TPMAPI_E_AUTHORIZATION_FAILED";
-	else
-	if (i_error==0x8029010AL) risultato="TPMAPI_E_INVALID_CONTEXT_HANDLE";
-	else
-	if (i_error==0x8029010BL) risultato="TPMAPI_E_TBS_COMMUNICATION_ERROR";
-	else
-	if (i_error==0x8029010CL) risultato="TPMAPI_E_TPM_COMMAND_ERROR";
-	else
-	if (i_error==0x8029010DL) risultato="TPMAPI_E_MESSAGE_TOO_LARGE";
-	else
-	if (i_error==0x8029010EL) risultato="TPMAPI_E_INVALID_ENCODING";
-	else
-	if (i_error==0x8029010FL) risultato="TPMAPI_E_INVALID_KEY_SIZE";
-	else
-	if (i_error==0x80290110L) risultato="TPMAPI_E_ENCRYPTION_FAILED";
-	else
-	if (i_error==0x80290111L) risultato="TPMAPI_E_INVALID_KEY_PARAMS";
-	else
-	if (i_error==0x80290112L) risultato="TPMAPI_E_INVALID_MIGRATION_AUTHORIZATION_BLOB";
-	else
-	if (i_error==0x80290113L) risultato="TPMAPI_E_INVALID_PCR_INDEX";
-	else
-	if (i_error==0x80290114L) risultato="TPMAPI_E_INVALID_DELEGATE_BLOB";
-	else
-	if (i_error==0x80290115L) risultato="TPMAPI_E_INVALID_CONTEXT_PARAMS";
-	else
-	if (i_error==0x80290116L) risultato="TPMAPI_E_INVALID_KEY_BLOB";
-	else
-	if (i_error==0x80290117L) risultato="TPMAPI_E_INVALID_PCR_DATA";
-	else
-	if (i_error==0x80290118L) risultato="TPMAPI_E_INVALID_OWNER_AUTH";
-	else
-	if (i_error==0x80290119L) risultato="TPMAPI_E_FIPS_RNG_CHECK_FAILED";
-	else
-	if (i_error==0x8029011AL) risultato="TPMAPI_E_EMPTY_TCG_LOG";
-	else
-	if (i_error==0x8029011BL) risultato="TPMAPI_E_INVALID_TCG_LOG_ENTRY";
-	else
-	if (i_error==0x8029011CL) risultato="TPMAPI_E_TCG_SEPARATOR_ABSENT";
-	else
-	if (i_error==0x8029011DL) risultato="TPMAPI_E_TCG_INVALID_DIGEST_ENTRY";
-	else
-	if (i_error==0x8029011EL) risultato="TPMAPI_E_POLICY_DENIES_OPERATION";
-	else
-	if (i_error==0x80290200L) risultato="TBSIMP_E_BUFFER_TOO_SMALL";
-	else
-	if (i_error==0x80290201L) risultato="TBSIMP_E_CLEANUP_FAILED";
-	else
-	if (i_error==0x80290202L) risultato="TBSIMP_E_INVALID_CONTEXT_HANDLE";
-	else
-	if (i_error==0x80290203L) risultato="TBSIMP_E_INVALID_CONTEXT_PARAM";
-	else
-	if (i_error==0x80290204L) risultato="TBSIMP_E_TPM_ERROR";
-	else
-	if (i_error==0x80290205L) risultato="TBSIMP_E_HASH_BAD_KEY";
-	else
-	if (i_error==0x80290206L) risultato="TBSIMP_E_DUPLICATE_VHANDLE";
-	else
-	if (i_error==0x80290207L) risultato="TBSIMP_E_INVALID_OUTPUT_POINTER";
-	else
-	if (i_error==0x80290208L) risultato="TBSIMP_E_INVALID_PARAMETER";
-	else
-	if (i_error==0x80290209L) risultato="TBSIMP_E_RPC_INIT_FAILED";
-	else
-	if (i_error==0x8029020AL) risultato="TBSIMP_E_SCHEDULER_NOT_RUNNING";
-	else
-	if (i_error==0x8029020BL) risultato="TBSIMP_E_COMMAND_CANCELED";
-	else
-	if (i_error==0x8029020CL) risultato="TBSIMP_E_OUT_OF_MEMORY";
-	else
-	if (i_error==0x8029020DL) risultato="TBSIMP_E_LISTNO_MORE_ITEMS";
-	else
-	if (i_error==0x8029020EL) risultato="TBSIMP_E_LISTNOT_FOUND";
-	else
-	if (i_error==0x8029020FL) risultato="TBSIMP_E_NOT_ENOUGH_SPACE";
-	else
-	if (i_error==0x80290210L) risultato="TBSIMP_E_NOT_ENOUGH_TPM_CONTEXTS";
-	else
-	if (i_error==0x80290211L) risultato="TBSIMP_E_COMMAND_FAILED";
-	else
-	if (i_error==0x80290212L) risultato="TBSIMP_E_UNKNOWN_ORDINAL";
-	else
-	if (i_error==0x80290213L) risultato="TBSIMP_E_RESOURCE_EXPIRED";
-	else
-	if (i_error==0x80290214L) risultato="TBSIMP_E_INVALID_RESOURCE";
-	else
-	if (i_error==0x80290215L) risultato="TBSIMP_E_NOTHING_TO_UNLOAD";
-	else
-	if (i_error==0x80290216L) risultato="TBSIMP_E_HASH_TABLE_FULL";
-	else
-	if (i_error==0x80290217L) risultato="TBSIMP_E_TOO_MANY_TBS_CONTEXTS";
-	else
-	if (i_error==0x80290218L) risultato="TBSIMP_E_TOO_MANY_RESOURCES";
-	else
-	if (i_error==0x80290219L) risultato="TBSIMP_E_PPI_NOT_SUPPORTED";
-	else
-	if (i_error==0x8029021AL) risultato="TBSIMP_E_TPM_INCOMPATIBLE";
-	else
-	if (i_error==0x8029021BL) risultato="TBSIMP_E_NO_EVENT_LOG";
-	else
-	if (i_error==0x80290300L) risultato="TPM_E_PPI_ACPI_FAILURE";
-	else
-	if (i_error==0x80290301L) risultato="TPM_E_PPI_USER_ABORT";
-	else
-	if (i_error==0x80290302L) risultato="TPM_E_PPI_BIOS_FAILURE";
-	else
-	if (i_error==0x80290303L) risultato="TPM_E_PPI_NOT_SUPPORTED";
-	else
-	if (i_error==0x80290304L) risultato="TPM_E_PPI_BLOCKED_IN_BIOS";
-	else
-	if (i_error==0x80290400L) risultato="TPM_E_PCP_ERROR_MASK";
-	else
-	if (i_error==0x80290401L) risultato="TPM_E_PCP_DEVICE_NOT_READY";
-	else
-	if (i_error==0x80290402L) risultato="TPM_E_PCP_INVALID_HANDLE";
-	else
-	if (i_error==0x80290403L) risultato="TPM_E_PCP_INVALID_PARAMETER";
-	else
-	if (i_error==0x80290404L) risultato="TPM_E_PCP_FLAG_NOT_SUPPORTED";
-	else
-	if (i_error==0x80290405L) risultato="TPM_E_PCP_NOT_SUPPORTED";
-	else
-	if (i_error==0x80290406L) risultato="TPM_E_PCP_BUFFER_TOO_SMALL";
-	else
-	if (i_error==0x80290407L) risultato="TPM_E_PCP_INTERNAL_ERROR";
-	else
-	if (i_error==0x80290408L) risultato="TPM_E_PCP_AUTHENTICATION_FAILED";
-	else
-	if (i_error==0x80290409L) risultato="TPM_E_PCP_AUTHENTICATION_IGNORED";
-	else
-	if (i_error==0x8029040AL) risultato="TPM_E_PCP_POLICY_NOT_FOUND";
-	else
-	if (i_error==0x8029040BL) risultato="TPM_E_PCP_PROFILE_NOT_FOUND";
-	else
-	if (i_error==0x8029040CL) risultato="TPM_E_PCP_VALIDATION_FAILED";
-	else
-	if (i_error==0x80300002L) risultato="PLA_E_DCS_NOT_FOUND";
-	else
-	if (i_error==0x803000AAL) risultato="PLA_E_DCS_IN_USE";
-	else
-	if (i_error==0x80300045L) risultato="PLA_E_TOO_MANY_FOLDERS";
-	else
-	if (i_error==0x80300070L) risultato="PLA_E_NO_MIN_DISK";
-	else
-	if (i_error==0x803000B7L) risultato="PLA_E_DCS_ALREADY_EXISTS";
-	else
-	if (i_error==0x00300100L) risultato="PLA_S_PROPERTY_IGNORED";
-	else
-	if (i_error==0x80300101L) risultato="PLA_E_PROPERTY_CONFLICT";
-	else
-	if (i_error==0x80300102L) risultato="PLA_E_DCS_SINGLETON_REQUIRED";
-	else
-	if (i_error==0x80300103L) risultato="PLA_E_CREDENTIALS_REQUIRED";
-	else
-	if (i_error==0x80300104L) risultato="PLA_E_DCS_NOT_RUNNING";
-	else
-	if (i_error==0x80300105L) risultato="PLA_E_CONFLICT_INCL_EXCL_API";
-	else
-	if (i_error==0x80300106L) risultato="PLA_E_NETWORK_EXE_NOT_VALID";
-	else
-	if (i_error==0x80300107L) risultato="PLA_E_EXE_ALREADY_CONFIGURED";
-	else
-	if (i_error==0x80300108L) risultato="PLA_E_EXE_PATH_NOT_VALID";
-	else
-	if (i_error==0x80300109L) risultato="PLA_E_DC_ALREADY_EXISTS";
-	else
-	if (i_error==0x8030010AL) risultato="PLA_E_DCS_START_WAIT_TIMEOUT";
-	else
-	if (i_error==0x8030010BL) risultato="PLA_E_DC_START_WAIT_TIMEOUT";
-	else
-	if (i_error==0x8030010CL) risultato="PLA_E_REPORT_WAIT_TIMEOUT";
-	else
-	if (i_error==0x8030010DL) risultato="PLA_E_NO_DUPLICATES";
-	else
-	if (i_error==0x8030010EL) risultato="PLA_E_EXE_FULL_PATH_REQUIRED";
-	else
-	if (i_error==0x8030010FL) risultato="PLA_E_INVALID_SESSION_NAME";
-	else
-	if (i_error==0x80300110L) risultato="PLA_E_PLA_CHANNEL_NOT_ENABLED";
-	else
-	if (i_error==0x80300111L) risultato="PLA_E_TASKSCHED_CHANNEL_NOT_ENABLED";
-	else
-	if (i_error==0x80300112L) risultato="PLA_E_RULES_MANAGER_FAILED";
-	else
-	if (i_error==0x80300113L) risultato="PLA_E_CABAPI_FAILURE";
-	else
-	if (i_error==0x80310000L) risultato="FVE_E_LOCKED_VOLUME";
-	else
-	if (i_error==0x80310001L) risultato="FVE_E_NOT_ENCRYPTED";
-	else
-	if (i_error==0x80310002L) risultato="FVE_E_NO_TPM_BIOS";
-	else
-	if (i_error==0x80310003L) risultato="FVE_E_NO_MBR_METRIC";
-	else
-	if (i_error==0x80310004L) risultato="FVE_E_NO_BOOTSECTOR_METRIC";
-	else
-	if (i_error==0x80310005L) risultato="FVE_E_NO_BOOTMGR_METRIC";
-	else
-	if (i_error==0x80310006L) risultato="FVE_E_WRONG_BOOTMGR";
-	else
-	if (i_error==0x80310007L) risultato="FVE_E_SECURE_KEY_REQUIRED";
-	else
-	if (i_error==0x80310008L) risultato="FVE_E_NOT_ACTIVATED";
-	else
-	if (i_error==0x80310009L) risultato="FVE_E_ACTION_NOT_ALLOWED";
-	else
-	if (i_error==0x8031000AL) risultato="FVE_E_AD_SCHEMA_NOT_INSTALLED";
-	else
-	if (i_error==0x8031000BL) risultato="FVE_E_AD_INVALID_DATATYPE";
-	else
-	if (i_error==0x8031000CL) risultato="FVE_E_AD_INVALID_DATASIZE";
-	else
-	if (i_error==0x8031000DL) risultato="FVE_E_AD_NO_VALUES";
-	else
-	if (i_error==0x8031000EL) risultato="FVE_E_AD_ATTR_NOT_SET";
-	else
-	if (i_error==0x8031000FL) risultato="FVE_E_AD_GUID_NOT_FOUND";
-	else
-	if (i_error==0x80310010L) risultato="FVE_E_BAD_INFORMATION";
-	else
-	if (i_error==0x80310011L) risultato="FVE_E_TOO_SMALL";
-	else
-	if (i_error==0x80310012L) risultato="FVE_E_SYSTEM_VOLUME";
-	else
-	if (i_error==0x80310013L) risultato="FVE_E_FAILED_WRONG_FS";
-	else
-	if (i_error==0x80310014L) risultato="FVE_E_BAD_PARTITION_SIZE";
-	else
-	if (i_error==0x80310015L) risultato="FVE_E_NOT_SUPPORTED";
-	else
-	if (i_error==0x80310016L) risultato="FVE_E_BAD_DATA";
-	else
-	if (i_error==0x80310017L) risultato="FVE_E_VOLUME_NOT_BOUND";
-	else
-	if (i_error==0x80310018L) risultato="FVE_E_TPM_NOT_OWNED";
-	else
-	if (i_error==0x80310019L) risultato="FVE_E_NOT_DATA_VOLUME";
-	else
-	if (i_error==0x8031001AL) risultato="FVE_E_AD_INSUFFICIENT_BUFFER";
-	else
-	if (i_error==0x8031001BL) risultato="FVE_E_CONV_READ";
-	else
-	if (i_error==0x8031001CL) risultato="FVE_E_CONV_WRITE";
-	else
-	if (i_error==0x8031001DL) risultato="FVE_E_KEY_REQUIRED";
-	else
-	if (i_error==0x8031001EL) risultato="FVE_E_CLUSTERING_NOT_SUPPORTED";
-	else
-	if (i_error==0x8031001FL) risultato="FVE_E_VOLUME_BOUND_ALREADY";
-	else
-	if (i_error==0x80310020L) risultato="FVE_E_OS_NOT_PROTECTED";
-	else
-	if (i_error==0x80310021L) risultato="FVE_E_PROTECTION_DISABLED";
-	else
-	if (i_error==0x80310022L) risultato="FVE_E_RECOVERY_KEY_REQUIRED";
-	else
-	if (i_error==0x80310023L) risultato="FVE_E_FOREIGN_VOLUME";
-	else
-	if (i_error==0x80310024L) risultato="FVE_E_OVERLAPPED_UPDATE";
-	else
-	if (i_error==0x80310025L) risultato="FVE_E_TPM_SRK_AUTH_NOT_ZERO";
-	else
-	if (i_error==0x80310026L) risultato="FVE_E_FAILED_SECTOR_SIZE";
-	else
-	if (i_error==0x80310027L) risultato="FVE_E_FAILED_AUTHENTICATION";
-	else
-	if (i_error==0x80310028L) risultato="FVE_E_NOT_OS_VOLUME";
-	else
-	if (i_error==0x80310029L) risultato="FVE_E_AUTOUNLOCK_ENABLED";
-	else
-	if (i_error==0x8031002AL) risultato="FVE_E_WRONG_BOOTSECTOR";
-	else
-	if (i_error==0x8031002BL) risultato="FVE_E_WRONG_SYSTEM_FS";
-	else
-	if (i_error==0x8031002CL) risultato="FVE_E_POLICY_PASSWORD_REQUIRED";
-	else
-	if (i_error==0x8031002DL) risultato="FVE_E_CANNOT_SET_FVEK_ENCRYPTED";
-	else
-	if (i_error==0x8031002EL) risultato="FVE_E_CANNOT_ENCRYPT_NO_KEY";
-	else
-	if (i_error==0x80310030L) risultato="FVE_E_BOOTABLE_CDDVD";
-	else
-	if (i_error==0x80310031L) risultato="FVE_E_PROTECTOR_EXISTS";
-	else
-	if (i_error==0x80310032L) risultato="FVE_E_RELATIVE_PATH";
-	else
-	if (i_error==0x80310033L) risultato="FVE_E_PROTECTOR_NOT_FOUND";
-	else
-	if (i_error==0x80310034L) risultato="FVE_E_INVALID_KEY_FORMAT";
-	else
-	if (i_error==0x80310035L) risultato="FVE_E_INVALID_PASSWORD_FORMAT";
-	else
-	if (i_error==0x80310036L) risultato="FVE_E_FIPS_RNG_CHECK_FAILED";
-	else
-	if (i_error==0x80310037L) risultato="FVE_E_FIPS_PREVENTS_RECOVERY_PASSWORD";
-	else
-	if (i_error==0x80310038L) risultato="FVE_E_FIPS_PREVENTS_EXTERNAL_KEY_EXPORT";
-	else
-	if (i_error==0x80310039L) risultato="FVE_E_NOT_DECRYPTED";
-	else
-	if (i_error==0x8031003AL) risultato="FVE_E_INVALID_PROTECTOR_TYPE";
-	else
-	if (i_error==0x8031003BL) risultato="FVE_E_NO_PROTECTORS_TO_TEST";
-	else
-	if (i_error==0x8031003CL) risultato="FVE_E_KEYFILE_NOT_FOUND";
-	else
-	if (i_error==0x8031003DL) risultato="FVE_E_KEYFILE_INVALID";
-	else
-	if (i_error==0x8031003EL) risultato="FVE_E_KEYFILE_NO_VMK";
-	else
-	if (i_error==0x8031003FL) risultato="FVE_E_TPM_DISABLED";
-	else
-	if (i_error==0x80310040L) risultato="FVE_E_NOT_ALLOWED_IN_SAFE_MODE";
-	else
-	if (i_error==0x80310041L) risultato="FVE_E_TPM_INVALID_PCR";
-	else
-	if (i_error==0x80310042L) risultato="FVE_E_TPM_NO_VMK";
-	else
-	if (i_error==0x80310043L) risultato="FVE_E_PIN_INVALID";
-	else
-	if (i_error==0x80310044L) risultato="FVE_E_AUTH_INVALID_APPLICATION";
-	else
-	if (i_error==0x80310045L) risultato="FVE_E_AUTH_INVALID_CONFIG";
-	else
-	if (i_error==0x80310046L) risultato="FVE_E_FIPS_DISABLE_PROTECTION_NOT_ALLOWED";
-	else
-	if (i_error==0x80310047L) risultato="FVE_E_FS_NOT_EXTENDED";
-	else
-	if (i_error==0x80310048L) risultato="FVE_E_FIRMWARE_TYPE_NOT_SUPPORTED";
-	else
-	if (i_error==0x80310049L) risultato="FVE_E_NO_LICENSE";
-	else
-	if (i_error==0x8031004AL) risultato="FVE_E_NOT_ON_STACK";
-	else
-	if (i_error==0x8031004BL) risultato="FVE_E_FS_MOUNTED";
-	else
-	if (i_error==0x8031004CL) risultato="FVE_E_TOKEN_NOT_IMPERSONATED";
-	else
-	if (i_error==0x8031004DL) risultato="FVE_E_DRY_RUN_FAILED";
-	else
-	if (i_error==0x8031004EL) risultato="FVE_E_REBOOT_REQUIRED";
-	else
-	if (i_error==0x8031004FL) risultato="FVE_E_DEBUGGER_ENABLED";
-	else
-	if (i_error==0x80310050L) risultato="FVE_E_RAW_ACCESS";
-	else
-	if (i_error==0x80310051L) risultato="FVE_E_RAW_BLOCKED";
-	else
-	if (i_error==0x80310052L) risultato="FVE_E_BCD_APPLICATIONS_PATH_INCORRECT";
-	else
-	if (i_error==0x80310053L) risultato="FVE_E_NOT_ALLOWED_IN_VERSION";
-	else
-	if (i_error==0x80310054L) risultato="FVE_E_NO_AUTOUNLOCK_MASTER_KEY";
-	else
-	if (i_error==0x80310055L) risultato="FVE_E_MOR_FAILED";
-	else
-	if (i_error==0x80310056L) risultato="FVE_E_HIDDEN_VOLUME";
-	else
-	if (i_error==0x80310057L) risultato="FVE_E_TRANSIENT_STATE";
-	else
-	if (i_error==0x80310058L) risultato="FVE_E_PUBKEY_NOT_ALLOWED";
-	else
-	if (i_error==0x80310059L) risultato="FVE_E_VOLUME_HANDLE_OPEN";
-	else
-	if (i_error==0x8031005AL) risultato="FVE_E_NO_FEATURE_LICENSE";
-	else
-	if (i_error==0x8031005BL) risultato="FVE_E_INVALID_STARTUP_OPTIONS";
-	else
-	if (i_error==0x8031005CL) risultato="FVE_E_POLICY_RECOVERY_PASSWORD_NOT_ALLOWED";
-	else
-	if (i_error==0x8031005DL) risultato="FVE_E_POLICY_RECOVERY_PASSWORD_REQUIRED";
-	else
-	if (i_error==0x8031005EL) risultato="FVE_E_POLICY_RECOVERY_KEY_NOT_ALLOWED";
-	else
-	if (i_error==0x8031005FL) risultato="FVE_E_POLICY_RECOVERY_KEY_REQUIRED";
-	else
-	if (i_error==0x80310060L) risultato="FVE_E_POLICY_STARTUP_PIN_NOT_ALLOWED";
-	else
-	if (i_error==0x80310061L) risultato="FVE_E_POLICY_STARTUP_PIN_REQUIRED";
-	else
-	if (i_error==0x80310062L) risultato="FVE_E_POLICY_STARTUP_KEY_NOT_ALLOWED";
-	else
-	if (i_error==0x80310063L) risultato="FVE_E_POLICY_STARTUP_KEY_REQUIRED";
-	else
-	if (i_error==0x80310064L) risultato="FVE_E_POLICY_STARTUP_PIN_KEY_NOT_ALLOWED";
-	else
-	if (i_error==0x80310065L) risultato="FVE_E_POLICY_STARTUP_PIN_KEY_REQUIRED";
-	else
-	if (i_error==0x80310066L) risultato="FVE_E_POLICY_STARTUP_TPM_NOT_ALLOWED";
-	else
-	if (i_error==0x80310067L) risultato="FVE_E_POLICY_STARTUP_TPM_REQUIRED";
-	else
-	if (i_error==0x80310068L) risultato="FVE_E_POLICY_INVALID_PIN_LENGTH";
-	else
-	if (i_error==0x80310069L) risultato="FVE_E_KEY_PROTECTOR_NOT_SUPPORTED";
-	else
-	if (i_error==0x8031006AL) risultato="FVE_E_POLICY_PASSPHRASE_NOT_ALLOWED";
-	else
-	if (i_error==0x8031006BL) risultato="FVE_E_POLICY_PASSPHRASE_REQUIRED";
-	else
-	if (i_error==0x8031006CL) risultato="FVE_E_FIPS_PREVENTS_PASSPHRASE";
-	else
-	if (i_error==0x8031006DL) risultato="FVE_E_OS_VOLUME_PASSPHRASE_NOT_ALLOWED";
-	else
-	if (i_error==0x8031006EL) risultato="FVE_E_INVALID_BITLOCKER_OID";
-	else
-	if (i_error==0x8031006FL) risultato="FVE_E_VOLUME_TOO_SMALL";
-	else
-	if (i_error==0x80310070L) risultato="FVE_E_DV_NOT_SUPPORTED_ON_FS";
-	else
-	if (i_error==0x80310071L) risultato="FVE_E_DV_NOT_ALLOWED_BY_GP";
-	else
-	if (i_error==0x80310072L) risultato="FVE_E_POLICY_USER_CERTIFICATE_NOT_ALLOWED";
-	else
-	if (i_error==0x80310073L) risultato="FVE_E_POLICY_USER_CERTIFICATE_REQUIRED";
-	else
-	if (i_error==0x80310074L) risultato="FVE_E_POLICY_USER_CERT_MUST_BE_HW";
-	else
-	if (i_error==0x80310075L) risultato="FVE_E_POLICY_USER_CONFIGURE_FDV_AUTOUNLOCK_NOT_ALLOWED";
-	else
-	if (i_error==0x80310076L) risultato="FVE_E_POLICY_USER_CONFIGURE_RDV_AUTOUNLOCK_NOT_ALLOWED";
-	else
-	if (i_error==0x80310077L) risultato="FVE_E_POLICY_USER_CONFIGURE_RDV_NOT_ALLOWED";
-	else
-	if (i_error==0x80310078L) risultato="FVE_E_POLICY_USER_ENABLE_RDV_NOT_ALLOWED";
-	else
-	if (i_error==0x80310079L) risultato="FVE_E_POLICY_USER_DISABLE_RDV_NOT_ALLOWED";
-	else
-	if (i_error==0x80310080L) risultato="FVE_E_POLICY_INVALID_PASSPHRASE_LENGTH";
-	else
-	if (i_error==0x80310081L) risultato="FVE_E_POLICY_PASSPHRASE_TOO_SIMPLE";
-	else
-	if (i_error==0x80310082L) risultato="FVE_E_RECOVERY_PARTITION";
-	else
-	if (i_error==0x80310083L) risultato="FVE_E_POLICY_CONFLICT_FDV_RK_OFF_AUK_ON";
-	else
-	if (i_error==0x80310084L) risultato="FVE_E_POLICY_CONFLICT_RDV_RK_OFF_AUK_ON";
-	else
-	if (i_error==0x80310085L) risultato="FVE_E_NON_BITLOCKER_OID";
-	else
-	if (i_error==0x80310086L) risultato="FVE_E_POLICY_PROHIBITS_SELFSIGNED";
-	else
-	if (i_error==0x80310087L) risultato="FVE_E_POLICY_CONFLICT_RO_AND_STARTUP_KEY_REQUIRED";
-	else
-	if (i_error==0x80310088L) risultato="FVE_E_CONV_RECOVERY_FAILED";
-	else
-	if (i_error==0x80310089L) risultato="FVE_E_VIRTUALIZED_SPACE_TOO_BIG";
-	else
-	if (i_error==0x80310090L) risultato="FVE_E_POLICY_CONFLICT_OSV_RP_OFF_ADB_ON";
-	else
-	if (i_error==0x80310091L) risultato="FVE_E_POLICY_CONFLICT_FDV_RP_OFF_ADB_ON";
-	else
-	if (i_error==0x80310092L) risultato="FVE_E_POLICY_CONFLICT_RDV_RP_OFF_ADB_ON";
-	else
-	if (i_error==0x80310093L) risultato="FVE_E_NON_BITLOCKER_KU";
-	else
-	if (i_error==0x80310094L) risultato="FVE_E_PRIVATEKEY_AUTH_FAILED";
-	else
-	if (i_error==0x80310095L) risultato="FVE_E_REMOVAL_OF_DRA_FAILED";
-	else
-	if (i_error==0x80310096L) risultato="FVE_E_OPERATION_NOT_SUPPORTED_ON_VISTA_VOLUME";
-	else
-	if (i_error==0x80310097L) risultato="FVE_E_CANT_LOCK_AUTOUNLOCK_ENABLED_VOLUME";
-	else
-	if (i_error==0x80310098L) risultato="FVE_E_FIPS_HASH_KDF_NOT_ALLOWED";
-	else
-	if (i_error==0x80310099L) risultato="FVE_E_ENH_PIN_INVALID";
-	else
-	if (i_error==0x8031009AL) risultato="FVE_E_INVALID_PIN_CHARS";
-	else
-	if (i_error==0x8031009BL) risultato="FVE_E_INVALID_DATUM_TYPE";
-	else
-	if (i_error==0x8031009CL) risultato="FVE_E_EFI_ONLY";
-	else
-	if (i_error==0x8031009DL) risultato="FVE_E_MULTIPLE_NKP_CERTS";
-	else
-	if (i_error==0x8031009EL) risultato="FVE_E_REMOVAL_OF_NKP_FAILED";
-	else
-	if (i_error==0x8031009FL) risultato="FVE_E_INVALID_NKP_CERT";
-	else
-	if (i_error==0x803100A0L) risultato="FVE_E_NO_EXISTING_PIN";
-	else
-	if (i_error==0x803100A1L) risultato="FVE_E_PROTECTOR_CHANGE_PIN_MISMATCH";
-	else
-	if (i_error==0x803100A2L) risultato="FVE_E_PIN_PROTECTOR_CHANGE_BY_STD_USER_DISALLOWED";
-	else
-	if (i_error==0x803100A3L) risultato="FVE_E_PROTECTOR_CHANGE_MAX_PIN_CHANGE_ATTEMPTS_REACHED";
-	else
-	if (i_error==0x803100A4L) risultato="FVE_E_POLICY_PASSPHRASE_REQUIRES_ASCII";
-	else
-	if (i_error==0x803100A5L) risultato="FVE_E_FULL_ENCRYPTION_NOT_ALLOWED_ON_TP_STORAGE";
-	else
-	if (i_error==0x803100A6L) risultato="FVE_E_WIPE_NOT_ALLOWED_ON_TP_STORAGE";
-	else
-	if (i_error==0x803100A7L) risultato="FVE_E_KEY_LENGTH_NOT_SUPPORTED_BY_EDRIVE";
-	else
-	if (i_error==0x803100A8L) risultato="FVE_E_NO_EXISTING_PASSPHRASE";
-	else
-	if (i_error==0x803100A9L) risultato="FVE_E_PROTECTOR_CHANGE_PASSPHRASE_MISMATCH";
-	else
-	if (i_error==0x803100AAL) risultato="FVE_E_PASSPHRASE_TOO_LONG";
-	else
-	if (i_error==0x803100ABL) risultato="FVE_E_NO_PASSPHRASE_WITH_TPM";
-	else
-	if (i_error==0x803100ACL) risultato="FVE_E_NO_TPM_WITH_PASSPHRASE";
-	else
-	if (i_error==0x803100ADL) risultato="FVE_E_NOT_ALLOWED_ON_CSV_STACK";
-	else
-	if (i_error==0x803100AEL) risultato="FVE_E_NOT_ALLOWED_ON_CLUSTER";
-	else
-	if (i_error==0x803100AFL) risultato="FVE_E_EDRIVE_NO_FAILOVER_TO_SW";
-	else
-	if (i_error==0x803100B0L) risultato="FVE_E_EDRIVE_BAND_IN_USE";
-	else
-	if (i_error==0x803100B1L) risultato="FVE_E_EDRIVE_DISALLOWED_BY_GP";
-	else
-	if (i_error==0x803100B2L) risultato="FVE_E_EDRIVE_INCOMPATIBLE_VOLUME";
-	else
-	if (i_error==0x803100B3L) risultato="FVE_E_NOT_ALLOWED_TO_UPGRADE_WHILE_CONVERTING";
-	else
-	if (i_error==0x803100B4L) risultato="FVE_E_EDRIVE_DV_NOT_SUPPORTED";
-	else
-	if (i_error==0x803100B5L) risultato="FVE_E_NO_PREBOOT_KEYBOARD_DETECTED";
-	else
-	if (i_error==0x803100B6L) risultato="FVE_E_NO_PREBOOT_KEYBOARD_OR_WINRE_DETECTED";
-	else
-	if (i_error==0x803100B7L) risultato="FVE_E_POLICY_REQUIRES_STARTUP_PIN_ON_TOUCH_DEVICE";
-	else
-	if (i_error==0x803100B8L) risultato="FVE_E_POLICY_REQUIRES_RECOVERY_PASSWORD_ON_TOUCH_DEVICE";
-	else
-	if (i_error==0x803100B9L) risultato="FVE_E_WIPE_CANCEL_NOT_APPLICABLE";
-	else
-	if (i_error==0x803100BAL) risultato="FVE_E_SECUREBOOT_DISABLED";
-	else
-	if (i_error==0x803100BBL) risultato="FVE_E_SECUREBOOT_CONFIGURATION_INVALID";
-	else
-	if (i_error==0x803100BCL) risultato="FVE_E_EDRIVE_DRY_RUN_FAILED";
-	else
-	if (i_error==0x803100BDL) risultato="FVE_E_SHADOW_COPY_PRESENT";
-	else
-	if (i_error==0x803100BEL) risultato="FVE_E_POLICY_INVALID_ENHANCED_BCD_SETTINGS";
-	else
-	if (i_error==0x803100BFL) risultato="FVE_E_EDRIVE_INCOMPATIBLE_FIRMWARE";
-	else
-	if (i_error==0x803100C0L) risultato="FVE_E_PROTECTOR_CHANGE_MAX_PASSPHRASE_CHANGE_ATTEMPTS_REACHED";
-	else
-	if (i_error==0x803100C1L) risultato="FVE_E_PASSPHRASE_PROTECTOR_CHANGE_BY_STD_USER_DISALLOWED";
-	else
-	if (i_error==0x803100C2L) risultato="FVE_E_LIVEID_ACCOUNT_SUSPENDED";
-	else
-	if (i_error==0x803100C3L) risultato="FVE_E_LIVEID_ACCOUNT_BLOCKED";
-	else
-	if (i_error==0x803100C4L) risultato="FVE_E_NOT_PROVISIONED_ON_ALL_VOLUMES";
-	else
-	if (i_error==0x803100C5L) risultato="FVE_E_DE_FIXED_DATA_NOT_SUPPORTED";
-	else
-	if (i_error==0x803100C6L) risultato="FVE_E_DE_HARDWARE_NOT_COMPLIANT";
-	else
-	if (i_error==0x803100C7L) risultato="FVE_E_DE_WINRE_NOT_CONFIGURED";
-	else
-	if (i_error==0x803100C8L) risultato="FVE_E_DE_PROTECTION_SUSPENDED";
-	else
-	if (i_error==0x803100C9L) risultato="FVE_E_DE_OS_VOLUME_NOT_PROTECTED";
-	else
-	if (i_error==0x803100CAL) risultato="FVE_E_DE_DEVICE_LOCKEDOUT";
-	else
-	if (i_error==0x803100CBL) risultato="FVE_E_DE_PROTECTION_NOT_YET_ENABLED";
-	else
-	if (i_error==0x803100CCL) risultato="FVE_E_INVALID_PIN_CHARS_DETAILED";
-	else
-	if (i_error==0x803100CDL) risultato="FVE_E_DEVICE_LOCKOUT_COUNTER_UNAVAILABLE";
-	else
-	if (i_error==0x803100CEL) risultato="FVE_E_DEVICELOCKOUT_COUNTER_MISMATCH";
-	else
-	if (i_error==0x803100CFL) risultato="FVE_E_BUFFER_TOO_LARGE";
-	else
-	if (i_error==0x803100D0L) risultato="FVE_E_NO_SUCH_CAPABILITY_ON_TARGET";
-	else
-	if (i_error==0x803100D1L) risultato="FVE_E_DE_PREVENTED_FOR_OS";
-	else
-	if (i_error==0x803100D2L) risultato="FVE_E_DE_VOLUME_OPTED_OUT";
-	else
-	if (i_error==0x803100D3L) risultato="FVE_E_DE_VOLUME_NOT_SUPPORTED";
-	else
-	if (i_error==0x803100D4L) risultato="FVE_E_EOW_NOT_SUPPORTED_IN_VERSION";
-	else
-	if (i_error==0x803100D5L) risultato="FVE_E_ADBACKUP_NOT_ENABLED";
-	else
-	if (i_error==0x803100D6L) risultato="FVE_E_VOLUME_EXTEND_PREVENTS_EOW_DECRYPT";
-	else
-	if (i_error==0x803100D7L) risultato="FVE_E_NOT_DE_VOLUME";
-	else
-	if (i_error==0x803100D8L) risultato="FVE_E_PROTECTION_CANNOT_BE_DISABLED";
-	else
-	if (i_error==0x803100D9L) risultato="FVE_E_OSV_KSR_NOT_ALLOWED";
-	else
-	if (i_error==0x80320001L) risultato="FWP_E_CALLOUT_NOT_FOUND";
-	else
-	if (i_error==0x80320002L) risultato="FWP_E_CONDITION_NOT_FOUND";
-	else
-	if (i_error==0x80320003L) risultato="FWP_E_FILTER_NOT_FOUND";
-	else
-	if (i_error==0x80320004L) risultato="FWP_E_LAYER_NOT_FOUND";
-	else
-	if (i_error==0x80320005L) risultato="FWP_E_PROVIDER_NOT_FOUND";
-	else
-	if (i_error==0x80320006L) risultato="FWP_E_PROVIDER_CONTEXT_NOT_FOUND";
-	else
-	if (i_error==0x80320007L) risultato="FWP_E_SUBLAYER_NOT_FOUND";
-	else
-	if (i_error==0x80320008L) risultato="FWP_E_NOT_FOUND";
-	else
-	if (i_error==0x80320009L) risultato="FWP_E_ALREADY_EXISTS";
-	else
-	if (i_error==0x8032000AL) risultato="FWP_E_IN_USE";
-	else
-	if (i_error==0x8032000BL) risultato="FWP_E_DYNAMIC_SESSION_IN_PROGRESS";
-	else
-	if (i_error==0x8032000CL) risultato="FWP_E_WRONG_SESSION";
-	else
-	if (i_error==0x8032000DL) risultato="FWP_E_NO_TXN_IN_PROGRESS";
-	else
-	if (i_error==0x8032000EL) risultato="FWP_E_TXN_IN_PROGRESS";
-	else
-	if (i_error==0x8032000FL) risultato="FWP_E_TXN_ABORTED";
-	else
-	if (i_error==0x80320010L) risultato="FWP_E_SESSION_ABORTED";
-	else
-	if (i_error==0x80320011L) risultato="FWP_E_INCOMPATIBLE_TXN";
-	else
-	if (i_error==0x80320012L) risultato="FWP_E_TIMEOUT";
-	else
-	if (i_error==0x80320013L) risultato="FWP_E_NET_EVENTS_DISABLED";
-	else
-	if (i_error==0x80320014L) risultato="FWP_E_INCOMPATIBLE_LAYER";
-	else
-	if (i_error==0x80320015L) risultato="FWP_E_KM_CLIENTS_ONLY";
-	else
-	if (i_error==0x80320016L) risultato="FWP_E_LIFETIME_MISMATCH";
-	else
-	if (i_error==0x80320017L) risultato="FWP_E_BUILTIN_OBJECT";
-	else
-	if (i_error==0x80320018L) risultato="FWP_E_TOO_MANY_CALLOUTS";
-	else
-	if (i_error==0x80320019L) risultato="FWP_E_NOTIFICATION_DROPPED";
-	else
-	if (i_error==0x8032001AL) risultato="FWP_E_TRAFFIC_MISMATCH";
-	else
-	if (i_error==0x8032001BL) risultato="FWP_E_INCOMPATIBLE_SA_STATE";
-	else
-	if (i_error==0x8032001CL) risultato="FWP_E_NULL_POINTER";
-	else
-	if (i_error==0x8032001DL) risultato="FWP_E_INVALID_ENUMERATOR";
-	else
-	if (i_error==0x8032001EL) risultato="FWP_E_INVALID_FLAGS";
-	else
-	if (i_error==0x8032001FL) risultato="FWP_E_INVALID_NET_MASK";
-	else
-	if (i_error==0x80320020L) risultato="FWP_E_INVALID_RANGE";
-	else
-	if (i_error==0x80320021L) risultato="FWP_E_INVALID_INTERVAL";
-	else
-	if (i_error==0x80320022L) risultato="FWP_E_ZERO_LENGTH_ARRAY";
-	else
-	if (i_error==0x80320023L) risultato="FWP_E_NULL_DISPLAY_NAME";
-	else
-	if (i_error==0x80320024L) risultato="FWP_E_INVALID_ACTION_TYPE";
-	else
-	if (i_error==0x80320025L) risultato="FWP_E_INVALID_WEIGHT";
-	else
-	if (i_error==0x80320026L) risultato="FWP_E_MATCH_TYPE_MISMATCH";
-	else
-	if (i_error==0x80320027L) risultato="FWP_E_TYPE_MISMATCH";
-	else
-	if (i_error==0x80320028L) risultato="FWP_E_OUT_OF_BOUNDS";
-	else
-	if (i_error==0x80320029L) risultato="FWP_E_RESERVED";
-	else
-	if (i_error==0x8032002AL) risultato="FWP_E_DUPLICATE_CONDITION";
-	else
-	if (i_error==0x8032002BL) risultato="FWP_E_DUPLICATE_KEYMOD";
-	else
-	if (i_error==0x8032002CL) risultato="FWP_E_ACTION_INCOMPATIBLE_WITH_LAYER";
-	else
-	if (i_error==0x8032002DL) risultato="FWP_E_ACTION_INCOMPATIBLE_WITH_SUBLAYER";
-	else
-	if (i_error==0x8032002EL) risultato="FWP_E_CONTEXT_INCOMPATIBLE_WITH_LAYER";
-	else
-	if (i_error==0x8032002FL) risultato="FWP_E_CONTEXT_INCOMPATIBLE_WITH_CALLOUT";
-	else
-	if (i_error==0x80320030L) risultato="FWP_E_INCOMPATIBLE_AUTH_METHOD";
-	else
-	if (i_error==0x80320031L) risultato="FWP_E_INCOMPATIBLE_DH_GROUP";
-	else
-	if (i_error==0x80320032L) risultato="FWP_E_EM_NOT_SUPPORTED";
-	else
-	if (i_error==0x80320033L) risultato="FWP_E_NEVER_MATCH";
-	else
-	if (i_error==0x80320034L) risultato="FWP_E_PROVIDER_CONTEXT_MISMATCH";
-	else
-	if (i_error==0x80320035L) risultato="FWP_E_INVALID_PARAMETER";
-	else
-	if (i_error==0x80320036L) risultato="FWP_E_TOO_MANY_SUBLAYERS";
-	else
-	if (i_error==0x80320037L) risultato="FWP_E_CALLOUT_NOTIFICATION_FAILED";
-	else
-	if (i_error==0x80320038L) risultato="FWP_E_INVALID_AUTH_TRANSFORM";
-	else
-	if (i_error==0x80320039L) risultato="FWP_E_INVALID_CIPHER_TRANSFORM";
-	else
-	if (i_error==0x8032003AL) risultato="FWP_E_INCOMPATIBLE_CIPHER_TRANSFORM";
-	else
-	if (i_error==0x8032003BL) risultato="FWP_E_INVALID_TRANSFORM_COMBINATION";
-	else
-	if (i_error==0x8032003CL) risultato="FWP_E_DUPLICATE_AUTH_METHOD";
-	else
-	if (i_error==0x8032003DL) risultato="FWP_E_INVALID_TUNNEL_ENDPOINT";
-	else
-	if (i_error==0x8032003EL) risultato="FWP_E_L2_DRIVER_NOT_READY";
-	else
-	if (i_error==0x8032003FL) risultato="FWP_E_KEY_DICTATOR_ALREADY_REGISTERED";
-	else
-	if (i_error==0x80320040L) risultato="FWP_E_KEY_DICTATION_INVALID_KEYING_MATERIAL";
-	else
-	if (i_error==0x80320041L) risultato="FWP_E_CONNECTIONS_DISABLED";
-	else
-	if (i_error==0x80320042L) risultato="FWP_E_INVALID_DNS_NAME";
-	else
-	if (i_error==0x80320043L) risultato="FWP_E_STILL_ON";
-	else
-	if (i_error==0x80320044L) risultato="FWP_E_IKEEXT_NOT_RUNNING";
-	else
-	if (i_error==0x80320104L) risultato="FWP_E_DROP_NOICMP";
-	else
-	if (i_error==0x003D0000L) risultato="WS_S_ASYNC";
-	else
-	if (i_error==0x003D0001L) risultato="WS_S_END";
-	else
-	if (i_error==0x803D0000L) risultato="WS_E_INVALID_FORMAT";
-	else
-	if (i_error==0x803D0001L) risultato="WS_E_OBJECT_FAULTED";
-	else
-	if (i_error==0x803D0002L) risultato="WS_E_NUMERIC_OVERFLOW";
-	else
-	if (i_error==0x803D0003L) risultato="WS_E_INVALID_OPERATION";
-	else
-	if (i_error==0x803D0004L) risultato="WS_E_OPERATION_ABORTED";
-	else
-	if (i_error==0x803D0005L) risultato="WS_E_ENDPOINT_ACCESS_DENIED";
-	else
-	if (i_error==0x803D0006L) risultato="WS_E_OPERATION_TIMED_OUT";
-	else
-	if (i_error==0x803D0007L) risultato="WS_E_OPERATION_ABANDONED";
-	else
-	if (i_error==0x803D0008L) risultato="WS_E_QUOTA_EXCEEDED";
-	else
-	if (i_error==0x803D0009L) risultato="WS_E_NO_TRANSLATION_AVAILABLE";
-	else
-	if (i_error==0x803D000AL) risultato="WS_E_SECURITY_VERIFICATION_FAILURE";
-	else
-	if (i_error==0x803D000BL) risultato="WS_E_ADDRESS_IN_USE";
-	else
-	if (i_error==0x803D000CL) risultato="WS_E_ADDRESS_NOT_AVAILABLE";
-	else
-	if (i_error==0x803D000DL) risultato="WS_E_ENDPOINT_NOT_FOUND";
-	else
-	if (i_error==0x803D000EL) risultato="WS_E_ENDPOINT_NOT_AVAILABLE";
-	else
-	if (i_error==0x803D000FL) risultato="WS_E_ENDPOINT_FAILURE";
-	else
-	if (i_error==0x803D0010L) risultato="WS_E_ENDPOINT_UNREACHABLE";
-	else
-	if (i_error==0x803D0011L) risultato="WS_E_ENDPOINT_ACTION_NOT_SUPPORTED";
-	else
-	if (i_error==0x803D0012L) risultato="WS_E_ENDPOINT_TOO_BUSY";
-	else
-	if (i_error==0x803D0013L) risultato="WS_E_ENDPOINT_FAULT_RECEIVED";
-	else
-	if (i_error==0x803D0014L) risultato="WS_E_ENDPOINT_DISCONNECTED";
-	else
-	if (i_error==0x803D0015L) risultato="WS_E_PROXY_FAILURE";
-	else
-	if (i_error==0x803D0016L) risultato="WS_E_PROXY_ACCESS_DENIED";
-	else
-	if (i_error==0x803D0017L) risultato="WS_E_NOT_SUPPORTED";
-	else
-	if (i_error==0x803D0018L) risultato="WS_E_PROXY_REQUIRES_BASIC_AUTH";
-	else
-	if (i_error==0x803D0019L) risultato="WS_E_PROXY_REQUIRES_DIGEST_AUTH";
-	else
-	if (i_error==0x803D001AL) risultato="WS_E_PROXY_REQUIRES_NTLM_AUTH";
-	else
-	if (i_error==0x803D001BL) risultato="WS_E_PROXY_REQUIRES_NEGOTIATE_AUTH";
-	else
-	if (i_error==0x803D001CL) risultato="WS_E_SERVER_REQUIRES_BASIC_AUTH";
-	else
-	if (i_error==0x803D001DL) risultato="WS_E_SERVER_REQUIRES_DIGEST_AUTH";
-	else
-	if (i_error==0x803D001EL) risultato="WS_E_SERVER_REQUIRES_NTLM_AUTH";
-	else
-	if (i_error==0x803D001FL) risultato="WS_E_SERVER_REQUIRES_NEGOTIATE_AUTH";
-	else
-	if (i_error==0x803D0020L) risultato="WS_E_INVALID_ENDPOINT_URL";
-	else
-	if (i_error==0x803D0021L) risultato="WS_E_OTHER";
-	else
-	if (i_error==0x803D0022L) risultato="WS_E_SECURITY_TOKEN_EXPIRED";
-	else
-	if (i_error==0x803D0023L) risultato="WS_E_SECURITY_SYSTEM_FAILURE";
-	else
-	if (i_error==0x80340002L) risultato="ERROR_NDIS_INTERFACE_CLOSING";
-	else
-	if (i_error==0x80340004L) risultato="ERROR_NDIS_BAD_VERSION";
-	else
-	if (i_error==0x80340005L) risultato="ERROR_NDIS_BAD_CHARACTERISTICS";
-	else
-	if (i_error==0x80340006L) risultato="ERROR_NDIS_ADAPTER_NOT_FOUND";
-	else
-	if (i_error==0x80340007L) risultato="ERROR_NDIS_OPEN_FAILED";
-	else
-	if (i_error==0x80340008L) risultato="ERROR_NDIS_DEVICE_FAILED";
-	else
-	if (i_error==0x80340009L) risultato="ERROR_NDIS_MULTICAST_FULL";
-	else
-	if (i_error==0x8034000AL) risultato="ERROR_NDIS_MULTICAST_EXISTS";
-	else
-	if (i_error==0x8034000BL) risultato="ERROR_NDIS_MULTICAST_NOT_FOUND";
-	else
-	if (i_error==0x8034000CL) risultato="ERROR_NDIS_REQUEST_ABORTED";
-	else
-	if (i_error==0x8034000DL) risultato="ERROR_NDIS_RESET_IN_PROGRESS";
-	else
-	if (i_error==0x803400BBL) risultato="ERROR_NDIS_NOT_SUPPORTED";
-	else
-	if (i_error==0x8034000FL) risultato="ERROR_NDIS_INVALID_PACKET";
-	else
-	if (i_error==0x80340011L) risultato="ERROR_NDIS_ADAPTER_NOT_READY";
-	else
-	if (i_error==0x80340014L) risultato="ERROR_NDIS_INVALID_LENGTH";
-	else
-	if (i_error==0x80340015L) risultato="ERROR_NDIS_INVALID_DATA";
-	else
-	if (i_error==0x80340016L) risultato="ERROR_NDIS_BUFFER_TOO_SHORT";
-	else
-	if (i_error==0x80340017L) risultato="ERROR_NDIS_INVALID_OID";
-	else
-	if (i_error==0x80340018L) risultato="ERROR_NDIS_ADAPTER_REMOVED";
-	else
-	if (i_error==0x80340019L) risultato="ERROR_NDIS_UNSUPPORTED_MEDIA";
-	else
-	if (i_error==0x8034001AL) risultato="ERROR_NDIS_GROUP_ADDRESS_IN_USE";
-	else
-	if (i_error==0x8034001BL) risultato="ERROR_NDIS_FILE_NOT_FOUND";
-	else
-	if (i_error==0x8034001CL) risultato="ERROR_NDIS_ERROR_READING_FILE";
-	else
-	if (i_error==0x8034001DL) risultato="ERROR_NDIS_ALREADY_MAPPED";
-	else
-	if (i_error==0x8034001EL) risultato="ERROR_NDIS_RESOURCE_CONFLICT";
-	else
-	if (i_error==0x8034001FL) risultato="ERROR_NDIS_MEDIA_DISCONNECTED";
-	else
-	if (i_error==0x80340022L) risultato="ERROR_NDIS_INVALID_ADDRESS";
-	else
-	if (i_error==0x80340010L) risultato="ERROR_NDIS_INVALID_DEVICE_REQUEST";
-	else
-	if (i_error==0x8034002AL) risultato="ERROR_NDIS_PAUSED";
-	else
-	if (i_error==0x8034002BL) risultato="ERROR_NDIS_INTERFACE_NOT_FOUND";
-	else
-	if (i_error==0x8034002CL) risultato="ERROR_NDIS_UNSUPPORTED_REVISION";
-	else
-	if (i_error==0x8034002DL) risultato="ERROR_NDIS_INVALID_PORT";
-	else
-	if (i_error==0x8034002EL) risultato="ERROR_NDIS_INVALID_PORT_STATE";
-	else
-	if (i_error==0x8034002FL) risultato="ERROR_NDIS_LOW_POWER_STATE";
-	else
-	if (i_error==0x80340030L) risultato="ERROR_NDIS_REINIT_REQUIRED";
-	else
-	if (i_error==0x80342000L) risultato="ERROR_NDIS_DOT11_AUTO_CONFIG_ENABLED";
-	else
-	if (i_error==0x80342001L) risultato="ERROR_NDIS_DOT11_MEDIA_IN_USE";
-	else
-	if (i_error==0x80342002L) risultato="ERROR_NDIS_DOT11_POWER_STATE_INVALID";
-	else
-	if (i_error==0x80342003L) risultato="ERROR_NDIS_PM_WOL_PATTERN_LISTFULL";
-	else
-	if (i_error==0x80342004L) risultato="ERROR_NDIS_PM_PROTOCOL_OFFLOAD_LISTFULL";
-	else
-	if (i_error==0x80342005L) risultato="ERROR_NDIS_DOT11_AP_CHANNEL_CURRENTLY_NOT_AVAILABLE";
-	else
-	if (i_error==0x80342006L) risultato="ERROR_NDIS_DOT11_AP_BAND_CURRENTLY_NOT_AVAILABLE";
-	else
-	if (i_error==0x80342007L) risultato="ERROR_NDIS_DOT11_AP_CHANNEL_NOT_ALLOWED";
-	else
-	if (i_error==0x80342008L) risultato="ERROR_NDIS_DOT11_AP_BAND_NOT_ALLOWED";
-	else
-	if (i_error==0x00340001L) risultato="ERROR_NDIS_INDICATION_REQUIRED";
-	else
-	if (i_error==0xC034100FL) risultato="ERROR_NDIS_OFFLOAD_POLICY";
-	else
-	if (i_error==0xC0341012L) risultato="ERROR_NDIS_OFFLOAD_CONNECTION_REJECTED";
-	else
-	if (i_error==0xC0341013L) risultato="ERROR_NDIS_OFFLOAD_PATH_REJECTED";
-	else
-	if (i_error==0xC0350002L) risultato="ERROR_HV_INVALID_HYPERCALL_CODE";
-	else
-	if (i_error==0xC0350003L) risultato="ERROR_HV_INVALID_HYPERCALL_INPUT";
-	else
-	if (i_error==0xC0350004L) risultato="ERROR_HV_INVALID_ALIGNMENT";
-	else
-	if (i_error==0xC0350005L) risultato="ERROR_HV_INVALID_PARAMETER";
-	else
-	if (i_error==0xC0350006L) risultato="ERROR_HV_ACCESS_DENIED";
-	else
-	if (i_error==0xC0350007L) risultato="ERROR_HV_INVALID_PARTITION_STATE";
-	else
-	if (i_error==0xC0350008L) risultato="ERROR_HV_OPERATION_DENIED";
-	else
-	if (i_error==0xC0350009L) risultato="ERROR_HV_UNKNOWN_PROPERTY";
-	else
-	if (i_error==0xC035000AL) risultato="ERROR_HV_PROPERTY_VALUE_OUT_OF_RANGE";
-	else
-	if (i_error==0xC035000BL) risultato="ERROR_HV_INSUFFICIENT_MEMORY";
-	else
-	if (i_error==0xC035000CL) risultato="ERROR_HV_PARTITION_TOO_DEEP";
-	else
-	if (i_error==0xC035000DL) risultato="ERROR_HV_INVALID_PARTITION_ID";
-	else
-	if (i_error==0xC035000EL) risultato="ERROR_HV_INVALID_VP_INDEX";
-	else
-	if (i_error==0xC0350011L) risultato="ERROR_HV_INVALID_PORT_ID";
-	else
-	if (i_error==0xC0350012L) risultato="ERROR_HV_INVALID_CONNECTION_ID";
-	else
-	if (i_error==0xC0350013L) risultato="ERROR_HV_INSUFFICIENT_BUFFERS";
-	else
-	if (i_error==0xC0350014L) risultato="ERROR_HV_NOT_ACKNOWLEDGED";
-	else
-	if (i_error==0xC0350015L) risultato="ERROR_HV_INVALID_VP_STATE";
-	else
-	if (i_error==0xC0350016L) risultato="ERROR_HV_ACKNOWLEDGED";
-	else
-	if (i_error==0xC0350017L) risultato="ERROR_HV_INVALID_SAVE_RESTORE_STATE";
-	else
-	if (i_error==0xC0350018L) risultato="ERROR_HV_INVALID_SYNIC_STATE";
-	else
-	if (i_error==0xC0350019L) risultato="ERROR_HV_OBJECT_IN_USE";
-	else
-	if (i_error==0xC035001AL) risultato="ERROR_HV_INVALID_PROXIMITY_DOMAIN_INFO";
-	else
-	if (i_error==0xC035001BL) risultato="ERROR_HV_NO_DATA";
-	else
-	if (i_error==0xC035001CL) risultato="ERROR_HV_INACTIVE";
-	else
-	if (i_error==0xC035001DL) risultato="ERROR_HV_NO_RESOURCES";
-	else
-	if (i_error==0xC035001EL) risultato="ERROR_HV_FEATURE_UNAVAILABLE";
-	else
-	if (i_error==0xC0350033L) risultato="ERROR_HV_INSUFFICIENT_BUFFER";
-	else
-	if (i_error==0xC0350038L) risultato="ERROR_HV_INSUFFICIENT_DEVICE_DOMAINS";
-	else
-	if (i_error==0xC035003CL) risultato="ERROR_HV_CPUID_FEATURE_VALIDATION";
-	else
-	if (i_error==0xC035003DL) risultato="ERROR_HV_CPUID_XSAVE_FEATURE_VALIDATION";
-	else
-	if (i_error==0xC035003EL) risultato="ERROR_HV_PROCESSOR_STARTUP_TIMEOUT";
-	else
-	if (i_error==0xC035003FL) risultato="ERROR_HV_SMX_ENABLED";
-	else
-	if (i_error==0xC0350041L) risultato="ERROR_HV_INVALID_LP_INDEX";
-	else
-	if (i_error==0xC0350050L) risultato="ERROR_HV_INVALID_REGISTER_VALUE";
-	else
-	if (i_error==0xC0350051L) risultato="ERROR_HV_INVALID_VTL_STATE";
-	else
-	if (i_error==0xC0350055L) risultato="ERROR_HV_NX_NOT_DETECTED";
-	else
-	if (i_error==0xC0350057L) risultato="ERROR_HV_INVALID_DEVICE_ID";
-	else
-	if (i_error==0xC0350058L) risultato="ERROR_HV_INVALID_DEVICE_STATE";
-	else
-	if (i_error==0x00350059L) risultato="ERROR_HV_PENDING_PAGE_REQUESTS";
-	else
-	if (i_error==0xC0350060L) risultato="ERROR_HV_PAGE_REQUEST_INVALID";
-	else
-	if (i_error==0xC035006FL) risultato="ERROR_HV_INVALID_CPU_GROUP_ID";
-	else
-	if (i_error==0xC0350070L) risultato="ERROR_HV_INVALID_CPU_GROUP_STATE";
-	else
-	if (i_error==0xC0350071L) risultato="ERROR_HV_NOT_ALLOWED_WITH_NESTED_VIRT_ACTIVE";
-	else
-	if (i_error==0xC0351000L) risultato="ERROR_HV_NOT_PRESENT";
-	else
-	if (i_error==0xC0370001L) risultato="ERROR_VID_DUPLICATE_HANDLER";
-	else
-	if (i_error==0xC0370002L) risultato="ERROR_VID_TOO_MANY_HANDLERS";
-	else
-	if (i_error==0xC0370003L) risultato="ERROR_VID_QUEUE_FULL";
-	else
-	if (i_error==0xC0370004L) risultato="ERROR_VID_HANDLER_NOT_PRESENT";
-	else
-	if (i_error==0xC0370005L) risultato="ERROR_VID_INVALID_OBJECT_NAME";
-	else
-	if (i_error==0xC0370006L) risultato="ERROR_VID_PARTITION_NAME_TOO_LONG";
-	else
-	if (i_error==0xC0370007L) risultato="ERROR_VID_MESSAGE_QUEUE_NAME_TOO_LONG";
-	else
-	if (i_error==0xC0370008L) risultato="ERROR_VID_PARTITION_ALREADY_EXISTS";
-	else
-	if (i_error==0xC0370009L) risultato="ERROR_VID_PARTITION_DOES_NOT_EXIST";
-	else
-	if (i_error==0xC037000AL) risultato="ERROR_VID_PARTITION_NAME_NOT_FOUND";
-	else
-	if (i_error==0xC037000BL) risultato="ERROR_VID_MESSAGE_QUEUE_ALREADY_EXISTS";
-	else
-	if (i_error==0xC037000CL) risultato="ERROR_VID_EXCEEDED_MBP_ENTRY_MAP_LIMIT";
-	else
-	if (i_error==0xC037000DL) risultato="ERROR_VID_MB_STILL_REFERENCED";
-	else
-	if (i_error==0xC037000EL) risultato="ERROR_VID_CHILD_GPA_PAGE_SET_CORRUPTED";
-	else
-	if (i_error==0xC037000FL) risultato="ERROR_VID_INVALID_NUMA_SETTINGS";
-	else
-	if (i_error==0xC0370010L) risultato="ERROR_VID_INVALID_NUMA_NODE_INDEX";
-	else
-	if (i_error==0xC0370011L) risultato="ERROR_VID_NOTIFICATION_QUEUE_ALREADY_ASSOCIATED";
-	else
-	if (i_error==0xC0370012L) risultato="ERROR_VID_INVALID_MEMORY_BLOCK_HANDLE";
-	else
-	if (i_error==0xC0370013L) risultato="ERROR_VID_PAGE_RANGE_OVERFLOW";
-	else
-	if (i_error==0xC0370014L) risultato="ERROR_VID_INVALID_MESSAGE_QUEUE_HANDLE";
-	else
-	if (i_error==0xC0370015L) risultato="ERROR_VID_INVALID_GPA_RANGE_HANDLE";
-	else
-	if (i_error==0xC0370016L) risultato="ERROR_VID_NO_MEMORY_BLOCK_NOTIFICATION_QUEUE";
-	else
-	if (i_error==0xC0370017L) risultato="ERROR_VID_MEMORY_BLOCK_LOCK_COUNT_EXCEEDED";
-	else
-	if (i_error==0xC0370018L) risultato="ERROR_VID_INVALID_PPM_HANDLE";
-	else
-	if (i_error==0xC0370019L) risultato="ERROR_VID_MBPS_ARE_LOCKED";
-	else
-	if (i_error==0xC037001AL) risultato="ERROR_VID_MESSAGE_QUEUE_CLOSED";
-	else
-	if (i_error==0xC037001BL) risultato="ERROR_VID_VIRTUAL_PROCESSOR_LIMIT_EXCEEDED";
-	else
-	if (i_error==0xC037001CL) risultato="ERROR_VID_STOP_PENDING";
-	else
-	if (i_error==0xC037001DL) risultato="ERROR_VID_INVALID_PROCESSOR_STATE";
-	else
-	if (i_error==0xC037001EL) risultato="ERROR_VID_EXCEEDED_KM_CONTEXT_COUNT_LIMIT";
-	else
-	if (i_error==0xC037001FL) risultato="ERROR_VID_KM_INTERFACE_ALREADY_INITIALIZED";
-	else
-	if (i_error==0xC0370020L) risultato="ERROR_VID_MB_PROPERTY_ALREADY_SET_RESET";
-	else
-	if (i_error==0xC0370021L) risultato="ERROR_VID_MMIO_RANGE_DESTROYED";
-	else
-	if (i_error==0xC0370022L) risultato="ERROR_VID_INVALID_CHILD_GPA_PAGE_SET";
-	else
-	if (i_error==0xC0370023L) risultato="ERROR_VID_RESERVE_PAGE_SET_IS_BEING_USED";
-	else
-	if (i_error==0xC0370024L) risultato="ERROR_VID_RESERVE_PAGE_SET_TOO_SMALL";
-	else
-	if (i_error==0xC0370025L) risultato="ERROR_VID_MBP_ALREADY_LOCKED_USING_RESERVED_PAGE";
-	else
-	if (i_error==0xC0370026L) risultato="ERROR_VID_MBP_COUNT_EXCEEDED_LIMIT";
-	else
-	if (i_error==0xC0370027L) risultato="ERROR_VID_SAVED_STATE_CORRUPT";
-	else
-	if (i_error==0xC0370028L) risultato="ERROR_VID_SAVED_STATE_UNRECOGNIZED_ITEM";
-	else
-	if (i_error==0xC0370029L) risultato="ERROR_VID_SAVED_STATE_INCOMPATIBLE";
-	else
-	if (i_error==0xC037002AL) risultato="ERROR_VID_VTL_ACCESS_DENIED";
-	else
-	if (i_error==0xC0370100L) risultato="ERROR_VMCOMPUTE_TERMINATED_DURING_START";
-	else
-	if (i_error==0xC0370101L) risultato="ERROR_VMCOMPUTE_IMAGE_MISMATCH";
-	else
-	if (i_error==0xC0370102L) risultato="ERROR_VMCOMPUTE_HYPERV_NOT_INSTALLED";
-	else
-	if (i_error==0xC0370103L) risultato="ERROR_VMCOMPUTE_OPERATION_PENDING";
-	else
-	if (i_error==0xC0370104L) risultato="ERROR_VMCOMPUTE_TOO_MANY_NOTIFICATIONS";
-	else
-	if (i_error==0xC0370105L) risultato="ERROR_VMCOMPUTE_INVALID_STATE";
-	else
-	if (i_error==0xC0370106L) risultato="ERROR_VMCOMPUTE_UNEXPECTED_EXIT";
-	else
-	if (i_error==0xC0370107L) risultato="ERROR_VMCOMPUTE_TERMINATED";
-	else
-	if (i_error==0xC0370108L) risultato="ERROR_VMCOMPUTE_CONNECT_FAILED";
-	else
-	if (i_error==0xC0370109L) risultato="ERROR_VMCOMPUTE_TIMEOUT";
-	else
-	if (i_error==0xC037010AL) risultato="ERROR_VMCOMPUTE_CONNECTION_CLOSED";
-	else
-	if (i_error==0xC037010BL) risultato="ERROR_VMCOMPUTE_UNKNOWN_MESSAGE";
-	else
-	if (i_error==0xC037010CL) risultato="ERROR_VMCOMPUTE_UNSUPPORTED_PROTOCOL_VERSION";
-	else
-	if (i_error==0xC037010DL) risultato="ERROR_VMCOMPUTE_INVALID_JSON";
-	else
-	if (i_error==0xC037010EL) risultato="ERROR_VMCOMPUTE_SYSTEM_NOT_FOUND";
-	else
-	if (i_error==0xC037010FL) risultato="ERROR_VMCOMPUTE_SYSTEM_ALREADY_EXISTS";
-	else
-	if (i_error==0xC0370110L) risultato="ERROR_VMCOMPUTE_SYSTEM_ALREADY_STOPPED";
-	else
-	if (i_error==0xC0370200L) risultato="ERROR_VNET_VIRTUAL_SWITCH_NAME_NOT_FOUND";
-	else
-	if (i_error==0x80370001L) risultato="ERROR_VID_REMOTE_NODE_PARENT_GPA_PAGES_USED";
-	else
-	if (i_error==0x80380001L) risultato="ERROR_VOLMGR_INCOMPLETE_REGENERATION";
-	else
-	if (i_error==0x80380002L) risultato="ERROR_VOLMGR_INCOMPLETE_DISK_MIGRATION";
-	else
-	if (i_error==0xC0380001L) risultato="ERROR_VOLMGR_DATABASE_FULL";
-	else
-	if (i_error==0xC0380002L) risultato="ERROR_VOLMGR_DISK_CONFIGURATION_CORRUPTED";
-	else
-	if (i_error==0xC0380003L) risultato="ERROR_VOLMGR_DISK_CONFIGURATION_NOT_IN_SYNC";
-	else
-	if (i_error==0xC0380004L) risultato="ERROR_VOLMGR_PACK_CONFIG_UPDATE_FAILED";
-	else
-	if (i_error==0xC0380005L) risultato="ERROR_VOLMGR_DISK_CONTAINS_NON_SIMPLE_VOLUME";
-	else
-	if (i_error==0xC0380006L) risultato="ERROR_VOLMGR_DISK_DUPLICATE";
-	else
-	if (i_error==0xC0380007L) risultato="ERROR_VOLMGR_DISK_DYNAMIC";
-	else
-	if (i_error==0xC0380008L) risultato="ERROR_VOLMGR_DISK_ID_INVALID";
-	else
-	if (i_error==0xC0380009L) risultato="ERROR_VOLMGR_DISK_INVALID";
-	else
-	if (i_error==0xC038000AL) risultato="ERROR_VOLMGR_DISK_LAST_VOTER";
-	else
-	if (i_error==0xC038000BL) risultato="ERROR_VOLMGR_DISK_LAYOUT_INVALID";
-	else
-	if (i_error==0xC038000CL) risultato="ERROR_VOLMGR_DISK_LAYOUT_NON_BASIC_BETWEEN_BASIC_PARTITIONS";
-	else
-	if (i_error==0xC038000DL) risultato="ERROR_VOLMGR_DISK_LAYOUT_NOT_CYLINDER_ALIGNED";
-	else
-	if (i_error==0xC038000EL) risultato="ERROR_VOLMGR_DISK_LAYOUT_PARTITIONS_TOO_SMALL";
-	else
-	if (i_error==0xC038000FL) risultato="ERROR_VOLMGR_DISK_LAYOUT_PRIMARY_BETWEEN_LOGICAL_PARTITIONS";
-	else
-	if (i_error==0xC0380010L) risultato="ERROR_VOLMGR_DISK_LAYOUT_TOO_MANY_PARTITIONS";
-	else
-	if (i_error==0xC0380011L) risultato="ERROR_VOLMGR_DISK_MISSING";
-	else
-	if (i_error==0xC0380012L) risultato="ERROR_VOLMGR_DISK_NOT_EMPTY";
-	else
-	if (i_error==0xC0380013L) risultato="ERROR_VOLMGR_DISK_NOT_ENOUGH_SPACE";
-	else
-	if (i_error==0xC0380014L) risultato="ERROR_VOLMGR_DISK_REVECTORING_FAILED";
-	else
-	if (i_error==0xC0380015L) risultato="ERROR_VOLMGR_DISK_SECTOR_SIZE_INVALID";
-	else
-	if (i_error==0xC0380016L) risultato="ERROR_VOLMGR_DISK_SET_NOT_CONTAINED";
-	else
-	if (i_error==0xC0380017L) risultato="ERROR_VOLMGR_DISK_USED_BY_MULTIPLE_MEMBERS";
-	else
-	if (i_error==0xC0380018L) risultato="ERROR_VOLMGR_DISK_USED_BY_MULTIPLE_PLEXES";
-	else
-	if (i_error==0xC0380019L) risultato="ERROR_VOLMGR_DYNAMIC_DISK_NOT_SUPPORTED";
-	else
-	if (i_error==0xC038001AL) risultato="ERROR_VOLMGR_EXTENT_ALREADY_USED";
-	else
-	if (i_error==0xC038001BL) risultato="ERROR_VOLMGR_EXTENT_NOT_CONTIGUOUS";
-	else
-	if (i_error==0xC038001CL) risultato="ERROR_VOLMGR_EXTENT_NOT_IN_PUBLIC_REGION";
-	else
-	if (i_error==0xC038001DL) risultato="ERROR_VOLMGR_EXTENT_NOT_SECTOR_ALIGNED";
-	else
-	if (i_error==0xC038001EL) risultato="ERROR_VOLMGR_EXTENT_OVERLAPS_EBR_PARTITION";
-	else
-	if (i_error==0xC038001FL) risultato="ERROR_VOLMGR_EXTENT_VOLUME_LENGTHS_DO_NOT_MATCH";
-	else
-	if (i_error==0xC0380020L) risultato="ERROR_VOLMGR_FAULT_TOLERANT_NOT_SUPPORTED";
-	else
-	if (i_error==0xC0380021L) risultato="ERROR_VOLMGR_INTERLEAVE_LENGTH_INVALID";
-	else
-	if (i_error==0xC0380022L) risultato="ERROR_VOLMGR_MAXIMUM_REGISTERED_USERS";
-	else
-	if (i_error==0xC0380023L) risultato="ERROR_VOLMGR_MEMBER_IN_SYNC";
-	else
-	if (i_error==0xC0380024L) risultato="ERROR_VOLMGR_MEMBER_INDEX_DUPLICATE";
-	else
-	if (i_error==0xC0380025L) risultato="ERROR_VOLMGR_MEMBER_INDEX_INVALID";
-	else
-	if (i_error==0xC0380026L) risultato="ERROR_VOLMGR_MEMBER_MISSING";
-	else
-	if (i_error==0xC0380027L) risultato="ERROR_VOLMGR_MEMBER_NOT_DETACHED";
-	else
-	if (i_error==0xC0380028L) risultato="ERROR_VOLMGR_MEMBER_REGENERATING";
-	else
-	if (i_error==0xC0380029L) risultato="ERROR_VOLMGR_ALL_DISKS_FAILED";
-	else
-	if (i_error==0xC038002AL) risultato="ERROR_VOLMGR_NO_REGISTERED_USERS";
-	else
-	if (i_error==0xC038002BL) risultato="ERROR_VOLMGR_NO_SUCH_USER";
-	else
-	if (i_error==0xC038002CL) risultato="ERROR_VOLMGR_NOTIFICATION_RESET";
-	else
-	if (i_error==0xC038002DL) risultato="ERROR_VOLMGR_NUMBER_OF_MEMBERS_INVALID";
-	else
-	if (i_error==0xC038002EL) risultato="ERROR_VOLMGR_NUMBER_OF_PLEXES_INVALID";
-	else
-	if (i_error==0xC038002FL) risultato="ERROR_VOLMGR_PACK_DUPLICATE";
-	else
-	if (i_error==0xC0380030L) risultato="ERROR_VOLMGR_PACK_ID_INVALID";
-	else
-	if (i_error==0xC0380031L) risultato="ERROR_VOLMGR_PACK_INVALID";
-	else
-	if (i_error==0xC0380032L) risultato="ERROR_VOLMGR_PACK_NAME_INVALID";
-	else
-	if (i_error==0xC0380033L) risultato="ERROR_VOLMGR_PACK_OFFLINE";
-	else
-	if (i_error==0xC0380034L) risultato="ERROR_VOLMGR_PACK_HAS_QUORUM";
-	else
-	if (i_error==0xC0380035L) risultato="ERROR_VOLMGR_PACK_WITHOUT_QUORUM";
-	else
-	if (i_error==0xC0380036L) risultato="ERROR_VOLMGR_PARTITION_STYLE_INVALID";
-	else
-	if (i_error==0xC0380037L) risultato="ERROR_VOLMGR_PARTITION_UPDATE_FAILED";
-	else
-	if (i_error==0xC0380038L) risultato="ERROR_VOLMGR_PLEX_IN_SYNC";
-	else
-	if (i_error==0xC0380039L) risultato="ERROR_VOLMGR_PLEX_INDEX_DUPLICATE";
-	else
-	if (i_error==0xC038003AL) risultato="ERROR_VOLMGR_PLEX_INDEX_INVALID";
-	else
-	if (i_error==0xC038003BL) risultato="ERROR_VOLMGR_PLEX_LAST_ACTIVE";
-	else
-	if (i_error==0xC038003CL) risultato="ERROR_VOLMGR_PLEX_MISSING";
-	else
-	if (i_error==0xC038003DL) risultato="ERROR_VOLMGR_PLEX_REGENERATING";
-	else
-	if (i_error==0xC038003EL) risultato="ERROR_VOLMGR_PLEX_TYPE_INVALID";
-	else
-	if (i_error==0xC038003FL) risultato="ERROR_VOLMGR_PLEX_NOT_RAID5";
-	else
-	if (i_error==0xC0380040L) risultato="ERROR_VOLMGR_PLEX_NOT_SIMPLE";
-	else
-	if (i_error==0xC0380041L) risultato="ERROR_VOLMGR_STRUCTURE_SIZE_INVALID";
-	else
-	if (i_error==0xC0380042L) risultato="ERROR_VOLMGR_TOO_MANY_NOTIFICATION_REQUESTS";
-	else
-	if (i_error==0xC0380043L) risultato="ERROR_VOLMGR_TRANSACTION_IN_PROGRESS";
-	else
-	if (i_error==0xC0380044L) risultato="ERROR_VOLMGR_UNEXPECTED_DISK_LAYOUT_CHANGE";
-	else
-	if (i_error==0xC0380045L) risultato="ERROR_VOLMGR_VOLUME_CONTAINS_MISSING_DISK";
-	else
-	if (i_error==0xC0380046L) risultato="ERROR_VOLMGR_VOLUME_ID_INVALID";
-	else
-	if (i_error==0xC0380047L) risultato="ERROR_VOLMGR_VOLUME_LENGTH_INVALID";
-	else
-	if (i_error==0xC0380048L) risultato="ERROR_VOLMGR_VOLUME_LENGTH_NOT_SECTOR_SIZE_MULTIPLE";
-	else
-	if (i_error==0xC0380049L) risultato="ERROR_VOLMGR_VOLUME_NOT_MIRRORED";
-	else
-	if (i_error==0xC038004AL) risultato="ERROR_VOLMGR_VOLUME_NOT_RETAINED";
-	else
-	if (i_error==0xC038004BL) risultato="ERROR_VOLMGR_VOLUME_OFFLINE";
-	else
-	if (i_error==0xC038004CL) risultato="ERROR_VOLMGR_VOLUME_RETAINED";
-	else
-	if (i_error==0xC038004DL) risultato="ERROR_VOLMGR_NUMBER_OF_EXTENTS_INVALID";
-	else
-	if (i_error==0xC038004EL) risultato="ERROR_VOLMGR_DIFFERENT_SECTOR_SIZE";
-	else
-	if (i_error==0xC038004FL) risultato="ERROR_VOLMGR_BAD_BOOT_DISK";
-	else
-	if (i_error==0xC0380050L) risultato="ERROR_VOLMGR_PACK_CONFIG_OFFLINE";
-	else
-	if (i_error==0xC0380051L) risultato="ERROR_VOLMGR_PACK_CONFIG_ONLINE";
-	else
-	if (i_error==0xC0380052L) risultato="ERROR_VOLMGR_NOT_PRIMARY_PACK";
-	else
-	if (i_error==0xC0380053L) risultato="ERROR_VOLMGR_PACK_LOG_UPDATE_FAILED";
-	else
-	if (i_error==0xC0380054L) risultato="ERROR_VOLMGR_NUMBER_OF_DISKS_IN_PLEX_INVALID";
-	else
-	if (i_error==0xC0380055L) risultato="ERROR_VOLMGR_NUMBER_OF_DISKS_IN_MEMBER_INVALID";
-	else
-	if (i_error==0xC0380056L) risultato="ERROR_VOLMGR_VOLUME_MIRRORED";
-	else
-	if (i_error==0xC0380057L) risultato="ERROR_VOLMGR_PLEX_NOT_SIMPLE_SPANNED";
-	else
-	if (i_error==0xC0380058L) risultato="ERROR_VOLMGR_NO_VALID_LOG_COPIES";
-	else
-	if (i_error==0xC0380059L) risultato="ERROR_VOLMGR_PRIMARY_PACK_PRESENT";
-	else
-	if (i_error==0xC038005AL) risultato="ERROR_VOLMGR_NUMBER_OF_DISKS_INVALID";
-	else
-	if (i_error==0xC038005BL) risultato="ERROR_VOLMGR_MIRROR_NOT_SUPPORTED";
-	else
-	if (i_error==0xC038005CL) risultato="ERROR_VOLMGR_RAID5_NOT_SUPPORTED";
-	else
-	if (i_error==0x80390001L) risultato="ERROR_BCD_NOT_ALL_ENTRIES_IMPORTED";
-	else
-	if (i_error==0xC0390002L) risultato="ERROR_BCD_TOO_MANY_ELEMENTS";
-	else
-	if (i_error==0x80390003L) risultato="ERROR_BCD_NOT_ALL_ENTRIES_SYNCHRONIZED";
-	else
-	if (i_error==0xC03A0001L) risultato="ERROR_VHD_DRIVE_FOOTER_MISSING";
-	else
-	if (i_error==0xC03A0002L) risultato="ERROR_VHD_DRIVE_FOOTER_CHECKSUM_MISMATCH";
-	else
-	if (i_error==0xC03A0003L) risultato="ERROR_VHD_DRIVE_FOOTER_CORRUPT";
-	else
-	if (i_error==0xC03A0004L) risultato="ERROR_VHD_FORMAT_UNKNOWN";
-	else
-	if (i_error==0xC03A0005L) risultato="ERROR_VHD_FORMAT_UNSUPPORTED_VERSION";
-	else
-	if (i_error==0xC03A0006L) risultato="ERROR_VHD_SPARSE_HEADER_CHECKSUM_MISMATCH";
-	else
-	if (i_error==0xC03A0007L) risultato="ERROR_VHD_SPARSE_HEADER_UNSUPPORTED_VERSION";
-	else
-	if (i_error==0xC03A0008L) risultato="ERROR_VHD_SPARSE_HEADER_CORRUPT";
-	else
-	if (i_error==0xC03A0009L) risultato="ERROR_VHD_BLOCK_ALLOCATION_FAILURE";
-	else
-	if (i_error==0xC03A000AL) risultato="ERROR_VHD_BLOCK_ALLOCATION_TABLE_CORRUPT";
-	else
-	if (i_error==0xC03A000BL) risultato="ERROR_VHD_INVALID_BLOCK_SIZE";
-	else
-	if (i_error==0xC03A000CL) risultato="ERROR_VHD_BITMAP_MISMATCH";
-	else
-	if (i_error==0xC03A000DL) risultato="ERROR_VHD_PARENT_VHD_NOT_FOUND";
-	else
-	if (i_error==0xC03A000EL) risultato="ERROR_VHD_CHILD_PARENT_ID_MISMATCH";
-	else
-	if (i_error==0xC03A000FL) risultato="ERROR_VHD_CHILD_PARENT_TIMESTAMP_MISMATCH";
-	else
-	if (i_error==0xC03A0010L) risultato="ERROR_VHD_METADATA_READ_FAILURE";
-	else
-	if (i_error==0xC03A0011L) risultato="ERROR_VHD_METADATA_WRITE_FAILURE";
-	else
-	if (i_error==0xC03A0012L) risultato="ERROR_VHD_INVALID_SIZE";
-	else
-	if (i_error==0xC03A0013L) risultato="ERROR_VHD_INVALID_FILE_SIZE";
-	else
-	if (i_error==0xC03A0014L) risultato="ERROR_VIRTDISK_PROVIDER_NOT_FOUND";
-	else
-	if (i_error==0xC03A0015L) risultato="ERROR_VIRTDISK_NOT_VIRTUAL_DISK";
-	else
-	if (i_error==0xC03A0016L) risultato="ERROR_VHD_PARENT_VHD_ACCESS_DENIED";
-	else
-	if (i_error==0xC03A0017L) risultato="ERROR_VHD_CHILD_PARENT_SIZE_MISMATCH";
-	else
-	if (i_error==0xC03A0018L) risultato="ERROR_VHD_DIFFERENCING_CHAIN_CYCLE_DETECTED";
-	else
-	if (i_error==0xC03A0019L) risultato="ERROR_VHD_DIFFERENCING_CHAIN_ERROR_IN_PARENT";
-	else
-	if (i_error==0xC03A001AL) risultato="ERROR_VIRTUAL_DISK_LIMITATION";
-	else
-	if (i_error==0xC03A001BL) risultato="ERROR_VHD_INVALID_TYPE";
-	else
-	if (i_error==0xC03A001CL) risultato="ERROR_VHD_INVALID_STATE";
-	else
-	if (i_error==0xC03A001DL) risultato="ERROR_VIRTDISK_UNSUPPORTED_DISK_SECTOR_SIZE";
-	else
-	if (i_error==0xC03A001EL) risultato="ERROR_VIRTDISK_DISK_ALREADY_OWNED";
-	else
-	if (i_error==0xC03A001FL) risultato="ERROR_VIRTDISK_DISK_ONLINE_AND_WRITABLE";
-	else
-	if (i_error==0xC03A0020L) risultato="ERROR_CTLOG_TRACKING_NOT_INITIALIZED";
-	else
-	if (i_error==0xC03A0021L) risultato="ERROR_CTLOG_LOGFILE_SIZE_EXCEEDED_MAXSIZE";
-	else
-	if (i_error==0xC03A0022L) risultato="ERROR_CTLOG_VHD_CHANGED_OFFLINE";
-	else
-	if (i_error==0xC03A0023L) risultato="ERROR_CTLOG_INVALID_TRACKING_STATE";
-	else
-	if (i_error==0xC03A0024L) risultato="ERROR_CTLOG_INCONSISTENT_TRACKING_FILE";
-	else
-	if (i_error==0xC03A0025L) risultato="ERROR_VHD_RESIZE_WOULD_TRUNCATE_DATA";
-	else
-	if (i_error==0xC03A0026L) risultato="ERROR_VHD_COULD_NOT_COMPUTE_MINIMUM_VIRTUAL_SIZE";
-	else
-	if (i_error==0xC03A0027L) risultato="ERROR_VHD_ALREADY_AT_OR_BELOW_MINIMUM_VIRTUAL_SIZE";
-	else
-	if (i_error==0xC03A0028L) risultato="ERROR_VHD_METADATA_FULL";
-	else
-	if (i_error==0xC03A0029L) risultato="ERROR_VHD_INVALID_CHANGE_TRACKING_ID";
-	else
-	if (i_error==0xC03A002AL) risultato="ERROR_VHD_CHANGE_TRACKING_DISABLED";
-	else
-	if (i_error==0xC03A0030L) risultato="ERROR_VHD_MISSING_CHANGE_TRACKING_INFORMATION";
-	else
-	if (i_error==0x803A0001L) risultato="ERROR_QUERY_STORAGE_ERROR";
-	else
-	if (i_error==0xC03B0001L) risultato="ERROR_HNS_PORT_ALLOCATED";
-	else
-	if (i_error==0xC03B0002L) risultato="ERROR_HNS_MAPPING_NOT_SUPPORTED";
-	else
-	if (i_error==0x803C0100L) risultato="SDIAG_E_CANCELLED";
-	else
-	if (i_error==0x803C0101L) risultato="SDIAG_E_SCRIPT";
-	else
-	if (i_error==0x803C0102L) risultato="SDIAG_E_POWERSHELL";
-	else
-	if (i_error==0x803C0103L) risultato="SDIAG_E_MANAGEDHOST";
-	else
-	if (i_error==0x803C0104L) risultato="SDIAG_E_NOVERIFIER";
-	else
-	if (i_error==0x003C0105L) risultato="SDIAG_S_CANNOTRUN";
-	else
-	if (i_error==0x803C0106L) risultato="SDIAG_E_DISABLED";
-	else
-	if (i_error==0x803C0107L) risultato="SDIAG_E_TRUST";
-	else
-	if (i_error==0x803C0108L) risultato="SDIAG_E_CANNOTRUN";
-	else
-	if (i_error==0x803C0109L) risultato="SDIAG_E_VERSION";
-	else
-	if (i_error==0x803C010AL) risultato="SDIAG_E_RESOURCE";
-	else
-	if (i_error==0x803C010BL) risultato="SDIAG_E_ROOTCAUSE";
-	else
-	if (i_error==0x803E0100L) risultato="WPN_E_CHANNEL_CLOSED";
-	else
-	if (i_error==0x803E0101L) risultato="WPN_E_CHANNEL_REQUEST_NOT_COMPLETE";
-	else
-	if (i_error==0x803E0102L) risultato="WPN_E_INVALID_APP";
-	else
-	if (i_error==0x803E0103L) risultato="WPN_E_OUTSTANDING_CHANNEL_REQUEST";
-	else
-	if (i_error==0x803E0104L) risultato="WPN_E_DUPLICATE_CHANNEL";
-	else
-	if (i_error==0x803E0105L) risultato="WPN_E_PLATFORM_UNAVAILABLE";
-	else
-	if (i_error==0x803E0106L) risultato="WPN_E_NOTIFICATION_POSTED";
-	else
-	if (i_error==0x803E0107L) risultato="WPN_E_NOTIFICATION_HIDDEN";
-	else
-	if (i_error==0x803E0108L) risultato="WPN_E_NOTIFICATION_NOT_POSTED";
-	else
-	if (i_error==0x803E0109L) risultato="WPN_E_CLOUD_DISABLED";
-	else
-	if (i_error==0x803E0110L) risultato="WPN_E_CLOUD_INCAPABLE";
-	else
-	if (i_error==0x803E011AL) risultato="WPN_E_CLOUD_AUTH_UNAVAILABLE";
-	else
-	if (i_error==0x803E011BL) risultato="WPN_E_CLOUD_SERVICE_UNAVAILABLE";
-	else
-	if (i_error==0x803E011CL) risultato="WPN_E_FAILED_LOCK_SCREEN_UPDATE_INTIALIZATION";
-	else
-	if (i_error==0x803E0111L) risultato="WPN_E_NOTIFICATION_DISABLED";
-	else
-	if (i_error==0x803E0112L) risultato="WPN_E_NOTIFICATION_INCAPABLE";
-	else
-	if (i_error==0x803E0113L) risultato="WPN_E_INTERNET_INCAPABLE";
-	else
-	if (i_error==0x803E0114L) risultato="WPN_E_NOTIFICATION_TYPE_DISABLED";
-	else
-	if (i_error==0x803E0115L) risultato="WPN_E_NOTIFICATION_SIZE";
-	else
-	if (i_error==0x803E0116L) risultato="WPN_E_TAG_SIZE";
-	else
-	if (i_error==0x803E0117L) risultato="WPN_E_ACCESS_DENIED";
-	else
-	if (i_error==0x803E0118L) risultato="WPN_E_DUPLICATE_REGISTRATION";
-	else
-	if (i_error==0x803E0119L) risultato="WPN_E_PUSH_NOTIFICATION_INCAPABLE";
-	else
-	if (i_error==0x803E0120L) risultato="WPN_E_DEV_ID_SIZE";
-	else
-	if (i_error==0x803E012AL) risultato="WPN_E_TAG_ALPHANUMERIC";
-	else
-	if (i_error==0x803E012BL) risultato="WPN_E_INVALID_HTTP_STATUS_CODE";
-	else
-	if (i_error==0x803E0200L) risultato="WPN_E_OUT_OF_SESSION";
-	else
-	if (i_error==0x803E0201L) risultato="WPN_E_POWER_SAVE";
-	else
-	if (i_error==0x803E0202L) risultato="WPN_E_IMAGE_NOT_FOUND_IN_CACHE";
-	else
-	if (i_error==0x803E0203L) risultato="WPN_E_ALL_URL_NOT_COMPLETED";
-	else
-	if (i_error==0x803E0204L) risultato="WPN_E_INVALID_CLOUD_IMAGE";
-	else
-	if (i_error==0x803E0205L) risultato="WPN_E_NOTIFICATION_ID_MATCHED";
-	else
-	if (i_error==0x803E0206L) risultato="WPN_E_CALLBACK_ALREADY_REGISTERED";
-	else
-	if (i_error==0x803E0207L) risultato="WPN_E_TOAST_NOTIFICATION_DROPPED";
-	else
-	if (i_error==0x803E0208L) risultato="WPN_E_STORAGE_LOCKED";
-	else
-	if (i_error==0x803E0209L) risultato="WPN_E_GROUP_SIZE";
-	else
-	if (i_error==0x803E020AL) risultato="WPN_E_GROUP_ALPHANUMERIC";
-	else
-	if (i_error==0x803E020BL) risultato="WPN_E_CLOUD_DISABLED_FOR_APP";
-	else
-	if (i_error==0x80548201L) risultato="E_MBN_CONTEXT_NOT_ACTIVATED";
-	else
-	if (i_error==0x80548202L) risultato="E_MBN_BAD_SIM";
-	else
-	if (i_error==0x80548203L) risultato="E_MBN_DATA_CLASS_NOT_AVAILABLE";
-	else
-	if (i_error==0x80548204L) risultato="E_MBN_INVALID_ACCESS_STRING";
-	else
-	if (i_error==0x80548205L) risultato="E_MBN_MAX_ACTIVATED_CONTEXTS";
-	else
-	if (i_error==0x80548206L) risultato="E_MBN_PACKET_SVC_DETACHED";
-	else
-	if (i_error==0x80548207L) risultato="E_MBN_PROVIDER_NOT_VISIBLE";
-	else
-	if (i_error==0x80548208L) risultato="E_MBN_RADIO_POWER_OFF";
-	else
-	if (i_error==0x80548209L) risultato="E_MBN_SERVICE_NOT_ACTIVATED";
-	else
-	if (i_error==0x8054820AL) risultato="E_MBN_SIM_NOT_INSERTED";
-	else
-	if (i_error==0x8054820BL) risultato="E_MBN_VOICE_CALL_IN_PROGRESS";
-	else
-	if (i_error==0x8054820CL) risultato="E_MBN_INVALID_CACHE";
-	else
-	if (i_error==0x8054820DL) risultato="E_MBN_NOT_REGISTERED";
-	else
-	if (i_error==0x8054820EL) risultato="E_MBN_PROVIDERS_NOT_FOUND";
-	else
-	if (i_error==0x8054820FL) risultato="E_MBN_PIN_NOT_SUPPORTED";
-	else
-	if (i_error==0x80548210L) risultato="E_MBN_PIN_REQUIRED";
-	else
-	if (i_error==0x80548211L) risultato="E_MBN_PIN_DISABLED";
-	else
-	if (i_error==0x80548212L) risultato="E_MBN_FAILURE";
-	else
-	if (i_error==0x80548218L) risultato="E_MBN_INVALID_PROFILE";
-	else
-	if (i_error==0x80548219L) risultato="E_MBN_DEFAULT_PROFILE_EXIST";
-	else
-	if (i_error==0x80548220L) risultato="E_MBN_SMS_ENCODING_NOT_SUPPORTED";
-	else
-	if (i_error==0x80548221L) risultato="E_MBN_SMS_FILTER_NOT_SUPPORTED";
-	else
-	if (i_error==0x80548222L) risultato="E_MBN_SMS_INVALID_MEMORY_INDEX";
-	else
-	if (i_error==0x80548223L) risultato="E_MBN_SMS_LANG_NOT_SUPPORTED";
-	else
-	if (i_error==0x80548224L) risultato="E_MBN_SMS_MEMORY_FAILURE";
-	else
-	if (i_error==0x80548225L) risultato="E_MBN_SMS_NETWORK_TIMEOUT";
-	else
-	if (i_error==0x80548226L) risultato="E_MBN_SMS_UNKNOWN_SMSC_ADDRESS";
-	else
-	if (i_error==0x80548227L) risultato="E_MBN_SMS_FORMAT_NOT_SUPPORTED";
-	else
-	if (i_error==0x80548228L) risultato="E_MBN_SMS_OPERATION_NOT_ALLOWED";
-	else
-	if (i_error==0x80548229L) risultato="E_MBN_SMS_MEMORY_FULL";
-	else
-	if (i_error==0x80630001L) risultato="PEER_E_IPV6_NOT_INSTALLED";
-	else
-	if (i_error==0x80630002L) risultato="PEER_E_NOT_INITIALIZED";
-	else
-	if (i_error==0x80630003L) risultato="PEER_E_CANNOT_START_SERVICE";
-	else
-	if (i_error==0x80630004L) risultato="PEER_E_NOT_LICENSED";
-	else
-	if (i_error==0x80630010L) risultato="PEER_E_INVALID_GRAPH";
-	else
-	if (i_error==0x80630011L) risultato="PEER_E_DBNAME_CHANGED";
-	else
-	if (i_error==0x80630012L) risultato="PEER_E_DUPLICATE_GRAPH";
-	else
-	if (i_error==0x80630013L) risultato="PEER_E_GRAPH_NOT_READY";
-	else
-	if (i_error==0x80630014L) risultato="PEER_E_GRAPH_SHUTTING_DOWN";
-	else
-	if (i_error==0x80630015L) risultato="PEER_E_GRAPH_IN_USE";
-	else
-	if (i_error==0x80630016L) risultato="PEER_E_INVALID_DATABASE";
-	else
-	if (i_error==0x80630017L) risultato="PEER_E_TOO_MANY_ATTRIBUTES";
-	else
-	if (i_error==0x80630103L) risultato="PEER_E_CONNECTION_NOT_FOUND";
-	else
-	if (i_error==0x80630106L) risultato="PEER_E_CONNECT_SELF";
-	else
-	if (i_error==0x80630107L) risultato="PEER_E_ALREADY_LISTENING";
-	else
-	if (i_error==0x80630108L) risultato="PEER_E_NODE_NOT_FOUND";
-	else
-	if (i_error==0x80630109L) risultato="PEER_E_CONNECTION_FAILED";
-	else
-	if (i_error==0x8063010AL) risultato="PEER_E_CONNECTION_NOT_AUTHENTICATED";
-	else
-	if (i_error==0x8063010BL) risultato="PEER_E_CONNECTION_REFUSED";
-	else
-	if (i_error==0x80630201L) risultato="PEER_E_CLASSIFIER_TOO_LONG";
-	else
-	if (i_error==0x80630202L) risultato="PEER_E_TOO_MANY_IDENTITIES";
-	else
-	if (i_error==0x80630203L) risultato="PEER_E_NO_KEY_ACCESS";
-	else
-	if (i_error==0x80630204L) risultato="PEER_E_GROUPS_EXIST";
-	else
-	if (i_error==0x80630301L) risultato="PEER_E_RECORD_NOT_FOUND";
-	else
-	if (i_error==0x80630302L) risultato="PEER_E_DATABASE_ACCESSDENIED";
-	else
-	if (i_error==0x80630303L) risultato="PEER_E_DBINITIALIZATION_FAILED";
-	else
-	if (i_error==0x80630304L) risultato="PEER_E_MAX_RECORD_SIZE_EXCEEDED";
-	else
-	if (i_error==0x80630305L) risultato="PEER_E_DATABASE_ALREADY_PRESENT";
-	else
-	if (i_error==0x80630306L) risultato="PEER_E_DATABASE_NOT_PRESENT";
-	else
-	if (i_error==0x80630401L) risultato="PEER_E_IDENTITY_NOT_FOUND";
-	else
-	if (i_error==0x80630501L) risultato="PEER_E_EVENT_HANDLE_NOT_FOUND";
-	else
-	if (i_error==0x80630601L) risultato="PEER_E_INVALID_SEARCH";
-	else
-	if (i_error==0x80630602L) risultato="PEER_E_INVALID_ATTRIBUTES";
-	else
-	if (i_error==0x80630701L) risultato="PEER_E_INVITATION_NOT_TRUSTED";
-	else
-	if (i_error==0x80630703L) risultato="PEER_E_CHAIN_TOO_LONG";
-	else
-	if (i_error==0x80630705L) risultato="PEER_E_INVALID_TIME_PERIOD";
-	else
-	if (i_error==0x80630706L) risultato="PEER_E_CIRCULAR_CHAIN_DETECTED";
-	else
-	if (i_error==0x80630801L) risultato="PEER_E_CERT_STORE_CORRUPTED";
-	else
-	if (i_error==0x80631001L) risultato="PEER_E_NO_CLOUD";
-	else
-	if (i_error==0x80631005L) risultato="PEER_E_CLOUD_NAME_AMBIGUOUS";
-	else
-	if (i_error==0x80632010L) risultato="PEER_E_INVALID_RECORD";
-	else
-	if (i_error==0x80632020L) risultato="PEER_E_NOT_AUTHORIZED";
-	else
-	if (i_error==0x80632021L) risultato="PEER_E_PASSWORD_DOES_NOT_MEET_POLICY";
-	else
-	if (i_error==0x80632030L) risultato="PEER_E_DEFERRED_VALIDATION";
-	else
-	if (i_error==0x80632040L) risultato="PEER_E_INVALID_GROUP_PROPERTIES";
-	else
-	if (i_error==0x80632050L) risultato="PEER_E_INVALID_PEER_NAME";
-	else
-	if (i_error==0x80632060L) risultato="PEER_E_INVALID_CLASSIFIER";
-	else
-	if (i_error==0x80632070L) risultato="PEER_E_INVALID_FRIENDLY_NAME";
-	else
-	if (i_error==0x80632071L) risultato="PEER_E_INVALID_ROLE_PROPERTY";
-	else
-	if (i_error==0x80632072L) risultato="PEER_E_INVALID_CLASSIFIER_PROPERTY";
-	else
-	if (i_error==0x80632080L) risultato="PEER_E_INVALID_RECORD_EXPIRATION";
-	else
-	if (i_error==0x80632081L) risultato="PEER_E_INVALID_CREDENTIAL_INFO";
-	else
-	if (i_error==0x80632082L) risultato="PEER_E_INVALID_CREDENTIAL";
-	else
-	if (i_error==0x80632083L) risultato="PEER_E_INVALID_RECORD_SIZE";
-	else
-	if (i_error==0x80632090L) risultato="PEER_E_UNSUPPORTED_VERSION";
-	else
-	if (i_error==0x80632091L) risultato="PEER_E_GROUP_NOT_READY";
-	else
-	if (i_error==0x80632092L) risultato="PEER_E_GROUP_IN_USE";
-	else
-	if (i_error==0x80632093L) risultato="PEER_E_INVALID_GROUP";
-	else
-	if (i_error==0x80632094L) risultato="PEER_E_NO_MEMBERS_FOUND";
-	else
-	if (i_error==0x80632095L) risultato="PEER_E_NO_MEMBER_CONNECTIONS";
-	else
-	if (i_error==0x80632096L) risultato="PEER_E_UNABLE_TO_LISTEN";
-	else
-	if (i_error==0x806320A0L) risultato="PEER_E_IDENTITY_DELETED";
-	else
-	if (i_error==0x806320A1L) risultato="PEER_E_SERVICE_NOT_AVAILABLE";
-	else
-	if (i_error==0x80636001L) risultato="PEER_E_CONTACT_NOT_FOUND";
-	else
-	if (i_error==0x00630001L) risultato="PEER_S_GRAPH_DATA_CREATED";
-	else
-	if (i_error==0x00630002L) risultato="PEER_S_NO_EVENT_DATA";
-	else
-	if (i_error==0x00632000L) risultato="PEER_S_ALREADY_CONNECTED";
-	else
-	if (i_error==0x00636000L) risultato="PEER_S_SUBSCRIPTION_EXISTS";
-	else
-	if (i_error==0x00630005L) risultato="PEER_S_NO_CONNECTIVITY";
-	else
-	if (i_error==0x00630006L) risultato="PEER_S_ALREADY_A_MEMBER";
-	else
-	if (i_error==0x80634001L) risultato="PEER_E_CANNOT_CONVERT_PEER_NAME";
-	else
-	if (i_error==0x80634002L) risultato="PEER_E_INVALID_PEER_HOST_NAME";
-	else
-	if (i_error==0x80634003L) risultato="PEER_E_NO_MORE";
-	else
-	if (i_error==0x80634005L) risultato="PEER_E_PNRP_DUPLICATE_PEER_NAME";
-	else
-	if (i_error==0x80637000L) risultato="PEER_E_INVITE_CANCELLED";
-	else
-	if (i_error==0x80637001L) risultato="PEER_E_INVITE_RESPONSE_NOT_AVAILABLE";
-	else
-	if (i_error==0x80637003L) risultato="PEER_E_NOT_SIGNED_IN";
-	else
-	if (i_error==0x80637004L) risultato="PEER_E_PRIVACY_DECLINED";
-	else
-	if (i_error==0x80637005L) risultato="PEER_E_TIMEOUT";
-	else
-	if (i_error==0x80637007L) risultato="PEER_E_INVALID_ADDRESS";
-	else
-	if (i_error==0x80637008L) risultato="PEER_E_FW_EXCEPTION_DISABLED";
-	else
-	if (i_error==0x80637009L) risultato="PEER_E_FW_BLOCKED_BY_POLICY";
-	else
-	if (i_error==0x8063700AL) risultato="PEER_E_FW_BLOCKED_BY_SHIELDS_UP";
-	else
-	if (i_error==0x8063700BL) risultato="PEER_E_FW_DECLINED";
-	else
-	if (i_error==0x802A0001L) risultato="UI_E_CREATE_FAILED";
-	else
-	if (i_error==0x802A0002L) risultato="UI_E_SHUTDOWN_CALLED";
-	else
-	if (i_error==0x802A0003L) risultato="UI_E_ILLEGAL_REENTRANCY";
-	else
-	if (i_error==0x802A0004L) risultato="UI_E_OBJECT_SEALED";
-	else
-	if (i_error==0x802A0005L) risultato="UI_E_VALUE_NOT_SET";
-	else
-	if (i_error==0x802A0006L) risultato="UI_E_VALUE_NOT_DETERMINED";
-	else
-	if (i_error==0x802A0007L) risultato="UI_E_INVALID_OUTPUT";
-	else
-	if (i_error==0x802A0008L) risultato="UI_E_BOOLEAN_EXPECTED";
-	else
-	if (i_error==0x802A0009L) risultato="UI_E_DIFFERENT_OWNER";
-	else
-	if (i_error==0x802A000AL) risultato="UI_E_AMBIGUOUS_MATCH";
-	else
-	if (i_error==0x802A000BL) risultato="UI_E_FP_OVERFLOW";
-	else
-	if (i_error==0x802A000CL) risultato="UI_E_WRONG_THREAD";
-	else
-	if (i_error==0x802A0101L) risultato="UI_E_STORYBOARD_ACTIVE";
-	else
-	if (i_error==0x802A0102L) risultato="UI_E_STORYBOARD_NOT_PLAYING";
-	else
-	if (i_error==0x802A0103L) risultato="UI_E_START_KEYFRAME_AFTER_END";
-	else
-	if (i_error==0x802A0104L) risultato="UI_E_END_KEYFRAME_NOT_DETERMINED";
-	else
-	if (i_error==0x802A0105L) risultato="UI_E_LOOPS_OVERLAP";
-	else
-	if (i_error==0x802A0106L) risultato="UI_E_TRANSITION_ALREADY_USED";
-	else
-	if (i_error==0x802A0107L) risultato="UI_E_TRANSITION_NOT_IN_STORYBOARD";
-	else
-	if (i_error==0x802A0108L) risultato="UI_E_TRANSITION_ECLIPSED";
-	else
-	if (i_error==0x802A0109L) risultato="UI_E_TIME_BEFORE_LAST_UPDATE";
-	else
-	if (i_error==0x802A010AL) risultato="UI_E_TIMER_CLIENT_ALREADY_CONNECTED";
-	else
-	if (i_error==0x802A010BL) risultato="UI_E_INVALID_DIMENSION";
-	else
-	if (i_error==0x802A010CL) risultato="UI_E_PRIMITIVE_OUT_OF_BOUNDS";
-	else
-	if (i_error==0x802A0201L) risultato="UI_E_WINDOW_CLOSED";
-	else
-	if (i_error==0x80650001L) risultato="E_BLUETOOTH_ATT_INVALID_HANDLE";
-	else
-	if (i_error==0x80650002L) risultato="E_BLUETOOTH_ATT_READ_NOT_PERMITTED";
-	else
-	if (i_error==0x80650003L) risultato="E_BLUETOOTH_ATT_WRITE_NOT_PERMITTED";
-	else
-	if (i_error==0x80650004L) risultato="E_BLUETOOTH_ATT_INVALID_PDU";
-	else
-	if (i_error==0x80650005L) risultato="E_BLUETOOTH_ATT_INSUFFICIENT_AUTHENTICATION";
-	else
-	if (i_error==0x80650006L) risultato="E_BLUETOOTH_ATT_REQUEST_NOT_SUPPORTED";
-	else
-	if (i_error==0x80650007L) risultato="E_BLUETOOTH_ATT_INVALID_OFFSET";
-	else
-	if (i_error==0x80650008L) risultato="E_BLUETOOTH_ATT_INSUFFICIENT_AUTHORIZATION";
-	else
-	if (i_error==0x80650009L) risultato="E_BLUETOOTH_ATT_PREPARE_QUEUE_FULL";
-	else
-	if (i_error==0x8065000AL) risultato="E_BLUETOOTH_ATT_ATTRIBUTE_NOT_FOUND";
-	else
-	if (i_error==0x8065000BL) risultato="E_BLUETOOTH_ATT_ATTRIBUTE_NOT_LONG";
-	else
-	if (i_error==0x8065000CL) risultato="E_BLUETOOTH_ATT_INSUFFICIENT_ENCRYPTION_KEY_SIZE";
-	else
-	if (i_error==0x8065000DL) risultato="E_BLUETOOTH_ATT_INVALID_ATTRIBUTE_VALUE_LENGTH";
-	else
-	if (i_error==0x8065000EL) risultato="E_BLUETOOTH_ATT_UNLIKELY";
-	else
-	if (i_error==0x8065000FL) risultato="E_BLUETOOTH_ATT_INSUFFICIENT_ENCRYPTION";
-	else
-	if (i_error==0x80650010L) risultato="E_BLUETOOTH_ATT_UNSUPPORTED_GROUP_TYPE";
-	else
-	if (i_error==0x80650011L) risultato="E_BLUETOOTH_ATT_INSUFFICIENT_RESOURCES";
-	else
-	if (i_error==0x80651000L) risultato="E_BLUETOOTH_ATT_UNKNOWN_ERROR";
-	else
-	if (i_error==0x80660001L) risultato="E_AUDIO_ENGINE_NODE_NOT_FOUND";
-	else
-	if (i_error==0x80660002L) risultato="E_HDAUDIO_EMPTY_CONNECTION_LIST";
-	else
-	if (i_error==0x80660003L) risultato="E_HDAUDIO_CONNECTION_LISTNOT_SUPPORTED";
-	else
-	if (i_error==0x80660004L) risultato="E_HDAUDIO_NO_LOGICAL_DEVICES_CREATED";
-	else
-	if (i_error==0x80660005L) risultato="E_HDAUDIO_NULL_LINKED_LISTENTRY";
-	else
-	if (i_error==0x80670001L) risultato="STATEREPOSITORY_E_CONCURRENCY_LOCKING_FAILURE";
-	else
-	if (i_error==0x80670002L) risultato="STATEREPOSITORY_E_STATEMENT_INPROGRESS";
-	else
-	if (i_error==0x80670003L) risultato="STATEREPOSITORY_E_CONFIGURATION_INVALID";
-	else
-	if (i_error==0x80670004L) risultato="STATEREPOSITORY_E_UNKNOWN_SCHEMA_VERSION";
-	else
-	if (i_error==0x80670005L) risultato="STATEREPOSITORY_ERROR_DICTIONARY_CORRUPTED";
-	else
-	if (i_error==0x80670006L) risultato="STATEREPOSITORY_E_BLOCKED";
-	else
-	if (i_error==0x80670007L) risultato="STATEREPOSITORY_E_BUSY_RETRY";
-	else
-	if (i_error==0x80670008L) risultato="STATEREPOSITORY_E_BUSY_RECOVERY_RETRY";
-	else
-	if (i_error==0x80670009L) risultato="STATEREPOSITORY_E_LOCKED_RETRY";
-	else
-	if (i_error==0x8067000AL) risultato="STATEREPOSITORY_E_LOCKED_SHAREDCACHE_RETRY";
-	else
-	if (i_error==0x8067000BL) risultato="STATEREPOSITORY_E_TRANSACTION_REQUIRED";
-	else
-	if (i_error==0x00E70001L) risultato="ERROR_SPACES_POOL_WAS_DELETED";
-	else
-	if (i_error==0x80E70001L) risultato="ERROR_SPACES_FAULT_DOMAIN_TYPE_INVALID";
-	else
-	if (i_error==0x80E70002L) risultato="ERROR_SPACES_INTERNAL_ERROR";
-	else
-	if (i_error==0x80E70003L) risultato="ERROR_SPACES_RESILIENCY_TYPE_INVALID";
-	else
-	if (i_error==0x80E70004L) risultato="ERROR_SPACES_DRIVE_SECTOR_SIZE_INVALID";
-	else
-	if (i_error==0x80E70006L) risultato="ERROR_SPACES_DRIVE_REDUNDANCY_INVALID";
-	else
-	if (i_error==0x80E70007L) risultato="ERROR_SPACES_NUMBER_OF_DATA_COPIES_INVALID";
-	else
-	if (i_error==0x80E70008L) risultato="ERROR_SPACES_PARITY_LAYOUT_INVALID";
-	else
-	if (i_error==0x80E70009L) risultato="ERROR_SPACES_INTERLEAVE_LENGTH_INVALID";
-	else
-	if (i_error==0x80E7000AL) risultato="ERROR_SPACES_NUMBER_OF_COLUMNS_INVALID";
-	else
-	if (i_error==0x80E7000BL) risultato="ERROR_SPACES_NOT_ENOUGH_DRIVES";
-	else
-	if (i_error==0x80E7000CL) risultato="ERROR_SPACES_EXTENDED_ERROR";
-	else
-	if (i_error==0x80E7000DL) risultato="ERROR_SPACES_PROVISIONING_TYPE_INVALID";
-	else
-	if (i_error==0x80E7000EL) risultato="ERROR_SPACES_ALLOCATION_SIZE_INVALID";
-	else
-	if (i_error==0x80E7000FL) risultato="ERROR_SPACES_ENCLOSURE_AWARE_INVALID";
-	else
-	if (i_error==0x80E70010L) risultato="ERROR_SPACES_WRITE_CACHE_SIZE_INVALID";
-	else
-	if (i_error==0x80E70011L) risultato="ERROR_SPACES_NUMBER_OF_GROUPS_INVALID";
-	else
-	if (i_error==0x80E70012L) risultato="ERROR_SPACES_DRIVE_OPERATIONAL_STATE_INVALID";
-	else
-	if (i_error==0x80820001L) risultato="ERROR_VOLSNAP_BOOTFILE_NOT_VALID";
-	else
-	if (i_error==0x80820002L) risultato="ERROR_VOLSNAP_ACTIVATION_TIMEOUT";
-	else
-	if (i_error==0x80830001L) risultato="ERROR_TIERING_NOT_SUPPORTED_ON_VOLUME";
-	else
-	if (i_error==0x80830002L) risultato="ERROR_TIERING_VOLUME_DISMOUNT_IN_PROGRESS";
-	else
-	if (i_error==0x80830003L) risultato="ERROR_TIERING_STORAGE_TIER_NOT_FOUND";
-	else
-	if (i_error==0x80830004L) risultato="ERROR_TIERING_INVALID_FILE_ID";
-	else
-	if (i_error==0x80830005L) risultato="ERROR_TIERING_WRONG_CLUSTER_NODE";
-	else
-	if (i_error==0x80830006L) risultato="ERROR_TIERING_ALREADY_PROCESSING";
-	else
-	if (i_error==0x80830007L) risultato="ERROR_TIERING_CANNOT_PIN_OBJECT";
-	else
-	if (i_error==0xC0E80000L) risultato="ERROR_SECCORE_INVALID_COMMAND";
-	else
-	if (i_error==0xC0EA0001L) risultato="ERROR_NO_APPLICABLE_APP_LICENSES_FOUND";
-	else
-	if (i_error==0xC0EA0002L) risultato="ERROR_CLIP_LICENSE_NOT_FOUND";
-	else
-	if (i_error==0xC0EA0003L) risultato="ERROR_CLIP_DEVICE_LICENSE_MISSING";
-	else
-	if (i_error==0xC0EA0004L) risultato="ERROR_CLIP_LICENSE_INVALID_SIGNATURE";
-	else
-	if (i_error==0xC0EA0005L) risultato="ERROR_CLIP_KEYHOLDER_LICENSE_MISSING_OR_INVALID";
-	else
-	if (i_error==0xC0EA0006L) risultato="ERROR_CLIP_LICENSE_EXPIRED";
-	else
-	if (i_error==0xC0EA0007L) risultato="ERROR_CLIP_LICENSE_SIGNED_BY_UNKNOWN_SOURCE";
-	else
-	if (i_error==0xC0EA0008L) risultato="ERROR_CLIP_LICENSE_NOT_SIGNED";
-	else
-	if (i_error==0xC0EA0009L) risultato="ERROR_CLIP_LICENSE_HARDWARE_ID_OUT_OF_TOLERANCE";
-	else
-	if (i_error==0xC0EA000AL) risultato="ERROR_CLIP_LICENSE_DEVICE_ID_MISMATCH";
-	else
-	if (i_error==0x087A0001L) risultato="DXGI_STATUS_OCCLUDED";
-	else
-	if (i_error==0x087A0002L) risultato="DXGI_STATUS_CLIPPED";
-	else
-	if (i_error==0x087A0004L) risultato="DXGI_STATUS_NO_REDIRECTION";
-	else
-	if (i_error==0x087A0005L) risultato="DXGI_STATUS_NO_DESKTOP_ACCESS";
-	else
-	if (i_error==0x087A0006L) risultato="DXGI_STATUS_GRAPHICS_VIDPN_SOURCE_IN_USE";
-	else
-	if (i_error==0x087A0007L) risultato="DXGI_STATUS_MODE_CHANGED";
-	else
-	if (i_error==0x087A0008L) risultato="DXGI_STATUS_MODE_CHANGE_IN_PROGRESS";
-	else
-	if (i_error==0x887A0001L) risultato="DXGI_ERROR_INVALID_CALL";
-	else
-	if (i_error==0x887A0002L) risultato="DXGI_ERROR_NOT_FOUND";
-	else
-	if (i_error==0x887A0003L) risultato="DXGI_ERROR_MORE_DATA";
-	else
-	if (i_error==0x887A0004L) risultato="DXGI_ERROR_UNSUPPORTED";
-	else
-	if (i_error==0x887A0005L) risultato="DXGI_ERROR_DEVICE_REMOVED";
-	else
-	if (i_error==0x887A0006L) risultato="DXGI_ERROR_DEVICE_HUNG";
-	else
-	if (i_error==0x887A0007L) risultato="DXGI_ERROR_DEVICE_RESET";
-	else
-	if (i_error==0x887A000AL) risultato="DXGI_ERROR_WAS_STILL_DRAWING";
-	else
-	if (i_error==0x887A000BL) risultato="DXGI_ERROR_FRAME_STATISTICS_DISJOINT";
-	else
-	if (i_error==0x887A000CL) risultato="DXGI_ERROR_GRAPHICS_VIDPN_SOURCE_IN_USE";
-	else
-	if (i_error==0x887A0020L) risultato="DXGI_ERROR_DRIVER_INTERNAL_ERROR";
-	else
-	if (i_error==0x887A0021L) risultato="DXGI_ERROR_NONEXCLUSIVE";
-	else
-	if (i_error==0x887A0022L) risultato="DXGI_ERROR_NOT_CURRENTLY_AVAILABLE";
-	else
-	if (i_error==0x887A0023L) risultato="DXGI_ERROR_REMOTE_CLIENT_DISCONNECTED";
-	else
-	if (i_error==0x887A0024L) risultato="DXGI_ERROR_REMOTE_OUTOFMEMORY";
-	else
-	if (i_error==0x887A0026L) risultato="DXGI_ERROR_ACCESS_LOST";
-	else
-	if (i_error==0x887A0027L) risultato="DXGI_ERROR_WAIT_TIMEOUT";
-	else
-	if (i_error==0x887A0028L) risultato="DXGI_ERROR_SESSION_DISCONNECTED";
-	else
-	if (i_error==0x887A0029L) risultato="DXGI_ERROR_RESTRICT_TO_OUTPUT_STALE";
-	else
-	if (i_error==0x887A002AL) risultato="DXGI_ERROR_CANNOT_PROTECT_CONTENT";
-	else
-	if (i_error==0x887A002BL) risultato="DXGI_ERROR_ACCESS_DENIED";
-	else
-	if (i_error==0x887A002CL) risultato="DXGI_ERROR_NAME_ALREADY_EXISTS";
-	else
-	if (i_error==0x887A002DL) risultato="DXGI_ERROR_SDK_COMPONENT_MISSING";
-	else
-	if (i_error==0x887A002EL) risultato="DXGI_ERROR_NOT_CURRENT";
-	else
-	if (i_error==0x887A0030L) risultato="DXGI_ERROR_HW_PROTECTION_OUTOFMEMORY";
-	else
-	if (i_error==0x087A0009L) risultato="DXGI_STATUS_UNOCCLUDED";
-	else
-	if (i_error==0x087A000AL) risultato="DXGI_STATUS_DDA_WAS_STILL_DRAWING";
-	else
-	if (i_error==0x887A0025L) risultato="DXGI_ERROR_MODE_CHANGE_IN_PROGRESS";
-	else
-	if (i_error==0x087A002FL) risultato="DXGI_STATUS_PRESENT_REQUIRED";
-	else
-	if (i_error==0x887B0001L) risultato="DXGI_DDI_ERR_WASSTILLDRAWING";
-	else
-	if (i_error==0x887B0002L) risultato="DXGI_DDI_ERR_UNSUPPORTED";
-	else
-	if (i_error==0x887B0003L) risultato="DXGI_DDI_ERR_NONEXCLUSIVE";
-	else
-	if (i_error==0x88790001L) risultato="D3D10_ERROR_TOO_MANY_UNIQUE_STATE_OBJECTS";
-	else
-	if (i_error==0x88790002L) risultato="D3D10_ERROR_FILE_NOT_FOUND";
-	else
-	if (i_error==0x887C0001L) risultato="D3D11_ERROR_TOO_MANY_UNIQUE_STATE_OBJECTS";
-	else
-	if (i_error==0x887C0002L) risultato="D3D11_ERROR_FILE_NOT_FOUND";
-	else
-	if (i_error==0x887C0003L) risultato="D3D11_ERROR_TOO_MANY_UNIQUE_VIEW_OBJECTS";
-	else
-	if (i_error==0x887C0004L) risultato="D3D11_ERROR_DEFERRED_CONTEXT_MAP_WITHOUT_INITIAL_DISCARD";
-	else
-	if (i_error==0x887E0001L) risultato="D3D12_ERROR_ADAPTER_NOT_FOUND";
-	else
-	if (i_error==0x887E0002L) risultato="D3D12_ERROR_DRIVER_VERSION_MISMATCH";
-	else
-	if (i_error==0x88990001L) risultato="D2DERR_WRONG_STATE";
-	else
-	if (i_error==0x88990002L) risultato="D2DERR_NOT_INITIALIZED";
-	else
-	if (i_error==0x88990003L) risultato="D2DERR_UNSUPPORTED_OPERATION";
-	else
-	if (i_error==0x88990004L) risultato="D2DERR_SCANNER_FAILED";
-	else
-	if (i_error==0x88990005L) risultato="D2DERR_SCREEN_ACCESS_DENIED";
-	else
-	if (i_error==0x88990006L) risultato="D2DERR_DISPLAY_STATE_INVALID";
-	else
-	if (i_error==0x88990007L) risultato="D2DERR_ZERO_VECTOR";
-	else
-	if (i_error==0x88990008L) risultato="D2DERR_INTERNAL_ERROR";
-	else
-	if (i_error==0x88990009L) risultato="D2DERR_DISPLAY_FORMAT_NOT_SUPPORTED";
-	else
-	if (i_error==0x8899000AL) risultato="D2DERR_INVALID_CALL";
-	else
-	if (i_error==0x8899000BL) risultato="D2DERR_NO_HARDWARE_DEVICE";
-	else
-	if (i_error==0x8899000CL) risultato="D2DERR_RECREATE_TARGET";
-	else
-	if (i_error==0x8899000DL) risultato="D2DERR_TOO_MANY_SHADER_ELEMENTS";
-	else
-	if (i_error==0x8899000EL) risultato="D2DERR_SHADER_COMPILE_FAILED";
-	else
-	if (i_error==0x8899000FL) risultato="D2DERR_MAX_TEXTURE_SIZE_EXCEEDED";
-	else
-	if (i_error==0x88990010L) risultato="D2DERR_UNSUPPORTED_VERSION";
-	else
-	if (i_error==0x88990011L) risultato="D2DERR_BAD_NUMBER";
-	else
-	if (i_error==0x88990012L) risultato="D2DERR_WRONG_FACTORY";
-	else
-	if (i_error==0x88990013L) risultato="D2DERR_LAYER_ALREADY_IN_USE";
-	else
-	if (i_error==0x88990014L) risultato="D2DERR_POP_CALL_DID_NOT_MATCH_PUSH";
-	else
-	if (i_error==0x88990015L) risultato="D2DERR_WRONG_RESOURCE_DOMAIN";
-	else
-	if (i_error==0x88990016L) risultato="D2DERR_PUSH_POP_UNBALANCED";
-	else
-	if (i_error==0x88990017L) risultato="D2DERR_RENDER_TARGET_HAS_LAYER_OR_CLIPRECT";
-	else
-	if (i_error==0x88990018L) risultato="D2DERR_INCOMPATIBLE_BRUSH_TYPES";
-	else
-	if (i_error==0x88990019L) risultato="D2DERR_WIN32_ERROR";
-	else
-	if (i_error==0x8899001AL) risultato="D2DERR_TARGET_NOT_GDI_COMPATIBLE";
-	else
-	if (i_error==0x8899001BL) risultato="D2DERR_TEXT_EFFECT_IS_WRONG_TYPE";
-	else
-	if (i_error==0x8899001CL) risultato="D2DERR_TEXT_RENDERER_NOT_RELEASED";
-	else
-	if (i_error==0x8899001DL) risultato="D2DERR_EXCEEDS_MAX_BITMAP_SIZE";
-	else
-	if (i_error==0x8899001EL) risultato="D2DERR_INVALID_GRAPH_CONFIGURATION";
-	else
-	if (i_error==0x8899001FL) risultato="D2DERR_INVALID_INTERNAL_GRAPH_CONFIGURATION";
-	else
-	if (i_error==0x88990020L) risultato="D2DERR_CYCLIC_GRAPH";
-	else
-	if (i_error==0x88990021L) risultato="D2DERR_BITMAP_CANNOT_DRAW";
-	else
-	if (i_error==0x88990022L) risultato="D2DERR_OUTSTANDING_BITMAP_REFERENCES";
-	else
-	if (i_error==0x88990023L) risultato="D2DERR_ORIGINAL_TARGET_NOT_BOUND";
-	else
-	if (i_error==0x88990024L) risultato="D2DERR_INVALID_TARGET";
-	else
-	if (i_error==0x88990025L) risultato="D2DERR_BITMAP_BOUND_AS_TARGET";
-	else
-	if (i_error==0x88990026L) risultato="D2DERR_INSUFFICIENT_DEVICE_CAPABILITIES";
-	else
-	if (i_error==0x88990027L) risultato="D2DERR_INTERMEDIATE_TOO_LARGE";
-	else
-	if (i_error==0x88990028L) risultato="D2DERR_EFFECT_IS_NOT_REGISTERED";
-	else
-	if (i_error==0x88990029L) risultato="D2DERR_INVALID_PROPERTY";
-	else
-	if (i_error==0x8899002AL) risultato="D2DERR_NO_SUBPROPERTIES";
-	else
-	if (i_error==0x8899002BL) risultato="D2DERR_PRINT_JOB_CLOSED";
-	else
-	if (i_error==0x8899002CL) risultato="D2DERR_PRINT_FORMAT_NOT_SUPPORTED";
-	else
-	if (i_error==0x8899002DL) risultato="D2DERR_TOO_MANY_TRANSFORM_INPUTS";
-	else
-	if (i_error==0x8899002EL) risultato="D2DERR_INVALID_GLYPH_IMAGE";
-	else
-	if (i_error==0x88985000L) risultato="DWRITE_E_FILEFORMAT";
-	else
-	if (i_error==0x88985001L) risultato="DWRITE_E_UNEXPECTED";
-	else
-	if (i_error==0x88985002L) risultato="DWRITE_E_NOFONT";
-	else
-	if (i_error==0x88985003L) risultato="DWRITE_E_FILENOTFOUND";
-	else
-	if (i_error==0x88985004L) risultato="DWRITE_E_FILEACCESS";
-	else
-	if (i_error==0x88985005L) risultato="DWRITE_E_FONTCOLLECTIONOBSOLETE";
-	else
-	if (i_error==0x88985006L) risultato="DWRITE_E_ALREADYREGISTERED";
-	else
-	if (i_error==0x88985007L) risultato="DWRITE_E_CACHEFORMAT";
-	else
-	if (i_error==0x88985008L) risultato="DWRITE_E_CACHEVERSION";
-	else
-	if (i_error==0x88985009L) risultato="DWRITE_E_UNSUPPORTEDOPERATION";
-	else
-	if (i_error==0x8898500AL) risultato="DWRITE_E_TEXTRENDERERINCOMPATIBLE";
-	else
-	if (i_error==0x8898500BL) risultato="DWRITE_E_FLOWDIRECTIONCONFLICTS";
-	else
-	if (i_error==0x8898500CL) risultato="DWRITE_E_NOCOLOR";
-	else
-	if (i_error==0x88982F04L) risultato="WINCODEC_ERR_WRONGSTATE";
-	else
-	if (i_error==0x88982F05L) risultato="WINCODEC_ERR_VALUEOUTOFRANGE";
-	else
-	if (i_error==0x88982F07L) risultato="WINCODEC_ERR_UNKNOWNIMAGEFORMAT";
-	else
-	if (i_error==0x88982F0BL) risultato="WINCODEC_ERR_UNSUPPORTEDVERSION";
-	else
-	if (i_error==0x88982F0CL) risultato="WINCODEC_ERR_NOTINITIALIZED";
-	else
-	if (i_error==0x88982F0DL) risultato="WINCODEC_ERR_ALREADYLOCKED";
-	else
-	if (i_error==0x88982F40L) risultato="WINCODEC_ERR_PROPERTYNOTFOUND";
-	else
-	if (i_error==0x88982F41L) risultato="WINCODEC_ERR_PROPERTYNOTSUPPORTED";
-	else
-	if (i_error==0x88982F42L) risultato="WINCODEC_ERR_PROPERTYSIZE";
-	else
-	if (i_error==0x88982F43L) risultato="WINCODEC_ERR_CODECPRESENT";
-	else
-	if (i_error==0x88982F44L) risultato="WINCODEC_ERR_CODECNOTHUMBNAIL";
-	else
-	if (i_error==0x88982F45L) risultato="WINCODEC_ERR_PALETTEUNAVAILABLE";
-	else
-	if (i_error==0x88982F46L) risultato="WINCODEC_ERR_CODECTOOMANYSCANLINES";
-	else
-	if (i_error==0x88982F48L) risultato="WINCODEC_ERR_INTERNALERROR";
-	else
-	if (i_error==0x88982F49L) risultato="WINCODEC_ERR_SOURCERECTDOESNOTMATCHDIMENSIONS";
-	else
-	if (i_error==0x88982F50L) risultato="WINCODEC_ERR_COMPONENTNOTFOUND";
-	else
-	if (i_error==0x88982F51L) risultato="WINCODEC_ERR_IMAGESIZEOUTOFRANGE";
-	else
-	if (i_error==0x88982F52L) risultato="WINCODEC_ERR_TOOMUCHMETADATA";
-	else
-	if (i_error==0x88982F60L) risultato="WINCODEC_ERR_BADIMAGE";
-	else
-	if (i_error==0x88982F61L) risultato="WINCODEC_ERR_BADHEADER";
-	else
-	if (i_error==0x88982F62L) risultato="WINCODEC_ERR_FRAMEMISSING";
-	else
-	if (i_error==0x88982F63L) risultato="WINCODEC_ERR_BADMETADATAHEADER";
-	else
-	if (i_error==0x88982F70L) risultato="WINCODEC_ERR_BADSTREAMDATA";
-	else
-	if (i_error==0x88982F71L) risultato="WINCODEC_ERR_STREAMWRITE";
-	else
-	if (i_error==0x88982F72L) risultato="WINCODEC_ERR_STREAMREAD";
-	else
-	if (i_error==0x88982F73L) risultato="WINCODEC_ERR_STREAMNOTAVAILABLE";
-	else
-	if (i_error==0x88982F80L) risultato="WINCODEC_ERR_UNSUPPORTEDPIXELFORMAT";
-	else
-	if (i_error==0x88982F81L) risultato="WINCODEC_ERR_UNSUPPORTEDOPERATION";
-	else
-	if (i_error==0x88982F8AL) risultato="WINCODEC_ERR_INVALIDREGISTRATION";
-	else
-	if (i_error==0x88982F8BL) risultato="WINCODEC_ERR_COMPONENTINITIALIZEFAILURE";
-	else
-	if (i_error==0x88982F8CL) risultato="WINCODEC_ERR_INSUFFICIENTBUFFER";
-	else
-	if (i_error==0x88982F8DL) risultato="WINCODEC_ERR_DUPLICATEMETADATAPRESENT";
-	else
-	if (i_error==0x88982F8EL) risultato="WINCODEC_ERR_PROPERTYUNEXPECTEDTYPE";
-	else
-	if (i_error==0x88982F8FL) risultato="WINCODEC_ERR_UNEXPECTEDSIZE";
-	else
-	if (i_error==0x88982F90L) risultato="WINCODEC_ERR_INVALIDQUERYREQUEST";
-	else
-	if (i_error==0x88982F91L) risultato="WINCODEC_ERR_UNEXPECTEDMETADATATYPE";
-	else
-	if (i_error==0x88982F92L) risultato="WINCODEC_ERR_REQUESTONLYVALIDATMETADATAROOT";
-	else
-	if (i_error==0x88982F93L) risultato="WINCODEC_ERR_INVALIDQUERYCHARACTER";
-	else
-	if (i_error==0x88982F94L) risultato="WINCODEC_ERR_WIN32ERROR";
-	else
-	if (i_error==0x88982F95L) risultato="WINCODEC_ERR_INVALIDPROGRESSIVELEVEL";
-	else
-	if (i_error==0x88982F96L) risultato="WINCODEC_ERR_INVALIDJPEGSCANINDEX";
-	else
-	if (i_error==0x88980001L) risultato="MILERR_OBJECTBUSY";
-	else
-	if (i_error==0x88980002L) risultato="MILERR_INSUFFICIENTBUFFER";
-	else
-	if (i_error==0x88980003L) risultato="MILERR_WIN32ERROR";
-	else
-	if (i_error==0x88980004L) risultato="MILERR_SCANNER_FAILED";
-	else
-	if (i_error==0x88980005L) risultato="MILERR_SCREENACCESSDENIED";
-	else
-	if (i_error==0x88980006L) risultato="MILERR_DISPLAYSTATEINVALID";
-	else
-	if (i_error==0x88980007L) risultato="MILERR_NONINVERTIBLEMATRIX";
-	else
-	if (i_error==0x88980008L) risultato="MILERR_ZEROVECTOR";
-	else
-	if (i_error==0x88980009L) risultato="MILERR_TERMINATED";
-	else
-	if (i_error==0x8898000AL) risultato="MILERR_BADNUMBER";
-	else
-	if (i_error==0x88980080L) risultato="MILERR_INTERNALERROR";
-	else
-	if (i_error==0x88980084L) risultato="MILERR_DISPLAYFORMATNOTSUPPORTED";
-	else
-	if (i_error==0x88980085L) risultato="MILERR_INVALIDCALL";
-	else
-	if (i_error==0x88980086L) risultato="MILERR_ALREADYLOCKED";
-	else
-	if (i_error==0x88980087L) risultato="MILERR_NOTLOCKED";
-	else
-	if (i_error==0x88980088L) risultato="MILERR_DEVICECANNOTRENDERTEXT";
-	else
-	if (i_error==0x88980089L) risultato="MILERR_GLYPHBITMAPMISSED";
-	else
-	if (i_error==0x8898008AL) risultato="MILERR_MALFORMEDGLYPHCACHE";
-	else
-	if (i_error==0x8898008BL) risultato="MILERR_GENERIC_IGNORE";
-	else
-	if (i_error==0x8898008CL) risultato="MILERR_MALFORMED_GUIDELINE_DATA";
-	else
-	if (i_error==0x8898008DL) risultato="MILERR_NO_HARDWARE_DEVICE";
-	else
-	if (i_error==0x8898008EL) risultato="MILERR_NEED_RECREATE_AND_PRESENT";
-	else
-	if (i_error==0x8898008FL) risultato="MILERR_ALREADY_INITIALIZED";
-	else
-	if (i_error==0x88980090L) risultato="MILERR_MISMATCHED_SIZE";
-	else
-	if (i_error==0x88980091L) risultato="MILERR_NO_REDIRECTION_SURFACE_AVAILABLE";
-	else
-	if (i_error==0x88980092L) risultato="MILERR_REMOTING_NOT_SUPPORTED";
-	else
-	if (i_error==0x88980093L) risultato="MILERR_QUEUED_PRESENT_NOT_SUPPORTED";
-	else
-	if (i_error==0x88980094L) risultato="MILERR_NOT_QUEUING_PRESENTS";
-	else
-	if (i_error==0x88980095L) risultato="MILERR_NO_REDIRECTION_SURFACE_RETRY_LATER";
-	else
-	if (i_error==0x88980096L) risultato="MILERR_TOOMANYSHADERELEMNTS";
-	else
-	if (i_error==0x88980097L) risultato="MILERR_MROW_READLOCK_FAILED";
-	else
-	if (i_error==0x88980098L) risultato="MILERR_MROW_UPDATE_FAILED";
-	else
-	if (i_error==0x88980099L) risultato="MILERR_SHADER_COMPILE_FAILED";
-	else
-	if (i_error==0x8898009AL) risultato="MILERR_MAX_TEXTURE_SIZE_EXCEEDED";
-	else
-	if (i_error==0x8898009BL) risultato="MILERR_QPC_TIME_WENT_BACKWARD";
-	else
-	if (i_error==0x8898009DL) risultato="MILERR_DXGI_ENUMERATION_OUT_OF_SYNC";
-	else
-	if (i_error==0x8898009EL) risultato="MILERR_ADAPTER_NOT_FOUND";
-	else
-	if (i_error==0x8898009FL) risultato="MILERR_COLORSPACE_NOT_SUPPORTED";
-	else
-	if (i_error==0x889800A0L) risultato="MILERR_PREFILTER_NOT_SUPPORTED";
-	else
-	if (i_error==0x889800A1L) risultato="MILERR_DISPLAYID_ACCESS_DENIED";
-	else
-	if (i_error==0x88980400L) risultato="UCEERR_INVALIDPACKETHEADER";
-	else
-	if (i_error==0x88980401L) risultato="UCEERR_UNKNOWNPACKET";
-	else
-	if (i_error==0x88980402L) risultato="UCEERR_ILLEGALPACKET";
-	else
-	if (i_error==0x88980403L) risultato="UCEERR_MALFORMEDPACKET";
-	else
-	if (i_error==0x88980404L) risultato="UCEERR_ILLEGALHANDLE";
-	else
-	if (i_error==0x88980405L) risultato="UCEERR_HANDLELOOKUPFAILED";
-	else
-	if (i_error==0x88980406L) risultato="UCEERR_RENDERTHREADFAILURE";
-	else
-	if (i_error==0x88980407L) risultato="UCEERR_CTXSTACKFRSTTARGETNULL";
-	else
-	if (i_error==0x88980408L) risultato="UCEERR_CONNECTIONIDLOOKUPFAILED";
-	else
-	if (i_error==0x88980409L) risultato="UCEERR_BLOCKSFULL";
-	else
-	if (i_error==0x8898040AL) risultato="UCEERR_MEMORYFAILURE";
-	else
-	if (i_error==0x8898040BL) risultato="UCEERR_PACKETRECORDOUTOFRANGE";
-	else
-	if (i_error==0x8898040CL) risultato="UCEERR_ILLEGALRECORDTYPE";
-	else
-	if (i_error==0x8898040DL) risultato="UCEERR_OUTOFHANDLES";
-	else
-	if (i_error==0x8898040EL) risultato="UCEERR_UNCHANGABLE_UPDATE_ATTEMPTED";
-	else
-	if (i_error==0x8898040FL) risultato="UCEERR_NO_MULTIPLE_WORKER_THREADS";
-	else
-	if (i_error==0x88980410L) risultato="UCEERR_REMOTINGNOTSUPPORTED";
-	else
-	if (i_error==0x88980411L) risultato="UCEERR_MISSINGENDCOMMAND";
-	else
-	if (i_error==0x88980412L) risultato="UCEERR_MISSINGBEGINCOMMAND";
-	else
-	if (i_error==0x88980413L) risultato="UCEERR_CHANNELSYNCTIMEDOUT";
-	else
-	if (i_error==0x88980414L) risultato="UCEERR_CHANNELSYNCABANDONED";
-	else
-	if (i_error==0x88980415L) risultato="UCEERR_UNSUPPORTEDTRANSPORTVERSION";
-	else
-	if (i_error==0x88980416L) risultato="UCEERR_TRANSPORTUNAVAILABLE";
-	else
-	if (i_error==0x88980417L) risultato="UCEERR_FEEDBACK_UNSUPPORTED";
-	else
-	if (i_error==0x88980418L) risultato="UCEERR_COMMANDTRANSPORTDENIED";
-	else
-	if (i_error==0x88980419L) risultato="UCEERR_GRAPHICSSTREAMUNAVAILABLE";
-	else
-	if (i_error==0x88980420L) risultato="UCEERR_GRAPHICSSTREAMALREADYOPEN";
-	else
-	if (i_error==0x88980421L) risultato="UCEERR_TRANSPORTDISCONNECTED";
-	else
-	if (i_error==0x88980422L) risultato="UCEERR_TRANSPORTOVERLOADED";
-	else
-	if (i_error==0x88980423L) risultato="UCEERR_PARTITION_ZOMBIED";
-	else
-	if (i_error==0x88980500L) risultato="MILAVERR_NOCLOCK";
-	else
-	if (i_error==0x88980501L) risultato="MILAVERR_NOMEDIATYPE";
-	else
-	if (i_error==0x88980502L) risultato="MILAVERR_NOVIDEOMIXER";
-	else
-	if (i_error==0x88980503L) risultato="MILAVERR_NOVIDEOPRESENTER";
-	else
-	if (i_error==0x88980504L) risultato="MILAVERR_NOREADYFRAMES";
-	else
-	if (i_error==0x88980505L) risultato="MILAVERR_MODULENOTLOADED";
-	else
-	if (i_error==0x88980506L) risultato="MILAVERR_WMPFACTORYNOTREGISTERED";
-	else
-	if (i_error==0x88980507L) risultato="MILAVERR_INVALIDWMPVERSION";
-	else
-	if (i_error==0x88980508L) risultato="MILAVERR_INSUFFICIENTVIDEORESOURCES";
-	else
-	if (i_error==0x88980509L) risultato="MILAVERR_VIDEOACCELERATIONNOTAVAILABLE";
-	else
-	if (i_error==0x8898050AL) risultato="MILAVERR_REQUESTEDTEXTURETOOBIG";
-	else
-	if (i_error==0x8898050BL) risultato="MILAVERR_SEEKFAILED";
-	else
-	if (i_error==0x8898050CL) risultato="MILAVERR_UNEXPECTEDWMPFAILURE";
-	else
-	if (i_error==0x8898050DL) risultato="MILAVERR_MEDIAPLAYERCLOSED";
-	else
-	if (i_error==0x8898050EL) risultato="MILAVERR_UNKNOWNHARDWAREERROR";
-	else
-	if (i_error==0x8898060EL) risultato="MILEFFECTSERR_UNKNOWNPROPERTY";
-	else
-	if (i_error==0x8898060FL) risultato="MILEFFECTSERR_EFFECTNOTPARTOFGROUP";
-	else
-	if (i_error==0x88980610L) risultato="MILEFFECTSERR_NOINPUTSOURCEATTACHED";
-	else
-	if (i_error==0x88980611L) risultato="MILEFFECTSERR_CONNECTORNOTCONNECTED";
-	else
-	if (i_error==0x88980612L) risultato="MILEFFECTSERR_CONNECTORNOTASSOCIATEDWITHEFFECT";
-	else
-	if (i_error==0x88980613L) risultato="MILEFFECTSERR_RESERVED";
-	else
-	if (i_error==0x88980614L) risultato="MILEFFECTSERR_CYCLEDETECTED";
-	else
-	if (i_error==0x88980615L) risultato="MILEFFECTSERR_EFFECTINMORETHANONEGRAPH";
-	else
-	if (i_error==0x88980616L) risultato="MILEFFECTSERR_EFFECTALREADYINAGRAPH";
-	else
-	if (i_error==0x88980617L) risultato="MILEFFECTSERR_EFFECTHASNOCHILDREN";
-	else
-	if (i_error==0x88980618L) risultato="MILEFFECTSERR_ALREADYATTACHEDTOLISTENER";
-	else
-	if (i_error==0x88980619L) risultato="MILEFFECTSERR_NOTAFFINETRANSFORM";
-	else
-	if (i_error==0x8898061AL) risultato="MILEFFECTSERR_EMPTYBOUNDS";
-	else
-	if (i_error==0x8898061BL) risultato="MILEFFECTSERR_OUTPUTSIZETOOLARGE";
-	else
-	if (i_error==0x88980700L) risultato="DWMERR_STATE_TRANSITION_FAILED";
-	else
-	if (i_error==0x88980701L) risultato="DWMERR_THEME_FAILED";
-	else
-	if (i_error==0x88980702L) risultato="DWMERR_CATASTROPHIC_FAILURE";
-	else
-	if (i_error==0x88980800L) risultato="DCOMPOSITION_ERROR_WINDOW_ALREADY_COMPOSED";
-	else
-	if (i_error==0x88980801L) risultato="DCOMPOSITION_ERROR_SURFACE_BEING_RENDERED";
-	else
-	if (i_error==0x88980802L) risultato="DCOMPOSITION_ERROR_SURFACE_NOT_BEING_RENDERED";
-	else
-	if (i_error==0x80860001L) risultato="ONL_E_INVALID_AUTHENTICATION_TARGET";
-	else
-	if (i_error==0x80860002L) risultato="ONL_E_ACCESS_DENIED_BY_TOU";
-	else
-	if (i_error==0x80860003L) risultato="ONL_E_INVALID_APPLICATION";
-	else
-	if (i_error==0x80860004L) risultato="ONL_E_PASSWORD_UPDATE_REQUIRED";
-	else
-	if (i_error==0x80860005L) risultato="ONL_E_ACCOUNT_UPDATE_REQUIRED";
-	else
-	if (i_error==0x80860006L) risultato="ONL_E_FORCESIGNIN";
-	else
-	if (i_error==0x80860007L) risultato="ONL_E_ACCOUNT_LOCKED";
-	else
-	if (i_error==0x80860008L) risultato="ONL_E_PARENTAL_CONSENT_REQUIRED";
-	else
-	if (i_error==0x80860009L) risultato="ONL_E_EMAIL_VERIFICATION_REQUIRED";
-	else
-	if (i_error==0x8086000AL) risultato="ONL_E_ACCOUNT_SUSPENDED_COMPROIMISE";
-	else
-	if (i_error==0x8086000BL) risultato="ONL_E_ACCOUNT_SUSPENDED_ABUSE";
-	else
-	if (i_error==0x8086000CL) risultato="ONL_E_ACTION_REQUIRED";
-	else
-	if (i_error==0x8086000DL) risultato="ONL_CONNECTION_COUNT_LIMIT";
-	else
-	if (i_error==0x8086000EL) risultato="ONL_E_CONNECTED_ACCOUNT_CAN_NOT_SIGNOUT";
-	else
-	if (i_error==0x8086000FL) risultato="ONL_E_USER_AUTHENTICATION_REQUIRED";
-	else
-	if (i_error==0x80860010L) risultato="ONL_E_REQUEST_THROTTLED";
-	else
-	if (i_error==0x80270220L) risultato="FA_E_MAX_PERSISTED_ITEMS_REACHED";
-	else
-	if (i_error==0x80270222L) risultato="FA_E_HOMEGROUP_NOT_AVAILABLE";
-	else
-	if (i_error==0x80270250L) risultato="E_MONITOR_RESOLUTION_TOO_LOW";
-	else
-	if (i_error==0x80270251L) risultato="E_ELEVATED_ACTIVATION_NOT_SUPPORTED";
-	else
-	if (i_error==0x80270252L) risultato="E_UAC_DISABLED";
-	else
-	if (i_error==0x80270253L) risultato="E_FULL_ADMIN_NOT_SUPPORTED";
-	else
-	if (i_error==0x80270254L) risultato="E_APPLICATION_NOT_REGISTERED";
-	else
-	if (i_error==0x80270255L) risultato="E_MULTIPLE_EXTENSIONS_FOR_APPLICATION";
-	else
-	if (i_error==0x80270256L) risultato="E_MULTIPLE_PACKAGES_FOR_FAMILY";
-	else
-	if (i_error==0x80270257L) risultato="E_APPLICATION_MANAGER_NOT_RUNNING";
-	else
-	if (i_error==0x00270258L) risultato="S_STORE_LAUNCHED_FOR_REMEDIATION";
-	else
-	if (i_error==0x00270259L) risultato="S_APPLICATION_ACTIVATION_ERROR_HANDLED_BY_DIALOG";
-	else
-	if (i_error==0x8027025AL) risultato="E_APPLICATION_ACTIVATION_TIMED_OUT";
-	else
-	if (i_error==0x8027025BL) risultato="E_APPLICATION_ACTIVATION_EXEC_FAILURE";
-	else
-	if (i_error==0x8027025CL) risultato="E_APPLICATION_TEMPORARY_LICENSE_ERROR";
-	else
-	if (i_error==0x8027025DL) risultato="E_APPLICATION_TRIAL_LICENSE_EXPIRED";
-	else
-	if (i_error==0x80270260L) risultato="E_SKYDRIVE_ROOT_TARGET_FILE_SYSTEM_NOT_SUPPORTED";
-	else
-	if (i_error==0x80270261L) risultato="E_SKYDRIVE_ROOT_TARGET_OVERLAP";
-	else
-	if (i_error==0x80270262L) risultato="E_SKYDRIVE_ROOT_TARGET_CANNOT_INDEX";
-	else
-	if (i_error==0x80270263L) risultato="E_SKYDRIVE_FILE_NOT_UPLOADED";
-	else
-	if (i_error==0x80270264L) risultato="E_SKYDRIVE_UPDATE_AVAILABILITY_FAIL";
-	else
-	if (i_error==0x80270265L) risultato="E_SKYDRIVE_ROOT_TARGET_VOLUME_ROOT_NOT_SUPPORTED";
-	else
-	if (i_error==0x8802B001L) risultato="E_SYNCENGINE_FILE_SIZE_OVER_LIMIT";
-	else
-	if (i_error==0x8802B002L) risultato="E_SYNCENGINE_FILE_SIZE_EXCEEDS_REMAINING_QUOTA";
-	else
-	if (i_error==0x8802B003L) risultato="E_SYNCENGINE_UNSUPPORTED_FILE_NAME";
-	else
-	if (i_error==0x8802B004L) risultato="E_SYNCENGINE_FOLDER_ITEM_COUNT_LIMIT_EXCEEDED";
-	else
-	if (i_error==0x8802B005L) risultato="E_SYNCENGINE_FILE_SYNC_PARTNER_ERROR";
-	else
-	if (i_error==0x8802B006L) risultato="E_SYNCENGINE_SYNC_PAUSED_BY_SERVICE";
-	else
-	if (i_error==0x8802C002L) risultato="E_SYNCENGINE_FILE_IDENTIFIER_UNKNOWN";
-	else
-	if (i_error==0x8802C003L) risultato="E_SYNCENGINE_SERVICE_AUTHENTICATION_FAILED";
-	else
-	if (i_error==0x8802C004L) risultato="E_SYNCENGINE_UNKNOWN_SERVICE_ERROR";
-	else
-	if (i_error==0x8802C005L) risultato="E_SYNCENGINE_SERVICE_RETURNED_UNEXPECTED_SIZE";
-	else
-	if (i_error==0x8802C006L) risultato="E_SYNCENGINE_REQUEST_BLOCKED_BY_SERVICE";
-	else
-	if (i_error==0x8802C007L) risultato="E_SYNCENGINE_REQUEST_BLOCKED_DUE_TO_CLIENT_ERROR";
-	else
-	if (i_error==0x8802D001L) risultato="E_SYNCENGINE_FOLDER_INACCESSIBLE";
-	else
-	if (i_error==0x8802D002L) risultato="E_SYNCENGINE_UNSUPPORTED_FOLDER_NAME";
-	else
-	if (i_error==0x8802D003L) risultato="E_SYNCENGINE_UNSUPPORTED_MARKET";
-	else
-	if (i_error==0x8802D004L) risultato="E_SYNCENGINE_PATH_LENGTH_LIMIT_EXCEEDED";
-	else
-	if (i_error==0x8802D005L) risultato="E_SYNCENGINE_REMOTE_PATH_LENGTH_LIMIT_EXCEEDED";
-	else
-	if (i_error==0x8802D006L) risultato="E_SYNCENGINE_CLIENT_UPDATE_NEEDED";
-	else
-	if (i_error==0x8802D007L) risultato="E_SYNCENGINE_PROXY_AUTHENTICATION_REQUIRED";
-	else
-	if (i_error==0x8802D008L) risultato="E_SYNCENGINE_STORAGE_SERVICE_PROVISIONING_FAILED";
-	else
-	if (i_error==0x8802D009L) risultato="E_SYNCENGINE_UNSUPPORTED_REPARSE_POINT";
-	else
-	if (i_error==0x8802D00AL) risultato="E_SYNCENGINE_STORAGE_SERVICE_BLOCKED";
-	else
-	if (i_error==0x8802D00BL) risultato="E_SYNCENGINE_FOLDER_IN_REDIRECTION";
-	else
-	if (i_error==0x80550001L) risultato="EAS_E_POLICY_NOT_MANAGED_BY_OS";
-	else
-	if (i_error==0x80550002L) risultato="EAS_E_POLICY_COMPLIANT_WITH_ACTIONS";
-	else
-	if (i_error==0x80550003L) risultato="EAS_E_REQUESTED_POLICY_NOT_ENFORCEABLE";
-	else
-	if (i_error==0x80550004L) risultato="EAS_E_CURRENT_USER_HAS_BLANK_PASSWORD";
-	else
-	if (i_error==0x80550005L) risultato="EAS_E_REQUESTED_POLICY_PASSWORD_EXPIRATION_INCOMPATIBLE";
-	else
-	if (i_error==0x80550006L) risultato="EAS_E_USER_CANNOT_CHANGE_PASSWORD";
-	else
-	if (i_error==0x80550007L) risultato="EAS_E_ADMINS_HAVE_BLANK_PASSWORD";
-	else
-	if (i_error==0x80550008L) risultato="EAS_E_ADMINS_CANNOT_CHANGE_PASSWORD";
-	else
-	if (i_error==0x80550009L) risultato="EAS_E_LOCAL_CONTROLLED_USERS_CANNOT_CHANGE_PASSWORD";
-	else
-	if (i_error==0x8055000AL) risultato="EAS_E_PASSWORD_POLICY_NOT_ENFORCEABLE_FOR_CONNECTED_ADMINS";
-	else
-	if (i_error==0x8055000BL) risultato="EAS_E_CONNECTED_ADMINS_NEED_TO_CHANGE_PASSWORD";
-	else
-	if (i_error==0x8055000CL) risultato="EAS_E_PASSWORD_POLICY_NOT_ENFORCEABLE_FOR_CURRENT_CONNECTED_USER";
-	else
-	if (i_error==0x8055000DL) risultato="EAS_E_CURRENT_CONNECTED_USER_NEED_TO_CHANGE_PASSWORD";
-	else
-	if (i_error==0x83750001L) risultato="WEB_E_UNSUPPORTED_FORMAT";
-	else
-	if (i_error==0x83750002L) risultato="WEB_E_INVALID_XML";
-	else
-	if (i_error==0x83750003L) risultato="WEB_E_MISSING_REQUIRED_ELEMENT";
-	else
-	if (i_error==0x83750004L) risultato="WEB_E_MISSING_REQUIRED_ATTRIBUTE";
-	else
-	if (i_error==0x83750005L) risultato="WEB_E_UNEXPECTED_CONTENT";
-	else
-	if (i_error==0x83750006L) risultato="WEB_E_RESOURCE_TOO_LARGE";
-	else
-	if (i_error==0x83750007L) risultato="WEB_E_INVALID_JSON_STRING";
-	else
-	if (i_error==0x83750008L) risultato="WEB_E_INVALID_JSON_NUMBER";
-	else
-	if (i_error==0x83750009L) risultato="WEB_E_JSON_VALUE_NOT_FOUND";
-	else
-	if (i_error==0x80190001L) risultato="HTTP_E_STATUS_UNEXPECTED";
-	else
-	if (i_error==0x80190003L) risultato="HTTP_E_STATUS_UNEXPECTED_REDIRECTION";
-	else
-	if (i_error==0x80190004L) risultato="HTTP_E_STATUS_UNEXPECTED_CLIENT_ERROR";
-	else
-	if (i_error==0x80190005L) risultato="HTTP_E_STATUS_UNEXPECTED_SERVER_ERROR";
-	else
-	if (i_error==0x8019012CL) risultato="HTTP_E_STATUS_AMBIGUOUS";
-	else
-	if (i_error==0x8019012DL) risultato="HTTP_E_STATUS_MOVED";
-	else
-	if (i_error==0x8019012EL) risultato="HTTP_E_STATUS_REDIRECT";
-	else
-	if (i_error==0x8019012FL) risultato="HTTP_E_STATUS_REDIRECT_METHOD";
-	else
-	if (i_error==0x80190130L) risultato="HTTP_E_STATUS_NOT_MODIFIED";
-	else
-	if (i_error==0x80190131L) risultato="HTTP_E_STATUS_USE_PROXY";
-	else
-	if (i_error==0x80190133L) risultato="HTTP_E_STATUS_REDIRECT_KEEP_VERB";
-	else
-	if (i_error==0x80190190L) risultato="HTTP_E_STATUS_BAD_REQUEST";
-	else
-	if (i_error==0x80190191L) risultato="HTTP_E_STATUS_DENIED";
-	else
-	if (i_error==0x80190192L) risultato="HTTP_E_STATUS_PAYMENT_REQ";
-	else
-	if (i_error==0x80190193L) risultato="HTTP_E_STATUS_FORBIDDEN";
-	else
-	if (i_error==0x80190194L) risultato="HTTP_E_STATUS_NOT_FOUND";
-	else
-	if (i_error==0x80190195L) risultato="HTTP_E_STATUS_BAD_METHOD";
-	else
-	if (i_error==0x80190196L) risultato="HTTP_E_STATUS_NONE_ACCEPTABLE";
-	else
-	if (i_error==0x80190197L) risultato="HTTP_E_STATUS_PROXY_AUTH_REQ";
-	else
-	if (i_error==0x80190198L) risultato="HTTP_E_STATUS_REQUEST_TIMEOUT";
-	else
-	if (i_error==0x80190199L) risultato="HTTP_E_STATUS_CONFLICT";
-	else
-	if (i_error==0x8019019AL) risultato="HTTP_E_STATUS_GONE";
-	else
-	if (i_error==0x8019019BL) risultato="HTTP_E_STATUS_LENGTH_REQUIRED";
-	else
-	if (i_error==0x8019019CL) risultato="HTTP_E_STATUS_PRECOND_FAILED";
-	else
-	if (i_error==0x8019019DL) risultato="HTTP_E_STATUS_REQUEST_TOO_LARGE";
-	else
-	if (i_error==0x8019019EL) risultato="HTTP_E_STATUS_URI_TOO_LONG";
-	else
-	if (i_error==0x8019019FL) risultato="HTTP_E_STATUS_UNSUPPORTED_MEDIA";
-	else
-	if (i_error==0x801901A0L) risultato="HTTP_E_STATUS_RANGE_NOT_SATISFIABLE";
-	else
-	if (i_error==0x801901A1L) risultato="HTTP_E_STATUS_EXPECTATION_FAILED";
-	else
-	if (i_error==0x801901F4L) risultato="HTTP_E_STATUS_SERVER_ERROR";
-	else
-	if (i_error==0x801901F5L) risultato="HTTP_E_STATUS_NOT_SUPPORTED";
-	else
-	if (i_error==0x801901F6L) risultato="HTTP_E_STATUS_BAD_GATEWAY";
-	else
-	if (i_error==0x801901F7L) risultato="HTTP_E_STATUS_SERVICE_UNAVAIL";
-	else
-	if (i_error==0x801901F8L) risultato="HTTP_E_STATUS_GATEWAY_TIMEOUT";
-	else
-	if (i_error==0x801901F9L) risultato="HTTP_E_STATUS_VERSION_NOT_SUP";
-	else
-	if (i_error==0x83760001L) risultato="E_INVALID_PROTOCOL_OPERATION";
-	else
-	if (i_error==0x83760002L) risultato="E_INVALID_PROTOCOL_FORMAT";
-	else
-	if (i_error==0x83760003L) risultato="E_PROTOCOL_EXTENSIONS_NOT_SUPPORTED";
-	else
-	if (i_error==0x83760004L) risultato="E_SUBPROTOCOL_NOT_SUPPORTED";
-	else
-	if (i_error==0x83760005L) risultato="E_PROTOCOL_VERSION_NOT_SUPPORTED";
-	else
-	if (i_error==0x80400000L) risultato="INPUT_E_OUT_OF_ORDER";
-	else
-	if (i_error==0x80400001L) risultato="INPUT_E_REENTRANCY";
-	else
-	if (i_error==0x80400002L) risultato="INPUT_E_MULTIMODAL";
-	else
-	if (i_error==0x80400003L) risultato="INPUT_E_PACKET";
-	else
-	if (i_error==0x80400004L) risultato="INPUT_E_FRAME";
-	else
-	if (i_error==0x80400005L) risultato="INPUT_E_HISTORY";
-	else
-	if (i_error==0x80400006L) risultato="INPUT_E_DEVICE_INFO";
-	else
-	if (i_error==0x80400007L) risultato="INPUT_E_TRANSFORM";
-	else
-	if (i_error==0x80400008L) risultato="INPUT_E_DEVICE_PROPERTY";
-	else
-	if (i_error==0x800C0002L) risultato="INET_E_INVALID_URL";
-	else
-	if (i_error==0x800C0003L) risultato="INET_E_NO_SESSION";
-	else
-	if (i_error==0x800C0004L) risultato="INET_E_CANNOT_CONNECT";
-	else
-	if (i_error==0x800C0005L) risultato="INET_E_RESOURCE_NOT_FOUND";
-	else
-	if (i_error==0x800C0006L) risultato="INET_E_OBJECT_NOT_FOUND";
-	else
-	if (i_error==0x800C0007L) risultato="INET_E_DATA_NOT_AVAILABLE";
-	else
-	if (i_error==0x800C0008L) risultato="INET_E_DOWNLOAD_FAILURE";
-	else
-	if (i_error==0x800C0009L) risultato="INET_E_AUTHENTICATION_REQUIRED";
-	else
-	if (i_error==0x800C000AL) risultato="INET_E_NO_VALID_MEDIA";
-	else
-	if (i_error==0x800C000BL) risultato="INET_E_CONNECTION_TIMEOUT";
-	else
-	if (i_error==0x800C000CL) risultato="INET_E_INVALID_REQUEST";
-	else
-	if (i_error==0x800C000DL) risultato="INET_E_UNKNOWN_PROTOCOL";
-	else
-	if (i_error==0x800C000EL) risultato="INET_E_SECURITY_PROBLEM";
-	else
-	if (i_error==0x800C000FL) risultato="INET_E_CANNOT_LOAD_DATA";
-	else
-	if (i_error==0x800C0010L) risultato="INET_E_CANNOT_INSTANTIATE_OBJECT";
-	else
-	if (i_error==0x800C0019L) risultato="INET_E_INVALID_CERTIFICATE";
-	else
-	if (i_error==0x800C0014L) risultato="INET_E_REDIRECT_FAILED";
-	else
-	if (i_error==0x800C0015L) risultato="INET_E_REDIRECT_TO_DIR";
-	else
-	if (i_error==0x80B00001L) risultato="ERROR_DBG_CREATE_PROCESS_FAILURE_LOCKDOWN";
-	else
-	if (i_error==0x80B00002L) risultato="ERROR_DBG_ATTACH_PROCESS_FAILURE_LOCKDOWN";
-	else
-	if (i_error==0x80B00003L) risultato="ERROR_DBG_CONNECT_SERVER_FAILURE_LOCKDOWN";
-	else
-	if (i_error==0x80B00004L) risultato="ERROR_DBG_START_SERVER_FAILURE_LOCKDOWN";
-	else
-	if (i_error==0x89010001L) risultato="ERROR_IO_PREEMPTED";
-	else
-	if (i_error==0x89020001L) risultato="JSCRIPT_E_CANTEXECUTE";
-	else
-	if (i_error==0x88010001L) risultato="WEP_E_NOT_PROVISIONED_ON_ALL_VOLUMES";
-	else
-	if (i_error==0x88010002L) risultato="WEP_E_FIXED_DATA_NOT_SUPPORTED";
-	else
-	if (i_error==0x88010003L) risultato="WEP_E_HARDWARE_NOT_COMPLIANT";
-	else
-	if (i_error==0x88010004L) risultato="WEP_E_LOCK_NOT_CONFIGURED";
-	else
-	if (i_error==0x88010005L) risultato="WEP_E_PROTECTION_SUSPENDED";
-	else
-	if (i_error==0x88010006L) risultato="WEP_E_NO_LICENSE";
-	else
-	if (i_error==0x88010007L) risultato="WEP_E_OS_NOT_PROTECTED";
-	else
-	if (i_error==0x88010008L) risultato="WEP_E_UNEXPECTED_FAIL";
-	else
-	if (i_error==0x88010009L) risultato="WEP_E_BUFFER_TOO_LARGE";
-	else
-	if (i_error==0xC05C0000L) risultato="ERROR_SVHDX_ERROR_STORED";
-	else
-	if (i_error==0xC05CFF00L) risultato="ERROR_SVHDX_ERROR_NOT_AVAILABLE";
-	else
-	if (i_error==0xC05CFF01L) risultato="ERROR_SVHDX_UNIT_ATTENTION_AVAILABLE";
-	else
-	if (i_error==0xC05CFF02L) risultato="ERROR_SVHDX_UNIT_ATTENTION_CAPACITY_DATA_CHANGED";
-	else
-	if (i_error==0xC05CFF03L) risultato="ERROR_SVHDX_UNIT_ATTENTION_RESERVATIONS_PREEMPTED";
-	else
-	if (i_error==0xC05CFF04L) risultato="ERROR_SVHDX_UNIT_ATTENTION_RESERVATIONS_RELEASED";
-	else
-	if (i_error==0xC05CFF05L) risultato="ERROR_SVHDX_UNIT_ATTENTION_REGISTRATIONS_PREEMPTED";
-	else
-	if (i_error==0xC05CFF06L) risultato="ERROR_SVHDX_UNIT_ATTENTION_OPERATING_DEFINITION_CHANGED";
-	else
-	if (i_error==0xC05CFF07L) risultato="ERROR_SVHDX_RESERVATION_CONFLICT";
-	else
-	if (i_error==0xC05CFF08L) risultato="ERROR_SVHDX_WRONG_FILE_TYPE";
-	else
-	if (i_error==0xC05CFF09L) risultato="ERROR_SVHDX_VERSION_MISMATCH";
-	else
-	if (i_error==0xC05CFF0AL) risultato="ERROR_VHD_SHARED";
-	else
-	if (i_error==0xC05CFF0BL) risultato="ERROR_SVHDX_NO_INITIATOR";
-	else
-	if (i_error==0xC05CFF0CL) risultato="ERROR_VHDSET_BACKING_STORAGE_NOT_FOUND";
-	else
-	if (i_error==0xC05D0000L) risultato="ERROR_SMB_NO_PREAUTH_INTEGRITY_HASH_OVERLAP";
-	else
-	if (i_error==0xC05D0001L) risultato="ERROR_SMB_BAD_CLUSTER_DIALECT";
-	else
-	if (i_error==0x80072EE1L) risultato="WININET_E_OUT_OF_HANDLES";
-	else
-	if (i_error==0x80072EE2L) risultato="WININET_E_TIMEOUT";
-	else
-	if (i_error==0x80072EE3L) risultato="WININET_E_EXTENDED_ERROR";
-	else
-	if (i_error==0x80072EE4L) risultato="WININET_E_INTERNAL_ERROR";
-	else
-	if (i_error==0x80072EE5L) risultato="WININET_E_INVALID_URL";
-	else
-	if (i_error==0x80072EE6L) risultato="WININET_E_UNRECOGNIZED_SCHEME";
-	else
-	if (i_error==0x80072EE7L) risultato="WININET_E_NAME_NOT_RESOLVED";
-	else
-	if (i_error==0x80072EE8L) risultato="WININET_E_PROTOCOL_NOT_FOUND";
-	else
-	if (i_error==0x80072EE9L) risultato="WININET_E_INVALID_OPTION";
-	else
-	if (i_error==0x80072EEAL) risultato="WININET_E_BAD_OPTION_LENGTH";
-	else
-	if (i_error==0x80072EEBL) risultato="WININET_E_OPTION_NOT_SETTABLE";
-	else
-	if (i_error==0x80072EECL) risultato="WININET_E_SHUTDOWN";
-	else
-	if (i_error==0x80072EEDL) risultato="WININET_E_INCORRECT_USER_NAME";
-	else
-	if (i_error==0x80072EEEL) risultato="WININET_E_INCORRECT_PASSWORD";
-	else
-	if (i_error==0x80072EEFL) risultato="WININET_E_LOGIN_FAILURE";
-	else
-	if (i_error==0x80072EF0L) risultato="WININET_E_INVALID_OPERATION";
-	else
-	if (i_error==0x80072EF1L) risultato="WININET_E_OPERATION_CANCELLED";
-	else
-	if (i_error==0x80072EF2L) risultato="WININET_E_INCORRECT_HANDLE_TYPE";
-	else
-	if (i_error==0x80072EF3L) risultato="WININET_E_INCORRECT_HANDLE_STATE";
-	else
-	if (i_error==0x80072EF4L) risultato="WININET_E_NOT_PROXY_REQUEST";
-	else
-	if (i_error==0x80072EF5L) risultato="WININET_E_REGISTRY_VALUE_NOT_FOUND";
-	else
-	if (i_error==0x80072EF6L) risultato="WININET_E_BAD_REGISTRY_PARAMETER";
-	else
-	if (i_error==0x80072EF7L) risultato="WININET_E_NO_DIRECT_ACCESS";
-	else
-	if (i_error==0x80072EF8L) risultato="WININET_E_NO_CONTEXT";
-	else
-	if (i_error==0x80072EF9L) risultato="WININET_E_NO_CALLBACK";
-	else
-	if (i_error==0x80072EFAL) risultato="WININET_E_REQUEST_PENDING";
-	else
-	if (i_error==0x80072EFBL) risultato="WININET_E_INCORRECT_FORMAT";
-	else
-	if (i_error==0x80072EFCL) risultato="WININET_E_ITEM_NOT_FOUND";
-	else
-	if (i_error==0x80072EFDL) risultato="WININET_E_CANNOT_CONNECT";
-	else
-	if (i_error==0x80072EFEL) risultato="WININET_E_CONNECTION_ABORTED";
-	else
-	if (i_error==0x80072EFFL) risultato="WININET_E_CONNECTION_RESET";
-	else
-	if (i_error==0x80072F00L) risultato="WININET_E_FORCE_RETRY";
-	else
-	if (i_error==0x80072F01L) risultato="WININET_E_INVALID_PROXY_REQUEST";
-	else
-	if (i_error==0x80072F02L) risultato="WININET_E_NEED_UI";
-	else
-	if (i_error==0x80072F04L) risultato="WININET_E_HANDLE_EXISTS";
-	else
-	if (i_error==0x80072F05L) risultato="WININET_E_SEC_CERT_DATE_INVALID";
-	else
-	if (i_error==0x80072F06L) risultato="WININET_E_SEC_CERT_CN_INVALID";
-	else
-	if (i_error==0x80072F07L) risultato="WININET_E_HTTP_TO_HTTPS_ON_REDIR";
-	else
-	if (i_error==0x80072F08L) risultato="WININET_E_HTTPS_TO_HTTP_ON_REDIR";
-	else
-	if (i_error==0x80072F09L) risultato="WININET_E_MIXED_SECURITY";
-	else
-	if (i_error==0x80072F0AL) risultato="WININET_E_CHG_POST_IS_NON_SECURE";
-	else
-	if (i_error==0x80072F0BL) risultato="WININET_E_POST_IS_NON_SECURE";
-	else
-	if (i_error==0x80072F0CL) risultato="WININET_E_CLIENT_AUTH_CERT_NEEDED";
-	else
-	if (i_error==0x80072F0DL) risultato="WININET_E_INVALID_CA";
-	else
-	if (i_error==0x80072F0EL) risultato="WININET_E_CLIENT_AUTH_NOT_SETUP";
-	else
-	if (i_error==0x80072F0FL) risultato="WININET_E_ASYNC_THREAD_FAILED";
-	else
-	if (i_error==0x80072F10L) risultato="WININET_E_REDIRECT_SCHEME_CHANGE";
-	else
-	if (i_error==0x80072F11L) risultato="WININET_E_DIALOG_PENDING";
-	else
-	if (i_error==0x80072F12L) risultato="WININET_E_RETRY_DIALOG";
-	else
-	if (i_error==0x80072F13L) risultato="WININET_E_NO_NEW_CONTAINERS";
-	else
-	if (i_error==0x80072F14L) risultato="WININET_E_HTTPS_HTTP_SUBMIT_REDIR";
-	else
-	if (i_error==0x80072F17L) risultato="WININET_E_SEC_CERT_ERRORS";
-	else
-	if (i_error==0x80072F19L) risultato="WININET_E_SEC_CERT_REV_FAILED";
-	else
-	if (i_error==0x80072F76L) risultato="WININET_E_HEADER_NOT_FOUND";
-	else
-	if (i_error==0x80072F77L) risultato="WININET_E_DOWNLEVEL_SERVER";
-	else
-	if (i_error==0x80072F78L) risultato="WININET_E_INVALID_SERVER_RESPONSE";
-	else
-	if (i_error==0x80072F79L) risultato="WININET_E_INVALID_HEADER";
-	else
-	if (i_error==0x80072F7AL) risultato="WININET_E_INVALID_QUERY_REQUEST";
-	else
-	if (i_error==0x80072F7BL) risultato="WININET_E_HEADER_ALREADY_EXISTS";
-	else
-	if (i_error==0x80072F7CL) risultato="WININET_E_REDIRECT_FAILED";
-	else
-	if (i_error==0x80072F7DL) risultato="WININET_E_SECURITY_CHANNEL_ERROR";
-	else
-	if (i_error==0x80072F7EL) risultato="WININET_E_UNABLE_TO_CACHE_FILE";
-	else
-	if (i_error==0x80072F7FL) risultato="WININET_E_TCPIP_NOT_INSTALLED";
-	else
-	if (i_error==0x80072F83L) risultato="WININET_E_DISCONNECTED";
-	else
-	if (i_error==0x80072F84L) risultato="WININET_E_SERVER_UNREACHABLE";
-	else
-	if (i_error==0x80072F85L) risultato="WININET_E_PROXY_SERVER_UNREACHABLE";
-	else
-	if (i_error==0x80072F86L) risultato="WININET_E_BAD_AUTO_PROXY_SCRIPT";
-	else
-	if (i_error==0x80072F87L) risultato="WININET_E_UNABLE_TO_DOWNLOAD_SCRIPT";
-	else
-	if (i_error==0x80072F89L) risultato="WININET_E_SEC_INVALID_CERT";
-	else
-	if (i_error==0x80072F8AL) risultato="WININET_E_SEC_CERT_REVOKED";
-	else
-	if (i_error==0x80072F8BL) risultato="WININET_E_FAILED_DUETOSECURITYCHECK";
-	else
-	if (i_error==0x80072F8CL) risultato="WININET_E_NOT_INITIALIZED";
-	else
-	if (i_error==0x80072F8EL) risultato="WININET_E_LOGIN_FAILURE_DISPLAY_ENTITY_BODY";
-	else
-	if (i_error==0x80072F8FL) risultato="WININET_E_DECODING_FAILED";
-	else
-	if (i_error==0x80072F80L) risultato="WININET_E_NOT_REDIRECTED";
-	else
-	if (i_error==0x80072F81L) risultato="WININET_E_COOKIE_NEEDS_CONFIRMATION";
-	else
-	if (i_error==0x80072F82L) risultato="WININET_E_COOKIE_DECLINED";
-	else
-	if (i_error==0x80072F88L) risultato="WININET_E_REDIRECT_NEEDS_CONFIRMATION";
-	else
-	if (i_error==0x87AF0001L) risultato="SQLITE_E_ERROR";
-	else
-	if (i_error==0x87AF0002L) risultato="SQLITE_E_INTERNAL";
-	else
-	if (i_error==0x87AF0003L) risultato="SQLITE_E_PERM";
-	else
-	if (i_error==0x87AF0004L) risultato="SQLITE_E_ABORT";
-	else
-	if (i_error==0x87AF0005L) risultato="SQLITE_E_BUSY";
-	else
-	if (i_error==0x87AF0006L) risultato="SQLITE_E_LOCKED";
-	else
-	if (i_error==0x87AF0007L) risultato="SQLITE_E_NOMEM";
-	else
-	if (i_error==0x87AF0008L) risultato="SQLITE_E_READONLY";
-	else
-	if (i_error==0x87AF0009L) risultato="SQLITE_E_INTERRUPT";
-	else
-	if (i_error==0x87AF000AL) risultato="SQLITE_E_IOERR";
-	else
-	if (i_error==0x87AF000BL) risultato="SQLITE_E_CORRUPT";
-	else
-	if (i_error==0x87AF000CL) risultato="SQLITE_E_NOTFOUND";
-	else
-	if (i_error==0x87AF000DL) risultato="SQLITE_E_FULL";
-	else
-	if (i_error==0x87AF000EL) risultato="SQLITE_E_CANTOPEN";
-	else
-	if (i_error==0x87AF000FL) risultato="SQLITE_E_PROTOCOL";
-	else
-	if (i_error==0x87AF0010L) risultato="SQLITE_E_EMPTY";
-	else
-	if (i_error==0x87AF0011L) risultato="SQLITE_E_SCHEMA";
-	else
-	if (i_error==0x87AF0012L) risultato="SQLITE_E_TOOBIG";
-	else
-	if (i_error==0x87AF0013L) risultato="SQLITE_E_CONSTRAINT";
-	else
-	if (i_error==0x87AF0014L) risultato="SQLITE_E_MISMATCH";
-	else
-	if (i_error==0x87AF0015L) risultato="SQLITE_E_MISUSE";
-	else
-	if (i_error==0x87AF0016L) risultato="SQLITE_E_NOLFS";
-	else
-	if (i_error==0x87AF0017L) risultato="SQLITE_E_AUTH";
-	else
-	if (i_error==0x87AF0018L) risultato="SQLITE_E_FORMAT";
-	else
-	if (i_error==0x87AF0019L) risultato="SQLITE_E_RANGE";
-	else
-	if (i_error==0x87AF001AL) risultato="SQLITE_E_NOTADB";
-	else
-	if (i_error==0x87AF001BL) risultato="SQLITE_E_NOTICE";
-	else
-	if (i_error==0x87AF001CL) risultato="SQLITE_E_WARNING";
-	else
-	if (i_error==0x87AF0064L) risultato="SQLITE_E_ROW";
-	else
-	if (i_error==0x87AF0065L) risultato="SQLITE_E_DONE";
-	else
-	if (i_error==0x87AF010AL) risultato="SQLITE_E_IOERR_READ";
-	else
-	if (i_error==0x87AF020AL) risultato="SQLITE_E_IOERR_SHORT_READ";
-	else
-	if (i_error==0x87AF030AL) risultato="SQLITE_E_IOERR_WRITE";
-	else
-	if (i_error==0x87AF040AL) risultato="SQLITE_E_IOERR_FSYNC";
-	else
-	if (i_error==0x87AF050AL) risultato="SQLITE_E_IOERR_DIR_FSYNC";
-	else
-	if (i_error==0x87AF060AL) risultato="SQLITE_E_IOERR_TRUNCATE";
-	else
-	if (i_error==0x87AF070AL) risultato="SQLITE_E_IOERR_FSTAT";
-	else
-	if (i_error==0x87AF080AL) risultato="SQLITE_E_IOERR_UNLOCK";
-	else
-	if (i_error==0x87AF090AL) risultato="SQLITE_E_IOERR_RDLOCK";
-	else
-	if (i_error==0x87AF0A0AL) risultato="SQLITE_E_IOERR_DELETE";
-	else
-	if (i_error==0x87AF0B0AL) risultato="SQLITE_E_IOERR_BLOCKED";
-	else
-	if (i_error==0x87AF0C0AL) risultato="SQLITE_E_IOERR_NOMEM";
-	else
-	if (i_error==0x87AF0D0AL) risultato="SQLITE_E_IOERR_ACCESS";
-	else
-	if (i_error==0x87AF0E0AL) risultato="SQLITE_E_IOERR_CHECKRESERVEDLOCK";
-	else
-	if (i_error==0x87AF0F0AL) risultato="SQLITE_E_IOERR_LOCK";
-	else
-	if (i_error==0x87AF100AL) risultato="SQLITE_E_IOERR_CLOSE";
-	else
-	if (i_error==0x87AF110AL) risultato="SQLITE_E_IOERR_DIR_CLOSE";
-	else
-	if (i_error==0x87AF120AL) risultato="SQLITE_E_IOERR_SHMOPEN";
-	else
-	if (i_error==0x87AF130AL) risultato="SQLITE_E_IOERR_SHMSIZE";
-	else
-	if (i_error==0x87AF140AL) risultato="SQLITE_E_IOERR_SHMLOCK";
-	else
-	if (i_error==0x87AF150AL) risultato="SQLITE_E_IOERR_SHMMAP";
-	else
-	if (i_error==0x87AF160AL) risultato="SQLITE_E_IOERR_SEEK";
-	else
-	if (i_error==0x87AF170AL) risultato="SQLITE_E_IOERR_DELETE_NOENT";
-	else
-	if (i_error==0x87AF180AL) risultato="SQLITE_E_IOERR_MMAP";
-	else
-	if (i_error==0x87AF190AL) risultato="SQLITE_E_IOERR_GETTEMPPATH";
-	else
-	if (i_error==0x87AF1A0AL) risultato="SQLITE_E_IOERR_CONVPATH";
-	else
-	if (i_error==0x87AF1A02L) risultato="SQLITE_E_IOERR_VNODE";
-	else
-	if (i_error==0x87AF1A03L) risultato="SQLITE_E_IOERR_AUTH";
-	else
-	if (i_error==0x87AF0106L) risultato="SQLITE_E_LOCKED_SHAREDCACHE";
-	else
-	if (i_error==0x87AF0105L) risultato="SQLITE_E_BUSY_RECOVERY";
-	else
-	if (i_error==0x87AF0205L) risultato="SQLITE_E_BUSY_SNAPSHOT";
-	else
-	if (i_error==0x87AF010EL) risultato="SQLITE_E_CANTOPEN_NOTEMPDIR";
-	else
-	if (i_error==0x87AF020EL) risultato="SQLITE_E_CANTOPEN_ISDIR";
-	else
-	if (i_error==0x87AF030EL) risultato="SQLITE_E_CANTOPEN_FULLPATH";
-	else
-	if (i_error==0x87AF040EL) risultato="SQLITE_E_CANTOPEN_CONVPATH";
-	else
-	if (i_error==0x87AF010BL) risultato="SQLITE_E_CORRUPT_VTAB";
-	else
-	if (i_error==0x87AF0108L) risultato="SQLITE_E_READONLY_RECOVERY";
-	else
-	if (i_error==0x87AF0208L) risultato="SQLITE_E_READONLY_CANTLOCK";
-	else
-	if (i_error==0x87AF0308L) risultato="SQLITE_E_READONLY_ROLLBACK";
-	else
-	if (i_error==0x87AF0408L) risultato="SQLITE_E_READONLY_DBMOVED";
-	else
-	if (i_error==0x87AF0204L) risultato="SQLITE_E_ABORT_ROLLBACK";
-	else
-	if (i_error==0x87AF0113L) risultato="SQLITE_E_CONSTRAINT_CHECK";
-	else
-	if (i_error==0x87AF0213L) risultato="SQLITE_E_CONSTRAINT_COMMITHOOK";
-	else
-	if (i_error==0x87AF0313L) risultato="SQLITE_E_CONSTRAINT_FOREIGNKEY";
-	else
-	if (i_error==0x87AF0413L) risultato="SQLITE_E_CONSTRAINT_FUNCTION";
-	else
-	if (i_error==0x87AF0513L) risultato="SQLITE_E_CONSTRAINT_NOTNULL";
-	else
-	if (i_error==0x87AF0613L) risultato="SQLITE_E_CONSTRAINT_PRIMARYKEY";
-	else
-	if (i_error==0x87AF0713L) risultato="SQLITE_E_CONSTRAINT_TRIGGER";
-	else
-	if (i_error==0x87AF0813L) risultato="SQLITE_E_CONSTRAINT_UNIQUE";
-	else
-	if (i_error==0x87AF0913L) risultato="SQLITE_E_CONSTRAINT_VTAB";
-	else
-	if (i_error==0x87AF0A13L) risultato="SQLITE_E_CONSTRAINT_ROWID";
-	else
-	if (i_error==0x87AF011BL) risultato="SQLITE_E_NOTICE_RECOVER_WAL";
-	else
-	if (i_error==0x87AF021BL) risultato="SQLITE_E_NOTICE_RECOVER_ROLLBACK";
-	else
-	if (i_error==0x87AF011CL) risultato="SQLITE_E_WARNING_AUTOINDEX";
-	else
-	if (i_error==0x87C51001L) risultato="UTC_E_TOGGLE_TRACE_STARTED";
-	else
-	if (i_error==0x87C51002L) risultato="UTC_E_ALTERNATIVE_TRACE_CANNOT_PREEMPT";
-	else
-	if (i_error==0x87C51003L) risultato="UTC_E_AOT_NOT_RUNNING";
-	else
-	if (i_error==0x87C51004L) risultato="UTC_E_SCRIPT_TYPE_INVALID";
-	else
-	if (i_error==0x87C51005L) risultato="UTC_E_SCENARIODEF_NOT_FOUND";
-	else
-	if (i_error==0x87C51006L) risultato="UTC_E_TRACEPROFILE_NOT_FOUND";
-	else
-	if (i_error==0x87C51007L) risultato="UTC_E_FORWARDER_ALREADY_ENABLED";
-	else
-	if (i_error==0x87C51008L) risultato="UTC_E_FORWARDER_ALREADY_DISABLED";
-	else
-	if (i_error==0x87C51009L) risultato="UTC_E_EVENTLOG_ENTRY_MALFORMED";
-	else
-	if (i_error==0x87C5100AL) risultato="UTC_E_DIAGRULES_SCHEMAVERSION_MISMATCH";
-	else
-	if (i_error==0x87C5100BL) risultato="UTC_E_SCRIPT_TERMINATED";
-	else
-	if (i_error==0x87C5100CL) risultato="UTC_E_INVALID_CUSTOM_FILTER";
-	else
-	if (i_error==0x87C5100DL) risultato="UTC_E_TRACE_NOT_RUNNING";
-	else
-	if (i_error==0x87C5100EL) risultato="UTC_E_REESCALATED_TOO_QUICKLY";
-	else
-	if (i_error==0x87C5100FL) risultato="UTC_E_ESCALATION_ALREADY_RUNNING";
-	else
-	if (i_error==0x87C51010L) risultato="UTC_E_PERFTRACK_ALREADY_TRACING";
-	else
-	if (i_error==0x87C51011L) risultato="UTC_E_REACHED_MAX_ESCALATIONS";
-	else
-	if (i_error==0x87C51012L) risultato="UTC_E_FORWARDER_PRODUCER_MISMATCH";
-	else
-	if (i_error==0x87C51013L) risultato="UTC_E_INTENTIONAL_SCRIPT_FAILURE";
-	else
-	if (i_error==0x87C51014L) risultato="UTC_E_SQM_INIT_FAILED";
-	else
-	if (i_error==0x87C51015L) risultato="UTC_E_NO_WER_LOGGER_SUPPORTED";
-	else
-	if (i_error==0x87C51016L) risultato="UTC_E_TRACERS_DONT_EXIST";
-	else
-	if (i_error==0x87C51017L) risultato="UTC_E_WINRT_INIT_FAILED";
-	else
-	if (i_error==0x87C51018L) risultato="UTC_E_SCENARIODEF_SCHEMAVERSION_MISMATCH";
-	else
-	if (i_error==0x87C51019L) risultato="UTC_E_INVALID_FILTER";
-	else
-	if (i_error==0x87C5101AL) risultato="UTC_E_EXE_TERMINATED";
-	else
-	if (i_error==0x87C5101BL) risultato="UTC_E_ESCALATION_NOT_AUTHORIZED";
-	else
-	if (i_error==0x87C5101CL) risultato="UTC_E_SETUP_NOT_AUTHORIZED";
-	else
-	if (i_error==0x87C5101DL) risultato="UTC_E_CHILD_PROCESS_FAILED";
-	else
-	if (i_error==0x87C5101EL) risultato="UTC_E_COMMAND_LINE_NOT_AUTHORIZED";
-	else
-	if (i_error==0x87C5101FL) risultato="UTC_E_CANNOT_LOAD_SCENARIO_EDITOR_XML";
-	else
-	if (i_error==0x87C51020L) risultato="UTC_E_ESCALATION_TIMED_OUT";
-	else
-	if (i_error==0x87C51021L) risultato="UTC_E_SETUP_TIMED_OUT";
-	else
-	if (i_error==0x87C51022L) risultato="UTC_E_TRIGGER_MISMATCH";
-	else
-	if (i_error==0x87C51023L) risultato="UTC_E_TRIGGER_NOT_FOUND";
-	else
-	if (i_error==0x87C51024L) risultato="UTC_E_SIF_NOT_SUPPORTED";
-	else
-	if (i_error==0x87C51025L) risultato="UTC_E_DELAY_TERMINATED";
-	else
-	if (i_error==0x87C51026L) risultato="UTC_E_DEVICE_TICKET_ERROR";
-	else
-	if (i_error==0x87C51027L) risultato="UTC_E_TRACE_BUFFER_LIMIT_EXCEEDED";
-	else
-	if (i_error==0x87C51028L) risultato="UTC_E_API_RESULT_UNAVAILABLE";
-	else
-	if (i_error==0x87C51029L) risultato="UTC_E_RPC_TIMEOUT";
-	else
-	if (i_error==0x87C5102AL) risultato="UTC_E_RPC_WAIT_FAILED";
-	else
-	if (i_error==0x87C5102BL) risultato="UTC_E_API_BUSY";
-	else
-	if (i_error==0x87C5102CL) risultato="UTC_E_TRACE_MIN_DURATION_REQUIREMENT_NOT_MET";
-	else
-	if (i_error==0x87C5102DL) risultato="UTC_E_EXCLUSIVITY_NOT_AVAILABLE";
-	else
-	if (i_error==0x87C5102EL) risultato="UTC_E_GETFILE_FILE_PATH_NOT_APPROVED";
-	else
-	if (i_error==0x87C5102FL) risultato="UTC_E_ESCALATION_DIRECTORY_ALREADY_EXISTS";
-	else
+			} 
+			else 
+			if (c == ' ') 
+			{
+                sanitized += '_';
+            } 
+			else 
+			{
+                sanitized += c;
+            }
+        }
+        risultato = sanitized;
+        
+        // Converti in maiuscolo per mantenere lo stile originale
+        transform(risultato.begin(), risultato.end(), risultato.begin(), ::toupper);
+    } 
+	else 
 	{
-		snprintf(buffer,sizeof(buffer),"Windows error # %ld\n",i_error);
-		risultato=buffer;
+        // Fallback per errori non riconosciuti dal sistema
+        snprintf(buffer, sizeof(buffer), "WINDOWS_ERROR_#_%ld", i_error);
+        risultato = buffer;
+    }
+    
+    // Gestione speciale per ERROR_PATH_NOT_FOUND (codice 3)
+
+	if ((i_error == 3L) && (i_filename)) 
+	{
+		if (strlen(i_filename) > 255) 
+		{
+			snprintf(buffer, sizeof(buffer), "%08d", (int)strlen(i_filename));
+			string lunghezza = buffer;
+			risultato += "_:_MAYBE_LENGTH_" + lunghezza + "_>255?";
+			g_255++;
+		}
 	}
-	if (risultato!="")
-		while (risultato.size()<25)
-				risultato+=" ";
-	return risultato;
+
+	while (!risultato.empty() && (risultato.back() == '.'))
+	    risultato.pop_back();
+        
+	unsigned int error_len=30;
+    // Padding per mantenere lunghezza minima di 25 caratteri come nell'originale
+    if (risultato.size() > error_len) 
+	{
+       risultato = risultato.substr(0,error_len);
+    } 
+	else 
+	{
+        while (risultato.size()<error_len) 
+            risultato += " ";
+    }
+    
+    return risultato;
 }
+
+
 void	enumerateerrors()
 {
 	if (g_errors.size()==0)
@@ -45152,13 +32721,26 @@ void printerr(const char* i_where,const char* filename,int32_t i_fileattr)
 	}
 	string swhere=i_where;
 
+	unsigned int error_len=7;
+	if (swhere.size() > error_len) 
+	{
+        swhere=swhere.substr(0,error_len);
+    } 
+	else 
+	{
+        while (swhere.size()<error_len) 
+            swhere+= " ";
+    }
+   
 	g_exec_text=swhere+": "+decodewinerror(err,filename);
 	if (!flagquiet)
 	{
 		myprintf("\r");
 		printbar(' ',false);
 		myprintf("\r");
-		myprintf("00079! %s %Z\n",g_exec_text.c_str(),filename);
+		color_red();
+		myprintf("%s %Z\n",g_exec_text.c_str(),filename);
+		color_restore();
 	}
 	g_exec_text=g_exec_text+" "+filename;
 	if (filename)
@@ -45183,7 +32765,7 @@ void printerr(const char* i_where,const char* filename,int32_t i_fileattr)
 #endif // corresponds to #ifdef (#ifdef unix)
 void ioerr(const char* msg)
 {
-  printerr("11896",msg,0);
+  printerr("ioerr",msg,0);
   throw std::runtime_error(msg);
 }
 /*
@@ -46417,7 +33999,7 @@ bool getfileinfo(string i_filename,int64_t& o_size,int64_t& o_date,int64_t& o_at
 		t+="*";
 	HANDLE h=FindFirstFile(utow(t.c_str()).c_str(), &ffd);
 	if (h==INVALID_HANDLE_VALUE && GetLastError()!=ERROR_FILE_NOT_FOUND && GetLastError()!=ERROR_PATH_NOT_FOUND)
-			printerr("36230",t.c_str(),0);
+			printerr("getinfo",t.c_str(),0);
 	if (h!=INVALID_HANDLE_VALUE)
 	{
 		SYSTEMTIME st;
@@ -51306,29 +38888,38 @@ int64_t list_btol(const char* &s) {
   return r+(int64_t(list_btoi(s))<<32);
 }
 
-string generaterandomstring(unsigned int i_length) 
+std::string generaterandomstring(unsigned int i_length) 
 {
-	if (i_length==0)
+    if (i_length == 0) 
 	{
-		myprintf("03168: i_lenght in C5\n");
-		seppuku();
-	}
-    static const char characters[]="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-    char* randomstring=(char*)franz_malloc(i_length+1);
-	if (randomstring==NULL) 
+        myprintf("03168: i_length in C5\n");
+        seppuku();
+    }
+
+    static const char characters[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+    const size_t charset_size = sizeof(characters) - 1;
+
+    char* randomstring = (char*)franz_malloc(i_length + 1);
+    if (randomstring == NULL) 
 	{
         myprintf("03169: C5 on malloc\n");
         seppuku();
     }
 
+#ifdef __OpenBSD__
+    // OpenBSD: usa arc4random_uniform per casualità sicura
+    for (unsigned int i = 0; i < i_length; ++i) 
+	    randomstring[i] = characters[arc4random_uniform(charset_size)];
+#else
+    // Altre piattaforme: mantieni rand e srand
     srand((unsigned)time(NULL));
-	
-    for (unsigned int i=0;i<i_length;++i) 
-        randomstring[i]=characters[rand()%(sizeof(characters)-1)];
-    randomstring[i_length]='\0';
-	
-	string risultato=randomstring;
-	franz_free(randomstring);
+    for (unsigned int i = 0; i < i_length; ++i) 
+	    randomstring[i] = characters[rand() % charset_size];
+#endif
+
+    randomstring[i_length] = '\0';
+    std::string risultato = randomstring;
+    franz_free(randomstring);
     return risultato;
 }
 
@@ -51446,6 +39037,19 @@ bool myavanzamentoby1sec(int64_t i_lavorati,int64_t i_totali,int64_t i_inizio,bo
 			secondi=1;
 		if (eta<356000)
 		{
+			if (flagwriteonconsole)
+			{
+			fprintf(stderr,"%03d%% %02d:%02d:%02d (%10s) of (%10s) %20s/s", percentuale,
+		int(eta/3600), int(eta/60)%60, int(eta)%60, tohuman(i_lavorati), tohuman2(i_totali),migliaia3(i_lavorati/secondi));
+			if (i_barran)
+				fprintf(stderr,"\n");
+			else
+				fprintf(stderr,"\r");
+			}
+		else
+		{
+			if (!flagnoeta)
+			{
 			myprintf("%03d%% %02d:%02d:%02d (%10s) of (%10s) %20s/s", percentuale,
 		int(eta/3600), int(eta/60)%60, int(eta)%60, tohuman(i_lavorati), tohuman2(i_totali),migliaia3(i_lavorati/secondi));
 			if (i_barran)
@@ -51453,6 +39057,10 @@ bool myavanzamentoby1sec(int64_t i_lavorati,int64_t i_totali,int64_t i_inizio,bo
 			else
 				myprintf("\r");
 			hostampato=true;
+			}
+		}
+			
+			
 		}
 		fflush(stdout);
 	}
@@ -52792,8 +40400,16 @@ string	franz_do_hash::filehash(string i_filename,bool i_flagcalccrc32,int64_t i_
 			break;
 //////bool myavanzamentoby1sec(int64_t i_lavorati,int64_t i_totali,int64_t i_inizio,bool i_barran=true)
 
-		if ((flagnoeta==false) && (i_inizio>0) && (i_totali>0))
-			myavanzamentoby1sec(g_dimensione,i_totali,i_inizio,false);
+		if (flagwriteonconsole)
+		{
+			if ((i_inizio>0) && (i_totali>0))
+				myavanzamentoby1sec(g_dimensione,i_totali,i_inizio,false);
+		}
+		else
+		{
+			if ((flagnoeta==false) && (i_inizio>0) && (i_totali>0))
+				myavanzamentoby1sec(g_dimensione,i_totali,i_inizio,false);
+		}
 	}
 	if (myfilez!=NULL)
 		fclose(myfilez);
@@ -53317,7 +40933,7 @@ static bool loadLibrary()
 			if (eta < 356000) // Valore massimo ragionevole per l'ETA
 			{
 				myprintf(
-					"\r%03d%% %02d:%02d:%02d %10s/%s [%10s/s]=>remote %9s/%s",
+					"\r%03d%% %02d:%02d:%02d %12s/%s [%12s/s]=>remote %9s/%s",
 					(int)percentage,
 					int(eta / 3600),         // Ore
 					int(eta / 60) % 60,      // Minuti
@@ -53775,39 +41391,31 @@ static
 ///////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////
-	int64_t getfilesize(const std::string& remotePath) 
+	int64_t getfilesize(const std::string& i_remote) 
 	{
 		if (!isloaded()) 
 		{
-            myprintf("47338! SFTP functionality (getfilesize) not available\n");
+            myprintf("41357! SFTP functionality (getfilesize) not available\n");
             return false;
         }
+        
+        if (!curl) return false;
 
-        if (!curl) return -1;
-        std::string url = "sftp://" + host + "/" + remotePath;
-		if (flagdebug3)
-			myprintf("DEBUG: Getting size of %s\n", url.c_str());
-		
-        reset();
-		
-        curldll.easy_setopt(curl, CURLOPT_URL, url.c_str());
-		curldll.easy_setopt(curl, CURLOPT_PORT, sftpport);
-		
-        curldll.easy_setopt(curl, CURLOPT_USERNAME, username.c_str());
-        curldll.easy_setopt(curl, CURLOPT_PASSWORD, password.c_str());
-        curldll.easy_setopt(curl, CURLOPT_NOBODY, 1L);
-        curldll.easy_setopt(curl, CURLOPT_FILETIME, 1L);
-        if (!sshKeyPath.empty()) 
-            curldll.easy_setopt(curl, CURLOPT_SSH_PRIVATE_KEYFILE, sshKeyPath.c_str());  
-        CURLcode res = curldll.easy_perform(curl);
-        if (res == CURLE_OK) 
+		string url=generateurl(i_remote);
+		if (url=="")
 		{
-            double size;
-            curldll.easy_getinfo(curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD_T, &size);
-			curldll.easy_cleanup(curl);
-            return static_cast<int64_t>(size);
-        }
-        return -1;
+			myprintf("41366$ Cannot generate SFTP url\n");
+			return false;
+		}
+
+		curl_off_t remoteFileSizeByte = getremotefilesize(url);
+
+		if(remoteFileSizeByte==-1)
+			myprintf("45852$ Remote file does not exists %Z\n",i_remote.c_str());
+		else
+			return (int64_t)remoteFileSizeByte;
+		return -1;
+		
     }
 
 
@@ -54691,6 +42299,10 @@ public:
 	int 						elaboradump(char* buffer, size_t buffer_size);
 	bool 						chiudidump();
 #endif
+	int 						getCharIndex(char c);
+	void 						printDigitalString(const char* inputString); 
+
+
 };
 
 Jidac* pjidac;
@@ -58208,8 +45820,6 @@ void print_progress(int64_t ts, int64_t td,int64_t i_scritti,int i_percentuale)
 {
 	static int ultimapercentuale=0;
 	static int ultimaeta=0;
-	if (flagnoeta==true)
-		return;
 	if (td>ts)
 		td=ts;
 	if (td<1000000)
@@ -58226,6 +45836,7 @@ void print_progress(int64_t ts, int64_t td,int64_t i_scritti,int i_percentuale)
 				if ((percentuale!=ultimapercentuale) || (percentuale==1))
 				{
 					ultimapercentuale=percentuale;
+					if (!flagnoeta)
 					myprintf("%03d%% %02d:%02d:%02d %20s of %20s %s/s\r", percentuale,
 					int(eta/3600), int(eta/60)%60, int(eta)%60, migliaia(td), migliaia2(ts),migliaia3(td/secondi));
 				}
@@ -58243,19 +45854,48 @@ void print_progress(int64_t ts, int64_t td,int64_t i_scritti,int i_percentuale)
 						projection=(int64_t)(i_scritti/(1.0*td/ts));
 
 				if (i_percentuale>0)
-					myprintf("(%03d%%) %6.2f%% %02d:%02d:%02d  (%10s)->(%10s)=>(%10s) %10s/s\r", i_percentuale,td*100.0/(ts+0.5),int(eta/3600), int(eta/60)%60, int(eta)%60, tohuman(td),tohuman2(i_scritti),tohuman3(projection),tohuman4(td/secondi));
+				{
+					if (flagwriteonconsole)
+					fprintf(stderr,"(%03d%%) %6.2f%% %02d:%02d:%02d  (%10s)->(%10s)=>(%10s) %10s/s\r", i_percentuale,td*100.0/(ts+0.5),int(eta/3600), int(eta/60)%60, int(eta)%60, tohuman(td),tohuman2(i_scritti),tohuman3(projection),tohuman4(td/secondi));
+					else
+					{
+						if (!flagnoeta)
+						myprintf("(%03d%%) %6.2f%% %02d:%02d:%02d  (%10s)->(%10s)=>(%10s) %10s/s\r", i_percentuale,td*100.0/(ts+0.5),int(eta/3600), int(eta/60)%60, int(eta)%60, tohuman(td),tohuman2(i_scritti),tohuman3(projection),tohuman4(td/secondi));
+					}
+				}
 				else
 				{
 					if (i_scritti>0)
-				myprintf("       %6.2f%% %02d:%02d:%02d  (%10s)->(%10s)=>(%10s) %10s/s\r", td*100.0/(ts+0.5),
-				int(eta/3600), int(eta/60)%60, int(eta)%60, tohuman(td),tohuman2(i_scritti),tohuman3(projection),tohuman4(td/secondi));
-				else
-				myprintf("       %6.2f%% %02d:%02d:%02d  (%10s)=>(%10s) %10s/s\r", td*100.0/(ts+0.5),
-				int(eta/3600), int(eta/60)%60, int(eta)%60, tohuman(td),tohuman2(projection),tohuman3(td/secondi));
+					{
+						if (flagwriteonconsole)
+							fprintf(stderr,"       %6.2f%% %02d:%02d:%02d  (%10s)->(%10s)=>(%10s) %10s/s\r", td*100.0/(ts+0.5),
+						int(eta/3600), int(eta/60)%60, int(eta)%60, tohuman(td),tohuman2(i_scritti),tohuman3(projection),tohuman4(td/secondi));
+						else
+						{
+							if (!flagnoeta)
+						myprintf("       %6.2f%% %02d:%02d:%02d  (%10s)->(%10s)=>(%10s) %10s/s\r", td*100.0/(ts+0.5),
+						int(eta/3600), int(eta/60)%60, int(eta)%60, tohuman(td),tohuman2(i_scritti),tohuman3(projection),tohuman4(td/secondi));
+						}
+					}
+					
+					
+					else
+					{
+						if (flagwriteonconsole)
+							fprintf(stderr,"       %6.2f%% %02d:%02d:%02d  (%10s)=>(%10s) %10s/s\r", td*100.0/(ts+0.5),
+							int(eta/3600), int(eta/60)%60, int(eta)%60, tohuman(td),tohuman2(projection),tohuman3(td/secondi));
+							else
+							{
+								if (!flagnoeta)
+						myprintf("       %6.2f%% %02d:%02d:%02d  (%10s)=>(%10s) %10s/s\r", td*100.0/(ts+0.5),
+							int(eta/3600), int(eta/60)%60, int(eta)%60, tohuman(td),tohuman2(projection),tohuman3(td/secondi));
+							}
+					}
 				}
 			}
 	}
 }
+
 /// work with a batch job
 void avanzamento(int64_t i_lavorati,int64_t i_totali,int64_t i_inizio)
 {
@@ -58701,6 +46341,9 @@ string help_work(bool i_usage,bool i_example)
 #ifdef _WIN32
 		moreprint("      resetacl           Revert Windows' ACL to administrators");
 #endif	
+        moreprint("      devart             Outputs a large ASCII string from input text");
+        moreprint("      last X             Show last file in X");
+        moreprint("      lastfile X         Show last file in X (only filename)");
 	}
 	if (i_usage && i_example) moreprint("    Examples:");
 	if (i_example)
@@ -58721,6 +46364,8 @@ string help_work(bool i_usage,bool i_example)
 #ifdef _WIN32
         moreprint("Fix 'strange' ACLs                   work resetacl z:\\temp");
 #endif	
+        moreprint("Devart                               work devart ALL-OK");
+        moreprint("Last file name                       work lastfile z:\\temp\\copia*.zpaq -terse");
 	}
 	return("Multiple commands");
 }
@@ -59074,6 +46719,8 @@ string help_a(bool i_usage,bool i_example)
 #ifdef _WIN32
 		moreprint("+ : -ntfs         Scan a NTFS drive");
 #endif
+		moreprint("+ : -appendoutput Append on -out, instead of rewrite from scratch");
+		moreprint("+ : -writeonconsole  Write to stderr too");
 		}
 		/*
 		fdisk -l image.img
@@ -59174,6 +46821,8 @@ losetup -d /dev/loop0
 #ifdef unix
 		moreprint("Raw imaging a device                 a /tmp/bak.zpaq /dev/sdb -image");
 #endif
+		moreprint("Append to outputfile                 a /tmp/bak.zpaq 7etc -out result.txt -appendoutput");
+		
 	}
 	return("Add or append files to archive");
 }
@@ -60418,6 +48067,7 @@ string help_summa(bool i_usage,bool i_example)
 		moreprint("+ : -zeta         Make the ZETA hash");
 		moreprint("+ : -zetaenc      Make the ZETA-encrypted hash");
 		help_orderby();
+		moreprint("+ : -last         Get only the last file");
 	}
 	if (i_usage && i_example) moreprint("    Examples:");
 	if (i_example)
@@ -60437,6 +48087,7 @@ string help_summa(bool i_usage,bool i_example)
 		moreprint("like md5sum                          sum *.txt -md5 -pakka -noeta -stdout -nosort");
 		moreprint("Order the output                     sum z:\\ -xxh3 -orderby size -desc -only *.cpp");
 		moreprint("ZETA multithread:                    sum z:\\knb -ssd -zeta");
+		moreprint("ZETA on last:                        sum z:\\knb -zeta -last");
 	}
 	return("Calc hash/checksums, find duplicated files");
 
@@ -60457,6 +48108,7 @@ string help_hasha(bool i_usage,bool i_example)
 		moreprint("+ : -stdout       Do not mess the output");
 		moreprint("+ : -pakka        Do not mess the output");
 		moreprint("+ : -noeta        Do not show ETA");
+		moreprint("+ : -last         Get only the last file");
 	}
 	if (i_usage && i_example) moreprint("    Examples:");
 	if (i_example)
@@ -60465,7 +48117,7 @@ string help_hasha(bool i_usage,bool i_example)
 		moreprint("SHA1 of all files, multithread:      hash z:\\knb -ssd");
 		moreprint("XXH3 multithreaded:                  hash z:\\knb -ssd -xxh3");
 		moreprint("SHA256 to file:                      hash z:\\knb -ssd -sha256 -stdout -out 1.txt");
-		
+		moreprint("SHA1 of the last file                hash z:\\knb -last");
 	}
 	return("Calc hash");
 }
@@ -60962,7 +48614,7 @@ void Jidac::usageall(string i_command)
 	if (i_command=="")
 	{
 		moreprint("Get help for one command with zpaqfranz h something");
-		moreprint(" zpaqfranz   h all -nomore => everything, ready to be pipep");
+		moreprint(" zpaqfranz   h all -nomore => everything, ready to be piped");
 		moreprint(" zpaqfranz   h a           => ask help and examples for command 'a'");
 		moreprint(" zpaqfranz -he a           => ask examples for command 'a'");
 		moreprint(" ");
@@ -61056,7 +48708,8 @@ void open_output(string i_filename)
 		if (g_output_handle==0)
 		{
 			g_output=i_filename;
-			g_output_handle=fopen(i_filename.c_str(),"wb");
+			g_output_handle = fopen(i_filename.c_str(), flagappendoutput && fileexists(i_filename.c_str()) ? "ab" : "wb");
+			
 			if (g_output_handle==NULL)
 				printf("28342: ERROR OPENING LOG FILE %s\n",i_filename.c_str());
 		}
@@ -61875,6 +49528,8 @@ int Jidac::loadparameters(int argc, const char** argv)
 #endif // corresponds to #ifdef (#ifdef _WIN32)
 	g_programflags.add(&flagfasttxt,		"-fasttxt",				"Create test .txt with CRC-32 and QUICK",											"");
 	g_programflags.add(&flagcomment,		"-comment",				"Comment version",									"");
+	g_programflags.add(&flagwriteonconsole,	"-writeonconsole",		"Write the output on stderr",							"");
+	g_programflags.add(&flagappendoutput,	"-appendoutput",		"Append to -out file (do not start from scratch)",							"");
 	g_programflags.add(&flagdebug,			"-debug",				"Show debug line number",							"");
 	g_programflags.add(&flagdebug2,			"-debug2",				"Show debug infos",									"");
 	g_programflags.add(&flagdebug3,			"-debug3",				"Show A LOT of debug",								"");
@@ -61918,6 +49573,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 	g_programflags.add(&flagnosynology,		"-nosynology",			"Exclude Synology system files",						"a;");
 	g_programflags.add(&flagnorecursion,	"-norecursion",			"Do not recurse into folders (default: YES)",		"");
 	g_programflags.add(&flagnosort,			"-nosort",				"Do not sort file",									"");
+	g_programflags.add(&flaglast,			"-last",				"Work on last file",									"");
 	g_programflags.add(&flagpakka,			"-pakka",				"New output style",										"");
 	g_programflags.add(&flagdistinct,		"-distinct",			"PAKKA zpaqlist",										"");
 	g_programflags.add(&flagparanoid,		"-paranoid",			"Paranoid 'something'",											"");
@@ -63105,7 +50761,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 #ifndef unix
 	HMODULE h = GetModuleHandle(TEXT("kernel32.dll"));
 	if (h == NULL)
-		printerr("14717", "GetModuleHandle", 0);
+		printerr("module", "GetModuleHandle", 0);
 	else
 	{
 		findFirstStreamW = reinterpret_cast<FindFirstStreamW_t>(
@@ -64877,7 +52533,7 @@ void Jidac::scandir(bool i_checkifselected,DTMap& i_edt,string filename, bool i_
   if (h==INVALID_HANDLE_VALUE
       && GetLastError()!=ERROR_FILE_NOT_FOUND
       && GetLastError()!=ERROR_PATH_NOT_FOUND)
-    printerr("15367",t.c_str(),0);
+    printerr("scandir",t.c_str(),0);
 	while (h!=INVALID_HANDLE_VALUE)
 	{
 		// For each file, get name, date, size, attributes
@@ -65083,7 +52739,7 @@ void Jidac::scandir(bool i_checkifselected,DTMap& i_edt,string filename, bool i_
 		}
 		if (!FindNextFile(h, &ffd))
 		{
-			if (GetLastError()!=ERROR_NO_MORE_FILES) printerr("15417",(fn+fn).c_str(),ffd.dwFileAttributes);
+			if (GetLastError()!=ERROR_NO_MORE_FILES) printerr("scan2",(fn+fn).c_str(),ffd.dwFileAttributes);
 				break;
 		}
 	}
@@ -65154,7 +52810,7 @@ void Jidac::addfile(bool i_checkifselected,DTMap& i_edt,string filename, int64_t
 		}
 	}
 	
-	if (flagnoeta==false)
+	if ((flagnoeta==false) && (!flagterse))
 		if (iscantime!=ultimotempo)
 		{
 			
@@ -65617,6 +53273,31 @@ void dump_franz_posix(struct franz_posix* i_posix)
 }
 
 #ifdef unix
+
+int get_creation_time(const char* filepath, time_t* creation_time) 
+{
+    struct stat st;
+    *creation_time = 0;
+
+    if (lstat(filepath, &st) != 0) {
+        if (flagverbose)
+            fprintf(stderr, "Cannot get creation time for %s: %s\n", filepath, strerror(errno));
+        return -1;
+    }
+
+#if defined(__APPLE__)
+    *creation_time = st.st_birthtimespec.tv_sec;
+#elif defined(__FreeBSD__)
+    *creation_time = st.st_birthtime;
+#else
+    // OpenBSD e altri sistemi Unix-like usano st_ctime come fallback
+    *creation_time = st.st_ctime;
+#endif
+
+    return 0;
+}
+
+/*
 int get_creation_time(const char* filepath, time_t* creation_time) 
 {
     *creation_time = 0;
@@ -65646,7 +53327,7 @@ int get_creation_time(const char* filepath, time_t* creation_time)
 		myprintf("64382! Cannot get creation time for %s", filepath);
     return -1;
 }
-
+*/
 int set_creation_time(const char* filepath, time_t creation_time) 
 {
     if (creation_time == 0) return 0;
@@ -65745,11 +53426,11 @@ int savefilemetadata(const char* filepath, struct franz_posix* metadata)
         strncpy(metadata->gname, "unknown", sizeof(metadata->gname));
     
     snprintf(metadata->mode, sizeof(metadata->mode), "%07o", fileInfo.st_mode & 07777);
-    snprintf(metadata->mtime, sizeof(metadata->mtime), "%ld", fileInfo.st_mtime);
-    snprintf(metadata->atime, sizeof(metadata->atime), "%ld", fileInfo.st_atime);
+    snprintf(metadata->mtime, sizeof(metadata->mtime), "%lld", (long long)fileInfo.st_mtime);
+    snprintf(metadata->atime, sizeof(metadata->atime), "%lld", (long long)fileInfo.st_atime);
     time_t creation_time = 0;
     get_creation_time(filepath, &creation_time);
-    snprintf(metadata->ctime, sizeof(metadata->ctime), "%ld", creation_time);
+    snprintf(metadata->ctime, sizeof(metadata->ctime), "%lld", (long long)creation_time);
     
     if (S_ISLNK(fileInfo.st_mode)) 
     {
@@ -66780,7 +54461,7 @@ ThreadReturn decompressThread(void* arg) {
 										if (!flaglongpath)
 											if (!creazione)
 												if (GetLastError()!=ERROR_ALREADY_EXISTS) 
-													printerr("17519",dafare.c_str(),0);
+													printerr("decomp1",dafare.c_str(),0);
 									}
 								}
 								temppercorso=temppercorso.substr(barra+1,temppercorso.length());
@@ -66788,11 +54469,10 @@ ThreadReturn decompressThread(void* arg) {
 						}
 						if (!flaglongpath)
 							if (!direxists(percorso))
-								myprintf("00702! percorso does not exists <<%s>>\n",percorso.c_str());
+								myprintf("00702! path 'percorso' does not exists <<%s>>\n",percorso.c_str());
 					}
 #endif // corresponds to #ifdef (#ifdef _WIN32)
 		///		filename=nomefileseesistegia(filename);
-		///printf("K1 +++\n");
 					if (flagstdout)
 						job.outf=stdout;
 					else
@@ -66801,7 +54481,7 @@ ThreadReturn decompressThread(void* arg) {
 					if (job.outf==FPNULL)
 					{
 						lock(job.mutex);
-						printerr("17451",filename.c_str(),0);
+						printerr("decomp2",filename.c_str(),0);
 						release(job.mutex);
 					}
 					
@@ -66818,7 +54498,7 @@ ThreadReturn decompressThread(void* arg) {
 
                 if (!DeviceIoControl(job.outf, FSCTL_SET_SPARSE,
                     NULL, 0, NULL, 0, &br, NULL))  // set sparse attribute
-                  printerr("17459",filename.c_str(),0);
+                  printerr("decomp3",filename.c_str(),0);
 				 ///printf("K4 +++\n");
 
               }
@@ -66830,7 +54510,17 @@ ThreadReturn decompressThread(void* arg) {
 				if (flagstdout)
 					job.outf=stdout;
 				else
+				{
 					job.outf=myfopen(filename.c_str(), RBPLUS);  // update existing file
+#ifdef _WIN32
+					if (job.outf==FPNULL)
+					{
+						myprintf("66935! Windows: myfopen failed, retry (just one time more) after 0.3s\n");
+						sleep(300); // Windows: milliseconds
+						job.outf=myfopen(filename.c_str(), RBPLUS);  // update existing file
+					}
+#endif	
+				}
           }
 		  if (!job.jd.flagtest && job.outf==FPNULL) break;  // skip errors
           
@@ -69062,11 +56752,14 @@ int Jidac::enumeratecomments()
 			if (lastdate!="")
 			{
 				myprintf("\n");
-				string primi10=lastdate.substr(0,10);
+				string primi10=lastdate.substr(0,19);
 
-				myreplaceall(primi10,"-","    ");
+				///myreplaceall(primi10,"-","    ");
+				printDigitalString(primi10.c_str());
+				/*
 				ascii::Ascii font=ascii::Ascii();
 				font.print(primi10);
+				*/
 			}
 						
 	}
@@ -70491,7 +58184,10 @@ int Jidac::pause()
 		unsigned int	secondi=1;
 		while ((secondi<=menoenne) && (!iskeypressed(thekey)))
 		{
-			myprintf("01140: Wait %03d seconds (or press any key)\r",(menoenne-secondi)+1);
+			if( (flagcomment) && (versioncomment!=""))
+				myprintf("01140: %s (%03d)\r",versioncomment.c_str(),(menoenne-secondi)+1);
+			else
+				myprintf("01140: Wait %03d seconds (or press any key)\r",(menoenne-secondi)+1);
 			fflush(stdout);
 			sleep(1);
 			secondi++;
@@ -70502,10 +58198,18 @@ int Jidac::pause()
 	else
 	{
 		myprintf("\n\n");
+		
+				
+		
 		if (thekey!=0)
 			myprintf("01141: **** Hit the key %c to continue (beware of case) ****\n",thekey);
 		else
-			myprintf("01142: **** Hit a key to continue ****\n");
+		{
+			if( (flagcomment) && (versioncomment!=""))
+				myprintf("01143: %s\n",versioncomment.c_str());
+			else
+				myprintf("01142: **** Hit a key to continue ****\n");
+		}
 		while ((!iskeypressed(thekey)))
 			sleep(1);
 
@@ -73928,7 +61632,7 @@ void myscandir(uint32_t i_tnumber,DTMap& i_edt,string filename, bool i_recursive
 	HANDLE h=FindFirstFile(utow(t.c_str()).c_str(), &ffd);
 	if (h==INVALID_HANDLE_VALUE && GetLastError()!=ERROR_FILE_NOT_FOUND && GetLastError()!=ERROR_PATH_NOT_FOUND)
 		if (!flagignore)
-			printerr("59345",t.c_str(),0);
+			printerr("myscan",t.c_str(),0);
 ///	myprintf("01479: 22:   %s\n",t.c_str());
 	while (h!=INVALID_HANDLE_VALUE)
 	{
@@ -73984,7 +61688,7 @@ void myscandir(uint32_t i_tnumber,DTMap& i_edt,string filename, bool i_recursive
 		if (!FindNextFile(h, &ffd))
 		{
 			if (GetLastError()!=ERROR_NO_MORE_FILES)
-				printerr("29656",fn.c_str(),ffd.dwFileAttributes);
+				printerr("myscan2",fn.c_str(),ffd.dwFileAttributes);
 			break;
 		}
 	}
@@ -80119,7 +67823,7 @@ int Jidac::add()
 #ifdef _WIN32
 						attrib=getwinattributes(p->first);
 #endif // corresponds to #ifdef (#ifdef _WIN32)
-						printerr("16672",p->first.c_str(),attrib);
+						printerr("add",p->first.c_str(),attrib);
 						++errors;
 						continue;
 					}
@@ -80143,7 +67847,7 @@ int Jidac::add()
 		int		ultimotempo=0;
 		// Read fragments
 		int64_t fsize=0;  // file size after dedupe
-		int64_t	workedsofar=0; // -image 
+		///int64_t	workedsofar=0; // -image 
 		for (unsigned fj=0; true; ++fj)
 		{
 			int64_t sz		=0;  // fragment size;
@@ -80229,7 +67933,7 @@ int Jidac::add()
 									else
 									{
 										buflen=bytesletti;
-										workedsofar+=bytesletti;
+										///workedsofar+=bytesletti;
 									}
 									
 									if (!flagnoeta) 
@@ -80322,7 +68026,7 @@ int Jidac::add()
 							else
 							{
 								buflen=bytesletti;
-								workedsofar+=bytesletti;
+								///workedsofar+=bytesletti;
 							}
 									
 							if (!flagnoeta) 
@@ -81379,7 +69083,7 @@ int Jidac::add()
 					if (flagverbose)
 						myprintf("02141: truncating archive from %s to %s\n",migliaia(archive_size), migliaia2(archive_end));
 					if (truncate(arcname.c_str(), archive_end))
-						printerr("17092",archive.c_str(),0);
+						printerr("trunc",archive.c_str(),0);
 					if (fasttxt!="")
 					{
 						myprintf("02142: Turning off fasttxt due to truncation [archive not changed]\n");
@@ -83308,6 +71012,18 @@ int Jidac::summa()
 		myprintf("02334: Nothing to do\n");
 		return 0;
 	}
+	if (flaglast)
+	{
+		if (!myfiles.empty()) 
+		{
+			if (flagdebug)
+				myprintf("71008: getting only -last\n");
+			std::string last = myfiles.back(); // Salva l'ultimo elemento
+			myfiles.clear();                   // Svuota il vettore
+			myfiles.push_back(last);          // Aggiungi l'ultimo elemento
+		}
+	}
+
 	vector<string> myhash;
 	vector<tparametrihash> 	vettoreparametrihash;
 	vector<s_stringpair> vec;
@@ -86942,6 +74658,8 @@ int Jidac::last2()
 	{
 		int riga=0;
 		string filename=files[0];
+		if (flagdebug)
+			myprintf("74619: filename is %Z\n",filename.c_str());
 		if (!fileexists(filename))
 		{
 			myprintf("02691! error file does not exists %Z\n",filename.c_str());
@@ -87213,7 +74931,7 @@ int Jidac::testbackup()
 					myprintf("02720: originalname |%s|\n",originalname.c_str());
 				string originalpath=extractfilepath(originalname);
 				string currentpath=extractfilepath(filename);
-				if (summary<0)
+				if (flagverbose)
 					if (originalpath!=currentpath)
 					{
 						color_yellow();
@@ -91032,7 +78750,7 @@ int reduz(vector<string>* i_files,DTMap* i_myedt,vector<DTMap::iterator>* i_vf)
 #ifdef _WIN32
 				attrib=getwinattributes(p->first);
 #endif // corresponds to #ifdef (#ifdef _WIN32)
-				printerr("88573",p->first.c_str(),attrib);
+				printerr("reduz",p->first.c_str(),attrib);
 				++errors;
 				continue;
 			}
@@ -93866,6 +81584,20 @@ int Jidac::hasha()
 		myprintf("03282: Nothing to do\n");
 		return 0;
 	}
+	
+	if (flaglast)
+	{
+		if (!myfiles.empty()) 
+		{
+			if (flagdebug)
+				myprintf("71008: getting only -last\n");
+			
+			std::string last = myfiles.back(); // Salva l'ultimo elemento
+			myfiles.clear();                   // Svuota il vettore
+			myfiles.push_back(last);          // Aggiungi l'ultimo elemento
+		}
+	}
+	
 	vector<string> myhash;
 	vector<tparametrihash> 	vettoreparametrihash;
 	vector<s_stringpair> vec;
@@ -95579,6 +83311,18 @@ int Jidac::work()
 		}
 		return 0;
 	}
+	if ((mycommand=="datebig") || (mycommand=="datetimebig") || (mycommand=="timebig"))
+	{
+		if (files.size()==1)
+			printDigitalString(dateToString(true,now()).c_str());
+		else
+		{
+			string thedate=format_datetime(files[1].c_str());
+			printDigitalString(thedate.c_str());
+		}
+		return 0;
+	}
+
 	if (mycommand=="printbar")
 	{
 		if (files.size()==1)
@@ -95599,6 +83343,45 @@ int Jidac::work()
 		return 0;
 	}
 #endif
+	if ((mycommand=="lastfile")  || (mycommand=="last"))
+	{
+		if (files.size()<2)
+		{
+			myprintf("83340: You need at least one pattern ex z:\\pippo*.zpaq\n");
+			return 2;
+		}
+		flagskipzfs					=true;  // strip down zfs
+
+		g_bytescanned=0;
+		g_filescanned=0;
+		g_dimensione=0;
+		g_worked=0;
+	
+		for (unsigned i=0; i<files.size(); ++i)
+			scandir(true,edt,files[i].c_str());
+		
+		if (!edt.empty()) 
+		{
+			if (!flagterse)
+			{
+				myprintf("\n");
+				myprintf("Last file\n");
+			}
+			if (mycommand=="lastfile")
+			myprintf("%Z\n", extractfilename(edt.rbegin()->first).c_str());
+			else
+			myprintf("%Z\n", edt.rbegin()->first.c_str());
+			return 0;
+		} 
+		return 2;
+	}
+
+	if (mycommand=="devart")
+	{
+		for (unsigned int i=1;i<files.size();i++)
+			printDigitalString(files[i].c_str());
+		return 0;
+	}
 
 
 	if (mycommand=="big")
@@ -97290,7 +85073,7 @@ int Jidac::extract()
 					FP myfile=myfopen(fn.c_str(), WB);
 					if (myfile==FPNULL)
 					{
-						printerr("000963",fn.c_str(),0);
+						printerr("ramdisk",fn.c_str(),0);
 						if (myhashtype!="")
 							hashko++;
 						break;
@@ -100517,7 +88300,7 @@ void dirprimolivello()
 		std::string 	pattern 			= filename;
 		bool 			found_any 			= false;
 		int64_t			sizetobeextracted	=0;
-		int				selectedfolders		=0;
+		///int				selectedfolders		=0;
 		
 		int	piped=-1;
 		if (tobeprinted.size()>0)
@@ -100618,8 +88401,8 @@ void dirprimolivello()
 					
 					if (!isdirectory(myfile->first))
 						sizetobeextracted+=myfile->second.size;
-					else
-						selectedfolders++;
+					//else
+					//	selectedfolders++;
 					(*pjidac).files.push_back(myfile->first);
 				}
 			}
@@ -101419,10 +89202,9 @@ public:
 				fflush(stdout);
 			}
 			if (!a->first.empty())
-				if (a->first[0]=='/')
-					wehaveslash=true;
-		    ///if (iswindowspath(a->first))
-				generate_directories(a->first,added_path);
+				wehaveslash=(a->first[0]=='/');
+
+			generate_directories(a->first,added_path);
         }
 		myprintf("\n");
 		/*
@@ -102800,7 +90582,8 @@ int Jidac::maxcpu(int i_percent)
 #else
 int Jidac::maxcpu(int i_percent)
 {
-	myprintf("10054! Sorry, cannot set maxcpu (not Windows, not Linux)\n");
+	if (i_percent!=-200)
+		myprintf("10054! Sorry, cannot set maxcpu (not Windows, not Linux)\n");
 	return 2;
 }	
 #endif
@@ -104096,8 +91879,8 @@ long long get_device_size_ioctl(int fd)
         return (long long)size;
     }
     
-#elif defined(__NetBSD__) || defined(__OpenBSD__)
-    // NetBSD e OpenBSD
+#elif defined(__NetBSD__) 
+    // NetBSD
     struct disklabel dl;
     if (ioctl(fd, DIOCGDINFO, &dl) == 0) 
 	{
@@ -104105,6 +91888,11 @@ long long get_device_size_ioctl(int fd)
 			myprintf("04400: Using BSD DIOCGDINFO (disklabel)\n");
         return (long long)dl.d_secsize * dl.d_secperunit;
     }
+#elif defined(__OpenBSD__) 
+    if (flagdebug)
+		if (fd!=-200)
+			myprintf("04410: OpenBSD: not good\n");
+	return -1;
     
 #elif defined(__APPLE__)
     // macOS
@@ -104326,3 +92114,178 @@ bool Jidac::chiudidump()
     return true;
 }
 #endif
+
+const char* ascii_patterns[95][7] = {
+    // 32: spacio
+    {"       ", "       ", "       ", "       ", "       ", "       ", "       "},
+    // 33: !
+    {"   ██  ", "   ██  ", "   ██  ", "   ██  ", "       ", "   ██  ", "   ██  "},
+    // 34: "
+    {" ██ ██ ", " ██ ██ ", " ██ ██ ", "       ", "       ", "       ", "       "},
+    // 35: #
+    {" ██ ██ ", " ██ ██ ", "███████", " ██ ██ ", "███████", " ██ ██ ", " ██ ██ "},
+    // 36: $
+    {"  ███  ", " █████ ", "██     ", " █████ ", "     ██", " █████ ", "  ███  "},
+    // 37: %
+    {"██   ██", "██  ██ ", "   ██  ", "  ██   ", " ██  ██", "██   ██", "       "},
+    // 38: &
+    {" ████  ", "██  ██ ", " ████  ", " ██ ██ ", "██ ██ █", "██  ██ ", " ██ ███"},
+    // 39: '
+    {"   ██  ", "   ██  ", "   ██  ", "       ", "       ", "       ", "       "},
+    // 40: (
+    {"    ██ ", "   ██  ", "  ██   ", "  ██   ", "  ██   ", "   ██  ", "    ██ "},
+    // 41: )
+    {" ██    ", "  ██   ", "   ██  ", "   ██  ", "   ██  ", "  ██   ", " ██    "},
+    // 42: *
+    {"       ", " ██ ██ ", "  ███  ", "███████", "  ███  ", " ██ ██ ", "       "},
+    // 43: +
+    {"       ", "   ██  ", "   ██  ", "███████", "   ██  ", "   ██  ", "       "},
+    // 44: ,
+    {"       ", "       ", "       ", "       ", "   ██  ", "   ██  ", "  ██   "},
+    // 45: -
+    {"       ", "       ", "       ", "███████", "       ", "       ", "       "},
+    // 46: .
+    {"       ", "       ", "       ", "       ", "       ", "   ██  ", "   ██  "},
+    // 47: /
+    {"      █", "     ██", "    ██ ", "   ██  ", "  ██   ", " ██    ", "██     "},
+    // 48-57: 0-9
+    {" █████ ", "██   ██", "██  ███", "██ █ ██", "███  ██", "██   ██", " █████ "},
+    {"   ██  ", "  ███  ", "   ██  ", "   ██  ", "   ██  ", "   ██  ", " ██████"},
+    {" █████ ", "██   ██", "     ██", "   ███ ", "  ██   ", " ██    ", "███████"},
+    {" █████ ", "██   ██", "     ██", "  ████ ", "     ██", "██   ██", " █████ "},
+    {"██   ██", "██   ██", "██   ██", "███████", "     ██", "     ██", "     ██"},
+    {"███████", "██     ", "██     ", "██████ ", "     ██", "██   ██", " █████ "},
+    {" █████ ", "██   ██", "██     ", "██████ ", "██   ██", "██   ██", " █████ "},
+    {"███████", "     ██", "    ██ ", "   ██  ", "  ██   ", " ██    ", "██     "},
+    {" █████ ", "██   ██", "██   ██", " █████ ", "██   ██", "██   ██", " █████ "},
+    {" █████ ", "██   ██", "██   ██", " ██████", "     ██", "██   ██", " █████ "},
+    // 58: :
+    {"       ", "   ██  ", "   ██  ", "       ", "   ██  ", "   ██  ", "       "},
+    // 59: ;
+    {"       ", "   ██  ", "   ██  ", "       ", "   ██  ", "   ██  ", "  ██   "},
+    // 60: <
+    {"     ██", "    ██ ", "   ██  ", "  ██   ", "   ██  ", "    ██ ", "     ██"},
+    // 61: =
+    {"       ", "       ", "███████", "       ", "███████", "       ", "       "},
+    // 62: >
+    {"██     ", " ██    ", "  ██   ", "   ██  ", "  ██   ", " ██    ", "██     "},
+    // 63: ?
+    {" █████ ", "██   ██", "    ██ ", "   ██  ", "  ██   ", "       ", "  ██   "},
+    // 64: @
+    {" █████ ", "██   ██", "██ ████", "██ ████", "██ ████", "██     ", " █████ "},
+    // 65-90: A-Z
+    {" █████ ", "██   ██", "██   ██", "███████", "██   ██", "██   ██", "██   ██"},
+    {"██████ ", "██   ██", "██   ██", "██████ ", "██   ██", "██   ██", "██████ "},
+    {" █████ ", "██   ██", "██     ", "██     ", "██     ", "██   ██", " █████ "},
+    {"██████ ", "██   ██", "██   ██", "██   ██", "██   ██", "██   ██", "██████ "},
+    {"███████", "██     ", "██     ", "██████ ", "██     ", "██     ", "███████"},
+    {"███████", "██     ", "██     ", "██████ ", "██     ", "██     ", "██     "},
+    {" █████ ", "██   ██", "██     ", "██ ████", "██   ██", "██   ██", " █████ "},
+    {"██   ██", "██   ██", "██   ██", "███████", "██   ██", "██   ██", "██   ██"},
+    {"███████", "   ██  ", "   ██  ", "   ██  ", "   ██  ", "   ██  ", "███████"},
+    {"███████", "   ██  ", "   ██  ", "   ██  ", "   ██  ", "██ ██  ", " █████ "},
+    {"██   ██", "██  ██ ", "██ ██  ", "████   ", "██ ██  ", "██  ██ ", "██   ██"},
+    {"██     ", "██     ", "██     ", "██     ", "██     ", "██     ", "███████"},
+    {"██   ██", "███ ███", "██ █ ██", "██   ██", "██   ██", "██   ██", "██   ██"},
+    {"██   ██", "███  ██", "██ █ ██", "██  ███", "██   ██", "██   ██", "██   ██"},
+    {" █████ ", "██   ██", "██   ██", "██   ██", "██   ██", "██   ██", " █████ "},
+    {"██████ ", "██   ██", "██   ██", "██████ ", "██     ", "██     ", "██     "},
+    {" █████ ", "██   ██", "██   ██", "██   ██", "██ █ ██", "██  ███", " ██████"},
+    {"██████ ", "██   ██", "██   ██", "██████ ", "██  ██ ", "██   ██", "██   ██"},
+    {" █████ ", "██   ██", "██     ", " █████ ", "     ██", "██   ██", " █████ "},
+    {"███████", "   ██  ", "   ██  ", "   ██  ", "   ██  ", "   ██  ", "   ██  "},
+    {"██   ██", "██   ██", "██   ██", "██   ██", "██   ██", "██   ██", " █████ "},
+    {"██   ██", "██   ██", "██   ██", "██   ██", "██   ██", " ██ ██ ", "  ███  "},
+    {"██   ██", "██   ██", "██   ██", "██ █ ██", "██ █ ██", "███ ███", "██   ██"},
+    {"██   ██", " ██ ██ ", "  ███  ", "   █   ", "  ███  ", " ██ ██ ", "██   ██"},
+    {"██   ██", " ██ ██ ", "  ███  ", "   ██  ", "   ██  ", "   ██  ", "   ██  "},
+    {"███████", "     ██", "    ██ ", "   ██  ", "  ██   ", " ██    ", "███████"},
+    // 91: [
+    {" █████ ", " ██    ", " ██    ", " ██    ", " ██    ", " ██    ", " █████ "},
+    // 92: backslash
+    {"██     ", " ██    ", "  ██   ", "   ██  ", "    ██ ", "     ██", "      █"},
+    // 93: ]
+    {" █████ ", "    ██ ", "    ██ ", "    ██ ", "    ██ ", "    ██ ", " █████ "},
+    // 94: ^
+    {"   ██  ", "  ████ ", " ██  ██", "       ", "       ", "       ", "       "},
+    // 95: _
+    {"       ", "       ", "       ", "       ", "       ", "       ", "███████"},
+    // 96: `
+    {"  ██   ", "   ██  ", "       ", "       ", "       ", "       ", "       "},
+    // 97-122: a-z
+    {"       ", "       ", " █████ ", "     ██", " ██████", "██   ██", " ██████"},
+    {"██     ", "██     ", "██████ ", "██   ██", "██   ██", "██   ██", "██████ "},
+    {"       ", "       ", " █████ ", "██     ", "██     ", "██   ██", " █████ "},
+    {"     ██", "     ██", " ██████", "██   ██", "██   ██", "██   ██", " ██████"},
+    {"       ", "       ", " █████ ", "██   ██", "███████", "██     ", " █████ "},
+    {"  ████ ", " ██    ", " ██    ", "██████ ", " ██    ", " ██    ", " ██    "},
+    {"       ", "       ", " ██████", "██   ██", "██   ██", " ██████", "     ██"},
+    {"██     ", "██     ", "██████ ", "██   ██", "██   ██", "██   ██", "██   ██"},
+    {"   ██  ", "       ", "  ███  ", "   ██  ", "   ██  ", "   ██  ", " ██████"},
+    {"   ██  ", "       ", "  ███  ", "   ██  ", "   ██  ", "   ██  ", "██ ██  "},
+    {"██     ", "██     ", "██  ██ ", "██ ██  ", "████   ", "██ ██  ", "██  ██ "},
+    {"  ███  ", "   ██  ", "   ██  ", "   ██  ", "   ██  ", "   ██  ", " ██████"},
+    {"       ", "       ", "██ ██  ", "██████ ", "██ █ ██", "██   ██", "██   ██"},
+    {"       ", "       ", "██████ ", "██   ██", "██   ██", "██   ██", "██   ██"},
+    {"       ", "       ", " █████ ", "██   ██", "██   ██", "██   ██", " █████ "},
+    {"       ", "       ", "██████ ", "██   ██", "██   ██", "██████ ", "██     "},
+    {"       ", "       ", " ██████", "██   ██", "██   ██", " ██████", "     ██"},
+    {"       ", "       ", "██ ███ ", "███    ", "██     ", "██     ", "██     "},
+    {"       ", "       ", " █████ ", "██     ", " █████ ", "     ██", " █████ "},
+    {" ██    ", " ██    ", "██████ ", " ██    ", " ██    ", " ██    ", "  ████ "},
+    {"       ", "       ", "██   ██", "██   ██", "██   ██", "██   ██", " ██████"},
+    {"       ", "       ", "██   ██", "██   ██", "██   ██", " ██ ██ ", "  ███  "},
+    {"       ", "       ", "██   ██", "██   ██", "██ █ ██", "███████", "██   ██"},
+    {"       ", "       ", "██   ██", " ██ ██ ", "  ███  ", " ██ ██ ", "██   ██"},
+    {"       ", "       ", "██   ██", "██   ██", " ██████", "     ██", " █████ "},
+    {"       ", "       ", "███████", "    ██ ", "   ██  ", "  ██   ", "███████"},
+    // 123: {
+    {"   ████", "  ██   ", "  ██   ", " ██    ", "  ██   ", "  ██   ", "   ████"},
+    // 124: |
+    {"   ██  ", "   ██  ", "   ██  ", "   ██  ", "   ██  ", "   ██  ", "   ██  "},
+    // 125: }
+    {"████   ", "   ██  ", "   ██  ", "    ██ ", "   ██  ", "   ██  ", "████   "},
+    // 126: ~
+    {"       ", " ██  ██", "████ ██", "██ ████", "██  ██ ", "       ", "       "}
+};
+
+int Jidac::getCharIndex(char c) 
+{
+    // Caratteri ASCII stampabili da 32 a 126
+    if (c >= 32 && c <= 126) {
+        return c - 32;  // Converte a indice 0-94
+    }
+    return -1;  // carattere non supportato
+}
+
+void Jidac::printDigitalString(const char* inputString) 
+{
+    
+    int charCount = 0;
+    int charIndices[1000];
+    
+    // Estrai i caratteri supportati dalla stringa
+    for (int i = 0; inputString[i] != '\0' && charCount < 1000; i++) {
+        int index = getCharIndex(inputString[i]);
+        if (index >= 0) {
+            charIndices[charCount] = index;
+            charCount++;
+        }
+    }
+    
+    if (charCount == 0) {
+        printf("Nessun carattere valido trovato.\n");
+        return;
+    }
+    
+    // Stampa riga per riga
+    for (int row = 0; row < 7; row++) {
+        for (int charIdx = 0; charIdx < charCount; charIdx++) {
+            printf("%s", ascii_patterns[charIndices[charIdx]][row]);
+            if (charIdx < charCount - 1) {
+                printf(" ");
+            }
+        }
+        printf("\n");
+    }
+}

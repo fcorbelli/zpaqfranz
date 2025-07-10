@@ -1,3 +1,48 @@
+### [61.5] - 2025-07-10
+There are many new features in this build, so particular attention should be paid to the possibility of new bugs being introduced.
+
+## Main Change
+The primary change is the overhaul of the interface with CURL and the management of SFTP commands, which now (mostly) support the `-ssd` switch for parallel operations.
+### Supported commands for sftp
+- **upload**: Uploads a single file to SFTP.
+- **verify**: Quickly compares a local file to a remote file.
+- **quick**: Retrieves the QUICK hash of a remote file.
+- **ls**: Lists the contents of a remote folder.
+- **delete**: Deletes a remote file.
+- **size**: Retrieves the size of a remote file.
+- **rsync**: Performs an rsync-like operation to sync local files to a remote folder (`-ssd` supported).
+  - `-force`: Prevents appending.
+- **1on1**: Quickly compares local files to a remote folder (`-ssd` supported).
+
+## New Switches
+- **-appendoutput**: Appends data to the `-out` file instead of recreating it each time.
+- **-writeonconsole**: Writes output to stderr, allowing data to be displayed on the console even when redirected.
+- **-last**: Operates on the last file in a selection, typically used for the last part of a multipart archive.
+- **-home**: Now works with the `l` (list) command, showing the sizes of virtual folders inside an archive at one level deep.
+
+## Other Additions
+- Introduced `work devart` for highly visible on-screen text.
+- In the `utf` command, the `-fix255` switch checks the maximum length of specified file names with `maxsize`.
+- New `drive` command on Windows: Displays the list of connected physical disks with their respective numbers.
+- The `-all` switch (with `-image`) on Windows operates on an entire disk image, similar to `dd`, rather than a single partition.
+- New commands: `work datebig` and `work datetimebig`.
+
+## Additional Features
+It is now possible to extract only the files added in a specific version, marked with a textual comment, using the following example format:
+```
+c:\zpaqfranz\zpaqfranz x z:\2.zpaq -to z:\wherever -comment "something" -range
+```
+
+## Miscellaneous Changes
+- Improved OpenBSD support.
+- On Windows, `decodewinerror` is no longer hardcoded (now respects the local language).
+- Fixed the `test` command to address occasional false positives.
+- Improved alignment of help text lines.
+- Removed comments from the CURL library and unused defines.
+
+## Additional Notes
+- Reduced the size of the source code.
+  
 ### [61.4] - 2025-06-16
 
 # - Many features in this release (e.g., `-image`, `-ntfs`, `ntfs` command, `work resetacl`) are experimental and not fully tested. Use with caution and report issues.

@@ -1,3 +1,6 @@
+### [61.6] - 2025-07-10
+Fixed a bug due to refactoring, false positive in t
+
 ### [61.5] - 2025-07-10
 There are many new features in this build, so particular attention should be paid to the possibility of new bugs being introduced.
 

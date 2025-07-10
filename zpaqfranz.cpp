@@ -52,7 +52,7 @@ WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 */
-#define ZPAQ_VERSION "61.5v"
+#define ZPAQ_VERSION "61.6a"
 #define ZPAQ_DATE "(2025-07-10)"  // cannot use __DATE__ on Debian!
 
 ///	optional align for malloc (sparc64,HPPA) via -DALIGNMALLOC
@@ -8863,41 +8863,44 @@ std::string myulltoa(uint64_t value, int i_len)
     return result;
 }
 
-std::string bin2hex_32(uint32_t i_thenumber) 
+std::string bin2hex_32(uint32_t i_thenumber)
 {
-    static const char dec2hex[] = "0123456789ABCDEF";
-    char buf[9];
-    for (int j = 3; j >= 0; --j) 
+    static const char dec2hex[16+1] = "0123456789ABCDEF";
+	char buf[16+1]; ///yep, a bit large
+	uint8_t numerino;
+	for (int j=3;j>=0;j--)
 	{
-        uint8_t byte = (i_thenumber >> (j * 8)) & 0xFF;
-        buf[j * 2] = dec2hex[(byte >> 4) & 0x0F];
-        buf[j * 2 + 1] = dec2hex[byte & 0x0F];
-    }
-    buf[8] = '\0';
-    return buf;
+		numerino=i_thenumber&255;
+		buf[j*2+1]	=dec2hex[numerino&15];
+		buf[j*2]	=dec2hex[(numerino>>4)&15];
+		i_thenumber>>=8;
+	}
+	buf[8]=0;
+	return buf;
 }
 
-std::string bin2hex_64(uint64_t i_thenumber) 
+std::string bin2hex_64(uint64_t i_thenumber)
 {
-    static const char dec2hex[] = "0123456789ABCDEF";
-    char buf[17];
-    for (int j = 7; j >= 0; --j) 
+    static const char dec2hex[16+1] = "0123456789ABCDEF";
+	char buf[16+1];
+	uint8_t numerino;
+	for (int j=7;j>=0;j--)
 	{
-        uint8_t byte = (i_thenumber >> (j * 8)) & 0xFF;
-        buf[j * 2] = dec2hex[(byte >> 4) & 0x0F];
-        buf[j * 2 + 1] = dec2hex[byte & 0x0F];
-    }
-    buf[16] = '\0';
-    return buf;
+		numerino=i_thenumber&255;
+		buf[j*2+1]	=dec2hex[numerino&15];
+		buf[j*2]	=dec2hex[(numerino>>4)&15];
+		i_thenumber>>=8;
+	}
+	buf[16]=0;
+	return buf;
 }
 
 std::string bin2hex_128(uint64_t i_high,uint64_t i_low)
 {
-	std::string shigh	=bin2hex_64(i_high);
+	std::string shigh=bin2hex_64(i_high);
 	std::string slow	=bin2hex_64(i_low);
 	return shigh+slow;
 }
-
 
 
 

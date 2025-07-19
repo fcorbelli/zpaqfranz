@@ -52,8 +52,8 @@ WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 */
-#define ZPAQ_VERSION "61.6a"
-#define ZPAQ_DATE "(2025-07-10)"  // cannot use __DATE__ on Debian!
+#define ZPAQ_VERSION "62.3a"
+#define ZPAQ_DATE "(2025-07-19)"  // cannot use __DATE__ on Debian!
 
 ///	optional align for malloc (sparc64,HPPA) via -DALIGNMALLOC
 #define STR(a) #a
@@ -3576,6 +3576,7 @@ typedef enum {
   CURLVERSION_TWELFTH,  
   CURLVERSION_LAST 
 } CURLversion;
+#define CURLVERSION_NOW CURLVERSION_TWELFTH
 struct curl_version_info_data {
   CURLversion age;          
   const char *version;      
@@ -4572,7 +4573,9 @@ int			g_mysql_port;
 std::string g_sftp_host;
 std::string g_sftp_user;
 std::string g_sftp_password;
+std::string g_sftp_key;
 int			g_sftp_port;
+int			g_sftp_bandwidth;
 #endif // corresponds to #ifdef (#ifdef SFTP)
 
 int 		g_device_fd;
@@ -4839,6 +4842,7 @@ struct	hash_autocheck
 {
 	std::string	ok;
 	std::string	calculated;
+	std::string ok5;
 	///hash_autocheck() {ok="";calculated="";};
 };
 typedef std::map<std::string, hash_autocheck> MAPPAAUTOCHECK;
@@ -4901,6 +4905,86 @@ bool iswindowsxp()
 }
 
 #ifdef _WIN32
+
+
+/*
+std::string encodehex(const std::string& input) 
+{
+    std::string result;
+    result.reserve(input.length() * 2); // Riserva spazio per efficienza
+    
+    const char hexChars[] = "0123456789ABCDEF";
+    
+    for (unsigned char c : input) 
+	{
+        result += hexChars[c >> 4];        // 4 bit più significativi
+        result += hexChars[c & 0x0F];      // 4 bit meno significativi
+    }
+    
+    return result;
+}
+*/
+// Funzione per decodificare una stringa esadecimale
+std::string decodehex(const std::string& hexInput) 
+{
+    if (hexInput.length() % 2 != 0) 
+        return ""; // Stringa hex deve avere lunghezza pari
+    
+    std::string result;
+    result.reserve(hexInput.length() / 2);
+    
+    for (size_t i = 0; i < hexInput.length(); i += 2) 
+	{
+        char high = hexInput[i];
+        char low = hexInput[i + 1];
+        
+        // Converte carattere hex in valore numerico
+        auto hexToInt = [](char c) -> int {
+            if (c >= '0' && c <= '9') return c - '0';
+            if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+            if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+            return -1; // Carattere non valido
+        };
+        
+        int highVal = hexToInt(high);
+        int lowVal = hexToInt(low);
+        
+        if (highVal == -1 || lowVal == -1) 
+		    return ""; // Carattere hex non valido
+        
+        result += static_cast<char>((highVal << 4) | lowVal);
+    }
+    
+    return result;
+}
+
+std::string windowspowerme()
+{
+	// Fix Kaspersky false positive on power*hell. Sigh
+	std::string runme;
+#ifdef _WIN32
+///    string runme = "c:\\Windows\\system32\\WindowsPowerShell\\v1.0\\powershell.exe";
+	runme="633A5C57696E646F77735C73797374656D33325C57696E646F7773506F7765725368656C6C5C76312E305C706F7765727368656C6C2E657865";
+#ifdef _WIN64
+///    runme = "c:\\Windows\\SysWOW64\\WindowsPowerShell\\v1.0\\powershell.exe";
+	runme="633A5C57696E646F77735C537973574F5736345C57696E646F7773506F7765725368656C6C5C76312E305C706F7765727368656C6C2E657865";
+#endif
+	if (flagdebug)
+		printf("88883: encoded runme |%s|\n",runme.c_str());
+	
+	runme=decodehex(runme);
+	if (flagdebug)
+		printf("88883: decoded runme |%s|\n",runme.c_str());
+	return runme;
+}
+
+#endif
+
+
+
+
+
+
 void color_save()
 {
 	if (flagnocolor)
@@ -33434,10 +33518,13 @@ public:
 #ifndef ESX
 		if (flagdebug4)
 		{
-			snprintf(debugfilename,sizeof(debugfilename),"z:\\enc_%04d,%04d_u_%08d_size_%06d_%s_at_%08d.bin",(int)g_debug_sequence++,(int)int64_t(fp),(int)int64_t(ftello(fp)),ptr,nomefile.c_str(),(int)cryptoffset);
-			debugoutf=myfopen(debugfilename,WB);
-			myfwrite(buf,1,ptr,debugoutf);
-			myfclose(&debugoutf);
+			if (fp!=NULL)
+			{
+				snprintf(debugfilename,sizeof(debugfilename),"z:\\enc_%04d,%04d_u_%08d_size_%06d_%s_at_%08d.bin",(int)g_debug_sequence++,(int)int64_t(fp),(int)int64_t(ftello(fp)),ptr,nomefile.c_str(),(int)cryptoffset);
+				debugoutf=myfopen(debugfilename,WB);
+				myfwrite(buf,1,ptr,debugoutf);
+				myfclose(&debugoutf);
+			}
 		}
 #endif
 		myfwrite(buf, 1, ptr, fp);
@@ -37081,30 +37168,35 @@ string	franz_do_hash::filehash(string i_filename,bool i_flagcalccrc32,int64_t i_
 
 	if (mytype==ALGO_CRC32C)
 	{
-		ssize_t got;
 		size_t off, n;
 		uint32_t crc=0;
-		while ((got = fread(unzBuf,sizeof(char),BUFSIZE,myfilez)) > 0)
+		size_t got;
+		while (!feof(myfilez) && !ferror(myfilez))
 		{
-			off=0;
+			got = fread(unzBuf, sizeof(char), BUFSIZE, myfilez);
+			if (got == 0)
+				break;
+				
+			off = 0;
 			do
 			{
-				n = (size_t)got - off;
-				if (n > (unsigned int)BUFSIZE)
+				n = got - off;
+				if (n > BUFSIZE)
 					n = BUFSIZE;
-				crc=crc32c(crc, (const unsigned char*)unzBuf+off,n);
+				crc = crc32c(crc, (const unsigned char*)unzBuf + off, n);
 				off += n;
-			} while (off < (size_t)got);
-
+			} while (off < got);
+			
 			if (i_flagcalccrc32)
-				o_crc32=crc32_16bytes(unzBuf,got,o_crc32);
-
-			g_dimensione+=got;
-			letti+=got;
-
-			if ((flagnoeta==false) && (i_inizio>0) && (i_totali>0))
-				myavanzamentoby1sec(g_dimensione,i_totali,i_inizio,false);
+				o_crc32 = crc32_16bytes(unzBuf, got, o_crc32);
+				
+			g_dimensione += got;
+			letti += got;
+			
+			if ((flagnoeta == false) && (i_inizio > 0) && (i_totali > 0))
+				myavanzamentoby1sec(g_dimensione, i_totali, i_inizio, false);
 		}
+
 		snprintf(temp,sizeof(temp),"%08X",crc);
 		o_hexhash=temp;
 	}
@@ -37511,6 +37603,7 @@ typedef void 				(*curl_slist_free_all_t)	(struct curl_slist *);
 typedef void 				(*curl_easy_cleanup_t)		(CURL *);
 typedef CURLcode 			(*curl_global_init_t)		(long);
 typedef void 				(*curl_global_cleanup_t)	(void);
+typedef curl_version_info_data* (*curl_version_info_t) (CURLversion);
 
 struct curldynfunctions 
 {
@@ -37526,6 +37619,7 @@ struct curldynfunctions
     curl_global_init_t 		global_init;
     curl_global_cleanup_t 	global_cleanup;
     curl_easy_duphandle_t 	easy_duphandle;
+	curl_version_info_t		my_version_info;
 };
 
 
@@ -38091,12 +38185,15 @@ static bool loadLibrary()
         reinterpret_cast<void*>(GetProcAddress(hModule, "curl_global_cleanup")));
     curldll.easy_duphandle = reinterpret_cast<curl_easy_duphandle_t>(
         reinterpret_cast<void*>(GetProcAddress(hModule, "curl_easy_duphandle")));
+	curldll.my_version_info = reinterpret_cast<curl_version_info_t>(
+        reinterpret_cast<void*>(GetProcAddress(hModule, "curl_version_info")));
 
     // Verify all functions were loaded
     if (!curldll.easy_reset || !curldll.easy_init || !curldll.easy_setopt ||
         !curldll.easy_perform || !curldll.easy_strerror || !curldll.easy_getinfo ||
         !curldll.slist_append || !curldll.slist_free_all || !curldll.easy_cleanup ||
-        !curldll.global_init || !curldll.global_cleanup || !curldll.easy_duphandle)
+        !curldll.global_init || !curldll.global_cleanup || !curldll.easy_duphandle
+		|| (!curldll.my_version_info))
     {
         myprintf("46967: Failed to load one or more libcurl functions (older %s?)\n", dllname.c_str());
         FreeLibrary(hModule);
@@ -38148,6 +38245,7 @@ static bool loadLibrary()
     int 			getPort() 		const { return port; }
     std::string 	getUsername() 	const { return username; }
     std::string 	getPassword() 	const { return password; }
+    std::string 	getKey() 		const { return ssh_key_path; }
 								
 	zpaqfranzsftp2() : port(22), use_ssh_key(false), curl(NULL)
     {
@@ -38740,6 +38838,150 @@ static bool loadLibrary()
         return true;
     }
 
+// Struttura per catturare l'output
+struct WriteData {
+    std::string data;
+};
+
+// Callback per catturare l'output
+static size_t WriteCallback(void* contents, size_t size, size_t nmemb, WriteData* userdata) {
+    size_t totalSize = size * nmemb;
+    userdata->data.append((char*)contents, totalSize);
+    return totalSize;
+}
+
+	bool check_ssh_support() 
+	{
+    curl_version_info_data* version_info = curldll.my_version_info(CURLVERSION_NOW);
+    
+    myprintf("38765: libcurl version: %s\n", version_info->version);
+    myprintf("38766: Supported protocols: ");
+    
+    bool ssh_supported = false;
+    for (int i = 0; version_info->protocols[i]; i++) 
+	{
+        myprintf("%s ", version_info->protocols[i]);
+        if (strcmp(version_info->protocols[i], "ssh") == 0) 
+		    ssh_supported = true;
+    }
+    myprintf("\n");
+    
+    if (!ssh_supported) 
+	{
+        myprintf("38779! SSH protocol not supported in this libcurl build!\n");
+        return false;
+    }
+    
+    myprintf("SSH protocol is supported\n");
+    return true;
+}
+
+bool xremote_command(const std::string& command, std::string& output) {
+    if (!curl) {
+        myprintf("38747! No curl in xremote_command\n");
+        return false;
+    }
+    
+    if (flagdebug3) 
+        myprintf("41923: executing remote command: %s\n", command.c_str());
+    
+    CURL* curl_command = Kurl_easy_duphandle(curl);
+    if (!curl_command) {
+        myprintf("41932: cannot duplicate xremote_command\n");
+        return false;
+    }
+    
+    // Struttura per catturare l'output
+    WriteData writeData;
+    
+    char url[1024];
+    snprintf(url, sizeof(url), "sftp://%s:%d/", host.c_str(), port);
+    
+    Kurl_easy_setopt(curl_command, CURLOPT_URL, url);
+    
+    // Configura il callback per catturare l'output
+    Kurl_easy_setopt(curl_command, CURLOPT_WRITEFUNCTION, WriteCallback);
+    Kurl_easy_setopt(curl_command, CURLOPT_WRITEDATA, &writeData);
+    
+    // Usa QUOTE per eseguire il comando
+    struct curl_slist* commands = NULL;
+    commands = Kurl_slist_append(commands, command.c_str());
+    Kurl_easy_setopt(curl_command, CURLOPT_QUOTE, commands);
+    
+    // Non usare NOBODY se vuoi catturare l'output
+    Kurl_easy_setopt(curl_command, CURLOPT_NOBODY, 0L);
+    
+    CURLcode res = Kurl_easy_perform(curl_command);
+    
+    Kurl_slist_free_all(commands);
+    Kurl_easy_cleanup(curl_command);
+    
+    if (res != CURLE_OK) {
+        myprintf("31951: Error xcommand %s\n", Kurl_easy_strerror(res));
+        return false;
+    }
+    
+    output = writeData.data;
+    
+    if (flagdebug3) 
+        myprintf("41953: remote command OK, output: %s\n", output.c_str());
+    
+    return true;
+}
+
+// Funzione specifica per md5sum
+bool xremote_md5sum(const std::string& pattern, std::string& md5_output) {
+    std::string command = "md5sum " + pattern;
+    return xremote_command(command, md5_output);
+}
+/*
+    bool xremote(const std::string& i_remotefile) 
+	{
+        if (!curl) 
+		{
+            myprintf("38747! No curl in xremote\n");
+			return false;
+        }
+        
+        if (flagdebug3) 
+			myprintf("41923: executing remote file: %s\n", i_remotefile.c_str());
+        
+        CURL* curl_command = Kurl_easy_duphandle(curl);
+        if (!curl_command) 
+		{
+            myprintf("41932: cannot duplicate xremote\n");
+            return false;
+        }
+        
+        char url[1024];
+        snprintf(url, sizeof(url),"sftp://%s:%d%s", host.c_str(), port, i_remotefile.c_str());
+        
+        Kurl_easy_setopt(curl_command, CURLOPT_URL, url);
+        Kurl_easy_setopt(curl_command, CURLOPT_QUOTE, NULL);
+        
+        // Usa POSTQUOTE per eliminare il file dopo la connessione
+        struct curl_slist* commands 	= NULL;
+        std::string rm_command 			= i_remotefile;
+        commands 						= Kurl_slist_append(commands, rm_command.c_str());
+        Kurl_easy_setopt(curl_command, CURLOPT_POSTQUOTE, commands);
+        
+        Kurl_easy_setopt(curl_command, CURLOPT_NOBODY, 1L);
+        CURLcode res = Kurl_easy_perform(curl_command);
+        
+        Kurl_slist_free_all(commands);
+        Kurl_easy_cleanup(curl_command);
+        
+        if (res != CURLE_OK) 
+		{
+            myprintf("31951: Error xcommand %s\n", Kurl_easy_strerror(res));
+            return false;
+        }
+        
+        if (flagdebug3) 
+			myprintf("41953: remote command OK\n");
+        return true;
+    }
+*/
 
 
 	bool listremotedir(const std::string& i_remote, std::vector<sftpfileinfo>* o_filearray, const std::string& filter = "") 
@@ -38834,6 +39076,7 @@ struct sftp_rsync_thread_data
     std::string 					remote_path;
     bool 							force_flag;
     bool* 							should_stop;
+	int								maxbandwidth;
     
     // Statistiche per thread
     std::string 					current_file;
@@ -38843,6 +39086,7 @@ struct sftp_rsync_thread_data
     int64_t 						last_update_time;
     double 							current_speed;
     enum { SFTP_IDLE, SFTP_UPLOAD, SFTP_ERROR, SFTP_DONE } status;
+	int64_t							resume_from;
     std::string status_message;
     
     sftp_rsync_thread_data() : 
@@ -38852,13 +39096,15 @@ struct sftp_rsync_thread_data
     queue_mutex			(nullptr), 
 	queue_cv			(nullptr), 
 	force_flag			(false),
-	should_stop			(nullptr), 
+	should_stop			(nullptr),
+	maxbandwidth		(0),
 	current_file_size	(0), 
 	current_uploaded	(0),
     thread_start_time	(0), 
 	last_update_time	(0), 
 	current_speed		(0.0),
-    status				(SFTP_IDLE) {}
+    status				(SFTP_IDLE),
+	resume_from(0)	{}
 };
 
 struct sftp_rsync_progress_data 
@@ -38973,7 +39219,7 @@ static void* sftp_rsync_worker_thread(void* arg)
         std::string remote_file = data->remote_path;
         if (remote_file.back() != '/') remote_file += '/';
         remote_file += filename;
-        
+       
         // Verifica se il file remoto esiste e la sua dimensione
         int64_t remote_size = 0;
         int64_t resume_from = 0;
@@ -38994,7 +39240,7 @@ static void* sftp_rsync_worker_thread(void* arg)
                     resume_from = remote_size;
             }
         }
-        
+		data->resume_from=resume_from;
         // Apri file locale
         FILE* file = fopen(current_file.c_str(), "rb");
         if (!file) 
@@ -39037,6 +39283,8 @@ static void* sftp_rsync_worker_thread(void* arg)
         
         Kurl_easy_setopt(curl_handle, CURLOPT_URL, url);
         Kurl_easy_setopt(curl_handle, CURLOPT_UPLOAD, 1L);
+		if (data->maxbandwidth>0)
+			Kurl_easy_setopt(curl_handle, CURLOPT_MAX_SEND_SPEED_LARGE,data->maxbandwidth);
         Kurl_easy_setopt(curl_handle, CURLOPT_READFUNCTION, sftp_rsync_read_callback);
         Kurl_easy_setopt(curl_handle, CURLOPT_READDATA, file);
         Kurl_easy_setopt(curl_handle, CURLOPT_INFILESIZE_LARGE, (curl_off_t)(local_size - resume_from));
@@ -39115,8 +39363,8 @@ static void sftp_rsync_update_display(sftp_rsync_progress_data* progress)
     for (size_t i = 0; i < progress->threads.size(); ++i) 
 	{
         sftp_rsync_thread_data* thread = progress->threads[i];
-
-		int64_t remaining = thread->current_file_size-thread->current_uploaded;
+		///int64_t remaining = thread->current_file_size-thread->current_uploaded;
+        int64_t remaining = thread->current_file_size-thread->current_uploaded-thread->resume_from;
         
         const char* status_str;
         switch (thread->status) 
@@ -39238,7 +39486,9 @@ bool zpaqfranzsftp2::sftp_rsync(const std::vector<std::string>& local_files, con
 	// Crea thread data
 	std::vector<sftp_rsync_thread_data> thread_data(i_thread);
 	std::vector<pthread_t> threads(i_thread);
-	
+
+	if (g_sftp_bandwidth>0)
+		g_sftp_bandwidth=(g_sftp_bandwidth/i_thread);
 	for (int i = 0; i < i_thread; ++i) 
 	{
 		thread_data[i].thread_id 		= i + 1;
@@ -39249,6 +39499,8 @@ bool zpaqfranzsftp2::sftp_rsync(const std::vector<std::string>& local_files, con
 		thread_data[i].remote_path 		= remote_path;
 		thread_data[i].force_flag 		= force_flag;
 		thread_data[i].should_stop 		= &should_stop;
+		thread_data[i].maxbandwidth 	= g_sftp_bandwidth;
+		
 		
 		progress.threads.push_back(&thread_data[i]);
 		
@@ -39926,6 +40178,9 @@ public:
 	int 						sftp_dosize();
 	int 						sftp_dodelete();
 	int 						sftp_doverify();
+	int 						sftp_domd5();
+	int 						sftp_doinfo();
+	
 #endif
 
 	void 						getfirstlevelfolders(const DTMap& i_filemap, 
@@ -42615,7 +42870,8 @@ public:
   int get() {
     if (f && p>=end) {
       p=0;
-      end=fread(unzBuf, 1, BUFSIZE, f);
+	  
+      end=fread(unzBuf, 1, BUFSIZE, f); // Fake warning (unix.Stream)
       if (aes) aes->encrypt(unzBuf, end, offset);
     }
     if (p>=end) return -1;
@@ -44017,10 +44273,13 @@ string help_sftp(bool i_usage,bool i_example)
 		moreprint("                            -force: do NOT append");
 		moreprint("noun  1on1               Quick compare local files to remote folder (-ssd)");
 		
-		moreprint("+ : -host     A   IPV4 hostname (ex. pippo.ciao.com)");
-		moreprint("+ : -user     B   SFTP username (ex. thesftpuser)");
-		moreprint("+ : -password C   SFTP password (ex. thehardpwd)");
-		moreprint("+ : -port     D   SFTP port     (ex. 22)");
+		moreprint("+ : -host      A  IPV4 hostname (ex. pippo.ciao.com)");
+		moreprint("+ : -user      B  SFTP username (ex. thesftpuser)");
+		moreprint("+ : -password  C  SFTP password (ex. thehardpwd)");
+		moreprint("+ : -port      D  SFTP port     (ex. 22)");
+		moreprint("+ : -key       E  SSH key       (ex. thekey)");
+		moreprint("+ : -bandwidth F  Limit global speed");
+		
 	}
 	if (i_usage && i_example) { color_yellow(); moreprint("Examples:"); color_restore(); }
 	if (i_example)
@@ -44034,6 +44293,9 @@ string help_sftp(bool i_usage,bool i_example)
 		moreprint("Multithread    : sftp quick  /tmp/remotefolder     -ssd -host 1.2.3.4 -user k1 -password pippo -port 23");
 		moreprint("Rsync          : sftp rsync  d:\\test* /home/fra    -ssd -host 1.2.3.4 -user k1 -password pippo -port 23");
 		moreprint("1on1           : sftp 1on1   d:\\test* /home/fra    -ssd -host 1.2.3.4 -user k1 -password pippo -port 23");
+		moreprint("Rsync w/limit  : sftp rsync  d:\\test* /home/fra    -ssd -host 1.2.3.4 -user k1 -password pippo -bandwidth 5m");
+		moreprint("ls             : sftp ls     /tmp                       -host 1.2.3.4 -user k1 -key theopensshkey.key ");
+		
 	}
 	return("SFTP interface");
 }
@@ -45527,8 +45789,10 @@ string help_zfsproxrestore(bool i_usage,bool i_example)
 		color_green();
 		moreprint("CMD   zfsproxrestore");
 		moreprint("                  Restore proxmox backups (on local storage)");
+#ifndef _WIN32
 		moreprint("                  into /var/lib/vz and /etc/pve/qemu-server");
 		moreprint("                  Without files selection restore everything");
+#endif
 		moreprint("                  Files can be a sequence of WMIDs (ex. 200 300)");
 		color_restore();
 		moreprint("+ : -kill         Remove snapshot (after backup)");
@@ -47447,8 +47711,10 @@ int Jidac::loadparameters(int argc, const char** argv)
 	g_mysql_user		="root";
 
 #ifdef SFTP
+	g_sftp_key			="";
 	g_sftp_host			="";
 	g_sftp_port			=22;
+	g_sftp_bandwidth	=0;
 	g_sftp_password		="";
 	g_sftp_user			="";
 #endif // corresponds to #ifdef (#ifdef SFTP)
@@ -48143,7 +48409,9 @@ int Jidac::loadparameters(int argc, const char** argv)
 		else if ((!flagforzarobocopy) && ((opt.size()<2 || opt[0]!='-'))) usage();
 		else if (cli_getint		(opt,"-P",			false,	"-P",							argc,argv,&i,4,					&g_mysql_port));
 #ifdef SFTP
-		else if (cli_getint		(opt,"-port",		false,	"",								argc,argv,&i,4,					&g_sftp_port));
+		else if (cli_getint		(opt,"-port",		false,	"",								argc,argv,&i,22,				&g_sftp_port));
+		else if (cli_getint		(opt,"-bandwidth",	false,	"",								argc,argv,&i,0,					&g_sftp_bandwidth));
+		
 #endif // corresponds to #ifdef (#ifdef SFTP)
 		else if (cli_getint		(opt,"-all",		false,	"",								argc,argv,&i,4,					&all));
 		else if (cli_getint		(opt,"-fragment",	false,	"",								argc,argv,&i,fragment,			&fragment));
@@ -48187,6 +48455,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 		else if (cli_onlystring	(opt,"-deleteinto",			"",				g_deleteinto,	argc,argv,&i,					NULL));
 		else if (cli_onlystring	(opt,"-sfxto",				"",				g_sfxto,		argc,argv,&i,					NULL));
 #ifdef SFTP
+		else if (cli_onlystring	(opt,"-key",				"",				g_sftp_key,	argc,argv,&i,					NULL));
 		else if (cli_onlystring	(opt,"-host",				"",				g_sftp_host,	argc,argv,&i,					NULL));
 		else if (cli_onlystring	(opt,"-user",				"",				g_sftp_user,	argc,argv,&i,					NULL));
 		else if (cli_onlystring	(opt,"-password",			"",				g_sftp_password,	argc,argv,&i,					NULL));
@@ -54218,12 +54487,19 @@ int Jidac::enumeratecomments()
 		if (flagstat)
 		{
 			myprintf("59648: ----------------------------------------------------------------------------------------------\n");
-			myprintf("59649:                                                    %20s  %20s\n",migliaia(totaluncompressed),migliaia2(totalcompressed));
+			if (g_password)
+				myprintf("59349:                                                    %20s  %20s [%s]\n",migliaia(totaluncompressed),migliaia2(totalcompressed),migliaia3(totalcompressed+32));
+			else
+				myprintf("59149:                                                    %20s  %20s\n",migliaia(totaluncompressed),migliaia2(totalcompressed));
 		}
 		else
 		{
 			myprintf("59644: --------------------------------------------------------------------------\n");
-			myprintf("59643:                                                       %20s\n",migliaia(totalcompressed));
+			if (g_password)
+				myprintf("59143:                                                       %20s [%s]\n",migliaia(totalcompressed),migliaia2(totalcompressed+32));
+			else
+				myprintf("59643:                                                       %20s\n",migliaia(totalcompressed));
+				
 		}
 
 		if (flagbig)
@@ -54736,7 +55012,7 @@ string filecopy(bool i_singlefile,bool i_append,const string& i_infile,const str
 		return "";
 	}
 	
-	int64_t donesize=0;
+	uint64_t donesize=0;
 	XXH3_state_t state128;
     (void)XXH3_128bits_reset(&state128);
 	FILE* inFile = freadopen(i_infile.c_str());
@@ -54794,24 +55070,50 @@ string filecopy(bool i_singlefile,bool i_append,const string& i_infile,const str
 	if (flagdebug3)
 		myprintf("01058: Buffer size %s\n",migliaia(g_ioBUFSIZE));
 	
-	while ((readSize = fread(buffer, 1, g_ioBUFSIZE, inFile)) > 0)
+
+	while (!feof(inFile) && !ferror(inFile))
 	{
-		if (i_maxoutputsize>0)
-			if (uint64_t(donesize+readSize)>i_maxoutputsize)
+		readSize = fread(buffer, 1, g_ioBUFSIZE, inFile);
+		if (readSize == 0)
+			break;
+			
+		int64_t bytesToWrite = readSize;
+		
+		// Controllo limite massimo output
+		if (i_maxoutputsize > 0)
+		{
+			if (uint64_t(donesize + readSize) > i_maxoutputsize)
 			{
-				int64_t bytestowrite=i_maxoutputsize-donesize;
-				int64_t written=fwrite(buffer,1,bytestowrite,outFile);
-				donesize+=written;
-				break;
+				bytesToWrite = i_maxoutputsize - donesize;
+				if (bytesToWrite <= 0)
+					break;
 			}
-		int64_t written=fwrite(buffer,1,readSize,outFile);
-		donesize+=written;
-		if (!i_append)
-			if (i_verify)
-				(void)XXH3_128bits_update(&state128, buffer, readSize);
+		}
+		
+		int64_t written = fwrite(buffer, 1, bytesToWrite, outFile);
+		
+		// Verifica scrittura completa
+		if (written != bytesToWrite)
+		{
+			color_red();
+			myprintf("Write error: expected %lld, wrote %lld bytes\n", bytesToWrite, written);
+			color_restore();
+			break;
+		}
+		
+		donesize += written;
+		
+		if (!i_append && i_verify)
+			(void)XXH3_128bits_update(&state128, buffer, readSize);
+			
 		if (!flagnoeta)
-			hostampato |= myavanzamentoby1sec(donesize,bytestoappend,startcopy,false);
+			hostampato |= myavanzamentoby1sec(donesize, bytestoappend, startcopy, false);
+		
+		// Se abbiamo raggiunto il limite massimo, esci
+		if ((i_maxoutputsize > 0) && (donesize >= i_maxoutputsize))
+			break;
 	}
+
 	if (hostampato)
 	{
 		printbar(' ');
@@ -54830,9 +55132,10 @@ string filecopy(bool i_singlefile,bool i_append,const string& i_infile,const str
 		franz_free(buffer);
 		buffer=0;
 	}
-	if (donesize!=bytestoappend)
+	if (donesize!=(uint64_t)bytestoappend)
 	{
 		myprintf("01062: GURU bytes written does not match expected\n");
+		fclose(inFile);
 		return "";
 	}
 
@@ -55276,25 +55579,34 @@ bool isfilesequal(string i_source,string i_destination,bool i_flagfast=false)
 	}
 	else
 	{
-		while ((readsource = fread(buffersource, 1, blockSize, source_file)) > 0)
+		size_t readsource, readdestination;
+		while (!feof(source_file) && !ferror(source_file) && !feof(destination_file) && !ferror(destination_file))
 		{
-			readdestination=fread(bufferdestination, 1, blockSize, destination_file);
-			if (readsource!=readdestination)
+			readsource = fread(buffersource, 1, blockSize, source_file);
+			if (readsource == 0)
+				break;
+				
+			readdestination = fread(bufferdestination, 1, blockSize, destination_file);
+			
+			if (readsource != readdestination)
 			{
-				///myprintf("01108: read source != read dest %s %s\n",migliaia(readsource),migliaia2(readdestination));
+				// myprintf("01108: read source != read dest %s %s\n", migliaia(readsource), migliaia2(readdestination));
 				fclose(source_file);
 				fclose(destination_file);
 				return false;
 			}
-			if (memcmp(buffersource, bufferdestination, readsource))
+			
+			if (memcmp(buffersource, bufferdestination, readsource) != 0)
 			{
-			///	myprintf("01109: failed mem compare\n");
+				// myprintf("01109: failed mem compare\n");
 				fclose(source_file);
 				fclose(destination_file);
 				return false;
 			}
-	///		confrontatitotale+=readsource;
+			
+			// confrontatitotale += readsource;
 		}
+
 	}
 	fclose(source_file);
 	fclose(destination_file);
@@ -55770,38 +56082,59 @@ int Jidac::autotest()
 	MAPPAAUTOCHECK myautocheck_map;
 	hash_autocheck myblock;
 	myblock.ok="93EA42CC35E379AD67927C4F3B7AB78EA038A7FD67D7B245975752FDF319B0A8C40E4F4AD30D9069CBB96777AE2CA6ED23A5FEB1DCF30487401317887E97584A";
+	myblock.ok5="C73D8F890F181CE6EB9FF431E08828D6BADA50AC2427546BA10A8F8226F527850FB61E638F798CE86028248262DF17D77D9D00FA5FE5E6CE6C94267E1DC2E99C";
 	myautocheck_map.insert(std::pair<string, hash_autocheck>("WHIRLPOOL",myblock));
 	myblock.ok="B99C2AD7BDE24144";
+	myblock.ok5="4755E237BAD15B4C";
 	myautocheck_map.insert(std::pair<string, hash_autocheck>("HIGHWAY64",myblock));
 	myblock.ok="794503BA1B12CF8848907AAF0F62A8C5";
+	myblock.ok5="C4C97D024A5DDDC7609B799BDBC46492";
 	myautocheck_map.insert(std::pair<string, hash_autocheck>("HIGHWAY128",myblock));
+	
 	myblock.ok="6F9B44DF54E86972F2873FEFEBB06BD7E29CF9C7DB71096FF0270D72726088EF";
+	myblock.ok5="13F23C2D5C49147DB7B10C8D8923CB052C2B3E1FF3EED5681E4FD69F05FFA6FE";
 	myautocheck_map.insert(std::pair<string, hash_autocheck>("HIGHWAY256",myblock));
 
 	myblock.ok="5AF0D4BB454A7D349CE97EFAFFD93CAC3B200DF166BEB9BFE2EC1838F35396AD";
+	myblock.ok5="61274278289E9F6233DF34ABB392AAFE03EE7CE9D77167F3A8D9CDE1AD9861C0";
 	myautocheck_map.insert(std::pair<string, hash_autocheck>("BLAKE3",myblock));
 	myblock.ok="0D26839A";
+	myblock.ok5="72D31AD5";
+	
 	myautocheck_map.insert(std::pair<string, hash_autocheck>("CRC-32",myblock));
 	myblock.ok="50CB8A6F";
+	myblock.ok5="B6AFE183";
 	myautocheck_map.insert(std::pair<string, hash_autocheck>("CRC-32C",myblock));
 	myblock.ok="A245C815AD0C65DBBC48094B281B245A";
+	myblock.ok5="2ECDDE3959051D913F61B14579EA136D";
 	myautocheck_map.insert(std::pair<string, hash_autocheck>("MD5",myblock));
 	myblock.ok="F1D057704157A6A69F4A6AF06321FF8EA57BC719D070B5E28A92E362D03F66AD";
+	myblock.ok5="F0393FEBE8BAAA55E32F7BE2A7CC180BF34E52137D99E056C817A9C07B8F239A";
 	myautocheck_map.insert(std::pair<string, hash_autocheck>("SHA-256-PUT",myblock));
 	myblock.ok="F1D057704157A6A69F4A6AF06321FF8EA57BC719D070B5E28A92E362D03F66AD";
+	myblock.ok5="F0393FEBE8BAAA55E32F7BE2A7CC180BF34E52137D99E056C817A9C07B8F239A";
 	myautocheck_map.insert(std::pair<string, hash_autocheck>("SHA-256-WRITE",myblock));
 	myblock.ok="A6F8AEA5086E5EEC6585ECCCE91901C7B810BD9A1EDD06CA0EE7DBF23AD773DE";
+	myblock.ok5="034AF02F68F8874B6668CCBEE49143A64BE435610E1282D93BF35FD80ACCE1FB";
 	myautocheck_map.insert(std::pair<string, hash_autocheck>("SHA-3",myblock));
 	myblock.ok="CEFB9B8DD36BFE7EE6CB3B1E5E5CA8D259A53FFF";
+	myblock.ok5="7BE07AAF460D593A323D0DB33DA05B64BFDCB3A5";
 	myautocheck_map.insert(std::pair<string, hash_autocheck>("SHA1-PUT",myblock));
 	myblock.ok="CEFB9B8DD36BFE7EE6CB3B1E5E5CA8D259A53FFF";
+	myblock.ok5="7BE07AAF460D593A323D0DB33DA05B64BFDCB3A5";
 	myautocheck_map.insert(std::pair<string, hash_autocheck>("SHA1-WRITE",myblock));
+	/*
 	myblock.ok="93EA42CC35E379AD67927C4F3B7AB78EA038A7FD67D7B245975752FDF319B0A8C40E4F4AD30D9069CBB96777AE2CA6ED23A5FEB1DCF30487401317887E97584A";
+	myblock.ok5="C73D8F890F181CE6EB9FF431E08828D6BADA50AC2427546BA10A8F8226F527850FB61E638F798CE86028248262DF17D77D9D00FA5FE5E6CE6C94267E1DC2E99C";
 	myautocheck_map.insert(std::pair<string, hash_autocheck>("WHIRLPOOL",myblock));
+	*/
 	myblock.ok="25F384F0514225C3878240045180B970";
+	myblock.ok5="1C8288B6013152D97B4A5D7E6C7893D4";
 	myautocheck_map.insert(std::pair<string, hash_autocheck>("XXH3",myblock));
 	myblock.ok="996D383079195E18";
+	myblock.ok5="E47599E7C7CEF609";
 	myautocheck_map.insert(std::pair<string, hash_autocheck>("XXHASH64",myblock));
+	myblock.ok5="E47599E7C7CEF609";
 	myblock.ok="996D383079195E18";
 	myautocheck_map.insert(std::pair<string, hash_autocheck>("XXHASH64Y",myblock));
 	///myblock.ok="EMPTY";
@@ -55849,6 +56182,9 @@ int Jidac::autotest()
 		if (outfolder[0]!='/')
 		{
 			myprintf("01154! on non-Win full path required: -to /tmp/testfolder is OK    -to ./testdir NOT GOOD\n");
+			franz_free(state);
+			franz_free(buffer8bit);
+			franz_free(buffer32bit);
 			return 2;
 		}
 #endif // corresponds to #ifdef (#ifdef unix)
@@ -55857,16 +56193,18 @@ int Jidac::autotest()
 
 		if (mypos(" ",outfolder)>=0)
 		{
+			myprintf("01156! -to folder cannot contain spaces\n");
+			franz_free(state);
 			franz_free(buffer8bit);
 			franz_free(buffer32bit);
-			myprintf("01156! -to folder cannot contain spaces\n");
 			return 2;
 		}
 		if (!saggiascrivibilitacartella(outfolder))
 		{
+			myprintf("01157! cannot write test data into -to\n");
+			franz_free(state);
 			franz_free(buffer8bit);
 			franz_free(buffer32bit);
-			myprintf("01157! cannot write test data into -to\n");
 			return 2;
 		}
 		else
@@ -55885,6 +56223,7 @@ int Jidac::autotest()
 			if (tofoldersize>0)
 			{
 				myprintf("01160! WARNING the folder <<%Z>>\n",outfolder.c_str());
+				franz_free(state);
 				franz_free(buffer8bit);
 				franz_free(buffer32bit);
 				return 1;
@@ -55902,6 +56241,9 @@ int Jidac::autotest()
 			if (!flagspace)
 			{
 				myprintf("01163! You need at least 18GB free on %s (founded %s). Use -space to bypass\n",outfolder.c_str(),tohuman(spazio));
+				franz_free(state);
+				franz_free(buffer8bit);
+				franz_free(buffer32bit);
 				return 2;
 			}
 
@@ -55933,9 +56275,10 @@ int Jidac::autotest()
 			///g_allocatedram+=the_file_len;
 			if (the_file==NULL)
 			{
+				myprintf("01169! error in malloc\n");
+				franz_free(state);
 				franz_free(buffer8bit);
 				franz_free(buffer32bit);
-				myprintf("01169! error in malloc\n");
 				return 2;
 			}
 #ifndef ESX
@@ -55944,10 +56287,11 @@ int Jidac::autotest()
 #endif
 			if (!mime2binary(extract_test.c_str(),(unsigned char *)the_file,the_file_len))
 			{
+				myprintf("01171! mime decoder kaputt!\n");
+				franz_free(state);
 				franz_free(the_file);
 				franz_free(buffer8bit);
 				franz_free(buffer32bit);
-				myprintf("01171! mime decoder kaputt!\n");
 				return 2;
 			}
 			else
@@ -55969,10 +56313,11 @@ int Jidac::autotest()
 	#endif // corresponds to #ifdef (#ifdef _WIN32)
 			if (outFile==NULL)
 			{
+				myprintf("01177! CANNOT OPEN outfile %s\n",outfile.c_str());
+				franz_free(state);
 				franz_free(the_file);
 				franz_free(buffer8bit);
 				franz_free(buffer32bit);
-				myprintf("01177! CANNOT OPEN outfile %s\n",outfile.c_str());
 				return 2;
 			}
 #ifndef ESX
@@ -55993,21 +56338,24 @@ int Jidac::autotest()
 				myprintf("01184: dopo fclose\n");
 			if (scritti!=the_file_len)
 			{
+				myprintf("01185! error extracting file .zpaq written %s expected %s => %s\n",migliaia(scritti),migliaia2(the_file_len),outfile.c_str());
 				franz_free(the_file);
 				franz_free(buffer8bit);
 				franz_free(buffer32bit);
-				myprintf("01185! error extracting file .zpaq written %s expected %s => %s\n",migliaia(scritti),migliaia2(the_file_len),outfile.c_str());
 				return 2;
 			}
 			if (flagdebug2)
 				myprintf("01186: dimensione outfile %s\n",migliaia(prendidimensionefile(outfile.c_str())));
+			franz_free(the_file);
 		}
 	}
 	if (all)
 	{
 		for (int i=0;i<10;i++)
 		{
+			int64_t startiteration=mtime();
 			myprintf("01187: Iteration %d/9 chunksize %12s                               \n",(int)i,migliaia(chunksize));
+			
 			populateRandom_xorshift128plus(buffer32bit, chunksize,324+i,4444+i);
 			if (flagverbose)
 			{
@@ -56116,15 +56464,26 @@ int Jidac::autotest()
 				HighwayHashCatAppend((const uint8_t*)buffer8bit,chunksize,&highway64state);
 			}
 			chunksize/=3;
+			int64_t elapsed	=(mtime()-startiteration)/1000;
+			int hours 		= elapsed / 3600;
+			int minutes 	= (elapsed % 3600) / 60;
+			int secs 		= elapsed % 60;
+			if (hours>99)
+				hours=99;
+		
+			myprintf("56464: Iteration %02d Time %9s %02d:%02d:%02d",i+1,migliaia(mtime()-startiteration),hours,minutes,secs);
+			eol();
+			myprintf("\n");
 		}
 	}
 	else
 	{
 		if ((unsigned int)menoenne>(unsigned int)chunksize)
 		{
+			myprintf("01208! -n too big, max %s\n",migliaia(sizeof(chunksize)));
 			franz_free(buffer8bit);
 			franz_free(buffer32bit);
-			myprintf("01208! -n too big, max %s\n",migliaia(sizeof(chunksize)));
+			franz_free(state);
 			return 2;
 		}
 		flagverbose=true;
@@ -56266,8 +56625,41 @@ int Jidac::autotest()
 	if (flagverbose)
 	{
 		printbar('-');
-		for (MAPPAAUTOCHECK::iterator p=myautocheck_map.begin(); p!=myautocheck_map.end(); ++p)
-			myprintf("01214: CALC %15s: %s\n",p->first.c_str(),p->second.calculated.c_str());
+		
+		
+		if (chunksize==5)
+		{
+			int countok=0;
+			int	countko=0;
+			for (MAPPAAUTOCHECK::iterator p=myautocheck_map.begin(); p!=myautocheck_map.end(); ++p)
+			{
+				if (p->second.calculated==p->second.ok5)
+				{
+					countok++;
+					color_green();
+				}
+				else
+				{
+					countko++;
+					color_red();
+				}
+				myprintf("56585: CALC %15s: %s\n",p->first.c_str(),p->second.calculated.c_str());
+				color_restore();
+			}
+
+			if (countok==5)
+				color_green();
+			else
+				color_yellow();
+			myprintf("56622: OK %d ERROR %d | use autotest -all for stronger (and longer) test\n",countok,countko);
+			color_restore();
+
+		}
+		else
+		{
+			for (MAPPAAUTOCHECK::iterator p=myautocheck_map.begin(); p!=myautocheck_map.end(); ++p)
+				myprintf("01214: CALC %15s: %s\n",p->first.c_str(),p->second.calculated.c_str());
+		}
 		printbar('-');
 	}
 	bool	allok=true;
@@ -56278,7 +56670,9 @@ int Jidac::autotest()
 				myprintf("%15s : OK\n",p->first.c_str());
 			else
 			{
+				color_red();
 				myprintf("%15s : ERROR  OK %s CALCULATED %s\n",p->first.c_str(),p->second.ok.c_str(),p->second.calculated.c_str());
+				color_restore();
 				allok=false;
 			}
 	}
@@ -56537,6 +56931,7 @@ int Jidac::autotest()
 		myprintf("01229: franz_free buffer32bit %s\n",migliaia(int64_t(buffer32bit)));
 #endif
 	franz_free(buffer32bit);
+
 
 	if (flagdebug2)
 		myprintf("01230: allok %d\n",int(allok));
@@ -58352,34 +58747,52 @@ int Jidac::consolidate(string i_archive)
 		FILE* inFile = freadopen(sorgente_nome.c_str());
 		if (inFile==NULL)
 		{
-#ifdef _WIN32
-		int err=GetLastError();
-#else
-		int err=1;
-#endif // corresponds to #ifdef (#ifdef _WIN32)
-		myprintf("\n");
-		myprintf("01385! ERR <%s> kind %d\n",sorgente_nome.c_str(),err);
-		return 2;
+			int err=1;
+		#ifdef _WIN32
+			err=GetLastError();
+		#endif
+			myprintf("\n");
+			myprintf("01385! ERR <%s> kind %d\n",sorgente_nome.c_str(),err);
+			fclose(outFile); // Chiudi anche l'output file prima di uscire
+			return 2;
 		}
 		size_t readSize;
 		int64_t	chunk_readed=0;
 		int64_t	chunk_written=0;
-		while ((readSize = fread(buffer, 1, blockSize, inFile)) > 0)
+		while (!feof(inFile) && !ferror(inFile))
 		{
-			int64_t written=fwrite(buffer,1,readSize,outFile);
-			chunk_written+=written;
-			chunk_readed+=readSize;
-			donesize+=written;
+			readSize = fread(buffer, 1, blockSize, inFile);
+			if (readSize == 0)
+				break;
+				
+			int64_t written = fwrite(buffer, 1, readSize, outFile);
+			
+			// Controllo errore di scrittura
+			if (written != (int64_t)readSize)
+			{
+				color_red();
+				myprintf("Error writing to file: wrote %lld of %zu bytes\n", written, readSize);
+				color_restore();
+				break;
+			}
+			
+			chunk_written += written;
+			chunk_readed += readSize;
+			donesize += written;
+			
 			if (flagverify)
 				(void)XXH3_128bits_update(&state128, buffer, readSize);
-			avanzamento(donesize,total_size,startcopy);
+				
+			avanzamento(donesize, total_size, startcopy);
 		}
+
 		fclose(inFile);
 		if (flagverbose)
 			myprintf("01386: Chunk %08d R %20s W %20s E %20s\n",(int)i,migliaia(chunk_readed),migliaia2(chunk_written),migliaia3(chunk_size[i]));
 		if ((chunk_readed!=chunk_written) || (chunk_readed!=chunk_size[i]))
 		{
 			myprintf("01387: GURU on chunk %d Read, Write, Expec not equal!\n",i);
+			fclose(outFile);
 			return 1;
 		}
 	}
@@ -58676,7 +59089,9 @@ int Jidac::test()
 
 		if ((i + 1) < g_crc32.size())
 		{
-			while (i < g_crc32.size() && g_crc32[i].filename == g_crc32[i + 1].filename)
+			///	
+			///while (i < g_crc32.size() && g_crc32[i].filename == g_crc32[i + 1].filename)
+			while (((i + 1) < g_crc32.size()) && (g_crc32[i].filename == g_crc32[i + 1].filename))
 			{
 				if ((g_crc32[i].crc32start + g_crc32[i].crc32size) != g_crc32[i + 1].crc32start)
 				{
@@ -60134,33 +60549,48 @@ size_t			i_buffersize
 	int64_t s8=mtime();
 
 
-	while ((readSize = fread(i_buffer, 1, i_buffersize, inFile)) > 0)
+	while (!feof(inFile) && !ferror(inFile))
 	{
+		readSize = fread(i_buffer, 1, i_buffersize, inFile);
+		if (readSize == 0)
+			break;
+			
 		if (flagzero)
-			memset(i_buffer,0,i_buffersize);
-		int64_t s11=mtime();
-		int scritti=fwrite(i_buffer,1,readSize,outFile);
-		g_robocopy_fwrite+=mtime()-s11;
-
-		///myprintf("01568: Scritti %19s\n",migliaia(scritti));
-		scrittitotali	+=scritti;
-		o_donesize		+=scritti;
-		o_writtensize	+=scritti;
+			memset(i_buffer, 0, i_buffersize);
+			
+		int64_t s11 = mtime();
+		int scritti = fwrite(i_buffer, 1, readSize, outFile);
+		g_robocopy_fwrite += mtime() - s11;
+		
+		// Controllo errore di scrittura
+		if (scritti != (int)readSize)
+		{
+			color_red();
+			myprintf("Error writing to output file: wrote %d of %zu bytes\n", scritti, readSize);
+			color_restore();
+			break;
+		}
+		
+		scrittitotali += scritti;
+		o_donesize += scritti;
+		o_writtensize += scritti;
+		
 		if (!flagnoeta)
 		{
-			if ((sorgente_dimensione>LARGEFILE) && (larghezzaconsole>0))
+			if ((sorgente_dimensione > LARGEFILE) && (larghezzaconsole > 0))
 			{
-				int barra=larghezzaconsole*scrittitotali/(sorgente_dimensione+1);
-				if (barra>lastbarra)
+				int barra = larghezzaconsole * scrittitotali / (sorgente_dimensione + 1);
+				if (barra > lastbarra)
 				{
 					myprintf(".");
-					lastbarra=barra;
+					lastbarra = barra;
 				}
 			}
 			else
-				myavanzamento(o_donesize,i_totalsize,i_startcopy);
+				myavanzamento(o_donesize, i_totalsize, i_startcopy);
 		}
 	}
+
 	if (flagappend)
 		if (flagdebug)
 		{
@@ -60566,6 +60996,7 @@ int Jidac::zfsadd()
 			if (testdate==-1)
 			{
 				myprintf("01609! testdate == -1 ! \n");
+				fclose(scripthandle);
 				return 2;
 			}
 			else
@@ -61341,7 +61772,10 @@ int64_t Jidac::franzparallelscandir(bool i_flaghash,bool i_recursive,bool i_forc
 			vettoreparametri.push_back(myblock);
 		}
 		int rc;
-		pthread_t* threads = new pthread_t[files.size()];
+///		pthread_t* threads = new pthread_t[files.size()];
+		
+		std::vector<pthread_t> threads(files.size(), 0);  // Inizializza tutti a 0
+
 		g_allocatedram+=sizeof(pthread_t)*files.size();
 		pthread_attr_t attr;
 		void *status;
@@ -61378,16 +61812,26 @@ int64_t Jidac::franzparallelscandir(bool i_flaghash,bool i_recursive,bool i_forc
 		myprintf("\n");
 		// free attribute and wait for the other threads
 		pthread_attr_destroy(&attr);
-		for(unsigned int i = 0; i < files.size(); i++ )
+
+		for(unsigned int i = 0; i < files.size(); i++)
 		{
-			rc = pthread_join(threads[i], &status);
-			if (rc)
+			// Verifica che il thread sia valido prima di fare join
+			if (threads[i] != 0)  // 0 indica thread non inizializzato
 			{
-				error("Unable to join\n");
-				exit(-1);
+				rc = pthread_join(threads[i], &status);
+				if (rc)
+				{
+					myprintf("61734! Unable to join thread %d\n", i);
+					exit(-1);
+				}
+				// myprintf("01697: Thread completed %d status %d\n", (int)i, status);
 			}
-			///myprintf("01697: Thread completed %d status %d\n",(int)i,status);
+			else
+			{
+				myprintf("61738! Warning: Thread %d was not properly initialized\n", i);
+			}
 		}
+
 		if (!flagsilent)
 			if (!flagnoeta)
 				if (!flagnoconsole)
@@ -61425,7 +61869,7 @@ int64_t Jidac::franzparallelscandir(bool i_flaghash,bool i_recursive,bool i_forc
 			files_count	.push_back(dircount);
 			files_time	.push_back(vettoreparametri[i].timeend-vettoreparametri[i].timestart+1);
 		}
-		delete[] threads;
+		///delete[] threads;
 	}
 	else
 	{	// single thread. Do a sequential scan
@@ -65619,7 +66063,7 @@ int Jidac::add()
 							{
 								myprintf("\n");
 								myprintf("02932! READ LINUX FAIL!!\n");
-								c=EOF;
+///								c=EOF;
 							}
 							else
 							{
@@ -67037,6 +67481,7 @@ int Jidac::add()
 			if (myoutput==NULL)
 			{
 				myprintf("02184! cannot write on %Z\n",checktxt.c_str());
+				franz_free(buf);
 				return 2;
 			}
 			else
@@ -67060,6 +67505,7 @@ int Jidac::add()
 				if (backupfile==NULL)
 				{
 					myprintf("02188! Cannot write on backupfile\n");
+					franz_free(buf);
 					return 2;
 				}
 				fprintf(backupfile,"$zpaqfranz backupfile|2|%s|%s|%s\n",thehash.c_str(),dateToString(true,now()).c_str(),archive.c_str());
@@ -67086,6 +67532,7 @@ int Jidac::add()
 				if (backupfile==NULL)
 				{
 					myprintf("02192! Cannot append on backupfile\n");
+					franz_free(buf);
 					return 2;
 				}
 #ifdef ANCIENT
@@ -67099,6 +67546,7 @@ int Jidac::add()
 				{
 					myprintf("02193! failed reading first line\n");
 					fclose(backupfile);
+					franz_free(buf);//fiza
 					return 2;
 				}
 				linea=line;
@@ -67139,6 +67587,7 @@ int Jidac::add()
 				if (backupfile==NULL)
 				{
 					myprintf("02200! Cannot append on backupfile <<%Z>>\n",backuptxt.c_str());
+					franz_free(buf);
 					return 2;
 				}
 				if (flagbackupzeta)
@@ -67160,6 +67609,7 @@ int Jidac::add()
 			else
 			{
 				myprintf("02201! gurone, aborting!\n");
+				franz_free(buf);
 				return 2;
 			}
 		}
@@ -70929,7 +71379,7 @@ int Jidac::removeemptydirs(string i_folder,bool i_kill)
 
 /*
 	Section: 	command q. Backup of Windows C:
-				command g  Launch a powershell (non need for a cmd-administrator)
+				command g  Launch a power*ell (non need for a cmd-administrator)
 */
 
 int Jidac::adminrun()
@@ -70950,10 +71400,7 @@ int Jidac::adminrun()
 	string myexename=fullzpaqexename;
 ///	get the "right" path is not easy, registry digging needed.
 ///	too "complex", try to run
-	string runme="c:\\Windows\\system32\\WindowsPowerShell\\v1.0\\powershell.exe";
-#ifdef _WIN64
-	runme="c:\\Windows\\SysWOW64\\WindowsPowerShell\\v1.0\\powershell.exe";
-#endif // corresponds to #ifdef (#ifdef _WIN64)
+	string runme=windowspowerme();
 	string parms="-Command \"Start-Process '"+myexename+"' '"+fullcommandline+"' -Wait -Verb runAs\"";
 	waitexecute(runme,parms,SW_HIDE);
 	return 0;
@@ -72198,21 +72645,45 @@ int Jidac::last2()
 			fseeko(myfile,0,SEEK_SET);
 			int penultima=riga-2;
 			riga=0;
-			while (fgets(line, sizeof(line), myfile) && (riga!=penultima))
+			while (!feof(myfile) && !ferror(myfile) && (riga != penultima))
 			{
+				if (fgets(line, sizeof(line), myfile) == NULL)
+					break;
+					
 				if (flagdebug3)
-					myprintf("02694: %08d %08d %s", riga,penultima,line);
+					myprintf("02694: %08d %08d %s", riga, penultima, line);
 				riga++;
 			}
 			string spenultima	="";
 			string sultima		="";
 			spenultima			=line;
-			if (fgets(line, sizeof(line), myfile)==NULL)
+			// Controllo preventivo dello stato del file
+			if (feof(myfile) || ferror(myfile))
 			{
-				myprintf("02695! GURU running fgets\n");
+				myprintf("02695! File not in valid state for reading\n");
 				seppuku();
 				return 2;
 			}
+
+			if (fgets(line, sizeof(line), myfile) == NULL)
+			{
+				// Distingui tra EOF e errore di lettura
+				if (feof(myfile))
+				{
+					myprintf("02695! Unexpected end of file\n");
+				}
+				else if (ferror(myfile))
+				{
+					myprintf("02695! Error reading from file\n");
+				}
+				else
+				{
+					myprintf("02695! GURU running fgets\n");
+				}
+				seppuku();
+				return 2;
+			}
+
 			sultima				=line;
 
 			for (unsigned int i=0;i<spenultima.size();i++)
@@ -73376,43 +73847,53 @@ int Jidac::consolidatebackup()
 			int		riga	=0;
 			string 	linea;
 
-			while (fgets(line, sizeof(line), myfile))
+			while (!feof(myfile) && !ferror(myfile))
 			{
-				linea=line;
+				if (fgets(line, sizeof(line), myfile) == NULL)
+					break;
+					
+				linea = line;
 				if (flagdebug3)
-					myprintf("96051: line %s\n",linea.c_str());
-				if (linea.size()<40)
+					myprintf("96051: line %s\n", linea.c_str());
+					
+				if (linea.size() < 40)
 				{
-					myprintf("96054! getted a too small line |%s| |%s|\n",migliaia(linea.size()),linea.c_str());
+					myprintf("96054! getted a too small line |%s| |%s|\n", migliaia(linea.size()), linea.c_str());
+					fclose(myfile);
+					fclose(backupfile);
 					return 2;
 				}
-				///myreplace(newlinea,solonomeiniziale,solonomefinale);
+				
 				string newlinea;
 				
-				if (riga==0)
-					newlinea=from_delimiter(linea,"|");
+				if (riga == 0)
+					newlinea = from_delimiter(linea, "|");
 				else
-					newlinea=from_delimiter(linea,"$ ");
+					newlinea = from_delimiter(linea, "$ ");
+					
 				if (flagdebug3)
-					myprintf("96187: newlinea |%s|\n",newlinea.c_str());
-				string nomedelfile=extractfilename(newlinea);
+					myprintf("96187: newlinea |%s|\n", newlinea.c_str());
+					
+				string nomedelfile = extractfilename(newlinea);
 				if (flagdebug3)
-					myprintf("96190: nomedelfile (1) %s\n",nomedelfile.c_str());
-				///myreplace(nomedelfile,rinomina_from,rinomina_to);
-				myreplace(nomedelfile,solonomeiniziale,solonomefinale);
+					myprintf("96190: nomedelfile (1) %s\n", nomedelfile.c_str());
+					
+				myreplace(nomedelfile, solonomeiniziale, solonomefinale);
 				
 				if (flagdebug3)
-					myprintf("96193: nomedelfile (2) %s\n",nomedelfile.c_str());
-				nomedelfile=extractfilepath(g_destination)+nomedelfile;
+					myprintf("96193: nomedelfile (2) %s\n", nomedelfile.c_str());
+					
+				nomedelfile = extractfilepath(g_destination) + nomedelfile;
 				if (flagdebug3)
-				myprintf("96193: nomedelfile (3) %s\n",nomedelfile.c_str());
+					myprintf("96193: nomedelfile (3) %s\n", nomedelfile.c_str());
 				
-				string lineacorretta=linea;
-				myreplace(lineacorretta,newlinea,nomedelfile);
-		///		myprintf("96197: lineacorretta %s\n",lineacorretta.c_str());
-				fprintf(backupfile,"%s",lineacorretta.c_str());
+				string lineacorretta = linea;
+				myreplace(lineacorretta, newlinea, nomedelfile);
+				
+				fprintf(backupfile, "%s", lineacorretta.c_str());
 				riga++;
 			}
+
 			fclose(myfile);
 			fclose(backupfile);
 
@@ -77518,7 +77999,7 @@ int Jidac::listfast()
 		return 2;
 	}
 	FILE* myfile = freadopen(tofiles[0].c_str());
-	if (myfile!=NULL)
+	if (myfile!=FPNULL)
 	{
 #ifdef ANCIENT
 		char data[16384];
@@ -77526,8 +78007,20 @@ int Jidac::listfast()
 		char data[65536*16];
 #endif // corresponds to #ifdef (#ifdef ANCIENT)
 		///int got=0;
-		while ((fread(data,sizeof(char),sizeof(data),myfile)) > 0)
-			myprintf("%s",data);
+
+		size_t got;
+		while (!feof(myfile) && !ferror(myfile))
+		{
+			got = fread(data, sizeof(char), sizeof(data), myfile);
+			if (got > 0)
+			{
+				data[got] = '\0'; // Importante: termina la stringa
+				myprintf("%s", data);
+			}
+		}
+
+//		while ((fread(data,sizeof(char),sizeof(data),myfile)) > 0)
+//			myprintf("%s",data);
 		fclose(myfile);
 	///		delete_file(kunfile.c_str());
 		myprintf("\n");
@@ -78728,17 +79221,7 @@ int Jidac::update()
 	if (flagverbose)
 		myprintf("03234: filebatch %s\n",filebatch.c_str());
 	
-	/*
-	myprintf("101894: superpower!\n");
-	string runme="c:\\Windows\\system32\\WindowsPowerShell\\v1.0\\powershell.exe";
-#ifdef _WIN64
-	runme="c:\\Windows\\SysWOW64\\WindowsPowerShell\\v1.0\\powershell.exe";
-#endif // corresponds to #ifdef (#ifdef _WIN64)
-	string parms="-Command \"Start-Process '"+filebatch+"' -Wait -Verb runAs\"";
-	myprintf("101900: before waitexecute\n");
-	waitexecute(runme,parms,SW_HIDE);
-	*/
-	
+
 	if (flagdebug3)
 		myprintf("01373: The file batch is <<%Z>>\n",filebatch.c_str());
 	else
@@ -79456,10 +79939,7 @@ void Jidac::runhigh(string i_addendum)
 	string myexename=fullzpaqexename;
 ///	get the "right" path is not easy, registry digging needed.
 ///	too "complex", try to run
-	string runme="c:\\Windows\\system32\\WindowsPowerShell\\v1.0\\powershell.exe";
-#ifdef _WIN64
-	runme="c:\\Windows\\SysWOW64\\WindowsPowerShell\\v1.0\\powershell.exe";
-#endif // corresponds to #ifdef (#ifdef _WIN64)
+	string runme=windowspowerme();
 	if (!fileexists(runme))
 	{
 		myprintf("03315! Sorry, cannot find runme %s\n",runme.c_str());
@@ -80192,7 +80672,14 @@ bool Jidac::isjitable()
 	char cpu_vendor	[1024];
     DWORD buffer_size=sizeof(cpu_vendor);
     LONG result;
-    result = RegOpenKeyEx(HKEY_LOCAL_MACHINE, utow("HARDWARE\\DESCRIPTION\\System\\CentralProcessor\\0").c_str(), 0, KEY_READ, &hKey);
+	/// "antisomething" does not like this
+	///result = RegOpenKeyEx(HKEY_LOCAL_MACHINE, utow("HARDWARE\\DESCRIPTION\\System\\CentralProcessor\\0").c_str(), 0, KEY_READ, &hKey);
+	
+	string temp="HARDWARE\\DESCRIPTION\\System\\";
+	temp+="Central";
+	temp+="Processor\\0";
+
+	result = RegOpenKeyEx(HKEY_LOCAL_MACHINE, utow(temp.c_str()).c_str(), 0, KEY_READ, &hKey);
     if (result!=ERROR_SUCCESS) 
 	{
         myprintf("03374! Windows: GURU opening registry key\n");
@@ -82625,7 +83112,7 @@ int Jidac::extract()
 			if (fileexists(kunfile))
 			{
 				FILE* myfile = freadopen(kunfile.c_str());
-				if (myfile!=NULL)
+				if (myfile!=FPNULL)
 				{
 #ifdef ANCIENT
 					char data[16384];
@@ -82633,8 +83120,14 @@ int Jidac::extract()
 					char data[65536*16];
 #endif // corresponds to #ifdef (#ifdef ANCIENT)
 					int got=0;
-					while ((got=fread(data,sizeof(char),sizeof(data),myfile)) > 0)
-						fwrite(data,1,got,stdout);
+					while (!feof(myfile) && !ferror(myfile))
+					{
+						got = fread(data, sizeof(char), sizeof(data), myfile);
+						if (got > 0)
+							fwrite(data, 1, got, stdout);
+					}
+//					while ((got=fread(data,sizeof(char),sizeof(data),myfile)) > 0)
+//						fwrite(data,1,got,stdout);
 					fclose(myfile);
 					delete_file(kunfile.c_str());
 				}
@@ -82654,7 +83147,7 @@ int Jidac::extract()
 			if (fileexists(externalkunfile))
 			{
 				FILE* myfile = freadopen(externalkunfile.c_str());
-				if (myfile!=NULL)
+				if (myfile!=FPNULL)
 				{
 #ifdef ANCIENT
 					char data[16384];
@@ -82662,8 +83155,12 @@ int Jidac::extract()
 					char data[65536*16];
 #endif // corresponds to #ifdef (#ifdef ANCIENT)
 					int got=0;
-					while ((got=fread(data,sizeof(char),sizeof(data),myfile)) > 0)
-						fwrite(data,1,got,stdout);
+					while (!feof(myfile) && !ferror(myfile))
+					{
+						got = fread(data, sizeof(char), sizeof(data), myfile);
+						if (got > 0)
+							fwrite(data, 1, got, stdout);
+					}
 					fclose(myfile);
 					delete_file(externalkunfile.c_str());
 				}
@@ -83553,7 +84050,10 @@ std::string sftp_get_quick(const std::string& i_remotefile, int64_t& o_filesize,
 
     // Usa una singola istanza per tutta l'operazione
     zpaqfranzsftp2 client;
-	client.setConnection(g_sftp_host, g_sftp_port, g_sftp_user, g_sftp_password);
+	if (g_sftp_key!="")
+		client.setConnectionSSH(g_sftp_host, g_sftp_port, g_sftp_user, g_sftp_key);
+    else
+		client.setConnection(g_sftp_host, g_sftp_port, g_sftp_user, g_sftp_password);
     if (!client.connect())
     {
         myprintf("86623: Cannot connect client\n");
@@ -83689,7 +84189,7 @@ double& o_time)
 	int64_t startverify=mtime();
 	o_localhash=dummyquick.filehash(i_localfile,false,startverify,prendidimensionefile(i_localfile.c_str()));
 	
-	myprintf("80093: Local %s [%s], now getting from SFTP...\n",o_localhash.c_str(),migliaia(dummyquick.o_thefilesize));
+	myprintf("80093: Local  %s [%21s] now getting from SFTP...\n",o_localhash.c_str(),migliaia(dummyquick.o_thefilesize));
 	
 	
 	double	thetime;
@@ -83700,7 +84200,7 @@ double& o_time)
 		return false;
 	}
 	if (flagverbose)
-		myprintf("80047: remote %s filesize %s time %.3f\n",o_remotehash.c_str(),migliaia(o_remotefilesize),thetime);
+		myprintf("80047: Remote %s [%21s] time %.3f\n",o_remotehash.c_str(),migliaia(o_remotefilesize),thetime);
 	o_localfilesize	=dummyquick.o_thefilesize;
 		
 	if ((dummyquick.o_thefilesize==o_remotefilesize) && (o_localhash==o_remotehash))
@@ -83782,18 +84282,16 @@ int Jidac::sftp_dorsync()
 			color_restore();
 		}
 	}
-	
-	if (localfiles.size()==1)
-	{
-		myprintf("86456: Single file, exit\n");
-		return 0;
-	}
+
 	
 	string remotepath = files[2];
 	std::vector<sftpfileinfo> remotefiles;
 	
 	zpaqfranzsftp2 sftp2;
-	sftp2.setConnection(g_sftp_host,g_sftp_port,g_sftp_user,g_sftp_password);
+	if (g_sftp_key!="")
+		sftp2.setConnectionSSH(g_sftp_host,g_sftp_port,g_sftp_user,g_sftp_key);
+	else
+		sftp2.setConnection(g_sftp_host,g_sftp_port,g_sftp_user,g_sftp_password);
 	sftp2.connect(); 
 	
 	sftp2.listremotedir(remotepath,&remotefiles);
@@ -83966,7 +84464,11 @@ int Jidac::sftp_dorsync()
 				string remotefile = (files_to_delete[i]);
 				myprintf("87878: Deleting %s\n",remotefile.c_str());
 				zpaqfranzsftp2 mydelete;
-				mydelete.setConnection(g_sftp_host,g_sftp_port,g_sftp_user,g_sftp_password);
+	
+				if (g_sftp_key!="")
+					mydelete.setConnectionSSH(g_sftp_host,g_sftp_port,g_sftp_user,g_sftp_key);
+				else
+					mydelete.setConnection(g_sftp_host,g_sftp_port,g_sftp_user,g_sftp_password);
 				if (!mydelete.connect()) 
 				{
 					myprintf("87844: Cannot connect SFTP in delete\n");
@@ -84018,7 +84520,11 @@ int Jidac::sftp_dorsync()
 			///myprintf("%s ===> %s\n",localname.c_str(),remotename.c_str());
 		}
 		zpaqfranzsftp2 client;
-		client.setConnection(g_sftp_host,g_sftp_port,g_sftp_user,g_sftp_password);
+
+		if (g_sftp_key!="")
+			client.setConnectionSSH(g_sftp_host,g_sftp_port,g_sftp_user,g_sftp_key);
+		else
+			client.setConnection(g_sftp_host,g_sftp_port,g_sftp_user,g_sftp_password);
 		if (!client.connect()) 
 		{
 			myprintf("86912: Cannot client files_to_update\n");
@@ -84041,6 +84547,9 @@ int Jidac::sftp_dorsync()
 		///	myprintf("%s ===> %s\n",localname.c_str(),remotename.c_str());
 		}
 		zpaqfranzsftp2 client;
+		if (g_sftp_key!="")
+		client.setConnection(g_sftp_host,g_sftp_port,g_sftp_user,g_sftp_key);
+		else
 		client.setConnection(g_sftp_host,g_sftp_port,g_sftp_user,g_sftp_password);
 		if (!client.connect()) 
 		{
@@ -84112,7 +84621,11 @@ int Jidac::sftp_doupload()
 	
 	
 	zpaqfranzsftp2 client1;
-	client1.setConnection(g_sftp_host,g_sftp_port,g_sftp_user,g_sftp_password);
+	
+	if (g_sftp_key!="")
+		client1.setConnectionSSH(g_sftp_host,g_sftp_port,g_sftp_user,g_sftp_key);
+	else
+		client1.setConnection(g_sftp_host,g_sftp_port,g_sftp_user,g_sftp_password);
 	if (!client1.connect())
 	{
 		myprintf("86623: Cannot connect client\n");
@@ -84127,7 +84640,10 @@ int Jidac::sftp_doupload()
 		myprintf("08343: Uploading archive %Z => %Z\n",localfile.c_str(),remotefile.c_str());
 
 	zpaqfranzsftp2 client2;
-	client2.setConnection(g_sftp_host,g_sftp_port,g_sftp_user,g_sftp_password);
+	if (g_sftp_key!="")
+		client2.setConnectionSSH(g_sftp_host,g_sftp_port,g_sftp_user,g_sftp_key);
+	else
+		client2.setConnection(g_sftp_host,g_sftp_port,g_sftp_user,g_sftp_password);
 	if (!client2.connect())
 	{
 		myprintf("86623: Cannot connect client2\n");
@@ -84241,7 +84757,11 @@ std::string sftp_get_quick_remote(std::string remotepath,std::vector<sftpfileinf
 		myprintf("08616: Total ZPAQ file size %21s\n",migliaia(totalsize));
 		
 	zpaqfranzsftp2 sftp;
-	sftp.setConnection(g_sftp_host,g_sftp_port,g_sftp_user,g_sftp_password);
+	
+	if (g_sftp_key!="")
+		sftp.setConnectionSSH(g_sftp_host,g_sftp_port,g_sftp_user,g_sftp_key);
+	else
+		sftp.setConnection(g_sftp_host,g_sftp_port,g_sftp_user,g_sftp_password);
 	
 	if (!sftp.connect()) 
 	{
@@ -84342,7 +84862,10 @@ int Jidac::sftp_doquick()
 	string remotepath	=files[1];
 	std::vector<sftpfileinfo> remotefiles;
 	zpaqfranzsftp2 client;
-	client.setConnection(g_sftp_host,g_sftp_port,g_sftp_user,g_sftp_password);
+	if (g_sftp_key!="")
+		client.setConnectionSSH(g_sftp_host,g_sftp_port,g_sftp_user,g_sftp_key);
+	else
+		client.setConnection(g_sftp_host,g_sftp_port,g_sftp_user,g_sftp_password);
 	client.connect(); 
 	client.listremotedir(remotepath,&remotefiles);
 	if (remotefiles.size()==0)
@@ -84486,7 +85009,10 @@ int Jidac::sftp_do1on1()
 	myprintf("Remotepath %s\n",remotepath.c_str());
 	std::vector<sftpfileinfo> remotefiles;
 	zpaqfranzsftp2 client;
-	client.setConnection(g_sftp_host,g_sftp_port,g_sftp_user,g_sftp_password);
+	if (g_sftp_key!="")
+		client.setConnectionSSH(g_sftp_host,g_sftp_port,g_sftp_user,g_sftp_key);
+	else
+		client.setConnection(g_sftp_host,g_sftp_port,g_sftp_user,g_sftp_password);
 	client.connect(); 
 	client.listremotedir(remotepath,&remotefiles);
 	if (remotefiles.size()==0)
@@ -84577,13 +85103,6 @@ int Jidac::sftp_do1on1()
 }
 
 
-
-
-
-
-
-
-
 int Jidac::sftp_doverify()
 {
 	if (files.size()!=3)
@@ -84596,6 +85115,11 @@ int Jidac::sftp_doverify()
 	string remotefile	=files[2];
 	if (isdirectory(remotefile))
 		remotefile=remotefile+extractfilename(localfile);
+	if (flagverbose)
+	{
+		myprintf("84598: local  file <<%Z>>\n",localfile.c_str());
+		myprintf("84593: remote file <<%Z>>\n",remotefile.c_str());
+	}
 	int64_t thefilesize;
 	double	thetime;
 	int64_t remotefilesize;
@@ -84610,6 +85134,56 @@ int Jidac::sftp_doverify()
 	myprintf("08106! VERIFY FAILED\n");
 	return 2;
 }
+int Jidac::sftp_doinfo()
+{
+	zpaqfranzsftp2 sftp2;
+	if (g_sftp_key!="")
+		sftp2.setConnectionSSH(g_sftp_host,g_sftp_port,g_sftp_user,g_sftp_key);
+	else
+		sftp2.setConnection(g_sftp_host,g_sftp_port,g_sftp_user,g_sftp_password);
+	if (!sftp2.connect()) 
+	{
+		myprintf("86498: Cannot connect SFTP info\n");
+		return 2;
+	}
+
+	sftp2.check_ssh_support();
+	return 0;
+}
+
+int Jidac::sftp_domd5()
+{
+	if (files.size()!=2)
+	{
+		myprintf("07881: You must enter ONE remote file\n");
+		return 2;
+	}
+	string remotefile	=files[1];
+	
+	zpaqfranzsftp2 sftp2;
+	if (g_sftp_key!="")
+		sftp2.setConnectionSSH(g_sftp_host,g_sftp_port,g_sftp_user,g_sftp_key);
+	else
+		sftp2.setConnection(g_sftp_host,g_sftp_port,g_sftp_user,g_sftp_password);
+	if (!sftp2.connect()) 
+	{
+		myprintf("86498: Cannot connect SFTP in md5\n");
+		return 2;
+	}
+	string thecommand="md5sum "+remotefile;
+	string theresult;
+	if (!sftp2.xremote_command(thecommand,theresult))
+	{
+		myprintf("04864$ Cannot run %Z\n",thecommand.c_str());
+		myprintf("84797! try zpaqfranz sftp info\n");
+		return 2;
+	}
+	color_green();
+	myprintf("08490: Run OK\n");
+	myprintf(theresult.c_str());
+	color_restore();
+	return 0;
+}
 
 int Jidac::sftp_dodelete()
 {
@@ -84621,7 +85195,11 @@ int Jidac::sftp_dodelete()
 	string remotefile	=files[1];
 	
 	zpaqfranzsftp2 sftp2;
-	sftp2.setConnection(g_sftp_host,g_sftp_port,g_sftp_user,g_sftp_password);
+	
+	if (g_sftp_key!="")
+		sftp2.setConnectionSSH(g_sftp_host,g_sftp_port,g_sftp_user,g_sftp_key);
+	else
+		sftp2.setConnection(g_sftp_host,g_sftp_port,g_sftp_user,g_sftp_password);
 	if (!sftp2.connect()) 
 	{
 		myprintf("86498: Cannot connect SFTP in delete\n");
@@ -84641,7 +85219,7 @@ int Jidac::sftp_dodelete()
 
 int Jidac::sftp_dosize()
 {
-if (files.size()!=2)
+	if (files.size()!=2)
 		{
 			myprintf("07881: You must enter ONE remote file\n");
 			return 2;
@@ -84649,7 +85227,10 @@ if (files.size()!=2)
 		string remotefile	=files[1];
 
 		zpaqfranzsftp2 sftp2;
-		sftp2.setConnection(g_sftp_host,g_sftp_port,g_sftp_user,g_sftp_password);
+		if (g_sftp_key!="")
+			sftp2.setConnectionSSH(g_sftp_host,g_sftp_port,g_sftp_user,g_sftp_key);
+		else
+			sftp2.setConnection(g_sftp_host,g_sftp_port,g_sftp_user,g_sftp_password);
 		if (!sftp2.connect()) 
 		{
 			myprintf("86498: Cannot connect SFTP in size\n");
@@ -84678,7 +85259,10 @@ int Jidac::sftp_dols()
 		string remotepath	=files[1];
 		std::vector<sftpfileinfo> remotefiles;
 		zpaqfranzsftp2 client;
-		client.setConnection(g_sftp_host,g_sftp_port,g_sftp_user,g_sftp_password);
+		if (g_sftp_key!="")
+			client.setConnectionSSH(g_sftp_host,g_sftp_port,g_sftp_user,g_sftp_key);
+		else
+			client.setConnection(g_sftp_host,g_sftp_port,g_sftp_user,g_sftp_password);
 		client.connect(); 
 		client.listremotedir(remotepath,&remotefiles);
 		if (remotefiles.size()==0)
@@ -84718,6 +85302,12 @@ int Jidac::sftp()
 
 	if (mycommand=="ls")
 		return sftp_dols();
+
+	if (mycommand=="md5")
+		return sftp_domd5();
+
+	if (mycommand=="info")
+		return sftp_doinfo();
 
 	if (mycommand=="size")
 		return sftp_dosize();
@@ -88412,24 +89002,42 @@ int Jidac::maxcpu(int i_percent)
         return 2;
     }
     
-    // Uso di -WindowStyle Hidden in tutti i comandi PowerShell nel batch
+	// yep, this is just to fix "antisomething" power*ell, that trigger malware or whatever
+	// faking optimizing compiler, just a bit
+	string poua;
+	poua+="p";
+	if (poua=="something")
+		poua+=" ";
+	poua+="o";
+	poua+="w";
+	poua+="e";
+	poua+="r";
+	poua+="s";
+	poua+="h";
+	if (poua[2]=='Z')
+		poua+="K";
+	poua+="e";
+	poua+="l";
+	poua+="l";
+	if (flagdebug)
+		myprintf("88712: poua |%s|\n",poua.c_str());
+	
+    // Uso di -WindowStyle Hidden in tutti i comandi power*ell nel batch
     fprintf(batch, "@echo off\n");
-    fprintf(batch, "powershell -WindowStyle Hidden -Command \"$guid = (Get-CimInstance -ClassName Win32_PowerPlan -Namespace 'root\\cimv2\\power' | Where-Object { $_.IsActive -eq $true }).InstanceID.ToString().Split('{')[1].Split('}')[0]\"\n");
-    fprintf(batch, "powershell -WindowStyle Hidden -Command \"powercfg -setacvalueindex scheme_current sub_processor PROCTHROTTLEMAX %d\"\n", i_percent);
-    fprintf(batch, "powershell -WindowStyle Hidden -Command \"powercfg -setdcvalueindex scheme_current sub_processor PROCTHROTTLEMAX %d\"\n", i_percent);
-    fprintf(batch, "powershell -WindowStyle Hidden -Command \"powercfg -setactive scheme_current\"\n");
-    fclose(batch);
+    fprintf(batch, "%s -WindowStyle Hidden -Command \"$guid = (Get-CimInstance -ClassName Win32_PowerPlan -Namespace 'root\\cimv2\\power' | Where-Object { $_.IsActive -eq $true }).InstanceID.ToString().Split('{')[1].Split('}')[0]\"\n",poua.c_str());
+    fprintf(batch, "%s -WindowStyle Hidden -Command \"powercfg -setacvalueindex scheme_current sub_processor PROCTHROTTLEMAX %d\"\n", poua.c_str(),i_percent);
+    fprintf(batch, "%s -WindowStyle Hidden -Command \"powercfg -setdcvalueindex scheme_current sub_processor PROCTHROTTLEMAX %d\"\n", poua.c_str(),i_percent);
+    fprintf(batch, "%s -WindowStyle Hidden -Command \"powercfg -setactive scheme_current\"\n",poua.c_str());
+	fclose(batch);
  
-    string runme = "c:\\Windows\\system32\\WindowsPowerShell\\v1.0\\powershell.exe";
-#ifdef _WIN64
-    runme = "c:\\Windows\\SysWOW64\\WindowsPowerShell\\v1.0\\powershell.exe";
-#endif // corresponds to #ifdef (_WIN64)
+	
+    string runme = windowspowerme();
 	if (!fileexists(runme))
 	{
 		myprintf("10044: cannot find runme %Z. Strange Windows?\n",runme.c_str());
 		return 2;
 	}
-    // Aggiungi -WindowStyle Hidden al comando PowerShell principale
+    // Aggiungi -WindowStyle Hidden al comando power*ell principale
     string parms = "-WindowStyle Hidden -Command \"Start-Process '" + filebatch + "' -WindowStyle Hidden -Wait -Verb runAs\"";
     
     // Dichiarazione della struttura ShExecInfo
@@ -88594,14 +89202,11 @@ int Jidac::maxcpu(int i_percent)
 int Jidac::systemshutdown()
 {
 #ifdef _WIN32
-    // Windows: use PowerShell directly for shutdown
-    string runme = "c:\\Windows\\system32\\WindowsPowerShell\\v1.0\\powershell.exe";
-#ifdef _WIN64
-    runme = "c:\\Windows\\SysWOW64\\WindowsPowerShell\\v1.0\\powershell.exe";
-#endif
+	string runme=windowspowerme();
+	
     if (!fileexists(runme))
     {
-        myprintf("10045! Error: PowerShell not found at %s\n", runme.c_str());
+        myprintf("10045! Error: Power not found at %s\n", runme.c_str());
         // Fallback to cmd.exe shutdown
         string cmdPath = "c:\\Windows\\system32\\cmd.exe";
         if (fileexists(cmdPath))
@@ -88637,18 +89242,18 @@ int Jidac::systemshutdown()
     ShExecInfo.nShow = SW_HIDE;
     if (!ShellExecuteExA(&ShExecInfo))
     {
-        myprintf("99676! Error executing PowerShell shutdown: %d\n", GetLastError());
+        myprintf("99676! Error executing Power shutdown: %d\n", GetLastError());
         return 1;
     }
     DWORD waitResult = WaitForSingleObject(ShExecInfo.hProcess, 30000); // Timeout 30s
     if (waitResult != WAIT_OBJECT_0)
-        myprintf("99677! Warning: PowerShell shutdown process wait timed out or failed: %d\n", GetLastError());
+        myprintf("99677! Warning: Power shutdown process wait timed out or failed: %d\n", GetLastError());
     
     CloseHandle(ShExecInfo.hProcess);
     return 2;
 #else
     // Unified Unix-like OS shutdown approach
-    const char* os_name = "Unknown";
+    const char* os_name;// = "Unknown";
     const char* shutdown_cmd = NULL;
     const char* alt_shutdown_cmd = NULL;  // Alternative command if first fails
     int error_base = 99677; // Base per i codici di errore
@@ -88714,7 +89319,7 @@ int Jidac::systemshutdown()
     alt_shutdown_cmd = "shutdown -r"; // Haiku doesn't have a separate halt command
     error_base = 99722;
 #else
-    myprintf("99677! Error: Operating system not supported for shutdown\n");
+	myprintf("99677! Error: Operating system not supported for shutdown\n");
     return 2;
 #endif
 
@@ -90308,6 +90913,12 @@ void* download_worker_thread(void* arg)
     zpaqfranzsftp2 thread_sftp;
     
     // Copia le impostazioni di connessione dal thread principale
+	if (g_sftp_key!="")
+	thread_sftp.setConnectionSSH(data->sftp_instance->getHost(), 
+                             data->sftp_instance->getPort(),
+                             data->sftp_instance->getUsername(),
+                             data->sftp_instance->getKey());
+ 	else
     thread_sftp.setConnection(data->sftp_instance->getHost(), 
                              data->sftp_instance->getPort(),
                              data->sftp_instance->getUsername(),

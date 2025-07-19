@@ -1,3 +1,47 @@
+### [62.3a] - 2025-07-19
+### Version Number Change for Macintosh Users
+To address an issue affecting Homebrew users on Macintosh who were "stuck" due to a versioning error, a significant version number increment has been implemented. 
+This should resolve the issue for those users. 
+If you see version 62.3 instead of 61.7, know that it’s for a good cause.
+
+### Internal Changes to Reduce False Positives in Kaspersky and Other Antivirus Software
+Various program analysis systems use heuristics to detect viruses. 
+After reverse-engineering Kaspersky’s detection methods, which flagged false positives for some versions of zpaqfranz, I introduced source code fixes. 
+Unfortunately, due to known reasons, Kaspersky is no longer installed on any of my machines, so I hadn’t noticed this earlier.
+
+### Autotest Command: Default Quick Hash Check for Moderate File Sizes
+The `autotest` command now performs a quick hash check by default, even for moderately sized files. 
+This should help detect errors like hexadecimal conversion issues.
+
+### Autotest Command: Additional Information with `-all` Switch
+The `autotest` command now displays additional details when using the `-all` switch, particularly the execution time of operations. 
+This is useful for performance comparisons.
+
+### Info Command (`i`): File Size Display for Encrypted Files
+The `i` (info) command now shows the file size (or sizes for multipart archives) including the additional 32 bytes for encrypted versions. 
+For example, if an archive is 10,000 bytes but encrypted, the actual size is 10,032 bytes, and this is now displayed.
+
+### SFTP Command: Support for Key-Based Authentication
+The `sftp` command now supports the `-key` option to use keys for connecting to an SFTP server. 
+Significant changes to the SFTP interface are ongoing, with plans to make it the primary interface for ransomware-resistant systems in the future.
+
+### SFTP Command: Bandwidth Limiting for Uploads
+The `sftp` command now allows limiting the total upload bandwidth using the `-bandwidth` switch. 
+Note that this limit is divided by the number of threads if using `-ssd`. For example, setting a 100K limit with 10 threads results in a 10K limit per thread.
+Use -tX to cap to X threads (with -ssd)
+
+### Fixed a Specific Case in the `t` Command for CRC32 Block Recalculation
+A particular issue with the `t` command for recalculating CRC32 blocks has been addressed. 
+This should resolve the issue permanently.
+Who knows. 
+In the future, a multithreaded checker might be developed.
+
+### Refactoring from Static Analysis
+Static analysis refactoring has been performed. 
+While I hope it hasn’t introduced too many bugs, issues are possible. 
+Compilation tests were limited to two environments (Windows and Debian). 
+Full certification across all platforms will wait until the SFTP module is further developed.
+
 ### [61.6] - 2025-07-10
 Fixed a bug due to refactoring, false positive in t
 

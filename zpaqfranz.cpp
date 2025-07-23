@@ -52,8 +52,8 @@ WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 */
-#define ZPAQ_VERSION "62.3a"
-#define ZPAQ_DATE "(2025-07-19)"  // cannot use __DATE__ on Debian!
+#define ZPAQ_VERSION "62.4e"
+#define ZPAQ_DATE "(2025-07-23)"  // cannot use __DATE__ on Debian!
 
 ///	optional align for malloc (sparc64,HPPA) via -DALIGNMALLOC
 #define STR(a) #a
@@ -5000,6 +5000,19 @@ void color_save()
 		g_console_attributes=csbiInfo.wAttributes;
 }
 #endif // corresponds to #ifdef (#ifdef _WIN32)
+void resetconsolecolor() 
+{
+#ifdef _WIN32
+    // Windows: Ripristina il colore predefinito della console
+    HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
+    CONSOLE_SCREEN_BUFFER_INFO csbi;
+    GetConsoleScreenBufferInfo(hConsole, &csbi); // Ottiene le informazioni correnti
+    SetConsoleTextAttribute(hConsole, csbi.wAttributes & 0x00FF); // Ripristina il colore di foreground/background
+#else
+    // Linux/macOS: Usa la sequenza ANSI per resettare il colore
+	printf(TEXT_RESET);
+#endif
+}
 void color_restore()
 {
 	if (flagnocolor)
@@ -5490,6 +5503,30 @@ std::string mytohuman2(int64_t i_bytes, int width = 0, char fill_char = ' ', boo
 
 void myprintf(const char *format, ...) 
 {
+	 // Early exit if string starts with "DEBUG:" and flagdebug is false
+	 
+	  if (format[0] == 'D' && format[1] == 'E' && format[2] == 'B' && 
+        format[3] == 'U' && format[4] == 'G') {
+        
+        if (format[5] == ':' && !flagdebug) {
+            return;
+        }
+        else if (format[5] >= '2' && format[5] <= '6' && format[6] == ':') {
+            switch(format[5]) {
+                case '2': if (!flagdebug2) return; break;
+                case '3': if (!flagdebug3) return; break;
+                case '4': if (!flagdebug4) return; break;
+                case '5': if (!flagdebug5) return; break;
+                case '6': if (!flagdebug6) return; break;
+            }
+        }
+    }
+    else if (format[0] == 'V' && format[1] == 'E' && format[2] == 'R' && 
+             format[3] == 'B' && format[4] == 'O' && format[5] == 'S' && 
+             format[6] == 'E' && format[7] == ':' && !flagverbose) {
+        return;
+    }
+	
     bool flagerror = false;
     bool flagwarning = false;
     bool flagcolon = false;
@@ -34550,6 +34587,7 @@ struct DT   // if you get some warning here, update your compiler!
 	int				red_avg;
 	uint64_t 		red_candidate;
 
+	bool			isedt;
 /// now using pointer to shrink DT from more then 1K to 296 bytes
 	XXH3_state_t	*pfile_xxh3;  // this is the problem: XXH3's 64-byte align not always work with too old-too new compilers
     XXHash64 		*pfile_xxhash64;
@@ -34565,7 +34603,7 @@ struct DT   // if you get some warning here, update your compiler!
 	franzfs			*pramfile;
 	int64_t 	kompressedsize;
 	int		filework; //0 = nothing; 1=updated; 2=added, 3=removed
-	DT(): date(0), size(0), attr(0), data(0),creationdate(0),accessdate(0),written(-1),isordered(false),isselected(false),/*franz_block_size(FRANZOFFSETV3),*/file_crc32(0),hashedsize(0),chunk(-1),expectedsize(0),version(0),forceadd(false),is4(false),red_total(0),red_count(0),red_min(256),red_max(0),red_avg(0),red_candidate(0),kompressedsize(0),filework(0)
+	DT(): date(0), size(0), attr(0), data(0),creationdate(0),accessdate(0),written(-1),isordered(false),isselected(false),/*franz_block_size(FRANZOFFSETV3),*/file_crc32(0),hashedsize(0),chunk(-1),expectedsize(0),version(0),forceadd(false),is4(false),red_total(0),red_count(0),red_min(256),red_max(0),red_avg(0),red_candidate(0),isedt(false),kompressedsize(0),filework(0)
 	{
 ///	let's save a bit of RAM (during compression)
 		franz_block_size=FRANZOFFSETV3;
@@ -39862,7 +39900,6 @@ private:
 	int all;                  			// -all option
 	int fragment;             			// -fragment option
 	int summary;              			// do summary if >0, else brief. OLD 7.15 summary option if > 0, detailed if -1
-	int howmanythreads;              	// default is number of cores
 	unsigned int menoenne;
 	int64_t date;             			// now as decimal YYYYMMDDHHMMSS (UT)
 	int64_t version;          			// version number or 14 digit date
@@ -39939,6 +39976,7 @@ private:
 	int findj();						// find files
 	int zpaqdirsize();               	// get size of a folder
 	int testverify();					// check
+	int sync();							// check
 	int kill();							// align to archive
 	int utf();							// check-sanitize strange filename
 	int test();           				// test, return 1 if error else 0
@@ -40077,7 +40115,6 @@ private:
 	void 		decodelastversion();
 	bool 		acceptonlynot(string i_filename);
 	int 		listfolders(string i_path,vector<string>* o_thelist);
-	void		franzreplace(string& i_filename);
 	string secure_copy_file(
 const string& i_filename,const string& i_outfilename,int64_t i_startcopy,int64_t i_totalsize,int64_t i_totalcount,int64_t& o_writtensize,int64_t& o_donesize,int64_t& o_donecount,
 int64_t i_sorgente_size,
@@ -40111,6 +40148,8 @@ size_t			i_buffersize
 
 #endif // corresponds to #ifdef (#ifdef _WIN32)
 public:
+	int howmanythreads;              	// default is number of cores
+	
 	int64_t		get_dt_ram() 		{ return ram_of_map(&dt);}
 	int64_t		get_edt_ram() 		{ return ram_of_map(&edt);}
 	int64_t		get_dt_count() 		{ return count_of_map(&dt); }
@@ -40189,6 +40228,11 @@ public:
                          bool i_ordinapersize,
 						 bool i_flagdesc);
 						 
+	void		franzreplace(string& i_filename);
+	
+	int 		comparefilelists(const std::vector<DTMap::iterator>& externalfilelist,
+                                 const std::vector<DTMap::iterator>& internalfilelist,
+								 DTMap&			thedt);
 
 	
 };
@@ -43707,84 +43751,115 @@ string Jidac::sanitizzanomefile(string i_filename,int i_filelength,int& io_colli
 	section: progress
 */
 // beware STATIC not good for M/T
-void print_progress(int64_t ts, int64_t td,int64_t i_scritti,int i_percentuale)
+void print_progress(int64_t ts, int64_t td, int64_t i_scritti, int i_percentuale) 
 {
-	static int ultimapercentuale=0;
-	static int ultimaeta=0;
-	if (td>ts)
-		td=ts;
-	if (td<1000000)
+    static int64_t ultimi_secondi = 0;
+    static int ultima_percentuale = 0;
+    
+    // Validazione parametri
+    if (td > ts) 
+		td = ts;
+    if (td < 1000000) 
 		return;
-	double eta=0.001*(mtime()-g_start)*(ts-td)/(td+1.0);
-	int secondi=(mtime()-g_start)/1000;
-	if (secondi==0)
-		secondi=1;
-	int percentuale=int(td*100.0/(ts+0.5));
-	if (flagpakka)
+    
+    // Calcolo tempi
+    int64_t tempo_trascorso 	= mtime() - g_start;
+    int secondi 				= tempo_trascorso / 1000;
+    if (secondi == 0) 
+		secondi = 1;
+    
+    // Calcolo ETA (tempo rimanente stimato)
+    double eta = 0.001 * tempo_trascorso * (ts - td) / (td + 1.0);
+    if (eta >= 350000) 
+		return; // Limite ragionevole per ETA (circa 4 giorni)
+    
+    int percentuale = (int)(td * 100.0 / (ts + 0.5));
+    
+    if (flagpakka) 
 	{
-		if (eta<350000)
-			if (((percentuale%10)==0) ||(percentuale==1))
-				if ((percentuale!=ultimapercentuale) || (percentuale==1))
-				{
-					ultimapercentuale=percentuale;
-					if (!flagnoeta)
-					myprintf("%03d%% %02d:%02d:%02d %20s of %20s %s/s\r", percentuale,
-					int(eta/3600), int(eta/60)%60, int(eta)%60, migliaia(td), migliaia2(ts),migliaia3(td/secondi));
-				}
-	}
-	else
+        // Modalità compatta - aggiorna solo ogni 10% o al primo 1%
+        bool aggiorna = ((percentuale % 10) == 0) || (percentuale == 1);
+        bool percentuale_cambiata = (percentuale != ultima_percentuale) || (percentuale == 1);
+        
+        if (aggiorna && percentuale_cambiata && !flagnoeta) 
+		{
+            ultima_percentuale = percentuale;
+            myprintf("%03d%% %02d:%02d:%02d %20s of %20s %s/s\r", 
+						percentuale,
+						(int)(eta / 3600), 
+						(int)(eta / 60) % 60, 
+						(int)eta % 60,
+						migliaia(td), 
+						migliaia2(ts), 
+						migliaia3(td / secondi));
+        }
+    } 
+	else 
 	{
-		if (int(eta)!=ultimaeta)
-			if (eta<350000)
+        // Modalità dettagliata - aggiorna ogni secondo
+        if (secondi != ultimi_secondi) 
+		{
+            ultimi_secondi = secondi;
+            
+            // Calcolo proiezione
+            int64_t projection = ts;
+            if ((command == 'a' || command == 'Z') && (ts > 0)) 
+			    projection = (int64_t)(i_scritti / (1.0 * td / ts));
+            
+            // Formato tempo: HH:MM:SS
+            int ore 			= (int)(eta / 3600);
+            int minuti 			= (int)(eta / 60) % 60;
+            int sec 			= (int)eta % 60;
+            double perc_precisa = td * 100.0 / (ts + 0.5);
+            
+            // Determina output e formato
+            bool usa_stderr 	= flagwriteonconsole;
+            bool stampa 		= (usa_stderr) || (!flagnoeta);
+            
+            if (stampa) 
 			{
-				ultimaeta=int(eta);
-				int64_t projection=ts;
-
-				if ((command=='a') || (command=='Z'))
-					if (ts>0)
-						projection=(int64_t)(i_scritti/(1.0*td/ts));
-
-				if (i_percentuale>0)
+                const char* formato;
+                
+                if (i_percentuale > 0) 
 				{
-					if (flagwriteonconsole)
-					fprintf(stderr,"(%03d%%) %6.2f%% %02d:%02d:%02d  (%10s)->(%10s)=>(%10s) %10s/s\r", i_percentuale,td*100.0/(ts+0.5),int(eta/3600), int(eta/60)%60, int(eta)%60, tohuman(td),tohuman2(i_scritti),tohuman3(projection),tohuman4(td/secondi));
-					else
-					{
-						if (!flagnoeta)
-						myprintf("(%03d%%) %6.2f%% %02d:%02d:%02d  (%10s)->(%10s)=>(%10s) %10s/s\r", i_percentuale,td*100.0/(ts+0.5),int(eta/3600), int(eta/60)%60, int(eta)%60, tohuman(td),tohuman2(i_scritti),tohuman3(projection),tohuman4(td/secondi));
-					}
-				}
-				else
+                    // Con percentuale esterna
+                    formato = "(%03d%%) %6.2f%% %02d:%02d:%02d  (%10s)->(%10s)=>(%10s) %10s/s\r";
+                    
+                    if (usa_stderr) 
+                        fprintf(stderr, formato, i_percentuale, perc_precisa, ore, minuti, sec,
+                               tohuman(td), tohuman2(i_scritti), tohuman3(projection), tohuman4(td/secondi));
+					else 
+                        myprintf(formato, i_percentuale, perc_precisa, ore, minuti, sec,
+                                tohuman(td), tohuman2(i_scritti), tohuman3(projection), tohuman4(td/secondi));
+                } 
+				else 
+				if (i_scritti > 0) 
 				{
-					if (i_scritti>0)
-					{
-						if (flagwriteonconsole)
-							fprintf(stderr,"       %6.2f%% %02d:%02d:%02d  (%10s)->(%10s)=>(%10s) %10s/s\r", td*100.0/(ts+0.5),
-						int(eta/3600), int(eta/60)%60, int(eta)%60, tohuman(td),tohuman2(i_scritti),tohuman3(projection),tohuman4(td/secondi));
-						else
-						{
-							if (!flagnoeta)
-						myprintf("       %6.2f%% %02d:%02d:%02d  (%10s)->(%10s)=>(%10s) %10s/s\r", td*100.0/(ts+0.5),
-						int(eta/3600), int(eta/60)%60, int(eta)%60, tohuman(td),tohuman2(i_scritti),tohuman3(projection),tohuman4(td/secondi));
-						}
-					}
-					
-					
-					else
-					{
-						if (flagwriteonconsole)
-							fprintf(stderr,"       %6.2f%% %02d:%02d:%02d  (%10s)=>(%10s) %10s/s\r", td*100.0/(ts+0.5),
-							int(eta/3600), int(eta/60)%60, int(eta)%60, tohuman(td),tohuman2(projection),tohuman3(td/secondi));
-							else
-							{
-								if (!flagnoeta)
-						myprintf("       %6.2f%% %02d:%02d:%02d  (%10s)=>(%10s) %10s/s\r", td*100.0/(ts+0.5),
-							int(eta/3600), int(eta/60)%60, int(eta)%60, tohuman(td),tohuman2(projection),tohuman3(td/secondi));
-							}
-					}
-				}
-			}
-	}
+                    // Senza percentuale esterna, ma con dati scritti
+                    formato = "       %6.2f%% %02d:%02d:%02d  (%10s)->(%10s)=>(%10s) %10s/s\r";
+                    
+                    if (usa_stderr) 
+					    fprintf(stderr, formato, perc_precisa, ore, minuti, sec,
+                               tohuman(td), tohuman2(i_scritti), tohuman3(projection), tohuman4(td/secondi));
+                    else
+                        myprintf(formato, perc_precisa, ore, minuti, sec,
+                                tohuman(td), tohuman2(i_scritti), tohuman3(projection), tohuman4(td/secondi));
+                } 
+				else 
+				{
+                    // Solo dati base
+                    formato = "       %6.2f%% %02d:%02d:%02d  (%10s)=>(%10s) %10s/s         \r";
+                    
+                    if (usa_stderr) 
+					    fprintf(stderr, formato, perc_precisa, ore, minuti, sec,
+                               tohuman(td), tohuman2(projection), tohuman3(td/secondi));
+                    else 
+					    myprintf(formato, perc_precisa, ore, minuti, sec,
+                                tohuman(td), tohuman2(projection), tohuman3(td/secondi));
+                }
+            }
+        }
+    }
 }
 
 /// work with a batch job
@@ -44277,7 +44352,7 @@ string help_sftp(bool i_usage,bool i_example)
 		moreprint("+ : -user      B  SFTP username (ex. thesftpuser)");
 		moreprint("+ : -password  C  SFTP password (ex. thehardpwd)");
 		moreprint("+ : -port      D  SFTP port     (ex. 22)");
-		moreprint("+ : -key       E  SSH key       (ex. thekey)");
+		moreprint("+ : -ssh       E  SSH key       (ex. thekey)");
 		moreprint("+ : -bandwidth F  Limit global speed");
 		
 	}
@@ -44294,7 +44369,7 @@ string help_sftp(bool i_usage,bool i_example)
 		moreprint("Rsync          : sftp rsync  d:\\test* /home/fra    -ssd -host 1.2.3.4 -user k1 -password pippo -port 23");
 		moreprint("1on1           : sftp 1on1   d:\\test* /home/fra    -ssd -host 1.2.3.4 -user k1 -password pippo -port 23");
 		moreprint("Rsync w/limit  : sftp rsync  d:\\test* /home/fra    -ssd -host 1.2.3.4 -user k1 -password pippo -bandwidth 5m");
-		moreprint("ls             : sftp ls     /tmp                       -host 1.2.3.4 -user k1 -key theopensshkey.key ");
+		moreprint("ls             : sftp ls     /tmp                       -host 1.2.3.4 -user k1 -ssh theopensshkey.key ");
 		
 	}
 	return("SFTP interface");
@@ -45369,6 +45444,9 @@ string help_t(bool i_usage,bool i_example)
 		moreprint("+ : -quick        Do not check hash, only size/date");
 		moreprint("+ : -crc32        Run a triple CRC-32 check (!) against the filesystem");
 		moreprint("+ :               Use -find/replace to fix path (if needed); -ssd for M/T");
+		moreprint("+ : -ssd          Run multithread CRC-32 rebuilder\n");
+		moreprint("+ : -debug6       Enforce CRC-32 error\n");
+		
 	}
 	if (i_usage && i_example) { color_yellow(); moreprint("Examples:"); color_restore(); }
 	if (i_example)
@@ -45392,6 +45470,30 @@ string help_t(bool i_usage,bool i_example)
 	}
 	return("Test archive integrity/compare with filesystem");
 
+}
+string help_sync(bool i_usage, bool i_example)
+{
+    if (i_usage)
+    {
+        color_green();
+        moreprint("CMD   sync");
+        moreprint("                  Compare archive content with filesystem folders");
+        moreprint("                  Estimate size of new/changed data to be compressed");
+        color_restore();
+        moreprint("+ : -quick        Compare only file sizes (skip hash verification)");
+        moreprint("+ : -ssd          Use multithreaded hashing for faster processing");
+    }
+    if (i_usage && i_example) { color_yellow(); moreprint("Examples:"); color_restore(); }
+    if (i_example)
+    {
+        moreprint("(example) Archive with 3 folders     : a z:\\1.zpaq c:\\zpaqfranz c:\\nz c:\\ut");
+        moreprint("Check all 3 folders against archive  : sync z:\\1.zpaq c:\\zpaqfranz c:\\nz c:\\ut");
+        moreprint("Check only 2 specific folders        : sync z:\\1.zpaq c:\\nz c:\\ut");
+        moreprint("Check with multithreaded hashing     : sync z:\\1.zpaq c:\\nz -ssd");
+        moreprint("Quick size-only comparison           : sync z:\\1.zpaq c:\\nz -quick");
+        moreprint("Check specific subfolder only        : sync z:\\1.zpaq c:\\zpaqfranz\\release -ssd");
+    }
+    return("Compare archive with filesystem");
 }
 string help_v(bool i_usage,bool i_example)
 {
@@ -46432,7 +46534,8 @@ void Jidac::load_help_map()
 	help_map.insert(std::pair<string, voidhelpfunction>("1on1",help_oneonone));
 	help_map.insert(std::pair<string, voidhelpfunction>("s",help_s));
 	help_map.insert(std::pair<string, voidhelpfunction>("t",help_t));
-	help_map.insert(std::pair<string, voidhelpfunction>("v",help_v));
+	help_map.insert(std::pair<string, voidhelpfunction>("t",help_t));
+	help_map.insert(std::pair<string, voidhelpfunction>("sync",help_sync));
 	help_map.insert(std::pair<string, voidhelpfunction>("w",help_w));
 	help_map.insert(std::pair<string, voidhelpfunction>("x",help_x));
 	help_map.insert(std::pair<string, voidhelpfunction>("z",help_z));
@@ -47544,7 +47647,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 	g_programflags.add(&flagdebug3,			"-debug3",				"Show A LOT of debug",								"");
 	g_programflags.add(&flagdebug4,			"-debug4",				"Write debug data on z:\\",							"");
 	g_programflags.add(&flagdebug5,			"-debug5",				"Show RAM usage",							"");
-	g_programflags.add(&flagdebug6,			"-debug6",				"NTFS",							"");
+	g_programflags.add(&flagdebug6,			"-debug6",				"NTFS/Enforce test",							"");
 	g_programflags.add(&flagdesc,			"-desc",				"Orderby desc",										"");
 	g_programflags.add(&flagnosymlink,		"-symlink",				"Ignore Windows REPARSE_POINT (Symlink)",										"");
 	g_programflags.add(&flagdonotforcexls,	"-xls",					"Do NOT force adding of XLS/PPT (default: NO)",		"a;");
@@ -48218,6 +48321,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 		opt=="p" 				||
 		opt=="t" 				||
 		opt=="test" 			||
+		opt=="sync" 			||
 		opt=="l" 				||
 		opt=="v"				||
 		opt=="w"				||
@@ -48290,6 +48394,8 @@ int Jidac::loadparameters(int argc, const char** argv)
 				command='x';
 			if (opt=="test")
 				command='t';
+			if (opt=="sync")
+				command='I';
 			if (opt=="sfx")
 				command='y';
 			if (opt=="dirsize")
@@ -48455,7 +48561,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 		else if (cli_onlystring	(opt,"-deleteinto",			"",				g_deleteinto,	argc,argv,&i,					NULL));
 		else if (cli_onlystring	(opt,"-sfxto",				"",				g_sfxto,		argc,argv,&i,					NULL));
 #ifdef SFTP
-		else if (cli_onlystring	(opt,"-key",				"",				g_sftp_key,	argc,argv,&i,					NULL));
+		else if (cli_onlystring	(opt,"-ssh",				"",				g_sftp_key,	argc,argv,&i,					NULL));
 		else if (cli_onlystring	(opt,"-host",				"",				g_sftp_host,	argc,argv,&i,					NULL));
 		else if (cli_onlystring	(opt,"-user",				"",				g_sftp_user,	argc,argv,&i,					NULL));
 		else if (cli_onlystring	(opt,"-password",			"",				g_sftp_password,	argc,argv,&i,					NULL));
@@ -49055,23 +49161,41 @@ int Jidac::doCommand()
 	else if (command=='B') return zfslist();
 	else if (command=='C') return zfspurge();
 	else if (command=='D') return dump();
+#ifdef _WIN32
+	else if (command=='E') return restoreimage();
+#endif
 	else if (command=='F') return fzf();
-	///G 
+#ifdef _WIN32
+	else if (command=='G') return drive();
+#endif
 	else if (command=='H') return zfssize();
-	///I J
+	else if (command=='I') return sync();
+//J
 	else if (command=='K') return collision(true);
 	else if (command=='L') return last();
+	else if (command=='M') return mysql();
+//N
+//O
+//P
+//Q
 	else if (command=='R') return redu();
 #ifdef _WIN32
-	else if (command=='.') return pakkalist();
 	else if (command=='S') return ads();
-#endif // corresponds to #ifdef (#ifdef _WIN32)
+#endif
+#ifndef ANCIENT
+	else if (command=='T') return tui();
+#endif
 	else if (command=='U') return update();
+//V
 #ifdef _WIN64
 	else if (command=='W') return download();
 #endif // corresponds to #ifdef (#ifdef _WIN64)
+//X
 	else if (command=='Y') return consolidatebackup();
 	else if (command=='Z') return backup();
+#ifdef _WIN32
+	else if (command=='.') return pakkalist();
+#endif // corresponds to #ifdef (#ifdef _WIN32)
 
 	else if (command=='b') return benchmark();
 	else if (command=='c') return dircompare(false,false);
@@ -49091,9 +49215,7 @@ int Jidac::doCommand()
 	else if (command=='p') return paranoid();
 #ifdef _WIN32
 	else if (command=='q') return windowsc();
-	else if (command=='E') return restoreimage();
-	else if (command=='G') return drive();
-	
+
 #endif // corresponds to #ifdef (#ifdef _WIN32)
 	else if (command=='r') return robocopy();
 	else if (command=='s') return dircompare(true,false);
@@ -49106,9 +49228,7 @@ int Jidac::doCommand()
 	else if (command=='z') return zero();
 #ifndef ANCIENT
 	else if (command==':') return ls();
-	else if (command=='T') return tui();
 #endif
-	else if (command=='M') return mysql();
 	else usage();
 	return 0;
 }
@@ -57058,7 +57178,7 @@ void my_handler(int s)
 {
 	g_control_c=true;	// block open new files for write
 	
-	color_restore();
+	resetconsolecolor();
 	fflush(stdout);
 	myprintf("\n\n");
 	myprintf("01250: CONTROL-C detected, try some housekeeping...\n");
@@ -58833,6 +58953,269 @@ int Jidac::consolidate(string i_archive)
 	}
 	return 0;
 }
+
+// Struttura per i dati condivisi tra thread
+struct ThreadData {
+    // Dati di input per ogni thread
+    std::vector<s_crc32block>* blocks;
+    int start_index;
+    int end_index;
+    int thread_id;
+    
+    // Risultati per thread (thread-local)
+    unsigned int status_e_hash;
+    unsigned int status_e_crc;
+    unsigned int status_e_blocks;
+    unsigned int status_0;
+    unsigned int status_1;
+    uint32_t checkedfiles;
+    uint32_t uncheckedfiles;
+    uint32_t triple_error;
+    uint64_t zeroedblocks;
+    uint32_t howmanyzero;
+	int		 internalthreads;
+    std::vector<std::string> filestobecrced;
+    
+    ThreadData() : status_e_hash(0), status_e_crc(0), status_e_blocks(0),
+                   status_0(0), status_1(0), checkedfiles(0), uncheckedfiles(0),
+                   triple_error(0), zeroedblocks(0), howmanyzero(0),internalthreads(1) {}
+};
+
+// Mutex per sezioni critiche
+pthread_mutex_t g_progress_mutex 	=PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t g_dt_mutex 			=PTHREAD_MUTEX_INITIALIZER;
+static int 		g_test_seconds		=0;
+static uint64_t g_test_start		=0;
+static int64_t 	g_global_lavorati 	=0;
+
+// Funzione per processare un gruppo di file (stesso filename)
+void process_file_group(ThreadData* data, const std::vector<int>& file_indices)
+{
+	
+    if (file_indices.empty()) return;
+    
+    uint32_t currentcrc32 = 0;
+    unsigned int parti = 1;
+    int64_t lavorati = 0;
+    
+    std::string current_filename = (*data->blocks)[file_indices[0]].filename;
+	if (flagdebug)
+	{
+		pthread_mutex_lock(&g_progress_mutex);
+		myprintf("58913: process current_filename ...  %s\n", current_filename.c_str());
+		pthread_mutex_unlock(&g_progress_mutex);
+	}
+    uint32_t crc32stored = 0;
+    std::string mycrc32 = "";
+    
+    // Processa tutti i blocchi dello stesso file
+    for (size_t idx = 0; idx < file_indices.size(); idx++) {
+        int i = file_indices[idx];
+        if (flagdebug)
+		{
+			pthread_mutex_lock(&g_progress_mutex);
+			myprintf("58927: Entered - processing block %d\n", i);
+			pthread_mutex_unlock(&g_progress_mutex);
+        }
+        s_crc32block it = (*data->blocks)[i];
+        
+		
+		int secondi=(mtime()-g_test_start)/1000;
+		if (!flagnoeta)
+			if (secondi!=g_test_seconds)
+			{
+				pthread_mutex_lock(&g_progress_mutex);
+				myprintf("01413: Block %05uK %16s\r", i / 1000, tohuman(lavorati));
+				pthread_mutex_unlock(&g_progress_mutex);
+				g_test_seconds=secondi;
+			}
+
+        
+        // Trova i dati del file nel dizionario (thread-safe read)
+      
+        DTMap::iterator p = (*pjidac).dt.find(it.filename);
+        crc32stored = 0;
+        mycrc32 = "";
+        std::string myhashtype = "";
+        std::string myhash = "";
+        
+        if (p != (*pjidac).dt.end()) {
+            int64_t mycreationtime = 0;
+            int64_t myaccesstime = 0;
+            bool myisordered = false;
+            int myversion = 0;
+            franz_posix* myposix = NULL;
+            bool myisadded = false;
+            if (flagdebug)
+			{
+				pthread_mutex_lock(&g_progress_mutex);
+				myprintf("58953: decodifico it.filename %s\n", it.filename.c_str());
+				pthread_mutex_unlock(&g_progress_mutex);
+			}
+            decode_franz_block(isdirectory(it.filename), p->second.franz_block,
+                              myhashtype, myhash, mycrc32, mycreationtime, myaccesstime,
+                              myisordered, myversion, myposix, myisadded);
+            crc32stored = crchex2int(mycrc32.c_str());
+            
+            if (flagdebug)
+			{
+				pthread_mutex_lock(&g_progress_mutex);
+				myprintf("58913: %08X %s\n", crc32stored, it.filename.c_str());
+				pthread_mutex_unlock(&g_progress_mutex);
+			}
+        } else 
+		{
+			pthread_mutex_lock(&g_progress_mutex);
+			myprintf("58957! Cannot find it.filename <<%s>>\n", it.filename.c_str());
+			pthread_mutex_unlock(&g_progress_mutex);
+        }
+        
+		if (flagdebug)
+        {
+			pthread_mutex_lock(&g_progress_mutex);
+	        myprintf("Thread %d - MYhashtype: %s\n", data->thread_id, myhashtype.c_str());
+            myprintf("Thread %d - Myhash: %s\n", data->thread_id, myhash.c_str());
+            myprintf("Thread %d - Mycrc32: %s\n", data->thread_id, mycrc32.c_str());
+			pthread_mutex_unlock(&g_progress_mutex);
+        }
+        
+        // Gestione dei gap con zeri all'inizio
+        if (it.crc32start > 0 && parti == 1) {
+            uint64_t holesize = it.crc32start;
+            uint32_t zerocrc = crc32zeros(holesize);
+            currentcrc32 = crc32_combine(currentcrc32, zerocrc, holesize);
+            lavorati += holesize;
+            data->zeroedblocks += holesize;
+            data->howmanyzero++;
+        }
+        
+        currentcrc32 = crc32_combine(currentcrc32, it.crc32, it.crc32size);
+        lavorati += it.crc32size;
+        
+        // Gestione dei gap intermedi
+        if (idx + 1 < file_indices.size()) {
+            int next_i = file_indices[idx + 1];
+            if (((*data->blocks)[i].crc32start + (*data->blocks)[i].crc32size) != 
+                (*data->blocks)[next_i].crc32start) {
+                
+                uint64_t holesize = (*data->blocks)[next_i].crc32start - 
+                                   ((*data->blocks)[i].crc32start + (*data->blocks)[i].crc32size);
+                uint32_t zerocrc = crc32zeros(holesize);
+                currentcrc32 = crc32_combine(currentcrc32, zerocrc, holesize);
+                lavorati += holesize;
+                data->zeroedblocks += holesize;
+                data->howmanyzero++;
+            }
+        }
+        
+        parti++;
+    }
+    
+    // Verifica finale del file
+    int last_i = file_indices.back();
+    std::string filedefinitivo = (*data->blocks)[last_i].filename;
+    (*pjidac).franzreplace(filedefinitivo);
+    
+    if (flagdebug) 
+	{
+		pthread_mutex_lock(&g_progress_mutex);
+	   myprintf("Thread %d - Stored %08X calculated %08X %s\n", 
+                data->thread_id, crc32stored, currentcrc32, filedefinitivo.c_str());
+		pthread_mutex_unlock(&g_progress_mutex);
+    }
+    
+    if (mycrc32 != "") {
+        if (currentcrc32 == crc32stored) {
+            if (flagdebug) 
+			{
+				pthread_mutex_lock(&g_progress_mutex);
+	            myprintf("Thread %d - GOOD: STORED %08X = DECOMPRESSED %s\n", 
+                        data->thread_id, crc32stored, filedefinitivo.c_str());
+				pthread_mutex_unlock(&g_progress_mutex);
+            }
+            
+            if (flagcrc32) {
+                if (fileexists(filedefinitivo)) 
+				{
+                    pthread_mutex_lock(&g_dt_mutex);
+                    DTMap::iterator p = (*pjidac).dt.find((*data->blocks)[last_i].filename);
+                    if (p != (*pjidac).dt.end()) {
+                        if (prendidimensionefile(filedefinitivo.c_str()) != p->second.size) {
+                            data->triple_error++;
+                            if (flagverbose) 
+							{
+                                pthread_mutex_lock(&g_progress_mutex);
+								myprintf("Thread %d - ERROR: expected %s <> %s <<%s>>\n",
+                                        data->thread_id, migliaia(p->second.size), 
+                                        migliaia2(prendidimensionefile(filedefinitivo.c_str())), 
+                                        filedefinitivo.c_str());
+								pthread_mutex_unlock(&g_progress_mutex);
+                            }
+                        } else {
+                            data->filestobecrced.push_back(filedefinitivo);
+                            p->second.file_crc32 = currentcrc32;
+                        }
+                    }
+                    pthread_mutex_unlock(&g_dt_mutex);
+                } else {
+                    data->triple_error++;
+                    if (flagverbose) {
+						   pthread_mutex_lock(&g_progress_mutex);
+							
+                        myprintf("Thread %d - ERROR: cannot find <<%s>>\n", 
+                                data->thread_id, filedefinitivo.c_str());
+					 pthread_mutex_unlock(&g_progress_mutex);
+                    }
+                }
+            } else {
+                data->status_1++;
+            }
+        } else {
+            if (crc32stored != 0) {
+				 pthread_mutex_lock(&g_progress_mutex);
+                myprintf("59087$ Thread %03d - ERROR: STORED CRC-32 %08X != DECOMPRESSED %08X (ck %08d) %s\n",
+                        data->thread_id, crc32stored, currentcrc32, parti, filedefinitivo.c_str());
+				pthread_mutex_unlock(&g_progress_mutex);
+                data->status_e_blocks++;
+            }
+        }
+    } else {
+        data->uncheckedfiles++;
+    }
+    
+    // Update global progress
+    pthread_mutex_lock(&g_progress_mutex);
+    g_global_lavorati += lavorati;
+    pthread_mutex_unlock(&g_progress_mutex);
+}
+
+// Funzione del thread worker
+void* thread_worker(void* arg) {
+    ThreadData* data = (ThreadData*)arg;
+    
+    uint64_t dalavorare = 0;
+    
+    // Calcola il lavoro totale per questo thread
+    for (int j = data->start_index; j < data->end_index; j++) {
+        dalavorare += (*data->blocks)[j].crc32size;
+    }
+    
+    // Raggruppa i blocchi per filename
+    std::map<std::string, std::vector<int>> file_groups;
+    
+    for (int i = data->start_index; i < data->end_index; i++) {
+        std::string filename = (*data->blocks)[i].filename;
+        file_groups[filename].push_back(i);
+    }
+    
+    // Processa ogni gruppo di file
+    for (auto& pair : file_groups) {
+        process_file_group(data, pair.second);
+    }
+    
+    return NULL;
+}
+
 int Jidac::test()
 {
 	archive=getbackupnameifany(archive);
@@ -59008,8 +59391,8 @@ int Jidac::test()
 		myprintf("01408: 7.15 stage time %10.2f no error detected (RAM ~%s), try CRC-32 (if any)\n",
 	(mtime()-starttest)/1000.0,tohuman((int64_t)(tid.size()*job.maxMemory)));
 //// OK now check against CRC32 and the entire World (if any)
-	int64_t startverify=mtime();
-	sort(g_crc32.begin(),g_crc32.end(),comparecrc32block);
+	
+
 	unsigned int 	status_e		=0; //all kinds of error
 	unsigned int 	status_e_hash	=0; //errors on hashes by file 
 	unsigned int 	status_e_crc	=0;	//errors on crcs by file
@@ -59023,163 +59406,273 @@ int Jidac::test()
 	uint64_t 		dalavorare		=0;
 	uint32_t 		currentcrc32	=0;
 	uint32_t		triple_error	=0;
-	vector<string> filestobecrced;
+	uint64_t		zeroedblocks	=0;
+	uint32_t		howmanyzero		=0;
+	vector<string> 	filestobecrced;
 
-	for (unsigned int i=0;i<g_crc32.size();i++)
-		dalavorare+=g_crc32[i].crc32size;
-	myprintf("01409: Checking %17s blocks with CRC-32 (%s not-0 bytes)\n",migliaia(g_crc32.size()),migliaia2(dalavorare));
-		
-	uint32_t 	parts=0;
-	uint64_t	zeroedblocks=0;
-	uint32_t	howmanyzero=0;
-	g_zerotime=0;
-	unsigned int i=0;
-	while (i < g_crc32.size())
+
+	if (flagdebug6)
 	{
-		if (flagdebug6)
-			myprintf("%08d  size %08d\n", i, g_crc32.size());
-		
-		if (++parts % 1000 == 0)
-			if (!flagnoeta)
-				myprintf("01410: Block %05uK %16s\r", i / 1000, tohuman(lavorati));
-		
-		s_crc32block it 		= g_crc32[i];
-		DTMap::iterator p 		= dt.find(it.filename);
-		uint32_t crc32stored 	= 0;
-		string myhashtype 		= "";
-		string myhash 			= "";
-		string mycrc32 			= "";
-		
-		
-		if (p != dt.end())
-		{
-			int64_t mycreationtime 	= 0;
-			int64_t myaccesstime 	= 0;
-			bool myisordered 		= false;
-			int myversion 			= 0;
-			franz_posix* myposix 	= NULL;
-			bool myisadded 			= false;
-		
-			decode_franz_block(isdirectory(it.filename), p->second.franz_block,
-							  myhashtype, myhash, mycrc32, mycreationtime, myaccesstime,
-							  myisordered, myversion, myposix, myisadded);
-			crc32stored = crchex2int(mycrc32.c_str());
-		}
-		
-		if (flagdebug3)
-		{
-			myprintf("01411: MYhashtype   %s\n", myhashtype.c_str());
-			myprintf("01412: Myhash       %s\n", myhash.c_str());
-			myprintf("01413: Mycrc32      %s\n", mycrc32.c_str());
-			myprintf("\n");
-		}
-		
-		/// Houston, we have something that start with a sequence of zeros, let's compute the missing CRC
-		if (it.crc32start > 0)
-		{
-			uint64_t holesize 	 = it.crc32start;
-			uint32_t zerocrc 	 = crc32zeros(holesize);
-			currentcrc32 		 = crc32_combine(currentcrc32, zerocrc, holesize);
-			lavorati 			+= holesize;
-			zeroedblocks 		+= holesize;
-			howmanyzero++;
-		}
-		currentcrc32 	= crc32_combine(currentcrc32, it.crc32, it.crc32size);
-		lavorati 	   += it.crc32size;
+		myprintf("59327$ Due to -debug6 ENFORCING CRC-32 errors!\n");
+		g_crc32[0].crc32+=5;
+		g_crc32[g_crc32.size()-1].crc32+=2;
+	}
+	int64_t startsort=mtime();
+	sort(g_crc32.begin(),g_crc32.end(),comparecrc32block);
+	if (flagdebug6)
+		myprintf("59333: Sort time %s of %K\n",migliaia(mtime()-startsort),g_crc32.size());
+	for (size_t i=0;i<g_crc32.size();i++) 
+		dalavorare += g_crc32[i].crc32size;
 
-		if ((i + 1) < g_crc32.size())
+	int64_t startverify	=mtime();
+	g_zerotime			=0;
+	g_test_seconds		=0;
+	g_test_start		=0;
+	if (flagssd) // multithread
+	{
+		if (howmanythreads <= 0)
+			howmanythreads = 1;
+		color_green();
+		myprintf("01409: Checking %17s blocks with CRC-32 (%s not-0 bytes) using %d threads\n",
+				 migliaia(g_crc32.size()), migliaia2(dalavorare), howmanythreads);
+		color_restore();
+		// Raggruppa i blocchi per filename
+		std::map<std::string, std::vector<int>> file_groups;
+		for (size_t i=0; i<g_crc32.size(); i++) 
+			file_groups[g_crc32[i].filename].push_back(i);
+		
+		// Converti in vettore per distribuzione
+		std::vector<std::pair<std::string, std::vector<int>>> files_list;
+		for (auto& pair : file_groups)
+			files_list.push_back(pair);
+
+		// Prepara i thread
+		pthread_t*  threads 		= new pthread_t[howmanythreads];
+		ThreadData* thread_data 	= new ThreadData[howmanythreads];
+
+		// Distribuisce i file tra i thread
+		size_t files_per_thread = files_list.size() / howmanythreads;
+		size_t remaining_files 	= files_list.size() % howmanythreads;
+
+		// Crea un vettore di indici per ogni thread
+		std::vector<std::vector<int>> thread_indices(howmanythreads);
+
+		size_t file_idx = 0;
+		for (unsigned int t = 0; t < (unsigned)howmanythreads; t++) 
 		{
-			///	
-			///while (i < g_crc32.size() && g_crc32[i].filename == g_crc32[i + 1].filename)
-			while (((i + 1) < g_crc32.size()) && (g_crc32[i].filename == g_crc32[i + 1].filename))
+			size_t files_for_this_thread = files_per_thread + (t < remaining_files ? 1 : 0);
+			
+			for (size_t f = 0; f < files_for_this_thread && file_idx < files_list.size(); f++, file_idx++) 
+				for (int block_idx : files_list[file_idx].second) 
+					thread_indices[t].push_back(block_idx);
+			
+			if (!thread_indices[t].empty()) 
 			{
-				if ((g_crc32[i].crc32start + g_crc32[i].crc32size) != g_crc32[i + 1].crc32start)
+				thread_data[t].blocks 		= &g_crc32;
+				thread_data[t].thread_id 	= t;
+				thread_data[t].start_index 	= thread_indices[t].front();
+				thread_data[t].end_index 	= thread_indices[t].back() + 1;
+				
+				// Crea il thread
+				if (pthread_create(&threads[t], NULL, thread_worker, &thread_data[t]) != 0) 
 				{
-					uint64_t holesize 	 = g_crc32[i + 1].crc32start - (g_crc32[i].crc32start + g_crc32[i].crc32size);
-					uint32_t zerocrc 	 = crc32zeros(holesize);
-					currentcrc32		 = crc32_combine(currentcrc32, zerocrc, holesize);
-					lavorati 			+= holesize;
-					zeroedblocks 		+= holesize;
-					howmanyzero++;
-				}
-				i++;
-				if (i < g_crc32.size())
-				{
-					s_crc32block myit 	 = g_crc32[i];
-					currentcrc32 		 = crc32_combine(currentcrc32, myit.crc32, myit.crc32size);
-					lavorati 			+= myit.crc32size;
-					parti++;
-				}
-				else
-				{
-					break;
+					myprintf("59140: Error on thread %d\n", t);
+					seppuku();
 				}
 			}
 		}
-		
-		if (i >= g_crc32.size())
-			break; // Esci dal ciclo esterno se i è fuori dai limiti
 
-		string filedefinitivo = g_crc32[i].filename;
-		franzreplace(filedefinitivo);
-		if (flagdebug)
-			myprintf("01414: Stored %08X calculated %08X %s\n", crc32stored, currentcrc32, filedefinitivo.c_str());
+		// Attende tutti i thread
+		for (int t=0;t<howmanythreads; t++) 
+			if (!thread_indices[t].empty()) 
+				pthread_join(threads[t], NULL);
 		
-		if (mycrc32 != "")
+		
+		myprintf("01413: Block %05uK %16s\r", g_crc32.size() / 1000, tohuman(dalavorare));
+				
+		for (int t=0;t<howmanythreads;t++) 
 		{
-			if (currentcrc32 == crc32stored)
-			{
-				if (flagdebug)
-					myprintf("01415: GOOD: STORED %08X = DECOMPRESSED %s\n", crc32stored, filedefinitivo.c_str());
-				if (flagcrc32)
+			status_e_hash 	+= thread_data[t].status_e_hash;
+			status_e_crc 	+= thread_data[t].status_e_crc;
+			status_e_blocks += thread_data[t].status_e_blocks;
+			status_0 		+= thread_data[t].status_0;
+			status_1 		+= thread_data[t].status_1;
+			checkedfiles 	+= thread_data[t].checkedfiles;
+			uncheckedfiles 	+= thread_data[t].uncheckedfiles;
+			triple_error 	+= thread_data[t].triple_error;
+			zeroedblocks 	+= thread_data[t].zeroedblocks;
+			howmanyzero 	+= thread_data[t].howmanyzero;
+			
+			// Aggiungi i file da controllare
+			filestobecrced.insert(filestobecrced.end(),
+									 thread_data[t].filestobecrced.begin(),
+									 thread_data[t].filestobecrced.end());
+		}
+    
+		// Cleanup
+		delete[] threads;
+		delete[] thread_data;
+		
+		// Distruggi i mutex
+		pthread_mutex_destroy(&g_progress_mutex);
+		pthread_mutex_destroy(&g_dt_mutex);
+
+	}
+	else // single thread
+	{
+		myprintf("01409: Checking %17s blocks with CRC-32 (%s not-0 bytes)\n",migliaia(g_crc32.size()),migliaia2(dalavorare));
+	
+		unsigned int i=0;
+		while (i < g_crc32.size())
+		{
+///			if (flagdebug6)
+	///			myprintf("%08d  size %08d\n", i, g_crc32.size());
+			
+			int secondi=(mtime()-g_test_start)/1000;
+			if (!flagnoeta)
+				if (secondi!=g_test_seconds)
 				{
-					if (fileexists(filedefinitivo))
+					myprintf("01410: Block %05uK %16s\r", i / 1000, tohuman(lavorati));
+					g_test_seconds=secondi;
+				}
+			s_crc32block it 		= g_crc32[i];
+			DTMap::iterator p 		= dt.find(it.filename);
+			uint32_t crc32stored 	= 0;
+			string myhashtype 		= "";
+			string myhash 			= "";
+			string mycrc32 			= "";
+			
+			
+			if (p != dt.end())
+			{
+				int64_t mycreationtime 	= 0;
+				int64_t myaccesstime 	= 0;
+				bool myisordered 		= false;
+				int myversion 			= 0;
+				franz_posix* myposix 	= NULL;
+				bool myisadded 			= false;
+			
+				decode_franz_block(isdirectory(it.filename), p->second.franz_block,
+								  myhashtype, myhash, mycrc32, mycreationtime, myaccesstime,
+								  myisordered, myversion, myposix, myisadded);
+				crc32stored = crchex2int(mycrc32.c_str());
+			}
+			
+			if (flagdebug3)
+			{
+				myprintf("01411: MYhashtype   %s\n", myhashtype.c_str());
+				myprintf("01412: Myhash       %s\n", myhash.c_str());
+				myprintf("01413: Mycrc32      %s\n", mycrc32.c_str());
+				myprintf("\n");
+			}
+			
+			/// Houston, we have something that start with a sequence of zeros, let's compute the missing CRC
+			if (it.crc32start > 0)
+			{
+				uint64_t holesize 	 = it.crc32start;
+				uint32_t zerocrc 	 = crc32zeros(holesize);
+				currentcrc32 		 = crc32_combine(currentcrc32, zerocrc, holesize);
+				lavorati 			+= holesize;
+				zeroedblocks 		+= holesize;
+				howmanyzero++;
+			}
+			currentcrc32 	= crc32_combine(currentcrc32, it.crc32, it.crc32size);
+			lavorati 	   += it.crc32size;
+
+			if ((i + 1) < g_crc32.size())
+			{
+				///	
+				///while (i < g_crc32.size() && g_crc32[i].filename == g_crc32[i + 1].filename)
+				while (((i + 1) < g_crc32.size()) && (g_crc32[i].filename == g_crc32[i + 1].filename))
+				{
+					if ((g_crc32[i].crc32start + g_crc32[i].crc32size) != g_crc32[i + 1].crc32start)
 					{
-						if (prendidimensionefile(filedefinitivo.c_str()) != p->second.size)
+						uint64_t holesize 	 = g_crc32[i + 1].crc32start - (g_crc32[i].crc32start + g_crc32[i].crc32size);
+						uint32_t zerocrc 	 = crc32zeros(holesize);
+						currentcrc32		 = crc32_combine(currentcrc32, zerocrc, holesize);
+						lavorati 			+= holesize;
+						zeroedblocks 		+= holesize;
+						howmanyzero++;
+					}
+					i++;
+					if (i < g_crc32.size())
+					{
+						s_crc32block myit 	 = g_crc32[i];
+						currentcrc32 		 = crc32_combine(currentcrc32, myit.crc32, myit.crc32size);
+						lavorati 			+= myit.crc32size;
+						parti++;
+					}
+					else
+					{
+						break;
+					}
+				}
+			}
+			
+			if (i >= g_crc32.size())
+				break; // Esci dal ciclo esterno se i è fuori dai limiti
+
+			string filedefinitivo = g_crc32[i].filename;
+			franzreplace(filedefinitivo);
+			if (flagdebug)
+				myprintf("01414: Stored %08X calculated %08X %s\n", crc32stored, currentcrc32, filedefinitivo.c_str());
+			
+			if (mycrc32 != "")
+			{
+				if (currentcrc32 == crc32stored)
+				{
+					if (flagdebug)
+						myprintf("01415: GOOD: STORED %08X = DECOMPRESSED %s\n", crc32stored, filedefinitivo.c_str());
+					if (flagcrc32)
+					{
+						if (fileexists(filedefinitivo))
 						{
-							triple_error++;
-							if (flagverbose)
+							if (prendidimensionefile(filedefinitivo.c_str()) != p->second.size)
 							{
-								myprintf("01416: ERROR: expected %s <> %s <<%Z>>\n",
-										 migliaia(p->second.size), migliaia2(prendidimensionefile(filedefinitivo.c_str())), filedefinitivo.c_str());
+								triple_error++;
+								if (flagverbose)
+								{
+									myprintf("01416: ERROR: expected %s <> %s <<%Z>>\n",
+											 migliaia(p->second.size), migliaia2(prendidimensionefile(filedefinitivo.c_str())), filedefinitivo.c_str());
+								}
+							}
+							else
+							{
+								filestobecrced.push_back(filedefinitivo);
+								p->second.file_crc32 = currentcrc32;
 							}
 						}
 						else
 						{
-							filestobecrced.push_back(filedefinitivo);
-							p->second.file_crc32 = currentcrc32;
+							triple_error++;
+							if (flagverbose)
+							{
+								myprintf("01417: ERROR: cannot find <<%Z>>\n", filedefinitivo.c_str());
+							}
 						}
 					}
 					else
-					{
-						triple_error++;
-						if (flagverbose)
-						{
-							myprintf("01417: ERROR: cannot find <<%Z>>\n", filedefinitivo.c_str());
-						}
-					}
+						status_1++;
 				}
 				else
-					status_1++;
+				{
+					if (crc32stored != 0)
+					{
+						myprintf("01422$ ERROR: STORED CRC-32 %08X != DECOMPRESSED %08X (ck %08d) %s\n",
+								 crc32stored, currentcrc32, parti, filedefinitivo.c_str());
+						status_e_blocks++;
+					}
+				}
 			}
 			else
 			{
-				if (crc32stored != 0)
-				{
-					myprintf("01422: ERROR: STORED CRC-32 %08X != DECOMPRESSED %08X (ck %08d) %s\n",
-							 crc32stored, currentcrc32, parti, filedefinitivo.c_str());
-					status_e_blocks++;
-				}
+				uncheckedfiles++;
 			}
+			
+			parti 		  = 1;
+			currentcrc32  = 0;
+			i++;
 		}
-		else
-		{
-			uncheckedfiles++;
-		}
-		
-		parti 		  = 1;
-		currentcrc32  = 0;
-		i++;
 	}
 	myprintf("\n");
 	myprintf("01424: CRC-32 time %14.2fs\n",(mtime()-startverify)/1000.0);
@@ -59198,7 +59691,9 @@ int Jidac::test()
 	if (status_e_crc)
 	myprintf("01431: ERRORS CRC FI   : %08d (ERROR verifyng CRC-32 from disk)\n",status_e_crc);
 	if (status_e_blocks)
-	myprintf("01432: ERRORS          : %08d (ERROR in CRC-32, SHA-1 collisions?)\n",status_e_blocks);
+	myprintf("01432: ERRORS          : %08d (ERROR in CRC-32: corrupted? SHA-1 collisions?)\n",status_e_blocks);
+	
+	
 	if (flagcrc32)
 	{
 		uint32_t		triple_ok		=0;
@@ -59289,6 +59784,8 @@ int Jidac::test()
 		collision(true);
 	
 	if (read_errors)
+		return 2;
+	if (status_e!=0)
 		return 2;
 	return (errors+status_e)>0;
 }
@@ -67892,19 +68389,19 @@ int Jidac::add()
 			///myprintf("02247: filework %d %s\n",p->second.filework,p->first.c_str());
 			if (p->second.filework==WORK_ADDED)
 			{
-				myprintf("02248: + %08d %Z\n",++work_added,p->first.c_str());
+				myprintf("02248: |STAT| + %08d %Z\n",++work_added,p->first.c_str());
 				
 			}
 		}
 		for (DTMap::const_iterator p=edt.begin(); p!=edt.end(); ++p)
 			if (p->second.filework==WORK_UPDATED)
 			{
-				myprintf("02249: # %08d %Z\n",++work_updated,p->first.c_str());
+				myprintf("02249: |STAT| # %08d %Z\n",++work_updated,p->first.c_str());
 			}
 		for (DTMap::const_iterator p=dt.begin(); p!=dt.end(); ++p)
 			if (p->second.filework==WORK_REMOVED)
 			{
-				myprintf("02250: - %08d %Z\n",++work_removed,p->first.c_str());
+				myprintf("02250: |STAT| - %08d %Z\n",++work_removed,p->first.c_str());
 				
 			}
 	}
@@ -70465,9 +70962,11 @@ int Jidac::extractw()
 			if (flagverify)
 				errors+=multiverify(chunkfile);
 			if (errors==0)
-			myprintf("02458: Stage XTR %04d : errors  %d (0=good)\n",chunkinlavorazione,errors);
+			myprintf("02458: Stage XTR %04d : errors  %d (0=good)",chunkinlavorazione,errors);
 			else
-			myprintf("02459: Stage XTR %04d : errors  %d (0=good) *** NOT GOOD ***\n",chunkinlavorazione,errors);
+			myprintf("02459! Stage XTR %04d : errors  %d (0=good) *** NOT GOOD ***",chunkinlavorazione,errors);
+			eol();
+			myprintf("\n");
 			chunkcorrente=0;
 			chunkscount++;
 			chunkfile.clear();
@@ -80192,7 +80691,425 @@ void Jidac::rename_a_dtmap(DTMap& i_source)
 	i_source=map_fixed;
 }	
 
+bool match_pattern(const std::string& str, const std::string& pattern) {
+    size_t i = 0, j = 0;
 
+    while (i < str.size() && j < pattern.size()) {
+        if (pattern[j] == '*') {
+            // Salta '*' e prova a matchare il resto della stringa
+            while (j + 1 < pattern.size() && pattern[j + 1] == '*') {
+                j++; // Salta eventuali * multipli
+            }
+            if (j + 1 == pattern.size()) {
+                return true; // '*' alla fine matcha tutto il resto
+            }
+            while (i < str.size()) {
+                if (match_pattern(str.substr(i), pattern.substr(j + 1))) {
+                    return true;
+                }
+                i++;
+            }
+            return false;
+        } else if (pattern[j] == '?' || str[i] == pattern[j]) {
+            i++;
+            j++;
+        } else {
+            return false;
+        }
+    }
+
+    // Controlla se abbiamo consumato entrambe le stringhe
+    while (j < pattern.size() && pattern[j] == '*') {
+        j++; // Salta eventuali * finali
+    }
+    return i == str.size() && j == pattern.size();
+}
+
+std::string pad_left(const std::string& input, size_t target_length) 
+{
+    if (input.length() >= target_length) 
+	    return input;
+    return std::string(target_length - input.length(), ' ') + input;
+}
+
+
+// Versione alternativa più compatta usando contatori
+int Jidac::comparefilelists(const std::vector<DTMap::iterator>& externalfilelist,
+                                 const std::vector<DTMap::iterator>& internalfilelist,
+								 DTMap&			thedt) 
+{
+	myprintf("VERBOSE: INTERNAL-EXTERNAL SYNC\n");
+    
+    size_t 	extIndex 				=0;
+    size_t 	intIndex 				=0;
+    int64_t tobetested				=0;
+	int 	filedahashare			=0;
+	
+	int		filesizediversa 		=0;
+	
+	int		filelocalinontrovati	=0;
+	
+	int		internalfilecount		=0;
+	int		externalfilecount		=0;
+	int		internalfoldercount		=0;
+	int		externalfoldercount		=0;
+	
+	for (unsigned int i=0;i<internalfilelist.size();i++)
+		if (internalfilelist[i]->first.size()>255)
+		{
+			if (isdirectory(internalfilelist[i]->first))
+				internalfoldercount++;
+			else
+				internalfilecount++;
+		}
+
+	for (unsigned int i=0;i<externalfilelist.size();i++)
+		if (externalfilelist[i]->first.size()>255)
+		{
+			if (isdirectory(externalfilelist[i]->first))
+				externalfoldercount++;
+			else
+				externalfilecount++;
+		}
+	
+	std::string onlyonehash;
+	
+	std::map<std::string, std::vector<std::string>> hasherini;
+	vector<string> filecorrotti;
+	vector<string> soloesterni;
+	vector<string> solointerni;
+	
+	uint64_t internisize 			=0;
+    uint64_t esternisize 			=0; 
+	uint64_t corrottisize 			=0;
+   
+    while ((extIndex < externalfilelist.size()) || (intIndex < internalfilelist.size())) 
+	{
+        
+        if (intIndex >= internalfilelist.size()) 
+		{
+            // Solo in EXTERNAL
+			soloesterni.push_back(externalfilelist[extIndex]->first);
+            esternisize+=externalfilelist[extIndex]->second.size;
+            extIndex++;
+        }
+        else if (extIndex >= externalfilelist.size()) 
+		{
+            // Solo in INTERNAL
+        	solointerni.push_back(internalfilelist[intIndex]->first);
+			internisize+=internalfilelist[intIndex]->second.size;
+            intIndex++;
+        }
+        else 
+		{
+            const std::string& extFile = externalfilelist[extIndex]->first;
+            const std::string& intFile = internalfilelist[intIndex]->first;
+            
+            if (extFile < intFile) 
+			{
+				soloesterni.push_back(externalfilelist[extIndex]->first);
+				esternisize+=externalfilelist[extIndex]->second.size;
+                extIndex++;
+            }
+            else if (intFile < extFile) 
+			{
+                solointerni.push_back(internalfilelist[intIndex]->first);
+				internisize+=internalfilelist[intIndex]->second.size;
+                intIndex++;
+            }
+            else 
+			{
+                extIndex++;
+                intIndex++;
+				
+			//	DTMap::iterator p=externalfilelist[extIndex];
+				if (!isdirectory(extFile))
+				{
+					DTMap::iterator a=thedt.find(extFile);
+					if (a!=thedt.end()) 
+					{
+						int64_t dimensionefileesterno=prendidimensionefile(extFile.c_str());
+						
+					///	myprintf("FILE TEMP %21s %s\n",migliaia(dimensionefileesterno),extFile.c_str());
+						
+						///myprintf("a secondi size %d %d\n",a->second.size,dimensionefileesterno);
+						if (a->second.size!=dimensionefileesterno)
+						{
+							if (flagdebug3)
+								myprintf("80790: != size internal %21K external %21K\n",a->second.size,dimensionefileesterno);
+							
+							string temp=pad_left(migliaia(myabs(a->second.size,dimensionefileesterno)),21);
+
+							filecorrotti.push_back("SIZE "+temp+" <<"+a->first+">>");
+							corrottisize+=myabs(a->second.size,dimensionefileesterno);
+							filesizediversa++;
+						}
+						else
+						{
+							if (!flagquick)
+							{
+								string 	myhashtype		="";
+								string 	myhash			="";
+								string 	mycrc32			="";
+								int64_t mycreationtime	=0;
+								int64_t myaccesstime	=0;
+								bool	myisordered		=false;
+								int		myversion		=0;
+								franz_posix* myposix	=NULL;
+								bool	myisadded		=false;
+						
+								string 	hashfromfile="";
+						
+								decode_franz_block(false,a->second.franz_block,
+								myhashtype,
+								myhash,
+								mycrc32,
+								mycreationtime,
+								myaccesstime,
+								myisordered,
+								myversion,
+								myposix,myisadded);
+								tobetested+=a->second.size;
+								
+								if (myhashtype!="")
+								{
+									hasherini[myhashtype].push_back(a->first);
+									filedahashare++;
+								}
+							}
+						}
+					}
+				}
+            }
+        }
+    }
+    
+    myprintf("\n");
+	
+	if (flagverbose)
+		myprintf("\n");
+	std::map<std::string, std::vector<std::string> >::iterator it;
+	for (it = hasherini.begin(); it != hasherini.end(); ++it) 
+	{
+		std::string chiave = it->first;
+		std::vector<std::string>& valori = it->second;
+
+		if (flagverbose)
+			myprintf("80875: HashType: %12s Elements %12s\n",chiave.c_str(),migliaia(valori.size()));
+		
+		
+		vector<std::pair<string,string> > hash_pair;
+		int64_t starttriple=mtime();
+		franzparallelhashfiles(chiave,tobetested,valori,false,hash_pair);
+		if (flagverbose)
+			myprintf("01434: Hashing time %14.2fs\n",(mtime()-starttriple)/1000.0);
+
+		for (unsigned int j=0;j<hash_pair.size();j++)
+		{
+			string thefilename=hash_pair[j].second;
+			DTMap::iterator p=thedt.find(thefilename);
+			if (p==thedt.end())
+			{
+				myprintf("01437: GURU cannot find thefilename in hash_pair <<%Z>>\n",thefilename.c_str());
+				filelocalinontrovati++;
+			}
+			else
+			{
+				string 	myhashtype		="";
+				string 	myhash			="";
+				string 	mycrc32			="";
+				int64_t mycreationtime	=0;
+				int64_t myaccesstime	=0;
+				bool	myisordered		=false;
+				int		myversion		=0;
+				franz_posix* myposix	=NULL;
+				bool	myisadded		=false;
+		
+				string 	hashfromfile="";
+		
+				decode_franz_block(false,p->second.franz_block,
+				myhashtype,
+				myhash,
+				mycrc32,
+				mycreationtime,
+				myaccesstime,
+				myisordered,
+				myversion,
+				myposix,myisadded);
+			
+			///	myprintf("Eurekona thefilename %s   edt %s %d\n",thefilename.c_str(),myhash.c_str(),p->second.size);
+				if (myhash!=hash_pair[j].first)
+				{
+					
+					string temp=pad_left(migliaia(p->second.size),21);
+					
+					filecorrotti.push_back("HASH "+temp+" <<"+thefilename+">>");
+					corrottisize+=p->second.size;
+				}
+			}
+			
+		}
+    }
+	eol();
+	if (soloesterni.size()>0)
+	{
+		color_yellow();
+		myprintf("80829: Only EXT %08d (%K %H) - files on the filesystem but NOT in .zpaq\n",soloesterni.size(),esternisize,esternisize);
+	}
+	else
+	{
+		color_green();
+		myprintf("80831: There are no external files on the filesystem in excess\n");
+	}
+	color_restore();
+	if (!soloesterni.empty()) 
+	{
+		size_t ciclomax = flagverbose ? soloesterni.size() : std::min(soloesterni.size(), static_cast<size_t>(10));
+        for (size_t i = 0; i < ciclomax; ++i) 
+			myprintf("80843:                   <<%Z>>\n", soloesterni[i].c_str());
+		if (ciclomax<soloesterni.size())
+			myprintf("80963$ ... showed first %d files, use -verbose to get them all\n",ciclomax);
+		myprintf("\n");
+ 	}
+
+	if (solointerni.size()>0)
+	{
+		color_yellow();
+		myprintf("80829: Only INT %08d (%K %H) - files in .zpaq but NOT on filesystem\n",solointerni.size(),internisize,internisize);
+	}
+	else
+	{
+		color_green();
+		myprintf("80829: There are no files in the .zpaq archive that are not present in the filesystem\n");
+	}
+	color_restore();
+	if (!solointerni.empty()) 
+	{
+		size_t ciclomax = flagverbose ? solointerni.size() : std::min(solointerni.size(), static_cast<size_t>(10));
+        for (size_t i = 0; i < ciclomax; ++i) 
+			myprintf("80843:                   <<%Z>>\n",solointerni[i].c_str());
+		if (ciclomax<solointerni.size())
+			myprintf("80962$ ... showed first %d files, use -verbose to get them all\n",ciclomax);
+		myprintf("\n");
+ 	}
+	
+	if (filecorrotti.size()>0)
+	{
+		color_yellow();
+		myprintf("80830: BOTH     %08d (%K %H)\n",filedahashare,tobetested,tobetested);
+		color_yellow();
+		for (unsigned int i=0;i<filecorrotti.size();i++)
+			myprintf("80898:              %s\n",filecorrotti[i].c_str());
+		myprintf("80935:              Total ABS different size %K (%H)\n",corrottisize,corrottisize);
+		color_restore();
+	}
+	else
+	{
+		color_green();
+		myprintf("80831: No difference internal-external files detected\n");
+		color_restore();
+	}
+
+	if ((internalfilecount+internalfoldercount+externalfilecount+externalfoldercount)>0)
+	{
+		color_yellow();
+		myprintf("80987: WARNING: longpath (>255) Internal files %s folders %s | external files %s folders %s\n",migliaia(internalfilecount),migliaia2(internalfoldercount),migliaia3(externalfilecount),migliaia4(externalfoldercount));
+	}
+	else
+	{
+		color_green();
+		myprintf("VERBOSE: No longpath (file/folder names longer than 255 chars) detected\n");
+	}
+	color_restore();
+	int64_t totaldelta=corrottisize+internisize+esternisize+filelocalinontrovati;
+	if (totaldelta>0)
+	{
+		myprintf("80931$	 Total delta %K (%H)\n",corrottisize+internisize+esternisize+filelocalinontrovati,corrottisize+internisize+esternisize+filelocalinontrovati);
+		return 2;
+	}
+	else
+	{
+		color_green();
+		myprintf("80942: No delta (this is VERY GOOD)\n");
+		color_restore();
+	}
+	return 0;
+}
+
+std::string get_top_level_folder(const std::string& path) 
+{
+		
+	myprintf("DEBUG: Input path = '%s' (length: %zu)\n", path.c_str(), path.length());
+    
+    // Caso vuoto
+    if (path.empty()) 
+	{
+		myprintf("DEBUG: Path is empty, returning empty string\n");
+        return "";
+    }
+    
+    std::string working_path = path;
+	myprintf("DEBUG: Initial working_path = '%s'\n", working_path.c_str());
+    
+    // Se il path termina con '/', è già una cartella - restituiscila così com'è
+    if (working_path.length() > 1 && working_path.back() == '/') 
+	{
+		myprintf("DEBUG: Path ends with '/', returning as-is: '%s'\n", working_path.c_str());
+        return working_path;
+    }
+    
+    // Gestione speciale per percorsi UNC (//server/share)
+    if (working_path.length() >= 2 && working_path[0] == '/' && working_path[1] == '/') 
+	{
+		myprintf("DEBUG: UNC path detected\n");
+        int slash_count = 0;
+        size_t pos 		= 2;
+        
+        // Trova il secondo slash dopo //
+        for (size_t i = 2; i < working_path.length(); i++) 
+            if (working_path[i] == '/') 
+			{
+                slash_count++;
+				myprintf("DEBUG: Found slash at position %zu, count = %d\n", i, slash_count);
+                if (slash_count == 2) 
+				{
+                    pos = i;
+                    break;
+                }
+            }
+        
+        // Se abbiamo trovato almeno il server e lo share, restituisci fino al secondo slash
+        if (slash_count >= 2) 
+		{
+            std::string result = working_path.substr(0, pos + 1);
+			myprintf("DEBUG: UNC result = '%s'\n", result.c_str());
+            return result;
+        } 
+		else 
+		{
+            // Solo server o server/share senza altro, restituisci tutto + /
+            std::string result = working_path + "/";
+			myprintf("DEBUG: UNC partial result = '%s'\n", result.c_str());
+            return result;
+        }
+    }
+    
+    // Per un file, cerca l'ultimo slash e restituisci la cartella che lo contiene
+    size_t last_slash = working_path.find_last_of('/');
+   	myprintf("DEBUG: Last slash position = %zu\n", last_slash);
+    
+    // Se non c'è slash, è un file/cartella nella directory corrente
+    if (last_slash == std::string::npos) 
+	{
+		myprintf("DEBUG: No slash found, returning empty string\n");
+        return "";
+    }
+    
+    // Restituisci tutto fino all'ultimo slash (incluso)
+    std::string result = working_path.substr(0, last_slash + 1);
+	myprintf("DEBUG: Final result = '%s'\n", result.c_str());
+    return result;
+}
 int Jidac::testverify()
 {
 	if (files.size()==0)
@@ -80557,6 +81474,166 @@ int Jidac::testverify()
 		}
 	}
 	return 0;
+}
+
+int Jidac::sync()
+{
+	if (files.size()==0)
+	{
+		myprintf("03337! no files[] selected\n");
+		return 2;
+	}
+	if (archive=="")
+	{
+		myprintf("03338! archive empty\n");
+		return 2;
+	}
+	myprintf("03339: Comparing archive content to folder(s)\n");
+
+/*
+	command		='l';
+	g_optional	="versum"; //force isselected
+	*/
+	int errors	=0;
+	int64_t csize=read_archive(NULL,archive.c_str(),&errors,1); 
+	if (flagdebug)
+		myprintf("03340: dtsize %d\n",dt.size());
+	if (csize==0)
+	{
+		myprintf("03341! cannot read_archive\n");
+		return 2;
+	}
+	if ((searchfrom!="") || (replaceto!=""))
+	{
+		myprintf("03342: due to -search/replace fixing the filenames\n");
+		rename_a_dtmap(dt);
+	}
+	
+	uint64_t howmanyfiles	=0;
+	g_bytescanned			=0;
+	g_filescanned			=0;
+	g_worked				=0;
+	files_count.clear();
+	edt.clear();
+	for (unsigned i=0;i<files.size();++i)
+	{
+		scandir(true,edt,files[i].c_str());
+		eol();
+		files_count.push_back(edt.size()-howmanyfiles);
+		howmanyfiles=edt.size();
+	}
+	myprintf("\n");
+///	printbar('-');
+ 	for (unsigned i=0; i<files.size(); ++i)
+		if (direxists(files[i]))
+			myprintf("03343: %9s in <<%s>>\n",migliaia((int64_t)files_count[i]),files[i].c_str());
+	///printbar('-');
+	myprintf("03344: Total external files found: %s\n", migliaia((int64_t)edt.size()));
+	myprintf("\n");
+	
+	
+	if (flagdebug3)
+	{
+		int j=0;
+		for (DTMap::iterator a = dt.begin(); a != dt.end(); a++) // Nota: non incrementare qui
+		{
+			j++;
+			if (j==10)
+				break;
+			myprintf("start dt %s\n",a->first.c_str());
+		}		
+	}
+	if (flagdebug3)
+	{
+		for (DTMap::iterator p=edt.begin(); p!=edt.end(); ++p)
+			myprintf("03345: EDT  %s\n",p->first.c_str());
+		printbar('-');
+		for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p)
+			myprintf("03346: DT   %s\n",p->first.c_str());
+	}
+
+	
+	vector<DTMap::iterator> filelist;
+	vector<DTMap::iterator> externalfilelist;
+	vector<DTMap::iterator> internalfilelist;
+
+	// Pre-allocare spazio conosciuto
+	externalfilelist.reserve(edt.size());  // Sappiamo già la dimensione
+	internalfilelist.reserve(dt.size());   // Evita reallocazioni
+
+/*
+	std::string filter=files[0]; //"c:/zpaqfranz/va*.cpp";
+	
+	if (flagdebug3)
+		myprintf("FILTER %s\n",filter.c_str());
+*/		
+	for (DTMap::iterator p = edt.begin(); p != edt.end(); ++p) 
+	{
+	///	if (match_pattern(p->first, filter)) 
+			externalfilelist.push_back(p);
+	}	
+
+
+	if (flagdebug3)
+	{
+		int i=0;
+		for (DTMap::iterator a = dt.begin(); a != dt.end(); a++) // Nota: non incrementare qui
+		{
+			i++;
+			if (i==10)
+				break;
+			myprintf("pre dt %s\n",a->first.c_str());
+		}		
+	}
+	for (DTMap::iterator a = dt.begin(); a != dt.end(); a++) // Nota: non incrementare qui
+	{
+		if (flagdebug3)
+			myprintf("DEBUG3: New dt %s\n",a->first.c_str());
+		internalfilelist.push_back(a);
+	}	
+	if (flagdebug3)
+	{
+		for (unsigned i=0;i<internalfilelist.size(); ++i)
+			myprintf("81508: INTERNAL %08d %s\n",i,internalfilelist[i]->first.c_str());
+		for (unsigned i=0;i<externalfilelist.size(); ++i)
+			myprintf("81509: EXTERNAL %08d %s\n",i,externalfilelist[i]->first.c_str());
+	}
+	if (internalfilelist.size()==0)
+	{
+		color_red();
+		myprintf("81623! No INTERNAL file in archive (wrong path?)\n");
+		color_restore();
+	}
+	else
+		myprintf("81541: Internal count %d\n",internalfilelist.size());
+	if (externalfilelist.size()==0)
+	{
+		color_red();
+		myprintf("81661! NO EXTERNAL files (wrong path?)\n");
+		color_restore();
+	}
+	else
+		myprintf("81541: External count %d\n",externalfilelist.size());
+	
+	if ((externalfilelist.size()>0) && (internalfilelist.size()>0))
+	{
+		string primaesterna=get_top_level_folder(externalfilelist[0]->first);
+		myprintf("DEBUG: Internalpath   %s\n",internalfilelist[0]->first.c_str());
+		string primainterna=get_top_level_folder(internalfilelist[0]->first);
+		myprintf("DEBUG: Thinking       %s\n",primainterna.c_str());
+		
+		if (primaesterna!=primainterna)
+		{
+			color_yellow();
+			myprintf("81022: External and internal paths does not match. Multiple paths? Fix with -find -replace?\n");
+			myprintf("81023: external %Z\n",primaesterna.c_str());
+			myprintf("81024: internal %Z\n",primainterna.c_str());
+			color_restore();
+		}
+		
+	}
+	
+	return comparefilelists(externalfilelist,internalfilelist,dt);
 }
 
 bool Jidac::grep(const string i_filename,const string i_search)

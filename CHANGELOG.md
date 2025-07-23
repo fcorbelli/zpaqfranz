@@ -1,3 +1,32 @@
+### [62.4e] - 2025-07-23
+
+# New `sync` command
+This command compares the content of an archive, or one of its subfolders, with a filesystem.  
+It is generally recommended to use absolute paths rather than relative ones.  
+It essentially serves two purposes:  
+1) **Test or verification**: After performing an archive with the `a` command, a "heavy" verification can be done with the `sync` command (use `-quick` to skip hash checking and only compare sizes, or `-ssd` to enable multithreading on non-rotational disks).  
+2) **Estimate data**: Estimate how much data would be archived if an update for a new version were performed.  
+It differs from the `v` (verify) command because it also shows new files not present in the archive and those that are missing.
+
+# Multithread support for the `t` (test) command
+It is now possible to use all cores in the second phase (CRC-32 reconstruction).  
+This has no significant impact if there are few archived files (e.g., a single virtual disk image), but it can reduce processing time by up to ten times in optimal cases (e.g., millions of small files, such as on a file server).  
+**Note**: This feature is not extensively tested.
+
+## Default progress is now displayed at one-second intervals  
+Instead of updating based on ETA changes, this reduces console impact for very large jobs.
+
+### Attempt (harder) to restore text color when pressing Ctrl+C
+
+## Using `-stat` adds `|STAT|` to output lines  
+This facilitates the removal of sensitive information for privacy purposes (e.g., using `grep`, `awk`, etc.) when sending logs via email.
+
+### Renamed the key file for the `sftp` command to `-ssh`
+
+### Further refactoring, likely introducing new bugs
+
+### Various minor internal improvements
+
 ### [62.3a] - 2025-07-19
 ### Version Number Change for Macintosh Users
 To address an issue affecting Homebrew users on Macintosh who were "stuck" due to a versioning error, a significant version number increment has been implemented. 

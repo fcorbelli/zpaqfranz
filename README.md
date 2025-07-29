@@ -1,6 +1,6 @@
 # zpaqfranz: advanced multiversioned archiver, with HW acceleration and SFX (on Windows)      
 
-### Swiss army knife for backup and disaster recovery, like 7z or RAR on steroids, with deduplicated "snapshots" (versions). Conceptually similar to Mac's time machine but much more efficient. zpaq 7.15 fork.    
+### Swiss army knife for backup and disaster recovery, like 7z or RAR on steroids, with deduplicated 'snapshots' (versions). Conceptually similar to Mac's Time Machine, but much more efficient. A zpaq 7.15 fork    
 
 |  Platform                                                           | OS package                    |  Version    | Video|
 |  ----------                                                         | -----                         |  ---------- |  -------    |

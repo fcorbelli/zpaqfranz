@@ -52,8 +52,8 @@ WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 */
-#define ZPAQ_VERSION "62.4e"
-#define ZPAQ_DATE "(2025-07-23)"  // cannot use __DATE__ on Debian!
+#define ZPAQ_VERSION "62.5h"
+#define ZPAQ_DATE "(2025-07-29)"  // cannot use __DATE__ on Debian!
 
 ///	optional align for malloc (sparc64,HPPA) via -DALIGNMALLOC
 #define STR(a) #a
@@ -4572,6 +4572,12 @@ int			g_mysql_port;
 #ifdef SFTP
 std::string g_sftp_host;
 std::string g_sftp_user;
+std::string g_sftp_remote;
+std::string g_sftp_mailfull;
+std::string g_sftp_mailprivacy;
+std::string g_sftp_maila;
+std::string g_sftp_customer;
+
 std::string g_sftp_password;
 std::string g_sftp_key;
 int			g_sftp_port;
@@ -4767,6 +4773,7 @@ bool		flagnodelete;
 bool		flagskipzfs;
 bool		flagspace;
 bool		flagssd;
+bool		flagonlyupload;
 bool		flagnomore;
 bool		flagsalt;
 bool		flaghdd;
@@ -8874,18 +8881,18 @@ void aligned_free(void * ptr)
 	*/
 	myoffset_t offset = *((myoffset_t *)ptr - 1);
 	if (flagdebug5)
-		myprintf("72254: aligned_free [3]\n");
+		myprintf("72255: aligned_free [3]\n");
 	/*
 	* Once we have the offset, we can get our original pointer and call free
 	*/
 	void * p = (void *)((uint8_t *)ptr - offset);
 #ifndef ESX
 	if (flagdebug5)
-		myprintf("72254: aligned_free [4] ptr %s  offset %s voidp %s\n",migliaia(int64_t(ptr)),migliaia2(int64_t(offset)),migliaia3(int64_t(p)));
+		myprintf("72256: aligned_free [4] ptr %s  offset %s voidp %s\n",migliaia(int64_t(ptr)),migliaia2(int64_t(offset)),migliaia3(int64_t(p)));
 #endif
 	free(p);
 	if (flagdebug5)
-		myprintf("72254: aligned_free [5]\n");
+		myprintf("72257: aligned_free [5]\n");
 }
 /// LICENSE_END.7
 
@@ -21750,12 +21757,14 @@ INLINE_divsuf void compress_subtree_to_parent_node(
   }
   memcpy(out, cv_array, 2 * BLAKE3_OUT_LEN);
 }
-INLINE_divsuf void hasher_init_base(blake3_hasher *self, const uint32_t key[8],
-                             uint8_t flags) {
-  memcpy(self->key, key, BLAKE3_KEY_LEN);
-  chunk_state_init(&self->chunk, key, flags);
-  self->cv_stack_len = 0;
-}
+	INLINE_divsuf void hasher_init_base(blake3_hasher *self, const uint32_t key[8],
+								 uint8_t flags) {
+	   if ((key == NULL) || (self == NULL)) //fix my me for compiler warning
+		   return;
+	  memcpy(self->key, key, BLAKE3_KEY_LEN);
+	  chunk_state_init(&self->chunk, key, flags);
+	  self->cv_stack_len = 0;
+	}
 void blake3_hasher_init(blake3_hasher *self) { hasher_init_base(self, IV, 0); }
 INLINE_divsuf void hasher_merge_cv_stack(blake3_hasher *self, uint64_t total_len) {
   size_t post_merge_stack_len = (size_t)popcnt(total_len);
@@ -27638,37 +27647,59 @@ int mygetch(bool i_flagmore)
 	}
 	return mychar;
 }
-/*
-void clear_from_cursor_to_end() 
+
+// Funzione per controllare se l'output è redirezionato
+bool isOutputRedirected() 
 {
-    CONSOLE_SCREEN_BUFFER_INFO csbi;
-    HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
-    DWORD charsWritten;
-    DWORD consoleSize;
-
-    // Ottieni le informazioni sul buffer della console
-    if (GetConsoleScreenBufferInfo(hConsole, &csbi)) {
-        // Calcola il numero di caratteri dalla posizione corrente del cursore alla fine della riga
-        consoleSize = csbi.dwSize.X - csbi.dwCursorPosition.X;
-
-        // Riempie lo spazio con spazi vuoti
-        FillConsoleOutputCharacter(hConsole, ' ', consoleSize, csbi.dwCursorPosition, &charsWritten);
-        
-        // Riposiziona il cursore alla riga successiva
-        COORD newCursorPos = {0, csbi.dwCursorPosition.Y + 1};
-        SetConsoleCursorPosition(hConsole, newCursorPos);
-    } 
-	else {
-        printf("Errore nel recupero delle informazioni della console.\n");
-    }
+#ifdef _WIN32
+    // Windows: usa GetFileType per controllare se stdout è un console handle
+    HANDLE hStdout = GetStdHandle(STD_OUTPUT_HANDLE);
+    if (hStdout == INVALID_HANDLE_VALUE) 
+	    return true; // Errore, assumiamo redirezione
+    
+    DWORD fileType = GetFileType(hStdout);
+    
+    // FILE_TYPE_CHAR significa che è un dispositivo carattere (console)
+    // Se non è FILE_TYPE_CHAR, allora è redirezionato
+    return (fileType != FILE_TYPE_CHAR);
+    
+#else
+    // Unix/Linux: usa isatty per controllare se stdout è un terminale
+    return !isatty(STDOUT_FILENO);
+#endif
 }
-*/
+
+// Versione alternativa che controlla anche stderr
+bool isStderrRedirected() 
+{
+#ifdef _WIN32
+    HANDLE hStderr = GetStdHandle(STD_ERROR_HANDLE);
+    if (hStderr == INVALID_HANDLE_VALUE) 
+	    return true;
+    
+    DWORD fileType = GetFileType(hStderr);
+    return (fileType != FILE_TYPE_CHAR);
+    
+#else
+    return !isatty(STDERR_FILENO);
+#endif
+}
+
+// Funzione che controlla entrambi stdout e stderr
+bool isAnyOutputRedirected() 
+{
+    return (isOutputRedirected() || isStderrRedirected());
+}
+
 
 void printbar(char i_carattere,bool i_printbarraenne=true)
 {
 	if (flagpakka)
 		return;
 	int twidth=terminalwidth();
+	if (isAnyOutputRedirected())
+		twidth=80;
+
 	if (twidth<10)
 		twidth=100;
 	for (int i=0;i<twidth-4;i++)
@@ -33014,8 +33045,10 @@ void redraw_input(sinputstate *state,string i_testo)
 
 string internal_password_withcursor(string i_default)
 {
-	string myresult	="";
-    sinputstate state;
+	if (flagsilent)
+		return "";
+    string myresult	="";
+	sinputstate state;
 	memset(&state,0,sizeof(state));
     int ch;
 
@@ -33054,6 +33087,8 @@ string internal_password_withcursor(string i_default)
 
 string internal_password_nocursor(const string i_default)
 {
+	if (flagsilent)
+		return "";
 	string myresult="";
 	myprintf("\n");
 	color_yellow();
@@ -36466,7 +36501,29 @@ string mm_hash_calc_file(int i_algo,const char * i_filename,bool i_flagcalccrc32
 
 	return risultato;
 }
-
+#ifdef _WIN32
+bool eol() 
+{
+    CONSOLE_SCREEN_BUFFER_INFO csbi;
+    HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
+    
+    if (hConsole == INVALID_HANDLE_VALUE) 
+	    return false;
+    
+    if (!GetConsoleScreenBufferInfo(hConsole, &csbi)) 
+	    return false;
+    
+    DWORD chars_to_clear = csbi.dwSize.X - csbi.dwCursorPosition.X;
+    DWORD written;
+    
+    if (!FillConsoleOutputCharacterA(hConsole, ' ', chars_to_clear, csbi.dwCursorPosition, &written)) 
+	    return false;
+    
+    if (!SetConsoleCursorPosition(hConsole, csbi.dwCursorPosition)) 
+	    return false;
+    return true;
+}
+#endif
 
 class franz_do_hash
 {
@@ -37322,6 +37379,12 @@ string	franz_do_hash::filehash(string i_filename,bool i_flagcalccrc32,int64_t i_
 	if (myfilez!=NULL)
 		fclose(myfilez);
 
+	if (flagwriteonconsole)
+	{
+		fprintf(stderr,"\r");
+		fprintf(stderr,"                                                                 \r");
+	}
+
 	if (i_flagcalccrc32)
 	{
 		snprintf(temp,sizeof(temp),"%08X",o_crc32);
@@ -37511,31 +37574,6 @@ void show_cursor()
     GetConsoleCursorInfo(GetStdHandle(STD_OUTPUT_HANDLE), &cursorInfo);
     cursorInfo.bVisible = true;
     SetConsoleCursorInfo(GetStdHandle(STD_OUTPUT_HANDLE), &cursorInfo);
-}
-bool eol() {
-    CONSOLE_SCREEN_BUFFER_INFO csbi;
-    HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
-    
-    if (hConsole == INVALID_HANDLE_VALUE) {
-        return false;
-    }
-    
-    if (!GetConsoleScreenBufferInfo(hConsole, &csbi)) {
-        return false;
-    }
-    
-    DWORD chars_to_clear = csbi.dwSize.X - csbi.dwCursorPosition.X;
-    DWORD written;
-    
-    if (!FillConsoleOutputCharacterA(hConsole, ' ', chars_to_clear, csbi.dwCursorPosition, &written)) {
-        return false;
-    }
-    
-    if (!SetConsoleCursorPosition(hConsole, csbi.dwCursorPosition)) {
-        return false;
-    }
-    
-    return true;
 }
 
 #else
@@ -37791,7 +37829,51 @@ static bool compareSftpFileInfo(const sftpfileinfo& a, const sftpfileinfo& b)
 {
     return a.name < b.name;
 }
+
+#ifdef __APPLE__
+#include <dirent.h>
+#include <sys/stat.h>
+
+// Funzione ricorsiva per cercare una libreria in una directory
+static std::string scan_directory_recursive(const std::string& dir_path, const std::string& libname) 
+{
+    DIR* dir = opendir(dir_path.c_str());
+    if (!dir) return "";
     
+    struct dirent* entry;
+    while ((entry = readdir(dir)) != nullptr) 
+    {
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
+            continue;
+            
+        std::string full_path = dir_path + "/" + entry->d_name;
+        
+        // Se è il file che cerchiamo, lo abbiamo trovato
+        if (entry->d_name == libname) 
+        {
+            if (flagdebug2)
+                myprintf("52649: Found <<%s>>\n", full_path.c_str());
+            closedir(dir);
+            return full_path;
+        }
+        
+        // Se è una directory, esplora ricorsivamente
+        struct stat st;
+        if (stat(full_path.c_str(), &st) == 0 && S_ISDIR(st.st_mode)) 
+        {
+            std::string result = scan_directory_recursive(full_path, libname);
+            if (!result.empty()) 
+            {
+                closedir(dir);
+                return result;
+            }
+        }
+    }
+    closedir(dir);
+    return "";
+}
+#endif
+
 class zpaqfranzsftp2 
 {
 private:
@@ -37889,6 +37971,8 @@ private:
     }
 	
 		// Callback per processare i dati di listing
+	
+
 	static size_t listing_callback(void* contents, size_t size, size_t nmemb, void* userp) 
 	{
 		sftp_listingdata* data 		= (sftp_listingdata*)userp;
@@ -37929,8 +38013,9 @@ private:
 		}
 		
 		// Processa ogni riga (formato simile a ls -la)
-		for (const std::string& line : lines) 
+		for (std::vector<std::string>::const_iterator line_it = lines.begin(); line_it != lines.end(); ++line_it) 
 		{
+			const std::string& line = *line_it;
 			if (line.empty() || line.length() < 10) 
 				continue;
 			
@@ -37971,9 +38056,11 @@ private:
 			
 			// Converti size manualmente
 			fileinfo.size = 0;
-			for (char c : tokens[4]) 
+			for (size_t i = 0; i < tokens[4].length(); i++) {
+				char c = tokens[4][i];
 				if (c >= '0' && c <= '9') 
 					fileinfo.size = fileinfo.size * 10 + (c - '0');
+			}
 			
 			fileinfo.isdirectory = (tokens[0][0] == 'd');
 			
@@ -38004,16 +38091,18 @@ private:
 			
 			// Converti day manualmente
 			int day = 0;
-			for (char c : tokens[6]) 
+			for (size_t i = 0; i < tokens[6].length(); i++) {
+				char c = tokens[6][i];
 				if (c >= '0' && c <= '9') 
 					day = day * 10 + (c - '0');
+			}
 				
 			std::string timeOrYear = tokens[7];
 			
 			// Converti mese
 			const char* months[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun",
 								   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
-		    for (int i = 0; i < 12; i++) 
+			for (int i = 0; i < 12; i++) 
 				if (month == months[i]) 
 				{
 					timeinfo.tm_mon = i;
@@ -38054,9 +38143,11 @@ private:
 			{
 				// Formato anno: "2023"
 				int year = 0;
-				for (char c : timeOrYear) 
+				for (size_t i = 0; i < timeOrYear.length(); i++) {
+					char c = timeOrYear[i];
 					if (c >= '0' && c <= '9') 
 						year = year * 10 + (c - '0');
+				}
 					
 				timeinfo.tm_year 	= year - 1900;
 				timeinfo.tm_hour 	= 0;
@@ -38092,6 +38183,7 @@ private:
 		return total_size;
 	}
 
+
 public:
     CURL* 		curl;
 	static 		curldynfunctions curldll;
@@ -38099,6 +38191,83 @@ public:
 
 	int kickstart()
 	{
+#ifndef _WIN32
+	myprintf("38151: You should get libcurl.so, for example\n");
+	
+	// apk (Alpine Package Keeper)
+	myprintf("38152: Alpine            :apk add curl\n");
+	
+	// apt (Advanced Package Tool)
+	myprintf("38153: Debian/Ubuntu     :apt install libcurl4\n");
+	myprintf("38154: Debian/Ubuntu     :sudo apt install libcurl4\n");
+	
+	// brew (Homebrew)
+	myprintf("38158: macOS             :brew install curl\n");
+	
+	// dnf (Dandified YUM)
+	myprintf("38155: Alma Linux        :dnf install curl\n");
+	myprintf("38156: Alma Linux        :sudo dnf install curl\n");
+	myprintf("38157: Amazon Linux (v2+):dnf install curl\n");
+	myprintf("38158: Fedora            :dnf install curl\n");
+	myprintf("38159: Oracle Linux (v8+):dnf install curl\n");
+	myprintf("38160: Rocky Linux       :dnf install curl\n");
+	
+	// emerge (Portage)
+	myprintf("38161: Gentoo            :emerge --ask net-misc/curl\n");
+	
+	// guix
+	myprintf("38162: Guix              :guix install curl\n");
+	
+	// nix-env
+	myprintf("38163: NixOS             :nix-env -i curl\n");
+	
+	// opkg (OpenWrt Package)
+	myprintf("38164: OpenWrt           :opkg install curl\n");
+	
+	// pacman
+	myprintf("38165: Arch              :pacman -S curl\n");
+	
+	// pkg (FreeBSD/Solaris/Termux style)
+	myprintf("38166: FreeBSD           :pkg install curl\n");
+	myprintf("38167: OPNSense          :pkg install curl\n");
+	myprintf("38168: pfSense           :pkg install curl\n");
+	myprintf("38169: OpenIndiana       :pkg install library/curl\n");
+	myprintf("38170: Solaris           :pkg install curl\n");
+	myprintf("38171: Termux            :pkg install curl\n");
+	myprintf("38172: TrueNAS           :pkg install curl\n");
+	
+	// pkg_add (OpenBSD)
+	myprintf("38173: OpenBSD           :pkg_add curl\n");
+	myprintf("38174: OpenBSD           :doas pkg_add curl\n");
+	
+	// pkgin (NetBSD)
+	myprintf("38175: NetBSD            :pkgin install curl\n");
+	
+	// pkgman (Haiku)
+	myprintf("38176: Haiku             :pkgman install curl\n");
+	
+	// slackpkg
+	myprintf("38177: Slackware         :slackpkg install curl\n");
+	
+	// swupd (Clear Linux)
+	myprintf("38178: Clear Linux       :swupd bundle-add curl\n");
+	
+	// xbps-install (Void Linux)
+	myprintf("38179: Void              :xbps-install -S curl\n");
+	
+	// yum (older RHEL/CentOS)
+	myprintf("38180: Amazon Linux (v1) :yum install curl\n");
+	myprintf("38181: CentOS            :yum install curl\n");
+	myprintf("38182: Oracle Linux (v7-):yum install curl\n");
+	myprintf("38183: RHEL              :yum install curl\n");
+	myprintf("38184: SUSE              :zypper install libcurl4\n");
+	
+	myprintf("38185: Conda             :conda install curl\n");
+	
+	myprintf("38186: Manual            :Get https://curl.se, then");
+	myprintf("./configure --disable-static && make && sudo make install\n");
+#endif
+
 #ifdef ZPAQ_VERSION
 #ifdef _WIN32
 		std::string randnocache="?"+generaterandomstring(10);
@@ -38153,131 +38322,197 @@ public:
 		return 1;
 	}
 
-	static std::string findso(const std::string& i_libname) 
-	{
-    	const std::vector<std::string> common_paths = 
-		{
-			"",              
-			"/usr/lib/",
-			"/usr/local/lib/",
-			"/lib/",
-			"/usr/lib64/",
-			"/usr/local/lib64/",
-			"./",
-			"/usr/lib/x86_64-linux-gnu/"
-		};
-
-		for (unsigned int i=0;i<common_paths.size();i++) 
-		{
-			std::string full_path = common_paths[i] + i_libname;
-			if (flagdebug2)
-				myprintf("52649: Checking <<%Z>>\n",full_path.c_str());
-			if (fileexists(full_path))
-				return full_path;
-        }
-		return "";
-    }
-
-
-static bool loadLibrary()
+#ifdef __APPLE__
+// Funzione per macOS: cerca libname con estensione .dylib
+static std::string findso_macos(const std::string& i_libname) 
 {
-    if (dllloaded)
-        return true;
-
-#ifdef _WIN32
-#ifdef _WIN64
-    std::string dllname = "libcurl-x64.dll";
-#else
-    std::string dllname = "libcurl.dll";
-#endif
-
-    HMODULE hModule = LoadLibraryA(dllname.c_str());
-    if (!hModule)
+    std::string libname = i_libname + ".dylib"; // Aggiunge .dylib
+    
+    // Prima cerca nelle directory di Homebrew (ricerca ricorsiva)
+    const char* homebrew_paths[] = {
+        "/usr/local/Cellar/curl",     // Homebrew (Intel)
+        "/opt/homebrew/Cellar/curl"   // Homebrew (Apple Silicon)
+    };
+    
+    for (const char* base_path : homebrew_paths) 
     {
-        myprintf("45559$ Cannot load %s\n", dllname.c_str());
-        return false;
+        if (flagdebug2)
+            myprintf("52649: Scanning recursively <<%s>>\n", base_path);
+        std::string result = scan_directory_recursive(base_path, libname);
+        if (!result.empty()) 
+            return result;
     }
-
-    // Load all function pointers con cast intermedio a void*
-    curldll.easy_reset = reinterpret_cast<curl_easy_reset_t>(
-        reinterpret_cast<void*>(GetProcAddress(hModule, "curl_easy_reset")));
-    curldll.easy_init = reinterpret_cast<curl_easy_init_t>(
-        reinterpret_cast<void*>(GetProcAddress(hModule, "curl_easy_init")));
-    curldll.easy_setopt = reinterpret_cast<curl_easy_setopt_t>(
-        reinterpret_cast<void*>(GetProcAddress(hModule, "curl_easy_setopt")));
-    curldll.easy_perform = reinterpret_cast<curl_easy_perform_t>(
-        reinterpret_cast<void*>(GetProcAddress(hModule, "curl_easy_perform")));
-    curldll.easy_strerror = reinterpret_cast<curl_easy_strerror_t>(
-        reinterpret_cast<void*>(GetProcAddress(hModule, "curl_easy_strerror")));
-    curldll.easy_getinfo = reinterpret_cast<curl_easy_getinfo_t>(
-        reinterpret_cast<void*>(GetProcAddress(hModule, "curl_easy_getinfo")));
-    curldll.slist_append = reinterpret_cast<curl_slist_append_t>(
-        reinterpret_cast<void*>(GetProcAddress(hModule, "curl_slist_append")));
-    curldll.slist_free_all = reinterpret_cast<curl_slist_free_all_t>(
-        reinterpret_cast<void*>(GetProcAddress(hModule, "curl_slist_free_all")));
-    curldll.easy_cleanup = reinterpret_cast<curl_easy_cleanup_t>(
-        reinterpret_cast<void*>(GetProcAddress(hModule, "curl_easy_cleanup")));
-    curldll.global_init = reinterpret_cast<curl_global_init_t>(
-        reinterpret_cast<void*>(GetProcAddress(hModule, "curl_global_init")));
-    curldll.global_cleanup = reinterpret_cast<curl_global_cleanup_t>(
-        reinterpret_cast<void*>(GetProcAddress(hModule, "curl_global_cleanup")));
-    curldll.easy_duphandle = reinterpret_cast<curl_easy_duphandle_t>(
-        reinterpret_cast<void*>(GetProcAddress(hModule, "curl_easy_duphandle")));
-	curldll.my_version_info = reinterpret_cast<curl_version_info_t>(
-        reinterpret_cast<void*>(GetProcAddress(hModule, "curl_version_info")));
-
-    // Verify all functions were loaded
-    if (!curldll.easy_reset || !curldll.easy_init || !curldll.easy_setopt ||
-        !curldll.easy_perform || !curldll.easy_strerror || !curldll.easy_getinfo ||
-        !curldll.slist_append || !curldll.slist_free_all || !curldll.easy_cleanup ||
-        !curldll.global_init || !curldll.global_cleanup || !curldll.easy_duphandle
-		|| (!curldll.my_version_info))
+    
+    // Poi cerca nei percorsi standard
+    const char* standard_paths[] = {
+        "/usr/local/lib/",   // Homebrew (linkato)
+        "/usr/lib/",         // Sistema macOS
+        "./"                 // Directory corrente
+    };
+    
+    for (const char* path : standard_paths) 
     {
-        myprintf("46967: Failed to load one or more libcurl functions (older %s?)\n", dllname.c_str());
-        FreeLibrary(hModule);
-        return false;
+        std::string full_path = std::string(path) + libname;
+        if (flagdebug2)
+            myprintf("52649: Checking <<%s>>\n", full_path.c_str());
+        if (access(full_path.c_str(), F_OK) == 0) // fileexists
+            return full_path;
     }
-
-    dllloaded = true;
-    return true;
-#else
-    string libcurlposition = findso("libcurl.so");
-
-    if (libcurlposition == "")
-    {
-        myprintf("52612$ Cannot find libcurl.so => I will try blindly\n");
-        libcurlposition = "libcurl.so";
-    }
-    else
-    {
-        if (flagverbose)
-            myprintf("52615: libcurl.so founded in %Z\n", libcurlposition.c_str());
-    }
-
-    void *hModule = dlopen(libcurlposition.c_str(), RTLD_LAZY);
-    if (!hModule)
-    {
-        const char* last_error = dlerror();
-        myprintf("46919$ Cannot load libcurl.so from <<%Z>> lasterror %s\n", libcurlposition.c_str(), last_error);
-        return false;
-    }
-    curldll.easy_reset 		= (curl_easy_reset_t)		dlsym(hModule, "curl_easy_reset");
-    curldll.easy_init 		= (curl_easy_init_t)		dlsym(hModule, "curl_easy_init");
-    curldll.easy_setopt 	= (curl_easy_setopt_t)		dlsym(hModule, "curl_easy_setopt");
-    curldll.easy_perform 	= (curl_easy_perform_t)		dlsym(hModule, "curl_easy_perform");
-    curldll.easy_strerror 	= (curl_easy_strerror_t)	dlsym(hModule, "curl_easy_strerror");
-    curldll.easy_getinfo 	= (curl_easy_getinfo_t)		dlsym(hModule, "curl_easy_getinfo");
-    curldll.slist_append 	= (curl_slist_append_t)		dlsym(hModule, "curl_slist_append");
-    curldll.slist_free_all 	= (curl_slist_free_all_t)	dlsym(hModule, "curl_slist_free_all");
-    curldll.easy_cleanup 	= (curl_easy_cleanup_t)		dlsym(hModule, "curl_easy_cleanup");
-    curldll.global_init 	= (curl_global_init_t)		dlsym(hModule, "curl_global_init");
-    curldll.global_cleanup 	= (curl_global_cleanup_t)	dlsym(hModule, "curl_global_cleanup");
-    curldll.easy_duphandle 	= (curl_easy_duphandle_t)	dlsym(hModule, "curl_easy_duphandle");
-
-    dllloaded = true;
-    return true;
-#endif
+    
+    return "";
 }
+#else
+    
+    // Funzione per altri sistemi *nix: cerca libcurl.so
+    static std::string findso_unix(const std::string& i_libname) 
+    {
+
+        const char* paths[] = {
+            "./",                         // CWD
+            "/usr/lib/",                  // Standard Linux
+            "/usr/local/lib/",            // Standard Linux
+            "/lib/",                      // Standard Linux
+            "/usr/lib64/",                // 64-bit Linux
+            "/usr/local/lib64/",          // 64-bit Linux
+            "/usr/lib/x86_64-linux-gnu/"  // Debian/Ubuntu
+        };
+        const int num_paths = sizeof(paths) / sizeof(paths[0]);
+        std::string libname = i_libname + ".so"; // Aggiunge estensione .so
+        for (int i = 0; i < num_paths; i++) 
+        {
+            std::string full_path = std::string(paths[i]) + libname;
+            if (flagdebug2)
+                myprintf("52649: Checking <<%s>>\n", full_path.c_str());
+            if (access(full_path.c_str(), F_OK) == 0) // fileexists
+                return full_path;
+        }
+		
+		
+		libname += ".4"; 
+		for (int i = 0; i < num_paths; i++) 
+        {
+            std::string full_path = std::string(paths[i]) + libname;
+            if (flagdebug2)
+                myprintf("52649: Checking <<%s>>\n", full_path.c_str());
+            if (access(full_path.c_str(), F_OK) == 0) // fileexists
+                return full_path;
+        }
+		
+        return "";
+    }
+#endif
+
+
+
+	// Funzione wrapper per semplificare l'uso
+	static std::string findcurlso()
+	{
+	#ifdef __APPLE__
+		return findso_macos("libcurl");
+	#else
+		return findso_unix("libcurl");
+	#endif
+	}
+
+	static bool loadLibrary()
+	{
+		if (dllloaded)
+			return true;
+
+	#ifdef _WIN32
+	#ifdef _WIN64
+		std::string dllname = "libcurl-x64.dll";
+	#else
+		std::string dllname = "libcurl.dll";
+	#endif
+
+		HMODULE hModule = LoadLibraryA(dllname.c_str());
+		if (!hModule)
+		{
+			myprintf("45559$ Cannot load %s\n", dllname.c_str());
+			return false;
+		}
+
+		// Load all function pointers con cast intermedio a void*
+		curldll.easy_reset = reinterpret_cast<curl_easy_reset_t>(
+			reinterpret_cast<void*>(GetProcAddress(hModule, "curl_easy_reset")));
+		curldll.easy_init = reinterpret_cast<curl_easy_init_t>(
+			reinterpret_cast<void*>(GetProcAddress(hModule, "curl_easy_init")));
+		curldll.easy_setopt = reinterpret_cast<curl_easy_setopt_t>(
+			reinterpret_cast<void*>(GetProcAddress(hModule, "curl_easy_setopt")));
+		curldll.easy_perform = reinterpret_cast<curl_easy_perform_t>(
+			reinterpret_cast<void*>(GetProcAddress(hModule, "curl_easy_perform")));
+		curldll.easy_strerror = reinterpret_cast<curl_easy_strerror_t>(
+			reinterpret_cast<void*>(GetProcAddress(hModule, "curl_easy_strerror")));
+		curldll.easy_getinfo = reinterpret_cast<curl_easy_getinfo_t>(
+			reinterpret_cast<void*>(GetProcAddress(hModule, "curl_easy_getinfo")));
+		curldll.slist_append = reinterpret_cast<curl_slist_append_t>(
+			reinterpret_cast<void*>(GetProcAddress(hModule, "curl_slist_append")));
+		curldll.slist_free_all = reinterpret_cast<curl_slist_free_all_t>(
+			reinterpret_cast<void*>(GetProcAddress(hModule, "curl_slist_free_all")));
+		curldll.easy_cleanup = reinterpret_cast<curl_easy_cleanup_t>(
+			reinterpret_cast<void*>(GetProcAddress(hModule, "curl_easy_cleanup")));
+		curldll.global_init = reinterpret_cast<curl_global_init_t>(
+			reinterpret_cast<void*>(GetProcAddress(hModule, "curl_global_init")));
+		curldll.global_cleanup = reinterpret_cast<curl_global_cleanup_t>(
+			reinterpret_cast<void*>(GetProcAddress(hModule, "curl_global_cleanup")));
+		curldll.easy_duphandle = reinterpret_cast<curl_easy_duphandle_t>(
+			reinterpret_cast<void*>(GetProcAddress(hModule, "curl_easy_duphandle")));
+		curldll.my_version_info = reinterpret_cast<curl_version_info_t>(
+			reinterpret_cast<void*>(GetProcAddress(hModule, "curl_version_info")));
+
+		// Verify all functions were loaded
+		if (!curldll.easy_reset || !curldll.easy_init || !curldll.easy_setopt ||
+			!curldll.easy_perform || !curldll.easy_strerror || !curldll.easy_getinfo ||
+			!curldll.slist_append || !curldll.slist_free_all || !curldll.easy_cleanup ||
+			!curldll.global_init || !curldll.global_cleanup || !curldll.easy_duphandle
+			|| (!curldll.my_version_info))
+		{
+			myprintf("46967: Failed to load one or more libcurl functions (older %s?)\n", dllname.c_str());
+			FreeLibrary(hModule);
+			return false;
+		}
+
+		dllloaded = true;
+		return true;
+	#else
+		string libcurlposition = findcurlso();
+	
+		if (libcurlposition == "")
+		{
+			myprintf("52612$ Cannot find libcurl.so => I will try blindly\n");
+			libcurlposition = "libcurl.so";
+		}
+		else
+		{
+			if (flagverbose)
+				myprintf("52615: libcurl.so founded in %Z\n", libcurlposition.c_str());
+		}
+
+		void *hModule = dlopen(libcurlposition.c_str(), RTLD_LAZY);
+		if (!hModule)
+		{
+			const char* last_error = dlerror();
+			myprintf("46919$ Cannot load libcurl.so from <<%Z>> lasterror %s\n", libcurlposition.c_str(), last_error);
+			return false;
+		}
+		curldll.easy_reset 		= (curl_easy_reset_t)		dlsym(hModule, "curl_easy_reset");
+		curldll.easy_init 		= (curl_easy_init_t)		dlsym(hModule, "curl_easy_init");
+		curldll.easy_setopt 	= (curl_easy_setopt_t)		dlsym(hModule, "curl_easy_setopt");
+		curldll.easy_perform 	= (curl_easy_perform_t)		dlsym(hModule, "curl_easy_perform");
+		curldll.easy_strerror 	= (curl_easy_strerror_t)	dlsym(hModule, "curl_easy_strerror");
+		curldll.easy_getinfo 	= (curl_easy_getinfo_t)		dlsym(hModule, "curl_easy_getinfo");
+		curldll.slist_append 	= (curl_slist_append_t)		dlsym(hModule, "curl_slist_append");
+		curldll.slist_free_all 	= (curl_slist_free_all_t)	dlsym(hModule, "curl_slist_free_all");
+		curldll.easy_cleanup 	= (curl_easy_cleanup_t)		dlsym(hModule, "curl_easy_cleanup");
+		curldll.global_init 	= (curl_global_init_t)		dlsym(hModule, "curl_global_init");
+		curldll.global_cleanup 	= (curl_global_cleanup_t)	dlsym(hModule, "curl_global_cleanup");
+		curldll.easy_duphandle 	= (curl_easy_duphandle_t)	dlsym(hModule, "curl_easy_duphandle");
+
+		dllloaded = true;
+		return true;
+	#endif
+	}
 
     std::string 	getHost() 		const { return host; }
     int 			getPort() 		const { return port; }
@@ -38293,12 +38528,12 @@ static bool loadLibrary()
 				myprintf("40822: do loadLibrary()\n");
 			if (!loadLibrary())
 			{
-				myprintf("40832: Doing a kickstart (download dll from internet)\n");
+				myprintf("40832: No libcurl. Doing a kickstart\n");
 				kickstart();
 				seppuku();
 			}
 		}
-        Kurl_global_init(CURL_GLOBAL_DEFAULT);
+		Kurl_global_init(CURL_GLOBAL_DEFAULT);
     }
     
     ~zpaqfranzsftp2() 
@@ -38325,6 +38560,12 @@ static bool loadLibrary()
     // Imposta i parametri di connessione con chiave SSH
     void setConnectionSSH(const std::string& h, int p, const std::string& user, const std::string& key_path) 
 	{
+		if (!fileexists(key_path))
+		{
+			myprintf("\n");
+			myprintf("38331: GURU -ssh keyfile does not exists <<%Z>>\n",key_path.c_str());
+			seppuku();
+		}
         host 			= h;
         port 			= p;
         username 		= user;
@@ -38379,56 +38620,102 @@ static bool loadLibrary()
         }
     }
     
-    // Ottiene la dimensione di un file remoto
-    int64_t remotegetfilesize(const std::string& remote_file) 
+// Struttura per contare i bytes ricevuti
+	struct FileInfo 
 	{
-        if (!curl) 
+		int64_t size;
+		bool file_exists;
+	};
+
+	// Callback che conta i bytes ricevuti (anche se sono zero)
+	static size_t count_bytes_callback(void* contents, size_t size, size_t nmemb, struct FileInfo* info) 
+	{
+		(void)contents;
+		size_t total_size = size * nmemb;
+		info->size += total_size;
+		info->file_exists = true;  // Se il callback viene chiamato, il file esiste
+		return total_size;
+	}
+
+	int64_t remotegetfilesize(const std::string& remote_file) 
+	{
+		if (!curl) 
 		{
-            myprintf("41258! No curl in remotegetfilesize\n");
+			myprintf("41258! No curl in remotegetfilesize\n");
 			return -1;
-        }
-        
-        if (flagdebug3) 
+		}
+		
+		if (flagdebug3) 
 			myprintf("41263: Getting remote file size %s\n", remote_file.c_str());
-        
-        CURL* curl_temp = Kurl_easy_duphandle(curl);
-        if (!curl_temp) 
+		
+		CURL* curl_temp = Kurl_easy_duphandle(curl);
+		if (!curl_temp) 
 		{
-            myprintf("41268! Impossible to duplicate handle curl\n");
+			myprintf("41268! Impossible to duplicate handle curl\n");
 			return -1;
-        }
-        
-        char url[1024];
-        snprintf(url, sizeof(url),"sftp://%s:%d%s", host.c_str(), port, remote_file.c_str());
-        
-        Kurl_easy_setopt(curl_temp, CURLOPT_URL, url);
-        Kurl_easy_setopt(curl_temp, CURLOPT_NOBODY, 1L);
-        Kurl_easy_setopt(curl_temp, CURLOPT_HEADER, 1L);
-        Kurl_easy_setopt(curl_temp, CURLOPT_WRITEFUNCTION, write_callback);
-        
-        CURLcode res = Kurl_easy_perform(curl_temp);
-        
-        int64_t file_size = -1;
-        if (res == CURLE_OK) 
+		}
+		
+		char url[1024];
+		snprintf(url, sizeof(url),"sftp://%s:%d%s", host.c_str(), port, remote_file.c_str());
+		
+		// Prima fase: verifica se il file esiste usando HEAD request
+		Kurl_easy_setopt(curl_temp, CURLOPT_URL, url);
+		Kurl_easy_setopt(curl_temp, CURLOPT_NOBODY, 1L);
+		Kurl_easy_setopt(curl_temp, CURLOPT_WRITEFUNCTION, write_callback);
+		
+		CURLcode res = Kurl_easy_perform(curl_temp);
+		
+		if (res != CURLE_OK) 
 		{
-			curl_off_t size;
-			res = Kurl_easy_getinfo(curl_temp, CURLINFO_CONTENT_LENGTH_DOWNLOAD_T, &size);
-            if (res == CURLE_OK && size >= 0) 
-			{
-                file_size = (int64_t)size;
-                if (flagdebug3) 
-					myprintf("41291: remote file size %s bytes\n", migliaia(file_size));
-            }
-        } 
+			if (flagdebug3) 
+				myprintf("41297! Remote file not found or error: %s\n", Kurl_easy_strerror(res));
+			Kurl_easy_cleanup(curl_temp);
+			return -1;
+		}
+		
+		// Il file esiste, ora proviamo a ottenere la dimensione
+		curl_off_t size = -1;
+		res = Kurl_easy_getinfo(curl_temp, CURLINFO_CONTENT_LENGTH_DOWNLOAD_T, &size);
+		
+		if (res == CURLE_OK && size >= 0) 
+		{
+			// Abbiamo ottenuto la dimensione direttamente
+			if (flagdebug3) 
+				myprintf("41291: remote file size %s bytes (via CURLINFO)\n", migliaia((int64_t)size));
+			Kurl_easy_cleanup(curl_temp);
+			return (int64_t)size;
+		}
+		
+		// Seconda fase: se non riusciamo a ottenere la dimensione, 
+		// facciamo un download completo per contare i bytes
+		if (flagdebug3) 
+			myprintf("41285: CURLINFO failed, trying full download to count bytes\n");
+		
+		struct FileInfo info = {0, false};
+		
+		// Reset delle opzioni per il download completo
+		Kurl_easy_setopt(curl_temp, CURLOPT_NOBODY, 0L);  // Abilita il download del corpo
+		Kurl_easy_setopt(curl_temp, CURLOPT_WRITEFUNCTION, count_bytes_callback);
+		Kurl_easy_setopt(curl_temp, CURLOPT_WRITEDATA, &info);
+		
+		res = Kurl_easy_perform(curl_temp);
+		
+		int64_t file_size = -1;
+		if (res == CURLE_OK) 
+		{
+			file_size = info.size;  // Può essere 0 per file vuoti
+			if (flagdebug3) 
+				myprintf("41291: remote file size %s bytes (via download)\n", migliaia(file_size));
+		} 
 		else 
 		{
-            if (flagdebug3) 
-				myprintf("41297! remotefile not found or error : %s\n", Kurl_easy_strerror(res));
-        }
-        
-        Kurl_easy_cleanup(curl_temp);
-        return file_size;
-    }
+			if (flagdebug3) 
+				myprintf("41299! Error during file download: %s\n", Kurl_easy_strerror(res));
+		}
+		
+		Kurl_easy_cleanup(curl_temp);
+		return file_size;
+	}
     
 	
 	bool karica(const std::string& local_file, const std::string& remote_file, bool force) 
@@ -38441,7 +38728,6 @@ static bool loadLibrary()
 
 		if (flagdebug3) 
 			myprintf("41315: karica %s -> %s (force: %s)\n", local_file.c_str(), remote_file.c_str(), force ? "true" : "false");
-		
 		
 		// Ottieni dimensione file locale
 		int64_t local_size = prendidimensionefile(local_file.c_str());
@@ -38633,63 +38919,78 @@ static bool loadLibrary()
         return true;
     }
     
-	
+	struct Range 
+	{
+		curl_off_t 	start;
+		curl_off_t 	end;
+		std::string file;
+	};	
 	bool down3(int64_t i_remote_size, const std::string& i_remote, const std::string& i_file1, const std::string& i_file2, const std::string& i_file3)
 	{
-        if (!curl) 
+		if (!curl) 
 		{
-            myprintf("41721! No curl in down3\n");
+			myprintf("41721! No curl in down3\n");
 			return false;
-        }
-
-		struct Range 
-		{
-			curl_off_t 	start;
-			curl_off_t 	end;
-			std::string file;
-		};
+		}
 
 		std::vector<Range> ranges; 
-
 		if (i_remote_size >= 65536) 
 		{
 			if (flagdebug3) 
 				myprintf("41738: File >= 64KB. 3 chunks\n");
-			ranges = 	{
-							{0, 16383, i_file1},
-							{i_remote_size / 2, i_remote_size / 2 + 16383, i_file2},
-							{i_remote_size - 16384, i_remote_size - 1, i_file3}
-						};
+			
+			Range range1;
+			range1.start = 0;
+			range1.end = 16383;
+			range1.file = i_file1;
+			ranges.push_back(range1);
+			
+			Range range2;
+			range2.start = i_remote_size / 2;
+			range2.end = i_remote_size / 2 + 16383;
+			range2.file = i_file2;
+			ranges.push_back(range2);
+			
+			Range range3;
+			range3.start = i_remote_size - 16384;
+			range3.end = i_remote_size - 1;
+			range3.file = i_file3;
+			ranges.push_back(range3);
 		} 
 		else 
 		{
 			if (flagdebug3) 
 				myprintf("41544: debug: $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$ File %s  %s < 64KB. One-chunk download\n",i_remote.c_str(),migliaia(i_remote_size));
 			if (i_remote_size > 0) 
-				ranges.push_back({0, i_remote_size - 1, i_file1});
+			{
+				Range range;
+				range.start = 0;
+				range.end = i_remote_size - 1;
+				range.file = i_file1;
+				ranges.push_back(range);
+			}
 		}
-    
+
+
 		CURL* curl_download = Kurl_easy_duphandle(curl);
 		if (!curl_download) 
 		{
 			myprintf("41756! impossible duphandle down3\n");
 			return false;
 		}
-
 		char url[1024];
 		snprintf(url, sizeof(url),"sftp://%s:%d%s", host.c_str(), port, i_remote.c_str());
 		Kurl_easy_setopt(curl_download, CURLOPT_URL, url);
 		Kurl_easy_setopt(curl_download, CURLOPT_WRITEFUNCTION, write_file_callback);
 		Kurl_easy_setopt(curl_download, CURLOPT_XFERINFOFUNCTION, download_progress_callback);
 		Kurl_easy_setopt(curl_download, CURLOPT_NOPROGRESS, 0L);
-
 		bool success = true;
-
-		for (const auto& range : ranges) 
+		for (size_t i = 0; i < ranges.size(); i++) 	
 		{
+			const Range& range = ranges[i];
 			if (flagdebug3) 
 				myprintf("41771: Download range: %s -> %s (bytes %s-%s)\n",
-								  i_remote.c_str(), range.file.c_str(), migliaia(range.start), migliaia2(range.end));
+                          i_remote.c_str(), range.file.c_str(), migliaia(range.start), migliaia2(range.end));
 
 			// Validazione range
 			if (range.start < 0 || range.end < 0 || range.start >= i_remote_size || range.end >= i_remote_size || range.start > range.end) 
@@ -38699,7 +39000,6 @@ static bool loadLibrary()
 				success = false;
 				break;
 			}
-
 			FILE* file = fopen(range.file.c_str(), "wb");
 			if (!file) 
 			{
@@ -38707,7 +39007,6 @@ static bool loadLibrary()
 				success = false;
 				break;
 			}
-
 			sftp_downloaddata download_data;
 			download_data.file 					= file;
 			download_data.total_size 			= i_remote_size;
@@ -38717,18 +39016,14 @@ static bool loadLibrary()
 			download_data.start_offset 			= range.start;
 			download_data.end_offset 			= range.end;
 			download_data.local_existing_size 	= 0; // No resume mode for these chunks
-
 			Kurl_easy_setopt(curl_download, CURLOPT_WRITEDATA, file);
 			std::string rangeStr = std::to_string(range.start) + "-" + std::to_string(range.end);
 			Kurl_easy_setopt(curl_download, CURLOPT_RANGE, rangeStr.c_str());
 			if (flagdebug3) 
 				myprintf("41805: Range range: %s\n", rangeStr.c_str());
-
 			Kurl_easy_setopt(curl_download, CURLOPT_PROGRESSDATA, &download_data);
-
 			CURLcode res = Kurl_easy_perform(curl_download);
 			fclose(file);
-
 			if (res != CURLE_OK) 
 			{
 				myprintf("41814! Error download range %s: %s\n", range.file.c_str(), Kurl_easy_strerror(res));
@@ -38736,96 +39031,109 @@ static bool loadLibrary()
 				success = false;
 				break;
 			}
-
 			if (flagdebug3) 
 				myprintf("41821: Download chunk completated: %s\n", range.file.c_str());
 		}
-
 		Kurl_easy_cleanup(curl_download);
 		return success;
 	}
-
-
-
     // Crea directory remota ricorsivamente
-    bool sftpmkdir(const std::string& i_remote) 
+	bool sftpmkdir(const std::string& i_remote) 
 	{
-	    if (!curl) 
+		if (!curl) 
 		{
-            myprintf("41836! No curl in sftpmkdir\n");
+			myprintf("41836! No curl in sftpmkdir\n");
 			return false;
-        }
-
+		}
 		if (flagdebug3) 
 			myprintf("41841: making directory %s\n", i_remote.c_str());
-        
-        // Separa il percorso in componenti
-        std::vector<std::string> path_components;
-        std::string current_path = i_remote;
-        
-        // Normalizza il percorso (rimuovi / finale se presente)
-        if (!current_path.empty() && current_path.back() == '/') 
-            current_path.pop_back();
-        
-        // Dividi il percorso
-        size_t pos = 0;
-        while ((pos = current_path.find('/', pos)) != std::string::npos) 
+		
+		std::string current_path = i_remote;
+		
+		// Normalizza il percorso (rimuovi / finale se presente)
+		if (!current_path.empty() && current_path.back() == '/') 
+			current_path.pop_back();
+		
+		// Crea ogni directory nel percorso incrementalmente
+		std::string cumulative_path;
+		size_t start = 0;
+		
+		// Se il percorso inizia con /, inizia dalla root
+		if (!current_path.empty() && current_path[0] == '/') 
 		{
-            if (pos > 0) 
-			{ // Evita stringhe vuote
-                path_components.push_back(current_path.substr(0, pos));
-            }
-            pos++;
-        }
-        // Aggiungi l'ultimo componente
-        if (!current_path.empty()) 
-		    path_components.push_back(current_path);
-        
-        // Crea ogni directory nel percorso
-        for (size_t i = 0; i < path_components.size(); i++) 
+			cumulative_path = "";
+			start = 1;  // Salta il primo '/'
+		}
+		
+		size_t pos = start;
+		while (pos <= current_path.length()) 
 		{
-            std::string dir_to_create = path_components[i];
-            if (!dir_to_create.empty() && dir_to_create[0] != '/') 
-			    dir_to_create = "/" + dir_to_create;
-            
-            if (flagdebug3) 
-				myprintf("41873: Attempt making : %s\n", dir_to_create.c_str());
-            
-            CURL* curl_mkdir = Kurl_easy_duphandle(curl);
-            if (!curl_mkdir) 
+			// Trova il prossimo '/' o la fine della stringa
+			size_t next_slash = current_path.find('/', pos);
+			if (next_slash == std::string::npos) 
+				next_slash = current_path.length();
+			
+			// Se abbiamo trovato un componente
+			if (next_slash > pos) 
 			{
-                myprintf("41878! impossible duplicating sftpmkdir\n");
-                return false;
-            }
-            
-            char url[1024];
-            snprintf(url, sizeof(url),"sftp://%s:%d%s/", host.c_str(), port, dir_to_create.c_str());
-            
-            Kurl_easy_setopt(curl_mkdir, CURLOPT_URL, url);
-            Kurl_easy_setopt(curl_mkdir, CURLOPT_FTP_CREATE_MISSING_DIRS, CURLFTP_CREATE_DIR);
-            Kurl_easy_setopt(curl_mkdir, CURLOPT_NOBODY, 1L);
-            
-            CURLcode res = Kurl_easy_perform(curl_mkdir);
-            Kurl_easy_cleanup(curl_mkdir);
-            
-            if (res != CURLE_OK) 
-			{
-                // Potrebbe già esistere, proviamo a continuare
-                if (flagdebug3) 
-					myprintf("41896: Directory %s: %s (alredy existent?)\n", 
-                                     dir_to_create.c_str(), Kurl_easy_strerror(res));
-            } 
-			else 
-			{
-                if (flagdebug) 
-					myprintf("41902: Directory %s succesfully created\n", dir_to_create.c_str());
-            }
-        }
-        
-        if (flagdebug3) 
+				std::string component = current_path.substr(pos, next_slash - pos);
+				
+				// Costruisci il percorso incrementale
+				if (cumulative_path.empty()) 
+					cumulative_path = "/" + component;
+				else 
+					cumulative_path += "/" + component;
+				
+				if (flagdebug3) 
+					myprintf("41873: Attempt making : %s\n", cumulative_path.c_str());
+				
+				CURL* curl_mkdir = Kurl_easy_duphandle(curl);
+				if (!curl_mkdir) 
+				{
+					myprintf("41878! impossible duplicating sftpmkdir\n");
+					return false;
+				}
+				
+				// Per SFTP usa CURLOPT_QUOTE con mkdir, non CURLOPT_FTP_CREATE_MISSING_DIRS
+				char mkdir_command[1024];
+				snprintf(mkdir_command, sizeof(mkdir_command), "mkdir %s", cumulative_path.c_str());
+				
+				struct curl_slist* quote_list = NULL;
+				quote_list = Kurl_slist_append(quote_list, mkdir_command);
+				
+				char url[1024];
+				snprintf(url, sizeof(url),"sftp://%s:%d/", host.c_str(), port);
+				
+				Kurl_easy_setopt(curl_mkdir, CURLOPT_URL, url);
+				Kurl_easy_setopt(curl_mkdir, CURLOPT_QUOTE, quote_list);
+				Kurl_easy_setopt(curl_mkdir, CURLOPT_NOBODY, 1L);
+				
+				CURLcode res = Kurl_easy_perform(curl_mkdir);
+				
+				Kurl_slist_free_all(quote_list);
+				Kurl_easy_cleanup(curl_mkdir);
+				
+				if (res != CURLE_OK) 
+				{
+					// Potrebbe già esistere, proviamo a continuare
+					if (flagdebug3) 
+						myprintf("41896: Directory %s: %s (already existent?)\n", 
+								 cumulative_path.c_str(), Kurl_easy_strerror(res));
+				} 
+				else 
+				{
+					if (flagdebug) 
+						myprintf("41902: Directory %s successfully created\n", cumulative_path.c_str());
+				}
+			}
+			
+			pos = next_slash + 1;
+		}
+		
+		if (flagdebug3) 
 			myprintf("41907: mkdir done\n");
-        return true;
-    }
+		return true;
+	}
     
     // Cancella file remoto
     bool sftpdeletefile(const std::string& i_remotefile) 
@@ -38877,150 +39185,108 @@ static bool loadLibrary()
     }
 
 // Struttura per catturare l'output
-struct WriteData {
-    std::string data;
-};
+	struct WriteData 
+	{
+		std::string data;
+	};
 
 // Callback per catturare l'output
-static size_t WriteCallback(void* contents, size_t size, size_t nmemb, WriteData* userdata) {
-    size_t totalSize = size * nmemb;
-    userdata->data.append((char*)contents, totalSize);
-    return totalSize;
-}
+	static size_t WriteCallback(void* contents, size_t size, size_t nmemb, WriteData* userdata) 
+	{
+		size_t totalSize = size * nmemb;
+		userdata->data.append((char*)contents, totalSize);
+		return totalSize;
+	}
 
 	bool check_ssh_support() 
 	{
-    curl_version_info_data* version_info = curldll.my_version_info(CURLVERSION_NOW);
-    
-    myprintf("38765: libcurl version: %s\n", version_info->version);
-    myprintf("38766: Supported protocols: ");
-    
-    bool ssh_supported = false;
-    for (int i = 0; version_info->protocols[i]; i++) 
-	{
-        myprintf("%s ", version_info->protocols[i]);
-        if (strcmp(version_info->protocols[i], "ssh") == 0) 
-		    ssh_supported = true;
-    }
-    myprintf("\n");
-    
-    if (!ssh_supported) 
-	{
-        myprintf("38779! SSH protocol not supported in this libcurl build!\n");
-        return false;
-    }
-    
-    myprintf("SSH protocol is supported\n");
-    return true;
-}
-
-bool xremote_command(const std::string& command, std::string& output) {
-    if (!curl) {
-        myprintf("38747! No curl in xremote_command\n");
-        return false;
-    }
-    
-    if (flagdebug3) 
-        myprintf("41923: executing remote command: %s\n", command.c_str());
-    
-    CURL* curl_command = Kurl_easy_duphandle(curl);
-    if (!curl_command) {
-        myprintf("41932: cannot duplicate xremote_command\n");
-        return false;
-    }
-    
-    // Struttura per catturare l'output
-    WriteData writeData;
-    
-    char url[1024];
-    snprintf(url, sizeof(url), "sftp://%s:%d/", host.c_str(), port);
-    
-    Kurl_easy_setopt(curl_command, CURLOPT_URL, url);
-    
-    // Configura il callback per catturare l'output
-    Kurl_easy_setopt(curl_command, CURLOPT_WRITEFUNCTION, WriteCallback);
-    Kurl_easy_setopt(curl_command, CURLOPT_WRITEDATA, &writeData);
-    
-    // Usa QUOTE per eseguire il comando
-    struct curl_slist* commands = NULL;
-    commands = Kurl_slist_append(commands, command.c_str());
-    Kurl_easy_setopt(curl_command, CURLOPT_QUOTE, commands);
-    
-    // Non usare NOBODY se vuoi catturare l'output
-    Kurl_easy_setopt(curl_command, CURLOPT_NOBODY, 0L);
-    
-    CURLcode res = Kurl_easy_perform(curl_command);
-    
-    Kurl_slist_free_all(commands);
-    Kurl_easy_cleanup(curl_command);
-    
-    if (res != CURLE_OK) {
-        myprintf("31951: Error xcommand %s\n", Kurl_easy_strerror(res));
-        return false;
-    }
-    
-    output = writeData.data;
-    
-    if (flagdebug3) 
-        myprintf("41953: remote command OK, output: %s\n", output.c_str());
-    
-    return true;
-}
-
-// Funzione specifica per md5sum
-bool xremote_md5sum(const std::string& pattern, std::string& md5_output) {
-    std::string command = "md5sum " + pattern;
-    return xremote_command(command, md5_output);
-}
-/*
-    bool xremote(const std::string& i_remotefile) 
-	{
-        if (!curl) 
+		curl_version_info_data* version_info = curldll.my_version_info(CURLVERSION_NOW);
+		
+		myprintf("38765: libcurl version: %s\n", version_info->version);
+		myprintf("38766: Supported protocols: ");
+		
+		bool ssh_supported = false;
+		for (int i = 0; version_info->protocols[i]; i++) 
 		{
-            myprintf("38747! No curl in xremote\n");
+			myprintf("%s ", version_info->protocols[i]);
+			if (strcmp(version_info->protocols[i], "ssh") == 0) 
+				ssh_supported = true;
+		}
+		myprintf("\n");
+		
+		if (!ssh_supported) 
+		{
+			myprintf("38779! SSH protocol not supported in this libcurl build!\n");
 			return false;
-        }
-        
-        if (flagdebug3) 
-			myprintf("41923: executing remote file: %s\n", i_remotefile.c_str());
-        
-        CURL* curl_command = Kurl_easy_duphandle(curl);
-        if (!curl_command) 
-		{
-            myprintf("41932: cannot duplicate xremote\n");
-            return false;
-        }
-        
-        char url[1024];
-        snprintf(url, sizeof(url),"sftp://%s:%d%s", host.c_str(), port, i_remotefile.c_str());
-        
-        Kurl_easy_setopt(curl_command, CURLOPT_URL, url);
-        Kurl_easy_setopt(curl_command, CURLOPT_QUOTE, NULL);
-        
-        // Usa POSTQUOTE per eliminare il file dopo la connessione
-        struct curl_slist* commands 	= NULL;
-        std::string rm_command 			= i_remotefile;
-        commands 						= Kurl_slist_append(commands, rm_command.c_str());
-        Kurl_easy_setopt(curl_command, CURLOPT_POSTQUOTE, commands);
-        
-        Kurl_easy_setopt(curl_command, CURLOPT_NOBODY, 1L);
-        CURLcode res = Kurl_easy_perform(curl_command);
-        
-        Kurl_slist_free_all(commands);
-        Kurl_easy_cleanup(curl_command);
-        
-        if (res != CURLE_OK) 
-		{
-            myprintf("31951: Error xcommand %s\n", Kurl_easy_strerror(res));
-            return false;
-        }
-        
-        if (flagdebug3) 
-			myprintf("41953: remote command OK\n");
-        return true;
-    }
-*/
+		}
+		
+		myprintf("SSH protocol is supported\n");
+		return true;
+	}
 
+	bool xremote_command(const std::string& command, std::string& output) 
+	{
+		if (!curl) 
+		{
+			myprintf("38747! No curl in xremote_command\n");
+			return false;
+		}
+		
+		if (flagdebug3) 
+			myprintf("41923: executing remote command: %s\n", command.c_str());
+		
+		CURL* curl_command = Kurl_easy_duphandle(curl);
+		if (!curl_command) 
+		{
+			myprintf("41932: cannot duplicate xremote_command\n");
+			return false;
+		}
+		
+		// Struttura per catturare l'output
+		WriteData writeData;
+		
+		char url[1024];
+		snprintf(url, sizeof(url), "sftp://%s:%d/", host.c_str(), port);
+		
+		Kurl_easy_setopt(curl_command, CURLOPT_URL, url);
+		
+		// Configura il callback per catturare l'output
+		Kurl_easy_setopt(curl_command, CURLOPT_WRITEFUNCTION, WriteCallback);
+		Kurl_easy_setopt(curl_command, CURLOPT_WRITEDATA, &writeData);
+		
+		// Usa QUOTE per eseguire il comando
+		struct curl_slist* commands = NULL;
+		commands = Kurl_slist_append(commands, command.c_str());
+		Kurl_easy_setopt(curl_command, CURLOPT_QUOTE, commands);
+		
+		// Non usare NOBODY se vuoi catturare l'output
+		Kurl_easy_setopt(curl_command, CURLOPT_NOBODY, 0L);
+		
+		CURLcode res = Kurl_easy_perform(curl_command);
+		
+		Kurl_slist_free_all(commands);
+		Kurl_easy_cleanup(curl_command);
+		
+		if (res != CURLE_OK) 
+		{
+			myprintf("31951: Error xcommand %s\n", Kurl_easy_strerror(res));
+			return false;
+		}
+		
+		output = writeData.data;
+		
+		if (flagdebug3) 
+			myprintf("41953: remote command OK, output: %s\n", output.c_str());
+		
+		return true;
+	}
+
+	// Funzione specifica per md5sum
+	bool xremote_md5sum(const std::string& pattern, std::string& md5_output) 
+	{
+		std::string command = "md5sum " + pattern;
+		return xremote_command(command, md5_output);
+	}
 
 	bool listremotedir(const std::string& i_remote, std::vector<sftpfileinfo>* o_filearray, const std::string& filter = "") 
 	{
@@ -39092,16 +39358,12 @@ bool xremote_md5sum(const std::string& pattern, std::string& md5_output) {
 	}
 
 	bool sftp_down3parallela		(std::vector<sftpget3>& file_list, int i_thread);
-
 								
 	bool sftp_rsync	(	const 	std::vector<std::string>& local_files, 
 										const 	std::string& remote_path, 
 										bool 	force_flag, 
 										int 	i_thread);
-		
 };
-
-
 
 // Strutture dati per il threading
 struct sftp_rsync_thread_data 
@@ -39125,6 +39387,7 @@ struct sftp_rsync_thread_data
     double 							current_speed;
     enum { SFTP_IDLE, SFTP_UPLOAD, SFTP_ERROR, SFTP_DONE } status;
 	int64_t							resume_from;
+	int 							ultima_percentuale;
     std::string status_message;
     
     sftp_rsync_thread_data() : 
@@ -39142,7 +39405,8 @@ struct sftp_rsync_thread_data
 	last_update_time	(0), 
 	current_speed		(0.0),
     status				(SFTP_IDLE),
-	resume_from(0)	{}
+	resume_from(0),
+	ultima_percentuale(0)	{}
 };
 
 struct sftp_rsync_progress_data 
@@ -39208,22 +39472,25 @@ static void* sftp_rsync_worker_thread(void* arg)
 	{
         std::string current_file;
         
-        // Prendi il prossimo file dalla coda
-		{
-			std::unique_lock<std::mutex> lock(*(data->queue_mutex));
-			data->queue_cv->wait(lock, [data] {	return !data->file_queue->empty() || *(data->should_stop); });
-			
-			if (*(data->should_stop)) 
-				break;
-			
-			if (!data->file_queue->empty()) 
-			{
-				current_file = data->file_queue->front();
-				data->file_queue->pop();
-			} 
-			else 
-				continue;
-		}
+        {
+            std::unique_lock<std::mutex> lock(*(data->queue_mutex));
+            
+            // Sostituisci la lambda con un loop esplicito
+            while (data->file_queue->empty() && !*(data->should_stop)) {
+                data->queue_cv->wait(lock);
+            }
+            
+            if (*(data->should_stop)) 
+                break;
+            
+            if (!data->file_queue->empty()) 
+            {
+                current_file = data->file_queue->front();
+                data->file_queue->pop();
+            } 
+            else 
+                continue;
+        }
         data->current_file = current_file;
 		
         data->status 				= sftp_rsync_thread_data::SFTP_UPLOAD;
@@ -39231,6 +39498,7 @@ static void* sftp_rsync_worker_thread(void* arg)
         data->last_update_time 		= data->thread_start_time;
         data->current_uploaded 		= 0;
         data->current_speed 		= 0.0;
+        data->ultima_percentuale 	= 0;
         
         // Verifica se il file locale esiste
         if (!fileexists(current_file)) 
@@ -39262,22 +39530,31 @@ static void* sftp_rsync_worker_thread(void* arg)
         int64_t remote_size = 0;
         int64_t resume_from = 0;
         
-        if (!data->force_flag) 
+		if (!data->force_flag) 
 		{
-            remote_size = data->sftp_instance->remotegetfilesize(remote_file);
-            if (remote_size > 0) 
+			remote_size = data->sftp_instance->remotegetfilesize(remote_file);
+			
+			myprintf("DEBUG3: ********************************* %d %s\n", remote_size, remote_file.c_str());
+
+			// Se remote_size è -1, il file non esiste, procedi con upload completo
+			if (remote_size == -1) {
+				///fikoremote_size = 0;  // Tratta come file inesistente
+				resume_from = 0;
+			}
+			else if (remote_size > 0) 
 			{
-                if (remote_size >= local_size) 
+				if (remote_size >= local_size) 
 				{
-                    // File già completo
-                    data->status = sftp_rsync_thread_data::SFTP_DONE;
-                    data->status_message = "Already done";
-                    continue;
-                } 
-				else     // Resume upload
-                    resume_from = remote_size;
-            }
-        }
+					data->status = sftp_rsync_thread_data::SFTP_DONE;
+					data->status_message = "Already done";
+					continue;
+				} 
+				else 
+				{
+					resume_from = remote_size;
+				}
+			}
+		}
 		data->resume_from=resume_from;
         // Apri file locale
         FILE* file = fopen(current_file.c_str(), "rb");
@@ -39397,7 +39674,8 @@ static void sftp_rsync_update_display(sftp_rsync_progress_data* progress)
     
 	if (ismultithread)
 		gotoxy(0, 1);
-    		
+    
+	
     for (size_t i = 0; i < progress->threads.size(); ++i) 
 	{
         sftp_rsync_thread_data* thread = progress->threads[i];
@@ -39431,21 +39709,55 @@ static void sftp_rsync_update_display(sftp_rsync_progress_data* progress)
 		
 		total_uploaded+=thread->current_uploaded;
 		
-        myprintf("#%02d [%7s] %12s ETA:%02d:%02d:%02d =>%12s (%12s @%12s/s) | %s",
+		  double percentuale = ((double)remaining / (thread->current_file_size + 1)) * 100.0;
+		int percentuale_intera = (int)(percentuale); // Percentuale completata (100 - rimanente)
+
+
+if ((percentuale_intera % 5 == 0) && (thread->ultima_percentuale != percentuale_intera)) 
+{
+	        thread->ultima_percentuale = percentuale_intera; // Aggiorna l'ultima percentuale
+  
+ myprintf("#%02d [%7s] %03d%% %12s ETA:%02d:%02d:%02d | %12s @%12s/s | %s",
                  thread->thread_id,
                  status_str,
+				 percentuale_intera,
 				 tohuman(remaining),
 				 eta_hours, eta_minutes, eta_seconds,
-                 tohuman2(thread->current_file_size),
+                 ///tohuman2(thread->current_file_size),
                  tohuman3(thread->current_uploaded),
                  tohuman4((int64_t)thread->current_speed),
                  extractfilename(thread->current_file).c_str());
+} 
+else 
+{
+ printf("#%02d [%7s] %03d%% %12s ETA:%02d:%02d:%02d | %12s @%12s/s | %s",
+                 thread->thread_id,
+                 status_str,
+				 percentuale_intera,
+				 tohuman(remaining),
+				 eta_hours, eta_minutes, eta_seconds,
+                 ///tohuman2(thread->current_file_size),
+                 tohuman3(thread->current_uploaded),
+                 tohuman4((int64_t)thread->current_speed),
+                 extractfilename(thread->current_file).c_str());
+}
 		color_restore();
         eol();
+if ((percentuale_intera % 5 == 0) && (thread->ultima_percentuale != percentuale_intera)) 
+{
 		if (ismultithread)
 			myprintf("\n");
 		else
 			myprintf("\r");
+}
+else
+{
+		if (ismultithread)
+			printf("\n");
+		else
+			printf("\r");
+
+}
     }
 
 	if (ismultithread)
@@ -39509,9 +39821,13 @@ bool zpaqfranzsftp2::sftp_rsync(const std::vector<std::string>& local_files, con
 	bool should_stop 			= false;
 	
 	// Popola la coda con i file
+	for (std::vector<std::string>::const_iterator it = local_files.begin(); 
+     it != local_files.end(); ++it) 
+    file_queue.push(*it);
+/*
 	for (const auto& file : local_files) 
 		file_queue.push(file);
-	
+*/	
 	// Crea struttura progresso
 	sftp_rsync_progress_data progress;
 	progress.total_files 		= (int)local_files.size();
@@ -39560,8 +39876,7 @@ bool zpaqfranzsftp2::sftp_rsync(const std::vector<std::string>& local_files, con
 		restoreConsole();
 	}
 	else
-		myprintf("02525: Upload one file at time (single thread)\n");
-	
+		myprintf("VERBOSE: Upload one file at time (single thread)\n");
 	// Loop di monitoraggio
 	while (!should_stop) 
 	{
@@ -39971,6 +40286,7 @@ private:
 	int append();						// anti-ramsomware (slow)
 	int multisomething();            	// extract/test with "*"
 	int setpassword();					// set or change password
+	int checkpassword();				// check if password is OK
 	int extractw();            			// chunked-extract, return 1 if error else 0
 	int info();							// wrap for list
 	int findj();						// find files
@@ -40219,6 +40535,7 @@ public:
 	int 						sftp_doverify();
 	int 						sftp_domd5();
 	int 						sftp_doinfo();
+	int							sftp_domkdir();
 	
 #endif
 
@@ -40233,7 +40550,9 @@ public:
 	int 		comparefilelists(const std::vector<DTMap::iterator>& externalfilelist,
                                  const std::vector<DTMap::iterator>& internalfilelist,
 								 DTMap&			thedt);
-
+#ifdef SFTP
+	int				cloud();
+#endif
 	
 };
 
@@ -42915,7 +43234,7 @@ public:
     if (f && p>=end) {
       p=0;
 	  
-      end=fread(unzBuf, 1, BUFSIZE, f); // Fake warning (unix.Stream)
+      end=fread(unzBuf, 1, BUFSIZE, f); // NOLINT(unix.Stream)
       if (aes) aes->encrypt(unzBuf, end, offset);
     }
     if (p>=end) return -1;
@@ -42925,6 +43244,17 @@ public:
   // Return number of bytes read
   uint64_t tell() {return offset;}
   int64_t getfilesize() {return filesize;}
+  ~unzInputFile() 
+  {
+    close();
+  }
+  void close() 
+  {
+    if (f) {
+      fclose(f);
+      f = nullptr;
+    }
+  }
 };
 // Open input. Decrypt with key.
 void unzInputFile::open(const char* filename, const char* key) {
@@ -44303,8 +44633,15 @@ string help_work(bool i_usage,bool i_example)
 		moreprint("      resetacl           Revert Windows' ACL to administrators");
 #endif	
         moreprint("      devart             Outputs a large ASCII string from input text");
+		moreprint("      devart-red         Outputs a red    large ASCII string from input text");
+		moreprint("      devart-green       Outputs a green  large ASCII string from input text");
+		moreprint("      devart-yellow      Outputs a yellow large ASCII string from input text");
+		moreprint("      devart-cyan        Outputs a cyan   large ASCII string from input text");
+		
         moreprint("      last X             Show last file in X");
         moreprint("      lastfile X         Show last file in X (only filename)");
+
+        moreprint("      getsize X          Show size of X (multiple / wildcard allowed)");
 	}
 	if (i_usage && i_example) { color_yellow(); moreprint("Examples:"); color_restore(); }
 	if (i_example)
@@ -44327,6 +44664,8 @@ string help_work(bool i_usage,bool i_example)
 #endif	
         moreprint("Devart                               : work devart ALL-OK");
         moreprint("Last file name                       : work lastfile z:\\temp\\copia*.zpaq -terse");
+        moreprint("Scary text                           : work devart-red ERROR! -terse");
+        moreprint("Show filesize                        : work getsize zpaqfranz*.cpp /tmp/prova");
 	}
 	return("Multiple commands");
 }
@@ -44347,6 +44686,7 @@ string help_sftp(bool i_usage,bool i_example)
 		moreprint("noun  rsync              Rsync-like local files to remote folder (-ssd)");
 		moreprint("                            -force: do NOT append");
 		moreprint("noun  1on1               Quick compare local files to remote folder (-ssd)");
+		moreprint("noun  mkdir              Create a remote folder");
 		
 		moreprint("+ : -host      A  IPV4 hostname (ex. pippo.ciao.com)");
 		moreprint("+ : -user      B  SFTP username (ex. thesftpuser)");
@@ -44370,9 +44710,100 @@ string help_sftp(bool i_usage,bool i_example)
 		moreprint("1on1           : sftp 1on1   d:\\test* /home/fra    -ssd -host 1.2.3.4 -user k1 -password pippo -port 23");
 		moreprint("Rsync w/limit  : sftp rsync  d:\\test* /home/fra    -ssd -host 1.2.3.4 -user k1 -password pippo -bandwidth 5m");
 		moreprint("ls             : sftp ls     /tmp                       -host 1.2.3.4 -user k1 -ssh theopensshkey.key ");
-		
+		moreprint("Mkdir          : sftp mkdirl /home/franco/pippo         -host 1.2.3.4 -user k1 -ssh theopensshkey.key ");
+	
 	}
 	return("SFTP interface");
+}
+string help_cloud(bool i_usage,bool i_example)
+{
+	if (i_usage)
+	{
+		color_green();
+		moreprint("CMD   cloud              zpaqfranz-to-cloud-via-SFTP");
+		color_restore();
+		moreprint("");
+		color_cyan();
+		moreprint("SFTP REQUIRED:");
+		color_restore();
+		moreprint("+ : -host        A SFTP server hostname          (ex. backup.example.com)");
+		moreprint("+ : -user        B SFTP username                 (ex. backupuser)");
+		moreprint("+ : -remote      C Remote destination path       (ex. /home/backup/archives/)");
+		moreprint("");
+		color_cyan();
+		moreprint("SFTP AUTHENTICATION (choose one):");
+		color_restore();
+		moreprint("+ : -password    D SFTP password                 (ex. mySecretPass123)");
+		moreprint("+ : -ssh         E SSH private key               (ex. ~/.ssh/backup_key)");
+		moreprint("");
+		color_cyan();
+		moreprint("OPTIONAL SETTINGS:");
+		color_restore();
+		color_yellow();
+		moreprint("+ : -key           Enable encryption password    (**RECOMMENDED**)");
+		color_restore();
+		moreprint("+ : -port        F SFTP port                     (ex. 23, default: 22)");
+		moreprint("+ : -bandwidth   G Limit global upload speed     (ex. 1000K)");
+		moreprint("+ : -stat          List changed file name in log (privacy risk)");
+		moreprint("                   Use -mailprivacy for filtered log with totals only");
+		moreprint("+ : -test          Test archive before upload    (time-consuming)");
+		moreprint("+ : -verify        Verify CRC-32 before upload");
+		moreprint("+ : -force         **OVERWRITE** remote archive  (DANGEROUS, needs captcha)");
+		moreprint("+ : -onlyupload    Continue upload only");
+		moreprint("");
+		color_cyan();
+		moreprint("EMAIL NOTIFICATIONS:");
+		color_restore();
+		moreprint("+ : -mailfull    H Full report e-mail            (ex. full@gmail.com)");
+		moreprint("+ : -mailprivacy I Privacy report e-mail         (ex. privacy@gmail.com)");
+		moreprint("+ : -maila       J Email program path            (see docs!)");
+		moreprint("+ : -customer    K Email subject text            (ex. myhomebackup)");
+
+	}
+	if (i_usage && i_example) { color_yellow(); moreprint("Examples:"); color_restore(); }
+	if (i_example)
+	{
+		moreprint("");
+		color_cyan();
+		moreprint("Basic automated backup, hardcoded key:");
+		color_restore();
+		moreprint("cloud u:\\backup.zpaq c:\\data\\*.cpp -host backup.company.com -user backupuser");
+		moreprint(" -password mySFTPpass123 -port 23456 -remote /home/backups/paqqa/ -key pippo");
+		moreprint("");
+		
+		color_cyan();
+		moreprint("Secure verified SSH backup, key prompt:");
+		color_restore();
+		moreprint("cloud u:\\prod.zpaq c:\\server\\*.*  -host secure.example.com -user produser");
+		moreprint(" -ssh ~/.ssh/prod_key -remote /secure/backups/ -test -verify -bandwidth 1m -key");
+		moreprint("");
+		
+		color_cyan();
+		moreprint("Full backup with -stat, dual emails (full and filtered):");
+		color_restore();
+		moreprint("cloud u:\\3.zpaq c:\\zp\\*.cpp  -host theserver.something -user theuser -port 23");
+		moreprint(" -ssh thekey -remote /home/p/z/ -stat -test -verify -key -mailfull f@user.com");
+		moreprint("-mailprivacy privacy@gmail.com -maila c:\\zpaqfranz\\maila2.exe -customer zcloud");
+		moreprint("");
+		
+		color_cyan();
+		moreprint("Resume upload only, no key asked:");
+		color_restore();
+		moreprint("cloud u:\\3.zpaq c:\\zp\\*.cpp  -host theserver.something -user theuser -port 23");
+		moreprint(" -ssh thekey -remote /home/p4/franz/ -onlyupload");
+		moreprint("");
+		
+		color_cyan();
+		moreprint("Maila interface:");
+		color_restore();
+		moreprint("Sends reports by backup status (0 = SUCCESS, other = ERROR)");
+		moreprint("Report types:");
+		moreprint("  -full     Detailed report with filenames        (ex.  personal backups)");
+		moreprint("  -privacy  Filtered report with data totals only (ex. for third parties)");
+		moreprint("Scenario:   Full log to the client (w/files), privacy-filtered to the admin");
+		moreprint("Example: maila2 0 ciao -full pip@user.com z:\\log.txt -privacy mar@it.it z:\\pri.txt");
+	}
+	return("zpaqfranz to cloud (via SFTP)");
 }
 #endif // corresponds to #ifdef (#ifdef SFTP)
 
@@ -44497,6 +44928,8 @@ string help_pause(bool i_usage,bool i_example)
 		moreprint("+ : -pakka        Write less");
 		moreprint("+ : -silent       Write way less");
 		moreprint("+ : -find x       Way for key x");
+		moreprint("+ : -comment y    Change the prompt");
+		
 	}
 	if (i_usage && i_example) { color_yellow(); moreprint("Examples:"); color_restore(); }
 	if (i_example)
@@ -44506,6 +44939,8 @@ string help_pause(bool i_usage,bool i_example)
 		moreprint("Wait for 5 seconds (or key)          : pause -n 5");
 		moreprint("Wait 5 seconds (or key) small output : pause -n 5 -pakka");
 		moreprint("Wait 5 seconds (or key) NO output    : pause -n 5 -pakka -silent");
+		moreprint("Italian                              : pause -comment \"Premi un tasto\" -terse");
+		
 	}
 	return("Halt script execution until timeout expires or keypress");
 }
@@ -44594,9 +45029,7 @@ void print_sub()
 void print_doublequote()
 {
 	color_yellow();
-	moreprint("************ REMEMBER TO USE DOUBLE QUOTES! ************");
-	moreprint("*** -not *.cpp    is bad,    -not \"*.cpp\"    is good ***");
-	moreprint("*** test_???.zpaq is bad,    \"test_???.zpaq\" is good ***");
+	moreprint("REMEMBER: wildcards require double quotes. E.g., \"*.cpp\", \"test_???.zpaq\"");
 	color_restore();
 }
 string help_a(bool i_usage,bool i_example)
@@ -45418,6 +45851,23 @@ string help_rsync(bool i_usage,bool i_example)
 		moreprint("Purge temporary (WET run)            : rsync \\\\nas\\thebackup -kill");
 	}
 	return("Delete rsync's dangling temporary files");
+}
+string help_checkpassword(bool i_usage,bool i_example)
+{
+	if (i_usage)
+	{
+		color_green();
+		moreprint("CMD   checkpassword");
+		moreprint("		             Check if password is OK");
+		color_restore();
+		moreprint("+ : -key X        Use X as password");
+	}
+	if (i_usage && i_example) { color_yellow(); moreprint("Examples:"); color_restore(); }
+	if (i_example)
+	{
+		moreprint("Check if password is pippo           : checkpassword file.zpaq -key pippo");
+	}
+	return("Check password");
 }
 string help_t(bool i_usage,bool i_example)
 {
@@ -46550,6 +47000,7 @@ void Jidac::load_help_map()
 	help_map.insert(std::pair<string, voidhelpfunction>("hash",				help_hasha));
 	help_map.insert(std::pair<string, voidhelpfunction>("utf",				help_utf));
 	help_map.insert(std::pair<string, voidhelpfunction>("rsync",			help_rsync));
+	help_map.insert(std::pair<string, voidhelpfunction>("checkpassword",	help_checkpassword));
 	help_map.insert(std::pair<string, voidhelpfunction>("pause",			help_pause));
 	help_map.insert(std::pair<string, voidhelpfunction>("isopen",			help_isopen));
 	help_map.insert(std::pair<string, voidhelpfunction>("autotest",			help_autotest));
@@ -46574,6 +47025,7 @@ void Jidac::load_help_map()
 #endif
 #ifdef SFTP
 	help_map.insert(std::pair<string, voidhelpfunction>("sftp",				help_sftp));
+	help_map.insert(std::pair<string, voidhelpfunction>("cloud",			help_cloud));
 #endif // corresponds to #ifdef (#ifdef SFTP)
 #if defined(_WIN32)
 	help_map.insert(std::pair<string, voidhelpfunction>("pakka",			help_pakka));
@@ -47246,6 +47698,8 @@ bool Jidac::cli_filesandcommand(const string& i_opt,string i_string,char i_comma
 
 bool Jidac::cli_getkey	(const string& i_opt,string i_string,int argc,const char** argv, int* i_i,string* o_plain,char**	o_password,char*	o_password_string)
 {
+	if (flagonlyupload)
+		return false;
 	if ((argv==NULL) || (i_i==NULL) || (o_plain==NULL) || (o_password_string==NULL))
 	{
 		myprintf("00515: GURU null data\n");
@@ -47698,6 +48152,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 	g_programflags.add(&flagskipzfs,		"-zfs",					"Do NOT ignore .zfs             (default: YES)",	""); //flagskipzfs
 	g_programflags.add(&flagspace,			"-space",				"Do not check space/writeability",					"");
 	g_programflags.add(&flagssd,			"-ssd",					"Reads the files with multithreading from the solid-state drive",												"");
+	g_programflags.add(&flagonlyupload,		"-onlyupload",			"In cloud ... just continue upload",				"");
 	g_programflags.add(&flagnomore,			"-nomore",				"Disable internal 'more' (ex |less)",				"");
 	g_programflags.add(&flagnopid,			"-nopid",				"Do not use pids in backup",				"");
 	g_programflags.add(&flagsalt,			"-salt",				"Fix encryption salt to 0",												"");
@@ -47820,6 +48275,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 	g_sftp_bandwidth	=0;
 	g_sftp_password		="";
 	g_sftp_user			="";
+	g_sftp_remote		="";
 #endif // corresponds to #ifdef (#ifdef SFTP)
 	g_device_fd			=-1;
 	g_device_size		=0;
@@ -48298,6 +48754,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 #endif // corresponds to #if (#if defined(_WIN32))
 	else
 		if ((
+		opt=="checkpassword" 	||
 		opt=="pakka" 			||
 		opt=="ntfs"				||
 		opt=="add" 				||
@@ -48310,6 +48767,9 @@ int Jidac::loadparameters(int argc, const char** argv)
 #ifndef ANCIENT
 		opt=="ls" 				||
 		opt=="tui" 				||
+#endif
+#ifdef SFTP
+		opt=="cloud"				||
 #endif
 		opt=="dump" 			||
 		opt=="collision"		||
@@ -48358,6 +48818,8 @@ int Jidac::loadparameters(int argc, const char** argv)
 				g_optional="zfsadd";
 				command='A';
 			}
+			if (opt=="checkpassword")
+				command='N';
 			if (opt=="mysqldump")
 				command='M';
 			if (opt=="ntfs")
@@ -48380,6 +48842,10 @@ int Jidac::loadparameters(int argc, const char** argv)
 				command='L';
 				flagpakka=true;
 			}
+#ifdef SFTP
+			if (opt=="cloud")
+				command='O';
+#endif
 			if (opt=="pakka")
 				command='.';
 			if (opt=="zfsreceive")
@@ -48565,6 +49031,14 @@ int Jidac::loadparameters(int argc, const char** argv)
 		else if (cli_onlystring	(opt,"-host",				"",				g_sftp_host,	argc,argv,&i,					NULL));
 		else if (cli_onlystring	(opt,"-user",				"",				g_sftp_user,	argc,argv,&i,					NULL));
 		else if (cli_onlystring	(opt,"-password",			"",				g_sftp_password,	argc,argv,&i,					NULL));
+		else if (cli_onlystring	(opt,"-remote",				"",					g_sftp_remote,	argc,argv,&i,					NULL));
+		else if (cli_onlystring	(opt,"-mailfull",			"",					g_sftp_mailfull,	argc,argv,&i,					NULL));
+		else if (cli_onlystring	(opt,"-mailprivacy",		"",					g_sftp_mailprivacy,	argc,argv,&i,					NULL));
+		else if (cli_onlystring	(opt,"-maila",			"",					g_sftp_maila,	argc,argv,&i,					NULL));
+		else if (cli_onlystring	(opt,"-customer",			"",					g_sftp_customer,	argc,argv,&i,					NULL));
+		
+		
+		
 #endif // corresponds to #ifdef (#ifdef SFTP)
 		else if (cli_onlystring	(opt,"-exec",				"",				g_exec,			argc,argv,&i,					NULL));
 		else if (cli_onlystring	(opt,"-exec",				"",				g_exec,			argc,argv,&i,					NULL));
@@ -48610,6 +49084,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 		}
 		else if (cli_getkey		(opt,"-key",												argc,argv,&i,&plainpassword,	&g_password,		g_password_string))
 		{
+	
 			if (flagdebug3)
 			{
 				myprintf("00558: Password        %s\n",	g_password);
@@ -48902,6 +49377,19 @@ int Jidac::loadparameters(int argc, const char** argv)
 		myprintf("00577$ Alternate streams not supported in Windows XP.\n");
 #endif
 
+/// postop
+#ifdef SFTP
+	if (g_sftp_key!="")
+		if (!fileexists(g_sftp_key.c_str()))
+		{
+			if (g_sftp_password!="")
+			{
+				g_sftp_key="";
+				myprintf("49049$ -ssh keyfile does not exists, but -password setted => falling back!\n");
+			}
+		}	
+#endif
+
 	if (flag715)
 	{
 		flagslow			=false;
@@ -49174,8 +49662,10 @@ int Jidac::doCommand()
 	else if (command=='K') return collision(true);
 	else if (command=='L') return last();
 	else if (command=='M') return mysql();
-//N
-//O
+	else if (command=='N') return checkpassword();
+#ifdef SFTP
+	else if (command=='O') return cloud();
+#endif
 //P
 //Q
 	else if (command=='R') return redu();
@@ -54178,6 +54668,30 @@ int Jidac::setpassword()
 	read_archive(NULL,repack.c_str()); /// AND NOW THE MAGIC ONE!
 	return 0;
 }
+int Jidac::checkpassword()
+{
+	archive=getbackupnameifany(archive);
+	if (archive=="")
+	{
+		myprintf("54277! archive cannot be empty!\n");
+		return 2;
+	}
+	
+	InputArchive in(archive.c_str());
+	if (!in.isopen()) 
+	{
+		myprintf("54284! GURU cannot open <<%Z>>\n",archive.c_str());
+		return 2;
+	}
+ 
+  	char s[4]={0};
+	const int nr=in.read(s, 4);
+	int risultato=0;
+	
+	if (nr>0 && memcmp(s, "7kSt", 4) && (memcmp(s, "zPQ", 3) || s[3]<1))
+		risultato=2;
+	return risultato;
+}
 // Extract files from archive. If force is true then overwrite
 // existing files and set the dates and attributes of exising directories.
 // Otherwise create only new files and directories. Return 1 if error else 0.
@@ -57493,6 +58007,35 @@ void my_handler(int s)
 		flagimage=true;
 #endif
 
+	if (argc == 2) 
+	{
+		const char* prefix = "seterrorlevel";
+		size_t prefix_len = strlen(prefix);
+		
+		// Verifica che l'argomento inizi con il prefisso
+		if (strncmp(argv[1], prefix, prefix_len) == 0) 
+		{
+			const char* input = argv[1] + prefix_len;
+			
+			int error_level = 0;
+			int digit_count = 0;
+			
+			// Estrai solo le cifre numeriche, massimo 3
+			while (*input && digit_count < 3) 
+			{
+				if (*input >= '0' && *input <= '9') 
+				{
+					error_level = error_level * 10 + (*input - '0');
+					digit_count++;
+				}
+				input++;
+			}
+			if (digit_count > 0) 
+				return (error_level > 255) ? 255 : error_level;
+		}
+	}
+	
+// Se arriviamo qui, non fare nulla (continua l'esecuzione normale)
 	Jidac jidac;
 	pjidac=&jidac;
 	int risultatoparametri=jidac.loadparameters(argc,argv);
@@ -57503,6 +58046,8 @@ void my_handler(int s)
 	try
 	{
 		errorcode=jidac.doCommand();
+		if (flagignore)
+			errorcode=0; 
 	}
 	catch (std::exception& e)
 	{
@@ -59021,7 +59566,7 @@ void process_file_group(ThreadData* data, const std::vector<int>& file_indices)
         
 		
 		int secondi=(mtime()-g_test_start)/1000;
-		if (!flagnoeta)
+		if ((!flagnoeta) && (!flagpakka))
 			if (secondi!=g_test_seconds)
 			{
 				pthread_mutex_lock(&g_progress_mutex);
@@ -59190,18 +59735,19 @@ void process_file_group(ThreadData* data, const std::vector<int>& file_indices)
 }
 
 // Funzione del thread worker
-void* thread_worker(void* arg) {
+void* thread_worker(void* arg) 
+{
     ThreadData* data = (ThreadData*)arg;
-    
-    uint64_t dalavorare = 0;
-    
     // Calcola il lavoro totale per questo thread
+    /*
+	uint64_t dalavorare = 0;
+    
     for (int j = data->start_index; j < data->end_index; j++) {
         dalavorare += (*data->blocks)[j].crc32size;
     }
-    
+    */
     // Raggruppa i blocchi per filename
-    std::map<std::string, std::vector<int>> file_groups;
+    std::map<std::string, std::vector<int> > file_groups;
     
     for (int i = data->start_index; i < data->end_index; i++) {
         std::string filename = (*data->blocks)[i].filename;
@@ -59209,8 +59755,9 @@ void* thread_worker(void* arg) {
     }
     
     // Processa ogni gruppo di file
-    for (auto& pair : file_groups) {
-        process_file_group(data, pair.second);
+    for (std::map<std::string, std::vector<int> >::iterator it = file_groups.begin(); 
+         it != file_groups.end(); ++it) {
+        process_file_group(data, it->second);
     }
     
     return NULL;
@@ -59388,8 +59935,11 @@ int Jidac::test()
 			int(tid.size()));
 	}
 	else
-		myprintf("01408: 7.15 stage time %10.2f no error detected (RAM ~%s), try CRC-32 (if any)\n",
-	(mtime()-starttest)/1000.0,tohuman((int64_t)(tid.size()*job.maxMemory)));
+	{
+		if (!flagpakka)
+			myprintf("01408: 7.15 stage time %10.2f no error detected (RAM ~%s), try CRC-32 (if any)\n",
+				(mtime()-starttest)/1000.0,tohuman((int64_t)(tid.size()*job.maxMemory)));
+	}
 //// OK now check against CRC32 and the entire World (if any)
 	
 
@@ -59432,20 +59982,24 @@ int Jidac::test()
 	{
 		if (howmanythreads <= 0)
 			howmanythreads = 1;
-		color_green();
-		myprintf("01409: Checking %17s blocks with CRC-32 (%s not-0 bytes) using %d threads\n",
-				 migliaia(g_crc32.size()), migliaia2(dalavorare), howmanythreads);
-		color_restore();
+		if (!flagpakka)
+		{
+			color_green();
+			myprintf("01409: Checking %17s blocks with CRC-32 (%s not-0 bytes) using %d threads\n",
+					 migliaia(g_crc32.size()), migliaia2(dalavorare), howmanythreads);
+			color_restore();
+		}
 		// Raggruppa i blocchi per filename
-		std::map<std::string, std::vector<int>> file_groups;
+		std::map<std::string, std::vector<int> > file_groups;
 		for (size_t i=0; i<g_crc32.size(); i++) 
 			file_groups[g_crc32[i].filename].push_back(i);
 		
 		// Converti in vettore per distribuzione
-		std::vector<std::pair<std::string, std::vector<int>>> files_list;
-		for (auto& pair : file_groups)
-			files_list.push_back(pair);
-
+		std::vector<std::pair<std::string, std::vector<int> > > files_list;
+		///for (auto& pair : file_groups)
+			///files_list.push_back(pair);
+		for (std::map<std::string, std::vector<int> >::iterator it = file_groups.begin();it != file_groups.end(); ++it) 
+			files_list.push_back(*it);
 		// Prepara i thread
 		pthread_t*  threads 		= new pthread_t[howmanythreads];
 		ThreadData* thread_data 	= new ThreadData[howmanythreads];
@@ -59455,17 +60009,23 @@ int Jidac::test()
 		size_t remaining_files 	= files_list.size() % howmanythreads;
 
 		// Crea un vettore di indici per ogni thread
-		std::vector<std::vector<int>> thread_indices(howmanythreads);
+		std::vector<std::vector<int> > thread_indices(howmanythreads);
 
 		size_t file_idx = 0;
 		for (unsigned int t = 0; t < (unsigned)howmanythreads; t++) 
 		{
 			size_t files_for_this_thread = files_per_thread + (t < remaining_files ? 1 : 0);
-			
+			/*
 			for (size_t f = 0; f < files_for_this_thread && file_idx < files_list.size(); f++, file_idx++) 
 				for (int block_idx : files_list[file_idx].second) 
 					thread_indices[t].push_back(block_idx);
-			
+			*/
+			for (size_t f = 0; f < files_for_this_thread && file_idx < files_list.size(); f++, file_idx++) 
+				for (size_t i = 0; i < files_list[file_idx].second.size(); i++) 
+				{
+					int block_idx = files_list[file_idx].second[i];
+					thread_indices[t].push_back(block_idx);
+				}
 			if (!thread_indices[t].empty()) 
 			{
 				thread_data[t].blocks 		= &g_crc32;
@@ -59487,8 +60047,8 @@ int Jidac::test()
 			if (!thread_indices[t].empty()) 
 				pthread_join(threads[t], NULL);
 		
-		
-		myprintf("01413: Block %05uK %16s\r", g_crc32.size() / 1000, tohuman(dalavorare));
+	///	if ((!flagpakka) && (!flagnoeta))
+		///	myprintf("01413: Block %05uK %16s\r", g_crc32.size() / 1000, tohuman(dalavorare));
 				
 		for (int t=0;t<howmanythreads;t++) 
 		{
@@ -59520,7 +60080,8 @@ int Jidac::test()
 	}
 	else // single thread
 	{
-		myprintf("01409: Checking %17s blocks with CRC-32 (%s not-0 bytes)\n",migliaia(g_crc32.size()),migliaia2(dalavorare));
+		if (!flagpakka)
+			myprintf("01409: Checking %17s blocks with CRC-32 (%s not-0 bytes)\n",migliaia(g_crc32.size()),migliaia2(dalavorare));
 	
 		unsigned int i=0;
 		while (i < g_crc32.size())
@@ -59529,7 +60090,7 @@ int Jidac::test()
 	///			myprintf("%08d  size %08d\n", i, g_crc32.size());
 			
 			int secondi=(mtime()-g_test_start)/1000;
-			if (!flagnoeta)
+			if ((!flagpakka) && (!flagnoeta))
 				if (secondi!=g_test_seconds)
 				{
 					myprintf("01410: Block %05uK %16s\r", i / 1000, tohuman(lavorati));
@@ -59674,17 +60235,33 @@ int Jidac::test()
 			i++;
 		}
 	}
-	myprintf("\n");
-	myprintf("01424: CRC-32 time %14.2fs\n",(mtime()-startverify)/1000.0);
-	myprintf("01425: Blocks %19s (%12s)\n",migliaia(dalavorare),migliaia2(g_crc32.size()));
-	myprintf("01426: Zeros  %19s (%12s) %f s\n",migliaia(zeroedblocks),migliaia2(howmanyzero),(g_zerotime/1000.0));
-	myprintf("01427: Total  %19s speed %s/s (%s/s)\n",migliaia(dalavorare+zeroedblocks),migliaia2((int64_t)((dalavorare+zeroedblocks)/((mtime()-startverify+1)/1000.0))),tohuman((int64_t)((dalavorare+zeroedblocks)/((mtime()-startverify+1)/1000.0))));
-	if (checkedfiles>0)
-		myprintf("01428: Checked         : %08d of %08d (zpaqfranz)\n",checkedfiles,total_files);
-	if (uncheckedfiles>0)
+		
+	if (flagwriteonconsole)
 	{
-		myprintf("01429: UNcheck         : %08d of %08d (zpaq 7.15?)\n",uncheckedfiles,total_files);
-			status_0=uncheckedfiles;
+		fprintf(stderr,"\r");
+		fprintf(stderr,"                                                                 \r");
+	}
+	if (flagpakka)
+	{
+		printf("\r");
+		eol();
+		printf("\r");
+	}
+	else
+		myprintf("\n");
+	if (!flagpakka)
+	{
+		myprintf("01424: CRC-32 time %14.2fs\n",(mtime()-startverify)/1000.0);
+		myprintf("01425: Blocks %19s (%12s)\n",migliaia(dalavorare),migliaia2(g_crc32.size()));
+		myprintf("01426: Zeros  %19s (%12s) %f s\n",migliaia(zeroedblocks),migliaia2(howmanyzero),(g_zerotime/1000.0));
+		myprintf("01427: Total  %19s speed %s/s (%s/s)\n",migliaia(dalavorare+zeroedblocks),migliaia2((int64_t)((dalavorare+zeroedblocks)/((mtime()-startverify+1)/1000.0))),tohuman((int64_t)((dalavorare+zeroedblocks)/((mtime()-startverify+1)/1000.0))));
+		if (checkedfiles>0)
+			myprintf("01428: Checked         : %08d of %08d (zpaqfranz)\n",checkedfiles,total_files);
+		if (uncheckedfiles>0)
+		{
+			myprintf("01429: UNcheck         : %08d of %08d (zpaq 7.15?)\n",uncheckedfiles,total_files);
+				status_0=uncheckedfiles;
+		}
 	}
 	if (status_e_hash)
 	myprintf("01430: ERRORS HASH     : %08d (ERROR verifyng hash from disk)\n",status_e_hash);
@@ -59755,6 +60332,9 @@ int Jidac::test()
 		myprintf("01441: Triple ERRORS   : %08d (-crc32 failed against filesystem)\n",triple_error);
 		color_restore();
 	}
+	
+
+
 	status_e = status_e_hash+status_e_crc+status_e_blocks+triple_error;
 	if (status_e)
 	printbar('-');
@@ -65722,7 +66302,7 @@ int Jidac::add()
 	{
 		myprintf("\n");
 		myprintf("02021: QUIT: total size,file/folder count == zero. Already archived/wrong/inaccessible source?\n");
-		return 1;
+		return 0;
 	}
 
 	if (!flagspace)
@@ -67378,7 +67958,13 @@ int Jidac::add()
 	}
 	printbar(' ',false);
 	myprintf("\r");
-		
+	
+	if (flagwriteonconsole)
+	{
+		fprintf(stderr,"\r");
+		fprintf(stderr,"                                                                 \r");
+	}
+
 	if (flagfast)
 	{
 		if (flagverbose)
@@ -68713,7 +69299,6 @@ zfs diff -F
 
 int Jidac::benchmark()
 {
-
 #ifdef _WIN32
 	myprintf("72943: Win32\n");
 	if (iswindowsxp())
@@ -73302,6 +73887,61 @@ bool Jidac::isbackuprunning()
 
 }
 
+// Funzione per controllare se una stringa contiene solo cifre
+bool isAllDigits(const std::string& str) 
+{
+    if (str.empty()) 
+		return false;
+    for (size_t i = 0; i < str.length(); i++) 
+	    if (!std::isdigit(str[i])) 
+		    return false;
+    return true;
+}
+
+std::string processBackupFilename(const std::string& filename) 
+{
+    // Controlla se termina con .zpaq
+    if (filename.length() < 5 || filename.substr(filename.length() - 5) != ".zpaq") 
+	    return filename; // Non è un file .zpaq, restituisce invariato
+    
+    // Rimuove .zpaq per l'analisi
+    std::string withoutExt = filename.substr(0, filename.length() - 5);
+    
+    // Cerca l'ultimo underscore
+    size_t lastUnderscore = withoutExt.find_last_of('_');
+    
+    // Se non trova underscore, restituisce il filename originale
+    if (lastUnderscore == std::string::npos) 
+	    return filename;
+    
+    // Estrae la parte dopo l'underscore
+    std::string afterUnderscore = withoutExt.substr(lastUnderscore + 1);
+    
+    // Controlla se dopo l'underscore ci sono solo numeri
+    if (isAllDigits(afterUnderscore)) 
+	    // Restituisce la parte prima dell'underscore
+        return withoutExt.substr(0, lastUnderscore);
+    
+    // Controlla se dopo l'underscore ci sono esattamente 8 caratteri '?'
+    if (afterUnderscore.length() == 8) 
+	{
+        bool allQuestionMarks = true;
+        for (size_t i = 0; i < 8; i++) 
+            if (afterUnderscore[i] != '?') 
+			{
+                allQuestionMarks = false;
+                break;
+            }
+        if (allQuestionMarks)     // Restituisce la parte prima dell'underscore
+            return withoutExt.substr(0, lastUnderscore);
+
+    }
+    
+    // Non corrisponde a nessun pattern, restituisce il filename originale
+    return filename;
+}
+
+
 int Jidac::testbackup()
 {
 	flagquick=true;
@@ -73310,14 +73950,20 @@ int Jidac::testbackup()
 
 	if (files.size()!=1)
 	{
-		myprintf("02708! estbackup require one file parameter\n");
+		myprintf("02708! testbackup require one file parameter\n");
 		return 2;
 	}
 	if (isjolly(files[0]))
 	{
-		myprintf("02709! Do not use ? for backups\n");
-		return 2;
+		std::string originalName = files[0];
+		std::string processedName = processBackupFilename(originalName);
+
+		if (processedName != originalName) 
+			files[0] = processedName;
+		if (flagdebug)
+			myprintf("73522: Automagical testbackup files[0] <<%s>>\n",files[0].c_str());
 	}
+
 	if (tofiles.size()>1)
 	{
 		myprintf("02710! testbackup require zero or one -to (where are the zpaqs?)\n");
@@ -75296,6 +75942,7 @@ int Jidac::versum()
 
 	printbar(' ');
 	myprintf("\r");
+
 	if (missing.size()>0)
 	{
 		expected_file	-=missing.size();
@@ -75415,12 +76062,16 @@ int Jidac::fastquicktxt()
 			thehashlen	=8;
 		}
 		///myprintf("02929: Test %s of .zpaq against _crc32.txt\n",thehash.c_str());
-		if (!flagads)
-			myprintf("02930: Test %s of .zpaq against _crc32.txt %s\n",thehash.c_str());
-		else
-			myprintf("02931: Test %s of .zpaq against ADS %s\n",thehash.c_str());
+		if (flagverbose)
+		{
+			if (!flagads)
+				myprintf("02930: Test %s of .zpaq against _crc32.txt\n",thehash.c_str());
+			else
+				myprintf("02931: Test %s of .zpaq against ADS\n",thehash.c_str());
+		}
 		
 	}
+
 	DTMap thedt;
 	for (unsigned int i=0;i<files.size();i++)
 		getjollylist(files[i],&thedt);
@@ -75435,7 +76086,8 @@ int Jidac::fastquicktxt()
 	for (DTMap::iterator p=thedt.begin(); p!=thedt.end(); ++p)
 		larghezzain+=prendidimensionefile(p->first.c_str());
 
-	myprintf("02933: Bytes to be checked %s (%s) in files %s\n",migliaia(larghezzain),tohuman(larghezzain),migliaia2(thedt.size()));
+	if (flagverbose)
+		myprintf("02933: Bytes to be checked %s (%s) in files %s\n",migliaia(larghezzain),tohuman(larghezzain),migliaia2(thedt.size()));
 
 	unsigned int	testok		=0;
 	unsigned int	testwarning	=0;
@@ -75494,8 +76146,9 @@ int Jidac::fastquicktxt()
 		
 		if (hashfromtxt.size()!=thehashlen)
 		{
-			myprintf("02943: hash size %d != %d %s\n",hashfromtxt.size(),thehashlen,firstline.c_str());
-			continue;
+			myprintf("02943! hash size %d != %d %s\n",hashfromtxt.size(),thehashlen,firstline.c_str());
+			return 2;
+			///continue;
 		}
 
 		if ((flagfasttxt && flagquick) || (flagquick && flagads))
@@ -75522,35 +76175,70 @@ int Jidac::fastquicktxt()
 		{
 			myprintf("02947: %s: %s %s for file %Z\n",thehash.c_str(),hashreloaded.c_str(),hashfromtxt.c_str(),thezpaq.c_str());
 		}
-		myprintf("02949: ");
+		myprintf("Working: ");
 		if (stringtolower(hashreloaded)==stringtolower(hashfromtxt))
 		{
+			color_green();
 			myprintf("02950: OK %s: ",thehash.c_str());
+			color_restore();
 			testok++;
 		}
 		else
 		{
+			color_red();
 			myprintf("02951: ERROR: reloaded %s vs txt %s ",hashreloaded.c_str(),hashfromtxt.c_str());
+			color_restore();
 			testerror++;
 		}
 		myprintf("%s\n",thezpaq.c_str());
 		///printUTF8(thezpaq.c_str());
 		///myprintf("\n");
 	}
-	printbar('=');
-
-	myprintf("02952: TOTAL  %9s\n",migliaia(thedt.size()));
-	myprintf("02953: OK     %9s\n",migliaia(testok));
-	myprintf("02954$ WARN   %9s\n",migliaia(testwarning));
-	myprintf("02955! ERROR  %9s\n",migliaia(testerror));
-
+	
+	
+	///myprintf("02952: TOTAL  %9s\n",migliaia(thedt.size()));
+	string temp=std::string(migliaia(thedt.size()));
+	
+	string risultatofinale="TOTAL "+temp;
+	
+	if (testok>0)
+	{
+		string temp=migliaia(testok);
+		risultatofinale+=",OK "+temp;
+	}
+	if (testwarning>0)
+	{
+		string temp=migliaia(testwarning);
+		risultatofinale+=", WARN "+temp;
+	}
+	if (testerror>0)
+	{
+		string temp=migliaia(testerror);
+		risultatofinale+=", ERROR "+temp;
+	}
+	
 	if (testwarning>0)
 		if (testerror==0)
+		{
+			color_yellow();
+			myprintf("78802: %s\n",risultatofinale.c_str());
+			color_restore();
 			return 1;
-
+		}
 	if (testerror>0)
+	{
+		color_red();
+		myprintf("78803: %s\n",risultatofinale.c_str());
+		color_restore();
 		return 2;
-
+	}
+	if (testok==thedt.size())
+		if (testok>=1)
+		{
+			color_green();
+			myprintf("78804: %s VERY GOOD\n",risultatofinale.c_str());
+			color_restore();
+		}
 	return 0;
 }
 /*
@@ -80774,7 +81462,7 @@ int Jidac::comparefilelists(const std::vector<DTMap::iterator>& externalfilelist
 	
 	std::string onlyonehash;
 	
-	std::map<std::string, std::vector<std::string>> hasherini;
+	std::map<std::string, std::vector<std::string> > hasherini;
 	vector<string> filecorrotti;
 	vector<string> soloesterni;
 	vector<string> solointerni;
@@ -82309,6 +82997,56 @@ int Jidac::work()
 		} 
 		return 2;
 	}
+	if ((mycommand=="getsize"))
+	{
+		if (files.size()<2)
+		{
+			myprintf("83440: You need at LEAST ONE parameter\n");
+			return 2;
+		}
+		
+		flagskipzfs					=true;  // strip down zfs
+
+		g_bytescanned=0;
+		g_filescanned=0;
+		g_dimensione=0;
+		g_worked=0;
+	
+		for (unsigned i=0; i<files.size(); ++i)
+			scandir(true,edt,files[i].c_str());
+		myprintf("\r");
+		eol();
+		int64_t dimensionetotale=0;
+		int		scritti=0;
+		for (DTMap::iterator a=edt.begin(); a!=edt.end(); ++a)
+		{	
+			if (!isdirectory(a->first))
+			{
+				int64_t dimensione=prendidimensionefile(a->first.c_str());
+				if (dimensione<0)
+				{
+					color_red();
+					myprintf("72637: Cannot find <<%Z>>\n",a->first.c_str());
+					color_restore();
+					return 2;
+				}
+				else
+				{
+					myprintf("72633: Size  %21s (%10s) <<%Z>>\n",migliaia(dimensione),tohuman(dimensione),a->first.c_str());
+					dimensionetotale+=dimensione;
+					scritti++;
+				}
+			}
+		}
+		if (scritti>1)
+		{
+			color_green();
+			myprintf("72631: Total %21s (%10s)\n",migliaia(dimensionetotale),tohuman(dimensionetotale));
+			color_restore();
+		}
+		
+		return 0;
+	}
 
 	if (mycommand=="devart")
 	{
@@ -82316,6 +83054,39 @@ int Jidac::work()
 			printDigitalString(files[i].c_str());
 		return 0;
 	}
+	if (mycommand=="devart-red")
+	{
+		color_red();
+		for (unsigned int i=1;i<files.size();i++)
+			printDigitalString(files[i].c_str());
+		color_restore();
+		return 0;
+	}
+	if (mycommand=="devart-green")
+	{
+		color_green();
+		for (unsigned int i=1;i<files.size();i++)
+			printDigitalString(files[i].c_str());
+		color_restore();
+		return 0;
+	}
+	if (mycommand=="devart-yellow")
+	{
+		color_yellow();
+		for (unsigned int i=1;i<files.size();i++)
+			printDigitalString(files[i].c_str());
+		color_restore();
+		return 0;
+	}
+	if (mycommand=="devart-green")
+	{
+		color_green();
+		for (unsigned int i=1;i<files.size();i++)
+			printDigitalString(files[i].c_str());
+		color_restore();
+		return 0;
+	}
+
 
 
 	if (mycommand=="big")
@@ -85143,8 +85914,12 @@ std::string sftp_get_quick(const std::string& i_remotefile, int64_t& o_filesize,
         myprintf("07809: remotefilesize %s\n", migliaia(o_filesize));
 
     if (o_filesize == -1)
-    {
-        myprintf("07814: cannot get remotefilesize for %s\n", i_remotefile.c_str());
+    {	
+		if (flagverbose)
+			myprintf("07814: cannot get remotefilesize for %s\n", i_remotefile.c_str());
+		else
+			myprintf("07815: no remotefilesize\n");
+		
         return "";
     }
 
@@ -85202,9 +85977,9 @@ std::string sftp_get_quick(const std::string& i_remotefile, int64_t& o_filesize,
         }
         if (flagdebug3)
         {
-            myprintf("07830: Done file 1 %s size %s\n", file1.c_str(), migliaia(prendidimensionefile(file1.c_str())));
-            myprintf("07830: Done file 2 %s size %s\n", file2.c_str(), migliaia(prendidimensionefile(file2.c_str())));
-            myprintf("07830: Done file 3 %s size %s\n", file3.c_str(), migliaia(prendidimensionefile(file3.c_str())));
+            myprintf("07834: Done file 1 %s size %s\n", file1.c_str(), migliaia(prendidimensionefile(file1.c_str())));
+            myprintf("07835: Done file 2 %s size %s\n", file2.c_str(), migliaia(prendidimensionefile(file2.c_str())));
+            myprintf("07839: Done file 3 %s size %s\n", file3.c_str(), migliaia(prendidimensionefile(file3.c_str())));
         }
 
         if (!update_quick_hash(&myhash, file1) ||
@@ -85265,9 +86040,7 @@ double& o_time)
 	g_dimensione=0;
 	int64_t startverify=mtime();
 	o_localhash=dummyquick.filehash(i_localfile,false,startverify,prendidimensionefile(i_localfile.c_str()));
-	
-	myprintf("80093: Local  %s [%21s] now getting from SFTP...\n",o_localhash.c_str(),migliaia(dummyquick.o_thefilesize));
-	
+		myprintf("80093: Local  %s [%21s] from SFTP...\n",o_localhash.c_str(),migliaia(dummyquick.o_thefilesize));
 	
 	double	thetime;
 	o_remotehash=sftp_get_quick(i_remotefile,o_remotefilesize,thetime);
@@ -85297,7 +86070,6 @@ double& o_time)
 	return false;
 
 }
-
 
 string change_path(string i_file,string i_newpath)
 {
@@ -85362,6 +86134,26 @@ int Jidac::sftp_dorsync()
 
 	
 	string remotepath = files[2];
+	myprintf("85447: Creating remote path");
+	eol();
+	myprintf("\n");
+	zpaqfranzsftp2 client1;
+	
+	if (g_sftp_key!="")
+		client1.setConnectionSSH(g_sftp_host,g_sftp_port,g_sftp_user,g_sftp_key);
+	else
+		client1.setConnection(g_sftp_host,g_sftp_port,g_sftp_user,g_sftp_password);
+	if (!client1.connect())
+	{
+		myprintf("85433: Cannot connect client\n");
+		return 2;
+	}
+
+	if (!client1.sftpmkdir(remotepath))
+		myprintf("85440! Remote path seems kaputt, continue anyway (let's hope for the best) %s\n",remotepath.c_str());
+	
+	myprintf("85443: Enumerating remote files\n");
+	
 	std::vector<sftpfileinfo> remotefiles;
 	
 	zpaqfranzsftp2 sftp2;
@@ -85373,7 +86165,7 @@ int Jidac::sftp_dorsync()
 	
 	sftp2.listremotedir(remotepath,&remotefiles);
 	if (remotefiles.size()==0)
-		myprintf("08641$ INFO: no file founded on remote path\n");
+		myprintf("38641$ INFO: no file founded on remote path\n");
 
 	int64_t totalremotesize=0;
 	for (unsigned int i=0;i<remotefiles.size();i++)
@@ -85385,13 +86177,12 @@ int Jidac::sftp_dorsync()
 		{
 			if (iszpaq(remotefiles[i].name.c_str()))
 				color_green();
-			myprintf("08616: %08d %21s <<%Z>>\n",i,
+			myprintf("58616: %08d %21s <<%Z>>\n",i,
 			migliaia(remotefiles[i].size),
 			remotefiles[i].name.c_str());
 			color_restore();
 		}
 	}
-	
 	
 	// Crea mappe per confronto veloce usando il nome completo del file (senza normalizzazione)
 	std::map<string, sftpfileinfo> localmap;
@@ -85494,7 +86285,7 @@ int Jidac::sftp_dorsync()
 	if (files_to_update.size() > 0) 
 	{
 		color_yellow();
-		myprintf("86897: Files to UPDATE on remote (%d):\n", (int)files_to_update.size());
+		myprintf("85897: Files to UPDATE on remote (%d):\n", (int)files_to_update.size());
 		for (unsigned int i = 0; i < files_to_update.size(); i++) {
 			string filename = extractfilename(files_to_update[i]);
 			int64_t local_size = localmap[filename].size;
@@ -85571,16 +86362,12 @@ int Jidac::sftp_dorsync()
 	
 
 	string myremotepath=extractfilepath(remotepath);
-	///myprintf("87051: myremotemap on %s\n",myremotepath.c_str());
 
 	if (howmanythreads<1)
 		howmanythreads=numberOfProcessors();
-
-//	myprintf("k1 how %d\n",howmanythreads);
 	
 	if (!flagssd)
 		howmanythreads=1;
-///	myprintf("k2 how %d\n",howmanythreads);
 	
 	int errori=0;
 	// File da aggiornare
@@ -85625,7 +86412,7 @@ int Jidac::sftp_dorsync()
 		}
 		zpaqfranzsftp2 client;
 		if (g_sftp_key!="")
-		client.setConnection(g_sftp_host,g_sftp_port,g_sftp_user,g_sftp_key);
+		client.setConnectionSSH(g_sftp_host,g_sftp_port,g_sftp_user,g_sftp_key);
 		else
 		client.setConnection(g_sftp_host,g_sftp_port,g_sftp_user,g_sftp_password);
 		if (!client.connect()) 
@@ -85691,8 +86478,8 @@ int Jidac::sftp_doupload()
 	color_green();
 	if (flagverbose)
 		myprintf("08645: SFTP upload - checking/making remote path <<%Z>>...\n",remotepath.c_str());
-	else
-		myprintf("08643: Starting SFTP upload\n");
+	///else
+		///myprintf("08643: Starting SFTP upload\n");
 		
 	color_restore();
 	
@@ -85733,7 +86520,7 @@ int Jidac::sftp_doupload()
 		double	thetime;
 		color_yellow();
 		
-		myprintf("87111: APPEND, double-checking hash...");
+		myprintf("83111: APPEND, checking...");
 		string 	thequickhash=sftp_get_quick(remotefile,thefilesize,thetime);
 		myprintf("%f s ",thetime);
 		color_restore();
@@ -85761,31 +86548,31 @@ int Jidac::sftp_doupload()
 			color_restore();
 		}
 	}
-	
 	else
-		myprintf("87111: OK, starting transfer from scratch (-force)\n");
-		
+	{
+		if (flagverbose)
+			myprintf("87111: OK, starting transfer from scratch (-force)\n");
+	}
 	if(!client2.karica(localfile,remotefile,flagforce)) 
 	{
 		myprintf("87114: karika failed\n");
 		return 2;
 	}
 	
-	color_green();
-	myprintf("87118: File uploaded for %s bytes",migliaia(prendidimensionefile(localfile.c_str())));
-	eol();
-	myprintf("\n");
+	if (flagverbose)
+	{
+		color_green();
+		myprintf("87118: File uploaded for %s bytes\n",migliaia(prendidimensionefile(localfile.c_str())));
+	}
+
 	color_yellow();
-	printbar('=');
-	myprintf("08363: Quick verify of remote file... ");
-	
+	myprintf("08363: Quick ... ");
 	int64_t thefilesize;
 	double	thetime;
 	int64_t remotefilesize;
 	string	localhash,remotehash;
 	if (sftp_verify(localfile,remotefile,localhash,thefilesize,remotehash,remotefilesize,thetime))
 	{
-		myprintf("\n");
 		color_green();
 		myprintf("87530: VERIFY OK in %.3f s\n",migliaia(thefilesize),thetime);
 		color_restore();
@@ -85798,18 +86585,18 @@ int Jidac::sftp_doupload()
 
 
 
-std::string sftp_get_quick_remote(std::string remotepath,std::vector<sftpfileinfo>&remotefiles,std::vector<sftpget3>& quick_hash3,int i_thread)
+std::string sftp_get_quick_remote(std::string remotepath,std::vector<sftpfileinfo>&remotefiles,std::vector<sftpget3>& quick_hash3,int i_thread,int64_t& o_totalsize)
 {
-	int64_t	totalsize=0;
+	o_totalsize=0;
 
 	for (unsigned int i=0;i<remotefiles.size();i++)
 	{
-		totalsize+=remotefiles[i].size;
+		o_totalsize+=remotefiles[i].size;
 		if (flagdebug3)
 		{
 			if (iszpaq(remotefiles[i].name.c_str()))
-						color_green();
-			myprintf("08616: %21s <<%Z>> <<%Z>>\n",migliaia(remotefiles[i].size),remotefiles[i].name.c_str(),(includetrailingbackslash(remotepath)+remotefiles[i].name).c_str());
+				color_green();
+			myprintf("08316: %21s <<%Z>> <<%Z>>\n",migliaia(remotefiles[i].size),remotefiles[i].name.c_str(),(includetrailingbackslash(remotepath)+remotefiles[i].name).c_str());
 			color_restore();
 		}
 		
@@ -85830,8 +86617,6 @@ std::string sftp_get_quick_remote(std::string remotepath,std::vector<sftpfileinf
 		entry.o_hash = "";    // da calcolare successivamente
 		quick_hash3.push_back(entry);
 	}
-	if (totalsize>0)
-		myprintf("08616: Total ZPAQ file size %21s\n",migliaia(totalsize));
 		
 	zpaqfranzsftp2 sftp;
 	
@@ -85905,7 +86690,6 @@ std::string sftp_get_quick_remote(std::string remotepath,std::vector<sftpfileinf
 	return risultato;
 }
 
-
 int Jidac::sftp_doquick()
 {
 	if (!flagssd)
@@ -85952,41 +86736,138 @@ int Jidac::sftp_doquick()
 	}
 	
 	std::vector<sftpget3> quick_hash3;
-	string globalremote=sftp_get_quick_remote(remotepath,remotefiles,quick_hash3,32);
+	int64_t dummy;
+	string globalremote=sftp_get_quick_remote(remotepath,remotefiles,quick_hash3,howmanythreads,dummy);
 	
 	for (unsigned int i=0;i<quick_hash3.size();i++)
 		myprintf("%08d QUICKZ:%s %21s %s\n",i,quick_hash3[i].o_hash.c_str(),migliaia(quick_hash3[i].o_size),quick_hash3[i].i_name.c_str());
 	if (globalremote=="")
 		return 2;
 	
-	myprintf("88340: GLOBAL SHA256: %s\n",globalremote.c_str());
+	myprintf("81340: GLOBAL SHA256: %s\n",globalremote.c_str());
 	return 0;
 }
 
 
 
 // Funzione per trovare un file per nome in un vettore di sftpget3
-int findRemoteFile(const std::vector<sftpget3>& remotes, const std::string& fileName) {
-    for (unsigned int i = 0; i < remotes.size(); i++) {
+int findRemoteFile(const std::vector<sftpget3>& remotes, const std::string& fileName) 
+{
+    for (unsigned int i = 0; i < remotes.size(); i++) 
+	{
         std::string remoteName = extractfilename(remotes[i].i_name);
-        if (remoteName == fileName) {
-            return (int)i;
-        }
+        if (remoteName == fileName) 
+		    return (int)i;
     }
     return -1; // non trovato
 }
 
 // Funzione per trovare un file per nome in un vettore di sftpfileinfo
-int findLocalFile(const std::vector<sftpfileinfo>& locals, const std::string& fileName) {
-    for (unsigned int i = 0; i < locals.size(); i++) {
+int findLocalFile(const std::vector<sftpfileinfo>& locals, const std::string& fileName) 
+{
+    for (unsigned int i = 0; i < locals.size(); i++) 
+	{
         std::string localName = extractfilename(locals[i].name);
-        if (localName == fileName) {
-            return (int)i;
-        }
+        if (localName == fileName) 
+		    return (int)i;
     }
     return -1; // non trovato
 }
-
+bool comparaquick(std::vector<sftpget3>& i_remoti, std::vector<sftpfileinfo>& i_locali) 
+{
+    bool allMatch = true;
+    
+    // Usa vector per tenere traccia dei file locali già controllati
+    std::vector<bool> localChecked(i_locali.size(), false);
+    
+    if (flagverbose)
+        myprintf("81373: Checking remote vs local\n");
+    
+    // Controlla tutti i file remoti
+    for (size_t i = 0; i < i_remoti.size(); i++) 
+    {
+        std::string remoteFileName = extractfilename(i_remoti[i].i_name);
+        std::string remoteHash = i_remoti[i].o_hash;
+        int64_t remoteSize = i_remoti[i].o_size;
+        
+        // Cerca il file corrispondente nei locali
+        int localIndex = findLocalFile(i_locali, remoteFileName);
+        
+        if (localIndex == -1) 
+        {
+            // File presente solo in remoto
+            myprintf("81387! NOT in local : %s (REMOTE idx:%zu hash:%s size:%s)\n", 
+                   remoteFileName.c_str(), i, remoteHash.c_str(), migliaia(remoteSize));
+            allMatch = false;
+        } 
+        else 
+        {
+            // Verifica che l'indice sia valido
+            if (localIndex >= 0 && localIndex < static_cast<int>(i_locali.size())) 
+            {
+                // File presente in entrambi - controlla hash e dimensione
+                localChecked[localIndex] = true;
+                
+                std::string localHash = i_locali[localIndex].hash;
+                int64_t localSize = i_locali[localIndex].size;
+                
+                if (remoteHash != localHash) 
+                {
+                    myprintf("88402! HASH KAPUTT: %s\n", remoteFileName.c_str());
+                    myprintf("88403!  REMOTE (idx:%zu): %s size:%21s\n", i, remoteHash.c_str(), migliaia(remoteSize));
+                    myprintf("88404!  LOCAL  (idx:%d): %s size:%21s\n", localIndex, localHash.c_str(), migliaia(localSize));
+                    allMatch = false;
+                } 
+                else if (remoteSize != localSize) 
+                {
+                    myprintf("88405! SIZE KAPUTT: %s\n", remoteFileName.c_str());
+                    myprintf("88406!  REMOTE (idx:%zu): size:%21s hash:%s\n", i, migliaia(remoteSize), remoteHash.c_str());
+                    myprintf("88407!  LOCAL  (idx:%d): size:%21s hash:%s\n", localIndex, migliaia(localSize), localHash.c_str());
+                    allMatch = false;
+                }
+                // Se tutto OK, non stampa nulla (opzionale: decommenta la riga sotto per debug)
+                // else { printf("OK: %s (hash:%s size:%lld)\n", remoteFileName.c_str(), remoteHash.c_str(), (long long)remoteSize); }
+            }
+            else 
+            {
+                myprintf("88420! ERRORE: indice locale non valido %d per file %s\n", 
+                       localIndex, remoteFileName.c_str());
+                allMatch = false;
+            }
+        }
+    }
+    
+    // Controlla i file locali che non sono stati ancora controllati
+    for (size_t i = 0; i < i_locali.size(); i++) 
+    {
+        if (!localChecked[i]) 
+        {
+            // File presente solo in locale
+            std::string localFileName = extractfilename(i_locali[i].name);
+            std::string localHash = i_locali[i].hash;
+            int64_t localSize = i_locali[i].size;
+            
+            myprintf("81429! NOT in remote : %s (LOCAL idx:%zu hash:%s size:%s)\n", 
+                   localFileName.c_str(), i, localHash.c_str(), migliaia(localSize));
+            allMatch = false;
+        }
+    }
+    
+    if (allMatch) 
+    {
+        color_green();
+        myprintf("81436: Perfect match! THIS IS VERY GOOD!\n");
+        color_restore();
+    } 
+    else 
+    {
+        myprintf("18440$ Something wrong, compare not good\n");
+    }
+    
+    // Non serve delete[], il vector si gestisce automaticamente
+    return allMatch;
+}
+/*
 bool comparaquick(std::vector<sftpget3>& i_remoti, std::vector<sftpfileinfo>& i_locali) 
 {
     bool allMatch = true;
@@ -86026,17 +86907,17 @@ bool comparaquick(std::vector<sftpget3>& i_remoti, std::vector<sftpfileinfo>& i_
             
             if (remoteHash != localHash) 
 			{
-                myprintf("88402! HASH KAPUTT: %s\n", remoteFileName.c_str());
-                myprintf("88403!  REMOTE (idx:%d): %s size:%21s\n", i, remoteHash.c_str(), migliaia(remoteSize));
-                myprintf("88404!  LOCAL  (idx:%d): %s size:%21s\n", localIndex, localHash.c_str(), migliaia(localSize));
+                myprintf("88432! HASH KAPUTT: %s\n", remoteFileName.c_str());
+                myprintf("88423!  REMOTE (idx:%d): %s size:%21s\n", i, remoteHash.c_str(), migliaia(remoteSize));
+                myprintf("88414!  LOCAL  (idx:%d): %s size:%21s\n", localIndex, localHash.c_str(), migliaia(localSize));
                 allMatch = false;
             } 
 			else 
 			if (remoteSize != localSize) 
 			{
-                myprintf("88405! SIZE KAPUTT: %s\n", remoteFileName.c_str());
-                myprintf("88406!  REMOTE (idx:%d): size:%21s hash:%s\n", i, migliaia(remoteSize), remoteHash.c_str());
-                myprintf("88407!  LOCAL  (idx:%d): size:%21s hash:%s\n", localIndex, migliaia(localSize), localHash.c_str());
+                myprintf("88435! SIZE KAPUTT: %s\n", remoteFileName.c_str());
+                myprintf("88426!  REMOTE (idx:%d): size:%21s hash:%s\n", i, migliaia(remoteSize), remoteHash.c_str());
+                myprintf("88417!  LOCAL  (idx:%d): size:%21s hash:%s\n", localIndex, migliaia(localSize), localHash.c_str());
                 allMatch = false;
             }
             // Se tutto OK, non stampa nulla (opzionale: decommenta la riga sotto per debug)
@@ -86074,6 +86955,7 @@ bool comparaquick(std::vector<sftpget3>& i_remoti, std::vector<sftpfileinfo>& i_
     
     return allMatch;
 }
+*/
 int Jidac::sftp_do1on1()
 {
 	if (files.size()!=3)
@@ -86083,7 +86965,8 @@ int Jidac::sftp_do1on1()
 	}
 	
 	string remotepath	=files[2];
-	myprintf("Remotepath %s\n",remotepath.c_str());
+	if (flagverbose)
+		myprintf("86185: 1on1 remotepath %s\n",remotepath.c_str());
 	std::vector<sftpfileinfo> remotefiles;
 	zpaqfranzsftp2 client;
 	if (g_sftp_key!="")
@@ -86099,7 +86982,8 @@ int Jidac::sftp_do1on1()
 	}
 	
 	std::vector<sftpget3> quick_hash3;
-	string globalremote=sftp_get_quick_remote(remotepath,remotefiles,quick_hash3,32);
+	int64_t remotesize;
+	string globalremote=sftp_get_quick_remote(remotepath,remotefiles,quick_hash3,howmanythreads,remotesize);
 	
 	if (flagverbose)
 		for (unsigned int i=0;i<quick_hash3.size();i++)
@@ -86107,9 +86991,6 @@ int Jidac::sftp_do1on1()
 	if (globalremote=="")
 		return 2;
 	
-	myprintf("88340: GLOBAL REMOTE SHA256: %s\n",globalremote.c_str());
-	
-
 	flagforcezfs=true;
 	g_arraybytescanned.push_back(0);
 	g_arrayfilescanned.push_back(0);
@@ -86131,10 +87012,25 @@ int Jidac::sftp_do1on1()
 	}
 	
 	libzpaq::SHA256 sha256;
+	int64_t totallocalsize=0;
+	for (unsigned int i=0;i<localfiles.size();i++)
+		totallocalsize+=localfiles[i].size;
 
+	if (remotesize>0)
+	{
+		myprintf("86238: Total remote file size %21s",migliaia(remotesize));
+		eol();
+		myprintf("\n");
+	}
+
+	if (totallocalsize>0)
+	{
+		myprintf("86235: Total local  file size %21s",migliaia(totallocalsize));
+		eol();
+		myprintf("\n");
+	}
 	for (unsigned int i=0;i<localfiles.size();i++)
 	{
-	
 		int64_t startverify	= 0;
 		g_dimensione 		= 0;
 		
@@ -86151,6 +87047,7 @@ int Jidac::sftp_do1on1()
 	char sha256result[32];
 	memcpy(sha256result, sha256.result(), 32);
 	std::string localglobal=binarytohex((const unsigned char*)sha256result,32);
+	myprintf("88340: GLOBAL REMOTE SHA256: %s\n",globalremote.c_str());
 	myprintf("88375: LOCAL  GLOBAL SHA256: %s\n",localglobal.c_str());
 	
 	int errors=0;
@@ -86165,7 +87062,7 @@ int Jidac::sftp_do1on1()
 	{
 		errors++;
 		color_red();
-		myprintf("88420: Local GLOBAL != remote GLOBAL\n");
+		myprintf("81420: Local GLOBAL != remote GLOBAL\n");
 		color_restore();
 	}
 
@@ -86213,6 +87110,7 @@ int Jidac::sftp_doverify()
 }
 int Jidac::sftp_doinfo()
 {
+#ifdef _WIN32
 	zpaqfranzsftp2 sftp2;
 	if (g_sftp_key!="")
 		sftp2.setConnectionSSH(g_sftp_host,g_sftp_port,g_sftp_user,g_sftp_key);
@@ -86220,11 +87118,12 @@ int Jidac::sftp_doinfo()
 		sftp2.setConnection(g_sftp_host,g_sftp_port,g_sftp_user,g_sftp_password);
 	if (!sftp2.connect()) 
 	{
-		myprintf("86498: Cannot connect SFTP info\n");
+		myprintf("82498: Cannot connect SFTP info\n");
 		return 2;
 	}
 
 	sftp2.check_ssh_support();
+#endif
 	return 0;
 }
 
@@ -86232,7 +87131,7 @@ int Jidac::sftp_domd5()
 {
 	if (files.size()!=2)
 	{
-		myprintf("07881: You must enter ONE remote file\n");
+		myprintf("37881: You must enter ONE remote file\n");
 		return 2;
 	}
 	string remotefile	=files[1];
@@ -86244,19 +87143,19 @@ int Jidac::sftp_domd5()
 		sftp2.setConnection(g_sftp_host,g_sftp_port,g_sftp_user,g_sftp_password);
 	if (!sftp2.connect()) 
 	{
-		myprintf("86498: Cannot connect SFTP in md5\n");
+		myprintf("84498: Cannot connect SFTP in md5\n");
 		return 2;
 	}
 	string thecommand="md5sum "+remotefile;
 	string theresult;
 	if (!sftp2.xremote_command(thecommand,theresult))
 	{
-		myprintf("04864$ Cannot run %Z\n",thecommand.c_str());
+		myprintf("34864$ Cannot run %Z\n",thecommand.c_str());
 		myprintf("84797! try zpaqfranz sftp info\n");
 		return 2;
 	}
 	color_green();
-	myprintf("08490: Run OK\n");
+	myprintf("18490: Run OK\n");
 	myprintf(theresult.c_str());
 	color_restore();
 	return 0;
@@ -86266,7 +87165,7 @@ int Jidac::sftp_dodelete()
 {
 	if (files.size()!=2)
 	{
-		myprintf("07883: You must enter ONE remote file\n");
+		myprintf("57883: You must enter ONE remote file\n");
 		return 2;
 	}
 	string remotefile	=files[1];
@@ -86279,7 +87178,7 @@ int Jidac::sftp_dodelete()
 		sftp2.setConnection(g_sftp_host,g_sftp_port,g_sftp_user,g_sftp_password);
 	if (!sftp2.connect()) 
 	{
-		myprintf("86498: Cannot connect SFTP in delete\n");
+		myprintf("85498: Cannot connect SFTP in delete\n");
 		return 2;
 	}
 	
@@ -86298,7 +87197,7 @@ int Jidac::sftp_dosize()
 {
 	if (files.size()!=2)
 		{
-			myprintf("07881: You must enter ONE remote file\n");
+			myprintf("07841: You must enter ONE remote file\n");
 			return 2;
 		}
 		string remotefile	=files[1];
@@ -86317,7 +87216,7 @@ int Jidac::sftp_dosize()
 		
 		if (remotesize==-1)
 		{
-			myprintf("02864! Cannot get size of %Z\n",remotefile.c_str());
+			myprintf("42865! Cannot get size of %Z\n",remotefile.c_str());
 			return 2;
 		}
 		color_green();
@@ -86325,12 +87224,43 @@ int Jidac::sftp_dosize()
 		color_restore();
 		return 0;
 }
+int Jidac::sftp_domkdir()
+{
+	if (files.size()!=2)
+		{
+			myprintf("07881: You must enter ONE remote path\n");
+			return 2;
+		}
+		string remotedir	=includetrailingbackslash(extractfilepath(files[1]));
+		
+		myprintf("86413: INFO: mkdir of <<%s>>\n",remotedir.c_str());
+		
+
+		zpaqfranzsftp2 sftp2;
+		if (g_sftp_key!="")
+			sftp2.setConnectionSSH(g_sftp_host,g_sftp_port,g_sftp_user,g_sftp_key);
+		else
+			sftp2.setConnection(g_sftp_host,g_sftp_port,g_sftp_user,g_sftp_password);
+		if (!sftp2.connect()) 
+		{
+			myprintf("16498: Cannot connect SFTP in size\n");
+			return 2;
+		}
+		if (sftp2.sftpmkdir(remotedir))
+		{
+			myprintf("86425: mkdir done %s\n",remotedir.c_str());
+			return 0;
+		}
+
+		myprintf("86429: cannot mkdir %s\n",remotedir.c_str());
+		return 2;
+}
 		
 int Jidac::sftp_dols()
 {
 	if (files.size()!=2)
 		{
-			myprintf("07883: You must enter ONE  remote folder\n");
+			myprintf("57843: You must enter ONE  remote folder\n");
 			return 2;
 		}
 		string remotepath	=files[1];
@@ -86344,7 +87274,7 @@ int Jidac::sftp_dols()
 		client.listremotedir(remotepath,&remotefiles);
 		if (remotefiles.size()==0)
 		{
-			myprintf("08641! No file found on remote path\n");
+			myprintf("58641! No file found on remote path\n");
 			return 1;
 		}
 		int64_t	totalsize=0;
@@ -86354,11 +87284,11 @@ int Jidac::sftp_dols()
 			if (!iszpaq(remotefiles[i].name.c_str()))
 				color_yellow();
 			int64_t dec=decimal_time(remotefiles[i].modtime);
-			myprintf("08616: %21s %s <<%Z>>\n",migliaia(remotefiles[i].size),dateToString(flagutc,dec).c_str(),(includetrailingbackslash(remotepath)+remotefiles[i].name).c_str());
+			myprintf("28616: %21s %s <<%Z>>\n",migliaia(remotefiles[i].size),dateToString(flagutc,dec).c_str(),(includetrailingbackslash(remotepath)+remotefiles[i].name).c_str());
 			color_restore();
 		}
 		if (totalsize>0)
-			myprintf("08616: Total file size %21s\n",migliaia(totalsize));
+			myprintf("38616: Total file size %21s\n",migliaia(totalsize));
 		return 0;
 }
 int Jidac::sftp()
@@ -86370,6 +87300,9 @@ int Jidac::sftp()
 	}
 	
 	std::string mycommand=files[0];
+
+	if (mycommand=="mkdir")
+		return sftp_domkdir();
 	
 	if (mycommand=="1on1")
 		return sftp_do1on1();
@@ -86412,7 +87345,6 @@ int Jidac::sftp()
 #ifndef FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS
 #define FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS 0x00400000
 #endif
-
 
 bool Jidac::isrealfile(const string& i_filename) 
 {
@@ -86717,7 +87649,7 @@ void add_directory(const std::string& dir_path,vector<string>& i_added_path)
 	d.attr			=0;
 	d.data			=0;
 	if (flagdebug5)
-		myprintf("14400: Added! %s\n",normalized_path.c_str());
+		myprintf("11400: Added! %s\n",normalized_path.c_str());
 	i_added_path.push_back(normalized_path);
 }
 
@@ -86775,6 +87707,7 @@ int	xto(string i_outputpath,string i_currentpath,int64_t i_sizetobeextracted)
 	i_outputpath=includetrailingbackslash(i_outputpath);
 	myprintf("16445: Multiple (%s) extraction in folder <<%Z>>\n",migliaia(i_input.size()),i_outputpath.c_str());
 		
+
 	flagspace 	= true;
 	command 	= 'x';
 	g_optional 	= "";
@@ -86788,11 +87721,18 @@ int	xto(string i_outputpath,string i_currentpath,int64_t i_sizetobeextracted)
 	///	printf("i_currentpath %s\n",i_currentpath.c_str());
 	///	printf("i_input[i]    %s\n",i_input[i].c_str());
 		(*pjidac).files.push_back(i_currentpath+i_input[i]);
-		string dascrivere=i_outputpath+i_input[i];
+		
+		string temp=i_input[i];
+		myreplaceall(temp,":","_");
+	
+		string dascrivere=i_outputpath+temp;
+		
+		
+	///	printf("Dascrivere %08d %s\n",i,dascrivere.c_str());
 		if (!flagforce)
 		{
 			dascrivere=nomefileseesistegia(dascrivere);
-			if (dascrivere!=(i_outputpath+i_input[i]))
+			if (dascrivere!=(i_outputpath+temp))
 				myprintf("16027$ Destination already exists and no -force => %Z\n",dascrivere.c_str());
 		}
 		(*pjidac).tofiles.push_back(dascrivere);
@@ -86812,6 +87752,7 @@ int	xto(string i_outputpath,string i_currentpath,int64_t i_sizetobeextracted)
 			color_green();
 			myprintf("16023: File extraction OK\n");
 			color_restore();
+                 
 		}
 		else
 			myprintf("16028! Something wrong extracted %s vs expected %s\n", migliaia(sizeextracted),migliaia2(i_sizetobeextracted));
@@ -87379,41 +88320,6 @@ public:
         }
 		myprintf("\n");
 		dirprimolivello();
-		
-		/*
-		add_directory("/etc/",added_path);
-		add_directory("/root/",added_path);
-		add_directory("/usr/",added_path);
-		*/
-	
-	/*
-		if (wehaveslash)
-		{
-			DT& d=(*pjidac).dt["/"];
-			d.date			=1;
-			d.creationdate	=0;
-			d.accessdate	=0;
-			d.size			=0;
-			d.attr			=0;
-			d.data			=0;
-			current_path="/"; //LINUX!!
-			cd("/"); 
-		}
-	*/	
-		/*
-		if (wehaveslash)
-		{
-			///current_path="/"; //LINUX!!
-		}
-		else
-		{
-			if (added_path.size()>=1)
-			{
-				myprintf("14500$ Entering with a cd %Z\n",added_path[0].c_str());
-				cd(added_path[0].c_str());
-			}
-		}
-		*/
 
     }
 
@@ -87599,7 +88505,7 @@ void dir(const char* path, bool recursive, bool i_more)
 		}
         if (!cd(path_str.c_str())) 
         {
-            myprintf("15313$ Z Directory not found: %s\n", path_str.c_str());
+            myprintf("11313$ Z Directory not found: %s\n", path_str.c_str());
             current_path = temp_path;
             return;
         }
@@ -87749,12 +88655,6 @@ void dirprimolivello()
 		myprintf(buffer);
     }
 }
-
-
-
-
-
-
 
 	bool handle_wildcard_cd(const std::string& path_str) 
 	{
@@ -88206,14 +89106,7 @@ void dirprimolivello()
 
 int Jidac::ls()
 {
-	
-	/*
-	color_yellow();
-	ascii::Ascii font=ascii::Ascii();
-	font.print("experiment");
-	color_restore();
-	*/
-    if (archive=="")
+   if (archive=="")
     {
         myprintf("14236! archive is empty\n");
         return 2;
@@ -88709,8 +89602,15 @@ private:
     }
 
     xto(relative, current_path, sizetobeextracted);
-    printf("\nPress a key...");
+    printf("\nPress a key (clear all selected files)...");
     get_key();
+		
+	for (std::vector<fileentry>::iterator it = entries.begin(); it != entries.end(); ++it) 
+    {
+		fileentry& entry = *it;
+		entry.selected = false;
+	}
+	show();
 }
 
 	int barcount(const string& i_stringa)
@@ -89227,7 +90127,7 @@ void process()
 			printf("*************************************\n");
 			printf("*************************************\n");
 			
-			printf("DEBUG: update_entries %zu entries on current_path |%s|\n", entries.size(),current_path.c_str());
+			printf("DEBUG: update_entries %s entries on current_path |%s|\n", migliaia(entries.size()),current_path.c_str());
 		}
 		entries.clear();
 		for (DTMap::const_iterator pair = (*pjidac).dt.begin(); pair != (*pjidac).dt.end(); ++pair)
@@ -89492,7 +90392,7 @@ bool Jidac::getmysqlfrominternet()
 	myprintf("99765: Downloading mysql.exe in %Z...\n",themysql.c_str());
 	if (!downloadfile(http_mysql,themysql,true))
 	{
-		myprintf("99678! Cannot download themysql\n");
+		myprintf("99378! Cannot download themysql\n");
 		return false;
 	}
 	myprintf("\n");
@@ -89511,7 +90411,7 @@ bool Jidac::getmysqlfrominternet()
 	myprintf("99776: Downloading mysqldump.exe in %Z...\n",themysqldump.c_str());
 	if (!downloadfile(http_mysqldump,themysqldump,true))
 	{
-		myprintf("99678! Cannot download themysqldump\n");
+		myprintf("92678! Cannot download themysqldump\n");
 		delete_file(themysql.c_str());
 		delete_file(themysqldump.c_str());
 		return false;
@@ -89801,7 +90701,7 @@ int Jidac::mysql()
 	if (!fileexists(themysql))
 	{
 #ifdef _WIN32
-		myprintf("99811! cannot find mysql.exe, use -bin to specify the folder or -space to get from Internet\n");
+		myprintf("91811! cannot find mysql.exe, use -bin to specify the folder or -space to get from Internet\n");
 #else
 		myprintf("99811! cannot find mysql, use -bin to specify the folder\n");
 #endif
@@ -89823,7 +90723,7 @@ int Jidac::mysql()
 	if (fileexists(filebatch))
 		if (remove(filebatch.c_str())!=0)
 		{
-			myprintf("99672! Highlander batch  %s\n", filebatch.c_str());
+			myprintf("90672! Highlander batch  %s\n", filebatch.c_str());
 			return 2;
 		}
 	FILE* batch=fopen(filebatch.c_str(), "wb");
@@ -89936,7 +90836,7 @@ int Jidac::mysql()
     fprintf(batch, "del \"%%TEMP%%\\db_list_clean.txt\" > nul 2>&1\n");
     fclose(batch);
     if (flagverbose)
-        myprintf("93958: Wait Execute %s\n",filebatch.c_str());
+        myprintf("91958: Wait Execute %s\n",filebatch.c_str());
     waitexecutepadre(filebatch,"");
 #else
 	fprintf(batch, "#!/bin/bash\n\n");
@@ -90069,13 +90969,13 @@ int Jidac::maxcpu(int i_percent)
     if (fileexists(filebatch))
         if (remove(filebatch.c_str()) != 0)
         {
-            myprintf("99673! Highlander batch  %s\n", filebatch.c_str());
+            myprintf("91673! Highlander batch  %s\n", filebatch.c_str());
             return 2;
         }
     FILE* batch = fopen(filebatch.c_str(), "wb");
     if (batch == NULL)
     {
-        myprintf("99672! cannot write on %s\n", filebatch.c_str());
+        myprintf("92672! cannot write on %s\n", filebatch.c_str());
         return 2;
     }
     
@@ -90158,7 +91058,7 @@ int Jidac::maxcpu(int i_percent)
     FILE* script = fopen(script_path.c_str(), "wb");
     if (script == NULL)
     {
-        myprintf("99672! Cannot write script: %s\n", script_path.c_str());
+        myprintf("91672! Cannot write script: %s\n", script_path.c_str());
         return 2;
     }
     
@@ -90246,7 +91146,7 @@ int Jidac::maxcpu(int i_percent)
     if (result != 0) 
 	{
 		if (flagdebug)
-			myprintf("10054! Try without sudo\n");
+			myprintf("10154! Try without sudo\n");
         command = script_path + " 2>/dev/null";;
         result = system(command.c_str());
 
@@ -90324,7 +91224,7 @@ int Jidac::systemshutdown()
     }
     DWORD waitResult = WaitForSingleObject(ShExecInfo.hProcess, 30000); // Timeout 30s
     if (waitResult != WAIT_OBJECT_0)
-        myprintf("99677! Warning: Power shutdown process wait timed out or failed: %d\n", GetLastError());
+        myprintf("91677! Warning: Power shutdown process wait timed out or failed: %d\n", GetLastError());
     
     CloseHandle(ShExecInfo.hProcess);
     return 2;
@@ -91213,7 +92113,7 @@ bool leggibitmap(const std::string& metadata_path, std::vector<BYTE>& bitmap_buf
     li.QuadPart = sizeof(ImageMetadata) + sizeof(cluster_count) + cluster_count * sizeof(ClusterData);
     if (!SetFilePointerEx(infile, li, NULL, FILE_BEGIN)) 
 	{
-        myprintf("03016! failed to set file pointer: %s\n", decodewinerror(GetLastError(), metadata_path.c_str()).c_str());
+        myprintf("03116! failed to set file pointer: %s\n", decodewinerror(GetLastError(), metadata_path.c_str()).c_str());
         CloseHandle(infile);
         return false;
     }
@@ -91289,7 +92189,7 @@ bool ripristinantfs(const std::string& image_path, const std::string& raw_path)
     BYTE* buffer = new BYTE[buffer_size];
     if (!buffer) 
 	{
-        myprintf("03013! memory allocation failed\n");
+        myprintf("03014! memory allocation failed\n");
         CloseHandle(image_file);
         CloseHandle(raw_file);
         return false;
@@ -92194,7 +93094,7 @@ void sftp_display_progress_down_parallelo(const std::vector<sftp_threadprogressd
                 if (filename.length() > 33) 
 				    filename = "..." + filename.substr(filename.length() - 30); 
                 color_cyan();
-                myprintf("T%02d: %-5s # %08d @%4.1f f/s [%12s] @%12s/s | %s", 
+                printf("T%02d: %-5s # %08d @%4.1f f/s [%12s] @%12s/s | %s", 
                          tp.thread_id, tp.status.c_str(), tp.thread_files_processed, thread_file_rate, 
                          tohuman(tp.thread_bytes_processed), tohuman((int64_t)thread_byte_rate), filename.c_str()); 
             } 
@@ -92209,7 +93109,7 @@ void sftp_display_progress_down_parallelo(const std::vector<sftp_threadprogressd
                 int total_minutes 	= (int)((thread_total_time - total_hours * 3600) / 60);
                 int total_seconds 	= (int)(thread_total_time - total_hours * 3600 - total_minutes * 60);
 				color_green();
-                myprintf("T%02d: %-5s # %08d        [%12s] @%12s/s | Time:%02d:%02d:%02d Avg:@%5.2f file/s", 
+                printf("T%02d: %-5s # %08d        [%12s] @%12s/s | Time:%02d:%02d:%02d Avg:@%5.2f file/s", 
                          tp.thread_id, tp.status.c_str(), tp.thread_files_processed, 
                          tohuman(tp.thread_bytes_processed), 
 						 tohuman2((int64_t)thread_avg_byte_rate),total_hours, total_minutes, total_seconds,
@@ -92259,7 +93159,7 @@ bool zpaqfranzsftp2::sftp_down3parallela(std::vector<sftpget3>& file_list, int i
     int actual_threads = std::min(i_thread, (int)file_list.size());
     
     if (flagdebug) 
-		myprintf("93557: debug Download parallel: %d file con %d thread (console: %d row, max display: %d)\n", 
+		myprintf("91557: debug Download parallel: %d file con %d thread (console: %d row, max display: %d)\n", 
                          (int)file_list.size(), actual_threads, console_height, max_display_threads);
     
     // Inizializza mutex e condition variable
@@ -92338,8 +93238,9 @@ bool zpaqfranzsftp2::sftp_down3parallela(std::vector<sftpget3>& file_list, int i
     hide_cursor();
     
     // Se verbose, prepara lo spazio per l'output
-    if (i_thread>0) 
+    if (actual_threads>1) 
 	{
+		
 		if ((!flagsilent) && (!flagnoconsole))
 		{
 			setupConsole();
@@ -92363,6 +93264,7 @@ bool zpaqfranzsftp2::sftp_down3parallela(std::vector<sftpget3>& file_list, int i
     int last_completed = -1;
     int64_t last_bytes = -1;
     
+	
     while (true) 
 	{
         pthread_mutex_lock(&result_mutex);
@@ -92385,7 +93287,7 @@ bool zpaqfranzsftp2::sftp_down3parallela(std::vector<sftpget3>& file_list, int i
             
             sftp_display_progress_down_parallelo(current_thread_progress, (int)file_list.size(),
                            current_files_processed, current_bytes, start_time,
-                           i_thread>0, max_display_threads);
+                           actual_threads>1, max_display_threads);
             
             last_completed 	= current_completed;
             last_bytes 		= current_bytes;
@@ -92405,7 +93307,7 @@ bool zpaqfranzsftp2::sftp_down3parallela(std::vector<sftpget3>& file_list, int i
     // Ripristina il cursore
     show_cursor();
     
-    if (i_thread<=0) 
+    if (actual_threads<=1) 
 	{
         myprintf("\n"); // Nuova riga dopo il progresso in modalità semplice
     } 
@@ -93034,3 +93936,808 @@ void Jidac::getfirstlevelfolders(const DTMap& i_filemap, const std::string& i_ba
     }	
 }
 
+
+bool makeprivacy(const std::string& input_file, const std::string& output_file)
+{
+    // Validazione input
+    if (input_file.empty()) 
+	{
+        myprintf("93548! Input file path is empty\n");
+        return false;
+    }
+    
+    if (output_file.empty()) 
+	{
+        myprintf("91549! Output file path is empty\n");
+        return false;
+    }
+    
+    // Verifica che i file non siano lo stesso
+    if (input_file == output_file) 
+	{
+        myprintf("93550! Input and output files cannot be the same\n");
+        return false;
+    }
+    
+    // Verifica esistenza file di input
+    FILE* test_file = fopen(input_file.c_str(), "r");
+    if (!test_file) 
+	{
+        myprintf("93551! Cannot find input file: <<%Z>>\n", input_file.c_str());
+        return false;
+    }
+    fclose(test_file);
+    
+    // Apertura file di input
+    FILE* in = fopen(input_file.c_str(), "r");
+    if (!in) 
+	{
+        myprintf("93552! Cannot open input file: <<%Z>>\n", input_file.c_str());
+        return false;
+    }
+    
+    // Apertura file di output
+    FILE* out = fopen(output_file.c_str(), "w");
+    if (!out) 
+	{
+        myprintf("93553: Cannot create output file: <<%Z>>\n", output_file.c_str());
+        fclose(in);
+        return false;
+    }
+    
+    const char* STAT_PREFIX 	= "|STAT|";
+    const size_t PREFIX_LEN 	= 6; // lunghezza di "|STAT|"
+    char line[32768]; 					// Buffer più grande per linee lunghe
+    size_t lines_processed 		= 0;
+    size_t lines_filtered 		= 0;
+    bool success 				= true;
+    
+    // Processa il file riga per riga
+    while (fgets(line, sizeof(line), in)) 
+	{
+        lines_processed++;
+        
+        // Rimuovi newline finale se presente per controllo più preciso
+        size_t len = strlen(line);
+        bool has_newline = (len > 0 && line[len-1] == '\n');
+        
+        // Verifica buffer overflow (linea troppo lunga)
+        if (len == sizeof(line)-1 && !has_newline) 
+		{
+            myprintf("93554$ Line %s too long, may be truncated\n", migliaia(lines_processed));
+        }
+        
+        // Filtra righe che iniziano con |STAT|
+        if (len >= PREFIX_LEN && strncmp(line, STAT_PREFIX, PREFIX_LEN) == 0) 
+		{
+            lines_filtered++;
+            continue; // Salta questa riga
+        }
+        
+        // Scrivi la riga nel file di output
+        if (fputs(line, out) == EOF) 
+		{
+            myprintf("93555! Write error to output file at line %s\n", migliaia(lines_processed));
+            success = false;
+            break;
+        }
+        
+        // Flush periodico per file grandi
+        if (lines_processed % 1000 == 0) 
+            fflush(out);
+    }
+    
+    // Verifica errori di lettura
+    if (!feof(in) && ferror(in)) 
+	{
+        myprintf("93556! Read error from input file\n");
+        success = false;
+    }
+    
+    // Verifica errori di scrittura finale
+    if (fflush(out) != 0) 
+	{
+        myprintf("93557! Final flush error to output file\n");
+        success = false;
+    }
+    
+    // Chiusura file
+    fclose(in);
+    fclose(out);
+    
+    if (success) 
+	{
+		if (flagverbose)
+			myprintf("93652: Privacy filter completed: %s lines processed, %s lines filtered\n", migliaia(lines_processed), migliaia(lines_filtered));
+    } else 
+      delete_file(output_file.c_str());
+    
+    return success;
+}
+
+
+
+
+
+bool isemail(const std::string& email)
+{
+    if (email.empty()) 
+	{
+        return false;
+    }
+    
+    size_t len = email.length();
+    
+    // Lunghezza minima: a@b.c (5 caratteri)
+    if (len < 5 || len > 254) { // RFC 5321 limite massimo
+        return false;
+    }
+    
+    // Trova la posizione dell'@
+    size_t at_pos = email.find('@');
+    if (at_pos == std::string::npos) {
+        return false; // Nessuna @
+    }
+    
+    // Verifica che ci sia una sola @
+    if (email.find('@', at_pos + 1) != std::string::npos) {
+        return false; // Più di una @
+    }
+    
+    // Calcola lunghezze delle parti
+    size_t local_len = at_pos;
+    size_t domain_len = len - local_len - 1;
+    
+    // Verifica lunghezze parti
+    if (local_len == 0 || local_len > 64) { // RFC 5321 limite local part
+        return false;
+    }
+    
+    if (domain_len == 0 || domain_len > 253) { // RFC 1035 limite domain
+        return false;
+    }
+    
+    // Estrai le parti
+    std::string local_part = email.substr(0, at_pos);
+    std::string domain = email.substr(at_pos + 1);
+    
+    // === VALIDAZIONE PARTE LOCALE (prima dell'@) ===
+    
+    // Non può iniziare o finire con punto
+    if (local_part[0] == '.' || local_part[local_len - 1] == '.') {
+        return false;
+    }
+    
+    // Controlla caratteri validi nella parte locale
+    bool prev_was_dot = false;
+    for (size_t i = 0; i < local_len; i++) {
+        char c = local_part[i];
+        
+        // Punti consecutivi non ammessi
+        if (c == '.') {
+            if (prev_was_dot) {
+                return false;
+            }
+            prev_was_dot = true;
+            continue;
+        }
+        prev_was_dot = false;
+        
+        // Caratteri ammessi: lettere, numeri, alcuni simboli
+        if (!isalnum(c) && c != '.' && c != '-' && c != '_' && 
+            c != '+' && c != '=' && c != '~') {
+            return false;
+        }
+    }
+    
+    // === VALIDAZIONE DOMINIO (dopo l'@) ===
+    
+    // Non può iniziare o finire con punto o trattino
+    if (domain[0] == '.' || domain[0] == '-' || 
+        domain[domain_len - 1] == '.' || domain[domain_len - 1] == '-') {
+        return false;
+    }
+    
+    // Deve contenere almeno un punto (per il TLD)
+    size_t dot_pos = domain.find('.');
+    if (dot_pos == std::string::npos) {
+        return false;
+    }
+    
+    // Controlla che ci sia almeno un carattere dopo l'ultimo punto (TLD)
+    size_t last_dot = domain.rfind('.');
+    if (domain.length() - last_dot - 1 < 2) { // TLD minimo 2 caratteri
+        return false;
+    }
+    
+    // Controlla caratteri validi nel dominio
+    prev_was_dot = false;
+    bool prev_was_dash = false;
+    
+    for (size_t i = 0; i < domain_len; i++) {
+        char c = domain[i];
+        
+        if (c == '.') {
+            // Punti consecutivi non ammessi
+            if (prev_was_dot) {
+                return false;
+            }
+            // Punto dopo trattino non ammesso
+            if (prev_was_dash) {
+                return false;
+            }
+            prev_was_dot = true;
+            prev_was_dash = false;
+            continue;
+        }
+        
+        if (c == '-') {
+            // Trattino dopo punto non ammesso
+            if (prev_was_dot) {
+                return false;
+            }
+            prev_was_dash = true;
+            prev_was_dot = false;
+            continue;
+        }
+        
+        // Reset flags
+        prev_was_dot = false;
+        prev_was_dash = false;
+        
+        // Solo lettere e numeri ammessi (oltre a . e -)
+        if (!isalnum(c)) {
+            return false;
+        }
+    }
+    
+    // === CONTROLLI AGGIUNTIVI ===
+    
+    // Verifica che il TLD contenga solo lettere
+    std::string tld = domain.substr(last_dot + 1);
+    for (size_t i = 0; i < tld.length(); i++) {
+        if (!isalpha(tld[i])) {
+            return false;
+        }
+    }
+    
+    // Controlla che ogni parte del dominio non superi 63 caratteri
+    size_t start = 0;
+    size_t pos = 0;
+    
+    while ((pos = domain.find('.', start)) != std::string::npos) {
+        size_t part_len = pos - start;
+        if (part_len == 0 || part_len > 63) { // RFC 1035 limite label
+            return false;
+        }
+        start = pos + 1;
+    }
+    
+    // Controlla l'ultima parte (dopo l'ultimo punto)
+    size_t last_part_len = domain.length() - start;
+    if (last_part_len == 0 || last_part_len > 63) {
+        return false;
+    }
+    
+	
+    return true;
+}
+
+void reportresult(string i_stringa,int i_risultato)
+{
+	if (i_risultato==0)
+	{
+		color_green();
+		printf("%25s:OK",i_stringa.c_str());
+		color_restore();
+	}
+	else
+	{
+		color_red();
+		printf("%25s:ERROR",i_stringa.c_str());
+		color_restore();
+	}
+
+}
+#ifdef _WIN32
+int waitexecuteprogram(const std::string& i_filename, const std::string& i_parameters, const std::string& i_fileoutput = "") 
+{
+    STARTUPINFOA si;
+    PROCESS_INFORMATION pi;
+    ZeroMemory(&si, sizeof(si));
+    si.cb = sizeof(si);
+    ZeroMemory(&pi, sizeof(pi));
+    
+    // Costruisci la command line completa
+    std::string cmdLine;
+    if (!i_parameters.empty()) {
+        cmdLine = "\"" + i_filename + "\" " + i_parameters;
+    } else {
+        cmdLine = "\"" + i_filename + "\"";
+    }
+    
+    // Aggiungi redirezione output se specificata
+    if (!i_fileoutput.empty()) {
+        cmdLine += " >>" + i_fileoutput;
+    }
+    
+    // Crea il processo con o senza redirezione
+    // Se c'è redirezione, usa cmd.exe per gestirla
+    std::string finalCmdLine;
+    if (!i_fileoutput.empty()) {
+        finalCmdLine = "cmd.exe /c \"" + cmdLine + "\"";
+    } else {
+        finalCmdLine = cmdLine;
+    }
+    
+///    printf("Executing: %s\n", finalCmdLine.c_str());
+    
+    // Crea il processo senza reindirizzamento I/O interno
+    // Il programma avrà accesso diretto alla console (a meno che non sia rediretto)
+    if (!CreateProcessA(
+        NULL,                                     // No module name (use command line)
+        const_cast<LPSTR>(finalCmdLine.c_str()), // Command line
+        NULL,                                     // Process handle not inheritable
+        NULL,                                     // Thread handle not inheritable
+        FALSE,                                    // Set handle inheritance to FALSE
+        0,                                        // No creation flags
+        NULL,                                     // Use parent's environment block
+        NULL,                                     // Use parent's starting directory 
+        &si,                                      // Pointer to STARTUPINFO structure
+        &pi)                                      // Pointer to PROCESS_INFORMATION structure
+    ) 
+    {
+        DWORD error = GetLastError();
+        printf("Error creating process: %lu\n", error);
+        return -1;  // Errore nella creazione del processo
+    }
+    
+    // Aspetta che il processo termini
+    WaitForSingleObject(pi.hProcess, INFINITE);
+    
+    // Ottieni l'exit code del processo
+    DWORD exitCode;
+    if (!GetExitCodeProcess(pi.hProcess, &exitCode)) {
+        DWORD error = GetLastError();
+        printf("Error getting exit code: %lu\n", error);
+        exitCode = -2;  // Errore nel recupero dell'exit code
+    }
+    
+    // Cleanup
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+    
+    return static_cast<int>(exitCode);
+}
+#endif
+
+#ifdef SFTP
+int Jidac::cloud()
+{
+	if (flagforce)
+		if (!getcaptcha("overwrite!","Overwrite remote archive"))
+			return 2;
+
+
+	if (g_sftp_mailfull!="")
+		if (!isemail(g_sftp_mailfull))
+		{
+			myprintf("93771: Mail full does not seems OK : %s\n",g_sftp_mailfull.c_str());
+			return 2;
+		}
+	if (g_sftp_mailprivacy!="")
+		if (!isemail(g_sftp_mailprivacy))
+		{
+			myprintf("93774: Mail privacy does not seems OK : %s\n",g_sftp_mailprivacy.c_str());
+			return 2;
+		}
+		
+	if (!flagonlyupload)	
+		if (fileexists(archive))
+		{
+			if ((checkpassword())!=0)
+			{
+				color_red();
+				printDigitalString("PASSWORD!");
+				color_restore();
+				return 2;
+			}
+		}
+		
+	string 	percorso	=extractfilepath		(archive);
+	string	nome		=prendinomefileebasta	(archive);
+	string 	thechecksum	=percorso+nome+"_crc32.txt";
+
+
+	bool	myflagtest=flagtest;
+	flagtest=false;
+
+	bool	myflagverify=flagverify;
+	flagverify=false;
+
+	string	cloudtxt=g_gettempdirectory()+"report.txt";
+	cloudtxt=nomefileseesistegia(cloudtxt);
+	
+	
+	g_output=cloudtxt;
+
+	open_output(g_output);
+
+
+	if (flagdebug)
+	{
+		myprintf("93675: Faccio g_output %s\n",g_output.c_str());
+		myprintf("93676: %s\n",migliaia(int64_t(g_output_handle)));
+	}
+	
+	int result_add=0;
+	int result_test=0;
+	int result_info=0;
+	int result_archive=0;
+	int result_versum=0;
+	int result_checksum=0;
+	int result_1on1=0;
+	
+	if (!flagonlyupload)
+	{
+		color_cyan();
+		myprintf("91544: ::::::::::::::::::::: Updating archive\n");
+		color_restore();
+		flagpakka=true;
+		flagfasttxt=true;
+		flagstat=true;
+		result_add=add();
+
+
+		
+		if (myflagtest)
+		{
+			color_cyan();
+			myprintf("93249: ::::::::::::::::::::: Testing\n");	
+			color_restore();
+			jidacreset();
+			files.clear();
+			flagpakka=true;
+			result_test=test();
+		}
+
+		color_cyan();
+		myprintf("93349: ::::::::::::::::::::: Enumerating versions\n");	
+		color_restore();
+		files.clear();
+		jidacreset();
+		flagpakka=true;
+		flagnoeta=true;
+		flagstat=false;
+		versioncomment="";
+		all=8;
+		command='i';
+		///flagbig=true;
+		///flagsilent=true;
+		///g_rangelast=10;
+		result_info=enumeratecomments();
+		
+		
+		if (myflagverify)
+		{
+			flagbig=false;
+			flagsilent=false;
+			color_cyan();
+			myprintf("93549: ::::::::::::::::::::: Double check CRC-32\n");	
+			color_restore();
+			files.clear();
+			jidacreset();
+			flagfasttxt=true;
+			files.push_back(archive);
+			flagpakka=true;
+			result_versum=versum();
+		}
+	}
+	color_cyan();
+	myprintf("93586: ::::::::::::::::::::: Starting cloud (main file)\n");
+	color_restore();
+	flagpakka=true;
+	files.clear();
+	files.push_back("sftp");
+	files.push_back(archive);
+	files.push_back(g_sftp_remote);
+	result_archive=sftp_doupload();
+
+	color_cyan();
+	myprintf("94597: ::::::::::::::::::::: Starting cloud (checksum)\n");
+	color_restore();
+
+	flagpakka=true;
+	flagforce=true;
+	files.clear();
+	files.push_back("sftp");
+	files.push_back(thechecksum);
+	files.push_back(g_sftp_remote);
+	result_checksum=sftp_doupload();
+	flagforce=false;
+
+	color_cyan();
+	myprintf("93614: ::::::::::::::::::::: 	Final check\n");
+	color_restore();
+	flagssd=true;
+	flagpakka=false;
+	flagterse=true;
+	string dacontrollare=includetrailingbackslash(percorso)+"*";
+	files.clear();
+	files.push_back("sftp");
+	files.push_back(dacontrollare);
+	files.push_back(g_sftp_remote);
+	result_1on1=sftp_do1on1();
+
+	printbar('-');
+	
+	reportresult("Archiving update",result_add);
+	
+	if (myflagtest)
+		reportresult("Full test of archive",result_test);
+	
+	reportresult("Enumerating versions",result_info);
+	printf("\n");
+	
+	if (myflagverify)
+	{
+		reportresult("Double-check versum",result_versum);
+	}
+	reportresult("Archive uploading",result_archive);
+	reportresult("Checksum uploading",result_checksum);
+	printf("\n");
+	reportresult("Double check upload",result_1on1);
+	printf("\n");
+	string	privacy=g_gettempdirectory()+"privacy.txt";
+	privacy=nomefileseesistegia(privacy);
+	if (flagdebug3)
+	{
+		myprintf("93624: report  %s\n",cloudtxt.c_str());
+		myprintf("93625: privacy %s\n",privacy.c_str());
+	}
+	
+	if(g_output_handle!=0)
+	{
+		fclose(g_output_handle);
+		g_output_handle=0;
+	}
+
+	int somma=result_add+result_test+result_info+result_versum+result_archive+result_checksum+result_1on1;
+	printbar('-');
+	reportresult("Global result",somma);
+	printf("\n");
+	
+	if (g_sftp_maila=="")
+	{
+		myprintf("94014: No -maila, exit\n");
+		
+		if (somma==0)
+		{
+			color_green();
+			printDigitalString("OK");
+			menoenne=5;
+			pause();
+			color_restore();
+			return 0;
+		}
+		else
+		{
+			color_red();
+			printDigitalString("ERROR");
+			pause();
+			color_restore();
+		}
+		return somma;
+	}		
+
+	if (!fileexists(g_sftp_maila))
+	{
+		myprintf("94040: Cannot launch -maila <<%Z>> not found\n",g_sftp_maila.c_str());
+		return 1;
+	}
+	
+	if (!makeprivacy(cloudtxt,privacy))
+	{
+		myprintf("94028: Cannot make privacy file\n");
+		return 2;
+	}
+	
+	string parametri=std::string(migliaia(somma))+" ";
+	if (g_sftp_customer=="")
+		g_sftp_customer="zpaqfranz";
+
+	parametri+=g_sftp_customer;
+	
+	
+	if (g_sftp_mailfull!="")
+	{
+		if (flagverbose)
+			myprintf("93773: Mail full     : %s\n",g_sftp_mailfull.c_str());
+		parametri+=" -full "+g_sftp_mailfull+" \""+cloudtxt+"\"";
+	}
+	if (g_sftp_mailprivacy!="")
+	{
+		if (flagverbose)
+			myprintf("93734: Mail privacy  : %s\n",g_sftp_mailprivacy.c_str());
+		parametri+=" -privacy "+g_sftp_mailprivacy+" \""+privacy+"\"";
+	}
+	if (flagdebug)
+		myprintf("9440: maila parameters |%s|\n",parametri.c_str());
+#ifdef _WIN32
+	int europe=waitexecuteprogram(g_sftp_maila,parametri);
+#else
+	int europe=0;
+	xcommand(g_sftp_maila,parametri);
+#endif
+
+	if ((europe==0) && (somma==0))
+	{
+		color_green();
+		printDigitalString("OK");
+		menoenne=5;
+		pause();
+		color_restore();
+		return 0;
+	}
+	else
+	{
+		color_red();
+		printDigitalString("ERROR");
+		pause();
+		color_restore();
+	}
+	
+	return 0;
+}
+#endif 
+
+/*
+PS C:\Program Files\Microsoft Visual Studio\2022\Community> (Get-Content c:\zpaqfranz\zpaqfranz.cpp | Select-String 'myprintf\("([0-9]{5})' | % { $_.Matches.Groups[1].Value } | Group-Object | ? Count -gt 1).Name
+72254
+01211
+02249
+02250
+48725
+00101
+00106
+00108
+41257
+42074
+02053
+00281
+00332
+00321
+03183
+57714
+01802
+03191
+03192
+00734
+52649
+41254
+41291
+41831
+00322
+00323
+00324
+00343
+00363
+00416
+00433
+00519
+00533
+00535
+00551
+00581
+00586
+00614
+00653
+64433
+64746
+00674
+00862
+01140
+01143
+01302
+01345
+01373
+58913
+01413
+01409
+01434
+01437
+01773
+01795
+01926
+69068
+69073
+01982
+78176
+01986
+01985
+01983
+01988
+01989
+01984
+01987
+01994
+01991
+01992
+01993
+01995
+01996
+01997
+01998
+01999
+02001
+02002
+02077
+02923
+02079
+02080
+02932
+02089
+02098
+02123
+02165
+02167
+02172
+61568
+02184
+02283
+02284
+71008
+02695
+96024
+95994
+96035
+96193
+96333
+03003
+03006
+03007
+03008
+03009
+03010
+03011
+03012
+03014
+03015
+03017
+03018
+03019
+03021
+03050
+03052
+03053
+03055
+03158
+03344
+10034
+03335
+03322
+03342
+03333
+03336
+80829
+80831
+80843
+03337
+03338
+03339
+03340
+03341
+03343
+03345
+03346
+03360
+81541
+03364
+00918
+00965
+05446
+07848
+86623
+86390
+07830
+*/

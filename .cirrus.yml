@@ -1,12 +1,13 @@
-# Task per Linux
-task:
+# Configurazione Cirrus CI per zpaqfranz multi-platform
+
+linux_task:
   name: Build on Linux
   container:
     image: gcc:latest
   install_script:
     - apt-get update && apt-get install -y g++ libz-dev
   compile_script:
-    - g++ -DSFTP -DHWSHA2 -g -O0 -Wall -Wextra -pthread zpaqfranz.cpp -lm -ldl -o zpaqfranz 2>&1 | tee build_report.txt
+    - g++ -DSFTP -DHWSHA2 -g -O0 -Wall -Wextra -pthread zpaqfranz.cpp -lm -ldl -lz -o zpaqfranz 2>&1 | tee build_report.txt
   test_script:
     - ./zpaqfranz autotest
   always:
@@ -15,18 +16,19 @@ task:
     executable_artifacts:
       path: zpaqfranz
 
-# Task per macOS
-task:
+macos_task:
   name: Build on macOS
   macos_instance:
     image: ghcr.io/cirruslabs/macos-runner:sonoma
   install_script:
     - brew update
     - brew install gcc zlib
-    - export PATH="/usr/local/opt/gcc/bin:$PATH"
-    - g++ --version
+    # Usa il gcc di Homebrew
+    - export CC=$(brew --prefix gcc)/bin/gcc-13
+    - export CXX=$(brew --prefix gcc)/bin/g++-13
+    - $CXX --version
   compile_script:
-    - g++ -Dunix -DSFTP zpaqfranz.cpp -o zpaqfranz -pthread -std=c++11 -Wall -Wpedantic 2>&1 | tee build_report.txt
+    - $(brew --prefix gcc)/bin/g++-13 -Dunix -DSFTP -DHWSHA2 zpaqfranz.cpp -o zpaqfranz -pthread -std=c++11 -Wall -Wpedantic -lz 2>&1 | tee build_report.txt
   test_script:
     - ./zpaqfranz autotest
   always:
@@ -35,15 +37,14 @@ task:
     executable_artifacts:
       path: zpaqfranz
 
-# Task per FreeBSD
-task:
+freebsd_task:
   name: Build on FreeBSD
   freebsd_instance:
-    image_name: freebsd-13-1-release-amd64
+    image_name: freebsd-14-0-release-amd64
   install_script:
-    - pkg install -y clang g++ zlib
+    - pkg install -y clang gcc zlib
   compile_script:
-    - cc -DHWSHA2 -DSFTP zpaqfranz.cpp -o zpaqfranz -pthread -lstdc++ -lm 2>&1 | tee build_report.txt
+    - c++ -DHWSHA2 -DSFTP zpaqfranz.cpp -o zpaqfranz -pthread -lm -lz 2>&1 | tee build_report.txt
   test_script:
     - ./zpaqfranz autotest
   always:
@@ -52,22 +53,39 @@ task:
     executable_artifacts:
       path: zpaqfranz
 
-# Task per Windows
-task:
+windows_task:
   name: Build on Windows
   windows_container:
-    image: mcr.microsoft.com/windows/servercore:ltsc2019
-    os_version: 2019
+    image: mcr.microsoft.com/windows/servercore:ltsc2022
+    os_version: 2022
   install_script:
     - powershell -Command "Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))"
-    - choco install mingw zlib -y
+    - choco install mingw zlib.v140 -y
+    - refreshenv
     - g++ --version
   compile_script:
-    - g++ -s -DSFTP -DHWSHA2 zpaqfranz.cpp -o zpaqfranz.exe -pthread -static -Wall -Wpedantic -lurlmon 2>&1 | tee build_report.txt
+    - g++ -s -DSFTP -DHWSHA2 zpaqfranz.cpp -o zpaqfranz.exe -pthread -static -Wall -Wpedantic -lurlmon -lz 2>&1 | tee build_report.txt
   test_script:
-    - zpaqfranz.exe autotest
+    - .\zpaqfranz.exe autotest
   always:
     report_artifacts:
       path: build_report.txt
     executable_artifacts:
       path: zpaqfranz.exe
+
+# Alternativa per Windows usando VM invece di container
+# windows_vm_task:
+#   name: Build on Windows VM
+#   windows_instance:
+#     image: windows-2022
+#   install_script:
+#     - choco install mingw zlib.v140 -y
+#   compile_script:
+#     - g++ -s -DSFTP -DHWSHA2 zpaqfranz.cpp -o zpaqfranz.exe -pthread -static -Wall -Wpedantic -lurlmon -lz 2>&1 | tee build_report.txt
+#   test_script:
+#     - .\zpaqfranz.exe autotest
+#   always:
+#     report_artifacts:
+#       path: build_report.txt
+#     executable_artifacts:
+#       path: zpaqfranz.exe

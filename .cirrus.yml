@@ -1,3 +1,141 @@
+# Build su multiple distribuzioni Linux va
+
+# Debian (stable) - APT based
+debian_task:
+  name: Build on Debian
+  container:
+    image: debian:bookworm
+  install_script:
+    - apt-get update && apt-get install -y g++ libz-dev build-essential
+  compile_script:
+    - g++ -DSFTP -DHWSHA2 -g -O0 -Wall -Wextra -pthread zpaqfranz.cpp -lm -ldl -lz -o zpaqfranz 2>&1 | tee build_report.txt
+  test_script:
+    - ./zpaqfranz autotest
+  always:
+    report_artifacts:
+      path: build_report.txt
+    executable_artifacts:
+      path: zpaqfranz
+
+# Ubuntu LTS - APT based
+ubuntu_task:
+  name: Build on Ubuntu LTS
+  container:
+    image: ubuntu:22.04
+  install_script:
+    - apt-get update && apt-get install -y g++ libz-dev build-essential
+  compile_script:
+    - g++ -DSFTP -DHWSHA2 -g -O0 -Wall -Wextra -pthread zpaqfranz.cpp -lm -ldl -lz -o zpaqfranz 2>&1 | tee build_report.txt
+  test_script:
+    - ./zpaqfranz autotest
+  always:
+    report_artifacts:
+      path: build_report.txt
+    executable_artifacts:
+      path: zpaqfranz
+
+# Fedora - DNF/YUM based
+fedora_task:
+  name: Build on Fedora
+  container:
+    image: fedora:39
+  install_script:
+    - dnf install -y gcc-c++ zlib-devel glibc-devel
+  compile_script:
+    - g++ -DSFTP -DHWSHA2 -g -O0 -Wall -Wextra -pthread zpaqfranz.cpp -lm -ldl -lz -o zpaqfranz 2>&1 | tee build_report.txt
+  test_script:
+    - ./zpaqfranz autotest
+  always:
+    report_artifacts:
+      path: build_report.txt
+    executable_artifacts:
+      path: zpaqfranz
+
+# CentOS Stream - YUM based
+centos_task:
+  name: Build on CentOS Stream
+  container:
+    image: quay.io/centos/centos:stream9
+  install_script:
+    - dnf install -y gcc-c++ zlib-devel glibc-devel
+  compile_script:
+    - g++ -DSFTP -DHWSHA2 -g -O0 -Wall -Wextra -pthread zpaqfranz.cpp -lm -ldl -lz -o zpaqfranz 2>&1 | tee build_report.txt
+  test_script:
+    - ./zpaqfranz autotest
+  always:
+    report_artifacts:
+      path: build_report.txt
+    executable_artifacts:
+      path: zpaqfranz
+
+# Rocky Linux (CentOS alternative) - YUM based
+rocky_task:
+  name: Build on Rocky Linux
+  container:
+    image: rockylinux:9
+  install_script:
+    - dnf install -y gcc-c++ zlib-devel glibc-devel
+  compile_script:
+    - g++ -DSFTP -DHWSHA2 -g -O0 -Wall -Wextra -pthread zpaqfranz.cpp -lm -ldl -lz -o zpaqfranz 2>&1 | tee build_report.txt
+  test_script:
+    - ./zpaqfranz autotest
+  always:
+    report_artifacts:
+      path: build_report.txt
+    executable_artifacts:
+      path: zpaqfranz
+
+# AlmaLinux (altra alternativa CentOS) - YUM based
+alma_task:
+  name: Build on AlmaLinux
+  container:
+    image: almalinux:9
+  install_script:
+    - dnf install -y gcc-c++ zlib-devel glibc-devel
+  compile_script:
+    - g++ -DSFTP -DHWSHA2 -g -O0 -Wall -Wextra -pthread zpaqfranz.cpp -lm -ldl -lz -o zpaqfranz 2>&1 | tee build_report.txt
+  test_script:
+    - ./zpaqfranz autotest
+  always:
+    report_artifacts:
+      path: build_report.txt
+    executable_artifacts:
+      path: zpaqfranz
+
+# openSUSE - Zypper based
+opensuse_task:
+  name: Build on openSUSE
+  container:
+    image: opensuse/leap:15.5
+  install_script:
+    - zypper refresh && zypper install -y gcc-c++ zlib-devel glibc-devel
+  compile_script:
+    - g++ -DSFTP -DHWSHA2 -g -O0 -Wall -Wextra -pthread zpaqfranz.cpp -lm -ldl -lz -o zpaqfranz 2>&1 | tee build_report.txt
+  test_script:
+    - ./zpaqfranz autotest
+  always:
+    report_artifacts:
+      path: build_report.txt
+    executable_artifacts:
+      path: zpaqfranz
+
+# Arch Linux - Pacman based
+arch_task:
+  name: Build on Arch Linux
+  container:
+    image: archlinux:latest
+  install_script:
+    - pacman -Syu --noconfirm gcc zlib glibc
+  compile_script:
+    - g++ -DSFTP -DHWSHA2 -g -O0 -Wall -Wextra -pthread zpaqfranz.cpp -lm -ldl -lz -o zpaqfranz 2>&1 | tee build_report.txt
+  test_script:
+    - ./zpaqfranz autotest
+  always:
+    report_artifacts:
+      path: build_report.txt
+    executable_artifacts:
+      path: zpaqfranz
+
 # Alpine Linux - APK based (musl libc - per binari statici)
 alpine_task:
   name: Build on Alpine Linux (musl)
@@ -7,6 +145,40 @@ alpine_task:
     - apk add --no-cache g++ musl-dev zlib-dev zlib-static make linux-headers build-base
   compile_script:
     - g++ -DSFTP -DHWSHA2 -static -g -O0 -Wall -Wextra -Wno-stringop-overflow -pthread zpaqfranz.cpp -lz -o zpaqfranz 2>&1 | tee build_report.txt
+  test_script:
+    - ./zpaqfranz autotest
+  always:
+    report_artifacts:
+      path: build_report.txt
+    executable_artifacts:
+      path: zpaqfranz
+
+# Versione ottimizzata per release (usando GCC latest)
+gcc_optimized_task:
+  name: Build Optimized (GCC latest)
+  container:
+    image: gcc:latest
+  install_script:
+    - apt-get update && apt-get install -y g++ libz-dev
+  compile_script:
+    - g++ -DSFTP -DHWSHA2 -O3 -march=native -flto -Wall -Wextra -pthread zpaqfranz.cpp -lm -ldl -lz -o zpaqfranz 2>&1 | tee build_report.txt
+  test_script:
+    - ./zpaqfranz autotest
+  always:
+    report_artifacts:
+      path: build_report.txt
+    executable_artifacts:
+      path: zpaqfranz
+
+# Test con Clang invece di GCC
+clang_task:
+  name: Build with Clang
+  container:
+    image: ubuntu:22.04
+  install_script:
+    - apt-get update && apt-get install -y clang libz-dev build-essential
+  compile_script:
+    - clang++ -DSFTP -DHWSHA2 -g -O0 -Wall -Wextra -pthread zpaqfranz.cpp -lm -ldl -lz -o zpaqfranz 2>&1 | tee build_report.txt
   test_script:
     - ./zpaqfranz autotest
   always:

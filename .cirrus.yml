@@ -1,0 +1,67 @@
+# Task per Linux
+task:
+  name: Build on Linux
+  container:
+    image: gcc:latest
+  install_script:
+    - apt-get update && apt-get install -y g++ libz-dev
+  compile_script:
+    - g++ -DSFTP -DHWSHA2 -g -O0 -Wall -Wextra -pthread zpaqfranz.cpp -lm -ldl -o zpaqfranz 2>&1 | tee build_report.txt
+  test_script:
+    - ./zpaqfranz 
+  always:
+    report_artifacts:
+      path: build_report.txt
+    executable_artifacts:
+      path: zpaqfranz
+
+# Task per macOS
+task:
+  name: Build on macOS
+  macos_instance:
+    image: macos-ventura-xcode
+  install_script:
+    - brew install gcc zlib
+  compile_script:
+    - g++-12 -DSFTP -DHWSHA2 -g -O0 -Wall -Wextra -pthread zpaqfranz.cpp -lm -ldl -o zpaqfranz 2>&1 | tee build_report.txt
+  test_script:
+    - ./zpaqfranz 
+  always:
+    report_artifacts:
+      path: build_report.txt
+    executable_artifacts:
+      path: zpaqfranz
+
+# Task per FreeBSD
+task:
+  name: Build on FreeBSD
+  freebsd_instance:
+    image: freebsd-13-3
+  install_script:
+    - pkg install -y g++ zlib
+  compile_script:
+    - g++ -DSFTP -DHWSHA2 -g -O0 -Wall -Wextra -pthread zpaqfranz.cpp -lm -ldl -o zpaqfranz 2>&1 | tee build_report.txt
+  test_script:
+    - ./zpaqfranz 
+  always:
+    report_artifacts:
+      path: build_report.txt
+    executable_artifacts:
+      path: zpaqfranz
+
+# Task per Windows
+task:
+  name: Build on Windows
+  windows_instance:
+    image: windows-2022
+  install_script:
+    - choco install mingw zlib
+  compile_script:
+    - g++ -DSFTP -DHWSHA2 -g -O0 -Wall -Wextra -pthread zpaqfranz.cpp -lm -o zpaqfranz 2>&1 | tee build_report.txt
+  test_script:
+    - zpaqfranz.exe 
+  always:
+    report_artifacts:
+      path: build_report.txt
+    executable_artifacts:
+      path: zpaqfranz.exe

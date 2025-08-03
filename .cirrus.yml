@@ -8,7 +8,7 @@ task:
   compile_script:
     - g++ -DSFTP -DHWSHA2 -g -O0 -Wall -Wextra -pthread zpaqfranz.cpp -lm -ldl -o zpaqfranz 2>&1 | tee build_report.txt
   test_script:
-    - ./zpaqfranz 
+    - ./zpaqfranz --version
   always:
     report_artifacts:
       path: build_report.txt
@@ -25,7 +25,7 @@ task:
   compile_script:
     - g++-12 -DSFTP -DHWSHA2 -g -O0 -Wall -Wextra -pthread zpaqfranz.cpp -lm -ldl -o zpaqfranz 2>&1 | tee build_report.txt
   test_script:
-    - ./zpaqfranz 
+    - ./zpaqfranz --version
   always:
     report_artifacts:
       path: build_report.txt
@@ -42,7 +42,7 @@ task:
   compile_script:
     - g++ -DSFTP -DHWSHA2 -g -O0 -Wall -Wextra -pthread zpaqfranz.cpp -lm -ldl -o zpaqfranz 2>&1 | tee build_report.txt
   test_script:
-    - ./zpaqfranz 
+    - ./zpaqfranz --version
   always:
     report_artifacts:
       path: build_report.txt
@@ -52,14 +52,15 @@ task:
 # Task per Windows
 task:
   name: Build on Windows
-  windows_instance:
-    image: windows-2022
+  windows_container:
+    image: mcr.microsoft.com/windows/servercore:ltsc2022
+    os_version: 2022
   install_script:
-    - choco install mingw zlib
+    - choco install mingw zlib -y
   compile_script:
     - g++ -DSFTP -DHWSHA2 -g -O0 -Wall -Wextra -pthread zpaqfranz.cpp -lm -o zpaqfranz 2>&1 | tee build_report.txt
   test_script:
-    - zpaqfranz.exe 
+    - zpaqfranz.exe --version
   always:
     report_artifacts:
       path: build_report.txt

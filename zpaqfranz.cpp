@@ -52,8 +52,20 @@ WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 */
-#define ZPAQ_VERSION "62.5h"
-#define ZPAQ_DATE "(2025-07-29)"  // cannot use __DATE__ on Debian!
+
+/*
+By uncommenting the line (defining ZPAQFULL), you'll get the 
+full version of zpaqfranz, with all features enabled.
+
+Here's the "spiegone"
+https://github.com/fcorbelli/zpaqfranz/wiki/Security:-open-software
+ */
+
+#define ZPAQFULL ///NOSFTPSTART
+///NOSFTPEND
+
+#define ZPAQ_VERSION "63.1b"
+#define ZPAQ_DATE "(2025-08-03)"
 
 ///	optional align for malloc (sparc64,HPPA) via -DALIGNMALLOC
 #define STR(a) #a
@@ -70,11 +82,10 @@ OTHER DEALINGS IN THE SOFTWARE.
 #endif // corresponds to #ifdef (#ifdef MALLOC_ALIGN)
 	
 /// "automagically" compiling (well, sort of)
-/// NO Windows? => no HWBLAKE, NO GUI, NOSHA1, YES unix
+/// NO Windows? => no HWBLAKE,NOSHA1, YES unix
 #ifndef _WIN32
 	#undef 	HWBLAKE3
 	#undef 	HWSHA1
-	#undef 	GUI
 	#undef 	unix
 	#define unix
 #endif // corresponds to #ifndef (#ifndef _WIN32)
@@ -86,8 +97,6 @@ OTHER DEALINGS IN THE SOFTWARE.
 	#undef	ESX
 	#undef	ALIGNMALLOC
 	#undef	unix
-	#undef 	GUI
-	#define	GUI
 #endif // corresponds to #ifdef (#ifdef _WIN32)
 
 #ifdef _WIN64
@@ -109,22 +118,23 @@ OTHER DEALINGS IN THE SOFTWARE.
    #endif // corresponds to #ifndef (#ifndef _WIN64)
 #endif // corresponds to #if (#if defined(_WIN32) && ( defined(HWSHA1) || defined(HWSHA2) ))
 
+#define ZSFX_VERSION ""
 
+#ifdef ZPAQFULL ///NOSFTPSTART
 #if defined(_WIN64)
-	#define ZSFX_VERSION "SFX64 v55.1,"
+	#undef ZSFX_VERSION
+	#define ZSFX_VERSION "SFX64 55.1,"
 #endif // corresponds to #if (#if defined(_WIN64))
-
 #if defined(_WIN32) && (!defined(_WIN64))
-	#define ZSFX_VERSION "-SFX32 v55.1,"
+	#undef ZSFX_VERSION
+	#define ZSFX_VERSION "-SFX32 55.1,"
 #endif // corresponds to #if (#if defined(_WIN32) && (!defined(_WIN64)))
 
-#if (!defined(_WIN32)) && (!defined(_WIN64))
-	#define ZSFX_VERSION ""
-#endif // corresponds to #if (#if (!defined(_WIN32)) && (!defined(_WIN64)))
+#endif ///NOSFTPEND
 
 
 #ifdef HWBLAKE3
-	#define TEXT_HWBLAKE3 "BLAKE3,"
+	#define TEXT_HWBLAKE3 "BLK3,"
 #else
 	#define TEXT_HWBLAKE3 ""
 #endif // corresponds to #ifdef (#ifdef HWBLAKE3)
@@ -189,8 +199,9 @@ OTHER DEALINGS IN THE SOFTWARE.
 	#undef DEBUG
 	#undef ESX
 	#undef ALIGNMALLOC
+#ifdef ZPAQFULL ///NOSFTPSTART
 	#undef SFTP
-	#undef GUI
+#endif ///NOSFTPEND
 	#undef unix
 	#define unix 1
 #endif // corresponds to #ifdef (#ifdef NAS)
@@ -200,31 +211,34 @@ OTHER DEALINGS IN THE SOFTWARE.
 	#define INT64_MAX 9223372036854775807LL
 	#define errno 0
 	#define nullptr NULL
+#ifdef ZPAQFULL ///NOSFTPSTART
 	#undef SFTP
+#endif ///NOSFTPEND
 #endif
 
 #define DATE_1980 1980*10000000000LL+1*100000000LL+1*1000000
 
 
 /*
-This is zpaqfranz, a patched  but (maybe :) compatible fork of ZPAQ version 7.15
-(http://mattmahoney.net/dc/zpaq.html)
 
-Old version in FreeBSD ports archivers/paq (v 6.57 of 2014),
-Debian (7.15 of 2016) et al.
+**This is zpaqfranz**, a patched — but (maybe :) compatible — fork of ZPAQ version 7.15
+([http://mattmahoney.net/dc/zpaq.html](http://mattmahoney.net/dc/zpaq.html)).
 
-From branch 51 all source code merged into one .cpp,
-aiming to make it as easy as possible to compile on "strange" systems
-(NAS, vSphere etc), because no make needed anymore.
+Starting from branch 51, all source code has been merged into a single `.cpp` file,
+with the goal of making it as easy as possible to compile on "unusual" systems
+(e.g., NAS devices, vSphere, etc.), since no `make` is required anymore.
 
-So be patient if the source is not linear, updating and compilation are now trivial.
+So please be patient if the source code appears non-linear — updating and compiling are now trivial.
 
-The source is composed of the fusion of different software
-from different authors, therefore there is no uniform style of programming.
+The source is a fusion of various software components from different authors,
+so there is no consistent programming style throughout.
 
-I have made a number of efforts to maintain compatibility with unmodified version (7.15)
-and compatibility with older versions of C++, even at the cost of slow or inelegant workarounds
-and as few as possible warnings.
+I've made considerable effort to maintain compatibility with the unmodified version (7.15)
+as well as with older C++ standards — even at the cost of slower or less elegant workarounds —
+and to minimize compiler warnings as much as possible.
+
+As of branch 63, you can now build a 100% open-source version (i.e., fully human-readable).
+
 
 So don't be surprised if it looks like what in Italy
 we call "zibaldone" or in Emilia-Romagna "mappazzone".
@@ -233,12 +247,14 @@ As Kirk McKusick once said: "nobody has offered to pay me the $25K to have me do
 
 GitHub links
 
+#ifdef ZPAQFULL ///NOSFTPSTART
 SFX modules (Windows)
 https://github.com/fcorbelli/zpaqfranz/tree/main/ZSFX
 https://github.com/fcorbelli/zsfx
 
 Embedded AUTOTEST file
 https://github.com/fcorbelli/zpaqfranz/tree/main/AUTOTEST
+#endif ///NOSFTPEND
 
 Windows stuff (assembly and object code for HW acceleration)
 https://github.com/fcorbelli/zpaqfranz/tree/main/WINDOWS
@@ -400,7 +416,7 @@ Credits and copyrights and licenses and links and internal bookmarks
 	LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 	OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 	SOFTWARE.
-
+#ifdef ZPAQFULL ///NOSFTPSTART
  9 [MIT License]                  zsfx by ... me                                      https://github.com/fcorbelli/zsfx
 	MIT License
 	Copyright (c) 2022 Franco Corbelli
@@ -419,6 +435,7 @@ Credits and copyrights and licenses and links and internal bookmarks
 	LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 	OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 	SOFTWARE.
+#endif ///NOSFTPEND
 
 10 [zlib license]                 Crc32.h Copyright (c) 2011-2019 Stephan Brumme      https://create.stephan-brumme.com/crc32/
  /// LICENSE_START.10
@@ -1170,6 +1187,24 @@ authorization of the copyright holder.
 50 Thanks to https://github.com/kskarlatos              for a very nasty bug on g++ with -tar
 51 Thanks to https://github.com/forgottenbutnotgone     for a bug in crc32 blocks sorting
 
+
+
+  _____  ______          _      _  __     __   ____  _____  ______ _   _ 
+ |  __ \|  ____|   /\   | |    | | \ \   / /  / __ \|  __ \|  ____| \ | |
+ | |__) | |__     /  \  | |    | |  \ \_/ /  | |  | | |__) | |__  |  \| |
+ |  _  /|  __|   / /\ \ | |    | |   \   /   | |  | |  ___/|  __| | . ` |
+ | | \ \| |____ / ____ \| |____| |____| |    | |__| | |    | |____| |\  |
+ |_|  \_\______/_/    \_\______|______|_|     \____/|_|    |______|_| \_|
+                                                                         
+
+`zpaqfranz` is **fully open source**. 
+All its components (including binary SFX modules) 
+are published on GitHub and can be rebuilt from source.
+
+Here's the "spiegone"
+https://github.com/fcorbelli/zpaqfranz/wiki/Security:-open-software
+
+
                 _____ _   _  _____ _______       _      _
                |_   _| \ | |/ ____|__   __|/\   | |    | |
                  | | |  \| | (___    | |  /  \  | |    | |
@@ -1188,7 +1223,7 @@ OpenSUSE:       sudo zypper install zpaqfranz
 
 
 ===============================================================================
-[2] Very fast: 	binary packages for various platform (almost the latest)
+[2] Very fast: 	browse binary packages for various platform (almost the latest)
 Sourceforge:	https://sourceforge.net/projects/zpaqfranz/files/
 ===============================================================================
 
@@ -1213,6 +1248,10 @@ wget http://www.francocorbelli.it/Makefile -O Makefile
 ```
 
 Why cc for a C++ file? LSS ancient-backward-compatibility
+This is therefore a "micro makefile" that you can try if you 
+can't use the full one, but it essentially works only 
+on modern versions of Linux, not on older ones.
+
 
 CC?=            cc
 INSTALL?=       install
@@ -1323,7 +1362,9 @@ DEFINEs at compile-time: IT IS UP TO YOU NOT TO MIX LOGICAL INCOMPATIBLE DEFINIT
 
 -DIPV6								// Do not force IPv4 (the current default)
 
+#ifdef ZPAQFULL ///NOSFTPSTART
 -DSFTP								// Enable SFTP support via curl (needs the library!)
+#endif ///NOSFTPEND
 
 -DNOLM								// Turn off the lm library (experimental)
 
@@ -1428,22 +1469,14 @@ Who knows. Try yourself :)
 OTHER COMPILERS
 I do not know. Try yourself :)
 
-DEBIAN (and derivates)
-Debian does not "like" anything embedded https://wiki.debian.org/EmbeddedCopies
-zpaqfranz (on Windows) have two different SFX modules (32 and 64).
-It is possible to make a Debian-package-compliant source code
-with some sed (or a single sed -e) (of course remove the |)
-sed -i "/DEBIAN|START/,/\/\/\/DEBIA|NEND/d"  zpaqfranz.cpp
-sed -i "s/\/\/\/char ext|ract_test1/char ext|ract_test1/g" zpaqfranz.cpp
-Actually, the code is inside #ifdef _WIN32, so it will be skipped on Debian 
-and in general every non-Windows.
-
 *NIX AND DOUBLE QUOTES
 Please, on non-Windows systems, DO NOT FORGET THE DOUBLE QUOTES, 
 especially with multipart files.
 "test_????.zpaq" is good
 test_????.zpaq   is BAD
 
+
+#ifdef ZPAQFULL ///NOSFTPSTART
 SFTP AND LIBCURL
 If you define -DSFTP during compilation, the program will dynamically use the 
 libcurl library, if it is available. 
@@ -1454,18 +1487,7 @@ installed manually, for example, using pkg add libcurl (on FreeBSD) or equivalen
 If it cannot be made to work, zpaqfranz will return an error.
 On *nix systems, the location of libcurl.so might not be known: there are many different systems, 
 and it can be found almost anywhere. 
-Therefore, you need to ensure it is in the current path, 
-or you need to evolve this function by adding the correct path.
-
-static string findso(const std::string& i_libname)
-"",              
-"/usr/lib/",
-"/usr/local/lib/",
-"/lib/",
-"/usr/lib64/",
-"/usr/local/lib64/",
-"./",
-"/usr/lib/x86_64-linux-gnu/"
+Therefore, you need to ensure it is in the current path
 
 Usually libcurl can be installed with something like
 
@@ -1492,7 +1514,7 @@ It's up to you
 *** BUT REMEMBER: DO *NOT* USE -static WITH -DSFTP ON *NIX ***
 *** BUT REMEMBER: DO *NOT* USE -static WITH -DSFTP ON *NIX ***
 *** BUT REMEMBER: DO *NOT* USE -static WITH -DSFTP ON *NIX ***
-
+#endif ///NOSFTPEND
 
 
 	
@@ -1525,8 +1547,10 @@ c:\mingw32\bin\g++ -m32 -O3 zpaqfranz.cpp -o zpaqfranz32 -pthread -static -lurlm
 Windows 64 (g++ 7.3.0), WITH cloud paq
 g++ -O3 -DSERVER zpaqfranz.cpp -o zpaqfranz -lwsock32 -lws2_32 -lurlmon
 
+#ifdef ZPAQFULL ///NOSFTPSTART
 Windows 64 (g++ 7.3.0) WITH SFTP (everything)
 g++ -O3 -DSFTP -DHWSHA2 zpaqfranz.cpp -o zpaqfranz -Wunused-parameter -Wall -Wextra -pedantic -lwsock32 -lws2_32 -lurlmon -IC:/zpaqfranz/libcurl/include 
+#endif ///NOSFTPEND
 
 FreeBSD (11.x) gcc 7
 gcc7 -O3 -Dunix zpaqfranz.cpp -lstdc++ -pthread -o zpaqfranz -static -lm
@@ -1700,9 +1724,11 @@ Rockylinux 9
 gcc 11.5.0
 g++ -O3 zpaqfranz.cpp -o zpaqfranz -pthread
 
+#ifdef ZPAQFULL ///NOSFTPSTART
 Debian with SFTP and libcurl
 This gets a DYNAMIC LOADING of curl library: you must have (somewhere) a libcurl.so!
 g++ -O3 -DSFTP -DHWSHA2 zpaqfranz.cpp -o zpaqfranz  -pthread -s -ldl -Wall -Wpedantic
+///NOSFTPEND
 
 Beware of #definitions
 g++ -dM -E - < /dev/null
@@ -1714,7 +1740,7 @@ sometimes __sun, sometimes not
 
 
 
-
+///NOSFTPSTART
 
       _______ ______  _____ _______   ______ _____ _      ______ 
      |__   __|  ____|/ ____|__   __| |  ____|_   _| |    |  ____|
@@ -1772,6 +1798,10 @@ SHA-256: 00D478184C1851145A712B8054D04789DA164CDEE61EDB2240F124E0AC3501AA [     
 (...)
 SHA-256: FCCE109C8360963EB18975B94BDBE434BE1A49D3F53BDD768A99093B3EB838D2 [             37.000]     FCCE109C8360963EB18975B94BDBE434BE1A49D3F53BDD768A99093B3EB838D2
 
+
+From branch 63 you can strip everything, losing the autotest capabilities of course.
+
+///NOSFTPEND
 
 Fixer build
 g++ -g -Wall -Wextra -Wpedantic -fsanitize=address,undefined -O3 zpaqfranz.cpp -o fixed  
@@ -1925,11 +1955,13 @@ g++ -g -Wall -Wextra -Wpedantic -fsanitize=address,undefined -O3 zpaqfranz.cpp -
 	#include <sys/socket.h>
 	#include <netdb.h>
 
+#ifdef ZPAQFULL ///NOSFTPSTART
 #ifdef SFTP
 	#include <dlfcn.h>
 	#include <queue>
 	#include <condition_variable>
 #endif
+#endif ///NOSFTPEND
 
 #else  // Assume Windows
 	#include <mutex>
@@ -1962,7 +1994,7 @@ g++ -g -Wall -Wextra -Wpedantic -fsanitize=address,undefined -O3 zpaqfranz.cpp -
 	using namespace std;
 #endif // corresponds to #ifdef (#ifdef unix)
 
-		
+#ifdef ZPAQFULL ///NOSFTPSTART
 ///sed "/^[[:space:]]*$/d" 2.cpp > 3.cpp
 /// LICENSE_START.24
 
@@ -4511,7 +4543,7 @@ typedef CURLcode (*_curl_seek_callback2)(const void *, curl_off_t, int);
 
 
 /// LICENSE_END.24
-
+#endif ///NOSFTPEND
 
 //ugo
 
@@ -4569,6 +4601,7 @@ std::string g_mysql_user;
 std::string g_mysql_password;
 int			g_mysql_port;
 
+#ifdef ZPAQFULL ///NOSFTPSTART
 #ifdef SFTP
 std::string g_sftp_host;
 std::string g_sftp_user;
@@ -4583,6 +4616,7 @@ std::string g_sftp_key;
 int			g_sftp_port;
 int			g_sftp_bandwidth;
 #endif // corresponds to #ifdef (#ifdef SFTP)
+#endif ///NOSFTPEND
 
 int 		g_device_fd;
 int64_t 	g_device_size;
@@ -4599,17 +4633,23 @@ std::string g_exec_text;
 std::string g_exec;
 int 		g_255;
 std::string g_output;
+std::string g_keyfile;
+std::string g_keyfilehash;
 std::string g_error;
 std::string g_ifexist;
 std::string g_script;
+#ifdef ZPAQFULL ///NOSFTPSTART
 std::string g_sfx;
 std::string g_sfxto;
 std::string g_sfxnot;
 std::string g_sfxonly;
 std::string g_sfxuntil;
+#endif ///NOSFTPEND
 std::string g_deleteinto;
+#ifdef ZPAQFULL ///NOSFTPSTART
 bool 		g_sfxflagall;
 bool  		g_sfxflagforce;
+#endif ///NOSFTPEND
 bool		g_sse42;
 bool		g_flagmultipart;
 std::string g_archive;
@@ -4719,7 +4759,9 @@ bool		flagappend;
 bool		flagbig;
 bool		flagchecksum;
 bool		flagchecktxt;
+#ifdef ZPAQFULL ///NOSFTPSTART
 bool		flagsfx;
+#endif ///NOSFTPEND
 bool		flagfasttxt;
 bool		flagcomment;
 bool		flagdesc;
@@ -4828,7 +4870,17 @@ std::string	g_thechosenhash_str;
 
 
 typedef std::string (*voidhelpfunction)(bool i_usage,bool i_example);
-typedef std::map<std::string, voidhelpfunction> MAPPAHELP;
+struct HelpInfo 
+{
+    std::string 		category;
+    voidhelpfunction 	function;
+    int					sortposition;
+    HelpInfo(const std::string& cat, voidhelpfunction func,int i_pos) 
+        : category(cat), function(func), sortposition(i_pos) {}
+};
+
+typedef std::map<std::string, HelpInfo> MAPPAHELP;
+///typedef std::map<std::string, voidhelpfunction> MAPPAHELP;
 typedef std::map<int, 	std::string> 			MAPPACOMMENTI;
 typedef std::map<std::string, std::string> 		MAPPAFILEHASH;
 typedef std::map<std::string, std::string> 		MAPPASTRINGASTRINGA;
@@ -4878,6 +4930,7 @@ std::vector<s_crc32block> 	g_crc32;
 std::vector<uint64_t> 		g_arraybytescanned;
 std::vector<uint64_t> 		g_arrayfilescanned;
 MAPPAERRORS 			g_errors;
+
 
 #ifdef _WIN32
 #define MYFOREGROUND_BLUE		0x0001
@@ -20037,6 +20090,40 @@ void seppuku()
 	exit(0);
 }
 
+void append_to_g_password_keyfilehash()
+{
+	if (g_keyfilehash.empty())
+		return;
+    // Calcola la lunghezza totale necessaria
+    size_t len_nuova = g_keyfilehash.length();
+    size_t len_g_password = (g_password != nullptr) ? strlen(g_password) : 0;
+    size_t nuova_lunghezza = len_g_password + len_nuova + 1; // +1 per il terminatore '\0'
+
+    // Alloca nuova memoria per la stringa concatenata
+    char* temp = (char*)malloc(nuova_lunghezza * sizeof(char));
+    if (temp == nullptr) 
+	{
+        printf("Error allocating mem!\n");
+		seppuku();
+		return;
+    }
+
+    // Copia la stringa esistente (se presente) e concatena la nuova
+    if (g_password != nullptr) 
+	{
+        strcpy(temp, g_password);
+        strcat(temp, g_keyfilehash.c_str()); // Usa c_str() per ottenere il char* da std::string
+    } else {
+        strcpy(temp, g_keyfilehash.c_str());
+    }
+
+    // Libera la memoria precedente (se g_password non è nullptr)
+    ///free(g_password);
+
+    // Aggiorna g_password con la nuova stringa
+    g_password = temp;
+}
+
 bool ihavehw()
 {
 #ifndef HWSHA2
@@ -26891,6 +26978,7 @@ string decode_command(const char i_command)
 	else
 	if (i_command=='Z')
 		return "backup command is running";
+#ifdef ZPAQFULL ///NOSFTPSTART
 	else
 	if (i_command=='A')
 		return "zfsadd";
@@ -26900,6 +26988,7 @@ string decode_command(const char i_command)
 	else
 	if (i_command=='=')
 		return "zfsproxbackup";
+#endif ///NOSFTPEND
 	else
 		return "";
 }
@@ -27707,9 +27796,12 @@ void printbar(char i_carattere,bool i_printbarraenne=true)
 	if (i_printbarraenne)
 		myprintf("\n");
 }
-void moreprint(const char* i_stringa,bool i_nocr=false)
+void moreprint(const char* i_stringa,bool i_nocr=false,int i_spaces=0)
 {
 	if (!i_stringa) return;  // Early return if string is null
+	
+	std::string spaces(i_spaces, ' ');
+			
 	if (g_output_handle)
 	{
 		if (i_nocr)
@@ -27725,18 +27817,18 @@ void moreprint(const char* i_stringa,bool i_nocr=false)
 	if (flagnomore)
 	{
 		if (i_nocr)
-			printf("%s",i_stringa);
+			printf("%s%s",spaces.c_str(),i_stringa);
 		else
-			printf("%s\n",i_stringa);
+			printf("%s%s\n",spaces.c_str(),i_stringa);
 		return;
 	}
 		
 	if ((larghezzaconsole<0) || (altezzaconsole<0))
 	{
 		if (i_nocr)
-			printf("%s",i_stringa);
+			printf("%s%s",spaces.c_str(),i_stringa);
 		else
-			printf("%s\n",i_stringa);
+			printf("%s%s\n",spaces.c_str(),i_stringa);
 		return;
 	}
 	if (!i_nocr)
@@ -27765,6 +27857,7 @@ void moreprint(const char* i_stringa,bool i_nocr=false)
 		if (riga==righe)
 			currentmax=massimo;
 		int startcarattere=(riga-1)*larghezzaconsole;
+		printf("%s",spaces.c_str());
 		for (int i=startcarattere;i<startcarattere+currentmax;i++)
 			printf("%c",i_stringa[i]);
 		if (!i_nocr)
@@ -27817,6 +27910,61 @@ bool getcaptcha(const string& i_captcha,const string& i_reason)
 	myprintf("00034: Captcha OK\n");
 	return true;
 }
+
+void scrivi(unsigned int i_spazio,string i_header, string i_desc)
+{
+	if (i_spazio<=10)
+		i_spazio=10;
+	
+	string header_padded = i_header;
+    
+    if (header_padded.length() > i_spazio)
+        header_padded = header_padded.substr(0, i_spazio - 1);
+    
+    while (header_padded.length() < i_spazio) 
+	    header_padded += " ";
+    
+    // Controlla se l'header inizia esattamente con "CMD "
+    if (i_header.substr(0, 4) == "CMD ") 
+		color_cyan();
+    else 
+	    color_green();
+    
+    moreprint(header_padded.c_str(), true); 
+    if (i_header.substr(0, 4) != "CMD ") 
+	    color_restore(); 
+    
+	moreprint(i_desc.c_str());
+	if (i_header.substr(0, 4) == "CMD ") 
+	    color_restore(); 
+    
+	
+	/*
+	static int maxlen=0;
+	if (i_desc.size()>maxlen)
+	{
+		maxlen=i_desc.size();
+		printf("----------------------------------- %d\n",maxlen);
+	}
+	*/
+}
+
+
+void scrivi_examples()
+{
+	color_yellow(); 
+	moreprint("Examples:"); 
+	color_restore();
+}
+void scrivi_riga(string i_header, string i_desc)
+{
+	scrivi(20,i_header,i_desc);
+}
+void scrivi_esempio(string i_header, string i_desc)
+{
+	scrivi(38,i_header,i_desc);
+}
+
 
 class franz_flags
 {
@@ -31116,6 +31264,7 @@ string wintolinuxpath(const string& i_path)
 	return risultato;
 }
 
+#ifdef ZPAQFULL ///NOSFTPSTART
 void xcommand(string i_command,string i_parameter)
 {
 	if (flagdebug2)
@@ -31179,6 +31328,7 @@ void xcommand(string i_command,string i_parameter)
 	if (dummy==888888)
 		myprintf("00132: no-warning-please\n");
 }
+#endif ///NOSFTPEND
 #if defined(_WIN32)
 bool win32_writeads_buffer(string i_filename,string i_adsname,unsigned char* i_buffer,int i_len)
 {
@@ -31328,7 +31478,7 @@ bool win32_readads_sb(string i_filename,string i_adsname,StringBuffer* o_stringb
 	return true;
 }
 
-
+#ifdef ZPAQFULL ///NOSFTPSTART
 /// something to get VSS done via batch file
 void waitexecute(string i_filename,string i_parameters,int i_show)
 {
@@ -31409,7 +31559,7 @@ void waitexecutepadre(const std::string& i_filename, const std::string& i_parame
     CloseHandle(pi.hThread);
     CloseHandle(hChildStdoutRd);
 }
-
+#endif ///NOSFTPEND
 
 
 bool isadmin()
@@ -31821,6 +31971,7 @@ string g_realtemp()
 }
 #endif // corresponds to #ifdef (#ifdef _WIN32)
 
+#ifdef ZPAQFULL ///NOSFTPSTART
 
 string g_gettempdirectory()
 {
@@ -31850,7 +32001,7 @@ string g_gettempdirectory()
 #if defined(ESX) || defined(ANCIENT)
 	string randomfolder="/tmp/_zpaqfranz/";
 #else
-	
+
 	///string temporaneo=migliaia(mtime());
 ///	string randomfolder="/tmp/_zpaqfranz/"+temporaneo+'/';
 	string randomfolder="/tmp/_zpaqfranz/"+std::to_string(mtime())+'/';
@@ -31867,6 +32018,8 @@ string g_gettempdirectory()
 	return randomfolder;
 #endif // corresponds to #if (#if defined(_WIN32) || defined(_WIN64))
 }
+
+#endif ///NOSFTPEND
 
 /*
 	some zpaq functions
@@ -31909,8 +32062,9 @@ void remove_temp_file(string i_thefile)
 	remove_dir_if_empty(percorso);
 }
 
-
 #ifdef _WIN32
+#ifdef ZPAQFULL ///NOSFTPSTART
+
 //// VSS on Windows by... batchfile
 //// delete all kind of shadows copies (if any)
 void vss_deleteshadows(string i_cartella)
@@ -31945,6 +32099,7 @@ void vss_deleteshadows(string i_cartella)
 		remove_temp_file(filebatch);
 	}
 }
+#endif ///NOSFTPEND
 string relativetolongpath(string i_filename)
 {
 ///https://googleprojectzero.blogspot.com/2016/02/the-definitive-guide-on-win32-to-nt.html
@@ -33156,9 +33311,15 @@ string internal_password_nocursor(const string i_default)
 
 string mygetpasswordblind(const string i_default)
 {
+	string risultato;
+	
 	if (flagnocolor)
-		return internal_password_nocursor(i_default);
-	return internal_password_withcursor(i_default);
+		risultato=internal_password_nocursor(i_default);
+	else
+		risultato=internal_password_withcursor(i_default);
+	if (g_keyfilehash!="")
+		risultato+=g_keyfilehash;
+	return risultato;
 }
 FP 		g_archivefp;
 FP 		g_archivefp_first;
@@ -33301,10 +33462,12 @@ InputArchive::InputArchive(const char* filename):fn(filename)
 				libzpaq::SHA256 sha256;
 				for (unsigned int i=0;i<spassword.size();i++)
 					sha256.put(spassword[i]);
+
 				memcpy(g_password_string, sha256.result(), 32);
 				g_password=g_password_string;
 			}
 		}
+		
 	fp=myfopen(part1.c_str(), RB);
 	if (!isopen()) 
 		ioerr(part1.c_str());
@@ -37486,7 +37649,7 @@ string	franz_do_hash::filehash(string i_filename,bool i_flagcalccrc32,int64_t i_
 
 
 
-
+#ifdef ZPAQFULL ///NOSFTPSTART
 #ifdef SFTP
 // Funzione helper per il matching dei wildcard
 static bool matchWildcard(const std::string& pattern, const std::string& text) 
@@ -37527,6 +37690,7 @@ static bool matchWildcard(const std::string& pattern, const std::string& text)
     return p == pattern.length();
 }
 #endif
+#endif ///NOSFTPEND
 
 #ifdef _WIN32
 
@@ -37663,6 +37827,8 @@ void getCurrentCursorPos(int& x, int& y) {
 #endif
 }
 
+
+#ifdef ZPAQFULL ///NOSFTPSTART
 #ifdef SFTP
 
 ///fima1
@@ -38190,83 +38356,88 @@ public:
  
 
 	int kickstart()
-	{
+{
+    	
+
 #ifndef _WIN32
-	myprintf("38151: You should get libcurl.so, for example\n");
-	
-	// apk (Alpine Package Keeper)
-	myprintf("38152: Alpine            :apk add curl\n");
-	
-	// apt (Advanced Package Tool)
-	myprintf("38153: Debian/Ubuntu     :apt install libcurl4\n");
-	myprintf("38154: Debian/Ubuntu     :sudo apt install libcurl4\n");
-	
-	// brew (Homebrew)
-	myprintf("38158: macOS             :brew install curl\n");
-	
-	// dnf (Dandified YUM)
-	myprintf("38155: Alma Linux        :dnf install curl\n");
-	myprintf("38156: Alma Linux        :sudo dnf install curl\n");
-	myprintf("38157: Amazon Linux (v2+):dnf install curl\n");
-	myprintf("38158: Fedora            :dnf install curl\n");
-	myprintf("38159: Oracle Linux (v8+):dnf install curl\n");
-	myprintf("38160: Rocky Linux       :dnf install curl\n");
-	
-	// emerge (Portage)
-	myprintf("38161: Gentoo            :emerge --ask net-misc/curl\n");
-	
-	// guix
-	myprintf("38162: Guix              :guix install curl\n");
-	
-	// nix-env
-	myprintf("38163: NixOS             :nix-env -i curl\n");
-	
-	// opkg (OpenWrt Package)
-	myprintf("38164: OpenWrt           :opkg install curl\n");
-	
-	// pacman
-	myprintf("38165: Arch              :pacman -S curl\n");
-	
-	// pkg (FreeBSD/Solaris/Termux style)
-	myprintf("38166: FreeBSD           :pkg install curl\n");
-	myprintf("38167: OPNSense          :pkg install curl\n");
-	myprintf("38168: pfSense           :pkg install curl\n");
-	myprintf("38169: OpenIndiana       :pkg install library/curl\n");
-	myprintf("38170: Solaris           :pkg install curl\n");
-	myprintf("38171: Termux            :pkg install curl\n");
-	myprintf("38172: TrueNAS           :pkg install curl\n");
-	
-	// pkg_add (OpenBSD)
-	myprintf("38173: OpenBSD           :pkg_add curl\n");
-	myprintf("38174: OpenBSD           :doas pkg_add curl\n");
-	
-	// pkgin (NetBSD)
-	myprintf("38175: NetBSD            :pkgin install curl\n");
-	
-	// pkgman (Haiku)
-	myprintf("38176: Haiku             :pkgman install curl\n");
-	
-	// slackpkg
-	myprintf("38177: Slackware         :slackpkg install curl\n");
-	
-	// swupd (Clear Linux)
-	myprintf("38178: Clear Linux       :swupd bundle-add curl\n");
-	
-	// xbps-install (Void Linux)
-	myprintf("38179: Void              :xbps-install -S curl\n");
-	
-	// yum (older RHEL/CentOS)
-	myprintf("38180: Amazon Linux (v1) :yum install curl\n");
-	myprintf("38181: CentOS            :yum install curl\n");
-	myprintf("38182: Oracle Linux (v7-):yum install curl\n");
-	myprintf("38183: RHEL              :yum install curl\n");
-	myprintf("38184: SUSE              :zypper install libcurl4\n");
-	
-	myprintf("38185: Conda             :conda install curl\n");
-	
-	myprintf("38186: Manual            :Get https://curl.se, then");
-	myprintf("./configure --disable-static && make && sudo make install\n");
-#endif
+    myprintf("38151: You should get libcurl.so, for example\n");
+#ifdef __APPLE__
+    myprintf("38158: macOS             :brew install curl\n");
+#else
+#ifdef __linux__
+    // apk (Alpine Package Keeper)
+    myprintf("38152: Alpine            :apk add curl\n");
+    
+    // apt (Advanced Package Tool)
+    myprintf("38153: Debian/Ubuntu     :apt install libcurl4\n");
+    myprintf("38154: Debian/Ubuntu     :sudo apt install libcurl4\n");
+    
+    // dnf (Dandified YUM)
+    myprintf("38155: Alma Linux        :dnf install curl\n");
+    myprintf("38156: Alma Linux        :sudo dnf install curl\n");
+    myprintf("38157: Amazon Linux (v2+):dnf install curl\n");
+    myprintf("38158: Fedora            :dnf install curl\n");
+    myprintf("38159: Oracle Linux (v8+):dnf install curl\n");
+    myprintf("38160: Rocky Linux       :dnf install curl\n");
+    
+    // emerge (Portage)
+    myprintf("38161: Gentoo            :emerge --ask net-misc/curl\n");
+    
+    // guix
+    myprintf("38162: Guix              :guix install curl\n");
+    
+    // nix-env
+    myprintf("38163: NixOS             :nix-env -i curl\n");
+    
+    // opkg (OpenWrt Package)
+    myprintf("38164: OpenWrt           :opkg install curl\n");
+    // pacman
+    myprintf("38165: Arch              :pacman -S curl\n");
+    // slackpkg
+    myprintf("38177: Slackware         :slackpkg install curl\n");
+    
+    // swupd (Clear Linux)
+    myprintf("38178: Clear Linux       :swupd bundle-add curl\n");
+    
+    // xbps-install (Void Linux)
+    myprintf("38179: Void              :xbps-install -S curl\n");
+    
+    // yum (older RHEL/CentOS)
+    myprintf("38180: Amazon Linux (v1) :yum install curl\n");
+    myprintf("38181: CentOS            :yum install curl\n");
+    myprintf("38182: Oracle Linux (v7-):yum install curl\n");
+    myprintf("38183: RHEL              :yum install curl\n");
+    myprintf("38184: SUSE              :zypper install libcurl4\n");
+#else
+    
+    // pkg (FreeBSD/Solaris/Termux style)
+    myprintf("38166: FreeBSD           :pkg install curl\n");
+    myprintf("38167: OPNSense          :pkg install curl\n");
+    myprintf("38168: pfSense           :pkg install curl\n");
+    myprintf("38169: OpenIndiana       :pkg install library/curl\n");
+    myprintf("38170: Solaris           :pkg install curl\n");
+    myprintf("38171: Termux            :pkg install curl\n");
+    myprintf("38172: TrueNAS           :pkg install curl\n");
+    
+    // pkg_add (OpenBSD)
+    myprintf("38173: OpenBSD           :pkg_add curl\n");
+    myprintf("38174: OpenBSD           :doas pkg_add curl\n");
+    
+    // pkgin (NetBSD)
+    myprintf("38175: NetBSD            :pkgin install curl\n");
+    
+    // pkgman (Haiku)
+    myprintf("38176: Haiku             :pkgman install curl\n");
+    
+    myprintf("38185: Conda             :conda install curl\n");
+    
+    myprintf("38186: Manual            :Get https://curl.se, then ");
+    myprintf("./configure --disable-static && make && sudo make install\n");
+#endif  // __linux__
+#endif  // __APPLE__
+    return 0;
+#endif  // _WIN32
+
 
 #ifdef ZPAQ_VERSION
 #ifdef _WIN32
@@ -38334,10 +38505,12 @@ static std::string findso_macos(const std::string& i_libname)
         "/opt/homebrew/Cellar/curl"   // Homebrew (Apple Silicon)
     };
     
-    for (const char* base_path : homebrew_paths) 
+    int homebrew_count = sizeof(homebrew_paths) / sizeof(homebrew_paths[0]);
+    for (int i = 0; i < homebrew_count; i++) 
     {
+        const char* base_path = homebrew_paths[i];
         if (flagdebug2)
-            myprintf("52649: Scanning recursively <<%s>>\n", base_path);
+            myprintf("92649: Scanning recursively <<%s>>\n", base_path);
         std::string result = scan_directory_recursive(base_path, libname);
         if (!result.empty()) 
             return result;
@@ -38347,14 +38520,15 @@ static std::string findso_macos(const std::string& i_libname)
     const char* standard_paths[] = {
         "/usr/local/lib/",   // Homebrew (linkato)
         "/usr/lib/",         // Sistema macOS
-        "./"                 // Directory corrente
     };
     
-    for (const char* path : standard_paths) 
+    int standard_count = sizeof(standard_paths) / sizeof(standard_paths[0]);
+    for (int j = 0; j < standard_count; j++) 
     {
+        const char* path = standard_paths[j];
         std::string full_path = std::string(path) + libname;
         if (flagdebug2)
-            myprintf("52649: Checking <<%s>>\n", full_path.c_str());
+            myprintf("52559: Checking <<%s>>\n", full_path.c_str());
         if (access(full_path.c_str(), F_OK) == 0) // fileexists
             return full_path;
     }
@@ -38368,7 +38542,7 @@ static std::string findso_macos(const std::string& i_libname)
     {
 
         const char* paths[] = {
-            "./",                         // CWD
+ ///           "./",                         // CWD
             "/usr/lib/",                  // Standard Linux
             "/usr/local/lib/",            // Standard Linux
             "/lib/",                      // Standard Linux
@@ -38387,13 +38561,12 @@ static std::string findso_macos(const std::string& i_libname)
                 return full_path;
         }
 		
-		
 		libname += ".4"; 
 		for (int i = 0; i < num_paths; i++) 
         {
             std::string full_path = std::string(paths[i]) + libname;
             if (flagdebug2)
-                myprintf("52649: Checking <<%s>>\n", full_path.c_str());
+                myprintf("32649: Checking <<%s>>\n", full_path.c_str());
             if (access(full_path.c_str(), F_OK) == 0) // fileexists
                 return full_path;
         }
@@ -38476,24 +38649,39 @@ static std::string findso_macos(const std::string& i_libname)
 		dllloaded = true;
 		return true;
 	#else
-		string libcurlposition = findcurlso();
-	
-		if (libcurlposition == "")
-		{
-			myprintf("52612$ Cannot find libcurl.so => I will try blindly\n");
-			libcurlposition = "libcurl.so";
-		}
-		else
-		{
-			if (flagverbose)
-				myprintf("52615: libcurl.so founded in %Z\n", libcurlposition.c_str());
-		}
-
-		void *hModule = dlopen(libcurlposition.c_str(), RTLD_LAZY);
+		
+		void *hModule 	= dlopen("libcurl.so", RTLD_LAZY); //first try
 		if (!hModule)
 		{
-			const char* last_error = dlerror();
-			myprintf("46919$ Cannot load libcurl.so from <<%Z>> lasterror %s\n", libcurlposition.c_str(), last_error);
+			if (flagdebug)
+				myprintf("38530: second try\n");
+			hModule 	= dlopen("libcurl.so.4", RTLD_LAZY); //second try
+		}
+#ifdef __APPLE__
+		if (!hModule)
+		{
+			if (flagdebug)
+				myprintf("38530: Apple try\n");
+			hModule 	= dlopen(".dylib", RTLD_LAZY); //Apple is always different
+			if (!hModule)
+			{
+				if (flagdebug)
+					myprintf("18530: Apple try (2nd)\n");
+				string wearedesperate=findso_macos("libcurl");
+				if (flagdebug)
+					myprintf("38543: wearedesperate %s\n",wearedesperate.c_str());
+				if (wearedesperate!="")
+					hModule = dlopen(wearedesperate.c_str(), RTLD_LAZY);
+			}
+		}
+#endif
+
+		if (!hModule)
+		{
+			myprintf("46919$ Cannot load libcurl.so, sorry\n");
+#ifdef _WIN32
+			(void)kickstart();
+#endif
 			return false;
 		}
 		curldll.easy_reset 		= (curl_easy_reset_t)		dlsym(hModule, "curl_easy_reset");
@@ -39952,6 +40140,7 @@ bool zpaqfranzsftp2::sftp_rsync(const std::vector<std::string>& local_files, con
 	
 ///finefima1
 #endif
+#endif ///NOSFTPEND
 /////////////////////////////// Jidac /////////////////////////////////
 
 // A Jidac object represents an archive contents: a list of file
@@ -40225,7 +40414,9 @@ private:
 	char new_password_string[32]; 		// -repack hashed password
 	char* new_password; 				// points to new_password_string or NULL
 	string nottype;           			// -not =...
+#ifdef ZPAQFULL ///NOSFTPSTART
 	string sfxnottype;           		// -not =...
+#endif ///NOSFTPEND
 	vector<string> level0;  			// list of m0
 	vector<string> level1;  			// list of m1
 	vector<string> level2;  			// list of m2
@@ -40234,10 +40425,14 @@ private:
 	vector<string> level5;  			// list of m5
 	
 	vector<string> notfiles;  			// list of prefixes to exclude
+#ifdef ZPAQFULL ///NOSFTPSTART
 	vector<string> sfxnotfiles;  		// list of prefixes to exclude
+#endif ///NOSFTPEND
 	vector<string> onlyfiles; 			// list of prefixes to include
 	vector<string> chunkfiles; 			// list of prefixes to include
+#ifdef ZPAQFULL ///NOSFTPSTART
 	vector<string> sfxonlyfiles; 		// list of prefixes to include
+#endif ///NOSFTPEND
 	vector<string> alwaysfiles; 		// list of prefixes to pack ALWAYS
 	string repack;       				// -repack output file
 	string	checktxt;					// check txt
@@ -40300,7 +40495,9 @@ private:
 	int consolidate(string i_archive);	// concat files into one
 	int summa();						// get hash / or sum
 	int hasha();						// get hash / or sum
+#ifdef ZPAQFULL ///NOSFTPSTART
 	int decimation();					// get only the newest file
+#endif ///NOSFTPEND
 	int deduplicate();					// get hash / or sum
 	int paranoid();						// paranoid test by unz. Really slow & lot of RAM
 	int fillami();						// media check
@@ -40310,24 +40507,32 @@ private:
 	int zero();							// Delete empty directory
 	int trim();							// Trim incomplete transaction
 	int crop();							// Truncate
+#ifdef ZPAQFULL ///NOSFTPSTART
 	int rd();							// Remove dir (rd /s or rm-f)
+#endif ///NOSFTPEND
 	int purgersync();					// Purge rsync temporary file
+#ifdef ZPAQFULL ///NOSFTPSTART
 	int sfx();							// Write autoextract module
+#endif ///NOSFTPEND
 	int oneonone();
 	int fix(string i_thearchive);
 	///int dd();
+#ifdef ZPAQFULL ///NOSFTPSTART
 	int	zfsproxbackup();
 	int	zfsproxrestore();
 	int	zfsbackup();
 	int	zfsrestore();
 	int	zfsreceive();
+#endif ///NOSFTPEND
 	int dircompare(bool i_flagonlysize,bool i_flagrobocopy);
 	int homesize();
 	int benchmark();
 	int autotest();
 	int pause();
+#ifdef ZPAQFULL ///NOSFTPSTART
 	int update();
 	int isopen();
+#endif ///NOSFTPEND
 	int	versum();
 	int last2();
 	int last();
@@ -40335,21 +40540,29 @@ private:
 	int consolidatebackup();
 	int comparehex();
 	int work();
+#ifdef ZPAQFULL ///NOSFTPSTART
 #ifdef SFTP
 	int sftp();
 #endif // corresponds to #ifdef (#ifdef SFTP)
+#endif ///NOSFTPEND
 	int count();
 	int backup();
+#ifdef ZPAQFULL ///NOSFTPSTART
 	int zfslist();
 	int zfspurge();
 	int zfssize();
 	int zfsadd();
 	int zfsenumerate(const string& i_command);
 	int mysql();
+#endif ///NOSFTPEND
 #ifdef _WIN32
+#ifdef ZPAQFULL ///NOSFTPSTART
 	int download();
+#endif ///NOSFTPEND
 	int windowsc();								// Backup (kind of) drive C:
+#ifdef ZPAQFULL ///NOSFTPSTART
 	int adminrun();								// Run windowsc()
+#endif ///NOSFTPEND
 	int 		read_archive2(int64_t i_starthere,string i_filename);
 #endif // corresponds to #ifdef (#ifdef _WIN32)
 	void load_help_map	();						// not in the constructor!
@@ -40373,9 +40586,13 @@ private:
 	int 		searchcomments(string i_testo,vector<DTMap::iterator> &filelist);
 	string 		zfs_get_snaplist(string i_header,string i_footer,vector<string>& o_array_primachiocciola,vector<string>& o_array_dopochiocciola,vector<string>& o_array_size);
 	string 		sanitizzanomefile(string i_filename,int i_filelength,int& io_collisioni,MAPPAFILEHASH& io_mappacollisioni);
+#ifdef ZPAQFULL ///NOSFTPSTART
 	int			writesfxmodule(string i_filename);
+#endif ///NOSFTPEND
 #ifdef _WIN32
+#ifdef ZPAQFULL ///NOSFTPSTART
 	int 		decompress_sfx_to_file(FILE* i_outfile);
+#endif ///NOSFTPEND
 	int			ads();
 #endif // corresponds to #ifdef (#ifdef _WIN32)
 	int 		extractqueue2(int i_chunk,int i_chunksize);
@@ -40459,7 +40676,9 @@ size_t			i_buffersize
 	bool		sanitizeline(string i_filename);
 	bool 		sanitizefile(string i_filename);
 #ifdef _WIN32
+#ifdef ZPAQFULL ///NOSFTPSTART
 	void		runhigh(string i_addendum);
+#endif ///NOSFTPEND
 	bool 		isrealfile(const string& i_filename);
 
 #endif // corresponds to #ifdef (#ifdef _WIN32)
@@ -40494,14 +40713,16 @@ public:
 #ifdef _WIN32
 	bool 						getmysqlfrominternet();
 #endif
+#ifdef ZPAQFULL ///NOSFTPSTART
 	int 						maxcpu(int i_percent);
 	int 						systemshutdown();
+#endif ///NOSFTPEND
 	int 						posix_count();
 	string 						find_unix_command(const string& i_thecommand);
-	
+#ifdef ZPAQFULL ///NOSFTPSTART	
 	int 						makefullzfsbackup(const string& poolName, const string& archiveName, const string& snapshotMarker, const string& sanitizedPoolName,const string & i_parameters);
 	int 						updatezfsbackup(const string& poolName, const string& archiveName, const string& snapshotMarker, const string& sanitizedPoolName,const string & i_parameters);
-
+#endif ///NOSFTPEND
 	bool 						preparantfs(const std::string& image_path, char drive_letter);
 #ifdef _WIN32
 	int 						elaborantfs(char* buffer, size_t buffer_size);
@@ -40523,7 +40744,7 @@ public:
 #endif
 	int 						getCharIndex(char c);
 	void 						printDigitalString(const char* inputString); 
-
+#ifdef ZPAQFULL ///NOSFTPSTART
 #ifdef SFTP
 	int 						sftp_do1on1();
 	int 						sftp_dorsync();
@@ -40538,7 +40759,7 @@ public:
 	int							sftp_domkdir();
 	
 #endif
-
+#endif ///NOSFTPEND
 	void 						getfirstlevelfolders(const DTMap& i_filemap, 
                          const std::string& i_basepath, 
                          std::vector<conteggio_file>& o_output,
@@ -40550,9 +40771,13 @@ public:
 	int 		comparefilelists(const std::vector<DTMap::iterator>& externalfilelist,
                                  const std::vector<DTMap::iterator>& internalfilelist,
 								 DTMap&			thedt);
+#ifdef ZPAQFULL ///NOSFTPSTART
 #ifdef SFTP
 	int				cloud();
 #endif
+#endif ///NOSFTPEND
+	string 		keyfile_to_string(string i_keyfile);
+
 	
 };
 
@@ -40646,7 +40871,7 @@ string x_one_vector(string i_command,string i_text,vector<string>& o_line)
 	return risultato;
 }
 
-
+#ifdef ZPAQFULL ///NOSFTPSTART
 string x_one(string i_command,string i_text)
 {
 	if (i_command=="")
@@ -40668,7 +40893,9 @@ string x_one(string i_command,string i_text)
 	}
 	return risultato;
 }
+#endif ///NOSFTPEND
 
+#ifdef ZPAQFULL ///NOSFTPSTART
 int Jidac::zfsreceive()
 {
 	myprintf("00332: zfsreceive\n",archive.c_str());
@@ -40903,7 +41130,9 @@ int Jidac::zfsrestore()
 	myprintf("00365: The script is <<%Z>>\n",myoutput.c_str());
 	return 0;
 }
+#endif ///NOSFTPEND
 
+#ifdef ZPAQFULL ///NOSFTPSTART
 int Jidac::makefullzfsbackup(const string& poolName, const string& archiveName, const string& snapshotMarker, const string& sanitizedPoolName,const string & i_parameters) 
 {
     myprintf("00378: The archive does not exist, checking for snapshots\n");
@@ -41270,6 +41499,7 @@ int Jidac::zfsbackup()
     else
 		return makefullzfsbackup(poolName, archive, snapshotMarker, sanitizedPoolName,parametrini);
 }
+#endif ///NOSFTPEND
 ///	detecting case collision: xxhash64 is more than enough (fast and compact)
 uint64_t Jidac::hashastringa(const string& i_string)
 {
@@ -44360,30 +44590,34 @@ bool compareorderby(DTMap::iterator a, DTMap::iterator b)
 /*
 	Section: help
 */
+
+
 void help_range()
 {
-	moreprint("+ : -range X:Y    Range versions [X-Y]");
-	moreprint("+ : -range X:     Range versions [X-THE LAST]");
-	moreprint("+ : -range :X     Range versions [1-X]");
-	moreprint("+ : -range X      Range is single version X");
-	moreprint("+ : -range ::X    Last X versions");
+	scrivi_riga("-range X:Y", "Range versions [X-Y]");
+	scrivi_riga("-range X:", "Range versions [X-THE LAST]");
+	scrivi_riga("-range :X", "Range versions [1-X]");
+	scrivi_riga("-range X", "Range is single version X");
+	scrivi_riga("-range ::X", "Last X versions");
+	scrivi_riga("-utf", "Remove non-utf8 chars");
+	scrivi_riga("-utf", "Remove non-utf8 chars");
 }
 
 void help_date()
 {
-	moreprint("+ : -datefrom X   datetime<=X The length must be even, beware of leading zeros");
-	moreprint("+ : -dateto   Y   datetime>=Y OK 2022, 202210, 2022-12-25, 2002-12-25_03:04:05, 20121225030405");
+	scrivi_riga("-datefrom X","datetime<=X The length must be even, beware of leading zeros");
+	scrivi_riga("-dateto   Y","datetime>=Y OK 2022, 202210, 2022-12-25, 2002-12-25_03:04:05, 20121225030405");
 }
 void help_size()
 {
-    moreprint("+ : -maxsize  X   Filter on filesize. Use K, M, G, T and KB,MB,GB,TB");
-    moreprint("+ : -minsize  Y   ex. 3000000, 3.000.000, 3000K, 3.2KB, 3M, 3MB, 2G, 3GB, 2TB, 3T");
+    scrivi_riga("-maxsize X","Filter on filesize. Use K, M, G, T and KB,MB,GB,TB");
+    scrivi_riga("-minsize Y","ex. 3000000, 3.000.000, 3000K, 3.2KB, 3M, 3MB, 2G, 3GB, 2TB, 3T");
 }
 void help_orderby()
 {
-	moreprint("+ : -orderby x    Sort files by (one or more of) ext;name;full;fullname;hash;size;");
-	moreprint("+ :                                              attr;date;creation;access;");
-	moreprint("+ : -desc         Descending sort (if -orderby)");
+	scrivi_riga("-orderby x","Sort files by (one or more of) ext;name;full;fullname;hash;size;");
+	scrivi_riga("","attr;date;creation;access;");
+	scrivi_riga("-desc","Descending sort (if -orderby)");
 }
 void help_printhash(bool i_flagadd)
 {
@@ -44391,68 +44625,66 @@ void help_printhash(bool i_flagadd)
 	for (MAPPATIPOHASH::iterator p=g_mappatipohash.begin(); p!=g_mappatipohash.end(); ++p)
 		if (p->second.flagiszpaq)
 		{
-			snprintf(linea,sizeof(linea),"+ : %-13s %s",p->second.switchname.c_str(),p->second.hashdescription.c_str());
-			moreprint(linea);
+			snprintf(linea,sizeof(linea),"%s",p->second.hashdescription.c_str());
+			scrivi_riga(p->second.switchname.c_str(),linea);
 		}
 	if (!i_flagadd)
 	{
 		for (MAPPATIPOHASH::iterator p=g_mappatipohash.begin(); p!=g_mappatipohash.end(); ++p)
 			if (!p->second.flagiszpaq)
 			{
-				snprintf(linea,sizeof(linea),"+ : %-13s %s",p->second.switchname.c_str(),p->second.hashdescription.c_str());
-				moreprint(linea);
+				snprintf(linea,sizeof(linea),"%s",p->second.hashdescription.c_str());
+				scrivi_riga(p->second.switchname.c_str(),linea);
 			}
 	}
 }
+/*
 void help_printhashline(bool i_flagadd)
 {
 
-	string	risultato="+ : ";
+	string	risultato;
 	for (MAPPATIPOHASH::iterator p=g_mappatipohash.begin(); p!=g_mappatipohash.end(); ++p)
 		if (p->second.flagiszpaq)
-			risultato+=p->second.switchname+" ";
-	moreprint(risultato.c_str());
+			scrivi_riga(p->second.switchname.c_str(),"");
 
 	if (!i_flagadd)
 	{
-		risultato="+ : ";
+		risultato="";
 		for (MAPPATIPOHASH::iterator p=g_mappatipohash.begin(); p!=g_mappatipohash.end(); ++p)
 			if (!p->second.flagiszpaq)
-				risultato+=p->second.switchname+" ";
-		moreprint(risultato.c_str());
+				scrivi_riga(p->second.switchname.c_str(),"");
 	}
 }
+*/
 string help_b(bool i_usage,bool i_example)
 {
 	if (i_usage)
 	{
-		color_green();
-		moreprint("CMD   b (benchmark and CPU stresser)");
-		moreprint("                  Rough benchmarking of hash-checksum");
-		moreprint("                  franzomips (fake index) showed if no switch selected");
-		moreprint("                  By default test ALL for 5 seconds with 400.000 bytes");
-		moreprint("                  NOTE: This reflects maximum theoretical performance,");
-		moreprint("                  not real-world speeds");
-		color_restore();
-		moreprint("+ : -debug        Do internal check (for non-Intel CPU)");
-		moreprint("+ : -verbose      Verbose output");
-		moreprint("+ : -n X          Set time limit to X s (<1000)");
-		moreprint("+ : -minsize Y    Run on chunks of Y bytes (<2000000000)");
+		scrivi_riga("CMD b","Bbenchmark and CPU stresser");
+		scrivi_riga(" ","Rough benchmarking of hash-checksum");
+		scrivi_riga(" ","franzomips (fake index) showed if no switch selected");
+		scrivi_riga(" ","By default test ALL for 5 seconds with 400.000 bytes");
+		scrivi_riga(" ","NOTE: This reflects maximum theoretical performance,");
+		scrivi_riga(" ","not real-world speeds");
+		scrivi_riga("-debug", "Do internal check (for non-Intel CPU)");
+		scrivi_riga("-verbose", "Verbose output");
+		scrivi_riga("-n X","Set time limit to X s (<1000)");
+		scrivi_riga("-minsize Y","Run on chunks of Y bytes (<2000000000)");
 		help_printhash(false);
-		moreprint("+ : -all          Multithread run (CPU cooker)");
-		moreprint("+ : -tX           With -all limit to X threads");
+		scrivi_riga("-all", "Multithread run (CPU cooker)");
+		scrivi_riga("-tX", "With -all limit to X threads");
 	}
-	if (i_usage && i_example) { color_yellow(); moreprint("Examples:"); color_restore(); }
+	if (i_usage && i_example) scrivi_examples();
 	if (i_example)
-	{
-		moreprint("Benchmark all                        : b");
-		moreprint("Benchmark all on 1.86GB              : b -minsize 2000000000");
-		moreprint("Benchmark all on 1MB                 : b -minsize 1048576");
-		moreprint("Benchmark SHA256 and BLAKE3          : b -sha256 -blake 3 -minsize 1048576");
-		moreprint("Benchmark for 10 second each         : b -n 10 -sha256 -blake3 -minsize 1048576");
-		moreprint("CPU stress test (heats the CPU)      : b -all -n 10000");
-		moreprint("Cook the CPU (all cores)             : b -all -n 20 -blake3");
-		moreprint("Cook the CPU (8 cores)               : b -all -t8 -n 20 -blake3");
+	{              
+		scrivi_esempio("Benchmark all","b");
+		scrivi_esempio("Benchmark all on 1.86GB","b -minsize 2000000000");
+		scrivi_esempio("Benchmark all on 1MB","b -minsize 1048576");
+		scrivi_esempio("Benchmark SHA256 and BLAKE3","b -sha256 -blake 3 -minsize 1048576");
+		scrivi_esempio("Benchmark for 10 second each","b -n 10 -sha256 -blake3 -minsize 1048576");
+		scrivi_esempio("CPU stress test (heats the CPU)","b -all -n 10000");
+		scrivi_esempio("Cook the CPU (all cores)","b -all -n 20 -blake3");
+		scrivi_esempio("Cook the CPU (8 cores)","b -all -t8 -n 20 -blake3");
 	}
 	return "CPU benchmark, speed index in (yes!) franzomips";
 }
@@ -44461,91 +44693,87 @@ string help_autotest(bool i_usage,bool i_example)
 {
 	if (i_usage)
 	{
-		color_green();
-		moreprint("CMD   autotest (autotest)");
-		moreprint("                  Operational self-test on this system");
-		color_restore();
-		moreprint("+ : -all          Heavy test (all hashes)");
-		moreprint("+ : -n X          On heavy test (-all) use X size (min: 200.000,default 1.000.000)");
-		moreprint("+ : -n X          On light test (not -all) use X ASCII chars");
-		moreprint("+ : -verbose      Verbose output");
-		moreprint("+ : -to d0        Create (into folder d0) a dotest.sh/bat script)");
-		moreprint("+ : -checktxt X   Test outYY.txt files inside X folder");
+		scrivi_riga("CMD autotest","Operational self-test on this system");
+		scrivi_riga("-all", "Heavy test (all hashes)");
+		scrivi_riga("-n X","On heavy test (-all) use X size (min: 200.000,default 1.000.000)");
+		scrivi_riga("-n X","On light test (not -all) use X ASCII chars");
+		scrivi_riga("-verbose", "Verbose output");
+		scrivi_riga("-to d0","Create (into folder d0) a dotest.sh/bat script)");
+		scrivi_riga("-checktxt X","Test outYY.txt files inside X folder");
 	}
-	if (i_usage && i_example) { color_yellow(); moreprint("Examples:"); color_restore(); }
+	if (i_usage && i_example) scrivi_examples();
 	if (i_example)
 	{
-		moreprint("Hashing internal test 'ABCD'         : autotest");
-		moreprint("Hashing internal test 'ABCDEFGHIJ'   : autotest -n 10");
-		moreprint("Hashing internal test                : autotest -all");
+		scrivi_esempio("Hashing internal test 'ABCD'","autotest");
+		scrivi_esempio("Hashing internal test 'ABCDEFGHIJ'","autotest -n 10");
+		scrivi_esempio("Hashing internal test","autotest -all");
 #if defined(HWSHA1) || defined(HWSHA2)
-		moreprint("Hashing internal test                : autotest -hw");
+		scrivi_esempio("Hashing internal test","autotest -hw");
 #endif // corresponds to #if (#if defined(HWSHA1) || defined(HWSHA2))
-		moreprint("Prepare a z:\\pippo\\dotest.bat        : autotest -all -verbose -to z:\\pippo");
-		moreprint("Check output results                 : autotest -checktxt z:\\ugo");
+		scrivi_esempio("Prepare a z:\\pippo\\dotest.bat","autotest -all -verbose -to z:\\pippo");
+		scrivi_esempio("Check output results","autotest -checktxt z:\\ugo");
 	}
 	return "Check for hidden errors after compiling from source";
 
 }
+#ifdef ZPAQFULL ///NOSFTPSTART
 string help_isopen(bool i_usage,bool i_example)
 {
 	if (i_usage)
 	{
-		color_green();
-		moreprint("CMD   isopen()");
-		color_restore();
-		moreprint("                  Check if a file is open (and execute some kind of script)");
+		scrivi_riga("CMD isopen()","Check if a file is open (and execute some kind of script)");
 	}
-	if (i_usage && i_example) { color_yellow(); moreprint("Examples:"); color_restore(); }
+	if (i_usage && i_example) scrivi_examples();
 	if (i_example)
 	{
-		moreprint("Check some thunderbird running       : isopen c:\\pippo\\INBOX -exec_ok killthunderbird.bat");
+		scrivi_esempio("Check some thunderbird running","isopen c:\\pippo\\INBOX -exec_ok killthunderbird.bat");
 	}
 	return("Check if a file is open (by other software)");
 
 }
+#endif ///NOSFTPEND
 string help_versum(bool i_usage,bool i_example)
 {
 	if (i_usage)
 	{
-		color_green();
-		moreprint("CMD   versum (hashdeep-like double check)");
-		moreprint("                  Double-check for 'remote' restore (ex. Unix => Win)");
-		moreprint("                  Heterogeneous restore can be tricky");
-		color_restore();
-		moreprint("+ : -ssd          Multithread (for SSDs, do NOT use on spinning drives)");
-		moreprint("+ : -find         Change the source (original) to the destination (extracted)");
-		moreprint("+ : -replace      folder (if different)");
-		moreprint("+ : -to file.zpaq Test against hashes stored in .zpaq (MUST match algo type!)");
-		moreprint("+ :               aka: do NOT compare sha3 hashes with xxhash64 or something !=");
-		moreprint("+ : -hashdeep     Use hashdeep format for the input file (DEFAULT: zpaqfranz)");
-		moreprint("+ : -checktxt     Test against .md5 / _md5.txt file (w/wildcards)");
-		moreprint("+ : -fasttxt      Test against _crc32.txt file (w/wildcards)");
-		moreprint("+ : -fasttxt -quick Test QUICK against _crc32.txt file (w/wildcards)");
+		scrivi_riga("CMD versum","hashdeep-like double check");
+		scrivi_riga(" ","Double-check for 'remote' restore (ex. Unix => Win)");
+		scrivi_riga(" ","Heterogeneous restore can be tricky");
+
+		scrivi_riga("-ssd", "Multithread (for SSDs, do NOT use on spinning drives)");
+		scrivi_riga("-find", "Change the source (original) to the destination (extracted)");
+		scrivi_riga("-replace", "folder (if different)");
+		scrivi_riga("-to", "file.zpaq Test against hashes stored in .zpaq (MUST match algo type!)");
+		scrivi_riga(" ","aka: do NOT compare sha3 hashes with xxhash64 or something !=");
+		scrivi_riga("-hashdeep", "Use hashdeep format for the input file (DEFAULT: zpaqfranz)");
+		scrivi_riga("-checktxt", "Test against .md5 / _md5.txt file (w/wildcards)");
+		scrivi_riga("-fasttxt", "Test against _crc32.txt file (w/wildcards)");
+		scrivi_riga("-fasttxt -quick","Test QUICK against _crc32.txt file (w/wildcards)");
 	}
-	if (i_usage && i_example) { color_yellow(); moreprint("Examples:"); color_restore(); }
+	if (i_usage && i_example) scrivi_examples();
 	if (i_example)
 	{
+#ifdef ZPAQFULL ///NOSFTPSTART
 		color_yellow();
 		moreprint("Educational purpose zfs-based backup of tank/d with various test on Win (-ssd for multithread)");
 		color_restore();
 		///moreprint("Destroy the snapshot fc (if any)     zfs destroy  tank/d@fc");
-		moreprint("Take the snapshot fc of tank/d       : zfs snapshot tank/d@fc");
-		moreprint("Get the hash list with xxhash64      : sum /tank/d/.zfs/snapshot/fc -forcezfs -ssd -xxhash -noeta -silent -out /tmp/hash_xx64.txt");
-		moreprint("Create hashdeep.txt w/md5            : hashdeep -c md5 -r /tank/d/.zfs/snapshot/fc >/tmp/hashdeep.txt");
-		moreprint("Make the backup (fixing path w/-to)  : a /tmp/thebak.zpaq /tank/d/.zfs/snapshot/fc /tmp/hash_xx64.txt /tmp/hashdeep.txt -to /tank/d");
-		moreprint("Destroy the snapshot                 : zfs destroy tank/d@fc");
+		scrivi_esempio("Take the snapshot fc of tank/d","zfs snapshot tank/d@fc");
+		scrivi_esempio("Get the hash list with xxhash64","sum /tank/d/.zfs/snapshot/fc -forcezfs -ssd -xxhash -noeta -silent -out /tmp/hash_xx64.txt");
+		scrivi_esempio("Create hashdeep.txt w/md5","hashdeep -c md5 -r /tank/d/.zfs/snapshot/fc >/tmp/hashdeep.txt");
+		scrivi_esempio("Make the backup (fixing path w/-to)","a /tmp/thebak.zpaq /tank/d/.zfs/snapshot/fc /tmp/hash_xx64.txt /tmp/hashdeep.txt -to /tank/d");
+		scrivi_esempio("Destroy the snapshot","zfs destroy tank/d@fc");
 		moreprint("!- Transfer somehow thebak.zpaq to Win (usually with rsync)");
 		moreprint("!- Full-scale test (aka:using filesystem), with extraction-restore");
-		moreprint("Extract in z:\\uno (-longpath)        : x thebak.zpaq -to z:\\uno -longpath");
-		moreprint("Verify files by hash list            : versum z:\\uno\\_tmp\\hash_xx64.txt -ssd -find /tank/d/.zfs/snapshot/fc -replace z:\\uno\\_tank\\d");
-		moreprint("Paranoid double-check with hashdeep  : versum z:\\uno\\_tmp\\hashdeep.txt -hashdeep -ssd -find /tank/d/.zfs/snapshot/fc -replace z:\\uno\\_tank\\d");
+		scrivi_esempio("Extract in z:\\uno (-longpath)","x thebak.zpaq -to z:\\uno -longpath");
+		scrivi_esempio("Verify files by hash list","versum z:\\uno\\_tmp\\hash_xx64.txt -ssd -find /tank/d/.zfs/snapshot/fc -replace z:\\uno\\_tank\\d");
+		scrivi_esempio("Paranoid double-check with hashdeep","versum z:\\uno\\_tmp\\hashdeep.txt -hashdeep -ssd -find /tank/d/.zfs/snapshot/fc -replace z:\\uno\\_tank\\d");
 		moreprint("!- Small-scale test, without reading from filesystem");
-		moreprint("Compare the md5 with the .zpaq       : versum \"*.zpaq\" -checktxt");
-		moreprint("Compare the crc32 with the .zpaq     : versum \"*.zpaq\" -fasttxt");
-		moreprint("Compare the quick with the .zpaq     : versum \"*.zpaq\" -fasttxt -quick");
-		moreprint("Automagically compare  .zpaq         : versum \"*.zpaq\"");
-
+		scrivi_esempio("Compare the md5 with the .zpaq","versum \"*.zpaq\" -checktxt");
+		scrivi_esempio("Compare the crc32 with the .zpaq","versum \"*.zpaq\" -fasttxt");
+		scrivi_esempio("Compare the quick with the .zpaq","versum \"*.zpaq\" -fasttxt -quick");
+		scrivi_esempio("Automagically compare  .zpaq","versum \"*.zpaq\"");
+#endif ///NOSFTPEND
 	}
 	return("Hashdeep-like double check of hashes");
 }
@@ -44556,26 +44784,25 @@ string help_backup(bool i_usage,bool i_example)
 {
 	if (i_usage)
 	{
-		color_green();
-		moreprint("CMD   backup      Multipart-managed backup: keeps part size/hash/quickhash");
-		moreprint("                  Hardening backups in 'pieces' (ex. rsync, robocopy etc)");
-		moreprint("                  Use command testbackup to check missing or invalid 'pieces'");
-		color_restore();
-		moreprint("+ : -backupxxh3   Store XXH3 instead of default MD5");
-		moreprint("+ : -backupzeta   Store ZETA instead of default MD5 [UNENCRYPTED]");
-		moreprint("+ : -index X      Store index (and .pid) files in X folder (for WORM drive)");
-		moreprint("+ : -tmp          .tmp instead of .zpaq for running multipart");
-		moreprint("+ : -notrim       DISABLE autotrim (if possible) of incomplete transaction");
+		
+		scrivi_riga("CMD backup","Multipart-managed backup: keeps part size/hash/quickhash");
+		scrivi_riga(" ","Hardening backups in 'pieces' (ex. rsync, robocopy etc)");
+		scrivi_riga(" ","Use command testbackup to check missing or invalid 'pieces'");
+		scrivi_riga("-backupxxh3", "Store XXH3 instead of default MD5");
+		scrivi_riga("-backupzeta", "Store ZETA instead of default MD5 [UNENCRYPTED]");
+		scrivi_riga("-index X","Store index (and .pid) files in X folder (for WORM drive)");
+		scrivi_riga("-tmp", ".tmp instead of .zpaq for running multipart");
+		scrivi_riga("-notrim", "DISABLE autotrim (if possible) of incomplete transaction");
 
 	}
-	if (i_usage && i_example) { color_yellow(); moreprint("Examples:"); color_restore(); }
+	if (i_usage && i_example) scrivi_examples();
 	if (i_example)
 	{
-		moreprint("Use the same parameters as add       : backup z:\\prova.zpaq *.txt -key pippo");
-		moreprint("Store XXH3 (instead of MD5)          : backup z:\\prova.zpaq *.txt -backupxxh3");
-		moreprint("Write index in c:\\temp               : backup z:\\prova.zpaq c:\\nz -index c:\\temp");
-		moreprint("Store ZETA (instead of MD5)          : backup z:\\prova.zpaq *.txt -backupzeta");
-		moreprint("Rename to .zpaq after completing     : backup z:\\prova.zpaq *.txt -tmp");
+		scrivi_esempio("Use the same parameters as add","backup z:\\prova.zpaq *.txt -key pippo");
+		scrivi_esempio("Store XXH3 (instead of MD5)","backup z:\\prova.zpaq *.txt -backupxxh3");
+		scrivi_esempio("Write index in c:\\temp","backup z:\\prova.zpaq c:\\nz -index c:\\temp");
+		scrivi_esempio("Store ZETA (instead of MD5)","backup z:\\prova.zpaq *.txt -backupzeta");
+		scrivi_esempio("Rename to .zpaq after completing","backup z:\\prova.zpaq *.txt -tmp");
 	}
 	return("Backup with hardened multipart");
 }
@@ -44583,31 +44810,30 @@ string help_testbackup(bool i_usage,bool i_example)
 {
 	if (i_usage)
 	{
-		color_green();
-		moreprint("CMD   testbackup  Check multipart-managed backup");
-		color_restore();
-		moreprint("+ : -to something Path to .zpaq chunks (if different)");
-		moreprint("+ : -verify       Read from filesystem and recompute hashes");
-		moreprint("+ : -ssd          Multithread (for SSDs, do NOT use on spinning drives)");
-		moreprint("+ : -paranoid     Compare index vs chunks (require password if encrypted)");
-		moreprint("+ : -verbose      Show more things");
-		moreprint("+ : -find         Change something in filenames");
-		moreprint("+ : -replace      for 'dirty' tricks");
-		moreprint("+ : -checktxt f1  Load md5sum-like textfile to compare against index");
+
+		scrivi_riga("CMD testbackup","Check multipart-managed backup");
+		scrivi_riga("-to", "something Path to .zpaq chunks (if different)");
+		scrivi_riga("-verify", "Read from filesystem and recompute hashes");
+		scrivi_riga("-ssd", "Multithread (for SSDs, do NOT use on spinning drives)");
+		scrivi_riga("-paranoid", "Compare index vs chunks (require password if encrypted)");
+		scrivi_riga("-verbose", "Show more things");
+		scrivi_riga("-find", "Change something in filenames");
+		scrivi_riga("-replace", "for 'dirty' tricks");
+		scrivi_riga("-checktxt f1","Load md5sum-like textfile to compare against index");
 		help_range();
-		moreprint("+ : -index X      Get index (and .pid) files in X folder (for WORM drive)");
+		scrivi_riga("-index X","Get index (and .pid) files in X folder (for WORM drive)");
 	}
-	if (i_usage && i_example) { color_yellow(); moreprint("Examples:"); color_restore(); }
+	if (i_usage && i_example) scrivi_examples();
 	if (i_example)
 	{
-		moreprint("Quick check local backup             : testbackup foo.zpaq");
-		moreprint("Multipart in different path          : testbackup foo.zpaq -to \\\\franzk\\z\\ -ssd");
-		moreprint("Different path, MD5 full test        : testbackup foo.zpaq -to \\\\franzk\\z\\ -verify");
-		moreprint("With multithread (on solid drives)   : testbackup foo.zpaq -to \\\\franzk\\z\\ -verify -ssd");
-		moreprint("Check from chunk 10 until last       : testbackup foo.zpaq -range 10: -verify");
-		moreprint("Test index with password (if any)    : testbackup foo.zpaq -paranoid -key pippo");
-		moreprint("Compare md5 hashes                   : testbackup foo.zpaq -checktxt z:\\md5.txt");
-		moreprint("Test with index in c:\\temp           : testbackup z:\\prova.zpaq -index c:\\temp -paranoid");
+		scrivi_esempio("Quick check local backup","testbackup foo.zpaq");
+		scrivi_esempio("Multipart in different path","testbackup foo.zpaq -to \\\\franzk\\z\\ -ssd");
+		scrivi_esempio("Different path, MD5 full test","testbackup foo.zpaq -to \\\\franzk\\z\\ -verify");
+		scrivi_esempio("With multithread (on solid drives)","testbackup foo.zpaq -to \\\\franzk\\z\\ -verify -ssd");
+		scrivi_esempio("Check from chunk 10 until last","testbackup foo.zpaq -range 10: -verify");
+		scrivi_esempio("Test index with password (if any)","testbackup foo.zpaq -paranoid -key pippo");
+		scrivi_esempio("Compare md5 hashes","testbackup foo.zpaq -checktxt z:\\md5.txt");
+		scrivi_esempio("Test with index in c:\\temp","testbackup z:\\prova.zpaq -index c:\\temp -paranoid");
 	}
 	return("Multipart hardening");
 }
@@ -44615,102 +44841,97 @@ string help_work(bool i_usage,bool i_example)
 {
 	if (i_usage)
 	{
-		color_green();
-		moreprint("CMD   work               Execute multiple commands (verb-noun format)");
-		color_restore();
-        moreprint("      Available nouns:");
-        moreprint("      big                Outputs a large ASCII string from input text");
-        moreprint("      pad                Left-pads a number with zeros");
-        moreprint("      filepathnotrailing Returns a file path without trailing backslash");
-        moreprint("      date               Displays current date or datetime");
-        moreprint("      printbar           Prints a row of repeated characters");
-        moreprint("      turbo              Sets CPU power to maximum (enables Turbo Boost)");
-        moreprint("      noturbo            Reduces CPU speed (limits Turbo Boost)");
-        moreprint("      monitoroff         Turns off the monitor");
-        moreprint("      monitoron          Turns on the monitor");
-        moreprint("      shutdown           (Try to) shutdown");
+		scrivi_riga("CMD work","Execute multiple commands (verb-noun format)");
+		scrivi_riga("Available nouns:","");
+        scrivi_riga("big               ","Outputs a large ASCII string from input text");
+        scrivi_riga("pad               ","Left-pads a number with zeros");
+        scrivi_riga("filepathnotrailing","Returns a file path without trailing backslash");
+        scrivi_riga("date              ","Displays current date or datetime");
+        scrivi_riga("printbar          ","Prints a row of repeated characters");
+        scrivi_riga("turbo             ","Sets CPU power to maximum (enables Turbo Boost)");
+        scrivi_riga("noturbo           ","Reduces CPU speed (limits Turbo Boost)");
+        scrivi_riga("monitoroff        ","Turns off the monitor");
+        scrivi_riga("monitoron         ","Turns on the monitor");
+        scrivi_riga("shutdown          ","(Try to) shutdown");
 #ifdef _WIN32
-		moreprint("      resetacl           Revert Windows' ACL to administrators");
+		scrivi_riga("resetacl","Revert Windows' ACL to administrators");
 #endif	
-        moreprint("      devart             Outputs a large ASCII string from input text");
-		moreprint("      devart-red         Outputs a red    large ASCII string from input text");
-		moreprint("      devart-green       Outputs a green  large ASCII string from input text");
-		moreprint("      devart-yellow      Outputs a yellow large ASCII string from input text");
-		moreprint("      devart-cyan        Outputs a cyan   large ASCII string from input text");
-		
-        moreprint("      last X             Show last file in X");
-        moreprint("      lastfile X         Show last file in X (only filename)");
-
-        moreprint("      getsize X          Show size of X (multiple / wildcard allowed)");
+        scrivi_riga("devart         ","Outputs a large ASCII string from input text");
+		scrivi_riga("devart-red     ","Outputs a red    large ASCII string from input text");
+		scrivi_riga("devart-green   ","Outputs a green  large ASCII string from input text");
+		scrivi_riga("devart-yellow  ","Outputs a yellow large ASCII string from input text");
+		scrivi_riga("devart-cyan    ","Outputs a cyan   large ASCII string from input text");
+		scrivi_riga("last X","Show last file in X");
+        scrivi_riga("lastfile X","Show last file in X (only filename)");
+		scrivi_riga("getsize X","Show size of X (multiple / wildcard allowed)");
 	}
-	if (i_usage && i_example) { color_yellow(); moreprint("Examples:"); color_restore(); }
+	if (i_usage && i_example) scrivi_examples();
 	if (i_example)
 	{
-		moreprint("Write a large ASCII string           : work big \"count the ok\"");
-        moreprint("Write in uppercase ASCII             : work big \"COUNT THE OK\"");
-        moreprint("Write a custom big string            : work big \"forza inter\"");
-        moreprint("Pad number to 8 digits               : work pad 123");
-        moreprint("Pad number to 4 digits               : work pad 123 -n 4");
-        moreprint("Remove trailing backslash            : work filepathnotrailing \"z:\\doc\\2\\3.eml\"");
-        moreprint("Show concise datetime                : work date -terse");
-        moreprint("Format date as year_month_day        : work date \"%year_%month_%day\" -terse");
-        moreprint("Print a line of dashes               : work printbar -terse");
-        moreprint("Print a line of exclamation marks    : work printbar \"!\" -terse");
-        moreprint("Reduce CPU speed (and power usage)   : work noturbo");
-        moreprint("Turn off monitor                     : work monitoroff");
-        moreprint("Shutdown                             : work shutdown");
+		scrivi_esempio("Write a large ASCII string","work big \"count the ok\"");
+        scrivi_esempio("Write in uppercase ASCII  ","work big \"COUNT THE OK\"");
+        scrivi_esempio("Write a custom big string ","work big \"forza inter\"");
+        scrivi_esempio("Pad number to 8 digits","work pad 123");
+        scrivi_esempio("Pad number to 4 digits","work pad 123 -n 4");
+        scrivi_esempio("Remove trailing backslash","work filepathnotrailing \"z:\\doc\\2\\3.eml\"");
+        scrivi_esempio("Show concise datetime","work date -terse");
+        scrivi_esempio("Format date as year_month_day","work date \"%year_%month_%day\" -terse");
+        scrivi_esempio("Print a line of dashes","work printbar -terse");
+        scrivi_esempio("Print a line of exclamation marks","work printbar \"!\" -terse");
+        scrivi_esempio("Reduce CPU speed (and power usage)","work noturbo");
+        scrivi_esempio("Turn off monitor","work monitoroff");
+        scrivi_esempio("Shutdown","work shutdown");
 #ifdef _WIN32
-        moreprint("Fix 'strange' ACLs                   : work resetacl z:\\temp");
+        scrivi_esempio("Fix 'strange' ACLs","work resetacl z:\\temp");
 #endif	
-        moreprint("Devart                               : work devart ALL-OK");
-        moreprint("Last file name                       : work lastfile z:\\temp\\copia*.zpaq -terse");
-        moreprint("Scary text                           : work devart-red ERROR! -terse");
-        moreprint("Show filesize                        : work getsize zpaqfranz*.cpp /tmp/prova");
+        scrivi_esempio("Devart","work devart ALL-OK");
+        scrivi_esempio("Last file name","work lastfile z:\\temp\\copia*.zpaq -terse");
+        scrivi_esempio("Scary text","work devart-red ERROR! -terse");
+        scrivi_esempio("Show filesize","work getsize zpaqfranz*.cpp /tmp/prova");
 	}
 	return("Multiple commands");
 }
+#ifdef ZPAQFULL ///NOSFTPSTART
 #ifdef SFTP
 string help_sftp(bool i_usage,bool i_example)
 {
 	if (i_usage)
 	{
-		color_green();
-		moreprint("CMD   sftp               Multiple commands (verb-noun) for SFTP servers");
-		color_restore();
-		moreprint("noun  upload             Upload a single file to SFTP");
-		moreprint("noun  verify             Quick compare local to remote file");
-		moreprint("noun  quick              Get the QUICK hash of a remote file");
-		moreprint("noun  ls                 List remote folder");
-		moreprint("noun  delete             Delete remote file");
-		moreprint("noun  size               Get size of remote file");
-		moreprint("noun  rsync              Rsync-like local files to remote folder (-ssd)");
-		moreprint("                            -force: do NOT append");
-		moreprint("noun  1on1               Quick compare local files to remote folder (-ssd)");
-		moreprint("noun  mkdir              Create a remote folder");
+		scrivi_riga("CMD sftp","Multiple commands (verb-noun) for SFTP servers");
+		scrivi_riga("noun  upload","Upload a single file to SFTP");
+		scrivi_riga("noun  verify","Quick compare local to remote file");
+		scrivi_riga("noun  quick ","Get the QUICK hash of a remote file");
+		scrivi_riga("noun  ls    ","List remote folder");
+		scrivi_riga("noun  delete","Delete remote file");
+		scrivi_riga("noun  size  ","Get size of remote file");
+		scrivi_riga("noun  rsync ","Rsync-like local files to remote folder (-ssd)");
+		scrivi_riga(" ","   -force: do NOT append");
+		scrivi_riga("noun  1on1  ","Quick compare local files to remote folder (-ssd)");
+		scrivi_riga("noun  mkdir ","Create a remote folder");
 		
-		moreprint("+ : -host      A  IPV4 hostname (ex. pippo.ciao.com)");
-		moreprint("+ : -user      B  SFTP username (ex. thesftpuser)");
-		moreprint("+ : -password  C  SFTP password (ex. thehardpwd)");
-		moreprint("+ : -port      D  SFTP port     (ex. 22)");
-		moreprint("+ : -ssh       E  SSH key       (ex. thekey)");
-		moreprint("+ : -bandwidth F  Limit global speed");
+		scrivi_riga("-host", "A  IPV4 hostname (ex. pippo.ciao.com)");
+		scrivi_riga("-user", "B  SFTP username (ex. thesftpuser)");
+		scrivi_riga("-password", "C  SFTP password (ex. thehardpwd)");
+		scrivi_riga("-port", "D  SFTP port     (ex. 22)");
+		scrivi_riga("-ssh", "E  SSH key       (ex. thekey)");
+		scrivi_riga("-bandwidth", "F  Limit global speed");
 		
 	}
-	if (i_usage && i_example) { color_yellow(); moreprint("Examples:"); color_restore(); }
+	if (i_usage && i_example) scrivi_examples();
 	if (i_example)
 	{
-		moreprint("Upload a file  : sftp upload j:\\1.zpaq /tmp/bak         -host 1.2.3.4 -user k1 -password pippo -port 23");
-		moreprint("Verify a file  : sftp verify j:\\1.zpaq /tmp/bak/1.zpaq  -host 1.2.3.4 -user k1 -password pippo -port 23");
-		moreprint("ls             : sftp ls     /tmp                       -host 1.2.3.4 -user k1 -password pippo -port 23");
-		moreprint("Delete a file  : sftp delete /tmp/bak/1.zpaq            -host 1.2.3.4 -user k1 -password pippo -port 23");
-		moreprint("Get size       : sftp size   /tmp/bak/1.zpaq            -host 1.2.3.4 -user k1 -password pippo -port 23");
-		moreprint("Get remote hash: sftp quick  /tmp/bak/1.zpaq            -host 1.2.3.4 -user k1 -password pippo -port 23");
-		moreprint("Multithread    : sftp quick  /tmp/remotefolder     -ssd -host 1.2.3.4 -user k1 -password pippo -port 23");
-		moreprint("Rsync          : sftp rsync  d:\\test* /home/fra    -ssd -host 1.2.3.4 -user k1 -password pippo -port 23");
-		moreprint("1on1           : sftp 1on1   d:\\test* /home/fra    -ssd -host 1.2.3.4 -user k1 -password pippo -port 23");
-		moreprint("Rsync w/limit  : sftp rsync  d:\\test* /home/fra    -ssd -host 1.2.3.4 -user k1 -password pippo -bandwidth 5m");
-		moreprint("ls             : sftp ls     /tmp                       -host 1.2.3.4 -user k1 -ssh theopensshkey.key ");
-		moreprint("Mkdir          : sftp mkdirl /home/franco/pippo         -host 1.2.3.4 -user k1 -ssh theopensshkey.key ");
+		scrivi_esempio("Upload a file","sftp upload j:\\1.zpaq /tmp/bak         -host 1.2.3.4 -user k1 -password pippo -port 23");
+		scrivi_esempio("Verify a file","sftp verify j:\\1.zpaq /tmp/bak/1.zpaq  -host 1.2.3.4 -user k1 -password pippo -port 23");
+		scrivi_esempio("ls","sftp ls     /tmp                       -host 1.2.3.4 -user k1 -password pippo -port 23");
+		scrivi_esempio("Delete a file","sftp delete /tmp/bak/1.zpaq            -host 1.2.3.4 -user k1 -password pippo -port 23");
+		scrivi_esempio("Get size","sftp size   /tmp/bak/1.zpaq            -host 1.2.3.4 -user k1 -password pippo -port 23");
+		scrivi_esempio("Get remote hash","sftp quick  /tmp/bak/1.zpaq            -host 1.2.3.4 -user k1 -password pippo -port 23");
+		scrivi_esempio("Multithread","sftp quick  /tmp/remotefolder     -ssd -host 1.2.3.4 -user k1 -password pippo -port 23");
+		scrivi_esempio("Rsync","sftp rsync  d:\\test* /home/fra    -ssd -host 1.2.3.4 -user k1 -password pippo -port 23");
+		scrivi_esempio("1on1","sftp 1on1   d:\\test* /home/fra    -ssd -host 1.2.3.4 -user k1 -password pippo -port 23");
+		scrivi_esempio("Rsync w/limit","sftp rsync  d:\\test* /home/fra    -ssd -host 1.2.3.4 -user k1 -password pippo -bandwidth 5m");
+		scrivi_esempio("ls","sftp ls     /tmp                       -host 1.2.3.4 -user k1 -ssh theopensshkey.key ");
+		scrivi_esempio("Mkdir","sftp mkdirl /home/franco/pippo         -host 1.2.3.4 -user k1 -ssh theopensshkey.key ");
 	
 	}
 	return("SFTP interface");
@@ -44760,7 +44981,7 @@ string help_cloud(bool i_usage,bool i_example)
 		moreprint("+ : -customer    K Email subject text            (ex. myhomebackup)");
 
 	}
-	if (i_usage && i_example) { color_yellow(); moreprint("Examples:"); color_restore(); }
+	if (i_usage && i_example) scrivi_examples();
 	if (i_example)
 	{
 		moreprint("");
@@ -44806,23 +45027,21 @@ string help_cloud(bool i_usage,bool i_example)
 	return("zpaqfranz to cloud (via SFTP)");
 }
 #endif // corresponds to #ifdef (#ifdef SFTP)
-
+#endif ///NOSFTPEND
 string help_comparehex(bool i_usage,bool i_example)
 {
 	if (i_usage)
 	{
-		color_green();
-		moreprint("CMD   comparehex  Compare HEX substs from two files");
-		color_restore();
-		moreprint("+ : First file    Name of first  text file");
-		moreprint("+ : Second file   Name of second text file");
-		moreprint("+ : Haystack      The string to be searched");
-		moreprint("+ : Expected len  Size of the hash");
+		scrivi_riga("CMD comparehex","Compare HEX substs from two files");
+		scrivi_riga("First file  ","Name of first  text file");
+		scrivi_riga("Second file ","Name of second text file");
+		scrivi_riga("Haystack    ","The string to be searched");
+		scrivi_riga("Expected len","Size of the hash");
 	}
-	if (i_usage && i_example) { color_yellow(); moreprint("Examples:"); color_restore(); }
+	if (i_usage && i_example) scrivi_examples();
 	if (i_example)
 	{
-		moreprint("Quick check local backup             : comparehex z:\\1.txt z:\\2.txt \"GLOBAL SHA256:\" 64");
+		scrivi_esempio("Quick check local backup","comparehex z:\\1.txt z:\\2.txt \"GLOBAL SHA256:\" 64");
 	}
 	return("Compare hex substrings from two files");
 }
@@ -44830,15 +45049,13 @@ string help_count(bool i_usage,bool i_example)
 {
 	if (i_usage)
 	{
-		color_green();
-		moreprint("CMD   count       Count strings inside files (just like grep)");
-		color_restore();
+		scrivi_riga("CMD count","Count strings inside files (just like grep)");
 	}
-	if (i_usage && i_example) { color_yellow(); moreprint("Examples:"); color_restore(); }
+	if (i_usage && i_example) scrivi_examples();
 	if (i_example)
 	{
-		moreprint("I expect 3 all OK in logfiles        : count z:\\*.txt 3 \"all OK\"");
-		moreprint("I expect 10 BIG OK in logfiles       : count z:\\*.txt 10");
+		scrivi_esempio("I expect 3 all OK in logfiles","count z:\\*.txt 3 \"all OK\"");
+		scrivi_esempio("I expect 10 BIG OK in logfiles","count z:\\*.txt 10");
 	}
 	return("Count substrings in files");
 }
@@ -44847,19 +45064,17 @@ string help_consolidatebackup(bool i_usage,bool i_example)
 {
 	if (i_usage)
 	{
-		color_green();
-		moreprint("CMD consolidate   Merge multipart-managed backup in one");
-		moreprint("                  or convert a standard .zpaq to backup");
-		color_restore();
-		moreprint("+ : -to something New backup file");
-		moreprint("+ : -destination X Copy-rename to X");
+		scrivi_riga("CMD consolidate","Merge multipart-managed backup in one");
+		scrivi_riga(" ","or convert a standard .zpaq to backup");
+		scrivi_riga("-to", "something New backup file");
+		scrivi_riga("-destination X","Copy-rename to X");
 	}
-	if (i_usage && i_example) { color_yellow(); moreprint("Examples:"); color_restore(); }
+	if (i_usage && i_example) scrivi_examples();
 	if (i_example)
 	{
-		moreprint("Convert archive to backup            : consolidate z:\\foo.zpaq -to k:\\newbackup -key pippo");
-		moreprint("Rename a backup                      : consolidate z:\\oldname -destination z:\\newname");
-		moreprint("Copy-Rename a backup                 : consolidate z:\\oldname -destination j:\\output\\newname");
+		scrivi_esempio("Convert archive to backup","consolidate z:\\foo.zpaq -to k:\\newbackup -key pippo");
+		scrivi_esempio("Rename a backup","consolidate z:\\oldname -destination z:\\newname");
+		scrivi_esempio("Copy-Rename a backup","consolidate z:\\oldname -destination j:\\output\\newname");
 	}
 	return("Consolidate multipart backup");
 }
@@ -44868,20 +45083,18 @@ string help_last2(bool i_usage,bool i_example)
 {
 	if (i_usage)
 	{
-		color_green();
-		moreprint("CMD   last2       Compare last 2 rows of a textfile, hash filename");
-		moreprint("                  Usually n-1 row the remote md5sum, last the local");
-		color_restore();
-		moreprint("                  zpaqfranz a z:\\1.zpaq *.bat -checktxt -noeta >z:\\l.txt");
-		moreprint("                  (some kind of rsync-rclone to remote)");
-		moreprint("                  (some kind of md5sum from remote) >z:\\r.txt");
-		moreprint("                  grep \"final MD5:\" z:\\l.txt >>z:\r.txt");
-		moreprint("                  zpaqfranz last2 z:\\r.txt -big");
+		scrivi_riga("CMD last2","Compare last 2 rows of a textfile, hash filename");
+		scrivi_riga(" ","Usually n-1 row the remote md5sum, last the local");
+		scrivi_riga(" ","zpaqfranz a z:\\1.zpaq *.bat -checktxt -noeta >z:\\l.txt");
+		scrivi_riga(" ","(some kind of rsync-rclone to remote)");
+		scrivi_riga(" ","(some kind of md5sum from remote) >z:\\r.txt");
+		scrivi_riga(" ","grep \"final MD5:\" z:\\l.txt >>z:\r.txt");
+		scrivi_riga(" ","zpaqfranz last2 z:\\r.txt -big");
 	}
-	if (i_usage && i_example) { color_yellow(); moreprint("Examples:"); color_restore(); }
+	if (i_usage && i_example) scrivi_examples();
 	if (i_example)
 	{
-		moreprint("Compare md5 hashes                   : last2 c:\\stor\\confronto.txt -big");
+		scrivi_esempio("Compare md5 hashes","last2 c:\\stor\\confronto.txt -big");
 	}
 	return("Compare last2 rows");
 }
@@ -44891,10 +45104,8 @@ string help_last(bool i_usage,bool i_example)
 {
 	if (i_usage)
 	{
-		color_green();
-		moreprint("CMD   last       Get last of multipart filename, usually for");
-		moreprint("                 scripting. Backups use 8 (eight) ? in filename");
-		color_restore();
+		scrivi_riga("CMD last","Get last of multipart filename, usually for");
+		scrivi_riga(" ","scripting. Backups use 8 (eight) ? in filename");
 		moreprint(" ");
 		moreprint("Windows' example (script use %%, direct only %)");
 		moreprint(" ");
@@ -44908,10 +45119,10 @@ string help_last(bool i_usage,bool i_example)
 		moreprint(" ");
 	}
 
-	if (i_usage && i_example) { color_yellow(); moreprint("Examples:"); color_restore(); }
+	if (i_usage && i_example) scrivi_examples();
 	if (i_example)
 	{
-		moreprint("Get the last partname                : last z:\\prova_????????");
+		scrivi_esempio("Get the last partname","last z:\\prova_????????");
 	}
 	return("Get the last multipart filename");
 }
@@ -44920,26 +45131,23 @@ string help_pause(bool i_usage,bool i_example)
 {
 	if (i_usage)
 	{
-		color_green();
-		moreprint("CMD   pause ()");
-		moreprint("                  Get a key from stdin (like pause on DOS)");
-		color_restore();
-		moreprint("+ : -n X          Wait X seconds, then proceed");
-		moreprint("+ : -pakka        Write less");
-		moreprint("+ : -silent       Write way less");
-		moreprint("+ : -find x       Way for key x");
-		moreprint("+ : -comment y    Change the prompt");
+		scrivi_riga("CMD pause","Get a key from stdin (like pause on DOS)");
+		scrivi_riga("-n X","Wait X seconds, then proceed");
+		scrivi_riga("-pakka", "Write less");
+		scrivi_riga("-silent", "Write way less");
+		scrivi_riga("-find x","Way for key x");
+		scrivi_riga("-comment y","Change the prompt");
 		
 	}
-	if (i_usage && i_example) { color_yellow(); moreprint("Examples:"); color_restore(); }
+	if (i_usage && i_example) scrivi_examples();
 	if (i_example)
 	{
-		moreprint("Wait for any key                     : pause");
-		moreprint("Wait for key z                       : pause -find z");
-		moreprint("Wait for 5 seconds (or key)          : pause -n 5");
-		moreprint("Wait 5 seconds (or key) small output : pause -n 5 -pakka");
-		moreprint("Wait 5 seconds (or key) NO output    : pause -n 5 -pakka -silent");
-		moreprint("Italian                              : pause -comment \"Premi un tasto\" -terse");
+		scrivi_esempio("Wait for any key","pause");
+		scrivi_esempio("Wait for key z","pause -find z");
+		scrivi_esempio("Wait for 5 seconds (or key)","pause -n 5");
+		scrivi_esempio("Wait 5 seconds (or key) small output","pause -n 5 -pakka");
+		scrivi_esempio("Wait 5 seconds (or key) NO output","pause -n 5 -pakka -silent");
+		scrivi_esempio("Italian","pause -comment \"Premi un tasto\" -terse");
 		
 	}
 	return("Halt script execution until timeout expires or keypress");
@@ -44949,20 +45157,18 @@ string help_setpassword(bool i_usage,bool i_example)
 {
 	if (i_usage)
 	{
-		color_green();
-		moreprint("CMD   password    Change/remove password of single archive (no multipart)");
-		color_restore();
-		moreprint("+ :               By default DRY RUN (only test)");
-		moreprint("+ : -force        Overwrite output if exists");
-		moreprint("+ : -space        Do not check for free space");
-		moreprint("+ : -key2 X       Use X as new password");
+		scrivi_riga("CMD password","Change/remove password of single archive (no multipart)");
+		scrivi_riga(" ","By default DRY RUN (only test)");
+		scrivi_riga("-force", "Overwrite output if exists");
+		scrivi_riga("-space", "Do not check for free space");
+		scrivi_riga("-key2 X","Use X as new password");
 	}
-	if (i_usage && i_example) { color_yellow(); moreprint("Examples:"); color_restore(); }
+	if (i_usage && i_example) scrivi_examples();
 	if (i_example)
 	{
-		moreprint("Change pass from X to Y              : password z:\\x.zpaq z:\\y.zpaq -key X -key2 Y");
-		moreprint("Add password X to NON encrypted      : password z:\\nocrypt.zpaq z:\\yescrypt.zpaq -key2 X");
-		moreprint("Remove password X from encrypted     : password z:\\crypt.zpaq z:\\nocrypt.zpaq -key X");
+		scrivi_esempio("Change pass from X to Y","password z:\\x.zpaq z:\\y.zpaq -key X -key2 Y");
+		scrivi_esempio("Add password X to NON encrypted","password z:\\nocrypt.zpaq z:\\yescrypt.zpaq -key2 X");
+		scrivi_esempio("Remove password X from encrypted","password z:\\crypt.zpaq z:\\nocrypt.zpaq -key X");
 	}
 	return ("Change/remove password of single archive (no multipart)");
 }
@@ -44971,22 +45177,20 @@ string help_trim(bool i_usage,bool i_example)
 
 	if (i_usage)
 	{
-		color_green();
-		moreprint("CMD   trim        Trim incomplete .zpaq file");
-		color_restore();
-		moreprint("+ :               By default DRY RUN (only test)");
-		moreprint("+ : -kill         Do a 'wet' (effective) in-place run");
-		moreprint("+ : -to tiny.zpaq Trim on tiny.zpaq");
-		moreprint("+ : -verify       Check the copy before trim");
+		scrivi_riga("CMD trim","Trim incomplete .zpaq file");
+		scrivi_riga(" ","By default DRY RUN (only test)");
+		scrivi_riga("-kill", "Do a 'wet' (effective) in-place run");
+		scrivi_riga("-to", "tiny.zpaq Trim on tiny.zpaq");
+		scrivi_riga("-verify", "Check the copy before trim");
 	}
-	if (i_usage && i_example) { color_yellow(); moreprint("Examples:"); color_restore(); }
+	if (i_usage && i_example) scrivi_examples();
 	if (i_example)
 	{
-		moreprint("Trim file (dry run)                  : trim z:\\1.zpaq");
-		moreprint("Trim file IN PLACE (wet run)         : trim z:\\1.zpaq -kill");
-		moreprint("Trim file on other (safer)           : trim z:\\1.zpaq -to d:\\small.zpaq");
-		moreprint("Trim file w/verify                   : trim z:\\1.zpaq -to d:\\small.zpaq -verify");
-		moreprint("Trim a multipart NON encrypted       : trim z:\\uno_???? -kill");
+		scrivi_esempio("Trim file (dry run)","trim z:\\1.zpaq");
+		scrivi_esempio("Trim file IN PLACE (wet run)","trim z:\\1.zpaq -kill");
+		scrivi_esempio("Trim file on other (safer)","trim z:\\1.zpaq -to d:\\small.zpaq");
+		scrivi_esempio("Trim file w/verify","trim z:\\1.zpaq -to d:\\small.zpaq -verify");
+		scrivi_esempio("Trim a multipart NON encrypted","trim z:\\uno_???? -kill");
 	}
 	return("Trim .zpaq archive from the incomplete transaction");
 
@@ -44996,35 +45200,31 @@ string help_crop(bool i_usage,bool i_example)
 
 	if (i_usage)
 	{
-		color_green();
-		moreprint("CMD   crop        Discard latest version(s)");
-		moreprint("                  Permanently deletes recent versions from an archive,");
-		moreprint("                  keeping only those up to a specified version number (-until)");
-		moreprint("                  By default DRY RUN (only test)");
-		color_restore();
-		moreprint("+ : -kill         Perform the actual crop operation (the default is a dry run)");
-		moreprint("+ : -to tiny.zpaq Reduce to tiny.zpaq (safer)");
-		moreprint("+ : -until X      Discard every versions >X");
-		color_yellow();
-		moreprint("+ : -maxsize  X   Manually cut at X (RISKY)");
-	    moreprint("+ : -force        Crop in-place (no backup: VERY RISKY!)");
-		color_restore();
+		scrivi_riga("CMD crop","Discard latest version(s)");
+		scrivi_riga(" ","Permanently deletes recent versions from an archive,");
+		scrivi_riga(" ","keeping only those up to a specified version number (-until)");
+		scrivi_riga(" ","By default DRY RUN (only test)");
+		scrivi_riga("-kill", "Perform the actual crop operation (the default is a dry run)");
+		scrivi_riga("-to tiny.zpaq","Reduce to tiny.zpaq (safer)");
+		scrivi_riga("-until X","Discard every versions >X");
+		scrivi_riga("-maxsize X","Manually cut at X (RISKY)");
+	    scrivi_riga("-force", "Crop in-place (no backup: VERY RISKY!)");
 	}
-	if (i_usage && i_example) { color_yellow(); moreprint("Examples:"); color_restore(); }
+	if (i_usage && i_example) scrivi_examples();
 	if (i_example)
 	{
-		moreprint("Reduce file (dry run, just infos)    : crop z:\\1.zpaq");
-		moreprint("Reduce up to version 100             : crop z:\\1.zpaq -to d:\\2.zpaq -until 100 -kill");
-		moreprint("Reduce to first 100.000              : crop z:\\1.zpaq -to d:\\2.zpaq -maxsize 100k -kill");
-		moreprint("Crop in place (NO BACKUP! RISKY!)    : crop z:\\1.zpaq -until 2 -kill -force");
+		scrivi_esempio("Reduce file (dry run, just infos)","crop z:\\1.zpaq");
+		scrivi_esempio("Reduce up to version 100","crop z:\\1.zpaq -to d:\\2.zpaq -until 100 -kill");
+		scrivi_esempio("Reduce to first 100.000","crop z:\\1.zpaq -to d:\\2.zpaq -maxsize 100k -kill");
+		scrivi_esempio("Crop in place (NO BACKUP! RISKY!)","crop z:\\1.zpaq -until 2 -kill -force");
 	}
 	return("Reduce .zpaq archive cropping (trimming) versions");
 
 }
 void print_sub()
 {
-	moreprint("                  Substitute %hour %min %sec %weekday %year %month %day");
-	moreprint("                  %week %date %time %datetime %timestamp (or $hour...)");
+	scrivi_riga(" ","Substitute %hour %min %sec %weekday %year %month %day");
+	scrivi_riga(" ","%week %date %time %datetime %timestamp (or $hour...)");
 }
 void print_doublequote()
 {
@@ -45036,121 +45236,117 @@ string help_a(bool i_usage,bool i_example)
 {
 	if (i_usage)
 	{
-		color_green();
-		moreprint("CMD   a (add) / append (ransomware)");
-		moreprint("                  zpaqfranz stores an extra checksum (CRC-32/XXH64) for each file");
-		moreprint("                  to detect potential SHA-1 collisions, a feature zpaq lacks.");
-		moreprint("                  This may cause a slowdown of ~10% on modern CPUs and can be");
-		moreprint("                  disabled with -nochecksum or -715");
-		color_restore();
+		scrivi_riga("CMD a","(add) / append (ransomware)");
+		scrivi_riga(" ","zpaqfranz stores an extra checksum (CRC-32/XXH64) for each file");
+		scrivi_riga(" ","to detect potential SHA-1 collisions, a feature zpaq lacks.");
+		scrivi_riga(" ","This may cause a slowdown of ~10% on modern CPUs and can be");
+		scrivi_riga(" ","disabled with -nochecksum or -715");
 		print_sub();
-		moreprint("+ :               By default do NOT store ADSs on Windows (essentially useless).");
-		moreprint("+ :               By default, .XLS files are forcibly re-added to every backup, as older");
-		moreprint("+ :               Excel often modify metafiles without changing content. -xls to disable");
-		moreprint("+ : -verbose      Verbose output");
-		moreprint("+ : -n X          Show X files to be added, before and after sort");
-		moreprint("+ : -debug        Show debugging information");
-		moreprint("+ : -debug2       Show detailed information");
-		moreprint("+ : -debug3       Show VERY detailed debugging information");
-		moreprint("+ : -summary      Be brief");
-		moreprint("+ : -noeta        Do not show ETA (redirect output to log file)");
-		moreprint("+ : -pakka        New-style output (by chunks)");
-		moreprint("+ : -forcewindows Store ADS stuff                (default: NO)");
-		moreprint("+ : -xls          Do NOT force adding of XLS/PPT (default: NO)");
-		moreprint("+ : -forcezfs     Do NOT ignore .zfs             (default: YES)");
-		moreprint("+ : -715          Runs just about like 7.15");
-		moreprint("+ : -debug -zero  Add files but zero-filled (debugging)");
-		moreprint("+ : -debug -zero -kill Add 0-byte long file (debugging)");
-		moreprint("+ : -nochecksum   Disable extra checksums (faster, but less reliable)");
-		moreprint("+ : -nodedup      Turn off deduplicator");
-		moreprint("+ : -store        Store mode: no deduplication, no compression");
-		moreprint("+ : -touch        Force 'touch' on date (converting 7.15 to zpaqfranz)");
-		moreprint("+ : -norecursion  Do not recurse into folders (default: YES)");
+		scrivi_riga(" ","By default do NOT store ADSs on Windows (essentially useless).");
+		scrivi_riga(" ","By default, .XLS files are forcibly re-added to every backup, as older");
+		scrivi_riga(" ","Excel often modify metafiles without changing content. -xls to disable");
+		scrivi_riga("-verbose", "Verbose output");
+		scrivi_riga("-n X", "Show X files to be added, before and after sort");
+		scrivi_riga("-debug", "Show debugging information");
+		scrivi_riga("-debug2", "Show detailed information");
+		scrivi_riga("-debug3", "Show VERY detailed debugging information");
+		scrivi_riga("-summary", "Be brief");
+		scrivi_riga("-noeta", "Do not show ETA (redirect output to log file)");
+		scrivi_riga("-pakka", "New-style output (by chunks)");
+		scrivi_riga("-forcewindows", "Store ADS stuff                (default: NO)");
+		scrivi_riga("-xls", "Do NOT force adding of XLS/PPT (default: NO)");
+		scrivi_riga("-forcezfs", "Do NOT ignore .zfs             (default: YES)");
+		scrivi_riga("-715", "Runs just about like 7.15");
+		scrivi_riga("-debug -zero","Add files but zero-filled (debugging)");
+		scrivi_riga("-debug -zero -kill", "Add 0-byte long file (debugging)");
+		scrivi_riga("-nochecksum", "Disable extra checksums (faster, but less reliable)");
+		scrivi_riga("-nodedup", "Turn off deduplicator");
+		scrivi_riga("-store", "Store mode: no deduplication, no compression");
+		scrivi_riga("-touch", "Force 'touch' on date (converting 7.15 to zpaqfranz)");
+		scrivi_riga("-norecursion", "Do not recurse into folders (default: YES)");
 #ifdef _WIN32
-		moreprint("+ : -findzpaq     On Windows search the .zpaq in every drive letter (USB device)");
+		scrivi_riga("-findzpaq", "On Windows search the .zpaq in every drive letter (USB device)");
 #endif // corresponds to #ifdef (#ifdef _WIN32)
-		moreprint("+ : -append       Append-only (antiransomware)");
+		scrivi_riga("-append", "Append-only (antiransomware)");
 		help_printhash(true);
-		moreprint("+ : -test         Do a post-add test (doveryay, no proveryay).");
-		moreprint("+ : -verify       Verify hashes against filesystem");
-		moreprint("+ : -verify -ssd  Verify hashes against filesystem MULTITHREAD (do NOT use on spinning drives)");
-		moreprint("+ : -paranoid     Test for file with same size and timestamp, but !=hash (-ssd multithread)");
-		moreprint("+ : -vss          Volume Shadow Copies (Win with admin rights) to backup files from %users%.");
-		moreprint("+ : -timestamp X  Setting version datetime @X, ex 2021-12-30_01:03:04 to freeze zfs snapshots");
-		moreprint("                  Must be monotonic. increasing (v[i+1].date>v[i]+date)");
+		scrivi_riga("-test", "Do a post-add test (doveryay, no proveryay).");
+		scrivi_riga("-verify", "Verify hashes against filesystem");
+		scrivi_riga("-verify -ssd","Verify hashes against filesystem MULTITHREAD (do NOT use on spinning drives)");
+		scrivi_riga("-paranoid", "Test for file with same size and timestamp, but !=hash (-ssd multithread)");
+		scrivi_riga("-vss", "Volume Shadow Copies (Win with admin rights) to backup files from %users%.");
+		scrivi_riga("-timestamp X","Setting version datetime @X, ex 2021-12-30_01:03:04 to freeze zfs snapshots");
+		scrivi_riga(" ","Must be monotonic. increasing (v[i+1].date>v[i]+date)");
 		help_date();
-		moreprint("+ : -comment foo  Add a version with ASCII text 'foo'");
-		moreprint("+ : -filelist     Add the list of file to be added in a VFILE");
-		moreprint("+ : -copy z:\\two  Make a 2nd copy of the written data into another folder");
-		moreprint("+ : -exec_ok p.sh Execute p.sh on successful completion, passing the archive name as a parameter");
-		moreprint("+ : -freeze kajo  If current archive size > maxsize, move to kajo folder");
-		moreprint("+ : -stdin        Input data from stdin (pipe)");
-		moreprint("+ : -stdout       Force a NOT DEDUPLICATED file ready to stdout (pipe OUT)");
-		moreprint("+ : -checktxt kaj Write out MD5 on kaj. For rsync/rclone sync");
-		moreprint("+ : -checktxt     Write out MD5 on archivename.txt");
-		moreprint("+ : -buffer X     Use a input buffer of X bytes (default: 4KB)");
-		moreprint("+ : -hashdeep     Add the hashdeep MD5 VFILE (-ssd for multithread)");
-		moreprint("+ : -fasttxt      Write out CRC32 on archivename_crc32.txt");
-		moreprint("+ : -fasttxt -verify Post-check of crc32.txt");
-		moreprint("+ : -home         Create one archive for folder (-not -only)");
-		moreprint("+ : -collision    Double check for SHA-1 collisions");
-		moreprint("+ : -chunk X      Split in chunk of size X");
-		///moreprint("+ : -red4         Level [0..255] of redundancy to enable method 4");
-		///moreprint("+ : -level0 foo0  Apply method 0 to foo0");
-		///moreprint("+ : -level1 foo1  Apply method 1 to foo1");
-		///moreprint("+ : -level2 foo2  Apply method 2 to foo2");
-		///moreprint("+ : -level3 foo3  Apply method 3 to foo3");
-		///moreprint("+ : -level4 foo4  Apply method 4 to foo4");
-		///moreprint("+ : -level5 foo5  Apply method 5 to foo5");
+		scrivi_riga("-comment", "foo  Add a version with ASCII text 'foo'");
+		scrivi_riga("-filelist", "Add the list of file to be added in a VFILE");
+		scrivi_riga("-copy", "z:\\two  Make a 2nd copy of the written data into another folder");
+#ifdef ZPAQFULL ///NOSFTPSTART
+		scrivi_riga("-exec_ok", "p.sh Execute p.sh on successful completion, passing the archive name as a parameter");
+#endif ///NOSFTPEND
+		scrivi_riga("-freeze", "kajo  If current archive size > maxsize, move to kajo folder");
+		scrivi_riga("-stdin", "Input data from stdin (pipe)");
+		scrivi_riga("-stdout", "Force a NOT DEDUPLICATED file ready to stdout (pipe OUT)");
+		scrivi_riga("-checktxt", "kaj Write out MD5 on kaj. For rsync/rclone sync");
+		scrivi_riga("-checktxt", "Write out MD5 on archivename.txt");
+		scrivi_riga("-buffer X","Use a input buffer of X bytes (default: 4KB)");
+		scrivi_riga("-hashdeep", "Add the hashdeep MD5 VFILE (-ssd for multithread)");
+		scrivi_riga("-fasttxt", "Write out CRC32 on archivename_crc32.txt");
+		scrivi_riga("-fasttxt -verify","Post-check of crc32.txt");
+		scrivi_riga("-home", "Create one archive for folder (-not -only)");
+		scrivi_riga("-collision", "Double check for SHA-1 collisions");
+		scrivi_riga("-chunk X","Split in chunk of size X");
+#ifdef ZPAQFULL ///NOSFTPSTART
 #ifdef unix
-		moreprint("+ : -dataset x    Add changes on zfs dataset x");
+		scrivi_riga("-dataset", "x    Add changes on zfs dataset x");
 #endif // corresponds to #ifdef (#ifdef unix)
+#endif ///NOSFTPEND
 		help_orderby();
 #if defined(_WIN32)
-		moreprint("+ : -sfx autoz    Make SFX autoz.exe (on Win)");
-		moreprint("+ : -sfxto foldr  Set -to into the SFX module");
-		moreprint("+ : -sfxforce     Set -force into the SFX module");
-		moreprint("+ : -sfxnot       Like -not for SFX");
-		moreprint("+ : -sfxonly      Like -only for SFX");
-		moreprint("+ : -sfxuntil     Like -until for SFX");
-		moreprint("+ : -longpath     Enable support for Windows paths longer than 255 characters");
-		moreprint("+ : -windate      Store file creation date");
-		moreprint("+ : -open         Early fail if archive is already open");
-///		moreprint("+ : -dd           Imaging a drive by dd (-minsize bs -maxsize count) - ADMIN");
-		moreprint("+ : -ads          Store filelist in NTFS' ADS (Alternate Data Stream)");
+#ifdef ZPAQFULL ///NOSFTPSTART
+		scrivi_riga("-sfx autoz","Make SFX autoz.exe (on Win)");
+		scrivi_riga("-sfxto foldr","Set -to into the SFX module");
+		scrivi_riga("-sfxforce", "Set -force into the SFX module");
+		scrivi_riga("-sfxnot", "Like -not for SFX");
+		scrivi_riga("-sfxonly", "Like -only for SFX");
+		scrivi_riga("-sfxuntil", "Like -until for SFX");
+#endif ///NOSFTPEND
+		scrivi_riga("-longpath", "Enable support for Windows paths longer than 255 characters");
+		scrivi_riga("-windate", "Store file creation date");
+		scrivi_riga("-open", "Early fail if archive is already open");
+		scrivi_riga("-ads", "Store filelist in NTFS' ADS (Alternate Data Stream)");
 #endif // corresponds to #if (#if defined(_WIN32))
-		moreprint("+ : -image        Create a raw image of a drive (Administrator/root rights required)");
-		moreprint("+ : -fast         Store filelist inside the archive (EXPERIMENTAL)");
-		moreprint("+ : -ignore       Do not show file access error");
-		moreprint("+ : -pause        Wait for key press after run");
-		moreprint("+ : -ifexist X    Abort if X folder does not exist");
+		scrivi_riga("-image", "Create a raw image of a drive (Administrator/root rights required)");
+		scrivi_riga("-fast", "Store filelist inside the archive (EXPERIMENTAL)");
+		scrivi_riga("-ignore", "Do not show file access error");
+		scrivi_riga("-pause", "Wait for key press after run");
+		scrivi_riga("-ifexist X","Abort if X folder does not exist");
 #if defined(_WIN32)
-		moreprint("+ : -thunderbird  Take appdata local\\roaming thunderbird");
+		scrivi_riga("-thunderbird", "Take appdata local\\roaming thunderbird");
 #endif // corresponds to #if (#if defined(_WIN32))
-		moreprint("+ : -date         Store creation date (slower)");
-		moreprint("+ : -frugal       Use less RAM, but CANNOT WORK with mixed hashes");
-		moreprint("+ : -stat         Show external files added/updated");
-		moreprint("+ : -external X   Run X before add (replace %files or $files)");
-		moreprint("+ : -touch X      Change every filedate to be stored to X");
-		moreprint("+ : -input X      Load the X file as files to be added");
-		moreprint("+ : -destination X Load the X file as -to");
-		moreprint("+ : -errorlog X   Write the errors on the X file");
-		moreprint("+ : -ht           Enable HyperThread (if any)");
-		moreprint("+ : -notrim       DISABLE autotrim of incomplete transaction (not with -chunk)");
+		scrivi_riga("-date", "Store creation date (slower)");
+		scrivi_riga("-frugal", "Use less RAM, but CANNOT WORK with mixed hashes");
+		scrivi_riga("-stat", "Show external files added/updated");
+		scrivi_riga("-external X","Run X before add (replace %files or $files)");
+		scrivi_riga("-touch X", "Change every filedate to be stored to X");
+		scrivi_riga("-input X", "Load the X file as files to be added");
+		scrivi_riga("-destination X ", "Load the X file as -to");
+		scrivi_riga("-errorlog X", "Write the errors on the X file");
+		scrivi_riga("-ht", "Enable HyperThread (if any)");
+		scrivi_riga("-notrim", "DISABLE autotrim of incomplete transaction (not with -chunk)");
 #ifdef _WIN32
-		moreprint("+ : -noonedrive   Do NOT add onedrive placeholders");
-		moreprint("+ : -monitor      Turn off the monitor (Windows)");
+		scrivi_riga("-noonedrive", "Do NOT add onedrive placeholders");
+		scrivi_riga("-monitor", "Turn off the monitor (Windows)");
 #endif
-		moreprint("+ : -slow         Reduce CPU power (experimental on Linux)");
-		moreprint("+ : -shutdown     Attempt to shut down the computer upon completion");
+		scrivi_riga("-slow", "Reduce CPU power (experimental on Linux)");
+		scrivi_riga("-shutdown", "Attempt to shut down the computer upon completion");
 #ifdef unix
-		moreprint("+ : -tar          Store *nix metadata (you need -whirlpool or -highhash too");
+		scrivi_riga("-tar", "Store *nix metadata (you need -whirlpool or -highhash too");
 #endif
 #ifdef _WIN32
-		moreprint("+ : -ntfs         Scan a NTFS drive");
+		scrivi_riga("-ntfs", "Scan a NTFS drive");
 #endif
-		moreprint("+ : -appendoutput Append to the output file specified by -out instead of overwriting it");
-		moreprint("+ : -writeonconsole  Write to stderr too");
+		scrivi_riga("-appendoutput", "Append to the output file specified by -out instead of overwriting it");
+		scrivi_riga("-writeonconsole", "Write to stderr too");
 		}
 		/*
 		fdisk -l image.img
@@ -45162,125 +45358,121 @@ mount /dev/loop0p1 /ripristinato
 umount /ripristinato
 losetup -d /dev/loop0
 */
-	if (i_usage && i_example)
-	{
-		color_yellow(); moreprint("Examples:"); color_restore();
-	}
+	if (i_usage && i_example) scrivi_examples();
 	if (i_example)
 	{
-		moreprint("Add two folders to archive           : a z:\\1.zpaq c:\\data\\* d:\\pippo\\*");
-		moreprint("Add folder, storing full hash SHA3   : a z:\\2.zpaq c:\\nz\\ -sha3");
-		moreprint("Add folder, then verification        : a z:\\3.zpaq c:\\nz\\ -test");
-		moreprint("Add two files                        : a z:\\4.zpaq.zpaq c:\\vecchio.sql r:\\1.txt");
-		moreprint("Add as zpaq 7.15 (no checksum)       : a z:\\5.zpaq c:\\audio -715");
-		moreprint("Add and mark version                 : a z:\\6.zpaq c:\\data\\* -comment first_copy");
+		scrivi_esempio("Add two folders to archive","a z:\\1.zpaq c:\\data\\* d:\\pippo\\*");
+		scrivi_esempio("Add folder, storing full hash SHA3","a z:\\2.zpaq c:\\nz\\ -sha3");
+		scrivi_esempio("Add folder, then verification","a z:\\3.zpaq c:\\nz\\ -test");
+		scrivi_esempio("Add two files","a z:\\4.zpaq.zpaq c:\\vecchio.sql r:\\1.txt");
+		scrivi_esempio("Add as zpaq 7.15 (no checksum)","a z:\\5.zpaq c:\\audio -715");
+		scrivi_esempio("Add and mark version","a z:\\6.zpaq c:\\data\\* -comment first_copy");
 #if defined(_WIN32) || defined(_WIN64)
-		moreprint("Add by a VSS (Windows admin)         : a z:\\7.zpaq c:\\users\\utente\\* -vss");
+		scrivi_esempio("Add by a VSS (Windows admin)","a z:\\7.zpaq c:\\users\\utente\\* -vss");
 #endif // corresponds to #if (#if defined(_WIN32) || defined(_WIN64))
-		moreprint("Add folder with timestamping (zfs)   : a z:\\8.zpaq c:\\data\\* -timestamp 2021-12-30_01:03:04");
-		moreprint("Create multipart archive             : a \"z:\\9_????.zpaq\" c:\\data\\");
-		moreprint("Create indexed multipart archive     : a \"z:\\a_???.zpaq\" c:\\data\\ -index z:\\a_000.zpaq");
-		moreprint("Add folder, with encryption          : a z:\\b.zpaq c:\\nz\\ -key mygoodpassword");
-		moreprint("Add folder, maximum compress         : a z:\\c.zpaq c:\\nz\\ -m5");
-		moreprint("Store the filelist VFILE             : a z:\\d.zpaq c:\\nz\\ -filelist");
-		moreprint("Add WITHOUT CRC-32/hash (like 715)   : a z:\\e.zpaq c:\\nz\\ -nochecksum");
-		moreprint("Add 2nd copy to USB drive (U)        : a \"z:\\f_???.zpaq\" c:\\nz\\ -copy u:\\usb");
-		moreprint("Launch pippo.bat after OK            : a \"z:\\g_???.zpaq\" c:\\nz\\ -exec_ok u:\\pippo.bat");
-		moreprint("Archive file if bigger of 10GB       : a z:\\h.zpaq c:\\nz\\ -freeze y:\\archived -maxsize 10000000000");
+		scrivi_esempio("Add folder with timestamping (zfs)","a z:\\8.zpaq c:\\data\\* -timestamp 2021-12-30_01:03:04");
+		scrivi_esempio("Create multipart archive","a \"z:\\9_????.zpaq\" c:\\data\\");
+		scrivi_esempio("Create indexed multipart archive","a \"z:\\a_???.zpaq\" c:\\data\\ -index z:\\a_000.zpaq");
+		scrivi_esempio("Add folder, with encryption","a z:\\b.zpaq c:\\nz\\ -key mygoodpassword");
+		scrivi_esempio("Add folder, maximum compress","a z:\\c.zpaq c:\\nz\\ -m5");
+		scrivi_esempio("Store the filelist VFILE","a z:\\d.zpaq c:\\nz\\ -filelist");
+		scrivi_esempio("Add WITHOUT CRC-32/hash (like 715)","a z:\\e.zpaq c:\\nz\\ -nochecksum");
+		scrivi_esempio("Add 2nd copy to USB drive (U)","a \"z:\\f_???.zpaq\" c:\\nz\\ -copy u:\\usb");
+#ifdef ZPAQFULL ///NOSFTPSTART
+		scrivi_esempio("Launch pippo.bat after OK","a \"z:\\g_???.zpaq\" c:\\nz\\ -exec_ok u:\\pippo.bat");
+#endif ///NOSFTPEND
+		scrivi_esempio("Archive file if bigger of 10GB","a z:\\h.zpaq c:\\nz\\ -freeze y:\\archived -maxsize 10000000000");
+#ifdef ZPAQFULL ///NOSFTPSTART
 #if defined(_WIN32)
-		moreprint("Make z:\\2.exe from z:\\1.zpaq         : a z:\\1.zpaq *.cpp -sfx z:\\2.exe");
-		moreprint("2.exe extract/overwrite into z:\\kom  : a z:\\1.zpaq *.cpp -sfx z:\\2.exe -sfxto z:\\kom -sfxforce");
+		scrivi_esempio("Make z:\\2.exe from z:\\1.zpaq","a z:\\1.zpaq *.cpp -sfx z:\\2.exe");
+		scrivi_esempio("2.exe extract/overwrite into z:\\kom","a z:\\1.zpaq *.cpp -sfx z:\\2.exe -sfxto z:\\kom -sfxforce");
 #endif // corresponds to #if (#if defined(_WIN32))
-		moreprint("Prepare a debug archive...for me     : a z:\\1.zpaq c:\\nz\\ -debug -zero");
-		moreprint("In-place 7.15 to zpaqfranz  1/2      : a z:\\1.zpaq c:\\nz\\ -touch");
-		moreprint("In-place 7.15 to zpaqfranz  2/2      : a z:\\1.zpaq c:\\nz\\");
-		moreprint("Hard-check of files                  : a z:\\1.zpaq c:\\nz\\ -paranoid");
-		moreprint("Hard-check of files multithread      : a z:\\1.zpaq c:\\nz\\ -paranoid -ssd");
-		moreprint("Archive, without recursion           : a z:\\1.zpaq f:\\zarc\\*.* -norecursion");
-		moreprint("Archive mysqldump                    : a z:\\1.zpaq mydump.sql -stdin");
-		moreprint("MD5 quick check                      : a z:\\knb.zpaq c:\\nz\\ -checktxt z:\\pippo.txt");
-		moreprint("Write MD5 on z:\\knb.txt              : a z:\\knb.zpaq c:\\nz\\ -checktxt");
-		moreprint("Write CRC32 on z:\\1_crc32.txt        : a z:\\1.zpaq c:\\nz\\ -fasttxt");
+#endif ///NOSFTPEND
+		scrivi_esempio("Prepare a debug archive...for me","a z:\\1.zpaq c:\\nz\\ -debug -zero");
+		scrivi_esempio("In-place 7.15 to zpaqfranz  1/2","a z:\\1.zpaq c:\\nz\\ -touch");
+		scrivi_esempio("In-place 7.15 to zpaqfranz  2/2","a z:\\1.zpaq c:\\nz\\");
+		scrivi_esempio("Hard-check of files","a z:\\1.zpaq c:\\nz\\ -paranoid");
+		scrivi_esempio("Hard-check of files multithread","a z:\\1.zpaq c:\\nz\\ -paranoid -ssd");
+		scrivi_esempio("Archive, without recursion","a z:\\1.zpaq f:\\zarc\\*.* -norecursion");
+		scrivi_esempio("Archive mysqldump","a z:\\1.zpaq mydump.sql -stdin");
+		scrivi_esempio("MD5 quick check","a z:\\knb.zpaq c:\\nz\\ -checktxt z:\\pippo.txt");
+		scrivi_esempio("Write MD5 on z:\\knb.txt","a z:\\knb.zpaq c:\\nz\\ -checktxt");
+		scrivi_esempio("Write CRC32 on z:\\1_crc32.txt","a z:\\1.zpaq c:\\nz\\ -fasttxt");
 #ifdef _WIN32
-		moreprint("Find file /prova/ci.zpaq on drives   : a z:\\prova\\ci.zpaq c:\\nz\\* -findzpaq");
-		moreprint("Abort if file already open           : a z:\\2.zpaq c:\\nz\\* -open");
-///		moreprint("Raw imaging drive C with DD          : a z:\\2.zpaq c: -dd");
-		moreprint("Raw imaging drive E with built in    : a z:\\2.zpaq e: -image");
-		moreprint("Imaging C with pwd and big buffer    : a z:\\2.zpaq c: -image -buffer 1MB -key pippo");
-		moreprint("Create VFILE-l-hashdeep.txt w/md5    : a z:\\2.zpaq *.txt *.cpp -hashdeep -ssd");
+		scrivi_esempio("Find file /prova/ci.zpaq on drives","a z:\\prova\\ci.zpaq c:\\nz\\* -findzpaq");
+		scrivi_esempio("Abort if file already open","a z:\\2.zpaq c:\\nz\\* -open");
+		scrivi_esempio("Raw imaging drive E with built in","a z:\\2.zpaq e: -image");
+		scrivi_esempio("Imaging C with pwd and big buffer","a z:\\2.zpaq c: -image -buffer 1MB -key pippo");
+		scrivi_esempio("Create VFILE-l-hashdeep.txt w/md5","a z:\\2.zpaq *.txt *.cpp -hashdeep -ssd");
 #endif // corresponds to #ifdef (#ifdef _WIN32)
-		moreprint("Multiple z:\\utenti_something.zpaq    : a z:\\utenti.zpaq c:\\users -home");
-		moreprint("All users, but not franco            : a /temp/test1 /home -home -not franco");
-		moreprint("Only SARA and NERI folders           : a /temp/test2 /home -home -only \"*SARA\" -only \"*NERI\"");
-		moreprint("Sort (orderby) before add            : a z:\\test.txt c:\\dropbox -orderby ext;name");
-		moreprint("Sorting files from largest           : a z:\\test.txt c:\\dropbox -orderby size -desc");
-		moreprint("Manage SHA-1 collisions              : a z:\\1.zpaq messageA messageB -collision");
-		///moreprint("Activate method 4 on compressible    a z:\\1.zpaq c:\\testfolder -red4 100");
-		///moreprint("Activate method 4 on more files      a z:\\1.zpaq c:\\testfolder -red4 50");
-		///moreprint("Mix methods                          a z:\\1.zpaq c:\\fold -leve1 *.avi -level1 *.7z -level4 *.txt");	
+		scrivi_esempio("Multiple z:\\utenti_something.zpaq","a z:\\utenti.zpaq c:\\users -home");
+		scrivi_esempio("All users, but not franco","a /temp/test1 /home -home -not franco");
+		scrivi_esempio("Only SARA and NERI folders","a /temp/test2 /home -home -only \"*SARA\" -only \"*NERI\"");
+		scrivi_esempio("Sort (orderby) before add","a z:\\test.txt c:\\dropbox -orderby ext;name");
+		scrivi_esempio("Sorting files from largest","a z:\\test.txt c:\\dropbox -orderby size -desc");
+		scrivi_esempio("Manage SHA-1 collisions","a z:\\1.zpaq messageA messageB -collision");
 #ifdef unix
-		moreprint("Update from tank/d dataset           : a /tmp/test.zpaq * -dataset \"tank/d\"");
+		scrivi_esempio("Update from tank/d dataset","a /tmp/test.zpaq * -dataset \"tank/d\"");
 #endif // corresponds to #ifdef (#ifdef unix)
 #ifdef _WIN32
-		moreprint("Store filelist on NTFS               : a z:\\1.zpaq *.cpp -ads");
+		scrivi_esempio("Store filelist on NTFS","a z:\\1.zpaq *.cpp -ads");
 #endif // corresponds to #ifdef (#ifdef _WIN32)
-		moreprint("Split in 1GB chunks                  : a z:\\1.zpaq c:\\pippo -chunk 1GB");
-		moreprint("Store (EXPERIMENTAL) filelist        : a z:\\1.zpaq c:\\pippo -fast");
-		moreprint("Do not mess output with errors       : a z:\\1.zpaq c:\\users -ignore");
-		moreprint("Wait for a key press after run       : a z:\\1.zpaq c:\\users -pause");
-		moreprint("Abort if /monta...rar does not exist : a /1.zpaq /thefolder -ifexist /monta/nas1_nfs3/rar");
+		scrivi_esempio("Split in 1GB chunks","a z:\\1.zpaq c:\\pippo -chunk 1GB");
+		scrivi_esempio("Store (EXPERIMENTAL) filelist","a z:\\1.zpaq c:\\pippo -fast");
+		scrivi_esempio("Do not mess output with errors","a z:\\1.zpaq c:\\users -ignore");
+		scrivi_esempio("Wait for a key press after run","a z:\\1.zpaq c:\\users -pause");
+		scrivi_esempio("Abort if /monta...rar does not exist","a /1.zpaq /thefolder -ifexist /monta/nas1_nfs3/rar");
 #ifdef _WIN32
-		moreprint("Take Thunderbird email of utente     : a z:\\1.zpaq c:\\users\\utente -thunderbird");
-		moreprint("Close and take Thunderbird email     : a z:\\1.zpaq c:\\users\\utente -thunderbird -kill");
+		scrivi_esempio("Take Thunderbird email of utente","a z:\\1.zpaq c:\\users\\utente -thunderbird");
+		scrivi_esempio("Close and take Thunderbird email","a z:\\1.zpaq c:\\users\\utente -thunderbird -kill");
 #endif // corresponds to #ifdef (#ifdef _WIN32)
-		moreprint("Store creation date (slower)         : a z:\\1.zpaq c:\\users\\utente -date");
-		moreprint("Use less RAM: DO NOT MIX HASHES!     : a z:\\1.zpaq c:\\nz -frugal");
-		moreprint("Store external VFILE-l-external.txt  : a z:\\2.zpaq c:\\nz -external \"c:\\nz\\hashdeep64 -r -c sha1 %files\"");
-		moreprint("Alter the filedate (piped)           : type 1.txt|zpaqfranz a z:\\2.zpaq 1.sql -stdin -touch 2024_02_03");
-		moreprint("Load files from text file            : a z:\\1.zpaq -input z:\\thelist.txt");
-		moreprint("Write errors                         : a z:\\1.zpaq c:\\windows\\system32 -errorlog z:\\errors.txt -silent");
-		moreprint("Load files/to from text files        : a z:\\1.zpaq -input z:\\input.txt -destination z:\\destination.txt");
+		scrivi_esempio("Store creation date (slower)","a z:\\1.zpaq c:\\users\\utente -date");
+		scrivi_esempio("Use less RAM: DO NOT MIX HASHES!","a z:\\1.zpaq c:\\nz -frugal");
+		scrivi_esempio("Store external VFILE-l-external.txt","a z:\\2.zpaq c:\\nz -external \"c:\\nz\\hashdeep64 -r -c sha1 %files\"");
+		scrivi_esempio("Alter the filedate (piped)","type 1.txt|zpaqfranz a z:\\2.zpaq 1.sql -stdin -touch 2024_02_03");
+		scrivi_esempio("Load files from text file","a z:\\1.zpaq -input z:\\thelist.txt");
+		scrivi_esempio("Write errors","a z:\\1.zpaq c:\\windows\\system32 -errorlog z:\\errors.txt -silent");
+		scrivi_esempio("Load files/to from text files","a z:\\1.zpaq -input z:\\input.txt -destination z:\\destination.txt");
 #ifdef _WIN32
-		moreprint("Do NOT add onedrive placeholder      : a z:\\1.zpaq c:\\users\\utente\\onedrive -onedrive");
-		moreprint("Reduce CPU power, turn off           : a z:\\1.zpaq c:\\pippo -slow -monitor -shutdown");
+		scrivi_esempio("Do NOT add onedrive placeholder","a z:\\1.zpaq c:\\users\\utente\\onedrive -onedrive");
+		scrivi_esempio("Reduce CPU power, turn off","a z:\\1.zpaq c:\\pippo -slow -monitor -shutdown");
 #endif
 #ifdef unix
-		moreprint("Store metadata too                   : a /tmp/1.zpaq /www -tar -highway64");
+		scrivi_esempio("Store metadata too","a /tmp/1.zpaq /www -tar -highway64");
 #endif
 #ifdef _WIN32
-		moreprint("Quickly scan a NTFS drive            : a z:\\1.zpaq d:\\ -ntfs");
+		scrivi_esempio("Quickly scan a NTFS drive","a z:\\1.zpaq d:\\ -ntfs");
 #endif
 #ifdef unix
-		moreprint("Raw imaging a device                 : a /tmp/bak.zpaq /dev/sdb -image");
+		scrivi_esempio("Raw imaging a device","a /tmp/bak.zpaq /dev/sdb -image");
 #endif
-		moreprint("Append to outputfile                 : a /tmp/bak.zpaq 7etc -out result.txt -appendoutput");
+		scrivi_esempio("Append to outputfile","a /tmp/bak.zpaq 7etc -out result.txt -appendoutput");
 		
 	}
 	return("Add or append files to archive");
 }
+#ifdef ZPAQFULL ///NOSFTPSTART
 string help_update(bool i_usage,bool i_example)
 {
 	if (i_usage)
 	{
-		color_green();
-		moreprint("CMD   update (refresh zpaqfranz from Internet)");
-		moreprint("                  Check/download from http://www.francocorbelli.it/zpaqfranz");
-		color_restore();
+		scrivi_riga("CMD update","(refresh zpaqfranz from Internet)");
+		scrivi_riga("  ","Check/download from http://www.francocorbelli.it/zpaqfranz");
 #ifdef _WIN64
-		moreprint("+ :               or from two user-entered URLs");
-		moreprint("+ : -force        Wet-run (do the update, default dry-run)");
-		moreprint("+ : -force -kill  Replace current zpaqfranz from Internet");
+		scrivi_riga(" ","or from two user-entered URLs");
+		scrivi_riga("-force", "Wet-run (do the update, default dry-run)");
+		scrivi_riga("-force -kill","Replace current zpaqfranz from Internet");
 #endif // corresponds to #ifdef (#ifdef _WIN64)
 	}
-	if (i_usage && i_example) { color_yellow(); moreprint("Examples:"); color_restore(); }
+	if (i_usage && i_example) scrivi_examples();
 	if (i_example)
 	{
-		moreprint("Check for updates       : update");
+		scrivi_esempio("Check for updates","update");
 #ifdef _WIN64
-		moreprint("Check for updates       : upgrade");
-		moreprint("Update (if any)         : update -force");
-		moreprint("Get always from Internet: update -force -kill");
-		moreprint("Use specific URLs       : update https://www.pippo.com/ugo.sha256 http://www.pluto.com/zpaqnew.exe");
+		scrivi_esempio("Check for updates","upgrade");
+		scrivi_esempio("Update (if any)","update -force");
+		scrivi_esempio("Get always from Internet","update -force -kill");
+		scrivi_esempio("Use specific URLs","update https://www.pippo.com/ugo.sha256 http://www.pluto.com/zpaqnew.exe");
 #endif // corresponds to #ifdef (#ifdef _WIN64)
 	}
 #ifdef _WIN32
@@ -45296,60 +45488,57 @@ string help_download(bool i_usage,bool i_example)
 {
 	if (i_usage)
 	{
-		color_green();
-		moreprint("CMD download      (get file from Internet)");
-		color_restore();
-		moreprint("+ : -force        Overwrite output file");
-		moreprint("+ : -space        Do not check the output path");
-		moreprint("+ : -checktxt z   Test hash in z file (len 32=MD5, 40=SHA-1, 64=SHA-256)");
+		scrivi_riga("CMD download","Get file from Internet");
+		scrivi_riga("-force", "Overwrite output file");
+		scrivi_riga("-space", "Do not check the output path");
+		scrivi_riga("-checktxt", "z   Test hash in z file (len 32=MD5, 40=SHA-1, 64=SHA-256)");
 	}
-	if (i_usage && i_example) { color_yellow(); moreprint("Examples:"); color_restore(); }
+	if (i_usage && i_example) scrivi_examples();
 	if (i_example)
 	{
-		moreprint("Download in ugo.txt              : download https://www.1.it/2.cpp ./2.cpp");
-		moreprint("Download+check SHA256            : download http://www.1.it/3.cpp z:\\3.cpp -checktxt http://www.1.it/3.sha256");
-		moreprint("Download+check MD5               : download http://www.1.it/4.cpp z:\\4.cpp -checktxt http://www.1.it/4.md5");
+		scrivi_esempio("Download in ugo.txt","download https://www.1.it/2.cpp ./2.cpp");
+		scrivi_esempio("Download+check SHA256","download http://www.1.it/3.cpp z:\\3.cpp -checktxt http://www.1.it/3.sha256");
+		scrivi_esempio("Download+check MD5","download http://www.1.it/4.cpp z:\\4.cpp -checktxt http://www.1.it/4.md5");
 	}
 	return ("Download file from Internet");
 }
 #endif // corresponds to #ifdef (#ifdef _WIN64)
+#endif ///NOSFTPEND
 
 #ifdef _WIN32
+#ifdef ZPAQFULL ///NOSFTPSTART
 string help_rd(bool i_usage,bool i_example)
 {
 	if (i_usage)
 	{
-		color_green();
-		moreprint("CMD   rd (remove directory on Windows)");
-		moreprint("                  Delete hard-to-remove dir (like rd /s or rm -r)");
-		color_restore();
-		moreprint("+ : -kill         Wet run (default: DRY run)");
-		moreprint("+ : -force        Remove folder if not-zero files present");
-		moreprint("+ : -space        Do not check if writeable (ex. 0 bytes free)");
+		scrivi_riga("CMD rd","remove directory on Windows");
+		scrivi_riga(" ","Delete hard-to-remove dir (like rd /s or rm -r)");
+		scrivi_riga("-kill", "Wet run (default: DRY run)");
+		scrivi_riga("-force", "Remove folder if not-zero files present");
+		scrivi_riga("-space", "Do not check if writeable (ex. 0 bytes free)");
 	}
-	if (i_usage && i_example) { color_yellow(); moreprint("Examples:"); color_restore(); }
+	if (i_usage && i_example) scrivi_examples();
 	if (i_example)
-		moreprint("Remove folder z:\\kajo:               : rd z:\\kajo -force -kill -space");
+		scrivi_esempio("Remove folder z:\\kajo:","rd z:\\kajo -force -kill -space");
 	return ("Remove hard-to-delete Windows' folder (ex. path too lengthy)");
 }
+#endif ///NOSFTPEND
 string help_pakka(bool i_usage,bool i_example)
 {
 	if (i_usage)
 	{
-		color_green();
-		moreprint("CMD   pakka (create zpaqlist-compatible output)");
-		color_restore();
-		moreprint("+ : -all          All version(s)");
-		moreprint("+ : -distinct     Do not deduplicate output");
-		moreprint("+ : -until X      Choose version X");
-		moreprint("+ : -out thefile  Write output on thefile");
+		scrivi_riga("CMD pakka","create zpaqlist-compatible output");
+		scrivi_riga("-all", "All version(s)");
+		scrivi_riga("-distinct", "Do not deduplicate output");
+		scrivi_riga("-until X", "Choose version X");
+		scrivi_riga("-out", "thefile  Write output on thefile");
 	}
-	if (i_usage && i_example) { color_yellow(); moreprint("Examples:"); color_restore(); }
+	if (i_usage && i_example) scrivi_examples();
 	if (i_example)
 	{
-		moreprint("List to file                         : pakka h:\\zarc\\1.zpaq -out z:\\default.txt");
-		moreprint("Disable de-duplicator                : pakka h:\\zarc\\1.zpaq -all -distinct -out z:\\default.txt");
-		moreprint("Get version 10                       : pakka h:\\zarc\\1.zpaq -until 10 -out z:\\10.txt");
+		scrivi_esempio("List to file","pakka h:\\zarc\\1.zpaq -out z:\\default.txt");
+		scrivi_esempio("Disable de-duplicator","pakka h:\\zarc\\1.zpaq -all -distinct -out z:\\default.txt");
+		scrivi_esempio("Get version 10","pakka h:\\zarc\\1.zpaq -until 10 -out z:\\10.txt");
 	}
 	return ("Auxiliary output for third-party extractor software");
 }
@@ -45358,16 +45547,14 @@ string help_fzf(bool i_usage,bool i_example)
 {
 	if (i_usage)
 	{
-		color_green();
-		moreprint("CMD   fzf List archive content 'plain-and-dirty'");
-		color_restore();
-		moreprint("+ : -all          Show all version");
+		scrivi_riga("CMD fzf","List archive content 'plain-and-dirty'");
+		scrivi_riga("-all", "Show all version");
 	}
-	if (i_usage && i_example) { color_yellow(); moreprint("Examples:"); color_restore(); }
+	if (i_usage && i_example) scrivi_examples();
 	if (i_example)
 	{
-		moreprint("List filenames                       : fzf z:\\kajo.zpaq");
-		moreprint("List filenames/pipe in fzf           : fzf z:\\kajo.zpaq|fzf");
+		scrivi_esempio("List filenames","fzf z:\\kajo.zpaq");
+		scrivi_esempio("List filenames/pipe in fzf","fzf z:\\kajo.zpaq|fzf");
 	}
 	return ("List archive filenames 'plain-and-dirty'");
 }
@@ -45375,14 +45562,12 @@ string help_collision(bool i_usage,bool i_example)
 {
 	if (i_usage)
 	{
-		color_green();
-		moreprint("CMD   collision Inspect for SHA-1 collisions");
-		color_restore();
+		scrivi_riga("CMD collision","Inspect for SHA-1 collisions");
 	}
-	if (i_usage && i_example) { color_yellow(); moreprint("Examples:"); color_restore(); }
+	if (i_usage && i_example) scrivi_examples();
 	if (i_example)
 	{
-		moreprint("Inspect file                         : collision z:\\kajo.zpaq");
+		scrivi_esempio("Inspect file","collision z:\\kajo.zpaq");
 	}
 	return ("Inspect archive for SHA-1 collisions");
 }
@@ -45390,24 +45575,22 @@ string help_dump(bool i_usage,bool i_example)
 {
 	if (i_usage)
 	{
-		color_green();
-		moreprint("CMD dump          Display technical archive information (not for huge archives!)");
-		moreprint("BTW               will show archive compatibility level");
-		moreprint("                  60+  = zpaqfranz from  v60 and more ~jul 2024");
-		moreprint("                  <60  = zpaqfranz up to v59.x");
-		moreprint("                  715  = standard  zpaq  7.15 (or zpaqfranz -715)");
-		color_restore();
-		moreprint("+ : -summary      Brief");
-		moreprint("+ : -verbose      Show useful infos");
-		moreprint("+ : -all          A bit deeper");
+		scrivi_riga("CMD dump","Display technical archive information (not for huge archives!)");
+		scrivi_riga("BTW","will show archive compatibility level");
+		scrivi_riga(" ","60+  = zpaqfranz from  v60 and more ~jul 2024");
+		scrivi_riga(" ","<60  = zpaqfranz up to v59.x");
+		scrivi_riga(" ","715  = standard  zpaq  7.15 (or zpaqfranz -715)");
+		scrivi_riga("-summary", "Brief");
+		scrivi_riga("-verbose", "Show useful infos");
+		scrivi_riga("-all", "A bit deeper");
 	}
-	if (i_usage && i_example) { color_yellow(); moreprint("Examples:"); color_restore(); }
+	if (i_usage && i_example) scrivi_examples();
 	if (i_example)
 	{
-		moreprint("Default infos                        : dump z:\\kajo.zpaq");
-		moreprint("More                                 : dump z:\\kajo.zpaq -verbose");
-		moreprint("Brief                                : dump z:\\kajo.zpaq -summary");
-		moreprint("All available details                : dump z:\\kajo.zpaq -all");
+		scrivi_esempio("Default infos","dump z:\\kajo.zpaq");
+		scrivi_esempio("More","dump z:\\kajo.zpaq -verbose");
+		scrivi_esempio("Brief","dump z:\\kajo.zpaq -summary");
+		scrivi_esempio("All available details","dump z:\\kajo.zpaq -all");
 	}
 	return ("Technical info (not for huge archives!)");
 }
@@ -45415,12 +45598,12 @@ string help_redu(bool i_usage,bool i_example)
 {
 	if (i_usage)
 	{
-		moreprint("redu  technical (quick) exam of files");
+		scrivi_riga("redu","technical (quick) exam of files");
 	}
-	if (i_usage && i_example) { color_yellow(); moreprint("Examples:"); color_restore(); }
+	if (i_usage && i_example) scrivi_examples();
 	if (i_example)
 	{
-		moreprint("Default infos                        : redu z:\\*.exe");
+		scrivi_esempio("Default infos","redu z:\\*.exe");
 	}
 	return ("Inspect archive for SHA-1 collisions");
 }
@@ -45428,32 +45611,30 @@ string help_w(bool i_usage,bool i_example)
 {
 	if (i_usage)
 	{
-		color_green();
-		moreprint("CMD   w (Chunked-extraction)");
-		moreprint("                  Extract/test in chunks, on disk or 'ramdisk' (RAM)");
-		moreprint("                  The output -to folder MUST BE EMPTY");
-		color_restore();
-		moreprint("+ : -maxsize X    Maxsize of the chunk @ X bytes");
-		moreprint("+ : -ramdisk      Use 'RAMDISK'");
-		moreprint("+ : -frugal       Use less possible RAM (default: get 75% of free RAM)'");
-		moreprint("+ : -ssd          Multithread writing from ramdisk");
-		moreprint("+ : -test         Do not write on media");
-		moreprint("+ : -verbose      Show useful infos");
-		moreprint("+ : -checksum     Do CRC-32 / hashes test");
-		moreprint("+ : -verify       Do a 'check-against-filesystem'");
-		moreprint("+ : -paranoid     Extract to filesystem, then delete if OK (need -verify)");
+		scrivi_riga("CMD w","Chunked-extraction");
+		scrivi_riga(" ","Extract/test in chunks, on disk or 'ramdisk' (RAM)");
+		scrivi_riga(" ","The output -to folder MUST BE EMPTY");
+		scrivi_riga("-maxsize X", "Maxsize of the chunk @ X bytes");
+		scrivi_riga("-ramdisk", "Use 'RAMDISK'");
+		scrivi_riga("-frugal", "Use less possible RAM (default: get 75% of free RAM)'");
+		scrivi_riga("-ssd", "Multithread writing from ramdisk");
+		scrivi_riga("-test", "Do not write on media");
+		scrivi_riga("-verbose", "Show useful infos");
+		scrivi_riga("-checksum", "Do CRC-32 / hashes test");
+		scrivi_riga("-verify", "Do a 'check-against-filesystem'");
+		scrivi_riga("-paranoid", "Extract to filesystem, then delete if OK (need -verify)");
 #ifdef _WIN32
-		moreprint("+ : -longpath     Extracting on Windows filenames longer than 255");
+		scrivi_riga("-longpath", "Extracting on Windows filenames longer than 255");
 #endif // corresponds to #ifdef (#ifdef _WIN32)
 	}
-	if (i_usage && i_example) { color_yellow(); moreprint("Examples:"); color_restore(); }
+	if (i_usage && i_example) scrivi_examples();
 	if (i_example)
 	{
-		moreprint("Extract to a spinning drive          : w z:\\1.zpaq -to p:\\muz7\\ -ramdisk -longpath");
-		moreprint("Paranoid check into folder muz7      : w z:\\1.zpaq -to z:\\muz7\\ -paranoid -verify -verbose -frugal -longpath");
-		moreprint("Paranoid  max chunksize 1000000000   : w z:\\1.zpaq -to z:\\muz7\\ -paranoid -verify -maxsize 1000000000");
-		moreprint("Test in RAM (no disk write,M/T)      : w z:\\1.zpaq -ramdisk -test -checksum -ssd -frugal");
-		moreprint("Top test (W/disk write on SSD z:\\)   : w z:\\1.zpaq -to z:\\kajo -ramdisk -paranoid -verify -checksum -longpath -ssd");
+		scrivi_esempio("Extract to a spinning drive","w z:\\1.zpaq -to p:\\muz7\\ -ramdisk -longpath");
+		scrivi_esempio("Paranoid check into folder muz7","w z:\\1.zpaq -to z:\\muz7\\ -paranoid -verify -verbose -frugal -longpath");
+		scrivi_esempio("Paranoid  max chunksize 1000000000","w z:\\1.zpaq -to z:\\muz7\\ -paranoid -verify -maxsize 1000000000");
+		scrivi_esempio("Test in RAM (no disk write,M/T)","w z:\\1.zpaq -ramdisk -test -checksum -ssd -frugal");
+		scrivi_esempio("Top test (W/disk write on SSD z:\\)","w z:\\1.zpaq -to z:\\kajo -ramdisk -paranoid -verify -checksum -longpath -ssd");
 	}
 	return ("Very big files chunked extraction/test");
 }
@@ -45461,69 +45642,67 @@ string help_x(bool i_usage,bool i_example)
 {
 	if (i_usage)
 	{
-		color_green();
-		moreprint("CMD   x (extract)");
-		moreprint("                  During extraction,if CRC-32s are present, the codes are checked.");
-		moreprint("                  Extract multiple files with '*'");
-		color_restore();
-		moreprint("+ : -all          All versions");
-		moreprint("+ : -all -comment Restore all versions with DATETIME and comment (if any)");
-		moreprint("+ : -checksum     force a full hash-code verify (if added with -checksum)");
-		moreprint("+ : -zero         extract to dummy, 0-length files. Do an empty-full restore.");
-		moreprint("+ : -zero -debug  extract full-sized files, 0 filled (Dry restore)");
-		moreprint("+ : -zero -debug  -kill  Only extract filenames (0 bytes long)");
-		moreprint("+ : -utf          change everything non latin to latin (Linux/*Nix => NTFS compatibility)");
-		moreprint("+ : -fix255       shrink max file name, avoid different case collision (Linux => NTFS)");
-		moreprint("                  (pippo.txt and PIPPO.txt are be silently overwritten by 7.15).");
-		moreprint("+ : -fixeml       compress .eml filenames.");
+		scrivi_riga("CMD x","Extract");
+		scrivi_riga(" ","During extraction,if CRC-32s are present, the codes are checked.");
+		scrivi_riga(" ","Extract multiple files with '*'");
+		scrivi_riga("-all", "All versions");
+		scrivi_riga("-all", "-comment Restore all versions with DATETIME and comment (if any)");
+		scrivi_riga("-checksum", "force a full hash-code verify (if added with -checksum)");
+		scrivi_riga("-zero", "extract to dummy, 0-length files. Do an empty-full restore.");
+		scrivi_riga("-zero -debug","extract full-sized files, 0 filled (Dry restore)");
+		scrivi_riga("-zero -debug -kill","Only extract filenames (0 bytes long)");
+		scrivi_riga("-utf", "change everything non latin to latin (Linux/*Nix => NTFS compatibility)");
+		scrivi_riga("-fix255", "shrink max file name, avoid different case collision (Linux => NTFS)");
+		scrivi_riga(" ","(pippo.txt and PIPPO.txt are be silently overwritten by 7.15).");
+		scrivi_riga("-fixeml", "compress .eml filenames.");
 #ifdef _WIN32
-		moreprint("+ : -longpath     Extracting on Windows filenames longer than 255");
-		moreprint("+ : -fixreserved  fix reserved filenames on Windows (ex. LPT1).");
-		moreprint("+ : -windate      Restore (if any) file's creation date");
+		scrivi_riga("-longpath", "Extracting on Windows filenames longer than 255");
+		scrivi_riga("-fixreserved", "fix reserved filenames on Windows (ex. LPT1).");
+		scrivi_riga("-windate", "Restore (if any) file's creation date");
 #endif // corresponds to #ifdef (#ifdef _WIN32)
-		moreprint("+ : -flat         emergency restore of everything into a single folder (Linux => NTFS)");
-		moreprint("+ : -filelist     show (if any) a stored filelist");
-		moreprint("+ : -force        Force overwrite AND extracting of corrupted files (if any)");
-		moreprint("+ : -space        Do not check free space before extract");
-		moreprint("+ : -find/replace Replace part of text");
-		moreprint("+ : -replace X    Juxtapose X to stored path");
-		moreprint("+ : -image        Change the progress to handle huge files (-minsize X default 20MB)");
-		moreprint("+ : -stdout       Output (if possible) a single file on stdout");
-		moreprint("+ : -external     Show (if any) a stored external file");
-		moreprint("+ : -ramdisk      Extract to RAM, then write (if possible)");
+		scrivi_riga("-flat", "emergency restore of everything into a single folder (Linux => NTFS)");
+		scrivi_riga("-filelist", "show (if any) a stored filelist");
+		scrivi_riga("-force", "Force overwrite AND extracting of corrupted files (if any)");
+		scrivi_riga("-space", "Do not check free space before extract");
+		scrivi_riga("-find/replace", "Replace part of text");
+		scrivi_riga("-replace X","Juxtapose X to stored path");
+		scrivi_riga("-image", "Change the progress to handle huge files (-minsize X default 20MB)");
+		scrivi_riga("-stdout", "Output (if possible) a single file on stdout");
+		scrivi_riga("-external", "Show (if any) a stored external file");
+		scrivi_riga("-ramdisk", "Extract to RAM, then write (if possible)");
 		help_range();
 #ifdef unix
-		moreprint("+ : -tar          Extract metadata (e.g. user, group ...if any), coalescing hard links");
+		scrivi_riga("-tar", "Extract metadata (e.g. user, group ...if any), coalescing hard links");
 #endif
 	}
-	if (i_usage && i_example) { color_yellow(); moreprint("Examples:"); color_restore(); }
+	if (i_usage && i_example) scrivi_examples();
 	if (i_example)
 	{
-		moreprint("Single file to file extraction       : x 1.zpaq \"/k/foo/b.md\" -to \"/tmp/restored/b.md\"");
-		moreprint("Single file to folder tree           : x 1.zpaq -only \"*whatever\" -to /tmp/foldertree");
-		moreprint("Everything into folder muz7          : x z:\\1.zpaq -to z:\\muz7\\");
-		moreprint("0-bytes files (check restoration)    : x z:\\1.zpaq -to z:\\muz7\\ -kill");
-		moreprint("Extract into single directory        : x z:\\1.zpaq -to z:\\muz7\\ -flat");
-		moreprint("Extract without utf,<255,.eml        : x z:\\1.zpaq -to z:\\muz7\\ -utf -fix255 -fixeml");
-		moreprint("Extract forcing overwrite            : x z:\\1.zpaq -to z:\\muz7\\ -force");
-		moreprint("Extract version K                    : x z:\\1.zpaq -to z:\\muz7\\ -until K");
-		moreprint("Extract last versions of multipart   : x \"z:\\a_???\" -to z:\\ugo");
-		moreprint("Extract into muz7 every versions     : x z:\\1.zpaq -to z:\\muz7\\ -all");
-		moreprint("Show the filelist (if any)           : x z:\\1.zpaq -filelist");
-		moreprint("Show the filelist (if any) of v3     : x z:\\1.zpaq -filelist -until 3");
-		moreprint("Extract all *.xls into new archive   : x z:\\1.zpaq *.xls -repack onlyxls.zpaq");
-		moreprint("Extract from a VSS (Windows)         : x z:\\1.zpaq \\\\?\\GLOBALROOT\\Device\\HarddiskVolumeShadowCopy1\\path -to d:\\output");
-		moreprint("Replace path in extract              : x 1.zpaq -find /tank/ -replace z:\\uno\\");
-		moreprint("Change path in extract, longpath     : x 1.zpaq -replace z:\\uno\\ -longpath");
-		moreprint("Create files' tree                   : x 1.zpaq -to z:\\testdir\\ -debug -kill -zero -longpath");
-		moreprint("Range-extract version                : x copia.zpaq -only *comp.pas -to z:\\allcomp -all -range 100:1000");
-		moreprint("Restore datetime and comments        : x copia.zpaq -to z:\\prova\\ -all -comment");
-		moreprint("Restore huge image w/smart progress  : x copia.zpaq -to z:\\prova\\ -image");
-		moreprint("Single file to stdout                : x copia.zpaq 00000015.zfs >z:\\15.zfs");
-		moreprint("Extract multiple zpaqs               : x \"vu*.zpaq\" -to z:\\pippo\\");
-		moreprint("Show external VFILE                  : x z:\\1.zpaq -external -silent");
-		moreprint("Spinning drive with lot of RAM       : x z:\11.zpaq -to z:\\ugo -ramdisk");
-		moreprint("Restoring user/group/dates           : x /1.zpaq -to /tmp/ugo -tar");
+		scrivi_esempio("Single file to file extraction","x 1.zpaq \"/k/foo/b.md\" -to \"/tmp/restored/b.md\"");
+		scrivi_esempio("Single file to folder tree","x 1.zpaq -only \"*whatever\" -to /tmp/foldertree");
+		scrivi_esempio("Everything into folder muz7","x z:\\1.zpaq -to z:\\muz7\\");
+		scrivi_esempio("0-bytes files (check restoration)","x z:\\1.zpaq -to z:\\muz7\\ -kill");
+		scrivi_esempio("Extract into single directory","x z:\\1.zpaq -to z:\\muz7\\ -flat");
+		scrivi_esempio("Extract without utf,<255,.eml","x z:\\1.zpaq -to z:\\muz7\\ -utf -fix255 -fixeml");
+		scrivi_esempio("Extract forcing overwrite","x z:\\1.zpaq -to z:\\muz7\\ -force");
+		scrivi_esempio("Extract version K","x z:\\1.zpaq -to z:\\muz7\\ -until K");
+		scrivi_esempio("Extract last versions of multipart","x \"z:\\a_???\" -to z:\\ugo");
+		scrivi_esempio("Extract into muz7 every versions","x z:\\1.zpaq -to z:\\muz7\\ -all");
+		scrivi_esempio("Show the filelist (if any)","x z:\\1.zpaq -filelist");
+		scrivi_esempio("Show the filelist (if any) of v3","x z:\\1.zpaq -filelist -until 3");
+		scrivi_esempio("Extract all *.xls into new archive","x z:\\1.zpaq *.xls -repack onlyxls.zpaq");
+		scrivi_esempio("Extract from a VSS (Windows)","x z:\\1.zpaq \\\\?\\GLOBALROOT\\Device\\HarddiskVolumeShadowCopy1\\path -to d:\\output");
+		scrivi_esempio("Replace path in extract","x 1.zpaq -find /tank/ -replace z:\\uno\\");
+		scrivi_esempio("Change path in extract, longpath","x 1.zpaq -replace z:\\uno\\ -longpath");
+		scrivi_esempio("Create files' tree","x 1.zpaq -to z:\\testdir\\ -debug -kill -zero -longpath");
+		scrivi_esempio("Range-extract version","x copia.zpaq -only *comp.pas -to z:\\allcomp -all -range 100:1000");
+		scrivi_esempio("Restore datetime and comments","x copia.zpaq -to z:\\prova\\ -all -comment");
+		scrivi_esempio("Restore huge image w/smart progress","x copia.zpaq -to z:\\prova\\ -image");
+		scrivi_esempio("Single file to stdout","x copia.zpaq 00000015.zfs >z:\\15.zfs");
+		scrivi_esempio("Extract multiple zpaqs","x \"vu*.zpaq\" -to z:\\pippo\\");
+		scrivi_esempio("Show external VFILE","x z:\\1.zpaq -external -silent");
+		scrivi_esempio("Spinning drive with lot of RAM","x z:\11.zpaq -to z:\\ugo -ramdisk");
+		scrivi_esempio("Restoring user/group/dates","x /1.zpaq -to /tmp/ugo -tar");
 		
 	}
 	return("Extract the file(s)");
@@ -45534,78 +45713,76 @@ string help_l(bool i_usage,bool i_example)
 
 	if (i_usage)
 	{
-		color_green();
-		moreprint("CMD   l (list)");
-		moreprint("                  If source folders are specified, do a compare of the archive's content.");
-		moreprint("                  A 'verify' more than a 'list', much faster than the standard,");
-		moreprint("                  as it performs a block calc  codes of source files, but not of");
-		moreprint("                  the archived ones; also checks the CRC-32, to intercept any SHA1 collisions.");
-		moreprint("                  Use the exact same parameters of add(), just use l instead of a.");
-		color_restore();
-		moreprint("+ : -force        Shows all files (even marked as corrupted)");
-		moreprint("+ : -checksum     Shows CRC-32/hash, if any");
-		moreprint("+ : -summary      Compact file list");
-		moreprint("+ : -comment foo  Works on version foo, if possible");
-		moreprint("+ : -comment      Enumerate version-comment");
-		moreprint("+ : -find pippo   Just like |grep -i pippo");
-		moreprint("+ : -replace foo  Replace -find with -replace in the output");
-		moreprint("+ : -to knb       Do the standard rename()");
-		moreprint("+ : -utc          Do not convert to localtime (show UTC)");
-		moreprint("+ : -stdout       If -verbose show if files' fragments are ordered");
+		scrivi_riga("CMD l","List");
+		scrivi_riga(" ","If source folders are specified, do a compare of the archive's content.");
+		scrivi_riga(" ","A 'verify' more than a 'list', much faster than the standard,");
+		scrivi_riga(" ","as it performs a block calc  codes of source files, but not of");
+		scrivi_riga(" ","the archived ones; also checks the CRC-32, to intercept any SHA1 collisions.");
+		scrivi_riga(" ","Use the exact same parameters of add(), just use l instead of a.");
+		scrivi_riga("-force", "Shows all files (even marked as corrupted)");
+		scrivi_riga("-checksum", "Shows CRC-32/hash, if any");
+		scrivi_riga("-summary", "Compact file list");
+		scrivi_riga("-comment", "foo  Works on version foo, if possible");
+		scrivi_riga("-comment", "Enumerate version-comment");
+		scrivi_riga("-find", "pippo   Just like |grep -i pippo");
+		scrivi_riga("-replace", "foo  Replace -find with -replace in the output");
+		scrivi_riga("-to", "knb       Do the standard rename()");
+		scrivi_riga("-utc", "Do not convert to localtime (show UTC)");
+		scrivi_riga("-stdout", "If -verbose show if files' fragments are ordered");
 #ifdef _WIN32
-		moreprint("+ : -windate      Show (if any) file's creation date");
-		moreprint("+ : -ads          Skip NTFS filelist (if any)");
+		scrivi_riga("-windate", "Show (if any) file's creation date");
+		scrivi_riga("-ads", "Skip NTFS filelist (if any)");
 #endif // corresponds to #ifdef (#ifdef _WIN32)
-		moreprint("+ : -fast         Try to extract the filelist (if present)");
-		moreprint("+ : -date         Show creation date (if any)");
-		moreprint("+ : -attr         Show the attr");
-		moreprint("+ : -terse        Make a 'script-aware' output");
-		moreprint("+ : -nodel        Do not show deleted files (with -all)");
-		moreprint("+ : -csv \"some\"   Enable -csv delimiter  (\\t for TAB)");
-		moreprint("+ : -csvhf \"!\"    CSV line header/footer (\\t for TAB)");
+		scrivi_riga("-fast", "Try to extract the filelist (if present)");
+		scrivi_riga("-date", "Show creation date (if any)");
+		scrivi_riga("-attr", "Show the attr");
+		scrivi_riga("-terse", "Make a 'script-aware' output");
+		scrivi_riga("-nodel", "Do not show deleted files (with -all)");
+		scrivi_riga("-csv","\"some\"   Enable -csv delimiter  (\\t for TAB)");
+		scrivi_riga("-csvhf","\"!\"    CSV line header/footer (\\t for TAB)");
 		help_date();
 		help_size();
 		help_orderby();
 		help_range();
-		moreprint("+ : -715          Binary-compatible zpaq 7.15 output");
-		moreprint("+ : -norecursion  Do not recurse with -only (see example below)");
-		moreprint("+ : -tar          Show Posix metadata (if any)");
-		moreprint("+ : -home         Show 1-level data");
-		moreprint("+ :               -orderby X, -desc -n Y");
+		scrivi_riga("-715", "Binary-compatible zpaq 7.15 output");
+		scrivi_riga("-norecursion", "Do not recurse with -only (see example below)");
+		scrivi_riga("-tar", "Show Posix metadata (if any)");
+		scrivi_riga("-home", "Show 1-level data");
+		scrivi_riga("-orderby X","-desc -n Y");
 		
 	}
-	if (i_usage && i_example) { color_yellow(); moreprint("Examples:"); color_restore(); }
+	if (i_usage && i_example) scrivi_examples();
 	if (i_example)
 	{
-		moreprint("Last version                         : l z:\\1.zpaq");
-		moreprint("Last version w/checksums             : l z:\\1.zpaq -checksum");
-		moreprint("Compact output                       : l z:\\1.zpaq -checksum -summary");
-		moreprint("Compact output renamed               : l z:\\1.zpaq -checksum -summary -to z:\\knb");
-		moreprint("All (every) version                  : l z:\\1.zpaq -all");
-		moreprint("Version comments (if any)            : l z:\\1.zpaq -comment");
-		moreprint("V.comments verbose (if any)          : l z:\\1.zpaq -comment -all");
-		moreprint("Only stored 'zpaq.cpp'               : l z:\\1.zpaq -find zpaq.cpp -pakka");
-		moreprint("Find-and-replace (like awk or sed)   : l r:\\1.zpaq -find c:/biz/ -replace z:\\mydir\\");
-		moreprint("List the 10 greatest file            : l z:\\1.zpaq -all -orderby size -desc -n 10");
-		moreprint("List files >1G                       : l z:\\1.zpaq -minsize 1g");
-		moreprint("List files >100M of 2017             : l z:\\1.zpaq -minsize 100m -datefrom 2017 -dateto 2017");
-		moreprint("List ORDERED files (-stdout)         : l z:\\1.zpaq -stdout");
-		moreprint("Compare to files on disk             : l z:\\1.zpaq \"//192.168.1.100/scanner/\" -ssd");
-		moreprint("Find the versions of a file          : l z:\\1.zpaq -only \"*/the/file.doc\" -all");
-		moreprint("Force recomputing list               : l z:\\1.zpaq -ads");
-		moreprint("Try to get the fast filelist         : l z:\\1.zpaq -fast");
-		moreprint("Files added in versions 2 and 3      : l z:\\1.zpaq -range 2:3");
-		moreprint("Files added in last version          : l z:\\1.zpaq -range ::1");
-		moreprint("Show creation date (if any)          : l z:\\1.zpaq -date");
-		moreprint("Fixed sized/no header and footer     : l z:\\1.zpaq -terse");
-		moreprint("Where are the restorable versions?   : l z:\\1.zpaq -find \"$$$$\" -all -nodel");
-		moreprint("TAB-delimited CSV output             : l z:\\1.zpaq -terse -csv \"\\t\"");
-		moreprint("Enclose fields between double quote  : l z:\\1.zpaq -terse -csv \"\\\",\\\"\" -csvhf \"\\\"\"");
-		moreprint("Output just like zpaq 7.15           : l z:\\1.zpaq -715");
-		moreprint("Show a folder WITHOUT subfolders     : l z:\\1.zpaq -only c:/dropbox/snapshot -norecursion");
-		moreprint("Show a folder WITH subfolders        : l z:\\1.zpaq -only c:/dropbox/snapshot");
-		moreprint("Get metadata (if any)                : l /tmp/backup.zpaq -tar");
-		moreprint("Show 4 largest 1-level folders       : l z:\\1.zpaq c:/zpaqfranz -home -desc -n 4");
+		scrivi_esempio("Last version","l z:\\1.zpaq");
+		scrivi_esempio("Last version w/checksums","l z:\\1.zpaq -checksum");
+		scrivi_esempio("Compact output","l z:\\1.zpaq -checksum -summary");
+		scrivi_esempio("Compact output renamed","l z:\\1.zpaq -checksum -summary -to z:\\knb");
+		scrivi_esempio("All (every) version","l z:\\1.zpaq -all");
+		scrivi_esempio("Version comments (if any)","l z:\\1.zpaq -comment");
+		scrivi_esempio("V.comments verbose (if any)","l z:\\1.zpaq -comment -all");
+		scrivi_esempio("Only stored 'zpaq.cpp'","l z:\\1.zpaq -find zpaq.cpp -pakka");
+		scrivi_esempio("Find-and-replace (like awk or sed)","l r:\\1.zpaq -find c:/biz/ -replace z:\\mydir\\");
+		scrivi_esempio("List the 10 greatest file","l z:\\1.zpaq -all -orderby size -desc -n 10");
+		scrivi_esempio("List files >1G","l z:\\1.zpaq -minsize 1g");
+		scrivi_esempio("List files >100M of 2017","l z:\\1.zpaq -minsize 100m -datefrom 2017 -dateto 2017");
+		scrivi_esempio("List ORDERED files (-stdout)","l z:\\1.zpaq -stdout");
+		scrivi_esempio("Compare to files on disk   ","l z:\\1.zpaq \"//somewhere/scanner/\" -ssd");
+		scrivi_esempio("Find the versions of a file","l z:\\1.zpaq -only \"*/the/file.doc\" -all");
+		scrivi_esempio("Force recomputing list","l z:\\1.zpaq -ads");
+		scrivi_esempio("Try to get the fast filelist","l z:\\1.zpaq -fast");
+		scrivi_esempio("Files added in versions 2 and 3","l z:\\1.zpaq -range 2:3");
+		scrivi_esempio("Files added in last version","l z:\\1.zpaq -range ::1");
+		scrivi_esempio("Show creation date (if any)","l z:\\1.zpaq -date");
+		scrivi_esempio("Fixed sized/no header and footer","l z:\\1.zpaq -terse");
+		scrivi_esempio("Where are the restorable versions? ","l z:\\1.zpaq -find \"$$$$\" -all -nodel");
+		scrivi_esempio("TAB-delimited CSV output           ","l z:\\1.zpaq -terse -csv \"\\t\"");
+		scrivi_esempio("Enclose fields between double quote","l z:\\1.zpaq -terse -csv \"\\\",\\\"\" -csvhf \"\\\"\"");
+		scrivi_esempio("Output just like zpaq 7.15","l z:\\1.zpaq -715");
+		scrivi_esempio("Show a folder WITHOUT subfolders","l z:\\1.zpaq -only c:/dropbox/snapshot -norecursion");
+		scrivi_esempio("Show a folder WITH subfolders","l z:\\1.zpaq -only c:/dropbox/snapshot");
+		scrivi_esempio("Get metadata (if any)","l /tmp/backup.zpaq -tar");
+		scrivi_esempio("Show 4 largest 1-level folders","l z:\\1.zpaq c:/zpaqfranz -home -desc -n 4");
 	}
 	return("List file(s)");
 
@@ -45614,22 +45791,19 @@ string help_i(bool i_usage,bool i_example)
 {
 	if (i_usage)
 	{
-		color_green();
-		moreprint("CMD   i (info)");
-		moreprint("                  Directly shows the versions into the archive, with size and comments");
-		color_restore();
-		moreprint("+ : -comment      Shows comments (if any)");
-		moreprint("+ : -stat         Count 'weird' files and show uncompressed size (slow)");
+		scrivi_riga("CMD i (info)","Directly shows the versions into the archive, with size and comments");
+		scrivi_riga("-comment", "Shows comments (if any)");
+		scrivi_riga("-stat", "Count 'weird' files and show uncompressed size (slow)");
 		help_range();
 	}
-	if (i_usage && i_example) { color_yellow(); moreprint("Examples:"); color_restore(); }
+	if (i_usage && i_example) scrivi_examples();
 	if (i_example)
 	{
-		moreprint("Show versions info (command i)       : i z:\\1.zpaq");
-		moreprint("Count 'not good filenames'           : i z:\\1.zpaq -stat");
-		moreprint("Shows version comment                : i z:\\1.zpaq -comment");
-		moreprint("Show version 153                     : i z:\\1.zpaq -range 153");
-		moreprint("Show last 5 versions                 : i z:\\1.zpaq -range ::5");
+		scrivi_esempio("Show versions info (command i)","i z:\\1.zpaq");
+		scrivi_esempio("Count 'not good filenames'","i z:\\1.zpaq -stat");
+		scrivi_esempio("Shows version comment","i z:\\1.zpaq -comment");
+		scrivi_esempio("Show version 153","i z:\\1.zpaq -range 153");
+		scrivi_esempio("Show last 5 versions","i z:\\1.zpaq -range ::5");
 	}
 	return("File (archive) information");
 
@@ -45639,19 +45813,15 @@ string help_ls(bool i_usage,bool i_example)
 {
 	if (i_usage)
 	{
-		color_green();
-		moreprint("CMD   ls          Navigate inside .zpaq like a 'filesystem'");
-		color_restore();
-		color_yellow();
-		moreprint("                  EXPERIMENTAL");
-		color_restore();
-		moreprint("                  Enter help or ? to commands list");
+		scrivi_riga("CMD ls","Navigate inside .zpaq like a 'filesystem'");
+		scrivi_riga(" ","EXPERIMENTAL");
+		scrivi_riga(" ","Enter help or ? to commands list");
 
 	}
-	if (i_usage && i_example) { color_yellow(); moreprint("Examples:"); color_restore(); }
+	if (i_usage && i_example) scrivi_examples();
 	if (i_example)
 	{
-		moreprint("Enter inside archive                 : ls z:\\1.zpaq");
+		scrivi_esempio("Enter inside archive","ls z:\\1.zpaq");
 	}
 	return ("Navigate inside .zpaq");
 }
@@ -45660,15 +45830,13 @@ string help_tui(bool i_usage,bool i_example)
 {
 	if (i_usage)
 	{
-		color_green();
-		moreprint("CMD   tui Start text-based TUI");
-		moreprint("          Please strike ? key to get all commands");
-		color_restore();
+		scrivi_riga("CMD tui","Start text-based TUI");
+		scrivi_riga(" ","Please strike ? key to get all commands");
 	}
-	if (i_usage && i_example) { color_yellow(); moreprint("Examples:"); color_restore(); }
+	if (i_usage && i_example) scrivi_examples();
 	if (i_example)
 	{
-		moreprint("Launch the TUI                       : tui z:\\okane.zpaq");
+		scrivi_esempio("Launch the TUI","tui z:\\okane.zpaq");
 	}
 	return("Text-based UI (listing-extraction)");
 
@@ -45679,29 +45847,27 @@ string help_q(bool i_usage,bool i_example)
 {
 	if (i_usage)
 	{
-		color_green();
-		moreprint("CMD   q Windows archiving of C: (*** admin rights mandatory ***)");
-		color_restore();
-		moreprint("+ :               Take as much C: as possible (no Windows and swapfile)");
-		moreprint("+ :               This is NOT a full backup (aka: bare-metal restorable)");
-		moreprint("+ : -forcewindows INCLUDE Windows folder");
-		moreprint("+ : -frugal       Exclude Windows, %programfiles% and %temp%");
-		moreprint("+ : -all          Get everything (except swapfile)");
-		moreprint("+ : -to c:\\piz    Use c:\\piz for snap (default c:\\franzsnap)");
-		moreprint("+ :               It is possible to use %pcname as placeholder");
-		moreprint("+ :               Just about all switches of add() (-key -m -only ...)");
-		moreprint("+ :               except files selection (always C:/*)");
-		moreprint("+ :     ****      The folder franzsnap MUST NOT EXIST and be on C:");
+		scrivi_riga("CMD q"," Windows archiving of C: (*** admin rights mandatory ***)");
+		scrivi_riga(" ","Take as much C: as possible (no Windows and swapfile)");
+		scrivi_riga(" ","This is NOT a full backup (aka: bare-metal restorable)");
+		scrivi_riga("-forcewindows", "INCLUDE Windows folder");
+		scrivi_riga("-frugal", "Exclude Windows, %programfiles% and %temp%");
+		scrivi_riga("-all", "Get everything (except swapfile)");
+		scrivi_riga("-to", "c:\\piz    Use c:\\piz for snap (default c:\\franzsnap)");
+		scrivi_riga(" ","It is possible to use %pcname as placeholder");
+		scrivi_riga(" ","Just about all switches of add() (-key -m -only ...)");
+		scrivi_riga(" ","except files selection (always C:/*)");
+		scrivi_riga(" ","****      The folder franzsnap MUST NOT EXIST and be on C:");
 	}
-	if (i_usage && i_example) { color_yellow(); moreprint("Examples:"); color_restore(); }
+	if (i_usage && i_example) scrivi_examples();
 	if (i_example)
 	{
-		moreprint("NOT C:\\WINDOWS, NOT RECYCLE BIN      : q z:\\1.zpaq");
-		moreprint("Everything                           : q z:\\1.zpaq -all");
-		moreprint("Everything NOT C:\\DROPBOX            : q z:\\1.zpaq -all -not c:/franzsnap/dropbox");
-		moreprint("NOT C:\\WINDOWS, NOT %programs%       : q z:\\1.zpaq -frugal");
-		moreprint("Only C/C++ files and header          : q z:\\1.zpaq -only *.c* -only *.h*");
-		moreprint("For multi-PC 'backup' on one zpaq    : q z:\\1.zpaq -frugal -to c:\\snap_%pcname -verbose");
+		scrivi_esempio("NOT C:\\WINDOWS, NOT RECYCLE BIN","q z:\\1.zpaq");
+		scrivi_esempio("Everything","q z:\\1.zpaq -all");
+		scrivi_esempio("Everything NOT C:\\DROPBOX","q z:\\1.zpaq -all -not c:/franzsnap/dropbox");
+		scrivi_esempio("NOT C:\\WINDOWS, NOT %programs%","q z:\\1.zpaq -frugal");
+		scrivi_esempio("Only C/C++ files and header","q z:\\1.zpaq -only *.c* -only *.h*");
+		scrivi_esempio("For multi-PC 'backup' on one zpaq","q z:\\1.zpaq -frugal -to c:\\snap_%pcname -verbose");
 	}
 	return("Windows archive of C: with VSS");
 
@@ -45712,17 +45878,15 @@ string help_ads(bool i_usage,bool i_example)
 
 	if (i_usage)
 	{
-		color_green();
-		moreprint("CMD   ads Manipulate NTFS Alternate Data Stream");
-		color_restore();
+		scrivi_riga("CMD ads","Manipulate NTFS Alternate Data Stream");
 	}
-	if (i_usage && i_example) { color_yellow(); moreprint("Examples:"); color_restore(); }
+	if (i_usage && i_example) scrivi_examples();
 	if (i_example)
 	{
-		moreprint("Show    ADS                          : ads z:\\1.zpaq");
-		moreprint("Remove  ADS (all of them)            : ads z:\\*.zpaq -kill");
-		moreprint("Remove  ADS (only one)               : ads z:\\*.zpaq -only fasttxt -kill");
-		moreprint("Rebuild ADS filelist                 : ads z:\\1.zpaq -force");
+		scrivi_esempio("Show    ADS","ads z:\\1.zpaq");
+		scrivi_esempio("Remove  ADS (all of them)","ads z:\\*.zpaq -kill");
+		scrivi_esempio("Remove  ADS (only one)","ads z:\\*.zpaq -only fasttxt -kill");
+		scrivi_esempio("Rebuild ADS filelist","ads z:\\1.zpaq -force");
 	}
 	return("ADS Alternate Data Stream manipulator");
 
@@ -45732,17 +45896,14 @@ string help_g(bool i_usage,bool i_example)
 {
 	if (i_usage)
 	{
-		color_green();
-		moreprint("CMD   g Run a q command (Windows archiving of C:)");
-		moreprint("                  If the user is in the administrator group, BUT");
-		moreprint("                  the current shell does not have admin rights, this will work");
-		color_restore();
+		scrivi_riga("CMD g","Run a q command (Windows archiving of C:)");
+		scrivi_riga(" ","If the user is in the administrator group, BUT");
+		scrivi_riga(" ","the current shell does not have admin rights, this will work");
 	}
-	if (i_usage && i_example) { color_yellow(); moreprint("Examples:"); color_restore(); }
+	if (i_usage && i_example) scrivi_examples();
 	if (i_example)
 	{
-		moreprint("NOT C:\\WINDOWS, NOT RECYCLE BIN      : g z:\\1.zpaq");
-		moreprint("... same as command q, but with g");
+		scrivi_esempio("NOT C:\\WINDOWS, NOT RECYCLE BIN","g z:\\1.zpaq");
 	}
 	return("Windows C: archiver from a shell without admin rights");
 }
@@ -45751,28 +45912,25 @@ string help_find(bool i_usage,bool i_example)
 {
 	if (i_usage)
 	{
-		color_green();
-		moreprint("CMD   find files");
-		moreprint("                  Search file(s) with wildcards. DO NOT FORGET DOUBLE QUOTES ON *NIX!");
-		color_restore();
-		moreprint("+ : -verbose      Show date/size (default:NO)");
+		scrivi_riga("CMD find","Search file(s) with wildcards. DO NOT FORGET DOUBLE QUOTES ON *NIX!");
+		scrivi_riga("-verbose", "Show date/size (default:NO)");
 		help_date();
 		help_size();
 		help_orderby();
-		moreprint("+ : -find         Like grep -i");
+		scrivi_riga("-find", "Like grep -i");
 	}
-	if (i_usage && i_example) { color_yellow(); moreprint("Examples:"); color_restore(); }
+	if (i_usage && i_example) scrivi_examples();
 	if (i_example)
 	{
-		moreprint("'Double filter'                      : find c:\\dropbox *.txt -minsize 1000000  -find franco");
-		moreprint("Search in multiple folders           : find c:\\uno z:\\kb -only *franco*");
-		moreprint("Search file ending with 01.cpp       : find c:\\zpaqfranz *01.cpp");
-		moreprint("Search all .cpp                      : find c:\\zpaqfranz *.cpp -verbose");
-		moreprint("Search *francia* BEWARE DOUBLE QUOTE!: find /root \"*francia*\"");
-		moreprint("Search filtered on date              : find c:\\zpaqfranz *.cpp -datefrom 20220920 -dateto 2022-10-01");
-		moreprint("Search every file of 2017            : find . -datefrom 2017 -dateto 2017");
-		moreprint("Search every EXE file of 2017        : find . *.exe -datefrom 2017 -dateto 2017");
-		moreprint("10 biggest cpp                       : find . *.cpp -orderby size -desc -limit 10 -verbose");
+		scrivi_esempio("'Double filter'","find c:\\dropbox *.txt -minsize 1000000  -find franco");
+		scrivi_esempio("Search in multiple folders","find c:\\uno z:\\kb -only *franco*");
+		scrivi_esempio("Search file ending with 01.cpp","find c:\\zpaqfranz *01.cpp");
+		scrivi_esempio("Search all .cpp","find c:\\zpaqfranz *.cpp -verbose");
+		scrivi_esempio("Search *francia* BEWARE DOUBLE QUOTE","find /root \"*francia*\"");
+		scrivi_esempio("Search filtered on date","find c:\\zpaqfranz *.cpp -datefrom 20220920 -dateto 2022-10-01");
+		scrivi_esempio("Search every file of 2017","find . -datefrom 2017 -dateto 2017");
+		scrivi_esempio("Search every EXE file of 2017","find . *.exe -datefrom 2017 -dateto 2017");
+		scrivi_esempio("10 biggest cpp","find . *.cpp -orderby size -desc -limit 10 -verbose");
 	}
 	return("Search file(s) with the wildcards");
 }
@@ -45781,15 +45939,13 @@ string help_e(bool i_usage,bool i_example)
 
 	if (i_usage)
 	{
-		color_green();
-		moreprint("CMD   e Extract on current folder");
-		moreprint("                  Shortcut for extracting on Windows with longpath");
-		color_restore();
+		scrivi_riga("CMD e","Extract on current folder");
+		scrivi_riga(" ","Shortcut for extracting on Windows with longpath");
 	}
-	if (i_usage && i_example) { color_yellow(); moreprint("Examples:"); color_restore(); }
+	if (i_usage && i_example) scrivi_examples();
 	if (i_example)
 	{
-		moreprint("Extract everything 'here'            : e z:\\1.zpaq -longpath");
+		scrivi_esempio("Extract everything 'here'","e z:\\1.zpaq -longpath");
 	}
 	return("Extract the file(s) in the current folder");
 }
@@ -45797,58 +45953,54 @@ string help_dirsize(bool i_usage,bool i_example)
 {
 	if (i_usage)
 	{
-		color_green();
-		moreprint("CMD   dirsize     Show cumulative folder(s) size");
-		moreprint("                  Case INsensitive ENDING with parameters (unless -force)");
-		moreprint("                  i.e. marcus == /1/marcus, /tank/d/documenti/MARCUS");
-		color_restore();
-		moreprint("+ : -force        Exact match; /tank/marcus != /tank/MARCUS");
+		scrivi_riga("CMD dirsize","Show cumulative folder(s) size");
+		scrivi_riga(" ","Case INsensitive ENDING with parameters (unless -force)");
+		scrivi_riga(" ","i.e. marcus == /1/marcus, /tank/d/documenti/MARCUS");
+		scrivi_riga("-force", "Exact match; /tank/marcus != /tank/MARCUS");
 	}
-	if (i_usage && i_example) { color_yellow(); moreprint("Examples:"); color_restore(); }
+	if (i_usage && i_example) scrivi_examples();
 	if (i_example)
 	{
-			moreprint("Search with 2 parameters             : dirsize z:\\1.zpaq marcus vanessa");
-			moreprint("Getting size (insensitive)           : dirsize z:\\1.zpaq /tank/d/documenti/marcus -force");
+		scrivi_esempio("Search with 2 parameters","dirsize z:\\1.zpaq marcus vanessa");
+		scrivi_esempio("Getting size (insensitive)","dirsize z:\\1.zpaq /tank/d/documenti/marcus -force");
 	}
 	return("Show cumulative folder(s) size");
 }
+#ifdef ZPAQFULL ///NOSFTPSTART
 #ifdef _WIN32
 string help_sfx(bool i_usage,bool i_example)
 {
 	if (i_usage)
 	{
-		color_green();
-		moreprint("CMD   sfx (sfx module, with encryption support)");
-		moreprint("                  (no switch): Write SFX along the .zpaq");
-		moreprint("                  (w/switch) : Convert .zpaq (max 2GB) to Windows .EXE");
-		color_restore();
-		moreprint("+ : -to X         Extract the .zpaq from a .exe into X");
+		scrivi_riga("CMD sfx","sfx module, with encryption support");
+		scrivi_riga("(no switch)","Write SFX along the .zpaq");
+		scrivi_riga("(w/switch)","Convert .zpaq (max 2GB) to Windows .EXE");
+		scrivi_riga("-to X","Extract the .zpaq from a .exe into X");
 	}
-	if (i_usage && i_example) { color_yellow(); moreprint("Examples:"); color_restore(); }
+	if (i_usage && i_example) scrivi_examples();
 	if (i_example)
 	{
-		moreprint("Create  z:\\1.exe                     : sfx z:\\1.zpaq");
-		moreprint("Convert 1.zpaq to 2.exe              : sfx z:\\1.zpaq -sfx z:\\2.exe");
-		moreprint("Extract sfx module                   : sfx z:\\64bit.exe");
-		moreprint("Extract the zpaq (if any)            : sfx z:\\1.exe -to z:\\1.zpaq -space -force");
+		scrivi_esempio("Create  z:\\1.exe","sfx z:\\1.zpaq");
+		scrivi_esempio("Convert 1.zpaq to 2.exe","sfx z:\\1.zpaq -sfx z:\\2.exe");
+		scrivi_esempio("Extract sfx module","sfx z:\\64bit.exe");
+		scrivi_esempio("Extract the zpaq (if any)","sfx z:\\1.exe -to z:\\1.zpaq -space -force");
 	}
 	return("Create SFX module (with encryption support)");
 }
 #endif // corresponds to #ifdef (#ifdef _WIN32)
+#endif ///NOSFTPEND
 string help_rsync(bool i_usage,bool i_example)
 {
 	if (i_usage)
 	{
-		color_green();
-		moreprint("CMD   rsync Delete dangling temporary rsync file");
-		color_restore();
-		moreprint("+ : -kill         Wet run (default: dry run)");
+		scrivi_riga("CMD rsync","Delete dangling temporary rsync file");
+		scrivi_riga("-kill", "Wet run (default: dry run)");
 	}
-	if (i_usage && i_example) { color_yellow(); moreprint("Examples:"); color_restore(); }
+	if (i_usage && i_example) scrivi_examples();
 	if (i_example)
 	{
-		moreprint("Purge temporary (dry run)            : rsync \\\\nas\\thebackup");
-		moreprint("Purge temporary (WET run)            : rsync \\\\nas\\thebackup -kill");
+		scrivi_esempio("Purge temporary (dry run)","rsync \\\\nas\\thebackup");
+		scrivi_esempio("Purge temporary (WET run)","rsync \\\\nas\\thebackup -kill");
 	}
 	return("Delete rsync's dangling temporary files");
 }
@@ -45856,16 +46008,13 @@ string help_checkpassword(bool i_usage,bool i_example)
 {
 	if (i_usage)
 	{
-		color_green();
-		moreprint("CMD   checkpassword");
-		moreprint("		             Check if password is OK");
-		color_restore();
-		moreprint("+ : -key X        Use X as password");
+		scrivi_riga("CMD checkpassword","Check if password is OK");
+		scrivi_riga("-key X","Use X as password");
 	}
-	if (i_usage && i_example) { color_yellow(); moreprint("Examples:"); color_restore(); }
+	if (i_usage && i_example) scrivi_examples();
 	if (i_example)
 	{
-		moreprint("Check if password is pippo           : checkpassword file.zpaq -key pippo");
+		scrivi_esempio("Check if password is pippo","checkpassword file.zpaq -key pippo");
 	}
 	return("Check password");
 }
@@ -45874,49 +46023,45 @@ string help_t(bool i_usage,bool i_example)
 
 	if (i_usage)
 	{
-		color_green();
-		moreprint("CMD   t (test)");
-		moreprint("                  NO PATH:   check all blocks, and CRC-32s of the files");
-		moreprint("                             corresponds to what would be generated by extracting");
-		color_restore();
-		color_yellow();
-		moreprint("                  WITH PATH: compares files/folders in the path(s) with the");
-		moreprint("                             archive's content");
-		color_restore();
-		moreprint("+ : -checksum     Enable hash checksums");
-		moreprint("+ : -verify       Do a filesystem post-check: STORED CRC==DECOMPRESSED==FROM FILE.");
-		moreprint("+ : -verify -ssd  Multithread verify (do NOT use on spinning drives)");
-		moreprint("+ : -find pippo   For path-rework of verify");
-		moreprint("+ : -replace plu  For path-rework of verify (find and replace)");
-		moreprint("+ : -paranoid     Extract all into -to something, check every file with stored hash");
-		moreprint("+ :               delete every equal files");
-		moreprint("+ : -collision    Test collisions");
-		moreprint("+ : -quick        Do not check hash, only size/date");
-		moreprint("+ : -crc32        Run a triple CRC-32 check (!) against the filesystem");
-		moreprint("+ :               Use -find/replace to fix path (if needed); -ssd for M/T");
-		moreprint("+ : -ssd          Run multithread CRC-32 rebuilder\n");
-		moreprint("+ : -debug6       Enforce CRC-32 error\n");
+		scrivi_riga("CMD t","Test");
+		scrivi_riga(" ","NO PATH:   check all blocks, and CRC-32s of the files");
+		scrivi_riga(" ","           corresponds to what would be generated by extracting");
+		scrivi_riga(" ","WITH PATH: compares files/folders in the path(s) with the");
+		scrivi_riga(" ","           archive's content");
+		scrivi_riga("-checksum", "Enable hash checksums");
+		scrivi_riga("-verify", "Do a filesystem post-check: STORED CRC==DECOMPRESSED==FROM FILE.");
+		scrivi_riga("-verify", "-ssd  Multithread verify (do NOT use on spinning drives)");
+		scrivi_riga("-find", "pippo   For path-rework of verify");
+		scrivi_riga("-replace", "plu  For path-rework of verify (find and replace)");
+		scrivi_riga("-paranoid", "Extract all into -to something, check every file with stored hash");
+		scrivi_riga(" ","delete every equal files");
+		scrivi_riga("-collision", "Test collisions");
+		scrivi_riga("-quick", "Do not check hash, only size/date");
+		scrivi_riga("-crc32", "Run a triple CRC-32 check (!) against the filesystem");
+		scrivi_riga(" ","Use -find/replace to fix path (if needed); -ssd for M/T");
+		scrivi_riga("-ssd", "Run multithread CRC-32 rebuilder\n");
+		scrivi_riga("-debug6", "Enforce CRC-32 error\n");
 		
 	}
-	if (i_usage && i_example) { color_yellow(); moreprint("Examples:"); color_restore(); }
+	if (i_usage && i_example) scrivi_examples();
 	if (i_example)
 	{
-		moreprint("Last version                         : t z:\\1.zpaq");
-		moreprint("All versions                         : t z:\\1.zpaq -all");
-		moreprint("Last+Against filesystem, 4 threads   : t z:\\1.zpaq -verify -ssd -t4");
-		moreprint("Real paranoid: extract all           : t z:\\1.zpaq -to z:\\knb -paranoid");
-		moreprint("Multiple paranoid check (Win)        : t *.zpaq -to z:\\temp\\ -paranoid -longpath -big");
-		moreprint("Multiple test (*NIX)                 : t \"/copie/*.zpaq\" ");
-		moreprint("Compare with string manipulation     : t z:\\2 c:\\nz -find k:\\nz -replace c:\\nz -verify");
-		moreprint("All version SHA-1 collisions         : t z:\\1.zpaq -collision -all");
-		moreprint("Triple check CRC-32                  : t z:\\1.zpaq -crc32");
-		moreprint("3 check w/path manipulation          : t z:\\1.zpaq -crc32 -find \"x:/memme/\" -replace \"c:/nz/\"");
+		scrivi_esempio("Last version","t z:\\1.zpaq");
+		scrivi_esempio("All versions","t z:\\1.zpaq -all");
+		scrivi_esempio("Last+Against filesystem, 4 threads","t z:\\1.zpaq -verify -ssd -t4");
+		scrivi_esempio("Real paranoid: extract all","t z:\\1.zpaq -to z:\\knb -paranoid");
+		scrivi_esempio("Multiple paranoid check (Win)","t *.zpaq -to z:\\temp\\ -paranoid -longpath -big");
+		scrivi_esempio("Multiple test (*NIX)","t \"/copie/*.zpaq\" ");
+		scrivi_esempio("Compare with string manipulation","t z:\\2 c:\\nz -find k:\\nz -replace c:\\nz -verify");
+		scrivi_esempio("All version SHA-1 collisions","t z:\\1.zpaq -collision -all");
+		scrivi_esempio("Triple check CRC-32","t z:\\1.zpaq -crc32");
+		scrivi_esempio("3 check w/path manipulation","t z:\\1.zpaq -crc32 -find \"x:/memme/\" -replace \"c:/nz/\"");
 		color_yellow();
 		moreprint("BEWARE: path(s) changes the logic!");
 		color_restore();
-		moreprint("Fast-SHA1 (nz the source dir)        : t z:\\1.zpaq c:\\nz");
-		moreprint("SHA1 + hash                          : t z:\\1.zpaq c:\\nz -verify");
-		moreprint("Quick-and-dirty size/date            : t z:\\1.zpaq c:\\nz c:\\kz -quick");
+		scrivi_esempio("Fast-SHA1 (nz the source dir)","t z:\\1.zpaq c:\\nz");
+		scrivi_esempio("SHA1 + hash","t z:\\1.zpaq c:\\nz -verify");
+		scrivi_esempio("Quick-and-dirty size/date","t z:\\1.zpaq c:\\nz c:\\kz -quick");
 	}
 	return("Test archive integrity/compare with filesystem");
 
@@ -45925,23 +46070,20 @@ string help_sync(bool i_usage, bool i_example)
 {
     if (i_usage)
     {
-        color_green();
-        moreprint("CMD   sync");
-        moreprint("                  Compare archive content with filesystem folders");
-        moreprint("                  Estimate size of new/changed data to be compressed");
-        color_restore();
-        moreprint("+ : -quick        Compare only file sizes (skip hash verification)");
-        moreprint("+ : -ssd          Use multithreaded hashing for faster processing");
+        scrivi_riga("CMD sync","Compare archive content with filesystem folders");
+        scrivi_riga("  ","Estimate size of new/changed data to be compressed");
+        scrivi_riga("-quick", "Compare only file sizes (skip hash verification)");
+        scrivi_riga("-ssd", "Use multithreaded hashing for faster processing");
     }
-    if (i_usage && i_example) { color_yellow(); moreprint("Examples:"); color_restore(); }
+    if (i_usage && i_example) scrivi_examples();
     if (i_example)
     {
-        moreprint("(example) Archive with 3 folders     : a z:\\1.zpaq c:\\zpaqfranz c:\\nz c:\\ut");
-        moreprint("Check all 3 folders against archive  : sync z:\\1.zpaq c:\\zpaqfranz c:\\nz c:\\ut");
-        moreprint("Check only 2 specific folders        : sync z:\\1.zpaq c:\\nz c:\\ut");
-        moreprint("Check with multithreaded hashing     : sync z:\\1.zpaq c:\\nz -ssd");
-        moreprint("Quick size-only comparison           : sync z:\\1.zpaq c:\\nz -quick");
-        moreprint("Check specific subfolder only        : sync z:\\1.zpaq c:\\zpaqfranz\\release -ssd");
+        scrivi_esempio("(example) Archive with 3 folders","a z:\\1.zpaq c:\\zpaqfranz c:\\nz c:\\ut");
+        scrivi_esempio("Check all 3 folders against archive","sync z:\\1.zpaq c:\\zpaqfranz c:\\nz c:\\ut");
+        scrivi_esempio("Check only 2 specific folders","sync z:\\1.zpaq c:\\nz c:\\ut");
+        scrivi_esempio("Check with multithreaded hashing","sync z:\\1.zpaq c:\\nz -ssd");
+        scrivi_esempio("Quick size-only comparison","sync z:\\1.zpaq c:\\nz -quick");
+        scrivi_esempio("Check specific subfolder only","sync z:\\1.zpaq c:\\zpaqfranz\\release -ssd");
     }
     return("Compare archive with filesystem");
 }
@@ -45949,27 +46091,24 @@ string help_v(bool i_usage,bool i_example)
 {
 	if (i_usage)
 	{
-		color_green();
-		moreprint("CMD   v (verify)");
-		moreprint("                  Verify all files (by hashes) against filesystem");
-		color_restore();
-		moreprint("+ : -ssd          Multithread (for SSD/NVMe). Do NOT use on spinning drives");
-		moreprint("+ : -tX           Limit -ssd to X threads");
-		moreprint("+ : -until Y      Check the version Y");
-		moreprint("+ : -find pippo   For path-rework of verify");
-		moreprint("+ : -replace plu  For path-rework of verify (find and replace)");
-		moreprint("+ : -verbose      Show distinct errors");
-		moreprint("+ : -debug        Show a lot of info");
-		moreprint("+ : -output x.txt Put errors in x.txt (alias -out)");
+		moreprint("CMD   v (verify)","Verify all files (by hashes) against filesystem");
+		scrivi_riga("-ssd", "Multithread (for SSD/NVMe). Do NOT use on spinning drives");
+		scrivi_riga("-tX", "Limit -ssd to X threads");
+		scrivi_riga("-until Y", "Check the version Y");
+		scrivi_riga("-find", "pippo   For path-rework of verify");
+		scrivi_riga("-replace", "plu  For path-rework of verify (find and replace)");
+		scrivi_riga("-verbose", "Show distinct errors");
+		scrivi_riga("-debug", "Show a lot of info");
+		scrivi_riga("-output x.txt","Put errors in x.txt (alias -out)");
 	}
-	if (i_usage && i_example) { color_yellow(); moreprint("Examples:"); color_restore(); }
+	if (i_usage && i_example) scrivi_examples();
 	if (i_example)
 	{
-		moreprint("Last version                         : v z:\\1.zpaq");
-		moreprint("Show errors line by line             : v z:\\1.zpaq -verbose");
-		moreprint("2n version                           : v z:\\1.zpaq -until 2");
-		moreprint("Remake path                          : v z:\\1.zpaq -find c:\\dropbox -replace z:\\knb");
-		moreprint("1st version, multithread             : v z:\\1.zpaq -until 1 -ssd");
+		scrivi_esempio("Last version","v z:\\1.zpaq");
+		scrivi_esempio("Show errors line by line","v z:\\1.zpaq -verbose");
+		scrivi_esempio("2n version","v z:\\1.zpaq -until 2");
+		scrivi_esempio("Remake path","v z:\\1.zpaq -find c:\\dropbox -replace z:\\knb");
+		scrivi_esempio("1st version, multithread","v z:\\1.zpaq -until 1 -ssd");
 	}
 
 	return ("Verify an archive (against filesystem)");
@@ -45979,25 +46118,23 @@ string help_p(bool i_usage,bool i_example)
 
 	if (i_usage)
 	{
-		color_green();
-		moreprint("CMD   p (paranoid test)");
-		moreprint("                  Test the archive (** NOT multipart **) in a very paranoid fashion.");
-		moreprint("                  ZPAQ reference decompressor is used to extract blocks in RAM.");
-		moreprint("                  Runs on unzpaq206.cpp source instead of 7.15 extract: double check");
-		moreprint("                  to avoid the risk of 'silent' bugs. The RAM needed can");
-		moreprint("                  quickly become unmanageable (warn: be very careful with 32bit versions)");
-		color_restore();
-		moreprint("+ : -noeta        Brief");
-		moreprint("+ : -verbose      Shows positive checks");
-		moreprint("+ : -verify       Next level (mine) of paranoia: check hashes against the filesystem.");
-		moreprint("                  Essentially equivalent to extracting in a temporary folder and check");
-		moreprint("                  against initial folders. For very paranoid people, or debug reason.");
+		scrivi_riga("CMD p","Paranoid test");
+		scrivi_riga(" ","Test the archive (** NOT multipart **) in a very paranoid fashion.");
+		scrivi_riga(" ","ZPAQ reference decompressor is used to extract blocks in RAM.");
+		scrivi_riga(" ","Runs on unzpaq206.cpp source instead of 7.15 extract: double check");
+		scrivi_riga(" ","to avoid the risk of 'silent' bugs. The RAM needed can");
+		scrivi_riga(" ","quickly become unmanageable (warn: be very careful with 32bit versions)");
+		scrivi_riga("-noeta", "Brief");
+		scrivi_riga("-verbose", "Shows positive checks");
+		scrivi_riga("-verify", "Next level (mine) of paranoia: check hashes against the filesystem.");
+		scrivi_riga(" ","Essentially equivalent to extracting in a temporary folder and check");
+		scrivi_riga(" ","against initial folders. For very paranoid people, or debug reason.");
 	}
-	if (i_usage && i_example) { color_yellow(); moreprint("Examples:"); color_restore(); }
+	if (i_usage && i_example) scrivi_examples();
 	if (i_example)
 	{
-		moreprint("Paranoid, use a lot of RAM           : p z:\\1.zpaq");
-		moreprint("Very paranoid, use a lot of RAM      : p z:\\1.zpaq -verify");
+		scrivi_esempio("Paranoid, use a lot of RAM","p z:\\1.zpaq");
+		scrivi_esempio("Very paranoid, use a lot of RAM","p z:\\1.zpaq -verify");
 	}
 	return("Paranoid test (slow, a lot of RAM needed)");
 
@@ -46007,30 +46144,28 @@ string help_c(bool i_usage,bool i_example)
 
 	if (i_usage)
 	{
-		color_green();
-		moreprint("CMD   c (compare dirs)");
-		moreprint("                  Compare a 'master' directory (d0) against N 'slaves' (d1, d2... dN).");
-		moreprint("                  This is ideal for verifying replicated folders (e.g., created by zpaq");
-		moreprint("                  restore, rsync, robocopy, or ZFS replica), especially across different");
-		moreprint("                  filesystems (like Linux NAS and Windows NTFS)");
-		moreprint("                  By default check file name and file size (excluding .zfs), not the content.");
-		color_restore();
-		moreprint("+ : -ssd          Concurrent threads will be created, each scan a slave dir (-t K to limit).");
-		moreprint("                  Not recommended for a single spinning drive; ideal for multiple target");
-		moreprint("                  directories on different physical disks");
+		scrivi_riga("CMD c","Compare dirs");
+		scrivi_riga(" ","Compare a 'master' directory (d0) against N 'slaves' (d1, d2... dN).");
+		scrivi_riga(" ","This is ideal for verifying replicated folders (e.g., created by zpaq");
+		scrivi_riga(" ","restore, rsync, robocopy, or ZFS replica), especially across different");
+		scrivi_riga(" ","filesystems (like Linux NAS and Windows NTFS)");
+		scrivi_riga(" ","By default check file name and file size (excluding .zfs), not the content.");
+		scrivi_riga("-ssd", "Concurrent threads will be created, each scan a slave dir (-t K to limit).");
+		scrivi_riga(" ","Not recommended for a single spinning drive; ideal for multiple target");
+		scrivi_riga(" ","directories on different physical disks");
 		help_printhash(false);
 		help_size();
-		moreprint("+ : -715          Work as 7.15 (with .zfs and ADS)");
-		moreprint("+ : -forcezfs     Include .zfs");
-		moreprint("+ : -checksum     Run hash compare");
+		scrivi_riga("-715", "Work as 7.15 (with .zfs and ADS)");
+		scrivi_riga("-forcezfs", "Include .zfs");
+		scrivi_riga("-checksum", "Run hash compare");
 
 	}
-	if (i_usage && i_example) { color_yellow(); moreprint("Examples:"); color_restore(); }
+	if (i_usage && i_example) scrivi_examples();
 	if (i_example)
 	{
-		moreprint("Compare master d0 against d1,d2,d3   : c c:\\d0 k:\\d1 j:\\d2 p:\\d3");
-		moreprint("Multithread compare                  : c c:\\d0 k:\\d1 j:\\d2 p:\\d3 -ssd");
-		moreprint("Hashed compare d0 against d1,d2,d3   : c c:\\d0 k:\\d1 j:\\d2 p:\\d3 -checksum -xxh3");
+		scrivi_esempio("Compare master d0 against d1,d2,d3","c c:\\d0 k:\\d1 j:\\d2 p:\\d3");
+		scrivi_esempio("Multithread compare","c c:\\d0 k:\\d1 j:\\d2 p:\\d3 -ssd");
+		scrivi_esempio("Hashed compare d0 against d1,d2,d3","c c:\\d0 k:\\d1 j:\\d2 p:\\d3 -checksum -xxh3");
 	}
 	return("Compare one master dir against one or more slaves dir(s)");
 
@@ -46039,25 +46174,23 @@ string help_s(bool i_usage,bool i_example)
 {
 	if (i_usage)
 	{
-		color_green();
-		moreprint("CMD   s (size)");
-		moreprint("                  Cumulative size of N directory, and free space (estimate for *Nix).");
-		moreprint("                  Everything containing .zfs and :$DATA (Windows's ADS) ignored by default");
-		moreprint("                  Very quick-and-dirty check of rsynced folders against the master");
-		color_restore();
-		moreprint("+ : -ssd          for multithreaded executions (warning for single spinning drive)");
-		moreprint("+ : -minsize X    Show a warning if free space < X");
-		moreprint("+ : -715          Work as 7.15 (with .zfs and ADS)");
-		moreprint("+ : -forcezfs     Include .zfs");
-		moreprint("+ : -home         Show 1-level cumulative size");
-		moreprint("+ : -ignore       Do not show file errors (ex. ERROR_ACCESS_DENIED)");
+		scrivi_riga("CMD s","Size");
+		scrivi_riga(" ","Cumulative size of N directory, and free space (estimate for *Nix).");
+		scrivi_riga(" ","Everything containing .zfs and :$DATA (Windows's ADS) ignored by default");
+		scrivi_riga(" ","Very quick-and-dirty check of rsynced folders against the master");
+		scrivi_riga("-ssd", "for multithreaded executions (warning for single spinning drive)");
+		scrivi_riga("-minsize X","Show a warning if free space < X");
+		scrivi_riga("-715", "Work as 7.15 (with .zfs and ADS)");
+		scrivi_riga("-forcezfs", "Include .zfs");
+		scrivi_riga("-home", "Show 1-level cumulative size");
+		scrivi_riga("-ignore", "Do not show file errors (ex. ERROR_ACCESS_DENIED)");
 	}
-	if (i_usage && i_example) { color_yellow(); moreprint("Examples:"); color_restore(); }
+	if (i_usage && i_example) scrivi_examples();
 	if (i_example)
 	{
-		moreprint("Dir cumulative size (no .zfs/NTFS)   : s r:\\vbox s:\\uno");
-		moreprint("Multithreaded size                   : s r:\\vbox s:\\uno -ssd");
-		moreprint("(Kind of) size of c:\\users           : s c:\\users -home -ssd -ignore");
+		scrivi_esempio("Dir cumulative size (no .zfs/NTFS)","s r:\\vbox s:\\uno");
+		scrivi_esempio("Multithreaded size","s r:\\vbox s:\\uno -ssd");
+		scrivi_esempio("(Kind of) size of c:\\users","s c:\\users -home -ssd -ignore");
 	}
 	return("Get dir(s) size, return free disk space");
 
@@ -46068,24 +46201,22 @@ string help_oneonone(bool i_usage,bool i_example)
 {
 	if (i_usage)
 	{
-		color_green();
-		moreprint("CMD   1on1        Julius Erving and Larry Bird Go One on One");
-		moreprint("                  Deduplicate a folder against another one");
-		color_restore();
-		moreprint("+ : -deleteinto X Delete corresponding files found in directory X");
-		moreprint("+ : -checksum     Rely only on checksums, not filenames");
-		///moreprint("+ : -zero         Deduplicate 0-length files too");
-		moreprint("+ : -ssd          Enable multithreading (use with care on single spinning drives)");
-		moreprint("+ : -forcezfs     Do not exclude zfs files (default: IGNORE)");
-		moreprint("+ : -kill         Perform a wet run (default is a dry run)");
+		scrivi_riga("CMD 1on1","Julius Erving and Larry Bird Go One on One");
+		scrivi_riga(" ","Deduplicate a folder against another one");
+		scrivi_riga("-deleteinto X", "Delete corresponding files found in directory X");
+		scrivi_riga("-checksum", "Rely only on checksums, not filenames");
+		///scrivi_riga("-zero", "Deduplicate 0-length files too");
+		scrivi_riga("-ssd", "Enable multithreading (use with care on single spinning drives)");
+		scrivi_riga("-forcezfs", "Do not exclude zfs files (default: IGNORE)");
+		scrivi_riga("-kill", "Perform a wet run (default is a dry run)");
 		help_printhash(false);
 	}
-	if (i_usage && i_example) { color_yellow(); moreprint("Examples:"); color_restore(); }
+	if (i_usage && i_example) scrivi_examples();
 	if (i_example)
 	{
-		moreprint("Dry run, =hash,=filename,multithread : 1on1 c:\\dropbox -deleteinto z:\\pippero2 -ssd");
-		moreprint("Real run, 0-files too                : 1on1 c:\\dropbox -deleteinto z:\\pippero2 -zero -kill");
-		moreprint("Real run, with XXH3, with *          : 1on1 c:\\dropbox -deleteinto z:\\pippero2 -xxh3 -kill -forcezfs");
+		scrivi_esempio("Dry run, =hash,=filename,multithread","1on1 c:\\dropbox -deleteinto z:\\pippero2 -ssd");
+		scrivi_esempio("Real run, 0-files too","1on1 c:\\dropbox -deleteinto z:\\pippero2 -zero -kill");
+		scrivi_esempio("Real run, with XXH3, with *","1on1 c:\\dropbox -deleteinto z:\\pippero2 -xxh3 -kill -forcezfs");
 	}
 	return("Delete folder2's files with same name/hash of folder1");
 }
@@ -46095,50 +46226,48 @@ string help_r(bool i_usage,bool i_example)
 {
 	if (i_usage)
 	{
-		color_green();
-		moreprint("CMD   r ('robocopy')");
-		moreprint("                  Mirror a master folder, just like robocopy /mir or rsync -a --delete");
-		moreprint("                  to one or more slave (destination) folders");
-		color_restore();
+		scrivi_riga("CMD r","'robocopy'");
+		scrivi_riga(" ","Mirror a master folder, just like robocopy /mir or rsync -a --delete");
+		scrivi_riga(" ","to one or more slave (destination) folders");
 		print_sub();
-		moreprint("                  ENFORCING XLS, ignore .zfs and ADS by default");
-		moreprint("+ : -kill         wet run (default: dry-run");
-		moreprint("+ : -space        do not exit if not enough space reported");
-		moreprint("+ : -ssd          run one thread for folder");
-		moreprint("+ : -verify       after copy quick check if OK (only filename and size)");
-		moreprint("+ : -checksum     heavy (hash) test of equality. Suggest: -xxh3 fast and reliable.");
+		scrivi_riga(" ","ENFORCING XLS, ignore .zfs and ADS by default");
+		scrivi_riga("", "ENFORCING XLS, ignore .zfs and ADS by default");
+		scrivi_riga("-kill", "wet run (default: dry-run");
+		scrivi_riga("-space", "do not exit if not enough space reported");
+		scrivi_riga("-ssd", "run one thread for folder");
+		scrivi_riga("-verify", "after copy quick check if OK (only filename and size)");
+		scrivi_riga("-checksum", "heavy (hash) test of equality. Suggest: -xxh3 fast and reliable.");
 		help_size();
-		moreprint("+ : -xls          Do not enforce backup of XLS/PPT");
-		moreprint("+ : -715          Work as 7.15 (with .zfs and ADS)");
-		moreprint("+ : -forcezfs     Include .zfs");
-		color_yellow();
-		moreprint("+ : -append       Only append data (*risky, use with zpaq archives)");
-		color_restore();
-		moreprint("+ : -zero         Fill all output file with zeros (for debug)");
-		moreprint("+ : -verbose      Show internal timings");
-		moreprint("+ : -buffer X     Use a input buffer of X bytes (default: 1MB)");
-		moreprint("+ : -pakka        Check-before-touch (faster for big tree over LAN)");
+		scrivi_riga("-xls", "Do not enforce backup of XLS/PPT");
+		scrivi_riga("-715", "Work as 7.15 (with .zfs and ADS)");
+		scrivi_riga("-forcezfs", "Include .zfs");
+		scrivi_riga("-append", "Only append data (*risky, use with zpaq archives)");
+		scrivi_riga("-zero", "Fill all output file with zeros (for debug)");
+		scrivi_riga("-verbose", "Show internal timings");
+		scrivi_riga("-buffer X", "Use a input buffer of X bytes (default: 1MB)");
+		scrivi_riga("-pakka", "Check-before-touch (faster for big tree over LAN)");
 #ifdef _WIN32
-		moreprint("+ : -big          Special Windows function for big files over LAN");
+		scrivi_riga("-big", "Special Windows function for big files over LAN");
 #endif // corresponds to #ifdef (#ifdef _WIN32)
 
+
 	}
-	if (i_usage && i_example) { color_yellow(); moreprint("Examples:"); color_restore(); }
+	if (i_usage && i_example) scrivi_examples();
 	if (i_example)
 	{
-		moreprint("Robocopy d0 in d1,d2      (dry run)  : r c:\\d0 k:\\d1 j:\\d2 p:\\d3");
-		moreprint("Robocopy d0 in d1,d2      (WET run)  : r c:\\d0 k:\\d1 j:\\d2 p:\\d3 -kill");
-		moreprint("Robocopy with verify      (WET run)  : r c:\\d0 k:\\d1 j:\\d2 p:\\d3 -kill -verify");
-		moreprint("Robocopy with hash verify (WET run)  : r c:\\d0 k:\\d1 j:\\d2 p:\\d3 -kill -verify -checksum -xxh3");
-		moreprint("Robocopy d0 in d1, forced (WET run)  : r c:\\d0 k:\\d1 j:\\d2 -kill -space");
-		moreprint("Robocopy append mode      (WET run)  : r c:\\d0 z:\\backup_%day -append -kill");
-		moreprint("Robocopy d0 in d1,w/infos (WET run)  : r c:\\d0 k:\\d1 -kill -verbose");
-		moreprint("Robocopy d0=>d1 over LAN  (WET run)  : r c:\\d0 \\\\nas\\d1 -kill -verbose -pakka");
+		scrivi_esempio("Robocopy d0 in d1,d2      (dry run)","r c:\\d0 k:\\d1 j:\\d2 p:\\d3");
+		scrivi_esempio("Robocopy d0 in d1,d2      (WET run)","r c:\\d0 k:\\d1 j:\\d2 p:\\d3 -kill");
+		scrivi_esempio("Robocopy with verify      (WET run)","r c:\\d0 k:\\d1 j:\\d2 p:\\d3 -kill -verify");
+		scrivi_esempio("Robocopy with hash verify (WET run)","r c:\\d0 k:\\d1 j:\\d2 p:\\d3 -kill -verify -checksum -xxh3");
+		scrivi_esempio("Robocopy d0 in d1, forced (WET run)","r c:\\d0 k:\\d1 j:\\d2 -kill -space");
+		scrivi_esempio("Robocopy append mode      (WET run)","r c:\\d0 z:\\backup_%day -append -kill");
+		scrivi_esempio("Robocopy d0 in d1,w/infos (WET run)","r c:\\d0 k:\\d1 -kill -verbose");
+		scrivi_esempio("Robocopy d0=>d1 over LAN  (WET run)","r c:\\d0 \\\\nas\\d1 -kill -verbose -pakka");
 #ifdef _WIN32
-		moreprint("Huge file to NAS (Windows)(WET run)  : r c:\\d0 \\\\nas\\share\\d1 -kill -big");
+		scrivi_esempio("Huge file to NAS (Windows)(WET run)","r c:\\d0 \\\\nas\\share\\d1 -kill -big");
 #endif // corresponds to #ifdef (#ifdef _WIN32)
-		moreprint("Robocopy only huge files  (WET run)  : r c:\\d0 z:\\dest -kill -minsize 10GB");
-		moreprint("Robocopy only E01 files   (WET run)  : r c:\\d0 z:\\dest -kill -only *.e01");
+		scrivi_esempio("Robocopy only huge files  (WET run)","r c:\\d0 z:\\dest -kill -minsize 10GB");
+		scrivi_esempio("Robocopy only E01 files   (WET run)","r c:\\d0 z:\\dest -kill -only *.e01");
 	}
 	return("Robocopy one master to multiple slave folders");
 }
@@ -46146,50 +46275,47 @@ string help_cp(bool i_usage,bool i_example)
 {
 	if (i_usage)
 	{
-		color_green();
-		moreprint("CMD   cp ('friendly copy') ");
-		moreprint("                  Copy files (with wildcards) into -to folder");
-		moreprint("                  with 1 sec progression feedback. Huge file, tiny bandwidth");
-		moreprint("                  and unreliable media (-verify)");
-		color_restore();
-		moreprint("+ :               By default overwrite, use -paranoid to create unique name");
-		moreprint("+ : -verify       Do an heavy (XXH3) check of copied data");
-		moreprint("+ : -paranoid     Rename output file to do not overwrite");
-		color_yellow();
-		moreprint("+ : -append       Only append data (*risky, use with zpaq archives)");
-		color_restore();
-		moreprint("+ : -force        Do no check if destination is writeable");
-		moreprint("+ : -space        Do no check if enough destination free space");
+		scrivi_riga("CMD cp","'friendly copy'");
+		scrivi_riga(" ","Copy files (with wildcards) into -to folder");
+		scrivi_riga(" ","with 1 sec progression feedback. Huge file, tiny bandwidth");
+		scrivi_riga(" ","and unreliable media (-verify)");
+		scrivi_riga(" ","By default overwrite, use -paranoid to create unique name");
+		scrivi_riga("-verify", "Do an heavy (XXH3) check of copied data");
+		scrivi_riga("-paranoid", "Rename output file to do not overwrite");
+		scrivi_riga("-append", "Only append data (*risky, use with zpaq archives)");
+		scrivi_riga("-force", "Do no check if destination is writeable");
+		scrivi_riga("-space", "Do no check if enough destination free space");
 	}
-	if (i_usage && i_example) { color_yellow(); moreprint("Examples:"); color_restore(); }
+	if (i_usage && i_example) scrivi_examples();
 	if (i_example)
 	{
-		moreprint("Copy k:\\*.mp4 d:\\a.txt in z:\\pluto   : cp k:\\*.mp4 d:\\a.txt -to z:\\pluto");
-		moreprint("Copy with verify                     : cp k:\\*.mp4 -to z:\\pluto -verify");
-		moreprint("Copy WITHOUT overwrite               : cp k:\\*.mp4 -to z:\\pluto -paranoid");
-		moreprint("Resumable copy (append only)         : cp k:\\*.zpaq -to z:\\pluto -append");
+		scrivi_esempio("Copy k:\\*.mp4 d:\\a.txt in z:\\pluto","cp k:\\*.mp4 d:\\a.txt -to z:\\pluto");
+		scrivi_esempio("Copy with verify","cp k:\\*.mp4 -to z:\\pluto -verify");
+		scrivi_esempio("Copy WITHOUT overwrite","cp k:\\*.mp4 -to z:\\pluto -paranoid");
+		scrivi_esempio("Resumable copy (append only)","cp k:\\*.zpaq -to z:\\pluto -append");
 	}
 	return("Friendly file copy with ETA (resumable)");
 
 }
+#ifdef ZPAQFULL ///NOSFTPSTART
 string help_zfs(bool i_usage,bool i_example)
 {
 	if (i_usage)
 	{
-		moreprint("On UNIX you get some zfs-specific commands");
-		moreprint("--- Enumerate / delete snapshots / sizeof");
-		moreprint("zfslist");
-		moreprint("zfspurge");
-		moreprint("zfssize");
-		moreprint("--- Freezing snapshot inside archive");
-		moreprint("zfsadd");
-		moreprint("--- Make / restore zfs backups inside zpaq");
-		moreprint("zfsbackup");
-		moreprint("zfsreceive");
-		moreprint("zfsrestore");
-		moreprint("--- Make / restore zfs backups of proxmox VM");
-		moreprint("zfsproxbackup");
-		moreprint("zfsproxrestore");
+		scrivi_riga("On UNIX you get some zfs-specific commands","");
+		scrivi_riga("--- Enumerate / delete snapshots / sizeof","");
+		scrivi_riga("zfslist","");
+		scrivi_riga("zfspurge","");
+		scrivi_riga("zfssize","");
+		scrivi_riga("--- Freezing snapshot inside archive","");
+		scrivi_riga("zfsadd","");
+		scrivi_riga("--- Make / restore zfs backups inside zpaq","");
+		scrivi_riga("zfsbackup","");
+		scrivi_riga("zfsreceive","");
+		scrivi_riga("zfsrestore","");
+		scrivi_riga("--- Make / restore zfs backups of proxmox VM","");
+		scrivi_riga("zfsproxbackup","");
+		scrivi_riga("zfsproxrestore","");
 	}
 	if (i_example)
 	{
@@ -46201,25 +46327,20 @@ string help_zfsadd(bool i_usage,bool i_example)
 {
 	if (i_usage)
 	{
-		color_green();
-		moreprint("CMD   zfsadd      Freeze a selection of snapshots into an archive");
-		moreprint("                  Optional subfolder as 3rd parameter");
-		color_restore();
-		moreprint("+ : -script pi.sh Write a script-ready on pi.sh (alias -out)");
-		moreprint("+ : -force        Do the freezing (wet run)");
+		scrivi_riga("CMD zfsadd","Freeze a selection of snapshots into an archive");
+		scrivi_riga(" ","Optional subfolder as 3rd parameter");
+		scrivi_riga("-script", "pi.sh Write a script-ready on pi.sh (alias -out)");
+		scrivi_riga("-force", "Do the freezing (wet run)");
 	}
-	if (i_usage && i_example) {		color_yellow(); moreprint("Examples:"); color_restore(); }
+	if (i_usage && i_example) scrivi_examples();	
 	if (i_example)
 	{
-		moreprint("");
-		moreprint("****  LUKE... REMEMBER... !USE THE DOUBLEQUOTES! ...");
-		moreprint("");
-		moreprint("      BEWARE of single -  \"-pippo\" DOES NOT WORK!");
-		moreprint("");
-		moreprint("zfsadd /tmp/kong.zpaq \"tank/d@2021\" \"--60d\"");
-		moreprint("zfsadd /tmp/kong.zpaq \"tank/d@2021\" \"--60d\" \"scanner\"");
-		moreprint("zfsadd /tmp/kong.zpaq \"tank/d@2021\" \"--60d\" \"scanner\" -force");
-		moreprint("zfsadd /tmp/kong.zpaq \"tank/d@2021\" \"--60d\" \"scanner\" -script ./dothejob.sh");
+		scrivi_esempio(" ","!USE THE DOUBLEQUOTES!");
+		scrivi_esempio(" ","BEWARE of single -  \"-pippo\" DOES NOT WORK!");
+		scrivi_esempio(" ","zfsadd /tmp/kong.zpaq \"tank/d@2021\" \"--60d\"");
+		scrivi_esempio(" ","zfsadd /tmp/kong.zpaq \"tank/d@2021\" \"--60d\" \"scanner\"");
+		scrivi_esempio(" ","zfsadd /tmp/kong.zpaq \"tank/d@2021\" \"--60d\" \"scanner\" -force");
+		scrivi_esempio(" ","zfsadd /tmp/kong.zpaq \"tank/d@2021\" \"--60d\" \"scanner\" -script ./dothejob.sh");
 	}
 	return("Freeze zfs' snapshots inside the archive");
 }
@@ -46227,23 +46348,18 @@ string help_zfspurge(bool i_usage,bool i_example)
 {
 	if (i_usage)
 	{
-		color_green();
-		moreprint("CMD   zfspurge    Destroy selected zfs snapshot (works like zfslist)");
-		color_restore();
-		moreprint("+ : -script pi.sh Write a script-ready on pi.sh (alias -out)");
+		scrivi_riga("CMD zfspurge","Destroy selected zfs snapshot (works like zfslist)");
+		scrivi_riga("-script", "pi.sh Write a script-ready on pi.sh (alias -out)");
 	}
-	if (i_usage && i_example) { color_yellow(); moreprint("Examples:"); color_restore(); }
+	if (i_usage && i_example) scrivi_examples();
 	if (i_example)
 	{
-			moreprint("");
-			moreprint("****  LUKE... REMEMBER... !USE THE DOUBLEQUOTES! ...");
-			moreprint("");
-			moreprint("      BEWARE of single -  \"-pippo\" DOES NOT WORK!");
-			moreprint("");
-			moreprint("zfspurge \"tank/d@2021\" \"--60d\"");
-			moreprint("zfspurge \"*\" \"*\"");
-			moreprint("zfspurge \"tank\" \"--7d\"");
-			moreprint("zfspurge \"tank\" \"--7d\" -script mygoodscript.sh");
+			scrivi_esempio(" ","!USE THE DOUBLEQUOTES!");
+			scrivi_esempio(" ","BEWARE of single -  \"-pippo\" DOES NOT WORK!");
+			scrivi_esempio(" ","zfspurge \"tank/d@2021\" \"--60d\"");
+			scrivi_esempio(" ","zfspurge \"*\" \"*\"");
+			scrivi_esempio(" ","zfspurge \"tank\" \"--7d\"");
+			scrivi_esempio(" ","zfspurge \"tank\" \"--7d\" -script mygoodscript.sh");
 	}
 	return("Purge snapshots with wildcards");
 
@@ -46252,28 +46368,20 @@ string help_zfslist(bool i_usage,bool i_example)
 {
 	if (i_usage)
 	{
-		color_green();
-		moreprint("CMD   zfslist     Show (/filtering) existing zfs snapshot");
-		color_restore();
-		moreprint("+ : -script pi.sh Write a script-ready on pi.sh (alias -out)");
+		scrivi_riga("CMD zfslist","Show (/filtering) existing zfs snapshot");
+		scrivi_riga("-script", "pi.sh Write a script-ready on pi.sh (alias -out)");
 	}
-	if (i_usage && i_example)
-	{
-		color_yellow(); moreprint("Examples:"); color_restore();
-	}
+	if (i_usage && i_example) scrivi_examples();
 	if (i_example)
 	{
 		if ((g_optional=="zfslist") || (g_optional==""))
 		{
-			moreprint("");
-			moreprint("****  LUKE... REMEMBER... !USE THE DOUBLEQUOTES! ...");
-			moreprint("");
-			moreprint("      BEWARE of single -  \"-pippo\" DOES NOT WORK!");
-			moreprint("");
-			moreprint("zfslist  \"tank/d@\"");
-			moreprint("zfslist  \"*\"");
-			moreprint("zfslist  \"*\" \"syncoid\"");
-			moreprint("zfslist  \"*\" \"10d\" -script pippo.sh");
+			scrivi_esempio(" ","!USE THE DOUBLEQUOTES!");
+			scrivi_esempio(" ","BEWARE of single -  \"-pippo\" DOES NOT WORK!");
+			scrivi_esempio(" ","zfslist  \"tank/d@\"");
+			scrivi_esempio(" ","zfslist  \"*\"");
+			scrivi_esempio(" ","zfslist  \"*\" \"syncoid\"");
+			scrivi_esempio(" ","zfslist  \"*\" \"10d\" -script pippo.sh");
 		}
 	}
 	return("List zfs' snapshots with wildcard");
@@ -46283,25 +46391,19 @@ string help_zfssize(bool i_usage,bool i_example)
 {
 	if (i_usage)
 	{
-		color_green();
-		moreprint("CMD   zfssize     Show (/filtering) the SIZE of existing zfs snapshot");
-		color_restore();
+		scrivi_riga("CMD zfssize","Show (/filtering) the SIZE of existing zfs snapshot");
 	}
-	if (i_usage && i_example) {
-	color_yellow(); moreprint("Examples:"); color_restore(); }
+	if (i_usage && i_example) scrivi_examples();
 	if (i_example)
 	{
 		if ((g_optional=="zfssize") || (g_optional==""))
 		{
-			moreprint("");
-			moreprint("****  LUKE... REMEMBER... !USE THE DOUBLEQUOTES! ...");
-			moreprint("");
-			moreprint("      BEWARE of single -  \"-pippo\" DOES NOT WORK!");
-			moreprint("");
-			moreprint("zfssize  \"tank/d@\"");
-			moreprint("zfssize  \"*\"");
-			moreprint("zfssize  \"*\" \"syncoid\"");
-			moreprint("zfssize  \"*\" \"10d\" -script pippo.sh");
+			scrivi_esempio(" ","!USE THE DOUBLEQUOTES!");
+			scrivi_esempio(" ","BEWARE of single -  \"-pippo\" DOES NOT WORK!");
+			scrivi_esempio(" ","zfssize  \"tank/d@\"");
+			scrivi_esempio(" ","zfssize  \"*\"");
+			scrivi_esempio(" ","zfssize  \"*\" \"syncoid\"");
+			scrivi_esempio(" ","zfssize  \"*\" \"10d\" -script pippo.sh");
 		}
 	}
 	return("List zfs' SIZE of snapshots with wildcard");
@@ -46311,25 +46413,22 @@ string help_zfsproxbackup(bool i_usage,bool i_example)
 {
 	if (i_usage)
 	{
-		color_green();
-		moreprint("CMD   zfsproxbackup");
-		moreprint("                  Archiving proxmox backups (from zfs local storage)");
-		moreprint("                  Getting VM disks from /var/lib/vz");
-		color_restore();
-		moreprint("+ : -force        Destroy temporary snapshot (before backup)");
-		moreprint("+ : -kill         Remove snapshot (after backup)");
-		moreprint("+ : -all          Get all VM");
-		moreprint("+ : -not          Do not backup (exclude)");
-		moreprint("+ : -snapshot kj  Make 'snapname' to kj (default: francoproxmox)");
+		scrivi_riga("CMD zfsproxbackup","");
+		scrivi_riga(" ","Archiving proxmox backups (from zfs local storage)");
+		scrivi_riga(" ","Getting VM disks from /var/lib/vz");
+		scrivi_riga("-force", "Destroy temporary snapshot (before backup)");
+		scrivi_riga("-kill", "Remove snapshot (after backup)");
+		scrivi_riga("-all", "Get all VM");
+		scrivi_riga("-not", "Do not backup (exclude)");
+		scrivi_riga("-snapshot", "kj  Make 'snapname' to kj (default: francoproxmox)");
 	}
-	if (i_usage && i_example) {
-	color_yellow(); moreprint("Examples:"); color_restore();}
+	if (i_usage && i_example) scrivi_examples();
 	if (i_example)
 	{
-		moreprint("Backup/encrypt w/key 'pippo' VM 200  : zfsproxbackup /bak/200.zpaq 200 -force -kill -key pippo");
-		moreprint("Backup 2 VMs: 200 and 300            : zfsproxbackup /bak/200_300.zpaq 200 300");
-		moreprint("Backup ALL VMs                       : zfsproxbackup /bak/all.zpaq  -all -force -kill");
-		moreprint("Backup all EXCEPT 200 and 300        : zfsproxbackup /bak/part.zpaq -all -not 200 -not 300 -force -kill");
+		scrivi_esempio("Backup/encrypt w/key 'pippo' VM 200","zfsproxbackup /bak/200.zpaq 200 -force -kill -key pippo");
+		scrivi_esempio("Backup 2 VMs: 200 and 300","zfsproxbackup /bak/200_300.zpaq 200 300");
+		scrivi_esempio("Backup ALL VMs","zfsproxbackup /bak/all.zpaq  -all -force -kill");
+		scrivi_esempio("Backup all EXCEPT 200 and 300","zfsproxbackup /bak/part.zpaq -all -not 200 -not 300 -force -kill");
 	}
 	return("Backup of proxmox on zfs");
 }
@@ -46338,26 +46437,22 @@ string help_zfsproxrestore(bool i_usage,bool i_example)
 {
 	if (i_usage)
 	{
-		color_green();
-		moreprint("CMD   zfsproxrestore");
-		moreprint("                  Restore proxmox backups (on local storage)");
+		scrivi_riga("CMD zfsproxrestore","Restore proxmox backups (on local storage)");
 #ifndef _WIN32
-		moreprint("                  into /var/lib/vz and /etc/pve/qemu-server");
-		moreprint("                  Without files selection restore everything");
+		scrivi_riga(" ","into /var/lib/vz and /etc/pve/qemu-server");
+		scrivi_riga(" ","Without files selection restore everything");
 #endif
-		moreprint("                  Files can be a sequence of WMIDs (ex. 200 300)");
-		color_restore();
-		moreprint("+ : -kill         Remove snapshot (after backup)");
-		moreprint("+ : -not          Do not restore (exclude)");
+		scrivi_riga(" ","Files can be a sequence of WMIDs (ex. 200 300)");
+		scrivi_riga("-kill", "Remove snapshot (after backup)");
+		scrivi_riga("-not", "Do not restore (exclude)");
 	}
-	if (i_usage && i_example) {
-	color_yellow(); moreprint("Examples:"); color_restore(); }
+	if (i_usage && i_example) scrivi_examples();
 	if (i_example)
 	{
-		moreprint("Restore all VMs                      : zfsproxrestore /backup/allvm.zpaq");
-		moreprint("Restore 2 VMs: 200 and 300           : zfsproxrestore /backup/allvm.zpaq 200 300");
-		moreprint("Restore VM 200, release snapshot     : zfsproxrestore /backup/allvm.zpaq 200 -kill");
-		moreprint("Restore all VMs, except 200          : zfsproxrestore /backup/allvm.zpaq -not 200 -kill");
+		scrivi_esempio("Restore all VMs","zfsproxrestore /backup/allvm.zpaq");
+		scrivi_esempio("Restore 2 VMs: 200 and 300","zfsproxrestore /backup/allvm.zpaq 200 300");
+		scrivi_esempio("Restore VM 200, release snapshot","zfsproxrestore /backup/allvm.zpaq 200 -kill");
+		scrivi_esempio("Restore all VMs, except 200","zfsproxrestore /backup/allvm.zpaq -not 200 -kill");
 	}
 	return("Restore of proxmox on zfs");
 }
@@ -46365,20 +46460,17 @@ string help_zfsbackup(bool i_usage,bool i_example)
 {
 	if (i_usage)
 	{
-		color_green();
-		moreprint("CMD   zfsbackup   Backup w/incremental zfs snapshots for long-term storage");
-		moreprint("                  Usually root privileges required");
-		color_restore();
-		moreprint("+ : -snapshot kj  Make 'snapname' to kj (default: zpaqfranco)");
+		scrivi_riga("CMD zfsbackup","Backup w/incremental zfs snapshots for long-term storage");
+		scrivi_riga(" ","Usually root privileges required");
+		scrivi_riga("-snapshot kj","Make 'snapname' to kj (default: zpaqfranco)");
 	}
-	if (i_usage && i_example) {
-	color_yellow(); moreprint("Examples:"); color_restore(); }
+	if (i_usage && i_example) scrivi_examples();
 	if (i_example)
 	{
-			moreprint("Update tank/d backup,retain snapshot : zfsbackup /tmp/incr.zpaq tank/d");
-			moreprint("Update tank backup,delete snapshot   : zfsbackup /tmp/incr.zpaq tank -kill");
-			moreprint("Update tank/d backup,w/hashdeep      : zfsbackup /tmp/incr.zpaq tank/d");
-			moreprint("Choose snapmark to 'mycopy'          : zfsbackup /tmp/incr.zpaq tank/d -snapshot mycopy");
+			scrivi_esempio("Update tank/d backup,retain snapshot","zfsbackup /tmp/incr.zpaq tank/d");
+			scrivi_esempio("Update tank backup,delete snapshot","zfsbackup /tmp/incr.zpaq tank -kill");
+			scrivi_esempio("Update tank/d backup,w/hashdeep","zfsbackup /tmp/incr.zpaq tank/d");
+			scrivi_esempio("Choose snapmark to 'mycopy'","zfsbackup /tmp/incr.zpaq tank/d -snapshot mycopy");
 	}
 	return("Backup of zfs' streams");
 }
@@ -46387,17 +46479,14 @@ string help_zfsrestore(bool i_usage,bool i_example)
 {
 	if (i_usage)
 	{
-		color_green();
-		moreprint("CMD   zfsrestore  Prepare a script for restoring from EXTRACTED .zfs backup files");
-		color_restore();
-		moreprint("+ : -snapshot kj  Make 'snapname' to kj (default: franco)");
+		scrivi_riga("CMD zfsrestore","Prepare a script for restoring from EXTRACTED .zfs backup files");
+		scrivi_riga("-snapshot kj","Make 'snapname' to kj (default: franco)");
 	}
-	if (i_usage && i_example) {
-	color_yellow(); moreprint("Examples:"); color_restore(); }
+	if (i_usage && i_example) scrivi_examples();
 	if (i_example)
 	{
-			moreprint("Restore *.zfs into /rez to rpool/rk  : zfsrestore /rez rpool/rk -script myscript.sh");
-			moreprint("Restore *.zfs into /rez to rpool/rk  : zfsrestore /rez rpool/rk -script myscript.sh -snapshot ugo");
+		scrivi_esempio("Restore *.zfs into /rez to rpool/rk","zfsrestore /rez rpool/rk -script myscript.sh");
+		scrivi_esempio("Restore *.zfs into /rez to rpool/rk","zfsrestore /rez rpool/rk -script myscript.sh -snapshot ugo");
 	}
 	return("Restore from extracted .zfs stream");
 }
@@ -46406,39 +46495,35 @@ string help_zfsreceive(bool i_usage,bool i_example)
 {
 	if (i_usage)
 	{
-		color_green();
-		moreprint("CMD   zfsreceive  Prepare a script for restoring from zpaq archive");
-		color_restore();
-		moreprint("+ : -snapshot kj  Make 'snapname' to kj (default: franco)");
+		scrivi_riga("CMD zfsreceive","Prepare a script for restoring from zpaq archive");
+		scrivi_riga("-snapshot", "kj  Make 'snapname' to kj (default: franco)");
 	}
-	if (i_usage && i_example) {
-	color_yellow(); moreprint("Examples:"); color_restore(); }
+	if (i_usage && i_example) scrivi_examples();
 	if (i_example)
 	{
-			moreprint("Rebuild rpool/restored from archive  zfsreceive /tmp/ordinato.zpaq rpool/restored -script myscript.sh");
+		scrivi_esempio("Rebuild rpool/restored from archive","zfsreceive /tmp/ordinato.zpaq rpool/restored -script myscript.sh");
 	}
 	return("Restore (with zfs) from zpaq archive");
 }
+#endif ///NOSFTPEND
 
 string help_z(bool i_usage,bool i_example)
 {
 	if (i_usage)
 	{
-		color_green();
-		moreprint("CMD   z (delete empty directories, zero length)");
-		moreprint("                  Remove empty directories in d0...dK folders. Conservative (ex hidden Thumbs.db)");
-		color_restore();
-		moreprint("+ : -kill         Do a wet run (default dry run)");
-		moreprint("+ : -verbose      Show infos");
+		scrivi_riga("CMD z","Delete empty directories, zero length");
+		scrivi_riga(" ","Remove empty directories in d0...dK folders. Conservative (ex hidden Thumbs.db)");
+		scrivi_riga("-kill", "Do a wet run (default dry run)");
+		scrivi_riga("-verbose", "Show infos");
 #ifdef _WIN32
-		moreprint("+ : -longpath     Extracting on Windows filenames longer than 255");
+		scrivi_riga("-longpath", "Extracting on Windows filenames longer than 255");
 #endif // corresponds to #ifdef (#ifdef _WIN32)
 	}
-	if (i_usage && i_example) { color_yellow(); moreprint("Examples:"); color_restore(); }
+	if (i_usage && i_example) scrivi_examples();
 	if (i_example)
 	{
-		moreprint("Delete empty dirs in d0,d1(dry run)  : z c:\\d0 k:\\d1");
-		moreprint("Delete empty dirs in d0,d1(WET run)  : z c:\\d0 k:\\d1 -kill -longpath");
+		scrivi_esempio("Delete empty dirs in d0,d1(dry run)","z c:\\d0 k:\\d1");
+		scrivi_esempio("Delete empty dirs in d0,d1(WET run)","z c:\\d0 k:\\d1 -kill -longpath");
 	}
 	return("Remove empty directories");
 }
@@ -46446,20 +46531,17 @@ string help_m(bool i_usage,bool i_example)
 {
 	if (i_usage)
 	{
-		color_green();
-		moreprint("CMD   m (merge, consolidate)");
-		moreprint("                  Merge a split (multipart) archive into a single one,");
-		moreprint("                  just like a concatenated cat or copy /b");
-		color_restore();
-		moreprint("+ : -force        Overwrite existing output");
-		moreprint("+ : -space        Ignore lack of free space");
-		moreprint("+ : -verify       Double-check (XXH3 hash test)");
+		scrivi_riga("CMD m","merge, consolidate");
+		scrivi_riga(" ","Merge a split (multipart) archive into a single one,");
+		scrivi_riga(" ","just like a concatenated cat or copy /b");
+		scrivi_riga("-force", "Overwrite existing output");
+		scrivi_riga("-space", "Ignore lack of free space");
+		scrivi_riga("-verify", "Double-check (XXH3 hash test)");
 	}
-	if (i_usage && i_example) {
-	color_yellow(); moreprint("Examples:"); color_restore(); }
+	if (i_usage && i_example) scrivi_examples();
 	if (i_example)
 	{
-		moreprint("Merge (consolidate) multipart        : m \"p:\\test\\prova_???\" z:\\cons.zpaq -verify");
+		scrivi_esempio("Merge (consolidate) multipart","m \"p:\\test\\prova_???\" z:\\cons.zpaq -verify");
 	}
 	return("Merge (consolidate) multipart archive into one");
 }
@@ -46467,25 +46549,23 @@ string help_d(bool i_usage,bool i_example)
 {
 	if (i_usage)
 	{
-		color_green();
-		moreprint("CMD   d (deduplicate)");
-		moreprint("                  Find and delete duplicate files in a single folder.");
-		moreprint("                  WARNING: This operation is destructive!");
-		moreprint("                  Note: The folder path must end with a path separator ('/' or '\')");
-		color_restore();
-		moreprint("+ : -ssd          Multithread run");
-		moreprint("+ : -force        Wet run (default: dry-run)");
-		moreprint("+ : -verbose      Show duplicated files");
-		moreprint("+ : -(somehash)   Use (somehash), one of the available next two lines, for detection");
-		help_printhashline(false);
+		scrivi_riga("CMD d","Deduplicate");
+		scrivi_riga(" ","Find and delete duplicate files in a single folder.");
+		scrivi_riga(" ","WARNING: This operation is destructive!");
+		scrivi_riga(" ","Note: The folder path must end with a path separator ('/' or '\')");
+		scrivi_riga("-ssd", "Multithread run");
+		scrivi_riga("-force", "Wet run (default: dry-run)");
+		scrivi_riga("-verbose", "Show duplicated files");
+		scrivi_riga("-(somehash)", "Use (somehash), one of the available next two lines, for detection");
+		help_printhash(false);
 	}
-	if (i_usage && i_example) { color_yellow(); moreprint("Examples:"); color_restore(); }
+	if (i_usage && i_example) scrivi_examples();
 	if (i_example)
 	{
-		moreprint("Deduplicate d0 (dry run, w/xxh3)     : d c:\\d0\\");
-		moreprint("Deduplicate d0 (dry run,xxh3,M/T)    : d c:\\d0\\ -ssd");
-		moreprint("Deduplicate d0 WITHOUT MERCY (wet)   : d c:\\d0\\ -kill");
-		moreprint("Dedup WITHOUT MERCY (wet run,sha256) : d c:\\d0\\ -force -sha256");
+		scrivi_esempio("Deduplicate d0 (dry run, w/xxh3)","d c:\\d0\\");
+		scrivi_esempio("Deduplicate d0 (dry run,xxh3,M/T)","d c:\\d0\\ -ssd");
+		scrivi_esempio("Deduplicate d0 WITHOUT MERCY (wet)","d c:\\d0\\ -kill");
+		scrivi_esempio("Dedup WITHOUT MERCY (wet run,sha256)","d c:\\d0\\ -force -sha256");
 	}
 	return("Deduplicate files inside a single folder WITHOUT MERCY");
 
@@ -46496,49 +46576,46 @@ string help_mysqldump(bool i_usage,bool i_example)
 	{
 		if (i_usage)
 		{
-			color_green();
-			moreprint("CMD   mysqldump   Dump all MySQL/MariaDB databases into a ZPAQ archive");
-			moreprint("                  Requires 'mysql' (or 'mariadb') and 'mysqldump' (or 'mariadb-dump')");
+			scrivi_riga("CMD mysqldump","Dump all MySQL/MariaDB databases");
+			scrivi_riga(" ","Requires 'mysql' (or 'mariadb') and 'mysqldump' (or 'mariadb-dump')");
 #ifdef _WIN32
-			moreprint("                  On Windows, append '.exe' to executable names [of course]");
+			scrivi_riga(" ","On Windows, append '.exe' to executable names [of course]");
 #endif
-			moreprint("                  Use one of these methods to locate executables:");
-			moreprint("                  - Specify path with -bin something");
-			moreprint("                  - Let the program search automatically (default)");
+			scrivi_riga(" ","Use one of these methods to locate executables:");
+			scrivi_riga(" ","- Specify path with -bin something");
+			scrivi_riga(" ","- Let the program search automatically (default)");
 #ifdef _WIN32
-			moreprint("                  - Use -space to download from the Internet (Windows only)");
+			scrivi_riga(" ","- Use -space to download from the Internet (Windows only)");
 #endif
-			color_restore();
-			moreprint("");
-			moreprint("+ : -bin path     Path where mysql/mariadb(.exe) and mysqldump/mariadb-dump(.exe) are located");
+			scrivi_riga("-bin path","Path where mysql/mariadb(.exe) and mysqldump/mariadb-dump(.exe) are located");
 #ifdef _WIN32
-			moreprint("+ : -space        Download mysql.exe and mysqldump.exe from the Internet");
+			scrivi_riga("-space", "Download mysql.exe and mysqldump.exe from the Internet");
 #endif
-			moreprint("+ : -u user       MySQL/MariaDB username");
-			moreprint("+ : -p password   MySQL/MariaDB password (use quotes if it contains spaces)");
-			moreprint("+ : -h host       MySQL/MariaDB host (e.g., localhost or IP address)");
-			moreprint("+ : -P port       MySQL/MariaDB port (default: 3306)");
-			moreprint("+ : -key pwd      Password for encrypting the ZPAQ archive");
-			moreprint("+ : -mX           ZPAQ compression method (X = 0-5, none to highest)");
-			moreprint("+ : -verbose      Be... verbose");
-			moreprint("+ : -only pattern Select only databases containing the specified text or matching pattern");
-			moreprint("                  -only 2015 matches any DB containing '2015' (e.g., db2015, test2015prod)");
-			moreprint("+ : -not pattern  Exclude databases containing the specified text or matching pattern");
-			moreprint("                  -not temp matches any DB containing 'temp' (e.g., temporary, temp_db)");
-			moreprint("                  *** Note: System databases (information_schema, performance_schema,");
-			moreprint("                      sys) are automatically excluded");
+			scrivi_riga("-u user","MySQL/MariaDB username");
+			scrivi_riga("-p password","MySQL/MariaDB password (use quotes if it contains spaces)");
+			scrivi_riga("-h host","MySQL/MariaDB host (e.g., localhost or IP address)");
+			scrivi_riga("-P port","MySQL/MariaDB port (default: 3306)");
+			scrivi_riga("-key pwd","Password for encrypting the ZPAQ archive");
+			scrivi_riga("-mX", "ZPAQ compression method (X = 0-5, none to highest)");
+			scrivi_riga("-verbose", "Be... verbose");
+			scrivi_riga("-only", "pattern Select only databases containing the specified text or matching pattern");
+			scrivi_riga(" ","-only 2015 matches any DB containing '2015' (e.g., db2015, test2015prod)");
+			scrivi_riga("-not", "pattern  Exclude databases containing the specified text or matching pattern");
+			scrivi_riga(" ","-not temp matches any DB containing 'temp' (e.g., temporary, temp_db)");
+			scrivi_riga(" ","*** Note: System databases (information_schema, performance_schema,");
+			scrivi_riga(" ","    sys) are automatically excluded");
 		}
 	}
-	if (i_usage && i_example) { color_yellow(); moreprint("Examples:"); color_restore(); }
+	if (i_usage && i_example) scrivi_examples();
 	if (i_example)
 	{
-		moreprint("Dump all databases (Windows)         : mysqldump z:\\1.zpaq -u root -p pluto -h 127.0.0.1 -P 3306 -key pippo -m2");
-		moreprint("Get tools from Internet (Windows)    : mysqldump z:\\1.zpaq -u root -p pluto -space");
-		moreprint("Auto-search on Linux                 : mysqldump /tmp/test.zpaq -u root -p pluto");
-		moreprint("Specify path on Linux                : mysqldump /tmp/test.zpaq -u root -p pluto -bin \"/bin\"");
-		moreprint("Include databases with '2015'        : mysqldump test.zpaq -u root -p pluto -only 2015");
-        moreprint("Exclude databases with 'geo'         : mysqldump test.zpaq -u root -p pluto -not geo");
-        moreprint("Multiple conditions                  : mysqldump test.zpaq -u root -p pluto -only prod -not backup");
+		scrivi_esempio("Dump all databases (Windows)","mysqldump z:\\1.zpaq -u root -p pluto -h 127.0.0.1 -P 3306 -key pippo -m2");
+		scrivi_esempio("Get tools from Internet (Windows)","mysqldump z:\\1.zpaq -u root -p pluto -space");
+		scrivi_esempio("Auto-search on Linux","mysqldump /tmp/test.zpaq -u root -p pluto");
+		scrivi_esempio("Specify path on Linux","mysqldump /tmp/test.zpaq -u root -p pluto -bin \"/bin\"");
+		scrivi_esempio("Include databases with '2015'","mysqldump test.zpaq -u root -p pluto -only 2015");
+        scrivi_esempio("Exclude databases with 'geo'","mysqldump test.zpaq -u root -p pluto -not geo");
+        scrivi_esempio("Multiple conditions","mysqldump test.zpaq -u root -p pluto -only prod -not backup");
     }
 	return("Dump all mysql databases inside a .zpaq");
 
@@ -46550,16 +46627,14 @@ string help_ntfs(bool i_usage,bool i_example)
 	{
 		if (i_usage)
 		{
-			color_green();
-			moreprint("CMD   ntfs        Restore zpaqfranz's NTFS images to raw");
-			color_restore();
-			moreprint("+ : -to out.raw   Write to full-size raw image");
+			scrivi_riga("CMD ntfs","Restore zpaqfranz's NTFS images to raw");
+			scrivi_riga("-to", "out.raw   Write to full-size raw image");
 		}
 	}
-	if (i_usage && i_example) { color_yellow(); moreprint("Examples:"); color_restore(); }
+	if (i_usage && i_example) scrivi_examples();
 	if (i_example)
 	{
-		moreprint("Restore to raw                       : ntfs z:\\1.img -to z:\\restored.raw");
+		scrivi_esempio("Restore to raw","ntfs z:\\1.img -to z:\\restored.raw");
     }
 	return("Restore zpaqfranz's NTFS images");
 }
@@ -46569,16 +46644,14 @@ string help_drive(bool i_usage,bool i_example)
 	{
 		if (i_usage)
 		{
-			color_green();
-			moreprint("CMD   drive        Show Windows' drive(s)");
-			color_restore();
+			scrivi_riga("CMD drive","Show Windows' drive(s)");
 		}
 	}
-	if (i_usage && i_example) { color_yellow(); moreprint("Examples:"); color_restore(); }
+	if (i_usage && i_example) scrivi_examples();
 	if (i_example)
 	{
-		moreprint("Show drives                          : drive");
-		moreprint("Show drives                          : drives");
+		scrivi_esempio("Show drives","drive");
+		scrivi_esempio("Show drives","drives");
     }
 	return("Show Windows' drives");
 }
@@ -46587,27 +46660,25 @@ string help_utf(bool i_usage,bool i_example)
 {
 	if (i_usage)
 	{
-		color_green();
-		moreprint("CMD   utf (deal with strange filenames)");
-		moreprint("                  Check (or sanitize) paths with non-latin chars");
-		moreprint("                  Can become a real problem extracting on different filesystems (ex. *nix => NTFS)");
-		color_restore();
-		moreprint("+ : -kill         Wet run (default dry run)");
-		moreprint("+ : -verbose      Show what is running");
-		moreprint("+ : -fix255       Show files too long");
+		scrivi_riga("CMD utf","deal with strange filenames");
+		scrivi_riga(" ","Check (or sanitize) paths with non-latin chars");
+		scrivi_riga(" ","Can become a real problem extracting on different filesystems (ex. *nix => NTFS)");
+		scrivi_riga("-kill", "Wet run (default dry run)");
+		scrivi_riga("-verbose", "Show what is running");
+		scrivi_riga("-fix255", "Show files too long");
 		/*
-		moreprint("+ : -utf          Sanitize filenames (strip non-latin)");
-		moreprint("+ : -fix255       Sanitize file length and filecase collisions pippo.txt PIPPO.txt)");
-		moreprint("+ : -fixeml       Sanitize .eml filenames (Fwd Fwd Fwd => Fwd)");
-		moreprint("+ : -dirlength X  Set the 'fix' limit");
-		moreprint("+ : -filelength Y Set the 'fix' limit");
+		scrivi_riga("-utf", "Sanitize filenames (strip non-latin)");
+		scrivi_riga("-fix255", "Sanitize file length and filecase collisions pippo.txt PIPPO.txt)");
+		scrivi_riga("-fixeml", "Sanitize .eml filenames (Fwd Fwd Fwd => Fwd)");
+		scrivi_riga("-dirlength", "X  Set the 'fix' limit");
+		scrivi_riga("-filelength", "Y Set the 'fix' limit");
 		*/
 	}
-	if (i_usage && i_example) { color_yellow(); moreprint("Examples:"); color_restore(); }
+	if (i_usage && i_example) scrivi_examples();
 	if (i_example)
 	{
-		moreprint("Check UTF-filenames (dry run)        : utf z:\\knb");
-		moreprint("Sanitize UTF-filenames (wet run)     : utf z:\\knb -kill");
+		scrivi_esempio("Check UTF-filenames (dry run)","utf z:\\knb");
+		scrivi_esempio("Sanitize UTF-filenames (wet run)","utf z:\\knb -kill");
 		/*
 		moreprint("Check >255 and case collisions:      utf z:\\knb -fix255");
 		moreprint("Fix .eml filenames (dry run):        utf z:\\knb -fixeml");
@@ -46620,23 +46691,21 @@ string help_f(bool i_usage,bool i_example)
 {
 	if (i_usage)
 	{
-		color_green();
-		moreprint("CMD   f (fill, or wipe)");
-		moreprint("                  Fill (wipe) 99% of free disk space in 500MB chunks");
-		moreprint("                  Stress-testing a storage subsystem (disk,controller,cache,cables)");
-		color_restore();
-		moreprint("+ : -verbose      Show write speed (useful to check speed consistency)");
-		moreprint("+ : -force        Do NOT delete (after run) the temporary filename. By default free");
-		moreprint("+ : -zero         Zero-fill instead of random. Use to prepare a thin VMDK shrink");
-		moreprint("+ : -verify       For -zero: do a verify.");
+		scrivi_riga("CMD f","(fill, or wipe)");
+		scrivi_riga(" ","Fill (wipe) 99% of free disk space in 500MB chunks");
+		scrivi_riga(" ","Stress-testing a storage subsystem (disk,controller,cache,cables)");
+		scrivi_riga("-verbose", "Show write speed (useful to check speed consistency)");
+		scrivi_riga("-force", "Do NOT delete (after run) the temporary filename. By default free");
+		scrivi_riga("-zero", "Zero-fill instead of random. Use to prepare a thin VMDK shrink");
+		scrivi_riga("-verify", "For -zero: do a verify.");
 	}
-	if (i_usage && i_example) { color_yellow(); moreprint("Examples:"); color_restore(); }
+	if (i_usage && i_example) scrivi_examples();
 	if (i_example)
 	{
-		moreprint("Fill (wipe) almost all free space    : f z:\\");
-		moreprint("Fill (wipe) keep temp files          : f z:\\ -force -verbose");
-		moreprint("Zero free space (VM shrink)          : f z:\\ -zero");
-		moreprint("Zero free space (WITH verify)        : f z:\\ -zero -verify");
+		scrivi_esempio("Fill (wipe) almost all free space","f z:\\");
+		scrivi_esempio("Fill (wipe) keep temp files","f z:\\ -force -verbose");
+		scrivi_esempio("Zero free space (VM shrink)","f z:\\ -zero");
+		scrivi_esempio("Zero free space (WITH verify)","f z:\\ -zero -verify");
 	}
 	return("Free disk space fills (=reliability test) or wipe (privacy)");
 
@@ -46645,50 +46714,48 @@ string help_summa(bool i_usage,bool i_example)
 {
 	if (i_usage)
 	{
-		color_green();
-		moreprint("CMD   sum");
-		moreprint("CMD   sha1        (retained for historical reasons, 7.15 always uses SHA-1 only)");
-		moreprint("                  Calculate hash/cksum of files/dirs, dupes and cumulative GLOBAL SHA256");
-		moreprint("                  (If two directories have the same GLOBAL SHA256 they are ==)");
-		moreprint("                  With no switches, by default, use SHA-1 (reliable, but not very fast)");
-		color_restore();
+		scrivi_riga("CMD sum","");
+		scrivi_riga("CMD sha1","(retained for historical reasons, 7.15 always uses SHA-1 only)");
+		scrivi_riga(" ","Calculate hash/cksum of files/dirs, dupes and cumulative GLOBAL SHA256");
+		scrivi_riga(" ","(If two directories have the same GLOBAL SHA256 they are ==)");
+		scrivi_riga(" ","With no switches, by default, use SHA-1 (reliable, but not very fast)");
 		help_printhash(false);
-		moreprint("+ : -ssd          make N thread (do not use with spinning HDDs, but SSDs and NVMes)");
-		moreprint("+ : -mm           use memory mapped file instead of 'regular' fread");
-		moreprint("+ : -kill         show the files to be deleted to manually deduplicate");
-		moreprint("+ : -home         get a 1-level checksum, for comparing hierarchically user-organized folders.");
-		moreprint("+ : -summary      show only GLOBAL (fast manual compare of directories)");
-		moreprint("+ : -rename       rename all files with the hash");
-		moreprint("+ : -forcezfs     force .zfs path (DEFAULT: skip)");
-		moreprint("+ : -kill -force  runs a deduplication without ask anything!");
+		scrivi_riga("-ssd", "make N thread (do not use with spinning HDDs, but SSDs and NVMes)");
+		scrivi_riga("-mm", "use memory mapped file instead of 'regular' fread");
+		scrivi_riga("-kill", "show the files to be deleted to manually deduplicate");
+		scrivi_riga("-home", "get a 1-level checksum, for comparing hierarchically user-organized folders.");
+		scrivi_riga("-summary", "show only GLOBAL (fast manual compare of directories)");
+		scrivi_riga("-rename", "rename all files with the hash");
+		scrivi_riga("-forcezfs", "force .zfs path (DEFAULT: skip)");
+		scrivi_riga("-kill", "-force  runs a deduplication without ask anything!");
 		help_size();
-		moreprint("+ : -715          Work as 7.15 (with .zfs and ADS)");
-		moreprint("+ : -checktxt kaj Check MD5 against kaj file. For rsync/rclone sync");
-		moreprint("+ : -hashdeep     Make (into mandatory -out) hashdeep-compatible output");
-		moreprint("+ : -zeta         Make the ZETA hash");
-		moreprint("+ : -zetaenc      Make the ZETA-encrypted hash");
+		scrivi_riga("-715", "Work as 7.15 (with .zfs and ADS)");
+		scrivi_riga("-checktxt", "kaj Check MD5 against kaj file. For rsync/rclone sync");
+		scrivi_riga("-hashdeep", "Make (into mandatory -out) hashdeep-compatible output");
+		scrivi_riga("-zeta", "Make the ZETA hash");
+		scrivi_riga("-zetaenc", "Make the ZETA-encrypted hash");
 		help_orderby();
-		moreprint("+ : -last         Get only the last file");
+		scrivi_riga("-last", "Get only the last file");
 	}
-	if (i_usage && i_example) { color_yellow(); moreprint("Examples:"); color_restore(); }
+	if (i_usage && i_example) scrivi_examples();
 	if (i_example)
 	{
-		moreprint("SHA1 of all files (and duplicated)   : sum z:\\knb");
-		moreprint("SHA1 multithread, only summary       : sum z:\\knb -ssd -summary");
-		moreprint("XXH3 multithread                     : sum z:\\knb -ssd -xxh3");
-		moreprint("CRC-32c HW accelerated               : sum z:\\knb -crc32c -pakka -noeta");
-		moreprint("Hashes to be compared (dir1)         : sum c:\\nz  -pakka -noeta -nosort -crc32c -find c:\\nz  -replace bakdir >1.txt");
-		moreprint("Hashes to be compared (dir2)         : sum z:\\knb -pakka -noeta -nosort -crc32c -find z:\\knb -replace bakdir >2.txt");
-		moreprint("Duplicated files with sha256         : sum z:\\knb -kill -sha256");
-		moreprint("Duplicated files minsize 1000000     : sum z:\\knb -kill -ssd -minsize 1000000");
-		moreprint("MAGIC cumulative hashes of 1-level   : sum p:\\staff -xxh3 -home -ssd");
-		moreprint("BLAKE3 multithread from memory map   : sum z:\\knb -ssd -blake3 -mm");
-		moreprint("MD5 quick check                      : sum z:\\knb.zpaq -checktxt z:\\pippo.txt");
-		moreprint("hashdeep-compatible (multithread)    : sum *.jpg *.cpp -hashdeep -ssd -out z:\\thehash.txt");
-		moreprint("like md5sum                          : sum *.txt -md5 -pakka -noeta -stdout -nosort");
-		moreprint("Order the output                     : sum z:\\ -xxh3 -orderby size -desc -only *.cpp");
-		moreprint("ZETA multithread                     : sum z:\\knb -ssd -zeta");
-		moreprint("ZETA on last                         : sum z:\\knb -zeta -last");
+		scrivi_esempio("SHA1 of all files (and duplicated)","sum z:\\knb");
+		scrivi_esempio("SHA1 multithread, only summary","sum z:\\knb -ssd -summary");
+		scrivi_esempio("XXH3 multithread","sum z:\\knb -ssd -xxh3");
+		scrivi_esempio("CRC-32c HW accelerated","sum z:\\knb -crc32c -pakka -noeta");
+		scrivi_esempio("Hashes to be compared (dir1)","sum c:\\nz  -pakka -noeta -nosort -crc32c -find c:\\nz  -replace bakdir >1.txt");
+		scrivi_esempio("Hashes to be compared (dir2)","sum z:\\knb -pakka -noeta -nosort -crc32c -find z:\\knb -replace bakdir >2.txt");
+		scrivi_esempio("Duplicated files with sha256","sum z:\\knb -kill -sha256");
+		scrivi_esempio("Duplicated files minsize 1000000","sum z:\\knb -kill -ssd -minsize 1000000");
+		scrivi_esempio("MAGIC cumulative hashes of 1-level","sum p:\\staff -xxh3 -home -ssd");
+		scrivi_esempio("BLAKE3 multithread from memory map","sum z:\\knb -ssd -blake3 -mm");
+		scrivi_esempio("MD5 quick check","sum z:\\knb.zpaq -checktxt z:\\pippo.txt");
+		scrivi_esempio("hashdeep-compatible (multithread)","sum *.jpg *.cpp -hashdeep -ssd -out z:\\thehash.txt");
+		scrivi_esempio("like md5sum","sum *.txt -md5 -pakka -noeta -stdout -nosort");
+		scrivi_esempio("Order the output","sum z:\\ -xxh3 -orderby size -desc -only *.cpp");
+		scrivi_esempio("ZETA multithread","sum z:\\knb -ssd -zeta");
+		scrivi_esempio("ZETA on last","sum z:\\knb -zeta -last");
 	}
 	return("Calc hash/checksums, find duplicated files");
 
@@ -46697,30 +46764,28 @@ string help_hasha(bool i_usage,bool i_example)
 {
 	if (i_usage)
 	{
-		color_green();
-		moreprint("CMD   hash        Calculate hash of files/dirs");
-		moreprint("                  With no switches, by default, use SHA-1 (reliable, but not very fast)");
-		color_restore();
+		scrivi_riga("CMD hash","Calculate hash of files/dirs");
+		scrivi_riga(" ","With no switches, by default, use SHA-1 (reliable, but not very fast)");
 		help_printhash(false);
-		moreprint("+ : -ssd          make N thread (do not use with spinning HDDs, but SSDs and NVMes)");
-		moreprint("+ : -mm           use memory mapped file instead of 'regular' fread");
-		moreprint("+ : -forcezfs     force .zfs path (DEFAULT: skip)");
+		scrivi_riga("-ssd", "make N thread (do not use with spinning HDDs, but SSDs and NVMes)");
+		scrivi_riga("-mm", "use memory mapped file instead of 'regular' fread");
+		scrivi_riga("-forcezfs", "force .zfs path (DEFAULT: skip)");
 		help_size();
-		moreprint("+ : -715          Work as 7.15 (with .zfs and ADS)");
-		moreprint("+ : -verbose      Show more infos");
-		moreprint("+ : -stdout       Do not mess the output");
-		moreprint("+ : -pakka        Do not mess the output");
-		moreprint("+ : -noeta        Do not show ETA");
-		moreprint("+ : -last         Get only the last file");
+		scrivi_riga("-715", "Work as 7.15 (with .zfs and ADS)");
+		scrivi_riga("-verbose", "Show more infos");
+		scrivi_riga("-stdout", "Do not mess the output");
+		scrivi_riga("-pakka", "Do not mess the output");
+		scrivi_riga("-noeta", "Do not show ETA");
+		scrivi_riga("-last", "Get only the last file");
 	}
-	if (i_usage && i_example) { color_yellow(); moreprint("Examples:"); color_restore(); }
+	if (i_usage && i_example) scrivi_examples();
 	if (i_example)
 	{
-		moreprint("SHA1 of all files                    : hash z:\\knb");
-		moreprint("SHA1 of all files, multithread       : hash z:\\knb -ssd");
-		moreprint("XXH3 multithreaded                   : hash z:\\knb -ssd -xxh3");
-		moreprint("SHA256 to file                       : hash z:\\knb -ssd -sha256 -stdout -out 1.txt");
-		moreprint("SHA1 of the last file                : hash z:\\knb -last");
+		scrivi_esempio("SHA1 of all files","hash z:\\knb");
+		scrivi_esempio("SHA1 of all files, multithread","hash z:\\knb -ssd");
+		scrivi_esempio("XXH3 multithreaded","hash z:\\knb -ssd -xxh3");
+		scrivi_esempio("SHA256 to file","hash z:\\knb -ssd -sha256 -stdout -out 1.txt");
+		scrivi_esempio("SHA1 of the last file","hash z:\\knb -last");
 	}
 	return("Calc hash");
 }
@@ -46729,35 +46794,33 @@ string help_dir(bool i_usage,bool i_example)
 {
 	if (i_usage)
 	{
-		color_green();
-		moreprint("CMD   dir         (yes, dir as in Windows, even better)");
-		moreprint("                  A powerful alternative to standard 'dir' or 'ls' that includes");
-		moreprint("                  cumulative file sizes");
-		moreprint("                  'Mini clone' of Windows's dir command, with the main switches");
-		moreprint("                  Windows-style switches (e.g., /s) must be placed before other switches");
-		color_restore();
-		moreprint("+ : /s            Recursive");
-		moreprint("+ : /os           Order by size");
-		moreprint("+ : /a            Show all (hidden)");
-		moreprint("+ : -checksum     Show hashes for every file");
-		moreprint("+ : -(somehash)   Use (somehash) to find duplicate/show checksums");
-		help_printhashline(false);
-		moreprint("+ : -n X          like |tail -X");
+		scrivi_riga("CMD dir","(yes, dir as in Windows, even better)");
+		scrivi_riga(" ","A powerful alternative to standard 'dir' or 'ls' that includes");
+		scrivi_riga(" ","cumulative file sizes");
+		scrivi_riga(" ","'Mini clone' of Windows's dir command, with the main switches");
+		scrivi_riga(" ","Windows-style switches (e.g., /s) must be placed before other switches");
+		scrivi_esempio("+","/s            Recursive");
+		scrivi_esempio("+","/os           Order by size");
+		scrivi_esempio("+","/a            Show all (hidden)");
+		scrivi_riga("-checksum", "Show hashes for every file");
+		scrivi_riga("-(somehash)", "Use (somehash) to find duplicate/show checksums");
+		help_printhash(false);
+		scrivi_riga("-n X","like |tail -X");
 		help_size();
 	}
-	if (i_usage && i_example) { color_yellow(); moreprint("Examples:"); color_restore(); }
+	if (i_usage && i_example) scrivi_examples();
 	if (i_example)
 	{
-		moreprint("Windows-dir command clone            : dir /root/script /od");
-		moreprint("Show the 10 largest .mp4 file in c:\\ : dir c:\\ /s /os -n 10 -find .mp4");
-		moreprint("Find .mp4 duplicate in C:\\           : dir c:\\ /s -crc32 -find .mp4");
-		moreprint("How big is c:\\z,with subdirs?        : dir c:\\z /s -n 1");
-		moreprint("100 biggest dup. files in c:\\z?      : dir c:\\z /s -crc32 -n 100");
-		moreprint("Show -md5 checksum, recurse by size  : dir z:\\cb /s /os -checksum -md5");
-		moreprint("Find duplicate, recurse by size      : dir z:\\cb /s /os -xxh3");
-		moreprint("Like dir                             : dir z:\\cb\\*.avi");
-		moreprint("Better than dir                      : dir c:\\*.cpp /s /os -n 100");
-		moreprint("Get last 5 backup files              : dir c:\\backup\\*.zpaq /on -n 5 -terse");
+		scrivi_esempio("Windows-dir command clone","dir /root/script /od");
+		scrivi_esempio("Show the 10 largest .mp4 file in c:\\","dir c:\\ /s /os -n 10 -find .mp4");
+		scrivi_esempio("Find .mp4 duplicate in C:\\","dir c:\\ /s -crc32 -find .mp4");
+		scrivi_esempio("How big is c:\\z,with subdirs?","dir c:\\z /s -n 1");
+		scrivi_esempio("100 biggest dup. files in c:\\z?","dir c:\\z /s -crc32 -n 100");
+		scrivi_esempio("Show -md5 checksum, recurse by size","dir z:\\cb /s /os -checksum -md5");
+		scrivi_esempio("Find duplicate, recurse by size","dir z:\\cb /s /os -xxh3");
+		scrivi_esempio("Like dir","dir z:\\cb\\*.avi");
+		scrivi_esempio("Better than dir","dir c:\\*.cpp /s /os -n 100");
+		scrivi_esempio("Get last 5 backup files","dir c:\\backup\\*.zpaq /on -n 5 -terse");
 	}
 	return("A better dir (yes, Windows' dir)");
 
@@ -46766,76 +46829,66 @@ string help_k(bool i_usage,bool i_example)
 {
 	if (i_usage)
 	{
-		color_yellow();
-		moreprint("CMD   k (kill, risky!)");
-		moreprint("                  Kill (delete) all files and directories that aren't in an archive");
-		moreprint("                  removing excess files");
-		color_restore();
+		scrivi_riga("CMD k","(kill, risky!)");
+		scrivi_riga(" ","Kill (delete) all files and directories that aren't in an archive");
+		scrivi_riga(" ","removing excess files");
 	}
-	if (i_usage && i_example) { color_yellow(); moreprint("Examples:"); color_restore(); }
+	if (i_usage && i_example) scrivi_examples();
 	if (i_example)
 	{
-		color_red();
-		moreprint("    RISKY COMMAND: DO NOT USE IF YOU DO NOT UNDERSTAND!");
-		color_restore();
-		moreprint("Create an archive                    : a z:\\1.zpaq c:\\z");
-		moreprint("Extract into z:\\knb                  : x z:\\1.zpaq c:\\z -to z:\\knb");
-		moreprint("... something happens (change) in");
-		moreprint("z:\\knb and we want to turn back");
-		moreprint("WITHOUT delete everything and ");
-		moreprint("extract again (maybe it's huge)      : k z:\\1.zpaq c:\\z -to z:\\knb");
+		scrivi_esempio("Create an archive","a z:\\1.zpaq c:\\z");
+		scrivi_esempio("Extract into z:\\knb","x z:\\1.zpaq c:\\z -to z:\\knb");
+		scrivi_esempio(" ","... something happens (change) in");
+		scrivi_esempio(" ","z:\\knb and we want to turn back");
+		scrivi_esempio(" ","WITHOUT delete everything and ");
+		scrivi_esempio("extract again (maybe it's huge)","k z:\\1.zpaq c:\\z -to z:\\knb");
 	}
 	return("Kill (delete) everything not in the archive (RISKY!)");
 
 }
+
+#ifdef ZPAQFULL ///NOSFTPSTART
 string help_n(bool i_usage,bool i_example)
 {
 	if (i_usage)
 	{
-		color_green();
-		moreprint("CMD   n (decimatioN)");
-		moreprint("                  Keep -n X files in a folder (NO recursive scan), delete all the others");
-		moreprint("                  At least one * must be used to filter.");
-		moreprint("                  with -exec execute external command");
-		color_restore();
-		moreprint("+ : -kill         Do a wet run (default dry run)");
-		moreprint("+ : -exec p.bat   Instead of delete launch p.bat with parameter");
-		moreprint("+ : /od           Order by date (default)");
-		moreprint("+ : /on           Order by name");
-		moreprint("+ : -verbose      Show infos");
-		moreprint("+ : -force        Continue even if >50 files founded");
+		scrivi_riga("CMD n","(decimatioN)");
+		scrivi_riga(" ","Keep -n X files in a folder (NO recursive scan), delete all the others");
+		scrivi_riga(" ","At least one * must be used to filter.");
+		scrivi_riga(" ","with -exec execute external command");
+		scrivi_riga("-kill", "Do a wet run (default dry run)");
+		scrivi_riga("-exec", "p.bat   Instead of delete launch p.bat with parameter");
+		scrivi_riga(" ","/od           Order by date (default)");
+		scrivi_riga(" ","/on           Order by name");
+		scrivi_riga("-verbose", "Show infos");
+		scrivi_riga("-force", "Continue even if >50 files founded");
 	}
-	if (i_usage && i_example) { color_yellow(); moreprint("Examples:"); color_restore(); }
+	if (i_usage && i_example) scrivi_examples();
 	if (i_example)
 	{
-		color_yellow();
-		moreprint("    RISKY COMMAND: DO NOT USE IF YOU DO NOT UNDERSTAND!");
-		color_restore();
-		moreprint("Keep 10 newest files in z:\\1\\        : n z:\\1\\*.txt -n 10 -kill");
-		moreprint("Keep 20 ordered by name              : n z:\\1\\dumpy_*.sql -n 20 -kill -force /on");
-		moreprint("Keep 30 txt ordered by name          : n z:\\1\\*.txt -n 20 -kill -force /on");
-		moreprint("Check the last file with ugo.bat     : n z:\\1\\*.txt -kill -exec ugo.bat");
+		scrivi_esempio("Keep 10 newest files in z:\\1\\","n z:\\1\\*.txt -n 10 -kill");
+		scrivi_esempio("Keep 20 ordered by name","n z:\\1\\dumpy_*.sql -n 20 -kill -force /on");
+		scrivi_esempio("Keep 30 txt ordered by name","n z:\\1\\*.txt -n 20 -kill -force /on");
+		scrivi_esempio("Check the last file with ugo.bat","n z:\\1\\*.txt -kill -exec ugo.bat");
 	}
 	return("Decimate (keeping the newer X) older files");
 }
+#endif ///NOSFTPEND
 string help_mainswitches(bool i_usage,bool i_example)
 {
 	if ((i_usage) || (i_example))
 	{
-		moreprint("  -all [N]:     All versions (default 4 digits)");
-		moreprint("  -key X:       Archive password X");
-		moreprint("  -mN -method N:0=no compression, 1..5=faster..better ");
-		moreprint("  -force:       Always overwrite");
-		moreprint("  -test:        Verify (extract/add)");
-		moreprint("  -kill:        Allow destructive operations ('wet runs')");
-		moreprint("  -to out...:   Prefix files to out");
-		moreprint("  -until N:     Roll back to N'th version");
+		scrivi_riga("-all [N]", "All versions (default 4 digits)");
+		scrivi_riga("-key X", "Archive password X");
+		scrivi_riga("-mN -method N", "0=no compression, 1..5=faster..better ");
+		scrivi_riga("-force", "Overwrite");
+		scrivi_riga("-test", "Verify (extract/add)");
+		scrivi_riga("-kill", "Allow destructive operations ('wet runs')");
+		scrivi_riga("-to out...", "Prefix files to out");
+		scrivi_riga("-until N", "Roll back to N'th version");		
 #ifdef HWSHA1
-		moreprint("  -hw:          Hardware-accelerated SHA1 code    (not in all CPUs)");
+		scrivi_riga("-hw","Hardware-accelerated SHA1 code    (not in all CPUs)");
 #endif // corresponds to #ifdef (#ifdef HWSHA1)
-#ifdef HWSHA2
-///		moreprint("  -hw:          Hardware-accelerated SHA1/2 code (not in all CPUs)");
-#endif // corresponds to #ifdef (#ifdef HWSHA2)
 
 	}
 	return("Most used switches");
@@ -46849,16 +46902,16 @@ string help_switches(bool i_usage,bool i_example)
 		tm* t=gmtime(&nowz);
 		int64_t date=(t->tm_year+1900)*10000000000LL+(t->tm_mon+1)*100000000LL
 		  +t->tm_mday*1000000+t->tm_hour*10000+t->tm_min*100+t->tm_sec;
-		snprintf(buffer,sizeof(buffer),"  -until %s   Set date, roll back (UT, default time: 235959)",dateToString(flagutc,date).c_str());
-		moreprint(buffer);
-		moreprint("  -not files...   Exclude. * and ? match any string or char");
-		moreprint("       =[+-#^?]   List: exclude by comparison result");
-		moreprint("  -only files...  Include only matches (default: *) example *pippo*.mp4");
-		moreprint("  -always files   Always (force) adding some file");
-		moreprint("  -noattributes   Ignore/don't save file attributes or permissions");
-		moreprint("  -index F        Extract: create index F for archive");
-		moreprint("                  Add: create suffix for archive indexed by F, update F");
-		moreprint("  -sN -summary N  If >0 show only summary (sha1())");
+		snprintf(buffer,sizeof(buffer),"%s   Set date, roll back (UT, default time: 235959)",dateToString(flagutc,date).c_str());
+		scrivi_riga("-until",buffer);
+		scrivi_riga("-not files... ","Exclude. * and ? match any string or char");
+		scrivi_riga("     =[+-#^?] ","List: exclude by comparison result");
+		scrivi_riga("-only files...","Include only matches (default: *) example *pippo*.mp4");
+		scrivi_riga("-always files ","Always (force) adding some file");
+		scrivi_riga("-noattributes ","Ignore/don't save file attributes or permissions");
+		scrivi_riga("-index F      ","Extract: create index F for archive");
+		scrivi_riga("              ","Add: create suffix for archive indexed by F, update F");
+		scrivi_riga("-sN -summary N","If >0 show only summary (sha1())");
 	}
 	return("Usual switches");
 }
@@ -46873,247 +46926,450 @@ string help_commonswitches(bool i_usage,bool i_example)
 string help_franzswitches(bool i_usage,bool i_example)
 {
 	if ((i_usage) || (i_example))
-	{
-		moreprint("+ : -big          ASCII art on final result");
-		moreprint("+ : -utc          Do not convert to localtime (use UTC, like 715)");
-		moreprint("+ : -715          Works just about like v7.15");
-		moreprint("+ : -checksum     Store SHA1+CRC32 for every file");
-		moreprint("+ : -verify       Force re-read of file during t (test command) or c");
-		moreprint("+ : -noeta        Do not show ETA");
-		moreprint("+ : -pakka        Output for PAKKA (briefly)");
-		moreprint("+ : -verbose      Show more");
-		moreprint("+ : -silent       Be mute (!)");
-		moreprint("+ : -summary      Concise output");
-		moreprint("+ : -zfs          Skip paths including .zfs");
-		moreprint("+ : -forcezfs     Force paths including .zfs");
-		moreprint("+ : -noqnap       Skip path including @Recently-Snapshot and @Recycle");
-		moreprint("+ : -nomac        Skip ._something and .DS_Store and Thumbs.db");
-		moreprint("+ : -nosynology   Skip #snapshot, #recycle etc");
-		moreprint("+ : -forcewindows Take $DATA$ and System Volume Information");
-		moreprint("+ : -xls          Do NOT always force XLS/PPT");
-		moreprint("+ : -nopath       Do not store path");
-		moreprint("+ : -nosort       Do not sort file when adding or listing");
-		moreprint("+ : -find       X Search for X in full filename (ex. list)");
-		moreprint("+ : -replace    Y Replace X with Y in full filename (ex. list)");
-		moreprint("+ : -n          X Only print last X lines in dir (like tail)/first X (list)");
-		moreprint("+ : -limit      X (like -n)");
-		help_size();
-		moreprint("+ : -filelength X Utf command: find file with length>X, extract maxfilelen");
-		moreprint("+ : -dirlength  X Utf command: find dirs with length>X, extract maxdirlen");
-		moreprint("+ : -comment foo  Add/find ASCII comment string to versions");
+{
+///	-all [N]             All version
+	scrivi_riga("-715", "Works just about like v7.15");
+	scrivi_riga("-all [N]", "All versions (default 4 digits)");
+	scrivi_riga("-big", "ASCII art on final result");
+	scrivi_riga("-checksum", "Store SHA1+CRC32 for every file");
+	scrivi_riga("-comment", "foo  Add/find ASCII comment string to versions");
+	scrivi_riga("-debug", "Show lot of infos (superverbose)");
+	scrivi_riga("-dirlength X", "Utf command: find dirs with length>X, extract maxdirlen");
+	scrivi_riga("-filelength X", "Utf command: find file with length>X, extract maxfilelen");
+	scrivi_riga("-filelist", "Store the add() list in VFILE-l-filelist.txt");
+	scrivi_riga("-find X", "Search for X in full filename (ex. list)");
+	scrivi_riga("-fix255", "Shrink total file length and case collisions (NTFS)");
+	scrivi_riga("-fixeml", "Heuristically compress .eml filenames (Fwd Fwd Fwd =>Fwd)");
+	scrivi_riga("-flat", "Everything in single path (emergency extract of strange files)");
+	scrivi_riga("-forcewindows", "Take $DATA$ and System Volume Information");
+	scrivi_riga("-forcezfs", "Force paths including .zfs");
+	scrivi_riga("-kill", "In extraction write 0-bytes file instead of data");
+	scrivi_riga("-kill", "Show 'script-ready' log of dup files");
+	scrivi_riga("-limit X", "(like -n)");
+	scrivi_riga("-n", "X Only print last X lines in dir (like tail)/first X (list)");
+	scrivi_riga("-nocolor", "disable colors");
+	scrivi_riga("-nodedup", "Disabling deduplication");
+	scrivi_riga("-noeta", "Do not show ETA");
+	scrivi_riga("-nomac", "Skip ._something and .DS_Store and Thumbs.db");
+	scrivi_riga("-nopath", "Do not store path");
+	scrivi_riga("-noqnap", "Skip path including @Recently-Snapshot and @Recycle");
+	scrivi_riga("-norecursion", "Do not recurse into folders (default: YES)");
+	scrivi_riga("-nosort", "Do not sort file when adding or listing");
+	scrivi_riga("-nosynology", "Skip #snapshot, #recycle etc");
+	scrivi_riga("-output", "s.txt Output on s.txt too (alias: -out)");
+	scrivi_riga("-pakka", "Output for PAKKA (briefly)");
+	scrivi_riga("-replace Y", "Replace X with Y in full filename (ex. list)");
+	scrivi_riga("-silent", "Be mute (!)");
+	scrivi_riga("-store", "Store mode: turn off deduplication and compression");
+	scrivi_riga("-summary", "Concise output");
+	scrivi_riga("-timestamp X", "Set version datetime@X 14 digit (2021-12-30_01:03:04)"); 	// force the timestamp
+	scrivi_riga("-utc", "Do not convert to localtime (use UTC, like 715)");
+	scrivi_riga("-utf", "Remove non-utf8 chars");
+	scrivi_riga("-utf8", "Like -utf");	help_date();
+	scrivi_riga("-verbose", "Show more");
+	scrivi_riga("-verify", "Force re-read of file during t (test command) or c");
+	scrivi_riga("-xls", "Do NOT always force XLS/PPT");
+	scrivi_riga("-zfs", "Skip paths including .zfs");	help_size();
 #if defined(_WIN32)
-		moreprint("+ : -vss          Do a VSS for drive C: (Windows with administrative rights)");
-		moreprint("+ : -open         Check if .zpaq is already open => abort if yes");
+	scrivi_riga("-open", "Check if .zpaq is already open => abort if yes");
+	scrivi_riga("-longpath", "add/extract on Windows filenames longer than 255");
+	scrivi_riga("-noconsole", "disable console manipulation (older Windows)");
+	scrivi_riga("", "support env variable NO_CONSOLE (no-color.org)");
 #endif // corresponds to #if (#if defined(_WIN32))
-		help_printhash(false);
-		moreprint("+ : -exec_ok f.sh After OK launch f.sh");
-		moreprint("+ : -exec_error z After NOT OK launch z");
-		moreprint("+ : -exec_warn cz At Warn launch cz");
-		moreprint("+ : -exec pip.bat Launch pip.bat %1 with command n");
-		moreprint("+ : -output s.txt Output on s.txt too (alias: -out)");
-		moreprint("+ : -kill         Show 'script-ready' log of dup files");
-		moreprint("+ : -kill         In extraction write 0-bytes file instead of data");
-		moreprint("+ : -utf          Remove non-utf8 chars");
-		moreprint("+ : -utf8         Like -utf");
-		moreprint("+ : -fix255       Shrink total file length and case collisions (NTFS)");
-		moreprint("+ : -fixeml       Heuristically compress .eml filenames (Fwd Fwd Fwd =>Fwd)");
-		moreprint("+ : -flat         Everything in single path (emergency extract of strange files)");
-		moreprint("+ : -debug        Show lot of infos (superverbose)");
-		moreprint("+ : -timestamp X  Set version datetime@X 14 digit (2021-12-30_01:03:04)"); 	// force the timestamp
-		help_date();
-		moreprint("+ : -filelist     Store the add() list in VFILE-l-filelist.txt");
-		moreprint("+ : -nodedup      Disabling deduplication");
-		help_orderby();
-		moreprint("+ : -store        Store mode: turn off deduplication and compression");
-		moreprint("+ : -norecursion  Do not recurse into folders (default: YES)");
-		moreprint("+ : -nocolor      disable colors");
+	help_printhash(false);
+#ifdef ZPAQFULL ///NOSFTPSTART
+	scrivi_riga("-exec_ok", "f.sh After OK launch f.sh");
+	scrivi_riga("-exec_error", "z After NOT OK launch z");
+	scrivi_riga("-exec_warn", "cz At Warn launch cz");
+	scrivi_riga("-exec", "pip.bat Launch pip.bat %1 with command n");
 #ifdef _WIN32
-		moreprint("+ : -longpath     add/extract on Windows filenames longer than 255");
-		moreprint("+ : -noconsole    disable console manipulation (older Windows)");
-		moreprint("+                 support env variable NO_CONSOLE (no-color.org)");
+	scrivi_riga("-vss", "Do a VSS for drive C: (Windows with administrative rights)");
 #endif // corresponds to #ifdef (#ifdef _WIN32)
-	}
+#endif ///NOSFTPEND
+
+	help_orderby();
+	
+}
 	return("Advanced switches");
 }
 string help_voodooswitches(bool i_usage,bool i_example)
 {
 	if ((i_usage) || (i_example))
 	{
-		moreprint("  -repack F [X]   Extract to new archive F with key X (default: none)");
-		moreprint("  -tN -threads N  Use N threads (default: 0 = all cores)");
-		moreprint("  -fragment N     Use 2^N KiB average fragment size (default: 6)");
-		moreprint("  -mNB -method NB Use 2^B MiB blocks (0..11, default: 04, 14, 26..56)");
-		moreprint("  -method {xs}B[,N2]...[{ciawmst}[N1[,N2]...]]...  Advanced:");
-		moreprint("  x=journaling (default). s=streaming (no dedupe)");
-		moreprint("    N2: 0=no pre/post. 1,2=packed,byte LZ77. 3=BWT. 4..7=0..3 with E8E9");
-		moreprint("    N3=LZ77 min match. N4=longer match to try first (0=none). 2^N5=search");
-		moreprint("    depth. 2^N6=hash table size (N6=B+21: suffix array). N7=lookahead");
-		moreprint("    Context modeling defaults shown below:");
-		moreprint("  c0,0,0: context model. N1: 0=ICM, 1..256=CM max count. 1000..1256 halves");
-		moreprint("    memory. N2: 1..255=offset mod N2, 1000..1255=offset from N2-1000 byte");
-		moreprint("    N3...: order 0... context masks (0..255). 256..511=mask+byte LZ77");
-		moreprint("    parse state, >1000: gap of N3-1000 zeros");
-		moreprint("  i: ISSE chain. N1=context order. N2...=order increment");
-		moreprint("  a24,0,0: MATCH: N1=hash multiplier. N2=halve buffer. N3=halve hash tab");
-		moreprint("  w1,65,26,223,20,0: Order 0..N1-1 word ISSE chain. A word is bytes");
-		moreprint("    N2..N2+N3-1 ANDed with N4, hash mulitpiler N5, memory halved by N6");
-		moreprint("  m8,24: MIX all previous models, N1 context bits, learning rate N2");
-		moreprint("  s8,32,255: SSE last model. N1 context bits, count range N2..N3");
-		moreprint("  t8,24: MIX2 last 2 models, N1 context bits, learning rate N2");
+		scrivi_riga("-repack F [X]","Extract to new archive F with key X (default: none)");
+		scrivi_riga("-tN -threads N","Use N threads (default: 0 = all cores)");
+		scrivi_riga("-fragment N","Use 2^N KiB average fragment size (default: 6)");
+		scrivi_riga("-mNB -method NB","Use 2^B MiB blocks (0..11, default: 04, 14, 26..56)");
+		scrivi_riga("-method","{xs}B[,N2]...[{ciawmst}[N1[,N2]...]]...  Advanced:");
+		scrivi_riga(" ","x=journaling (default). s=streaming (no dedupe)");
+		scrivi_riga(" ","  N2: 0=no pre/post. 1,2=packed,byte LZ77. 3=BWT. 4..7=0..3 with E8E9");
+		scrivi_riga(" ","  N3=LZ77 min match. N4=longer match to try first (0=none). 2^N5=search");
+		scrivi_riga(" ","  depth. 2^N6=hash table size (N6=B+21: suffix array). N7=lookahead");
+		scrivi_riga(" ","  Context modeling defaults shown below:");
+		scrivi_riga(" ","c0,0,0: context model. N1: 0=ICM, 1..256=CM max count. 1000..1256 halves");
+		scrivi_riga(" ","  memory. N2: 1..255=offset mod N2, 1000..1255=offset from N2-1000 byte");
+		scrivi_riga(" ","  N3...: order 0... context masks (0..255). 256..511=mask+byte LZ77");
+		scrivi_riga(" ","  parse state, >1000: gap of N3-1000 zeros");
+		scrivi_riga(" ","i: ISSE chain. N1=context order. N2...=order increment");
+		scrivi_riga(" ","a24,0,0: MATCH: N1=hash multiplier. N2=halve buffer. N3=halve hash tab");
+		scrivi_riga(" ","w1,65,26,223,20,0: Order 0..N1-1 word ISSE chain. A word is bytes");
+		scrivi_riga(" ","  N2..N2+N3-1 ANDed with N4, hash mulitpiler N5, memory halved by N6");
+		scrivi_riga(" ","m8,24: MIX all previous models, N1 context bits, learning rate N2");
+		scrivi_riga(" ","s8,32,255: SSE last model. N1 context bits, count range N2..N3");
+		scrivi_riga(" ","t8,24: MIX2 last 2 models, N1 context bits, learning rate N2");
 	}
 	return("Nerd's switches");
 
 }
+
+
+// Struttura per memorizzare informazioni sulle categorie
+struct CategoryInfo {
+    std::string name;
+    int sortposition;
+    std::vector<std::string> commands;
+};
+
+// Funtore per ordinare le categorie per sortposition
+struct CategorySorter {
+    bool operator()(const CategoryInfo& a, const CategoryInfo& b) const {
+        return a.sortposition < b.sortposition;
+    }
+};
+
+// Funzione principale per stampare l'help
+void printhelp(const MAPPAHELP& help_map,unsigned int maxchar) 
+{
+
+    // 1. Raggruppa i comandi per categoria e memorizza il sortposition
+    std::vector<CategoryInfo> categorieComandi;
+    std::map<std::string, int> categorySortPosition;
+
+    for (MAPPAHELP::const_iterator p = help_map.begin(); p != help_map.end(); ++p) {
+        bool found = false;
+        for (std::vector<CategoryInfo>::iterator cat = categorieComandi.begin(); cat != categorieComandi.end(); ++cat) {
+            if (cat->name == p->second.category) {
+                cat->commands.push_back(p->first);
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            CategoryInfo newCat;
+            newCat.name = p->second.category;
+            newCat.sortposition = p->second.sortposition;
+            newCat.commands.push_back(p->first);
+            categorieComandi.push_back(newCat);
+        }
+        categorySortPosition[p->second.category] = p->second.sortposition;
+    }
+
+    // 2. Ordina i comandi all'interno di ogni categoria alfabeticamente
+    for (std::vector<CategoryInfo>::iterator cat = categorieComandi.begin(); cat != categorieComandi.end(); ++cat) {
+        std::sort(cat->commands.begin(), cat->commands.end());
+    }
+
+    // 3. Ordina le categorie per sortposition
+    std::sort(categorieComandi.begin(), categorieComandi.end(), CategorySorter());
+
+    // 4. Calcola la lunghezza massima dei nomi di categoria per l'allineamento
+    size_t maxLength = 0;
+    for (std::vector<CategoryInfo>::const_iterator cat = categorieComandi.begin(); cat != categorieComandi.end(); ++cat) {
+        if (cat->name.length() > maxLength) {
+            maxLength = cat->name.length();
+        }
+    }
+
+    // 5. Stampa le categorie e i comandi
+    std::string rigaCorrente;
+    bool primaCategoria = true;
+
+    for (std::vector<CategoryInfo>::const_iterator cat = categorieComandi.begin(); cat != categorieComandi.end(); ++cat) {
+        // Ogni categoria deve iniziare su una nuova riga
+        if (!primaCategoria) {
+            moreprint("");
+            rigaCorrente.clear();
+        }
+
+        // Stampa intestazione categoria in giallo
+        color_yellow();
+        std::string intestazione = cat->name;
+		moreprint(intestazione.c_str(), true);
+		color_restore();
+        moreprint(":", true);
+
+        // Calcola l'indentazione in base alla lunghezza massima
+        std::string indentazione(maxLength - cat->name.length() + 1, ' ');
+        moreprint(indentazione.c_str(), true);
+
+        color_green();
+        rigaCorrente += intestazione + indentazione;
+
+        // Stampa comandi uno per uno, gestendo il wrap
+        bool primoComando = true;
+        for (std::vector<std::string>::const_iterator cmd = cat->commands.begin(); cmd != cat->commands.end(); ++cmd) {
+            std::string separatore = primoComando ? "" : ", ";
+
+            // Se il separatore + comando non entrano, va a capo e riallinea
+            if (rigaCorrente.length() + separatore.length() + cmd->length() > maxchar) {
+                moreprint("");
+                // Aggiunge la stessa indentazione usata per il primo comando della categoria
+                std::string nuovaRigaIndentazione(maxLength + 2, ' ');
+                moreprint(nuovaRigaIndentazione.c_str(), true);
+                rigaCorrente.clear();
+                rigaCorrente += nuovaRigaIndentazione;
+                separatore = ""; // Non serve il separatore all'inizio della nuova riga
+            }
+
+            moreprint((separatore + *cmd).c_str(), true);
+            rigaCorrente += (separatore + *cmd);
+
+            primoComando = false;
+        }
+
+        primaCategoria = false;
+    }
+
+    // Stampa l'ultima riga se non è vuota
+    if (!rigaCorrente.empty()) {
+        moreprint("");
+    }
+}
+
 void Jidac::load_help_map()
 {
 	/// a map is not so good, but we want to keep the executable small
 	/// NOT in the constructor
-	help_map.insert(std::pair<string, voidhelpfunction>("a",help_a));
-	help_map.insert(std::pair<string, voidhelpfunction>("b",help_b));
-	help_map.insert(std::pair<string, voidhelpfunction>("c",help_c));
-	help_map.insert(std::pair<string, voidhelpfunction>("d",help_d));
-	help_map.insert(std::pair<string, voidhelpfunction>("e",help_e));
-	help_map.insert(std::pair<string, voidhelpfunction>("f",help_f));
-	help_map.insert(std::pair<string, voidhelpfunction>("i",help_i));
-	help_map.insert(std::pair<string, voidhelpfunction>("k",help_k));
-	help_map.insert(std::pair<string, voidhelpfunction>("l",help_l));
-	help_map.insert(std::pair<string, voidhelpfunction>("m",help_m));
-	help_map.insert(std::pair<string, voidhelpfunction>("n",help_n));
-	help_map.insert(std::pair<string, voidhelpfunction>("p",help_p));
-	help_map.insert(std::pair<string, voidhelpfunction>("r",help_r));
-	help_map.insert(std::pair<string, voidhelpfunction>("1on1",help_oneonone));
-	help_map.insert(std::pair<string, voidhelpfunction>("s",help_s));
-	help_map.insert(std::pair<string, voidhelpfunction>("t",help_t));
-	help_map.insert(std::pair<string, voidhelpfunction>("t",help_t));
-	help_map.insert(std::pair<string, voidhelpfunction>("sync",help_sync));
-	help_map.insert(std::pair<string, voidhelpfunction>("w",help_w));
-	help_map.insert(std::pair<string, voidhelpfunction>("x",help_x));
-	help_map.insert(std::pair<string, voidhelpfunction>("z",help_z));
-	help_map.insert(std::pair<string, voidhelpfunction>("find",				help_find));
-	help_map.insert(std::pair<string, voidhelpfunction>("trim",				help_trim));
-	help_map.insert(std::pair<string, voidhelpfunction>("crop",				help_crop));
-	help_map.insert(std::pair<string, voidhelpfunction>("password",			help_setpassword));
-	help_map.insert(std::pair<string, voidhelpfunction>("dirsize",			help_dirsize));
-	help_map.insert(std::pair<string, voidhelpfunction>("cp",				help_cp));
-	help_map.insert(std::pair<string, voidhelpfunction>("dir",				help_dir));
-	help_map.insert(std::pair<string, voidhelpfunction>("sum",				help_summa));
-	help_map.insert(std::pair<string, voidhelpfunction>("hash",				help_hasha));
-	help_map.insert(std::pair<string, voidhelpfunction>("utf",				help_utf));
-	help_map.insert(std::pair<string, voidhelpfunction>("rsync",			help_rsync));
-	help_map.insert(std::pair<string, voidhelpfunction>("checkpassword",	help_checkpassword));
-	help_map.insert(std::pair<string, voidhelpfunction>("pause",			help_pause));
-	help_map.insert(std::pair<string, voidhelpfunction>("isopen",			help_isopen));
-	help_map.insert(std::pair<string, voidhelpfunction>("autotest",			help_autotest));
-	help_map.insert(std::pair<string, voidhelpfunction>("versum",			help_versum));
-	help_map.insert(std::pair<string, voidhelpfunction>("testbackup",		help_testbackup));
-	help_map.insert(std::pair<string, voidhelpfunction>("count",			help_count));
-	help_map.insert(std::pair<string, voidhelpfunction>("comparehex",		help_comparehex));
-	help_map.insert(std::pair<string, voidhelpfunction>("work",				help_work));
-	help_map.insert(std::pair<string, voidhelpfunction>("consolidate",		help_consolidatebackup));
-	help_map.insert(std::pair<string, voidhelpfunction>("backup",			help_backup));
-	help_map.insert(std::pair<string, voidhelpfunction>("last2",			help_last2));
-	help_map.insert(std::pair<string, voidhelpfunction>("last",				help_last));
-	help_map.insert(std::pair<string, voidhelpfunction>("fzf",				help_fzf));
-	help_map.insert(std::pair<string, voidhelpfunction>("collision",		help_collision));
-	help_map.insert(std::pair<string, voidhelpfunction>("dump",				help_dump));
-	help_map.insert(std::pair<string, voidhelpfunction>("redu",				help_redu));
-	help_map.insert(std::pair<string, voidhelpfunction>("mysqldump",		help_mysqldump));
 	
-#ifndef ANCIENT
-	help_map.insert(std::pair<string, voidhelpfunction>("ls",				help_ls));
-	help_map.insert(std::pair<string, voidhelpfunction>("tui",				help_tui));
-#endif
-#ifdef SFTP
-	help_map.insert(std::pair<string, voidhelpfunction>("sftp",				help_sftp));
-	help_map.insert(std::pair<string, voidhelpfunction>("cloud",			help_cloud));
-#endif // corresponds to #ifdef (#ifdef SFTP)
+	// Core
+	help_map.insert(std::pair<string, HelpInfo>("a", 				HelpInfo("Core     ", help_a,				0)));
+	help_map.insert(std::pair<string, HelpInfo>("x",				HelpInfo("Core     ", help_x,				0)));
+	help_map.insert(std::pair<string, HelpInfo>("l",				HelpInfo("Core     ", help_l,				0)));
+	help_map.insert(std::pair<string, HelpInfo>("e",				HelpInfo("Core     ", help_e,				0)));
+	
+	help_map.insert(std::pair<string, HelpInfo>("backup", 			HelpInfo("Backup   ", help_backup,			1)));
+#ifdef ZPAQFULL ///NOSFTPSTART
+	help_map.insert(std::pair<string, HelpInfo>("mysqldump", 		HelpInfo("Backup   ", help_mysqldump,		1)));
+#endif ///NOSFTPEND
 #if defined(_WIN32)
-	help_map.insert(std::pair<string, voidhelpfunction>("pakka",			help_pakka));
-	help_map.insert(std::pair<string, voidhelpfunction>("ads",help_ads));
-	help_map.insert(std::pair<string, voidhelpfunction>("g",help_g));
-	help_map.insert(std::pair<string, voidhelpfunction>("q",help_q));
-	help_map.insert(std::pair<string, voidhelpfunction>("sfx",				help_sfx));
-	help_map.insert(std::pair<string, voidhelpfunction>("rd",				help_rd));
-	help_map.insert(std::pair<string, voidhelpfunction>("ntfs",help_ntfs));
-	help_map.insert(std::pair<string, voidhelpfunction>("drive",help_drive));
-	
+	help_map.insert(std::pair<string, HelpInfo>("g", 				HelpInfo("Backup   ", help_g,				1)));
+	help_map.insert(std::pair<string, HelpInfo>("q", 				HelpInfo("Backup   ", help_q,				1)));
 #endif // corresponds to #if (#if defined(_WIN32))
-	help_map.insert(std::pair<string, voidhelpfunction>("update",			help_update));
-	help_map.insert(std::pair<string, voidhelpfunction>("upgrade",			help_update));
-#ifdef _WIN64
-	help_map.insert(std::pair<string, voidhelpfunction>("download",			help_download));
-#endif // corresponds to #ifdef (#ifdef _WIN64)
 
+	// Restore
+	help_map.insert(std::pair<string, HelpInfo>("w", 				HelpInfo("Restore  ", help_w,				2)));
+#if defined(_WIN32)
+	help_map.insert(std::pair<string, HelpInfo>("ntfs", 			HelpInfo("Restore  ", help_ntfs,			2)));
+#endif 
+
+	// Info
+	help_map.insert(std::pair<string, HelpInfo>("dirsize", 			HelpInfo("Info/list", help_dirsize,			3)));
+	help_map.insert(std::pair<string, HelpInfo>("i",				HelpInfo("Info/list", help_i,				3)));
+#if defined(_WIN32)
+	help_map.insert(std::pair<string, HelpInfo>("drive", 			HelpInfo("Info/list", help_drive,			3)));
+#endif
+
+	// List  
+	help_map.insert(std::pair<string, HelpInfo>("fzf", 				HelpInfo("Info/list", help_fzf,				3)));
+#ifndef ANCIENT
+	help_map.insert(std::pair<string, HelpInfo>("ls", 				HelpInfo("Info/list", help_ls,				3)));
+	help_map.insert(std::pair<string, HelpInfo>("tui", 				HelpInfo("Info/list", help_tui,				3)));
+#endif
+#if defined(_WIN32)
+	help_map.insert(std::pair<string, HelpInfo>("pakka", 			HelpInfo("Info/list", help_pakka,			3)));
+#endif
+
+#if defined(_WIN32)
+	help_map.insert(std::pair<string, HelpInfo>("drive", 			HelpInfo("Info/list", help_drive,			3)));
+
+#endif // corresponds to #if (#if defined(_WIN32))
+
+	// Test
+	help_map.insert(std::pair<string, HelpInfo>("p", 				HelpInfo("Test     ", help_p,				4)));
+	help_map.insert(std::pair<string, HelpInfo>("sync", 			HelpInfo("Test     ", help_sync,			4)));
+	help_map.insert(std::pair<string, HelpInfo>("t", 				HelpInfo("Test     ", help_t,				4)));
+	help_map.insert(std::pair<string, HelpInfo>("testbackup", 		HelpInfo("Test     ", help_testbackup,		4)));
+
+
+#ifdef ZPAQFULL ///NOSFTPSTART
+#ifdef SFTP
+	help_map.insert(std::pair<string, HelpInfo>("sftp", 			HelpInfo("Cloud    ", help_sftp,			5)));
+	help_map.insert(std::pair<string, HelpInfo>("cloud", 			HelpInfo("Cloud    ", help_cloud,			5)));
+#endif // corresponds to #ifdef (#ifdef SFTP)
+#ifdef _WIN64
+	help_map.insert(std::pair<string, HelpInfo>("download", 		HelpInfo("Cloud    ", help_download,		5)));
+#endif // corresponds to #ifdef (#ifdef _WIN64)
+#endif ///NOSFTPEND
+
+	// File
+	help_map.insert(std::pair<string, HelpInfo>("1on1", 			HelpInfo("File     ", help_oneonone,		6)));
+	help_map.insert(std::pair<string, HelpInfo>("c",				HelpInfo("File     ", help_c,				6)));
+	help_map.insert(std::pair<string, HelpInfo>("cp", 				HelpInfo("File     ", help_cp,				6)));
+	help_map.insert(std::pair<string, HelpInfo>("d",				HelpInfo("File     ", help_d,				6)));
+	help_map.insert(std::pair<string, HelpInfo>("dir", 				HelpInfo("File     ", help_dir,				6)));
+	help_map.insert(std::pair<string, HelpInfo>("find", 			HelpInfo("File     ", help_find,			6)));
+	help_map.insert(std::pair<string, HelpInfo>("hash", 			HelpInfo("File     ", help_hasha,			6)));
+	help_map.insert(std::pair<string, HelpInfo>("r", 				HelpInfo("File     ", help_r,				6)));
+	help_map.insert(std::pair<string, HelpInfo>("s", 				HelpInfo("File     ", help_s,				6)));
+	help_map.insert(std::pair<string, HelpInfo>("sum", 				HelpInfo("File     ", help_summa,			6)));
+#ifdef ZPAQFULL ///NOSFTPSTART
+	help_map.insert(std::pair<string, HelpInfo>("n", 				HelpInfo("File     ", help_n,				6)));
+#if defined(_WIN32)
+	help_map.insert(std::pair<string, HelpInfo>("rd", 				HelpInfo("File     ", help_rd,				6)));
+#endif
+#endif ///NOSFTPEND
+
+// Admin
+	help_map.insert(std::pair<string, HelpInfo>("autotest", 		HelpInfo("Admin    ", help_autotest,		7)));
+	help_map.insert(std::pair<string, HelpInfo>("b",				HelpInfo("Admin    ", help_b,				7)));
+	help_map.insert(std::pair<string, HelpInfo>("collision", 		HelpInfo("Admin    ", help_collision,		7)));
+	help_map.insert(std::pair<string, HelpInfo>("consolidate", 		HelpInfo("Admin    ", help_consolidatebackup,7)));
+	help_map.insert(std::pair<string, HelpInfo>("crop", 			HelpInfo("Admin    ", help_crop,			7)));
+	help_map.insert(std::pair<string, HelpInfo>("dump", 			HelpInfo("Admin    ", help_dump,			7)));
+	help_map.insert(std::pair<string, HelpInfo>("k",				HelpInfo("Admin    ", help_k,				7)));
+	help_map.insert(std::pair<string, HelpInfo>("m",				HelpInfo("Admin    ", help_m,				7)));
+	help_map.insert(std::pair<string, HelpInfo>("password", 		HelpInfo("Admin    ", help_setpassword,		7)));
+	help_map.insert(std::pair<string, HelpInfo>("redu", 			HelpInfo("Admin    ", help_redu,			7)));
+	help_map.insert(std::pair<string, HelpInfo>("trim", 			HelpInfo("Admin    ", help_trim,			7)));
+#ifdef ZPAQFULL ///NOSFTPSTART
+#if defined(_WIN32)
+	help_map.insert(std::pair<string, HelpInfo>("ads", 				HelpInfo("Admin    ", help_ads,				7)));
+#endif // corresponds to #if (#if defined(_WIN32))
+	help_map.insert(std::pair<string, HelpInfo>("update", 			HelpInfo("Admin    ", help_update,			7)));
+	help_map.insert(std::pair<string, HelpInfo>("upgrade", 			HelpInfo("Admin    ", help_update,			7)));
+#endif ///NOSFTPEND
+
+
+	// Utils
+	help_map.insert(std::pair<string, HelpInfo>("checkpassword", 	HelpInfo("Utils    ", help_checkpassword,	8)));
+	help_map.insert(std::pair<string, HelpInfo>("comparehex", 		HelpInfo("Utils    ", help_comparehex,		8)));
+	help_map.insert(std::pair<string, HelpInfo>("count", 			HelpInfo("Utils    ", help_count,			8)));
+	help_map.insert(std::pair<string, HelpInfo>("f",				HelpInfo("Utils    ", help_f,				8)));
+	help_map.insert(std::pair<string, HelpInfo>("last", 			HelpInfo("Utils    ", help_last,			8)));
+	help_map.insert(std::pair<string, HelpInfo>("last2", 			HelpInfo("Utils    ", help_last2,			8)));
+	help_map.insert(std::pair<string, HelpInfo>("pause", 			HelpInfo("Utils    ", help_pause,			8)));
+	help_map.insert(std::pair<string, HelpInfo>("rsync", 			HelpInfo("Utils    ", help_rsync,			8)));
+	help_map.insert(std::pair<string, HelpInfo>("utf", 				HelpInfo("Utils    ", help_utf,				8)));
+	help_map.insert(std::pair<string, HelpInfo>("versum", 			HelpInfo("Utils    ", help_versum,			8)));
+	help_map.insert(std::pair<string, HelpInfo>("work", 			HelpInfo("Utils    ", help_work,			8)));
+	help_map.insert(std::pair<string, HelpInfo>("z", 				HelpInfo("Utils    ", help_z,				8)));
+#ifdef ZPAQFULL ///NOSFTPSTART
+	help_map.insert(std::pair<string, HelpInfo>("isopen", 			HelpInfo("Utils    ", help_isopen,			8)));
+#if defined(_WIN32)
+	help_map.insert(std::pair<string, HelpInfo>("sfx", 				HelpInfo("Utils    ", help_sfx,				8)));
+#endif
+#endif ///NOSFTPEND
+	
+
+#ifdef ZPAQFULL ///NOSFTPSTART
 #if defined(unix)
-	help_map.insert(std::pair<string, voidhelpfunction>("zfs",				help_zfs));
-	help_map.insert(std::pair<string, voidhelpfunction>("zfsproxbackup",	help_zfsproxbackup));
-	help_map.insert(std::pair<string, voidhelpfunction>("zfsproxrestore",	help_zfsproxrestore));
-	help_map.insert(std::pair<string, voidhelpfunction>("zfsbackup",		help_zfsbackup));
-	help_map.insert(std::pair<string, voidhelpfunction>("zfsrestore",		help_zfsrestore));
-	help_map.insert(std::pair<string, voidhelpfunction>("zfsreceive",		help_zfsreceive));
-	help_map.insert(std::pair<string, voidhelpfunction>("zfsadd",			help_zfsadd));
-	help_map.insert(std::pair<string, voidhelpfunction>("zfslist",			help_zfslist));
-	help_map.insert(std::pair<string, voidhelpfunction>("zfspurge",			help_zfspurge));
-	help_map.insert(std::pair<string, voidhelpfunction>("zfssize",			help_zfssize));
+	help_map.insert(std::pair<string, HelpInfo>("zfs", 				HelpInfo("Admin    ", help_zfs,				7)));
+	help_map.insert(std::pair<string, HelpInfo>("zfsproxbackup", 	HelpInfo("Backup   ", help_zfsproxbackup,	1)));
+	help_map.insert(std::pair<string, HelpInfo>("zfsproxrestore", 	HelpInfo("Restore  ", help_zfsproxrestore,	2)));
+	help_map.insert(std::pair<string, HelpInfo>("zfsbackup", 		HelpInfo("Backup   ", help_zfsbackup,		1)));
+	help_map.insert(std::pair<string, HelpInfo>("zfsrestore", 		HelpInfo("Restore  ", help_zfsrestore,		2)));
+	help_map.insert(std::pair<string, HelpInfo>("zfsreceive", 		HelpInfo("Backup   ", help_zfsreceive,		1)));
+	help_map.insert(std::pair<string, HelpInfo>("zfsadd", 			HelpInfo("Backup   ", help_zfsadd,			1)));
+	help_map.insert(std::pair<string, HelpInfo>("zfslist", 			HelpInfo("Info/list", help_zfslist,			3)));
+	help_map.insert(std::pair<string, HelpInfo>("zfspurge", 		HelpInfo("Admin    ", help_zfspurge,		7)));
+	help_map.insert(std::pair<string, HelpInfo>("zfssize", 			HelpInfo("Info/list", help_zfssize,			3)));
 #endif // corresponds to #if (#if defined(unix))
-	switches_map.insert(std::pair<string, voidhelpfunction>("main",			help_mainswitches));
-	switches_map.insert(std::pair<string, voidhelpfunction>("normal",		help_switches));
-	switches_map.insert(std::pair<string, voidhelpfunction>("franz",		help_franzswitches));
-	switches_map.insert(std::pair<string, voidhelpfunction>("common",		help_commonswitches));
-	///switches_map.insert(std::pair<string, voidhelpfunction>("paq",			help_paq));
-	switches_map.insert(std::pair<string, voidhelpfunction>("voodoo",		help_voodooswitches));
-}
+#endif ///NOSFTPEND
+
+
+
+	switches_map.insert(std::pair<string, HelpInfo>("main", 		HelpInfo("dummy", help_mainswitches,		0)));
+	switches_map.insert(std::pair<string, HelpInfo>("normal", 		HelpInfo("dummy", help_switches,			1)));
+	switches_map.insert(std::pair<string, HelpInfo>("common", 		HelpInfo("dummy", help_commonswitches,		2)));
+	switches_map.insert(std::pair<string, HelpInfo>("franz", 		HelpInfo("dummy", help_franzswitches,		3)));
+	switches_map.insert(std::pair<string, HelpInfo>("voodoo", 		HelpInfo("dummy", help_voodooswitches,		4)));}
 
 
 void Jidac::usage(bool i_flagdie=true)
 {
-	moreprint("Usage: zpaqfranz command archive.zpaq files|directories -switches");
-	moreprint("       double quote for multipart archive name => \"test_???.zpaq\"");
-#if defined(unix)
-	moreprint("UNIX   zfs commands available      (zpaqfranz h zfs   for details)");
-#endif // corresponds to #if (#if defined(unix))
-	moreprint(" ");
-	moreprint("  a: Append files     | x: Extract            |   t: Test");
-	moreprint("  l: List             | v: Verify on FS       |   i: Info");
-	moreprint("  w: Chunked extract  | p: Paranoid verify    | sum: File hashing");
-#if defined(_WIN32)
-	moreprint("sfx: Create Win SFX   | g: Win C: image       | tui: Text-GUI");
-#endif // corresponds to #if (#if defined(_WIN32))
-	moreprint(" ");
-	moreprint("   -to out...: Prefix  files to out   -until N: Rollback to ver.N");
-	moreprint("     -all [N]: All versions N digit     -key X: Archive  password");
-	moreprint("        -test: Run additional tests     -force: Always  overwrite");
-	moreprint("          -mN: 0..5= faster..better      -kill: Destructive    ON");
-#ifdef HWSHA1
-	moreprint("          -hw: hardware-accelerated SHA1 code    (not in all CPUs)");
-#endif // corresponds to #ifdef (#ifdef HWSHA1)
-	moreprint(" ");
+#ifdef ZPAQFULL ///NOSFTPSTART
+	moreprint("A powerful archiver with deduplication (C) by ",true);
+#else
+	moreprint("A good archiver with deduplication (C) by ",true);
+#endif ///NOSFTPEND
+	color_cyan();
+	moreprint("Franco Corbelli");
+	color_cyan();
+	moreprint("Help     ",true);
+	color_restore();
+	moreprint(": zpaqfranz h ",true);
+	color_green();
+	moreprint("<command>",true);
+	color_restore();
+	moreprint(" (single) zpaqfranz ",true);
+	color_green();
+	moreprint("h h",true);
+	color_restore();	
+	moreprint(" (full)");
+	
+	
+	color_green();
+	load_help_map();
 
+	unsigned int leftspace=66;
+	if (!isAnyOutputRedirected())
+		leftspace=(terminalwidth()-4);
+		
+	printhelp(help_map,leftspace);
+	
+	color_restore();
+
+	color_cyan();
+	moreprint("Switches ",true);
+	color_restore();
+	moreprint(": zpaqfranz h ",true);
+	color_green();
+	moreprint("main",true);
+	color_yellow();
+	moreprint("  ",true);
+	color_restore();
+	moreprint("zpaqfranz h ",true);
+	color_green();
+	moreprint("common",true);
+	color_restore();
+	moreprint("  zpaqfranz h ",true);
+	color_green();
+	moreprint("franz");
+	color_restore();
+	
+/*
 #ifdef HWSHA2
+	
 	if (ihavehw())
 	{
-		color_yellow();
-		moreprint("More help: zpaqfranz h  Extended help: zpaqfranz h h ",true);
-		color_green();
-		moreprint("HW SHA1/2 ON");
+		printf ("\033[1;32;44mHW ACCELERATION ON\033[0m\n");
 	}
 	else
 	{
-		color_yellow();
-		moreprint("    More help: zpaqfranz h       Extended help: zpaqfranz h h");
+		color_red();
+		moreprint(" (HW OFF)");
 	}
-#else
-	color_yellow();
-	moreprint("    More help: zpaqfranz h       Extended help: zpaqfranz h h");
 #endif // corresponds to #ifdef (#ifdef HWSHA2)
-	color_restore();
-	color_red();
+*/
+#ifdef HWSHA1
+	moreprint("   -hw: activate SHA1 code");
+#endif // corresponds to #ifdef (#ifdef HWSHA1)
+
+	
+#ifdef ZPAQFULL ///NOSFTPSTART
 #if defined(_WIN32)
-	moreprint("Get latest Win version (Internet) :    zpaqfranz update -force");
+	color_cyan();
+	moreprint("Update   ",true);
+	color_restore();
+	moreprint(": zpaqfranz ",true);
+	color_green();
+	moreprint("update -force");
+	color_restore();
 #else
 	moreprint("Look for newer version  (Internet):    zpaqfranz update");
 #endif // corresponds to #if (#if defined(_WIN32))
-	color_restore();
+#endif ///NOSFTPEND
+
 		
 	if (i_flagdie)
 		seppuku();
@@ -47129,32 +47385,39 @@ void Jidac::helphelp()
 	}
 	load_help_map();
 	color_green();
-	moreprint("                                      FFFF");
-	moreprint(" ZZZZZZ PPPPP.    AAAAA.    QQQQQQ FFFFF RRRRR AAAAA.   NNNNNN.  ZZZZZZ"); 
-	moreprint("   ZZZZ PPP  PPP      AAA QQQ  QQQ FFF  RRRR       AAA NNN  NNN    ZZZZ");  
-	moreprint("  ZZZZ  PPP  PPP .AAAAAAA QQQ  QQQ FFF  RRR   .AAAAAAA NNN  NNN   ZZZZ");   
-	moreprint(" ZZZZ   PPP PPPP AAA  AAA QQQQ QQQ FFF  RRR   AAA  AAA NNN  NNN  ZZZZ");    
-	moreprint("ZZZZZZZ PPPPP.    AAAAAA     QQQQQ FFF  RRR    AAAAAA  NNN  NNN ZZZZZZZ"); 
-	moreprint("        PPP                    QQQ");                                          
+
+	unsigned int leftspace=0;
+	if (!isAnyOutputRedirected())
+		leftspace=(terminalwidth()-72)/2;
+
+	moreprint("                                      FFFF",false,leftspace);
+	moreprint(" ZZZZZZ PPPPP.    AAAAA.    QQQQQQ FFFFF RRRRR AAAAA.   NNNNNN.  ZZZZZZ",false,leftspace); 
+	moreprint("   ZZZZ PPP  PPP      AAA QQQ  QQQ FFF  RRRR       AAA NNN  NNN    ZZZZ",false,leftspace);  
+	moreprint("  ZZZZ  PPP  PPP .AAAAAAA QQQ  QQQ FFF  RRR   .AAAAAAA NNN  NNN   ZZZZ",false,leftspace);   
+	moreprint(" ZZZZ   PPP PPPP AAA  AAA QQQQ QQQ FFF  RRR   AAA  AAA NNN  NNN  ZZZZ",false,leftspace);    
+	moreprint("ZZZZZZZ PPPPP.    AAAAAA     QQQQQ FFF  RRR    AAAAAA  NNN  NNN ZZZZZZZ",false,leftspace); 
+	moreprint("        PPP                    QQQ",false,leftspace);                                          
 	color_red();
-	moreprint("(C) 2021-2025 by Franco Corbelli: provided as-is,no warranty whatsoever");
+	moreprint("(C) 2021-2025 by Franco Corbelli: provided as-is,no warranty whatsoever",false,leftspace);
 	color_yellow();
-	moreprint("           WWW: https://sourceforge.net/projects/zpaqfranz");
+	moreprint("           WWW: https://sourceforge.net/projects/zpaqfranz",false,leftspace);
 	color_restore();
-	moreprint("          Swiss army knife for backup and disaster recovery");
-	moreprint("  Like 7z or RAR on steroids,with deduplicated \"snapshots\" (versions)");
-	moreprint("  Conceptually similar to Mac time machine, but much more efficiently");
-	moreprint("  Keeps backup always-to-always,no need to prune (bye bye Ransomware)");
-	moreprint("  Easily handles millions of files and TBs of data, non-latin support");
-	moreprint("  Multithreaded HW accelerations, full encryption, multipart archives");
-	moreprint("  Minimal data transfer => low bandwidth Virtual Machine Cloud backup");
-	moreprint("  Data integrity check CRC32+XXHASH|SHA-1|SHA-2|SHA-3|MD5|XXH3|BLAKE3");
+	moreprint("          Swiss army knife for backup and disaster recovery",false,leftspace);
+	moreprint("  Like 7z or RAR on steroids,with deduplicated \"snapshots\" (versions)",false,leftspace);
+	moreprint("  Conceptually similar to Mac time machine, but much more efficiently",false,leftspace);
+	moreprint("  Keeps backup always-to-always,no need to prune (bye bye Ransomware)",false,leftspace);
+	moreprint("  Easily handles millions of files and TBs of data, non-latin support",false,leftspace);
+	moreprint("  Multithreaded HW accelerations, full encryption, multipart archives",false,leftspace);
+	moreprint("  Minimal data transfer => low bandwidth Virtual Machine Cloud backup",false,leftspace);
+	moreprint("  Data integrity check CRC32+XXHASH|SHA-1|SHA-2|SHA-3|MD5|XXH3|BLAKE3",false,leftspace);
+#ifdef ZPAQFULL ///NOSFTPSTART
 #ifdef unix
-	moreprint("  Specific zfs handling functions,full multiplatform interoperability");
+	moreprint("  Specific zfs handling functions,full multiplatform interoperability",false,leftspace);
 #endif // corresponds to #ifdef (#ifdef unix)
-	moreprint("  Windows, FreeBSD, OpenBSD, Linux, MacOS, Solaris, OmniOS and others");
+#endif ///NOSFTPEND
+	moreprint("  Windows, FreeBSD, OpenBSD, Linux, MacOS, Solaris, OmniOS and others",false,leftspace);
 	color_red();
-	moreprint("  Extended help:   zpaqfranz h h           ALL IN:   zpaqfranz h full");
+	moreprint("  Extended help:   zpaqfranz h h           ALL IN:   zpaqfranz h full",false,leftspace);
 	color_restore();
 }
 //// print a lot more
@@ -47171,7 +47434,7 @@ void Jidac::usageall(string i_command)
 		for (MAPPAHELP::iterator p=help_map.begin(); p!=help_map.end(); ++p)
 		{
 			char linea[200];
-			string temp=(*p->second)(false,false);
+			string temp=(*p->second.function)(false,false);
 			snprintf(linea,sizeof(linea),"%-15s",p->first.c_str());
 			color_green();
 			moreprint(linea,true);
@@ -47182,7 +47445,7 @@ void Jidac::usageall(string i_command)
 		for (MAPPAHELP::iterator p=switches_map.begin(); p!=switches_map.end(); ++p)
 		{
 			char linea[200];
-			string temp=(*p->second)(false,false);
+			string temp=(*p->second.function)(false,false);
 			snprintf(linea,sizeof(linea),"%-15s",p->first.c_str());
 			color_green();
 			moreprint(linea,true);
@@ -47203,7 +47466,7 @@ void Jidac::usageall(string i_command)
 			MAPPAHELP::iterator b=switches_map.find(i_command);
 			if (b!=switches_map.end())
 			{
-				(*b->second)(true,true);
+				(*b->second.function)(true,true);
 				seppuku();
 			}
 		}
@@ -47214,7 +47477,7 @@ void Jidac::usageall(string i_command)
 		{
 			
 			///(*p->second)(true,true);
-			(*p->second)(true,true);
+			(*p->second.function)(true,true);
 			morebar('-');
 		}
 		morebar('-');
@@ -47229,7 +47492,7 @@ void Jidac::usageall(string i_command)
 	}
 	else
 	{	// please note: first parameter help, second example
-		(*a->second)(true,true);
+		(*a->second.function)(true,true);
 		morebar('-');
 	}
 	print_doublequote();
@@ -47244,13 +47507,13 @@ void Jidac::examples(string i_command)
 	{
 		for (MAPPAHELP::iterator p=help_map.begin(); p!=help_map.end(); ++p)
 		{
-			(*p->second)(false,true);
+			(*p->second.function)(false,true);
 			morebar('-');
 		}
 	}
 	else
 	{	// please note: first parameter help, second example
-		(*a->second)(false,true);
+		(*a->second.function)(false,true);
 		morebar('-');
 	}
 }
@@ -47698,6 +47961,7 @@ bool Jidac::cli_filesandcommand(const string& i_opt,string i_string,char i_comma
 
 bool Jidac::cli_getkey	(const string& i_opt,string i_string,int argc,const char** argv, int* i_i,string* o_plain,char**	o_password,char*	o_password_string)
 {
+		
 	if (flagonlyupload)
 		return false;
 	if ((argv==NULL) || (i_i==NULL) || (o_plain==NULL) || (o_password_string==NULL))
@@ -47718,6 +47982,13 @@ bool Jidac::cli_getkey	(const string& i_opt,string i_string,int argc,const char*
 					sha256.put(*p);
 					(*o_plain)+=*p;
 				}
+				if (g_keyfilehash!="")
+					for (unsigned int i=0;i<g_keyfilehash.size();i++)
+					{
+						sha256.put(g_keyfilehash[i]);
+						(*o_plain)+=g_keyfilehash[i];
+					}
+					
 				memcpy(o_password_string, sha256.result(), 32);
 				(*o_password)=o_password_string;
 			}
@@ -47728,12 +47999,15 @@ bool Jidac::cli_getkey	(const string& i_opt,string i_string,int argc,const char*
 			{
 				if ((command=='a') || (command=='Z'))
 				{
-					string doublepwd=mygetpasswordblind("Password,again :");
-					if (doublepwd!=spassword)
+					if (archive=="")
 					{
-						myprintf("\n");
-						myprintf("51852! You must enter the exact password TWICE\n");
-						seppuku();
+						string doublepwd=mygetpasswordblind("Password,again :");
+						if (doublepwd!=spassword)
+						{
+							myprintf("\n");
+							myprintf("51852! You must enter the exact password TWICE\n");
+							seppuku();
+						}						
 					}
 				}
 				libzpaq::SHA256 sha256;
@@ -47743,6 +48017,8 @@ bool Jidac::cli_getkey	(const string& i_opt,string i_string,int argc,const char*
 				(*o_password)=o_password_string;
 			}
 		}
+///		myprintf("00516: ORENGOOOO franz:%-21s %21s\n",i_string.c_str(),(*o_plain).c_str());
+
 		if (!do_not_print_headers())
 			if (flagdebug)
 			{
@@ -48021,6 +48297,32 @@ bool Jidac::cli_onlystring(const string& i_opt,string i_string,string i_alias,st
 			else
 				(*i_i)--;
 		}
+
+		if (i_string=="-keyfile")
+		{
+			if (o_thefile!="")
+			{
+				g_keyfilehash=keyfile_to_string(o_thefile);
+				if (g_keyfilehash=="")
+				{
+					myprintf("49268: bad -keyfile!\n");
+					seppuku();
+				}
+				g_keyfile=o_thefile;
+			}
+///			myprintf("********************************************** %s\n",g_keyfilehash.c_str());
+			
+		}
+	/*
+		g_keyfilehash=keyfile_to_string(g_keyfile);
+		if (g_keyfilehash=="")
+		{
+			myprintf("49268: bad -keyfile\n");
+			seppuku();
+		}
+	*/		
+
+
 		return true;
 	}
 	return false;
@@ -48089,9 +48391,11 @@ int Jidac::loadparameters(int argc, const char** argv)
 	g_programflags.add(&flagbig,			"-big",					"Write the result of the processing in large text",	"all;");
 	g_programflags.add(&flagchecksum,		"-checksum",			"Do checksums",										"");
 	g_programflags.add(&flagchecktxt,		"-checktxt",			"Create Checktxt.txt",								"");
+#ifdef ZPAQFULL ///NOSFTPSTART
 #ifdef _WIN32
 	g_programflags.add(&flagsfx,			"-sfx",					"Enable SFX module",								"");
 #endif // corresponds to #ifdef (#ifdef _WIN32)
+#endif ///NOSFTPEND
 	g_programflags.add(&flagfasttxt,		"-fasttxt",				"Create test .txt with CRC-32 and QUICK",											"");
 	g_programflags.add(&flagcomment,		"-comment",				"Comment version",									"");
 	g_programflags.add(&flagwriteonconsole,	"-writeonconsole",		"Write the output on stderr",							"");
@@ -48176,10 +48480,10 @@ int Jidac::loadparameters(int argc, const char** argv)
 	g_programflags.add(&flagzero,			"-zero",				"Zeroing something",										"");
 	g_programflags.add(&flagpause,			"-pause",				"Pause after run (for runhigh)",					"");
 	g_programflags.add(&flagquiet,			"-quiet",				"Do not show filesystem errors",												"");
-
+#ifdef ZPAQFULL ///NOSFTPSTART
 	g_programflags.add(&g_sfxflagforce,		"-sfxforce",			"Sfx force",									"");
 	g_programflags.add(&g_sfxflagall,		"-sfxall",				"Sfx all",										"");
-
+#endif ///NOSFTPEND
 	g_programflags.add(&flagbarraod,		"/od",					"Order by date",									"dir;");
 	g_programflags.add(&flagbarraon,		"/on",					"Order by name",									"dir;");
 	g_programflags.add(&flagbarraos,		"/os",					"Order by size",									"dir;");
@@ -48268,6 +48572,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 	g_mysql_password	="";
 	g_mysql_user		="root";
 
+#ifdef ZPAQFULL ///NOSFTPSTART
 #ifdef SFTP
 	g_sftp_key			="";
 	g_sftp_host			="";
@@ -48277,6 +48582,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 	g_sftp_user			="";
 	g_sftp_remote		="";
 #endif // corresponds to #ifdef (#ifdef SFTP)
+#endif ///NOSFTPEND
 	g_device_fd			=-1;
 	g_device_size		=0;
 
@@ -48287,11 +48593,13 @@ int Jidac::loadparameters(int argc, const char** argv)
 	g_franzotypelen		=16;
 	g_255				=0; // errors on longer than 255 chars
 	g_deleteinto		="";
+#ifdef ZPAQFULL ///NOSFTPSTART
 	g_sfx				="";
 	g_sfxto				="";
 	g_sfxnot			="";
 	g_sfxonly			="";
 	g_sfxuntil			="";
+#endif ///NOSFTPEND
 	g_freeze			="";
 	g_archive			="";
 	g_indexname			="";
@@ -48326,6 +48634,8 @@ int Jidac::loadparameters(int argc, const char** argv)
 	all					=0;
 	g_password			=0;
 	index				=0;
+	g_keyfilehash		="";
+	g_keyfile			="";
 	method				="";
 	repack				="";
 	checktxt			="";
@@ -48528,10 +48838,15 @@ int Jidac::loadparameters(int argc, const char** argv)
 			char buffer[300];
 			if (iswindowsxp())
 				textnojit+="-WinXP";
+#ifdef ZPAQFULL ///NOSFTPSTART
 #ifdef SFTP
 				textnojit+="SFTP";
 #endif // corresponds to #ifdef (#ifdef SFTP)
-			snprintf(buffer,sizeof(buffer),"zpaqfranz v" ZPAQ_VERSION "%s" TEXT_BIG TEXT_ALIGN TEXT_HWPRE TEXT_HWBLAKE3 TEXT_HWSHA1 TEXT_HWSHA2 TEXT_IPV ZSFX_VERSION ZPAQ_DATE,textnojit.c_str()); 
+#endif ///NOSFTPEND
+	if (strcmp(ZSFX_VERSION, "") == 0) 
+		snprintf(buffer,sizeof(buffer),"zpaqfranz-open v" ZPAQ_VERSION "%s" TEXT_BIG TEXT_ALIGN TEXT_HWPRE TEXT_HWBLAKE3 TEXT_HWSHA1 TEXT_HWSHA2 TEXT_IPV ZSFX_VERSION ZPAQ_DATE,textnojit.c_str()); 
+	else
+		snprintf(buffer,sizeof(buffer),"zpaqfranz v" ZPAQ_VERSION "%s" TEXT_BIG TEXT_ALIGN TEXT_HWPRE TEXT_HWBLAKE3 TEXT_HWSHA1 TEXT_HWSHA2 TEXT_IPV ZSFX_VERSION ZPAQ_DATE,textnojit.c_str()); 
 			color_green();
 			moreprint(buffer);
 			color_restore();
@@ -48736,9 +49051,11 @@ int Jidac::loadparameters(int argc, const char** argv)
 		else if (cli_filesandcommand(opt,"testbackup",	'_',argc,argv,&i));
 		else if (cli_filesandcommand(opt,"comparehex",	'?',argc,argv,&i));
 		else if (cli_filesandcommand(opt,"work",		']',argc,argv,&i));
+#ifdef ZPAQFULL ///NOSFTPSTART
 #ifdef SFTP
 		else if (cli_filesandcommand(opt,"sftp",		'@',argc,argv,&i));
 #endif // corresponds to #ifdef (#ifdef SFTP)
+#endif ///NOSFTPEND
 		else if (cli_filesandcommand(opt,"big",			'/',argc,argv,&i));
 		else if (cli_filesandcommand(opt,"count",	    '[',argc,argv,&i));
 		else if (cli_filesandcommand(opt,"consolidate",	'Y',argc,argv,&i));
@@ -48768,9 +49085,11 @@ int Jidac::loadparameters(int argc, const char** argv)
 		opt=="ls" 				||
 		opt=="tui" 				||
 #endif
+#ifdef ZPAQFULL ///NOSFTPSTART
 #ifdef SFTP
 		opt=="cloud"				||
 #endif
+#endif ///NOSFTPEND
 		opt=="dump" 			||
 		opt=="collision"		||
 		opt=="fzf" 				||
@@ -48788,7 +49107,9 @@ int Jidac::loadparameters(int argc, const char** argv)
 		opt=="i" 				||
 		opt=="q" 				||
 		opt=="g" 				||
+#ifdef ZPAQFULL ///NOSFTPSTART
 		opt=="sfx" 				||
+#endif ///NOSFTPEND
 		opt=="crop" 			||
 		opt=="m"				||
 		opt=="dirsize"  		||
@@ -48842,10 +49163,12 @@ int Jidac::loadparameters(int argc, const char** argv)
 				command='L';
 				flagpakka=true;
 			}
+#ifdef ZPAQFULL ///NOSFTPSTART
 #ifdef SFTP
 			if (opt=="cloud")
 				command='O';
 #endif
+#endif ///NOSFTPEND
 			if (opt=="pakka")
 				command='.';
 			if (opt=="zfsreceive")
@@ -48862,8 +49185,10 @@ int Jidac::loadparameters(int argc, const char** argv)
 				command='t';
 			if (opt=="sync")
 				command='I';
+#ifdef ZPAQFULL ///NOSFTPSTART
 			if (opt=="sfx")
 				command='y';
+#endif ///NOSFTPEND
 			if (opt=="dirsize")
 			{
 				command='5';
@@ -48980,11 +49305,13 @@ int Jidac::loadparameters(int argc, const char** argv)
 		}
 		else if ((!flagforzarobocopy) && ((opt.size()<2 || opt[0]!='-'))) usage();
 		else if (cli_getint		(opt,"-P",			false,	"-P",							argc,argv,&i,4,					&g_mysql_port));
+#ifdef ZPAQFULL ///NOSFTPSTART
 #ifdef SFTP
 		else if (cli_getint		(opt,"-port",		false,	"",								argc,argv,&i,22,				&g_sftp_port));
 		else if (cli_getint		(opt,"-bandwidth",	false,	"",								argc,argv,&i,0,					&g_sftp_bandwidth));
 		
 #endif // corresponds to #ifdef (#ifdef SFTP)
+#endif ///NOSFTPEND
 		else if (cli_getint		(opt,"-all",		false,	"",								argc,argv,&i,4,					&all));
 		else if (cli_getint		(opt,"-fragment",	false,	"",								argc,argv,&i,fragment,			&fragment));
 		else if (cli_getuint	(opt,"-filelength",	false,	"",								argc,argv,&i,filelength,		&filelength));
@@ -49019,13 +49346,17 @@ int Jidac::loadparameters(int argc, const char** argv)
 		else if (cli_onlystring	(opt,"-copy",				"",				g_copy,			argc,argv,&i,					NULL));
 		else if (cli_onlystring	(opt,"-freeze",				"",				g_freeze,		argc,argv,&i,					NULL));
 		else if (cli_onlystring	(opt,"-output",				"-out",			g_output,		argc,argv,&i,					NULL));
+		else if (cli_onlystring	(opt,"-keyfile",			"",				g_keyfile,		argc,argv,&i,					NULL));
 		else if (cli_onlystring	(opt,"-errorlog",			"-error",		g_error,		argc,argv,&i,					NULL));
 		else if (cli_onlystring	(opt,"-ifexist",			"-ifexists",	g_ifexist,		argc,argv,&i,					NULL));
 		///else if (cli_onlystring	(opt,"-ismounted",			"",	g_ismounted,		argc,argv,&i,					NULL));
 		else if (cli_onlystring	(opt,"-script",				"",				g_script,		argc,argv,&i,					NULL));
+#ifdef ZPAQFULL ///NOSFTPSTART
 		else if (cli_onlystring	(opt,"-sfx",				"",				g_sfx,			argc,argv,&i,					&flagsfx));
-		else if (cli_onlystring	(opt,"-deleteinto",			"",				g_deleteinto,	argc,argv,&i,					NULL));
 		else if (cli_onlystring	(opt,"-sfxto",				"",				g_sfxto,		argc,argv,&i,					NULL));
+#endif ///NOSFTPEND
+		else if (cli_onlystring	(opt,"-deleteinto",			"",				g_deleteinto,	argc,argv,&i,					NULL));
+#ifdef ZPAQFULL ///NOSFTPSTART
 #ifdef SFTP
 		else if (cli_onlystring	(opt,"-ssh",				"",				g_sftp_key,	argc,argv,&i,					NULL));
 		else if (cli_onlystring	(opt,"-host",				"",				g_sftp_host,	argc,argv,&i,					NULL));
@@ -49036,10 +49367,8 @@ int Jidac::loadparameters(int argc, const char** argv)
 		else if (cli_onlystring	(opt,"-mailprivacy",		"",					g_sftp_mailprivacy,	argc,argv,&i,					NULL));
 		else if (cli_onlystring	(opt,"-maila",			"",					g_sftp_maila,	argc,argv,&i,					NULL));
 		else if (cli_onlystring	(opt,"-customer",			"",					g_sftp_customer,	argc,argv,&i,					NULL));
-		
-		
-		
 #endif // corresponds to #ifdef (#ifdef SFTP)
+#endif ///NOSFTPEND
 		else if (cli_onlystring	(opt,"-exec",				"",				g_exec,			argc,argv,&i,					NULL));
 		else if (cli_onlystring	(opt,"-exec",				"",				g_exec,			argc,argv,&i,					NULL));
 		else if (cli_onlystring	(opt,"-comment",			"",				versioncomment,	argc,argv,&i,					&flagcomment));
@@ -49050,11 +49379,13 @@ int Jidac::loadparameters(int argc, const char** argv)
 		else if (cli_getdate	(opt,"-datefrom",											argc,argv,&i,					&g_datefrom));
 		else if (cli_getdate	(opt,"-dateto",												argc,argv,&i,					&g_dateto));
 		else if (cli_getarray	(opt,"-not",												argc,argv,&i,					&notfiles,		&nottype));
+#ifdef ZPAQFULL ///NOSFTPSTART
 		else if (cli_getarray	(opt,"-sfxnot",												argc,argv,&i,					&sfxnotfiles,	&sfxnottype));
-		else if (cli_getarray	(opt,"-only",												argc,argv,&i,					&onlyfiles,		NULL));
 		else if (cli_getarray	(opt,"-sfxonly",											argc,argv,&i,					&sfxonlyfiles,	NULL));
-		else if (cli_getarray	(opt,"-always",												argc,argv,&i,					&alwaysfiles,	NULL));
 		else if (cli_getstring	(opt,"-sfxuntil",	false, 	"",								argc,argv,&i,"",				&g_sfxuntil));
+#endif ///NOSFTPEND
+		else if (cli_getarray	(opt,"-only",												argc,argv,&i,					&onlyfiles,		NULL));
+		else if (cli_getarray	(opt,"-always",												argc,argv,&i,					&alwaysfiles,	NULL));
 		///else if (cli_getarray	(opt,"-level0",												argc,argv,&i,					&level0,		NULL));
 		///else if (cli_getarray	(opt,"-level1",												argc,argv,&i,					&level1,		NULL));
 		///else if (cli_getarray	(opt,"-level2",												argc,argv,&i,					&level2,		NULL));
@@ -49084,7 +49415,8 @@ int Jidac::loadparameters(int argc, const char** argv)
 		}
 		else if (cli_getkey		(opt,"-key",												argc,argv,&i,&plainpassword,	&g_password,		g_password_string))
 		{
-	
+	///
+		///	myprintf("\n\n\n g_keyfile %s\n",g_keyfile.c_str());
 			if (flagdebug3)
 			{
 				myprintf("00558: Password        %s\n",	g_password);
@@ -49197,6 +49529,14 @@ int Jidac::loadparameters(int argc, const char** argv)
 /*
 	Check from "weird" parameters
 */
+	if (g_keyfile!="")
+	{
+		if (g_password==NULL)
+		{
+			myprintf("49267: -keyfile require a -key\n");
+			seppuku();
+		}
+	}
 	if (flagnosynology)
 	{
 		myprintf("00563: Filling -not for -nosynology\n");
@@ -49246,6 +49586,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 	replacetabs(g_csvhf);
 	
 #ifdef _WIN32
+#ifdef ZPAQFULL ///NOSFTPSTART
 		if (flagvss)
 		{
 			if (!isadmin())
@@ -49256,6 +49597,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 				return 2;
 			}
 		}
+#endif ///NOSFTPEND
 	if (flagimage && flagstdin)
 	{
 		myprintf("00566! -image incompatible with -stdin\n");
@@ -49378,6 +49720,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 #endif
 
 /// postop
+#ifdef ZPAQFULL ///NOSFTPSTART
 #ifdef SFTP
 	if (g_sftp_key!="")
 		if (!fileexists(g_sftp_key.c_str()))
@@ -49389,6 +49732,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 			}
 		}	
 #endif
+#endif ///NOSFTPEND
 
 	if (flag715)
 	{
@@ -49561,12 +49905,13 @@ int Jidac::doCommand()
 
 	
 	theonlyone(command,archive);
+#ifdef ZPAQFULL ///NOSFTPSTART
 	if (flagslow)
 	{
 		myprintf("62776$ Due to -slow reducing CPU usage (turn off TurboBoost)\n");
 		maxcpu(99);
 	}
-	
+#endif ///NOSFTPEND
 #ifdef _WIN32
 	if (flagmonitoroff)
 	{
@@ -49617,13 +49962,16 @@ int Jidac::doCommand()
 			return add();
 	}
 	else if (command=='+') return crop();
+#ifdef ZPAQFULL ///NOSFTPSTART
 	else if (command=='!') return isopen();
+#endif ///NOSFTPEND
 	else if (command=='|') return versum();
 	else if (command=='^') return last2();
 	else if (command=='_') return testbackup();
 	else if (command=='?') return comparehex();
 	else if (command=='[') return count();
 	else if (command==']') return work();
+#ifdef ZPAQFULL ///NOSFTPSTART
 #ifdef SFTP
 	else if (command=='@') return sftp();
 #endif // corresponds to #ifdef (#ifdef SFTP)
@@ -49632,6 +49980,7 @@ int Jidac::doCommand()
 	else if (command=='(') return zfsproxrestore();
 	else if (command=='%') return zfsrestore();
 	else if (command==';') return zfsreceive();
+#endif ///NOSFTPEND
 	else if (command==')') return oneonone();
 
 	else if (command=='0') return pause();
@@ -49641,13 +49990,16 @@ int Jidac::doCommand()
 	else if (command=='4') return trim();
 	else if (command=='5') return zpaqdirsize();
 	else if (command=='6') return setpassword();
+#ifdef ZPAQFULL ///NOSFTPSTART
 	else if (command=='7') return rd();
+#endif ///NOSFTPEND
 	else if (command=='8') return autotest();
 	else if (command=='9') return hasha();
-
+#ifdef ZPAQFULL ///NOSFTPSTART
 	else if (command=='A') return zfsadd();
 	else if (command=='B') return zfslist();
 	else if (command=='C') return zfspurge();
+#endif ///NOSFTPEND
 	else if (command=='D') return dump();
 #ifdef _WIN32
 	else if (command=='E') return restoreimage();
@@ -49656,16 +50008,24 @@ int Jidac::doCommand()
 #ifdef _WIN32
 	else if (command=='G') return drive();
 #endif
+#ifdef ZPAQFULL ///NOSFTPSTART
+#ifndef _WIN32
 	else if (command=='H') return zfssize();
+#endif
+#endif ///NOSFTPEND
 	else if (command=='I') return sync();
 //J
 	else if (command=='K') return collision(true);
 	else if (command=='L') return last();
+#ifdef ZPAQFULL ///NOSFTPSTART
 	else if (command=='M') return mysql();
+#endif ///NOSFTPEND
 	else if (command=='N') return checkpassword();
+#ifdef ZPAQFULL ///NOSFTPSTART
 #ifdef SFTP
 	else if (command=='O') return cloud();
 #endif
+#endif ///NOSFTPEND
 //P
 //Q
 	else if (command=='R') return redu();
@@ -49675,11 +50035,15 @@ int Jidac::doCommand()
 #ifndef ANCIENT
 	else if (command=='T') return tui();
 #endif
+#ifdef ZPAQFULL ///NOSFTPSTART
 	else if (command=='U') return update();
+#endif ///NOSFTPEND
 //V
+#ifdef ZPAQFULL ///NOSFTPSTART
 #ifdef _WIN64
 	else if (command=='W') return download();
 #endif // corresponds to #ifdef (#ifdef _WIN64)
+#endif ///NOSFTPEND
 //X
 	else if (command=='Y') return consolidatebackup();
 	else if (command=='Z') return backup();
@@ -49692,15 +50056,19 @@ int Jidac::doCommand()
 	else if (command=='d') return deduplicate();
 	else if (command=='e') return ecommand();
 	else if (command=='f') return fillami();
+#ifdef ZPAQFULL ///NOSFTPSTART
 #ifdef _WIN32
 	else if (command=='g') return adminrun();
 #endif // corresponds to #ifdef (#ifdef _WIN32)
+#endif ///NOSFTPEND
 	else if (command=='i') return info();
 	else if (command=='j') return findj();
 	else if (command=='k') return kill();
 	else if (command=='l') return list();
 	else if (command=='m') return consolidate(archive);
+#ifdef ZPAQFULL ///NOSFTPSTART
 	else if (command=='n') return decimation();
+#endif ///NOSFTPEND
 	else if (command=='o') return mycopy();
 	else if (command=='p') return paranoid();
 #ifdef _WIN32
@@ -49714,7 +50082,9 @@ int Jidac::doCommand()
 	else if (command=='v') return verify(true);
 	else if (command=='w') return extractw();
 	else if (command=='x') return multisomething();
+#ifdef ZPAQFULL ///NOSFTPSTART
 	else if (command=='y') return sfx();
+#endif ///NOSFTPEND
 	else if (command=='z') return zero();
 #ifndef ANCIENT
 	else if (command==':') return ls();
@@ -49760,6 +50130,7 @@ bool Jidac::getfoldersize(string i_folder,uint64_t& o_totalsize,uint32_t & o_tot
 		return true;
 	return false;
 }
+#ifdef ZPAQFULL ///NOSFTPSTART
 int Jidac::rd()
 {
 	myprintf("00592: Remove Directory ");
@@ -49843,6 +50214,8 @@ int Jidac::rd()
 	}
 	return 0;
 }
+#endif ///NOSFTPEND
+
 uint32_t checkfilename(
 const string&	i_filename,
 int* 			o_toolongfilenames,
@@ -50353,7 +50726,7 @@ bool getFileAttributesFromMFT(HANDLE hVolume, DWORDLONG frn, NTFSFileInfo& fi, c
         outputBuffer, sizeof(outputBuffer), &bytesReturned, NULL)) 
 	{
         if (isDebugFile) 
-			myprintf("DeviceIoControl (fase 1) fallito, errore: %d\n", GetLastError());
+			myprintf("DeviceIoControl (fas 1) failed, error: %d\n", GetLastError());
         return false;
     }
 
@@ -50508,7 +50881,7 @@ end_attribute_scan:; // Etichetta per uscire dalla scansione del record di base
                 extAttrPtr += extAttrHdr->RecordLength;
             }
         } else {
-             if (isDebugFile) myprintf("DeviceIoControl (fase 2) fallito, errore: %d\n", GetLastError());
+             if (isDebugFile) myprintf("DeviceIoControl (fas 2) failed, error: %d\n", GetLastError());
         }
     }
 
@@ -52610,7 +52983,7 @@ ThreadReturn decompressThread(void* arg) {
   release(job.mutex);
   ///myprintf("00691: K1 %s\n",job.jd.archive.c_str());
   // Open archive for reading
-  InputArchive in(job.jd.archive.c_str()/*,job.jd.g_password*/);
+  InputArchive in(job.jd.archive.c_str()/*,job.jd.*/);
   if (!in.isopen()) return 0;
   StringBuffer out;
   // Look for next READY job.
@@ -53080,7 +53453,7 @@ ThreadReturn decompressthreadramdisk(void* arg)
 	lock(job.mutex);
 	jobNumber=++job.job;
 	release(job.mutex);
-	InputArchive in(job.jd.archive.c_str()/*,job.jd.g_password*/);
+	InputArchive in(job.jd.archive.c_str()/*,job.jd.*/);
 	if (!in.isopen())
 		return 0;
 	StringBuffer out;
@@ -54576,6 +54949,11 @@ bool isletterpath(const string& i_filename)
 #endif // corresponds to #ifdef (#ifdef _WIN32)
 int Jidac::setpassword()
 {
+	if (g_keyfile!="")
+	{
+		myprintf("54639! setpassword does not work with -keyfile\n");
+		return 2;
+	}
 	if (files.size()!=2)
 	{
 		myprintf("00825! setpassword require exactly two file-parameters: source and destination\n");
@@ -54668,6 +55046,7 @@ int Jidac::setpassword()
 	read_archive(NULL,repack.c_str()); /// AND NOW THE MAGIC ONE!
 	return 0;
 }
+
 int Jidac::checkpassword()
 {
 	archive=getbackupnameifany(archive);
@@ -54676,7 +55055,6 @@ int Jidac::checkpassword()
 		myprintf("54277! archive cannot be empty!\n");
 		return 2;
 	}
-	
 	InputArchive in(archive.c_str());
 	if (!in.isopen()) 
 	{
@@ -56569,6 +56947,9 @@ int bittino(int i)
 	return contabit((i&(-i))-1);
 }
 */
+
+#ifdef ZPAQFULL ///NOSFTPSTART
+
 /*
 AUTOTEST file
 https://github.com/fcorbelli/zpaqfranz/tree/main/AUTOTEST
@@ -56577,13 +56958,11 @@ This is a Windows binary test file
 
 */
 /// splitted for old C++ compilers.
-///DEBIANSTART
 char extract_test1[]={"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"};
 char extract_test2[]={"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"};
 char extract_test3[]={"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"};
 char extract_test4[]={"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"};
-///DEBIANEND
-///char extract_test1[]={"DEBIAN"};char extract_test2[]={""};char extract_test3[]={""};char extract_test4[]={""};
+#endif ///NOSFTPEND
 
 int Jidac::pause()
 {
@@ -56808,7 +57187,7 @@ int Jidac::autotest()
 	string extract1="";
 	if (flagdebug3)
 		myprintf("01153: end of init\n");
-
+#ifdef ZPAQFULL ///NOSFTPSTART
 	if (tofiles.size()==1)
 	{
 		outfolder=includetrailingbackslash(tofiles[0]);
@@ -56983,6 +57362,7 @@ int Jidac::autotest()
 			franz_free(the_file);
 		}
 	}
+#endif ///NOSFTPEND
 	if (all)
 	{
 		for (int i=0;i<10;i++)
@@ -57311,6 +57691,7 @@ int Jidac::autotest()
 			}
 	}
 	myprintf("01215: Time %.2f seconds for bytes %s\n",(endtime-startcalc)*0.001,migliaia(total_hashed));
+#ifdef ZPAQFULL ///NOSFTPSTART
 	if (outfolder!="")
 	{
 		
@@ -57554,6 +57935,7 @@ int Jidac::autotest()
 		myprintf("\n\n");
 		myprintf("01227: The test batchfile is: %s\n",filebatch.c_str());
 	}
+#endif ///NOSFTPEND
 #ifndef ESX
 	if (flagdebug3)
 		myprintf("01228: franz_free buffer8bit %s\n",migliaia(int64_t(buffer8bit)));
@@ -57659,6 +58041,8 @@ int Jidac::findj()
 	return 0;
 }
 ///zpaqfranz isopen "C:\Users\utente\AppData\Roaming\Thunderbird\Profiles\to6z2c6f.default\ImapMail\imap.googlemail.com\INBOX"
+
+#ifdef ZPAQFULL ///NOSFTPSTART
 int Jidac::isopen()
 {
 	if (files.size()!=1)
@@ -57680,7 +58064,7 @@ int Jidac::isopen()
 	myprintf("01241: file is NOT open %Z\n",files[0].c_str());
 	return 0;
 }
-
+#endif ///NOSFTPEND
 
 /*
 	Section: main
@@ -57701,6 +58085,7 @@ void my_handler(int s)
 
 	printf("\x1B[?25h");  // Mostra il cursore
     fflush(stdout);
+#ifdef ZPAQFULL ///NOSFTPSTART
 	if (g_dataset!="")
 	{
 		string 	destroy_diff2	=x_one("zfs destroy "	+g_tempsnapshot,"59870: Destroy diff snapshot (if any)");
@@ -57714,6 +58099,7 @@ void my_handler(int s)
 		if (flagdebug)
 			myprintf("01253: %s\n",take_base.c_str());
 	}
+#endif ///NOSFTPEND
 	// control-C in blind password
     struct termios tty;
     tcgetattr(STDIN_FILENO, &tty);
@@ -57888,7 +58274,7 @@ void my_handler(int s)
 	// 2==control-C (maybe)
 	if (s==2)
 	{
-
+#ifdef ZPAQFULL ///NOSFTPSTART
 #ifdef _WIN32
 		if (command=='q')
 		{
@@ -57896,6 +58282,7 @@ void my_handler(int s)
 			vss_deleteshadows(linuxtowinpath(g_franzsnap));
 		}
 #endif // corresponds to #ifdef (#ifdef _WIN32)
+#endif ///NOSFTPEND
 		if ((!flagsilent) && (!flagnoconsole))
 		{
 			setupConsole();
@@ -58188,6 +58575,7 @@ void my_handler(int s)
 			myprintf("\n");
 			myprintf("01303: Seems %08d errors by path/filename too long (>255)\n", g_255);
 		}
+#ifdef ZPAQFULL ///NOSFTPSTART
 		if (pjidac!=NULL)
 		{	
 			if (flagslow)
@@ -58196,22 +58584,27 @@ void my_handler(int s)
 				(*pjidac).maxcpu(100);
 			}
 		}
-		
+#endif ///NOSFTPEND
 		if (errorcode>=2)
 		{
+#ifdef ZPAQFULL ///NOSFTPSTART
 			if (flagdebug2)
 				myprintf("01304: call xcommand on errorcode>=2 %s\n",migliaia(errorcode));
 			xcommand(g_exec_error,g_exec_text);
+#endif ///NOSFTPEND
 		}
 		else
 		if (errorcode==1)
 		{
+#ifdef ZPAQFULL ///NOSFTPSTART
 			if (flagdebug2)
 				myprintf("01305: call xcommand on errorcode==1\n");
 			xcommand(g_exec_warn,g_exec_text);
+#endif ///NOSFTPEND
 		}
 		else
 		{
+#ifdef ZPAQFULL ///NOSFTPSTART
 			if (flagdebug2)
 				myprintf("01306: call xcommand with a different errorcode (not 1, not 2) %d\n",errorcode);
 	/// when adding multipart archive, and no errors, take the last filename
@@ -58223,6 +58616,7 @@ void my_handler(int s)
 			}
 			if (g_exec_ok!="")
 				xcommand(g_exec_ok,g_exec_text);
+#endif ///NOSFTPEND
 		}
 	}
 	else
@@ -58263,10 +58657,11 @@ void my_handler(int s)
 	}
 #endif // corresponds to #ifdef (#ifdef _WIN32)
 	color_restore();
-
+#ifdef ZPAQFULL ///NOSFTPSTART
 	if (pjidac!=NULL)
 		if (flagshutdown)
 			return (*pjidac).systemshutdown();
+#endif ///NOSFTPEND
 		
 	return errorcode;
 }
@@ -61709,6 +62104,7 @@ int pos(const std::string &i_stringa,const std::string& i_cerca)
 {
     return (i_stringa.find(i_cerca));
 }
+#ifdef ZPAQFULL ///NOSFTPSTART
 string Jidac::zfs_get_snaplist(string i_header,const string i_footer,vector<string>& o_array_primachiocciola,vector<string>& o_array_dopochiocciola,vector<string>& o_array_size)
 {
 	string filebatch="/tmp/exec_zfs.sh";
@@ -62131,6 +62527,7 @@ int Jidac::zfsadd()
 	myprintf("01614: zfsadd done (use -verbose if you like)\n");
 	return 0;
 }
+#endif ///NOSFTPEND
 /// find and delete 0-length dirs
 /// in a slow (but hopefully) safe way
 /// to be merged with Jidac::removeemptydirs(string i_folder,bool i_kill)
@@ -63667,6 +64064,8 @@ int  Jidac::dir()
 	}
 	return 0;
 }
+
+#ifdef ZPAQFULL ///NOSFTPSTART
 int Jidac::decimation()
 {
 	bool flagthelastone=false;
@@ -63813,6 +64212,8 @@ int Jidac::decimation()
 	}
 	return 0;
 }
+#endif ///NOSFTPEND
+
 #ifdef _WIN32
 bool iswinroot(const string& i_path)
 {
@@ -64450,13 +64851,14 @@ int Jidac::add()
 	}
 
 	string externaloutputfile="";
+#ifdef ZPAQFULL ///NOSFTPSTART
 	if (g_externalname!="")
 	{
 		int risultato=external();
 		if (risultato!=0)
 			return risultato;
 	}
-	
+#endif ///NOSFTPEND
 	/*
 	if (g_ismounted!="")
 	{
@@ -64470,6 +64872,7 @@ int Jidac::add()
 		myprintf("01848: yep, ismounted\n");
 	}
 */
+#ifdef ZPAQFULL ///NOSFTPSTART
 #ifdef _WIN32
 	if (flagthunderbird)
 	{
@@ -64503,7 +64906,6 @@ int Jidac::add()
 			}
 			files.push_back(thunfiles[i]);
 		}
-
 		if (flagkill)
 		{
 			string	filesubba	=g_gettempdirectory()+"thunkil.bat";
@@ -64525,7 +64927,7 @@ int Jidac::add()
 		}
 	}
 #endif // corresponds to #ifdef (#ifdef _WIN32)
-
+#endif ///NOSFTPEND
 
 	if (g_ifexist!="")
 	{
@@ -64536,6 +64938,7 @@ int Jidac::add()
 		}
 	}
 
+#ifdef ZPAQFULL ///NOSFTPSTART
 #ifdef unix
 	if (g_dataset!="")
 	{
@@ -64627,7 +65030,8 @@ int Jidac::add()
 		replaceto	=dataset_path;
 	}
 #endif // corresponds to #ifdef (#ifdef unix)
-	
+#endif ///NOSFTPEND
+
 	if (flagcollision)
 	{
 		if ((flagchecktxt) || (backuptxt!="") || (flagfasttxt))
@@ -65042,7 +65446,7 @@ int Jidac::add()
 	g_scritti				=0;
 	string primalettera		="";
 	string cartellalocale	="";
-
+#ifdef ZPAQFULL ///NOSFTPSTART
 	if (flagvss)
 	{
 #if defined(_WIN32)
@@ -65229,6 +65633,7 @@ int Jidac::add()
 		print_datetime();
 		myprintf("01944: VSS: end\n");
 	}
+#endif ///NOSFTPEND
 	string ffranzotype=decodefranzoffset(g_franzotype);
 	if (flagverify)
 		ffranzotype+=" + CRC-32 by fragments";
@@ -65995,12 +66400,15 @@ int Jidac::add()
 	int utf8names		=0;
 	int casecollision	=0;
 	int	folders			=0;
+#ifdef ZPAQFULL ///NOSFTPSTART
 	FILE* myoutfile		=NULL;
+#endif ///NOSFTPEND
 	string tempfile		="";
 	
 
 ///	What is a file list? Just about a dir with redirection on a .txt
 /// Why? Because I am paranoid: this is THE file list, dt must be ==
+#ifdef ZPAQFULL ///NOSFTPSTART
 	if (flagfilelist)
 	{
 		
@@ -66089,7 +66497,7 @@ int Jidac::add()
 			return 2;
 		}
 	}
-
+#endif ///NOSFTPEND
 
 
 
@@ -68302,7 +68710,7 @@ int Jidac::add()
 				g_archive=sto;
 			}
 		}
-	
+#ifdef ZPAQFULL ///NOSFTPSTART
 #if defined(_WIN32)
 	if (flagvss)
 	{
@@ -68332,6 +68740,7 @@ int Jidac::add()
 				myprintf("02163$ *** WINDOWS WARNING *** found file length >255. Suggestion: use -longpath switch\n");
 			}
 #endif // corresponds to #if (#if defined(_WIN32))
+#endif ///NOSFTPEND
 	if (flagfilelist)
 		if (fileexists(tempfile))
 		{
@@ -68368,6 +68777,7 @@ int Jidac::add()
 		jidacreset();
 		errors=verify(true); //re-read, again
 	}
+#ifdef ZPAQFULL ///NOSFTPSTART
 	if (flagsfx)
 	{
 		if (g_sfx=="")
@@ -68386,6 +68796,7 @@ int Jidac::add()
 		if (g_sfx!="")
 			errors+=writesfxmodule(g_sfx);
 	}
+#endif ///NOSFTPEND
 	
 	
 
@@ -68945,6 +69356,7 @@ int Jidac::add()
 		}
 	
 ///	checksha1collision(dt,true);
+#ifdef ZPAQFULL ///NOSFTPSTART
 #ifdef unix
 	if (g_dataset!="")
 	{
@@ -68960,6 +69372,7 @@ int Jidac::add()
 			myprintf("02246: %s\n",take_base.c_str());
 	}
 #endif // corresponds to #ifdef (#ifdef unix)
+#endif ///NOSFTPEND
 #ifdef _WIN32
 	if ((flagads) && (!flagfasttxt))
 		fill_ads(g_archive,start_iblock);
@@ -69150,6 +69563,8 @@ bool Jidac::fill_ads(string i_filename,int64_t i_startiblock)
 	return false;
 }
 #endif // corresponds to #ifdef (#ifdef _WIN32)
+
+#ifdef ZPAQFULL ///NOSFTPSTART
 /*
 	Section: sfx
 	The two binaries (zsfx.exe for Windows 64 bit, and zsfx32.exe for Win32)
@@ -69160,6 +69575,7 @@ bool Jidac::fill_ads(string i_filename,int64_t i_startiblock)
 	Debian does not like embedded code, at all
 	Fix by sed
 */
+#endif ///NOSFTPEND
 ///DEBIANSTART
 #if defined(_WIN32) && (defined(_WIN64))
 char zsfx_mime64[]={"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"};
@@ -70513,6 +70929,7 @@ struct Myfilewriter: public libzpaq::Writer
 ///	decode the mime64 into memory (~150KB, not very big),
 ///	then decompress by zpaq checking sha-256
 /// write into i_outfile
+#ifdef ZPAQFULL ///NOSFTPSTART
 #ifdef _WIN32
 int Jidac::decompress_sfx_to_file(FILE* i_outfile)
 {
@@ -70920,6 +71337,7 @@ int Jidac::decompress_mime64_to_file(FILE* i_outfile,const char* i_mime64)
 #endif // corresponds to #if (#if defined(_WIN32))
 }
 #endif // corresponds to #ifdef (#ifdef _WIN32)
+#endif ///NOSFTPEND
 
 /*
 int Jidac::writeresource(const string i_filename,bool i_force,const char* i_mime64)
@@ -72459,13 +72877,14 @@ int Jidac::removeemptydirs(string i_folder,bool i_kill)
 	else
 		return 1;
 }
+#ifdef ZPAQFULL ///NOSFTPSTART
+
 #ifdef _WIN32
 
 /*
 	Section: 	command q. Backup of Windows C:
 				command g  Launch a power*ell (non need for a cmd-administrator)
 */
-
 int Jidac::adminrun()
 {
 #ifdef _WIN32
@@ -72494,6 +72913,7 @@ int Jidac::adminrun()
 #endif // corresponds to #ifdef (#ifdef _WIN32)
 }
 #endif // corresponds to #ifdef (#ifdef _WIN32)
+#endif ///NOSFTPEND
 
 #ifdef _WIN32
 int Jidac::windowsc()
@@ -72848,6 +73268,7 @@ bool Jidac::getjollylist(string i_fullarchive,DTMap* o_thedt)
 
 typedef std::pair<string,string>  mycoppia;
 
+#ifdef ZPAQFULL ///NOSFTPSTART
 int Jidac::zfsproxbackup()
 {
 	if (g_ifexist!="")
@@ -73231,7 +73652,7 @@ int Jidac::zfsproxrestore()
 
 	return extract();
 }
-
+#endif ///NOSFTPEND
 
 typedef std::pair<uint64_t,string> uint64string;
 
@@ -73642,30 +74063,6 @@ int64_t Jidac::franzparallelhashfiles(const string i_hashtype,int64_t i_totalsiz
 	return mtime()-startscan;
 }
 
-
-
-
-///DEBIANSTART
-
-
-/// LICENSE_START.19
-/*
-	This is the very first stage of a textual-GUI based WYSISWYG (!) extractor
-	For Windows, in future - maybe - *nix
-
-	This is a reworked PDCursesMod
-	It is not so easy to interface 30-year-old C code with C++,
-	the source would need a lot of refactoring,
-	but I don't think I will do that.
-	I have even implemented voluntary memory leaks (!)
-	to avoid the warnings of modern compilers
-	about the 'old' style of C code.
-We are talking about a few hundred bytes
-
-*/
-
-
-///DEBIANEND
 
 int Jidac::last()
 {
@@ -79164,10 +79561,12 @@ int Jidac::listfast()
 	files.push_back(i_filename);
 	
 	tofiles.clear();
+#ifdef ZPAQFULL ///NOSFTPSTART
 	string kunfile=g_gettempdirectory()+"debug.txt";
 	myreplaceall(kunfile,"\\","/");
 	tofiles.push_back(nomefileseesistegia(kunfile));
 	myprintf("03132: Temp file %s\n",tofiles[0].c_str());
+#endif ///NOSFTPEND
 
 	vector<ThreadID> tid(howmanythreads);
 	for (unsigned i=0; i<tid.size(); ++i)
@@ -79975,6 +80374,7 @@ bool isurl(string i_url)
 	
 }
 
+#ifdef ZPAQFULL ///NOSFTPSTART
 int Jidac::update()
 {
 #if defined(SOLARIS) || defined(__HAIKU__)
@@ -80570,6 +80970,7 @@ int Jidac::download()
 }
 
 #endif // corresponds to #ifdef (#ifdef _WIN32)
+#endif ///NOSFTPEND
 
 int Jidac::crop()
 {
@@ -81115,6 +81516,7 @@ f5bd0843bcfbc7eda8c8a8bf5698dfd35bf79d140d5169ba7b7d8a705f3cb253 *59.6b_(2024-05
 }
 
 
+#ifdef ZPAQFULL ///NOSFTPSTART
 #ifdef _WIN32
 void Jidac::runhigh(string i_addendum)
 {
@@ -81142,7 +81544,7 @@ void Jidac::runhigh(string i_addendum)
 	waitexecute(runme,parms,SW_HIDE);
 }
 #endif // corresponds to #ifdef (#ifdef _WIN32)
-
+#endif ///NOSFTPEND
 
 void Jidac::list_datetime(const int64_t i_seconddate,const bool i_flagnewversion)
 {
@@ -82861,6 +83263,625 @@ int Jidac::count()
 }
 
 
+/* Funzione per calcolare l'entropia di un file */
+double calculate_entropy(std::string filename) 
+{
+    if (filename.empty())
+    {
+        myprintf("82872: filename empty\n");
+        return -1.0;
+    }
+    
+    FILE *file = fopen(filename.c_str(), "rb");
+    if (!file) 
+    {
+        myprintf("82873: error cannot open %s\n", filename.c_str());
+        return -1.0;
+    }
+    
+    /* Array per contare la frequenza di ogni byte (0-255) */
+    unsigned long frequency[256] = {0};
+    unsigned char buffer[1024];
+    size_t bytes_read;
+    unsigned long total_bytes = 0;
+    
+    /* Leggi il file e conta le frequenze */
+    while (!feof(file) && !ferror(file)) 
+    {
+        bytes_read = fread(buffer, 1, sizeof(buffer), file);
+        if (bytes_read == 0) {
+            break; // EOF raggiunto o errore
+        }
+        
+        for (size_t i = 0; i < bytes_read; i++) 
+        {
+            frequency[buffer[i]]++;
+            total_bytes++;
+        }
+    }
+    
+    // Controlla se c'è stato un errore di lettura
+    if (ferror(file)) 
+    {
+        myprintf("82874: error reading file %s\n", filename.c_str());
+        fclose(file);
+        return -1.0;
+    }
+    
+    fclose(file);
+    
+    if (total_bytes == 0) 
+    {
+        myprintf("82900: File empty %s è vuoto\n", filename.c_str());
+        return -1.0;
+    }
+    
+    /* Calcola l'entropia di Shannon */
+    double entropy = 0.0;
+    for (int i = 0; i < 256; i++) 
+    {
+        if (frequency[i] > 0) 
+        {
+            double probability = (double)frequency[i] / total_bytes;
+            entropy -= probability * log2(probability);
+        }
+    }
+    
+    return entropy;
+}
+/* Funzione per valutare l'idoneità come chiave crittografica */
+int evaluate_key_suitability(double entropy,bool i_dooutput=false) 
+{
+	if (i_dooutput)
+		myprintf("82908: Entropy: %.4f bit/byte : ", entropy);
+    if (entropy >= 7.5) 
+	{
+		if (i_dooutput)
+		{
+			color_green();
+			myprintf("Suitable for cryptography\n");
+			color_restore();
+		}
+		return 0;
+	}
+	else
+	if 
+	(entropy >= 6.0) 
+	{
+		if (i_dooutput)
+		{
+			color_yellow();
+			myprintf("Intermediate — I want a better one\n");
+			color_restore();
+		}
+		return 2;
+    } 
+	else 
+	{
+		if (i_dooutput)
+		{
+			color_red();
+			myprintf("Not suitable — entropy too low, choose a better one\n");
+			color_restore();
+		}
+		return 2;
+	}
+	return 2;
+}
+
+
+
+// Alfabeto Base58 (Bitcoin style)
+const char* BASE58_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+
+// Converte un carattere esadecimale in valore numerico
+int hexCharToInt(char c) {
+    if (c >= '0' && c <= '9') return c - '0';
+    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+    throw std::invalid_argument("Carattere non valido in input esadecimale");
+}
+
+// Converte una stringa esadecimale in vettore di byte (big-endian)
+std::vector<uint8_t> hexToBytes(const std::string& hex) {
+    if (hex.size() % 2 != 0)
+        throw std::invalid_argument("La stringa hex deve avere lunghezza pari");
+
+    std::vector<uint8_t> bytes;
+    bytes.reserve(hex.size() / 2);
+
+    for (size_t i = 0; i < hex.size(); i += 2) {
+        int hi = hexCharToInt(hex[i]);
+        int lo = hexCharToInt(hex[i + 1]);
+        bytes.push_back(static_cast<uint8_t>((hi << 4) | lo));
+    }
+    return bytes;
+}
+
+// Divide "number" (base 256) per 58, restituisce resto e aggiorna number col quoziente
+uint8_t divmod58(std::vector<uint8_t>& number) {
+    int remainder = 0;
+    for (size_t i = 0; i < number.size(); i++) {
+        int temp = remainder * 256 + number[i];
+        number[i] = temp / 58;
+        remainder = temp % 58;
+    }
+    // Rimuove zeri all'inizio
+    while (!number.empty() && number[0] == 0) {
+        number.erase(number.begin());
+    }
+    return static_cast<uint8_t>(remainder);
+}
+
+// Converte esadecimale in Base58
+std::string hexToBase58(const std::string& hex) {
+    std::vector<uint8_t> bytes = hexToBytes(hex);
+    
+    // Conta quanti zeri all'inizio (in byte, cioè 0x00)
+    size_t zeroCount = 0;
+    for (size_t i = 0; i < bytes.size(); i++) {
+        if (bytes[i] == 0) zeroCount++;
+        else break;
+    }
+    
+    std::string result;
+    // Copia vettore perché lo modifichiamo
+    std::vector<uint8_t> temp = bytes;
+    
+    // Dividiamo ripetutamente per 58
+    while (!temp.empty()) {
+        uint8_t mod = divmod58(temp);
+        result.push_back(BASE58_ALPHABET[mod]);
+    }
+    
+    // Aggiunge '1' per ogni zero iniziale
+    for (size_t i = 0; i < zeroCount; i++) {
+        result.push_back('1');
+    }
+    
+    // La stringa è in ordine inverso
+    std::reverse(result.begin(), result.end());
+    return result;
+}
+
+// ---
+// Esempio di utilizzo (commenta o rimuovi in produzione)
+// int main() {
+//     std::string hexInput = "0000000000000000000000000000000000000000000000000000000000000000" // 64 zeri (32 byte)
+//                             "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"; // 64 F (32 byte)
+//     try {
+//         std::string base58 = hexToBase58(hexInput);
+//         std::cout << "Base58: " << base58 << std::endl;
+//     } catch (const std::exception& e) {
+//         std::cerr << "Errore: " << e.what() << std::endl;
+//     }
+//     return 0;
+// }
+
+// Mappa inversa per trovare l'indice di un carattere Base58
+int base58CharToValue(char c) {
+    for (int i = 0; i < 58; ++i) {
+        if (BASE58_ALPHABET[i] == c) {
+            return i;
+        }
+    }
+    throw std::invalid_argument("Carattere non valido nell'input Base58");
+}
+
+// Converte un vettore di byte (numero grande in base 256) in una stringa esadecimale
+std::string bytesToHex(const std::vector<uint8_t>& bytes) {
+    std::string hexString;
+    hexString.reserve(bytes.size() * 2); // Ogni byte diventa 2 caratteri esadecimali
+    const char* hexDigits = "0123456789abcdef";
+    
+    for (size_t i = 0; i < bytes.size(); i++) {
+        uint8_t byte = bytes[i];
+        hexString.push_back(hexDigits[(byte >> 4) & 0x0F]); // Nibble superiore
+        hexString.push_back(hexDigits[byte & 0x0F]);         // Nibble inferiore
+    }
+    
+    return hexString;
+}
+
+// Moltiplica "number" (base 256) per 58 e aggiunge "digit", restituisce il nuovo numero
+void muladd256(std::vector<uint8_t>& number, int digit) {
+    int carry = digit;
+    for (size_t i = 0; i < number.size(); ++i) {
+        int temp = number[i] * 58 + carry;
+        number[i] = temp % 256;
+        carry = temp / 256;
+    }
+    while (carry > 0) {
+        number.push_back(carry % 256);
+        carry /= 256;
+    }
+}
+
+// Converte Base58 in Esadecimale
+std::string base58ToHex(const std::string& base58) {
+    std::vector<uint8_t> bytes(1, 0); // Inizia con un singolo byte a zero
+    
+    // Controlla e conta gli '1' iniziali
+    size_t leadingOnes = 0;
+    for (size_t j = 0; j < base58.length(); j++) {
+        char c = base58[j];
+        if (c == '1') {
+            leadingOnes++;
+        } else {
+            break;
+        }
+    }
+    
+    // Processa i caratteri Base58, ignorando gli '1' iniziali per l'aritmetica
+    for (size_t i = leadingOnes; i < base58.length(); ++i) {
+        int digit = base58CharToValue(base58[i]);
+        // Questa implementazione elabora i byte in ordine inverso,
+        // quindi dobbiamo invertire prima e poi gestire i riporti
+        // Un approccio più semplice per evitare l'inversione continua sarebbe usare una libreria BigInt
+        // Ma per rimanere con vector<uint8_t> semplici, facciamo così.
+        // In realtà, l'algoritmo standard decodifica da sinistra a destra accumulando il risultato.
+        // L'algoritmo corretto per la decodifica è: risultato = risultato * 58 + digit
+        // Poiché operiamo su un vettore di byte, è una "big integer multiplication and addition"
+        muladd256(bytes, digit);
+    }
+    
+    // Gli zeri iniziali della stringa Base58 ('1's) corrispondono agli zeri iniziali nel vettore di byte
+    // Dobbiamo aggiungerli al risultato.
+    // L'array `bytes` è stato costruito con i byte meno significativi prima.
+    // Adesso lo dobbiamo invertire per ottenere l'ordine big-endian.
+    std::reverse(bytes.begin(), bytes.end());
+    
+    // Se ci sono zeri iniziali nel Base58 originale (gli '1'),
+    // dobbiamo aggiungerne di equivalenti al risultato in byte.
+    // L'algoritmo `muladd256` sposta gli zeri effettivi.
+    // Gli '1' iniziali nella stringa base58 rappresentano byte 0x00.
+    // Dobbiamo pre-appendere il numero corretto di 0x00 byte.
+    std::vector<uint8_t> finalBytes;
+    finalBytes.reserve(bytes.size() + leadingOnes);
+    
+    for(size_t i = 0; i < leadingOnes; ++i) {
+        finalBytes.push_back(0x00);
+    }
+    
+    // Rimuovi eventuali zeri iniziali spurii generati dall'aritmetica prima di copiare
+    // Questo è fondamentale perché `muladd256` potrebbe aggiungere zeri se il primo numero è 0.
+    size_t firstNonZero = 0;
+    while (firstNonZero < bytes.size() && bytes[firstNonZero] == 0) {
+        firstNonZero++;
+    }
+    
+    for (size_t i = firstNonZero; i < bytes.size(); ++i) {
+        finalBytes.push_back(bytes[i]);
+    }
+    
+    // Gestione del caso di stringa Base58 vuota o solo '1's
+    if (finalBytes.empty()) {
+        return "00"; // Rappresenta un valore 0 in esadecimale
+    }
+    
+    return bytesToHex(finalBytes);
+}
+
+// NOTA BENE: L'implementazione di `muladd256` sopra è semplificata e costruisce il numero "al contrario"
+// (il byte meno significativo è all'indice 0). Per una corretta decodifica Base58 (big-endian),
+// il vettore `bytes` dovrebbe essere trattato come un numero grande in cui `bytes[0]` è il byte più significativo.
+
+// Rivediamo la logica di base58ToHex e muladd256 per essere compliant con big-endian e l'algoritmo standard.
+
+// Algoritmo di decodifica Base58 standard:
+// Il numero risultante è inizializzato a 0.
+// Per ogni carattere nella stringa Base58:
+//   Il numero risultante è moltiplicato per 58.
+//   Si aggiunge il valore del carattere corrente.
+
+// Per implementare questo con un vector<uint8_t> big-endian:
+std::vector<uint8_t> base58ToBytesCorrected(const std::string& base58) {
+    std::vector<uint8_t> resultBytes;
+    
+    // Gestisci gli '1' iniziali
+    size_t leadingOnes = 0;
+    for (size_t k = 0; k < base58.length(); k++) {
+        char c = base58[k];
+        if (c == '1') {
+            leadingOnes++;
+        } else {
+            break;
+        }
+    }
+    
+    // Decodifica i caratteri Base58 rimanenti
+    for (size_t i = leadingOnes; i < base58.length(); ++i) {
+        int digit = base58CharToValue(base58[i]);
+        // Implementa result = result * 58 + digit
+        // Lavora sui byte dal meno significativo al più significativo (dal fondo del vettore)
+        // per gestire i riporti.
+        int carry = digit;
+        for (size_t j = 0; j < resultBytes.size(); ++j) {
+            int temp = resultBytes[j] * 58 + carry;
+            resultBytes[j] = temp % 256;
+            carry = temp / 256;
+        }
+        while (carry > 0) {
+            resultBytes.push_back(carry % 256);
+            carry /= 256;
+        }
+    }
+    
+    // Aggiungi gli zeri iniziali per ogni '1' nel Base58
+    for (size_t i = 0; i < leadingOnes; ++i) {
+        resultBytes.push_back(0);
+    }
+    
+    // Inverti il vettore per ottenere l'ordine big-endian
+    std::reverse(resultBytes.begin(), resultBytes.end());
+    
+    // Rimuovi eventuali zeri iniziali extra che non corrispondono a un '1' nel Base58
+    // (possono verificarsi se il numero decodificato inizia effettivamente con 0 ma non c'erano '1' espliciti)
+    size_t firstNonZero = 0;
+    while (firstNonZero < resultBytes.size() - 1 && resultBytes[firstNonZero] == 0) {
+        firstNonZero++;
+    }
+    resultBytes.erase(resultBytes.begin(), resultBytes.begin() + firstNonZero);
+    
+    // Gestione del caso in cui la stringa Base58 era solo '1's o vuota
+    if (resultBytes.empty() && leadingOnes == 0) {
+        // Se la stringa era vuota o solo '1's, e non c'erano '1' specifici, il valore è 0
+        std::vector<uint8_t> singleZero;
+        singleZero.push_back(0x00);
+        return singleZero; // Un singolo byte 0
+    } else if (resultBytes.empty() && leadingOnes > 0) {
+        // Se la stringa era solo '1's, il risultato è tanti 0x00 quanti '1'
+        std::vector<uint8_t> zeros(leadingOnes, 0x00);
+        return zeros;
+    }
+    
+    return resultBytes;
+}
+
+// Funzione finale da chiamare
+std::string base58ToHexWrapper(const std::string& base58) {
+    std::vector<uint8_t> bytes = base58ToBytesCorrected(base58);
+    if (bytes.empty()) {
+        return ""; // O "00" a seconda di come vuoi rappresentare lo zero
+    }
+    return bytesToHex(bytes);
+}
+
+
+string Jidac::keyfile_to_string(string i_keyfile)
+{
+	if (i_keyfile=="")
+	{
+		myprintf("83259: Keyfile empty\n");
+		seppuku();
+	}
+	if (!fileexists(i_keyfile))
+	{
+		myprintf("83260: Keyfile does not exists <<%Z>>\n",i_keyfile.c_str());
+		seppuku();
+	}
+	int64_t dimensionekeyfile=prendidimensionefile(i_keyfile.c_str());
+	if (dimensionekeyfile<=4096)
+	{
+		myprintf("83270: Keyfile <<%Z>> too small (must be >=4KB) %s\n",i_keyfile.c_str(),migliaia(dimensionekeyfile));
+		seppuku();
+	}
+	if (dimensionekeyfile>50000000)
+	{
+		myprintf("83243: Keyfile <<%Z>> too large (cannot be larger than 50.000.000) %s\n",i_keyfile.c_str(),migliaia(dimensionekeyfile));
+		seppuku();
+	}
+
+	
+	double entropy = calculate_entropy(i_keyfile.c_str());
+	if (entropy >= 0.0) 
+	{
+		int risultato=evaluate_key_suitability(entropy,false);
+		if (risultato>0)
+		{
+			myprintf("83280: File not good for crypto <<%Z>> (low entropy)\n",i_keyfile.c_str());
+			seppuku();
+		}
+		franz_do_hash dummy("WHIRLPOOL");
+		int64_t starthash=mtime();
+		string 	hashkeyfile=dummy.filehash(i_keyfile,false,starthash,dimensionekeyfile);
+		if (hashkeyfile=="")
+		{
+			myprintf("83420: Cannot get keyfile hash\n");
+			seppuku();
+		}
+		string 	base58=hexToBase58(hashkeyfile);
+		std::string newhash=base58ToHexWrapper(base58);
+		if (flagdebug)
+		{
+			myprintf("81375: [1] hash         :%s\n",hashkeyfile.c_str());
+			myprintf("81423: [2] newhash      :%s\n",newhash.c_str());
+			color_green();
+			myprintf("83433: [3] encoded  key :%s (KEEP THIS ONE SAFE!)\n",base58.c_str());
+			color_restore();
+		}
+		return base58;
+	}
+	else
+	{
+		myprintf("83283: strange entropy for %s\n",i_keyfile.c_str());
+		seppuku();
+	}
+	
+	seppuku();
+	return "";
+}
+
+std::string translateString(const std::string& input) 
+{
+    // Costanti di configurazione
+    const int COLUMNS = 5;                    // Numero di colonne
+    const int COLUMN_SPACING = 0;             // Spazi tra le colonne
+    const char* UPPERCASE_LABEL = "UP";    // Etichetta per maiuscole
+    const int PHONETIC_WIDTH = 9;             // Larghezza campo fonetico (%-5s)
+    const int ALIGNMENT_SPACES = strlen(UPPERCASE_LABEL);  // Spazi di allineamento basati su lunghezza etichetta
+    
+    // Array per le cifre
+    const char* digits[] = {
+        "ZERO", "ONE", "TWO", "THREE", "FOUR",
+        "FIVE", "SIX", "SEVEN", "EIGHT", "NINE"
+    };
+    
+    // Array per l'alfabeto fonetico ICAO maiuscolo
+    const char* phonetic_upper[] = {
+        "ALPHA", "BRAVO", "CHARLIE", "DELTA", "ECHO",
+        "FOXTROT", "GOLF", "HOTEL", "INDIA", "JULIET",
+        "KILO", "LIMA", "MIKE", "NOVEMBER", "OSCAR",
+        "PAPA", "QUEBEC", "ROMEO", "SIERRA", "TANGO",
+        "UNIFORM", "VICTOR", "WHISKEY", "XRAY", "YANKEE", "ZULU"
+    };
+    
+    // Array per l'alfabeto fonetico ICAO minuscolo
+    const char* phonetic_lower[] = {
+        "alpha", "bravo", "charlie", "delta", "echo",
+        "foxtrot", "golf", "hotel", "india", "juliet",
+        "kilo", "lima", "mike", "november", "oscar",
+        "papa", "quebec", "romeo", "sierra", "tango",
+        "uniform", "victor", "whiskey", "xray", "yankee", "zulu"
+    };
+    
+    std::string result;  // Stringa da ritornare
+    
+    // Calcola il numero di righe (divisione per COLUMNS con arrotondamento per eccesso)
+    size_t rows = (input.length() + COLUMNS - 1) / COLUMNS;
+    
+    for (size_t row = 0; row < rows; row++) {
+        std::string line;  // Riga corrente per la stringa di ritorno
+        
+        // Stampa COLUMNS caratteri per riga, affiancati
+        for (int col = 0; col < COLUMNS; col++) {
+            size_t index = col * rows + row;  // Ordinamento per colonna
+            
+            if (index < input.length()) {
+                char c = input[index];
+                
+                // Costruisci la parte per la stringa di ritorno
+                char buffer[100];
+                
+                // Stampa l'indice (sia su console che nella stringa)
+                snprintf(buffer,sizeof(buffer), "|%02d ", (int)index+1);
+                line += buffer;
+                printf("|%02d ", (int)index+1);
+                
+                color_green();
+                snprintf(buffer,sizeof(buffer), "%c: ", c);
+                line += buffer;
+                printf("%c: ", c);
+                color_restore();
+                
+                if (c >= '0' && c <= '9') {
+                    // Cifra
+                    color_cyan();
+                    snprintf(buffer,sizeof(buffer), "%-*s", PHONETIC_WIDTH, digits[c - '0']);
+                    line += buffer;
+                    printf("%-*s", PHONETIC_WIDTH, digits[c - '0']);
+                    color_restore();
+                    // Spazi per mantenere l'incolonnamento (lunghezza di UPPERCASE_LABEL)
+                    line += std::string(ALIGNMENT_SPACES, ' ');
+                    printf("%*s", ALIGNMENT_SPACES, "");
+                }
+                else if (c >= 'A' && c <= 'Z') {
+                    // Lettera maiuscola
+                    color_cyan();
+                    snprintf(buffer,sizeof(buffer),"%-*s", PHONETIC_WIDTH, phonetic_upper[c - 'A']);
+                    line += buffer;
+                    printf("%-*s", PHONETIC_WIDTH, phonetic_upper[c - 'A']);
+                    color_restore();
+                    color_yellow();
+                    line += UPPERCASE_LABEL;
+                    printf("%s", UPPERCASE_LABEL);
+                    color_restore();
+                }
+                else if (c >= 'a' && c <= 'z') {
+                    // Lettera minuscola
+                    color_cyan();
+                    snprintf(buffer,sizeof(buffer), "%-*s", PHONETIC_WIDTH, phonetic_lower[c - 'a']);
+                    line += buffer;
+                    printf("%-*s", PHONETIC_WIDTH, phonetic_lower[c - 'a']);
+                    color_restore();
+                    line += std::string(ALIGNMENT_SPACES, ' ');
+                    printf("%*s", ALIGNMENT_SPACES, "");
+                }
+                else {
+                    // Carattere speciale o altro
+                    color_red();
+                    line += "ERROR!";
+                    printf("ERROR!");
+                    color_restore();
+                    seppuku();
+                }
+            }
+            
+            // Spaziatura tra le colonne (tranne dopo l'ultima)
+            if (col < COLUMNS - 1) {
+                line += std::string(COLUMN_SPACING, ' ');
+                printf("%*s", COLUMN_SPACING, "");
+            }
+        }
+        
+        // Aggiungi la riga al risultato e stampa il newline
+        result += line + "\n";
+        printf("\n");
+    }
+    
+    return result;
+}
+
+void formatAndSplitStringInFourParts(
+    const std::string& inputString,
+    std::string& o_output1,
+    std::string& o_output2,
+    std::string& o_output3,
+    std::string& o_output4)
+{
+    // Clear output strings to ensure no previous data lingers
+    o_output1.clear();
+    o_output2.clear();
+    o_output3.clear();
+    o_output4.clear();
+
+    if (inputString.empty()) {
+        return; // Nothing to process
+    }
+
+    // Step 1: Format the string with spaces every 4 characters
+    std::string formattedString;
+    formattedString.reserve(inputString.length() + (inputString.length() + 3) / 4);
+
+    for (size_t i = 0; i < inputString.length(); ++i) {
+        formattedString.push_back(inputString[i]);
+        // Add a space after every 4 characters, except at the end of the string
+        if ((i + 1) % 4 == 0 && i != inputString.length() - 1) {
+            formattedString.push_back(' ');
+        }
+    }
+
+    // Step 2: Split into four parts, each containing up to 5 blocks of 4 characters
+    // Each block is 4 chars + 1 space = 5 chars (except possibly the last block)
+    size_t charsPerPart = 5 * 5; // 5 blocks of (4 chars + 1 space) = 25 chars per part
+    size_t currentStart = 0;
+
+    // Part 1: First 5 blocks (up to 25 characters)
+    o_output1 = formattedString.substr(currentStart, charsPerPart);
+    currentStart += charsPerPart;
+
+    // Part 2: Next 5 blocks
+    o_output2 = formattedString.substr(currentStart, charsPerPart);
+    currentStart += charsPerPart;
+
+    // Part 3: Next 5 blocks
+    o_output3 = formattedString.substr(currentStart, charsPerPart);
+    currentStart += charsPerPart;
+
+    // Part 4: Remaining characters
+    o_output4 = formattedString.substr(currentStart);
+}
+
 int Jidac::work()
 {
 	
@@ -82871,7 +83892,7 @@ int Jidac::work()
     }
  
     string mycommand = files[0];
-	
+#ifdef ZPAQFULL ///NOSFTPSTART
 #ifdef _WIN32
     if (mycommand == "resetacl")
     {        
@@ -82921,6 +83942,7 @@ int Jidac::work()
 		return 0;
     }
 #endif
+#endif ///NOSFTPEND
 
 	if ((mycommand=="date") || (mycommand=="datetime") || (mycommand=="time"))
 	{
@@ -83098,6 +84120,7 @@ int Jidac::work()
 		}
 		return 0;
 	}
+#ifdef ZPAQFULL ///NOSFTPSTART
 	if (mycommand=="shutdown")
 		return systemshutdown();
 	
@@ -83113,7 +84136,7 @@ int Jidac::work()
 		maxcpu(99);
 		return 0;
 	}
-		
+#endif ///NOSFTPEND
 	if (mycommand=="pad")
 	{
 		if (files.size()!=2)
@@ -83226,10 +84249,145 @@ int Jidac::work()
 		myprintf("%s\n",thestring.c_str());
 		return 0;
 	}
+	
+	if (mycommand=="keyfile")
+	{
+		if (files.size()!=2)
+		{
+			myprintf("03445! keyfile command needs 1 more parameter\n");
+			return 2;
+		}
+		string keyfile=files[1];
+		if (!fileexists(keyfile.c_str()))
+		{
+			myprintf("83294: Cannot open keyfile\n");
+			return 2;
+		}
+		int64_t dimensionekeyfile=prendidimensionefile(keyfile.c_str());
+		if (dimensionekeyfile<=4096)
+		{
+			myprintf("83240: Keyfile too small (must be >=4KB) %s\n",migliaia(dimensionekeyfile));
+			return 2;
+		}
+		if (dimensionekeyfile>50000000)
+		{
+			myprintf("83240: Keyfile too large (cannot be larger than 50.000.000) %s\n",migliaia(dimensionekeyfile));
+			return 2;
+		}
+	
+		double entropy = calculate_entropy(keyfile.c_str());
+		if (entropy >= 0.0) 
+		{
+			int risultato=evaluate_key_suitability(entropy,true);
+			if (risultato>0)
+				return risultato;
+			
+			franz_do_hash dummy("WHIRLPOOL");
+			int64_t starthash=mtime();
+			int64_t dimensionekeyfile=prendidimensionefile(keyfile.c_str());
+			string 	hashkeyfile=dummy.filehash(keyfile,false,starthash,dimensionekeyfile);
+			if (hashkeyfile=="")
+			{
+				myprintf("83420: Cannot get hash\n");
+				return 2;
+			}
+			string 	base58=hexToBase58(hashkeyfile);
+			std::string newhash=base58ToHexWrapper(base58);
+			
+			string doublecheck=keyfile_to_string(keyfile);
+			if (doublecheck!=base58)
+			{
+				myprintf("83717: Internal error!\n");
+				seppuku();
+			}
+			
+			if (flagverbose)
+			{
+				myprintf("83375: hash   : %s\n",hashkeyfile.c_str());
+				myprintf("83423: newhash: %s\n",newhash.c_str());
+			}
+			
+			string spaced1;
+			string spaced2;
+			string spaced3;
+			string spaced4;
+			
+			formatAndSplitStringInFourParts(base58,spaced1,spaced2,spaced3,spaced4);
+			string rebuilt=spaced1+spaced2+spaced3+spaced4;
+			myreplaceall(rebuilt," ","");
+			
+			if (rebuilt!=base58)
+			{
+				myprintf("83889: INTERNAL GURU, rebuild != base58\n");
+				seppuku();
+			}
+			color_green();
+			myprintf("83423: encoded: %s\n",base58.c_str());
+			myprintf("84000: <<%Z>>\n",keyfile.c_str());
+			color_restore();
+	
+			string icao=translateString(base58);
+			
+			color_green();
+			myprintf("83424: %s%s\n",spaced1.c_str(),spaced2.c_str());
+			myprintf("83422: %s%s\n",spaced3.c_str(),spaced4.c_str());
+			color_restore();
+			
+			
+			color_yellow();
+			myprintf("THIS KEY IS  CRITICAL. Guard it. Losing it means losing your data.\n");
+			myprintf("PRIMARY    : Print on paper. Store safely offline.\n");
+			myprintf("SECONDARY  : Save  to secure USB drive.\n");
+			myprintf("LAST RESORT: Photograph with extreme caution. Avoid cloud auto-upload!\n");
+			color_restore();
+
+#ifdef _WIN32
+			base58+="\n";
+			base58+=icao+"\n";
+			base58+=spaced1+"\n";
+			base58+=spaced2+"\n";
+			base58+=spaced3+"\n";
+			base58+=spaced4+"\n";
+			
+			if (OpenClipboard(NULL)) 
+			{
+				EmptyClipboard();
+				const size_t len = base58.size()+1;
+				HGLOBAL hMem = GlobalAlloc(GMEM_MOVEABLE, len);
+				if (hMem==NULL) 
+				{
+					myprintf("05235$ Error allocating Global!\n");
+					CloseClipboard();
+				}
+				else
+				{
+					memcpy(GlobalLock(hMem),base58.c_str(), len);
+					GlobalUnlock(hMem);
+					SetClipboardData(CF_TEXT, hMem);
+					CloseClipboard();
+					myprintf("\n");
+					color_green();
+					myprintf("83800: Crucial KEY data copied on clipboard. Please safekeeping!\n");
+					color_restore();
+				}
+			}
+#endif
+		} 
+		else 
+		{
+			myprintf("83304: Cannot get entropy\n");
+			return 1;
+		}
+		return 0;
+  	}
+	
+	
 	myprintf("03441! Do not understand the command\n");
 	return 2;
 }
 
+
+#ifdef ZPAQFULL ///NOSFTPSTART
 int	Jidac::external()
 {
 	if (g_externalname=="")
@@ -83323,6 +84481,7 @@ int	Jidac::external()
 
 	return 0;
 }
+#endif ///NOSFTPEND
 
 string Jidac::getbackupnameifany(const string i_filename)
 {
@@ -83854,7 +85013,7 @@ int Jidac::extract()
 		myprintf("00881$ ****** Full-scale extraction test (UTF-8 strange filenames, path too long...)\n");
 		myprintf("00882$ ****** Highly suggested output on RAMDISK\n\n");
 	}
-
+#ifdef ZPAQFULL ///NOSFTPSTART
 	string kunfile=g_gettempdirectory()+"VFILE-kun.txt";
 	myreplaceall(kunfile,"\\","/");
 	kunfile=nomefileseesistegia(kunfile);
@@ -83885,7 +85044,7 @@ int Jidac::extract()
 #endif // corresponds to #ifdef (#ifdef unix)
 
 	}
-	
+#endif ///NOSFTPEND	
 	
 	g_scritti=0;
   // Encrypt or decrypt whole archive
@@ -84954,6 +86113,7 @@ int Jidac::extract()
 	if (relativepath)
 		myprintf("00975: Relative path  %12s\n",migliaia(relativepath));
 
+#ifdef ZPAQFULL ///NOSFTPSTART
   	if (flagfilelist)
 		if (errors==0)
 		{
@@ -85022,6 +86182,7 @@ int Jidac::extract()
 				errors=2;
 			}
 		}
+#endif ///NOSFTPEND
 
 	if (flagparanoid)
 	{
@@ -85832,6 +86993,7 @@ int Jidac::fix(string i_thearchive)
 	return theresult;
 }
 
+#ifdef ZPAQFULL ///NOSFTPSTART
 #ifdef SFTP
 bool update_quick_hash(XXHash64* i_hash,string i_filename)
 {
@@ -85880,7 +87042,6 @@ bool update_quick_hash(XXHash64* i_hash,string i_filename)
 	
 	return true;
 }
-
 
 
 std::string sftp_get_quick(const std::string& i_remotefile, int64_t& o_filesize, double& o_time)
@@ -86830,7 +87991,7 @@ bool comparaquick(std::vector<sftpget3>& i_remoti, std::vector<sftpfileinfo>& i_
             }
             else 
             {
-                myprintf("88420! ERRORE: indice locale non valido %d per file %s\n", 
+                myprintf("88420! ERROR: local index not good %d for %s\n", 
                        localIndex, remoteFileName.c_str());
                 allMatch = false;
             }
@@ -87338,7 +88499,7 @@ int Jidac::sftp()
 	return 2;
 }
 #endif // corresponds to #ifdef (#ifdef SFTP)
-
+#endif ///NOSFTPEND
 
 #ifdef _WIN32
 
@@ -90563,7 +91724,7 @@ void exec_with_realtime_output(const char* cmd)
 }
 #endif
 
-
+#ifdef ZPAQFULL ///NOSFTPSTART
 int Jidac::mysql()
 {
 	if (archive=="")
@@ -90957,7 +92118,9 @@ int Jidac::mysql()
 
 	return 0;
 }
+#endif ///NOSFTPEND
 
+#ifdef ZPAQFULL ///NOSFTPSTART
 #ifdef _WIN32
 int Jidac::maxcpu(int i_percent)
 {
@@ -91389,6 +92552,7 @@ int Jidac::systemshutdown()
     return 2;
 #endif
 }
+#endif ///NOSFTPEND
 
 int Jidac::posix_count()
 {
@@ -92861,9 +94025,7 @@ void Jidac::printDigitalString(const char* inputString)
     }
 }
 
-
-
-///SFTP things
+#ifdef ZPAQFULL ///NOSFTPSTART
 #ifdef SFTP
 
 ///fima2
@@ -93361,7 +94523,7 @@ bool zpaqfranzsftp2::sftp_down3parallela(std::vector<sftpget3>& file_list, int i
 }
 #endif
 ///finefima2
-
+#endif ///NOSFTPEND
 
 
 
@@ -94239,6 +95401,7 @@ void reportresult(string i_stringa,int i_risultato)
 	}
 
 }
+#ifdef ZPAQFULL ///NOSFTPSTART
 #ifdef _WIN32
 int waitexecuteprogram(const std::string& i_filename, const std::string& i_parameters, const std::string& i_fileoutput = "") 
 {
@@ -94310,7 +95473,9 @@ int waitexecuteprogram(const std::string& i_filename, const std::string& i_param
     return static_cast<int>(exitCode);
 }
 #endif
+#endif ///NOSFTPEND
 
+#ifdef ZPAQFULL ///NOSFTPSTART
 #ifdef SFTP
 int Jidac::cloud()
 {
@@ -94590,154 +95755,4 @@ int Jidac::cloud()
 	return 0;
 }
 #endif 
-
-/*
-PS C:\Program Files\Microsoft Visual Studio\2022\Community> (Get-Content c:\zpaqfranz\zpaqfranz.cpp | Select-String 'myprintf\("([0-9]{5})' | % { $_.Matches.Groups[1].Value } | Group-Object | ? Count -gt 1).Name
-72254
-01211
-02249
-02250
-48725
-00101
-00106
-00108
-41257
-42074
-02053
-00281
-00332
-00321
-03183
-57714
-01802
-03191
-03192
-00734
-52649
-41254
-41291
-41831
-00322
-00323
-00324
-00343
-00363
-00416
-00433
-00519
-00533
-00535
-00551
-00581
-00586
-00614
-00653
-64433
-64746
-00674
-00862
-01140
-01143
-01302
-01345
-01373
-58913
-01413
-01409
-01434
-01437
-01773
-01795
-01926
-69068
-69073
-01982
-78176
-01986
-01985
-01983
-01988
-01989
-01984
-01987
-01994
-01991
-01992
-01993
-01995
-01996
-01997
-01998
-01999
-02001
-02002
-02077
-02923
-02079
-02080
-02932
-02089
-02098
-02123
-02165
-02167
-02172
-61568
-02184
-02283
-02284
-71008
-02695
-96024
-95994
-96035
-96193
-96333
-03003
-03006
-03007
-03008
-03009
-03010
-03011
-03012
-03014
-03015
-03017
-03018
-03019
-03021
-03050
-03052
-03053
-03055
-03158
-03344
-10034
-03335
-03322
-03342
-03333
-03336
-80829
-80831
-80843
-03337
-03338
-03339
-03340
-03341
-03343
-03345
-03346
-03360
-81541
-03364
-00918
-00965
-05446
-07848
-86623
-86390
-07830
-*/
+#endif ///NOSFTPEND

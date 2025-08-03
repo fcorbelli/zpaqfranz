@@ -11,7 +11,7 @@ macos_arm64_task:
     - gcc --version
     - uname -m  # Dovrebbe mostrare arm64
   compile_script:
-    - $(brew --prefix gcc)/bin/g++-13 -Dunix -DSFTP -DHWSHA2 -arch arm64 zpaqfranz.cpp -o zpaqfranz-arm64 -pthread -std=c++11 -Wall -Wpedantic -lz 2>&1 | tee build_report.txt
+    - $(brew --prefix gcc)/bin/g++ -Dunix -DSFTP -DHWSHA2 -arch arm64 zpaqfranz.cpp -o zpaqfranz-arm64 -pthread -std=c++11 -Wall -Wpedantic -lz 2>&1 | tee build_report.txt
   test_script:
     - ./zpaqfranz-arm64 autotest
   always:
@@ -32,7 +32,7 @@ macos_intel_task:
     - gcc --version
   compile_script:
     # Forza compilazione per x86_64 anche su Apple Silicon
-    - $(brew --prefix gcc)/bin/g++-13 -Dunix -DSFTP -DHWSHA2 -arch x86_64 zpaqfranz.cpp -o zpaqfranz-intel -pthread -std=c++11 -Wall -Wpedantic -lz 2>&1 | tee build_report.txt
+    - $(brew --prefix gcc)/bin/g++ -Dunix -DSFTP -DHWSHA2 -arch x86_64 zpaqfranz.cpp -o zpaqfranz-intel -pthread -std=c++11 -Wall -Wpedantic -lz 2>&1 | tee build_report.txt
   test_script:
     # Test sotto Rosetta se siamo su Apple Silicon
     - if [[ $(uname -m) == "arm64" ]]; then arch -x86_64 ./zpaqfranz-intel autotest; else ./zpaqfranz-intel autotest; fi
@@ -54,9 +54,9 @@ macos_universal_task:
     - gcc --version
   compile_script:
     # Compila per ARM64
-    - $(brew --prefix gcc)/bin/g++-13 -Dunix -DSFTP -DHWSHA2 -arch arm64 zpaqfranz.cpp -o zpaqfranz-arm64 -pthread -std=c++11 -Wall -Wpedantic -lz 2>&1 | tee build_report_arm64.txt
+    - $(brew --prefix gcc)/bin/g++ -Dunix -DSFTP -DHWSHA2 -arch arm64 zpaqfranz.cpp -o zpaqfranz-arm64 -pthread -std=c++11 -Wall -Wpedantic -lz 2>&1 | tee build_report_arm64.txt
     # Compila per Intel
-    - $(brew --prefix gcc)/bin/g++-13 -Dunix -DSFTP -DHWSHA2 -arch x86_64 zpaqfranz.cpp -o zpaqfranz-intel -pthread -std=c++11 -Wall -Wpedantic -lz 2>&1 | tee build_report_intel.txt
+    - $(brew --prefix gcc)/bin/g++ -Dunix -DSFTP -DHWSHA2 -arch x86_64 zpaqfranz.cpp -o zpaqfranz-intel -pthread -std=c++11 -Wall -Wpedantic -lz 2>&1 | tee build_report_intel.txt
     # Crea il binario universale
     - lipo -create -output zpaqfranz-universal zpaqfranz-arm64 zpaqfranz-intel
     # Verifica il binario universale
@@ -84,7 +84,7 @@ macos_arm64_optimized_task:
     - export PATH="$(brew --prefix gcc)/bin:$PATH"
   compile_script:
     # Ottimizzazioni specifiche per Apple Silicon
-    - $(brew --prefix gcc)/bin/g++-13 -Dunix -DSFTP -DHWSHA2 -arch arm64 -mcpu=apple-m1 -O3 -flto zpaqfranz.cpp -o zpaqfranz-arm64-opt -pthread -std=c++11 -Wall -Wpedantic -lz 2>&1 | tee build_report.txt
+    - $(brew --prefix gcc)/bin/g++ -Dunix -DSFTP -DHWSHA2 -arch arm64 -mcpu=apple-m1 -O3 -flto zpaqfranz.cpp -o zpaqfranz-arm64-opt -pthread -std=c++11 -Wall -Wpedantic -lz 2>&1 | tee build_report.txt
   test_script:
     - ./zpaqfranz-arm64-opt autotest
   always:

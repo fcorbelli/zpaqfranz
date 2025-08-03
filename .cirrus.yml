@@ -8,7 +8,7 @@ macos_arm64:
     # Usa il gcc di Homebrew per ARM64
     - export PATH="$(brew --prefix gcc)/bin:$PATH"
     - g++ --version
-	- uname -m  # Dovrebbe mostrare arm64
+    - uname -m  # Dovrebbe mostrare arm64
   compile_script:
     - $(brew --prefix gcc)/bin/g++ -Dunix -DSFTP -arch arm64 -DNOJIT zpaqfranz.cpp -o zpaqfranz -pthread -std=c++11 -Wall -Wpedantic 2>&1 | tee build_report.txt
   test_script:
@@ -18,3 +18,4 @@ macos_arm64:
       path: build_report.txt
     executable_artifacts:
       path: zpaqfranz
+

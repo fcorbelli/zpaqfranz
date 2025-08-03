@@ -4,9 +4,9 @@ alpine_task:
   container:
     image: alpine:latest
   install_script:
-    - apk add --no-cache g++ musl-dev zlib-dev make linux-headers
+    - apk add --no-cache g++ musl-dev zlib-dev zlib-static make linux-headers build-base
   compile_script:
-    - g++ -DSFTP -DHWSHA2 -static -g -O0 -Wall -Wextra -pthread zpaqfranz.cpp -lz -o zpaqfranz 2>&1 | tee build_report.txt
+    - g++ -DSFTP -DHWSHA2 -static -g -O0 -Wall -Wextra -Wno-stringop-overflow -pthread zpaqfranz.cpp -lz -o zpaqfranz 2>&1 | tee build_report.txt
   test_script:
     - ./zpaqfranz autotest
   always:

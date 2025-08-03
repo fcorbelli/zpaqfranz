@@ -56,6 +56,7 @@ OTHER DEALINGS IN THE SOFTWARE.
 /*
 By uncommenting the line (defining ZPAQFULL), you'll get the 
 full version of zpaqfranz, with all features enabled.
+
 Here's the "spiegone"
 https://github.com/fcorbelli/zpaqfranz/wiki/Security:-open-software
  */

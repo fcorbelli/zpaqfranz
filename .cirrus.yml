@@ -1,4 +1,4 @@
-# Task per FreeBSD che va
+# Task per FreeBSD
 freebsd14_task:
   name: Build on FreeBSD
   freebsd_instance:
@@ -15,9 +15,7 @@ freebsd14_task:
     executable_artifacts:
       path: zpaqfranz
 
-
-	  
-# Task per macOS va
+# Task per macOS
 macos_task:
   name: Build on macOS
   macos_instance:
@@ -37,8 +35,7 @@ macos_task:
     executable_artifacts:
       path: zpaqfranz
 
-
-# Build su multiple distribuzioni Linux va
+# Build su multiple distribuzioni Linux
 
 # Debian (stable) - APT based
 debian_task:
@@ -108,7 +105,7 @@ centos_task:
     executable_artifacts:
       path: zpaqfranz
 
-# Rocky Linux (CentOS alternative) - YUM based
+# Rocky Linux - YUM based
 rocky_task:
   name: Build on Rocky Linux
   container:
@@ -125,7 +122,7 @@ rocky_task:
     executable_artifacts:
       path: zpaqfranz
 
-# AlmaLinux (altra alternativa CentOS) - YUM based
+# AlmaLinux - YUM based
 alma_task:
   name: Build on AlmaLinux
   container:
@@ -226,3 +223,4 @@ clang_task:
       path: build_report.txt
     executable_artifacts:
       path: zpaqfranz
+      

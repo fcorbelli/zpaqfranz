@@ -1,10 +1,9 @@
-# Task per FreeBSD nonva
 freebsd14_task:
   name: Build on FreeBSD
   freebsd_instance:
     image_family: freebsd-14-2
   install_script:
-    - pkg install -y clang g++ zlib
+    - pkg install -y llvm zlib
   compile_script:
     - cc -DHWSHA2 -DSFTP zpaqfranz.cpp -o zpaqfranz -pthread -lstdc++ -lm 2>&1 | tee build_report.txt
   test_script:

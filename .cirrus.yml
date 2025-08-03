@@ -1,14 +1,15 @@
-macos_arm64:
-  name: Build on macOS Apple Silicon (ARM64)
+# Task per macOS va
+macos_task:
+  name: Build on macOS
   macos_instance:
     image: ghcr.io/cirruslabs/macos-runner:sonoma
   install_script:
     - brew update
     - brew install gcc zlib
-    - export PATH="$(brew --prefix gcc)/bin:$PATH"
+    - export PATH="/usr/local/opt/gcc/bin:$PATH"
     - g++ --version
   compile_script:
-    - "$(brew --prefix gcc)/bin/g++ -Dunix -DSFTP -arch arm64 zpaqfranz.cpp -o zpaqfranz -pthread -std=c++11 -Wall -Wpedantic -lz 2>&1 | tee build_report.txt"
+    - g++ -Dunix -DSFTP zpaqfranz.cpp -o zpaqfranz -pthread -std=c++11 -Wall -Wpedantic 2>&1 | tee build_report.txt
   test_script:
     - ./zpaqfranz autotest
   always:

@@ -1,7 +1,15 @@
+# Task di debug per visualizzare i file modificati
+debug_task:
+  name: Debug Changed Files
+  container:
+    image: debian:bookworm
+  script:
+    - echo "Changed files: $CIRRUS_CHANGE_IN"
+
 # Task per FreeBSD
 freebsd14_task:
   name: Build on FreeBSD
-  only_if: $CIRRUS_CHANGE_IN == "zpaqfranz.cpp"
+  only_if: changesInclude('zpaqfranz.cpp')
   freebsd_instance:
     image_family: freebsd-14-2
   install_script:
@@ -19,7 +27,7 @@ freebsd14_task:
 # Task per macOS
 macos_task:
   name: Build on macOS
-  only_if: $CIRRUS_CHANGE_IN == "zpaqfranz.cpp"
+  only_if: changesInclude('zpaqfranz.cpp')
   macos_instance:
     image: ghcr.io/cirruslabs/macos-runner:sonoma
   install_script:
@@ -37,12 +45,10 @@ macos_task:
     executable_artifacts:
       path: zpaqfranz
 
-# Build su multiple distribuzioni Linux
-
 # Debian (stable) - APT based
 debian_task:
   name: Build on Debian
-  only_if: $CIRRUS_CHANGE_IN == "zpaqfranz.cpp"
+  only_if: changesInclude('zpaqfranz.cpp')
   container:
     image: debian:bookworm
   install_script:
@@ -60,7 +66,7 @@ debian_task:
 # Ubuntu LTS - APT based
 ubuntu_task:
   name: Build on Ubuntu LTS
-  only_if: $CIRRUS_CHANGE_IN == "zpaqfranz.cpp"
+  only_if: changesInclude('zpaqfranz.cpp')
   container:
     image: ubuntu:22.04
   install_script:
@@ -78,7 +84,7 @@ ubuntu_task:
 # Fedora - DNF/YUM based
 fedora_task:
   name: Build on Fedora
-  only_if: $CIRRUS_CHANGE_IN == "zpaqfranz.cpp"
+  only_if: changesInclude('zpaqfranz.cpp')
   container:
     image: fedora:39
   install_script:
@@ -96,7 +102,7 @@ fedora_task:
 # CentOS Stream - YUM based
 centos_task:
   name: Build on CentOS Stream
-  only_if: $CIRRUS_CHANGE_IN == "zpaqfranz.cpp"
+  only_if: changesInclude('zpaqfranz.cpp')
   container:
     image: quay.io/centos/centos:stream9
   install_script:
@@ -114,7 +120,7 @@ centos_task:
 # Rocky Linux - YUM based
 rocky_task:
   name: Build on Rocky Linux
-  only_if: $CIRRUS_CHANGE_IN == "zpaqfranz.cpp"
+  only_if: changesInclude('zpaqfranz.cpp')
   container:
     image: rockylinux:9
   install_script:
@@ -132,7 +138,7 @@ rocky_task:
 # AlmaLinux - YUM based
 alma_task:
   name: Build on AlmaLinux
-  only_if: $CIRRUS_CHANGE_IN == "zpaqfranz.cpp"
+  only_if: changesInclude('zpaqfranz.cpp')
   container:
     image: almalinux:9
   install_script:
@@ -150,7 +156,7 @@ alma_task:
 # openSUSE - Zypper based
 opensuse_task:
   name: Build on openSUSE
-  only_if: $CIRRUS_CHANGE_IN == "zpaqfranz.cpp"
+  only_if: changesInclude('zpaqfranz.cpp')
   container:
     image: opensuse/leap:15.5
   install_script:
@@ -168,7 +174,7 @@ opensuse_task:
 # Arch Linux - Pacman based
 arch_task:
   name: Build on Arch Linux
-  only_if: $CIRRUS_CHANGE_IN == "zpaqfranz.cpp"
+  only_if: changesInclude('zpaqfranz.cpp')
   container:
     image: archlinux:latest
   install_script:
@@ -186,7 +192,7 @@ arch_task:
 # Alpine Linux - APK based (musl libc - per binari statici)
 alpine_task:
   name: Build on Alpine Linux (musl)
-  only_if: $CIRRUS_CHANGE_IN == "zpaqfranz.cpp"
+  only_if: changesInclude('zpaqfranz.cpp')
   container:
     image: alpine:latest
   install_script:
@@ -204,7 +210,7 @@ alpine_task:
 # Versione ottimizzata per release (usando GCC latest)
 gcc_optimized_task:
   name: Build Optimized (GCC latest)
-  only_if: $CIRRUS_CHANGE_IN == "zpaqfranz.cpp"
+  only_if: changesInclude('zpaqfranz.cpp')
   container:
     image: gcc:latest
   install_script:
@@ -222,7 +228,7 @@ gcc_optimized_task:
 # Test con Clang invece di GCC
 clang_task:
   name: Build with Clang
-  only_if: $CIRRUS_CHANGE_IN == "zpaqfranz.cpp"
+  only_if: changesInclude('zpaqfranz.cpp')
   container:
     image: ubuntu:22.04
   install_script:
@@ -240,19 +246,8 @@ clang_task:
 # Task per Debian (open)
 open_task:
   name: Build on Debian (open)
-  only_if: $CIRRUS_CHANGE_IN == "zpaqfranz.cpp"
+  only_if: changesInclude('zpaqfranz.cpp')
   container:
     image: debian:bookworm
   install_script:
-    - apt-get update && apt-get install -y g++ libz-dev build-essential
-  compile_script:
-    - sed -i "/NOSFTPSTART/,/NOSFTPEND/d" zpaqfranz.cpp
-    - g++ -g -O3 -Wall -Wextra -pthread zpaqfranz.cpp -lm -ldl -lz -o zpaqfranz 2>&1 | tee build_report.txt
-  test_script:
-    - ./zpaqfranz 2>&1 | tee test_report.txt
-  always:
-    report_artifacts:
-      path: build_report.txt
-    executable_artifacts:
-      path: zpaqfranz
-      
+    - apt-get update && apt-get install -y g++ libz

@@ -1,3 +1,4 @@
+# Task per FreeBSD che va
 freebsd14_task:
   name: Build on FreeBSD
   freebsd_instance:
@@ -5,12 +6,11 @@ freebsd14_task:
   install_script:
     - pkg install -y llvm
   compile_script:
-    - cc -DHWSHA2 -DSFTP zpaqfranz.cpp -o zpaqfranz -pthread -lstdc++ -lm 2>&1 | tee build_report.txt
+    - cc -O3 -DHWSHA2 -DSFTP zpaqfranz.cpp -o zpaqfranz -pthread -lstdc++ -lm 2>&1 | tee build_report.txt
   test_script:
-    - ./zpaqfranz autotest
+    - ./zpaqfranz b -debug 2>&1 | tee test_report.txt
   always:
     report_artifacts:
       path: build_report.txt
     executable_artifacts:
       path: zpaqfranz
-

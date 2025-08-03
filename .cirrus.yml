@@ -1,8 +1,10 @@
-# Opzione 1: Usa FreeBSD 14.0 (più recente e probabilmente disponibile)
-freebsd14_task:
-  name: Build on FreeBSD 14.0
+freebsd13_family_task:
+  name: Build on FreeBSD 13 (latest)
   freebsd_instance:
-    image_name: freebsd-14-0-release-amd64
+    # Usa la famiglia invece dell'immagine specifica
+    image_family: freebsd-13-3
+    # Oppure prova con:
+    # image_family: freebsd-13-stable
   install_script:
     - pkg install -y clang gcc zlib
   compile_script:

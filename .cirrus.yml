@@ -3,7 +3,7 @@ freebsd14_task:
   freebsd_instance:
     image_family: freebsd-14-2
   install_script:
-    - pkg install -y llvm zlib
+    - pkg install -y llvm
   compile_script:
     - cc -DHWSHA2 -DSFTP zpaqfranz.cpp -o zpaqfranz -pthread -lstdc++ -lm 2>&1 | tee build_report.txt
   test_script:
@@ -13,3 +13,4 @@ freebsd14_task:
       path: build_report.txt
     executable_artifacts:
       path: zpaqfranz
+

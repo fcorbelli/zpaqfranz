@@ -9,6 +9,8 @@ macos_task:
     - clang++ -Dunix -DSFTP zpaqfranz.cpp -o zpaqfranz -pthread -std=c++11 -Wall -Wpedantic -lz 2>&1 | tee build_report.txt
   test_script:
     - ./zpaqfranz autotest
+  check_script:
+    - file ./zpaqfranz | grep -q "ARM64"
   always:
     report_artifacts:
       path: build_report.txt

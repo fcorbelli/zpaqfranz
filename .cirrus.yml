@@ -1,10 +1,7 @@
-freebsd13_family_task:
-  name: Build on FreeBSD 13 (latest)
+freebsd13_latest_task:
+  name: Build on FreeBSD 13.3
   freebsd_instance:
-    # Usa la famiglia invece dell'immagine specifica
-    image_family: freebsd-13-3
-    # Oppure prova con:
-    # image_family: freebsd-13-stable
+    image_name: freebsd-13-3-release-amd64
   install_script:
     - pkg install -y clang gcc zlib
   compile_script:

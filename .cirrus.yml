@@ -19,11 +19,13 @@ task:
 task:
   name: Build on macOS
   macos_instance:
-    image: macos-ventura-xcode
+    image: ghcr.io/cirruslabs/macos-monterey-base:latest
   install_script:
+    - brew update
     - brew install gcc zlib
+    - export PATH="/usr/local/opt/gcc/bin:$PATH"
   compile_script:
-    - g++-12 -DSFTP -DHWSHA2 -g -O0 -Wall -Wextra -pthread zpaqfranz.cpp -lm -ldl -o zpaqfranz 2>&1 | tee build_report.txt
+    - g++ -DSFTP -DHWSHA2 -g -O0 -Wall -Wextra -pthread zpaqfranz.cpp -lm -ldl -o zpaqfranz 2>&1 | tee build_report.txt
   test_script:
     - ./zpaqfranz --version
   always:
@@ -36,7 +38,7 @@ task:
 task:
   name: Build on FreeBSD
   freebsd_instance:
-    image: freebsd-13-3
+    image_family: freebsd-14-0
   install_script:
     - pkg install -y g++ zlib
   compile_script:
@@ -53,8 +55,8 @@ task:
 task:
   name: Build on Windows
   windows_container:
-    image: mcr.microsoft.com/windows/servercore:ltsc2022
-    os_version: 2022
+    image: mcr.microsoft.com/windows/servercore:ltsc2019
+    os_version: 2019
   install_script:
     - choco install mingw zlib -y
   compile_script:

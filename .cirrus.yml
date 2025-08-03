@@ -1,188 +1,136 @@
-# Build su multiple distribuzioni Linux va
-
-# Debian (stable) - APT based
-debian_task:
-  name: Build on Debian
-  container:
-    image: debian:bookworm
+# Build per macOS Apple Silicon (ARM64/M1/M2/M3)
+macos_arm64_task:
+  name: Build on macOS Apple Silicon (ARM64)
+  macos_instance:
+    image: ghcr.io/cirruslabs/macos-runner:sonoma
   install_script:
-    - apt-get update && apt-get install -y g++ libz-dev build-essential
+    - brew update
+    - brew install gcc zlib
+    # Usa il gcc di Homebrew per ARM64
+    - export PATH="$(brew --prefix gcc)/bin:$PATH"
+    - gcc --version
+    - uname -m  # Dovrebbe mostrare arm64
   compile_script:
-    - g++ -DSFTP -DHWSHA2 -g -O0 -Wall -Wextra -pthread zpaqfranz.cpp -lm -ldl -lz -o zpaqfranz 2>&1 | tee build_report.txt
+    - $(brew --prefix gcc)/bin/g++-13 -Dunix -DSFTP -DHWSHA2 -arch arm64 zpaqfranz.cpp -o zpaqfranz-arm64 -pthread -std=c++11 -Wall -Wpedantic -lz 2>&1 | tee build_report.txt
   test_script:
-    - ./zpaqfranz autotest
+    - ./zpaqfranz-arm64 autotest
   always:
     report_artifacts:
       path: build_report.txt
     executable_artifacts:
-      path: zpaqfranz
+      path: zpaqfranz-arm64
 
-# Ubuntu LTS - APT based
-ubuntu_task:
-  name: Build on Ubuntu LTS
-  container:
-    image: ubuntu:22.04
+# Build per macOS Intel (x86_64)
+macos_intel_task:
+  name: Build on macOS Intel (x86_64)
+  macos_instance:
+    image: ghcr.io/cirruslabs/macos-runner:sonoma
   install_script:
-    - apt-get update && apt-get install -y g++ libz-dev build-essential
+    - brew update
+    - brew install gcc zlib
+    - export PATH="$(brew --prefix gcc)/bin:$PATH"
+    - gcc --version
   compile_script:
-    - g++ -DSFTP -DHWSHA2 -g -O0 -Wall -Wextra -pthread zpaqfranz.cpp -lm -ldl -lz -o zpaqfranz 2>&1 | tee build_report.txt
+    # Forza compilazione per x86_64 anche su Apple Silicon
+    - $(brew --prefix gcc)/bin/g++-13 -Dunix -DSFTP -DHWSHA2 -arch x86_64 zpaqfranz.cpp -o zpaqfranz-intel -pthread -std=c++11 -Wall -Wpedantic -lz 2>&1 | tee build_report.txt
   test_script:
-    - ./zpaqfranz autotest
+    # Test sotto Rosetta se siamo su Apple Silicon
+    - if [[ $(uname -m) == "arm64" ]]; then arch -x86_64 ./zpaqfranz-intel autotest; else ./zpaqfranz-intel autotest; fi
   always:
     report_artifacts:
       path: build_report.txt
     executable_artifacts:
-      path: zpaqfranz
+      path: zpaqfranz-intel
 
-# Fedora - DNF/YUM based
-fedora_task:
-  name: Build on Fedora
-  container:
-    image: fedora:39
+# Build Universale (Fat Binary) - Funziona su entrambe le architetture
+macos_universal_task:
+  name: Build macOS Universal Binary
+  macos_instance:
+    image: ghcr.io/cirruslabs/macos-runner:sonoma
   install_script:
-    - dnf install -y gcc-c++ zlib-devel glibc-devel
+    - brew update
+    - brew install gcc zlib
+    - export PATH="$(brew --prefix gcc)/bin:$PATH"
+    - gcc --version
   compile_script:
-    - g++ -DSFTP -DHWSHA2 -g -O0 -Wall -Wextra -pthread zpaqfranz.cpp -lm -ldl -lz -o zpaqfranz 2>&1 | tee build_report.txt
+    # Compila per ARM64
+    - $(brew --prefix gcc)/bin/g++-13 -Dunix -DSFTP -DHWSHA2 -arch arm64 zpaqfranz.cpp -o zpaqfranz-arm64 -pthread -std=c++11 -Wall -Wpedantic -lz 2>&1 | tee build_report_arm64.txt
+    # Compila per Intel
+    - $(brew --prefix gcc)/bin/g++-13 -Dunix -DSFTP -DHWSHA2 -arch x86_64 zpaqfranz.cpp -o zpaqfranz-intel -pthread -std=c++11 -Wall -Wpedantic -lz 2>&1 | tee build_report_intel.txt
+    # Crea il binario universale
+    - lipo -create -output zpaqfranz-universal zpaqfranz-arm64 zpaqfranz-intel
+    # Verifica il binario universale
+    - lipo -info zpaqfranz-universal | tee build_report.txt
+    - file zpaqfranz-universal >> build_report.txt
   test_script:
-    - ./zpaqfranz autotest
+    # Test del binario universale
+    - ./zpaqfranz-universal autotest
+    # Verifica che funzioni sotto entrambe le architetture
+    - if [[ $(uname -m) == "arm64" ]]; then arch -x86_64 ./zpaqfranz-universal autotest; fi
   always:
     report_artifacts:
       path: build_report.txt
     executable_artifacts:
-      path: zpaqfranz
+      path: zpaqfranz-universal
 
-# CentOS Stream - YUM based
-centos_task:
-  name: Build on CentOS Stream
-  container:
-    image: quay.io/centos/centos:stream9
+# Build ottimizzato per Apple Silicon con ottimizzazioni native
+macos_arm64_optimized_task:
+  name: Build macOS ARM64 Optimized
+  macos_instance:
+    image: ghcr.io/cirruslabs/macos-runner:sonoma
   install_script:
-    - dnf install -y gcc-c++ zlib-devel glibc-devel
+    - brew update
+    - brew install gcc zlib
+    - export PATH="$(brew --prefix gcc)/bin:$PATH"
   compile_script:
-    - g++ -DSFTP -DHWSHA2 -g -O0 -Wall -Wextra -pthread zpaqfranz.cpp -lm -ldl -lz -o zpaqfranz 2>&1 | tee build_report.txt
+    # Ottimizzazioni specifiche per Apple Silicon
+    - $(brew --prefix gcc)/bin/g++-13 -Dunix -DSFTP -DHWSHA2 -arch arm64 -mcpu=apple-m1 -O3 -flto zpaqfranz.cpp -o zpaqfranz-arm64-opt -pthread -std=c++11 -Wall -Wpedantic -lz 2>&1 | tee build_report.txt
   test_script:
-    - ./zpaqfranz autotest
+    - ./zpaqfranz-arm64-opt autotest
   always:
     report_artifacts:
       path: build_report.txt
     executable_artifacts:
-      path: zpaqfranz
+      path: zpaqfranz-arm64-opt
 
-# Rocky Linux (CentOS alternative) - YUM based
-rocky_task:
-  name: Build on Rocky Linux
-  container:
-    image: rockylinux:9
+# Build con Clang (compiler nativo di macOS)
+macos_clang_task:
+  name: Build macOS with Clang
+  macos_instance:
+    image: ghcr.io/cirruslabs/macos-runner:sonoma
   install_script:
-    - dnf install -y gcc-c++ zlib-devel glibc-devel
+    - brew update
+    - brew install zlib
+    - clang++ --version
   compile_script:
-    - g++ -DSFTP -DHWSHA2 -g -O0 -Wall -Wextra -pthread zpaqfranz.cpp -lm -ldl -lz -o zpaqfranz 2>&1 | tee build_report.txt
+    # Usa Clang nativo di macOS
+    - clang++ -Dunix -DSFTP -DHWSHA2 zpaqfranz.cpp -o zpaqfranz-clang -pthread -std=c++11 -Wall -Wpedantic -lz 2>&1 | tee build_report.txt
   test_script:
-    - ./zpaqfranz autotest
+    - ./zpaqfranz-clang autotest
   always:
     report_artifacts:
       path: build_report.txt
     executable_artifacts:
-      path: zpaqfranz
+      path: zpaqfranz-clang
 
-# AlmaLinux (altra alternativa CentOS) - YUM based
-alma_task:
-  name: Build on AlmaLinux
-  container:
-    image: almalinux:9
+# Build per macOS con supporto Xcode (se necessario)
+macos_xcode_task:
+  name: Build macOS with Xcode
+  macos_instance:
+    image: ghcr.io/cirruslabs/macos-runner:sonoma
   install_script:
-    - dnf install -y gcc-c++ zlib-devel glibc-devel
+    - brew update
+    - brew install zlib
+    # Assicurati che Xcode command line tools siano installati
+    - xcode-select --install || true
+    - xcrun --show-sdk-path
   compile_script:
-    - g++ -DSFTP -DHWSHA2 -g -O0 -Wall -Wextra -pthread zpaqfranz.cpp -lm -ldl -lz -o zpaqfranz 2>&1 | tee build_report.txt
+    # Usa xcrun per invocare clang con SDK corretto
+    - xcrun clang++ -Dunix -DSFTP -DHWSHA2 zpaqfranz.cpp -o zpaqfranz-xcode -pthread -std=c++11 -Wall -Wpedantic -lz 2>&1 | tee build_report.txt
   test_script:
-    - ./zpaqfranz autotest
+    - ./zpaqfranz-xcode autotest
   always:
     report_artifacts:
       path: build_report.txt
     executable_artifacts:
-      path: zpaqfranz
-
-# openSUSE - Zypper based
-opensuse_task:
-  name: Build on openSUSE
-  container:
-    image: opensuse/leap:15.5
-  install_script:
-    - zypper refresh && zypper install -y gcc-c++ zlib-devel glibc-devel
-  compile_script:
-    - g++ -DSFTP -DHWSHA2 -g -O0 -Wall -Wextra -pthread zpaqfranz.cpp -lm -ldl -lz -o zpaqfranz 2>&1 | tee build_report.txt
-  test_script:
-    - ./zpaqfranz autotest
-  always:
-    report_artifacts:
-      path: build_report.txt
-    executable_artifacts:
-      path: zpaqfranz
-
-# Arch Linux - Pacman based
-arch_task:
-  name: Build on Arch Linux
-  container:
-    image: archlinux:latest
-  install_script:
-    - pacman -Syu --noconfirm gcc zlib glibc
-  compile_script:
-    - g++ -DSFTP -DHWSHA2 -g -O0 -Wall -Wextra -pthread zpaqfranz.cpp -lm -ldl -lz -o zpaqfranz 2>&1 | tee build_report.txt
-  test_script:
-    - ./zpaqfranz autotest
-  always:
-    report_artifacts:
-      path: build_report.txt
-    executable_artifacts:
-      path: zpaqfranz
-
-# Alpine Linux - APK based (musl libc - per binari statici)
-alpine_task:
-  name: Build on Alpine Linux (musl)
-  container:
-    image: alpine:latest
-  install_script:
-    - apk add --no-cache g++ musl-dev zlib-dev zlib-static make linux-headers build-base
-  compile_script:
-    - g++ -DSFTP -DHWSHA2 -static -g -O0 -Wall -Wextra -Wno-stringop-overflow -pthread zpaqfranz.cpp -lz -o zpaqfranz 2>&1 | tee build_report.txt
-  test_script:
-    - ./zpaqfranz autotest
-  always:
-    report_artifacts:
-      path: build_report.txt
-    executable_artifacts:
-      path: zpaqfranz
-
-# Versione ottimizzata per release (usando GCC latest)
-gcc_optimized_task:
-  name: Build Optimized (GCC latest)
-  container:
-    image: gcc:latest
-  install_script:
-    - apt-get update && apt-get install -y g++ libz-dev
-  compile_script:
-    - g++ -DSFTP -DHWSHA2 -O3 -march=native -flto -Wall -Wextra -pthread zpaqfranz.cpp -lm -ldl -lz -o zpaqfranz 2>&1 | tee build_report.txt
-  test_script:
-    - ./zpaqfranz autotest
-  always:
-    report_artifacts:
-      path: build_report.txt
-    executable_artifacts:
-      path: zpaqfranz
-
-# Test con Clang invece di GCC
-clang_task:
-  name: Build with Clang
-  container:
-    image: ubuntu:22.04
-  install_script:
-    - apt-get update && apt-get install -y clang libz-dev build-essential
-  compile_script:
-    - clang++ -DSFTP -DHWSHA2 -g -O0 -Wall -Wextra -pthread zpaqfranz.cpp -lm -ldl -lz -o zpaqfranz 2>&1 | tee build_report.txt
-  test_script:
-    - ./zpaqfranz autotest
-  always:
-    report_artifacts:
-      path: build_report.txt
-    executable_artifacts:
-      path: zpaqfranz
+      path: zpaqfranz-xcode

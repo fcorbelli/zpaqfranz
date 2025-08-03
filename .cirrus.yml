@@ -7,15 +7,15 @@ macos_arm64:
     - brew install gcc zlib
     - export PATH="$(brew --prefix gcc)/bin:$PATH"
     - g++ --version
-    - uname -m  # Dovrebbe mostrare arm64
+    - uname -m
   compile_script:
     - echo "Build started at $(date)" > build_report.txt
     - $(brew --prefix gcc)/bin/g++ -Dunix -DSFTP -arch arm64 -DNOJIT zpaqfranz.cpp -o zpaqfranz -pthread -std=c++11 -Wall -Wpedantic -lz -O2 2>&1 | tee -a build_report.txt
   test_script:
+    - [ -f ./zpaqfranz ] && ./zpaqfranz autotest || { echo "Errore: zpaqfranz non trovato"; exit 1; }
     - ./zpaqfranz autotest || { echo "Test fallito"; exit 1; }
   always:
     report_artifacts:
       path: build_report.txt
     executable_artifacts:
       path: zpaqfranz
-

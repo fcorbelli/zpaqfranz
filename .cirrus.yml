@@ -250,4 +250,15 @@ open_task:
   container:
     image: debian:bookworm
   install_script:
-    - apt-get update && apt-get install -y g++ libz
+    - apt-get update && apt-get install -y g++ libz-dev build-essential
+  compile_script:
+    - sed -i "/NOSFTPSTART/,/NOSFTPEND/d" zpaqfranz.cpp
+    - g++ -g -O3 -Wall -Wextra -pthread zpaqfranz.cpp -lm -ldl -lz -o zpaqfranz 2>&1 | tee build_report.txt
+  test_script:
+    - ./zpaqfranz 2>&1 | tee test_report.txt
+  always:
+    report_artifacts:
+      path: build_report.txt
+    executable_artifacts:
+      path: zpaqfranz
+      

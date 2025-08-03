@@ -8,7 +8,7 @@ task:
   compile_script:
     - g++ -DSFTP -DHWSHA2 -g -O0 -Wall -Wextra -pthread zpaqfranz.cpp -lm -ldl -o zpaqfranz 2>&1 | tee build_report.txt
   test_script:
-    - ./zpaqfranz --version
+    - ./zpaqfranz autotest
   always:
     report_artifacts:
       path: build_report.txt
@@ -19,15 +19,16 @@ task:
 task:
   name: Build on macOS
   macos_instance:
-    image: ghcr.io/cirruslabs/macos-monterey-base:latest
+    image: ghcr.io/cirruslabs/macos-runner:sonoma
   install_script:
     - brew update
     - brew install gcc zlib
     - export PATH="/usr/local/opt/gcc/bin:$PATH"
+    - g++ --version
   compile_script:
     - g++ -DSFTP -DHWSHA2 -g -O0 -Wall -Wextra -pthread zpaqfranz.cpp -lm -ldl -o zpaqfranz 2>&1 | tee build_report.txt
   test_script:
-    - ./zpaqfranz --version
+    - ./zpaqfranz autotest
   always:
     report_artifacts:
       path: build_report.txt
@@ -38,13 +39,13 @@ task:
 task:
   name: Build on FreeBSD
   freebsd_instance:
-    image_family: freebsd-14-0
+    image_name: freebsd-13-2-release-amd64
   install_script:
     - pkg install -y g++ zlib
   compile_script:
     - g++ -DSFTP -DHWSHA2 -g -O0 -Wall -Wextra -pthread zpaqfranz.cpp -lm -ldl -o zpaqfranz 2>&1 | tee build_report.txt
   test_script:
-    - ./zpaqfranz --version
+    - ./zpaqfranz autotest
   always:
     report_artifacts:
       path: build_report.txt
@@ -58,11 +59,13 @@ task:
     image: mcr.microsoft.com/windows/servercore:ltsc2019
     os_version: 2019
   install_script:
+    - powershell -Command "Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))"
     - choco install mingw zlib -y
+    - g++ --version
   compile_script:
     - g++ -DSFTP -DHWSHA2 -g -O0 -Wall -Wextra -pthread zpaqfranz.cpp -lm -o zpaqfranz 2>&1 | tee build_report.txt
   test_script:
-    - zpaqfranz.exe --version
+    - zpaqfranz.exe autotest
   always:
     report_artifacts:
       path: build_report.txt

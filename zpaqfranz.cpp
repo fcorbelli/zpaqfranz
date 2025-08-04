@@ -1329,7 +1329,7 @@ DEFINEs at compile-time: IT IS UP TO YOU NOT TO MIX LOGICAL INCOMPATIBLE DEFINIT
 -DHWBLAKE3 blake3_windows_gnu.S		// On Win64 enable HW accelerated BLAKE3 (with assembly)
 -DHWSHA1							// On Win64 enable HW SHA1 (-flaghw)
 -DHWSHA2							// Enable HW SHA2 (without assembly code to be linked)
--Dunix 								// Compile on "something different from Windows"
+-Dunix 								// Compile on "something different from Windows" (obsolete)
 -DSOLARIS        					// Solaris is similar, but not equal, to BSD Unix
 
 -DNOJIT								// By default zpaqfranz works on Intel CPUs
@@ -33611,8 +33611,8 @@ public:
 				myprintf("00216: HERE WE ARE @ %12s on fp %12s  size %s\n",migliaia3(ftello(firstfp)),migliaia(int64_t(firstfp)),migliaia2(ptr));
 #endif
 			char debugfilename[100];
-			FP debugoutf;
 #ifndef ESX
+			FP debugoutf;
 			if (flagdebug4)
 			{
 				snprintf(debugfilename,sizeof(debugfilename),"z:\\fp_%04d,%04d_u_%08d_size_%06d_%s.bin",(int)g_debug_sequence++,(int)int64_t(firstfp),(int)int64_t(ftello(firstfp)),ptr,nomefile.c_str());
@@ -33684,9 +33684,10 @@ public:
 		if (flagdebug3)
 			myprintf("00227: flush k4bis\n");
 
-		char debugfilename[100];
-		FP debugoutf;
+
 #ifndef ESX
+		char debugfilename[100];
+		FP debugoutf;		
 		if (flagdebug4)
 		{
 			snprintf(debugfilename,sizeof(debugfilename),"z:\\fp_%04d,%04d_u_%08d_size_%06d_%s.bin",(int)g_debug_sequence++,(int)int64_t(fp),(int)int64_t(ftello(fp)),ptr,nomefile.c_str());
@@ -40785,6 +40786,7 @@ Jidac* pjidac;
 std::string exec(const char* cmd)
 {
 #ifdef ANCIENT
+	(void)cmd;
 	return "";
 #else
 ///	"unfolded" for compiler "quiteness"
@@ -52152,7 +52154,10 @@ int set_creation_time(const char* filepath, time_t creation_time)
 
 int savefilemetadata(const char* filepath, struct franz_posix* metadata) 
 {
-#ifndef ANCIENT
+#ifdef ANCIENT
+	(void)filepath;
+	(void)metadata;
+#else
     struct stat fileInfo;
     if (flagdebug3)
         myprintf("64468: Saving metadata for <<%Z>>", filepath);
@@ -52340,7 +52345,10 @@ static int validate_metadata(const struct franz_posix* metadata)
 #endif
 int restorefilemetadata(const char* filepath, const struct franz_posix* metadata) 
 {
-#ifndef ANCIENT
+#ifdef ANCIENT
+	(void)filepath;
+	(void)metadata;
+#else
 	if (filepath==NULL)
 		return -1;
 	if (metadata==NULL)
@@ -77539,6 +77547,8 @@ endblock:;
 int Jidac::checksha1collision(DTMap& i_dtmap,bool i_decodefranzblock)
 {
 #ifdef ESX
+	(void)i_dtmap;
+	(void)i_decodefranzblock;
 	return 0; ///ESXi old compiler does not like
 #else
 	if ((flag715) || (flagnochecksum))
@@ -91702,6 +91712,7 @@ bool findmysql(std::string& o_mysql, std::string& o_mysqldump)
 void exec_with_realtime_output(const char* cmd)
 {
 #ifdef ANCIENT
+	(void)cmd;
     myprintf("00321: Real-time output not supported in ANCIENT mode\n");
 #else
     char buffer[128];
@@ -93562,14 +93573,17 @@ bool ripristinantfs(const std::string& image_path, const std::string& raw_path)
 #ifdef ESX
 long long get_device_size_ioctl(int fd)
 {
+	(void)fd;
 	return -1;
 }
 long long get_device_size_lseek(int fd) 
 {
+	(void)fd;
 	return -1;
 }
 long long get_device_size(int fd) 
 {
+	(void)fd;
 	return -1;
 }
 
@@ -93760,7 +93774,9 @@ long long get_device_size(int fd)
 
 bool Jidac::preparadump(const std::string& image_path) 
 {
-#ifndef ESX
+#ifdef ESX
+	(void)image_path;
+#else
     if (image_path=="")
     {
         myprintf("04276: image_path empty\n");
@@ -93803,7 +93819,11 @@ bool Jidac::preparadump(const std::string& image_path)
 // Funzione per leggere dati dal dispositivo
 int Jidac::elaboradump(char* buffer, size_t buffer_size) 
 {
-#ifndef ESX
+#ifdef ESX
+	(void)buffer;
+	(void)buffer_size;
+	return 0;
+#else
     if (g_device_fd == -1) 
 	{
         myprintf("04298! Error, device not open\n");
@@ -93828,8 +93848,6 @@ int Jidac::elaboradump(char* buffer, size_t buffer_size)
     
     // Ritorna il numero di byte letti (0 se EOF)
     return (int)bytes_read;
-#else
-	return 0;
 #endif
 }
 

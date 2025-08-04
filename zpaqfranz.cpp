@@ -207,14 +207,25 @@ https://github.com/fcorbelli/zpaqfranz/wiki/Security:-open-software
 #endif // corresponds to #ifdef (#ifdef NAS)
 
 #ifdef ANCIENT
-	#define INT64_MIN (-9223372036854775807LL - 1)
-	#define INT64_MAX 9223372036854775807LL
-	#define errno 0
-	#define nullptr 0
+     #if __cplusplus < 201103L
+        const class {
+        public:
+            template<class T>
+            operator T*() const { return 0; }
+            template<class C, class T>
+            operator T C::*() const { return 0; }
+        private:
+            void operator&() const;
+        } nullptr = {};
+    #endif
+    #define INT64_MIN (-9223372036854775807LL - 1)
+    #define INT64_MAX 9223372036854775807LL
+    #define errno 0
 #ifdef ZPAQFULL ///NOSFTPSTART
-	#undef SFTP
+    #undef SFTP
 #endif ///NOSFTPEND
 #endif
+
 
 #define DATE_1980 1980*10000000000LL+1*100000000LL+1*1000000
 
@@ -1357,7 +1368,7 @@ DEFINEs at compile-time: IT IS UP TO YOU NOT TO MIX LOGICAL INCOMPATIBLE DEFINIT
 -DESX								// Yes, zpaqfranz run (kind of) on ESXi too :-)
 
 -DALIGNMALLOC 						// Force malloc to be aligned at something (sparc64). Use naive CRC-32
-
+	
 -DIPV6								// Do not force IPv4 (the current default)
 
 #ifdef ZPAQFULL ///NOSFTPSTART

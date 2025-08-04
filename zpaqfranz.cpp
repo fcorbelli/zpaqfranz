@@ -64,8 +64,8 @@ https://github.com/fcorbelli/zpaqfranz/wiki/Security:-open-software
 #define ZPAQFULL ///NOSFTPSTART
 ///NOSFTPEND
 
-#define ZPAQ_VERSION "63.1b"
-#define ZPAQ_DATE "(2025-08-03)"
+#define ZPAQ_VERSION "63.1c"
+#define ZPAQ_DATE "(2025-08-04)"
 
 ///	optional align for malloc (sparc64,HPPA) via -DALIGNMALLOC
 #define STR(a) #a
@@ -1357,8 +1357,6 @@ DEFINEs at compile-time: IT IS UP TO YOU NOT TO MIX LOGICAL INCOMPATIBLE DEFINIT
 -DESX								// Yes, zpaqfranz run (kind of) on ESXi too :-)
 
 -DALIGNMALLOC 						// Force malloc to be aligned at something (sparc64). Use naive CRC-32
-
--DSERVER							// Enable the cloudpaq client (for Windows)
 
 -DIPV6								// Do not force IPv4 (the current default)
 

@@ -252,8 +252,8 @@ open_task:
   install_script:
     - apt-get update && apt-get install -y g++ libz-dev build-essential
   compile_script:
-    - sed -i "/NOSFTPSTART/,/NOSFTPEND/d" zpaqfranz.cpp
-    - g++ -g -O3 -Wall -Wextra -pthread zpaqfranz.cpp -lm -ldl -lz -o zpaqfranz 2>&1 | tee build_report.txt
+    - sed "/NOSFTPSTART/,/NOSFTPEND/d" zpaqfranz.cpp > zpaqfranz-open.cpp
+    - g++ -g -O3 -Wall -Wextra -pthread zpaqfranz-open.cpp -lm -ldl -lz -o zpaqfranz 2>&1 | tee build_report.txt
   test_script:
     - ./zpaqfranz 2>&1 | tee test_report.txt
   always:
@@ -262,3 +262,88 @@ open_task:
     executable_artifacts:
       path: zpaqfranz
       
+debian_straight_task:
+  name: Build on Debian (default)
+  only_if: changesInclude('zpaqfranz.cpp')
+  container:
+    image: debian:bookworm
+  install_script:
+    - apt-get update && apt-get install -y g++ libz-dev build-essential
+  compile_script:
+    - g++ -g -O3 -Wall -Wextra -pthread zpaqfranz.cpp -lm -ldl -lz -o zpaqfranz 2>&1 | tee build_report.txt
+  test_script:
+    - ./zpaqfranz b -debug 2>&1 | tee test_report.txt
+  always:
+    report_artifacts:
+      path: build_report.txt
+    executable_artifacts:
+      path: zpaqfranz
+
+debian_ancient:
+  name: Build on Debian (ancient)
+  only_if: changesInclude('zpaqfranz.cpp')
+  container:
+    image: debian:bookworm
+  install_script:
+    - apt-get update && apt-get install -y g++ libz-dev build-essential
+  compile_script:
+    - g++ -DANCIENT -g -O3 -Wall -Wextra -pthread zpaqfranz.cpp -lm -ldl -lz -o zpaqfranz 2>&1 | tee build_report.txt
+  test_script:
+    - ./zpaqfranz b -debug 2>&1 | tee test_report.txt
+  always:
+    report_artifacts:
+      path: build_report.txt
+    executable_artifacts:
+      path: zpaqfranz
+
+debian_nas:
+  name: Build on Debian (NAS)
+  only_if: changesInclude('zpaqfranz.cpp')
+  container:
+    image: debian:bookworm
+  install_script:
+    - apt-get update && apt-get install -y g++ libz-dev build-essential
+  compile_script:
+    - g++ -DNAS -g -O3 -Wall -Wextra -pthread zpaqfranz.cpp -lm -ldl -lz -o zpaqfranz 2>&1 | tee build_report.txt
+  test_script:
+    - ./zpaqfranz b -debug 2>&1 | tee test_report.txt
+  always:
+    report_artifacts:
+      path: build_report.txt
+    executable_artifacts:
+      path: zpaqfranz
+
+debian_esxi:
+  name: Build on Debian (ESXi)
+  only_if: changesInclude('zpaqfranz.cpp')
+  container:
+    image: debian:bookworm
+  install_script:
+    - apt-get update && apt-get install -y g++ libz-dev build-essential
+  compile_script:
+    - g++ -DESX -g -O3 -Wall -Wextra -pthread zpaqfranz.cpp -lm -ldl -lz -o zpaqfranz 2>&1 | tee build_report.txt
+  test_script:
+    - ./zpaqfranz b -debug 2>&1 | tee test_report.txt
+  always:
+    report_artifacts:
+      path: build_report.txt
+    executable_artifacts:
+      path: zpaqfranz
+
+debian_alignmalloc:
+  name: Build on Debian (ALIGNMALLOC)
+  only_if: changesInclude('zpaqfranz.cpp')
+  container:
+    image: debian:bookworm
+  install_script:
+    - apt-get update && apt-get install -y g++ libz-dev build-essential
+  compile_script:
+    - g++ -DALIGNMALLOC -g -O3 -Wall -Wextra -pthread zpaqfranz.cpp -lm -ldl -lz -o zpaqfranz 2>&1 | tee build_report.txt
+  test_script:
+    - ./zpaqfranz b -debug 2>&1 | tee test_report.txt
+  always:
+    report_artifacts:
+      path: build_report.txt
+    executable_artifacts:
+      path: zpaqfranz
+

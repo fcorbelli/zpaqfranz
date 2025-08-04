@@ -79,19 +79,16 @@ It is then possible to restore the data @ the single version, just like snapshot
 - Multiple possibilities of data verification, fast, advanced and even paranoid.
 - Some optimizations for modern hardware (aka: SSD, NVMe, multithread).
 - By default triple-check with "chunked" SHA-1, XXHASH64 and CRC-32 (!).  
-
-```
-For even higher level of paranoia, it is possible to use others hash algorithms, as
-```
-- MD5
-- SHA-1 of the full-file (NIST FIPS 180-4)
-- XXH3-128
-- BLAKE3 128
-- SHA-2-256 (NIST FIPS 180-4)
-- SHA-3-256 (NIST FIPS 202)
-- WHIRLPOOL (ISO/IEC 10118-3)
-- HIGHWAY (64,128,256)
-...And much more.  
+  For even higher level of paranoia, it is possible to use others hash algorithms, as
+  - MD5
+  - SHA-1 of the full-file (NIST FIPS 180-4)
+  - XXH3-128
+  - BLAKE3 128
+  - SHA-2-256 (NIST FIPS 180-4)
+  - SHA-3-256 (NIST FIPS 202)
+  - WHIRLPOOL (ISO/IEC 10118-3)
+  - HIGHWAY (64,128,256)
+  - ...And much more.  
 
 
 **No complex (and fragile) repository folders, with hundreds of "whatever", just only a single file!**  
@@ -304,7 +301,7 @@ https://user-images.githubusercontent.com/77727889/215267855-22bf875c-90ee-47d1-
 
 **Bonus: for a developer it's just like a "super-git-versioning"**
 
-In the makefile ,just put a zpaq-save-everything at the top and you will keep all the versions of your software, even with libraries, SQL dumps, etc.
+In the makefile, just put a zpaq-save-everything at the top and you will keep all the versions of your software, even with libraries, SQL dumps, etc.
 A single archive keeps everything, forever, with just one command (or two, for verification).
     
 **Defects?**

@@ -54,7 +54,7 @@ debian_task:
   install_script:
     - apt-get update && apt-get install -y g++ libz-dev build-essential
   compile_script:
-    - g++ -DSFTP -DHWSHA2 -g -O3 -Wall -Wextra -pthread zpaqfranz.cpp -lm -ldl -lz -o zpaqfranz 2>&1 | tee build_report.txt
+    - g++ -DSFTP -DHWSHA2 -g -O3 -Wall -Wextra -pthread zpaqfranz.cpp -lm -ldl -o zpaqfranz 2>&1 | tee build_report.txt
   test_script:
     - ./zpaqfranz autotest -all -debug 2>&1 | tee test_report.txt
   always:
@@ -72,7 +72,7 @@ ubuntu_task:
   install_script:
     - apt-get update && apt-get install -y g++ libz-dev build-essential
   compile_script:
-    - g++ -DANCIENT -g -O3 -Wall -Wextra -pthread zpaqfranz.cpp -lm -ldl -lz -o zpaqfranz 2>&1 | tee build_report.txt
+    - g++ -DANCIENT -g -O3 -Wall -Wextra -pthread zpaqfranz.cpp -lm -o zpaqfranz 2>&1 | tee build_report.txt
   test_script:
     - ./zpaqfranz autotest -all -debug 2>&1 | tee test_report.txt
   always:
@@ -90,7 +90,7 @@ fedora_task:
   install_script:
     - dnf install -y gcc-c++ zlib-devel glibc-devel
   compile_script:
-    - g++ -DSFTP -DHWSHA2 -g -O3 -Wall -Wextra -pthread zpaqfranz.cpp -lm -ldl -lz -o zpaqfranz 2>&1 | tee build_report.txt
+    - g++ -DSFTP -DHWSHA2 -g -O3 -Wall -Wextra -pthread zpaqfranz.cpp -lm -ldl -o zpaqfranz 2>&1 | tee build_report.txt
   test_script:
     - ./zpaqfranz autotest -all -debug 2>&1 | tee test_report.txt
   always:
@@ -108,7 +108,7 @@ centos_task:
   install_script:
     - dnf install -y gcc-c++ zlib-devel glibc-devel
   compile_script:
-    - g++ -DSFTP -DHWSHA2 -g -O3 -Wall -Wextra -pthread zpaqfranz.cpp -lm -ldl -lz -o zpaqfranz 2>&1 | tee build_report.txt
+    - g++ -DSFTP -DHWSHA2 -g -O3 -Wall -Wextra -pthread zpaqfranz.cpp -lm -ldl -o zpaqfranz 2>&1 | tee build_report.txt
   test_script:
     - ./zpaqfranz autotest -all -debug 2>&1 | tee test_report.txt
   always:
@@ -126,7 +126,7 @@ rocky_task:
   install_script:
     - dnf install -y gcc-c++ zlib-devel glibc-devel
   compile_script:
-    - g++ -DSFTP -DHWSHA2 -g -O3 -Wall -Wextra -pthread zpaqfranz.cpp -lm -ldl -lz -o zpaqfranz 2>&1 | tee build_report.txt
+    - g++ -DSFTP -DHWSHA2 -g -O3 -Wall -Wextra -pthread zpaqfranz.cpp -lm -ldl -o zpaqfranz 2>&1 | tee build_report.txt
   test_script:
     - ./zpaqfranz autotest -all -debug 2>&1 | tee test_report.txt
   always:
@@ -144,7 +144,7 @@ alma_task:
   install_script:
     - dnf install -y gcc-c++ zlib-devel glibc-devel
   compile_script:
-    - g++ -DSFTP -DHWSHA2 -g -O3 -Wall -Wextra -pthread zpaqfranz.cpp -lm -ldl -lz -o zpaqfranz 2>&1 | tee build_report.txt
+    - g++ -DSFTP -DHWSHA2 -g -O3 -Wall -Wextra -pthread zpaqfranz.cpp -lm -ldl -o zpaqfranz 2>&1 | tee build_report.txt
   test_script:
     - ./zpaqfranz autotest -all -debug 2>&1 | tee test_report.txt
   always:
@@ -162,7 +162,7 @@ opensuse_task:
   install_script:
     - zypper refresh && zypper install -y gcc-c++ zlib-devel glibc-devel
   compile_script:
-    - g++ -DSFTP -DHWSHA2 -g -O3 -Wall -Wextra -pthread zpaqfranz.cpp -lm -ldl -lz -o zpaqfranz 2>&1 | tee build_report.txt
+    - g++ -DSFTP -DHWSHA2 -g -O3 -Wall -Wextra -pthread zpaqfranz.cpp -lm -ldl -o zpaqfranz 2>&1 | tee build_report.txt
   test_script:
     - ./zpaqfranz autotest -all -debug 2>&1 | tee test_report.txt
   always:
@@ -180,7 +180,7 @@ arch_task:
   install_script:
     - pacman -Syu --noconfirm gcc zlib glibc
   compile_script:
-    - g++ -DSFTP -DHWSHA2 -g -O3 -Wall -Wextra -pthread zpaqfranz.cpp -lm -ldl -lz -o zpaqfranz 2>&1 | tee build_report.txt
+    - g++ -DSFTP -DHWSHA2 -g -O3 -Wall -Wextra -pthread zpaqfranz.cpp -lm -ldl -o zpaqfranz 2>&1 | tee build_report.txt
   test_script:
     - ./zpaqfranz autotest -all -debug 2>&1 | tee test_report.txt
   always:
@@ -198,7 +198,7 @@ alpine_task:
   install_script:
     - apk add --no-cache g++ musl-dev zlib-dev zlib-static make linux-headers build-base
   compile_script:
-    - g++ -DSFTP -DHWSHA2 -static -g -O3 -Wall -Wextra -Wno-stringop-overflow -pthread zpaqfranz.cpp -lz -o zpaqfranz 2>&1 | tee build_report.txt
+    - g++ -DSFTP -DHWSHA2 -static -g -O3 -Wall -Wextra -Wno-stringop-overflow -pthread zpaqfranz.cpp -o zpaqfranz 2>&1 | tee build_report.txt
   test_script:
     - ./zpaqfranz autotest -all -debug 2>&1 | tee test_report.txt
   always:
@@ -216,7 +216,7 @@ gcc_optimized_task:
   install_script:
     - apt-get update && apt-get install -y g++ libz-dev
   compile_script:
-    - g++ -DSFTP -DHWSHA2 -O3 -march=native -flto -Wall -Wextra -pthread zpaqfranz.cpp -lm -ldl -lz -o zpaqfranz 2>&1 | tee build_report.txt
+    - g++ -DSFTP -DHWSHA2 -O3 -march=native -flto -Wall -Wextra -pthread zpaqfranz.cpp -lm -ldl -o zpaqfranz 2>&1 | tee build_report.txt
   test_script:
     - ./zpaqfranz autotest -all -debug 2>&1 | tee test_report.txt
   always:
@@ -234,7 +234,7 @@ clang_task:
   install_script:
     - apt-get update && apt-get install -y clang libz-dev build-essential
   compile_script:
-    - clang++ -DSFTP -DHWSHA2 -g -O3 -Wall -Wextra -pthread zpaqfranz.cpp -lm -ldl -lz -o zpaqfranz 2>&1 | tee build_report.txt
+    - clang++ -DSFTP -DHWSHA2 -g -O3 -Wall -Wextra -pthread zpaqfranz.cpp -lm -ldl -o zpaqfranz 2>&1 | tee build_report.txt
   test_script:
     - ./zpaqfranz autotest -all -debug 2>&1 | tee test_report.txt
   always:
@@ -253,7 +253,7 @@ open_task:
     - apt-get update && apt-get install -y g++ libz-dev build-essential
   compile_script:
     - sed "/NOSFTPSTART/,/NOSFTPEND/d" zpaqfranz.cpp > zpaqfranz-open.cpp
-    - g++ -g -O3 -Wall -Wextra -pthread zpaqfranz-open.cpp -lm -ldl -lz -o zpaqfranz 2>&1 | tee build_report.txt
+    - g++ -g -O3 -Wall -Wextra -pthread zpaqfranz-open.cpp -lm -o zpaqfranz 2>&1 | tee build_report.txt
   test_script:
     - ./zpaqfranz 2>&1 | tee test_report.txt
   always:
@@ -270,7 +270,7 @@ debian_straight_task:
   install_script:
     - apt-get update && apt-get install -y g++ libz-dev build-essential
   compile_script:
-    - g++ -g -O3 -Wall -Wextra -pthread zpaqfranz.cpp -lm -ldl -lz -o zpaqfranz 2>&1 | tee build_report.txt
+    - g++ -g -O3 -Wall -Wextra -pthread zpaqfranz.cpp -lm -o zpaqfranz 2>&1 | tee build_report.txt
   test_script:
     - ./zpaqfranz autotest -all -debug 2>&1 | tee test_report.txt
   always:
@@ -287,7 +287,7 @@ debian_nas:
   install_script:
     - apt-get update && apt-get install -y g++ libz-dev build-essential
   compile_script:
-    - g++ -DNAS -g -O3 -Wall -Wextra -pthread zpaqfranz.cpp -lm -ldl -lz -o zpaqfranz 2>&1 | tee build_report.txt
+    - g++ -DNAS -g -O3 -Wall -Wextra -pthread zpaqfranz.cpp -lm -o zpaqfranz 2>&1 | tee build_report.txt
   test_script:
     - ./zpaqfranz autotest -all -debug 2>&1 | tee test_report.txt
   always:
@@ -304,7 +304,7 @@ debian_esxi:
   install_script:
     - apt-get update && apt-get install -y g++ libz-dev build-essential
   compile_script:
-    - g++ -DESX -g -O3 -Wall -Wextra -pthread zpaqfranz.cpp -lm -ldl -lz -o zpaqfranz 2>&1 | tee build_report.txt
+    - g++ -DESX -g -O3 -Wall -Wextra -pthread zpaqfranz.cpp -lm -o zpaqfranz 2>&1 | tee build_report.txt
   test_script:
     - ./zpaqfranz autotest -all -debug 2>&1 | tee test_report.txt
   always:
@@ -321,7 +321,7 @@ debian_alignmalloc:
   install_script:
     - apt-get update && apt-get install -y g++ libz-dev build-essential
   compile_script:
-    - g++ -DALIGNMALLOC -g -O3 -Wall -Wextra -pthread zpaqfranz.cpp -lm -ldl -lz -o zpaqfranz 2>&1 | tee build_report.txt
+    - g++ -DALIGNMALLOC -g -O3 -Wall -Wextra -pthread zpaqfranz.cpp -lm -o zpaqfranz 2>&1 | tee build_report.txt
   test_script:
     - ./zpaqfranz autotest -all -debug 2>&1 | tee test_report.txt
   always:
@@ -329,3 +329,4 @@ debian_alignmalloc:
       path: build_report.txt
     executable_artifacts:
       path: zpaqfranz
+

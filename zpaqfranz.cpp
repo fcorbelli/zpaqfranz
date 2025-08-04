@@ -64,7 +64,7 @@ https://github.com/fcorbelli/zpaqfranz/wiki/Security:-open-software
 #define ZPAQFULL ///NOSFTPSTART
 ///NOSFTPEND
 
-#define ZPAQ_VERSION "63.1c"
+#define ZPAQ_VERSION "63.1d"
 #define ZPAQ_DATE "(2025-08-04)"
 
 ///	optional align for malloc (sparc64,HPPA) via -DALIGNMALLOC
@@ -210,7 +210,7 @@ https://github.com/fcorbelli/zpaqfranz/wiki/Security:-open-software
 	#define INT64_MIN (-9223372036854775807LL - 1)
 	#define INT64_MAX 9223372036854775807LL
 	#define errno 0
-	#define nullptr NULL
+	#define nullptr 0
 #ifdef ZPAQFULL ///NOSFTPSTART
 	#undef SFTP
 #endif ///NOSFTPEND
@@ -20101,7 +20101,7 @@ void append_to_g_password_keyfilehash()
     char* temp = (char*)malloc(nuova_lunghezza * sizeof(char));
     if (temp == nullptr) 
 	{
-        printf("Error allocating mem!\n");
+        printf("20104: Error allocating mem!\n");
 		seppuku();
 		return;
     }
@@ -94975,7 +94975,6 @@ void sortBySizeDesc(std::vector<conteggio_file>& vec)
     std::sort(vec.begin(), vec.end(), compareBySizeDesc);
 }
 
-
 // Funzione per estrarre la cartella di primo livello da un percorso
 std::string extractFirstLevelFolder(const std::string& path, const std::string& i_basepath) 
 {
@@ -95169,9 +95168,7 @@ bool makeprivacy(const std::string& input_file, const std::string& output_file)
         
         // Verifica buffer overflow (linea troppo lunga)
         if (len == sizeof(line)-1 && !has_newline) 
-		{
             myprintf("93554$ Line %s too long, may be truncated\n", migliaia(lines_processed));
-        }
         
         // Filtra righe che iniziano con |STAT|
         if (len >= PREFIX_LEN && strncmp(line, STAT_PREFIX, PREFIX_LEN) == 0) 
@@ -95215,8 +95212,9 @@ bool makeprivacy(const std::string& input_file, const std::string& output_file)
 	{
 		if (flagverbose)
 			myprintf("93652: Privacy filter completed: %s lines processed, %s lines filtered\n", migliaia(lines_processed), migliaia(lines_filtered));
-    } else 
-      delete_file(output_file.c_str());
+    } 
+	else 
+		delete_file(output_file.c_str());
     
     return success;
 }
@@ -95228,40 +95226,34 @@ bool makeprivacy(const std::string& input_file, const std::string& output_file)
 bool isemail(const std::string& email)
 {
     if (email.empty()) 
-	{
         return false;
-    }
     
     size_t len = email.length();
     
     // Lunghezza minima: a@b.c (5 caratteri)
-    if (len < 5 || len > 254) { // RFC 5321 limite massimo
+    if ((len < 5) || (len > 254)) // RFC 5321 limite massimo
         return false;
-    }
     
     // Trova la posizione dell'@
     size_t at_pos = email.find('@');
-    if (at_pos == std::string::npos) {
-        return false; // Nessuna @
-    }
+    if (at_pos == std::string::npos) 
+	    return false; // Nessuna @
     
     // Verifica che ci sia una sola @
-    if (email.find('@', at_pos + 1) != std::string::npos) {
-        return false; // Più di una @
-    }
+    if (email.find('@', at_pos + 1) != std::string::npos) 
+	    return false; // Più di una @
     
     // Calcola lunghezze delle parti
     size_t local_len = at_pos;
     size_t domain_len = len - local_len - 1;
     
     // Verifica lunghezze parti
-    if (local_len == 0 || local_len > 64) { // RFC 5321 limite local part
-        return false;
-    }
+    if ((local_len == 0) || (local_len > 64))
+	    return false;  // RFC 5321 limite local part
     
-    if (domain_len == 0 || domain_len > 253) { // RFC 1035 limite domain
-        return false;
-    }
+    
+    if ((domain_len == 0) || (domain_len > 253)) 
+        return false;// RFC 1035 limite domain
     
     // Estrai le parti
     std::string local_part = email.substr(0, at_pos);
@@ -95270,122 +95262,111 @@ bool isemail(const std::string& email)
     // === VALIDAZIONE PARTE LOCALE (prima dell'@) ===
     
     // Non può iniziare o finire con punto
-    if (local_part[0] == '.' || local_part[local_len - 1] == '.') {
-        return false;
-    }
+    if (local_part[0] == '.' || local_part[local_len - 1] == '.') 
+	    return false;
     
     // Controlla caratteri validi nella parte locale
     bool prev_was_dot = false;
-    for (size_t i = 0; i < local_len; i++) {
+    for (size_t i = 0; i < local_len; i++) 
+	{
         char c = local_part[i];
         
         // Punti consecutivi non ammessi
-        if (c == '.') {
-            if (prev_was_dot) {
-                return false;
-            }
+        if (c == '.') 
+		{
+            if (prev_was_dot) 
+			    return false;
             prev_was_dot = true;
             continue;
         }
         prev_was_dot = false;
         
         // Caratteri ammessi: lettere, numeri, alcuni simboli
-        if (!isalnum(c) && c != '.' && c != '-' && c != '_' && 
-            c != '+' && c != '=' && c != '~') {
-            return false;
-        }
+        if (!isalnum(c) && c != '.' && c != '-' && c != '_' && c != '+' && c != '=' && c != '~') 
+		    return false;
     }
     
     // === VALIDAZIONE DOMINIO (dopo l'@) ===
     
     // Non può iniziare o finire con punto o trattino
-    if (domain[0] == '.' || domain[0] == '-' || 
-        domain[domain_len - 1] == '.' || domain[domain_len - 1] == '-') {
-        return false;
-    }
+    if (domain[0] == '.' || domain[0] == '-' || domain[domain_len - 1] == '.' || domain[domain_len - 1] == '-') 
+	    return false;
     
     // Deve contenere almeno un punto (per il TLD)
     size_t dot_pos = domain.find('.');
-    if (dot_pos == std::string::npos) {
-        return false;
-    }
+    if (dot_pos == std::string::npos) 
+	    return false;
     
     // Controlla che ci sia almeno un carattere dopo l'ultimo punto (TLD)
     size_t last_dot = domain.rfind('.');
-    if (domain.length() - last_dot - 1 < 2) { // TLD minimo 2 caratteri
-        return false;
-    }
-    
+    if (domain.length() - last_dot - 1 < 2)  
+		return false; // TLD minimo 2 caratteri
+        
     // Controlla caratteri validi nel dominio
     prev_was_dot = false;
     bool prev_was_dash = false;
     
-    for (size_t i = 0; i < domain_len; i++) {
+    for (size_t i = 0; i < domain_len; i++) 
+	{
         char c = domain[i];
         
-        if (c == '.') {
+        if (c == '.') 
+		{
             // Punti consecutivi non ammessi
-            if (prev_was_dot) {
-                return false;
-            }
+            if (prev_was_dot) 
+			    return false;
             // Punto dopo trattino non ammesso
-            if (prev_was_dash) {
-                return false;
-            }
-            prev_was_dot = true;
-            prev_was_dash = false;
+            if (prev_was_dash) 
+			    return false;
+            prev_was_dot 	= true;
+            prev_was_dash 	= false;
             continue;
         }
         
-        if (c == '-') {
+        if (c == '-') 
+		{
             // Trattino dopo punto non ammesso
-            if (prev_was_dot) {
-                return false;
-            }
-            prev_was_dash = true;
-            prev_was_dot = false;
+            if (prev_was_dot) 
+			    return false;
+            prev_was_dash 	= true;
+            prev_was_dot 	= false;
             continue;
         }
         
         // Reset flags
-        prev_was_dot = false;
-        prev_was_dash = false;
+        prev_was_dot 	= false;
+        prev_was_dash 	= false;
         
         // Solo lettere e numeri ammessi (oltre a . e -)
-        if (!isalnum(c)) {
-            return false;
-        }
+        if (!isalnum(c)) 
+		    return false;
     }
     
     // === CONTROLLI AGGIUNTIVI ===
     
     // Verifica che il TLD contenga solo lettere
     std::string tld = domain.substr(last_dot + 1);
-    for (size_t i = 0; i < tld.length(); i++) {
-        if (!isalpha(tld[i])) {
-            return false;
-        }
-    }
+    for (size_t i = 0; i < tld.length(); i++) 
+	    if (!isalpha(tld[i])) 
+		    return false;
     
     // Controlla che ogni parte del dominio non superi 63 caratteri
-    size_t start = 0;
-    size_t pos = 0;
+    size_t start 	= 0;
+    size_t pos 		= 0;
     
-    while ((pos = domain.find('.', start)) != std::string::npos) {
+    while ((pos = domain.find('.', start)) != std::string::npos) 
+	{
         size_t part_len = pos - start;
-        if (part_len == 0 || part_len > 63) { // RFC 1035 limite label
-            return false;
-        }
+        if ((part_len == 0) || (part_len > 63))
+            return false; // RFC 1035 limite label
         start = pos + 1;
     }
     
     // Controlla l'ultima parte (dopo l'ultimo punto)
     size_t last_part_len = domain.length() - start;
-    if (last_part_len == 0 || last_part_len > 63) {
-        return false;
-    }
+    if ((last_part_len == 0) || (last_part_len > 63))
+	    return false;
     
-	
     return true;
 }
 
@@ -95417,25 +95398,23 @@ int waitexecuteprogram(const std::string& i_filename, const std::string& i_param
     
     // Costruisci la command line completa
     std::string cmdLine;
-    if (!i_parameters.empty()) {
-        cmdLine = "\"" + i_filename + "\" " + i_parameters;
-    } else {
-        cmdLine = "\"" + i_filename + "\"";
-    }
+    if (!i_parameters.empty()) 
+	    cmdLine = "\"" + i_filename + "\" " + i_parameters;
+     else 
+	    cmdLine = "\"" + i_filename + "\"";
+
     
     // Aggiungi redirezione output se specificata
-    if (!i_fileoutput.empty()) {
-        cmdLine += " >>" + i_fileoutput;
-    }
+    if (!i_fileoutput.empty()) 
+	    cmdLine += " >>" + i_fileoutput;
     
     // Crea il processo con o senza redirezione
     // Se c'è redirezione, usa cmd.exe per gestirla
     std::string finalCmdLine;
-    if (!i_fileoutput.empty()) {
-        finalCmdLine = "cmd.exe /c \"" + cmdLine + "\"";
-    } else {
-        finalCmdLine = cmdLine;
-    }
+    if (!i_fileoutput.empty()) 
+	    finalCmdLine = "cmd.exe /c \"" + cmdLine + "\"";
+    else 
+	    finalCmdLine = cmdLine;
     
 ///    printf("Executing: %s\n", finalCmdLine.c_str());
     
@@ -95464,7 +95443,8 @@ int waitexecuteprogram(const std::string& i_filename, const std::string& i_param
     
     // Ottieni l'exit code del processo
     DWORD exitCode;
-    if (!GetExitCodeProcess(pi.hProcess, &exitCode)) {
+    if (!GetExitCodeProcess(pi.hProcess, &exitCode)) 
+	{
         DWORD error = GetLastError();
         printf("Error getting exit code: %lu\n", error);
         exitCode = -2;  // Errore nel recupero dell'exit code
@@ -95513,25 +95493,21 @@ int Jidac::cloud()
 			}
 		}
 		
-	string 	percorso	=extractfilepath		(archive);
-	string	nome		=prendinomefileebasta	(archive);
-	string 	thechecksum	=percorso+nome+"_crc32.txt";
+	string 	percorso		=extractfilepath		(archive);
+	string	nome			=prendinomefileebasta	(archive);
+	string 	thechecksum		=percorso+nome+"_crc32.txt";
 
+	bool	myflagtest		=flagtest;
+	flagtest				=false;
 
-	bool	myflagtest=flagtest;
-	flagtest=false;
+	bool	myflagverify	=flagverify;
+	flagverify				=false;
 
-	bool	myflagverify=flagverify;
-	flagverify=false;
-
-	string	cloudtxt=g_gettempdirectory()+"report.txt";
-	cloudtxt=nomefileseesistegia(cloudtxt);
-	
-	
-	g_output=cloudtxt;
+	string	cloudtxt		=g_gettempdirectory()+"report.txt";
+	cloudtxt				=nomefileseesistegia(cloudtxt);
+	g_output				=cloudtxt;
 
 	open_output(g_output);
-
 
 	if (flagdebug)
 	{
@@ -95539,26 +95515,24 @@ int Jidac::cloud()
 		myprintf("93676: %s\n",migliaia(int64_t(g_output_handle)));
 	}
 	
-	int result_add=0;
-	int result_test=0;
-	int result_info=0;
-	int result_archive=0;
-	int result_versum=0;
-	int result_checksum=0;
-	int result_1on1=0;
+	int result_add		=0;
+	int result_test		=0;
+	int result_info		=0;
+	int result_archive	=0;
+	int result_versum	=0;
+	int result_checksum	=0;
+	int result_1on1		=0;
 	
 	if (!flagonlyupload)
 	{
 		color_cyan();
 		myprintf("91544: ::::::::::::::::::::: Updating archive\n");
 		color_restore();
-		flagpakka=true;
-		flagfasttxt=true;
-		flagstat=true;
+		flagpakka	=true;
+		flagfasttxt	=true;
+		flagstat	=true;
 		result_add=add();
 
-
-		
 		if (myflagtest)
 		{
 			color_cyan();
@@ -95575,30 +95549,27 @@ int Jidac::cloud()
 		color_restore();
 		files.clear();
 		jidacreset();
-		flagpakka=true;
-		flagnoeta=true;
-		flagstat=false;
-		versioncomment="";
-		all=8;
-		command='i';
-		///flagbig=true;
-		///flagsilent=true;
-		///g_rangelast=10;
-		result_info=enumeratecomments();
+		flagpakka		=true;
+		flagnoeta		=true;
+		flagstat		=false;
+		versioncomment	="";
+		all				=8;
+		command			='i';
+		result_info		=enumeratecomments();
 		
 		
 		if (myflagverify)
 		{
-			flagbig=false;
-			flagsilent=false;
+			flagbig		=false;
+			flagsilent	=false;
 			color_cyan();
 			myprintf("93549: ::::::::::::::::::::: Double check CRC-32\n");	
 			color_restore();
 			files.clear();
 			jidacreset();
-			flagfasttxt=true;
+			flagfasttxt	=true;
 			files.push_back(archive);
-			flagpakka=true;
+			flagpakka	=true;
 			result_versum=versum();
 		}
 	}
@@ -95628,9 +95599,9 @@ int Jidac::cloud()
 	color_cyan();
 	myprintf("93614: ::::::::::::::::::::: 	Final check\n");
 	color_restore();
-	flagssd=true;
-	flagpakka=false;
-	flagterse=true;
+	flagssd		=true;
+	flagpakka	=false;
+	flagterse	=true;
 	string dacontrollare=includetrailingbackslash(percorso)+"*";
 	files.clear();
 	files.push_back("sftp");
@@ -95649,9 +95620,8 @@ int Jidac::cloud()
 	printf("\n");
 	
 	if (myflagverify)
-	{
 		reportresult("Double-check versum",result_versum);
-	}
+	
 	reportresult("Archive uploading",result_archive);
 	reportresult("Checksum uploading",result_checksum);
 	printf("\n");

@@ -17,7 +17,7 @@ freebsd14_task:
   compile_script:
     - cc -O3 -DHWSHA2 -DSFTP zpaqfranz.cpp -o zpaqfranz -pthread -lstdc++ -lm 2>&1 | tee build_report.txt
   test_script:
-    - ./zpaqfranz b -debug 2>&1 | tee test_report.txt
+    - ./zpaqfranz autotest -all -debug 2>&1 | tee test_report.txt
   always:
     report_artifacts:
       path: build_report.txt
@@ -38,7 +38,7 @@ macos_task:
   compile_script:
     - g++ -O3 -Dunix -DSFTP zpaqfranz.cpp -o zpaqfranz -pthread -std=c++11 -Wall -Wpedantic 2>&1 | tee build_report.txt
   test_script:
-    - ./zpaqfranz b -debug 2>&1 | tee test_report.txt
+    - ./zpaqfranz autotest -all -debug 2>&1 | tee test_report.txt
   always:
     report_artifacts:
       path: build_report.txt
@@ -56,7 +56,7 @@ debian_task:
   compile_script:
     - g++ -DSFTP -DHWSHA2 -g -O3 -Wall -Wextra -pthread zpaqfranz.cpp -lm -ldl -lz -o zpaqfranz 2>&1 | tee build_report.txt
   test_script:
-    - ./zpaqfranz b -debug 2>&1 | tee test_report.txt
+    - ./zpaqfranz autotest -all -debug 2>&1 | tee test_report.txt
   always:
     report_artifacts:
       path: build_report.txt
@@ -65,16 +65,16 @@ debian_task:
 
 # Ubuntu LTS - APT based
 ubuntu_task:
-  name: Build on Ubuntu LTS
+  name: Build on Ubuntu LTS (ANCIENT)
   only_if: changesInclude('zpaqfranz.cpp')
   container:
     image: ubuntu:22.04
   install_script:
     - apt-get update && apt-get install -y g++ libz-dev build-essential
   compile_script:
-    - g++ -DSFTP -DHWSHA2 -g -O3 -Wall -Wextra -pthread zpaqfranz.cpp -lm -ldl -lz -o zpaqfranz 2>&1 | tee build_report.txt
+    - g++ -DANCIENT -g -O3 -Wall -Wextra -pthread zpaqfranz.cpp -lm -ldl -lz -o zpaqfranz 2>&1 | tee build_report.txt
   test_script:
-    - ./zpaqfranz b -debug 2>&1 | tee test_report.txt
+    - ./zpaqfranz autotest -all -debug 2>&1 | tee test_report.txt
   always:
     report_artifacts:
       path: build_report.txt
@@ -92,7 +92,7 @@ fedora_task:
   compile_script:
     - g++ -DSFTP -DHWSHA2 -g -O3 -Wall -Wextra -pthread zpaqfranz.cpp -lm -ldl -lz -o zpaqfranz 2>&1 | tee build_report.txt
   test_script:
-    - ./zpaqfranz b -debug 2>&1 | tee test_report.txt
+    - ./zpaqfranz autotest -all -debug 2>&1 | tee test_report.txt
   always:
     report_artifacts:
       path: build_report.txt
@@ -110,7 +110,7 @@ centos_task:
   compile_script:
     - g++ -DSFTP -DHWSHA2 -g -O3 -Wall -Wextra -pthread zpaqfranz.cpp -lm -ldl -lz -o zpaqfranz 2>&1 | tee build_report.txt
   test_script:
-    - ./zpaqfranz b -debug 2>&1 | tee test_report.txt
+    - ./zpaqfranz autotest -all -debug 2>&1 | tee test_report.txt
   always:
     report_artifacts:
       path: build_report.txt
@@ -128,7 +128,7 @@ rocky_task:
   compile_script:
     - g++ -DSFTP -DHWSHA2 -g -O3 -Wall -Wextra -pthread zpaqfranz.cpp -lm -ldl -lz -o zpaqfranz 2>&1 | tee build_report.txt
   test_script:
-    - ./zpaqfranz b -debug 2>&1 | tee test_report.txt
+    - ./zpaqfranz autotest -all -debug 2>&1 | tee test_report.txt
   always:
     report_artifacts:
       path: build_report.txt
@@ -146,7 +146,7 @@ alma_task:
   compile_script:
     - g++ -DSFTP -DHWSHA2 -g -O3 -Wall -Wextra -pthread zpaqfranz.cpp -lm -ldl -lz -o zpaqfranz 2>&1 | tee build_report.txt
   test_script:
-    - ./zpaqfranz b -debug 2>&1 | tee test_report.txt
+    - ./zpaqfranz autotest -all -debug 2>&1 | tee test_report.txt
   always:
     report_artifacts:
       path: build_report.txt
@@ -164,7 +164,7 @@ opensuse_task:
   compile_script:
     - g++ -DSFTP -DHWSHA2 -g -O3 -Wall -Wextra -pthread zpaqfranz.cpp -lm -ldl -lz -o zpaqfranz 2>&1 | tee build_report.txt
   test_script:
-    - ./zpaqfranz b -debug 2>&1 | tee test_report.txt
+    - ./zpaqfranz autotest -all -debug 2>&1 | tee test_report.txt
   always:
     report_artifacts:
       path: build_report.txt
@@ -182,7 +182,7 @@ arch_task:
   compile_script:
     - g++ -DSFTP -DHWSHA2 -g -O3 -Wall -Wextra -pthread zpaqfranz.cpp -lm -ldl -lz -o zpaqfranz 2>&1 | tee build_report.txt
   test_script:
-    - ./zpaqfranz b -debug 2>&1 | tee test_report.txt
+    - ./zpaqfranz autotest -all -debug 2>&1 | tee test_report.txt
   always:
     report_artifacts:
       path: build_report.txt
@@ -200,7 +200,7 @@ alpine_task:
   compile_script:
     - g++ -DSFTP -DHWSHA2 -static -g -O3 -Wall -Wextra -Wno-stringop-overflow -pthread zpaqfranz.cpp -lz -o zpaqfranz 2>&1 | tee build_report.txt
   test_script:
-    - ./zpaqfranz b -debug 2>&1 | tee test_report.txt
+    - ./zpaqfranz autotest -all -debug 2>&1 | tee test_report.txt
   always:
     report_artifacts:
       path: build_report.txt
@@ -218,7 +218,7 @@ gcc_optimized_task:
   compile_script:
     - g++ -DSFTP -DHWSHA2 -O3 -march=native -flto -Wall -Wextra -pthread zpaqfranz.cpp -lm -ldl -lz -o zpaqfranz 2>&1 | tee build_report.txt
   test_script:
-    - ./zpaqfranz b -debug 2>&1 | tee test_report.txt
+    - ./zpaqfranz autotest -all -debug 2>&1 | tee test_report.txt
   always:
     report_artifacts:
       path: build_report.txt
@@ -236,7 +236,7 @@ clang_task:
   compile_script:
     - clang++ -DSFTP -DHWSHA2 -g -O3 -Wall -Wextra -pthread zpaqfranz.cpp -lm -ldl -lz -o zpaqfranz 2>&1 | tee build_report.txt
   test_script:
-    - ./zpaqfranz b -debug 2>&1 | tee test_report.txt
+    - ./zpaqfranz autotest -all -debug 2>&1 | tee test_report.txt
   always:
     report_artifacts:
       path: build_report.txt
@@ -272,24 +272,7 @@ debian_straight_task:
   compile_script:
     - g++ -g -O3 -Wall -Wextra -pthread zpaqfranz.cpp -lm -ldl -lz -o zpaqfranz 2>&1 | tee build_report.txt
   test_script:
-    - ./zpaqfranz b -debug 2>&1 | tee test_report.txt
-  always:
-    report_artifacts:
-      path: build_report.txt
-    executable_artifacts:
-      path: zpaqfranz
-
-debian_ancient:
-  name: Build on Debian (ancient)
-  only_if: changesInclude('zpaqfranz.cpp')
-  container:
-    image: debian:bookworm
-  install_script:
-    - apt-get update && apt-get install -y g++ libz-dev build-essential
-  compile_script:
-    - g++ -DANCIENT -g -O3 -Wall -Wextra -pthread zpaqfranz.cpp -lm -ldl -lz -o zpaqfranz 2>&1 | tee build_report.txt
-  test_script:
-    - ./zpaqfranz b -debug 2>&1 | tee test_report.txt
+    - ./zpaqfranz autotest -all -debug 2>&1 | tee test_report.txt
   always:
     report_artifacts:
       path: build_report.txt
@@ -306,7 +289,7 @@ debian_nas:
   compile_script:
     - g++ -DNAS -g -O3 -Wall -Wextra -pthread zpaqfranz.cpp -lm -ldl -lz -o zpaqfranz 2>&1 | tee build_report.txt
   test_script:
-    - ./zpaqfranz b -debug 2>&1 | tee test_report.txt
+    - ./zpaqfranz autotest -all -debug 2>&1 | tee test_report.txt
   always:
     report_artifacts:
       path: build_report.txt
@@ -323,7 +306,7 @@ debian_esxi:
   compile_script:
     - g++ -DESX -g -O3 -Wall -Wextra -pthread zpaqfranz.cpp -lm -ldl -lz -o zpaqfranz 2>&1 | tee build_report.txt
   test_script:
-    - ./zpaqfranz b -debug 2>&1 | tee test_report.txt
+    - ./zpaqfranz autotest -all -debug 2>&1 | tee test_report.txt
   always:
     report_artifacts:
       path: build_report.txt
@@ -340,10 +323,9 @@ debian_alignmalloc:
   compile_script:
     - g++ -DALIGNMALLOC -g -O3 -Wall -Wextra -pthread zpaqfranz.cpp -lm -ldl -lz -o zpaqfranz 2>&1 | tee build_report.txt
   test_script:
-    - ./zpaqfranz b -debug 2>&1 | tee test_report.txt
+    - ./zpaqfranz autotest -all -debug 2>&1 | tee test_report.txt
   always:
     report_artifacts:
       path: build_report.txt
     executable_artifacts:
       path: zpaqfranz
-

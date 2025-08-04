@@ -40775,7 +40775,7 @@ public:
 #endif
 #endif ///NOSFTPEND
 	string 		keyfile_to_string(string i_keyfile);
-
+	void		pc_info();
 	
 };
 
@@ -57055,7 +57055,9 @@ bool debugwritebuffertofile(string i_filename,const void* i_buffer,size_t i_size
 int Jidac::autotest()
 {
 	myprintf("01147: Self-test for correct internal functioning\n"); // for non-Intel CPU
-
+	if (all)
+		pc_info();
+	
 	if (flagchecktxt)
 		if (checktxt!="")
 			return checkautotest(checktxt);
@@ -69711,9 +69713,9 @@ zfs diff -F
 }
 
 
-int Jidac::benchmark()
+void Jidac::pc_info()
 {
-#ifdef _WIN32
+	#ifdef _WIN32
 	myprintf("72943: Win32\n");
 	if (iswindowsxp())
 		myprintf("72945: This seems Windows XP!\n");
@@ -69761,6 +69763,10 @@ int Jidac::benchmark()
 	else
 		myprintf("02284: Number of processors (without HT) %d\n",myproc);
 		
+}
+int Jidac::benchmark()
+{
+	pc_info();
 
 	vector<string> 	array_cpu;
 	vector<float> 	array_single;

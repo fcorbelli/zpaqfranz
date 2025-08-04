@@ -64,7 +64,7 @@ https://github.com/fcorbelli/zpaqfranz/wiki/Security:-open-software
 #define ZPAQFULL ///NOSFTPSTART
 ///NOSFTPEND
 
-#define ZPAQ_VERSION "63.1d"
+#define ZPAQ_VERSION "63.1e"
 #define ZPAQ_DATE "(2025-08-04)"
 
 ///	optional align for malloc (sparc64,HPPA) via -DALIGNMALLOC
@@ -47162,10 +47162,14 @@ void Jidac::load_help_map()
 #ifdef ZPAQFULL ///NOSFTPSTART
 	help_map.insert(std::pair<string, HelpInfo>("mysqldump", 		HelpInfo("Backup   ", help_mysqldump,		1)));
 #endif ///NOSFTPEND
+
+
+#ifdef ZPAQFULL ///NOSFTPSTART
 #if defined(_WIN32)
 	help_map.insert(std::pair<string, HelpInfo>("g", 				HelpInfo("Backup   ", help_g,				1)));
 	help_map.insert(std::pair<string, HelpInfo>("q", 				HelpInfo("Backup   ", help_q,				1)));
 #endif // corresponds to #if (#if defined(_WIN32))
+#endif ///NOSFTPEND
 
 	// Restore
 	help_map.insert(std::pair<string, HelpInfo>("w", 				HelpInfo("Restore  ", help_w,				2)));
@@ -47298,11 +47302,11 @@ void Jidac::load_help_map()
 
 void Jidac::usage(bool i_flagdie=true)
 {
-#ifdef ZPAQFULL ///NOSFTPSTART
+#ifdef ZPAQFULL
 	moreprint("A powerful archiver with deduplication (C) by ",true);
 #else
 	moreprint("A good archiver with deduplication (C) by ",true);
-#endif ///NOSFTPEND
+#endif
 	color_cyan();
 	moreprint("Franco Corbelli");
 	color_cyan();
@@ -47363,7 +47367,8 @@ void Jidac::usage(bool i_flagdie=true)
 #endif // corresponds to #ifdef (#ifdef HWSHA2)
 */
 #ifdef HWSHA1
-	moreprint("   -hw: activate SHA1 code");
+	moreprint("     -hw : Force hardware SHA1 (fails if unsupported by CPU)");
+	
 #endif // corresponds to #ifdef (#ifdef HWSHA1)
 
 	
@@ -48854,10 +48859,12 @@ int Jidac::loadparameters(int argc, const char** argv)
 				textnojit+="SFTP";
 #endif // corresponds to #ifdef (#ifdef SFTP)
 #endif ///NOSFTPEND
-	if (strcmp(ZSFX_VERSION, "") == 0) 
+
+#ifndef ZPAQFULL
 		snprintf(buffer,sizeof(buffer),"zpaqfranz-open v" ZPAQ_VERSION "%s" TEXT_BIG TEXT_ALIGN TEXT_HWPRE TEXT_HWBLAKE3 TEXT_HWSHA1 TEXT_HWSHA2 TEXT_IPV ZSFX_VERSION ZPAQ_DATE,textnojit.c_str()); 
-	else
+#else
 		snprintf(buffer,sizeof(buffer),"zpaqfranz v" ZPAQ_VERSION "%s" TEXT_BIG TEXT_ALIGN TEXT_HWPRE TEXT_HWBLAKE3 TEXT_HWSHA1 TEXT_HWSHA2 TEXT_IPV ZSFX_VERSION ZPAQ_DATE,textnojit.c_str()); 
+#endif
 			color_green();
 			moreprint(buffer);
 			color_restore();

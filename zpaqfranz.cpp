@@ -64,7 +64,7 @@ https://github.com/fcorbelli/zpaqfranz/wiki/Security:-open-software
 #define ZPAQFULL ///NOSFTPSTART
 ///NOSFTPEND
 
-#define ZPAQ_VERSION "63.1l"
+#define ZPAQ_VERSION "63.1m"
 #define ZPAQ_DATE "(2025-08-11)"
 
 ///	optional align for malloc (sparc64,HPPA) via -DALIGNMALLOC
@@ -4981,23 +4981,6 @@ bool iswindowsxp()
 #ifdef _WIN32
 
 
-/*
-std::string encodehex(const std::string& input) 
-{
-    std::string result;
-    result.reserve(input.length() * 2); // Riserva spazio per efficienza
-    
-    const char hexChars[] = "0123456789ABCDEF";
-    
-    for (unsigned char c : input) 
-	{
-        result += hexChars[c >> 4];        // 4 bit più significativi
-        result += hexChars[c & 0x0F];      // 4 bit meno significativi
-    }
-    
-    return result;
-}
-*/
 // Funzione per decodificare una stringa esadecimale
 std::string decodehex(const std::string& hexInput) 
 {
@@ -5577,9 +5560,13 @@ std::string mytohuman2(int64_t i_bytes, int width = 0, char fill_char = ' ', boo
 
 void myprintf(const char *format, ...) 
 {
-	 // Early exit if string starts with "DEBUG:" and flagdebug is false
-	 
-	  if (format[0] == 'D' && format[1] == 'E' && format[2] == 'B' && 
+    // Early exit if format is null
+    if (!format) {
+        return;
+    }
+    
+    // Early exit if string starts with "DEBUG:" and flagdebug is false
+    if (format[0] == 'D' && format[1] == 'E' && format[2] == 'B' && 
         format[3] == 'U' && format[4] == 'G') {
         
         if (format[5] == ':' && !flagdebug) {
@@ -5600,14 +5587,15 @@ void myprintf(const char *format, ...)
              format[6] == 'E' && format[7] == ':' && !flagverbose) {
         return;
     }
-	
+    
     bool flagerror = false;
     bool flagwarning = false;
     bool flagcolon = false;
-    char buffer[4096]; // Buffer temporaneo per formati complessi
+    static const size_t BUFFER_SIZE = 4096;
+    char buffer[BUFFER_SIZE]; // Buffer temporaneo per formati complessi
 
     if (flagsilent) {
-        char fixata[4096];
+        char fixata[BUFFER_SIZE];
         replacezwiths(format, fixata);
 
         va_list args2;
@@ -5655,17 +5643,19 @@ void myprintf(const char *format, ...)
         color_yellow();
 
     // Buffer per raccogliere tutto l'output per il controllo finale del \r
-    char output_buffer[4096];
+    char output_buffer[BUFFER_SIZE];
     char *output_ptr = output_buffer;
+    size_t remaining_space = BUFFER_SIZE - 1; // -1 per il terminatore null
     
     const char *p = format;
-    while (*p) {
+    while (*p && remaining_space > 0) {
         if (*p == '%') {
             p++; // Passa al carattere successivo dopo '%'
 
             if (*p == '%') {
                 putchar('%');
                 *output_ptr++ = '%';
+                remaining_space--;
                 if (flagerror && prepare_error_log())
                     fputc('%', g_error_handle);
                 p++;
@@ -5707,83 +5697,142 @@ void myprintf(const char *format, ...)
 
                 if (*p == 'K') {
                     int64_t value = va_arg(args, int64_t);
-					std::string formatted=format_int64_t(value, width, fill_char, left_align);
+                    std::string formatted = format_int64_t(value, width, fill_char, left_align);
                     printf("%s", formatted.c_str());
-                    strcpy(output_ptr, formatted.c_str());
-                    output_ptr += formatted.length();
+                    
+                    size_t formatted_len = formatted.length();
+                    size_t copy_len = std::min(formatted_len, remaining_space);
+                    strncpy(output_ptr, formatted.c_str(), copy_len);
+                    output_ptr += copy_len;
+                    remaining_space -= copy_len;
+                    
                     if (flagerror && prepare_error_log())
                         fprintf(g_error_handle, "%s", formatted.c_str());
+                        
                 } else if (*p == 'H') {
                     int64_t value = va_arg(args, int64_t);
-                    std::string formatted=mytohuman2(value,width, fill_char, left_align);
+                    std::string formatted = mytohuman2(value, width, fill_char, left_align);
                     printf("%s", formatted.c_str());
-                    strcpy(output_ptr, formatted.c_str());
-                    output_ptr += formatted.length();
+                    
+                    size_t formatted_len = formatted.length();
+                    size_t copy_len = std::min(formatted_len, remaining_space);
+                    strncpy(output_ptr, formatted.c_str(), copy_len);
+                    output_ptr += copy_len;
+                    remaining_space -= copy_len;
+                    
                     if (flagerror && prepare_error_log())
                         fprintf(g_error_handle, "%s", formatted.c_str());
+                        
                 } else if (*p == 'd' || *p == 'i') {
                     int i = va_arg(args, int);
                     printf(fmt_buffer, i);
-                    int written = sprintf(output_ptr, fmt_buffer, i);
-                    output_ptr += written;
+                    int written = snprintf(output_ptr, remaining_space + 1, fmt_buffer, i);
+                    if (written > 0 && (size_t)written <= remaining_space) {
+                        output_ptr += written;
+                        remaining_space -= written;
+                    } else {
+                        remaining_space = 0; // Buffer pieno
+                    }
                     if (flagerror)
                         my_print_on_error_i(fmt_buffer, i);
+                        
                 } else if (*p == 'u' || *p == 'x' || *p == 'X') {
                     unsigned int x = va_arg(args, unsigned int);
                     printf(fmt_buffer, x);
-                    int written = sprintf(output_ptr, fmt_buffer, x);
-                    output_ptr += written;
+                    int written = snprintf(output_ptr, remaining_space + 1, fmt_buffer, x);
+                    if (written > 0 && (size_t)written <= remaining_space) {
+                        output_ptr += written;
+                        remaining_space -= written;
+                    } else {
+                        remaining_space = 0; // Buffer pieno
+                    }
                     if (flagerror)
                         my_print_on_error_u(fmt_buffer, x);
+                        
                 } else if (*p == 'f') {
                     double f = va_arg(args, double);
                     printf(fmt_buffer, f);
-                    int written = sprintf(output_ptr, fmt_buffer, f);
-                    output_ptr += written;
+                    int written = snprintf(output_ptr, remaining_space + 1, fmt_buffer, f);
+                    if (written > 0 && (size_t)written <= remaining_space) {
+                        output_ptr += written;
+                        remaining_space -= written;
+                    } else {
+                        remaining_space = 0; // Buffer pieno
+                    }
                     if (flagerror)
                         my_print_on_error_d(fmt_buffer, f);
+                        
                 } else if (*p == 's') {
+                    const char *s;
                     if (strchr(fmt_buffer, '*') != NULL) {
                         int width = va_arg(args, int);
-                        const char *s = va_arg(args, char *);
+                        s = va_arg(args, char *);
                         printf(fmt_buffer, width, s);
-                        int written = sprintf(output_ptr, fmt_buffer, width, s);
-                        output_ptr += written;
-                        if (flagerror)
-                            my_print_on_error_s(fmt_buffer, s);
+                        int written = snprintf(output_ptr, remaining_space + 1, fmt_buffer, width, s);
+                        if (written > 0 && (size_t)written <= remaining_space) {
+                            output_ptr += written;
+                            remaining_space -= written;
+                        } else {
+                            remaining_space = 0; // Buffer pieno
+                        }
                     } else {
-                        const char *s = va_arg(args, char *);
+                        s = va_arg(args, char *);
+                        if (s == NULL) s = "(null)"; // Protezione contro puntatori null
                         printf(fmt_buffer, s);
-                        int written = sprintf(output_ptr, fmt_buffer, s);
-                        output_ptr += written;
-                        if (flagerror)
-                            my_print_on_error_s(fmt_buffer, s);
+                        int written = snprintf(output_ptr, remaining_space + 1, fmt_buffer, s);
+                        if (written > 0 && (size_t)written <= remaining_space) {
+                            output_ptr += written;
+                            remaining_space -= written;
+                        } else {
+                            remaining_space = 0; // Buffer pieno
+                        }
                     }
+                    if (flagerror)
+                        my_print_on_error_s(fmt_buffer, s);
+                        
                 } else if (*p == 'c') {
                     int c = va_arg(args, int);
                     printf(fmt_buffer, c);
-                    int written = sprintf(output_ptr, fmt_buffer, c);
-                    output_ptr += written;
+                    int written = snprintf(output_ptr, remaining_space + 1, fmt_buffer, c);
+                    if (written > 0 && (size_t)written <= remaining_space) {
+                        output_ptr += written;
+                        remaining_space -= written;
+                    } else {
+                        remaining_space = 0; // Buffer pieno
+                    }
                     if (flagerror)
                         my_print_on_error_i(fmt_buffer, c);
+                        
                 } else if (*p == 'Z') {
                     const char *s = va_arg(args, char *);
+                    if (s == NULL) s = "(null)"; // Protezione contro puntatori null
                     printUTF8(s);
-                    strcpy(output_ptr, s);
-                    output_ptr += strlen(s);
+                    
+                    size_t s_len = strlen(s);
+                    size_t copy_len = std::min(s_len, remaining_space);
+                    strncpy(output_ptr, s, copy_len);
+                    output_ptr += copy_len;
+                    remaining_space -= copy_len;
+                    
                     if (flagerror)
                         my_print_on_error_z(s);
                 }
             } else {
                 putchar(*p);
-                *output_ptr++ = *p;
+                if (remaining_space > 0) {
+                    *output_ptr++ = *p;
+                    remaining_space--;
+                }
                 if (flagerror && prepare_error_log())
                     fputc(*p, g_error_handle);
             }
             p++;
         } else {
             putchar(*p);
-            *output_ptr++ = *p;
+            if (remaining_space > 0) {
+                *output_ptr++ = *p;
+                remaining_space--;
+            }
             if (flagerror && prepare_error_log())
                 fputc(*p, g_error_handle);
             p++;
@@ -5795,9 +5844,10 @@ void myprintf(const char *format, ...)
     
     // Scrivi su file, convertendo \r finale in \n se necessario
     if (g_output_handle != 0) {
-        int len = output_ptr - output_buffer;
+        size_t len = output_ptr - output_buffer;
         if (len > 0 && output_buffer[len-1] == '\r') {
-            ///output_buffer[len-1] = '\n';
+            // Rimuovi \r e aggiungi \n
+            output_buffer[len-1] = '\0';
             fprintf(g_output_handle, "%s\n", output_buffer);
         } else {
             fprintf(g_output_handle, "%s", output_buffer);
@@ -5811,218 +5861,6 @@ void myprintf(const char *format, ...)
     if (flagerror || flagwarning)
         color_restore();
 }
-
-
-/*
-void myprintf(const char *format, ...) 
-{
-	 // Early exit if string starts with "DEBUG:" and flagdebug is false
-	 
-	  if (format[0] == 'D' && format[1] == 'E' && format[2] == 'B' && 
-        format[3] == 'U' && format[4] == 'G') {
-        
-        if (format[5] == ':' && !flagdebug) {
-            return;
-        }
-        else if (format[5] >= '2' && format[5] <= '6' && format[6] == ':') {
-            switch(format[5]) {
-                case '2': if (!flagdebug2) return; break;
-                case '3': if (!flagdebug3) return; break;
-                case '4': if (!flagdebug4) return; break;
-                case '5': if (!flagdebug5) return; break;
-                case '6': if (!flagdebug6) return; break;
-            }
-        }
-    }
-    else if (format[0] == 'V' && format[1] == 'E' && format[2] == 'R' && 
-             format[3] == 'B' && format[4] == 'O' && format[5] == 'S' && 
-             format[6] == 'E' && format[7] == ':' && !flagverbose) {
-        return;
-    }
-	
-    bool flagerror = false;
-    bool flagwarning = false;
-    bool flagcolon = false;
-    char buffer[4096]; // Buffer temporaneo per formati complessi
-
-    if (flagsilent) {
-        char fixata[4096];
-        replacezwiths(format, fixata);
-
-        va_list args2;
-        va_start(args2, format);
-        vsnprintf(buffer, sizeof(buffer), fixata, args2);
-        va_end(args2);
-        
-        decode_print_flag(buffer, flagcolon, flagerror, flagwarning);
-        if (g_output_handle != 0)
-            fprintf(g_output_handle, "%s", buffer);
-    
-        if (flagerror)
-            my_print_on_error_z(buffer);
-
-        return;
-    }
-
-    va_list args;
-    va_start(args, format);
-
-    decode_print_flag(format, flagcolon, flagerror, flagwarning);
-    
-    if (flagcolon || flagwarning) {
-        if (flagdebug) {
-            color_green();
-            printf("%c%c%c%c%c: ", format[0], format[1], format[2], format[3], format[4]);
-            color_restore();
-        }
-        format += 7;
-    }
-        
-    if (flagerror)
-        color_red();
-    else if (flagwarning)
-        color_yellow();
-
-    const char *p = format;
-    while (*p) {
-        if (*p == '%') {
-            p++; // Passa al carattere successivo dopo '%'
-
-            if (*p == '%') {
-                putchar('%');
-                if (g_output_handle != 0)
-                    fputc('%', g_output_handle);
-                if (flagerror && prepare_error_log())
-                    fputc('%', g_error_handle);
-                p++;
-                continue;
-            }
-
-            char fmt_buffer[32];
-            char* b = fmt_buffer;
-            *b++ = '%';
-
-            // Gestisci flag
-            int left_align = 0;
-            char fill_char = ' ';
-            while (*p && (strchr("-+0 ", *p) != NULL)) {
-                if (*p == '-') left_align = 1;
-                if (*p == '0') fill_char = '0';
-                *b++ = *p++;
-            }
-
-            // Gestisci larghezza
-            int width = 0;
-            while (*p && (*p >= '0' && *p <= '9')) {
-                width = width * 10 + (*p - '0');
-                *b++ = *p++;
-            }
-
-            // Gestisci precisione (ignorata per %K e %H)
-            if (*p == '.') {
-                *b++ = *p++;
-                while (*p && (*p >= '0' && *p <= '9')) {
-                    *b++ = *p++;
-                }
-            }
-
-            // Gestisci specificatore
-            if (*p && strchr("diouxXfscZKH", *p) != NULL) {
-                *b++ = *p;
-                *b = '\0';
-
-                if (*p == 'K') {
-                    int64_t value = va_arg(args, int64_t);
-					std::string formatted=format_int64_t(value, width, fill_char, left_align);
-                    printf("%s", formatted.c_str());
-                    if (g_output_handle != 0)
-                        fprintf(g_output_handle, "%s", formatted.c_str());
-                    if (flagerror && prepare_error_log())
-                        fprintf(g_error_handle, "%s", formatted.c_str());
-                } else if (*p == 'H') {
-                    int64_t value = va_arg(args, int64_t);
-                    std::string formatted=mytohuman2(value,width, fill_char, left_align);
-                    printf("%s", formatted.c_str());
-                    if (g_output_handle != 0)
-                        fprintf(g_output_handle, "%s", formatted.c_str());
-                    if (flagerror && prepare_error_log())
-                        fprintf(g_error_handle, "%s", formatted.c_str());
-                } else if (*p == 'd' || *p == 'i') {
-                    int i = va_arg(args, int);
-                    printf(fmt_buffer, i);
-                    if (g_output_handle != 0)
-                        fprintf(g_output_handle, fmt_buffer, i);
-                    if (flagerror)
-                        my_print_on_error_i(fmt_buffer, i);
-                } else if (*p == 'u' || *p == 'x' || *p == 'X') {
-                    unsigned int x = va_arg(args, unsigned int);
-                    printf(fmt_buffer, x);
-                    if (g_output_handle != 0)
-                        fprintf(g_output_handle, fmt_buffer, x);
-                    if (flagerror)
-                        my_print_on_error_u(fmt_buffer, x);
-                } else if (*p == 'f') {
-                    double f = va_arg(args, double);
-                    printf(fmt_buffer, f);
-                    if (g_output_handle != 0)
-                        fprintf(g_output_handle, fmt_buffer, f);
-                    if (flagerror)
-                        my_print_on_error_d(fmt_buffer, f);
-                } else if (*p == 's') {
-                    if (strchr(fmt_buffer, '*') != NULL) {
-                        int width = va_arg(args, int);
-                        const char *s = va_arg(args, char *);
-                        printf(fmt_buffer, width, s);
-                        if (g_output_handle != 0)
-                            fprintf(g_output_handle, fmt_buffer, width, s);
-                        if (flagerror)
-                            my_print_on_error_s(fmt_buffer, s);
-                    } else {
-                        const char *s = va_arg(args, char *);
-                        printf(fmt_buffer, s);
-                        if (g_output_handle != 0)
-                            fprintf(g_output_handle, fmt_buffer, s);
-                        if (flagerror)
-                            my_print_on_error_s(fmt_buffer, s);
-                    }
-                } else if (*p == 'c') {
-                    int c = va_arg(args, int);
-                    printf(fmt_buffer, c);
-                    if (g_output_handle != 0)
-                        fprintf(g_output_handle, fmt_buffer, c);
-                    if (flagerror)
-                        my_print_on_error_i(fmt_buffer, c);
-                } else if (*p == 'Z') {
-                    const char *s = va_arg(args, char *);
-                    printUTF8(s);
-                    if (flagerror)
-                        my_print_on_error_z(s);
-                }
-            } else {
-                putchar(*p);
-                if (g_output_handle != 0)
-                    fputc(*p, g_output_handle);
-                if (flagerror && prepare_error_log())
-                    fputc(*p, g_error_handle);
-            }
-            p++;
-        } else {
-            putchar(*p);
-            if (g_output_handle != 0)
-                fputc(*p, g_output_handle);
-            if (flagerror && prepare_error_log())
-                fputc(*p, g_error_handle);
-            p++;
-        }
-    }
-    va_end(args);
-#ifndef _WIN32
-    fflush(stdout);
-#endif
-    if (flagerror || flagwarning)
-        color_restore();
-}
-*/
 /// LICENSE_START.23
 
 //  This is a reworked https://github.com/codewithnick/ascii-art
@@ -47028,7 +46866,8 @@ string help_hasha(bool i_usage,bool i_example)
 		scrivi_riga("-pakka", "Do not mess the output");
 		scrivi_riga("-noeta", "Do not show ETA");
 		scrivi_riga("-last", "Get only the last file");
-		scrivi_riga("-franzhash", "Use franzhash on a single file");
+		scrivi_riga("-franzhash", "Use franzhash on a single file with multithread");
+		scrivi_riga("-franzhash -frugal", "franzhash with a single thread");
 	}
 	if (i_usage && i_example) scrivi_examples();
 	if (i_example)
@@ -47038,8 +46877,8 @@ string help_hasha(bool i_usage,bool i_example)
 		scrivi_esempio("XXH3 multithreaded","hash z:\\knb -ssd -xxh3");
 		scrivi_esempio("SHA256 to file","hash z:\\knb -ssd -sha256 -stdout -out 1.txt");
 		scrivi_esempio("SHA1 of the last file","hash z:\\knb -last");
-		scrivi_esempio("franzhash BLAKE-3 4 threads","hash z:\\knb -franzhash -blake3 -t4");
-		
+		scrivi_esempio("franzhash 4 parts/4 threads","hash z:\\pippo.zpaq -franzhash -blake3 -t4");
+		scrivi_esempio("franzhash 4 parts/1 thread","hash z:\\pippo.zpaq -franzhash -blake3 -t4 -frugal");		
 	}
 	return("Calc hash");
 }
@@ -70604,17 +70443,6 @@ typedef struct
     std::string final_hash;
 } franzhash_result;
 
-/*
-// Funzione di supporto per convertire da binario a esadecimale
-std::string binarytohex(const unsigned char* data, size_t len) 
-{
-    char hex[65];
-    for (size_t i = 0; i < len; i++) 
-        sprintf(hex + i * 2, "%02x", data[i]);
-    hex[len * 2] = '\0';
-    return std::string(hex);
-}
-*/
 // Funzione di supporto per convertire int64_t in stringa
 std::string int64_to_string(int64_t value) 
 {
@@ -70627,61 +70455,80 @@ std::string int64_to_string(int64_t value)
 void* franzhash_thread_func(void* arg) 
 {
     franzhash_thread_data* data = (franzhash_thread_data*)arg;
-    const size_t buffer_size = 16 * 1024 * 1024; // 16 MB
-    char* buffer = (char*)malloc(buffer_size);
+    char* buffer = (char*)franz_malloc(g_ioBUFSIZE);
     if (!buffer) 
-	{
+    {
         myprintf("70627! Error buffer thread %d\n", data->thread_id);
         return NULL;
     }
-
+    
     FILE* file = fopen(data->filename, "rb");
     if (!file) 
-	{
+    {
         myprintf("70634: Error opening file thread %d\n", data->thread_id);
-        free(buffer);
+        franz_free(buffer);
         return NULL;
     }
-
-///    libzpaq::SHA256 sha256;
-
-	franz_do_hash hashfrombuffer(g_thechosenhash_str);
-	hashfrombuffer.init();
-
-    fseeko(file, data->start_offset, SEEK_SET);
-    int64_t bytes_to_read 		= data->end_offset - data->start_offset + 1;
-    int64_t bytes_read_total 	= 0;
-
-    while (bytes_read_total < bytes_to_read) 
+    
+    franz_do_hash hashfrombuffer(g_thechosenhash_str);
+    hashfrombuffer.init();
+    
+    if (fseeko(file, data->start_offset, SEEK_SET) != 0) 
 	{
-        size_t to_read = (size_t)std::min((int64_t)buffer_size, bytes_to_read - bytes_read_total);
-        size_t read = fread(buffer, 1, to_read, file);
-        if (read == 0) break;
-
-		hashfrombuffer.update(buffer,read);
-///        sha256.write(buffer, read);
-        bytes_read_total += read;
-
-        // Aggiorna progresso
-        *(data->progress) = (double)bytes_read_total / bytes_to_read * 100.0;
-		///printf("Thread %d: %.2f%%\n", data->thread_id, *(data->progress));
+        myprintf("70635: Error seeking in file thread %d\n", data->thread_id);
+        fclose(file);
+        franz_free(buffer);
+        return NULL;
     }
-
+    
+    int64_t bytes_to_read = data->end_offset - data->start_offset + 1;
+    int64_t bytes_read_total = 0;
+    
+	while (bytes_read_total < bytes_to_read) 
+	{
+		// Clear any previous error indicators
+		clearerr(file);
+		
+		size_t to_read = (size_t)std::min((int64_t)g_ioBUFSIZE, bytes_to_read - bytes_read_total);
+		size_t read = fread(buffer, 1, to_read, file);
+		
+		if (read > 0) 
+		{
+			hashfrombuffer.update(buffer, read);
+			bytes_read_total += read;
+			*(data->progress) = (double)bytes_read_total / bytes_to_read * 100.0;
+		}
+		
+		// Exit conditions
+		if (read == 0 || read < to_read) 
+		{
+			if (feof(file)) 
+			{
+				// Normal EOF - we're done
+				break;
+			}
+			if (ferror(file)) 
+			{
+				myprintf("70636: Read error in thread %d\n", data->thread_id);
+				break;
+			}
+			// Should not reach here, but break for safety
+			break;
+		}
+	}
+    
     fclose(file);
-    free(buffer);
-
-    // Salva risultato hash
-
-	string thefinalhash=hashfrombuffer.finalize();
-	data->hash_result=thefinalhash;
-	if (flagdebug3) /// yep, no mutex, just debug
-		myprintf("70670: Thread %03d hash string %s\n",data->thread_id,data->hash_result.c_str());
-
+    franz_free(buffer);
+    
+    string thefinalhash = hashfrombuffer.finalize();
+    data->hash_result = thefinalhash;
+    
+    if (flagdebug3) /// yep, no mutex, just debug
+        myprintf("70670: Thread %03d hash string %s\n", data->thread_id, data->hash_result.c_str());
+    
     return NULL;
 }
-
-// Funzione principale per calcolare l'hash
-std::string calcolafranzhash(std::string i_tipohash, std::string i_nomefile, int i_numerothread) {
+std::string calcolafranzhash(std::string i_tipohash, std::string i_nomefile, int i_numerothread, bool i_serie) {
 
     // Ottieni dimensione file
     int64_t file_size = prendidimensionefile(i_nomefile.c_str());
@@ -70698,7 +70545,6 @@ std::string calcolafranzhash(std::string i_tipohash, std::string i_nomefile, int
     std::vector<int64_t> offsets(num_threads);
     std::vector<franzhash_thread_data> thread_data(num_threads);
     std::vector<pthread_t> threads(num_threads);
-    ///std::vector<string> part_hashes(num_threads);
     std::vector<double> progress(num_threads, 0.0);
 
     // Inizializza dati thread
@@ -70708,83 +70554,143 @@ std::string calcolafranzhash(std::string i_tipohash, std::string i_nomefile, int
         thread_data[i].end_offset = (i == num_threads - 1) ? file_size - 1 : (i + 1) * part_size - 1;
         thread_data[i].thread_id = i;
         thread_data[i].total_threads = num_threads;
-       /// thread_data[i].hash_result = part_hashes[i];
         thread_data[i].progress = &progress[i];
         offsets[i] = thread_data[i].start_offset;
     }
 
-    // Avvia thread
-    for (int i = 0; i < num_threads; i++) 
-	    if (pthread_create(&threads[i], NULL, franzhash_thread_func, &thread_data[i]) != 0) 
-            return "Error creating thread";
-    
     int64_t start_run = mtime();
-    // Monitora progresso globale
-    while (true) 
-	{
-        double total_progress = 0.0;
-        int64_t bytes_processed = 0;
+
+    if (i_serie) {
+		myprintf("70687: franzhash: serial run %s (spinning drives, old SSD, slow CPU)\n",tohuman(file_size));
+        // ESECUZIONE IN SERIE
         for (int i = 0; i < num_threads; i++) {
-            double thread_progress = progress[i]; // Progresso in percentuale (0-100)
-            int64_t thread_bytes = (i == num_threads - 1) 
-                ? (file_size - thread_data[i].start_offset) 
-                : (thread_data[i].end_offset - thread_data[i].start_offset + 1);
-            bytes_processed += static_cast<int64_t>(thread_bytes * (thread_progress / 100.0));
-            total_progress += thread_progress;
-        }
-        total_progress /= num_threads;
+            // Reset progresso per il thread corrente
+            progress[i] = 0.0;
+            
+            // Crea e avvia un thread alla volta
+            if (pthread_create(&threads[i], NULL, franzhash_thread_func, &thread_data[i]) != 0) 
+                return "Error creating thread";
+            
+            // Monitora il progresso di questo thread specifico
+            while (progress[i] < 100.0) {
+                // Calcola progresso globale considerando i thread già completati + quello corrente
+                double total_progress = 0.0;
+                int64_t bytes_processed = 0;
+                
+                for (int j = 0; j < num_threads; j++) {
+                    double thread_progress = (j < i) ? 100.0 : ((j == i) ? progress[j] : 0.0);
+                    int64_t thread_bytes = (j == num_threads - 1) 
+                        ? (file_size - thread_data[j].start_offset) 
+                        : (thread_data[j].end_offset - thread_data[j].start_offset + 1);
+                    bytes_processed += static_cast<int64_t>(thread_bytes * (thread_progress / 100.0));
+                    total_progress += thread_progress;
+                }
+                total_progress /= num_threads;
 
-        // Calcola velocità media (byte/s)
-        int64_t current_time = mtime();
-        double elapsed_seconds = (current_time - start_run) / 1000.0;
-        double average_speed = (elapsed_seconds > 0) ? (bytes_processed / elapsed_seconds) : 0.0;
+                // Calcola velocità media (byte/s)
+                int64_t current_time = mtime();
+                double elapsed_seconds = (current_time - start_run) / 1000.0;
+                double average_speed = (elapsed_seconds > 0) ? (bytes_processed / elapsed_seconds) : 0.0;
 
-        // Calcola ETA
-        int64_t bytes_remaining = file_size - bytes_processed;
-        double eta_seconds = (average_speed > 0) ? (bytes_remaining / average_speed) : 0.0;
-        int eta_hours = static_cast<int>(eta_seconds / 3600);
-        eta_seconds -= eta_hours * 3600;
-        int eta_minutes = static_cast<int>(eta_seconds / 60);
-        eta_seconds -= eta_minutes * 60;
-        int eta_secs = static_cast<int>(eta_seconds);
+                // Calcola ETA
+                int64_t bytes_remaining = file_size - bytes_processed;
+                double eta_seconds = (average_speed > 0) ? (bytes_remaining / average_speed) : 0.0;
+                int eta_hours = static_cast<int>(eta_seconds / 3600);
+                eta_seconds -= eta_hours * 3600;
+                int eta_minutes = static_cast<int>(eta_seconds / 60);
+                eta_seconds -= eta_minutes * 60;
+                int eta_secs = static_cast<int>(eta_seconds);
 
-        myprintf("70713: %7.2f%% ETA %02d:%02d:%02d %10s @ %10s/s\n",
-		         total_progress, eta_hours,eta_minutes,eta_secs,tohuman2(bytes_processed), tohuman(average_speed));
-
-        bool all_done = true;
-        for (int i = 0; i < num_threads; i++) 
-		    if (progress[i] < 100.0) 
-			{
-                all_done = false;
-                break;
-            }
-        if (all_done) 
-            break;
+                myprintf("70713: %7.2f%% ETA %02d:%02d:%02d %10s @ %10s/s [Part %03d/%03d]\r",
+                         total_progress, eta_hours,eta_minutes,eta_secs,tohuman2(bytes_processed), tohuman(average_speed), i+1, num_threads);
 
 #ifdef _WIN32
-        Sleep(1000);
+                Sleep(1000);
 #else
-        usleep(1000000); // 1 secondo (1000000 microsecondi)
+                usleep(1000000); // 1 secondo
 #endif
-    }
+            }
+            
+            // Aspetta che questo thread specifico termini
+            pthread_join(threads[i], NULL);
+        }
+    } else {
+        // ESECUZIONE IN PARALLELO (logica originale)
+        myprintf("70423: franzhash: parallel run %s (NVMe/RAID of SSDs, multicore CPU)\n",tohuman(file_size));
+        
+        // Avvia tutti i thread
+        for (int i = 0; i < num_threads; i++) 
+            if (pthread_create(&threads[i], NULL, franzhash_thread_func, &thread_data[i]) != 0) 
+                return "Error creating thread";
+        
+        // Monitora progresso globale
+        while (true) {
+            double total_progress = 0.0;
+            int64_t bytes_processed = 0;
+            for (int i = 0; i < num_threads; i++) {
+                double thread_progress = progress[i]; // Progresso in percentuale (0-100)
+                int64_t thread_bytes = (i == num_threads - 1) 
+                    ? (file_size - thread_data[i].start_offset) 
+                    : (thread_data[i].end_offset - thread_data[i].start_offset + 1);
+                bytes_processed += static_cast<int64_t>(thread_bytes * (thread_progress / 100.0));
+                total_progress += thread_progress;
+            }
+            total_progress /= num_threads;
 
-    // Aspetta completamento thread
-    for (int i = 0; i < num_threads; i++) 
-        pthread_join(threads[i], NULL);
+            // Calcola velocità media (byte/s)
+            int64_t current_time = mtime();
+            double elapsed_seconds = (current_time - start_run) / 1000.0;
+            double average_speed = (elapsed_seconds > 0) ? (bytes_processed / elapsed_seconds) : 0.0;
+
+            // Calcola ETA
+            int64_t bytes_remaining = file_size - bytes_processed;
+            double eta_seconds = (average_speed > 0) ? (bytes_remaining / average_speed) : 0.0;
+            int eta_hours = static_cast<int>(eta_seconds / 3600);
+            eta_seconds -= eta_hours * 3600;
+            int eta_minutes = static_cast<int>(eta_seconds / 60);
+            eta_seconds -= eta_minutes * 60;
+            int eta_secs = static_cast<int>(eta_seconds);
+
+            myprintf("70713: %7.2f%% ETA %02d:%02d:%02d %10s @ %10s/s\r",
+                     total_progress, eta_hours,eta_minutes,eta_secs,tohuman2(bytes_processed), tohuman(average_speed));
+
+            bool all_done = true;
+            for (int i = 0; i < num_threads; i++) 
+                if (progress[i] < 100.0) {
+                    all_done = false;
+                    break;
+                }
+            if (all_done) 
+                break;
+
+#ifdef _WIN32
+            Sleep(1000);
+#else
+            usleep(1000000); // 1 secondo (1000000 microsecondi)
+#endif
+        }
+
+        // Aspetta completamento di tutti i thread rimanenti
+        for (int i = 0; i < num_threads; i++) 
+            pthread_join(threads[i], NULL);
+    }
 
     // Calcola hash finale
     libzpaq::SHA256 final_sha256;
-	myprintf("---- OK, just debug for %03d threads\n",num_threads);
-    for (int i = 0; i < num_threads; i++) 
-	{
-		///if (flagdebug3)
-			myprintf("70880: Making global %03d %s %d %s\n",i,thread_data[i].hash_result.c_str(),thread_data[i].hash_result.size(),g_thechosenhash_str.c_str());
+    if (flagdebug3)
+        myprintf("---- OK, just debug for %03d threads\n",num_threads);
+    for (int i = 0; i < num_threads; i++) {
+        if (flagdebug3)
+            myprintf("70880: Making global %03d %s %d %s\n",i,thread_data[i].hash_result.c_str(),thread_data[i].hash_result.size(),g_thechosenhash_str.c_str());
         final_sha256.write(thread_data[i].hash_result.c_str(),thread_data[i].hash_result.size());
-	}
+    }
+    myprintf("\n");
     char final_hash[32];
     memcpy(final_hash, final_sha256.result(), 32);
     std::string final_hash_hex = binarytohex((const unsigned char*)final_hash, 32);
-	myprintf("70783: Final_hash_hex    %s\n",final_hash_hex.c_str());
+    if (flagdebug)
+        myprintf("70783: Final_hash_hex    %s\n",final_hash_hex.c_str());
+    
     // Crea stringa risultato
     char result_buffer[4096];
     snprintf(result_buffer, sizeof(result_buffer), "franzhash:%s:%d:", i_tipohash.c_str(), num_threads);
@@ -82179,14 +82085,15 @@ int Jidac::hasha()
 		if (mythread<1)
 			mythread=1;
 		
-		std::string straight_hash		= calcolafranzhash(g_thechosenhash_str.c_str(),files[0],mythread);
+		std::string straight_hash		= calcolafranzhash(g_thechosenhash_str.c_str(),files[0],mythread,flagfrugal);
 		std::string franz_hash_coded 	= codifica_franzhash(straight_hash);
 		std::string franz_decoded		= decodifica_franzhash(franz_hash_coded.c_str());
 	
-		myprintf("\n\n");
-		myprintf("82178: Straight     %s\n",straight_hash.c_str());
+		myprintf("\n");
+		if (flagverbose)
+			myprintf("82178: Straight     %s\n",straight_hash.c_str());
 			
-		myprintf("82189: Encoded      %s\n",franz_hash_coded.c_str());
+		myprintf("82189: %s\n",franz_hash_coded.c_str());
 		if (straight_hash!=franz_decoded)
 		{
 			color_red();
@@ -82196,8 +82103,6 @@ int Jidac::hasha()
 			return 2;
 		}
 		return 0;
-
-		///fika
 	}
 	if (flagpakka)
 		flagstdout=true;
@@ -96839,17 +96744,6 @@ int Jidac::cloud()
 	
 	return 0;
 }
-#endif 
-#endif ///NOSFTPEND
-
-
-
-
-
-
-
-
-
 
 
 
@@ -96857,36 +96751,32 @@ int Jidac::cloud()
 #ifdef _WIN32
     #define SLEEP(ms) Sleep(ms)
 #else
-    #include <dlfcn.h>
-    #include <unistd.h>
-    #include <sys/stat.h>
     #define SLEEP(ms) usleep((ms) * 1000)
     typedef void* HMODULE;
 #endif
 
 // Tipi di funzione per libssh
-typedef void* 		(*ssh_new_t)();
-typedef int 		(*ssh_options_set_t)(void*, int, const void*);
-typedef int 		(*ssh_connect_t)(void*);
-typedef int 		(*ssh_userauth_password_t)(void*, const char*, const char*);
-typedef int 		(*ssh_userauth_publickey_fromfile_t)(void*, const char*, const char*, const char*, const char*);
-typedef void* 		(*ssh_channel_new_t)(void*);
-typedef int 		(*ssh_channel_open_session_t)(void*);
-typedef int 		(*ssh_channel_request_exec_t)(void*, const char*);
-typedef int 		(*ssh_channel_read_t)(void*, void*, uint32_t, int);
-typedef int 		(*ssh_channel_read_timeout_t)(void*, void*, uint32_t, int, int);
-typedef void 		(*ssh_channel_close_t)(void*);
-typedef void 		(*ssh_channel_free_t)(void*);
-typedef void 		(*ssh_disconnect_t)(void*);
-typedef void 		(*ssh_free_t)(void*);
-typedef const char* (*ssh_get_error_t)(void*);
-typedef int 		(*ssh_channel_is_open_t)(void*);
-typedef int 		(*ssh_channel_is_eof_t)(void*);
-typedef int 		(*ssh_channel_get_exit_status_t)(void*);
-
-typedef int (*ssh_channel_read_nonblocking_t)(void* channel, void *buffer, int count, int is_stderr); // NUOVA
-typedef int (*ssh_channel_send_eof_t)(void* channel); // NUOVA
-typedef int (*ssh_channel_select_t)(void** read_channels, void** write_channels, void* except_channels, struct timeval *timeout); // NUOVA
+typedef void* 		(*ssh_new_t)							();
+typedef int 		(*ssh_options_set_t)					(void*, int, const void*);
+typedef int 		(*ssh_connect_t)						(void*);
+typedef int 		(*ssh_userauth_password_t)				(void*, const char*, const char*);
+typedef int 		(*ssh_userauth_publickey_fromfile_t)	(void*, const char*, const char*, const char*, const char*);
+typedef void* 		(*ssh_channel_new_t)					(void*);
+typedef int 		(*ssh_channel_open_session_t)			(void*);
+typedef int 		(*ssh_channel_request_exec_t)			(void*, const char*);
+typedef int 		(*ssh_channel_read_t)					(void*, void*, uint32_t, int);
+typedef int 		(*ssh_channel_read_timeout_t)			(void*, void*, uint32_t, int, int);
+typedef void 		(*ssh_channel_close_t)					(void*);
+typedef void 		(*ssh_channel_free_t)					(void*);
+typedef void 		(*ssh_disconnect_t)						(void*);
+typedef void 		(*ssh_free_t)							(void*);
+typedef const char* (*ssh_get_error_t)						(void*);
+typedef int 		(*ssh_channel_is_open_t)				(void*);
+typedef int 		(*ssh_channel_is_eof_t)					(void*);
+typedef int 		(*ssh_channel_get_exit_status_t)		(void*);
+typedef int 		(*ssh_channel_read_nonblocking_t)		(void* channel, void *buffer, int count, int is_stderr);
+typedef int 		(*ssh_channel_send_eof_t)				(void* channel);
+typedef int 		(*ssh_channel_select_t)					(void** read_channels, void** write_channels, void* except_channels, struct timeval *timeout);
 
 // Costanti per ssh_options_set
 #define SSH_OPTIONS_HOST 0
@@ -97121,25 +97011,7 @@ const char* get_library_error()
 }
 
 const char* get_default_libssh_path() 
-{	// only for debug!!!
-/*
-    // Prova diversi percorsi comuni su *nix
-   static const char* paths[] = {
-        "/usr/lib/libssh.so",
-        "/usr/lib/x86_64-linux-gnu/libssh.so.4",
-        "/usr/lib/x86_64-linux-gnu/libssh.so",
-        "/usr/local/lib/libssh.so",
-        "/lib/libssh.so",
-        "libssh.so.4",
-        "libssh.so",
-        NULL
-    };
-    
-    for (int i = 0; paths[i]; i++) 
-	    if (file_exists(paths[i])) 
-		    return paths[i];
-*/  
-    // Se nessun file trovato, ritorna il più comune
+{	
     return "libssh.so.4";
 }
 
@@ -97279,21 +97151,12 @@ int autentica_ssh(void* session, const std::string& user, const std::string& pas
 }
 
 
-// Assumo che queste dipendenze esistano nel tuo progetto
-// extern void myprintf(const char* format, ...);
-// extern bool g_sshLib;
-// extern int autentica_ssh(void* session, const std::string& user, const std::string& password, const std::string& keyfile);
-// extern bool flagdebug3;
-// extern bool flagverbose;
-// extern void SLEEP(int ms);
-
-enum ssh_error_e {
-  SSH_OK = 0,         /**< No error. */
-  SSH_ERROR = -1,       /**< A general error occurred. */
-  SSH_AGAIN = -2,       /**< The function needs to be called again. */
-  /* ... altre costanti di errore ... */
+enum ssh_error_e 
+{
+  SSH_OK = 0,
+  SSH_ERROR = -1,
+  SSH_AGAIN = -2,
 };
-
 
 int eseguicomandossh( std::string& comando, const std::string& host, int port,
                       const std::string& user, const std::string& password, const std::string& keyfile,
@@ -97472,7 +97335,7 @@ int eseguicomandossh( std::string& comando, const std::string& host, int port,
     myprintf("DEBUG: Cleanup done\n");
     return 0;
 }
-#ifdef SFTP
+
 int Jidac::xssh(std::string i_command,std::string& o_output)
 {
 	o_output="";
@@ -97498,9 +97361,6 @@ int Jidac::xssh(std::string i_command,std::string& o_output)
 			myprintf("96805: you need -password or -key!\n");
 			return 2;
 		}
-
-//    const char* libssh_path = "somewhereovertheraynbow"
-
     // Carica la libreria SSH
     if (caricadllssh(NULL)!=0) 
 	{
@@ -97509,41 +97369,31 @@ int Jidac::xssh(std::string i_command,std::string& o_output)
     }
 	
     int result = eseguicomandossh(i_command, g_sftp_host, g_sftp_port, g_sftp_user, g_sftp_password, g_sftp_key,o_output);
-///		vector<std::pair<string,string> > crc32_pair;
-
     scaricadllssh();
 
     return result;
 
 }
 
-////usr/local/bin/zpaqfranz hash /home/demofranco/demo1/sftp/* -xxh3 -ssd -terse
-/// md5sum /home/demofranco/demo1/sftp/*
-
-
-
-
 void parsehashfilelist(const std::string& input, std::vector<std::pair<std::string, std::string> >& o_hashname) 
 {
     o_hashname.clear(); // Pulisce il vettore di output
     
-    if (input.empty()) {
+    if (input.empty()) 
         return; // Stringa vuota, esci
-    }
 
     const char* ptr = input.c_str();
     const char* end = ptr + input.length();
     
-    while (ptr < end) {
+    while (ptr < end) 
+	{
         // Salta spazi iniziali e caratteri di controllo
-        while (ptr < end && (*ptr == ' ' || *ptr == '\t' || *ptr == '\r' || *ptr == '\n')) {
-            ++ptr;
-        }
+        while (ptr < end && (*ptr == ' ' || *ptr == '\t' || *ptr == '\r' || *ptr == '\n')) 
+		    ++ptr;
         
-        if (ptr >= end) {
-            break; // Fine input
-        }
-
+        if (ptr >= end) 
+		    break; // Fine input
+        
         // Leggi hash (caratteri esadecimali)
         std::string hash;
         while (ptr < end && 
@@ -97555,22 +97405,22 @@ void parsehashfilelist(const std::string& input, std::vector<std::pair<std::stri
         }
         
         // Verifica validità hash
-        if (hash.empty() || hash.length() > 64) { // Lunghezza massima per SHA-256
+        if (hash.empty() || hash.length() > 64) 
+		{ // Lunghezza massima per SHA-256
             // Salta fino alla fine della linea
-            while (ptr < end && *ptr != '\n' && *ptr != '\r') {
-                ++ptr;
-            }
+            while (ptr < end && *ptr != '\n' && *ptr != '\r') 
+			    ++ptr;
             continue;
         }
 
         // Salta separatori (spazi, tab)
-        while (ptr < end && (*ptr == ' ' || *ptr == '\t')) {
-            ++ptr;
-        }
-
+        while (ptr < end && (*ptr == ' ' || *ptr == '\t')) 
+		    ++ptr;
+        
         // Leggi nome file
         std::string filename;
-        while (ptr < end && *ptr != '\n' && *ptr != '\r') {
+        while (ptr < end && *ptr != '\n' && *ptr != '\r') 
+		{
             filename += *ptr;
             ++ptr;
         }
@@ -97578,19 +97428,16 @@ void parsehashfilelist(const std::string& input, std::vector<std::pair<std::stri
         // Rimuovi spazi finali dal nome file
         while (!filename.empty() && 
                (filename[filename.length() - 1] == ' ' || 
-                filename[filename.length() - 1] == '\t')) {
-            filename.erase(filename.length() - 1);
-        }
-
+                filename[filename.length() - 1] == '\t')) 
+		    filename.erase(filename.length() - 1);
+        
         // Verifica validità nome file
-        if (!filename.empty()) {
-            o_hashname.push_back(std::make_pair(hash, filename));
-        }
-
+        if (!filename.empty()) 
+		    o_hashname.push_back(std::make_pair(hash, filename));
+        
         // Salta caratteri di fine linea
-        while (ptr < end && (*ptr == '\n' || *ptr == '\r')) {
-            ++ptr;
-        }
+        while (ptr < end && (*ptr == '\n' || *ptr == '\r')) 
+		    ++ptr;
     }
 }
 
@@ -97605,28 +97452,32 @@ int strcmp_case(const char* s1, const char* s2)
 
 
 // Function to check if a string is a valid hexadecimal hash
-int isValidHexHash(const char* hash) {
-    if (!hash || strlen(hash) == 0) return 0;
-    for (size_t i = 0; hash[i] != '\0'; i++) {
+int isValidHexHash(const char* hash) 
+{
+    if (!hash || strlen(hash) == 0) 
+		return 0;
+    for (size_t i = 0; hash[i] != '\0'; i++) 
+	{
         char c = hash[i];
-        if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'))) {
-            return 0; // Invalid character found
-        }
+        if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'))) 
+		    return 0; // Invalid character found
     }
     return 1; // All characters are valid hex
 }
 
 // Function to convert a character to lowercase
-char toLowerChar(char c) {
-    if (c >= 'A' && c <= 'Z') {
+char toLowerChar(char c) 
+{
+    if (c >= 'A' && c <= 'Z') 
         return c + ('a' - 'A');
-    }
     return c;
 }
 
 // Function to compare two strings case-insensitively
-int strcmp_nocase(const char* s1, const char* s2) {
-    while (*s1 && *s2) {
+int strcmp_nocase(const char* s1, const char* s2) 
+{
+    while (*s1 && *s2) 
+	{
         char c1 = toLowerChar(*s1);
         char c2 = toLowerChar(*s2);
         if (c1 != c2) return c1 - c2;
@@ -97953,4 +97804,5 @@ int Jidac::ssh_dohasha(std::string i_algo)
 	return comparazioneok;
 }		
 #endif
+#endif ///NOSFTPEND
 

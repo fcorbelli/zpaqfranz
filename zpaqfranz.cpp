@@ -97036,6 +97036,7 @@ int caricadllssh()
 
 	const char* dllPath	= get_default_libssh_path();
     
+#ifdef _WIN32
     // Verifica se la libreria esiste
     if (!file_exists(dllPath)) 
 	{
@@ -97048,6 +97049,7 @@ int caricadllssh()
         return -1;
     }
     myprintf("DEBUG: libssh founded in %s\n", dllPath);
+#endif
 
     // Carica la libreria
     g_sshLib = load_library(dllPath);

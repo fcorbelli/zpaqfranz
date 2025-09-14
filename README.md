@@ -2,14 +2,15 @@
 
 ### Swiss army knife for backup and disaster recovery, like 7z or RAR on steroids, with deduplicated 'snapshots' (versions). Conceptually similar to Mac's Time Machine, but much more efficient. A zpaq 7.15 fork    
 
-|  Platform                                                           | OS package                    |  Version    | Video|
-|  ----------                                                         | -----                         |  ---------- |  -------    |
-|  [Windows 32/64bit (sourceforge)](https://sourceforge.net/projects/zpaqfranz/files)   |                                  |![Badge](https://img.shields.io/github/v/release/fcorbelli/zpaqfranz)|      |      
-|  [Windows 32 (direct)](https://www.francocorbelli.it/zpaqfranz/win32/zpaqfranz32.exe)           |   `zpaqfranz32 upgrade -force`    |latest|      | 
-|  [Windows 64 (direct)](http://www.francocorbelli.it/zpaqfranz/win64/zpaqfranz.exe)           |   `zpaqfranz upgrade -force`     |latest|      | 
-|  [Windows 64 (HW accelerated)](http://www.francocorbelli.it/zpaqfranz/win64hw/zpaqfranzhw.exe)           | `zpaqfranzhw -force`   |latest|      |
-|  [Windows 64 (full)](http://www.francocorbelli.it/zpaqfranz/win64/zpaqfranz-full.exe)           |    |latest|      |
-|  [Windows 64 (open)](http://www.francocorbelli.it/zpaqfranz/win64/zpaqfranz-open.exe)           |    |latest|      |
+|  Platform                                                           | OS package                    |  Version    | Video| Description |
+|  ----------                                                         | -----                         |  ---------- |  -------    |-------------|
+|  [Everything (sourceforge)](https://sourceforge.net/projects/zpaqfranz/files)   |   Windows' exes        |![Badge](https://img.shields.io/github/v/release/fcorbelli/zpaqfranz)|      | Alternative to GitHub|     
+|  [Windows 64](http://www.francocorbelli.it/zpaqfranz/win64/zpaqfranz.exe)           |   `zpaqfranz upgrade -force`     |latest|      | 64-bit version with hardware acceleration auto-detection for SHA1 and SHA2 (if supported by the CPU). Can download additional files (e.g., DLLs) from the internet when needed. Can self-update from the internet (if requested). **Recommended version for Win** |   
+|  [Windows 32](https://www.francocorbelli.it/zpaqfranz/win32/zpaqfranz32.exe)           |   `zpaqfranz32 upgrade -force`    |latest|      |  32-bit version with limitations on memory allocation and available threads. Noticeably slower than the 64-bit version. |
+|  [Windows 64 (HW accelerated)](http://www.francocorbelli.it/zpaqfranz/win64hw/zpaqfranzhw.exe)           | `zpaqfranzhw -force`   |latest|      |64-bit version that uses different code to accelerate SHA1 calculation, but requires the `-hw` switch to enable it. On modern AMD processors it may be ~1.5% faster than zpaqfranz. For power users. |
+|  [Windows 64 (full)](http://www.francocorbelli.it/zpaqfranz/win64/zpaqfranz-full.exe)           |    |latest|      |64-bit version containing all libraries and programs already compressed and linked. Suitable for systems without internet access, which would otherwise fail to download required supporting software.
+|  [Windows 64 (open)](http://www.francocorbelli.it/zpaqfranz/win64/zpaqfranz-open.exe)           |    |latest|      |64-bit version stripped of all additional components, without the ability to create temporary files. It is **100% open-source**, with no binary or hard-to-interpret code. **Suitable for high-security environments**. |
+|  [Windows XP (sourceforge)](https://sourceforge.net/projects/zpaqfranz/files)           |    |      |   32-bit version with various limitations for the glorious Windows XP. Noticeably slower. |
 |  [OpenBSD](http://www.francocorbelli.it/zpaqfranz/openbsd)                 |`pkg_add zpaqfranz`            |![Badge](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fopenbsd.app%2F%3Fsearch%3Dzpaqfranz%26format%3Djson%26current%3Don&query=%24..FULLPKGNAME&label=openbsd)|      |
 |  [FreeBSD](http://www.francocorbelli.it/zpaqfranz/freebsd)                 |`pkg install zpaqfranz`        |60.3a |      |
 |  [MacOS](http://www.francocorbelli.it/zpaqfranz/mac)                       |`brew install zpaqfranz`       |![Badge](https://img.shields.io/homebrew/v/zpaqfranz)|      |

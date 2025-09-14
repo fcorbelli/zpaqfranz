@@ -5,7 +5,7 @@
 |  Platform                                                           | OS package                    |  Version    | Video|
 |  ----------                                                         | -----                         |  ---------- |  -------    |
 |  [Windows 32/64bit (sourceforge)](https://sourceforge.net/projects/zpaqfranz/files)   |                                  |![Badge](https://img.shields.io/github/v/release/fcorbelli/zpaqfranz)|      |      
-|  [Windows 32 (direct)](http://www.francocorbelli.it/zpaqfranz/win32)           |   `zpaqfranz32 upgrade -force`    |latest|      | 
+|  [Windows 32 (direct)](https://www.francocorbelli.it/zpaqfranz/win32/zpaqfranz32.exe)           |   `zpaqfranz32 upgrade -force`    |latest|      | 
 |  [Windows 64 (direct)](http://www.francocorbelli.it/zpaqfranz/win64)           |   `zpaqfranz upgrade -force`     |latest|      | 
 |  [Windows 64 (HW accelerated)](http://www.francocorbelli.it/zpaqfranz/win64hw)           | `zpaqfranzhw -force`   |latest|      |
 |  [OpenBSD](http://www.francocorbelli.it/zpaqfranz/openbsd)                 |`pkg_add zpaqfranz`            |![Badge](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fopenbsd.app%2F%3Fsearch%3Dzpaqfranz%26format%3Djson%26current%3Don&query=%24..FULLPKGNAME&label=openbsd)|      |

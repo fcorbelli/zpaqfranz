@@ -139,3 +139,5 @@ Credits and copyrights and licenses and links and internal bookmarks
 49 Thanks to https://github.com/KnightAR                for -stdin bug from 60.7 to 60.8
 50 Thanks to https://github.com/kskarlatos              for a very nasty bug on g++ with -tar
 51 Thanks to https://github.com/forgottenbutnotgone     for a bug in crc32 blocks sorting
+52 Thanks to https://github.com/197788                  for help fix
+53 Thanks to https://github.com/cheebusjeebus           for "different" UTC fixes

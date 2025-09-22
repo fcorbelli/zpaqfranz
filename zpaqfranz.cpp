@@ -58,8 +58,9 @@ OTHER DEALINGS IN THE SOFTWARE.
 #define ZPAQFULL ///NOSFTPSTART
 ///NOSFTPEND
 
-#define ZPAQ_VERSION "63.1p"
-#define ZPAQ_DATE "(2025-08-13)"
+#define ZPAQ_VERSION "63.2t"
+#define ZPAQ_DATE "(2025-09-22)"
+
 
 
 /*
@@ -1205,6 +1206,7 @@ authorization of the copyright holder.
 50 Thanks to https://github.com/kskarlatos              for a very nasty bug on g++ with -tar
 51 Thanks to https://github.com/forgottenbutnotgone     for a bug in crc32 blocks sorting
 52 Thanks to https://github.com/197788                  for help fix
+53 Thanks to https://github.com/cheebusjeebus           for "different" UTC fixes
 
 
 
@@ -1788,7 +1790,7 @@ It is essentially an interoperability test between Windows
 It is packed with 256 "shuffled" pieces of the Iliade
 https://www.rodoni.ch/busoni/bibliotechina/nuovifiles/iliade_h/testo.htm
 
-Cantami, o Diva, del Pelìde Achille
+Cantami, o Diva, del Pelide Achille
 l'ira funesta che infiniti addusse
 lutti agli Achei, molte anzi tempo all'Orco
 generose travolse alme d'eroi...
@@ -1937,6 +1939,7 @@ g++ -g -Wall -Wextra -Wpedantic -fsanitize=address,undefined -O3 zpaqfranz.cpp -
 	#include <math.h>
 	#include <memory>
 	#include <pthread.h>
+	#include <set>
 	#include <stdarg.h>
 	#include <stdexcept>
 	#include <stdio.h>
@@ -2010,7 +2013,7 @@ g++ -g -Wall -Wextra -Wpedantic -fsanitize=address,undefined -O3 zpaqfranz.cpp -
 	#include <fcntl.h> // for setmode()
 	#include <aclapi.h>
 	#include <sddl.h>
-	#include <cwctype> // Per std::towlower
+	#include <cwctype> // For std::towlower
 	#include <queue>
 
 	using namespace std;
@@ -4636,10 +4639,10 @@ std::string g_sftp_customer;
 std::string g_sftp_password;
 std::string g_sftp_key;
 int			g_sftp_port;
-int			g_sftp_bandwidth;
 #endif // corresponds to #ifdef (#ifdef SFTP)
 #endif ///NOSFTPEND
 
+int			g_sftp_bandwidth;
 int 		g_device_fd;
 int64_t 	g_device_size;
 
@@ -4733,6 +4736,11 @@ unsigned 	g_htsize		=0;
 bool		g_fakewrite		=false;	// in add() disable write (ransomware)
 uint64_t 	minsize;
 uint64_t 	maxsize;
+uint64_t	g_remotespeed	=0;
+bool		flaghuge		=false;
+#ifdef _WIN32
+bool		flagsparse		=false;
+#endif
 uint64_t	g_ramsize;
 bool		flagramsize		=false;
 uint64_t	g_checksize		=0;
@@ -4816,6 +4824,7 @@ bool		flagmm;
 bool		flagattr;
 bool		flagthunderbird;
 bool		flagnoattributes;
+bool		flagnodir;
 bool		flagnodedup;
 bool		flagnoeta;
 bool		flagnopath;
@@ -4981,7 +4990,36 @@ MAPPAERRORS 			g_errors;
 #endif // corresponds to #ifdef (#ifdef _WIN32)
 
 int g_console_attributes=-1;
+/*
+bool iswindowsxp()
+{
+#ifdef _WIN32
+    OSVERSIONINFO osvi;
+    ZeroMemory(&osvi, sizeof(OSVERSIONINFO));  // Pulisce la struttura
+    osvi.dwOSVersionInfoSize = sizeof(OSVERSIONINFO);
+    
+    if (GetVersionEx(&osvi))  // Controlla il successo
+    {
+        return (osvi.dwMajorVersion == 5) && (osvi.dwMinorVersion == 1);
+    }
+    return false;  // Fallback se GetVersionEx fallisce
+#else
+    return false;
+#endif
+}
+*/
+bool iswindowsxp()
+{
+#ifdef _WIN32
+    // Metodo veloce: se GetTickCount64 non esiste, è XP/2003
+    HMODULE hKernel = GetModuleHandleW(L"kernel32.dll");
+    return (hKernel && GetProcAddress(hKernel, "GetTickCount64") == NULL);
+#else
+    return false;
+#endif
+}
 
+/*
 bool iswindowsxp()
 {
 #ifdef _WIN32
@@ -4992,15 +5030,16 @@ bool iswindowsxp()
 #endif // corresponds to #ifdef (#ifdef _WIN32)
 	return false;
 }
+*/
 
 #ifdef _WIN32
 
 
-// Funzione per decodificare una stringa esadecimale
+// Function to decode a hexadecimal string
 std::string decodehex(const std::string& hexInput) 
 {
     if (hexInput.length() % 2 != 0) 
-        return ""; // Stringa hex deve avere lunghezza pari
+        return ""; // Hex string must have an even length
     
     std::string result;
     result.reserve(hexInput.length() / 2);
@@ -5010,19 +5049,19 @@ std::string decodehex(const std::string& hexInput)
         char high = hexInput[i];
         char low = hexInput[i + 1];
         
-        // Converte carattere hex in valore numerico
+        // Convert hex character to numeric value
         auto hexToInt = [](char c) -> int {
             if (c >= '0' && c <= '9') return c - '0';
             if (c >= 'A' && c <= 'F') return c - 'A' + 10;
             if (c >= 'a' && c <= 'f') return c - 'a' + 10;
-            return -1; // Carattere non valido
+            return -1; // Invalid character
         };
         
         int highVal = hexToInt(high);
         int lowVal = hexToInt(low);
         
         if (highVal == -1 || lowVal == -1) 
-		    return ""; // Carattere hex non valido
+		    return ""; // Invalid hex character
         
         result += static_cast<char>((highVal << 4) | lowVal);
     }
@@ -5078,8 +5117,8 @@ void resetconsolecolor()
     // Windows: Ripristina il colore predefinito della console
     HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
     CONSOLE_SCREEN_BUFFER_INFO csbi;
-    GetConsoleScreenBufferInfo(hConsole, &csbi); // Ottiene le informazioni correnti
-    SetConsoleTextAttribute(hConsole, csbi.wAttributes & 0x00FF); // Ripristina il colore di foreground/background
+    GetConsoleScreenBufferInfo(hConsole, &csbi); // Get current information
+    SetConsoleTextAttribute(hConsole, csbi.wAttributes & 0x00FF); // Restore the foreground/background color
 #else
     // Linux/macOS: Usa la sequenza ANSI per resettare il colore
 	printf(TEXT_RESET);
@@ -5177,38 +5216,67 @@ std::string print_datetime(bool i_flagout=true);
 
 #ifdef _WIN32
 // In Windows, convert UTF-8 string to wide string ignoring
-// invalid UTF-8 or >64K. Convert "/" to slash (default "\").
+// invalid UTF-8. Convert "/" to slash (default "\").
+// Now supports 4-byte UTF-8 sequences (emojis, etc.) using surrogate pairs
 std::wstring utow(const char* ss, char slash = '\\') {
   assert(sizeof(wchar_t) == 2);
   assert((wchar_t)(-1) == 65535);
   std::wstring r;
   if (!ss) return r;
   const unsigned char* s = (const unsigned char*)ss;
+  
   while (*s) {
     if (*s == '/') {
       r += slash;
       ++s;
     }
     else if (*s < 128) {
+      // ASCII (1 byte)
       r += *s;
       ++s;
     }
     else if (*s >= 192 && *s < 224 && s[1] >= 128 && s[1] < 192) {
+      // 2-byte UTF-8 sequence
       r += ((*s & 0x1F) << 6) | (s[1] & 0x3F);
       s += 2;
     }
     else if (*s >= 224 && *s < 240 && s[1] >= 128 && s[1] < 192 && s[2] >= 128 && s[2] < 192) {
+      // 3-byte UTF-8 sequence
       r += ((*s & 0x0F) << 12) | ((s[1] & 0x3F) << 6) | (s[2] & 0x3F);
       s += 3;
     }
+    else if (*s >= 240 && *s < 248 && 
+             s[1] >= 128 && s[1] < 192 && 
+             s[2] >= 128 && s[2] < 192 && 
+             s[3] >= 128 && s[3] < 192) {
+      // 4-byte UTF-8 sequence - necessita surrogate pairs per UTF-16
+      uint32_t codepoint = ((*s & 0x07) << 18) | 
+                          ((s[1] & 0x3F) << 12) | 
+                          ((s[2] & 0x3F) << 6) | 
+                          (s[3] & 0x3F);
+      
+      if (codepoint >= 0x10000 && codepoint <= 0x10FFFF) {
+        // Convert to surrogate pair for UTF-16
+        codepoint -= 0x10000;
+        wchar_t high_surrogate = 0xD800 + ((codepoint >> 10) & 0x3FF);
+        wchar_t low_surrogate = 0xDC00 + (codepoint & 0x3FF);
+        r += high_surrogate;
+        r += low_surrogate;
+      } else {
+        // Invalid codepoint
+        r += L'?';
+      }
+      s += 4;
+    }
     else {
-      // Carattere non valido o non supportato (es. 4 byte), salta
-      r += L'?'; // Sostituisci con un placeholder
+      // Invalid or unrecognized UTF-8 sequence
+      r += L'?';
       ++s;
     }
   }
   return r;
 }
+
 #endif // corresponds to #ifdef (#ifdef _WIN32)
 
 int mypos(const std::string& i_substring,const std::string& i_string)
@@ -5297,292 +5365,712 @@ void printUTF8(const char* s, FILE* f=stdout)
 #endif // corresponds to #ifdef (#ifdef unix)
 }
 
-void	decode_print_flag(const char* i_buffer,bool& o_flagcolon,bool& o_flagerror,bool& o_flagwarning)
-{
-	if (i_buffer==NULL)
-	{
-		printf("02734: i_buffer calcola flag NULL!\n");
-		exit(0);
-	}
-	o_flagcolon=false;
-	o_flagerror=false;
-	o_flagwarning=false;
-	int format_len=strlen(i_buffer);
+////////////////////////////////
+////////////////////////////////
+////////////////////////////////
+////////////////////////////////
+////////////////////////////////
+////////////////////////////////
+////////////////////////////////
+////////////////////////////////
+////////////////////////////////
+////////////////////////////////
+////////////////////////////////
 
-	if (format_len>7)
-	{
-		bool fivedigits=(isdigit(i_buffer[0])) &&
-						(isdigit(i_buffer[1])) &&
-						(isdigit(i_buffer[2])) &&
-						(isdigit(i_buffer[3])) &&
-						(isdigit(i_buffer[4])) &&
-						((i_buffer[5]=='!') || (i_buffer[5]=='$') || (i_buffer[5]==':') ) &&
-						(i_buffer[6]==' ');
-						
-		if (fivedigits)
-		{
-			o_flagerror		=(i_buffer[5]=='!');
-			o_flagwarning	=(i_buffer[5]=='$');
-			o_flagcolon		=(i_buffer[5]==':');
-		}
-	}
+
+
+
+
+
+void decode_print_flag_refactored(const char* i_buffer, bool* o_flagcolon, bool* o_flagerror, bool* o_flagwarning)
+{
+    if (i_buffer == NULL)
+    {
+        if (flagdebug) 
+			printf("02734: i_buffer NULL!\n");
+        return;
+    }
+
+    if (o_flagcolon) *o_flagcolon = false;
+    if (o_flagerror) *o_flagerror = false;
+    if (o_flagwarning) *o_flagwarning = false;
+
+    size_t len = strlen(i_buffer);
+    if (len > 6 && isdigit((unsigned char)i_buffer[0]) && isdigit((unsigned char)i_buffer[1]) && isdigit((unsigned char)i_buffer[2]) &&
+        isdigit((unsigned char)i_buffer[3]) && isdigit((unsigned char)i_buffer[4]) && i_buffer[6] == ' ')
+    {
+        char flag_char = i_buffer[5];
+        if (flag_char == '!') *o_flagerror = true;
+        else if (flag_char == '$') *o_flagwarning = true;
+        else if (flag_char == ':') *o_flagcolon = true;
+        else if (flagdebug)
+            printf("02735: Invalid symbol: %c\n", flag_char);
+    }
+    else if (len > 6 && isdigit((unsigned char)i_buffer[0]) && flagdebug)
+    {
+        printf("02736: Invalid format  i_buffer: %.6s\n", i_buffer);
+    }
 }
 
-void replacezwiths(const char *input, char *output) 
+bool prepare_error_log(void)
 {
-	if (input==NULL)
-		return;
-	if (output==NULL)
-		return;
-	const char *ptr = input;
-    char *out_ptr = output;
+    if (g_error.empty())
+        return false;
 
-    while (*ptr != '\0') 
-	{
-        // Controlla se troviamo la coppia "%Z"
-        if (ptr[0] == '%' && ptr[1] == 'Z') 
-		{
-            // Sostituisci con "%s"
-            *out_ptr++ = '%';
-            *out_ptr++ = 's';
-            ptr += 2; // Salta la coppia "%Z"
-        } 
-		else 
-		{
-            // Copia il carattere corrente
-            *out_ptr++ = *ptr++;
+    if (!g_error_handle)
+    {
+        if (flagverbose)
+            printf("02747: OPENING ERROR FILE %s\n", g_error.c_str());
+        g_error_handle = fopen(g_error.c_str(), "w");
+        if (!g_error_handle)
+            return false;
+    }
+
+    return true;
+}
+
+void my_print_on_error(const char* format, ...)
+{
+    if (!format || !prepare_error_log())
+        return;
+
+    va_list args;
+    va_start(args, format);
+    vfprintf(g_error_handle, format, args);
+    va_end(args);
+    fflush(g_error_handle);
+}
+
+static void apply_padding(char* buffer, size_t buffer_size, const char* content, int width,  bool left_align)
+{
+    if (!buffer || !content || buffer_size == 0)
+    {
+        if (flagdebug) printf("02737: Invalid apply_padding\n");
+        return;
+    }
+
+    size_t content_len = strlen(content);
+    if (width <= (int)content_len)
+    {
+        snprintf(buffer, buffer_size, "%s", content);
+        return;
+    }
+
+    // Force space fill — tests expect only space padding
+
+    // Use snprintf with width to handle truncation safely
+    if (left_align)
+        snprintf(buffer, buffer_size, "%-*s", width, content);
+    else
+        snprintf(buffer, buffer_size, "%*s", width, content);
+}
+
+char* format_int64_t_refactored(int64_t value, char* buffer, size_t buffer_size, int width, bool left_align)
+{
+    if (!buffer || buffer_size == 0)
+    {
+        if (flagdebug) printf("02739: Buffer not good in format_int64_t_refactored\n");
+        return NULL;
+    }
+
+    char temp_num_str[64];
+    snprintf(temp_num_str, sizeof(temp_num_str), "%lld", (long long)value);
+
+    char* src_ptr = temp_num_str;
+    bool is_negative = false;
+    if (*src_ptr == '-')
+    {
+        is_negative = true;
+        src_ptr++;
+    }
+
+    int len = (int)strlen(src_ptr);
+
+    char formatted_str[128];
+    char* dst_ptr = formatted_str;
+    size_t remaining = sizeof(formatted_str);
+
+    if (is_negative && remaining > 1)
+    {
+        *dst_ptr++ = '-';
+        remaining--;
+    }
+
+    int first_group_len = len % 3;
+    if (first_group_len == 0 && len > 0)
+    {
+        first_group_len = 3;
+    }
+
+    if (remaining > (size_t)first_group_len)
+    {
+        memcpy(dst_ptr, src_ptr, first_group_len);
+        dst_ptr += first_group_len;
+        src_ptr += first_group_len;
+        remaining -= first_group_len;
+    }
+
+    while (*src_ptr && remaining > 4)
+    {
+        *dst_ptr++ = '.';
+        memcpy(dst_ptr, src_ptr, 3);
+        dst_ptr += 3;
+        src_ptr += 3;
+        remaining -= 4;
+    }
+    *dst_ptr = '\0';
+
+    if (*src_ptr && flagdebug)
+        printf("02740: Truncating buffer in format_int64_t_refactored\n");
+
+    // Always use spaces for padding
+    apply_padding(buffer, buffer_size, formatted_str, width,  left_align);
+    return buffer;
+}
+
+char* mytohuman2_refactored(int64_t i_bytes, char* buffer, size_t buffer_size, int width,  bool left_align)
+{
+    if (!buffer || buffer_size == 0)
+    {
+        if (flagdebug) printf("02741: Buffer invalid mytohuman2_refactored\n");
+        return NULL;
+    }
+
+    char content[64];
+    if (i_bytes < 0)
+    {
+        snprintf(content, sizeof(content), "neg");
+    }
+    else
+    {
+        const char* units[] = {" B", " KB", " MB", " GB", " TB", " PB"};
+        double bytes = (double)i_bytes;
+        int unit_index = 0;
+        while (bytes >= 1024.0 && unit_index < 5)
+        {
+            bytes /= 1024.0;
+            unit_index++;
+        }
+        snprintf(content, sizeof(content), "%.2f%s", bytes, units[unit_index]);
+    }
+
+    // Always space-fill
+    apply_padding(buffer, buffer_size, content, width, left_align);
+    return buffer;
+}
+
+bool should_skip_print(const char* format)
+{
+    if (!format)
+        return true;
+
+    if (strncmp(format, "DEBUG", 5) == 0)
+    {
+        size_t len = strlen(format);
+        if (len > 5 && format[5] == ':' && !flagdebug)
+            return true;
+        if (len > 6 && format[6] == ':')
+        {
+            switch (format[5])
+            {
+                case '2': return !flagdebug2;
+                case '3': return !flagdebug3;
+                case '4': return !flagdebug4;
+                case '5': return !flagdebug5;
+                case '6': return !flagdebug6;
+                default: break;
+            }
         }
     }
-    *out_ptr = '\0'; // Termina la stringa output
+    else if (strncmp(format, "VERBOSE:", 8) == 0 && !flagverbose)
+        return true;
+
+    return false;
+}
+
+void handle_silent_mode(const char* format, va_list args)
+{
+    char buffer[8192];
+    int ret = vsnprintf(buffer, sizeof(buffer), format, args);
+    if (ret >= (int)sizeof(buffer))
+    {
+        buffer[sizeof(buffer)-1] = '\0';
+        if (flagdebug)
+            printf("02742: Truncating handle_silent_mode\n");
+    }
+
+    bool flagcolon = false, flagerror = false, flagwarning = false;
+    decode_print_flag_refactored(buffer, &flagcolon, &flagerror, &flagwarning);
+
+    if (g_output_handle)
+    {
+        fprintf(g_output_handle, "%s", buffer);
+        fflush(g_output_handle);
+    }
+
+    if (flagerror)
+        my_print_on_error("%s", buffer);
+}
+
+void print_char_to_all(char c, bool is_error)
+{
+    putchar(c);
+    if (g_output_handle)
+    {
+        fputc(c, g_output_handle);
+        fflush(g_output_handle);
+    }
+    if (is_error && prepare_error_log())
+    {
+        fputc(c, g_error_handle);
+        fflush(g_error_handle);
+    }
+}
+
+void print_string_to_all_refactored(const char* str, bool is_error)
+{
+    if (!str)
+        str = "(null)";
+    fputs(str, stdout);
+    if (g_output_handle)
+    {
+        fputs(str, g_output_handle);
+        fflush(g_output_handle);
+    }
+    if (is_error && prepare_error_log())
+    {
+        fputs(str, g_error_handle);
+        fflush(g_error_handle);
+    }
+}
+
+typedef enum {
+    ARG_TYPE_INT,
+    ARG_TYPE_LONG_LONG,
+    ARG_TYPE_DOUBLE,
+    ARG_TYPE_POINTER,
+    ARG_TYPE_CUSTOM
+} arg_type_t;
+
+static arg_type_t get_arg_type(const char* fmt_spec, char final_specifier)
+{
+    if (strchr("KHZ", final_specifier))
+        return ARG_TYPE_CUSTOM;
+
+    if (strchr("fegEGaA", final_specifier))
+        return ARG_TYPE_DOUBLE;
+
+    if (strchr("scp", final_specifier))
+        return ARG_TYPE_POINTER;
+
+    if (strchr("diuoxX", final_specifier))
+    {
+        if (strstr(fmt_spec, "ll") || strstr(fmt_spec, "L"))
+            return ARG_TYPE_LONG_LONG;
+        if (strstr(fmt_spec, "hh"))
+            return ARG_TYPE_INT;
+        if (strstr(fmt_spec, "j") || strstr(fmt_spec, "z"))
+            return ARG_TYPE_LONG_LONG;
+        return ARG_TYPE_INT;
+    }
+
+    if (final_specifier == 'n')
+        return ARG_TYPE_POINTER;
+
+    if (flagdebug)
+        printf("02743: Specifier unknown: %s\n", fmt_spec);
+    return ARG_TYPE_POINTER;
 }
 
 
+void my_vprintf_refactored(const char* format, va_list args)
+{
+    if (!format)
+    {
+        if (flagdebug)
+            printf("02744: my_vprintf_refactored format NULL\n");
+        return;
+    }
 
-bool prepare_error_log()
-{
-	if (g_error=="")
-		return false;
-	
-	if (g_error_handle==0)
-	{
-		if (flagverbose)
-			printf("02747: OPENING ERROR FILE %s\n",g_error.c_str());
-		g_error_handle=fopen(g_error.c_str(),"wb");
-	}
+    if (should_skip_print(format))
+        return;
 
-	if (g_error_handle==0)
-		return false;
-	
-	return true;
-	
-}
-void my_print_on_error_z(const char* i_input)
-{
-	if (i_input==NULL)
-		return;
-	if (prepare_error_log())
-	{
-		fprintf(g_error_handle,"%s",i_input);
-		fflush(g_error_handle);
-	}
-}
-void my_print_on_error_s(const char* i_buffer,const char* i_input)
-{
-	if (i_buffer==NULL)
-		return;
-	if (i_input==NULL)
-		return;
-	if (prepare_error_log())
-	{
-		fprintf(g_error_handle,i_buffer,i_input);
-		fflush(g_error_handle);
-	}
-}
-void my_print_on_error_i(const char* i_buffer,int i_input)
-{
-	if (i_buffer==NULL)
-		return;
-	if (prepare_error_log())
-	{
-		fprintf(g_error_handle,i_buffer,i_input);
-		fflush(g_error_handle);
-	}
-}
-void my_print_on_error_u(char* i_buffer,unsigned int i_input)
-{
-	if (i_buffer==NULL)
-		return;
-	if (prepare_error_log())
-	{
-		fprintf(g_error_handle,i_buffer,i_input);
-		fflush(g_error_handle);
-	}
-}
-void my_print_on_error_d(const char* i_buffer,double i_input)
-{
-	if (i_buffer==NULL)
-		return;
-	if (prepare_error_log())
-	{
-		fprintf(g_error_handle,i_buffer,i_input);
-		fflush(g_error_handle);
-	}
-}
+    if (flagsilent)
+    {
+        handle_silent_mode(format, args);
+        return;
+    }
 
-std::string format_int64_t(int64_t value, int width = 0, char fill_char = ' ', bool left_align = false) 
-{
-    // Validazione input
-    if (width < 0) 
-		throw std::invalid_argument("08625: Width cannot be negative");
-    if (width > 1000) 
-        throw std::invalid_argument("08629: Width too large");
-    
-    std::string result;
-    
-    // Gestione caso speciale dello zero
-    if (value == 0) 
-	{
-        result = "0";
-    } else 
-	{
-        // Gestione del segno
-        bool is_negative = (value < 0);
-        uint64_t abs_value;
-        
-        // Gestione corretta del caso INT64_MIN
-        if (value == INT64_MIN) 
-		    abs_value = static_cast<uint64_t>(INT64_MAX) + 1;
-        else 
-		    abs_value = is_negative ? static_cast<uint64_t>(-value) : static_cast<uint64_t>(value);
-        
-        // Conversione a stringa
-        std::string digits;
-        while (abs_value > 0) 
-		{
-            digits += static_cast<char>('0' + (abs_value % 10));
-            abs_value /= 10;
+    bool flagcolon = false, flagerror = false, flagwarning = false;
+    decode_print_flag_refactored(format, &flagcolon, &flagerror, &flagwarning);
+
+    if (flagerror)
+        color_red();
+    else if (flagwarning)
+        color_yellow();
+
+    // Only strip prefix when it's a colon type; leave '!' and '$' prefixes intact
+    if (flagcolon)
+    {
+        if (flagdebug)
+        {
+            color_green();
+            printf("%.5s: ", format);
+            color_restore();
         }
-        
-        // Le cifre sono in ordine inverso, le ribaltiamo
-        std::reverse(digits.begin(), digits.end());
-        
-        // Aggiungiamo i separatori di migliaia
-        std::string formatted;
-        int digit_count = 0;
-        
-        for (int i = static_cast<int>(digits.length()) - 1; i >= 0; i--) 
-		{
-            formatted += digits[i];
-            digit_count++;
-            
-            // Aggiungi separatore se necessario
-            if (digit_count % 3 == 0 && i > 0) 
-			    formatted += '.';
+        const char* temp = format;
+        while (*temp && *temp != ' ')
+            temp++;
+        if (*temp == ' ')
+            temp++;
+        format = temp; // strip the leading "12345: "
+    }
+
+    const char* p = format;
+    while (*p)
+    {
+        if (*p != '%')
+        {
+            print_char_to_all(*p, flagerror);
+            p++;
+            continue;
         }
-        
-        // Ribaltiamo il risultato
-        std::reverse(formatted.begin(), formatted.end());
-        
-        // Aggiungiamo il segno negativo se necessario
-        if (is_negative) 
-            result = "-" + formatted;
-		else 
-            result = formatted;
+
+        p++;
+        if (*p == '%')
+        {
+            print_char_to_all('%', flagerror);
+            p++;
+            continue;
+        }
+
+        char fmt_specifier_str[64] = {'\0'};
+        char* q = fmt_specifier_str;
+        *q++ = '%';
+
+        while (*p && strchr("-+0 #.0123456789hlLjz", *p))
+        {
+            *q++ = *p++;
+        }
+
+        char final_specifier = *p;
+        *q++ = final_specifier;
+        *q = '\0';
+
+        char buffer[8192];
+        int ret = 0;
+
+        switch (final_specifier)
+        {
+            case 'K':
+            case 'H':
+            {
+                int64_t val = va_arg(args, long long);
+
+                // Extract width properly: skip flags then read consecutive digits before any '.'
+                const char* s = fmt_specifier_str + 1;
+                // skip flags
+                while (*s && strchr("-+0 #", *s)) s++;
+                // read width digits (stop at non-digit)
+                int width = 0;
+                while (*s >= '0' && *s <= '9') { width = width * 10 + (*s - '0'); s++; }
+                bool left_align = strchr(fmt_specifier_str, '-') != NULL;
+
+                if (strchr(fmt_specifier_str, '.'))
+                {
+                    if (flagdebug)
+                        printf("02751: Ignored precision  %%%c\n", final_specifier);
+                }
+
+                if (final_specifier == 'K')
+                    format_int64_t_refactored(val, buffer, sizeof(buffer), width,  left_align);
+                else
+                    mytohuman2_refactored(val, buffer, sizeof(buffer), width, left_align);
+
+                print_string_to_all_refactored(buffer, flagerror);
+                break;
+            }
+            case 'Z':
+            {
+                const char* val = va_arg(args, const char*);
+                if (!val)
+                    val = "(null)";
+
+                // Extract width similarly (stop at precision)
+                const char* s = fmt_specifier_str + 1;
+                while (*s && strchr("-+0 #", *s)) s++;
+                int width = 0;
+                while (*s >= '0' && *s <= '9') { width = width * 10 + (*s - '0'); s++; }
+                bool left_align = strchr(fmt_specifier_str, '-') != NULL;
+
+                apply_padding(buffer, sizeof(buffer), val, width, left_align);
+                print_string_to_all_refactored(buffer, flagerror);
+                break;
+            }
+            case 'n':
+            {
+                (void)va_arg(args, void*);
+                if (flagdebug)
+                    printf("02745: spec %%n ignored\n");
+                break;
+            }
+            default:
+            {
+                arg_type_t arg_type = get_arg_type(fmt_specifier_str, final_specifier);
+
+                switch (arg_type)
+                {
+                    case ARG_TYPE_INT:
+                    {
+                        int v = va_arg(args, int);
+                        ret = snprintf(buffer, sizeof(buffer), fmt_specifier_str, v);
+                        break;
+                    }
+                    case ARG_TYPE_LONG_LONG:
+                    {
+                        long long v = va_arg(args, long long);
+                        ret = snprintf(buffer, sizeof(buffer), fmt_specifier_str, v);
+                        break;
+                    }
+                    case ARG_TYPE_DOUBLE:
+                    {
+                        double v = va_arg(args, double);
+                        ret = snprintf(buffer, sizeof(buffer), fmt_specifier_str, v);
+                        break;
+                    }
+                    case ARG_TYPE_POINTER:
+                    {
+                        void* v = va_arg(args, void*);
+                        ret = snprintf(buffer, sizeof(buffer), fmt_specifier_str, v);
+                        break;
+                    }
+                    case ARG_TYPE_CUSTOM:
+                        buffer[0] = '\0';
+                        break;
+                }
+
+                if (ret >= (int)sizeof(buffer) && flagdebug)
+                    printf("02746: Truncate buffer my_vprintf_refactored\n");
+
+                print_string_to_all_refactored(buffer, flagerror);
+                break;
+            }
+        }
+        p++; // move past final specifier
     }
-    
-    // Gestione del padding
-    int current_length = static_cast<int>(result.length());
-    if (width > current_length) 
-	{
-        int padding = width - current_length;
-        
-        if (left_align) 
-            result += std::string(padding, fill_char);
-		else 
-		    result = std::string(padding, fill_char) + result;
-    }
-    
-    return result;
+
+    if (flagerror || flagwarning)
+        color_restore();
+    fflush(stdout);
+    if (g_output_handle)
+        fflush(g_output_handle);
+    if (flagerror && g_error_handle)
+        fflush(g_error_handle);
 }
 
-
-// Versione alternativa che evita completamente le eccezioni
-std::string mytohuman2(int64_t i_bytes, int width = 0, char fill_char = ' ', bool left_align = false) 
+void myprintf(const char* format, ...)
 {
-    // Validazione input senza eccezioni
-    if ((width < 0) || (width > 1000)) 
-	    width = 0; // Fallback sicuro
-    
-    // Gestione valori negativi
-    if (i_bytes < 0) 
-	{
-        std::string result = "neg";
-        
-        // Gestione del padding per "neg"
-        int current_length = static_cast<int>(result.length());
-        if (width > current_length) 
-		{
-            int padding = width - current_length;
-            
-            if (left_align) 
-			    result += std::string(padding, fill_char);
-            else 
-			    result = std::string(padding, fill_char) + result;
-        }
-        
-        return result;
+    if (!format)
+    {
+        if (flagdebug)
+            printf("02750: myprintf format NULL\n");
+        return;
     }
-    
-    // Array delle unità
-    const char* units[] = {" B", "KB", "MB", "GB", "TB", "PB"};
-    const int num_units = 6;
-    
-    double bytes = static_cast<double>(i_bytes);
-    int unit_index = 0;
-    
-    // Dividi per 1024 finché possibile
-    while (bytes >= 1024.0 && unit_index < num_units - 1) 
-	{
-        bytes /= 1024.0;
-        unit_index++;
-    }
-    
-    // Formatta il numero con due decimali usando snprintf
-    char temp[32];
-    snprintf(temp, sizeof(temp), "%.2f %s", bytes, units[unit_index]);
-    
-    std::string result = temp;
-    
-    // Gestione del padding
-    int current_length = static_cast<int>(result.length());
-    if (width > current_length) 
-	{
-        int padding = width - current_length;
-        
-        if (left_align) 
-            result += std::string(padding, fill_char);
-        else 
-		    result = std::string(padding, fill_char) + result;
-    }
-	
-    return result;
+
+    va_list args;
+    va_start(args, format);
+    my_vprintf_refactored(format, args);
+    va_end(args);
 }
 
+void myprintf_autotest(void)
+{
+    printf("**** myprintf (TEST01-TEST40)\n");
 
-//// %K  => migliaia
-///  %H  => Human
-///  %Z  => UTF-8
+    // TEST01: Specificatori standard
+    printf("TEST01: Specificatori standard\n");
+    myprintf("Int: %d, Unsigned: %u, Octal: %o, Hex: %x, HEX: %X\n", -123, 123, 123, 123, 123);
+    myprintf("Float: %f, Scientific: %e, General: %g\n", 123.456, 123.456, 123.456);
+    myprintf("Char: %c, String: %s, Pointer: %p\n", 'A', "Test string", (void*)&g_error);
 
+    // TEST02: Specificatori con modificatori di lunghezza
+    printf("TEST02: Modificatori di lunghezza\n");
+    myprintf("Long long: %lld, Long long hex: %llx\n", (long long)INT64_MAX, (long long)INT64_MAX);
+    myprintf("Short int: %hd\n", (short)123);
+    myprintf("Size_t: %zu, Intmax_t: %jd\n", (size_t)123, (intmax_t)123);
+
+    // TEST03: Specificatore %K
+    printf("TEST03: Specificatore %%K\n");
+    myprintf("Int64: %K\n", (int64_t)123456789);
+    myprintf("Int64 negative: %K\n", (int64_t)-123456789);
+    myprintf("Int64 max: %K\n", INT64_MAX);
+    myprintf("Int64 min: %K\n", INT64_MIN);
+    myprintf("Int64 with width: %10K\n", (int64_t)123456);
+    myprintf("Int64 left-align: %-10K\n", (int64_t)123456);
+
+    // TEST04: Specificatore %H
+    printf("TEST04: Specificatore %%H\n");
+    myprintf("Bytes: %H\n", (int64_t)123456789);
+    myprintf("Negative bytes: %H\n", (int64_t)-123);
+    myprintf("Large bytes: %H\n", (int64_t)(1024 * 1024 * 1024 * 5LL));
+    myprintf("Bytes with width: %10H\n", (int64_t)123456);
+    myprintf("Bytes left-align: %-10H\n", (int64_t)123456);
+
+    // TEST05: Specificatore %Z
+    printf("TEST05: Specificatore %%Z\n");
+    myprintf("String: %Z\n", "Test UTF8 string");
+    myprintf("Null string: %Z\n", (char*)NULL);
+    myprintf("String with width: %10Z\n", "Test");
+    myprintf("String left-align: %-10Z\n", "Test");
+
+    // TEST06: Prefissi per flagcolon, flagerror, flagwarning
+    printf("TEST06: Prefissi flagcolon, flagerror, flagwarning\n");
+    myprintf("12345: Test colon\n");
+    myprintf("12345! Test error\n");
+    myprintf("12345$ Test warning\n");
+    myprintf("12345: Test %d\n", 123);
+
+    // TEST07: Modalità debug
+    printf("TEST07: Modalità debug\n");
+    bool old_flagdebug = flagdebug;
+    flagdebug = true;
+    myprintf("DEBUG: Debug message\n");
+    myprintf("DEBUG2: Debug level 2\n");
+    myprintf("DEBUG3: Debug level 3\n");
+    flagdebug = old_flagdebug;
+
+    // TEST08: Modalità verbose
+    printf("TEST08: Modalità verbose\n");
+    bool old_flagverbose = flagverbose;
+    flagverbose = true;
+    myprintf("VERBOSE: Verbose message\n");
+    flagverbose = old_flagverbose;
+
+    // TEST09: Modalità silenziosa
+    printf("TEST09: Modalità silenziosa\n");
+    bool old_flagsilent = flagsilent;
+    flagsilent = true;
+    myprintf("Test in silent mode: %d\n", 123);
+    myprintf("12345! Test error in silent mode\n");
+    flagsilent = old_flagsilent;
+
+    // TEST10: Formati con troncamento
+    printf("TEST10: Troncamento buffer\n");
+    flagdebug = true;
+    char long_str[7000];
+    memset(long_str, 'A', 6999);
+    long_str[6999] = '\0';
+    myprintf("Long string: %s\n", long_str);
+    flagdebug = old_flagdebug;
+
+    // TEST11: Formati con parametri nulli
+    printf("TEST11: Parametri nulli\n");
+    myprintf("Null format: %s\n", (char*)NULL);
+    myprintf(NULL);
+
+    // TEST12: Specificatori con precisione e flag
+    printf("TEST12: Precisione e flag\n");
+    myprintf("Padded int: %010d\n", 123);
+    myprintf("Precision float: %.2f\n", 123.456789);
+    myprintf("Signed int: %+d\n", 123);
+    myprintf("Space int: % d\n", 123);
+
+    // TEST13: Specificatore %n
+    printf("TEST13: Specificatore %%n\n");
+    flagdebug = true;
+    int n;
+    myprintf("Store count: %n\n", &n);
+    flagdebug = old_flagdebug;
+
+    // TEST14: Stringhe vuote e spazi
+    printf("TEST14: Stringhe vuote e spazi\n");
+    myprintf("Empty string: %s\n", "");
+    myprintf("Spaces: %s\n", "   ");
+
+    // TEST15: Combinazioni complesse
+    printf("TEST15: Combinazioni complesse\n");
+    myprintf("12345: Complex: %K %H %Z %d %.2f\n", (int64_t)123456, (int64_t)1048576, "Test", 123, 123.456);
+    myprintf("12345! Error complex: %K %H %Z\n", (int64_t)-123456, (int64_t)1024, (char*)NULL);
+
+    // TEST16: Padding con caratteri diversi
+    printf("TEST16: Padding con caratteri diversi\n");
+    char buffer[32];
+    format_int64_t_refactored(123456, buffer, sizeof(buffer), 10,  false);
+    myprintf("Padded %K: %s\n", (int64_t)123456, buffer);
+    mytohuman2_refactored(123456, buffer, sizeof(buffer), 10, true);
+    myprintf("Padded %H: %s\n", (int64_t)123456, buffer);
+
+    // TEST17: Formati non validi
+    printf("TEST17: Formati non validi\n");
+    flagdebug = true;
+    myprintf("12345X Invalid format\n");
+    myprintf("1234: Short prefix\n");
+    flagdebug = old_flagdebug;
+
+    // TEST18: Specificatori con modificatori complessi
+    printf("TEST18: Modificatori complessi\n");
+    myprintf("Zero-padded: %08d\n", 123);
+    myprintf("Precision string: %.5s\n", "HelloWorld");
+    myprintf("Complex float: %10.3f\n", 123.456789);
+
+    // TEST19: Più specificatori
+    printf("TEST19: Più specificatori\n");
+    myprintf("Mixed: %d %s %K %H\n", 123, "Test", (int64_t)123456, (int64_t)1048576);
+
+    // TEST20: Specificatori non riconosciuti
+    printf("TEST20: Specificatori non riconosciuti\n");
+    flagdebug = true;
+    myprintf("Unknown: %q\n", 123);
+    flagdebug = old_flagdebug;
+
+    // TEST21: Combinazioni di flag
+    printf("TEST21: Combinazioni di flag\n");
+    myprintf("Signed padded: %+10d\n", 123);
+    myprintf("Zero padded float: %010.3f\n", 123.456);
+    myprintf("Space padded: % 10d\n", 123);
+
+    // TEST22: Precisione non supportata per %K e %H
+    printf("TEST22: Precisione non supportata per %%K e %%H\n");
+    flagdebug = true;
+    myprintf("Precision %K: %.2K\n", (int64_t)123456);
+    myprintf("Precision %H: %.2H\n", (int64_t)123456);
+    flagdebug = old_flagdebug;
+
+    // TEST23: Stringhe UTF-8
+    printf("TEST23: Stringhe UTF-8\n");
+    myprintf("UTF-8 string: %Z\n", "Café München");
+    myprintf("UTF-8 with width: %15Z\n", "Café");
+
+    printf("===== Fine Test myprintf =====\n");
+}
+
+////////////////////////////////
+////////////////////////////////
+////////////////////////////////
+////////////////////////////////
+////////////////////////////////
+////////////////////////////////
+////////////////////////////////
+////////////////////////////////
+////////////////////////////////
+////////////////////////////////
+
+
+
+
+
+
+/*
 void myprintf(const char *format, ...) 
 {
     // Early exit if format is null
-    if (!format) {
+    if (!format) 
         return;
-    }
-    
-    // Early exit if string starts with "DEBUG:" and flagdebug is false
-    if (format[0] == 'D' && format[1] == 'E' && format[2] == 'B' && 
-        format[3] == 'U' && format[4] == 'G') {
+	 // Early exit if string starts with "DEBUG:" and flagdebug is false
+	 
+	  if (format[0] == 'D' && format[1] == 'E' && format[2] == 'B' && 
+        format[3] == 'U' && format[4] == 'G') 
+	{
         
         if (format[5] == ':' && !flagdebug) {
             return;
@@ -5602,15 +6090,15 @@ void myprintf(const char *format, ...)
              format[6] == 'E' && format[7] == ':' && !flagverbose) {
         return;
     }
-    
+	
     bool flagerror = false;
     bool flagwarning = false;
     bool flagcolon = false;
-    static const size_t BUFFER_SIZE = 4096;
-    char buffer[BUFFER_SIZE]; // Buffer temporaneo per formati complessi
+    char buffer[4096]; // Buffer temporaneo per formati complessi
 
-    if (flagsilent) {
-        char fixata[BUFFER_SIZE];
+    if (flagsilent) 
+	{
+        char fixata[4096];
         replacezwiths(format, fixata);
 
         va_list args2;
@@ -5619,18 +6107,8 @@ void myprintf(const char *format, ...)
         va_end(args2);
         
         decode_print_flag(buffer, flagcolon, flagerror, flagwarning);
-        
-        if (g_output_handle != 0) {
-            // Check if last character is \r and replace with \n for file output
-            int len = strlen(buffer);
-            if (len > 0 && buffer[len-1] == '\r') {
-                buffer[len-1] = '\n';
-                fprintf(g_output_handle, "%s", buffer);
-                buffer[len-1] = '\r'; // Restore original for error handling
-            } else {
-                fprintf(g_output_handle, "%s", buffer);
-            }
-        }
+        if (g_output_handle != 0)
+            fprintf(g_output_handle, "%s", buffer);
     
         if (flagerror)
             my_print_on_error_z(buffer);
@@ -5657,20 +6135,15 @@ void myprintf(const char *format, ...)
     else if (flagwarning)
         color_yellow();
 
-    // Buffer per raccogliere tutto l'output per il controllo finale del \r
-    char output_buffer[BUFFER_SIZE];
-    char *output_ptr = output_buffer;
-    size_t remaining_space = BUFFER_SIZE - 1; // -1 per il terminatore null
-    
     const char *p = format;
-    while (*p && remaining_space > 0) {
+    while (*p) {
         if (*p == '%') {
             p++; // Passa al carattere successivo dopo '%'
 
             if (*p == '%') {
                 putchar('%');
-                *output_ptr++ = '%';
-                remaining_space--;
+                if (g_output_handle != 0)
+                    fputc('%', g_output_handle);
                 if (flagerror && prepare_error_log())
                     fputc('%', g_error_handle);
                 p++;
@@ -5712,166 +6185,88 @@ void myprintf(const char *format, ...)
 
                 if (*p == 'K') {
                     int64_t value = va_arg(args, int64_t);
-                    std::string formatted = format_int64_t(value, width, fill_char, left_align);
+					std::string formatted=format_int64_t(value, width, fill_char, left_align);
                     printf("%s", formatted.c_str());
-                    
-                    size_t formatted_len = formatted.length();
-                    size_t copy_len = std::min(formatted_len, remaining_space);
-                    strncpy(output_ptr, formatted.c_str(), copy_len);
-                    output_ptr += copy_len;
-                    remaining_space -= copy_len;
-                    
+                    if (g_output_handle != 0)
+                        fprintf(g_output_handle, "%s", formatted.c_str());
                     if (flagerror && prepare_error_log())
                         fprintf(g_error_handle, "%s", formatted.c_str());
-                        
                 } else if (*p == 'H') {
                     int64_t value = va_arg(args, int64_t);
-                    std::string formatted = mytohuman2(value, width, fill_char, left_align);
+                    std::string formatted=mytohuman2(value,width, fill_char, left_align);
                     printf("%s", formatted.c_str());
-                    
-                    size_t formatted_len = formatted.length();
-                    size_t copy_len = std::min(formatted_len, remaining_space);
-                    strncpy(output_ptr, formatted.c_str(), copy_len);
-                    output_ptr += copy_len;
-                    remaining_space -= copy_len;
-                    
+                    if (g_output_handle != 0)
+                        fprintf(g_output_handle, "%s", formatted.c_str());
                     if (flagerror && prepare_error_log())
                         fprintf(g_error_handle, "%s", formatted.c_str());
-                        
                 } else if (*p == 'd' || *p == 'i') {
                     int i = va_arg(args, int);
                     printf(fmt_buffer, i);
-                    int written = snprintf(output_ptr, remaining_space + 1, fmt_buffer, i);
-                    if (written > 0 && (size_t)written <= remaining_space) {
-                        output_ptr += written;
-                        remaining_space -= written;
-                    } else {
-                        remaining_space = 0; // Buffer pieno
-                    }
+                    if (g_output_handle != 0)
+                        fprintf(g_output_handle, fmt_buffer, i);
                     if (flagerror)
                         my_print_on_error_i(fmt_buffer, i);
-                        
                 } else if (*p == 'u' || *p == 'x' || *p == 'X') {
                     unsigned int x = va_arg(args, unsigned int);
                     printf(fmt_buffer, x);
-                    int written = snprintf(output_ptr, remaining_space + 1, fmt_buffer, x);
-                    if (written > 0 && (size_t)written <= remaining_space) {
-                        output_ptr += written;
-                        remaining_space -= written;
-                    } else {
-                        remaining_space = 0; // Buffer pieno
-                    }
+                    if (g_output_handle != 0)
+                        fprintf(g_output_handle, fmt_buffer, x);
                     if (flagerror)
                         my_print_on_error_u(fmt_buffer, x);
-                        
                 } else if (*p == 'f') {
                     double f = va_arg(args, double);
                     printf(fmt_buffer, f);
-                    int written = snprintf(output_ptr, remaining_space + 1, fmt_buffer, f);
-                    if (written > 0 && (size_t)written <= remaining_space) {
-                        output_ptr += written;
-                        remaining_space -= written;
-                    } else {
-                        remaining_space = 0; // Buffer pieno
-                    }
+                    if (g_output_handle != 0)
+                        fprintf(g_output_handle, fmt_buffer, f);
                     if (flagerror)
                         my_print_on_error_d(fmt_buffer, f);
-                        
                 } else if (*p == 's') {
-                    const char *s;
                     if (strchr(fmt_buffer, '*') != NULL) {
                         int width = va_arg(args, int);
-                        s = va_arg(args, char *);
+                        const char *s = va_arg(args, char *);
                         printf(fmt_buffer, width, s);
-                        int written = snprintf(output_ptr, remaining_space + 1, fmt_buffer, width, s);
-                        if (written > 0 && (size_t)written <= remaining_space) {
-                            output_ptr += written;
-                            remaining_space -= written;
-                        } else {
-                            remaining_space = 0; // Buffer pieno
-                        }
+                        if (g_output_handle != 0)
+                            fprintf(g_output_handle, fmt_buffer, width, s);
+                        if (flagerror)
+                            my_print_on_error_s(fmt_buffer, s);
                     } else {
-                        s = va_arg(args, char *);
-                        if (s == NULL) s = "(null)"; // Protezione contro puntatori null
+                        const char *s = va_arg(args, char *);
                         printf(fmt_buffer, s);
-                        int written = snprintf(output_ptr, remaining_space + 1, fmt_buffer, s);
-                        if (written > 0 && (size_t)written <= remaining_space) {
-                            output_ptr += written;
-                            remaining_space -= written;
-                        } else {
-                            remaining_space = 0; // Buffer pieno
-                        }
+                        if (g_output_handle != 0)
+                            fprintf(g_output_handle, fmt_buffer, s);
+                        if (flagerror)
+                            my_print_on_error_s(fmt_buffer, s);
                     }
-                    if (flagerror)
-                        my_print_on_error_s(fmt_buffer, s);
-                        
                 } else if (*p == 'c') {
                     int c = va_arg(args, int);
                     printf(fmt_buffer, c);
-                    int written = snprintf(output_ptr, remaining_space + 1, fmt_buffer, c);
-                    if (written > 0 && (size_t)written <= remaining_space) {
-                        output_ptr += written;
-                        remaining_space -= written;
-                    } else {
-                        remaining_space = 0; // Buffer pieno
-                    }
+                    if (g_output_handle != 0)
+                        fprintf(g_output_handle, fmt_buffer, c);
                     if (flagerror)
                         my_print_on_error_i(fmt_buffer, c);
-                        
                 } else if (*p == 'Z') {
-					const char *s = va_arg(args, char *);
-						if (s == NULL) s = "(null)";
-						printUTF8(s);
-						
-						if (remaining_space > 0) {
-							int written = snprintf(output_ptr, remaining_space, "%s", s);
-							if (written > 0) {
-								size_t actual_written = std::min((size_t)written, remaining_space - 1);
-								output_ptr += actual_written;
-								remaining_space -= actual_written;
-							}
-						}
-						
-						if (flagerror)
-							my_print_on_error_z(s);
-					}
+                    const char *s = va_arg(args, char *);
+                    printUTF8(s);
+                    if (flagerror)
+                        my_print_on_error_z(s);
+                }
             } else {
                 putchar(*p);
-                if (remaining_space > 0) {
-                    *output_ptr++ = *p;
-                    remaining_space--;
-                }
+                if (g_output_handle != 0)
+                    fputc(*p, g_output_handle);
                 if (flagerror && prepare_error_log())
                     fputc(*p, g_error_handle);
             }
             p++;
         } else {
             putchar(*p);
-            if (remaining_space > 0) {
-                *output_ptr++ = *p;
-                remaining_space--;
-            }
+            if (g_output_handle != 0)
+                fputc(*p, g_output_handle);
             if (flagerror && prepare_error_log())
                 fputc(*p, g_error_handle);
             p++;
         }
     }
-    
-    // Termina il buffer di output
-    *output_ptr = '\0';
-    
-    // Scrivi su file, convertendo \r finale in \n se necessario
-    if (g_output_handle != 0) {
-        size_t len = output_ptr - output_buffer;
-        if (len > 0 && output_buffer[len-1] == '\r') {
-            // Rimuovi \r e aggiungi \n
-            output_buffer[len-1] = '\0';
-            fprintf(g_output_handle, "%s\n", output_buffer);
-        } else {
-            fprintf(g_output_handle, "%s", output_buffer);
-        }
-    }
-    
     va_end(args);
 #ifndef _WIN32
     fflush(stdout);
@@ -5879,6 +6274,9 @@ void myprintf(const char *format, ...)
     if (flagerror || flagwarning)
         color_restore();
 }
+*/
+
+
 /// LICENSE_START.23
 
 //  This is a reworked https://github.com/codewithnick/ascii-art
@@ -9004,12 +9402,12 @@ void * aligned_malloc(size_t align, size_t size)
 			
 			if (ptr)
             {
-                // Calcola l'offset e memorizzalo
+                // Calculate the offset and store it
                 *((myoffset_t *)ptr - 1) = (myoffset_t)((uintptr_t)ptr - (uintptr_t)p);
             }
             else
             {
-                // Se il calcolo del puntatore fallisce, libera la memoria
+                // If the pointer calculation fails, free the memory
                 free(p);
                 return NULL;
             }
@@ -9078,7 +9476,7 @@ static void* franz_malloc(size_t i_size)
     ptr = malloc(i_size);
 #endif
     if (ptr) 
-        g_allocatedram += i_size; // Incrementa solo se l'allocazione è riuscita
+        g_allocatedram += i_size; // Increment only if the allocation was successful
     return ptr;
 }
 
@@ -9192,6 +9590,8 @@ std::string bin2hex_128(uint64_t i_high,uint64_t i_low)
 	std::string slow	=bin2hex_64(i_low);
 	return shigh+slow;
 }
+
+
 
 
 
@@ -15418,17 +15818,17 @@ bool Compiler::matchToken(const char* word) {
 #if defined(__OpenBSD__)
 
 void Compiler::syntaxError(const char* msg, const char* expected) {
-    Array<char> sbuf(128); // Buffer per il messaggio di errore
+    Array<char> sbuf(128); // Buffer for the error message
     char* s = &sbuf[0];
-    s[0] = '\0'; // Inizializza il buffer vuoto
+    s[0] = '\0'; // Initialize the empty buffer
 
-    // Concatena "Config line "
+    // Concatenate "Config line "
     if (strlcat(s, "Config line ", sizeof(sbuf)) >= sizeof(sbuf)) {
         error("Buffer overflow in syntaxError");
         return;
     }
 
-    // Aggiungi il numero di linea
+    // Add the line number
     char line_buf[16];
     snprintf(line_buf, sizeof(line_buf), "%d", line);
     if (strlcat(s, line_buf, sizeof(sbuf)) >= sizeof(sbuf)) {
@@ -15436,33 +15836,33 @@ void Compiler::syntaxError(const char* msg, const char* expected) {
         return;
     }
 
-    // Concatena " at "
+    // Concatenate " at "
     if (strlcat(s, " at ", sizeof(sbuf)) >= sizeof(sbuf)) {
         error("Buffer overflow in syntaxError");
         return;
     }
 
-    // Aggiungi il token trovato (limitato a 40 caratteri)
+    // Add the found token (limited to 40 characters)
     size_t len = strlen(s);
     size_t i;
     for (i = 0; i < 40 && len + i < sizeof(sbuf) - 1 && *in > ' '; ++i) {
         s[len + i] = *in++;
     }
-    s[len + i] = '\0'; // Termina la stringa
+    s[len + i] = '\0'; // Terminate the string
 
-    // Concatena ": "
+    // Concatenate ": "
     if (strlcat(s, ": ", sizeof(sbuf)) >= sizeof(sbuf)) {
         error("Buffer overflow in syntaxError");
         return;
     }
 
-    // Aggiungi il messaggio (limitato a 40 caratteri)
+    // Add the message (limited to 40 characters)
     if (strlcat(s, msg, sizeof(sbuf)) >= sizeof(sbuf)) {
         error("Buffer overflow in syntaxError");
         return;
     }
 
-    // Aggiungi l'expected, se presente
+    // Add the expected, if present
     if (expected) {
         if (strlcat(s, ", expected: ", sizeof(sbuf)) >= sizeof(sbuf)) {
             error("Buffer overflow in syntaxError");
@@ -20200,16 +20600,19 @@ void seppuku()
 	exit(0);
 }
 
+
+
+
 void append_to_g_password_keyfilehash()
 {
 	if (g_keyfilehash.empty())
 		return;
-    // Calcola la lunghezza totale necessaria
+    // Calculate the total required length
     size_t len_nuova = g_keyfilehash.length();
     size_t len_g_password = (g_password != nullptr) ? strlen(g_password) : 0;
     size_t nuova_lunghezza = len_g_password + len_nuova + 1; // +1 per il terminatore '\0'
 
-    // Alloca nuova memoria per la stringa concatenata
+    // Allocate new memory for the concatenated string
     char* temp = (char*)malloc(nuova_lunghezza * sizeof(char));
     if (temp == nullptr) 
 	{
@@ -20218,19 +20621,19 @@ void append_to_g_password_keyfilehash()
 		return;
     }
 
-    // Copia la stringa esistente (se presente) e concatena la nuova
+    // Copy the existing string (if present) and concatenate the new one
     if (g_password != nullptr) 
 	{
         strcpy(temp, g_password);
-        strcat(temp, g_keyfilehash.c_str()); // Usa c_str() per ottenere il char* da std::string
+        strcat(temp, g_keyfilehash.c_str()); // Use c_str() to get the char* from std::string
     } else {
         strcpy(temp, g_keyfilehash.c_str());
     }
 
-    // Libera la memoria precedente (se g_password non è nullptr)
+    // Free the previous memory (if g_password is not nullptr)
     ///free(g_password);
 
-    // Aggiorna g_password con la nuova stringa
+    // Update g_password with the new string
     g_password = temp;
 }
 
@@ -27847,28 +28250,28 @@ int mygetch(bool i_flagmore)
 	return mychar;
 }
 
-// Funzione per controllare se l'output è redirezionato
+// Function to check if the output is redirected
 bool isOutputRedirected() 
 {
 #ifdef _WIN32
-    // Windows: usa GetFileType per controllare se stdout è un console handle
-    HANDLE hStdout = GetStdHandle(STD_OUTPUT_HANDLE);
+    // Windows: use GetFileType 
+	HANDLE hStdout = GetStdHandle(STD_OUTPUT_HANDLE);
     if (hStdout == INVALID_HANDLE_VALUE) 
-	    return true; // Errore, assumiamo redirezione
+	    return true; // Error, we assume redirection
     
     DWORD fileType = GetFileType(hStdout);
     
-    // FILE_TYPE_CHAR significa che è un dispositivo carattere (console)
-    // Se non è FILE_TYPE_CHAR, allora è redirezionato
+    // FILE_TYPE_CHAR console
+	// If it's not FILE_TYPE_CHAR, then it's redirected
     return (fileType != FILE_TYPE_CHAR);
     
 #else
-    // Unix/Linux: usa isatty per controllare se stdout è un terminale
+    // Unix/Linux: use isatty
     return !isatty(STDOUT_FILENO);
 #endif
 }
 
-// Versione alternativa che controlla anche stderr
+// Alternative version that also checks stderr
 bool isStderrRedirected() 
 {
 #ifdef _WIN32
@@ -27884,7 +28287,7 @@ bool isStderrRedirected()
 #endif
 }
 
-// Funzione che controlla entrambi stdout e stderr
+// Function that checks both stdout and stderr
 bool isAnyOutputRedirected() 
 {
     return (isOutputRedirected() || isStderrRedirected());
@@ -28006,7 +28409,7 @@ bool getcaptcha(const string& i_captcha,const string& i_reason)
 	printf("\nTo confirm a dangerous command\n");
 	printf(">>> %s\n",i_reason.c_str());
 	printf("enter EXACTLY the capcha, then press CR (return)\n");
-	printf("Entering anything else will quit.\n");
+	printf("Entering anything else will quit\n");
 	printf("\nCaptcha to continue:     %s\n",i_captcha.c_str());
 	char myline[81];
     int dummy=scanf("%80s", myline);
@@ -28021,6 +28424,8 @@ bool getcaptcha(const string& i_captcha,const string& i_reason)
 	return true;
 }
 
+
+
 void scrivi(unsigned int i_spazio,string i_header, string i_desc)
 {
 	if (i_spazio<=10)
@@ -28034,7 +28439,7 @@ void scrivi(unsigned int i_spazio,string i_header, string i_desc)
     while (header_padded.length() < i_spazio) 
 	    header_padded += " ";
     
-    // Controlla se l'header inizia esattamente con "CMD "
+    // Check if the header starts exactly with "CMD "
     if (i_header.substr(0, 4) == "CMD ") 
 		color_cyan();
     else 
@@ -28705,10 +29110,75 @@ int64_t prendidimensionehandle(FILE* i_handle)
 	fseeko(i_handle, 0, SEEK_SET);
 	return dimensione;
 }
+/*
+/// faster, but do not like emojis
+int64_t prendidimensionefile(const char* i_filename)
+{
+    if (!i_filename)
+        return -1; // Ritorna -1 per indicare errore invece di 0
+    
+#ifdef _WIN32
+    // Usa le API native Windows per migliori prestazioni e supporto Unicode
+    HANDLE hFile = CreateFileA(
+        i_filename,
+        GENERIC_READ,
+        FILE_SHARE_READ | FILE_SHARE_WRITE,
+        NULL,
+        OPEN_EXISTING,
+        FILE_ATTRIBUTE_NORMAL,
+        NULL
+    );
+    
+    if (hFile == INVALID_HANDLE_VALUE)
+        return -1;
+    
+    LARGE_INTEGER fileSize;
+    if (!GetFileSizeEx(hFile, &fileSize))
+    {
+        CloseHandle(hFile);
+        return -1;
+    }
+    CloseHandle(hFile);
+    return fileSize.QuadPart;
+    
+#else
+    // Usa stat() per sistemi Unix-like (più efficiente di fopen/fseek/ftell)
+    struct stat st;
+    if (stat(i_filename, &st) == 0)
+    {
+        return st.st_size;
+    }
+    
+    // Fallback al metodo originale se stat() fallisce
+    FILE* myfile = freadopen(i_filename);
+    if (myfile)
+    {
+        if (fseeko(myfile, 0, SEEK_END) != 0)
+        {
+            fclose(myfile);
+            return -1;
+        }
+        
+        int64_t dimensione = ftello(myfile);
+        fclose(myfile);
+        
+        if (dimensione == -1)
+            return -1;
+            
+        return dimensione;
+    }
+    
+    return -1;
+#endif
+}
+*/
+
+/// slower, but gets more files (emoji)
 int64_t prendidimensionefile(const char* i_filename)
 {
 	if (!i_filename)
 		return 0;
+	///myprintf("29583: i_filename %s\n",i_filename);
 	FILE* myfile = freadopen(i_filename);
 	if (myfile)
     {
@@ -28720,6 +29190,7 @@ int64_t prendidimensionefile(const char* i_filename)
 	else
 	return 0;
 }
+
 #ifdef _WIN32
 bool islonguncpath(string i_filename)
 {
@@ -28950,8 +29421,8 @@ int64_t myatoll(const char * i_str)
 	}
 	else
 	{
-		if (flagdebug)
-			myprintf("00045! ERROR string size not 1 or 2, ignoring [%s]\n",migliaia(thestring.size()));
+///		if (flagdebug)
+	///		myprintf("00045! ERROR string size not 1 or 2, ignoring [%s]\n",migliaia(thestring.size()));
 	}
 	
 	if (flagdebug)
@@ -29133,12 +29604,9 @@ string subpart(string fn, int part) {
 // Return relative time in milliseconds
 /// Slow, working on string instead of char *. But who cares?
 #define NO_WARNING_PLEASE 36
-string ConvertUtcToLocalTime(const string& i_date)
+
+string internalutctolocal(const string& i_date)
 {
-#if defined(_WIN32_WINNT) && ((_WIN32_WINNT == 0x0501) || (_WIN32_WINNT == 0x0502))
-	return i_date;
-#endif // corresponds to #if (#if defined(_WIN32_WINNT) && ((_WIN32_WINNT == 0x0501) || (_WIN32_WINNT == 0x0502)))
-	
 	if (flagdebug3)
 	{
 		myprintf("\n");
@@ -29201,6 +29669,23 @@ time_t tt =-1;
 		myprintf("00061: localtime is %s\n",ds);
 	return ds;
 }
+
+string ConvertUtcToLocalTime(const string& i_date)
+{
+	if (iswindowsxp()) 	/// Windows XP, Windows Server 2003
+	{
+		if (flagdebug3)
+		{
+			color_cyan();
+			printbar('+');
+			myprintf("29643: WARNING: XP or 2003, do not convert to local time!\n");
+			color_restore();
+		}
+		return i_date;
+	}
+	return internalutctolocal(i_date);
+}
+
 // Convert 64 bit decimal YYYYMMDDHHMMSS to "YYYY-MM-DD HH:MM:SS"
 // where -1 = unknown date, 0 = deleted.
 string dateToString(bool i_flagutc,int64_t date,bool i_mylocal=false)
@@ -29210,7 +29695,9 @@ string dateToString(bool i_flagutc,int64_t date,bool i_mylocal=false)
   static const int t[]={18,17,15,14,12,11,9,8,6,5,3,2,1,0};
   for (int i=0; i<14; ++i) s[t[i]]+=int(date%10), date/=10;
   if (!i_flagutc)
-		s=ConvertUtcToLocalTime(s);
+  {
+	s=ConvertUtcToLocalTime(s);
+  }
   if (i_mylocal)
   {
 	///string "0000-00-00 00:00:00";
@@ -29238,6 +29725,37 @@ string dateToString(bool i_flagutc,int64_t date,bool i_mylocal=false)
   }
   return s;
 }
+
+string dateToString_forcedlocal(bool i_flagutc,int64_t date)
+{
+  if (date<=0) 
+	  return "                   ";
+  string s="0000-00-00 00:00:00";
+  static const int t[]={18,17,15,14,12,11,9,8,6,5,3,2,1,0};
+  for (int i=0; i<14; ++i) s[t[i]]+=int(date%10), date/=10;
+  if (!i_flagutc)
+  {
+		s=internalutctolocal(s);
+		///myprintf("Converted to local %s\n",s.c_str());
+  }
+  return s;
+}
+
+
+int64_t nowutc()
+{
+	time_t 	mynow=time(NULL);
+	const tm* 	t=gmtime(&mynow);  // <-- gmtime invece di localtime
+	if (t==NULL)
+		return 0;
+	return	(t->tm_year+1900)	*10000000000LL
+		+	(t->tm_mon+1)		*100000000LL
+		+	t->tm_mday			*1000000
+		+	t->tm_hour			*10000
+		+	t->tm_min			*100
+		+	t->tm_sec;
+}
+
 int64_t now()
 {
 	time_t 	mynow=time(NULL);
@@ -29401,42 +29919,15 @@ string getfirstwindowsuncdir(const string& i_filename)
 }
 #endif // corresponds to #ifdef (#ifdef _WIN32)
 
-/*
-bool direxists(string i_directory)
-{
-#ifdef unix
-	struct stat sb;
-    return ((stat(i_directory.c_str(), &sb) == 0) && S_ISDIR(sb.st_mode));
-#endif // corresponds to #ifdef (#ifdef unix)
-#ifdef _WIN32
-	HANDLE	myhandle;
-	WIN32_FIND_DATA findfiledata;
-	if (!isdirectory(i_directory))
-		i_directory+="/";
-	std::string pattern=i_directory+"*.*";
-	///printf("panno %s\n",pattern.c_str());
-	std::wstring wpattern=utow(pattern.c_str());
-	myhandle=FindFirstFile(wpattern.c_str(),&findfiledata);
-	if (myhandle!=INVALID_HANDLE_VALUE)
-	{
-		FindClose(myhandle);
-		return true;
-	}
-	return false;
-#endif // corresponds to #ifdef (#ifdef _WIN32)
-	return false;
-}
-*/
-
 
 #ifdef _WIN32
 
-// Funzione per preparare il percorso per i long path
+// Function to prepare the path for long paths
 std::wstring preparelongpath(const std::wstring& path) 
 {
     if (path.empty()) 
 		return path;
-    // Non modificare se è già un long path o un UNC
+    // Do not modify if it is already a long path or UNC
     if (path.substr(0, 4) == L"\\\\?\\" || path.substr(0, 2) == L"\\\\") 
         return path;
     // Aggiungi \\?\ per percorsi assoluti
@@ -29454,17 +29945,17 @@ bool direxists(const std::string& i_directory) {
 #ifdef _WIN32
     if (i_directory.empty()) return false;
 
-    // Converti il percorso in wstring
+    // Convert the path to wstring
     std::wstring wdirectory = utow(i_directory.c_str());
     wdirectory = preparelongpath(wdirectory);
 
-    // Usa GetFileAttributesW per verificare l'esistenza della directory
+    // Use GetFileAttributesW to check for the existence of the directory
     DWORD attrib = GetFileAttributesW(wdirectory.c_str());
     if (attrib == INVALID_FILE_ATTRIBUTES) 
-        return false; // Directory non esistente o errore
-    return (attrib & FILE_ATTRIBUTE_DIRECTORY) != 0; // Verifica che sia una directory
+        return false; // Directorydoes not exist or error
+    return (attrib & FILE_ATTRIBUTE_DIRECTORY) != 0; // Verifica che sia a directory
 #endif
-    return false; // Fallback per sistemi non supportati
+    return false; // Fallback for unsupported systems
 }
 
 #ifdef _WIN32
@@ -29674,7 +30165,7 @@ string decodewinerror(DWORD i_error, const char* i_filename)
     string risultato = "";
     char buffer[100];
     
-    // Usa FormatMessage per ottenere automaticamente la descrizione dell'errore
+    // Use FormatMessage to automatically get the error description
     LPSTR messageBuffer = nullptr;
     size_t size = FormatMessageA(
         FORMAT_MESSAGE_ALLOCATE_BUFFER | 
@@ -29694,12 +30185,12 @@ string decodewinerror(DWORD i_error, const char* i_filename)
         risultato = string(messageBuffer, size);
         LocalFree(messageBuffer);
         
-        // Rimuovi caratteri di fine riga
+        // Remove end-of-line characters
         while (!risultato.empty() && (risultato.back() == '\n' || risultato.back() == '\r')) 
 		    risultato.pop_back();
         
         
-        // Sanitizza caratteri non ASCII e sostituisci spazi con underscore
+        // Sanitize non-ASCII characters and replace spaces with underscores
         string sanitized = "";
         for (char c : risultato) 
 		{
@@ -29709,28 +30200,28 @@ string decodewinerror(DWORD i_error, const char* i_filename)
 			else
             if (static_cast<unsigned char>(c) >= 128) 
 			{
-                // Carattere non ASCII - sostituisci con equivalente ASCII
+                // Non-ASCII character - replace with ASCII equivalent
                 switch (static_cast<unsigned char>(c)) 
 				{
-                    case 0xC0: case 0xC1: case 0xC2: case 0xC3: case 0xC4: case 0xC5: // À Á Â Ã Ä Å
+                    case 0xC0: case 0xC1: case 0xC2: case 0xC3: case 0xC4: case 0xC5: //  Á Â Ã Ä Å
                         sanitized += 'A'; break;
-                    case 0xE0: case 0xE1: case 0xE2: case 0xE3: case 0xE4: case 0xE5: // à á â ã ä å
+                    case 0xE0: case 0xE1: case 0xE2: case 0xE3: case 0xE4: case 0xE5: //  á â ã ä å
                         sanitized += 'A'; break;
-                    case 0xC8: case 0xC9: case 0xCA: case 0xCB: // È É Ê Ë
+                    case 0xC8: case 0xC9: case 0xCA: case 0xCB: //  É Ê Ë
                         sanitized += 'E'; break;
-                    case 0xE8: case 0xE9: case 0xEA: case 0xEB: // è é ê ë
+                    case 0xE8: case 0xE9: case 0xEA: case 0xEB: //  é ê ë
                         sanitized += 'E'; break;
-                    case 0xCC: case 0xCD: case 0xCE: case 0xCF: // Ì Í Î Ï
+                    case 0xCC: case 0xCD: case 0xCE: case 0xCF: //  Í Î Ï
                         sanitized += 'I'; break;
-                    case 0xEC: case 0xED: case 0xEE: case 0xEF: // ì í î ï
+                    case 0xEC: case 0xED: case 0xEE: case 0xEF: //  í î ï
                         sanitized += 'I'; break;
-                    case 0xD2: case 0xD3: case 0xD4: case 0xD5: case 0xD6: case 0xD8: // Ò Ó Ô Õ Ö Ø
+                    case 0xD2: case 0xD3: case 0xD4: case 0xD5: case 0xD6: case 0xD8: //  Ó Ô Õ Ö Ø
                         sanitized += 'O'; break;
-                    case 0xF2: case 0xF3: case 0xF4: case 0xF5: case 0xF6: case 0xF8: // ò ó ô õ ö ø
+                    case 0xF2: case 0xF3: case 0xF4: case 0xF5: case 0xF6: case 0xF8: //  ó ô õ ö ø
                         sanitized += 'O'; break;
-                    case 0xD9: case 0xDA: case 0xDB: case 0xDC: // Ù Ú Û Ü
+                    case 0xD9: case 0xDA: case 0xDB: case 0xDC: //  Ú Û Ü
                         sanitized += 'U'; break;
-                    case 0xF9: case 0xFA: case 0xFB: case 0xFC: // ù ú û ü
+                    case 0xF9: case 0xFA: case 0xFB: case 0xFC: //  ú û ü
                         sanitized += 'U'; break;
                     case 0xD1: // Ñ
                         sanitized += 'N'; break;
@@ -29741,7 +30232,7 @@ string decodewinerror(DWORD i_error, const char* i_filename)
                     case 0xE7: // ç
                         sanitized += 'C'; break;
                     default:
-                        sanitized += '?'; // Carattere sconosciuto
+                        sanitized += '?'; // Unknown character
                         break;
 				}
 			} 
@@ -29757,17 +30248,17 @@ string decodewinerror(DWORD i_error, const char* i_filename)
         }
         risultato = sanitized;
         
-        // Converti in maiuscolo per mantenere lo stile originale
+        // Convert to uppercase to maintain the original style
         transform(risultato.begin(), risultato.end(), risultato.begin(), ::toupper);
     } 
 	else 
 	{
-        // Fallback per errori non riconosciuti dal sistema
+        // Fallback for errors not recognized by the system
         snprintf(buffer, sizeof(buffer), "WINDOWS_ERROR_#_%ld", i_error);
         risultato = buffer;
     }
     
-    // Gestione speciale per ERROR_PATH_NOT_FOUND (codice 3)
+    // Special handling for ERROR_PATH_NOT_FOUND (code 3)
 
 	if ((i_error == 3L) && (i_filename)) 
 	{
@@ -30638,6 +31129,62 @@ const uint32_t Crc32Lookup[MaxSlice][256] =
 	File-funtions section
 */
 
+#ifdef _WIN32
+bool eol() 
+{
+    CONSOLE_SCREEN_BUFFER_INFO csbi;
+    HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
+    
+    if (hConsole == INVALID_HANDLE_VALUE) 
+	    return false;
+    
+    if (!GetConsoleScreenBufferInfo(hConsole, &csbi)) 
+	    return false;
+    
+    DWORD chars_to_clear = csbi.dwSize.X - csbi.dwCursorPosition.X;
+    DWORD written;
+    
+    if (!FillConsoleOutputCharacterA(hConsole, ' ', chars_to_clear, csbi.dwCursorPosition, &written)) 
+	    return false;
+    
+    if (!SetConsoleCursorPosition(hConsole, csbi.dwCursorPosition)) 
+	    return false;
+    return true;
+}
+#else
+/*
+bool eol() 
+{
+    int result = printf("\033[K");
+    if (result < 0) {
+        return false;
+    }
+    
+    if (fflush(stdout) != 0) {
+        return false;
+    }
+    
+    return true;
+}
+*/
+
+bool eol() 
+{
+    if (!isatty(STDOUT_FILENO)) 
+        return false;
+    
+    struct winsize w;
+    if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &w) == -1)
+        return false;
+    
+    printf("\033[K");
+    fflush(stdout);
+    
+    return true;
+}
+#endif
+
+
 // Windows/Linux compatible file type
 #ifdef unix
 typedef FILE* FP;
@@ -30778,11 +31325,12 @@ vector<string> 	g_write_filename;
 
 
 
-
 void tocca_now(FP i_fp)
 {
+	
 	if (i_fp==FPNULL)
 		return;
+	
 	if (flagdebug)
 		myprintf("48718: Windows tocca_now %s\n",migliaia(int64_t(i_fp)));
 	SYSTEMTIME st;
@@ -30790,14 +31338,29 @@ void tocca_now(FP i_fp)
 	FILETIME ft,ftutc;
 	SystemTimeToFileTime(&st, &ft);
 	LocalFileTimeToFileTime(&ft, &ftutc);
+	
+	// Debug: converti il FILETIME UTC in SYSTEMTIME per visualizzare la data/ora
+	SYSTEMTIME st_utc;  // <-- Questa riga mancava!
+	FileTimeToSystemTime(&ftutc, &st_utc);
+/*
+	color_cyan(); // o un altro colore per distinguere
+	myprintf("DEBUG: Impostando file time UTC: %04d-%02d-%02d %02d:%02d:%02d.%03d\n",
+		st_utc.wYear, st_utc.wMonth, st_utc.wDay,
+		st_utc.wHour, st_utc.wMinute, st_utc.wSecond, st_utc.wMilliseconds);
+	color_restore();
+*/	
 	if (!SetFileTime(i_fp, NULL, NULL, &ftutc))
 		myprintf("48725! WARN tocca_now cannot set filetime (error %s) su fp %s\n",migliaia((int64_t)GetLastError()),migliaia2(int64_t(i_fp)));
 }
 
 typedef enum {RB, WB, RBPLUS, WBPLUS} MODE;  // fopen modes
+
+
+
 // Open file. Only modes "rb", "wb", "rb+" and "wb+" are supported on WINDOWS
 FP myfopen(const char* filename, MODE mode, int64_t i_date=0)
 {
+	
 	if (g_control_c)
 	{
 		myprintf("\n\nThe house is closed by control-c!\n");
@@ -30808,7 +31371,6 @@ FP myfopen(const char* filename, MODE mode, int64_t i_date=0)
 		myprintf("39836$ myfopen with NULL filename!\n");
 		return FPNULL;
 	}
-
 	DWORD access=0;
 	if (mode!=WB) access=GENERIC_READ;
 	if (mode!=RB) access|=GENERIC_WRITE;
@@ -30830,8 +31392,28 @@ FP myfopen(const char* filename, MODE mode, int64_t i_date=0)
 	FP risultato=CreateFile(utow(filename).c_str(), access, share,NULL, disp, FILE_ATTRIBUTE_NORMAL , NULL);
 	if (flagdebug3)
 		myprintf("00090: Createfile risultato %s\n",migliaia(int64_t(risultato)));
-
-	if ((mode==WB) || (mode=WBPLUS))
+	
+#if _WIN32
+	if (risultato!=FPNULL)
+		if ((mode==WB) || (mode==WBPLUS))
+			if (flagsparse)
+			{
+				DWORD bytesReturned;
+				if (!DeviceIoControl(risultato, FSCTL_SET_SPARSE, NULL, 0, NULL, 0, &bytesReturned, NULL))
+					myprintf("39875! failed to set sparse attribute (error %s) on %Z\n",migliaia((int64_t)GetLastError()),filename);
+				else
+				{
+					if (flagdebug)
+					{
+						color_green();
+						myprintf("39876: file successfully set as sparse: %Z\n",filename);
+						eol();
+						color_restore();
+					}
+				}
+			}
+#endif
+	if ((mode==WB) || (mode==WBPLUS))
 		if (i_date!=0)
 		{
 			SYSTEMTIME st;
@@ -30850,7 +31432,6 @@ FP myfopen(const char* filename, MODE mode, int64_t i_date=0)
 			if (!SetFileTime(risultato, NULL, NULL, &ft))
 				myprintf("39387! failed settime (error %s) on %Z\n",migliaia((int64_t)GetLastError()),filename);
 		}
-
 	if (g_chunk_size>0)
 		if ((mode==WB) || (mode==WBPLUS))
 		{
@@ -30862,7 +31443,6 @@ FP myfopen(const char* filename, MODE mode, int64_t i_date=0)
 	return risultato;
 	
 }
-
 int myfclose(FP* fp)
 {
 	if ((*fp)==FPNULL)
@@ -31080,6 +31660,14 @@ size_t myfwrite(const void* ptr, size_t size, size_t nobj, FP fp)
   if (size>1) r/=size;
   return r;
 }
+
+
+
+
+
+
+
+
 
 
 
@@ -31615,12 +32203,12 @@ void waitexecutepadre(const std::string& i_filename, const std::string& i_parame
     saAttr.bInheritHandle = TRUE;
     saAttr.lpSecurityDescriptor = NULL;
 
-    // Crea pipe per l'output
+    // Create pipe for output
     HANDLE hChildStdoutRd, hChildStdoutWr;
     if (!CreatePipe(&hChildStdoutRd, &hChildStdoutWr, &saAttr, 0)) 
         return;
 
-    // Assicura che l'handle di scrittura non sia ereditato
+    // Ensure that the write handle is not inherited
     SetHandleInformation(hChildStdoutRd, HANDLE_FLAG_INHERIT, 0);
 
     STARTUPINFOA si;
@@ -31634,7 +32222,7 @@ void waitexecutepadre(const std::string& i_filename, const std::string& i_parame
 
     std::string cmdLine = "\"" + i_filename + "\" " + i_parameters;
 
-    // Crea il processo
+    // Create the process
     if (!CreateProcessA(
         NULL,               // No module name (use command line)
         const_cast<LPSTR>(cmdLine.c_str()),  // Command line
@@ -31655,7 +32243,7 @@ void waitexecutepadre(const std::string& i_filename, const std::string& i_parame
 
     CloseHandle(hChildStdoutWr);
 
-    // Leggi l'output
+    // Read the output
     char buffer[4096];
     DWORD bytesRead;
     while (ReadFile(hChildStdoutRd, buffer, sizeof(buffer) - 1, &bytesRead, NULL) && bytesRead != 0) 
@@ -31663,7 +32251,7 @@ void waitexecutepadre(const std::string& i_filename, const std::string& i_parame
         buffer[bytesRead] = '\0';  // Null-terminate
         WriteConsoleA(GetStdHandle(STD_OUTPUT_HANDLE), buffer, bytesRead, NULL, NULL);
     }
-    // Aspetta che il processo termini
+    // Wait for the process to terminate
     WaitForSingleObject(pi.hProcess, INFINITE);
     CloseHandle(pi.hProcess);
     CloseHandle(pi.hThread);
@@ -32578,10 +33166,10 @@ bool check_if_password(string i_filename)
 */
 bool comparecrc32block(s_crc32block a, s_crc32block b)
 {
-    // Prima ordina per filename
+    // First sort by filename
     if (a.filename != b.filename) 
 	    return a.filename < b.filename;
-    // Se i filename sono uguali, ordina per crc32start
+    // If the filenames are the same, sort by crc32start
     return a.crc32start < b.crc32start;
 }
 bool comparecrc32(s_fileandsize a, s_fileandsize b)
@@ -33163,7 +33751,7 @@ int read_key()
 			case 77: return 1001;  // right
 			case 72: return 1002;  // up
 			case 80: return 1003;  // down
-			case 83: return 1004;  // Canc
+			case 83: return 1004;  // Del
             case 82: return 1005;  // Ins
             default: return ch;
         }
@@ -33209,7 +33797,7 @@ int read_key()
 				case 'C': return 1001;  // right
 				case 'A': return 1002;  // up
 				case 'B': return 1003;  // down
-				case '3': // Canc (longer escape)
+				case '3': // Del (longer escape)
 						  getchar();  // final ~
 						  return 1004;
                 case '2': //  Ins
@@ -33220,7 +33808,7 @@ int read_key()
 }
 #endif // corresponds to #ifdef (#ifdef _WIN32)
 
-// Funzioni generiche di gestione input
+// Generic input handling functions
 void insert_char(sinputstate *state, char ch) 
 {
     if (state->length < MAX_PWD_LEN - 1) 
@@ -33252,7 +33840,7 @@ void delete_char(sinputstate *state)
 
 void delete_char_forward(sinputstate *state)
 {
-    // Canc
+    // Del
     if (state->cursor_pos < state->length)
     {
         // move to left from current pos
@@ -33292,7 +33880,7 @@ void redraw_input(sinputstate *state,string i_testo)
     myprintf("%s", i_testo.c_str());
     color_restore();
 
-    // Stampa il contenuto del buffer
+    // Print the contents of the buffer
     for (int i = 0; i < state->length; i++) 
 		if (flagdebug)
 			printf("%c", state->buffer[i]);
@@ -33334,7 +33922,7 @@ string internal_password_withcursor(string i_default)
 			delete_char(&state);
 		else if ((ch==1000)|| (ch== 1001))   // left/right
 			move_cursor(&state, ch);
-		else if (ch==1004)   // Canc
+		else if (ch==1004)   // Del
 			delete_char_forward(&state);
 		else if (isprint(ch))   // goodchar
 			insert_char(&state, ch);
@@ -33385,11 +33973,11 @@ string internal_password_nocursor(const string i_default)
 			{
                 pos--;
                 password[pos] = '\0';
-                printf("\b \b");  // Cancella l'ultimo asterisco
+                printf("\b \b");  // Delete the last asterisk
                 fflush(stdout);
             }
         }
-        // Caratteri normali
+        // Normal characters
         else
 		if (iscontrolsomething(ch)) ///ESC, control-C
 		{
@@ -36108,11 +36696,11 @@ std::string generaterandomstring(unsigned int i_length)
     }
 
 #ifdef __OpenBSD__
-    // OpenBSD: usa arc4random_uniform per casualità sicura
+    // OpenBSD: use arc4random_uniform 
     for (unsigned int i = 0; i < i_length; ++i) 
 	    randomstring[i] = characters[arc4random_uniform(charset_size)];
 #else
-    // Altre piattaforme: mantieni rand e srand
+    // Other platforms: keep rand and srand
     srand((unsigned)time(NULL));
     for (unsigned int i = 0; i < i_length; ++i) 
 	    randomstring[i] = characters[rand() % charset_size];
@@ -36133,11 +36721,11 @@ double custom_log(double x)
 #ifndef NOLM
 	return log(x);
 #else
-    // Controlli input
-    if (x <= 0) return -__builtin_huge_valf(); // Gestione input non validi
-    if (x == 1.0) return 0.0; // Caso speciale
+    // Input checks
+    if (x <= 0) return -__builtin_huge_valf(); // Handling invalid inputs
+    if (x == 1.0) return 0.0; // Special case
 
-    // Riduzione dell'intervallo
+    // Interval reduction
     int exponent = 0;
     double normalized = x;
 
@@ -36151,7 +36739,7 @@ double custom_log(double x)
         exponent--;
     }
 
-    // Calcolo logaritmo usando serie di Taylor
+    // Logarithm calculation using Taylor series
     // ln(x) = 2 * [ (x-1)/(x+1) + (1/3)((x-1)/(x+1))³ + (1/5)((x-1)/(x+1))⁵ + ... ]
     double y = (normalized - 1.0) / (normalized + 1.0);
     double y2 = y * y;
@@ -36162,11 +36750,11 @@ double custom_log(double x)
         result += term / n;
         term *= y2;
         
-        // Criterio di interruzione
+        // Interruption criterion
         if (term < MYEPSILON && term > -MYEPSILON) break;
     }
-	 // Moltiplica per 2 e aggiungi contributo dell'esponente
-    double risultato= 2.0 * result + exponent * 0.69314718056; // 0.69314718056 è ln(2)
+	 // Multiply by 2 and add the exponent's contribution
+    double risultato= 2.0 * result + exponent * 0.69314718056; // 0.69314718056  ln(2)
 	
 	double check=log(x);
 	myprintf("51122: log delta %f\n",risultato-check);
@@ -36194,15 +36782,15 @@ double custom_exp(double x)
 	return exp(x);
 #else
     if (x == 0.0) return 1.0;
-    if (x > 700.0) return __builtin_huge_valf();  // Evita overflow
-    if (x < -700.0) return 0.0;  // Evita underflow
+    if (x > 700.0) return __builtin_huge_valf();  // Avoid overflow
+    if (x < -700.0) return 0.0;  // Avoid underflow
     
-    // Riduce x usando exp(x) = exp(x/2)^2
+    // Reduce x using exp(x) = exp(x/2)^2
     int power = 0;
     while (x > 1.0) { x /= 2.0; power++; }
     while (x < -1.0) { x /= 2.0; power--; }
     
-    // Serie di Taylor
+    // Taylor series
     double result = 1.0;
     double term = 1.0;
     for (int n = 1; n <= MAX_ITERATIONS; n++) {
@@ -36211,7 +36799,7 @@ double custom_exp(double x)
         if (term < MYEPSILON) break;
     }
     
-    // Ricompone il risultato
+    // Recompose the result
     while (power > 0) { result *= result; power--; }
     while (power < 0) { result = result * result; power++; }
     
@@ -36279,7 +36867,7 @@ bool myavanzamentoby1sec(int64_t i_lavorati,int64_t i_totali,int64_t i_inizio,bo
 class downcallback : public IBindStatusCallback
 {
 private:
-    LONG m_cRef; // Conteggio dei riferimenti per COM
+    LONG m_cRef; // Reference counting for COM
 
 public:
     downcallback() : m_cRef(1) {}
@@ -36288,7 +36876,7 @@ public:
     // IUnknown methods
     STDMETHODIMP QueryInterface(REFIID, void**)
     {
-        return E_NOINTERFACE; // Non supportiamo altre interfacce in questa implementazione minimale
+        return E_NOINTERFACE; // We do not support other interfaces in this minimal implementation
     }
 
     STDMETHODIMP_(ULONG) AddRef()
@@ -36315,7 +36903,7 @@ public:
 
     STDMETHODIMP GetPriority(LONG*)
     {
-        return E_NOTIMPL; // Priorità non implementata
+        return E_NOTIMPL; // Priority not implemented
     }
 
     STDMETHODIMP OnLowResource(DWORD)
@@ -36325,8 +36913,8 @@ public:
 
 	STDMETHODIMP OnProgress(ULONG, ULONG, ULONG, LPCWSTR)
 	{
-	    // Esempio di logica minimale: usa ulProgress e ulProgressMax
-        // Puoi aggiungere qui la logica per aggiornare una barra di progresso
+	    // Example of minimal logic: use ulProgress and ulProgressMax
+        // You can add logic here to update a progress bar
     	return S_OK;
 	}
     
@@ -36390,7 +36978,7 @@ bool downloadfile(string i_verurl, string i_verfile, bool i_showupdate)
     if (S_OK != URLDownloadToFileW(NULL, utow(i_verurl.c_str()).c_str(), utow(i_verfile.c_str()).c_str(), 0, 0))
 #endif
     {
-        myprintf("03175: Error C5: cannot download file (no internet?)\n");
+        myprintf("03175: Download failed C5 (no internet?)  %s\n",i_verurl.c_str());
         return false;
     }
 #else
@@ -36480,7 +37068,7 @@ bool downloadfile(string i_verurl, string i_verfile, bool i_showupdate)
     if (ret) 
     {
         myprintf("03183$ IPV6 cannot resolve %s: %s\n", hostname, gai_strerror(ret));
-        free(hostname); // Aggiunto free qui
+        free(hostname); // Added free here
         return false;
     }
 
@@ -36499,7 +37087,7 @@ bool downloadfile(string i_verurl, string i_verfile, bool i_showupdate)
     if (address == NULL) 
     {
         myprintf("39345$ IPV6 C5 on connect\n");
-        free(hostname); // Aggiunto free qui
+        free(hostname); // Added free here
         return false;
     }
 #endif
@@ -36510,7 +37098,7 @@ bool downloadfile(string i_verurl, string i_verfile, bool i_showupdate)
     if (write(sockfd, buffer, strlen(buffer)) < 0) 
     {
         myprintf("03185: kaputt writing on socket\n");
-        close(sockfd); // Aggiunto close qui
+        close(sockfd); // Added close here
         return false;
     }
 
@@ -36518,7 +37106,7 @@ bool downloadfile(string i_verurl, string i_verfile, bool i_showupdate)
     if (file == NULL) 
     {
         myprintf("03186: cannot open file to write %s\n", i_verfile.c_str());
-        close(sockfd); // Aggiunto close qui
+        close(sockfd); // Added close here
         return false;
     }
     ssize_t n;
@@ -36735,29 +37323,7 @@ string mm_hash_calc_file(int i_algo,const char * i_filename,bool i_flagcalccrc32
 
 	return risultato;
 }
-#ifdef _WIN32
-bool eol() 
-{
-    CONSOLE_SCREEN_BUFFER_INFO csbi;
-    HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
-    
-    if (hConsole == INVALID_HANDLE_VALUE) 
-	    return false;
-    
-    if (!GetConsoleScreenBufferInfo(hConsole, &csbi)) 
-	    return false;
-    
-    DWORD chars_to_clear = csbi.dwSize.X - csbi.dwCursorPosition.X;
-    DWORD written;
-    
-    if (!FillConsoleOutputCharacterA(hConsole, ' ', chars_to_clear, csbi.dwCursorPosition, &written)) 
-	    return false;
-    
-    if (!SetConsoleCursorPosition(hConsole, csbi.dwCursorPosition)) 
-	    return false;
-    return true;
-}
-#endif
+
 
 class franz_do_hash
 {
@@ -36896,7 +37462,7 @@ class franz_do_hash
 		isinit				=false;
 		isfinalized			=false;
 	}
-	string	filehash(string i_filename,bool i_flagcalccrc32,int64_t i_inizio,int64_t i_totali,int64_t i_lunghezza);
+	string	filehash(int64_t i_offset,string i_filename,bool i_flagcalccrc32,int64_t i_inizio,int64_t i_totali,int64_t i_lunghezza);
 };
 
 
@@ -37244,7 +37810,7 @@ void franz_do_hash::update(char *i_buffer,const int i_buflen)
 	}
 }
 
-string	franz_do_hash::filehash(string i_filename,bool i_flagcalccrc32,int64_t i_inizio,int64_t i_totali,int64_t i_lunghezza=0)
+string	franz_do_hash::filehash(int64_t i_offset,string i_filename,bool i_flagcalccrc32,int64_t i_inizio,int64_t i_totali,int64_t i_lunghezza=0)
 {
 ///	if (ihashtype==FRANZO_BLAKE3B)
 		///myprintf("$$$$$$$$$$$$$$$$$ BLAKE3 filehash ihashtype %d\n",ihashtype);
@@ -37494,7 +38060,10 @@ string	franz_do_hash::filehash(string i_filename,bool i_flagcalccrc32,int64_t i_
 	if (mytype==FRANZO_CRC_32)
 		i_flagcalccrc32=true;
 
-
+	if (i_offset>0)
+		if (lunghezza>i_offset)
+			fseeko(myfilez,i_offset,SEEK_SET);
+	
 	if (mytype==ALGO_CRC32C)
 	{
 		size_t off, n;
@@ -37709,7 +38278,7 @@ string	franz_do_hash::filehash(string i_filename,bool i_flagcalccrc32,int64_t i_
 	}
 
 	if (!flagignore)
-		if (lunghezza!=letti)
+		if ((lunghezza-i_offset)!=letti)
 		{
 			myprintf("\n");
 			myprintf("00811: *** CORRUPTED FILE DETECTED! expected %s readed %s bytes *** %Z\n",migliaia(lunghezza),migliaia2(letti),i_filename.c_str());
@@ -37723,9 +38292,17 @@ string	franz_do_hash::filehash(string i_filename,bool i_flagcalccrc32,int64_t i_
 
 
 
+
+
+
+
+
+
+
+
 #ifdef ZPAQFULL ///NOSFTPSTART
 #ifdef SFTP
-// Funzione helper per il matching dei wildcard
+// Helper function for wildcard matching
 static bool matchWildcard(const std::string& pattern, const std::string& text) 
 {
     size_t p = 0, t = 0;
@@ -37735,7 +38312,7 @@ static bool matchWildcard(const std::string& pattern, const std::string& text)
 	{
         if (p < pattern.length() && (pattern[p] == '?' || pattern[p] == text[t])) 
 		{
-            // Carattere corrispondente o '?'
+            // Corresponding character or '?'
             p++;
             t++;
         } 
@@ -37758,7 +38335,7 @@ static bool matchWildcard(const std::string& pattern, const std::string& text)
         
     }
     
-    // Consuma eventuali '*' rimasti alla fine del pattern
+    // Consume any remaining '*' at the end of the pattern
     while (p < pattern.length() && pattern[p] == '*') 
 	    p++;
     return p == pattern.length();
@@ -37860,22 +38437,10 @@ void restore_cursor()
 {
     printf("\033[u");
 }
-bool eol() {
-    int result = printf("\033[K");
-    if (result < 0) {
-        return false;
-    }
-    
-    if (fflush(stdout) != 0) {
-        return false;
-    }
-    
-    return true;
-}
 #endif
 
 
-// Funzione per spostare il cursore (Windows)
+// Function to move the cursor (Windows)
 void moveCursor(int x, int y) {
 #ifdef _WIN32
     COORD coord;
@@ -37887,7 +38452,7 @@ void moveCursor(int x, int y) {
 #endif
 }
 
-// Funzione per ottenere la posizione corrente del cursore (Windows)
+// Function to get the current cursor position (Windows)
 void getCurrentCursorPos(int& x, int& y) {
 #ifdef _WIN32
     CONSOLE_SCREEN_BUFFER_INFO csbi;
@@ -37902,2272 +38467,6 @@ void getCurrentCursorPos(int& x, int& y) {
 }
 
 
-#ifdef ZPAQFULL ///NOSFTPSTART
-#ifdef SFTP
-
-///fima1
-
-typedef void 				(*curl_easy_reset_t)		(CURL *);
-typedef CURL *				(*curl_easy_init_t)			(void);
-typedef CURLcode 			(*curl_easy_setopt_t)		(CURL *, CURLoption, ...);
-typedef CURLcode 			(*curl_easy_perform_t)		(CURL *);
-typedef CURL*				(*curl_easy_duphandle_t)	(CURL*);
-typedef const char *		(*curl_easy_strerror_t)		(CURLcode);
-typedef CURLcode 			(*curl_easy_getinfo_t)		(CURL *, CURLINFO, ...);
-typedef struct curl_slist *	(*curl_slist_append_t)		(struct curl_slist *, const char *);
-typedef void 				(*curl_slist_free_all_t)	(struct curl_slist *);
-typedef void 				(*curl_easy_cleanup_t)		(CURL *);
-typedef CURLcode 			(*curl_global_init_t)		(long);
-typedef void 				(*curl_global_cleanup_t)	(void);
-typedef curl_version_info_data* (*curl_version_info_t) (CURLversion);
-
-struct curldynfunctions 
-{
-	curl_easy_reset_t 		easy_reset;
-	curl_easy_init_t 		easy_init;
-    curl_easy_setopt_t 		easy_setopt;
-    curl_easy_perform_t 	easy_perform;
-    curl_easy_strerror_t 	easy_strerror;
-    curl_easy_getinfo_t 	easy_getinfo;
-    curl_slist_append_t 	slist_append;
-    curl_slist_free_all_t 	slist_free_all;
-    curl_easy_cleanup_t 	easy_cleanup;
-    curl_global_init_t 		global_init;
-    curl_global_cleanup_t 	global_cleanup;
-    curl_easy_duphandle_t 	easy_duphandle;
-	curl_version_info_t		my_version_info;
-};
-
-
-#define Kurl_easy_setopt 	zpaqfranzsftp2::curldll.easy_setopt
-#define Kurl_easy_init 		zpaqfranzsftp2::curldll.easy_init
-#define Kurl_easy_cleanup 	zpaqfranzsftp2::curldll.easy_cleanup
-#define Kurl_easy_duphandle zpaqfranzsftp2::curldll.easy_duphandle
-#define Kurl_easy_perform 	zpaqfranzsftp2::curldll.easy_perform
-#define Kurl_easy_getinfo 	zpaqfranzsftp2::curldll.easy_getinfo
-#define Kurl_easy_strerror 	zpaqfranzsftp2::curldll.easy_strerror
-#define Kurl_global_init 	zpaqfranzsftp2::curldll.global_init
-#define Kurl_global_cleanup zpaqfranzsftp2::curldll.global_cleanup
-#define Kurl_slist_free_all zpaqfranzsftp2::curldll.slist_free_all
-#define Kurl_slist_append 	zpaqfranzsftp2::curldll.slist_append
-
-class zpaqfranzsftp2; 
-
-// Struttura per tracciare le statistiche di ogni thread
-struct sftp_threadstats 
-{
-    int 		thread_id;
-    int 		completed_files;
-    int64_t 	bytes_transferred;
-    int64_t 	start_time;
-    int64_t 	last_activity_time;
-    std::string	current_file;
-    bool 		is_active;
-    double 		current_speed;
-	int64_t		bytes_transferred_current; 
-	int64_t		bytes_transferred_this_session;
-	int64_t		starting_file_size;
-	
-	
-    sftp_threadstats	() : 
-	thread_id			(0), 
-	completed_files		(0), 
-	bytes_transferred	(0), 
-    start_time			(0), 
-	last_activity_time	(0), 
-	current_file		(""), 
-    is_active			(false), 
-	current_speed		(0.0),
-	bytes_transferred_current(0),
-	bytes_transferred_this_session(0),
-starting_file_size(0)	{}
-};
-
-// Struttura per tracciare i dati per thread
-struct sftp_threadprogressdata 
-{
-    int 			thread_id;
-    std::string 	current_file;
-    int64_t 		current_file_size;
-	int64_t 		thread_bytes_processed;
-    int 			thread_files_processed;
-    int64_t 		thread_start_time;
-    bool 			is_active;
-    std::string 	status; // DOWN WAIT DONE ERROR 
-};
-
-struct sftpfileinfo 
-{
-    std::string 	name;
-    std::string 	fullname;
-    int64_t 		size;
-    time_t 			modtime;
-    std::string 	permissions;
-    std::string 	owner;
-    std::string 	group;
-    bool 			isdirectory;
-	std::string		hash;
-};
-
-struct sftpget3 
-{
-    std::string 	i_name;
-    std::string 	i_file1;
-	std::string 	i_file2;
-	std::string 	i_file3;
-	int64_t 		o_size;
-	std::string 	o_hash;
-};
-
-// Struttura dati aggiornata per il worker thread
-struct sftp_downloadthreaddata 
-{
-    zpaqfranzsftp2* 			sftp_instance;
-    std::queue<sftpget3*>* 		task_queue;
-    pthread_mutex_t* 			queue_mutex;
-    pthread_cond_t* 			queue_cond;
-    bool* 						all_tasks_added;
-    bool* 						stop_threads;
-    int 						thread_id;
-    bool* 						success_flag;
-    pthread_mutex_t* 			result_mutex;
-    int* 						completed_tasks;
-    int 						total_tasks;
-    int* 						total_files_processed;
-    int64_t* 					total_bytes_processed;
-    sftp_threadprogressdata*	thread_progress;
-    pthread_mutex_t* 			progress_mutex;
-};
-
-  
-struct sftp_downloaddata 
-{
-	FILE* 						file;
-	int64_t 					total_size;
-	int64_t 					downloaded;
-	int64_t 					start_time;
-	int64_t 					last_progress_time;
-	curl_off_t 					start_offset;
-	curl_off_t 					end_offset;
-	int64_t 					local_existing_size;
-};
-
-// Struttura per il callback di listing
-struct sftp_listingdata 
-{
-    std::vector<sftpfileinfo>* 	filearray;
-    std::string 				remote_path;
-    std::string 				filter;
-    
-    sftp_listingdata(std::vector<sftpfileinfo>* fa, const std::string& path, const std::string& filt): 
-		filearray(fa), 
-		remote_path(path), 
-		filter(filt) {}
-};
-
-static bool compareSftpFileInfo(const sftpfileinfo& a, const sftpfileinfo& b) 
-{
-    return a.name < b.name;
-}
-
-#ifdef __APPLE__
-#include <dirent.h>
-#include <sys/stat.h>
-
-// Funzione ricorsiva per cercare una libreria in una directory
-static std::string scan_directory_recursive(const std::string& dir_path, const std::string& libname) 
-{
-    DIR* dir = opendir(dir_path.c_str());
-    if (!dir) return "";
-    
-    struct dirent* entry;
-    while ((entry = readdir(dir)) != nullptr) 
-    {
-        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
-            continue;
-            
-        std::string full_path = dir_path + "/" + entry->d_name;
-        
-        // Se è il file che cerchiamo, lo abbiamo trovato
-        if (entry->d_name == libname) 
-        {
-            if (flagdebug2)
-                myprintf("52649: Found <<%s>>\n", full_path.c_str());
-            closedir(dir);
-            return full_path;
-        }
-        
-        // Se è una directory, esplora ricorsivamente
-        struct stat st;
-        if (stat(full_path.c_str(), &st) == 0 && S_ISDIR(st.st_mode)) 
-        {
-            std::string result = scan_directory_recursive(full_path, libname);
-            if (!result.empty()) 
-            {
-                closedir(dir);
-                return result;
-            }
-        }
-    }
-    closedir(dir);
-    return "";
-}
-#endif
-
-class zpaqfranzsftp2 
-{
-private:
-    std::string host;
-    std::string username;
-    std::string password;
-    std::string ssh_key_path;
-    int 		port;
-    bool 		use_ssh_key;
-	static bool dllloaded;
-   
-    
-    // Callback per scrivere i dati ricevuti (per remotegetfilesize)
-    static size_t write_callback(void* contents, size_t size, size_t nmemb, void* userp) 
-	{
-		if (!contents)
-			return size*nmemb; // compiler be quiet
-		if (userp)
-			return size*nmemb; // compiler be quiet
-        // Non facciamo nulla, ci interessa solo l'header
-        return size * nmemb;
-    }
-	
-	
-    // Callback per il progresso del download
-	 static int download_progress_callback(void* clientp, curl_off_t dltotal, curl_off_t dlnow, curl_off_t ultotal, curl_off_t ulnow) 
-	 {
-			 
-        sftp_downloaddata* data 	= (sftp_downloaddata*)clientp;
-        int64_t current_time 		= mtime();
-		
-		if (dltotal+ultotal>ulnow)
-			 current_time++; // compiler be quiet
-        
-        // Aggiorna ogni secondo
-        if (current_time - data->last_progress_time >= 1) 
-		{
-            data->last_progress_time 	= current_time;
-            int64_t total_downloaded 	= (int64_t)dlnow;
-            double elapsed 				= (mtime()-data->start_time)/1000.0;
-            
-            // Calcola la dimensione totale effettiva da scaricare
-            int64_t effective_total 					= data->total_size;
-           
-            if (data->end_offset > 0) 
-			{
-                effective_total = data->end_offset - data->start_offset + 1;
-            } 
-			else 
-			if (data->start_offset > 0) 
-			{
-                effective_total = data->total_size - data->start_offset;
-            }
-            
-            if (elapsed > 0) 
-			{
-				int64_t total_downloaded_including_existing = total_downloaded + data->local_existing_size;
-                double speed = total_downloaded / elapsed; // bytes/sec
-                double remaining = effective_total - total_downloaded;
-                double eta = (speed > 0) ? remaining / speed : 0;
-                
-                int eta_hours = (int)(eta / 3600);
-                int eta_minutes = (int)((eta - eta_hours * 3600) / 60);
-                int eta_seconds = (int)(eta - eta_hours * 3600 - eta_minutes * 60);
-                
-                if (flagdebug) 
-				{
-                    if (data->local_existing_size > 0) 
-					{
-                        myprintf("41030: Download (Resume): %s/%s total bytes (%5.2f%%) - now: %s - @ %s - ETA: %02d:%02d:%02d\n",
-                               migliaia(total_downloaded_including_existing), migliaia2(data->total_size), 
-                               (double)total_downloaded_including_existing / data->total_size * 100.0,
-                               migliaia3(total_downloaded), tohuman(speed), eta_hours, eta_minutes, eta_seconds);
-                    } 
-					else 
-					{
-                        myprintf("41031: Download (full): %s/%s total bytes (%5.2f%%) - now: %s - @ %s - ETA: %02d:%02d:%02d\n",
-                               migliaia(total_downloaded_including_existing), migliaia2(data->total_size), 
-                               (double)total_downloaded_including_existing / data->total_size * 100.0,
-                               migliaia3(total_downloaded), tohuman(speed), eta_hours, eta_minutes, eta_seconds);
-
-                    }
-                }
-            }
-        }
-        return 0;
-    }
-    
-
-    // Callback per scrivere i dati scaricati su file
-    static size_t write_file_callback(void* contents, size_t size, size_t nmemb, void* userp) 
-	{
-        FILE* file = (FILE*)userp;
-        return fwrite(contents, size, nmemb, file);
-    }
-	
-		// Callback per processare i dati di listing
-	
-
-	static size_t listing_callback(void* contents, size_t size, size_t nmemb, void* userp) 
-	{
-		sftp_listingdata* data 		= (sftp_listingdata*)userp;
-		size_t total_size 			= size * nmemb;
-		std::string content((char*)contents, total_size);
-		
-		if (flagdebug3) 
-			myprintf("41075: Listing data: %s\n", content.c_str());
-		
-		// Dividi il contenuto in righe
-		std::vector<std::string> lines;
-		size_t mystart 	= 0;
-		size_t mypoz 		= 0;
-		
-		while ((mypoz = content.find('\n', mystart)) != std::string::npos) 
-		{
-			std::string line = content.substr(mystart, mypoz - mystart);
-			if (!line.empty() && line != "\r") 
-			{
-				// Rimuovi \r se presente alla fine
-				if (!line.empty() && line.back() == '\r') 
-					line.pop_back();
-				lines.push_back(line);
-			}
-			mystart = mypoz + 1;
-		}
-		
-		// Aggiungi l'ultima riga se non termina con \n
-		if (mystart < content.length()) 
-		{
-			std::string line = content.substr(mystart);
-			if (!line.empty() && line != "\r") 
-			{
-				if (!line.empty() && line.back() == '\r') 
-					line.pop_back();
-				lines.push_back(line);
-			}
-		}
-		
-		// Processa ogni riga (formato simile a ls -la)
-		for (std::vector<std::string>::const_iterator line_it = lines.begin(); line_it != lines.end(); ++line_it) 
-		{
-			const std::string& line = *line_it;
-			if (line.empty() || line.length() < 10) 
-				continue;
-			
-			// Esempio di riga: drwxr-xr-x   5 franco   franco       4096 Dec 15 10:30 dirname
-			// O: -rw-r--r--   1 franco   franco    1234567 Dec 15 10:30 filename.ext
-			
-			sftpfileinfo fileinfo;
-			std::vector<std::string> tokens;
-			
-			// Dividi la riga in token manualmente
-			
-			size_t pos 		= 0;
-			
-			while (pos < line.length()) 
-			{
-				// Salta spazi iniziali
-				while (pos < line.length() && line[pos] == ' ') 
-					pos++;
-				if (pos >= line.length()) 
-					break;
-				
-				size_t start = pos;
-				// Trova fine del token
-				while (pos < line.length() && line[pos] != ' ') 
-					pos++;
-				
-				if (pos > start) 
-					tokens.push_back(line.substr(start, pos - start));
-			}
-			
-			if (tokens.size() < 9) 
-				continue; // Formato non valido
-			
-			// Parsing dei campi
-			fileinfo.permissions 	= tokens[0];
-			fileinfo.owner 			= tokens[2];
-			fileinfo.group 			= tokens[3];
-			
-			// Converti size manualmente
-			fileinfo.size = 0;
-			for (size_t i = 0; i < tokens[4].length(); i++) {
-				char c = tokens[4][i];
-				if (c >= '0' && c <= '9') 
-					fileinfo.size = fileinfo.size * 10 + (c - '0');
-			}
-			
-			fileinfo.isdirectory = (tokens[0][0] == 'd');
-			
-			// Il nome del file è dall'ottavo token in poi (può contenere spazi)
-			fileinfo.name = "";
-			for (size_t i = 8; i < tokens.size(); i++) 
-			{
-				if (i > 8) 
-					fileinfo.name += " ";
-				fileinfo.name += tokens[i];
-			}
-			
-			// Salta . e ..
-			if (fileinfo.name == "." || fileinfo.name == "..") 
-				continue;
-			
-			// Costruisci il percorso completo
-			fileinfo.fullname = data->remote_path;
-			if (!fileinfo.fullname.empty() && fileinfo.fullname.back() != '/') 
-				fileinfo.fullname += "/";
-			fileinfo.fullname += fileinfo.name;
-			
-			// Parsing della data (formato: "Dec 15 10:30" o "Dec 15  2023")
-			struct tm timeinfo;
-			memset(&timeinfo,0,sizeof(struct tm));
-
-			std::string month = tokens[5];
-			
-			// Converti day manualmente
-			int day = 0;
-			for (size_t i = 0; i < tokens[6].length(); i++) {
-				char c = tokens[6][i];
-				if (c >= '0' && c <= '9') 
-					day = day * 10 + (c - '0');
-			}
-				
-			std::string timeOrYear = tokens[7];
-			
-			// Converti mese
-			const char* months[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun",
-								   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
-			for (int i = 0; i < 12; i++) 
-				if (month == months[i]) 
-				{
-					timeinfo.tm_mon = i;
-					break;
-				}
-			timeinfo.tm_mday = day;
-			
-			if (timeOrYear.find(':') != std::string::npos) 
-			{
-				// Formato ora: "10:30" - assumiamo anno corrente
-				time_t now 			= time(NULL);
-				const struct tm* current 	= localtime(&now);
-				timeinfo.tm_year 	= current->tm_year;
-				
-				size_t colonPos 	= timeOrYear.find(':');
-				
-				// Converti ore e minuti manualmente
-				int hour 			= 0;
-				for (size_t i = 0; i < colonPos; i++) 
-				{
-					char c = timeOrYear[i];
-					if (c >= '0' && c <= '9') 
-						hour = hour * 10 + (c - '0');
-				}
-				
-				int min = 0;
-				for (size_t i = colonPos + 1; i < timeOrYear.length(); i++) 
-				{
-					char c = timeOrYear[i];
-					if (c >= '0' && c <= '9') 
-						min = min * 10 + (c - '0');
-				}
-				
-				timeinfo.tm_hour = hour;
-				timeinfo.tm_min = min;
-			} 
-			else 
-			{
-				// Formato anno: "2023"
-				int year = 0;
-				for (size_t i = 0; i < timeOrYear.length(); i++) {
-					char c = timeOrYear[i];
-					if (c >= '0' && c <= '9') 
-						year = year * 10 + (c - '0');
-				}
-					
-				timeinfo.tm_year 	= year - 1900;
-				timeinfo.tm_hour 	= 0;
-				timeinfo.tm_min 	= 0;
-			}
-			
-			fileinfo.modtime = mktime(&timeinfo);
-			
-			// Applica filtro se specificato
-			if (!data->filter.empty() && !fileinfo.isdirectory) 
-			{
-				if (!matchWildcard(data->filter, fileinfo.name)) 
-				{
-					if (flagdebug3) 
-						myprintf("41249: File %s not in filter %s\n", 
-										 fileinfo.name.c_str(), data->filter.c_str());
-					continue;
-				}
-			}
-			
-			if (flagdebug) 
-			{
-				myprintf("41257: File founded: %s (%s) - %s bytes - %s\n", 
-					   fileinfo.name.c_str(), 
-					   fileinfo.isdirectory ? "DIR" : "FILE",
-					   migliaia(fileinfo.size),
-					   fileinfo.permissions.c_str());
-			}
-			
-			data->filearray->push_back(fileinfo);
-		}
-		
-		return total_size;
-	}
-
-
-public:
-    CURL* 		curl;
-	static 		curldynfunctions curldll;
- 
-
-	int kickstart()
-{
-    	
-
-#ifndef _WIN32
-    myprintf("38151: You should get libcurl.so, for example\n");
-#ifdef __APPLE__
-    myprintf("38158: macOS             :brew install curl\n");
-#else
-#ifdef __linux__
-    // apk (Alpine Package Keeper)
-    myprintf("38152: Alpine            :apk add curl\n");
-    
-    // apt (Advanced Package Tool)
-    myprintf("38153: Debian/Ubuntu     :apt install libcurl4\n");
-    myprintf("38154: Debian/Ubuntu     :sudo apt install libcurl4\n");
-    
-    // dnf (Dandified YUM)
-    myprintf("38155: Alma Linux        :dnf install curl\n");
-    myprintf("38156: Alma Linux        :sudo dnf install curl\n");
-    myprintf("38157: Amazon Linux (v2+):dnf install curl\n");
-    myprintf("38158: Fedora            :dnf install curl\n");
-    myprintf("38159: Oracle Linux (v8+):dnf install curl\n");
-    myprintf("38160: Rocky Linux       :dnf install curl\n");
-    
-    // emerge (Portage)
-    myprintf("38161: Gentoo            :emerge --ask net-misc/curl\n");
-    
-    // guix
-    myprintf("38162: Guix              :guix install curl\n");
-    
-    // nix-env
-    myprintf("38163: NixOS             :nix-env -i curl\n");
-    
-    // opkg (OpenWrt Package)
-    myprintf("38164: OpenWrt           :opkg install curl\n");
-    // pacman
-    myprintf("38165: Arch              :pacman -S curl\n");
-    // slackpkg
-    myprintf("38177: Slackware         :slackpkg install curl\n");
-    
-    // swupd (Clear Linux)
-    myprintf("38178: Clear Linux       :swupd bundle-add curl\n");
-    
-    // xbps-install (Void Linux)
-    myprintf("38179: Void              :xbps-install -S curl\n");
-    
-    // yum (older RHEL/CentOS)
-    myprintf("38180: Amazon Linux (v1) :yum install curl\n");
-    myprintf("38181: CentOS            :yum install curl\n");
-    myprintf("38182: Oracle Linux (v7-):yum install curl\n");
-    myprintf("38183: RHEL              :yum install curl\n");
-    myprintf("38184: SUSE              :zypper install libcurl4\n");
-#else
-    
-    // pkg (FreeBSD/Solaris/Termux style)
-    myprintf("38166: FreeBSD           :pkg install curl\n");
-    myprintf("38167: OPNSense          :pkg install curl\n");
-    myprintf("38168: pfSense           :pkg install curl\n");
-    myprintf("38169: OpenIndiana       :pkg install library/curl\n");
-    myprintf("38170: Solaris           :pkg install curl\n");
-    myprintf("38171: Termux            :pkg install curl\n");
-    myprintf("38172: TrueNAS           :pkg install curl\n");
-    
-    // pkg_add (OpenBSD)
-    myprintf("38173: OpenBSD           :pkg_add curl\n");
-    myprintf("38174: OpenBSD           :doas pkg_add curl\n");
-    
-    // pkgin (NetBSD)
-    myprintf("38175: NetBSD            :pkgin install curl\n");
-    
-    // pkgman (Haiku)
-    myprintf("38176: Haiku             :pkgman install curl\n");
-    
-    myprintf("38185: Conda             :conda install curl\n");
-    
-    myprintf("38186: Manual            :Get https://curl.se, then ");
-    myprintf("./configure --disable-static && make && sudo make install\n");
-#endif  // __linux__
-#endif  // __APPLE__
-    return 0;
-#endif  // _WIN32
-
-
-#ifdef ZPAQ_VERSION
-#ifdef _WIN32
-		std::string randnocache="?"+generaterandomstring(10);
-		
-#ifdef _WIN64
-		std::string dllname="libcurl-x64.dll";
-		std::string	http_dll="http://www.francocorbelli.it/zpaqfranz/win64/"+dllname;
-#else
-		std::string dllname="libcurl.dll";
-		std::string	http_dll="http://www.francocorbelli.it/zpaqfranz/win32/"+dllname;
-#endif
-
-		myprintf("07755! Houston, %s not found. Getting from author's website\n",dllname.c_str());
-		
-		wchar_t myexepath[_MAX_PATH];
-		GetModuleFileName(NULL,myexepath,_MAX_PATH);
-		std::string temp=wtou(myexepath);
-	
-		std::string mypath=extractfilepath(temp);
-		if (flagdebug)
-			myprintf("07776: fullzpaqexename %s\n",temp.c_str());
-		std::string	dllfile	=mypath+dllname;
-		myprintf("03191: Downloading %s 8.11.1.0 => %Z\n",dllname.c_str(),dllfile.c_str());
-		myprintf("03192: Taking from %s\n",http_dll.c_str());
-		std::string 	dllurl 	=http_dll+randnocache;
-		if (!downloadfile(dllurl,dllfile,true))
-		{
-			myprintf("07767$ Cannot download %s, sorry (no Internet?)\n",dllname.c_str());
-			return 2;
-		}
-		myprintf("\n");
-		franz_do_hash dummy("SHA-256");
-		int64_t starthash=mtime();
-		int64_t dimensionescaricata=prendidimensionefile(dllfile.c_str());
-		string hashreloaded=dummy.filehash(dllfile,false,starthash,dimensionescaricata);
-		myprintf("\n");
-		
-#ifdef _WIN64
-		string goodhash="2EA8DBCA33DE476B23497A10ACE1A76C54DDCEF061E866771BF737A376DDC882";
-#else
-		string goodhash="620492F47179274AFE840A1AC4EDDFDC5E7F87A014D296FB35CCFDFA2251D46B";
-#endif
-		if (hashreloaded!=goodhash)
-		{
-			myprintf("07773$ %s size %s, checking SHA-256\n",dllname.c_str(),migliaia(dimensionescaricata));
-			myprintf("07771$ SHA-256 expected %s != downloaded %s\n",goodhash.c_str(),hashreloaded.c_str());
-			return 2;
-		}
-		myprintf("00734$ Please restart zpaqfranz. %s is now OK\n",dllname.c_str());
-#endif
-#endif
-		return 1;
-	}
-
-#ifdef __APPLE__
-// Funzione per macOS: cerca libname con estensione .dylib
-static std::string findso_macos(const std::string& i_libname) 
-{
-    std::string libname = i_libname + ".dylib"; // Aggiunge .dylib
-    
-    // Prima cerca nelle directory di Homebrew (ricerca ricorsiva)
-    const char* homebrew_paths[] = {
-        "/usr/local/Cellar/curl",     // Homebrew (Intel)
-        "/opt/homebrew/Cellar/curl"   // Homebrew (Apple Silicon)
-    };
-    
-    int homebrew_count = sizeof(homebrew_paths) / sizeof(homebrew_paths[0]);
-    for (int i = 0; i < homebrew_count; i++) 
-    {
-        const char* base_path = homebrew_paths[i];
-        if (flagdebug2)
-            myprintf("92649: Scanning recursively <<%s>>\n", base_path);
-        std::string result = scan_directory_recursive(base_path, libname);
-        if (!result.empty()) 
-            return result;
-    }
-    
-    // Poi cerca nei percorsi standard
-    const char* standard_paths[] = {
-        "/usr/local/lib/",   // Homebrew (linkato)
-        "/usr/lib/",         // Sistema macOS
-    };
-    
-    int standard_count = sizeof(standard_paths) / sizeof(standard_paths[0]);
-    for (int j = 0; j < standard_count; j++) 
-    {
-        const char* path = standard_paths[j];
-        std::string full_path = std::string(path) + libname;
-        if (flagdebug2)
-            myprintf("52559: Checking <<%s>>\n", full_path.c_str());
-        if (access(full_path.c_str(), F_OK) == 0) // fileexists
-            return full_path;
-    }
-    
-    return "";
-}
-#else
-    
-#endif
-
-
-	static bool loadLibrary()
-	{
-		if (dllloaded)
-			return true;
-
-	#ifdef _WIN32
-	#ifdef _WIN64
-		std::string dllname = "libcurl-x64.dll";
-	#else
-		std::string dllname = "libcurl.dll";
-	#endif
-
-		HMODULE hModule = LoadLibraryA(dllname.c_str());
-		if (!hModule)
-		{
-			myprintf("45559$ Cannot load %s\n", dllname.c_str());
-			return false;
-		}
-
-		// Load all function pointers con cast intermedio a void*
-		curldll.easy_reset = reinterpret_cast<curl_easy_reset_t>(
-			reinterpret_cast<void*>(GetProcAddress(hModule, "curl_easy_reset")));
-		curldll.easy_init = reinterpret_cast<curl_easy_init_t>(
-			reinterpret_cast<void*>(GetProcAddress(hModule, "curl_easy_init")));
-		curldll.easy_setopt = reinterpret_cast<curl_easy_setopt_t>(
-			reinterpret_cast<void*>(GetProcAddress(hModule, "curl_easy_setopt")));
-		curldll.easy_perform = reinterpret_cast<curl_easy_perform_t>(
-			reinterpret_cast<void*>(GetProcAddress(hModule, "curl_easy_perform")));
-		curldll.easy_strerror = reinterpret_cast<curl_easy_strerror_t>(
-			reinterpret_cast<void*>(GetProcAddress(hModule, "curl_easy_strerror")));
-		curldll.easy_getinfo = reinterpret_cast<curl_easy_getinfo_t>(
-			reinterpret_cast<void*>(GetProcAddress(hModule, "curl_easy_getinfo")));
-		curldll.slist_append = reinterpret_cast<curl_slist_append_t>(
-			reinterpret_cast<void*>(GetProcAddress(hModule, "curl_slist_append")));
-		curldll.slist_free_all = reinterpret_cast<curl_slist_free_all_t>(
-			reinterpret_cast<void*>(GetProcAddress(hModule, "curl_slist_free_all")));
-		curldll.easy_cleanup = reinterpret_cast<curl_easy_cleanup_t>(
-			reinterpret_cast<void*>(GetProcAddress(hModule, "curl_easy_cleanup")));
-		curldll.global_init = reinterpret_cast<curl_global_init_t>(
-			reinterpret_cast<void*>(GetProcAddress(hModule, "curl_global_init")));
-		curldll.global_cleanup = reinterpret_cast<curl_global_cleanup_t>(
-			reinterpret_cast<void*>(GetProcAddress(hModule, "curl_global_cleanup")));
-		curldll.easy_duphandle = reinterpret_cast<curl_easy_duphandle_t>(
-			reinterpret_cast<void*>(GetProcAddress(hModule, "curl_easy_duphandle")));
-		curldll.my_version_info = reinterpret_cast<curl_version_info_t>(
-			reinterpret_cast<void*>(GetProcAddress(hModule, "curl_version_info")));
-
-		// Verify all functions were loaded
-		if (!curldll.easy_reset || !curldll.easy_init || !curldll.easy_setopt ||
-			!curldll.easy_perform || !curldll.easy_strerror || !curldll.easy_getinfo ||
-			!curldll.slist_append || !curldll.slist_free_all || !curldll.easy_cleanup ||
-			!curldll.global_init || !curldll.global_cleanup || !curldll.easy_duphandle
-			|| (!curldll.my_version_info))
-		{
-			myprintf("46967: Failed to load one or more libcurl functions (older %s?)\n", dllname.c_str());
-			FreeLibrary(hModule);
-			return false;
-		}
-
-		dllloaded = true;
-		return true;
-	#else
-		
-		void *hModule 	= dlopen("libcurl.so", RTLD_LAZY); //first try
-		if (!hModule)
-		{
-			if (flagdebug)
-				myprintf("38530: second try\n");
-			hModule 	= dlopen("libcurl.so.4", RTLD_LAZY); //second try
-		}
-#ifdef __APPLE__
-		if (!hModule)
-		{
-			if (flagdebug)
-				myprintf("38530: Apple try\n");
-			hModule 	= dlopen("libcurl.dylib", RTLD_LAZY); //Apple is always different 
-			if (!hModule)
-			{
-				if (flagdebug)
-					myprintf("18530: Apple try (2nd)\n");
-				string wearedesperate=findso_macos("libcurl");
-				if (flagdebug)
-					myprintf("38543: wearedesperate %s\n",wearedesperate.c_str());
-				if (wearedesperate!="")
-					hModule = dlopen(wearedesperate.c_str(), RTLD_LAZY);
-			}
-		}
-#endif
-
-		if (!hModule)
-		{
-			myprintf("46919$ Cannot load libcurl.so, sorry\n");
-#ifdef _WIN32
-			(void)kickstart();
-#endif
-			return false;
-		}
-		curldll.easy_reset 		= (curl_easy_reset_t)		dlsym(hModule, "curl_easy_reset");
-		curldll.easy_init 		= (curl_easy_init_t)		dlsym(hModule, "curl_easy_init");
-		curldll.easy_setopt 	= (curl_easy_setopt_t)		dlsym(hModule, "curl_easy_setopt");
-		curldll.easy_perform 	= (curl_easy_perform_t)		dlsym(hModule, "curl_easy_perform");
-		curldll.easy_strerror 	= (curl_easy_strerror_t)	dlsym(hModule, "curl_easy_strerror");
-		curldll.easy_getinfo 	= (curl_easy_getinfo_t)		dlsym(hModule, "curl_easy_getinfo");
-		curldll.slist_append 	= (curl_slist_append_t)		dlsym(hModule, "curl_slist_append");
-		curldll.slist_free_all 	= (curl_slist_free_all_t)	dlsym(hModule, "curl_slist_free_all");
-		curldll.easy_cleanup 	= (curl_easy_cleanup_t)		dlsym(hModule, "curl_easy_cleanup");
-		curldll.global_init 	= (curl_global_init_t)		dlsym(hModule, "curl_global_init");
-		curldll.global_cleanup 	= (curl_global_cleanup_t)	dlsym(hModule, "curl_global_cleanup");
-		curldll.easy_duphandle 	= (curl_easy_duphandle_t)	dlsym(hModule, "curl_easy_duphandle");
-
-		dllloaded = true;
-		return true;
-	#endif
-	}
-
-    std::string 	getHost() 		const { return host; }
-    int 			getPort() 		const { return port; }
-    std::string 	getUsername() 	const { return username; }
-    std::string 	getPassword() 	const { return password; }
-    std::string 	getKey() 		const { return ssh_key_path; }
-								
-	zpaqfranzsftp2() : port(22), use_ssh_key(false), curl(NULL)
-    {
-		if (!dllloaded)
-		{	
-			if (flagdebug)
-				myprintf("40822: do loadLibrary()\n");
-			if (!loadLibrary())
-			{
-				myprintf("40832: No libcurl. Doing a kickstart\n");
-				kickstart();
-				seppuku();
-			}
-		}
-		Kurl_global_init(CURL_GLOBAL_DEFAULT);
-    }
-    
-    ~zpaqfranzsftp2() 
-	{
-        if (flagdebug3) 
-			myprintf("41182: zpaqfranzsftp destructor\n");
-        disconnect();
-        Kurl_global_cleanup();
-    }
-	
-    
-    // Imposta i parametri di connessione con password
-    void setConnection(const std::string& h, int p, const std::string& user, const std::string& pass) 
-	{
-        host 		= h;
-        port 		= p;
-        username 	= user;
-        password 	= pass;
-        use_ssh_key = false;
-        if (flagdebug3) 
-			myprintf("41192: SFTP setconnection to %s:%d user:%s\n", host.c_str(), port, username.c_str());
-    }
-    
-    // Imposta i parametri di connessione con chiave SSH
-    void setConnectionSSH(const std::string& h, int p, const std::string& user, const std::string& key_path) 
-	{
-		if (!fileexists(key_path))
-		{
-			myprintf("\n");
-			myprintf("38331: GURU -ssh keyfile does not exists <<%Z>>\n",key_path.c_str());
-			seppuku();
-		}
-        host 			= h;
-        port 			= p;
-        username 		= user;
-        ssh_key_path 	= key_path;
-        use_ssh_key 	= true;
-        if (flagdebug3) 
-			myprintf("41205: SFTP with SSH: %s:%d user:%s key:%s\n", 
-                             host.c_str(), port, username.c_str(), key_path.c_str());
-    }
-    
-    // Connessione al server
-    bool connect() 
-	{
-        if (flagdebug3) 
-			myprintf("31212: connect() to sftp server\n");
-        
-        curl = Kurl_easy_init();
-        if (!curl) 
-		{
-            if (flagdebug) 
-				myprintf("41218! Cannot init curl!\n");
-            return false;
-        }
-        
-        char url[1024];
-        snprintf(url,sizeof(url), "sftp://%s:%d/", host.c_str(), port);
-        
-        Kurl_easy_setopt(curl, CURLOPT_URL, url);
-        Kurl_easy_setopt(curl, CURLOPT_USERNAME, username.c_str());
-        
-        if (use_ssh_key) 
-		    Kurl_easy_setopt(curl, CURLOPT_SSH_PRIVATE_KEYFILE, ssh_key_path.c_str());
-         else 
-		    Kurl_easy_setopt(curl, CURLOPT_PASSWORD, password.c_str());
-
-        Kurl_easy_setopt(curl, CURLOPT_SSH_AUTH_TYPES, CURLSSH_AUTH_PASSWORD | CURLSSH_AUTH_PUBLICKEY);
-        Kurl_easy_setopt(curl, CURLOPT_VERBOSE, flagdebug3 ? 1L : 0L);
-        
-        if (flagdebug3) 
-			myprintf("41237: sftp connection - done\n");
-        return true;
-    }
-    
-    void disconnect() 
-	{
-        if (curl) 
-		{
-            if (flagdebug3) 
-				myprintf("41254: Closing (disconenct) from SFTP\n");
-            Kurl_easy_cleanup(curl);
-            curl = NULL;
-        }
-    }
-    
-// Struttura per contare i bytes ricevuti
-	struct FileInfo 
-	{
-		int64_t size;
-		bool file_exists;
-	};
-
-	// Callback che conta i bytes ricevuti (anche se sono zero)
-	static size_t count_bytes_callback(void* contents, size_t size, size_t nmemb, struct FileInfo* info) 
-	{
-		(void)contents;
-		size_t total_size = size * nmemb;
-		info->size += total_size;
-		info->file_exists = true;  // Se il callback viene chiamato, il file esiste
-		return total_size;
-	}
-
-	int64_t remotegetfilesize(const std::string& remote_file) 
-	{
-		if (!curl) 
-		{
-			myprintf("41258! No curl in remotegetfilesize\n");
-			return -1;
-		}
-		
-		if (flagdebug3) 
-			myprintf("41263: Getting remote file size %s\n", remote_file.c_str());
-		
-		CURL* curl_temp = Kurl_easy_duphandle(curl);
-		if (!curl_temp) 
-		{
-			myprintf("41268! Impossible to duplicate handle curl\n");
-			return -1;
-		}
-		
-		char url[1024];
-		snprintf(url, sizeof(url),"sftp://%s:%d%s", host.c_str(), port, remote_file.c_str());
-		
-		// Prima fase: verifica se il file esiste usando HEAD request
-		Kurl_easy_setopt(curl_temp, CURLOPT_URL, url);
-		Kurl_easy_setopt(curl_temp, CURLOPT_NOBODY, 1L);
-		Kurl_easy_setopt(curl_temp, CURLOPT_WRITEFUNCTION, write_callback);
-		
-		CURLcode res = Kurl_easy_perform(curl_temp);
-		
-		if (res != CURLE_OK) 
-		{
-			if (flagdebug3) 
-				myprintf("41297! Remote file not found or error: %s\n", Kurl_easy_strerror(res));
-			Kurl_easy_cleanup(curl_temp);
-			return -1;
-		}
-		
-		// Il file esiste, ora proviamo a ottenere la dimensione
-		curl_off_t size = -1;
-		res = Kurl_easy_getinfo(curl_temp, CURLINFO_CONTENT_LENGTH_DOWNLOAD_T, &size);
-		
-		if (res == CURLE_OK && size >= 0) 
-		{
-			// Abbiamo ottenuto la dimensione direttamente
-			if (flagdebug3) 
-				myprintf("41291: remote file size %s bytes (via CURLINFO)\n", migliaia((int64_t)size));
-			Kurl_easy_cleanup(curl_temp);
-			return (int64_t)size;
-		}
-		
-		// Seconda fase: se non riusciamo a ottenere la dimensione, 
-		// facciamo un download completo per contare i bytes
-		if (flagdebug3) 
-			myprintf("41285: CURLINFO failed, trying full download to count bytes\n");
-		
-		struct FileInfo info = {0, false};
-		
-		// Reset delle opzioni per il download completo
-		Kurl_easy_setopt(curl_temp, CURLOPT_NOBODY, 0L);  // Abilita il download del corpo
-		Kurl_easy_setopt(curl_temp, CURLOPT_WRITEFUNCTION, count_bytes_callback);
-		Kurl_easy_setopt(curl_temp, CURLOPT_WRITEDATA, &info);
-		
-		res = Kurl_easy_perform(curl_temp);
-		
-		int64_t file_size = -1;
-		if (res == CURLE_OK) 
-		{
-			file_size = info.size;  // Può essere 0 per file vuoti
-			if (flagdebug3) 
-				myprintf("41291: remote file size %s bytes (via download)\n", migliaia(file_size));
-		} 
-		else 
-		{
-			if (flagdebug3) 
-				myprintf("41299! Error during file download: %s\n", Kurl_easy_strerror(res));
-		}
-		
-		Kurl_easy_cleanup(curl_temp);
-		return file_size;
-	}
-    
-	
-	bool karica(const std::string& local_file, const std::string& remote_file, bool force) 
-	{
-		if (!curl) 
-		{
-			myprintf("41253! No curl in karica\n");
-			return false;
-		}
-
-		if (flagdebug3) 
-			myprintf("41315: karica %s -> %s (force: %s)\n", local_file.c_str(), remote_file.c_str(), force ? "true" : "false");
-		
-		// Ottieni dimensione file locale
-		int64_t local_size = prendidimensionefile(local_file.c_str());
-		if (local_size < 0) 
-		{
-			myprintf("41322: local file not found! %s\n",local_file.c_str());
-			return false;
-		}
-		
-		if (flagdebug3) 
-			myprintf("41327: Local file size %s bytes\n", migliaia(local_size));
-		
-	    std::vector<std::string> files_to_upload;
-		files_to_upload.push_back(local_file);
-		std::string remotepath=extractfilepath(remote_file);
-		
-		
-		//rsync with 1 thread only
-		if (sftp_rsync(files_to_upload,remotepath,force,1))
-		{
-			if (flagdebug3) 
-				myprintf("41439: upload successfully done\n");
-			return true;
-		}
-		return false;
-	}
-
-    
-    // Scarica un file o una parte di file dal remoto al locale
-    bool downfilerange(const std::string& i_remote, const std::string& i_local, curl_off_t i_start, curl_off_t i_end, bool i_append) 
-	{
-	    if (!curl) 
-		{
-            myprintf("41254! No curl in downfilerange\n");
-			return false;
-        }
-
-        if (flagdebug) 
-		{
-            if (i_start == 0 && i_end == 0) 
-			{
-				myprintf("41566: down full : %s -> %s (append: %s)\n", 
-                       i_remote.c_str(), i_local.c_str(), i_append ? "true" : "false");
-            } 
-			else 
-			{
-                myprintf("41571: down RANGE : %s -> %s (bytes %s-%s, append: %s)\n", 
-                       i_remote.c_str(), i_local.c_str(), migliaia(i_start), migliaia2(i_end), i_append ? "true" : "false");
-            }
-        }
-        
-        // Ottieni dimensione file remoto
-        int64_t remote_size = remotegetfilesize(i_remote);
-        if (remote_size < 0) 
-		{
-            myprintf("41580: cannot find remote!\n");
-			return false;
-        }
-        
-        if (flagdebug3) 
-			myprintf("41585: remote file size for down : %s bytes\n",migliaia(remote_size));
-        
-        // Gestione modalità append
-        curl_off_t actual_start 	= i_start;
-        curl_off_t actual_end 		= i_end;
-        bool is_resume_mode 		= false;
-        int64_t local_size 			= 0;
-        
-        if (i_append && (i_start == 0 && i_end == 0)) 
-		{
-            // Modalità append: controlla se il file locale esiste
-            local_size = prendidimensionefile(i_local.c_str());
-            if (local_size > 0) 
-			{
-                if (local_size < remote_size) 
-				{
-                    // File locale parziale: riprendi download
-                    actual_start 	= local_size;
-                    actual_end 		= 0; // Fino alla fine
-                    is_resume_mode 	= true;
-                    if (flagdebug3) 
-						myprintf("41606: *** RESUME *** - local: %s bytes, restarting from offset %s (%s bytes to transfer)\n", 
-                                         migliaia(local_size), migliaia2(actual_start), migliaia3(remote_size - local_size));
-                } 
-				else if (local_size == remote_size) 
-				{
-                    // File già completo
-                    if (flagdebug3) 
-						myprintf("41613: same down size - SKIP\n");
-                    return true;
-                } else 
-				{
-                    // File locale più grande del remoto: errore o file corrotto
-                    if (flagdebug) 
-						myprintf("41619! Warning: local bigger than remote (%s > %s) - Download interrupted\n", 
-                                         migliaia(local_size), migliaia(remote_size));
-                    // Procedi con download completo sovrascrivendo
-                }
-            } 
-			else 
-			{
-    			myprintf("41627! local file does not exists\n");
-	        }
-        }
-        
-        // Validazione range (usa actual_start/actual_end dopo gestione append)
-        if (actual_start != 0 || actual_end != 0) 
-		{
-            if (actual_start < 0 || actual_end < 0 || actual_start >= remote_size) 
-			{
-				myprintf("41636! error - invalid range\n");
-                return false;
-            }
-            if (actual_end > 0 && actual_end >= remote_size) 
-			{
-                myprintf("41640: actual_end too big => to file size\n");
-                actual_end = remote_size - 1;
-            }
-            if (actual_end > 0 && actual_start > actual_end) 
-			{
-                myprintf("41656: error actual_start > actual_end\n");
-                return false;
-            }
-        }
-        
-        FILE* file = fopen(i_local.c_str(), is_resume_mode ? "ab" : "wb");
-        if (!file) 
-		{
-            myprintf("41653! cannot on local file %s : %s\n", i_local.c_str(),is_resume_mode ? "open to append" : "creating");
-            return false;
-        }
-        
-        CURL* curl_download = Kurl_easy_duphandle(curl);
-        if (!curl_download) 
-		{
-            fclose(file);
-            myprintf("41661! cannot dup handle downrange\n");
-            return false;
-        }
-        
-        char url[1024];
-        snprintf(url, sizeof(url),"sftp://%s:%d%s", host.c_str(), port, i_remote.c_str());
-        
-        sftp_downloaddata download_data;
-        download_data.file 					= file;
-        download_data.total_size 			= remote_size;
-        download_data.downloaded 			= 0;
-        download_data.start_time 			= mtime();
-		download_data.last_progress_time 	= download_data.start_time;
-        download_data.start_offset 			= actual_start;
-        download_data.end_offset 			= actual_end;
-        download_data.local_existing_size 	= is_resume_mode ? local_size : 0;
-        
-        Kurl_easy_setopt(curl_download, CURLOPT_URL, url);
-        Kurl_easy_setopt(curl_download, CURLOPT_WRITEFUNCTION, write_file_callback);
-        Kurl_easy_setopt(curl_download, CURLOPT_WRITEDATA, file);
-        
-        // Imposta range se necessario
-        if (actual_start != 0 || actual_end != 0) 
-		{
-            std::string rangeStr;
-            if (actual_end == 0) 
-	            rangeStr = std::to_string(actual_start) + "-";
-            else 
-			    rangeStr = std::to_string(actual_start) + "-" + std::to_string(actual_end);
-            Kurl_easy_setopt(curl_download, CURLOPT_RANGE, rangeStr.c_str());
-            if (flagdebug3) 
-				myprintf("41692: range: %s\n", rangeStr.c_str());
-        }
-        
-		Kurl_easy_setopt(curl_download, CURLOPT_XFERINFOFUNCTION, download_progress_callback);
-		Kurl_easy_setopt(curl_download, CURLOPT_XFERINFODATA, &download_data);
-        Kurl_easy_setopt(curl_download, CURLOPT_NOPROGRESS, 0L);
-        
-        CURLcode res = Kurl_easy_perform(curl_download);
-        
-        fclose(file);
-        Kurl_easy_cleanup(curl_download);
-        
-        if (res != CURLE_OK) 
-		{
-            myprintf("41706! error download: %s\n", Kurl_easy_strerror(res));
-            remove(i_local.c_str()); // Rimuovi file parziale
-            return false;
-        }
-        
-        if (flagdebug3) 
-			myprintf("41712: download done\n");
-        return true;
-    }
-    
-	struct Range 
-	{
-		curl_off_t 	start;
-		curl_off_t 	end;
-		std::string file;
-	};	
-	bool down3(int64_t i_remote_size, const std::string& i_remote, const std::string& i_file1, const std::string& i_file2, const std::string& i_file3)
-	{
-		if (!curl) 
-		{
-			myprintf("41721! No curl in down3\n");
-			return false;
-		}
-
-		std::vector<Range> ranges; 
-		if (i_remote_size >= 65536) 
-		{
-			if (flagdebug3) 
-				myprintf("41738: File >= 64KB. 3 chunks\n");
-			
-			Range range1;
-			range1.start = 0;
-			range1.end = 16383;
-			range1.file = i_file1;
-			ranges.push_back(range1);
-			
-			Range range2;
-			range2.start = i_remote_size / 2;
-			range2.end = i_remote_size / 2 + 16383;
-			range2.file = i_file2;
-			ranges.push_back(range2);
-			
-			Range range3;
-			range3.start = i_remote_size - 16384;
-			range3.end = i_remote_size - 1;
-			range3.file = i_file3;
-			ranges.push_back(range3);
-		} 
-		else 
-		{
-			if (flagdebug3) 
-				myprintf("41544: debug: $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$ File %s  %s < 64KB. One-chunk download\n",i_remote.c_str(),migliaia(i_remote_size));
-			if (i_remote_size > 0) 
-			{
-				Range range;
-				range.start = 0;
-				range.end = i_remote_size - 1;
-				range.file = i_file1;
-				ranges.push_back(range);
-			}
-		}
-
-
-		CURL* curl_download = Kurl_easy_duphandle(curl);
-		if (!curl_download) 
-		{
-			myprintf("41756! impossible duphandle down3\n");
-			return false;
-		}
-		char url[1024];
-		snprintf(url, sizeof(url),"sftp://%s:%d%s", host.c_str(), port, i_remote.c_str());
-		Kurl_easy_setopt(curl_download, CURLOPT_URL, url);
-		Kurl_easy_setopt(curl_download, CURLOPT_WRITEFUNCTION, write_file_callback);
-		Kurl_easy_setopt(curl_download, CURLOPT_XFERINFOFUNCTION, download_progress_callback);
-		Kurl_easy_setopt(curl_download, CURLOPT_NOPROGRESS, 0L);
-		bool success = true;
-		for (size_t i = 0; i < ranges.size(); i++) 	
-		{
-			const Range& range = ranges[i];
-			if (flagdebug3) 
-				myprintf("41771: Download range: %s -> %s (bytes %s-%s)\n",
-                          i_remote.c_str(), range.file.c_str(), migliaia(range.start), migliaia2(range.end));
-
-			// Validazione range
-			if (range.start < 0 || range.end < 0 || range.start >= i_remote_size || range.end >= i_remote_size || range.start > range.end) 
-			{
-				if (flagdebug3) 
-					myprintf("41778: invalid range (%s-%s)\n", migliaia(range.start), migliaia2(range.end));
-				success = false;
-				break;
-			}
-			FILE* file = fopen(range.file.c_str(), "wb");
-			if (!file) 
-			{
-				myprintf("41768: cannot create local file %s\n", range.file.c_str());
-				success = false;
-				break;
-			}
-			sftp_downloaddata download_data;
-			download_data.file 					= file;
-			download_data.total_size 			= i_remote_size;
-			download_data.downloaded 			= 0;
-			download_data.start_time 			= mtime(); // time(NULL);
-			download_data.last_progress_time 	= download_data.start_time;
-			download_data.start_offset 			= range.start;
-			download_data.end_offset 			= range.end;
-			download_data.local_existing_size 	= 0; // No resume mode for these chunks
-			Kurl_easy_setopt(curl_download, CURLOPT_WRITEDATA, file);
-			std::string rangeStr = std::to_string(range.start) + "-" + std::to_string(range.end);
-			Kurl_easy_setopt(curl_download, CURLOPT_RANGE, rangeStr.c_str());
-			if (flagdebug3) 
-				myprintf("41805: Range range: %s\n", rangeStr.c_str());
-			Kurl_easy_setopt(curl_download, CURLOPT_PROGRESSDATA, &download_data);
-			CURLcode res = Kurl_easy_perform(curl_download);
-			fclose(file);
-			if (res != CURLE_OK) 
-			{
-				myprintf("41814! Error download range %s: %s\n", range.file.c_str(), Kurl_easy_strerror(res));
-				remove(range.file.c_str()); // Rimuovi file parziale
-				success = false;
-				break;
-			}
-			if (flagdebug3) 
-				myprintf("41821: Download chunk completated: %s\n", range.file.c_str());
-		}
-		Kurl_easy_cleanup(curl_download);
-		return success;
-	}
-    // Crea directory remota ricorsivamente
-	bool sftpmkdir(const std::string& i_remote) 
-	{
-		if (!curl) 
-		{
-			myprintf("41836! No curl in sftpmkdir\n");
-			return false;
-		}
-		if (flagdebug3) 
-			myprintf("41841: making directory %s\n", i_remote.c_str());
-		
-		std::string current_path = i_remote;
-		
-		// Normalizza il percorso (rimuovi / finale se presente)
-		if (!current_path.empty() && current_path.back() == '/') 
-			current_path.pop_back();
-		
-		// Crea ogni directory nel percorso incrementalmente
-		std::string cumulative_path;
-		size_t start = 0;
-		
-		// Se il percorso inizia con /, inizia dalla root
-		if (!current_path.empty() && current_path[0] == '/') 
-		{
-			cumulative_path = "";
-			start = 1;  // Salta il primo '/'
-		}
-		
-		size_t pos = start;
-		while (pos <= current_path.length()) 
-		{
-			// Trova il prossimo '/' o la fine della stringa
-			size_t next_slash = current_path.find('/', pos);
-			if (next_slash == std::string::npos) 
-				next_slash = current_path.length();
-			
-			// Se abbiamo trovato un componente
-			if (next_slash > pos) 
-			{
-				std::string component = current_path.substr(pos, next_slash - pos);
-				
-				// Costruisci il percorso incrementale
-				if (cumulative_path.empty()) 
-					cumulative_path = "/" + component;
-				else 
-					cumulative_path += "/" + component;
-				
-				if (flagdebug3) 
-					myprintf("41873: Attempt making : %s\n", cumulative_path.c_str());
-				
-				CURL* curl_mkdir = Kurl_easy_duphandle(curl);
-				if (!curl_mkdir) 
-				{
-					myprintf("41878! impossible duplicating sftpmkdir\n");
-					return false;
-				}
-				
-				// Per SFTP usa CURLOPT_QUOTE con mkdir, non CURLOPT_FTP_CREATE_MISSING_DIRS
-				char mkdir_command[1024];
-				snprintf(mkdir_command, sizeof(mkdir_command), "mkdir %s", cumulative_path.c_str());
-				
-				struct curl_slist* quote_list = NULL;
-				quote_list = Kurl_slist_append(quote_list, mkdir_command);
-				
-				char url[1024];
-				snprintf(url, sizeof(url),"sftp://%s:%d/", host.c_str(), port);
-				
-				Kurl_easy_setopt(curl_mkdir, CURLOPT_URL, url);
-				Kurl_easy_setopt(curl_mkdir, CURLOPT_QUOTE, quote_list);
-				Kurl_easy_setopt(curl_mkdir, CURLOPT_NOBODY, 1L);
-				
-				CURLcode res = Kurl_easy_perform(curl_mkdir);
-				
-				Kurl_slist_free_all(quote_list);
-				Kurl_easy_cleanup(curl_mkdir);
-				
-				if (res != CURLE_OK) 
-				{
-					// Potrebbe già esistere, proviamo a continuare
-					if (flagdebug3) 
-						myprintf("41896: Directory %s: %s (already existent?)\n", 
-								 cumulative_path.c_str(), Kurl_easy_strerror(res));
-				} 
-				else 
-				{
-					if (flagdebug) 
-						myprintf("41902: Directory %s successfully created\n", cumulative_path.c_str());
-				}
-			}
-			
-			pos = next_slash + 1;
-		}
-		
-		if (flagdebug3) 
-			myprintf("41907: mkdir done\n");
-		return true;
-	}
-    
-    // Cancella file remoto
-    bool sftpdeletefile(const std::string& i_remotefile) 
-	{
-        if (!curl) 
-		{
-            myprintf("41831! No curl in sftpdeletefile\n");
-			return false;
-        }
-        
-        if (flagdebug3) 
-			myprintf("41921: deleting remote file: %s\n", i_remotefile.c_str());
-        
-        CURL* curl_delete = Kurl_easy_duphandle(curl);
-        if (!curl_delete) 
-		{
-            myprintf("41926: cannot duplicate sftpdeletefile\n");
-            return false;
-        }
-        
-        char url[1024];
-        snprintf(url, sizeof(url),"sftp://%s:%d%s", host.c_str(), port, i_remotefile.c_str());
-        
-        // Imposta le opzioni per l'eliminazione
-        Kurl_easy_setopt(curl_delete, CURLOPT_URL, url);
-        Kurl_easy_setopt(curl_delete, CURLOPT_QUOTE, NULL);
-        
-        // Usa POSTQUOTE per eliminare il file dopo la connessione
-        struct curl_slist* commands 	= NULL;
-        std::string rm_command 			= "rm " + i_remotefile;
-        commands 						= Kurl_slist_append(commands, rm_command.c_str());
-        Kurl_easy_setopt(curl_delete, CURLOPT_POSTQUOTE, commands);
-        
-        Kurl_easy_setopt(curl_delete, CURLOPT_NOBODY, 1L);
-        CURLcode res = Kurl_easy_perform(curl_delete);
-        
-        Kurl_slist_free_all(commands);
-        Kurl_easy_cleanup(curl_delete);
-        
-        if (res != CURLE_OK) 
-		{
-            myprintf("41951: Error deleting %s\n", Kurl_easy_strerror(res));
-            return false;
-        }
-        
-        if (flagdebug3) 
-			myprintf("41956: remote file deleted OK\n");
-        return true;
-    }
-
-// Struttura per catturare l'output
-	struct WriteData 
-	{
-		std::string data;
-	};
-
-// Callback per catturare l'output
-	static size_t WriteCallback(void* contents, size_t size, size_t nmemb, WriteData* userdata) 
-	{
-		size_t totalSize = size * nmemb;
-		userdata->data.append((char*)contents, totalSize);
-		return totalSize;
-	}
-
-	bool check_ssh_support() 
-	{
-		curl_version_info_data* version_info = curldll.my_version_info(CURLVERSION_NOW);
-		
-		myprintf("38765: libcurl version: %s\n", version_info->version);
-		myprintf("38766: Supported protocols: ");
-		
-		bool ssh_supported = false;
-		for (int i = 0; version_info->protocols[i]; i++) 
-		{
-			myprintf("%s ", version_info->protocols[i]);
-			if (strcmp(version_info->protocols[i], "ssh") == 0) 
-				ssh_supported = true;
-		}
-		myprintf("\n");
-		
-		if (!ssh_supported) 
-		{
-			myprintf("38779! SSH protocol not supported in this libcurl build!\n");
-			return false;
-		}
-		
-		myprintf("SSH protocol is supported\n");
-		return true;
-	}
-
-	bool xremote_command(const std::string& command, std::string& output) 
-	{
-		if (!curl) 
-		{
-			myprintf("38747! No curl in xremote_command\n");
-			return false;
-		}
-		
-		if (flagdebug3) 
-			myprintf("41923: executing remote command: %s\n", command.c_str());
-		
-		CURL* curl_command = Kurl_easy_duphandle(curl);
-		if (!curl_command) 
-		{
-			myprintf("41932: cannot duplicate xremote_command\n");
-			return false;
-		}
-		
-		// Struttura per catturare l'output
-		WriteData writeData;
-		
-		char url[1024];
-		snprintf(url, sizeof(url), "sftp://%s:%d/", host.c_str(), port);
-		
-		Kurl_easy_setopt(curl_command, CURLOPT_URL, url);
-		
-		// Configura il callback per catturare l'output
-		Kurl_easy_setopt(curl_command, CURLOPT_WRITEFUNCTION, WriteCallback);
-		Kurl_easy_setopt(curl_command, CURLOPT_WRITEDATA, &writeData);
-		
-		// Usa QUOTE per eseguire il comando
-		struct curl_slist* commands = NULL;
-		commands = Kurl_slist_append(commands, command.c_str());
-		Kurl_easy_setopt(curl_command, CURLOPT_QUOTE, commands);
-		
-		// Non usare NOBODY se vuoi catturare l'output
-		Kurl_easy_setopt(curl_command, CURLOPT_NOBODY, 0L);
-		
-		CURLcode res = Kurl_easy_perform(curl_command);
-		
-		Kurl_slist_free_all(commands);
-		Kurl_easy_cleanup(curl_command);
-		
-		if (res != CURLE_OK) 
-		{
-			myprintf("31951: Error xcommand %s\n", Kurl_easy_strerror(res));
-			return false;
-		}
-		
-		output = writeData.data;
-		
-		if (flagdebug3) 
-			myprintf("41953: remote command OK, output: %s\n", output.c_str());
-		
-		return true;
-	}
-
-	// Funzione specifica per md5sum
-	bool xremote_md5sum(const std::string& pattern, std::string& md5_output) 
-	{
-		std::string command = "md5sum " + pattern;
-		return xremote_command(command, md5_output);
-	}
-
-	bool listremotedir(const std::string& i_remote, std::vector<sftpfileinfo>* o_filearray, const std::string& filter = "") 
-	{
-        if (!curl) 
-		{
-            myprintf("41831! No curl in listremotedir\n");
-			return false;
-        }
-		
-		if (!o_filearray) 
-		{
-			myprintf("42186: puntatore array null\n");
-			return false;
-		}
-		
-		if (flagdebug) 
-			myprintf("42190: Listing directory: %s (filter: %s)\n", 
-							 i_remote.c_str(), filter.empty() ? "none" : filter.c_str());
-		
-		// Pulisci l'array di output
-		o_filearray->clear();
-		
-		CURL* curl_list = Kurl_easy_duphandle(curl);
-		if (!curl_list) 
-		{
-			myprintf("42199: impossible to dup handle listremotedir\n");
-			return false;
-		}
-		
-		// Costruisci URL per listing - SFTP usa semplicemente l'URL della directory
-		char url[1024];
-		std::string dir_path = i_remote;
-		if (!dir_path.empty() && dir_path.back() != '/') 
-			dir_path += "/";
-		snprintf(url,sizeof(url), "sftp://%s:%d%s", host.c_str(), port, dir_path.c_str());
-		
-		// Prepara i dati per il callback
-		sftp_listingdata listing_data(o_filearray, i_remote, filter);
-		
-		// Configura curl per il listing SFTP
-		Kurl_easy_setopt(curl_list, CURLOPT_URL, url);
-		Kurl_easy_setopt(curl_list, CURLOPT_WRITEFUNCTION, listing_callback);
-		Kurl_easy_setopt(curl_list, CURLOPT_WRITEDATA, &listing_data);
-		
-		// Per SFTP, usa CURLOPT_DIRLISTONLY per ottenere solo i nomi
-		// o lascialo a 0 per informazioni dettagliate
-		Kurl_easy_setopt(curl_list, CURLOPT_DIRLISTONLY, 0L);
-		
-		CURLcode res = Kurl_easy_perform(curl_list);
-		Kurl_easy_cleanup(curl_list);
-		
-		if (res != CURLE_OK) 
-		{
-			myprintf("42233: Error listing directory: %s\n", Kurl_easy_strerror(res));
-			return false;
-		}
-
-		std::sort(o_filearray->begin(), o_filearray->end(), compareSftpFileInfo);
-		/*
-		// Ordina alfabeticamente il vettore risultato
-		std::sort(o_filearray->begin(), o_filearray->end(), [](const sftpfileinfo& a, const sftpfileinfo& b) {
-			return a.name < b.name;
-		});
-		*/
-		if (flagdebug3) 
-			myprintf("42243: listing done and sorted: %d elements\n", (int)o_filearray->size());
-		
-		return true;
-	}
-
-	bool sftp_down3parallela		(std::vector<sftpget3>& file_list, int i_thread);
-								
-	bool sftp_rsync	(	const 	std::vector<std::string>& local_files, 
-										const 	std::string& remote_path, 
-										bool 	force_flag, 
-										int 	i_thread);
-};
-
-// Strutture dati per il threading
-struct sftp_rsync_thread_data 
-{
-    int 							thread_id;
-    zpaqfranzsftp2* 				sftp_instance;
-    std::queue<std::string>* 		file_queue;
-    std::mutex* 					queue_mutex;
-    std::condition_variable* 		queue_cv;
-    std::string 					remote_path;
-    bool 							force_flag;
-    bool* 							should_stop;
-	int								maxbandwidth;
-    
-    // Statistiche per thread
-    std::string 					current_file;
-	int64_t 						current_file_size;
-    int64_t 						current_uploaded;
-    int64_t 						thread_start_time;
-    int64_t 						last_update_time;
-    double 							current_speed;
-    enum { SFTP_IDLE, SFTP_UPLOAD, SFTP_ERROR, SFTP_DONE } status;
-	int64_t							resume_from;
-	int 							ultima_percentuale;
-    std::string status_message;
-    
-    sftp_rsync_thread_data() : 
-	thread_id			(0), 
-	sftp_instance		(nullptr), 
-	file_queue			(nullptr), 
-    queue_mutex			(nullptr), 
-	queue_cv			(nullptr), 
-	force_flag			(false),
-	should_stop			(nullptr),
-	maxbandwidth		(0),
-	current_file_size	(0), 
-	current_uploaded	(0),
-    thread_start_time	(0), 
-	last_update_time	(0), 
-	current_speed		(0.0),
-    status				(SFTP_IDLE),
-	resume_from(0),
-	ultima_percentuale(0)	{}
-};
-
-struct sftp_rsync_progress_data 
-{
-    int 									total_files;
-    int 									completed_files;
-    int64_t 								total_start_time;
-    std::vector<sftp_rsync_thread_data*> 	threads;
-    std::mutex progress_mutex;
-    
-    sftp_rsync_progress_data() : 
-	total_files			(0), 
-	completed_files		(0), 
-	total_start_time	(0) {}
-};
-
-// Callback per il progresso dell'upload
-
-static size_t sftp_rsync_progress_callback(void* clientp, curl_off_t dltotal, curl_off_t dlnow,curl_off_t ultotal, curl_off_t ulnow) 
-{
-	(void)dlnow;
-	(void)ultotal;
-	(void)dltotal;
-    sftp_rsync_thread_data* data = static_cast<sftp_rsync_thread_data*>(clientp);
-    if (data) 
-	{
-		int64_t istante			= mtime();
-        int64_t time_from_start = istante - data->thread_start_time;
-
-		if (time_from_start>0)
-			if ((istante-data->last_update_time)>1000)
-			{
-				int64_t bytes_diff = data->current_uploaded;
-				if (bytes_diff > 0) 
-				{
-					data->current_speed = (double)bytes_diff / (time_from_start / 1000.0); 
-					/*
-					gotoxy(0,10+data->thread_id);
-					printf("Thread %d: time_from_start=%d bytes_diff=%d, speed=%s/s",
-                             data->thread_id, time_from_start, bytes_diff, tohuman3((int64_t)data->current_speed));
-					*/
-				}
-				data->last_update_time = istante;
-				data->current_uploaded = (int64_t)ulnow;
-			}
-     }
-    
-    return 0;
-}
-// Callback per la scrittura dei dati
-static size_t sftp_rsync_read_callback(void* ptr, size_t size, size_t nmemb, void* userdata) 
-{
-    FILE* file = static_cast<FILE*>(userdata);
-    return fread(ptr, size, nmemb, file);
-}
-
-// Funzione worker per ogni thread
-static void* sftp_rsync_worker_thread(void* arg) 
-{
-    sftp_rsync_thread_data* data = static_cast<sftp_rsync_thread_data*>(arg);
-    
-    while (!*(data->should_stop)) 
-	{
-        std::string current_file;
-        
-        {
-            std::unique_lock<std::mutex> lock(*(data->queue_mutex));
-            
-            // Sostituisci la lambda con un loop esplicito
-            while (data->file_queue->empty() && !*(data->should_stop)) {
-                data->queue_cv->wait(lock);
-            }
-            
-            if (*(data->should_stop)) 
-                break;
-            
-            if (!data->file_queue->empty()) 
-            {
-                current_file = data->file_queue->front();
-                data->file_queue->pop();
-            } 
-            else 
-                continue;
-        }
-        data->current_file = current_file;
-		
-        data->status 				= sftp_rsync_thread_data::SFTP_UPLOAD;
-        data->thread_start_time		= mtime();
-        data->last_update_time 		= data->thread_start_time;
-        data->current_uploaded 		= 0;
-        data->current_speed 		= 0.0;
-        data->ultima_percentuale 	= 0;
-        
-        // Verifica se il file locale esiste
-        if (!fileexists(current_file)) 
-		{
-            data->status 			= sftp_rsync_thread_data::SFTP_ERROR;
-            data->status_message 	= "File not foud";
-            continue;
-        }
-        
-        // Ottieni dimensione file locale
-        int64_t local_size = prendidimensionefile(current_file.c_str());
-        if (local_size < 0) 
-		{
-            data->status 			= sftp_rsync_thread_data::SFTP_ERROR;
-            data->status_message 	= "Size error";
-            continue;
-        }
-///		data->local_file_size= local_size;
-		
-        data->current_file_size = local_size;
-        
-        // Costruisci percorso remoto
-        std::string filename 	= extractfilename(current_file);
-        std::string remote_file = data->remote_path;
-        if (remote_file.back() != '/') remote_file += '/';
-        remote_file += filename;
-       
-        // Verifica se il file remoto esiste e la sua dimensione
-        int64_t remote_size = 0;
-        int64_t resume_from = 0;
-        
-		if (!data->force_flag) 
-		{
-			remote_size = data->sftp_instance->remotegetfilesize(remote_file);
-			
-			myprintf("DEBUG3: ********************************* %d %s\n", remote_size, remote_file.c_str());
-
-			// Se remote_size è -1, il file non esiste, procedi con upload completo
-			if (remote_size == -1) {
-				///fikoremote_size = 0;  // Tratta come file inesistente
-				resume_from = 0;
-			}
-			else if (remote_size > 0) 
-			{
-				if (remote_size >= local_size) 
-				{
-					data->status = sftp_rsync_thread_data::SFTP_DONE;
-					data->status_message = "Already done";
-					continue;
-				} 
-				else 
-				{
-					resume_from = remote_size;
-				}
-			}
-		}
-		data->resume_from=resume_from;
-        // Apri file locale
-        FILE* file = fopen(current_file.c_str(), "rb");
-        if (!file) 
-		{
-            data->status 			= sftp_rsync_thread_data::SFTP_ERROR;
-            data->status_message 	= "Error in fopen";
-            continue;
-        }
-		// OTTIMIZZAZIONE 1: Buffer più grande per la lettura
-		const size_t BUFFER_SIZE 	= 1024 * 1024; // 1MB invece del default
-		char* buffer 				= new char[BUFFER_SIZE];
-		setvbuf(file, buffer, _IOFBF, BUFFER_SIZE);
-        
-        // Se resume, salta alla posizione corretta
-        if (resume_from > 0) 
-		{
- #ifdef _WIN32
-			_fseeki64(file, resume_from, SEEK_SET);
-#else
-			fseeko(file, resume_from, SEEK_SET);
-#endif
-        }
-        
-        // Configura CURL per l'upload
-        CURL* curl_handle = Kurl_easy_duphandle(data->sftp_instance->curl);
-        if (!curl_handle) 
-		{
-            fclose(file);
-			delete[] buffer; // Libera il buffer in caso di errore
-            data->status 			= sftp_rsync_thread_data::SFTP_ERROR;
-            data->status_message 	= "CURL Error duphandle";
-            continue;
-        }
-        
-        char url[1024];
-        snprintf(url, sizeof(url),"sftp://%s:%d%s", 
-                data->sftp_instance->getHost().c_str(), 
-                data->sftp_instance->getPort(), 
-                remote_file.c_str());
-        
-        Kurl_easy_setopt(curl_handle, CURLOPT_URL, url);
-        Kurl_easy_setopt(curl_handle, CURLOPT_UPLOAD, 1L);
-		if (data->maxbandwidth>0)
-			Kurl_easy_setopt(curl_handle, CURLOPT_MAX_SEND_SPEED_LARGE,data->maxbandwidth);
-        Kurl_easy_setopt(curl_handle, CURLOPT_READFUNCTION, sftp_rsync_read_callback);
-        Kurl_easy_setopt(curl_handle, CURLOPT_READDATA, file);
-        Kurl_easy_setopt(curl_handle, CURLOPT_INFILESIZE_LARGE, (curl_off_t)(local_size - resume_from));
-        
-		
-		// OTTIMIZZAZIONE 2: Buffer size per libcurl
-		Kurl_easy_setopt(curl_handle, CURLOPT_BUFFERSIZE, BUFFER_SIZE);
-		///  experimental
-		Kurl_easy_setopt(curl_handle, CURLOPT_UPLOAD_BUFFERSIZE, BUFFER_SIZE); // Or a value up to 2MB
-	   // OTTIMIZZAZIONE 3: Timeout più elevati per evitare disconnessioni
-		Kurl_easy_setopt(curl_handle, CURLOPT_TIMEOUT, 0L);           // Nessun timeout totale
-		Kurl_easy_setopt(curl_handle, CURLOPT_LOW_SPEED_LIMIT, 1024L); // 1KB/s minimo
-		Kurl_easy_setopt(curl_handle, CURLOPT_LOW_SPEED_TIME, 30L);   // Per 30 secondi
-		
-		// OTTIMIZZAZIONE 4: Opzioni TCP per performance
-		Kurl_easy_setopt(curl_handle, CURLOPT_TCP_NODELAY, 1L);       // Disabilita Nagle algorithm
-		Kurl_easy_setopt(curl_handle, CURLOPT_TCP_KEEPALIVE, 1L);     // Mantieni connessione attiva
-		Kurl_easy_setopt(curl_handle, CURLOPT_TCP_KEEPIDLE, 60L);     // Keepalive dopo 60s
-		Kurl_easy_setopt(curl_handle, CURLOPT_TCP_KEEPINTVL, 30L);    // Interval tra keepalive
-		
-		// OTTIMIZZAZIONE 5: Opzioni SSH specifiche
-		Kurl_easy_setopt(curl_handle, CURLOPT_SSH_COMPRESSION, 0L);   // Disabilita compressione SSH
-	
-        if (resume_from > 0) 
-		    Kurl_easy_setopt(curl_handle, CURLOPT_RESUME_FROM_LARGE, (curl_off_t)resume_from);
-        
-        // Callback per il progresso
-        Kurl_easy_setopt(curl_handle, CURLOPT_XFERINFOFUNCTION, sftp_rsync_progress_callback);
-        Kurl_easy_setopt(curl_handle, CURLOPT_XFERINFODATA, data);
-        Kurl_easy_setopt(curl_handle, CURLOPT_NOPROGRESS, 0L);
-        
-        // Esegui upload
-        CURLcode res = Kurl_easy_perform(curl_handle);
-        
-        fclose(file);
-		delete[] buffer; // Libera il buffer in caso di errore
-        Kurl_easy_cleanup(curl_handle);
-        
-        if (res == CURLE_OK) 
-		{
-            data->status 			= sftp_rsync_thread_data::SFTP_DONE;
-            data->status_message 	= "Completed and OK";
-        } else 
-		{
-            data->status 			= sftp_rsync_thread_data::SFTP_ERROR;
-            data->status_message 	= Kurl_easy_strerror(res);
-        }
-    }
-    
-    return nullptr;
-}
-
-// Funzione per aggiornare la visualizzazione del progresso
-static void sftp_rsync_update_display(sftp_rsync_progress_data* progress) 
-{
-	bool	ismultithread=progress->threads.size()>1;
-	
-    // Calcola statistiche globali
-    int 		completed 		= 0;
-    double 		total_speed 	= 0.0;
-	double 		max_eta			= 0;
-	int64_t 	total_uploaded	= 0;
-	int64_t 	total_remaining	= 0;
-	
-    for (size_t i = 0; i < progress->threads.size(); ++i) 
-	{
-        const sftp_rsync_thread_data* thread = progress->threads[i];
-        if (thread->status == sftp_rsync_thread_data::SFTP_DONE) 
-		    completed++;
-        total_speed += thread->current_speed;
-    }
-    
-	if (ismultithread)
-		gotoxy(0, 1);
-    
-	
-    for (size_t i = 0; i < progress->threads.size(); ++i) 
-	{
-        sftp_rsync_thread_data* thread = progress->threads[i];
-		///int64_t remaining = thread->current_file_size-thread->current_uploaded;
-        int64_t remaining = thread->current_file_size-thread->current_uploaded-thread->resume_from;
-        
-        const char* status_str;
-        switch (thread->status) 
-		{
-            case sftp_rsync_thread_data::SFTP_IDLE:   status_str = "IDLE  "; color_yellow(); 	break;
-            case sftp_rsync_thread_data::SFTP_UPLOAD: status_str = "UPLOAD"; color_cyan(); 		break;
-            case sftp_rsync_thread_data::SFTP_ERROR:  status_str = "ERROR "; color_red(); 		break;
-            case sftp_rsync_thread_data::SFTP_DONE:   status_str = "DONE  "; color_green(); remaining=0; 
-			thread->current_uploaded	=0;
-			thread->current_speed		=0;
-			break;
-            default: status_str = "UNKNOW"; break;
-        }
-        total_remaining+=remaining;
-		double eta = (thread->current_speed > 0) ? remaining / thread->current_speed : 0;
-                
-		if (eta>max_eta)
-			max_eta=eta;
-		
-		int eta_hours 	= (int)(eta / 3600);
-		int eta_minutes = (int)((eta - eta_hours * 3600) / 60);
-		int eta_seconds = (int)(eta - eta_hours * 3600 - eta_minutes * 60);
-				
-		if (eta_hours>99)
-			eta_hours=99;
-		
-		total_uploaded+=thread->current_uploaded;
-		
-		  double percentuale = ((double)remaining / (thread->current_file_size + 1)) * 100.0;
-		int percentuale_intera = (int)(percentuale); // Percentuale completata (100 - rimanente)
-
-
-if ((percentuale_intera % 5 == 0) && (thread->ultima_percentuale != percentuale_intera)) 
-{
-	        thread->ultima_percentuale = percentuale_intera; // Aggiorna l'ultima percentuale
-  
- myprintf("#%02d [%7s] %03d%% %12s ETA:%02d:%02d:%02d | %12s @%12s/s | %s",
-                 thread->thread_id,
-                 status_str,
-				 percentuale_intera,
-				 tohuman(remaining),
-				 eta_hours, eta_minutes, eta_seconds,
-                 ///tohuman2(thread->current_file_size),
-                 tohuman3(thread->current_uploaded),
-                 tohuman4((int64_t)thread->current_speed),
-                 extractfilename(thread->current_file).c_str());
-} 
-else 
-{
- printf("#%02d [%7s] %03d%% %12s ETA:%02d:%02d:%02d | %12s @%12s/s | %s",
-                 thread->thread_id,
-                 status_str,
-				 percentuale_intera,
-				 tohuman(remaining),
-				 eta_hours, eta_minutes, eta_seconds,
-                 ///tohuman2(thread->current_file_size),
-                 tohuman3(thread->current_uploaded),
-                 tohuman4((int64_t)thread->current_speed),
-                 extractfilename(thread->current_file).c_str());
-}
-		color_restore();
-        eol();
-if ((percentuale_intera % 5 == 0) && (thread->ultima_percentuale != percentuale_intera)) 
-{
-		if (ismultithread)
-			myprintf("\n");
-		else
-			myprintf("\r");
-}
-else
-{
-		if (ismultithread)
-			printf("\n");
-		else
-			printf("\r");
-
-}
-    }
-
-	if (ismultithread)
-	{
-		static int last_console_y 	= 0;
-    
-		gotoxy(0, 0);
-		int eta_hours = (int)(max_eta / 3600);
-		int eta_minutes = (int)((max_eta - eta_hours * 3600) / 60);
-		int eta_seconds = (int)(max_eta - eta_hours * 3600 - eta_minutes * 60);
-		if (eta_hours>99)
-			eta_hours=99;
-			
-		myprintf("Global TODO:  %12s ETA:%02d:%02d:%02d   (%6.2f%%)    (%12s @%12s/s)",
-			tohuman(total_remaining),
-			eta_hours, eta_minutes, eta_seconds,
-			(double)completed * 100.0 / progress->total_files,
-			tohuman3(total_uploaded),
-			tohuman2(total_speed));
-
-		// Ricorda l'ultima posizione
-		int current_y = 1 + (int)progress->threads.size();
-		while (last_console_y > current_y) 
-		{
-			clear_line();
-			myprintf("\n");
-			last_console_y--;
-		}
-		last_console_y = current_y;
-	}
-}
-
-curldynfunctions 	zpaqfranzsftp2::curldll = {};
-bool 				zpaqfranzsftp2::dllloaded = false;
-
-bool zpaqfranzsftp2::sftp_rsync(const std::vector<std::string>& local_files, const std::string& remote_path, bool force_flag, int i_thread) 
-{
-    
-	if (local_files.empty()) 
-	{
-		myprintf("42516: No file to transfer\n");
-		return false;
-	}
-	
-	if ((i_thread < 1) || (i_thread > 99)) 
-	{
-		myprintf("42522: Invalid thread number : %d (1-99)\n", i_thread);
-		return false;
-	}
-	
-	if (!curl) 
-	{
-		myprintf("42528! Curl SFTP not OK\n");
-		return false;
-	}
-	
-	// Inizializza le strutture dati
-	std::queue<std::string> 	file_queue;
-	std::mutex 					queue_mutex;
-	std::condition_variable 	queue_cv;
-	bool should_stop 			= false;
-	
-	// Popola la coda con i file
-	for (std::vector<std::string>::const_iterator it = local_files.begin(); 
-     it != local_files.end(); ++it) 
-    file_queue.push(*it);
-/*
-	for (const auto& file : local_files) 
-		file_queue.push(file);
-*/	
-	// Crea struttura progresso
-	sftp_rsync_progress_data progress;
-	progress.total_files 		= (int)local_files.size();
-	progress.completed_files 	= 0;
-	progress.total_start_time 	= mtime();
-	
-	if (i_thread>(int)local_files.size())
-		i_thread=local_files.size();
-	
-	// Crea thread data
-	std::vector<sftp_rsync_thread_data> thread_data(i_thread);
-	std::vector<pthread_t> threads(i_thread);
-
-	if (g_sftp_bandwidth>0)
-		g_sftp_bandwidth=(g_sftp_bandwidth/i_thread);
-	for (int i = 0; i < i_thread; ++i) 
-	{
-		thread_data[i].thread_id 		= i + 1;
-		thread_data[i].sftp_instance 	= this;
-		thread_data[i].file_queue 		= &file_queue;
-		thread_data[i].queue_mutex 		= &queue_mutex;
-		thread_data[i].queue_cv 		= &queue_cv;
-		thread_data[i].remote_path 		= remote_path;
-		thread_data[i].force_flag 		= force_flag;
-		thread_data[i].should_stop 		= &should_stop;
-		thread_data[i].maxbandwidth 	= g_sftp_bandwidth;
-		
-		
-		progress.threads.push_back(&thread_data[i]);
-		
-		if (pthread_create(&threads[i], nullptr, sftp_rsync_worker_thread, &thread_data[i]) != 0) 
-		{
-			myprintf("42570! Error making thread  %d\n", i + 1);
-			should_stop = true;
-			return false;
-		}
-	}
-	
-	// Nascondi cursore e pulisci schermo
-	hide_cursor();
-	if (i_thread>1)
-	{
-		setupConsole();
-		printf("\033[2J"); //cls
-		printf("\033[%d;0H",(int)1);
-		restoreConsole();
-	}
-	else
-		myprintf("VERBOSE: Upload one file at time (single thread)\n");
-	// Loop di monitoraggio
-	while (!should_stop) 
-	{
-		{
-			std::lock_guard<std::mutex> lock(queue_mutex);
-			if (file_queue.empty()) 
-			{
-				// Verifica se tutti i thread hanno finito
-				bool all_done = true;
-				for (int i = 0; i < i_thread; ++i) 
-					if (thread_data[i].status == sftp_rsync_thread_data::SFTP_UPLOAD) 
-					{
-						all_done = false;
-						break;
-					}
-				if (all_done) 
-					should_stop = true;
-			}
-		}
-		
-		sftp_rsync_update_display(&progress);
-		
-		if (!should_stop) 
-#ifdef _WIN32
-			Sleep(1000); // Windows: pausa in millisecondi
-#else
-			usleep(1000000); // Linux: pausa di 1 secondo (1000 ms = 1000000 µs)
-#endif
-
-	}
-	
-	// Notifica tutti i thread di fermarsi
-	queue_cv.notify_all();
-	
-	// Attendi che tutti i thread finiscano
-	for (int i = 0; i < i_thread; ++i) 
-		pthread_join(threads[i], nullptr);
-	
-	// Aggiornamento finale
-	sftp_rsync_update_display(&progress);
-	
-	// Ripristina cursore
-	show_cursor();
-	
-	// Conta i successi
-	int successful	 = 0;
-	int errors 		= 0;
-	
-	for (int i=0;i<i_thread;i++)
-	{
-		if (thread_data[i].status == sftp_rsync_thread_data::SFTP_DONE) 
-		{
-			successful++;
-		} 
-		else 
-		if (thread_data[i].status == sftp_rsync_thread_data::SFTP_ERROR) 
-		{
-			errors++;
-		}
-	}
-	if (i_thread>1)
-		gotoxy(0,i_thread+2);
-	if (errors==0)
-		color_green();
-	myprintf("42637: Outcome: successful %d, %d error", successful, errors);
-	eol();
-	myprintf("\n");
-	color_restore();
-	return errors == 0;
-}
-
-
-	
-///finefima1
-#endif
-#endif ///NOSFTPEND
 /////////////////////////////// Jidac /////////////////////////////////
 
 // A Jidac object represents an archive contents: a list of file
@@ -40253,13 +38552,13 @@ inline void list_progress(int i_list_ver,int i_list_dt,int64_t ts, int64_t td)
 #define METAMAGIC 	0x494D4D41474543
 #define IMGMAGIC 	0x494D4D41474544
 
-// Strutture (invariate)
+// Structures (unchanged)
 #pragma pack(push, 1)
 struct ClusterData {
-    ULONGLONG cluster_number;    // Numero del cluster
-    ULONGLONG disk_offset;       // Offset del cluster nel disco
-    ULONGLONG image_offset;      // Offset del cluster nell'immagine
-    DWORD size;                  // Dimensione del cluster
+    ULONGLONG cluster_number;    // Cluster number
+    ULONGLONG disk_offset;       // Offset of the cluster on the disk
+    ULONGLONG image_offset;      // Offset of the cluster in the image
+    DWORD size;                  // Cluster size
 };
 
 struct ImageMetadata 
@@ -40269,15 +38568,15 @@ struct ImageMetadata
 	int64_t		datetime;				// timestamp
 	int64_t		version;				// of the zpaqfranz's version
     DWORD		letter;					// A...F 
-    DWORD 		sectors_per_cluster;   	// Settori per cluster
+    DWORD 		sectors_per_cluster;   	// Sectors per cluster
     DWORD 		bytes_per_sector;      	// Byte per settore
 	DWORD		bytes_per_cluster;		// Byte per cluster
-	char 		filesystem[16];         // Nome filesystem
+	char 		filesystem[16];         // Filesystem name
 	char 		backup_uuid[16];		// uuid
-	ULONGLONG 	total_size;        		// Dimensione totale disco
-    ULONGLONG 	total_clusters;    		// Numero totale cluster
-    ULONGLONG 	used_clusters;     		// Cluster utilizzati
-    ULONGLONG 	image_size;        		// Dimensione immagine
+	ULONGLONG 	total_size;        		// Total disk size
+    ULONGLONG 	total_clusters;    		// Total clusters number
+    ULONGLONG 	used_clusters;     		// Used clusters
+    ULONGLONG 	image_size;        		// Image size
 	char		hash_data[32];			// hash of datablocks
 	char		hash_clusters[32];		// hash of clusters map
 	char		hash_bitmap[32];		// hash of bitmap
@@ -40293,7 +38592,7 @@ struct ImageMetadata
 
 #pragma pack(pop)
 
-// Contesto per condividere stato tra le funzioni
+// Context to share state between functions
 struct ImagingContext 
 {
     HANDLE device;
@@ -40739,9 +39038,6 @@ public:
 	int 						sumhome();
 	bool 						is_incomplete_trans(const char* arc);
 	bool 						onlynorecursion(string filename);
-#ifdef _WIN32
-	bool 						getmysqlfrominternet();
-#endif
 #ifdef ZPAQFULL ///NOSFTPSTART
 	int 						maxcpu(int i_percent);
 	int 						systemshutdown();
@@ -40808,12 +39104,4529 @@ public:
 #endif ///NOSFTPEND
 	string 		keyfile_to_string(string i_keyfile);
 	void		pc_info();
-	int 		xssh(std::string i_command,std::string& o_output);
+	int 		xssh(uint64_t i_timetorun,std::string i_command,std::string& o_output);
+	void 		exclude_output();
 
+
+#ifdef ZPAQFULL ///NOSFTPSTART
+#ifdef _WIN32
+	int 		kickstart_resources(std::string i_package);
+#endif
+#endif ///NOSFTPEND
+	
 	
 };
 
 Jidac* pjidac;
+
+
+#ifdef _WIN64
+BOOL CALLBACK EnumTypesProc(HMODULE, LPWSTR, LONG_PTR lParam) {
+    // Se siamo qui significa che almeno una risorsa esiste
+    bool* hasRes = reinterpret_cast<bool*>(lParam);
+    *hasRes = true;
+    // Fermiamo subito l’enumerazione
+    return FALSE;
+}
+
+bool wehaveresources()
+{
+	if (pjidac == nullptr)
+		return false;
+
+    bool hasRes = false;
+
+    HMODULE hModule = LoadLibraryExW(
+        utow(pjidac->fullzpaqexename.c_str()).c_str(),
+        NULL,
+        LOAD_LIBRARY_AS_DATAFILE | LOAD_LIBRARY_AS_IMAGE_RESOURCE
+    );
+    if (!hModule) 
+	    return false; // file non apribile
+    
+    EnumResourceTypesW(hModule, EnumTypesProc, reinterpret_cast<LONG_PTR>(&hasRes));
+    FreeLibrary(hModule);
+
+    return hasRes;
+}
+#endif
+
+
+
+
+
+#ifdef ZPAQFULL ///NOSFTPSTART
+#ifdef SFTP
+
+///fima1
+
+typedef void 				(*curl_easy_reset_t)		(CURL *);
+typedef CURL *				(*curl_easy_init_t)			(void);
+typedef CURLcode 			(*curl_easy_setopt_t)		(CURL *, CURLoption, ...);
+typedef CURLcode 			(*curl_easy_perform_t)		(CURL *);
+typedef CURL*				(*curl_easy_duphandle_t)	(CURL*);
+typedef const char *		(*curl_easy_strerror_t)		(CURLcode);
+typedef CURLcode 			(*curl_easy_getinfo_t)		(CURL *, CURLINFO, ...);
+typedef struct curl_slist *	(*curl_slist_append_t)		(struct curl_slist *, const char *);
+typedef void 				(*curl_slist_free_all_t)	(struct curl_slist *);
+typedef void 				(*curl_easy_cleanup_t)		(CURL *);
+typedef CURLcode 			(*curl_global_init_t)		(long);
+typedef void 				(*curl_global_cleanup_t)	(void);
+typedef curl_version_info_data* (*curl_version_info_t) (CURLversion);
+
+struct curldynfunctions 
+{
+	curl_easy_reset_t 		easy_reset;
+	curl_easy_init_t 		easy_init;
+    curl_easy_setopt_t 		easy_setopt;
+    curl_easy_perform_t 	easy_perform;
+    curl_easy_strerror_t 	easy_strerror;
+    curl_easy_getinfo_t 	easy_getinfo;
+    curl_slist_append_t 	slist_append;
+    curl_slist_free_all_t 	slist_free_all;
+    curl_easy_cleanup_t 	easy_cleanup;
+    curl_global_init_t 		global_init;
+    curl_global_cleanup_t 	global_cleanup;
+    curl_easy_duphandle_t 	easy_duphandle;
+	curl_version_info_t		my_version_info;
+};
+
+
+#define Kurl_easy_setopt 	zpaqfranzsftp2::curldll.easy_setopt
+#define Kurl_easy_init 		zpaqfranzsftp2::curldll.easy_init
+#define Kurl_easy_cleanup 	zpaqfranzsftp2::curldll.easy_cleanup
+#define Kurl_easy_duphandle zpaqfranzsftp2::curldll.easy_duphandle
+#define Kurl_easy_perform 	zpaqfranzsftp2::curldll.easy_perform
+#define Kurl_easy_getinfo 	zpaqfranzsftp2::curldll.easy_getinfo
+#define Kurl_easy_strerror 	zpaqfranzsftp2::curldll.easy_strerror
+#define Kurl_global_init 	zpaqfranzsftp2::curldll.global_init
+#define Kurl_global_cleanup zpaqfranzsftp2::curldll.global_cleanup
+#define Kurl_slist_free_all zpaqfranzsftp2::curldll.slist_free_all
+#define Kurl_slist_append 	zpaqfranzsftp2::curldll.slist_append
+
+class zpaqfranzsftp2; 
+
+// Structure to track the statistics of each thread
+struct sftp_threadstats 
+{
+    int 		thread_id;
+    int 		completed_files;
+    int64_t 	bytes_transferred;
+    int64_t 	start_time;
+    int64_t 	last_activity_time;
+    std::string	current_file;
+    bool 		is_active;
+    double 		current_speed;
+	int64_t		bytes_transferred_current; 
+	int64_t		bytes_transferred_this_session;
+	int64_t		starting_file_size;
+	
+	
+    sftp_threadstats	() : 
+	thread_id			(0), 
+	completed_files		(0), 
+	bytes_transferred	(0), 
+    start_time			(0), 
+	last_activity_time	(0), 
+	current_file		(""), 
+    is_active			(false), 
+	current_speed		(0.0),
+	bytes_transferred_current(0),
+	bytes_transferred_this_session(0),
+starting_file_size(0)	{}
+};
+
+// Structure to track data per thread
+struct sftp_threadprogressdata 
+{
+    int 			thread_id;
+    std::string 	current_file;
+    int64_t 		current_file_size;
+	int64_t 		thread_bytes_processed;
+    int 			thread_files_processed;
+    int64_t 		thread_start_time;
+    bool 			is_active;
+    std::string 	status; // DOWN WAIT DONE ERROR 
+};
+
+struct sftpfileinfo 
+{
+    std::string 	name;
+    std::string 	fullname;
+    int64_t 		size;
+    time_t 			modtime;
+    std::string 	permissions;
+    std::string 	owner;
+    std::string 	group;
+    bool 			isdirectory;
+	std::string		hash;
+};
+
+struct sftpget3 
+{
+    std::string 	i_name;
+    std::string 	i_file1;
+	std::string 	i_file2;
+	std::string 	i_file3;
+	int64_t 		o_size;
+	std::string 	o_hash;
+};
+
+// Updated data structure for the worker thread
+struct sftp_downloadthreaddata 
+{
+    zpaqfranzsftp2* 			sftp_instance;
+    std::queue<sftpget3*>* 		task_queue;
+    pthread_mutex_t* 			queue_mutex;
+    pthread_cond_t* 			queue_cond;
+    bool* 						all_tasks_added;
+    bool* 						stop_threads;
+    int 						thread_id;
+    bool* 						success_flag;
+    pthread_mutex_t* 			result_mutex;
+    int* 						completed_tasks;
+    int 						total_tasks;
+    int* 						total_files_processed;
+    int64_t* 					total_bytes_processed;
+    sftp_threadprogressdata*	thread_progress;
+    pthread_mutex_t* 			progress_mutex;
+};
+
+  
+struct sftp_downloaddata 
+{
+	FILE* 						file;
+	int64_t 					total_size;
+	int64_t 					downloaded;
+	int64_t 					start_time;
+	int64_t 					last_progress_time;
+	curl_off_t 					start_offset;
+	curl_off_t 					end_offset;
+	int64_t 					local_existing_size;
+};
+
+// Structure for the listing callback
+struct sftp_listingdata 
+{
+    std::vector<sftpfileinfo>* 	filearray;
+    std::string 				remote_path;
+    std::string 				filter;
+    
+    sftp_listingdata(std::vector<sftpfileinfo>* fa, const std::string& path, const std::string& filt): 
+		filearray(fa), 
+		remote_path(path), 
+		filter(filt) {}
+};
+
+static bool compareSftpFileInfo(const sftpfileinfo& a, const sftpfileinfo& b) 
+{
+    return a.name < b.name;
+}
+
+#ifdef __APPLE__
+#include <dirent.h>
+#include <sys/stat.h>
+
+// Recursive function to search for a library in a directory
+static std::string scan_directory_recursive(const std::string& dir_path, const std::string& libname) 
+{
+    DIR* dir = opendir(dir_path.c_str());
+    if (!dir) return "";
+    
+    struct dirent* entry;
+    while ((entry = readdir(dir)) != nullptr) 
+    {
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
+            continue;
+            
+        std::string full_path = dir_path + "/" + entry->d_name;
+        
+        // If it's the file we're looking for, we've found it
+        if (entry->d_name == libname) 
+        {
+            if (flagdebug2)
+                myprintf("52649: Found <<%s>>\n", full_path.c_str());
+            closedir(dir);
+            return full_path;
+        }
+        
+        // If dir, recurse
+		struct stat st;
+        if (stat(full_path.c_str(), &st) == 0 && S_ISDIR(st.st_mode)) 
+        {
+            std::string result = scan_directory_recursive(full_path, libname);
+            if (!result.empty()) 
+            {
+                closedir(dir);
+                return result;
+            }
+        }
+    }
+    closedir(dir);
+    return "";
+}
+#endif
+
+
+
+
+
+
+class zpaqfranzsftp2 
+{
+private:
+    std::string host;
+    std::string username;
+    std::string password;
+    std::string ssh_key_path;
+    int 		port;
+    bool 		use_ssh_key;
+	static bool dllloaded;
+   
+    
+    // Callback per scrivere i dati ricevuti (per remotegetfilesize)
+    static size_t write_callback(void* contents, size_t size, size_t nmemb, void* userp) 
+	{
+		if (!contents)
+			return size*nmemb; // compiler be quiet
+		if (userp)
+			return size*nmemb; // compiler be quiet
+        // We do nothing, weare only interested in the header
+        return size * nmemb;
+    }
+	
+	
+    // Callback per il progresso del download
+	 static int download_progress_callback(void* clientp, curl_off_t dltotal, curl_off_t dlnow, curl_off_t ultotal, curl_off_t ulnow) 
+	 {
+			 
+        sftp_downloaddata* data 	= (sftp_downloaddata*)clientp;
+        int64_t current_time 		= mtime();
+		
+		if (dltotal+ultotal>ulnow)
+			 current_time++; // compiler be quiet
+        
+        // Update every second
+        if (current_time - data->last_progress_time >= 1) 
+		{
+            data->last_progress_time 	= current_time;
+            int64_t total_downloaded 	= (int64_t)dlnow;
+            double elapsed 				= (mtime()-data->start_time)/1000.0;
+            
+            // Calculate the total effective size to download
+            int64_t effective_total 					= data->total_size;
+           
+            if (data->end_offset > 0) 
+			{
+                effective_total = data->end_offset - data->start_offset + 1;
+            } 
+			else 
+			if (data->start_offset > 0) 
+			{
+                effective_total = data->total_size - data->start_offset;
+            }
+            
+            if (elapsed > 0) 
+			{
+				int64_t total_downloaded_including_existing = total_downloaded + data->local_existing_size;
+                double speed = total_downloaded / elapsed; // bytes/sec
+                double remaining = effective_total - total_downloaded;
+                double eta = (speed > 0) ? remaining / speed : 0;
+                
+                int eta_hours = (int)(eta / 3600);
+                int eta_minutes = (int)((eta - eta_hours * 3600) / 60);
+                int eta_seconds = (int)(eta - eta_hours * 3600 - eta_minutes * 60);
+                
+                if (flagdebug) 
+				{
+                    if (data->local_existing_size > 0) 
+					{
+                        myprintf("41030: Download (Resume): %s/%s total bytes (%5.2f%%) - now: %s - @ %s - ETA: %02d:%02d:%02d\n",
+                               migliaia(total_downloaded_including_existing), migliaia2(data->total_size), 
+                               (double)total_downloaded_including_existing / data->total_size * 100.0,
+                               migliaia3(total_downloaded), tohuman(speed), eta_hours, eta_minutes, eta_seconds);
+                    } 
+					else 
+					{
+                        myprintf("41031: Download (full): %s/%s total bytes (%5.2f%%) - now: %s - @ %s - ETA: %02d:%02d:%02d\n",
+                               migliaia(total_downloaded_including_existing), migliaia2(data->total_size), 
+                               (double)total_downloaded_including_existing / data->total_size * 100.0,
+                               migliaia3(total_downloaded), tohuman(speed), eta_hours, eta_minutes, eta_seconds);
+
+                    }
+                }
+            }
+        }
+        return 0;
+    }
+    
+
+    // Callback per scrivere i dati scaricati su file
+    static size_t write_file_callback(void* contents, size_t size, size_t nmemb, void* userp) 
+	{
+        FILE* file = (FILE*)userp;
+        return fwrite(contents, size, nmemb, file);
+    }
+	
+		// Callback per processare i dati di listing
+	
+
+	static size_t listing_callback(void* contents, size_t size, size_t nmemb, void* userp) 
+	{
+		sftp_listingdata* data 		= (sftp_listingdata*)userp;
+		size_t total_size 			= size * nmemb;
+		std::string content((char*)contents, total_size);
+		
+		if (flagdebug3) 
+			myprintf("41075: Listing data: %s\n", content.c_str());
+		
+		// Divide the content into lines
+		std::vector<std::string> lines;
+		size_t mystart 	= 0;
+		size_t mypoz 		= 0;
+		
+		while ((mypoz = content.find('\n', mystart)) != std::string::npos) 
+		{
+			std::string line = content.substr(mystart, mypoz - mystart);
+			if (!line.empty() && line != "\r") 
+			{
+				// Rimuovi \r se presente alla fine
+				if (!line.empty() && line.back() == '\r') 
+					line.pop_back();
+				lines.push_back(line);
+			}
+			mystart = mypoz + 1;
+		}
+		
+		// Aggiungi l'ultima riga se non termina con \n
+		if (mystart < content.length()) 
+		{
+			std::string line = content.substr(mystart);
+			if (!line.empty() && line != "\r") 
+			{
+				if (!line.empty() && line.back() == '\r') 
+					line.pop_back();
+				lines.push_back(line);
+			}
+		}
+		
+		// Process each line (format similar to ls -la)
+		for (std::vector<std::string>::const_iterator line_it = lines.begin(); line_it != lines.end(); ++line_it) 
+		{
+			const std::string& line = *line_it;
+			if (line.empty() || line.length() < 10) 
+				continue;
+			
+			// Example line: drwxr-xr-x   5 franco   franco       4096 Dec 15 10:30 dirname
+			// Or: -rw-r--r--   1 franco   franco    1234567 Dec 15 10:30 filename.ext
+			
+			sftpfileinfo fileinfo;
+			std::vector<std::string> tokens;
+			
+			// Divide the line into tokens manually
+			
+			size_t pos 		= 0;
+			
+			while (pos < line.length()) 
+			{
+				// Skip leading spaces
+				while (pos < line.length() && line[pos] == ' ') 
+					pos++;
+				if (pos >= line.length()) 
+					break;
+				
+				size_t start = pos;
+				// Find end of token
+				while (pos < line.length() && line[pos] != ' ') 
+					pos++;
+				
+				if (pos > start) 
+					tokens.push_back(line.substr(start, pos - start));
+			}
+			
+			if (tokens.size() < 9) 
+				continue; // Invalid format
+			
+			// Parsing the fields
+			fileinfo.permissions 	= tokens[0];
+			fileinfo.owner 			= tokens[2];
+			fileinfo.group 			= tokens[3];
+			
+			// Convert size manually
+			fileinfo.size = 0;
+			for (size_t i = 0; i < tokens[4].length(); i++) {
+				char c = tokens[4][i];
+				if (c >= '0' && c <= '9') 
+					fileinfo.size = fileinfo.size * 10 + (c - '0');
+			}
+			
+			fileinfo.isdirectory = (tokens[0][0] == 'd');
+			
+			// The file name is from the eighth token onwards (it can contain spaces)
+			fileinfo.name = "";
+			for (size_t i = 8; i < tokens.size(); i++) 
+			{
+				if (i > 8) 
+					fileinfo.name += " ";
+				fileinfo.name += tokens[i];
+			}
+			
+			// Skip . and ..
+			if (fileinfo.name == "." || fileinfo.name == "..") 
+				continue;
+			
+			// Build the full path
+			fileinfo.fullname = data->remote_path;
+			if (!fileinfo.fullname.empty() && fileinfo.fullname.back() != '/') 
+				fileinfo.fullname += "/";
+			fileinfo.fullname += fileinfo.name;
+			
+			// Parsing the date (format: "Dec 15 10:30" or "Dec 15  2023")
+			struct tm timeinfo;
+			memset(&timeinfo,0,sizeof(struct tm));
+
+			std::string month = tokens[5];
+			
+			// Convert day manually
+			int day = 0;
+			for (size_t i = 0; i < tokens[6].length(); i++) {
+				char c = tokens[6][i];
+				if (c >= '0' && c <= '9') 
+					day = day * 10 + (c - '0');
+			}
+				
+			std::string timeOrYear = tokens[7];
+			
+			// Convert month
+			const char* months[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun",
+								   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
+			for (int i = 0; i < 12; i++) 
+				if (month == months[i]) 
+				{
+					timeinfo.tm_mon = i;
+					break;
+				}
+			timeinfo.tm_mday = day;
+			
+			if (timeOrYear.find(':') != std::string::npos) 
+			{
+				// Time format: "10:30" - we assume the current year
+				time_t now 			= time(NULL);
+				const struct tm* current 	= localtime(&now);
+				timeinfo.tm_year 	= current->tm_year;
+				
+				size_t colonPos 	= timeOrYear.find(':');
+				
+				// Convert hours and minutes manually
+				int hour 			= 0;
+				for (size_t i = 0; i < colonPos; i++) 
+				{
+					char c = timeOrYear[i];
+					if (c >= '0' && c <= '9') 
+						hour = hour * 10 + (c - '0');
+				}
+				
+				int min = 0;
+				for (size_t i = colonPos + 1; i < timeOrYear.length(); i++) 
+				{
+					char c = timeOrYear[i];
+					if (c >= '0' && c <= '9') 
+						min = min * 10 + (c - '0');
+				}
+				
+				timeinfo.tm_hour = hour;
+				timeinfo.tm_min = min;
+			} 
+			else 
+			{
+				// Year format: "2023"
+				int year = 0;
+				for (size_t i = 0; i < timeOrYear.length(); i++) {
+					char c = timeOrYear[i];
+					if (c >= '0' && c <= '9') 
+						year = year * 10 + (c - '0');
+				}
+					
+				timeinfo.tm_year 	= year - 1900;
+				timeinfo.tm_hour 	= 0;
+				timeinfo.tm_min 	= 0;
+			}
+			
+			fileinfo.modtime = mktime(&timeinfo);
+			
+			// Apply filter if specified
+			if (!data->filter.empty() && !fileinfo.isdirectory) 
+			{
+				if (!matchWildcard(data->filter, fileinfo.name)) 
+				{
+					if (flagdebug3) 
+						myprintf("41249: File %s not in filter %s\n", 
+										 fileinfo.name.c_str(), data->filter.c_str());
+					continue;
+				}
+			}
+			
+			if (flagdebug) 
+			{
+				myprintf("41257: File founded: %s (%s) - %s bytes - %s\n", 
+					   fileinfo.name.c_str(), 
+					   fileinfo.isdirectory ? "DIR" : "FILE",
+					   migliaia(fileinfo.size),
+					   fileinfo.permissions.c_str());
+			}
+			
+			data->filearray->push_back(fileinfo);
+		}
+		
+		return total_size;
+	}
+
+
+public:
+    CURL* 		curl;
+	static 		curldynfunctions curldll;
+
+#ifndef _WIN32
+int kickstartlinux()
+{
+    myprintf("38151: You should get libcurl.so, for example\n");
+#ifdef __APPLE__
+    myprintf("38158: macOS             :brew install curl\n");
+#else
+#ifdef __linux__
+    // apk (Alpine Package Keeper)
+    myprintf("38152: Alpine            :apk add curl\n");
+    
+    // apt (Advanced Package Tool)
+    myprintf("38153: Debian/Ubuntu     :apt install libcurl4\n");
+    myprintf("38154: Debian/Ubuntu     :sudo apt install libcurl4\n");
+    
+    // dnf (Dandified YUM)
+    myprintf("38155: Alma Linux        :dnf install curl\n");
+    myprintf("38156: Alma Linux        :sudo dnf install curl\n");
+    myprintf("38157: Amazon Linux (v2+):dnf install curl\n");
+    myprintf("38158: Fedora            :dnf install curl\n");
+    myprintf("38159: Oracle Linux (v8+):dnf install curl\n");
+    myprintf("38160: Rocky Linux       :dnf install curl\n");
+    
+    // emerge (Portage)
+    myprintf("38161: Gentoo            :emerge --ask net-misc/curl\n");
+    
+    // guix
+    myprintf("38162: Guix              :guix install curl\n");
+    
+    // nix-env
+    myprintf("38163: NixOS             :nix-env -i curl\n");
+    
+    // opkg (OpenWrt Package)
+    myprintf("38164: OpenWrt           :opkg install curl\n");
+    // pacman
+    myprintf("38165: Arch              :pacman -S curl\n");
+    // slackpkg
+    myprintf("38177: Slackware         :slackpkg install curl\n");
+    
+    // swupd (Clear Linux)
+    myprintf("38178: Clear Linux       :swupd bundle-add curl\n");
+    
+    // xbps-install (Void Linux)
+    myprintf("38179: Void              :xbps-install -S curl\n");
+    
+    // yum (older RHEL/CentOS)
+    myprintf("38180: Amazon Linux (v1) :yum install curl\n");
+    myprintf("38181: CentOS            :yum install curl\n");
+    myprintf("38182: Oracle Linux (v7-):yum install curl\n");
+    myprintf("38183: RHEL              :yum install curl\n");
+    myprintf("38184: SUSE              :zypper install libcurl4\n");
+#else
+    
+    // pkg (FreeBSD/Solaris/Termux style)
+    myprintf("38166: FreeBSD           :pkg install curl\n");
+    myprintf("38167: OPNSense          :pkg install curl\n");
+    myprintf("38168: pfSense           :pkg install curl\n");
+    myprintf("38169: OpenIndiana       :pkg install library/curl\n");
+    myprintf("38170: Solaris           :pkg install curl\n");
+    myprintf("38171: Termux            :pkg install curl\n");
+    myprintf("38172: TrueNAS           :pkg install curl\n");
+    
+    // pkg_add (OpenBSD)
+    myprintf("38173: OpenBSD           :pkg_add curl\n");
+    myprintf("38174: OpenBSD           :doas pkg_add curl\n");
+    
+    // pkgin (NetBSD)
+    myprintf("38175: NetBSD            :pkgin install curl\n");
+    
+    // pkgman (Haiku)
+    myprintf("38176: Haiku             :pkgman install curl\n");
+    
+    myprintf("38185: Conda             :conda install curl\n");
+    
+    myprintf("38186: Manual            :Get https://curl.se, then ");
+    myprintf("./configure --disable-static && make && sudo make install\n");
+#endif  // __linux__
+#endif  // __APPLE__
+    return 0;
+}
+#endif
+
+#ifdef _WIN32
+	
+int kickstartwindows()
+{
+	///#ifdef ZPAQ_VERSION
+
+	if (pjidac == NULL)
+	{
+		myprintf("39008: pjidac null\n");
+		seppuku();
+	}
+    
+    if ((*pjidac).kickstart_resources("LIBCURL")==0) 
+		myprintf("00734$ Please restart zpaqfranz\n");
+	return 1;
+///#endif
+	return 0;
+}
+#endif
+
+
+#ifdef __APPLE__
+// Function for macOS: search for libname with .dylib extension
+static std::string findso_macos(const std::string& i_libname) 
+{
+    std::string libname = i_libname + ".dylib"; // Add .dylib
+    
+    // First search in Homebrew directories (recursive search)
+    const char* homebrew_paths[] = {
+        "/usr/local/Cellar/curl",     // Homebrew (Intel)
+        "/opt/homebrew/Cellar/curl"   // Homebrew (Apple Silicon)
+    };
+    
+    int homebrew_count = sizeof(homebrew_paths) / sizeof(homebrew_paths[0]);
+    for (int i = 0; i < homebrew_count; i++) 
+    {
+        const char* base_path = homebrew_paths[i];
+        if (flagdebug2)
+            myprintf("92649: Scanning recursively <<%s>>\n", base_path);
+        std::string result = scan_directory_recursive(base_path, libname);
+        if (!result.empty()) 
+            return result;
+    }
+    
+    // Then search in standard paths
+    const char* standard_paths[] = {
+        "/usr/local/lib/",   // Homebrew (linkato)
+        "/usr/lib/",         // macOS system
+    };
+    
+    int standard_count = sizeof(standard_paths) / sizeof(standard_paths[0]);
+    for (int j = 0; j < standard_count; j++) 
+    {
+        const char* path = standard_paths[j];
+        std::string full_path = std::string(path) + libname;
+        if (flagdebug2)
+            myprintf("52559: Checking <<%s>>\n", full_path.c_str());
+        if (access(full_path.c_str(), F_OK) == 0) // fileexists
+            return full_path;
+    }
+    
+    return "";
+}
+#else
+    
+#endif
+
+
+	static bool loadLibrary()
+	{
+		if (dllloaded)
+			return true;
+
+	#ifdef _WIN32
+	#ifdef _WIN64
+		const char *local_lib_name = "./libcurl-x64.dll";
+		const char *generic_lib_name = "libcurl-x64.dll";
+	#else
+		const char *local_lib_name = "./libcurl.dll";
+		const char *generic_lib_name = "libcurl.dll";
+	#endif
+	
+
+	HMODULE hModule=NULL;
+
+    if ((*pjidac).kickstart_resources("LIBCURL") == 0) 
+	{
+        hModule = LoadLibraryA(local_lib_name);
+        if (hModule) 
+		{
+			if (flagdebug)
+			{
+				color_green();
+				myprintf("38280: libcurl load from local\n");
+				color_restore();
+			}
+        } 
+		else 
+		{
+            color_yellow();
+            myprintf("38281! Cannot load local libcurl!\n");
+			color_restore();
+            hModule = LoadLibraryA(generic_lib_name);
+        }
+    } 
+	else 
+	{
+        color_yellow();
+        myprintf("38279: No libcurl in current folder, trying generic loading\n");
+        color_restore();
+        hModule = LoadLibraryA(generic_lib_name);
+    }
+    
+    // Controllo finale del caricamento
+    if (!hModule) 
+	{
+        myprintf("38087! cannot load libcurl.dll from any location\n");
+        return false;
+    }
+
+
+		// Load all function pointers con cast intermedio a void*
+		curldll.easy_reset = reinterpret_cast<curl_easy_reset_t>(
+			reinterpret_cast<void*>(GetProcAddress(hModule, "curl_easy_reset")));
+		curldll.easy_init = reinterpret_cast<curl_easy_init_t>(
+			reinterpret_cast<void*>(GetProcAddress(hModule, "curl_easy_init")));
+		curldll.easy_setopt = reinterpret_cast<curl_easy_setopt_t>(
+			reinterpret_cast<void*>(GetProcAddress(hModule, "curl_easy_setopt")));
+		curldll.easy_perform = reinterpret_cast<curl_easy_perform_t>(
+			reinterpret_cast<void*>(GetProcAddress(hModule, "curl_easy_perform")));
+		curldll.easy_strerror = reinterpret_cast<curl_easy_strerror_t>(
+			reinterpret_cast<void*>(GetProcAddress(hModule, "curl_easy_strerror")));
+		curldll.easy_getinfo = reinterpret_cast<curl_easy_getinfo_t>(
+			reinterpret_cast<void*>(GetProcAddress(hModule, "curl_easy_getinfo")));
+		curldll.slist_append = reinterpret_cast<curl_slist_append_t>(
+			reinterpret_cast<void*>(GetProcAddress(hModule, "curl_slist_append")));
+		curldll.slist_free_all = reinterpret_cast<curl_slist_free_all_t>(
+			reinterpret_cast<void*>(GetProcAddress(hModule, "curl_slist_free_all")));
+		curldll.easy_cleanup = reinterpret_cast<curl_easy_cleanup_t>(
+			reinterpret_cast<void*>(GetProcAddress(hModule, "curl_easy_cleanup")));
+		curldll.global_init = reinterpret_cast<curl_global_init_t>(
+			reinterpret_cast<void*>(GetProcAddress(hModule, "curl_global_init")));
+		curldll.global_cleanup = reinterpret_cast<curl_global_cleanup_t>(
+			reinterpret_cast<void*>(GetProcAddress(hModule, "curl_global_cleanup")));
+		curldll.easy_duphandle = reinterpret_cast<curl_easy_duphandle_t>(
+			reinterpret_cast<void*>(GetProcAddress(hModule, "curl_easy_duphandle")));
+		curldll.my_version_info = reinterpret_cast<curl_version_info_t>(
+			reinterpret_cast<void*>(GetProcAddress(hModule, "curl_version_info")));
+
+		// Verify all functions were loaded
+		if (!curldll.easy_reset || !curldll.easy_init || !curldll.easy_setopt ||
+			!curldll.easy_perform || !curldll.easy_strerror || !curldll.easy_getinfo ||
+			!curldll.slist_append || !curldll.slist_free_all || !curldll.easy_cleanup ||
+			!curldll.global_init || !curldll.global_cleanup || !curldll.easy_duphandle
+			|| (!curldll.my_version_info))
+		{
+			myprintf("46967: Failed to load one or more libcurl functions (too old?)\n");
+			FreeLibrary(hModule);
+			return false;
+		}
+
+		dllloaded = true;
+		return true;
+	#else
+		
+		void *hModule 	= dlopen("libcurl.so", RTLD_LAZY); //first try
+		if (!hModule)
+		{
+			if (flagdebug)
+				myprintf("38530: second try\n");
+			hModule 	= dlopen("libcurl.so.4", RTLD_LAZY); //second try
+		}
+#ifdef __APPLE__
+		if (!hModule)
+		{
+			if (flagdebug)
+				myprintf("38530: Apple try\n");
+			hModule 	= dlopen("libcurl.dylib", RTLD_LAZY); //Apple is always different 
+			if (!hModule)
+			{
+				if (flagdebug)
+					myprintf("18530: Apple try (2nd)\n");
+				string wearedesperate=findso_macos("libcurl");
+				if (flagdebug)
+					myprintf("38543: wearedesperate %s\n",wearedesperate.c_str());
+				if (wearedesperate!="")
+					hModule = dlopen(wearedesperate.c_str(), RTLD_LAZY);
+			}
+		}
+#endif
+
+		if (!hModule)
+		{
+			myprintf("46919$ Cannot load libcurl.so, sorry\n");
+#ifdef _WIN32
+			(void)kickstart();
+#endif
+			return false;
+		}
+		curldll.easy_reset 		= (curl_easy_reset_t)		dlsym(hModule, "curl_easy_reset");
+		curldll.easy_init 		= (curl_easy_init_t)		dlsym(hModule, "curl_easy_init");
+		curldll.easy_setopt 	= (curl_easy_setopt_t)		dlsym(hModule, "curl_easy_setopt");
+		curldll.easy_perform 	= (curl_easy_perform_t)		dlsym(hModule, "curl_easy_perform");
+		curldll.easy_strerror 	= (curl_easy_strerror_t)	dlsym(hModule, "curl_easy_strerror");
+		curldll.easy_getinfo 	= (curl_easy_getinfo_t)		dlsym(hModule, "curl_easy_getinfo");
+		curldll.slist_append 	= (curl_slist_append_t)		dlsym(hModule, "curl_slist_append");
+		curldll.slist_free_all 	= (curl_slist_free_all_t)	dlsym(hModule, "curl_slist_free_all");
+		curldll.easy_cleanup 	= (curl_easy_cleanup_t)		dlsym(hModule, "curl_easy_cleanup");
+		curldll.global_init 	= (curl_global_init_t)		dlsym(hModule, "curl_global_init");
+		curldll.global_cleanup 	= (curl_global_cleanup_t)	dlsym(hModule, "curl_global_cleanup");
+		curldll.easy_duphandle 	= (curl_easy_duphandle_t)	dlsym(hModule, "curl_easy_duphandle");
+
+		dllloaded = true;
+		return true;
+	#endif
+	}
+
+    std::string 	getHost() 		const { return host; }
+    int 			getPort() 		const { return port; }
+    std::string 	getUsername() 	const { return username; }
+    std::string 	getPassword() 	const { return password; }
+    std::string 	getKey() 		const { return ssh_key_path; }
+								
+	zpaqfranzsftp2() : port(22), use_ssh_key(false), curl(NULL)
+    {
+		if (!dllloaded)
+		{	
+			if (flagdebug)
+				myprintf("40822: do loadLibrary()\n");
+			if (!loadLibrary())
+			{
+				myprintf("40832: No libcurl. Doing a kickstart\n");
+#ifdef _WIN32
+				kickstartwindows();
+#else
+				kickstartlinux();
+#endif
+				seppuku();
+			}
+		}
+		Kurl_global_init(CURL_GLOBAL_DEFAULT);
+    }
+    
+    ~zpaqfranzsftp2() 
+	{
+        if (flagdebug3) 
+			myprintf("41182: zpaqfranzsftp destructor\n");
+        disconnect();
+        Kurl_global_cleanup();
+    }
+	
+    
+    // Set the connection parameters with password
+    void setConnection(const std::string& h, int p, const std::string& user, const std::string& pass) 
+	{
+        host 		= h;
+        port 		= p;
+        username 	= user;
+        password 	= pass;
+        use_ssh_key = false;
+        if (flagdebug3) 
+			myprintf("41192: SFTP setconnection to %s:%d user:%s\n", host.c_str(), port, username.c_str());
+    }
+    
+    // Set the connection parameters with SSH key
+    void setConnectionSSH(const std::string& h, int p, const std::string& user, const std::string& key_path) 
+	{
+		if (!fileexists(key_path))
+		{
+			myprintf("\n");
+			myprintf("38331: GURU -ssh keyfile does not exists <<%Z>>\n",key_path.c_str());
+			seppuku();
+		}
+        host 			= h;
+        port 			= p;
+        username 		= user;
+        ssh_key_path 	= key_path;
+        use_ssh_key 	= true;
+        if (flagdebug3) 
+			myprintf("41205: SFTP with SSH: %s:%d user:%s key:%s\n", 
+                             host.c_str(), port, username.c_str(), key_path.c_str());
+    }
+    
+    // Connection to the server
+    bool connect() 
+	{
+        if (flagdebug3) 
+			myprintf("31212: connect() to sftp server\n");
+        
+        curl = Kurl_easy_init();
+        if (!curl) 
+		{
+            if (flagdebug) 
+				myprintf("41218! Cannot init curl!\n");
+            return false;
+        }
+        
+        char url[1024];
+        snprintf(url,sizeof(url), "sftp://%s:%d/", host.c_str(), port);
+        
+        Kurl_easy_setopt(curl, CURLOPT_URL, url);
+        Kurl_easy_setopt(curl, CURLOPT_USERNAME, username.c_str());
+        
+        if (use_ssh_key) 
+		    Kurl_easy_setopt(curl, CURLOPT_SSH_PRIVATE_KEYFILE, ssh_key_path.c_str());
+         else 
+		    Kurl_easy_setopt(curl, CURLOPT_PASSWORD, password.c_str());
+
+        Kurl_easy_setopt(curl, CURLOPT_SSH_AUTH_TYPES, CURLSSH_AUTH_PASSWORD | CURLSSH_AUTH_PUBLICKEY);
+        Kurl_easy_setopt(curl, CURLOPT_VERBOSE, flagdebug3 ? 1L : 0L);
+        
+        if (flagdebug3) 
+			myprintf("41237: sftp connection - done\n");
+        return true;
+    }
+    
+    void disconnect() 
+	{
+        if (curl) 
+		{
+            if (flagdebug3) 
+				myprintf("41254: Closing (disconenct) from SFTP\n");
+            Kurl_easy_cleanup(curl);
+            curl = NULL;
+        }
+    }
+    
+// Structure to count received bytes
+	struct FileInfo 
+	{
+		int64_t size;
+		bool file_exists;
+	};
+
+	// Callback che conta i bytes ricevuti (anche se sono zero)
+	static size_t count_bytes_callback(void* contents, size_t size, size_t nmemb, struct FileInfo* info) 
+	{
+		(void)contents;
+		size_t total_size = size * nmemb;
+		info->size += total_size;
+		info->file_exists = true;  // If the callback is called, the file exists
+		return total_size;
+	}
+
+	int64_t remotegetfilesize(const std::string& remote_file) 
+	{
+		if (!curl) 
+		{
+			myprintf("41258! No curl in remotegetfilesize\n");
+			return -1;
+		}
+		
+		if (flagdebug3) 
+			myprintf("41263: Getting remote file size %s\n", remote_file.c_str());
+		
+		CURL* curl_temp = Kurl_easy_duphandle(curl);
+		if (!curl_temp) 
+		{
+			myprintf("41268! Impossible to duplicate handle curl\n");
+			return -1;
+		}
+		
+		char url[1024];
+		snprintf(url, sizeof(url),"sftp://%s:%d%s", host.c_str(), port, remote_file.c_str());
+		
+		// First phase: check if the file exists using a HEAD request
+		Kurl_easy_setopt(curl_temp, CURLOPT_URL, url);
+		Kurl_easy_setopt(curl_temp, CURLOPT_NOBODY, 1L);
+		Kurl_easy_setopt(curl_temp, CURLOPT_WRITEFUNCTION, write_callback);
+		
+		CURLcode res = Kurl_easy_perform(curl_temp);
+		
+		if (res != CURLE_OK) 
+		{
+			if (flagdebug3) 
+				myprintf("41297! Remote file not found or error: %s\n", Kurl_easy_strerror(res));
+			Kurl_easy_cleanup(curl_temp);
+			return -1;
+		}
+		
+		// The file exists, now we try to get the size
+		curl_off_t size = -1;
+		res = Kurl_easy_getinfo(curl_temp, CURLINFO_CONTENT_LENGTH_DOWNLOAD_T, &size);
+		
+		if (res == CURLE_OK && size >= 0) 
+		{
+			// We have obtained the size directly
+			if (flagdebug3) 
+				myprintf("41291: remote file size %s bytes (via CURLINFO)\n", migliaia((int64_t)size));
+			Kurl_easy_cleanup(curl_temp);
+			return (int64_t)size;
+		}
+		
+		// Second phase: if we can't get the size,
+		// facciamo un download completo per contare i bytes
+		if (flagdebug3) 
+			myprintf("41285: CURLINFO failed, trying full download to count bytes\n");
+		
+		struct FileInfo info = {0, false};
+		
+		// Reset options for full download
+		Kurl_easy_setopt(curl_temp, CURLOPT_NOBODY, 0L);  // Enable body download
+		Kurl_easy_setopt(curl_temp, CURLOPT_WRITEFUNCTION, count_bytes_callback);
+		Kurl_easy_setopt(curl_temp, CURLOPT_WRITEDATA, &info);
+		
+		res = Kurl_easy_perform(curl_temp);
+		
+		int64_t file_size = -1;
+		if (res == CURLE_OK) 
+		{
+			file_size = info.size;  // Can be 0 for empty files
+			if (flagdebug3) 
+				myprintf("41291: remote file size %s bytes (via download)\n", migliaia(file_size));
+		} 
+		else 
+		{
+			if (flagdebug3) 
+				myprintf("41299! Error during file download: %s\n", Kurl_easy_strerror(res));
+		}
+		
+		Kurl_easy_cleanup(curl_temp);
+		return file_size;
+	}
+    
+	
+	bool karica(const std::string& local_file, const std::string& remote_file, bool force) 
+	{
+		if (!curl) 
+		{
+			myprintf("41253! No curl in karica\n");
+			return false;
+		}
+
+		if (flagdebug3) 
+			myprintf("41315: karica %s -> %s (force: %s)\n", local_file.c_str(), remote_file.c_str(), force ? "true" : "false");
+		
+		// Get file size locale
+		int64_t local_size = prendidimensionefile(local_file.c_str());
+		if (local_size < 0) 
+		{
+			myprintf("41322: local file not found! %s\n",local_file.c_str());
+			return false;
+		}
+		
+		if (flagdebug3) 
+			myprintf("41327: Local file size %s bytes\n", migliaia(local_size));
+		
+	    std::vector<std::string> files_to_upload;
+		files_to_upload.push_back(local_file);
+		std::string remotepath=extractfilepath(remote_file);
+		
+		
+		//rsync with 1 thread only
+		if (sftp_rsync(files_to_upload,remotepath,force,1))
+		{
+			if (flagdebug3) 
+				myprintf("41439: upload successfully done\n");
+			return true;
+		}
+		return false;
+	}
+
+    
+    // Download a file or part of a file from remote to local
+    bool downfilerange(const std::string& i_remote, const std::string& i_local, curl_off_t i_start, curl_off_t i_end, bool i_append) 
+	{
+	    if (!curl) 
+		{
+            myprintf("41254! No curl in downfilerange\n");
+			return false;
+        }
+
+        if (flagdebug) 
+		{
+            if (i_start == 0 && i_end == 0) 
+			{
+				myprintf("41566: down full : %s -> %s (append: %s)\n", 
+                       i_remote.c_str(), i_local.c_str(), i_append ? "true" : "false");
+            } 
+			else 
+			{
+                myprintf("41571: down RANGE : %s -> %s (bytes %s-%s, append: %s)\n", 
+                       i_remote.c_str(), i_local.c_str(), migliaia(i_start), migliaia2(i_end), i_append ? "true" : "false");
+            }
+        }
+        
+        // Get file size remoto
+        int64_t remote_size = remotegetfilesize(i_remote);
+        if (remote_size < 0) 
+		{
+            myprintf("41580: cannot find remote!\n");
+			return false;
+        }
+        
+        if (flagdebug3) 
+			myprintf("41585: remote file size for down : %s bytes\n",migliaia(remote_size));
+        
+        // Handling append mode
+        curl_off_t actual_start 	= i_start;
+        curl_off_t actual_end 		= i_end;
+        bool is_resume_mode 		= false;
+        int64_t local_size 			= 0;
+        
+        if (i_append && (i_start == 0 && i_end == 0)) 
+		{
+            // Append mode: check if the local file exists
+            local_size = prendidimensionefile(i_local.c_str());
+            if (local_size > 0) 
+			{
+                if (local_size < remote_size) 
+				{
+                    // Partial local file: resume download
+                    actual_start 	= local_size;
+                    actual_end 		= 0; // Until the end
+                    is_resume_mode 	= true;
+                    if (flagdebug3) 
+						myprintf("41606: *** RESUME *** - local: %s bytes, restarting from offset %s (%s bytes to transfer)\n", 
+                                         migliaia(local_size), migliaia2(actual_start), migliaia3(remote_size - local_size));
+                } 
+				else if (local_size == remote_size) 
+				{
+                    // File already complete
+                    if (flagdebug3) 
+						myprintf("41613: same down size - SKIP\n");
+                    return true;
+                } else 
+				{
+                    // Local file larger than remote: error or corrupted file
+                    if (flagdebug) 
+						myprintf("41619! Warning: local bigger than remote (%s > %s) - Download interrupted\n", 
+                                         migliaia(local_size), migliaia(remote_size));
+                    // Proceed with full download overwriting
+                }
+            } 
+			else 
+			{
+    			myprintf("41627! local file does not exists\n");
+	        }
+        }
+        
+        // Range validation (usa actual_start/actual_end dopo gestione append)
+        if (actual_start != 0 || actual_end != 0) 
+		{
+            if (actual_start < 0 || actual_end < 0 || actual_start >= remote_size) 
+			{
+				myprintf("41636! error - invalid range\n");
+                return false;
+            }
+            if (actual_end > 0 && actual_end >= remote_size) 
+			{
+                myprintf("41640: actual_end too big => to file size\n");
+                actual_end = remote_size - 1;
+            }
+            if (actual_end > 0 && actual_start > actual_end) 
+			{
+                myprintf("41656: error actual_start > actual_end\n");
+                return false;
+            }
+        }
+        
+        FILE* file = fopen(i_local.c_str(), is_resume_mode ? "ab" : "wb");
+        if (!file) 
+		{
+            myprintf("41653! cannot on local file %s : %s\n", i_local.c_str(),is_resume_mode ? "open to append" : "creating");
+            return false;
+        }
+        
+        CURL* curl_download = Kurl_easy_duphandle(curl);
+        if (!curl_download) 
+		{
+            fclose(file);
+            myprintf("41661! cannot dup handle downrange\n");
+            return false;
+        }
+        
+        char url[1024];
+        snprintf(url, sizeof(url),"sftp://%s:%d%s", host.c_str(), port, i_remote.c_str());
+        
+        sftp_downloaddata download_data;
+        download_data.file 					= file;
+        download_data.total_size 			= remote_size;
+        download_data.downloaded 			= 0;
+        download_data.start_time 			= mtime();
+		download_data.last_progress_time 	= download_data.start_time;
+        download_data.start_offset 			= actual_start;
+        download_data.end_offset 			= actual_end;
+        download_data.local_existing_size 	= is_resume_mode ? local_size : 0;
+        
+        Kurl_easy_setopt(curl_download, CURLOPT_URL, url);
+        Kurl_easy_setopt(curl_download, CURLOPT_WRITEFUNCTION, write_file_callback);
+        Kurl_easy_setopt(curl_download, CURLOPT_WRITEDATA, file);
+        
+        // Set range if necessary
+        if (actual_start != 0 || actual_end != 0) 
+		{
+            std::string rangeStr;
+            if (actual_end == 0) 
+	            rangeStr = std::to_string(actual_start) + "-";
+            else 
+			    rangeStr = std::to_string(actual_start) + "-" + std::to_string(actual_end);
+            Kurl_easy_setopt(curl_download, CURLOPT_RANGE, rangeStr.c_str());
+            if (flagdebug3) 
+				myprintf("41692: range: %s\n", rangeStr.c_str());
+        }
+        
+		Kurl_easy_setopt(curl_download, CURLOPT_XFERINFOFUNCTION, download_progress_callback);
+		Kurl_easy_setopt(curl_download, CURLOPT_XFERINFODATA, &download_data);
+        Kurl_easy_setopt(curl_download, CURLOPT_NOPROGRESS, 0L);
+        
+        CURLcode res = Kurl_easy_perform(curl_download);
+        
+        fclose(file);
+        Kurl_easy_cleanup(curl_download);
+        
+        if (res != CURLE_OK) 
+		{
+            myprintf("41706! error download: %s\n", Kurl_easy_strerror(res));
+            remove(i_local.c_str()); // Remove partial file
+            return false;
+        }
+        
+        if (flagdebug3) 
+			myprintf("41712: download done\n");
+        return true;
+    }
+    
+	struct Range 
+	{
+		curl_off_t 	start;
+		curl_off_t 	end;
+		std::string file;
+	};	
+	bool down3(int64_t i_remote_size, const std::string& i_remote, const std::string& i_file1, const std::string& i_file2, const std::string& i_file3)
+	{
+		if (!curl) 
+		{
+			myprintf("41721! No curl in down3\n");
+			return false;
+		}
+
+		std::vector<Range> ranges; 
+		if (i_remote_size >= 65536) 
+		{
+			if (flagdebug3) 
+				myprintf("41738: File >= 64KB. 3 chunks\n");
+			
+			Range range1;
+			range1.start = 0;
+			range1.end = 16383;
+			range1.file = i_file1;
+			ranges.push_back(range1);
+			
+			Range range2;
+			range2.start = i_remote_size / 2;
+			range2.end = i_remote_size / 2 + 16383;
+			range2.file = i_file2;
+			ranges.push_back(range2);
+			
+			Range range3;
+			range3.start = i_remote_size - 16384;
+			range3.end = i_remote_size - 1;
+			range3.file = i_file3;
+			ranges.push_back(range3);
+		} 
+		else 
+		{
+			if (flagdebug3) 
+				myprintf("41544: debug: $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$ File %s  %s < 64KB. One-chunk download\n",i_remote.c_str(),migliaia(i_remote_size));
+			if (i_remote_size > 0) 
+			{
+				Range range;
+				range.start = 0;
+				range.end = i_remote_size - 1;
+				range.file = i_file1;
+				ranges.push_back(range);
+			}
+		}
+
+
+		CURL* curl_download = Kurl_easy_duphandle(curl);
+		if (!curl_download) 
+		{
+			myprintf("41756! impossible duphandle down3\n");
+			return false;
+		}
+		char url[1024];
+		snprintf(url, sizeof(url),"sftp://%s:%d%s", host.c_str(), port, i_remote.c_str());
+		Kurl_easy_setopt(curl_download, CURLOPT_URL, url);
+		Kurl_easy_setopt(curl_download, CURLOPT_WRITEFUNCTION, write_file_callback);
+		Kurl_easy_setopt(curl_download, CURLOPT_XFERINFOFUNCTION, download_progress_callback);
+		Kurl_easy_setopt(curl_download, CURLOPT_NOPROGRESS, 0L);
+		bool success = true;
+		for (size_t i = 0; i < ranges.size(); i++) 	
+		{
+			const Range& range = ranges[i];
+			if (flagdebug3) 
+				myprintf("41771: Download range: %s -> %s (bytes %s-%s)\n",
+                          i_remote.c_str(), range.file.c_str(), migliaia(range.start), migliaia2(range.end));
+
+			// Range validation
+			if (range.start < 0 || range.end < 0 || range.start >= i_remote_size || range.end >= i_remote_size || range.start > range.end) 
+			{
+				if (flagdebug3) 
+					myprintf("41778: invalid range (%s-%s)\n", migliaia(range.start), migliaia2(range.end));
+				success = false;
+				break;
+			}
+			FILE* file = fopen(range.file.c_str(), "wb");
+			if (!file) 
+			{
+				myprintf("41768: cannot create local file %s\n", range.file.c_str());
+				success = false;
+				break;
+			}
+			sftp_downloaddata download_data;
+			download_data.file 					= file;
+			download_data.total_size 			= i_remote_size;
+			download_data.downloaded 			= 0;
+			download_data.start_time 			= mtime(); // time(NULL);
+			download_data.last_progress_time 	= download_data.start_time;
+			download_data.start_offset 			= range.start;
+			download_data.end_offset 			= range.end;
+			download_data.local_existing_size 	= 0; // No resume mode for these chunks
+			Kurl_easy_setopt(curl_download, CURLOPT_WRITEDATA, file);
+			std::string rangeStr = std::to_string(range.start) + "-" + std::to_string(range.end);
+			Kurl_easy_setopt(curl_download, CURLOPT_RANGE, rangeStr.c_str());
+			if (flagdebug3) 
+				myprintf("41805: Range range: %s\n", rangeStr.c_str());
+			Kurl_easy_setopt(curl_download, CURLOPT_PROGRESSDATA, &download_data);
+			CURLcode res = Kurl_easy_perform(curl_download);
+			fclose(file);
+			if (res != CURLE_OK) 
+			{
+				myprintf("41814! Error download range %s: %s\n", range.file.c_str(), Kurl_easy_strerror(res));
+				remove(range.file.c_str()); // Remove partial file
+				success = false;
+				break;
+			}
+			if (flagdebug3) 
+				myprintf("41821: Download chunk completated: %s\n", range.file.c_str());
+		}
+		Kurl_easy_cleanup(curl_download);
+		return success;
+	}
+    // Create remote directory recursively
+	bool sftpmkdir(const std::string& i_remote) 
+	{
+		if (!curl) 
+		{
+			myprintf("41836! No curl in sftpmkdir\n");
+			return false;
+		}
+		if (flagdebug3) 
+			myprintf("41841: making directory %s\n", i_remote.c_str());
+		
+		std::string current_path = i_remote;
+		
+		// Normalizza il percorso (rimuovi / finale se presente)
+		if (!current_path.empty() && current_path.back() == '/') 
+			current_path.pop_back();
+		
+		// Create each directory in the path incrementally
+		std::string cumulative_path;
+		size_t start = 0;
+		
+		// If the path starts with /, start from the root
+		if (!current_path.empty() && current_path[0] == '/') 
+		{
+			cumulative_path = "";
+			start = 1;  // Skip the first '/'
+		}
+		
+		size_t pos = start;
+		while (pos <= current_path.length()) 
+		{
+			// Find the next '/' or the end of the string
+			size_t next_slash = current_path.find('/', pos);
+			if (next_slash == std::string::npos) 
+				next_slash = current_path.length();
+			
+			// If we found a component
+			if (next_slash > pos) 
+			{
+				std::string component = current_path.substr(pos, next_slash - pos);
+				
+				// Build the incremental path
+				if (cumulative_path.empty()) 
+					cumulative_path = "/" + component;
+				else 
+					cumulative_path += "/" + component;
+				
+				if (flagdebug3) 
+					myprintf("41873: Attempt making : %s\n", cumulative_path.c_str());
+				
+				CURL* curl_mkdir = Kurl_easy_duphandle(curl);
+				if (!curl_mkdir) 
+				{
+					myprintf("41878! impossible duplicating sftpmkdir\n");
+					return false;
+				}
+				
+				// For SFTP use CURLOPT_QUOTE with mkdir, not CURLOPT_FTP_CREATE_MISSING_DIRS
+				char mkdir_command[1024];
+				snprintf(mkdir_command, sizeof(mkdir_command), "mkdir %s", cumulative_path.c_str());
+				
+				struct curl_slist* quote_list = NULL;
+				quote_list = Kurl_slist_append(quote_list, mkdir_command);
+				
+				char url[1024];
+				snprintf(url, sizeof(url),"sftp://%s:%d/", host.c_str(), port);
+				
+				Kurl_easy_setopt(curl_mkdir, CURLOPT_URL, url);
+				Kurl_easy_setopt(curl_mkdir, CURLOPT_QUOTE, quote_list);
+				Kurl_easy_setopt(curl_mkdir, CURLOPT_NOBODY, 1L);
+				
+				CURLcode res = Kurl_easy_perform(curl_mkdir);
+				
+				Kurl_slist_free_all(quote_list);
+				Kurl_easy_cleanup(curl_mkdir);
+				
+				if (res != CURLE_OK) 
+				{
+					// It might already exist, let's try to continue
+					if (flagdebug3) 
+						myprintf("41896: Directory %s: %s (already existent?)\n", 
+								 cumulative_path.c_str(), Kurl_easy_strerror(res));
+				} 
+				else 
+				{
+					if (flagdebug) 
+						myprintf("41902: Directory %s successfully created\n", cumulative_path.c_str());
+				}
+			}
+			
+			pos = next_slash + 1;
+		}
+		
+		if (flagdebug3) 
+			myprintf("41907: mkdir done\n");
+		return true;
+	}
+    
+    // Delete remote file
+    bool sftpdeletefile(const std::string& i_remotefile) 
+	{
+        if (!curl) 
+		{
+            myprintf("41831! No curl in sftpdeletefile\n");
+			return false;
+        }
+        
+        if (flagdebug3) 
+			myprintf("41921: deleting remote file: %s\n", i_remotefile.c_str());
+        
+        CURL* curl_delete = Kurl_easy_duphandle(curl);
+        if (!curl_delete) 
+		{
+            myprintf("41926: cannot duplicate sftpdeletefile\n");
+            return false;
+        }
+        
+        char url[1024];
+        snprintf(url, sizeof(url),"sftp://%s:%d%s", host.c_str(), port, i_remotefile.c_str());
+        
+        // Set the options for deletion
+        Kurl_easy_setopt(curl_delete, CURLOPT_URL, url);
+        Kurl_easy_setopt(curl_delete, CURLOPT_QUOTE, NULL);
+        
+        // Use POSTQUOTE to delete the file after connection
+        struct curl_slist* commands 	= NULL;
+        std::string rm_command 			= "rm " + i_remotefile;
+        commands 						= Kurl_slist_append(commands, rm_command.c_str());
+        Kurl_easy_setopt(curl_delete, CURLOPT_POSTQUOTE, commands);
+        
+        Kurl_easy_setopt(curl_delete, CURLOPT_NOBODY, 1L);
+        CURLcode res = Kurl_easy_perform(curl_delete);
+        
+        Kurl_slist_free_all(commands);
+        Kurl_easy_cleanup(curl_delete);
+        
+        if (res != CURLE_OK) 
+		{
+            myprintf("41951: Error deleting %s\n", Kurl_easy_strerror(res));
+            return false;
+        }
+        
+        if (flagdebug3) 
+			myprintf("41956: remote file deleted OK\n");
+        return true;
+    }
+
+// Structure to capture output
+	struct WriteData 
+	{
+		std::string data;
+	};
+
+// Callback per catturare l'output
+	static size_t WriteCallback(void* contents, size_t size, size_t nmemb, WriteData* userdata) 
+	{
+		size_t totalSize = size * nmemb;
+		userdata->data.append((char*)contents, totalSize);
+		return totalSize;
+	}
+
+	bool check_ssh_support() 
+	{
+		curl_version_info_data* version_info = curldll.my_version_info(CURLVERSION_NOW);
+		
+		myprintf("38765: libcurl version: %s\n", version_info->version);
+		myprintf("38766: Supported protocols: ");
+		
+		bool ssh_supported = false;
+		for (int i = 0; version_info->protocols[i]; i++) 
+		{
+			myprintf("%s ", version_info->protocols[i]);
+			if (strcmp(version_info->protocols[i], "ssh") == 0) 
+				ssh_supported = true;
+		}
+		myprintf("\n");
+		
+		if (!ssh_supported) 
+		{
+			myprintf("38779! SSH protocol not supported in this libcurl build!\n");
+			return false;
+		}
+		
+		myprintf("SSH protocol is supported\n");
+		return true;
+	}
+
+	bool xremote_command(const std::string& command, std::string& output) 
+	{
+		if (!curl) 
+		{
+			myprintf("38747! No curl in xremote_command\n");
+			return false;
+		}
+		
+		if (flagdebug3) 
+			myprintf("41923: executing remote command: %s\n", command.c_str());
+		
+		CURL* curl_command = Kurl_easy_duphandle(curl);
+		if (!curl_command) 
+		{
+			myprintf("41932: cannot duplicate xremote_command\n");
+			return false;
+		}
+		
+		// Structure to capture output
+		WriteData writeData;
+		
+		char url[1024];
+		snprintf(url, sizeof(url), "sftp://%s:%d/", host.c_str(), port);
+		
+		Kurl_easy_setopt(curl_command, CURLOPT_URL, url);
+		
+		// Configure the callback to capture the output
+		Kurl_easy_setopt(curl_command, CURLOPT_WRITEFUNCTION, WriteCallback);
+		Kurl_easy_setopt(curl_command, CURLOPT_WRITEDATA, &writeData);
+		
+		// Use QUOTE to execute the command
+		struct curl_slist* commands = NULL;
+		commands = Kurl_slist_append(commands, command.c_str());
+		Kurl_easy_setopt(curl_command, CURLOPT_QUOTE, commands);
+		
+		// Do not use NOBODY if you want to capture the output
+		Kurl_easy_setopt(curl_command, CURLOPT_NOBODY, 0L);
+		
+		CURLcode res = Kurl_easy_perform(curl_command);
+		
+		Kurl_slist_free_all(commands);
+		Kurl_easy_cleanup(curl_command);
+		
+		if (res != CURLE_OK) 
+		{
+			myprintf("31951: Error xcommand %s\n", Kurl_easy_strerror(res));
+			return false;
+		}
+		
+		output = writeData.data;
+		
+		if (flagdebug3) 
+			myprintf("41953: remote command OK, output: %s\n", output.c_str());
+		
+		return true;
+	}
+
+	// Specific function for md5sum
+	bool xremote_md5sum(const std::string& pattern, std::string& md5_output) 
+	{
+		std::string command = "md5sum " + pattern;
+		return xremote_command(command, md5_output);
+	}
+
+	bool listremotedir(const std::string& i_remote, std::vector<sftpfileinfo>* o_filearray, const std::string& filter = "") 
+	{
+        if (!curl) 
+		{
+            myprintf("41831! No curl in listremotedir\n");
+			return false;
+        }
+		
+		if (!o_filearray) 
+		{
+			myprintf("42186: puntatore array null\n");
+			return false;
+		}
+		
+		if (flagdebug) 
+			myprintf("42190: Listing directory: %s (filter: %s)\n", 
+							 i_remote.c_str(), filter.empty() ? "none" : filter.c_str());
+		
+		// Clear the output array
+		o_filearray->clear();
+		
+		CURL* curl_list = Kurl_easy_duphandle(curl);
+		if (!curl_list) 
+		{
+			myprintf("42199: impossible to dup handle listremotedir\n");
+			return false;
+		}
+		
+		// Build URL for listing - SFTP simply uses the directory URL
+		char url[1024];
+		std::string dir_path = i_remote;
+		if (!dir_path.empty() && dir_path.back() != '/') 
+			dir_path += "/";
+		snprintf(url,sizeof(url), "sftp://%s:%d%s", host.c_str(), port, dir_path.c_str());
+		
+		// Prepare data for the callback
+		sftp_listingdata listing_data(o_filearray, i_remote, filter);
+		
+		// Configure curl for SFTP listing
+		Kurl_easy_setopt(curl_list, CURLOPT_URL, url);
+		Kurl_easy_setopt(curl_list, CURLOPT_WRITEFUNCTION, listing_callback);
+		Kurl_easy_setopt(curl_list, CURLOPT_WRITEDATA, &listing_data);
+		
+		// For SFTP, use CURLOPT_DIRLISTONLY to get only the names
+		// or leave it at 0 for detailed information
+		Kurl_easy_setopt(curl_list, CURLOPT_DIRLISTONLY, 0L);
+		
+		CURLcode res = Kurl_easy_perform(curl_list);
+		Kurl_easy_cleanup(curl_list);
+		
+		if (res != CURLE_OK) 
+		{
+			myprintf("42233: Error listing directory: %s\n", Kurl_easy_strerror(res));
+			return false;
+		}
+
+		std::sort(o_filearray->begin(), o_filearray->end(), compareSftpFileInfo);
+		/*
+		// Ordina alfabeticamente il vettore risultato
+		std::sort(o_filearray->begin(), o_filearray->end(), [](const sftpfileinfo& a, const sftpfileinfo& b) {
+			return a.name < b.name;
+		});
+		*/
+		if (flagdebug3) 
+			myprintf("42243: listing done and sorted: %d elements\n", (int)o_filearray->size());
+		
+		return true;
+	}
+
+	bool sftp_down3parallela		(std::vector<sftpget3>& file_list, int i_thread);
+								
+	bool sftp_rsync	(	const 	std::vector<std::string>& local_files, 
+										const 	std::string& remote_path, 
+										bool 	force_flag, 
+										int 	i_thread);
+};
+
+// Data structures for threading
+struct sftp_rsync_thread_data 
+{
+    int 							thread_id;
+    zpaqfranzsftp2* 				sftp_instance;
+    std::queue<std::string>* 		file_queue;
+    std::mutex* 					queue_mutex;
+    std::condition_variable* 		queue_cv;
+    std::string 					remote_path;
+    bool 							force_flag;
+    bool* 							should_stop;
+	int								maxbandwidth;
+    
+    // Statistics per thread
+    std::string 					current_file;
+	int64_t 						current_file_size;
+    int64_t 						current_uploaded;
+    int64_t 						thread_start_time;
+    int64_t 						last_update_time;
+    double 							current_speed;
+    enum { SFTP_IDLE, SFTP_UPLOAD, SFTP_ERROR, SFTP_DONE } status;
+	int64_t							resume_from;
+	int 							ultima_percentuale;
+    std::string status_message;
+    
+    sftp_rsync_thread_data() : 
+	thread_id			(0), 
+	sftp_instance		(nullptr), 
+	file_queue			(nullptr), 
+    queue_mutex			(nullptr), 
+	queue_cv			(nullptr), 
+	force_flag			(false),
+	should_stop			(nullptr),
+	maxbandwidth		(0),
+	current_file_size	(0), 
+	current_uploaded	(0),
+    thread_start_time	(0), 
+	last_update_time	(0), 
+	current_speed		(0.0),
+    status				(SFTP_IDLE),
+	resume_from(0),
+	ultima_percentuale(0)	{}
+};
+
+struct sftp_rsync_progress_data 
+{
+    int 									total_files;
+    int 									completed_files;
+    int64_t 								total_start_time;
+    std::vector<sftp_rsync_thread_data*> 	threads;
+    std::mutex progress_mutex;
+    
+    sftp_rsync_progress_data() : 
+	total_files			(0), 
+	completed_files		(0), 
+	total_start_time	(0) {}
+};
+
+// Callback per il progresso dell'upload
+
+static size_t sftp_rsync_progress_callback(void* clientp, curl_off_t dltotal, curl_off_t dlnow,curl_off_t ultotal, curl_off_t ulnow) 
+{
+	(void)dlnow;
+	(void)ultotal;
+	(void)dltotal;
+    sftp_rsync_thread_data* data = static_cast<sftp_rsync_thread_data*>(clientp);
+    if (data) 
+	{
+		int64_t istante			= mtime();
+        int64_t time_from_start = istante - data->thread_start_time;
+
+		if (time_from_start>0)
+			if ((istante-data->last_update_time)>1000)
+			{
+				int64_t bytes_diff = data->current_uploaded;
+				if (bytes_diff > 0) 
+				{
+					data->current_speed = (double)bytes_diff / (time_from_start / 1000.0); 
+					/*
+					gotoxy(0,10+data->thread_id);
+					printf("Thread %d: time_from_start=%d bytes_diff=%d, speed=%s/s",
+                             data->thread_id, time_from_start, bytes_diff, tohuman3((int64_t)data->current_speed));
+					*/
+				}
+				data->last_update_time = istante;
+				data->current_uploaded = (int64_t)ulnow;
+			}
+     }
+    
+    return 0;
+}
+// Callback per la scrittura dei dati
+static size_t sftp_rsync_read_callback(void* ptr, size_t size, size_t nmemb, void* userdata) 
+{
+    FILE* file = static_cast<FILE*>(userdata);
+    return fread(ptr, size, nmemb, file);
+}
+
+// Worker function for each thread
+static void* sftp_rsync_worker_thread(void* arg) 
+{
+    sftp_rsync_thread_data* data = static_cast<sftp_rsync_thread_data*>(arg);
+    
+    while (!*(data->should_stop)) 
+	{
+        std::string current_file;
+        
+        {
+            std::unique_lock<std::mutex> lock(*(data->queue_mutex));
+            
+            // Replace the lambda with an explicit loop
+            while (data->file_queue->empty() && !*(data->should_stop)) {
+                data->queue_cv->wait(lock);
+            }
+            
+            if (*(data->should_stop)) 
+                break;
+            
+            if (!data->file_queue->empty()) 
+            {
+                current_file = data->file_queue->front();
+                data->file_queue->pop();
+            } 
+            else 
+                continue;
+        }
+        data->current_file = current_file;
+		
+        data->status 				= sftp_rsync_thread_data::SFTP_UPLOAD;
+        data->thread_start_time		= mtime();
+        data->last_update_time 		= data->thread_start_time;
+        data->current_uploaded 		= 0;
+        data->current_speed 		= 0.0;
+        data->ultima_percentuale 	= 0;
+        
+        // Check if the local file exists
+        if (!fileexists(current_file)) 
+		{
+            data->status 			= sftp_rsync_thread_data::SFTP_ERROR;
+            data->status_message 	= "File not foud";
+            continue;
+        }
+        
+        // Get file size locale
+        int64_t local_size = prendidimensionefile(current_file.c_str());
+        if (local_size < 0) 
+		{
+            data->status 			= sftp_rsync_thread_data::SFTP_ERROR;
+            data->status_message 	= "Size error";
+            continue;
+        }
+///		data->local_file_size= local_size;
+		
+        data->current_file_size = local_size;
+        
+        // Build remote path
+        std::string filename 	= extractfilename(current_file);
+        std::string remote_file = data->remote_path;
+        if (remote_file.back() != '/') remote_file += '/';
+        remote_file += filename;
+       
+        // Check if the remote file exists and its size
+        int64_t remote_size = 0;
+        int64_t resume_from = 0;
+        
+		if (!data->force_flag) 
+		{
+			remote_size = data->sftp_instance->remotegetfilesize(remote_file);
+			
+			myprintf("DEBUG3: ********************************* %d %s\n", remote_size, remote_file.c_str());
+
+			// If remote_size is -1, the file does not exist, proceed with full upload
+			if (remote_size == -1) {
+				///fikoremote_size = 0;  // Tratta come file inesistente
+				resume_from = 0;
+			}
+			else if (remote_size > 0) 
+			{
+				if (remote_size >= local_size) 
+				{
+					data->status = sftp_rsync_thread_data::SFTP_DONE;
+					data->status_message = "Already done";
+					continue;
+				} 
+				else 
+				{
+					resume_from = remote_size;
+				}
+			}
+		}
+		data->resume_from=resume_from;
+        // Open local file
+        FILE* file = fopen(current_file.c_str(), "rb");
+        if (!file) 
+		{
+            data->status 			= sftp_rsync_thread_data::SFTP_ERROR;
+            data->status_message 	= "Error in fopen";
+            continue;
+        }
+		// OPTIMIZATION 1: Larger buffer for reading
+		const size_t BUFFER_SIZE 	= 1024 * 1024; // 1MB invece del default
+		char* buffer 				= new char[BUFFER_SIZE];
+		setvbuf(file, buffer, _IOFBF, BUFFER_SIZE);
+        
+        // If resuming, jump to the correct position
+        if (resume_from > 0) 
+		{
+ #ifdef _WIN32
+			_fseeki64(file, resume_from, SEEK_SET);
+#else
+			fseeko(file, resume_from, SEEK_SET);
+#endif
+        }
+        
+        // Configure CURL for upload
+        CURL* curl_handle = Kurl_easy_duphandle(data->sftp_instance->curl);
+        if (!curl_handle) 
+		{
+            fclose(file);
+			delete[] buffer; // Free the buffer in case of error
+            data->status 			= sftp_rsync_thread_data::SFTP_ERROR;
+            data->status_message 	= "CURL Error duphandle";
+            continue;
+        }
+        
+        char url[1024];
+        snprintf(url, sizeof(url),"sftp://%s:%d%s", 
+                data->sftp_instance->getHost().c_str(), 
+                data->sftp_instance->getPort(), 
+                remote_file.c_str());
+        
+        Kurl_easy_setopt(curl_handle, CURLOPT_URL, url);
+        Kurl_easy_setopt(curl_handle, CURLOPT_UPLOAD, 1L);
+		if (data->maxbandwidth>0)
+			Kurl_easy_setopt(curl_handle, CURLOPT_MAX_SEND_SPEED_LARGE,data->maxbandwidth);
+        Kurl_easy_setopt(curl_handle, CURLOPT_READFUNCTION, sftp_rsync_read_callback);
+        Kurl_easy_setopt(curl_handle, CURLOPT_READDATA, file);
+        Kurl_easy_setopt(curl_handle, CURLOPT_INFILESIZE_LARGE, (curl_off_t)(local_size - resume_from));
+        
+		
+		// OPTIMIZATION 2: Buffer size for libcurl
+		Kurl_easy_setopt(curl_handle, CURLOPT_BUFFERSIZE, BUFFER_SIZE);
+		///  experimental
+		Kurl_easy_setopt(curl_handle, CURLOPT_UPLOAD_BUFFERSIZE, BUFFER_SIZE); // Or a value up to 2MB
+	   // OPTIMIZATION 3: Higher timeouts to avoid disconnections
+		Kurl_easy_setopt(curl_handle, CURLOPT_TIMEOUT, 0L);           // No total timeout
+		Kurl_easy_setopt(curl_handle, CURLOPT_LOW_SPEED_LIMIT, 1024L); // 1KB/s minimo
+		Kurl_easy_setopt(curl_handle, CURLOPT_LOW_SPEED_TIME, 30L);   // For 30 seconds
+		
+		// OPTIMIZATION 4: TCP options for performance
+		Kurl_easy_setopt(curl_handle, CURLOPT_TCP_NODELAY, 1L);       // Disable Nagle algorithm
+		Kurl_easy_setopt(curl_handle, CURLOPT_TCP_KEEPALIVE, 1L);     // Keep connection alive
+		Kurl_easy_setopt(curl_handle, CURLOPT_TCP_KEEPIDLE, 60L);     // Keepalive dopo 60s
+		Kurl_easy_setopt(curl_handle, CURLOPT_TCP_KEEPINTVL, 30L);    // Interval tra keepalive
+		
+		// OPTIMIZATION 5: Specific SSH options
+		Kurl_easy_setopt(curl_handle, CURLOPT_SSH_COMPRESSION, 0L);   // Disable SSH compression
+	
+        if (resume_from > 0) 
+		    Kurl_easy_setopt(curl_handle, CURLOPT_RESUME_FROM_LARGE, (curl_off_t)resume_from);
+        
+        // Callback per il progresso
+        Kurl_easy_setopt(curl_handle, CURLOPT_XFERINFOFUNCTION, sftp_rsync_progress_callback);
+        Kurl_easy_setopt(curl_handle, CURLOPT_XFERINFODATA, data);
+        Kurl_easy_setopt(curl_handle, CURLOPT_NOPROGRESS, 0L);
+        
+        // Perform upload
+        CURLcode res = Kurl_easy_perform(curl_handle);
+        
+        fclose(file);
+		delete[] buffer; // Free the buffer in case of error
+        Kurl_easy_cleanup(curl_handle);
+        
+        if (res == CURLE_OK) 
+		{
+            data->status 			= sftp_rsync_thread_data::SFTP_DONE;
+            data->status_message 	= "Completed and OK";
+        } else 
+		{
+            data->status 			= sftp_rsync_thread_data::SFTP_ERROR;
+            data->status_message 	= Kurl_easy_strerror(res);
+        }
+    }
+    
+    return nullptr;
+}
+
+// Function to update the progress display
+static void sftp_rsync_update_display(sftp_rsync_progress_data* progress) 
+{
+	bool	ismultithread=progress->threads.size()>1;
+	
+    // Calculate global statistics
+    int 		completed 		= 0;
+    double 		total_speed 	= 0.0;
+	double 		max_eta			= 0;
+	int64_t 	total_uploaded	= 0;
+	int64_t 	total_remaining	= 0;
+	
+    for (size_t i = 0; i < progress->threads.size(); ++i) 
+	{
+        const sftp_rsync_thread_data* thread = progress->threads[i];
+        if (thread->status == sftp_rsync_thread_data::SFTP_DONE) 
+		    completed++;
+        total_speed += thread->current_speed;
+    }
+    
+	if (ismultithread)
+		gotoxy(0, 1);
+    
+	
+    for (size_t i = 0; i < progress->threads.size(); ++i) 
+	{
+        sftp_rsync_thread_data* thread = progress->threads[i];
+		///int64_t remaining = thread->current_file_size-thread->current_uploaded;
+        int64_t remaining = thread->current_file_size-thread->current_uploaded-thread->resume_from;
+        
+        const char* status_str;
+        switch (thread->status) 
+		{
+            case sftp_rsync_thread_data::SFTP_IDLE:   status_str = "IDLE  "; color_yellow(); 	break;
+            case sftp_rsync_thread_data::SFTP_UPLOAD: status_str = "UPLOAD"; color_cyan(); 		break;
+            case sftp_rsync_thread_data::SFTP_ERROR:  status_str = "ERROR "; color_red(); 		break;
+            case sftp_rsync_thread_data::SFTP_DONE:   status_str = "DONE  "; color_green(); remaining=0; 
+			thread->current_uploaded	=0;
+			thread->current_speed		=0;
+			break;
+            default: status_str = "UNKNOW"; break;
+        }
+        total_remaining+=remaining;
+		double eta = (thread->current_speed > 0) ? remaining / thread->current_speed : 0;
+                
+		if (eta>max_eta)
+			max_eta=eta;
+		
+		int eta_hours 	= (int)(eta / 3600);
+		int eta_minutes = (int)((eta - eta_hours * 3600) / 60);
+		int eta_seconds = (int)(eta - eta_hours * 3600 - eta_minutes * 60);
+				
+		if (eta_hours>99)
+			eta_hours=99;
+		
+		total_uploaded+=thread->current_uploaded;
+		
+		  double percentuale = ((double)remaining / (thread->current_file_size + 1)) * 100.0;
+		int percentuale_intera = (int)(percentuale); // Percentage completed (100 - remaining)
+
+
+if ((percentuale_intera % 5 == 0) && (thread->ultima_percentuale != percentuale_intera)) 
+{
+	        thread->ultima_percentuale = percentuale_intera; // Update the last percentage
+  
+ myprintf("#%02d [%7s] %03d%% %12s ETA:%02d:%02d:%02d | %12s @%12s/s | %s",
+                 thread->thread_id,
+                 status_str,
+				 percentuale_intera,
+				 tohuman(remaining),
+				 eta_hours, eta_minutes, eta_seconds,
+                 ///tohuman2(thread->current_file_size),
+                 tohuman3(thread->current_uploaded),
+                 tohuman4((int64_t)thread->current_speed),
+                 extractfilename(thread->current_file).c_str());
+} 
+else 
+{
+ printf("#%02d [%7s] %03d%% %12s ETA:%02d:%02d:%02d | %12s @%12s/s | %s",
+                 thread->thread_id,
+                 status_str,
+				 percentuale_intera,
+				 tohuman(remaining),
+				 eta_hours, eta_minutes, eta_seconds,
+                 ///tohuman2(thread->current_file_size),
+                 tohuman3(thread->current_uploaded),
+                 tohuman4((int64_t)thread->current_speed),
+                 extractfilename(thread->current_file).c_str());
+}
+		color_restore();
+        eol();
+if ((percentuale_intera % 5 == 0) && (thread->ultima_percentuale != percentuale_intera)) 
+{
+		if (ismultithread)
+			myprintf("\n");
+		else
+			myprintf("\r");
+}
+else
+{
+		if (ismultithread)
+			printf("\n");
+		else
+			printf("\r");
+
+}
+    }
+
+	if (ismultithread)
+	{
+		static int last_console_y 	= 0;
+    
+		gotoxy(0, 0);
+		int eta_hours = (int)(max_eta / 3600);
+		int eta_minutes = (int)((max_eta - eta_hours * 3600) / 60);
+		int eta_seconds = (int)(max_eta - eta_hours * 3600 - eta_minutes * 60);
+		if (eta_hours>99)
+			eta_hours=99;
+			
+		myprintf("Global TODO:  %12s ETA:%02d:%02d:%02d   (%6.2f%%)    (%12s @%12s/s)",
+			tohuman(total_remaining),
+			eta_hours, eta_minutes, eta_seconds,
+			(double)completed * 100.0 / progress->total_files,
+			tohuman3(total_uploaded),
+			tohuman2(total_speed));
+
+		// Remember the last position
+		int current_y = 1 + (int)progress->threads.size();
+		while (last_console_y > current_y) 
+		{
+			clear_line();
+			myprintf("\n");
+			last_console_y--;
+		}
+		last_console_y = current_y;
+	}
+}
+
+curldynfunctions 	zpaqfranzsftp2::curldll = {};
+bool 				zpaqfranzsftp2::dllloaded = false;
+
+bool zpaqfranzsftp2::sftp_rsync(const std::vector<std::string>& local_files, const std::string& remote_path, bool force_flag, int i_thread) 
+{
+    
+	if (local_files.empty()) 
+	{
+		myprintf("42516: No file to transfer\n");
+		return false;
+	}
+	
+	if ((i_thread < 1) || (i_thread > 99)) 
+	{
+		myprintf("42522: Invalid thread number : %d (1-99)\n", i_thread);
+		return false;
+	}
+	
+	if (!curl) 
+	{
+		myprintf("42528! Curl SFTP not OK\n");
+		return false;
+	}
+	
+	// Initialize the data structures
+	std::queue<std::string> 	file_queue;
+	std::mutex 					queue_mutex;
+	std::condition_variable 	queue_cv;
+	bool should_stop 			= false;
+	
+	// Populate the queue with files
+	for (std::vector<std::string>::const_iterator it = local_files.begin(); 
+     it != local_files.end(); ++it) 
+    file_queue.push(*it);
+/*
+	for (const auto& file : local_files) 
+		file_queue.push(file);
+*/	
+	// Create progress structure
+	sftp_rsync_progress_data progress;
+	progress.total_files 		= (int)local_files.size();
+	progress.completed_files 	= 0;
+	progress.total_start_time 	= mtime();
+	
+	if (i_thread>(int)local_files.size())
+		i_thread=local_files.size();
+	
+	// Create thread data
+	std::vector<sftp_rsync_thread_data> thread_data(i_thread);
+	std::vector<pthread_t> threads(i_thread);
+
+	if (g_sftp_bandwidth>0)
+		g_sftp_bandwidth=(g_sftp_bandwidth/i_thread);
+	for (int i = 0; i < i_thread; ++i) 
+	{
+		thread_data[i].thread_id 		= i + 1;
+		thread_data[i].sftp_instance 	= this;
+		thread_data[i].file_queue 		= &file_queue;
+		thread_data[i].queue_mutex 		= &queue_mutex;
+		thread_data[i].queue_cv 		= &queue_cv;
+		thread_data[i].remote_path 		= remote_path;
+		thread_data[i].force_flag 		= force_flag;
+		thread_data[i].should_stop 		= &should_stop;
+		thread_data[i].maxbandwidth 	= g_sftp_bandwidth;
+		
+		
+		progress.threads.push_back(&thread_data[i]);
+		
+		if (pthread_create(&threads[i], nullptr, sftp_rsync_worker_thread, &thread_data[i]) != 0) 
+		{
+			myprintf("42570! Error making thread  %d\n", i + 1);
+			should_stop = true;
+			return false;
+		}
+	}
+	
+	// Hide cursor and clear screen
+	hide_cursor();
+	if (i_thread>1)
+	{
+		setupConsole();
+		printf("\033[2J"); //cls
+		printf("\033[%d;0H",(int)1);
+		restoreConsole();
+	}
+	else
+		myprintf("VERBOSE: Upload one file at time (single thread)\n");
+	// Loop di monitoraggio
+	while (!should_stop) 
+	{
+		{
+			std::lock_guard<std::mutex> lock(queue_mutex);
+			if (file_queue.empty()) 
+			{
+				// Check if all threads have finished
+				bool all_done = true;
+				for (int i = 0; i < i_thread; ++i) 
+					if (thread_data[i].status == sftp_rsync_thread_data::SFTP_UPLOAD) 
+					{
+						all_done = false;
+						break;
+					}
+				if (all_done) 
+					should_stop = true;
+			}
+		}
+		
+		sftp_rsync_update_display(&progress);
+		
+		if (!should_stop) 
+#ifdef _WIN32
+			Sleep(1000); // Windows: pausa in millisecondi
+#else
+			usleep(1000000); // Linux: pausa di 1 secondo (1000 ms = 1000000 µs)
+#endif
+
+	}
+	
+	// Notify all threads to stop
+	queue_cv.notify_all();
+	
+	// Wait for all threads to finish
+	for (int i = 0; i < i_thread; ++i) 
+		pthread_join(threads[i], nullptr);
+	
+	// Final update
+	sftp_rsync_update_display(&progress);
+	
+	// Restore cursor
+	show_cursor();
+	
+	// Count the successes
+	int successful	 = 0;
+	int errors 		= 0;
+	
+	for (int i=0;i<i_thread;i++)
+	{
+		if (thread_data[i].status == sftp_rsync_thread_data::SFTP_DONE) 
+		{
+			successful++;
+		} 
+		else 
+		if (thread_data[i].status == sftp_rsync_thread_data::SFTP_ERROR) 
+		{
+			errors++;
+		}
+	}
+	if (i_thread>1)
+		gotoxy(0,i_thread+2);
+	if (errors==0)
+		color_green();
+	myprintf("42637: Outcome: successful %d, %d error", successful, errors);
+	eol();
+	myprintf("\n");
+	color_restore();
+	return errors == 0;
+}
+///finefima1
+
+#endif
+#endif ///NOSFTPEND
+
+
+
+
+#ifdef ZPAQFULL ///NOSFTPSTART	
+
+#define MAGIC_BYTES "FRANZEN\x1a"
+#define MAGIC_BYTES_LEN 8
+bool domemzero=false; 
+
+// Costanti basate su libsodium
+const int CRYPTO_PWHASH_ALG_DEFAULT = 2; // Argon2id
+const unsigned long long CRYPTO_PWHASH_OPSLIMIT_INTERACTIVE = 2;
+const size_t CRYPTO_PWHASH_MEMLIMIT_INTERACTIVE = 67108864; // 64MB
+const unsigned long long CRYPTO_PWHASH_OPSLIMIT_MODERATE = 3;
+const size_t CRYPTO_PWHASH_MEMLIMIT_MODERATE = 268435456; // 256MB
+const unsigned long long CRYPTO_PWHASH_OPSLIMIT_SENSITIVE = 4;
+const size_t CRYPTO_PWHASH_MEMLIMIT_SENSITIVE = 1073741824; // 1GB
+
+#define G_FRANZEN_SIZE 1048576
+//65536*2
+
+// Variabili globali parametriche
+uint64_t g_sodio_block_size = G_FRANZEN_SIZE;
+unsigned long long g_sodio_pwhash_opslimit = CRYPTO_PWHASH_OPSLIMIT_MODERATE;
+size_t g_sodio_pwhash_memlimit = CRYPTO_PWHASH_MEMLIMIT_MODERATE;
+
+
+
+struct sodium_functions {
+#ifdef _WIN32
+    HINSTANCE handle;
+#else
+    void *handle;
+#endif
+    int 	(*sodium_init)(void);
+    void 	(*sodium_memzero)(void *const, const size_t);
+    void 	(*randombytes_buf)(void *const buf, const size_t size);
+    int 	(*crypto_pwhash)(unsigned char *const out, unsigned long long outlen,
+				const char *const passwd, unsigned long long passwdlen,
+				const unsigned char *const salt,
+				unsigned long long opslimit, size_t memlimit, int alg);
+    size_t 	(*crypto_aead_chacha20poly1305_ietf_keybytes)(void);
+    size_t 	(*crypto_aead_chacha20poly1305_ietf_npubbytes)(void);
+    size_t 	(*crypto_aead_chacha20poly1305_ietf_abytes)(void);
+    int 	(*crypto_aead_chacha20poly1305_ietf_encrypt)(
+				unsigned char *c, unsigned long long *clen_p,
+				const unsigned char *m, unsigned long long mlen,
+				const unsigned char *ad, unsigned long long adlen,
+				const unsigned char *nsec, const unsigned char *npub,
+				const unsigned char *k);
+    int 	(*crypto_aead_chacha20poly1305_ietf_decrypt)(
+				unsigned char *m, unsigned long long *mlen_p,
+				unsigned char *nsec,
+				const unsigned char *c, unsigned long long clen,
+				const unsigned char *ad, unsigned long long adlen,
+				const unsigned char *npub, const unsigned char *k);
+};
+
+#pragma pack(push, 1)
+struct file_header 
+{
+    char magic[MAGIC_BYTES_LEN];    // 8 bytes
+    unsigned char auth_tag[16];     // 16 bytes (ChaCha20-Poly1305 tag)
+    unsigned char salt[16];         // 16 bytes
+    uint64_t block_size;            // 8 bytes
+    uint64_t file_data_size;        // 8 bytes
+    uint32_t crc32;                 // 4 bytes (non crypto)
+    uint64_t quickhash;             // 8 bytes (non crypto)
+    uint64_t hashtype;              // 8 bytes (non crypto)
+	uint64_t pwhash_opslimit;       // 8 bytes
+    uint64_t pwhash_memlimit;       // 8 bytes
+    uint8_t pad[36];              	// pad
+	
+};
+#pragma pack(pop)
+
+class franzcri 
+{
+private:
+    FILE 				*file_handle;
+    std::string 		password;
+    size_t 				io_buffer_size;
+    uint64_t 			block_size;
+    bool 				is_file_open;
+    bool 				is_libsodium_loaded;
+    bool 				file_was_modified;
+    struct 				file_header header;
+    unsigned char 		header_nonce[12];
+    struct 				sodium_functions sodium;
+    unsigned char 		key[32];
+    unsigned long long 	pwhash_opslimit;
+    size_t 				pwhash_memlimit;
+    int 				pwhash_alg;
+
+    uint64_t host_to_le64(uint64_t val) 
+	{
+        // Semplice controllo endianness
+        uint16_t test = 1;
+        if (*((uint8_t *)&test) == 1) { // Little-endian
+            return val;
+        }
+        // Big-endian
+        return (((val >> 56) & 0x00000000000000FF) | ((val >> 40) & 0x000000000000FF00) |
+                ((val >> 24) & 0x0000000000FF0000) | ((val >>  8) & 0x00000000FF000000) |
+                ((val <<  8) & 0x000000FF00000000) | ((val << 24) & 0x0000FF0000000000) |
+                ((val << 40) & 0x00FF000000000000) | ((val << 56) & 0xFF00000000000000));
+    }
+
+    uint64_t le64_to_host(uint64_t val) 
+	{
+        return host_to_le64(val);
+    }
+
+    void print_nonce(const unsigned char *nonce, size_t len, const char *context) 
+	{
+		if (!flagdebug) 
+			return;
+		myprintf("DEBUG: %s Nonce: ", context);
+        for (size_t i = 0; i < len; ++i) 
+			myprintf("%02x", nonce[i]);
+		myprintf("\n");
+    }
+
+    void print_key() 
+	{
+        if (!flagdebug) 
+			return;
+		myprintf("DEBUG: Key: ");
+        for (size_t i = 0; i < sizeof(key); ++i) 
+			myprintf("%02x", key[i]);
+		myprintf("\n");
+    }
+
+
+
+
+
+
+
+
+const char* get_default_libssh_path() 
+{
+    static std::string percorsolocale = "./libssh.dll";
+    if (pjidac != NULL)
+        percorsolocale = extractfilepath((*pjidac).fullzpaqexename) + "libssh.dll";
+    return percorsolocale.c_str();
+}
+
+
+
+bool load_library() 
+{
+#ifdef _WIN32
+#ifdef _WIN64
+	if (pjidac == NULL)
+	{
+		myprintf("41466: pjidac null\n");
+		seppuku();
+	}
+    
+	const char *local_lib_name = "./libsodium.dll";
+    const char *generic_lib_name = "libsodium.dll";
+
+
+    // Controlla se libsodium è presente nella cartella locale
+    if ((*pjidac).kickstart_resources("LIBSODIUM") == 0) 
+	{
+        // Libsodium trovato nella cartella locale, prova a caricarlo
+        sodium.handle = LoadLibraryA(local_lib_name);
+        if (sodium.handle) 
+		{
+			if (flagdebug)
+			{
+				color_green();
+				myprintf("38280: libsodium load from local\n");
+				color_restore();
+			}
+        } 
+		else 
+		{
+            color_yellow();
+            myprintf("38281! Cannot load local libsodium!\n");
+			color_restore();
+            sodium.handle = LoadLibraryA(generic_lib_name);
+        }
+    } 
+	else 
+	{
+        // Libsodium non presente nella cartella locale
+        color_yellow();
+        myprintf("38279: No libsodium in current folder, trying generic loading\n");
+        color_restore();
+        sodium.handle = LoadLibraryA(generic_lib_name);
+    }
+    
+    // Controllo finale del caricamento
+    if (!sodium.handle) 
+	{
+        myprintf("38087! cannot load libsodium.dll from any location\n");
+        return false;
+    }
+	
+	sodium.sodium_init 									= (int (*)		(void))						GetProcAddress(sodium.handle, "sodium_init");
+    sodium.sodium_memzero 								= (void (*)		(void *const, const size_t))GetProcAddress(sodium.handle, "sodium_memzero");
+    sodium.randombytes_buf 								= (void (*)		(void *const, const size_t))GetProcAddress(sodium.handle, "randombytes_buf");
+    sodium.crypto_pwhash 								= (int (*)		(unsigned char *const, unsigned long long, const char *const, unsigned long long, const unsigned char *const, unsigned long long, size_t, int))GetProcAddress(sodium.handle, "crypto_pwhash");
+    sodium.crypto_aead_chacha20poly1305_ietf_keybytes 	= (size_t(*)	(void))						GetProcAddress(sodium.handle, "crypto_aead_chacha20poly1305_ietf_keybytes");
+    sodium.crypto_aead_chacha20poly1305_ietf_npubbytes 	= (size_t(*)	(void))						GetProcAddress(sodium.handle, "crypto_aead_chacha20poly1305_ietf_npubbytes");
+    sodium.crypto_aead_chacha20poly1305_ietf_abytes 	= (size_t(*)	(void))						GetProcAddress(sodium.handle, "crypto_aead_chacha20poly1305_ietf_abytes");
+    sodium.crypto_aead_chacha20poly1305_ietf_encrypt 	= (int (*)		(unsigned char *, unsigned long long *, const unsigned char *, unsigned long long, const unsigned char *, unsigned long long, const unsigned char *, const unsigned char *, const unsigned char *))GetProcAddress(sodium.handle, "crypto_aead_chacha20poly1305_ietf_encrypt");
+    sodium.crypto_aead_chacha20poly1305_ietf_decrypt 	= (int (*)		(unsigned char *, unsigned long long *, unsigned char *, const unsigned char *, unsigned long long, const unsigned char *, unsigned long long, const unsigned char *, const unsigned char *))GetProcAddress(sodium.handle, "crypto_aead_chacha20poly1305_ietf_decrypt");
+#endif
+	myprintf("41604: NO sodium on 32 bit\n");
+	return false;
+#else
+    const char *lib_name = "libsodium.so";
+    sodium.handle = dlopen(lib_name, RTLD_LAZY);
+
+    if (!sodium.handle) 
+	{
+		if (flagdebug)
+			myprintf("38138: second try\n");
+		sodium.handle = dlopen("libsodium.so.4", RTLD_LAZY);
+	}
+
+
+    if (!sodium.handle) 
+	{
+        myprintf("38104! Unable to load %s. %s\n", lib_name, dlerror());
+        return false;
+    }
+    sodium.sodium_init = (int (*)(void))dlsym(sodium.handle, "sodium_init");
+    sodium.sodium_memzero = (void (*)(void *const, const size_t))dlsym(sodium.handle, "sodium_memzero");
+    sodium.randombytes_buf = (void (*)(void *const, const size_t))dlsym(sodium.handle, "randombytes_buf");
+    sodium.crypto_pwhash = (int (*)(unsigned char *const, unsigned long long, const char *const, unsigned long long, const unsigned char *const, unsigned long long, size_t, int))dlsym(sodium.handle, "crypto_pwhash");
+    sodium.crypto_aead_chacha20poly1305_ietf_keybytes = (size_t(*)(void))dlsym(sodium.handle, "crypto_aead_chacha20poly1305_ietf_keybytes");
+    sodium.crypto_aead_chacha20poly1305_ietf_npubbytes = (size_t(*)(void))dlsym(sodium.handle, "crypto_aead_chacha20poly1305_ietf_npubbytes");
+    sodium.crypto_aead_chacha20poly1305_ietf_abytes = (size_t(*)(void))dlsym(sodium.handle, "crypto_aead_chacha20poly1305_ietf_abytes");
+    sodium.crypto_aead_chacha20poly1305_ietf_encrypt = (int (*)(unsigned char *, unsigned long long *, const unsigned char *, unsigned long long, const unsigned char *, unsigned long long, const unsigned char *, const unsigned char *, const unsigned char *))dlsym(sodium.handle, "crypto_aead_chacha20poly1305_ietf_encrypt");
+    sodium.crypto_aead_chacha20poly1305_ietf_decrypt = (int (*)(unsigned char *, unsigned long long *, unsigned char *, const unsigned char *, unsigned long long, const unsigned char *, unsigned long long, const unsigned char *, const unsigned char *))dlsym(sodium.handle, "crypto_aead_chacha20poly1305_ietf_decrypt");
+#endif
+
+    if (!sodium.sodium_init || !sodium.sodium_memzero || !sodium.randombytes_buf || !sodium.crypto_pwhash || 
+        !sodium.crypto_aead_chacha20poly1305_ietf_encrypt || !sodium.crypto_aead_chacha20poly1305_ietf_decrypt) 
+	{
+        myprintf("38121! libsodium functions not founded\n");
+        return false;
+    }
+
+    if (sodium.sodium_init() < 0) 
+	{
+        myprintf("38127! libsodium init kaputt\n");
+        return false;
+    }
+    return true;
+}
+
+    void unload_library() 
+	{
+        if (!sodium.handle) 
+			return;
+#ifdef _WIN32
+        FreeLibrary(sodium.handle);
+#else
+        dlclose(sodium.handle);
+#endif
+        sodium.handle = NULL;
+    }
+
+    bool derive_key(const unsigned char *salt) 
+	{
+        if (sodium.crypto_pwhash(key, sizeof(key), password.c_str(), password.length(),
+                                 salt, pwhash_opslimit, pwhash_memlimit, pwhash_alg) != 0) 
+		{
+            myprintf("38150! CRITIC: derive_key KO\n");
+            return false;
+        }
+        print_key();
+        return true;
+    }
+
+    int fseek64(FILE *f, int64_t offset, int origin) 
+	{
+#ifdef _WIN32
+        return _fseeki64(f, offset, origin);
+#else
+        return fseeko(f, offset, origin);
+#endif
+    }
+
+    int64_t get_block_file_offset(uint64_t block_idx) 
+	{
+        size_t tag_len   	= 	sodium.crypto_aead_chacha20poly1305_ietf_abytes();
+        size_t nonce_len 	= 	sodium.crypto_aead_chacha20poly1305_ietf_npubbytes();
+        int64_t offset 		= 	sizeof(file_header) + (int64_t)sizeof(header_nonce);
+        offset 				+= 	(int64_t)block_idx * (int64_t)(nonce_len + block_size + tag_len);
+        return offset;
+    }
+
+    bool write_header() 
+	{
+        if (!file_handle) 
+			return false;
+
+        std::vector<unsigned char> header_data;
+        header_data.insert(header_data.end(), header.salt, header.salt + sizeof(header.salt));
+        uint64_t block_size_le = host_to_le64(header.block_size);
+        header_data.insert(header_data.end(), (unsigned char *)&block_size_le, (unsigned char *)&block_size_le + sizeof(block_size_le));
+        uint64_t file_data_size_le = host_to_le64(header.file_data_size);
+        header_data.insert(header_data.end(), (unsigned char *)&file_data_size_le, (unsigned char *)&file_data_size_le + sizeof(file_data_size_le));
+        uint32_t crc32_le = header.crc32;
+        header_data.insert(header_data.end(), (unsigned char *)&crc32_le, (unsigned char *)&crc32_le + sizeof(crc32_le));
+        uint64_t quickhash_le = host_to_le64(header.quickhash);
+        header_data.insert(header_data.end(), (unsigned char *)&quickhash_le, (unsigned char *)&quickhash_le + sizeof(quickhash_le));
+        uint64_t hashtype_le = host_to_le64(header.hashtype);
+        header_data.insert(header_data.end(), (unsigned char *)&hashtype_le, (unsigned char *)&hashtype_le + sizeof(hashtype_le));
+        header_data.insert(header_data.end(), header.pad, header.pad + sizeof(header.pad));
+
+        sodium.randombytes_buf(header_nonce, sizeof(header_nonce));
+        print_nonce(header_nonce, sizeof(header_nonce), "header_auth");
+
+        unsigned long long ciphertext_len;
+        if (sodium.crypto_aead_chacha20poly1305_ietf_encrypt(header.auth_tag, &ciphertext_len, NULL, 0,
+                &header_data[0], header_data.size(), NULL, header_nonce, key) != 0) 
+				{
+					myprintf("38201! Header auth KO\n");
+					return false;
+				}
+
+        file_header writable_header 	= header;
+        writable_header.block_size 		= host_to_le64(header.block_size);
+        writable_header.file_data_size 	= host_to_le64(header.file_data_size);
+        writable_header.quickhash 		= host_to_le64(header.quickhash);
+        writable_header.hashtype 		= host_to_le64(header.hashtype);
+		writable_header.pwhash_opslimit = host_to_le64(header.pwhash_opslimit);
+		writable_header.pwhash_memlimit = host_to_le64(header.pwhash_memlimit);
+	
+        fseek64(file_handle, 0, SEEK_SET);
+        if (fwrite(&writable_header, 1, sizeof(file_header), file_handle) != sizeof(file_header) ||
+            fwrite(header_nonce, 1, sizeof(header_nonce), file_handle) != sizeof(header_nonce)) 
+			{
+				perror("CRITICAL HEADER WRITING ERROR");
+				return false;
+			}
+        
+        fflush(file_handle);
+        return true;
+    }
+    
+bool read_header() 
+{
+    if (!file_handle) 
+		return false;
+
+    fseek64(file_handle, 0, SEEK_SET);
+    if (fread(&header, 1, sizeof(file_header), file_handle) != sizeof(file_header)) 
+	{
+        myprintf("38233! Error: Header read fail or file too short\n");
+        return false;
+    }
+    
+    if (fread(header_nonce, 1, sizeof(header_nonce), file_handle) != sizeof(header_nonce)) 
+	{
+        myprintf("38239! Error: auth nonce KO\n");
+        return false;
+    }
+    print_nonce(header_nonce, sizeof(header_nonce), "header_auth");
+
+	header.block_size 			= le64_to_host(header.block_size);
+    header.file_data_size 		= le64_to_host(header.file_data_size);
+    header.quickhash 			= le64_to_host(header.quickhash);
+    header.hashtype 			= le64_to_host(header.hashtype);
+    header.pwhash_opslimit 		= le64_to_host(header.pwhash_opslimit);
+    header.pwhash_memlimit 		= le64_to_host(header.pwhash_memlimit);
+    
+    if (!validate_header_integrity()) 
+	{
+        myprintf("38253! Error: header is not good!\n");
+        return false;
+    }
+    
+    this->pwhash_opslimit = header.pwhash_opslimit;
+    this->pwhash_memlimit = header.pwhash_memlimit;
+
+    if (flagdebug) 
+        myprintf("DEBUG: Parameters validated from file - opslimit: %s, memlimit: %s\n", migliaia(this->pwhash_opslimit), migliaia(this->pwhash_memlimit));
+
+    // Deriva la chiave con controllo di fallimento
+    if (!derive_key(header.salt)) 
+        return false;
+
+    std::vector<unsigned char> header_data;
+    header_data.insert(header_data.end(), header.salt, header.salt + sizeof(header.salt));
+    uint64_t block_size_le = host_to_le64(header.block_size);
+    header_data.insert(header_data.end(), (unsigned char *)&block_size_le, (unsigned char *)&block_size_le + sizeof(block_size_le));
+    uint64_t file_data_size_le = host_to_le64(header.file_data_size);
+    header_data.insert(header_data.end(), (unsigned char *)&file_data_size_le, (unsigned char *)&file_data_size_le + sizeof(file_data_size_le));
+    uint32_t crc32_le = header.crc32;
+    header_data.insert(header_data.end(), (unsigned char *)&crc32_le, (unsigned char *)&crc32_le + sizeof(crc32_le));
+    uint64_t quickhash_le = host_to_le64(header.quickhash);
+    header_data.insert(header_data.end(), (unsigned char *)&quickhash_le, (unsigned char *)&quickhash_le + sizeof(quickhash_le));
+    uint64_t hashtype_le = host_to_le64(header.hashtype);
+    header_data.insert(header_data.end(), (unsigned char *)&hashtype_le, (unsigned char *)&hashtype_le + sizeof(hashtype_le));
+    header_data.insert(header_data.end(), header.pad, header.pad + sizeof(header.pad));
+
+    if (flagdebug) 
+	    myprintf("DEBUG: Header read - block_size: %s, file_data_size: %s\n", migliaia(header.block_size), migliaia(header.file_data_size));
+    
+    unsigned char dummy_output[16];
+    unsigned long long dummy_len;
+
+    if (sodium.crypto_aead_chacha20poly1305_ietf_decrypt(
+            dummy_output, &dummy_len, NULL,
+            header.auth_tag, sizeof(header.auth_tag),
+            &header_data[0], header_data.size(),
+            header_nonce, key) != 0) 
+			{
+				myprintf("38293! Corrupted file or wrong password\n");
+				return false;
+			}
+
+    
+    return true;
+}
+
+public:
+	uint64_t worked_so_far;
+
+franzcri(const std::string &p, size_t blk_sz = 0,
+         unsigned long long opslimit = 0,
+         size_t memlimit = 0,
+         int alg = CRYPTO_PWHASH_ALG_DEFAULT) 
+        : file_handle(NULL), password(p), 
+  block_size(blk_sz == 0 ? g_sodio_block_size : blk_sz),
+  is_file_open(false), is_libsodium_loaded(false), file_was_modified(false),
+  pwhash_opslimit(opslimit == 0 ? g_sodio_pwhash_opslimit : opslimit), 
+  pwhash_memlimit(memlimit == 0 ? g_sodio_pwhash_memlimit : memlimit), 
+  pwhash_alg(alg),
+worked_so_far(0)
+{
+        
+        memset(&sodium, 0, sizeof(sodium));
+        memset(&header, 0, sizeof(header));
+        memset(header_nonce, 0, sizeof(header_nonce));
+        memset(key, 0, sizeof(key));
+        is_libsodium_loaded = load_library();
+    }
+
+    ~franzcri() 
+	{
+        close();
+        if (is_libsodium_loaded)
+		{
+            if (domemzero) 
+			{
+                if(!password.empty()) 
+					sodium.sodium_memzero(&password[0], password.size());
+                sodium.sodium_memzero(key, sizeof(key));
+                sodium.sodium_memzero(&header, sizeof(header));
+                sodium.sodium_memzero(header_nonce, sizeof(header_nonce));
+            }
+			unload_library();
+		}
+    }
+
+    bool open(const char *filename, bool create_new) 
+	{
+        if (is_file_open) 
+		{
+            myprintf("38340! File already open!\n");
+            return false;
+        }
+        if (!is_libsodium_loaded) 
+		{
+            myprintf("38345! Error: libsodium not loaded\n");
+            return false;
+        }
+
+        file_was_modified = false;
+        if (flagdebug) 
+			myprintf("DEBUG: Attempting to open '%s' (create_new=%s)\n", filename, create_new ? "true" : "false");
+
+        file_handle = fopen(filename, create_new ? "w+b" : "r+b");
+        if (!file_handle) 
+		{
+            perror("fopen error");
+            return false;
+        }
+
+        if (create_new) 
+		{
+            if (flagdebug) 
+				myprintf("DEBUG: Creating new file\n");
+            memset(&header, 0, sizeof(header));
+            memcpy(header.magic, MAGIC_BYTES, MAGIC_BYTES_LEN);
+            header.block_size 		= block_size;
+            header.file_data_size 	= 0;
+			header.pwhash_opslimit 	= this->pwhash_opslimit;
+			header.pwhash_memlimit 	= this->pwhash_memlimit;
+        
+            sodium.randombytes_buf(header.salt, sizeof(header.salt));
+            
+            if (!derive_key(header.salt)) 
+			{
+                fclose(file_handle);
+                file_handle = NULL;
+                return false;
+            }
+            if (!write_header()) 
+			{
+                myprintf("38381! Initial header writing failed\n");
+                fclose(file_handle);
+                file_handle = NULL;
+                return false;
+            }
+            file_was_modified = true;
+        } 
+		else 
+		{
+            if (!read_header()) 
+			{
+                fclose(file_handle);
+                file_handle = NULL;
+                return false;
+            }
+        }
+
+        is_file_open = true;
+        if (flagdebug) 
+			myprintf("DEBUG: File '%s' opened\n", filename);
+        return true;
+    }
+
+    void close() 
+	{
+        if (!is_file_open) 
+			return;
+        
+        if (file_was_modified) 
+		{
+            if (flagdebug) 
+				myprintf("DEBUG: File changed, updating header\n");
+            if (!write_header()) 
+			{
+                myprintf("38415! CRITICAL ERROR: Header update failed!\n");
+            }
+        }
+        fclose(file_handle);
+        file_handle = NULL;
+        is_file_open = false;
+        if (flagdebug) 
+			myprintf("DEBUG: File closed\n");
+    }
+
+bool writeat(int64_t offset, const char *buffer, size_t size) 
+{
+    if (!is_file_open || offset < 0 || size == 0) 
+		return false;
+    if ((uint64_t)(offset + size) > header.file_data_size) 
+	{
+        myprintf("38431! Error: write at beyond file size\n");
+        return false;
+    }
+
+    size_t 		tag_len   			= sodium.crypto_aead_chacha20poly1305_ietf_abytes();
+    size_t 		nonce_len 			= sodium.crypto_aead_chacha20poly1305_ietf_npubbytes();
+    uint64_t 	start_block_idx 	= offset / block_size;
+    uint64_t 	end_block_idx   	= (offset + size - 1) / block_size;
+
+    size_t 		bytes_remaining 	= size;
+    const char *src_ptr 			= buffer;
+
+    std::vector<unsigned char> plaintext(block_size);
+
+    for (uint64_t block_idx = start_block_idx; block_idx <= end_block_idx; ++block_idx) 
+	{
+        int64_t block_file_offset = get_block_file_offset(block_idx);
+
+        if (fseek64(file_handle, block_file_offset, SEEK_SET) != 0) 
+			return false;
+
+        std::vector<unsigned char> stored_nonce(nonce_len);
+        if (fread(&stored_nonce[0], 1, nonce_len, file_handle) != nonce_len) 
+			return false;
+
+        std::vector<unsigned char> encrypted(block_size + tag_len);
+        if (fread(&encrypted[0], 1, encrypted.size(), file_handle) != encrypted.size()) 
+			return false;
+
+        unsigned long long decrypted_len = 0;
+        if (sodium.crypto_aead_chacha20poly1305_ietf_decrypt(
+                &plaintext[0], &decrypted_len, NULL,
+                &encrypted[0], encrypted.size(),
+                NULL, 0, &stored_nonce[0], key) != 0) 
+				{
+					myprintf("38466! decrypting block #s for rewrite\n", migliaia(block_idx));
+					if (domemzero) 
+						sodium.sodium_memzero(plaintext.data(), plaintext.size());
+					return false;
+				}
+
+        size_t start_in_block 	= (block_idx == start_block_idx) ? (offset % block_size) : 0;
+        size_t bytes_here = (bytes_remaining < (block_size - start_in_block)) ? 
+                    bytes_remaining : (block_size - start_in_block);
+        memcpy(&plaintext[start_in_block], src_ptr, bytes_here);
+
+        std::vector<unsigned char> new_nonce(nonce_len);
+        sodium.randombytes_buf(&new_nonce[0], nonce_len);
+
+        std::vector<unsigned char> new_encrypted(block_size + tag_len);
+        unsigned long long new_ciphertext_len = 0;
+        if (sodium.crypto_aead_chacha20poly1305_ietf_encrypt(
+                &new_encrypted[0], &new_ciphertext_len,
+                &plaintext[0], block_size,
+                NULL, 0, NULL, &new_nonce[0], key) != 0) 
+				{
+					myprintf("38486! Rencrypting block #s\n", migliaia(block_idx));
+					if (domemzero) 
+						sodium.sodium_memzero(plaintext.data(), plaintext.size());
+					return false;
+				}
+
+        if (fseek64(file_handle, block_file_offset, SEEK_SET) != 0) 
+			return false;
+        if (fwrite(&new_nonce[0], 1, nonce_len, file_handle) != nonce_len) 
+			return false;
+        if (fwrite(&new_encrypted[0], 1, new_encrypted.size(), file_handle) != new_encrypted.size()) 
+			return false;
+
+        bytes_remaining 	-= bytes_here;
+        src_ptr 			+= bytes_here;
+    }
+
+    if (domemzero) 
+		sodium.sodium_memzero(plaintext.data(), plaintext.size());
+    fflush(file_handle);
+    file_was_modified = true; // L'header non deve essere riscritto, ma impostiamo il flag per coerenza
+    return true;
+}
+
+// Funzione di supporto per confrontare due file binariamente
+bool compare_files_binary(const char* file1, const char* file2) 
+{
+	    // Confronta le dimensioni
+    int64_t size1 = prendidimensionefile(file1);
+	if (size1==-1)
+		return false;
+    int64_t size2 = prendidimensionefile(file2);
+	if (size2==-1)
+		return false;
+	
+    if (size1!=size2) 
+        return false;
+
+    FILE* f1 = fopen(file1, "rb");
+    FILE* f2 = fopen(file2, "rb");
+    
+    if (!f1 || !f2) 
+	{
+        if (f1) fclose(f1);
+        if (f2) fclose(f2);
+        return false;
+    }
+    
+    
+    // Confronta il contenuto con buffer
+    const size_t buffer_size = 65536;
+    std::vector<char> buf1(buffer_size);
+    std::vector<char> buf2(buffer_size);
+    
+	int64_t inizio=mtime();
+	uint64_t bytes_processed=0;
+	
+    while (!feof(f1) && !feof(f2)) 
+	{
+        size_t read1 = fread(&buf1[0], 1, buffer_size, f1);
+        size_t read2 = fread(&buf2[0], 1, buffer_size, f2);
+        
+        if (read1 != read2 || memcmp(&buf1[0], &buf2[0], read1) != 0) 
+		{
+            fclose(f1);
+            fclose(f2);
+            return false;
+        }
+		bytes_processed+=read1;
+		if (!flagnoeta)
+			myavanzamentoby1sec(bytes_processed,size1,inizio,false);
+    }
+    
+    fclose(f1);
+    fclose(f2);
+	
+    return true;
+}
+
+bool fulltest(const char* input_file, const char* output_file, const std::string& password, int num_threads) 
+{
+    int64_t input_size = prendidimensionefile(input_file);
+    if (input_size < 0) 
+	{
+        myprintf("38563! ERROR: Input file '%s' not found or not readable\n", input_file);
+        return false;
+    }
+    
+	myprintf("Starting long test with %d threads\n",num_threads);
+    myprintf("Input file     : %s (%s) => %s\n", input_file,tohuman(input_size),output_file);
+    printbar('=');
+	
+    int64_t step_start;
+    bool all_ok = true;
+    
+    // Costruzione nomi file
+    std::string output_par 	= std::string(output_file) + ".franzen.enc";
+    std::string decoded_par = std::string(output_file) + ".franzen.dec";
+	output_par	=nomefileseesistegia(output_par);
+	decoded_par	=nomefileseesistegia(decoded_par);
+	
+	bool success;
+	double step_time;
+	
+	int64_t multi_start=mtime();
+	color_cyan();
+	myprintf("1) Encoding\n");
+	color_restore();
+	step_start = mtime();
+	franzcri fc5(password);
+	success = fc5.encode_parallela(input_file, output_par.c_str(), num_threads);
+	eol();
+	step_time = (mtime() - step_start) / 1000.0;
+	if (success) 
+	{
+		color_green();
+		myprintf("   OK (%10.2fs @ %10s/s) %s\n", step_time, tohuman2(input_size / step_time),output_par.c_str());
+	} 
+	else 
+	{
+		color_red();
+		myprintf(" FAILED\n");
+		all_ok = false;
+	}
+	color_restore();
+
+    color_cyan();
+	myprintf("2) Decoding\n");
+	color_restore();
+	step_start = mtime();
+	
+	franzcri fc6(password);
+	success = fc6.decode_parallela(output_par.c_str(), decoded_par.c_str(), num_threads);
+	eol();
+	step_time = (mtime() - step_start) / 1000.0;
+	if (success) 
+	{
+		color_green();
+		myprintf("   OK (%10.2fs @ %10s/s) %s\n", step_time, tohuman2(input_size / step_time),decoded_par.c_str());
+	} 
+	else 
+	{
+		color_red();
+		myprintf(" FAILED\n");
+		all_ok = false;
+	}
+	color_restore();
+    
+	color_cyan();
+	myprintf("3) Verify\n");
+	color_restore();
+    step_start = mtime();
+	franzcri fc8(password);
+    success = fc8.decode_parallela(output_par.c_str(), NULL, num_threads);  // NULL = verify only
+    eol();    
+    step_time = (mtime() - step_start) / 1000.0;
+	if (success) 
+	{
+		color_green();
+		myprintf("   OK (%10.2fs @ %10s/s) %s\n", step_time, tohuman2(input_size / step_time),output_par.c_str());
+	} 
+	else 
+	{
+		color_red();
+		myprintf(" FAILED\n");
+		all_ok = false;
+	}
+	color_restore();
+    int64_t multi_end=mtime();
+	
+	color_cyan();
+	myprintf("4) Binary comparison %s vs %s...\n", decoded_par.c_str(), input_file);
+    color_restore();
+	step_start = mtime();
+    success = compare_files_binary(decoded_par.c_str(), input_file);
+	eol();
+    step_time = (mtime() - step_start) / 1000.0;
+	if (success) 
+	{
+		color_green();
+		myprintf("   OK (%10.2fs @ %10s/s)\n", step_time,tohuman2(input_size / step_time));
+	}
+	else 
+	{
+		myprintf(" FAILED - Files differ!\n");
+		all_ok = false;
+	}
+	color_restore();
+    
+    // Pulizia file temporanei
+    remove(output_par.c_str());
+    remove(decoded_par.c_str());
+    
+    double multi_time = (multi_end-multi_start) / 1000.0;
+    
+	myprintf("Time/throughput %10.2fs @ %12s/s\n",multi_time,tohuman(3*input_size/multi_time));
+	myprintf("sodio_block_size     %s\n",tohuman(g_sodio_block_size));
+	myprintf("opslimit             %d\n",g_sodio_pwhash_opslimit);
+	myprintf("memlimit             %s\n",tohuman(g_sodio_pwhash_memlimit));
+	
+    if (all_ok) 
+	{
+		color_green();
+		myprintf("*** ALL TESTS PASSED ***\n");
+	}
+	else
+	{
+		color_red();
+        myprintf("*** SOME TESTS FAILED ***\n");
+	}
+   	color_restore();
+	
+    return all_ok;
+}
+bool autotest() 
+{
+    myprintf("38820: Starting advanced autotest...\n");
+    if (!is_libsodium_loaded) 
+	{
+        myprintf("38823! AUTOTEST FAILED: libsodium not loaded\n");
+        return false;
+    }
+
+    bool all_tests_passed 				= true;
+    const char* test_filename 			= "test_file.franz";
+    const std::string correct_password 	= "password123";
+    const std::string wrong_password 	= "wrongpass";
+    const size_t block_size_default 	= G_FRANZEN_SIZE;
+    const size_t block_size_min 		= 4096;
+    const size_t block_size_max 		= 1024 * 1024;
+    const size_t small_data_size 		= 1024;
+    const size_t large_data_size 		= 2 * 1024 * 1024; // 2 MB
+
+    // Funzione helper per stampare il risultato di un test
+    auto print_result = [&all_tests_passed](const char* test_name, bool passed) 
+	{
+        myprintf("%s: %s\n", test_name, passed ? "PASSED" : "FAILED");
+        if (!passed) 
+			all_tests_passed = false;
+    };
+
+    // TEST 1: Creazione, scrittura, riscrittura (writeat) e verifica (come originale)
+    myprintf("\nTEST 1: Creating, write, rewrite, verify...\n");
+	{
+        franzcri fc(correct_password, block_size_default);
+        if (!fc.open(test_filename, true)) 
+		{
+            print_result("TEST 1 - Creation opening", false);
+            goto cleanup;
+        }
+        std::vector<char> data(small_data_size, 'A');
+        if (!fc.write(&data[0], data.size())) 
+		{
+            print_result("TEST 1 - Initial writing", false);
+            fc.close();
+            goto cleanup;
+        }
+        fc.close();
+
+        if (!fc.open(test_filename, false)) 
+		{
+            print_result("TEST 1 - Reopening for writeat", false);
+            goto cleanup;
+        }
+        std::string overwrite_data(104, 'B');
+        if (!fc.writeat(200, overwrite_data.c_str(), overwrite_data.size())) 
+		{
+            print_result("TEST 1 - Writeat call", false);
+            fc.close();
+            goto cleanup;
+        }
+        fc.close();
+
+        if (!fc.open(test_filename, false)) 
+		{
+            print_result("TEST 1 - Reopening for verification", false);
+            goto cleanup;
+        }
+        std::vector<char> decrypted(small_data_size);
+        if (!fc.decrypt_to_buffer(&decrypted[0], decrypted.size())) 
+		{
+            print_result("TEST 1 - Decryption", false);
+            fc.close();
+            goto cleanup;
+        }
+        fc.close();
+
+        bool correct = true;
+        for (size_t i = 0; i < small_data_size; ++i) 
+		{
+            char expected = (i >= 200 && i < 304) ? 'B' : 'A';
+            if (decrypted[i] != expected) 
+			{
+                myprintf("TEST 1 - Error: Incorrect data at position %zu. Expected '%c', found '%c'\n", i, expected, decrypted[i]);
+                correct = false;
+                break;
+            }
+        }
+        print_result("TEST 1 - Content verification", correct);
+    }
+
+    // TEST 2: File vuoto
+    myprintf("\nTEST 2: Creating empty file...\n");
+    {
+        franzcri fc(correct_password,  block_size_default);
+        if (!fc.open(test_filename, true)) 
+		{
+            print_result("TEST 2 - Opening creation of empty file", false);
+            goto cleanup;
+        }
+        fc.close();
+        if (!fc.open(test_filename, false)) 
+		{
+            print_result("TEST 2 - Reopening empty file", false);
+            goto cleanup;
+        }
+        if (!fc.is_not_changed()) 
+		{
+            print_result("TEST 2 - Empty file integrity verification", false);
+            fc.close();
+            goto cleanup;
+        }
+        std::vector<char> decrypted(0);
+        bool success = fc.decrypt_to_buffer(&decrypted[0], 0);
+        fc.close();
+        print_result("TEST 2 - Empty file decryption", success && decrypted.empty());
+    }
+
+    // TEST 3: File grande
+    myprintf("\nTEST 3: Big file ...\n");
+    {
+        franzcri fc(correct_password,  block_size_default);
+        if (!fc.open(test_filename, true)) 
+		{
+            print_result("TEST 3 - Opening creation of large file", false);
+            goto cleanup;
+        }
+        std::vector<char> data(large_data_size, 'C');
+        if (!fc.write(&data[0], data.size())) 
+		{
+            print_result("TEST 3 - Writing large file", false);
+            fc.close();
+            goto cleanup;
+        }
+        fc.close();
+        if (!fc.open(test_filename, false)) 
+		{
+            print_result("TEST 3 - Reopening large file", false);
+            goto cleanup;
+        }
+        std::vector<char> decrypted(large_data_size);
+        if (!fc.decrypt_to_buffer(&decrypted[0], decrypted.size())) 
+		{
+            print_result("TEST 3 - Decryption of large file", false);
+            fc.close();
+            goto cleanup;
+        }
+        fc.close();
+        bool correct = true;
+        for (size_t i = 0; i < large_data_size; ++i) 
+            if (decrypted[i] != 'C') 
+			{
+                myprintf("TEST 3 - Error: Incorrect data at position %zu. Expected 'C', found '%c'\n", i, decrypted[i]);
+                correct = false;
+                break;
+            }
+        print_result("TEST 3 - Large file content verification", correct);
+    }
+
+    // TEST 4: Password errata
+    myprintf("\nTEST 4: Test with wrong password...\n");
+    {
+        franzcri fc(correct_password,  block_size_default);
+        if (!fc.open(test_filename, true)) 
+		{
+            print_result("TEST 4 - File creation", false);
+            goto cleanup;
+        }
+        std::vector<char> data(small_data_size, 'D');
+        if (!fc.write(&data[0], data.size())) 
+		{
+            print_result("TEST 4 - Initial writing", false);
+            fc.close();
+            goto cleanup;
+        }
+        fc.close();
+        franzcri fc_wrong(wrong_password,  block_size_default);
+        bool should_fail = !fc_wrong.open(test_filename, false);
+        print_result("TEST 4 - Opening with incorrect password", should_fail);
+    }
+
+    // TEST 5: File corrotto
+    myprintf("\nTEST 5: Corrupted file...\n");
+    {
+        franzcri fc(correct_password,  block_size_default);
+        if (!fc.open(test_filename, true)) 
+		{
+            print_result("TEST 5 - File creation", false);
+            goto cleanup;
+        }
+        std::vector<char> data(small_data_size, 'E');
+        if (!fc.write(&data[0], data.size())) 
+		{
+            print_result("TEST 5 - Initial writing", false);
+            fc.close();
+            goto cleanup;
+        }
+        fc.close();
+        // Corrompi il file modificando un byte nel primo blocco
+        FILE* f = fopen(test_filename, "r+b");
+        if (f) 
+		{
+            size_t offset = sizeof(file_header) + sizeof(header_nonce) + sodium.crypto_aead_chacha20poly1305_ietf_npubbytes() + 10;
+            fseek(f, offset, SEEK_SET);
+            unsigned char corrupt_byte = 0xFF;
+            fwrite(&corrupt_byte, 1, 1, f);
+            fclose(f);
+        }
+        if (!fc.open(test_filename, false)) 
+		{
+            print_result("TEST 5 - Opening corrupted file", false);
+            goto cleanup;
+        }
+        bool should_fail = !fc.is_not_changed();
+        fc.close();
+        print_result("TEST 5 - Corruption detection", should_fail);
+    }
+
+    // TEST 6: Block size estremo
+    myprintf("\nTEST 6: Min/max block_size...\n");
+    {
+        // Test con block_size minimo (4096)
+        franzcri fc_min(correct_password,  block_size_min);
+        if (!fc_min.open(test_filename, true)) 
+		{
+            print_result("TEST 6 - Opening with minimum block_size", false);
+            goto cleanup;
+        }
+        std::vector<char> data(small_data_size, 'F');
+        if (!fc_min.write(&data[0], data.size())) 
+		{
+            print_result("TEST 6 - Writing with minimum block_size", false);
+            fc_min.close();
+            goto cleanup;
+        }
+        fc_min.close();
+        if (!fc_min.open(test_filename, false)) 
+		{
+            print_result("TEST 6 - Reopening with minimum block_size", false);
+            goto cleanup;
+        }
+        std::vector<char> decrypted(small_data_size);
+        bool success = fc_min.decrypt_to_buffer(&decrypted[0], decrypted.size());
+        fc_min.close();
+        bool correct = true;
+        if (success) 
+            for (size_t i = 0; i < small_data_size; ++i) 
+                if (decrypted[i] != 'F') 
+				{
+                    myprintf("TEST 6 - Error: Incorrect data at position %zu with minimum block_size. Expected 'F', found '%c'\n", i, decrypted[i]);
+                    correct = false;
+                    break;
+                }
+        print_result("TEST 6 - Minimum block_size verification", success && correct);
+
+        // Test con block_size massimo (1 MB)
+        franzcri fc_max(correct_password,  block_size_max);
+        if (!fc_max.open(test_filename, true)) 
+		{
+            print_result("TEST 6 - Opening with maximum block_size", false);
+            goto cleanup;
+        }
+        if (!fc_max.write(&data[0], data.size())) 
+		{
+            print_result("TEST 6 - Writing with maximum block_size", false);
+            fc_max.close();
+            goto cleanup;
+        }
+        fc_max.close();
+        if (!fc_max.open(test_filename, false)) 
+		{
+            print_result("TEST 6 - Reopening with maximum block_size", false);
+            goto cleanup;
+        }
+        success = fc_max.decrypt_to_buffer(&decrypted[0], decrypted.size());
+        fc_max.close();
+        correct = true;
+        if (success) 
+            for (size_t i = 0; i < small_data_size; ++i) 
+                if (decrypted[i] != 'F') 
+				{
+                    myprintf("TEST 6 - Error: Incorrect data at position %zu with maximum block_size. Expected 'F', found '%c'\n", i, decrypted[i]);
+                    correct = false;
+                    break;
+                }
+        print_result("TEST 6 - Maximum block_size verification", success && correct);
+    }
+
+cleanup:
+    // Rimuovi il file di test
+    remove(test_filename);
+	if (all_tests_passed)
+		color_green();
+    myprintf("\nAutotest done. Result: %s\n", all_tests_passed ? "PASSED" : "SOME FAILED");
+	color_restore();
+    return all_tests_passed;
+}
+
+/// tieniamolo semplice per debug del multithread
+bool encode(const char *input_filename, const char *output_filename) 
+{
+    FILE *input_file = fopen(input_filename, "rb");
+    if (!input_file) 
+	{
+        perror("Error opening input file");
+        return false;
+    }
+
+    // Ottieni la dimensione totale del file di input per il feedback
+    fseek(input_file, 0, SEEK_END);
+    long long total_size = -1;
+    #ifdef _WIN32
+        total_size = _ftelli64(input_file);
+    #else
+        total_size = ftello(input_file);
+    #endif
+    fseek(input_file, 0, SEEK_SET);
+    long long bytes_processed = 0;
+
+    if (!open(output_filename, true)) 
+	{
+        fclose(input_file);
+        return false;
+    }
+
+    std::vector<char> buffer(io_buffer_size);
+    size_t bytes_read;
+    bool success = true;
+	int64_t inizio=mtime();
+    while ((bytes_read = fread(&buffer[0], 1, io_buffer_size, input_file)) > 0) 
+	{
+        if (!write(&buffer[0], bytes_read)) 
+		{
+            myprintf("\n");
+			myprintf("39145! Error during writing of encrypted data\n");
+            success = false;
+            break;
+        }
+        bytes_processed += bytes_read;
+        // Stampa l'avanzamento
+
+		if (!flagnoeta)
+			myavanzamentoby1sec(bytes_processed,total_size,inizio);
+		
+    }
+
+    if (ferror(input_file)) 
+	{
+        perror("\nError reading from input file");
+        success = false;
+    }
+    
+    if(domemzero) 
+	    sodium.sodium_memzero(buffer.data(), buffer.size());
+    
+    fclose(input_file);
+    close();
+
+    // Pulisci la riga di avanzamento
+    if (success) 
+	    myprintf("Encoding completed\n");
+    
+    return success;
+}
+
+
+bool encode_parallela(const char *input_filename, const char *output_filename, int num_threads) 
+{
+    if (num_threads <= 0) 
+	{
+        myprintf("39184! Error: The number of threads must be greater than zero\n");
+        return false;
+    }
+
+    FILE *input_file = fopen(input_filename, "rb");
+    if (!input_file) 
+	{
+        perror("Error opening input file");
+        return false;
+    }
+
+    if (fseek64(input_file, 0, SEEK_END) != 0) 
+	{
+        perror("Error positioning to the end of the input file");
+        fclose(input_file);
+        return false;
+    }
+
+    long long total_size = -1;
+#ifdef _WIN32
+        total_size = _ftelli64(input_file);
+#else
+        total_size = ftello(input_file);
+#endif
+    fclose(input_file);
+
+    if (total_size < 0) 
+	{
+        myprintf("39212! CRITICAL ERROR: Unable to determine the size of file '%s'\n", input_filename);
+        // Non lasciare un file di output vuoto e corrotto
+        // open() non è stato ancora chiamato, quindi non c'è nulla da pulire.
+        return false;
+    }
+
+    if (total_size == 0) 
+	{
+        open(output_filename, true);
+        close();
+        return true;
+    }
+    
+    if (!open(output_filename, true)) 
+	{
+        // Se l'apertura fallisce, il file non esiste, non c'è bisogno di cancellarlo.
+        return false;
+    }
+    
+    if (total_size < 0) 
+	{
+        myprintf("39233! CRITIC: cannot get total_size of '%s'\n", input_filename);
+        close();
+        remove(output_filename); // Rimuove il file vuoto creato da open()
+        return false;
+    }
+
+
+    header.file_data_size = total_size;
+    if (!write_header()) 
+	{
+        myprintf("39243! Error: Initial header writing failed\n");
+        close();
+        remove(output_filename); // Rimuove il file corrotto
+        return false;
+    }
+
+    uint64_t total_blocks = (total_size + block_size - 1) / block_size;
+    if ((int)num_threads > (int)total_blocks) 
+        num_threads = total_blocks > 0 ? (int)total_blocks : 1;
+    if (num_threads == 0 && total_blocks > 0) 
+		num_threads = 1;
+
+
+    pthread_t* threads 	= new pthread_t[num_threads];
+    thread_data* t_data = new thread_data[num_threads];
+    pthread_mutex_t file_mutex;
+    pthread_mutex_init(&file_mutex, NULL);
+    
+    uint64_t blocks_per_thread 	= total_blocks / num_threads;
+    uint64_t remaining_blocks 	= total_blocks % num_threads;
+    uint64_t current_block_idx 	= 0;
+    bool all_threads_ok 		= true;
+
+	if (flagverbose)
+		if (num_threads > 0) 
+			myprintf("Encoding threads %d on %s blocks of %s for %s...\n", num_threads, migliaia(total_blocks),tohuman(block_size),tohuman2(total_size));
+
+    for (int i = 0; i < num_threads; ++i) 
+	{
+        t_data[i].instance 					= this;
+        t_data[i].input_filename 			= input_filename;
+        t_data[i].file_mutex 				= &file_mutex;
+        t_data[i].start_block_idx 			= current_block_idx;
+        t_data[i].total_input_size 			= total_size;
+		t_data[i].starttime	 				= mtime();
+
+        uint64_t blocks_for_this_thread 	= blocks_per_thread;
+        if (remaining_blocks > 0) 
+		{
+            blocks_for_this_thread++;
+            remaining_blocks--;
+        }
+        t_data[i].num_blocks_to_process 	= blocks_for_this_thread;
+
+        if (pthread_create(&threads[i], NULL, encryption_worker, &t_data[i]) != 0) 
+		{
+            perror("Error creating thread");
+            all_threads_ok = false;
+            break; 
+        }
+
+        current_block_idx += blocks_for_this_thread;
+    }
+
+    if (all_threads_ok) 
+        for (int i = 0; i < num_threads; ++i) 
+		{
+            pthread_join(threads[i], NULL);
+            if (!t_data[i].success) 
+                all_threads_ok = false;
+        }
+
+    pthread_mutex_destroy(&file_mutex);
+    delete[] threads;
+    delete[] t_data;
+    
+    close();
+
+    if (!all_threads_ok) 
+	{
+        myprintf("39311! One or more threads encountered an error. The output file may be incomplete or corrupted\n");
+        return false;
+    }
+    
+    return true;
+}
+bool decode_parallela(const char *input_filename, const char *output_filename, int num_threads) 
+{
+    if (num_threads <= 0) 
+	{
+        myprintf("39321! Error: The number of threads must be greater than zero\n");
+        return false;
+    }
+
+    // Apre il file criptato e legge/verifica l'header. La chiave viene derivata qui.
+    if (!open(input_filename, false)) 
+	    return false;
+    
+    // Determina la modalità: se output_filename è nullo o vuoto, è una verifica.
+	// Mahoney's trick
+    bool verify_only_mode = (output_filename == NULL || *output_filename == '\0');
+    
+    FILE* output_file = NULL;
+    if (!verify_only_mode) 
+	{
+        output_file = fopen(output_filename, "wb");
+        if (!output_file) 
+		{
+            perror("Error creating output file");
+            close(); // Chiude il file di input
+            return false;
+        }
+    } 
+	else 
+	{
+		if (flagverbose)
+			myprintf("Starting parallel verification (no disk writing)...\n");
+    }
+
+    uint64_t total_blocks = (header.file_data_size + block_size - 1) / block_size;
+    if ((total_blocks > 0) && ((int)num_threads > (int)total_blocks))
+	    num_threads = (int)total_blocks;
+    if (num_threads == 0 && total_blocks > 0) 
+		num_threads = 1;
+    
+    // Se il file è vuoto (0 blocchi), il lavoro è già finito.
+    if (total_blocks == 0) 
+	{
+        if (output_file) 
+			fclose(output_file);
+        close();
+        return true;
+    }
+
+    pthread_t* threads 				= new pthread_t[num_threads];
+    decode_thread_data* t_data 		= new decode_thread_data[num_threads];
+    pthread_mutex_t file_io_mutex;
+    pthread_mutex_init(&file_io_mutex, NULL);
+    
+    uint64_t blocks_per_thread 		= total_blocks / num_threads;
+    uint64_t remaining_blocks 		= total_blocks % num_threads;
+    uint64_t current_block_idx 		= 0;
+    bool all_threads_ok 			= true;
+
+	if (flagverbose)
+	{
+		if (!verify_only_mode) 
+			myprintf("Decoding threads %d on %s blocks of %s for %s...\n", num_threads, migliaia(total_blocks),tohuman(block_size),tohuman2(total_blocks*block_size));
+		else
+			myprintf("Verifying threads %d on %s blocks of %s for %s...\n", num_threads, migliaia(total_blocks),tohuman(block_size),tohuman2(total_blocks*block_size));
+	}
+	
+    for (int i = 0; i < num_threads; ++i) 
+	{
+        t_data[i].instance 			= this;
+        t_data[i].output_file 		= output_file;
+        t_data[i].file_io_mutex 	= &file_io_mutex;
+        t_data[i].start_block_idx 	= current_block_idx;
+		t_data[i].total_input_size 	= total_blocks*block_size;
+		t_data[i].starttime			= mtime();
+
+        uint64_t blocks_for_this_thread = blocks_per_thread;
+        if (remaining_blocks > 0) 
+		{
+            blocks_for_this_thread++;
+            remaining_blocks--;
+        }
+        t_data[i].num_blocks_to_process = blocks_for_this_thread;
+
+        if (pthread_create(&threads[i], NULL, decryption_worker, &t_data[i]) != 0) 
+		{
+            perror("Error creating thread");
+            all_threads_ok = false;
+            break; 
+        }
+        current_block_idx += blocks_for_this_thread;
+    }
+
+    if (all_threads_ok) 
+        for (int i = 0; i < num_threads; ++i) 
+		{
+            pthread_join(threads[i], NULL);
+            if (!t_data[i].success) 
+			    all_threads_ok = false;
+        }
+
+    pthread_mutex_destroy(&file_io_mutex);
+    delete[] threads;
+    delete[] t_data;
+
+    if (output_file) fclose(output_file);
+    close(); // Chiude il file di input
+
+    if (!all_threads_ok) 
+	{
+        // Se c'è stato un errore e stavamo scrivendo un file, lo cancelliamo per non lasciare output corrotti.
+        if (!verify_only_mode) 
+			remove(output_filename);
+        return false;
+    }
+
+    return true;
+}
+private:
+bool decrypt_and_write_stream(FILE *output_file) 
+{
+    if (!is_file_open || !output_file) 
+	    return false;
+    
+    size_t tag_len   			= sodium.crypto_aead_chacha20poly1305_ietf_abytes();
+    size_t nonce_len 			= sodium.crypto_aead_chacha20poly1305_ietf_npubbytes();
+    uint64_t total_blocks 		= (header.file_data_size + block_size - 1) / block_size;
+    uint64_t bytes_processed 	= 0;
+
+    std::vector<unsigned char> encrypted(block_size + tag_len);
+    std::vector<unsigned char> plaintext(block_size);
+
+    for (uint64_t block_idx = 0; block_idx < total_blocks; ++block_idx) 
+	{
+        int64_t block_file_offset = get_block_file_offset(block_idx);
+        if (fseek64(file_handle, block_file_offset, SEEK_SET) != 0) 
+		{
+            perror("\nError positioning in input file");
+            return false;
+        }
+
+        // Leggi nonce e blocco cifrato
+        std::vector<unsigned char> block_nonce(nonce_len);
+        if (fread(&block_nonce[0], 1, nonce_len, file_handle) != nonce_len) 
+			return false;
+        if (fread(&encrypted[0], 1, encrypted.size(), file_handle) != encrypted.size()) 
+			return false;
+        
+        // Decifra il blocco
+        unsigned long long decrypted_len = 0;
+        if (sodium.crypto_aead_chacha20poly1305_ietf_decrypt(
+                &plaintext[0], &decrypted_len, NULL,
+                &encrypted[0], encrypted.size(),
+                NULL, 0, &block_nonce[0], key) != 0) 
+				{
+					myprintf("\n");
+					myprintf("39464! Error: Decryption of block #%s failed. File corrupted or incorrect password\n", migliaia(block_idx));
+					if (domemzero) 
+						sodium.sodium_memzero(plaintext.data(), plaintext.size());
+					return false;
+				}
+
+        // Calcola quanti byte scrivere (gestisce l'ultimo blocco)
+        uint64_t remaining_in_file 	= header.file_data_size - bytes_processed;
+		size_t bytes_to_write = ((size_t)remaining_in_file < (size_t)decrypted_len) ? 
+                       (size_t)remaining_in_file : (size_t)decrypted_len;
+        
+        // Scrivi il blocco decifrato nel file di output
+        if (fwrite(&plaintext[0], 1, bytes_to_write, output_file) != bytes_to_write) 
+		{
+            perror("\nError writing to output file");
+            if (domemzero) 
+				sodium.sodium_memzero(plaintext.data(), plaintext.size());
+            return false;
+        }
+
+        bytes_processed += bytes_to_write;
+
+        // Stampa l'avanzamento
+        /*
+		if (header.file_data_size > 0) {
+            int percent = (int)(100.0 * bytes_processed / header.file_data_size);
+            printf("\rDecifratura in corso: %d%%", percent);
+            fflush(stdout);
+        }
+		*/
+    }
+
+    if(domemzero) 
+	{
+        sodium.sodium_memzero(plaintext.data(), plaintext.size());
+        sodium.sodium_memzero(encrypted.data(), encrypted.size());
+    }
+    
+    myprintf("Decryption completed\n");
+    return true;
+}
+
+    // Validazione parametri Argon2id
+    bool validate_argon2_params(uint64_t opslimit, uint64_t memlimit) 
+	{
+        // Controlla limiti minimi e massimi ragionevoli
+        const uint64_t min_opslimit = CRYPTO_PWHASH_OPSLIMIT_INTERACTIVE;
+        const uint64_t max_opslimit = CRYPTO_PWHASH_OPSLIMIT_SENSITIVE * 10; // Permetti fino a 10x sensitive
+        const uint64_t min_memlimit = CRYPTO_PWHASH_MEMLIMIT_INTERACTIVE;
+        const uint64_t max_memlimit = 4ULL * 1024 * 1024 * 1024; // Max 4GB
+        
+        if (opslimit < min_opslimit || opslimit > max_opslimit) 
+		{
+            myprintf("39516! Error: opslimit (%s) outside allowed limits (%%s-%s)\n", 
+                   migliaia(opslimit), migliaia2(min_opslimit), migliaia3(max_opslimit));
+            return false;
+        }
+        
+        if (memlimit < min_memlimit || memlimit > max_memlimit) 
+		{
+            myprintf("39523! Error: memlimit (%s) outside allowed limits (%s-%s)\n", 
+                   migliaia(memlimit), migliaia2(min_memlimit), migliaia3(max_memlimit));
+            return false;
+        }
+        
+        return true;
+    }
+    
+    // Controlla overflow negli offset dei blocchi
+    // Verifica che block_idx * block_size non causi overflow
+    bool check_offset_overflow(uint64_t block_idx, uint64_t block_size) 
+	{
+        if (block_idx > 0 && block_size > UINT64_MAX / block_idx) 
+		{
+            myprintf("39537! Error: Overflow in block offset %s with block_size %s\n", 
+                   migliaia(block_idx), migliaia(block_size));
+            return false;
+        }
+        return true;
+    }
+    
+    // Validazione dimensione file ragionevole
+    bool validate_file_size(uint64_t file_size) 
+	{
+        const uint64_t max_file_size = 100ULL * 1024 * 1024 * 1024 *1024; // 100TB max
+        if (file_size > max_file_size) 
+		{
+            myprintf("39550! Error: File size (%s bytes) exceeds the maximum limit (%s bytes)\n", 
+                   migliaia(file_size), migliaia2(max_file_size));
+            return false;
+        }
+        return true;
+    }
+    
+	
+bool validate_header_integrity() {
+    // Controlla magic bytes (già fatto)
+    if (memcmp(header.magic, MAGIC_BYTES, MAGIC_BYTES_LEN) != 0) 
+        return false;
+
+    // Valida block_size (gia' fatto in parte)
+	// in produzione sara' fissato, probabilmente 1MB
+	
+    const uint64_t min_block_size = 4096;
+    const uint64_t max_block_size = 16 * 1024 * 1024; // Aumentato a 16MB
+    if (header.block_size < min_block_size || header.block_size > max_block_size) 
+	{
+        myprintf("39570! Error: block_size (%s) outside limits (%s-%s)\n", 
+               migliaia(header.block_size), migliaia2(min_block_size), migliaia3(max_block_size));
+        return false;
+    }
+    
+    // Verifica che sia potenza di 2
+    if ((header.block_size & (header.block_size - 1)) != 0) 
+	{
+        myprintf("39578! Error: block_size (%s) is not a power of 2\n", migliaia(header.block_size));
+        return false;
+    }
+    
+    // Valida parametri Argon2id
+    if (!validate_argon2_params(header.pwhash_opslimit, header.pwhash_memlimit)) 
+	    return false;
+    
+    // Valida dimensione file
+    if (!validate_file_size(header.file_data_size)) 
+	    return false;
+    
+    // Verifica coerenza: numero di blocchi calcolabile
+    if (header.file_data_size > 0) 
+	{
+        uint64_t num_blocks = (header.file_data_size + header.block_size - 1) / header.block_size;
+        if (!check_offset_overflow(num_blocks - 1, header.block_size)) 
+		    return false;
+    }
+
+    // Controllo dimensione file esatta
+    if (!validate_actual_file_size()) 
+        return false;
+
+    return true;
+}
+
+bool validate_actual_file_size() 
+{
+    // Salva la posizione corrente
+    long long current_pos = -1;
+    #ifdef _WIN32
+        current_pos = _ftelli64(file_handle);
+    #else
+        current_pos = ftello(file_handle);
+    #endif
+    
+    if (current_pos < 0) 
+	{
+        myprintf("39617! Error: Unable to determine the current position in the file\n");
+        return false;
+    }
+
+    // Vai alla fine del file per determinarne la dimensione
+    if (fseek64(file_handle, 0, SEEK_END) != 0) 
+	{
+        myprintf("39624! Error: Unable to position to the end of the file\n");
+        return false;
+    }
+
+    long long actual_file_size = -1;
+    #ifdef _WIN32
+        actual_file_size = _ftelli64(file_handle);
+    #else
+        actual_file_size = ftello(file_handle);
+    #endif
+
+    // Ripristina la posizione originale
+    if (fseek64(file_handle, current_pos, SEEK_SET) != 0) 
+	{
+        myprintf("39638! Error: Unable to restore the position in the file\n");
+        return false;
+    }
+
+    if (actual_file_size < 0) 
+	{
+        myprintf("39644! Error: Unable to determine the actual file size\n");
+        return false;
+    }
+
+    // Calcola la dimensione attesa basata sull'header
+    size_t nonce_len 	= sodium.crypto_aead_chacha20poly1305_ietf_npubbytes();
+    size_t tag_len 		= sodium.crypto_aead_chacha20poly1305_ietf_abytes();
+    
+    // Calcola il numero di blocchi di dati
+    uint64_t num_data_blocks = 0;
+    if (header.file_data_size > 0) 
+        num_data_blocks = (header.file_data_size + header.block_size - 1) / header.block_size;
+    
+    // Dimensione attesa:
+    // - Header fisso
+    // - Nonce dell'header 
+    // - Per ogni blocco di dati: nonce + dati cifrati + tag di autenticazione
+    uint64_t expected_size = sizeof(file_header) + 
+                            sizeof(header_nonce) + 
+                            num_data_blocks * (nonce_len + header.block_size + tag_len);
+    
+    if (flagdebug) 
+	{
+        myprintf("DEBUG: Actual file size      : %s bytes\n", migliaia(actual_file_size));
+        myprintf("DEBUG: Expected size         : %s bytes\n", migliaia(expected_size));
+        myprintf("DEBUG: Number of data blocks : %s\n", migliaia(num_data_blocks));
+        myprintf("DEBUG: Size per block        : %s (nonce) + %s (data) + %s (tag) = %s bytes\n", 
+               migliaia(nonce_len), migliaia2(header.block_size), migliaia3(tag_len), migliaia4(nonce_len + header.block_size + tag_len));
+    }
+    
+    if ((uint64_t)actual_file_size != expected_size) 
+	{
+		color_red();
+        myprintf("39656!Error: File size does not match the expected size\n");
+        myprintf("39677:       Actual file: %s bytes, expected: %s bytes\n", migliaia(actual_file_size), migliaia2(expected_size));
+        
+        if ((uint64_t)actual_file_size < expected_size) 
+		    myprintf("         The file appears truncated or incomplete\n");
+        else 
+		    myprintf("         The file contains unexpected extra data\n");
+		color_restore();
+        return false;
+    }
+    
+    if (flagdebug) 
+	   myprintf("DEBUG: File size verification passed\n");
+    
+    return true;
+}
+
+public:
+
+/// semplice per debug
+bool decode(const char *input_filename, const char *output_filename) 
+{
+    if (!open(input_filename, false)) 
+	{
+        // L'errore specifico gia stampato da open()
+        return false;
+    }
+
+    FILE *output_file = fopen(output_filename, "wb");
+    if (!output_file) 
+	{
+        perror("Error creating output file");
+        close();
+        return false;
+    }
+
+    // Chiama la nuova funzione di streaming
+    bool success = decrypt_and_write_stream(output_file);
+    
+    fclose(output_file);
+    close(); // Chiude il file di input e resetta lo stato
+    
+    return success;
+}
+bool is_not_changed() 
+{
+    if (!is_file_open) 
+	{
+        myprintf("39725! Error: No file open for integrity check\n");
+        return false;
+    }
+
+    // L'integrità dell'header è già stata verificata da open().
+    // Procediamo direttamente alla verifica di ogni blocco di dati.
+    size_t tag_len   		= sodium.crypto_aead_chacha20poly1305_ietf_abytes();
+    size_t nonce_len 		= sodium.crypto_aead_chacha20poly1305_ietf_npubbytes();
+    uint64_t total_blocks 	= (header.file_data_size + block_size - 1) / block_size;
+
+    // Se il file è vuoto (solo header), è integro per definizione.
+    if (total_blocks == 0) 
+        return true;
+
+    if (flagdebug) 
+		myprintf("DEBUG: Checking integrity of %s data blocks...\n", migliaia(total_blocks));
+
+    std::vector<unsigned char> dummy_plaintext(block_size);
+    unsigned long long dummy_decrypted_len = 0;
+
+    for (uint64_t block_idx = 0; block_idx < total_blocks; ++block_idx) 
+	{
+        int64_t block_file_offset = get_block_file_offset(block_idx);
+        if (fseek64(file_handle, block_file_offset, SEEK_SET) != 0) 
+		{
+            myprintf("39750! ERROR: Unable to position to block #%s\n", migliaia(block_idx));
+            return false;
+        }
+
+        std::vector<unsigned char> block_nonce(nonce_len);
+        if (fread(&block_nonce[0], 1, nonce_len, file_handle) != nonce_len) 
+		{
+            myprintf("39757! ERROR: Nonce reading failed for block #%s\n",migliaia(block_idx));
+            return false;
+        }
+
+        std::vector<unsigned char> encrypted(block_size + tag_len);
+        if (fread(&encrypted[0], 1, encrypted.size(), file_handle) != encrypted.size()) 
+		{
+            myprintf("39764! ERROR: Reading encrypted data failed for block #%s\n", migliaia(block_idx));
+            return false;
+        }
+
+        // Tenta di decifrare: questa è la vera verifica di integrità del blocco.
+        // Se il tag di autenticazione non corrisponde, la funzione fallirà.
+        if (sodium.crypto_aead_chacha20poly1305_ietf_decrypt(
+                &dummy_plaintext[0], &dummy_decrypted_len, NULL,
+                &encrypted[0], encrypted.size(),
+                NULL, 0, &block_nonce[0], key) != 0) {
+            // Aggiunge un newline per non sovrascrivere la riga di avanzamento
+            myprintf("39775! ERROR: Integrity check failed on block #s The block is corrupted (good)\n", migliaia(block_idx));
+            if (domemzero) 
+			    sodium.sodium_memzero(dummy_plaintext.data(), dummy_plaintext.size());
+            return false;
+        }
+        
+/*
+        int percent = (int)(100.0 * (block_idx + 1) / total_blocks);
+        printf("\rVerifica in corso: %d%%", percent);
+        fflush(stdout);
+		*/
+    }
+    
+    if (domemzero) 
+	    sodium.sodium_memzero(dummy_plaintext.data(), dummy_plaintext.size());
+    
+    myprintf("Verification completed\n");
+    return true;
+}
+
+private: 
+    
+struct thread_data 
+{
+    franzcri* 			instance;
+    const char* 		input_filename;
+    pthread_mutex_t* 	file_mutex;
+    uint64_t 			start_block_idx;
+	uint64_t 			num_blocks_to_process;
+    uint64_t 			total_input_size; // Aggiunto per gestire l'ultimo blocco
+	uint64_t			starttime;
+    bool 				success;
+};
+
+// Nuova struct per il worker di decodifica
+struct decode_thread_data 
+{
+    franzcri* 			instance;
+    FILE* 				output_file; // Sarà NULL in modalità 'verify' Mahoney's trick
+    pthread_mutex_t* 	file_io_mutex;
+    uint64_t 			start_block_idx;
+	uint64_t 			num_blocks_to_process;
+    uint64_t 			total_input_size; // avanzamento
+	uint64_t			starttime;
+    bool 				success;
+	
+};
+
+static void* encryption_worker(void* arg) 
+{
+    thread_data* data 	= (thread_data*)arg;
+    data->success 		= false;
+
+    FILE* input_file 	= fopen(data->input_filename, "rb");
+    if (!input_file) 
+	{
+        perror("WORKER: Error opening input file");
+        return NULL;
+    }
+
+    size_t 			tag_len   	= data->instance->sodium.crypto_aead_chacha20poly1305_ietf_abytes();
+    size_t 			nonce_len 	= data->instance->sodium.crypto_aead_chacha20poly1305_ietf_npubbytes();
+    const uint64_t 	block_size 	= data->instance->block_size;
+
+    std::vector<unsigned char> plaintext	(block_size);
+    std::vector<unsigned char> ciphertext	(block_size + tag_len);
+    std::vector<unsigned char> block_nonce	(nonce_len);
+
+    for (uint64_t i = 0; i < data->num_blocks_to_process; ++i) 
+	{
+        uint64_t 	current_block_idx 	= data->start_block_idx + i;
+        int64_t 	input_offset 		= (int64_t)(current_block_idx * block_size);
+
+        if (data->instance->fseek64(input_file, input_offset, SEEK_SET) != 0) 
+		{
+            perror("WORKER: Error fseek64 on input file");
+            fclose(input_file);
+            return NULL;
+        }
+
+        // Calcola quanti byte leggere per questo blocco (gestisce l'ultimo blocco del file)
+        uint64_t bytes_remaining_in_file 	= data->total_input_size - input_offset;
+        size_t bytes_to_read = ((uint64_t)block_size < bytes_remaining_in_file) ? 
+                      (uint64_t)block_size : (size_t)bytes_remaining_in_file;
+
+        size_t bytes_read = fread(&plaintext[0], 1, bytes_to_read, input_file);
+        if (bytes_read != bytes_to_read) 
+		{
+            myprintf("39858! WORKER: Error reading block #%s from input file\n", migliaia(current_block_idx));
+            fclose(input_file);
+            return NULL;
+        }
+		
+
+        if (bytes_read < block_size) 
+		    memset(&plaintext[bytes_read], 0, block_size - bytes_read);
+        
+        data->instance->sodium.randombytes_buf(&block_nonce[0], nonce_len);
+
+        unsigned long long ciphertext_len = 0;
+        if (data->instance->sodium.crypto_aead_chacha20poly1305_ietf_encrypt(
+                &ciphertext[0], &ciphertext_len,
+                &plaintext[0], block_size,
+                NULL, 0, NULL, &block_nonce[0], data->instance->key) != 0) 
+				{
+					myprintf("39874! WORKER: Encryption error for block #%s\n", migliaia(current_block_idx));
+					fclose(input_file);
+					return NULL;
+				}
+        
+        pthread_mutex_lock(data->file_mutex);
+        
+        int64_t block_file_offset = data->instance->get_block_file_offset(current_block_idx);
+        if (data->instance->fseek64(data->instance->file_handle, block_file_offset, SEEK_SET) != 0) 
+		{
+            perror("WORKER: Error fseek64 on output file");
+            pthread_mutex_unlock(data->file_mutex);
+            fclose(input_file);
+            return NULL;
+        }
+        
+        if (fwrite(&block_nonce[0], 1, nonce_len, data->instance->file_handle) != nonce_len ||
+            fwrite(&ciphertext[0], 1, ciphertext.size(), data->instance->file_handle) != ciphertext.size()) 
+			{
+				perror("WORKER: Error writing block data");
+				pthread_mutex_unlock(data->file_mutex);
+				fclose(input_file);
+				return NULL;
+			}
+
+///fiko
+		data->instance->worked_so_far+=bytes_read;
+		if (!flagnoeta)
+			myavanzamentoby1sec(data->instance->worked_so_far,data->total_input_size,data->starttime,false);
+
+        pthread_mutex_unlock(data->file_mutex);
+    }
+
+    fclose(input_file);
+    data->success = true;
+    return NULL;
+}
+static void* decryption_worker(void* arg) 
+{
+    decode_thread_data* 	data 	= (decode_thread_data*)arg;
+    data->success 					= false;
+
+    franzcri* 			instance 	= data->instance;
+    const uint64_t 		block_size 	= instance->block_size;
+    const size_t 		tag_len   	= instance->sodium.crypto_aead_chacha20poly1305_ietf_abytes();
+    const size_t 		nonce_len 	= instance->sodium.crypto_aead_chacha20poly1305_ietf_npubbytes();
+
+    std::vector<unsigned char> encrypted	(block_size + tag_len);
+    std::vector<unsigned char> plaintext	(block_size);
+    std::vector<unsigned char> block_nonce	(nonce_len);
+
+    for (uint64_t i = 0; i < data->num_blocks_to_process; ++i) 
+	{
+        uint64_t current_block_idx = data->start_block_idx + i;
+
+        pthread_mutex_lock(data->file_io_mutex);
+
+        int64_t block_file_offset = instance->get_block_file_offset(current_block_idx);
+        if (instance->fseek64(instance->file_handle, block_file_offset, SEEK_SET) != 0) 
+		{
+            perror("\nWORKER: Error fseek64 on input file");
+            pthread_mutex_unlock(data->file_io_mutex);
+            return NULL;
+        }
+
+        // Leggi nonce e blocco cifrato
+        bool read_ok = fread(&block_nonce[0], 1, nonce_len, instance->file_handle) == nonce_len &&
+                       fread(&encrypted[0], 1, encrypted.size(), instance->file_handle) == encrypted.size();
+
+        pthread_mutex_unlock(data->file_io_mutex);
+        
+        if (!read_ok) 
+		{
+            myprintf("39942! WORKER: Error reading block #%s from input file\n", migliaia(current_block_idx));
+            return NULL;
+        }
+
+        // Decifra il blocco (CPU intensive, avviene in parallelo)
+        unsigned long long decrypted_len = 0;
+        if (instance->sodium.crypto_aead_chacha20poly1305_ietf_decrypt(
+                &plaintext[0], &decrypted_len, NULL,
+                &encrypted[0], encrypted.size(),
+                NULL, 0, &block_nonce[0], instance->key) != 0) 
+				{
+					myprintf("39953: WORKER: ERROR: Decryption failed on block #%s File corrupted or incorrect password\n", migliaia(current_block_idx));
+					return NULL; // Termina il thread in caso di fallimento
+				}
+
+        // Se non è in modalità 'verify', scrivi sul file di output
+        if (data->output_file != NULL) 
+		{
+            uint64_t 	bytes_processed_so_far 	= current_block_idx * block_size;
+            uint64_t 	remaining_in_file 		= instance->header.file_data_size - bytes_processed_so_far;
+            size_t bytes_to_write = ((uint64_t)block_size < remaining_in_file) ? 
+                       (uint64_t)block_size : (size_t)remaining_in_file;
+
+            pthread_mutex_lock(data->file_io_mutex);
+
+            int64_t output_offset = (int64_t)(current_block_idx * block_size);
+            if (instance->fseek64(data->output_file, output_offset, SEEK_SET) != 0) 
+			{
+                perror("\nWORKER: Error fseek64 on output file");
+                pthread_mutex_unlock(data->file_io_mutex);
+                return NULL;
+            }
+            
+            bool write_ok = fwrite(&plaintext[0], 1, bytes_to_write, data->output_file) == bytes_to_write;
+
+///fiko
+			data->instance->worked_so_far+=encrypted.size();
+			if (!flagnoeta)
+				myavanzamentoby1sec(data->instance->worked_so_far,data->total_input_size,data->starttime,false);
+
+            pthread_mutex_unlock(data->file_io_mutex);
+
+            if (!write_ok) 
+			{
+                perror("\nWORKER: Error writing to output file");
+                return NULL;
+            }
+        }
+		else
+		{
+			///no mutex here, just infos, nobody really cares
+			if (!flagnoeta)
+			{
+				pthread_mutex_lock(data->file_io_mutex);
+				data->instance->worked_so_far+=encrypted.size();
+				myavanzamentoby1sec(data->instance->worked_so_far,data->total_input_size,data->starttime,false);
+				pthread_mutex_unlock(data->file_io_mutex);
+			}
+		}
+    }
+
+    data->success = true;
+    return NULL;
+}
+
+bool decrypt_to_buffer(char *out_buffer, size_t buffer_size) 
+{
+    if (!is_file_open || buffer_size < header.file_data_size) 
+	    return false;
+    
+    size_t tag_len   		= sodium.crypto_aead_chacha20poly1305_ietf_abytes();
+    size_t nonce_len 		= sodium.crypto_aead_chacha20poly1305_ietf_npubbytes();
+    uint64_t total_blocks 	= (header.file_data_size + block_size - 1) / block_size;
+    uint64_t bytes_written 	= 0;
+
+    std::vector<unsigned char> encrypted(block_size + tag_len);
+    std::vector<unsigned char> plaintext(block_size);
+
+    for (uint64_t block_idx = 0; block_idx < total_blocks; ++block_idx) 
+	{
+        int64_t block_file_offset = get_block_file_offset(block_idx);
+        if (fseek64(file_handle, block_file_offset, SEEK_SET) != 0) 
+			return false;
+
+        std::vector<unsigned char> block_nonce(nonce_len);
+        if (fread(&block_nonce[0], 1, nonce_len, file_handle) != nonce_len) 
+			return false;
+        if (fread(&encrypted[0], 1, encrypted.size(), file_handle) != encrypted.size()) 
+			return false;
+        
+        unsigned long long decrypted_len = 0;
+        if (sodium.crypto_aead_chacha20poly1305_ietf_decrypt(
+                &plaintext[0], &decrypted_len, NULL,
+                &encrypted[0], encrypted.size(),
+                NULL, 0, &block_nonce[0], key) != 0) 
+				{
+					myprintf("40021! Decryption of block #%s failed\n", migliaia(block_idx));
+					if (domemzero) 
+						sodium.sodium_memzero(plaintext.data(), plaintext.size());
+					return false;
+				}
+
+        size_t remaining 	= header.file_data_size - bytes_written;
+        size_t to_copy = ((size_t)remaining < (size_t)decrypted_len) ? 
+                (size_t)remaining : (size_t)decrypted_len;
+        memcpy(out_buffer + bytes_written, &plaintext[0], to_copy);
+        bytes_written 		+= to_copy;
+    }
+
+    if (domemzero) 
+		sodium.sodium_memzero(plaintext.data(), plaintext.size());
+    return true;
+}
+
+
+bool write(const char *buffer, size_t size) 
+{
+    if (!is_file_open || size == 0) 
+		return true;
+
+    if (header.file_data_size > UINT64_MAX - size) 
+	{
+        myprintf("40046! Error: Adding data would cause file size overflow\n");
+        return false;
+    }
+
+    uint64_t new_size = header.file_data_size + size;
+    if (!validate_file_size(new_size)) 
+	    return false;
+    
+    uint64_t start_block_index 	= header.file_data_size / block_size;
+    uint64_t end_block_index 	= (new_size - 1) / block_size;
+
+    if (!check_offset_overflow(end_block_index, block_size)) 
+	    return false;
+    
+    int64_t file_pos = get_block_file_offset(start_block_index);
+    if (fseek64(file_handle, file_pos, SEEK_SET) != 0) 
+	{
+        perror("fseek64 failed in write");
+        return false;
+    }
+
+    size_t bytes_processed 	= 0;
+    size_t tag_len   		= sodium.crypto_aead_chacha20poly1305_ietf_abytes();
+    size_t nonce_len 		= sodium.crypto_aead_chacha20poly1305_ietf_npubbytes();
+
+    std::vector<unsigned char> plaintext	(block_size);
+    std::vector<unsigned char> ciphertext	(block_size + tag_len);
+    std::vector<unsigned char> block_nonce	(nonce_len);
+
+    while (bytes_processed < size) 
+	{
+        size_t chunk_size = ((size_t)block_size < (size - bytes_processed)) ? 
+                   (size_t)block_size : (size - bytes_processed);
+
+        memcpy(&plaintext[0], buffer + bytes_processed, chunk_size);
+        if (chunk_size < block_size) 
+		    memset(&plaintext[chunk_size], 0, block_size - chunk_size);
+        
+        // Genera un nonce casuale per ogni blocco ---
+        sodium.randombytes_buf(&block_nonce[0], nonce_len);
+        print_nonce(&block_nonce[0], nonce_len, "block_write");
+
+        unsigned long long ciphertext_len = 0;
+        if (sodium.crypto_aead_chacha20poly1305_ietf_encrypt(
+                &ciphertext[0], &ciphertext_len,
+                &plaintext[0], block_size,
+                NULL, 0, NULL, &block_nonce[0], key) != 0) 
+				{
+            myprintf("Encryption error\n");
+            if (domemzero) 
+			{
+                sodium.sodium_memzero(plaintext.data(), plaintext.size());
+                sodium.sodium_memzero(ciphertext.data(), ciphertext.size());
+            }
+            return false;
+        }
+
+        // Scrivi prima il nonce, poi il blocco cifrato
+        if (fwrite(&block_nonce[0], 1, nonce_len, file_handle) != nonce_len ||
+            fwrite(&ciphertext[0], 1, ciphertext.size(), file_handle) != ciphertext.size()) 
+			{
+				perror("Error writing block data");
+				if (domemzero) 
+				{
+					sodium.sodium_memzero(plaintext.data(), plaintext.size());
+					sodium.sodium_memzero(ciphertext.data(), ciphertext.size());
+				}
+            return false;
+        }
+
+        bytes_processed += chunk_size;
+        // header.file_data_size viene aggiornato solo alla fine per consistenza
+    }
+
+    header.file_data_size = new_size; // Aggiorna la dimensione totale
+
+    if (domemzero) 
+	{
+        sodium.sodium_memzero(plaintext.data(), plaintext.size());
+        sodium.sodium_memzero(ciphertext.data(), ciphertext.size());
+    }
+
+    fflush(file_handle);
+    file_was_modified = true;
+    return true;
+}
+
+
+}; // Fine classe franzcri
+
+#endif ///NOSFTPEND
+
+
+
+
+
+
+
+
+
+
+
 
 #ifdef unix
 std::string exec(const char* cmd)
@@ -41173,7 +43986,7 @@ int Jidac::makefullzfsbackup(const string& poolName, const string& archiveName, 
     vector<string> array_dopochiocciola;
     vector<string> array_size;
 
-    // Verifica se esistono snapshot
+    // Check if snapshots exist
     (void)zfs_get_snaplist(poolName, snapshotMarker, array_primachiocciola, array_dopochiocciola, array_size);
     if (!array_primachiocciola.empty()) 
 	{
@@ -41181,7 +43994,7 @@ int Jidac::makefullzfsbackup(const string& poolName, const string& archiveName, 
         return 2;
     }
 
-    // Crea il nome dello snapshot
+    // Create the snapshot name
     char buffer[1000];
     snprintf(buffer, sizeof(buffer), "%s%08d", snapshotMarker.c_str(), 1);
     string snapshotName = buffer;
@@ -41192,7 +44005,7 @@ int Jidac::makefullzfsbackup(const string& poolName, const string& archiveName, 
     myprintf("00382: Exename  |%s|\n", zpaqfranzexename.c_str());
     myprintf("00383: Now preparing a brand-new archive and snapshot (starting from 00000001)\n");
 
-    // Crea lo script temporaneo
+    // Create the temporary script
     string scriptPath = "/tmp/newbackup_zfs_" + sanitizedPoolName + ".sh";
     scriptPath = nomefileseesistegia(scriptPath);
     myprintf("00384: CREATING script %s\n", scriptPath.c_str());
@@ -41203,7 +44016,7 @@ int Jidac::makefullzfsbackup(const string& poolName, const string& archiveName, 
         return 2;
     }
 
-    // Scrittura comandi nello script
+    // Writing commands into the script
     fprintf(batch, "zfs snapshot %s\n", fullSnapshotName.c_str());
 
     string hashFilePath;
@@ -41229,14 +44042,14 @@ int Jidac::makefullzfsbackup(const string& poolName, const string& archiveName, 
         fprintf(batch, "%s -c md5 -r %s >%s\n", hashdeepCommand.c_str(), zfsFolder.c_str(), hashFilePath.c_str());
     }
 
-    // Aggiungi pv se disponibile
+    // Add pv if available
     string pv = find_unix_command("pv");
     if (!pv.empty()) {
         pv += "|";
         myprintf("54862: Activating pv on <<%s>>\n", pv.c_str());
     }
 
-    // Scrivi comando zfs send
+    // Write zfs send command
     fprintf(batch, "zfs send %s@%s00000001 |%s%s a %s 00000001.zfs -stdin %s\n",
             poolName.c_str(), snapshotMarker.c_str(), pv.c_str(), fullzpaqexename.c_str(), archiveName.c_str(),i_parameters.c_str());
 
@@ -41247,7 +44060,7 @@ int Jidac::makefullzfsbackup(const string& poolName, const string& archiveName, 
     fclose(batch);
 
 #ifndef _WIN32
-    // Imposta permessi e esegui lo script
+    // Set permissions and run the script
     if (chmod(scriptPath.c_str(), 0700) != 0) {
         myprintf("00390! error on chmod 700 on <<%s>>\n", scriptPath.c_str());
         return 2;
@@ -41285,7 +44098,7 @@ int Jidac::updatezfsbackup(const string& poolName, const string& archiveName, co
 #ifndef _WIN32
     int64_t oldsize = prendidimensionefile(archiveName.c_str());
 #endif
-    // Legge l'archivio
+    // Read the archive
     read_archive(NULL, archiveName.c_str(), &errors, 1);
     vector<string> filename;
     for (DTMap::iterator a = dt.begin(); a != dt.end(); ++a) 
@@ -41296,7 +44109,7 @@ int Jidac::updatezfsbackup(const string& poolName, const string& archiveName, co
             filename.push_back(a->first.c_str());
     }
 
-    // Verifica i nomi dei file nell'archivio
+    // Check the filenames in the archive
     char nomeatteso[40];
     for (unsigned int i = 0; i < filename.size(); i++) 
 	{
@@ -41309,13 +44122,13 @@ int Jidac::updatezfsbackup(const string& poolName, const string& archiveName, co
         }
     }
 
-    // Determina il nome dello snapshot atteso
+    // Determine the name of the expected snapshot
     string snomeatteso = myulltoa(filename.size(), 8);
     string expectedsnapshot = snapshotMarker + snomeatteso;
     string fullexpectedsnapshot = poolName + '@' + snapshotMarker + snomeatteso;
     myprintf("00398: Searching for snapshot |%s|\n", fullexpectedsnapshot.c_str());
 
-    // Ottiene la lista degli snapshot
+    // Get the list of snapshots
     vector<string> array_primachiocciola;
     vector<string> array_dopochiocciola;
     vector<string> array_size;
@@ -41327,7 +44140,7 @@ int Jidac::updatezfsbackup(const string& poolName, const string& archiveName, co
         return 2;
     }
 
-    // Cerca l'indice dello snapshot atteso
+    // Search for the index of the expected snapshot
     int foundindex = -1;
     for (unsigned int i = 0; i < array_primachiocciola.size(); i++) 
 	{
@@ -41347,7 +44160,7 @@ int Jidac::updatezfsbackup(const string& poolName, const string& archiveName, co
         return 2;
     }
 
-    // Calcola il nome del nuovo snapshot
+    // Calculate the name of the new snapshot
     string ultimo = array_dopochiocciola[foundindex];
     string solocifre = "";
     for (unsigned int i = 0; i < ultimo.size(); i++) 
@@ -41363,7 +44176,7 @@ int Jidac::updatezfsbackup(const string& poolName, const string& archiveName, co
     myprintf("00404: Newname full |%s|\n", nuovonomefull.c_str());
     myprintf("00405: Exename      |%s|\n", zpaqfranzexename.c_str());
 
-    // Crea lo script temporaneo
+    // Create the temporary script
     string filebatch = "/tmp/backup_zfs_" + sanitizedPoolName + ".sh";
     filebatch = nomefileseesistegia(filebatch);
     myprintf("00406: EXECUTING script %s\n", filebatch.c_str());
@@ -41375,7 +44188,7 @@ int Jidac::updatezfsbackup(const string& poolName, const string& archiveName, co
         return 2;
     }
 
-    // Scrittura comandi nello script
+    // Writing commands into the script
     fprintf(batch, "zfs snapshot %s\n", nuovonomefull.c_str());
 
     string hashofile;
@@ -41404,7 +44217,7 @@ int Jidac::updatezfsbackup(const string& poolName, const string& archiveName, co
                 hashdeepposition.c_str(), zfsfolder.c_str(), hashofile.c_str());
     }
 
-    // Scrivi comando zfs send incrementale
+    // Write zfs send command incrementale
 	
     fprintf(batch, "zfs send -i %s %s |%s a %s %s.zfs -stdin %s\n",
             fullexpectedsnapshot.c_str(), nuovonomefull.c_str(),
@@ -41420,7 +44233,7 @@ int Jidac::updatezfsbackup(const string& poolName, const string& archiveName, co
     fclose(batch);
 
 #ifndef _WIN32
-    // Imposta permessi ed esegui lo script
+    // Set permissions and run the script
     if (chmod(filebatch.c_str(), 0700) != 0) 
 	{
         myprintf("00412! Error on chmod 700 on %s\n", filebatch.c_str());
@@ -41457,7 +44270,7 @@ int Jidac::updatezfsbackup(const string& poolName, const string& archiveName, co
 }
 int Jidac::zfsbackup() 
 {
-    // Validazione iniziale
+    // Initial validation
     if (!g_ifexist.empty()) 
         if (!direxists(g_ifexist)) 
 		{
@@ -41488,7 +44301,7 @@ int Jidac::zfsbackup()
 
     string snapshotMarker = snapmark.empty() ? "zpaqfranz" : snapmark;
 
-    // Validazione poolName
+    // poolName validation
     int howmanyslash = 0, howmanyat = 0;
 	for (unsigned int i = 0; i < poolName.size(); i++) 
 	{
@@ -41526,7 +44339,7 @@ int Jidac::zfsbackup()
 	if (flagverbose)
 		myprintf("55081: Parameters |%s|\n",parametrini.c_str());
 
-    // Creazione o aggiornamento
+    // Creation or update
     if (fileexists(archive))
         return updatezfsbackup(poolName, archive, snapshotMarker, sanitizedPoolName,parametrini);
     else
@@ -43700,7 +46513,7 @@ void hex2binary(const std::string& i_hexstr, char* i_bytearray,const unsigned in
         //std::string byteString=i_hexstr.substr(i,2);
 		///myprintf("Lavoro da indice length-i %d\n",length-i-2);
         std::string byteString=i_hexstr.substr(length-i-2,2);
-        i_bytearray[i/2]=(char)strtol(byteString.c_str(),NULL,16); // Converte i 2 caratteri in un byte
+        i_bytearray[i/2]=(char)strtol(byteString.c_str(),NULL,16); // Convert the 2 characters into a byte
 		///myprintf("00438: i/2 %d valore %02X\n",i/2,i_bytearray[i/2]&255);
     }
 }
@@ -44349,28 +47162,28 @@ void print_progress(int64_t ts, int64_t td, int64_t i_scritti, int i_percentuale
     static int64_t ultimi_secondi = 0;
     static int ultima_percentuale = 0;
     
-    // Validazione parametri
+    // Parameter validation
     if (td > ts) 
 		td = ts;
     if (td < 1000000) 
 		return;
     
-    // Calcolo tempi
+    // Time calculation
     int64_t tempo_trascorso 	= mtime() - g_start;
     int secondi 				= tempo_trascorso / 1000;
     if (secondi == 0) 
 		secondi = 1;
     
-    // Calcolo ETA (tempo rimanente stimato)
+    // ETA calculation (estimated remaining time)
     double eta = 0.001 * tempo_trascorso * (ts - td) / (td + 1.0);
     if (eta >= 350000) 
-		return; // Limite ragionevole per ETA (circa 4 giorni)
+		return; // Reasonable limit per ETA (circa 4 giorni)
     
     int percentuale = (int)(td * 100.0 / (ts + 0.5));
     
     if (flagpakka) 
 	{
-        // Modalità compatta - aggiorna solo ogni 10%
+        // Every 10%
         bool aggiorna = ((percentuale % 10) == 0);/// || (percentuale == 1);
         bool percentuale_cambiata = (percentuale != ultima_percentuale) || (percentuale == 1);
         
@@ -44389,23 +47202,23 @@ void print_progress(int64_t ts, int64_t td, int64_t i_scritti, int i_percentuale
     } 
 	else 
 	{
-        // Modalità dettagliata - aggiorna ogni secondo
+        // Detailed mode - update every second
         if (secondi != ultimi_secondi) 
 		{
             ultimi_secondi = secondi;
             
-            // Calcolo proiezione
+            // Projection calculation
             int64_t projection = ts;
             if ((command == 'a' || command == 'Z') && (ts > 0)) 
 			    projection = (int64_t)(i_scritti / (1.0 * td / ts));
             
-            // Formato tempo: HH:MM:SS
+            // Time format: HH:MM:SS
             int ore 			= (int)(eta / 3600);
             int minuti 			= (int)(eta / 60) % 60;
             int sec 			= (int)eta % 60;
             double perc_precisa = td * 100.0 / (ts + 0.5);
             
-            // Determina output e formato
+            // Determine output and format
             bool usa_stderr 	= flagwriteonconsole;
             bool stampa 		= (usa_stderr) || (!flagnoeta);
             
@@ -44428,7 +47241,7 @@ void print_progress(int64_t ts, int64_t td, int64_t i_scritti, int i_percentuale
 				else 
 				if (i_scritti > 0) 
 				{
-                    // Senza percentuale esterna, ma con dati scritti
+                    // Without external percentage, but with data written
                     formato = "       %6.2f%% %02d:%02d:%02d  (%10s)->(%10s)=>(%10s) %10s/s\r";
                     
                     if (usa_stderr) 
@@ -44440,7 +47253,7 @@ void print_progress(int64_t ts, int64_t td, int64_t i_scritti, int i_percentuale
                 } 
 				else 
 				{
-                    // Solo dati base
+                    // Only base data
                     formato = "       %6.2f%% %02d:%02d:%02d  (%10s)=>(%10s) %10s/s         \r";
                     
                     if (usa_stderr) 
@@ -44539,11 +47352,11 @@ bool compareredallavgthenfilename(DTMap::iterator ap, DTMap::iterator bp)
 
 bool compareorderby(DTMap::iterator a, DTMap::iterator b) 
 {
-    // Se orderby è vuoto, non ordina
+    // If orderby is empty, it doesn't sort
     if (orderby.empty()) 
         return false;
 
-    // Popola g_theorderby una sola volta se necessario
+    // Populate g_theorderby only once if necessary
     if (g_theorderby.empty()) 
     {
         g_theorderby.clear();
@@ -44553,14 +47366,14 @@ bool compareorderby(DTMap::iterator a, DTMap::iterator b)
         explode(temp_orderby, ';', g_theorderby);
     }
 
-    // Confronta i campi in base ai criteri in g_theorderby con ciclo esplicito
+    // Compare fields based on criteria in g_theorderby with explicit loop
     for (size_t i = 0; i < g_theorderby.size(); ++i) 
     {
         const std::string& criterio = g_theorderby[i];
         if (criterio.empty()) 
             continue;
 
-        // Confronto per ogni criterio
+        // Comparison for each criterion
         if (criterio == "ext") 
         {
             std::string a_ext = prendiestensione(a->first);
@@ -44617,7 +47430,7 @@ bool compareorderby(DTMap::iterator a, DTMap::iterator b)
         }
     }
 
-    // Criterio di spareggio: nome completo del file
+    // Tie-breaking criterion: full file name
     return flagdesc ? (a->first > b->first) : (a->first < b->first);
 }
 /*
@@ -44898,6 +47711,13 @@ string help_work(bool i_usage,bool i_example)
         scrivi_riga("lastfile X","Show last file in X (only filename)");
 		scrivi_riga("getsize X","Show size of X (multiple / wildcard allowed)");
 		scrivi_riga("checkspace","Check if enough free space");
+#ifdef ZPAQFULL ///NOSFTPSTART
+		scrivi_riga("encode pass","FRANZEN encrypt. Use -ssd for multithread (limit with -tX)");
+		scrivi_riga("decode pass","FRANZEN decrypt. Use -ssd for multithread (limit with -tX)");
+		scrivi_riga("fulltest",   "FRANZEN full test. Encrypt, decrypt, compare");
+		scrivi_riga("autotest",   "FRANZEN autotest");
+#endif ///NOSFTPEND
+		
 	}
 	if (i_usage && i_example) scrivi_examples();
 	if (i_example)
@@ -44923,6 +47743,12 @@ string help_work(bool i_usage,bool i_example)
         scrivi_esempio("Scary text","work devart-red ERROR! -terse");
         scrivi_esempio("Show filesize","work getsize zpaqfranz*.cpp /tmp/prova");
         scrivi_esempio("Check free space","work checkspace c:\\ 10g d:\\ 20g -exec_error nospace.bat");
+#ifdef ZPAQFULL ///NOSFTPSTART
+        scrivi_esempio("Encrypt (experimental)","work encode j:\\1.zpaq z:\\crip.cha pippo -ssd");
+	    scrivi_esempio("Encrypt fulltest","work fulltest j:\\1.zpaq z:\\testme pippo -ssd");
+		scrivi_esempio("FRANZEN autotest","work autotest");
+#endif ///NOSFTPEND
+		
 	}
 	return("Run multiple commands");
 }
@@ -45401,7 +48227,7 @@ string help_a(bool i_usage,bool i_example)
 		scrivi_riga("-slow", "Reduce CPU power (experimental on Linux)");
 		scrivi_riga("-shutdown", "Attempt to shut down the computer upon completion");
 #ifdef unix
-		scrivi_riga("-tar", "Store *nix metadata (you need -whirlpool or -highhash too");
+		scrivi_riga("-tar", "Store *nix metadata");
 #endif
 #ifdef _WIN32
 		scrivi_riga("-ntfs", "Scan a NTFS drive");
@@ -45409,6 +48235,7 @@ string help_a(bool i_usage,bool i_example)
 		scrivi_riga("-appendoutput", "Append to the output file specified by -out instead of overwriting it");
 		scrivi_riga("-writeonconsole", "Write to stderr too");
 		scrivi_riga("-checksize X", "Check if enoungh free space (or fail)");
+		scrivi_riga("-nodelete", "Store all files togheter. WARNING: you must handle name collisions!");
 		}
 		/*
 		fdisk -l image.img
@@ -45741,6 +48568,8 @@ string help_x(bool i_usage,bool i_example)
 #ifdef _WIN64
 		scrivi_riga("-ramsize", "Win64: allocate max virtual memory across all swapfiles");
 #endif	
+		scrivi_riga("-huge", "Use alternate write policy (huge file on non-sparse filesystem)");
+
 #endif ///NOSFTPEND
 	}
 	if (i_usage && i_example) scrivi_examples();
@@ -45777,6 +48606,10 @@ string help_x(bool i_usage,bool i_example)
 		scrivi_esempio("Try allocating 500GB virtual memory", "x 1.zpaq -to somewhere -ramdisk -ramsize 500GB");
 #endif
 #endif ///NOSFTPEND
+		scrivi_esempio("Restoring huge files on not-NTFS","x z:\\1.zpaq -to u:\\restore -huge");
+#ifdef _WIN32
+		scrivi_esempio("Restoring with sparse file","x z:\\1.zpaq -to u:\\restore -sparse");
+#endif
 	}
 	return("Extract file(s)");
 
@@ -46322,6 +49155,7 @@ string help_r(bool i_usage,bool i_example)
 #ifdef _WIN32
 		scrivi_riga("-big", "Special Windows function for big files over LAN");
 #endif // corresponds to #ifdef (#ifdef _WIN32)
+		scrivi_riga("-bandwidth X", "Limit to X the write rate");
 
 
 	}
@@ -46341,6 +49175,8 @@ string help_r(bool i_usage,bool i_example)
 #endif // corresponds to #ifdef (#ifdef _WIN32)
 		scrivi_esempio("Robocopy only huge files  (WET run)","r c:\\d0 z:\\dest -kill -minsize 10GB");
 		scrivi_esempio("Robocopy only E01 files   (WET run)","r c:\\d0 z:\\dest -kill -only *.e01");
+		scrivi_esempio("Robocopy limited to 100MB/s (WET run)","r c:\\d0 k:\\d1 -kill -bandwidth 100M");
+
 	}
 	return("Robocopy master to multiple slave folders");
 }
@@ -46791,7 +49627,9 @@ string help_summa(bool i_usage,bool i_example)
 		scrivi_riga("CMD sha1","(retained for historical reasons, 7.15 always uses SHA-1 only)");
 		scrivi_riga(" ","Calculate hash/cksum of files/dirs, dupes and cumulative GLOBAL SHA256");
 		scrivi_riga(" ","(If two directories have the same GLOBAL SHA256 they are ==)");
-		scrivi_riga(" ","With no switches, by default, use SHA-1 (reliable, but not very fast)");
+		scrivi_riga(" ","Default: -sha1 | Faster: -blake3 | Fastest: -xxh3 | Safer: -sha256");
+		scrivi_riga(" ","BTW use 'hash' (not 'sum') for md5sum/sha1sum-like output format");
+		scrivi_riga(" ","Use -out to save hashes to a .sfv-style file for later verification");
 		help_printhash(false);
 		scrivi_riga("-ssd", "make N thread (do not use with spinning HDDs, but SSDs and NVMes)");
 		scrivi_riga("-mm", "use memory mapped file instead of 'regular' fread");
@@ -46803,12 +49641,14 @@ string help_summa(bool i_usage,bool i_example)
 		scrivi_riga("-kill -force","runs a deduplication without ask anything!");
 		help_size();
 		scrivi_riga("-715", "Work as 7.15 (with .zfs and ADS)");
-		scrivi_riga("-checktxt", "kaj Check MD5 against kaj file. For rsync/rclone sync");
+		scrivi_riga("-checktxt kaj", "Check MD5 against kaj file. For rsync/rclone sync");
 		scrivi_riga("-hashdeep", "Make (into mandatory -out) hashdeep-compatible output");
 		scrivi_riga("-zeta", "Make the ZETA hash");
 		scrivi_riga("-zetaenc", "Make the ZETA-encrypted hash");
 		help_orderby();
 		scrivi_riga("-last", "Get only the last file");
+		scrivi_riga("-norecursion", "Disable recursion");
+		
 	}
 	if (i_usage && i_example) scrivi_examples();
 	if (i_example)
@@ -46824,11 +49664,14 @@ string help_summa(bool i_usage,bool i_example)
 		scrivi_esempio("MAGIC cumulative hashes of 1-level","sum p:\\staff -xxh3 -home -ssd");
 		scrivi_esempio("BLAKE3 multithread from memory map","sum z:\\knb -ssd -blake3 -mm");
 		scrivi_esempio("MD5 quick check","sum z:\\knb.zpaq -checktxt z:\\pippo.txt");
-		scrivi_esempio("hashdeep-compatible (multithread)","sum *.jpg *.cpp -hashdeep -ssd -out z:\\thehash.txt");
+		scrivi_esempio("hashdeep-compatible (multithread)","sum *.jpg *.cpp -md5 -hashdeep -ssd -out z:\\thehash.txt");
 		scrivi_esempio("like md5sum","sum *.txt -md5 -pakka -noeta -stdout -nosort");
 		scrivi_esempio("Order the output","sum z:\\ -xxh3 -orderby size -desc -only *.cpp");
 		scrivi_esempio("ZETA multithread","sum z:\\knb -ssd -zeta");
 		scrivi_esempio("ZETA on last","sum z:\\knb -zeta -last");
+		scrivi_esempio("Silently create SFV-style hash file", "sum c:\\nz -ssd -xxh3 -out Z:\\pippo.txt -silent");
+		scrivi_esempio("Verify SFV file (multi-thread)", "versum Z:\\pippo.txt -ssd");
+		scrivi_esempio("Only current files", "sum * -norecursion");
 	}
 	return("Calculate hashes, find duplicate file(s)");
 
@@ -46852,6 +49695,7 @@ string help_hasha(bool i_usage,bool i_example)
 		scrivi_riga("-last", "Get only the last file");
 		scrivi_riga("-franzhash", "Use franzhash on a single file with multithread");
 		scrivi_riga("-franzhash -frugal", "franzhash with a single thread");
+		scrivi_riga("-norecursion", "Disable recursion");
 	}
 	if (i_usage && i_example) scrivi_examples();
 	if (i_example)
@@ -46863,6 +49707,8 @@ string help_hasha(bool i_usage,bool i_example)
 		scrivi_esempio("SHA1 of the last file","hash z:\\knb -last");
 		scrivi_esempio("franzhash 4 parts/4 threads","hash z:\\pippo.zpaq -franzhash -blake3 -t4");
 		scrivi_esempio("franzhash 4 parts/1 thread","hash z:\\pippo.zpaq -franzhash -blake3 -t4 -frugal");		
+		scrivi_esempio("only files in c:\\nz","hash c:\\nz -norecursion");		
+		
 	}
 	return("Calculate file hash");
 }
@@ -46884,6 +49730,7 @@ string help_dir(bool i_usage,bool i_example)
 		help_printhash(false);
 		scrivi_riga("-n X","like |tail -X");
 		help_size();
+		scrivi_riga("-nodir","Shows only files");
 	}
 	if (i_usage && i_example) scrivi_examples();
 	if (i_example)
@@ -46898,6 +49745,8 @@ string help_dir(bool i_usage,bool i_example)
 		scrivi_esempio("Like dir","dir z:\\cb\\*.avi");
 		scrivi_esempio("Better than dir","dir c:\\*.cpp /s /os -n 100");
 		scrivi_esempio("Get last 5 backup files","dir c:\\backup\\*.zpaq /on -n 5 -terse");
+		scrivi_esempio("Show newer files","dir c:\\backup\\*.zpaq /s -datefrom 2025 -nodir");
+		
 	}
 	return("Enhanced dir (better than Windows' dir)");
 
@@ -47100,25 +49949,25 @@ string help_voodooswitches(bool i_usage,bool i_example)
 }
 
 
-// Struttura per memorizzare informazioni sulle categorie
+// Structure to store information about categories
 struct CategoryInfo {
     std::string name;
     int sortposition;
     std::vector<std::string> commands;
 };
 
-// Funtore per ordinare le categorie per sortposition
+// Functor to sort categories by sort position
 struct CategorySorter {
     bool operator()(const CategoryInfo& a, const CategoryInfo& b) const {
         return a.sortposition < b.sortposition;
     }
 };
 
-// Funzione principale per stampare l'help
+// Main function to print the help
 void printhelp(const MAPPAHELP& help_map,unsigned int maxchar) 
 {
 
-    // 1. Raggruppa i comandi per categoria e memorizza il sortposition
+    // 1. Group commands by category and store the sort position
     std::vector<CategoryInfo> categorieComandi;
     std::map<std::string, int> categorySortPosition;
 
@@ -47141,15 +49990,15 @@ void printhelp(const MAPPAHELP& help_map,unsigned int maxchar)
         categorySortPosition[p->second.category] = p->second.sortposition;
     }
 
-    // 2. Ordina i comandi all'interno di ogni categoria alfabeticamente
+    // 2. Sort commands within each category alphabetically
     for (std::vector<CategoryInfo>::iterator cat = categorieComandi.begin(); cat != categorieComandi.end(); ++cat) {
         std::sort(cat->commands.begin(), cat->commands.end());
     }
 
-    // 3. Ordina le categorie per sortposition
+    // 3. Sort categories by sort position
     std::sort(categorieComandi.begin(), categorieComandi.end(), CategorySorter());
 
-    // 4. Calcola la lunghezza massima dei nomi di categoria per l'allineamento
+    // 4. Calculate the maximum length of category names for alignment
     size_t maxLength = 0;
     for (std::vector<CategoryInfo>::const_iterator cat = categorieComandi.begin(); cat != categorieComandi.end(); ++cat) {
         if (cat->name.length() > maxLength) {
@@ -47157,45 +50006,45 @@ void printhelp(const MAPPAHELP& help_map,unsigned int maxchar)
         }
     }
 
-    // 5. Stampa le categorie e i comandi
+    // 5. Print categories and commands
     std::string rigaCorrente;
     bool primaCategoria = true;
 
     for (std::vector<CategoryInfo>::const_iterator cat = categorieComandi.begin(); cat != categorieComandi.end(); ++cat) {
-        // Ogni categoria deve iniziare su una nuova riga
+        // Each category must start on a new line
         if (!primaCategoria) {
             moreprint("");
             rigaCorrente.clear();
         }
 
-        // Stampa intestazione categoria in giallo
+        // Print category header in yellow
         color_yellow();
         std::string intestazione = cat->name;
 		moreprint(intestazione.c_str(), true);
 		color_restore();
         moreprint(":", true);
 
-        // Calcola l'indentazione in base alla lunghezza massima
+        // Calculate indentation based on maximum length
         std::string indentazione(maxLength - cat->name.length() + 1, ' ');
         moreprint(indentazione.c_str(), true);
 
         color_green();
         rigaCorrente += intestazione + indentazione;
 
-        // Stampa comandi uno per uno, gestendo il wrap
+        // Print commands one by one, handling wrap
         bool primoComando = true;
         for (std::vector<std::string>::const_iterator cmd = cat->commands.begin(); cmd != cat->commands.end(); ++cmd) {
             std::string separatore = primoComando ? "" : ", ";
 
-            // Se il separatore + comando non entrano, va a capo e riallinea
+            // If the separator + command don't fit, it wraps and realigns
             if (rigaCorrente.length() + separatore.length() + cmd->length() > maxchar) {
                 moreprint("");
-                // Aggiunge la stessa indentazione usata per il primo comando della categoria
+                // Add the same indentation used for the first command of the category
                 std::string nuovaRigaIndentazione(maxLength + 2, ' ');
                 moreprint(nuovaRigaIndentazione.c_str(), true);
                 rigaCorrente.clear();
                 rigaCorrente += nuovaRigaIndentazione;
-                separatore = ""; // Non serve il separatore all'inizio della nuova riga
+                separatore = ""; // No need for a separator at the beginning of the new line
             }
 
             moreprint((separatore + *cmd).c_str(), true);
@@ -47207,7 +50056,7 @@ void printhelp(const MAPPAHELP& help_map,unsigned int maxchar)
         primaCategoria = false;
     }
 
-    // Stampa l'ultima riga se non è vuota
+    // Print the last line if it is not empty
     if (!rigaCorrente.empty()) {
         moreprint("");
     }
@@ -48049,6 +50898,29 @@ bool Jidac::cli_filesandcommand(const string& i_opt,string i_string,char i_comma
 	return false;
 }
 
+string get_final_part(string i_filename)
+{
+	string part0=subpart(i_filename, 0);
+	
+	int parts=0;
+	if (part0!=i_filename) 
+	{  // multi-part?
+		for (int i=1;; ++i) 
+		{
+			string partname=subpart(i_filename, i);
+			if (partname==part0) 
+				error("48805: too many archive parts");
+			FP fp=myfopen(partname.c_str(), RB);
+			if (fp==FPNULL) 
+				break;
+			++parts;
+			if (fp!=NULL)
+				myfclose(&fp);
+		}
+	}
+	return subpart(i_filename, parts);
+	
+}
 bool Jidac::cli_getkey	(const string& i_opt,string i_string,int argc,const char** argv, int* i_i,string* o_plain,char**	o_password,char*	o_password_string)
 {
 		
@@ -48089,7 +50961,8 @@ bool Jidac::cli_getkey	(const string& i_opt,string i_string,int argc,const char*
 			{
 				if ((command=='a') || (command=='Z'))
 				{
-					if (archive=="")
+					string thefinalpart=get_final_part(archive);
+					if (!fileexists(thefinalpart.c_str()))
 					{
 						string doublepwd=mygetpasswordblind("Password,again :");
 						if (doublepwd!=spassword)
@@ -48461,6 +51334,31 @@ bool isbigendian(void)
     } bint = {0x01020304};
     return bint.c[0] == 1;
 }
+#ifdef _WIN32
+std::string getwinexedir() 
+{
+    char fullPath[MAX_PATH];
+    DWORD result = GetModuleFileNameA(NULL, fullPath, MAX_PATH); // Use ANSI version
+    
+    if (result == 0 || result == MAX_PATH) 
+	{
+		myprintf("\n");
+		myprintf("51348! getwinexedir() KO => seppuku\n");
+		seppuku();
+        return std::string(); // Error or buffer too small
+    }
+    // Convert to std::string for easier manipulation
+    std::string path(fullPath);
+    
+    // Find last backslash
+    size_t lastBackslash = path.find_last_of('\\');
+    if (lastBackslash == std::string::npos) 
+	    return std::string(); // No separator found
+    // Return only the directory (without the file name)
+    return includetrailingbackslash(wintolinuxpath(path.substr(0, lastBackslash)));
+}
+#endif
+
 
 void replacetabs(std::string &str) 
 {
@@ -48507,6 +51405,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 	g_programflags.add(&flagfilelist,		"-filelist",			"Create a filelist .txt",							"");
 #ifdef _WIN32
 	g_programflags.add(&flagads,			"-ads",					"Store filelists on NTFS",							"");
+	g_programflags.add(&flagsparse,			"-sparse",				"Try to create sparse file on Windows",				"");
 #endif // corresponds to #ifdef (#ifdef _WIN32)
 	g_programflags.add(&flagfast,			"-fast",				"Store filelists inside",							"");
 	g_programflags.add(&flagfix255,			"-fix255",				"Fix 255",											"");
@@ -48519,6 +51418,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 	g_programflags.add(&flagfranzhash,		"-franzhash",			"Use franzhash",									"");
 	g_programflags.add(&flaghashdeep,		"-hashdeep",			"Hashdeep",											"");
 	g_programflags.add(&flagignore,			"-ignore",				"Ignore (do not show) file errors",												"a;");
+	g_programflags.add(&flaghuge,			"-huge",				"Use different extraction algo",					"");
 	g_programflags.add(&flagnotrim,			"-notrim",				"Disable autotrim of incomplete transactions",												"");
 	g_programflags.add(&flagonedrive,		"-onedrive",			"Do NOT get onedrive placeholders",												"");
 	g_programflags.add(&flaghome,			"-home",				"Divide into multiple files, one for each folder.",												"a;");
@@ -48527,6 +51427,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 	g_programflags.add(&flagnocaptcha,		"-nocaptcha",			"Skip chaptcha",												"");
 	g_programflags.add(&flagmm,				"-mm",					"Memory mapped file",									"");
 	g_programflags.add(&flagnoattributes,	"-noattributes",		"Do not store file attribute",									"");
+	g_programflags.add(&flagnodir,			"-nodir",				"On 'dir' do not show dirs, only files",									"");
 	g_programflags.add(&flagattr,			"-attr",				"Show attribute (listing)",									"");
 	g_programflags.add(&flagthunderbird,	"-thunderbird",			"Thunderbird's e-mail",									"");
 	g_programflags.add(&flagnodedup,		"-nodedup",				"Turn off deduplicator",							"");
@@ -48726,6 +51627,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 	flagramsize			=false;
 	g_checksize			=0;
 	maxsize				=0;
+	g_remotespeed		=0;
 	dirlength			=0;
 	filelength			=0;
 	all					=0;
@@ -48938,6 +51840,11 @@ int Jidac::loadparameters(int argc, const char** argv)
 #ifdef ZPAQFULL ///NOSFTPSTART
 #ifdef SFTP
 				textnojit+="SFTP";
+#ifdef _WIN64
+	if (wehaveresources())
+		textnojit+=",RES";
+		
+#endif
 #endif // corresponds to #ifdef (#ifdef SFTP)
 #endif ///NOSFTPEND
 
@@ -48966,7 +51873,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 #ifdef _WIN64
 	if (flagnomore)
 	{
-		// Abilita l'uso delle large page
+		// Enable the use of large pages
 		HANDLE hProcess=GetCurrentProcess();
 		SIZE_T largePageMinimum=GetLargePageMinimum();
 		if (largePageMinimum>0) 
@@ -49405,11 +52312,10 @@ int Jidac::loadparameters(int argc, const char** argv)
 		}
 		else if ((!flagforzarobocopy) && ((opt.size()<2 || opt[0]!='-'))) usage();
 		else if (cli_getint		(opt,"-P",			false,	"-P",							argc,argv,&i,4,					&g_mysql_port));
+		else if (cli_getint		(opt,"-bandwidth",	false,	"",								argc,argv,&i,0,					&g_sftp_bandwidth));
 #ifdef ZPAQFULL ///NOSFTPSTART
 #ifdef SFTP
 		else if (cli_getint		(opt,"-port",		false,	"",								argc,argv,&i,22,				&g_sftp_port));
-		else if (cli_getint		(opt,"-bandwidth",	false,	"",								argc,argv,&i,0,					&g_sftp_bandwidth));
-		
 #endif // corresponds to #ifdef (#ifdef SFTP)
 #endif ///NOSFTPEND
 		else if (cli_getint		(opt,"-all",		false,	"",								argc,argv,&i,4,					&all));
@@ -49422,6 +52328,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 		else if (cli_getuint64	(opt,"-chunk",		false,	"",								argc,argv,&i,g_chunk_size,		&g_chunk_size));
 		else if (cli_getuint64	(opt,"-minsize",	false,	"",								argc,argv,&i,minsize,			&minsize));
 		else if (cli_getuint64	(opt,"-maxsize",	false,	"",								argc,argv,&i,maxsize,			&maxsize));
+		else if (cli_getuint64	(opt,"-remotespeed",false,	"",								argc,argv,&i,g_remotespeed,		&g_remotespeed));
 		else if (cli_getuint64	(opt,"-checksize",	false,	"",								argc,argv,&i,g_checksize,		&g_checksize));
 		else if (cli_getstring	(opt,"-method",		false,	"-m",							argc,argv,&i,"",				&method));
 		else if (cli_getstring	(opt,"-csv",		false,	"-tab",							argc,argv,&i,"",				&g_csvstring));
@@ -49821,7 +52728,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 			reinterpret_cast<void*>(GetProcAddress(h, "GetFinalPathNameByHandleW")));
 	}
 	if ((!findFirstStreamW) || (!findNextStreamW))
-		myprintf("00577$ Alternate streams not supported in Windows XP.\n");
+		myprintf("00577$ Alternate streams not supported in Windows XP\n");
 #endif
 
 /// postop
@@ -49841,9 +52748,12 @@ int Jidac::loadparameters(int argc, const char** argv)
 
 	if (flag715)
 	{
+		
+		flaghuge			=false;
 		flagslow			=false;
 #ifdef _WIN32
 		flagmonitoroff		=false;
+		flagsparse			=false;
 #endif
 		flagonedrive		=false;
 		flagnotrim			=true;
@@ -49923,6 +52833,14 @@ int Jidac::loadparameters(int argc, const char** argv)
 			notfiles[i]=makelongpath(notfiles[i]);
 			if (flagdebug3)
 				myprintf(" => long |%s|\n",notfiles[i].c_str());
+		}
+		for (unsigned int i=0;i<alwaysfiles.size();i++)
+		{
+			if (flagdebug3)
+				myprintf("00581: alwaysfiles  %03d files |%s| ",i,alwaysfiles[i].c_str());
+			alwaysfiles[i]=makelongpath(alwaysfiles[i]);
+			if (flagdebug3)
+				myprintf(" => long |%s|\n",alwaysfiles[i].c_str());
 		}
 		if (flagdebug3)
 			printbar('$');
@@ -50214,8 +53132,9 @@ bool Jidac::getfoldersize(string i_folder,uint64_t& o_totalsize,uint32_t & o_tot
 		myprintf("00589: Scanning dir <<%Z>>\n",i_folder.c_str());
 	}
 	scandir(true,mydestinationdir,i_folder);
-	printbar(' ',false);
-	myprintf("\r");
+	eol();
+	///printbar(' ',false);
+	///myprintf("\r");
 	for (DTMap::iterator p=mydestinationdir.begin(); p!=mydestinationdir.end(); ++p)
 	{
 		string fn=p->first;
@@ -50472,7 +53391,7 @@ bool ismac(const string& i_stringa)
 	return false;
 }
 
-// Funzione per verificare se filename soddisfa le condizioni richieste
+// Function to check if filename meets the required conditions
 bool Jidac::onlynorecursion(string filename) 
 {
 	if (flagdebug5)
@@ -50746,11 +53665,11 @@ typedef struct _STANDARD_INFORMATION
     LARGE_INTEGER LastAccessTime;
     LARGE_INTEGER ChangeTime;
     ULONG FileAttributes;
-    // ... il resto non è necessario per questa implementazione
+    // ... the rest is not necessary for this implementation
 } STANDARD_INFORMATION, *PSTANDARD_INFORMATION;
 
 
-// Aggiorna l'enum per includere $ATTRIBUTE_LIST
+// Update the enum to include $ATTRIBUTE_LIST
 typedef enum _ATTRIBUTE_TYPE_CODE 
 {
     AttributeStandardInformation = 0x10,
@@ -50760,20 +53679,20 @@ typedef enum _ATTRIBUTE_TYPE_CODE
     AttributeEnd                 = 0xFFFFFFFF
 } ATTRIBUTE_TYPE_CODE;
 
-#pragma pack(push, 1) // Imposta l'allineamento a 1 byte
+#pragma pack(push, 1) // Set alignment to 1 byte
 typedef struct _ATTRIBUTE_LIST_ENTRY {
     ATTRIBUTE_TYPE_CODE AttributeTypeCode;
     USHORT RecordLength;
     UCHAR  AttributeNameLength;
     UCHAR  AttributeNameOffset;
     ULONGLONG StartingVcn;
-    ULONGLONG SegmentReferenceNumber; // Questo è il FRN del record di estensione!
+    ULONGLONG SegmentReferenceNumber; // This is the FRN of the extension record!
     USHORT AttributeInstance;
-    // Qui seguirebbe il nome dell'attributo, se presente
+    // The attribute name would follow here, if present
 } ATTRIBUTE_LIST_ENTRY, *PATTRIBUTE_LIST_ENTRY;
-#pragma pack(pop) // Ripristina l'allineamento predefinito
+#pragma pack(pop) // Restore default alignment
 
-// Nuove strutture per un parsing più pulito e sicuro degli attributi NTFS
+// New structures for a cleaner and safer parsing of NTFS attributes
 typedef struct _ATTRIBUTE_RECORD_HEADER 
 {
     ATTRIBUTE_TYPE_CODE TypeCode;
@@ -50813,7 +53732,7 @@ union TimeUnion
 };
 bool getFileAttributesFromMFT(HANDLE hVolume, DWORDLONG frn, NTFSFileInfo& fi, const std::wstring& debugPath = L"")
 {
-    // --- FASE 1: Lettura del record MFT di base ---
+    // --- PHASE 1: Reading the base MFT record ---
 
     struct { ULONGLONG FileReferenceNumber; } input = { frn };
     BYTE outputBuffer[10240];
@@ -50857,7 +53776,7 @@ bool getFileAttributesFromMFT(HANDLE hVolume, DWORDLONG frn, NTFSFileInfo& fi, c
 
     bool foundStdInfo = false;
     bool foundDataAttr = false;
-    // NUOVO: Variabile per memorizzare il FRN del record di estensione che contiene $DATA
+    // NEW: Variable to store theFRN of the extension record containing $DATA
     DWORDLONG dataRecordFrn = 0;
 
     fi.size = ULONGLONG(-2);
@@ -50868,7 +53787,7 @@ bool getFileAttributesFromMFT(HANDLE hVolume, DWORDLONG frn, NTFSFileInfo& fi, c
         if (attrHeader->TypeCode == AttributeEnd) break;
         if (attrHeader->RecordLength == 0 || (attrPtr + attrHeader->RecordLength > mftEndPtr)) break;
 
-        // --- Parsing degli attributi nel record di base ---
+        // --- Parsing attributes in the base record ---
 
 /// i maledetti warning
 /*
@@ -50911,7 +53830,7 @@ bool getFileAttributesFromMFT(HANDLE hVolume, DWORDLONG frn, NTFSFileInfo& fi, c
 		}
         else if (attrHeader->TypeCode == AttributeData && !fi.isDirectory && !foundDataAttr)
         {
-            // ... (logica per $DATA, invariata, si attiva solo se $DATA è nel record base) ...
+            // ... (logic for $DATA, unchanged, is only activated if $DATA is in the base record) ...
             if (attrHeader->NameLength == 0) {
                  if (attrHeader->NonResident == 0) {
                     fi.size = ((PRESIDENT_ATTRIBUTE_HEADER)attrHeader)->ValueLength;
@@ -50924,8 +53843,9 @@ bool getFileAttributesFromMFT(HANDLE hVolume, DWORDLONG frn, NTFSFileInfo& fi, c
         }
         else if (attrHeader->TypeCode == AttributeAttributeList)
         {
-            // NUOVO: Gestione di $ATTRIBUTE_LIST
-            if (isDebugFile) myprintf("Trovato $ATTRIBUTE_LIST, inizio la scansione delle voci...\n");
+            // NEW: Handling of $ATTRIBUTE_LIST
+            if (isDebugFile) 
+				myprintf("Founded $ATTRIBUTE_LIST, scanning...\n");
             
             PRESIDENT_ATTRIBUTE_HEADER resAttr = (PRESIDENT_ATTRIBUTE_HEADER)attrHeader;
             BYTE* listEntryPtr = attrPtr + resAttr->ValueOffset;
@@ -50933,13 +53853,13 @@ bool getFileAttributesFromMFT(HANDLE hVolume, DWORDLONG frn, NTFSFileInfo& fi, c
 
             while (listEntryPtr < listEndPtr) {
                 PATTRIBUTE_LIST_ENTRY entry = (PATTRIBUTE_LIST_ENTRY)listEntryPtr;
-                if (entry->RecordLength < sizeof(ATTRIBUTE_LIST_ENTRY)) break; // Voce corrotta
+                if (entry->RecordLength < sizeof(ATTRIBUTE_LIST_ENTRY)) break; // Corrupted entry
 
-                // Cerchiamo la voce che descrive l'attributo $DATA
+                // We look for the entry that describes the $DATA attribute
                 if (entry->AttributeTypeCode == AttributeData) {
                     if (isDebugFile) myprintf("Trovata voce per $DATA in $ATTRIBUTE_LIST. FRN di estensione: %s\n", migliaia(entry->SegmentReferenceNumber));
                     dataRecordFrn = entry->SegmentReferenceNumber;
-                    goto end_attribute_scan; // Esci da entrambi i cicli, abbiamo il puntatore
+                    goto end_attribute_scan; // Exit both loops, we have the pointer
                 }
                 listEntryPtr += entry->RecordLength;
             }
@@ -50948,11 +53868,11 @@ bool getFileAttributesFromMFT(HANDLE hVolume, DWORDLONG frn, NTFSFileInfo& fi, c
         if (foundStdInfo && foundDataAttr) break;
         attrPtr += attrHeader->RecordLength;
     }
-end_attribute_scan:; // Etichetta per uscire dalla scansione del record di base
+end_attribute_scan:; // Label to exit the base record scan
 
-    // --- FASE 2: Lettura del record di estensione (se necessario) ---
+    // --- PHASE 2: Reading the extension record (if necessary) ---
 
-    // NUOVO: Se abbiamo trovato un puntatore a $DATA in un Attribute List e non abbiamo ancora la dimensione...
+    // NEW: If we found a pointer to $DATA in an Attribute List and we don't have the size yet...
     if (dataRecordFrn != 0 && !foundDataAttr)
     {
         if (isDebugFile) myprintf("Avvio FASE 2: Lettura del record MFT di estensione FRN %s\n", migliaia(dataRecordFrn));
@@ -50969,7 +53889,7 @@ end_attribute_scan:; // Etichetta per uscire dalla scansione del record di base
             BYTE* extAttrPtr = extMftRecord + extRecordHdr->FirstAttributeOffset;
             BYTE* extMftEndPtr = extMftRecord + extRecordHdr->BytesInUse;
             
-            // Scansiona il record di estensione cercando specificamente $DATA
+            // Scan the extension record specifically looking for $DATA
             while (extAttrPtr < extMftEndPtr) {
                 PATTRIBUTE_RECORD_HEADER extAttrHdr = (PATTRIBUTE_RECORD_HEADER)extAttrPtr;
                 if (extAttrHdr->TypeCode == AttributeEnd || extAttrHdr->RecordLength == 0) break;
@@ -50981,7 +53901,7 @@ end_attribute_scan:; // Etichetta per uscire dalla scansione del record di base
                          foundDataAttr = true;
                          if (isDebugFile) myprintf("Trovato $DATA non residente nel record di estensione. Dimensione: %s\n", migliaia(fi.size));
                     }
-                    break; // Trovato, usciamo
+                    break; // Found, let's exit
                 }
                 extAttrPtr += extAttrHdr->RecordLength;
             }
@@ -51076,7 +53996,7 @@ int Jidac::NTFSEnumerateFiles(std::string i_path, DTMap& i_edt, bool i_checkifse
         return 0;
     }
 
-    // Passo 1: Enumerazione completa dei file dal journal USN
+    // Step 1: Complete enumeration of files from the USN journal
     std::map<DWORDLONG, NTFSFileInfo> files;
     MFT_ENUM_DATA med;
 	memset(&med,0,sizeof(med));
@@ -51105,8 +54025,8 @@ int Jidac::NTFSEnumerateFiles(std::string i_path, DTMap& i_edt, bool i_checkifse
                     fi.parentFrn = pRecord->ParentFileReferenceNumber;
                     fi.name = std::wstring(pRecord->FileName, pRecord->FileNameLength / sizeof(WCHAR));
                     fi.isDirectory = (pRecord->FileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
-                    fi.size = -1; // Segnaposto, i metadati saranno ottenuti dopo
-                    fi.attributes = pRecord->FileAttributes; // Attributi base dal journal
+                    fi.size = -1; // Placeholder, metadata will be obtained later
+                    fi.attributes = pRecord->FileAttributes; // Base attributes from the journal
                     memset(&fi.creationTime,0,sizeof(fi.creationTime));
                     memset(&fi.lastWriteTime,0,sizeof(fi.lastWriteTime));
                     memset(&fi.lastAccessTime,0,sizeof(fi.lastAccessTime));
@@ -51133,7 +54053,7 @@ int Jidac::NTFSEnumerateFiles(std::string i_path, DTMap& i_edt, bool i_checkifse
 
     myprintf("64119: Enumeration completed, total records: %s\n", migliaia(files.size()));
 
-    // Passo 2: Trova la radice del volume
+    // Step 2: Find the root of the volume
     DWORDLONG rootFrn = 0;
     for (const auto& pair : files) 
     {
@@ -51149,7 +54069,7 @@ int Jidac::NTFSEnumerateFiles(std::string i_path, DTMap& i_edt, bool i_checkifse
         }
     }
 
-    // Fallback al FRN 5 se non trovato
+    // Fallback to FRN 5 if not found
     if (rootFrn == 0) 
     {
         if (files.count(5)) 
@@ -51166,36 +54086,36 @@ int Jidac::NTFSEnumerateFiles(std::string i_path, DTMap& i_edt, bool i_checkifse
         return 0;
     }
 
-    // Passo 3: Ricostruisci i percorsi completi
+    // Step 3: Reconstruct the full paths
     std::map<DWORDLONG, std::wstring> frnToPath;
     myprintf("64158: Building paths for drive %s starting from FRN %s\n", wtou(rootPath.c_str()).c_str(), migliaia(rootFrn));
     int64_t startbuild = mtime();
     buildPaths(rootFrn, rootPath.substr(0, rootPath.length() - 1), files, frnToPath);
     myprintf("64181: Path construction complete. Total paths built: %s time %s\n", migliaia(frnToPath.size()), migliaia2(mtime() - startbuild));
 
-    // Passo 4: Filtra i file rilevanti e ottieni i metadati solo per quelli
+    // Step 4: Filter relevant files and get metadata only for those
     for (const auto& pair : files) 
     {
         const NTFSFileInfo& fi = pair.second;
         if (frnToPath.find(fi.frn) == frnToPath.end()) 
-            continue; // Salta file orfani
+            continue; // Skip orphan files
 
         if (fi.isDirectory) 
-            continue; // Processa solo i file, non le directory
+            continue; // Process only files, not directories
 
         std::wstring path = frnToPath[fi.frn];
         if (!starts_with_case_insensitive(wi_path, path)) 
-            continue; // Salta i file che non iniziano con il percorso specificato
+            continue; // Skip files that do not start with the specified path
 
-        // Passo 5: Ottieni i metadati completi dal MFT per i file filtrati
-        NTFSFileInfo updatedFi = fi; // Copia i dati esistenti
+        // Step 5: Get complete metadata from the MFT for the filtered files
+        NTFSFileInfo updatedFi = fi; // Copy existing data
         if (!getFileAttributesFromMFT(hVolume, fi.frn, updatedFi)) 
         {
-            // Se fallisce, mantieni i dati base (attributi dal journal, dimensione a -1)
+            // If it fails, keep the base data (attributes from the journal, size at -1)
             myprintf("64200: Warning: Failed to get MFT attributes for FRN %s\n", migliaia(fi.frn));
         }
 
-        // Passo 6: Elabora il file con i metadati aggiornati
+        // Step 6: Process the file with the updated metadata
         SYSTEMTIME stCreate, stModify, stAccess;
         FileTimeToSystemTime(&updatedFi.creationTime, &stCreate);
         FileTimeToSystemTime(&updatedFi.lastWriteTime, &stModify);
@@ -51229,7 +54149,7 @@ int Jidac::NTFSEnumerateFiles(std::string i_path, DTMap& i_edt, bool i_checkifse
                 stAccess.wYear, stAccess.wMonth, stAccess.wDay, stAccess.wHour, stAccess.wMinute, stAccess.wSecond);
         }
 
-        // Prepara i dati per addfile
+        // Prepare data for addfile
         std::string fn = wtou(path.c_str());
         int64_t esize = (updatedFi.size == -1) ? 0 : updatedFi.size;
         int64_t edate = ConvertFileTimeToCustomInt(updatedFi.lastWriteTime);
@@ -51240,7 +54160,7 @@ int Jidac::NTFSEnumerateFiles(std::string i_path, DTMap& i_edt, bool i_checkifse
         if (flagdebug3) 
             myprintf("63963: NTFS Adding %s\n", fn.c_str());
 
-        // Chiama la funzione per aggiungere il file
+        // Call the function to add the file
         addfile(i_checkifselected, i_edt, fn, edate, esize, eattr, creationdate, accessdate);
         fileCount++;
     }
@@ -51256,27 +54176,27 @@ bool IsPathNTFS(const char* path)
     wchar_t volumeRoot[MAX_PATH];
     wchar_t fileSystemName[MAX_PATH];
 
-    // Converte il percorso da char* a wchar_t*
+    // Convert the path from char* to wchar_t*
     if (MultiByteToWideChar(CP_ACP, 0, path, -1, widePath, MAX_PATH) == 0) {
         myprintf("63988: Error multi\n");
 		return false;
     }
 
-    // Ottiene il percorso radice del volume (es. "C:\")
+    // Gets the root path of thevolume (e.g. "C:\")
     if (!GetVolumePathNameW(widePath, volumeRoot, MAX_PATH)) 
 	{
 		myprintf("63995: Cannot get on path %s\n",path);
         return false;
     }
 
-    // Ottiene le informazioni del volume, incluso il nome del filesystem
+    // Get volume information, including the filesystem name
     if (!GetVolumeInformationW(volumeRoot, NULL, 0, NULL, NULL, NULL, fileSystemName, MAX_PATH)) 
 	{
         myprintf("64002: Error getting volumeroot\n");
 		return false;
     }
 
-    // Confronta il nome del filesystem con "NTFS"
+    // Compare the filesystem name with "NTFS"
     if (_wcsicmp(fileSystemName, L"NTFS") == 0) 
 	    return true;
      else 
@@ -51285,6 +54205,48 @@ bool IsPathNTFS(const char* path)
 }
 #endif
 
+
+void Jidac::exclude_output()
+{
+	if (g_output!="")
+	{
+		string no_output="*"+extractfilename(g_output);
+		if (flagverbose)
+		{
+			color_yellow();
+			myprintf("72383: WARN: excluding <<%s>> due to -out\n",no_output.c_str());
+			color_restore();
+		}
+		notfiles.push_back(no_output);
+	}
+}
+
+string fix_scandir(const string& i_path)
+{
+    if (i_path == ".") 
+        return "./";
+    
+    if (isdirectory(i_path)) 
+	    return i_path;
+    
+    if (realfileexists(i_path)) 
+	    return i_path;
+    
+    string dir_path = i_path+"/";
+    
+    if (direxists(dir_path)) 
+	{
+        if (flagverbose) 
+		{
+            color_yellow();
+            myprintf("WARNING: Path '%s' not found as file, but exists as directory '%s'. Using directory\n", 
+                    i_path.c_str(), dir_path.c_str());
+            color_restore();
+        }
+        return dir_path;
+    }
+    return i_path;
+}
 
 // Insert external filename (UTF-8 with "/") into dt if selected
 // by files, onlyfiles, and notfiles. If filename
@@ -52054,24 +55016,24 @@ void Jidac::write715attr(libzpaq::StringBuffer& i_sb, uint64_t i_data, unsigned 
 #define LNKTYPE  '1'    // Hard link 
 #define SYMTYPE  '2'    // Symbolic link 
 #define CHRTYPE  '3'    // Character special 
-#define DIRTYPE  '5'    // Directory 
+#define DIRTYPE  '5'    // Directory
 #define FIFOTYPE '6'    // FIFO special
 #define CONTTYPE '7'    // Reserved 
 
-// Struttura franz_posix - Dimensione totale: 360 byte
+// franz_posix structure - Total size: 360 bytes
 
 struct franz_posix 
 {
-    char typeflag[8];      // Tipo di file (8) 
-    char uid[8];           // ID utente numerico (8) 
-    char gid[8];           // ID gruppo numerico (8) 
-    char uname[32];        // Nome utente (32) 
-    char gname[32];        // Nome gruppo (32) 
+    char typeflag[8];      // File type (8)
+    char uid[8];           // Numeric user ID (8) 
+    char gid[8];           // Numeric group ID (8) 
+    char uname[32];        // User name (32)
+    char gname[32];        // Group name (32)
     char mode[8];          // Permessi file (8) 
-    char mtime[16];        // Tempo di modifica (16) 
-    char ctime[16];        // Tempo di creazione (16) 
-    char atime[16];        // Tempo di accesso (16) 
-    char linkname[216];    // Percorso del link simbolico o hard link (216) 
+    char mtime[16];        // Modification time (16)
+    char ctime[16];        // Creation time (16)
+    char atime[16];        // Access time (16)
+    char linkname[216];    // Path of the symbolic link or hard link (216)
 };
 
 std::string decode_typeflag(char typeflag)
@@ -52100,30 +55062,30 @@ std::string decode_typeflag(char typeflag)
 
 std::string decode_mode(const char* mode_str)
 {
-    // Il valore mode è una stringa di 8 caratteri (come "0755", "0644", ecc.)
-    int mode = std::strtol(mode_str, nullptr, 8);  // Converte la stringa in un numero intero (base 8)
+    // The mode value is an 8-character string (like "0755", "0644", etc.)
+    int mode = std::strtol(mode_str, nullptr, 8);  // Convert the string to an integer (base 8)
 
     std::string permissions = "";
 
-    // Decodifica i permessi per il proprietario
-    permissions += (mode & 0400) ? 'r' : '-';  // bit 8 per la lettura (r)
-    permissions += (mode & 0200) ? 'w' : '-';  // bit 7 per la scrittura (w)
-    permissions += (mode & 0100) ? 'x' : '-';  // bit 6 per l'esecuzione (x)
+    // Decode permissions for the owner
+    permissions += (mode & 0400) ? 'r' : '-';  // bit 8 for reading (r)
+    permissions += (mode & 0200) ? 'w' : '-';  // bit 7 for writing (w)
+    permissions += (mode & 0100) ? 'x' : '-';  // bit 6 for execution (x)
 
-    // Decodifica i permessi per il gruppo
-    permissions += (mode & 0040) ? 'r' : '-';  // bit 5 per la lettura (r)
-    permissions += (mode & 0020) ? 'w' : '-';  // bit 4 per la scrittura (w)
-    permissions += (mode & 0010) ? 'x' : '-';  // bit 3 per l'esecuzione (x)
+    // Decode permissions for the group
+    permissions += (mode & 0040) ? 'r' : '-';  // bit 5 for reading (r)
+    permissions += (mode & 0020) ? 'w' : '-';  // bit 4 for writing (w)
+    permissions += (mode & 0010) ? 'x' : '-';  // bit 3 for execution (x)
 
-    // Decodifica i permessi per gli altri
-    permissions += (mode & 0004) ? 'r' : '-';  // bit 2 per la lettura (r)
-    permissions += (mode & 0002) ? 'w' : '-';  // bit 1 per la scrittura (w)
-    permissions += (mode & 0001) ? 'x' : '-';  // bit 0 per l'esecuzione (x)
+    // Decode permissions for others
+    permissions += (mode & 0004) ? 'r' : '-';  // bit 2 for reading (r)
+    permissions += (mode & 0002) ? 'w' : '-';  // bit 1 for writing (w)
+    permissions += (mode & 0001) ? 'x' : '-';  // bit 0 for execution (x)
 
     return permissions;
 }
 
-// Funzione di supporto per convertire un timestamp Unix (in secondi) in una data leggibile
+// Support function to convert a Unix timestamp (in seconds) to a readable date
 std::string timestamp_to_human(const char* timestamp_str)
 {
     long long timestamp = std::strtoll(timestamp_str, nullptr, 10);
@@ -52137,7 +55099,7 @@ std::string timestamp_to_human(const char* timestamp_str)
     int minute = tm_info->tm_min;
     int second = tm_info->tm_sec;
 
-    char buffer[128]; // Buffer più grande
+    char buffer[128]; // Larger buffer
     snprintf(buffer, sizeof(buffer), "%04d-%02d-%02d %02d:%02d:%02d", 
              year, month, day, hour, minute, second);
 
@@ -52152,21 +55114,21 @@ void dump_franz_posix(struct franz_posix* i_posix)
         return;
     }
 
-    // Gestione robusta di typeflag
-    char typechar = i_posix->typeflag[0]; // Primo byte significativo
-    std::string type_desc = decode_typeflag(typechar); // Descrizione del tipo
+    // Robust handling of typeflag
+    char typechar = i_posix->typeflag[0]; // First significant byte
+    std::string type_desc = decode_typeflag(typechar); // Type description
     myprintf("64430: type:  '%c' (%.7s)  [%s] ", 
-             (typechar >= 32 && typechar <= 126) ? typechar : '.', // Solo caratteri stampabili
+             (typechar >= 32 && typechar <= 126) ? typechar : '.', // Only printable characters
              i_posix->typeflag + 1, // I restanti 7 byte come stringa (se presenti)
              type_desc.c_str());
     
-    // Stampa esadecimale di tutti i byte di typeflag per debugging
+    // Hexadecimal print of all typeflag bytes for debugging
     myprintf("  typeflag bytes: ");
     for (unsigned int i = 0; i < 8; i++) 
         myprintf("%02x ", (unsigned char)i_posix->typeflag[i]);
     myprintf("\n");
 
-    // Resto della struttura
+    // Rest of the structure
     myprintf("64431: uid:   %.8s (%.32s) gid: %.8s (%.32s)\n", 
              i_posix->uid, i_posix->uname, i_posix->gid, i_posix->gname);
     myprintf("64432: mode:  %.8s     (%s)\n", 
@@ -52293,7 +55255,7 @@ int savefilemetadata(const char* filepath, struct franz_posix* metadata)
         if (fileInfo.st_nlink > 1) 
         {
             metadata->typeflag[0] = LNKTYPE;
-            // Per gli hard link, salviamo il percorso del file originale in linkname
+            // For hard links, we save the path of the original file in linkname
             snprintf(metadata->linkname, sizeof(metadata->linkname), "%s", filepath);
         } 
         else 
@@ -52630,7 +55592,6 @@ void Jidac::writefranzattr(DTMap::iterator i_dtmap,libzpaq::StringBuffer& i_sb, 
 		myprintf("be quiet\n");
 #endif
 	i_dtmap->second.hexcrc32=bin2hex_32(writtencrc);
-	
 	if (g_franzotype==FRANZO_NONE) /*|| (i_thehash=="")*/	// 7.15
 	{
 		if (flagdebug3)
@@ -52638,6 +55599,7 @@ void Jidac::writefranzattr(DTMap::iterator i_dtmap,libzpaq::StringBuffer& i_sb, 
 		write715attr(i_sb,i_data,i_quanti);
 		return;
 	}
+	
 	if (flagverify || flagcollision)
 		if (i_crc32!=i_crc32fromfragments)
 		{
@@ -53073,8 +56035,9 @@ struct ExtractJob {         // list of jobs
   double maxMemory;         // largest memory used by any block (test mode)
   int64_t total_size;       // bytes to extract
   int64_t total_done;       // bytes extracted so far
+  uint64_t last_write;		// last fseek
   ExtractJob(Jidac& j): chunk(0),job(0), jd(j), outf(FPNULL), lastdt(j.dt.end()),
-      maxMemory(0), total_size(0), total_done(0) {
+      maxMemory(0), total_size(0), total_done(0),last_write(0) {
     init_mutex(mutex);
     init_mutex(write_mutex);
   }
@@ -53083,6 +56046,10 @@ struct ExtractJob {         // list of jobs
     destroy_mutex(write_mutex);
   }
 };
+
+
+static int64_t g_last_progress_time = 0;
+
 // Decompress blocks in a job until none are READY
 ThreadReturn decompressThread(void* arg) {
   ExtractJob& job=*(ExtractJob*)arg;
@@ -53231,6 +56198,9 @@ ThreadReturn decompressThread(void* arg) {
           offset+=job.jd.ht[ptr[j]].usize;
           continue;
         }
+		
+		///myprintf("\noffset %21s\n",migliaia(offset));
+		
         // Close last opened file if different
         if (p!=job.lastdt) {
           if (job.outf!=FPNULL) {
@@ -53509,12 +56479,94 @@ ThreadReturn decompressThread(void* arg) {
 								}
 							}
 #endif // corresponds to #ifdef (#ifdef _WIN32)
+
+					if (flagdebug3)
+								myprintf("00704: KA +++ seek offset %21s write %12s\n",migliaia(offset),migliaia2(usize));
+
 						if (!flagstdout)
 						{
-							if (flagdebug3)
-								myprintf("00704: KA +++ seek offset %21s write %12s\n",migliaia(offset),migliaia2(offset));
-							fseeko(job.outf, offset, SEEK_SET);
-							myfwrite(out.c_str()+q, 1, usize, job.outf);
+							if (!flaghuge)
+							{
+								fseeko(job.outf, offset, SEEK_SET);
+								myfwrite(out.c_str()+q, 1, usize, job.outf);
+							}
+							else
+							{
+								// Costanti definite dall'utente
+								const int64_t seekgrande      = 1024 * 1024 * 1024; // 1 GB
+								const size_t  dimensionebuffer = 1024 * 1024;      // 1 MB
+								// Buffer di zeri, static per essere inizializzato una sola volta
+								static std::vector<char> arrayzero(dimensionebuffer, 0);
+								int64_t seek_distance = offset - job.last_write;
+								if (seek_distance > seekgrande) 
+								{
+									int64_t inizio_ms = mtime();
+									fseeko(job.outf, job.last_write, SEEK_SET);
+									uint64_t zeri_da_scrivere = seek_distance;
+									uint64_t zeri_scritti_tot = 0; // Rinominato per chiarezza
+									
+									int64_t ultimo_output_ms = inizio_ms; // Timestamp dell'ultimo output
+									
+									// Ciclo di scrittura dei blocchi di zeri
+									for (zeri_scritti_tot = 0; zeri_scritti_tot + dimensionebuffer <= zeri_da_scrivere; zeri_scritti_tot += dimensionebuffer) 
+									{
+										myfwrite(arrayzero.data(), 1, dimensionebuffer, job.outf);
+										
+										// *** LOGICA DI AGGIORNAMENTO MODIFICATA - OGNI SECONDO ***
+										int64_t tempo_attuale_ms = mtime();
+										// Stampiamo solo se è passato almeno 1 secondo dall'ultimo output
+										if (tempo_attuale_ms - ultimo_output_ms >= 1000) 
+										{
+											ultimo_output_ms = tempo_attuale_ms; // Aggiorniamo il timestamp dell'ultimo output
+											int64_t tempo_trascorso_ms = tempo_attuale_ms - inizio_ms;
+											
+											if (tempo_trascorso_ms > 0) {
+												double velocita = ((double)zeri_scritti_tot) / ((double)tempo_trascorso_ms / 1000.0);
+												
+												int64_t byte_rimanenti = zeri_da_scrivere - zeri_scritti_tot;
+												int perc_attuale = static_cast<int>(((double)zeri_scritti_tot / zeri_da_scrivere) * 100.0);
+												int eta_sec_totali = 0;
+												
+												if (velocita > 0) 
+													eta_sec_totali = (int)(byte_rimanenti / velocita);
+												
+												int ore = eta_sec_totali / 3600;
+												if (ore > 99)
+													ore = 99;
+												int min = (eta_sec_totali % 3600) / 60;
+												int sec = eta_sec_totali % 60;
+												myprintf("56481: Ext %10s %03d%% ETA: %02d:%02d:%02d @ %12s/s                   \r", 
+													   tohuman2(byte_rimanenti), perc_attuale, ore, min, sec, tohuman(velocita));
+												///fflush(stdout);
+											}
+										}
+									}
+									// Gestiamo i byte rimanenti
+									size_t rimanenti = zeri_da_scrivere - zeri_scritti_tot;
+									if (rimanenti > 0) 
+										myfwrite(arrayzero.data(), 1, rimanenti, job.outf);
+									
+									eol();
+									myprintf("Thinking... %10s\r",tohuman(g_fwritten));
+									
+								} else {
+									fseeko(job.outf, offset, SEEK_SET);
+								}
+								// Scrittura dei dati effettivi (invariata)
+								myfwrite(out.c_str() + q, 1, usize, job.outf);
+								
+								int64_t current_time = mtime();
+								if (g_last_progress_time == 0 || (current_time - g_last_progress_time) >= 1000) 
+								{
+									eol();
+									myprintf("Written... %10s of %10s\r", tohuman(job.total_done), tohuman2(job.total_size));
+									g_last_progress_time = current_time;
+								}
+
+								// Aggiornamento di job.last_write (invariato)
+								if ((offset + usize) > job.last_write) 
+									job.last_write = offset + usize;
+							}
 						}
 						else
 							fwrite(out.c_str()+q, 1, usize, stdout);
@@ -54726,7 +57778,6 @@ int Jidac::list()
 					{
 						if (g_csvhf!="")
 							myprintf(g_csvhf.c_str());
-
 						list_datetime(p->second.date,flagnewversion);
 						tabba();
 						
@@ -55086,7 +58137,7 @@ int Jidac::setpassword()
 		if (!saggiascrivibilitacartella(repack))
 		{
 			myprintf("00827! Cannot write on output %s\n",repack.c_str());
-			myprintf("00828! Aborting. Use -space to bypass and enforcing.\n");
+			myprintf("00828! Aborting. Use -space to bypass and enforcing\n");
 			return 2;
 		}
 	myprintf("\n\n");
@@ -55123,7 +58174,7 @@ int Jidac::setpassword()
 		if (spazio<lavoro+1024)
 		{
 			myprintf("00834! The free space seems tiny %s on %s\n",migliaia(spazio),repack.c_str());
-			myprintf("00835! Aborting. Use -space to bypass and enforcing.\n");
+			myprintf("00835! Aborting. Use -space to bypass and enforcing\n");
 			return 2;
 		}
 	}
@@ -55385,7 +58436,7 @@ int Jidac::ecommand()
 }
 int myrename(string sfrom, string sto)
 {
-    // Verifica se il file o percorso di destinazione esiste
+    // Check if the destination file or path exists
 #ifdef _WIN32
     std::wstring wto = utow(sto.c_str());
     if (GetFileAttributesW(wto.c_str()) != INVALID_FILE_ATTRIBUTES)
@@ -55611,17 +58662,17 @@ int Jidac::enumeratecomments()
 		{
 			myprintf("59648: ----------------------------------------------------------------------------------------------\n");
 			if (g_password)
-				myprintf("59349:                                                    %20s  %20s [%s]\n",migliaia(totaluncompressed),migliaia2(totalcompressed),migliaia3(totalcompressed+32));
+				myprintf("59349: %20s                               %20s  %20s [%s]\n",migliaia3(csize),migliaia(totaluncompressed),migliaia2(totalcompressed),migliaia3(totalcompressed+32));
 			else
-				myprintf("59149:                                                    %20s  %20s\n",migliaia(totaluncompressed),migliaia2(totalcompressed));
+				myprintf("59149: %20s                               %20s  %20s\n",migliaia3(csize),migliaia(totaluncompressed),migliaia2(totalcompressed));
 		}
 		else
 		{
 			myprintf("59644: --------------------------------------------------------------------------\n");
 			if (g_password)
-				myprintf("59143:                                                       %20s [%s]\n",migliaia(totalcompressed),migliaia2(totalcompressed+32));
+				myprintf("59143: %20s                                  %20s [%s]\n",migliaia3(csize),migliaia(totalcompressed),migliaia2(totalcompressed+32));
 			else
-				myprintf("59643:                                                       %20s\n",migliaia(totalcompressed));
+				myprintf("59643: %20s                                  %20s\n",migliaia3(csize),migliaia(totalcompressed));
 				
 		}
 
@@ -55660,6 +58711,7 @@ int Jidac::kill()
 	edt.clear();
 	string cartellaoutput=tofiles[0];
 	scandir(false,edt,cartellaoutput);
+	eol();
 	if (edt.size())
 		myprintf("01014: Total files found: %s\n", migliaia(edt.size()));
 	else
@@ -55789,7 +58841,7 @@ void * scansionahash(void *t)
 		bool calcolacrc32=tmpalgo[i]=="CRC-32";
 		if (flagdebug2)
 			myprintf("01033: calccrc32 %d filehash type |%s| on %s\n",int(calcolacrc32),tmpalgo[i].c_str(),work.c_str());
-		string risu=dummy.filehash(work,calcolacrc32,par->inizio,par->dimensione);
+		string risu=dummy.filehash(0,work,calcolacrc32,par->inizio,par->dimensione);
 		
 		if (!flaghashdeep)
 			if (flagnosort)
@@ -56202,7 +59254,7 @@ string filecopy(bool i_singlefile,bool i_append,const string& i_infile,const str
 			
 		int64_t bytesToWrite = readSize;
 		
-		// Controllo limite massimo output
+		// Maximum output limit check
 		if (i_maxoutputsize > 0)
 		{
 			if (uint64_t(donesize + readSize) > i_maxoutputsize)
@@ -56215,7 +59267,7 @@ string filecopy(bool i_singlefile,bool i_append,const string& i_infile,const str
 		
 		int64_t written = fwrite(buffer, 1, bytesToWrite, outFile);
 		
-		// Verifica scrittura completa
+		// Check complete write
 		if (written != bytesToWrite)
 		{
 			color_red();
@@ -56232,7 +59284,7 @@ string filecopy(bool i_singlefile,bool i_append,const string& i_infile,const str
 		if (!flagnoeta)
 			hostampato |= myavanzamentoby1sec(donesize, bytestoappend, startcopy, false);
 		
-		// Se abbiamo raggiunto il limite massimo, esci
+		// If we have reached the maximum limit, exit
 		if ((i_maxoutputsize > 0) && (donesize >= i_maxoutputsize))
 			break;
 	}
@@ -56309,7 +59361,7 @@ string filecopy(bool i_singlefile,bool i_append,const string& i_infile,const str
 		if (flagdebug3)
 			myprintf("01068: filehash on %s\n",filedefinitivo.c_str());
 
-		string hashreloaded=dummy.filehash(filedefinitivo,false,startverify,larghezzain);
+		string hashreloaded=dummy.filehash(0,filedefinitivo,false,startverify,larghezzain);
 
 
 		if (flagverbose || flagdebug)
@@ -56499,6 +59551,7 @@ int Jidac::purgersync()
 		myprintf("01093: SCAN FOLDER %02d %Z\n",i,files[i].c_str());
 		scandir(false,myedt,files[i].c_str(),true);
 	}
+	eol();
 	myprintf("01095: Files to be checked %s\n",migliaia(myedt.size()));
 	int	erased=0;
 	int tobeerased=0;
@@ -56781,6 +59834,7 @@ int Jidac::mycopy()
 			}
 		}
 	}
+	eol();
 	if (sourcelist.size()==0)
 	{
 		myprintf("01115! cannot build source file list\n");
@@ -56850,7 +59904,7 @@ int Jidac::mycopy()
 
 #ifdef _WIN64
 
-// Struttura per contenere le informazioni di un singolo file di paging
+// Structure to hold information for a single paging file
 struct PageFileInfo 
 {
     char drive[4];
@@ -56869,14 +59923,14 @@ ULONGLONG getAvailableDiskSpace(const char* drivePath) {
     return 0;
 }
 
-// Stima semplificata della dimensione di un page file gestito dal sistema ("AUTO")
-// L'algoritmo reale di Windows è più complesso e dipende da policy di crash dump etc.
+// Simplified estimate of the size of a system-managed page file ("AUTO")
+// The actual Windows algorithm is more complex and depends on crash dump policies, etc..
 ULONGLONG getSystemManagedPageFileSize(ULONGLONG availableDiskSpace, ULONGLONG totalRAM) {
-    // Regola di stima: max 3 volte la RAM o 1/8 del disco libero, il minore dei due.
+    // Estimation rule: max 3 times the RAM or 1/8 of the free disk space, whichever is smaller.
     ULONGLONG ramBasedSize = totalRAM * 3;
     ULONGLONG diskBasedSize = availableDiskSpace / 8;
     
-    // Un page file non può superare i 256 TB per volume
+    // A page file cannot exceed 256 TB per volume
     ULONGLONG cap = 256ULL * 1024 * 1024 * 1024 * 1024;
 
     return std::min({ramBasedSize, diskBasedSize, cap});
@@ -56885,23 +59939,23 @@ int parsePageFiles(const char* multiSzValue, std::vector<PageFileInfo>& pageFile
     const char* currentString = multiSzValue;
     
     // Itera finché non incontra il doppio terminatore nullo (\0\0),
-    // che si manifesta come una stringa vuota.
+    // which manifests as an empty string.
     while (*currentString != '\0') {
         PageFileInfo info = {};
         char path[MAX_PATH];
         int initialMB = 0, maxMB = 0;
 
-        // Tenta di leggere la riga (es. "C:\pagefile.sys 1024 4096")
+        // Try to read the line (e.g. "C:\pagefile.sys 1024 4096")
         int itemsScanned = sscanf(currentString, "%s %d %d", path, &initialMB, &maxMB);
 
         if (itemsScanned >= 1) {
             strncpy(info.drive, path, 3);
-            info.drive[3] = '\0'; // Assicura la terminazione
+            info.drive[3] = '\0'; // Ensure termination
             
             info.initialSize = (ULONGLONG)initialMB * 1024 * 1024;
             info.maxSize = (ULONGLONG)maxMB * 1024 * 1024;
             
-            // "0 0" significa gestito dal sistema
+            // "0 0" means managed by the system
             info.isAutoManaged = (initialMB == 0 && maxMB == 0);
 
             char drivePath[5];
@@ -56911,8 +59965,8 @@ int parsePageFiles(const char* multiSzValue, std::vector<PageFileInfo>& pageFile
             pageFiles.push_back(info);
         }
 
-        // --- PUNTO CHIAVE ---
-        // Sposta il puntatore alla stringa successiva nel buffer REG_MULTI_SZ.
+        // --- KEY POINT ---
+        // Move the pointer to the next string in the REG_MULTI_SZ buffer.
         currentString += strlen(currentString) + 1;
     }
     return pageFiles.size();
@@ -56929,13 +59983,13 @@ ULONGLONG getwifesize() {
     }
 
     ULONGLONG totalRAM = statex.ullTotalPhys;
-    ULONGLONG commitLimit = totalRAM; // La base è sempre la RAM fisica
+    ULONGLONG commitLimit = totalRAM; // The base is always the physical RAM
 
     HKEY hKey;
     const char* regPath = "SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Memory Management";
     if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, regPath, 0, KEY_READ, &hKey) == ERROR_SUCCESS) {
         
-        char pagingFilesValue[8192]; // Buffer più grande per sicurezza
+        char pagingFilesValue[8192]; // Larger buffer per sicurezza
         DWORD size = sizeof(pagingFilesValue);
         
         if (RegQueryValueExA(hKey, "PagingFiles", NULL, NULL, (LPBYTE)pagingFilesValue, &size) == ERROR_SUCCESS) {
@@ -56958,9 +60012,9 @@ ULONGLONG getwifesize() {
                                  tohuman(pageFileContribution),
                                  tohuman2(pageFiles[i].availableSpace));
                     } else {
-                        // Per un file fisso, la dimensione è il suo massimo definito...
+                        // For a fixed file, the size is its defined maximum...
                         pageFileContribution = pageFiles[i].maxSize;
-                        // ...ma non può eccedere lo spazio fisico disponibile sul disco.
+                        // ...but cannot exceed the physical space available on the disk.
                         if (pageFileContribution > pageFiles[i].availableSpace) {
                             pageFileContribution = pageFiles[i].availableSpace;
                         }
@@ -57196,17 +60250,17 @@ size_t provaAllocazioneAdattiva(size_t stimaIniziale)
     // Cicla finché non riusciamo ad allocare il buffer
     while (true) 
 	{
-        // Controllo di sicurezza: se la dimensione è diventata 0, l'allocazione è impossibile.
+        // Safety check: if the size has become 0, allocation is impossible.
         if (dimensioneDaAllocare == 0) 
 		{
             myprintf("70203: wife-array failed!\n");
             break;
         }
 
-        // 1. Tenta di allocare la memoria
+        // 1. Attempt to allocate memory
         buffer = (uint8_t*)franz_malloc(dimensioneDaAllocare);
 
-        // 2. Controlla il risultato
+        // 2. Check the result
         if (buffer) 
 		{
 			color_green();
@@ -57380,6 +60434,19 @@ int Jidac::autotest()
 	myprintf("01147: Self-test for correct internal functioning\n"); // for non-Intel CPU
 	if (all)
 		pc_info();
+
+#ifdef ZPAQFULL ///NOSFTPSTART
+#ifdef _WIN64
+
+	if (flagdebug)
+	{
+		if (kickstart_resources("")==0)
+			myprintf("60269: Kickstart OK\n");
+		else
+			myprintf("60271: Kickstart failed\n");
+	}
+#endif
+#endif ///NOSFTPEND
 	
 	if (flagchecktxt)
 		if (checktxt!="")
@@ -58298,6 +61365,7 @@ int Jidac::findj()
 	int64_t startscan=mtime();
 	for (unsigned int i=0;i<files.size();i++)
 		scandir(true,edt,files[i].c_str(),!flagnorecursion);
+	eol();
 	int64_t scantime=mtime()-startscan;
 	if (flagverbose)
 		myprintf("01233: Scantime %f\n",(scantime*0.001));
@@ -58406,7 +61474,7 @@ void my_handler(int s)
 
 #ifdef unix
 
-	printf("\x1B[?25h");  // Mostra il cursore
+	printf("\x1B[?25h");  // Show the cursor
     fflush(stdout);
 #ifdef ZPAQFULL ///NOSFTPSTART
 	if (g_dataset!="")
@@ -58722,7 +61790,7 @@ void my_handler(int s)
 		const char* prefix = "seterrorlevel";
 		size_t prefix_len = strlen(prefix);
 		
-		// Verifica che l'argomento inizi con il prefisso
+		// Check that the argument starts with the prefix
 		if (strncmp(argv[1], prefix, prefix_len) == 0) 
 		{
 			const char* input = argv[1] + prefix_len;
@@ -58730,7 +61798,7 @@ void my_handler(int s)
 			int error_level = 0;
 			int digit_count = 0;
 			
-			// Estrai solo le cifre numeriche, massimo 3
+			// Extract only the numeric digits, maximum 3
 			while (*input && digit_count < 3) 
 			{
 				if (*input >= '0' && *input <= '9') 
@@ -58745,7 +61813,7 @@ void my_handler(int s)
 		}
 	}
 	
-// Se arriviamo qui, non fare nulla (continua l'esecuzione normale)
+// If we get here, do nothing (continue normal execution)
 	Jidac jidac;
 	pjidac=&jidac;
 	int risultatoparametri=jidac.loadparameters(argc,argv);
@@ -59011,8 +62079,9 @@ int Jidac::utf()
 	edt.clear();
 	for (unsigned i=0; i<files.size(); ++i)
 		scandir(true,edt,files[i].c_str());
-	printbar(' ');
-	myprintf("\r");
+	eol();
+	///printbar(' ');
+	///myprintf("\r");
 	vector<string> mydirs;
 	unsigned int	howmanyfiles=0;
 	unsigned int	longfiles=0;
@@ -59199,8 +62268,9 @@ int Jidac::utf()
 			edt.clear();
 			for (unsigned ii=0; ii<files.size(); ++ii)
 				scandir(true,edt,files[ii].c_str());
-			printbar(' ');
-			myprintf("\r");
+			eol();
+			///printbar(' ');
+			///myprintf("\r");
 			myprintf("01333: Stage 3: fix filenames\n");
 			unsigned int filerenamed=0;
 
@@ -59318,7 +62388,7 @@ int unz(const char * archive,const char * key)
       // They must be in ascending lexicographical order.
 		uint64_t date=0, id=0;  // date and frag ID from filename
 		char type=0;  // c,d,h,i
-		if (journaling)  // di solito
+		if (journaling)  // usually
 		{
 			if (filename.s.size()!=28)
 				unzerror("filename size not 28");
@@ -59924,7 +62994,7 @@ int unz(const char * archive,const char * key)
 						if (flagdebug3)
 							myprintf("01355: filehash on %s\n",p->first.c_str());
 
-						hashfromfile=dummy.filehash(
+						hashfromfile=dummy.filehash(0,
 						p->first.c_str(),true,starthash,hashed);
 					}
 				}
@@ -60142,7 +63212,7 @@ int Jidac::consolidate(string i_archive)
 		#endif
 			myprintf("\n");
 			myprintf("01385! ERR <%s> kind %d\n",sorgente_nome.c_str(),err);
-			fclose(outFile); // Chiudi anche l'output file prima di uscire
+			fclose(outFile); // Close the output file too before exiting
 			return 2;
 		}
 		size_t readSize;
@@ -60156,7 +63226,7 @@ int Jidac::consolidate(string i_archive)
 				
 			int64_t written = fwrite(buffer, 1, readSize, outFile);
 			
-			// Controllo errore di scrittura
+			// Write error check
 			if (written != (int64_t)readSize)
 			{
 				color_red();
@@ -60209,7 +63279,7 @@ int Jidac::consolidate(string i_archive)
 		if (flagdebug3)
 			myprintf("01394: filehash on %s\n",outfile.c_str());
 
-		string hashreloaded=dummy.filehash(outfile,false,startverify,total_size);
+		string hashreloaded=dummy.filehash(0,outfile,false,startverify,total_size);
 
 		///string hashreloaded=xxhash_calc_file(outfile.c_str(),false,dummycrc32,startverify,total_size,io_lavorati,thefilesize);
 		myprintf("01395: Expected   XXH3 hash of the output file %s\n",risultato);
@@ -60223,15 +63293,15 @@ int Jidac::consolidate(string i_archive)
 	return 0;
 }
 
-// Struttura per i dati condivisi tra thread
+// Structure for data shared between threads
 struct ThreadData {
-    // Dati di input per ogni thread
+    // Input data for each thread
     std::vector<s_crc32block>* blocks;
     int start_index;
     int end_index;
     int thread_id;
     
-    // Risultati per thread (thread-local)
+    // Results per thread (thread-local)
     unsigned int status_e_hash;
     unsigned int status_e_crc;
     unsigned int status_e_blocks;
@@ -60257,7 +63327,7 @@ static int 		g_test_seconds		=0;
 static uint64_t g_test_start		=0;
 static int64_t 	g_global_lavorati 	=0;
 
-// Funzione per processare un gruppo di file (stesso filename)
+// Function to process a group of files (same filename)
 void process_file_group(ThreadData* data, const std::vector<int>& file_indices)
 {
 	
@@ -60277,7 +63347,7 @@ void process_file_group(ThreadData* data, const std::vector<int>& file_indices)
     uint32_t crc32stored = 0;
     std::string mycrc32 = "";
     
-    // Processa tutti i blocchi dello stesso file
+    // Process all blocks of the same file
     for (size_t idx = 0; idx < file_indices.size(); idx++) {
         int i = file_indices[idx];
         if (flagdebug)
@@ -60300,7 +63370,7 @@ void process_file_group(ThreadData* data, const std::vector<int>& file_indices)
 			}
 
         
-        // Trova i dati del file nel dizionario (thread-safe read)
+        // Find file data in the dictionary (thread-safe read)
       
         DTMap::iterator p = (*pjidac).dt.find(it.filename);
         crc32stored = 0;
@@ -60348,7 +63418,7 @@ void process_file_group(ThreadData* data, const std::vector<int>& file_indices)
 			pthread_mutex_unlock(&g_progress_mutex);
         }
         
-        // Gestione dei gap con zeri all'inizio
+        // Handling gaps with leading zeros
         if (it.crc32start > 0 && parti == 1) {
             uint64_t holesize = it.crc32start;
             uint32_t zerocrc = crc32zeros(holesize);
@@ -60361,7 +63431,7 @@ void process_file_group(ThreadData* data, const std::vector<int>& file_indices)
         currentcrc32 = crc32_combine(currentcrc32, it.crc32, it.crc32size);
         lavorati += it.crc32size;
         
-        // Gestione dei gap intermedi
+        // Handling intermediate gaps
         if (idx + 1 < file_indices.size()) {
             int next_i = file_indices[idx + 1];
             if (((*data->blocks)[i].crc32start + (*data->blocks)[i].crc32size) != 
@@ -60380,7 +63450,7 @@ void process_file_group(ThreadData* data, const std::vector<int>& file_indices)
         parti++;
     }
     
-    // Verifica finale del file
+    // Final check of the file
     int last_i = file_indices.back();
     std::string filedefinitivo = (*data->blocks)[last_i].filename;
     (*pjidac).franzreplace(filedefinitivo);
@@ -60458,11 +63528,11 @@ void process_file_group(ThreadData* data, const std::vector<int>& file_indices)
     pthread_mutex_unlock(&g_progress_mutex);
 }
 
-// Funzione del thread worker
+// Worker thread function
 void* thread_worker(void* arg) 
 {
     ThreadData* data = (ThreadData*)arg;
-    // Calcola il lavoro totale per questo thread
+    // Calculate the total work for this thread
     /*
 	uint64_t dalavorare = 0;
     
@@ -60470,7 +63540,7 @@ void* thread_worker(void* arg)
         dalavorare += (*data->blocks)[j].crc32size;
     }
     */
-    // Raggruppa i blocchi per filename
+    // Group blocks by filename
     std::map<std::string, std::vector<int> > file_groups;
     
     for (int i = data->start_index; i < data->end_index; i++) {
@@ -60478,7 +63548,7 @@ void* thread_worker(void* arg)
         file_groups[filename].push_back(i);
     }
     
-    // Processa ogni gruppo di file
+    // Process each group of files
     for (std::map<std::string, std::vector<int> >::iterator it = file_groups.begin(); 
          it != file_groups.end(); ++it) {
         process_file_group(data, it->second);
@@ -60713,26 +63783,26 @@ int Jidac::test()
 					 migliaia(g_crc32.size()), migliaia2(dalavorare), howmanythreads);
 			color_restore();
 		}
-		// Raggruppa i blocchi per filename
+		// Group blocks by filename
 		std::map<std::string, std::vector<int> > file_groups;
 		for (size_t i=0; i<g_crc32.size(); i++) 
 			file_groups[g_crc32[i].filename].push_back(i);
 		
-		// Converti in vettore per distribuzione
+		// Convert to vector for distribution
 		std::vector<std::pair<std::string, std::vector<int> > > files_list;
 		///for (auto& pair : file_groups)
 			///files_list.push_back(pair);
 		for (std::map<std::string, std::vector<int> >::iterator it = file_groups.begin();it != file_groups.end(); ++it) 
 			files_list.push_back(*it);
-		// Prepara i thread
+		// Prepare the threads
 		pthread_t*  threads 		= new pthread_t[howmanythreads];
 		ThreadData* thread_data 	= new ThreadData[howmanythreads];
 
-		// Distribuisce i file tra i thread
+		// Distribute files among threads
 		size_t files_per_thread = files_list.size() / howmanythreads;
 		size_t remaining_files 	= files_list.size() % howmanythreads;
 
-		// Crea un vettore di indici per ogni thread
+		// Create a vector of indexes for each thread
 		std::vector<std::vector<int> > thread_indices(howmanythreads);
 
 		size_t file_idx = 0;
@@ -60757,7 +63827,7 @@ int Jidac::test()
 				thread_data[t].start_index 	= thread_indices[t].front();
 				thread_data[t].end_index 	= thread_indices[t].back() + 1;
 				
-				// Crea il thread
+				// Create the thread
 				if (pthread_create(&threads[t], NULL, thread_worker, &thread_data[t]) != 0) 
 				{
 					myprintf("59140: Error on thread %d\n", t);
@@ -60766,7 +63836,7 @@ int Jidac::test()
 			}
 		}
 
-		// Attende tutti i thread
+		// Wait for all threads
 		for (int t=0;t<howmanythreads; t++) 
 			if (!thread_indices[t].empty()) 
 				pthread_join(threads[t], NULL);
@@ -60787,7 +63857,7 @@ int Jidac::test()
 			zeroedblocks 	+= thread_data[t].zeroedblocks;
 			howmanyzero 	+= thread_data[t].howmanyzero;
 			
-			// Aggiungi i file da controllare
+			// Add files to check
 			filestobecrced.insert(filestobecrced.end(),
 									 thread_data[t].filestobecrced.begin(),
 									 thread_data[t].filestobecrced.end());
@@ -60797,7 +63867,7 @@ int Jidac::test()
 		delete[] threads;
 		delete[] thread_data;
 		
-		// Distruggi i mutex
+		// Destroy the mutexes
 		pthread_mutex_destroy(&g_progress_mutex);
 		pthread_mutex_destroy(&g_dt_mutex);
 
@@ -60895,8 +63965,8 @@ int Jidac::test()
 			}
 			
 			if (i >= g_crc32.size())
-				break; // Esci dal ciclo esterno se i è fuori dai limiti
-
+				break; // exit 
+			
 			string filedefinitivo = g_crc32[i].filename;
 			franzreplace(filedefinitivo);
 			if (flagdebug)
@@ -61149,7 +64219,7 @@ void myaddfile(uint32_t i_tnumber,DTMap& i_edt,string i_filename, int64_t i_date
 			if (flagdebug3)
 				myprintf("01472: filehash on %s\n",i_filename.c_str());
 
-			d.hexhash=dummy.filehash(i_filename,false,0,prendidimensionefile(i_filename.c_str()));
+			d.hexhash=dummy.filehash(0,i_filename,false,0,prendidimensionefile(i_filename.c_str()));
 
 ///			d.hexhash=hash_calc_file(flag2algo(),i_filename.c_str(),false,dummycrc,mtime(),prendidimensionefile(i_filename.c_str()),dummy,thefilesize);
 			if (flagverbose)
@@ -61607,9 +64677,9 @@ class multipart
 			temppath="./"+temppath;
 
 		myscandir(0,thedt,temppath,false,false);
-
-		printbar(' ',false);
-		myprintf("\r");
+		eol();
+		///printbar(' ',false);
+		///myprintf("\r");
 
 		if (flagdebug)
 			myprintf("01507: scanned %s\n",migliaia(thedt.size()));
@@ -61864,8 +64934,9 @@ int Jidac::multisomething()
 	}
 #else
 	scandir(false,thedt,fullarchive,false);
-	printbar(' ',false);
-	myprintf("\r");
+	eol();
+	///printbar(' ',false);
+	///myprintf("\r");
 #endif // corresponds to #ifdef (#ifdef unix)
 
 	if (thedt.size()==0)
@@ -62348,7 +65419,23 @@ size_t			i_buffersize
 		}
 	}
 	int64_t s8=mtime();
+	int64_t maxspeed 						= 0;
+	if (g_sftp_bandwidth>0)
+		maxspeed=g_sftp_bandwidth;
+	
+	bool speed_control_enabled 				= (maxspeed > 0);
+	static int64_t last_control_time 		= 0;
+	static int64_t bytes_at_last_control	= 0;
+	static int64_t total_bytes_written 		= 0;  // Global counter
+	static int64_t copy_start_time 			= 0;  // Copy start time
+	static int base_sleep_ms 				= 0;  // Base pause to apply
 
+	// Initialize times at the beginning of the copy
+	if (speed_control_enabled && last_control_time == 0) 
+	{
+		copy_start_time = last_control_time = mtime();
+		bytes_at_last_control = 0;
+	}
 
 	while (!feof(inFile) && !ferror(inFile))
 	{
@@ -62363,18 +65450,99 @@ size_t			i_buffersize
 		int scritti = fwrite(i_buffer, 1, readSize, outFile);
 		g_robocopy_fwrite += mtime() - s11;
 		
-		// Controllo errore di scrittura
+		// Write error check
 		if (scritti != (int)readSize)
 		{
 			color_red();
-			myprintf("Error writing to output file: wrote %d of %d bytes\n", scritti, readSize);
+			myprintf("63138: Error writing to output file: wrote %s of %s bytes\n", migliaia(scritti), migliaia2(readSize));
 			color_restore();
 			break;
 		}
 		
-		scrittitotali += scritti;
-		o_donesize += scritti;
-		o_writtensize += scritti;
+		scrittitotali 			+= scritti;
+		o_donesize 				+= scritti;
+		o_writtensize 			+= scritti;
+		total_bytes_written 	+= scritti;
+
+		if (speed_control_enabled)
+		{
+			const int control_interval_ms = 500; // Interval
+			int64_t current_time = mtime();
+			int64_t time_since_last_control = current_time - last_control_time;
+
+			// Recalculate the pause only at regular intervals
+			if (time_since_last_control >= control_interval_ms)
+			{
+				// Calculation based on global average speed from the start
+				int64_t total_elapsed = current_time - copy_start_time;
+				if (total_elapsed > 0)
+				{
+					double current_avg_speed = (double)total_bytes_written * 1000.0 / total_elapsed;
+					double speed_ratio = current_avg_speed / maxspeed;
+					
+					if (speed_ratio > 1.1) // Se supera del 10% il target
+					{
+						// Calculate pause needed to bring back to target speed
+						double excess_ratio = speed_ratio - 1.0;
+						base_sleep_ms = (int)(excess_ratio * 20); // Gradual increment
+						if (base_sleep_ms > 50) 
+							base_sleep_ms = 50; // Maximum limit
+					}
+					else if (speed_ratio < 0.9) // Se sotto del 10% dal target
+					{
+						// Gradually reduce the pause
+						base_sleep_ms = (int)(base_sleep_ms * 0.8);
+						if (base_sleep_ms < 0) 
+							base_sleep_ms = 0;
+					}
+					// Se siamo nel range 90%-110% non cambiamo nulla (zona morta)
+				}
+
+				// Debug every 2 seconds
+				static int64_t last_debug_time = 0;
+				if (flagverbose)
+					if (current_time - last_debug_time > 2000)
+					{
+						int64_t bytes_in_interval 	= total_bytes_written - bytes_at_last_control;
+						double interval_speed 		= (double)bytes_in_interval * 1000.0 / time_since_last_control;
+						double global_speed 		= (double)total_bytes_written * 1000.0 / (current_time - copy_start_time);
+						
+						myprintf("\n");
+						myprintf("Speed %10s/s|W=%10s|Avg %10s/s of %s/s|Pause %04d ms ",
+						tohuman(interval_speed), 
+						tohuman2(total_bytes_written),
+						tohuman3(global_speed),
+						tohuman4(maxspeed),
+						base_sleep_ms);
+						last_debug_time = current_time;
+					}
+
+				// Reset for the next interval
+				last_control_time 		= current_time;
+				bytes_at_last_control 	= total_bytes_written;
+			}
+
+			// Apply the constant pause after each write
+			if (base_sleep_ms > 0)
+			{
+			#ifdef _WIN32
+				Sleep(base_sleep_ms);
+			#else
+				usleep(base_sleep_ms * 1000); // usleep prende microsecondi
+			#endif
+			}
+		}
+		else
+		{
+			/*
+			static bool bypass_shown = false;
+			if (!bypass_shown)
+			{
+				myprintf("\n[SPEED CONTROL] Going FULL!\n");
+				bypass_shown = true;
+			}
+			*/
+		}
 		
 		if (!flagnoeta)
 		{
@@ -63027,6 +66195,13 @@ int Jidac::robocopy()
 	}
 
 
+	if (g_sftp_bandwidth>0)
+	{
+		color_yellow();
+		myprintf("63833: Due to -bandwidth the target speed will be %s\n",tohuman(g_sftp_bandwidth));
+		color_restore();
+	}
+		
 ///	we start by 1 (the first slave); 0 is the master
 	for (unsigned i=1; i<files.size(); ++i)
 	{
@@ -63353,18 +66528,32 @@ int Jidac::robocopy()
 	myprintf("\n");
 	return dircompare(false,true);
 }
+
+
+
+
 /// do a s (get size) or c (compare). The second flag is for output when called by robocopy
 int Jidac::dircompare(bool i_flagonlysize,bool i_flagrobocopy)
 {
+	if (!i_flagonlysize)
+		if (files.size()<2)
+		{
+			myprintf("66395: On dircompare you need at least one master and one slave\n");
+			return 1;
+		}
+	if (!exists(files[0]))
+	{
+		myprintf("66400: Master dir <<%Z>> does not exists\n",files[0].c_str());
+		return 2;
+	}
+		
 	if (i_flagonlysize)
 		if (flaghome)
 			return homesize();
 		
-/// If you specify a checksum, do hard compare
-	bool hashscelto=ischecksum();
-	if (flagchecksum)
-		if (!hashscelto)
-			flagxxh3=true;
+	/// If you specify a checksum, do hard compare
+	flagchecksum=ischecksum();
+	
 	int risultato=0;
 	if (i_flagonlysize)
 		myprintf("01669: Get directory size ");
@@ -63372,13 +66561,17 @@ int Jidac::dircompare(bool i_flagonlysize,bool i_flagrobocopy)
 	{
 		if (!i_flagrobocopy)
 			myprintf("01670: Dir compare (%s dirs to be checked) ",migliaia(files.size()));
-		if (files.size()<2)
-			error("28212: At least two directories required\n");
 	}
 	if (!flagforcezfs)
-			myprintf(" ignoring .zfs and :$DATA\n");
+		myprintf(" ignoring .zfs and :$DATA\n");
 	franzparallelscandir(flagchecksum,true,true);
 	printbar('=');
+	
+	if ((files.size()!=files_size.size()) || (files.size()!=files_count.size()) || (files.size()!=files_time.size()))
+	{
+		myprintf("66428: GURU, files.size() not good\n");
+		seppuku();
+	}
 	for (unsigned i=0; i<files.size(); ++i)
 	{
 		int64_t spazio=getfreespace(files[i]);
@@ -63388,15 +66581,16 @@ int Jidac::dircompare(bool i_flagonlysize,bool i_flagrobocopy)
 		if (minsize)
 			if (minsize>(uint64_t)spazio)
 			{
+				color_yellow();
 				myprintf("01672: ***************************************\n");
 				myprintf("01673: |=|=|=|=|=|=|=|=|=|=|=|=|=|=|=|=|=|=|=|\n");
 				myprintf("01674: WARN: free space < of minsize   %19s  %19s\n",migliaia(spazio),migliaia2(minsize));
 				myprintf("01675: |=|=|=|=|=|=|=|=|=|=|=|=|=|=|=|=|=|=|=|\n");
 				myprintf("01676: ***************************************\n");
+				color_restore();
 			}
 	}
 	uint64_t total_size	=0;
-	///uint64_t total_files=0;
 	int64_t delta_size	=0;
 	int64_t delta_files	=0;
 	printbar('=');
@@ -63411,7 +66605,6 @@ int Jidac::dircompare(bool i_flagonlysize,bool i_flagrobocopy)
 			delta_files	+= myabs(files_count[0],files_count[i]);
 		}
 		total_size	+=files_size[i];
-///		total_files	+=files_count[i];
 	}
 	printbar('=');
 	myprintf("01679: Total  |%21s| (%s)\n",migliaia(total_size),tohuman(total_size));
@@ -63419,13 +66612,19 @@ int Jidac::dircompare(bool i_flagonlysize,bool i_flagrobocopy)
 /// only a s (size)? Done
 	if (i_flagonlysize)
 		return 0;
+
 	uint64_t strangethings;
 	myprintf("\n");
 	myprintf("01681: Dir 0 (master) %s (files %s) <<%s>>\n",migliaia(files_size[0]),migliaia2(files_count[0]),files[0].c_str());
 	printbar('-');
 	bool flagerror=false;
-/// check from 1 (the first slave)
-	for (unsigned i=1; i<files.size(); ++i)
+	/// check from 1 (the first slave)
+
+	// Per ogni slave, prepariamo un set con i suoi file.
+	// Man mano che troviamo corrispondenze nel master, li rimuoviamo da questo set.
+	// Quelli che rimangono alla fine sono i file in "eccesso".
+
+	for (unsigned i=1; i<files.size(); ++i) 
 	{
 		strangethings=0;
 		if (!exists(files[i]))
@@ -63441,98 +66640,128 @@ int Jidac::dircompare(bool i_flagonlysize,bool i_flagrobocopy)
 				myprintf("01682: Dir %d (slave) IS DIFFERENT time %f <<%s>>\n",(int)i,files_time[i]/1000.0,files[i].c_str());
 				myprintf("01683: size  %24s (files %s)\n",migliaia(files_size[i]),migliaia2(files_count[i]));
 			}
-			for (DTMap::iterator p=files_edt[0].begin(); p!=files_edt[0].end(); ++p)
+
+			// Per ogni slave, prepariamo un set con i suoi file.
+			// Man mano che troviamo corrispondenze nel master, li rimuoviamo da questo set.
+			// Quelli che rimangono alla fine sono i file in "eccesso".
+			std::set<string> slave_files_unmatched;
+			for (DTMap::iterator it = files_edt[i].begin(); it != files_edt[i].end(); ++it)
+				slave_files_unmatched.insert(it->first);
+			
+			// 1. CICLO PRINCIPALE: Iteriamo sul master UNA SOLA VOLTA
+			// In questo ciclo troviamo i file MANCANTI e i file DIFFERENTI
+			for (DTMap::iterator p = files_edt[0].begin(); p != files_edt[0].end(); ++p)
 			{
-				string filename0=p->first;
-				string filenamei=filename0;
-				myreplace(filenamei,files[0],files[i]);
-				DTMap::iterator cerca=files_edt[i].find(filenamei);
-				if  (cerca==files_edt[i].end())
+				string filename0 = p->first;
+				string filenamei = filename0;
+				myreplace(filenamei, files[0], files[i]); // Calcola il nome del file atteso nello slave
+				
+				DTMap::iterator cerca = files_edt[i].find(filenamei);
+			
+				if (cerca == files_edt[i].end())
 				{
-					myprintf("01684: missing (not in %d) %Z\n",i,filename0.c_str());
-					flagerror=true;
+					// File trovato nel master ma NON nello slave -> MANCANTE
+					myprintf("01684: missing (not in %d) %Z\n", i, filename0.c_str());
+					flagerror = true;
 					strangethings++;
 				}
-				if (menoenne>0)
-					if (strangethings>menoenne)
-					{
-						myprintf("01685: **** TOO MANY STRANGE THINGS (-n %d)  %s\n",menoenne,migliaia(strangethings));
-						break;
-					}
-			}
-			for (DTMap::iterator p=files_edt[i].begin(); p!=files_edt[i].end(); ++p)
-			{
-				string filenamei=p->first;
-				string filename0=filenamei;
-				myreplace(filename0,files[i],files[0]);
-				DTMap::iterator cerca=files_edt[0].find(filename0);
-				if  (cerca==files_edt[0].end())
+				else
 				{
-					myprintf("01686: excess  (not in 0) %Z\n",filename0.c_str());
-					flagerror=true;
-					strangethings++;
-				}
-				if (menoenne>0)
-					if (strangethings>menoenne)
+					// File trovato in entrambi, ora confrontiamo dimensione e checksum.
+					// E lo rimuoviamo dal set dei file "non giustificati".
+					slave_files_unmatched.erase(filenamei);
+			
+					if (p->second.size != cerca->second.size)
 					{
-						myprintf("01687: **** TOO MANY STRANGE THINGS (-n %d)  %s\n",menoenne,migliaia(strangethings));
-						break;
-					}
-			}
-			for (DTMap::iterator p=files_edt[0].begin(); p!=files_edt[0].end(); ++p)
-			{
-				string filename0=p->first;
-				string filenamei=filename0;
-				myreplace(filenamei,files[0],files[i]);
-				DTMap::iterator cerca=files_edt[i].find(filenamei);
-				if  (cerca!=files_edt[i].end())
-				{
-					if (p->second.size!=cerca->second.size)
-					{
-						myprintf("01688: diff size  %18s (0) %18s (%d) %s\n",migliaia(p->second.size),migliaia2(cerca->second.size),i,filename0.c_str());
-						flagerror=true;
+						myprintf("01688: diff size  %18s (0) %18s (%d) %s\n", migliaia(p->second.size), migliaia2(cerca->second.size), i, filename0.c_str());
+						flagerror = true;
 						strangethings++;
 					}
-					else
-					if (flagchecksum)
+					else if (flagchecksum)
 					{
-						if (p->second.hexhash!=cerca->second.hexhash)
+						if (p->second.hexhash != cerca->second.hexhash)
 						{
-							myprintf("%s different %s (0) vs %s (%d) %Z\n",g_thechosenhash_str.c_str(),p->second.hexhash.c_str(),cerca->second.hexhash.c_str(),i,filename0.c_str());
-							flagerror=true;
+							myprintf("%s different %s (0) vs %s (%d) %Z\n", g_thechosenhash_str.c_str(), p->second.hexhash.c_str(), cerca->second.hexhash.c_str(), i, filename0.c_str());
+							flagerror = true;
 							strangethings++;
 						}
 					}
 				}
-				if (menoenne>0)
-					if (strangethings>menoenne)
+			
+				// Uscita anticipata se ci sono troppi errori
+				if (menoenne > 0 && strangethings > menoenne)
+				{
+					myprintf("01689: **** TOO MANY STRANGE THINGS (-n %d)  %s\n", menoenne, migliaia(strangethings));
+					break;
+				}
+			}
+			
+			// 2. CONTROLLO FINALE: Iteriamo sui file rimasti nel set.
+			// Questi sono i file in ECCESSO (presenti nello slave ma non nel master).
+			if (!(menoenne > 0 && strangethings > menoenne)) // Controlla di non essere già uscito per troppi errori
+			{
+				for (std::set<string>::iterator it = slave_files_unmatched.begin(); it != slave_files_unmatched.end(); ++it)
+				{
+					string filenamei = *it;
+					string filename0 = filenamei;
+					myreplace(filename0, files[i], files[0]); // Ricalcola il nome che avrebbe nel master
+			
+					myprintf("01686: excess  (not in 0) %Z\n", filename0.c_str());
+					flagerror = true;
+					strangethings++;
+			
+					if (menoenne > 0 && strangethings > menoenne)
 					{
-						myprintf("01689: **** TOO MANY STRANGE THINGS (-n %d)  %s\n",menoenne,migliaia(strangethings));
+						myprintf("01687: **** TOO MANY STRANGE THINGS (-n %d)  %s\n", menoenne, migliaia(strangethings));
 						break;
 					}
-			}
-			if (!flagerror)
-				if ((files_size[i]==files_size[0]) && (files_count[i]==files_count[0]))
-				{
-					myprintf("[%03d] == <<%Z>>\n",i,files[i].c_str());
 				}
+			}
+		
+			if (!flagerror)
+				if ((files_size[i] == files_size[0]) && (files_count[i] == files_count[0]))
+					myprintf("[%03d] == <<%Z>>\n",i,files[i].c_str());
+
 			printbar('-');
 		}
 	}
+
+
 	if (!flagerror)
 	{
 		if (flagchecksum)
+		{
+			color_green();
 			myprintf("01690: NO diff FOR SURE in slave dirs (checksum check %s)\n",g_thechosenhash_str.c_str());
+		}
 		else
+		{
+			color_cyan();
 			myprintf("01691: NO diff in slave dirs (fast check, only size)\n");
+		}
 	}
 	else
 	{
+		color_yellow();
 		myprintf("01692: DIFFERENT SLAVE DIRS!!\n");
 		risultato=2;
 	}
+	color_restore();
+
 	return risultato;
 }
+
+
+
+
+
+
+
+
+
+
+
+
 /// scans one or more directories, with one or more threads
 /// return total time
 int64_t Jidac::franzparallelscandir(bool i_flaghash,bool i_recursive,bool i_forcedir)
@@ -63577,7 +66806,7 @@ int64_t Jidac::franzparallelscandir(bool i_flaghash,bool i_recursive,bool i_forc
 		int rc;
 ///		pthread_t* threads = new pthread_t[files.size()];
 		
-		std::vector<pthread_t> threads(files.size(), 0);  // Inizializza tutti a 0
+		std::vector<pthread_t> threads(files.size(), 0);  // Initialize all to 0
 
 		g_allocatedram+=sizeof(pthread_t)*files.size();
 		pthread_attr_t attr;
@@ -63618,7 +66847,7 @@ int64_t Jidac::franzparallelscandir(bool i_flaghash,bool i_recursive,bool i_forc
 
 		for(unsigned int i = 0; i < files.size(); i++)
 		{
-			// Verifica che il thread sia valido prima di fare join
+			// Check that the thread is valid before joining
 			if (threads[i] != 0)  // 0 indica thread non inizializzato
 			{
 				rc = pthread_join(threads[i], &status);
@@ -63897,7 +67126,7 @@ int Jidac::fillami()
 			if (flagdebug3)
 				myprintf("01718: filehash on %s\n",filename.c_str());
 
-			string filehash=dummy.filehash(filename,false,-1,-1);
+			string filehash=dummy.filehash(0,filename,false,-1,-1);
 			lavorati+=dummy.o_thefilesize;
 
 			uint64_t hashspeed=(uint64_t)(lavorati/((mtime()-startverify+1)/1000.0));
@@ -64049,8 +67278,9 @@ int  Jidac::dir()
 	g_worked		=0;
 	flagskipzfs					=true;  // strip down zfs
 	scandir(true,edt,cartella,barras);
-	printbar(' ',false);
-	myprintf("\r");
+	eol();
+	///printbar(' ',false);
+	///myprintf("\r");
 	vector <s_fileandsize> fileandsize;
 	for (DTMap::iterator p=edt.begin(); p!=edt.end(); ++p)
 	{
@@ -64062,6 +67292,10 @@ int  Jidac::dir()
 #endif // corresponds to #ifdef (#ifdef _WIN32)
 		if (searchfrom!="")
 			flagaggiungi &= (stristr(p->first.c_str(),searchfrom.c_str())!=0);
+		if (flagnodir)
+			if (isdirectory(p->first.c_str()))
+				flagaggiungi=false;
+			
 		if (flagaggiungi)
 		{
 			s_fileandsize myblock;
@@ -64156,7 +67390,7 @@ int  Jidac::dir()
 						if (flagdebug3)
 							myprintf("01738: filehash on %s\n",fileandsize[i].filename.c_str());
 
-						string temp=dummy.filehash(fileandsize[i].filename,false,-1,-1);
+						string temp=dummy.filehash(0,fileandsize[i].filename,false,-1,-1);
 
 						///string temp=hash_calc_file(flag2algo(),fileandsize[i].filename.c_str(),false,dummycrc,0,0,dummylavorati,thefilesize);
 						flagnoeta=saveeta;
@@ -64196,7 +67430,7 @@ int  Jidac::dir()
 					if (flagdebug3)
 						myprintf("01742: filehash on %s\n",fileandsize[i+1].filename.c_str());
 
-					string temp=dummy.filehash(fileandsize[i+1].filename,false,-1,-1);
+					string temp=dummy.filehash(0,fileandsize[i+1].filename,false,-1,-1);
 
 					///string temp=hash_calc_file(flag2algo(),fileandsize[i+1].filename.c_str(),false,dummycrc,0,0,dummylavorati,thefilesize);
 					flagnoeta=saveeta;
@@ -64355,7 +67589,7 @@ int  Jidac::dir()
 					if (flagdebug3)
 						myprintf("01756: filehash on %s\n",fileandsize[i].filename.c_str());
 
-					string temp=dummy.filehash(fileandsize[i].filename,false,-1,-1);
+					string temp=dummy.filehash(0,fileandsize[i].filename,false,-1,-1);
 					myprintf("|| %s:%s ",g_thechosenhash_str.c_str(),temp.c_str());
 				}
 				printUTF8(fileandsize[i].filename.c_str());
@@ -64896,7 +68130,7 @@ int	Jidac::rebuildcrc32(string i_filename,string& o_prezpaqcrc32,int64_t& 	o_pre
 		myprintf("01825: filehash QUICK on %s\n",i_filename.c_str());
 
 	g_dimensione=0;
-	string o_initialzpaqquick=dummyquick.filehash(i_filename,false	,startverify,prendidimensionefile(i_filename.c_str()));
+	string o_initialzpaqquick=dummyquick.filehash(0,i_filename,false	,startverify,prendidimensionefile(i_filename.c_str()));
 	if (o_initialzpaqquick=="")
 	{
 		myprintf("01826! quick hash empty!\n");
@@ -64910,7 +68144,7 @@ int	Jidac::rebuildcrc32(string i_filename,string& o_prezpaqcrc32,int64_t& 	o_pre
 
 	///myprintf("01828: 4444444444444 %s\n",tohuman(prendidimensionefile(i_filename.c_str())));
 	g_dimensione=0;
-	string o_initialzpaqcrc32=dummyquick2.filehash(i_filename,false,startverify,prendidimensionefile(i_filename.c_str()));
+	string o_initialzpaqcrc32=dummyquick2.filehash(0,i_filename,false,startverify,prendidimensionefile(i_filename.c_str()));
 	if (o_initialzpaqcrc32=="")
 	{
 		myprintf("01829! CRC-32 empty!\n");
@@ -64986,7 +68220,7 @@ string&		o_thecrcfile)
 		if (flagdebug3)
 			myprintf("01834: filehash on %s\n",i_filename.c_str());
 
-		o_initialquickhash=dummyquick.filehash(i_filename,false,-1,-1);
+		o_initialquickhash=dummyquick.filehash(0,i_filename,false,-1,-1);
 		o_initialzpaqsize=prendidimensionefile(i_filename.c_str());
 	}
 	bool	fastisok	=true;
@@ -65049,7 +68283,7 @@ string&		o_thecrcfile)
 
 std::string devicetoname(const std::string& i_device) 
 {
-    std::string result = i_device;  // Copia della stringa originale
+    std::string result = i_device;  // Copy of the original string
 
     for (size_t i = 0; i < result.length(); ++i) 
 	    if (!((result[i] >= 'A' && result[i] <= 'Z') || 
@@ -65151,11 +68385,34 @@ string	win_getlong(const string& i_file)
 	return risultato;
 }			
 #endif		 // corresponds to #ifdef (#ifdef _WIN32)
+string	forgefastcrc32(string i_filename)
+{
+	string 	percorso	=extractfilepath		(i_filename);
+	string	nome		=prendinomefileebasta	(i_filename);
+	return percorso+nome+"_crc32.txt";
+}
+
+
+bool isfastcrc32(string i_filename)
+{
+	return fileexists((forgefastcrc32(i_filename)));
+}
+
 // Add or delete files from archive. Return 1 if error else 0.
 // Note: by flagverify do a CRC32-integrity check (@zpaqfranz)
 ///zpaqfranz a z:\1 \\?\UNC\franzk\z\cb -longpath -debug
 int Jidac::add()
 {
+	
+	string tobetested=subpart(archive, 1);
+	myprintf("DEBUG: Tobetested %s\n",tobetested.c_str());
+	if (!flagfasttxt)
+		if (isfastcrc32(tobetested))
+		{
+			myprintf("65202$ Turning on -fasttxt because <<%Z>> does exists\n",forgefastcrc32(tobetested).c_str());
+			flagfasttxt=true;
+		}
+
 	if (g_checksize>0)
 	{
 		string percorso=extractfilepath(archive);
@@ -65174,8 +68431,6 @@ int Jidac::add()
 		}
 		else
 			myprintf("65087$ Cannot check space on <<%Z>>: use a full path!\n",archive.c_str());
-
-		
 	}
 #ifdef _WIN32
 	if (flaglongpath && (tofiles.size()>0))
@@ -66399,9 +69654,9 @@ int Jidac::add()
 	{
 		for (unsigned i=0; i<files.size(); ++i)
 		scandir(true,edt,files[i].c_str(),!flagnorecursion);
-	
-		printbar(' ',false);
-		myprintf("\r");
+		eol();
+		///printbar(' ',false);
+		///myprintf("\r");
 		if (flagverbose)
 		{
 			color_green();
@@ -66463,6 +69718,7 @@ int Jidac::add()
 				i++;
 			}
 		}
+
 		edt.clear();
 		assert(files.size()==1);
 		string solonome="";
@@ -66476,7 +69732,7 @@ int Jidac::add()
 		if (flagimage)
 		{
 			solonome=devicetoname(files[0])+".img";
-			g_ioBUFSIZE = 16 * 1024 * 1024; // Buffer di 16MB
+			g_ioBUFSIZE = 16 * 1024 * 1024; // 16MB buffer
 			myprintf("73821: DD image (buffer %s) of %Z on %s\n",tohuman(g_ioBUFSIZE),files[0].c_str(),solonome.c_str());
 			if (!preparadump(files[0])) 
 			{
@@ -66492,7 +69748,7 @@ int Jidac::add()
 			if (flagntfs)
 			{
 				ntfs_ok=false;
-				g_ioBUFSIZE = 16 * 1024 * 1024; // Buffer di 16MB
+				g_ioBUFSIZE = 16 * 1024 * 1024; // 16MB buffer
 				lettera=toupper(lettera);
   
 				snprintf(tempo,sizeof(tempo),"image_%c.img",lettera);
@@ -66507,7 +69763,7 @@ int Jidac::add()
 				
 				ntfs_ok=false;
 				
-				// Fase 1: Preparazione
+				// Phase 1: Preparation
 				if (!preparantfs("z:\\provona.img", lettera)) 
 				{
 					myprintf("78176: ERROR preparing NTFS (not administrator?)\n");
@@ -66526,7 +69782,7 @@ int Jidac::add()
 				if (all)
 				{
 		
-				// BACKUP DELL'INTERO DISCO FISICO
+				// BACKUP OF THE ENTIRE PHYSICAL DISK
 
 					DWORD diskNumber =-1;
 				
@@ -66541,14 +69797,14 @@ int Jidac::add()
 						if (flagdebug)
 							myprintf("01985: finding physical disk containing partition %c:\n",lettera);
 						
-						// Prima apri il volume per trovare il disco fisico
+						// First open the volume to find the physical disk
 						snprintf(tempo,sizeof(tempo),"\\\\.\\%c:",lettera);
 						string volumepath=tempo;
 						if (flagdebug2)
 							myprintf("01986: VOLUME |%s|\n",volumepath.c_str());
 						
 						HANDLE volumeHandle = CreateFile(utow(volumepath.c_str()).c_str(),
-											0,  // Non serve accesso in lettura, solo query
+											0,  // Read access not needed, only query
 											FILE_SHARE_READ|FILE_SHARE_WRITE,
 											NULL,
 											OPEN_EXISTING,
@@ -66562,7 +69818,7 @@ int Jidac::add()
 							return 2;
 						}
 						
-						// Ottieni informazioni sul disco fisico
+						// Get information about the physical disk
 						VOLUME_DISK_EXTENTS diskExtents;
 						memset(&diskExtents, 0, sizeof(diskExtents));
 						DWORD bytesReturned = 0;
@@ -66589,7 +69845,7 @@ int Jidac::add()
 					color_restore();
 					
 					
-					// Ora apri il disco fisico
+					// Now open the physical disk
 					snprintf(tempo,sizeof(tempo),"\\\\.\\PhysicalDrive%lu",diskNumber);
 					string diskpath=tempo;
 					if (flagverbose)
@@ -66617,7 +69873,7 @@ int Jidac::add()
 						return 2;
 					}
 					
-					// Ottieni la dimensione dell'intero disco fisico
+					// Get the size of the entire physical disk
 					GET_LENGTH_INFORMATION lengthInfo;
 					memset(&lengthInfo,0,sizeof(lengthInfo));
 					DWORD dummy=0;
@@ -66642,7 +69898,7 @@ int Jidac::add()
 				}
 				else
 				{
-					// BACKUP SOLO DELLA PARTIZIONE (codice originale)
+					// BACKUP OF THE PARTITION ONLY (original code)
 					myprintf("01984: REBUILDING IMAGE filename to %s (PARTITION MODE)\n",solonome.c_str());
 					myprintf("01985: opening drive %c:\n",lettera);
 					snprintf(tempo,sizeof(tempo),"\\\\.\\%c:",lettera);
@@ -66698,7 +69954,9 @@ int Jidac::add()
 		}
 #endif // corresponds to #ifdef (#ifdef _WIN32)
 		DT& d=edt[solonome];
-		int64_t myora=now();
+		int64_t myora=nowutc(); // fix to store utc
+	
+		
 		d.date=myora;
 		d.creationdate=0;
 		d.accessdate=0;
@@ -66872,6 +70130,27 @@ int Jidac::add()
 		}
 	}
 	
+	if (alwaysfiles.size())
+	{
+		if (flagdebug)
+			myprintf("70125: -always with %s\n",migliaia(alwaysfiles.size()));
+		
+		for (DTMap::iterator p=edt.begin(); p!=edt.end(); ++p)
+		{
+			for (unsigned int j=0;j<alwaysfiles.size();j++)
+			{
+			///	myprintf("70148:    ispath %s vs %s\n",alwaysfiles[j].c_str(),p->first.c_str());
+				if (ispath(alwaysfiles[j].c_str(),p->first.c_str()))
+				{
+					p->second.forceadd=true;
+					if (flagdebug3)
+						myprintf("70150: forceadd due -always on <<%Z>>\n",p->first.c_str());
+				}
+			}
+		}
+		
+	}
+	
 	for (DTMap::iterator p=edt.begin(); p!=edt.end(); ++p)
 	{
 			string filename=rename(p->first);
@@ -66904,6 +70183,7 @@ int Jidac::add()
 			/// zpaqfranz a z:\1.zpaq c:\dropbox -touch
 			/// zpaqfranz a z:\1.zpaq c:\dropbox
 			/// space and time wasted, but afterall about 10 SLOCs
+			
 			if (flagtouch)
 				p->second.date+=1;  // just a little bit...
 			if (a!=dt.end())
@@ -67001,7 +70281,7 @@ int Jidac::add()
 				if (flagdebug3)
 					myprintf("02014: filehash on %s\n",filename.c_str());
 
-				string thehash=dummy.filehash(filename,false,starthashsort,total_size);
+				string thehash=dummy.filehash(0,filename,false,starthashsort,total_size);
 
 				///string thehash=hash_calc_file(FRANZO_XXHASH64,filename.c_str(),false,dummycrc,starthashsort,total_size,hashed,thefilesize);
 				if (thehash!="")
@@ -67846,7 +71126,7 @@ int Jidac::add()
 										float ratio=100.0*g_scritti/(total_size+1);
 										float percentuale=100.0*imagereaded/(total_size+1);
 										
-										// Calcola ETA
+										// Calculate ETA
 										char eta_str[32] = "calculating...";
 										if (secondi > 0 && imagereaded > 0)
 										{
@@ -68673,16 +71953,31 @@ int Jidac::add()
 					}
 				}
 #endif	
-				if ((p->second.attr&255)=='u')
-						writefranzattr(p,is,p->second.attr,3,filename,currentcrc32,p->second.file_crc32,hashtobewritten,p->second.creationdate,0,themetadata,p->second.filework==WORK_ADDED);
-				else
-				if ((p->second.attr&255)=='w')
+
+				if ((flagnoattributes) && (!flag715))
 				{
-						///myprintf("02120: WINDOWS writefranz attr |%s|\n",hashtobewritten.c_str());
-						writefranzattr(p,is,p->second.attr,5,filename,currentcrc32,p->second.file_crc32,hashtobewritten,p->second.creationdate,p->second.accessdate,themetadata,p->second.filework==WORK_ADDED);
+#ifdef _WIN32
+					writefranzattr(p,is,p->second.attr,5,filename,currentcrc32,p->second.file_crc32,hashtobewritten,p->second.creationdate,p->second.accessdate,themetadata,p->second.filework==WORK_ADDED);
+#else
+					writefranzattr(p,is,p->second.attr,3,filename,currentcrc32,p->second.file_crc32,hashtobewritten,p->second.creationdate,0,themetadata,p->second.filework==WORK_ADDED);
+#endif
 				}
 				else
-					puti(is, 0, 4);  // no attributes
+				{
+					if ((p->second.attr&255)=='u')
+							writefranzattr(p,is,p->second.attr,3,filename,currentcrc32,p->second.file_crc32,hashtobewritten,p->second.creationdate,0,themetadata,p->second.filework==WORK_ADDED);
+					else
+					if ((p->second.attr&255)=='w')
+					{
+							///myprintf("02120: WINDOWS writefranz attr |%s|\n",hashtobewritten.c_str());
+							writefranzattr(p,is,p->second.attr,5,filename,currentcrc32,p->second.file_crc32,hashtobewritten,p->second.creationdate,p->second.accessdate,themetadata,p->second.filework==WORK_ADDED);
+					}
+					else
+						puti(is, 0, 4);  // no attributes
+				}
+
+
+
 				if (a==dt.end() || p->second.data)
 					a=p;  // use new frag pointers
 				puti(is, a->second.ptr.size(), 4);  // list of frag pointers
@@ -68919,6 +72214,8 @@ int Jidac::add()
 						flagfasttxt=false; // we do not want to update CRC-32!
 						fasttxt="";
 					}
+					
+///					myprintf("0000000000000000000000000000 %s\n",migliaia(g_starting_zpaqdate));
 					if (g_starting_zpaqdate>0)
 					{
 						if (flagverbose)
@@ -68953,8 +72250,9 @@ int Jidac::add()
 		if (ticks>0) 	// not divide by zero, please
 			speed=(int64_t)(total_size/(ticks/1000.0));
 			
-		int64_t myarchive_end=archive_end;		
-		string inchunks="";
+		int64_t myarchive_end=archive_end;	
+		
+		string inchunks=" ";
 		string intotalsize="";
 		
 			if (g_chunk_size>0)
@@ -69006,7 +72304,9 @@ int Jidac::add()
 				if (g_chunk_size>0)  // we have multiple output
 						global_file_len=myarchive_end+initial_archive_size;
 						
+						
 				if (files_added+files_updated+removed>0)
+				{
 				myprintf("02157: %s + (%s -> %s -> %s %s) = %s %s @ %s/s\n",
 						migliaia(initial_archive_size), 
 						migliaia2(total_size), 
@@ -69016,6 +72316,7 @@ int Jidac::add()
 						migliaia5(global_file_len),
 						intotalsize.c_str(),
 						tohuman(speed));
+				}
 			}
 		}
 	}
@@ -69310,7 +72611,7 @@ int Jidac::add()
 
 		if (!flagbackupzeta)
 		{
-			hashreloaded=dummy.filehash(g_archive,false,startverify,larghezzain);
+			hashreloaded=dummy.filehash(0,g_archive,false,startverify,larghezzain);
 			myprintf("\n");
 			myprintf("%s 44202: final %s: %s\n",hashreloaded.c_str(),thehash.c_str(),g_archive.c_str());
 		
@@ -69371,7 +72672,7 @@ int Jidac::add()
 				if (flagdebug3)
 					myprintf("02191: filehash on %s\n",g_archive.c_str());
 
-				string quickhash=dummyquick.filehash(g_archive,false,startverify,larghezzain);
+				string quickhash=dummyquick.filehash(0,g_archive,false,startverify,larghezzain);
 
 				FILE* backupfile=fopen(backuptxt.c_str(), "rb");
 				if (backupfile==NULL)
@@ -69445,7 +72746,7 @@ int Jidac::add()
 						franz_do_hash dummyquick(goodhash);
 						if (flagdebug3)
 							myprintf("02199: filehash on %s\n",g_archive.c_str());
-						hashreloaded=dummy.filehash(g_archive,false,startverify,larghezzain);
+						hashreloaded=dummy.filehash(0,g_archive,false,startverify,larghezzain);
 					}
 				}
 				fprintf(backupfile,"%s %s|[%21s] <%s> $%s$ %s\r\n",stringtolower(hashreloaded).c_str(),checktxt.c_str(),migliaia(larghezzain),quickhash.c_str(),dateToString(true,now()).c_str(),g_archive.c_str());
@@ -69603,7 +72904,7 @@ int Jidac::add()
 				if (flagdebug2)
 					myprintf("02221: filehash on %s\n",g_archive.c_str());
 
-				string hashreloaded=dummy.filehash(g_archive,false,0,finalfile);
+				string hashreloaded=dummy.filehash(0,g_archive,false,0,finalfile);
 				myprintf("02222: CRC-32 FROM FS  %s %s\n",hashreloaded.c_str(),g_archive.c_str());
 				if (stringtoupper(hashreloaded)==stringtoupper(scrc32post))
 					myprintf("02223: CRC-32 MATCH, THIS IS GOOD!\n");
@@ -69641,7 +72942,7 @@ int Jidac::add()
 					if (flagdebug2)
 						myprintf("02229: filehash on %s\n",g_indexname.c_str());
 
-					string hashreloaded=dummy.filehash(g_indexname,false,0,finalfile);
+					string hashreloaded=dummy.filehash(0,g_indexname,false,0,finalfile);
 					myprintf("02230: INDEX CRC-32 FROM FS  %s %s\n",hashreloaded.c_str(),g_indexname.c_str());
 					if (stringtoupper(hashreloaded)==stringtoupper(scrc32indexpost))
 						myprintf("02231: INDEX CRC-32 MATCH, THIS IS GOOD!\n");
@@ -69658,7 +72959,7 @@ int Jidac::add()
 			if (flagdebug3)
 				myprintf("02233: filehash on %s\n",g_archive.c_str());
 
-			string quickhash=dummyquick.filehash(g_archive,false,startverify,finalfile);
+			string quickhash=dummyquick.filehash(0,g_archive,false,startverify,finalfile);
 			if (quickhash=="")
 			{
 				myprintf("02234! quick hash empty!\n");
@@ -69684,7 +72985,7 @@ int Jidac::add()
 				if (flagdebug3)
 					myprintf("02237: filehash on %s\n",g_indexname.c_str());
 
-				string quickhash=dummyquick.filehash(g_indexname,false,startverify,finalfile);
+				string quickhash=dummyquick.filehash(0,g_indexname,false,startverify,finalfile);
 				if (quickhash=="")
 				{
 					myprintf("02238! quick hash empty!\n");
@@ -70154,7 +73455,7 @@ void Jidac::pc_info()
 ////////////////////
 
 
-// Funzione per codificare in Base85 (variante ASCII85 semplificata)
+// Function to encode in Base85 (simplified ASCII85 variant)
 std::string encode_base85(const std::string& data) 
 {
     const char* charset = "!\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstu";
@@ -70165,7 +73466,7 @@ std::string encode_base85(const std::string& data)
         unsigned long value = 0;
         int padding = 0;
         
-        // Raccoglie fino a 4 byte
+        // Collects up to 4 bytes
         for (int j = 0; j < 4; j++) 
 		{
             value <<= 8;
@@ -70175,7 +73476,7 @@ std::string encode_base85(const std::string& data)
 			    padding++;
         }
         
-        // Converte in base 85
+        // Convert to base 85
         char encoded[6] = {0};
         for (int j = 4; j >= 0; j--) 
 		{
@@ -70183,14 +73484,14 @@ std::string encode_base85(const std::string& data)
             value /= 85;
         }
         
-        // Aggiunge al risultato (meno il padding)
+        // Add to the result (minus padding)
         for (int j = 0; j < 5 - padding; j++) 
 		    result += encoded[j];
     }
     return result;
 }
 
-// Funzione per decodificare da Base85
+// Function to decode from Base85
 std::string decode_base85(const std::string& encoded) 
 {
     std::string result;
@@ -70199,7 +73500,7 @@ std::string decode_base85(const std::string& encoded)
         unsigned long value = 0;
         int chars_to_process = (encoded.length() - i < 5) ? (encoded.length() - i) : 5;
         
-        // Decodifica fino a 5 caratteri
+        // Decode up to 5 characters
         for (int j = 0; j < chars_to_process; j++) 
 		{
             char c = encoded[i + j];
@@ -70212,7 +73513,7 @@ std::string decode_base85(const std::string& encoded)
 			    value = value * 85 + digit;
         }
         
-        // Converte in byte
+        // Convert to byte
         int bytes_to_output = chars_to_process - 1;
         for (int j = bytes_to_output - 1; j >= 0; j--) 
 		    result += (char)((value >> (j * 8)) & 0xFF);
@@ -70240,19 +73541,19 @@ std::string codifica_franzhash(const std::string& input)
         block_count = std::stol(block_count_str);
     } catch (const std::invalid_argument& e) 
 	{
-        return input; // Conversione a numero fallita
+        return input; // Conversion to number failed
     }
     if (block_count <= 0) return input;
 
-    // Separazione tra numeri e hash finale
+    // Separation between numbers and final hash
     std::string numbers_part;
     std::string final_hash;
     size_t hash_separator_pos = payload.rfind('-');
 
     if (hash_separator_pos == std::string::npos) 
 	{
-        // Nessun trattino: valido solo se block_count è 1.
-        // La validità sarà controllata più avanti.
+        // No hyphen: valid only if block_count is 1.
+        // Validity will be checked later.
         numbers_part = "";
         final_hash = payload;
     } else 
@@ -70261,9 +73562,9 @@ std::string codifica_franzhash(const std::string& input)
         final_hash = payload.substr(hash_separator_pos + 1);
     }
 
-    // Parsing dei numeri ---
+    // Parsing numbers ---
     std::vector<long long> numbers;
-    numbers.push_back(0); // Il primo è sempre zero
+    numbers.push_back(0); // The first one is always zero
 
     if (!numbers_part.empty()) 
 	{
@@ -70275,15 +73576,15 @@ std::string codifica_franzhash(const std::string& input)
             } catch (const std::invalid_argument& e) { return input; }
             start = end + 1;
         }
-        try { // Aggiunge l'ultimo numero dopo l'ultimo trattino
+        try { // Add the last number after the last hyphen
             numbers.push_back(std::stoll(numbers_part.substr(start)));
         } catch (const std::invalid_argument& e) { return input; }
     }
 
     if (static_cast<long>(numbers.size()) != block_count) 
-	    return input; // Il numero di blocchi non corrisponde
+	    return input; // The number of blocks does not match
     
-    // --- 4. Verifica della progressione aritmetica ---
+    // --- 4. Verification of the arithmetic progression ---
     bool is_ap = true;
     long long step = 0;
     if (block_count > 1) 
@@ -70297,7 +73598,7 @@ std::string codifica_franzhash(const std::string& input)
             }
     }
 
-    // Stringa finale
+    // Final string
 	if (is_ap) 
 	{
         std::string encoded_hash = encode_base85(final_hash);
@@ -70311,15 +73612,15 @@ std::string codifica_franzhash(const std::string& input)
         return result;
     } 
 	else 
-        return input; // Non è una progressione aritmetica
+        return input; // It is not an arithmetic progression
 }
 
 std::string decodifica_franzhash(const std::string& input) 
 {
-    // Controlla la presenza del marcatore "c" (compressed)
+    // Check for the presence of the "c" marker (compressed)
     size_t marker_pos = input.find(":c:");
     if (marker_pos == std::string::npos) 
-	    return input; // Non è codificata, restituisce l'originale
+	    return input; // It's not encoded, return the original
     
     // Parsing
 	size_t pos1 = input.find(':');
@@ -70331,7 +73632,7 @@ std::string decodifica_franzhash(const std::string& input)
     std::string algo = input.substr(pos1 + 1, pos2 - (pos1 + 1));
     std::string block_count_str = input.substr(pos2 + 1, marker_pos - (pos2 + 1));
     
-    // Il resto della stringa dopo ":c:"
+    // The rest of the string after ":c:"
     std::string payload = input.substr(marker_pos + 3);
 
     long block_count;
@@ -70341,7 +73642,7 @@ std::string decodifica_franzhash(const std::string& input)
     } 
 	catch (const std::invalid_argument& e) 
 	{
-        return input; // Conversione fallita
+        return input; // Conversion failed
     }
     if (block_count <= 0) return input;
 
@@ -70350,7 +73651,7 @@ std::string decodifica_franzhash(const std::string& input)
     if (block_count > 1) 
 	{
         size_t step_separator = payload.find(':');
-        if (step_separator == std::string::npos) return input; // Formato non valido
+        if (step_separator == std::string::npos) return input; // Invalid format
         try 
 		{
             step = std::stoll(payload.substr(0, step_separator));
@@ -70376,7 +73677,7 @@ std::string decodifica_franzhash(const std::string& input)
         }
         result += numbers_payload + "-" + final_hash;
     } 
-	else     // Se block_count è 1, non c'è payload numerico, solo l'hash finale.
+	else     // If block_count is 1, there is no numeric payload, only the final hash.
 		result += final_hash;
     
     return result;
@@ -70384,7 +73685,7 @@ std::string decodifica_franzhash(const std::string& input)
 
 
 
-// Struttura per i dati del thread
+// Structure for thread data
 typedef struct 
 {
     const char* filename;
@@ -70393,10 +73694,10 @@ typedef struct
     int thread_id;
     int total_threads;
     std::string hash_result; // Buffer per l'hash  della parte
-    double* progress;  // Percentuale di avanzamento del thread
+    double* progress;  // Thread progress percentage
 } franzhash_thread_data;
 
-// Struttura per il risultato del calcolo/verifica
+// Structure for the calculation/verification result
 typedef struct 
 {
     std::string hash_type;
@@ -70405,7 +73706,7 @@ typedef struct
     std::string final_hash;
 } franzhash_result;
 
-// Funzione di supporto per convertire int64_t in stringa
+// Support function to convert int64_t to string
 std::string int64_to_string(int64_t value) 
 {
     char buffer[32];
@@ -70413,7 +73714,7 @@ std::string int64_to_string(int64_t value)
     return std::string(buffer);
 }
 
-// Funzione di supporto per il calcolo dell'hash di una parte
+// Support function for calculating the hash of a part
 void* franzhash_thread_func(void* arg) 
 {
     franzhash_thread_data* data = (franzhash_thread_data*)arg;
@@ -70451,8 +73752,9 @@ void* franzhash_thread_func(void* arg)
 		// Clear any previous error indicators
 		clearerr(file);
 		
-		size_t to_read = (size_t)std::min((int64_t)g_ioBUFSIZE, bytes_to_read - bytes_read_total);
-		size_t read = fread(buffer, 1, to_read, file);
+	size_t to_read = (size_t)(((int64_t)g_ioBUFSIZE < (bytes_to_read - bytes_read_total)) ? 
+                         (int64_t)g_ioBUFSIZE : (bytes_to_read - bytes_read_total));
+		 size_t read = fread(buffer, 1, to_read, file);
 		
 		if (read > 0) 
 		{
@@ -70492,24 +73794,24 @@ void* franzhash_thread_func(void* arg)
 }
 std::string calcolafranzhash(std::string i_tipohash, std::string i_nomefile, int i_numerothread, bool i_serie) {
 
-    // Ottieni dimensione file
+    // Get file size
     int64_t file_size = prendidimensionefile(i_nomefile.c_str());
     if (file_size == -1) 
         return "Error: cannot get filesize";
 
-    // Determina numero di thread effettivo
-    int num_threads = std::min(i_numerothread, 64); // Limite ragionevole
-    if (num_threads < 1) 
+    // Determine effective number of threads
+    int num_threads = (i_numerothread < 64) ? i_numerothread : 64; // Reasonable limit
+	if (num_threads < 1) 
         num_threads = 1;
 
-    // Calcola dimensione parte per thread
+    // Calculate part size per thread
     int64_t part_size = file_size / num_threads;
     std::vector<int64_t> offsets(num_threads);
     std::vector<franzhash_thread_data> thread_data(num_threads);
     std::vector<pthread_t> threads(num_threads);
     std::vector<double> progress(num_threads, 0.0);
 
-    // Inizializza dati thread
+    // Initialize thread data
     for (int i = 0; i < num_threads; i++) {
         thread_data[i].filename = i_nomefile.c_str();
         thread_data[i].start_offset = i * part_size;
@@ -70524,18 +73826,18 @@ std::string calcolafranzhash(std::string i_tipohash, std::string i_nomefile, int
 
     if (i_serie) {
 		myprintf("70687: franzhash: serial run %s (spinning drives, old SSD, slow CPU)\n",tohuman(file_size));
-        // ESECUZIONE IN SERIE
+        // SERIAL EXECUTION
         for (int i = 0; i < num_threads; i++) {
-            // Reset progresso per il thread corrente
+            // Reset progress for the current thread
             progress[i] = 0.0;
             
-            // Crea e avvia un thread alla volta
+            // Create and start one thread at a time
             if (pthread_create(&threads[i], NULL, franzhash_thread_func, &thread_data[i]) != 0) 
                 return "Error creating thread";
             
-            // Monitora il progresso di questo thread specifico
+            // Monitor the progress di questo thread specifico
             while (progress[i] < 100.0) {
-                // Calcola progresso globale considerando i thread già completati + quello corrente
+                // Calculate global progress considering threads already completed + the current one
                 double total_progress = 0.0;
                 int64_t bytes_processed = 0;
                 
@@ -70549,12 +73851,12 @@ std::string calcolafranzhash(std::string i_tipohash, std::string i_nomefile, int
                 }
                 total_progress /= num_threads;
 
-                // Calcola velocità media (byte/s)
+                // Calculate average speed (byte/s)
                 int64_t current_time = mtime();
                 double elapsed_seconds = (current_time - start_run) / 1000.0;
                 double average_speed = (elapsed_seconds > 0) ? (bytes_processed / elapsed_seconds) : 0.0;
 
-                // Calcola ETA
+                // Calculate ETA
                 int64_t bytes_remaining = file_size - bytes_processed;
                 double eta_seconds = (average_speed > 0) ? (bytes_remaining / average_speed) : 0.0;
                 int eta_hours = static_cast<int>(eta_seconds / 3600);
@@ -70569,28 +73871,28 @@ std::string calcolafranzhash(std::string i_tipohash, std::string i_nomefile, int
 #ifdef _WIN32
                 Sleep(1000);
 #else
-                usleep(1000000); // 1 secondo
+                usleep(1000000); // 1 second
 #endif
             }
             
-            // Aspetta che questo thread specifico termini
+            // Wait for this specific thread to terminate
             pthread_join(threads[i], NULL);
         }
     } else {
-        // ESECUZIONE IN PARALLELO (logica originale)
+        // PARALLEL EXECUTION (original logic)
         myprintf("70423: franzhash: parallel run %s (NVMe/RAID of SSDs, multicore CPU)\n",tohuman(file_size));
         
-        // Avvia tutti i thread
+        // Start all threads
         for (int i = 0; i < num_threads; i++) 
             if (pthread_create(&threads[i], NULL, franzhash_thread_func, &thread_data[i]) != 0) 
                 return "Error creating thread";
         
-        // Monitora progresso globale
+        // Monitor global progress
         while (true) {
             double total_progress = 0.0;
             int64_t bytes_processed = 0;
             for (int i = 0; i < num_threads; i++) {
-                double thread_progress = progress[i]; // Progresso in percentuale (0-100)
+                double thread_progress = progress[i]; // Progress in percentage (0-100)
                 int64_t thread_bytes = (i == num_threads - 1) 
                     ? (file_size - thread_data[i].start_offset) 
                     : (thread_data[i].end_offset - thread_data[i].start_offset + 1);
@@ -70599,12 +73901,12 @@ std::string calcolafranzhash(std::string i_tipohash, std::string i_nomefile, int
             }
             total_progress /= num_threads;
 
-            // Calcola velocità media (byte/s)
+            // Calculate average speed (byte/s)
             int64_t current_time = mtime();
             double elapsed_seconds = (current_time - start_run) / 1000.0;
             double average_speed = (elapsed_seconds > 0) ? (bytes_processed / elapsed_seconds) : 0.0;
 
-            // Calcola ETA
+            // Calculate ETA
             int64_t bytes_remaining = file_size - bytes_processed;
             double eta_seconds = (average_speed > 0) ? (bytes_remaining / average_speed) : 0.0;
             int eta_hours = static_cast<int>(eta_seconds / 3600);
@@ -70628,16 +73930,16 @@ std::string calcolafranzhash(std::string i_tipohash, std::string i_nomefile, int
 #ifdef _WIN32
             Sleep(1000);
 #else
-            usleep(1000000); // 1 secondo (1000000 microsecondi)
+            usleep(1000000); // 1 second (1000000 microsecondi)
 #endif
         }
 
-        // Aspetta completamento di tutti i thread rimanenti
+        // Wait for completion of all remaining threads
         for (int i = 0; i < num_threads; i++) 
             pthread_join(threads[i], NULL);
     }
 
-    // Calcola hash finale
+    // Calculate final hash
     libzpaq::SHA256 final_sha256;
     if (flagdebug3)
         myprintf("---- OK, just debug for %03d threads\n",num_threads);
@@ -70653,7 +73955,7 @@ std::string calcolafranzhash(std::string i_tipohash, std::string i_nomefile, int
     if (flagdebug)
         myprintf("70783: Final_hash_hex    %s\n",final_hash_hex.c_str());
     
-    // Crea stringa risultato
+    // Create result string
     char result_buffer[4096];
     snprintf(result_buffer, sizeof(result_buffer), "franzhash:%s:%d:", i_tipohash.c_str(), num_threads);
     for (int i = 0; i < num_threads - 1; i++) {
@@ -70669,11 +73971,6 @@ std::string calcolafranzhash(std::string i_tipohash, std::string i_nomefile, int
 
     return std::string(result_buffer);
 }
-
-
-
-
-
 
 
 
@@ -71195,7 +74492,7 @@ int Jidac::summa()
 		if (flagdebug3)
 			myprintf("02322: filehash on %s\n",thelastzpaq.c_str());
 
-		string hashreloaded=dummy.filehash(thelastzpaq,false,startverify,larghezzain);
+		string hashreloaded=dummy.filehash(0,thelastzpaq,false,startverify,larghezzain);
 
 		myprintf("02323: MD5 recalculated       |%s| %Z\n",hashreloaded.c_str(),thelastzpaq.c_str());
 		
@@ -71246,7 +74543,6 @@ int Jidac::summa()
 				return 1;
 		}
 
-
 	if (flaghashdeep)
 	{
 		string hashdeepalgo="";
@@ -71294,12 +74590,15 @@ int Jidac::summa()
 	g_worked=0;
 	vector<string> mydirs;
 
+
+	exclude_output();
+	
 	for (unsigned i=0; i<files.size(); ++i)
 	{
-	///	myprintf("02331: files %03d %s\n",i,files[i].c_str());
-		scandir(true,edt,files[i].c_str());
+		string thepath=fix_scandir(files[i]);
+		scandir(true,edt,thepath,!flagnorecursion);
 	}
-	
+	eol();
 
 	///myprintf("02332: edt size %s\n",migliaia(edt.size()));
 	if (flagverify)
@@ -71394,9 +74693,9 @@ int Jidac::summa()
 		{
 			if (flagdebug)
 				myprintf("71008: getting only -last\n");
-			std::string last = myfiles.back(); // Salva l'ultimo elemento
-			myfiles.clear();                   // Svuota il vettore
-			myfiles.push_back(last);          // Aggiungi l'ultimo elemento
+			std::string last = myfiles.back(); // Save the last element
+			myfiles.clear();                   // Empty the vector
+			myfiles.push_back(last);          // Add the last element
 		}
 	}
 
@@ -71461,7 +74760,7 @@ int Jidac::summa()
 			if (flagdebug3)
 				myprintf("02341: filehash on %s\n",myfiles[i].c_str());
 
-			string risu=dummy.filehash(myfiles[i],false,inizio,total_size);
+			string risu=dummy.filehash(0,myfiles[i],false,inizio,total_size);
 			if ((!flaghashdeep) && (flagnosort))
 			{
 				int printlen=0;
@@ -71820,6 +75119,7 @@ struct Myfilewriter: public libzpaq::Writer
 	size_t	written;
 	bool	dosha256;
 	libzpaq::SHA256 thehash256;
+	int64_t	inizio;
 	Myfilewriter(FILE* f_,size_t i_tobewritten=0,bool i_dosha256=false): f(f_),tobewritten(i_tobewritten),written(0),dosha256(i_dosha256) {}
   	void put(int c)
 	{
@@ -71834,8 +75134,12 @@ struct Myfilewriter: public libzpaq::Writer
 				written++;
 				if (tobewritten)
 				{
+					myavanzamentoby1sec(written,tobewritten,inizio,false);
+/*
+					
 					if (written % 1000==0)
 						myprintf("02365: Extracted so far %12s/%s\r",migliaia(written),migliaia2(tobewritten));
+*/
 				}
 				else
 				{
@@ -72467,7 +75771,7 @@ int Jidac::verify(bool i_readfile)
 			franz_do_hash dummy(myalgo[i]);
 			
 			bool calcolacrc32=myalgo[i]=="CRC-32";
-			string risu=dummy.filehash(myfiles[i],calcolacrc32,inizio,hashtotali);
+			string risu=dummy.filehash(0,myfiles[i],calcolacrc32,inizio,hashtotali);
 			if (flagdebug3)
 				myprintf("02422: risu %s\n",risu.c_str());
 			vettoreparametrihash[0].o_hashcalculated.push_back(risu);
@@ -73697,8 +77001,9 @@ int Jidac::removeemptydirs(string i_folder,bool i_kill)
 		myprintf("02521: Scanning dir <<%Z>>\n",i_folder.c_str());
 	}
 	scandir(false,mydestinationdir,i_folder);
-	printbar(' ',false);
-	myprintf("\r");
+	eol();
+	///printbar(' ',false);
+	////myprintf("\r");
 	vector<string> scannedfiles;
 	for (DTMap::iterator p=mydestinationdir.begin(); p!=mydestinationdir.end(); ++p)
 		scannedfiles.push_back(p->first);
@@ -74169,8 +77474,9 @@ bool Jidac::getjollylist(string i_fullarchive,DTMap* o_thedt)
 	}
 #else
 	scandir(false,(*o_thedt),i_fullarchive,false);
-	printbar(' ',false);
-	myprintf("\r");
+	eol();
+	///printbar(' ',false);
+	///myprintf("\r");
 #endif // corresponds to #ifdef (#ifdef unix)
 
 	if ((*o_thedt).size()==0)
@@ -74975,7 +78281,7 @@ int64_t Jidac::franzparallelhashfiles(const string i_hashtype,int64_t i_totalsiz
 			if (flagdebug3)
 				myprintf("02679: filehash on %s\n",i_thefiles[i].c_str());
 
-			string gettedhash=dummy.filehash(i_thefiles[i],false,
+			string gettedhash=dummy.filehash(0,i_thefiles[i],false,
 			startscan,i_totalsize);
 			o_hashname.push_back(std::pair<string,string>(gettedhash,i_thefiles[i]));
 		}
@@ -75058,7 +78364,7 @@ int Jidac::last2()
 			string spenultima	="";
 			string sultima		="";
 			spenultima			=line;
-			// Controllo preventivo dello stato del file
+			// Pre-emptive check of file status
 			if (feof(myfile) || ferror(myfile))
 			{
 				myprintf("02695! File not in valid state for reading\n");
@@ -75068,7 +78374,7 @@ int Jidac::last2()
 
 			if (fgets(line, sizeof(line), myfile) == NULL)
 			{
-				// Distingui tra EOF e errore di lettura
+				// Distinguish between EOF and read error
 				if (feof(myfile))
 				{
 					myprintf("02695! Unexpected end of file\n");
@@ -75204,7 +78510,7 @@ bool Jidac::isbackuprunning()
 
 }
 
-// Funzione per controllare se una stringa contiene solo cifre
+// Function to check if a string contains only digits
 bool isAllDigits(const std::string& str) 
 {
     if (str.empty()) 
@@ -75217,29 +78523,29 @@ bool isAllDigits(const std::string& str)
 
 std::string processBackupFilename(const std::string& filename) 
 {
-    // Controlla se termina con .zpaq
+    // Check if it ends with .zpaq
     if (filename.length() < 5 || filename.substr(filename.length() - 5) != ".zpaq") 
-	    return filename; // Non è un file .zpaq, restituisce invariato
+	    return filename; // Not a .zpaq file, return unchanged
     
-    // Rimuove .zpaq per l'analisi
+    // Removes .zpaq for analysis
     std::string withoutExt = filename.substr(0, filename.length() - 5);
     
-    // Cerca l'ultimo underscore
+    // Search for the last underscore
     size_t lastUnderscore = withoutExt.find_last_of('_');
     
-    // Se non trova underscore, restituisce il filename originale
+    // If it doesn't find an underscore, it returns the original filename
     if (lastUnderscore == std::string::npos) 
 	    return filename;
     
-    // Estrae la parte dopo l'underscore
+    // Extract the part after the underscore
     std::string afterUnderscore = withoutExt.substr(lastUnderscore + 1);
     
-    // Controlla se dopo l'underscore ci sono solo numeri
+    // Check if after the underscore there are only numbers
     if (isAllDigits(afterUnderscore)) 
-	    // Restituisce la parte prima dell'underscore
+	    // Returns the part before the underscore
         return withoutExt.substr(0, lastUnderscore);
     
-    // Controlla se dopo l'underscore ci sono esattamente 8 caratteri '?'
+    // Check if after the underscore there are exactly 8 '?' characters
     if (afterUnderscore.length() == 8) 
 	{
         bool allQuestionMarks = true;
@@ -75249,12 +78555,12 @@ std::string processBackupFilename(const std::string& filename)
                 allQuestionMarks = false;
                 break;
             }
-        if (allQuestionMarks)     // Restituisce la parte prima dell'underscore
+        if (allQuestionMarks)     // Returns the part before the underscore
             return withoutExt.substr(0, lastUnderscore);
 
     }
     
-    // Non corrisponde a nessun pattern, restituisce il filename originale
+    // Does not match any pattern, return the original filename
     return filename;
 }
 
@@ -76075,18 +79381,18 @@ int Jidac::backup()
 
 string from_delimiter(const string& s, string delim) 
 {
-    // Trova l'ultima posizione del delimitatore
+    // Find the last position of the delimiter
     size_t last_delim_pos = s.rfind(delim);
     
-    // Se il delimitatore non è trovato, restituisci la stringa originale
+    // If the delimiter is not found, return the original string
     if (last_delim_pos == string::npos) {
         return s;
     }
     
-    // Estrai la sottostringa dopo l'ultimo delimitatore
+    // Extract the substring after the last delimiter
     string result = s.substr(last_delim_pos + delim.length());
     
-    // Rimuovi i caratteri #10 (Line Feed) e #13 (Carriage Return)
+    // Remove characters #10 (Line Feed) and #13 (Carriage Return)
     string cleaned_result;
     for (size_t i=0;i<result.length(); i++) 
         if (result[i] != '\n' && result[i] != '\r') 
@@ -76566,7 +79872,7 @@ int Jidac::consolidatebackup()
 	if (flagdebug3)
 		myprintf("02838: filehash on %s\n",g_archive.c_str());
 
-	string hashreloaded=dummy.filehash(g_archive,false,startverify,larghezzain);
+	string hashreloaded=dummy.filehash(0,g_archive,false,startverify,larghezzain);
 
 	if (hashreloaded=="")
 	{
@@ -76589,7 +79895,7 @@ int Jidac::consolidatebackup()
 	if (flagdebug3)
 		myprintf("02846: filehash on %s\n",g_archive.c_str());
 
-	string quickhash=dummyquick.filehash(g_archive,false,startverify,larghezzain);
+	string quickhash=dummyquick.filehash(0,g_archive,false,startverify,larghezzain);
 /*
 	if (flagbackupzeta)
 	{
@@ -77052,6 +80358,38 @@ int Jidac::versum()
 		myprintf("02894! no files selected to be compared\n");
 		return 2;
 	}
+	
+	int fastfounded=0;
+	for (unsigned int i=0;i<files.size();i++)
+	{
+		if (!flagads)
+			if ((!flagchecktxt) && (!flagfasttxt))
+				if (!iswildcard(files[i]))
+					if (iszpaq(files[i]))
+					{
+						string 	thezpaq		=files[i];
+						string 	percorso	=extractfilepath		(thezpaq);
+						string	nome		=prendinomefileebasta	(thezpaq);
+						myprintf("02926: Search for _crc32.txt  ");
+						
+						if (fileexists(percorso+nome+"_crc32.txt"))
+						{
+							fastfounded++;
+							color_green();
+							myprintf(": FOUNDED _crc32.txt!\n");
+						}
+						else
+						{
+							color_yellow();
+							myprintf(": NOTHING\n");
+						}
+						color_restore();
+					}
+	}
+	if (files.size()>0)
+		if ((int)fastfounded==(int)files.size())
+			return fastquicktxt();
+			
 	/// versum z:\*.zpaq -checktxt
 	if ((flagchecktxt) || (flagfasttxt) || (flagads))
 		return fastquicktxt();
@@ -77160,7 +80498,7 @@ int Jidac::versum()
 				franz_do_hash dummy(myfilealgo[i]);
 				if (flagdebug3) 
 					myprintf("02910: filehash on %s total_size %s  expected %s\n",filename.c_str(),migliaia(total_size),migliaia2(expected_size));
-				string risu=dummy.filehash(filename,false,inizio,total_size);
+				string risu=dummy.filehash(0,filename,false,inizio,total_size);
 				if (risu!="")
 				{
 					s_stringpair 		mypair;
@@ -77478,7 +80816,7 @@ int Jidac::fastquicktxt()
 		if (flagdebug3)
 			myprintf("02944: filehash on %s\n",thezpaq.c_str());
 
-		string hashreloaded=dummy.filehash(thezpaq,false,startverify,larghezzain);
+		string hashreloaded=dummy.filehash(0,thezpaq,false,startverify,larghezzain);
 		printbar(' ');
 		myprintf("\r");
 
@@ -77511,7 +80849,7 @@ int Jidac::fastquicktxt()
 		///myprintf("\n");
 	}
 	
-	
+	eol();
 	///myprintf("02952: TOTAL  %9s\n",migliaia(thedt.size()));
 	string temp=std::string(migliaia(thedt.size()));
 	
@@ -78259,7 +81597,7 @@ int64_t Jidac::read_archive(callback_function i_advance,const char* arc, int *er
             else
 			{
 				myprintf("02986: Skipping %s %s\n",filename.s.c_str(), comment.s.c_str());
-				error("Unexpected journaling block");
+				error("Unexpected journaling block 1");
             }
           }  // end if journaling
           // Streaming format
@@ -78954,7 +82292,8 @@ int Jidac::dump()
 						if (summary<0)
 							if (flagverbose || all)
 							{
-								myprintf("%s %Z", dateToString(false,fdate).c_str(),p);
+								///zekka
+								myprintf("%s %s", dateToString(false,fdate).c_str(),p);
 								///printUTF8(p);
 							}
 						while (p<end && *p) 
@@ -79173,8 +82512,9 @@ int reduz(vector<string>* i_files,DTMap* i_myedt,vector<DTMap::iterator>* i_vf)
 
 	for (unsigned i=0;i<(*i_files).size(); ++i)
 		myscandir(0,(*i_myedt),(*i_files)[i],!flagnorecursion,false);
-	printbar(' ',false);
-	myprintf("\r");
+	eol();
+	///printbar(' ',false);
+	//myprintf("\r");
 
 	int64_t total_done	=0;
 	for (DTMap::iterator p=(*i_myedt).begin(); p!=(*i_myedt).end(); ++p)
@@ -79735,7 +83075,7 @@ int Jidac::read_archive2(int64_t i_starthere,string i_filename)
 						else 
 						{
 							myprintf("03078: Skipping %s %s\n",filename.s.c_str(), comment.s.c_str());
-							error("88160:Unexpected journaling block");
+							error("88160:Unexpected journaling block 2");
 						}
 					}  // end if journaling
 
@@ -79857,8 +83197,9 @@ int Jidac::ads()
 	DTMap		thedt;
 
 	scandir(false,thedt,fullarchive,false);
-	printbar(' ',false);
-	myprintf("\r");
+	eol();
+	//printbar(' ',false);
+	//myprintf("\r");
 	if (thedt.size()==0)
 	{
 		myprintf("03088: no archive founded => quit\n");
@@ -80081,7 +83422,7 @@ int Jidac::listfast()
 						else 
 						{
 							myprintf("03106: Skipping %s %s\n",filename.s.c_str(), comment.s.c_str());
-							error("91290: Unexpected journaling block, I want i");
+							error("91290: Unexpected journaling block 3");
 						}
 					}  // end if journaling
 				// Streaming format
@@ -80498,7 +83839,7 @@ int Jidac::listfast()
 
 	int64_t starthash=mtime();
 	franz_do_hash dummy("XXHASH64");
-	string gettedhash=dummy.filehash(tofiles[0].c_str(),false,starthash,job.total_size);
+	string gettedhash=dummy.filehash(0,tofiles[0].c_str(),false,starthash,job.total_size);
 	if (gettedhash!=sthehash)
 	{
 		myprintf("03133! checksum by file %s\n",gettedhash.c_str());
@@ -80521,7 +83862,7 @@ int Jidac::listfast()
 			got = fread(data, sizeof(char), sizeof(data), myfile);
 			if (got > 0)
 			{
-				data[got] = '\0'; // Importante: termina la stringa
+				data[got] = '\0'; // Important: terminate the string
 				myprintf("%s", data);
 			}
 		}
@@ -81302,7 +84643,9 @@ int Jidac::update()
 	myprintf("03190: Cannot update SOLARIS or HAIKU\n");
 	return 0;
 #else
-	
+	if (flagverbose)
+	myprintf("03192: Checking internet update (-verbose)\n");
+	else
 	myprintf("03191: Checking internet update (-verbose for details)\n");
 	string randnocache="?"+generaterandomstring(10);
 
@@ -81612,7 +84955,7 @@ int Jidac::update()
 		myprintf("03216: filehash on %s\n",fullzpaqexename.c_str());
 	
 	int64_t startmyself=mtime();
-	string myownsha256=myself.filehash(fullzpaqexename,false,startmyself,prendidimensionefile(fullzpaqexename.c_str()));
+	string myownsha256=myself.filehash(0,fullzpaqexename,false,startmyself,prendidimensionefile(fullzpaqexename.c_str()));
 	if (flagverbose)
 		myprintf("03217: myownsha256 %s\n",myownsha256.c_str());
 	
@@ -81666,7 +85009,7 @@ int Jidac::update()
 		myprintf("03225: filehash on %s\n",exefile.c_str());
 
 	int64_t starthash=mtime();
-	string hashreloaded=dummy.filehash(exefile,false,starthash,dimensionescaricata);
+	string hashreloaded=dummy.filehash(0,exefile,false,starthash,dimensionescaricata);
 	if (flagverbose)
 	{
 		myprintf("03226: hash reloaded %s\n",hashreloaded.c_str());
@@ -81859,7 +85202,7 @@ int Jidac::download()
 			myprintf("03252: hashing on %s\n",output_file.c_str());
 
 		int64_t starthash=mtime();
-		string hashreloaded=dummy.filehash(output_file,false,starthash,prendidimensionefile(output_file.c_str()));
+		string hashreloaded=dummy.filehash(0,output_file,false,starthash,prendidimensionefile(output_file.c_str()));
 		myprintf("\n");
 		if (flagverbose)
 		{
@@ -82090,10 +85433,14 @@ int Jidac::hasha()
 	g_dimensione=0;
 	g_worked=0;
 	vector<string> mydirs;
-	
+
+	exclude_output();
 	for (unsigned i=0; i<files.size(); ++i)
-		scandir(true,edt,files[i].c_str());
-	
+	{
+		string thepath=fix_scandir(files[i]);
+		scandir(true,edt,thepath,!flagnorecursion);
+	}
+	eol();
 	for (DTMap::iterator p=edt.begin(); p!=edt.end(); ++p)
 		if (p->second.date && p->first!="" && (!isdirectory(p->first)) && (!isads(p->first)) )
 		{
@@ -82128,9 +85475,9 @@ int Jidac::hasha()
 			if (flagdebug)
 				myprintf("71008: getting only -last\n");
 			
-			std::string last = myfiles.back(); // Salva l'ultimo elemento
-			myfiles.clear();                   // Svuota il vettore
-			myfiles.push_back(last);          // Aggiungi l'ultimo elemento
+			std::string last = myfiles.back(); // Save the last element
+			myfiles.clear();                   // Empty the vector
+			myfiles.push_back(last);          // Add the last element
 		}
 	}
 	
@@ -82164,7 +85511,7 @@ int Jidac::hasha()
 			franz_do_hash dummy(g_thechosenhash);
 			if (flagdebug3)
 				myprintf("03286: filehash on %s\n",myfiles[i].c_str());
-			string risu=dummy.filehash(myfiles[i],false,inizio,total_size);
+			string risu=dummy.filehash(0,myfiles[i],false,inizio,total_size);
 			int printlen=0;
 			if (flagstdout)
 				myprintf("%s ",stringtolower(risu).c_str());
@@ -82513,8 +85860,16 @@ void Jidac::list_datetime(const int64_t i_seconddate,const bool i_flagnewversion
 		return;
 	}
 	if (i_flagnewversion)
+	{
 		color_blackongreen();
-	myprintf("%s", dateToString(flagutc,i_seconddate).c_str());
+		myprintf("%s", dateToString_forcedlocal(flagutc,i_seconddate).c_str());
+//		myprintf("%s (%s)", dateToString_forcedlocal(flagutc,i_seconddate).c_str(),migliaia(i_seconddate));
+	}
+	else
+	{
+		myprintf("%s", dateToString(flagutc,i_seconddate).c_str());
+	}
+
 }
 void Jidac::list_filesize(const bool i_isdir,const int64_t i_filesize,int i_thesizesize)
 {
@@ -82742,9 +86097,9 @@ bool match_pattern(const std::string& str, const std::string& pattern) {
 
     while (i < str.size() && j < pattern.size()) {
         if (pattern[j] == '*') {
-            // Salta '*' e prova a matchare il resto della stringa
+            // Skip '*' and try to match the rest of the string
             while (j + 1 < pattern.size() && pattern[j + 1] == '*') {
-                j++; // Salta eventuali * multipli
+                j++; // Skip any multiple *
             }
             if (j + 1 == pattern.size()) {
                 return true; // '*' alla fine matcha tutto il resto
@@ -82764,9 +86119,9 @@ bool match_pattern(const std::string& str, const std::string& pattern) {
         }
     }
 
-    // Controlla se abbiamo consumato entrambe le stringhe
+    // Check if we have consumed both strings
     while (j < pattern.size() && pattern[j] == '*') {
-        j++; // Salta eventuali * finali
+        j++; // Skip any trailing *
     }
     return i == str.size() && j == pattern.size();
 }
@@ -82779,7 +86134,7 @@ std::string pad_left(const std::string& input, size_t target_length)
 }
 
 
-// Versione alternativa più compatta usando contatori
+// More compact alternative version using counters
 int Jidac::comparefilelists(const std::vector<DTMap::iterator>& externalfilelist,
                                  const std::vector<DTMap::iterator>& internalfilelist,
 								 DTMap&			thedt) 
@@ -82832,14 +86187,14 @@ int Jidac::comparefilelists(const std::vector<DTMap::iterator>& externalfilelist
         
         if (intIndex >= internalfilelist.size()) 
 		{
-            // Solo in EXTERNAL
+            // Only in EXTERNAL
 			soloesterni.push_back(externalfilelist[extIndex]->first);
             esternisize+=externalfilelist[extIndex]->second.size;
             extIndex++;
         }
         else if (extIndex >= externalfilelist.size()) 
 		{
-            // Solo in INTERNAL
+            // Only in INTERNAL
         	solointerni.push_back(internalfilelist[intIndex]->first);
 			internisize+=internalfilelist[intIndex]->second.size;
             intIndex++;
@@ -83084,7 +86439,7 @@ std::string get_top_level_folder(const std::string& path)
 		
 	myprintf("DEBUG: Input path = '%s' (length: %d)\n", path.c_str(), path.length());
     
-    // Caso vuoto
+    // Empty case
     if (path.empty()) 
 	{
 		myprintf("DEBUG: Path is empty, returning empty string\n");
@@ -83094,21 +86449,21 @@ std::string get_top_level_folder(const std::string& path)
     std::string working_path = path;
 	myprintf("DEBUG: Initial working_path = '%s'\n", working_path.c_str());
     
-    // Se il path termina con '/', è già una cartella - restituiscila così com'è
+    // If the path ends with '/', it's already a folder - return it as is
     if (working_path.length() > 1 && working_path.back() == '/') 
 	{
 		myprintf("DEBUG: Path ends with '/', returning as-is: '%s'\n", working_path.c_str());
         return working_path;
     }
     
-    // Gestione speciale per percorsi UNC (//server/share)
+    // Special handling for UNC paths (//server/share)
     if (working_path.length() >= 2 && working_path[0] == '/' && working_path[1] == '/') 
 	{
 		myprintf("DEBUG: UNC path detected\n");
         int slash_count = 0;
         size_t pos 		= 2;
         
-        // Trova il secondo slash dopo //
+        // Find the second slash after //
         for (size_t i = 2; i < working_path.length(); i++) 
             if (working_path[i] == '/') 
 			{
@@ -83121,7 +86476,7 @@ std::string get_top_level_folder(const std::string& path)
                 }
             }
         
-        // Se abbiamo trovato almeno il server e lo share, restituisci fino al secondo slash
+        // If we have found at least the server and the share, return up to the second slash
         if (slash_count >= 2) 
 		{
             std::string result = working_path.substr(0, pos + 1);
@@ -83130,25 +86485,25 @@ std::string get_top_level_folder(const std::string& path)
         } 
 		else 
 		{
-            // Solo server o server/share senza altro, restituisci tutto + /
+            // Only server or server/share with nothing else, return everything + /
             std::string result = working_path + "/";
 			myprintf("DEBUG: UNC partial result = '%s'\n", result.c_str());
             return result;
         }
     }
     
-    // Per un file, cerca l'ultimo slash e restituisci la cartella che lo contiene
+    // For a file, find the last slash and return the folder that contains it
     size_t last_slash = working_path.find_last_of('/');
    	myprintf("DEBUG: Last slash position = %d\n", last_slash);
     
-    // Se non c'è slash, è un file/cartella nella directory corrente
+    // If there is no slash, it's a file/folder in the current directory
     if (last_slash == std::string::npos) 
 	{
 		myprintf("DEBUG: No slash found, returning empty string\n");
         return "";
     }
     
-    // Restituisci tutto fino all'ultimo slash (incluso)
+    // Return everything up to the last slash (inclusive)
     std::string result = working_path.substr(0, last_slash + 1);
 	myprintf("DEBUG: Final result = '%s'\n", result.c_str());
     return result;
@@ -83196,7 +86551,8 @@ int Jidac::testverify()
 		files_count.push_back(edt.size()-howmanyfiles);
 		howmanyfiles=edt.size();
 	}
-	myprintf("\n");
+	eol();
+	///myprintf("\n");
 	printbar('-');
  	for (unsigned i=0; i<files.size(); ++i)
 		if (direxists(files[i]))
@@ -83565,7 +86921,8 @@ int Jidac::sync()
 		files_count.push_back(edt.size()-howmanyfiles);
 		howmanyfiles=edt.size();
 	}
-	myprintf("\n");
+	eol();
+	///myprintf("\n");
 ///	printbar('-');
  	for (unsigned i=0; i<files.size(); ++i)
 		if (direxists(files[i]))
@@ -83578,7 +86935,7 @@ int Jidac::sync()
 	if (flagdebug3)
 	{
 		int j=0;
-		for (DTMap::iterator a = dt.begin(); a != dt.end(); a++) // Nota: non incrementare qui
+		for (DTMap::iterator a = dt.begin(); a != dt.end(); a++) // Note: do not increment here
 		{
 			j++;
 			if (j==10)
@@ -83601,8 +86958,8 @@ int Jidac::sync()
 	vector<DTMap::iterator> internalfilelist;
 
 	// Pre-allocare spazio conosciuto
-	externalfilelist.reserve(edt.size());  // Sappiamo già la dimensione
-	internalfilelist.reserve(dt.size());   // Evita reallocazioni
+	externalfilelist.reserve(edt.size());  // We already know the size
+	internalfilelist.reserve(dt.size());   // Avoid reallocations
 
 /*
 	std::string filter=files[0]; //"c:/zpaqfranz/va*.cpp";
@@ -83620,7 +86977,7 @@ int Jidac::sync()
 	if (flagdebug3)
 	{
 		int i=0;
-		for (DTMap::iterator a = dt.begin(); a != dt.end(); a++) // Nota: non incrementare qui
+		for (DTMap::iterator a = dt.begin(); a != dt.end(); a++) // Note: do not increment here
 		{
 			i++;
 			if (i==10)
@@ -83628,7 +86985,7 @@ int Jidac::sync()
 			myprintf("pre dt %s\n",a->first.c_str());
 		}		
 	}
-	for (DTMap::iterator a = dt.begin(); a != dt.end(); a++) // Nota: non incrementare qui
+	for (DTMap::iterator a = dt.begin(); a != dt.end(); a++) // Note: do not increment here
 	{
 		if (flagdebug3)
 			myprintf("DEBUG3: New dt %s\n",a->first.c_str());
@@ -84161,8 +87518,9 @@ int Jidac::count()
 #else
 
 	scandir(false,thedt,file1,false);
-	printbar(' ',false);
-	myprintf("\r");
+	eol();
+	///printbar(' ',false);
+	///myprintf("\r");
 #endif // corresponds to #ifdef (#ifdef unix)
 
 	if (thedt.size()==0)
@@ -84243,7 +87601,7 @@ double calculate_entropy(std::string filename)
     {
         bytes_read = fread(buffer, 1, sizeof(buffer), file);
         if (bytes_read == 0) {
-            break; // EOF raggiunto o errore
+            break; // EOF reached or error
         }
         
         for (size_t i = 0; i < bytes_read; i++) 
@@ -84253,7 +87611,7 @@ double calculate_entropy(std::string filename)
         }
     }
     
-    // Controlla se c'è stato un errore di lettura
+    // Check if there was a read error
     if (ferror(file)) 
     {
         myprintf("82874: error reading file %s\n", filename.c_str());
@@ -84265,7 +87623,7 @@ double calculate_entropy(std::string filename)
     
     if (total_bytes == 0) 
     {
-        myprintf("82900: File empty %s è vuoto\n", filename.c_str());
+        myprintf("82900: File empty %s is empty\n", filename.c_str());
         return -1.0;
     }
     
@@ -84282,7 +87640,7 @@ double calculate_entropy(std::string filename)
     
     return entropy;
 }
-/* Funzione per valutare l'idoneità come chiave crittografica */
+// check encrypt key
 int evaluate_key_suitability(double entropy,bool i_dooutput=false) 
 {
 	if (i_dooutput)
@@ -84327,7 +87685,7 @@ int evaluate_key_suitability(double entropy,bool i_dooutput=false)
 // Alfabeto Base58 (Bitcoin style)
 const char* BASE58_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 
-// Converte un carattere esadecimale in valore numerico
+// Convert a hexadecimal character to a numeric value
 int hexCharToInt(char c) {
     if (c >= '0' && c <= '9') return c - '0';
     if (c >= 'a' && c <= 'f') return c - 'a' + 10;
@@ -84335,7 +87693,7 @@ int hexCharToInt(char c) {
     throw std::invalid_argument("Carattere non valido in input esadecimale");
 }
 
-// Converte una stringa esadecimale in vettore di byte (big-endian)
+// Convert a hexadecimal string to a byte vector (big-endian)
 std::vector<uint8_t> hexToBytes(const std::string& hex) {
     if (hex.size() % 2 != 0)
         throw std::invalid_argument("La stringa hex deve avere lunghezza pari");
@@ -84351,7 +87709,7 @@ std::vector<uint8_t> hexToBytes(const std::string& hex) {
     return bytes;
 }
 
-// Divide "number" (base 256) per 58, restituisce resto e aggiorna number col quoziente
+// Divide "number" (base 256) by 58, return remainder and update number with quotient
 uint8_t divmod58(std::vector<uint8_t>& number) {
     int remainder = 0;
     for (size_t i = 0; i < number.size(); i++) {
@@ -84359,18 +87717,18 @@ uint8_t divmod58(std::vector<uint8_t>& number) {
         number[i] = temp / 58;
         remainder = temp % 58;
     }
-    // Rimuove zeri all'inizio
+    // Remove leading zeros
     while (!number.empty() && number[0] == 0) {
         number.erase(number.begin());
     }
     return static_cast<uint8_t>(remainder);
 }
 
-// Converte esadecimale in Base58
+// Convert hexadecimal to Base58
 std::string hexToBase58(const std::string& hex) {
     std::vector<uint8_t> bytes = hexToBytes(hex);
     
-    // Conta quanti zeri all'inizio (in byte, cioè 0x00)
+    // Count how many zeros at the beginning (in bytes, i.e. 0x00)
     size_t zeroCount = 0;
     for (size_t i = 0; i < bytes.size(); i++) {
         if (bytes[i] == 0) zeroCount++;
@@ -84381,24 +87739,24 @@ std::string hexToBase58(const std::string& hex) {
     // Copia vettore perché lo modifichiamo
     std::vector<uint8_t> temp = bytes;
     
-    // Dividiamo ripetutamente per 58
+    // We repeatedly divide by 58
     while (!temp.empty()) {
         uint8_t mod = divmod58(temp);
         result.push_back(BASE58_ALPHABET[mod]);
     }
     
-    // Aggiunge '1' per ogni zero iniziale
+    // Add '1' for each leading zero
     for (size_t i = 0; i < zeroCount; i++) {
         result.push_back('1');
     }
     
-    // La stringa è in ordine inverso
+    // The string is in reverse order
     std::reverse(result.begin(), result.end());
     return result;
 }
 
 // ---
-// Esempio di utilizzo (commenta o rimuovi in produzione)
+// Example of use (comment or remove in production)
 // int main() {
 //     std::string hexInput = "0000000000000000000000000000000000000000000000000000000000000000" // 64 zeri (32 byte)
 //                             "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"; // 64 F (32 byte)
@@ -84411,7 +87769,7 @@ std::string hexToBase58(const std::string& hex) {
 //     return 0;
 // }
 
-// Mappa inversa per trovare l'indice di un carattere Base58
+// Reverse map to find the index of a Base58 character
 int base58CharToValue(char c) {
     for (int i = 0; i < 58; ++i) {
         if (BASE58_ALPHABET[i] == c) {
@@ -84421,22 +87779,22 @@ int base58CharToValue(char c) {
     throw std::invalid_argument("Carattere non valido nell'input Base58");
 }
 
-// Converte un vettore di byte (numero grande in base 256) in una stringa esadecimale
+// Convert a byte vector (large number in base 256) to a hexadecimal string
 std::string bytesToHex(const std::vector<uint8_t>& bytes) {
     std::string hexString;
-    hexString.reserve(bytes.size() * 2); // Ogni byte diventa 2 caratteri esadecimali
+    hexString.reserve(bytes.size() * 2); // Each byte becomes 2 hex characters
     const char* hexDigits = "0123456789abcdef";
     
     for (size_t i = 0; i < bytes.size(); i++) {
         uint8_t byte = bytes[i];
-        hexString.push_back(hexDigits[(byte >> 4) & 0x0F]); // Nibble superiore
-        hexString.push_back(hexDigits[byte & 0x0F]);         // Nibble inferiore
+        hexString.push_back(hexDigits[(byte >> 4) & 0x0F]); // Upper nibble
+        hexString.push_back(hexDigits[byte & 0x0F]);         // Lower nibble
     }
     
     return hexString;
 }
 
-// Moltiplica "number" (base 256) per 58 e aggiunge "digit", restituisce il nuovo numero
+// Multiply "number" (base 256) by 58 and add "digit", return the new number
 void muladd256(std::vector<uint8_t>& number, int digit) {
     int carry = digit;
     for (size_t i = 0; i < number.size(); ++i) {
@@ -84450,11 +87808,11 @@ void muladd256(std::vector<uint8_t>& number, int digit) {
     }
 }
 
-// Converte Base58 in Esadecimale
+// Convert Base58 to Hexadecimal
 std::string base58ToHex(const std::string& base58) {
-    std::vector<uint8_t> bytes(1, 0); // Inizia con un singolo byte a zero
+    std::vector<uint8_t> bytes(1, 0); // Start with a single zero byte
     
-    // Controlla e conta gli '1' iniziali
+    // Check and count the leading '1's
     size_t leadingOnes = 0;
     for (size_t j = 0; j < base58.length(); j++) {
         char c = base58[j];
@@ -84465,30 +87823,30 @@ std::string base58ToHex(const std::string& base58) {
         }
     }
     
-    // Processa i caratteri Base58, ignorando gli '1' iniziali per l'aritmetica
+    // Process Base58 characters, ignoring initial '1's for arithmetic
     for (size_t i = leadingOnes; i < base58.length(); ++i) {
         int digit = base58CharToValue(base58[i]);
-        // Questa implementazione elabora i byte in ordine inverso,
-        // quindi dobbiamo invertire prima e poi gestire i riporti
-        // Un approccio più semplice per evitare l'inversione continua sarebbe usare una libreria BigInt
-        // Ma per rimanere con vector<uint8_t> semplici, facciamo così.
-        // In realtà, l'algoritmo standard decodifica da sinistra a destra accumulando il risultato.
-        // L'algoritmo corretto per la decodifica è: risultato = risultato * 58 + digit
-        // Poiché operiamo su un vettore di byte, è una "big integer multiplication and addition"
+        // This implementation processes bytes in reverse order,
+        // so we need to invert first and then handle the carries
+        // A simpler approach to avoid continuous inversion would be to use a BigInt library
+        // But to stick with simple vector<uint8_t>, we do this.
+        // In reality, the standard algorithm decodes from left to right accumulating the result.
+        // The correct decoding algorithm is: result = result *58 + digit
+        // On bytvector, it's a "big integer multiplication and addition"
         muladd256(bytes, digit);
     }
     
     // Gli zeri iniziali della stringa Base58 ('1's) corrispondono agli zeri iniziali nel vettore di byte
-    // Dobbiamo aggiungerli al risultato.
-    // L'array `bytes` è stato costruito con i byte meno significativi prima.
-    // Adesso lo dobbiamo invertire per ottenere l'ordine big-endian.
+    // We must add them to the result.
+    // The `bytes` array was built with the least significant bytes first.
+    // Now we must invert it to obtain the big-endian order.
     std::reverse(bytes.begin(), bytes.end());
     
-    // Se ci sono zeri iniziali nel Base58 originale (gli '1'),
-    // dobbiamo aggiungerne di equivalenti al risultato in byte.
-    // L'algoritmo `muladd256` sposta gli zeri effettivi.
+    // If there are leading zeros in the original Base58 (the '1's),
+    // we must add equivalent ones to the result in bytes.
+    // The `muladd256` algorithm shifts the effective zeros.
     // Gli '1' iniziali nella stringa base58 rappresentano byte 0x00.
-    // Dobbiamo pre-appendere il numero corretto di 0x00 byte.
+    // We must pre-append the correct number of 0x00 bytes.
     std::vector<uint8_t> finalBytes;
     finalBytes.reserve(bytes.size() + leadingOnes);
     
@@ -84496,9 +87854,9 @@ std::string base58ToHex(const std::string& base58) {
         finalBytes.push_back(0x00);
     }
     
-    // Rimuovi eventuali zeri iniziali spurii generati dall'aritmetica prima di copiare
-    // Questo è fondamentale perché `muladd256` potrebbe aggiungere zeri se il primo numero è 0.
-    size_t firstNonZero = 0;
+    // Remove any spurious leading zeros generated by the arithmetic before copying
+    // Useful because  `muladd256` can add zeros
+	size_t firstNonZero = 0;
     while (firstNonZero < bytes.size() && bytes[firstNonZero] == 0) {
         firstNonZero++;
     }
@@ -84507,31 +87865,31 @@ std::string base58ToHex(const std::string& base58) {
         finalBytes.push_back(bytes[i]);
     }
     
-    // Gestione del caso di stringa Base58 vuota o solo '1's
+    // Handling the case of an empty or '1's only Base58 string
     if (finalBytes.empty()) {
-        return "00"; // Rappresenta un valore 0 in esadecimale
+        return "00"; // Represents a 0 value in hexadecimal
     }
     
     return bytesToHex(finalBytes);
 }
 
-// NOTA BENE: L'implementazione di `muladd256` sopra è semplificata e costruisce il numero "al contrario"
-// (il byte meno significativo è all'indice 0). Per una corretta decodifica Base58 (big-endian),
-// il vettore `bytes` dovrebbe essere trattato come un numero grande in cui `bytes[0]` è il byte più significativo.
+// NOTE: The `muladd256` implementation above is simplified and builds the number "backwards"
+// (the least significant byte is at index 0). For a correct Base58 decoding (big-endian),
+// `bytes` can be a big number
 
-// Rivediamo la logica di base58ToHex e muladd256 per essere compliant con big-endian e l'algoritmo standard.
+// Let's review the logic of base58ToHex and muladd256 to be compliant with big-endian and the standard algorithm.
 
-// Algoritmo di decodifica Base58 standard:
-// Il numero risultante è inizializzato a 0.
-// Per ogni carattere nella stringa Base58:
-//   Il numero risultante è moltiplicato per 58.
-//   Si aggiunge il valore del carattere corrente.
+// Standard Base58 decoding algorithm:
+// The resulting number is initialized to 0.
+// For each character in the Base58 string:
+//   The resulting number is multiplied by 58.
+//   The value of the current character is added.
 
-// Per implementare questo con un vector<uint8_t> big-endian:
+// To implement this with a big-endian vector<uint8_t>:
 std::vector<uint8_t> base58ToBytesCorrected(const std::string& base58) {
     std::vector<uint8_t> resultBytes;
     
-    // Gestisci gli '1' iniziali
+    // Handle the leading '1's
     size_t leadingOnes = 0;
     for (size_t k = 0; k < base58.length(); k++) {
         char c = base58[k];
@@ -84542,12 +87900,12 @@ std::vector<uint8_t> base58ToBytesCorrected(const std::string& base58) {
         }
     }
     
-    // Decodifica i caratteri Base58 rimanenti
+    // Decode the remaining Base58 characters
     for (size_t i = leadingOnes; i < base58.length(); ++i) {
         int digit = base58CharToValue(base58[i]);
-        // Implementa result = result * 58 + digit
-        // Lavora sui byte dal meno significativo al più significativo (dal fondo del vettore)
-        // per gestire i riporti.
+        // Implement result = result * 58 + digit
+        // Work on the bytes from least significant to most significant (from the end of the vector)
+        // to handle carries.
         int carry = digit;
         for (size_t j = 0; j < resultBytes.size(); ++j) {
             int temp = resultBytes[j] * 58 + carry;
@@ -84560,30 +87918,30 @@ std::vector<uint8_t> base58ToBytesCorrected(const std::string& base58) {
         }
     }
     
-    // Aggiungi gli zeri iniziali per ogni '1' nel Base58
+    // Add leading zeros for each '1' in Base58
     for (size_t i = 0; i < leadingOnes; ++i) {
         resultBytes.push_back(0);
     }
     
-    // Inverti il vettore per ottenere l'ordine big-endian
+    // Invert the vector to get big-endian order
     std::reverse(resultBytes.begin(), resultBytes.end());
     
-    // Rimuovi eventuali zeri iniziali extra che non corrispondono a un '1' nel Base58
-    // (possono verificarsi se il numero decodificato inizia effettivamente con 0 ma non c'erano '1' espliciti)
+    // Remove any extra leading zeros that do not correspond to a '1' in Base58
+    // (can occur if the decoded number actually starts with 0 but there were no explicit '1's)
     size_t firstNonZero = 0;
     while (firstNonZero < resultBytes.size() - 1 && resultBytes[firstNonZero] == 0) {
         firstNonZero++;
     }
     resultBytes.erase(resultBytes.begin(), resultBytes.begin() + firstNonZero);
     
-    // Gestione del caso in cui la stringa Base58 era solo '1's o vuota
+    // Handling the case where the Base58 string was only '1's or empty
     if (resultBytes.empty() && leadingOnes == 0) {
-        // Se la stringa era vuota o solo '1's, e non c'erano '1' specifici, il valore è 0
+        // If the string was empty or only '1's, and there were no specific '1's, the value is 0
         std::vector<uint8_t> singleZero;
         singleZero.push_back(0x00);
-        return singleZero; // Un singolo byte 0
+        return singleZero; // A single byte 0
     } else if (resultBytes.empty() && leadingOnes > 0) {
-        // Se la stringa era solo '1's, il risultato è tanti 0x00 quanti '1'
+        // If the string was only '1's, the result is as many 0x00s as there were '1's
         std::vector<uint8_t> zeros(leadingOnes, 0x00);
         return zeros;
     }
@@ -84591,11 +87949,11 @@ std::vector<uint8_t> base58ToBytesCorrected(const std::string& base58) {
     return resultBytes;
 }
 
-// Funzione finale da chiamare
+// Final function to call
 std::string base58ToHexWrapper(const std::string& base58) {
     std::vector<uint8_t> bytes = base58ToBytesCorrected(base58);
     if (bytes.empty()) {
-        return ""; // O "00" a seconda di come vuoi rappresentare lo zero
+        return ""; // Or "00" depending on how you want to represent zero
     }
     return bytesToHex(bytes);
 }
@@ -84637,7 +87995,7 @@ string Jidac::keyfile_to_string(string i_keyfile)
 		}
 		franz_do_hash dummy("WHIRLPOOL");
 		int64_t starthash=mtime();
-		string 	hashkeyfile=dummy.filehash(i_keyfile,false,starthash,dimensionekeyfile);
+		string 	hashkeyfile=dummy.filehash(0,i_keyfile,false,starthash,dimensionekeyfile);
 		if (hashkeyfile=="")
 		{
 			myprintf("83420: Cannot get keyfile hash\n");
@@ -84667,20 +88025,20 @@ string Jidac::keyfile_to_string(string i_keyfile)
 
 std::string translateString(const std::string& input) 
 {
-    // Costanti di configurazione
-    const int COLUMNS = 5;                    // Numero di colonne
-    const int COLUMN_SPACING = 0;             // Spazi tra le colonne
-    const char* UPPERCASE_LABEL = "UP";    // Etichetta per maiuscole
+    // Configuration constants
+    const int COLUMNS = 5;                    // Number of columns
+    const int COLUMN_SPACING = 0;             // Spaces between columns
+    const char* UPPERCASE_LABEL = "UP";    // Label for uppercase
     const int PHONETIC_WIDTH = 9;             // Larghezza campo fonetico (%-5s)
-    const int ALIGNMENT_SPACES = strlen(UPPERCASE_LABEL);  // Spazi di allineamento basati su lunghezza etichetta
+    const int ALIGNMENT_SPACES = strlen(UPPERCASE_LABEL);  // Alignment spaces based on label length
     
-    // Array per le cifre
+    // Array for digits
     const char* digits[] = {
         "ZERO", "ONE", "TWO", "THREE", "FOUR",
         "FIVE", "SIX", "SEVEN", "EIGHT", "NINE"
     };
     
-    // Array per l'alfabeto fonetico ICAO maiuscolo
+    // Array for the uppercase ICAO phonetic alphabet
     const char* phonetic_upper[] = {
         "ALPHA", "BRAVO", "CHARLIE", "DELTA", "ECHO",
         "FOXTROT", "GOLF", "HOTEL", "INDIA", "JULIET",
@@ -84689,7 +88047,7 @@ std::string translateString(const std::string& input)
         "UNIFORM", "VICTOR", "WHISKEY", "XRAY", "YANKEE", "ZULU"
     };
     
-    // Array per l'alfabeto fonetico ICAO minuscolo
+    // Array for the lowercase ICAO phonetic alphabet
     const char* phonetic_lower[] = {
         "alpha", "bravo", "charlie", "delta", "echo",
         "foxtrot", "golf", "hotel", "india", "juliet",
@@ -84698,25 +88056,25 @@ std::string translateString(const std::string& input)
         "uniform", "victor", "whiskey", "xray", "yankee", "zulu"
     };
     
-    std::string result;  // Stringa da ritornare
+    std::string result;  // String to return
     
-    // Calcola il numero di righe (divisione per COLUMNS con arrotondamento per eccesso)
+    // Calculate the number of rows (division by COLUMNS with rounding up)
     size_t rows = (input.length() + COLUMNS - 1) / COLUMNS;
     
     for (size_t row = 0; row < rows; row++) {
-        std::string line;  // Riga corrente per la stringa di ritorno
+        std::string line;  // Current line for the return string
         
-        // Stampa COLUMNS caratteri per riga, affiancati
+        // Print COLUMNS characters per line, side by side
         for (int col = 0; col < COLUMNS; col++) {
-            size_t index = col * rows + row;  // Ordinamento per colonna
+            size_t index = col * rows + row;  // Sort by column
             
             if (index < input.length()) {
                 char c = input[index];
                 
-                // Costruisci la parte per la stringa di ritorno
+                // Build the part for the return string
                 char buffer[100];
                 
-                // Stampa l'indice (sia su console che nella stringa)
+                // Print the index (both on the console and in the string)
                 snprintf(buffer,sizeof(buffer), "|%02d ", (int)index+1);
                 line += buffer;
                 printf("|%02d ", (int)index+1);
@@ -84728,18 +88086,18 @@ std::string translateString(const std::string& input)
                 color_restore();
                 
                 if (c >= '0' && c <= '9') {
-                    // Cifra
+                    // Digit
                     color_cyan();
                     snprintf(buffer,sizeof(buffer), "%-*s", PHONETIC_WIDTH, digits[c - '0']);
                     line += buffer;
                     printf("%-*s", PHONETIC_WIDTH, digits[c - '0']);
                     color_restore();
-                    // Spazi per mantenere l'incolonnamento (lunghezza di UPPERCASE_LABEL)
+                    // Spaces to maintain column alignment (length of UPPERCASE_LABEL)
                     line += std::string(ALIGNMENT_SPACES, ' ');
                     printf("%*s", ALIGNMENT_SPACES, "");
                 }
                 else if (c >= 'A' && c <= 'Z') {
-                    // Lettera maiuscola
+                    // Uppercase letter
                     color_cyan();
                     snprintf(buffer,sizeof(buffer),"%-*s", PHONETIC_WIDTH, phonetic_upper[c - 'A']);
                     line += buffer;
@@ -84751,7 +88109,7 @@ std::string translateString(const std::string& input)
                     color_restore();
                 }
                 else if (c >= 'a' && c <= 'z') {
-                    // Lettera minuscola
+                    // Lowercase letter
                     color_cyan();
                     snprintf(buffer,sizeof(buffer), "%-*s", PHONETIC_WIDTH, phonetic_lower[c - 'a']);
                     line += buffer;
@@ -84761,7 +88119,7 @@ std::string translateString(const std::string& input)
                     printf("%*s", ALIGNMENT_SPACES, "");
                 }
                 else {
-                    // Carattere speciale o altro
+                    // Special character or other
                     color_red();
                     line += "ERROR!";
                     printf("ERROR!");
@@ -84770,14 +88128,14 @@ std::string translateString(const std::string& input)
                 }
             }
             
-            // Spaziatura tra le colonne (tranne dopo l'ultima)
+            // Spacing between columns (except after the last one)
             if (col < COLUMNS - 1) {
                 line += std::string(COLUMN_SPACING, ' ');
                 printf("%*s", COLUMN_SPACING, "");
             }
         }
         
-        // Aggiungi la riga al risultato e stampa il newline
+        // Add the line to the result and print the newline
         result += line + "\n";
         printf("\n");
     }
@@ -84956,7 +88314,7 @@ int Jidac::work()
 	
 		for (unsigned i=0; i<files.size(); ++i)
 			scandir(true,edt,files[i].c_str());
-		
+		eol();
 		if (!edt.empty()) 
 		{
 			if (!flagterse)
@@ -84989,7 +88347,8 @@ int Jidac::work()
 	
 		for (unsigned i=0; i<files.size(); ++i)
 			scandir(true,edt,files[i].c_str());
-		myprintf("\r");
+		
+		///myprintf("\r");
 		eol();
 		int64_t dimensionetotale=0;
 		int		scritti=0;
@@ -85238,7 +88597,7 @@ int Jidac::work()
 			franz_do_hash dummy("WHIRLPOOL");
 			int64_t starthash=mtime();
 			int64_t dimensionekeyfile=prendidimensionefile(keyfile.c_str());
-			string 	hashkeyfile=dummy.filehash(keyfile,false,starthash,dimensionekeyfile);
+			string 	hashkeyfile=dummy.filehash(0,keyfile,false,starthash,dimensionekeyfile);
 			if (hashkeyfile=="")
 			{
 				myprintf("83420: Cannot get hash\n");
@@ -85344,7 +88703,7 @@ int Jidac::work()
 		}
 		
 		
-		// Controlla se il numero totale di parametri è dispari (escluso il primo)
+		// Check if the total number of parameters is odd (excluding the first)
 		int risultato=0;
 		if ((files.size() - 1) % 2 != 0)
 		{
@@ -85356,7 +88715,7 @@ int Jidac::work()
 	
 		for (unsigned int i = 1; i < files.size(); i += 2)
 		{
-			// Verifica che ci sia una coppia completa (percorso + spazio)
+			// Check that there is a complete pair (path + space)
 			if (i + 1 >= files.size())
 			{
 				myprintf("84438! Path '%s' without minimum space\n", files[i].c_str());
@@ -85374,25 +88733,25 @@ int Jidac::work()
 			if (spaziominimo < 0)
 				spaziominimo = 0;
 			
-			// Calcolo del risultato
+			// Calculation of the result
 			string status;
 			if (spaziominimo == 0)
 			{
-				status = "OK"; // Se non c'è requisito minimo, è sempre OK
+				status = "OK"; // If there is no minimum requirement, it's always OK
 				color_green();
 			}
-			else if (spaziopresente >= spaziominimo * 1.1) // Almeno 10% in più del minimo
+			else if (spaziopresente >= spaziominimo * 1.1) // +10%
 			{
 				status = "OK";
 				color_green();
 			}
-			else if (spaziopresente >= spaziominimo) // Sopra il minimo ma sotto il 10%
+			else if (spaziopresente >= spaziominimo) // Above but <10%
 			{
 				status = "WARN";
 				color_yellow();
 				risultato=2;
 			}
-			else // Sotto il minimo
+			else // Below the minimum
 			{
 				status = "ERROR";
 				color_red();
@@ -85410,6 +88769,181 @@ int Jidac::work()
 		return risultato;
 		
 	}
+#ifdef ZPAQFULL ///NOSFTPSTART
+
+	if ((mycommand=="encode") || (mycommand=="decode"))
+	{
+		bool flagencode=(mycommand=="encode");
+		string myencode		="decode";
+		string myencrypted	="decrypted";
+		
+		if (flagencode)
+		{
+			myencode		="encode";
+			myencrypted		="encrypted";
+		}
+		if (flagdebug)
+			for (unsigned int i=0;i<files.size();i++)
+				myprintf("85465: %03d %s\n",i,files[i].c_str());
+		
+		if ((files.size()!=4))
+		{
+			myprintf("83418! for %s you need 1) source file 2) dest %s file 3) password (the longer the better)\n",myencode.c_str(),myencrypted.c_str());
+			return 2;
+		}
+		
+		string input_filename	=files[1];
+		string output_filename	=files[2];
+		string thepassword		=files[3];
+		
+		int threads=howmanythreads;
+		if (threads<=0)
+			threads=1;
+		if (!flagssd)
+			threads=1;
+		
+		int64_t dimensione=prendidimensionefile(input_filename.c_str());
+		int64_t startenc=mtime();
+		bool success=false;
+			
+		franzcri fc(thepassword);
+		
+		if (flagencode)
+		{
+			if (threads==1)
+				myprintf("86083: Single thread encrypting <<%s>> to <<%s>>\n", input_filename.c_str(), output_filename.c_str());
+			else
+				myprintf("86083: Multi thread encrypting <<%s>> to <<%s>> with %d...\n", input_filename.c_str(), output_filename.c_str(),threads);
+			success = fc.encode_parallela(input_filename.c_str(), output_filename.c_str(),threads);
+		}
+		else
+		{
+			if (threads==1)
+				myprintf("86083: Single thread decrypting <<%s>> to <<%s>>\n", input_filename.c_str(), output_filename.c_str());
+			else
+				myprintf("86083: Multi thread decrypting <<%s>> to <<%s>> with %d...\n", input_filename.c_str(), output_filename.c_str(),threads);
+			success = fc.decode_parallela(input_filename.c_str(), output_filename.c_str(),threads);
+		}
+
+		double  tempo=(mtime()-startenc)/1000.0;
+		
+		eol();
+		if (success) 
+		{
+			color_green();
+			myprintf("OK %s (%s) in %f @ %s/s\n",migliaia(dimensione),tohuman(dimensione),tempo,tohuman2(dimensione/tempo));
+			color_restore();
+			return 0;
+		} 
+		else 
+		{
+			color_red();
+			myprintf("!FAILED!\n");
+			color_restore();
+			return 2;
+		}
+		return 2;
+		
+			
+			/*
+			franz_do_hash dummy("CRC-32");
+			string crc32_reloaded=dummy.filehash(128,output_filename,false,0,prendidimensionefile(output_filename.c_str()));
+			myprintf("CRC32 reloaded %s\n",crc32_reloaded.c_str());
+			*/
+	}
+	
+
+	if ((mycommand=="encodecheck") || (mycommand=="decodecheck"))
+	{
+		if (flagdebug)
+			for (unsigned int i=0;i<files.size();i++)
+				myprintf("85465: %03d %s\n",i,files[i].c_str());
+		
+		if ((files.size()!=3))
+		{
+			myprintf("83218! for encodecheck you need 1) source file 2) password\n");
+			return 2;
+		}
+		
+		string input_filename	=files[1];
+		string thepassword		=files[2];
+		
+		int threads=howmanythreads;
+		if (threads<=0)
+			threads=1;
+		if (!flagssd)
+			threads=1;
+		
+		int64_t dimensione=prendidimensionefile(input_filename.c_str());
+		int64_t startenc=mtime();
+		bool success=false;		
+				
+		franzcri fc(thepassword);
+		if (threads==1)
+			myprintf("86183: Single thread verify <<%s>>\n", input_filename.c_str());
+		else
+			myprintf("86083: Multi thread verify <<%s>> with %d...\n", input_filename.c_str(), threads);
+		success = fc.decode_parallela(input_filename.c_str(), NULL,threads);
+		
+		double  tempo=(mtime()-startenc)/1000.0;
+		
+		eol();
+		if (success) 
+		{
+			color_green();
+			myprintf("OK %s (%s) in %f @ %s/s\n",migliaia(dimensione),tohuman(dimensione),tempo,tohuman2(dimensione/tempo));
+			color_restore();
+			return 0;
+		} 
+		else 
+		{
+			color_red();
+			myprintf("!FAILED!\n");
+			color_restore();
+			return 2;
+		}
+		return 2;
+	}
+	
+	
+	if ((mycommand=="fulltest"))
+	{
+		if ((files.size()!=4))
+		{
+			myprintf("88160! for fulltest you need 1) source file 2) dest file base 3) password (the longer the better)\n");
+			return 2;
+		}
+		
+		string input_filename	=files[1];
+		string output_filename	=files[2];
+		string thepassword		=files[3];
+		
+		int threads=howmanythreads;
+		if (threads<=0)
+			threads=1;
+		if (!flagssd)
+			threads=1;
+
+		if (threads==1)
+			myprintf("84083: Single thread full test <<%s>> to <<%s>>\n", input_filename.c_str(), output_filename.c_str());
+		else
+			myprintf("82083: Multi thread full test <<%s>> to <<%s>> with %d...\n", input_filename.c_str(), output_filename.c_str(),threads);
+				
+		franzcri fc(thepassword);
+		bool success = fc.fulltest(input_filename.c_str(), output_filename.c_str(),thepassword,threads);
+		eol();
+		if (success) 
+			return 0;
+		return 2;
+	}
+
+	if (mycommand=="autotest")
+	{
+        franzcri fc("password123");
+        return fc.autotest() ? 0 : 2;
+	}
+#endif ///NOSFTPEND
+
 	myprintf("03441! Do not understand the command\n");
 	return 2;
 }
@@ -85571,7 +89105,7 @@ string shrinkstring(const string i_string,unsigned int i_len)
 	if (i_len>i_string.size())
 		return i_string;
 	 if (i_len < 4) 
-        return i_string.substr(0, i_len);  // Taglia semplicemente ai primi i_len caratteri
+        return i_string.substr(0, i_len);  // Simply cut to the first i_len characters
     int head_len = (i_len - 3) / 2;
     int tail_len = i_len - 3 - head_len;
     return i_string.substr(0, head_len)+"..."+i_string.substr(i_string.length() - tail_len);
@@ -85908,8 +89442,6 @@ int Jidac::list715()
 
 int Jidac::extract()
 {
-	
-
 	archive=getbackupnameifany(archive);
 	
 	if (flagcomment && flagrange)
@@ -87259,7 +90791,7 @@ int Jidac::extract()
 							franz_do_hash dummy(p->second.hashtype);
 							if (flagdebug3)
 								myprintf("00980: filehash on %s\n",fn.c_str());
-							string hashfromfile=dummy.filehash(fn,false,inizio,dimensionetotale);
+							string hashfromfile=dummy.filehash(0,fn,false,inizio,dimensionetotale);
 							if (hashfromfile==p->second.hexhash)
 							{
 								lavorati+=dummy.o_thefilesize;
@@ -88088,7 +91620,7 @@ std::string sftp_get_quick(const std::string& i_remotefile, int64_t& o_filesize,
         return "";
     }
 
-    // Usa una singola istanza per tutta l'operazione
+    // Use a single instance for the entire operation
     zpaqfranzsftp2 client;
 	if (g_sftp_key!="")
 		client.setConnectionSSH(g_sftp_host, g_sftp_port, g_sftp_user, g_sftp_key);
@@ -88100,7 +91632,7 @@ std::string sftp_get_quick(const std::string& i_remotefile, int64_t& o_filesize,
         return "";
     }
 
-    // Ottieni dimensione file remoto
+    // Get file size remoto
     o_filesize = client.remotegetfilesize(i_remotefile);
     if (flagdebug3)
         myprintf("07809: remotefilesize %s\n", migliaia(o_filesize));
@@ -88126,7 +91658,7 @@ std::string sftp_get_quick(const std::string& i_remotefile, int64_t& o_filesize,
         std::string file0 = g_gettempdirectory() + "pezzo0.bin";
         file0 = nomefileseesistegia(file0);
 
-        // Usa lo stesso client per il download
+        // Use the same client for the download
         if (!client.downfilerange(i_remotefile, file0, 0, o_filesize - 1, false))
         {
             myprintf("86390: Errore download file %s\n", file0.c_str());
@@ -88139,7 +91671,7 @@ std::string sftp_get_quick(const std::string& i_remotefile, int64_t& o_filesize,
         franz_do_hash dummyquick("QUICK");
         g_dimensione = 0;
         int64_t startverify = mtime();
-        std::string temp = dummyquick.filehash(file0, false, startverify, prendidimensionefile(file0.c_str()));
+        std::string temp = dummyquick.filehash(0,file0, false, startverify, prendidimensionefile(file0.c_str()));
         o_time = (mtime() - startverify) / 1000.0;
         delete_file(file0.c_str());
         return temp;
@@ -88158,7 +91690,7 @@ std::string sftp_get_quick(const std::string& i_remotefile, int64_t& o_filesize,
         if (flagdebug3)
             myprintf("07829: Scaricamento 3 chunk per %s\n", i_remotefile.c_str());
 
-        // Usa lo stesso client per down3
+        // Use the same client for down3
 	   if (!client.down3(o_filesize, i_remotefile, file1, file2, file3))
         {
             myprintf("86390: Errore download 3 chunk per %s\n", i_remotefile.c_str());
@@ -88231,7 +91763,7 @@ double& o_time)
 	franz_do_hash dummyquick("QUICK");
 	g_dimensione=0;
 	int64_t startverify=mtime();
-	o_localhash=dummyquick.filehash(i_localfile,false,startverify,prendidimensionefile(i_localfile.c_str()));
+	o_localhash=dummyquick.filehash(0,i_localfile,false,startverify,prendidimensionefile(i_localfile.c_str()));
 		myprintf("80093: Local  %s [%21s] from SFTP...\n",o_localhash.c_str(),migliaia(dummyquick.o_thefilesize));
 	
 	double	thetime;
@@ -88376,42 +91908,42 @@ int Jidac::sftp_dorsync()
 		}
 	}
 	
-	// Crea mappe per confronto veloce usando il nome completo del file (senza normalizzazione)
+	// Create maps for quick comparison using the full file name (without normalization)
 	std::map<string, sftpfileinfo> localmap;
 	std::map<string, sftpfileinfo> remotemap;
 
-	// Popola mappa locale
+	// Populate local map
 	for (unsigned int i = 0; i < localfiles.size(); i++) 
 	{
-		string filename = extractfilename(localfiles[i].name); // Nome completo, inclusi zeri
+		string filename = extractfilename(localfiles[i].name); // Full name, including zeros
 		localmap[filename] = localfiles[i];
 		if (flagdebug)
 			myprintf("Locale %08d %21s %s\n",i,migliaia(localfiles[i].size),filename.c_str());
 	}
 
-	// Popola mappa remota
+	// Populate remote map
 	for (unsigned int i = 0; i < remotefiles.size(); i++) 
 	{
-		string filename = extractfilename(remotefiles[i].name); // Nome completo, inclusi zeri
+		string filename = extractfilename(remotefiles[i].name); // Full name, including zeros
 		remotemap[filename] = remotefiles[i];
 		if (flagdebug)
 			myprintf("Remota %08d %21s %s\n",i,migliaia(remotefiles[i].size),filename.c_str());
 	}
 
 	// Vettori per le operazioni
-	std::vector<string> files_to_delete;    // File remoti da cancellare
-	std::vector<string> files_to_upload;    // File locali da caricare (nuovi)
-	std::vector<string> files_to_update;    // File da aggiornare (dimensione diversa)
+	std::vector<string> files_to_delete;    // Remote files to delete
+	std::vector<string> files_to_upload;    // Local files to upload (new)
+	std::vector<string> files_to_update;    // Files to update (dimensione diversa)
 
-	// 1. Trova file remoti da cancellare (esistono in remoto ma non in locale)
+	// 1. Find remote files to delete (exist remotely but not locally)
 	for (std::map<string, sftpfileinfo>::iterator it = remotemap.begin(); it != remotemap.end(); ++it) 
 	{
 		string filename = it->first;
 		if (localmap.find(filename) == localmap.end()) 
-			files_to_delete.push_back(it->second.name); // Nome completo con path
+			files_to_delete.push_back(it->second.name); // Full name with path
 	}
 
-	// 2. Trova file da caricare e da aggiornare
+	// 2. Find files to upload and update
 	for (std::map<string, sftpfileinfo>::iterator it = localmap.begin(); it != localmap.end(); ++it) 
 	{
 		string filename = it->first;
@@ -88421,14 +91953,14 @@ int Jidac::sftp_dorsync()
 		std::map<string, sftpfileinfo>::iterator remote_it = remotemap.find(filename);
 		if (remote_it == remotemap.end()) 
 		{
-			// File non esiste in remoto -> da caricare
+			// File does not exist remotely -> to upload
 			files_to_upload.push_back(localfile.name);
 		} 
 		else 
 		{
-			// File esiste in remoto -> controlla dimensione
+			// File exists remotely -> check size
 			sftpfileinfo remotefile = remote_it->second;
-				// Dimensione diversa -> da aggiornare
+				// Different size -> to be updated
 			if (localfile.size != remotefile.size) 
 				files_to_update.push_back(localfile.name);
 		}
@@ -88439,7 +91971,7 @@ int Jidac::sftp_dorsync()
 	eol();
 	myprintf("\n");
 	
-	// File da cancellare
+	// Files to delete
 	if (files_to_delete.size() > 0) 
 	{
 		color_red();
@@ -88492,7 +92024,7 @@ int Jidac::sftp_dorsync()
 	else 
 		myprintf("86897: UPDATE : No files to update\n");
 	
-	// Riepilogo
+	// Summary
 	int total_operations=files_to_delete.size()+files_to_upload.size()+files_to_update.size();
 	if (total_operations==0) 
 	{
@@ -88562,7 +92094,7 @@ int Jidac::sftp_dorsync()
 		howmanythreads=1;
 	
 	int errori=0;
-	// File da aggiornare
+	// Files to update
 	if (files_to_update.size() > 0) 
 	{
 		myprintf("86931: Starting update of %s for %s bytes\n",migliaia(files_to_update.size()),migliaia2(update_size));
@@ -88728,7 +92260,7 @@ int Jidac::sftp_doupload()
 			int64_t startverify=0;
 			g_dimensione = 0;
 			int64_t dummy=0;
-			std::string tempquick = dummyquick.filehash(localfile, false, startverify,dummy,thefilesize);
+			std::string tempquick = dummyquick.filehash(0,localfile, false, startverify,dummy,thefilesize);
 			if (tempquick!=thequickhash)
 			{
 				myprintf("\n");
@@ -88795,7 +92327,7 @@ std::string sftp_get_quick_remote(std::string remotepath,std::vector<sftpfileinf
 		sftpget3 entry;
 		entry.i_name = includetrailingbackslash(remotepath)+remotefiles[i].name;
 		
-		std::string index = std::to_string(i);  // formato "01", "02", etc.
+		std::string index = std::to_string(i);  // format "01", "02", etc.
 	
 		entry.i_file1 = g_gettempdirectory()+"uno_"+index;
 		entry.i_file1 = nomefileseesistegia(entry.i_file1);
@@ -88805,8 +92337,8 @@ std::string sftp_get_quick_remote(std::string remotepath,std::vector<sftpfileinf
 		entry.i_file3 = nomefileseesistegia(entry.i_file3);
 		
 		
-		entry.o_size = 0;     // da calcolare successivamente
-		entry.o_hash = "";    // da calcolare successivamente
+		entry.o_size = 0;     // to be calculated later
+		entry.o_hash = "";    // to be calculated later
 		quick_hash3.push_back(entry);
 	}
 		
@@ -88847,7 +92379,7 @@ std::string sftp_get_quick_remote(std::string remotepath,std::vector<sftpfileinf
 			franz_do_hash dummyquick("QUICK");
 			int64_t startverify=0;
 			g_dimensione = 0;
-			std::string temp = dummyquick.filehash(file1, false, startverify, quick_hash3[i].o_size);
+			std::string temp = dummyquick.filehash(0,file1, false, startverify, quick_hash3[i].o_size);
 			quick_hash3[i].o_hash=temp;
 		}
 		else
@@ -88942,7 +92474,7 @@ int Jidac::sftp_doquick()
 
 
 
-// Funzione per trovare un file per nome in un vettore di sftpget3
+// Function to find a file by name in a vector of sftpget3
 int findRemoteFile(const std::vector<sftpget3>& remotes, const std::string& fileName) 
 {
     for (unsigned int i = 0; i < remotes.size(); i++) 
@@ -88951,10 +92483,10 @@ int findRemoteFile(const std::vector<sftpget3>& remotes, const std::string& file
         if (remoteName == fileName) 
 		    return (int)i;
     }
-    return -1; // non trovato
+    return -1; // not found
 }
 
-// Funzione per trovare un file per nome in un vettore di sftpfileinfo
+// Function to find a file by name in a vector of sftpfileinfo
 int findLocalFile(const std::vector<sftpfileinfo>& locals, const std::string& fileName) 
 {
     for (unsigned int i = 0; i < locals.size(); i++) 
@@ -88963,41 +92495,41 @@ int findLocalFile(const std::vector<sftpfileinfo>& locals, const std::string& fi
         if (localName == fileName) 
 		    return (int)i;
     }
-    return -1; // non trovato
+    return -1; // not found
 }
 bool comparaquick(std::vector<sftpget3>& i_remoti, std::vector<sftpfileinfo>& i_locali) 
 {
     bool allMatch = true;
     
-    // Usa vector per tenere traccia dei file locali già controllati
+    // Use vector to keep track of already checked local files
     std::vector<bool> localChecked(i_locali.size(), false);
     
     if (flagverbose)
         myprintf("81373: Checking remote vs local\n");
     
-    // Controlla tutti i file remoti
+    // Check all remote files
     for (size_t i = 0; i < i_remoti.size(); i++) 
     {
         std::string remoteFileName = extractfilename(i_remoti[i].i_name);
         std::string remoteHash = i_remoti[i].o_hash;
         int64_t remoteSize = i_remoti[i].o_size;
         
-        // Cerca il file corrispondente nei locali
+        // Search for the corresponding file in locals
         int localIndex = findLocalFile(i_locali, remoteFileName);
         
         if (localIndex == -1) 
         {
-            // File presente solo in remoto
+            // File present only remotely
             myprintf("81387! NOT in local : %s (REMOTE idx:%d hash:%s size:%s)\n", 
                    remoteFileName.c_str(), i, remoteHash.c_str(), migliaia(remoteSize));
             allMatch = false;
         } 
         else 
         {
-            // Verifica che l'indice sia valido
+            // Check that the index is valid
             if (localIndex >= 0 && localIndex < static_cast<int>(i_locali.size())) 
             {
-                // File presente in entrambi - controlla hash e dimensione
+                // File present in both - check hash and size
                 localChecked[localIndex] = true;
                 
                 std::string localHash = i_locali[localIndex].hash;
@@ -89017,7 +92549,7 @@ bool comparaquick(std::vector<sftpget3>& i_remoti, std::vector<sftpfileinfo>& i_
                     myprintf("88407!  LOCAL  (idx:%d): size:%21s hash:%s\n", localIndex, migliaia(localSize), localHash.c_str());
                     allMatch = false;
                 }
-                // Se tutto OK, non stampa nulla (opzionale: decommenta la riga sotto per debug)
+                // If everything is OK, it prints nothing (optional: uncomment the line below for debugging)
                 // else { printf("OK: %s (hash:%s size:%lld)\n", remoteFileName.c_str(), remoteHash.c_str(), (long long)remoteSize); }
             }
             else 
@@ -89029,12 +92561,12 @@ bool comparaquick(std::vector<sftpget3>& i_remoti, std::vector<sftpfileinfo>& i_
         }
     }
     
-    // Controlla i file locali che non sono stati ancora controllati
+    // Check local files that have not yet been checked
     for (size_t i = 0; i < i_locali.size(); i++) 
     {
         if (!localChecked[i]) 
         {
-            // File presente solo in locale
+            // File present only locally
             std::string localFileName = extractfilename(i_locali[i].name);
             std::string localHash = i_locali[i].hash;
             int64_t localSize = i_locali[i].size;
@@ -89138,7 +92670,7 @@ int Jidac::sftp_do1on1()
 		g_dimensione 		= 0;
 		
 		franz_do_hash dummyquick("QUICK");
-		std::string temp = dummyquick.filehash(localfiles[i].name, false, startverify,localfiles[i].size);
+		std::string temp = dummyquick.filehash(0,localfiles[i].name, false, startverify,localfiles[i].size);
 		localfiles[i].hash=temp;
 		for (const char* p=temp.c_str(); *p; ++p)
 			sha256.put(*p);
@@ -89480,28 +93012,28 @@ int Jidac::ssh()
 
 bool Jidac::isrealfile(const string& i_filename) 
 {
-    // Usa GetFileAttributesEx per ottenere informazioni sul file
+    // Use GetFileAttributesEx to get information about the file
     WIN32_FILE_ATTRIBUTE_DATA fileAttributes;
     if (GetFileAttributesEx((utow(i_filename.c_str()).c_str()),GetFileExInfoStandard, &fileAttributes)) 
 	{
-        // Controlla se il file è un "placeholder" (FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS o FILE_ATTRIBUTE_PINNED sono indicatori comuni)
+        // Check if the file is a "placeholder" (FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS or FILE_ATTRIBUTE_PINNED are common indicators)
         if (fileAttributes.dwFileAttributes & FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS) 
-            return false; // File non scaricato completamente
+            return false; // File not completely downloaded
 		else
-			return true; // File scaricato completamente
+			return true; // File completely downloaded
     } 
 	else 
 	{
 		if (flagverbose)
 			myprintf("10836$ Cannot get attribute for <<%Z>>\n",i_filename.c_str());
-		return false; // Assume che non sia disponibile in caso di errore
+		return false; // Assume it is not available in case of error
     }
 }
 #endif
 
 
 
-// Gestione input tastiera
+// Handling keyboard input
 	
 int get_key() 
 {
@@ -89510,10 +93042,10 @@ int get_key()
 	if (ch == 0 || ch == 224) {
 		ch = _getch();
 		switch(ch) {
-			case 72: return 'k';  // Freccia su
-			case 80: return 'j';  // Freccia giù
-			case 73: return 'u';  // PagSu
-			case 81: return 'd';  // PagGiù
+			case 72: return 'k';  // Up arrow
+			case 80: return 'j';  // Down arrow
+			case 73: return 'u';  // PagUp
+			case 81: return 'd';  // PagDown
 			case 71: return 'h';  // Home
 			case 79: return 'e';  // End
 			case 59: return 128;  // F1
@@ -89530,21 +93062,21 @@ int get_key()
 	int ch;
 	unsigned char buf[4] = {0};
 	
-	// Salva le impostazioni correnti del terminale
+	// Save the current terminal settings
 	tcgetattr(STDIN_FILENO, &old_settings);
 	new_settings = old_settings;
 	
-	// Disabilita il buffering e l'echo
+	// Disable buffering and echo
 	new_settings.c_lflag &= ~(ICANON | ECHO);
-	// Importante: non modificare il trattamento del CR/LF
+	// Important: do not modify the handling of CR/LF
 	new_settings.c_iflag &= ~(ICRNL | INLCR);
 	new_settings.c_cc[VMIN] = 1;
 	new_settings.c_cc[VTIME] = 0;
 	
-	// Applica le nuove impostazioni
+	// Apply the new settings
 	tcsetattr(STDIN_FILENO, TCSANOW, &new_settings);
 	
-	// Leggi il primo carattere
+	// Read the first character
 	if (read(STDIN_FILENO, &buf[0], 1) != 1) {
 		tcsetattr(STDIN_FILENO, TCSANOW, &old_settings);
 		return -1;
@@ -89552,28 +93084,28 @@ int get_key()
 	
 	ch = buf[0];
 	
-	// Debug per il tasto INVIO
+	// Debug for the ENTER key
 	if (ch == '\r' || ch == '\n' || ch == 0x0D || ch == 0x0A) 
 	{
-		// Ripristina le impostazioni originali del terminale
+		// Restore the original terminal settings
 		tcsetattr(STDIN_FILENO, TCSANOW, &old_settings);
 		
 	  ///printf("DEBUG: INVIO rilevato (codice: %d, 0x%02X)\n", ch, ch);
 	  ///seppuku();
-		return 13;  // Codice ASCII hardcoded
+		return 13;  // Hardcoded ASCII code
 	}
 	
 	// Gestione del tasto BACKSPACE (8 = '\b', 127 = DEL)
 	if (ch == 8 || ch == 127) 
 	{
 		tcsetattr(STDIN_FILENO, TCSANOW, &old_settings);
-		return 8; //'\b';  // Puoi usare 127 se preferisci
+		return 8; //'\b';  // You can use 127 if you prefer
 	}
 	
-	// Se è un carattere di escape, leggi la sequenza
+	// If it's an escape character, read the sequence
 	if (ch == '\x1b') 
 	{
-		// Leggi fino a 3 caratteri aggiuntivi con timeout minimo
+		// Read up to 3 additional characters with a minimum timeout
 		struct timeval tv = {0, 100};  // 100 microseconds timeout
 		fd_set fds;
 		FD_ZERO(&fds);
@@ -89593,8 +93125,8 @@ int get_key()
 				}
 				
 				switch (buf[2]) {
-					case 'A': ch = 'k'; break;  // Freccia su
-					case 'B': ch = 'j'; break;  // Freccia giù
+					case 'A': ch = 'k'; break;  // Up arrow
+					case 'B': ch = 'j'; break;  // Down arrow
 					case 'H': ch = 'h'; break;  // Home
 					case 'F': ch = 'e'; break;  // End
 					case '5': 
@@ -89612,7 +93144,7 @@ int get_key()
 							return -1;
 						}
 				
-						ch = 'd'; break;  // PagGiù
+						ch = 'd'; break;  // PagUp
 					case '1':
 						if (read(STDIN_FILENO, &buf[3], 1)!=1)
 									{
@@ -89666,11 +93198,11 @@ int get_key()
 		} 
 		else 
 		{
-			ch = '\x1b';  // Era un ESC reale
+			ch = '\x1b';  // It was a real ESC
 		}
 	}
 	
-	// Ripristina le impostazioni originali del terminale
+	// Restore the original terminal settings
 	tcsetattr(STDIN_FILENO, TCSANOW, &old_settings);
 	
 	return ch;
@@ -89679,22 +93211,22 @@ int get_key()
 
 string getuserinput(const std::string& i_prompt, const std::string& i_default) 
 {
-	char buffer[4096] = {0};  // Buffer inizializzato a 0
+	char buffer[4096] = {0};  // Buffer initialized to 0
 
-// Mostra il prompt
+// Show the prompt
 	printf("%s ", i_prompt.c_str());
-	fflush(stdout);  // Assicura che il prompt venga stampato immediatamente
+	fflush(stdout);  // Ensure that the prompt is printed immediately
 
-// Legge l'input
+// Read the input
 	if (fgets(buffer, sizeof(buffer), stdin) == NULL) 
-		return i_default;  // Se fgets fallisce, ritorna il valore di default
+		return i_default;  // If fgets fails,return the default value
 
-// Rimuove il carattere di newline se presente
+// Removes the newline character if present
 	size_t len = strlen(buffer);
 	if (len > 0 && buffer[len - 1] == '\n') 
 		buffer[len - 1] = '\0';
 
-// Se l'input è vuoto, usa il valore di default
+// If the input is empty, use the default value
 	return (buffer[0] == '\0') ? i_default : std::string(buffer);
 }
 
@@ -89735,18 +93267,18 @@ void clearscreen()
 
 std::string truncate_with_extension(const std::string& filename, int max_length) 
 {
-    if ((int)filename.size() <= max_length) // Nessun troncamento necessario
+    if ((int)filename.size() <= max_length) // No truncation necessary
 	    return filename; 
-    size_t dot_pos = filename.find_last_of('.'); // Trova l'ultimo punto
+    size_t dot_pos = filename.find_last_of('.'); // Find the last dot
     if (dot_pos == std::string::npos || dot_pos == 0)         // Nessuna estensione trovata o il file inizia con un punto → Troncamento normale
        return filename.substr(0, max_length - 3) + "...";
 
-    std::string name_part = filename.substr(0, dot_pos); // Parte senza estensione
-    std::string extension = filename.substr(dot_pos); // Estensione inclusa il punto
+    std::string name_part = filename.substr(0, dot_pos); // Part without extension
+    std::string extension = filename.substr(dot_pos); // Extension including the dot
 
-    int space_for_name = max_length - extension.size() - 3; // Spazio disponibile per il nome
+    int space_for_name = max_length - extension.size() - 3; // Space available for the name
 
-    if (space_for_name <= 0)     // Se l'estensione è troppo lunga per lasciare spazio al nome
+    if (space_for_name <= 0)     // If the extension is too long to leave space for the name
         return filename.substr(0, max_length - 3) + "...";
     return filename.substr(0, space_for_name) + "..." + extension;
 }
@@ -89757,10 +93289,10 @@ bool starts_with(const std::string& str, const std::string& prefix)
 }
 
 
-// Funzione helper per aggiungere una directory se non esiste già
+// helper function
 void add_directory(const std::string& dir_path,vector<string>& i_added_path)
 {
-   // Assicurati che il path termini con uno slash
+   // Make sure the path ends with a slash
 	std::string normalized_path = dir_path;
 ///	if (!normalized_path.empty() && normalized_path.back() != '/') 
 	if (!normalized_path.empty() && normalized_path[normalized_path.size() - 1] != '/')
@@ -89785,7 +93317,7 @@ void add_directory(const std::string& dir_path,vector<string>& i_added_path)
 	i_added_path.push_back(normalized_path);
 }
 
-// Funzione che genera tutte le directory intermedie da un path
+// Function that generates all intermediate directories from a path
 void generate_directories(std::string file_path,vector<string>& i_added_path) 
 {
 	///myprintf("Genero per |%s|\n",file_path.c_str());
@@ -89847,7 +93379,7 @@ int	xto(string i_outputpath,string i_currentpath,int64_t i_sizetobeextracted)
 	(*pjidac).tofiles.clear();
 	(*pjidac).files.clear();
 
-	// Processa ogni file selezionato
+	// Process each selected file
 	for (unsigned int i=0;i<i_input.size();i++)
 	{
 	///	printf("i_currentpath %s\n",i_currentpath.c_str());
@@ -89875,7 +93407,7 @@ int	xto(string i_outputpath,string i_currentpath,int64_t i_sizetobeextracted)
 	
 	if (i_sizetobeextracted>0)
 	{
-		// Somma estrazione complessiva
+		// Overall extraction sum
 		int64_t sizeextracted=0;
 		for (size_t i=0;i<(*pjidac).tofiles.size();i++)
 			sizeextracted+=prendidimensionefile((*pjidac).tofiles[i].c_str());
@@ -89900,7 +93432,7 @@ int	xto(string i_outputpath,string i_currentpath,int64_t i_sizetobeextracted)
 
 #ifndef ANCIENT
 
-// Funzione per leggere un carattere senza invio su Linux
+// Function to read a character without enter on Linux
 #ifndef _WIN32
 int linux_getch() 
 {
@@ -89916,8 +93448,8 @@ int linux_getch()
 }
 #endif
 
-// Struttura per memorizzare le entries con tutti i loro dati
-// Serve per ordinare (impossibile per dtmap)
+// Structure to store entries with all their data
+// Used for sorting (impossible for dtmap)
 struct direntry 
 {
 	std::string name;
@@ -89972,44 +93504,44 @@ private:
 
 	bool directory_exists(const std::string& path) 
 	{
-		// Gestisce casi speciali come ".." e "/"
+		// Handles special cases like ".." and "/"
 		if (path == ".." || path == "/" || path.empty()) 
 			return true;
 
-    // Costruisci il percorso completo
+    // Build the full path
 		std::string full_path;
 		if (path[0] == '/') 
 		{
-			// Percorso assoluto
+			// Absolute path
 			full_path = path.substr(1);
 		} 
 		else 
 		{
-        // Percorso relativo
+        // Relative path
 			full_path = current_path;
 			if (!current_path.empty()) 
 				full_path += "/";
 			full_path += path;
 		}
 
-    // Rimuovi l'ultimo slash se presente
+    // Remove the last slash if present
 	if (!full_path.empty() && full_path[full_path.size() - 1] == '/')
 		full_path.resize(full_path.size() - 1);
 
 		///if (!full_path.empty() && full_path.back() == '/') 
 			///full_path.pop_back();
 
-    // Controlla se esiste una voce con questo percorso
+    // Check if there is an entry with this path
 	for (DTMap::const_iterator it = (*pjidac).dt.begin(); it != (*pjidac).dt.end(); ++it)
 {
-    // Verifica se il percorso è esattamente uguale a full_path o se è un percorso
-    // che inizia con full_path e il carattere successivo è '/'
+    // Check if the path is exactly equal to full_path or if it is a path
+    // that starts with full_path and the next character is '/'
     if (it->first == full_path ||
        (it->first.length() > full_path.length() &&
         it->first.substr(0, full_path.length()) == full_path &&
         it->first[full_path.length()] == '/'))
     {
-        // Se il percorso termina con '/', è sicuramente una directory
+        // If the path ends with '/', it is definitelya directory
         if (!it->first.empty() && it->first[it->first.size() - 1] == '/')
             return true;
     }
@@ -90018,13 +93550,11 @@ private:
 	/*
 		for (const auto& file : (*pjidac).dt) 
 		{
-			// Verifica se è una directory diretta o padre di altre directory/file
 			if (file.first == full_path || 
             (file.first.length() > full_path.length() && 
              file.first.substr(0, full_path.length()) == full_path && 
              file.first[full_path.length()] == '/')) 
 			 
-            // Se termina con '/', è sicuramente una directory
 				if (!file.first.empty() && file.first.back() == '/') 
 					
                 return true;
@@ -90039,12 +93569,12 @@ private:
 void more_like_display(const std::vector<std::string>& lines, int lines_per_page, int char_for_line) 
 {
     int total_lines = lines.size();
-    int start = 0;  // Indice della prima riga visibile
+    int start = 0;  // Index of the first visible line
 
     while (true) {
-        clearscreen(); // Pulisce lo schermo usando API di Windows
+        clearscreen(); // Clears the screen using Windows API
 
-        // Stampa le righe visibili nella schermata
+        // Print the visible lines on the screen
         for (int i = 0; i < lines_per_page && (start + i) < total_lines; i++) {
             bool isdir = false;
             if (lines[start + i].size() >= 2) 
@@ -90054,24 +93584,24 @@ void more_like_display(const std::vector<std::string>& lines, int lines_per_page
 
 			std::string truncated_line = truncate_with_extension(lines[start + i], char_for_line);
 			
-            myprintf("%08d| %Z", start + i, truncated_line.c_str()); // Numerazione univoca
+            myprintf("%08d| %Z", start + i, truncated_line.c_str()); // Unique numbering
 
             if (isdir) color_restore();
         }
 
-        // Mostra il prompt per i controlli
+        // Show the prompt per i controlli
         color_green();
         printf("\n[↑↓ +/-, PgUp/PgDn pages, Home, End, SPACE=PgDn, : jump, ESC exit]");
         color_restore();
 
-        // Attende l'input dell'utente
+        // Wait for user input
 #ifdef _WIN32
         int key = _getch();
 #else
         int key = linux_getch();
 #endif	
         if (key == MYSPACEBAR) { 
-            // SPAZIO = PAGINA GIÙ
+            // SPACE = PAGE DOWN
             start += lines_per_page;
             if (start + lines_per_page > total_lines) 
                 start = total_lines - lines_per_page;
@@ -90080,37 +93610,37 @@ void more_like_display(const std::vector<std::string>& lines, int lines_per_page
         
 #ifdef _WIN32	
 		else 
-		if (key == 224) {  // Tasti speciali
-		     key = _getch(); // Acquisisce il codice effettivo
+		if (key == 224) {  // Special keys
+		     key = _getch(); // Acquire the effective code
 #endif
 
             if (key == MYKEY_UP && start > 0) {
-                start--; // Scorri indietro di una riga
+                start--; // Scroll back one line
             } 
             else if (key == MYKEY_DOWN && (start + lines_per_page) < total_lines) {
-                start++; // Scorri avanti di una riga
+                start++; // Scroll forward one line
             }
             else if (key == MYKEY_PGUP) {
-                start -= lines_per_page; // Scorri indietro di una pagina
+                start -= lines_per_page; // Scroll back one page
                 if (start < 0) start = 0;
             }
             else if (key == MYKEY_PGDN) {
-                start += lines_per_page; // Scorri avanti di una pagina
+                start += lines_per_page; // Scroll forward one page
                 if (start + lines_per_page > total_lines) 
                     start = total_lines - lines_per_page;
-                if (start < 0) start = 0; // Gestisce casi limite
+                if (start < 0) start = 0; // Handles edge cases
             }
             else if (key == MYKEY_HOME) {
-                start = 0; // Salta all'inizio
+                start = 0; // Jump to the beginning
             }
             else if (key == MYKEY_END) {
-                start = total_lines - lines_per_page; // Salta alla fine
+                start = total_lines - lines_per_page; // Jump to the end
                 if (start < 0) start = 0;
             }
 #ifdef _WIN32
         } 
 #endif
-        else if (key == MYCOLON) { // Se l'utente preme ':'
+        else if (key == MYCOLON) { // If the user presses ':'
             printf("\nInsert row number: ");
             int new_start;
             if (scanf("%d", &new_start) == 1) {
@@ -90119,7 +93649,7 @@ void more_like_display(const std::vector<std::string>& lines, int lines_per_page
                 } else {
                     printf("\nInvalid number, must be 0 to %d\n", total_lines - 1);
 #ifdef _WIN32
-                    _getch(); // Attende un tasto per continuare
+                    _getch(); // Wait for a key to continue
 #else
 					linux_getch();
 #endif
@@ -90128,7 +93658,7 @@ void more_like_display(const std::vector<std::string>& lines, int lines_per_page
         }
         else if (key == MYESC || key == 'q' || key == 'Q') {  
             printf("\n");
-            break; // Esce dal ciclo
+            break; // Exits the loop
         }
     }
 }
@@ -90238,7 +93768,7 @@ public:
 		return (current_path.empty() ? "" : current_path + "/") + common;
 	}
 
-// Funzione per trovare il file che corrisponde al pattern
+// Function to find the file that matches the pattern
 	std::string complete_file(const std::string& partial_path) 
 	{
 		// Determine base_dir and search_term
@@ -90303,7 +93833,7 @@ public:
 		if (matches.empty()) 
 			return partial_path;
 		
-		// il primo
+		// the first one
 		if (matches.size()==1)
 			return matches[0];
 		
@@ -90519,12 +94049,12 @@ bool contains(const std::vector<std::string>& list, const std::string& value)
 */
 string take_first_level_folder(const std::string& path) 
 {
-    if (path.empty()) return ""; // Salta stringhe vuote
+    if (path.empty()) return ""; // Skip empty strings
 
     size_t start = 0;
     std::string first_level;
 
-    // ✅ Percorso di rete UNC (Windows) es. "//server/share/..."
+    // UNC (Windows) es. "//server/share/..."
     if (path.substr(0, 2) == "//") 
     {
         size_t second_slash = path.find('/', 2);
@@ -90535,30 +94065,30 @@ string take_first_level_folder(const std::string& path)
         }
         else 
         {
-            first_level = path + "/";  // Percorso UNC incompleto? Consideriamo tutto
+            first_level = path + "/";  // Incomplete UNC path? We consider everything
         }
     }
-    // ✅ Percorso Windows con unità es. "C:/cartella/file.txt"
+    //  "C:/cartella/file.txt"
     else if (path.length() > 2 && path[1] == ':' && (path[2] == '/' || path[2] == '\\')) 
     {
         size_t first_slash = path.find_first_of("/\\", 3);
         first_level = (first_slash != std::string::npos) ? path.substr(0, first_slash + 1) : path + "/";
     }
-    // ✅ Percorso assoluto Linux/macOS es. "/etc/..."
+    // Linux/macOS es. "/etc/..."
     else if (path[0] == '/') 
     {
         start = 1;
         size_t first_slash = path.find('/', start);
         first_level = (first_slash != std::string::npos) ? path.substr(0, first_slash) : path;
     }
-    // ✅ Percorso relativo es. "rombone/prova.txt" o "./dormire/ciao"
+    // "rombone/prova.txt" o "./dormire/ciao"
     else 
     {
         size_t first_slash = path.find('/');
         first_level = (first_slash != std::string::npos) ? path.substr(0, first_slash) : path;
     }
 
-    // Aggiungi la cartella solo se non è già presente
+    // Add the folder only if it is not already present
     if (!first_level.empty()) 
 		return first_level;
 	
@@ -90575,7 +94105,7 @@ void generate_first_level(std::string file_path,vector<string>& i_added_path)
 {
 	string thefirst=take_first_level_folder(file_path)+"/";
 	///printf("Il first %s %s\n",file_path.c_str(),thefirst.c_str());
-    if (!thefirst.empty() && pjidac != nullptr)  // ✅ Controlla se `thefirst` è valido e `pjidac` esiste
+    if (!thefirst.empty() && pjidac != nullptr) 
     {
         if ((*pjidac).dt.find(thefirst) == (*pjidac).dt.end()) 
         {
@@ -90604,7 +94134,7 @@ void dir(const char* path, bool recursive, bool i_more)
     std::string temp_path = current_path;
     std::string sort_option;
     
-    // Se viene passato NULL, mostra il contenuto della cartella corrente
+    // If NULL is passed, show the contents of the current folder
     std::string path_str = (path) ? path : "";
 	myprintf("path_str %s  current_path %s\n",path_str.c_str(),current_path.c_str());
 	///fik
@@ -90616,16 +94146,16 @@ void dir(const char* path, bool recursive, bool i_more)
 		return;
 	}
 
-    // Controllo se l'utente ha specificato "/s" come argomento
+    // Check if the user has specified "/s" as an argument
     if (path_str == "/s") 
     {
-        recursive = true;  // Abilita la ricorsione
-        path_str = "";      // Non trattarlo come directory
+        recursive = true;  // Enable recursion
+        path_str = "";      // Do not treat it as a directory
         path = nullptr;
     }
 	///printf("Path ora |%s|\n",path);
-    // Se path è una directory, cambiamo temporaneamente cartella
-    if (!path_str.empty() && path_str[0] != '-')
+    // temp change
+	if (!path_str.empty() && path_str[0] != '-')
     {
 	///	myprintf("$$$$$$$$$$$$$ to |%s|\n",path_str.c_str());
 	///	if (path_str[0] == '/') 
@@ -90647,7 +94177,7 @@ void dir(const char* path, bool recursive, bool i_more)
 
     std::vector<direntry> entries;
 	
-    // Raccoglie i file e le cartelle della directory corrente
+    // Collects the files and folders of the current directory
 	
 	for (DTMap::const_iterator file = (*pjidac).dt.begin(); file != (*pjidac).dt.end(); ++file)
     {
@@ -90714,7 +94244,7 @@ void dir(const char* path, bool recursive, bool i_more)
 			///printf("Deleted %s\n",file.first.c_str());
     }
 
-    // Stampa il contenuto della directory corrente
+    // Print the contents of the current directory
     for (std::vector<direntry>::const_iterator it = entries.begin(); it != entries.end(); ++it)
     {
         const direntry& entry = *it;
@@ -90733,7 +94263,7 @@ void dir(const char* path, bool recursive, bool i_more)
 			myprintf(buffer);
     }
 
-    // Se la modalità ricorsiva è attivata, esplora le sottodirectory
+    // If recursive mode is activated, explore subdirectories
     if (recursive) 
     {
         for (std::vector<direntry>::const_iterator it = entries.begin(); it != entries.end(); ++it)
@@ -90753,7 +94283,7 @@ void dir(const char* path, bool recursive, bool i_more)
         }
     }
 
-    // Ripristina il percorso originale se era stato cambiato
+    // Restore the original path if it was changed
     if (!path_str.empty() && path_str[0] != '-') 
         current_path = temp_path;
 }
@@ -90774,7 +94304,7 @@ void dirprimolivello()
 					entry.is_directory = true;
 					entries.push_back(entry);
 				}
-    // Stampa il contenuto della directory corrente
+    // Print the contents of the current directory
     for (std::vector<direntry>::const_iterator it = entries.begin(); it != entries.end(); ++it)
     {
         const direntry& entry = *it;
@@ -91040,22 +94570,22 @@ void dirprimolivello()
 		{
 			bool has_wildcard = (pattern.find('*') != std::string::npos);
 			
-			// Costruisci il percorso completo per la ricerca
+			// Build the full path per la ricerca
 			std::string base_path;
 			if (pattern[0] == '/') 
 			{
-				// Percorso assoluto
+				// Absolute path
 				base_path = pattern.substr(1);
 			} 
 			else 
 			{
-				// Percorso relativo
+				// Relative path
 				base_path = current_path;
 				if (!current_path.empty()) base_path += "/";
 				base_path += pattern;
 			}
 			
-			// Divide il pattern in parte prefissa e suffissa attorno all'asterisco
+			// Divide the pattern into a prefix and suffix part around the asterisk
 			std::string prefix, suffix;
 			if (has_wildcard) 
 			{
@@ -91063,7 +94593,7 @@ void dirprimolivello()
 				prefix = base_path.substr(0, star_pos);
 				suffix = base_path.substr(star_pos + 1);
 			}
-		// Cerca i file che corrispondono
+		// Search for matching files
 		
 			for (DTMap::const_iterator myfile = (*pjidac).dt.begin(); myfile != (*pjidac).dt.end(); ++myfile)
 
@@ -91114,7 +94644,7 @@ void dirprimolivello()
 				}
 			}
 		}
-		// Se abbiamo trovato dei file, procedi con l'estrazione
+		// If we have found files, proceed with the extraction
 		if (found_any)
 			xto(relative,current_path,sizetobeextracted);
 		else
@@ -91300,7 +94830,7 @@ int Jidac::ls()
                     path = arg1.c_str();
             }
             
-			std::string temp = (path != nullptr) ? path : "";  // Evita l'errore
+			std::string temp = (path != nullptr) ? path : "";  // Avoid the error
 
 			bool needmore=false;
 			size_t pos=temp.find("|more");
@@ -91386,7 +94916,7 @@ void hidecursor()
     cursorInfo.bVisible = FALSE;
     SetConsoleCursorInfo(hConsole, &cursorInfo);
 #else
-	printf("\x1B[?25l");  // Nasconde il cursore
+	printf("\x1B[?25l");  // Hide the cursor
     fflush(stdout);
 #endif
 }
@@ -91400,12 +94930,12 @@ void showcursor()
     cursorInfo.bVisible = TRUE;
     SetConsoleCursorInfo(hConsole, &cursorInfo);
 #else
-	printf("\x1B[?25h");  // Mostra il cursore
+	printf("\x1B[?25h");  // Show the cursor
     fflush(stdout);
 #endif
 }
 
-// Struttura per memorizzare i dati in modo ordinabile
+// Structure to store data in a sortable way
 struct fileentry 
 {
     std::string name;
@@ -91420,20 +94950,20 @@ class franztui
 {
 private:
     std::vector<fileentry> entries;		// pezzi di dt
-    int 				current_pos;    // posizione corrente del cursore
-    int 				top_line;       // prima riga visualizzata
-    int 				sort_mode;      // modalità di ordinamento corrente
-    int 				screen_width;   // larghezza dello schermo
-    int 				screen_height;  // altezza dello schermo
-    std::string 		current_path;  	// Percorso corrente (vuoto = root)
+    int 				current_pos;    // current cursor position
+    int 				top_line;       // first displayed line
+    int 				sort_mode;      // current sort mode
+    int 				screen_width;   // screen width
+    int 				screen_height;  // screen height
+    std::string 		current_path;  	// Current path (empty = root)
     std::vector<int> 	path_positions;	// Stack delle posizioni per backspace
-	vector<string> 		added_path;		// path aggiungi (debug)
+	vector<string> 		added_path;		// add path (debug)
 	std::string			filtervisible;	// rendi solo parte visibile
 	
 	void init_console() 
 	{
         #ifdef _WIN32
-        // Abilita il supporto ANSI su Windows
+        // Enable ANSI support on Windows
         HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
         DWORD dwMode = 0;
         GetConsoleMode(hOut, &dwMode);
@@ -91442,18 +94972,18 @@ private:
         #endif
     }
 
-    // Funzioni per la gestione dei colori
+    // Functions for color management
     void start_inverse() 
 	{
-        printf("\033[7m");  // Inverte i colori
+        printf("\033[7m");  // Invert colors
     }
 
     void end_inverse() 
 	{
-        printf("\033[0m");  // Resetta i colori
+        printf("\033[0m");  // Reset colors
     }
 	
-    // Funzioni di supporto per l'ordinamento
+    // Support functions for sorting
     static bool compare_default(const fileentry& a, const fileentry& b) 
 	{
         if (a.is_directory != b.is_directory)
@@ -91483,28 +95013,28 @@ private:
         return a.date < b.date;
     }
 
-    // Ordina le entries secondo la modalità corrente
+    // Sort the entries according to the current mode
     void sort_entries() 
 	{
         switch(sort_mode) {
-            case 1: // predefinito alfabetico
+            case 1: // default alphabetical
                 std::sort(entries.begin(), entries.end(), compare_default);
                 break;
-            case 2: // dimensione crescente
+            case 2: // ascending size
                 std::sort(entries.begin(), entries.end(), compare_size);
                 break;
-            case 3: // data crescente
+            case 3: // ascending date
                 std::sort(entries.begin(), entries.end(), compare_date);
                 break;
-            case 4: // alfabetico inverso
+            case 4: // reverse alphabetical
                 std::sort(entries.begin(), entries.end(), compare_default);
                 std::reverse(entries.begin(), entries.end());
                 break;
-            case 5: // dimensione decrescente
+            case 5: // descending size
                 std::sort(entries.begin(), entries.end(), compare_size);
                 std::reverse(entries.begin(), entries.end());
                 break;
-            case 6: // data decrescente
+            case 6: // descending date
                 std::sort(entries.begin(), entries.end(), compare_date);
                 std::reverse(entries.begin(), entries.end());
                 break;
@@ -91517,10 +95047,10 @@ private:
 		printf("\033[%d;%dH", row, col);
 	}
 
-	// Funzione che usa un codice colore compatibile con l'inversione
+	// Function that uses a color code compatible with inversion
 	void my_color_green() 
 	{
-		printf("\033[92m");  // Verde base senza modificare lo sfondo
+		printf("\033[92m");  // Basic green without modifying the background
 	}
 
 	void draw_entry(int index, bool is_current_line) 
@@ -91528,20 +95058,20 @@ private:
 		const fileentry& entry = entries[index];
 		std::string display_name = truncate_with_extension(entry.name, screen_width - 40);
 		
-		// Posizionati all'inizio della riga
+		// Position at the beginning of the line
 		printf("\r");
 		// Clear the entire line
 		printf("\033[K");
 		
-		// Se è una directory, resettiamo prima tutti gli attributi
+		// if folder, reset
 		if (entry.is_directory) 
 			color_restore();
 		
-		// Applichiamo prima l'inversione se è la riga corrente
+		// We apply the inversion first if it is the current line
 		if (is_current_line) 
 			start_inverse();
 		
-		// Poi il colore verde per le directory
+		// Then the color green for directories
 		if (entry.is_directory) 
 			my_color_green();
 		
@@ -91554,7 +95084,7 @@ private:
 			display_name.c_str()
 		);
 		
-		// Ripristiniamo nello stesso ordine: prima il colore poi l'inversione
+		// We restore in the same order: first the color then the inversion
 		if (entry.is_directory) 
 			color_restore();
 		
@@ -91598,7 +95128,7 @@ private:
 		// Flush output to ensure immediate display
 		fflush(stdout);
 	}
-    // Mostra la schermata di aiuto
+    // Show the help screen
     void show_help() 
 	{
         clearscreen();
@@ -91629,13 +95159,13 @@ private:
 
 	void filter_files()
 	{
-		move_cursor_to_input(); // Sposta il cursore sotto la riga di help
+		move_cursor_to_input(); // Move the cursor below the help line
 		showcursor();
 		std::string filter = getuserinput("\nFilter: ", "");
 		hidecursor();
 
 		if (filter.empty()) 
-			filtervisible.clear();  // Reset del filtro -> mostra tutto
+			filtervisible.clear();  // Reset filter -> show all
 		 else 
 		 {
 #ifdef _WIN32
@@ -91649,17 +95179,17 @@ private:
 		show();
 	}
 
-    // Gestisce la ricerca dei file
+    // Handles file search
     void search_files()
 {
-    move_cursor_to_input(); // Sposta il cursore sotto la riga di help
+    move_cursor_to_input(); // Move the cursor below the help line
     std::string search_str = getuserinput("\nSearchtext: ", "");
     if (search_str=="")
         return;
 #ifdef _WIN32
     search_str = stringtolower(search_str);
 #endif
-    // Deseleziona tutto prima di iniziare la ricerca
+    // Deselect all before starting the search
     for (std::vector<fileentry>::iterator it = entries.begin(); it != entries.end(); ++it)
     {
         fileentry& entry = *it;
@@ -91671,7 +95201,7 @@ private:
     }
 }
 
-    // Gestisce il goto line
+    // Handles the goto line
     void goto_line() 
 	{
 		std::string line_str = getuserinput("\nGoto: ", "");
@@ -91688,7 +95218,7 @@ private:
     }
 
 	
-    // Enumera i file selezionati per estrazione
+    // Enumerate the selected files for extraction
     void enumerate_selected() 
 {	
     clearscreen();
@@ -91761,11 +95291,11 @@ private:
         
         if (current_path.empty()) 
 		{
-            // Al livello root, mostra solo i file/cartelle del primo livello
+            // At the root level, show only the first level files/folders
             size_t first_slash = name.find('/');
             size_t last_slash = name.find_last_of('/');
             
-            // Se non ci sono slash o lo slash è alla fine (cartella), è al root
+            // If there are no slashes or the slash is at the end (folder), it's at the root
             bool is_root = (first_slash == std::string::npos) || 
                           (first_slash == last_slash && first_slash == name.length() - 1);
             
@@ -91781,26 +95311,26 @@ private:
 		}
 		else
 		{
-			// Non al root, verifichiamo se il file è nella cartella corrente
+			// Not at root, we check if the file is in the current folder
 			if (name.length() <= current_path.length()) 
 			{
 				debug_print("too short", name);
 				return false;
 			}
         }
-        // Deve iniziare con il percorso corrente
+        // Must start with the current path
         if (name.substr(0, current_path.length()) != current_path) 
 		{
             debug_print("wrong prefix", name);
             return false;
         }
         
-        // Rimuovi il percorso corrente per ottenere il nome relativo
+        // Remove the current path to get the relative name
         std::string relative = name.substr(current_path.length());
         debug_print("relative path", relative);
         
-        // Controlla che sia direttamente nella cartella corrente
-        // (nessun altro slash eccetto forse l'ultimo per le directory)
+        // Check that it is directly in the current folder
+        // (no other slashes except maybe the last one for directories)
         size_t first_slash = relative.find('/');
         bool valid = (first_slash == std::string::npos) || 
                     (first_slash == relative.length() - 1);
@@ -91809,28 +95339,28 @@ private:
         return valid;
     }	
     
-    // Entra in una cartella
+    // Enter a folder
 	void enter_directory(const std::string& dir_name) 
 	{
         debug_print("entering directory", dir_name);
         
-        // Salva la posizione corrente per il backspace
+        // Save the current position for backspace
         path_positions.push_back(current_pos);
         
-        // Aggiorna il percorso corrente
-        // Se il nome della directory non finisce con '/', aggiungilo
+        // Update the current path
+        // If the directory name does not end with '/', add it
         std::string new_dir = dir_name;
         if (new_dir.back() != '/') 
             new_dir += '/';
 
         
-        // Se siamo al root, il nuovo percorso è solo il nome della directory
+        // If we are at the root, the new path is just the directory name
         if (current_path.empty())
             current_path = new_dir;
         else 
 		{
-            // Altrimenti, dobbiamo concatenare al percorso esistente
-            // Se il nome include già il percorso completo, non lo aggiungiamo di nuovo
+            // Otherwise, we must concatenate to the existing path
+            // If the name already includes the full path, we don't add it again
             if (new_dir.find(current_path) == 0) 
                 current_path = new_dir;
 			else 
@@ -91838,26 +95368,26 @@ private:
         }
         
         debug_print("new current path", current_path);
-        // Ricarica le entries per il nuovo percorso
+        // Reload the entries for the new path
         update_entries();
     }
 
-    // Torna alla cartella superiore
+    // Go back to the parent folder
     void go_back() 
 	{
-        if (current_path.empty()) return;  // Già al root
-        
-        // Trova l'ultimo separatore nel percorso corrente
+        if (current_path.empty()) return;  
+		
+        // Find the last separator in the current path
         size_t last_slash = current_path.find_last_of('/', current_path.length() - 2);
         if (last_slash == std::string::npos) 
-            current_path.clear();  // Torna al root
+            current_path.clear();  // Back to root
 		else 
             current_path = current_path.substr(0, last_slash + 1);
         
-        // Ricarica le entries per il nuovo percorso
+        // Reload the entries for the new path
         update_entries();
         
-        // Ripristina la posizione precedente
+        // Restore the previous position
         if (!path_positions.empty()) 
 		{
             current_pos = path_positions.back();
@@ -91884,7 +95414,7 @@ public:
 		
         init_console();
 
-        // Carica tutti i dati dalla DTMap globale
+        // Load all data from the global DTMap
 		for (DTMap::const_iterator pair = (*pjidac).dt.begin(); pair != (*pjidac).dt.end(); ++pair)
 
         {
@@ -91930,7 +95460,7 @@ public:
 		if (wehaveslash)
 			current_path="/"; //LINUX!!
 		
-        // Filtra e ordina le entries per il percorso root
+        // Filter and sort entries for the root path
         update_entries();
     }
 	
@@ -91948,23 +95478,23 @@ public:
 		color_restore();
 	    myprintf("\n");
 		
-        // Mostra le entries nella pagina corrente
+        // Show the entries on the current page
         for (int i = 0; i < screen_height - 1 && (top_line + i) < (int)entries.size(); i++) 
 		{
             const fileentry& entry = entries[top_line + i];
             std::string display_name = truncate_with_extension(entry.name, screen_width - 40);
             
-            // Se questa è la riga corrente, inizia l'inversione
+            // If this is the current line, start the inversion
             if (top_line + i == current_pos) 
 			    start_inverse();
             
 			if (entry.is_directory)
 				color_green();
-            // Formatta la riga
+            // Format the line
             printf("%c[%c] %08d| %s %21s %s",
                 (top_line + i == current_pos) ? '>' : ' ',
                 entry.selected ? 'X' : ' ',
-                top_line + i + 1,  // numerazione one-based
+                top_line + i + 1,  // one-based numbering
                 dateToString(true, entry.date).c_str(),
                 entry.is_directory ? "<DIR>" : migliaia(entry.size),
                 display_name.c_str()
@@ -91972,14 +95502,14 @@ public:
 			if (entry.is_directory)
 				color_restore();
             
-            // Se questa è la riga corrente, termina l'inversione
+            // If this is the current line, end the inversion
             if (top_line + i == current_pos) 
 			    end_inverse();
             
-            printf("\n");  // A capo dopo aver gestito l'inversione
+            printf("\n");  // Line break after handling inversion
         }
         
-        // Mostra la riga informativa
+        // Show the information line
 	    ///move_cursor(screen_height+2, 1); 
 		///fflush(stdout);
 		color_yellow();
@@ -92045,7 +95575,7 @@ void process()
                 
             case 	'u': // PagSu
                     if (current_pos > 0) 
-                    { // Non fare nulla se sei già in cima
+                    { // Do nothing if you are already at the top
                         int step = screen_height - 1;
                         ///printf("\nPRE Step is %d  current_pos %d  currentpos-step %d top_line %d\n",step,current_pos,current_pos-step,top_line);
                         if (current_pos - step < 0) 
@@ -92073,7 +95603,7 @@ void process()
                 
                     break;
 
-            case 	'd': // PagGiù
+            case 	'd': // PagDown
                     ///if (current_pos != (int)entries.size() - 1) 
                     {
                         int step = screen_height - 1;
@@ -92094,7 +95624,7 @@ void process()
 
             case 	'h': // Home
                     if (current_pos > 0) 
-                    { // Non fare nulla se sei già in cima
+                    { // Do nothing if you are already at the top
                         current_pos 	= 0;
                         top_line 		= 0;
                     ///draw_entry(current_pos, true);
@@ -92104,7 +95634,7 @@ void process()
 
             case 	'e': // End
                     if (current_pos < (int)entries.size() - 1) 
-                    { // Non fare nulla se sei già in fondo
+                    { // Do nothing if you are already at the bottom
                         current_pos = entries.size() - 1;
                         top_line = current_pos - screen_height + 2;
                         if (top_line < 0) top_line = 0;
@@ -92114,7 +95644,7 @@ void process()
                     break;
 
                 
-            case 	' ': // Seleziona/Deseleziona
+            case 	' ': // Select/Deselect
                     if (current_pos < (int)entries.size()) 
                     {
                         entries[current_pos].selected = !entries[current_pos].selected;
@@ -92135,7 +95665,7 @@ void process()
                     }
                     break;
                 
-            case 	'a': // Seleziona tutti
+            case 	'a': // Select all
                     for (std::vector<fileentry>::iterator it = entries.begin(); it != entries.end(); ++it) 
                     {
                         fileentry& entry = *it;
@@ -92144,7 +95674,7 @@ void process()
                     show();
                     break;
 
-            case 	'n': // Deseleziona tutti
+            case 	'n': // Deselect all
                     for (std::vector<fileentry>::iterator it = entries.begin(); it != entries.end(); ++it) 
                     {
                         fileentry& entry = *it;
@@ -92153,7 +95683,7 @@ void process()
                     show();
                     break;
 
-            case 	'i': // Inverti selezione
+            case 	'i': // Invert selection
                     for (std::vector<fileentry>::iterator it = entries.begin(); it != entries.end(); ++it) 
                         it->selected = !it->selected;
                     //for (fileentry& entry : entries) 
@@ -92211,7 +95741,7 @@ void process()
                     show();
                     break;
                 
-            case 	13: // Invio
+            case 	13: // Enter
                     if ((current_pos < (int)entries.size()) && (entries[current_pos].is_directory)) 
                     {
                         enter_directory(entries[current_pos].name);
@@ -92230,11 +95760,11 @@ void process()
             show();
     }
     showcursor();
-    move_cursor_to_input(); // Posiziona il cursore quando esci
+    move_cursor_to_input(); // Position the cursor when you exit
 }
 	void move_cursor_to_input()
 	{
-		move_cursor(screen_height+4, 1); // Posiziona il cursore sotto la riga di help
+		move_cursor(screen_height+4, 1); // Position the cursor under the help line
 		fflush(stdout);
 	}
 
@@ -92333,7 +95863,7 @@ void process()
 					
 					if (!filtervisible.empty()) 
 					{
-						std::string fullpath = current_path + new_entry.name;  // Percorso completo
+						std::string fullpath = current_path + new_entry.name;  // Full path
 #ifdef _WIN32
 						fullpath = stringtolower(fullpath);
 #endif
@@ -92363,7 +95893,7 @@ void process()
 					
 					if (!filtervisible.empty()) 
 					{
-						std::string fullpath = current_path + new_entry.name;  // Percorso completo
+						std::string fullpath = current_path + new_entry.name;  // Full path
 #ifdef _WIN32
 						fullpath = stringtolower(fullpath);
 #endif
@@ -92381,16 +95911,16 @@ void process()
 		if (flagdebug5)
 			printf("DEBUG: filtered to %s entries\n", migliaia(filtered.size()));
         
-        // Sostituisci le entries con quelle filtrate
-        entries = filtered;  // Cambiato da swap a assegnamento diretto
+        // Replace the entries with the filtered ones
+        entries = filtered;  // Changed from swap to direct assignment
         
-        // Reset della posizione
+        // Reset position
         current_pos = 0;
         top_line = 0;
         
 		///if (flagdebug5)
 			///getch();
-        // Riordina secondo il modo corrente
+        // Reorder according to the current mode
         sort_entries();
     }
 };
@@ -92451,10 +95981,10 @@ std::string searchfile(const std::string& i_directory, const std::string& i_file
     HANDLE hFind = FindFirstFileW(searchPath.c_str(), &findData);
 
     if (hFind == INVALID_HANDLE_VALUE) 
-      return "";  // Restituisci una stringa vuota se errore nell'aprire la directory
+      return "";  // Return an empty string if there is an error opening the directory
 
     do {
-        // Salta i file speciali "." e ".."
+        // Skip special files "." and ".."
         if (wcscmp(findData.cFileName, L".") == 0 || wcscmp(findData.cFileName, L"..") == 0)
             continue;
 
@@ -92465,20 +95995,20 @@ std::string searchfile(const std::string& i_directory, const std::string& i_file
             std::string result = searchfile(wtou(fullPath.c_str()), i_file);
             if (!result.empty()) 
 			{
-                FindClose(hFind);  // Chiudi il gestore del find prima di restituire il risultato
-                return result;  // Se un file è trovato, lo restituiamo subito
+                FindClose(hFind);  // Close the find manager before returning the result
+                return result;  // If a file is found, we return it immediately
             }
         } 
 		else 
 		{
-            // Se è un file, confronta il nome con quello cercato
+            // If it's a file, compare the name with the one sought
             if (_wcsicmp(findData.cFileName, file.c_str()) == 0) 
 			{
-                std::string result = wtou(fullPath.c_str());  // Converti il percorso in stringa
+                std::string result = wtou(fullPath.c_str());  // Convert the path to string
 				if (flagdebug)
 					myprintf("99718: Founded %s\n", result.c_str());
-                FindClose(hFind);  // Chiudi il gestore del find prima di restituire il risultato
-                return result;  // Restituisci il percorso del file trovato
+                FindClose(hFind);  // Close the find manager before returning the result
+                return result;  // Return the path of the found file
             }
         }
     } while (FindNextFileW(hFind, &findData));
@@ -92489,96 +96019,21 @@ std::string searchfile(const std::string& i_directory, const std::string& i_file
     FindClose(hFind);
     return "";
 }
+#endif
 
-bool Jidac::getmysqlfrominternet()
-{
-	
+#ifdef ZPAQFULL ///NOSFTPSTART
 #ifndef _WIN32
-	myprintf("99736: Sorry cannot get binaries for non-Windows\n");
-	return false;
-#endif
-
-	string	http_mysql				="http://www.francocorbelli.it/zpaqfranz/win64/mysql.exe";
-	string	http_mysqldump			="http://www.francocorbelli.it/zpaqfranz/win64/mysqldump.exe";
-	
-	///z:\mysql from 11.1.2-MariaDB, client 15.2 for Win64 (AMD64), source revision 9bc25d98209df6810f7a7d5e7dd3ae677a313ab5
-	string http_mysql_sha256		="65DCBF7897E062A02B6018FFDE4635183E75DBCC075F21D3BE7CC5A27C45FD12";
-	
-	///z:\mysqldump from 11.1.2-MariaDB, client 10.19 for Win64 (AMD64)
-	string http_mysqldump_sha256	="F2114A565E8A4D23FC62FD190B59BFFF56C71B8E06B2F9308D246875708A0091";
-	
-#if defined(_WIN32) && (!defined(_WIN64))
-	http_mysql		="http://www.francocorbelli.it/zpaqfranz/win32/mysql.exe";
-	http_mysqldump	="http://www.francocorbelli.it/zpaqfranz/win32/mysqldump.exe";
-#endif
-
-	string 	randnocache="?"+generaterandomstring(10);
-	http_mysql		=http_mysql+randnocache;
-	http_mysqldump	=http_mysqldump+randnocache;
-
-	string	mypath=includetrailingbackslash(extractfilepath(fullzpaqexename.c_str()));
-	
-	string	themysql		=mypath+"mysql.exe";
-	string	themysqldump	=mypath+"mysqldump.exe";
-	
-	myprintf("99765: Downloading mysql.exe in %Z...\n",themysql.c_str());
-	if (!downloadfile(http_mysql,themysql,true))
-	{
-		myprintf("99378! Cannot download themysql\n");
-		return false;
-	}
-	myprintf("\n");
-	franz_do_hash dummy("SHA-256");
-	int64_t starthash=mtime();
-	string mysql_hash=dummy.filehash(themysql,false,starthash,prendidimensionefile(themysql.c_str()));
-	
-	if (mysql_hash!=http_mysql_sha256)
-	{
-		myprintf("99792$ mysql.exe hash invalid\n");
-		delete_file(themysql.c_str());
-		return false;
-	}
-	
-	myprintf("\n");
-	myprintf("99776: Downloading mysqldump.exe in %Z...\n",themysqldump.c_str());
-	if (!downloadfile(http_mysqldump,themysqldump,true))
-	{
-		myprintf("92678! Cannot download themysqldump\n");
-		delete_file(themysql.c_str());
-		delete_file(themysqldump.c_str());
-		return false;
-	}
-
-	franz_do_hash dummy2("SHA-256");
-	starthash=mtime();
-	string mysqldump_hash=dummy2.filehash(themysqldump,false,starthash,prendidimensionefile(themysqldump.c_str()));
-	myprintf("\n");
-	
-	if (mysqldump_hash!=http_mysqldump_sha256)
-	{
-		myprintf("99800$ mysqldump.exe hash invalid\n");
-		delete_file(themysql.c_str());
-		delete_file(themysqldump.c_str());
-		return false;
-	}
-	color_green();
-	myprintf("99806: Download seems OK\n");
-	color_restore();
-	
-	return true;
-}
-#else
 bool findmysql(std::string& o_mysql, std::string& o_mysqldump) 
 {
     o_mysql = "";
     o_mysqldump = "";
 
-    // Dichiarazione dei vettori senza inizializzazione diretta
+    // Declaration of vectors without direct initialization
     std::vector<std::string> common_paths;
     std::vector<std::string> mysql_names;
     std::vector<std::string> mysqldump_names;
 
-    // Popolamento di common_paths
+    // Populating common_paths
     common_paths.push_back("/usr/bin/");
     common_paths.push_back("/usr/local/bin/");
     common_paths.push_back("/bin/");
@@ -92614,11 +96069,11 @@ bool findmysql(std::string& o_mysql, std::string& o_mysqldump)
     common_paths.push_back("/usr/local/mariadb/bin/");
     common_paths.push_back("/usr/local/opt/mysql/bin/");
 
-    // Popolamento di mysql_names
+    // Populating mysql_names
     mysql_names.push_back("mysql");
     mysql_names.push_back("mariadb");
 
-    // Popolamento di mysqldump_names
+    // Populating mysqldump_names
     mysqldump_names.push_back("mysqldump");
     mysqldump_names.push_back("mariadb-dump");
 
@@ -92664,6 +96119,9 @@ bool findmysql(std::string& o_mysql, std::string& o_mysqldump)
     return found_mysql && found_mysqldump;
 }
 #endif
+#endif ///NOSFTPEND
+
+
 
 #ifdef unix
 void exec_with_realtime_output(const char* cmd)
@@ -92719,11 +96177,15 @@ int Jidac::mysql()
 
 	string themysql		="";
 	string themysqldump ="";
+#ifdef _WIN32
+	string	mypath=includetrailingbackslash(getwinexedir());
+	#else
 	string	mypath=includetrailingbackslash(extractfilepath(fullzpaqexename.c_str()));
-	
+#endif
 	if (g_bin=="")
 	{
 #ifdef _WIN32
+	
 	if (fileexists(mypath + "mysqldump.exe"))
 		themysqldump = mypath + "mysqldump.exe";
 	else
@@ -92732,7 +96194,7 @@ int Jidac::mysql()
 		themysqldump = searchfile("c:/program files", "mysqldump.exe");
 		if (themysqldump.empty())
 		{
-			// Prova con mariadb-dump.exe se mysqldump.exe non è stato trovato
+			// Try with mariadb-dump.exe if mysqldump.exe was not found
 			themysqldump = searchfile("c:/program files", "mariadb-dump.exe");
 			if (themysqldump.empty())
 			{
@@ -92763,7 +96225,7 @@ int Jidac::mysql()
 		themysql = searchfile("c:/program files", "mysql.exe");
 		if (themysql.empty())
 		{
-			// Prova con mariadb.exe se mysql.exe non è stato trovato
+			// Try with mariadb.exe if mysql.exe was not found
 			themysql = searchfile("c:/program files", "mariadb.exe");
 			if (themysql.empty())
 			{
@@ -92806,14 +96268,22 @@ int Jidac::mysql()
 	if (flagspace)
 		if ((themysqldump=="") || (themysql==""))
 		{
-			myprintf("99794$ Cannot find mysql.exe and mysqldump.exe, getting from my website due to -space...\n");
-			if (getmysqlfrominternet())
+			myprintf("99794$ Cannot find mysql.exe and mysqldump.exe, fixing due to -space for %s...\n",mypath.c_str());
+			if (kickstart_resources("MYSQL")==0)
 			{
 				if (fileexists(mypath+"mysqldump.exe"))
 					themysqldump=mypath+"mysqldump.exe";
 				if (fileexists(mypath+"mysql.exe"))
 					themysql=mypath+"mysql.exe";
+				///if (flagdebug3)
+				{
+					myprintf("96215: after kickstart themysqldump %s\n",themysqldump.c_str());
+					myprintf("96214: after kickstart themysql     %s\n",themysql.c_str());
+					
+				}
 			}
+			else
+				myprintf("96221: kickstart failed\n");
 		}
 #endif
 
@@ -92889,20 +96359,20 @@ int Jidac::mysql()
     fprintf(batch, "set \"MYSQL_PORT=%d\"\n", g_mysql_port);
     fprintf(batch, "set \"BACKUP_DEST=%s\"\n", temp.c_str());
     
-    // Genera la lista dei database
+    // Generate the database list
     fprintf(batch, "\"%s\" -u%%MYSQL_USER%% -p%%MYSQL_PASSWORD%% -h%%MYSQL_HOST%% -P%%MYSQL_PORT%% -e \"SHOW DATABASES;\" > \"%%TEMP%%\\db_list.txt\"\n", themysql.c_str());
     
-    // Gestione dei filtri di inclusione/esclusione con supporto wildcard
+    // Handling inclusion/exclusion filters with wildcard support
     if (!onlyfiles.empty()) 
 	{
-        // Modalità inclusione: processa solo i database che corrispondono ai pattern specificati
+        // Inclusion mode: process only the databases that match the specified patterns
         fprintf(batch, "echo Processing only specified database patterns...\n");
         fprintf(batch, "type \"%%TEMP%%\\db_list.txt\" | findstr /v \"Database\" > \"%%TEMP%%\\db_list_clean.txt\"\n");
         fprintf(batch, "for /f \"tokens=1\" %%%%d in ('type \"%%TEMP%%\\db_list_clean.txt\"') do (\n");
         fprintf(batch, "    set \"DB_NAME=%%%%d\"\n");
         fprintf(batch, "    set \"MATCH=0\"\n");
         
-        // Verifica se il database corrisponde a qualcuno dei pattern specificati
+        // Check if the database matches any of the specified patterns
         for (size_t i=0;i<onlyfiles.size();i++) 
 		{
             // Converti il pattern in uno compatibile con findstr (sostituisci * con .*)
@@ -92928,16 +96398,16 @@ int Jidac::mysql()
     } 
 	else 
 	{
-        // Processa tutti i database con possibili esclusioni basate su pattern
+        // Process all databases with possible exclusions based on patterns
         fprintf(batch, "for /f \"skip=1 tokens=1\" %%%%d in ('type \"%%TEMP%%\\db_list.txt\"') do (\n");
         fprintf(batch, "    set \"DB_NAME=%%%%d\"\n");
         fprintf(batch, "    set \"EXCLUDE=0\"\n");
         
-        // Escludiamo sempre i database di sistema
+        // We always exclude system databases
         fprintf(batch, "    echo !DB_NAME! | findstr /i \"information_schema performance_schema sys\" > nul\n");
         fprintf(batch, "    if !errorlevel! equ 0 set \"EXCLUDE=1\"\n");
         
-        // Controlla le esclusioni personalizzate con wildcard
+        // Check custom exclusions with wildcards
         if (!notfiles.empty()) 
 		{
             for (size_t i=0;i<notfiles.size(); i++) 
@@ -92950,8 +96420,8 @@ int Jidac::mysql()
             }
         }
         
-        // Backup del database se non è stato escluso
-        fprintf(batch, "    if !EXCLUDE! equ 0 (\n");
+        // Backup of db
+		fprintf(batch, "    if !EXCLUDE! equ 0 (\n");
         if (flagverbose)
             fprintf(batch, "        echo Processing database !DB_NAME!...\n");
         fprintf(batch, "        \"%s\" -u%%MYSQL_USER%% -p%%MYSQL_PASSWORD%% -h%%MYSQL_HOST%% -P%%MYSQL_PORT%% --add-drop-database --databases !DB_NAME! | \"%s\" a \"%%BACKUP_DEST%%\" \"!DB_NAME!.sql\" -stdin -silent %s\n", 
@@ -92983,22 +96453,22 @@ int Jidac::mysql()
 
 	fprintf(batch, "echo \"Starting MySQL backup...\"\n\n");
 
-	// Crea la lista dei database
+	// Create the database list
 	fprintf(batch, "%s -u${MYSQL_USER} -p${MYSQL_PASSWORD} -h${MYSQL_HOST} -P${MYSQL_PORT} -e \"SHOW DATABASES;\" > \"${TEMP_DIR}/db_list.txt\"\n\n", themysql.c_str());
 	fprintf(batch, "grep -v \"Database\" \"${TEMP_DIR}/db_list.txt\" > \"${TEMP_DIR}/db_list_clean.txt\"\n\n");
 
-	// Gestione filtri di inclusione/esclusione con supporto wildcard
+	// Handling inclusion/exclusion filters with wildcard support
 	if (!onlyfiles.empty()) 
 	{
-		// Modalità inclusione: processa solo i database che corrispondono ai pattern specificati
+		// Inclusion mode: process only the databases that match the specified patterns
 		fprintf(batch, "echo \"Processing only specified database patterns...\"\n");
 		fprintf(batch, "while read DB_NAME; do\n");
 		fprintf(batch, "    MATCH=0\n");
 
-		// Verifica se il database corrisponde a uno dei pattern specificati
+		// Check if the database matches one of the specified patterns
 		for (size_t i=0;i<onlyfiles.size(); i++) 
 		{
-			fprintf(batch, "    if [[ \"$DB_NAME\" == \"%s\" ]]; then\n", onlyfiles[i].c_str()); // Aggiunte virgolette
+			fprintf(batch, "    if [[ \"$DB_NAME\" == \"%s\" ]]; then\n", onlyfiles[i].c_str()); // Added quotes
 			fprintf(batch, "        MATCH=1\n");
 			if (flagverbose)
 				fprintf(batch, "        echo \"Matched database: $DB_NAME\"\n");
@@ -93009,7 +96479,7 @@ int Jidac::mysql()
 			fprintf(batch, "        else\n");
 			fprintf(batch, "            echo \"* ERROR on database ${DB_NAME} (exit code: $?)\"\n");
 			fprintf(batch, "        fi\n");
-			fprintf(batch, "    fi\n"); // Rimosso il break
+			fprintf(batch, "    fi\n"); // Removed the break
 		}
 
 		if (flagverbose)
@@ -93018,14 +96488,14 @@ int Jidac::mysql()
 	} 
 	else 
 	{
-		// Processa tutti i database con possibili esclusioni basate su pattern
+		// Process all databases with possible exclusions based on patterns
 		fprintf(batch, "# Esclusioni di sistema\n");
 		fprintf(batch, "SYSTEM_DBS=\"information_schema performance_schema sys\"\n\n");
 
 		fprintf(batch, "while read DB_NAME; do\n");
 		fprintf(batch, "    EXCLUDE=0\n");
 
-		// Esclusione dei database di sistema
+		// Exclusion of system databases
 		fprintf(batch, "    for SYS_DB in $SYSTEM_DBS; do\n");
 		fprintf(batch, "        if [ \"$DB_NAME\" = \"$SYS_DB\" ]; then\n");
 		fprintf(batch, "            EXCLUDE=1\n");
@@ -93035,11 +96505,11 @@ int Jidac::mysql()
 		fprintf(batch, "        fi\n");
 		fprintf(batch, "    done\n\n");
 
-		// Controlla le esclusioni personalizzate con wildcard
+		// Check custom exclusions with wildcards
 		if (!notfiles.empty()) {
 			fprintf(batch, "    if [ $EXCLUDE -eq 0 ]; then\n");
 			for (size_t i = 0; i < notfiles.size(); i++) {
-				fprintf(batch, "        if [[ \"$DB_NAME\" == \"%s\" ]]; then\n", notfiles[i].c_str()); // Aggiunte virgolette
+				fprintf(batch, "        if [[ \"$DB_NAME\" == \"%s\" ]]; then\n", notfiles[i].c_str()); // Added quotes
 				fprintf(batch, "            EXCLUDE=1\n");
 				if (flagverbose)
 					fprintf(batch, "            echo \"Skipping excluded database: $DB_NAME\"\n");
@@ -93049,7 +96519,6 @@ int Jidac::mysql()
 			fprintf(batch, "    fi\n\n");
 		}
 
-		// Backup del database se non è stato escluso
 		fprintf(batch, "    if [ $EXCLUDE -eq 0 ]; then\n");
 		if (flagverbose)
 			fprintf(batch, "        echo \"Processing database: $DB_NAME\"\n");
@@ -93149,10 +96618,10 @@ int Jidac::maxcpu(int i_percent)
 		myprintf("10044: cannot find runme %Z. Strange Windows?\n",runme.c_str());
 		return 2;
 	}
-    // Aggiungi -WindowStyle Hidden al comando power*ell principale
+    // Add -WindowStyle Hidden to the main power*ell command
     string parms = "-WindowStyle Hidden -Command \"Start-Process '" + filebatch + "' -WindowStyle Hidden -Wait -Verb runAs\"";
     
-    // Dichiarazione della struttura ShExecInfo
+    // Declaration of the ShExecInfo structure
     SHELLEXECUTEINFOA ShExecInfo;
     memset(&ShExecInfo, 0, sizeof(SHELLEXECUTEINFOA));
     ShExecInfo.cbSize = sizeof(SHELLEXECUTEINFOA);
@@ -93181,7 +96650,7 @@ int Jidac::maxcpu(int i_percent)
     string script_path = g_gettempdirectory() + "cpu_limit.sh";
     script_path = nomefileseesistegia(script_path);
     
-    // Rimuovi file esistente se necessario
+    // Remove existing file if necessary
     if (fileexists(script_path))
         if (remove(script_path.c_str()) != 0)
         {
@@ -93189,7 +96658,7 @@ int Jidac::maxcpu(int i_percent)
             return 2;
         }
     
-    // Crea lo script shell
+    // Create the shell script
     FILE* script = fopen(script_path.c_str(), "wb");
     if (script == NULL)
     {
@@ -93197,16 +96666,16 @@ int Jidac::maxcpu(int i_percent)
         return 2;
     }
     
-    // Contenuto dello script per limitare la CPU in Linux
+    // Script content to limit CPU in Linux
     fprintf(script, "#!/bin/bash\n\n");
     
-    // Verifica se turbo boost è supportato
+    // Check if turbo boost is supported
     fprintf(script, "# Verifica supporto Turbo Boost\n");
     fprintf(script, "INTEL_PSTATE=\"/sys/devices/system/cpu/intel_pstate\"\n");
     fprintf(script, "CPU_BOOST=\"/sys/devices/system/cpu/cpufreq/boost\"\n");
     fprintf(script, "INTEL_BOOST=\"${INTEL_PSTATE}/no_turbo\"\n\n");
     
-    // Imposta limiti CPU usando diverse strade possibili
+    // Set CPU limits using different possible ways
     fprintf(script, "# Funzione per limitare la CPU\n");
     fprintf(script, "limit_cpu() {\n");
     fprintf(script, "  if [ -d \"$INTEL_PSTATE\" ]; then\n");
@@ -93247,12 +96716,12 @@ int Jidac::maxcpu(int i_percent)
     fprintf(script, "  return 1\n");
     fprintf(script, "}\n\n");
     
-    // Esegui la funzione e verifica il risultato
+    // Execute the function and verify the result
     fprintf(script, "# Esegui la limitazione\n");
     fprintf(script, "limit_cpu\n");
     fprintf(script, "EXIT_CODE=$?\n\n");
     
-    // Pulisci ed esci
+    // Clean up and exit
     fprintf(script, "exit $EXIT_CODE\n");
     
     fclose(script);
@@ -93260,17 +96729,17 @@ int Jidac::maxcpu(int i_percent)
     // Rendi lo script eseguibile
     chmod(script_path.c_str(), S_IRWXU);
     
-    // Esegui lo script con privilegi di amministratore usando pkexec o sudo
+    // Execute the script with administrator privileges using pkexec or sudo
     int result = 0;
     
     if (flagverbose)
         myprintf("93958: Executing CPU limit script %s\n", script_path.c_str());
     
-    // Prova prima con pkexec, se disponibile (più user-friendly)
+    // First try with pkexec, if available (more user-friendly)
     string command = "pkexec " + script_path + " 2>/dev/null";
     result = system(command.c_str());
     
-    // Se pkexec fallisce o non è disponibile, prova con sudo
+    // If pkexec fails or is not available, try with sudo
     if (result != 0) 
 	{
 		if (flagdebug)
@@ -93287,11 +96756,11 @@ int Jidac::maxcpu(int i_percent)
 
     }
     
-    // Pulizia
+    // Cleanup
     if (!flagdebug)
         remove_temp_file(script_path);
     
-    // Verifica il risultato
+    // Check the result
     if (result != 0) 
 	{
         myprintf("99679! Failed to set CPU maximum to %d%%\n", i_percent);
@@ -93368,7 +96837,7 @@ int Jidac::systemshutdown()
     const char* os_name;// = "Unknown";
     const char* shutdown_cmd = NULL;
     const char* alt_shutdown_cmd = NULL;  // Alternative command if first fails
-    int error_base = 99677; // Base per i codici di errore
+    int error_base = 99677; // Base for error codes
 
 #if defined(__linux__)
     os_name = "Linux";
@@ -93461,7 +96930,7 @@ int Jidac::systemshutdown()
         sudo_available = true;
     } 
     else if (system("which sudo >/dev/null 2>&1") == 0) 
-    { // Fallback per sistemi senza 'command'
+    { // Fallback for systems without 'command'
         sudo_available = true;
     }
     
@@ -93568,7 +97037,7 @@ string Jidac::find_unix_command(const string& i_thecommand)
 			myprintf("01773: be quiet\n");
     return "";
 #else
-    // Elenco percorsi ottimizzato per Unix-like, inclusi sistemi non Linux
+    // Optimized path list for Unix-like systems, including non-Linux systems
     vector<string> common_paths;
     common_paths.push_back("/usr/bin/");
     common_paths.push_back("/usr/local/bin/");
@@ -93578,10 +97047,10 @@ string Jidac::find_unix_command(const string& i_thecommand)
     common_paths.push_back("/usr/local/sbin/");
     common_paths.push_back("/opt/bin/");
     common_paths.push_back("/opt/local/bin/");
-    common_paths.push_back("/usr/ucb/");      // Per Solaris, HP-UX
-    common_paths.push_back("/usr/xpg4/bin/"); // Per conformità POSIX su Solaris
+    common_paths.push_back("/usr/ucb/");      // For Solaris, HP-UX
+    common_paths.push_back("/usr/xpg4/bin/"); // For POSIX compliance on Solaris
 
-    // Su sistemi non Unix, restituisci vuoto immediatamente
+    // On non-Unix systems, return empty immediately
     for (unsigned int i = 0; i < common_paths.size(); ++i) 
     {
         string full_path = common_paths[i] + i_thecommand;
@@ -93644,7 +97113,7 @@ int elaborantfs(char* buffer, size_t buffer_size)
 	ULONGLONG total_clusters = context.metadata.total_clusters;
     const size_t bitmap_offset = 2 * sizeof(ULONGLONG);
     
-    // Ritorna 0 se abbiamo finito tutti i cluster
+    // Returns 0 if we have finished all clusters
     if (context.current_cluster >= total_clusters) 
 	{
 		if (flagdebug6)
@@ -93652,7 +97121,7 @@ int elaborantfs(char* buffer, size_t buffer_size)
         return 0;
     }
 
-    // Trova sequenza di cluster contigui usati
+    // Find sequence of used contiguous clusters
     ULONGLONG start_cluster = context.current_cluster;
     ULONGLONG contiguous_clusters = 0;
     
@@ -93709,7 +97178,7 @@ int elaborantfs(char* buffer, size_t buffer_size)
 	if (flagdebug6)
 		myprintf("DEBUG: Reading %s bytes at offset %s\n",migliaia(read_size), migliaia(offset));
 
-    // Posiziona puntatore dispositivo
+    // Position device pointer
     LARGE_INTEGER li;
     li.QuadPart = offset;
     if (!SetFilePointerEx(context.device, li, NULL, FILE_BEGIN)) 
@@ -93719,7 +97188,7 @@ int elaborantfs(char* buffer, size_t buffer_size)
         return -1;
     }
 
-    // Leggi cluster
+    // Read cluster
     DWORD bytes_to_read = static_cast<DWORD>(std::min(static_cast<ULONGLONG>(buffer_size), read_size));
     DWORD bytes_read = 0;
     
@@ -93739,13 +97208,13 @@ int elaborantfs(char* buffer, size_t buffer_size)
     
     if (bytes_read == 0) 
 	{
-        // Nessun dato letto, ma non è un errore (fine del file)
+        // No data read, but it's not an error (endof file)
 		if (flagdebug6)
 			myprintf("DEBUG: No bytes read - likely at end of file\n");
         return 0;
     }
 
-    // Scrivi i dati nel file di backup
+    // Write data to the backup file
     DWORD bytes_written = 0;
 	if (flagdebug6)
 	{
@@ -93761,11 +97230,11 @@ int elaborantfs(char* buffer, size_t buffer_size)
 		}
 		
 	}
-    // Registra i cluster elaborati
+    // Record the processed clusters
     ULONGLONG current_image_offset = context.g_scritti;
     ULONGLONG clusters_in_read = (bytes_read + context.cluster_size - 1) / context.cluster_size;
     
-    // Numero esatto di cluster completi letti
+    // Exact number of full clusters read
     clusters_in_read = std::min(clusters_in_read, contiguous_clusters);
     
 	if (flagdebug6)
@@ -93788,7 +97257,7 @@ int elaborantfs(char* buffer, size_t buffer_size)
         cluster_data.disk_offset = current_cluster * context.cluster_size;
         cluster_data.image_offset = current_image_offset + current_offset;
         
-        // Calcola dimensione effettiva del cluster in questa lettura
+        // Calculate effective cluster size in this read
         DWORD cluster_bytes;
         if (i < clusters_in_read - 1 || bytes_read % context.cluster_size == 0) {
             cluster_bytes = static_cast<DWORD>(context.cluster_size);
@@ -93808,12 +97277,12 @@ int elaborantfs(char* buffer, size_t buffer_size)
         }
     }
 
-    // Aggiorna i contatori
+    // Update the counters
     context.total_done += bytes_read;
     context.g_scritti += bytes_read;
     context.processed_clusters += clusters_in_read;
 
-    // Se non abbiamo letto tutti i cluster contigui, aggiustiamo current_cluster
+    // If we haven't read all contiguous clusters, we adjust current_cluster
     if (clusters_in_read < contiguous_clusters) {
 		if (flagdebug6)
 			myprintf("DEBUG: Did not read all contiguous clusters. Adjusting current_cluster from %s to %s\n", migliaia(context.current_cluster), migliaia(start_cluster + clusters_in_read));
@@ -93827,7 +97296,7 @@ int elaborantfs(char* buffer, size_t buffer_size)
 }
 
 
-// Funzione ausiliaria per contare i cluster utilizzati nella bitmap
+// Auxiliary function to count used clusters in the bitmap
 ULONGLONG countUsedClusters(const std::vector<BYTE>& bitmap_buffer, ULONGLONG total_clusters) {
     ULONGLONG used_clusters = 0;
     const size_t bitmap_offset = 2 * sizeof(ULONGLONG);
@@ -93874,7 +97343,7 @@ bool preparantfs(const std::string& image_path, char drive_letter)
     std::string root_path = std::string(1, drive_letter) + ":\\";
     std::string metadata_path = image_path + ".dat";
 
-    // Verifica NTFS
+    // Check NTFS
     char fs_name[16];
     if (!GetVolumeInformationA(root_path.c_str(), NULL, 0, NULL, NULL, NULL, fs_name, sizeof(fs_name))) 
 	{
@@ -93887,7 +97356,7 @@ bool preparantfs(const std::string& image_path, char drive_letter)
         return false;
     }
 
-    // Apri device
+    // Open device
     context.device = CreateFileA(letterpath.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
     if (context.device == INVALID_HANDLE_VALUE) 
 	{
@@ -93897,7 +97366,7 @@ bool preparantfs(const std::string& image_path, char drive_letter)
 
 	if (flagdebug6)
 	{
-		// Crea file immagine
+		// Create image file
 		context.backup_file = CreateFileA(image_path.c_str(), GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
 		if (context.backup_file == INVALID_HANDLE_VALUE) 
 		{
@@ -93906,7 +97375,7 @@ bool preparantfs(const std::string& image_path, char drive_letter)
 			return false;
 		}
 
-		// Crea file metadati
+		// Create metadata file
 		context.metadata_file = CreateFileA(metadata_path.c_str(), GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
 		if (context.metadata_file == INVALID_HANDLE_VALUE) 
 		{
@@ -93917,7 +97386,7 @@ bool preparantfs(const std::string& image_path, char drive_letter)
 		}
 	}
 
-    // Ottieni dimensioni volume
+    // Get volume dimensions
     PARTITION_INFORMATION_EX sizeofletter;
     memset(&sizeofletter, 0, sizeof(sizeofletter));
     DWORD dummy = 0;
@@ -93936,7 +97405,7 @@ bool preparantfs(const std::string& image_path, char drive_letter)
 	context.total_size = sizeofletter.PartitionLength.QuadPart;
     
 
-    // Ottieni informazioni cluster
+    // Get cluster information
     DWORD sectors_per_cluster = 0;
     DWORD bytes_per_sector = 0;
     DWORD free_clusters = 0;
@@ -93954,7 +97423,7 @@ bool preparantfs(const std::string& image_path, char drive_letter)
     }
     context.cluster_size = sectors_per_cluster * bytes_per_sector;
 
-    // Ottieni bitmap
+    // Get bitmap
     STARTING_LCN_INPUT_BUFFER starting_lcn;
     starting_lcn.StartingLcn.QuadPart = 0;
     context.bitmap_buffer.resize(16 * 1024 * 1024);
@@ -93994,7 +97463,7 @@ bool preparantfs(const std::string& image_path, char drive_letter)
 
     ULONGLONG total_clusters = volume_bitmap->BitmapSize.QuadPart;
     
-    // Conta cluster utilizzati correttamente
+    // Count correctly used clusters
     ULONGLONG used_clusters = countUsedClusters(context.bitmap_buffer, total_clusters);
     myprintf("01992: Volume %s (%s), used %s clusters %s (used %s) of %s\n", 
 	migliaia(context.total_size),
@@ -94004,7 +97473,7 @@ bool preparantfs(const std::string& image_path, char drive_letter)
 	migliaia3(used_clusters),
 	tohuman3(context.cluster_size));
 
-    // Inizializza metadati
+    // Initialize metadata
 	memset((char*)&context.metadata, 0, sizeof(context.metadata));
     context.metadata.magic = METAMAGIC;
     context.metadata.version = 1;
@@ -94025,7 +97494,7 @@ bool preparantfs(const std::string& image_path, char drive_letter)
     context.metadata.used_clusters = used_clusters;
     context.metadata.image_size = 0;
 
-    // Scrivi header metadati
+    // Write metadata header
     DWORD bytes_written = 0;
 	if (flagdebug6)
 	{
@@ -94041,7 +97510,7 @@ bool preparantfs(const std::string& image_path, char drive_letter)
 			return false;
 		}
 	}
-    // Alloca buffer
+    // Allocate buffer
     context.buffer = new BYTE[context.buffer_size];
     if (!context.buffer) 
 	{
@@ -94069,10 +97538,10 @@ bool chiudintfs()
 	if (flagdebug6)
 	    myprintf("DEBUG: chiudintfs() called\n");
 
-    // Aggiorna dimensione immagine
+    // Update image size
     context.metadata.image_size = context.g_scritti;
 
-    // Sovrascrivi header metadati con immagine aggiornata
+    // Overwrite metadata header with updated image
     LARGE_INTEGER li;
     li.QuadPart = 0;
 	if (flagdebug6)
@@ -94090,7 +97559,7 @@ bool chiudintfs()
 			return false;
 		}
 
-    // Scrivi numero di cluster
+    // Write number of clusters
     ULONGLONG cluster_count = context.clusters.size();
 	if (flagdebug6)
 	{
@@ -94100,7 +97569,7 @@ bool chiudintfs()
 			return false;
 		}
 
-		// Scrivi ClusterData con buffering
+		// Write ClusterData with buffering
 		const DWORD buffer_size = 1024 * 1024; // 1 MB buffer
 		std::vector<BYTE> buffer(buffer_size);
 		DWORD buffer_pos = 0;
@@ -94118,7 +97587,7 @@ bool chiudintfs()
 			buffer_pos += sizeof(ClusterData);
 		}
 
-		// Scrivi eventuali dati rimanenti nel buffer
+		// Write any remaining data in the buffer
 		if (buffer_pos > 0) {
 			if (!WriteFile(context.metadata_file, buffer.data(), buffer_pos, &bytes_written, NULL) || bytes_written != buffer_pos) {
 				printf("02000! failed to write remaining cluster data: %s\n", decodewinerror(GetLastError(), "").c_str());
@@ -94126,7 +97595,7 @@ bool chiudintfs()
 			}
 		}
 
-		// Scrivi bitmap
+		// Write bitmap
 		ULONGLONG bitmap_size = (context.metadata.total_clusters + 7) / 8;
 		myprintf("02098: Writing bitmap (%s bytes)\n", migliaia(bitmap_size));
 		if (!WriteFile(context.metadata_file, &bitmap_size, sizeof(bitmap_size), &bytes_written, NULL) || bytes_written != sizeof(bitmap_size)) 
@@ -94154,7 +97623,7 @@ bool chiudintfs()
 
 }
 
-// Carica i metadati e le informazioni sui cluster
+// Load metadata and cluster information
 bool loadClusterData(const std::string& filename, ImageMetadata& metadata, 
                      std::vector<ClusterData>& clusters) {
     HANDLE infile = CreateFileA(filename.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
@@ -94166,7 +97635,7 @@ bool loadClusterData(const std::string& filename, ImageMetadata& metadata,
 
     DWORD bytes_read = 0;
 
-    // Leggi l'header
+    // Read the header
     if (!ReadFile(infile, &metadata, sizeof(metadata), &bytes_read, NULL) || bytes_read != sizeof(metadata)) 
 	{
         myprintf("03008! Failed to read metadata header: %s\n", decodewinerror(GetLastError(), filename.c_str()).c_str());
@@ -94174,7 +97643,7 @@ bool loadClusterData(const std::string& filename, ImageMetadata& metadata,
         return false;
     }
 
-    // Verifica il valore magico
+    // Check the magic value
     if (metadata.magic != METAMAGIC) 
 	{
         myprintf("03009! Invalid metadata file format\n");
@@ -94182,7 +97651,7 @@ bool loadClusterData(const std::string& filename, ImageMetadata& metadata,
         return false;
     }
 
-    // Leggi il numero di cluster
+    // Read the number of clusters
     ULONGLONG cluster_count = 0;
     if (!ReadFile(infile, &cluster_count, sizeof(cluster_count), &bytes_read, NULL) || bytes_read != sizeof(cluster_count)) 
 	{
@@ -94191,7 +97660,7 @@ bool loadClusterData(const std::string& filename, ImageMetadata& metadata,
         return false;
     }
 
-    // Leggi i dati dei cluster
+    // Read the cluster data
     clusters.resize(cluster_count);
     const DWORD buffer_size = 1024 * 1024; // 1 MB buffer
     std::vector<BYTE> buffer(buffer_size);
@@ -94227,7 +97696,7 @@ bool leggibitmap(const std::string& metadata_path, std::vector<BYTE>& bitmap_buf
         return false;
     }
 
-    // Salta header e ClusterData
+    // Skip header and ClusterData
     LARGE_INTEGER li;
     li.QuadPart = sizeof(ImageMetadata);
     if (!SetFilePointerEx(infile, li, NULL, FILE_BEGIN)) 
@@ -94254,7 +97723,7 @@ bool leggibitmap(const std::string& metadata_path, std::vector<BYTE>& bitmap_buf
         return false;
     }
 
-    // Leggi dimensione bitmap
+    // Read bitmap size
     if (!ReadFile(infile, &bitmap_size, sizeof(bitmap_size), &bytes_read, NULL) || bytes_read != sizeof(bitmap_size)) 
 	{
         myprintf("03006! failed to read bitmap size: %s\n", decodewinerror(GetLastError(), metadata_path.c_str()).c_str());
@@ -94262,7 +97731,7 @@ bool leggibitmap(const std::string& metadata_path, std::vector<BYTE>& bitmap_buf
         return false;
     }
 
-    // Leggi la bitmap
+    // Read the bitmap
     bitmap_buffer.resize(bitmap_size);
     if (!ReadFile(infile, bitmap_buffer.data(), bitmap_size, &bytes_read, NULL) || bytes_read != bitmap_size) 
 	{
@@ -94289,21 +97758,21 @@ bool ripristinantfs(const std::string& image_path, const std::string& raw_path)
 
     std::string metadata_path = image_path + ".dat";
 
-    // Carica metadati
+    // Load metadata
     if (!loadClusterData(metadata_path, metadata, clusters)) 
 	{
         myprintf("03009! failed to load metadata\n");
         return false;
     }
 
-    // Carica bitmap
+    // Load bitmap
     if (!leggibitmap(metadata_path, bitmap_buffer, bitmap_size)) 
 	{
         myprintf("03010! failed to load bitmap\n");
         return false;
     }
 
-    // Apri file immagine
+    // Open image file
     HANDLE image_file = CreateFileA(image_path.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
     if (image_file == INVALID_HANDLE_VALUE) 
 	{
@@ -94311,7 +97780,7 @@ bool ripristinantfs(const std::string& image_path, const std::string& raw_path)
         return false;
     }
 
-    // Crea file raw
+    // Create raw file
     HANDLE raw_file = CreateFileA(raw_path.c_str(), GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
     if (raw_file == INVALID_HANDLE_VALUE) 
 	{
@@ -94320,7 +97789,7 @@ bool ripristinantfs(const std::string& image_path, const std::string& raw_path)
         return false;
     }
 
-    // Buffer per lettura/scrittura
+    // Buffer for reading/writing
     const DWORD buffer_size = 1024 * 1024;
     BYTE* buffer = new BYTE[buffer_size];
     if (!buffer) 
@@ -94330,7 +97799,7 @@ bool ripristinantfs(const std::string& image_path, const std::string& raw_path)
         CloseHandle(raw_file);
         return false;
     }
-    memset(buffer, 0, buffer_size); // Per zeri
+    memset(buffer, 0, buffer_size); // For zeros
 
     ULONGLONG total_written = 0;
     ULONGLONG total_skipped = 0;
@@ -94347,7 +97816,7 @@ bool ripristinantfs(const std::string& image_path, const std::string& raw_path)
 
     myprintf("03050: Created cluster map with %s entries %s total clusters\n", migliaia(cluster_map.size()),migliaia2(total_clusters));
 
-    // Processa cluster in ordine
+    // Process clusters in order
     for (ULONGLONG cluster = 0; cluster < total_clusters; cluster++) {
         auto cluster_it = cluster_map.find(cluster);
         bool has_data = cluster_it != cluster_map.end();
@@ -94617,7 +98086,7 @@ long long get_device_size_ioctl(int fd)
         return (long long)(dkmp.dki_lbsize * dkmp.dki_capacity);
     }
     
-    // Fallback per Solaris più vecchi
+    // Fallback per Solaris  vecchi
     struct vtoc vtoc;
     if (ioctl(fd, DKIOCGVTOC, &vtoc) == 0) 
 	{
@@ -94652,7 +98121,7 @@ long long get_device_size_ioctl(int fd)
 
     if (flagdebug) 
 		myprintf("04456: No ioctl method available for this platform\n");
-    return -1;  // Nessun metodo ioctl disponibile o errore
+    return -1;  // No ioctl method available or error
 }
 /**
  * Ottiene la dimensione usando lseek (metodo universale ma meno affidabile per dispositivi)
@@ -94675,7 +98144,7 @@ long long get_device_size_lseek(int fd)
 	{
         if (flagdebug) 
 			myprintf("04480: lseek SEEK_END failed: %s\n", strerror(errno));
-        // Ripristina posizione originale anche in caso di errore
+        // Restore original position also in case of error
         lseek(fd, current_pos, SEEK_SET);
         return -1;
     }
@@ -94702,7 +98171,7 @@ long long get_device_size(int fd)
     if (flagdebug) 
 		myprintf("04506: Attempting to get device size for fd=%d\n", fd);
     
-    // Prova prima il metodo ioctl specifico per piattaforma
+    // First try the platform-specific ioctl method
     size = get_device_size_ioctl(fd);
     if (size > 0) 
 	{
@@ -94714,7 +98183,7 @@ long long get_device_size(int fd)
     if (flagdebug) 
 		myprintf("04518: ioctl method failed, trying lseek\n");
     
-    // Fallback su lseek
+    // Fallback on lseek
     size = get_device_size_lseek(fd);
     if (size > 0) 
 	{
@@ -94725,7 +98194,7 @@ long long get_device_size(int fd)
     
     if (flagdebug) 
 		myprintf("04530: All methods failed\n");
-    return -1;  // Tutti i metodi falliti
+    return -1;  // All methods failed
 }
 #endif
 
@@ -94740,14 +98209,14 @@ bool Jidac::preparadump(const std::string& image_path)
         return false;
     }
     
-    // Chiudi eventuale file descriptor precedente
+    // Close any previous file descriptor
     if (g_device_fd != -1) 
     {
         close(g_device_fd);
         g_device_fd = -1;
     }
     
-    // Apri il dispositivo in modalità sola lettura
+    // Open the device in read-only mode
     g_device_fd = open(image_path.c_str(), O_RDONLY);
     
     if (g_device_fd == -1) 
@@ -94756,7 +98225,7 @@ bool Jidac::preparadump(const std::string& image_path)
         return false;
     }
     
-    // Ottieni la dimensione del dispositivo
+    // Get the device size
     int64_t device_size = get_device_size(g_device_fd);
 	
     if (device_size == -1) 
@@ -94773,7 +98242,7 @@ bool Jidac::preparadump(const std::string& image_path)
 
 
 
-// Funzione per leggere dati dal dispositivo
+// Function to read data from the device
 int Jidac::elaboradump(char* buffer, size_t buffer_size) 
 {
 #ifdef ESX
@@ -94803,12 +98272,12 @@ int Jidac::elaboradump(char* buffer, size_t buffer_size)
         return -1;
     }
     
-    // Ritorna il numero di byte letti (0 se EOF)
+    // Returns the number of bytes read (0 if EOF)
     return (int)bytes_read;
 #endif
 }
 
-// Funzione per chiudere il dispositivo
+// Function to close the device
 bool Jidac::chiudidump() 
 {
 #ifndef ESX
@@ -94830,7 +98299,7 @@ bool Jidac::chiudidump()
 #endif
 
 const char* ascii_patterns[95][7] = {
-    // 32: spacio
+    // 32: space
     {"       ", "       ", "       ", "       ", "       ", "       ", "       "},
     // 33: !
     {"   ██  ", "   ██  ", "   ██  ", "   ██  ", "       ", "   ██  ", "   ██  "},
@@ -94965,11 +98434,11 @@ const char* ascii_patterns[95][7] = {
 
 int Jidac::getCharIndex(char c) 
 {
-    // Caratteri ASCII stampabili da 32 a 126
+    // Printable ASCII characters from 32 to 126
     if (c >= 32 && c <= 126) {
-        return c - 32;  // Converte a indice 0-94
+        return c - 32;  // Convert to index 0-94
     }
-    return -1;  // carattere non supportato
+    return -1;  // unsupported character
 }
 
 void Jidac::printDigitalString(const char* inputString) 
@@ -94978,7 +98447,7 @@ void Jidac::printDigitalString(const char* inputString)
     int charCount = 0;
     int charIndices[1000];
     
-    // Estrai i caratteri supportati dalla stringa
+    // Extract the supported characters from the string
     for (int i = 0; inputString[i] != '\0' && charCount < 1000; i++) {
         int index = getCharIndex(inputString[i]);
         if (index >= 0) {
@@ -94992,7 +98461,7 @@ void Jidac::printDigitalString(const char* inputString)
         return;
     }
     
-    // Stampa riga per riga
+    // Print line by line
     for (int row = 0; row < 7; row++) {
         for (int charIdx = 0; charIdx < charCount; charIdx++) {
             printf("%s", ascii_patterns[charIndices[charIdx]][row]);
@@ -95015,7 +98484,7 @@ void* download_worker_thread(void* arg)
     if (flagdebug) 
 		myprintf("93297: debug Download Thread %d started\n", data->thread_id);
     
-    // Inizializza i dati di progresso del thread
+    // Initialize the thread's progress data
     pthread_mutex_lock(data->progress_mutex);
     data->thread_progress->thread_id 				= data->thread_id;
     data->thread_progress->current_file 			= "";
@@ -95027,10 +98496,10 @@ void* download_worker_thread(void* arg)
     data->thread_progress->status 					= "starting";
     pthread_mutex_unlock(data->progress_mutex);
     
-    // Crea una connessione SFTP separata per questo thread
+    // Create a separate SFTP connection for this thread
     zpaqfranzsftp2 thread_sftp;
     
-    // Copia le impostazioni di connessione dal thread principale
+    // Copy connection settings from the main thread
 	if (g_sftp_key!="")
 	thread_sftp.setConnectionSSH(data->sftp_instance->getHost(), 
                              data->sftp_instance->getPort(),
@@ -95062,12 +98531,12 @@ void* download_worker_thread(void* arg)
         sftpget3* task 	= NULL;
         bool has_task 	= false;
         
-        // Aggiorna stato: in attesa
+        // Update status: waiting
         pthread_mutex_lock(data->progress_mutex);
         data->thread_progress->status = "WAIT";
         pthread_mutex_unlock(data->progress_mutex);
         
-        // Prendi un task dalla coda
+        // Take a task from the queue
         pthread_mutex_lock(data->queue_mutex);
         
         while (data->task_queue->empty() && !*(data->all_tasks_added)) 
@@ -95090,7 +98559,7 @@ void* download_worker_thread(void* arg)
         
         if (has_task) 
 		{
-            // Aggiorna stato: downloading
+            // Update status: downloading
             pthread_mutex_lock(data->progress_mutex);
             data->thread_progress->status 		= "DOWN";
             data->thread_progress->current_file = task->i_name;
@@ -95099,7 +98568,7 @@ void* download_worker_thread(void* arg)
             if (flagdebug) 
 				myprintf("93370: debug Thread %d: download %s\n", data->thread_id, task->i_name.c_str());
             
-            // Prima ottieni la dimensione del file remoto
+            // First get the remote file size
             int64_t remote_size = thread_sftp.remotegetfilesize(task->i_name);
             if (remote_size < 0) 
 			{
@@ -95115,7 +98584,7 @@ void* download_worker_thread(void* arg)
                 continue;
             }
             
-            // Aggiorna dimensione file corrente
+            // Update current file size
             pthread_mutex_lock(data->progress_mutex);
             data->thread_progress->current_file_size = remote_size;
             pthread_mutex_unlock(data->progress_mutex);
@@ -95123,7 +98592,7 @@ void* download_worker_thread(void* arg)
             task->o_size = remote_size;
             task->o_hash = "QUICK";
             
-            // Esegui il download dei 3 chunk
+            // Perform the download of the 3 chunks
             bool download_result = thread_sftp.down3(remote_size, task->i_name, 
                                                     task->i_file1, task->i_file2, task->i_file3);
             
@@ -95142,7 +98611,7 @@ void* download_worker_thread(void* arg)
                 (*(data->total_files_processed))++;
                 (*(data->total_bytes_processed)) += remote_size;
                 
-                // Aggiorna statistiche del thread
+                // Update thread statistics
                 pthread_mutex_lock(data->progress_mutex);
                 data->thread_progress->thread_files_processed++;
                 data->thread_progress->thread_bytes_processed += remote_size;
@@ -95158,7 +98627,7 @@ void* download_worker_thread(void* arg)
             pthread_mutex_unlock(data->result_mutex);
         }
         
-        // Controlla se dobbiamo fermarci per errori
+        // Check if we need to stop for errors
         pthread_mutex_lock(data->result_mutex);
         bool should_stop = *(data->stop_threads);
         pthread_mutex_unlock(data->result_mutex);
@@ -95171,7 +98640,7 @@ void* download_worker_thread(void* arg)
         }
     }
     
-    // Segna il thread come non attivo
+    // Mark the thread as not active
     pthread_mutex_lock(data->progress_mutex);
     data->thread_progress->is_active = false;
     data->thread_progress->status = "finished";
@@ -95196,7 +98665,7 @@ void sftp_display_progress_down_parallelo(const std::vector<sftp_threadprogressd
     
     if (!verbose) 
 	{ 
-        // Modalità semplice: una sola riga 
+        // Simple mode: a single line
         clear_line(); 
         myprintf("42875: Download parallel (%5.1f%%) ETA: %02d:%02d:%02d Files: %d/%d @%5.2f file/s Data: %s @%s/s", 
                  progress_percent, eta_hours, eta_minutes, eta_seconds, completed_files, total_files, 
@@ -95205,9 +98674,9 @@ void sftp_display_progress_down_parallelo(const std::vector<sftp_threadprogressd
     } 
 	else 
 	{ 
-        // Modalità verbose: riga globale + dettagli thread
+        // Verbose mode: global line + thread details
         
-        // Riga globale 
+        // Global line
         clear_line(); 
         color_green(); 
 	    myprintf("GLOBAL: (%5.1f%%) ETA: %02d:%02d:%02d  [%12s] @%12s/s | %08d/%08d @%5.2f file/s\n", 
@@ -95217,7 +98686,7 @@ void sftp_display_progress_down_parallelo(const std::vector<sftp_threadprogressd
                  file_rate); 
         color_restore(); 
         
-        // Dettagli per thread (limitati dal numero massimo visualizzabile) 
+        // Details per thread (limited by the maximum visible number) 
         int threads_to_show = std::min(max_display_threads, (int)thread_progress.size());
         
         for (int i = 0; i < threads_to_show; i++) 
@@ -95241,7 +98710,7 @@ void sftp_display_progress_down_parallelo(const std::vector<sftp_threadprogressd
             } 
 			else 
 			{ 
-                // Thread finito: calcola tempo totale e velocità media
+                // Thread finished: calculate total time and average speed
                 double thread_total_time 	= (mtime() - tp.thread_start_time) / 1000.0;
                 double thread_avg_file_rate = (thread_total_time > 0) ? tp.thread_files_processed / thread_total_time : 0;
                 double thread_avg_byte_rate = (thread_total_time > 0) ? tp.thread_bytes_processed / thread_total_time : 0;
@@ -95263,7 +98732,7 @@ void sftp_display_progress_down_parallelo(const std::vector<sftp_threadprogressd
 				myprintf("\n"); 
         }
         
-        // Torna all'inizio per la prossima iterazione 
+        // Back to the beginning for the next iteration
 #ifdef WIN32 
         gotoxy(0, 0); 
 #else 
@@ -95290,26 +98759,26 @@ bool zpaqfranzsftp2::sftp_down3parallela(std::vector<sftpget3>& file_list, int i
 		return true;
     }
     
-    // Determina altezza console e numero massimo di thread visualizzabili
+    // Determine console height and maximum number of visible threads
     int console_height 		= get_console_height();
-    int max_display_threads = console_height - 3; // Riserva spazio per riga globale + margini
+    int max_display_threads = console_height - 3; // Reserve space for global line + margins
     if (max_display_threads < 1) 
 		max_display_threads = 1;
     
-    // Limita il numero di thread al numero di file
+    // Limit the number of threads to the number of files
     int actual_threads = std::min(i_thread, (int)file_list.size());
     
     if (flagdebug) 
 		myprintf("91557: debug Download parallel: %d file con %d thread (console: %d row, max display: %d)\n", 
                          (int)file_list.size(), actual_threads, console_height, max_display_threads);
     
-    // Inizializza mutex e condition variable
+    // Initialize mutex and condition variable
     pthread_mutex_t queue_mutex 	= PTHREAD_MUTEX_INITIALIZER;
     pthread_cond_t queue_cond 		= PTHREAD_COND_INITIALIZER;
     pthread_mutex_t result_mutex 	= PTHREAD_MUTEX_INITIALIZER;
     pthread_mutex_t progress_mutex	 = PTHREAD_MUTEX_INITIALIZER;
     
-    // Coda dei task (puntatori agli elementi del vettore)
+    // Task queue (pointers to vector elements)
     std::queue<sftpget3*> task_queue;
     
     // Variabili condivise
@@ -95320,14 +98789,14 @@ bool zpaqfranzsftp2::sftp_down3parallela(std::vector<sftpget3>& file_list, int i
     int total_files_processed 		= 0;
     int64_t total_bytes_processed 	= 0;
     
-    // Dati di progresso per thread
+    // Progress data per thread
     std::vector<sftp_threadprogressdata> thread_progress(actual_threads);
     
-    // Prepara i task (puntatori agli elementi del vettore)
+    // Prepare tasks (pointers to vector elements)
     for (size_t i = 0; i < file_list.size(); i++) 
 	    task_queue.push(&file_list[i]);
     
-    // Crea i thread
+    // Create the threads
     std::vector<pthread_t> threads(actual_threads);
     std::vector<sftp_downloadthreaddata> thread_data(actual_threads);
     
@@ -95354,40 +98823,44 @@ bool zpaqfranzsftp2::sftp_down3parallela(std::vector<sftpget3>& file_list, int i
 		{
         	myprintf("93609! Error creating download thread %d: %d\n", i + 1, result);
             
-            // Ferma i thread già creati
+            // Stop the threads already created
             pthread_mutex_lock(&result_mutex);
             stop_threads = true;
             pthread_mutex_unlock(&result_mutex);
             
-            // Sveglia tutti i thread
+            // Wake up all threads
             pthread_cond_broadcast(&queue_cond);
             
-            // Aspetta i thread già creati
+            // Wait for the threads already created
             for (int j = 0; j < i; j++) 
 			    pthread_join(threads[j], NULL);
             return false;
         }
     }
     
-    // Segnala che tutti i task sono stati aggiunti
+    // Signal that all tasks have been added
     pthread_mutex_lock(&queue_mutex);
     all_tasks_added = true;
     pthread_cond_broadcast(&queue_cond);
     pthread_mutex_unlock(&queue_mutex);
     
-    // Nasconde il cursore per un output più pulito
     hide_cursor();
     
-    // Se verbose, prepara lo spazio per l'output
+	
+    // If verbose, prepare space for the output
     if (actual_threads>1) 
 	{
 		
 		if ((!flagsilent) && (!flagnoconsole))
 		{
+			clearscreen();
+			/*
 			setupConsole();
 			printf("\033[2J"); //cls
 			printf("\033[%d;0H",(int)1);
 			restoreConsole();
+			*/
+			
 		}
 
         int lines_needed = std::min(max_display_threads, actual_threads) + 1;
@@ -95400,7 +98873,7 @@ bool zpaqfranzsftp2::sftp_down3parallela(std::vector<sftpget3>& file_list, int i
 #endif
     }
     
-    // Monitora il progresso
+    // Monitor the progress
     int64_t start_time = mtime();
     int last_completed = -1;
     int64_t last_bytes = -1;
@@ -95415,11 +98888,11 @@ bool zpaqfranzsftp2::sftp_down3parallela(std::vector<sftpget3>& file_list, int i
         bool 	current_success 			= success_flag;
         pthread_mutex_unlock(&result_mutex);
         
-        // Aggiorna display solo se ci sono cambiamenti
+        // Update display only if there are changes
         if (current_completed != last_completed || current_bytes != last_bytes) 
 		{
             
-            // Copia i dati di progresso dei thread in modo thread-safe
+            // Copy thread progress data in a thread-safe way
             std::vector<sftp_threadprogressdata> current_thread_progress(actual_threads);
             pthread_mutex_lock(&progress_mutex);
             for (int i = 0; i < actual_threads; i++) 
@@ -95437,7 +98910,7 @@ bool zpaqfranzsftp2::sftp_down3parallela(std::vector<sftpget3>& file_list, int i
         if (current_completed >= (int)file_list.size() || !current_success) 
 		    break;
         
-        // Pausa per evitare busy wait
+        // Pause to avoid busy wait
 #ifdef _WIN32
         Sleep(500);
 #else
@@ -95445,16 +98918,16 @@ bool zpaqfranzsftp2::sftp_down3parallela(std::vector<sftpget3>& file_list, int i
 #endif
     }
     
-    // Ripristina il cursore
+    // Restore the cursor
     show_cursor();
     
     if (actual_threads<=1) 
 	{
-        myprintf("\n"); // Nuova riga dopo il progresso in modalità semplice
+        myprintf("\n"); // New line after progress in simple mode
     } 
 	else 
 	{
-        // In modalità verbose, vai alla fine dell'output
+        // In verbose mode, go to the end of the output
         int lines_shown = std::min(max_display_threads, actual_threads) + 1;
 #ifdef _WIN32
         gotoxy(0, lines_shown);
@@ -95464,7 +98937,7 @@ bool zpaqfranzsftp2::sftp_down3parallela(std::vector<sftpget3>& file_list, int i
 #endif
     }
     
-    // Se c'è stato un errore, ferma tutti i thread
+    // If there was an error, stop all threads
     pthread_mutex_lock(&result_mutex);
     if (!success_flag) 
 	    stop_threads = true;
@@ -95472,7 +98945,7 @@ bool zpaqfranzsftp2::sftp_down3parallela(std::vector<sftpget3>& file_list, int i
     
     pthread_cond_broadcast(&queue_cond);
     
-    // Aspetta che tutti i thread terminino
+    // Wait for all threads to terminate
     for (int i = 0; i < actual_threads; i++) 
 	{
         pthread_join(threads[i], NULL);
@@ -95512,13 +98985,13 @@ std::string Jidac::enumerate_physical_disks(int i_chosendrive)
 	std::string risultato;
 	if (flagdebug)
 		myprintf("94752: i_chosendrive %d\n",i_chosendrive);
-    for (int diskNum = 0; diskNum < 32; diskNum++) // Max 32 dischi
+    for (int diskNum = 0; diskNum < 32; diskNum++) // Max 32 disks
     {
         char diskPath[64];
         snprintf(diskPath, sizeof(diskPath), "\\\\.\\PhysicalDrive%d", diskNum);
         
         HANDLE hDisk = CreateFile(utow(diskPath).c_str(),
-                                 0, // Solo query, non lettura
+                                 0, // Query only, not read
                                  FILE_SHARE_READ | FILE_SHARE_WRITE,
                                  NULL,
                                  OPEN_EXISTING,
@@ -95526,7 +98999,7 @@ std::string Jidac::enumerate_physical_disks(int i_chosendrive)
                                  NULL);
         
         if (hDisk == INVALID_HANDLE_VALUE)
-            continue; // Disco non esistente
+            continue; // Disk does not exist
         
 ///        myprintf("\n--- DISK %d: %s ---\n", diskNum, diskPath);
 ///        myprintf("\n--- DISK %d ---\n", diskNum);
@@ -95535,7 +99008,7 @@ std::string Jidac::enumerate_physical_disks(int i_chosendrive)
 			printbar('-');
 		
 		
-        // 1. DIMENSIONE DEL DISCO
+        // 1. DISK SIZE
         GET_LENGTH_INFORMATION lengthInfo;
         DWORD bytesReturned = 0;
         
@@ -95548,7 +99021,7 @@ std::string Jidac::enumerate_physical_disks(int i_chosendrive)
 				myprintf("Size           : %K (%H)\n", lengthInfo.Length.QuadPart,lengthInfo.Length.QuadPart);
         }
         
-        // 2. INFORMAZIONI GEOMETRIA E MODELLO
+        // 2. GEOMETRY AND MODEL INFORMATION
         STORAGE_PROPERTY_QUERY query;
         memset(&query, 0, sizeof(query));
         query.PropertyId = StorageDeviceProperty;
@@ -95612,7 +99085,7 @@ std::string Jidac::enumerate_physical_disks(int i_chosendrive)
                 }
             }
             
-            // Tipo di bus (usando solo i valori compatibili)
+            // Bus type (using only compatible values)
             const char* busType = "Unknown";
             switch ((int)desc->BusType)
             {
@@ -95649,7 +99122,7 @@ std::string Jidac::enumerate_physical_disks(int i_chosendrive)
 			
         }
         
-        // 3. LAYOUT PARTIZIONI
+        // 3. PARTITION LAYOUT
         DWORD layoutSize = sizeof(DRIVE_LAYOUT_INFORMATION_EX) + 128 * sizeof(PARTITION_INFORMATION_EX);
         BYTE* layoutBuffer = new BYTE[layoutSize];
         memset(layoutBuffer, 0, layoutSize);
@@ -95668,7 +99141,7 @@ std::string Jidac::enumerate_physical_disks(int i_chosendrive)
                     layout->PartitionStyle == PARTITION_STYLE_GPT ? "GPT" : "RAW");
             myprintf("Partitions      : %K\n", layout->PartitionCount);
             
-            // Enumera le partizioni
+            // Enumerate the partitions
             for (DWORD i = 0; i < layout->PartitionCount; i++)
             {
                 PARTITION_INFORMATION_EX* part = &layout->PartitionEntry[i];
@@ -95680,13 +99153,13 @@ std::string Jidac::enumerate_physical_disks(int i_chosendrive)
                             part->PartitionLength.QuadPart,
                             part->PartitionLength.QuadPart);
                     
-                    // Cerca la lettera di drive corrispondente
+                    // Search for the corresponding drive letter
                     char driveLetter = find_drive_letter_for_partition(diskNum, part->PartitionNumber);
                     if (driveLetter != 0)
                     {
                         myprintf(" -> %c:", driveLetter);
                         
-                        // Ottieni informazioni sul filesystem
+                        // Get filesystem information
                         char rootPath[8];
                         snprintf(rootPath, sizeof(rootPath), "%c:\\", driveLetter);
                         
@@ -95714,7 +99187,7 @@ std::string Jidac::enumerate_physical_disks(int i_chosendrive)
 		return risultato;
 }
 
-// Funzione helper per trovare la lettera di drive
+// Helper function to find the drive letter
 char Jidac::find_drive_letter_for_partition(int diskNumber, DWORD partitionNumber)
 {
     char drives[512];
@@ -95745,7 +99218,7 @@ char Jidac::find_drive_letter_for_partition(int diskNumber, DWORD partitionNumbe
                     if (diskExtents.NumberOfDiskExtents > 0 &&
                         diskExtents.Extents[0].DiskNumber == (DWORD)diskNumber)
                     {
-                        // Verifica il numero di partizione tramite IOCTL_DISK_GET_PARTITION_INFO_EX
+                        // Check the partition number via IOCTL_DISK_GET_PARTITION_INFO_EX
                         PARTITION_INFORMATION_EX partInfo;
                         if (DeviceIoControl(hVolume, IOCTL_DISK_GET_PARTITION_INFO_EX,
                                            NULL, 0,
@@ -95767,20 +99240,20 @@ char Jidac::find_drive_letter_for_partition(int diskNumber, DWORD partitionNumbe
     return 0;
 }
 
-// Funzione per verificare se è una lettera
+// Function to check if it's a letter
 bool isLetter(char c) 
 {
     return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
 }
 
-// Funzione per convertire stringa in numero
+// Function to convert string to number
 int stringToInt(const string& str) 
 {
     int result = 0;
     for (unsigned int i = 0; i < str.length(); i++) 
 	{
         if (!isdigit(str[i])) 
-            return -1; // Carattere non valido
+            return -1; // Invalid character
         result = result * 10 + (str[i] - '0');
     }
     return result;
@@ -95788,7 +99261,7 @@ int stringToInt(const string& str)
 
 bool Jidac::parsediskunit(string i_stringa, char& o_char, int& o_number) 
 {
- // Inizializza i valori di output
+ // Initialize output values
     o_char = '\0';
     o_number = -1;
     
@@ -95797,14 +99270,14 @@ bool Jidac::parsediskunit(string i_stringa, char& o_char, int& o_number)
     
     int len = i_stringa.length();
     
-    // Caso 1: Lettera singola (a-z, A-Z)
+    // Case 1: Single letter (a-z, A-Z)
     if (len == 1 && isLetter(i_stringa[0])) 
 	{
         o_char = tolower(i_stringa[0]);
         return true;
     }
     
-    // Caso 2: Lettera con : (a:, A:)
+    // Case 2: Letter with : (a:, A:)
     if (len == 2 && isLetter(i_stringa[0]) && i_stringa[1] == ':') 
 	{
         o_char = tolower(i_stringa[0]);
@@ -95819,7 +99292,7 @@ bool Jidac::parsediskunit(string i_stringa, char& o_char, int& o_number)
         return true;
     }
     
-    // Caso 4: Numero (0-32)
+    // Case 4: Number (0-32)
     if (len >= 1 && len <= 2) 
 	{
         bool allDigits = true;
@@ -95841,7 +99314,7 @@ bool Jidac::parsediskunit(string i_stringa, char& o_char, int& o_number)
         }
     }
     
-    // Caso 5: Numero con : (0:, 12:)
+    // Case 5: Number with : (0:, 12:)
     if (len >= 2 && len <= 3 && i_stringa[len-1] == ':') 
 	{
         string numStr = i_stringa.substr(0, len-1);
@@ -95866,7 +99339,7 @@ bool Jidac::parsediskunit(string i_stringa, char& o_char, int& o_number)
         }
     }
     
-    // Formato non riconosciuto
+    // Unrecognized format
     return false;
 }
 
@@ -95881,7 +99354,7 @@ int Jidac::drive()
 
 
 
-// Funzione per normalizzare i separatori (converte tutti in '/')
+// Function to normalize separators (converts all to '/')
 std::string normalizePath(const std::string& path) 
 {
     std::string normalized = path;
@@ -95891,7 +99364,7 @@ std::string normalizePath(const std::string& path)
     return normalized;
 }
 
-// Funzione per verificare se un percorso termina con '/'
+// Function to check if a path ends with '/'
 std::string ensureTrailingSlash(const std::string& path) 
 {
     if (path.empty() || path[path.length() - 1] != '/') 
@@ -95899,7 +99372,7 @@ std::string ensureTrailingSlash(const std::string& path)
     return path;
 }
 
-// Funzione per verificare se un percorso inizia con un altro percorso
+// Function to check if a path starts with another path
 bool startsWith(const std::string& fullPath, const std::string& prefix) 
 {
     if (prefix.length() > fullPath.length()) 
@@ -95907,7 +99380,7 @@ bool startsWith(const std::string& fullPath, const std::string& prefix)
     return fullPath.substr(0, prefix.length()) == prefix;
 }
 
-// Funzione per trovare la posizione del prossimo separatore
+// Function to find the position of the next separator
 size_t findNextSeparator(const std::string& path, size_t startPos) 
 {
     for (size_t i = startPos; i < path.length(); i++) 
@@ -95916,7 +99389,7 @@ size_t findNextSeparator(const std::string& path, size_t startPos)
     return std::string::npos;
 }
 
-// Funzione per verificare se una cartella è già presente nel vettore
+// Function to check if a folder is already present in the vector
 int findFolderIndex(const std::vector<conteggio_file>& vec, const std::string& item) 
 {
     for (size_t i = 0; i < vec.size(); i++) 
@@ -95926,45 +99399,45 @@ int findFolderIndex(const std::vector<conteggio_file>& vec, const std::string& i
 }
 
 
-// Funzione per ordinare per dimensione crescente
+// Function to sort by ascending size
 bool compareBySizeAsc(const conteggio_file& a, const conteggio_file& b) 
 {
     return a.dimensione_totale < b.dimensione_totale;
 }
 
-// Funzione per ordinare per dimensione decrescente
+// Function to sort by descending size
 bool compareBySizeDesc(const conteggio_file& a, const conteggio_file& b) 
 {
     return a.dimensione_totale > b.dimensione_totale;
 }
 
-// Funzione per ordinare in senso crescente usando sort C++
+// Function to sort in ascending order using C++ sort
 void sortBySize(std::vector<conteggio_file>& vec) 
 {
     std::sort(vec.begin(), vec.end(), compareBySizeAsc);
 }
 
-// Funzione per ordinare in senso decrescente usando sort C++
+// Function to sort in descending order using C++ sort
 void sortBySizeDesc(std::vector<conteggio_file>& vec) 
 {
     std::sort(vec.begin(), vec.end(), compareBySizeDesc);
 }
 
-// Funzione per estrarre la cartella di primo livello da un percorso
+// Function to extract the first level folder from a path
 std::string extractFirstLevelFolder(const std::string& path, const std::string& i_basepath) 
 {
     std::string normalizedPath 		= normalizePath(path);
     std::string normalizedBasePath 	= normalizePath(i_basepath);
     
-    // Se i_basepath è vuoto, gestiamo diversamente
+    // If i_basepath is empty, we handle it differently
     if (normalizedBasePath.empty()) 
 	{
-        // Trova il primo separatore nel percorso
+        // Find the first separator in the path
         size_t firstSeparatorPos = findNextSeparator(normalizedPath, 0);
         
         if (firstSeparatorPos != std::string::npos) 
 		{
-            // Per percorsi UNC (//server/), considera i primi due componenti
+            // For UNC paths (//server/), consider the first two components
             if (normalizedPath.length() >= 2 && normalizedPath.substr(0, 2) == "//") 
 			{
                 size_t secondSeparatorPos = findNextSeparator(normalizedPath, 2);
@@ -95976,16 +99449,16 @@ std::string extractFirstLevelFolder(const std::string& path, const std::string& 
                 }
                 return normalizedPath.substr(0, secondSeparatorPos + 1);
             }
-            // Per percorsi Windows con drive (c:/)
+            // For Windows paths with drive (c:/)
             else 
 			if (normalizedPath.length() >= 2 && normalizedPath[1] == ':') 
 			    return normalizedPath.substr(0, firstSeparatorPos + 1);
-            // Per percorsi relativi e assoluti Linux
+            // For relative and absolute Linux paths
             else 
 			{
-                if (normalizedPath[0] == '/')     // Percorso assoluto Linux
+                if (normalizedPath[0] == '/')     // Absolute path Linux
                     return normalizedPath.substr(0, firstSeparatorPos + 1);
-				else     // Percorso relativo
+				else     // Relative path
                     return normalizedPath.substr(0, firstSeparatorPos + 1);
                 
             }
@@ -95993,7 +99466,7 @@ std::string extractFirstLevelFolder(const std::string& path, const std::string& 
         return "";
     }
     
-    // Caso con i_basepath non vuoto (logica originale)
+    // Case with non-empty i_basepath (original logic)
     normalizedBasePath = ensureTrailingSlash(normalizedBasePath);
     
     if (startsWith(normalizedPath, normalizedBasePath)) 
@@ -96013,26 +99486,26 @@ std::string extractFirstLevelFolder(const std::string& path, const std::string& 
 void Jidac::getfirstlevelfolders(const DTMap& i_filemap, const std::string& i_basepath, std::vector<conteggio_file>& o_output, bool i_ordinapersize, bool i_flagdesc) 
 {
     
-    // Pulisce il vettore di output
+    // Clears the output vector
     o_output.clear();
     
-    // Itera attraverso tutti i percorsi nella mappa
+    // Iterate through all paths in the map
     for (DTMap::const_iterator it = i_filemap.begin(); it != i_filemap.end(); ++it) 
 	{
         std::string currentPath = it->first;
         const DT& metadata = it->second;
         
-        // Estrai la cartella di primo livello
+        // Extract the first level folder
         std::string firstLevelFolder = extractFirstLevelFolder(currentPath, i_basepath);
         
         if (!firstLevelFolder.empty()) 
 		{
-            // Cerca se la cartella è già presente
+            // Check if the folder is already present
             int folderIndex = findFolderIndex(o_output, firstLevelFolder);
             
             if (folderIndex == -1) 
 			{
-                // Nuova cartella
+                // New folder
                 conteggio_file nuovo;
                 nuovo.percorso = firstLevelFolder;
                 nuovo.dimensione_totale = metadata.size >= 0 ? metadata.size : 0;
@@ -96054,7 +99527,7 @@ void Jidac::getfirstlevelfolders(const DTMap& i_filemap, const std::string& i_ba
             } 
 			else 
 			{
-                // Cartella esistente, aggiorna i contatori
+                // Existing folder, update counters
                 if (metadata.size >= 0) 
 				    o_output[folderIndex].dimensione_totale += metadata.size;
                 
@@ -96079,7 +99552,7 @@ void Jidac::getfirstlevelfolders(const DTMap& i_filemap, const std::string& i_ba
 
 bool makeprivacy(const std::string& input_file, const std::string& output_file)
 {
-    // Validazione input
+    // Input validation
     if (input_file.empty()) 
 	{
         myprintf("93548! Input file path is empty\n");
@@ -96092,14 +99565,14 @@ bool makeprivacy(const std::string& input_file, const std::string& output_file)
         return false;
     }
     
-    // Verifica che i file non siano lo stesso
+    // Check that the files are not the same
     if (input_file == output_file) 
 	{
         myprintf("93550! Input and output files cannot be the same\n");
         return false;
     }
     
-    // Verifica esistenza file di input
+    // Check existence of input file
     FILE* test_file = fopen(input_file.c_str(), "r");
     if (!test_file) 
 	{
@@ -96108,7 +99581,7 @@ bool makeprivacy(const std::string& input_file, const std::string& output_file)
     }
     fclose(test_file);
     
-    // Apertura file di input
+    // Opening input file
     FILE* in = fopen(input_file.c_str(), "r");
     if (!in) 
 	{
@@ -96116,7 +99589,7 @@ bool makeprivacy(const std::string& input_file, const std::string& output_file)
         return false;
     }
     
-    // Apertura file di output
+    // Opening output file
     FILE* out = fopen(output_file.c_str(), "w");
     if (!out) 
 	{
@@ -96127,22 +99600,22 @@ bool makeprivacy(const std::string& input_file, const std::string& output_file)
     
     const char* STAT_PREFIX 	= "|STAT|";
     const size_t PREFIX_LEN 	= 6; // lunghezza di "|STAT|"
-    char line[32768]; 					// Buffer più grande per linee lunghe
+    char line[32768]; 					// Larger buffer per linee lunghe
     size_t lines_processed 		= 0;
     size_t lines_filtered 		= 0;
     bool success 				= true;
     
-    // Processa il file riga per riga
+    // Process the file line by line
     while (fgets(line, sizeof(line), in)) 
 	{
         lines_processed++;
         
-        // Rimuovi newline finale se presente per controllo più preciso
+        // Remove final newline if present for more precise control
         size_t len = strlen(line);
 		
         bool has_newline = (len > 0 && ((line[len-1] == '\n') || (line[len-1] == '\r')));
         
-        // Verifica buffer overflow (linea troppo lunga)
+        // Check for buffer overflow (line too long)
         if (len == sizeof(line)-1 && !has_newline) 
 		{
             myprintf("93554$ Line %s too long, may be truncated |%s|\n", migliaia(lines_processed),line);
@@ -96151,10 +99624,10 @@ bool makeprivacy(const std::string& input_file, const std::string& output_file)
         if (len >= PREFIX_LEN && strncmp(line, STAT_PREFIX, PREFIX_LEN) == 0) 
 		{
             lines_filtered++;
-            continue; // Salta questa riga
+            continue; // Skip this line
         }
         
-        // Scrivi la riga nel file di output
+        // Write the line to the output file
         if (fputs(line, out) == EOF) 
 		{
             myprintf("93555! Write error to output file at line %s\n", migliaia(lines_processed));
@@ -96167,21 +99640,21 @@ bool makeprivacy(const std::string& input_file, const std::string& output_file)
             fflush(out);
     }
     
-    // Verifica errori di lettura
+    // Check for read errors
     if (!feof(in) && ferror(in)) 
 	{
         myprintf("93556! Read error from input file\n");
         success = false;
     }
     
-    // Verifica errori di scrittura finale
+    // Check for final write errors
     if (fflush(out) != 0) 
 	{
         myprintf("93557! Final flush error to output file\n");
         success = false;
     }
     
-    // Chiusura file
+    // File closing
     fclose(in);
     fclose(out);
     
@@ -96207,24 +99680,24 @@ bool isemail(const std::string& email)
     
     size_t len = email.length();
     
-    // Lunghezza minima: a@b.c (5 caratteri)
+    // Minimum length: a@b.c (5 characters)
     if ((len < 5) || (len > 254)) // RFC 5321 limite massimo
         return false;
     
-    // Trova la posizione dell'@
+    // Find the position of the @
     size_t at_pos = email.find('@');
     if (at_pos == std::string::npos) 
-	    return false; // Nessuna @
+	    return false; // No @
     
-    // Verifica che ci sia una sola @
+    // Check that there is only one @
     if (email.find('@', at_pos + 1) != std::string::npos) 
-	    return false; // Più di una @
-    
-    // Calcola lunghezze delle parti
+	    return false; 
+	
+    // Calculate part lengths
     size_t local_len = at_pos;
     size_t domain_len = len - local_len - 1;
     
-    // Verifica lunghezze parti
+    // Check part lengths
     if ((local_len == 0) || (local_len > 64))
 	    return false;  // RFC 5321 limite local part
     
@@ -96232,23 +99705,23 @@ bool isemail(const std::string& email)
     if ((domain_len == 0) || (domain_len > 253)) 
         return false;// RFC 1035 limite domain
     
-    // Estrai le parti
+    // Extract the parts
     std::string local_part = email.substr(0, at_pos);
     std::string domain = email.substr(at_pos + 1);
     
-    // === VALIDAZIONE PARTE LOCALE (prima dell'@) ===
+    // === LOCAL PART VALIDATION (before the '@') ===
     
-    // Non può iniziare o finire con punto
+    // Cannot start or end with a dot
     if (local_part[0] == '.' || local_part[local_len - 1] == '.') 
 	    return false;
     
-    // Controlla caratteri validi nella parte locale
+    // Check valid characters in the local part
     bool prev_was_dot = false;
     for (size_t i = 0; i < local_len; i++) 
 	{
         char c = local_part[i];
         
-        // Punti consecutivi non ammessi
+        // Consecutive dots not allowed
         if (c == '.') 
 		{
             if (prev_was_dot) 
@@ -96258,28 +99731,28 @@ bool isemail(const std::string& email)
         }
         prev_was_dot = false;
         
-        // Caratteri ammessi: lettere, numeri, alcuni simboli
+        // Allowed characters: letters, numbers, some symbols
         if (!isalnum(c) && c != '.' && c != '-' && c != '_' && c != '+' && c != '=' && c != '~') 
 		    return false;
     }
     
-    // === VALIDAZIONE DOMINIO (dopo l'@) ===
+    // === DOMAIN VALIDATION (after the '@') ===
     
-    // Non può iniziare o finire con punto o trattino
+    // Cannot start or end with a dot o trattino
     if (domain[0] == '.' || domain[0] == '-' || domain[domain_len - 1] == '.' || domain[domain_len - 1] == '-') 
 	    return false;
     
-    // Deve contenere almeno un punto (per il TLD)
+    // Must contain at least one dot (for the TLD)
     size_t dot_pos = domain.find('.');
     if (dot_pos == std::string::npos) 
 	    return false;
     
-    // Controlla che ci sia almeno un carattere dopo l'ultimo punto (TLD)
+    // Check that there is at least one character after the last dot (TLD)
     size_t last_dot = domain.rfind('.');
     if (domain.length() - last_dot - 1 < 2)  
-		return false; // TLD minimo 2 caratteri
+		return false; // Minimum TLD 2 characters
         
-    // Controlla caratteri validi nel dominio
+    // Check valid characters in the domain
     prev_was_dot = false;
     bool prev_was_dash = false;
     
@@ -96289,10 +99762,10 @@ bool isemail(const std::string& email)
         
         if (c == '.') 
 		{
-            // Punti consecutivi non ammessi
+            // Consecutive dots not allowed
             if (prev_was_dot) 
 			    return false;
-            // Punto dopo trattino non ammesso
+            // Dot after hyphen not allowed
             if (prev_was_dash) 
 			    return false;
             prev_was_dot 	= true;
@@ -96302,7 +99775,7 @@ bool isemail(const std::string& email)
         
         if (c == '-') 
 		{
-            // Trattino dopo punto non ammesso
+            // Hyphen after dot not allowed
             if (prev_was_dot) 
 			    return false;
             prev_was_dash 	= true;
@@ -96314,20 +99787,20 @@ bool isemail(const std::string& email)
         prev_was_dot 	= false;
         prev_was_dash 	= false;
         
-        // Solo lettere e numeri ammessi (oltre a . e -)
+        // Only letters and numbers allowed (in addition to . and -)
         if (!isalnum(c)) 
 		    return false;
     }
     
-    // === CONTROLLI AGGIUNTIVI ===
+    // === ADDITIONAL CHECKS ===
     
-    // Verifica che il TLD contenga solo lettere
+    // Check that the TLD contains only letters
     std::string tld = domain.substr(last_dot + 1);
     for (size_t i = 0; i < tld.length(); i++) 
 	    if (!isalpha(tld[i])) 
 		    return false;
     
-    // Controlla che ogni parte del dominio non superi 63 caratteri
+    // Check that each part of the domain does not exceed 63 characters
     size_t start 	= 0;
     size_t pos 		= 0;
     
@@ -96339,7 +99812,7 @@ bool isemail(const std::string& email)
         start = pos + 1;
     }
     
-    // Controlla l'ultima parte (dopo l'ultimo punto)
+    // Check the last part (after the last dot)
     size_t last_part_len = domain.length() - start;
     if ((last_part_len == 0) || (last_part_len > 63))
 	    return false;
@@ -96373,7 +99846,7 @@ int waitexecuteprogram(const std::string& i_filename, const std::string& i_param
     si.cb = sizeof(si);
     ZeroMemory(&pi, sizeof(pi));
     
-    // Costruisci la command line completa
+    // Build the complete command line
     std::string cmdLine;
     if (!i_parameters.empty()) 
 	    cmdLine = "\"" + i_filename + "\" " + i_parameters;
@@ -96381,12 +99854,12 @@ int waitexecuteprogram(const std::string& i_filename, const std::string& i_param
 	    cmdLine = "\"" + i_filename + "\"";
 
     
-    // Aggiungi redirezione output se specificata
+    // Add output redirection if specified
     if (!i_fileoutput.empty()) 
 	    cmdLine += " >>" + i_fileoutput;
     
-    // Crea il processo con o senza redirezione
-    // Se c'è redirezione, usa cmd.exe per gestirla
+    // Create the process con o senza redirezione
+    // If there is redirection, use cmd.exe to handle it
     std::string finalCmdLine;
     if (!i_fileoutput.empty()) 
 	    finalCmdLine = "cmd.exe /c \"" + cmdLine + "\"";
@@ -96395,8 +99868,8 @@ int waitexecuteprogram(const std::string& i_filename, const std::string& i_param
     
 ///    printf("Executing: %s\n", finalCmdLine.c_str());
     
-    // Crea il processo senza reindirizzamento I/O interno
-    // Il programma avrà accesso diretto alla console (a meno che non sia rediretto)
+    // Create the process senza reindirizzamento I/O interno
+    // The program will have direct access to the console (unless redirected)
     if (!CreateProcessA(
         NULL,                                     // No module name (use command line)
         const_cast<LPSTR>(finalCmdLine.c_str()), // Command line
@@ -96412,19 +99885,19 @@ int waitexecuteprogram(const std::string& i_filename, const std::string& i_param
     {
         DWORD error = GetLastError();
         printf("Error creating process: %lu\n", error);
-        return -1;  // Errore nella creazione del processo
+        return -1;  // Error in creating the process
     }
     
-    // Aspetta che il processo termini
+    // Wait for the process to terminate
     WaitForSingleObject(pi.hProcess, INFINITE);
     
-    // Ottieni l'exit code del processo
+    // Get the process exit code
     DWORD exitCode;
     if (!GetExitCodeProcess(pi.hProcess, &exitCode)) 
 	{
         DWORD error = GetLastError();
         printf("Error getting exit code: %lu\n", error);
-        exitCode = -2;  // Errore nel recupero dell'exit code
+        exitCode = -2;  // Error in retrieving the exit code
     }
     
     // Cleanup
@@ -96606,6 +100079,8 @@ int Jidac::cloud()
 			thealgo="sha256";	
 		color_cyan();
 		myprintf("43614: ::::::::::::::::::::: 	Full deep check with %s\n",thealgo.c_str());
+		///flagpakka	=true; 
+		flagnoeta	=false;
 		color_restore();
 		files.clear();
 		files.push_back("ssh");
@@ -96748,7 +100223,7 @@ int Jidac::cloud()
     typedef void* HMODULE;
 #endif
 
-// Tipi di funzione per libssh
+// Function types for libssh
 
 typedef void* 		ssh_key;
 typedef int 		(*ssh_pki_import_privkey_file_t)		(const char* filename, const char* passphrase, void* auth_fn, void* auth_data, ssh_key* pkey);
@@ -96776,7 +100251,7 @@ typedef int 		(*ssh_channel_get_exit_status_t)		(void*);
 typedef int 		(*ssh_channel_send_eof_t)				(void*);
 typedef int 		(*ssh_channel_select_t)					(void**, void**, void**, struct timeval*);
 
-// Costanti per ssh_options_set
+// Constants for ssh_options_set
 #define SSH_OPTIONS_HOST 0
 #define SSH_OPTIONS_PORT 1
 #define SSH_OPTIONS_USER 2
@@ -96809,7 +100284,7 @@ static ssh_userauth_password_t ssh_userauth_password 						= NULL;
 static ssh_userauth_publickey_auto_t ssh_userauth_publickey_auto			= NULL;
 static ssh_userauth_publickey_t ssh_userauth_publickey						= NULL;
 
-// Funzioni cross-platform per il caricamento dinamico
+// Cross-platform functions for dynamic loading
 #ifdef _WIN32
 bool file_exists(const char* path) 
 {
@@ -96851,147 +100326,13 @@ const char* get_library_error()
 const char* get_default_libssh_path() 
 {
     static std::string percorsolocale = "./libssh.dll";
-    if (pjidac != NULL)
-        percorsolocale = extractfilepath((*pjidac).fullzpaqexename) + "libssh.dll";
+	if (getwinexedir()!="")
+		percorsolocale = getwinexedir() + "libssh.dll";
     return percorsolocale.c_str();
 }
 
 
 
-int checklibssh(bool i_downloadfrominternet)
-{
-    string percorsolocale;
-    if (pjidac != NULL)
-        percorsolocale = includetrailingbackslash(extractfilepath((*pjidac).fullzpaqexename));
-    
-    if (percorsolocale == "")
-    {
-        myprintf("96496: GURU, cannot get path for kickstartlibssh\n");
-        return 2;
-    }
-    
-    myprintf("DEBUG: percorsolocale %s\n", percorsolocale.c_str());
-    
-    // Mappa con tutti i file da verificare (nome file -> hash SHA-256)
-    map<string, string> files_to_check;
-    
-    files_to_check["libssh.dll"] 			= "7385986FFA0BDDB95CAEB835A8118E96099A91CB3AD5B42A3009A6E0EDFC6B7F";
-    files_to_check["libgcc_s_seh-1.dll"] 	= "B22B954397A52703579D92DB64B57812AF70F2AFCAFE2E742A009C1640B9EC1A";
-    files_to_check["libwinpthread-1.dll"] 	= "5091B85A2A73B82AA3CF433F51AF338F6245319D1C041BC26B42A61CBDB2F880";
-    files_to_check["zlib1.dll"] 			= "CB7AB3788D10940DF874ACD97B1821BBB5EE4A91F3EEC11982BB5BF7A3C96443";
-    files_to_check["libcrypto-3-x64.dll"] 	= "C0674A225D30F1642CA1DA45AC040A9C1885D8F23883532B42987BAE458EDC4D";
-    
-    franz_do_hash dummy("SHA-256");
-    int64_t starthash = mtime();
-    
-    // Controllo di tutti i file nella mappa usando iteratore
-    for (map<string, string>::iterator it = files_to_check.begin(); it != files_to_check.end(); ++it)
-    {
-        string filename 		= it->first;
-        string expected_sha256 	= it->second;
-        string filepath 		= percorsolocale + filename;
-        
-        // Tenta fino a 2 volte: prima verifica esistente, poi eventualmente scarica e ri-verifica
-        for (int attempt=0;attempt<2;attempt++)
-        {
-            int64_t dimensione = prendidimensionefile(filepath.c_str());
-            
-            if (dimensione<=0)
-            {
-                if (attempt==0)
-                {
-                    color_yellow();
-                    myprintf("96515: libssh: file %s not found or empty\n", filepath.c_str());
-                    color_restore();
-                    
-                    if (!i_downloadfrominternet)
-                    {
-                        myprintf("96516! Download not allowed, exiting\n");
-                        return 2;
-                    }
-                    // Continua al download
-                }
-                else
-                {
-                    myprintf("83123: File %s still not found after download => KAPUTT\n", filepath.c_str());
-                    return 2;
-                }
-            }
-            else
-            {
-                // File esiste, verifica hash
-                string hashreloaded = dummy.filehash(filepath, false, starthash, dimensione);
-                
-                if (hashreloaded == expected_sha256)
-                {
-                    // Hash corretto, file OK
-					if (flagdebug)
-					{
-						color_green();
-						myprintf("96591: Verified successfully %s\n", filepath.c_str());
-						color_restore();
-					}
-                    break; // Esci dal loop dei tentativi
-                }
-                else
-                {
-                    if (attempt == 0)
-                    {
-                        color_yellow();
-                        myprintf("96518: %s corrupted (expected: %s, got: %s)\n", 
-                                 filepath.c_str(), 
-                                 expected_sha256.c_str(), 
-                                 hashreloaded.c_str());
-                        color_restore();
-                        
-                        if (!i_downloadfrominternet)
-                        {
-                            myprintf("96519: Download not allowed, exiting\n");
-                            return 2;
-                        }
-                        
-                        // Rimuovi file corrotto
-                        delete_file(filepath.c_str());
-                        // Continua al download
-                    }
-                    else
-                    {
-                        myprintf("96584: %s still corrupted after download (expected: %s, got: %s)\n", 
-                                 filepath.c_str(), 
-                                 expected_sha256.c_str(), 
-                                 hashreloaded.c_str());
-                        return 2;
-                    }
-                }
-            }
-            
-            // Se arriviamo qui, dobbiamo scaricare il file
-            if (attempt == 0)
-            {
-                string randnocache = "?" + generaterandomstring(10);
-                string http_dll = "http://www.francocorbelli.it/zpaqfranz/win64/" + filename;
-				
-				color_yellow();
-                myprintf("96554: Getting %s from %s\n", filename.c_str(),http_dll.c_str());
-                color_restore();
-                
-				string dllurl = http_dll + randnocache;
-                
-                if (!downloadfile(dllurl, filepath, true))
-                {
-                    myprintf("0342: Cannot download %s, sorry (no Internet?)\n", filepath.c_str());
-                    return 2;
-                }
-                if (flagverbose)
-					myprintf("96565: Downloaded, checking again %s\n", filename.c_str());
-                // Il loop continuerà e ri-verificherà il file
-            }
-        }
-    }
-    
-    myprintf("DEBUG: All library files verified successfully\n");
-    return 0;
-}
 
 #else // Unix/Linux
 
@@ -97028,16 +100369,15 @@ const char* get_default_libssh_path()
 
 #endif
 
-// Funzione per caricare dinamicamente la libreria SSH
+// Function to dynamically load the SSH library
 int caricadllssh()
 {
 	if (g_sshLib)
 		return 0;
 
 	const char* dllPath	= get_default_libssh_path();
-    
 #ifdef _WIN32
-    // Verifica se la libreria esiste
+    // Check if the library exists
     if (!file_exists(dllPath)) 
 	{
         myprintf("96543! Cannot find libssh in %Z\n", dllPath);
@@ -97051,7 +100391,7 @@ int caricadllssh()
     myprintf("DEBUG: libssh founded in %s\n", dllPath);
 #endif
 
-    // Carica la libreria
+    // Load the library
     g_sshLib = load_library(dllPath);
     if (!g_sshLib) 
 	{
@@ -97067,12 +100407,12 @@ int caricadllssh()
 
 
 
-// Nel caricamento delle funzioni aggiungi:
+// When loading functions add:
 	ssh_version_t ssh_version = (ssh_version_t)get_proc_address(g_sshLib, "ssh_version");
 	if (ssh_version) 
 		myprintf("DEBUG: libssh version: %s\n", ssh_version(0));
 	
-    // Risolvi le funzioni
+    // Resolve functions
 	ssh_new 						= (ssh_new_t)							get_proc_address(g_sshLib, "ssh_new");
 	ssh_options_set 				= (ssh_options_set_t)					get_proc_address(g_sshLib, "ssh_options_set");
 	ssh_connect 					= (ssh_connect_t)						get_proc_address(g_sshLib, "ssh_connect");
@@ -97142,7 +100482,7 @@ int caricadllssh()
     return 0;
 }
 
-// Funzione per scaricare la libreria
+// Function to download the library
 void scaricadllssh() 
 {
     if (g_sshLib) 
@@ -97153,24 +100493,24 @@ void scaricadllssh()
     }
 }
 
-// Funzione per autenticazione (prima chiave RSA, poi password come fallback)
+// Function for authentication (first RSA key, then password as fallback)
 int autentica_ssh(void* session, const std::string& user, const std::string& password, const std::string& keyfile) 
 {
-   // Tenta autenticazione con chiave se specificata e il file esiste
+   // Attempt authentication with key if specified and the file exists
    if (!keyfile.empty() && file_exists(keyfile.c_str())) 
    {
        myprintf("DEBUG: RSA keyfile: %s\n", keyfile.c_str());
        
-       // Caricamento manuale della chiave
+       // Manual key loading
        if (ssh_pki_import_privkey_file && ssh_userauth_publickey && ssh_key_free)
        {
            void* privkey = NULL;
            
-           // Prova a caricare la chiave senza passphrase
+           // Try to load the key without a passphrase
            int rc = ssh_pki_import_privkey_file(keyfile.c_str(), NULL, NULL, NULL, &privkey);
            if (rc != 0 && !password.empty()) 
            {
-               // Riprova con password come passphrase
+               // Retry with password as passphrase
                rc = ssh_pki_import_privkey_file(keyfile.c_str(), password.c_str(), NULL, NULL, &privkey);
            }
            
@@ -97201,7 +100541,7 @@ int autentica_ssh(void* session, const std::string& user, const std::string& pas
        myprintf("DEBUG: Keyfile '%s' not found, going password\n", keyfile.c_str());
    }
    
-   // Fallback con autenticazione password
+   // Fallback with password authentication
    myprintf("DEBUG: Going password for user: %s\n", user.c_str());
    if (ssh_userauth_password(session, user.c_str(), password.c_str()) == 0) 
    {
@@ -97220,12 +100560,11 @@ enum ssh_error_e
   SSH_ERROR = -1,
   SSH_AGAIN = -2,
 };
-
-int eseguicomandossh(std::string& comando, const std::string& host, int port,
+int eseguicomandossh(uint64_t i_expectedtime,std::string& comando, const std::string& host, int port,
                       const std::string& user, const std::string& password, const std::string& keyfile,
                       std::string& o_output)
 {
-    o_output = ""; // Pulisce l'output precedente
+    o_output = ""; // Clears the previous output
     if (!g_sshLib)
     {
         myprintf("96673: SSH not loaded. Need  caricadllssh()\n");
@@ -97237,7 +100576,7 @@ int eseguicomandossh(std::string& comando, const std::string& host, int port,
     if (flagdebug)
         myprintf("DEBUG: Command=%s\n", comando.c_str());
 
-    // 1. Inizializzazione della sessione SSH
+    // 1. SSH session initialization
     void* session = ssh_new();
     if (!session)
     {
@@ -97245,14 +100584,14 @@ int eseguicomandossh(std::string& comando, const std::string& host, int port,
         return -1;
     }
 
-    // 2. Impostazione delle opzioni della sessione con timeout più conservativo
-    int timeout_secondi = 20; // Aumentato per connessioni più stabili
+    // 2. Setting session options with a more conservative timeout
+    int timeout_secondi = 20; // Increased for more stable connections
     ssh_options_set(session, SSH_OPTIONS_HOST,      host.c_str());
     ssh_options_set(session, SSH_OPTIONS_PORT,      &port);
     ssh_options_set(session, SSH_OPTIONS_USER,      user.c_str());
     ssh_options_set(session, SSH_OPTIONS_TIMEOUT,   &timeout_secondi);
 
-    // 3. Connessione al server
+    // 3. Server connection
     if (ssh_connect(session) != 0)
     {
         myprintf("96700: ssh_connect kaputt: %s\n", ssh_get_error(session));
@@ -97261,7 +100600,7 @@ int eseguicomandossh(std::string& comando, const std::string& host, int port,
     }
     myprintf("DEBUG: Connection to %s done\n", host.c_str());
 
-    // 4. Autenticazione
+    // 4. Authentication
     if (autentica_ssh(session, user, password, keyfile) != 0)
     {
         myprintf("96799! autentica_ssh kaputt: %s\n", ssh_get_error(session));
@@ -97271,7 +100610,7 @@ int eseguicomandossh(std::string& comando, const std::string& host, int port,
     }
     myprintf("DEBUG: Autentica_ssh OK\n");
 
-    // 5. Creazione di un canale
+    // 5. Channel creation
     void* channel = ssh_channel_new(session);
     if (!channel)
     {
@@ -97281,7 +100620,7 @@ int eseguicomandossh(std::string& comando, const std::string& host, int port,
         return -1;
     }
 
-    // 6. Apertura di una sessione sul canale
+    // 6. Opening a session on the channel
     if (ssh_channel_open_session(channel) != 0)
     {
         myprintf("96731! ssh_channel_open_session kaputt: %s\n", ssh_get_error(session));
@@ -97292,7 +100631,7 @@ int eseguicomandossh(std::string& comando, const std::string& host, int port,
     }
     myprintf("DEBUG: Session channel OK\n");
 
-    // 7. Esecuzione del comando
+    // 7. Command execution
     if (ssh_channel_request_exec(channel, comando.c_str()) != 0)
     {
         myprintf("96750! exec kaputt: %s\n", ssh_get_error(session));
@@ -97305,49 +100644,73 @@ int eseguicomandossh(std::string& comando, const std::string& host, int port,
     myprintf("DEBUG: Waiting for output...\n");
 
     // 8. *** LOGICA DI LETTURA OTTIMIZZATA ANTI-DEADLOCK ***
-    char buffer[8192]; // Buffer più grande per maggiore efficienza
+    char buffer[8192]; // Larger buffer per maggiore efficienza
     int nbytes;
     std::string stderr_output;
     
     int64_t started = mtime();
     int consecutive_empty_reads = 0;
-    const int MAX_EMPTY_READS = 10; // Limite per evitare loop infiniti
+    const int MAX_EMPTY_READS = 10; // Limit to avoid infinite loops
     
-    // Il ciclo continua finché il canale è aperto e/o ci sono dati da leggere
     while (ssh_channel_is_open(channel) && !ssh_channel_is_eof(channel))
     {
         struct timeval timeout;
-        timeout.tv_sec 	= 5;  // Timeout bilanciato
+        timeout.tv_sec 	= 5;  // Balanced timeout
         timeout.tv_usec = 0;
 
         void* read_channels[2];
         read_channels[0] = channel;
         read_channels[1] = NULL;
-        
-        // Progress indicator per operazioni lunghe
+      
+      
         int seconds = (mtime() - started) / 1000.0;
-        if (seconds > 5) // Mostra progress solo dopo 5 secondi
+        if (seconds > 5) // Show progress only after 5 seconds
         {
-            myprintf("96891: Waiting... %02d:%02d:%02d\r", 
-                    int(seconds/3600), int(seconds/60)%60, int(seconds)%60);
+			if (i_expectedtime > 0) 
+            {
+                // Calcola tempo rimanente basato su i_expectedtime
+                int64_t tempo_rimanente = i_expectedtime - seconds;
+				///myprintf("00600: i_expected %s rimanente_ms %s\n",migliaia(i_expectedtime),migliaia2(tempo_rimanente_ms));
+				
+                if (tempo_rimanente > 0) 
+                {
+                    int eta_ore = tempo_rimanente / 3600;
+                    if (eta_ore > 99) eta_ore = 99;
+                    int eta_min = (tempo_rimanente / 60) % 60;
+                    int eta_sec = tempo_rimanente % 60;
+                    myprintf("96891: Waiting... %02d:%02d:%02d ETA: %02d:%02d:%02d\r", 
+                            int(seconds/3600), int(seconds/60)%60, int(seconds)%60,
+                            eta_ore, eta_min, eta_sec);
+                } 
+                else 
+                {
+                    myprintf("96891: Waiting... %02d:%02d:%02d ETA: --:--:--\r", 
+                            int(seconds/3600), int(seconds/60)%60, int(seconds)%60);
+                }
+            } 
+            else 
+            {
+                myprintf("96891: Waiting... %02d:%02d:%02d\r", 
+                        int(seconds/3600), int(seconds/60)%60, int(seconds)%60);
+            }
         }
         
-        // Attende che ci siano dati pronti sul canale
+        // Wait for data to be ready on the channel
         int rc = ssh_channel_select(read_channels, NULL, NULL, &timeout);
 
         if (rc == SSH_ERROR) 
 		{
             myprintf("\n");
 			myprintf("96930! Critical error ssh_channel_select: %s\n", ssh_get_error(session));
-            break; // Esce immediatamente su errore critico
+            break; // Exits immediately on critical error
         }
 
         if (rc == SSH_AGAIN) 
-		{ // Timeout, nessun dato disponibile
+		{ // Timeout, no data available
             consecutive_empty_reads++;
             if (consecutive_empty_reads >= MAX_EMPTY_READS) 
 			{
-                // Verifica se il canale è ancora attivo
+                // Check if the channel is still active
                 if (ssh_channel_is_eof(channel)) 
 				{
                     myprintf("\n");
@@ -97358,14 +100721,14 @@ int eseguicomandossh(std::string& comando, const std::string& host, int port,
             continue;
         }
 
-        // Reset del contatore se abbiamo ricevuto dati
+        // Reset the counter if we have received data
         consecutive_empty_reads = 0;
 
-        // *** LETTURA BILANCIATA ANTI-DEADLOCK ***
-        // Legge SEMPRE da entrambi i canali ad ogni iterazione
+        // *** BALANCED ANTI-DEADLOCK READ ***
+        // ALWAYS read from both channels at each iteration
         bool data_read = false;
         
-        // Tentativo di lettura da STDOUT (prioritario per l'output principale)
+        // Attempt to read from STDOUT (priority for the main output)
         nbytes = ssh_channel_read_nonblocking(channel, buffer, sizeof(buffer), 0);
         if (nbytes > 0) 
 		{
@@ -97378,7 +100741,7 @@ int eseguicomandossh(std::string& comando, const std::string& host, int port,
 		///	myprintf("96935! Error reading STDOUT %s\n", ssh_get_error(session));
         }
 
-        // Tentativo di lettura da STDERR (critico per prevenire deadlock)
+        // Attempt to read from STDERR (critical to prevent deadlock)
         nbytes = ssh_channel_read_nonblocking(channel, buffer, sizeof(buffer), 1);
         if (nbytes > 0) 
 		{
@@ -97391,14 +100754,14 @@ int eseguicomandossh(std::string& comando, const std::string& host, int port,
 		///	myprintf("96940$ No stderr\n");
         }
         
-        // Se non ci sono dati su nessuno dei due canali, incrementa il contatore
+        // If there is no data on either channel, increment the counter
         if (!data_read) 
             consecutive_empty_reads++;
     }
 
     myprintf("DEBUG: Completed\n");
 
-    // 9. Gestione e stampa dei risultati con informazioni più dettagliate
+    // 9. Management and printing of results with more detailed information
     if (flagdebug)
         myprintf("96818: RESULT FOR comando: |%s|\n", comando.c_str());
     
@@ -97410,9 +100773,6 @@ int eseguicomandossh(std::string& comando, const std::string& host, int port,
 	{
         if (flagdebug)
             myprintf("96823: STDOUT (%s bytes)\n%s\n", migliaia(o_output.length()), o_output.c_str());
-        else 
-			if (flagverbose)
-				myprintf("96824: STDOUT %s bytes\n", migliaia(o_output.length()));
     }
 
     if (!stderr_output.empty()) 
@@ -97428,13 +100788,12 @@ int eseguicomandossh(std::string& comando, const std::string& host, int port,
     } else 
 	if (flagverbose) 
 	{
-        myprintf("96840: Done with success (exit code: 0)\n");
+        myprintf("96840: Done remote with success (exit code: 0)\n");
     }
 
     // 11. Pulizia finale ottimizzata
     myprintf("DEBUG: Cleanup ssh...\n");
     
-    // Invio EOF solo se il canale è ancora aperto
     if (ssh_channel_is_open(channel)) 
         ssh_channel_send_eof(channel);
     
@@ -97445,10 +100804,10 @@ int eseguicomandossh(std::string& comando, const std::string& host, int port,
     
     myprintf("DEBUG: Cleanup done\n");
 
-    // Ritorna l'exit status del comando remoto (0 = successo, altro = errore)
+    // Returns the exit status of the remote command (0 = success, other = error)
     return exit_status;
 }
-int Jidac::xssh(std::string i_command,std::string& o_output)
+int Jidac::xssh(uint64_t i_timetorun,std::string i_command,std::string& o_output)
 {
 	o_output="";
 	if (i_command=="")
@@ -97473,14 +100832,13 @@ int Jidac::xssh(std::string i_command,std::string& o_output)
 			myprintf("96805: you need -password or -key!\n");
 			return 2;
 		}
-    // Carica la libreria SSH
+    // Load the library SSH
     if (caricadllssh()!=0) 
 	{
 		myprintf("96814: cannot load libssh\n");
         return 2;
     }
-	
-    int result = eseguicomandossh(i_command, g_sftp_host, g_sftp_port, g_sftp_user, g_sftp_password, g_sftp_key,o_output);
+    int result = eseguicomandossh(i_timetorun,i_command, g_sftp_host, g_sftp_port, g_sftp_user, g_sftp_password, g_sftp_key,o_output);
     scaricadllssh();
 
     return result;
@@ -97489,24 +100847,24 @@ int Jidac::xssh(std::string i_command,std::string& o_output)
 
 void parsehashfilelist(const std::string& input, std::vector<std::pair<std::string, std::string> >& o_hashname) 
 {
-    o_hashname.clear(); // Pulisce il vettore di output
+    o_hashname.clear(); // Clears the output vector
     
     if (input.empty()) 
-        return; // Stringa vuota, esci
+        return; // Empty string, exit
 
     const char* ptr = input.c_str();
     const char* end = ptr + input.length();
     
     while (ptr < end) 
 	{
-        // Salta spazi iniziali e caratteri di controllo
+        // Skip leading spaces e caratteri di controllo
         while (ptr < end && (*ptr == ' ' || *ptr == '\t' || *ptr == '\r' || *ptr == '\n')) 
 		    ++ptr;
         
         if (ptr >= end) 
 		    break; // Fine input
         
-        // Leggi hash (caratteri esadecimali)
+        // Read hash (hex characters)
         std::string hash;
         while (ptr < end && 
                ((*ptr >= '0' && *ptr <= '9') || 
@@ -97516,20 +100874,20 @@ void parsehashfilelist(const std::string& input, std::vector<std::pair<std::stri
             ++ptr;
         }
         
-        // Verifica validità hash
+        // Check hash validity
         if (hash.empty() || hash.length() > 64) 
-		{ // Lunghezza massima per SHA-256
-            // Salta fino alla fine della linea
+		{ // Maximum length for SHA-256
+            // Skip to the end of the line
             while (ptr < end && *ptr != '\n' && *ptr != '\r') 
 			    ++ptr;
             continue;
         }
 
-        // Salta separatori (spazi, tab)
+        // Skip separators (spaces, tabs)
         while (ptr < end && (*ptr == ' ' || *ptr == '\t')) 
 		    ++ptr;
         
-        // Leggi nome file
+        // Read filename
         std::string filename;
         while (ptr < end && *ptr != '\n' && *ptr != '\r') 
 		{
@@ -97537,17 +100895,17 @@ void parsehashfilelist(const std::string& input, std::vector<std::pair<std::stri
             ++ptr;
         }
 
-        // Rimuovi spazi finali dal nome file
+        // Remove trailing spaces from filename
         while (!filename.empty() && 
                (filename[filename.length() - 1] == ' ' || 
                 filename[filename.length() - 1] == '\t')) 
 		    filename.erase(filename.length() - 1);
         
-        // Verifica validità nome file
+        // Check filename validity
         if (!filename.empty()) 
 		    o_hashname.push_back(std::make_pair(hash, filename));
         
-        // Salta caratteri di fine linea
+        // Skip end-of-line characters
         while (ptr < end && (*ptr == '\n' || *ptr == '\r')) 
 		    ++ptr;
     }
@@ -97764,7 +101122,14 @@ int Jidac::ssh_dohasha(std::string i_algo)
 
 // just for Win64, for now
 #ifdef _WIN64
-	if (checklibssh(true)!=0)
+	if (pjidac == NULL)
+	{
+		myprintf("41436: pjidac null\n");
+		seppuku();
+	}
+
+
+	if ((*pjidac).kickstart_resources("LIBSSH")!=0) 
 	{
 		color_yellow();
 		myprintf("97321: No libssh in current folder\n");
@@ -97780,7 +101145,7 @@ int Jidac::ssh_dohasha(std::string i_algo)
     }
 	else
 	{
-		if (flagverbose)
+		if (flagdebug)
 			myprintf("97715: libssh loaded!\n");
 	}
 
@@ -97880,15 +101245,22 @@ int Jidac::ssh_dohasha(std::string i_algo)
 	string finalcommand=sumcommand;
 
 	myreplaceall(finalcommand,"!1",posizioneremota);
-	if (flagverbose)
+	if (flagdebug)
 	{
 		myprintf("96837: Remote position %s\n",posizioneremota.c_str());
 		myprintf("96850: Remote sum      %s\n",sumcommand.c_str());
 		myprintf("96860: Replaced !1     %s\n",finalcommand.c_str());
 	}
 
+	uint64_t expectedtime=0;
+	if (g_remotespeed>0)
+	{
+		expectedtime=totallocalsize/g_remotespeed;
+		if (flagdebug2)
+			myprintf("01245: g_remotespeed %s bytes %s expected time %s\n",migliaia(g_remotespeed),migliaia2(totallocalsize),migliaia3(expectedtime));
+	}
 	string theoutput;
-	int risultato=xssh(finalcommand,theoutput);
+	int risultato=xssh(expectedtime,finalcommand,theoutput);
 	if (risultato!=0)
 	{
 		color_red();
@@ -97932,3 +101304,350 @@ int Jidac::ssh_dohasha(std::string i_algo)
 #endif
 #endif ///NOSFTPEND
 
+#ifdef ZPAQFULL ///NOSFTPSTART
+#ifdef _WIN32
+struct risorse 
+{
+    WORD number; 
+	std::string package;
+    std::string filename;
+    uint64_t extractedsize;
+    std::string extractedhash;
+
+    risorse(WORD n, const std::string& p, const std::string& f, uint64_t ch, const std::string& eh)
+        : number(n), package(p), filename(f), extractedsize(ch), extractedhash(eh)
+	{
+        // Validazione
+        if (filename.empty() || filename.find_first_of("/\\:") != std::string::npos) 
+		{
+            myprintf("01400: Invalid filename %Z in risorse\n", filename.c_str());
+            filename = "";
+        }
+        if (eh.length() != 64 || eh.find_first_not_of("0123456789ABCDEF") != std::string::npos) 
+		{
+            myprintf("01401: Invalid SHA-256 hash (uppercase HEX) %Z in resources %s\n", filename.c_str(),eh.c_str());
+            extractedhash = "";
+        }
+    }
+};
+
+bool controllaHash( std::string& i_filename, const std::string& expectedHash) 
+{
+    if (i_filename.empty()) 
+	{
+        myprintf("01402: Invalid filename %Z in controllaHash\n", i_filename.c_str());
+        return false;
+    }
+
+	i_filename=includetrailingbackslash(getwinexedir())+extractfilename(i_filename);
+
+    int64_t dimensione = prendidimensionefile(i_filename.c_str());
+    if (dimensione <= 0) 
+	{
+        if (flagdebug) 
+		    myprintf("01403: File %Z not found or empty in controllaHash\n", i_filename.c_str());
+        return false;
+    }
+
+    franz_do_hash dummy("SHA-256");
+    std::string hashreloaded = dummy.filehash(0, i_filename, false, mtime(), dimensione);
+    if (hashreloaded.empty()) 
+	{
+        myprintf("01404: Failed to compute hash for %Z\n", i_filename.c_str());
+        return false;
+    }
+
+    return hashreloaded == expectedHash;
+}
+
+int getdllfrominternet(std::string& i_filename, const std::string& i_sha256) 
+{
+    if (i_filename.empty()) 
+	{
+        myprintf("01406: Invalid filename %Z\n", i_filename.c_str());
+        return 2;
+    }
+	i_filename=extractfilename(i_filename);
+
+    if (i_sha256.length() != 64 || i_sha256.find_first_not_of("0123456789ABCDEF") != std::string::npos) 
+	{
+        myprintf("01407: Invalid SHA-256 hash %Z\n", i_sha256.c_str());
+        return 2;
+    }
+
+    std::string filepath = includetrailingbackslash(getwinexedir()) + i_filename;
+    const std::string base_url = "http://www.francocorbelli.it/zpaqfranz/win64/"; // Configurabile
+	
+
+	for (int attempt = 0; attempt < 2; ++attempt) 
+	{
+		if (controllaHash(filepath, i_sha256)) 
+		{
+            if (flagdebug) 
+			{
+                color_green();
+                myprintf("01408: Verified successfully %Z\n", filepath.c_str());
+                color_restore();
+            }
+			break;
+        }
+        if (attempt == 0) 
+		{
+            int64_t dimensione = prendidimensionefile(filepath.c_str());
+            if (dimensione > 0) 
+			{
+                color_yellow();
+                myprintf("01409: %Z corrupted, attempting to download\n", filepath.c_str());
+                color_restore();
+                if (!delete_file(filepath.c_str())) 
+				{
+                    myprintf("01410: Failed to delete corrupted file %Z\n", filepath.c_str());
+                    return 2;
+                }
+            } 
+			else 
+				if (flagverbose) 
+				{
+					color_yellow();
+					myprintf("01411: File %Z not found or empty\n", filepath.c_str());
+					color_restore();
+				}
+			std::string randnocache = "?" + generaterandomstring(10);
+            std::string dllurl = base_url + i_filename + randnocache;
+
+            color_cyan();
+            myprintf("01412: Download %20s from %s\n", i_filename.c_str(), dllurl.c_str());
+            color_restore();
+
+            if (!downloadfile(dllurl, filepath, true)) 
+			{
+				/// error already printed
+                ///myprintf("01413: Something wrong downloading %Z, sorry (no Internet?)\n", filepath.c_str());
+                return 2;
+            }
+            if (flagverbose) 
+                myprintf("01414: Downloaded, checking again %Z\n", i_filename.c_str());
+        } else 
+		{
+            myprintf("01415: %Z still corrupted or not found after download\n", filepath.c_str());
+            return 2;
+        }
+    }
+
+	
+	myprintf("%29s:",i_filename.c_str());
+	color_green();
+	myprintf("OK\n");
+	color_restore();
+    return 0;
+}
+
+bool estrairisorsa(const risorse& r) 
+{
+    std::string filelocale=includetrailingbackslash(getwinexedir())+extractfilename(r.filename);
+
+    myprintf("01416: Checking %20s:", filelocale.c_str());
+///mika
+
+    if (controllaHash(filelocale, r.extractedhash)) 
+	{
+        color_green();
+        myprintf("OK\n");
+        color_restore();
+        return true;
+    }
+
+	
+
+    FILE* f = std::fopen(filelocale.c_str(), "rb");
+    if (f != nullptr) 
+	{
+        std::fclose(f);
+        color_yellow();
+        myprintf("different hash (not good)\n");
+        color_restore();
+    } 
+	else 
+	{
+        color_yellow();
+        myprintf("Not found");
+        color_restore();
+    }
+
+    HMODULE hExe = GetModuleHandle(nullptr);
+    if (!hExe) 
+	{
+        color_yellow();
+        myprintf(" => get from internet (no module handle)!\n");
+        color_restore();
+        return getdllfrominternet(filelocale, r.extractedhash) == 0;
+    }
+
+    HRSRC hRes = FindResource(hExe, MAKEINTRESOURCE(r.number), RT_RCDATA);
+    if (!hRes) 
+	{
+        color_yellow();
+        myprintf(" => get from internet (resource not found)!\n");
+        color_restore();
+        return getdllfrominternet(filelocale, r.extractedhash) == 0;
+    }
+
+    color_yellow();
+    myprintf(" => extraction\n");
+    color_restore();
+
+    HGLOBAL hData = LoadResource(hExe, hRes);
+    if (!hData) 
+	{
+        myprintf("01417: Failed to load resource %u\n", r.number);
+        return false;
+    }
+
+    DWORD size = SizeofResource(hExe, hRes);
+    if (size == 0) 
+	{
+        myprintf("01418: Resource %u has zero size\n", r.number);
+        return false;
+    }
+
+    void* data = LockResource(hData);
+    if (!data) 
+	{
+        myprintf("01419: Failed to lock resource %u\n", r.number);
+        return false;
+    }
+
+    f = std::fopen(filelocale.c_str(), "wb");
+    if (!f) 
+	{
+        color_red();
+        myprintf("01420: Cannot write %Z\n", filelocale.c_str());
+        color_restore();
+        return false;
+    }
+
+    Mymemreader in((unsigned char*)data, size);
+    Myfilewriter out(f, r.extractedsize, true);
+    out.inizio = mtime();
+
+    try 
+	{
+        libzpaq::decompress(&in, &out);
+    } 
+	catch (const std::exception& e) 
+	{
+        std::fclose(f);
+        myprintf("01421: Decompression failed for %Z\n", filelocale.c_str());
+        return false;
+    }
+
+    if (std::fclose(f) != 0) 
+	{
+        myprintf("01422: Failed to close file %Z\n", filelocale.c_str());
+        return false;
+    }
+	eol();
+    unsigned char sha256result[32];
+    memcpy(sha256result, out.thehash256.result(), 32);
+    std::string calculatedhash = binarytohex(sha256result, 32);
+
+    if (calculatedhash == r.extractedhash) 
+	{
+        color_green();
+        myprintf("01423: %20Z: OK\n", filelocale.c_str());
+        color_restore();
+        return true;
+    } 
+	else 
+	{
+        color_red();
+        myprintf("01424: %20Z: Hash mismatch (expected: %Z, got: %Z)\n",
+                 filelocale.c_str(), r.extractedhash.c_str(), calculatedhash.c_str());
+        color_restore();
+        delete_file(filelocale.c_str());
+        return false;
+    }
+}
+
+int Jidac::kickstart_resources(std::string i_package)
+{
+	if (flagdebug)
+		myprintf("01014: Starting kickstart of |%s|\n",i_package.c_str());
+    bool allok = true;
+
+    std::vector<risorse> elenco_risorse;
+    elenco_risorse.push_back(risorse(1, "LIBSSH",	"libcrypto-3-x64.dll", 	5130880, 	"C0674A225D30F1642CA1DA45AC040A9C1885D8F23883532B42987BAE458EDC4D"));
+    elenco_risorse.push_back(risorse(4, "LIBSSH",	"libgcc_s_seh-1.dll", 	150707,		"B22B954397A52703579D92DB64B57812AF70F2AFCAFE2E742A009C1640B9EC1A"));
+	elenco_risorse.push_back(risorse(6, "LIBSSH",	"libssh.dll", 			513146,		"7385986FFA0BDDB95CAEB835A8118E96099A91CB3AD5B42A3009A6E0EDFC6B7F"));
+	elenco_risorse.push_back(risorse(7, "LIBSSH",	"libwinpthread-1.dll", 	60798,		"5091B85A2A73B82AA3CF433F51AF338F6245319D1C041BC26B42A61CBDB2F880"));
+	elenco_risorse.push_back(risorse(9, "LIBSSH",	"zlib1.dll", 			120814,		"CB7AB3788D10940DF874ACD97B1821BBB5EE4A91F3EEC11982BB5BF7A3C96443"));
+	elenco_risorse.push_back(risorse(5, "LIBSODIUM","libsodium.dll", 		312928,		"C61B8E230C86AADBF79368DA30B616DAFB05B81F5AECB4A6857C14AB23493125"));
+	elenco_risorse.push_back(risorse(8, "LIBSODIUM","vcruntime140.dll", 	124544,		"D5E4D9A3E835FA679450145D6A7D94E36573A509317111904D9B3712C30D9066"));
+	elenco_risorse.push_back(risorse(2, "LIBCURL",	"libcurl-x64.dll", 		3193960,	"2EA8DBCA33DE476B23497A10ACE1A76C54DDCEF061E866771BF737A376DDC882"));
+	elenco_risorse.push_back(risorse(3, "LIBCURL",	"mailsend.exe", 		1253888,	"0E23BD1214D687DC2B2E28D4FEA12BC1C197BC85B5FFE90BB8888C43746B6F21"));
+	elenco_risorse.push_back(risorse(10, "MYSQL",	"mysql.exe", 			4809640,	"65DCBF7897E062A02B6018FFDE4635183E75DBCC075F21D3BE7CC5A27C45FD12"));
+	elenco_risorse.push_back(risorse(11, "MYSQL",	"mysqldump.exe", 		4875064,	"F2114A565E8A4D23FC62FD190B59BFFF56C71B8E06B2F9308D246875708A0091"));
+
+    std::vector<std::string> failed_resources;
+
+    for (unsigned int i = 0; i < elenco_risorse.size(); ++i)
+	{
+		if (flagdebug3)
+			myprintf("01490: Testing %03d %s hash %s\n",i,elenco_risorse[i].filename.c_str(),elenco_risorse[i].extractedhash.c_str());
+        if (i_package.empty() || elenco_risorse[i].package == i_package) 
+            if (!controllaHash(elenco_risorse[i].filename, elenco_risorse[i].extractedhash)) 
+			{
+                allok = false;
+			}
+	}
+	if (allok)
+		return 0;
+	color_cyan();
+	myprintf("01425: Kickstart %s in zpaqfranz's folder\n",i_package.c_str());
+	color_restore();
+
+    for (unsigned int i = 0; i < elenco_risorse.size(); ++i) 
+	{
+		if (flagdebug3)
+			myprintf("01492: Second round %03d %s hash %s\n",i,elenco_risorse[i].filename.c_str(),elenco_risorse[i].extractedhash.c_str());
+        if (i_package.empty() || elenco_risorse[i].package == i_package) 
+		{
+            if (!estrairisorsa(elenco_risorse[i])) 
+			{
+				if (flagdebug3)
+					myprintf("01512: estrairisorsa failed for %s\n",elenco_risorse[i].filename.c_str());
+                allok = false;
+                failed_resources.push_back(elenco_risorse[i].filename);
+            }
+			else
+			{
+				if (flagdebug3)
+					myprintf("01511: estrairisorsa OK %s\n",elenco_risorse[i].filename.c_str());
+                
+			}
+				
+		}
+	}
+    if (!failed_resources.empty()) 
+	{
+        color_red();
+        myprintf("01426: Failed to prepare the following resources:\n");
+        for (unsigned int i=0;i<failed_resources.size();i++)
+			myprintf("  - %s\n", failed_resources[i].c_str());
+        color_restore();
+    } 
+	else 
+	{
+        color_green();
+        myprintf("01427: All resources OK\n");
+        color_restore();
+		return 0;
+    }
+
+    return allok ? 0 : 1;
+}
+
+#endif
+
+
+#endif ///NOSFTPEND

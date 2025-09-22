@@ -41562,8 +41562,9 @@ private:
 
 
 
-
-
+#ifndef RTLD_LAZY
+#define RTLD_LAZY 1
+#endif
 
 
 

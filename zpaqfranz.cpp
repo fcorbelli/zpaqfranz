@@ -1979,10 +1979,10 @@ g++ -g -Wall -Wextra -Wpedantic -fsanitize=address,undefined -O3 zpaqfranz.cpp -
 	#include <netinet/in.h>
 	#include <sys/socket.h>
 	#include <netdb.h>
+	#include <dlfcn.h>
 
 #ifdef ZPAQFULL ///NOSFTPSTART
 #ifdef SFTP
-	#include <dlfcn.h>
 	#include <queue>
 	#include <condition_variable>
 #endif

@@ -1,3 +1,46 @@
+### [63.2t] - 2025-09-22
+
+## SFTP Bandwidth Limitation
+SFTP bandwidth limitation, distributed across multiple threads, using the `-bandwidth` switch.
+
+## New Switches and Features
+- `-sparse`: On Windows, attempts to create a sparse file (typically for NTFS). This can halve the extraction time for gigantic files.
+- `-huge`: Uses a different algorithm for file preparation. Useful for few but enormous files on filesystems that do not support sparse files.
+
+Details: [Discussion #213](https://github.com/fcorbelli/zpaqfranz/discussions/213)
+
+- In the `dir` command, the `-nodir` switch now displays only files, excluding folders.
+- In the `hash` command, a new `-norecursion` switch performs as expected (non-recursive hashing).
+- The `-always` switch forces adding files even if their timestamp has not changed. Conceptually similar to `-only`, it can be repeated and used with wildcards.
+
+## Compatibility and Performance Improvements
+
+- Enhanced `iswindowsxp` function for improved compatibility (in theory).
+- Improved wide character support on Windows, including some emojis.
+- Rewritten output function (potential for introduced bugs, but refactoring was necessary).
+- Most source code comments are now in English.
+- Improved local time handling, including for negative UTC offsets (e.g., USA).
+- Added support for file hash calculations with an offset (implementation for future FRANZEN testing).
+
+## New Functions and Builds
+
+- New `kickstart` function for downloading files from the internet or extracting them (if available) on Windows.
+
+Details: [Discussion #205](https://github.com/fcorbelli/zpaqfranz/discussions/205)
+
+- Added release of `zpaqfranz-full.exe` (for 64-bit Windows), which includes statically linked resources (useful for offline systems; no other functional differences).
+
+## FRANZEN Encryptor
+Details: [Encode.su Thread](https://encode.su/threads/4431-sodio-file-encryption-my-way)
+
+Essentially, this is an early (very immature) version of a future capability to encrypt zpaqfranz files (losing backward compatibility with zpaq) using a different encryption system and a separate password.
+
+In the future (not yet implemented), it will enable **double encryption** for files: an outer layer (FRANZEN) and an inner layer (standard zpaq). This allows GDPR-compliant cloud storage where the provider knows the outer password, but only the user knows the inner one.
+
+Key feature: Parallel integrity testing of the encrypted file. Instead of single-threaded hashing (reading one byte at a time to compute e.g., SHA-256), FRANZEN reads the encrypted file in blocks, achieving real-world performance exceeding 2GB/s on consumer hardware on non-spinning drives
+
+This is a highly complex topic—treat it as experimental (which it is).
+
 ### [62.4e] - 2025-07-23
 
 # New `sync` command
@@ -1131,4 +1174,5 @@ c:\zpaqfranz\zpaqfranz x z:\2.zpaq -to z:\wherever -comment "something" -range
 ---
 
 ## [54.9] - 2021-11-04
+
 

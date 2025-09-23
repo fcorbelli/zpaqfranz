@@ -58,7 +58,7 @@ OTHER DEALINGS IN THE SOFTWARE.
 #define ZPAQFULL ///NOSFTPSTART
 ///NOSFTPEND
 
-#define ZPAQ_VERSION "63.3a"
+#define ZPAQ_VERSION "63.3b"
 #define ZPAQ_DATE "(2025-09-23)"
 
 
@@ -47927,6 +47927,8 @@ string help_work(bool i_usage,bool i_example)
 		scrivi_riga("test   f1 pass",		"FRANZEN test.    Use -ssd for multithread (limit with -tX)");
 		scrivi_riga("fulltest f1 f2 pass",	"FRANZEN full test. Encrypt, decrypt, compare");
 		scrivi_riga("autotest",   			"FRANZEN (quick) autotest");
+		scrivi_riga("crc32",   				"FRANZEN CRC32 check");
+		
 #endif ///NOSFTPEND
 		
 	}
@@ -47959,6 +47961,7 @@ string help_work(bool i_usage,bool i_example)
         scrivi_esempio("Test FRANZEN file","work test z:\\crip.cha pippo -ssd");
 	    scrivi_esempio("Encrypt fulltest","work fulltest j:\\1.zpaq z:\\testme pippo -ssd");
 		scrivi_esempio("FRANZEN autotest","work autotest");
+		scrivi_esempio("FRANZEN crc32","work crc32 z:\\1.zpaq");
 #endif ///NOSFTPEND
 		
 	}

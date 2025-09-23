@@ -1,3 +1,22 @@
+### [63.3b] - 2025-09-23
+
+FRANZEN Enhancements
+
+**Added**
+- Experimental FRANZEN function now stores CRC-32 of encrypted file blocks in the header.
+- New `work crc32` command for quick integrity checks without requiring the encryption password.
+
+**Improved**
+- CRC-32 computation uses multi-threaded block processing, similar to zpaqfranz.
+- Verification function skips the first 140 bytes (128 + 12) and processes the rest efficiently.
+- Supports high-speed integrity checks for cloud transmission on standard machines.
+
+**Notes**
+- CRC-32 is **not cryptographic**; it only provides a fast integrity check.
+- Full verification still requires `work test` with the encryption password.
+- Additional checks are planned for future refinements.
+
+
 ### [63.2t] - 2025-09-22
 
 ## SFTP Bandwidth Limitation
@@ -1174,5 +1193,6 @@ c:\zpaqfranz\zpaqfranz x z:\2.zpaq -to z:\wherever -comment "something" -range
 ---
 
 ## [54.9] - 2021-11-04
+
 
 

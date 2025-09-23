@@ -58,8 +58,8 @@ OTHER DEALINGS IN THE SOFTWARE.
 #define ZPAQFULL ///NOSFTPSTART
 ///NOSFTPEND
 
-#define ZPAQ_VERSION "63.2t"
-#define ZPAQ_DATE "(2025-09-22)"
+#define ZPAQ_VERSION "63.3a"
+#define ZPAQ_DATE "(2025-09-23)"
 
 
 
@@ -4944,6 +4944,17 @@ struct	hash_autocheck
 	///hash_autocheck() {ok="";calculated="";};
 };
 typedef std::map<std::string, hash_autocheck> MAPPAAUTOCHECK;
+struct s_crc32block 
+{
+    uint64_t crc32start;
+    uint64_t crc32size;
+    uint32_t crc32;
+    std::string filename;
+    s_crc32block() : crc32start(0), crc32size(0), crc32(0) {}
+	 s_crc32block(uint32_t c, uint64_t start, uint64_t size)
+        : crc32start(start), crc32size(size), crc32(c)  {}
+};
+/*
 struct s_crc32block
 {
 	std::string	filename;
@@ -4952,6 +4963,7 @@ struct s_crc32block
 	uint32_t 	crc32;
 	s_crc32block(): crc32start(0),crc32size(0),crc32(0) {}
 };
+*/
 struct s_error
 {
 	int					counter;
@@ -31529,6 +31541,7 @@ size_t myfwrite(const void* ptr, size_t size, size_t nobj, FP fp)
 	}
 	if ((nobj*size)==0)
 		return 0;
+	
 /*
 	char mynomefile[100];
 	uint32_t crc=crc32_16bytes(ptr,nobj*size);
@@ -41486,6 +41499,7 @@ struct sodium_functions {
 				const unsigned char *npub, const unsigned char *k);
 };
 
+
 #pragma pack(push, 1)
 struct file_header 
 {
@@ -41494,12 +41508,12 @@ struct file_header
     unsigned char salt[16];         // 16 bytes
     uint64_t block_size;            // 8 bytes
     uint64_t file_data_size;        // 8 bytes
-    uint32_t crc32;                 // 4 bytes (non crypto)
+    uint64_t crc32;                 // 8 bytes (non crypto)
     uint64_t quickhash;             // 8 bytes (non crypto)
     uint64_t hashtype;              // 8 bytes (non crypto)
 	uint64_t pwhash_opslimit;       // 8 bytes
     uint64_t pwhash_memlimit;       // 8 bytes
-    uint8_t pad[36];              	// pad
+    uint8_t pad[32];              	// pad
 	
 };
 #pragma pack(pop)
@@ -41507,6 +41521,8 @@ struct file_header
 class franzcri 
 {
 private:
+	std::vector<s_crc32block> 	blocks_crc32;
+
     FILE 				*file_handle;
     std::string 		password;
     size_t 				io_buffer_size;
@@ -41521,6 +41537,7 @@ private:
     unsigned long long 	pwhash_opslimit;
     size_t 				pwhash_memlimit;
     int 				pwhash_alg;
+	uint64_t 			crc32;
 
     uint64_t host_to_le64(uint64_t val) 
 	{
@@ -41640,9 +41657,10 @@ bool load_library()
     sodium.crypto_aead_chacha20poly1305_ietf_abytes 	= (size_t(*)	(void))						GetProcAddress(sodium.handle, "crypto_aead_chacha20poly1305_ietf_abytes");
     sodium.crypto_aead_chacha20poly1305_ietf_encrypt 	= (int (*)		(unsigned char *, unsigned long long *, const unsigned char *, unsigned long long, const unsigned char *, unsigned long long, const unsigned char *, const unsigned char *, const unsigned char *))GetProcAddress(sodium.handle, "crypto_aead_chacha20poly1305_ietf_encrypt");
     sodium.crypto_aead_chacha20poly1305_ietf_decrypt 	= (int (*)		(unsigned char *, unsigned long long *, unsigned char *, const unsigned char *, unsigned long long, const unsigned char *, unsigned long long, const unsigned char *, const unsigned char *))GetProcAddress(sodium.handle, "crypto_aead_chacha20poly1305_ietf_decrypt");
-#endif
+#else
 	myprintf("41604: NO sodium on 32 bit\n");
 	return false;
+#endif
 #else
     const char *lib_name = "libsodium.so";
     sodium.handle = dlopen(lib_name, RTLD_LAZY);
@@ -41731,7 +41749,111 @@ bool load_library()
     bool write_header() 
 	{
         if (!file_handle) 
+		{
+			myprintf("41741! file_handle KO in write_header\n");
 			return false;
+		}
+		if (blocks_crc32.size() > 0)
+		{
+			sort(blocks_crc32.begin(), blocks_crc32.end(), comparecrc32block);
+
+			crc32 					= 0;
+			uint64_t total_covered	= 0;
+			bool has_holes 			= false;
+			
+			if (flagdebug)
+				myprintf("41744: We have %20s crc32 blocks filedatasize %s\n", 
+					 migliaia(blocks_crc32.size()), migliaia2(header.file_data_size));
+
+			// Verifica il primo blocco - deve iniziare da 140
+			if (blocks_crc32[0].crc32start != (sizeof(file_header) + 12)) //(int64_t)sizeof(header_nonce);
+			{
+				myprintf("41762! HOLE DETECTED: Missing data from 140 to %s (size: %s)\n", 
+						 migliaia(blocks_crc32[0].crc32start), 
+						 migliaia2(blocks_crc32[0].crc32start));
+				has_holes = true;
+			}
+
+			for (unsigned int i = 0; i < blocks_crc32.size(); i++)
+			{
+				/*
+				myprintf("41749: %08d start %21s size %21s %08X\n", i,
+						 migliaia(blocks_crc32[i].crc32start),
+						 migliaia2(blocks_crc32[i].crc32size),
+						 blocks_crc32[i].crc32);
+	*/
+				// Verifica sovrapposizioni e buchi tra blocchi consecutivi
+				if (i > 0)
+				{
+					uint64_t prev_end = blocks_crc32[i-1].crc32start + blocks_crc32[i-1].crc32size;
+					uint64_t curr_start = blocks_crc32[i].crc32start;
+					
+					if (prev_end > curr_start)
+					{
+						// Sovrapposizione
+						myprintf("41782! OVERLAP DETECTED: Block %d overlaps with block %d (overlap: %s bytes)\n", 
+								 i-1, i, migliaia2(prev_end - curr_start));
+						has_holes = true;
+					}
+					else if (prev_end < curr_start)
+					{
+						// Buco trovato
+						myprintf("41789! HOLE DETECTED: Missing data from %s to %s (size: %s)\n", 
+								 migliaia(prev_end), migliaia2(curr_start), 
+								 migliaia3(curr_start - prev_end));
+						has_holes = true;
+					}
+				}
+
+				crc32 = crc32_combine(crc32, blocks_crc32[i].crc32, blocks_crc32[i].crc32size);
+				total_covered += blocks_crc32[i].crc32size;
+			}
+
+			// Verifica l'ultimo blocco - deve arrivare fino alla fine del file
+			if (blocks_crc32.size() > 0)
+			{
+				uint64_t last_end = blocks_crc32.back().crc32start + blocks_crc32.back().crc32size;
+				if (last_end < header.file_data_size)
+				{
+					myprintf("41806! HOLE DETECTED: Missing data from %s to %s (size: %s)\n", 
+							 migliaia(last_end), migliaia(header.file_data_size),
+							 migliaia2(header.file_data_size - last_end));
+					has_holes = true;
+				}
+				else if (last_end > header.file_data_size)
+				{
+					
+					///myprintf("WARNING: Last block extends beyond file size by %s bytes\n",
+						///	 migliaia2(last_end - header.file_data_size));
+				}
+			}
+
+			// Riepilogo finale
+			if (flagverbose)
+			{
+				myprintf("41755: full-crc32 %08X\n", crc32);
+				myprintf("Coverage: %s / %s bytes (%.2f%%)\n", 
+					 migliaia2(total_covered), migliaia2(header.file_data_size),
+					 (double)total_covered * 100.0 / header.file_data_size);
+			}
+			if (has_holes)
+			{
+				myprintf("41831! File has holes or overlaps in CRC32 blocks!\n");
+			}
+			else
+			{
+				if (flagverbose)
+				{
+					color_green();
+					myprintf("OK: Complete coverage, no holes detected\n");
+					color_restore();
+				}
+			}
+			header.crc32=crc32;
+		}
+
+
+
 
         std::vector<unsigned char> header_data;
         header_data.insert(header_data.end(), header.salt, header.salt + sizeof(header.salt));
@@ -41739,7 +41861,7 @@ bool load_library()
         header_data.insert(header_data.end(), (unsigned char *)&block_size_le, (unsigned char *)&block_size_le + sizeof(block_size_le));
         uint64_t file_data_size_le = host_to_le64(header.file_data_size);
         header_data.insert(header_data.end(), (unsigned char *)&file_data_size_le, (unsigned char *)&file_data_size_le + sizeof(file_data_size_le));
-        uint32_t crc32_le = header.crc32;
+        uint64_t crc32_le = host_to_le64(header.crc32);
         header_data.insert(header_data.end(), (unsigned char *)&crc32_le, (unsigned char *)&crc32_le + sizeof(crc32_le));
         uint64_t quickhash_le = host_to_le64(header.quickhash);
         header_data.insert(header_data.end(), (unsigned char *)&quickhash_le, (unsigned char *)&quickhash_le + sizeof(quickhash_le));
@@ -41761,11 +41883,14 @@ bool load_library()
         file_header writable_header 	= header;
         writable_header.block_size 		= host_to_le64(header.block_size);
         writable_header.file_data_size 	= host_to_le64(header.file_data_size);
+        writable_header.crc32 			= host_to_le64(header.crc32);
         writable_header.quickhash 		= host_to_le64(header.quickhash);
         writable_header.hashtype 		= host_to_le64(header.hashtype);
 		writable_header.pwhash_opslimit = host_to_le64(header.pwhash_opslimit);
 		writable_header.pwhash_memlimit = host_to_le64(header.pwhash_memlimit);
 	
+		
+		
         fseek64(file_handle, 0, SEEK_SET);
         if (fwrite(&writable_header, 1, sizeof(file_header), file_handle) != sizeof(file_header) ||
             fwrite(header_nonce, 1, sizeof(header_nonce), file_handle) != sizeof(header_nonce)) 
@@ -41799,6 +41924,7 @@ bool read_header()
 
 	header.block_size 			= le64_to_host(header.block_size);
     header.file_data_size 		= le64_to_host(header.file_data_size);
+    header.crc32 				= le64_to_host(header.crc32);
     header.quickhash 			= le64_to_host(header.quickhash);
     header.hashtype 			= le64_to_host(header.hashtype);
     header.pwhash_opslimit 		= le64_to_host(header.pwhash_opslimit);
@@ -41826,7 +41952,7 @@ bool read_header()
     header_data.insert(header_data.end(), (unsigned char *)&block_size_le, (unsigned char *)&block_size_le + sizeof(block_size_le));
     uint64_t file_data_size_le = host_to_le64(header.file_data_size);
     header_data.insert(header_data.end(), (unsigned char *)&file_data_size_le, (unsigned char *)&file_data_size_le + sizeof(file_data_size_le));
-    uint32_t crc32_le = header.crc32;
+    uint64_t crc32_le = header.crc32;
     header_data.insert(header_data.end(), (unsigned char *)&crc32_le, (unsigned char *)&crc32_le + sizeof(crc32_le));
     uint64_t quickhash_le = host_to_le64(header.quickhash);
     header_data.insert(header_data.end(), (unsigned char *)&quickhash_le, (unsigned char *)&quickhash_le + sizeof(quickhash_le));
@@ -41834,6 +41960,8 @@ bool read_header()
     header_data.insert(header_data.end(), (unsigned char *)&hashtype_le, (unsigned char *)&hashtype_le + sizeof(hashtype_le));
     header_data.insert(header_data.end(), header.pad, header.pad + sizeof(header.pad));
 
+	if (flagdebug)
+		myprintf("41846: CRC32 DA READ_HEADER %08X %s\n",header.crc32,bin2hex_64(header.crc32).c_str());
     if (flagdebug) 
 	    myprintf("DEBUG: Header read - block_size: %s, file_data_size: %s\n", migliaia(header.block_size), migliaia(header.file_data_size));
     
@@ -41857,6 +41985,65 @@ bool read_header()
 public:
 	uint64_t worked_so_far;
 
+uint32_t get_crc32(const char *input_filename)
+{
+    // 1. Validazione input
+    if (input_filename == NULL || strlen(input_filename) == 0) {
+        myprintf("41870! Error: input filename is NULL or empty\n");
+        return 0;
+    }
+
+    // 2. Apertura file
+    file_handle = fopen(input_filename, "rb");
+    if (!file_handle) {
+        myprintf("41871! Error: cannot open file '%s' (%s)\n", input_filename, strerror(errno));
+        return 0;
+    }
+
+    // 3. Posizionamento a inizio file
+    if (fseek(file_handle, 0, SEEK_SET) != 0) {
+        myprintf("41872! Error: cannot seek to beginning of file '%s'\n", input_filename);
+        fclose(file_handle);
+        file_handle = NULL;
+        return 0;
+    }
+
+    // 4. Lettura header
+    size_t read_size = fread(&header, 1, sizeof(header), file_handle);
+    if (read_size != sizeof(header)) {
+        myprintf("41879! Error: header read failed or file too short (read %zu / expected %zu)\n",
+                 read_size, sizeof(header));
+        fclose(file_handle);
+        file_handle = NULL;
+        return 0;
+    }
+
+    // 5. Lettura nonce
+    read_size = fread(header_nonce, 1, sizeof(header_nonce), file_handle);
+    if (read_size != sizeof(header_nonce)) {
+        myprintf("41885! Error: nonce read failed (read %zu / expected %zu)\n",
+                 read_size, sizeof(header_nonce));
+        fclose(file_handle);
+        file_handle = NULL;
+        return 0;
+    }
+
+    print_nonce(header_nonce, sizeof(header_nonce), "header_auth");
+
+    // 6. Conversione e validazione CRC32
+    uint64_t raw_crc = le64_to_host(header.crc32);
+    if (raw_crc > UINT32_MAX) {
+        myprintf("41890! Warning: CRC32 value (0x%llx) exceeds 32-bit range\n",
+                 (unsigned long long)raw_crc);
+    }
+
+    // 7. Cleanup
+    fclose(file_handle);
+    file_handle = NULL;
+
+    return (uint32_t)(raw_crc & 0xFFFFFFFFu);
+}
+
 franzcri(const std::string &p, size_t blk_sz = 0,
          unsigned long long opslimit = 0,
          size_t memlimit = 0,
@@ -41867,9 +42054,10 @@ franzcri(const std::string &p, size_t blk_sz = 0,
   pwhash_opslimit(opslimit == 0 ? g_sodio_pwhash_opslimit : opslimit), 
   pwhash_memlimit(memlimit == 0 ? g_sodio_pwhash_memlimit : memlimit), 
   pwhash_alg(alg),
+crc32(0),
 worked_so_far(0)
 {
-        
+		blocks_crc32.clear();
         memset(&sodium, 0, sizeof(sodium));
         memset(&header, 0, sizeof(header));
         memset(header_nonce, 0, sizeof(header_nonce));
@@ -43340,6 +43528,10 @@ static void* encryption_worker(void* arg)
         pthread_mutex_lock(data->file_mutex);
         
         int64_t block_file_offset = data->instance->get_block_file_offset(current_block_idx);
+		
+		if (flagdebug3)
+			myprintf("43521: block file offset ******** %21s\n",migliaia(block_file_offset));
+		
         if (data->instance->fseek64(data->instance->file_handle, block_file_offset, SEEK_SET) != 0) 
 		{
             perror("WORKER: Error fseek64 on output file");
@@ -43347,6 +43539,7 @@ static void* encryption_worker(void* arg)
             fclose(input_file);
             return NULL;
         }
+
         
         if (fwrite(&block_nonce[0], 1, nonce_len, data->instance->file_handle) != nonce_len ||
             fwrite(&ciphertext[0], 1, ciphertext.size(), data->instance->file_handle) != ciphertext.size()) 
@@ -43356,8 +43549,23 @@ static void* encryption_worker(void* arg)
 				fclose(input_file);
 				return NULL;
 			}
+		
+		uint32_t 	blockcrc	=crc32_16bytes(&block_nonce[0],nonce_len);
+					blockcrc	=crc32_16bytes(&ciphertext[0],ciphertext.size(),blockcrc);
+		
+		data->instance->blocks_crc32.push_back
+		(
+			s_crc32block(blockcrc, block_file_offset, nonce_len + ciphertext.size())
+		);
+/*
+		s_crc32block 		myblock;
+		myblock.crc32		=blockcrc;
+		myblock.crc32start	=block_file_offset;
+		myblock.crc32size	=nonce_len+ciphertext.size();
+		myblock.filename	="";
+		data->instance->blocks_crc32.push_back(myblock);
+*/
 
-///fiko
 		data->instance->worked_so_far+=bytes_read;
 		if (!flagnoeta)
 			myavanzamentoby1sec(data->instance->worked_so_far,data->total_input_size,data->starttime,false);
@@ -47714,10 +47922,11 @@ string help_work(bool i_usage,bool i_example)
 		scrivi_riga("getsize X","Show size of X (multiple / wildcard allowed)");
 		scrivi_riga("checkspace","Check if enough free space");
 #ifdef ZPAQFULL ///NOSFTPSTART
-		scrivi_riga("encode pass","FRANZEN encrypt. Use -ssd for multithread (limit with -tX)");
-		scrivi_riga("decode pass","FRANZEN decrypt. Use -ssd for multithread (limit with -tX)");
-		scrivi_riga("fulltest",   "FRANZEN full test. Encrypt, decrypt, compare");
-		scrivi_riga("autotest",   "FRANZEN autotest");
+		scrivi_riga("encode f1 f2 pass",	"FRANZEN encrypt. Use -ssd for multithread (limit with -tX)");
+		scrivi_riga("decode f1 f2 pass",	"FRANZEN decrypt. Use -ssd for multithread (limit with -tX)");
+		scrivi_riga("test   f1 pass",		"FRANZEN test.    Use -ssd for multithread (limit with -tX)");
+		scrivi_riga("fulltest f1 f2 pass",	"FRANZEN full test. Encrypt, decrypt, compare");
+		scrivi_riga("autotest",   			"FRANZEN (quick) autotest");
 #endif ///NOSFTPEND
 		
 	}
@@ -47747,6 +47956,7 @@ string help_work(bool i_usage,bool i_example)
         scrivi_esempio("Check free space","work checkspace c:\\ 10g d:\\ 20g -exec_error nospace.bat");
 #ifdef ZPAQFULL ///NOSFTPSTART
         scrivi_esempio("Encrypt (experimental)","work encode j:\\1.zpaq z:\\crip.cha pippo -ssd");
+        scrivi_esempio("Test FRANZEN file","work test z:\\crip.cha pippo -ssd");
 	    scrivi_esempio("Encrypt fulltest","work fulltest j:\\1.zpaq z:\\testme pippo -ssd");
 		scrivi_esempio("FRANZEN autotest","work autotest");
 #endif ///NOSFTPEND
@@ -88855,7 +89065,7 @@ int Jidac::work()
 	}
 	
 
-	if ((mycommand=="encodecheck") || (mycommand=="decodecheck"))
+	if ((mycommand=="test"))
 	{
 		if (flagdebug)
 			for (unsigned int i=0;i<files.size();i++)
@@ -88863,7 +89073,7 @@ int Jidac::work()
 		
 		if ((files.size()!=3))
 		{
-			myprintf("83218! for encodecheck you need 1) source file 2) password\n");
+			myprintf("83218! for encodetest you need 1) source file 2) password\n");
 			return 2;
 		}
 		
@@ -88882,9 +89092,9 @@ int Jidac::work()
 				
 		franzcri fc(thepassword);
 		if (threads==1)
-			myprintf("86183: Single thread verify <<%s>>\n", input_filename.c_str());
+			myprintf("86183: Single thread test <<%s>>\n", input_filename.c_str());
 		else
-			myprintf("86083: Multi thread verify <<%s>> with %d...\n", input_filename.c_str(), threads);
+			myprintf("86083: Multi thread test <<%s>> with %d...\n", input_filename.c_str(), threads);
 		success = fc.decode_parallela(input_filename.c_str(), NULL,threads);
 		
 		double  tempo=(mtime()-startenc)/1000.0;
@@ -88944,6 +89154,67 @@ int Jidac::work()
         franzcri fc("password123");
         return fc.autotest() ? 0 : 2;
 	}
+	
+	if (mycommand == "crc32")
+	{
+		if (flagdebug)
+			for (size_t i = 0; i < files.size(); ++i)
+				myprintf("85465: %03d %s\n", (int)i, files[i].c_str());
+
+		if (files.size() != 2)
+		{
+			myprintf("83218! For crc-32 you need 1) source file\n");
+			return 2;
+		}
+		const std::string& input_filename = files[1];
+
+		franzcri fc("dummy");
+		uint32_t thecrcstored = fc.get_crc32(input_filename.c_str());
+		if (thecrcstored == 0)
+		{
+			myprintf("89048: Cannot get the CRC stored!\n");
+			return 2;
+		}
+		std::string s_thecrcstored = bin2hex_32(thecrcstored);
+
+		int64_t file_header_size = sizeof(file_header) + 12; // (int64_t)sizeof(header_nonce)
+		if (flagdebug)
+			myprintf("88967: Skipping %s\n", migliaia(file_header_size));
+
+		franz_do_hash dummy("CRC-32");
+		std::string crc32_reloaded = dummy.filehash(
+			file_header_size,
+			input_filename,
+			false,
+			mtime(),
+			prendidimensionefile(input_filename.c_str())
+		);
+
+		eol();
+
+		if (flagverbose)
+		{
+			myprintf("89062: CRC-32 reloaded %s\n", crc32_reloaded.c_str());
+			myprintf("89063: CRC-32 stored   %s\n", s_thecrcstored.c_str());
+		}
+
+		if (crc32_reloaded == s_thecrcstored)
+		{
+			color_green();
+			myprintf("89063: CRC-32 match, this is good!\n");
+			color_restore();
+			return 0;
+		}
+
+		color_red();
+		myprintf("89069: CRC32 reloaded %s != CRC32 stored %s\n",
+				 crc32_reloaded.c_str(), s_thecrcstored.c_str());
+		color_restore();
+
+		return 2;
+	}
+
+	
 #endif ///NOSFTPEND
 
 	myprintf("03441! Do not understand the command\n");

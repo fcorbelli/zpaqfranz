@@ -34252,7 +34252,7 @@ bool load_library()
 #endif
 
 #else // Unix/Linux
-    const char *lib_names[] = {"libsodium.so", "libsodium.so.23", "libsodium.so.4", NULL};
+    const char *lib_names[] = {"libsodium.so", "libsodium.so.26", "libsodium.so.23", "libsodium.so.4", NULL};
     
     for (unsigned int i=0;lib_names[i]!=NULL;++i)
     {

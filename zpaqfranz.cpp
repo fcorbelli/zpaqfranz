@@ -58,8 +58,8 @@ OTHER DEALINGS IN THE SOFTWARE.
 #define ZPAQFULL ///NOSFTPSTART
 ///NOSFTPEND
 
-#define ZPAQ_VERSION "63.4d"
-#define ZPAQ_DATE "(2025-09-30)"
+#define ZPAQ_VERSION "63.5d"
+#define ZPAQ_DATE "(2025-10-13)"
 
 
 
@@ -4573,6 +4573,7 @@ typedef CURLcode (*_curl_seek_callback2)(const void *, curl_off_t, int);
 
 //ugo
 
+
 std::string	g_franzen;
 int64_t 	g_dt_ram;
 int64_t 	g_debug_sequence		=0;
@@ -4888,6 +4889,7 @@ bool 		flagimage;
 bool		flagfindzpaq;
 bool		flagfixreserved;
 bool		flagntfs;
+bool		flagvhd;
 bool		flaglongpath;
 bool		flagopen;
 int			g_ConsoleCP;
@@ -6289,6 +6291,65 @@ void myprintf(const char *format, ...)
 }
 */
 
+#ifdef _WIN32
+bool appendfirst512(const std::string& i_filename) 
+{
+    unsigned char buffer[512];
+    
+    FILE* file = fopen(i_filename.c_str(), "r+b");
+    if (!file) 
+    {
+        int err = errno;
+        myprintf("05061! Cannot open %s\n", i_filename.c_str());
+        myprintf("05062! Error  code %d - %s\n", err, strerror(err));
+        return false;
+    }
+    
+    // Leggi i primi 512 bytes
+    size_t bytesRead = fread(buffer, 1, 512, file);
+    if (bytesRead == 0) 
+    {
+        if (feof(file)) 
+		{
+            myprintf("05072! Empty file %s\n", i_filename.c_str());
+        } 
+		else 
+			if (ferror(file)) 
+		{
+            myprintf("05075! Error reading %s\n", i_filename.c_str());
+        }
+        fclose(file);
+        return false;
+    }
+    
+	if (_fseeki64(file, 0, SEEK_END) != 0) 
+	{
+		myprintf("00585! Cannot seek to %s\n", i_filename.c_str());
+		fclose(file);
+		return false;
+	}
+    
+    size_t bytesWritten = fwrite(buffer, 1, bytesRead, file);
+    
+    if (bytesWritten != bytesRead) 
+    {
+        myprintf("05904! Incomplete on %s\n", i_filename.c_str());
+        fclose(file);
+        return false;
+    }
+    
+    // Chiudi il file
+    if (fclose(file) != 0) 
+    {
+        myprintf("05102! Error closing %s\n", i_filename.c_str());
+        return false;
+    }
+    
+	if (flagverbose)
+		myprintf("05107: OK: Appended %d bytes to %s\n", bytesRead, i_filename.c_str());
+    return true;
+}
+#endif
 
 /// LICENSE_START.23
 
@@ -31358,7 +31419,7 @@ typedef HANDLE FP;
 const FP FPNULL=INVALID_HANDLE_VALUE;
 vector<FP> 		g_write_fp;
 vector<string> 	g_write_filename;
-
+FP 			g_vhd_file_handle		=0;
 
 
 void tocca_now(FP i_fp)
@@ -32545,7 +32606,7 @@ double custom_exp(double x)
 #endif
 }
 
-///fiko
+///
 
 
 
@@ -34252,7 +34313,7 @@ bool load_library()
 #endif
 
 #else // Unix/Linux
-    const char *lib_names[] = {"libsodium.so", "libsodium.so.26", "libsodium.so.23", "libsodium.so.4", NULL};
+	const char *lib_names[] = {"libsodium.so", "libsodium.so.26", "libsodium.so.23", "libsodium.so.4", NULL};
     
     for (unsigned int i=0;lib_names[i]!=NULL;++i)
     {
@@ -40607,9 +40668,11 @@ struct DT   // if you get some warning here, update your compiler!
 
 
 	franzfs			*pramfile;
-	int64_t 	kompressedsize;
-	int		filework; //0 = nothing; 1=updated; 2=added, 3=removed
-	DT(): date(0), size(0), attr(0), data(0),creationdate(0),accessdate(0),written(-1),isordered(false),isselected(false),/*franz_block_size(FRANZOFFSETV3),*/file_crc32(0),hashedsize(0),chunk(-1),expectedsize(0),version(0),forceadd(false),is4(false),red_total(0),red_count(0),red_min(256),red_max(0),red_avg(0),red_candidate(0),isedt(false),kompressedsize(0),filework(0)
+	int64_t 		kompressedsize;
+	int				filework; //0 = nothing; 1=updated; 2=added, 3=removed
+	bool			donotextractme;
+	DT(): date(0), size(0), attr(0), data(0),creationdate(0),accessdate(0),written(-1),isordered(false),isselected(false),/*franz_block_size(FRANZOFFSETV3),*/file_crc32(0),hashedsize(0),chunk(-1),expectedsize(0),version(0),forceadd(false),is4(false),red_total(0),red_count(0),red_min(256),red_max(0),red_avg(0),red_candidate(0),isedt(false),kompressedsize(0),filework(0),
+	donotextractme(false)
 	{
 ///	let's save a bit of RAM (during compression)
 		franz_block_size=FRANZOFFSETV3;
@@ -42092,6 +42155,27 @@ inline void list_progress(int i_list_ver,int i_list_dt,int64_t ts, int64_t td)
 #define LIST_RECOVER 2 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 ///////////////////////////
 #ifdef _WIN32
 #define METAMAGIC 	0x494D4D41474543
@@ -42593,10 +42677,16 @@ public:
 	int 						makefullzfsbackup(const string& poolName, const string& archiveName, const string& snapshotMarker, const string& sanitizedPoolName,const string & i_parameters);
 	int 						updatezfsbackup(const string& poolName, const string& archiveName, const string& snapshotMarker, const string& sanitizedPoolName,const string & i_parameters);
 #endif ///NOSFTPEND
-	bool 						preparantfs(const std::string& image_path, char drive_letter);
+	
 #ifdef _WIN32
+	bool 						preparantfs(const std::string& image_path, char drive_letter);
+	bool 						preparavhd(const std::string& image_path, char drive_letter);
+	
 	int 						elaborantfs(char* buffer, size_t buffer_size);
-    bool 						chiudintfs();
+	int 						elaboravhd(const char* buffer, size_t buffer_size);
+	
+	bool 						chiudintfs();
+	bool 						chiudivhd();
 	bool 						ripristinantfs(const std::string& image_path, const std::string& raw_path);
 	int							restoreimage();
 	int 						NTFSEnumerateFiles(string i_path, DTMap& i_edt, bool i_checkifselected);
@@ -42689,7 +42779,958 @@ bool wehaveresources()
 }
 #endif
 
+///////////////////////////////////////////////////////////////////////////////
+#ifdef _WIN32
 
+#define SECTOR_SIZE 512
+#define NTFS_OEM_ID "NTFS    "
+#define MFT_RECORD_SIGNATURE "FILE"
+#define NTFS_ATTR_DATA 0x80
+#define NTFS_ATTR_END 0xFFFFFFFF
+
+// Endianness conversion functions
+uint16_t vhd_htobe16(uint16_t val) 
+{
+    return (val << 8) | (val >> 8);
+}
+
+uint32_t vhd_htobe32(uint32_t val) 
+{
+    val = ((val << 8) & 0xFF00FF00) | ((val >> 8) & 0x00FF00FF);
+    return (val << 16) | (val >> 16);
+}
+
+uint64_t vhd_htobe64(uint64_t val) 
+{
+    val = ((val << 8) & 0xFF00FF00FF00FF00ULL) | ((val >> 8) & 0x00FF00FF00FF00FFULL);
+    val = ((val << 16) & 0xFFFF0000FFFF0000ULL) | ((val >> 16) & 0x0000FFFF0000FFFFULL);
+    return (val << 32) | (val >> 32);
+}
+
+#define vhd_be16toh vhd_htobe16
+#define vhd_be32toh vhd_htobe32
+#define vhd_be64toh vhd_htobe64
+
+#pragma pack(push, 1)
+struct VHD_FOOTER 
+{
+    char        Cookie[8];
+    uint32_t    Features;
+    uint32_t    FormatVersion;
+    uint64_t    DataOffset;
+    uint32_t    TimeStamp;
+    char        CreatorApp[4];
+    uint32_t    CreatorVersion;
+    uint32_t    CreatorHostOS;
+    uint64_t    OriginalSize;
+    uint64_t    CurrentSize;
+    uint16_t    Cylinders;
+    uint8_t     Heads;
+    uint8_t     SectorsPerTrack;
+    uint32_t    DiskType;
+    uint32_t    Checksum;
+    uint8_t     UniqueId[16];
+    uint8_t     SavedState;
+    uint8_t     Reserved[427];
+
+    VHD_FOOTER()
+    {
+        memset(this, 0, sizeof(VHD_FOOTER));
+    }
+};
+
+struct VHD_DYN_HEADER
+{
+    char        Cookie[8];
+    uint64_t    DataOffset;
+    uint64_t    TableOffset;
+    uint32_t    HeaderVersion;
+    uint32_t    MaxTableEntries;
+    uint32_t    BlockSize;
+    uint32_t    Checksum;
+    uint8_t     ParentUniqueId[16];
+    uint32_t    ParentTimeStamp;
+    uint32_t    Reserved1;
+    uint16_t    ParentUnicodeName[256];
+
+    struct ParentLocatorStruct 
+	{
+        uint32_t PlatformCode;
+        uint32_t PlatformDataSpace;
+        uint32_t PlatformDataLength;
+        uint32_t Reserved;
+        uint64_t PlatformDataOffset;
+    } ParentLocator[8];
+
+    uint8_t     Reserved2[256];
+
+    VHD_DYN_HEADER()
+    {
+        memset(this, 0, sizeof(VHD_DYN_HEADER));
+    }
+};
+
+struct PARTITION_ENTRY 
+{
+    uint8_t     Status;
+    uint8_t     ChsBegin[3];
+    uint8_t     Type;
+    uint8_t     ChsEnd[3];
+    uint32_t    LbaBegin;
+    uint32_t    TotalSectors;
+};
+
+struct MBR 
+{
+    uint8_t         BootCode[446];
+    PARTITION_ENTRY Partitions[4];
+    uint16_t        Signature;
+};
+
+struct NTFS_BOOT_SECTOR 
+{
+    uint8_t  Jump[3];
+    char     OemId[8];
+    uint16_t BytesPerSector;
+    uint8_t  SectorsPerCluster;
+    uint16_t ReservedSectors;
+    uint8_t  Fats;
+    uint16_t RootEntries;
+    uint16_t TotalSectors16;
+    uint8_t  Media;
+    uint16_t SectorsPerFat16;
+    uint16_t SectorsPerTrack;
+    uint16_t Heads;
+    uint32_t HiddenSectors;
+    uint32_t TotalSectors32;
+    uint32_t Unused1;
+    uint64_t TotalSectors;
+    uint64_t MftLcn;
+    uint64_t MftMirrLcn;
+    int8_t   ClustersPerMftRecord;
+    uint8_t  Reserved0[3];
+    int8_t   ClustersPerIndexBuffer;
+    uint8_t  Reserved1[3];
+    uint64_t SerialNumber;
+    uint32_t Checksum;
+    uint8_t  BootCode[426];
+    uint16_t Signature;
+};
+#pragma pack(pop)
+
+#define BUFFER_POOL_SIZE 16
+
+struct vhdcontesto
+{
+    char 					lettera 					= 0;
+    bool 					g_vhd_full 					= true;
+    bool 					g_vhd_split 				= true;
+    int 					g_vhd_split_counter 		= 0;
+    HANDLE 					g_vhd_hsourcedrive 			= INVALID_HANDLE_VALUE;
+    HANDLE 					g_vhd_vhdfile 				= INVALID_HANDLE_VALUE;
+    uint64_t				g_vhd_partition_size_bytes 	= 0;
+    uint64_t	 			g_vhd_disk_size_bytes 		= 0;
+    uint64_t 				g_vhd_partition_start_bytes = 0;
+    uint32_t 				g_vhd_bytes_per_sector 		= SECTOR_SIZE;
+    uint32_t 				g_vhd_sectors_per_cluster 	= 0;
+    uint32_t 				g_vhd_cluster_size_bytes 	= 0;
+    VHD_FOOTER 				g_vhd_footer;
+    VHD_DYN_HEADER 			g_vhd_dyn_header;
+    uint32_t* 				g_vhd_bat 					= NULL;
+    uint64_t 				g_vhd_current_data_offset 	= 0;
+    uint8_t*				g_vhd_volume_bitmap 		= NULL;
+    uint64_t				g_vhd_total_clusters 		= 0;
+    uint32_t				g_vhd_block_size 			= 2 * 1024 * 1024;
+    uint64_t				current_read_offset 		= 0; // Tracks read position
+    int 					blocks_written 				= 0;          // Number of blocks written
+    uint64_t 				total_bytes 				= 0;        // Total bytes processed
+    char* 					g_vhd_buffer 				= NULL;       // Internal buffer for VHD processing
+    std::vector<uint8_t> 	array_header;  				// Footer + DynHeader + BAT + padding
+	
+    FILE* g_vhd_output_file = NULL;  // Handle of the VHD file being constructed
+    uint64_t g_vhd_used_bytes = 0;        // Bytes actually used
+    uint64_t g_vhd_used_blocks = 0;       // Blocks to be written
+};
+static vhdcontesto ctx;
+
+static const uint8_t g_vhd_mbr_template[SECTOR_SIZE] = {
+    0x33, 0xC0, 0x8E, 0xD0, 0xBC, 0x00, 0x7C, 0x8E, 0xC0, 0x8E, 0xD8, 0xBE, 0x00, 0x7C, 0xBF, 0x00,
+    0x06, 0xB9, 0x00, 0x02, 0xFC, 0xF3, 0xA4, 0x50, 0x68, 0x1C, 0x06, 0xCB, 0xFB, 0xB9, 0x04, 0x00,
+    0xBD, 0xBE, 0x07, 0x80, 0x7E, 0x00, 0x00, 0x7C, 0x0B, 0x0F, 0x85, 0x0E, 0x01, 0x83, 0xC5, 0x10,
+    0xE2, 0xF1, 0xCD, 0x18, 0x88, 0x56, 0x00, 0x55, 0xC6, 0x46, 0x11, 0x05, 0xC6, 0x46, 0x10, 0x00,
+    0xB4, 0x41, 0xBB, 0xAA, 0x55, 0xCD, 0x13, 0x5D, 0x72, 0x0F, 0x81, 0xFB, 0x55, 0xAA, 0x75, 0x09,
+    0xF7, 0xC1, 0x01, 0x00, 0x74, 0x03, 0xFE, 0x46, 0x10, 0x66, 0x60, 0x80, 0x7E, 0x10, 0x00, 0x74,
+    0x26, 0x66, 0x68, 0x00, 0x00, 0x00, 0x00, 0x66, 0xFF, 0x76, 0x08, 0x68, 0x00, 0x00, 0x68, 0x00,
+    0x7C, 0x68, 0x01, 0x00, 0x68, 0x10, 0x00, 0xB4, 0x42, 0x8A, 0x56, 0x00, 0x8B, 0xF4, 0xCD, 0x13,
+    0x9F, 0x83, 0xC4, 0x10, 0x9E, 0xEB, 0x14, 0xB8, 0x01, 0x02, 0xBB, 0x00, 0x7C, 0x8A, 0x56, 0x00,
+    0x8A, 0x76, 0x01, 0x8A, 0x4E, 0x02, 0x8A, 0x6E, 0x03, 0xCD, 0x13, 0x66, 0x61, 0x73, 0x1C, 0xFE,
+    0x4E, 0x11, 0x75, 0x0C, 0x80, 0x7E, 0x00, 0x80, 0x0F, 0x84, 0x8A, 0x00, 0xB2, 0x80, 0xEB, 0x84,
+    0x55, 0x32, 0xE4, 0x8A, 0x56, 0x00, 0xCD, 0x13, 0x5D, 0xEB, 0x9E, 0x81, 0x3E, 0xFE, 0x7D, 0x55,
+    0xAA, 0x75, 0x6E, 0xFF, 0x76, 0x00, 0xE8, 0x8D, 0x00, 0x75, 0x17, 0xFA, 0xB0, 0xD1, 0xE6, 0x64,
+    0xE8, 0x83, 0x00, 0xB0, 0xDF, 0xE6, 0x60, 0xE8, 0x7C, 0x00, 0xB0, 0xFF, 0xE6, 0x64, 0xE8, 0x75,
+    0x00, 0xFB, 0xB8, 0x00, 0xBB, 0xCD, 0x1A, 0x66, 0x23, 0xC0, 0x75, 0x3B, 0x66, 0x81, 0xFB, 0x54,
+    0x43, 0x50, 0x41, 0x75, 0x32, 0x81, 0xF9, 0x02, 0x01, 0x72, 0x2C, 0x66, 0x68, 0x07, 0xBB, 0x00,
+    0x00, 0x66, 0x68, 0x00, 0x02, 0x00, 0x00, 0x66, 0x68, 0x08, 0x00, 0x00, 0x00, 0x66, 0x53, 0x66,
+    0x53, 0x66, 0x55, 0x66, 0x68, 0x00, 0x00, 0x00, 0x00, 0x66, 0x68, 0x00, 0x7C, 0x00, 0x00, 0x66,
+    0x61, 0x68, 0x00, 0x00, 0x07, 0xCD, 0x1A, 0x5A, 0x32, 0xF6, 0xEA, 0x00, 0x7C, 0x00, 0x00, 0xCD,
+    0x18, 0xA0, 0xB7, 0x07, 0xEB, 0x08, 0xA0, 0xB6, 0x07, 0xEB, 0x03, 0xA0, 0xB5, 0x07, 0x32, 0xE4,
+    0x05, 0x00, 0x07, 0x8B, 0xF0, 0xAC, 0x3C, 0x00, 0x74, 0x09, 0xBB, 0x07, 0x00, 0xB4, 0x0E, 0xCD,
+    0x10, 0xEB, 0xF2, 0xF4, 0xEB, 0xFD, 0x2B, 0xC9, 0xE4, 0x64, 0xEB, 0x00, 0x24, 0x02, 0xE0, 0xF8,
+    0x24, 0x02, 0xC3, 0x49, 0x6E, 0x76, 0x61, 0x6C, 0x69, 0x64, 0x20, 0x70, 0x61, 0x72, 0x74, 0x69,
+    0x74, 0x69, 0x6F, 0x6E, 0x20, 0x74, 0x61, 0x62, 0x6C, 0x65, 0x00, 0x45, 0x72, 0x72, 0x6F, 0x72,
+    0x20, 0x6C, 0x6F, 0x61, 0x64, 0x69, 0x6E, 0x67, 0x20, 0x6F, 0x70, 0x65, 0x72, 0x61, 0x74, 0x69,
+    0x6E, 0x67, 0x20, 0x73, 0x79, 0x73, 0x74, 0x65, 0x6D, 0x00, 0x4D, 0x69, 0x73, 0x73, 0x69, 0x6E,
+    0x67, 0x20, 0x6F, 0x70, 0x65, 0x72, 0x61, 0x74, 0x69, 0x6E, 0x67, 0x20, 0x73, 0x79, 0x73, 0x74,
+    0x65, 0x6D, 0x00, 0x00, 0x00, 0x63, 0x7B, 0x9A, 0xE3, 0xF5, 0x4C, 0xCF, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x55, 0xAA
+};
+
+uint32_t vhd_calculate_checksum(void* structure, size_t size) 
+{
+    uint32_t 	checksum 			= 0;
+    uint8_t* 	p 					= (uint8_t*)structure;
+    uint32_t 	original_checksum 	= 0;
+    if (size == sizeof(VHD_FOOTER)) 
+    {
+        original_checksum = ((VHD_FOOTER*)p)->Checksum;
+        ((VHD_FOOTER*)p)->Checksum = 0;
+    } 
+    else 
+	if (size == sizeof(VHD_DYN_HEADER)) 
+    {
+        original_checksum = ((VHD_DYN_HEADER*)p)->Checksum;
+        ((VHD_DYN_HEADER*)p)->Checksum = 0;
+    }
+    for (size_t i=0;i<size;++i) 
+        checksum += p[i];
+    if (size == sizeof(VHD_FOOTER)) 
+        ((VHD_FOOTER*)p)->Checksum = original_checksum;
+    else 
+	if (size == sizeof(VHD_DYN_HEADER)) 
+        ((VHD_DYN_HEADER*)p)->Checksum = original_checksum;
+    return ~checksum;
+}
+
+void vhd_calculate_chs(uint64_t total_sectors, uint16_t* cylinders, uint8_t* heads, uint8_t* sectors) 
+{
+    *heads 			= 16;
+    *sectors 		= 63;
+    uint32_t c_h_s 	= (*heads) * (*sectors);
+    uint32_t cyls 	= total_sectors / c_h_s;
+    if (total_sectors > 65535ULL * 16 * 255) 
+    {
+        *heads 		= 255;
+        *sectors 	= 63;
+        c_h_s 		= (*heads) * (*sectors);
+        cyls 		= total_sectors / c_h_s;
+    }
+    if (cyls > 65535) 
+        cyls = 65535;
+    *cylinders = cyls;
+}
+
+bool open_source_drive(char drive_letter, vhdcontesto& ctx)
+{
+    char drive_path[] 		= "\\\\.\\C:";
+    drive_path[4] 			= drive_letter;
+    ctx.g_vhd_hsourcedrive 	= CreateFileA(drive_path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE,
+                                        NULL, OPEN_EXISTING, 0, NULL);
+    if (ctx.g_vhd_hsourcedrive == INVALID_HANDLE_VALUE)
+    {
+        myprintf("43178! Error: Unable to open drive %c: (code %s)\n",drive_letter, migliaia(GetLastError()));
+        return false;
+    }
+	color_green();
+    myprintf("43093: Drive %c: opened successfully\n", drive_letter);
+	color_restore();
+	
+    PARTITION_INFORMATION_EX pinfo;
+    DWORD bytes_returned = 0;
+    if (!DeviceIoControl(ctx.g_vhd_hsourcedrive, IOCTL_DISK_GET_PARTITION_INFO_EX,
+                         NULL, 0, &pinfo, sizeof(pinfo), &bytes_returned, NULL))
+    {
+        myprintf("41390! Error: Unable to retrieve partition information (code %s)\n", migliaia(GetLastError()));
+        CloseHandle(ctx.g_vhd_hsourcedrive);
+        ctx.g_vhd_hsourcedrive = INVALID_HANDLE_VALUE;
+        return false;
+    }
+    ctx.g_vhd_partition_size_bytes = pinfo.PartitionLength.QuadPart;
+    myprintf("43108: Partition size       : %s (%s)\n",migliaia(ctx.g_vhd_partition_size_bytes), tohuman(ctx.g_vhd_partition_size_bytes));
+    return true;
+}
+
+bool read_ntfs_boot_sector(vhdcontesto& ctx)
+{
+    char boot_sector_buffer[SECTOR_SIZE] = {0};
+    DWORD read_bytes = 0;
+    if (!ReadFile(ctx.g_vhd_hsourcedrive, boot_sector_buffer, SECTOR_SIZE, &read_bytes, NULL) || read_bytes != SECTOR_SIZE)
+    {
+        myprintf("43206! Error: Unable to read boot sector (code %s)\n", migliaia(GetLastError()));
+        return false;
+    }
+
+    const NTFS_BOOT_SECTOR* bs = (NTFS_BOOT_SECTOR*)boot_sector_buffer;
+    if (memcmp(bs->OemId, NTFS_OEM_ID, 8) != 0)
+    {
+        myprintf("43213! Error: Filesystem is not NTFS (OEM ID: %.8s)\n", bs->OemId);
+        return false;
+    }
+
+    ctx.g_vhd_bytes_per_sector 		= bs->BytesPerSector;
+    ctx.g_vhd_sectors_per_cluster 	= bs->SectorsPerCluster;
+    ctx.g_vhd_cluster_size_bytes 	= ctx.g_vhd_bytes_per_sector * ctx.g_vhd_sectors_per_cluster;
+    ctx.g_vhd_total_clusters 		= ctx.g_vhd_partition_size_bytes / ctx.g_vhd_cluster_size_bytes;
+
+    if (flagdebug)
+    {
+       myprintf("\nDEBUG NTFS Boot Sector\n");
+       myprintf("Bytes per sector    : %u\n", ctx.g_vhd_bytes_per_sector);
+       myprintf("Sectors per cluster : %u\n", ctx.g_vhd_sectors_per_cluster);
+       myprintf("Cluster size        : %u bytes\n", ctx.g_vhd_cluster_size_bytes);
+       myprintf("Total clusters      : %llu\n", ctx.g_vhd_total_clusters);
+       myprintf("MFT LCN             : %llu\n", bs->MftLcn);
+       myprintf("------------------------------\n\n");
+    }
+    return true;
+}
+
+bool read_mft_bitmap(vhdcontesto& ctx)
+{
+    char* mft_record 						= NULL;
+    uint64_t bitmap_mft_record_offset 		= 0;
+    int mft_record_size 					= 0;
+    uint64_t bitmap_size_bytes 				= (ctx.g_vhd_total_clusters + 7) / 8;
+    uint64_t mft_offset 					= 0;
+	
+    const NTFS_BOOT_SECTOR* bs 				= NULL;
+    char boot_sector_buffer[SECTOR_SIZE]	= {0};
+    DWORD read_bytes 						= 0;
+    LARGE_INTEGER 							dist;
+    dist.QuadPart							= 0;
+    SetFilePointerEx(ctx.g_vhd_hsourcedrive, dist, NULL, FILE_BEGIN);
+    if (!ReadFile(ctx.g_vhd_hsourcedrive, boot_sector_buffer, SECTOR_SIZE, &read_bytes, NULL) || read_bytes != SECTOR_SIZE)
+        return false;
+    bs 					= (NTFS_BOOT_SECTOR*)boot_sector_buffer;
+    mft_offset 			= bs->MftLcn * ctx.g_vhd_cluster_size_bytes;
+    mft_record_size 	= (bs->ClustersPerMftRecord > 0) ?
+                     (bs->ClustersPerMftRecord * ctx.g_vhd_cluster_size_bytes) :
+                     (1 << (-bs->ClustersPerMftRecord));
+    bitmap_mft_record_offset = mft_offset + 6 * mft_record_size;
+
+    mft_record = new char[mft_record_size];
+    if (!mft_record)
+    {
+        myprintf("43261! Error: MFT memory allocation failed\n");
+        return false;
+    }
+
+    dist.QuadPart = bitmap_mft_record_offset;
+    if (!SetFilePointerEx(ctx.g_vhd_hsourcedrive, dist, NULL, FILE_BEGIN))
+    {
+        myprintf("43268! Error: Seek MFT $Bitmap failed (code %s)\n", migliaia(GetLastError()));
+        delete[] mft_record;
+        return false;
+    }
+    if (!ReadFile(ctx.g_vhd_hsourcedrive, mft_record, mft_record_size, &read_bytes, NULL) ||
+        read_bytes != (DWORD)mft_record_size)
+    {
+        myprintf("43275! Error: Reading MFT $Bitmap failed (code %s)\n", migliaia(GetLastError()));
+        delete[] mft_record;
+        return false;
+    }
+
+    uint8_t* p = (uint8_t*)mft_record;
+    const uint8_t* record_end = p + mft_record_size;
+    if (memcmp(p, MFT_RECORD_SIGNATURE, 4) != 0)
+    {
+        myprintf("43284! Error: Invalid MFT record\n");
+        delete[] mft_record;
+        return false;
+    }
+
+    uint16_t fixup_offset 		= *(uint16_t*)(p + 0x04);
+    uint16_t fixup_count 		= *(uint16_t*)(p + 0x06);
+    const uint16_t* fixup_array = (uint16_t*)(p + fixup_offset);
+    for (uint16_t i = 1; i < fixup_count; i++)
+        *(uint16_t*)(p + (i * SECTOR_SIZE) - 2) = fixup_array[i];
+
+    uint8_t* data_attr = NULL;
+    p += *(uint16_t*)(p + 0x14); // Move to first attribute
+    while (p < record_end && *(uint32_t*)p != NTFS_ATTR_END)
+    {
+        uint32_t attr_type 	= *(uint32_t*)p;
+        uint32_t attr_len 	= *(uint32_t*)(p + 0x04);
+        
+        if (attr_type == NTFS_ATTR_DATA)
+        {
+            data_attr = p; // Found $DATA attribute
+            break;
+        }
+
+        if (attr_len == 0 || attr_len > (size_t)(record_end - p))
+        {
+            myprintf("43310! Error: Invalid attribute length\n");
+            delete[] mft_record;
+            return false;
+        }
+        p += attr_len;
+    }
+
+    if (!data_attr)
+    {
+        myprintf("43319! Error: $DATA attribute of $Bitmap not found\n");
+        delete[] mft_record;
+        return false;
+    }
+
+    ctx.g_vhd_volume_bitmap = new uint8_t[bitmap_size_bytes];
+    if (!ctx.g_vhd_volume_bitmap)
+    {
+        myprintf("43327! Error: Bitmap memory allocation failed\n");
+        delete[] mft_record;
+        return false;
+    }
+    memset(ctx.g_vhd_volume_bitmap, 0, bitmap_size_bytes);
+    
+    uint8_t non_resident = *(data_attr + 0x08);
+
+   
+    if (non_resident == 0x00) // Attribute is RESIDENT
+    {
+        myprintf("43251: $Bitmap is resident. Direct copy\n");
+        uint32_t data_size = *(uint32_t*)(data_attr + 0x10);
+        uint16_t data_offset = *(uint16_t*)(data_attr + 0x14);
+        uint64_t bytes_to_copy = std::min((uint64_t)data_size, bitmap_size_bytes);
+        
+        memcpy(ctx.g_vhd_volume_bitmap, data_attr + data_offset, bytes_to_copy);
+		myprintf("43257: $Bitmap loaded: %s bytes\n", migliaia(bytes_to_copy));
+    }
+    else // Attribute is NON-RESIDENT 
+    {
+        char* read_buffer 			= NULL;
+        uint16_t runlist_offset 	= *(uint16_t*)(data_attr + 0x20);
+        p = data_attr + runlist_offset;
+        uint64_t current_lcn 		= 0;
+        uint64_t bitmap_bytes_read 	= 0;
+
+        while (*p != 0x00 && bitmap_bytes_read < bitmap_size_bytes)
+        {
+            uint8_t header 		= *p;
+            uint8_t len_bytes 	= header & 0x0F;
+            uint8_t off_bytes 	= (header >> 4) & 0x0F;
+            if (len_bytes == 0 || len_bytes > 8 || off_bytes > 8)
+            {
+                myprintf("43361! Error: Invalid runlist header (0x%02X)\n", header);
+                delete[] mft_record;
+                delete[] ctx.g_vhd_volume_bitmap;
+                ctx.g_vhd_volume_bitmap = NULL;
+                return false;
+            }
+            p++;
+            uint64_t run_len = 0;
+            memcpy(&run_len, p, len_bytes);
+            p += len_bytes;
+            int64_t run_off = 0;
+            memcpy(&run_off, p, off_bytes);
+            if (off_bytes > 0 && (*(p + off_bytes - 1) & 0x80))
+                for (int i = off_bytes; i < 8; i++) ((unsigned char*)&run_off)[i] = 0xFF;
+            p += off_bytes;
+
+            current_lcn += run_off;
+            uint64_t run_len_bytes 			= run_len * ctx.g_vhd_cluster_size_bytes;
+            uint64_t bytes_remaining 		= bitmap_size_bytes - bitmap_bytes_read;
+            uint64_t bytes_to_read_total 	= std::min(run_len_bytes, bytes_remaining);
+
+            uint64_t run_bytes_read = 0;
+            while (run_bytes_read < bytes_to_read_total)
+            {
+                uint64_t chunk_offset = (current_lcn * ctx.g_vhd_cluster_size_bytes) + run_bytes_read;
+                uint64_t chunk_size = std::min((uint64_t)ctx.g_vhd_cluster_size_bytes, bytes_to_read_total - run_bytes_read);
+
+                uint64_t aligned_offset = (chunk_offset / ctx.g_vhd_bytes_per_sector) * ctx.g_vhd_bytes_per_sector;
+                uint64_t offset_in_sector = chunk_offset - aligned_offset;
+                uint64_t aligned_size = ((chunk_size + offset_in_sector + ctx.g_vhd_bytes_per_sector - 1) / ctx.g_vhd_bytes_per_sector) * ctx.g_vhd_bytes_per_sector;
+                
+                // 'new' and 'delete' are slow, but acceptable for bitmap
+                delete[] read_buffer; 
+                read_buffer = new char[aligned_size];
+                if (!read_buffer)
+                {
+                    myprintf("43397! Error: read_buffer memory allocation failed\n");
+                    delete[] mft_record;
+                    delete[] ctx.g_vhd_volume_bitmap;
+                    ctx.g_vhd_volume_bitmap = NULL;
+                    return false;
+                }
+
+                dist.QuadPart = aligned_offset;
+                if (!SetFilePointerEx(ctx.g_vhd_hsourcedrive, dist, NULL, FILE_BEGIN))
+                {
+                    myprintf("43407! Error: Seek failed (offset %s)\n", migliaia(aligned_offset));
+                    delete[] mft_record;
+                    delete[] read_buffer;
+                    delete[] ctx.g_vhd_volume_bitmap;
+                    ctx.g_vhd_volume_bitmap = NULL;
+                    return false;
+                }
+
+                DWORD actual_read = 0;
+                if (!ReadFile(ctx.g_vhd_hsourcedrive, read_buffer, (DWORD)aligned_size, &actual_read, NULL))
+                {
+                    myprintf("43418! Error: Read failed (code %s, offset %s)\n", migliaia(GetLastError()), migliaia2(aligned_offset));
+                    delete[] mft_record;
+                    delete[] read_buffer;
+                    delete[] ctx.g_vhd_volume_bitmap;
+                    ctx.g_vhd_volume_bitmap = NULL;
+                    return false;
+                }
+
+                uint64_t bytes_to_copy = std::min(chunk_size, (uint64_t)(actual_read > offset_in_sector ? actual_read - offset_in_sector : 0));
+                if (bytes_to_copy > 0)
+                    memcpy(ctx.g_vhd_volume_bitmap + bitmap_bytes_read + run_bytes_read, read_buffer + offset_in_sector, bytes_to_copy);
+                
+                run_bytes_read += bytes_to_copy;
+            }
+            bitmap_bytes_read += run_bytes_read;
+        }
+        myprintf("43347: $Bitmap loaded (std) : %s bytes\n", migliaia(bitmap_bytes_read));
+        delete[] read_buffer;
+    }
+    
+    delete[] mft_record;
+    return true;
+}
+
+typedef HRESULT (WINAPI *CoCreateGuidFunc)(GUID *pguid);
+
+bool initialize_vhd_structures(vhdcontesto& ctx, uint64_t& partition_start_sector)
+{
+    partition_start_sector 				= SECTOR_SIZE * 4;
+    ctx.g_vhd_partition_start_bytes 	= partition_start_sector * ctx.g_vhd_bytes_per_sector;
+    ctx.g_vhd_disk_size_bytes 			= ctx.g_vhd_partition_start_bytes + ctx.g_vhd_partition_size_bytes;
+
+    //memset(&ctx.g_vhd_footer, 0, sizeof(ctx.g_vhd_footer));
+    memcpy(ctx.g_vhd_footer.Cookie, "conectix", 8);
+    ctx.g_vhd_footer.Features 			= vhd_htobe32(2);
+    ctx.g_vhd_footer.FormatVersion 		= vhd_htobe32(0x00010000);
+    ctx.g_vhd_footer.DataOffset 		= vhd_htobe64(SECTOR_SIZE);
+    ctx.g_vhd_footer.TimeStamp 			= vhd_htobe32((uint32_t)(time(NULL) - 946684800));
+    memcpy(ctx.g_vhd_footer.CreatorApp, "ntcl", 4);
+    ctx.g_vhd_footer.CreatorVersion		= vhd_htobe32(0x00010000);
+    ctx.g_vhd_footer.CreatorHostOS 		= vhd_htobe32(0x5769326B);
+    ctx.g_vhd_footer.OriginalSize 		= vhd_htobe64(ctx.g_vhd_disk_size_bytes);
+    ctx.g_vhd_footer.CurrentSize 		= vhd_htobe64(ctx.g_vhd_disk_size_bytes);
+    ctx.g_vhd_footer.DiskType 			= vhd_htobe32(3);
+	
+    uint64_t total_sectors 				= ctx.g_vhd_disk_size_bytes / SECTOR_SIZE;
+    uint16_t cylinders;
+    uint8_t heads, sectors_per_track;
+    vhd_calculate_chs(total_sectors, &cylinders, &heads, &sectors_per_track);
+    ctx.g_vhd_footer.Cylinders 			= vhd_htobe16(cylinders);
+    ctx.g_vhd_footer.Heads 				= heads;
+    ctx.g_vhd_footer.SectorsPerTrack	= sectors_per_track;
+
+    // Attempt to dynamically load ole32.dll
+    HMODULE hOle32 = LoadLibraryA("ole32.dll");
+    if (hOle32 == NULL)
+    {
+        myprintf("43475! Error: Unable to load ole32.dll\n");
+        return false;
+    }
+
+    // Get the address of the CoCreateGuid function
+    CoCreateGuidFunc pCoCreateGuid = (CoCreateGuidFunc)GetProcAddress(hOle32, "CoCreateGuid");
+    if (pCoCreateGuid == NULL)
+    {
+        myprintf("43483! Error: Unable to find CoCreateGuid in ole32.dll\n");
+        FreeLibrary(hOle32);
+        return false;
+    }
+
+    GUID guid;
+    // Call the function via the obtained pointer
+    if (pCoCreateGuid(&guid) != S_OK)
+    {
+        myprintf("43492! Error: GUID creation failed\n");
+        FreeLibrary(hOle32);
+        return false;
+    }
+    
+    // Free the DLL 
+	FreeLibrary(hOle32); 
+
+    // Assign the created GUID
+    memcpy(ctx.g_vhd_footer.UniqueId, &guid, 16);
+    
+    ///memset(&ctx.g_vhd_dyn_header, 0, sizeof(ctx.g_vhd_dyn_header));
+    memcpy(ctx.g_vhd_dyn_header.Cookie, "cxsparse", 8);
+    ctx.g_vhd_dyn_header.DataOffset 		= vhd_htobe64((uint64_t)-1);
+    ctx.g_vhd_dyn_header.TableOffset 		= vhd_htobe64(SECTOR_SIZE + sizeof(VHD_DYN_HEADER));
+    ctx.g_vhd_dyn_header.HeaderVersion 		= vhd_htobe32(0x00010000);
+    ctx.g_vhd_dyn_header.BlockSize 			= vhd_htobe32(ctx.g_vhd_block_size);
+    uint32_t max_table_entries 				= (uint32_t)((ctx.g_vhd_disk_size_bytes + ctx.g_vhd_block_size - 1) / ctx.g_vhd_block_size);
+    ctx.g_vhd_dyn_header.MaxTableEntries 	= vhd_htobe32(max_table_entries);
+    ctx.g_vhd_dyn_header.Checksum 			= vhd_htobe32(vhd_calculate_checksum(&ctx.g_vhd_dyn_header, sizeof(VHD_DYN_HEADER)));
+
+    ctx.g_vhd_bat = new uint32_t[max_table_entries];
+    if (!ctx.g_vhd_bat)
+    {
+        myprintf("43516! Error: BAT memory allocation failed\n");
+        return false;
+    }
+    for (uint32_t i = 0; i < max_table_entries; ++i)
+        ctx.g_vhd_bat[i] = vhd_htobe32(0xFFFFFFFF);
+
+    return true;
+}
+
+bool write_initial_vhd_data(vhdcontesto& ctx, uint64_t partition_start_sector)
+{
+    uint8_t mbr_buffer[SECTOR_SIZE] = {0};
+
+    // ctx.g_vhd_vhdfile remains INVALID_HANDLE_VALUE for now
+
+    uint64_t bat_raw_size 			= (uint64_t)vhd_be32toh(ctx.g_vhd_dyn_header.MaxTableEntries) * sizeof(uint32_t);
+    uint64_t bat_size_bytes 		= (bat_raw_size + 511) & ~511ULL;
+
+    ctx.g_vhd_current_data_offset 	= vhd_be64toh(ctx.g_vhd_dyn_header.TableOffset) + bat_size_bytes;
+
+    // Prepare MBR
+    memcpy(mbr_buffer, g_vhd_mbr_template, SECTOR_SIZE);
+    MBR* mbr 					= (MBR*)mbr_buffer;
+    mbr->Signature 				= 0xAA55;
+    PARTITION_ENTRY* p_entry 	= &mbr->Partitions[0];
+    memset(p_entry, 0, sizeof(PARTITION_ENTRY));
+    p_entry->Status 			= 0x80;
+    p_entry->Type 				= 0x07;
+    p_entry->LbaBegin 			= (uint32_t)partition_start_sector;
+    uint64_t partition_sectors 	= ctx.g_vhd_partition_size_bytes / ctx.g_vhd_bytes_per_sector;
+    p_entry->TotalSectors 		= (partition_sectors > 0xFFFFFFFF) ? 0xFFFFFFFF : (uint32_t)partition_sectors;
+
+    uint64_t mbr_data_offset 	= ctx.g_vhd_current_data_offset;
+
+    // Allocate buffer for the first block (bitmap + data)
+    // Will be used in elaboravhd to return the first block
+    if (!ctx.g_vhd_buffer)
+    {
+        ctx.g_vhd_buffer = new char[SECTOR_SIZE + ctx.g_vhd_block_size];
+        if (!ctx.g_vhd_buffer)
+        {
+            myprintf("43557! Error: Buffer memory allocation failed\n");
+            return false;
+        }
+    }
+
+    // Prepare bitmap for the first block (all sectors used)
+    uint8_t* sector_bitmap = (uint8_t*)ctx.g_vhd_buffer;
+    memset(sector_bitmap, 0xFF, SECTOR_SIZE);
+
+    // Prepare the MBR block
+    char* mbr_block_data = ctx.g_vhd_buffer + SECTOR_SIZE;
+    memset(mbr_block_data, 0, ctx.g_vhd_block_size);
+    memcpy(mbr_block_data, mbr_buffer, SECTOR_SIZE);
+
+    // Read the rest of the first block from the drive
+    LARGE_INTEGER dist;
+    dist.QuadPart = 0;
+    SetFilePointerEx(ctx.g_vhd_hsourcedrive, dist, NULL, FILE_BEGIN);
+    DWORD mbr_read;
+    if (!ReadFile(ctx.g_vhd_hsourcedrive, mbr_block_data + ctx.g_vhd_partition_start_bytes, 
+                  ctx.g_vhd_block_size - ctx.g_vhd_partition_start_bytes, &mbr_read, NULL))
+    {
+        myprintf("43579! Error: Reading MBR block failed (code %s)\n", migliaia(GetLastError()));
+        return false;
+    }
+
+    // Update BAT for the first block
+    ctx.g_vhd_bat[0] 				= vhd_htobe32((uint32_t)(mbr_data_offset / SECTOR_SIZE));
+    ctx.g_vhd_current_data_offset 	+= SECTOR_SIZE + ctx.g_vhd_block_size;
+
+    myprintf("43502: First MBR block ready\n");
+    return true;
+}
+
+bool calculate_used_blocks(vhdcontesto& ctx)
+{
+    if (!ctx.g_vhd_volume_bitmap)
+    {
+        printf("Error: Bitmap not loaded\n");
+        return false;
+    }
+
+    myprintf("43514: Calculating actual used size...\n");
+    
+    ctx.g_vhd_used_blocks 	= 1; // MBR block always present
+    ctx.g_vhd_used_bytes 	= SECTOR_SIZE + ctx.g_vhd_block_size; // MBR block
+    
+    uint64_t temp_offset 	= ctx.g_vhd_block_size;
+    int blocks_checked 		= 0;
+    
+    while (temp_offset < ctx.g_vhd_disk_size_bytes)
+    {
+        blocks_checked++;
+        
+        // Skip blocks outside the partition
+        if (temp_offset < ctx.g_vhd_partition_start_bytes ||
+            temp_offset >= ctx.g_vhd_partition_start_bytes + ctx.g_vhd_partition_size_bytes)
+        {
+            temp_offset += ctx.g_vhd_block_size;
+            continue;
+        }
+
+        uint64_t partition_offset 	= temp_offset - ctx.g_vhd_partition_start_bytes;
+        uint64_t start_cluster 		= partition_offset / ctx.g_vhd_cluster_size_bytes;
+        uint64_t end_cluster 		= (partition_offset + ctx.g_vhd_block_size - 1) / ctx.g_vhd_cluster_size_bytes;
+        if (end_cluster >= ctx.g_vhd_total_clusters)
+            end_cluster = ctx.g_vhd_total_clusters - 1;
+
+        // Check if the block contains used clusters
+        bool block_is_used = false;
+        for (uint64_t c = start_cluster; c <= end_cluster; ++c)
+        {
+            uint64_t byte_idx 	= c / 8;
+            uint8_t bit_idx 	= c % 8;
+            if (ctx.g_vhd_volume_bitmap && (ctx.g_vhd_volume_bitmap[byte_idx] >> bit_idx) & 1)
+            {
+                block_is_used = true;
+                break;
+            }
+        }
+
+        if (block_is_used)
+        {
+            ctx.g_vhd_used_blocks++;
+            
+            uint64_t bytes_in_block = (temp_offset + ctx.g_vhd_block_size <= ctx.g_vhd_disk_size_bytes)
+                                     ? ctx.g_vhd_block_size
+                                     : (ctx.g_vhd_disk_size_bytes - temp_offset);
+            
+            ctx.g_vhd_used_bytes += SECTOR_SIZE + bytes_in_block; // bitmap + data
+        }
+
+        temp_offset += ctx.g_vhd_block_size;
+        
+        // Progress every 1000 blocks
+        if (blocks_checked % 1000 == 0)
+        {
+            myprintf("  Analyzed %08d blocks, found %08d used...\r", blocks_checked, ctx.g_vhd_used_blocks);
+            fflush(stdout);
+        }
+    }
+    eol();
+    myprintf("43576:   Total blocks       : %s\n", migliaia(blocks_checked));
+    myprintf("43677:   Used blocks        : %s (%.1f%%)\n", migliaia(ctx.g_vhd_used_blocks),(ctx.g_vhd_used_blocks * 100.0) / blocks_checked);
+    myprintf("43678:   Data to copy       : %s (%s)\n", migliaia(ctx.g_vhd_used_bytes),tohuman(ctx.g_vhd_used_bytes));
+    
+    return true;
+}
+
+#ifdef ZPAQ_VERSION
+bool Jidac::preparavhd(const std::string& image_path, char drive_letter)
+#else
+bool preparavhd(const std::string& image_path, char drive_letter)
+#endif
+{
+    ctx.lettera 					= drive_letter;
+    ctx.g_vhd_split_counter 		= 0;
+    ctx.current_read_offset 		= ctx.g_vhd_block_size;
+    ctx.blocks_written 				= 0;
+    ctx.total_bytes 				= 0;
+    ctx.g_vhd_buffer 				= NULL;
+
+    uint64_t partition_start_sector = 0;
+
+    if (!open_source_drive(drive_letter, ctx) ||
+        !read_ntfs_boot_sector(ctx) ||
+        !read_mft_bitmap(ctx) ||
+        !initialize_vhd_structures(ctx, partition_start_sector) ||
+        !calculate_used_blocks(ctx) ||  
+        !write_initial_vhd_data(ctx, partition_start_sector))
+    {
+        
+        myprintf("43689! nError during preparation. Aborting\n");
+        return false;
+    }
+
+    myprintf("43612: Preparation completed\n");
+	return true;
+}
+
+#ifdef ZPAQ_VERSION
+int Jidac::elaboravhd(const char* buffer, size_t buffer_size) 
+#else
+int elaboravhd(const char* buffer, size_t buffer_size) 
+#endif
+{
+    if (buffer_size < SECTOR_SIZE + ctx.g_vhd_block_size)
+        return -2; // Buffer too small
+
+    //  Handle the first MBR block at the start ***
+    static bool first_block_written = false;
+    if (!first_block_written)
+    {
+        first_block_written = true;
+        
+        // The first block is already prepared in ctx.g_vhd_buffer
+        size_t first_block_size = SECTOR_SIZE + ctx.g_vhd_block_size;
+        memcpy((void*)buffer, ctx.g_vhd_buffer, first_block_size);
+        
+        myprintf("43635: MBR block (first block): %s bytes\n", migliaia(first_block_size));
+        return (int)first_block_size;
+    }
+
+    while (ctx.current_read_offset < ctx.g_vhd_disk_size_bytes)
+    {
+        if (ctx.current_read_offset < ctx.g_vhd_partition_start_bytes ||
+            ctx.current_read_offset >= ctx.g_vhd_partition_start_bytes + ctx.g_vhd_partition_size_bytes)
+        {
+            ctx.current_read_offset += ctx.g_vhd_block_size;
+            continue;
+        }
+
+        uint64_t partition_offset 	= ctx.current_read_offset - ctx.g_vhd_partition_start_bytes;
+        uint64_t start_cluster 		= partition_offset / ctx.g_vhd_cluster_size_bytes;
+        uint64_t end_cluster 		= (partition_offset + ctx.g_vhd_block_size - 1) / ctx.g_vhd_cluster_size_bytes;
+        if (end_cluster >= ctx.g_vhd_total_clusters)
+            end_cluster = ctx.g_vhd_total_clusters - 1;
+
+        bool block_is_used 			= false;
+        for (uint64_t c = start_cluster; c <= end_cluster; ++c)
+        {
+            uint64_t byte_idx 	= c / 8;
+            uint8_t bit_idx 	= c % 8;
+            if (ctx.g_vhd_volume_bitmap && (ctx.g_vhd_volume_bitmap[byte_idx] >> bit_idx) & 1)
+            {
+                block_is_used = true;
+                break;
+            }
+        }
+
+        if (!block_is_used)
+        {
+            ctx.current_read_offset += ctx.g_vhd_block_size;
+            continue;
+        }
+
+        uint64_t bytes_to_read = (ctx.current_read_offset + ctx.g_vhd_block_size <= ctx.g_vhd_disk_size_bytes)
+                                 ? ctx.g_vhd_block_size
+                                 : (ctx.g_vhd_disk_size_bytes - ctx.current_read_offset);
+
+        LARGE_INTEGER dist;
+        dist.QuadPart = partition_offset;
+        if (!SetFilePointerEx(ctx.g_vhd_hsourcedrive, dist, NULL, FILE_BEGIN))
+        {
+            myprintf("43761! Error seeking (offset %s, code %s)\n", migliaia(partition_offset), migliaia2(GetLastError()));
+            return -2;
+        }
+
+        DWORD bytes_read = 0;
+        if (!ReadFile(ctx.g_vhd_hsourcedrive, ctx.g_vhd_buffer + SECTOR_SIZE, (DWORD)bytes_to_read, &bytes_read, NULL))
+        {
+            myprintf("43768! Error (2) reading (offset %s, code %s)\n", migliaia(partition_offset), migliaia2(GetLastError()));
+            return -2;
+        }
+
+        // Generate sector bitmap
+        uint8_t* sector_bitmap 			= (uint8_t*)ctx.g_vhd_buffer;
+        memset(sector_bitmap, 0, SECTOR_SIZE);
+        uint32_t sectors_in_block		= (uint32_t)((bytes_read + ctx.g_vhd_bytes_per_sector - 1) / ctx.g_vhd_bytes_per_sector);
+        uint32_t bitmap_full_bytes 		= sectors_in_block / 8;
+        uint8_t bitmap_last_bits 		= sectors_in_block % 8;
+        memset(sector_bitmap, 0xFF, bitmap_full_bytes);
+        if (bitmap_last_bits != 0)
+            sector_bitmap[bitmap_full_bytes] = (uint8_t)((1 << bitmap_last_bits) - 1);
+
+        // Copy bitmap and data to output buffer
+        memcpy((void*)buffer, (void*)ctx.g_vhd_buffer, SECTOR_SIZE + bytes_read);
+
+        // Update BAT and offset
+        uint32_t block_idx = (uint32_t)(ctx.current_read_offset / ctx.g_vhd_block_size);
+        if (vhd_be32toh(ctx.g_vhd_bat[block_idx]) == 0xFFFFFFFF)
+        {
+            ctx.g_vhd_bat[block_idx] = vhd_htobe32((uint32_t)(ctx.g_vhd_current_data_offset / SECTOR_SIZE));
+            ctx.g_vhd_current_data_offset += SECTOR_SIZE + bytes_read;
+            ctx.blocks_written++;
+            ctx.total_bytes += SECTOR_SIZE + bytes_read;
+        }
+
+        ctx.current_read_offset += ctx.g_vhd_block_size;
+        return SECTOR_SIZE + bytes_read;
+    }
+
+    return -1; // End of reading
+}
+
+#ifdef ZPAQ_VERSION
+bool Jidac::chiudivhd()
+#else
+bool chiudivhd()
+#endif
+{
+    if (ctx.g_vhd_hsourcedrive == INVALID_HANDLE_VALUE)
+        return false;
+
+    myprintf("Finalizing VHD...\n");
+
+    // Calculate footer checksum
+    VHD_FOOTER footer_temp;
+    memcpy(&footer_temp, &ctx.g_vhd_footer, sizeof(VHD_FOOTER));
+    footer_temp.Checksum 				= 0;
+    uint32_t 		footer_checksum 	= 0;
+    const uint8_t* 	pf 					= (uint8_t*)&footer_temp;
+    for (size_t i = 0; i < sizeof(footer_temp); ++i)
+        footer_checksum += pf[i];
+    footer_checksum 					= ~footer_checksum;
+    ctx.g_vhd_footer.Checksum 			= vhd_htobe32(footer_checksum);
+
+    if (flagdebug)
+        myprintf("43825: Footer Checksum: 0x%08X\n", footer_checksum);
+
+    // Build array_header
+    uint32_t max_entries 		= vhd_be32toh(ctx.g_vhd_dyn_header.MaxTableEntries);
+    uint64_t bat_raw_size 		= (uint64_t)max_entries * sizeof(uint32_t);
+    uint64_t bat_size_bytes 	= (bat_raw_size + 511) & ~511ULL;
+    uint64_t header_total_size 	= sizeof(VHD_FOOTER) + sizeof(VHD_DYN_HEADER) + bat_size_bytes;
+
+    ctx.array_header.resize(header_total_size);
+    memcpy(&ctx.array_header[0], &ctx.g_vhd_footer, sizeof(VHD_FOOTER));
+    memcpy(&ctx.array_header[sizeof(VHD_FOOTER)], &ctx.g_vhd_dyn_header, sizeof(VHD_DYN_HEADER));
+    memcpy(&ctx.array_header[sizeof(VHD_FOOTER) + sizeof(VHD_DYN_HEADER)], ctx.g_vhd_bat, bat_raw_size);
+    if (bat_size_bytes > bat_raw_size)
+        memset(&ctx.array_header[sizeof(VHD_FOOTER) + sizeof(VHD_DYN_HEADER) + bat_raw_size], 0, bat_size_bytes - bat_raw_size);
+
+    myprintf("43760:   array_header       : %s bytes (Footer + DynHeader + BAT)\n", migliaia(header_total_size));
+	
+    // Cleanup
+    CloseHandle(ctx.g_vhd_hsourcedrive);
+    if (ctx.g_vhd_vhdfile != INVALID_HANDLE_VALUE)
+        CloseHandle(ctx.g_vhd_vhdfile);
+    
+    if (ctx.g_vhd_bat)
+    {
+        delete[] ctx.g_vhd_bat;
+        ctx.g_vhd_bat = NULL;
+    }
+    if (ctx.g_vhd_volume_bitmap)
+    {
+        delete[] ctx.g_vhd_volume_bitmap;
+        ctx.g_vhd_volume_bitmap = NULL;
+    }
+    if (ctx.g_vhd_buffer)
+    {
+        delete[] ctx.g_vhd_buffer;
+        ctx.g_vhd_buffer = NULL;
+    }
+    ctx.g_vhd_hsourcedrive = INVALID_HANDLE_VALUE;
+    ctx.g_vhd_vhdfile = INVALID_HANDLE_VALUE;
+
+    myprintf("43865: VHD finalized successfully\n");
+    return true;
+}
+#endif
 
 
 
@@ -44551,7 +45592,7 @@ static void* sftp_rsync_worker_thread(void* arg)
 
 			// If remote_size is -1, the file does not exist, proceed with full upload
 			if (remote_size == -1) {
-				///fikoremote_size = 0;  // Tratta come file inesistente
+				///remote_size = 0;  // Tratta come file inesistente
 				resume_from = 0;
 			}
 			else if (remote_size > 0) 
@@ -53107,6 +54148,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 	g_programflags.add(&flagfixcase,		"-fixcase",				"Fix CAse",											"");
 	g_programflags.add(&flagfixreserved,	"-fixreserved",			"fixreserved",										"");
 	g_programflags.add(&flagntfs,			"-ntfs",				"NTFS image",										"");
+	g_programflags.add(&flagvhd,			"-vhd",					"NTFS image to VHD file",										"");
 	g_programflags.add(&flaglongpath,		"-longpath",			"Longpath",											"");
 	g_programflags.add(&flagopen,			"-open",				"Abort if archive seems already opened",												"");
 #endif // corresponds to #ifdef (#ifdef _WIN32)
@@ -54204,6 +55246,10 @@ int Jidac::loadparameters(int argc, const char** argv)
 		all=8;
 	}
 
+	if (!method.empty())
+		if ((method[0]-48)>5)
+			myprintf("54209$ method >5 not different of method 5\n");
+	
 	myreplaceall(g_csvstring,"/","\\");
 	replacetabs(g_csvstring);
 
@@ -57916,15 +58962,24 @@ ThreadReturn decompressThread(void* arg) {
 					if (flagstdout)
 						job.outf=stdout;
 					else
-						job.outf=myfopen(filename.c_str(), WB);
-		///printf("K2 ---\n");
-					if (job.outf==FPNULL)
 					{
-						lock(job.mutex);
-						printerr("decomp2",filename.c_str(),0);
-						release(job.mutex);
+						if (p->second.donotextractme)
+						{
+							///myprintf("Do not extract 2\n"); questo
+						}
+						else
+							job.outf=myfopen(filename.c_str(), WB);
 					}
-					
+		///printf("K2 ---\n");
+					if (!p->second.donotextractme)
+					{
+						if (job.outf==FPNULL)
+						{
+							lock(job.mutex);
+							printerr("decomp2",filename.c_str(),0);
+							release(job.mutex);
+						}
+					}
 					if (g_chunk_size>0)
 					{
 						///g_addedchunklist_fp.push_back(job.outf);
@@ -57951,12 +59006,22 @@ ThreadReturn decompressThread(void* arg) {
 					job.outf=stdout;
 				else
 				{
+					if (p->second.donotextractme)
+					{
+						///myprintf("Do not extract 3\n");
+					}
+					else
 					job.outf=myfopen(filename.c_str(), RBPLUS);  // update existing file
 #ifdef _WIN32
 					if (job.outf==FPNULL)
 					{
 						myprintf("66935! Windows: myfopen failed, retry (just one time more) after 0.3s\n");
 						sleep(300); // Windows: milliseconds
+					if (p->second.donotextractme)
+					{
+						////myprintf("Do not extract 4\n");
+					}
+					else
 						job.outf=myfopen(filename.c_str(), RBPLUS);  // update existing file
 					}
 #endif	
@@ -58048,6 +59113,11 @@ ThreadReturn decompressThread(void* arg) {
 			{
 				if (flagdebug2)
 					myprintf("00703: OFFSET-WRITE   %19s  size  %12s %s\n",migliaia((int64_t)offset),migliaia2(usize),job.lastdt->first.c_str());
+				if (p->second.donotextractme)
+				{
+					///myprintf("Do not extract 5\n");
+				}
+				else
 				if (flagramdisk)
 				{
 					/// do a "ramdisk" write
@@ -58221,6 +59291,273 @@ ThreadReturn decompressThread(void* arg) {
   // Last block
   return 0;
 }
+
+ThreadReturn decompressthreadramdisk(void* arg)
+{
+    // ============================= INIZIO MODIFICHE =============================
+    // 1. Si crea una copia locale della struttura 'job'.
+    //    Tutte le modifiche di stato avverranno su questa copia,
+    //    lasciando intatta la struttura originale passata tramite 'arg'.
+    ExtractJob job = *(ExtractJob*)arg;
+    
+    // 2. Si mantiene un riferimento all'originale SOLO per l'operazione
+    //    di scrittura (ramwrite) e per il mutex di scrittura, che sono
+    //    gli unici effetti esterni permessi.
+    ExtractJob& original_job_ref = *(ExtractJob*)arg;
+    // ============================== FINE MODIFICHE ===============================
+
+    int jobNumber = 0;
+    // Get job number (modifica la copia locale)
+    lock(job.mutex);
+    jobNumber = ++job.job;
+    release(job.mutex);
+
+    InputArchive in(job.jd.archive.c_str());
+    if (!in.isopen())
+        return 0;
+
+    StringBuffer out;
+    // Look for next READY job.
+    int next = 0;  // current job
+    while (true)
+    {
+        lock(job.mutex);
+        for (unsigned i = 0; i <= job.jd.block.size(); ++i)
+        {
+            unsigned k = i + next;
+            if (k >= job.jd.block.size())
+                k -= job.jd.block.size();
+            
+            if (i == job.jd.block.size())
+            {  // no more jobs?
+                release(job.mutex);
+                return 0;
+            }
+
+            Block& b = job.jd.block[k];
+            if (b.state == Block::READY && b.size > 0 && b.usize >= 0)
+            {
+                b.state = Block::WORKING; // Modifica lo stato solo nella copia locale
+                release(job.mutex);
+                next = k;
+                break;
+            }
+        }
+        
+        Block& b = job.jd.block[next];
+        // Get uncompressed size of block
+        unsigned output_size = 0;  // minimum size to decompress
+        assert(b.start > 0);
+        for (unsigned j = 0; j < b.size; ++j)
+        {
+            assert(b.start + j < job.jd.ht.size());
+            assert(job.jd.ht[b.start + j].usize >= 0);
+            output_size += job.jd.ht[b.start + j].usize;
+        }
+        
+        // Decompress
+        double mem = 0;  // how much memory used to decompress
+        try
+        {
+            assert(b.start > 0);
+            assert(b.start < job.jd.ht.size());
+            assert(b.size > 0);
+            assert(b.start + b.size <= job.jd.ht.size());
+            in.seek(b.offset, SEEK_SET);
+            libzpaq::Decompresser d;
+            d.setInput(&in);
+            out.resize(0);
+            assert(b.usize >= 0);
+            assert(b.usize <= 0xffffffffu);
+            out.setLimit(b.usize);
+            d.setOutput(&out);
+            if (!d.findBlock(&mem))
+                error("31284 archive block not found");
+            
+            if (mem > job.maxMemory)
+                job.maxMemory = mem; // Aggiorna il picco di memoria solo nella copia locale
+            
+            while (d.findFilename())
+            {
+                d.readComment();
+                while (out.size() < output_size && d.decompress(1 << 14))
+                    ;
+                if (!flagimage)
+                {
+                    lock(job.mutex);
+                    print_progress(job.total_size, job.total_done, -1, -1);
+                    release(job.mutex);
+                }
+                if (out.size() >= output_size)
+                    break;
+                d.readSegmentEnd();
+            }
+            
+            if (out.size() < output_size)
+            {
+                lock(job.mutex);
+                fflush(stdout);
+                myprintf("00706: output [%u..%u] %d of %u bytes\n", b.start, b.start + b.size - 1, int(out.size()), output_size);
+                release(job.mutex);
+                error("31838 unexpected end of compressed data");
+            }
+            
+            // Verify fragment checksums if present
+            uint64_t q = 0;  // fragment start
+            libzpaq::SHA1 sha1;
+            assert(b.extracted == 0);
+            for (unsigned j = b.start; j < b.start + b.size; ++j)
+            {
+                assert(j > 0 && j < job.jd.ht.size());
+                assert(job.jd.ht[j].usize >= 0);
+                assert(job.jd.ht[j].usize <= 0x7fffffff);
+                if (q + job.jd.ht[j].usize > out.size())
+                    error("31318 Incomplete decompression");
+                
+                if (flagchecksum)
+                {
+                    char sha1result[20];
+                    sha1.write(out.c_str() + q, job.jd.ht[j].usize);
+                    memcpy(sha1result, sha1.result(), 20);
+                    q += job.jd.ht[j].usize;
+                    if (memcmp(sha1result, job.jd.ht[j].sha1, 20))
+                    {
+                        lock(job.mutex);
+                        fflush(stdout);
+                        myprintf("00707: Job %d: fragment %u size %d checksum failed\n", jobNumber, j, job.jd.ht[j].usize);
+                        // NON si modifica g_exec_text per non alterare lo stato globale
+                        release(job.mutex);
+                        error("31330 bad checksum");
+                    }
+                }
+                else
+                {
+                    q += job.jd.ht[j].usize;
+                }
+                ++b.extracted; // Modifica la copia locale
+            }
+        }
+        catch (std::bad_alloc& e)
+        {
+            lock(job.mutex);
+            fflush(stdout);
+            myprintf("00708: Job %d killed: %s\n", jobNumber, e.what());
+            // NON si modifica g_exec_text per non alterare lo stato globale
+            b.state = Block::READY; // Ripristina lo stato nella copia
+            b.extracted = 0;
+            out.resize(0);
+            release(job.mutex);
+            return 0; // Esce senza aver modificato l'originale
+        }
+        catch (std::exception& e)
+        {
+            lock(job.mutex);
+            fflush(stdout);
+            myprintf("00709: Job %d: skipping [%u..%u] at %1.0f: %s\n", jobNumber, b.start + b.extracted, b.start + b.size - 1, b.offset + 0.0, e.what());
+            release(job.mutex);
+            continue;
+        }
+
+        // Scrive i file che puntano a questo blocco
+        lock(original_job_ref.write_mutex); // Usa il mutex di scrittura ORIGINALE per la thread-safety
+        for (unsigned ip = 0; ip < b.files.size(); ++ip)
+        {
+            DTMap::iterator p_copy = b.files[ip]; // Iteratore sulla mappa della COPIA
+            
+            // Cerca l'elemento corrispondente nella mappa ORIGINALE per ottenere il puntatore pramfile
+            DTMap::iterator p_original = original_job_ref.jd.dt.find(p_copy->first);
+
+
+
+
+			if (p_original->second.pramfile==NULL)
+					{
+						p_original->second.pramfile=new franzfs;
+						(*p_original->second.pramfile).init(p_original->second.size);
+						g_allocatedram+=sizeof(franzfs);
+
+					}
+
+
+            // Se non esiste nell'originale o non deve essere scritto, salta
+            if (p_original == original_job_ref.jd.dt.end() || p_original->second.date == 0 || p_original->second.data < 0
+                || p_original->second.data >= int64_t(p_original->second.ptr.size()))
+                continue;
+
+            const vector<unsigned>& ptr = p_copy->second.ptr;
+            int64_t offset = 0;  // write offset
+            for (unsigned j = 0; j < ptr.size(); ++j)
+            {
+                if (ptr[j] < b.start || ptr[j] >= b.start + b.extracted)
+                {
+                    offset += job.jd.ht[ptr[j]].usize;
+                    continue;
+                }
+
+                // La logica di 'lastdt' è ora interna alla copia e non ha effetti esterni
+                if (p_copy != job.lastdt)
+                    job.lastdt = job.jd.dt.end();
+                if (job.lastdt == job.jd.dt.end())
+                {
+                    // L'allocazione di memoria è stata rimossa.
+                    // Si presuppone che p_original->second.pramfile sia già valido.
+                    if (p_original->second.pramfile == NULL)
+                       error("31399 ramdisk non inizializzato dal chiamante");
+                    
+                    job.lastdt = p_copy;
+                }
+
+                uint64_t q = 0;
+                for (unsigned k = b.start; k < ptr[j]; ++k)
+                {
+                    q += job.jd.ht[k].usize;
+                }
+                
+                // Unisce frammenti consecutivi
+                ++p_copy->second.data; // Modifica il contatore dei dati sulla copia
+                uint64_t usize = job.jd.ht[ptr[j]].usize;
+                while (j + 1 < ptr.size() && ptr[j + 1] == ptr[j] + 1
+                    && ptr[j + 1] < b.start + b.size
+                    && job.jd.ht[ptr[j + 1]].usize >= 0
+                    && usize + job.jd.ht[ptr[j + 1]].usize <= 0x7fffffff)
+                {
+                    ++p_copy->second.data; // Modifica il contatore sulla copia
+                    usize += job.jd.ht[ptr[++j]].usize;
+                }
+
+                uint64_t nz = q;
+                while (nz < q + usize && out.c_str()[nz] == 0) ++nz;
+
+                if ((nz < q + usize || j + 1 == ptr.size()))
+                {
+                    if (!(flagzero && flagdebug))
+                    {
+                        // ================== OPERAZIONE DI SCRITTURA ESTERNA ==================
+                        // Usa il puntatore 'pramfile' dalla struttura ORIGINALE
+                        if (p_original->second.pramfile != NULL)
+                            (*p_original->second.pramfile).ramwrite(offset, (char*)out.c_str() + q, usize);
+                        // =====================================================================
+                    }
+                }
+                
+                offset += usize;
+                
+                lock(job.mutex);
+                job.total_done += usize; // Aggiorna il progresso solo sulla copia
+                release(job.mutex);
+
+                if (p_copy->second.data == int64_t(ptr.size())) {
+                    job.lastdt = job.jd.dt.end(); // Aggiorna lo stato sulla copia
+                }
+            } // end for j
+        } // end for ip
+        
+        release(original_job_ref.write_mutex); // Rilascia il mutex di scrittura ORIGINALE
+    } // end while true
+
+    return 0;
+}
+/*
 ThreadReturn decompressthreadramdisk(void* arg)
 {
 	ExtractJob& job=*(ExtractJob*)arg;
@@ -58229,7 +59566,7 @@ ThreadReturn decompressthreadramdisk(void* arg)
 	lock(job.mutex);
 	jobNumber=++job.job;
 	release(job.mutex);
-	InputArchive in(job.jd.archive.c_str()/*,job.jd.*/);
+	InputArchive in(job.jd.archive.c_str());
 	if (!in.isopen())
 		return 0;
 	StringBuffer out;
@@ -58468,6 +59805,9 @@ ThreadReturn decompressthreadramdisk(void* arg)
   // Last block
   return 0;
 }
+*/
+
+
 // Streaming output destination
 struct OutputFile: public libzpaq::Writer {
   FP f;
@@ -63395,6 +64735,8 @@ void my_handler(int s)
 
 #ifdef _WIN32
 	if (flagntfs)
+		flagimage=true;
+	if (flagvhd)
 		flagimage=true;
 #endif
 
@@ -71390,6 +72732,31 @@ int Jidac::add()
 				total_size=context.total_size;
 			}
 			else
+			if (flagvhd)
+			{
+				color_yellow();
+				printDigitalString("EXPERIMENTAL");
+				color_restore();
+				
+				g_ioBUFSIZE = 512+2 * 1024 * 1024; // 2MB buffer PLUS the BITMAP!!!!
+				
+				lettera=toupper(lettera);
+				snprintf(tempo,sizeof(tempo),"image_%c.fhd",lettera);
+				solonome=tempo;
+				myprintf("71413: NTFS of drive %c: (buffer %s) on (VHD) %Z\n",lettera,tohuman(g_ioBUFSIZE),solonome.c_str());
+				snprintf(tempo,sizeof(tempo),"\\\\.\\%c:",lettera);
+				string	letterpath=tempo;
+				if (flagverbose)
+					myprintf("71417: LETTER |%s|\n",letterpath.c_str());
+				
+				if (!preparavhd("z:\\provona.vhd", lettera)) 
+				{
+					myprintf("78176: ERROR preparing NTFS-VHD (not administrator?)\n");
+					return 2;
+				}
+				total_size=ctx.g_vhd_used_bytes;
+			}
+			else
 			{
 				snprintf(tempo,sizeof(tempo),"image_%c.img",lettera);
 				solonome=tempo;
@@ -72381,6 +73748,37 @@ int Jidac::add()
 
 	string	memfilehash="";
 #ifdef _WIN32
+	if (flagimage && flagvhd)
+	{
+		myprintf("79013: Making  VHD header in memfile\n");
+		string memfilename	="image_"+std::string(1,ctx.lettera)+".header";
+		
+		int64_t		memneeded=1;
+		
+		thefranzfs.init(memneeded);
+		DT& d=edt[memfilename];
+		d.creationdate		=now();
+		d.accessdate		=now();
+		d.date				=0; // if date !=0 ram is filled
+		d.size				=memneeded; //fake, we'll init() later
+		d.data				=1;
+		d.attr				=8311;
+
+		DTMap::iterator p=edt.find(memfilename);
+		if (p!=edt.end())
+		{
+			myprintf("79123: INFO => VHD header %s\n",memfilename.c_str());
+			p->second.pramfile=&thefranzfs;
+			p->second.data=1;  // add in every case
+			vf.push_back(p);
+		}
+		else
+		{
+			myprintf("74062: GURU cannot find MFILE-memfile %s\n",memfilename.c_str());
+			seppuku();
+		}
+	}
+	else
 	if (flagimage && flagntfs)
 	{
 		if (flagverbose)
@@ -72570,7 +73968,11 @@ int Jidac::add()
 		int		ultimotempo=0;
 		// Read fragments
 		int64_t fsize=0;  // file size after dedupe
+		int64_t workedsofar=0;
 		///int64_t	workedsofar=0; // -image 
+		int 	blocchi=0;
+		bool brutalexit=false;
+		
 		for (unsigned fj=0; true; ++fj)
 		{
 			int64_t sz		=0;  // fragment size;
@@ -72595,6 +73997,106 @@ int Jidac::add()
 						bufptr=0;
 						if (flagimage)
 						{
+							if (flagvhd)
+							{
+								if (vf[fi]->second.pramfile!=NULL)
+								{
+									///kammo
+									if (vf[fi]->second.date==0)
+									{
+										uint64_t memtobecompressed=ctx.array_header.size();
+										vf[fi]->second.pramfile->init(memtobecompressed);
+										vf[fi]->second.pramfile->append(reinterpret_cast<const char*>(&ctx.array_header[0]), ctx.array_header.size());
+										vf[fi]->second.pramfile->seekstart();
+										vf[fi]->second.size=memtobecompressed;
+										vf[fi]->second.date=now();
+										g_thememfilelength=memtobecompressed;
+										eol();
+										color_green();
+										myprintf("79360: VHD header ready for %s bytes\n",migliaia(memtobecompressed));
+										color_restore();
+									}
+									buflen=vf[fi]->second.pramfile->ramread(g_ioBUFSIZE,buf);
+								}
+							
+								else
+
+								{
+									int bytesletti=elaboravhd(buf,g_ioBUFSIZE);
+									
+									if (bytesletti==-2)
+									{
+										myprintf("74187: Hard error on elaboravhd, guru!\n");
+										seppuku();
+									}
+									else
+									if (bytesletti==-1) 
+									{
+										c=EOF;
+										eol();
+										myprintf("74315: VHD NTFS data done, starting finalizing...\n");
+										chiudivhd();
+										myprintf("74164: Done, header size is %s\n",migliaia(ctx.array_header.size()));
+										brutalexit=true;
+										
+									}
+									else
+									{
+										buflen=bytesletti;
+										workedsofar+=bytesletti;
+										blocchi++;
+									}
+
+
+									if (workedsofar>=total_size)
+									{
+										c=EOF;
+										color_red();
+										eol();
+										myprintf("69187: Brutally exit from image bufptr %d buflen %d so far %s total %s\n",bufptr,buflen,migliaia(workedsofar),migliaia2(total_size));
+										color_restore();
+										brutalexit=true;
+									}
+
+									
+									if (!flagnoeta) 
+									{
+										int64_t current_time = mtime();
+										if (current_time - last_update_time >= 1000) 
+										{
+											int secondi = (current_time - startstream) / 1000;
+											if (secondi != ultimotempo) 
+											{
+												float percentuale=100.0*total_done/(total_size+1);
+												float speed = secondi > 0 ? (total_done) / secondi : 0;
+												ULONGLONG eta_seconds = 0;
+												if (speed > 0) 
+												{
+													ULONGLONG bytes_remaining = total_size - total_done;
+													eta_seconds = bytes_remaining / (speed );
+												}
+							
+												int eta_hours = eta_seconds / 3600;
+												int eta_minutes = (eta_seconds % 3600) / 60;
+												int eta_secs = eta_seconds % 60;
+												int64_t projectedsize=double(total_size/total_done)*g_fwritten;
+												myprintf("06021: VHD %06.2f%% %10s/%s =>+%12s (%12s) @ %10s/s ETA %02d:%02d:%02d\r",
+													   percentuale, 
+													   tohuman(total_done), 
+													   tohuman2(total_size),
+													   tohuman3(g_fwritten),
+													   tohuman5(projectedsize),
+													   tohuman4(speed), 
+													   eta_hours, eta_minutes, eta_secs);
+												ultimotempo = secondi;
+												fflush(stdout);
+												last_update_time = current_time;
+											}
+										}
+									}
+								}
+							}
+							else
 							if (flagntfs)
 							{
 								if (vf[fi]->second.pramfile!=NULL)
@@ -72898,6 +74400,15 @@ int Jidac::add()
 								}
 							}
 
+					if (brutalexit)
+					{
+						if (flagdebug)
+						{
+							myprintf("************* exit due to brutalexit bufptr buflen %d %d\n",bufptr,buflen);
+							myprintf("blocchi %d %s\n",blocchi,migliaia(workedsofar));
+						}	
+						break;
+					}
 					if (bufptr>=buflen)
 						c=EOF;
 					else
@@ -73087,6 +74598,9 @@ int Jidac::add()
 									m="36,207,0"; //packing the .dat with method 3
 									///m="56,207,0"; //packing the .dat with method 3
 								}
+							if (flagimage && flagvhd)
+								if (fi==(vf.size()-1))
+									m="36,207,0"; //packing the .header with method 3
 #endif
 							if (flagdebug2)
 								myprintf("02088: appendz %s %s \n",fn.c_str(),m.c_str());
@@ -74112,8 +75626,10 @@ int Jidac::add()
 #endif
 
 #ifdef _WIN32
+		
 	if (flagimage)
 	{
+		
 		if (flagntfs)
 		{
 			if (ntfs_ok)
@@ -75593,32 +77109,8 @@ std::string calcolafranzhash(std::string i_tipohash, std::string i_nomefile, int
 
 
 
-
 int Jidac::benchmark()
 {
-/*
-	printf("Inizio test\n");
-	franzcri cri("pippo",strlen("pippo"));
-	if (!cri.open("z:\\okane.franzen", true))
-	{
-        perror("Error creating output file");
-        return 0;
-    }
-	char sale[32]={0};
-	char resto[48]={0};
-	for (unsigned int i=0;i<32;i++)
-		sale[i]=i;
-	for (unsigned int i=0;i<48;i++)
-			resto[i]=250;
-	cri.write(sale,32);
-	cri.write(resto,48);
-	
-	char singolo=255;
-	cri.writeat(10,&singolo,1);
-    cri.close();
-	printf("done\n");
-	return 0;
-*/
 	pc_info();
 
 	vector<string> 	array_cpu;
@@ -89780,6 +91272,30 @@ void formatAndSplitStringInFourParts(
     o_output4 = formattedString.substr(currentStart);
 }
 
+/*
+bool isFileLockedByAnotherProcess(const std::string& filename) {
+    HANDLE hFile = CreateFileA(
+        filename.c_str(),
+        GENERIC_READ | GENERIC_WRITE,
+        0,  // No sharing - prova accesso esclusivo
+        NULL,
+        OPEN_EXISTING,
+        FILE_ATTRIBUTE_NORMAL,
+        NULL
+    );
+    
+    if (hFile == INVALID_HANDLE_VALUE) {
+        DWORD error = GetLastError();
+        if (error == ERROR_SHARING_VIOLATION) {
+            printf("Il file è aperto da un altro processo.\n");
+            return true;
+        }
+    } else {
+        CloseHandle(hFile);
+    }
+    return false;
+}
+*/
 int Jidac::work()
 {
 	
@@ -91126,6 +92642,23 @@ int Jidac::list715()
   return 0;
 }
 
+
+bool isvhdheader(const std::string& filename) 
+{
+    return filename.length() == 14 &&
+           filename.rfind("image_", 0) == 0 &&
+           (filename[6] >= 'A' && filename[6] <= 'Z') &&
+           filename.rfind(".header") == 7;
+}
+
+bool isvhdimage(const std::string& filename) 
+{
+    return filename.length() == 11 &&
+           filename.rfind("image_", 0) == 0 &&
+           (filename[6] >= 'A' && filename[6] <= 'Z') &&
+           filename.rfind(".fhd") == 7;
+}
+
 int Jidac::extract()
 {
 	archive=getbackupnameifany(archive);
@@ -91563,14 +93096,56 @@ int Jidac::extract()
 	bool	isstdourordered=false;
 	int		badfrag=0;
 
+
+#ifdef _WIN32
+	string 	vhd_image_name;
+	string	vhd_image_fullname;
+	string	vhd_header_name;
+
+	if (flagvhd)
+	{
+		if (dt.size()!=2)
+		{
+			myprintf("93263! with -vhd we expect EXACTLY two files\n");
+			return 2;
+		}
+		for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p)
+		{
+			string fileinlavoro=p->first;
+			if (isvhdheader(fileinlavoro))
+			{
+				vhd_header_name=fileinlavoro;
+				p->second.donotextractme=true;	/// <<< we really do not want to extract on disk the header
+			}
+			if (isvhdimage(fileinlavoro))
+			{
+				vhd_image_name=fileinlavoro;
+				vhd_image_fullname=rename(p->first);
+			}
+		}
+		if ((vhd_image_name=="") || (vhd_header_name==""))
+		{
+			myprintf("93270! Cannot find image or header name\n");
+			return 2;
+		}
+		if (flagverbose)
+		{
+			myprintf("93273: vhd header name %Z\n",vhd_header_name.c_str());
+			myprintf("93273: vhd image  name %Z\n",vhd_image_name.c_str());
+		}
+	}
+#endif
 	
 	for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p)
 	{
 		p->second.data=-1;  // skip
-		if (p->second.date && p->first!="")
+		
+		bool entra=(p->second.date && p->first!="");
+
+		if (entra)
 		{
 			string fn=rename(p->first);
-			
+		///	myprintf("sono entrato con %s\n",fn.c_str());
 			const bool isdir=isdirectory(p->first);
 			if (isdir)
 				real_dirs++;
@@ -91979,6 +93554,72 @@ int Jidac::extract()
 	///blockdecoder();
 	
 	vector<ThreadID> tid(howmanythreads);
+
+#ifdef _WIN32
+	uint64_t vhd_header_size=0;
+	uint64_t vhd_data_size	=0;
+	if (flagvhd)
+	{
+		// OK this is slow, but who cares?
+		
+		/*
+		vector<unsigned> frammenti_header;
+		for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p)
+			if (p->second.donotextractme)
+				frammenti_header=p->second.ptr;
+		
+		for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p)
+			if (!p->second.donotextractme)
+			{
+				if (flagdebug2)
+					myprintf("93782: Before fragment fusion %s\n",migliaia(p->second.ptr.size()));
+				for (unsigned int j=0;j<p->second.ptr.size();j++)
+					frammenti_header.push_back(p->second.ptr[j]);
+				p->second.ptr=frammenti_header;
+				if (flagdebug2)
+					myprintf("93787: After fragment fusion %s\n",migliaia(p->second.ptr.size()));
+			}
+			*/
+			
+		DTMap::iterator it_header = dt.end();
+		DTMap::iterator it_target = dt.end();
+
+		// Trova i due elementi
+		for (DTMap::iterator p = dt.begin(); p != dt.end(); ++p)
+			if (p->second.donotextractme)
+				it_header = p;
+			else
+				it_target = p;
+
+		// Se entrambi trovati, fai la fusione
+		if (it_header != dt.end() && it_target != dt.end())
+		{
+			vhd_header_size	=it_header->second.size;
+			vhd_data_size	=it_target->second.size;
+			
+			if (flagdebug2)
+				myprintf("93782: Before fusion %s\n", migliaia(it_target->second.ptr.size()));
+
+			std::vector<unsigned> nuovo;
+			nuovo.reserve(it_header->second.ptr.size() + it_target->second.ptr.size());
+
+			for (unsigned int i=0;i<it_header->second.ptr.size(); ++i)
+				nuovo.push_back(it_header->second.ptr[i]);
+
+			for (unsigned int i=0;i<it_target->second.ptr.size(); ++i)
+				nuovo.push_back(it_target->second.ptr[i]);
+
+			it_target->second.ptr = nuovo;
+
+			if (flagdebug2)
+				myprintf("93787: After fusion %s\n", migliaia(it_target->second.ptr.size()));
+		}
+		else
+			myprintf("93819! GURU cannot find header & target\n");
+
+	}
+#endif
+		
 	if (howmanythreads==1)
 	{
 		if (flagverbose)
@@ -92050,6 +93691,7 @@ int Jidac::extract()
 
 										makepath(outname);
 										///myprintf();
+									
 										outf=myfopen(outname.c_str(), WB);
 										if (outf==FPNULL)
 										{
@@ -92297,7 +93939,11 @@ int Jidac::extract()
 	int			windowspath		=0;
 	int			windowsunc		=0;
 	int			relativepath	=0;
-	if (!flagramdisk)
+#ifdef _WIN32
+	if ((!flagramdisk) && (vhd_header_name==""))
+#else
+	if ((!flagramdisk))
+#endif
 	{
 		// Report failed extractions, plain old 715
 		for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p)
@@ -92652,9 +94298,49 @@ int Jidac::extract()
 		}
 	}
 #endif
-///myprintf("10485: g_ramwrite %s\n",migliaia(g_ramwrite));
+
+#ifdef _WIN32
+	if (flagvhd)
+	{
+		if (vhd_image_fullname=="")
+		{
+			myprintf("94302: vhd_image_fullname empty, this is BAD!\n");
+			return 2;
+		}
+		string vhdfilename=vhd_image_fullname;
+		myreplace(vhdfilename,".fhd",".vhd");
+		color_cyan();
+		myprintf("76058: Due to -vhd finalizing vhd %s to %s\n",vhd_image_fullname.c_str(),vhdfilename.c_str());
+		color_restore();
+		fflush(stdout);
+		sleep(1); 
+		
+		/*
+		if (isFileLockedByAnotherProcess(vhd_image_fullname))
+			myprintf("LOCKED\n");
+		else
+			myprintf("FREE\n");
+		*/
+	
+		if (appendfirst512(vhd_image_fullname))
+			if (myrename(vhd_image_fullname,vhdfilename)==0)
+			{
+				int64_t dimfile=prendidimensionefile(vhdfilename.c_str());
+				if ((dimfile)==int64_t(vhd_header_size+vhd_data_size+SECTOR_SIZE))
+				{
+					color_green();
+					myprintf("84521: VHD file OK %s (%s)\n",migliaia(dimfile),tohuman(dimfile));
+					color_restore();
+				}
+				else
+				{
+					myprintf("84321! VHD KAPUTT\n");
+				}
+			}		
+	}
+#endif
+
   return errors;
-  ///return errors>0;
 }
 
 
@@ -102989,4 +104675,3 @@ int Jidac::ssh_dohasha(std::string i_algo)
 }		
 #endif
 #endif ///NOSFTPEND
-

@@ -58,7 +58,7 @@ OTHER DEALINGS IN THE SOFTWARE.
 #define ZPAQFULL ///NOSFTPSTART
 ///NOSFTPEND
 
-#define ZPAQ_VERSION "63.5d"
+#define ZPAQ_VERSION "63.5g"
 #define ZPAQ_DATE "(2025-10-13)"
 
 
@@ -34148,28 +34148,28 @@ struct sodium_functions
 #pragma pack(push, 1)
 struct file_header
 {
-    // --- Identification & Authentication (56 bytes) ---
+    // Identification & Authentication (56 bytes) 
     char            magic			[MAGIC_BYTES_LEN];		// Offset  0  (0x00) | Size:  8 | Range: [0x00..0x07]
     unsigned char   auth_tag		[SIZEOF_AUTH_TAG];		// Offset  8  (0x08) | Size: 16 | Range: [0x08..0x17] (Main header tag)
     unsigned char   salt			[SIZEOF_SALT];			// Offset 24  (0x18) | Size: 16 | Range: [0x18..0x27] (Salt for key derivation)
     unsigned char   key_check_tag	[SIZEOF_KEY_CHECK_TAG];	// Offset 40  (0x28) | Size: 16 | Range: [0x28..0x37] (Password check tag)
 
-    // --- Main Metadata (40 bytes) ---
+    //  Main Metadata (40 bytes) 
     uint64_t        block_size;     						// Offset 56  (0x38) | Size:  8 | Range: [0x38..0x3F] (Data block size)
     uint64_t        file_data_size; 						// Offset 64  (0x40) | Size:  8 | Range: [0x40..0x47] (Total logical data size)
     uint64_t        crc32;          						// Offset 72  (0x48) | Size:  8 | Range: [0x48..0x4F] (Full non-crypto CRC32)
     uint64_t        quickhash;      						// Offset 80  (0x50) | Size:  8 | Range: [0x50..0x57] (Fast non-crypto hash)
     uint64_t        version;        						// Offset 88  (0x58) | Size:  8 | Range: [0x58..0x5F] (File format version)
 
-    // --- Key Derivation Parameters (16 bytes) ---
+    //  Key Derivation Parameters (16 bytes) 
     uint64_t        pwhash_opslimit;               			// Offset 96  (0x60) | Size:  8 | Range: [0x60..0x67] (Argon2id parameter)
     uint64_t        pwhash_memlimit;               			// Offset 104 (0x68) | Size:  8 | Range: [0x68..0x6F] (Argon2id parameter)
 
-    // --- Fast Append Metadata (16 bytes) ---
+    //  Fast Append Metadata (16 bytes) 
     uint64_t        prefix_crc32;           				// Offset 112 (0x70) | Size:  8 | Range: [0x70..0x77] (CRC32 of all blocks except the last one)
     uint64_t        prefix_size;            				// Offset 120 (0x78) | Size:  8 | Range: [0x78..0x7F] (Size in bytes of the prefix)
 
-    // --- Final Padding (4 bytes) ---
+    //  Final Padding (4 bytes) 
     uint8_t         pad[4];                           		// Offset 128 (0x80) | Size:  4 | Range: [0x80..0x83] (Padding to align struct to 132 bytes)
 };
 #pragma pack(pop)
@@ -34605,7 +34605,7 @@ bool write_header()
     // Genera la nonce per l'header (usata sia per il key check che per l'auth tag)
 	sodium.randombytes_buf(header_nonce, sizeof(header_nonce));
 
-    // --- NUOVO: Creazione del Key Check Value ---
+    // Creazione del Key Check Value
     // Cifriamo un messaggio nullo per generare un tag. Questo permette una verifica
     // rapidissima della correttezza della chiave (e quindi della password).
     unsigned long long dummy_len;
@@ -34618,7 +34618,7 @@ bool write_header()
         return false;
     }
 
-    // --- LOGICA DI AUTENTICAZIONE PRINCIPALE ---
+    //  LOGICA DI AUTENTICAZIONE PRINCIPALE
     // Prepara i dati addizionali (AD) per il tag di autenticazione principale.
     // L'integrità di questi dati sarà protetta da 'header.auth_tag'.
     std::vector<unsigned char> header_data;
@@ -34646,7 +34646,7 @@ bool write_header()
         return false;
     }
 
-    // --- SCRITTURA SU DISCO ---
+    //  SCRITTURA SU DISCO
     // Prepara una copia dell'header con i campi in formato little-endian per la scrittura.
     file_header writable_header 	= header;
     writable_header.block_size 		= host_to_le64(header.block_size);
@@ -34726,7 +34726,7 @@ bool read_header()
     if (!derive_key(header.salt))
         return false;
 
-    // --- NUOVO: Verifica Immediata della Password tramite Key Check Value ---
+    // Verifica Immediata della Password tramite Key Check Value
     unsigned char dummy_output[1];
     unsigned long long dummy_len;
     if (sodium.crypto_aead_chacha20poly1305_ietf_decrypt(dummy_output, &dummy_len, NULL,
@@ -34738,7 +34738,7 @@ bool read_header()
         return false;
     }
 
-    // --- VERIFICA DEL TAG DI AUTENTICAZIONE PRINCIPALE ---
+    //  VERIFICA DEL TAG DI AUTENTICAZIONE PRINCIPALE
     // Ricostruisci il buffer dei dati addizionali esattamente come è stato creato in write_header
     std::vector<unsigned char> header_data;
     header_data.insert(header_data.end(), header.key_check_tag, header.key_check_tag + sizeof(header.key_check_tag));
@@ -34766,7 +34766,7 @@ bool read_header()
         return false;
     }
 
-    // --- Caricamento dei metadati CRC (logica originale ripristinata) ---
+    //  Caricamento dei metadati CRC (logica originale ripristinata)
     if (!is_file_new)
     {
         blocks_crc32.clear();
@@ -34839,7 +34839,7 @@ bool is_password_ok(const char* filename)
     FILE* f = fopen(filename, "rb");
     if (!f) return false;
 
-    // --- NUOVO E FONDAMENTALE: Verifica i magic bytes prima di tutto ---
+    //  FONDAMENTALE: Verifica i magic bytes prima di tutto
     char magic[MAGIC_BYTES_LEN];
     if (fread(magic, 1, MAGIC_BYTES_LEN, f) != MAGIC_BYTES_LEN) {
         fclose(f); // File troppo corto
@@ -34850,7 +34850,7 @@ bool is_password_ok(const char* filename)
         fclose(f);
         return false;
     }
-    // --- FINE CONTROLLO MAGIC BYTES ---
+    //  FINE CONTROLLO MAGIC BYTES
 
     unsigned char salt[SIZEOF_SALT];
     unsigned char key_check_tag[SIZEOF_KEY_CHECK_TAG];
@@ -35004,7 +35004,7 @@ franzcri(const char *p, size_t p_len,
 				crc32(0),
 				worked_so_far(0)
 	{
-			// --- Gestione della password ---
+			// Gestione della password
 			// Validazione della password e della sua lunghezza
 			if (p == NULL || p_len == 0 || p_len > 255) 
 			{
@@ -37247,6 +37247,7 @@ size_t myfwrite(const void* ptr, size_t size, size_t nobj, FP fp)
 	if ((nobj*size)==0)
 		return 0;
 	
+
 /*
 	char mynomefile[100];
 	uint32_t crc=crc32_16bytes(ptr,nobj*size);
@@ -43296,7 +43297,8 @@ bool read_mft_bitmap(vhdcontesto& ctx)
             }
             bitmap_bytes_read += run_bytes_read;
         }
-        myprintf("43347: $Bitmap loaded (std) : %s bytes\n", migliaia(bitmap_bytes_read));
+		if (flagverbose)
+			myprintf("43347: $Bitmap loaded (std) : %s bytes\n", migliaia(bitmap_bytes_read));
         delete[] read_buffer;
     }
     
@@ -43448,8 +43450,8 @@ bool write_initial_vhd_data(vhdcontesto& ctx, uint64_t partition_start_sector)
     // Update BAT for the first block
     ctx.g_vhd_bat[0] 				= vhd_htobe32((uint32_t)(mbr_data_offset / SECTOR_SIZE));
     ctx.g_vhd_current_data_offset 	+= SECTOR_SIZE + ctx.g_vhd_block_size;
-
-    myprintf("43502: First MBR block ready\n");
+	if (flagverbose)
+		myprintf("43502: First MBR block ready\n");
     return true;
 }
 
@@ -43521,8 +43523,11 @@ bool calculate_used_blocks(vhdcontesto& ctx)
         }
     }
     eol();
-    myprintf("43576:   Total blocks       : %s\n", migliaia(blocks_checked));
-    myprintf("43677:   Used blocks        : %s (%.1f%%)\n", migliaia(ctx.g_vhd_used_blocks),(ctx.g_vhd_used_blocks * 100.0) / blocks_checked);
+	if (flagverbose)
+	{
+		myprintf("43576:   Total blocks       : %s\n", migliaia(blocks_checked));
+		myprintf("43677:   Used blocks        : %s (%.1f%%)\n", migliaia(ctx.g_vhd_used_blocks),(ctx.g_vhd_used_blocks * 100.0) / blocks_checked);
+	}
     myprintf("43678:   Data to copy       : %s (%s)\n", migliaia(ctx.g_vhd_used_bytes),tohuman(ctx.g_vhd_used_bytes));
     
     return true;
@@ -43554,8 +43559,8 @@ bool preparavhd(const std::string& image_path, char drive_letter)
         myprintf("43689! nError during preparation. Aborting\n");
         return false;
     }
-
-    myprintf("43612: Preparation completed\n");
+	if (flagverbose)
+		myprintf("43612: Preparation completed\n");
 	return true;
 }
 
@@ -43577,8 +43582,8 @@ int elaboravhd(const char* buffer, size_t buffer_size)
         // The first block is already prepared in ctx.g_vhd_buffer
         size_t first_block_size = SECTOR_SIZE + ctx.g_vhd_block_size;
         memcpy((void*)buffer, ctx.g_vhd_buffer, first_block_size);
-        
-        myprintf("43635: MBR block (first block): %s bytes\n", migliaia(first_block_size));
+        if (flagdebug2)
+			myprintf("43635: MBR block (first block): %s bytes\n", migliaia(first_block_size));
         return (int)first_block_size;
     }
 
@@ -43671,10 +43676,14 @@ bool chiudivhd()
 #endif
 {
     if (ctx.g_vhd_hsourcedrive == INVALID_HANDLE_VALUE)
+	{
         return false;
-
-    myprintf("Finalizing VHD...\n");
-
+	}
+	
+	if (flagverbose)
+	{
+		myprintf("Finalizing VHD...\n");
+	}
     // Calculate footer checksum
     VHD_FOOTER footer_temp;
     memcpy(&footer_temp, &ctx.g_vhd_footer, sizeof(VHD_FOOTER));
@@ -43700,10 +43709,13 @@ bool chiudivhd()
     memcpy(&ctx.array_header[sizeof(VHD_FOOTER)], &ctx.g_vhd_dyn_header, sizeof(VHD_DYN_HEADER));
     memcpy(&ctx.array_header[sizeof(VHD_FOOTER) + sizeof(VHD_DYN_HEADER)], ctx.g_vhd_bat, bat_raw_size);
     if (bat_size_bytes > bat_raw_size)
+	{
         memset(&ctx.array_header[sizeof(VHD_FOOTER) + sizeof(VHD_DYN_HEADER) + bat_raw_size], 0, bat_size_bytes - bat_raw_size);
-
-    myprintf("43760:   array_header       : %s bytes (Footer + DynHeader + BAT)\n", migliaia(header_total_size));
-	
+	}
+	if (flagverbose)
+	{
+		myprintf("43760:   array_header       : %s bytes (Footer + DynHeader + BAT)\n", migliaia(header_total_size));
+	}
     // Cleanup
     CloseHandle(ctx.g_vhd_hsourcedrive);
     if (ctx.g_vhd_vhdfile != INVALID_HANDLE_VALUE)
@@ -43726,8 +43738,8 @@ bool chiudivhd()
     }
     ctx.g_vhd_hsourcedrive = INVALID_HANDLE_VALUE;
     ctx.g_vhd_vhdfile = INVALID_HANDLE_VALUE;
-
-    myprintf("43865: VHD finalized successfully\n");
+	if (flagverbose)
+		myprintf("43865: VHD finalized successfully\n");
     return true;
 }
 #endif
@@ -50909,6 +50921,9 @@ string help_a(bool i_usage,bool i_example)
 		scrivi_riga("-checksize X", "Check if enoungh free space (or fail)");
 		scrivi_riga("-nodelete", "Store all files togheter. WARNING: you must handle name collisions!");
 		scrivi_riga("-franzen X", "EXPERIMENTAL: create .franzen file too with key X");
+#ifdef _WIN32
+		scrivi_riga("-vhd", "Create (with -image) a VHD-mountable image (use g if not admin)");
+#endif
 		}
 		/*
 		fdisk -l image.img
@@ -51011,6 +51026,10 @@ losetup -d /dev/loop0
 		scrivi_esempio("Append to outputfile","a /tmp/bak.zpaq etc -out result.txt -appendoutput");
 		scrivi_esempio("Force 10GB+ free space","a /tmp/bak.zpaq etc -checkspace 10g -exec_err fulldisk.sh");
 		scrivi_esempio("Make franzen file","a z:\\1.zpaq c:\\nz -franzen pippo -key pluto");
+#ifdef _WIN32
+		scrivi_esempio("Make VHD from admin","a z:\\1.zpaq C: -image -vhd");
+		scrivi_esempio("Make VHD NO admin","g z:\\1.zpaq C: -image -vhd");
+#endif
 		
 	}
 	return("Add/append file(s) to archive");
@@ -51243,6 +51262,9 @@ string help_x(bool i_usage,bool i_example)
 		scrivi_riga("-ramsize", "Win64: allocate max virtual memory across all swapfiles");
 #endif	
 		scrivi_riga("-huge", "Use alternate write policy (huge file on non-sparse filesystem)");
+#ifdef _WIN32
+		scrivi_riga("-vhd", "Extract the files to a VHD image. Required a -image -vhd");
+#endif	
 
 #endif ///NOSFTPEND
 	}
@@ -51283,6 +51305,7 @@ string help_x(bool i_usage,bool i_example)
 		scrivi_esempio("Restoring huge files on not-NTFS","x z:\\1.zpaq -to u:\\restore -huge");
 #ifdef _WIN32
 		scrivi_esempio("Restoring with sparse file","x z:\\1.zpaq -to u:\\restore -sparse");
+		scrivi_esempio("Restoring VHD","x z:\\1.zpaq -to u:\\restore -vhd");
 #endif
 	}
 	return("Extract file(s)");
@@ -55274,14 +55297,14 @@ int Jidac::loadparameters(int argc, const char** argv)
 		myprintf("00566! -image incompatible with -stdin\n");
 		return 2;
 	}
-	if
-	(flagimage)
-		if (!isadmin())
-		{
-			myprintf("\n");
-			myprintf("00569! Impossible to image: admin rights required\n");
-			return 2;
-		}
+	if	(flagimage)
+		if  (command!='g')
+			if (!isadmin())
+			{
+				myprintf("\n");
+				myprintf("00569! Impossible to image: admin rights required (try g command)\n");
+				return 2;
+			}
 #endif // corresponds to #ifdef (#ifdef _WIN32)
 
 /*
@@ -56391,7 +56414,7 @@ union TimeUnion
 };
 bool getFileAttributesFromMFT(HANDLE hVolume, DWORDLONG frn, NTFSFileInfo& fi, const std::wstring& debugPath = L"")
 {
-    // --- PHASE 1: Reading the base MFT record ---
+    //  PHASE 1: Reading the base MFT record ---
 
     struct { ULONGLONG FileReferenceNumber; } input = { frn };
     BYTE outputBuffer[10240];
@@ -56446,7 +56469,7 @@ bool getFileAttributesFromMFT(HANDLE hVolume, DWORDLONG frn, NTFSFileInfo& fi, c
         if (attrHeader->TypeCode == AttributeEnd) break;
         if (attrHeader->RecordLength == 0 || (attrPtr + attrHeader->RecordLength > mftEndPtr)) break;
 
-        // --- Parsing attributes in the base record ---
+        //  Parsing attributes in the base record ---
 
 /// i maledetti warning
 /*
@@ -56529,7 +56552,7 @@ bool getFileAttributesFromMFT(HANDLE hVolume, DWORDLONG frn, NTFSFileInfo& fi, c
     }
 end_attribute_scan:; // Label to exit the base record scan
 
-    // --- PHASE 2: Reading the extension record (if necessary) ---
+    //  PHASE 2: Reading the extension record (if necessary) 
 
     // NEW: If we found a pointer to $DATA in an Attribute List and we don't have the size yet...
     if (dataRecordFrn != 0 && !foundDataAttr)
@@ -59078,6 +59101,7 @@ ThreadReturn decompressThread(void* arg) {
 /// in comments debug code
 				if (offset>g_scritti)
 					g_scritti=offset;
+			
 				uint32_t crc;
 				crc=crc32_16bytes(out.c_str()+q, usize);
 				s_crc32block myblock;
@@ -59086,7 +59110,6 @@ ThreadReturn decompressThread(void* arg) {
 				myblock.crc32size=usize;
 				myblock.filename=job.lastdt->first;
 				g_crc32.push_back(myblock);
-
 			}
 			/*
 		if (job.jd.flagtest && (nz<q+usize || j+1==ptr.size()))
@@ -59291,20 +59314,11 @@ ThreadReturn decompressThread(void* arg) {
   // Last block
   return 0;
 }
-
+/*
 ThreadReturn decompressthreadramdisk(void* arg)
 {
-    // ============================= INIZIO MODIFICHE =============================
-    // 1. Si crea una copia locale della struttura 'job'.
-    //    Tutte le modifiche di stato avverranno su questa copia,
-    //    lasciando intatta la struttura originale passata tramite 'arg'.
     ExtractJob job = *(ExtractJob*)arg;
-    
-    // 2. Si mantiene un riferimento all'originale SOLO per l'operazione
-    //    di scrittura (ramwrite) e per il mutex di scrittura, che sono
-    //    gli unici effetti esterni permessi.
     ExtractJob& original_job_ref = *(ExtractJob*)arg;
-    // ============================== FINE MODIFICHE ===============================
 
     int jobNumber = 0;
     // Get job number (modifica la copia locale)
@@ -59466,10 +59480,6 @@ ThreadReturn decompressthreadramdisk(void* arg)
             
             // Cerca l'elemento corrispondente nella mappa ORIGINALE per ottenere il puntatore pramfile
             DTMap::iterator p_original = original_job_ref.jd.dt.find(p_copy->first);
-
-
-
-
 			if (p_original->second.pramfile==NULL)
 					{
 						p_original->second.pramfile=new franzfs;
@@ -59532,11 +59542,8 @@ ThreadReturn decompressthreadramdisk(void* arg)
                 {
                     if (!(flagzero && flagdebug))
                     {
-                        // ================== OPERAZIONE DI SCRITTURA ESTERNA ==================
-                        // Usa il puntatore 'pramfile' dalla struttura ORIGINALE
                         if (p_original->second.pramfile != NULL)
                             (*p_original->second.pramfile).ramwrite(offset, (char*)out.c_str() + q, usize);
-                        // =====================================================================
                     }
                 }
                 
@@ -59557,7 +59564,8 @@ ThreadReturn decompressthreadramdisk(void* arg)
 
     return 0;
 }
-/*
+*/
+
 ThreadReturn decompressthreadramdisk(void* arg)
 {
 	ExtractJob& job=*(ExtractJob*)arg;
@@ -59805,7 +59813,7 @@ ThreadReturn decompressthreadramdisk(void* arg)
   // Last block
   return 0;
 }
-*/
+
 
 
 // Streaming output destination
@@ -62918,7 +62926,7 @@ int parsePageFiles(const char* multiSzValue, std::vector<PageFileInfo>& pageFile
             pageFiles.push_back(info);
         }
 
-        // --- KEY POINT ---
+        //  KEY POINT
         // Move the pointer to the next string in the REG_MULTI_SZ buffer.
         currentString += strlen(currentString) + 1;
     }
@@ -64584,18 +64592,18 @@ void my_handler(int s)
 			int64_t newdim=prendidimensionefile(g_archive.c_str());
 			if (newdim>g_starting_zpaqsize)
 			{
-				myprintf("01282: should roll back %s from %s to %s\n",g_archive.c_str(),migliaia(newdim), migliaia2(g_starting_zpaqsize));
-
-///				if (truncate(g_archive.c_str(), g_starting_zpaqsize))
-	///				printerr("61920",g_archive.c_str(),0);
+				color_yellow();
+				myprintf("01282: rolling back %s from %s to %s!\n",g_archive.c_str(),migliaia(newdim), migliaia2(g_starting_zpaqsize));
+				color_restore();
+				if (truncate(g_archive.c_str(), g_starting_zpaqsize))
+					printerr("61920",g_archive.c_str(),0);
 		
 				if (g_starting_zpaqdate>0)
 				{
 					if (flagdebug3)
-					myprintf("01283: should touching back to %s\n",dateToString(false,g_starting_zpaqdate).c_str());
-						
-					///if (!touch(g_archive.c_str(),g_starting_zpaqdate,g_starting_zpaqattr))
-						///myprintf("01284: WARNING trouble in touching\n");
+						myprintf("01283: should touching back to %s\n",dateToString(false,g_starting_zpaqdate).c_str());
+					if (!touch(g_archive.c_str(),g_starting_zpaqdate,g_starting_zpaqattr))
+						myprintf("01284: WARNING trouble in touching\n");
 				}
 			}
 		}
@@ -66639,7 +66647,7 @@ int Jidac::test()
 		}  // end if selected
   }  // end for
 ///	dimtotalefile=job.total_size;
-	myprintf("01405: To be checked %s in %s files (%d threads)\n",migliaia(job.total_size), migliaia2(total_files), howmanythreads);
+	myprintf("01405: To be checked %s (%s) in %s files (%d threads)\n",migliaia(job.total_size), tohuman(job.total_size),migliaia2(total_files), howmanythreads);
 	vector<ThreadID> tid(howmanythreads);
 	if (howmanythreads==1)
 	{
@@ -72743,7 +72751,8 @@ int Jidac::add()
 				lettera=toupper(lettera);
 				snprintf(tempo,sizeof(tempo),"image_%c.fhd",lettera);
 				solonome=tempo;
-				myprintf("71413: NTFS of drive %c: (buffer %s) on (VHD) %Z\n",lettera,tohuman(g_ioBUFSIZE),solonome.c_str());
+				if (flagverbose)
+					myprintf("71413: NTFS of drive %c: (buffer %s) on (VHD) %Z\n",lettera,tohuman(g_ioBUFSIZE),solonome.c_str());
 				snprintf(tempo,sizeof(tempo),"\\\\.\\%c:",lettera);
 				string	letterpath=tempo;
 				if (flagverbose)
@@ -73750,7 +73759,8 @@ int Jidac::add()
 #ifdef _WIN32
 	if (flagimage && flagvhd)
 	{
-		myprintf("79013: Making  VHD header in memfile\n");
+		if (flagverbose)
+			myprintf("79013: Making  VHD header in memfile\n");
 		string memfilename	="image_"+std::string(1,ctx.lettera)+".header";
 		
 		int64_t		memneeded=1;
@@ -73767,7 +73777,8 @@ int Jidac::add()
 		DTMap::iterator p=edt.find(memfilename);
 		if (p!=edt.end())
 		{
-			myprintf("79123: INFO => VHD header %s\n",memfilename.c_str());
+			if (flagverbose)
+				myprintf("79123: INFO => VHD header %s\n",memfilename.c_str());
 			p->second.pramfile=&thefranzfs;
 			p->second.data=1;  // add in every case
 			vf.push_back(p);
@@ -74024,6 +74035,8 @@ int Jidac::add()
 								{
 									int bytesletti=elaboravhd(buf,g_ioBUFSIZE);
 									
+									
+									
 									if (bytesletti==-2)
 									{
 										myprintf("74187: Hard error on elaboravhd, guru!\n");
@@ -74036,7 +74049,8 @@ int Jidac::add()
 										eol();
 										myprintf("74315: VHD NTFS data done, starting finalizing...\n");
 										chiudivhd();
-										myprintf("74164: Done, header size is %s\n",migliaia(ctx.array_header.size()));
+										if (flagverbose)
+											myprintf("74164: Done, header size is %s\n",migliaia(ctx.array_header.size()));
 										brutalexit=true;
 										
 									}
@@ -74045,7 +74059,8 @@ int Jidac::add()
 										buflen=bytesletti;
 										workedsofar+=bytesletti;
 										blocchi++;
-									}
+										
+									}	
 
 
 									if (workedsofar>=total_size)
@@ -74182,12 +74197,14 @@ int Jidac::add()
 												int eta_hours = eta_seconds / 3600;
 												int eta_minutes = (eta_seconds % 3600) / 60;
 												int eta_secs = eta_seconds % 60;
-							
-												myprintf("06021: NTFS %06.2f%% %10s/%s =>+%12s @ %10s/s ETA %02d:%02d:%02d\r",
+												int64_t projectedsize=double(total_size/total_done)*g_fwritten;
+
+												myprintf("06021: NTFS %06.2f%% %10s/%s =>+%12s (%12s) @ %10s/s ETA %02d:%02d:%02d\r",
 													   percentuale, 
 													   tohuman(total_done), 
 													   tohuman2(total_size),
 													   tohuman3(g_fwritten),
+													   tohuman5(projectedsize),
 													   tohuman4(speed), 
 													   eta_hours, eta_minutes, eta_secs);
 												ultimotempo = secondi;
@@ -74360,6 +74377,16 @@ int Jidac::add()
 								memset(buf,0,buflen);
 						}
 
+					if (brutalexit)
+					{
+						if (flagdebug)
+						{
+							myprintf("************* exit due to brutalexit bufptr buflen %d %d\n",bufptr,buflen);
+							myprintf("blocchi %d %s\n",blocchi,migliaia(workedsofar));
+						}	
+						break;
+					}
+
 					if (bufptr==0)
 						if (buflen>0)
 							{
@@ -74400,15 +74427,6 @@ int Jidac::add()
 								}
 							}
 
-					if (brutalexit)
-					{
-						if (flagdebug)
-						{
-							myprintf("************* exit due to brutalexit bufptr buflen %d %d\n",bufptr,buflen);
-							myprintf("blocchi %d %s\n",blocchi,migliaia(workedsofar));
-						}	
-						break;
-					}
 					if (bufptr>=buflen)
 						c=EOF;
 					else
@@ -76657,7 +76675,7 @@ std::string decode_base85(const std::string& encoded)
 
 std::string codifica_franzhash(const std::string& input) 
 {
-    // --- 1. Parsing iniziale con find e substr ---
+    // 1. Parsing iniziale con find e substr ---
     size_t pos1 = input.find(':');
     if (pos1 == std::string::npos) return input;
     size_t pos2 = input.find(':', pos1 + 1);
@@ -76718,7 +76736,7 @@ std::string codifica_franzhash(const std::string& input)
     if (static_cast<long>(numbers.size()) != block_count) 
 	    return input; // The number of blocks does not match
     
-    // --- 4. Verification of the arithmetic progression ---
+    // 4. Verification of the arithmetic progression
     bool is_ap = true;
     long long step = 0;
     if (block_count > 1) 
@@ -80187,7 +80205,7 @@ int Jidac::removeemptydirs(string i_folder,bool i_kill)
 
 /*
 	Section: 	command q. Backup of Windows C:
-				command g  Launch a power*ell (non need for a cmd-administrator)
+				command g  Launch a power*ell (non need for a cmd-administrator), now with -vhd too
 */
 int Jidac::adminrun()
 {
@@ -80203,7 +80221,10 @@ int Jidac::adminrun()
 		myprintf("02532! command line empty\n");
 		return 2;
 	}
-	replace(fullcommandline,"g ","q ");
+	if (flagvhd)
+		replace(fullcommandline,"g ","a ");
+	else
+		replace(fullcommandline,"g ","q ");
 	string myexename=fullzpaqexename;
 ///	get the "right" path is not easy, registry digging needed.
 ///	too "complex", try to run

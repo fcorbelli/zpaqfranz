@@ -52,14 +52,15 @@ WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 */
-
-
+#ifdef _WIN64
+#define _WIN32_WINNT 0x0600
+#endif
 
 #define ZPAQFULL ///NOSFTPSTART
 ///NOSFTPEND
 
-#define ZPAQ_VERSION "63.5g"
-#define ZPAQ_DATE "(2025-10-13)"
+#define ZPAQ_VERSION "63.6e"
+#define ZPAQ_DATE "(2025-10-31)"
 
 
 
@@ -1991,6 +1992,8 @@ g++ -g -Wall -Wextra -Wpedantic -fsanitize=address,undefined -O3 zpaqfranz.cpp -
 
 #else  // Assume Windows
 	#include <mutex>
+
+	#include <wbemidl.h>
 
 	#include <assert.h>
 	#include <time.h>
@@ -6058,238 +6061,6 @@ void myprintf_autotest(void)
 
     printf("===== Fine Test myprintf =====\n");
 }
-
-////////////////////////////////
-////////////////////////////////
-////////////////////////////////
-////////////////////////////////
-////////////////////////////////
-////////////////////////////////
-////////////////////////////////
-////////////////////////////////
-////////////////////////////////
-////////////////////////////////
-
-
-
-
-
-
-/*
-void myprintf(const char *format, ...) 
-{
-    // Early exit if format is null
-    if (!format) 
-        return;
-	 // Early exit if string starts with "DEBUG:" and flagdebug is false
-	 
-	  if (format[0] == 'D' && format[1] == 'E' && format[2] == 'B' && 
-        format[3] == 'U' && format[4] == 'G') 
-	{
-        
-        if (format[5] == ':' && !flagdebug) {
-            return;
-        }
-        else if (format[5] >= '2' && format[5] <= '6' && format[6] == ':') {
-            switch(format[5]) {
-                case '2': if (!flagdebug2) return; break;
-                case '3': if (!flagdebug3) return; break;
-                case '4': if (!flagdebug4) return; break;
-                case '5': if (!flagdebug5) return; break;
-                case '6': if (!flagdebug6) return; break;
-            }
-        }
-    }
-    else if (format[0] == 'V' && format[1] == 'E' && format[2] == 'R' && 
-             format[3] == 'B' && format[4] == 'O' && format[5] == 'S' && 
-             format[6] == 'E' && format[7] == ':' && !flagverbose) {
-        return;
-    }
-	
-    bool flagerror = false;
-    bool flagwarning = false;
-    bool flagcolon = false;
-    char buffer[4096]; // Buffer temporaneo per formati complessi
-
-    if (flagsilent) 
-	{
-        char fixata[4096];
-        replacezwiths(format, fixata);
-
-        va_list args2;
-        va_start(args2, format);
-        vsnprintf(buffer, sizeof(buffer), fixata, args2);
-        va_end(args2);
-        
-        decode_print_flag(buffer, flagcolon, flagerror, flagwarning);
-        if (g_output_handle != 0)
-            fprintf(g_output_handle, "%s", buffer);
-    
-        if (flagerror)
-            my_print_on_error_z(buffer);
-
-        return;
-    }
-
-    va_list args;
-    va_start(args, format);
-
-    decode_print_flag(format, flagcolon, flagerror, flagwarning);
-    
-    if (flagcolon || flagwarning) {
-        if (flagdebug) {
-            color_green();
-            printf("%c%c%c%c%c: ", format[0], format[1], format[2], format[3], format[4]);
-            color_restore();
-        }
-        format += 7;
-    }
-        
-    if (flagerror)
-        color_red();
-    else if (flagwarning)
-        color_yellow();
-
-    const char *p = format;
-    while (*p) {
-        if (*p == '%') {
-            p++; // Passa al carattere successivo dopo '%'
-
-            if (*p == '%') {
-                putchar('%');
-                if (g_output_handle != 0)
-                    fputc('%', g_output_handle);
-                if (flagerror && prepare_error_log())
-                    fputc('%', g_error_handle);
-                p++;
-                continue;
-            }
-
-            char fmt_buffer[32];
-            char* b = fmt_buffer;
-            *b++ = '%';
-
-            // Gestisci flag
-            int left_align = 0;
-            char fill_char = ' ';
-            while (*p && (strchr("-+0 ", *p) != NULL)) {
-                if (*p == '-') left_align = 1;
-                if (*p == '0') fill_char = '0';
-                *b++ = *p++;
-            }
-
-            // Gestisci larghezza
-            int width = 0;
-            while (*p && (*p >= '0' && *p <= '9')) {
-                width = width * 10 + (*p - '0');
-                *b++ = *p++;
-            }
-
-            // Gestisci precisione (ignorata per %K e %H)
-            if (*p == '.') {
-                *b++ = *p++;
-                while (*p && (*p >= '0' && *p <= '9')) {
-                    *b++ = *p++;
-                }
-            }
-
-            // Gestisci specificatore
-            if (*p && strchr("diouxXfscZKH", *p) != NULL) {
-                *b++ = *p;
-                *b = '\0';
-
-                if (*p == 'K') {
-                    int64_t value = va_arg(args, int64_t);
-					std::string formatted=format_int64_t(value, width, fill_char, left_align);
-                    printf("%s", formatted.c_str());
-                    if (g_output_handle != 0)
-                        fprintf(g_output_handle, "%s", formatted.c_str());
-                    if (flagerror && prepare_error_log())
-                        fprintf(g_error_handle, "%s", formatted.c_str());
-                } else if (*p == 'H') {
-                    int64_t value = va_arg(args, int64_t);
-                    std::string formatted=mytohuman2(value,width, fill_char, left_align);
-                    printf("%s", formatted.c_str());
-                    if (g_output_handle != 0)
-                        fprintf(g_output_handle, "%s", formatted.c_str());
-                    if (flagerror && prepare_error_log())
-                        fprintf(g_error_handle, "%s", formatted.c_str());
-                } else if (*p == 'd' || *p == 'i') {
-                    int i = va_arg(args, int);
-                    printf(fmt_buffer, i);
-                    if (g_output_handle != 0)
-                        fprintf(g_output_handle, fmt_buffer, i);
-                    if (flagerror)
-                        my_print_on_error_i(fmt_buffer, i);
-                } else if (*p == 'u' || *p == 'x' || *p == 'X') {
-                    unsigned int x = va_arg(args, unsigned int);
-                    printf(fmt_buffer, x);
-                    if (g_output_handle != 0)
-                        fprintf(g_output_handle, fmt_buffer, x);
-                    if (flagerror)
-                        my_print_on_error_u(fmt_buffer, x);
-                } else if (*p == 'f') {
-                    double f = va_arg(args, double);
-                    printf(fmt_buffer, f);
-                    if (g_output_handle != 0)
-                        fprintf(g_output_handle, fmt_buffer, f);
-                    if (flagerror)
-                        my_print_on_error_d(fmt_buffer, f);
-                } else if (*p == 's') {
-                    if (strchr(fmt_buffer, '*') != NULL) {
-                        int width = va_arg(args, int);
-                        const char *s = va_arg(args, char *);
-                        printf(fmt_buffer, width, s);
-                        if (g_output_handle != 0)
-                            fprintf(g_output_handle, fmt_buffer, width, s);
-                        if (flagerror)
-                            my_print_on_error_s(fmt_buffer, s);
-                    } else {
-                        const char *s = va_arg(args, char *);
-                        printf(fmt_buffer, s);
-                        if (g_output_handle != 0)
-                            fprintf(g_output_handle, fmt_buffer, s);
-                        if (flagerror)
-                            my_print_on_error_s(fmt_buffer, s);
-                    }
-                } else if (*p == 'c') {
-                    int c = va_arg(args, int);
-                    printf(fmt_buffer, c);
-                    if (g_output_handle != 0)
-                        fprintf(g_output_handle, fmt_buffer, c);
-                    if (flagerror)
-                        my_print_on_error_i(fmt_buffer, c);
-                } else if (*p == 'Z') {
-                    const char *s = va_arg(args, char *);
-                    printUTF8(s);
-                    if (flagerror)
-                        my_print_on_error_z(s);
-                }
-            } else {
-                putchar(*p);
-                if (g_output_handle != 0)
-                    fputc(*p, g_output_handle);
-                if (flagerror && prepare_error_log())
-                    fputc(*p, g_error_handle);
-            }
-            p++;
-        } else {
-            putchar(*p);
-            if (g_output_handle != 0)
-                fputc(*p, g_output_handle);
-            if (flagerror && prepare_error_log())
-                fputc(*p, g_error_handle);
-            p++;
-        }
-    }
-    va_end(args);
-#ifndef _WIN32
-    fflush(stdout);
-#endif
-    if (flagerror || flagwarning)
-        color_restore();
-}
-*/
 
 #ifdef _WIN32
 bool appendfirst512(const std::string& i_filename) 
@@ -28486,7 +28257,10 @@ bool getcaptcha(const string& i_captcha,const string& i_reason)
 	printf(">>> %s\n",i_reason.c_str());
 	printf("enter EXACTLY the capcha, then press CR (return)\n");
 	printf("Entering anything else will quit\n");
-	printf("\nCaptcha to continue:     %s\n",i_captcha.c_str());
+	printf("\nCaptcha to continue:     ");
+	color_green();
+	printf("%s\n",i_captcha.c_str());
+	color_restore();
 	char myline[81];
     int dummy=scanf("%80s", myline);
 	if (dummy==888888)	// compiler be quiet!
@@ -37923,7 +37697,6 @@ bool win32_readads_sb(string i_filename,string i_adsname,StringBuffer* o_stringb
 }
 
 #ifdef ZPAQFULL ///NOSFTPSTART
-/// something to get VSS done via batch file
 void waitexecute(string i_filename,string i_parameters,int i_show)
 {
 	SHELLEXECUTEINFOA ShExecInfo =SHELLEXECUTEINFOA();
@@ -38494,43 +38267,6 @@ void remove_temp_file(string i_thefile)
 }
 
 #ifdef _WIN32
-#ifdef ZPAQFULL ///NOSFTPSTART
-
-//// VSS on Windows by... batchfile
-//// delete all kind of shadows copies (if any)
-void vss_deleteshadows(string i_cartella)
-{
-	if (flagvss)
-	{
-		i_cartella=linuxtowinpath(i_cartella);
-		string	filebatch	=g_gettempdirectory()+"vsz.bat";
-		filebatch=nomefileseesistegia(filebatch);
-		print_datetime();
-		myprintf("00187: VSS: starting release\n");
-		if (fileexists(filebatch))
-			if (remove(filebatch.c_str())!=0)
-			{
-				myprintf("00188! Highlander batch  %s\n", filebatch.c_str());
-				return;
-			}
-		FILE* batch=fopen(filebatch.c_str(), "wb");
-		if (batch==NULL)
-		{
-			myprintf("00189! cannot write on %s\n",filebatch.c_str());
-			exit(0);
-		}
-		fprintf(batch,"@echo OFF\n");
-		if (i_cartella!="")
-			fprintf(batch,"rmdir %s\n",i_cartella.c_str());
-		fprintf(batch,"@wmic shadowcopy delete /nointeractive\n");
-		fclose(batch);
-		waitexecute(filebatch,"",SW_HIDE);
-		print_datetime();
-		myprintf("00190: VSS: end releasing\n");
-		remove_temp_file(filebatch);
-	}
-}
-#endif ///NOSFTPEND
 string relativetolongpath(string i_filename)
 {
 ///https://googleprojectzero.blogspot.com/2016/02/the-definitive-guide-on-win32-to-nt.html
@@ -42305,6 +42041,21 @@ struct conteggio_file
     int64_t dimensione_totale;
 };
 
+#ifdef _WIN32
+// Typedef per la funzione RtlGetVersion
+typedef NTSTATUS (NTAPI *pRtlGetVersion)(PRTL_OSVERSIONINFOW);
+
+struct WindowsVersionInfo 
+{
+    std::string name;
+    DWORD majorVersion;
+    DWORD minorVersion;
+    DWORD buildNumber;
+    std::string displayVersion; // es. "23H2"
+    int success; // Flag per indicare se il rilevamento è riuscito (0 = fallimento, 1 = successo; compatibile con C)
+};
+#endif
+
 
 // Do everything.
 // Very weird approach, this is about plain-old C, almost zero ++
@@ -42681,7 +42432,7 @@ public:
 	
 #ifdef _WIN32
 	bool 						preparantfs(const std::string& image_path, char drive_letter);
-	bool 						preparavhd(const std::string& image_path, char drive_letter);
+	bool 						preparavhd(char drive_letter);
 	
 	int 						elaborantfs(char* buffer, size_t buffer_size);
 	int 						elaboravhd(const char* buffer, size_t buffer_size);
@@ -42743,6 +42494,11 @@ public:
 	int 		xssh(uint64_t i_timetorun,std::string i_command,std::string& o_output);
 	void 		exclude_output();
 
+#ifdef _WIN32
+	std::string getwinver(WindowsVersionInfo& o_myver);
+	void		vssmenu();
+#endif
+
 
 };
 
@@ -42779,6 +42535,932 @@ bool wehaveresources()
     return hasRes;
 }
 #endif
+
+
+#ifdef _WIN32
+#ifndef REPARSE_DATA_BUFFER_HEADER_SIZE
+typedef struct _REPARSE_DATA_BUFFER {
+    ULONG  ReparseTag;
+    USHORT ReparseDataLength;
+    USHORT Reserved;
+    union {
+        struct {
+            USHORT SubstituteNameOffset;
+            USHORT SubstituteNameLength;
+            USHORT PrintNameOffset;
+            USHORT PrintNameLength;
+            ULONG  Flags;
+            WCHAR  PathBuffer[1];
+        } SymbolicLinkReparseBuffer;
+        struct {
+            USHORT SubstituteNameOffset;
+            USHORT SubstituteNameLength;
+            USHORT PrintNameOffset;
+            USHORT PrintNameLength;
+            WCHAR  PathBuffer[1];
+        } MountPointReparseBuffer;
+        struct {
+            UCHAR DataBuffer[1];
+        } GenericReparseBuffer;
+    };
+} REPARSE_DATA_BUFFER, *PREPARSE_DATA_BUFFER;
+
+#define REPARSE_DATA_BUFFER_HEADER_SIZE FIELD_OFFSET(REPARSE_DATA_BUFFER, GenericReparseBuffer)
+#endif
+
+#ifndef MAXIMUM_REPARSE_DATA_BUFFER_SIZE
+#define MAXIMUM_REPARSE_DATA_BUFFER_SIZE (16 * 1024)
+#endif
+
+
+// Definizioni manuali dei CLSID e IID per evitare -lwbemuuid
+static const CLSID CLSID_WbemLocator_Manual = 
+    {0x4590f811, 0x1d3a, 0x11d0, {0x89, 0x1f, 0x00, 0xaa, 0x00, 0x4b, 0x2e, 0x24}};
+
+static const IID IID_IWbemLocator_Manual = 
+    {0xdc12a687, 0x737f, 0x11cf, {0x88, 0x4d, 0x00, 0xaa, 0x00, 0x4b, 0x2e, 0x24}};
+	
+bool isPathSafe(const char* path) 
+{
+    const char* dangerous = "&|<>^\"";
+    for (const char* p = path; *p; p++) 
+	    if (strchr(dangerous, *p)) 
+			return false;
+    return true;
+}
+
+// Typedef per le funzioni caricate dinamicamente
+typedef HRESULT (WINAPI* CoInitializeExFunc)(LPVOID, DWORD);
+typedef void    (WINAPI* CoUninitializeFunc)();
+typedef HRESULT (WINAPI* CoCreateInstanceFunc)(REFCLSID, LPUNKNOWN, DWORD, REFIID, LPVOID*);
+typedef HRESULT (WINAPI* CoSetProxyBlanketFunc)(IUnknown*, DWORD, DWORD, OLECHAR*, DWORD, DWORD, RPC_AUTH_IDENTITY_HANDLE, DWORD);
+typedef HRESULT (WINAPI* CoInitializeSecurityFunc)(PSECURITY_DESCRIPTOR, LONG, SOLE_AUTHENTICATION_SERVICE*, void*, DWORD, DWORD, void*, DWORD, void*);
+typedef BSTR    (WINAPI* SysAllocStringFunc)(const OLECHAR*);
+typedef void    (WINAPI* SysFreeStringFunc)(BSTR);
+typedef void    (WINAPI* VariantInitFunc)(VARIANTARG*);
+typedef HRESULT (WINAPI* VariantClearFunc)(VARIANTARG*);
+typedef HRESULT (WINAPI* UuidCreateFunc)(UUID*);
+typedef RPC_STATUS (WINAPI* UuidToStringAFunc)(const UUID*, RPC_CSTR*);
+typedef void    (WINAPI* RpcStringFreeAFunc)(RPC_CSTR*);
+
+class franzVSS 
+{
+private:
+    std::string snapshotID;
+    std::string vssPath;
+    std::string symlinkPath;
+    char driveLetter;
+    
+    const DWORD MKLINK_TIMEOUT_MS = 10000;
+    IWbemLocator* pLoc;
+    IWbemServices* pSvc;
+
+    HMODULE hOle32;
+    HMODULE hOleAut32;
+    HMODULE hRpcrt4;
+
+    CoInitializeExFunc pCoInitializeEx;
+    CoUninitializeFunc pCoUninitialize;
+    CoCreateInstanceFunc pCoCreateInstance;
+    CoSetProxyBlanketFunc pCoSetProxyBlanket;
+    CoInitializeSecurityFunc pCoInitializeSecurity;
+    
+    SysAllocStringFunc pSysAllocString;
+    SysFreeStringFunc pSysFreeString;
+    VariantInitFunc pVariantInit;
+    VariantClearFunc pVariantClear;
+
+    UuidCreateFunc pUuidCreate;
+    UuidToStringAFunc pUuidToStringA;
+    RpcStringFreeAFunc pRpcStringFreeA;
+
+    bool wmiInitialized;
+
+    std::wstring ansiToWide(const std::string& str) 
+	{
+        if (str.empty()) return std::wstring();
+        int size_needed = MultiByteToWideChar(CP_ACP, 0, &str[0], (int)str.size(), NULL, 0);
+        std::wstring wstrTo(size_needed, 0);
+        MultiByteToWideChar(CP_ACP, 0, &str[0], (int)str.size(), &wstrTo[0], size_needed);
+        return wstrTo;
+    }
+
+    std::string wideToAnsi(const wchar_t* wstr) 
+	{
+        if (!wstr) return "";
+        int size_needed = WideCharToMultiByte(CP_ACP, 0, wstr, -1, NULL, 0, NULL, NULL);
+        if (size_needed <= 1) return "";
+        std::string strTo(size_needed, 0);
+        WideCharToMultiByte(CP_ACP, 0, wstr, -1, &strTo[0], size_needed, NULL, NULL);
+        if (!strTo.empty() && strTo.back() == '\0') {
+            strTo.pop_back();
+        }
+        return strTo;
+    }
+
+    bool loadFunctions() 
+	{
+        hOle32 = LoadLibraryA("ole32.dll");
+        hOleAut32 = LoadLibraryA("oleaut32.dll");
+        hRpcrt4 = LoadLibraryA("rpcrt4.dll");
+
+        if (!hOle32 || !hOleAut32 || !hRpcrt4) return false;
+
+        pCoInitializeEx = (CoInitializeExFunc)GetProcAddress(hOle32, "CoInitializeEx");
+        pCoUninitialize = (CoUninitializeFunc)GetProcAddress(hOle32, "CoUninitialize");
+        pCoCreateInstance = (CoCreateInstanceFunc)GetProcAddress(hOle32, "CoCreateInstance");
+        pCoSetProxyBlanket = (CoSetProxyBlanketFunc)GetProcAddress(hOle32, "CoSetProxyBlanket");
+        pCoInitializeSecurity = (CoInitializeSecurityFunc)GetProcAddress(hOle32, "CoInitializeSecurity");
+
+        pSysAllocString = (SysAllocStringFunc)GetProcAddress(hOleAut32, "SysAllocString");
+        pSysFreeString = (SysFreeStringFunc)GetProcAddress(hOleAut32, "SysFreeString");
+        pVariantInit = (VariantInitFunc)GetProcAddress(hOleAut32, "VariantInit");
+        pVariantClear = (VariantClearFunc)GetProcAddress(hOleAut32, "VariantClear");
+
+        pUuidCreate = (UuidCreateFunc)GetProcAddress(hRpcrt4, "UuidCreate");
+        pUuidToStringA = (UuidToStringAFunc)GetProcAddress(hRpcrt4, "UuidToStringA");
+        pRpcStringFreeA = (RpcStringFreeAFunc)GetProcAddress(hRpcrt4, "RpcStringFreeA");
+
+        return pCoInitializeEx && pCoUninitialize && pCoCreateInstance &&
+               pCoSetProxyBlanket && pCoInitializeSecurity && pSysAllocString &&
+               pSysFreeString && pVariantInit && pVariantClear &&
+               pUuidCreate && pUuidToStringA && pRpcStringFreeA;
+    }
+
+    bool initWMI() {
+        HRESULT hr;
+
+        hr = pCoInitializeEx(0, COINIT_MULTITHREADED);
+        if (FAILED(hr)) return false;
+
+        hr = pCoInitializeSecurity(
+            NULL, -1, NULL, NULL,
+            RPC_C_AUTHN_LEVEL_DEFAULT, RPC_C_IMP_LEVEL_IMPERSONATE,
+            NULL, EOAC_NONE, NULL);
+
+    if (FAILED(hr) && hr != RPC_E_TOO_LATE) 
+	{
+    //     pCoUninitialize();
+      //   return false;
+		myprintf("WARNING: not TOO_LATE\n");
+     }
+	
+       hr = pCoCreateInstance(
+    CLSID_WbemLocator_Manual, 0, CLSCTX_INPROC_SERVER,
+    IID_IWbemLocator_Manual, (LPVOID*)&pLoc);
+        if (FAILED(hr)) {
+            pCoUninitialize();
+            return false;
+        }
+
+        BSTR bstrRootCimv2 = pSysAllocString(L"ROOT\\CIMV2");
+        hr = pLoc->ConnectServer(bstrRootCimv2, NULL, NULL, NULL, 0L, NULL, NULL, &pSvc);
+        pSysFreeString(bstrRootCimv2);
+
+        if (FAILED(hr)) {
+            pLoc->Release();
+            pCoUninitialize();
+            return false;
+        }
+
+        hr = pCoSetProxyBlanket(
+            pSvc, RPC_C_AUTHN_WINNT, RPC_C_AUTHZ_NONE, NULL,
+            RPC_C_AUTHN_LEVEL_CALL, RPC_C_IMP_LEVEL_IMPERSONATE,
+            NULL, EOAC_NONE);
+        if (FAILED(hr)) {
+            pSvc->Release();
+            pLoc->Release();
+            pCoUninitialize();
+            return false;
+        }
+
+        return true;
+    }
+
+    void cleanupWMI() {
+        if (pSvc) {
+            pSvc->Release();
+            pSvc = NULL;
+        }
+        if (pLoc) {
+            pLoc->Release();
+            pLoc = NULL;
+        }
+        if (pCoUninitialize) {
+            pCoUninitialize();
+        }
+
+        if (hOle32) {
+            FreeLibrary(hOle32);
+            hOle32 = NULL;
+        }
+        if (hOleAut32) {
+            FreeLibrary(hOleAut32);
+            hOleAut32 = NULL;
+        }
+        if (hRpcrt4) {
+            FreeLibrary(hRpcrt4);
+            hRpcrt4 = NULL;
+        }
+    }
+
+    // Helper unificato per cercare snapshot per ID
+    IWbemClassObject* findSnapshotById(const std::string& id) 
+	{
+        if (!wmiInitialized || id.empty()) return NULL;
+
+        std::wstring wQuery = L"SELECT * FROM Win32_ShadowCopy WHERE ID = '";
+        wQuery += ansiToWide(id);
+        wQuery += L"'";
+        
+        BSTR bstrQuery = pSysAllocString(wQuery.c_str());
+        BSTR bstrWQL = pSysAllocString(L"WQL");
+        IEnumWbemClassObject* pEnum = NULL;
+        
+        HRESULT hr = pSvc->ExecQuery(bstrWQL, bstrQuery, 
+            WBEM_FLAG_FORWARD_ONLY, NULL, &pEnum);
+        pSysFreeString(bstrWQL);
+        pSysFreeString(bstrQuery);
+        
+        if (FAILED(hr) || !pEnum) return NULL;
+        
+        IWbemClassObject* pObj = NULL;
+        ULONG uReturn = 0;
+        hr = pEnum->Next(static_cast<LONG>(WBEM_INFINITE), 1, &pObj, &uReturn);
+        pEnum->Release();
+        
+        return (uReturn > 0) ? pObj : NULL;
+    }
+
+    std::string getWmiStringProperty(IWbemClassObject* pObj, const wchar_t* propName) 
+	{
+        if (!pObj) return "";
+        VARIANT vtProp;
+        pVariantInit(&vtProp);
+        HRESULT hr = pObj->Get(propName, 0, &vtProp, 0, 0);
+        
+        std::string result = "";
+        if (SUCCEEDED(hr) && vtProp.vt == VT_BSTR && vtProp.bstrVal) 
+		    result = wideToAnsi(vtProp.bstrVal);
+        
+        pVariantClear(&vtProp);
+        return result;
+    }
+
+    std::string generateUniqueId() {
+        UUID uuid;
+        if (pUuidCreate(&uuid) != RPC_S_OK) {
+            myprintf("Error: GUID creation failed (UuidCreate)\n");
+            return "dummy_fallback_guid";
+        }
+
+        RPC_CSTR strUuid = NULL;
+        if (pUuidToStringA(&uuid, &strUuid) != RPC_S_OK) {
+            myprintf("Error: GUID to string conversion failed (UuidToStringA)\n");
+            return "dummy_fallback_string";
+        }
+
+        std::string result((const char*)strUuid);
+        pRpcStringFreeA(&strUuid);
+
+        return result;
+    }
+
+    void removeSymlink() {
+        if (symlinkPath.empty()) return;
+        
+        DWORD attrs = GetFileAttributesA(symlinkPath.c_str());
+        if (attrs == INVALID_FILE_ATTRIBUTES) {
+            symlinkPath.clear();
+            return;
+        }
+        
+        // Rimuovi attributo readonly se presente
+        if (attrs & FILE_ATTRIBUTE_READONLY) 
+		    SetFileAttributesA(symlinkPath.c_str(), 
+                attrs & ~FILE_ATTRIBUTE_READONLY);
+        
+        if (RemoveDirectoryA(symlinkPath.c_str())) 
+		{
+			if (flagverbose)
+				myprintf("71626: Symlink removed: %s\n", symlinkPath.c_str());
+        } 
+		else 
+		{
+            DWORD err = GetLastError();
+            if (err != ERROR_FILE_NOT_FOUND && err != ERROR_PATH_NOT_FOUND) 
+			{
+                myprintf("Warning: Failed to remove symlink %s (error %lu)\n", symlinkPath.c_str(), err);
+            }
+        }
+        
+        symlinkPath.clear();
+    }
+
+public:
+ HANDLE openVSSDevice() {
+        if (vssPath.empty()) {
+            myprintf("ERROR: No VSS snapshot available\n");
+            return INVALID_HANDLE_VALUE;
+        }
+
+        // Apri il device snapshot per lettura diretta
+        HANDLE hDevice = CreateFileA(
+            vssPath.c_str(),
+            GENERIC_READ,
+            FILE_SHARE_READ | FILE_SHARE_WRITE,
+            NULL,
+            OPEN_EXISTING,
+            0,  // Non usare FILE_FLAG_NO_BUFFERING, VSS preferisce buffering normale
+            NULL
+        );
+
+        if (hDevice == INVALID_HANDLE_VALUE) {
+            DWORD err = GetLastError();
+            myprintf("ERROR: Cannot open VSS device '%s' (error %lu)\n", 
+                     vssPath.c_str(), err);
+            return INVALID_HANDLE_VALUE;
+        }
+
+        myprintf("VSS device opened successfully: %s\n", vssPath.c_str());
+        return hDevice;
+    }
+	
+	bool reset_file_pointer_to_zero(HANDLE hFile) {
+    LARGE_INTEGER zero;
+	memset(&zero,0,sizeof(zero));
+	
+    if (!SetFilePointerEx(hFile, zero, NULL, FILE_BEGIN)) {
+        myprintf("Warning: SetFilePointerEx to zero failed (code %lu)\n", GetLastError());
+        return false;
+    }
+    return true;
+}
+
+ bool waitForVSSReadyRobust(HANDLE hDevice, int maxRetries = 5, DWORD baseSleepMs = 200) 
+{
+    const DWORD readSize = 512;
+    BYTE test_buffer[readSize];
+    DWORD bytesRead = 0;
+    LARGE_INTEGER zero;
+	memset(&zero,0,sizeof(zero));
+	
+
+    if (hDevice == INVALID_HANDLE_VALUE || hDevice == NULL) {
+        myprintf("waitForVSSReadyRobust: Handle nullo o non valido fornito.\n");
+        return false;
+    }
+
+    for (int i = 0; i < maxRetries; i++) {
+        if (i > 0) {
+            DWORD sleepMs = baseSleepMs * (1 << (i - 1)); // 200, 400, 800...
+            myprintf("waitForVSSReadyRobust: Tentativo %d/%d fallito. Riprovo tra %lu ms...\n", i, maxRetries, sleepMs);
+            Sleep(sleepMs);
+        }
+
+        if (!SetFilePointerEx(hDevice, zero, NULL, FILE_BEGIN)) {
+            DWORD err = GetLastError();
+            myprintf("waitForVSSReadyRobust: SetFilePointerEx fallito (Errore %lu). Interruzione.\n", err);
+            return false;
+        }
+
+        if (ReadFile(hDevice, test_buffer, readSize, &bytesRead, NULL)) {
+            if (bytesRead == readSize) {
+                myprintf("waitForVSSReadyRobust: Volume VSS pronto dopo %d tentativo/i.\n", i + 1);
+                return true; // Successo!
+            } else {
+                myprintf("waitForVSSReadyRobust: Lettura parziale (%lu bytes letti, attesi %lu). Interruzione.\n", bytesRead, readSize);
+                return false; // Errore fatale
+            }
+        }
+
+        // ReadFile è fallito, analizza l'errore
+        DWORD err = GetLastError();
+        char* errorBuffer = NULL;
+        FormatMessageA(
+            FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+            NULL,
+            err,
+            MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+            (LPSTR)&errorBuffer,
+            0,
+            NULL);
+        
+        char* errorString = (errorBuffer) ? errorBuffer : (char*)"Errore sconosciuto";
+
+        switch (err) {
+            case ERROR_NOT_READY:        // 21
+            case ERROR_BUSY:             // 170
+            case ERROR_IO_PENDING:       // 997
+            case ERROR_SHARING_VIOLATION: // 32
+            case ERROR_ACCESS_DENIED:    // 5 (A volte capita temporaneamente)
+                myprintf("waitForVSSReadyRobust: Test fallito (Errore transitorio %lu: %s), ritento...\n", err, errorString);
+                break; // Continua al prossimo ciclo 'for'
+            default:
+                myprintf("waitForVSSReadyRobust: Test fallito (Errore Fatale %lu: %s). Interruzione.\n", err, errorString);
+                if (errorBuffer) LocalFree(errorBuffer);
+                return false; // Esci dalla funzione
+        }
+        if (errorBuffer) LocalFree(errorBuffer);
+    } // fine del ciclo for
+
+    myprintf("waitForVSSReadyRobust: Volume VSS non pronto dopo %d tentativi.\n", maxRetries);
+    return false;
+}
+    franzVSS() : driveLetter(0), 
+                 pLoc(NULL), pSvc(NULL),
+                 hOle32(NULL), hOleAut32(NULL), hRpcrt4(NULL),
+                 pCoInitializeEx(NULL), pCoUninitialize(NULL), 
+                 pCoCreateInstance(NULL), pCoSetProxyBlanket(NULL), 
+                 pCoInitializeSecurity(NULL),
+                 pSysAllocString(NULL), pSysFreeString(NULL), 
+                 pVariantInit(NULL), pVariantClear(NULL),
+                 pUuidCreate(NULL), pUuidToStringA(NULL), pRpcStringFreeA(NULL),
+                 wmiInitialized(false) {
+        if (loadFunctions()) 
+		{
+            if (initWMI()) 
+			{
+                wmiInitialized = true;
+            } 
+			else 
+			{
+                myprintf("Failed to initialize WMI\n");
+                cleanupWMI();
+            }
+        } 
+		else 
+		{
+            myprintf("Failed to load dynamic libraries\n");
+        }
+    }
+    
+    ~franzVSS() 
+	{
+        removeSymlink();
+        if (!snapshotID.empty()) 
+		    deleteSnapshot();
+        if (wmiInitialized) 
+		    cleanupWMI();
+    }
+
+    bool create(char drive) 
+	{
+        if (!wmiInitialized) 
+			return false;
+
+        driveLetter = static_cast<char>(toupper(drive));
+        std::string baseID = generateUniqueId();
+        snapshotID = "franz_" + baseID;
+
+        HRESULT hr;
+        IWbemClassObject* pClass = NULL;
+        BSTR bstrClassName = pSysAllocString(L"Win32_ShadowCopy");
+        hr = pSvc->GetObject(bstrClassName, 0, NULL, &pClass, NULL);
+        if (FAILED(hr)) {
+            pSysFreeString(bstrClassName);
+            myprintf("Failed to get Win32_ShadowCopy class\n");
+            return false;
+        }
+
+        IWbemClassObject* pInParams = NULL;
+        BSTR bstrMethodName = pSysAllocString(L"Create");
+        hr = pClass->GetMethod(bstrMethodName, 0, &pInParams, NULL);
+        if (FAILED(hr) || !pInParams) 
+		{
+            pSysFreeString(bstrClassName);
+            pSysFreeString(bstrMethodName);
+            pClass->Release();
+            myprintf("Failed to get Create method\n");
+            return false;
+        }
+
+        std::string sVolume = std::string(1, driveLetter) + ":\\";
+        std::wstring wVolume = ansiToWide(sVolume);
+        
+        VARIANT varVolume;
+        pVariantInit(&varVolume);
+        varVolume.vt = VT_BSTR;
+        varVolume.bstrVal = pSysAllocString(wVolume.c_str());
+        
+        VARIANT varContext;
+        pVariantInit(&varContext);
+        varContext.vt = VT_BSTR;
+        varContext.bstrVal = pSysAllocString(L"ClientAccessible");
+        
+        pInParams->Put(L"Volume", 0, &varVolume, 0);
+        pInParams->Put(L"Context", 0, &varContext, 0);
+
+        pVariantClear(&varVolume);
+        pVariantClear(&varContext);
+
+        IWbemClassObject* pOutParams = NULL;
+        hr = pSvc->ExecMethod(bstrClassName, bstrMethodName, 0, NULL, pInParams, &pOutParams, NULL);
+        
+        pInParams->Release();
+        pSysFreeString(bstrMethodName);
+
+        if (FAILED(hr)) {
+            if (pOutParams) pOutParams->Release();
+            pSysFreeString(bstrClassName);
+            pClass->Release();
+            myprintf("Failed to execute Create method\n");
+            return false;
+        }
+
+        VARIANT varRetVal;
+        pVariantInit(&varRetVal);
+        hr = pOutParams->Get(L"ReturnValue", 0, &varRetVal, 0, 0);
+        
+        bool success = false;
+        if (SUCCEEDED(hr) && varRetVal.uintVal == 0) {
+            VARIANT varShadowID;
+            pVariantInit(&varShadowID);
+            pOutParams->Get(L"ShadowID", 0, &varShadowID, 0, 0);
+            
+            if (varShadowID.vt == VT_BSTR && varShadowID.bstrVal) {
+                std::string shadowID_str = wideToAnsi(varShadowID.bstrVal);
+                pVariantClear(&varShadowID);
+                
+                if (!shadowID_str.empty()) {
+                    snapshotID = shadowID_str;
+
+                    // Timeout più lungo e backoff esponenziale
+                    int retries = 30;
+                    int sleepMs = 100;
+                    
+                    while (retries-- > 0) {
+                        Sleep(sleepMs);
+                        if (sleepMs < 500) {
+                            sleepMs = sleepMs * 2;
+                        }
+                        
+                        IWbemClassObject* pObj = findSnapshotById(shadowID_str);
+                        if (pObj) {
+                            vssPath = getWmiStringProperty(pObj, L"DeviceObject");
+                            pObj->Release();
+                            
+                            if (!vssPath.empty()) 
+							{
+                                if (flagdebug3)
+									myprintf("71770: VSS '%s' created for %c: -> %s\n", snapshotID.c_str(), driveLetter, vssPath.c_str());
+                                success = true;
+                                break;
+                            }
+                        }
+                    }
+                    
+                    if (!success) {
+                        myprintf("Timeout waiting for snapshot to appear\n");
+                    }
+                } else {
+                    myprintf("Empty ShadowID returned\n");
+                }
+            } else {
+                pVariantClear(&varShadowID);
+                myprintf("Invalid ShadowID type\n");
+            }
+        } else {
+            myprintf("VSS creation failed (WMI ReturnValue != 0)\n");
+        }
+
+        pVariantClear(&varRetVal);
+        if (pOutParams) pOutParams->Release();
+        pSysFreeString(bstrClassName);
+        pClass->Release();
+        
+        if (!success) {
+            deleteSnapshot();
+        }
+        
+        return success;
+    }
+    
+    bool deleteSnapshot() {
+        if (snapshotID.empty() || !wmiInitialized) return false;
+        removeSymlink();
+        
+        IWbemClassObject* pObj = findSnapshotById(snapshotID);
+        if (!pObj) {
+            myprintf("VSS '%s' not found for deletion\n", snapshotID.c_str());
+            return false;
+        }
+
+        std::string sPath = getWmiStringProperty(pObj, L"__PATH");
+        pObj->Release();
+
+        if (sPath.empty()) {
+            myprintf("Failed to get __PATH for snapshot\n");
+            return false;
+        }
+        
+        BSTR bstrPath = pSysAllocString(ansiToWide(sPath).c_str());
+        HRESULT hr = pSvc->DeleteInstance(bstrPath, 0, NULL, NULL);
+        pSysFreeString(bstrPath);
+
+        if (SUCCEEDED(hr)) 
+		{
+			color_cyan();
+		///	if (flagverbose)
+				myprintf("71826: VSS <<%s>> deleted\n", snapshotID.c_str());
+			///else
+				///myprintf("71826: VSS deleted\n");
+			color_restore();
+            snapshotID.clear();
+            vssPath.clear();
+            return true;
+        }
+        
+        myprintf("71835! ERROR VSS deletion failed (WMI Error %s)\n", migliaia(hr));
+        return false;
+    }
+
+    bool deleteAllVSS() {
+        if (!wmiInitialized) return false;
+        removeSymlink();
+       
+        HRESULT hr;
+        IEnumWbemClassObject* pEnumerator = NULL;
+        std::wstring wQuery = L"SELECT * FROM Win32_ShadowCopy";
+
+        BSTR bstrQuery = pSysAllocString(wQuery.c_str());
+        BSTR bstrWQL = pSysAllocString(L"WQL");
+
+        hr = pSvc->ExecQuery(bstrWQL, bstrQuery, 
+            WBEM_FLAG_FORWARD_ONLY | WBEM_FLAG_RETURN_IMMEDIATELY, NULL, &pEnumerator);
+        pSysFreeString(bstrWQL);
+        pSysFreeString(bstrQuery);
+
+        if (FAILED(hr)) {
+            myprintf("Failed to query all VSS for deletion\n");
+            return false;
+        }
+
+        int deleteCount = 0;
+        
+       if (pEnumerator) {
+    IWbemClassObject* pObj = NULL;
+    ULONG uReturn = 0;
+    
+    while (SUCCEEDED(pEnumerator->Next(static_cast<LONG>(WBEM_INFINITE), 1, &pObj, &uReturn)) 
+           && uReturn > 0) {
+        std::string sPath = getWmiStringProperty(pObj, L"__PATH");
+        if (!sPath.empty()) {
+            BSTR bstrPath = pSysAllocString(ansiToWide(sPath).c_str());
+            HRESULT hrDel = pSvc->DeleteInstance(bstrPath, 0, NULL, NULL);
+            pSysFreeString(bstrPath);
+            if (SUCCEEDED(hrDel)) {
+                deleteCount++;
+            }
+        }
+        pObj->Release();
+    }
+    
+    pEnumerator->Release();
+}
+        
+        myprintf("All VSS snapshots deleted (Count: %d)\n", deleteCount);
+        
+        snapshotID.clear();
+        vssPath.clear();
+        
+        return true;
+    }
+
+    bool listVSS() {
+        if (!wmiInitialized) return false;
+
+        HRESULT hr;
+        IEnumWbemClassObject* pEnumerator = NULL;
+        std::wstring wQuery = L"SELECT ID, DeviceObject, VolumeName, InstallDate FROM Win32_ShadowCopy";
+
+        BSTR bstrQuery = pSysAllocString(wQuery.c_str());
+        BSTR bstrWQL = pSysAllocString(L"WQL");
+
+        hr = pSvc->ExecQuery(bstrWQL, bstrQuery, 
+            WBEM_FLAG_FORWARD_ONLY | WBEM_FLAG_RETURN_IMMEDIATELY, NULL, &pEnumerator);
+        pSysFreeString(bstrWQL);
+        pSysFreeString(bstrQuery);
+
+        if (FAILED(hr)) {
+            myprintf("Failed to list VSS snapshots\n");
+            return false;
+        }
+
+        
+        myprintf("\n--- VSS Snapshots List (WMI) ---\n");
+        if (pEnumerator) {
+    IWbemClassObject* pObj = NULL;
+    ULONG uReturn = 0;
+    
+    while (SUCCEEDED(pEnumerator->Next(static_cast<LONG>(WBEM_INFINITE), 1, &pObj, &uReturn)) 
+           && uReturn > 0) {
+        myprintf("ID:           %s\n", getWmiStringProperty(pObj, L"ID").c_str());
+        myprintf("DeviceObject: %s\n", getWmiStringProperty(pObj, L"DeviceObject").c_str());
+        myprintf("VolumeName:   %s\n", getWmiStringProperty(pObj, L"VolumeName").c_str());
+        myprintf("InstallDate:  %s\n", getWmiStringProperty(pObj, L"InstallDate").c_str());
+        myprintf("\n");
+        
+        pObj->Release();
+    }
+    
+    pEnumerator->Release();
+}
+        myprintf("----------------------------------\n");
+        return true;
+    }
+
+    bool mklink(const char* localFolder) {
+        if (vssPath.empty()) {
+            myprintf("No VSS snapshot available for mklink\n");
+            return false;
+        }
+
+        if (!isPathSafe(localFolder)) {
+            myprintf("Invalid characters in path\n");
+            return false;
+        }
+
+        removeSymlink();
+
+        std::string linkTarget = vssPath + "\\";
+
+        // Flag 0x1 = SYMBOLIC_LINK_FLAG_DIRECTORY
+        if (CreateSymbolicLinkA(localFolder, linkTarget.c_str(), 0x1)) 
+		{
+            if (flagdebug3)
+				myprintf("71953: VSS linked to: %s\n", localFolder);
+            symlinkPath = localFolder;
+            return true;
+        } 
+        
+        DWORD err = GetLastError();
+		if (err==183) //ERROR_ALREADY_EXISTS
+			color_yellow();
+		else
+			color_red();
+        myprintf("71958: mklink (CreateSymbolicLinkA) failed with error %s\n", migliaia(err));
+        color_restore();
+        if (err == 1314) 
+		{
+            myprintf("71962: HINT: Error 1314. Program must be run as Administrator.\n");
+        }
+        
+        return false;
+    }
+
+    void unlinkSnapshot() {
+        removeSymlink();
+    }
+
+    const char* getName() const { return snapshotID.c_str(); }
+    const char* getPath() const { return vssPath.c_str(); }
+    char getDrive() const { return driveLetter; }
+    const char* getSymlinkPath() const { return symlinkPath.c_str(); }
+	
+
+// Versione alternativa che ritorna anche il path del VSS target
+bool isvsslinked(const std::string& i_folder, std::string* o_vssPath) 
+{
+    if (o_vssPath)
+        o_vssPath->clear();
+    
+    if (i_folder.empty()) 
+        return false;
+    
+    DWORD attrs = GetFileAttributesA(i_folder.c_str());
+    if (attrs == INVALID_FILE_ATTRIBUTES || !(attrs & FILE_ATTRIBUTE_REPARSE_POINT))
+        return false;
+    
+    HANDLE hFile = CreateFileA(
+        i_folder.c_str(), 0,
+        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+        NULL, OPEN_EXISTING,
+        FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT,
+        NULL
+    );
+    
+    if (hFile == INVALID_HANDLE_VALUE)
+        return false;
+    
+    BYTE buffer[MAXIMUM_REPARSE_DATA_BUFFER_SIZE];
+    DWORD bytesReturned = 0;
+    
+    BOOL result = DeviceIoControl(
+        hFile, FSCTL_GET_REPARSE_POINT,
+        NULL, 0, buffer, MAXIMUM_REPARSE_DATA_BUFFER_SIZE,
+        &bytesReturned, NULL
+    );
+    
+    CloseHandle(hFile);
+    
+    if (!result || bytesReturned < sizeof(DWORD))
+        return false;
+    
+    REPARSE_DATA_BUFFER* reparseData = (REPARSE_DATA_BUFFER*)buffer;
+    
+    if (reparseData->ReparseTag != IO_REPARSE_TAG_SYMLINK)
+        return false;
+    
+    WCHAR* targetPath = reparseData->SymbolicLinkReparseBuffer.PathBuffer +
+                        (reparseData->SymbolicLinkReparseBuffer.SubstituteNameOffset / sizeof(WCHAR));
+    USHORT targetLength = reparseData->SymbolicLinkReparseBuffer.SubstituteNameLength / sizeof(WCHAR);
+    
+    std::wstring target(targetPath, targetLength);
+    
+    bool isVSS = (target.find(L"\\\\?\\GLOBALROOT\\Device\\HarddiskVolumeShadowCopy") != std::wstring::npos) ||
+                 (target.find(L"\\Device\\HarddiskVolumeShadowCopy") != std::wstring::npos);
+    
+    if (isVSS && o_vssPath) {
+        // Converti da wide a ANSI
+        int size_needed = WideCharToMultiByte(CP_ACP, 0, target.c_str(), -1, NULL, 0, NULL, NULL);
+        if (size_needed > 0) {
+            std::string ansiPath(size_needed, 0);
+            WideCharToMultiByte(CP_ACP, 0, target.c_str(), -1, &ansiPath[0], size_needed, NULL, NULL);
+            if (!ansiPath.empty() && ansiPath.back() == '\0')
+                ansiPath.pop_back();
+            *o_vssPath = ansiPath;
+        }
+    }
+    
+    return isVSS;
+}
+
+// Versione che verifica e rimuove solo se è VSS (più sicura)
+bool removevsslink(const std::string& i_folder) 
+{
+	std::string dummy;
+
+    if (i_folder.empty()) 
+        return false;
+
+	
+    // Verifica prima che sia effettivamente un VSS link
+    if (!isvsslinked(i_folder,&dummy))
+	{
+		myprintf("72257: ERROR: this is not a vss link %s\n",i_folder.c_str());
+        // Non è un VSS link, non fare nulla
+        return false;
+    }
+    
+    DWORD attrs = GetFileAttributesA(i_folder.c_str());
+    if (attrs != INVALID_FILE_ATTRIBUTES) {
+        if (attrs & FILE_ATTRIBUTE_READONLY) {
+            SetFileAttributesA(i_folder.c_str(), 
+                attrs & ~FILE_ATTRIBUTE_READONLY);
+        }
+    }
+    
+    if (RemoveDirectoryA(i_folder.c_str())) 
+	{
+		color_yellow();
+        myprintf("72273: VSS symlink removed %s\n", i_folder.c_str());
+		color_restore();
+        return true;
+    }
+    
+    DWORD err = GetLastError();
+    if (err != ERROR_FILE_NOT_FOUND && err != ERROR_PATH_NOT_FOUND) 
+        myprintf("72281! Failed to remove VSS symlink %s (error %s)\n", i_folder.c_str(), migliaia(err));
+    
+    return false;
+}
+
+
+    bool getVSSPartitionInfo(PARTITION_INFORMATION_EX* pinfo) {
+        if (vssPath.empty()) {
+            myprintf("ERROR: No VSS snapshot available\n");
+            return false;
+        }
+
+        HANDLE hDevice = openVSSDevice();
+        if (hDevice == INVALID_HANDLE_VALUE) {
+            return false;
+        }
+
+        DWORD bytes_returned = 0;
+        bool success = DeviceIoControl(
+            hDevice,
+            IOCTL_DISK_GET_PARTITION_INFO_EX,
+            NULL, 0,
+            pinfo, sizeof(PARTITION_INFORMATION_EX),
+            &bytes_returned,
+            NULL
+        ) != 0;
+
+        if (!success) {
+            DWORD err = GetLastError();
+            myprintf("ERROR: Cannot get VSS partition info (error %lu)\n", err);
+        }
+
+        CloseHandle(hDevice);
+        return success;
+    }
+
+};
+#endif
+
+
 
 ///////////////////////////////////////////////////////////////////////////////
 #ifdef _WIN32
@@ -42948,9 +43630,10 @@ struct vhdcontesto
     char* 					g_vhd_buffer 				= NULL;       // Internal buffer for VHD processing
     std::vector<uint8_t> 	array_header;  				// Footer + DynHeader + BAT + padding
 	
-    FILE* g_vhd_output_file = NULL;  // Handle of the VHD file being constructed
-    uint64_t g_vhd_used_bytes = 0;        // Bytes actually used
-    uint64_t g_vhd_used_blocks = 0;       // Blocks to be written
+    FILE* g_vhd_output_file 							= NULL;  // Handle of the VHD file being constructed
+    uint64_t g_vhd_used_bytes 							= 0;        // Bytes actually used
+    uint64_t g_vhd_used_blocks 							= 0;       // Blocks to be written
+	bool 					using_vss					= false;
 };
 static vhdcontesto ctx;
 
@@ -43033,6 +43716,184 @@ void vhd_calculate_chs(uint64_t total_sectors, uint16_t* cylinders, uint8_t* hea
     *cylinders = cyls;
 }
 
+
+bool get_volume_size(HANDLE hVolume, uint64_t* size_bytes) {
+    // Metodo 1: Prova GET_LENGTH_INFO (più diretto)
+    GET_LENGTH_INFORMATION lengthInfo;
+    DWORD bytes_returned = 0;
+    
+    if (DeviceIoControl(hVolume, 
+                       IOCTL_DISK_GET_LENGTH_INFO,
+                       NULL, 0,
+                       &lengthInfo, sizeof(lengthInfo),
+                       &bytes_returned, NULL)) {
+        *size_bytes = lengthInfo.Length.QuadPart;
+        return true;
+    }
+    
+    // Metodo 2: Fallback con DRIVE_GEOMETRY_EX
+    DISK_GEOMETRY_EX geometryEx;
+    bytes_returned = 0;
+    
+    if (DeviceIoControl(hVolume,
+                       IOCTL_DISK_GET_DRIVE_GEOMETRY_EX,
+                       NULL, 0,
+                       &geometryEx, sizeof(geometryEx),
+                       &bytes_returned, NULL)) {
+        *size_bytes = geometryEx.DiskSize.QuadPart;
+        return true;
+    }
+    
+    return false;
+}
+
+/**
+ * Apre il drive sorgente - VERSIONE CON SUPPORTO VSS
+ * 
+ * Se vss è NULL o non ha uno snapshot attivo: apre il drive diretto
+ * Se vss ha uno snapshot attivo: apre il device VSS snapshot
+ */
+ /* Assicurati che le definizioni di:
+   - vhdcontesto
+   - franzVSS
+   - myprintf, color_green, color_restore
+   - get_volume_size, tohuman
+   siano disponibili.
+*/
+
+bool open_source_drive_vss(char drive_letter, vhdcontesto& ctx, franzVSS* vss = NULL)
+{
+    ctx.using_vss = false;
+    
+    // Caso 1: Usa VSS se disponibile
+    if (vss && strlen(vss->getPath()) > 0 && vss->getDrive() == toupper(drive_letter)) 
+    {
+        myprintf("Opening drive %c: via VSS snapshot...\n", drive_letter);
+        
+        ctx.g_vhd_hsourcedrive = vss->openVSSDevice();
+        if (ctx.g_vhd_hsourcedrive == INVALID_HANDLE_VALUE) {
+            myprintf("43178! Error: Unable to open VSS device for drive %c:\n", drive_letter);
+            return false;
+        }
+        
+        ctx.using_vss = true;
+        color_green();
+        myprintf("43093: Drive %c: opened via VSS snapshot\n", drive_letter);
+        color_restore();
+        
+        // Per VSS usa get_volume_size invece di PARTITION_INFO
+        if (!get_volume_size(ctx.g_vhd_hsourcedrive, &ctx.g_vhd_partition_size_bytes))
+        {
+            myprintf("41390! Error: Unable to retrieve VSS volume size (code %lu)\n", 
+                     GetLastError());
+            CloseHandle(ctx.g_vhd_hsourcedrive);
+            ctx.g_vhd_hsourcedrive = INVALID_HANDLE_VALUE;
+            return false;
+        }
+        
+        myprintf("43108: VSS Volume size       : %llu bytes (%s)\n", 
+                 ctx.g_vhd_partition_size_bytes,
+                 tohuman(ctx.g_vhd_partition_size_bytes));
+        
+        // ======================================================================
+        // === BLOCCO DI INTEGRAZIONE ===
+        // Sostituiamo il vecchio Sleep/Test/Sleep/Test con la funzione robusta
+        
+        myprintf("43109: Waiting for VSS volume to stabilize (robust check)...\n");
+        
+        // Usiamo la nuova funzione per attendere che il volume sia pronto
+        // Parametri di default: 5 tentativi, 200ms di base (totale circa 6 secondi)
+        if (!vss->waitForVSSReadyRobust(ctx.g_vhd_hsourcedrive)) 
+        {
+            // La funzione waitForVSSReadyRobust stampa già l'errore dettagliato
+            myprintf("43111! Error: VSS volume not ready after robust retries.\n");
+            CloseHandle(ctx.g_vhd_hsourcedrive);
+            ctx.g_vhd_hsourcedrive = INVALID_HANDLE_VALUE;
+            return false;
+        }
+        
+        // Il volume è pronto e il test di lettura è riuscito.
+        myprintf("43112: VSS volume test read successful.\n");
+        
+        // === FINE BLOCCO DI INTEGRAZIONE ===
+        // ======================================================================
+        
+        
+        // CRITICO: Chiudi e riapri l'handle per stato pulito
+        // MANTENIAMO questa logica come da codice originale, 
+        // è una patch importante per i bug dei driver.
+        myprintf("43113: Reopening VSS handle for clean state...\n");
+        CloseHandle(ctx.g_vhd_hsourcedrive);
+        Sleep(200); // Breve attesa prima di riaprire
+        
+        ctx.g_vhd_hsourcedrive = vss->openVSSDevice();
+        if (ctx.g_vhd_hsourcedrive == INVALID_HANDLE_VALUE) {
+            myprintf("43114! Error: Unable to reopen VSS device\n");
+            return false;
+        }
+        
+        // Reset definitivo a posizione zero
+        LARGE_INTEGER zero;
+		memset(&zero,0,sizeof(zero));
+        SetFilePointerEx(ctx.g_vhd_hsourcedrive, zero, NULL, FILE_BEGIN);
+        
+        color_green();
+        myprintf("43115: VSS handle reopened and ready at position 0\n");
+        color_restore();
+        
+        return true;
+    }
+    
+    // Caso 2: Apertura diretta del drive (modalità originale)
+    // ... (Questa parte rimane invariata) ...
+    myprintf("Opening drive %c: directly (no VSS)...\n", drive_letter);
+    
+    char drive_path[] = "\\\\.\\C:";
+    drive_path[4] = drive_letter;
+    
+    ctx.g_vhd_hsourcedrive = CreateFileA(
+        drive_path, 
+        GENERIC_READ, 
+        FILE_SHARE_READ | FILE_SHARE_WRITE,
+        NULL, 
+        OPEN_EXISTING, 
+        0, 
+        NULL
+    );
+    
+    if (ctx.g_vhd_hsourcedrive == INVALID_HANDLE_VALUE)
+    {
+        myprintf("43178! Error: Unable to open drive %c: (code %lu)\n",
+                 drive_letter, GetLastError());
+        return false;
+    }
+    
+    color_green();
+    myprintf("43093: Drive %c: opened successfully\n", drive_letter);
+    color_restore();
+    
+    PARTITION_INFORMATION_EX pinfo;
+    DWORD bytes_returned = 0;
+    if (!DeviceIoControl(ctx.g_vhd_hsourcedrive, 
+                         IOCTL_DISK_GET_PARTITION_INFO_EX,
+                         NULL, 0, 
+                         &pinfo, sizeof(pinfo), 
+                         &bytes_returned, NULL))
+    {
+        myprintf("41390! Error: Unable to retrieve partition info (code %lu)\n", 
+                 GetLastError());
+        CloseHandle(ctx.g_vhd_hsourcedrive);
+        ctx.g_vhd_hsourcedrive = INVALID_HANDLE_VALUE;
+        return false;
+    }
+    
+    ctx.g_vhd_partition_size_bytes = pinfo.PartitionLength.QuadPart;
+    myprintf("43108: Partition size        : %llu bytes (%s)\n", 
+             ctx.g_vhd_partition_size_bytes,
+             tohuman(ctx.g_vhd_partition_size_bytes));
+    
+    return true;
+}
 bool open_source_drive(char drive_letter, vhdcontesto& ctx)
 {
     char drive_path[] 		= "\\\\.\\C:";
@@ -43065,26 +43926,50 @@ bool open_source_drive(char drive_letter, vhdcontesto& ctx)
 
 bool read_ntfs_boot_sector(vhdcontesto& ctx)
 {
+    // IMPORTANTE: Per VSS, reset esplicito a posizione zero prima di leggere
+    if (ctx.using_vss) {
+        LARGE_INTEGER zero;
+		memset(&zero,0,sizeof(zero));
+        
+        if (!SetFilePointerEx(ctx.g_vhd_hsourcedrive, zero, NULL, FILE_BEGIN)) {
+            myprintf("43205! Error: Cannot reset file pointer (code %s)\n", 
+                     migliaia(GetLastError()));
+            return false;
+        }
+		if (flagdebug)
+			myprintf("43205: File pointer reset to zero for boot sector read\n");
+    }
+    
     char boot_sector_buffer[SECTOR_SIZE] = {0};
     DWORD read_bytes = 0;
-    if (!ReadFile(ctx.g_vhd_hsourcedrive, boot_sector_buffer, SECTOR_SIZE, &read_bytes, NULL) || read_bytes != SECTOR_SIZE)
+    
+    if (!ReadFile(ctx.g_vhd_hsourcedrive, boot_sector_buffer, SECTOR_SIZE, &read_bytes, NULL))
     {
-        myprintf("43206! Error: Unable to read boot sector (code %s)\n", migliaia(GetLastError()));
+        myprintf("43206! Error: Unable to read boot sector (code %s)\n", 
+                 migliaia(GetLastError()));
         return false;
     }
-
+    
+    if (read_bytes != SECTOR_SIZE)
+    {
+        myprintf("43207! Error: Boot sector read incomplete (%lu bytes instead of %d)\n",
+                 read_bytes, SECTOR_SIZE);
+        return false;
+    }
+    
     const NTFS_BOOT_SECTOR* bs = (NTFS_BOOT_SECTOR*)boot_sector_buffer;
+    
     if (memcmp(bs->OemId, NTFS_OEM_ID, 8) != 0)
     {
         myprintf("43213! Error: Filesystem is not NTFS (OEM ID: %.8s)\n", bs->OemId);
         return false;
     }
-
-    ctx.g_vhd_bytes_per_sector 		= bs->BytesPerSector;
-    ctx.g_vhd_sectors_per_cluster 	= bs->SectorsPerCluster;
-    ctx.g_vhd_cluster_size_bytes 	= ctx.g_vhd_bytes_per_sector * ctx.g_vhd_sectors_per_cluster;
-    ctx.g_vhd_total_clusters 		= ctx.g_vhd_partition_size_bytes / ctx.g_vhd_cluster_size_bytes;
-
+    
+    ctx.g_vhd_bytes_per_sector     = bs->BytesPerSector;
+    ctx.g_vhd_sectors_per_cluster  = bs->SectorsPerCluster;
+    ctx.g_vhd_cluster_size_bytes   = ctx.g_vhd_bytes_per_sector * ctx.g_vhd_sectors_per_cluster;
+    ctx.g_vhd_total_clusters       = ctx.g_vhd_partition_size_bytes / ctx.g_vhd_cluster_size_bytes;
+    
     if (flagdebug)
     {
        myprintf("\nDEBUG NTFS Boot Sector\n");
@@ -43095,6 +43980,7 @@ bool read_ntfs_boot_sector(vhdcontesto& ctx)
        myprintf("MFT LCN             : %llu\n", bs->MftLcn);
        myprintf("------------------------------\n\n");
     }
+    
     return true;
 }
 
@@ -43533,10 +44419,120 @@ bool calculate_used_blocks(vhdcontesto& ctx)
     return true;
 }
 
+
+
+franzVSS g_myvss;
+
+bool writevsstestfile(char i_driveletter, string i_text)
+{
+    if (!isalpha(i_driveletter)) 
+	{
+        color_red();
+        myprintf("44703! Invalid drive letter '%c' (must be A-Z or a-z)\n", i_driveletter);
+        color_restore();
+        return false;
+    }
+    
+    i_driveletter = (char)toupper(i_driveletter);
+    
+    if (i_text.empty()) 
+	{
+        color_yellow();
+        myprintf("44713: WARNING: Empty text provided, writing timestamp only\n");
+        color_restore();
+    }
+    
+    if (i_text.find_first_of("\r\n") != string::npos) 
+	{
+        color_yellow();
+        myprintf("44721: WARNING: Text contains newline characters, they will be preserved\n");
+        color_restore();
+    }
+    
+    char testPath[MAX_PATH];
+    snprintf(testPath, sizeof(testPath), "%c:/vsstest_zpaqfranz/testfile.txt", i_driveletter);
+    
+    if (strlen(testPath) >= MAX_PATH - 1) 
+	{
+        color_red();
+        myprintf("44733! Path too long (%s chars)\n", migliaia(strlen(testPath)));
+        color_restore();
+        return false;
+    }
+    
+    string dirPath = extractfilepath(testPath);
+    if (dirPath.empty()) 
+	{
+        color_red();
+        myprintf("44743! Cannot extract directory path from '%s'\n", testPath);
+        color_restore();
+        return false;
+    }
+    
+    makepath(dirPath);
+
+	if (!direxists(dirPath.c_str()))
+	{
+        color_red();
+        myprintf("44752: ERROR cannot create directory <<%s>>\n", dirPath.c_str());
+        color_restore();
+        return false;
+    }
+    
+    FILE* batch = fopen(testPath, "w");
+    if (batch == NULL) 
+	{
+        color_red();
+        myprintf("44722: Cannot write to test file <<%s>> (error: %d - %s)\n", testPath, errno, strerror(errno));
+        color_restore();
+        return false;
+    }
+    
+    string timestamp = dateToString(true, now());
+    int result;
+    
+    if (!i_text.empty()) 
+	    result = fprintf(batch, "%s %s", i_text.c_str(), timestamp.c_str());
+    else 
+	    result = fprintf(batch, "%s", timestamp.c_str());
+    
+    if (result < 0) 
+	{
+        color_red();
+        myprintf("44779: Write operation failed on <<%s>>\n", testPath);
+        color_restore();
+        fclose(batch);
+        return false;
+    }
+    
+    if (fclose(batch) != 0) 
+	{
+        color_red();
+        myprintf("44789: Cannot close file <<%s>> (error: %d - %s)\n", testPath, errno, strerror(errno));
+        color_restore();
+        return false;
+    }
+    
+    FILE* verify = fopen(testPath, "r");
+    if (verify == NULL) 
+	{
+        color_red();
+        myprintf("44799:  File written but cannot be read back <<%s>>\n", testPath);
+        color_restore();
+        return false;
+    }
+    fclose(verify);
+    
+    color_green();
+    myprintf("44807: Written successfully to <<%s>>\n", testPath);
+    color_restore();
+    return true;
+}
+
 #ifdef ZPAQ_VERSION
-bool Jidac::preparavhd(const std::string& image_path, char drive_letter)
+bool Jidac::preparavhd(char drive_letter)
 #else
-bool preparavhd(const std::string& image_path, char drive_letter)
+bool preparavhd(char drive_letter)
 #endif
 {
     ctx.lettera 					= drive_letter;
@@ -43547,18 +44543,93 @@ bool preparavhd(const std::string& image_path, char drive_letter)
     ctx.g_vhd_buffer 				= NULL;
 
     uint64_t partition_start_sector = 0;
+	
+	if (flagvss)
+	{
+		if (flagdebug6)
+		{
+			color_cyan();
+			myprintf("44824: Due to -debug6, creating a Before VSS test file\n");
+			color_restore();
+			writevsstestfile(drive_letter,"Before VSS");
+			myprintf("Wait a bit and press a key...\n");
+			_getch();
+		}
+		
+    	// Crea uno snapshot VSS del drive C:
+		if (!g_myvss.create(drive_letter)) 
+		{
+			myprintf("44739: Failed to create VSS snapshot on %c\n",drive_letter);
+			return false;
+		}
+		
+		// Apri il drive tramite VSS
+		if (!open_source_drive_vss(drive_letter, ctx, &g_myvss)) 
+		{
+			myprintf("43689! Error: Cannot open drive %c with VSS\n",drive_letter);
+			return false;
+		}
+		color_green();
+		myprintf("44637: OK, VSS open (this is good)\n");
+		color_restore();
+		
+		if (flagdebug6)
+		{
+			color_cyan();
+			myprintf("44851: Due to -debug6, creating a After VSS test file\n");
+			myprintf("44851: To complete the test, extract the .vhd with x -vhd, then check\n");
+			myprintf("44851: that the testfile contains Before VSS\n");
+			color_restore();
+			writevsstestfile(drive_letter,"After VSS");
+			myprintf("Wait a bit (to stabilize VSS) and press a key...\n");
+			_getch();
+		}
+		
+	}
+	else
+	{
+	// 1. Tentativo di aprire il drive sorgente
+		if (!open_source_drive(drive_letter, ctx))
+		{
+			myprintf("43689! Errore: Impossibile aprire il drive sorgente.\n");
+			return false;
+		}
+	}
+	// 2. Tentativo di leggere il boot sector NTFS
+	if (!read_ntfs_boot_sector(ctx))
+	{
+		myprintf("43689! Errore: Impossibile leggere il boot sector NTFS.\n");
+		return false;
+	}
 
-    if (!open_source_drive(drive_letter, ctx) ||
-        !read_ntfs_boot_sector(ctx) ||
-        !read_mft_bitmap(ctx) ||
-        !initialize_vhd_structures(ctx, partition_start_sector) ||
-        !calculate_used_blocks(ctx) ||  
-        !write_initial_vhd_data(ctx, partition_start_sector))
-    {
-        
-        myprintf("43689! nError during preparation. Aborting\n");
-        return false;
-    }
+	// 3. Tentativo di leggere la MFT bitmap
+	if (!read_mft_bitmap(ctx))
+	{
+		myprintf("43689! Errore: Impossibile leggere la MFT bitmap.\n");
+		return false;
+	}
+
+	// 4. Tentativo di inizializzare le strutture VHD
+	if (!initialize_vhd_structures(ctx, partition_start_sector))
+	{
+		myprintf("43689! Errore: Impossibile inizializzare le strutture VHD.\n");
+		return false;
+	}
+
+	// 5. Tentativo di calcolare i blocchi usati
+	if (!calculate_used_blocks(ctx))
+	{
+		myprintf("43689! Errore: Impossibile calcolare i blocchi usati.\n");
+		return false;
+	}
+
+	// 6. Tentativo di scrivere i dati VHD iniziali
+	if (!write_initial_vhd_data(ctx, partition_start_sector))
+	{
+		myprintf("43689! Errore: Impossibile scrivere i dati VHD iniziali.\n");
+		return false;
+	}
+
 	if (flagverbose)
 		myprintf("43612: Preparation completed\n");
 	return true;
@@ -49886,7 +50957,7 @@ void print_progress(int64_t ts, int64_t td, int64_t i_scritti, int i_percentuale
             
             // Projection calculation
             int64_t projection = ts;
-            if ((command == 'a' || command == 'Z') && (ts > 0)) 
+            if ((command == 'a' || command=='g' || command=='q' || command == 'Z') && (ts > 0)) 
 			    projection = (int64_t)(i_scritti / (1.0 * td / ts));
             
             // Time format: HH:MM:SS
@@ -50396,6 +51467,7 @@ string help_work(bool i_usage,bool i_example)
 		scrivi_riga("autotest",   			"FRANZEN (quick) autotest");
 		scrivi_riga("crc32",   				"FRANZEN CRC32 check");
 		scrivi_riga("ispasswordok",   		"FRANZEN quickly check password");
+		scrivi_riga("vss",   		"franzVSS manager");
 		
 #endif ///NOSFTPEND
 		
@@ -50431,6 +51503,7 @@ string help_work(bool i_usage,bool i_example)
 		scrivi_esempio("FRANZEN autotest","work autotest");
 		scrivi_esempio("FRANZEN crc32","work crc32 z:\\1.zpaq");
 		scrivi_esempio("FRANZEN password","work ispasswordok z:\\1.zpaq pippo");
+		scrivi_esempio("Manage VSS (shadow copy)","work vss");
 #endif ///NOSFTPEND
 		
 	}
@@ -50799,9 +51872,11 @@ void print_sub()
 }
 void print_doublequote()
 {
+#ifndef _WIN32
 	color_yellow();
 	moreprint("REMEMBER: wildcards require double quotes. E.g., \"*.cpp\", \"test_???.zpaq\"");
 	color_restore();
+#endif
 }
 string help_a(bool i_usage,bool i_example)
 {
@@ -50854,7 +51929,7 @@ string help_a(bool i_usage,bool i_example)
 #ifdef ZPAQFULL ///NOSFTPSTART
 		scrivi_riga("-exec_ok", "p.sh Execute p.sh on successful completion, passing the archive name as a parameter");
 #endif ///NOSFTPEND
-		scrivi_riga("-freeze", "kajo  If current archive size > maxsize, move to kajo folder");
+		scrivi_riga("-freeze kajo","If current archive size > maxsize, move to kajo folder");
 		scrivi_riga("-stdin", "Input data from stdin (pipe)");
 		scrivi_riga("-stdout", "Force a NOT DEDUPLICATED file ready to stdout (pipe OUT)");
 		scrivi_riga("-checktxt", "kaj Write out MD5 on kaj. For rsync/rclone sync");
@@ -50923,6 +51998,7 @@ string help_a(bool i_usage,bool i_example)
 		scrivi_riga("-franzen X", "EXPERIMENTAL: create .franzen file too with key X");
 #ifdef _WIN32
 		scrivi_riga("-vhd", "Create (with -image) a VHD-mountable image (use g if not admin)");
+		scrivi_riga("-vhd -vss -image", "Making a VHD-mountable image from VSS");
 #endif
 		}
 		/*
@@ -51284,7 +52360,7 @@ string help_x(bool i_usage,bool i_example)
 		scrivi_esempio("Show the filelist (if any)","x z:\\1.zpaq -filelist");
 		scrivi_esempio("Show the filelist (if any) of v3","x z:\\1.zpaq -filelist -until 3");
 		scrivi_esempio("Extract all *.xls into new archive","x z:\\1.zpaq *.xls -repack onlyxls.zpaq");
-		scrivi_esempio("Extract from a VSS (Windows)","x z:\\1.zpaq \\\\?\\GLOBALROOT\\Device\\HarddiskVolumeShadowCopy1\\path -to d:\\output");
+		///scrivi_esempio("Extract from a VSS (Windows)","x z:\\1.zpaq \\\\?\\GLOBALROOT\\Device\\HarddiskVolumeShadowCopy1\\path -to d:\\output");
 		scrivi_esempio("Replace path in extract","x 1.zpaq -find /tank/ -replace z:\\uno\\");
 		scrivi_esempio("Change path in extract, longpath","x 1.zpaq -replace z:\\uno\\ -longpath");
 		scrivi_esempio("Create files' tree","x 1.zpaq -to z:\\testdir\\ -debug -kill -zero -longpath");
@@ -51450,29 +52526,29 @@ string help_q(bool i_usage,bool i_example)
 {
 	if (i_usage)
 	{
-		scrivi_riga("CMD q"," Windows archiving of C: (*** admin rights mandatory ***)");
-		scrivi_riga(" ","Take as much C: as possible (no Windows and swapfile)");
-		scrivi_riga(" ","This is NOT a full backup (aka: bare-metal restorable)");
-		scrivi_riga("-forcewindows", "INCLUDE Windows folder");
-		scrivi_riga("-frugal", "Exclude Windows, %programfiles% and %temp%");
-		scrivi_riga("-all", "Get everything (except swapfile)");
-		scrivi_riga("-to", "c:\\piz    Use c:\\piz for snap (default c:\\franzsnap)");
-		scrivi_riga(" ","It is possible to use %pcname as placeholder");
-		scrivi_riga(" ","Just about all switches of add() (-key -m -only ...)");
-		scrivi_riga(" ","except files selection (always C:/*)");
-		scrivi_riga(" ","****      The folder franzsnap MUST NOT EXIST and be on C:");
+		scrivi_riga("CMD q","Windows C: drive archiving (*** REQUIRES ADMIN RIGHTS ***)");
+		scrivi_riga(" ","Archives useful data from C: drive (no Windows system files and swapfile)");
+		scrivi_riga(" ","NOTE: This is NOT a full bare-metal backup!");
+		scrivi_riga("-forcewindows", "INCLUDE Windows system folder (normally excluded)");
+		scrivi_riga("-frugal", "Exclude Windows, Program Files, and Temp folders");
+		scrivi_riga("-all", "Archive everything (except swapfile)");
+		scrivi_riga("-to c:\\path","Custom snapshot folder c:\\path (default c:\\franzsnap)");
+		scrivi_riga(" ","Use %pcname% placeholder for computer name");
+		scrivi_riga("***","Snapshot folder MUST NOT exist and on be on C:");
+		scrivi_riga("***","Source is always C:/* (cannot be changed)");
 	}
 	if (i_usage && i_example) scrivi_examples();
 	if (i_example)
 	{
-		scrivi_esempio("NOT C:\\WINDOWS, NOT RECYCLE BIN","q z:\\1.zpaq");
+		scrivi_esempio("Default (no Win,no Recycle Bin)","q z:\\1.zpaq");
 		scrivi_esempio("Everything","q z:\\1.zpaq -all");
-		scrivi_esempio("Everything NOT C:\\DROPBOX","q z:\\1.zpaq -all -not c:/franzsnap/dropbox");
+		scrivi_esempio("Using alias 'cc'","cc z:\\1.zpaq");
+		scrivi_esempio("Everything excluding C:\\DROPBOX","q z:\\1.zpaq -all -not c:/franzsnap/dropbox");
 		scrivi_esempio("NOT C:\\WINDOWS, NOT %programs%","q z:\\1.zpaq -frugal");
 		scrivi_esempio("Only C/C++ files and header","q z:\\1.zpaq -only *.c* -only *.h*");
 		scrivi_esempio("For multi-PC 'backup' on one zpaq","q z:\\1.zpaq -frugal -to c:\\snap_%pcname -verbose");
 	}
-	return("Archive C: with VSS (Windows)");
+	return("Archive C: drive using VSS (Windows only)");
 
 }
 
@@ -52026,7 +53102,7 @@ string help_zfsproxbackup(bool i_usage,bool i_example)
 		scrivi_riga("-kill", "Remove snapshot (after backup)");
 		scrivi_riga("-all", "Get all VM");
 		scrivi_riga("-not", "Do not backup (exclude)");
-		scrivi_riga("-snapshot", "kj  Make 'snapname' to kj (default: francoproxmox)");
+		scrivi_riga("-snapshot kj","Make 'snapname' to kj (default: francoproxmox)");
 	}
 	if (i_usage && i_example) scrivi_examples();
 	if (i_example)
@@ -54145,7 +55221,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 	g_programflags.add(&flagutf,			"-utf",					"UTF-8",											"");
 	g_programflags.add(&flagverbose,		"-verbose",				"Verbose output",									"");
 	g_programflags.add(&flagverify,			"-verify",				"Verify (read from filesystem)",					"");
-	g_programflags.add(&flagvss,			"-vss",					"Enable Volume Shadow Copies",						"a;");
+	g_programflags.add(&flagvss,			"-vss",					"Enable Volume Shadow Copies (need admin)",						"a;");
 	g_programflags.add(&flagzero,			"-zero",				"Zeroing something",										"");
 	g_programflags.add(&flagpause,			"-pause",				"Pause after run (for runhigh)",					"");
 	g_programflags.add(&flagquiet,			"-quiet",				"Do not show filesystem errors",												"");
@@ -54789,6 +55865,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 		opt=="w"				||
 		opt=="i" 				||
 		opt=="q" 				||
+		opt=="cc" 				||
 		opt=="g" 				||
 #ifdef ZPAQFULL ///NOSFTPSTART
 		opt=="sfx" 				||
@@ -54816,6 +55893,11 @@ int Jidac::loadparameters(int argc, const char** argv)
 			if (opt=="ls")
 				command=':';
 #endif
+			if (opt=="cc")		//cbackup
+				command='q';
+		
+			if ((opt=="g") || (opt=="q") || (opt=="g"))
+				flagvss=true;
 
 			if (opt=="zfsadd")
 			{
@@ -55281,12 +56363,17 @@ int Jidac::loadparameters(int argc, const char** argv)
 	
 #ifdef _WIN32
 #ifdef ZPAQFULL ///NOSFTPSTART
-		if (flagvss)
+
+		///myprintf("DBG: flagvss %d command %c\n",int(flagvss),command);
+
+		if ((flagvss) || (command=='q') || (command=='a') || (command=='g'))
 		{
 			if (!isadmin())
 			{
 				myprintf("\n");
-				myprintf("00565: Admin rights required for VSS => runhigh()\n");
+				color_cyan();
+				myprintf("00565: Admin rights required for VSS => getting the power!\n");
+				color_restore();
 				runhigh(" -pause");
 				return 2;
 			}
@@ -57120,7 +58207,7 @@ void Jidac::scandir(bool i_checkifselected,DTMap& i_edt,string filename, bool i_
 		// Ignore links, the names "." and ".." or any unselected file
 		t=wtou(ffd.cFileName);
 		/// Ok this is rather weird, but is Microsoft afterall
-		/// a SYMLINK in a VSS can become rather tricky
+		/// a SYMLINK in a  can become rather tricky
 		/// this should (?) get the "real" name of a SYMLINK
 		/// Microsoft documentations sucks big time
 		///string solonome=extractfilename(t);
@@ -57311,7 +58398,8 @@ void Jidac::addfile(bool i_checkifselected,DTMap& i_edt,string filename, int64_t
 			return;
 	//	OK, let's handle longpath on VSS by a kludge
 	//	cook some spaghetti code!
-	if (command=='q')
+	///if (command=='q') 
+	if ((flagvss) && (!flagimage))
 		if (filename.size()>250)
 			myreplace(filename,g_franzsnap,g_vss_shadow);
 
@@ -60387,7 +61475,7 @@ int Jidac::list()
 		myprintf("\n");
 	}
 	
-///fik
+
 //	if (flagstat)
 	{
 		DTMap* dp[2]={&dt, &edt};
@@ -64427,7 +65515,7 @@ int Jidac::isopen()
 void my_handler(int s)
 {
 	g_control_c=true;	// block open new files for write
-	
+	color_restore();
 	resetconsolecolor();
 	fflush(stdout);
 	myprintf("\n\n");
@@ -64626,15 +65714,6 @@ void my_handler(int s)
 	// 2==control-C (maybe)
 	if (s==2)
 	{
-#ifdef ZPAQFULL ///NOSFTPSTART
-#ifdef _WIN32
-		if (command=='q')
-		{
-			myprintf("01290: *** VSS RUNNING, DETACHING\n");
-			vss_deleteshadows(linuxtowinpath(g_franzsnap));
-		}
-#endif // corresponds to #ifdef (#ifdef _WIN32)
-#endif ///NOSFTPEND
 		if ((!flagsilent) && (!flagnoconsole))
 		{
 			setupConsole();
@@ -64824,11 +65903,15 @@ void my_handler(int s)
 	
 	if (flagpause)
 	{
-		int thekey=0;
-		myprintf("\n57597: Press any key to continue\n");
-		while ((!iskeypressed(thekey)))
-			sleep(1);
 		myprintf("\n");
+		int thekey = 0;
+		color_cyan();
+		for (int countdown = 9; countdown >= 0 && (!iskeypressed(thekey)); countdown--) 
+		{
+			myprintf("Press any key to continue (or wait %d)\r",countdown);
+			sleep(1);
+		}
+		color_restore();
 		fflush(stdout);
 	}
 ///	  exit(0);
@@ -64886,7 +65969,11 @@ void my_handler(int s)
 			mem_all.c_str());
 				
 			if (command=='q')
-				myprintf(" on VSS operation\n");
+			{
+				color_cyan();
+				myprintf(" on C:-VSS operation\n");
+				color_restore();
+			}
 			else
 			{
 				if (!flagnotrim)
@@ -71361,6 +72448,10 @@ bool isfastcrc32(string i_filename)
 	return fileexists((forgefastcrc32(i_filename)));
 }
 
+
+
+
+
 // Add or delete files from archive. Return 1 if error else 0.
 // Note: by flagverify do a CRC32-integrity check (@zpaqfranz)
 ///zpaqfranz a z:\1 \\?\UNC\franzk\z\cb -longpath -debug
@@ -71645,9 +72736,7 @@ int Jidac::add()
 					myprintf("01874: start %03d %s\n",i,files[i].c_str());
 				if (!isdirectory(files[i]))
 					if (direxists(files[i]))
-					{
 						files[i]+="/";
-					}
 				///files[i]=get_good_filename(files[i]);
 				if (flagdebug3)
 					myprintf("01875: fixed %03d %s\n",i,files[i].c_str());
@@ -72012,24 +73101,25 @@ int Jidac::add()
 	}
 	g_scritti				=0;
 	string primalettera		="";
-	string cartellalocale	="";
 #ifdef ZPAQFULL ///NOSFTPSTART
-	if (flagvss)
+	
+	if ((flagvss) && (!flagimage))
 	{
 #if defined(_WIN32)
-
-///	command q is hardcoded. Why? Because it is so much simplier
-/// the generic switch -vss is just about abandoned
-		if (command=='q')
+			
+		std::string vssTarget;
+		if (g_myvss.isvsslinked(g_franzsnap, &vssTarget)) 
 		{
-			cartellalocale=g_franzsnap;
-			if (!flagspace)
-				if (direxists(cartellalocale))
-				{
-					myprintf("01922: abort because folder already exists %s\n",cartellalocale.c_str());
-					myprintf("01923: you need to rename/delete or try -space to bypass\n");
-					seppuku();
-				}
+			myprintf("72661! VSS link <<%Z>> does exist => %s\n",g_franzsnap.c_str(),vssTarget.c_str());
+			myprintf("72662! I am a coward, remove yourself or use another -to c:\\somewhere\n");
+
+			if (getcaptcha("risk","Should I delete the link for you (risky)?"))
+			{
+				if (!g_myvss.removevsslink(g_franzsnap))
+					return 2;
+			}
+			else
+				return 1;
 		}
 		char mydrive=0; // only ONE letter, only ONE VSS snapshot
 		// abort for something like zpaqfranz a z:\1.zpaq c:\pippo d:\pluto -vss
@@ -72051,141 +73141,94 @@ int Jidac::add()
 			else
 				mydrive=currentdrive;
 		}
-		string	fileoutput	=g_gettempdirectory()+"outputz.txt";
-		string	filebatch	=g_gettempdirectory()+"vsz.bat";
-		fileoutput			=nomefileseesistegia(fileoutput); // this will proliferate batch files, but they are tiny
-		filebatch			=nomefileseesistegia(filebatch);
+		
+		
 		print_datetime();
-		myprintf("01924: VSS: starting\n");
-		if (fileexists(fileoutput))
-			if (remove(fileoutput.c_str())!=0)
-					error("Highlander outputz.txt");
-		if (fileexists(filebatch))
-			if (remove(filebatch.c_str())!=0)
-				error("Highlander vsz.bat");
-		FILE* batch=fopen(filebatch.c_str(), "wb");
-		if (batch==NULL)
+		myprintf("01924: VSS: starting operation on <<%c>>\n",mydrive);
+		
+		///vss.getPath()
+		
+		if (g_myvss.create(mydrive)) 
 		{
-			myprintf("01925: cannot write on filebatch %s\n",filebatch.c_str());
-			exit(0);
-		}
-		fprintf(batch,"@echo OFF\n");
-		fprintf(batch,"@wmic shadowcopy delete /nointeractive\n");
-		fprintf(batch,"@wmic shadowcopy call create Volume=%c:\\\n",mydrive);
-		fprintf(batch,"@vssadmin list shadows >%s\n",fileoutput.c_str());
-		fclose(batch);
-		waitexecute(filebatch,"",SW_HIDE);
-		if (!fileexists(fileoutput))
-			error("VSS Output file KO");
-		string globalroot="";
-		char line[1024];
-		FILE* myoutput=fopen(fileoutput.c_str(), "rb");
-		if (myoutput==NULL)
-		{
-			myprintf("01926: cannot read from fileoutput %s\n",fileoutput.c_str());
-			exit(0);
-		}
-		/* note that fgets don't strip the terminating \n (or \r\n) but we do not like it  */
-		while (fgets(line, sizeof(line), myoutput))
-        	if (strstr(line,"GLOBALROOT"))
-			{
-				globalroot=line;
-				myreplaceall(globalroot,"\n","");
-				myreplaceall(globalroot,"\r","");
-				break;
-			}
-		fclose(myoutput);
-		if (flagdebug2)
-			myprintf("01927: Global root |%s|\n",globalroot.c_str());
-///	sometimes VSS is not available
-		if (globalroot=="")
-			error("VSS cannot continue. Maybe impossible to take snapshot?");
-		string volume="";
-		int posstart=globalroot.find("\\\\");
-		if (posstart>0)
-			for (unsigned i=posstart; i<globalroot.length(); ++i)
-				g_vss_shadow=g_vss_shadow+globalroot.at(i);
-		if (flagdebug2)
-			myprintf("01928: VSS VOLUME <<<%s>>>\n",g_vss_shadow.c_str());
-		myreplaceall(g_vss_shadow,"\\","/");
-		if (flagdebug2)
-			myprintf("01929: VSS SHADOW <<<%s>>>\n",g_vss_shadow.c_str());
-
-
-		if (command!='a')
-		{
-			string	filesubba	=g_gettempdirectory()+"subba.bat";
-			filesubba=nomefileseesistegia(filesubba);
 			print_datetime();
-			myprintf("01930: VSS: intermediate\n");
-			if (fileexists(filesubba))
-				if (remove(filesubba.c_str())!=0)
-						error("Highlander subba.txt");
-			string 	vss_windows_style=g_vss_shadow;
-			myreplaceall(vss_windows_style,"/","\\");
-			if (cartellalocale=="")
+			color_green();
+			myprintf("72740: SUCCESS: Snapshot created!\n");
+			color_restore();
+			if (flagverbose)
 			{
-				myprintf("01931: cartellalocale empty\n");
-				exit(0);
+				myprintf("72743: ID          : %s\n", 	g_myvss.getName());
+				myprintf("72444: Drive       : %c:\n", 	g_myvss.getDrive());
+				myprintf("72454: Path        : %s\n", 	g_myvss.getPath());
+				myprintf("72452: g_franzsnap : %s\n", 	g_franzsnap.c_str());
 			}
-			else
-				myprintf("01932: cartellalocale %s\n",cartellalocale.c_str());
-
-			FILE* subbatch=fopen(filesubba.c_str(), "wb");
-			if (subbatch==NULL)
+			
+			if (g_myvss.mklink(g_franzsnap.c_str())) 
 			{
-				myprintf("01933: cannot write filesubba %s\n",filesubba.c_str());
-				exit(0);
-			}
-
-			fprintf(subbatch,"@echo OFF\n");
-			fprintf(subbatch,"rmdir %s\n",linuxtowinpath(cartellalocale).c_str());
-			fprintf(subbatch,"mklink /d %s %s\\ \n",linuxtowinpath(cartellalocale).c_str(),vss_windows_style.c_str());
-			///fprintf(subbatch,"subst %s: %s\n",primalettera.c_str(),cartellalocale.c_str());
-			fclose(subbatch);
-			waitexecute(filesubba,"",SW_HIDE);
-			///int64_t	liberavss=getfreespace(primalettera+":");
-			int64_t	liberavss=getfreespace(cartellalocale.c_str());
-			///myprintf("01934: spazio libero vss %s\n",migliaia(liberavss));
-			if (liberavss==0)
+				print_datetime();
+				color_green();
+				myprintf("72722: SUCCESS: Symbolic link created %s\n",g_franzsnap.c_str());
+				color_restore();
+            } 
+			else 
 			{
-				///myprintf("01935: something wrong preparing %s\n",primalettera.c_str());
-				myprintf("01936! something wrong preparing %s\n",cartellalocale.c_str());
+				myprintf("72726! FAILED: Could not create symbolic link\n");
 				return 2;
 			}
-		}
-
-		if (command=='a')
+		} 
+		else 
 		{
+			myprintf("72745! FAILED: Could not create snapshot\n");
+			return 2;
+		}
+		g_vss_shadow=g_myvss.getPath();
+		if (flagverbose)
+			myprintf("01928: VSS VOLUME <<<%s>>>\n",g_vss_shadow.c_str());
+		myreplaceall(g_vss_shadow,"\\","/");
+		if (flagverbose)
+			myprintf("01929: VSS SHADOW (g_vss_shadow) <<<%s>>>\n",g_vss_shadow.c_str());
+
+  		
+  		if (command=='a')
+		{
+
+			int64_t	liberavss=getfreespace(g_franzsnap.c_str());
+			if (liberavss==0)
+			{
+				myprintf("72734! something wrong preparing %s\n",g_franzsnap.c_str());
+				return 2;
+			}
+		
 			if (flagdebug)
 				myprintf("01937: tofiles because not q\n");
 			tofiles.clear();
 			for (unsigned i=0; i<files.size(); ++i)
 				tofiles.push_back(files[i]);
 			g_replaceme=tofiles[0].substr(0,2);
+			
 			if (flagdebug3)
 				myprintf("01938: -------------- %s -------\n",g_replaceme.c_str());
+			
 			for (unsigned i=0; i<files.size(); ++i)
 			{
 				if (flagdebug3)
 					myprintf("01939: PRE  FILES %s\n",files[i].c_str());
-				myreplace(files[i],g_replaceme,g_vss_shadow);
+				myreplace(files[i],g_replaceme,g_franzsnap);
 				if (flagdebug3)
 					myprintf("01940: POST FILES %s\n",files[i].c_str());
-				if (strstr(files[i].c_str(), "GLOBALROOT")==0)
-					error("VSS fail: strange post files");
+				if (files[i].substr(0, g_franzsnap.size()) != g_franzsnap)
+					error("VSS fail2: strange post files");
 			}
-		}
+			  		}
 		else
 		{/// command q, windows c backup
 			tofiles.clear();
 			files.clear();
-			string cartellaunix=cartellalocale;
+			string cartellaunix=g_franzsnap;
 			myreplaceall(cartellaunix,"\\","/");
 			cartellaunix+="/*";
 			files.push_back(cartellaunix);
 		}
-		if (flagdebug3)
+		  if (flagdebug3)
 		{
 			for (unsigned i=0; i<files.size(); ++i)
 				myprintf("01941: files %s\n",files[i].c_str());
@@ -72194,13 +73237,16 @@ int Jidac::add()
 				myprintf("01942: TOFILESSS %s\n",tofiles[i].c_str());
 			myprintf("\n");
 		}
+		  
 #else
 		myprintf("01943: Volume Shadow Copies runs only on Windows\n");
 #endif // corresponds to #if (#if defined(_WIN32))
 		print_datetime();
-		myprintf("01944: VSS: end\n");
+		myprintf("01944: VSS: end of preparation stage\n");
+				  
 	}
 #endif ///NOSFTPEND
+
 	string ffranzotype=decodefranzoffset(g_franzotype);
 	if (flagverify)
 		ffranzotype+=" + CRC-32 by fragments";
@@ -72218,8 +73264,7 @@ int Jidac::add()
   // Set arcname, offset, header_pos, and salt to open out archive
   arcname=archive;  // output file name
   
-  
-	if (flagcomment)
+  	if (flagcomment)
 		if (versioncomment!="")
 		{
   			vector<DTMap::iterator> myfilelist;
@@ -72758,7 +73803,7 @@ int Jidac::add()
 				if (flagverbose)
 					myprintf("71417: LETTER |%s|\n",letterpath.c_str());
 				
-				if (!preparavhd("z:\\provona.vhd", lettera)) 
+				if (!preparavhd(lettera)) 
 				{
 					myprintf("78176: ERROR preparing NTFS-VHD (not administrator?)\n");
 					return 2;
@@ -74875,7 +75920,8 @@ int Jidac::add()
 			}
 			/// Fix longpath on VSS ( reference the addfile() )
 			///	hardcoded, do you like it?
-			if (command=='q')
+			///if (command=='q') 
+			if ((flagvss) && (!flagimage))
 				myreplace(filename,g_vss_shadow,g_franzsnap);
 			franzreplace(filename);
 ///			by using FRANZOFFSETV1 we need to cut down the attr during this compare
@@ -74906,20 +75952,7 @@ int Jidac::add()
 				}
 				
 				
-				if (command=='a')
-					if (flagvss)
-					{
-						if (flagdebug3)
-						{
-							myprintf("02104: pre filename     %s\n",filename.c_str());
-							myprintf("02105: pre g_franzsnap  %s\n",g_franzsnap.c_str());
-							myprintf("02106: pre g_vss_shadow %s\n",g_vss_shadow.c_str());
-						}
-						myreplace(filename,g_vss_shadow,g_franzsnap);
-						if (flagdebug)
-							myprintf("02107: sanitized vss    %s\n",filename.c_str());
-					}
-
+				
 				
 				uint32_t currentcrc32=0;
 				if (flagverify || flagcollision)
@@ -75532,7 +76565,6 @@ int Jidac::add()
 			jidacreset();
 			errors+=verify(true); //re-read, again
 		}
-		vss_deleteshadows(cartellalocale);
 	}
 	if (!flaglongpath)
 		if (!flagvss) // hard-coded kludge for long vss files
@@ -76545,7 +77577,6 @@ zfs diff -F
 void Jidac::pc_info()
 {
 #ifdef _WIN32
-	myprintf("72943: Win32\n");
 	if (iswindowsxp())
 		myprintf("72945: This seems Windows XP!\n");
 /*
@@ -76555,6 +77586,13 @@ void Jidac::pc_info()
 	provaAllocazioneAdattiva(wifemem);
 #endif
 */
+	WindowsVersionInfo mywin;
+	std::string windowsver=getwinver(mywin);
+
+	myprintf("72943: _WIN32 %s\n",windowsver.c_str());
+#ifdef _WIN64
+	myprintf("76580: _WIN64\n");
+#endif
 
 #endif // corresponds to #ifdef (#ifdef _WIN32)
 
@@ -78827,7 +79865,7 @@ int Jidac::verify(bool i_readfile)
 	}
 	for (unsigned int i=0;i<myfiles.size();i++)
 	{
-		if (flagvss)
+		if ((flagvss) && (!flagimage))
 		{
 			if (flagdebug3)
 			{
@@ -80256,7 +81294,11 @@ int Jidac::windowsc()
 		return 2;
 	}
 	if (files.size()!=0)
-		myprintf("02537: files ignored (try to copy all C:)\n");
+	{	
+		color_cyan();
+		myprintf("02537: Files ignored to shrink archive size\n");
+		color_restore();
+	}
 	if (!isadmin())
 	{
 		myprintf("\n");
@@ -80305,7 +81347,9 @@ int Jidac::windowsc()
 	notfiles.push_back(g_franzsnap+"/swapfile.sys");
 	notfiles.push_back(g_franzsnap+"/System Volume Information/*");
 	notfiles.push_back("*/AppData/Local/Microsoft/WindowsApps/*");	// no full reparse point, yet
+	color_yellow();
 	myprintf("02546: Excluding ALWAYS pagefile.sys, swapfile.sys, System Volume Information, WindowsApps\n");
+	color_restore();
 	if (all)
 	{
 		flagforcewindows=true;
@@ -80320,8 +81364,10 @@ int Jidac::windowsc()
 			notfiles.push_back(g_franzsnap+"/ProgramData/Microsoft/Windows Defender/");
 			notfiles.push_back(g_franzsnap+"/ProgramData/Microsoft/Search/");
 			notfiles.push_back(g_franzsnap+"/ProgramData/Package Cache/");
+			color_yellow();
 			myprintf("02547: Excluding        %%programfiles%% and x86, programdata/microsoft/windows defender, programdata/microsoft/search\n");
 			myprintf("02548: Excluding        programdata/package cache (because -frugal)\n");
+			color_restore();
 		}
 		if (!flagforcewindows)
 		{
@@ -80333,7 +81379,9 @@ int Jidac::windowsc()
 			if (flagdebug)
 				myprintf("02549: TEMP |%s|\n",tempdir.c_str());
 			notfiles.push_back(tempdir);
+			color_yellow();
 			myprintf("02550: Excluding        C:\\WINDOWS, TEMP, RECYCLE.BIN, ADS and .zfs bypass with -forcewindows\n");
+			color_restore();
 		}
 	}
 	flagvss=true;
@@ -84831,7 +85879,7 @@ endblock:;
 					if (!flagvss)
 						if (!flagstdout)
 							if (!flagterse)
-							myprintf("02993$ Long filenames (>255)  %9s *** WARNING *** (suggest -longpath or -fix255 or -flat)\n",migliaia(toolongfilenames));
+								myprintf("02993$ Long filenames (>255)  %9s *** WARNING *** (suggest -longpath or -fix255 or -flat)\n",migliaia(toolongfilenames));
 #else
 			if (!flagtest)
 				if (!flagstdout)
@@ -92163,6 +93211,13 @@ int Jidac::work()
 		return 2;
 	}
 
+#ifdef _WIN32
+	if (mycommand=="vss")
+	{
+		vssmenu();
+		return 0;
+	}
+#endif
 
 	
 #endif ///NOSFTPEND
@@ -93127,7 +94182,24 @@ int Jidac::extract()
 	{
 		if (dt.size()!=2)
 		{
-			myprintf("93263! with -vhd we expect EXACTLY two files\n");
+			myprintf("93263! with -vhd we expect EXACTLY 2 files but %s founded (-force to overrule)\n",migliaia(dt.size()));
+			
+			
+			if (flagverbose)
+			{
+				int count=0;
+				for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p)
+				{
+					myprintf("File %08d %s\n",++count,p->first.c_str());
+				}
+			}
+			if (flagforce)
+			{
+				color_yellow();
+				myprintf("94337: Running anyway, because -force\n");
+				color_restore();
+			}
+			else
 			return 2;
 		}
 		for (DTMap::iterator p=dt.begin(); p!=dt.end(); ++p)
@@ -94708,7 +95780,7 @@ bool Jidac::is_incomplete_trans(const char* arc)
 
           // Bad JIDAC block
           else if (pass!=LIST_RECOVER) {
-            ///printf( "Bad JIDAC block ignored: %s %s\n",filename.s.c_str(), comment.s.c_str());
+            ///myprintf( "Bad JIDAC block ignored: %s %s\n",filename.s.c_str(), comment.s.c_str());
             ++errors;
           }
         }
@@ -104696,3 +105768,677 @@ int Jidac::ssh_dohasha(std::string i_algo)
 }		
 #endif
 #endif ///NOSFTPEND
+
+
+
+
+
+#ifdef _WIN32
+std::string dwToString(DWORD value) 
+{
+    char buffer[32];  // Buffer sufficiente per DWORD (fino a 10 cifre + null)
+    snprintf(buffer, sizeof(buffer),"%lu", value);  // %lu per unsigned long (DWORD è unsigned long)
+    return std::string(buffer);
+}
+
+WindowsVersionInfo getWindowsVersion() 
+{
+    WindowsVersionInfo info = { "", 0, 0, 0, "", 0 };  // Inizializzazione esplicita per compatibilità
+
+    // ntdll.dll è sempre caricato, usa GetModuleHandle invece di LoadLibrary
+    HMODULE hNtdll = GetModuleHandleA("ntdll.dll");
+    if (!hNtdll) {
+        myprintf("04736! Cannot load ntdll.dll\n");
+		return info;
+    }
+    
+    pRtlGetVersion RtlGetVersion = 
+        (pRtlGetVersion)GetProcAddress(hNtdll, "RtlGetVersion");  // Cast C-style per massima compatibilità
+    if (!RtlGetVersion) {
+        myprintf("04728! Cannot RtlGetVersion\n");
+		return info;
+    }
+    
+    RTL_OSVERSIONINFOW osvi;// {0};  // Inizializzazione zero
+	memset(&osvi,0,sizeof(osvi));
+    osvi.dwOSVersionInfoSize = sizeof(RTL_OSVERSIONINFOW);
+    
+    NTSTATUS status = RtlGetVersion(&osvi);
+    if (status != 0) {  // STATUS_SUCCESS = 0
+        myprintf("04752! RtlGetVersion status not good\n");
+		return info;
+    }
+    
+    // Popola i campi
+    info.majorVersion = osvi.dwMajorVersion;
+    info.minorVersion = osvi.dwMinorVersion;
+    info.buildNumber = osvi.dwBuildNumber;
+    info.success = 1;
+    
+    // Determina il nome della versione
+    if (osvi.dwMajorVersion == 10) {
+        if (osvi.dwBuildNumber >= 22000) {
+            info.name = "Windows 11";
+            // Determina la versione specifica di Windows 11
+            if (osvi.dwBuildNumber >= 22631) {
+                info.displayVersion = "23H2";
+            } else if (osvi.dwBuildNumber >= 22621) {
+                info.displayVersion = "22H2";
+            } else {
+                info.displayVersion = "21H2";
+            }
+        } else {
+            info.name = "Windows 10";
+            // Puoi aggiungere logica simile per Windows 10 (es. build-based)
+        }
+    } else if (osvi.dwMajorVersion == 6) {
+        switch (osvi.dwMinorVersion) {
+            case 1: info.name = "Windows 7"; break;
+            case 2: info.name = "Windows 8"; break;
+            case 3: info.name = "Windows 8.1"; break;
+            default: info.name = "Unknown Windows 6.x"; break;
+        }
+    } else {
+        info.name = "Unknown Windows";
+    }
+    
+    return info;
+}
+
+std::string Jidac::getwinver(WindowsVersionInfo& o_myver) 
+{
+    o_myver= getWindowsVersion();
+    if (o_myver.success != 1) 
+        return "Unable to detect Windows version";
+    
+    std::string result = o_myver.name;
+    result += " (Build " + dwToString(o_myver.buildNumber) + ")";
+    if (!o_myver.displayVersion.empty()) 
+	    result += " " + o_myver.displayVersion;
+    return result;
+}
+
+
+void printMenu() 
+{
+    myprintf("\n");
+    printbar('=');
+	color_cyan();
+	myprintf("   franzVSS manager\n");
+	color_restore();
+	printbar('=');
+	myprintf("1. Create VSS Snapshot\n");
+    myprintf("2. Delete Current Snapshot\n");
+    myprintf("3. List All VSS Snapshots\n");
+    myprintf("4. Delete All VSS Snapshots\n");
+    myprintf("5. Create Symbolic Link (mklink)\n");
+    myprintf("6. Show Current Snapshot Info\n");
+    myprintf("7. Full Test (Create + Link + Info)\n");
+    myprintf("8. Stress Test (Multiple Create/Delete)\n");
+	myprintf("9. Create Locked Test File\n");
+    myprintf("0. Exit\n");
+    printbar('=');
+    myprintf("Choice: ");
+}
+
+
+std::string getstring(std::string i_default) {
+    std::string buffer = i_default;
+    size_t cursor_pos = buffer.length(); // Cursore alla fine
+    
+    printf("%s", buffer.c_str());
+    fflush(stdout);
+    
+    while (true) {
+        int ch = _getch();
+        
+        // Gestione tasti speciali (iniziano con 0 o 224)
+        if (ch == 0 || ch == 224) {
+            ch = _getch(); // Leggi il secondo byte
+            
+            switch (ch) {
+                case 75: // Freccia sinistra
+                    if (cursor_pos > 0) {
+                        cursor_pos--;
+                        printf("\b");
+                        fflush(stdout);
+                    }
+                    break;
+                    
+                case 77: // Freccia destra
+                    if (cursor_pos < buffer.length()) {
+                        printf("%c", buffer[cursor_pos]);
+                        fflush(stdout);
+                        cursor_pos++;
+                    }
+                    break;
+                    
+                case 83: // Canc (Delete)
+                    if (cursor_pos < buffer.length()) {
+                        buffer.erase(cursor_pos, 1);
+                        // Ridisegna dalla posizione corrente
+                        printf("%s \b", buffer.substr(cursor_pos).c_str());
+                        // Riposiziona cursore
+                        for (size_t i = cursor_pos; i < buffer.length(); i++) {
+                            printf("\b");
+                        }
+                        fflush(stdout);
+                    }
+                    break;
+                    
+                case 71: // Home
+                    // Torna indietro fino all'inizio
+                    while (cursor_pos > 0) {
+                        printf("\b");
+                        cursor_pos--;
+                    }
+                    fflush(stdout);
+                    break;
+                    
+                case 79: // End
+                    // Vai avanti fino alla fine
+                    while (cursor_pos < buffer.length()) {
+                        printf("%c", buffer[cursor_pos]);
+                        cursor_pos++;
+                    }
+                    fflush(stdout);
+                    break;
+            }
+        }
+        // Invio
+        else if (ch == 13) {
+            printf("\n");
+            fflush(stdout);
+            return buffer;
+        }
+        // Backspace
+        else if (ch == 8) {
+            if (cursor_pos > 0) {
+                buffer.erase(cursor_pos - 1, 1);
+                cursor_pos--;
+                printf("\b");
+                // Ridisegna dalla posizione corrente
+                printf("%s ", buffer.substr(cursor_pos).c_str());
+                // Riposiziona cursore
+                for (size_t i = cursor_pos; i <= buffer.length(); i++) {
+                    printf("\b");
+                }
+                fflush(stdout);
+            }
+        }
+        // ESC - cancella tutto
+        else if (ch == 27) {
+            // Torna all'inizio
+            while (cursor_pos > 0) {
+                printf("\b");
+                cursor_pos--;
+            }
+            // Cancella tutto
+            for (size_t i = 0; i < buffer.length(); i++) {
+                printf(" ");
+            }
+            for (size_t i = 0; i < buffer.length(); i++) {
+                printf("\b");
+            }
+            fflush(stdout);
+            buffer.clear();
+            cursor_pos = 0;
+        }
+        // Carattere stampabile
+        else if (ch >= 32 && ch <= 126) {
+            buffer.insert(cursor_pos, 1, (char)ch);
+            // Stampa il carattere e il resto della stringa
+            printf("%s", buffer.substr(cursor_pos).c_str());
+            cursor_pos++;
+            // Riposiziona cursore
+            for (size_t i = cursor_pos; i < buffer.length(); i++) {
+                printf("\b");
+            }
+            fflush(stdout);
+        }
+    }
+}
+
+
+void testCreateLockedFile() 
+{
+    char testPath[MAX_PATH] = "./VSS_LOCK_TEST.bin";
+    const DWORD fileSizeMB = 50;
+    myprintf("\n");
+    printbar('=');
+    myprintf("   CREATE LOCKED TEST FILE\n");
+    printbar('=');
+    color_cyan();
+    myprintf("Default file path: %s\n", testPath);
+    color_restore();
+    myprintf("Press ENTER to accept, or type a new path: ");
+
+	std::string input=getstring("");
+	
+	if (!input.empty()) {  // Corretto: se NON vuoto, sovrascrivi con input
+        // Copia sicura: limita a sizeof(testPath)-1 e forza \0
+        strncpy(testPath, input.c_str(), sizeof(testPath) - 1);  // Usa c_str() per const char*
+        testPath[sizeof(testPath) - 1] = '\0';
+        myprintf("Path aggiornato: %s\n", testPath);  // Opzionale: conferma
+    } else {
+        // Input vuoto: mantieni default (già fatto)
+        myprintf("Path mantenuto: %s\n", testPath);  // Opzionale: conferma
+    }
+		
+	
+    myprintf("\nCreating locked test file: %s (%s)\n", testPath, tohuman(fileSizeMB));
+    
+    HANDLE hFile = CreateFileA(
+        testPath,
+        GENERIC_WRITE,
+        0,              // share mode = 0 → NESSUNA lettura/scrittura da altri processi
+        NULL,
+        CREATE_ALWAYS,
+        FILE_ATTRIBUTE_NORMAL,
+        NULL
+    );
+    
+    if (hFile == INVALID_HANDLE_VALUE) 
+    {
+        color_red();
+        myprintf("FAILED: Could not create or lock file (error %s)\n", migliaia(GetLastError()));
+        color_restore();
+        return;
+    }
+    
+    // Scrive dati casuali + calcola hash
+    myprintf("Writing random data...");
+    const DWORD bufferSize = 1024 * 1024; // 1 MB
+    BYTE* buffer = new BYTE[bufferSize];
+    
+    for (DWORD i = 0; i < bufferSize; i++) 
+        buffer[i] = (BYTE)(rand() % 256);
+    
+    libzpaq::SHA256 sha256;
+    
+    for (DWORD i = 0; i < fileSizeMB; ++i) 
+    {
+        DWORD written = 0;
+        if (!WriteFile(hFile, buffer, bufferSize, &written, NULL)) {
+            color_red();
+            myprintf("\nFAILED: Write error at MB %lu (error %s)\n", i, migliaia(GetLastError()));
+            color_restore();
+            delete[] buffer;
+            CloseHandle(hFile);
+            return;
+        }
+        sha256.write((const char*)buffer, written);
+    }
+    
+    delete[] buffer;
+    
+    unsigned char hashBin[32];
+    memcpy(hashBin, sha256.result(), 32);
+    std::string hashHex = binarytohex(hashBin, 32);
+    
+    myprintf(" done\n");
+    color_green();
+    myprintf("SHA256: %s\n", hashHex.c_str());
+    color_restore();
+    
+    color_yellow();
+    myprintf("\nThe file is now OPEN and LOCKED exclusively.\n");
+    myprintf("You CANNOT copy or open it with normal tools (Explorer, copy, etc.)\n");
+    myprintf("Try to back it up now using 'zpaqfranz a -vss (in another shell)'\n");
+    color_restore();
+    
+    myprintf("\nPress any key to release the lock and close the file...\n");
+    
+    while (!_kbhit()) {
+        Sleep(200);
+    }
+    _getch(); // consume key
+    
+    CloseHandle(hFile);
+    
+    color_green();
+    myprintf("File closed and unlocked.\n");
+    color_restore();
+    printbar('=');
+}
+
+void showCurrentInfo(const franzVSS& vss) 
+{
+    myprintf("\n--- Current Snapshot Info ---\n");
+    if (strlen(vss.getName()) == 0) 
+	{
+		color_yellow();
+        myprintf("No active snapshot\n");
+		
+    } 
+	else 
+	{
+		color_green();
+        myprintf("ID:     %s\n", vss.getName());
+        myprintf("Drive:  %c:\n", vss.getDrive());
+        myprintf("Path:   %s\n", vss.getPath());
+    }
+	color_restore();
+		
+	printbar('-');
+}
+
+void testCreate(franzVSS& vss) 
+{
+    char drive;
+    myprintf("\nEnter drive letter (e.g., C): ");
+    if (scanf(" %c", &drive) != 1) 
+	{
+        myprintf("Invalid input\n");
+        return;
+    }
+    
+    myprintf("\nCreating VSS snapshot for %c:...\n", toupper(drive));
+    if (vss.create(drive)) 
+	{
+		color_green();
+        myprintf("SUCCESS: Snapshot created!\n");
+		color_restore();
+        showCurrentInfo(vss);
+    } else 
+	{
+		color_red();
+        myprintf("FAILED: Could not create snapshot\n");
+		color_restore();
+    }
+}
+
+void testDelete(franzVSS& vss) 
+{
+    if (strlen(vss.getName()) == 0) 
+	{
+		color_yellow();
+        myprintf("\nNo active snapshot to delete\n");
+		color_restore();
+        return;
+    }
+    
+    printf("\nDeleting snapshot '%s'...\n", vss.getName());
+    if (strlen(vss.getSymlinkPath()) > 0) 
+	{
+        myprintf("Removing symlink: %s\n", vss.getSymlinkPath());
+        vss.unlinkSnapshot();
+    }
+    
+    if (vss.deleteSnapshot()) 
+	{
+		color_green();
+        myprintf("SUCCESS: Snapshot deleted!\n");
+		
+    } else 
+	{
+		color_red();
+        myprintf("FAILED: Could not delete snapshot\n");
+    }
+	color_restore();
+		
+}
+
+void testList(franzVSS& vss) 
+{
+	color_cyan();
+    myprintf("\nListing all VSS snapshots...\n");
+	color_restore();
+    vss.listVSS();
+}
+
+void testDeleteAll(franzVSS& vss) 
+{
+	color_yellow();
+    myprintf("\nWARNING: This will delete ALL VSS snapshots!\n");
+    myprintf("Are you sure? (y/n): ");
+	color_restore();
+    char confirm;
+    if (scanf(" %c", &confirm) != 1) 
+	{
+        myprintf("Invalid input\n");
+        return;
+    }
+    
+    if (confirm == 'y' || confirm == 'Y') 
+	{
+        myprintf("\nDeleting all snapshots...\n");
+        if (vss.deleteAllVSS()) 
+		{
+			color_green();
+            myprintf("SUCCESS: All snapshots deleted!\n");
+        } 
+		else 
+		{
+			color_red();
+            myprintf("FAILED: Could not delete all snapshots\n");
+        }
+	} 
+	else 
+	{
+		color_red();
+        myprintf("Cancelled.\n");
+    }
+	color_restore();
+}
+
+void testMklink(franzVSS& vss) 
+{
+    if (strlen(vss.getName()) == 0) 
+	{
+		color_yellow();
+        myprintf("\nNo active snapshot. Create one first!\n");
+		color_restore();
+        return;
+    }
+    char folder[MAX_PATH];
+    myprintf("\nEnter local folder path for symlink (e.g., C:\\VSS_LINK): ");
+    if (scanf(" %[^\n]", folder) != 1) 
+	{
+        myprintf("Invalid input\n");
+        return;
+    }
+    
+    myprintf("\nCreating symbolic link to: %s\n", folder);
+    if (vss.mklink(folder)) 
+	{
+        myprintf("SUCCESS: Symbolic link created!\n");
+        myprintf("\nYou can now access the snapshot at: %s\n", folder);
+        myprintf("Example: dir %s\\Windows\\System32\n", folder);
+    } 
+	else 
+	{
+        myprintf("FAILED: Could not create symbolic link\n");
+    }
+	
+}
+
+void testFull(franzVSS& vss) 
+{
+    myprintf("\n");
+	printbar('=');
+	myprintf("   FULL TEST SEQUENCE\n");
+    printbar('=');
+	
+    myprintf("\n[1/4] Creating snapshot for C:...\n");
+    if (!vss.create('C')) 
+	{
+        myprintf("FAILED at creation step\n");
+        return;
+    }
+    myprintf("SUCCESS!\n");
+    
+    myprintf("\n[2/4] Snapshot Info:\n");
+    showCurrentInfo(vss);
+    
+    myprintf("\n[3/4] Creating symbolic link to C:\\FRANZ_VSS_TEST...\n");
+    if (!vss.mklink("C:\\FRANZ_VSS_TEST")) 
+	{
+        myprintf("FAILED at mklink step\n");
+    } 
+	else 
+	{
+        myprintf("SUCCESS!\n");
+        myprintf("\nTest the link with: dir C:\\FRANZ_VSS_TEST\n");
+    }
+    
+    myprintf("\n[4/4] Press ENTER to cleanup and delete snapshot...");
+    // Clear input buffer
+    int c;
+    while ((c = getchar()) != '\n' && c != EOF);
+    getchar();
+    
+    if (vss.deleteSnapshot()) 
+	    myprintf("Snapshot deleted successfully\n");
+    
+    myprintf("\n");
+    printbar('=');
+    myprintf("   FULL TEST COMPLETE\n");
+    printbar('=');
+}
+
+void testStress(franzVSS& vss) 
+{
+	myprintf("\n");
+    printbar('=');
+	myprintf("   STRESS TEST\n");
+    printbar('=');
+	
+    int cycles;
+    myprintf("Enter number of create/delete cycles: ");
+    if (scanf("%d", &cycles) != 1 || cycles <= 0) 
+	{
+        myprintf("Invalid input\n");
+        return;
+    }
+    
+    int successCount = 0;
+    int failCount = 0;
+    
+    for (int i = 0; i < cycles; i++) 
+	{
+        myprintf("\n--- Cycle %d/%d ---\n", i+1, cycles);
+        
+        // Create
+        myprintf("Creating snapshot (of C)...");
+        if (vss.create('C')) 
+		{
+            myprintf(" OK\n");
+            Sleep(500);
+            
+            // Delete
+            myprintf("Deleting snapshot...");
+            if (vss.deleteSnapshot()) 
+			{
+				color_green();
+                printf(" OK\n");
+				color_restore();
+                successCount++;
+            } 
+			else 
+			{
+				color_red();
+                myprintf(" FAILED\n");
+				color_restore();
+				failCount++;
+            }
+        } 
+		else 
+		{
+			color_red();
+            myprintf(" FAILED\n");
+			color_restore();
+            failCount++;
+        }
+        
+        Sleep(200);
+    }
+    
+    myprintf("\n");
+	printbar('=');
+	myprintf("   STRESS TEST RESULTS\n");
+    printbar('=');
+	myprintf("Total Cycles:    %d\n", cycles);
+    myprintf("Successful:      %d\n", successCount);
+    myprintf("Failed:          %d\n", failCount);
+    myprintf("Success Rate:    %.1f%%\n", (successCount * 100.0) / cycles);
+    printbar('=');
+}
+
+
+void Jidac::vssmenu()
+{
+	if (!isadmin())
+	{
+		myprintf("\n");
+		myprintf("06451! you need admin rights, quit\n");
+		return;
+	}
+
+    franzVSS vss;
+    
+    int choice;
+    bool running = true;
+    
+    while (running) 
+	{
+        printMenu();
+        
+        if (scanf("%d", &choice) != 1) 
+		{
+            // Clear input buffer
+            int c;
+            while ((c = getchar()) != '\n' && c != EOF);
+            myprintf("\nInvalid input! Please enter a number.\n");
+            continue;
+        }
+        
+        switch (choice) {
+            case 1:
+                testCreate(vss);
+                break;
+                
+            case 2:
+                testDelete(vss);
+                break;
+                
+            case 3:
+                testList(vss);
+                break;
+                
+            case 4:
+                testDeleteAll(vss);
+                break;
+                
+            case 5:
+                testMklink(vss);
+                break;
+                
+            case 6:
+                showCurrentInfo(vss);
+                break;
+                
+            case 7:
+                testFull(vss);
+                break;
+                
+            case 8:
+                testStress(vss);
+                break;
+			case 9:
+				testCreateLockedFile();
+			break;
+                
+            case 0:
+                myprintf("\nExiting...\n");
+                running = false;
+                break;
+                
+            default:
+                myprintf("\nInvalid choice! Please try again.\n");
+        }
+    }
+    
+    myprintf("\nCleaning up...\n");  
+}
+#endif

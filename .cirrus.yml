@@ -11,7 +11,7 @@ freebsd14_task:
   name: Build on FreeBSD
   only_if: changesInclude('zpaqfranz.cpp')
   freebsd_instance:
-    image_family: freebsd-14-2
+    image_family: freebsd-14-3
   install_script:
     - pkg install -y llvm
   compile_script:
@@ -329,4 +329,5 @@ debian_alignmalloc:
       path: build_report.txt
     executable_artifacts:
       path: zpaqfranz
+
 

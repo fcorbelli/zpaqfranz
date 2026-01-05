@@ -59,8 +59,8 @@ OTHER DEALINGS IN THE SOFTWARE.
 #define ZPAQFULL ///NOSFTPSTART
 ///NOSFTPEND
 
-#define ZPAQ_VERSION "64.1i"
-#define ZPAQ_DATE "(2026-01-04)"
+#define ZPAQ_VERSION "64.2a"
+#define ZPAQ_DATE "(2026-01-05)"
 
 
 
@@ -4701,6 +4701,7 @@ std::string g_archive;
 std::string g_indexname;
 std::string g_externalname;
 std::string g_input;
+std::string g_exclude;
 std::string g_destination;
 std::string g_csvstring;
 std::string g_csvhf;
@@ -4827,6 +4828,7 @@ bool flagdonotforcexls;
 bool flagfilelist;
 bool flagexternal;
 bool flaginput;
+bool flagexclude;
 bool flagdestination;
 bool flagads;
 bool flagfast;
@@ -46225,7 +46227,7 @@ bool franzimager::scriverawfilechunk(const char *i_data, size_t i_size)
 							if (etahours > 99)
 								etahours= 99;
 
-							myprintf("Writing zeros: %12s / %s (%5.1f%%) ETA %02d:%02d:%02d @ %12s/s\r",
+							myprintf("Writing zeros: %12s / %s (%5.1f%%) ETA %02d:%02d:%02d @ %12s/s  \r",
 									 tohuman(m_rawfilestate.currentpos),
 									 tohuman2(blockposition),
 									 progress,
@@ -48461,6 +48463,11 @@ struct franzdriveinfo
 };
 #endif
 
+#ifdef _WIN32
+// Enum per distinguere il tipo di immagine
+enum class ImageType { NTFS, RAW };
+#endif
+
 // Do everything.
 // Very weird approach, this is about plain-old C, almost zero ++
 class Jidac
@@ -48486,6 +48493,7 @@ class Jidac
 	int extracttobuffer(const std::string &filename, std::vector<uint8_t> &out_buffer);
 #endif
 	char take_letter_from_filename(char i_sourceletter);
+	bool get_letters_from_dt(vector<char>& o_fhd,vector<char>& o_raw);
 
 	void jidacreset();
 
@@ -48920,7 +48928,22 @@ class Jidac
 
 	bool chiudivhd();
 
+	bool 		extract_ntfs_meta(char source);
+	void		prepare_extract_to_disk(const string& image_filename);
 	int			restoreimage();
+	int 		restore_ntfs_to_disk(char i_source,char i_destination);
+	int 		restore_raw_to_disk(char i_source,char i_destination);
+	int 		restore_ntfs_to_rawfile(char i_source,string i_destfile);
+	int 		restore_raw_to_rawfile(char i_source,string i_destfile);
+	int 		restore_ntfs_to_vhd(char i_source,string i_destfile);
+	int 		get_images_filenames(vector<char>& i_avail_fhd,vector<char>& i_avail_raw);
+	bool 		image_risky_continue(char i_source,char i_destination);
+
+	char 		find_and_validate_source_letter(char source, ImageType type,
+                                             vector<char>& avail_fhd,
+                                             vector<char>& avail_raw);
+
+
 	int			NTFSEnumerateFiles(string i_path, DTMap &i_edt, bool i_checkifselected);
 	int			drive();
 	std::string enumerate_physical_disks(bool i_output, int i_chosendrive, std::vector<franzdriveinfo> &drives);
@@ -57165,6 +57188,7 @@ string help_a(bool i_usage, bool i_example)
 		scrivi_riga("-external X", "Run X before add (replace %files or $files)");
 		scrivi_riga("-touch X", "Change every filedate to be stored to X");
 		scrivi_riga("-input X", "Load the X file as files to be added");
+		scrivi_riga("-exclude X", "Load the X file as notfiles");
 		scrivi_riga("-destination X ", "Load the X file as -to");
 		scrivi_riga("-errorlog X", "Write the errors on the X file");
 		scrivi_riga("-ht", "Enable HyperThread (if any)");
@@ -58534,18 +58558,25 @@ string help_image(bool i_usage, bool i_example)
 {
 	if (i_usage)
 	{
-		if (i_usage)
-		{
-			scrivi_riga("CMD image", "Restore zpaqfranz's images (RISKY)");
-		}
-	}
+		scrivi_riga("CMD image", "Restore/export zpaqfranz images (RISKY: can overwrite drives; use with caution)");
+        scrivi_riga("-image", "Enable physical write (otherwise output to file)");
+		scrivi_riga("-ntfs",  "Handle NTFS filesystem / thin (sparse/optimized) images");
+        scrivi_riga("-raw",   "Raw sector-by-sector mode (bypasses filesystem)");
+        scrivi_riga("-space",   "Do not check if destination partition is empty");
+        scrivi_riga("Note",   ".vhd files can be mounted (OSFMount,FTKImager) and opened w/7-Zip for extraction");
+    }
 	if (i_usage && i_example)
 		scrivi_examples();
 	if (i_example)
 	{
-		scrivi_esempio("Write NTFS f: to i:", "image z:\\partf.raw f: -to i:");
+        scrivi_esempio("Restore NTFS from f: to physical i:", "image i1.zpaq f: -to i: -image -ntfs");
+        scrivi_esempio("Restore raw  from f: to physical f:", "image i3.zpaq f: -to f: -image -raw");
+        scrivi_esempio("Export  NTFS from g: to file 1.raw",  "image i2.zpaq g: -to d:\\1.raw -ntfs -raw");
+        scrivi_esempio("Export  raw  from f: to file 2.raw",  "image i4.zpaq f: -to d:\\2.raw -raw");
+        scrivi_esempio("Create  VHD  file from f:",  "image i5.zpaq f: -to d:\\3.vhd -ntfs");
+
 	}
-	return ("Restore zpaqfranz images");
+	return ("Restore/export zpaqfranz images");
 }
 string help_drive(bool i_usage, bool i_example)
 {
@@ -61439,6 +61470,10 @@ int Jidac::loadparameters(int argc, const char** argv)
 		{
 			flaginput=true;
 		}
+		else if (cli_getstring	(opt,"-exclude",		false,	"",								argc,argv,&i,"",				&g_exclude))
+		{
+			flagexclude=true;
+		}
 		else if (cli_getstring	(opt,"-destination",		false,	"",								argc,argv,&i,"",				&g_destination))
 		{
 			flagdestination=true;
@@ -61729,6 +61764,8 @@ int Jidac::loadparameters(int argc, const char** argv)
 	archive=format_datetime(archive);
 	for (unsigned int i=0;i<files.size();i++)
 		files[i]=format_datetime(files[i]);
+	for (unsigned int i=0;i<tofiles.size();i++)
+		tofiles[i]=format_datetime(tofiles[i]);
 	versioncomment=format_datetime(versioncomment);
 
 // Load dynamic functions in Windows Vista and later
@@ -61916,6 +61953,31 @@ int Jidac::doCommand()
 		}
 		else
 			myprintf("00587: -input file DOES NOT EXISTS! %s\n",g_input.c_str());
+	}
+	
+	if (flagexclude)
+	{
+		if (fileexists(g_exclude))
+		{
+			vector<string> excludefiles;
+			readfiletoarray(g_exclude,excludefiles);
+			if (!do_not_print_headers())
+				if (flagdebug)
+					myprintf("00585: excludefiles count  %s\n",migliaia(excludefiles.size()));
+			if (excludefiles.size()>0)
+				for (unsigned int i=0;i<excludefiles.size();i++)
+				{
+					string temp=excludefiles[i];
+#ifdef _WIN32
+					temp=wintolinuxpath(temp);
+#endif // corresponds to #ifdef (#ifdef _WIN32)
+					notfiles.push_back(temp);
+					if (flagdebug3)
+						myprintf("00586: excludefiles %08d %s\n",i,temp.c_str());
+				}
+		}
+		else
+			myprintf("00587: -exclude file DOES NOT EXISTS! %s\n",g_exclude.c_str());
 	}
 
 	if (flagdestination)
@@ -78470,7 +78532,7 @@ int Jidac::cercapartizione(char i_lettera, franzdriveinfo &o_drive)
 		for (unsigned int j= 0; j < drives[i].partitions.size(); j++)
 			if (toupper((drives[i].partitions[j].lettera)) == i_lettera)
 			{
-				myprintf("%d %d %s\n", j, drives[i].partitions.size(), drives[i].serial.c_str());
+				///myprintf("%d %d %s\n", j, drives[i].partitions.size(), drives[i].serial.c_str());
 				o_drive= drives[i];
 				return j+1;
 			}
@@ -105445,6 +105507,140 @@ int Jidac::oneononehome()
 #ifdef _WIN32
 
 
+// Funzione helper: cerca se un carattere è presente nel vettore
+static bool vector_contains(const std::vector<char>& vec, char ch)
+{
+    for (size_t i = 0; i < vec.size(); i++) {
+        if (vec[i] == ch) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Funzione helper: aggiunge un carattere al vettore solo se non già presente
+static void vector_add_unique(std::vector<char>& vec, char ch)
+{
+    if (!vector_contains(vec, ch)) {
+        vec.push_back(ch);
+    }
+}
+
+bool Jidac::get_letters_from_dt(std::vector<char>& o_fhd, std::vector<char>& o_raw)
+{
+    o_fhd.clear();
+    o_raw.clear();
+    
+    // Vettori per tracciare le lettere trovate per ogni tipo di estensione
+    std::vector<char> letters_raw;
+    std::vector<char> letters_fhd;
+    std::vector<char> letters_footer;
+    std::vector<char> letters_header;
+    std::vector<char> letters_meta;
+    
+    for (DTMap::iterator p = dt.begin(); p != dt.end(); ++p) 
+    {
+        std::string fileinlavoro = p->first;
+		
+        
+        // Estrai solo il nome del file (senza path)
+        size_t last_slash = fileinlavoro.find_last_of("/\\");
+        std::string filename;
+        if (last_slash != std::string::npos) {
+            filename = fileinlavoro.substr(last_slash + 1);
+        } else {
+            filename = fileinlavoro;
+        }
+
+		if (flagdebug)
+			myprintf("05421: filename %s\n",filename.c_str());
+        
+		///printf("Filename %s\n",filename.c_str());
+        // Cerca il pattern: qualcosa_X.estensione
+        // dove X è una singola lettera
+        size_t underscore_pos = filename.find_last_of('_');
+        size_t dot_pos = filename.find_last_of('.');
+        
+        if (underscore_pos != std::string::npos && 
+            dot_pos != std::string::npos && 
+            dot_pos > underscore_pos &&
+            dot_pos - underscore_pos == 2)  // esattamente una lettera tra _ e .
+        {
+            char letter = filename[underscore_pos + 1];
+            std::string extension = filename.substr(dot_pos + 1);
+            if (flagdebug)
+				printf("extension |%s|\n",extension.c_str());
+            if (extension == "raw") {
+                vector_add_unique(letters_raw, letter);
+            }
+            else if (extension == "fhd") {
+                vector_add_unique(letters_fhd, letter);
+            }
+            else if (extension == "footer") {
+                vector_add_unique(letters_footer, letter);
+            }
+            else if (extension == "header") {
+                vector_add_unique(letters_header, letter);
+            }
+            else if (extension == "meta") {
+                vector_add_unique(letters_meta, letter);
+            }
+        }
+    }
+    
+    // Aggiungi le lettere .raw al vettore di output
+    for (size_t i = 0; i < letters_raw.size(); i++) {
+        o_raw.push_back(letters_raw[i]);
+    }
+	
+    // Raccogli tutte le lettere candidate per i quartetti (senza duplicati)
+    std::vector<char> all_quartet_letters;
+    
+    for (size_t i = 0; i < letters_fhd.size(); i++) {
+        vector_add_unique(all_quartet_letters, letters_fhd[i]);
+    }
+    for (size_t i = 0; i < letters_footer.size(); i++) {
+        vector_add_unique(all_quartet_letters, letters_footer[i]);
+    }
+    for (size_t i = 0; i < letters_header.size(); i++) {
+        vector_add_unique(all_quartet_letters, letters_header[i]);
+    }
+    for (size_t i = 0; i < letters_meta.size(); i++) {
+        vector_add_unique(all_quartet_letters, letters_meta[i]);
+    }
+    
+    // Verifica che ogni lettera abbia tutti e 4 i file
+    for (size_t i = 0; i < all_quartet_letters.size(); i++)
+    {
+        char letter = all_quartet_letters[i];
+        
+        bool has_fhd    = vector_contains(letters_fhd, letter);
+        bool has_footer = vector_contains(letters_footer, letter);
+        bool has_header = vector_contains(letters_header, letter);
+        bool has_meta   = vector_contains(letters_meta, letter);
+        
+        if (has_fhd && has_footer && has_header && has_meta) {
+            // Quartetto completo
+            o_fhd.push_back(letter);
+        }
+        else {
+            // Quartetto incompleto - mostra errore
+            printf("ERRORE: Quartetto incompleto per la lettera '%c'. File mancanti:", letter);
+            if (!has_fhd)    printf(" .fhd");
+            if (!has_footer) printf(" .footer");
+            if (!has_header) printf(" .header");
+            if (!has_meta)   printf(" .meta");
+            printf("\n");
+        }
+    }
+	/*
+	printf("Trovati fhd %d\n",o_fhd.size());
+	printf("Trovati raw %d\n",o_raw.size());
+	*/
+	return ((o_fhd.size()>0) || (o_raw.size()>0));
+}
+
+
 char Jidac::take_letter_from_filename(char i_sourceletter)
 {
 	int bitmap_count	= 0;
@@ -105638,6 +105834,7 @@ int Jidac::extractstdout(char i_dest_partition, const string &i_rawfilename)
 
 #ifdef _WIN32
 	// determina modalita' raw da flagraw e lettera
+	if (!export_to_rawfile)
 	if (flagraw)
 	{
 		if (lettera >= '0' && lettera <= '9')
@@ -105664,16 +105861,17 @@ int Jidac::extractstdout(char i_dest_partition, const string &i_rawfilename)
 		myprintf("10349: ERROR: cannot use both partition restore and raw file export\n");
 		return 2;
 	}
-	if (restore_to_partition)
-		myprintf("Restore to partition\n");
-	if (export_to_rawfile)
-		myprintf("Export to rawfile\n");
-	
-	if (restore_raw_partition)
-		myprintf("Restore to raw_partition\n");
-	if (restore_raw_disk)
-		myprintf("Restore to raw_disk\n");
-	
+	if (flagdebug2)
+	{
+		if (restore_to_partition)
+			myprintf("Restore to partition\n");
+		if (export_to_rawfile)
+			myprintf("Export to rawfile\n");
+		if (restore_raw_partition)
+			myprintf("Restore to raw_partition\n");
+		if (restore_raw_disk)
+			myprintf("Restore to raw_disk\n");
+	}
 	int mode_count= 0;
 	if (restore_to_partition)
 		mode_count++;
@@ -110715,7 +110913,7 @@ int Jidac::add()
 										if (g_thememfilelength <= 0)
 											myprintf("20696: thememfilelength is not good! [1]\n");
 										vf[fi]->second.size= g_thememfilelength;
-										vf[fi]->second.date= now();
+										vf[fi]->second.date= nowutc();
 									}
 									buflen= vf[fi]->second.pramfile->ramread(g_ioBUFSIZE, buf);
 								}
@@ -110731,7 +110929,7 @@ int Jidac::add()
 											temp.resize(512); // riduce il vector ai primi 512 byte
 											array_to_ramfile(temp, vf[fi]->second.pramfile);
 											vf[fi]->second.size= 512;
-											vf[fi]->second.date= now();
+											vf[fi]->second.date= nowutc();
 										}
 										else
 											myprintf("20693: footerlen is not good! [1]\n");
@@ -110750,7 +110948,7 @@ int Jidac::add()
 										/// color_restore();
 										int64_t metasize   = array_to_ramfile(metaarray, vf[fi]->second.pramfile);
 										vf[fi]->second.size= metasize;
-										vf[fi]->second.date= now();
+										vf[fi]->second.date= nowutc(); 
 									}
 									buflen= vf[fi]->second.pramfile->ramread(g_ioBUFSIZE, buf);
 								}
@@ -112270,6 +112468,487 @@ int Jidac::extracttobuffer(const std::string &filename, std::vector<uint8_t> &ou
 #endif
 
 #ifdef _WIN32
+
+// Trova una lettera in un vettore di lettere disponibili
+static char find_letter_in_vector(char source, const vector<char> &available)
+{
+	for (size_t i= 0; i < available.size(); ++i)
+		if (source == available[i])
+			return available[i];
+	return 0;
+}
+
+// Stampa errore quando la lettera non è trovata
+static void print_letter_not_found_error(char source, const char *type,
+										 const char			*extension,
+										 const vector<char> &available)
+{
+	color_yellow();
+	myprintf("24342: Cannot find letter %c in the %s archive image (%s)\n",
+			 source, type, extension);
+	if (!available.empty())
+	{
+		myprintf("24432: Available -%s letter ", type);
+		for (size_t i= 0; i < available.size(); ++i)
+			myprintf("%c ", available[i]);
+		myprintf("\n");
+	}
+	color_restore();
+}
+
+// Valida source e destination (char o stringa)
+static bool validate_source_dest(char source, char dest, const char *func_name)
+{
+	if (source == 0 || dest == 0)
+	{
+		myprintf("23234: %s: invalid source/destination\n", func_name);
+		return false;
+	}
+	return true;
+}
+
+static bool validate_source_dest(char source, const string &dest, const char *func_name)
+{
+	if (source == 0 || dest.empty())
+	{
+		myprintf("23234: %s: invalid source/destination\n", func_name);
+		return false;
+	}
+	return true;
+}
+
+// Trova e valida una lettera sorgente nel tipo specificato
+// Ritorna la lettera se trovata, 0 altrimenti
+char Jidac::find_and_validate_source_letter(char source, ImageType type,
+											vector<char> &avail_fhd,
+											vector<char> &avail_raw)
+{
+	if (get_images_filenames(avail_fhd, avail_raw) != 0)
+		return 0;
+
+	const vector<char> &available= (type == ImageType::NTFS) ? avail_fhd : avail_raw;
+	const char		   *type_str = (type == ImageType::NTFS) ? "ntfs" : "raw";
+	const char		   *ext_str	 = (type == ImageType::NTFS) ? ".fhd" : ".raw";
+
+	char found= find_letter_in_vector(source, available);
+	if (found == 0)
+		print_letter_not_found_error(source, type_str, ext_str, available);
+
+	return found;
+}
+
+// Estrae il file .meta per immagini NTFS
+bool Jidac::extract_ntfs_meta(char source)
+{
+	string imager_image= "image_" + string(1, source) + ".fhd";
+	string imager_meta = "image_" + string(1, source) + ".meta";
+
+	if (flagverbose)
+	{
+		color_cyan();
+		myprintf("00005: Source filename %s + meta %s\n",
+				 imager_image.c_str(), imager_meta.c_str());
+		color_restore();
+	}
+
+	int result= extracttobuffer(imager_meta, imager_themetafile);
+	if (result != 0)
+	{
+		myprintf("10433: cannot extract meta!\n");
+		return false;
+	}
+
+	if (flagverbose)
+		myprintf("17441: The meta size is %s\n", migliaia(imager_themetafile.size()));
+
+	return true;
+}
+
+// Prepara per l'estrazione a disco/stdout
+void Jidac::prepare_extract_to_disk(const string &image_filename)
+{
+	tofiles.clear();
+	files.clear();
+	files.push_back(image_filename);
+
+	// do NOT invert those two lines! or an "all in" commit limit will be enforced
+	g_ramsize  = getramdisksize();
+	flagramsize= true;
+}
+
+// Stampa messaggio "ready to restore"
+static void print_ready_to_restore(const char *type, char source,
+								   const char *dest_type, const char *dest)
+{
+	color_cyan();
+	myprintf("22329: Ready to restore source %s %c to %s %s\n",
+			 type, source, dest_type, dest);
+	color_restore();
+}
+
+static void print_ready_to_restore(const char *type, char source,
+								   const char *dest_type, char dest)
+{
+	color_cyan();
+	myprintf("22329: Ready to restore source %s %c to %s %c\n",
+			 type, source, dest_type, dest);
+	color_restore();
+}
+
+int Jidac::get_images_filenames(vector<char> &i_avail_fhd, vector<char> &i_avail_raw)
+{
+	files.clear();
+	archive		  = getbackupnameifany(archive);
+	int		errors= 0;
+	int64_t sz	  = read_archive(NULL, archive.c_str(), &errors, 0, 0);
+	if (sz < 1)
+	{
+		error("Archive (3) not found");
+		return 2;
+	}
+
+	if (!get_letters_from_dt(i_avail_fhd, i_avail_raw))
+	{
+		myprintf("21244: Cannot find zpaqfranz images in the archive\n");
+		return 2;
+	}
+
+	return 0;
+}
+
+int Jidac::restore_ntfs_to_disk(char i_source, char i_destination)
+{
+	if (!validate_source_dest(i_source, i_destination, "restore_ntfs_to_disk"))
+		return 2;
+
+	vector<char> avail_fhd, avail_raw;
+	char		 letter= find_and_validate_source_letter(i_source, ImageType::NTFS,
+														 avail_fhd, avail_raw);
+	if (letter == 0)
+		return 2;
+
+	print_ready_to_restore("ntfs", i_source, "physical", i_destination);
+
+	if (!extract_ntfs_meta(i_source))
+		return 2;
+
+	string imager_image= "image_" + string(1, i_source) + ".fhd";
+	prepare_extract_to_disk(imager_image);
+
+	return extractstdout(i_destination, "");
+}
+
+int Jidac::restore_raw_to_disk(char i_source, char i_destination)
+{
+	if (!validate_source_dest(i_source, i_destination, "restore_raw_to_disk"))
+		return 2;
+
+	vector<char> avail_fhd, avail_raw;
+	char		 letter= find_and_validate_source_letter(i_source, ImageType::RAW,
+														 avail_fhd, avail_raw);
+	if (letter == 0)
+		return 2;
+
+	print_ready_to_restore("raw", i_source, "physical", i_destination);
+
+	string raw_image= "image_" + string(1, i_source) + ".raw";
+	prepare_extract_to_disk(raw_image);
+	flagraw= true;
+
+	return extractstdout(i_destination, "");
+}
+
+int Jidac::restore_ntfs_to_rawfile(char i_source, string i_destfile)
+{
+	if (!validate_source_dest(i_source, i_destfile, "restore_ntfs_to_rawfile"))
+		return 2;
+
+	vector<char> avail_fhd, avail_raw;
+	char		 letter= find_and_validate_source_letter(i_source, ImageType::NTFS,
+														 avail_fhd, avail_raw);
+	if (letter == 0)
+		return 2;
+
+	print_ready_to_restore("ntfs", i_source, "file", i_destfile.c_str());
+
+	if (!extract_ntfs_meta(i_source))
+		return 2;
+
+	string imager_image= "image_" + string(1, i_source) + ".fhd";
+	prepare_extract_to_disk(imager_image);
+
+	return extractstdout(0, i_destfile);
+}
+
+int Jidac::restore_raw_to_rawfile(char i_source, string i_destfile)
+{
+	if (!validate_source_dest(i_source, i_destfile, "restore_raw_to_rawfile"))
+		return 2;
+
+	vector<char> avail_fhd, avail_raw;
+	char		 letter= find_and_validate_source_letter(i_source, ImageType::RAW,
+														 avail_fhd, avail_raw);
+	if (letter == 0)
+		return 2;
+
+	print_ready_to_restore("raw", i_source, "file", i_destfile.c_str());
+
+	string imager_raw= "image_" + string(1, i_source) + ".raw";
+
+	jidacreset();
+	files.clear();
+	files.push_back(imager_raw);
+
+	return extract();
+}
+
+int Jidac::restore_ntfs_to_vhd(char i_source, string i_destfile)
+{
+	if (!validate_source_dest(i_source, i_destfile, "restore_ntfs_to_vhd"))
+		return 2;
+
+	files.clear();
+	return extract();
+}
+
+// Risultato del controllo partizione
+enum PartitionContentStatus
+{
+	PARTITION_EMPTY		   = 0, // Vuota (o solo file di sistema ignorabili)
+	PARTITION_HAS_FILES	   = 1, // Contiene file utente
+	PARTITION_NOT_READY	   = 2, // Drive non pronto (USB/CD non inserito)
+	PARTITION_NOT_FOUND	   = 3, // Lettera non esiste
+	PARTITION_ACCESS_DENIED= 4, // Permessi insufficienti
+	PARTITION_ERROR		   = 5	// Errore generico
+};
+
+// Case-insensitive compare helper
+static bool str_iequals(const char *a, const char *b)
+{
+	return _stricmp(a, b) == 0;
+}
+
+// Controlla se un file/cartella è da ignorare (roba di sistema Windows)
+static bool is_ignorable_system_entry(const WIN32_FIND_DATAA &fd)
+{
+	const char *name= fd.cFileName;
+
+	// Sempre ignora . e ..
+	if (name[0] == '.')
+	{
+		if (name[1] == '\0')
+			return true;
+		if (name[1] == '.' && name[2] == '\0')
+			return true;
+	}
+
+	// Cartelle di sistema Windows (presenti su quasi ogni NTFS)
+	if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+	{
+		if (str_iequals(name, "System Volume Information"))
+			return true;
+		if (str_iequals(name, "$RECYCLE.BIN"))
+			return true;
+		if (str_iequals(name, "RECYCLER")) // XP
+			return true;
+		if (str_iequals(name, "RECYCLED")) // Win9x
+			return true;
+		if (str_iequals(name, "$WinREAgent")) // Recovery
+			return true;
+		if (str_iequals(name, "Recovery"))
+			return true;
+		if (str_iequals(name, "Boot")) // EFI/Boot partition stuff
+			return true;
+	}
+
+	// File di sistema comuni da ignorare
+	if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY))
+	{
+		if (str_iequals(name, "Thumbs.db"))
+			return true;
+		if (str_iequals(name, "desktop.ini"))
+			return true;
+		if (str_iequals(name, "Desktop.ini"))
+			return true;
+		if (str_iequals(name, "AUTORUN.INF"))
+			return true;
+		if (str_iequals(name, "autorun.inf"))
+			return true;
+		if (str_iequals(name, "pagefile.sys"))
+			return true;
+		if (str_iequals(name, "hiberfil.sys"))
+			return true;
+		if (str_iequals(name, "swapfile.sys"))
+			return true;
+		if (str_iequals(name, "bootmgr"))
+			return true;
+		if (str_iequals(name, "BOOTNXT"))
+			return true;
+		if (str_iequals(name, "BOOTSECT.BAK"))
+			return true;
+
+		// File NTFS speciali (iniziano con $)
+		if (name[0] == '$')
+			return true;
+	}
+
+	return false;
+}
+
+PartitionContentStatus check_partition_content(char drive_letter)
+{
+	if (drive_letter == 0)
+		return PARTITION_ERROR;
+
+	// Normalizza a maiuscolo
+	if (drive_letter >= 'a' && drive_letter <= 'z')
+		drive_letter= drive_letter - 'a' + 'A';
+
+	if (drive_letter < 'A' || drive_letter > 'Z')
+		return PARTITION_ERROR;
+
+	char root_path[4]= {drive_letter, ':', '\\', '\0'};
+
+	// 1. Verifica che il drive esista
+	UINT drive_type= GetDriveTypeA(root_path);
+	if (drive_type == DRIVE_UNKNOWN || drive_type == DRIVE_NO_ROOT_DIR)
+		return PARTITION_NOT_FOUND;
+
+	// 2. Disabilita popup di errore per drive rimovibili
+	UINT old_error_mode= SetErrorMode(SEM_FAILCRITICALERRORS);
+
+	// 3. Verifica accessibilità
+	DWORD spc, bps, fc, tc;
+	if (!GetDiskFreeSpaceA(root_path, &spc, &bps, &fc, &tc))
+	{
+		DWORD err= GetLastError();
+		SetErrorMode(old_error_mode);
+
+		if (err == ERROR_NOT_READY)
+			return PARTITION_NOT_READY;
+		if (err == ERROR_ACCESS_DENIED)
+			return PARTITION_ACCESS_DENIED;
+		return PARTITION_ERROR;
+	}
+
+	// 4. Enumera contenuto root
+	char search_path[8]= {drive_letter, ':', '\\', '*', '\0'};
+
+	WIN32_FIND_DATAA fd;
+	HANDLE			 hFind= FindFirstFileA(search_path, &fd);
+
+	SetErrorMode(old_error_mode);
+
+	if (hFind == INVALID_HANDLE_VALUE)
+	{
+		DWORD err= GetLastError();
+		if (err == ERROR_FILE_NOT_FOUND || err == ERROR_NO_MORE_FILES)
+			return PARTITION_EMPTY;
+		if (err == ERROR_ACCESS_DENIED)
+			return PARTITION_ACCESS_DENIED;
+		return PARTITION_ERROR;
+	}
+
+	PartitionContentStatus result= PARTITION_EMPTY;
+
+	do
+	{
+		// Ignora file di sistema Windows
+		if (is_ignorable_system_entry(fd))
+			continue;
+
+		// Qualsiasi altro file/cartella (nascosto o no) => non vuota
+		// I file nascosti SONO considerati come contenuto utente
+		result= PARTITION_HAS_FILES;
+		break;
+
+	} while (FindNextFileA(hFind, &fd));
+
+	FindClose(hFind);
+	return result;
+}
+bool Jidac::image_risky_continue(char i_source, char i_destination)
+{
+	if ((i_source == 0) || (i_destination == 0))
+	{
+		myprintf("22442: Guru in image_risky\n");
+		return false;
+	}
+
+	if (flagspace)
+	{
+		color_yellow();
+		myprintf("09282: -space flag set, skipping safety check\n");
+		color_restore();
+		return true;
+	}
+
+	PartitionContentStatus status= check_partition_content(i_destination);
+
+	switch (status)
+	{
+	case PARTITION_EMPTY:
+		if (flagverbose)
+		{
+			color_cyan();
+			myprintf("09283: Partition %c:\\ is empty, proceeding\n", i_destination);
+			color_restore();
+		}
+		return true;
+
+	case PARTITION_HAS_FILES:
+	{
+		color_yellow();
+		printDigitalString("RISKY");
+		myprintf("\n");
+		myprintf("09281: WARNING this command can overwrite data without mercy!\n");
+		myprintf("03213: IT IS NOT MEANT FOR UNSKILLED USER!\n");
+		color_restore();
+
+		color_cyan();
+		myprintf("32441: Source partition letter %c => destination %c NOT EMPTY\n",
+				 i_source, i_destination);
+		color_restore();
+
+		char temp[80];
+		snprintf(temp, sizeof(temp),
+				 "Do you really want to OVERWRITE %c: ?", i_destination);
+
+		char yes[10];
+		snprintf(yes, sizeof(yes), "YES%c", i_destination);
+
+		return getcaptcha(yes, temp);
+	} // <-- chiudo blocco
+
+	case PARTITION_NOT_READY:
+		color_red();
+		myprintf("09284: Drive %c:\\ is not ready (no media?)\n", i_destination);
+		color_restore();
+		return false;
+
+	case PARTITION_NOT_FOUND:
+		color_red();
+		myprintf("09285: Drive %c:\\ does not exist\n", i_destination);
+		color_restore();
+		return false;
+
+	case PARTITION_ACCESS_DENIED:
+		color_red();
+		myprintf("09286: Access denied to %c:\\ (run as Administrator?)\n", i_destination);
+		color_restore();
+		return false;
+
+	case PARTITION_ERROR:
+	default:
+		color_red();
+		myprintf("09287: Cannot check partition %c:\\ status\n", i_destination);
+		color_restore();
+		return false;
+	}
+
+	return false; // Mai raggiunto, ma evita warning
+}
+
 int Jidac::restoreimage()
 {
 	if (!iszpaq(archive))
@@ -112283,150 +112962,123 @@ int Jidac::restoreimage()
 		myprintf("09377: exactly one parameter needed!\n");
 		return 2;
 	}
-	char drive_letter= getwindowsdriveletter(files[0]);
-	if (!drive_letter)
-	{
-		myprintf("09410: you need a drive letter!\n");
-		return 2;
-	}
-	lettera= drive_letter;
 
 	if (tofiles.size() != 1)
 	{
-		myprintf("73321: You neeed a single -to letter\n");
+		myprintf("73321: You neeed a single -to\n");
 		return 2;
 	}
 
-	if ((flagntfs + flagraw + flagimage) != 1) 
+	lettera= getwindowsdriveletter(files[0]);
+
+	// Helper lambda per validare destinazione fisica
+	auto validate_physical_dest= [this](char dest_letter) -> int
 	{
-		myprintf("12310: With image command you need exactly one of -ntfs, -raw, or -image\n");
-		return 2;
-	}
-
-	char dest_drive_letter= 0;
-	files.clear();
-
-	std::string raw_filename;
-	std::string bitmap_filename;
-
-	// Check e Caricamento Archivio
-	archive		  = getbackupnameifany(archive);
-	int		errors= 0;
-	int64_t sz	  = read_archive(NULL, archive.c_str(), &errors, 0, 0);
-	if (sz < 1)
-	{
-		error("Archive not found");
-		return -1;
-	}
-
-	char founded_letter= take_letter_from_filename(lettera);
-	if (founded_letter == 0)
-	{
-		myprintf("21234: Cannot find a good zpaqfranz image inside the archive\n");
-		return 2;
-	}
-		
-	printf("Founded letter %c\n",founded_letter);
-	
-///-image ripristina su file
-
-	if (flagimage)
-	{
-		myprintf("33432: Not implemented (yet)\n");
-		return 1;
-		tofiles.clear();
-		files.clear();
-		files.push_back(imager_image);
-
-	// do NOT invert those two lines! or an "all in" commit limit will be enforced
-		g_ramsize  = getramdisksize();
-		flagramsize= true;
-
-		return extractstdout(0, tofiles[0]);
-	}
-	if (!flagimage)
-	{
-		dest_drive_letter= getwindowsdriveletter(tofiles[0]);
-		if (!dest_drive_letter)
+		franzdriveinfo mydrive;
+		int			   partizione= cercapartizione(dest_letter, mydrive);
+		if (partizione < 0)
 		{
-			myprintf("09432: you need a drive letter as to!\n");
+			color_red();
+			myprintf("22321: Cannot find the destination drive for letter %c "
+					 "(bypass with -force)\n",
+					 dest_letter);
+			color_restore();
+			if (!flagforce)
+				return -1;
+		}
+		else
+		{
+			color_cyan();
+			myprintf("32442: Selected destination\n");
+			color_restore();
+			printdriveinfo(partizione, mydrive);
+		}
+		return 0;
+	};
+
+	// -image -ntfs => write a thin .ntfs to physical
+	if (flagimage && flagntfs)
+	{
+		if (lettera == 0)
+		{
+			myprintf("09410: you need a drive letter!\n");
 			return 2;
 		}
-		color_yellow();
-		printDigitalString("RISKY");
-		myprintf("\n");
-		myprintf("09281: WARNING this command can overwrite data without mercy!\n");
-		myprintf("03213: IT IS NOT MEANT FOR UNSKILLED USER!\n");
-		color_restore();
-		
-		color_cyan();
-		myprintf("32441: Source      partition letter %c\n",founded_letter);
-		myprintf("32442: Destination partition letter %c\n",dest_drive_letter);
-		color_restore();
-		
-		char temp[80];
-		snprintf(temp,sizeof(temp),"Do you really want to OVERWRITE %c: ?",dest_drive_letter);
-		
-		char yes[10];
-		snprintf(yes,sizeof(yes),"YES%c",dest_drive_letter);
-		
-		if (!getcaptcha(yes, temp))
-			return 1;
-		
-		if (flagverbose)
+		char dest= getwindowsdriveletter(tofiles[0]);
+		if (validate_physical_dest(dest) < 0)
+			return 2;
+		if (!image_risky_continue(lettera, dest))
+			return 2;
+		return restore_ntfs_to_disk(lettera, dest);
+	}
+
+	// -image -raw => write a raw image to physical
+	if (flagimage && flagraw)
+	{
+		if (lettera == 0)
 		{
-			color_green();
-			myprintf("09715: Restoring image of=%c:  to partition %c\n", founded_letter, dest_drive_letter);
-			color_restore();
+			myprintf("09410: you need a drive letter!\n");
+			return 2;
 		}
+		char dest= getwindowsdriveletter(tofiles[0]);
+		if (validate_physical_dest(dest) < 0)
+			return 2;
+		if (!image_risky_continue(lettera, dest))
+			return 2;
+		return restore_raw_to_disk(lettera, dest);
 	}
 
-	if (flagraw)
+	// -ntfs -raw => write a thin .ntfs to A FILE
+	if (flagntfs && flagraw)
 	{
-		color_cyan();
-		myprintf("12349: Running raw from %c => %c\n",founded_letter,dest_drive_letter);
-		color_restore();
-		string raw_image = "image_" + std::string(1, founded_letter) + ".raw";
-		
-		tofiles.clear();
-		files.clear();
-		files.push_back(raw_image);
-
-	// do NOT invert those two lines! or an "all in" commit limit will be enforced
-		g_ramsize  	= getramdisksize();
-		flagramsize	= true;
-		flagraw		= true;
-		return extractstdout(dest_drive_letter, "");
+		if (lettera == 0)
+		{
+			myprintf("09410: you need a drive letter!\n");
+			return 2;
+		}
+		if (getwindowsdriveletter(tofiles[0]) != 0)
+		{
+			myprintf("32334: -ntfs -raw means 'write a ntfs image to a RAW file' "
+					 "-to must be a file\n");
+			return 2;
+		}
+		return restore_ntfs_to_rawfile(lettera, tofiles[0]);
 	}
 
-
-	string imager_image = "image_" + std::string(1, founded_letter) + ".fhd";
-	string imager_header= "image_" + std::string(1, founded_letter) + ".header";
-	string imager_meta	= "image_" + std::string(1, founded_letter) + ".meta";
-
-	if (flagverbose)
+	// -raw => write a raw to A FILE
+	if (!flagimage && !flagntfs && flagraw)
 	{
-		color_cyan();
-		myprintf("00005: Source filename %s + meta %s\n", imager_image.c_str(), imager_meta.c_str());
-		color_restore();
+		if (lettera == 0)
+		{
+			myprintf("09410: you need a drive letter!\n");
+			return 2;
+		}
+		if (getwindowsdriveletter(tofiles[0]) != 0)
+		{
+			myprintf("32334: -raw 'write a raw image to a RAW file' "
+					 "-to must be a file\n");
+			return 2;
+		}
+		return restore_raw_to_rawfile(lettera, tofiles[0]);
 	}
-	int estrazionemetaok= extracttobuffer(imager_meta, imager_themetafile);
-	if (estrazionemetaok != 0)
+
+	// -ntfs => extract a .ntfs to a vhd
+	if (!flagimage && flagntfs && !flagraw)
 	{
-		myprintf("10433: cannot extract meta!\n");
-		return 2;
+		if (lettera == 0)
+		{
+			myprintf("09410: you need a drive letter!\n");
+			return 2;
+		}
+		if (getwindowsdriveletter(tofiles[0]) != 0)
+		{
+			myprintf("32334: -ntfs 'extract ntfs image to .VHD' "
+					 "-to must be a folder\n");
+			return 2;
+		}
+		return restore_ntfs_to_vhd(lettera, tofiles[0]);
 	}
-	if (flagverbose)
-		myprintf("17441: The meta size is %s\n", migliaia(imager_themetafile.size()));
 
-	tofiles.clear();
-	files.clear();
-	files.push_back(imager_image);
-
-	// do NOT invert those two lines! or an "all in" commit limit will be enforced
-	g_ramsize  = getramdisksize();
-	flagramsize= true;
-	return extractstdout(dest_drive_letter, "");
+	return 0;
 }
-
 #endif

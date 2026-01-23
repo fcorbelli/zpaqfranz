@@ -26,6 +26,7 @@
 |  [NAS (arm Cortex-C57,QNAP TS433...)](http://www.francocorbelli.it/zpaqfranz/57c)           |                               |60.7u|      | 
 |  [Haiku](http://www.francocorbelli.it/zpaqfranz/haiku)                     |                               |60.7u|      |
 |  [ESXi](http://www.francocorbelli.it/zpaqfranz/esxi)                       |                               |60.7u|
+|  [Docker](https://github.com/def324/zpaqfranz-docker)                       | `docker pull ghcr.io/def324/zpaqfranz-docker` |latest| | amd64 and arm64 docker images based on Ubuntu |
 | [Freeware GUI for Windows](https://github.com/fcorbelli/zpaqfranz/wiki/PAKKA-Windows-32-bit-extractor) |   |[latest](http://www.francocorbelli.it/pakka/build/latest/pakka_latest.zip)  |      |
 | [![ZpaqTreeView](https://github.com/fcorbelli/zpaqfranz/assets/77727889/2e155fa7-0565-416b-8bdd-b99c16ae896d)](https://github.com/EpicGazel/ZpaqTreeView)                                                                | Third Party Python software |      |
 

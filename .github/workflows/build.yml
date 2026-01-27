@@ -29,7 +29,7 @@ jobs:
       run: |
         echo "Compiling reproducibly..."
         set SOURCE_DATE_EPOCH=1735689600
-        g++ -O3 -s -DSFTP -DGUI -DHWSHA2 -DHWBLAKE3 blake3_windows_gnu.S zpaqfranz.cpp -o zpaqfranz.exe -pthread -static -Wall -Wpedantic -frandom-seed=1234
+        g++ -O3 -s -DSFTP -DGUI -DHWSHA2 -DHWBLAKE3 blake3_windows_gnu.S zpaqfranz.cpp -o zpaqfranz.exe -pthread -static -Wall -Wpedantic -frandom-seed=1234 -lurlmon
 
     - name: Upload artifact
       uses: actions/upload-artifact@v4

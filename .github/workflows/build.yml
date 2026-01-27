@@ -1,38 +1,18 @@
-name: Build zpaqfranz (reproducible)
-
-on:
-  push:
-    paths:
-      - 'zpaqfranz.cpp'
-  workflow_dispatch:
-
 jobs:
   build-windows:
     runs-on: windows-latest
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v3
 
-    - name: Setup MSYS2
-      uses: msys2/setup-msys2@v2
-      with:
-        update: false         # Non aggiorniamo pacchetti per mantenere riproducibilità
-        install: >
-          ucrt64/mingw-w64-ucrt-x86_64-gcc
-          ucrt64/mingw-w64-ucrt-x86_64-gcc-objc
+      - name: Compile zpaqfranz.exe
+        run: |
+          set SOURCE_DATE_EPOCH=1735689600
+          g++ -O3 -s -DSFTP -DGUI -DHWSHA2 -DHWBLAKE3 blake3_windows_gnu.S zpaqfranz.cpp -o zpaqfranz.exe -pthread -static -Wall -Wpedantic -frandom-seed=1234 -lurlmon
 
-    - name: Add UCRT64 to PATH
-      run: echo "C:\msys64\ucrt64\bin" >> $GITHUB_PATH
-
-    - name: Compile zpaqfranz.exe
-      run: |
-        echo "Compiling reproducibly..."
-        set SOURCE_DATE_EPOCH=1735689600
-        g++ -O3 -s -DSFTP -DGUI -DHWSHA2 -DHWBLAKE3 blake3_windows_gnu.S zpaqfranz.cpp -o zpaqfranz.exe -pthread -static -Wall -Wpedantic -frandom-seed=1234 -lurlmon
-
-    - name: Upload artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: zpaqfranz-64bit
-        path: zpaqfranz.exe
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: zpaqfranz-64bit
+          path: zpaqfranz.exe

@@ -27,6 +27,7 @@
 |  [Haiku](http://www.francocorbelli.it/zpaqfranz/haiku)                     |                               |60.7u|      |
 |  [ESXi](http://www.francocorbelli.it/zpaqfranz/esxi)                       |                               |60.7u|
 | [Freeware GUI for Windows](https://github.com/fcorbelli/zpaqfranz/wiki/PAKKA-Windows-32-bit-extractor) |   |[latest](http://www.francocorbelli.it/pakka/build/latest/pakka_latest.zip)  |      |
+| [Docker Image](https://github.com/fcorbelli/zpaqfranz/pkgs/container/zpaqfranz) | `docker pull ghcr.io/fcorbelli/zpaqfranz:latest` | [latest](https://github.com/fcorbelli/zpaqfranz/pkgs/container/zpaqfranz) |      | See [docker/README.md](docker/README.md), or print help with `docker run --rm ghcr.io/fcorbelli/zpaqfranz:latest -h` |
 | [![ZpaqTreeView](https://github.com/fcorbelli/zpaqfranz/assets/77727889/2e155fa7-0565-416b-8bdd-b99c16ae896d)](https://github.com/EpicGazel/ZpaqTreeView)                                                                | Third Party Python software |      |
 
 [![Freeware GUI for Windows](https://github.com/fcorbelli/zpaqfranz/assets/77727889/e8243e14-b299-4224-b998-8c96a8e425d5)](https://github.com/fcorbelli/zpaqfranz/wiki/PAKKA-Windows-32-bit-extractor)

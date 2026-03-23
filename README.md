@@ -17,36 +17,31 @@ like 7z or RAR **on steroids**, with deduplicated 'snapshots' (versions).
 Conceptually similar to Mac's Time Machine, but **much more efficient**.  
 A zpaq 7.15 fork.
 
-|  Platform                                                           | OS package                    |  Version    | Video| Description |
-|  ----------                                                         | -----                         |  ---------- |  -------    |-------------|
-|  [Everything (sourceforge)](https://sourceforge.net/projects/zpaqfranz/files)   |   Windows' exes        |![Badge](https://img.shields.io/github/v/release/fcorbelli/zpaqfranz)|      | Alternative to GitHub|     
-|  [Windows 64](http://www.francocorbelli.it/zpaqfranz/win64/zpaqfranz.exe)           |   `zpaqfranz upgrade -force`     |latest|      | 64-bit version with hardware acceleration auto-detection for SHA1 and SHA2 (if supported by the CPU). Can download additional files (e.g., DLLs) from the internet when needed. Can self-update from the internet (if requested). **Recommended version for Win** |   
-|  [Windows 32](https://www.francocorbelli.it/zpaqfranz/win32/zpaqfranz32.exe)           |   `zpaqfranz32 upgrade -force`    |latest|      |  32-bit version with limitations on memory allocation and available threads. Noticeably slower than the 64-bit version. |
-|  [Windows 64 (HW accelerated)](http://www.francocorbelli.it/zpaqfranz/win64hw/zpaqfranzhw.exe)           | `zpaqfranzhw -force`   |latest|      |64-bit version that uses different code to accelerate SHA1 calculation, but requires the `-hw` switch to enable it. On modern AMD processors it may be ~1.5% faster than zpaqfranz. For power users. |
-|  [Windows 64 (full)](http://www.francocorbelli.it/zpaqfranz/win64/zpaqfranz-full.exe)           |    |latest|      |64-bit version containing all libraries and programs already compressed and linked. Suitable for systems without internet access, which would otherwise fail to download required supporting software.
-|  [Windows 64 (open)](http://www.francocorbelli.it/zpaqfranz/win64/zpaqfranz-open.exe)           |    |latest|      |64-bit version stripped of all additional components, without the ability to create temporary files. It is **100% open-source**, with no binary or hard-to-interpret code. **Suitable for high-security environments**. |
-|  [Windows XP (sourceforge)](https://sourceforge.net/projects/zpaqfranz/files)           |    |    |  |   32-bit version with various limitations for the glorious Windows XP. Noticeably slower. |
-|  [OpenBSD](http://www.francocorbelli.it/zpaqfranz/openbsd)                 |`pkg_add zpaqfranz`            |![Badge](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fopenbsd.app%2F%3Fsearch%3Dzpaqfranz%26format%3Djson%26current%3Don&query=%24..FULLPKGNAME&label=openbsd)|      |
-|  [FreeBSD](http://www.francocorbelli.it/zpaqfranz/freebsd)                 |`pkg install zpaqfranz`        |60.3a |      |
-|  [MacOS](http://www.francocorbelli.it/zpaqfranz/mac)                       |`brew install zpaqfranz`       |![Badge](https://img.shields.io/homebrew/v/zpaqfranz)|      |
-|  [OpenSUSE](http://www.francocorbelli.it/zpaqfranz/opensuse)               |`sudo zypper install zpaqfranz`|      |      |
-|  [Debian 13+ (Ubuntu etc) ](https://packages.debian.org/trixie/utils/zpaqfranz)      | `apt-get install zpaqfranz`  |60.7|      |
-|  [Debian (Ubuntu etc) .deb](http://www.francocorbelli.it/zpaqfranz/debian)      | `sudo apt install zpaqfranz`  |59.8j / 60.7|[Desktop](http://www.francocorbelli.it/zpaqfranz/video/debian-deb.mp4)      |
-|  [Linux generic (32/64)](http://www.francocorbelli.it/zpaqfranz/linux)             |                               |60.7u|      |
-|  [Arch](http://www.francocorbelli.it/zpaqfranz/arch)                       | [AUR user repository (latest)](https://aur.archlinux.org/packages/zpaqfranz-git)|58.10i|[Terminal](http://www.francocorbelli.it/zpaqfranz/video/arch.mp4)
-|  [Solaris 11-64](http://www.francocorbelli.it/zpaqfranz/solaris)                 |                               |60.7u|      |
-|  [OmniOS 64](http://www.francocorbelli.it/zpaqfranz/omnios)                   |                               |60.7u|      |
-|  [NAS (Intel, Synology...)](http://www.francocorbelli.it/zpaqfranz/nas)           |                               |60.7u|      | 
-|  [NAS (armv8, QNAP...)](http://www.francocorbelli.it/zpaqfranz/qnap)           |                               |60.7u|      | 
-|  [NAS (arm Cortex-C57,QNAP TS433...)](http://www.francocorbelli.it/zpaqfranz/57c)           |                               |60.7u|      | 
-|  [Haiku](http://www.francocorbelli.it/zpaqfranz/haiku)                     |                               |60.7u|      |
-|  [ESXi](http://www.francocorbelli.it/zpaqfranz/esxi)                       |                               |60.7u|
-| [Freeware GUI for Windows](https://github.com/fcorbelli/zpaqfranz/wiki/PAKKA-Windows-32-bit-extractor) |   |[latest](http://www.francocorbelli.it/pakka/build/latest/pakka_latest.zip)  |      |
-| [Docker Image](https://github.com/fcorbelli/zpaqfranz/pkgs/container/zpaqfranz) | `docker pull ghcr.io/fcorbelli/zpaqfranz:latest` | [latest](https://github.com/fcorbelli/zpaqfranz/pkgs/container/zpaqfranz) |      | See [docker/README.md](docker/README.md), or print help with `docker run --rm ghcr.io/fcorbelli/zpaqfranz:latest h` |
-| [![ZpaqTreeView](https://github.com/fcorbelli/zpaqfranz/assets/77727889/2e155fa7-0565-416b-8bdd-b99c16ae896d)](https://github.com/EpicGazel/ZpaqTreeView)                                                                | Third Party Python software |      |
+### 📦 zpaqfranz Downloads & Packages
 
-[![Freeware GUI for Windows](https://github.com/fcorbelli/zpaqfranz/assets/77727889/e8243e14-b299-4224-b998-8c96a8e425d5)](https://github.com/fcorbelli/zpaqfranz/wiki/PAKKA-Windows-32-bit-extractor)
-[![Wiki](https://github-production-user-asset-6210df.s3.amazonaws.com/77727889/267342908-7d4c5bb9-6ea2-4735-9226-4d8112c5d65d.jpg)](https://github.com/fcorbelli/zpaqfranz/wiki) [![Help](https://github-production-user-asset-6210df.s3.amazonaws.com/77727889/267348388-d539932d-55c6-454a-a27b-054a10ae5f35.jpg)](https://github.com/fcorbelli/zpaqfranz/wiki/HELP-integrated) [![Sourceforge](https://github-production-user-asset-6210df.s3.amazonaws.com/77727889/267350249-91c18ca6-8c74-4585-96f4-3c72fd2c6725.jpg)](https://github.com/EpicGazel/ZpaqTreeView)
+#### 🪟 Windows Binaries
+
+| Variant                  | Download                                                                 | Install command                  | Version | Notes |
+|--------------------------|--------------------------------------------------------------------------|----------------------------------|---------|-------|
+| **Everything**           | [SourceForge](https://sourceforge.net/projects/zpaqfranz/files)          | —                                | ![GitHub](https://img.shields.io/github/v/release/fcorbelli/zpaqfranz?style=for-the-badge) | All files in one place |
+| **Windows 64** (recommended) | [zpaqfranz.exe](http://www.francocorbelli.it/zpaqfranz/win64/zpaqfranz.exe) | `zpaqfranz upgrade -force`      | ![GitHub](https://img.shields.io/github/v/release/fcorbelli/zpaqfranz?style=for-the-badge) | HW acceleration auto-detect (SHA1/SHA2) + self-update |
+| **Windows 32**           | [zpaqfranz32.exe](https://www.francocorbelli.it/zpaqfranz/win32/zpaqfranz32.exe) | `zpaqfranz32 upgrade -force`   | ![GitHub](https://img.shields.io/github/v/release/fcorbelli/zpaqfranz?style=for-the-badge) | Limited RAM/threads – slower |
+| **Windows 64 HW**        | [zpaqfranzhw.exe](http://www.francocorbelli.it/zpaqfranz/win64hw/zpaqfranzhw.exe) | `zpaqfranzhw -force`           | ![GitHub](https://img.shields.io/github/v/release/fcorbelli/zpaqfranz?style=for-the-badge) | Extra SHA1 acceleration (AMD ~+1.5%) – use `-hw` switch |
+| **Windows 64 Full**      | [zpaqfranz-full.exe](http://www.francocorbelli.it/zpaqfranz/win64/zpaqfranz-full.exe) | —                              | ![GitHub](https://img.shields.io/github/v/release/fcorbelli/zpaqfranz?style=for-the-badge) | All libraries included (no internet needed) |
+| **Windows 64 Open**      | [zpaqfranz-open.exe](http://www.francocorbelli.it/zpaqfranz/win64/zpaqfranz-open.exe) | —                              | ![GitHub](https://img.shields.io/github/v/release/fcorbelli/zpaqfranz?style=for-the-badge) | **100% open-source**, no binary blobs – high-security |
+
+#### 🐧 Linux / BSD / Unix Packages
+
+| OS / Distro | Versione | Install command | Demo |
+|-------------|----------|-----------------|------|
+| ![OpenBSD](https://img.shields.io/badge/OpenBSD-F2CA30?style=for-the-badge&logo=openbsd&logoColor=black) | ![](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fopenbsd.app%2F%3Fsearch%3Dzpaqfranz%26format%3Djson%26current%3Don&query=%24..FULLPKGNAME&label=&style=flat-square) | `pkg_add zpaqfranz` | — |
+| ![FreeBSD](https://img.shields.io/badge/FreeBSD-AB2B28?style=for-the-badge&logo=freebsd&logoColor=white) | ![GitHub](https://img.shields.io/github/v/release/fcorbelli/zpaqfranz?style=flat-square&label=) | `pkg install zpaqfranz` | — |
+| ![macOS](https://img.shields.io/badge/macOS-000000?style=for-the-badge&logo=apple&logoColor=white) | ![Homebrew](https://img.shields.io/homebrew/v/zpaqfranz?style=flat-square&label=) | `brew install zpaqfranz` | — |
+| ![openSUSE](https://img.shields.io/badge/openSUSE-73BA25?style=for-the-badge&logo=opensuse&logoColor=white) | ![GitHub](https://img.shields.io/github/v/release/fcorbelli/zpaqfranz?style=flat-square&label=) | `sudo zypper install zpaqfranz` | — |
+| ![Debian](https://img.shields.io/badge/Debian%2013+%20%2F%20Ubuntu-A81D33?style=for-the-badge&logo=debian&logoColor=white) | ![](https://img.shields.io/badge/62.2-blue?style=flat-square) | `apt-get install zpaqfranz` | — |
+| ![Debian](https://img.shields.io/badge/Debian%20.deb-A81D33?style=for-the-badge&logo=debian&logoColor=white) | ![](https://img.shields.io/badge/62.2-blue?style=flat-square) | `sudo apt install zpaqfranz` | [▶️ Desktop](http://www.francocorbelli.it/zpaqfranz/video/debian-deb.mp4) |
+| ![Arch Linux](https://img.shields.io/badge/Arch%20Linux-1793D1?style=for-the-badge&logo=archlinux&logoColor=white) | ![GitHub](https://img.shields.io/github/v/release/fcorbelli/zpaqfranz?style=flat-square&label=) | [AUR (zpaqfranz-git)](https://aur.archlinux.org/packages/zpaqfranz-git) | [▶️ Terminal](http://www.francocorbelli.it/zpaqfranz/video/arch.mp4) |
+| ![Linux](https://img.shields.io/badge/Linux%20generic%2032%2F64-FCC624?style=for-the-badge&logo=linux&logoColor=black) | ![GitHub](https://img.shields.io/github/v/release/fcorbelli/zpaqfranz?style=flat-square&label=) | [Download](http://www.francocorbelli.it/zpaqfranz/linux) | — |
 
 ## Classic file archivers (tar, 7z, RAR etc) are obsolete when used for repeated backups (daily, weekly, etc) compared to the ZPAQ algorithm that maintains "snapshots" (versions) of the data. [This is even more true in the case of ASCII dumps of databases (e.g. MySQL/MariaDB)](https://github.com/fcorbelli/zpaqfranz/wiki/Real-world:-SQL-dumps-(MySQL-MariaDB-Postgres-backup))
 

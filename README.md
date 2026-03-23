@@ -35,7 +35,7 @@ A zpaq 7.15 fork.
 | OS / Distro | Versione | Install command | Demo |
 |-------------|----------|-----------------|------|
 | ![OpenBSD](https://img.shields.io/badge/OpenBSD-F2CA30?style=for-the-badge&logo=openbsd&logoColor=black) | ![](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fopenbsd.app%2F%3Fsearch%3Dzpaqfranz%26format%3Djson%26current%3Don&query=%24..FULLPKGNAME&label=&style=flat-square) | `pkg_add zpaqfranz` | — |
-| ![FreeBSD](https://img.shields.io/badge/FreeBSD-AB2B28?style=for-the-badge&logo=freebsd&logoColor=white) | ![GitHub](https://img.shields.io/github/v/release/fcorbelli/zpaqfranz?style=flat-square&label=) | `pkg install zpaqfranz` | — |
+| ![FreeBSD](https://img.shields.io/badge/FreeBSD-AB2B28?style=for-the-badge&logoColor=white) | ![GitHub](https://img.shields.io/github/v/release/fcorbelli/zpaqfranz?style=flat-square&label=) | `pkg install zpaqfranz` | — |
 | ![macOS](https://img.shields.io/badge/macOS-000000?style=for-the-badge&logo=apple&logoColor=white) | ![Homebrew](https://img.shields.io/homebrew/v/zpaqfranz?style=flat-square&label=) | `brew install zpaqfranz` | — |
 | ![openSUSE](https://img.shields.io/badge/openSUSE-73BA25?style=for-the-badge&logo=opensuse&logoColor=white) | ![GitHub](https://img.shields.io/github/v/release/fcorbelli/zpaqfranz?style=flat-square&label=) | `sudo zypper install zpaqfranz` | — |
 | ![Debian](https://img.shields.io/badge/Debian%2013+%20%2F%20Ubuntu-A81D33?style=for-the-badge&logo=debian&logoColor=white) | ![](https://img.shields.io/badge/62.2-blue?style=flat-square) | `apt-get install zpaqfranz` | — |

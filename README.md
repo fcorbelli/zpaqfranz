@@ -1,6 +1,21 @@
-# zpaqfranz: advanced multiversioned archiver, with HW acceleration and SFX (on Windows)      
-# [catpaq official GUI](https://github.com/fcorbelli/catpaq)
-### Swiss army knife for backup and disaster recovery, like 7z or RAR on steroids, with deduplicated 'snapshots' (versions). Conceptually similar to Mac's Time Machine, but much more efficient. A zpaq 7.15 fork    
+# zpaqfranz: advanced multiversioned archiver, with HW acceleration and SFX (on Windows)
+
+## 🖥️ **[catpaq — Official GUI](https://github.com/fcorbelli/catpaq)** open-source ready to use on many platforms
+
+### 📥 Direct Downloads (latest versions)
+
+[![Windows](https://img.shields.io/badge/Windows-0078D4?style=for-the-badge&logo=windows&logoColor=white)](https://www.francocorbelli.it/catpaq/latest/win64/catpaq.exe)
+[![Debian](https://img.shields.io/badge/Debian-A81D33?style=for-the-badge&logo=debian&logoColor=white)](https://www.francocorbelli.it/catpaq/latest/debian/catpaq_debian_000019.zip)
+[![Fedora](https://img.shields.io/badge/Fedora-294172?style=for-the-badge&logo=fedora&logoColor=white)](https://www.francocorbelli.it/catpaq/latest/fedora/catpaq_fedora_000020.zip)
+[![Arch Linux](https://img.shields.io/badge/Arch%20Linux-1793D1?style=for-the-badge&logo=archlinux&logoColor=white)](https://www.francocorbelli.it/catpaq/latest/arch/catpaq_arch_000019.zip)
+[![macOS](https://img.shields.io/badge/macOS-000000?style=for-the-badge&logo=apple&logoColor=white)](https://www.francocorbelli.it/catpaq/latest/macos/catpaq_macos_000020.zip)
+
+---
+
+### Swiss army knife for backup and disaster recovery
+like 7z or RAR **on steroids**, with deduplicated 'snapshots' (versions).  
+Conceptually similar to Mac's Time Machine, but **much more efficient**.  
+A zpaq 7.15 fork.
 
 |  Platform                                                           | OS package                    |  Version    | Video| Description |
 |  ----------                                                         | -----                         |  ---------- |  -------    |-------------|

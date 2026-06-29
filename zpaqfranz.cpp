@@ -59,8 +59,8 @@ OTHER DEALINGS IN THE SOFTWARE.
 #define ZPAQFULL ///NOSFTPSTART
 ///NOSFTPEND
 
-#define ZPAQ_VERSION "64.7g"
-#define ZPAQ_DATE "(2026-03-24)"
+#define ZPAQ_VERSION "64.8j"
+#define ZPAQ_DATE "(2026-06-29)"
 
 
 
@@ -72,6 +72,10 @@ Here's the "spiegone"
 https://github.com/fcorbelli/zpaqfranz/wiki/Security:-open-software
 */
  
+#ifdef DLL
+	#undef OPEN
+	#define OPEN
+#endif
 #ifdef OPEN ///NOSFTPSTART
 	#undef ZPAQFULL
 #endif ///NOSFTPEND
@@ -5706,6 +5710,52 @@ void print_string_to_all_refactored(const char *str, bool is_error)
 	}
 }
 
+
+// Function to check if the output is redirected
+bool isOutputRedirected()
+{
+#ifdef _WIN32
+	// Windows: use GetFileType
+	HANDLE hStdout= GetStdHandle(STD_OUTPUT_HANDLE);
+	if (hStdout == INVALID_HANDLE_VALUE)
+		return true; // Error, we assume redirection
+
+	DWORD fileType= GetFileType(hStdout);
+
+	// FILE_TYPE_CHAR console
+	// If it's not FILE_TYPE_CHAR, then it's redirected
+	return (fileType != FILE_TYPE_CHAR);
+
+#else
+	// Unix/Linux: use isatty
+	return !isatty(STDOUT_FILENO);
+#endif
+}
+
+// Alternative version that also checks stderr
+bool isStderrRedirected()
+{
+#ifdef _WIN32
+	HANDLE hStderr= GetStdHandle(STD_ERROR_HANDLE);
+	if (hStderr == INVALID_HANDLE_VALUE)
+		return true;
+
+	DWORD fileType= GetFileType(hStderr);
+	return (fileType != FILE_TYPE_CHAR);
+
+#else
+	return !isatty(STDERR_FILENO);
+#endif
+}
+
+bool isAnyOutputRedirected()
+{
+    static const bool result = isOutputRedirected() || isStderrRedirected();
+    return result;
+}
+
+
+
 typedef enum
 {
 	ARG_TYPE_INT,
@@ -5793,11 +5843,13 @@ void my_vprintf_refactored(const char *format, va_list args)
 	{
 		if (*p != '%')
 		{
-			print_char_to_all(*p, flagerror);
+			char c= *p;
+			if (c == '\r' && isAnyOutputRedirected())
+				c= '\n';
+			print_char_to_all(c, flagerror);
 			p++;
 			continue;
 		}
-
 		p++;
 		if (*p == '%')
 		{
@@ -13902,6 +13954,11 @@ void stretchKey(char* out, const char* in, const char* salt) {
 // The first byte will not be 'z' or '7' (start of a ZPAQ archive).
 // For a pure random number, discard the first byte.
 // In VC++, must link to advapi32.lib.
+#ifdef DLL
+void random(char* buf, int n) 
+{}
+#else
+	
 void random(char* buf, int n) {
 #ifdef unix
   FILE* in=fopen("/dev/urandom", "rb");
@@ -13930,6 +13987,7 @@ void random(char* buf, int n) {
   if (n>=1 && (buf[0]=='z' || buf[0]=='7'))
     buf[0]^=0x80;
 }
+#endif
 //////////////////////////// Component ///////////////////////
 // A Component is a context model, indirect context model, match model,
 // fixed weight mixer, adaptive 2 input mixer without or with current
@@ -20459,7 +20517,7 @@ bool ihavehw()
 	getcpuid(0, 0, a, b, c, d);
 	if (a < 7)
 	{
-		myprintf("00001! cpuid cannot get at least EAX 7\n");
+		myprintf("10001! WARN: No hw SHA2 in CPU. Drop -DHWSHA2 to remove this warning\n");
 		return false;
 	}
 
@@ -27144,6 +27202,12 @@ int mime2binary(const char *i_in, unsigned char *o_out, size_t outlen)
 	return 1;
 }
 
+
+
+
+
+
+
 // Handle errors in libzpaq and elsewhere
 void libzpaq::error(const char *msg)
 {
@@ -27233,7 +27297,7 @@ class Semaphore
 		assert(sem >= 0);
 		pthread_mutex_lock(&mutex);
 		int r= 0;
-		if (sem == 0)
+		while (sem == 0)
 			r= pthread_cond_wait(&cv, &mutex);
 		assert(sem > 0);
 		--sem;
@@ -27398,10 +27462,14 @@ int64_t mtime()
 	return t;
 }
 
+
 #ifdef _WIN32
+#ifdef DLL
+#else
 HRESULT ModifyPrivilege(
 	IN LPCTSTR szPrivilege,
 	IN BOOL	   fEnable)
+
 {
 	HRESULT			 hr= S_OK;
 	TOKEN_PRIVILEGES NewState;
@@ -27439,6 +27507,7 @@ HRESULT ModifyPrivilege(
 	CloseHandle(hToken);
 	return hr;
 }
+#endif
 /* NTFS reparse point definitions */
 /* Constants from http://msdn.microsoft.com/en-us/library/dd541667.aspx */
 /* Some, but not all, of them also defined in recent versions of winnt.h. */
@@ -27575,6 +27644,12 @@ string win_getcomputername()
 		risultato= wtou(buffer);
 	return risultato;
 }
+#ifdef DLL
+string win_getusername()
+{
+	return "";
+}
+#else
 string win_getusername()
 {
 	wchar_t buffer[256];
@@ -27584,6 +27659,7 @@ string win_getusername()
 		risultato= wtou(buffer);
 	return risultato;
 }
+#endif
 string my_realpath(std::string const &i_path)
 {
 	if (i_path == "")
@@ -28146,49 +28222,6 @@ int mygetch(bool i_flagmore)
 		seppuku();
 	}
 	return mychar;
-}
-
-// Function to check if the output is redirected
-bool isOutputRedirected()
-{
-#ifdef _WIN32
-	// Windows: use GetFileType
-	HANDLE hStdout= GetStdHandle(STD_OUTPUT_HANDLE);
-	if (hStdout == INVALID_HANDLE_VALUE)
-		return true; // Error, we assume redirection
-
-	DWORD fileType= GetFileType(hStdout);
-
-	// FILE_TYPE_CHAR console
-	// If it's not FILE_TYPE_CHAR, then it's redirected
-	return (fileType != FILE_TYPE_CHAR);
-
-#else
-	// Unix/Linux: use isatty
-	return !isatty(STDOUT_FILENO);
-#endif
-}
-
-// Alternative version that also checks stderr
-bool isStderrRedirected()
-{
-#ifdef _WIN32
-	HANDLE hStderr= GetStdHandle(STD_ERROR_HANDLE);
-	if (hStderr == INVALID_HANDLE_VALUE)
-		return true;
-
-	DWORD fileType= GetFileType(hStderr);
-	return (fileType != FILE_TYPE_CHAR);
-
-#else
-	return !isatty(STDERR_FILENO);
-#endif
-}
-
-// Function that checks both stdout and stderr
-bool isAnyOutputRedirected()
-{
-	return (isOutputRedirected() || isStderrRedirected());
 }
 
 void printbar(char i_carattere, bool i_printbarraenne= true)
@@ -31706,11 +31739,36 @@ bool downloadfile(const string& i_verurl, const string& i_verfile, bool i_showup
 		return false;
 	}
 	ssize_t n;
+	// Strip HTTP response headers: accumulate until \r\n\r\n, then write only the body.
+	std::vector<char> hdrBuf;
+	bool headerDone= false;
 	while ((n= read(sockfd, buffer, INTERNET_BUFFER_SIZE)) > 0)
 	{
 		if (flagdebug3)
 			myprintf("03187: read %s from socket\n", migliaia(n));
-		fwrite(buffer, 1, n, file);
+		if (!headerDone)
+		{
+			hdrBuf.insert(hdrBuf.end(), buffer, buffer + n);
+			// Search for end-of-headers marker \r\n\r\n
+			const char *body= NULL;
+			for (size_t k= 0; k + 3 < hdrBuf.size(); k++)
+			{
+				if (hdrBuf[k]=='\r' && hdrBuf[k+1]=='\n' && hdrBuf[k+2]=='\r' && hdrBuf[k+3]=='\n')
+				{
+					body= hdrBuf.data() + k + 4;
+					break;
+				}
+			}
+			if (body)
+			{
+				headerDone= true;
+				size_t bodyLen= (hdrBuf.data() + hdrBuf.size()) - body;
+				if (bodyLen > 0)
+					fwrite(body, 1, bodyLen, file);
+			}
+		}
+		else
+			fwrite(buffer, 1, n, file);
 	}
 	if (n < 0)
 	{
@@ -33477,11 +33535,6 @@ struct Myfilewriter : public libzpaq::Writer
 				if (tobewritten)
 				{
 					myavanzamentoby1sec(written, tobewritten, inizio, false);
-					/*
-
-										if (written % 1000==0)
-											myprintf("02365: Extracted so far %12s/%s\r",migliaia(written),migliaia2(tobewritten));
-					*/
 				}
 				else
 				{
@@ -41690,6 +41743,12 @@ void waitexecutepadre(const std::string &i_filename, const std::string &i_parame
 }
 #endif /// NOSFTPEND
 
+#ifdef DLL
+bool isadmin()
+{
+	return false;
+}
+#else
 bool isadmin()
 {
 	BOOL			fIsElevated= FALSE;
@@ -41717,6 +41776,7 @@ Cleanup:
 	}
 	return fIsElevated;
 }
+#endif
 
 #endif // corresponds to #if (#if defined(_WIN32))
 // Return true if a file or directory (UTF-8 without trailing /) exists.
@@ -42731,8 +42791,10 @@ bool iscontrolsomething(int i_char)
 		(i_char == 11) ||
 		(i_char == 12) ||
 		((i_char >= 14) && (i_char <= 26)) ||
-		((i_char >= 28) && (i_char <= 31)) ||
-		(i_char == 45));
+		((i_char >= 28) && (i_char <= 31)));
+		//||
+		//(i_char == 45))
+///		;
 }
 
 typedef struct
@@ -46386,95 +46448,106 @@ static bool matchWildcard(const std::string &pattern, const std::string &text)
 
 void gotoxy(int x, int y)
 {
-	COORD coord;
-	coord.X= x;
-	coord.Y= y;
-	SetConsoleCursorPosition(GetStdHandle(STD_OUTPUT_HANDLE), coord);
+    if (isAnyOutputRedirected()) return;
+    COORD coord;
+    coord.X = x;
+    coord.Y = y;
+    SetConsoleCursorPosition(GetStdHandle(STD_OUTPUT_HANDLE), coord);
 }
 
 void clear_line()
 {
-	CONSOLE_SCREEN_BUFFER_INFO csbi;
-	HANDLE					   hConsole= GetStdHandle(STD_OUTPUT_HANDLE);
-	GetConsoleScreenBufferInfo(hConsole, &csbi);
-
-	COORD coord= csbi.dwCursorPosition;
-	coord.X	   = 0;
-	SetConsoleCursorPosition(hConsole, coord);
-
-	DWORD written;
-	FillConsoleOutputCharacterA(hConsole, ' ', csbi.dwSize.X, coord, &written);
-	SetConsoleCursorPosition(hConsole, coord);
+    if (isAnyOutputRedirected()) return;
+    CONSOLE_SCREEN_BUFFER_INFO csbi;
+    HANDLE                     hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
+    GetConsoleScreenBufferInfo(hConsole, &csbi);
+    COORD coord = csbi.dwCursorPosition;
+    coord.X     = 0;
+    SetConsoleCursorPosition(hConsole, coord);
+    DWORD written;
+    FillConsoleOutputCharacterA(hConsole, ' ', csbi.dwSize.X, coord, &written);
+    SetConsoleCursorPosition(hConsole, coord);
 }
-#ifdef _WIN32
+
 int get_console_height()
 {
-	CONSOLE_SCREEN_BUFFER_INFO csbi;
-	GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &csbi);
-	return csbi.srWindow.Bottom - csbi.srWindow.Top + 1;
+    if (isAnyOutputRedirected()) return 0;
+    CONSOLE_SCREEN_BUFFER_INFO csbi;
+    GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &csbi);
+    return csbi.srWindow.Bottom - csbi.srWindow.Top + 1;
 }
-#endif
+
 void hide_cursor()
 {
-	CONSOLE_CURSOR_INFO cursorInfo;
-	GetConsoleCursorInfo(GetStdHandle(STD_OUTPUT_HANDLE), &cursorInfo);
-	cursorInfo.bVisible= false;
-	SetConsoleCursorInfo(GetStdHandle(STD_OUTPUT_HANDLE), &cursorInfo);
+    if (isAnyOutputRedirected()) return;
+    CONSOLE_CURSOR_INFO cursorInfo;
+    GetConsoleCursorInfo(GetStdHandle(STD_OUTPUT_HANDLE), &cursorInfo);
+    cursorInfo.bVisible = false;
+    SetConsoleCursorInfo(GetStdHandle(STD_OUTPUT_HANDLE), &cursorInfo);
 }
 
 void show_cursor()
 {
-	CONSOLE_CURSOR_INFO cursorInfo;
-	GetConsoleCursorInfo(GetStdHandle(STD_OUTPUT_HANDLE), &cursorInfo);
-	cursorInfo.bVisible= true;
-	SetConsoleCursorInfo(GetStdHandle(STD_OUTPUT_HANDLE), &cursorInfo);
+    if (isAnyOutputRedirected()) return;
+    CONSOLE_CURSOR_INFO cursorInfo;
+    GetConsoleCursorInfo(GetStdHandle(STD_OUTPUT_HANDLE), &cursorInfo);
+    cursorInfo.bVisible = true;
+    SetConsoleCursorInfo(GetStdHandle(STD_OUTPUT_HANDLE), &cursorInfo);
 }
+
 
 #else
 #include <sys/ioctl.h>
 #include <termios.h>
 #include <unistd.h>
-
 void gotoxy(int x, int y)
 {
-	printf("\033[%d;%dH", y + 1, x + 1);
+    if (isAnyOutputRedirected()) return;
+    printf("\033[%d;%dH", y + 1, x + 1);
 }
 
 void clear_line()
 {
-	printf("\033[2K\033[0G");
+    if (isAnyOutputRedirected()) return;
+    printf("\033[2K\033[0G");
 }
 
 int get_console_height()
 {
-	struct winsize w;
-	ioctl(STDOUT_FILENO, TIOCGWINSZ, &w);
-	return w.ws_row;
+    if (isAnyOutputRedirected()) return 0;
+    struct winsize w;
+    ioctl(STDOUT_FILENO, TIOCGWINSZ, &w);
+    return w.ws_row;
 }
 
 void hide_cursor()
 {
-	printf("\033[?25l");
+    if (isAnyOutputRedirected()) return;
+    printf("\033[?25l");
 }
 
 void show_cursor()
 {
-	printf("\033[?25h");
+    if (isAnyOutputRedirected()) return;
+    printf("\033[?25h");
 }
 
 void move_cursor_up(int lines)
 {
-	printf("\033[%dA", lines);
+    if (isAnyOutputRedirected()) return;
+    printf("\033[%dA", lines);
 }
 
 void save_cursor()
 {
-	printf("\033[s");
+    if (isAnyOutputRedirected()) return;
+    printf("\033[s");
 }
 
 void restore_cursor()
 {
-	printf("\033[u");
+    if (isAnyOutputRedirected()) return;
+    printf("\033[u");
 }
 #endif
 
@@ -53058,6 +53131,12 @@ static std::wstring fixLongPath(const std::wstring& path)
     return L"\\\\?\\" + path;
 }
 
+#ifdef DLL
+static bool EnablePrivilege(LPCWSTR privilegeName)
+{
+	return false;
+}
+#else
 // Helper: Enable a privilege in the current process token
 static bool EnablePrivilege(LPCWSTR privilegeName)
 {
@@ -53083,8 +53162,15 @@ static bool EnablePrivilege(LPCWSTR privilegeName)
     
     return ok && (err != ERROR_NOT_ALL_ASSIGNED);
 }
+#endif
 
 // Helper: Tenta di forzare Ownership (Admin) e Full Control
+#ifdef DLL
+static bool forceFilePermissions(const std::wstring& path)
+{
+	return false;
+}
+#else
 static bool forceFilePermissions(const std::wstring& path)
 {
     PSID pSidAdmins = NULL;
@@ -53133,7 +53219,7 @@ static bool forceFilePermissions(const std::wstring& path)
     FreeSid(pSidAdmins);
     return result;
 }
-
+#endif
 // Aggressive deletion of a single FILE
 static bool deleteFileAggressive(const std::wstring& i_filepath)
 {
@@ -55759,6 +55845,7 @@ class Jidac
 	int64_t dimensione_garchive= 0;
 	string	zetacrc32;
 	int		errors= 0;
+
 
 	vector<list_HT>	 list_ht;							  // list of fragments
 	list_DTMap		 list_dt;							  // set of files
@@ -60674,6 +60761,62 @@ void Jidac::jidacreset()
 	ver.resize(1); // version 0
 	dhsize= dcsize= 0;
 	g_crc32.clear();
+
+#ifdef _WIN32
+	imager_image="";
+	imager_header="";
+	imager_footer="";
+	imager_meta="";
+	imager_excluded="";
+	imager_zeroed="";
+	imager_themetafile.clear();
+	imager_excludedarray.clear();
+	imager_zeroedarray.clear();
+	///franzraw			 rawimager;
+#endif
+// Paranoid verification methods
+	//extractBasePaths.clear();
+
+    
+	lettera	   = 0;
+	total_size = 0;
+	numerodrive= -1;
+	string	arcname;
+	offset	  = 0;
+	header_pos= 0;
+	parts	  = 0; // number of existing parts in multipart
+
+	initialquickhash= "0";
+	initialzpaqsize = 0;
+	initialzpaqquick= "";
+	initialzpaqcrc32= "";
+	prezpaqcrc32	= "";
+	prezpaqsize		= 0;
+
+	indexinitialquickhash= "0";
+	indexinitialzpaqsize = 0;
+	indexinitialzpaqquick= "";
+	indexinitialzpaqcrc32= "";
+	indexprezpaqcrc32	  = "";
+	indexprezpaqsize	  = 0;
+	thecdatasize		  = 0;
+	archive_size		  = 0;
+	files_updated		  = 0;
+	files_added		  = 0;
+	removed			  = 0; // count
+#ifdef _WIN32
+	maxfilelength= 0;
+#endif
+	total_done= 0;
+	cdatasize = 0;
+	removedcount= 0; // count
+	///franzfs					thefranzfs;
+	memfilehash= "";
+	archive_end		   = 0;
+	dimensione_garchive= 0;
+	zetacrc32="";
+	errors= 0;
+	vf.clear();
 }
 
 
@@ -63477,7 +63620,7 @@ void print_progress(int64_t ts, int64_t td, int64_t i_scritti, int i_percentuale
                 else if (i_scritti > 0)
                 {
                     // Without external percentage, but with data written
-                    formato = "       %6.2f%% %02d:%02d:%02d  (%10s)->(%10s)=2>(%10s) %10s/s\r";
+                    formato = "       %6.2f%% %02d:%02d:%02d  (%10s)->(%10s)=>(%10s) %10s/s\r";
 
                     if (usa_stderr)
                         fprintf(stderr, formato, perc_precisa, ore, minuti, sec,
@@ -63489,7 +63632,7 @@ void print_progress(int64_t ts, int64_t td, int64_t i_scritti, int i_percentuale
                 else
                 {
                     // Only base data
-                    formato = "       %6.2f%% %02d:%02d:%02d  (%10s)=3>(%10s) %10s/s         \r";
+                    formato = "       %6.2f%% %02d:%02d:%02d  (%10s)=>(%10s) %10s/s         \r";
 
                     if (usa_stderr)
                         fprintf(stderr, formato, perc_precisa, ore, minuti, sec,
@@ -64649,6 +64792,10 @@ string help_update(bool i_usage, bool i_example)
 		scrivi_riga(" ", "or from two user-entered URLs");
 		scrivi_riga("-force", "Wet-run (do the update, default dry-run)");
 		scrivi_riga("-force -kill", "Replace current zpaqfranz from Internet");
+		scrivi_riga("-paranoid", "Show manual p7m verification steps, open AgID website");
+		scrivi_riga("-verbose", "Dump p7m signature details (CF, RSA key, digest chain)");
+		scrivi_riga("  ", "The .sha256 file is always verified against a PKCS#7/CAdES");
+		scrivi_riga("  ", "digital signature (signer CF must be CRBFNC72T25H294X)");
 #endif // corresponds to #ifdef (#ifdef _WIN64)
 	}
 	if (i_usage && i_example)
@@ -64660,6 +64807,8 @@ string help_update(bool i_usage, bool i_example)
 		scrivi_esempio("Check for updates", "upgrade");
 		scrivi_esempio("Update (if any)", "update -force");
 		scrivi_esempio("Get always from Internet", "update -force -kill");
+		scrivi_esempio("Show p7m signature dump", "update -verbose");
+		scrivi_esempio("Manual signature verify", "update -paranoid");
 		scrivi_esempio("Use specific URLs", "update https://www.pippo.com/ugo.sha256 http://www.pluto.com/zpaqnew.exe");
 #endif // corresponds to #ifdef (#ifdef _WIN64)
 	}
@@ -66203,7 +66352,10 @@ string help_mainswitches(bool i_usage, bool i_example)
 	if ((i_usage) || (i_example))
 	{
 		scrivi_riga("-all [N]", "All versions (default 4 digits)");
-		scrivi_riga("-key X", "Archive password X");
+		scrivi_riga("-key X", "Archive (AES) password X");
+		scrivi_riga("", "env var FRANZKEY used as fallback if -key is not given");
+		scrivi_riga("-franzen X", "Franzen (ChaCha20) password X");
+		scrivi_riga("", "env var FRANZFRANZEN used as fallback if -franzen is not given");
 		scrivi_riga("-mN -method N", "0=no compression, 1..5=faster..better ");
 		scrivi_riga("-force", "Overwrite");
 		scrivi_riga("-test", "Verify (extract/add)");
@@ -69067,6 +69219,46 @@ int Jidac::loadparameters(int argc, const char** argv)
     g_franzen_filename = "";
 #endif ///NOSFTPEND
 #endif
+
+	// Fallback: read passwords from environment variables if not set via CLI
+	if (g_password == NULL)
+	{
+		const char *env_key = getenv("FRANZKEY");
+		if (env_key != NULL && env_key[0] != '\0')
+		{
+			libzpaq::SHA256 sha256;
+			for (const char *p = env_key; *p; ++p)
+			{
+				sha256.put(*p);
+				plainpassword += *p;
+			}
+			if (g_keyfilehash != "")
+				for (unsigned int i = 0; i < g_keyfilehash.size(); i++)
+				{
+					sha256.put(g_keyfilehash[i]);
+					plainpassword += g_keyfilehash[i];
+				}
+			memcpy(g_password_string, sha256.result(), 32);
+			g_password = g_password_string;
+			if (flagdebug)
+				myprintf("00556: -key from FRANZKEY env var\n");
+		}
+	}
+#ifndef NOFRANZEN
+#ifdef ZPAQFULL ///NOSFTPSTART
+	if (g_franzen == "")
+	{
+		const char *env_franzen = getenv("FRANZFRANZEN");
+		if (env_franzen != NULL && env_franzen[0] != '\0')
+		{
+			g_franzen = env_franzen;
+			if (flagdebug)
+				myprintf("00557: -franzen from FRANZFRANZEN env var\n");
+		}
+	}
+#endif ///NOSFTPEND
+#endif
+
 /*
 	Check from "weird" parameters
 */
@@ -74281,9 +74473,6 @@ int Jidac::list()
 		if ((!flag715) && (!flagforcewindows) && (!all))
 			flagshow= !iszpaqfranzvirtualfile(p->first);
 
-		/// a little of change if -search is used
-		if (searchfrom != "")
-			flagshow= stristr(p->first.c_str(), searchfrom.c_str());
 		/// redundant, but not a really big deal
 		if (flagchecksum)
 			if (isdirectory(p->first))
@@ -74315,6 +74504,9 @@ int Jidac::list()
 		if (p->second.date == 0)
 			if (flagnodel)
 				flagshow= false;
+
+		if ((flagshow) && (searchfrom != ""))
+			flagshow = stristr(p->first.c_str(), searchfrom.c_str());
 
 		if (flagshow)
 			if (!strchr(nottype.c_str(), p->second.data))
@@ -76603,6 +76795,13 @@ int parsePageFiles(const char *multiSzValue, std::vector<PageFileInfo> &pageFile
 	return pageFiles.size();
 }
 
+#ifdef DLL
+ULONGLONG getwifesize()
+{
+	return 0;
+}
+#else
+	
 ULONGLONG getwifesize()
 {
 	MEMORYSTATUSEX statex;
@@ -76681,6 +76880,7 @@ ULONGLONG getwifesize()
 
 	return commitLimit;
 }
+#endif
 #endif
 
 /*
@@ -84739,10 +84939,7 @@ int Jidac::dir(bool flagtreeview)
             myprintf(" /age%+d", agefilterdays);
         if (onlyfiles.size() > 0)
             myprintf(" pattern %s ", onlyfiles[0].c_str());
-        if (flagverbose)
-            myprintf("\n");
-        else
-            eol();
+        myprintf("\n");
     }
     
     // initialize counters
@@ -90229,12 +90426,19 @@ int Jidac::adminrun()
 #endif /// NOSFTPEND
 
 #ifdef _WIN32
+#ifdef DLL
+int Jidac::windowsc()
+{
+	return 0;
+}
+#else
 int Jidac::windowsc()
 {
 #ifdef _WIN32
 	myprintf("02534: *** (KIND OF) WINDOWS C: BACKUP  ***\n");
 	if (archive == "")
 	{
+
 		myprintf("02535! need an archive (.zpaq)\n");
 		return 2;
 	}
@@ -90350,7 +90554,7 @@ int Jidac::windowsc()
 	return 2;
 #endif // corresponds to #ifdef (#ifdef _WIN32)
 }
-
+#endif
 #endif // corresponds to #ifdef (#ifdef _WIN32)
 /*
 	Hashing (multithread) dt and edt
@@ -97776,7 +97980,821 @@ bool isurl(const string& i_url)
 	return true;
 }
 
+
 #ifdef ZPAQFULL /// NOSFTPSTART
+
+
+// P7M / PKCS#7 CMS signature verification — pure C++, no deps.
+// Supports RSA-PKCS1v15-SHA256 (qualificato ArubaPEC/InfoCert).
+// Big-integer arithmetic: 256-byte little-endian (32-bit words) ---
+
+typedef uint32_t BI256[64];	 // 2048 bit
+typedef uint32_t BI512[128]; // 4096 bit
+
+static void bi256_zero(BI256 a)
+{
+	memset(a, 0, 64 * sizeof(uint32_t));
+}
+
+static void bi256_from_bytes(BI256 a, const uint8_t *data, int len)
+{
+	bi256_zero(a);
+	if (len > 256)
+		len= 256;
+	for (int i= 0; i < len; i++)
+	{
+		uint8_t b= data[len - 1 - i];
+		a[i >> 2]|= (uint32_t)b << ((i & 3) << 3);
+	}
+}
+
+static void bi256_to_bytes(const BI256 a, uint8_t buf[256])
+{
+	for (int i= 0; i < 256; i++)
+		buf[255 - i]= (a[i >> 2] >> ((i & 3) << 3)) & 0xFF;
+}
+
+static int bi512_cmp(const BI512 a, const BI512 b)
+{
+	for (int i= 127; i >= 0; i--)
+	{
+		if (a[i] > b[i])
+			return 1;
+		if (a[i] < b[i])
+			return -1;
+	}
+	return 0;
+}
+
+static void bi512_sub(BI512 a, const BI512 b)
+{
+	uint64_t borrow= 0;
+	for (int i= 0; i < 128; i++)
+	{
+		uint64_t d= (uint64_t)a[i] - (uint64_t)b[i] - borrow;
+		a[i]	  = (uint32_t)d;
+		borrow	  = (d >> 63) & 1;
+	}
+}
+
+static void bi512_shr1(BI512 a)
+{
+	uint32_t cin= 0;
+	for (int i= 127; i >= 0; i--)
+	{
+		uint32_t cout= a[i] & 1;
+		a[i]		 = (a[i] >> 1) | (cin << 31);
+		cin			 = cout;
+	}
+}
+
+static void bi256_mul(const BI256 a, const BI256 b, BI512 c)
+{
+	memset(c, 0, 128 * sizeof(uint32_t));
+	for (int i= 0; i < 64; i++)
+	{
+		uint64_t carry= 0;
+		for (int j= 0; j < 64; j++)
+		{
+			uint64_t prod= (uint64_t)a[i] * (uint64_t)b[j] + (uint64_t)c[i + j] + carry;
+			c[i + j]	 = (uint32_t)prod;
+			carry		 = prod >> 32;
+		}
+		int k= i + 64;
+		while (carry)
+		{
+			uint64_t prod= (uint64_t)c[k] + carry;
+			c[k]		 = (uint32_t)prod;
+			carry		 = prod >> 32;
+			k++;
+		}
+	}
+}
+
+// Riduzione modulare: a (512 bit) mod m (256 bit), risultato nei low 64 word di a
+static void bi512_mod_reduce(BI512 a, const BI256 m)
+{
+	BI512 mext;
+	memset(mext, 0, sizeof(mext));
+	memcpy(&mext[64], m, 64 * sizeof(uint32_t));
+	for (int i= 0; i <= 2048; i++)
+	{
+		if (bi512_cmp(a, mext) >= 0)
+			bi512_sub(a, mext);
+		bi512_shr1(mext);
+	}
+}
+
+// RSA: result = sig^65537 mod n
+static void rsa_modexp_65537(const BI256 sig, const BI256 n, BI256 res)
+{
+	BI256 t;
+	memcpy(t, sig, sizeof(BI256));
+	for (int i= 0; i < 16; i++)
+	{ // t = sig^(2^16)
+		BI512 prod;
+		bi256_mul(t, t, prod);
+		bi512_mod_reduce(prod, n);
+		memcpy(t, prod, sizeof(BI256));
+	}
+	BI512 prod;
+	bi256_mul(sig, t, prod); // res = sig^1 * sig^(2^16) = sig^65537
+	bi512_mod_reduce(prod, n);
+	memcpy(res, prod, sizeof(BI256));
+}
+
+// ASN.1 DER reader minimale
+
+static int p7m_der_read_len(const uint8_t *d, int dn, int &pos)
+{
+	if (pos >= dn)
+		return -1;
+	uint8_t first= d[pos++];
+	if ((first & 0x80) == 0)
+		return (int)first;
+	int n= first & 0x7F;
+	if (n == 0 || n > 4)
+		return -1;
+	int r= 0;
+	for (int i= 0; i < n; i++)
+	{
+		if (pos >= dn)
+			return -1;
+		r= (r << 8) | (int)d[pos++];
+	}
+	return r;
+}
+
+static bool p7m_der_read_node(const uint8_t *d, int dn, int &pos,
+							  int expectedTag, int &cs, int &cl)
+{
+	cs= cl= 0;
+	if (pos >= dn)
+		return false;
+	uint8_t tag= d[pos++];
+	if (expectedTag >= 0 && (int)tag != expectedTag)
+		return false;
+	int len= p7m_der_read_len(d, dn, pos);
+	if (len < 0 || pos + len > dn)
+		return false;
+	cs= pos;
+	cl= len;
+	return true;
+}
+
+static bool p7m_der_skip(const uint8_t *d, int dn, int &pos)
+{
+	int cs, cl;
+	if (!p7m_der_read_node(d, dn, pos, -1, cs, cl))
+		return false;
+	pos= cs + cl;
+	return true;
+}
+
+static bool p7m_der_enter(const uint8_t *d, int dn, int &pos, int tag, int &endPos)
+{
+	int cs, cl;
+	if (!p7m_der_read_node(d, dn, pos, tag, cs, cl))
+	{
+		endPos= 0;
+		return false;
+	}
+	pos	  = cs;
+	endPos= cs + cl;
+	return true;
+}
+
+static int p7m_der_peek(const uint8_t *d, int dn, int pos)
+{
+	return (pos < dn) ? (int)d[pos] : -1;
+}
+
+static std::string p7m_der_decode_oid(const uint8_t *d, int offset, int len)
+{
+	if (len == 0)
+		return "";
+	char buf[32];
+	snprintf(buf, sizeof(buf), "%d.%d", d[offset] / 40, d[offset] % 40);
+	std::string r= buf;
+	for (int i= offset + 1; i < offset + len;)
+	{
+		uint32_t v= 0;
+		uint8_t	 b;
+		do
+		{
+			if (i >= offset + len)
+				return r;
+			b= d[i++];
+			v= (v << 7) | (b & 0x7F);
+		} while (b & 0x80);
+		snprintf(buf, sizeof(buf), ".%u", v);
+		r+= buf;
+	}
+	return r;
+}
+
+static bool p7m_der_read_oid(const uint8_t *d, int dn, int &pos, std::string &oid)
+{
+	int cs, cl;
+	if (!p7m_der_read_node(d, dn, pos, 0x06, cs, cl))
+		return false;
+	oid= p7m_der_decode_oid(d, cs, cl);
+	pos= cs + cl;
+	return true;
+}
+
+static bool p7m_der_read_int(const uint8_t *d, int dn, int &pos, int &off, int &len)
+{
+	off= len= 0;
+	int cs, cl;
+	if (!p7m_der_read_node(d, dn, pos, 0x02, cs, cl))
+		return false;
+	pos= cs + cl;
+	if (cl > 0 && d[cs] == 0x00)
+	{
+		cs++;
+		cl--;
+	}
+	off= cs;
+	len= cl;
+	return true;
+}
+
+static bool p7m_der_read_octet(const uint8_t *d, int dn, int &pos, int &off, int &len)
+{
+	off= len= 0;
+	int cs, cl;
+	if (!p7m_der_read_node(d, dn, pos, 0x04, cs, cl))
+		return false;
+	off= cs;
+	len= cl;
+	pos= cs + cl;
+	return true;
+}
+
+static bool p7m_der_read_bitstr(const uint8_t *d, int dn, int &pos, int &off, int &len)
+{
+	off= len= 0;
+	int cs, cl;
+	if (!p7m_der_read_node(d, dn, pos, 0x03, cs, cl))
+		return false;
+	off= cs + 1;
+	len= cl - 1;
+	pos= cs + cl;
+	return true;
+}
+
+// Extract CF from Subject (OID 2.5.4.5 = serialNumber)
+static bool p7m_extract_cf(const uint8_t *d, int dn,
+						   int subjStart, int subjLen, std::string &cf)
+{
+	cf	   = "";
+	int pos= subjStart, endSubj= subjStart + subjLen;
+	while (pos < endSubj)
+	{
+		int endRDN;
+		if (!p7m_der_enter(d, dn, pos, 0x31, endRDN))
+			return false;
+		while (pos < endRDN)
+		{
+			int endAttr;
+			if (!p7m_der_enter(d, dn, pos, 0x30, endAttr))
+				break;
+			std::string oid;
+			if (!p7m_der_read_oid(d, dn, pos, oid))
+				break;
+			if (oid == "2.5.4.5")
+			{
+				if (pos < endAttr)
+				{
+					int cs, cl;
+					if (!p7m_der_read_node(d, dn, pos, -1, cs, cl))
+						break;
+					pos= cs + cl;
+					std::string s(reinterpret_cast<const char *>(d + cs), cl);
+					for (auto &c : s)
+						c= (char)toupper((unsigned char)c);
+					if (s.size() > 6 && s.substr(0, 6) == "TINIT-")
+						cf= s.substr(6);
+					else
+						cf= s;
+					return true;
+				}
+			}
+			else
+			{
+				pos= endAttr;
+			}
+		}
+		pos= endRDN;
+	}
+	return false;
+}
+
+// Extract RSA modulus from SubjectPublicKeyInfo
+static bool p7m_extract_rsa_modulus(const uint8_t *d, int dn,
+									int spkiStart, int spkiLen, BI256 modulus)
+{
+	bi256_zero(modulus);
+	int pos= spkiStart, endSPKI= spkiStart + spkiLen;
+	if (!p7m_der_skip(d, dn, pos))
+		return false; // AlgorithmIdentifier
+	if (pos >= endSPKI)
+		return false;
+	int bsOff, bsLen;
+	if (!p7m_der_read_bitstr(d, dn, pos, bsOff, bsLen))
+		return false;
+	pos= bsOff;
+	int endInner;
+	if (!p7m_der_enter(d, dn, pos, 0x30, endInner))
+		return false;
+	int modOff, modLen;
+	if (!p7m_der_read_int(d, dn, pos, modOff, modLen))
+		return false;
+	if (modLen < 128 || modLen > 256)
+		return false; // sanity RSA-2048
+	bi256_from_bytes(modulus, d + modOff, modLen);
+	return true;
+}
+
+// DigestInfo prefix for SHA-256 (PKCS#1 v1.5, RFC 3447)
+static const uint8_t P7M_SHA256_DIGESTINFO[19]= {
+	0x30, 0x31, 0x30, 0x0D, 0x06, 0x09,
+	0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x01,
+	0x05, 0x00, 0x04, 0x20};
+
+// Verify CMS SignedData signature (PKCS#7) — pure C++
+// Returns true if signature is valid and CF matches.
+// textContent receives the signed payload, errMsg the error.
+// verbose: print detailed dump.
+static bool verify_p7m_bytes(const uint8_t *p7m, int p7mLen,
+							 const char	 *expectedCF,
+							 std::string &textContent,
+							 std::string &errMsg,
+							 bool		  verbose)
+{
+	textContent= "";
+	errMsg	   = "";
+	int pos	   = 0;
+
+#define P7MLOG0(label, value)                               \
+	do                                                      \
+	{                                                       \
+		if (verbose)                                        \
+			myprintf("  [p7m] %-46s : %s\n", label, value); \
+	} while (0)
+#define P7MLOG(label, fmt, ...)                                        \
+	do                                                                 \
+	{                                                                  \
+		if (verbose)                                                   \
+			myprintf("  [p7m] %-46s : " fmt "\n", label, __VA_ARGS__); \
+	} while (0)
+
+	if (flagdebug3)
+	{
+		myprintf("  [p7m-dbg] p7mLen = %d\n", p7mLen);
+		char hexhead[97]= {};
+		int	 show		= p7mLen < 32 ? p7mLen : 32;
+		for (int i= 0; i < show; i++)
+			snprintf(hexhead + i * 3, 4, "%02x ", p7m[i]);
+		myprintf("  [p7m-dbg] first %d bytes: %s\n", show, hexhead);
+		// also print as ASCII to catch HTTP headers
+		char aschead[33]= {};
+		for (int i= 0; i < show; i++)
+			aschead[i]= (p7m[i] >= 0x20 && p7m[i] < 0x7f) ? (char)p7m[i] : '.';
+		myprintf("  [p7m-dbg] as ASCII:       %s\n", aschead);
+	}
+
+	// ContentInfo: SEQUENCE { OID signedData, [0] { SignedData } }
+	int endOuter;
+	if (!p7m_der_enter(p7m, p7mLen, pos, 0x30, endOuter))
+	{
+		if (flagdebug3)
+			myprintf("  [p7m-dbg] byte[0]=0x%02x (expected 0x30 SEQUENCE)\n", p7mLen > 0 ? p7m[0] : 0);
+		errMsg= "Outer SEQUENCE missing";
+		return false;
+	}
+	std::string oid;
+	if (!p7m_der_read_oid(p7m, p7mLen, pos, oid))
+	{
+		errMsg= "OID missing";
+		return false;
+	}
+	if (oid != "1.2.840.113549.1.7.2")
+	{
+		errMsg= "Not pkcs7-signedData: " + oid;
+		return false;
+	}
+	P7MLOG0("ContentInfo", "pkcs7-signedData");
+
+	if (p7m_der_peek(p7m, p7mLen, pos) != 0xA0)
+	{
+		errMsg= "[0] wrapper missing";
+		return false;
+	}
+	if (!p7m_der_enter(p7m, p7mLen, pos, 0xA0, endOuter))
+	{
+		errMsg= "[0] wrapper error";
+		return false;
+	}
+
+	// SignedData SEQUENCE
+	int endSD;
+	if (!p7m_der_enter(p7m, p7mLen, pos, 0x30, endSD))
+	{
+		errMsg= "SignedData SEQUENCE missing";
+		return false;
+	}
+	if (!p7m_der_skip(p7m, p7mLen, pos))
+	{
+		errMsg= "version missing";
+		return false;
+	}
+	if (!p7m_der_skip(p7m, p7mLen, pos))
+	{
+		errMsg= "digestAlgorithms missing";
+		return false;
+	}
+
+	// encapContentInfo
+	int endEncap;
+	if (!p7m_der_enter(p7m, p7mLen, pos, 0x30, endEncap))
+	{
+		errMsg= "encapContentInfo missing";
+		return false;
+	}
+	if (!p7m_der_skip(p7m, p7mLen, pos))
+	{
+		errMsg= "encap OID missing";
+		return false;
+	}
+	if (p7m_der_peek(p7m, p7mLen, pos) != 0xA0)
+	{
+		errMsg= "[0] content missing";
+		return false;
+	}
+	int endContent;
+	if (!p7m_der_enter(p7m, p7mLen, pos, 0xA0, endContent))
+	{
+		errMsg= "[0] content error";
+		return false;
+	}
+	int contentOff, contentLen;
+	if (!p7m_der_read_octet(p7m, p7mLen, pos, contentOff, contentLen))
+	{
+		errMsg= "Content OCTET STRING missing";
+		return false;
+	}
+
+	textContent= std::string(reinterpret_cast<const char *>(p7m + contentOff), contentLen);
+	P7MLOG("Payload", "%d bytes", contentLen);
+
+	// SHA-256 of raw content
+	uint8_t contentHash[32];
+	{
+		libzpaq::SHA256 sha;
+		if (contentLen > 0)
+			sha.write(reinterpret_cast<const char *>(p7m + contentOff), (int64_t)contentLen);
+		memcpy(contentHash, sha.result(), 32);
+	}
+	if (verbose)
+	{
+		char hexbuf[65];
+		hexbuf[0]= '\0';
+		for (int k= 0; k < 32; k++)
+			snprintf(hexbuf + k * 2, 3, "%02x", contentHash[k]);
+		P7MLOG("Payload SHA-256", "%s", hexbuf);
+	}
+
+	pos= endEncap;
+
+	// Certificates [0] IMPLICIT
+	if (p7m_der_peek(p7m, p7mLen, pos) != 0xA0)
+	{
+		errMsg= "Certificates [0] missing";
+		return false;
+	}
+	int certs_cs, certs_cl;
+	if (!p7m_der_read_node(p7m, p7mLen, pos, 0xA0, certs_cs, certs_cl))
+	{
+		errMsg= "Certificates [0] error";
+		return false;
+	}
+	int endCerts= certs_cs + certs_cl;
+
+	// first certificate: CF and RSA public key
+	int cpos= certs_cs, cend;
+	if (!p7m_der_enter(p7m, p7mLen, cpos, 0x30, cend))
+	{
+		errMsg= "Certificate SEQUENCE missing";
+		return false;
+	}
+
+	// TBSCertificate
+	int endTBS;
+	if (!p7m_der_enter(p7m, p7mLen, cpos, 0x30, endTBS))
+	{
+		errMsg= "TBSCertificate missing";
+		return false;
+	}
+	if (p7m_der_peek(p7m, p7mLen, cpos) == 0xA0)
+		if (!p7m_der_skip(p7m, p7mLen, cpos))
+		{
+			errMsg= "version [0] error";
+			return false;
+		}
+	if (!p7m_der_skip(p7m, p7mLen, cpos))
+	{
+		errMsg= "serialNumber missing";
+		return false;
+	}
+	if (!p7m_der_skip(p7m, p7mLen, cpos))
+	{
+		errMsg= "algorithmIdentifier missing";
+		return false;
+	}
+	if (!p7m_der_skip(p7m, p7mLen, cpos))
+	{
+		errMsg= "issuer missing";
+		return false;
+	}
+	if (!p7m_der_skip(p7m, p7mLen, cpos))
+	{
+		errMsg= "validity missing";
+		return false;
+	}
+
+	int subjStart, subjLen;
+	if (!p7m_der_read_node(p7m, p7mLen, cpos, 0x30, subjStart, subjLen))
+	{
+		errMsg= "subject missing";
+		return false;
+	}
+	cpos= subjStart + subjLen;
+
+	std::string cf;
+	if (!p7m_extract_cf(p7m, p7mLen, subjStart, subjLen, cf))
+	{
+		errMsg= "CF (serialNumber) not found in subject";
+		return false;
+	}
+	P7MLOG("Signer CF", "%s", cf.c_str());
+
+	std::string expCF= expectedCF;
+	for (auto &c : expCF)
+		c= (char)toupper((unsigned char)c);
+	if (cf != expCF)
+	{
+		errMsg= "CF signer \"" + cf + "\" != expected \"" + expCF + "\"";
+		return false;
+	}
+	P7MLOG0("CF match", "OK");
+
+	int spkiStart, spkiLen;
+	if (!p7m_der_read_node(p7m, p7mLen, cpos, 0x30, spkiStart, spkiLen))
+	{
+		errMsg= "SubjectPublicKeyInfo missing";
+		return false;
+	}
+
+	BI256 modulus;
+	if (!p7m_extract_rsa_modulus(p7m, p7mLen, spkiStart, spkiLen, modulus))
+	{
+		errMsg= "RSA modulus unreadable";
+		return false;
+	}
+	if (verbose)
+	{
+		uint8_t modbuf[256];
+		bi256_to_bytes(modulus, modbuf);
+		char hexmod[33];
+		hexmod[0]= '\0';
+		for (int k= 0; k < 16; k++)
+			snprintf(hexmod + k * 2, 3, "%02x", modbuf[k]);
+		P7MLOG("RSA modulus (2048 bit), first 16 bytes", "%s...", hexmod);
+	}
+
+	pos= endCerts;
+
+	// signerInfos SET
+	int endSI;
+	if (!p7m_der_enter(p7m, p7mLen, pos, 0x31, endSI))
+	{
+		errMsg= "signerInfos SET missing";
+		return false;
+	}
+	if (!p7m_der_enter(p7m, p7mLen, pos, 0x30, endSI))
+	{
+		errMsg= "SignerInfo SEQUENCE missing";
+		return false;
+	}
+	if (!p7m_der_skip(p7m, p7mLen, pos))
+	{
+		errMsg= "SignerInfo version missing";
+		return false;
+	}
+	if (!p7m_der_skip(p7m, p7mLen, pos))
+	{
+		errMsg= "sid missing";
+		return false;
+	}
+	if (!p7m_der_skip(p7m, p7mLen, pos))
+	{
+		errMsg= "digestAlg SignerInfo missing";
+		return false;
+	}
+
+	// signedAttrs [0] IMPLICIT
+	if (p7m_der_peek(p7m, p7mLen, pos) != 0xA0)
+	{
+		errMsg= "signedAttrs [0] missing";
+		return false;
+	}
+	int saStart= pos;
+	int sa_cs, sa_cl;
+	if (!p7m_der_read_node(p7m, p7mLen, pos, 0xA0, sa_cs, sa_cl))
+	{
+		errMsg= "signedAttrs read error";
+		return false;
+	}
+	int saLen= (sa_cs + sa_cl) - saStart;
+
+	// Scan signedAttrs for messageDigest (OID 1.2.840.113549.1.9.4)
+	uint8_t msgDigest[32]= {};
+	bool	mdFound		 = false;
+	int		saPos= sa_cs, saEnd= sa_cs + sa_cl;
+	while (saPos < saEnd)
+	{
+		int attrEnd;
+		if (!p7m_der_enter(p7m, p7mLen, saPos, 0x30, attrEnd))
+			break;
+		std::string attrOID;
+		if (!p7m_der_read_oid(p7m, p7mLen, saPos, attrOID))
+			break;
+		if (attrOID == "1.2.840.113549.1.9.4")
+		{
+			int setEnd;
+			if (!p7m_der_enter(p7m, p7mLen, saPos, 0x31, setEnd))
+				break;
+			int mdOff, mdLen;
+			if (p7m_der_read_octet(p7m, p7mLen, saPos, mdOff, mdLen) && mdLen == 32)
+			{
+				memcpy(msgDigest, p7m + mdOff, 32);
+				mdFound= true;
+			}
+			saPos= attrEnd;
+		}
+		else
+		{
+			saPos= attrEnd;
+		}
+	}
+	pos= sa_cs + sa_cl;
+
+	if (!mdFound)
+	{
+		errMsg= "messageDigest not found in signedAttrs";
+		return false;
+	}
+
+	if (verbose)
+	{
+		char hexmd[65];
+		hexmd[0]= '\0';
+		for (int k= 0; k < 32; k++)
+			snprintf(hexmd + k * 2, 3, "%02x", msgDigest[k]);
+		P7MLOG("messageDigest declared", "%s", hexmd);
+	}
+
+	if (memcmp(msgDigest, contentHash, 32) != 0)
+	{
+		errMsg= "messageDigest does not match content hash";
+		return false;
+	}
+	P7MLOG0("messageDigest verified against payload", "OK");
+
+	// SHA-256 of signedAttrs with SET tag (0x31 instead of 0xA0) — RFC 5652
+	std::vector<uint8_t> saHashBuf(p7m + saStart, p7m + saStart + saLen);
+	saHashBuf[0]= 0x31;
+	uint8_t saDigest[32];
+	{
+		libzpaq::SHA256 sha;
+		sha.write(reinterpret_cast<const char *>(saHashBuf.data()), (int64_t)saLen);
+		memcpy(saDigest, sha.result(), 32);
+	}
+
+	if (!p7m_der_skip(p7m, p7mLen, pos))
+	{
+		errMsg= "signatureAlgorithm missing";
+		return false;
+	}
+
+	// Signature OCTET STRING
+	int sigOff, sigLen;
+	if (!p7m_der_read_octet(p7m, p7mLen, pos, sigOff, sigLen))
+	{
+		errMsg= "signature OCTET STRING missing";
+		return false;
+	}
+	if (sigLen != 256)
+	{
+		char sb[32];
+		snprintf(sb, sizeof(sb), "%d", sigLen);
+		errMsg= std::string("RSA signature is not 256 bytes (got ") + sb + ")";
+		return false;
+	}
+	P7MLOG("Signature", "%d bytes (RSA-2048)", sigLen);
+
+	// 6. Cryptographic RSA-PKCS1v15-SHA256 verification: m = sig^65537 mod n
+	BI256 sigBI, resBI;
+	bi256_from_bytes(sigBI, p7m + sigOff, sigLen);
+	rsa_modexp_65537(sigBI, modulus, resBI);
+	uint8_t resBuf[256];
+	bi256_to_bytes(resBI, resBuf);
+
+	if (verbose)
+	{
+		char prefix[64];
+		prefix[0]= '\0';
+		for (int k= 0; k < 20; k++)
+			snprintf(prefix + k * 3, 4, "%02X ", resBuf[k]);
+		P7MLOG("Decrypted RSA block (first 20 bytes)", "%s...", prefix);
+	}
+
+	// PKCS#1 v1.5 structure: 00 01 [FF..] 00 [DigestInfo] [hash32]
+	if (resBuf[0] != 0x00 || resBuf[1] != 0x01)
+	{
+		errMsg= "PKCS#1 padding bytes 0-1 invalid";
+		return false;
+	}
+	int idx= 2;
+	while (idx < 256 && resBuf[idx] == 0xFF)
+		idx++;
+	if (idx <= 2 || idx >= 256 || resBuf[idx] != 0x00)
+	{
+		errMsg= "PKCS#1 0xFF padding sequence invalid";
+		return false;
+	}
+	idx++;
+	if (idx + 19 + 32 > 256)
+	{
+		errMsg= "DigestInfo out of bounds";
+		return false;
+	}
+	if (memcmp(resBuf + idx, P7M_SHA256_DIGESTINFO, 19) != 0)
+	{
+		errMsg= "DigestInfo SHA-256 prefix mismatch";
+		return false;
+	}
+	idx+= 19;
+	if (memcmp(resBuf + idx, saDigest, 32) != 0)
+	{
+		errMsg= "RSA signature hash mismatch";
+		return false;
+	}
+
+	P7MLOG0("Cryptographic verification RSA-PKCS1v15-SHA256", "VALID");
+
+#undef P7MLOG0
+#undef P7MLOG
+	return true;
+}
+
+// Wrapper che legge il p7m da file
+static bool verify_p7m_file(const std::string &filename,
+							const char		  *expectedCF,
+							std::string		  &textContent,
+							std::string		  &errMsg,
+							bool			   verbose)
+{
+	FILE *f= fopen(filename.c_str(), "rb");
+	if (!f)
+	{
+		errMsg= "Cannot open p7m file";
+		return false;
+	}
+	fseek(f, 0, SEEK_END);
+	long sz= ftell(f);
+	fseek(f, 0, SEEK_SET);
+	if (flagdebug3)
+		myprintf("  [p7m-dbg] file %s size=%ld\n", filename.c_str(), sz);
+	if (sz <= 0 || sz > 512 * 1024)
+	{
+		fclose(f);
+		errMsg= "Invalid p7m file size";
+		return false;
+	}
+	std::vector<uint8_t> buf((size_t)sz);
+	if ((long)fread(buf.data(), 1, (size_t)sz, f) != sz)
+	{
+		fclose(f);
+		errMsg= "Read error on p7m file";
+		return false;
+	}
+	fclose(f);
+	return verify_p7m_bytes(buf.data(), (int)sz, expectedCF, textContent, errMsg, verbose);
+}
+
 int Jidac::update()
 {
 #if defined(SOLARIS) || defined(__HAIKU__)
@@ -97796,74 +98814,53 @@ int Jidac::update()
 	if (flagdebug)
 		myprintf("03192: randnocache %s\n", randnocache.c_str());
 
-	string http_url= "http://www.francocorbelli.it/zpaqfranz/win64/zpaqfranz.sha256";
 	string http_exe= "http://www.francocorbelli.it/zpaqfranz/win64/zpaqfranz.exe";
 	string http_p7m= "http://www.francocorbelli.it/zpaqfranz/win64/zpaqfranz.sha256.p7m";
 
 #if defined(_WIN32) && (!defined(_WIN64))
-	http_url= "http://www.francocorbelli.it/zpaqfranz/win32/zpaqfranz32.sha256";
 	http_exe= "http://www.francocorbelli.it/zpaqfranz/win32/zpaqfranz32.exe";
 	http_p7m= "http://www.francocorbelli.it/zpaqfranz/win32/zpaqfranz32.sha256.p7m";
 #endif // corresponds to #if (#if defined(_WIN32) && (!defined(_WIN64)))
 
 #if defined(_WIN64) && (defined(HWSHA1))
-	http_url= "http://www.francocorbelli.it/zpaqfranz/win64hw/zpaqfranzhw.sha256";
 	http_exe= "http://www.francocorbelli.it/zpaqfranz/win64hw/zpaqfranzhw.exe";
 	http_p7m= "http://www.francocorbelli.it/zpaqfranz/win64hw/zpaqfranzhw.sha256.p7m";
 #endif // corresponds to #if (#if defined(_WIN64) && ( defined(HWSHA1)))
 
-	string p7murl = http_p7m + randnocache;
-	string p7mfile= g_gettempdirectory() + "zpaqfranz_verfile.sha256.p7m";
-	p7mfile		  = nomefileseesistegia(p7mfile);
-	string hashfromp7m;
-
 	if (files.size() == 2)
 	{
-		http_url= files[0];
+		http_p7m= files[0];
 		http_exe= files[1];
 		myprintf("03193: Command-selected URL\n");
-		myprintf("03194: new http_url |%s|\n", http_url.c_str());
+		myprintf("03194: new http_p7m |%s|\n", http_p7m.c_str());
 		myprintf("03195: new http_exe |%s|\n", http_exe.c_str());
 	}
-#ifdef _WIN32
-	else
+
+	string p7mContent;  // signed payload from verified .p7m (= .sha256 file content)
 	{
+		string p7murl = http_p7m + randnocache;
+		string p7mfile= g_gettempdirectory() + "zpaqfranz_verfile.sha256.p7m";
+		p7mfile		  = nomefileseesistegia(p7mfile);
+
 		if (!downloadfile(p7murl, p7mfile, false))
 			myprintf("00551! Cannot download the signature file!\n");
 		else
 		{
 			myprintf("\n");
-			myprintf("00533: Ready to extract from p7m\n");
+			myprintf("00533: Verifying digital signature (.p7m)...\n");
 
-			int p7msize= prendidimensionefile(p7mfile.c_str());
-			if (p7msize > 4000)
+			std::string p7mErr;
+			if (flagverbose)
+				myprintf("03344: verify_p7m_file on %s\n", p7mfile.c_str());
+
+			if (!verify_p7m_file(p7mfile, "CRBFNC72T25H294X", p7mContent, p7mErr, flagverbose))
 			{
-				myprintf("03344! The p7m size is too big (%s)\n", migliaia(p7msize));
+				myprintf("00552! P7M signature verification FAILED: %s\n", p7mErr.c_str());
 				return 2;
 			}
-
-			FILE *p7m_handle= fopen(p7mfile.c_str(), "rb");
-			if (p7m_handle == NULL) 
-			{
-				myprintf("01926$ cannot read from p7m <<%Z>>\n", p7mfile.c_str());
-				return 2;
-			}
-			fseeko(p7m_handle, 0x3C, SEEK_SET);
-			char ch;
-			while ((ch= fgetc(p7m_handle)) != EOF)
-			{
-				if (!ishex(ch))
-					break;
-				hashfromp7m+= ch;
-			}
-
-			fclose(p7m_handle);
-			if (hashfromp7m.size() != 64)
-			{
-				myprintf("00586! The hash from .p7m is not 64 chars long, but %d\n", hashfromp7m.size());
-				return 2;
-			}
+			myprintf("00534: Digital signature OK (CF CRBFNC72T25H294X)\n");
 		}
+#ifdef _WIN32
 		if (flagparanoid)
 		{
 			myprintf("\n");
@@ -97914,61 +98911,26 @@ int Jidac::update()
 			ShellExecuteA(NULL, "open", notariato, NULL, NULL, SW_SHOWNORMAL);
 			return 0;
 		}
+#endif // _WIN32 (flagparanoid uses clipboard/ShellExecute)
 	}
-#endif // corresponds to #ifdef (#ifdef _WIN32)
 
-	if (!isurl(http_url))
-	{
-		myprintf("03196! http_url is not a url |%s|\n", http_url.c_str());
-		return 2;
-	}
 	if (!isurl(http_exe))
 	{
 		myprintf("03197! http_exe is not a url |%s|\n", http_exe.c_str());
 		return 2;
 	}
 
-	string verurl = http_url + randnocache;
-	string verfile= g_gettempdirectory() + "zpaqfranz_verfile.sha256";
-	verfile		  = nomefileseesistegia(verfile);
-
-	if (!downloadfile(verurl, verfile, false))
-		return 2;
-	myprintf("\n");
-
-	///	verfile="z:\\test.256";
-	if (!sanitizefile(verfile))
+	if (p7mContent.empty())
 	{
-		myprintf("03198! ERROR C5 strange downloaded file\n");
-		remove_temp_file(verfile);
-		seppuku();
+		myprintf("00553! No p7m content available — cannot determine internet version\n");
 		return 2;
 	}
-
 	myprintf("03199: Testing internet version...\n");
-
-	vector<string> versioni;
-	readfiletoarray(verfile, versioni);
-	if (versioni.size() == 0)
-	{
-		myprintf("03200! version file with 0 lines\n");
-		return 2;
-	}
-
-	string linea;
-
-#ifdef _WIN32
-	if (versioni.size() != 1)
-	{
-		myprintf("03201! version file should have 1 line instead of %s\n", migliaia(versioni.size()));
-		return 2;
-	}
-	linea= versioni[0];
-#else
-	linea= versioni[versioni.size() - 1];
+	string linea = p7mContent;
+	while (!linea.empty() && (linea.back() == '\r' || linea.back() == '\n' || linea.back() == ' '))
+		linea.pop_back();
 	if (flagdebug3)
-		myprintf("03202: the last line |%s|\n", linea.c_str());
-#endif // corresponds to #ifdef (#ifdef _WIN32)
+		myprintf("03202: p7m content line |%s|\n", linea.c_str());
 
 	if (linea.size() < 70)
 	{
@@ -97978,8 +98940,7 @@ int Jidac::update()
 
 	if (!sanitizeline(linea))
 	{
-		myprintf("03204! ERROR C5 the downloaded file is not adherent to expected format\n");
-		remove_temp_file(verfile);
+		myprintf("03204! ERROR C5 p7m payload is not in expected format\n");
 		seppuku();
 		return 2;
 	}
@@ -98062,7 +99023,6 @@ int Jidac::update()
 		myprintf("03213: NOTHING TO DO: your %s %s is not older of %s %s\n", internal_version.c_str(), internal_date.c_str(), theversion.c_str(), thedate.c_str());
 	}
 	color_restore();
-	remove(verfile.c_str());
 	return 0;
 #else
 	if ((!flagnewer) && (flagkill))
@@ -98080,7 +99040,6 @@ int Jidac::update()
 		color_green();
 		myprintf("03215: NOTHING TO DO: your %s %s is not older of %s %s\n", internal_version.c_str(), internal_date.c_str(), theversion.c_str(), thedate.c_str());
 		color_restore();
-		remove_temp_file(verfile);
 		return 0;
 	}
 
@@ -98155,12 +99114,6 @@ int Jidac::update()
 		return 2;
 	}
 
-	if (hashfromp7m != thesha256)
-	{
-		myprintf("0587: Hash from .p7m %s does not match expected %s\n", hashfromp7m.c_str(), thesha256.c_str());
-		return 2;
-	}
-
 	myprintf("\n");
 	color_green();
 	myprintf("03229: OK => updating ...\n");
@@ -98189,7 +99142,6 @@ int Jidac::update()
 
 	fullzpaqexename= linuxtowinpath(fullzpaqexename);
 	exefile		   = linuxtowinpath(exefile);
-	verfile		   = linuxtowinpath(verfile);
 	filebatch	   = linuxtowinpath(filebatch);
 	fprintf(batch, "@echo OFF\r\n");
 	fprintf(batch, "echo Running update batch (this is good)\r\n");
@@ -98198,7 +99150,6 @@ int Jidac::update()
 	fprintf(batch, "del \"%s\"\r\n", fullzpaqexename.c_str());
 	fprintf(batch, "if exist \"%s\" goto again\r\n", fullzpaqexename.c_str());
 	fprintf(batch, "copy \"%s\" \"%s\" /y\r\n", exefile.c_str(), fullzpaqexename.c_str());
-	fprintf(batch, "del \"%s\"\r\n", verfile.c_str());
 	fprintf(batch, "del \"%s\"\r\n", exefile.c_str());
 	fprintf(batch, "echo Update done\r\n"); // this will not work, the calling task should be already killed
 	fprintf(batch, "del \"%s\"\r\n", filebatch.c_str());
@@ -100264,6 +101215,13 @@ int Jidac::checkautotest(string i_path)
     }
     return 0;
 }
+#ifdef DLL
+bool Jidac::isjitable()
+{
+	return true;
+}
+#else
+	
 bool Jidac::isjitable()
 {
 	bool risultato= false;
@@ -100428,7 +101386,7 @@ bool Jidac::isjitable()
 	return risultato;
 #endif // corresponds to #ifdef (#ifdef _WIN32)
 }
-
+#endif
 void Jidac::tabba()
 {
 	if (g_csvstring != "")
@@ -115738,6 +116696,7 @@ int Jidac::oneononehome()
 		files.push_back(path);
 	}
 	flagnoeta= true;
+	eol();
 	printDigitalString("TWO");
 
 	franzparallelscandir(false, true, false);

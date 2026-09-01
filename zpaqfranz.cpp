@@ -64962,7 +64962,7 @@ string help_w(bool i_usage, bool i_example)
 		scrivi_riga(" ", "Extract/test in chunks, on disk or 'ramdisk' (RAM)");
 		scrivi_riga(" ", "The output -to folder MUST BE EMPTY");
 		scrivi_riga("-maxsize X", "Maxsize of the chunk @ X bytes");
-		scrivi_riga("-ramdisk", "Use 'RAMDISK'");
+		scrivi_riga("-ramdisk", "Use RAM for files that fit; stream oversized files to disk");
 		scrivi_riga("-frugal", "Use less possible RAM (default: get 75% of free RAM)'");
 		scrivi_riga("-ssd", "Multithread writing from ramdisk");
 		scrivi_riga("-test", "Do not write on media");
@@ -89350,7 +89350,8 @@ int Jidac::extractw()
 				fileandsize.push_back(myblock);
 			}
 	sort(fileandsize.begin(), fileandsize.end(), comparefilenamesize);
-	int64_t biggestfile= (int64_t)(fileandsize[fileandsize.size() - 1].size * 1.1);
+	int64_t largestfilesize= (int64_t)fileandsize[fileandsize.size() - 1].size;
+	int64_t biggestfile= (int64_t)(largestfilesize * 1.1);
 	if (flagverbose)
 		myprintf("02448: Minimum needed  (+10%%) %21s %s\n", migliaia(biggestfile), fileandsize[fileandsize.size() - 1].filename.c_str());
 	int64_t freediskspace= 0;
@@ -89400,7 +89401,21 @@ int Jidac::extractw()
 	//	count the chunks in advance
 	int quantichunk= 0;
 	while (indice < fileandsize.size())
-		if ((chunkcorrente + (int64_t)fileandsize[indice].size) > spazio)
+		if ((int64_t)fileandsize[indice].size > spazio)
+		{
+			// A chunk is normally a group of complete files. An oversized file
+			// cannot fit in the heap-backed ramdisk, so count it as a standalone
+			// direct-to-disk streaming chunk. Always advance the index here: the
+			// old loop retried the same file forever.
+			if (chunkcorrente > 0)
+			{
+				quantichunk++;
+				chunkcorrente= 0;
+			}
+			quantichunk++;
+			indice++;
+		}
+		else if ((chunkcorrente + (int64_t)fileandsize[indice].size) > spazio)
 		{
 			chunkcorrente= 0;
 			quantichunk++;
@@ -89410,17 +89425,18 @@ int Jidac::extractw()
 			chunkcorrente+= fileandsize[indice].size;
 			indice++;
 		}
-	quantichunk++;
+	if (chunkcorrente > 0)
+		quantichunk++;
 	if (spazio > totalarchive)
 		spazio= totalarchive;
 	myprintf("02452: Chunks %04d x          %21s (total decompressed size %s)\n", quantichunk, migliaia(spazio), migliaia2(totalarchive));
 	if (!flagspace)
 		if (!flagtest)
 		{
-			if (spazio < biggestfile)
+			if (spazio < largestfilesize)
 			{
-				myprintf("02453: chunk size (-maxsize) too small %s, at least %s needed (bypass with -space)\n", migliaia(spazio), migliaia2(biggestfile + 1));
-				return 1;
+				myprintf("02453: RAM chunk %s is smaller than the largest file %s; oversized files will stream directly to disk\n",
+						 migliaia(spazio), migliaia2(largestfilesize));
 			}
 			if (tofiles.size() > 0)
 				if (freediskspace < spazio)
@@ -89467,7 +89483,65 @@ int Jidac::extractw()
 	chunkcorrente		  = 0;
 	int chunkinlavorazione= 1;
 	while (indice < fileandsize.size())
-		if ((chunkcorrente + (int64_t)fileandsize[indice].size) > spazio)
+		if ((int64_t)fileandsize[indice].size > spazio)
+		{
+			// First flush any ordinary RAM chunk already being assembled.
+			if (chunkfiles.size() > 0)
+			{
+				printbar('=');
+				errors+= extractqueue2(chunkscount, quantichunk);
+				if (flagverify)
+					errors+= multiverify(chunkfile);
+				if (errors == 0)
+					myprintf("02458: Stage XTR %04d : errors  %d (0=good)", chunkinlavorazione, errors);
+				else
+					myprintf("02459! Stage XTR %04d : errors  %d (0=good) *** NOT GOOD ***", chunkinlavorazione, errors);
+				eol();
+				myprintf("\n");
+				chunkcorrente= 0;
+				chunkscount++;
+				chunkfile.clear();
+				chunkfiles.clear();
+				chunkinlavorazione++;
+			}
+
+			if (flagverify && flagparanoid)
+			{
+				snprintf(chunksbuffer, sizeof(chunksbuffer), "%08d", (int)chunkscount);
+				tofiles[0]= initialtofiles + chunksbuffer + "/";
+			}
+			else
+				tofiles[0]= initialtofiles;
+
+			string fn= fileandsize[indice].filename;
+			string writtenfilename= rename(fn);
+			fileandsize[indice].writtenfilename= writtenfilename;
+			chunkfile.push_back(fileandsize[indice]);
+			chunkfiles.push_back(fn);
+			indice++;
+
+			myprintf("02560: File %s exceeds RAM chunk %s; using bounded direct-to-disk streaming\n",
+					 tohuman((int64_t)fileandsize[indice - 1].size), tohuman2(spazio));
+			printbar('=');
+			bool savedramdisk= flagramdisk;
+			flagramdisk= false;
+			errors+= extractqueue2(chunkscount, quantichunk);
+			flagramdisk= savedramdisk;
+			if (flagverify)
+				errors+= multiverify(chunkfile);
+			if (errors == 0)
+				myprintf("02458: Stage XTR %04d : errors  %d (0=good)", chunkinlavorazione, errors);
+			else
+				myprintf("02459! Stage XTR %04d : errors  %d (0=good) *** NOT GOOD ***", chunkinlavorazione, errors);
+			eol();
+			myprintf("\n");
+			chunkcorrente= 0;
+			chunkscount++;
+			chunkfile.clear();
+			chunkfiles.clear();
+			chunkinlavorazione++;
+		}
+		else if ((chunkcorrente + (int64_t)fileandsize[indice].size) > spazio)
 		{
 			printbar('=');
 			errors+= extractqueue2(chunkscount, quantichunk);
@@ -89505,15 +89579,18 @@ int Jidac::extractw()
 				indice++;
 			}
 		}
-	printbar('=');
-	/// finalize "spare" chunk
-	errors+= extractqueue2(chunkscount, quantichunk);
-	if (flagverify)
-		errors+= multiverify(chunkfile);
-	if (errors == 0)
-		myprintf("02460: Stage VEF %04d : errors  %d (0=good)\n", chunkinlavorazione, errors);
-	else
-		myprintf("02461: VEF %04d : errors  %d (0=good) *** NOT GOOD ***\n", chunkinlavorazione, errors);
+	if (chunkfiles.size() > 0)
+	{
+		printbar('=');
+		/// finalize "spare" chunk
+		errors+= extractqueue2(chunkscount, quantichunk);
+		if (flagverify)
+			errors+= multiverify(chunkfile);
+		if (errors == 0)
+			myprintf("02460: Stage VEF %04d : errors  %d (0=good)\n", chunkinlavorazione, errors);
+		else
+			myprintf("02461: VEF %04d : errors  %d (0=good) *** NOT GOOD ***\n", chunkinlavorazione, errors);
+	}
 	printbar('=');
 	if (flagverify && flagparanoid)
 		if (!removetempdirifempty(outputdirectory, true))

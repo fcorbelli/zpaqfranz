@@ -60,7 +60,7 @@ small_source_hash=$(hash_file "$source_directory/small.bin")
 
 (
     cd "$source_directory"
-    "$timeout_command" 120 "$executable" a "$archive_path" payload.bin small.bin -m0 -noeta -nocolor
+    "$timeout_command" 120 "$executable" a "$archive_path" payload.bin small.bin -m0 -nojit -noeta -nocolor
 )
 
 extract_log=$test_root/extract.log
@@ -72,6 +72,7 @@ if ! (
         -maxsize "${ram_budget_mib}MB" \
         -checksum \
         -verify \
+        -nojit \
         -noeta \
         -nocolor >"$extract_log" 2>&1
 ); then

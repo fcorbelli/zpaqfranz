@@ -149,7 +149,7 @@ try {
     $smallSourceHash = (Get-FileHash -LiteralPath $smallSourcePath -Algorithm SHA256).Hash
 
     $addResult = Invoke-TestProcess -FilePath $executableFullPath -WorkingDirectory $sourceDirectory -TimeoutSeconds 120 -ArgumentList @(
-        'a', $archivePath, 'payload.bin', 'small.bin', '-m0', '-noeta', '-nocolor'
+        'a', $archivePath, 'payload.bin', 'small.bin', '-m0', '-nojit', '-noeta', '-nocolor'
     )
     if ($addResult.ExitCode -ne 0) {
         throw "Archive creation failed with exit code $($addResult.ExitCode).`nSTDOUT:`n$($addResult.Stdout)`nSTDERR:`n$($addResult.Stderr)"
@@ -162,6 +162,7 @@ try {
         '-maxsize', "${RamBudgetMiB}MB",
         '-checksum',
         '-verify',
+        '-nojit',
         '-noeta',
         '-nocolor'
     )

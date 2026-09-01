@@ -5,12 +5,12 @@ param(
 
     [Parameter()]
     [ValidateRange(2, 8192)]
-    [int] $FileSizeMiB = 32,
+    [int] $FileSizeMiB = 5,
 
     [Parameter()]
     [ValidateRange(1, 4096)]
     [Alias('WindowSizeMiB')]
-    [int] $RamBudgetMiB = 8,
+    [int] $RamBudgetMiB = 2,
 
     [Parameter()]
     [ValidateRange(5, 3600)]
@@ -74,7 +74,19 @@ function Invoke-TestProcess {
     if (-not $process.HasExited) {
         $process.Kill($true)
         $process.WaitForExit()
-        throw "Process timed out after $TimeoutSeconds seconds: $FilePath $($ArgumentList -join ' ')"
+        $stdout = $stdoutTask.GetAwaiter().GetResult()
+        $stderr = $stderrTask.GetAwaiter().GetResult()
+        throw "Process timed out after $TimeoutSeconds seconds: $FilePath $($ArgumentList -join ' ')`nSTDOUT:`n$stdout`nSTDERR:`n$stderr"
+    }
+
+    try {
+        $process.Refresh()
+        if ($process.PeakWorkingSet64 -gt $peakWorkingSet64) {
+            $peakWorkingSet64 = $process.PeakWorkingSet64
+        }
+    } catch {
+        # A very short-lived process can release its performance counters
+        # before PowerShell samples them. Leave the value at zero in that case.
     }
 
     $stdout = $stdoutTask.GetAwaiter().GetResult()
@@ -127,14 +139,17 @@ $sourceDirectory = Join-Path $testRoot 'source'
 $restoreDirectory = Join-Path $testRoot 'restore'
 $archivePath = Join-Path $testRoot 'streaming.zpaq'
 $sourcePath = Join-Path $sourceDirectory 'payload.bin'
+$smallSourcePath = Join-Path $sourceDirectory 'small.bin'
 
 try {
     [void] (New-Item -ItemType Directory -Path $sourceDirectory, $restoreDirectory -Force)
     New-DeterministicFile -Path $sourcePath -Length ([int64] $FileSizeMiB * 1MB)
+    New-DeterministicFile -Path $smallSourcePath -Length 512KB
     $sourceHash = (Get-FileHash -LiteralPath $sourcePath -Algorithm SHA256).Hash
+    $smallSourceHash = (Get-FileHash -LiteralPath $smallSourcePath -Algorithm SHA256).Hash
 
     $addResult = Invoke-TestProcess -FilePath $executableFullPath -WorkingDirectory $sourceDirectory -TimeoutSeconds 120 -ArgumentList @(
-        'a', $archivePath, 'payload.bin', '-m1', '-noeta', '-nocolor'
+        'a', $archivePath, 'payload.bin', 'small.bin', '-m0', '-noeta', '-nocolor'
     )
     if ($addResult.ExitCode -ne 0) {
         throw "Archive creation failed with exit code $($addResult.ExitCode).`nSTDOUT:`n$($addResult.Stdout)`nSTDERR:`n$($addResult.Stderr)"
@@ -154,6 +169,18 @@ try {
         throw "Chunked extraction failed with exit code $($extractResult.ExitCode).`nSTDOUT:`n$($extractResult.Stdout)`nSTDERR:`n$($extractResult.Stderr)"
     }
 
+    [int64] $fileBytes = [int64] $FileSizeMiB * 1MB
+    [int64] $windowBytes = [int64] $RamBudgetMiB * 1MB
+    [int] $windowCount = [int] [Math]::Ceiling($fileBytes / [double] $windowBytes)
+    for ($windowIndex = 0; $windowIndex -lt $windowCount; $windowIndex++) {
+        [int64] $windowOffset = [int64] $windowIndex * $windowBytes
+        [int64] $currentWindowBytes = [Math]::Min($windowBytes, $fileBytes - $windowOffset)
+        $expectedWindowLog = "RAM window $($windowIndex + 1)/$windowCount offset=$windowOffset size=$currentWindowBytes"
+        if ($extractResult.Stdout -notmatch [regex]::Escape($expectedWindowLog)) {
+            throw "Missing window extraction evidence '$expectedWindowLog'.`nSTDOUT:`n$($extractResult.Stdout)"
+        }
+    }
+
     $restoredFiles = @(Get-ChildItem -LiteralPath $restoreDirectory -Recurse -File | Where-Object Name -eq 'payload.bin')
     if ($restoredFiles.Count -ne 1) {
         throw "Expected exactly one restored payload.bin, found $($restoredFiles.Count)."
@@ -167,6 +194,15 @@ try {
         throw "Restored SHA-256 mismatch. Expected $sourceHash, got $restoredHash."
     }
 
+    $restoredSmallFiles = @(Get-ChildItem -LiteralPath $restoreDirectory -Recurse -File | Where-Object Name -eq 'small.bin')
+    if ($restoredSmallFiles.Count -ne 1) {
+        throw "Expected exactly one restored small.bin, found $($restoredSmallFiles.Count)."
+    }
+    $restoredSmallHash = (Get-FileHash -LiteralPath $restoredSmallFiles[0].FullName -Algorithm SHA256).Hash
+    if ($restoredSmallHash -ne $smallSourceHash) {
+        throw "Small-file SHA-256 mismatch. Expected $smallSourceHash, got $restoredSmallHash."
+    }
+
     if ($MaximumPeakWorkingSetMiB -gt 0) {
         $maximumBytes = [int64] $MaximumPeakWorkingSetMiB * 1MB
         if ($extractResult.PeakWorkingSet64 -le 0) {
@@ -177,7 +213,7 @@ try {
         }
     }
 
-    Write-Host "PASS: w -ramdisk restored a $FileSizeMiB MiB file with a $RamBudgetMiB MiB RAM chunk budget."
+    Write-Host "PASS: w -ramdisk restored a $FileSizeMiB MiB windowed file and a normal RAM-batch file with a $RamBudgetMiB MiB budget."
     Write-Host "SHA-256: $sourceHash"
     Write-Host "Peak working set: $([Math]::Round($extractResult.PeakWorkingSet64 / 1MB, 2)) MiB"
 } finally {

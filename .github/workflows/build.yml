@@ -26,8 +26,8 @@ jobs:
         run: |
           .\tests\Test-WRamdiskStreaming.ps1 `
             -Executable .\zpaqfranz.exe `
-            -FileSizeMiB 32 `
-            -RamBudgetMiB 8 `
+            -FileSizeMiB 5 `
+            -RamBudgetMiB 2 `
             -TimeoutSeconds 120
 
       - name: Upload artifact

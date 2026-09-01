@@ -85,8 +85,7 @@ function Invoke-TestProcess {
             $peakWorkingSet64 = $process.PeakWorkingSet64
         }
     } catch {
-        # A very short-lived process can release its performance counters
-        # before PowerShell samples them. Leave the value at zero in that case.
+        Write-Verbose 'The process released its performance counters before they could be sampled.'
     }
 
     $stdout = $stdoutTask.GetAwaiter().GetResult()
@@ -100,6 +99,7 @@ function Invoke-TestProcess {
 }
 
 function New-DeterministicFile {
+    [CmdletBinding(SupportsShouldProcess)]
     param(
         [Parameter(Mandatory = $true)]
         [string] $Path,
@@ -107,6 +107,10 @@ function New-DeterministicFile {
         [Parameter(Mandatory = $true)]
         [int64] $Length
     )
+
+    if (-not $PSCmdlet.ShouldProcess($Path, 'Create deterministic test file')) {
+        return
+    }
 
     $buffer = [byte[]]::new(1MB)
     $stream = [System.IO.File]::Open($Path, [System.IO.FileMode]::CreateNew, [System.IO.FileAccess]::Write, [System.IO.FileShare]::None)
@@ -214,12 +218,12 @@ try {
         }
     }
 
-    Write-Host "PASS: w -ramdisk restored a $FileSizeMiB MiB windowed file and a normal RAM-batch file with a $RamBudgetMiB MiB budget."
-    Write-Host "SHA-256: $sourceHash"
-    Write-Host "Peak working set: $([Math]::Round($extractResult.PeakWorkingSet64 / 1MB, 2)) MiB"
+    Write-Output "PASS: w -ramdisk restored a $FileSizeMiB MiB windowed file and a normal RAM-batch file with a $RamBudgetMiB MiB budget."
+    Write-Output "SHA-256: $sourceHash"
+    Write-Output "Peak working set: $([Math]::Round($extractResult.PeakWorkingSet64 / 1MB, 2)) MiB"
 } finally {
     if ($KeepArtifacts) {
-        Write-Host "Artifacts kept at $testRoot"
+        Write-Output "Artifacts kept at $testRoot"
     } elseif (Test-Path -LiteralPath $testRoot) {
         Remove-Item -LiteralPath $testRoot -Recurse -Force
     }

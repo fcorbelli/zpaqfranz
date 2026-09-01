@@ -44803,6 +44803,8 @@ class franzfs
 	char	 space[16];
 	uint64_t filesize;
 	uint64_t position;
+	uint64_t windowoffset;
+	bool	 windowed;
 
 	void seekstart()
 	{
@@ -44840,6 +44842,23 @@ class franzfs
 	}
 	size_t ramwrite(uint64_t i_offset, const char *i_ptr, size_t i_size)
 	{
+		if (windowed)
+		{
+			uint64_t inputend= i_offset + i_size;
+			uint64_t windowend= windowoffset + filesize;
+			if (inputend <= windowoffset || i_offset >= windowend)
+				return 0;
+			uint64_t copystart= i_offset > windowoffset ? i_offset : windowoffset;
+			uint64_t copyend= inputend < windowend ? inputend : windowend;
+			size_t sourceoffset= (size_t)(copystart - i_offset);
+			size_t copysize= (size_t)(copyend - copystart);
+			if (i_ptr == NULL || data == NULL || copysize == 0)
+				return 0;
+			position= copystart - windowoffset;
+			memcpy(data + position, i_ptr + sourceoffset, copysize);
+			position+= copysize;
+			return copysize;
+		}
 		if (i_offset > filesize)
 		{
 			myprintf("00308: i_offset greater then filesize %s %s\n", migliaia((int64_t)i_offset), migliaia2((int64_t)filesize));
@@ -44867,13 +44886,29 @@ class franzfs
 		position+= i_size;
 		return i_size;
 	}
+	size_t mappedsize(uint64_t i_offset, size_t i_size) const
+	{
+		if (!windowed)
+			return i_size;
+		uint64_t inputend= i_offset + i_size;
+		uint64_t windowend= windowoffset + filesize;
+		if (inputend <= windowoffset || i_offset >= windowend)
+			return 0;
+		uint64_t copystart= i_offset > windowoffset ? i_offset : windowoffset;
+		uint64_t copyend= inputend < windowend ? inputend : windowend;
+		return (size_t)(copyend - copystart);
+	}
 	franzfs()
 	{
-		data	= NULL;
-		position= 0;
+		data		= NULL;
+		position	= 0;
+		windowoffset= 0;
+		windowed	= false;
 	}
 	bool init(int64_t i_size)
 	{
+		windowoffset= 0;
+		windowed= false;
 		///		myprintf("00311: init1\n");
 		data= (char *)franz_malloc(i_size);
 		/// g_allocatedram+=i_size;
@@ -44895,6 +44930,14 @@ class franzfs
 #endif
 		return true;
 	}
+	bool initwindow(int64_t i_size, uint64_t i_offset)
+	{
+		if (!init(i_size))
+			return false;
+		windowoffset= i_offset;
+		windowed= true;
+		return true;
+	}
 	bool reset()
 	{
 		if (data == NULL)
@@ -44909,7 +44952,11 @@ class franzfs
 		}
 		franz_free(data);
 		g_ramdisksize-= filesize;
+		data= NULL;
 		filesize= 0;
+		position= 0;
+		windowoffset= 0;
+		windowed= false;
 #ifndef ESX
 		if (flagdebug2)
 			myprintf("00319: Deallocated  %s\n", migliaia((int64_t)filesize));
@@ -56067,7 +56114,7 @@ class Jidac
 #endif /// NOSFTPEND
 	int ads();
 #endif // corresponds to #ifdef (#ifdef _WIN32)
-	int		 extractqueue2(int i_chunk, int i_chunksize);
+	int		 extractqueue2(int i_chunk, int i_chunksize, int64_t i_windowoffset= -1, int64_t i_windowsize= 0);
 	int		 multiverify(vector<s_fileandsize> &i_arrayfilename);
 	bool	 removetempdirifempty(string i_folder, bool i_deleteifsizezero);
 	void	 handleflaglongpath();
@@ -64962,7 +65009,7 @@ string help_w(bool i_usage, bool i_example)
 		scrivi_riga(" ", "Extract/test in chunks, on disk or 'ramdisk' (RAM)");
 		scrivi_riga(" ", "The output -to folder MUST BE EMPTY");
 		scrivi_riga("-maxsize X", "Maxsize of the chunk @ X bytes");
-		scrivi_riga("-ramdisk", "Use 'RAMDISK'");
+		scrivi_riga("-ramdisk", "Use RAM batches; split oversized files into sequential RAM windows");
 		scrivi_riga("-frugal", "Use less possible RAM (default: get 75% of free RAM)'");
 		scrivi_riga("-ssd", "Multithread writing from ramdisk");
 		scrivi_riga("-test", "Do not write on media");
@@ -72809,8 +72856,12 @@ struct ExtractJob
 	int64_t			total_size;	 // bytes to extract
 	int64_t			total_done;	 // bytes extracted so far
 	uint64_t		last_write;	 // last fseek
+	bool			windowed;	 // extract one logical file window to RAM
+	uint64_t		window_start;
+	uint64_t		window_size;
 	ExtractJob(Jidac &j) : chunk(0), job(0), jd(j), outf(FPNULL), lastdt(j.dt.end()),
-						   maxMemory(0), total_size(0), total_done(0), last_write(0)
+						   maxMemory(0), total_size(0), total_done(0), last_write(0),
+						   windowed(false), window_start(0), window_size(0)
 	{
 		init_mutex(mutex);
 		init_mutex(write_mutex);
@@ -73671,9 +73722,12 @@ ThreadReturn decompressthreadramdisk(void *arg)
 						if (p->second.pramfile != NULL)
 							(*p->second.pramfile).ramwrite(offset, (char *)out.c_str() + q, usize);
 				}
+				size_t mappedbytes= usize;
+				if (job.windowed && p->second.pramfile != NULL)
+					mappedbytes= (*p->second.pramfile).mappedsize(offset, usize);
 				offset+= usize;
 				lock(job.mutex);
-				job.total_done+= usize;
+				job.total_done+= mappedbytes;
 				release(job.mutex);
 				if (p->second.data == int64_t(ptr.size()))
 				{
@@ -89350,7 +89404,8 @@ int Jidac::extractw()
 				fileandsize.push_back(myblock);
 			}
 	sort(fileandsize.begin(), fileandsize.end(), comparefilenamesize);
-	int64_t biggestfile= (int64_t)(fileandsize[fileandsize.size() - 1].size * 1.1);
+	int64_t largestfilesize= (int64_t)fileandsize[fileandsize.size() - 1].size;
+	int64_t biggestfile= (int64_t)(largestfilesize * 1.1);
 	if (flagverbose)
 		myprintf("02448: Minimum needed  (+10%%) %21s %s\n", migliaia(biggestfile), fileandsize[fileandsize.size() - 1].filename.c_str());
 	int64_t freediskspace= 0;
@@ -89391,6 +89446,11 @@ int Jidac::extractw()
 		spazio= maxsize;
 	if (flagfrugal)
 		spazio= biggestfile;
+	if (spazio <= 0)
+	{
+		myprintf("02567! Chunk size must be greater than zero\n");
+		return 1;
+	}
 	unsigned int chunkscount   = 0;
 	int64_t		 chunkcorrente = 0;
 	unsigned int indice		   = 0;
@@ -89400,7 +89460,24 @@ int Jidac::extractw()
 	//	count the chunks in advance
 	int quantichunk= 0;
 	while (indice < fileandsize.size())
-		if ((chunkcorrente + (int64_t)fileandsize[indice].size) > spazio)
+		if ((int64_t)fileandsize[indice].size > spazio)
+		{
+			// A chunk is normally a group of complete files. In RAM mode an
+			// oversized file is split into logical windows of at most spazio bytes.
+			// Always advance the index here: the old loop retried the same file
+			// forever.
+			if (chunkcorrente > 0)
+			{
+				quantichunk++;
+				chunkcorrente= 0;
+			}
+			if (flagramdisk)
+				quantichunk+= (int)(((uint64_t)fileandsize[indice].size + (uint64_t)spazio - 1) / (uint64_t)spazio);
+			else
+				quantichunk++;
+			indice++;
+		}
+		else if ((chunkcorrente + (int64_t)fileandsize[indice].size) > spazio)
 		{
 			chunkcorrente= 0;
 			quantichunk++;
@@ -89410,17 +89487,18 @@ int Jidac::extractw()
 			chunkcorrente+= fileandsize[indice].size;
 			indice++;
 		}
-	quantichunk++;
+	if (chunkcorrente > 0)
+		quantichunk++;
 	if (spazio > totalarchive)
 		spazio= totalarchive;
 	myprintf("02452: Chunks %04d x          %21s (total decompressed size %s)\n", quantichunk, migliaia(spazio), migliaia2(totalarchive));
 	if (!flagspace)
 		if (!flagtest)
 		{
-			if (spazio < biggestfile)
+			if (spazio < largestfilesize)
 			{
-				myprintf("02453: chunk size (-maxsize) too small %s, at least %s needed (bypass with -space)\n", migliaia(spazio), migliaia2(biggestfile + 1));
-				return 1;
+				myprintf("02453: RAM window %s is smaller than the largest file %s; oversized files will use sequential RAM windows\n",
+						 migliaia(spazio), migliaia2(largestfilesize));
 			}
 			if (tofiles.size() > 0)
 				if (freediskspace < spazio)
@@ -89467,7 +89545,85 @@ int Jidac::extractw()
 	chunkcorrente		  = 0;
 	int chunkinlavorazione= 1;
 	while (indice < fileandsize.size())
-		if ((chunkcorrente + (int64_t)fileandsize[indice].size) > spazio)
+		if ((int64_t)fileandsize[indice].size > spazio)
+		{
+			// First flush any ordinary RAM chunk already being assembled.
+			if (chunkfiles.size() > 0)
+			{
+				printbar('=');
+				errors+= extractqueue2(chunkscount, quantichunk);
+				if (flagverify)
+					errors+= multiverify(chunkfile);
+				if (errors == 0)
+					myprintf("02458: Stage XTR %04d : errors  %d (0=good)", chunkinlavorazione, errors);
+				else
+					myprintf("02459! Stage XTR %04d : errors  %d (0=good) *** NOT GOOD ***", chunkinlavorazione, errors);
+				eol();
+				myprintf("\n");
+				chunkcorrente= 0;
+				chunkscount++;
+				chunkfile.clear();
+				chunkfiles.clear();
+				chunkinlavorazione++;
+			}
+
+			if (flagverify && flagparanoid)
+			{
+				snprintf(chunksbuffer, sizeof(chunksbuffer), "%08d", (int)chunkscount);
+				tofiles[0]= initialtofiles + chunksbuffer + "/";
+			}
+			else
+				tofiles[0]= initialtofiles;
+
+			string fn= fileandsize[indice].filename;
+			string writtenfilename= rename(fn);
+			fileandsize[indice].writtenfilename= writtenfilename;
+			chunkfile.push_back(fileandsize[indice]);
+			uint64_t oversizedfilesize= fileandsize[indice].size;
+			indice++;
+
+			if (flagramdisk)
+			{
+				uint64_t windowbudget= (uint64_t)spazio;
+				uint64_t windowcount= (oversizedfilesize + windowbudget - 1) / windowbudget;
+				for (uint64_t windowindex= 0; windowindex < windowcount && errors == 0; ++windowindex)
+				{
+					uint64_t windowoffset= windowindex * windowbudget;
+					uint64_t windowsize= oversizedfilesize - windowoffset;
+					if (windowsize > windowbudget)
+						windowsize= windowbudget;
+					chunkfiles.push_back(fn);
+					myprintf("02560: RAM window %llu/%llu offset=%llu size=%llu\n",
+							 (unsigned long long)(windowindex + 1), (unsigned long long)windowcount,
+							 (unsigned long long)windowoffset, (unsigned long long)windowsize);
+					printbar('=');
+					errors+= extractqueue2(chunkscount, quantichunk, (int64_t)windowoffset, (int64_t)windowsize);
+					chunkscount++;
+				}
+			}
+			else
+			{
+				chunkfiles.push_back(fn);
+				myprintf("02568: File %s exceeds disk chunk %s; using direct streaming\n",
+						 tohuman((int64_t)oversizedfilesize), tohuman2(spazio));
+				printbar('=');
+				errors+= extractqueue2(chunkscount, quantichunk);
+				chunkscount++;
+			}
+			if (flagverify)
+				errors+= multiverify(chunkfile);
+			if (errors == 0)
+				myprintf("02458: Stage XTR %04d : errors  %d (0=good)", chunkinlavorazione, errors);
+			else
+				myprintf("02459! Stage XTR %04d : errors  %d (0=good) *** NOT GOOD ***", chunkinlavorazione, errors);
+			eol();
+			myprintf("\n");
+			chunkcorrente= 0;
+			chunkfile.clear();
+			chunkfiles.clear();
+			chunkinlavorazione++;
+		}
+		else if ((chunkcorrente + (int64_t)fileandsize[indice].size) > spazio)
 		{
 			printbar('=');
 			errors+= extractqueue2(chunkscount, quantichunk);
@@ -89505,15 +89661,18 @@ int Jidac::extractw()
 				indice++;
 			}
 		}
-	printbar('=');
-	/// finalize "spare" chunk
-	errors+= extractqueue2(chunkscount, quantichunk);
-	if (flagverify)
-		errors+= multiverify(chunkfile);
-	if (errors == 0)
-		myprintf("02460: Stage VEF %04d : errors  %d (0=good)\n", chunkinlavorazione, errors);
-	else
-		myprintf("02461: VEF %04d : errors  %d (0=good) *** NOT GOOD ***\n", chunkinlavorazione, errors);
+	if (chunkfiles.size() > 0)
+	{
+		printbar('=');
+		/// finalize "spare" chunk
+		errors+= extractqueue2(chunkscount, quantichunk);
+		if (flagverify)
+			errors+= multiverify(chunkfile);
+		if (errors == 0)
+			myprintf("02460: Stage VEF %04d : errors  %d (0=good)\n", chunkinlavorazione, errors);
+		else
+			myprintf("02461: VEF %04d : errors  %d (0=good) *** NOT GOOD ***\n", chunkinlavorazione, errors);
+	}
 	printbar('=');
 	if (flagverify && flagparanoid)
 		if (!removetempdirifempty(outputdirectory, true))
@@ -89863,7 +90022,7 @@ int Jidac::multiverify(vector<s_fileandsize> &i_arrayfilename)
 		}
 	return risultato;
 }
-int Jidac::extractqueue2(int i_chunk, int i_chunksize)
+int Jidac::extractqueue2(int i_chunk, int i_chunksize, int64_t i_windowoffset, int64_t i_windowsize)
 {
 	if (i_chunk < 0)
 	{
@@ -89881,6 +90040,17 @@ int Jidac::extractqueue2(int i_chunk, int i_chunksize)
 	int		   errors	  = 0;
 	int		   total_files= 0;
 	ExtractJob job(*this);
+	job.windowed= i_windowoffset >= 0;
+	if (job.windowed)
+	{
+		if (i_windowsize <= 0 || chunkfiles.size() != 1)
+		{
+			myprintf("02561! RAM window requires one file and a positive size\n");
+			return 1;
+		}
+		job.window_start= (uint64_t)i_windowoffset;
+		job.window_size= (uint64_t)i_windowsize;
+	}
 	for (DTMap::iterator p= dt.begin(); p != dt.end(); ++p)
 	{
 		p->second.data= -1; // skip by default
@@ -89891,7 +90061,23 @@ int Jidac::extractqueue2(int i_chunk, int i_chunksize)
 			if (block.size() > 0)
 			{ // files to decompress
 				p->second.data= 0;
+				if (job.windowed)
+				{
+					if (p->second.pramfile == NULL)
+					{
+						p->second.pramfile= new franzfs;
+						g_allocatedram+= sizeof(franzfs);
+					}
+					else if (p->second.pramfile->data != NULL)
+						p->second.pramfile->reset();
+					if (!p->second.pramfile->initwindow(i_windowsize, (uint64_t)i_windowoffset))
+					{
+						block= preblock;
+						return 1;
+					}
+				}
 				unsigned lo= 0, hi= block.size() - 1; // block indexes for binary search
+				uint64_t fileoffset= 0;
 				for (unsigned i= 0; p->second.data >= 0 && i < p->second.ptr.size(); ++i)
 				{
 					unsigned j= p->second.ptr[i]; // fragment index
@@ -89903,6 +90089,22 @@ int Jidac::extractqueue2(int i_chunk, int i_chunksize)
 						myprintf(": 1 bad frag IDs, skipping...\n");
 						p->second.data= -1;
 						continue;
+					}
+					if (job.windowed && ht[j].usize < 0)
+					{
+						myprintf("02569! RAM window cannot map a fragment with unknown size\n");
+						p->second.pramfile->reset();
+						block= preblock;
+						return 1;
+					}
+					uint64_t fragmentstart= fileoffset;
+					uint64_t fragmentend= fragmentstart + (uint64_t)ht[j].usize;
+					fileoffset= fragmentend;
+					if (job.windowed)
+					{
+						uint64_t windowend= job.window_start + job.window_size;
+						if (fragmentend <= job.window_start || fragmentstart >= windowend)
+							continue;
 					}
 					assert(j > 0 && j < ht.size());
 					if (lo != hi || lo >= block.size() || j < block[lo].start || (lo + 1 < block.size() && j >= block[lo + 1].start))
@@ -89931,7 +90133,7 @@ int Jidac::extractqueue2(int i_chunk, int i_chunksize)
 						block[lo].files.push_back(p);
 				}
 				++total_files;
-				job.total_size+= p->second.size;
+				job.total_size+= job.windowed ? i_windowsize : p->second.size;
 				/// w extract only on EMPTY folder (for speed)
 				/*
 				if (fileexists(fn))
@@ -89957,6 +90159,76 @@ int Jidac::extractqueue2(int i_chunk, int i_chunksize)
 		join(tid[i]);
 	printbar(' ', false);
 	myprintf("\r");
+	if (job.windowed)
+	{
+		DTMap::iterator windowfile= dt.end();
+		for (DTMap::iterator p= dt.begin(); p != dt.end(); ++p)
+			if (std::binary_search(chunkfiles.begin(), chunkfiles.end(), p->first))
+			{
+				windowfile= p;
+				break;
+			}
+		if (windowfile == dt.end() || windowfile->second.pramfile == NULL || windowfile->second.pramfile->data == NULL)
+		{
+			myprintf("02562! RAM window buffer is missing\n");
+			errors++;
+		}
+		else
+		{
+			if ((uint64_t)job.total_done != job.window_size)
+			{
+				myprintf("02563! RAM window incomplete %s of %s bytes\n",
+						 migliaia(job.total_done), migliaia2((int64_t)job.window_size));
+				errors++;
+			}
+			if (!flagtest && errors == 0 && !windowfile->second.donotextractme)
+			{
+				string finalfile= rename(windowfile->first);
+				franzreplace(finalfile);
+				if (job.window_start == 0)
+					makepath(finalfile);
+				FP myfile= myfopen(finalfile.c_str(), job.window_start == 0 ? WB : RBPLUS);
+				if (myfile == FPNULL)
+				{
+					myprintf("02564! Cannot open RAM window output %Z\n", finalfile.c_str());
+					errors++;
+				}
+				else
+				{
+					if (fseeko(myfile, job.window_start, SEEK_SET) != 0)
+					{
+						myprintf("02565! Cannot seek RAM window output at %s\n", migliaia((int64_t)job.window_start));
+						errors++;
+					}
+					uint64_t written= 0;
+					const size_t maxwrite= 1000000000;
+					while (errors == 0 && written < job.window_size)
+					{
+						size_t towritenow= (size_t)(job.window_size - written);
+						if (towritenow > maxwrite)
+							towritenow= maxwrite;
+						size_t w= myfwrite(windowfile->second.pramfile->data + written, 1, towritenow, myfile);
+						written+= w;
+						if (w != towritenow)
+						{
+							myprintf("02566! Short RAM window write %s of %s bytes\n",
+									 migliaia((int64_t)written), migliaia2((int64_t)job.window_size));
+							errors++;
+						}
+					}
+					bool lastwindow= job.window_start + job.window_size == (uint64_t)windowfile->second.size;
+					if (lastwindow && errors == 0)
+						close(finalfile.c_str(), windowfile->second.date, windowfile->second.attr, myfile);
+					else
+						myfclose(&myfile);
+				}
+			}
+			windowfile->second.pramfile->reset();
+		}
+		block= preblock;
+		chunkfiles.clear();
+		return errors > 0;
+	}
 	// Report failed extractions (on filesystem)
 	if (!flagramdisk)
 	{

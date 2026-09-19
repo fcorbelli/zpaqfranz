@@ -1,3 +1,4 @@
+
 /*
                                   __
            _____ __   __ _  __ _ / _|_ __ __ _ _ __  ____
@@ -59,9 +60,8 @@ OTHER DEALINGS IN THE SOFTWARE.
 #define ZPAQFULL ///NOSFTPSTART
 ///NOSFTPEND
 
-#define ZPAQ_VERSION "64.8j"
-#define ZPAQ_DATE "(2026-06-29)"
-
+#define ZPAQ_VERSION "65.1a"
+#define ZPAQ_DATE "(2026-09-19)"
 
 
 /*
@@ -1170,6 +1170,60 @@ otherwise to promote the sale, use or other dealings in this Software without pr
 authorization of the copyright holder.
 
 
+25 [LGPL]                       https://github.com/libfuse/libfuse
+ /// LICENSE_START.25
+ /// LICENSE_END.25
+The following files may be used under the terms of the GNU Lesser
+General Public License, version 2.1 ("LGPL"):
+
+- All files in the include/ directory.
+- All files in the lib/ directory.
+- meson.build
+
+The full terms of the LGPL can be found in the LGPL2.txt file.
+
+
+All other files may be used only under the terms of the GNU General
+Public License, version 2 ("GPL"). The full text of this license can
+be found in the GPL2.txt file.
+
+
+26 [GPLv3]                      https://github.com/codewithnick/ascii-art
+ /// LICENSE_START.26
+ /// LICENSE_END.26
+ 
+ The WinFsp project is Copyright (C) Bill Zissimopoulos. It is licensed
+under the terms of the GPLv3.
+
+As a special exception to GPLv3, Bill Zissimopoulos grants additional
+permissions to Free/Libre and Open Source Software ("FLOSS") without requiring
+that such software is covered by the GPLv3.
+
+    1. Permission to link with a platform specific version of the WinFsp DLL
+    (one of: winfsp-a64.dll, winfsp-x64.dll, winfsp-x86.dll, winfsp-msil.dll).
+
+    2. Permission to distribute unmodified binary releases of the WinFsp
+    installer (as released by the WinFsp project).
+
+    These permissions (and no other) are granted provided that the software:
+
+    1. Is distributed under a license that satisfies the Free Software
+    Definition Version 1.141 (https://www.gnu.org/philosophy/free-sw.en.html)
+    or the Open Source Definition Version 1.9 (https://opensource.org/osd).
+
+    2. Includes the copyright notice "WinFsp - Windows File System Proxy,
+    Copyright (C) Bill Zissimopoulos" and a link to the WinFsp repository in
+    its user-interface and any user-facing documentation.
+
+    3. Is not linked or distributed with proprietary (non-FLOSS) software.
+    [You cannot mix FLOSS and proprietary software while using WinFsp under
+    this special exception.]
+
+Commercial licensing options are also available: Please contact
+Bill Zissimopoulos <billziss at navimatics.com>.
+
+
+
    _____ _____  ______ ______ _______ _____ _   _  _____  _____ 
   / ____|  __ \|  ____|  ____|__   __|_   _| \ | |/ ____|/ ____|
  | |  __| |__) | |__  | |__     | |    | | |  \| | |  __| (___  
@@ -1239,7 +1293,17 @@ authorization of the copyright holder.
 53 Thanks to https://github.com/cheebusjeebus           for "different" UTC fixes
 54 Thanks to https://github.com/def324/                 for Docker https://github.com/fcorbelli/zpaqfranz/tree/main/docker
 55 Thanks to https://github.com/KnightAR                for stdin-size switch   
+56 Thanks to https://github.com/MarkSchmied             for getting the WORK_NONE hash warning
+57 Thanks to https://github.com/dannyboy76705           for then mount idea
 
+███████ ██                      ██                       ██                     ██████                          ██   ██
+   ██   ██                      ██                       ██                     ██   ██                         ██   ██
+   ██   ██████   █████  ██████  ██  ██   █████          ██████   █████          ██   ██  █████  ██████          ██   ██
+   ██   ██   ██      ██ ██   ██ ██ ██   ██               ██     ██   ██         ██   ██      ██ ██   ██         ██ █ ██
+   ██   ██   ██  ██████ ██   ██ ████     █████           ██     ██   ██         ██   ██  ██████ ██   ██         ██ █ ██
+   ██   ██   ██ ██   ██ ██   ██ ██ ██        ██          ██     ██   ██         ██   ██ ██   ██ ██   ██         ███ ███
+   ██   ██   ██  ██████ ██   ██ ██  ██   █████            ████   █████          ██████   ██████ ██   ██         ██   ██
+   
   _____  ______          _      _  __     __   ____  _____  ______ _   _ 
  |  __ \|  ____|   /\   | |    | | \ \   / /  / __ \|  __ \|  ____| \ | |
  | |__) | |__     /  \  | |    | |  \ \_/ /  | |  | | |__) | |__  |  \| |
@@ -1423,6 +1487,8 @@ DEFINEs at compile-time: IT IS UP TO YOU NOT TO MIX LOGICAL INCOMPATIBLE DEFINIT
 
 -DNOLM								// Turn off the lm library (experimental)
 
+-DZPAQMOUNT							// Mount archive on Windows and Linux. See later for how to compile
+
 HIDDEN GEMS
 If the (non Windows) executable is named "dir" act (just about)... like Windows' dir
 Beware of collisions with other software "dir"
@@ -1531,6 +1597,44 @@ especially with multipart files.
 "test_????.zpaq" is good
 test_????.zpaq   is BAD
 
+
+Building with Mount Support (ZPAQMOUNT)
+This project can optionally be compiled with support for mounting archives as a virtual filesystem. 
+This requires an extra library depending on your operating system.
+
+Linux
+/// LICENSE_START.25
+You need FUSE, specifically the development package, since the headers (not just the runtime library) 
+are required to compile against it.
+
+Install it with your distribution's package manager, something like...
+
+debian/Ubuntu:      apt install libfuse3-dev
+Fedora/RHEL/CentOS: dnf install fuse3-devel
+Arch Linux:         pacman -S fuse3
+openSUSE:           zypper install fuse3-devel
+
+Once FUSE is installed, add the -DZPAQMOUNT flag to your build command to produce an executable with mount support:
+
+bash
+g++ -DZPAQMOUNT [...other build flags...] 
+/// LICENSE_END.25
+
+/// LICENSE_START.26
+Windows
+You need WinFsp, which provides the Windows equivalent of FUSE.
+Download the installer from the official website: https://winfsp.dev
+During installation, make sure to select the Developer component,
+the default install only includes the runtime, 
+not the headers needed for compilation.
+
+This installs a folder containing the files required to build against WinFsp. 
+Add the following to your compiler flags (adjust the path if you installed WinFsp to a different location):
+
+-DZPAQMOUNT -I"C:/Program Files (x86)/WinFsp/inc"
+
+Note: Without the -DZPAQMOUNT flag, the project builds normally, just without mount support.
+/// LICENSE_END.26
 
 #ifdef ZPAQFULL ///NOSFTPSTART
 SFTP AND LIBCURL
@@ -2050,6 +2154,7 @@ g++ -g -Wall -Wextra -Wpedantic -fsanitize=address,undefined -O3 zpaqfranz.cpp -
 	#include <fcntl.h> // for setmode()
 	#include <aclapi.h>
 	#include <sddl.h>
+	#include <wininet.h> /// only for the types/constants: wininet.dll is loaded at run time
 	#include <cwctype> // For std::towlower
 	#include <queue>
 	#include <memory>
@@ -2057,6 +2162,75 @@ g++ -g -Wall -Wextra -Wpedantic -fsanitize=address,undefined -O3 zpaqfranz.cpp -
 	#include <unordered_set>
 	using namespace std;
 #endif // corresponds to #ifdef (#ifdef unix)
+
+////////////////////////////////////////////////////////////////////////////
+/// ZPAQMOUNT: read-only FUSE mount of an archive ("mount" command).
+///
+/// Build with -DZPAQMOUNT.
+///   Linux/BSD: needs libfuse3 headers and -lfuse3 (pkg-config fuse3).
+///   Windows:   needs the WinFsp headers only (-I"C:/Program Files (x86)/WinFsp/inc");
+///              the WinFsp DLL is located and loaded at run time, so there
+///              is NO link-time dependency (see zpaqmount_winfsp_bind()).
+///   Both:      C++11 threads (std::thread), i.e. a posix-threads MinGW.
+///
+/// Everything mount-related lives in namespace franzmount, just before
+/// Jidac::doCommand(). This block only pulls in the FUSE headers, which
+/// must come early and, on Windows, after windows.h.
+////////////////////////////////////////////////////////////////////////////
+#ifdef ZPAQMOUNT
+#define FUSE_USE_VERSION 31
+#include <thread>
+#include <mutex>
+#include <condition_variable>
+#include <list>
+#include <deque>
+#include <functional>
+#include <memory>
+#include <algorithm>
+#include <map>
+#include <set>
+#include <unordered_map>
+#ifdef _WIN32
+extern "C" {
+void  zpaqmount_winfsp_bind(const char* name, void** slot);
+void* zpaqmount_winfsp_load(const char** why);
+}
+/// Turn every fsp_* entry point declared by the WinFsp headers into a
+/// private function pointer resolved on first use (LoadLibrary +
+/// GetProcAddress), instead of a __declspec(dllimport) that would need an
+/// import library and the DLL on PATH at process start.
+#define FSP_FUSE_API            static
+#define FSP_FUSE_API_NAME(n)    (* n)
+#define FSP_FUSE_API_CALL(n)    (zpaqmount_winfsp_bind(#n, (void**)&(n)), (n))
+#if defined(__GNUC__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-variable"
+#endif
+#include <fuse3/fuse.h>
+#if defined(__GNUC__)
+#pragma GCC diagnostic pop
+#endif
+#include <shellapi.h>
+#ifndef O_ACCMODE
+#define O_ACCMODE (O_RDONLY | O_WRONLY | O_RDWR)
+#endif
+#else
+#include <fuse3/fuse.h>
+#include <sys/statvfs.h>
+#include <sys/mman.h>
+#define fuse_stat    stat
+#define fuse_statvfs statvfs
+typedef off_t  fuse_off_t;
+typedef mode_t fuse_mode_t;
+#if defined(__APPLE__)
+#define st_atim st_atimespec
+#define st_mtim st_mtimespec
+#define st_ctim st_ctimespec
+#endif
+#endif
+std::string g_fuseopt;              // -fuseopt a,b,c  -> passed to FUSE/WinFsp as -o a,b,c
+std::string g_mountbackend= "auto"; // -backend auto|core|jidac (see franzmount::mount_pick_backend)
+#endif // ZPAQMOUNT
 
 #ifdef ZPAQFULL ///NOSFTPSTART
 ///sed "/^[[:space:]]*$/d" 2.cpp > 3.cpp
@@ -4721,6 +4895,7 @@ bool		g_flagmultipart;
 std::string g_archive;
 std::string g_indexname;
 std::string g_externalname;
+std::string g_backupdir; // x -force -backupdir X: move (do not erase) overwritten files into X/<timestamp>/
 std::string g_input;
 std::string g_exclude;
 std::string g_destination;
@@ -4856,6 +5031,7 @@ bool flagfast;
 bool flagfix255;
 bool flagfixeml;
 bool flagflat;
+bool flagextras; // x -backupdir -extras: move away (never delete) files on disk NOT in the archive
 bool flagforce;
 bool flagforcewindows;
 bool flagforcezfs;
@@ -31569,6 +31745,136 @@ class downcallback : public IBindStatusCallback
 };
 #endif // corresponds to #ifdef (#ifdef _WIN64)
 
+#ifdef _WIN32
+/// Fallback used when URLDownloadToFileW() fails: urlmon gives up on a
+/// dual-stack host whose IPv6 address does not answer (INET_E_DOWNLOAD_FAILURE
+/// 0x800C0008), WinINet instead falls back to IPv4.
+/// Yes, VMWare Workstation and Win 11 :-D
+/// wininet.dll is loaded at run time: no new link-time dependency
+bool downloadfile_wininet(const string& i_verurl, const string& i_verfile, bool i_showupdate)
+{
+	typedef HINTERNET (WINAPI *t_open)(LPCWSTR, DWORD, LPCWSTR, LPCWSTR, DWORD);
+	typedef HINTERNET (WINAPI *t_openurl)(HINTERNET, LPCWSTR, LPCWSTR, DWORD, DWORD, DWORD_PTR);
+	typedef BOOL	  (WINAPI *t_read)(HINTERNET, LPVOID, DWORD, LPDWORD);
+	typedef BOOL	  (WINAPI *t_query)(HINTERNET, DWORD, LPVOID, LPDWORD, LPDWORD);
+	typedef BOOL	  (WINAPI *t_close)(HINTERNET);
+
+	HMODULE hwininet= LoadLibraryA("wininet.dll");
+	if (hwininet == NULL)
+	{
+		if (flagdebug)
+			myprintf("03190: cannot load wininet.dll\n");
+		return false;
+	}
+	t_open	  p_open   = (t_open)	(void*)GetProcAddress(hwininet, "InternetOpenW");
+	t_openurl p_openurl= (t_openurl)(void*)GetProcAddress(hwininet, "InternetOpenUrlW");
+	t_read	  p_read   = (t_read)	(void*)GetProcAddress(hwininet, "InternetReadFile");
+	t_query	  p_query  = (t_query)	(void*)GetProcAddress(hwininet, "HttpQueryInfoW");
+	t_close	  p_close  = (t_close)	(void*)GetProcAddress(hwininet, "InternetCloseHandle");
+	if (p_open == NULL || p_openurl == NULL || p_read == NULL || p_query == NULL || p_close == NULL)
+	{
+		if (flagdebug)
+			myprintf("03191: wininet.dll without the expected functions\n");
+		FreeLibrary(hwininet);
+		return false;
+	}
+
+	bool	  risultato= false;
+	HINTERNET hsession	= p_open(L"zpaqfranz", INTERNET_OPEN_TYPE_PRECONFIG, NULL, NULL, 0);
+	HINTERNET hurl		= NULL;
+	FILE*	  outfile	= NULL;
+	if (hsession == NULL)
+	{
+		myprintf("03192! WinINet: cannot start a session\n");
+		goto uscita;
+	}
+	/// NOTE: utow() by default turns every / into \: for an URL the slashes
+	/// must be kept as they are
+	hurl= p_openurl(hsession, utow(i_verurl.c_str(), '/').c_str(), NULL, 0,
+					INTERNET_FLAG_RELOAD | INTERNET_FLAG_NO_CACHE_WRITE | INTERNET_FLAG_KEEP_CONNECTION, 0);
+	if (hurl == NULL)
+	{
+		myprintf("03193! WinINet: cannot open %s (error %u)\n", i_verurl.c_str(), (unsigned)GetLastError());
+		goto uscita;
+	}
+	{
+		DWORD statuscode= 0;
+		DWORD lunghezza	= sizeof(statuscode);
+		DWORD indice	= 0;
+		if (p_query(hurl, HTTP_QUERY_STATUS_CODE | HTTP_QUERY_FLAG_NUMBER, &statuscode, &lunghezza, &indice))
+			if (statuscode < 200 || statuscode > 299)
+			{
+				myprintf("03194! WinINet: HTTP status %u for %s\n", (unsigned)statuscode, i_verurl.c_str());
+				goto uscita;
+			}
+		int64_t attesi= 0;
+		DWORD	clen  = 0;
+		lunghezza	  = sizeof(clen);
+		indice		  = 0;
+		if (p_query(hurl, HTTP_QUERY_CONTENT_LENGTH | HTTP_QUERY_FLAG_NUMBER, &clen, &lunghezza, &indice))
+			attesi= (int64_t)clen;
+
+		outfile= _wfopen(utow(i_verfile.c_str()).c_str(), L"wb");
+		if (outfile == NULL)
+		{
+			myprintf("03195! WinINet: cannot write %s\n", i_verfile.c_str());
+			goto uscita;
+		}
+		const DWORD	   dimbuffer= 65536;
+		vector<char>   buffer(dimbuffer);
+		int64_t		   scaricati= 0;
+		int64_t		   ultimo	= mtime();
+		bool		   errore	= false;
+		while (true)
+		{
+			DWORD letti= 0;
+			if (!p_read(hurl, &buffer[0], dimbuffer, &letti))
+			{
+				myprintf("03196! WinINet: read error (%u)\n", (unsigned)GetLastError());
+				errore= true;
+				break;
+			}
+			if (letti == 0)
+				break;
+			if (fwrite(&buffer[0], 1, letti, outfile) != letti)
+			{
+				myprintf("03197! WinINet: write error on %s\n", i_verfile.c_str());
+				errore= true;
+				break;
+			}
+			scaricati+= letti;
+			if (i_showupdate && (mtime() - ultimo) > 1000)
+			{
+				ultimo= mtime();
+				if (attesi > 0)
+					myprintf("03198: Downloaded %s of %s bytes\r", migliaia(scaricati), migliaia2(attesi));
+				else
+					myprintf("03198: Downloaded %s bytes\r", migliaia(scaricati));
+			}
+		}
+		if (i_showupdate)
+			myprintf("\n");
+		fclose(outfile);
+		outfile= NULL;
+		if (!errore && (attesi <= 0 || scaricati == attesi))
+			risultato= true;
+		else if (!errore)
+			myprintf("03199! WinINet: got %s bytes instead of %s\n", migliaia(scaricati), migliaia2(attesi));
+		if (!risultato)
+			delete_file(i_verfile.c_str());
+	}
+uscita:
+	if (outfile != NULL)
+		fclose(outfile);
+	if (hurl != NULL)
+		p_close(hurl);
+	if (hsession != NULL)
+		p_close(hsession);
+	FreeLibrary(hwininet);
+	return risultato;
+}
+#endif
+
 bool downloadfile(const string& i_verurl, const string& i_verfile, bool i_showupdate)
 {
 #if defined(SOLARIS) || defined(__HAIKU__) || defined(OPEN)
@@ -31602,13 +31908,21 @@ bool downloadfile(const string& i_verurl, const string& i_verfile, bool i_showup
 	if (i_showupdate)
 		p_thecallback= &thecallback;
 
-	if (S_OK != URLDownloadToFileW(NULL, utow(i_verurl.c_str()).c_str(), utow(i_verfile.c_str()).c_str(), 0, p_thecallback))
+	/// utow() by default turns every / into \: fine for the local file, NOT for the URL
+	if (S_OK != URLDownloadToFileW(NULL, utow(i_verurl.c_str(), '/').c_str(), utow(i_verfile.c_str()).c_str(), 0, p_thecallback))
 #else
-	if (S_OK != URLDownloadToFileW(NULL, utow(i_verurl.c_str()).c_str(), utow(i_verfile.c_str()).c_str(), 0, 0))
+	if (S_OK != URLDownloadToFileW(NULL, utow(i_verurl.c_str(), '/').c_str(), utow(i_verfile.c_str()).c_str(), 0, 0))
 #endif
 	{
-		myprintf("03175: Download failed C5 (no internet?)  %s\n", i_verurl.c_str());
-		return false;
+		/// urlmon failed: retry with WinINet before giving up (typically an
+		/// unreachable IPv6 address on a dual-stack host)
+		if (flagverbose)
+			myprintf("03178: urlmon download failed, retrying with WinINet\n");
+		if (!downloadfile_wininet(i_verurl, i_verfile, i_showupdate))
+		{
+			myprintf("03175: Download failed C5 (no internet?)  %s\n", i_verurl.c_str());
+			return false;
+		}
 	}
 #else
 #define INTERNET_BUFFER_SIZE 1024
@@ -36212,11 +36526,6 @@ class franzcri
 		return footer.file_data_size;
 	}
 
-	void dumpblocks(const string &i_intestazione)
-	{
-		// Removed CRC32 block tracking - using AEAD authentication instead
-	}
-
 	bool write(const char *buffer, size_t size)
 	{
 		if (flagdebug3)
@@ -37422,7 +37731,7 @@ class franzcri
 		return true;
 	}
 
-	bool validate_actual_file_size(bool include_footer= true)
+	bool validate_actual_file_size()
 	{
 		// Save current position
 		long long current_pos= -1;
@@ -40902,6 +41211,8 @@ int64_t	  g_franzen_jidacheader= -1;
 
 string g_franzen_filename = "";     // Franzen file path
 
+bool g_franzen_zpaq_nowrite= false; // -franzen without -debug (with or without -key): do not write the .zpaq at all
+
 
 // Thread-local: ogni thread ha il suo puntatore
 __thread franzcri* tls_franzenfile = NULL;
@@ -40969,7 +41280,16 @@ void cleanup_thread_franzenfile()
 // "overloaded" from fwrite() for flagfasttxt
 size_t myfwrite(const void *ptr, size_t size, size_t nobj, FP fp)
 {
-	if (fp == 0)
+	bool fakezpaq= false;
+#ifndef NOFRANZEN
+#ifdef ZPAQFULL /// NOSFTPSTART
+	// Franzen-only: the cleartext .zpaq is deliberately not opened (fp==FPNULL, which
+	// is INVALID_HANDLE_VALUE on Windows, NULL elsewhere), but the byte stream must
+	// still flow through here to feed the .zpaq.franzen below
+	fakezpaq= ((fp == 0) || (fp == FPNULL)) && g_franzen_zpaq_nowrite && (g_p_franzenfile != 0);
+#endif /// NOSFTPEND
+#endif
+	if ((fp == 0) && (!fakezpaq))
 	{
 		if (flagdebug3)
 			myprintf("00099! FP NOT POSITIVE\n");
@@ -41005,10 +41325,17 @@ size_t myfwrite(const void *ptr, size_t size, size_t nobj, FP fp)
 	if (r == 104)
 		myprintf("r 104 ftello %s PPPPPPPPPPPPPPPPPPPPPPPPPPPP\n", migliaia2(ftello(fp)));
 
-	WriteFile(fp, ptr, size * nobj, &r, NULL);
+	if (fakezpaq)
+		r= (DWORD)(size * nobj); // no cleartext .zpaq: pretend full write so the franzen logic below is unchanged
+	else
+		WriteFile(fp, ptr, size * nobj, &r, NULL);
 
 #else
-	size_t r= fwrite(ptr, size, nobj, fp);
+	size_t r;
+	if (fakezpaq)
+		r= nobj; // no cleartext .zpaq: pretend full write so the franzen logic below is unchanged
+	else
+		r= fwrite(ptr, size, nobj, fp);
 #endif // corresponds to #ifdef (#ifdef _WIN32)
 	g_fexpected+= (size * nobj);
 	g_fwritten+= r;
@@ -43171,7 +43498,19 @@ class InputArchive : public ArchiveBase, public libzpaq::Reader
   public:
 	vector<string> filepartnames;
 	string		   lastfilename;
-	
+
+	// franzen-only archives are readable even with fp==FPNULL (decrypted via franzcri)
+	bool isopen()
+	{
+#ifndef NOFRANZEN
+#ifdef ZPAQFULL /// NOSFTPSTART
+		if (uses_franzen)
+			return true;
+#endif /// NOSFTPEND
+#endif
+		return fp != FPNULL;
+	}
+
 	// Open filename. If password then decrypt input.
 	InputArchive(const char *filename);
 	
@@ -43231,8 +43570,60 @@ bool is_file_franzen(const string& filename) {
     return result;
 }
 
+// True only for AES+Franzen files (FRENZEN magic): they need -key too
+bool is_file_frenzen(const string& filename) {
+    FILE* f = fopen(filename.c_str(), "rb");
+    if (f == NULL) return false;
+    char magic[8];
+    bool result = false;
+    if (fread(magic, 1, 8, f) == 8)
+        result = (memcmp(magic, "FRENZEN\x1a", 8) == 0);
+    fclose(f);
+    return result;
+}
+
 // Check if file starts with ZPAQ magic (7kSt) or zPQ
 
+// fopen "unicode-safe": su Windows converte il nome (atteso in UTF-8)
+// in UTF-16 e usa _wfopen; altrove e' un fopen normale.
+static FILE* xfopen(const string& filename, const char* mode)
+{
+#ifdef _WIN32
+    int wlen = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS,
+                                   filename.c_str(), -1, NULL, 0);
+    if (wlen > 0)
+    {
+        wstring wname(wlen, 0);
+        MultiByteToWideChar(CP_UTF8, 0, filename.c_str(), -1, &wname[0], wlen);
+        wstring wmode(mode, mode + strlen(mode));
+        FILE* f = _wfopen(wname.c_str(), wmode.c_str());
+        if (f != NULL)
+            return f;
+    }
+    // fallback: stringa non UTF-8 valida (es. gia' in codepage ANSI)
+    return fopen(filename.c_str(), mode);
+#else
+    return fopen(filename.c_str(), mode);
+#endif
+}
+
+bool is_file_zpaq(const string& filename)
+{
+    FILE* f = xfopen(filename, "rb");
+    if (f == NULL)
+        return false;
+    unsigned char magic[4] = {0};
+    bool result = false;
+    if (fread(magic, 1, 4, f) == 4)
+    {
+        const bool is_7kSt = (memcmp(magic, "7kSt", 4) == 0);
+        const bool is_zPQ  = (memcmp(magic, "zPQ",  3) == 0) && (magic[3] >= 1);
+        result = is_7kSt || is_zPQ;
+    }
+    fclose(f);
+    return result;
+}
+/*
 bool is_file_zpaq(const string& filename)
 {
     FILE* f = fopen(filename.c_str(), "rb");
@@ -43252,7 +43643,7 @@ bool is_file_zpaq(const string& filename)
     fclose(f);
     return result;
 }
-
+*/
 // Check if buffer starts with ZPAQ magic (7kSt)
 bool is_buffer_zpaq(const char* buffer, size_t len)
 {
@@ -43269,6 +43660,23 @@ bool is_buffer_franzen(const char* buffer, size_t len) {
     return (memcmp(buffer, "FRANZEN\x1a", 8) == 0) ||
            (memcmp(buffer, "FRENZEN\x1a", 8) == 0);
 }
+
+#ifndef NOFRANZEN
+#ifdef ZPAQFULL /// NOSFTPSTART
+// True when the cleartext .zpaq does not exist but a valid .zpaq.franzen does:
+// the archive lives only in its franzen file (made by -franzen without -key/-debug)
+bool isfranzenonly(const string &i_zpaqname)
+{
+	if (g_franzen == "")
+		return false;
+	if (i_zpaqname == "")
+		return false;
+	if (exists(i_zpaqname))
+		return false;
+	return is_file_franzen(i_zpaqname + ".franzen");
+}
+#endif /// NOSFTPEND
+#endif
 
 // Detect archive type and determine physical file to use
 ArchiveType InputArchive::detect_archive_type(const string& base_file)
@@ -43923,6 +44331,8 @@ class OutputArchive : public ArchiveBase, public libzpaq::Writer
 	char* buf; // Dichiara un puntatore unico ad array
 	string thefilename;
 	bool   flagindex;
+	bool	nowrite;	// franzen-only: no physical .zpaq behind this stream
+	int64_t nowriteeof; // virtual EOF while nowrite is active
 
 	FP			 firstfp;
 	uint64_t	 chunksize;
@@ -43955,7 +44365,7 @@ class OutputArchive : public ArchiveBase, public libzpaq::Writer
 	{
 		if (flagdebug3)
 			myprintf("00210: flush k1\n");
-		assert(fp != FPNULL);
+		assert(fp != FPNULL || nowrite);
 		string nomefile= prendinomefileebasta(thefilename);
 
 		g_archivefp= fp;
@@ -44099,7 +44509,9 @@ class OutputArchive : public ArchiveBase, public libzpaq::Writer
 		}
 		else
 		{
-			if ((int64_t)fp != 0)
+			if (nowrite) // must come first: fp is FPNULL (-1 on Windows), which is != 0
+				cryptoffset= off; // off is the virtual ftello (no multipart in nowrite mode)
+			else if ((int64_t)fp != 0)
 				cryptoffset= ftello(fp) + off;
 			else
 				cryptoffset= 0;
@@ -44138,6 +44550,13 @@ class OutputArchive : public ArchiveBase, public libzpaq::Writer
 		myfwrite(buf, 1, ptr, fp);
 		writtensofar+= ptr;
 		chunksize+= ptr;
+
+		if (nowrite)
+		{
+			off+= ptr; // advance the virtual position exactly as the physical write would
+			if (off > nowriteeof)
+				nowriteeof= off;
+		}
 
 		if (flagdebug3)
 			myprintf("00235: flush k8\n");
@@ -44199,10 +44618,17 @@ class OutputArchive : public ArchiveBase, public libzpaq::Writer
 #endif
 			fseeko(fp, p, whence);
 		}
-		else if (whence == SEEK_SET)
-			off= p;
 		else
-			off+= p; // assume at end
+		{
+			if (nowrite)
+				flush(); // pending bytes must reach the franzen stream before moving
+			if (whence == SEEK_SET)
+				off= p;
+			else if (nowrite && (whence == SEEK_END))
+				off= nowriteeof + p;
+			else
+				off+= p; // assume at end
+		}
 	}
 	// Return current file offset.
 	int64_t tell() const
@@ -44212,6 +44638,8 @@ class OutputArchive : public ArchiveBase, public libzpaq::Writer
 
 		if (fp != FPNULL)
 			return ftello(fp) + ptr;
+		else if (nowrite)
+			return off + ptr;
 		else
 			return off;
 	}
@@ -44230,7 +44658,7 @@ class OutputArchive : public ArchiveBase, public libzpaq::Writer
 			++off; // we do not flush
 			return;
 		}
-		if (fp == FPNULL)
+		if ((fp == FPNULL) && (!nowrite))
 			++off;
 		else
 		{
@@ -44248,7 +44676,7 @@ class OutputArchive : public ArchiveBase, public libzpaq::Writer
 			return;
 		}
 
-		if (fp == FPNULL)
+		if ((fp == FPNULL) && (!nowrite))
 			off+= len;
 		else
 			while (len-- > 0)
@@ -44257,7 +44685,7 @@ class OutputArchive : public ArchiveBase, public libzpaq::Writer
 	// Flush output and close
 	void close()
 	{
-		if (fp != FPNULL)
+		if ((fp != FPNULL) || nowrite)
 		{
 #ifndef ESX
 			if (flagdebug3)
@@ -44308,12 +44736,19 @@ class OutputArchive : public ArchiveBase, public libzpaq::Writer
 			else
 			{
 				if (flagdebug)
-					myprintf("nofranzen zero!\n");
+					myprintf("44430: nofranzen zero!\n");
 			}
 
 #endif /// NOSFTPEND
 #endif
 		}
+#ifndef NOFRANZEN
+#ifdef ZPAQFULL /// NOSFTPSTART
+		if (nowrite)
+			g_franzen_zpaq_nowrite= false;
+#endif /// NOSFTPEND
+#endif
+		nowrite= false;
 		fp= FPNULL;
 	}
 	string format_filename(unsigned int i_number)
@@ -53211,6 +53646,10 @@ static bool EnablePrivilege(LPCWSTR privilegeName)
 }
 #endif
 
+// Contatore file/cartelle schedulati per cancellazione al prossimo riavvio.
+// Resettato all'inizio di deleteExcludedFiles, letto alla fine per il riepilogo.
+static int64_t s_rebootScheduled = 0;
+
 // Helper: Tenta di forzare Ownership (Admin) e Full Control
 #ifdef DLL
 static bool forceFilePermissions(const std::wstring& path)
@@ -53220,26 +53659,40 @@ static bool forceFilePermissions(const std::wstring& path)
 #else
 static bool forceFilePermissions(const std::wstring& path)
 {
+    /// NOTA CRITICA: SetNamedSecurityInfoW NON supporta il prefisso
+    // (aggiunto da fixLongPath), quindi falliva silenziosamente su ogni path.
+    // Usiamo SetSecurityInfo su handle, che funziona con qualsiasi lunghezza path.
     PSID pSidAdmins = NULL;
     SID_IDENTIFIER_AUTHORITY SIDAuthNT = SECURITY_NT_AUTHORITY;
 
-    if (!AllocateAndInitializeSid(&SIDAuthNT, 2, 
-            SECURITY_BUILTIN_DOMAIN_RID, DOMAIN_ALIAS_RID_ADMINS, 
+    if (!AllocateAndInitializeSid(&SIDAuthNT, 2,
+            SECURITY_BUILTIN_DOMAIN_RID, DOMAIN_ALIAS_RID_ADMINS,
             0, 0, 0, 0, 0, 0, &pSidAdmins))
         return false;
 
     bool result = false;
 
-    // Prendi Ownership
-    DWORD res = SetNamedSecurityInfoW(
-        const_cast<LPWSTR>(path.c_str()), 
-        SE_FILE_OBJECT, 
-        OWNER_SECURITY_INFORMATION, 
-        pSidAdmins, NULL, NULL, NULL);
+    // Passo 1: prendi ownership (SE_TAKE_OWNERSHIP_NAME bypassa DACL per WRITE_OWNER)
+    HANDLE h = CreateFileW(path.c_str(), WRITE_OWNER,
+        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+        NULL, OPEN_EXISTING,
+        FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT, NULL);
 
-    if (res == ERROR_SUCCESS)
+    if (h != INVALID_HANDLE_VALUE)
     {
-        // Reset DACL: Grant Full Control to Administrators
+        SetSecurityInfo(h, SE_FILE_OBJECT, OWNER_SECURITY_INFORMATION,
+            pSidAdmins, NULL, NULL, NULL);
+        CloseHandle(h);
+    }
+
+    // Passo 2: imposta DACL — ora siamo owner, WRITE_DAC è consentito
+    h = CreateFileW(path.c_str(), WRITE_DAC | READ_CONTROL,
+        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+        NULL, OPEN_EXISTING,
+        FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT, NULL);
+
+    if (h != INVALID_HANDLE_VALUE)
+    {
         EXPLICIT_ACCESSW ea = {};
         ea.grfAccessPermissions = GENERIC_ALL;
         ea.grfAccessMode = SET_ACCESS;
@@ -53251,18 +53704,14 @@ static bool forceFilePermissions(const std::wstring& path)
         PACL pNewDacl = NULL;
         if (SetEntriesInAclW(1, &ea, NULL, &pNewDacl) == ERROR_SUCCESS)
         {
-            if (SetNamedSecurityInfoW(
-                    const_cast<LPWSTR>(path.c_str()), 
-                    SE_FILE_OBJECT, 
-                    DACL_SECURITY_INFORMATION | UNPROTECTED_DACL_SECURITY_INFORMATION, 
-                    NULL, NULL, pNewDacl, NULL) == ERROR_SUCCESS)
-            {
-                result = true;
-            }
+            result = (SetSecurityInfo(h, SE_FILE_OBJECT,
+                DACL_SECURITY_INFORMATION | UNPROTECTED_DACL_SECURITY_INFORMATION,
+                NULL, NULL, pNewDacl, NULL) == ERROR_SUCCESS);
             LocalFree(pNewDacl);
         }
+        CloseHandle(h);
     }
-    
+
     FreeSid(pSidAdmins);
     return result;
 }
@@ -53271,45 +53720,73 @@ static bool forceFilePermissions(const std::wstring& path)
 static bool deleteFileAggressive(const std::wstring& i_filepath)
 {
     std::wstring path = fixLongPath(i_filepath);
+    DWORD err;
 
     // ATTEMPT 1: Direct deletion
     if (DeleteFileW(path.c_str())) return true;
-
-    DWORD err = GetLastError();
+    err = GetLastError();
     if (err == ERROR_FILE_NOT_FOUND || err == ERROR_PATH_NOT_FOUND) return true;
+    if (flagdebug3)
+        myprintf("47901: deleteFile attempt1 (direct) err=%lu: %ls\n", err, i_filepath.c_str());
 
     // ATTEMPT 2: Remove Read-Only/Hidden/System attributes
     DWORD attrs = GetFileAttributesW(path.c_str());
-    if (attrs != INVALID_FILE_ATTRIBUTES)
+    if (attrs != INVALID_FILE_ATTRIBUTES &&
+        (attrs & (FILE_ATTRIBUTE_READONLY | FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM)))
     {
-        if (attrs & (FILE_ATTRIBUTE_READONLY | FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM))
-        {
-            SetFileAttributesW(path.c_str(), FILE_ATTRIBUTE_NORMAL);
-            if (DeleteFileW(path.c_str())) return true;
-        }
+        SetFileAttributesW(path.c_str(), FILE_ATTRIBUTE_NORMAL);
+        if (DeleteFileW(path.c_str())) return true;
+        err = GetLastError();
+        if (flagdebug3)
+            myprintf("47902: deleteFile attempt2 (strip attrs) err=%lu: %ls\n", err, i_filepath.c_str());
     }
 
-    // ATTEMPT 3: Force Permissions (Ownership + ACL) and retry
+    // ATTEMPT 3: Force Permissions (Ownership + ACL via handle) and retry
     if (forceFilePermissions(path))
     {
         SetFileAttributesW(path.c_str(), FILE_ATTRIBUTE_NORMAL);
         if (DeleteFileW(path.c_str())) return true;
+        err = GetLastError();
+        if (flagdebug3)
+            myprintf("47903: deleteFile attempt3 (force perms) err=%lu: %ls\n", err, i_filepath.c_str());
+    }
+    else if (flagdebug3)
+    {
+        myprintf("47903b: deleteFile forceFilePermissions failed: %ls\n", i_filepath.c_str());
     }
 
     // ATTEMPT 4: MoveFile trick (rename and delete)
     std::wstring tempName = path + L".~del~";
-    DeleteFileW(tempName.c_str()); // Rimuovi eventuale residuo
+    DeleteFileW(tempName.c_str());
     if (MoveFileW(path.c_str(), tempName.c_str()))
     {
         if (DeleteFileW(tempName.c_str())) return true;
-        path = tempName; 
+        path = tempName;
+        if (flagdebug3)
+        {
+            err = GetLastError();
+            myprintf("47904: deleteFile attempt4 (rename+del) rinominato ma del fallito err=%lu\n", err);
+        }
+    }
+    else if (flagdebug3)
+    {
+        err = GetLastError();
+        myprintf("47904b: deleteFile attempt4 (rename) fallito err=%lu: %ls\n", err, i_filepath.c_str());
     }
 
     // ATTEMPT 5: Schedule deletion at Reboot
     if (MoveFileExW(path.c_str(), NULL, MOVEFILE_DELAY_UNTIL_REBOOT))
     {
-        return true; // Sparirà al riavvio
+        s_rebootScheduled++;
+        color_magenta();
+        myprintf("47905: *** RIAVVIO NECESSARIO *** file schedulato per cancellazione: %ls\n", i_filepath.c_str());
+        color_restore();
+        return true;
     }
+
+    err = GetLastError();
+    if (flagdebug3)
+        myprintf("47906: deleteFile TUTTI I TENTATIVI FALLITI err=%lu: %ls\n", err, i_filepath.c_str());
 
     return false;
 }
@@ -53317,93 +53794,153 @@ static bool deleteFileAggressive(const std::wstring& i_filepath)
 static bool deleteDirectoryAggressive(const std::wstring& i_dirpath)
 {
     std::wstring path = fixLongPath(i_dirpath);
-    
-    // TENTATIVO 1: Prima prova diretta (funziona solo se vuota e senza intoppi)
+    DWORD err;
+
+    // TENTATIVO 1: Diretto (funziona solo se già vuota e senza problemi ACL)
     if (RemoveDirectoryW(path.c_str())) return true;
-    
-    DWORD err = GetLastError();
+    err = GetLastError();
     if (err == ERROR_FILE_NOT_FOUND || err == ERROR_PATH_NOT_FOUND) return true;
-    
-    // Preparazione: Forza permessi e rimuovi ReadOnly sulla root della cartella
-    forceFilePermissions(path);
+    if (flagdebug3)
+        myprintf("47910: deleteDir attempt1 (direct) err=%lu: %ls\n", err, i_dirpath.c_str());
+
+    // Forza permessi e azzera attributi sulla root della cartella
+    if (!forceFilePermissions(path) && flagdebug3)
+        myprintf("47911: deleteDir forcePerms fallito sulla root: %ls\n", i_dirpath.c_str());
     DWORD attrs = GetFileAttributesW(path.c_str());
-    if (attrs != INVALID_FILE_ATTRIBUTES && (attrs & FILE_ATTRIBUTE_READONLY))
+    if (attrs != INVALID_FILE_ATTRIBUTES &&
+        (attrs & (FILE_ATTRIBUTE_READONLY | FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM)))
     {
-        SetFileAttributesW(path.c_str(), attrs & ~FILE_ATTRIBUTE_READONLY);
+        SetFileAttributesW(path.c_str(), FILE_ATTRIBUTE_NORMAL);
     }
-    
-    // Enumerate and empty content
+
+    // Enumera il contenuto
     std::wstring searchPath = path;
     if (searchPath.back() != L'\\') searchPath += L'\\';
     searchPath += L'*';
-    
+
     WIN32_FIND_DATAW fd;
     HANDLE hFind = FindFirstFileW(searchPath.c_str(), &fd);
-    
+
+    // Se FindFirstFile fallisce (ACL impedisce il listing), ritenta dopo un secondo forcePerms
+    if (hFind == INVALID_HANDLE_VALUE)
+    {
+        err = GetLastError();
+        if (flagdebug3)
+            myprintf("47912: deleteDir FindFirstFile err=%lu, secondo forcePerms: %ls\n",
+                err, i_dirpath.c_str());
+        forceFilePermissions(path);
+        SetFileAttributesW(path.c_str(), FILE_ATTRIBUTE_NORMAL);
+        hFind = FindFirstFileW(searchPath.c_str(), &fd);
+        if (hFind == INVALID_HANDLE_VALUE && flagdebug3)
+            myprintf("47913: deleteDir FindFirstFile ancora fallito err=%lu: %ls\n",
+                GetLastError(), i_dirpath.c_str());
+    }
+
     if (hFind != INVALID_HANDLE_VALUE)
     {
         do
         {
             if (wcscmp(fd.cFileName, L".") == 0 || wcscmp(fd.cFileName, L"..") == 0)
                 continue;
-            
+
             std::wstring childPath = path;
             if (childPath.back() != L'\\') childPath += L'\\';
             childPath += fd.cFileName;
 
-            // --- FIX CRITICO: GESTIONE REPARSE POINTS ---
             if (fd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)
             {
-                // È un Junction/Symlink. NON ENTRARE (evita danni al target).
-                // Remove it directly. Per le junction directory si usa RemoveDirectory.
-                
-                // Remove any read-only attributes from the link itself
-                if (fd.dwFileAttributes & FILE_ATTRIBUTE_READONLY)
-                    SetFileAttributesW(childPath.c_str(), fd.dwFileAttributes & ~FILE_ATTRIBUTE_READONLY);
-
-                // Prova RemoveDirectory (per junction directory) o DeleteFile (per symlink file)
+                // Junction/Symlink: NON entrare nel target, rimuovi solo il link
+                if (fd.dwFileAttributes & (FILE_ATTRIBUTE_READONLY | FILE_ATTRIBUTE_SYSTEM | FILE_ATTRIBUTE_HIDDEN))
+                    SetFileAttributesW(childPath.c_str(), FILE_ATTRIBUTE_NORMAL);
                 if (!RemoveDirectoryW(childPath.c_str()))
                 {
-                    // Fallback: se è un symlink a file, RemoveDirectory fallisce, usiamo DeleteFile
-                    if (GetLastError() == ERROR_DIRECTORY) 
-                         deleteFileAggressive(childPath);
+                    DWORD rerr = GetLastError();
+                    if (flagdebug3)
+                        myprintf("47914: deleteDir reparse RemoveDir err=%lu: %ls\n", rerr, childPath.c_str());
+                    if (rerr == ERROR_DIRECTORY)
+                        deleteFileAggressive(childPath);
                     else
-                         // If it fails again, try a forzare permessi sul link stesso e riprova
-                         if (forceFilePermissions(childPath)) RemoveDirectoryW(childPath.c_str());
+                    {
+                        forceFilePermissions(childPath);
+                        SetFileAttributesW(childPath.c_str(), FILE_ATTRIBUTE_NORMAL);
+                        if (!RemoveDirectoryW(childPath.c_str()) && !deleteFileAggressive(childPath))
+                        {
+                            if (MoveFileExW(childPath.c_str(), NULL, MOVEFILE_DELAY_UNTIL_REBOOT))
+                        {
+                            s_rebootScheduled++;
+                            color_magenta();
+                            myprintf("47914b: *** RIAVVIO NECESSARIO *** reparse schedulato: %ls\n", childPath.c_str());
+                            color_restore();
+                        }
+                        else if (flagdebug3)
+                            myprintf("47914c: reparse MoveFileEx fallito err=%lu: %ls\n", GetLastError(), childPath.c_str());
+                        }
+                    }
                 }
             }
             else if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
             {
-                // Directory reale: Ricorsione
-                deleteDirectoryAggressive(childPath);
+                // IMPORTANTE: forza permessi sul figlio PRIMA di ricorrere,
+                // altrimenti FindFirstFile sul figlio potrebbe fallire per ACL restrittivi
+                forceFilePermissions(childPath);
+                DWORD cattrs = GetFileAttributesW(childPath.c_str());
+                if (cattrs != INVALID_FILE_ATTRIBUTES &&
+                    (cattrs & (FILE_ATTRIBUTE_READONLY | FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM)))
+                {
+                    SetFileAttributesW(childPath.c_str(), FILE_ATTRIBUTE_NORMAL);
+                }
+                if (!deleteDirectoryAggressive(childPath))
+                {
+                    if (MoveFileExW(childPath.c_str(), NULL, MOVEFILE_DELAY_UNTIL_REBOOT))
+                    {
+                        s_rebootScheduled++;
+                        color_magenta();
+                        myprintf("47915: *** RIAVVIO NECESSARIO *** sottocartella schedulata: %ls\n", childPath.c_str());
+                        color_restore();
+                    }
+                    else if (flagdebug3)
+                        myprintf("47915b: figlio MoveFileEx fallito err=%lu: %ls\n", GetLastError(), childPath.c_str());
+                }
             }
             else
             {
-                // File reale
-                deleteFileAggressive(childPath);
+                if (!deleteFileAggressive(childPath) && flagdebug3)
+                    myprintf("47916: deleteDir file figlio non cancellato: %ls\n", childPath.c_str());
             }
-            // ---------------------------------------------
 
         } while (FindNextFileW(hFind, &fd));
-        
+
         FindClose(hFind);
     }
-    
-    // TENTATIVO 2: Riprova a rimuovere la directory (ora dovrebbe essere vuota)
-    if (RemoveDirectoryW(path.c_str())) return true;
-    
-    // TENTATIVO 3: Ownership sulla cartella stessa (se fallita prima) e riprova
-    if (forceFilePermissions(path))
-    {
-         if (RemoveDirectoryW(path.c_str())) return true;
-    }
 
-    // TENTATIVO 4: Schedule at reboot
+    // TENTATIVO 2: Riprova ora che dovrebbe essere vuota
+    if (RemoveDirectoryW(path.c_str())) return true;
+    err = GetLastError();
+    if (flagdebug3)
+        myprintf("47917: deleteDir attempt2 (dopo svuotamento) err=%lu: %ls\n", err, i_dirpath.c_str());
+
+    // TENTATIVO 3: Forza permessi di nuovo e riprova
+    forceFilePermissions(path);
+    SetFileAttributesW(path.c_str(), FILE_ATTRIBUTE_NORMAL);
+    if (RemoveDirectoryW(path.c_str())) return true;
+    err = GetLastError();
+    if (flagdebug3)
+        myprintf("47918: deleteDir attempt3 (force+retry) err=%lu: %ls\n", err, i_dirpath.c_str());
+
+    // TENTATIVO 4: Schedula la cancellazione al prossimo riavvio
     if (MoveFileExW(path.c_str(), NULL, MOVEFILE_DELAY_UNTIL_REBOOT))
     {
+        s_rebootScheduled++;
+        color_magenta();
+        myprintf("47919: *** RIAVVIO NECESSARIO *** cartella schedulata per cancellazione: %ls\n", i_dirpath.c_str());
+        color_restore();
         return true;
     }
-    
+
+    if (flagdebug3)
+        myprintf("47920: deleteDir TUTTI I TENTATIVI FALLITI err=%lu: %ls\n",
+            GetLastError(), i_dirpath.c_str());
+
     return false;
 }
 
@@ -53454,6 +53991,7 @@ bool franzimager::deleteExcludedFiles(
 	// initialize statistics
 	m_excludedExpectedDeleted = (int64_t)i_fileDaCancellare.size();
 	m_excludedCannotDelete = 0;
+	s_rebootScheduled = 0;
 	
 	if (i_fileDaCancellare.empty())
 	{
@@ -53561,24 +54099,38 @@ bool franzimager::deleteExcludedFiles(
 	myprintf("44254: Deletion complete in %.1f seconds:\n", elapsedsec);
 	myprintf("  Total items     : %21s\n", migliaia(totalCount));
 	myprintf("  Deleted OK      : %21s\n", migliaia(deletedCount));
+	myprintf("  Reboot pending  : %21s\n", migliaia(s_rebootScheduled));
 	myprintf("  Failed          : %21s\n", migliaia(m_excludedCannotDelete));
-	
+
+	if (s_rebootScheduled > 0)
+	{
+		color_magenta();
+		myprintf("44257: =====================================================\n");
+		myprintf("44257: *** RIAVVIO DI WINDOWS NECESSARIO ***\n");
+		myprintf("44257: %s elementi non erano cancellabili e sono stati\n", migliaia(s_rebootScheduled));
+		myprintf("         schedulati per la rimozione automatica al prossimo\n");
+		myprintf("         avvio di Windows (PendingFileRenameOperations).\n");
+		myprintf("         IL RIPRISTINO NON E' COMPLETO FINO AL RIAVVIO!\n");
+		myprintf("44257: =====================================================\n");
+		color_restore();
+	}
+
 	if (m_excludedCannotDelete > 0)
 	{
 		color_yellow();
 		myprintf("44255: Warning: %s items could not be deleted\n", migliaia(m_excludedCannotDelete));
 		color_restore();
 	}
-	else
+	else if (s_rebootScheduled == 0)
 	{
 		color_green();
 		myprintf("44256: All excluded files deleted successfully\n");
 		color_restore();
 	}
-	
+
 	if (flagdebug)
 		myprintf("47672: <<< deleteExcludedFiles = %s\n", (m_excludedCannotDelete == 0) ? "true" : "false");
-	
+
 	return (m_excludedCannotDelete == 0);
 }
 
@@ -56047,6 +56599,9 @@ class Jidac
 #endif /// NOSFTPEND
 	int versum();
 	int last2();
+#ifdef ZPAQMOUNT
+	int mount();
+#endif
 	int last();
 	int testbackup();
 	int consolidatebackup();
@@ -56372,7 +56927,9 @@ class Jidac
 	void handlemultiparttrim();
 	void gestisciposttest();
 	int	 posterrori();
-	void preparahashtobewritten(const string &i_filename, const DTMap::iterator &i_p, string &i_hashtobewritten, string &i_hasherror, string &i_hashname);
+	void preparahashtobewritten(const string &i_filename, const DTMap::iterator &i_p, string &i_hashtobewritten, string &i_hasherror, string &i_hashname,const int i_fileaggiunto);
+	bool carryoverhash(const DTMap::iterator &i_old, string &io_hash, uint32_t &io_crc32);
+	void backupdir_archiveroots(vector<string> &o_roots);
 
 #ifdef _WIN64
 #ifdef ZPAQFULL ///NOSFTPSTART
@@ -59684,6 +60241,8 @@ OutputArchive::OutputArchive(string i_thearchive, const char *filename, const ch
 	off		   = off_;
 	thefilename= "";
 	flagindex  = false;
+	nowrite	   = false;
+	nowriteeof = 0;
 	/// g_p_franzenfile=0;
 
 	if (!*filename)
@@ -59822,20 +60381,37 @@ OutputArchive::OutputArchive(string i_thearchive, const char *filename, const ch
 	{
 		if (flagdebug3)
 			myprintf("00295: not isopen\n");
-#ifdef BSD
-		if (flagappend)
+#ifndef NOFRANZEN
+#ifdef ZPAQFULL /// NOSFTPSTART
+		nowrite= g_franzen_zpaq_nowrite; // -franzen without -debug (with or without -key): the .zpaq is never opened
+#endif /// NOSFTPEND
+#endif
+		if (nowrite)
 		{
-			if (flagdebug2)
-				myprintf("00296: try BSD flagappend\n");
-			fp= myfopen(thefilename.c_str(), AB);
+			if (flagverbose)
+			{
+				color_cyan();
+				myprintf("43784: Franzen-only: cleartext <<%Z>> will NOT be written\n", thefilename.c_str());
+				color_restore();
+			}
 		}
 		else
-			fp= myfopen(thefilename.c_str(), WB);
+		{
+#ifdef BSD
+			if (flagappend)
+			{
+				if (flagdebug2)
+					myprintf("00296: try BSD flagappend\n");
+				fp= myfopen(thefilename.c_str(), AB);
+			}
+			else
+				fp= myfopen(thefilename.c_str(), WB);
 #else
-		fp= myfopen(thefilename.c_str(), WB, DATE_1980);
+			fp= myfopen(thefilename.c_str(), WB, DATE_1980);
 #endif // corresponds to #ifdef (#ifdef BSD)
-		if (!isopen())
-			ioerr(thefilename.c_str());
+			if (!isopen())
+				ioerr(thefilename.c_str());
+		}
 
 		if (g_chunk_size > 0)
 		{
@@ -59854,22 +60430,55 @@ OutputArchive::OutputArchive(string i_thearchive, const char *filename, const ch
 			{
 				string franzenfilename= thefilename + ".franzen";
 				bool has_aes = (g_password != NULL && g_password[0] != 0);
-				g_p_franzenfile = new franzcri(g_franzen.c_str(), g_franzen.length(), 0, 0, 0, CRYPTO_PWHASH_ALG_DEFAULT, has_aes);
-				if (g_p_franzenfile->open(franzenfilename.c_str(), true))
+				if (nowrite && is_file_franzen(franzenfilename))
 				{
-					color_cyan();
-					printbar('*');
-					if (has_aes)
-						myprintf("43783: Creating AES+Franzen (FRENZEN) <<%Z>>\n", franzenfilename.c_str());
+					// franzen-only incremental append: the archive lives only in the .zpaq.franzen
+					nowriteeof= g_header_pos; // logical (decoded) size of the existing archive
+					g_p_franzenfile= new franzcri(g_franzen.c_str(), g_franzen.length());
+					if (g_p_franzenfile->open(franzenfilename.c_str(), false))
+					{
+						if (g_p_franzenfile->get_is_aes_too() != has_aes)
+						{
+							if (has_aes)
+								myprintf("43796! <<%Z>> is Franzen-only (no AES): -key cannot be used\n", franzenfilename.c_str());
+							else
+								myprintf("43793! <<%Z>> is AES+Franzen: -key is needed\n", franzenfilename.c_str());
+							error("franzen-only append: AES mismatch between archive and options");
+						}
+						color_cyan();
+						printbar('*');
+						if (has_aes)
+							myprintf("43792: Appending AES+Franzen (FRENZEN) <<%Z>>\n", franzenfilename.c_str());
+						else
+							myprintf("43794: Appending Franzen (FRANZEN) <<%Z>>\n", franzenfilename.c_str());
+						printbar('*');
+						color_restore();
+					}
 					else
-						myprintf("43787: Creating Franzen (FRANZEN) <<%Z>>\n", franzenfilename.c_str());
-					printbar('*');
-					color_restore();
+					{
+						myprintf("43795! cannot open franzen <<%Z>>\n", franzenfilename.c_str());
+						error("cannot open franzen archive for append");
+					}
 				}
 				else
 				{
-					myprintf("43791!  cannot create franzen <<%Z>>\n", franzenfilename.c_str());
-					g_p_franzenfile= 0;
+					g_p_franzenfile = new franzcri(g_franzen.c_str(), g_franzen.length(), 0, 0, 0, CRYPTO_PWHASH_ALG_DEFAULT, has_aes);
+					if (g_p_franzenfile->open(franzenfilename.c_str(), true))
+					{
+						color_cyan();
+						printbar('*');
+						if (has_aes)
+							myprintf("43783: Creating AES+Franzen (FRENZEN) <<%Z>>\n", franzenfilename.c_str());
+						else
+							myprintf("43787: Creating Franzen (FRANZEN) <<%Z>>\n", franzenfilename.c_str());
+						printbar('*');
+						color_restore();
+					}
+					else
+					{
+						myprintf("43791!  cannot create franzen <<%Z>>\n", franzenfilename.c_str());
+						g_p_franzenfile= 0;
+					}
 				}
 			}
 		}
@@ -59901,13 +60510,27 @@ OutputArchive::OutputArchive(string i_thearchive, const char *filename, const ch
 				exit(0);
 			}
 			memcpy(salt, salt_, 32);
-			if (off == 0 && myfwrite(salt, 1, 32, fp) != 32)
-				ioerr(thefilename.c_str());
-			if (flagdebug3)
-				myprintf("00297: written SALT (32bytes) on %s\n", thefilename.c_str());
+			if (nowrite && (nowriteeof > 0))
+			{
+				// franzen-only AES append: the salt is already at decoded [0..31], do not rewrite it
+				if (flagdebug3)
+					myprintf("00298: franzen-only append, salt not rewritten\n");
+			}
+			else
+			{
+				if (off == 0 && myfwrite(salt, 1, 32, fp) != 32)
+					ioerr(thefilename.c_str());
+				if (nowrite)
+				{
+					off		  = 32; // virtual position just after the salt
+					nowriteeof= 32;
+				}
+				if (flagdebug3)
+					myprintf("00297: written SALT (32bytes) on %s\n", thefilename.c_str());
 #ifndef _WIN32
-			fflush(fp); /// unix fix
+				fflush(fp); /// unix fix
 #endif					// corresponds to #ifndef (#ifndef _WIN32)
+			}
 		}
 	}
 	if (flagdebug)
@@ -64440,6 +65063,54 @@ string help_consolidatebackup(bool i_usage, bool i_example)
 	return ("Manage multipart backup");
 }
 
+#ifdef ZPAQMOUNT
+/// lo spiegone, ancora da mettere a punto
+string help_mount(bool i_usage, bool i_example)
+{
+	if (i_usage)
+	{
+		scrivi_riga("CMD mount", "Mount an archive read-only (FUSE / WinFsp): the LAST version");
+		scrivi_riga(" ", "The mountpoint IS that version: its files and folders are right there");
+		scrivi_riga(" ", "With -all every version becomes a top level folder instead:");
+		scrivi_riga(" ", "mountpoint/VER00000000 = state after the 1st add, VER00000001 after");
+		scrivi_riga(" ", "the 2nd, and so on (cumulative state, a snapshot, not a diff)");
+		scrivi_riga(" ", "Windows: mountpoint is a drive letter (Z:) or a not-yet-existing folder;");
+		scrivi_riga(" ", "         omit it to get the first free letter and an Explorer window");
+		scrivi_riga(" ", "Unix: mountpoint is an empty directory; stays in foreground, Ctrl+C unmounts");
+		scrivi_riga("-all", "Mount every version (VER00000000, VER00000001 ...), not just the last");
+		scrivi_riga(" ", "  slower to mount: one directory tree has to be built per version");
+		scrivi_riga("-until N", "Version N (or a date) becomes the last one, and that is what is");
+		scrivi_riga(" ", "  mounted; with -all, the versions after N are not shown either");
+		scrivi_riga("-threads N", "Threads for read-ahead/decompression (default: 4)");
+		scrivi_riga("-backend X", "Engine: auto (default) | core | jidac");
+		scrivi_riga(" ", "  core : self-contained mmap scanner, plain (unencrypted) archives only");
+		scrivi_riga(" ", "  jidac: native zpaqfranz I/O, reads -key (AES-256) and Franzen archives");
+		scrivi_riga(" ", "  auto : jidac if the archive is encrypted, else core");
+		scrivi_riga("-fuseopt a,b", "Extra options passed to FUSE/WinFsp as -o a,b");
+		scrivi_riga(" ", "  Windows: VolumePrefix=\\zpaqfuse\\name (network drive, tames the AV),");
+		scrivi_riga(" ", "  FileSystemName=NTFS (run .exe from the mount)");
+		scrivi_riga("-noeta", "No progress line while the index is being scanned");
+		scrivi_riga("-debug", "Also enable FUSE/WinFsp debug output (-d)");
+		scrivi_riga(" ", "Env: ZPAQFUSE_CACHE_MB (256) ZPAQFUSE_SHARDS ZPAQFUSE_PREFETCH_THREADS");
+		scrivi_riga(" ", "     ZPAQFUSE_WINNAMES ZPAQFUSE_CASEFOLD ZPAQFUSE_CASE_INSENSITIVE (Windows)");
+	}
+	if (i_usage && i_example)
+		scrivi_examples();
+	if (i_example)
+	{
+		scrivi_esempio("Last version, first free drive letter (Windows)", "mount z:\\1.zpaq");
+		scrivi_esempio("Mount a multipart archive on Z:", "mount z:\\part_???.zpaq Z:");
+		scrivi_esempio("Every version, one folder each", "mount z:\\1.zpaq Z: -all");
+		scrivi_esempio("Mount as a network drive (Windows)", "mount z:\\1.zpaq Z: -fuseopt VolumePrefix=\\zpaqfuse\\1");
+		scrivi_esempio("Mount on a directory (Unix)", "mount /tmp/1.zpaq /mnt/zpaq");
+		scrivi_esempio("Version 3 instead of the last one", "mount z:\\1.zpaq Z: -until 3");
+		scrivi_esempio("The first 3 versions, one folder each", "mount z:\\1.zpaq Z: -all -until 3");
+		scrivi_esempio("Mount an encrypted archive", "mount z:\\enc.zpaq Z: -key mypassword");
+		scrivi_esempio("Force the native engine", "mount z:\\1.zpaq Z: -backend jidac");
+	}
+	return ("Mount an archive read-only (FUSE/WinFsp)");
+}
+#endif // ZPAQMOUNT
 string help_last2(bool i_usage, bool i_example)
 {
 	if (i_usage)
@@ -65033,6 +65704,30 @@ string help_w(bool i_usage, bool i_example)
 	}
 	return ("Extract/test large files in chunks");
 }
+string help_xx(bool i_usage, bool i_example)
+{
+	if (i_usage)
+	{
+		scrivi_riga("CMD xx", "Extract with sequential write (shortcut for x -recover)");
+		scrivi_riga(" ", "Same switches as x, but a different read/write strategy:");
+		scrivi_riga(" ", "the archive is read in stored order (random read, SSD advised),");
+		scrivi_riga(" ", "output files are buffered in a RAM cache and written sequentially.");
+		scrivi_riga(" ", "Faster on spinning drives, reduces fragmentation of restored files,");
+		scrivi_riga(" ", "and gets out as much data as possible from a damaged archive.");
+		scrivi_riga("-ramsize X", "Size of the write cache (default 1GB)");
+		scrivi_riga(" ", "Everything else (-to -only -not -until -force ...) works as in x");
+	}
+	if (i_usage && i_example)
+		scrivi_examples();
+	if (i_example)
+	{
+		scrivi_esempio("Single file to folder tree", "xx 1.zpaq -only \"*whatever\" -to /tmp/foldertree");
+		scrivi_esempio("Everything into folder muz7", "xx z:\\1.zpaq -to z:\\muz7\\");
+		scrivi_esempio("Bigger cache (4GB) if you have RAM", "xx z:\\1.zpaq -to z:\\muz7\\ -ramsize 4GB");
+		scrivi_esempio("Salvage a damaged archive", "xx z:\\1.zpaq -to z:\\muz7\\ -force");
+	}
+	return ("Extract file(s) with sequential write");
+}
 string help_x(bool i_usage, bool i_example)
 {
 	if (i_usage)
@@ -65075,6 +65770,13 @@ string help_x(bool i_usage, bool i_example)
 		scrivi_riga("-ramsize", "Win64: allocate max virtual memory across all swapfiles");
 #endif
 		scrivi_riga("-huge", "Use alternate write policy (huge file on non-sparse filesystem)");
+		scrivi_riga("-backupdir X", "With -force: MOVE (not erase) files to be overwritten into X/<timestamp>/");
+		scrivi_riga(" ", "keeping the relative path. If a move fails, abort BEFORE writing anything");
+		scrivi_riga(" ", "Two runs in the same second get X/<timestamp>_00001/ and so on");
+		scrivi_riga("-extras", "With -backupdir: also move into X/<timestamp>/ files on disk NOT in the archive");
+		scrivi_riga(" ", "so the restored tree matches the archive, and nothing is ever deleted");
+		scrivi_riga(" ", "Compared folder: the -to one, or (without -to) the archive's own folder");
+		scrivi_riga(" ", "Refused for a whole drive/filesystem: use -to. No -flat -utf -nopath");
 
 
 #endif /// NOSFTPEND
@@ -65120,6 +65822,10 @@ string help_x(bool i_usage, bool i_example)
 		scrivi_esempio("Restoring VHD", "x z:\\1.zpaq -to u:\\restore");
 #endif
 		scrivi_esempio("Recover as much as possibile", "x z:\\1.zpaq -to u:\\restore -recover");
+		scrivi_esempio("Overwrite, moving old files aside", "x z:\\1.zpaq -to z:\\muz7\\ -force -backupdir z:\\archiv");
+		scrivi_esempio("...and move away files not in archive", "x z:\\1.zpaq -to z:\\muz7\\ -force -backupdir z:\\archiv -extras");
+		scrivi_esempio("Restore in place (1:1 layout)", "x z:\\1.zpaq c:\\data -to c:\\data -force -backupdir z:\\archiv");
+		scrivi_esempio("Restore in place, delete nothing", "x z:\\1.zpaq -force -backupdir z:\\archiv -extras");
 	}
 	return ("Extract file(s)");
 }
@@ -65475,7 +66181,7 @@ string help_t(bool i_usage, bool i_example)
 		scrivi_riga("-quick", "Do not check hash, only size/date");
 		scrivi_riga("-crc32", "Run a triple CRC-32 check (!) against the filesystem");
 		scrivi_riga(" ", "Use -find/replace to fix path (if needed); -ssd for M/T");
-		scrivi_riga("-ssd", "Run multithread CRC-32 rebuilder\n");
+		scrivi_riga("-ssd", "Run multithread CRC-32 rebuilder / pre .franzen check\n");
 		scrivi_riga("-debug6", "Enforce CRC-32 error\n");
 	}
 	if (i_usage && i_example)
@@ -65591,6 +66297,7 @@ string help_pp(bool i_usage, bool i_example)
 		scrivi_riga(" ", "  Detects files in archive missing from disk");
 		scrivi_riga(" ", "  Detects size mismatches between archive and disk");
 		scrivi_riga("-n X", "Limit warning output to X lines (counting continues)");
+		scrivi_riga("-ssd", "Run a pre-franzen check (if any)");
 	}
 	if (i_usage && i_example)
 		scrivi_examples();
@@ -65602,7 +66309,7 @@ string help_pp(bool i_usage, bool i_example)
 		scrivi_esempio("Verify with path substitution", "pp j:\\1.zpaq -verify -find \"g:/\" -replace \"u:/omare/g/\"");
 		scrivi_esempio("Full paranoid test (verify + bijective)", "pp j:\\1.zpaq -verify -paranoid");
 		scrivi_esempio("Paranoid only (no hash re-read)", "pp j:\\1.zpaq -paranoid");
-		scrivi_esempio("Paranoid with limited output", "pp j:\\1.zpaq -paranoid -n 10");
+		scrivi_esempio("Pre-check of franzen archive", "pp j:\\1.zpaq.franzen -ssd");
 	}
 	return ("Paranoid test (prefer SSD-based archive)");
 }
@@ -65648,8 +66355,9 @@ string help_s(bool i_usage, bool i_example)
 		scrivi_riga("-minsize X", "Show a warning if free space < X");
 		scrivi_riga("-715", "Work as 7.15 (with .zfs and ADS)");
 		scrivi_riga("-forcezfs", "Include .zfs");
-		scrivi_riga("-home", "Show 1-level cumulative size");
+		scrivi_riga("-home", "Show 1-level cumulative size, with [oldest]-[newest] file date");
 		scrivi_riga("-ignore", "Do not show file errors (ex. ERROR_ACCESS_DENIED)");
+		scrivi_riga("-verbose", "With -home, also show oldest/newest filename and full timestamp");
 	}
 	if (i_usage && i_example)
 		scrivi_examples();
@@ -65658,6 +66366,7 @@ string help_s(bool i_usage, bool i_example)
 		scrivi_esempio("Dir cumulative size (no .zfs/NTFS)", "s r:\\vbox s:\\uno");
 		scrivi_esempio("Multithreaded size", "s r:\\vbox s:\\uno -ssd");
 		scrivi_esempio("(Kind of) size of c:\\users", "s c:\\users -home -ssd -ignore");
+		scrivi_esempio("Find 'cold' (unused) folders", "s c:\\users -home -verbose");
 	}
 	return ("Show dir(s) size and free disk space");
 }
@@ -66679,6 +67388,7 @@ void Jidac::load_help_map()
 	// Core
 	help_map.insert(std::pair<string, HelpInfo>("a", HelpInfo("Core     ", help_a, 0)));
 	help_map.insert(std::pair<string, HelpInfo>("x", HelpInfo("Core     ", help_x, 0)));
+	help_map.insert(std::pair<string, HelpInfo>("xx", HelpInfo("Core     ", help_xx, 0)));
 	help_map.insert(std::pair<string, HelpInfo>("l", HelpInfo("Core     ", help_l, 0)));
 	help_map.insert(std::pair<string, HelpInfo>("e", HelpInfo("Core     ", help_e, 0)));
 
@@ -66797,6 +67507,9 @@ void Jidac::load_help_map()
 	help_map.insert(std::pair<string, HelpInfo>("f", HelpInfo("Utils    ", help_f, 8)));
 	help_map.insert(std::pair<string, HelpInfo>("last", HelpInfo("Utils    ", help_last, 8)));
 	help_map.insert(std::pair<string, HelpInfo>("last2", HelpInfo("Utils    ", help_last2, 8)));
+#ifdef ZPAQMOUNT
+	help_map.insert(std::pair<string, HelpInfo>("mount", HelpInfo("Utils    ", help_mount, 8)));
+#endif
 	help_map.insert(std::pair<string, HelpInfo>("pause", HelpInfo("Utils    ", help_pause, 8)));
 	help_map.insert(std::pair<string, HelpInfo>("rsync", HelpInfo("Utils    ", help_rsync, 8)));
 	help_map.insert(std::pair<string, HelpInfo>("utf", HelpInfo("Utils    ", help_utf, 8)));
@@ -68085,6 +68798,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 	g_programflags.add(&flagfix255,			"-fix255",				"Fix 255",											"");
 	g_programflags.add(&flagfixeml,			"-fixeml",				"Fix eml filenames",								"");
 	g_programflags.add(&flagflat,			"-flat",				"Flat filenames",									"");
+	g_programflags.add(&flagextras,			"-extras",				"x -backupdir: move away files not in archive",		"");
 	g_programflags.add(&flagforce,			"-force",				"Force (usually overwrite)",											"");
 	g_programflags.add(&flagforcewindows,	"-forcewindows",		"Store ADS stuff                (default: NO)",		"a;");
 	g_programflags.add(&flagforcezfs,		"-forcezfs",			"Enforce using .zfs",								"");
@@ -68752,6 +69466,9 @@ int Jidac::loadparameters(int argc, const char** argv)
 		else if (cli_filesandcommand(opt,"trim",		'4',argc,argv,&i));
 		else if (cli_filesandcommand(opt,"versum",		'|',argc,argv,&i));
 		else if (cli_filesandcommand(opt,"last2",		'^',argc,argv,&i));
+#ifdef ZPAQMOUNT
+		else if (cli_filesandcommand(opt,"mount",		'V',argc,argv,&i));
+#endif
 		else if (cli_filesandcommand(opt,"testbackup",	'_',argc,argv,&i));
 		else if (cli_filesandcommand(opt,"comparehex",	'?',argc,argv,&i));
 		else if (cli_filesandcommand(opt,"work",		']',argc,argv,&i));
@@ -68804,6 +69521,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 		opt=="a"  				||
 		opt=="e"  				||
 		opt=="x" 				||
+		opt=="xx" 				||
 		opt=="p" 				||
 		opt=="pp" 		||
 		opt=="t" 				||
@@ -68902,6 +69620,11 @@ int Jidac::loadparameters(int argc, const char** argv)
 				command='(';
 			if (opt=="extract")
 				command='x';
+			if (opt=="xx")
+			{
+				command='x';
+				flagrecover=true;
+			}
 			if (opt=="test")
 				command='t';
 			if (opt=="sync")
@@ -69046,6 +69769,10 @@ int Jidac::loadparameters(int argc, const char** argv)
 		else if (cli_getuint64	(opt,"-remotespeed",false,	"",								argc,argv,&i,g_remotespeed,		&g_remotespeed));
 		else if (cli_getuint64	(opt,"-checksize",	false,	"",								argc,argv,&i,g_checksize,		&g_checksize));
 		else if (cli_getstring	(opt,"-method",		false,	"-m",							argc,argv,&i,"",				&method));
+#ifdef ZPAQMOUNT
+		else if (cli_getstring	(opt,"-fuseopt",	false,	"",								argc,argv,&i,"",				&g_fuseopt));
+		else if (cli_getstring	(opt,"-backend",	false,	"",								argc,argv,&i,"auto",			&g_mountbackend));
+#endif
 		else if (cli_getstring	(opt,"-csv",		false,	"-tab",							argc,argv,&i,"",				&g_csvstring));
 		else if (cli_getstring	(opt,"-csvhf",		false,	"",								argc,argv,&i,"",				&g_csvhf));
 		else if (cli_getstring	(opt,"-bin",		false,	"",								argc,argv,&i,"",				&g_bin));
@@ -69137,6 +69864,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 		{
 			flagexternal=true;
 		}
+		else if (cli_getstring	(opt,"-backupdir",		false,	"",								argc,argv,&i,"",				&g_backupdir));
 		else if (cli_getstring	(opt,"-input",		false,	"",								argc,argv,&i,"",				&g_input))
 		{
 			flaginput=true;
@@ -69628,6 +70356,2308 @@ int Jidac::loadparameters(int argc, const char** argv)
 }
 
 //  Return 1 if error else 0.
+
+////////////////////////////////////////////////////////////////////////////
+/// ZPAQMOUNT: "mount" command -- expose an archive as a read-only file
+/// system. By default that is the LAST version and nothing else: the
+/// mountpoint is that version, its files are right there, and it is the
+/// only version whose directory tree has to be built -- which on a big
+/// archive is the difference between seconds and minutes.
+///
+/// With -all every version becomes a top-level directory instead:
+///
+///   mountpoint/VER00000000/...   archive contents as of the 1st transaction
+///   mountpoint/VER00000001/...   ... as of the 2nd, and so on (cumulative
+///                                state, like a snapshot, not a diff)
+///
+/// Fixed width, so an 11-version archive does not list as 0 1 10 2 3 ...
+/// wherever the sort is lexicographic; the bare number is still accepted
+/// on lookup, it is just not what readdir shows.
+///
+/// -until N (or a date) cuts the list short: version N becomes the last
+/// one, mounted alone by default, or the last folder with -all.
+///
+/// Layering (top to bottom):
+///   Jidac::mount()          command glue: arguments, backend choice, FUSE loop
+///   franzmount FUSE layer   getattr/readdir/open/read/statfs/init
+///   franzmount generic      path resolution, name escaping, dates,
+///                           block cache + read-ahead, read_range()
+///   franzmount::MountBackend  the ONLY thing the layers above see of an
+///                           archive: versions, directory children, entries,
+///                           fragment -> block mapping, block decompression
+///   backends                "core":  self-contained scanner (mmap reader,
+///                                    one snapshot per version). Origin:
+///                                    the standalone zpaqfuse project.
+///                                    Plain archives only.
+///                           "jidac": same index, read through the native
+///                                    InputArchive, so -key (AES-256) and
+///                                    Franzen archives mount too, and the
+///                                    version snapshots share their records
+///                                    instead of copying them.
+///   -backend auto (default) picks jidac when the archive is encrypted and
+///   core otherwise; -backend core|jidac forces one. Both can be mounted at
+///   the same time on two mountpoints: same listing, same bytes.
+////////////////////////////////////////////////////////////////////////////
+#ifdef ZPAQMOUNT
+namespace franzmount {
+
+//////////////////////////////////////////////////////////////////////////
+// Names, dates: pure helpers
+//////////////////////////////////////////////////////////////////////////
+
+// Lexically normalizes a stored archive path (collapse "." and "..") so no
+// directory ever has to be called ".." through the mount (the VFS would
+// resolve it itself and the entry would become invisible).
+inline string mount_normalize_path(const string& in)
+{
+	bool trailing_slash= !in.empty() && in[in.size()-1]=='/';
+	vector<string> parts;
+	size_t start= 0;
+	while (start<=in.size())
+	{
+		size_t slash= in.find('/', start);
+		string comp= (slash==string::npos) ? in.substr(start) : in.substr(start, slash-start);
+		if (!comp.empty())
+		{
+			if (comp==".") {}
+			else if (comp=="..") { if (!parts.empty()) parts.pop_back(); }
+			else parts.push_back(comp);
+		}
+		if (slash==string::npos) break;
+		start= slash+1;
+	}
+	string out;
+	for (size_t i= 0; i<parts.size(); ++i) { if (i) out+= '/'; out+= parts[i]; }
+	if (trailing_slash && !out.empty()) out+= '/';
+	return out;
+}
+
+inline bool mount_is_hex(unsigned char c) { return (c>='0' && c<='9') || (c>='a' && c<='f') || (c>='A' && c<='F'); }
+inline int  mount_hexval(unsigned char c) { if (c>='0' && c<='9') return c-'0'; if (c>='a' && c<='f') return c-'a'+10; return c-'A'+10; }
+
+// Characters that can never appear in a Windows file name component.
+inline bool mount_win_invalid_char(unsigned char c)
+{
+	return c<0x20 || c=='\\' || c==':' || c=='*' || c=='?' || c=='"' || c=='<' || c=='>' || c=='|';
+}
+
+// CON, PRN, AUX, NUL, COM1-9, LPT1-9, with or without extension, any case.
+inline bool mount_win_reserved_name(const string& name)
+{
+	string base= name.substr(0, name.find('.'));
+	while (!base.empty() && base[base.size()-1]==' ') base.erase(base.size()-1);
+	for (size_t i= 0; i<base.size(); ++i) base[i]= (char)toupper((unsigned char)base[i]);
+	if (base=="CON" || base=="PRN" || base=="AUX" || base=="NUL") return true;
+	if (base.size()==4 && (base.compare(0, 3, "COM")==0 || base.compare(0, 3, "LPT")==0) && base[3]>='1' && base[3]<='9') return true;
+	return false;
+}
+
+// Length of the well-formed UTF-8 sequence at s[i], 0 if invalid.
+inline size_t mount_utf8_seq_len(const string& s, size_t i)
+{
+	unsigned char c= (unsigned char)s[i];
+	if (c<0x80) return 1;
+	size_t n; unsigned cp;
+	if		((c & 0xE0)==0xC0) { n= 2; cp= c & 0x1F; }
+	else if ((c & 0xF0)==0xE0) { n= 3; cp= c & 0x0F; }
+	else if ((c & 0xF8)==0xF0) { n= 4; cp= c & 0x07; }
+	else return 0;
+	if (i+n>s.size()) return 0;
+	for (size_t k= 1; k<n; ++k)
+	{
+		unsigned char cc= (unsigned char)s[i+k];
+		if ((cc & 0xC0)!=0x80) return 0;
+		cp= (cp<<6) | (cc & 0x3F);
+	}
+	if (n==2 && cp<0x80) return 0;
+	if (n==3 && (cp<0x800 || (cp>=0xD800 && cp<=0xDFFF))) return 0;
+	if (n==4 && (cp<0x10000 || cp>0x10FFFF)) return 0;
+	return n;
+}
+
+// Archive name component -> name shown through the mount (Windows rules).
+// Deterministic, injective percent-encoding of everything NTFS refuses:
+// \ : * ? " < > | and control chars, a trailing '.' or ' ', reserved
+// device names (first char escaped), bytes that aren't valid UTF-8.
+// '%' itself is escaped only when followed by two hex digits, which is
+// exactly when a literal '%' would be ambiguous on decode ("100%.txt"
+// stays as is, "a%3Ab" becomes "a%253Ab").
+inline string mount_escape_name(const string& name, bool windows_rules)
+{
+	if (!windows_rules) return name;
+	static const char* HEX= "0123456789ABCDEF";
+	const size_t n= name.size();
+	const bool reserved= mount_win_reserved_name(name);
+	string out;
+	out.reserve(n);
+	for (size_t i= 0; i<n;)
+	{
+		unsigned char c= (unsigned char)name[i];
+		size_t len= 1;
+		bool esc= false;
+		if (c<0x80)
+		{
+			if (mount_win_invalid_char(c)) esc= true;
+			else if (c=='%' && i+2<n && mount_is_hex((unsigned char)name[i+1]) && mount_is_hex((unsigned char)name[i+2])) esc= true;
+			else if (i==n-1 && (c=='.' || c==' ')) esc= true;
+			else if (i==0 && reserved) esc= true;
+		}
+		else
+		{
+			len= mount_utf8_seq_len(name, i);
+			if (len==0) { esc= true; len= 1; }
+		}
+		if (esc) { out+= '%'; out+= HEX[c>>4]; out+= HEX[c & 15]; }
+		else out.append(name, i, len);
+		i+= len;
+	}
+	return out;
+}
+
+// Exact inverse of mount_escape_name().
+inline string mount_unescape_name(const string& shown, bool windows_rules)
+{
+	if (!windows_rules) return shown;
+	string out;
+	out.reserve(shown.size());
+	for (size_t i= 0; i<shown.size(); ++i)
+	{
+		if (shown[i]=='%' && i+2<shown.size() && mount_is_hex((unsigned char)shown[i+1]) && mount_is_hex((unsigned char)shown[i+2]))
+		{
+			out+= (char)((mount_hexval((unsigned char)shown[i+1])<<4) | mount_hexval((unsigned char)shown[i+2]));
+			i+= 2;
+		}
+		else out+= shown[i];
+	}
+	return out;
+}
+
+// "c:" -- how zpaq/zpaqfranz on Windows store the drive of an absolute
+// path. Shown as just "c" at the session root (see mount_shown_root_name).
+inline bool mount_is_drive_name(const string& n) { return n.size()==2 && isalpha((unsigned char)n[0]) && n[1]==':'; }
+
+inline bool mount_ascii_iequals(const string& a, const string& b)
+{
+	if (a.size()!=b.size()) return false;
+	for (size_t i= 0; i<a.size(); ++i)
+		if (tolower((unsigned char)a[i])!=tolower((unsigned char)b[i])) return false;
+	return true;
+}
+
+// zpaq date YYYYMMDDHHMMSS (UTC) -> seconds since the Unix epoch. 0 stays 0.
+inline int64_t mount_date_to_unix(int64_t d)
+{
+	if (d<=0) return 0;
+	int64_t sec= d%100; d/= 100;
+	int64_t min= d%100; d/= 100;
+	int64_t hour= d%100; d/= 100;
+	int64_t day= d%100; d/= 100;
+	int64_t mon= d%100; d/= 100;
+	int64_t year= d;
+	if (year<1970 || mon<1 || mon>12 || day<1 || day>31) return 0;
+	int64_t y= year-(mon<=2 ? 1 : 0);
+	int64_t era= y/400;
+	int64_t yoe= y-era*400;
+	int64_t doy= (153*(mon+(mon>2 ? -3 : 9))+2)/5+day-1;
+	int64_t doe= yoe*365+yoe/4-yoe/100+doy;
+	int64_t days= era*146097+doe-719468;
+	return days*86400+hour*3600+min*60+sec;
+}
+
+//////////////////////////////////////////////////////////////////////////
+// Progress of the scan
+//
+// Before the mountpoint can appear the whole index has to be read and one
+// directory tree per version has to be built: on a 200 GB archive with a
+// couple of hundred versions that is minutes of a blinking cursor and
+// nothing else. This is the single \r line printed meanwhile -- how far
+// into the archive the scan is, what it has found so far, and an ETA --
+// wiped as soon as the real banner is ready.
+//
+// due() is the cheap "may I print?" test (one clock read) and line() the
+// printf-style refresh, so a caller inside a hot loop masks its own
+// counter first and the clock is not read a million times a second.
+//
+// Silent with -noeta and with everything do_not_print_headers() covers
+// (-pakka, -silent, -stdout, -terse). With -catpaqmode it becomes the
+// @SPK@EXT@ telemetry line the GUI already parses for the long commands.
+// When the output is redirected myprintf() turns the '\r' into a newline,
+// so there the line is printed once per percentage point instead of five
+// times a second.
+//////////////////////////////////////////////////////////////////////////
+class MountScanProgress
+{
+	int64_t	start_= 0;		// mtime() when the phase began
+	int64_t	lastms_= 0;		// mtime() of the last refresh
+	int64_t	total_= 0;		// archive bytes, 0 = phase without a percentage
+	int64_t	pos_= 0;		// how far into the archive the scan has got
+	int		lastlen_= 0;	// length of the last line, to wipe it clean
+	int		lastperc_= -1;	// last percentage printed (redirected/catpaq only)
+	int		every_= 200;	// ms between two refreshes
+	bool	on_= false;		// print the human line
+	bool	machine_= false;// -catpaqmode: telemetry instead of the line
+	bool	dirty_= false;	// something was printed with \r and must be wiped
+public:
+	// i_archivebytes= 0 starts a phase that has no percentage and no ETA,
+	// just its counters and the elapsed time (the totals walk does that).
+	void begin(int64_t i_archivebytes)
+	{
+		start_= lastms_= mtime();
+		total_= i_archivebytes>0 ? i_archivebytes : 0;
+		pos_= 0;
+		lastlen_= 0;
+		lastperc_= -1;
+		dirty_= false;
+		machine_= flagcatpaqmode;
+		on_= !machine_ && !flagnoeta && !do_not_print_headers();
+		every_= isAnyOutputRedirected() ? 1000 : 200;
+	}
+	bool active() const { return on_ || machine_; }
+	// Where the scan is in the archive, whether or not it is time to
+	// print: a version whose tree takes ten seconds to build must not be
+	// shown at the offset of the version before it.
+	void at(int64_t i_offset) { if (i_offset>=0) pos_= i_offset; }
+	// One clock read, true at most every every_ milliseconds.
+	bool due()
+	{
+		if (!active()) return false;
+		const int64_t now= mtime();
+		if (now-lastms_<every_) return false;
+		lastms_= now;
+		return true;
+	}
+	// Refreshes the line. i_offset<0 keeps the offset shown so far: the
+	// phases that do not move through the archive (building a version's
+	// tree, summing the totals) pass -1 and only update their own detail.
+	void line(int64_t i_offset, const char* i_fmt, ...)
+	{
+		if (!active()) return;
+		if (i_offset>=0) pos_= i_offset;
+		char detail[512];
+		va_list args;
+		va_start(args, i_fmt);
+		vsnprintf(detail, sizeof(detail), i_fmt, args);
+		va_end(args);
+		const int64_t now= mtime();
+		lastms_= now;
+		const int64_t elapsed= now-start_;
+		double perc= total_>0 ? pos_*100.0/total_ : 0.0;
+		if (perc>100.0) perc= 100.0;
+		// The index of a version costs about what the data behind it does,
+		// so "bytes of the archive walked" is a fair enough yardstick.
+		int64_t eta= 0;
+		if (total_>0 && pos_>0 && elapsed>0)
+			eta= (int64_t)(0.001*elapsed*(total_-pos_)/pos_);
+		if (machine_)
+		{
+			if (total_<=0) return; // nothing sensible to put in the bar
+			const int p= (int)perc;
+			if (p==lastperc_) return;
+			lastperc_= p;
+			printf("@SPK@EXT@%d@%lld@%lld@%d@%d\n", p, (long long)pos_, (long long)total_, (int)eta, 0);
+			fflush(stdout);
+			return;
+		}
+		if (isAnyOutputRedirected())
+		{
+			// down there the \r is a newline: one line per percent, no more
+			const int p= (int)perc;
+			if (total_<=0 || p==lastperc_) return;
+			lastperc_= p;
+		}
+		char buf[1024];
+		int n;
+		if (total_>0)
+			n= snprintf(buf, sizeof(buf), " %6.2f%%  %s of %s  eta %s  %s",
+				perc, tohuman(pos_), tohuman2(total_), timetohuman((int32_t)eta).c_str(), detail);
+		else
+			n= snprintf(buf, sizeof(buf), " %s  %s", timetohuman((int32_t)(elapsed/1000)).c_str(), detail);
+		if (n<0) return;
+		if (n>(int)sizeof(buf)-1) n= (int)sizeof(buf)-1;
+		int width= terminalwidth();
+		if (width<20 || isAnyOutputRedirected()) width= 80;
+		if (n>width-1) { n= width-1; buf[n]= 0; }
+		const int len= n;
+		while (n<lastlen_ && n<(int)sizeof(buf)-1) buf[n++]= ' '; // wipe a longer line
+		buf[n]= 0;
+		lastlen_= len;
+		dirty_= true;
+		myprintf("%s\r", buf);
+	}
+	// Erases the line: whatever is printed next starts on a clean one.
+	void end()
+	{
+		if (dirty_ && !isAnyOutputRedirected())
+		{
+			char blank[256];
+			int n= lastlen_;
+			if (n>(int)sizeof(blank)-1) n= (int)sizeof(blank)-1;
+			if (n>0)
+			{
+				memset(blank, ' ', (size_t)n);
+				blank[n]= 0;
+				myprintf("%s\r", blank);
+			}
+		}
+		dirty_= false;
+		lastlen_= 0;
+	}
+};
+
+// Both backends scan one archive at a time, on the thread that runs the
+// mount command: one reporter for all of them.
+static MountScanProgress g_mountscan;
+
+//////////////////////////////////////////////////////////////////////////
+// The backend interface: everything the mount needs to know about an
+// archive. Immutable after construction, safe to call from any thread.
+// Or I hope so...
+//////////////////////////////////////////////////////////////////////////
+
+struct MountBlock
+{
+	int64_t  offset= 0; // archive offset of the compressed block
+	unsigned usize= 0;  // sum of its fragments' sizes (decompressed length)
+	unsigned start= 0;  // first fragment id
+	unsigned frags= 0;  // number of fragments
+	unsigned index= 0;  // position in the backend's block list (read-ahead ordering)
+};
+
+struct MountEntry
+{
+	int64_t					date= 0;	// zpaq date, never 0 for a live entry
+	const vector<unsigned>*	ptr= NULL;	// fragment ids (NULL/empty for directories)
+};
+
+// One decompressor over the archive; a backend hands out as many as the
+// cache wants, each used by one thread at a time.
+class MountReader
+{
+public:
+	virtual ~MountReader() {}
+	virtual string decompress(const MountBlock& b)= 0; // exactly b.usize bytes, or throws
+};
+
+class MountBackend
+{
+public:
+	virtual ~MountBackend() {}
+	virtual string name() const= 0;
+	virtual size_t versions() const= 0;
+	virtual int64_t version_date(size_t v) const= 0; // zpaq date of version v
+	// Sorted, unique names of the immediate children of directory `dir`
+	// ("" = root of the version, else "a/b/") -- directories end in '/'.
+	// NULL if `dir` is not a directory of version v.
+	virtual const vector<string>* children(size_t v, const string& dir) const= 0;
+	// Live entry for `path` in version v ("a/b.txt" for a file, "a/b/" for
+	// a directory). false if absent, tombstoned, or an implied directory.
+	virtual bool entry(size_t v, const string& path, MountEntry& out) const= 0;
+	virtual unsigned frag_size(unsigned f) const= 0;
+	// Block holding fragment f, and f's byte offset inside it. NULL if unknown.
+	virtual const MountBlock* block_of(unsigned f, size_t* off_in_block) const= 0;
+	virtual size_t nblocks() const= 0;
+	virtual size_t nfragments() const= 0;
+	virtual MountReader* new_reader()= 0; // caller owns
+	virtual int64_t archive_bytes() const= 0;
+	virtual int parts() const= 0;
+	// "version v is going to be mounted": called by Jidac::mount() for the
+	// versions it exposes and for those only, once each, before the file
+	// system starts and from that one thread. Whatever children() needs
+	// and the scan did not build goes here, so that a version nobody
+	// mounts costs nothing -- and without -all that is all of them but one.
+	virtual void prepare(size_t v) { (void)v; }
+	// Free-form extra line for the banner ("AES-256", "3 damaged blocks
+	// skipped", ...). Empty when there is nothing worth saying.
+	virtual string remarks() const { return ""; }
+};
+
+inline int64_t mount_file_size(const MountBackend& be, const MountEntry& e)
+{
+	int64_t total= 0;
+	if (e.ptr) for (size_t i= 0; i<e.ptr->size(); ++i) total+= be.frag_size((*e.ptr)[i]);
+	return total;
+}
+
+//////////////////////////////////////////////////////////////////////////
+// Backend "core": self-contained scanner, one snapshot of the file tree
+// per version. Reads the archive through memory-mapped part files (no
+// encryption). This is the standalone zpaqfuse engine, kept verbatim in
+// spirit so the two can be compared; the "jidac" backend will replace it
+// for production use.
+//////////////////////////////////////////////////////////////////////////
+
+// A libzpaq::Reader over one or more memory-mapped parts (same '?'/'*'
+// wildcard convention as InputArchive, via the global subpart()).
+class CoreMmapReader : public libzpaq::Reader
+{
+	struct Part
+	{
+		string	path;
+		int64_t	size= 0;
+		void*	base= NULL;
+#ifdef _WIN32
+		void*	hmap= NULL; // file-mapping handle, outlives the view
+#endif
+	};
+	vector<Part>	parts_;
+	vector<int64_t>	cum_;
+	int64_t			total_= 0;
+	int64_t			off_= 0;
+
+	void release()
+	{
+		for (size_t i= 0; i<parts_.size(); ++i)
+		{
+			Part& p= parts_[i];
+#ifdef _WIN32
+			if (p.base) UnmapViewOfFile(p.base);
+			if (p.hmap) CloseHandle((HANDLE)p.hmap);
+			p.hmap= NULL;
+#else
+			if (p.base) ::munmap(p.base, (size_t)p.size);
+#endif
+			p.base= NULL;
+		}
+		parts_.clear();
+		cum_.clear();
+		total_= 0;
+	}
+
+public:
+	explicit CoreMmapReader(const string& pattern)
+	{
+		const string part0= subpart(pattern, 0);
+		try
+		{
+			for (int i= 1;; ++i)
+			{
+				const string parti= subpart(pattern, i);
+				if (i>1 && parti==part0) break;
+				Part p;
+				p.path= parti;
+#ifdef _WIN32
+				std::wstring wpath= utow(parti.c_str());
+				HANDLE h= CreateFileW(wpath.c_str(), GENERIC_READ, FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+				if (h==INVALID_HANDLE_VALUE)
+				{
+					DWORD err= GetLastError();
+					if (err==ERROR_FILE_NOT_FOUND || err==ERROR_PATH_NOT_FOUND || err==ERROR_INVALID_NAME) break;
+					throw std::runtime_error("open failed: "+parti);
+				}
+				LARGE_INTEGER sz;
+				if (!GetFileSizeEx(h, &sz)) { CloseHandle(h); throw std::runtime_error("GetFileSizeEx failed: "+parti); }
+				p.size= sz.QuadPart;
+				if (p.size>0)
+				{
+					if (sizeof(void*)<8 && p.size>0x7fffffffLL) { CloseHandle(h); throw std::runtime_error("part too large for a 32-bit build: "+parti); }
+					HANDLE hm= CreateFileMappingW(h, NULL, PAGE_READONLY, 0, 0, NULL);
+					if (!hm) { CloseHandle(h); throw std::runtime_error("CreateFileMapping failed: "+parti); }
+					void* m= MapViewOfFile(hm, FILE_MAP_READ, 0, 0, 0);
+					if (!m) { CloseHandle(hm); CloseHandle(h); throw std::runtime_error("MapViewOfFile failed: "+parti); }
+					p.base= m;
+					p.hmap= hm;
+				}
+				CloseHandle(h);
+#else
+				struct stat st;
+				if (::stat(parti.c_str(), &st)!=0) break;
+				p.size= st.st_size;
+				if (p.size>0)
+				{
+					int fd= ::open(parti.c_str(), O_RDONLY);
+					if (fd<0) throw std::runtime_error("open failed: "+parti+": "+strerror(errno));
+					void* m= ::mmap(NULL, (size_t)p.size, PROT_READ, MAP_PRIVATE, fd, 0);
+					int saved= errno;
+					::close(fd);
+					if (m==MAP_FAILED) throw std::runtime_error("mmap failed: "+parti+": "+strerror(saved));
+					p.base= m;
+				}
+#endif
+				cum_.push_back(total_);
+				total_+= p.size;
+				parts_.push_back(p);
+			}
+		}
+		catch (...) { release(); throw; }
+		if (parts_.empty()) throw std::runtime_error("no archive parts found for "+pattern);
+	}
+	~CoreMmapReader() { release(); }
+	CoreMmapReader(const CoreMmapReader&)= delete;
+	CoreMmapReader& operator=(const CoreMmapReader&)= delete;
+
+	int64_t total_size() const { return total_; }
+	int		num_parts() const { return (int)parts_.size(); }
+	int64_t tell() const { return off_; }
+	void seek(int64_t p, int whence)
+	{
+		if (whence==SEEK_SET) off_= p;
+		else if (whence==SEEK_CUR) off_+= p;
+		else if (whence==SEEK_END) off_= total_+p;
+		else throw std::runtime_error("bad whence");
+	}
+	int get()
+	{
+		unsigned char c;
+		return read((char*)&c, 1)==1 ? c : -1;
+	}
+	int read(char* obuf, int len)
+	{
+		if (off_<0 || off_>=total_ || len<=0) return 0;
+		int64_t remaining= total_-off_;
+		int to_read= (int)(std::min)((int64_t)len, remaining);
+		int copied= 0;
+		int64_t voff= off_;
+		size_t pi= 0;
+		while (pi+1<parts_.size() && voff>=cum_[pi]+parts_[pi].size) ++pi;
+		while (copied<to_read)
+		{
+			const Part& p= parts_[pi];
+			int64_t local= voff-cum_[pi];
+			int64_t avail= p.size-local;
+			if (avail<=0) { if (++pi>=parts_.size()) break; continue; }
+			int chunk= (int)(std::min)(avail, (int64_t)(to_read-copied));
+			memcpy(obuf+copied, (const char*)p.base+local, (size_t)chunk);
+			copied+= chunk;
+			voff+= chunk;
+			if (chunk==avail) ++pi;
+		}
+		off_+= copied;
+		return copied;
+	}
+};
+
+struct CoreHT { unsigned usize= 0; };
+struct CoreDT
+{
+	int64_t				date= 0; // 0 = tombstone
+	int64_t				attr= 0;
+	unsigned			version= 0;
+	vector<unsigned>	ptr;
+};
+typedef map<string, CoreDT> CoreDTMap;
+struct CoreSession
+{
+	CoreDTMap						dt;
+	map<string, vector<string> >	children; // "" or "a/b/" -> sorted names, dirs end in '/'
+	int64_t							date= 0;
+	bool							tree= false; // children built (see prepare())
+};
+struct CoreFragLoc { unsigned block= ~0u; unsigned off= 0; };
+
+inline unsigned core_btoi(const char*& s)
+{
+	s+= 4;
+	return (unsigned char)s[-4] | ((unsigned char)s[-3]<<8) | ((unsigned char)s[-2]<<16) | ((unsigned char)s[-1]<<24);
+}
+inline int64_t core_btol(const char*& s)
+{
+	uint64_t r= core_btoi(s);
+	return r+(uint64_t(core_btoi(s))<<32);
+}
+struct CoreStrWriter : public libzpaq::Writer
+{
+	string s;
+	void put(int c) { s+= char(c); }
+};
+
+// Adds one live path to an immediate-children map, synthesizing every
+// ancestor directory implied by it even when zpaq never stored the
+// directory explicitly. Shared by both backends, so the two engines list
+// exactly the same tree for the same archive.
+inline void mount_tree_add(map<string, vector<string> >& children, const string& path)
+{
+	bool is_dir= !path.empty() && path[path.size()-1]=='/';
+	string p= is_dir ? path.substr(0, path.size()-1) : path;
+	size_t pos= 0;
+	while (true)
+	{
+		size_t slash= p.find('/', pos);
+		if (slash==string::npos) break;
+		string dir= p.substr(0, slash+1);
+		string trimmed= dir.substr(0, dir.size()-1);
+		size_t ps= trimmed.find_last_of('/');
+		string parent= (ps==string::npos) ? "" : trimmed.substr(0, ps+1);
+		string name= (ps==string::npos) ? trimmed : trimmed.substr(ps+1);
+		children[parent].push_back(name+"/");
+		children[dir];
+		pos= slash+1;
+	}
+	size_t slash= p.find_last_of('/');
+	string parent= (slash==string::npos) ? "" : p.substr(0, slash+1);
+	string name= (slash==string::npos) ? p : p.substr(slash+1);
+	if (is_dir) { children[parent].push_back(name+"/"); children[parent+name+"/"]; }
+	else children[parent].push_back(name);
+}
+
+// Sorts and deduplicates every child list: called once, after the last add.
+inline void mount_tree_finish(map<string, vector<string> >& children)
+{
+	for (map<string, vector<string> >::iterator it= children.begin(); it!=children.end(); ++it)
+	{
+		vector<string>& v= it->second;
+		std::sort(v.begin(), v.end());
+		v.erase(std::unique(v.begin(), v.end()), v.end());
+	}
+}
+
+// Immediate-children map for one session, synthesizing every ancestor
+// directory implied by a path even when zpaq never stored it explicitly.
+// Called by prepare(), not by the scan: this is the expensive half of a
+// version, and only a version that gets mounted is worth it.
+inline void core_build_dir_tree(CoreSession& s, int i_version)
+{
+	const int64_t entries= (int64_t)s.dt.size();
+	int64_t done= 0;
+	for (CoreDTMap::const_iterator it= s.dt.begin(); it!=s.dt.end(); ++it)
+	{
+		if (it->second.date!=0)
+			mount_tree_add(s.children, it->first);
+		// a version with a million files takes seconds of its own here
+		if (((++done) & 8191)==0 && g_mountscan.due())
+			g_mountscan.line(-1, "V%08d  tree %d%% of %s files", i_version,
+				(int)(done*100/(entries>0 ? entries : 1)), migliaia2(entries));
+	}
+	if (g_mountscan.active())
+		g_mountscan.line(-1, "V%08d  sorting %s files", i_version, migliaia2(entries));
+	mount_tree_finish(s.children);
+}
+
+class CoreBackend : public MountBackend
+{
+	string				pattern_;
+	vector<CoreHT>		ht_;
+	vector<MountBlock>	blocks_;
+	vector<int64_t>		verdate_;
+	vector<CoreSession>	sessions_;
+	vector<CoreFragLoc>	fragloc_;
+	int64_t				archive_bytes_= 0;
+	int					parts_= 0;
+
+	// Scans the journaling index (c/h/i blocks) without decompressing any
+	// data ('d') block, snapshotting the tree at the end of every version.
+	void scan(CoreMmapReader& in)
+	{
+		int64_t data_offset= 0;
+		bool have_version= false;
+		bool done= false;
+		CoreDTMap running;
+		while (!done)
+		{
+			bool restart= false;
+			libzpaq::Decompresser d;
+			d.setInput(&in);
+			double mem= 0;
+			while (!restart && d.findBlock(&mem))
+			{
+				CoreStrWriter filename, comment;
+				while (d.findFilename(&filename))
+				{
+					g_mountscan.at(in.tell());
+					if (g_mountscan.due()) // V: the version being read, as its folder would be numbered
+						g_mountscan.line(-1, "V%08d  %s files", (int)(verdate_.empty() ? 0 : verdate_.size()-1), migliaia2((int64_t)running.size()));
+					comment.s.clear();
+					d.readComment(&comment);
+					if (comment.s.size()<4 || comment.s.compare(comment.s.size()-4, 4, "jDC\x01")!=0) { d.readSegmentEnd(); continue; }
+					if (filename.s.size()!=28 || filename.s.compare(0, 3, "jDC")!=0) throw std::runtime_error("bad journaling block name: "+filename.s);
+					int64_t usize= 0;
+					for (size_t k= 0; k<comment.s.size(); ++k) { if (!isdigit((unsigned char)comment.s[k])) break; usize= usize*10+(comment.s[k]-'0'); }
+					int64_t fdate= 0;
+					for (int k= 3; k<17; ++k) fdate= fdate*10+(filename.s[k]-'0');
+					char type= filename.s[17];
+					int64_t num= 0;
+					for (int k= 18; k<28; ++k) num= num*10+(filename.s[k]-'0');
+					if (type=='d') { d.readSegmentEnd(); continue; }
+
+					libzpaq::StringBuffer os;
+					os.setLimit(usize);
+					d.setOutput(&os);
+					d.decompress();
+					d.readSegmentEnd();
+					if ((int64_t)os.size()!=usize) throw std::runtime_error("block size mismatch");
+
+					if (type=='c')
+					{
+						if (os.size()<8) throw std::runtime_error("c block too small");
+						const char* s= (const char*)os.data();
+						int64_t jmp= core_btol(s);
+						if (!verdate_.empty())
+						{
+							CoreSession sess;
+							sess.dt= running;
+							sess.date= verdate_.back();
+							sessions_.push_back(sess); // the tree waits for prepare()
+						}
+						verdate_.push_back(fdate);
+						data_offset= in.tell()+1-d.buffered();
+						have_version= true;
+						if (jmp>0) { in.seek(data_offset+jmp, SEEK_SET); restart= true; break; }
+					}
+					else if (type=='h')
+					{
+						if (!have_version) throw std::runtime_error("h block before any c block");
+						if (os.size()%24!=4) throw std::runtime_error("bad h block size");
+						unsigned n= (unsigned)((os.size()-4)/24);
+						const char* s= (const char*)os.data();
+						unsigned bsize= core_btoi(s);
+						MountBlock b;
+						b.offset= data_offset; b.start= (unsigned)num; b.frags= n;
+						unsigned block_usize= 0;
+						for (unsigned k= 0; k<n; ++k)
+						{
+							s+= 20; // sha1
+							unsigned fsize= core_btoi(s);
+							while (ht_.size()<=(size_t)num+k) ht_.push_back(CoreHT());
+							ht_[(size_t)num+k].usize= fsize;
+							block_usize+= fsize;
+						}
+						b.usize= block_usize;
+						b.index= (unsigned)blocks_.size();
+						blocks_.push_back(b);
+						data_offset+= bsize;
+					}
+					else if (type=='i')
+					{
+						if (!have_version) throw std::runtime_error("i block before any c block");
+						const char* s= (const char*)os.data();
+						const char* end= s+os.size();
+						while (s+9<=end)
+						{
+							int64_t date= core_btol(s);
+							string fn= mount_normalize_path(s);
+							s+= strlen(s)+1;
+							if (s>end) throw std::runtime_error("filename overruns i block");
+							CoreDT rec;
+							rec.date= date;
+							rec.version= (unsigned)verdate_.size()-1;
+							if (date==0) { running[fn]= rec; continue; }
+							if (s+4>end) throw std::runtime_error("missing attr");
+							unsigned na= core_btoi(s);
+							if (s+na>end) throw std::runtime_error("attr too long");
+							for (unsigned k= 0; k<na; ++k, ++s) if (k<8) rec.attr+= int64_t((unsigned char)*s)<<(k*8);
+							if (s+4>end) throw std::runtime_error("missing ptr count");
+							unsigned ni= core_btoi(s);
+							if ((size_t)ni>(size_t)(end-s)/4) throw std::runtime_error("ptr list too long");
+							rec.ptr.resize(ni);
+							for (unsigned k= 0; k<ni; ++k) rec.ptr[k]= core_btoi(s);
+							running[fn]= rec;
+						}
+					}
+				}
+			}
+			if (!restart) done= true;
+		}
+		if (!verdate_.empty())
+		{
+			CoreSession sess;
+			sess.dt= running;
+			sess.date= verdate_.back();
+			sessions_.push_back(sess); // the tree waits for prepare()
+		}
+		// fragment -> (block, offset) table: O(1) per fragment on the read path
+		fragloc_.assign(ht_.size(), CoreFragLoc());
+		for (size_t bi= 0; bi<blocks_.size(); ++bi)
+		{
+			const MountBlock& b= blocks_[bi];
+			unsigned off= 0;
+			for (unsigned f= b.start; f<b.start+b.frags; ++f)
+			{
+				if (f<fragloc_.size()) { fragloc_[f].block= b.index; fragloc_[f].off= off; }
+				off+= (f<ht_.size()) ? ht_[f].usize : 0;
+			}
+		}
+	}
+
+	class Reader : public MountReader
+	{
+		CoreMmapReader in_;
+	public:
+		explicit Reader(const string& pattern) : in_(pattern) {}
+		string decompress(const MountBlock& b)
+		{
+			in_.seek(b.offset, SEEK_SET);
+			libzpaq::Decompresser d;
+			d.setInput(&in_);
+			libzpaq::StringBuffer out;
+			out.setLimit((size_t)b.usize+8+4ull*b.frags);
+			d.setOutput(&out);
+			double mem= 0;
+			if (!d.findBlock(&mem)) throw std::runtime_error("block not found at expected offset");
+			while (d.findFilename())
+			{
+				d.readComment();
+				while (out.size()<b.usize && d.decompress(1<<14)) {}
+				if (out.size()>=b.usize) break;
+				d.readSegmentEnd();
+			}
+			if (out.size()<b.usize) throw std::runtime_error("incomplete block decompression");
+			return string((const char*)out.data(), b.usize);
+		}
+	};
+
+public:
+	explicit CoreBackend(const string& pattern) : pattern_(pattern)
+	{
+		CoreMmapReader in(pattern);
+		archive_bytes_= in.total_size();
+		parts_= in.num_parts();
+		g_mountscan.begin(archive_bytes_); // ended by mount(), thrown or not
+		scan(in);
+	}
+	string name() const { return "core"; }
+	size_t versions() const { return sessions_.size(); }
+	int64_t version_date(size_t v) const { return v<sessions_.size() ? sessions_[v].date : 0; }
+	const vector<string>* children(size_t v, const string& dir) const
+	{
+		if (v>=sessions_.size()) return NULL;
+		map<string, vector<string> >::const_iterator it= sessions_[v].children.find(dir);
+		return it==sessions_[v].children.end() ? NULL : &it->second;
+	}
+	bool entry(size_t v, const string& path, MountEntry& out) const
+	{
+		if (v>=sessions_.size()) return false;
+		CoreDTMap::const_iterator it= sessions_[v].dt.find(path);
+		if (it==sessions_[v].dt.end() || it->second.date==0) return false;
+		out.date= it->second.date;
+		out.ptr= &it->second.ptr;
+		return true;
+	}
+	unsigned frag_size(unsigned f) const { return f<ht_.size() ? ht_[f].usize : 0; }
+	const MountBlock* block_of(unsigned f, size_t* off) const
+	{
+		if (f>=fragloc_.size() || fragloc_[f].block>=blocks_.size()) return NULL;
+		if (off) *off= fragloc_[f].off;
+		return &blocks_[fragloc_[f].block];
+	}
+	size_t nblocks() const { return blocks_.size(); }
+	size_t nfragments() const { return ht_.size(); }
+	MountReader* new_reader() { return new Reader(pattern_); }
+	int64_t archive_bytes() const { return archive_bytes_; }
+	int parts() const { return parts_; }
+	void prepare(size_t v)
+	{
+		if (v>=sessions_.size() || sessions_[v].tree) return;
+		core_build_dir_tree(sessions_[v], (int)v);
+		sessions_[v].tree= true;
+	}
+};
+
+//////////////////////////////////////////////////////////////////////////
+// Backend "jidac": the same index, read through the native zpaqfranz I/O
+// stack. Every byte goes through InputArchive -- the very class add /
+// extract / list use -- so this backend gets for free what "core", which
+// maps the part files raw, structurally cannot do:
+//
+//   - AES-256 archives (-key): salt, stretchKey() and one AES_CTR
+//     keystream per decompressor are InputArchive's business, not ours
+//   - Franzen archives, and Franzen+AES, including the franzen-only case
+//     where the .zpaq does not exist on disk at all
+//   - multipart archives opened exactly the way the rest of zpaqfranz
+//     opens them (subpart(), per-part .franzen fallback)
+//   - the password prompt, shared with every other command
+//
+// The index parser follows Jidac::read_archive() block for block (c/h/i,
+// SHA-1 verification of every index block, incomplete transactions
+// dropped), so both engines show the same tree and return the same bytes
+// for the same archive: mount one on X:, the other on Y:, and compare.
+//
+// Memory: a version here is a snapshot of pointers, not of records. A
+// file that never changes across 300 versions is stored once and its
+// fragment list is stored once, where "core" copies the whole record into
+// every one of the 300 sessions.
+//////////////////////////////////////////////////////////////////////////
+
+// What one 'i' block says about a file the moment it is added or updated.
+// Owned by JidacBackend::recs_ (a deque: pointers into it never move),
+// shared by every version snapshot from that one until the file changes.
+struct JidacRec
+{
+	int64_t				date= 0;	// zpaq date, never 0 (deletions are not stored here)
+	int64_t				attr= 0;	// first 8 attribute bytes
+	unsigned			version= 0;	// version that introduced this record
+	vector<unsigned>	ptr;		// fragment ids
+};
+
+typedef map<string, const JidacRec*> JidacDTMap;
+
+struct JidacSession
+{
+	JidacDTMap						dt;
+	map<string, vector<string> >	children; // "" or "a/b/" -> sorted names, dirs end in '/'
+	int64_t							date= 0;
+	bool							tree= false; // children built (see prepare())
+};
+
+// Encryption in force, for the banner. Looks at the bytes on disk, so it
+// is right even before a password has been asked for.
+inline string jidac_detect_encryption(const string& pattern)
+{
+	const string part1= subpart(pattern, 1);
+	string phys= part1;
+	if (!fileexists(phys) && fileexists(phys+".franzen")) phys+= ".franzen";
+	if (is_file_frenzen(phys)) return "Franzen+AES";
+	if (is_file_franzen(phys)) return "Franzen";
+	if (is_file_zpaq(phys))    return "";			// plain zpaq, nothing to say
+	return "AES-256";
+}
+
+class JidacBackend : public MountBackend
+{
+	string						pattern_;
+	vector<unsigned>			ht_;		// fragment id -> uncompressed size
+	vector<MountBlock>			blocks_;
+	std::deque<JidacSession>	sessions_;	// deque: children() hands out pointers into it
+	vector<CoreFragLoc>			fragloc_;
+	std::deque<JidacRec>		recs_;		// stable addresses, sessions_ point here
+	JidacDTMap					running_;	// tree being built, replayed version by version
+	int64_t						archive_bytes_= 0;
+	int							parts_= 0;
+	int							streaming_= 0;	// non-journaling segments seen
+	size_t						incomplete_= 0;	// 1-based version killed mid-write, 0 = none
+	string						encryption_;
+	string						truncated_;		// why the scan stopped early, "" = it did not
+
+	// Freezes the tree as it stands into one more version. Cheap on
+	// purpose: the directory map, the expensive half, waits for prepare()
+	// and is never built for a version nobody mounts.
+	void push_session(int64_t i_date)
+	{
+		sessions_.push_back(JidacSession());
+		JidacSession& s= sessions_.back();
+		s.dt= running_;	// pointers only: no fragment list is ever copied
+		s.date= i_date;
+	}
+
+	// The directory map of one version: every path it holds, plus every
+	// ancestor directory implied by them.
+	void build_tree(JidacSession& s, int i_version)
+	{
+		const int64_t entries= (int64_t)s.dt.size();
+		int64_t done= 0;
+		for (JidacDTMap::const_iterator it= s.dt.begin(); it!=s.dt.end(); ++it)
+		{
+			mount_tree_add(s.children, it->first);
+			// a version with a million files takes seconds of its own here
+			if (((++done) & 8191)==0 && g_mountscan.due())
+				g_mountscan.line(-1, "V%08d  tree %d%% of %s files", i_version,
+					(int)(done*100/(entries>0 ? entries : 1)), migliaia2(entries));
+		}
+		if (g_mountscan.active())
+			g_mountscan.line(-1, "V%08d  sorting %s files", i_version, migliaia2(entries));
+		mount_tree_finish(s.children);
+	}
+
+	// Index scan: c/h/i journaling blocks only, no 'd' (data) block is ever
+	// decompressed. Same walk as Jidac::read_archive(), minus everything
+	// the mount does not need (franz attributes, selection, hashes).
+	void scan(InputArchive& in)
+	{
+		const int64_t start_off= in.tell(); // 0, or 32 past the AES salt
+		{
+			// The check read_archive() does first: with the wrong key the
+			// whole stream is noise, and "password incorrect" beats a
+			// "bad journaling block name" two megabytes later.
+			char magic[4]= {0};
+			const int nr= in.read(magic, 4);
+			if (nr>0 && memcmp(magic, "7kSt", 4) && (memcmp(magic, "zPQ", 3) || magic[3]<1))
+				throw std::runtime_error("password incorrect, or not a zpaq archive");
+			in.seek(start_off, SEEK_SET);
+		}
+		int64_t	 data_offset= start_off;
+		int64_t	 cur_date= 0;	// date of the version being read
+		size_t	 nver= 0;		// 'c' blocks seen so far
+		bool	 done= false;
+		while (!done)
+		{
+			bool restart= false; // a 'c' block jumped us forward: new Decompresser
+			try
+			{
+				libzpaq::Decompresser d;
+				d.setInput(&in);
+				double mem= 0;
+				while (!restart && !done && d.findBlock(&mem))
+				{
+					CoreStrWriter filename, comment;
+					while (!restart && !done && d.findFilename(&filename))
+					{
+						g_mountscan.at(in.tell());
+						if (g_mountscan.due()) // V: the version being read, as its folder would be numbered
+							g_mountscan.line(-1, "V%08d  %s files", (int)(nver>0 ? nver-1 : 0), migliaia2((int64_t)running_.size()));
+						comment.s.clear();
+						d.readComment(&comment);
+						if (comment.s.size()<4 || comment.s.compare(comment.s.size()-4, 4, "jDC\x01")!=0)
+						{
+							// Streaming (pre-journaling) segment: no fragment
+							// table, so no random access. Counted, not mounted.
+							d.readSegmentEnd();
+							++streaming_;
+							filename.s.clear();
+							continue;
+						}
+						if (filename.s.size()!=28 || filename.s.compare(0, 3, "jDC")!=0)
+							throw std::runtime_error("bad journaling block name: "+filename.s);
+						int64_t usize= 0;
+						for (size_t k= 0; k<comment.s.size() && isdigit((unsigned char)comment.s[k]); ++k)
+						{
+							usize= usize*10+(comment.s[k]-'0');
+							if (usize>0xffffffffLL) throw std::runtime_error("journaling block too big");
+						}
+						int64_t fdate= 0;
+						for (int k= 3; k<17; ++k) fdate= fdate*10+(filename.s[k]-'0');
+						const char type= filename.s[17];
+						int64_t num= 0;
+						for (int k= 18; k<28; ++k) num= num*10+(filename.s[k]-'0');
+						if (type=='d') { d.readSegmentEnd(); filename.s.clear(); continue; }
+
+						libzpaq::StringBuffer os;
+						os.setLimit(usize);
+						d.setOutput(&os);
+						libzpaq::SHA1 sha1;
+						d.setSHA1(&sha1);
+						d.decompress();
+						char sha1result[21]= {0};
+						d.readSegmentEnd(sha1result);
+						d.setOutput(NULL); // os and sha1 die with this iteration
+						d.setSHA1(NULL);
+						if ((int64_t)os.size()!=usize) throw std::runtime_error("bad block size");
+						if (sha1result[0] && memcmp(sha1result+1, sha1.result(), 20))
+							throw std::runtime_error("bad checksum on index block "+filename.s);
+
+						if (type=='c')
+						{
+							if (os.size()<8) throw std::runtime_error("c block too small");
+							data_offset= in.tell()+1-d.buffered();
+							const char* s= os.c_str();
+							const int64_t jmp= btol(s);
+							if (jmp<0)
+							{
+								// add/backup killed halfway: the transaction
+								// has no data. read_archive() rolls back here
+								// and so do we -- the version is not exposed.
+								incomplete_= nver+1;
+								done= true;
+								break;
+							}
+							if (nver>0) push_session(cur_date);
+							cur_date= fdate;
+							++nver;
+							if (jmp>0) { in.seek(data_offset+jmp, SEEK_SET); restart= true; break; }
+						}
+						else if (type=='h')
+						{
+							if (nver==0) throw std::runtime_error("h block before any c block");
+							if (os.size()%24!=4) throw std::runtime_error("bad h block size");
+							const unsigned n= (unsigned)((os.size()-4)/24);
+							if (num<1 || num+n>0xffffffffLL) throw std::runtime_error("bad h fragment");
+							// Every fragment costs 24 barely compressible bytes of
+							// index (sha1+size), so an id far past that is garbage,
+							// and resizing ht_ to it would eat the machine.
+							if (num>archive_bytes_/16+(int64_t)n+65536) throw std::runtime_error("h block fragment id out of range");
+							const char* s= os.c_str();
+							const unsigned bsize= btoi(s);
+							MountBlock b;
+							b.offset= data_offset;
+							b.start= (unsigned)num;
+							b.frags= n;
+							uint64_t block_usize= 0;
+							if (ht_.size()<(size_t)num+n) ht_.resize((size_t)num+n, 0);
+							for (unsigned k= 0; k<n; ++k)
+							{
+								s+= 20; // sha1: the mount never checks fragment hashes
+								const unsigned fsize= btoi(s);
+								if (fsize>0x7fffffffu) throw std::runtime_error("fragment too big");
+								ht_[(size_t)num+k]= fsize;
+								block_usize+= fsize;
+							}
+							if (block_usize>0xffffffffull) throw std::runtime_error("block too big");
+							b.usize= (unsigned)block_usize;
+							b.index= (unsigned)blocks_.size();
+							blocks_.push_back(b);
+							data_offset+= bsize;
+						}
+						else if (type=='i')
+						{
+							if (nver==0) throw std::runtime_error("i block before any c block");
+							const char* s= os.c_str();
+							const char* const end= s+os.size();
+							while (s+9<=end)
+							{
+								const int64_t date= btol(s);
+								const char* nul= (const char*)memchr(s, 0, (size_t)(end-s));
+								if (!nul) throw std::runtime_error("unterminated filename in i block");
+								const size_t len= (size_t)(nul-s);
+								if (len>65535) throw std::runtime_error("filename too long");
+								const string fn= mount_normalize_path(string(s, len));
+								s+= len+1;
+								if (date==0) { running_.erase(fn); continue; } // tombstone
+								if (s+4>end) throw std::runtime_error("missing attr");
+								const unsigned na= btoi(s);
+								if (na>65535 || s+na>end) throw std::runtime_error("attr too long");
+								int64_t attr= 0;
+								for (unsigned k= 0; k<na; ++k, ++s)
+									if (k<8) attr+= int64_t((unsigned char)*s)<<(k*8);
+								if (s+4>end) throw std::runtime_error("missing ptr count");
+								const unsigned ni= btoi(s);
+								if ((size_t)ni>(size_t)(end-s)/4) throw std::runtime_error("ptr list too long");
+								recs_.push_back(JidacRec());
+								JidacRec& r= recs_.back();
+								r.date= date;
+								r.attr= attr;
+								r.version= (unsigned)(nver-1);
+								r.ptr.resize(ni);
+								for (unsigned k= 0; k<ni; ++k) r.ptr[k]= btoi(s);
+								running_[fn]= &r;
+							}
+						}
+						else throw std::runtime_error(string("unexpected journaling block type ")+type);
+						filename.s.clear();
+					} // end while findFilename
+				} // end while findBlock
+			}
+			catch (const std::exception& ex)
+			{
+				// A damaged tail should cost you the tail, not the mount:
+				// keep every version already complete and say what happened.
+				if (nver==0) throw;
+				truncated_= ex.what();
+				done= true;
+				restart= false;
+			}
+			if (!restart) done= true;
+		}
+		// The version in progress is complete only if nothing went wrong.
+		if (nver>0 && truncated_=="") push_session(cur_date);
+
+		// fragment -> (block, offset) table: O(1) per fragment on the read path
+		fragloc_.assign(ht_.size(), CoreFragLoc());
+		for (size_t bi= 0; bi<blocks_.size(); ++bi)
+		{
+			const MountBlock& b= blocks_[bi];
+			unsigned off= 0;
+			for (unsigned f= b.start; f<b.start+b.frags; ++f)
+			{
+				if (f<fragloc_.size()) { fragloc_[f].block= b.index; fragloc_[f].off= off; }
+				off+= (f<ht_.size()) ? ht_[f] : 0;
+			}
+		}
+	}
+
+	// One decompressor over its own InputArchive: own file handle, own
+	// AES_CTR keystream, own Franzen context, so the cache shards decompress
+	// in parallel without sharing anything but the archive on disk.
+	class Reader : public MountReader
+	{
+		InputArchive in_;
+	public:
+		explicit Reader(const string& pattern) : in_(pattern.c_str())
+		{
+			if (!in_.isopen()) throw std::runtime_error("cannot reopen "+pattern);
+		}
+		string decompress(const MountBlock& b)
+		{
+			in_.seek(b.offset, SEEK_SET);
+			libzpaq::Decompresser d;
+			d.setInput(&in_);
+			libzpaq::StringBuffer out;
+			out.setLimit((size_t)b.usize+8+4ull*b.frags);
+			d.setOutput(&out);
+			double mem= 0;
+			if (!d.findBlock(&mem)) throw std::runtime_error("block not found at expected offset");
+			while (d.findFilename())
+			{
+				d.readComment();
+				while (out.size()<b.usize && d.decompress(1<<14)) {}
+				if (out.size()>=b.usize) break;
+				d.readSegmentEnd();
+			}
+			if (out.size()<b.usize) throw std::runtime_error("incomplete block decompression");
+			return string((const char*)out.data(), b.usize);
+		}
+	};
+
+public:
+	explicit JidacBackend(const string& pattern) : pattern_(pattern)
+	{
+		encryption_= jidac_detect_encryption(pattern);
+		InputArchive in(pattern.c_str());
+		if (!in.isopen()) throw std::runtime_error("cannot open "+pattern);
+		archive_bytes_= in.get_totalsize();
+		parts_= (int)in.filepartnames.size();
+		if (parts_<1) parts_= 1;
+		g_mountscan.begin(archive_bytes_); // ended by mount(), thrown or not
+		scan(in);
+		if (sessions_.empty() && streaming_>0)
+			throw std::runtime_error("streaming (non-journaling) archive: no fragment table, cannot be mounted");
+	}
+	string name() const { return "jidac"; }
+	string remarks() const
+	{
+		string r;
+		if (encryption_!="")	r+= "encryption "+encryption_;
+		if (streaming_>0)		{ if (r!="") r+= ", "; r+= itos(streaming_)+" streaming segment(s) ignored"; }
+		if (incomplete_>0)		{ if (r!="") r+= ", "; r+= "incomplete transaction "+itos((int64_t)incomplete_)+" dropped"; }
+		if (truncated_!="")		{ if (r!="") r+= ", "; r+= "scan stopped early ("+truncated_+")"; }
+		return r;
+	}
+	size_t versions() const { return sessions_.size(); }
+	int64_t version_date(size_t v) const { return v<sessions_.size() ? sessions_[v].date : 0; }
+	const vector<string>* children(size_t v, const string& dir) const
+	{
+		if (v>=sessions_.size()) return NULL;
+		map<string, vector<string> >::const_iterator it= sessions_[v].children.find(dir);
+		return it==sessions_[v].children.end() ? NULL : &it->second;
+	}
+	bool entry(size_t v, const string& path, MountEntry& out) const
+	{
+		if (v>=sessions_.size()) return false;
+		JidacDTMap::const_iterator it= sessions_[v].dt.find(path);
+		if (it==sessions_[v].dt.end() || it->second==NULL || it->second->date==0) return false;
+		out.date= it->second->date;
+		out.ptr= &it->second->ptr;
+		return true;
+	}
+	unsigned frag_size(unsigned f) const { return f<ht_.size() ? ht_[f] : 0; }
+	const MountBlock* block_of(unsigned f, size_t* off) const
+	{
+		if (f>=fragloc_.size() || fragloc_[f].block>=blocks_.size()) return NULL;
+		if (off) *off= fragloc_[f].off;
+		return &blocks_[fragloc_[f].block];
+	}
+	size_t nblocks() const { return blocks_.size(); }
+	size_t nfragments() const { return ht_.size(); }
+	MountReader* new_reader() { return new Reader(pattern_); }
+	int64_t archive_bytes() const { return archive_bytes_; }
+	int parts() const { return parts_; }
+	void prepare(size_t v)
+	{
+		if (v>=sessions_.size() || sessions_[v].tree) return;
+		build_tree(sessions_[v], (int)v);
+		sessions_[v].tree= true;
+	}
+};
+
+// Resolves -backend auto (the default): "jidac" whenever encryption is or
+// might be in play -- a key on the command line, a Franzen password, an
+// archive whose first bytes are not a zpaq header (so it is encrypted and
+// InputArchive will ask for the password), or a franzen-only archive --
+// and "core" for a plain archive, where the mmap scanner is at home.
+inline string mount_pick_backend(const string& which, const string& archive)
+{
+	if (which!="" && which!="auto") return which;
+	if (g_password!=NULL) return "jidac";
+	if (g_franzen!="") return "jidac";
+	const string part1= subpart(archive, 1);
+	if (fileexists(part1)) return is_file_zpaq(part1) ? "core" : "jidac";
+	if (fileexists(part1+".franzen")) return "jidac";
+	return "core"; // missing file: let CoreBackend report it as before
+}
+
+// Backend factory. Both engines implement the same MountBackend interface
+// and can be mounted side by side on two mountpoints to be compared.
+inline MountBackend* open_backend(const string& which, const string& archive, string& err)
+{
+	try
+	{
+		if (which=="core")	return new CoreBackend(archive);
+		if (which=="jidac")	return new JidacBackend(archive);
+		err= "unknown backend '"+which+"' (available: core, jidac, auto)";
+	}
+	catch (const std::exception& ex) { err= ex.what(); }
+	return NULL;
+}
+
+//////////////////////////////////////////////////////////////////////////
+// Generic layer: path resolution and block cache over a MountBackend
+//////////////////////////////////////////////////////////////////////////
+
+struct Resolved
+{
+	bool		found= false;
+	bool		is_dir= false;
+	bool		has_entry= false; // file: always. dir: only if explicitly stored
+	MountEntry	entry;
+	string		internal;         // "" root, "a/b.txt", or "a/b/"
+};
+
+// Name shown for a direct child of the session root: escaping plus the
+// drive rule ("c:" -> "c", unless a real "c" also exists there).
+inline string mount_shown_root_name(const MountBackend& be, size_t v, const string& bare, bool windows_rules)
+{
+	if (windows_rules && mount_is_drive_name(bare))
+	{
+		string letter(1, bare[0]);
+		const vector<string>* kids= be.children(v, "");
+		bool clash= kids && (std::binary_search(kids->begin(), kids->end(), letter) || std::binary_search(kids->begin(), kids->end(), letter+"/"));
+		if (!clash) return letter;
+	}
+	return mount_escape_name(bare, windows_rules);
+}
+
+// Resolves a mount-visible, session-relative path ("docs/read%3Ame.txt",
+// no leading slash) walking the tree one component at a time: unescape,
+// exact match, drive-letter rule at the root, then (optionally) a
+// case-insensitive sibling match. A file wins over a same-named directory.
+inline Resolved mount_resolve(const MountBackend& be, size_t v, const string& shown, bool windows_rules, bool ci_fallback)
+{
+	Resolved r;
+	if (shown.empty()) { r.found= true; r.is_dir= true; return r; }
+	string cur;
+	size_t start= 0;
+	while (true)
+	{
+		size_t slash= shown.find('/', start);
+		bool last= (slash==string::npos);
+		string comp= last ? shown.substr(start) : shown.substr(start, slash-start);
+		if (comp.empty())
+		{
+			if (!last) return r;
+			r.found= true; r.is_dir= true; r.internal= cur;
+			r.has_entry= be.entry(v, cur, r.entry);
+			return r;
+		}
+		string name= mount_unescape_name(comp, windows_rules);
+		const vector<string>* kids= be.children(v, cur);
+		if (!kids) return r;
+		string dirname= name+"/";
+		bool have_dir= std::binary_search(kids->begin(), kids->end(), dirname);
+		bool have_file= last && std::binary_search(kids->begin(), kids->end(), name);
+		const bool root_letter= windows_rules && cur.empty() && name.size()==1 && isalpha((unsigned char)name[0]);
+		if (!have_dir && !have_file && root_letter)
+		{
+			string drive= name+":";
+			if (std::binary_search(kids->begin(), kids->end(), drive+"/")) { have_dir= true; name= drive; dirname= drive+"/"; }
+			else if (last && std::binary_search(kids->begin(), kids->end(), drive)) { have_file= true; name= drive; }
+		}
+		if (!have_dir && !have_file && ci_fallback)
+		{
+			for (size_t k= 0; k<kids->size(); ++k)
+			{
+				const string& kn0= (*kids)[k];
+				bool kd= !kn0.empty() && kn0[kn0.size()-1]=='/';
+				string kn= kd ? kn0.substr(0, kn0.size()-1) : kn0;
+				if (!mount_ascii_iequals(kn, name) && !(root_letter && mount_ascii_iequals(kn, name+":"))) continue;
+				if (kd) { have_dir= true; name= kn; dirname= kn0; break; }
+				else if (last) { have_file= true; name= kn; break; }
+			}
+		}
+		if (last)
+		{
+			if (have_file && be.entry(v, cur+name, r.entry)) { r.found= true; r.has_entry= true; r.internal= cur+name; return r; }
+			if (have_dir)
+			{
+				r.found= true; r.is_dir= true; r.internal= cur+dirname;
+				r.has_entry= be.entry(v, r.internal, r.entry);
+			}
+			return r;
+		}
+		if (!have_dir) return r;
+		cur+= dirname;
+		start= slash+1;
+	}
+}
+
+// Thread-safe LRU cache of decompressed blocks, bounded by bytes, split in
+// N independent shards (reader + mutex + LRU each) so different blocks can
+// decompress on different cores, plus a small worker pool for read-ahead.
+// Blocks are handed out as shared_ptr: a 4KB read of a 16MB block costs
+// no copy, and the data stays alive even if the LRU evicts it mid-read.
+class MountCache
+{
+public:
+	typedef std::shared_ptr<const string> BlockData;
+
+	MountCache(MountBackend& be, size_t byte_budget, int nshards, int prefetch_threads)
+		: nshards_((std::max)(1, nshards)), shutdown_(false)
+	{
+		size_t per_shard= (std::max)((size_t)1, byte_budget/(size_t)nshards_);
+		for (int i= 0; i<nshards_; ++i) shards_.push_back(std::unique_ptr<Shard>(new Shard(be.new_reader(), per_shard)));
+		for (int i= 0; i<(std::max)(0, prefetch_threads); ++i) workers_.push_back(std::thread(&MountCache::worker_loop, this));
+	}
+	~MountCache()
+	{
+		{ std::lock_guard<std::mutex> lk(pool_mu_); shutdown_= true; }
+		pool_cv_.notify_all();
+		for (size_t i= 0; i<workers_.size(); ++i) if (workers_[i].joinable()) workers_[i].join();
+	}
+	MountCache(const MountCache&)= delete;
+	MountCache& operator=(const MountCache&)= delete;
+
+	BlockData get_or_decompress(const MountBlock& b) { return shard_for(b.offset).get_or_decompress(b); }
+
+	// Best-effort background decompression of a block needed soon.
+	void prefetch_async(const MountBlock& b)
+	{
+		if (shard_for(b.offset).is_cached(b.offset)) return;
+		std::lock_guard<std::mutex> lk(pool_mu_);
+		if (shutdown_ || workers_.empty() || pending_.count(b.offset)) return;
+		pending_.insert(b.offset);
+		queue_.push_back(b);
+		pool_cv_.notify_one();
+	}
+	int64_t total_decompressions() const
+	{
+		int64_t t= 0;
+		for (size_t i= 0; i<shards_.size(); ++i) t+= shards_[i]->decompressions();
+		return t;
+	}
+
+private:
+	struct Entry { BlockData data; std::list<int64_t>::iterator lru_it; };
+	struct Shard
+	{
+		Shard(MountReader* r, size_t budget) : reader_(r), budget_(budget), total_bytes_(0), decompressions_(0) {}
+		BlockData get_or_decompress(const MountBlock& b)
+		{
+			std::lock_guard<std::mutex> lock(mu_);
+			std::unordered_map<int64_t, Entry>::iterator it= index_.find(b.offset);
+			if (it!=index_.end()) { lru_.splice(lru_.begin(), lru_, it->second.lru_it); return it->second.data; }
+			BlockData data= std::make_shared<const string>(reader_->decompress(b));
+			decompressions_++;
+			total_bytes_+= data->size();
+			lru_.push_front(b.offset);
+			Entry e; e.data= data; e.lru_it= lru_.begin();
+			index_[b.offset]= e;
+			while (total_bytes_>budget_ && !lru_.empty())
+			{
+				int64_t victim= lru_.back();
+				lru_.pop_back();
+				std::unordered_map<int64_t, Entry>::iterator vit= index_.find(victim);
+				if (vit!=index_.end()) { total_bytes_-= vit->second.data->size(); index_.erase(vit); }
+			}
+			return data;
+		}
+		bool is_cached(int64_t offset) { std::lock_guard<std::mutex> lock(mu_); return index_.count(offset)>0; }
+		int64_t decompressions() { std::lock_guard<std::mutex> lock(mu_); return decompressions_; }
+
+		std::unique_ptr<MountReader>		reader_;
+		std::mutex							mu_;
+		size_t								budget_;
+		size_t								total_bytes_;
+		int64_t								decompressions_;
+		std::list<int64_t>					lru_;
+		std::unordered_map<int64_t, Entry>	index_;
+	};
+	Shard& shard_for(int64_t offset) { return *shards_[std::hash<int64_t>()(offset)%(size_t)nshards_]; }
+	void worker_loop()
+	{
+		while (true)
+		{
+			MountBlock b;
+			{
+				std::unique_lock<std::mutex> lk(pool_mu_);
+				while (!shutdown_ && queue_.empty()) pool_cv_.wait(lk);
+				if (shutdown_ && queue_.empty()) return;
+				b= queue_.front();
+				queue_.pop_front();
+			}
+			try { get_or_decompress(b); } catch (...) {}
+			{ std::lock_guard<std::mutex> lk(pool_mu_); pending_.erase(b.offset); }
+		}
+	}
+
+	int									nshards_;
+	vector<std::unique_ptr<Shard> >		shards_;
+	vector<std::thread>					workers_;
+	std::mutex							pool_mu_;
+	std::condition_variable				pool_cv_;
+	std::deque<MountBlock>				queue_;
+	std::set<int64_t>					pending_;
+	bool								shutdown_;
+};
+
+// Reads [offset, offset+len) of a file's content, touching only the blocks
+// that cover the range, then queues read-ahead for the file's next blocks.
+inline size_t mount_read_range(const MountBackend& be, MountCache& cache, const MountEntry& e, char* out, size_t len, int64_t offset)
+{
+	if (!e.ptr) return 0;
+	int64_t file_pos= 0;
+	size_t written= 0;
+	int64_t last_block_offset= -1;
+	size_t last_frag_index= 0;
+	const vector<unsigned>& ptr= *e.ptr;
+	for (size_t fi= 0; fi<ptr.size(); ++fi)
+	{
+		unsigned frag= ptr[fi];
+		unsigned fsize= be.frag_size(frag);
+		int64_t frag_start= file_pos, frag_end= file_pos+fsize;
+		file_pos= frag_end;
+		if (offset>=frag_end || (int64_t)(offset+len)<=frag_start) continue;
+		size_t local_off= 0;
+		const MountBlock* b= be.block_of(frag, &local_off);
+		if (!b) throw std::runtime_error("fragment without owning block");
+		MountCache::BlockData data= cache.get_or_decompress(*b);
+		last_block_offset= b->offset;
+		last_frag_index= fi;
+		int64_t want_from= (std::max)(offset, frag_start);
+		int64_t want_to= (std::min)(offset+(int64_t)len, frag_end);
+		size_t src_off= local_off+(size_t)(want_from-frag_start);
+		size_t n= (size_t)(want_to-want_from);
+		size_t dst_off= (size_t)(want_from-offset);
+		if (src_off+n>data->size()) throw std::runtime_error("fragment overruns its block");
+		memcpy(out+dst_off, data->data()+src_off, n);
+		written= (std::max)(written, dst_off+n);
+	}
+	const int READAHEAD_DEPTH= 4;
+	if (last_block_offset!=-1)
+	{
+		int queued= 0;
+		int64_t prev= last_block_offset;
+		for (size_t fi= last_frag_index+1; fi<ptr.size() && queued<READAHEAD_DEPTH; ++fi)
+		{
+			const MountBlock* nb= be.block_of(ptr[fi], NULL);
+			if (nb && nb->offset!=prev) { cache.prefetch_async(*nb); prev= nb->offset; ++queued; }
+		}
+	}
+	return written;
+}
+
+//////////////////////////////////////////////////////////////////////////
+// FUSE layer
+//////////////////////////////////////////////////////////////////////////
+
+struct MountState
+{
+	MountBackend*				be= NULL;
+	std::unique_ptr<MountCache>	cache;      // created in init(), after any daemonize()
+	size_t						cache_bytes= 0;
+	int							shards= 4;
+	int							prefetch= 4;
+	size_t						nversions= 0; // versions exposed (-until may cut the list)
+	bool						allversions= false; // -all: one folder per version, else
+									// the mountpoint IS version nversions-1
+	bool						windows_names= false;
+	bool						case_fallback= false;
+	bool						case_insensitive_volume= false;
+	unsigned					uid= 0, gid= 0;
+	int64_t						total_bytes= 0;
+	int64_t						total_files= 0;
+};
+static MountState* g_mount= NULL;
+
+inline void mount_set_times(struct fuse_stat* st, int64_t t)
+{
+	st->st_atim.tv_sec= (decltype(st->st_atim.tv_sec))t; st->st_atim.tv_nsec= 0;
+	st->st_mtim.tv_sec= (decltype(st->st_mtim.tv_sec))t; st->st_mtim.tv_nsec= 0;
+	st->st_ctim.tv_sec= (decltype(st->st_ctim.tv_sec))t; st->st_ctim.tv_nsec= 0;
+#ifdef _WIN32
+	st->st_birthtim.tv_sec= (decltype(st->st_birthtim.tv_sec))t; st->st_birthtim.tv_nsec= 0;
+#endif
+}
+inline void mount_fill_dir(struct fuse_stat* st, int64_t t)
+{
+	memset(st, 0, sizeof(*st));
+	st->st_mode= S_IFDIR|0555; st->st_nlink= 2;
+	st->st_uid= g_mount->uid; st->st_gid= g_mount->gid;
+	st->st_blksize= 4096;
+	mount_set_times(st, t);
+}
+inline void mount_fill_file(struct fuse_stat* st, int64_t size, int64_t t)
+{
+	memset(st, 0, sizeof(*st));
+	st->st_mode= S_IFREG|0444; st->st_nlink= 1;
+	st->st_uid= g_mount->uid; st->st_gid= g_mount->gid;
+	st->st_size= (decltype(st->st_size))size;
+	st->st_blksize= 4096;
+	st->st_blocks= (decltype(st->st_blocks))((size+511)/512);
+	mount_set_times(st, t);
+}
+
+// Name of the top level folder of version v. Fixed width, so that a plain
+// lexicographic sort (ls, a file manager that does not sort numerically)
+// keeps VER00000009 before VER00000010 instead of listing 0 1 10 11 2 3;
+// and a VER prefix, so that it is obvious those folders are versions and
+// not something that was inside the archive.
+inline string mount_version_name(size_t v)
+{
+	char name[24];
+	snprintf(name, sizeof(name), "VER%08u", (unsigned)v);
+	return string(name);
+}
+
+// "VER00000003" -> 3. The bare "3" is still accepted so that a path typed
+// by hand, or written before the rename, keeps resolving.
+inline bool mount_version_number(const string& shown, size_t& v)
+{
+	string digits= shown;
+	if (digits.size()>3)
+		if (mount_ascii_iequals(digits.substr(0, 3), "VER"))
+			digits= digits.substr(3);
+	if (digits.empty() || digits.size()>9) return false;
+	for (size_t i= 0; i<digits.size(); ++i) if (!isdigit((unsigned char)digits[i])) return false;
+	v= (size_t)atoi(digits.c_str());
+	return true;
+}
+
+// "/VER00000003/a/b" -> version 3, rel "a/b" -- with -all, where the first
+// component has to be a version folder. Without it there is no such
+// folder at all: the mountpoint is the last exposed version, so "/a/b" is
+// already relative to it.
+inline bool mount_split(const string& path, size_t& v, string& rel)
+{
+	if (path.empty() || path[0]!='/') return false;
+	if (g_mount->nversions==0) return false;
+	if (!g_mount->allversions)
+	{
+		v= g_mount->nversions-1;
+		rel= path.substr(1);
+		return true;
+	}
+	size_t p1= path.find('/', 1);
+	string vs= (p1==string::npos) ? path.substr(1) : path.substr(1, p1-1);
+	if (!mount_version_number(vs, v)) return false;
+	if (v>=g_mount->nversions) return false;
+	rel= (p1==string::npos) ? "" : path.substr(p1+1);
+	return true;
+}
+inline Resolved mount_lookup(size_t v, const string& rel)
+{
+	return mount_resolve(*g_mount->be, v, rel, g_mount->windows_names, g_mount->case_fallback);
+}
+inline int64_t mount_entry_time(size_t v, const Resolved& r)
+{
+	return mount_date_to_unix(r.has_entry && r.entry.date ? r.entry.date : g_mount->be->version_date(v));
+}
+
+static int mount_getattr(const char* path, struct fuse_stat* st, struct fuse_file_info*)
+{
+	try
+	{
+		string p(path);
+		if (p=="/")
+		{
+			mount_fill_dir(st, g_mount->nversions ? mount_date_to_unix(g_mount->be->version_date(g_mount->nversions-1)) : 0);
+			return 0;
+		}
+		size_t v; string rel;
+		if (!mount_split(p, v, rel)) return -ENOENT;
+		Resolved r= mount_lookup(v, rel);
+		if (!r.found) return -ENOENT;
+		if (r.is_dir) mount_fill_dir(st, mount_entry_time(v, r));
+		else mount_fill_file(st, mount_file_size(*g_mount->be, r.entry), mount_entry_time(v, r));
+		return 0;
+	}
+	catch (const std::exception& ex) { myprintf("94001! getattr %s: %s\n", path, ex.what()); return -EIO; }
+	catch (...) { return -EIO; }
+}
+
+static int mount_readdir(const char* path, void* buf, fuse_fill_dir_t filler, fuse_off_t, struct fuse_file_info*, enum fuse_readdir_flags rflags)
+{
+	try
+	{
+		string p(path);
+		// Full stat with every entry: WinFsp uses it and skips one getattr
+		// per entry; libfuse uses it only for READDIRPLUS.
+		const enum fuse_fill_dir_flags fflags= (rflags & FUSE_READDIR_PLUS) ? FUSE_FILL_DIR_PLUS : (enum fuse_fill_dir_flags)0;
+		struct fuse_stat st;
+		filler(buf, ".", NULL, 0, (enum fuse_fill_dir_flags)0);
+		filler(buf, "..", NULL, 0, (enum fuse_fill_dir_flags)0);
+		// With -all the root is the list of versions. Without it the root
+		// is the last version's own root, listed by the generic code below
+		// -- and an archive with no version at all has an empty root.
+		if (p=="/" && (g_mount->allversions || g_mount->nversions==0))
+		{
+			for (size_t i= 0; i<g_mount->nversions; ++i)
+			{
+				mount_fill_dir(&st, mount_date_to_unix(g_mount->be->version_date(i)));
+				filler(buf, mount_version_name(i).c_str(), &st, 0, fflags);
+			}
+			return 0;
+		}
+		size_t v; string rel;
+		if (!mount_split(p, v, rel)) return -ENOENT;
+		Resolved r= mount_lookup(v, rel);
+		if (!r.found || !r.is_dir) return -ENOENT;
+		const vector<string>* kids= g_mount->be->children(v, r.internal);
+		if (!kids) return r.internal.empty() ? 0 : -ENOENT;
+		for (size_t k= 0; k<kids->size(); ++k)
+		{
+			const string& name= (*kids)[k];
+			bool is_dir= !name.empty() && name[name.size()-1]=='/';
+			string bare= is_dir ? name.substr(0, name.size()-1) : name;
+			MountEntry e;
+			bool has= g_mount->be->entry(v, r.internal+name, e);
+			int64_t t= mount_date_to_unix(has && e.date ? e.date : g_mount->be->version_date(v));
+			if (is_dir) mount_fill_dir(&st, t);
+			else if (has) mount_fill_file(&st, mount_file_size(*g_mount->be, e), t);
+			else continue;
+			string shown= r.internal.empty() ? mount_shown_root_name(*g_mount->be, v, bare, g_mount->windows_names)
+											 : mount_escape_name(bare, g_mount->windows_names);
+			filler(buf, shown.c_str(), &st, 0, fflags);
+		}
+		return 0;
+	}
+	catch (const std::exception& ex) { myprintf("94002! readdir %s: %s\n", path, ex.what()); return -EIO; }
+	catch (...) { return -EIO; }
+}
+
+static int mount_open(const char* path, struct fuse_file_info* fi)
+{
+	try
+	{
+		if ((fi->flags & O_ACCMODE)!=O_RDONLY) return -EACCES;
+		size_t v; string rel;
+		if (!mount_split(path, v, rel)) return -ENOENT;
+		Resolved r= mount_lookup(v, rel);
+		if (!r.found || r.is_dir || !r.has_entry) return -ENOENT;
+		return 0;
+	}
+	catch (...) { return -EIO; }
+}
+
+static int mount_read(const char* path, char* buf, size_t size, fuse_off_t offset, struct fuse_file_info*)
+{
+	try
+	{
+		if (!g_mount->cache) return -EIO;
+		size_t v; string rel;
+		if (!mount_split(path, v, rel)) return -ENOENT;
+		Resolved r= mount_lookup(v, rel);
+		if (!r.found || r.is_dir || !r.has_entry) return -ENOENT;
+		int64_t total= mount_file_size(*g_mount->be, r.entry);
+		if (offset<0 || offset>=total) return 0;
+		size_t want= (size_t)(std::min)((int64_t)size, total-offset);
+		if (want>(size_t)0x7fffffff) want= 0x7fffffff;
+		return (int)mount_read_range(*g_mount->be, *g_mount->cache, r.entry, buf, want, offset);
+	}
+	catch (const std::exception& ex) { myprintf("94003! read %s: %s\n", path, ex.what()); return -EIO; }
+	catch (...) { return -EIO; }
+}
+
+static int mount_statfs(const char*, struct fuse_statvfs* stbuf)
+{
+	memset(stbuf, 0, sizeof(*stbuf));
+	const unsigned long bsize= 4096;
+	stbuf->f_bsize= bsize;
+	stbuf->f_frsize= bsize;
+	stbuf->f_blocks= (decltype(stbuf->f_blocks))((g_mount->total_bytes+bsize-1)/bsize);
+	stbuf->f_bfree= 0;
+	stbuf->f_bavail= 0;
+	stbuf->f_files= (decltype(stbuf->f_files))g_mount->total_files;
+	stbuf->f_ffree= 0;
+	stbuf->f_namemax= 255;
+	return 0;
+}
+
+// Runs once the file system is up (on libfuse: AFTER the daemonize fork,
+// which is why the cache and its worker threads are created here and not
+// in Jidac::mount()).
+static void* mount_init(struct fuse_conn_info* conn, struct fuse_config* cfg)
+{
+	(void)conn; (void)cfg;
+#ifdef _WIN32
+	if (g_mount->case_insensitive_volume) conn->want|= FUSE_CAP_CASE_INSENSITIVE;
+#else
+	cfg->kernel_cache= 1;
+	cfg->attr_timeout= 86400;
+	cfg->entry_timeout= 86400;
+#endif
+	try
+	{
+		g_mount->cache.reset(new MountCache(*g_mount->be, g_mount->cache_bytes, g_mount->shards, g_mount->prefetch));
+	}
+	catch (const std::exception& ex)
+	{
+		myprintf("94004! cannot open the archive for reading: %s\n", ex.what());
+	}
+	return g_mount;
+}
+
+static struct fuse_operations mount_ops()
+{
+	struct fuse_operations ops;
+	memset(&ops, 0, sizeof(ops));
+	ops.getattr= mount_getattr;
+	ops.readdir= mount_readdir;
+	ops.open= mount_open;
+	ops.read= mount_read;
+	ops.statfs= mount_statfs;
+	ops.init= mount_init;
+	return ops;
+}
+
+inline int mount_env_int(const char* name, int def, int lo, int hi)
+{
+	const char* v= getenv(name);
+	if (!v || !*v) return def;
+	int n= atoi(v);
+	return (n<lo || n>hi) ? def : n;
+}
+inline bool mount_env_bool(const char* name, bool def)
+{
+	const char* v= getenv(name);
+	if (!v || !*v) return def;
+	return !(v[0]=='0' || v[0]=='n' || v[0]=='N' || v[0]=='f' || v[0]=='F');
+}
+// True if "key" or "key=..." is among the comma-separated FUSE options.
+inline bool mount_has_opt(const string& opts, const string& key)
+{
+	size_t start= 0;
+	while (start<=opts.size())
+	{
+		size_t comma= opts.find(',', start);
+		string item= opts.substr(start, comma==string::npos ? string::npos : comma-start);
+		if (item==key || (item.size()>key.size() && item.compare(0, key.size(), key)==0 && item[key.size()]=='=')) return true;
+		if (comma==string::npos) break;
+		start= comma+1;
+	}
+	return false;
+}
+
+#ifdef _WIN32
+//////////////////////////////////////////////////////////////////////////
+// WinFsp: DLL located through the registry and bound lazily
+// And yes, i Really do not like C linker
+//////////////////////////////////////////////////////////////////////////
+inline const wchar_t* winfsp_dll_name()
+{
+#if defined(_M_ARM64) || defined(__aarch64__)
+	return L"winfsp-a64.dll";
+#elif defined(_WIN64)
+	return L"winfsp-x64.dll";
+#else
+	return L"winfsp-x86.dll";
+#endif
+}
+inline HMODULE winfsp_load_from_registry(const wchar_t* key)
+{
+	HKEY hk;
+	if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, key, 0, KEY_READ, &hk)!=ERROR_SUCCESS) return NULL;
+	wchar_t dir[MAX_PATH];
+	DWORD sz= sizeof(dir)-2*sizeof(wchar_t), type= 0;
+	LONG rc= RegQueryValueExW(hk, L"InstallDir", NULL, &type, (LPBYTE)dir, &sz);
+	RegCloseKey(hk);
+	if (rc!=ERROR_SUCCESS || type!=REG_SZ) return NULL;
+	dir[sz/sizeof(wchar_t)]= 0;
+	std::wstring path= dir;
+	if (!path.empty() && path[path.size()-1]!=L'\\') path+= L'\\';
+	path+= L"bin\\";
+	path+= winfsp_dll_name();
+	return LoadLibraryW(path.c_str());
+}
+static HMODULE			g_winfsp= NULL;
+static std::once_flag	g_winfsp_once;
+static const char*		g_winfsp_why= NULL;
+
+inline string first_free_drive_letter()
+{
+	DWORD used= GetLogicalDrives();
+	for (char c= 'Z'; c>='D'; --c)
+		if (!(used & (1u<<(c-'A')))) return string(1, c)+":";
+	return "";
+}
+// Opens an Explorer window on `drive` as soon as the mount is visible.
+inline void open_explorer_when_mounted(const string& drive)
+{
+	std::thread([drive]()
+	{
+		std::wstring root= utow((drive+"\\").c_str());
+		for (int i= 0; i<300; ++i)
+		{
+			Sleep(100);
+			if (GetFileAttributesW(root.c_str())!=INVALID_FILE_ATTRIBUTES)
+			{
+				ShellExecuteW(NULL, L"open", root.c_str(), NULL, NULL, SW_SHOWNORMAL);
+				return;
+			}
+		}
+	}).detach();
+}
+inline string volume_label(const string& pattern)
+{
+	size_t cut= pattern.find_last_of("/\\");
+	string base= (cut==string::npos) ? pattern : pattern.substr(cut+1);
+	for (size_t i= 0; i<base.size(); ++i) if (base[i]=='?' || base[i]=='*') base[i]= '#';
+	if (base.size()>32) base.resize(32);
+	return base;
+}
+#endif // _WIN32
+
+} // namespace franzmount
+
+#ifdef _WIN32
+extern "C" void* zpaqmount_winfsp_load(const char** why)
+{
+	std::call_once(franzmount::g_winfsp_once, []()
+	{
+		franzmount::g_winfsp= LoadLibraryW(franzmount::winfsp_dll_name());
+		if (!franzmount::g_winfsp) franzmount::g_winfsp= franzmount::winfsp_load_from_registry(L"SOFTWARE\\WOW6432Node\\WinFsp");
+		if (!franzmount::g_winfsp) franzmount::g_winfsp= franzmount::winfsp_load_from_registry(L"SOFTWARE\\WinFsp");
+		if (!franzmount::g_winfsp) franzmount::g_winfsp_why= "WinFsp is not installed (winfsp DLL not found): get it from https://winfsp.dev/rel/";
+	});
+	if (why) *why= franzmount::g_winfsp_why;
+	return franzmount::g_winfsp;
+}
+extern "C" void zpaqmount_winfsp_bind(const char* name, void** slot)
+{
+	if (*slot) return;
+	const char* why= NULL;
+	HMODULE m= (HMODULE)zpaqmount_winfsp_load(&why);
+	if (!m) { myprintf("94005! %s\n", why ? why : "cannot load WinFsp"); exit(3); }
+	void* p= (void*)GetProcAddress(m, name);
+	if (!p) { myprintf("94006! symbol %s not found in the WinFsp DLL (too old?)\n", name); exit(3); }
+	InterlockedExchangePointer(slot, p);
+}
+#endif
+
+#ifdef _WIN32
+/// kickstart_mount: make sure WinFsp is usable before mounting.
+/// If the DLL loads, return 0 and let the mount go on.
+/// Otherwise download the (pinned) MSI into the system temp folder, check size
+/// and SHA-256, then (admin only, after a captcha) install it silently with
+/// msiexec. After the install zpaqfranz quits: the DLL loading is cached by
+/// std::call_once, so the user has to run the command again.
+/// someone can, of course, fake the URL (DNS) name or whatever. Anyway... it's up to you
+int kickstart_mount()
+{
+	const char* why= NULL;
+	if (zpaqmount_winfsp_load(&why))
+		return 0;
+
+	const string  msiname	= "winfsp-2.1.25156.msi";
+	const int64_t msisize	= 2191360;
+	const string  msisha256	= "073A70E00F77423E34BED98B86E600DEF93393BA5822204FAC57A29324DB9F7A";
+	const string  msiurl	= "http://www.francocorbelli.it/zpaqfranz/win64/" + msiname;
+
+	color_yellow();
+	myprintf("94200: WinFsp is not installed (or cannot be loaded)\n");
+	color_restore();
+	if (flagverbose && why)
+		myprintf("94201: %s\n", why);
+
+	// Plain system temp folder (not g_gettempdirectory(), which is per-run):
+	// a good MSI left by a previous attempt is reused
+	wchar_t wtemp[MAX_PATH+1];
+	DWORD	lentemp= GetTempPathW(MAX_PATH, wtemp);
+	if (lentemp==0 || lentemp>MAX_PATH)
+	{
+		myprintf("94202! cannot get the temporary folder\n");
+		exit(2);
+	}
+	string msifile= wtou(wtemp);
+	myreplaceall(msifile, "/", "\\");
+	if (msifile!="" && msifile[msifile.size()-1]!='\\')
+		msifile+= '\\';
+	string logfile= msifile + "winfsp-install.log";
+	msifile+= msiname;
+
+	// size + SHA-256 check of the local file
+	auto msi_is_good= [&]() -> bool
+	{
+		int64_t dimensione= prendidimensionefile(msifile.c_str());
+		if (dimensione!=msisize)
+			return false;
+		franz_do_hash hasher("SHA-256");
+		string hash= hasher.filehash(0, msifile, false, mtime(), dimensione);
+		if (flagverbose)
+			myprintf("94203: SHA-256 %s\n", hash.c_str());
+		return hash==msisha256;
+	};
+
+	if (msi_is_good())
+	{
+		if (flagverbose)
+			myprintf("94204: Reusing already downloaded %s\n", msifile.c_str());
+	}
+	else
+	{
+		if (fileexists(msifile))
+			delete_file(msifile.c_str());
+		color_cyan();
+		myprintf("94205: Downloading WinFsp installer from %s\n", msiurl.c_str());
+		color_restore();
+		if (!downloadfile(msiurl + "?" + generaterandomstring(10), msifile, true))
+		{
+			myprintf("94206! download of %s failed\n", msiname.c_str());
+			exit(2);
+		}
+		if (!msi_is_good())
+		{
+			color_red();
+			myprintf("94207! %s is corrupted (size or SHA-256 mismatch), deleted\n", msiname.c_str());
+			color_restore();
+			delete_file(msifile.c_str());
+			exit(2);
+		}
+	}
+	color_green();
+	myprintf("94208: Installer verified (SHA-256 OK) %s\n", msifile.c_str());
+	color_restore();
+
+	if (!isadmin())
+	{
+		color_red();
+		myprintf("94209! You must be administrator to install WinFsp: quit\n");
+		color_restore();
+		myprintf("94210: Run again from an elevated prompt, or install %s by hand\n", msifile.c_str());
+		exit(2);
+	}
+
+	string reason=	"WinFsp is required to mount archives but is not installed.\n"
+					"    Installer downloaded and verified (SHA-256 OK):\n"
+					"    " + msifile + "\n"
+					"    Install WinFsp now (silent install, no reboot)?";
+	if (!getcaptcha("itaketherisk", reason))
+		exit(2);
+
+	// Already elevated: run msiexec (from the system folder, not from PATH)
+	// and wait for its exit code
+	wchar_t wsys[MAX_PATH+1];
+	UINT	lensys= GetSystemDirectoryW(wsys, MAX_PATH);
+	if (lensys==0 || lensys>MAX_PATH)
+	{
+		myprintf("94211! cannot get the system folder\n");
+		exit(2);
+	}
+	std::wstring msiexec= std::wstring(wsys) + L"\\msiexec.exe";
+	std::wstring cmdline= L"\"" + msiexec + L"\" /i \"" + utow(msifile.c_str()) + L"\" /qn /norestart /l*v \"" + utow(logfile.c_str()) + L"\"";
+	if (flagverbose)
+		myprintf("94212: Running %s\n", wtou(cmdline.c_str()).c_str());
+
+	color_cyan();
+	myprintf("94213: Installing WinFsp, please wait...\n");
+	color_restore();
+
+	STARTUPINFOW		si;
+	PROCESS_INFORMATION pi;
+	ZeroMemory(&si, sizeof(si));
+	ZeroMemory(&pi, sizeof(pi));
+	si.cb= sizeof(si);
+	std::vector<wchar_t> cmdbuf(cmdline.begin(), cmdline.end());
+	cmdbuf.push_back(0);
+	if (!CreateProcessW(msiexec.c_str(), &cmdbuf[0], NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi))
+	{
+		myprintf("94214! cannot run msiexec (error %u)\n", (unsigned)GetLastError());
+		exit(2);
+	}
+	WaitForSingleObject(pi.hProcess, INFINITE);
+	DWORD exitcode= 1;
+	if (!GetExitCodeProcess(pi.hProcess, &exitcode))
+		exitcode= 1;
+	CloseHandle(pi.hProcess);
+	CloseHandle(pi.hThread);
+
+	if (exitcode==0 || exitcode==3010 || exitcode==1641)
+	{
+		delete_file(msifile.c_str());
+		delete_file(logfile.c_str());
+		color_green();
+		myprintf("94215: WinFsp installed\n");
+		color_restore();
+		if (exitcode!=0)
+		{
+			color_yellow();
+			myprintf("94216: Windows says a reboot is required to complete the install\n");
+			color_restore();
+		}
+		myprintf("94217: Please run the mount command again\n");
+		exit(1);
+	}
+
+	color_red();
+	if (exitcode==1602)
+		myprintf("94218! WinFsp install cancelled (msiexec code 1602)\n");
+	else if (exitcode==1618)
+		myprintf("94219! Another installation is in progress, retry later (msiexec code 1618)\n");
+	else
+		myprintf("94220! WinFsp install failed (msiexec code %u)\n", (unsigned)exitcode);
+	color_restore();
+	myprintf("94221: msiexec log %s\n", logfile.c_str());
+	exit(2);
+	return 2;
+}
+#endif
+
+/// mount <archive> [mountpoint] [-backend core] [-fuseopt a,b] [-until N] [-t N]
+int Jidac::mount()
+{
+	using namespace franzmount;
+	// "mount <archive> [mountpoint]": both arrive in files[] (the command is
+	// parsed like the other utils, not like a/x/l which take the archive first)
+	if (files.size()<1)
+	{
+		myprintf("94010! mount requires an archive\n");
+		return 2;
+	}
+	archive= files[0];
+	if (!iszpaq(archive))
+		archive+= ".zpaq";
+	string mountpoint= files.size()>=2 ? files[1] : "";
+#ifdef _WIN32
+	{
+		// WinFsp missing: download, verify and (admin + captcha) install it, then quit
+		if (kickstart_mount()!=0)
+			return 2;
+		// No mountpoint or "*": first free drive letter, announced BEFORE the
+		// (possibly long) scan, with an Explorer window opened once mounted.
+		bool auto_drive= mountpoint=="" || mountpoint=="*";
+		if (auto_drive)
+		{
+			mountpoint= first_free_drive_letter();
+			if (mountpoint=="")
+			{
+				myprintf("94012! no free drive letter available\n");
+				return 2;
+			}
+			myprintf("94013: Mount point (first free drive letter) %s\n", mountpoint.c_str());
+			open_explorer_when_mounted(mountpoint);
+		}
+	}
+#else
+	if (mountpoint=="")
+	{
+		myprintf("94014! mount requires a mountpoint (an existing empty directory)\n");
+		return 2;
+	}
+#endif
+	const string backend= mount_pick_backend(g_mountbackend, archive);
+	if (backend=="core" && (g_password!=NULL || g_franzen!=""))
+	{
+		myprintf("94015! the 'core' mount backend cannot read encrypted archives: use -backend jidac\n");
+		return 2;
+	}
+
+	MountState st;
+	g_mount= &st;
+	string err;
+	std::unique_ptr<MountBackend> be;
+	int64_t scan_start= mtime();
+	if (!do_not_print_headers())
+		myprintf("94016: Scanning %s with backend '%s'\n", archive.c_str(), backend.c_str());
+	be.reset(open_backend(backend, archive, err));
+	g_mountscan.end(); // whatever the scan printed, the line ends here
+	if (!be)
+	{
+		myprintf("94017! cannot open %s: %s\n", archive.c_str(), err.c_str());
+		g_mount= NULL;
+		return 2;
+	}
+	st.be= be.get();
+
+	// -until N (or a date): expose only the first N versions
+	st.nversions= be->versions();
+	if (version>0 && version<(int64_t)st.nversions) st.nversions= (size_t)version;
+	else if (version>=19000101000000LL)
+	{
+		size_t n= 0;
+		while (n<be->versions() && be->version_date(n)<=version) ++n;
+		st.nversions= n;
+	}
+	st.allversions= (all!=0);
+	if (st.nversions>0)
+	{
+		// The directory tree of a version costs about as much as reading
+		// the whole index does, so it is built here, and only for what
+		// will be visible: one version, or every one of them with -all.
+		if (st.allversions && !do_not_print_headers())
+			myprintf("94024: Building the directory tree of %s version(s)\n", migliaia((int64_t)st.nversions));
+		g_mountscan.begin(0);
+		if (st.allversions)
+			for (size_t v= 0; v<st.nversions; ++v) be->prepare(v);
+		else
+			be->prepare(st.nversions-1);
+		const vector<string>* root= be->children(st.nversions-1, "");
+		(void)root;
+		// totals for statfs: walk the last exposed version once. No
+		// percentage here: how many files there are is what we are counting.
+		std::vector<string> stack;
+		stack.push_back("");
+		while (!stack.empty())
+		{
+			string dir= stack.back(); stack.pop_back();
+			const vector<string>* kids= be->children(st.nversions-1, dir);
+			if (!kids) continue;
+			for (size_t k= 0; k<kids->size(); ++k)
+			{
+				const string& n= (*kids)[k];
+				if (!n.empty() && n[n.size()-1]=='/') { stack.push_back(dir+n); continue; }
+				MountEntry e;
+				if (be->entry(st.nversions-1, dir+n, e)) { st.total_files++; st.total_bytes+= mount_file_size(*be, e); }
+				if (g_mountscan.due())
+					g_mountscan.line(-1, "totals: %s files, %s", migliaia((int64_t)st.total_files), tohuman((int64_t)st.total_bytes));
+			}
+		}
+		g_mountscan.end();
+	}
+	if (!do_not_print_headers())
+	{
+		myprintf("94018: %s part(s), %s bytes, %s version(s), %s fragments, %s blocks, %s files in last version (%1.2fs)\n",
+			migliaia(be->parts()), migliaia2(be->archive_bytes()), migliaia3(st.nversions),
+			migliaia4(be->nfragments()), migliaia5(be->nblocks()), migliaia6(st.total_files),
+			(mtime()-scan_start)/1000.0);
+		const string remarks= be->remarks();
+		if (remarks!="")
+			myprintf("94022: Backend '%s': %s\n", be->name().c_str(), remarks.c_str());
+		if (st.nversions==0)
+			myprintf("94023: No version to mount: the mountpoint will be empty\n");
+		else if (st.allversions)
+			myprintf("94023: Mounting %s version(s), one folder each (%s ... %s)\n",
+				migliaia((int64_t)st.nversions), mount_version_name(0).c_str(), mount_version_name(st.nversions-1).c_str());
+		else
+			myprintf("94023: Mounting version %s of %s (%s) only: -all mounts every version\n",
+				migliaia((int64_t)st.nversions), migliaia2((int64_t)be->versions()), mount_version_name(st.nversions-1).c_str());
+	}
+
+	// tuning: -t for threads, environment for the rest (no rebuild needed)
+	int threads= howmanythreads>0 ? howmanythreads : 4;
+	st.cache_bytes= (size_t)mount_env_int("ZPAQFUSE_CACHE_MB", 256, 8, 65536)<<20;
+	st.shards= mount_env_int("ZPAQFUSE_SHARDS", (std::min)((std::max)(threads, 1), 16), 1, 64);
+	st.prefetch= mount_env_int("ZPAQFUSE_PREFETCH_THREADS", (std::min)(threads, 64), 0, 64);
+#ifdef _WIN32
+	st.windows_names= mount_env_bool("ZPAQFUSE_WINNAMES", true);
+	st.case_fallback= mount_env_bool("ZPAQFUSE_CASEFOLD", true);
+	st.case_insensitive_volume= mount_env_bool("ZPAQFUSE_CASE_INSENSITIVE", false);
+	if (st.case_insensitive_volume) st.case_fallback= true;
+#else
+	st.windows_names= mount_env_bool("ZPAQFUSE_WINNAMES", false);
+	st.case_fallback= mount_env_bool("ZPAQFUSE_CASEFOLD", false);
+	st.uid= (unsigned)getuid();
+	st.gid= (unsigned)getgid();
+#endif
+	if (flagverbose)
+		myprintf("94019: cache %s MB, %s shards, %s prefetch threads, windows names %d, case fallback %d\n",
+			migliaia((int64_t)(st.cache_bytes>>20)), migliaia2(st.shards), migliaia3(st.prefetch), int(st.windows_names), int(st.case_fallback));
+
+	// FUSE argv: program, mountpoint, options
+	vector<string> fargs;
+	fargs.push_back("zpaqfranz");
+	fargs.push_back(mountpoint);
+	if (flagdebug) fargs.push_back("-d");
+#ifdef _WIN32
+	{
+		string extra;
+		const char* keys[]= { "uid", "gid", "FileInfoTimeout", "DirInfoTimeout", "VolumeInfoTimeout", "volname" };
+		string vals[]= { "-1", "-1", "-1", "-1", "-1", volume_label(archive) };
+		for (int k= 0; k<6; ++k)
+		{
+			if (mount_has_opt(g_fuseopt, keys[k])) continue;
+			if (!extra.empty()) extra+= ',';
+			extra+= keys[k]; extra+= '='; extra+= vals[k];
+		}
+		if (!extra.empty()) { fargs.push_back("-o"); fargs.push_back(extra); }
+	}
+#else
+	fargs.push_back("-f"); // stay in the foreground: our threads would not survive a daemonize() fork
+#endif
+	if (g_fuseopt!="") { fargs.push_back("-o"); fargs.push_back(g_fuseopt); }
+	vector<char*> fargv;
+	for (size_t i= 0; i<fargs.size(); ++i) fargv.push_back((char*)fargs[i].c_str());
+
+	if (!do_not_print_headers())
+	{
+#ifdef _WIN32
+		myprintf("94020: Mounting on %s (Ctrl+C to unmount)\n", mountpoint.c_str());
+#else
+		myprintf("94020: Mounting on %s (Ctrl+C or fusermount3 -u to unmount)\n", mountpoint.c_str());
+#endif
+	}
+	struct fuse_operations ops= mount_ops();
+	int rc= fuse_main((int)fargv.size(), fargv.data(), &ops, &st);
+	if (flagverbose && st.cache)
+		myprintf("94021: %s block decompressions\n", migliaia(st.cache->total_decompressions()));
+	st.cache.reset();
+	g_mount= NULL;
+	return rc;
+}
+#endif // ZPAQMOUNT
 int Jidac::doCommand()
 {
 	if (g_chunk_size>0)
@@ -69786,6 +72816,9 @@ int Jidac::doCommand()
 		else
 			return add();
 	}
+#ifdef ZPAQMOUNT
+	else if (command=='V') return mount();
+#endif
 	else if (command=='+') return crop();
 #ifdef ZPAQFULL ///NOSFTPSTART
 	else if (command=='!') return isopen();
@@ -78584,6 +81617,31 @@ void my_handler(int s)
 				}
 			}
 		}
+#ifndef NOFRANZEN
+#ifdef ZPAQFULL /// NOSFTPSTART
+		// roll back the franzen archive too (with or without a cleartext .zpaq)
+		if (!g_flagcreating)
+			if (g_franzen_filename != "")
+				if (fileexists(g_franzen_filename))
+				{
+					int64_t newfranzen= prendidimensionefile(g_franzen_filename.c_str());
+					if ((g_starting_franzenfile > 0) && (newfranzen > g_starting_franzenfile))
+					{
+						if (g_p_franzenfile)
+						{
+							g_p_franzenfile->close();
+							g_p_franzenfile= 0;
+						}
+						cleanup_thread_franzenfile();
+						color_yellow();
+						myprintf("01288: rolling back franzen %s from %s to %s!\n", g_franzen_filename.c_str(), migliaia(newfranzen), migliaia2(g_starting_franzenfile));
+						color_restore();
+						if (truncate(g_franzen_filename.c_str(), g_starting_franzenfile))
+							printerr("61921", g_franzen_filename.c_str(), 0);
+					}
+				}
+#endif /// NOSFTPEND
+#endif
 	}
 	if (!flagnopid)
 		if (g_pidname != "")
@@ -80634,6 +83692,28 @@ int Jidac::test()
 		myprintf("65757! cannot read_archive (%s) THIS IS VERY BAD!!!\n", migliaia(read_errors));
 	if (sz < 1)
 		error("archive not found");
+	
+	
+	int franzentestresult=-1;
+	    
+#ifndef NOFRANZEN
+#ifdef ZPAQFULL /// NOSFTPSTART
+	if (is_file_franzen(archive))
+		if (flagssd || flagparanoid)
+		{
+			color_cyan();
+			myprintf("80893: pre-check of .franzen to catch corrupted archives\n");
+			color_yellow();
+			franzentestresult=do_franzen_operation(archive, "", false, true);  // decode, test_only=true
+			if (franzentestresult>0)
+			{
+				myprintf("80895! Corrupted .franzen archive!! This is very BAD!!\n");
+			}
+			color_restore();
+		}
+#endif /// NOSFTPEND
+#endif
+
 	for (unsigned i= 0; i < block.size(); ++i)
 	{
 		if (block[i].bsize < 0)
@@ -81180,6 +84260,9 @@ int Jidac::test()
 	}
 	if (flagcollision)
 		collision(true);
+	
+	if (franzentestresult>0) /// previous franzen test with -ssd
+		return 2;
 	
 	if (read_errors)
 		return 2;
@@ -100019,15 +103102,108 @@ int Jidac::homesize()
 	franzparallelscandir(false, true, false);
 	int64_t totalsize = 0;
 	int		totalcount= 0;
+
+	// for every folder, find oldest and newest (real) file's date/name
+	// a date whose year is after the current year is unreliable (broken clock/FS/VM) => excluded, but flagged
+	int64_t			 currentyear = nowutc() / 10000000000LL;
+	bool			 anomalyfound= false;
+	vector<int64_t> oldestdate(files.size(), 0);
+	vector<int64_t> newestdate(files.size(), 0);
+	vector<string>	newestfile(files.size(), "");
+	vector<bool>	folderanomaly(files.size(), false);
+	vector<int64_t> anomalydate(files.size(), 0);	// latest excluded (anomalous) date, per folder
+	vector<int>	   anomalycount(files.size(), 0); // how many excluded, per folder
+	for (unsigned int i= 0; i < files_edt.size(); i++)
+	{
+		for (DTMap::iterator p= files_edt[i].begin(); p != files_edt[i].end(); ++p)
+		{
+			if (p->second.date <= 0)
+				continue;
+			if (p->first == "")
+				continue;
+			if (isdirectory(p->first))
+				continue;
+			if (isads(p->first))
+				continue;
+			if (p->second.date / 10000000000LL > currentyear)
+			{
+				anomalyfound	 = true;
+				folderanomaly[i]= true;
+				anomalycount[i]++;
+				if (p->second.date > anomalydate[i])
+					anomalydate[i]= p->second.date;
+				continue;
+			}
+			if ((oldestdate[i] == 0) || (p->second.date < oldestdate[i]))
+				oldestdate[i]= p->second.date;
+			if ((newestdate[i] == 0) || (p->second.date > newestdate[i]))
+			{
+				newestdate[i]= p->second.date;
+				newestfile[i]= p->first;
+			}
+		}
+	}
+
 	printbar('-');
 	for (unsigned int i= 0; i < files_size.size(); i++)
 	{
-		myprintf("03301: %21s %12s   %08d %s\n", migliaia(files_size[i]), tohuman(files_size[i]), files_edt[i].size(), files[i].c_str());
+		string daterange= "                         "; // 25 spaces, same width as [YYYY-MM-DD]-[YYYY-MM-DD]
+		if (oldestdate[i] > 0)
+			daterange= "[" + dateToString(flagutc, oldestdate[i]).substr(0, 10) + "]-[" + dateToString(flagutc, newestdate[i]).substr(0, 10) + "]";
+		else if (files_edt[i].size() > 0)
+			daterange= "(no valid date)          "; // has entries, but none with a usable date (dirs only, or excluded anomalies)
+		if (folderanomaly[i])
+			color_yellow();
+		myprintf("03970: %21s %12s   %08d %s %s\n", migliaia(files_size[i]), tohuman(files_size[i]), files_edt[i].size(), daterange.c_str(), files[i].c_str());
+		if (folderanomaly[i])
+		{
+			myprintf("03974!   ^^^ %d anomalous date(s) excluded, latest [%s]\n", anomalycount[i], dateToString(flagutc, anomalydate[i]).substr(0, 10).c_str());
+			color_restore();
+		}
 		totalsize+= files_size[i];
 		totalcount+= files_edt[i].size();
 	}
 	printbar('-');
-	myprintf("03302: %21s %12s   %08d\n", migliaia(totalsize), tohuman(totalsize), totalcount);
+	myprintf("03971: %21s %12s   %08d\n", migliaia(totalsize), tohuman(totalsize), totalcount);
+
+	if (anomalyfound)
+	{
+		color_red();
+		myprintf("03973! WARNING: anomalous date(s) beyond today detected, those file(s) were excluded from oldest/newest\n");
+		color_restore();
+	}
+
+	// -verbose: same folders again, but with full timestamp (and name) of oldest/newest file
+	if (flagverbose)
+	{
+		printbar('-');
+		for (unsigned int i= 0; i < files_size.size(); i++)
+		{
+			string foldername= files[i];
+			if ((foldername.size() > 0) && (foldername[foldername.size() - 1] == '/'))
+				foldername= foldername.substr(0, foldername.size() - 1);
+			if (foldername.size() > 30)
+				foldername= foldername.substr(0, 27) + "...";
+
+			if (folderanomaly[i])
+				color_yellow();
+			if (oldestdate[i] == 0)
+			{
+				myprintf("03972: %-30s %s\n", foldername.c_str(), files_edt[i].size() > 0 ? "(no valid date)" : "(no files found)");
+			}
+			else
+			{
+				myprintf("03972: %-30s OLDEST [%s] NEWEST [%s] %s\n", foldername.c_str(),
+						 dateToString(flagutc, oldestdate[i]).c_str(),
+						 dateToString(flagutc, newestdate[i]).c_str(), extractfilename(newestfile[i]).c_str());
+			}
+			if (folderanomaly[i])
+				myprintf("03974!   ^^^ %d anomalous date(s) excluded, latest [%s]\n", anomalycount[i], dateToString(flagutc, anomalydate[i]).substr(0, 10).c_str());
+			if (folderanomaly[i])
+				color_restore();
+		}
+		printbar('-');
+	}
 	return 0;
 }
 
@@ -104378,7 +107554,399 @@ void Jidac::extractstreaming()
 	if (segments > 0)
 		myprintf("%u streaming segments extracted\n", segments);
 
-}	
+}
+
+/////////////////////////////////////////////////////////////////////////////
+/// -backupdir support (rclone-like --backup-dir) for x -force
+/// Files that would be overwritten (and, with -extras, files on disk but
+/// NOT in the archive) are MOVED into <backupdir>/<timestamp>/ keeping
+/// the relative path, instead of being erased.
+/// Nothing inside the backupdir is ever overwritten (fresh timestamp folder,
+/// and _00001 suffix on collisions), and if a single move fails the
+/// extraction is aborted BEFORE writing anything
+/// It's a bit risky, no tested at all. Beware...
+/////////////////////////////////////////////////////////////////////////////
+struct backupdir_item
+{
+	string	from;
+	string	to;
+	int64_t size;
+};
+
+/// forward slashes, duplicated separators collapsed (z:\muz7\/src => z:/muz7/src), leading // (UNC, //?/) preserved
+string backupdir_collapse(string i_path)
+{
+	myreplaceall(i_path, "\\", "/");
+	string risultato= "";
+	for (unsigned int i= 0; i < i_path.size(); i++)
+	{
+		if ((i_path[i] == '/') && (i > 1) && (risultato.size() > 0) && (risultato[risultato.size() - 1] == '/'))
+			continue;
+		risultato+= i_path[i];
+	}
+	return risultato;
+}
+
+/// forward slashes, collapsed, without Windows' long path prefix
+string backupdir_slashes(string i_path)
+{
+	i_path= backupdir_collapse(i_path);
+	if (i_path.size() >= 4)
+		if (i_path.substr(0, 4) == "//?/")
+			i_path= i_path.substr(4);
+	return i_path;
+}
+
+/// key used to compare filenames (case insensitive on Windows, ASCII only)
+string backupdir_comparekey(string i_path)
+{
+	i_path= backupdir_slashes(i_path);
+#ifdef _WIN32
+	for (unsigned int i= 0; i < i_path.size(); i++)
+		if ((unsigned char)i_path[i] < 128)
+			i_path[i]= tolower(i_path[i]);
+#endif
+	return i_path;
+}
+
+/// turn ANY path into a relative path that can live inside the backup folder, no mercy:
+/// c:/data/a.txt => c_/data/a.txt   //server/share/x => server/share/x   ../x => __/x
+/// every char forbidden on Windows becomes _ (on *nix you can have c:/pippo.txt in the archive)
+/// The folder is less important than not losing the file
+string backupdir_sanitize(string i_path)
+{
+	i_path= backupdir_slashes(i_path);
+	if (i_path.size() >= 4)
+		if (i_path.substr(0, 4) == "UNC/")
+			i_path= i_path.substr(4);
+	string risultato= "";
+	string pezzo	= "";
+	for (unsigned int i= 0; i <= i_path.size(); i++)
+	{
+		if ((i == i_path.size()) || (i_path[i] == '/'))
+		{
+			if ((pezzo != "") && (pezzo != "."))
+			{
+				if (pezzo == "..")
+					pezzo= "__";
+				/// trailing dots and spaces are forbidden on Windows
+				while ((pezzo.size() > 0) && ((pezzo[pezzo.size() - 1] == '.') || (pezzo[pezzo.size() - 1] == ' ')))
+					pezzo= pezzo.substr(0, pezzo.size() - 1);
+				if (pezzo == "")
+					pezzo= "_";
+				if (risultato != "")
+					risultato+= "/";
+				risultato+= pezzo;
+			}
+			pezzo= "";
+		}
+		else
+		{
+			unsigned char c= i_path[i];
+			if ((c < 32) || (c == '<') || (c == '>') || (c == ':') || (c == '"') || (c == '|') || (c == '?') || (c == '*'))
+				pezzo+= '_';
+			else
+				pezzo+= i_path[i];
+		}
+	}
+	if (risultato == "")
+		risultato= "_";
+	return risultato;
+}
+
+/// relative (sanitized) path of i_file: relative to -to if inside it, else the full path (drive letter => letter_)
+string backupdir_relative(const string& i_file, const string& i_basekey)
+{
+	string conbarre= backupdir_slashes(i_file);
+	if (i_basekey != "")
+	{
+		string chiave= backupdir_comparekey(i_file);
+		if ((chiave.size() > i_basekey.size()) && (chiave.substr(0, i_basekey.size()) == i_basekey))
+			return backupdir_sanitize(conbarre.substr(i_basekey.size()));
+	}
+	return backupdir_sanitize(conbarre);
+}
+
+/// move ONE file into the backup folder. Never overwrite: on collision a _00001 (etc) is appended
+/// Windows: MoveFileEx (copy allowed => works across volumes)
+/// *nix   : rename(), on EXDEV copy + verify size + delete source
+bool backupdir_movefile(const string& i_source, const string& i_to, string& o_finalname)
+{
+	string i_from= backupdir_collapse(i_source); // rename() can produce z:\muz7\/src/..: fix for \\?\ paths
+	o_finalname	 = i_to;
+	string cartella= extractfilepath(i_to);
+	if (cartella != "")
+		if (!direxists(cartella))
+			makepath(cartella);
+	if (fileexists(o_finalname))
+	{
+		o_finalname= nomefileseesistegia(o_finalname);
+		if (o_finalname == "")
+		{
+			myprintf("71301! Cannot find a free name for %Z\n", i_to.c_str());
+			return false;
+		}
+	}
+#ifdef _WIN32
+	std::wstring wfrom= utow(makelongpath(i_from).c_str());
+	std::wstring wto  = utow(makelongpath(o_finalname).c_str());
+	if (MoveFileExW(wfrom.c_str(), wto.c_str(), MOVEFILE_COPY_ALLOWED))
+		return true;
+	/// maybe readonly/hidden/system: retry with plain attributes
+	SetFileAttributesW(wfrom.c_str(), FILE_ATTRIBUTE_NORMAL);
+	if (MoveFileExW(wfrom.c_str(), wto.c_str(), MOVEFILE_COPY_ALLOWED))
+		return true;
+	DWORD errore= GetLastError();
+	myprintf("71302! Cannot move %Z\n", i_from.c_str());
+	myprintf("71303! to          %Z\n", o_finalname.c_str());
+	myprintf("71304! %s\n", decodewinerror(errore, i_from.c_str()).c_str());
+	return false;
+#else
+	if (::rename(i_from.c_str(), o_finalname.c_str()) == 0)
+		return true;
+	if (errno != EXDEV)
+	{
+		myprintf("71305! Cannot move %Z\n", i_from.c_str());
+		myprintf("71306! to          %Z\n", o_finalname.c_str());
+		myprintf("71307! %s\n", strerror(errno));
+		return false;
+	}
+	/// different filesystem: copy, verify, then delete the source
+	struct stat sb;
+	if (stat(i_from.c_str(), &sb) != 0)
+	{
+		myprintf("71308! Cannot stat %Z\n", i_from.c_str());
+		return false;
+	}
+	FILE* in= fopen(i_from.c_str(), "rb");
+	if (in == NULL)
+	{
+		myprintf("71309! Cannot open for reading %Z\n", i_from.c_str());
+		return false;
+	}
+	FILE* out= fopen(o_finalname.c_str(), "wb");
+	if (out == NULL)
+	{
+		fclose(in);
+		myprintf("71310! Cannot open for writing %Z\n", o_finalname.c_str());
+		return false;
+	}
+	vector<char> buffer(1 << 20);
+	bool		 ok= true;
+	while (ok)
+	{
+		size_t letti= fread(&buffer[0], 1, buffer.size(), in);
+		if (letti == 0)
+			break;
+		if (fwrite(&buffer[0], 1, letti, out) != letti)
+			ok= false;
+	}
+	if (ferror(in))
+		ok= false;
+	if (fclose(out) != 0)
+		ok= false;
+	fclose(in);
+	if (ok)
+		if (prendidimensionefile(o_finalname.c_str()) != (int64_t)sb.st_size)
+			ok= false;
+	if (!ok)
+	{
+		myprintf("71311! Copy (cross-device move) failed, source left untouched %Z\n", i_from.c_str());
+		delete_file(o_finalname.c_str());
+		return false;
+	}
+	chmod(o_finalname.c_str(), sb.st_mode & 07777);
+	struct utimbuf ub;
+	ub.actime = sb.st_atime;
+	ub.modtime= sb.st_mtime;
+	utime(o_finalname.c_str(), &ub);
+	if (::remove(i_from.c_str()) != 0)
+	{
+		myprintf("71312! Copied into backupdir, but cannot delete the source %Z\n", i_from.c_str());
+		return false;
+	}
+	return true;
+#endif
+}
+
+/// move everything (all-or-nothing from the caller's point of view). Progress + ETA every second with -verbose
+bool backupdir_moveall(const vector<backupdir_item>& i_items, const char* i_what, int64_t& o_files, int64_t& o_bytes)
+{
+	o_files= 0;
+	o_bytes= 0;
+	int64_t totalbytes= 0;
+	for (unsigned int i= 0; i < i_items.size(); i++)
+		totalbytes+= i_items[i].size;
+	if (!flagterse)
+	{	
+		color_yellow();
+		myprintf("71313: Saving  %10s    %-25s into -backupdir\n", tohuman(totalbytes), i_what);
+		color_restore();
+	}
+	int64_t inizio		= mtime();
+	int64_t ultimastampa= inizio;
+	for (unsigned int i= 0; i < i_items.size(); i++)
+	{
+		string finale= "";
+		if (flagdebug)
+			myprintf("71314: move %Z => %Z\n", i_items[i].from.c_str(), i_items[i].to.c_str());
+		if (!backupdir_movefile(i_items[i].from, i_items[i].to, finale))
+		{
+			myprintf("71315! Moved so far %12s files (%10s): they are safe inside the backupdir\n", migliaia(o_files), tohuman(o_bytes));
+			return false;
+		}
+		if (flagverbose)
+			if (finale != i_items[i].to)
+				myprintf("71316: collision in backupdir, renamed to %Z\n", finale.c_str());
+		o_files++;
+		o_bytes+= i_items[i].size;
+		if (flagverbose)
+			if ((mtime() - ultimastampa) >= 1000)
+			{
+				ultimastampa	= mtime();
+				double trascorso= (ultimastampa - inizio) / 1000.0;
+				if (trascorso < 0.001)
+					trascorso= 0.001;
+				double frazione= 0;
+				if (totalbytes > 0)
+					frazione= double(o_bytes) / double(totalbytes);
+				else if (i_items.size() > 0)
+					frazione= double(o_files) / double(i_items.size());
+				double eta= 0;
+				if (frazione > 0)
+					eta= trascorso * (1.0 - frazione) / frazione;
+				myprintf("%03d%% %02d:%02d:%02d files %s/%s (%10s of %10s) %20s /s\n", int(frazione * 100), int(eta / 3600), int(eta / 60) % 60, int(eta) % 60,
+						 migliaia(o_files), migliaia2((int64_t)i_items.size()), tohuman(o_bytes), tohuman2(totalbytes), migliaia3(int64_t(o_bytes / trascorso)));
+				fflush(stdout);
+			}
+	}
+///	if (flagverbose)
+	{
+		double trascorso= (mtime() - inizio) / 1000.0;
+		color_yellow();
+		myprintf("71317: Moved  %08d files (%10s) %21s bytes in %.3f s\n", o_files, tohuman(o_bytes), migliaia2(o_bytes), i_what, trascorso);
+		color_restore();
+	}
+	return true;
+}
+
+/// recursive scan of a folder (regular files only, never follow links/junctions), skipping the backupdir itself
+void backupdir_scantree(const string& i_folder, const string& i_skipkey, vector<backupdir_item>& o_files)
+{
+	string cartella= includetrailingbackslash(backupdir_collapse(i_folder));
+	if (i_skipkey != "")
+		if (backupdir_comparekey(cartella) == i_skipkey)
+			return;
+#ifdef _WIN32
+	WIN32_FIND_DATAW ffd;
+	string			 pattern= cartella + "*";
+	HANDLE			 h		= FindFirstFileW(utow(pattern.c_str()).c_str(), &ffd);
+	if (h == INVALID_HANDLE_VALUE)
+		return;
+	do
+	{
+		string nome= wtou(ffd.cFileName);
+		if ((nome == ".") || (nome == ".."))
+			continue;
+		if (ffd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)
+			continue;
+		string completo= cartella + nome;
+		if (ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+			backupdir_scantree(completo + "/", i_skipkey, o_files);
+		else
+		{
+			backupdir_item elemento;
+			elemento.from= completo;
+			elemento.to  = "";
+			elemento.size= int64_t(ffd.nFileSizeLow) + (int64_t(ffd.nFileSizeHigh) << 32);
+			o_files.push_back(elemento);
+		}
+	} while (FindNextFileW(h, &ffd));
+	FindClose(h);
+#else
+	string senzabarra= cartella.substr(0, cartella.size() - 1);
+	if (senzabarra == "")
+		senzabarra= "/";
+	DIR* dirp= opendir(senzabarra.c_str());
+	if (dirp == NULL)
+		return;
+	for (dirent* dp= readdir(dirp); dp; dp= readdir(dirp))
+	{
+		if ((strcmp(".", dp->d_name) == 0) || (strcmp("..", dp->d_name) == 0))
+			continue;
+		string		completo= cartella + dp->d_name;
+		struct stat sb;
+		if (lstat(completo.c_str(), &sb) != 0)
+			continue;
+		if (S_ISDIR(sb.st_mode))
+			backupdir_scantree(completo + "/", i_skipkey, o_files);
+		else if (S_ISREG(sb.st_mode))
+		{
+			backupdir_item elemento;
+			elemento.from= completo;
+			elemento.to  = "";
+			elemento.size= sb.st_size;
+			o_files.push_back(elemento);
+		}
+	}
+	closedir(dirp);
+#endif
+}
+
+/// "/" or "c:/": scanning one of these means scanning a whole filesystem
+bool backupdir_isfilesystemroot(const string& i_folder)
+{
+	const string cartella= includetrailingbackslash(backupdir_slashes(i_folder));
+	if (cartella == "/")
+		return true;
+	if (cartella.size() == 3)
+		if (isalpha((unsigned char)cartella[0]))
+			if ((cartella[1] == ':') && (cartella[2] == '/'))
+				return true;
+	return false;
+}
+
+/// -extras without -to (restore in place): the folders to compare the disk
+/// against are the archive's own top level folders, mapped through rename()
+/// exactly like the extraction does, so the comparison keys match.
+/// Nested folders are dropped: nothing is scanned twice.
+void Jidac::backupdir_archiveroots(vector<string>& o_roots)
+{
+	o_roots.clear();
+	/// compare key -> real path. Sorted, so a parent always comes before its children
+	std::map<string, string> candidati;
+	for (DTMap::iterator p= dt.begin(); p != dt.end(); ++p)
+	{
+		if (!p->second.date)
+			continue;
+		if (p->first == "")
+			continue;
+		string percorso= backupdir_slashes(rename(p->first));
+		if (!isdirectory(percorso))
+			percorso= extractfilepath(percorso); /// a file: its folder
+		percorso= backupdir_slashes(percorso);
+		if (percorso == "")
+			continue;
+		candidati.insert(std::pair<string, string>(backupdir_comparekey(percorso), percorso));
+	}
+	for (std::map<string, string>::const_iterator it= candidati.begin(); it != candidati.end(); ++it)
+	{
+		bool giadentro= false;
+		for (unsigned int i= 0; i < o_roots.size(); i++)
+		{
+			const string chiave= backupdir_comparekey(o_roots[i]);
+			if (it->first.size() >= chiave.size())
+				if (it->first.substr(0, chiave.size()) == chiave)
+				{
+					giadentro= true;
+					break;
+				}
+		}
+		if (!giadentro)
+			o_roots.push_back(it->second);
+	}
+}
+
 int Jidac::extract()
 {
 	archive= getbackupnameifany(archive);
@@ -104514,6 +108082,89 @@ int Jidac::extract()
 		myprintf("00881$ ****** Full-scale extraction test (UTF-8 strange filenames, path too long...)\n");
 		myprintf("00882$ ****** Highly suggested output on RAMDISK\n\n");
 	}
+
+	/// -backupdir X: move (instead of erase) into X/<timestamp>/ the files that would be overwritten
+	/// -extras     : also the files on disk (inside -to) that are NOT in the archive
+	string backupdir_run= "";
+	if (flagextras && (g_backupdir == ""))
+	{
+		myprintf("71320! -extras requires -backupdir (extra files are never deleted, only moved)\n");
+		return 2;
+	}
+	if (g_backupdir != "")
+	{
+		if (!flagforce)
+		{
+			myprintf("71321! -backupdir requires -force\n");
+			return 2;
+		}
+		if (flagstdout || flagtest || (repack != "") || flagzero)
+		{
+			myprintf("71322! -backupdir cannot be used with -stdout, t (test), -repack, -zero\n");
+			return 2;
+		}
+		if (flagextras)
+		{
+			/// no -to means "restore in place": the folders to police are the
+			/// archive's own ones (see backupdir_archiveroots)
+			if (tofiles.size() > 1)
+			{
+				myprintf("71323! -extras needs at most one -to folder (or none, to restore in place)\n");
+				return 2;
+			}
+			if (flagflat || flagutf || flagfix255 || flagfixcase || flagnopath
+#ifdef _WIN32
+				|| flagfixreserved
+#endif
+			)
+			{
+				/// all of these change the name on disk without changing the name
+				/// in the archive: every file would look like an extra and would
+				/// be moved away
+				myprintf("71324! -extras cannot be used with -flat -utf -nopath -fix255 -fixcase -fixreserved\n");
+				return 2;
+			}
+		}
+		g_backupdir= backupdir_slashes(g_backupdir);
+		int64_t adesso= now();
+		char	timestamp[40];
+		snprintf(timestamp, sizeof(timestamp), "%04d%02d%02d_%02d%02d%02d",
+				 int(adesso / 10000000000LL % 10000), int(adesso / 100000000 % 100), int(adesso / 1000000 % 100),
+				 int(adesso / 10000 % 100), int(adesso / 100 % 100), int(adesso % 100));
+		/// the timestamp has second resolution: two runs within the same second
+		/// (a script, a loop) must not collide. Same _00001 suffix convention
+		/// already used for the files moved inside the backupdir
+		const string radice= includetrailingbackslash(g_backupdir) + timestamp;
+		backupdir_run	   = "";
+		for (int tentativo= 0; tentativo < 99999; tentativo++)
+		{
+			string candidato= radice;
+			if (tentativo > 0)
+				candidato+= "_" + itos(tentativo, 5);
+			if (!direxists(candidato + "/") && !fileexists(candidato))
+			{
+				backupdir_run= candidato + "/";
+				break;
+			}
+		}
+		if (backupdir_run == "")
+		{
+			myprintf("71325! Cannot find a free backupdir run folder %Z\n", (radice + "_?????").c_str());
+			return 2;
+		}
+		makepath(backupdir_run);
+		if (!direxists(backupdir_run))
+		{
+			myprintf("71326! Cannot create the backupdir run folder %Z\n", backupdir_run.c_str());
+			return 2;
+		}
+		if (!flagterse)
+		{	
+			color_cyan();
+			myprintf("71327: INFO: -backupdir run folder %Z\n", backupdir_run.c_str());
+			color_restore();
+		}
+	}
 #ifdef ZPAQFULL /// NOSFTPSTART
 	string kunfile= g_gettempdirectory() + "VFILE-kun.txt";
 	myreplaceall(kunfile, "\\", "/");
@@ -104549,7 +108200,37 @@ int Jidac::extract()
 	// Encrypt or decrypt whole archive
 	if ((repack != "") && all)
 		return repackall();
-	
+
+	/// -extras: compare keys of every file the WHOLE version would write (not only the selected ones)
+	std::set<std::string> backupdir_expected;
+	bool		backupdir_expected_ready= false;
+	if (flagextras)
+		if ((files.size() > 0) || (onlyfiles.size() > 0) || (notfiles.size() > 0))
+		{
+			/// dt will hold only the selected files: read the archive once more, without filters
+			vector<string> salvafiles= files;
+			vector<string> salvaonly = onlyfiles;
+			vector<string> salvanot  = notfiles;
+			files.clear();
+			onlyfiles.clear();
+			notfiles.clear();
+			decodelastversion();
+			int		errori2= 0;
+			int64_t sz2	   = read_archive(NULL, archive.c_str(), &errori2, 0, flagstdout);
+			files	 = salvafiles;
+			onlyfiles= salvaonly;
+			notfiles = salvanot;
+			if (sz2 < 1)
+				error("archive not found");
+			for (DTMap::iterator p= dt.begin(); p != dt.end(); ++p)
+				if ((p->second.date) && (p->first != "") && (!isdirectory(p->first)))
+					backupdir_expected.insert(backupdir_comparekey(rename(p->first)));
+			backupdir_expected_ready= true;
+			if (flagverbose)
+				myprintf("71328: -extras: %s files in the whole version (unfiltered read)\n", migliaia((int64_t)backupdir_expected.size()));
+			jidacreset();
+		}
+
 	decodelastversion();
 
 	int		errors= 0;
@@ -104707,6 +108388,23 @@ int Jidac::extract()
 	int		   real_dirs= 0;
 	uint32_t   crc32fromfile;
 	int		   kollision= 0;
+
+	vector<backupdir_item> backupdir_tomove;   // -backupdir: files to be overwritten, moved away before writing
+	string				   backupdir_basekey= ""; // root folder (compare key), to keep the relative path
+	vector<string>		   backupdir_roots;	   // folders the restore writes into (one per archive root without -to)
+	if (backupdir_run != "")
+	{
+		if (tofiles.size() == 1)
+			backupdir_roots.push_back(tofiles[0]);
+		else
+			backupdir_archiveroots(backupdir_roots); /// no -to: restore in place
+		/// A single root (the normal case) gives the same 1:1 layout you get
+		/// with -to: bk/<run>/SJ2627/a.txt. Without it every file would be
+		/// stored under its sanitized full path, which on Windows is very
+		/// easily longer than MAX_PATH, and the move would fail.
+		if (backupdir_roots.size() == 1)
+			backupdir_basekey= backupdir_comparekey(includetrailingbackslash(backupdir_slashes(backupdir_roots[0])));
+	}
 
 #ifdef _WIN32
 	bool flagunix= false;
@@ -104977,7 +108675,18 @@ int Jidac::extract()
 							myprintf("00914: * %Z\n", fn.c_str());
 						}
 						tobeerased++;
-						if (delete_file(fn.c_str()))
+						if (backupdir_run != "")
+						{
+							/// -backupdir: do not erase now, move away later (all-or-nothing, BEFORE writing)
+							backupdir_item elemento;
+							elemento.from= fn;
+							elemento.to  = backupdir_run + backupdir_relative(fn, backupdir_basekey);
+							elemento.size= prendidimensionefile(fn.c_str());
+							if (elemento.size < 0)
+								elemento.size= 0;
+							backupdir_tomove.push_back(elemento);
+						}
+						else if (delete_file(fn.c_str()))
 							erased++;
 						else
 							myprintf("00916: ************ HIGHLANDER FILE! %s\n", fn.c_str());
@@ -104985,6 +108694,86 @@ int Jidac::extract()
 			}
 		} // end if selected
 	} // end for
+
+	if (backupdir_run != "")
+	{
+		if (flagverbose)
+		{
+			color_cyan();
+			myprintf("0529: Running on backup_dir <<%Z>>\n",backupdir_run.c_str());
+			color_restore();
+		}
+		/// phase 1: files that would be overwritten
+		if (backupdir_tomove.size() > 0)
+		{
+			int64_t mossi	 = 0;
+			int64_t mossibyte= 0;
+			if (!backupdir_moveall(backupdir_tomove, "(to be overwritten)", mossi, mossibyte))
+			{
+				myprintf("71329! Cannot move into -backupdir: ABORT before writing anything\n");
+				return 2;
+			}
+			erased= (int)mossi;
+		}
+		/// phase 2 (-extras): files on disk, inside -to, that are NOT in the archive
+		if (flagextras)
+		{
+			if (!backupdir_expected_ready)
+				for (DTMap::iterator p= dt.begin(); p != dt.end(); ++p)
+					if ((p->second.date) && (p->first != "") && (!isdirectory(p->first)))
+						backupdir_expected.insert(backupdir_comparekey(rename(p->first)));
+			int64_t				   inizioscan= mtime();
+			vector<backupdir_item> sudisco;
+			vector<backupdir_item> extras;
+			/// with -to that folder, without -to (restore in place) the archive's
+			/// own folders: same command either way, nothing deleted, ever
+			if (backupdir_roots.size() == 0)
+			{
+				myprintf("71335! -extras: no folder to compare against\n");
+				return 2;
+			}
+			for (unsigned int i= 0; i < backupdir_roots.size(); i++)
+			{
+				if (backupdir_isfilesystemroot(backupdir_roots[i]))
+				{
+					myprintf("71336! -extras would scan the whole %Z\n", backupdir_roots[i].c_str());
+					myprintf("71337! That is almost never what you want: restrict it with an explicit -to folder\n");
+					return 2;
+				}
+				if (tofiles.size() != 1)
+					if (!flagterse)
+					{
+						color_cyan();
+						myprintf("71334: INFO: -extras compares against the archive folder %Z\n", backupdir_roots[i].c_str());
+						color_restore();
+					}
+				backupdir_scantree(backupdir_roots[i], backupdir_comparekey(includetrailingbackslash(g_backupdir)), sudisco);
+			}
+			for (unsigned int i= 0; i < sudisco.size(); i++)
+				if (backupdir_expected.find(backupdir_comparekey(sudisco[i].from)) == backupdir_expected.end())
+				{
+					backupdir_item elemento= sudisco[i];
+					elemento.to				= backupdir_run + backupdir_relative(elemento.from, backupdir_basekey);
+					if (flagverbose)
+						myprintf("71330: extra %Z\n", elemento.from.c_str());
+					extras.push_back(elemento);
+				}
+			if (flagverbose)
+				myprintf("71331: -extras: %s files on disk, %s expected, %s extras (scan %.3f s)\n", migliaia((int64_t)sudisco.size()), migliaia2((int64_t)backupdir_expected.size()), migliaia3((int64_t)extras.size()), (mtime() - inizioscan) / 1000.0);
+			if (extras.size() > 0)
+			{
+				int64_t mossiextra	  = 0;
+				int64_t mossiextrabyte= 0;
+				if (!backupdir_moveall(extras, "(extras, not in archive)", mossiextra, mossiextrabyte))
+				{
+					myprintf("71332! Cannot move extras into -backupdir: ABORT before writing anything\n");
+					return 2;
+				}
+			}
+			else if (!flagterse)
+				myprintf("71333: -extras: no extra files found on disk\n");
+		}
+	}
 
 	if (flagstdout)
 	{
@@ -105016,7 +108805,12 @@ int Jidac::extract()
 		if (flagforce && skipped > 0)
 			myprintf("%08d =identical files skipped.\n", skipped);
 		if (flagforce && tobeerased > 0)
-			myprintf("%08d !=different files to be owerwritten => erased %08d\n", tobeerased, erased);
+		{
+			if (backupdir_run != "")
+				myprintf("%08d !=different files to be owerwritten => moved into backupdir %08d\n", tobeerased, erased);
+			else
+				myprintf("%08d !=different files to be owerwritten => erased %08d\n", tobeerased, erased);
+		}
 		if (tobeerased != erased)
 			myprintf("00923: **** GURU **** WE HAVE SOME HIGHLANDER!\n");
 	}
@@ -117552,6 +121346,7 @@ int Jidac::paranoidseq()
 	flagramsize= true;
 	if (flagparanoid)
 		flagverify=true;
+
 	return extractstdout(0,"");
 }
 #endif
@@ -118538,11 +122333,32 @@ int Jidac::extractstdout(char i_dest_partition, const string &i_rawfilename)
 	bool	is_special_mode= (restore_to_partition || export_to_rawfile ||
 							  restore_raw_partition || restore_raw_disk);
 
+	int franzentestresult=-1;
+
 	if (!is_special_mode)
 	{
 		sz= read_archive(NULL, archive.c_str(), &errors, 0, flagstdout);
 		if (sz < 1)
 			error("archive (3) not found");
+
+
+#ifndef NOFRANZEN
+#ifdef ZPAQFULL /// NOSFTPSTART
+		if (is_file_franzen(archive))
+			if (flagssd)
+			{
+				color_cyan();
+				myprintf("80894: pre-check (2) of .franzen to catch corrupted archives\n");
+				color_yellow();
+				franzentestresult=do_franzen_operation(archive, "", false, true);  // decode, test_only=true
+				if (franzentestresult>0)
+				{
+					myprintf("80894! Corrupted .franzen archive!! This is very BAD!!\n");
+				}
+				color_restore();
+			}
+#endif /// NOSFTPEND
+#endif
 	}
 
 	pthread_t	   *mythreads		   = new pthread_t[howmanythreads];
@@ -119303,6 +123119,8 @@ int Jidac::extractstdout(char i_dest_partition, const string &i_rawfilename)
 
 		int result= handler_success ? 0 : 2;
 		delete handler;
+		if (franzentestresult>0)
+			result=2;
 		return result;
 	}
 
@@ -119423,6 +123241,8 @@ int Jidac::extractstdout(char i_dest_partition, const string &i_rawfilename)
     }
 	
 
+	if (franzentestresult>0)
+		risultato=2;
 	return risultato;
 }
 
@@ -121571,10 +125391,30 @@ int Jidac::gestiscisingleormultipart()
 		FP fp= myfopen(subpart(archive, 1).c_str(), RB);
 		if (fp == FPNULL)
 		{
-	
-			if (header_pos > 32)
-				error("archive first part not found");
-			header_pos= 32;
+#ifndef NOFRANZEN
+#ifdef ZPAQFULL /// NOSFTPSTART
+			if (isfranzenonly(subpart(archive, 1)))
+			{
+				// franzen-only AES archive: the salt lives at decoded offset 0 of the .franzen
+				string franzenfilename= subpart(archive, 1) + ".franzen";
+				franzcri fc(g_franzen.c_str(), g_franzen.length());
+				if (!fc.open(franzenfilename.c_str(), false))
+					error("cannot open franzen archive to read the AES salt");
+				if (!fc.read_at_to(salt, 32, 0))
+				{
+					fc.close();
+					error("cannot read AES salt from franzen archive");
+				}
+				fc.close();
+			}
+			else
+#endif /// NOSFTPEND
+#endif
+			{
+				if (header_pos > 32)
+					error("archive first part not found");
+				header_pos= 32;
+			}
 		}
 		else
 		{
@@ -121618,6 +125458,12 @@ void Jidac::gestiscimultipart()
 	g_archive= arcname; /// for multipart the last
 
 	(void)getfileinfo(arcname, g_starting_zpaqsize, g_starting_zpaqdate, g_starting_zpaqattr);
+#ifndef NOFRANZEN
+#ifdef ZPAQFULL /// NOSFTPSTART
+	if (isfranzenonly(arcname))
+		(void)getfileinfo(arcname + ".franzen", g_starting_zpaqsize, g_starting_zpaqdate, g_starting_zpaqattr);
+#endif /// NOSFTPEND
+#endif
 	g_starting_indexsize= 0;
 #ifndef NOFRANZEN
 #ifdef ZPAQFULL /// NOSFTPSTART
@@ -121657,7 +125503,15 @@ int Jidac::gestiscitxt()
 	if (flagfasttxt)
 		if (fasttxt == "")
 		{
-			int resultzpaq= makecrc32txt(g_archive, initialquickhash, initialzpaqsize, initialzpaqquick, initialzpaqcrc32, prezpaqcrc32, prezpaqsize, fasttxt);
+			string fasttarget= g_archive;
+#ifndef NOFRANZEN
+#ifdef ZPAQFULL /// NOSFTPSTART
+			// franzen-only: the fasttxt tracks the physical .zpaq.franzen
+			if ((g_franzen != "") && (!exists(g_archive)) && (g_chunk_size == 0))
+				fasttarget= g_archive + ".franzen";
+#endif /// NOSFTPEND
+#endif
+			int resultzpaq= makecrc32txt(fasttarget, initialquickhash, initialzpaqsize, initialzpaqquick, initialzpaqcrc32, prezpaqcrc32, prezpaqsize, fasttxt);
 			if (resultzpaq != 0)
 			{
 				myprintf("01971: resultzpaq not zero\n");
@@ -121758,6 +125612,15 @@ int Jidac::gestisciwrite()
 			myprintf("02040: Updating %Z at offset %s + %s\n", arcname.c_str(), migliaia(header_pos), migliaia2(offset));
 			g_flagcreating= false;
 		}
+#ifndef NOFRANZEN
+#ifdef ZPAQFULL /// NOSFTPSTART
+		else if ((g_chunk_size == 0) && isfranzenonly(arcname))
+		{
+			myprintf("02046: Updating (franzen-only) %Z at offset %s + %s\n", (arcname + ".franzen").c_str(), migliaia(header_pos), migliaia2(offset));
+			g_flagcreating= false;
+		}
+#endif /// NOSFTPEND
+#endif
 		else
 		{
 			myprintf("02041: Creating %Z at offset %s + %s\n", arcname.c_str(), migliaia(header_pos), migliaia2(offset));
@@ -121801,6 +125664,39 @@ int Jidac::gestisciwrite()
 
 int Jidac::aggiornafasttxt()
 {
+#ifndef NOFRANZEN
+#ifdef ZPAQFULL /// NOSFTPSTART
+	if (fasttxt != "")
+		if ((g_franzen != "") && (!fileexists(g_archive)) && (g_chunk_size == 0))
+		{
+			string franzenname= g_archive + ".franzen";
+			if (fileexists(franzenname))
+			{
+				// franzen-only: no cleartext CRC math possible, full recompute on the physical .zpaq.franzen
+				int64_t startverify= mtime();
+				franz_do_hash dummyquick("QUICK");
+				g_dimensione= 0;
+				string myquick= dummyquick.filehash(0, franzenname, false, startverify, prendidimensionefile(franzenname.c_str()));
+				franz_do_hash dummycrc32("CRC-32");
+				g_dimensione= 0;
+				string mycrc32= dummycrc32.filehash(0, franzenname, false, startverify, prendidimensionefile(franzenname.c_str()));
+				myprintf("\n");
+				if ((myquick == "") || (mycrc32 == ""))
+				{
+					myprintf("43796! cannot hash franzen for fasttxt <<%Z>>\n", franzenname.c_str());
+					return 2;
+				}
+				myprintf("43797: Updating fasttxt (CRC-32 %s of franzen) %Z\n", mycrc32.c_str(), fasttxt.c_str());
+				if (!writedatainfasttxt(fasttxt, franzenname, mycrc32, myquick, "0", prendidimensionefile(franzenname.c_str()), 0))
+				{
+					myprintf("43798! cannot write fasttxt <<%Z>>\n", fasttxt.c_str());
+					return 2;
+				}
+			}
+			return 0;
+		}
+#endif /// NOSFTPEND
+#endif
 	if (fasttxt != "")
 		if (fileexists(g_archive))
 		/// if (isfirstrun)
@@ -122343,11 +126239,18 @@ void Jidac::gestiscibackupzeta()
 
 int Jidac::gestiscicalcolifinali()
 {
+	string thephysical= g_archive;
+#ifndef NOFRANZEN
+#ifdef ZPAQFULL /// NOSFTPSTART
+	if (isfranzenonly(g_archive))
+		thephysical= g_archive + ".franzen"; // franzen-only: hash the real file on disk
+#endif /// NOSFTPEND
+#endif
 	if ((checktxt != "") || (backuptxt != ""))
-		if (fileexists(g_archive)) // with no changes no multipart file is created
+		if (fileexists(thephysical)) // with no changes no multipart file is created
 		{
 			int64_t startverify= mtime();
-			int64_t larghezzain= prendidimensionefile(g_archive.c_str());
+			int64_t larghezzain= prendidimensionefile(thephysical.c_str());
 			g_dimensione	   = 0;
 			string hashreloaded= "";
 
@@ -122357,20 +126260,20 @@ int Jidac::gestiscicalcolifinali()
 			if (flagbackupzeta)
 				thehash= "ZETA";
 
-			myprintf("02181: Creating %s check txt on %s\n", thehash.c_str(), g_archive.c_str());
+			myprintf("02181: Creating %s check txt on %s\n", thehash.c_str(), thephysical.c_str());
 			franz_do_hash dummy(thehash);
 			if (flagdebug2)
-				myprintf("02182: filehash on %s\n", g_archive.c_str());
+				myprintf("02182: filehash on %s\n", thephysical.c_str());
 
 			if (!flagbackupzeta)
 			{
-				hashreloaded= dummy.filehash(0, g_archive, false, startverify, larghezzain);
+				hashreloaded= dummy.filehash(0, thephysical, false, startverify, larghezzain);
 				myprintf("\n");
-				myprintf("%s 44202: final %s: %s\n", hashreloaded.c_str(), thehash.c_str(), g_archive.c_str());
+				myprintf("%s 44202: final %s: %s\n", hashreloaded.c_str(), thehash.c_str(), thephysical.c_str());
 
 				if (hashreloaded == "")
 				{
-					myprintf("02183! Guru calculating %s hash for <<%Z>>\n", thehash.c_str(), g_archive.c_str());
+					myprintf("02183! Guru calculating %s hash for <<%Z>>\n", thehash.c_str(), thephysical.c_str());
 					return 2;
 				}
 			}
@@ -122384,7 +126287,7 @@ int Jidac::gestiscicalcolifinali()
 				}
 				else
 				{
-					fprintf(myoutput, "%s %s|[%21s] %s", stringtolower(hashreloaded).c_str(), checktxt.c_str(), migliaia(larghezzain), /*dateToString(true,now()).c_str(),*/ g_archive.c_str());
+					fprintf(myoutput, "%s %s|[%21s] %s", stringtolower(hashreloaded).c_str(), checktxt.c_str(), migliaia(larghezzain), /*dateToString(true,now()).c_str(),*/ thephysical.c_str());
 					if (flagverbose)
 						myprintf("02185: %s: checksum file done\n", thehash.c_str());
 				}
@@ -122421,9 +126324,9 @@ int Jidac::gestiscicalcolifinali()
 
 					franz_do_hash dummyquick("QUICK");
 					if (flagdebug3)
-						myprintf("02191: filehash on %s\n", g_archive.c_str());
+						myprintf("02191: filehash on %s\n", thephysical.c_str());
 
-					string quickhash= dummyquick.filehash(0, g_archive, false, startverify, larghezzain);
+					string quickhash= dummyquick.filehash(0, thephysical, false, startverify, larghezzain);
 
 					FILE *backupfile= fopen(backuptxt.c_str(), "rb");
 					if (backupfile == NULL)
@@ -122498,14 +126401,14 @@ int Jidac::gestiscicalcolifinali()
 					{
 						if (goodhash != thehash)
 						{
-							myprintf("02198: Rebuilding %s on %s\n", goodhash.c_str(), g_archive.c_str());
+							myprintf("02198: Rebuilding %s on %s\n", goodhash.c_str(), thephysical.c_str());
 							franz_do_hash dummyquick(goodhash);
 							if (flagdebug3)
-								myprintf("02199: filehash on %s\n", g_archive.c_str());
-							hashreloaded= dummy.filehash(0, g_archive, false, startverify, larghezzain);
+								myprintf("02199: filehash on %s\n", thephysical.c_str());
+							hashreloaded= dummy.filehash(0, thephysical, false, startverify, larghezzain);
 						}
 					}
-					fprintf(backupfile, "%s %s|[%21s] <%s> $%s$ %s\r\n", stringtolower(hashreloaded).c_str(), checktxt.c_str(), migliaia(larghezzain), quickhash.c_str(), dateToString(true, now()).c_str(), g_archive.c_str());
+					fprintf(backupfile, "%s %s|[%21s] <%s> $%s$ %s\r\n", stringtolower(hashreloaded).c_str(), checktxt.c_str(), migliaia(larghezzain), quickhash.c_str(), dateToString(true, now()).c_str(), thephysical.c_str());
 					fclose(backupfile);
 				}
 				else
@@ -122629,7 +126532,66 @@ int Jidac::posterrori()
 	return 0;
 }
 
-void Jidac::preparahashtobewritten(const string &i_filename, const DTMap::iterator &i_p, string &i_hashtobewritten, string &i_hasherror, string &i_hashname)
+/// true if a stored hash (or CRC-32) can be trusted: hex, not empty, not all
+/// zeros and not the "!ERROR!" placeholder (which becomes all zeros for the
+/// binary hash types, because hex2binary() cannot encode it)
+bool ishashusable(const string &i_hash)
+{
+	if (i_hash == "")
+		return false;
+	bool tuttizeri= true;
+	for (unsigned int i= 0; i < i_hash.size(); i++)
+	{
+		if (!isxdigit((unsigned char)i_hash[i]))
+			return false;
+		if (i_hash[i] != '0')
+			tuttizeri= false;
+	}
+	return !tuttizeri;
+}
+
+/// A metadata-only change (attributes, creation/access date) does NOT re-read
+/// the file: the fragment pointers are carried over from the previous version,
+/// so nothing is hashed and a "!ERROR!" placeholder would be stored instead
+/// (all zeros for the binary hash types). From then on v (verify) reports that
+/// file as FAILED forever, and the whole verify output stops being usable as a
+/// monitoring signal.
+/// The bytes in the archive are EXACTLY the bytes the previous version hashed,
+/// so its hash (and CRC-32) are still valid: carry them over.
+/// Only when the algorithm is the very same one, or we would label a hash with
+/// the wrong name. Returns true if something usable was found in i_old.
+bool Jidac::carryoverhash(const DTMap::iterator &i_old, string &io_hash, uint32_t &io_crc32)
+{
+	if (i_old->second.franz_block == NULL)
+		return false;
+	string		 oldtype	  = "";
+	string		 oldhash	  = "";
+	string		 oldcrc32	  = "";
+	int64_t		 oldcreation  = 0;
+	int64_t		 oldaccess	  = 0;
+	bool		 oldordered	  = false;
+	bool		 oldisadded	  = false;
+	int			 oldversion	  = 0;
+	franz_posix *oldposix	  = NULL;
+	const int	 oldfranzotype= decode_franz_block(false, i_old->second.franz_block,
+												   oldtype, oldhash, oldcrc32,
+												   oldcreation, oldaccess, oldordered, oldversion, oldposix, oldisadded);
+	bool risultato= false;
+	if (oldfranzotype == g_franzotype)
+		if (ishashusable(oldhash))
+		{
+			io_hash	 = oldhash;
+			risultato= true;
+		}
+	if (ishashusable(oldcrc32))
+	{
+		io_crc32 = (uint32_t)strtoul(oldcrc32.c_str(), NULL, 16);
+		risultato= true;
+	}
+	return risultato;
+}
+
+void Jidac::preparahashtobewritten(const string &i_filename, const DTMap::iterator &i_p, string &i_hashtobewritten, string &i_hasherror, string &i_hashname,const int i_fileaggiunto)
 {
 	i_hashtobewritten= "";
 	i_hasherror		 = "";
@@ -122703,7 +126665,9 @@ void Jidac::preparahashtobewritten(const string &i_filename, const DTMap::iterat
 			i_p->second.hexhash= i_hashtobewritten;
 			if ((i_p->second.size != i_p->second.hashedsize) && (i_p->second.hashedsize == 0))
 			{
-				if (!flagvss && (!flagstdin))
+				if (flagdebug3)
+					myprintf("23302: WORK_NONE %d\n",int(i_fileaggiunto==WORK_NONE));
+				if (!flagvss && (!flagstdin) && (i_fileaggiunto != WORK_NONE))
 				{
 					myprintf("02115: ERROR expected %19s getted 0 bytes  %Z\n", migliaia(i_p->second.size), i_filename.c_str());
 					if (flagdebug3)
@@ -122762,12 +126726,62 @@ int Jidac::add()
 		return 2;
 
 	const bool archive_exists= exists(subpart(archive, 1).c_str());
+#ifndef NOFRANZEN
+#ifdef ZPAQFULL /// NOSFTPSTART
+	// "automagic" check: distinguish .zpaq exists / only .zpaq.franzen exists / nothing exists.
+	// If the .zpaq is missing but a valid .zpaq.franzen is there, this is a franzen-only archive:
+	// never fork a fresh cleartext .zpaq beside it.
+	if ((!index) && (g_chunk_size == 0) && (!g_fakewrite))
+		if (!archive_exists)
+			if (is_file_franzen(subpart(archive, 1) + ".franzen"))
+			{
+				string franzenfilename= subpart(archive, 1) + ".franzen";
+				bool   aestoo		  = is_file_frenzen(franzenfilename);
+				bool   haskey		  = (g_password != NULL) && (g_password[0] != 0);
+				if (aestoo && (!haskey))
+				{
+					myprintf("43804! <<%Z>> is an AES+Franzen archive: -key is required\n", franzenfilename.c_str());
+					return 2;
+				}
+				if ((!aestoo) && haskey)
+				{
+					myprintf("43801! <<%Z>> is a franzen-only archive (no AES): -key cannot be used on it\n", franzenfilename.c_str());
+					myprintf("43803! (delete or rename the .franzen file to start a new AES archive)\n");
+					return 2;
+				}
+				if (g_franzen == "")
+				{
+					color_magenta();
+					if (aestoo)
+						myprintf("43805: AES+Franzen-only archive detected <<%Z>>\n", franzenfilename.c_str());
+					else
+						myprintf("43800: Franzen-only archive detected <<%Z>>\n", franzenfilename.c_str());
+					color_restore();
+					g_franzen= mygetpasswordblind("Enter Franzen password: ");
+					if (g_franzen == "")
+					{
+						myprintf("43802! Franzen password required for franzen-only archive (use -franzen)\n");
+						return 2;
+					}
+				}
+			}
+#endif /// NOSFTPEND
+#endif
 	arcname					 = archive;
 	if (index)
 		arcname= index;
 	header_pos= 0;
 	if (exists(subpart(arcname, 1).c_str()))
 		header_pos= read_archive(NULL, arcname.c_str(), &errors);
+#ifndef NOFRANZEN
+#ifdef ZPAQFULL /// NOSFTPSTART
+	else if ((g_chunk_size == 0) && isfranzenonly(subpart(arcname, 1)))
+	{
+		// no cleartext .zpaq: load the index from the .zpaq.franzen (decrypted on the fly)
+		header_pos= read_archive(NULL, arcname.c_str(), &errors);
+	}
+#endif /// NOSFTPEND
+#endif
 
 	arcname= archive;
 
@@ -123032,6 +127046,17 @@ int Jidac::add()
 
 	if (gestisciwrite() != 0)
 		return 2;
+
+#ifndef NOFRANZEN
+#ifdef ZPAQFULL /// NOSFTPSTART
+	// -franzen alone (no -key, no -debug): write only the .zpaq.franzen, no cleartext .zpaq
+	// (covers both creation and incremental append on a franzen-only archive).
+	// -debug writes both files only on CREATION: an existing franzen-only archive stays
+	// franzen-only even with -debug (a partial .zpaq born from an append would be garbage)
+	// with -key too: AES+franzen goes into a single FRENZEN file, no cleartext-side .zpaq
+	g_franzen_zpaq_nowrite= (g_franzen != "") && (!exists(arcname)) && ((!flagdebug) || is_file_franzen(arcname + ".franzen")) && (g_chunk_size == 0) && (!g_fakewrite) && (!index);
+#endif /// NOSFTPEND
+#endif
 
 	if (flagdebug2)
 		myprintf("02049: calling open archive %s arcname %s with offset %s\n", archive.c_str(), arcname.c_str(), migliaia(offset));
@@ -124245,8 +128270,30 @@ int Jidac::add()
 				string hashtobewritten;
 				string hasherror;
 				string hashname;
+				preparahashtobewritten(filename, p, hashtobewritten, hasherror, hashname,fileaggiunto);
 
-				preparahashtobewritten(filename, p, hashtobewritten, hasherror, hashname);
+				/// Metadata-only update (typically an attribute change): the file
+				/// was not read, so there is no hash and no CRC-32 for it, and a
+				/// "!ERROR!" placeholder would be stored. But the fragments below
+				/// come from the previous version, so the archived bytes did not
+				/// change at all: carry the previous hash over instead, or v
+				/// (verify) would report this file as FAILED forever.
+				if ((a != dt.end()) && (p->second.data == 0) && (p->second.size > 0) && (p->second.hashedsize == 0))
+				{
+					string	 hashvecchio= hashtobewritten;
+					uint32_t crcvecchio	= p->second.file_crc32;
+					if (carryoverhash(a, hashvecchio, crcvecchio))
+					{
+						if (flagdebug3)
+							myprintf("02121: hash carried over from version %08d <<%Z>>\n", a->second.version, filename.c_str());
+						hashtobewritten		= hashvecchio;
+						p->second.hexhash	= hashvecchio;
+						p->second.file_crc32= crcvecchio;
+						currentcrc32		= crcvecchio; // -verify writes this one
+					}
+					else if (flagverbose)
+						myprintf("02122$ WARN no hash for the metadata-only change of %Z (different algorithm?)\n", filename.c_str());
+				}
 
 				/// myprintf("02119: hastobewritten ............. %s %s |%08X|\n",p->first.c_str(),hashtobewritten.c_str(),p->second.file_crc32);
 
@@ -124506,10 +128553,13 @@ int Jidac::add()
 				if (archive_end > 0)
 				{
 					
-					if (flagverbose)
-						myprintf("02141: truncating archive from %s to %s\n", migliaia(archive_size), migliaia2(archive_end));
-					if (truncate(arcname.c_str(), archive_end))
-						printerr("trunc", archive.c_str(), 0);
+					if (exists(arcname))
+					{
+						if (flagverbose)
+							myprintf("02141: truncating archive from %s to %s\n", migliaia(archive_size), migliaia2(archive_end));
+						if (truncate(arcname.c_str(), archive_end))
+							printerr("trunc", archive.c_str(), 0);
+					}
 					if (fasttxt != "")
 					{
 						myprintf("02142: Turning off fasttxt due to truncation [archive not changed]\n");
@@ -124518,7 +128568,7 @@ int Jidac::add()
 					}
 
 					///					myprintf("0000000000000000000000000000 %s\n",migliaia(g_starting_zpaqdate));
-					if (g_starting_zpaqdate > 0)
+					if ((g_starting_zpaqdate > 0) && exists(arcname))
 					{
 						if (flagverbose)
 							myprintf("02143: touching back to %s\n", dateToString(false, g_starting_zpaqdate).c_str());
@@ -124686,11 +128736,18 @@ int Jidac::add()
 	if (errors == 0)
 		if (g_copy != "")
 		{
-			string filescritto= filecopy(false, false, g_archive, g_copy, true, false, false, 0);
+			string tobecopied= g_archive;
+#ifndef NOFRANZEN
+#ifdef ZPAQFULL /// NOSFTPSTART
+			if (isfranzenonly(g_archive))
+				tobecopied= g_archive + ".franzen"; // franzen-only: the .franzen is the archive
+#endif /// NOSFTPEND
+#endif
+			string filescritto= filecopy(false, false, tobecopied, g_copy, true, false, false, 0);
 			if (filescritto != "")
-				myprintf("02165: Copied <<%s>> to <<%s>>\n", g_archive.c_str(), filescritto.c_str());
+				myprintf("02165: Copied <<%s>> to <<%s>>\n", tobecopied.c_str(), filescritto.c_str());
 			else
-				myprintf("02166: ERROR doing -copy from %s to %s\n", g_archive.c_str(), filescritto.c_str());
+				myprintf("02166: ERROR doing -copy from %s to %s\n", tobecopied.c_str(), filescritto.c_str());
 		}
 	if (flagfilelist)
 		if (fileexists(tempfile))
@@ -124732,6 +128789,13 @@ int Jidac::add()
 		}
 
 	dimensione_garchive= prendidimensionefile(g_archive.c_str());
+#ifndef NOFRANZEN
+#ifdef ZPAQFULL /// NOSFTPSTART
+	if (dimensione_garchive <= 0)
+		if (isfranzenonly(g_archive))
+			dimensione_garchive= prendidimensionefile((g_archive + ".franzen").c_str());
+#endif /// NOSFTPEND
+#endif
 
 ///	myprintf("dimensione g_archive %s\n",migliaia(dimensione_garchive));
 	gestiscibackupzeta();

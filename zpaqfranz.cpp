@@ -60,8 +60,8 @@ OTHER DEALINGS IN THE SOFTWARE.
 #define ZPAQFULL ///NOSFTPSTART
 ///NOSFTPEND
 
-#define ZPAQ_VERSION "65.1a"
-#define ZPAQ_DATE "(2026-09-19)"
+#define ZPAQ_VERSION "65.2k"
+#define ZPAQ_DATE "(2026-09-20)"
 
 
 /*
@@ -2229,7 +2229,7 @@ typedef mode_t fuse_mode_t;
 #endif
 #endif
 std::string g_fuseopt;              // -fuseopt a,b,c  -> passed to FUSE/WinFsp as -o a,b,c
-std::string g_mountbackend= "auto"; // -backend auto|core|jidac (see franzmount::mount_pick_backend)
+std::string g_mountbackend= "auto"; // -backend auto|jidac ('core' commented out, see franzmount::mount_pick_backend)
 #endif // ZPAQMOUNT
 
 #ifdef ZPAQFULL ///NOSFTPSTART
@@ -4948,6 +4948,9 @@ int64_t	 g_rd_expected	 = 0;
 int64_t	 g_startrd		 = 0;
 int64_t	 g_startdownload = 0;
 int		 g_rd_ultimotempo= 0;
+uint32_t g_rd_errors	 = 0;  // rd: objects that could NOT be deleted
+uint32_t g_rd_lasterror	 = 0; // rd: the FIRST error found (Windows code)
+string	 g_rd_errorpath	 = ""; // rd: ...and on which object
 int64_t	 g_cdatasize	 = 0;
 unsigned g_htsize		 = 0;
 bool	 g_fakewrite	 = false; // in add() disable write (ransomware)
@@ -5109,10 +5112,14 @@ bool flaghome;
 bool flagfixcase;
 bool flagturbo;
 bool flagimage;
+bool flagzip;			  // 'zip' command: x, but into ONE single ZIP64 file
+bool flagdeflate;		  // ...and -deflate compresses it, sequentially (method 8)
+string g_zipname= ""; // ...and this is the .zip to be created
 #ifdef _WIN32
 bool flagraw;
 bool flagfindzpaq;
 bool flagfixreserved;
+bool flagnosanitize;
 bool flagntfs;
 bool flagvhd;
 bool flaglongpath;
@@ -27968,12 +27975,31 @@ std::string utf8toansi(const std::string &utf8)
 	convert_unicode_to_ansi_string(ansi, unicode.c_str(), unicode.size());
 	return ansi;
 }
+string decodewinerror(DWORD i_error, const char *i_filename, bool i_padded= true); /// defined later
+/*
+	One object could not be erased. Count it, remember the first one and KEEP GOING:
+	stopping at the very first error leaves the folder half-deleted and (without
+	-debug) does not even say which object is the culprit
+*/
+void erredbarrasfallito(const std::wstring &wi_path, const char *i_cosa)
+{
+	const DWORD	 errore= GetLastError();
+	const string nome  = wtou(wi_path.c_str());
+	g_rd_errors++;
+	if (g_rd_lasterror == 0)
+	{
+		g_rd_lasterror= (uint32_t)errore;
+		g_rd_errorpath= nome;
+	}
+	if (flagdebug || flagverbose)
+		myprintf("71342! rd cannot %s (%08d %s) <<%Z>>\n", i_cosa, (int)errore, decodewinerror(errore, NULL, false).c_str(), nome.c_str());
+}
 int erredbarras(const std::wstring &wi_path)
 {
-	std::wstring	  wpattern= wi_path + L"\\*.*";
-	const std::string s_pattern(wpattern.begin(), wpattern.end());
+	const std::wstring wpattern= wi_path + L"\\*.*";
+	const std::string  s_wipath= wtou(wi_path.c_str());
 	if (flagdebug)
-		myprintf("00014: get handle FOR %s\n", s_pattern.c_str());
+		myprintf("00014: get handle FOR %Z\n", (s_wipath + "/*.*").c_str());
 	int secondi= (mtime() - g_startrd) / 1000;
 	if (secondi != g_rd_ultimotempo)
 	{
@@ -27985,83 +28011,81 @@ int erredbarras(const std::wstring &wi_path)
 	}
 	WIN32_FIND_DATAW findfiledata;
 	HANDLE			 myhandle= FindFirstFileW(wpattern.c_str(), &findfiledata);
-	if (myhandle == INVALID_HANDLE_VALUE)
+	if (myhandle != INVALID_HANDLE_VALUE)
+	{
+		do
+		{
+			const std::string t= wtou(findfiledata.cFileName);
+			if ((t != ".") && (t != ".."))
+			{
+				const std::wstring wfilepath  = wi_path + L"\\" + findfiledata.cFileName;
+				const std::string  s_wfilepath= wtou(wfilepath.c_str());
+				const DWORD		   attributi  = findfiledata.dwFileAttributes;
+				const bool		   edir		  = (attributi & FILE_ATTRIBUTE_DIRECTORY) != 0;
+				const bool		   ereparse	  = (attributi & FILE_ATTRIBUTE_REPARSE_POINT) != 0;
+				if (flagdebug3)
+					myprintf("00018: Working on %Z\n", s_wfilepath.c_str());
+				/*
+					NEVER walk into a junction (or a directory symlink): we would erase
+					the files it points to, somewhere else on the disk. RemoveDirectory
+					kills the link and leaves the target alone
+				*/
+				if (edir && (!ereparse))
+				{
+					if (flagdebug3)
+					{
+						myprintf("\n");
+						myprintf("00019: recurse on %Z\n", s_wfilepath.c_str());
+					}
+					erredbarras(wfilepath);
+					continue;
+				}
+				/// READONLY (and HIDDEN/SYSTEM) stops the delete: clear it, but only if set
+				if (attributi & (FILE_ATTRIBUTE_READONLY | FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM))
+				{
+					if (flagdebug3)
+						myprintf("00020: set attribute on %Z\n", s_wfilepath.c_str());
+					if (SetFileAttributesW(wfilepath.c_str(), FILE_ATTRIBUTE_NORMAL) == FALSE)
+						if (flagdebug)
+							myprintf("00021! ERROR cannot change attr of %Z\n", s_wfilepath.c_str());
+				}
+				if (flagdebug3)
+					myprintf("00022: try to delete %Z\n", s_wfilepath.c_str());
+				const bool fatto= edir ? (RemoveDirectoryW(wfilepath.c_str()) != FALSE)
+									   : (DeleteFileW(wfilepath.c_str()) != FALSE);
+				if (fatto)
+					g_rd++;
+				else
+					erredbarrasfallito(wfilepath, edir ? "remove the junction" : "delete the file");
+			}
+		} while (FindNextFileW(myhandle, &findfiledata) == TRUE);
+		FindClose(myhandle);
+	}
+	else if (flagdebug)
+		myprintf("00017: Invalid handle %Z\n", s_wipath.c_str());
+	/// and now the folder itself, even if something inside could not be deleted
+	const DWORD attributi= GetFileAttributesW(wi_path.c_str());
+	if (attributi == INVALID_FILE_ATTRIBUTES)
 	{
 		if (flagdebug)
-			myprintf("00017: Invalid handle %s\n", s_pattern.c_str());
-		return 0;
+			myprintf("71349: rd folder already gone (or unreachable) <<%Z>>\n", s_wipath.c_str());
+		return (int)g_rd_lasterror;
 	}
-	do
+	if (attributi & (FILE_ATTRIBUTE_READONLY | FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM))
 	{
-		std::string t= wtou(findfiledata.cFileName);
-		if ((t != ".") && (t != ".."))
-		{
-			std::wstring	  wfilepath= wi_path + L"\\" + findfiledata.cFileName;
-			const std::string s_wfilepath(wfilepath.begin(), wfilepath.end());
-			if (flagdebug3)
-				myprintf("00018: Working on %s\n", s_wfilepath.c_str());
-			if (findfiledata.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
-			{
-				if (flagdebug3)
-				{
-					myprintf("\n");
-					myprintf("00019: recurse on %s\n", s_wfilepath.c_str());
-				}
-				int myresult= erredbarras(wfilepath);
-				if (myresult)
-					return myresult;
-			}
-			else
-			{
-				if (flagdebug3)
-					myprintf("00020: set attribute on file %s\n", s_wfilepath.c_str());
-				if (SetFileAttributesW(wfilepath.c_str(), FILE_ATTRIBUTE_NORMAL) == FALSE)
-				{
-					if (flagdebug)
-						myprintf("00021! ERROR cannot change attr of %s\n", s_wfilepath.c_str());
-					return GetLastError();
-				}
-				if (flagdebug3)
-					myprintf("00022: try to delete file %s\n", s_wfilepath.c_str());
-				if (DeleteFileW(wfilepath.c_str()) == FALSE)
-				{
-					if (flagdebug)
-						myprintf("00023! ERROR highlander file %s\n", s_wfilepath.c_str());
-					return GetLastError();
-				}
-				else
-					g_rd++;
-			}
-		}
-	} while (FindNextFile(myhandle, &findfiledata) == TRUE);
-	if (myhandle)
-		FindClose(myhandle);
-	DWORD myerror= GetLastError();
-	if (myerror == ERROR_NO_MORE_FILES)
-	{
-		const std::string s_wipath(wi_path.begin(), wi_path.end());
 		if (flagdebug3)
-			myprintf("00024: Change folder attr  %s\n", s_wipath.c_str());
+			myprintf("00024: Change folder attr  %Z\n", s_wipath.c_str());
 		if (SetFileAttributesW(wi_path.c_str(), FILE_ATTRIBUTE_NORMAL) == FALSE)
-		{
 			if (flagdebug)
-				myprintf("00025! ERROR cannot change folder attr %s\n", s_wipath.c_str());
-			return GetLastError();
-		}
-		if (flagdebug3)
-			myprintf("00026: RemoveDirectory  %s\n", s_wipath.c_str());
-		if (RemoveDirectoryW(wi_path.c_str()) == FALSE)
-		{
-			if (flagdebug)
-				myprintf("00027! ERROR highlander dir %s\n", s_wipath.c_str());
-			return GetLastError();
-		}
-		else
-			g_rd++;
+				myprintf("00025! ERROR cannot change folder attr %Z\n", s_wipath.c_str());
 	}
+	if (flagdebug3)
+		myprintf("00026: RemoveDirectory  %Z\n", s_wipath.c_str());
+	if (RemoveDirectoryW(wi_path.c_str()) == FALSE)
+		erredbarrasfallito(wi_path, "remove the folder");
 	else
-		return myerror;
-	return 0;
+		g_rd++;
+	return (int)g_rd_lasterror;
 }
 
 int64_t getwinattributes(string i_filename)
@@ -28765,6 +28789,17 @@ bool isextension(const char *i_filename, const char *i_ext)
 bool isfranzen(const string& i_filename)
 {
 	return isextension(i_filename.c_str(), ".franzen");
+}
+/*
+	The franzen file of a .zpaq archive is <archive>.franzen.
+	BUT the archive itself can be named .franzen (a z:/pippo.franzen -franzen mypassword):
+	in that case there is no cleartext .zpaq at all, the archive IS its franzen file
+*/
+string franzenname(const string& i_filename)
+{
+	if (isfranzen(i_filename))
+		return i_filename;
+	return i_filename + ".franzen";
 }
 bool iszpaq(const string& i_filename)
 {
@@ -30194,7 +30229,7 @@ string decodewinattribute(int32_t i_attribute)
 		risultato+= "VIRTUAL;";
 	return risultato;
 }
-string decodewinerror(DWORD i_error, const char *i_filename)
+string decodewinerror(DWORD i_error, const char *i_filename, bool i_padded)
 {
 	string risultato= "";
 	char   buffer[100];
@@ -30356,18 +30391,22 @@ string decodewinerror(DWORD i_error, const char *i_filename)
 	while (!risultato.empty() && (risultato.back() == '.'))
 		risultato.pop_back();
 
-	unsigned int error_len= 30;
-	// Padding to keep minimum length di 25 caratteri come nell'originale
-	if (risultato.size() > error_len)
+	/// i_padded: exactly 30 chars, to keep the columns of the error report aligned.
+	/// A standalone message wants the whole text instead, not a 30-chars stump
+	if (i_padded)
 	{
-		risultato= risultato.substr(0, error_len);
+		unsigned int error_len= 30;
+		// Padding to keep minimum length di 25 caratteri come nell'originale
+		if (risultato.size() > error_len)
+		{
+			risultato= risultato.substr(0, error_len);
+		}
+		else
+		{
+			while (risultato.size() < error_len)
+				risultato+= " ";
+		}
 	}
-	else
-	{
-		while (risultato.size() < error_len)
-			risultato+= " ";
-	}
-
 	return risultato;
 }
 
@@ -31590,13 +31629,23 @@ int fseeko(FP fp, int64_t offset, int origin)
 	else if (origin == SEEK_END)
 		origin= FILE_END;
 	LONG h= uint64_t(offset) >> 32;
-	SetFilePointer(fp, offset & 0xffffffffull, &h, origin);
-	return GetLastError() != NO_ERROR;
+	/*
+		SetFilePointer() gives back INVALID_SET_FILE_POINTER both on a real error and
+		on a perfectly good seek to 0xFFFFFFFF, so the only way to tell them apart is
+		to clear the error code FIRST. Without this, fseeko() keeps reporting whatever
+		some unrelated API left behind (ex. a DeviceIoControl that failed long before)
+	*/
+	SetLastError(NO_ERROR);
+	DWORD risultato= SetFilePointer(fp, offset & 0xffffffffull, &h, origin);
+	if (risultato == INVALID_SET_FILE_POINTER)
+		return GetLastError() != NO_ERROR;
+	return 0;
 }
 
 #endif // corresponds to #ifdef (#ifdef unix)
 
 FP		 g_fp_zpaq			   = 0;
+FP		 g_zipfp			   = FPNULL; // 'zip' command: the ONE file every thread writes into
 int		 g_crc32_sequence_data = 0;
 int		 g_crc32_sequence_index= 0;
 uint32_t g_crc32_index		   = 0;
@@ -33859,6 +33908,71 @@ struct Myfilewriter : public libzpaq::Writer
 	}
 };
 
+/*
+	Extracts resource i_number (a zpaq stream, the way zpipe -3 makes them) into
+	i_destfile, wherever that happens to be. estrairisorsa(), down here, always
+	writes next to the .exe, because that is where a DLL has to be; an MSI does
+	not care, and the mount wants it in the temporary folder.
+
+	Returns false without saying a word when the resource is not there at all:
+	that is a plain zpaqfranz.exe, not an error. Nothing is verified here, the
+	caller has the hash and checks the file it asked for
+*/
+bool estrairisorsa_in(WORD i_number, const std::string &i_destfile, uint64_t i_expectedsize)
+{
+	HMODULE hExe= GetModuleHandle(nullptr);
+	if (!hExe)
+		return false;
+	HRSRC hRes= FindResource(hExe, MAKEINTRESOURCE(i_number), RT_RCDATA);
+	if (!hRes)
+		return false; /// no resources linked in: this is not a zpaqfranz-full
+	HGLOBAL hData= LoadResource(hExe, hRes);
+	if (!hData)
+	{
+		myprintf("01430: Failed to load resource %u\n", i_number);
+		return false;
+	}
+	DWORD size= SizeofResource(hExe, hRes);
+	if (size == 0)
+	{
+		myprintf("01431: Resource %u has zero size\n", i_number);
+		return false;
+	}
+	void *data= LockResource(hData);
+	if (!data)
+	{
+		myprintf("01432: Failed to lock resource %u\n", i_number);
+		return false;
+	}
+	FILE *f= std::fopen(i_destfile.c_str(), "wb");
+	if (!f)
+	{
+		myprintf("01433: Cannot write %Z\n", i_destfile.c_str());
+		return false;
+	}
+	Mymemreader	 in((unsigned char *)data, size);
+	Myfilewriter out(f, i_expectedsize, false);
+	out.inizio= mtime();
+	try
+	{
+		libzpaq::decompress(&in, &out);
+	}
+	catch (const std::exception &e)
+	{
+		std::fclose(f);
+		myprintf("01434: Decompression failed for %Z (%s)\n", i_destfile.c_str(), e.what());
+		delete_file(i_destfile.c_str());
+		return false;
+	}
+	if (std::fclose(f) != 0)
+	{
+		myprintf("01435: Failed to close file %Z\n", i_destfile.c_str());
+		return false;
+	}
+	eol();
+	return true;
+}
+
 bool estrairisorsa(const risorse &r)
 {
 	std::string filelocale= includetrailingbackslash(getwinexedir()) + extractfilename(r.filename);
@@ -34001,7 +34115,26 @@ int kickstart_resources(std::string i_package)
 	elenco_risorse.push_back(risorse(2, "LIBCURL", "libcurl-x64.dll", 3193960, "2EA8DBCA33DE476B23497A10ACE1A76C54DDCEF061E866771BF737A376DDC882"));
 	elenco_risorse.push_back(risorse(3, "LIBCURL", "mailsend.exe", 1253888, "0E23BD1214D687DC2B2E28D4FEA12BC1C197BC85B5FFE90BB8888C43746B6F21"));
 	elenco_risorse.push_back(risorse(10, "MYSQL", "mysql.exe", 4809640, "65DCBF7897E062A02B6018FFDE4635183E75DBCC075F21D3BE7CC5A27C45FD12"));
-	elenco_risorse.push_back(risorse(11, "MYSQL", "mysqldump.exe", 4875064, "F2114A565E8A4D23FC62FD190B59BFFF56C71B8E06B2F9308D246875708A0091"));
+	elenco_risorse.push_back(risorse(11, "MYSQL", "mysqldump.exe", 4785064, "F2114A565E8A4D23FC62FD190B59BFFF56C71B8E06B2F9308D246875708A0091"));
+	/// WinFsp's installer: the mount command takes it from here (see kickstart_mount)
+	/// instead of downloading it, whenever this is a zpaqfranz-full
+	elenco_risorse.push_back(risorse(12, "WINFSP", "winfsp-2.1.25156.msi", 2191360, "073A70E00F77423E34BED98B86E600DEF93393BA5822204FAC57A29324DB9F7A"));
+
+	/*
+		The WinFsp installer is not something zpaqfranz needs to run: it is only
+		good for mounting on a machine that does not have WinFsp, and there
+		kickstart_mount() takes it from the resource by itself. So it stays out
+		of the "everything" sweep, where on a plain build it would mean 2 MB of
+		download that nobody asked for; kickstart_resources("WINFSP") still does it
+	*/
+	if (i_package.empty())
+		for (unsigned int i= 0; i < elenco_risorse.size();)
+		{
+			if (elenco_risorse[i].package == "WINFSP")
+				elenco_risorse.erase(elenco_risorse.begin() + i);
+			else
+				++i;
+		}
 
 	std::vector<std::string> failed_resources;
 
@@ -41696,26 +41829,53 @@ int erredbarras(const std::string &i_path)
 	return risultato;
 }
 #endif // corresponds to #ifdef (#ifdef unix)
+#ifdef _WIN32
+string relativetolongpath(string i_filename); /// defined later
+/*
+	//?/X:/something (or //?/UNC/server/share/something): the extended syntax, the
+	ONLY one that can reach a path longer than MAX_PATH, or a name whose last char
+	is a dot or a space (the Win32 parser silently strips them, so a folder called
+	"acustica " cannot even be opened => ERROR_INVALID_NAME).
+	Unlike makelongpath() it does not care about -longpath: some operations
+	(erasing, for one) never need any kind of compatibility.
+	It wants a FULL path, so a relative one is expanded first
+*/
+string forcelongpath(string i_path)
+{
+	if (i_path == "")
+		return i_path;
+	if (islongpath(i_path) || islonguncpath(i_path))
+		return i_path;
+	if ((!iswindowspath(i_path)) && (!iswindowsunc(i_path)))
+		i_path= relativetolongpath(i_path); /// pippo => z:/somewhere/pippo
+	if (iswindowsunc(i_path))
+		return "//?/UNC/" + i_path.substr(2); /// //nas/share => //?/UNC/nas/share
+	if (iswindowspath(i_path))
+		return "//?/" + i_path;
+	return i_path;
+}
+#endif // corresponds to #ifdef (#ifdef _WIN32)
 bool stermina(string i_path, int32_t i_expectedfile= 0)
 {
 	if (i_path == "")
 		return false;
 	if (flagdebug2)
-		myprintf("00116: PRE  ------------------ %s ----------\n", i_path.c_str());
-#ifdef _WIN32
-	if (flaglongpath)
-		if (iswindowspath(i_path))
-			if (!islongpath(i_path))
-				i_path= "//?/" + i_path;
-#endif // corresponds to #ifdef (#ifdef _WIN32)
+		myprintf("00116: PRE  ------------------ %Z ----------\n", i_path.c_str());
 	if (isdirectory(i_path))
 		i_path= i_path.substr(0, i_path.size() - 1);
+#ifdef _WIN32
+	/// erasing does not need compatibility: go extended, whatever -longpath says
+	i_path= forcelongpath(i_path);
+#endif // corresponds to #ifdef (#ifdef _WIN32)
 	if (flagdebug2)
-		myprintf("00117: POST ------------------ %s ----------\n", i_path.c_str());
+		myprintf("00117: POST ------------------ %Z ----------\n", i_path.c_str());
 	g_rd			= 0; // global file counter for huge dirs on slow media
 	g_rd_expected	= i_expectedfile;
 	g_startrd		= mtime();
 	g_rd_ultimotempo= 0;
+	g_rd_errors		= 0;
+	g_rd_lasterror	= 0;
+	g_rd_errorpath	= "";
 #ifdef _WIN32
 	erredbarras(utow(i_path.c_str()));
 #else
@@ -41726,41 +41886,169 @@ bool stermina(string i_path, int32_t i_expectedfile= 0)
 
 string forbiddenstring[]  = {"CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9"};
 size_t forbiddenstringsize= sizeof(forbiddenstring) / sizeof(forbiddenstring[0]);
-char   forbiddenchar[]	  = {'<', '>', '"', '|', '?', '*'};
+char   forbiddenchar[]	  = {'<', '>', '"', '|', '?', '*', ':', '\\'};
 size_t forbiddencharsize  = sizeof(forbiddenchar) / sizeof(forbiddenchar[0]);
+/*
+	Windows (and exFAT/FAT32 even more) is way more restrictive than any *nix filesystem.
+	Forbidden: < > " | ? * : \ the control chars, the trailing dots and spaces,
+	the old DOS device names (CON, LPT1 and friends).
+	So extracting an archive made on a NAS dies, file by file, with ERROR_INVALID_NAME (123)
+	"the filename, directory name, or volume label syntax is incorrect".
+	Same error for a doubled prefix (//?/z:///?/z:/something), that shows up when a long
+	path is stored INSIDE the archive and then extracted -to a long path.
+
+	franzrootlength()   how many leading chars are the "root", to be left alone
+	franzsanitizepath() fix everything after the root, and nothing else
+*/
+size_t franzrootlength(const string &i_path)
+{
+	const size_t lunghezza= i_path.size();
+	if (lunghezza == 0)
+		return 0;
+	if (islongpath(i_path))
+		return 7; /// //?/X:/
+	if (lunghezza > 1)
+		if ((i_path[0] == '/') && (i_path[1] == '/'))
+		{
+			/// //?/UNC/server/share/ or //server/share/: server and share are not folders
+			size_t i= 2;
+			if (lunghezza > 8)
+				if (stringtoupper(i_path.substr(0, 8)) == "//?/UNC/")
+					i= 8;
+			int quantebarre= 0;
+			while ((i < lunghezza) && (quantebarre < 2))
+			{
+				if (i_path[i] == '/')
+					quantebarre++;
+				i++;
+			}
+			return i;
+		}
+	if (lunghezza > 2)
+		if (isalpha((unsigned char)i_path[0]))
+			if (i_path[1] == ':')
+				if (i_path[2] == '/')
+					return 3; /// X:/
+	if (lunghezza == 2)
+		if (isalpha((unsigned char)i_path[0]))
+			if (i_path[1] == ':')
+				return 2; /// X:
+	if (i_path[0] == '/')
+		return 1; /// *nix absolute
+	return 0;
+}
+/*
+	true (and o_fixed filled) if something had to be changed.
+	By default only what makes Windows really refuse the file (ERROR_INVALID_NAME).
+	i_strict (=-fixreserved) also fixes what Windows accepts, but silently mangles
+	or redirects: trailing dots and spaces, CON/LPT1... device names
+*/
+bool franzsanitizepath(const string &i_path, string &o_fixed, bool i_strict= false)
+{
+	o_fixed= i_path;
+	if (i_path == "")
+		return false;
+	if (isads(i_path)) /// something:$DATA is a legit Windows alternate data stream
+		return false;
+	const bool	 isfolder= isdirectory(i_path);
+	const size_t radice	 = franzrootlength(i_path);
+	const string root	 = i_path.substr(0, radice);
+	string		 resto	 = i_path.substr(radice);
+	bool		 cambiato= false;
+	/// //?/z:///?/z:/qualcosa => //?/z:/qualcosa, otherwise ERROR_INVALID_NAME
+	if (radice > 0)
+		for (int i= 0; i < 8; i++)
+		{
+			const size_t doppione= franzrootlength(resto);
+			if (doppione == 0)
+				break;
+			resto	= resto.substr(doppione);
+			cambiato= true;
+		}
+	vector<string> pezzi;
+	string		   pezzo= "";
+	for (size_t i= 0; i < resto.size(); i++)
+		if (resto[i] == '/')
+		{
+			pezzi.push_back(pezzo);
+			pezzo= "";
+		}
+		else
+			pezzo+= resto[i];
+	pezzi.push_back(pezzo); /// the last one, "" if the path ends with /
+	string risultato= root;
+	for (size_t i= 0; i < pezzi.size(); i++)
+	{
+		string corrente= pezzi[i];
+		if (corrente == "")
+		{
+			if (i + 1 < pezzi.size())
+				cambiato= true; /// a//b => a/b
+			continue;
+		}
+		for (size_t j= 0; j < corrente.size(); j++)
+		{
+			const unsigned char c	 = (unsigned char)corrente[j];
+			bool				nonva= (c < 32);
+			for (unsigned int k= 0; k < forbiddencharsize; k++)
+				if (c == (unsigned char)forbiddenchar[k])
+					nonva= true;
+			if (nonva)
+			{
+				corrente[j]= '_';
+				cambiato   = true;
+			}
+		}
+		if ((corrente == ".") || (corrente == ".."))
+		{
+			corrente= string(corrente.size(), '_'); /// usually already done by rename()
+			cambiato= true;
+		}
+		else if (i_strict)
+		{
+			/// Windows silently drops trailing dots and spaces: better doing it here
+			size_t fine= corrente.size();
+			while ((fine > 0) && ((corrente[fine - 1] == '.') || (corrente[fine - 1] == ' ')))
+				fine--;
+			if (fine != corrente.size())
+			{
+				corrente= corrente.substr(0, fine);
+				cambiato= true;
+			}
+		}
+		if (corrente == "")
+			corrente= "_";
+		/// CON, PRN, AUX, NUL, COM1..COM9, LPT1..LPT9, with or without extension
+		if (i_strict)
+		{
+			const string maiuscolo= stringtoupper(corrente);
+			for (unsigned int j= 0; j < forbiddenstringsize; j++)
+				if ((maiuscolo == forbiddenstring[j]) || (maiuscolo.substr(0, forbiddenstring[j].size() + 1) == forbiddenstring[j] + "."))
+				{
+					corrente= "_" + corrente;
+					cambiato= true;
+					break;
+				}
+		}
+		risultato+= corrente;
+		if (i + 1 < pezzi.size())
+			risultato+= '/';
+	}
+	if (isfolder)
+		if (!isdirectory(risultato))
+			risultato+= '/';
+	if (!cambiato)
+		return false;
+	o_fixed= risultato;
+	return true;
+}
 bool   isreserved(const string &i_filename, string &o_fixed)
 {
 	o_fixed		  = i_filename;
 	bool risultato= false;
 #ifdef _WIN32
-	bool		   isfolder= isdirectory(i_filename);
-	vector<string> pezzi;
-	explode(i_filename, '/', pezzi);
-	for (unsigned int i= 0; i < pezzi.size(); i++)
-	{
-		string porzione= stringtoupper(pezzi[i]);
-		for (unsigned int j= 0; j < forbiddenstringsize; j++)
-			if ((porzione == forbiddenstring[j]) || (mypos(forbiddenstring[j] + ".", porzione) == 0))
-			{
-				pezzi[i] = "_" + pezzi[i];
-				risultato= true;
-			}
-	}
-	if (risultato)
-	{
-		o_fixed= "";
-		for (unsigned int i= 0; i < pezzi.size(); i++)
-			o_fixed= o_fixed + pezzi[i] + '/';
-		if (!isfolder)
-			o_fixed= myleft(o_fixed, o_fixed.length() - 1);
-	}
-	for (unsigned int i= 0; i < o_fixed.size(); i++)
-		for (unsigned int j= 0; j < forbiddencharsize; j++)
-			if (o_fixed[i] == forbiddenchar[j])
-			{
-				o_fixed[i]= '_';
-				risultato = true;
-			}
+	/// do NOT touch the //?/ prefix nor the X: drive letter, or the path becomes invalid
+	risultato= franzsanitizepath(i_filename, o_fixed, true);
 	if (risultato)
 		o_fixed= nomefileseesistegia(o_fixed);
 #endif // corresponds to #ifdef (#ifdef _WIN32)
@@ -43671,9 +43959,10 @@ bool isfranzenonly(const string &i_zpaqname)
 		return false;
 	if (i_zpaqname == "")
 		return false;
-	if (exists(i_zpaqname))
-		return false;
-	return is_file_franzen(i_zpaqname + ".franzen");
+	if (!isfranzen(i_zpaqname)) // an archive named .franzen has no cleartext side at all
+		if (exists(i_zpaqname))
+			return false;
+	return is_file_franzen(franzenname(i_zpaqname));
 }
 #endif /// NOSFTPEND
 #endif
@@ -45492,10 +45781,12 @@ struct DT // if you get some warning here, update your compiler!
 	int64_t			 kompressedsize;
 	int				 filework; // 0 = nothing; 1=updated; 2=added, 3=removed
 	bool			 donotextractme;
+	int64_t			 zipdataoffset; // 'zip' command: where this file's data goes into the .zip
+	int				 zipindex;		// ...and which g_zipentries[] describes it
 	vector<unsigned> block_for_ptr;
 
 	DT() : date(0), size(0), attr(0), data(0), creationdate(0), accessdate(0), written(-1), isordered(false), isselected(false), /*franz_block_size(FRANZOFFSETV3),*/ file_crc32(0), hashedsize(0), chunk(-1), expectedsize(0), version(0), forceadd(false), is4(false), red_total(0), red_count(0), red_min(256), red_max(0), red_avg(0), red_candidate(0), isedt(false), kompressedsize(0), filework(0),
-		   donotextractme(false)
+		   donotextractme(false), zipdataoffset(-1), zipindex(-1)
 	{
 		///	let's save a bit of RAM (during compression)
 		franz_block_size= FRANZOFFSETV3;
@@ -56660,6 +56951,7 @@ class Jidac
 	int	   searchcomments(string i_testo, vector<DTMap::iterator> &filelist);
 	string zfs_get_snaplist(string i_header, string i_footer, vector<string> &o_array_primachiocciola, vector<string> &o_array_dopochiocciola, vector<string> &o_array_size);
 	string sanitizzanomefile(string i_filename, int i_filelength, int &io_collisioni, MAPPAFILEHASH &io_mappacollisioni);
+	uint32_t sanitizzawindows();
 #ifdef ZPAQFULL /// NOSFTPSTART
 	int writesfxmodule(string i_filename);
 #endif /// NOSFTPEND
@@ -60287,6 +60579,17 @@ OutputArchive::OutputArchive(string i_thearchive, const char *filename, const ch
 
 	// Open existing file
 	char salt[32]= {0};
+	bool franzenistheoutput= false;
+#ifndef NOFRANZEN
+#ifdef ZPAQFULL /// NOSFTPSTART
+	// the archive itself is the .franzen: it must NEVER be opened as a cleartext .zpaq
+	franzenistheoutput= (g_franzen != "") && isfranzen(thefilename);
+#endif /// NOSFTPEND
+#endif
+	if (franzenistheoutput)
+		fp= FPNULL;
+	else
+	{
 #ifdef BSD
 	if (flagappend)
 	{
@@ -60299,6 +60602,7 @@ OutputArchive::OutputArchive(string i_thearchive, const char *filename, const ch
 #else
 	fp= myfopen(thefilename.c_str(), RBPLUS);
 #endif // corresponds to #ifdef (#ifdef BSD)
+	}
 
 	if (flagdebug3)
 		myprintf("00287: ***********************************************************\n");
@@ -60353,7 +60657,7 @@ OutputArchive::OutputArchive(string i_thearchive, const char *filename, const ch
 			}
 			else
 			{
-				string franzenfilename= thefilename + ".franzen";
+				string franzenfilename= franzenname(thefilename);
 				g_p_franzenfile = new franzcri(g_franzen.c_str(), g_franzen.length());
 				if (g_p_franzenfile->open(franzenfilename.c_str(), false))
 				{
@@ -60428,7 +60732,7 @@ OutputArchive::OutputArchive(string i_thearchive, const char *filename, const ch
 			}
 			else
 			{
-				string franzenfilename= thefilename + ".franzen";
+				string franzenfilename= franzenname(thefilename);
 				bool has_aes = (g_password != NULL && g_password[0] != 0);
 				if (nowrite && is_file_franzen(franzenfilename))
 				{
@@ -63932,10 +64236,14 @@ string Jidac::sanitizzanomefile(string i_filename, int i_filelength, int &io_col
 #ifdef _WIN32
 	if (flagfixreserved)
 	{
-		const std::string caratteriNonValidi= "\\:*?\"<>|";
-		for (char &c : i_filename)
-			if (caratteriNonValidi.find(c) != std::string::npos)
-				c= '_';
+		/// NOT a blind search&replace: //?/ and the X: drive letter must survive
+		string fixato;
+		if (franzsanitizepath(i_filename, fixato, true))
+		{
+			if (flagdebug3)
+				myprintf("71334: -fixreserved <<%Z>> => <<%Z>>\n", i_filename.c_str(), fixato.c_str());
+			i_filename= fixato;
+		}
 	}
 #endif // corresponds to #ifdef (#ifdef _WIN32)
 
@@ -64183,6 +64491,74 @@ string Jidac::sanitizzanomefile(string i_filename, int i_filelength, int &io_col
 			myprintf("\n");
 		}
 	return newname;
+}
+/*
+	Rewrite dt's keys (=the filenames to be extracted) into something a Windows
+	filesystem can really create. Runs by default on x, turned off by -nosanitize.
+	Without this an archive made on a NAS dies, file by file, on names that are
+	perfectly legal on *nix and forbidden on Windows (ERROR_INVALID_NAME 123).
+	Returns how many names have been changed.
+*/
+uint32_t Jidac::sanitizzawindows()
+{
+	uint32_t cambiati= 0;
+#ifdef _WIN32
+	if (flagnosanitize)
+		return 0;
+	/*
+		First pass: just count. An archive made on Windows (=almost every archive)
+		has nothing to fix, and rebuilding the whole dt for nothing would cost
+		one full copy of the map (hundreds of MB on big archives)
+	*/
+	string fixato;
+	for (DTMap::iterator p= dt.begin(); p != dt.end(); ++p)
+		if (franzsanitizepath(p->first, fixato))
+		{
+			cambiati++;
+			if (flagverbose)
+			{
+				myprintf("71335$ sanitize <<%Z>>\n", p->first.c_str());
+				myprintf("71336:       to <<%Z>>\n", fixato.c_str());
+			}
+		}
+	if (cambiati == 0)
+		return 0;
+	myprintf("71339: Windows: %s filename(s) sanitized (chars Windows cannot store).\n", migliaia((int64_t)cambiati));
+	myprintf("71340:          Turn off with -nosanitize, -fixreserved is stricter\n");
+	if (!flagverbose)
+		myprintf("71341:          use -verbose to get the full list\n");
+	/// Second pass: rewrite the keys
+	DTMap	 mymap;
+	uint32_t kollisioni= 0;
+	for (DTMap::iterator p= dt.begin(); p != dt.end(); ++p)
+	{
+		string nuovonome= p->first;
+		if (franzsanitizepath(p->first, fixato))
+			nuovonome= fixato;
+		std::pair<DTMap::iterator, bool> ret= mymap.insert(std::pair<string, DT>(nuovonome, p->second));
+		if (ret.second == false)
+		{
+			/// two different *nix names can collapse into the very same Windows name.
+			/// folders do not care (same target folder), files do
+			if (!isdirectory(nuovonome))
+			{
+				char numero[40];
+				snprintf(numero, sizeof(numero), "_%08d", (int)++kollisioni);
+				string estensione= prendiestensione(nuovonome);
+				string collisionato;
+				if (estensione != "")
+					collisionato= nuovonome.substr(0, nuovonome.size() - estensione.size() - 1) + numero + "." + estensione;
+				else
+					collisionato= nuovonome + numero;
+				myprintf("71337$ WARNING sanitize collision <<%Z>>\n", nuovonome.c_str());
+				myprintf("71338:                         to <<%Z>>\n", collisionato.c_str());
+				mymap.insert(std::pair<string, DT>(collisionato, p->second));
+			}
+		}
+	}
+	dt= mymap;
+#endif // corresponds to #ifdef (#ifdef _WIN32)
+	return cambiati;
 }
 /*
 	section: progress
@@ -65082,10 +65458,11 @@ string help_mount(bool i_usage, bool i_example)
 		scrivi_riga("-until N", "Version N (or a date) becomes the last one, and that is what is");
 		scrivi_riga(" ", "  mounted; with -all, the versions after N are not shown either");
 		scrivi_riga("-threads N", "Threads for read-ahead/decompression (default: 4)");
-		scrivi_riga("-backend X", "Engine: auto (default) | core | jidac");
-		scrivi_riga(" ", "  core : self-contained mmap scanner, plain (unencrypted) archives only");
+		scrivi_riga("-backend X", "Engine: auto (default) | jidac");
 		scrivi_riga(" ", "  jidac: native zpaqfranz I/O, reads -key (AES-256) and Franzen archives");
-		scrivi_riga(" ", "  auto : jidac if the archive is encrypted, else core");
+		scrivi_riga(" ", "  auto : the very same: jidac is the only engine left");
+		/// the 'core' mmap engine is commented out (franzmount, Backend "core" (DISABLED))
+		///	scrivi_riga(" ", "  core : self-contained mmap scanner, plain (unencrypted) archives only");
 		scrivi_riga("-fuseopt a,b", "Extra options passed to FUSE/WinFsp as -o a,b");
 		scrivi_riga(" ", "  Windows: VolumePrefix=\\zpaqfuse\\name (network drive, tames the AV),");
 		scrivi_riga(" ", "  FileSystemName=NTFS (run .exe from the mount)");
@@ -65106,7 +65483,7 @@ string help_mount(bool i_usage, bool i_example)
 		scrivi_esempio("Version 3 instead of the last one", "mount z:\\1.zpaq Z: -until 3");
 		scrivi_esempio("The first 3 versions, one folder each", "mount z:\\1.zpaq Z: -all -until 3");
 		scrivi_esempio("Mount an encrypted archive", "mount z:\\enc.zpaq Z: -key mypassword");
-		scrivi_esempio("Force the native engine", "mount z:\\1.zpaq Z: -backend jidac");
+		scrivi_esempio("Name the engine (jidac, the only one)", "mount z:\\1.zpaq Z: -backend jidac");
 	}
 	return ("Mount an archive read-only (FUSE/WinFsp)");
 }
@@ -65568,9 +65945,13 @@ string help_rd(bool i_usage, bool i_example)
 	{
 		scrivi_riga("CMD rd", "remove directory on Windows");
 		scrivi_riga(" ", "Delete hard-to-remove dir (like rd /s or rm -r)");
+		scrivi_riga(" ", "Paths >255, names ending with a dot or a space, read-only");
+		scrivi_riga(" ", "files: handled by default, -longpath NOT needed");
+		scrivi_riga(" ", "Junctions/symlinks are removed, never followed");
 		scrivi_riga("-kill", "Wet run (default: DRY run)");
 		scrivi_riga("-force", "Remove folder if not-zero files present");
 		scrivi_riga("-space", "Do not check if writeable (ex. 0 bytes free)");
+		scrivi_riga("-verbose", "Show every object that could not be deleted");
 	}
 	if (i_usage && i_example)
 		scrivi_examples();
@@ -65579,6 +65960,56 @@ string help_rd(bool i_usage, bool i_example)
 	return ("Remove hard-to-delete Windows folder (ex. path >255)");
 }
 #endif /// NOSFTPEND
+string help_zip(bool i_usage, bool i_example)
+{
+	if (i_usage)
+	{
+		scrivi_riga("CMD zip", "extract into ONE single ZIP64 file (STORED, or -deflate)");
+		scrivi_riga(" ", "It is the x command: same filters, same -until, same -range,");
+		scrivi_riga(" ", "only the output is a .zip instead of the filesystem");
+		scrivi_riga(" ", "Made for 'universal' restores: the Linux/NAS/Mac filenames that");
+		scrivi_riga(" ", "Windows cannot even create ( : * ? \" < > | , trailing dots and");
+		scrivi_riga(" ", "spaces, CON, LPT1...) are legal INSIDE a zip, so the whole tree");
+		scrivi_riga(" ", "travels on a Windows (or exFAT) disk and is unpacked back *nix side");
+		scrivi_riga(" ", "Nothing is compressed unless -deflate is asked for");
+		scrivi_riga(" ", "Symlinks, *nix permissions and mtime are kept");
+		scrivi_riga("-to X.zip", "the file to be created. WITHOUT -to the .zip is");
+		scrivi_riga(" ", "born beside the archive, same name, .zip extension");
+		scrivi_riga(" ", "(zip z:\\pippo.zpaq => z:\\pippo.zip) and, in this case,");
+		scrivi_riga(" ", "must NOT exist yet (or -force to overwrite it)");
+		scrivi_riga("-all", "Every version, as the mount command shows them: one");
+		scrivi_riga(" ", "  VER00000000, VER00000001... folder per version, each one");
+		scrivi_riga(" ", "  the FULL tree at that point (a snapshot, not a delta)");
+		scrivi_riga(" ", "  Careful: a zip does not deduplicate and nothing is packed,");
+		scrivi_riga(" ", "  so an unchanged file is written again in every folder.");
+		scrivi_riga(" ", "  The size is printed before anything is created");
+		scrivi_riga("-range X:Y", "With -all, write only the version folders from X to Y");
+		scrivi_riga(" ", "  (the versions before X are read anyway: a snapshot is made");
+		scrivi_riga(" ", "  of everything that happened before it)");
+		scrivi_riga("-deflate", "Compress (method 8) instead of storing. Same .zip, readable");
+		scrivi_riga(" ", "  everywhere, ~3x smaller on sources and text, ~100 MB/s.");
+		scrivi_riga(" ", "  Folders, symlinks, files under 64 bytes and things that are");
+		scrivi_riga(" ", "  compressed already (jpg, mp4, zip, docx...) stay STORED");
+		scrivi_riga(" ", "  -zip is an alias of -deflate");
+		scrivi_riga("-force", "Overwrite the default .zip, if already there");
+		scrivi_riga(" ", "  With -all: go on even beyond 5.000.000 entries");
+		scrivi_riga("-space", "Do not check the free space");
+	}
+	if (i_usage && i_example)
+		scrivi_examples();
+	if (i_example)
+	{
+		scrivi_esempio("Everything into z:\\nas.zip:", "zip z:\\nas.zpaq");
+		scrivi_esempio("The same, overwriting it:", "zip z:\\nas.zpaq -force");
+		scrivi_esempio("Everything into a single zip:", "zip z:\\nas.zpaq -to z:\\restore.zip");
+		scrivi_esempio("Only one folder, last version:", "zip z:\\nas.zpaq /share/PUBLIC -to z:\\public.zip");
+		scrivi_esempio("A specific version:", "zip z:\\nas.zpaq -until 100 -to z:\\v100.zip");
+		scrivi_esempio("Every version, mount-style folders:", "zip z:\\nas.zpaq -all -to z:\\every.zip");
+		scrivi_esempio("The snapshots of versions 10 to 20:", "zip z:\\nas.zpaq -all -range 10:20 -to z:\\10_20.zip");
+		scrivi_esempio("Compressed (sources, text):", "zip z:\\src.zpaq -deflate -to z:\\src.zip");
+	}
+	return ("Extract into a single ZIP64 file (universal restore)");
+}
 string help_pakka(bool i_usage, bool i_example)
 {
 	if (i_usage)
@@ -65748,6 +66179,8 @@ string help_x(bool i_usage, bool i_example)
 #ifdef _WIN32
 		scrivi_riga("-longpath", "Extracting on Windows filenames longer than 255");
 		scrivi_riga("-fixreserved", "fix reserved filenames on Windows (ex. LPT1).");
+		scrivi_riga("-nosanitize", "do NOT fix the filenames Windows cannot store at all");
+		scrivi_riga(" ", "(: * ? \" < > | \\). Default: fix them, else they are NOT extracted");
 		scrivi_riga("-windate", "Restore (if any) file's creation date");
 #endif // corresponds to #ifdef (#ifdef _WIN32)
 		scrivi_riga("-flat", "emergency restore of everything into a single folder (Linux => NTFS)");
@@ -67472,6 +67905,7 @@ void Jidac::load_help_map()
 	help_map.insert(std::pair<string, HelpInfo>("n", HelpInfo("File     ", help_n, 6)));
 #if defined(_WIN32)
 	help_map.insert(std::pair<string, HelpInfo>("rd", HelpInfo("File     ", help_rd, 6)));
+	help_map.insert(std::pair<string, HelpInfo>("zip", HelpInfo("Archive  ", help_zip, 6)));
 #endif
 #endif /// NOSFTPEND
 
@@ -67814,6 +68248,14 @@ string Jidac::rename(string name)
 							name[0]= '_';
 				myreplaceall(name, "/./", "/_/");
 				myreplaceall(name, "/../", "/__/");
+				/*
+					//?/z:/qualcosa (a long path stored INSIDE the archive) glued to a
+					long path -to becomes //?/z:///?/z:/qualcosa, that Windows refuses
+					with ERROR_INVALID_NAME. Drop the prefix and let the z: => z_ rule
+					below do its usual job
+				*/
+				if (islongpath(name))
+					name= name.substr(4);
 				if (iswindowsunc(name))
 				{
 					replace(name, "//", "__");
@@ -67849,6 +68291,12 @@ string Jidac::rename(string name)
 	}
 	if (files.size() == 0 && tofiles.size() > 0) // append prefix tofiles[0]
 	{
+#ifdef _WIN32
+		/// //?/z:/qualcosa stored inside the archive: drop the prefix,
+		/// append_path() knows what to do with the z: drive letter
+		if (islongpath(name))
+			name= name.substr(4);
+#endif // corresponds to #ifdef (#ifdef _WIN32)
 		name= append_path(tofiles[0], name);
 	}
 	else
@@ -68855,6 +69303,8 @@ int Jidac::loadparameters(int argc, const char** argv)
 	g_programflags.add(&flagnodel,			"-nodel",				"Do not show deleted files (in listing)",			"");
 	g_programflags.add(&flagstdout,			"-stdout",				"File suitable for extraction via piping to stdout (reduces efficiency).",											"");
 	g_programflags.add(&flagstore,			"-store",				"Store mode: no deduplication, no compression",		"");
+	g_programflags.add(&flagdeflate,		"-deflate",				"zip: compress (deflate) instead of storing",			"");
+	g_programflags.add(&flagdeflate,		"-zip",					"zip: the same as -deflate",							"");
 	g_programflags.add(&flagtar,			"-tar",					"TAR mode (store/show Posix metadata)",							"");
 	g_programflags.add(&flagtmp,			"-tmp",					"Use .tmp instead of .zpaq during backup",			"");
 	g_programflags.add(&flagtest,			"-test",				"Only do test",										"");
@@ -68891,6 +69341,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 	g_programflags.add(&flagfindzpaq,		"-findzpaq",			"Search .zpaq in every drive letter (USB device)",	"");
 	g_programflags.add(&flagfixcase,		"-fixcase",				"Fix CAse",											"");
 	g_programflags.add(&flagfixreserved,	"-fixreserved",			"fixreserved",										"");
+	g_programflags.add(&flagnosanitize,		"-nosanitize",			"Do NOT fix Windows-invalid filenames",				"x;");
 	g_programflags.add(&flagntfs,			"-ntfs",				"NTFS image",										"");
 	g_programflags.add(&flagvhd,			"-vhd",					"NTFS image to VHD file",										"");
 	g_programflags.add(&flagraw,			"-raw",					"Raw image",										"");
@@ -69522,6 +69973,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 		opt=="e"  				||
 		opt=="x" 				||
 		opt=="xx" 				||
+		opt=="zip" 				||
 		opt=="p" 				||
 		opt=="pp" 		||
 		opt=="t" 				||
@@ -69624,6 +70076,12 @@ int Jidac::loadparameters(int argc, const char** argv)
 			{
 				command='x';
 				flagrecover=true;
+			}
+			if (opt=="zip")
+			{
+				/// 'zip' IS 'x': same filters, same switches, only the output is ONE ZIP64
+				command='x';
+				flagzip=true;
 			}
 			if (opt=="test")
 				command='t';
@@ -70385,18 +70843,19 @@ int Jidac::loadparameters(int argc, const char** argv)
 ///   franzmount::MountBackend  the ONLY thing the layers above see of an
 ///                           archive: versions, directory children, entries,
 ///                           fragment -> block mapping, block decompression
-///   backends                "core":  self-contained scanner (mmap reader,
-///                                    one snapshot per version). Origin:
-///                                    the standalone zpaqfuse project.
-///                                    Plain archives only.
-///                           "jidac": same index, read through the native
+///   backends                "jidac": the index read through the native
 ///                                    InputArchive, so -key (AES-256) and
 ///                                    Franzen archives mount too, and the
 ///                                    version snapshots share their records
 ///                                    instead of copying them.
-///   -backend auto (default) picks jidac when the archive is encrypted and
-///   core otherwise; -backend core|jidac forces one. Both can be mounted at
-///   the same time on two mountpoints: same listing, same bytes.
+///                           "core":  self-contained scanner (mmap reader,
+///                                    one snapshot per version) from the
+///                                    standalone zpaqfuse project, plain
+///                                    archives only. COMMENTED OUT, line
+///                                    by line, nothing deleted: see
+///                                    Backend "core" (DISABLED) below.
+///   -backend auto (the default) and -backend jidac are the same thing now:
+///   jidac is the only engine left, and it reads every archive core read.
 ////////////////////////////////////////////////////////////////////////////
 #ifdef ZPAQMOUNT
 namespace franzmount {
@@ -70597,6 +71056,9 @@ class MountScanProgress
 	bool	on_= false;		// print the human line
 	bool	machine_= false;// -catpaqmode: telemetry instead of the line
 	bool	dirty_= false;	// something was printed with \r and must be wiped
+	int64_t	units_= 0;		// units of work of a phase not counted in bytes
+	int64_t	unitdone_= 0;	// units already finished
+	double	unitfrac_= 0.0;	// how far the unit in progress has got, 0..1
 public:
 	// i_archivebytes= 0 starts a phase that has no percentage and no ETA,
 	// just its counters and the elapsed time (the totals walk does that).
@@ -70611,6 +71073,40 @@ public:
 		machine_= flagcatpaqmode;
 		on_= !machine_ && !flagnoeta && !do_not_print_headers();
 		every_= isAnyOutputRedirected() ? 1000 : 200;
+		units_= 0;
+		unitdone_= 0;
+		unitfrac_= 0.0;
+	}
+	// A phase counted in units of work instead of archive bytes: one
+	// unit is one version's directory tree, and they all cost about the
+	// same, so the percentage and the ETA are worth as much as the
+	// byte-based ones. This is what puts an eta on the tree/sorting line.
+	void begin_units(int64_t i_units)
+	{
+		begin(0);
+		units_= i_units>0 ? i_units : 0;
+	}
+	// i_done units are behind us: the one being worked on is i_done itself.
+	void unit(int64_t i_done)
+	{
+		unitdone_= i_done>0 ? i_done : 0;
+		unitfrac_= 0.0;
+	}
+	// How far the unit in progress has got (0..1). Without it a phase of
+	// one single unit -- mounting one version, which is the default --
+	// would have no ETA at all until it is over.
+	void subunit(double i_frac)
+	{
+		if (i_frac<0.0) i_frac= 0.0;
+		if (i_frac>1.0) i_frac= 1.0;
+		unitfrac_= i_frac;
+	}
+	// Units finished, the fraction of the current one included.
+	double unitsdone() const
+	{
+		double d= (double)unitdone_+unitfrac_;
+		if (d>(double)units_) d= (double)units_;
+		return d>0.0 ? d : 0.0;
 	}
 	bool active() const { return on_ || machine_; }
 	// Where the scan is in the archive, whether or not it is time to
@@ -70646,15 +71142,40 @@ public:
 		// The index of a version costs about what the data behind it does,
 		// so "bytes of the archive walked" is a fair enough yardstick.
 		int64_t eta= 0;
+		bool haveeta= false;
 		if (total_>0 && pos_>0 && elapsed>0)
+		{
 			eta= (int64_t)(0.001*elapsed*(total_-pos_)/pos_);
+			haveeta= true;
+		}
+		// The very same arithmetic on the other yardstick: the versions
+		// whose tree is built (plus the fraction of the one being built)
+		// against the ones still to go. This is the eta of the "building
+		// the directory tree ... sorting N files" line.
+		const double udone= unitsdone();
+		if (total_<=0 && units_>0)
+		{
+			perc= udone*100.0/(double)units_;
+			if (perc>100.0) perc= 100.0;
+			if (udone>0.0 && elapsed>0)
+			{
+				eta= (int64_t)(0.001*elapsed*((double)units_-udone)/udone);
+				haveeta= true;
+			}
+		}
+		const bool measured= total_>0 || units_>0; // something to put a % on
 		if (machine_)
 		{
-			if (total_<=0) return; // nothing sensible to put in the bar
+			if (!measured) return; // nothing sensible to put in the bar
 			const int p= (int)perc;
 			if (p==lastperc_) return;
 			lastperc_= p;
-			printf("@SPK@EXT@%d@%lld@%lld@%d@%d\n", p, (long long)pos_, (long long)total_, (int)eta, 0);
+			// td/ts are BYTES for the GUI (it formats them with
+			// FormatFileSize): a phase counted in versions has none, so it
+			// sends 0/0 and only the percentage and the eta travel.
+			const long long td= total_>0 ? (long long)pos_   : 0;
+			const long long ts= total_>0 ? (long long)total_ : 0;
+			printf("@SPK@EXT@%d@%lld@%lld@%d@%d\n", p, td, ts, (int)eta, 0);
 			fflush(stdout);
 			return;
 		}
@@ -70662,7 +71183,7 @@ public:
 		{
 			// down there the \r is a newline: one line per percent, no more
 			const int p= (int)perc;
-			if (total_<=0 || p==lastperc_) return;
+			if (!measured || p==lastperc_) return;
 			lastperc_= p;
 		}
 		char buf[1024];
@@ -70670,6 +71191,9 @@ public:
 		if (total_>0)
 			n= snprintf(buf, sizeof(buf), " %6.2f%%  %s of %s  eta %s  %s",
 				perc, tohuman(pos_), tohuman2(total_), timetohuman((int32_t)eta).c_str(), detail);
+		else if (units_>0 && haveeta) // tree/sorting: elapsed, then what is left
+			n= snprintf(buf, sizeof(buf), " %6.2f%%  %s  eta %s  %s",
+				perc, timetohuman((int32_t)(elapsed/1000)).c_str(), timetohuman((int32_t)eta).c_str(), detail);
 		else
 			n= snprintf(buf, sizeof(buf), " %s  %s", timetohuman((int32_t)(elapsed/1000)).c_str(), detail);
 		if (n<0) return;
@@ -70779,181 +71303,235 @@ inline int64_t mount_file_size(const MountBackend& be, const MountEntry& e)
 }
 
 //////////////////////////////////////////////////////////////////////////
-// Backend "core": self-contained scanner, one snapshot of the file tree
-// per version. Reads the archive through memory-mapped part files (no
-// encryption). This is the standalone zpaqfuse engine, kept verbatim in
-// spirit so the two can be compared; the "jidac" backend will replace it
-// for production use.
+// Backend "core" (DISABLED): self-contained scanner, one snapshot of the
+// file tree per version. Reads the archive through memory-mapped part
+// files (no encryption). This is the standalone zpaqfuse engine, kept
+// verbatim in spirit so the two could be compared; "jidac" has replaced
+// it, reads what core read and the encrypted archives too.
+//
+// The whole engine is COMMENTED OUT, not deleted: from here down to the
+// end of CoreBackend everything is the original source with a "//" in
+// front of it, one line at a time, and stripping that prefix brings it
+// all back. It is gone from the options as well: see mount_pick_backend(),
+// open_backend() and help_mount().
+//
+// Three things down here are NOT commented out, because the "jidac"
+// backend uses them: CoreFragLoc, CoreStrWriter and the shared
+// mount_tree_add() / mount_tree_finish() pair. They keep their names.
 //////////////////////////////////////////////////////////////////////////
-
-// A libzpaq::Reader over one or more memory-mapped parts (same '?'/'*'
-// wildcard convention as InputArchive, via the global subpart()).
-class CoreMmapReader : public libzpaq::Reader
-{
-	struct Part
-	{
-		string	path;
-		int64_t	size= 0;
-		void*	base= NULL;
-#ifdef _WIN32
-		void*	hmap= NULL; // file-mapping handle, outlives the view
-#endif
-	};
-	vector<Part>	parts_;
-	vector<int64_t>	cum_;
-	int64_t			total_= 0;
-	int64_t			off_= 0;
-
-	void release()
-	{
-		for (size_t i= 0; i<parts_.size(); ++i)
-		{
-			Part& p= parts_[i];
-#ifdef _WIN32
-			if (p.base) UnmapViewOfFile(p.base);
-			if (p.hmap) CloseHandle((HANDLE)p.hmap);
-			p.hmap= NULL;
-#else
-			if (p.base) ::munmap(p.base, (size_t)p.size);
-#endif
-			p.base= NULL;
-		}
-		parts_.clear();
-		cum_.clear();
-		total_= 0;
-	}
-
-public:
-	explicit CoreMmapReader(const string& pattern)
-	{
-		const string part0= subpart(pattern, 0);
-		try
-		{
-			for (int i= 1;; ++i)
-			{
-				const string parti= subpart(pattern, i);
-				if (i>1 && parti==part0) break;
-				Part p;
-				p.path= parti;
-#ifdef _WIN32
-				std::wstring wpath= utow(parti.c_str());
-				HANDLE h= CreateFileW(wpath.c_str(), GENERIC_READ, FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-				if (h==INVALID_HANDLE_VALUE)
-				{
-					DWORD err= GetLastError();
-					if (err==ERROR_FILE_NOT_FOUND || err==ERROR_PATH_NOT_FOUND || err==ERROR_INVALID_NAME) break;
-					throw std::runtime_error("open failed: "+parti);
-				}
-				LARGE_INTEGER sz;
-				if (!GetFileSizeEx(h, &sz)) { CloseHandle(h); throw std::runtime_error("GetFileSizeEx failed: "+parti); }
-				p.size= sz.QuadPart;
-				if (p.size>0)
-				{
-					if (sizeof(void*)<8 && p.size>0x7fffffffLL) { CloseHandle(h); throw std::runtime_error("part too large for a 32-bit build: "+parti); }
-					HANDLE hm= CreateFileMappingW(h, NULL, PAGE_READONLY, 0, 0, NULL);
-					if (!hm) { CloseHandle(h); throw std::runtime_error("CreateFileMapping failed: "+parti); }
-					void* m= MapViewOfFile(hm, FILE_MAP_READ, 0, 0, 0);
-					if (!m) { CloseHandle(hm); CloseHandle(h); throw std::runtime_error("MapViewOfFile failed: "+parti); }
-					p.base= m;
-					p.hmap= hm;
-				}
-				CloseHandle(h);
-#else
-				struct stat st;
-				if (::stat(parti.c_str(), &st)!=0) break;
-				p.size= st.st_size;
-				if (p.size>0)
-				{
-					int fd= ::open(parti.c_str(), O_RDONLY);
-					if (fd<0) throw std::runtime_error("open failed: "+parti+": "+strerror(errno));
-					void* m= ::mmap(NULL, (size_t)p.size, PROT_READ, MAP_PRIVATE, fd, 0);
-					int saved= errno;
-					::close(fd);
-					if (m==MAP_FAILED) throw std::runtime_error("mmap failed: "+parti+": "+strerror(saved));
-					p.base= m;
-				}
-#endif
-				cum_.push_back(total_);
-				total_+= p.size;
-				parts_.push_back(p);
-			}
-		}
-		catch (...) { release(); throw; }
-		if (parts_.empty()) throw std::runtime_error("no archive parts found for "+pattern);
-	}
-	~CoreMmapReader() { release(); }
-	CoreMmapReader(const CoreMmapReader&)= delete;
-	CoreMmapReader& operator=(const CoreMmapReader&)= delete;
-
-	int64_t total_size() const { return total_; }
-	int		num_parts() const { return (int)parts_.size(); }
-	int64_t tell() const { return off_; }
-	void seek(int64_t p, int whence)
-	{
-		if (whence==SEEK_SET) off_= p;
-		else if (whence==SEEK_CUR) off_+= p;
-		else if (whence==SEEK_END) off_= total_+p;
-		else throw std::runtime_error("bad whence");
-	}
-	int get()
-	{
-		unsigned char c;
-		return read((char*)&c, 1)==1 ? c : -1;
-	}
-	int read(char* obuf, int len)
-	{
-		if (off_<0 || off_>=total_ || len<=0) return 0;
-		int64_t remaining= total_-off_;
-		int to_read= (int)(std::min)((int64_t)len, remaining);
-		int copied= 0;
-		int64_t voff= off_;
-		size_t pi= 0;
-		while (pi+1<parts_.size() && voff>=cum_[pi]+parts_[pi].size) ++pi;
-		while (copied<to_read)
-		{
-			const Part& p= parts_[pi];
-			int64_t local= voff-cum_[pi];
-			int64_t avail= p.size-local;
-			if (avail<=0) { if (++pi>=parts_.size()) break; continue; }
-			int chunk= (int)(std::min)(avail, (int64_t)(to_read-copied));
-			memcpy(obuf+copied, (const char*)p.base+local, (size_t)chunk);
-			copied+= chunk;
-			voff+= chunk;
-			if (chunk==avail) ++pi;
-		}
-		off_+= copied;
-		return copied;
-	}
-};
-
-struct CoreHT { unsigned usize= 0; };
-struct CoreDT
-{
-	int64_t				date= 0; // 0 = tombstone
-	int64_t				attr= 0;
-	unsigned			version= 0;
-	vector<unsigned>	ptr;
-};
-typedef map<string, CoreDT> CoreDTMap;
-struct CoreSession
-{
-	CoreDTMap						dt;
-	map<string, vector<string> >	children; // "" or "a/b/" -> sorted names, dirs end in '/'
-	int64_t							date= 0;
-	bool							tree= false; // children built (see prepare())
-};
+//
+//// A libzpaq::Reader over one or more memory-mapped parts (same '?'/'*'
+//// wildcard convention as InputArchive, via the global subpart()).
+//class CoreMmapReader : public libzpaq::Reader
+//{
+//	struct Part
+//	{
+//		string	path;
+//		int64_t	size= 0;
+//		void*	base= NULL;
+//#ifdef _WIN32
+//		void*	hmap= NULL; // file-mapping handle, outlives the view
+//#endif
+//	};
+//	vector<Part>	parts_;
+//	vector<int64_t>	cum_;
+//	int64_t			total_= 0;
+//	int64_t			off_= 0;
+//
+//	void release()
+//	{
+//		for (size_t i= 0; i<parts_.size(); ++i)
+//		{
+//			Part& p= parts_[i];
+//#ifdef _WIN32
+//			if (p.base) UnmapViewOfFile(p.base);
+//			if (p.hmap) CloseHandle((HANDLE)p.hmap);
+//			p.hmap= NULL;
+//#else
+//			if (p.base) ::munmap(p.base, (size_t)p.size);
+//#endif
+//			p.base= NULL;
+//		}
+//		parts_.clear();
+//		cum_.clear();
+//		total_= 0;
+//	}
+//
+//public:
+//	explicit CoreMmapReader(const string& pattern)
+//	{
+//		const string part0= subpart(pattern, 0);
+//		try
+//		{
+//			for (int i= 1;; ++i)
+//			{
+//				const string parti= subpart(pattern, i);
+//				if (i>1 && parti==part0) break;
+//				Part p;
+//				p.path= parti;
+//#ifdef _WIN32
+//				std::wstring wpath= utow(parti.c_str());
+//				HANDLE h= CreateFileW(wpath.c_str(), GENERIC_READ, FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+//				if (h==INVALID_HANDLE_VALUE)
+//				{
+//					DWORD err= GetLastError();
+//					if (err==ERROR_FILE_NOT_FOUND || err==ERROR_PATH_NOT_FOUND || err==ERROR_INVALID_NAME) break;
+//					throw std::runtime_error("open failed: "+parti);
+//				}
+//				LARGE_INTEGER sz;
+//				if (!GetFileSizeEx(h, &sz)) { CloseHandle(h); throw std::runtime_error("GetFileSizeEx failed: "+parti); }
+//				p.size= sz.QuadPart;
+//				if (p.size>0)
+//				{
+//					if (sizeof(void*)<8 && p.size>0x7fffffffLL) { CloseHandle(h); throw std::runtime_error("part too large for a 32-bit build: "+parti); }
+//					HANDLE hm= CreateFileMappingW(h, NULL, PAGE_READONLY, 0, 0, NULL);
+//					if (!hm) { CloseHandle(h); throw std::runtime_error("CreateFileMapping failed: "+parti); }
+//					void* m= MapViewOfFile(hm, FILE_MAP_READ, 0, 0, 0);
+//					if (!m) { CloseHandle(hm); CloseHandle(h); throw std::runtime_error("MapViewOfFile failed: "+parti); }
+//					p.base= m;
+//					p.hmap= hm;
+//				}
+//				CloseHandle(h);
+//#else
+//				struct stat st;
+//				if (::stat(parti.c_str(), &st)!=0) break;
+//				p.size= st.st_size;
+//				if (p.size>0)
+//				{
+//					int fd= ::open(parti.c_str(), O_RDONLY);
+//					if (fd<0) throw std::runtime_error("open failed: "+parti+": "+strerror(errno));
+//					void* m= ::mmap(NULL, (size_t)p.size, PROT_READ, MAP_PRIVATE, fd, 0);
+//					int saved= errno;
+//					::close(fd);
+//					if (m==MAP_FAILED) throw std::runtime_error("mmap failed: "+parti+": "+strerror(saved));
+//					p.base= m;
+//				}
+//#endif
+//				cum_.push_back(total_);
+//				total_+= p.size;
+//				parts_.push_back(p);
+//			}
+//		}
+//		catch (...) { release(); throw; }
+//		if (parts_.empty()) throw std::runtime_error("no archive parts found for "+pattern);
+//	}
+//	~CoreMmapReader() { release(); }
+//	CoreMmapReader(const CoreMmapReader&)= delete;
+//	CoreMmapReader& operator=(const CoreMmapReader&)= delete;
+//
+//	int64_t total_size() const { return total_; }
+//	int		num_parts() const { return (int)parts_.size(); }
+//	int64_t tell() const { return off_; }
+//	void seek(int64_t p, int whence)
+//	{
+//		if (whence==SEEK_SET) off_= p;
+//		else if (whence==SEEK_CUR) off_+= p;
+//		else if (whence==SEEK_END) off_= total_+p;
+//		else throw std::runtime_error("bad whence");
+//	}
+//	int get()
+//	{
+//		unsigned char c;
+//		return read((char*)&c, 1)==1 ? c : -1;
+//	}
+//	int read(char* obuf, int len)
+//	{
+//		if (off_<0 || off_>=total_ || len<=0) return 0;
+//		int64_t remaining= total_-off_;
+//		int to_read= (int)(std::min)((int64_t)len, remaining);
+//		int copied= 0;
+//		int64_t voff= off_;
+//		size_t pi= 0;
+//		while (pi+1<parts_.size() && voff>=cum_[pi]+parts_[pi].size) ++pi;
+//		while (copied<to_read)
+//		{
+//			const Part& p= parts_[pi];
+//			int64_t local= voff-cum_[pi];
+//			int64_t avail= p.size-local;
+//			if (avail<=0) { if (++pi>=parts_.size()) break; continue; }
+//			int chunk= (int)(std::min)(avail, (int64_t)(to_read-copied));
+//			memcpy(obuf+copied, (const char*)p.base+local, (size_t)chunk);
+//			copied+= chunk;
+//			voff+= chunk;
+//			if (chunk==avail) ++pi;
+//		}
+//		off_+= copied;
+//		return copied;
+//	}
+//};
+//
+//struct CoreHT { unsigned usize= 0; };
+//struct CoreDT
+//{
+//	int64_t				date= 0; // 0 = tombstone
+//	int64_t				attr= 0;
+//	unsigned			version= 0;
+//	vector<unsigned>	ptr;
+//};
+///*
+//	One file's whole life: the record every version that touched it gave it,
+//	NULL meaning deleted from that version on. This is what replaces a copy
+//	of the file table inside every version: 746 versions of a 455.000 files
+//	NAS backup are 340 million map nodes, tens of GB, std::bad_alloc long
+//	before the mount point appears. A history is only as big as the changes
+//	really stored in the archive
+//*/
+//struct CoreChange
+//{
+//	unsigned	  version= 0;
+//	const CoreDT* rec= NULL; // NULL (or rec->date==0) => deleted from here on
+//};
+//typedef map<string, vector<CoreChange> > CoreHistMap;
+//
+///// the record visible at version v: NULL if the file is not there (yet, or any more)
+//inline const CoreDT* core_at(const vector<CoreChange>& i_hist, size_t i_version)
+//{
+//	size_t lo= 0;
+//	size_t hi= i_hist.size();
+//	while (lo<hi) /// the last change with version <= i_version
+//	{
+//		const size_t mid= lo+(hi-lo)/2;
+//		if (i_hist[mid].version<=(unsigned)i_version)
+//			lo= mid+1;
+//		else
+//			hi= mid;
+//	}
+//	return lo>0 ? i_hist[lo-1].rec : NULL;
+//}
+//
+///// one more change; the same file twice in the same version is an overwrite
+//inline void core_touch(vector<CoreChange>& o_hist, unsigned i_version, const CoreDT* i_rec)
+//{
+//	if ((!o_hist.empty()) && (o_hist.back().version==i_version))
+//	{
+//		o_hist.back().rec= i_rec;
+//		return;
+//	}
+//	CoreChange c;
+//	c.version= i_version;
+//	c.rec	 = i_rec;
+//	o_hist.push_back(c);
+//}
+//struct CoreSession
+//{
+//	map<string, vector<string> >	children; // "" or "a/b/" -> sorted names, dirs end in '/'
+//	int64_t							date= 0;
+//	bool							tree= false; // children built (see prepare())
+//};
+// Alive, and used by "jidac": fragment -> (block, offset), one per fragment
 struct CoreFragLoc { unsigned block= ~0u; unsigned off= 0; };
 
-inline unsigned core_btoi(const char*& s)
-{
-	s+= 4;
-	return (unsigned char)s[-4] | ((unsigned char)s[-3]<<8) | ((unsigned char)s[-2]<<16) | ((unsigned char)s[-1]<<24);
-}
-inline int64_t core_btol(const char*& s)
-{
-	uint64_t r= core_btoi(s);
-	return r+(uint64_t(core_btoi(s))<<32);
-}
+//inline unsigned core_btoi(const char*& s)
+//{
+//	s+= 4;
+//	return (unsigned char)s[-4] | ((unsigned char)s[-3]<<8) | ((unsigned char)s[-2]<<16) | ((unsigned char)s[-1]<<24);
+//}
+//inline int64_t core_btol(const char*& s)
+//{
+//	uint64_t r= core_btoi(s);
+//	return r+(uint64_t(core_btoi(s))<<32);
+//}
+// Alive, and used by "jidac": a libzpaq::Writer that appends to a string
 struct CoreStrWriter : public libzpaq::Writer
 {
 	string s;
@@ -71000,246 +71578,266 @@ inline void mount_tree_finish(map<string, vector<string> >& children)
 	}
 }
 
-// Immediate-children map for one session, synthesizing every ancestor
-// directory implied by a path even when zpaq never stored it explicitly.
-// Called by prepare(), not by the scan: this is the expensive half of a
-// version, and only a version that gets mounted is worth it.
-inline void core_build_dir_tree(CoreSession& s, int i_version)
-{
-	const int64_t entries= (int64_t)s.dt.size();
-	int64_t done= 0;
-	for (CoreDTMap::const_iterator it= s.dt.begin(); it!=s.dt.end(); ++it)
-	{
-		if (it->second.date!=0)
-			mount_tree_add(s.children, it->first);
-		// a version with a million files takes seconds of its own here
-		if (((++done) & 8191)==0 && g_mountscan.due())
-			g_mountscan.line(-1, "V%08d  tree %d%% of %s files", i_version,
-				(int)(done*100/(entries>0 ? entries : 1)), migliaia2(entries));
-	}
-	if (g_mountscan.active())
-		g_mountscan.line(-1, "V%08d  sorting %s files", i_version, migliaia2(entries));
-	mount_tree_finish(s.children);
-}
-
-class CoreBackend : public MountBackend
-{
-	string				pattern_;
-	vector<CoreHT>		ht_;
-	vector<MountBlock>	blocks_;
-	vector<int64_t>		verdate_;
-	vector<CoreSession>	sessions_;
-	vector<CoreFragLoc>	fragloc_;
-	int64_t				archive_bytes_= 0;
-	int					parts_= 0;
-
-	// Scans the journaling index (c/h/i blocks) without decompressing any
-	// data ('d') block, snapshotting the tree at the end of every version.
-	void scan(CoreMmapReader& in)
-	{
-		int64_t data_offset= 0;
-		bool have_version= false;
-		bool done= false;
-		CoreDTMap running;
-		while (!done)
-		{
-			bool restart= false;
-			libzpaq::Decompresser d;
-			d.setInput(&in);
-			double mem= 0;
-			while (!restart && d.findBlock(&mem))
-			{
-				CoreStrWriter filename, comment;
-				while (d.findFilename(&filename))
-				{
-					g_mountscan.at(in.tell());
-					if (g_mountscan.due()) // V: the version being read, as its folder would be numbered
-						g_mountscan.line(-1, "V%08d  %s files", (int)(verdate_.empty() ? 0 : verdate_.size()-1), migliaia2((int64_t)running.size()));
-					comment.s.clear();
-					d.readComment(&comment);
-					if (comment.s.size()<4 || comment.s.compare(comment.s.size()-4, 4, "jDC\x01")!=0) { d.readSegmentEnd(); continue; }
-					if (filename.s.size()!=28 || filename.s.compare(0, 3, "jDC")!=0) throw std::runtime_error("bad journaling block name: "+filename.s);
-					int64_t usize= 0;
-					for (size_t k= 0; k<comment.s.size(); ++k) { if (!isdigit((unsigned char)comment.s[k])) break; usize= usize*10+(comment.s[k]-'0'); }
-					int64_t fdate= 0;
-					for (int k= 3; k<17; ++k) fdate= fdate*10+(filename.s[k]-'0');
-					char type= filename.s[17];
-					int64_t num= 0;
-					for (int k= 18; k<28; ++k) num= num*10+(filename.s[k]-'0');
-					if (type=='d') { d.readSegmentEnd(); continue; }
-
-					libzpaq::StringBuffer os;
-					os.setLimit(usize);
-					d.setOutput(&os);
-					d.decompress();
-					d.readSegmentEnd();
-					if ((int64_t)os.size()!=usize) throw std::runtime_error("block size mismatch");
-
-					if (type=='c')
-					{
-						if (os.size()<8) throw std::runtime_error("c block too small");
-						const char* s= (const char*)os.data();
-						int64_t jmp= core_btol(s);
-						if (!verdate_.empty())
-						{
-							CoreSession sess;
-							sess.dt= running;
-							sess.date= verdate_.back();
-							sessions_.push_back(sess); // the tree waits for prepare()
-						}
-						verdate_.push_back(fdate);
-						data_offset= in.tell()+1-d.buffered();
-						have_version= true;
-						if (jmp>0) { in.seek(data_offset+jmp, SEEK_SET); restart= true; break; }
-					}
-					else if (type=='h')
-					{
-						if (!have_version) throw std::runtime_error("h block before any c block");
-						if (os.size()%24!=4) throw std::runtime_error("bad h block size");
-						unsigned n= (unsigned)((os.size()-4)/24);
-						const char* s= (const char*)os.data();
-						unsigned bsize= core_btoi(s);
-						MountBlock b;
-						b.offset= data_offset; b.start= (unsigned)num; b.frags= n;
-						unsigned block_usize= 0;
-						for (unsigned k= 0; k<n; ++k)
-						{
-							s+= 20; // sha1
-							unsigned fsize= core_btoi(s);
-							while (ht_.size()<=(size_t)num+k) ht_.push_back(CoreHT());
-							ht_[(size_t)num+k].usize= fsize;
-							block_usize+= fsize;
-						}
-						b.usize= block_usize;
-						b.index= (unsigned)blocks_.size();
-						blocks_.push_back(b);
-						data_offset+= bsize;
-					}
-					else if (type=='i')
-					{
-						if (!have_version) throw std::runtime_error("i block before any c block");
-						const char* s= (const char*)os.data();
-						const char* end= s+os.size();
-						while (s+9<=end)
-						{
-							int64_t date= core_btol(s);
-							string fn= mount_normalize_path(s);
-							s+= strlen(s)+1;
-							if (s>end) throw std::runtime_error("filename overruns i block");
-							CoreDT rec;
-							rec.date= date;
-							rec.version= (unsigned)verdate_.size()-1;
-							if (date==0) { running[fn]= rec; continue; }
-							if (s+4>end) throw std::runtime_error("missing attr");
-							unsigned na= core_btoi(s);
-							if (s+na>end) throw std::runtime_error("attr too long");
-							for (unsigned k= 0; k<na; ++k, ++s) if (k<8) rec.attr+= int64_t((unsigned char)*s)<<(k*8);
-							if (s+4>end) throw std::runtime_error("missing ptr count");
-							unsigned ni= core_btoi(s);
-							if ((size_t)ni>(size_t)(end-s)/4) throw std::runtime_error("ptr list too long");
-							rec.ptr.resize(ni);
-							for (unsigned k= 0; k<ni; ++k) rec.ptr[k]= core_btoi(s);
-							running[fn]= rec;
-						}
-					}
-				}
-			}
-			if (!restart) done= true;
-		}
-		if (!verdate_.empty())
-		{
-			CoreSession sess;
-			sess.dt= running;
-			sess.date= verdate_.back();
-			sessions_.push_back(sess); // the tree waits for prepare()
-		}
-		// fragment -> (block, offset) table: O(1) per fragment on the read path
-		fragloc_.assign(ht_.size(), CoreFragLoc());
-		for (size_t bi= 0; bi<blocks_.size(); ++bi)
-		{
-			const MountBlock& b= blocks_[bi];
-			unsigned off= 0;
-			for (unsigned f= b.start; f<b.start+b.frags; ++f)
-			{
-				if (f<fragloc_.size()) { fragloc_[f].block= b.index; fragloc_[f].off= off; }
-				off+= (f<ht_.size()) ? ht_[f].usize : 0;
-			}
-		}
-	}
-
-	class Reader : public MountReader
-	{
-		CoreMmapReader in_;
-	public:
-		explicit Reader(const string& pattern) : in_(pattern) {}
-		string decompress(const MountBlock& b)
-		{
-			in_.seek(b.offset, SEEK_SET);
-			libzpaq::Decompresser d;
-			d.setInput(&in_);
-			libzpaq::StringBuffer out;
-			out.setLimit((size_t)b.usize+8+4ull*b.frags);
-			d.setOutput(&out);
-			double mem= 0;
-			if (!d.findBlock(&mem)) throw std::runtime_error("block not found at expected offset");
-			while (d.findFilename())
-			{
-				d.readComment();
-				while (out.size()<b.usize && d.decompress(1<<14)) {}
-				if (out.size()>=b.usize) break;
-				d.readSegmentEnd();
-			}
-			if (out.size()<b.usize) throw std::runtime_error("incomplete block decompression");
-			return string((const char*)out.data(), b.usize);
-		}
-	};
-
-public:
-	explicit CoreBackend(const string& pattern) : pattern_(pattern)
-	{
-		CoreMmapReader in(pattern);
-		archive_bytes_= in.total_size();
-		parts_= in.num_parts();
-		g_mountscan.begin(archive_bytes_); // ended by mount(), thrown or not
-		scan(in);
-	}
-	string name() const { return "core"; }
-	size_t versions() const { return sessions_.size(); }
-	int64_t version_date(size_t v) const { return v<sessions_.size() ? sessions_[v].date : 0; }
-	const vector<string>* children(size_t v, const string& dir) const
-	{
-		if (v>=sessions_.size()) return NULL;
-		map<string, vector<string> >::const_iterator it= sessions_[v].children.find(dir);
-		return it==sessions_[v].children.end() ? NULL : &it->second;
-	}
-	bool entry(size_t v, const string& path, MountEntry& out) const
-	{
-		if (v>=sessions_.size()) return false;
-		CoreDTMap::const_iterator it= sessions_[v].dt.find(path);
-		if (it==sessions_[v].dt.end() || it->second.date==0) return false;
-		out.date= it->second.date;
-		out.ptr= &it->second.ptr;
-		return true;
-	}
-	unsigned frag_size(unsigned f) const { return f<ht_.size() ? ht_[f].usize : 0; }
-	const MountBlock* block_of(unsigned f, size_t* off) const
-	{
-		if (f>=fragloc_.size() || fragloc_[f].block>=blocks_.size()) return NULL;
-		if (off) *off= fragloc_[f].off;
-		return &blocks_[fragloc_[f].block];
-	}
-	size_t nblocks() const { return blocks_.size(); }
-	size_t nfragments() const { return ht_.size(); }
-	MountReader* new_reader() { return new Reader(pattern_); }
-	int64_t archive_bytes() const { return archive_bytes_; }
-	int parts() const { return parts_; }
-	void prepare(size_t v)
-	{
-		if (v>=sessions_.size() || sessions_[v].tree) return;
-		core_build_dir_tree(sessions_[v], (int)v);
-		sessions_[v].tree= true;
-	}
-};
+//// Immediate-children map for one session, synthesizing every ancestor
+//// directory implied by a path even when zpaq never stored it explicitly.
+//// Called by prepare(), not by the scan: this is the expensive half of a
+//// version, and only a version that gets mounted is worth it.
+//inline void core_build_dir_tree(const CoreHistMap& i_hist, CoreSession& s, int i_version)
+//{
+//	const int64_t entries= (int64_t)i_hist.size();
+//	int64_t done= 0;
+//	for (CoreHistMap::const_iterator it= i_hist.begin(); it!=i_hist.end(); ++it)
+//	{
+//		const CoreDT* r= core_at(it->second, (size_t)i_version);
+//		if (r!=NULL && r->date!=0)
+//			mount_tree_add(s.children, it->first);
+//		// a version with a million files takes seconds of its own here
+//		if (((++done) & 8191)==0 && g_mountscan.due())
+//			g_mountscan.line(-1, "V%08d  tree %d%% of %s files", i_version,
+//				(int)(done*100/(entries>0 ? entries : 1)), migliaia2(entries));
+//	}
+//	if (g_mountscan.active())
+//		g_mountscan.line(-1, "V%08d  sorting %s files", i_version, migliaia2(entries));
+//	mount_tree_finish(s.children);
+//}
+//
+//class CoreBackend : public MountBackend
+//{
+//	string				pattern_;
+//	vector<CoreHT>		ht_;
+//	vector<MountBlock>	blocks_;
+//	vector<int64_t>		verdate_;
+//	vector<CoreSession>	sessions_;
+//	vector<CoreFragLoc>	fragloc_;
+//	std::deque<CoreDT>	recs_;		// stable addresses, hist_ points here
+//	size_t				live_= 0;	// files alive in the version being scanned
+//	CoreHistMap			hist_;		// every file's history, shared by all versions
+//	int64_t				archive_bytes_= 0;
+//	int					parts_= 0;
+//
+//	// Scans the journaling index (c/h/i blocks) without decompressing any
+//	// data ('d') block, snapshotting the tree at the end of every version.
+//	void scan(CoreMmapReader& in)
+//	{
+//		int64_t data_offset= 0;
+//		bool have_version= false;
+//		bool done= false;
+//		while (!done)
+//		{
+//			bool restart= false;
+//			libzpaq::Decompresser d;
+//			d.setInput(&in);
+//			double mem= 0;
+//			while (!restart && d.findBlock(&mem))
+//			{
+//				CoreStrWriter filename, comment;
+//				while (d.findFilename(&filename))
+//				{
+//					g_mountscan.at(in.tell());
+//					if (g_mountscan.due()) // V: the version being read, as its folder would be numbered
+//						g_mountscan.line(-1, "V%08d  %s files", (int)(verdate_.empty() ? 0 : verdate_.size()-1), migliaia2((int64_t)live_));
+//					comment.s.clear();
+//					d.readComment(&comment);
+//					if (comment.s.size()<4 || comment.s.compare(comment.s.size()-4, 4, "jDC\x01")!=0) { d.readSegmentEnd(); continue; }
+//					if (filename.s.size()!=28 || filename.s.compare(0, 3, "jDC")!=0) throw std::runtime_error("bad journaling block name: "+filename.s);
+//					int64_t usize= 0;
+//					for (size_t k= 0; k<comment.s.size(); ++k) { if (!isdigit((unsigned char)comment.s[k])) break; usize= usize*10+(comment.s[k]-'0'); }
+//					int64_t fdate= 0;
+//					for (int k= 3; k<17; ++k) fdate= fdate*10+(filename.s[k]-'0');
+//					char type= filename.s[17];
+//					int64_t num= 0;
+//					for (int k= 18; k<28; ++k) num= num*10+(filename.s[k]-'0');
+//					if (type=='d') { d.readSegmentEnd(); continue; }
+//
+//					libzpaq::StringBuffer os;
+//					os.setLimit(usize);
+//					d.setOutput(&os);
+//					d.decompress();
+//					d.readSegmentEnd();
+//					if ((int64_t)os.size()!=usize) throw std::runtime_error("block size mismatch");
+//
+//					if (type=='c')
+//					{
+//						if (os.size()<8) throw std::runtime_error("c block too small");
+//						const char* s= (const char*)os.data();
+//						int64_t jmp= core_btol(s);
+//						if (!verdate_.empty())
+//						{
+//							CoreSession sess;
+//							sess.date= verdate_.back();
+//							sessions_.push_back(sess); // the tree waits for prepare()
+//						}
+//						verdate_.push_back(fdate);
+//						data_offset= in.tell()+1-d.buffered();
+//						have_version= true;
+//						if (jmp>0) { in.seek(data_offset+jmp, SEEK_SET); restart= true; break; }
+//					}
+//					else if (type=='h')
+//					{
+//						if (!have_version) throw std::runtime_error("h block before any c block");
+//						if (os.size()%24!=4) throw std::runtime_error("bad h block size");
+//						unsigned n= (unsigned)((os.size()-4)/24);
+//						const char* s= (const char*)os.data();
+//						unsigned bsize= core_btoi(s);
+//						MountBlock b;
+//						b.offset= data_offset; b.start= (unsigned)num; b.frags= n;
+//						unsigned block_usize= 0;
+//						for (unsigned k= 0; k<n; ++k)
+//						{
+//							s+= 20; // sha1
+//							unsigned fsize= core_btoi(s);
+//							while (ht_.size()<=(size_t)num+k) ht_.push_back(CoreHT());
+//							ht_[(size_t)num+k].usize= fsize;
+//							block_usize+= fsize;
+//						}
+//						b.usize= block_usize;
+//						b.index= (unsigned)blocks_.size();
+//						blocks_.push_back(b);
+//						data_offset+= bsize;
+//					}
+//					else if (type=='i')
+//					{
+//						if (!have_version) throw std::runtime_error("i block before any c block");
+//						const char* s= (const char*)os.data();
+//						const char* end= s+os.size();
+//						while (s+9<=end)
+//						{
+//							int64_t date= core_btol(s);
+//							string fn= mount_normalize_path(s);
+//							s+= strlen(s)+1;
+//							if (s>end) throw std::runtime_error("filename overruns i block");
+//							CoreDT rec;
+//							rec.date= date;
+//							rec.version= (unsigned)verdate_.size()-1;
+//							if (date==0)
+//							{	/// tombstone: remembered, not erased (older versions still show the file)
+//								CoreHistMap::iterator h= hist_.find(fn);
+//								if (h!=hist_.end())
+//								{
+//									if ((!h->second.empty()) && (h->second.back().rec!=NULL)) --live_;
+//									core_touch(h->second, rec.version, NULL);
+//								}
+//								continue;
+//							}
+//							if (s+4>end) throw std::runtime_error("missing attr");
+//							unsigned na= core_btoi(s);
+//							if (s+na>end) throw std::runtime_error("attr too long");
+//							for (unsigned k= 0; k<na; ++k, ++s) if (k<8) rec.attr+= int64_t((unsigned char)*s)<<(k*8);
+//							if (s+4>end) throw std::runtime_error("missing ptr count");
+//							unsigned ni= core_btoi(s);
+//							if ((size_t)ni>(size_t)(end-s)/4) throw std::runtime_error("ptr list too long");
+//							rec.ptr.resize(ni);
+//							for (unsigned k= 0; k<ni; ++k) rec.ptr[k]= core_btoi(s);
+//							recs_.push_back(CoreDT());
+//							CoreDT& stored= recs_.back();
+//							stored.date	  = rec.date;
+//							stored.attr	  = rec.attr;
+//							stored.version= rec.version;
+//							stored.ptr.swap(rec.ptr); /// the fragment list is moved, never copied
+//							vector<CoreChange>& h= hist_[fn];
+//							if (h.empty() || h.back().rec==NULL) ++live_;
+//							core_touch(h, stored.version, &stored);
+//						}
+//					}
+//				}
+//			}
+//			if (!restart) done= true;
+//		}
+//		if (!verdate_.empty())
+//		{
+//			CoreSession sess;
+//			sess.date= verdate_.back();
+//			sessions_.push_back(sess); // the tree waits for prepare()
+//		}
+//		// fragment -> (block, offset) table: O(1) per fragment on the read path
+//		fragloc_.assign(ht_.size(), CoreFragLoc());
+//		for (size_t bi= 0; bi<blocks_.size(); ++bi)
+//		{
+//			const MountBlock& b= blocks_[bi];
+//			unsigned off= 0;
+//			for (unsigned f= b.start; f<b.start+b.frags; ++f)
+//			{
+//				if (f<fragloc_.size()) { fragloc_[f].block= b.index; fragloc_[f].off= off; }
+//				off+= (f<ht_.size()) ? ht_[f].usize : 0;
+//			}
+//		}
+//	}
+//
+//	class Reader : public MountReader
+//	{
+//		CoreMmapReader in_;
+//	public:
+//		explicit Reader(const string& pattern) : in_(pattern) {}
+//		string decompress(const MountBlock& b)
+//		{
+//			in_.seek(b.offset, SEEK_SET);
+//			libzpaq::Decompresser d;
+//			d.setInput(&in_);
+//			libzpaq::StringBuffer out;
+//			out.setLimit((size_t)b.usize+8+4ull*b.frags);
+//			d.setOutput(&out);
+//			double mem= 0;
+//			if (!d.findBlock(&mem)) throw std::runtime_error("block not found at expected offset");
+//			while (d.findFilename())
+//			{
+//				d.readComment();
+//				while (out.size()<b.usize && d.decompress(1<<14)) {}
+//				if (out.size()>=b.usize) break;
+//				d.readSegmentEnd();
+//			}
+//			if (out.size()<b.usize) throw std::runtime_error("incomplete block decompression");
+//			return string((const char*)out.data(), b.usize);
+//		}
+//	};
+//
+//public:
+//	explicit CoreBackend(const string& pattern) : pattern_(pattern)
+//	{
+//		CoreMmapReader in(pattern);
+//		archive_bytes_= in.total_size();
+//		parts_= in.num_parts();
+//		g_mountscan.begin(archive_bytes_); // ended by mount(), thrown or not
+//		scan(in);
+//	}
+//	string name() const { return "core"; }
+//	size_t versions() const { return sessions_.size(); }
+//	int64_t version_date(size_t v) const { return v<sessions_.size() ? sessions_[v].date : 0; }
+//	const vector<string>* children(size_t v, const string& dir) const
+//	{
+//		if (v>=sessions_.size()) return NULL;
+//		map<string, vector<string> >::const_iterator it= sessions_[v].children.find(dir);
+//		return it==sessions_[v].children.end() ? NULL : &it->second;
+//	}
+//	bool entry(size_t v, const string& path, MountEntry& out) const
+//	{
+//		if (v>=sessions_.size()) return false;
+//		CoreHistMap::const_iterator it= hist_.find(path);
+//		if (it==hist_.end()) return false;
+//		const CoreDT* r= core_at(it->second, v);
+//		if (r==NULL || r->date==0) return false;
+//		out.date= r->date;
+//		out.ptr= &r->ptr;
+//		return true;
+//	}
+//	unsigned frag_size(unsigned f) const { return f<ht_.size() ? ht_[f].usize : 0; }
+//	const MountBlock* block_of(unsigned f, size_t* off) const
+//	{
+//		if (f>=fragloc_.size() || fragloc_[f].block>=blocks_.size()) return NULL;
+//		if (off) *off= fragloc_[f].off;
+//		return &blocks_[fragloc_[f].block];
+//	}
+//	size_t nblocks() const { return blocks_.size(); }
+//	size_t nfragments() const { return ht_.size(); }
+//	MountReader* new_reader() { return new Reader(pattern_); }
+//	int64_t archive_bytes() const { return archive_bytes_; }
+//	int parts() const { return parts_; }
+//	void prepare(size_t v)
+//	{
+//		if (v>=sessions_.size() || sessions_[v].tree) return;
+//		core_build_dir_tree(hist_, sessions_[v], (int)v);
+//		sessions_[v].tree= true;
+//	}
+//};
 
 //////////////////////////////////////////////////////////////////////////
 // Backend "jidac": the same index, read through the native zpaqfranz I/O
@@ -71277,11 +71875,46 @@ struct JidacRec
 	vector<unsigned>	ptr;		// fragment ids
 };
 
-typedef map<string, const JidacRec*> JidacDTMap;
+/// what one version did to one file: see CoreChange, same idea, same reason
+struct JidacChange
+{
+	unsigned		version= 0;
+	const JidacRec* rec= NULL; // NULL => deleted (tombstone) from here on
+};
+typedef map<string, vector<JidacChange> > JidacHistMap;
+
+/// the record visible at version v: NULL if the file is not there (yet, or any more)
+inline const JidacRec* jidac_at(const vector<JidacChange>& i_hist, size_t i_version)
+{
+	size_t lo= 0;
+	size_t hi= i_hist.size();
+	while (lo<hi) /// the last change with version <= i_version
+	{
+		const size_t mid= lo+(hi-lo)/2;
+		if (i_hist[mid].version<=(unsigned)i_version)
+			lo= mid+1;
+		else
+			hi= mid;
+	}
+	return lo>0 ? i_hist[lo-1].rec : NULL;
+}
+
+/// one more change; the same file twice in the same version is an overwrite
+inline void jidac_touch(vector<JidacChange>& o_hist, unsigned i_version, const JidacRec* i_rec)
+{
+	if ((!o_hist.empty()) && (o_hist.back().version==i_version))
+	{
+		o_hist.back().rec= i_rec;
+		return;
+	}
+	JidacChange c;
+	c.version= i_version;
+	c.rec	 = i_rec;
+	o_hist.push_back(c);
+}
 
 struct JidacSession
 {
-	JidacDTMap						dt;
 	map<string, vector<string> >	children; // "" or "a/b/" -> sorted names, dirs end in '/'
 	int64_t							date= 0;
 	bool							tree= false; // children built (see prepare())
@@ -71305,10 +71938,11 @@ class JidacBackend : public MountBackend
 	string						pattern_;
 	vector<unsigned>			ht_;		// fragment id -> uncompressed size
 	vector<MountBlock>			blocks_;
-	std::deque<JidacSession>	sessions_;	// deque: children() hands out pointers into it
+	std::deque<JidacSession>	sessions_;	// one per version: a date and (if mounted) its tree
 	vector<CoreFragLoc>			fragloc_;
-	std::deque<JidacRec>		recs_;		// stable addresses, sessions_ point here
-	JidacDTMap					running_;	// tree being built, replayed version by version
+	std::deque<JidacRec>		recs_;		// stable addresses, hist_ points here
+	size_t						live_= 0;	// files alive in the version being scanned
+	JidacHistMap				hist_;		// every file's history, shared by all versions
 	int64_t						archive_bytes_= 0;
 	int							parts_= 0;
 	int							streaming_= 0;	// non-journaling segments seen
@@ -71316,31 +71950,38 @@ class JidacBackend : public MountBackend
 	string						encryption_;
 	string						truncated_;		// why the scan stopped early, "" = it did not
 
-	// Freezes the tree as it stands into one more version. Cheap on
-	// purpose: the directory map, the expensive half, waits for prepare()
-	// and is never built for a version nobody mounts.
+	// One more version: just its date. Nothing is frozen and nothing is
+	// copied, because a version IS a point in hist_; the directory map, the
+	// expensive half, waits for prepare() and is never built for a version
+	// nobody mounts.
 	void push_session(int64_t i_date)
 	{
 		sessions_.push_back(JidacSession());
-		JidacSession& s= sessions_.back();
-		s.dt= running_;	// pointers only: no fragment list is ever copied
-		s.date= i_date;
+		sessions_.back().date= i_date;
 	}
 
 	// The directory map of one version: every path it holds, plus every
 	// ancestor directory implied by them.
 	void build_tree(JidacSession& s, int i_version)
 	{
-		const int64_t entries= (int64_t)s.dt.size();
+		const int64_t entries= (int64_t)hist_.size();
 		int64_t done= 0;
-		for (JidacDTMap::const_iterator it= s.dt.begin(); it!=s.dt.end(); ++it)
+		for (JidacHistMap::const_iterator it= hist_.begin(); it!=hist_.end(); ++it)
 		{
-			mount_tree_add(s.children, it->first);
+			if (jidac_at(it->second, (size_t)i_version)!=NULL)
+				mount_tree_add(s.children, it->first);
 			// a version with a million files takes seconds of its own here
 			if (((++done) & 8191)==0 && g_mountscan.due())
+			{
+				// how far into this version we are: the ETA of the whole phase
+				// is the versions already done, plus exactly this fraction
+				g_mountscan.subunit(entries>0 ? (double)done/(double)entries : 0.0);
 				g_mountscan.line(-1, "V%08d  tree %d%% of %s files", i_version,
 					(int)(done*100/(entries>0 ? entries : 1)), migliaia2(entries));
+			}
 		}
+		// The sort of this version's directories: one line per version, and
+		// the eta of the phase is recomputed here every single time.
 		if (g_mountscan.active())
 			g_mountscan.line(-1, "V%08d  sorting %s files", i_version, migliaia2(entries));
 		mount_tree_finish(s.children);
@@ -71381,7 +72022,7 @@ class JidacBackend : public MountBackend
 					{
 						g_mountscan.at(in.tell());
 						if (g_mountscan.due()) // V: the version being read, as its folder would be numbered
-							g_mountscan.line(-1, "V%08d  %s files", (int)(nver>0 ? nver-1 : 0), migliaia2((int64_t)running_.size()));
+							g_mountscan.line(-1, "V%08d  %s files", (int)(nver>0 ? nver-1 : 0), migliaia2((int64_t)live_));
 						comment.s.clear();
 						d.readComment(&comment);
 						if (comment.s.size()<4 || comment.s.compare(comment.s.size()-4, 4, "jDC\x01")!=0)
@@ -71488,7 +72129,16 @@ class JidacBackend : public MountBackend
 								if (len>65535) throw std::runtime_error("filename too long");
 								const string fn= mount_normalize_path(string(s, len));
 								s+= len+1;
-								if (date==0) { running_.erase(fn); continue; } // tombstone
+								if (date==0)
+								{	/// tombstone: remembered, not erased (older versions still show the file)
+									JidacHistMap::iterator h= hist_.find(fn);
+									if (h!=hist_.end())
+									{
+										if ((!h->second.empty()) && (h->second.back().rec!=NULL)) --live_;
+										jidac_touch(h->second, (unsigned)(nver-1), NULL);
+									}
+									continue;
+								}
 								if (s+4>end) throw std::runtime_error("missing attr");
 								const unsigned na= btoi(s);
 								if (na>65535 || s+na>end) throw std::runtime_error("attr too long");
@@ -71505,7 +72155,9 @@ class JidacBackend : public MountBackend
 								r.version= (unsigned)(nver-1);
 								r.ptr.resize(ni);
 								for (unsigned k= 0; k<ni; ++k) r.ptr[k]= btoi(s);
-								running_[fn]= &r;
+								vector<JidacChange>& h= hist_[fn];
+								if (h.empty() || h.back().rec==NULL) ++live_;
+								jidac_touch(h, (unsigned)(nver-1), &r);
 							}
 						}
 						else throw std::runtime_error(string("unexpected journaling block type ")+type);
@@ -71609,10 +72261,12 @@ public:
 	bool entry(size_t v, const string& path, MountEntry& out) const
 	{
 		if (v>=sessions_.size()) return false;
-		JidacDTMap::const_iterator it= sessions_[v].dt.find(path);
-		if (it==sessions_[v].dt.end() || it->second==NULL || it->second->date==0) return false;
-		out.date= it->second->date;
-		out.ptr= &it->second->ptr;
+		JidacHistMap::const_iterator it= hist_.find(path);
+		if (it==hist_.end()) return false;
+		const JidacRec* r= jidac_at(it->second, v);
+		if (r==NULL || r->date==0) return false;
+		out.date= r->date;
+		out.ptr= &r->ptr;
 		return true;
 	}
 	unsigned frag_size(unsigned f) const { return f<ht_.size() ? ht_[f] : 0; }
@@ -71635,13 +72289,17 @@ public:
 	}
 };
 
-// Resolves -backend auto (the default): "jidac" whenever encryption is or
-// might be in play -- a key on the command line, a Franzen password, an
-// archive whose first bytes are not a zpaq header (so it is encrypted and
-// InputArchive will ask for the password), or a franzen-only archive --
-// and "core" for a plain archive, where the mmap scanner is at home.
+// Resolves -backend. With the "core" engine commented out there is only
+// one left, and "jidac" reads everything core did plus the encrypted and
+// the Franzen archives, so auto (the default) and an empty -backend both
+// end up there. Anything else is handed over untouched on purpose: it is
+// open_backend() that says a backend does not exist.
 inline string mount_pick_backend(const string& which, const string& archive)
 {
+	(void)archive;
+	if (which!="" && which!="auto") return which;
+	return "jidac";
+/*	The original choice, kept for the day the "core" engine comes back:
 	if (which!="" && which!="auto") return which;
 	if (g_password!=NULL) return "jidac";
 	if (g_franzen!="") return "jidac";
@@ -71649,17 +72307,18 @@ inline string mount_pick_backend(const string& which, const string& archive)
 	if (fileexists(part1)) return is_file_zpaq(part1) ? "core" : "jidac";
 	if (fileexists(part1+".franzen")) return "jidac";
 	return "core"; // missing file: let CoreBackend report it as before
+*/
 }
 
-// Backend factory. Both engines implement the same MountBackend interface
-// and can be mounted side by side on two mountpoints to be compared.
+// Backend factory: one engine left, on the same MountBackend interface
+// the commented-out "core" implemented too.
 inline MountBackend* open_backend(const string& which, const string& archive, string& err)
 {
 	try
 	{
-		if (which=="core")	return new CoreBackend(archive);
+///		if (which=="core")	return new CoreBackend(archive);	// engine commented out
 		if (which=="jidac")	return new JidacBackend(archive);
-		err= "unknown backend '"+which+"' (available: core, jidac, auto)";
+		err= "unknown backend '"+which+"' (available: jidac, auto)";
 	}
 	catch (const std::exception& ex) { err= ex.what(); }
 	return NULL;
@@ -72301,10 +72960,14 @@ extern "C" void zpaqmount_winfsp_bind(const char* name, void** slot)
 #ifdef _WIN32
 /// kickstart_mount: make sure WinFsp is usable before mounting.
 /// If the DLL loads, return 0 and let the mount go on.
-/// Otherwise download the (pinned) MSI into the system temp folder, check size
-/// and SHA-256, then (admin only, after a captcha) install it silently with
-/// msiexec. After the install zpaqfranz quits: the DLL loading is cached by
-/// std::call_once, so the user has to run the command again.
+/// Otherwise the (pinned) MSI has to be found, and it is looked for in this
+/// order: the system temp folder (a previous attempt), zpaqfranz's own folder
+/// (kickstart_resources() may have put it there), resource 12 of the
+/// executable (zpaqfranz-full carries the installer INSIDE itself: no network
+/// at all), and only in the end the download. Whatever it comes from, size and
+/// SHA-256 are checked, and then (admin only, after a captcha) it is installed
+/// silently with msiexec. After the install zpaqfranz quits: the DLL loading is
+/// cached by std::call_once, so the user has to run the command again.
 /// someone can, of course, fake the URL (DNS) name or whatever. Anyway... it's up to you
 int kickstart_mount()
 {
@@ -72359,23 +73022,66 @@ int kickstart_mount()
 	}
 	else
 	{
-		if (fileexists(msifile))
-			delete_file(msifile.c_str());
-		color_cyan();
-		myprintf("94205: Downloading WinFsp installer from %s\n", msiurl.c_str());
-		color_restore();
-		if (!downloadfile(msiurl + "?" + generaterandomstring(10), msifile, true))
+		/// kickstart_resources("WINFSP") extracts it next to the .exe: if it is
+		/// already there, and good, that is the one we install
+		const string msiesedir= includetrailingbackslash(getwinexedir()) + msiname;
+		const string msitemp  = msifile;
+		msifile= msiesedir;
+		const bool giapronto= msi_is_good();
+		msifile= msitemp;
+		if (giapronto)
 		{
-			myprintf("94206! download of %s failed\n", msiname.c_str());
-			exit(2);
+			msifile= msiesedir;
+			if (flagverbose)
+				myprintf("94222: Reusing %s\n", msifile.c_str());
 		}
-		if (!msi_is_good())
+		else
 		{
-			color_red();
-			myprintf("94207! %s is corrupted (size or SHA-256 mismatch), deleted\n", msiname.c_str());
-			color_restore();
-			delete_file(msifile.c_str());
-			exit(2);
+			if (fileexists(msifile))
+				delete_file(msifile.c_str());
+			/*
+				zpaqfranz-full.exe carries the installer inside itself (resource
+				12, the very same zpaq stream kickstart_resources() uses): it is
+				a moment, and it needs no network whatsoever. A plain
+				zpaqfranz.exe has no such resource: then, and only then, download
+			*/
+			bool dallarisorsa= false;
+			if (estrairisorsa_in(12, msifile, (uint64_t)msisize))
+			{
+				dallarisorsa= msi_is_good();
+				if (dallarisorsa)
+				{
+					color_green();
+					myprintf("94223: %s extracted from this very executable (no download)\n", msiname.c_str());
+					color_restore();
+				}
+				else
+				{
+					color_red();
+					myprintf("94224! the embedded %s is corrupted (size or SHA-256 mismatch), deleted\n", msiname.c_str());
+					color_restore();
+					delete_file(msifile.c_str());
+				}
+			}
+			if (!dallarisorsa)
+			{
+				color_cyan();
+				myprintf("94205: Downloading WinFsp installer from %s\n", msiurl.c_str());
+				color_restore();
+				if (!downloadfile(msiurl + "?" + generaterandomstring(10), msifile, true))
+				{
+					myprintf("94206! download of %s failed\n", msiname.c_str());
+					exit(2);
+				}
+				if (!msi_is_good())
+				{
+					color_red();
+					myprintf("94207! %s is corrupted (size or SHA-256 mismatch), deleted\n", msiname.c_str());
+					color_restore();
+					delete_file(msifile.c_str());
+					exit(2);
+				}
+			}
 		}
 	}
 	color_green();
@@ -72466,7 +73172,7 @@ int kickstart_mount()
 }
 #endif
 
-/// mount <archive> [mountpoint] [-backend core] [-fuseopt a,b] [-until N] [-t N]
+/// mount <archive> [mountpoint] [-backend jidac] [-fuseopt a,b] [-until N] [-t N]
 int Jidac::mount()
 {
 	using namespace franzmount;
@@ -72509,11 +73215,13 @@ int Jidac::mount()
 	}
 #endif
 	const string backend= mount_pick_backend(g_mountbackend, archive);
-	if (backend=="core" && (g_password!=NULL || g_franzen!=""))
-	{
-		myprintf("94015! the 'core' mount backend cannot read encrypted archives: use -backend jidac\n");
-		return 2;
-	}
+///	The 'core' engine is commented out and jidac reads everything:
+///	there is nothing left to refuse here.
+///	if (backend=="core" && (g_password!=NULL || g_franzen!=""))
+///	{
+///		myprintf("94015! the 'core' mount backend cannot read encrypted archives: use -backend jidac\n");
+///		return 2;
+///	}
 
 	MountState st;
 	g_mount= &st;
@@ -72549,15 +73257,25 @@ int Jidac::mount()
 		// will be visible: one version, or every one of them with -all.
 		if (st.allversions && !do_not_print_headers())
 			myprintf("94024: Building the directory tree of %s version(s)\n", migliaia((int64_t)st.nversions));
-		g_mountscan.begin(0);
+		// One unit of work = one version's tree, and one version costs about
+		// what the next one does: that is where the eta of the tree/sorting
+		// line comes from. Without -all there is a single unit, and the eta
+		// comes from how far into that one version the walk has got.
+		g_mountscan.begin_units((int64_t)(st.allversions ? st.nversions : 1));
 		if (st.allversions)
-			for (size_t v= 0; v<st.nversions; ++v) be->prepare(v);
+			for (size_t v= 0; v<st.nversions; ++v)
+			{
+				g_mountscan.unit((int64_t)v);
+				be->prepare(v);
+			}
 		else
 			be->prepare(st.nversions-1);
 		const vector<string>* root= be->children(st.nversions-1, "");
 		(void)root;
 		// totals for statfs: walk the last exposed version once. No
-		// percentage here: how many files there are is what we are counting.
+		// percentage here: how many files there are is what we are counting,
+		// so a new phase, without the units the tree build was counting down.
+		g_mountscan.begin(0);
 		std::vector<string> stack;
 		stack.push_back("");
 		while (!stack.empty())
@@ -73012,10 +73730,18 @@ int Jidac::rd()
 		if (isdirectory(files[i]))
 			files[i]= files[i].substr(0, files[i].size() - 1);
 #ifdef _WIN32
-		if (flaglongpath)
-			if (iswindowspath(files[i]))
-				if (!islongpath(files[i]))
-					files[i]= "//?/" + files[i];
+		/*
+			Always switch to the extended //?/ syntax, -longpath or not: it is the only
+			way to reach something deeper than MAX_PATH, or a folder whose name ends
+			with a dot or a space ("acustica ") that the Win32 parser cannot even open
+		*/
+		string esteso= forcelongpath(files[i]);
+		if (esteso != files[i])
+		{
+			if (flagdebug || flagverbose)
+				myprintf("71343: rd <<%Z>> => <<%Z>>\n", files[i].c_str(), esteso.c_str());
+			files[i]= esteso;
+		}
 #endif // corresponds to #ifdef (#ifdef _WIN32)
 		uint64_t	 totalsize= 0;
 		unsigned int totalfile= 0;
@@ -73033,7 +73759,8 @@ int Jidac::rd()
 			return 1;
 		}
 		if (!flagspace)
-			if (!saggiascrivibilitacartella(files[i]))
+			/// without the trailing / the test file would land in the PARENT folder
+			if (!saggiascrivibilitacartella(includetrailingbackslash(files[i])))
 			{
 				myprintf("\n");
 				myprintf("00598: cannot write into %d %Z -space to bypass\n", i, files[i].c_str());
@@ -73043,9 +73770,9 @@ int Jidac::rd()
 		printbar('=');
 		myprintf("00600: Files %s for %s bytes (%s) longpath %s\n", migliaia(totalfile), migliaia2((int64_t)totalsize), tohuman((int64_t)totalsize), migliaia3(longfiles));
 #ifdef _WIN32
-		if (!flaglongpath)
-			if (longfiles)
-				myprintf("00601$ *** WARNING: long files detected, but no -longpath switch ***\n\n");
+		if (longfiles)
+			if (flagverbose || flagdebug)
+				myprintf("00601: %s object(s) longer than 255 chars (handled by the //?/ syntax)\n", migliaia(longfiles));
 #endif // corresponds to #ifdef (#ifdef _WIN32)
 		if (totalsize > 0)
 			if (!flagforce)
@@ -73058,20 +73785,24 @@ int Jidac::rd()
 			if (totalsize > 0)
 				if (!getcaptcha("y", "Remove folder WITH subfolders?"))
 					return 1;
-			if (stermina(files[i], totalfile))
+			const bool sparito= stermina(files[i], totalfile);
+			myprintf("\n");
+			myprintf("71344: Deleted objects %s\n", migliaia(g_rd));
+			if (g_rd_errors > 0)
 			{
-				myprintf("\n");
-				myprintf("00603: OK: folder %i does not seems to exist anymore %Z\n", i, files[i].c_str());
-			}
-			else
-			{
+				/// do NOT just say "cannot", say WHAT and WHY: the first one is enough to debug
+				myprintf("71345! NOT deleted     %s\n", migliaia((int64_t)g_rd_errors));
 #ifdef _WIN32
-				if (!flaglongpath)
-					if (longfiles)
-						myprintf("00605: Try to use the -longpath switch to erase files >255 in length\n");
+				myprintf("71346! First error     %08d %s\n", (int)g_rd_lasterror, decodewinerror((DWORD)g_rd_lasterror, NULL, false).c_str());
 #endif // corresponds to #ifdef (#ifdef _WIN32)
-				return 2;
+				myprintf("71347! on <<%Z>>\n", g_rd_errorpath.c_str());
+				if (!(flagverbose || flagdebug))
+					myprintf("71348: use -verbose to get every object that could not be deleted\n");
 			}
+			if (sparito)
+				myprintf("00603: OK: folder %i does not seems to exist anymore %Z\n", i, files[i].c_str());
+			else
+				return 2;
 		}
 		else
 		{
@@ -74078,6 +74809,68 @@ void Jidac::exclude_output()
 	}
 }
 
+#ifdef unix
+/*
+	On Windows FindFirstFile() expands the wildcards ("nas*", "pippo?.zpaq"),
+	on *nix lstat() does not: without a glob-ing shell (quoted parameters,
+	as zpaqfranz asks for on *nix) nothing at all is found.
+	So: do the expansion by hand, just like Windows does.
+	Return the sorted list of matching paths (empty => nothing to expand,
+	or nothing matched)
+*/
+vector<string> expandwildcards(const string &i_filename, bool i_recursive)
+{
+	vector<string> risultato;
+	if (!iswildcards(i_filename))
+		return risultato;
+
+	string thepath	 = extractfilepath(i_filename); // "" or something ending by /
+	string thepattern= extractfilename(i_filename);
+	if (thepattern == "")
+		return risultato;
+	if (iswildcards(thepath)) // wildcards on the folder(s) too: way too hard
+	{
+		if (flagverbose)
+			myprintf("00622: WARN: wildcards on folders are not supported <<%Z>>\n", i_filename.c_str());
+		return risultato;
+	}
+	DIR *dirp= opendir(thepath == "" ? "./" : thepath.c_str());
+	if (dirp == NULL)
+	{
+		if (flagdebug)
+			perror(thepath.c_str());
+		return risultato;
+	}
+	for (dirent *dp= readdir(dirp); dp; dp= readdir(dirp))
+	{
+		if ((!strcmp(".", dp->d_name)) || (!strcmp("..", dp->d_name)))
+			continue;
+		if (iswildcards(dp->d_name)) // paranoid: never expand into something expandable
+			continue;
+		if (!ispath(thepattern.c_str(), dp->d_name)) // case sensitive on *nix (tolowerW)
+			continue;
+		string candidato= thepath + dp->d_name;
+		if (!i_recursive)
+		{
+			/// no recursion: do not enter into a matching folder, just like Windows
+			struct stat sb;
+			if ((!lstat(candidato.c_str(), &sb)) && (S_ISDIR(sb.st_mode)))
+			{
+				if (flagdebug2)
+					myprintf("00623: skip folder (no recursion) <<%Z>>\n", candidato.c_str());
+				continue;
+			}
+		}
+		risultato.push_back(candidato);
+	}
+	closedir(dirp);
+	sort(risultato.begin(), risultato.end());
+	if (flagdebug2)
+		myprintf("00624: expandwildcards <<%Z>> => %s match\n", i_filename.c_str(), migliaia((int64_t)risultato.size()));
+	return risultato;
+}
+#endif // corresponds to #ifdef (#ifdef unix)
+
 string fix_scandir(const string &i_path)
 {
 	if (i_path == ".")
@@ -74215,6 +75008,14 @@ void Jidac::scandir(bool i_checkifselected, DTMap &i_edt, string filename, bool 
 	}
 	else
 	{
+		/// maybe something like /tmp/nas* (quoted): expand it, just like Windows
+		vector<string> espansi= expandwildcards(filename, i_recursive);
+		if (espansi.size() > 0)
+		{
+			for (unsigned int i= 0; i < espansi.size(); i++)
+				scandir(i_checkifselected, i_edt, espansi[i], i_recursive);
+			return;
+		}
 		if (!flagstdin)
 			perror(filename.c_str());
 	}
@@ -74323,12 +75124,13 @@ void Jidac::scandir(bool i_checkifselected, DTMap &i_edt, string filename, bool 
 				filename= percorso;
 		}
 		if (flagdebug3) // sometimes Windows get very strange attributes
-		{
-			string myfn= path(filename) + t;
-			myprintf("00630: FATTR %08X RES0 %08X %Z\n", (unsigned int)ffd.dwFileAttributes, (unsigned int)ffd.dwReserved0, myfn.c_str());
-			string temp= decodewinattribute(ffd.dwFileAttributes);
-			myprintf("00631: %s\n", temp.c_str());
-		}
+			if ((t != ".") && (t != "..")) /// . and .. are never added: just noise in the dump
+			{
+				string myfn= path(filename) + t;
+				myprintf("00630: FATTR %08X RES0 %08X %Z\n", (unsigned int)ffd.dwFileAttributes, (unsigned int)ffd.dwReserved0, myfn.c_str());
+				string temp= decodewinattribute(ffd.dwFileAttributes);
+				myprintf("00631: %s\n", temp.c_str());
+			}
 		if (t == "." || t == "..")
 			edate= 0; // don't add, of course
 					  /*
@@ -75892,9 +76694,10 @@ struct ExtractJob
 	bool			windowed;	 // extract one logical file window to RAM
 	uint64_t		window_start;
 	uint64_t		window_size;
+	int64_t			zipbase;	 // 'zip' command: offset of the current file inside the .zip
 	ExtractJob(Jidac &j) : chunk(0), job(0), jd(j), outf(FPNULL), lastdt(j.dt.end()),
 						   maxMemory(0), total_size(0), total_done(0), last_write(0),
-						   windowed(false), window_start(0), window_size(0)
+						   windowed(false), window_start(0), window_size(0), zipbase(0)
 	{
 		init_mutex(mutex);
 		init_mutex(write_mutex);
@@ -76091,7 +76894,10 @@ ThreadReturn decompressThread(void *arg)
 						assert(job.lastdt != job.jd.dt.end());
 						assert(job.lastdt->second.date);
 						assert(job.lastdt->second.data < int64_t(job.lastdt->second.ptr.size()));
-						myfclose(&job.outf);
+						if (flagzip)
+							job.outf= FPNULL; /// the zip is ONE file: do NOT close it
+						else
+							myfclose(&job.outf);
 					}
 					job.lastdt= job.jd.dt.end();
 				}
@@ -76112,7 +76918,26 @@ ThreadReturn decompressThread(void *arg)
 											}
 					*/
 					assert(job.outf == FPNULL);
-					if ((p->second.data == 0) && (!flagstdout))
+					if (flagzip)
+					{
+						/*
+							ZIP: the output is ONE single file, already created and already
+							carrying the local header of this entry. Nothing to create and
+							nothing to open: just move the base offset of the writes
+						*/
+						if (p->second.zipdataoffset >= 0)
+						{
+							job.outf   = g_zipfp;
+							job.zipbase= p->second.zipdataoffset;
+						}
+						else
+						{
+							lock(job.mutex);
+							myprintf("71374! zip: no room reserved for <<%Z>>\n", p->first.c_str());
+							release(job.mutex);
+						}
+					}
+					else if ((p->second.data == 0) && (!flagstdout))
 					{
 						if (!job.jd.flagtest)
 						{
@@ -76396,7 +77221,8 @@ ThreadReturn decompressThread(void *arg)
 									if (!flaghuge)
 #endif
 									{
-										fseeko(job.outf, offset, SEEK_SET);
+										/// job.zipbase is 0 unless we are writing inside a zip
+										fseeko(job.outf, offset + job.zipbase, SEEK_SET);
 										myfwrite(out.c_str() + q, 1, usize, job.outf);
 									}
 #ifndef ANCIENT
@@ -76502,15 +77328,24 @@ ThreadReturn decompressThread(void *arg)
 					if (!job.jd.flagtest)
 					{
 						assert(job.outf != FPNULL);
-						string	fn	= job.jd.rename(p->first);
-						int64_t attr= p->second.attr;
-						int64_t date= p->second.date;
-						if ((p->second.attr & 0x1ff) == 'w' + 256)
-							attr= 0; // read-only?
-						if (p->second.data != int64_t(p->second.ptr.size()))
-							date= attr= 0; // not last frag
-						close(fn.c_str(), date, attr, job.outf);
-						job.outf= FPNULL;
+						if (flagzip)
+						{
+							/// date and attributes live in the zip headers, not on the filesystem
+							job.outf   = FPNULL;
+							job.zipbase= 0;
+						}
+						else
+						{
+							string	fn	= job.jd.rename(p->first);
+							int64_t attr= p->second.attr;
+							int64_t date= p->second.date;
+							if ((p->second.attr & 0x1ff) == 'w' + 256)
+								attr= 0; // read-only?
+							if (p->second.data != int64_t(p->second.ptr.size()))
+								date= attr= 0; // not last frag
+							close(fn.c_str(), date, attr, job.outf);
+							job.outf= FPNULL;
+						}
 					}
 					job.lastdt= job.jd.dt.end();
 				}
@@ -76851,7 +77686,11 @@ uint32_t crchex2int(const char *hex)
 }
 void Jidac::printsanitizeflags()
 {
+#ifdef _WIN32
+	if (flagflat || flagutf || flagfix255 || flagfixeml || flagfixreserved || flagfixcase)
+#else
 	if (flagflat || flagutf || flagfix255 || flagfixeml)
+#endif // corresponds to #ifdef (#ifdef _WIN32)
 	{
 		myprintf("\n");
 		myprintf("00710: ******\n");
@@ -79728,16 +80567,16 @@ int Jidac::mycopy()
 	vector<int64_t> sourcesize;
 	int64_t			totalsourcesize= 0;
 	for (unsigned int i= 0; i < files.size(); i++)
-	{
 		scandir(false, edt, files[i].c_str(), false);
-		for (DTMap::iterator p= edt.begin(); p != edt.end(); ++p)
+	/// edt is cumulative: take everything once, or the very same file would be
+	/// counted (and copied) as many times as the sources
+	for (DTMap::iterator p= edt.begin(); p != edt.end(); ++p)
+	{
+		if (!isdirectory(p->first))
 		{
-			if (!isdirectory(p->first))
-			{
-				sourcelist.push_back(p->first);
-				sourcesize.push_back(p->second.size);
-				totalsourcesize+= p->second.size;
-			}
+			sourcelist.push_back(p->first);
+			sourcesize.push_back(p->second.size);
+			totalsourcesize+= p->second.size;
 		}
 	}
 	eol();
@@ -79781,7 +80620,7 @@ int Jidac::mycopy()
 			0);			   // maxoutputsize
 		if (risultato == "")
 		{
-			myprintf("01119: ERROR: %s\n", risultato.c_str());
+			myprintf("01119! ERROR copying %Z\n", filesource.c_str());
 			allok= false;
 		}
 		else
@@ -84456,7 +85295,17 @@ void myscandir(uint32_t i_tnumber, DTMap &i_edt, string filename, bool i_recursi
 		}
 	}
 	else
+	{
+		/// maybe something like /tmp/nas* (quoted): expand it, just like Windows
+		vector<string> espansi= expandwildcards(filename, i_recursive);
+		if (espansi.size() > 0)
+		{
+			for (unsigned int i= 0; i < espansi.size(); i++)
+				myscandir(i_tnumber, i_edt, espansi[i], i_recursive, i_flagcalchash);
+			return;
+		}
 		perror(filename.c_str());
+	}
 #else  // Windows: expand wildcards in filename
 	// Expand wildcards
 	WIN32_FIND_DATA ffd;
@@ -87508,6 +88357,25 @@ bool haswildcard(const string &i_string)
 {
 	return (i_string.find('*') != string::npos || i_string.find('?') != string::npos);
 }
+/*
+	dir "nas*" => the wildcard has to be matched against the NAME of the file
+	(nas_orecchia_og_00000001.zpaq), not against the full path
+	(/dieci/dati/orecchia/nas_orecchia_og_00000001.zpaq): ispath() works on the
+	whole string, so a pattern not starting by * would never match anything.
+	Folders are matched by their name too, just like cmd.exe's dir does
+*/
+bool matchesfilepattern(const string &i_pattern, const string &i_filename)
+{
+	if (i_pattern == "")
+		return true;
+	string thename= i_filename;
+	while (thename.size() > 1 && thename[thename.size() - 1] == '/')
+		thename= thename.substr(0, thename.size() - 1); // folders end by /
+	thename= extractfilename(thename);
+	if (thename == "")
+		return false; // the scanned folder itself
+	return ispath(i_pattern.c_str(), thename.c_str()); // case sensitive on *nix (tolowerW)
+}
 
 // sort comparators for different orderings
 
@@ -87976,12 +88844,9 @@ int Jidac::dir(bool flagtreeview)
         if (flagorderbysizeasc)
             summary = 1;
     
-    // handle patterns from onlyfiles or extracted pattern
-    if (filepattern != "")
-    {
-        onlyfiles.clear();
-        onlyfiles.push_back(filepattern);
-    }
+    // the pattern is NOT pushed into onlyfiles: it would be matched against the
+    // full path (and fail, unless starting by *). It is used by matchesfilepattern()
+    // on the scan loop instead, leaving -only free to do its own job
     
     // Normalize all folder paths
     for (unsigned int f = 0; f < folders.size(); f++)
@@ -88074,7 +88939,9 @@ int Jidac::dir(bool flagtreeview)
             myprintf(" /tree");
         if (agefilterdays != 0)
             myprintf(" /age%+d", agefilterdays);
-        if (onlyfiles.size() > 0)
+        if (filepattern != "")
+            myprintf(" pattern %s ", filepattern.c_str());
+        else if (onlyfiles.size() > 0)
             myprintf(" pattern %s ", onlyfiles[0].c_str());
         myprintf("\n");
     }
@@ -88132,6 +88999,10 @@ myprintf("VEDIAMO: files[0] = %s, folder = %s\n",
             flagadd &= (!isads(p->first));
 #endif
             
+            // apply the wildcard pattern (dir "nas*") on the name, not on the path
+            if (filepattern != "")
+                flagadd &= matchesfilepattern(filepattern, p->first);
+
             // apply search filter
             if (searchfrom != "")
                 flagadd &= (stristr(p->first.c_str(), searchfrom.c_str()) != 0);
@@ -92430,6 +93301,10 @@ int Jidac::extractw()
 	int64_t sz	  = read_archive(NULL, archive.c_str(), &errors);
 	if (sz < 1)
 		error("44504: archive not found");
+#ifdef _WIN32
+	if (!flagtest)
+		sanitizzawindows(); /// filenames Windows cannot create, see extract()
+#endif // corresponds to #ifdef (#ifdef _WIN32)
 	for (unsigned i= 0; i < block.size(); ++i)
 	{
 		if (block[i].bsize < 0)
@@ -98778,12 +99653,14 @@ int64_t Jidac::read_archive(callback_function i_advance, const char *arc, int *e
 					if (!flagvss)
 						if (!flagstdout)
 							if (!flagterse)
-								myprintf("02993$ Long filenames (>255)  %9s *** WARNING *** (suggest -longpath or -fix255 or -flat)\n", migliaia(toolongfilenames));
+								if (!flagzip) /// a zip does not care at all about >255
+									myprintf("02993$ Long filenames (>255)  %9s *** WARNING *** (suggest -longpath or -fix255 or -flat)\n", migliaia(toolongfilenames));
 #else
 			if (!flagtest)
 				if (!flagstdout)
 					if (!flagterse)
-						myprintf("02994: Long filenames (>255)  %9s\n", migliaia(toolongfilenames));
+						if (!flagzip) /// a zip does not care at all about >255
+							myprintf("02994: Long filenames (>255)  %9s\n", migliaia(toolongfilenames));
 #endif // corresponds to #ifdef (#ifdef _WIN32)
 		}
 
@@ -107947,6 +108824,1278 @@ void Jidac::backupdir_archiveroots(vector<string>& o_roots)
 	}
 }
 
+/*
+	section: deflate
+
+	A minimal DEFLATE (RFC 1951) encoder, written for the 'zip' command's
+	-deflate. No external library: zpaqfranz does not link zlib, and this is
+	not going to change that.
+
+	Minimal means FIXED Huffman codes (BTYPE=01) and nothing else: the tables
+	are the ones printed in the RFC, so there is no tree to build, no code
+	lengths to transmit and nothing to get wrong. The matcher is a plain
+	3-byte hash chain, greedy, no lazy matching. It is a "level 1" compressor,
+	made to be fast on sources and text, not to win a benchmark: measured on
+	this very file it does about 100 MB/s on one core and gets 37%, against
+	the 35% of gzip -1 and the 30% of gzip -6. That is the deal.
+
+	A chunk that does not gain anything is written as a STORED block
+	(BTYPE=00), so already compressed data (jpg, mp4, .zip...) costs 5 bytes
+	every 64 KB instead of the ~12% that fixed Huffman would ADD to it.
+
+	The input is compressed one chunk at a time and no match ever crosses a
+	chunk boundary: it costs a whisker of ratio (32 KB of history lost every
+	256 KB) and it saves the sliding window, the rebasing of the hash table
+	and every bug that lives in there. The BIT stream, on the contrary, does
+	run across the chunks: what comes out is ONE deflate stream, closed by an
+	empty final block, which is exactly what method 8 of a .zip wants.
+*/
+#define ZIPDEFLATE_CHUNK	 (256 * 1024) /// how much input is compressed in one go
+#define ZIPDEFLATE_HASHBITS	 16			  /// 3 bytes -> 64 K buckets
+#define ZIPDEFLATE_CHAIN	 16			  /// candidates tried, at most, per position
+#define ZIPDEFLATE_MINMATCH	 3
+#define ZIPDEFLATE_MAXMATCH	 258
+#define ZIPDEFLATE_MAXDIST	 32768
+#define ZIPDEFLATE_STOREDMAX 65535		  /// a stored block cannot say more than this
+
+/// RFC 1951, 3.2.5: length codes 257..285 and distance codes 0..29
+static const unsigned short zipdeflate_lenbase[29]=
+	{3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27, 31, 35, 43, 51, 59, 67, 83, 99, 115, 131, 163, 195, 227, 258};
+static const unsigned char zipdeflate_lenextra[29]=
+	{0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 0};
+static const unsigned short zipdeflate_distbase[30]=
+	{1, 2, 3, 4, 5, 7, 9, 13, 17, 25, 33, 49, 65, 97, 129, 193, 257, 385, 513, 769,
+	 1025, 1537, 2049, 3073, 4097, 6145, 8193, 12289, 16385, 24577};
+static const unsigned char zipdeflate_distextra[30]=
+	{0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13};
+
+/// The fixed codes, already turned around: deflate writes a Huffman code
+/// starting from its MOST significant bit, and everything else from the least
+static unsigned short zipdeflate_litcode[288];
+static unsigned char  zipdeflate_litbits[288];
+static unsigned char  zipdeflate_distcode[30];
+static unsigned char  zipdeflate_lenof[ZIPDEFLATE_MAXMATCH + 1]; /// length	  -> 0..28
+static unsigned char  zipdeflate_distof[ZIPDEFLATE_MAXDIST];	 /// distance -> 0..29
+static bool			  zipdeflate_tabellepronte= false;
+
+inline unsigned zipdeflate_rovescia(unsigned i_code, int i_bits)
+{
+	unsigned risultato= 0;
+	for (int i= 0; i < i_bits; i++)
+	{
+		risultato= (risultato << 1) | (i_code & 1);
+		i_code>>= 1;
+	}
+	return risultato;
+}
+
+/// Built once and never again: the fixed tables are in the RFC, they do not move
+void zipdeflate_preparetabelle()
+{
+	if (zipdeflate_tabellepronte)
+		return;
+	for (int i= 0; i < 288; i++)
+	{
+		/// RFC 1951, 3.2.6
+		if (i < 144)
+		{
+			zipdeflate_litbits[i]= 8;
+			zipdeflate_litcode[i]= (unsigned short)zipdeflate_rovescia(0x30 + i, 8);
+		}
+		else if (i < 256)
+		{
+			zipdeflate_litbits[i]= 9;
+			zipdeflate_litcode[i]= (unsigned short)zipdeflate_rovescia(0x190 + i - 144, 9);
+		}
+		else if (i < 280)
+		{
+			zipdeflate_litbits[i]= 7;
+			zipdeflate_litcode[i]= (unsigned short)zipdeflate_rovescia(i - 256, 7);
+		}
+		else
+		{
+			zipdeflate_litbits[i]= 8;
+			zipdeflate_litcode[i]= (unsigned short)zipdeflate_rovescia(0xC0 + i - 280, 8);
+		}
+	}
+	for (int i= 0; i < 30; i++)
+		zipdeflate_distcode[i]= (unsigned char)zipdeflate_rovescia(i, 5);
+	for (int c= 0; c < 29; c++)
+	{
+		const int da= zipdeflate_lenbase[c];
+		const int a = (c == 28) ? ZIPDEFLATE_MAXMATCH : (zipdeflate_lenbase[c + 1] - 1);
+		for (int l= da; (l <= a) && (l <= ZIPDEFLATE_MAXMATCH); l++)
+			zipdeflate_lenof[l]= (unsigned char)c;
+	}
+	for (int c= 0; c < 30; c++)
+	{
+		const int da= zipdeflate_distbase[c];
+		const int a = (c == 29) ? ZIPDEFLATE_MAXDIST : (zipdeflate_distbase[c + 1] - 1);
+		for (int d= da; (d <= a) && (d <= ZIPDEFLATE_MAXDIST); d++)
+			zipdeflate_distof[d - 1]= (unsigned char)c;
+	}
+	zipdeflate_tabellepronte= true;
+}
+
+/*
+	Deflating an .mp4 is a waste of CPU: the stored fallback keeps the entry
+	from GROWING, but every byte has to be looked at all the same. These are
+	the extensions where there is nothing left to squeeze, and a file that
+	small is not worth the few bytes of framing a deflate stream costs
+*/
+#define ZIPDEFLATE_MINFILE 64 /// under this, storing it is smaller. Always
+
+bool zipdeflate_inutile(const string &i_nome)
+{
+	const string ext= extractextension(i_nome);
+	if (ext == "")
+		return false;
+	static const char *lista[]=
+		{"zip", "gz", "tgz", "bz2", "xz", "7z", "rar", "zst", "zstd", "lz4", "cab", "arj", "lzh", "zpaq", "paq", "pea", "wim",
+		 "jpg", "jpeg", "png", "gif", "webp", "heic", "heif", "avif", "jp2",
+		 "mp3", "mp4", "m4a", "m4v", "aac", "ogg", "oga", "opus", "flac", "avi", "mkv", "mov", "wmv", "webm", "3gp",
+		 "docx", "xlsx", "pptx", "odt", "ods", "odp", "epub", "jar", "apk", "whl", "crx", "nupkg", "franzen",
+		 NULL};
+	for (int i= 0; lista[i] != NULL; i++)
+		if (ext == lista[i])
+			return true;
+	return false;
+}
+
+inline unsigned zipdeflate_hash(const unsigned char *i_p)
+{
+	const unsigned tre= ((unsigned)i_p[0] << 16) | ((unsigned)i_p[1] << 8) | (unsigned)i_p[2];
+	return (unsigned)((tre * 2654435761u) >> (32 - ZIPDEFLATE_HASHBITS));
+}
+
+/*
+	One deflate stream, written straight into an already open FP. Made to be
+	built once and reused file after file with begin(): the tables and the
+	three big vectors are allocated the first time and then stay there
+*/
+struct s_deflate
+{
+	FP				 fp;	   /// where the compressed bytes go
+	int64_t			 csize;	   /// how many of them have gone there
+	uint64_t		 bitbuf;   /// bit accumulator, least significant bit first
+	int				 bitcount;
+	string			 out;	   /// staging, written out every 64 KB
+	string			 in;	   /// the chunk being filled
+	vector<int>		 head;	   /// hash	  -> last position seen, -1 = never
+	vector<int>		 prev;	   /// position -> the previous one with the same hash
+	vector<unsigned> token;	   /// bit 31 = match, then (len<<16)|dist; else a literal
+	bool			 errore;
+
+	s_deflate() : fp(FPNULL), csize(0), bitbuf(0), bitcount(0), errore(false)
+	{
+		zipdeflate_preparetabelle();
+	}
+
+	/// A brand new stream on i_fp, starting from the byte it is sitting on
+	void begin(FP i_fp)
+	{
+		fp		= i_fp;
+		csize	= 0;
+		bitbuf	= 0;
+		bitcount= 0;
+		errore	= false;
+		out.clear();
+		in.clear();
+		if (head.size() != ((size_t)1 << ZIPDEFLATE_HASHBITS))
+			head.resize((size_t)1 << ZIPDEFLATE_HASHBITS);
+		if (prev.size() != (size_t)ZIPDEFLATE_CHUNK)
+			prev.resize((size_t)ZIPDEFLATE_CHUNK);
+		if (in.capacity() < (size_t)ZIPDEFLATE_CHUNK)
+			in.reserve((size_t)ZIPDEFLATE_CHUNK);
+		if (out.capacity() < 131072)
+			out.reserve(131072);
+	}
+
+	void scrivi(bool i_forza)
+	{
+		if (out.size() == 0)
+			return;
+		if ((!i_forza) && (out.size() < 65536))
+			return;
+		if (fp != FPNULL)
+			if (myfwrite(out.c_str(), 1, out.size(), fp) != out.size())
+				errore= true;
+		csize+= (int64_t)out.size();
+		out.clear();
+	}
+
+	/// i_bits bits, least significant first: headers, lengths and extra bits
+	inline void putbits(unsigned i_value, int i_bits)
+	{
+		bitbuf|= ((uint64_t)i_value) << bitcount;
+		bitcount+= i_bits;
+		while (bitcount >= 8)
+		{
+			out+= (char)(bitbuf & 0xFF);
+			bitbuf>>= 8;
+			bitcount-= 8;
+		}
+	}
+	/// a Huffman code: the tables hold it already turned around, so it goes
+	/// out most significant bit first, the way the RFC wants it
+	inline void puthuff(int i_simbolo)
+	{
+		putbits(zipdeflate_litcode[i_simbolo], zipdeflate_litbits[i_simbolo]);
+	}
+	inline void allineabyte()
+	{
+		if (bitcount > 0)
+		{
+			out+= (char)(bitbuf & 0xFF);
+			bitbuf	= 0;
+			bitcount= 0;
+		}
+	}
+
+	/// The chunk as it is, in stored blocks of at most 64 KB
+	void bloccostored(const char *i_data, int i_n)
+	{
+		int fatti= 0;
+		do
+		{
+			int pezzo= i_n - fatti;
+			if (pezzo > ZIPDEFLATE_STOREDMAX)
+				pezzo= ZIPDEFLATE_STOREDMAX;
+			putbits(0, 1); /// BFINAL = 0
+			putbits(0, 2); /// BTYPE  = 00, stored
+			allineabyte(); /// a stored block always starts on a byte boundary
+			putbits((unsigned)(pezzo & 0xFFFF), 16);
+			putbits((unsigned)((~(unsigned)pezzo) & 0xFFFF), 16);
+			out.append(i_data + fatti, (size_t)pezzo);
+			fatti+= pezzo;
+			scrivi(false);
+		} while (fatti < i_n);
+	}
+
+	/// The tokens, with the fixed codes
+	void bloccofisso()
+	{
+		putbits(0, 1); /// BFINAL = 0
+		putbits(1, 2); /// BTYPE  = 01, fixed Huffman
+		for (size_t i= 0; i < token.size(); i++)
+		{
+			const unsigned t= token[i];
+			if ((t & 0x80000000u) == 0)
+				puthuff((int)(t & 0xFF));
+			else
+			{
+				const int lunghezza= (int)((t >> 16) & 0x7FFF);
+				const int distanza = (int)(t & 0xFFFF);
+				const int cl	   = zipdeflate_lenof[lunghezza];
+				puthuff(257 + cl);
+				if (zipdeflate_lenextra[cl] > 0)
+					putbits((unsigned)(lunghezza - zipdeflate_lenbase[cl]), zipdeflate_lenextra[cl]);
+				const int cd= zipdeflate_distof[distanza - 1];
+				putbits(zipdeflate_distcode[cd], 5);
+				if (zipdeflate_distextra[cd] > 0)
+					putbits((unsigned)(distanza - zipdeflate_distbase[cd]), zipdeflate_distextra[cd]);
+			}
+			if ((i & 4095) == 0)
+				scrivi(false);
+		}
+		puthuff(256); /// end of block
+		scrivi(false);
+	}
+
+	/*
+		LZ77 over the chunk, greedy: at every position the longest match wins
+		and that is that. The positions a match jumps over go into the hash
+		table anyway, because the next match is very often found right there.
+		The cost in bits is counted while the tokens are made, so that at the
+		end we know whether the fixed block is worth more than a stored one
+	*/
+	void comprimichunk()
+	{
+		const unsigned char *b= (const unsigned char *)in.data();
+		const int			 n= (int)in.size();
+		if (n <= 0)
+			return;
+		/// no match ever crosses a chunk: the matcher starts from nothing
+		for (size_t i= 0; i < head.size(); i++)
+			head[i]= -1;
+		token.clear();
+		int64_t bit= 3 + 7; /// the fixed block header, plus its end-of-block symbol
+		int		pos= 0;
+		while (pos < n)
+		{
+			int migliorelen = 0;
+			int miglioredist= 0;
+			if ((pos + ZIPDEFLATE_MINMATCH) <= n)
+			{
+				const unsigned h	   = zipdeflate_hash(b + pos);
+				const int	   massimo = ((n - pos) > ZIPDEFLATE_MAXMATCH) ? ZIPDEFLATE_MAXMATCH : (n - pos);
+				int			   candidato= head[h];
+				int			   catena  = ZIPDEFLATE_CHAIN;
+				while ((candidato >= 0) && (catena-- > 0))
+				{
+					const int distanza= pos - candidato;
+					if ((distanza <= 0) || (distanza > ZIPDEFLATE_MAXDIST))
+						break;
+					/// the classic quick reject: if the byte that should make
+					/// the match LONGER does not match, there is nothing to do
+					if (b[candidato + migliorelen] == b[pos + migliorelen])
+					{
+						int l= 0;
+						while ((l < massimo) && (b[candidato + l] == b[pos + l]))
+							l++;
+						if (l > migliorelen)
+						{
+							migliorelen = l;
+							miglioredist= distanza;
+							if (l >= massimo)
+								break;
+						}
+					}
+					candidato= prev[candidato];
+				}
+				prev[pos]= head[h];
+				head[h]	 = pos;
+			}
+			if (migliorelen >= ZIPDEFLATE_MINMATCH)
+			{
+				token.push_back(0x80000000u | ((unsigned)migliorelen << 16) | (unsigned)miglioredist);
+				const int cl= zipdeflate_lenof[migliorelen];
+				const int cd= zipdeflate_distof[miglioredist - 1];
+				bit+= zipdeflate_litbits[257 + cl] + zipdeflate_lenextra[cl] + 5 + zipdeflate_distextra[cd];
+				/// the positions the match jumps over are worth inserting
+				for (int k= 1; k < migliorelen; k++)
+				{
+					if ((pos + k + ZIPDEFLATE_MINMATCH) > n)
+						break;
+					const unsigned h2= zipdeflate_hash(b + pos + k);
+					prev[pos + k]	 = head[h2];
+					head[h2]		 = pos + k;
+				}
+				pos+= migliorelen;
+			}
+			else
+			{
+				token.push_back((unsigned)b[pos]);
+				bit+= zipdeflate_litbits[b[pos]];
+				pos++;
+			}
+		}
+		/// a stored block is 5 bytes of header every 64 KB, plus the data: if
+		/// the fixed one does not do better, data does not get compressed here
+		const int64_t bitstored= 8LL * n + 40LL * (1 + n / ZIPDEFLATE_STOREDMAX) + 7;
+		if (bit >= bitstored)
+			bloccostored(in.data(), n);
+		else
+			bloccofisso();
+	}
+
+	/// More input. Whatever it is, it lands into the chunk and, when that is
+	/// full, it gets compressed: the caller does not have to know anything
+	void push(const char *i_data, size_t i_len)
+	{
+		while (i_len > 0)
+		{
+			size_t spazio= (size_t)ZIPDEFLATE_CHUNK - in.size();
+			if (spazio > i_len)
+				spazio= i_len;
+			in.append(i_data, spazio);
+			i_data+= spazio;
+			i_len-= spazio;
+			if (in.size() >= (size_t)ZIPDEFLATE_CHUNK)
+			{
+				comprimichunk();
+				in.clear();
+			}
+		}
+	}
+
+	/// The last chunk, the empty final block, everything flushed: this is the
+	/// compressed size of the entry
+	int64_t finish()
+	{
+		if (in.size() > 0)
+		{
+			comprimichunk();
+			in.clear();
+		}
+		putbits(1, 1); /// BFINAL = 1
+		putbits(1, 2); /// BTYPE  = 01, an empty fixed block to close the stream
+		puthuff(256);
+		allineabyte();
+		scrivi(true);
+		return csize;
+	}
+};
+/*
+	section: zip
+
+	The 'zip' command IS the x command: same filters, same -until, same everything,
+	only it writes into ONE single ZIP64 file instead of writing on the filesystem.
+	The point is a "universal" restore file: the Linux/NAS/Mac filenames that Windows
+	cannot create at all ( : * ? " < > | , trailing dots and spaces, CON, LPT1...)
+	are perfectly legal INSIDE a zip, so the whole tree can be carried on a Windows
+	box, or on an exFAT disk, and unpacked back on the original system untouched.
+
+	No external dependency and, by default, no compression: everything is STORED
+	(method 0). That is what makes it cheap: the compressed size IS the uncompressed
+	size, and that is known BEFORE extracting anything. So the position of every
+	single byte can be computed in advance, the extractor keeps writing at absolute
+	offsets exactly like it does on N separate files, and stays fully multithreaded.
+
+	-deflate (method 8) turns that upside down, because a compressed entry does not
+	know where it ends until it has ended: it goes down another road entirely, the
+	sequential engine of extractstdout(), which hands over one file at a time with
+	its fragments in order. See zip_export_handler and the "section: deflate".
+
+	The CRC-32 is not recalculated either: the extractor already computes the CRC-32
+	of every chunk it writes (g_crc32), so they are just combined together
+	(crc32_combine, as the -checksum verify does) and patched into the headers.
+
+	-all has a section of its own further down (search for "section: zip -all"):
+	the .zip gets one VER00000000, VER00000001... folder per version, the very
+	ones the mount command shows, and every one of them is a full snapshot.
+
+	The destination is the -to one. WITHOUT -to (zipdefaultname()) the .zip is born
+	beside the archive, with the very same name and a .zip extension
+	(zip z:/pippo.zpaq => z:/pippo.zip): in that, and only in that, case the file
+	must not be there yet, unless -force, because nobody asked for it explicitly
+*/
+struct s_zipentry
+{
+	string	 name;		  // the name INSIDE the zip: always /, never absolute
+	string	 linktarget;  // != "" => symlink, the "data" is the target itself
+	int64_t	 size;		  // uncompressed
+	int64_t	 csize;		  // compressed: the very same, unless method is 8
+	unsigned method;	  // 0 = STORED (the default), 8 = DEFLATE (-deflate)
+	int64_t	 localoffset; // where its local file header starts
+	int64_t	 dataoffset;  // where its data starts
+	int64_t	 date;		  // zpaqfranz's YYYYMMDDHHMMSS
+	int64_t	 attr;		  // zpaqfranz's attributes ('u'/'w' + value<<8)
+	uint32_t crc;
+	bool	 isdir;
+	s_zipentry() : size(0), csize(0), method(0), localoffset(0), dataoffset(0), date(0), attr(0), crc(0), isdir(false) {}
+};
+
+/// What goes into the "compressed size" fields: with STORED nobody ever fills
+/// csize, and it would be a pity to have to remember to do it everywhere
+inline int64_t zipcsize(const s_zipentry &i_entry)
+{
+	return (i_entry.method == 0) ? i_entry.size : i_entry.csize;
+}
+/// Does this entry need the zip64 extra field? The margin is everything the
+/// worst possible deflate could add to a file sitting just under the 4 GB line
+/// (5 bytes every 64 KB of stored block), so that the layout decided BEFORE
+/// compressing stays right AFTER it
+inline bool zipgrande(const s_zipentry &i_entry)
+{
+	return (i_entry.size + (i_entry.size / 8192) + 64) >= 0xFFFFFFFFLL;
+}
+vector<s_zipentry> g_zipentries;
+
+/// the zip format is little endian, everywhere, no exceptions
+void zipput16(string &o_buffer, unsigned i_value)
+{
+	o_buffer+= (char)(i_value & 0xFF);
+	o_buffer+= (char)((i_value >> 8) & 0xFF);
+}
+void zipput32(string &o_buffer, uint32_t i_value)
+{
+	for (int i= 0; i < 4; i++)
+		o_buffer+= (char)((i_value >> (8 * i)) & 0xFF);
+}
+void zipput64(string &o_buffer, uint64_t i_value)
+{
+	for (int i= 0; i < 8; i++)
+		o_buffer+= (char)((i_value >> (8 * i)) & 0xFF);
+}
+/// YYYYMMDDHHMMSS (UT) => the 1980-based MS-DOS couple, and the Unix epoch
+void zipdecodedate(int64_t i_date, unsigned &o_dostime, unsigned &o_dosdate, uint32_t &o_unixtime)
+{
+	int anno   = (int)(i_date / 10000000000LL % 10000);
+	int mese   = (int)(i_date / 100000000 % 100);
+	int giorno = (int)(i_date / 1000000 % 100);
+	int ora	   = (int)(i_date / 10000 % 100);
+	int minuto = (int)(i_date / 100 % 100);
+	int secondo= (int)(i_date % 100);
+	/// MS-DOS cannot go before 1980, nor after 2107
+	if ((anno < 1980) || (anno > 2107) || (mese < 1) || (mese > 12) || (giorno < 1) || (giorno > 31))
+	{
+		anno= 1980;
+		mese= 1;
+		giorno= 1;
+		ora= 0;
+		minuto= 0;
+		secondo= 0;
+	}
+	if (ora > 23)
+		ora= 0;
+	if (minuto > 59)
+		minuto= 0;
+	if (secondo > 59)
+		secondo= 0;
+	/// days from civil: 1970-01-01 == 0 (Howard Hinnant's algorithm)
+	int		 y	  = anno - (mese <= 2 ? 1 : 0);
+	int		 era   = (y >= 0 ? y : y - 399) / 400;
+	unsigned yoe   = (unsigned)(y - era * 400);
+	unsigned doy   = (unsigned)((153 * (mese + (mese > 2 ? -3 : 9)) + 2) / 5 + giorno - 1);
+	unsigned doe   = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+	int64_t	 giorni= (int64_t)era * 146097 + (int64_t)doe - 719468;
+	o_unixtime= (uint32_t)(giorni * 86400 + ora * 3600 + minuto * 60 + secondo);
+	/*
+		zpaqfranz stores UT, the "UT" extra field wants UT, but the MS-DOS couple is
+		LOCAL time (that is what every zip tool assumes, Windows Explorer included).
+		So the ONLY field that gets converted is this one
+	*/
+	if (!flagutc)
+	{
+		time_t	   quando= (time_t)o_unixtime;
+		struct tm *locale= localtime(&quando);
+		if (locale != NULL)
+			if ((locale->tm_year + 1900) >= 1980)
+				if ((locale->tm_year + 1900) <= 2107)
+				{
+					anno   = locale->tm_year + 1900;
+					mese   = locale->tm_mon + 1;
+					giorno = locale->tm_mday;
+					ora	   = locale->tm_hour;
+					minuto = locale->tm_min;
+					secondo= locale->tm_sec > 59 ? 59 : locale->tm_sec;
+				}
+	}
+	o_dosdate= ((unsigned)(anno - 1980) << 9) | ((unsigned)mese << 5) | (unsigned)giorno;
+	o_dostime= ((unsigned)ora << 11) | ((unsigned)minuto << 5) | ((unsigned)secondo / 2);
+}
+/*
+	The name INSIDE the zip. Everything Windows hates is perfectly legal here and
+	MUST be kept as it is: unpacking on the original *nix box has to give back the
+	very same names. Only what the ZIP format itself forbids gets fixed: no
+	backslashes, no absolute paths, no drive letters, no .. (zip-slip)
+*/
+string zipmakename(string i_name)
+{
+	myreplaceall(i_name, "\\", "/");
+	if (i_name.size() > 8)
+		if (stringtoupper(i_name.substr(0, 8)) == "//?/UNC/")
+			i_name= i_name.substr(8);
+	if (i_name.size() > 4)
+		if (i_name.substr(0, 4) == "//?/")
+			i_name= i_name.substr(4);
+	/// X:/something => X/something, the drive letter becomes a plain folder
+	if (i_name.size() > 2)
+		if (isalpha((unsigned char)i_name[0]))
+			if (i_name[1] == ':')
+				if (i_name[2] == '/')
+					i_name= i_name.substr(0, 1) + i_name.substr(2);
+	while ((i_name.size() > 0) && (i_name[0] == '/'))
+		i_name= i_name.substr(1);
+	/// .. would let the name escape the output folder when unzipped
+	for (int i= 0; i < 4; i++)
+	{
+		myreplaceall(i_name, "/../", "/__/");
+		myreplaceall(i_name, "/./", "/_/");
+	}
+	if (i_name.size() > 2)
+		if (i_name.substr(0, 3) == "../")
+			i_name= "__/" + i_name.substr(3);
+	if (i_name.size() > 1)
+		if (i_name.substr(0, 2) == "./")
+			i_name= "_/" + i_name.substr(2);
+	return i_name;
+}
+/// Info-ZIP "UT": the real mtime. The MS-DOS couple has a 2 seconds resolution
+/// and no timezone at all, this one is a plain Unix time
+void zipputut(string &o_buffer, uint32_t i_unixtime)
+{
+	zipput16(o_buffer, 0x5455);
+	zipput16(o_buffer, 5);
+	o_buffer+= (char)1; /// flags: mtime present
+	zipput32(o_buffer, i_unixtime);
+}
+/// external attributes + "version made by", Info-ZIP style
+uint32_t zipexternalattr(int64_t i_attr, bool i_isdir, bool i_issymlink, unsigned &o_versionmadeby)
+{
+	uint32_t risultato= 0;
+	if (i_isdir)
+		risultato|= 0x10; /// the MS-DOS "directory" bit is always welcome
+	if (((i_attr & 255) == 'u') || i_issymlink)
+	{
+		/// *nix: the mode goes into the HIGH 16 bits, and "version made by" says Unix
+		uint32_t mode= (uint32_t)((i_attr >> 8) & 0xFFFF);
+		if (i_issymlink)
+			mode= 0xA1FF; /// S_IFLNK | 0777
+		else
+		{
+			if ((i_attr & 255) != 'u')
+				mode= 0;
+			if ((mode & 07777) == 0)
+				mode= i_isdir ? 0755 : 0644;
+			if ((mode & 0170000) == 0) /// only the permissions were stored
+				mode|= (i_isdir ? 040000 : 0100000);
+		}
+		risultato|= (mode << 16);
+		o_versionmadeby= (3 << 8) | 45; /// 3 = Unix
+	}
+	else
+	{
+		/// Windows attributes are already MS-DOS compatible
+		risultato|= (uint32_t)((i_attr >> 8) & 0xFF);
+		o_versionmadeby= (0 << 8) | 45; /// 0 = MS-DOS / FAT
+	}
+	return risultato;
+}
+/*
+	ZIP64 is used per-entry, and only when really needed: a <4GB file in a >4GB zip
+	gets a plain 32 bits local header, so even the weakest unzipper is happy
+*/
+int zipextralocalsize(const s_zipentry &i_entry)
+{
+	return 9 + (zipgrande(i_entry) ? 20 : 0);
+}
+int64_t ziplocalheadersize(const s_zipentry &i_entry)
+{
+	return 30 + (int64_t)i_entry.name.size() + zipextralocalsize(i_entry);
+}
+void zipbuildlocal(const s_zipentry &i_entry, string &o_buffer)
+{
+	unsigned dostime, dosdate;
+	uint32_t unixtime;
+	zipdecodedate(i_entry.date, dostime, dosdate, unixtime);
+	const bool	  grande= zipgrande(i_entry);
+	const int64_t csize = zipcsize(i_entry);
+	string		  extra = "";
+	zipputut(extra, unixtime);
+	if (grande)
+	{
+		zipput16(extra, 0x0001);
+		zipput16(extra, 16);
+		zipput64(extra, (uint64_t)i_entry.size); /// uncompressed
+		zipput64(extra, (uint64_t)csize);		 /// compressed (STORED: the same)
+	}
+	o_buffer= "";
+	zipput32(o_buffer, 0x04034b50);
+	zipput16(o_buffer, grande ? 45 : 20); /// version needed (4.5 = zip64)
+	zipput16(o_buffer, 1 << 11);		  /// bit 11: the filename is UTF-8
+	zipput16(o_buffer, i_entry.method);	  /// 0 = STORED, 8 = DEFLATE
+	zipput16(o_buffer, dostime);
+	zipput16(o_buffer, dosdate);
+	zipput32(o_buffer, i_entry.crc);
+	zipput32(o_buffer, grande ? 0xFFFFFFFF : (uint32_t)csize);
+	zipput32(o_buffer, grande ? 0xFFFFFFFF : (uint32_t)i_entry.size);
+	zipput16(o_buffer, (unsigned)i_entry.name.size());
+	zipput16(o_buffer, (unsigned)extra.size());
+	o_buffer+= i_entry.name;
+	o_buffer+= extra;
+}
+void zipbuildcentral(const s_zipentry &i_entry, string &o_buffer)
+{
+	unsigned dostime, dosdate;
+	uint32_t unixtime;
+	zipdecodedate(i_entry.date, dostime, dosdate, unixtime);
+	const bool	   symlink		 = (i_entry.linktarget != "");
+	unsigned	   versionmadeby = (0 << 8) | 45;
+	const uint32_t esterni		 = zipexternalattr(i_entry.attr, i_entry.isdir, symlink, versionmadeby);
+	const bool	   grandesize	 = zipgrande(i_entry);
+	const bool	   grandeoffset = (i_entry.localoffset >= 0xFFFFFFFFLL);
+	const int64_t  csize		 = zipcsize(i_entry);
+	string		   extra		 = "";
+	zipputut(extra, unixtime);
+	if (grandesize || grandeoffset)
+	{
+		string zip64= "";
+		if (grandesize)
+		{
+			zipput64(zip64, (uint64_t)i_entry.size);
+			zipput64(zip64, (uint64_t)csize);
+		}
+		if (grandeoffset)
+			zipput64(zip64, (uint64_t)i_entry.localoffset);
+		zipput16(extra, 0x0001);
+		zipput16(extra, (unsigned)zip64.size());
+		extra+= zip64;
+	}
+	o_buffer= "";
+	zipput32(o_buffer, 0x02014b50);
+	zipput16(o_buffer, versionmadeby);
+	zipput16(o_buffer, (grandesize || grandeoffset) ? 45 : 20);
+	zipput16(o_buffer, 1 << 11);
+	zipput16(o_buffer, i_entry.method);
+	zipput16(o_buffer, dostime);
+	zipput16(o_buffer, dosdate);
+	zipput32(o_buffer, i_entry.crc);
+	zipput32(o_buffer, grandesize ? 0xFFFFFFFF : (uint32_t)csize);
+	zipput32(o_buffer, grandesize ? 0xFFFFFFFF : (uint32_t)i_entry.size);
+	zipput16(o_buffer, (unsigned)i_entry.name.size());
+	zipput16(o_buffer, (unsigned)extra.size());
+	zipput16(o_buffer, 0); /// file comment
+	zipput16(o_buffer, 0); /// disk number
+	zipput16(o_buffer, 0); /// internal attributes
+	zipput32(o_buffer, esterni);
+	zipput32(o_buffer, grandeoffset ? 0xFFFFFFFF : (uint32_t)i_entry.localoffset);
+	o_buffer+= i_entry.name;
+	o_buffer+= extra;
+}
+void zipbuildend(int64_t i_centralstart, int64_t i_centralsize, int64_t i_quanti, string &o_buffer)
+{
+	o_buffer= "";
+	const bool zip64= (i_quanti >= 0xFFFF) || (i_centralstart >= 0xFFFFFFFFLL) || (i_centralsize >= 0xFFFFFFFFLL);
+	if (zip64)
+	{
+		/// ZIP64 end of central directory record
+		zipput32(o_buffer, 0x06064b50);
+		zipput64(o_buffer, 44); /// size of this record, minus the first 12 bytes
+		zipput16(o_buffer, (3 << 8) | 45);
+		zipput16(o_buffer, 45);
+		zipput32(o_buffer, 0); /// this disk
+		zipput32(o_buffer, 0); /// the disk with the central directory
+		zipput64(o_buffer, (uint64_t)i_quanti);
+		zipput64(o_buffer, (uint64_t)i_quanti);
+		zipput64(o_buffer, (uint64_t)i_centralsize);
+		zipput64(o_buffer, (uint64_t)i_centralstart);
+		/// ZIP64 end of central directory locator
+		zipput32(o_buffer, 0x07064b50);
+		zipput32(o_buffer, 0);
+		zipput64(o_buffer, (uint64_t)(i_centralstart + i_centralsize));
+		zipput32(o_buffer, 1);
+	}
+	/// ...and the good old 22 bytes end of central directory
+	zipput32(o_buffer, 0x06054b50);
+	zipput16(o_buffer, 0);
+	zipput16(o_buffer, 0);
+	zipput16(o_buffer, i_quanti >= 0xFFFF ? 0xFFFF : (unsigned)i_quanti);
+	zipput16(o_buffer, i_quanti >= 0xFFFF ? 0xFFFF : (unsigned)i_quanti);
+	zipput32(o_buffer, i_centralsize >= 0xFFFFFFFFLL ? 0xFFFFFFFF : (uint32_t)i_centralsize);
+	zipput32(o_buffer, i_centralstart >= 0xFFFFFFFFLL ? 0xFFFFFFFF : (uint32_t)i_centralstart);
+	zipput16(o_buffer, 0); /// zip comment length
+}
+bool zipwriteat(int64_t i_offset, const string &i_buffer)
+{
+	if (g_zipfp == FPNULL)
+		return false;
+	if (fseeko(g_zipfp, i_offset, SEEK_SET) != 0)
+		return false;
+	return (myfwrite(i_buffer.c_str(), 1, i_buffer.size(), g_zipfp) == i_buffer.size());
+}
+/*
+	section: zip -all
+
+	The 'mount' command shows an archive as mountpoint/VER00000000,
+	mountpoint/VER00000001, ... one folder per version, each one the CUMULATIVE
+	state of the tree at that point: a snapshot, not a delta. 'zip -all' writes
+	exactly those folders, with exactly those names, INSIDE the .zip: the same
+	restore points, on a disk that can travel, without FUSE/WinFsp and without
+	zpaqfranz at all on the machine that opens it.
+
+	This is NOT zpaq's own -all (what the x command does), where every folder
+	holds only what that version added or changed: here every single folder is
+	a full tree, the one the mount would show.
+
+	The price is paid in bytes, because a zip does not deduplicate anything and
+	here nothing is compressed either: a file that never changes is written
+	again into every version folder. So the damage is measured FIRST (the
+	history is replayed, nothing is copied) and printed, -range picks the
+	versions really worth writing, and past ZIPALLMAXENTRIES entries -force has
+	to say "yes, I do mean it".
+
+	How it works: read_archive(), whenever all>0, keys every entry it reads as
+	"0001/name", one group per version, holding what THAT version did (a date
+	of 0 being a deletion). That is the whole history, and the snapshot of
+	version N is just the history replayed from the first version up to N.
+*/
+#define ZIPALLMAXENTRIES 5000000 /// zip -all: beyond this many entries, -force is needed
+#define ZIPALLBYTESPERENTRY 500	 /// ...and this is what one of them costs, in RAM, more or less
+
+/// The folder of a version: the very same name the mount command shows, and
+/// 0 based just like it (VER00000000 IS the first version of the archive)
+string zipversionname(int64_t i_version)
+{
+	char risultato[24];
+	snprintf(risultato, sizeof(risultato), "VER%08u", (unsigned)i_version);
+	return string(risultato);
+}
+
+/// How many bytes a record is worth inside the zip (a folder: none)
+inline int64_t zipentrysize(const DT &i_dt)
+{
+	return (i_dt.size > 0) ? i_dt.size : 0;
+}
+
+/// Replays on io_vivi everything the version i_version did: what it added or
+/// changed, and what it deleted (a date of 0). The key is the name the file
+/// will have inside the zip, the value is where its record sits into i_dt.
+/// io_byte follows the live state as it changes, so that counting how big a
+/// snapshot is does not cost a walk of the whole state, version after version
+void zipapplyversion(const DTMap &i_dt, int64_t i_version, int i_digits,
+					 std::map<string, DTMap::const_iterator> &io_vivi, int64_t &io_byte)
+{
+	const string prefisso= itos(i_version, i_digits) + "/";
+	for (DTMap::const_iterator p= i_dt.lower_bound(prefisso); p != i_dt.end(); ++p)
+	{
+		if (p->first.size() < prefisso.size())
+			break;
+		if (p->first.compare(0, prefisso.size(), prefisso) != 0)
+			break; /// sorted map: this version's entries are over
+		const string nome= zipmakename(p->first.substr(prefisso.size()));
+		if (nome == "")
+			continue; /// the version's own folder: we make that one ourselves
+		std::map<string, DTMap::const_iterator>::iterator trovato= io_vivi.find(nome);
+		if (p->second.date == 0)
+		{
+			/// deleted from this version on
+			if (trovato != io_vivi.end())
+			{
+				io_byte-= zipentrysize(trovato->second->second);
+				io_vivi.erase(trovato);
+			}
+			continue;
+		}
+		if (trovato != io_vivi.end())
+		{
+			io_byte-= zipentrysize(trovato->second->second);
+			trovato->second= p;
+		}
+		else
+			io_vivi.insert(std::pair<string, DTMap::const_iterator>(nome, p));
+		io_byte+= zipentrysize(p->second);
+	}
+}
+
+/*
+	Turns the per-version entries read_archive() built ("0001/name") into the
+	version folders of the mount command ("VER00000000/name"), every one of
+	them a full snapshot. i_from/i_to (a -range, 1 based like everywhere else)
+	choose which folders get written: the history before i_from is replayed
+	all the same, because that is what those snapshots are made of
+*/
+int zipexpandversions(DTMap &io_dt, const vector<VER> &i_ver, int i_digits, int i_from, int i_to,
+					  int64_t &o_folders, int64_t &o_entries, int64_t &o_bytes)
+{
+	o_folders= 0;
+	o_entries= 0;
+	o_bytes	 = 0;
+	if (i_digits < 1)
+		i_digits= 1;
+	const int64_t ultima= (int64_t)i_ver.size() - 1; /// ver[0] is the empty one
+	if (ultima < 1)
+	{
+		myprintf("71390! zip: -all, but the archive does not have any version at all\n");
+		return 2;
+	}
+	int64_t da= (i_from > 0) ? (int64_t)i_from : 1;
+	int64_t a = (i_to > 0) ? (int64_t)i_to : ultima;
+	if (da < 1)
+		da= 1;
+	if (a > ultima)
+		a= ultima;
+	if (da > a)
+	{
+		myprintf("71391! zip: -all, nothing into the %s..%s range (%s version(s) in the archive)\n",
+				 migliaia((int64_t)i_from), migliaia2((int64_t)i_to), migliaia3(ultima));
+		return 2;
+	}
+	/*
+		First pass: how big would it be? The history is replayed without
+		copying anything at all, so the answer is almost free and, above all,
+		it arrives BEFORE the RAM and the disk are eaten
+	*/
+	std::map<string, DTMap::const_iterator> vivi;
+	int64_t									vivibyte= 0;
+	for (int64_t v= 1; v <= a; v++)
+	{
+		zipapplyversion(io_dt, v, i_digits, vivi, vivibyte);
+		if (v < da)
+			continue; /// -range: replayed, just not written
+		o_folders++;
+		o_entries+= 1+(int64_t)vivi.size(); /// the version's folder is an entry too
+		o_bytes+= vivibyte;
+	}
+	/// every entry costs about half a KB of RAM to be kept, and this is the
+	/// one thing that really kills a -all: a projection is better than a
+	/// std::bad_alloc twenty minutes into the job
+	const int64_t ramservita= o_entries * ZIPALLBYTESPERENTRY;
+	if (!flagterse)
+	{
+		myprintf("71392: zip  -all  %s version folder(s) (%s ... %s)\n",
+				 migliaia(o_folders), zipversionname(da - 1).c_str(), zipversionname(a - 1).c_str());
+		myprintf("71393: zip  -all  %s entries %21s (%s), about %s of RAM\n",
+				 migliaia(o_entries), migliaia2(o_bytes), tohuman(o_bytes), tohuman2(ramservita));
+	}
+	/*
+		The free space is checked again, and exactly, by zipprepare(): but that
+		is AFTER the expansion, and the expansion is what eats the RAM. A .zip
+		that cannot fit anyway is stopped here, before paying for it
+	*/
+	if (!flagspace)
+	{
+		string dove= extractfilepath(g_zipname);
+		if (dove == "")
+			dove= "./";
+		const int64_t spazio= getfreespace(dove);
+		if ((spazio > 0) && (spazio < o_bytes))
+		{
+			myprintf("71398: Free space on <<%Z>>\n", dove.c_str());
+			myprintf("71399: is      %21s\n", migliaia(spazio));
+			myprintf("71400: needed  %21s\n", migliaia2(o_bytes));
+			myprintf("71401! zip: -all, not enough free space. -range/-until to write less, -space to bypass\n");
+			return 2;
+		}
+	}
+	if ((o_entries > ZIPALLMAXENTRIES) && (!flagforce))
+	{
+		myprintf("71394! zip: -all, %s entries are a lot (a zip does NOT deduplicate anything)\n", migliaia(o_entries));
+		myprintf("71395: about %s of RAM would be needed just to lay them out\n", tohuman(ramservita));
+		myprintf("71396: use -range 10:20 to pick the versions, -until N to stop earlier, or -force\n");
+		return 2;
+	}
+	/// Second pass: the snapshots, this time for real
+	vivi.clear();
+	vivibyte= 0;
+	DTMap		  risultato;
+	int64_t		  fatti		   = 0;
+	int64_t		  ultimastampa = mtime();
+	const int64_t inizio	   = ultimastampa;
+	bool		  stampatoreta = false;
+	for (int64_t v= 1; v <= a; v++)
+	{
+		zipapplyversion(io_dt, v, i_digits, vivi, vivibyte);
+		if (v < da)
+			continue;
+		const string cartella= zipversionname(v - 1);
+		DT			 cartellona; /// the version's folder itself, as the mount shows it
+		cartellona.date= i_ver[(size_t)v].date;
+		risultato.insert(std::pair<string, DT>(cartella + "/", cartellona));
+		for (std::map<string, DTMap::const_iterator>::const_iterator q= vivi.begin(); q != vivi.end(); ++q)
+		{
+			/// insert(), not [] : operator[] would default-build a DT first,
+			/// and every DT built from scratch franz_malloc()s its franz_block
+			risultato.insert(std::pair<string, DT>(cartella + "/" + q->first, q->second->second));
+			fatti++;
+		}
+		if ((!flagnoeta) && (!flagterse))
+			if ((mtime() - ultimastampa) > 200)
+			{
+				ultimastampa= mtime();
+				stampatoreta= true;
+				myprintf("71397: zip  -all  %s  %s of %s entries\r",
+						 cartella.c_str(), migliaia(fatti), migliaia2(o_entries));
+			}
+	}
+	if (stampatoreta)
+		myprintf("%79s\r", " "); /// wipe the progress line, whatever comes next starts clean
+	io_dt.swap(risultato);
+	if (flagverbose)
+		myprintf("71402: zip  -all  %s entries expanded in %1.2fs\n", migliaia(fatti), (mtime() - inizio) / 1000.0);
+	return 0;
+}
+/*
+	Work out where every byte will end up, create the .zip, write all the local
+	headers (and the symlinks' data: they have no fragments at all inside the
+	archive), and store into dt where each file's data has to go.
+	After this the extractor can just write at absolute offsets
+*/
+int zipprepare(DTMap &i_dt, int64_t &o_files, int64_t &o_dirs, int64_t &o_symlinks)
+{
+	g_zipentries.clear();
+	o_files	   = 0;
+	o_dirs	   = 0;
+	o_symlinks= 0;
+	int64_t cursore= 0;
+	for (DTMap::iterator p= i_dt.begin(); p != i_dt.end(); ++p)
+	{
+		p->second.zipdataoffset= -1;
+		p->second.zipindex	   = -1;
+		if (p->second.data != 0) /// not selected for extraction
+			continue;
+		if (p->first == "")
+			continue;
+		s_zipentry elemento;
+		elemento.isdir= isdirectory(p->first);
+		elemento.name = zipmakename(p->first);
+		elemento.date = p->second.date;
+		elemento.attr = p->second.attr;
+		if (elemento.name == "")
+			continue;
+		if (elemento.isdir)
+			elemento.size= 0;
+		else
+		{
+			elemento.size= p->second.size;
+			if (elemento.size < 0)
+				elemento.size= 0;
+			/*
+				A symlink has no data inside the archive: the target sits in the posix
+				block. In a zip it becomes an entry whose DATA is the target itself,
+				plus a S_IFLNK mode: that is what unzip restores as a real symlink
+			*/
+			if ((elemento.size == 0) && (p->second.ptr.size() == 0) && (p->second.franz_block != NULL))
+			{
+				string		 myhashtype= "";
+				string		 myhash	   = "";
+				string		 mycrc32   = "";
+				int64_t		 mycreation= 0;
+				int64_t		 myaccess  = 0;
+				bool		 myisordered= false;
+				int			 myversion = 0;
+				franz_posix *myposix   = NULL;
+				bool		 myisadded = false;
+				decode_franz_block(false, p->second.franz_block, myhashtype, myhash, mycrc32,
+								   mycreation, myaccess, myisordered, myversion, myposix, myisadded);
+				if (myposix != NULL)
+					if (myposix->typeflag[0] == SYMTYPE)
+					{
+						char sicuro[sizeof(myposix->linkname) + 1];
+						memcpy(sicuro, myposix->linkname, sizeof(myposix->linkname));
+						sicuro[sizeof(myposix->linkname)]= 0;
+						elemento.linktarget				 = sicuro;
+						elemento.size					 = (int64_t)elemento.linktarget.size();
+					}
+			}
+		}
+		elemento.localoffset= cursore;
+		cursore+= ziplocalheadersize(elemento);
+		elemento.dataoffset= cursore;
+		cursore+= elemento.size;
+		p->second.zipdataoffset= elemento.dataoffset;
+		p->second.zipindex	   = (int)g_zipentries.size();
+		g_zipentries.push_back(elemento);
+		if (elemento.isdir)
+			o_dirs++;
+		else if (elemento.linktarget != "")
+			o_symlinks++;
+		else
+			o_files++;
+	}
+	if (g_zipentries.size() == 0)
+	{
+		myprintf("71360! zip: nothing to be extracted\n");
+		return 2;
+	}
+	/// the central directory sits after the last byte of data
+	int64_t centrale= 0;
+	for (unsigned int i= 0; i < g_zipentries.size(); i++)
+	{
+		string riga;
+		zipbuildcentral(g_zipentries[i], riga);
+		centrale+= (int64_t)riga.size();
+	}
+	const int64_t totale= cursore + centrale + 98 + 22; /// + zip64 end + locator + end
+	if (!flagspace)
+	{
+		string dove= extractfilepath(g_zipname);
+		if (dove == "")
+			dove= "./";
+		const int64_t spazio= getfreespace(dove);
+		if ((spazio > 0) && (spazio < totale))
+		{
+			myprintf("71361: Free space on <<%Z>>\n", dove.c_str());
+			myprintf("71362: is      %21s\n", migliaia(spazio));
+			myprintf("71363: needed  %21s\n", migliaia(totale));
+			myprintf("71364! Not enough free space. Use -space to bypass and enforcing\n");
+			return 2;
+		}
+	}
+	if (!flagterse)
+	{
+		myprintf("71365: zip  %s file(s) %s folder(s) %s symlink(s)\n",
+				 migliaia(o_files), migliaia2(o_dirs), migliaia3(o_symlinks));
+		myprintf("71366: zip  %21s (%s) into <<%Z>>\n", migliaia(totale), tohuman(totale), g_zipname.c_str());
+	}
+	g_zipfp= myfopen(g_zipname.c_str(), WB);
+	if (g_zipfp == FPNULL)
+	{
+		myprintf("71367! zip: cannot create <<%Z>>\n", g_zipname.c_str());
+		return 2;
+	}
+#ifdef _WIN32
+	/*
+		The headers are written now, the data later and in whatever order the blocks
+		come out. Without the sparse flag NTFS would zero-fill everything up to the
+		farthest offset touched, which on a 300GB restore is a lot of pointless I/O.
+		Not supported on exFAT/FAT32: there it just costs the zero-filling
+	*/
+	{
+		DWORD scritti= 0;
+		if (!DeviceIoControl(g_zipfp, FSCTL_SET_SPARSE, NULL, 0, NULL, 0, &scritti, NULL))
+			if (flagverbose || flagdebug)
+				myprintf("71368$ zip: no sparse file on this filesystem, writing can be slower\n");
+	}
+#endif // corresponds to #ifdef (#ifdef _WIN32)
+	/// the local headers, in increasing offset order (the gentlest for any filesystem)
+	for (unsigned int i= 0; i < g_zipentries.size(); i++)
+	{
+		string riga;
+		zipbuildlocal(g_zipentries[i], riga);
+		if (g_zipentries[i].linktarget != "")
+			riga+= g_zipentries[i].linktarget; /// a symlink carries its target as data
+		if (!zipwriteat(g_zipentries[i].localoffset, riga))
+		{
+			myprintf("71369! zip: cannot write the header of <<%Z>>\n", g_zipentries[i].name.c_str());
+			return 2;
+		}
+	}
+	return 0;
+}
+/*
+	The data is written: rebuild the CRC-32 of every file out of the chunks the
+	extractor already hashed (exactly like the -checksum verify does, holes of
+	zeros included), patch it into the local headers, then append the central
+	directory. Returns how many files have NO crc (=were not extracted at all)
+*/
+int zipfinalize(DTMap &i_dt, int64_t &o_written)
+{
+	o_written= 0;
+	if (g_zipfp == FPNULL)
+		return -1;
+	/// group the chunks by file, they arrive in block order, not in file order
+	std::map<string, vector<unsigned int> > gruppi;
+	for (unsigned int i= 0; i < g_crc32.size(); i++)
+		gruppi[g_crc32[i].filename].push_back(i);
+	int64_t senzacrc= 0;
+	for (std::map<string, vector<unsigned int> >::iterator p= gruppi.begin(); p != gruppi.end(); ++p)
+	{
+		DTMap::iterator q= i_dt.find(p->first);
+		if (q == i_dt.end())
+			continue;
+		if (q->second.zipindex < 0)
+			continue;
+		vector<unsigned int> &pezzi= p->second;
+		/// sort by position inside the file: crc32_combine() only works in order
+		for (unsigned int i= 1; i < pezzi.size(); i++)
+			for (unsigned int j= i; j > 0; j--)
+			{
+				if (g_crc32[pezzi[j]].crc32start >= g_crc32[pezzi[j - 1]].crc32start)
+					break;
+				std::swap(pezzi[j], pezzi[j - 1]);
+			}
+		uint32_t crc	  = 0;
+		int64_t	 posizione= 0;
+		for (unsigned int i= 0; i < pezzi.size(); i++)
+		{
+			const s_crc32block &pezzo= g_crc32[pezzi[i]];
+			if ((int64_t)pezzo.crc32start > posizione)
+			{
+				/// an all-zeros hole: never written, but it IS part of the file
+				const int64_t buco= (int64_t)pezzo.crc32start - posizione;
+				crc		  = crc32_combine(crc, crc32zeros(buco), (size_t)buco);
+				posizione+= buco;
+			}
+			crc		  = crc32_combine(crc, pezzo.crc32, (size_t)pezzo.crc32size);
+			posizione+= (int64_t)pezzo.crc32size;
+		}
+		s_zipentry &elemento= g_zipentries[q->second.zipindex];
+		if (posizione < elemento.size)
+		{
+			const int64_t buco= elemento.size - posizione;
+			crc				  = crc32_combine(crc, crc32zeros(buco), (size_t)buco);
+		}
+		elemento.crc= crc;
+		o_written++;
+	}
+	/// patch the crc into the local headers, it is 4 bytes at offset +14
+	for (unsigned int i= 0; i < g_zipentries.size(); i++)
+	{
+		const s_zipentry &elemento= g_zipentries[i];
+		if (elemento.size > 0)
+			if (elemento.crc == 0)
+				if (elemento.linktarget == "")
+					senzacrc++;
+		if (elemento.linktarget != "")
+			continue; /// already written, crc and all
+		string quattro= "";
+		zipput32(quattro, elemento.crc);
+		if (!zipwriteat(elemento.localoffset + 14, quattro))
+		{
+			myprintf("71370! zip: cannot patch the crc of <<%Z>>\n", elemento.name.c_str());
+			return -1;
+		}
+	}
+	/// ...and the symlinks, whose data was written before the crc was known
+	for (unsigned int i= 0; i < g_zipentries.size(); i++)
+		if (g_zipentries[i].linktarget != "")
+		{
+			g_zipentries[i].crc= crc32_16bytes(g_zipentries[i].linktarget.c_str(), g_zipentries[i].linktarget.size());
+			string quattro	   = "";
+			zipput32(quattro, g_zipentries[i].crc);
+			if (!zipwriteat(g_zipentries[i].localoffset + 14, quattro))
+				return -1;
+		}
+	/// the central directory goes right after the last byte of data
+	const s_zipentry &ultimo   = g_zipentries[g_zipentries.size() - 1];
+	const int64_t	  inizio   = ultimo.dataoffset + ultimo.size;
+	string			  direttorio= "";
+	if (fseeko(g_zipfp, inizio, SEEK_SET) != 0)
+	{
+		myprintf("71371! zip: cannot seek to the central directory\n");
+		return -1;
+	}
+	int64_t scritti= 0;
+	for (unsigned int i= 0; i < g_zipentries.size(); i++)
+	{
+		string riga;
+		zipbuildcentral(g_zipentries[i], riga);
+		direttorio+= riga;
+		/// do not keep hundreds of MB in RAM: flush every now and then
+		if (direttorio.size() > 8000000)
+		{
+			if (myfwrite(direttorio.c_str(), 1, direttorio.size(), g_zipfp) != direttorio.size())
+			{
+				myprintf("71372! zip: cannot write the central directory\n");
+				return -1;
+			}
+			scritti+= (int64_t)direttorio.size();
+			direttorio= "";
+		}
+	}
+	if (direttorio.size() > 0)
+	{
+		if (myfwrite(direttorio.c_str(), 1, direttorio.size(), g_zipfp) != direttorio.size())
+		{
+			myprintf("71372! zip: cannot write the central directory\n");
+			return -1;
+		}
+		scritti+= (int64_t)direttorio.size();
+	}
+	string coda= "";
+	zipbuildend(inizio, scritti, (int64_t)g_zipentries.size(), coda);
+	if (myfwrite(coda.c_str(), 1, coda.size(), g_zipfp) != coda.size())
+	{
+		myprintf("71373! zip: cannot write the end of central directory\n");
+		return -1;
+	}
+	myfclose(&g_zipfp);
+	return (int)senzacrc;
+}
+/*
+	'zip' without -to: the .zip is born right beside the archive, with the very
+	same name and a .zip extension (z:/pippo.zpaq => z:/pippo.zip)
+	Returns "" whenever a sane name cannot be made up (jolly/multipart archive),
+	or when it would collide with the archive we are extracting from
+*/
+string zipdefaultname(const string &i_archive)
+{
+	if (i_archive == "")
+		return ("");
+#ifdef _WIN32
+	size_t barra= i_archive.find_last_of("/\\"); /// on Windows both kind of slashes
+#else
+	size_t barra= i_archive.find_last_of('/'); /// on *nix the backslash is a legal char
+#endif // corresponds to #ifdef (#ifdef _WIN32)
+	string nomefile= (barra == string::npos) ? i_archive : i_archive.substr(barra + 1);
+	if (nomefile == "")
+		return ("");
+	/// a multipart (z:/parte???.zpaq) would make an unusable filename
+	if ((nomefile.find('?') != string::npos) || (nomefile.find('*') != string::npos))
+		return ("");
+	size_t punto= nomefile.rfind('.');
+	string risultato;
+	if ((punto == string::npos) || (punto == 0)) /// no extension, or .hidden
+		risultato= i_archive + ".zip";
+	else
+		risultato= i_archive.substr(0, i_archive.length() - (nomefile.length() - punto)) + ".zip";
+	/// paranoid: never, ever, write on the very archive we are reading from
+	if (stringtolower(risultato) == stringtolower(i_archive))
+		return ("");
+	return (risultato);
+}
 int Jidac::extract()
 {
 	archive= getbackupnameifany(archive);
@@ -107954,6 +110103,66 @@ int Jidac::extract()
 	if (flagrecover)
 		return extractstdout(0,"");
 #endif
+	if (flagzip)
+	{
+		/*
+			The 'zip' command is this very same extract(), only the output is a single
+			ZIP64 file. Everything that writes on the filesystem, or that renames the
+			files, has to stay out of the way: the names must land inside the zip
+			EXACTLY as they are stored, that is the whole point of the command
+		*/
+		if (tofiles.size() == 0)
+		{
+			/// no -to at all => the archive's name with a .zip extension, if free
+			string predefinito= zipdefaultname(archive);
+			if (predefinito == "")
+			{
+				myprintf("71380! zip: cannot make up the .zip name from <<%Z>>\n", archive.c_str());
+				myprintf("71381: please use -to something.zip\n");
+				return 2;
+			}
+			if (exists(predefinito))
+			{
+				if (!flagforce)
+				{
+					myprintf("71382! zip: <<%Z>> is already there\n", predefinito.c_str());
+					myprintf("71383: use -force to overwrite it, or -to something.zip\n");
+					return 2;
+				}
+				if (!flagterse)
+					myprintf("71384: zip: -force, overwriting <<%Z>>\n", predefinito.c_str());
+			}
+			else if (flagverbose)
+				myprintf("71385: zip: no -to, taking <<%Z>>\n", predefinito.c_str());
+			tofiles.push_back(predefinito);
+		}
+		if (tofiles.size() != 1)
+		{
+			myprintf("71375! zip: exactly one -to something.zip is needed\n");
+			return 2;
+		}
+		if (isdirectory(tofiles[0]))
+		{
+			myprintf("71376! zip: -to must be a FILE, <<%Z>> looks like a folder\n", tofiles[0].c_str());
+			return 2;
+		}
+		if (flagstdout || flagtest || flagzero || flagparanoid || flagflat || flagramdisk || flaghuge || flagimage || (repack != "") || (g_chunk_size > 0) || (g_backupdir != ""))
+		{
+			myprintf("71377! zip: incompatible with -stdout -test -zero -paranoid -flat -ramdisk -huge -image -repack -chunk -backupdir\n");
+			return 2;
+		}
+		g_zipname= tofiles[0];
+		tofiles.clear();
+		flagutf	  = false;
+		flagfix255= false;
+		flagfixeml= false;
+#ifdef _WIN32
+		flagfixreserved= false;
+		flagfixcase	   = false;
+		flaglongpath   = false;
+		flagnosanitize = true; /// NO sanitizing: the *nix names must survive as they are
+#endif // corresponds to #ifdef (#ifdef _WIN32)
+	}
 
 	if (flagcomment && flagrange)
 		if (versioncomment.length() > 0)
@@ -108233,10 +110442,28 @@ int Jidac::extract()
 
 	decodelastversion();
 
+	/*
+		zip -all: the snapshot of a version is made of everything the versions
+		BEFORE it did, so a -range cannot be allowed to filter the read. It is
+		kept aside here, and applied later on the folders that get written
+	*/
+	const bool zipsnapshot	 = (flagzip && all);
+	const int  ziprangefrom= zipsnapshot ? g_rangefrom : 0;
+	const int  ziprangeto  = zipsnapshot ? g_rangeto : 0;
+	if (zipsnapshot)
+	{
+		g_rangefrom= 0;
+		g_rangeto  = 0;
+	}
 	int		errors= 0;
 	int64_t sz	  = read_archive(NULL, archive.c_str(), &errors, 0, flagstdout); // we want to be quiet by stdout?
 	if (sz < 1)
 		error("archive not found");
+	if (zipsnapshot)
+	{
+		g_rangefrom= ziprangefrom;
+		g_rangeto  = ziprangeto;
+	}
 
 	if (flagstdout)
 		flagsilent= true;
@@ -108378,6 +110605,22 @@ int Jidac::extract()
 		out.close();
 		return 0;
 	}
+	/*
+		zip -all: the per-version entries become the VER folders of the mount
+		command, one full snapshot each. It has to happen exactly here: from
+		now on dt is walked to decide what to extract and iterators into it
+		are taken (block[].files), so nothing may be moved around any more
+	*/
+	if (zipsnapshot)
+	{
+		int64_t   zipcartelle= 0;
+		int64_t   zipvoci	 = 0;
+		int64_t   zipbyte	 = 0;
+		const int esito= zipexpandversions(dt, ver, all, ziprangefrom, ziprangeto, zipcartelle, zipvoci, zipbyte);
+		if (esito != 0)
+			return esito;
+	}
+
 	// Label files to extract with data=0.
 	// Skip existing output files. If force then skip only if equal
 	// and set date and attributes.
@@ -108489,17 +110732,32 @@ int Jidac::extract()
 		/// if (flagdebug)
 	}
 #ifdef _WIN32
-	if (!flaglongpath)
-		if (repack == "")
-			for (DTMap::iterator p= dt.begin(); p != dt.end(); ++p)
-				if ((p->second.date && p->first != ""))
-				{
-					string filename= rename(p->first);
-					if (filename.length() > 254)
+	/*
+		NAS (or any *nix) filenames that Windows cannot create at all: : * ? " < > | \
+		control chars, trailing dots and spaces, CON/LPT1..., doubled //?/X:/ prefix.
+		Fix them BEFORE writing anything, instead of losing the files one by one with
+		ERROR_INVALID_NAME (123)
+	*/
+	if (!flagstdout)
+		if (!flagtest)
+			if (repack == "")
+				if (!flagzip) /// inside a zip every *nix name is legal: do not touch them
+					sanitizzawindows();
+#endif // corresponds to #ifdef (#ifdef _WIN32)
+#ifdef _WIN32
+	/// inside a zip a >255 name is perfectly legal: nothing to warn about
+	if ((!flagzip) || (flagverbose))
+		if (!flaglongpath)
+			if (repack == "")
+				for (DTMap::iterator p= dt.begin(); p != dt.end(); ++p)
+					if ((p->second.date && p->first != ""))
 					{
-						myprintf("00911: WARN: path too long %03d %Z\n", (int)filename.length(), filename.c_str());
+						string filename= rename(p->first);
+						if (filename.length() > 254)
+						{
+							myprintf("00911: WARN: path too long %03d %Z\n", (int)filename.length(), filename.c_str());
+						}
 					}
-				}
 #endif // corresponds to #ifdef (#ifdef _WIN32)
 
 	string goingstdout	  = "";
@@ -108595,7 +110853,7 @@ int Jidac::extract()
 				real_dirs++;
 			string dummy= "";
 			/// myprintf("49911\n");
-			if ((!flagstdout) && (repack == "") && !flagtest && flagforce && !isdir && equal(p, fn.c_str(), crc32fromfile, "", "", dummy))
+			if ((!flagstdout) && (!flagzip) && (repack == "") && !flagtest && flagforce && !isdir && equal(p, fn.c_str(), crc32fromfile, "", "", dummy))
 			{
 				// identical
 				if (flagverbose)
@@ -108605,7 +110863,7 @@ int Jidac::extract()
 				close(fn.c_str(), p->second.date, p->second.attr);
 				++skipped;
 			}
-			else if ((!flagstdout) && (repack == "") && !flagtest && !flagforce && exists(fn))
+			else if ((!flagstdout) && (!flagzip) && (repack == "") && !flagtest && !flagforce && exists(fn))
 			{
 				// exists, skip
 
@@ -108667,7 +110925,7 @@ int Jidac::extract()
 
 				job.total_size+= p->second.size;
 				/// myprintf("00913: FACCIO QUALCOSA SU %s per size %d\n",fn.c_str(),p->second.size);
-				if ((!flagtest) && (!flagstdout) && (repack == ""))
+				if ((!flagtest) && (!flagstdout) && (!flagzip) && (repack == ""))
 					if (fileexists(fn))
 					{
 						if (flagverbose)
@@ -108985,6 +111243,28 @@ int Jidac::extract()
 	/// myprintf("00954: preparo per estrazione\n");
 	/// blockdecoder();
 
+	if (flagzip && flagdeflate)
+	{
+		/*
+			-deflate: the .zip is written by the sequential engine, the one
+			that hands a file's bytes over in order, one file at a time. It is
+			the only way to build a deflate stream while extracting, because a
+			compressed entry does not know where it ends until it has ended.
+			dt, ht and block are ready: extractstdout() will not read again
+		*/
+		return extractstdout(0, "");
+	}
+	if (flagzip)
+	{
+		/// where every byte will go, then create the .zip and write the local headers
+		int64_t	  zipfiles= 0;
+		int64_t	  zipdirs	= 0;
+		int64_t	  ziplinks= 0;
+		const int esito	   = zipprepare(dt, zipfiles, zipdirs, ziplinks);
+		if (esito != 0)
+			return esito;
+	}
+
 	vector<ThreadID> tid(howmanythreads);
 
 #ifdef _WIN32
@@ -109083,8 +111363,21 @@ int Jidac::extract()
 	if (howmanythreads > 1)
 		for (unsigned i= 0; i < tid.size(); ++i)
 			join(tid[i]);
+	if (flagzip)
+	{
+		/// crc-32 of every file (combining the chunks), then the central directory
+		int64_t	  zipdone = 0;
+		const int senzacrc= zipfinalize(dt, zipdone);
+		if (senzacrc < 0)
+			return 2;
+		if (!flagterse)
+			myprintf("71378: zip  %s entries into <<%Z>>\n", migliaia((int64_t)g_zipentries.size()), g_zipname.c_str());
+		if (senzacrc > 0)
+			myprintf("71379$ zip  WARNING %s file(s) with no data at all (not extracted?)\n", migliaia((int64_t)senzacrc));
+	}
 	// Create empty directories and set file dates and attributes
 	if (!flagtest)
+		if (!flagzip) /// folders and dates are INSIDE the zip, nothing to do on disk
 		for (DTMap::reverse_iterator p= dt.rbegin(); p != dt.rend(); ++p)
 			if (p->second.data >= 0 && p->second.date && p->first != "")
 			{
@@ -121363,6 +123656,20 @@ class extract_handler
 	virtual bool should_process_file(const string &filename) = 0;
 	virtual bool write_fragment(const char *data, size_t len)= 0;
 	virtual bool finalize()									 = 0;
+	/// Where a file starts and where it ends. Only the zip handler cares (an
+	/// entry has a header, a crc and an end), the others write one long
+	/// stream and are perfectly happy not to know
+	virtual bool begin_file(const string &i_storedname, const DT &i_dt, bool i_isdir)
+	{
+		(void)i_storedname;
+		(void)i_dt;
+		(void)i_isdir;
+		return true;
+	}
+	virtual bool end_file()
+	{
+		return true;
+	}
 	virtual bool needs_hash_check()
 	{
 		return false;
@@ -121420,6 +123727,299 @@ class normal_extract_handler : public extract_handler
 	const char *mode_name() override
 	{
 		return is_test_mode ? "Heavy testing" : "Sequential extraction";
+	}
+};
+
+/*
+	The .zip handler of the sequential engine: one file at a time, its
+	fragments in order, so the bytes can go straight through a deflate stream
+	as they arrive. Nothing is laid out in advance: the local header is
+	written with the crc and the compressed size at zero, and patched when the
+	file is over, which is exactly what the STORED path does with the crc.
+
+	This is what makes 'zip -deflate' possible at all. The parallel extract()
+	writes the blocks at absolute offsets computed BEFORE extracting anything,
+	and that needs the compressed size to be known in advance: which, with a
+	deflate, it is not, not until the entry is finished.
+*/
+class zip_export_handler : public extract_handler
+{
+  private:
+	FP		   fp;
+	int64_t	   cursore;		  /// where we are writing, inside the zip
+	s_deflate  deflate;
+	s_zipentry corrente;	  /// the entry being written...
+	bool	   aperta;		  /// ...if there is one
+	int64_t	   patch64;		  /// where the zip64 sizes sit, -1 = the 32 bit ones
+	int64_t	   usizecorrente;
+	uint32_t   crccorrente;
+	int64_t	   totaleusize;
+	int64_t	   totalecsize;
+	int64_t	   quantideflate;
+	bool	   problemi;
+
+	bool scrivi(const string &i_buffer)
+	{
+		if (i_buffer.size() == 0)
+			return true;
+		if (myfwrite(i_buffer.c_str(), 1, i_buffer.size(), fp) != i_buffer.size())
+		{
+			if (!problemi) /// once is enough: there can be a million entries
+				myprintf("71407! zip: cannot write into <<%Z>> (disk full?)\n", g_zipname.c_str());
+			problemi= true;
+			return false;
+		}
+		return true;
+	}
+	/// back to i_offset, write, and that is all: the next entry seeks to the
+	/// cursor by itself, so nobody has to remember where we were
+	bool rattoppa(int64_t i_offset, const string &i_buffer)
+	{
+		if (fseeko(fp, i_offset, SEEK_SET) != 0)
+		{
+			problemi= true;
+			return false;
+		}
+		return scrivi(i_buffer);
+	}
+
+  public:
+	zip_export_handler()
+		: fp(FPNULL), cursore(0), aperta(false), patch64(-1), usizecorrente(0), crccorrente(0),
+		  totaleusize(0), totalecsize(0), quantideflate(0), problemi(false)
+	{
+	}
+	~zip_export_handler()
+	{
+		if (fp != FPNULL)
+			myfclose(&fp);
+	}
+
+	bool initialize() override
+	{
+		g_zipentries.clear();
+		fp= myfopen(g_zipname.c_str(), WB);
+		if (fp == FPNULL)
+		{
+			myprintf("71403! zip: cannot create <<%Z>>\n", g_zipname.c_str());
+			return false;
+		}
+		cursore= 0;
+		return true;
+	}
+
+	bool should_process_file(const string &filename) override
+	{
+		(void)filename;
+		return true;
+	}
+
+	bool begin_file(const string &i_storedname, const DT &i_dt, bool i_isdir) override
+	{
+		if (aperta)
+			end_file();
+		corrente	 = s_zipentry();
+		corrente.name= zipmakename(i_storedname);
+		if (corrente.name == "")
+			return true; /// nothing we could call it: it does not go in
+		corrente.isdir= i_isdir;
+		corrente.date = i_dt.date;
+		corrente.attr = i_dt.attr;
+		corrente.size = (i_isdir || (i_dt.size < 0)) ? 0 : i_dt.size;
+		/*
+			A symlink has no data at all inside the archive: the target sits in
+			the posix block and, in a zip, becomes the DATA of the entry (plus
+			a S_IFLNK mode). Same as zipprepare() does
+		*/
+		if ((!i_isdir) && (corrente.size == 0) && (i_dt.ptr.size() == 0) && (i_dt.franz_block != NULL))
+		{
+			string		 myhashtype = "";
+			string		 myhash		= "";
+			string		 mycrc32	= "";
+			int64_t		 mycreation = 0;
+			int64_t		 myaccess	= 0;
+			bool		 myisordered= false;
+			int			 myversion	= 0;
+			franz_posix *myposix	= NULL;
+			bool		 myisadded	= false;
+			decode_franz_block(false, i_dt.franz_block, myhashtype, myhash, mycrc32,
+							   mycreation, myaccess, myisordered, myversion, myposix, myisadded);
+			if (myposix != NULL)
+				if (myposix->typeflag[0] == SYMTYPE)
+				{
+					char sicuro[sizeof(myposix->linkname) + 1];
+					memcpy(sicuro, myposix->linkname, sizeof(myposix->linkname));
+					sicuro[sizeof(myposix->linkname)]= 0;
+					corrente.linktarget				 = sicuro;
+					corrente.size					 = (int64_t)corrente.linktarget.size();
+				}
+		}
+		/// folders, symlinks, tiny files and things that are compressed already
+		/// are not worth a deflate stream: they go in STORED, as they always did
+		corrente.method= 0;
+		if ((!i_isdir) && (corrente.linktarget == "") && (corrente.size >= ZIPDEFLATE_MINFILE))
+			if (!zipdeflate_inutile(corrente.name))
+				corrente.method= 8;
+		corrente.crc   = 0;
+		corrente.csize = 0;
+		usizecorrente  = 0;
+		crccorrente	   = 0;
+		corrente.localoffset= cursore;
+		string riga;
+		zipbuildlocal(corrente, riga); /// crc and compressed size are zero, for now
+		corrente.dataoffset= cursore + (int64_t)riga.size();
+		/// the zip64 extra holds the two sizes right after the UT field
+		patch64= zipgrande(corrente) ? (corrente.localoffset + 30 + (int64_t)corrente.name.size() + 9 + 4) : -1;
+		if (fseeko(fp, cursore, SEEK_SET) != 0)
+		{
+			problemi= true;
+			return false;
+		}
+		if (!scrivi(riga))
+			return false;
+		cursore= corrente.dataoffset;
+		aperta = true;
+		if (corrente.method == 8)
+			deflate.begin(fp);
+		if (corrente.linktarget != "")
+		{
+			/// no fragment will ever arrive for it: the target IS the data
+			write_fragment(corrente.linktarget.c_str(), corrente.linktarget.size());
+			return end_file();
+		}
+		return true;
+	}
+
+	bool write_fragment(const char *data, size_t len) override
+	{
+		if (!aperta)
+			return true;
+		if (len == 0)
+			return true;
+		crccorrente= crc32_16bytes(data, len, crccorrente);
+		usizecorrente+= (int64_t)len;
+		if (corrente.method == 8)
+		{
+			deflate.push(data, len);
+			if (deflate.errore)
+			{
+				problemi= true;
+				return false;
+			}
+			return true;
+		}
+		if (myfwrite(data, 1, len, fp) != len)
+		{
+			if (!problemi)
+				myprintf("71407! zip: cannot write into <<%Z>> (disk full?)\n", g_zipname.c_str());
+			problemi= true;
+			return false;
+		}
+		return true;
+	}
+
+	bool end_file() override
+	{
+		if (!aperta)
+			return true;
+		aperta		 = false;
+		int64_t csize= 0;
+		if (corrente.method == 8)
+		{
+			csize= deflate.finish();
+			if (deflate.errore)
+				problemi= true;
+		}
+		else
+			csize= usizecorrente;
+		corrente.size = usizecorrente;
+		corrente.csize= csize;
+		corrente.crc  = crccorrente;
+		/// crc, compressed and uncompressed size: now we do know them
+		string quattro= "";
+		zipput32(quattro, corrente.crc);
+		rattoppa(corrente.localoffset + 14, quattro);
+		if (patch64 >= 0)
+		{
+			string otto= "";
+			zipput64(otto, (uint64_t)corrente.size);
+			zipput64(otto, (uint64_t)csize);
+			rattoppa(patch64, otto); /// the 32 bit fields stay at 0xFFFFFFFF
+		}
+		else
+		{
+			string duevolte= "";
+			zipput32(duevolte, (uint32_t)csize);
+			zipput32(duevolte, (uint32_t)corrente.size);
+			rattoppa(corrente.localoffset + 18, duevolte);
+		}
+		cursore= corrente.dataoffset + csize;
+		g_zipentries.push_back(corrente);
+		totaleusize+= corrente.size;
+		totalecsize+= csize;
+		if (corrente.method == 8)
+			quantideflate++;
+		return !problemi;
+	}
+
+	bool finalize() override
+	{
+		if (aperta)
+			end_file();
+		if (fp == FPNULL)
+			return false;
+		if (g_zipentries.size() == 0)
+		{
+			myprintf("71404! zip: nothing to be extracted\n");
+			myfclose(&fp);
+			fp= FPNULL;
+			return false;
+		}
+		/// the central directory goes right after the last byte of data
+		if (fseeko(fp, cursore, SEEK_SET) != 0)
+			problemi= true;
+		const int64_t inizio = cursore;
+		int64_t		  scritti= 0;
+		for (unsigned int i= 0; i < g_zipentries.size(); i++)
+		{
+			string riga;
+			zipbuildcentral(g_zipentries[i], riga);
+			if (!scrivi(riga))
+				break;
+			scritti+= (int64_t)riga.size();
+		}
+		string coda;
+		zipbuildend(inizio, scritti, (int64_t)g_zipentries.size(), coda);
+		scrivi(coda);
+		myfclose(&fp);
+		fp= FPNULL;
+		if (!flagterse)
+		{
+			myprintf("71405: zip  %s entries (%s deflated) into <<%Z>>\n",
+					 migliaia((int64_t)g_zipentries.size()), migliaia2(quantideflate), g_zipname.c_str());
+			const double percentuale= (totaleusize > 0) ? (100.0 * totalecsize / totaleusize) : 100.0;
+			if (totalecsize < totaleusize)
+				myprintf("71406: zip  %21s => %21s (%1.2f%%, %s saved)\n",
+						 migliaia(totaleusize), migliaia2(totalecsize), percentuale,
+						 tohuman(totaleusize - totalecsize));
+			else
+				myprintf("71406: zip  %21s => %21s (%1.2f%%: nothing to squeeze here)\n",
+						 migliaia(totaleusize), migliaia2(totalecsize), percentuale);
+		}
+		return !problemi;
+	}
+
+	bool needs_hash_check() override
+	{
+		return true; /// the data flows through here anyway: check it, it is free
+	}
+	bool needs_file_output() override
+	{
+		return false; /// nothing is written on the filesystem: the .zip is the output
+	}
+	const char *mode_name() override
+	{
+		return "Zip (deflate)";
 	}
 };
 
@@ -122287,6 +124887,16 @@ int Jidac::extractstdout(char i_dest_partition, const string &i_rawfilename)
 			myprintf("Restore to raw_disk\n");
 	}
 
+	/*
+		'zip -deflate': extract() has already read the archive (dt, ht and
+		block are there, -all snapshots included) and it comes here because
+		THIS is the engine that hands a file's bytes over in order, one file
+		at a time, which is the only way to build a deflate stream while
+		extracting. -recover does not go through extract()'s zip setup, so a
+		.zip without a name means somebody else got here: stay out of it
+	*/
+	const bool zip_mode= (flagzip && flagdeflate && (g_zipname != ""));
+
 	extract_handler *handler= NULL;
 
 #ifdef _WIN32
@@ -122316,7 +124926,10 @@ int Jidac::extractstdout(char i_dest_partition, const string &i_rawfilename)
 	else
 #endif
 	{
-		handler= new normal_extract_handler(flagtest);
+		if (zip_mode)
+			handler= new zip_export_handler(); /// -deflate: the .zip IS the output
+		else
+			handler= new normal_extract_handler(flagtest);
 	}
 
 	if (!handler->initialize())
@@ -122335,7 +124948,7 @@ int Jidac::extractstdout(char i_dest_partition, const string &i_rawfilename)
 
 	int franzentestresult=-1;
 
-	if (!is_special_mode)
+	if ((!is_special_mode) && (!zip_mode)) /// zip: extract() has read it already
 	{
 		sz= read_archive(NULL, archive.c_str(), &errors, 0, flagstdout);
 		if (sz < 1)
@@ -122569,6 +125182,9 @@ int Jidac::extractstdout(char i_dest_partition, const string &i_rawfilename)
 				makepath(filename);
 			f= (!flagtest) ? myfopen(filename.c_str(), WB) : FPNULL;
 		}
+		/// where a file begins: the zip handler opens its entry here, with the
+		/// name as it is STORED (rename() is for the filesystem, not for a zip)
+		handler->begin_file(file_it->first, file_info, isdir);
 
 		franz_do_hash myhashcheck(myhashtype);
 		if (myhashtype != "" && handler->needs_hash_check())
@@ -122733,6 +125349,8 @@ int Jidac::extractstdout(char i_dest_partition, const string &i_rawfilename)
 							myhashcheck.update((char *)frag_data, frag_len);
 						if (f != FPNULL)
 							myfwrite(frag_data, 1, frag_len, f);
+						else
+							handler->write_fragment(frag_data, (size_t)frag_len); /// zip: into the deflate stream
 						global_bytes_written+= frag_len;
 						file_info.expectedsize+= frag_len;
 					}
@@ -123010,6 +125628,9 @@ int Jidac::extractstdout(char i_dest_partition, const string &i_rawfilename)
 					attr= 0;
 				close(filename.c_str(), file_info.date, attr, f);
 			}
+			/// ...and where it ends: the zip handler closes the entry, patches
+			/// the crc and the sizes into its header, and moves the cursor
+			handler->end_file();
 
 			string hashstringato= "";
 			if (myhashtype != "" && handler->needs_hash_check())
@@ -123132,16 +125753,21 @@ int Jidac::extractstdout(char i_dest_partition, const string &i_rawfilename)
 			myprintf("11204$ DETECTED %d ZERO-LENGTH FRAGMENTS\n", frag_scartati);
 	}
 
+	/*
+		One line per file, and there can be a hundred thousand of them, to
+		say something the summary down here says in one single number.
+		-verbose asks for the list, everybody else gets the count
+	*/
 	if (!flagignore)
-	{
-		for (unsigned int i= 0; i < allzero.size(); i++)
-			myprintf("05553: %08d All zero hash for <<%Z>>\n", i + 1, allzero[i]->first.c_str());
-	}
+		if (flagverbose)
+			for (unsigned int i= 0; i < allzero.size(); i++)
+				myprintf("05553: %08d All zero hash for <<%Z>>\n", i + 1, allzero[i]->first.c_str());
 
 	int risultato=0;
 	
-	for (unsigned int i= 0; i < nohash.size(); i++)
-		myprintf("05551: %08d No hash for        <<%Z>>\n", i + 1, nohash[i]->first.c_str());
+	if (flagverbose) /// same as above: hundreds of lines, one number
+		for (unsigned int i= 0; i < nohash.size(); i++)
+			myprintf("05551: %08d No hash for        <<%Z>>\n", i + 1, nohash[i]->first.c_str());
 
 	color_red();
 	for (unsigned int i= 0; i < notgood.size(); i++)
@@ -123182,7 +125808,8 @@ int Jidac::extractstdout(char i_dest_partition, const string &i_rawfilename)
 		if (hash_not_checked > 0)
 		{
 			color_yellow();
-			myprintf("05563: WARN: some files does not have stored hash (%s)\n", migliaia(hash_not_checked));
+			myprintf("05563: WARN: some files does not have stored hash (%s)%s\n",
+					 migliaia(hash_not_checked), flagverbose ? "" : " (-verbose to list them)");
 			color_restore();
 		}
 	}
@@ -123243,6 +125870,9 @@ int Jidac::extractstdout(char i_dest_partition, const string &i_rawfilename)
 
 	if (franzentestresult>0)
 		risultato=2;
+	if (zip_mode)
+		if (!handler_success) /// a .zip that could not be written is an error
+			risultato=2;
 	return risultato;
 }
 
@@ -124054,13 +126684,56 @@ int Jidac::testparametriadd()
 			myprintf("02735! Sorry, franzen not supported (yet) for multipart\n");
 			return 2;
 		}
+	/// an archive named .franzen IS the franzen file: no cleartext .zpaq at all
 	if (isfranzen(archive))
+	{
+		bool franzenisok= false;
+#ifndef NOFRANZEN
+#ifdef ZPAQFULL /// NOSFTPSTART
+		if (strrchr(archive.c_str(), '?'))
 		{
-			color_magenta();
-			myprintf("02732! Sorry, franzen not supported (yet) for only franzen file\n");
-			color_restore();
+			myprintf("02709! Sorry, franzen not supported (yet) for multipart\n");
 			return 2;
 		}
+		if (g_chunk_size > 0)
+		{
+			myprintf("02723! Sorry, franzen not supported (yet) for -chunk\n");
+			return 2;
+		}
+		/// with -index the cleartext .zpaq is written: it would be a cleartext .franzen!
+		if (index)
+		{
+			myprintf("02757! Sorry, franzen not supported (yet) for -index\n");
+			return 2;
+		}
+		/// never destroy something that is not a franzen archive at all
+		if (fileexists(archive))
+			if (!is_file_franzen(archive))
+			{
+				color_magenta();
+				myprintf("02724! <<%Z>> does exist and is not a franzen file: cowardly refusing\n", archive.c_str());
+				color_restore();
+				return 2;
+			}
+		/// without the password nothing at all could be written: if the archive does
+		/// exist the password will be asked for (automagically), otherwise abort here
+		if (g_franzen == "")
+			if (!is_file_franzen(archive))
+			{
+				color_magenta();
+				myprintf("02732! A .franzen archive needs the -franzen password\n");
+				color_restore();
+				return 2;
+			}
+		franzenisok= true;
+#endif /// NOSFTPEND
+#endif
+		if (!franzenisok)
+		{
+			myprintf("02732! Sorry, franzen is not supported by this build\n");
+			return 2;
+		}
+	}
 	
 #ifdef _WIN32
 	if (flaglongpath && (tofiles.size() > 0))
@@ -125388,7 +128061,9 @@ int Jidac::gestiscisingleormultipart()
 	// Get salt from first part if it exists
 	if (g_password)
 	{
-		FP fp= myfopen(subpart(archive, 1).c_str(), RB);
+		FP fp= FPNULL;
+		if (!isfranzen(subpart(archive, 1))) // a .franzen archive is not a cleartext .zpaq
+			fp= myfopen(subpart(archive, 1).c_str(), RB);
 		if (fp == FPNULL)
 		{
 #ifndef NOFRANZEN
@@ -125396,7 +128071,7 @@ int Jidac::gestiscisingleormultipart()
 			if (isfranzenonly(subpart(archive, 1)))
 			{
 				// franzen-only AES archive: the salt lives at decoded offset 0 of the .franzen
-				string franzenfilename= subpart(archive, 1) + ".franzen";
+				string franzenfilename= franzenname(subpart(archive, 1));
 				franzcri fc(g_franzen.c_str(), g_franzen.length());
 				if (!fc.open(franzenfilename.c_str(), false))
 					error("cannot open franzen archive to read the AES salt");
@@ -125461,7 +128136,7 @@ void Jidac::gestiscimultipart()
 #ifndef NOFRANZEN
 #ifdef ZPAQFULL /// NOSFTPSTART
 	if (isfranzenonly(arcname))
-		(void)getfileinfo(arcname + ".franzen", g_starting_zpaqsize, g_starting_zpaqdate, g_starting_zpaqattr);
+		(void)getfileinfo(franzenname(arcname), g_starting_zpaqsize, g_starting_zpaqdate, g_starting_zpaqattr);
 #endif /// NOSFTPEND
 #endif
 	g_starting_indexsize= 0;
@@ -125607,7 +128282,7 @@ int Jidac::gestisciwrite()
 {
 	if (!g_fakewrite)
 	{
-		if (exists(arcname))
+		if (exists(arcname) && (!isfranzen(arcname))) // a .franzen is handled just below
 		{
 			myprintf("02040: Updating %Z at offset %s + %s\n", arcname.c_str(), migliaia(header_pos), migliaia2(offset));
 			g_flagcreating= false;
@@ -125616,7 +128291,7 @@ int Jidac::gestisciwrite()
 #ifdef ZPAQFULL /// NOSFTPSTART
 		else if ((g_chunk_size == 0) && isfranzenonly(arcname))
 		{
-			myprintf("02046: Updating (franzen-only) %Z at offset %s + %s\n", (arcname + ".franzen").c_str(), migliaia(header_pos), migliaia2(offset));
+			myprintf("02046: Updating (franzen-only) %Z at offset %s + %s\n", franzenname(arcname).c_str(), migliaia(header_pos), migliaia2(offset));
 			g_flagcreating= false;
 		}
 #endif /// NOSFTPEND
@@ -126243,7 +128918,7 @@ int Jidac::gestiscicalcolifinali()
 #ifndef NOFRANZEN
 #ifdef ZPAQFULL /// NOSFTPSTART
 	if (isfranzenonly(g_archive))
-		thephysical= g_archive + ".franzen"; // franzen-only: hash the real file on disk
+		thephysical= franzenname(g_archive); // franzen-only: hash the real file on disk
 #endif /// NOSFTPEND
 #endif
 	if ((checktxt != "") || (backuptxt != ""))
@@ -126732,10 +129407,10 @@ int Jidac::add()
 	// If the .zpaq is missing but a valid .zpaq.franzen is there, this is a franzen-only archive:
 	// never fork a fresh cleartext .zpaq beside it.
 	if ((!index) && (g_chunk_size == 0) && (!g_fakewrite))
-		if (!archive_exists)
-			if (is_file_franzen(subpart(archive, 1) + ".franzen"))
+		if ((!archive_exists) || isfranzen(subpart(archive, 1))) // the archive can BE the .franzen
+			if (is_file_franzen(franzenname(subpart(archive, 1))))
 			{
-				string franzenfilename= subpart(archive, 1) + ".franzen";
+				string franzenfilename= franzenname(subpart(archive, 1));
 				bool   aestoo		  = is_file_frenzen(franzenfilename);
 				bool   haskey		  = (g_password != NULL) && (g_password[0] != 0);
 				if (aestoo && (!haskey))
@@ -127054,7 +129729,9 @@ int Jidac::add()
 	// -debug writes both files only on CREATION: an existing franzen-only archive stays
 	// franzen-only even with -debug (a partial .zpaq born from an append would be garbage)
 	// with -key too: AES+franzen goes into a single FRENZEN file, no cleartext-side .zpaq
-	g_franzen_zpaq_nowrite= (g_franzen != "") && (!exists(arcname)) && ((!flagdebug) || is_file_franzen(arcname + ".franzen")) && (g_chunk_size == 0) && (!g_fakewrite) && (!index);
+	// a .franzen archive (a z:/pippo.franzen) is franzen-only by definition: -debug cannot
+	// turn on a cleartext .zpaq, there is no .zpaq name at all
+	g_franzen_zpaq_nowrite= (g_franzen != "") && (isfranzen(arcname) || ((!exists(arcname)) && ((!flagdebug) || is_file_franzen(arcname + ".franzen")))) && (g_chunk_size == 0) && (!g_fakewrite) && (!index);
 #endif /// NOSFTPEND
 #endif
 

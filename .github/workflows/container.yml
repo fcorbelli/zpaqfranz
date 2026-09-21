@@ -1,3 +1,4 @@
+
 name: Build container image
 
 on:
@@ -16,19 +17,20 @@ jobs:
   build:
     if: github.event.release.prerelease == false
     runs-on: ubuntu-24.04
+
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           ref: ${{ github.event.release.tag_name }}
 
       - name: Prepare docker build context
         run: cp zpaqfranz.cpp docker/zpaqfranz.cpp
 
-      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-qemu-action@v4
 
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v4
 
-      - uses: docker/login-action@v3
+      - uses: docker/login-action@v4
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -38,7 +40,9 @@ jobs:
         run: echo "IMAGE_NAME=${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
 
       - name: Build and push
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v7
+        env:
+          BUILDKIT_PROGRESS: plain
         with:
           context: docker
           file: docker/Dockerfile
@@ -58,6 +62,7 @@ jobs:
           set -euo pipefail
           image="${REGISTRY}/${IMAGE_NAME}"
           tag="${{ github.event.release.tag_name }}"
+
           if ! latest_json="$(
             curl -fsSL \
               --retry 3 \
@@ -75,6 +80,7 @@ jobs:
             echo "::error::Failed to parse latest release JSON"
             exit 1
           fi
+
           if [ -z "$latest" ]; then
             echo "::error::GitHub API returned no tag_name for latest release"
             exit 1

@@ -74,6 +74,16 @@ Credits and copyrights and licenses and links and internal bookmarks
  /// LICENSE_START.23 LICENSE_END.23
 24 [MIT-like]           curl command line tool and library        https://curl.se/
  /// LICENSE_START.24 LICENSE_END.24
+25 [LGPL]                       https://github.com/libfuse/libfuse
+ /// LICENSE_START.25 LICENSE_END.25
+26 [GPLv3 + FLOSS exception]   WinFsp Copyright (C) Bill Zissimopoulos https://github.com/winfsp/winfsp
+ /// LICENSE_START.26 LICENSE_END.26
+27 [MIT License]                LZAV Copyright (c) 2023-2026 Aleksey Vaneev https://github.com/avaneev/lzav
+ /// LICENSE_START.27 LICENSE_END.27
+ Removed (65.5d: -m7 LZAV dropped, zstd -m8 compresses more at the same speed)
+28 [BSD 3-Clause license]      zstd Copyright (c) Meta Platforms, Inc. and affiliates https://github.com/facebook/zstd
+ /// LICENSE_START.28 LICENSE_END.28
+
 
    _____ _____  ______ ______ _______ _____ _   _  _____  _____ 
   / ____|  __ \|  ____|  ____|__   __|_   _| \ | |/ ____|/ ____|
@@ -144,4 +154,8 @@ Credits and copyrights and licenses and links and internal bookmarks
 54 Thanks to https://github.com/def324/                 for Docker https://github.com/fcorbelli/zpaqfranz/tree/main/docker
 55 Thanks to https://github.com/KnightAR                for stdin-size switch   
 56 Thanks to https://github.com/MarkSchmied             for getting the WORK_NONE hash warning
+58 Thanks to https://github.com/8tpercent               for mount issues
+59 Thanks to https://github.com/YadeWira                for bug hunting   
+60 Thanks to https://github.com/plusky                  for testing on OpenSUSE
+61 Thanks to https://github.com/VSteveHL                for "strange chars" issue
 

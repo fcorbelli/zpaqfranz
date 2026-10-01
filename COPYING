@@ -83,6 +83,10 @@ Credits and copyrights and licenses and links and internal bookmarks
  Removed (65.5d: -m7 LZAV dropped, zstd -m8 compresses more at the same speed)
 28 [BSD 3-Clause license]      zstd Copyright (c) Meta Platforms, Inc. and affiliates https://github.com/facebook/zstd
  /// LICENSE_START.28 LICENSE_END.28
+29 [MIT License]               postami 0.3.0 (SMTP client with TLS) and zippami (one file into a .zip) by ... me
+ /// LICENSE_START.29 LICENSE_END.29
+30 [Apache License 2.0]        Mbed TLS 3.6.4 Copyright The Mbed TLS Contributors https://github.com/Mbed-TLS/mbedtls
+ /// LICENSE_START.30 LICENSE_END.30
 
 
    _____ _____  ______ ______ _______ _____ _   _  _____  _____ 
@@ -154,6 +158,7 @@ Credits and copyrights and licenses and links and internal bookmarks
 54 Thanks to https://github.com/def324/                 for Docker https://github.com/fcorbelli/zpaqfranz/tree/main/docker
 55 Thanks to https://github.com/KnightAR                for stdin-size switch   
 56 Thanks to https://github.com/MarkSchmied             for getting the WORK_NONE hash warning
+57 Thanks to https://github.com/dannyboy76705           for then mount idea
 58 Thanks to https://github.com/8tpercent               for mount issues
 59 Thanks to https://github.com/YadeWira                for bug hunting   
 60 Thanks to https://github.com/plusky                  for testing on OpenSUSE

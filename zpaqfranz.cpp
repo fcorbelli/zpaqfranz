@@ -64,8 +64,8 @@ OTHER DEALINGS IN THE SOFTWARE.
 /// Comment out the next line to build without -m8 (-m8 is then -m5 again)
 #define ZPAQZSTD
 
-#define ZPAQ_VERSION "65.6i"
-#define ZPAQ_DATE "(2026-09-30)"
+#define ZPAQ_VERSION "65.7v"
+#define ZPAQ_DATE "(2026-10-01)"
 
 
 /*
@@ -1256,6 +1256,42 @@ ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+29 [MIT License]               postami 0.3.0 (SMTP client with TLS) and zippami (one file into a .zip) by ... me
+ /// LICENSE_START.29
+ /// LICENSE_END.29
+    The e-mail client of "work email" and the .zip of "work zip": written for zpaqfranz,
+    same author and same license (the MIT License at the top of this file).
+    Its block (from POSTAMI BEGIN to POSTAMI END) holds a subset of Mbed TLS: see 30.
+    Left out of the build by -DNOEMAIL (-DOPEN sets it).
+
+30 [Apache License 2.0]        Mbed TLS 3.6.4 Copyright The Mbed TLS Contributors https://github.com/Mbed-TLS/mbedtls
+ /// LICENSE_START.30
+ /// LICENSE_END.30
+    Inside the block of postami (29), from BEGIN MBEDTLS AMALGAMATION to END MBEDTLS AMALGAMATION.
+
+    Mbed TLS is dual licensed (SPDX-License-Identifier: Apache-2.0 OR GPL-2.0-or-later).
+    It is used here under the Apache License, Version 2.0: its full text is at 18, above.
+
+    Copyright The Mbed TLS Contributors
+
+    Licensed under the Apache License, Version 2.0 (the "License"); you may
+    not use this file except in compliance with the License.
+    You may obtain a copy of the License at
+        http://www.apache.org/licenses/LICENSE-2.0
+    Unless required by applicable law or agreed to in writing, software
+    distributed under the License is distributed on an "AS IS" BASIS,
+    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    See the License for the specific language governing permissions and
+    limitations under the License.
+
+    Changes (Apache License 2.0, section 4b): this is NOT the Mbed TLS distribution.
+    It is a subset of v3.6.4 configured as a TLS 1.2 client (ECDHE-RSA/ECDHE-ECDSA,
+    AES-GCM, ChaCha20-Poly1305, AES-CBC, X25519/P-256/P-384, X.509 with RSA and ECDSA),
+    put into one block and mechanically transformed: comments, code disabled by the
+    configuration and unused functions, types and macros removed; static names made
+    unique; C99 constructs turned into C++98 (casts, positional initializers).
+    Otherwise unmodified. Left out of the build by -DNOEMAIL (-DOPEN sets it).
+
 
    _____ _____  ______ ______ _______ _____ _   _  _____  _____ 
   / ____|  __ \|  ____|  ____|__   __|_   _| \ | |/ ____|/ ____|
@@ -1336,7 +1372,11 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
    ██   ██   ██  ██████ ██   ██ ████     █████           ██     ██   ██         ██   ██  ██████ ██   ██         ██ █ ██
    ██   ██   ██ ██   ██ ██   ██ ██ ██        ██          ██     ██   ██         ██   ██ ██   ██ ██   ██         ███ ███
    ██   ██   ██  ██████ ██   ██ ██  ██   █████            ████   █████          ██████   ██████ ██   ██         ██   ██
-   
+58 Thanks to https://github.com/8tpercent               for mount issues
+59 Thanks to https://github.com/YadeWira                for bug hunting   
+60 Thanks to https://github.com/plusky                  for testing on OpenSUSE
+61 Thanks to https://github.com/VSteveHL                for "strange chars" issue
+
   _____  ______          _      _  __     __   ____  _____  ______ _   _ 
  |  __ \|  ____|   /\   | |    | | \ \   / /  / __ \|  __ \|  ____| \ | |
  | |__) | |__     /  \  | |    | |  \ \_/ /  | |  | | |__) | |__  |  \| |
@@ -2303,6 +2343,8 @@ g++ -g -Wall -Wextra -Wpedantic -fsanitize=address,undefined -O3 zpaqfranz.cpp -
 	#endif // corresponds to #ifndef (#ifndef unix)
 #endif // corresponds to #if (#if defined(SOLARIS) || defined(__unix__) || (defined(__APPLE__) && defined(__MACH__)))
 
+/// LICENSE_START.29
+/// (and LICENSE 30, Mbed TLS: from BEGIN MBEDTLS AMALGAMATION to END MBEDTLS AMALGAMATION)
 /// ======== POSTAMI BEGIN: embedded SMTP client, see tools/embed_zpaqfranz.py ========
 /* ======================================================================== */
 /* ======== ZIPPAMI BEGIN: one file into a .zip (deflate), no dependencies  */
@@ -37227,6 +37269,7 @@ int zpaqfranz_sendmail(const std::string &i_configfile, const std::string &i_to,
 }
 #endif /// NOEMAIL
 /// ======== POSTAMI END ========
+/// LICENSE_END.29
 
 #ifdef IPV6
     #include <sys/types.h>
@@ -88043,6 +88086,7 @@ bool flagverbose;
 bool flagfranzen;
 bool flagverify;
 bool flagvss;
+bool flagnovss; /// 65.7m: -image with no VSS, not even tried (-image tries it by itself on NTFS)
 bool flagzero;
 bool flaghome;
 bool flagfixcase;
@@ -88055,6 +88099,7 @@ int	 g_turbothreads= 0; /// -turbo N: threads of the parallel fragmenter of add2
 bool flagimage;
 bool flagdashboard; /// a -image -dashboard: a live map of the source (65.6f: the default)
 bool flagnodashboard; /// 65.6f: -dashboard is the default, -nodashboard turns it off (the classic line)
+bool flagelevated; /// 65.7l: mount of a .vhd relaunched as administrator (hidden): never relaunched again
 /// images (a -image): what the source cannot give stays zeros and the image goes on; counted
 /// here, then a giant READ ERROR at the end and the exit code 2 (see imagebanner)
 int64_t				 g_imgerrori	 = 0;	  /// unreadable sectors
@@ -88064,6 +88109,12 @@ int64_t				 g_imgfine		 = -1;	  /// where the last stretch ends
 std::vector<int64_t> g_imgerroridove;		  /// the first 16 stretches: start (bytes from the start of the source), bytes
 bool				 g_imgmorto		 = false; /// the source is gone: no more reads, zeros to the end
 int64_t				 g_imgbuio		 = 0;	  /// pieces in a row that gave nothing: a dead zone, no more sector by sector
+/// an image of a volume in use (no VSS, not locked): what was written meanwhile can be
+/// inconsistent. Said at the start and again at the end, exit code 1
+std::string g_imgincoerente;
+/// the file of the image being restored (prepare_extract_to_disk): an archive can hold the
+/// images of more drives, only that one goes to the destination
+std::string g_immaginescelta;
 static void img_errore(int64_t i_dove, int64_t i_bytes, uint32_t i_settore)
 {
 	if (i_settore == 0)
@@ -88089,8 +88140,9 @@ static void img_errore(int64_t i_dove, int64_t i_bytes, uint32_t i_settore)
 bool flagzip;			  // 'zip' command: x, but into ONE single ZIP64 file
 bool flagdeflate;		  // ...and -deflate compresses it, sequentially (method 8)
 std::string g_zipname= ""; // ...and this is the .zip to be created (std:: : see g_rd_errorpath)
+bool flagraw;			  /// 65.7o: everywhere. a -raw: the image of the whole partition (or disk); out of Windows the same of -image
+bool flagnofrugal;		  /// 65.7o: -image with the swap files too (pagefile, swapfile, hiberfil: left out by default)
 #ifdef _WIN32
-bool flagraw;
 bool flagfindzpaq;
 bool flagfixreserved;
 bool flagnosanitize;
@@ -113099,11 +113151,25 @@ int64_t getfreespace(string i_path)
 			{
 				while ((percorso.size() > 1) && ((percorso[percorso.size() - 1] == '/') || (percorso[percorso.size() - 1] == '\\')))
 					percorso= percorso.substr(0, percorso.size() - 1);
+#ifdef _WIN32
+				/// 65.7t: a drive ("f:"): its root, and nothing above it. Cut to "f:" it is not a folder,
+				/// the loop went on to "" and the free space was the one of the current folder, on
+				/// another drive (-to f:/x.vhd from c:\zpaqfranz: the free space of C:)
+				if ((percorso.size() == 2) && (percorso[1] == ':'))
+				{
+					percorso+= "/";
+					break;
+				}
+#endif
 				size_t barra= percorso.find_last_of("/\\");
 				if (barra == string::npos)
 					percorso= "";
 				else if (barra == 0)
 					percorso= "/";
+#ifdef _WIN32
+				else if ((barra == 2) && (percorso[1] == ':'))
+					percorso= percorso.substr(0, 3); /// the folder of f:/x.vhd is f:/
+#endif
 				else
 					percorso= percorso.substr(0, barra);
 			}
@@ -114623,13 +114689,36 @@ int myfclose(FP *fp)
 /// the size), else only if its size, known before writing it, is >= ZPAQ_SPARSEMIN: the
 /// smaller ones stay as they are (tiny files in the MFT, no fragmentation). Never with
 /// -nosparse. Not possible here (FAT32, exFAT...) => a normal file, not an error
-bool trysparse(FP i_fp, int64_t i_size, bool i_origin, const char *i_filename)
+/// a virtual disk (.vhd .vhdx .avhd .avhdx): Windows does not mount it when it is sparse
+/// ("virtual disk system limitation... must not be sparse")
+static bool isdiscovirtuale(const char *i_filename)
+{
+	if (i_filename == NULL)
+		return false;
+	const char *punto= strrchr(i_filename, '.');
+	if (punto == NULL)
+		return false;
+	string estensione= punto;
+	for (size_t i= 0; i < estensione.size(); i++)
+		estensione[i]= (char)tolower((unsigned char)estensione[i]);
+	return (estensione == ".vhd") || (estensione == ".vhdx") || (estensione == ".avhd") || (estensione == ".avhdx");
+}
+bool trysparse(FP i_fp, int64_t i_size, bool i_origin, const char *i_filename, bool i_discotemporaneo= false)
 {
 	if ((i_fp == FPNULL) || flagnosparse)
 		return false;
-	if (!i_origin)
+	if (isdiscovirtuale(i_filename))
+	{
+		/// left sparse (even when it was at the origin) it could not be mounted. 65.7o: sparse only
+		/// WHILE it is written, when the caller clears it at the end (toglisparse)
+		if ((!i_discotemporaneo) || (!flagsparse))
+			return false;
+	}
+	else if (!i_origin)
+	{
 		if ((!flagsparse) || (i_size < ZPAQ_SPARSEMIN))
 			return false;
+	}
 	DWORD bytesreturned= 0;
 	if (DeviceIoControl(i_fp, FSCTL_SET_SPARSE, NULL, 0, NULL, 0, &bytesreturned, NULL))
 	{
@@ -114642,6 +114731,14 @@ bool trysparse(FP i_fp, int64_t i_size, bool i_origin, const char *i_filename)
 	else if (flagverbose)
 		myprintf("39875$ no sparse file here (not NTFS?), a normal one: %Z\n", i_filename);
 	return false;
+}
+/// is this open file sparse, now?
+static bool filesparse(FP i_fp)
+{
+	BY_HANDLE_FILE_INFORMATION info;
+	if ((i_fp == FPNULL) || (!GetFileInformationByHandle(i_fp, &info)))
+		return false;
+	return (info.dwFileAttributes & FILE_ATTRIBUTE_SPARSE_FILE) != 0;
 }
 // Read nobj objects of size size into ptr. Return number of objects read.
 size_t fread(void *ptr, size_t size, size_t nobj, FP fp)
@@ -131852,6 +131949,93 @@ typedef void(WINAPI *RpcStringFreeAFunc)(RPC_CSTR *);
 #define FRANZIMAGER_MFT_SIGNATURE "FILE"
 #define FRANZIMAGER_NTFS_ATTR_DATA 0x80
 #define FRANZIMAGER_NTFS_ATTR_END 0xFFFFFFFF
+/// a VHD: at most 2040 GB (Windows), sectors of 512 bytes only
+#define FRANZIMAGER_VHD_MAX (2040ULL * 1024 * 1024 * 1024)
+/// the file systems of a thin image (the .meta keeps it). NTFS: its $Bitmap; FAT12/16/32 and
+/// exFAT: the used clusters from Windows, and what is before the first cluster always
+#define FRANZIMAGER_FS_NTFS 0
+#define FRANZIMAGER_FS_FAT12 1
+#define FRANZIMAGER_FS_FAT16 2
+#define FRANZIMAGER_FS_FAT32 3
+#define FRANZIMAGER_FS_EXFAT 4
+#ifndef FSCTL_GET_RETRIEVAL_POINTER_BASE
+#define FSCTL_GET_RETRIEVAL_POINTER_BASE CTL_CODE(FILE_DEVICE_FILE_SYSTEM, 141, METHOD_BUFFERED, FILE_ANY_ACCESS)
+#endif
+
+/// FAT12/16/32 or exFAT, from the boot sector: where the clusters start, how many they are
+struct franzfatgeo
+{
+	uint8_t	 fs;
+	uint32_t settore;
+	uint32_t percluster;
+	uint64_t heap; /// the first cluster, bytes from the start of the partition
+	uint64_t clusters;
+};
+static bool franzimager_leggifat(const uint8_t *i_boot, franzfatgeo &o_geo)
+{
+	if ((i_boot[510] != 0x55) || (i_boot[511] != 0xAA))
+		return false;
+	if (memcmp(i_boot + 3, "EXFAT   ", 8) == 0)
+	{
+		const uint8_t s= i_boot[108];
+		const uint8_t c= i_boot[109];
+		if ((s < 9) || (s > 12) || (c > 25 - s))
+			return false;
+		uint32_t heap	 = 0;
+		uint32_t clusters= 0;
+		memcpy(&heap, i_boot + 88, 4);
+		memcpy(&clusters, i_boot + 92, 4);
+		o_geo.fs		= FRANZIMAGER_FS_EXFAT;
+		o_geo.settore	= 1u << s;
+		o_geo.percluster= 1u << c;
+		o_geo.heap		= (uint64_t)heap * o_geo.settore;
+		o_geo.clusters	= clusters;
+		return (heap > 0) && (clusters > 0);
+	}
+	uint16_t bps= 0, riservati= 0, radice= 0, tot16= 0, fat16= 0;
+	uint32_t tot32= 0, fat32= 0;
+	memcpy(&bps, i_boot + 11, 2);
+	const uint8_t spc= i_boot[13];
+	memcpy(&riservati, i_boot + 14, 2);
+	const uint8_t nfat= i_boot[16];
+	memcpy(&radice, i_boot + 17, 2);
+	memcpy(&tot16, i_boot + 19, 2);
+	memcpy(&fat16, i_boot + 22, 2);
+	memcpy(&tot32, i_boot + 32, 4);
+	memcpy(&fat32, i_boot + 36, 4);
+	if ((bps != 512) && (bps != 1024) && (bps != 2048) && (bps != 4096))
+		return false;
+	if ((spc == 0) || ((spc & (spc - 1)) != 0) || (riservati == 0) || (nfat == 0) || (nfat > 4))
+		return false;
+	const uint64_t fatsize= fat16 ? fat16 : fat32;
+	const uint64_t totali = tot16 ? tot16 : tot32;
+	const uint64_t primo  = (uint64_t)riservati + (uint64_t)nfat * fatsize + ((uint64_t)radice * 32 + bps - 1) / bps;
+	if ((fatsize == 0) || (totali <= primo))
+		return false;
+	o_geo.settore	= bps;
+	o_geo.percluster= spc;
+	o_geo.heap		= primo * bps;
+	o_geo.clusters	= (totali - primo) / spc;
+	/// the kind of FAT is the number of its clusters, nothing else (Microsoft, "FAT type determination")
+	if (o_geo.clusters < 4085)
+		o_geo.fs= FRANZIMAGER_FS_FAT12;
+	else if (o_geo.clusters < 65525)
+		o_geo.fs= FRANZIMAGER_FS_FAT16;
+	else
+		o_geo.fs= FRANZIMAGER_FS_FAT32;
+	return o_geo.clusters > 0;
+}
+/// the type of the partition in the MBR of a .vhd: the one Windows itself writes (diskpart)
+static uint8_t franzimager_tipombr(uint8_t i_fs)
+{
+	if (i_fs == FRANZIMAGER_FS_FAT12)
+		return 0x01;
+	if (i_fs == FRANZIMAGER_FS_FAT16)
+		return 0x0E;
+	if (i_fs == FRANZIMAGER_FS_FAT32)
+		return 0x0C;
+	return 0x07; /// NTFS, exFAT
+}
 
 // struttura per range di cluster
 struct clusterrange
@@ -132096,6 +132280,52 @@ class franzimager
 	{
 		m_flagfull= true;
 	}
+	/// -image alone: the shadow copy is asked by zpaqfranz. If it cannot be made (a USB disk, no
+	/// space for it...) the image goes on without it, told; a -vss of the user stops instead
+	void setvssautomatico(bool i_automatico)
+	{
+		m_vssautomatico= i_automatico;
+	}
+	/// the archive is on this very volume: never locked (the archive could not be written)
+	void setnonbloccare(bool i_nonbloccare)
+	{
+		m_nonbloccare= i_nonbloccare;
+	}
+	/// 65.7s, image -raw: the next restore of the used clusters on a partition writes the whole
+	/// partition, zeros where the image has nothing (else what was there stays there)
+	void setriempizeri(bool i_riempi)
+	{
+		m_estraithin.riempi= i_riempi;
+	}
+	bool zeriestrai(uint64_t i_fino);
+	/// VSS asked automatically, and not made: the image is of the live volume
+	bool vssmancata() const
+	{
+		return m_vssmancata;
+	}
+	const std::string &motivovss() const
+	{
+		return m_motivovss;
+	}
+	bool usavss() const
+	{
+		return m_usingvss;
+	}
+	/// no VSS, but locked: nobody else could write on the volume while it was read
+	bool bloccato() const
+	{
+		return m_bloccato;
+	}
+	uint8_t tipofs() const
+	{
+		return m_fstype;
+	}
+	const char *nomefs() const;
+
+	/// a raw image (a partition, or a whole disk) as a dynamic .vhd that Windows mounts
+	bool preparavhdraw(const char *i_filename, uint64_t i_sourcesize, bool i_disco);
+	bool scrivivhdraw(const char *i_data, size_t i_size);
+	bool chiudivhdraw();
 
 	// main methods (public interface)
 	bool aprivhd(char i_driveletter, bool i_usevss= false);
@@ -132231,6 +132461,10 @@ class franzimager
 	{
 		return m_clustersize;
 	}
+	uint32_t getbytespersector() const
+	{
+		return m_bytespersector;
+	}
 	uint32_t getblocksize() const
 	{
 		return m_blocksize;
@@ -132318,6 +132552,33 @@ class franzimager
 	};
 	rawfilestate m_rawfilestate;
 
+	/// a raw image written as a dynamic .vhd (preparavhdraw): the blocks of zeros are not written
+	struct vhdrawstate
+	{
+		bool		 attivo;
+		bool		 errore;
+		bool		 disco;		 /// a whole disk: no MBR of ours, its own partition table
+		FILE		*fout;
+		char		*blocco;	 /// the block being filled
+		uint64_t	 posizione;	 /// where the next byte goes, in the virtual disk
+		uint64_t	 disksize;
+		uint64_t	 sorgente;	 /// bytes of the raw image
+		uint64_t	 dataoffset; /// where the next block goes, in the file
+		uint32_t	 voci;		 /// entries of the BAT
+		uint32_t	*bat;		 /// sectors of the file, host order (big endian at the end)
+		int64_t		 scritti;	 /// blocks written
+		int64_t		 vuoti;		 /// blocks of zeros, left out
+		vhdfooter	 footer;
+		vhddynheader dyn;
+
+		vhdrawstate() : attivo(false), errore(false), disco(false), fout(NULL), blocco(NULL),
+						posizione(0), disksize(0), sorgente(0), dataoffset(0), voci(0), bat(NULL),
+						scritti(0), vuoti(0)
+		{
+		}
+	};
+	vhdrawstate m_vhdraw;
+
 // .meta file header structure
 #pragma pack(push, 1)
 	struct metaheader
@@ -132335,7 +132596,8 @@ class franzimager
 		uint64_t partitionstart; // partition offset in virtual disk
 		uint64_t disksize;		 // total virtual disk size
 		uint32_t bytespersector; // bytes per sector
-		uint8_t	 reserved[44];	 // reserved for future use (totale header: 128 bytes)
+		uint8_t	 fstype;		 // FRANZIMAGER_FS_* (0 NTFS: the images before it too)
+		uint8_t	 reserved[43];	 // reserved for future use (totale header: 128 bytes)
 	};
 #pragma pack(pop)
 
@@ -132365,6 +132627,16 @@ class franzimager
 	bool	 opensourcedrive(char i_driveletter);
 	bool	 opensourcedrivevsss(char i_driveletter);
 	bool	 readntfsbootsector();
+	bool	 leggibootfat(const uint8_t *i_boot);
+	bool	 readfatbitmap();
+	bool	 bloccavolume();
+	void	 chiudisorgente();
+	void	 ricalcolaesclusioni();
+	bool	 nuovoguid(uint8_t *o_guid);
+	bool	 scrivibloccovhdraw(uint32_t i_indice);
+	void	 segnaultima();
+	void	 azzeracoda(HANDLE i_h, uint64_t i_da, uint64_t i_fine);
+	void	 adattaexfat(HANDLE i_h, uint64_t i_destsize);
 	bool	 readmftbitmap();
 	bool	 initializevhdstructures(uint64_t &o_partitionstartsector);
 	bool	 calculateusedblocks();
@@ -132409,6 +132681,15 @@ class franzimager
 	bool m_firstblockwritten;
 	bool m_flagignorespace;
 	char m_driveletter;
+	uint8_t		m_fstype;		   /// FRANZIMAGER_FS_*
+	uint64_t	m_heapoffset;	   /// FAT/exFAT: the first cluster, bytes from the start of the partition
+	uint32_t	m_realclustersize; /// FAT/exFAT: the cluster of the file system (m_clustersize: the unit of the bitmap)
+	uint64_t	m_fatclusters;	   /// FAT/exFAT: how many clusters
+	bool		m_vssautomatico;
+	bool		m_vssmancata;
+	std::string m_motivovss;
+	bool		m_bloccato;
+	bool		m_nonbloccare;
 
 	// handles
 	HANDLE m_hsourcedrive;
@@ -132501,12 +132782,18 @@ class franzimager
 		uint32_t			   blockindex;
 		LARGE_INTEGER		   freq;
 		LARGE_INTEGER		   starttime;
+		bool				   riempi;		/// 65.7s, image -raw: what the image does not have is written too, as zeros
+		uint64_t			   finoa;		/// ...the destination is written up to here
+		int64_t				   zeriscritti; /// ...the zeros, bytes
+		char				  *zeri;		/// ...and their buffer (aligned)
+		int64_t				   ultimariga;
 
 		estraistatethin() : attivo(false), hdest(INVALID_HANDLE_VALUE),
 							blockbuffer(NULL), accumulatore(NULL),
 							destsize(0), maxwritesize(0),
 							totalbyteswritten(0), blockswritten(0),
-							fragmentsread(0), blockindex(0)
+							fragmentsread(0), blockindex(0),
+							riempi(false), finoa(0), zeriscritti(0), zeri(NULL), ultimariga(0)
 		{
 		}
 	};
@@ -132592,7 +132879,7 @@ static const IID IID_IWBEMLOCATOR_MANUAL=
 franzimager::franzimager()
 	: m_initialized(false), m_flagfull(true) // default: FULL mode (tutti i cluster)
 	  ,
-	  m_usingvss(false), m_firstblockwritten(false), m_flagignorespace(false), m_driveletter(0), m_hsourcedrive(INVALID_HANDLE_VALUE), m_bat(NULL), m_volumebitmap(NULL), m_buffer(NULL), m_partitionsize(0), m_disksize(0), m_partitionstart(0), m_bytespersector(FRANZIMAGER_SECTOR_SIZE), m_sectorspercluster(0), m_clustersize(0), m_totalclusters(0), m_blocksize(FRANZIMAGER_BLOCK_SIZE), m_currentoffset(0), m_currentdataoffset(0), m_bitmapsize(0), m_blockswritten(0), m_totalbytes(0), m_usedblocks(0), m_usedbytes(0), m_excludedExpectedDeleted(0), m_excludedCannotDelete(0), m_pwbemlocator(NULL), m_pwbemservices(NULL), m_wmiinitialized(false), m_hole32(NULL), m_holeaut32(NULL), m_hrpcrt4(NULL), m_dllloaded(false), m_pCoInitializeEx(NULL), m_pCoUninitialize(NULL), m_pCoCreateInstance(NULL), m_pCoSetProxyBlanket(NULL), m_pCoInitializeSecurity(NULL), m_pSysAllocString(NULL), m_pSysFreeString(NULL), m_pVariantInit(NULL), m_pVariantClear(NULL), m_pUuidCreate(NULL), m_pUuidToStringA(NULL), m_pRpcStringFreeA(NULL)
+	  m_usingvss(false), m_firstblockwritten(false), m_flagignorespace(false), m_driveletter(0), m_fstype(FRANZIMAGER_FS_NTFS), m_heapoffset(0), m_realclustersize(0), m_fatclusters(0), m_vssautomatico(false), m_vssmancata(false), m_bloccato(false), m_nonbloccare(false), m_hsourcedrive(INVALID_HANDLE_VALUE), m_bat(NULL), m_volumebitmap(NULL), m_buffer(NULL), m_partitionsize(0), m_disksize(0), m_partitionstart(0), m_bytespersector(FRANZIMAGER_SECTOR_SIZE), m_sectorspercluster(0), m_clustersize(0), m_totalclusters(0), m_blocksize(FRANZIMAGER_BLOCK_SIZE), m_currentoffset(0), m_currentdataoffset(0), m_bitmapsize(0), m_blockswritten(0), m_totalbytes(0), m_usedblocks(0), m_usedbytes(0), m_excludedExpectedDeleted(0), m_excludedCannotDelete(0), m_pwbemlocator(NULL), m_pwbemservices(NULL), m_wmiinitialized(false), m_hole32(NULL), m_holeaut32(NULL), m_hrpcrt4(NULL), m_dllloaded(false), m_pCoInitializeEx(NULL), m_pCoUninitialize(NULL), m_pCoCreateInstance(NULL), m_pCoSetProxyBlanket(NULL), m_pCoInitializeSecurity(NULL), m_pSysAllocString(NULL), m_pSysFreeString(NULL), m_pVariantInit(NULL), m_pVariantClear(NULL), m_pUuidCreate(NULL), m_pUuidToStringA(NULL), m_pRpcStringFreeA(NULL)
 {
 	m_ultimoblocco= 0;
 }
@@ -132601,6 +132888,15 @@ franzimager::franzimager()
 franzimager::~franzimager()
 {
 	chiudivhd();
+	/// a .vhd from a raw image left half way (an error): its file closed, its memory freed
+	if (m_vhdraw.fout)
+		fclose(m_vhdraw.fout);
+	m_vhdraw.fout= NULL;
+	if (m_vhdraw.blocco)
+		franz_free(m_vhdraw.blocco);
+	m_vhdraw.blocco= NULL;
+	delete[] m_vhdraw.bat;
+	m_vhdraw.bat= NULL;
 
 	if (m_usingvss)
 	{
@@ -132760,25 +133056,48 @@ uint32_t franzimager::calculatechecksum(void *i_structure, size_t i_size)
 }
 
 // chs geometry calculation
+/// The algorithm of the VHD specification (appendix "CHS calculation"): the one that Windows,
+/// Virtual PC and disk2vhd use. Above 127 GB it gave 255 heads, not allowed (16 at most)
 void franzimager::calculatechs(uint64_t i_totalsectors, uint16_t *o_cylinders, uint8_t *o_heads, uint8_t *o_sectors)
 {
-	*o_heads	 = 16;
-	*o_sectors	 = 63;
-	uint32_t chs = (*o_heads) * (*o_sectors);
-	uint32_t cyls= (uint32_t)(i_totalsectors / chs);
-
-	if (i_totalsectors > 65535ULL * 16 * 255)
+	uint64_t totale= i_totalsectors;
+	if (totale > 65535ULL * 16 * 255)
+		totale= 65535ULL * 16 * 255;
+	uint32_t settori;
+	uint32_t testine;
+	uint64_t cilindriperteste;
+	if (totale >= 65535ULL * 16 * 63)
 	{
-		*o_heads  = 255;
-		*o_sectors= 63;
-		chs		  = (*o_heads) * (*o_sectors);
-		cyls	  = (uint32_t)(i_totalsectors / chs);
+		settori			= 255;
+		testine			= 16;
+		cilindriperteste= totale / settori;
 	}
-
-	if (cyls > 65535)
-		cyls= 65535;
-
-	*o_cylinders= (uint16_t)cyls;
+	else
+	{
+		settori			= 17;
+		cilindriperteste= totale / settori;
+		testine			= (uint32_t)((cilindriperteste + 1023) / 1024);
+		if (testine < 4)
+			testine= 4;
+		if ((cilindriperteste >= (uint64_t)testine * 1024) || (testine > 16))
+		{
+			settori			= 31;
+			testine			= 16;
+			cilindriperteste= totale / settori;
+		}
+		if (cilindriperteste >= (uint64_t)testine * 1024)
+		{
+			settori			= 63;
+			testine			= 16;
+			cilindriperteste= totale / settori;
+		}
+	}
+	uint64_t cilindri= cilindriperteste / testine;
+	if (cilindri > 65535)
+		cilindri= 65535;
+	*o_cylinders= (uint16_t)cilindri;
+	*o_heads	= (uint8_t)testine;
+	*o_sectors	= (uint8_t)settori;
 }
 
 // get volume size
@@ -133000,6 +133319,14 @@ bool franzimager::opensourcedrive(char i_driveletter)
 	if (flagverbose)
 		myprintf("43450: partition size: %s bytes\n", migliaia(m_partitionsize));
 
+	/// the volume handle stops at the end of the filesystem: the last sectors of the partition (the
+	/// backup boot sector of NTFS, the rounding to the physical sector) could not be read, and the
+	/// last block of the image came out short (the same as the raw restore)
+	DWORD dasd= 0;
+	if (!DeviceIoControl(m_hsourcedrive, FSCTL_ALLOW_EXTENDED_DASD_IO, NULL, 0, NULL, 0, &dasd, NULL))
+		if (flagverbose)
+			myprintf("43451: no reading up to the end of the partition %c: (error %lu): its last sectors are zeros\n", i_driveletter, GetLastError());
+
 	return true;
 }
 
@@ -133008,15 +133335,20 @@ bool franzimager::opensourcedrivevsss(char i_driveletter)
 {
 	m_usingvss= false;
 
+	m_motivovss= "";
 	if (!createvss(i_driveletter))
 	{
-		myprintf("43462: vss kaputt for %c:\n", i_driveletter);
+		if (m_motivovss == "")
+			m_motivovss= "WMI does not answer";
+		if ((!m_vssautomatico) || flagverbose)
+			myprintf("43462: vss kaputt for %c:\n", i_driveletter);
 		return false;
 	}
 
 	m_hsourcedrive= openvssdevice();
 	if (m_hsourcedrive == INVALID_HANDLE_VALUE)
 	{
+		m_motivovss= "the shadow copy cannot be read";
 		myprintf("43469: error opening vss device %c:\n", i_driveletter);
 		deletevss();
 		return false;
@@ -133029,6 +133361,7 @@ bool franzimager::opensourcedrivevsss(char i_driveletter)
 
 	if (!getvolumesize(m_hsourcedrive, &m_partitionsize))
 	{
+		m_motivovss= "the shadow copy cannot be read";
 		myprintf("43481: error reading vss volume size (code %lu)\n", GetLastError());
 		CloseHandle(m_hsourcedrive);
 		m_hsourcedrive= INVALID_HANDLE_VALUE;
@@ -133042,6 +133375,7 @@ bool franzimager::opensourcedrivevsss(char i_driveletter)
 	// wait for VSS volume to be ready
 	if (!waitforvssready(m_hsourcedrive))
 	{
+		m_motivovss= "the shadow copy cannot be read";
 		myprintf("43494: vss volume not ready (too much in use?)\n");
 		CloseHandle(m_hsourcedrive);
 		m_hsourcedrive= INVALID_HANDLE_VALUE;
@@ -133056,6 +133390,7 @@ bool franzimager::opensourcedrivevsss(char i_driveletter)
 	m_hsourcedrive= openvssdevice();
 	if (m_hsourcedrive == INVALID_HANDLE_VALUE)
 	{
+		m_motivovss= "the shadow copy cannot be read";
 		myprintf("43508: error reopening vss device\n");
 		deletevss();
 		return false;
@@ -133065,6 +133400,12 @@ bool franzimager::opensourcedrivevsss(char i_driveletter)
 	LARGE_INTEGER zero;
 	zero.QuadPart= 0;
 	SetFilePointerEx(m_hsourcedrive, zero, NULL, FILE_BEGIN);
+
+	/// as opensourcedrive(): up to the end of the (shadow) volume, if it lets
+	DWORD dasd= 0;
+	if (!DeviceIoControl(m_hsourcedrive, FSCTL_ALLOW_EXTENDED_DASD_IO, NULL, 0, NULL, 0, &dasd, NULL))
+		if (flagverbose)
+			myprintf("43518: no extended reading on the vss device (error %lu)\n", GetLastError());
 
 	color_cyan();
 	myprintf("43519: VSS ready!\n");
@@ -133094,13 +133435,23 @@ bool franzimager::readntfsbootsector()
 
 	const ntfsbootsector *bs= (ntfsbootsector *)bootsectorbuffer;
 
+	m_fstype		 = FRANZIMAGER_FS_NTFS;
+	m_heapoffset	 = 0;
+	m_realclustersize= 0;
+	m_fatclusters	 = 0;
 	// if flagfull, ignore ntfs verification
 	if (!m_flagfull)
 	{
 		if (memcmp(bs->oemid, FRANZIMAGER_NTFS_OEM_ID, 8) != 0)
 		{
-			myprintf("43551: filesystem NOT NTFS (oem id: %.8s)\n", bs->oemid);
-			return false;
+			if (!leggibootfat((const uint8_t *)bootsectorbuffer))
+			{
+				myprintf("43551: file system not NTFS, FAT or exFAT (oem id: %.8s)\n", bs->oemid);
+				return false;
+			}
+			if (flagverbose)
+				myprintf("43552: %s: %s clusters of %s bytes, the first at %s\n", nomefs(), migliaia(m_fatclusters), migliaia2(m_realclustersize), migliaia3(m_heapoffset));
+			return true;
 		}
 	}
 
@@ -133526,6 +133877,14 @@ bool franzimager::readmftbitmap()
 		return true;
 	}
 
+	/// read again after the lock of the volume: the first bitmap goes
+	if (m_volumebitmap)
+	{
+		delete[] m_volumebitmap;
+		m_volumebitmap= NULL;
+		m_bitmapsize  = 0;
+	}
+
 	// NORMAL READ: PARSE NTFS STRUCTURES
 
 	// 1. Read boot sector to find MFT
@@ -133746,8 +134105,10 @@ bool franzimager::readmftbitmap()
 // initialize vhd structures
 bool franzimager::initializevhdstructures(uint64_t &o_partitionstartsector)
 {
-	o_partitionstartsector= FRANZIMAGER_SECTOR_SIZE * 4;
-	m_partitionstart	  = o_partitionstartsector * m_bytespersector;
+	/// the partition starts at 1 MiB of the virtual disk, whose sectors are always of 512 bytes
+	/// (a VHD): not "2048 sectors of the source", 8 MiB on a 4Kn disk, past the first block
+	o_partitionstartsector= 2048;
+	m_partitionstart	  = o_partitionstartsector * FRANZIMAGER_SECTOR_SIZE;
 	m_disksize			  = m_partitionstart + m_partitionsize;
 
 	memcpy(m_footer.cookie, "conectix", 8);
@@ -133874,11 +134235,7 @@ bool franzimager::calculateusedblocks()
 		{
 			m_usedblocks++;
 
-			uint64_t bytesinblock= (tempoffset + m_blocksize <= m_disksize)
-									   ? m_blocksize
-									   : (m_disksize - tempoffset);
-
-			m_usedbytes+= FRANZIMAGER_SECTOR_SIZE + bytesinblock; // bitmap + data
+			m_usedbytes+= FRANZIMAGER_SECTOR_SIZE + m_blocksize; // bitmap + data: a block is always whole
 		}
 
 		tempoffset+= m_blocksize;
@@ -133960,14 +134317,19 @@ bool franzimager::writeinitialvhddata(uint64_t i_partitionstartsector)
 
 	// prepara mbr
 	memcpy(mbrbuffer, s_mbrtemplate, FRANZIMAGER_SECTOR_SIZE);
+	/// the disk signature (bytes 440-443): from the unique id of this VHD. The one of the template
+	/// was the same in every image, a collision when two of them are attached
+	memcpy(mbrbuffer + 440, m_footer.uniqueid, 4);
+	if ((mbrbuffer[440] | mbrbuffer[441] | mbrbuffer[442] | mbrbuffer[443]) == 0)
+		mbrbuffer[440]= 1;
 	mbrstructure *mbr	  = (mbrstructure *)mbrbuffer;
 	mbr->signature		  = 0xAA55;
 	partitionentry *pentry= &mbr->partitions[0];
 	memset(pentry, 0, sizeof(partitionentry));
 	pentry->status			 = 0x80;
-	pentry->type			 = 0x07;
+	pentry->type			 = franzimager_tipombr(m_fstype);
 	pentry->lbabegin		 = (uint32_t)i_partitionstartsector;
-	uint64_t partitionsectors= m_partitionsize / m_bytespersector;
+	uint64_t partitionsectors= m_partitionsize / FRANZIMAGER_SECTOR_SIZE; /// sectors of the virtual disk
 	pentry->totalsectors	 = (partitionsectors > 0xFFFFFFFF) ? 0xFFFFFFFF : (uint32_t)partitionsectors;
 
 	uint64_t mbrdataoffset= m_currentdataoffset;
@@ -134026,16 +134388,7 @@ bool franzimager::writeinitialvhddata(uint64_t i_partitionstartsector)
 		myprintf("  signature 510-511: %02X %02X (expected 55 AA)\n",
 			bootsector[510], bootsector[511]);
 		
-		// Check if it looks like NTFS
-		if (bootsector[0] == 0xEB && bootsector[3] == 'N' && bootsector[4] == 'T' &&
-			bootsector[5] == 'F' && bootsector[6] == 'S')
-		{
-			myprintf("  NTFS signature: OK\n");
-		}
-		else
-		{
-			myprintf("  WARNING: Not a valid NTFS boot sector!\n");
-		}
+		myprintf("  file system: %s, partition type 0x%02X\n", nomefs(), (unsigned int)pentry->type);
 	}
 
 	// update bat per primo blocco
@@ -134441,11 +134794,16 @@ int64_t franzimager::enumerateexcludedfiles(char i_driveletter)
 	m_excludedclusters.clear();
 	m_filesToDelete.clear();
 
-	// standard exclusions (pagefile, swap, hiberfil)
+	// standard exclusions (pagefile, swap, hiberfil). 65.7o: -nofrugal takes them too
 	std::vector<std::string> excludedfiles;
-	excludedfiles.push_back("pagefile.sys");
-	excludedfiles.push_back("swapfile.sys");
-	excludedfiles.push_back("hiberfil.sys");
+	if (!flagnofrugal)
+	{
+		excludedfiles.push_back("pagefile.sys");
+		excludedfiles.push_back("swapfile.sys");
+		excludedfiles.push_back("hiberfil.sys");
+	}
+	else if (flagverbose)
+		myprintf("44013: -nofrugal: the swap files (pagefile, swapfile, hiberfil) are in the image too\n");
 	int64_t excludedspace= 0;
 
 	for (size_t i= 0; i < excludedfiles.size(); i++)
@@ -134470,14 +134828,19 @@ int64_t franzimager::enumerateexcludedfiles(char i_driveletter)
 
 	if (m_excludedclusters.size() > 0)
 	{
-		myprintf("44101: Excluded swapfile: %s ranges for %s clusters of %s\n", migliaia(m_excludedclusters.size()), migliaia2(excludedspace), tohuman(excludedspace * 4096));
+		myprintf("44101: Excluded swapfile: %s ranges for %s clusters of %s\n", migliaia(m_excludedclusters.size()), migliaia2(excludedspace), tohuman(excludedspace * (int64_t)(m_realclustersize ? m_realclustersize : m_clustersize)));
 	}
 	else
 	{
-		if ((i_driveletter=='C') && (!flagvss))
+		/// the drive of Windows (not always C:)
+		char windows[MAX_PATH + 1]= {0};
+		char sistema			  = 'C';
+		if (GetWindowsDirectoryA(windows, MAX_PATH) > 0)
+			sistema= (char)toupper((unsigned char)windows[0]);
+		if ((!flagnofrugal) && (toupper((unsigned char)i_driveletter) == sistema) && (!m_usingvss))
 		{
 			color_yellow();
-			myprintf("44012: Sorry no swapfile clusters excluded (you can try -vss for C:)\n");
+			myprintf("44012: No swapfile clusters excluded (without VSS the pagefile of %c: cannot be read)\n", sistema);
 			color_restore();
 		}
 	}
@@ -134818,6 +135181,15 @@ int64_t franzimager::enumerateexcludedfiles(char i_driveletter)
 		}
 	}
 	
+	ricalcolaesclusioni();
+	
+	return excludedspace * 4096;
+}
+
+/// the used blocks without the ones all excluded (what elaboravhd will really give): after the
+/// exclusions, and again after the used clusters are read again (a locked volume)
+void franzimager::ricalcolaesclusioni()
+{
 	int64_t lastProgressTime=0;
 	
 	// RICALCOLA m_usedblocks e m_usedbytes considerando le esclusioni
@@ -134883,10 +135255,8 @@ int64_t franzimager::enumerateexcludedfiles(char i_driveletter)
 				if (excludedClustersCount < clustersInBlock)
 				{
 					newUsedBlocks++;
-					uint64_t bytesinblock = (tempoffset + m_blocksize <= m_disksize)
-						? m_blocksize
-						: (m_disksize - tempoffset);
-					newUsedBytes += FRANZIMAGER_SECTOR_SIZE + bytesinblock;
+					/// a block is always whole (the last too: zeros after the end), as elaboravhd writes it
+					newUsedBytes += FRANZIMAGER_SECTOR_SIZE + m_blocksize;
 					
 					int64_t now = mtime();
 					if (now - lastProgressTime >= 1000)
@@ -134913,8 +135283,6 @@ int64_t franzimager::enumerateexcludedfiles(char i_driveletter)
 		m_usedblocks = newUsedBlocks;
 		m_usedbytes = newUsedBytes;
 	}
-	
-	return excludedspace * 4096;
 }
 
 // enumerazione cluster singolo file
@@ -134988,7 +135356,22 @@ int64_t franzimager::enumeratefileclusters(const wchar_t *i_filepath, std::vecto
 				clusterrange range;
 				range.start_cluster= (uint64_t)startlcn;
 				range.end_cluster  = (uint64_t)(startlcn + clustercount - 1);
-				o_ranges.push_back(range);
+				/// FAT/exFAT: the clusters of the file system start after the FATs, the units of the
+				/// bitmap at the start of the partition. Only the units all inside the file: the
+				/// others hold something else too, never zeroed
+				bool tieni= true;
+				if (m_fstype != FRANZIMAGER_FS_NTFS)
+				{
+					const uint64_t da	= m_heapoffset + (uint64_t)startlcn * m_realclustersize;
+					const uint64_t a	= da + (uint64_t)clustercount * m_realclustersize;
+					const uint64_t primo= (da + m_clustersize - 1) / m_clustersize;
+					const uint64_t dopo = a / m_clustersize;
+					tieni				= (dopo > primo);
+					range.start_cluster = primo;
+					range.end_cluster	= dopo - 1;
+				}
+				if (tieni)
+					o_ranges.push_back(range);
 				totalclusters+= clustercount;
 			}
 		}
@@ -135048,6 +135431,298 @@ bool franzimager::getfilephysicalsize(const wchar_t *i_filepath, uint64_t &o_fil
 }
 
 // main method: open vhd
+const char *franzimager::nomefs() const
+{
+	switch (m_fstype)
+	{
+	case FRANZIMAGER_FS_FAT12:
+		return "FAT12";
+	case FRANZIMAGER_FS_FAT16:
+		return "FAT16";
+	case FRANZIMAGER_FS_FAT32:
+		return "FAT32";
+	case FRANZIMAGER_FS_EXFAT:
+		return "exFAT";
+	default:
+		return "NTFS";
+	}
+}
+
+/// FAT12/16/32 or exFAT: the geometry from the boot sector. m_clustersize becomes the unit of the
+/// bitmap (the cluster, 64 KB at most) counted from the start of the partition, as on NTFS: the
+/// first cluster of a FAT is not there (it comes after the FATs), and a used cluster marks every
+/// unit it touches. The exclusions (-not) the other way round: only the units all inside a file
+bool franzimager::leggibootfat(const uint8_t *i_boot)
+{
+	franzfatgeo geo;
+	if (!franzimager_leggifat(i_boot, geo))
+		return false;
+	const uint64_t fine= geo.heap + geo.clusters * geo.settore * geo.percluster;
+	if (fine > m_partitionsize)
+	{
+		myprintf("43553! The file system (%s bytes) is bigger than its partition (%s bytes)\n", migliaia(fine), migliaia2(m_partitionsize));
+		return false;
+	}
+	m_fstype		   = geo.fs;
+	m_bytespersector   = geo.settore;
+	m_sectorspercluster= geo.percluster;
+	m_realclustersize  = geo.settore * geo.percluster;
+	m_heapoffset	   = geo.heap;
+	m_fatclusters	   = geo.clusters;
+	m_clustersize	   = (m_realclustersize > 65536) ? 65536 : m_realclustersize;
+	m_totalclusters	   = m_partitionsize / m_clustersize;
+	return m_totalclusters > 0;
+}
+
+/// FAT/exFAT: the used clusters from Windows (the map of the defragmenters), on the handle of
+/// the reads. What is before the first cluster (boot sectors, FATs, the root folder of a FAT16)
+/// always. Where Windows says the first cluster is must be where the boot sector says
+bool franzimager::readfatbitmap()
+{
+	if ((m_totalclusters == 0) || (m_clustersize == 0) || (m_realclustersize == 0))
+		return false;
+	if (m_volumebitmap)
+		delete[] m_volumebitmap;
+	const uint64_t dimensione= (m_totalclusters + 7) / 8;
+	m_volumebitmap			 = new uint8_t[dimensione];
+	if (!m_volumebitmap)
+	{
+		myprintf("43600: error allocating bitmap\n");
+		return false;
+	}
+	memset(m_volumebitmap, 0, dimensione);
+	m_bitmapsize= dimensione;
+
+	LARGE_INTEGER base;
+	DWORD		  fatti= 0;
+	base.QuadPart	   = 0;
+	if (DeviceIoControl(m_hsourcedrive, FSCTL_GET_RETRIEVAL_POINTER_BASE, NULL, 0, &base, sizeof(base), &fatti, NULL))
+	{
+		const uint64_t windows= (uint64_t)base.QuadPart * m_bytespersector;
+		if (windows != m_heapoffset)
+		{
+			myprintf("43601! %s: the first cluster at %s for Windows, at %s for the boot sector\n", nomefs(), migliaia(windows), migliaia2(m_heapoffset));
+			delete[] m_volumebitmap;
+			m_volumebitmap= NULL;
+			m_bitmapsize  = 0;
+			return false;
+		}
+	}
+	else if (flagverbose)
+		myprintf("43602: no FSCTL_GET_RETRIEVAL_POINTER_BASE (error %lu): the first cluster from the boot sector\n", GetLastError());
+
+	/// before the first cluster: always
+	uint64_t unita= 0;
+	for (uint64_t u= 0; (u < (m_heapoffset + m_clustersize - 1) / m_clustersize) && (u < m_totalclusters); u++)
+	{
+		m_volumebitmap[u / 8]|= (uint8_t)(1u << (u % 8));
+		unita++;
+	}
+
+	const DWORD dimbuffer= 1024 * 1024;
+	uint8_t	   *buffer	 = (uint8_t *)franz_malloc(dimbuffer);
+	if (!buffer)
+	{
+		myprintf("43603: error allocating the buffer of the bitmap\n");
+		delete[] m_volumebitmap;
+		m_volumebitmap= NULL;
+		m_bitmapsize  = 0;
+		return false;
+	}
+	STARTING_LCN_INPUT_BUFFER inizio;
+	inizio.StartingLcn.QuadPart= 0;
+	uint64_t usati			   = 0;
+	uint64_t visti			   = 0;
+	bool	 ok				   = true;
+	while (true)
+	{
+		fatti			  = 0;
+		const BOOL	fatto = DeviceIoControl(m_hsourcedrive, FSCTL_GET_VOLUME_BITMAP, &inizio, sizeof(inizio), buffer, dimbuffer, &fatti, NULL);
+		const DWORD errore= fatto ? 0 : GetLastError();
+		if ((!fatto) && (errore != ERROR_MORE_DATA))
+		{
+			myprintf("43604! The used clusters of %s cannot be read (error %lu)\n", nomefs(), errore);
+			ok= false;
+			break;
+		}
+		const VOLUME_BITMAP_BUFFER *vb	 = (const VOLUME_BITMAP_BUFFER *)buffer;
+		const DWORD					testa= (DWORD)offsetof(VOLUME_BITMAP_BUFFER, Buffer);
+		if (fatti < testa)
+		{
+			ok= false;
+			break;
+		}
+		const uint64_t partenza	= (uint64_t)vb->StartingLcn.QuadPart;
+		const uint64_t totale	= (uint64_t)vb->BitmapSize.QuadPart;
+		const uint64_t nelbuffer= (uint64_t)(fatti - testa) * 8;
+		const uint64_t quanti	= (totale < nelbuffer) ? totale : nelbuffer;
+		const uint8_t *bit		= vb->Buffer;
+		uint64_t	   i		= 0;
+		while (i < quanti)
+		{
+			if (((i & 7) == 0) && (i + 8 <= quanti) && (bit[i / 8] == 0))
+			{
+				i+= 8;
+				continue;
+			}
+			if (!((bit[i / 8] >> (i & 7)) & 1))
+			{
+				i++;
+				continue;
+			}
+			uint64_t j= i + 1;
+			while ((j < quanti) && ((bit[j / 8] >> (j & 7)) & 1))
+				j++;
+			/// clusters [i, j) of this piece: every unit they touch
+			const uint64_t da= m_heapoffset + (partenza + i) * m_realclustersize;
+			const uint64_t a = m_heapoffset + (partenza + j) * m_realclustersize;
+			for (uint64_t u= da / m_clustersize; (u <= (a - 1) / m_clustersize) && (u < m_totalclusters); u++)
+				m_volumebitmap[u / 8]|= (uint8_t)(1u << (u % 8));
+			usati+= j - i;
+			i= j;
+		}
+		visti= partenza + quanti;
+		if (fatto || (quanti == 0))
+			break;
+		inizio.StartingLcn.QuadPart= (LONGLONG)visti;
+	}
+	franz_free(buffer);
+	/// the clusters for Windows must be the ones of the boot sector: else something is not
+	/// understood, and the image is not made this way (-image alone: raw instead)
+	if (ok && (visti != m_fatclusters))
+	{
+		myprintf("43605! %s: %s clusters for Windows, %s for the boot sector\n", nomefs(), migliaia(visti), migliaia2(m_fatclusters));
+		ok= false;
+	}
+	if (!ok)
+	{
+		delete[] m_volumebitmap;
+		m_volumebitmap= NULL;
+		m_bitmapsize  = 0;
+		return false;
+	}
+	if (flagverbose)
+		myprintf("43606: %s: %s/%s clusters used (%s units of %s bytes before the first cluster)\n", nomefs(), migliaia(usati), migliaia2(m_fatclusters), migliaia3(unita), migliaia4(m_clustersize));
+	return true;
+}
+
+/// no shadow copy: the volume locked if nobody has anything open on it. Then nobody writes on it
+/// while it is read, and the lock goes away with the handle (chiudivhd). Not on the volume of
+/// Windows, nor with the archive on it (never tried then: the archive could not be written)
+bool franzimager::bloccavolume()
+{
+	m_bloccato= false;
+	DWORD fatti= 0;
+	if (DeviceIoControl(m_hsourcedrive, FSCTL_LOCK_VOLUME, NULL, 0, NULL, 0, &fatti, NULL))
+	{
+		m_bloccato= true;
+		if (flagverbose)
+			myprintf("43607: %c: locked: nobody else can write on it during the image\n", m_driveletter);
+		return true;
+	}
+	if (flagverbose)
+		myprintf("43608: %c: cannot be locked (error %lu): something is open on it\n", m_driveletter, GetLastError());
+	return false;
+}
+
+/// a failed aprivhd: the handle (and with it the lock) and the shadow copy go away, the image can
+/// be made another way (raw)
+void franzimager::chiudisorgente()
+{
+	if (m_hsourcedrive != INVALID_HANDLE_VALUE)
+	{
+		CloseHandle(m_hsourcedrive);
+		m_hsourcedrive= INVALID_HANDLE_VALUE;
+	}
+	m_bloccato= false;
+	if (m_usingvss)
+	{
+		deletevss();
+		m_usingvss= false;
+	}
+}
+
+/// the last unit of the partition always in the image: NTFS keeps there, after its last cluster,
+/// the copy of its boot sector. Restored on a partition, the old one would stay there
+void franzimager::segnaultima()
+{
+	if (m_volumebitmap && (m_totalclusters > 0))
+		m_volumebitmap[(m_totalclusters - 1) / 8]|= (uint8_t)(1u << ((m_totalclusters - 1) % 8));
+}
+
+/// a destination bigger than the image: its end is not written by the image, and there the file
+/// system that was on it before can have the copy of its boot sector (NTFS: the last sector).
+/// Windows finds it and does not see the one restored: the last MiB after the image is zeroed
+void franzimager::azzeracoda(HANDLE i_h, uint64_t i_da, uint64_t i_fine)
+{
+	const uint64_t mega= 1024 * 1024;
+	uint64_t	   da  = (i_fine > mega) ? i_fine - mega : 0;
+	if (da < i_da)
+		da= i_da;
+	da= (da + 4095) & ~(uint64_t)4095;
+	if (da >= i_fine)
+		return;
+	const DWORD quanti= (DWORD)(i_fine - da);
+	char	   *zeri  = (char *)VirtualAlloc(NULL, (SIZE_T)mega, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE); /// zeros, aligned
+	if (!zeri)
+		return;
+	const DWORD fatti= writewithfallback(i_h, zeri, quanti, da, i_fine);
+	VirtualFree(zeri, 0, MEM_RELEASE);
+	if (fatti != quanti)
+		myprintf("47281$ The end of the destination cannot be zeroed (%s of %s bytes): a file system that was there can be seen instead\n", migliaia(fatti), migliaia2(quanti));
+	else if (flagverbose)
+		myprintf("47280: the end of the destination zeroed (%s bytes)\n", migliaia(quanti));
+}
+
+/// an exFAT restored on a bigger partition: Windows mounts an exFAT only as long as its partition
+/// (a shorter one is not a file system, for Windows: FAT and NTFS do not care). Its VolumeLength
+/// becomes the partition (what is after the clusters is "excess space", allowed), the checksum of
+/// the boot region is made again, and the backup boot region is the same as the main one
+void franzimager::adattaexfat(HANDLE i_h, uint64_t i_destsize)
+{
+	const DWORD quanto= 65536;
+	uint8_t	   *b	  = (uint8_t *)VirtualAlloc(NULL, quanto, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+	if (!b)
+		return;
+	LARGE_INTEGER zero;
+	zero.QuadPart= 0;
+	DWORD letti	 = 0;
+	if (SetFilePointerEx(i_h, zero, NULL, FILE_BEGIN) && ReadFile(i_h, b, quanto, &letti, NULL) && (letti == quanto) &&
+		(memcmp(b + 3, "EXFAT   ", 8) == 0) && (b[108] >= 9) && (b[108] <= 12))
+	{
+		const uint32_t settore	 = 1u << b[108];
+		const uint64_t partizione= i_destsize / settore;
+		uint64_t	   lunghezza = 0;
+		memcpy(&lunghezza, b + 72, 8);
+		if (lunghezza < partizione)
+		{
+			memcpy(b + 72, &partizione, 8);
+			uint32_t somma= 0;
+			for (uint32_t i= 0; i < 11 * settore; i++)
+			{
+				if ((i == 106) || (i == 107) || (i == 112)) /// VolumeFlags, PercentInUse: out of the checksum
+					continue;
+				somma= ((somma & 1) ? 0x80000000u : 0) + (somma >> 1) + b[i];
+			}
+			for (uint32_t i= 0; i < settore / 4; i++)
+				memcpy(b + 11 * settore + i * 4, &somma, 4);
+			memcpy(b + 12 * settore, b, 12 * settore);
+			DWORD	   scritti= 0;
+			const bool ok	  = SetFilePointerEx(i_h, zero, NULL, FILE_BEGIN) && WriteFile(i_h, b, 24 * settore, &scritti, NULL) && (scritti == 24 * settore);
+			if (ok)
+			{
+				color_cyan();
+				myprintf("47282: exFAT: its length set to the partition (%s sectors instead of %s): else Windows would not mount it\n", migliaia(partizione), migliaia2(lunghezza));
+				color_restore();
+			}
+			else
+				myprintf("47283$ exFAT: its length cannot be set to the partition (error %lu): Windows will not mount it\n", GetLastError());
+		}
+	}
+	VirtualFree(b, 0, MEM_RELEASE);
+}
+
+
 bool franzimager::aprivhd(char i_driveletter, bool i_usevss)
 {
 	if (flagdebug)
@@ -135058,20 +135733,35 @@ bool franzimager::aprivhd(char i_driveletter, bool i_usevss)
 	m_blockswritten				 = 0;
 	m_totalbytes				 = 0;
 	m_firstblockwritten			 = false;
+	m_vssmancata				 = false;
+	m_motivovss					 = "";
+	m_bloccato					 = false;
 	uint64_t partitionstartsector= 0;
 
 	// open drive
+	bool aperto= false;
 	if (i_usevss)
 	{
 		if (flagdebug)
 			myprintf("45372: aprivhd: apertura con VSS\n");
-		if (!opensourcedrivevsss(m_driveletter))
+		aperto= opensourcedrivevsss(m_driveletter);
+		if (!aperto)
 		{
-			myprintf("445443: error opening volume %c: with vss\n", m_driveletter);
-			return false;
+			if (!m_vssautomatico)
+			{
+				myprintf("445443: error opening volume %c: with vss\n", m_driveletter);
+				return false;
+			}
+			/// asked by zpaqfranz, not by the user: the image goes on, of the live volume
+			m_vssmancata= true;
+			if (m_motivovss == "")
+				m_motivovss= "the shadow copy cannot be made";
+			color_yellow();
+			myprintf("43609$ No VSS for %c: (%s): the image is of the live volume\n", m_driveletter, m_motivovss.c_str());
+			color_restore();
 		}
 	}
-	else
+	if (!aperto)
 	{
 		if (flagdebug)
 			myprintf("43282: aprivhd: apertura diretta (senza VSS)\n");
@@ -135082,21 +135772,25 @@ bool franzimager::aprivhd(char i_driveletter, bool i_usevss)
 		}
 	}
 
-	// read boot sector
+	// read boot sector: NTFS, FAT or exFAT
 	if (flagdebug)
 		myprintf("45223: aprivhd: chiamata readntfsbootsector()\n");
 	if (!readntfsbootsector())
 	{
 		myprintf("45463: error reading boot sector\n");
+		chiudisorgente();
 		return false;
 	}
 
-	// read MFT bitmap
+	// read the used clusters
 	if (flagdebug)
 		myprintf("45504: aprivhd: chiamata readmftbitmap()\n");
-	if (!readmftbitmap())
+	const bool mappa= (m_fstype == FRANZIMAGER_FS_NTFS) ? readmftbitmap() : readfatbitmap();
+	segnaultima();
+	if (!mappa)
 	{
-		myprintf("45472: error reading bitmap mft\n");
+		myprintf("45472: error reading the used clusters of %s\n", nomefs());
+		chiudisorgente();
 		return false;
 	}
 
@@ -135106,8 +135800,14 @@ bool franzimager::aprivhd(char i_driveletter, bool i_usevss)
 	if (!initializevhdstructures(partitionstartsector))
 	{
 		myprintf("45481: error init vhd structure\n");
+		chiudisorgente();
 		return false;
 	}
+	/// what a .vhd cannot hold: the image is still good for a restore to a disk, or to a raw file
+	if (m_bytespersector != FRANZIMAGER_SECTOR_SIZE)
+		myprintf("45482$ %s with sectors of %u bytes: a .vhd (sectors of 512) could not mount it (restore to a disk, or a raw file)\n", nomefs(), m_bytespersector);
+	if (m_disksize > FRANZIMAGER_VHD_MAX)
+		myprintf("45483$ %s bytes: more than a .vhd can hold (2040 GB): restore to a disk, or a raw file\n", migliaia(m_disksize));
 
 	// calculate used blocks
 	if (flagdebug)
@@ -135115,6 +135815,7 @@ bool franzimager::aprivhd(char i_driveletter, bool i_usevss)
 	if (!calculateusedblocks())
 	{
 		myprintf("45490: error calculating used blocks\n");
+		chiudisorgente();
 		return false;
 	}
 
@@ -135127,12 +135828,29 @@ bool franzimager::aprivhd(char i_driveletter, bool i_usevss)
 		(void)enumerateexcludedfiles(m_driveletter);
 	}
 
+	/// no shadow copy: the volume locked, if nobody has anything open on it. Only now: the files
+	/// to leave out (pagefile, -not) are opened by name, impossible on a locked volume. Then the
+	/// used clusters again: the ones of the volume as it is from now to the end of the image
+	if ((!m_usingvss) && (!m_nonbloccare) && bloccavolume())
+	{
+		const bool dinuovo= (m_fstype == FRANZIMAGER_FS_NTFS) ? readmftbitmap() : readfatbitmap();
+		segnaultima();
+		if ((!dinuovo) || (!calculateusedblocks()))
+		{
+			myprintf("45491: error reading again the used clusters of the locked %c:\n", m_driveletter);
+			chiudisorgente();
+			return false;
+		}
+		ricalcolaesclusioni();
+	}
+
 	// write initial data
 	if (flagdebug)
 		myprintf("45434: aprivhd: chiamata writeinitialvhddata()\n");
 	if (!writeinitialvhddata(partitionstartsector))
 	{
 		myprintf("45508: error writin initial vhd\n");
+		chiudisorgente();
 		return false;
 	}
 
@@ -135308,18 +136026,21 @@ int franzimager::elaboravhd(char *o_buffer, size_t i_buffersize)
 			}
 		}
 
-		// generate sector bitmap
+		/// A block of a dynamic VHD is always whole in the file: the BAT says only where it
+		/// starts. What was not read (the end of the disk, or of what the volume lets read) is
+		/// zeros. A short last block ran into the footer: Windows refused the file as corrupted
+		if (bytesread < m_blocksize)
+			memset(m_buffer + FRANZIMAGER_SECTOR_SIZE + bytesread, 0, (size_t)(m_blocksize - bytesread));
+		const size_t bloccointero= FRANZIMAGER_SECTOR_SIZE + (size_t)m_blocksize;
+
+		/// the sector bitmap: one bit for every sector of 512 bytes of the virtual disk (never
+		/// the sector of the source, 4096 on a 4Kn disk), all of them in the block
 		uint8_t *sectorbitmap= (uint8_t *)m_buffer;
 		memset(sectorbitmap, 0, FRANZIMAGER_SECTOR_SIZE);
-		uint32_t sectorsinblock = (uint32_t)((bytesread + m_bytespersector - 1) / m_bytespersector);
-		uint32_t bitmapfullbytes= sectorsinblock / 8;
-		uint8_t	 bitmaplastbits = sectorsinblock % 8;
-		memset(sectorbitmap, 0xFF, bitmapfullbytes);
-		if (bitmaplastbits != 0)
-			sectorbitmap[bitmapfullbytes]= (uint8_t)((1 << bitmaplastbits) - 1);
+		memset(sectorbitmap, 0xFF, (size_t)(m_blocksize / FRANZIMAGER_SECTOR_SIZE / 8));
 
 		// copia in buffer output
-		memcpy(o_buffer, m_buffer, FRANZIMAGER_SECTOR_SIZE + bytesread);
+		memcpy(o_buffer, m_buffer, bloccointero);
 
 		// update bat
 		uint32_t blockidx= (uint32_t)(m_currentoffset / m_blocksize);
@@ -135327,9 +136048,9 @@ int franzimager::elaboravhd(char *o_buffer, size_t i_buffersize)
 		if (be32toh(m_bat[blockidx]) == 0xFFFFFFFF)
 		{
 			m_bat[blockidx]= htobe32((uint32_t)(m_currentdataoffset / FRANZIMAGER_SECTOR_SIZE));
-			m_currentdataoffset+= FRANZIMAGER_SECTOR_SIZE + bytesread;
+			m_currentdataoffset+= bloccointero;
 			m_blockswritten++;
-			m_totalbytes+= FRANZIMAGER_SECTOR_SIZE + bytesread;
+			m_totalbytes+= bloccointero;
 
 			// add to blockmap: original block index
 			m_blockmap.push_back(blockidx);
@@ -135345,7 +136066,7 @@ int franzimager::elaboravhd(char *o_buffer, size_t i_buffersize)
 
 		m_currentoffset+= m_blocksize;
 		s_blocksProcessed++;
-		return FRANZIMAGER_SECTOR_SIZE + bytesread;
+		return (int)bloccointero;
 	}
 
 	// end read - print debug summary
@@ -135357,9 +136078,8 @@ int franzimager::elaboravhd(char *o_buffer, size_t i_buffersize)
 		myprintf("  Blocks skipped excl  : %s\n", migliaia(s_blocksSkippedExcluded));
 		myprintf("  Blocks written       : %s\n", migliaia(s_blocksWritten));
 		
-		// reset per prossimo utilizzo
-		s_initialized = false;
 	}
+	s_initialized= false; /// the next image starts from zero (it was only with -verbose or -debug)
 	
 	return -1; // end reading
 }
@@ -135461,6 +136181,7 @@ bool franzimager::salvametamemory(std::vector<uint8_t> &o_data)
 	header.partitionstart= m_partitionstart;
 	header.disksize		 = m_disksize;
 	header.bytespersector= m_bytespersector;
+	header.fstype		 = m_fstype;
 
 	// calculate total size
 	uint32_t blockmapsize= (uint32_t)m_blockmap.size();
@@ -135548,6 +136269,7 @@ bool franzimager::caricametamemory(const std::vector<uint8_t> &i_data)
 	m_disksize		= header.disksize;
 	m_bytespersector= header.bytespersector;
 	m_usedblocks	= header.usedblocks;
+	m_fstype		= (header.fstype <= FRANZIMAGER_FS_EXFAT) ? header.fstype : FRANZIMAGER_FS_NTFS;
 
 	// load bitmap
 	if (m_volumebitmap)
@@ -135603,7 +136325,7 @@ bool franzimager::caricametamemory(const std::vector<uint8_t> &i_data)
 	if (flagdebug2)
 	{
 		myprintf("45923: caricametamemory: parametri caricati\n");
-		myprintf("45923:   tipo: %s\n", m_flagfull ? "FULL" : "NTFS");
+		myprintf("45923:   tipo: %s\n", m_flagfull ? "FULL" : nomefs());
 		myprintf("45923:   partizione: %llu bytes\n", (unsigned long long)m_partitionsize);
 		myprintf("45923:   bitmap: %llu bytes\n", (unsigned long long)m_bitmapsize);
 		myprintf("45923:   blockmap: %u entries\n", blockmapsize);
@@ -135874,6 +136596,11 @@ bool franzimager::preparaestraicompressothinmemory(const std::vector<uint8_t> &i
 
 	// unmount volume
 	DeviceIoControl(hdest, FSCTL_DISMOUNT_VOLUME, NULL, 0, NULL, 0, &bytesreturned, NULL);
+	/// up to the end of the partition: the volume handle stops at the end of the file system that
+	/// was there (the last block of the image, the zeros at the end of a bigger destination)
+	if (!DeviceIoControl(hdest, FSCTL_ALLOW_EXTENDED_DASD_IO, NULL, 0, NULL, 0, &bytesreturned, NULL))
+		if (flagverbose)
+			myprintf("47029: no I/O up to the end of the partition (error %lu)\n", GetLastError());
 
 	// PHASE 4: allocate structures
 	const size_t RECORD_SIZE= FRANZIMAGER_SECTOR_SIZE + m_blocksize;
@@ -135908,6 +136635,9 @@ bool franzimager::preparaestraicompressothinmemory(const std::vector<uint8_t> &i
 	m_estraithin.blockswritten	  = 0;
 	m_estraithin.fragmentsread	  = 0;
 	m_estraithin.blockindex		  = 0;
+	m_estraithin.finoa			  = 0;
+	m_estraithin.zeriscritti	  = 0;
+	m_estraithin.ultimariga		  = 0;
 
 	// timer
 	QueryPerformanceFrequency(&m_estraithin.freq);
@@ -135918,6 +136648,42 @@ bool franzimager::preparaestraicompressothinmemory(const std::vector<uint8_t> &i
 	if (flagdebug2)
 		myprintf("47077: preparaestraicompressothinmemory completato\n");
 
+	return true;
+}
+
+/// 65.7s, image -raw: zeros on the destination from where it is written up to i_fino (the
+/// blocks the image does not have: not used, or left out). 4 MB at a time, a line every second
+bool franzimager::zeriestrai(uint64_t i_fino)
+{
+	if (i_fino > m_estraithin.destsize)
+		i_fino= m_estraithin.destsize;
+	const DWORD pezzomax= 4 * 1024 * 1024;
+	if (m_estraithin.zeri == NULL)
+		m_estraithin.zeri= (char *)VirtualAlloc(NULL, pezzomax, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE); /// zeros, aligned
+	if (m_estraithin.zeri == NULL)
+	{
+		myprintf("47284! -raw: no memory for the zeros\n");
+		return false;
+	}
+	while (m_estraithin.finoa < i_fino)
+	{
+		const uint64_t resto= i_fino - m_estraithin.finoa;
+		const DWORD	   pezzo= (resto > pezzomax) ? pezzomax : (DWORD)resto;
+		const DWORD	   fatti= writewithfallback(m_estraithin.hdest, m_estraithin.zeri, pezzo, m_estraithin.finoa, m_estraithin.destsize);
+		if (fatti != pezzo)
+		{
+			myprintf("\n47285! -raw: cannot write the zeros at %s\n", migliaia((int64_t)m_estraithin.finoa));
+			return false;
+		}
+		m_estraithin.finoa+= pezzo;
+		m_estraithin.zeriscritti+= pezzo;
+		m_estraithin.totalbyteswritten+= pezzo;
+		if ((!flagnoeta) && (mtime() - m_estraithin.ultimariga >= 1000))
+		{
+			m_estraithin.ultimariga= mtime();
+			myprintf("47286: -raw: zeros on the unused part %10s, at %10s of %10s\r", tohuman(m_estraithin.zeriscritti), tohuman2((int64_t)m_estraithin.finoa), tohuman3((int64_t)m_estraithin.maxwritesize));
+		}
+	}
 	return true;
 }
 
@@ -136038,6 +136804,8 @@ bool franzimager::lavoraestraicompressothin(const char *i_frammento, size_t i_di
 				DWORD written = writewithfallback(m_estraithin.hdest, partdata, (DWORD)datasize,
 												  0, m_estraithin.destsize);
 				m_estraithin.totalbyteswritten+= written;
+				if (m_estraithin.finoa < datasize)
+					m_estraithin.finoa= datasize;
 				
 				if (flagdebug || flagverbose)
 					myprintf("12345: MBR block: wrote %lu bytes at offset 0\n", written);
@@ -136066,6 +136834,10 @@ bool franzimager::lavoraestraicompressothin(const char *i_frammento, size_t i_di
 				uint64_t partitionoffset= blockoffsetindisk - m_partitionstart;
 				if (partitionoffset < m_estraithin.destsize)
 				{
+					/// image -raw: the blocks the image does not have, before this one
+					if (m_estraithin.riempi && (partitionoffset > m_estraithin.finoa))
+						if (!zeriestrai(partitionoffset))
+							return false;
 					LARGE_INTEGER destoffset;
 					memset(&destoffset, 0, sizeof(destoffset));
 					destoffset.QuadPart= partitionoffset;
@@ -136074,6 +136846,8 @@ bool franzimager::lavoraestraicompressothin(const char *i_frammento, size_t i_di
 					uint64_t datasize= m_blocksize;
 					if (partitionoffset + datasize > m_estraithin.destsize)
 						datasize= m_estraithin.destsize - partitionoffset;
+					if (m_estraithin.finoa < partitionoffset + datasize)
+						m_estraithin.finoa= partitionoffset + datasize;
 
 					// DEBUG: primi 15 blocchi non-MBR
 					if ((flagdebug || flagverbose) && m_estraithin.blockswritten < 15)
@@ -136152,6 +136926,8 @@ bool franzimager::chiudiestraicompressothin()
 				uint64_t partitionoffset= blockoffsetindisk - m_partitionstart;
 				if (partitionoffset < m_estraithin.destsize)
 				{
+					if (m_estraithin.riempi && (partitionoffset > m_estraithin.finoa))
+						zeriestrai(partitionoffset);
 					LARGE_INTEGER destoffset;
 					memset(&destoffset, 0, sizeof(destoffset));
 					destoffset.QuadPart= partitionoffset;
@@ -136160,6 +136936,8 @@ bool franzimager::chiudiestraicompressothin()
 					uint64_t datasize= m_blocksize;
 					if (partitionoffset + datasize > m_estraithin.destsize)
 						datasize= m_estraithin.destsize - partitionoffset;
+					if (m_estraithin.finoa < partitionoffset + datasize)
+						m_estraithin.finoa= partitionoffset + datasize;
 
 					DWORD written= writewithfallback(m_estraithin.hdest,
 													 m_estraithin.blockbuffer + FRANZIMAGER_SECTOR_SIZE,
@@ -136172,6 +136950,22 @@ bool franzimager::chiudiestraicompressothin()
 
 		m_estraithin.blockswritten++;
 		m_estraithin.blockindex++;
+	}
+
+	/// image -raw: the zeros after the last block of the image, up to the end of the partition
+	/// that was imaged (a bigger destination: its rest as before, the last MiB only)
+	bool zeriok= true;
+	if (m_estraithin.riempi)
+	{
+		zeriok= zeriestrai(m_estraithin.maxwritesize);
+		if (!flagnoeta)
+			eol();
+	}
+	if (m_estraithin.destsize > m_partitionsize)
+	{
+		azzeracoda(m_estraithin.hdest, m_partitionsize, m_estraithin.destsize);
+		if (m_fstype == FRANZIMAGER_FS_EXFAT)
+			adattaexfat(m_estraithin.hdest, m_estraithin.destsize);
 	}
 
 	// flush e unlock
@@ -136192,6 +136986,8 @@ bool franzimager::chiudiestraicompressothin()
 	myprintf("  blocks written  : %21s\n", migliaia(m_estraithin.blockswritten));
 	myprintf("  fragment readed : %21s\n", migliaia(m_estraithin.fragmentsread));
 	myprintf("  bytes written   : %21s (%s)\n", migliaia(m_estraithin.totalbyteswritten), tohuman(m_estraithin.totalbyteswritten));
+	if (m_estraithin.riempi)
+		myprintf("  zeros (-raw)    : %21s (%s)\n", migliaia(m_estraithin.zeriscritti), tohuman(m_estraithin.zeriscritti));
 	myprintf("  time            : %21f s\n", elapsed);
 	myprintf("  average speed   : %21s/s\n", tohuman(speedmbps));
 	if (m_estraithin.fragmentsread > 0)
@@ -136207,14 +137003,56 @@ bool franzimager::chiudiestraicompressothin()
 	m_estraithin.hdest		 = INVALID_HANDLE_VALUE;
 	m_estraithin.blockbuffer = NULL;
 	m_estraithin.accumulatore= NULL;
+	if (m_estraithin.zeri != NULL)
+		VirtualFree(m_estraithin.zeri, 0, MEM_RELEASE);
+	m_estraithin.zeri		= NULL;
+	m_estraithin.riempi		= false;
+	m_estraithin.finoa		= 0;
+	m_estraithin.zeriscritti= 0;
 
 	if (flagdebug2)
 		myprintf("47277: << chiudiestraicompressothin completato\n");
 
-	return true;
+	return zeriok;
 }
 
 // funzioni vss
+
+/// why Win32_ShadowCopy.Create said no (its ReturnValue)
+static const char *franzimager_motivovss(unsigned int i_codice)
+{
+	switch (i_codice)
+	{
+	case 1:
+		return "access denied (not administrator?)";
+	case 2:
+		return "invalid argument";
+	case 3:
+		return "volume not found";
+	case 4:
+		return "volume not supported (not NTFS, a removable disk...)";
+	case 5:
+		return "context not supported";
+	case 6:
+		return "not enough space for the shadow copy";
+	case 7:
+		return "volume in use";
+	case 8:
+		return "too many shadow copies";
+	case 9:
+		return "another shadow copy is being made";
+	case 10:
+		return "vetoed by the provider";
+	case 11:
+		return "provider not registered";
+	case 12:
+		return "provider failure";
+	case 13:
+		return "unknown error of the provider";
+	default:
+		return "WMI error";
+	}
+}
 
 bool franzimager::createvss(char i_driveletter)
 {
@@ -136423,12 +137261,22 @@ bool franzimager::createvss(char i_driveletter)
 			}
 
 			if (!success)
+			{
+				m_motivovss= "the shadow copy did not show up (timeout)";
 				myprintf("46722: timeout snapshot KO\n");
+			}
 		}
 	}
 	else
 	{
-		myprintf("46757: vss creation failed!\n");
+		/// the reason: a USB disk, a FAT, no space for the copy are not errors when the VSS was
+		/// asked by zpaqfranz (the image goes on without it, and says why)
+		const unsigned int codice= SUCCEEDED(hr) ? (unsigned int)varretval.uintVal : 0xFFFFFFFFu;
+		m_motivovss				 = franzimager_motivovss(codice);
+		if (codice != 0xFFFFFFFFu)
+			m_motivovss+= " (" + itos(codice) + ")";
+		if ((!m_vssautomatico) || flagverbose)
+			myprintf("46757: vss creation failed: %s\n", m_motivovss.c_str());
 	}
 
 	m_pVariantClear(&varretval);
@@ -136754,8 +137602,17 @@ bool franzimager::scriverawfilechunk(const char *i_data, size_t i_size)
 			// get original block index dalla blockmap
 			uint32_t blockindex= getoriginalblockindex((size_t)m_rawfilestate.blockswritten);
 
-			// calculate position in raw file
-			int64_t blockposition= (int64_t)blockindex * m_blocksize;
+			/// the raw file is the PARTITION: the block is at blockindex * blocksize of the virtual
+			/// disk, and the partition starts at m_partitionstart (1 MiB): the MBR area at the start of
+			/// block 0 is not in it. It was the virtual disk cut to the size of the partition: all
+			/// shifted by 1 MiB, the last MiB lost
+			const int64_t inizioblocco= (int64_t)blockindex * m_blocksize;
+			int64_t		  salta		  = 0; /// bytes of this block before the partition
+			if (inizioblocco < (int64_t)m_partitionstart)
+				salta= (int64_t)m_partitionstart - inizioblocco;
+			if (salta > (int64_t)m_blocksize)
+				salta= (int64_t)m_blocksize;
+			int64_t blockposition= inizioblocco + salta - (int64_t)m_partitionstart;
 
 			// fill with zeros up to position del blocco
 			if (blockposition > m_rawfilestate.currentpos)
@@ -136837,11 +137694,13 @@ bool franzimager::scriverawfilechunk(const char *i_data, size_t i_size)
 			// write block data (salta header 512 bytes)
 			if (!m_rawfilestate.errore)
 			{
-				const char *blockdataptr = m_rawfilestate.accumbuffer + FRANZIMAGER_SECTOR_SIZE;
-				size_t		blockdatasize= m_blocksize;
+				const char *blockdataptr = m_rawfilestate.accumbuffer + FRANZIMAGER_SECTOR_SIZE + salta;
+				size_t		blockdatasize= (size_t)(m_blocksize - salta);
 
 				// limit if it exceeds the partition
-				if (m_rawfilestate.currentpos + (int64_t)blockdatasize > (int64_t)m_partitionsize)
+				if (m_rawfilestate.currentpos >= (int64_t)m_partitionsize)
+					blockdatasize= 0;
+				else if (m_rawfilestate.currentpos + (int64_t)blockdatasize > (int64_t)m_partitionsize)
 				{
 					blockdatasize= (size_t)(m_partitionsize - m_rawfilestate.currentpos);
 				}
@@ -136857,13 +137716,13 @@ bool franzimager::scriverawfilechunk(const char *i_data, size_t i_size)
 					else
 					{
 						m_rawfilestate.currentpos+= blockdatasize;
-						m_rawfilestate.blockswritten++;
 
 						if (flagdebug3)
 							myprintf("45771: Block %u written at pos %s\n",
 									 blockindex, migliaia(blockposition));
 					}
 				}
+				m_rawfilestate.blockswritten++; /// always: it is the index into the blockmap
 			}
 
 			// reset accumulatore
@@ -136990,6 +137849,278 @@ bool franzimager::chiudirawfileoutput()
 	return success;
 }
 
+/*
+	a raw image as a dynamic .vhd, the same kind of the thin images: what Windows mounts. A
+	partition goes at 1 MiB, after an MBR of ours whose type comes from its boot sector; a whole
+	disk (image_0.raw ...) as it is, with its own partition table. The blocks of zeros are not
+	written (the BAT, at the end, says "not there": Windows reads zeros); the others are always
+	whole, and the file is never sparse (Windows refuses a sparse .vhd)
+*/
+bool franzimager::nuovoguid(uint8_t *o_guid)
+{
+	HMODULE hole32= LoadLibraryA("ole32.dll");
+	if (hole32 == NULL)
+		return false;
+	typedef HRESULT(WINAPI * cocreateguidfunc)(GUID *);
+	cocreateguidfunc pcocreateguid= (cocreateguidfunc)GetProcAddress(hole32, "CoCreateGuid");
+	GUID			 guid;
+	const bool		 ok= (pcocreateguid != NULL) && (pcocreateguid(&guid) == S_OK);
+	FreeLibrary(hole32);
+	if (ok)
+		memcpy(o_guid, &guid, 16);
+	return ok;
+}
+
+bool franzimager::preparavhdraw(const char *i_filename, uint64_t i_sourcesize, bool i_disco)
+{
+	if (m_vhdraw.attivo)
+	{
+		myprintf("20030! vhd output already active\n");
+		return false;
+	}
+	if (i_sourcesize == 0)
+	{
+		myprintf("20031! The raw image is empty\n");
+		return false;
+	}
+	vhdrawstate &s		= m_vhdraw;
+	const uint64_t inizio= i_disco ? 0 : (uint64_t)2048 * FRANZIMAGER_SECTOR_SIZE;
+	s.disco				= i_disco;
+	s.sorgente			= i_sourcesize;
+	s.disksize			= (inizio + i_sourcesize + FRANZIMAGER_SECTOR_SIZE - 1) / FRANZIMAGER_SECTOR_SIZE * FRANZIMAGER_SECTOR_SIZE;
+	s.posizione			= inizio;
+	s.errore			= false;
+	s.scritti			= 0;
+	s.vuoti				= 0;
+	if (s.disksize > FRANZIMAGER_VHD_MAX)
+	{
+		myprintf("20032! %s bytes: more than a .vhd can hold (2040 GB): export it to a raw file\n", migliaia(s.disksize));
+		return false;
+	}
+	s.voci= (uint32_t)((s.disksize + m_blocksize - 1) / m_blocksize);
+	s.bat = new uint32_t[s.voci];
+	for (uint32_t i= 0; i < s.voci; i++)
+		s.bat[i]= 0xFFFFFFFF;
+	s.blocco= (char *)franz_malloc(m_blocksize);
+	if (!s.blocco)
+	{
+		myprintf("20033! error allocating the block\n");
+		delete[] s.bat;
+		s.bat= NULL;
+		return false;
+	}
+	memset(s.blocco, 0, m_blocksize);
+
+	/// as initializevhdstructures: the same footer and dynamic header of the thin images
+	s.footer= vhdfooter();
+	memcpy(s.footer.cookie, "conectix", 8);
+	s.footer.features	   = htobe32(2);
+	s.footer.formatversion = htobe32(0x00010000);
+	s.footer.dataoffset	   = htobe64(FRANZIMAGER_SECTOR_SIZE);
+	s.footer.timestamp	   = htobe32((uint32_t)(time(NULL) - 946684800));
+	memcpy(s.footer.creatorapp, "frnz", 4);
+	s.footer.creatorversion= htobe32(0x00010000);
+	s.footer.creatorhostos = htobe32(0x5769326B);
+	s.footer.originalsize  = htobe64(s.disksize);
+	s.footer.currentsize   = htobe64(s.disksize);
+	s.footer.disktype	   = htobe32(3);
+	uint16_t cilindri	   = 0;
+	uint8_t	 testine	   = 0;
+	uint8_t	 settori	   = 0;
+	calculatechs(s.disksize / FRANZIMAGER_SECTOR_SIZE, &cilindri, &testine, &settori);
+	s.footer.cylinders		= htobe16(cilindri);
+	s.footer.heads			= testine;
+	s.footer.sectorspertrack= settori;
+	if (!nuovoguid(s.footer.uniqueid))
+	{
+		myprintf("20034! error creating the id of the .vhd\n");
+		franz_free(s.blocco);
+		s.blocco= NULL;
+		delete[] s.bat;
+		s.bat= NULL;
+		return false;
+	}
+	s.footer.checksum= htobe32(calculatechecksum(&s.footer, sizeof(vhdfooter)));
+
+	s.dyn= vhddynheader();
+	memcpy(s.dyn.cookie, "cxsparse", 8);
+	s.dyn.dataoffset	 = htobe64((uint64_t)-1);
+	s.dyn.tableoffset	 = htobe64(FRANZIMAGER_SECTOR_SIZE + sizeof(vhddynheader));
+	s.dyn.headerversion	 = htobe32(0x00010000);
+	s.dyn.blocksize		 = htobe32(m_blocksize);
+	s.dyn.maxtableentries= htobe32(s.voci);
+	s.dyn.checksum		 = htobe32(calculatechecksum(&s.dyn, sizeof(vhddynheader)));
+
+	s.fout= _wfopen(utow(i_filename).c_str(), L"wb");
+	if (!s.fout)
+	{
+		myprintf("20035! Cannot create %Z\n", i_filename);
+		franz_free(s.blocco);
+		s.blocco= NULL;
+		delete[] s.bat;
+		s.bat= NULL;
+		return false;
+	}
+	/// the head: footer copy, dynamic header, the BAT ("not there" for now: written at the end)
+	const uint64_t batbytes= ((uint64_t)s.voci * 4 + FRANZIMAGER_SECTOR_SIZE - 1) & ~(uint64_t)(FRANZIMAGER_SECTOR_SIZE - 1);
+	std::vector<uint8_t> testa((size_t)(FRANZIMAGER_SECTOR_SIZE + sizeof(vhddynheader) + batbytes), 0);
+	memcpy(&testa[0], &s.footer, sizeof(vhdfooter));
+	memcpy(&testa[FRANZIMAGER_SECTOR_SIZE], &s.dyn, sizeof(vhddynheader));
+	memset(&testa[FRANZIMAGER_SECTOR_SIZE + sizeof(vhddynheader)], 0xFF, (size_t)s.voci * 4);
+	if (fwrite(&testa[0], 1, testa.size(), s.fout) != testa.size())
+	{
+		myprintf("20036! Cannot write %Z\n", i_filename);
+		fclose(s.fout);
+		s.fout= NULL;
+		franz_free(s.blocco);
+		s.blocco= NULL;
+		delete[] s.bat;
+		s.bat= NULL;
+		return false;
+	}
+	s.dataoffset= testa.size();
+	s.attivo	= true;
+	if (flagverbose)
+		myprintf("20037: .vhd of %s bytes (%s), %s blocks%s\n", migliaia(s.disksize), tohuman(s.disksize), migliaia2(s.voci), s.disco ? ", a whole disk" : ", the partition at 1 MiB");
+	return true;
+}
+
+/// the block just filled goes to the file (if not all zeros). The first one of a partition gets
+/// the MBR of ours before it, with the type of the file system it holds
+bool franzimager::scrivibloccovhdraw(uint32_t i_indice)
+{
+	vhdrawstate &s= m_vhdraw;
+	if (i_indice >= s.voci)
+	{
+		myprintf("20038! block %s beyond the .vhd\n", migliaia(i_indice));
+		s.errore= true;
+		return false;
+	}
+	if ((i_indice == 0) && (!s.disco))
+	{
+		uint8_t mbr[FRANZIMAGER_SECTOR_SIZE];
+		memcpy(mbr, s_mbrtemplate, FRANZIMAGER_SECTOR_SIZE);
+		memcpy(mbr + 440, s.footer.uniqueid, 4);
+		if ((mbr[440] | mbr[441] | mbr[442] | mbr[443]) == 0)
+			mbr[440]= 1;
+		mbrstructure *m= (mbrstructure *)mbr;
+		m->signature   = 0xAA55;
+		partitionentry *p= &m->partitions[0];
+		memset(p, 0, sizeof(partitionentry));
+		franzfatgeo	   geo;
+		const uint8_t *boot= (const uint8_t *)s.blocco + (size_t)2048 * FRANZIMAGER_SECTOR_SIZE;
+		p->status		   = 0x80;
+		p->type			   = franzimager_leggifat(boot, geo) ? franzimager_tipombr(geo.fs) : 0x07;
+		p->lbabegin		   = 2048;
+		const uint64_t quanti= s.sorgente / FRANZIMAGER_SECTOR_SIZE;
+		p->totalsectors		 = (quanti > 0xFFFFFFFF) ? 0xFFFFFFFF : (uint32_t)quanti;
+		memcpy(s.blocco, mbr, FRANZIMAGER_SECTOR_SIZE);
+		if (flagverbose)
+			myprintf("20039: MBR of the .vhd: partition at 1 MiB, type 0x%02X\n", (unsigned int)p->type);
+	}
+	bool				  vuoto= true;
+	const uint64_t		 *w	   = (const uint64_t *)s.blocco;
+	for (size_t i= 0; i < m_blocksize / 8; i++)
+		if (w[i])
+		{
+			vuoto= false;
+			break;
+		}
+	if (vuoto)
+		s.vuoti++;
+	else
+	{
+		uint8_t bitmap[FRANZIMAGER_SECTOR_SIZE];
+		memset(bitmap, 0, sizeof(bitmap));
+		memset(bitmap, 0xFF, (size_t)(m_blocksize / FRANZIMAGER_SECTOR_SIZE / 8)); /// every sector of the block
+		if ((fwrite(bitmap, 1, sizeof(bitmap), s.fout) != sizeof(bitmap)) || (fwrite(s.blocco, 1, m_blocksize, s.fout) != m_blocksize))
+		{
+			myprintf("20040! Cannot write the .vhd (disk full?)\n");
+			s.errore= true;
+			return false;
+		}
+		s.bat[i_indice]= (uint32_t)(s.dataoffset / FRANZIMAGER_SECTOR_SIZE);
+		s.dataoffset+= FRANZIMAGER_SECTOR_SIZE + m_blocksize;
+		s.scritti++;
+	}
+	memset(s.blocco, 0, m_blocksize);
+	return true;
+}
+
+bool franzimager::scrivivhdraw(const char *i_data, size_t i_size)
+{
+	vhdrawstate &s= m_vhdraw;
+	if ((!s.attivo) || s.errore)
+		return false;
+	while (i_size > 0)
+	{
+		if (s.posizione >= s.disksize)
+		{
+			myprintf("20041! The raw image is longer than expected\n");
+			s.errore= true;
+			return false;
+		}
+		const uint64_t dentro= s.posizione % m_blocksize;
+		uint64_t	   n	 = m_blocksize - dentro;
+		if (n > i_size)
+			n= i_size;
+		if (n > s.disksize - s.posizione)
+			n= s.disksize - s.posizione;
+		memcpy(s.blocco + dentro, i_data, (size_t)n);
+		s.posizione+= n;
+		i_data+= n;
+		i_size-= (size_t)n;
+		if ((s.posizione % m_blocksize) == 0)
+			if (!scrivibloccovhdraw((uint32_t)(s.posizione / m_blocksize - 1)))
+				return false;
+	}
+	return true;
+}
+
+bool franzimager::chiudivhdraw()
+{
+	vhdrawstate &s= m_vhdraw;
+	if (!s.attivo)
+		return false;
+	s.attivo= false;
+	bool		   ok	 = !s.errore;
+	const uint64_t inizio= s.disco ? 0 : (uint64_t)2048 * FRANZIMAGER_SECTOR_SIZE;
+	if (ok && (s.posizione != inizio + s.sorgente))
+	{
+		myprintf("20042! The raw image gave %s bytes instead of %s\n", migliaia(s.posizione - inizio), migliaia2(s.sorgente));
+		ok= false;
+	}
+	/// the last block: whole, zeros after the end of the disk
+	if (ok && ((s.posizione % m_blocksize) != 0))
+		ok= scrivibloccovhdraw((uint32_t)(s.posizione / m_blocksize));
+	if (ok)
+	{
+		/// the footer at the end, then the BAT (big endian) in its place
+		for (uint32_t i= 0; i < s.voci; i++)
+			s.bat[i]= htobe32(s.bat[i]);
+		ok= (fwrite(&s.footer, 1, sizeof(vhdfooter), s.fout) == sizeof(vhdfooter));
+		ok= ok && (_fseeki64(s.fout, (int64_t)(FRANZIMAGER_SECTOR_SIZE + sizeof(vhddynheader)), SEEK_SET) == 0);
+		ok= ok && (fwrite(s.bat, 4, s.voci, s.fout) == s.voci);
+		if (!ok)
+			myprintf("20043! Cannot write the end of the .vhd (disk full?)\n");
+	}
+	if (fclose(s.fout) != 0)
+		ok= false;
+	s.fout= NULL;
+	franz_free(s.blocco);
+	s.blocco= NULL;
+	delete[] s.bat;
+	s.bat= NULL;
+	if (ok)
+	{
+		color_cyan();
+		myprintf("20044: .vhd of %s: %s blocks written, %s of zeros left out\n", tohuman(s.disksize), migliaia(s.scritti), migliaia2(s.vuoti));
+		color_restore();
+	}
+	return ok;
+}
+
+
 bool franzimager::prepararawrestore(char i_target)
 {
 	if (flagdebug)
@@ -137025,9 +138156,24 @@ bool franzimager::prepararawrestore(char i_target)
 			myprintf("20201: Opening partition %c for restore: %s\n", toupper(i_target), devicepath);
 	}
 
-	// open for writing
+	/// how big the partition is (a handle only to write cannot ask): its end, if bigger than the
+	/// image, is zeroed at the end (azzeracoda)
+	m_rawdiskstate.totalsize= 0;
+	if (!isdisk)
+	{
+		HANDLE hleggi= CreateFileA(devicepath, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
+		if (hleggi != INVALID_HANDLE_VALUE)
+		{
+			uint64_t dimensione= 0;
+			if (getvolumesize(hleggi, &dimensione))
+				m_rawdiskstate.totalsize= dimensione;
+			CloseHandle(hleggi);
+		}
+	}
+
+	// open for writing (and reading: the boot region of an exFAT, adattaexfat)
 	m_rawdiskstate.hdest= CreateFileA(devicepath,
-									  GENERIC_WRITE,
+									  GENERIC_READ | GENERIC_WRITE,
 									  FILE_SHARE_READ | FILE_SHARE_WRITE,
 									  NULL,
 									  OPEN_EXISTING,
@@ -137180,6 +138326,13 @@ bool franzimager::chiudirawrestore()
 		}
 
 		m_rawdiskstate.accumsize= 0;
+	}
+
+	if ((!m_rawdiskstate.isdisk) && (!m_rawdiskstate.errore) && (m_rawdiskstate.hdest != INVALID_HANDLE_VALUE) &&
+		(m_rawdiskstate.totalsize > (uint64_t)m_rawdiskstate.byteswritten))
+	{
+		azzeracoda(m_rawdiskstate.hdest, (uint64_t)m_rawdiskstate.byteswritten, m_rawdiskstate.totalsize);
+		adattaexfat(m_rawdiskstate.hdest, m_rawdiskstate.totalsize);
 	}
 
 	// flush
@@ -138398,6 +139551,7 @@ class franzVSS
 	RpcStringFreeAFunc pRpcStringFreeA;
 
 	bool wmiInitialized;
+	bool comInizializzato; /// CoInitializeEx went well: CoUninitialize once, in cleanupWMI()
 
 	std::wstring ansiToWide(const std::string &str)
 	{
@@ -138462,6 +139616,7 @@ class franzVSS
 		hr= pCoInitializeEx(0, COINIT_MULTITHREADED);
 		if (FAILED(hr))
 			return false;
+		comInizializzato= true; /// uninitialized by cleanupWMI(), once
 
 		hr= pCoInitializeSecurity(
 			NULL, -1, NULL, NULL,
@@ -138479,10 +139634,7 @@ class franzVSS
 			CLSID_WbemLocator_Manual, 0, CLSCTX_INPROC_SERVER,
 			IID_IWbemLocator_Manual, (LPVOID *)&pLoc);
 		if (FAILED(hr))
-		{
-			pCoUninitialize();
 			return false;
-		}
 
 		BSTR bstrRootCimv2= pSysAllocString(L"ROOT\\CIMV2");
 		hr				  = pLoc->ConnectServer(bstrRootCimv2, NULL, NULL, NULL, 0L, NULL, NULL, &pSvc);
@@ -138491,7 +139643,7 @@ class franzVSS
 		if (FAILED(hr))
 		{
 			pLoc->Release();
-			pCoUninitialize();
+			pLoc= NULL; /// cleanupWMI() would release it again
 			return false;
 		}
 
@@ -138502,8 +139654,9 @@ class franzVSS
 		if (FAILED(hr))
 		{
 			pSvc->Release();
+			pSvc= NULL;
 			pLoc->Release();
-			pCoUninitialize();
+			pLoc= NULL;
 			return false;
 		}
 
@@ -138522,9 +139675,10 @@ class franzVSS
 			pLoc->Release();
 			pLoc= NULL;
 		}
-		if (pCoUninitialize)
+		if (pCoUninitialize && comInizializzato) /// only if CoInitializeEx went well, and once
 		{
 			pCoUninitialize();
+			comInizializzato= false;
 		}
 
 		if (hOle32)
@@ -138786,7 +139940,7 @@ class franzVSS
 				 pSysAllocString(NULL), pSysFreeString(NULL),
 				 pVariantInit(NULL), pVariantClear(NULL),
 				 pUuidCreate(NULL), pUuidToStringA(NULL), pRpcStringFreeA(NULL),
-				 wmiInitialized(false)
+				 wmiInitialized(false), comInizializzato(false)
 	{
 		if (loadFunctions())
 		{
@@ -139346,6 +140500,8 @@ class franzraw
 	bool m_is_partition; /* true = partizione, false = disco fisico */
 	bool m_use_vss;		 /* true = usa VSS snapshot */
 	char m_drive_letter; /* valido solo se is_partition */
+	bool m_bloccato;	 /* the volume locked: nobody else writes on it while it is read */
+	bool m_nonbloccare; /* the archive is on it: never locked */
 
 	/* puntatore a franzVSS (se usato) */
 	franzVSS *m_vss;
@@ -139395,6 +140551,9 @@ class franzraw
 	{
 		DWORD bytes_ret;
 		char  volume_path[16];
+		m_bloccato= false;
+		if (m_nonbloccare) /* the archive is on this volume: it could not be written */
+			return false;
 		snprintf(volume_path, sizeof(volume_path),"\\\\.\\%c:", drive_letter);
 
 		m_hvolume_lock= CreateFileA(volume_path, GENERIC_READ | GENERIC_WRITE,
@@ -139413,6 +140572,7 @@ class franzraw
 		}
 		else
 		{
+			m_bloccato= true;
 			if (flagverbose)
 			{
 				color_green();
@@ -139421,6 +140581,9 @@ class franzraw
 			}
 		}
 
+		/* only if locked: a dismount of a volume in use would take its files away from who has them open */
+		if (!m_bloccato)
+			return true;
 		if (!DeviceIoControl(m_hvolume_lock, FSCTL_DISMOUNT_VOLUME,
 							 NULL, 0, NULL, 0, &bytes_ret, NULL))
 		{
@@ -139449,9 +140612,13 @@ class franzraw
 							NULL, 0, NULL, 0, &bytes_ret, NULL);
 			CloseHandle(m_hvolume_lock);
 			m_hvolume_lock= INVALID_HANDLE_VALUE;
-			color_green();
-			myprintf("42144: volume unlocked\n");
-			color_restore();
+			if (m_bloccato)
+			{
+				color_green();
+				myprintf("42144: volume unlocked\n");
+				color_restore();
+			}
+			m_bloccato= false;
 		}
 	}
 
@@ -139537,12 +140704,28 @@ class franzraw
 		m_use_vss	  = false;
 		m_drive_letter= 0;
 		m_vss		  = NULL;
+		m_bloccato	  = false;
+		m_nonbloccare = false;
 	}
 
 	/* destructor */
 	~franzraw()
 	{
 		chiudiraw();
+	}
+
+	/* the volume could not change while read: a VSS, or locked */
+	bool usavss() const
+	{
+		return m_use_vss;
+	}
+	bool bloccato() const
+	{
+		return m_bloccato;
+	}
+	void setnonbloccare(bool i_nonbloccare)
+	{
+		m_nonbloccare= i_nonbloccare;
 	}
 
 bool get_partition_info(char drive_letter)
@@ -140192,6 +141375,7 @@ class Jidac
 #ifndef ANCIENT
 	int add2();	   // -turbo: add() with the SHA-1 of the fragments in parallel
 	friend ThreadReturn add2_readthread(void *i_arg); /// it calls updatehash()
+	friend ThreadReturn add2_imgthread(void *i_arg);  /// 65.7p: the reads of the source of an image
 #endif
 	int addhome(); // add, return 1 if error else 0
 	int list();	   // list (one parameter) / check (more than one)
@@ -140270,6 +141454,9 @@ class Jidac
 #ifdef ZPAQMOUNT ///NOSFTPSTART
 	int mount();
 #endif ///NOSFTPEND
+#ifdef _WIN32
+	int montadisco(); /// mount of a .vhd .vhdx .iso: by Windows (franzmonta), every build
+#endif
 	int last();
 	int testbackup();
 	int consolidatebackup();
@@ -140487,6 +141674,13 @@ class Jidac
 #ifdef _WIN32
 	int64_t  gestiscispaz(bool i_silent);
 	bool preparavhd(char drive_letter);
+	int	 sceglimodoimage();	 /// -image alone: what to do with the volume
+	int	 restoreimageauto(); /// image without -ntfs or -raw
+	int	 restore_raw_to_vhd(char i_source, string i_destfile);
+	int	 imagevss;			 /// -image: 0 no VSS, 1 tried by zpaqfranz (without it the image goes on), 2 -vss (it must be there)
+	bool imageautomatica;	 /// -image alone: zpaqfranz chose (used clusters that cannot be read: raw instead)
+	bool esportavhdraw;		 /// image: a raw image to a .vhd (extractstdout)
+	int64_t esportavhdrawsize;
 
 	int handle_vhd_read(char *buf, int g_ioBUFSIZE,
 						bool flagverbose, bool *brutalexit,
@@ -140635,6 +141829,12 @@ Jidac::Jidac()
 	lettera= 0;
 	total_size= 0;
 	numerodrive= -1;
+#ifdef _WIN32
+	imagevss		 = 0;
+	imageautomatica  = false;
+	esportavhdraw	 = false;
+	esportavhdrawsize= 0;
+#endif
 	offset= 0;
 	header_pos= 0;
 	parts= 0;
@@ -149009,6 +150209,11 @@ string help_mount(bool i_usage, bool i_example)
 		scrivi_riga(" ", "  size, date, stored hash, random-offset reads; exit code 0 if OK");
 		scrivi_riga(" ", "  (the list comes from the index read as x does, not from the mount)");
 		scrivi_riga("-debug", "Also enable FUSE/WinFsp debug output (-d)");
+#ifdef _WIN32
+		scrivi_riga(" ", "Windows: a .vhd .vhdx .iso is attached by Windows itself, READ-ONLY (no WinFsp):");
+		scrivi_riga(" ", "  mountpoint = a drive letter (or the one Windows gives); not admin: a new elevated");
+		scrivi_riga(" ", "  window; a key or Ctrl+C unmounts; -test: attach, read every root, detach");
+#endif
 		scrivi_riga(" ", "Env: ZPAQFUSE_CACHE_MB (256) ZPAQFUSE_SHARDS ZPAQFUSE_PREFETCH_THREADS");
 		scrivi_riga(" ", "     ZPAQFUSE_WINNAMES ZPAQFUSE_CASEFOLD ZPAQFUSE_CASE_INSENSITIVE (Windows)");
 	}
@@ -149028,10 +150233,34 @@ string help_mount(bool i_usage, bool i_example)
 		scrivi_esempio("Mount an encrypted archive", "mount z:\\enc.zpaq Z: -key mypassword");
 		scrivi_esempio("Name the engine (jidac, the only one)", "mount z:\\1.zpaq Z: -backend jidac");
 		scrivi_esempio("Does the mount work here? (and unmount)", "mount z:\\1.zpaq z:\\mnt -test");
+#ifdef _WIN32
+		scrivi_esempio("A .vhd, read-only, by Windows", "mount z:\\e.vhd");
+		scrivi_esempio("A .vhd on drive Y:", "mount z:\\e.vhd Y:");
+#endif
 	}
 	return ("Mount an archive read-only (FUSE/WinFsp)");
 }
 #endif // ZPAQMOUNT ///NOSFTPEND
+#if defined(_WIN32) && !defined(ZPAQMOUNT)
+string help_montadisco(bool i_usage, bool i_example)
+{
+	if (i_usage)
+	{
+		scrivi_riga("CMD mount", "Attach a .vhd .vhdx .iso READ-ONLY with Windows itself (no WinFsp)");
+		scrivi_riga(" ", "mountpoint = a drive letter (or the one Windows gives); not admin: a new elevated");
+		scrivi_riga(" ", "window; a key or Ctrl+C unmounts. Archives (.zpaq) need a build with -DZPAQMOUNT");
+		scrivi_riga("-test", "Attach, read the root of every volume, detach");
+	}
+	if (i_usage && i_example)
+		scrivi_examples();
+	if (i_example)
+	{
+		scrivi_esempio("A .vhd, read-only, by Windows", "mount z:\\e.vhd");
+		scrivi_esempio("A .vhd on drive Y:", "mount z:\\e.vhd Y:");
+	}
+	return ("Mount a virtual disk read-only (Windows)");
+}
+#endif
 string help_last2(bool i_usage, bool i_example)
 {
 	if (i_usage)
@@ -149283,7 +150512,19 @@ string help_a(bool i_usage, bool i_example)
 		scrivi_riga("-open", "Early fail if archive is already open");
 		scrivi_riga("-ads", "Store CRC-32 (-fasttxt) in NTFS' ADS (Alternate Data Stream)");
 #endif // corresponds to #if (#if defined(_WIN32))
-		scrivi_riga("-image", "Create a raw image of a drive/partition (Administrator/root rights required)");
+#ifdef _WIN32
+		scrivi_riga("-image", "Image of a drive (Administrator): it chooses by itself. NTFS: the used clusters,");
+		scrivi_riga(" ", "  with VSS (none: without, told); FAT12/16/32, exFAT: the used clusters, the drive");
+		scrivi_riga(" ", "  locked; else (ReFS, not formatted...), or when it cannot, the whole partition.");
+		scrivi_riga(" ", "  A disk (3:): all of it. NTFS: without the swap files (pagefile, swapfile, hiberfil)");
+		scrivi_riga("-raw", "Image of the whole partition (or disk), byte by byte: no choice (no -image needed)");
+		scrivi_riga("-novss", "-image: no VSS, not even tried (the drive is locked, when it can be)");
+		scrivi_riga(" ", "  No VSS and not locked (the drive of Windows...): a warning, exit code 1");
+		scrivi_riga("-nofrugal", "-image: the swap files too");
+#else
+		scrivi_riga("-image", "Create a raw image of a drive/partition (root rights required)");
+		scrivi_riga("-raw", "The very same of -image");
+#endif
 		scrivi_riga("-image", "Unreadable sectors: zeros, the image goes on; a giant READ ERROR at the end, exit code 2");
 		scrivi_riga("-dashboard", "With -image: a live map of the source (new, deduplicated, slow, unreadable), default");
 		scrivi_riga(" ", "  off with -nodashboard, -noeta, -verbose and -debug");
@@ -149316,7 +150557,6 @@ string help_a(bool i_usage, bool i_example)
 #endif
 #ifdef _WIN32
 		scrivi_riga("-ntfs", "Scan a NTFS drive (if no -image)");
-		scrivi_riga("-ntfs", "Get only used NTFS clusters (with -image)");
 #endif
 		scrivi_riga("-appendoutput", "Append to the output file specified by -out instead of overwriting it");
 		scrivi_riga("-writeonconsole", "Write to stderr too");
@@ -149385,7 +150625,7 @@ losetup -d /dev/loop0
 #ifdef _WIN32
 		scrivi_esempio("Find file /prova/ci.zpaq on drives", "a z:\\prova\\ci.zpaq c:\\nz\\* -findzpaq");
 		scrivi_esempio("Abort if file already open", "a z:\\2.zpaq c:\\nz\\* -open");
-		scrivi_esempio("Raw imaging drive E with built in", "a z:\\2.zpaq e: -image");
+		scrivi_esempio("Imaging drive E (it chooses how)", "a z:\\2.zpaq e: -image");
 		scrivi_esempio("Imaging C with pwd and big buffer", "a z:\\2.zpaq c: -image -buffer 1MB -key pippo");
 		scrivi_esempio("Create VFILE-l-hashdeep.txt w/md5", "a z:\\2.zpaq *.txt *.cpp -hashdeep -ssd");
 #endif // corresponds to #ifdef (#ifdef _WIN32)
@@ -149434,10 +150674,12 @@ losetup -d /dev/loop0
 		scrivi_esempio("Force 10GB+ free space", "a /tmp/bak.zpaq etc -checkspace 10g -exec_err fulldisk.sh");
 		scrivi_esempio("Make franzen file", "a z:\\1.zpaq c:\\nz -franzen pippo -key pluto");
 #ifdef _WIN32
+		scrivi_esempio("Image of C: (used clusters + VSS)", "a z:\\1.zpaq c: -image");
+		scrivi_esempio("Image of a USB stick (FAT32, exFAT)", "a z:\\1.zpaq f: -image");
 		scrivi_esempio("Get the DRIVE where C: is", "a z:\\1.zpaq C: -image -all");
-		scrivi_esempio("Get only used data from NTFS", "a z:\\1.zpaq C: -image -ntfs");
-		scrivi_esempio("Making a 'backup' of C:", "a z:\\1.zpaq c: -image -ntfs -vss");
-		scrivi_esempio("The same, without the live map", "a z:\\1.zpaq c: -image -ntfs -vss -nodashboard");
+		scrivi_esempio("The whole partition, byte by byte", "a z:\\1.zpaq e: -raw");
+		scrivi_esempio("C: without VSS, with the swap files", "a z:\\1.zpaq c: -image -novss -nofrugal");
+		scrivi_esempio("The same, without the live map", "a z:\\1.zpaq c: -image -nodashboard");
 #endif
 	}
 	return ("Add/append file(s) to archive");
@@ -149778,7 +151020,12 @@ string help_x(bool i_usage, bool i_example)
 #ifdef _WIN64
 		scrivi_riga("-ramsize", "Win64: allocate max virtual memory across all swapfiles");
 #endif
-		scrivi_riga("-huge", "Use alternate write policy (huge file on non-sparse filesystem)");
+		scrivi_riga("-huge", "Files written without gaps: the zeros are written, never a seek past the end");
+		scrivi_riga(" ", "(huge files on filesystems without sparse files, slow drives). No sparse files");
+#ifdef _WIN32
+		scrivi_riga(" ", "Virtual disks (.vhd .vhdx .avhd .avhdx) are never left sparse (no mount): on NTFS");
+		scrivi_riga(" ", "sparse only while written, elsewhere (exFAT, FAT, -nosparse) -huge by itself");
+#endif
 		scrivi_riga("-backupdir X", "With -force: MOVE (not erase) files to be overwritten into X/<timestamp>/");
 		scrivi_riga(" ", "keeping the relative path. If a move fails, abort BEFORE writing anything");
 		scrivi_riga(" ", "Two runs in the same second get X/<timestamp>_00001/ and so on");
@@ -150818,22 +152065,38 @@ string help_image(bool i_usage, bool i_example)
 	if (i_usage)
 	{
 		scrivi_riga("CMD image", "Restore/export zpaqfranz images (RISKY: can overwrite drives; use with caution)");
-        scrivi_riga("-image", "Enable physical write (otherwise output to file)");
-		scrivi_riga("-ntfs",  "Handle NTFS filesystem / thin (sparse/optimized) images");
-        scrivi_riga("-raw",   "Raw sector-by-sector mode (bypasses filesystem)");
-        scrivi_riga("-space",   "Do not check if destination partition is empty");
-        scrivi_riga("Note",   ".vhd files can be mounted (OSFMount,FTKImager) and opened w/7-Zip for extraction");
+		scrivi_riga("-to x.vhd", "A .vhd that Windows mounts (Disk Management, Mount-DiskImage, mount x.vhd)");
+		scrivi_riga("-to folder", "image_X.vhd in it (a name without extension is a folder)");
+		scrivi_riga("-to x.raw", "The partition byte by byte (any other extension too: .img, .bin...)");
+		scrivi_riga("-to G: -image", "Write on the partition G: (-image is the consent: G: is overwritten)");
+		scrivi_riga(" ", "  The archive says what the image is: used clusters (NTFS, FAT, exFAT) or raw");
+		scrivi_riga(" ", "  A disk number (3:): the image of a whole disk, to a .vhd or to a raw file");
+		scrivi_riga("-raw", "Write the unused part too, as zeros: the whole partition is written");
+		scrivi_riga("-until N", "The image of version N (default: the last one)");
+		scrivi_riga("-space", "Do not ask when the destination partition is not empty");
+		scrivi_riga("-force", "Overwrite an existing destination file");
     }
 	if (i_usage && i_example)
 		scrivi_examples();
 	if (i_example)
 	{
-        scrivi_esempio("Restore NTFS from f: to physical i:", "image i1.zpaq f: -to i: -image -ntfs");
-        scrivi_esempio("Restore raw  from f: to physical f:", "image i3.zpaq f: -to f: -image -raw");
-        scrivi_esempio("Export  NTFS from g: to file 1.raw",  "image i2.zpaq g: -to d:\\1.raw -ntfs -raw");
-        scrivi_esempio("Export  raw  from f: to file 2.raw",  "image i4.zpaq f: -to d:\\2.raw -raw");
-        scrivi_esempio("Create  VHD  file from f:",  "image i5.zpaq f: -to d:\\3.vhd -ntfs");
-
+		color_cyan();
+		moreprint("Restore to file");
+		color_restore();
+		scrivi_esempio("Image to VHD", "image i5.zpaq f: -to d:\\3.vhd");
+		scrivi_esempio("Image of disk 3 in a folder", "image i5.zpaq 3: -to d:\\folderone");
+		scrivi_esempio("Image to raw file", "image i2.zpaq f: -to d:\\1.raw");
+		scrivi_esempio("An older version", "image i5.zpaq f: -to d:\\old.vhd -until 3");
+		color_cyan();
+		moreprint("Restore to drive");
+		color_restore();
+		scrivi_esempio("Restore f: on the partition i:", "image i1.zpaq f: -to i: -image");
+		scrivi_esempio("Restore f: on i:, every sector", "image i1.zpaq f: -to i: -image -raw");
+		color_cyan();
+		moreprint("See also");
+		color_restore();
+		scrivi_esempio("Mount VHD (read-only)", "mount d:\\3.vhd");
+		scrivi_esempio("Partition/drive list", "drives");
 	}
 	return ("Restore/export zpaqfranz images");
 }
@@ -151566,6 +152829,9 @@ void Jidac::load_help_map()
 #ifdef ZPAQMOUNT ///NOSFTPSTART
 	help_map.insert(std::pair<string, HelpInfo>("mount", HelpInfo("Utils    ", help_mount, 8)));
 #endif ///NOSFTPEND
+#if defined(_WIN32) && !defined(ZPAQMOUNT)
+	help_map.insert(std::pair<string, HelpInfo>("mount", HelpInfo("Utils    ", help_montadisco, 8)));
+#endif
 	help_map.insert(std::pair<string, HelpInfo>("pause", HelpInfo("Utils    ", help_pause, 8)));
 	help_map.insert(std::pair<string, HelpInfo>("rsync", HelpInfo("Utils    ", help_rsync, 8)));
 	help_map.insert(std::pair<string, HelpInfo>("utf", HelpInfo("Utils    ", help_utf, 8)));
@@ -152895,7 +154161,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 	g_programflags.add(&flaghashdeep,		"-hashdeep",			"Hashdeep",											"");
 	g_programflags.add(&flagignore,			"-ignore",				"Ignore (do not show) file errors",												"a;");
 #ifndef ANCIENT
-	g_programflags.add(&flaghuge,			"-huge",				"Use different extraction algo",					"");
+	g_programflags.add(&flaghuge,			"-huge",				"Extract without gaps (zeros written), no sparse",	"");
 #endif
 	g_programflags.add(&flagnotrim,			"-notrim",				"Disable autotrim of incomplete transactions",												"");
 	g_programflags.add(&flagonedrive,		"-onedrive",			"Do NOT get onedrive placeholders",												"");
@@ -152956,6 +154222,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 	g_programflags.add(&flagverbose,		"-verbose",				"Verbose output",									"");
 	g_programflags.add(&flagverify,			"-verify",				"Verify (read from filesystem)",					"");
 	g_programflags.add(&flagvss,			"-vss",					"Enable Volume Shadow Copies (need admin)",						"a;");
+	g_programflags.add(&flagnovss,			"-novss",				"-image: no VSS, not even tried",							"a;");
 	g_programflags.add(&flagzero,			"-zero",				"Zeroing something",										"");
 	g_programflags.add(&flagpause,			"-pause",				"Pause after run (for runhigh)",					"");
 	g_programflags.add(&flagquiet,			"-quiet",				"Do not show filesystem errors",												"");
@@ -152977,6 +154244,9 @@ int Jidac::loadparameters(int argc, const char** argv)
 	g_programflags.add(&flagimage,			"-image",				"Drive image",										"");
 	g_programflags.add(&flagdashboard,		"-dashboard",			"-image: a live map of the source (default)",		"",nuovodefault);
 	g_programflags.add(&flagnodashboard,	"-nodashboard",			"-image: no live map, the classic progress line",	"");
+	g_programflags.add(&flagelevated,		"-elevated",			"",												""); /// not in the help: set by the relaunch of mount
+	g_programflags.add(&flagraw,			"-raw",					"Image of the whole partition (or disk)",			"");
+	g_programflags.add(&flagnofrugal,		"-nofrugal",			"-image: the swap files too (pagefile...)",			"a;");
 
 #ifdef _WIN32
 ///	g_programflags.add(&flagdd,				"-dd",					"dd",												"");
@@ -152987,7 +154257,6 @@ int Jidac::loadparameters(int argc, const char** argv)
 	g_programflags.add(&flagnosanitize,		"-nosanitize",			"Do NOT fix Windows-invalid filenames",				"x;");
 	g_programflags.add(&flagntfs,			"-ntfs",				"NTFS image",										"");
 	g_programflags.add(&flagvhd,			"-vhd",					"NTFS image to VHD file",										"");
-	g_programflags.add(&flagraw,			"-raw",					"Raw image",										"");
 	g_programflags.add(&flaglongpath,		"-longpath",			"Longpath",											"");
 	g_programflags.add(&flagopen,			"-open",				"Abort if archive seems already opened",												"");
 #endif // corresponds to #ifdef (#ifdef _WIN32)
@@ -153017,6 +154286,12 @@ int Jidac::loadparameters(int argc, const char** argv)
 	if (flagnoeta) /// 65.6h: no progress line, not even the map
 		flagdashboard=false;
 #ifdef _WIN32
+#ifndef ANCIENT
+	/// 65.7n: -huge writes every byte of the file, the zeros too: no sparse files at all (not even the
+	/// ones sparse at the origin), whatever -sparse says
+	if (flaghuge)
+		flagnosparse=true;
+#endif
 	if (flagnosparse)
 		flagsparse=false;
 #endif // corresponds to #ifdef (#ifdef _WIN32)
@@ -153453,6 +154728,9 @@ int Jidac::loadparameters(int argc, const char** argv)
 	/// without -DZPAQMOUNT "mount" is an unknown command: the generic help, exit code 0, and
 	/// nothing said about why. Say it (a build with mount shows +M in the banner)
 	if ((argc>=2) && (stringcomparei(argv[1],"mount")))
+#ifdef _WIN32
+		if (!((argc>=3) && isdiscovirtuale(argv[2]))) /// a .vhd: Windows mounts it (franzmonta), in every build
+#endif
 	{
 		color_red();
 		myprintf("65501! This zpaqfranz has NO mount command: it was built without -DZPAQMOUNT\n");
@@ -153624,9 +154902,9 @@ int Jidac::loadparameters(int argc, const char** argv)
 		else if (cli_filesandcommand(opt,"trim",		'4',argc,argv,&i));
 		else if (cli_filesandcommand(opt,"versum",		'|',argc,argv,&i));
 		else if (cli_filesandcommand(opt,"last2",		'^',argc,argv,&i));
-#ifdef ZPAQMOUNT ///NOSFTPSTART
+#if defined(ZPAQMOUNT) || defined(_WIN32) /// Windows: a .vhd is mounted by Windows itself (franzmonta)
 		else if (cli_filesandcommand(opt,"mount",		'V',argc,argv,&i));
-#endif ///NOSFTPEND
+#endif
 		else if (cli_filesandcommand(opt,"testbackup",	'_',argc,argv,&i));
 		else if (cli_filesandcommand(opt,"comparehex",	'?',argc,argv,&i));
 		else if (cli_filesandcommand(opt,"work",		']',argc,argv,&i));
@@ -154315,6 +155593,11 @@ int Jidac::loadparameters(int argc, const char** argv)
 	myreplaceall(g_csvhf,"/","\\");
 	replacetabs(g_csvhf);
 	
+	/// 65.7o: two switches for the images. -image chooses by itself (Windows: the used clusters of
+	/// NTFS, FAT, exFAT, with VSS when it can, else the whole partition); -raw is the whole
+	/// partition (or disk) byte by byte, with no need of -image. Out of Windows they are the same
+	if ((command == 'a') && flagraw)
+		flagimage= true;
 #ifdef _WIN32
 	if (flagimage && flagstdin)
 	{
@@ -158667,9 +159950,19 @@ int Jidac::doCommand()
 		else
 			return add();
 	}
+#ifdef _WIN32 /// a .vhd .vhdx .iso: attached by Windows, in every build (no WinFsp)
+	else if ((command=='V') && (files.size()>0) && isdiscovirtuale(files[0].c_str())) return montadisco();
+#endif
 #ifdef ZPAQMOUNT ///NOSFTPSTART
 	else if (command=='V') return mount();
 #endif ///NOSFTPEND
+#if defined(_WIN32) && !defined(ZPAQMOUNT)
+	else if (command=='V')
+	{
+		myprintf("65501! This zpaqfranz mounts only virtual disks (.vhd .vhdx .iso): it was built without -DZPAQMOUNT\n");
+		return 2;
+	}
+#endif
 	else if (command=='+') return crop();
 #ifdef ZPAQFULL ///NOSFTPSTART
 	else if (command=='!') return isopen();
@@ -162358,13 +163651,21 @@ struct ExtractJob
 	double			maxMemory;	 // largest memory used by any block (test mode)
 	int64_t			total_size;	 // bytes to extract
 	int64_t			total_done;	 // bytes extracted so far
-	uint64_t		last_write;	 // last fseek
+	uint64_t		last_write;	 // -huge: where the data of the currently open output file ends
+	bool			hugefile;	 // -huge: the currently open output file is written without gaps
+	int64_t			huge_zeri;	 // -huge: zeros written by us in the gaps (bytes)
+	int64_t			huge_buchi;	 // -huge: how many gaps
+	bool			huge_errore; // -huge: a write did not go through
+	bool			fillimplicito; // the open file is not sparse and not -huge: the gaps are filled by the filesystem (the W line of -image)
+	bool			vhdsparse;	 // Windows, extract(): the virtual disks are sparse while written, cleared at the end
 	bool			windowed;	 // extract one logical file window to RAM
 	uint64_t		window_start;
 	uint64_t		window_size;
 	int64_t			zipbase;	 // 'zip' command: offset of the current file inside the .zip
 	ExtractJob(Jidac &j) : chunk(0), job(0), jd(j), outf(FPNULL), lastdt(j.dt.end()),
 						   maxMemory(0), total_size(0), total_done(0), last_write(0),
+						   hugefile(false), huge_zeri(0), huge_buchi(0), huge_errore(false),
+						   fillimplicito(true), vhdsparse(false),
 						   windowed(false), window_start(0), window_size(0), zipbase(0)
 	{
 		init_mutex(mutex);
@@ -162377,8 +163678,197 @@ struct ExtractJob
 	}
 };
 #ifndef ANCIENT
-static int64_t g_last_progress_time= 0;
+/*
+	-huge: the output file is written without gaps. When the next data is after the end
+	of the file the zeros in between are written here, instead of a seek past the end: on
+	a filesystem without sparse files that seek does the very same writing, but inside the
+	filesystem and silently (minutes of "freeze" on a slow drive).
+	Per file: last_write is where the data of the file open now ends (0 for a new one, its
+	size for one opened again).
+	Automatic for the virtual disks on Windows, that cannot be left sparse (Windows would not
+	mount them), when they cannot be sparse even while written (not NTFS, -nosparse): see
+	toglisparse()
+*/
+static bool usahuge(const char *i_filename)
+{
+	if (flag715)
+		return false;
+	if (flaghuge)
+		return true;
+#ifdef _WIN32
+	return isdiscovirtuale(i_filename);
+#else
+	(void)i_filename;
+	return false;
 #endif
+}
+/// the line of the zeros being written: the layout of the extraction one (that keeps the only
+/// ETA of the whole job), it starts with "zeroing"
+static void rigazeri(int64_t i_scritti, int64_t i_dascrivere, int64_t i_inizio)
+{
+	if (flagnoeta || flagcatpaqmode)
+		return;
+	const double velocita= i_scritti / ((mtime() - i_inizio + 1) / 1000.0);
+	const double eta	 = (i_dascrivere - i_scritti) / (velocita + 1.0);
+	myprintf("56481: zeroing%6.2f%% %02d:%02d:%02d  (%10s)=>(%10s) %10s/s         \r",
+			 i_scritti * 100.0 / (i_dascrivere + 0.5),
+			 int(eta / 3600), int(eta / 60) % 60, int(eta) % 60,
+			 tohuman(i_scritti), tohuman2(i_dascrivere), tohuman3((int64_t)velocita));
+}
+/// zeros from the end of the file up to i_fino (1 MB at a time). A line every second with the
+/// layout of the extraction one, that keeps the only ETA of the whole job. false: write error
+static bool hugezeri(ExtractJob &job, int64_t i_fino)
+{
+	static const size_t		 pezzomax= 1 << 20;
+	static std::vector<char> zeri(pezzomax, 0);
+	const int64_t			 partenza  = (int64_t)job.last_write;
+	const int64_t			 dascrivere= i_fino - partenza;
+	const int64_t			 inizio	   = mtime();
+	int64_t					 ultimo	   = inizio;
+	int64_t					 scritti   = 0;
+	bool					 tuttobene = (fseeko(job.outf, partenza, SEEK_SET) == 0);
+	while (tuttobene && (scritti < dascrivere))
+	{
+		const size_t pezzo= ((dascrivere - scritti) > (int64_t)pezzomax) ? pezzomax : (size_t)(dascrivere - scritti);
+		if (myfwrite(zeri.data(), 1, pezzo, job.outf) != pezzo)
+		{
+			tuttobene= false;
+			break;
+		}
+		scritti+= pezzo;
+		const int64_t ora= mtime();
+		if (ora - ultimo >= 1000)
+		{
+			ultimo= ora;
+			lock(job.mutex);
+			if (flagcatpaqmode)
+				print_progress(job.total_size, job.total_done, -1, -1); /// the GUI: the job is alive
+			else
+				rigazeri(scritti, dascrivere, inizio);
+			release(job.mutex);
+		}
+	}
+	job.last_write= partenza + scritti;
+	job.huge_zeri+= scritti;
+	job.huge_buchi++;
+	return tuttobene;
+}
+#ifdef _WIN32
+/*
+	65.7o: a virtual disk is sparse WHILE it is written (trysparse, i_discotemporaneo). The data
+	come in the order of the archive, not of the file: a not sparse file gets the zeros of
+	every gap first and the data after, everything written twice (an image with more versions:
+	twice the time). Windows does not mount a sparse .vhd: when the extraction is over the
+	holes left (the all-zeros fragments, never written) are filled with zeros, every byte
+	written once, and the attribute is cleared. Not NTFS: never sparse, the -huge way.
+	true: not sparse (it never was, or not any more). false: still sparse
+*/
+static bool toglisparse(const string &i_filename, int64_t i_date, int64_t i_attr, int64_t &io_buchi, int64_t &io_zeri)
+{
+	const DWORD attributi= GetFileAttributesW(utow(i_filename.c_str()).c_str());
+	if ((attributi == INVALID_FILE_ATTRIBUTES) || (!(attributi & FILE_ATTRIBUTE_SPARSE_FILE)))
+		return true;
+	FP fp= myfopen(i_filename.c_str(), RBPLUS);
+	if (fp == FPNULL)
+	{
+		myprintf("56487! cannot open the virtual disk to clear the sparse attribute: Windows will not mount it <<%Z>>\n", i_filename.c_str());
+		return false;
+	}
+	LARGE_INTEGER dimensione;
+	dimensione.QuadPart= 0;
+	bool tuttobene	   = GetFileSizeEx(fp, &dimensione) != 0;
+	/// the holes: what is not in the allocated ranges
+	std::vector<std::pair<int64_t, int64_t> > buchi;
+	int64_t									 dascrivere= 0;
+	int64_t									 pos	   = 0;
+	std::vector<FILE_ALLOCATED_RANGE_BUFFER> allocati(1024);
+	while (tuttobene && (pos < dimensione.QuadPart))
+	{
+		FILE_ALLOCATED_RANGE_BUFFER chiesto;
+		chiesto.FileOffset.QuadPart= pos;
+		chiesto.Length.QuadPart	   = dimensione.QuadPart - pos;
+		DWORD		avuti		   = 0;
+		const BOOL	fatto		   = DeviceIoControl(fp, FSCTL_QUERY_ALLOCATED_RANGES, &chiesto, sizeof(chiesto), allocati.data(), (DWORD)(allocati.size() * sizeof(FILE_ALLOCATED_RANGE_BUFFER)), &avuti, NULL);
+		const DWORD errore		   = fatto ? 0 : GetLastError();
+		const DWORD quanti		   = avuti / sizeof(FILE_ALLOCATED_RANGE_BUFFER);
+		if ((!fatto) && ((errore != ERROR_MORE_DATA) || (quanti == 0)))
+		{
+			myprintf("56488! cannot get the allocated ranges (error %s) <<%Z>>\n", migliaia((int64_t)errore), i_filename.c_str());
+			tuttobene= false;
+			break;
+		}
+		for (DWORD i= 0; i < quanti; i++)
+		{
+			if (allocati[i].FileOffset.QuadPart > pos)
+			{
+				buchi.push_back(std::make_pair(pos, (int64_t)allocati[i].FileOffset.QuadPart - pos));
+				dascrivere+= buchi.back().second;
+			}
+			pos= allocati[i].FileOffset.QuadPart + allocati[i].Length.QuadPart;
+		}
+		if (fatto)
+		{
+			if (pos < dimensione.QuadPart) /// nothing allocated up to the end
+			{
+				buchi.push_back(std::make_pair(pos, (int64_t)dimensione.QuadPart - pos));
+				dascrivere+= buchi.back().second;
+			}
+			break;
+		}
+	}
+	static const size_t		 pezzomax= 1 << 20;
+	static std::vector<char> zeri(pezzomax, 0);
+	const int64_t			 inizio = mtime();
+	int64_t					 ultimo = inizio;
+	int64_t					 scritti= 0;
+	for (size_t i= 0; tuttobene && (i < buchi.size()); i++)
+	{
+		int64_t fatti= 0;
+		tuttobene	 = (fseeko(fp, buchi[i].first, SEEK_SET) == 0);
+		while (tuttobene && (fatti < buchi[i].second))
+		{
+			const size_t pezzo= ((buchi[i].second - fatti) > (int64_t)pezzomax) ? pezzomax : (size_t)(buchi[i].second - fatti);
+			if (myfwrite(zeri.data(), 1, pezzo, fp) != pezzo)
+			{
+				tuttobene= false;
+				break;
+			}
+			fatti+= pezzo;
+			scritti+= pezzo;
+			if (mtime() - ultimo >= 1000)
+			{
+				ultimo= mtime();
+				rigazeri(scritti, dascrivere, inizio);
+			}
+		}
+		if (!tuttobene)
+			myprintf("56489! cannot write the zeros of the holes (disk full?) <<%Z>>\n", i_filename.c_str());
+	}
+	if (tuttobene)
+	{
+		FILE_SET_SPARSE_BUFFER nonsparse;
+		nonsparse.SetSparse= FALSE;
+		DWORD ritorno	   = 0;
+		if (!DeviceIoControl(fp, FSCTL_SET_SPARSE, &nonsparse, sizeof(nonsparse), NULL, 0, &ritorno, NULL))
+		{
+			myprintf("56490! cannot clear the sparse attribute (error %s) <<%Z>>\n", migliaia((int64_t)GetLastError()), i_filename.c_str());
+			tuttobene= false;
+		}
+	}
+	io_buchi+= (int64_t)buchi.size();
+	io_zeri+= scritti;
+	if (!tuttobene)
+	{
+		color_red();
+		myprintf("56491! the virtual disk is still a sparse file: Windows will not mount it (extract again with -nosparse) <<%Z>>\n", i_filename.c_str());
+		color_restore();
+	}
+	/// the zeros have changed the date of the file: again, as at the end of its extraction
+	close(i_filename.c_str(), i_date, i_attr, fp);
+	return tuttobene;
+}
+#endif // corresponds to #ifdef (#ifdef _WIN32)
+#endif // corresponds to #ifndef (#ifndef ANCIENT)
 
 // Decompress blocks in a job until none are READY
 ThreadReturn decompressThread(void *arg)
@@ -162704,8 +164194,8 @@ ThreadReturn decompressThread(void *arg)
 							}
 
 #ifndef unix
-							else if (!flagstdout) // sparse? (it was at the origin, or 65.6a a big file)
-								trysparse(job.outf, p->second.size, (p->second.attr & 0x200ff) == 0x20000 + 'w', filename.c_str());
+							else if (!flagstdout) // sparse? (it was at the origin, or 65.6a a big file, or 65.7o a virtual disk, while written)
+								trysparse(job.outf, p->second.size, (p->second.attr & 0x200ff) == 0x20000 + 'w', filename.c_str(), job.vhdsparse);
 #endif // corresponds to #ifndef (#ifndef unix)
 						}
 					}
@@ -162745,6 +164235,30 @@ ThreadReturn decompressThread(void *arg)
 						g_addedchunklist.push_back(filename);
 					}
 
+#ifndef ANCIENT
+					/// -huge is per file: the position reached by the previous file is of no use for
+					/// this one. A file just created is empty, one opened again has data up to its end
+					job.hugefile	 = false;
+					job.last_write	 = 0;
+					job.fillimplicito= true;
+					if ((!job.jd.flagtest) && (!flagstdout) && (!flagzip) && (!flagramdisk) && (!p->second.donotextractme))
+					{
+#ifdef _WIN32
+						/// a sparse file (a virtual disk too, while it is written): a seek costs nothing
+						if (filesparse(job.outf))
+							job.fillimplicito= false;
+						else
+#endif
+						if (usahuge(filename.c_str()))
+						{
+							job.hugefile	 = true;
+							job.fillimplicito= false;
+							if (p->second.data > 0)
+								if (fseeko(job.outf, 0, SEEK_END) == 0)
+									job.last_write= ftello(job.outf);
+						}
+					}
+#endif
 					job.lastdt= p;
 					assert(job.jd.flagtest || job.outf != FPNULL);
 				}
@@ -162845,7 +164359,7 @@ ThreadReturn decompressThread(void *arg)
 								/// if something is 1 all writes (and seeks) will be showed
 #ifdef _WIN32
 								if (!flagnoeta)
-									if (flagimage)
+									if (flagimage && job.fillimplicito) /// the gaps filled by the filesystem. Sparse: none. -huge: by us, with their own line
 									{
 										int64_t zerofill= 0;
 										if (offset > g_maxposition)
@@ -162877,95 +164391,49 @@ ThreadReturn decompressThread(void *arg)
 
 								if (!flagstdout)
 								{
+									bool scritto;
 #ifndef ANCIENT
-									if (!flaghuge)
+									if (job.hugefile)
+									{
+										/// -huge: never a seek past the end of the file, the gap (if any) is written by us
+										if (offset > (int64_t)job.last_write)
+											scritto= hugezeri(job, offset);
+										else
+											scritto= (fseeko(job.outf, offset, SEEK_SET) == 0);
+										if (scritto && (usize > 0))
+											scritto= (myfwrite(out.c_str() + q, 1, usize, job.outf) == usize);
+										if (scritto && (uint64_t(offset + usize) > job.last_write))
+											job.last_write= offset + usize;
+									}
+									else
 #endif
 									{
 										/// job.zipbase is 0 unless we are writing inside a zip
 										fseeko(job.outf, offset + job.zipbase, SEEK_SET);
-										myfwrite(out.c_str() + q, 1, usize, job.outf);
+										scritto= (usize == 0) || (myfwrite(out.c_str() + q, 1, usize, job.outf) == usize);
 									}
-#ifndef ANCIENT
-									else
+									/// 65.7o: a write that did not go through (disk full) is told here, and it is an error: with
+									/// -image on Windows not even the final check of the written bytes is done
+									if (!scritto)
 									{
-										// User-defined constants
-										const int64_t seekgrande	  = 1024 * 1024 * 1024; // 1 GB
-										const size_t  dimensionebuffer= 1024 * 1024;		// 1 MB
-										// Zero buffer, static to be initialized only once
-										static std::vector<char> arrayzero(dimensionebuffer, 0);
-										int64_t					 seek_distance= offset - job.last_write;
-										if (seek_distance > seekgrande)
+										lock(job.mutex);
+										if (!job.huge_errore)
 										{
-											int64_t inizio_ms= mtime();
-											fseeko(job.outf, job.last_write, SEEK_SET);
-											uint64_t zeri_da_scrivere= seek_distance;
-											uint64_t zeri_scritti_tot= 0; // Renamed for clarity
-
-											int64_t ultimo_output_ms= inizio_ms; // Last output timestamp
-
-											// Zero block write loop
-											for (zeri_scritti_tot= 0; zeri_scritti_tot + dimensionebuffer <= zeri_da_scrivere; zeri_scritti_tot+= dimensionebuffer)
-											{
-												myfwrite(arrayzero.data(), 1, dimensionebuffer, job.outf);
-
-												// MODIFIED UPDATE LOGIC - EVERY SECOND ***
-												int64_t tempo_attuale_ms= mtime();
-												// Stampiamo solo se è passato almeno 1 secondo dall'ultimo output
-												if (tempo_attuale_ms - ultimo_output_ms >= 1000)
-												{
-													ultimo_output_ms		  = tempo_attuale_ms; // Updating the last output timestamp
-													int64_t tempo_trascorso_ms= tempo_attuale_ms - inizio_ms;
-
-													if (tempo_trascorso_ms > 0)
-													{
-														double velocita= ((double)zeri_scritti_tot) / ((double)tempo_trascorso_ms / 1000.0);
-
-														int64_t byte_rimanenti= zeri_da_scrivere - zeri_scritti_tot;
-														int		perc_attuale  = static_cast<int>(((double)zeri_scritti_tot / zeri_da_scrivere) * 100.0);
-														int		eta_sec_totali= 0;
-
-														if (velocita > 0)
-															eta_sec_totali= (int)(byte_rimanenti / velocita);
-
-														int ore= eta_sec_totali / 3600;
-														if (ore > 99)
-															ore= 99;
-														int min= (eta_sec_totali % 3600) / 60;
-														int sec= eta_sec_totali % 60;
-														myprintf("56481: Ext %10s %03d%% ETA: %02d:%02d:%02d @ %12s/s                   \r",
-																 tohuman2(byte_rimanenti), perc_attuale, ore, min, sec, tohuman(velocita));
-														/// fflush(stdout);
-													}
-												}
-											}
-											// We handle remaining bytes
-											size_t rimanenti= zeri_da_scrivere - zeri_scritti_tot;
-											if (rimanenti > 0)
-												myfwrite(arrayzero.data(), 1, rimanenti, job.outf);
-
-											eol();
-											myprintf("Thinking... %10s\r", tohuman(g_fwritten));
+											color_red();
+											myprintf("56483! cannot write %s bytes at %s (disk full?) <<%Z>>\n", migliaia(usize), migliaia2(offset), job.lastdt->first.c_str());
+											color_restore();
 										}
-										else
-										{
-											fseeko(job.outf, offset, SEEK_SET);
-										}
-										// Writing actual data (invariata)
-										myfwrite(out.c_str() + q, 1, usize, job.outf);
-
-										int64_t current_time= mtime();
-										if (g_last_progress_time == 0 || (current_time - g_last_progress_time) >= 1000)
-										{
-											eol();
-											myprintf("Written... %10s of %10s\r", tohuman(job.total_done), tohuman2(job.total_size));
-											g_last_progress_time= current_time;
-										}
-
-										// Updating job.last_write (unchanged)
-										if ((offset + usize) > job.last_write)
-											job.last_write= offset + usize;
+										job.huge_errore= true;
+										release(job.mutex);
 									}
-#endif
+									/// with -image the progress is not printed while decompressing: here, the same line, when
+									/// the W one above is of no use (sparse file, or -huge)
+									if (flagimage && (!job.fillimplicito))
+									{
+										lock(job.mutex);
+										print_progress(job.total_size, job.total_done, -1, -1);
+										release(job.mutex);
+									}
 								}
 								else
 									fwrite(out.c_str() + q, 1, usize, stdout);
@@ -197716,6 +199184,11 @@ int Jidac::extract()
 	// and set date and attributes.
 
 	ExtractJob job(*this);
+#ifndef ANCIENT
+#ifdef _WIN32
+	job.vhdsparse= true; /// 65.7o: the virtual disks sparse while written, see toglisparse() after the threads
+#endif
+#endif
 	int		   total_files= 0, skipped= 0, skipped_diversi= 0;
 	int		   tobeerased= 0, erased= 0;
 	int		   real_dirs= 0;
@@ -197928,6 +199401,89 @@ int Jidac::extract()
 	}
 #endif
 
+#ifdef _WIN32
+
+	/// the .vhd: header + image + footer joined BEFORE the blocks are planned. After, the image was planned
+	/// with its own fragments only: header and footer were written only when they shared a block with
+	/// the image, and only if their own entries were planned too (not when a file with their name was
+	/// in the current folder: a broken .vhd, and with -force that file was deleted)
+	if (flagvhd)
+	{
+		// OK this is slow, but who cares?
+
+		DTMap::iterator it_header= dt.end();
+		DTMap::iterator it_target= dt.end();
+		DTMap::iterator it_footer= dt.end();
+		
+	
+		// Find the two elements
+		for (DTMap::iterator p= dt.begin(); p != dt.end(); ++p)
+		{
+			/*
+			printf("memmone |%s| vhd head |%s|\n",p->first.c_str(),vhd_header_name.c_str());
+			printf("memmone |%s| vhd foot |%s|\n",p->first.c_str(),vhd_footer_name.c_str());
+			printf("memmone |%s| vhd imag |%s|\n",p->first.c_str(),vhd_image_name.c_str());
+			*/
+			if (p->first==vhd_footer_name)
+			{
+				if (flagdebug2)
+					myprintf("95320: footer is %s\n",p->first.c_str());
+				it_footer= p;
+			}
+			if (p->first==vhd_header_name)
+			{
+				if (flagdebug2)
+					myprintf("95320: header is %s\n",p->first.c_str());
+				it_header= p;
+			}
+			if (p->first==vhd_image_name)
+			{
+				if (flagdebug2)
+					myprintf("95326: Target is %s\n",p->first.c_str());
+				it_target= p;
+			}
+		}
+		// If both found, merge
+		if (it_header != dt.end() && it_target != dt.end() && it_footer != dt.end())
+		{
+			if (flagdebug2)
+			{
+				myprintf("93782: Before fusion %21s\n", migliaia(it_target->second.ptr.size()));
+				myprintf("93782: header        %21s\n", migliaia(it_header->second.ptr.size()));
+				myprintf("93782: footer        %21s\n", migliaia(it_footer->second.ptr.size()));
+			}
+			std::vector<unsigned> nuovo;
+			nuovo.reserve(it_header->second.ptr.size() + it_target->second.ptr.size() + it_footer->second.ptr.size());
+
+			for (unsigned int i= 0; i < it_header->second.ptr.size(); ++i)
+				nuovo.push_back(it_header->second.ptr[i]);
+
+			for (unsigned int i= 0; i < it_target->second.ptr.size(); ++i)
+				nuovo.push_back(it_target->second.ptr[i]);
+
+			for (unsigned int i= 0; i < it_footer->second.ptr.size(); ++i)
+				nuovo.push_back(it_footer->second.ptr[i]);
+
+			it_target->second.ptr= nuovo;
+			it_target->second.size= it_header->second.size + it_target->second.size + it_footer->second.size; /// the .vhd, whole
+
+			if (flagdebug2)
+				myprintf("93787: After fusion %s\n", migliaia(it_target->second.ptr.size()));
+
+			/// the name on disk: .fhd => .vhd. Not when -to has given it (image -to x.vhd): rename()
+			/// does this replace BEFORE the files[0] => tofiles[0] one, that then would not match
+			if ((vhd_image_fullname.size() >= 4) && (vhd_image_fullname.substr(vhd_image_fullname.size() - 4) == ".fhd"))
+			{
+				searchfrom= ".fhd";
+				replaceto = ".vhd";
+			}
+	
+		}
+		else
+			myprintf("93819! GURU cannot find header & footer & target\n");
+	}
+#endif
+
 	/*
 		-find/-replace (or more -to) can turn two names of the archive into the same one on
 		disk, or a file into a folder name (-find a.txt on src/a.txt => src/). The file would be
@@ -197945,7 +199501,9 @@ int Jidac::extract()
 	{
 		p->second.data= -1; // skip
 
-		bool entra= (p->second.date && p->first != "");
+		/// the pieces of an image not to be written (header, footer, meta of a .vhd): no check of a
+		/// file with their name on disk (nor its deletion with -force), no count, no block
+		bool entra= (p->second.date && p->first != "") && (!p->second.donotextractme);
 
 		if (entra)
 		{
@@ -198341,7 +199899,12 @@ int Jidac::extract()
 					myprintf("00931: Free space on <<-to %s>>\n", tofiles[0].c_str());
 					myprintf("00932: is      %21s\n", migliaia(spazio));
 					myprintf("00933: needed  %21s\n", migliaia(job.total_size));
-					if (!isdirectory(tofiles[0]))
+					bool nonecartella= !isdirectory(tofiles[0]);
+#ifdef _WIN32
+					if (flagvhd) /// an image to x.vhd: a file is what is wanted
+						nonecartella= false;
+#endif
+					if (nonecartella)
 						myprintf("00934: -to is a single file, NOT a folder. Maybe you miss the final /?\n");
 					myprintf("00935! Not enough free space. Use -space to bypass and enforcing.\n");
 					/// error("Not enough free space");
@@ -198490,78 +200053,6 @@ int Jidac::extract()
 
 	vector<ThreadID> tid(howmanythreads);
 
-#ifdef _WIN32
-
-	if (flagvhd)
-	{
-		// OK this is slow, but who cares?
-
-		DTMap::iterator it_header= dt.end();
-		DTMap::iterator it_target= dt.end();
-		DTMap::iterator it_footer= dt.end();
-		
-	
-		// Find the two elements
-		for (DTMap::iterator p= dt.begin(); p != dt.end(); ++p)
-		{
-			/*
-			printf("memmone |%s| vhd head |%s|\n",p->first.c_str(),vhd_header_name.c_str());
-			printf("memmone |%s| vhd foot |%s|\n",p->first.c_str(),vhd_footer_name.c_str());
-			printf("memmone |%s| vhd imag |%s|\n",p->first.c_str(),vhd_image_name.c_str());
-			*/
-			if (p->first==vhd_footer_name)
-			{
-				if (flagdebug2)
-					myprintf("95320: footer is %s\n",p->first.c_str());
-				it_footer= p;
-			}
-			if (p->first==vhd_header_name)
-			{
-				if (flagdebug2)
-					myprintf("95320: header is %s\n",p->first.c_str());
-				it_header= p;
-			}
-			if (p->first==vhd_image_name)
-			{
-				if (flagdebug2)
-					myprintf("95326: Target is %s\n",p->first.c_str());
-				it_target= p;
-			}
-		}
-		// If both found, merge
-		if (it_header != dt.end() && it_target != dt.end() && it_footer != dt.end())
-		{
-			if (flagdebug2)
-			{
-				myprintf("93782: Before fusion %21s\n", migliaia(it_target->second.ptr.size()));
-				myprintf("93782: header        %21s\n", migliaia(it_header->second.ptr.size()));
-				myprintf("93782: footer        %21s\n", migliaia(it_footer->second.ptr.size()));
-			}
-			std::vector<unsigned> nuovo;
-			nuovo.reserve(it_header->second.ptr.size() + it_target->second.ptr.size() + it_footer->second.ptr.size());
-
-			for (unsigned int i= 0; i < it_header->second.ptr.size(); ++i)
-				nuovo.push_back(it_header->second.ptr[i]);
-
-			for (unsigned int i= 0; i < it_target->second.ptr.size(); ++i)
-				nuovo.push_back(it_target->second.ptr[i]);
-
-			for (unsigned int i= 0; i < it_footer->second.ptr.size(); ++i)
-				nuovo.push_back(it_footer->second.ptr[i]);
-
-			it_target->second.ptr= nuovo;
-
-			if (flagdebug2)
-				myprintf("93787: After fusion %s\n", migliaia(it_target->second.ptr.size()));
-
-			searchfrom=".fhd";
-			replaceto=".vhd";
-	
-		}
-		else
-			myprintf("93819! GURU cannot find header & footer & target\n");
-	}
-#endif
 
 	if (howmanythreads == 1)
 	{
@@ -198586,6 +200077,40 @@ int Jidac::extract()
 	if (howmanythreads > 1)
 		for (unsigned i= 0; i < tid.size(); ++i)
 			join(tid[i]);
+#ifndef ANCIENT
+	/// a write that did not go through is an error (not a "strange thing" at the very end)
+	if (job.huge_errore)
+		errors= 2;
+	if (flagverbose && (job.huge_buchi > 0))
+		myprintf("56484: -huge: zeros written by us %s (%s) in %s gaps\n", migliaia(job.huge_zeri), tohuman(job.huge_zeri), migliaia2(job.huge_buchi));
+#ifdef _WIN32
+	/// 65.7o: the virtual disks were sparse while written: now their holes are filled and the sparse
+	/// attribute is cleared, or Windows does not mount them. Before the read-only attributes
+	if ((!flagtest) && (!flagzip) && (!flagstdout) && (!flagramdisk))
+	{
+		/// a file not complete (a damaged archive) is still open: closed, or it cannot be opened here
+		if (job.outf != FPNULL)
+			myfclose(&job.outf);
+		int64_t vhdbuchi= 0;
+		int64_t vhdzeri = 0;
+		for (DTMap::iterator p= dt.begin(); p != dt.end(); ++p)
+			if ((p->second.data >= 0) && p->second.date && (p->first != "") && (!p->second.donotextractme) && (!isdirectory(p->first)))
+			{
+				const string fn= rename(p->first);
+				if (!isdiscovirtuale(fn.c_str()))
+					continue;
+				const bool completo= (p->second.data == int64_t(p->second.ptr.size()));
+				int64_t	   attr	   = p->second.attr;
+				if ((!completo) || ((attr & 0x1ff) == 'w' + 256))
+					attr= 0; /// read-only: later, as for every file
+				if (!toglisparse(fn, completo ? p->second.date : 0, attr, vhdbuchi, vhdzeri))
+					errors= 2;
+			}
+		if (flagverbose && (vhdbuchi > 0))
+			myprintf("56485: virtual disks: %s (%s) of zeros written in %s holes at the end, not sparse any more\n", migliaia(vhdzeri), tohuman(vhdzeri), migliaia2(vhdbuchi));
+	}
+#endif
+#endif
 	if (flagzip)
 	{
 		/// crc-32 of every file (combining the chunks), then the central directory
@@ -198788,11 +200313,9 @@ int Jidac::extract()
 	int		 windowspath	 = 0;
 	int		 windowsunc		 = 0;
 	int		 relativepath	 = 0;
-#ifdef _WIN32
-	if ((!flagramdisk) && (vhd_header_name == ""))
-#else
+	/// 65.7n: for a .vhd too (it was skipped: a damaged archive gave a broken .vhd with rc 0, "all OK").
+	/// Header and footer are not planned any more (data -1), so they cannot be counted as failed
 	if ((!flagramdisk))
-#endif
 	{
 		// Report failed extractions, plain old 715
 		for (DTMap::iterator p= dt.begin(); p != dt.end(); ++p)
@@ -198843,6 +200366,11 @@ int Jidac::extract()
 				 migliaia(extracted), migliaia3(errors), migliaia4((int64_t)job.maxMemory),
 				 int(tid.size()));
 	}
+#ifdef _WIN32
+	/// the .vhd is one file: with a piece missing it is broken, an error (2) and not a warning (1)
+	if (flagvhd && (errors == 1))
+		errors= 2;
+#endif
 	if (toolongfilenames)
 		myprintf("00970: Long filenames %12s\n", migliaia(toolongfilenames));
 	if (adsfilenames)
@@ -210521,6 +212049,7 @@ class franzimgdash
 	void iniziasequenziale(const string &i_tag, const string &i_titolo, int64_t i_bytesblocco, int64_t i_totale);
 	void prima();								   /// before a read
 	void dopo(int64_t i_blocco, int64_t i_bytes);  /// after it: the block and its bytes, the time since prima
+	void dopocon(int64_t i_blocco, int64_t i_bytes, double i_secondi, int64_t i_errori); /// the same, a read done before (-turbo)
 	void frammento(int64_t i_bytes, bool i_nuovo); /// a fragment of the data of the block being read: new or deduplicated
 	/// the info lines, at most every FRANZUSB_REFRESH; false when not live (then the classic line)
 	bool mostra(int64_t i_fatti, int64_t i_totale, int64_t i_scritti);
@@ -210680,17 +212209,23 @@ void franzimgdash::prima()
 }
 void franzimgdash::dopo(int64_t i_blocco, int64_t i_bytes)
 {
-	const double secondi= franzusb::adesso() - m_t0;
+	dopocon(i_blocco, i_bytes, franzusb::adesso() - m_t0, g_imgerrori);
+}
+/// 65.7p: the same, for a read done before by another thread (-turbo on the stream of an image):
+/// how long it took and the unreadable sectors counted right after it
+void franzimgdash::dopocon(int64_t i_blocco, int64_t i_bytes, double i_secondi, int64_t i_errori)
+{
+	const double secondi= i_secondi;
 	if ((!attivo()) || (i_blocco < 0) || (i_blocco >= (int64_t)m_stato.size()) || (i_bytes <= 0))
 		return;
 	const int64_t prima= m_corrente;
 	chiudiblocco();
 	m_corrente	  = i_blocco;
 	uint8_t stato= IMG_FATTO;
-	if (g_imgerrori > m_errori) /// zeros in this block: first thing in the title (a long one is cut), red
+	if (i_errori > m_errori) /// zeros in this block: first thing in the title (a long one is cut), red
 	{
 		stato	= IMG_ERRORE;
-		m_errori= g_imgerrori;
+		m_errori= i_errori;
 		char quanti[128];
 		snprintf(quanti, sizeof(quanti), "*** %sREAD ERRORS: %s sectors ***  ", g_imgmorto ? "SOURCE GONE, " : "", migliaia(m_errori));
 		m_dash.titolo(quanti + m_titolo, 3);
@@ -210820,6 +212355,7 @@ class franzimgdash
 	void iniziasequenziale(const string &, const string &, int64_t, int64_t) {}
 	void prima() {}
 	void dopo(int64_t, int64_t) {}
+	void dopocon(int64_t, int64_t, double, int64_t) {}
 	void frammento(int64_t, bool) {}
 	bool mostra(int64_t, int64_t, int64_t) { return false; }
 	void fine() {}
@@ -214403,6 +215939,21 @@ int Jidac::paranoidseq()
 
 #ifndef ANCIENT
 
+#ifdef _WIN32
+/// the file of the image being restored (prepare_extract_to_disk): an archive can hold the images
+/// of more drives, and only that one goes to the destination (not every .fhd, or every file)
+static bool immaginescelta(const string &i_filename, const char *i_estensione)
+{
+	string		 nome = i_filename;
+	const size_t barra= nome.find_last_of("/\\");
+	if (barra != string::npos)
+		nome= nome.substr(barra + 1);
+	if (g_immaginescelta != "")
+		return nome == g_immaginescelta;
+	return nome.find(i_estensione) != string::npos;
+}
+#endif
+
 class extract_handler
 {
   public:
@@ -214848,7 +216399,7 @@ class partition_restore_handler : public extract_handler
 
 	bool should_process_file(const string &filename) override
 	{
-		return (filename.find(".fhd") != string::npos);
+		return immaginescelta(filename, ".fhd");
 	}
 
 	bool write_fragment(const char *data, size_t len) override
@@ -214940,8 +216491,7 @@ class rawfile_export_handler : public extract_handler
 
 	bool should_process_file(const string &filename) override
 	{
-		(void)filename;
-		return true;
+		return immaginescelta(filename, ".fhd");
 	}
 
 	bool write_fragment(const char *data, size_t len) override
@@ -214979,6 +216529,53 @@ class rawfile_export_handler : public extract_handler
 	}
 };
 
+/// a raw image (image_X.raw) to a .vhd that Windows mounts (franzimager::preparavhdraw)
+class vhdraw_export_handler : public extract_handler
+{
+  private:
+	franzimager &imager_ref;
+	const string vhdname;
+	uint64_t	 sourcesize;
+	bool		 disco;
+	bool		 error_occurred;
+
+  public:
+	vhdraw_export_handler(franzimager &img, const string &i_vhdname, uint64_t i_sourcesize, bool i_disco)
+		: imager_ref(img), vhdname(i_vhdname), sourcesize(i_sourcesize), disco(i_disco), error_occurred(false)
+	{
+	}
+	bool initialize() override
+	{
+		return imager_ref.preparavhdraw(vhdname.c_str(), sourcesize, disco);
+	}
+	bool should_process_file(const string &filename) override
+	{
+		return immaginescelta(filename, ".raw");
+	}
+	bool write_fragment(const char *data, size_t len) override
+	{
+		if (error_occurred)
+			return false;
+		if (!imager_ref.scrivivhdraw(data, len))
+		{
+			error_occurred= true;
+			return false;
+		}
+		return true;
+	}
+	bool finalize() override
+	{
+		if (!imager_ref.chiudivhdraw())
+			error_occurred= true;
+		return !error_occurred;
+	}
+	const char *mode_name() override
+	{
+		return "Raw to VHD export";
+	}
+};
+
+
 // ----------------------------------------------------------------------------
 class raw_restore_handler : public extract_handler
 {
@@ -215009,8 +216606,7 @@ class raw_restore_handler : public extract_handler
 
 	bool should_process_file(const string &filename) override
 	{
-		(void)filename;
-		return true;
+		return immaginescelta(filename, ".raw");
 	}
 
 	bool write_fragment(const char *data, size_t len) override
@@ -215693,7 +217289,10 @@ int Jidac::extractstdout(char i_dest_partition, const string &i_rawfilename)
 	{
 		if (flagverbose)
 			myprintf("10355: Raw file export mode to %s\n", i_rawfilename.c_str());
-		handler= new rawfile_export_handler(imager, imager_themetafile, i_rawfilename, flagsparse);
+		if (esportavhdraw)
+			handler= new vhdraw_export_handler(imager, i_rawfilename, (uint64_t)esportavhdrawsize, (lettera >= '0') && (lettera <= '9'));
+		else
+			handler= new rawfile_export_handler(imager, imager_themetafile, i_rawfilename, flagsparse);
 	}
 	else if (restore_to_partition)
 	{
@@ -217667,6 +219266,14 @@ int Jidac::testparametriadd()
 			return 2;
 		}
 		lettera= toupper(lettera);
+		/// -image alone: the volume says how (sceglimodoimage). A whole disk: raw
+		if ((lettera != 0) && (numerodrive == -1))
+		{
+			if (sceglimodoimage() != 0)
+				return 2;
+		}
+		else
+			imagevss= flagvss ? 2 : 0;
 	}
 #endif // corresponds to #ifdef (#ifdef _WIN32)
 
@@ -218373,6 +219980,86 @@ void Jidac::handlemultiparttrim()
 						}
 					}
 }
+#ifdef _WIN32
+/*
+	-image alone: the volume says how. NTFS: its used clusters, with a shadow copy (tried: on a
+	USB disk, or without space for it, the image goes on without, told); FAT12/16/32 and exFAT:
+	their used clusters, the volume locked (there is no VSS for them); anything else (ReFS, not
+	formatted, a file system Windows does not know): the whole partition, raw. -ntfs forces the
+	used clusters, -raw the whole partition, -vss a shadow copy that must be there, -novss none
+*/
+int Jidac::sceglimodoimage()
+{
+	imagevss	   = 0;
+	imageautomatica= false;
+	g_imgincoerente= "";
+	if (flagvss && flagnovss)
+	{
+		myprintf("73900! -vss and -novss together: which one?\n");
+		return 2;
+	}
+	if (flagntfs && flagraw)
+	{
+		myprintf("73901! -image: -ntfs (the used clusters) or -raw (the whole partition), not both\n");
+		return 2;
+	}
+	if (flagfrugal && flagnofrugal)
+	{
+		myprintf("73907! -frugal and -nofrugal together: which one?\n");
+		return 2;
+	}
+	char	   radice[4]		 = {lettera, ':', '\\', 0};
+	char	   nome[MAX_PATH + 1]= {0};
+	string	   fs				 = "";
+	const UINT vecchio			 = SetErrorMode(SEM_FAILCRITICALERRORS);
+	if (GetVolumeInformationA(radice, NULL, 0, NULL, NULL, NULL, nome, MAX_PATH + 1))
+		fs= nome;
+	SetErrorMode(vecchio);
+	const bool ntfs= (fs == "NTFS");
+	const bool fat = (fs == "FAT") || (fs == "FAT32") || (fs == "exFAT");
+	if ((!flagntfs) && (!flagraw))
+	{
+		imageautomatica= true;
+		flagntfs	   = ntfs || fat;
+	}
+	if (flagntfs)
+	{
+		if (ntfs)
+			imagevss= flagvss ? 2 : (flagnovss ? 0 : 1);
+		else if (flagvss)
+		{
+			color_yellow();
+			myprintf("73902$ -vss: no shadow copies on %s, the volume is locked instead\n", fs.c_str());
+			color_restore();
+		}
+	}
+	else
+		imagevss= flagvss ? 2 : (((fs == "ReFS") && (!flagnovss)) ? 1 : 0);
+
+	/// the archive on the volume of the image: never locked (the archive could not be written)
+	char	   pieno[MAX_PATH + 1]= {0};
+	const bool sulvolume		  = (GetFullPathNameA(archive.c_str(), MAX_PATH, pieno, NULL) > 1) && (pieno[1] == ':') &&
+						   (toupper((unsigned char)pieno[0]) == toupper((unsigned char)lettera));
+	if (sulvolume)
+	{
+		color_yellow();
+		myprintf("73903$ The archive is on %c:, the volume of the image: not locked, and the image grows while it is read\n", lettera);
+		color_restore();
+	}
+	imager.setnonbloccare(sulvolume);
+	rawimager.setnonbloccare(sulvolume);
+
+	const string mostra= (fs == "") ? "not formatted, or unknown to Windows" : fs;
+	color_cyan();
+	if (flagntfs)
+		myprintf("73904: Image of %c: (%s): the used clusters%s\n", lettera, mostra.c_str(), (imagevss > 0) ? ", with VSS" : "");
+	else
+		myprintf("73905: Image of %c: (%s): the whole partition (raw)%s\n", lettera, mostra.c_str(), (imagevss > 0) ? ", with VSS" : "");
+	color_restore();
+	return 0;
+}
+#endif
+
 int Jidac::gestisciflagimage()
 {
 #ifdef _WIN32
@@ -218426,6 +220113,7 @@ int Jidac::gestisciflagimage()
 		if (flagimage)
 		{
 			lettera= toupper(lettera);
+			const int bufferprima= g_ioBUFSIZE;
 
 			if (flagntfs)
 			{
@@ -218441,20 +220129,38 @@ int Jidac::gestisciflagimage()
 					myprintf("71417: LETTER |%s|\n", letterpath.c_str());
 				if (!preparavhd(lettera))
 				{
-					myprintf("78176: ERROR preparing NTFS (not administrator?)\n");
-					return 2;
+					if (!imageautomatica)
+					{
+						myprintf("78176: ERROR preparing the image of %c: (not administrator?)\n", lettera);
+						return 2;
+					}
+					/// what zpaqfranz chose and cannot do: the whole partition instead
+					color_yellow();
+					myprintf("78177$ The used clusters of %c: cannot be read: the whole partition (raw) instead\n", lettera);
+					color_restore();
+					flagntfs   = false;
+					g_ioBUFSIZE= bufferprima;
 				}
-				total_size= imager.getusedbytes();
+				else
+					total_size= imager.getusedbytes();
 			}
-			else
+			if (!flagntfs)
 			{
 				if (numerodrive!=-1)
 					lettera=numerodrive;
 				
-				if (!rawimager.apriraw(lettera,flagvss)) 
+				if (!rawimager.apriraw(lettera, imagevss > 0)) 
 				{
 					myprintf("04380: error: apriraw() %03d failed\n",(int)lettera);
 					return 2;
+				}
+				/// a partition that could change while read: said now, and again at the end
+				if ((numerodrive == -1) && (!rawimager.usavss()) && (!rawimager.bloccato()))
+				{
+					g_imgincoerente= string(1, lettera) + ": was read while in use (no VSS, not locked): what was written meanwhile can be inconsistent in the image";
+					color_yellow();
+					myprintf("73906$ %s\n", g_imgincoerente.c_str());
+					color_restore();
 				}
 				total_size= rawimager.getsize();
 			
@@ -218472,7 +220178,7 @@ int Jidac::gestisciflagimage()
 					myprintf("01989: Raw partition size %s (%s)\n", migliaia(total_size), tohuman(total_size));
 			}
 			else
-				myprintf("03994: NTFS used partition size %s (%s)\n", migliaia(total_size), tohuman(total_size));
+				myprintf("03994: %s used partition size %s (%s)\n", imager.nomefs(), migliaia(total_size), tohuman(total_size));
 				
 
 			if (!flagspace)
@@ -222183,6 +223889,14 @@ int Jidac::add()
 		imagebanner();
 		errors= 2;
 	}
+	/// an image of a volume in use (no VSS, not locked): said again at the end, exit code 1
+	if (flagimage && (g_imgincoerente != "") && (errors == 0))
+	{
+		color_yellow();
+		myprintf("69120$ %s\n", g_imgincoerente.c_str());
+		color_restore();
+		errors= 1;
+	}
 	/// errors is a count: as an exit code 256 errors would become 0 (all OK)
 	return (errors > 2) ? 2 : errors;
 }
@@ -222340,6 +224054,95 @@ ThreadReturn add2_readthread(void *i_arg)
 			lavoro->jidac->updatehash(&lavoro->p, lavoro->buf + fatto, (int)pezzo);
 			fatto+= pezzo;
 		}
+	}
+	return 0;
+}
+/*
+	65.7p: -turbo on the stream of an image. The batch is filled with the reads of the source,
+	one after the other exactly as the loop of add() takes them (the same pieces in the same
+	order: same data, same hash of the file), by this thread while the batch before is cut
+	and stored. Every read is noted: where its data are in the batch, the block of the source,
+	how long it took, the unreadable sectors so far. The map of the source (-dashboard) is
+	drawn by the main thread when those data go through the fragments
+*/
+struct s_add2imgread
+{
+	int64_t dove;	 // in the batch
+	int64_t bytes;
+	int64_t blocco;	 // of the source (the cell of the map)
+	double	secondi; // the read
+	int64_t errori;	 // g_imgerrori right after it
+};
+struct s_add2imgjob
+{
+	Jidac		   *jidac;
+	DTMap::iterator p;
+	char		   *buf;	 // the batch
+	char		   *tmp;	 // the buffer of the reads of add(): raw and dd read there, as always
+	int64_t			voglio;
+	bool			hash;
+	bool			sottile; // Windows: the used clusters (512 of bitmap + 2 MB a block), else the whole partition
+	int64_t		   *presi;	 // bytes of the whole stream read so far
+	int64_t			letti;	 // out
+	bool			eof;	 // out
+	int				fatale;	 // out: the reader gave an error code, not data (imagefatale)
+	double			secondi; // out: inside the reads
+	std::vector<s_add2imgread> letture; // out
+};
+ThreadReturn add2_imgthread(void *i_arg)
+{
+	s_add2imgjob *lavoro= (s_add2imgjob *)i_arg;
+	Jidac		 *jidac = lavoro->jidac;
+	lavoro->letti		= 0;
+	lavoro->eof			= false;
+	lavoro->fatale		= 0;
+	lavoro->secondi		= 0;
+	lavoro->letture.clear();
+	while (lavoro->letti + (int64_t)g_ioBUFSIZE <= lavoro->voglio)
+	{
+		char		*qui   = lavoro->buf + lavoro->letti;
+		int			 presi = 0;
+		int64_t		 blocco= (*lavoro->presi) / g_ioBUFSIZE;
+		const double prima = franzusb::adesso();
+#ifdef _WIN32
+		if (lavoro->sottile)
+		{
+			bool	finito= false;
+			int64_t fatti = 0;
+			presi		  = jidac->handle_vhd_read(qui, g_ioBUFSIZE, flagverbose, &finito, &fatti);
+			blocco		  = (int64_t)jidac->imager.ultimoblocco();
+		}
+		else
+		{
+			presi= jidac->rawimager.prendiraw(lavoro->tmp, g_ioBUFSIZE);
+			if (presi > 0)
+				memcpy(qui, lavoro->tmp, (size_t)presi);
+		}
+#else
+		presi= jidac->elaboradump(lavoro->tmp, g_ioBUFSIZE);
+		if (presi > 0)
+			memcpy(qui, lavoro->tmp, (size_t)presi);
+#endif
+		const double durata= franzusb::adesso() - prima;
+		if (presi < 0)
+			lavoro->fatale= presi;
+		if (presi <= 0)
+		{
+			lavoro->eof= true;
+			break;
+		}
+		lavoro->secondi+= durata;
+		s_add2imgread una;
+		una.dove   = lavoro->letti;
+		una.bytes  = presi;
+		una.blocco = blocco;
+		una.secondi= durata;
+		una.errori = g_imgerrori;
+		lavoro->letture.push_back(una);
+		if (lavoro->hash)
+			jidac->updatehash(&lavoro->p, qui, presi);
+		lavoro->letti+= presi;
+		*lavoro->presi+= presi;
 	}
 	return 0;
 }
@@ -223228,7 +225031,15 @@ int Jidac::add2()
 			(-t1, NAS, ESXi): there is nothing to gain. Both ways give the same
 			archive, so this choice can only change the speed
 		*/
-		const bool turbo= (fi < vf.size()) && (in != FPNULL) && (!flagmemfile) && (!flagimage) && (!flagstdin) && (!(flagdebug && flagzero)) && (turbothreads > 1) && (p->second.expectedsize >= (int64_t)ZPAQ_TURBOMIN);
+		/// 65.7p: the stream of an image too (not its small pieces in memory: header, footer, meta...).
+		/// It went through the loop below, one thread: the limit of every image of a fast drive
+		bool turboimg= (fi < vf.size()) && flagimage && (!flagstdin) && (!(flagdebug && flagzero)) && (turbothreads > 1) && ((int64_t)g_ioBUFSIZE <= TURBOCHUNK);
+#ifdef _WIN32
+		if (turboimg && (flagvhd || flagntfs) && (vf[fi]->second.pramfile != NULL))
+			if ((vf[fi]->first == imager_zeroed) || (vf[fi]->first == imager_excluded) || (vf[fi]->first == imager_header) || (vf[fi]->first == imager_footer) || (vf[fi]->first == imager_meta))
+				turboimg= false;
+#endif
+		const bool turbo= turboimg || ((fi < vf.size()) && (in != FPNULL) && (!flagmemfile) && (!flagimage) && (!flagstdin) && (!(flagdebug && flagzero)) && (turbothreads > 1) && (p->second.expectedsize >= (int64_t)ZPAQ_TURBOMIN));
 		if (turbo && turbobuf[0].empty())
 		{
 			turbobuf[0].resize((size_t)(TURBOROOM + TURBOCHUNK));
@@ -223475,9 +225286,79 @@ int Jidac::add2()
 				lettura[k].letti = 0;
 				lettura[k].eof	 = false;
 			}
-			ThreadID tidlettura;
-			bool	 leggendo= false;
-			add2_readthread(&lettura[0]); /// the first one: nothing to do meanwhile
+			/// the stream of an image: its own reader (the reads of the source, noted one by one)
+			s_add2imgjob imglettura[2];
+			int64_t		 imgpresi  = 0; // bytes of the stream read so far
+			double		 imgsecondi= 0; // inside the reads
+			int			 imgfatale = 0; // the reader gave an error code
+			size_t		 imgfatte  = 0; // reads of the batch being worked already on the map
+			for (int k= 0; k < 2; k++)
+			{
+				imglettura[k].jidac	 = this;
+				imglettura[k].p		 = p;
+				imglettura[k].buf	 = &turbobuf[k][0] + TURBOROOM;
+				imglettura[k].tmp	 = buf;
+				imglettura[k].voglio = TURBOCHUNK;
+				imglettura[k].hash	 = (g_franzotype > 0);
+				imglettura[k].sottile= false;
+#ifdef _WIN32
+				imglettura[k].sottile= (flagvhd || flagntfs);
+#endif
+				imglettura[k].presi	 = &imgpresi;
+				imglettura[k].letti	 = 0;
+				imglettura[k].eof	 = false;
+				imglettura[k].fatale = 0;
+				imglettura[k].secondi= 0;
+			}
+			if (turboimg)
+			{
+#ifdef _WIN32
+				if (flagvhd || flagntfs)
+					imgdash_ntfs(imgdash, imager, vf[fi]->first);
+				else
+					imgdash_sequenziale(imgdash, "raw", vf[fi]->first, total_size);
+#else
+				imgdash_sequenziale(imgdash, "DD", vf[fi]->first, total_size);
+#endif
+			}
+			/// the reads of the batch whose data begin before i_fino go on the map (and on the
+			/// progress line), as the loop below does right after each read
+			auto imgrileggi= [&](int64_t i_fino)
+			{
+				std::vector<s_add2imgread> &letture= imglettura[qui].letture;
+				while ((imgfatte < letture.size()) && (carry + letture[imgfatte].dove < i_fino))
+				{
+					const s_add2imgread &una= letture[imgfatte++];
+					imgdash.dopocon(una.blocco, una.bytes, una.secondi, una.errori);
+					imagereaded+= una.bytes;
+					img_avvisa(imgdash.live());
+#ifdef _WIN32
+					if (flagvhd || flagntfs)
+					{
+						if ((!imgdash.mostra(total_done, total_size, g_fwritten)) && (!flagnoeta))
+							print_eta_image("NTFS", 100.0f * total_done / (total_size + 1), total_done, total_size,
+											g_fwritten, startstream, &ultimotempo, &last_update_time);
+					}
+					else if ((!imgdash.mostra(imagereaded, total_size, g_scritti)) && (!flagnoeta))
+						print_eta_image("raw", 100.0f * imagereaded / (total_size + 1),
+										imagereaded, total_size, g_scritti, startstream,
+										&ultimotempo, &last_update_time);
+#else
+					if ((!imgdash.mostra(imagereaded, total_size, g_scritti)) && (!flagnoeta))
+						print_eta_image("DD", 100.0f * imagereaded / (total_size + 1),
+										imagereaded, total_size, g_scritti, startstream,
+										&ultimotempo, &last_update_time);
+#endif
+				}
+			};
+			const int64_t imginizio= mtime();
+			ThreadID	  tidlettura;
+			bool		  leggendo= false;
+			/// the first one: nothing to do meanwhile
+			if (turboimg)
+				add2_imgthread(&imglettura[0]);
+			else
+				add2_readthread(&lettura[0]);
 			while (!eof)
 			{
 				if (leggendo)
@@ -223488,17 +225369,25 @@ int Jidac::add2()
 #endif
 					leggendo= false;
 				}
-				const int64_t letti= lettura[qui].letti;
-				eof				   = lettura[qui].eof;
+				const int64_t letti= turboimg ? imglettura[qui].letti : lettura[qui].letti;
+				eof				   = turboimg ? imglettura[qui].eof : lettura[qui].eof;
+				imgfatte		   = 0;
+				if (turboimg && (imglettura[qui].fatale != 0))
+					imgfatale= imglettura[qui].fatale;
 				/// the next batch, meanwhile (with one thread, as on some NAS
 				/// and ESXi where threads may not work, right now instead)
 				if (!eof)
 				{
 					if (turbothreads > 1)
 					{
-						run(tidlettura, add2_readthread, &lettura[1 - qui]);
+						if (turboimg)
+							run(tidlettura, add2_imgthread, &imglettura[1 - qui]);
+						else
+							run(tidlettura, add2_readthread, &lettura[1 - qui]);
 						leggendo= true;
 					}
+					else if (turboimg)
+						add2_imgthread(&imglettura[1 - qui]);
 					else
 						add2_readthread(&lettura[1 - qui]);
 				}
@@ -223646,16 +225535,38 @@ int Jidac::add2()
 					s_add2frag &uno= turbofrags[k];
 					total_done+= uno.len;
 					const unsigned htptr= htinv.find(uno.sha1);
+					if (turboimg)
+					{
+						imgrileggi(uno.start + uno.len);
+						imgdash.frammento(uno.len, htptr == 0);
+					}
 					elabora(fj, uno.len, uno.hits, uno.o1, uno.sha1, htptr, (const char *)base + uno.start);
 					++fj;
+				}
+				if (turboimg)
+				{
+					imgrileggi(fine + 1); /// the reads whose data are all in the open fragment
+					imgsecondi+= imglettura[qui].secondi;
 				}
 				/// the open fragment goes just before the data of the next batch
 				carry= eof ? 0 : fine - e;
 				if (carry > 0)
 					memcpy(&turbobuf[1 - qui][0] + TURBOROOM - carry, base + e, (size_t)carry);
 				qui= 1 - qui;
-				if (!flagnoeta)
+				if ((!flagnoeta) && (!turboimg))
 					print_progress(total_size, total_done, g_scritti, ultimapercentuale);
+			}
+			if (turboimg)
+			{
+				/// the reader could not go on (not a bad sector: those are zeros): as the loop below
+				if (imgfatale != 0)
+					imagefatale(imgfatale);
+				if (flagverbose)
+				{
+					const double tutto= (mtime() - imginizio + 1) / 1000.0;
+					myprintf("65394: image stream: %s read, %.2f s inside the reads (%s/s), %.2f s in all (%s/s), -turbo %d threads\n",
+							 migliaia(imgpresi), imgsecondi, tohuman((int64_t)(imgpresi / (imgsecondi + 0.000001))), tutto, tohuman2((int64_t)(imgpresi / tutto)), turbothreads);
+				}
 			}
 		}
 		else
@@ -224873,6 +226784,14 @@ int Jidac::add2()
 		imagebanner();
 		errors= 2;
 	}
+	/// an image of a volume in use (no VSS, not locked): said again at the end, exit code 1
+	if (flagimage && (g_imgincoerente != "") && (errors == 0))
+	{
+		color_yellow();
+		myprintf("69120$ %s\n", g_imgincoerente.c_str());
+		color_restore();
+		errors= 1;
+	}
 	/// errors is a count: as an exit code 256 errors would become 0 (all OK)
 	return (errors > 2) ? 2 : errors;
 }
@@ -224900,16 +226819,42 @@ bool Jidac::preparavhd(char drive_letter)
 	}
 
 	// apri vhd
-	if (!imager.aprivhd(drive_letter, flagvss))
+	imager.setvssautomatico(imagevss == 1);
+	if (!imager.aprivhd(drive_letter, imagevss > 0))
 	{
 		myprintf("73531! cannnot open drive %c\n", drive_letter);
 		return false;
+	}
+	/// the volume of Windows without its shadow copy: said loud (it is always in use)
+	if (imager.vssmancata())
+	{
+		char windows[MAX_PATH + 1]= {0};
+		if ((GetWindowsDirectoryA(windows, MAX_PATH) > 0) && (toupper((unsigned char)windows[0]) == toupper((unsigned char)drive_letter)))
+		{
+			color_red();
+			myprintf("73532$ %c: is the volume of Windows, without VSS: the image is of a running system\n", drive_letter);
+			color_restore();
+		}
+	}
+	if (imager.bloccato())
+	{
+		color_cyan();
+		myprintf("73533: %c: locked for the image (nobody else can write on it)\n", drive_letter);
+		color_restore();
+	}
+	else if (!imager.usavss())
+	{
+		g_imgincoerente= string(1, drive_letter) + ": was read while in use (no VSS, not locked): what was written meanwhile can be inconsistent in the image";
+		color_yellow();
+		myprintf("73534$ %s\n", g_imgincoerente.c_str());
+		color_restore();
 	}
 
 	// show information
 	myprintf("\n");
 	myprintf("Partition  info:\n");
 	myprintf("  size           : %21s (%s)\n", migliaia(imager.getpartitionsize()), tohuman(imager.getpartitionsize()));
+	myprintf("  file system    : %21s\n", imager.nomefs());
 	if (flagverbose)
 	{
 		myprintf("  cluster size   : %21s\n", migliaia(imager.getclustersize()));
@@ -225282,9 +227227,14 @@ bool Jidac::extract_ntfs_meta(char source)
 	if (flagverbose)
 		myprintf("13767: Looking for exclusions %s\n",imager_excluded.c_str());
 	
-	int howmanyexcluded= extracttobuffer(imager_excluded, imager_excludedarray);
+	int howmanyexcluded= -1;
+	if (dt.find(imager_excluded) != dt.end()) /// optional: only a backup with -not has it
+		howmanyexcluded= extracttobuffer(imager_excluded, imager_excludedarray);
 	if (howmanyexcluded != 0)
-		myprintf("10432: No excluded founded\n");
+	{
+		if (flagverbose)
+			myprintf("10432: No excluded founded\n");
+	}
 	else
 	{
 		if (flagverbose)
@@ -225302,9 +227252,14 @@ bool Jidac::extract_ntfs_meta(char source)
 	if (flagverbose)
 		myprintf("13764: Looking for zeroed %s\n",imager_zeroed.c_str());
 	
-	int howmanyzeroed= extracttobuffer(imager_zeroed, imager_zeroedarray);
+	int howmanyzeroed= -1;
+	if (dt.find(imager_zeroed) != dt.end()) /// optional, as the list of the excluded
+		howmanyzeroed= extracttobuffer(imager_zeroed, imager_zeroedarray);
 	if (howmanyzeroed != 0)
-		myprintf("10433: No zeroed founded\n");
+	{
+		if (flagverbose)
+			myprintf("10433: No zeroed founded\n");
+	}
 	else
 	{	
 		if (flagverbose)
@@ -225343,6 +227298,7 @@ void Jidac::prepare_extract_to_disk(const string &image_filename)
 	tofiles.clear();
 	files.clear();
 	files.push_back(image_filename);
+	g_immaginescelta= image_filename; /// only this one goes to the destination
 
 	// do NOT invert those two lines! or an "all in" commit limit will be enforced
 	g_ramsize  = getramdisksize();
@@ -225366,6 +227322,425 @@ static void print_ready_to_restore(const char *type, char source,
 	myprintf("22329: Ready to restore source %s %c to %s %c\n",
 			 type, source, dest_type, dest);
 	color_restore();
+}
+
+/*
+	franzmonta: a .vhd .vhdx (or .iso) mounted READ-ONLY by the virtual disk service of Windows,
+	the one of Disk Management and Mount-DiskImage: no WinFsp. virtdisk.dll is loaded at run
+	time from System32 (no virtdisk.lib: the program starts even where it is missing). The
+	attach is NOT permanent: Windows detaches the disk by itself when its handle is closed, that
+	is when zpaqfranz ends, however it ends (Ctrl+C, the window closed, a crash)
+*/
+/// the types of virtdisk.h, here: not every compiler has that header. The parameters are
+/// zero-filled and bigger than the real ones: every field not set is 0, whatever the union
+struct franzmonta_tipo
+{
+	ULONG DeviceId;
+	GUID  VendorId;
+};
+struct franzmonta_parametri
+{
+	int	  Version;
+	ULONG resto[15];
+};
+typedef DWORD(WINAPI *franzmonta_open_t)(franzmonta_tipo *, PCWSTR, int, int, void *, HANDLE *);
+typedef DWORD(WINAPI *franzmonta_attach_t)(HANDLE, PSECURITY_DESCRIPTOR, int, ULONG, void *, LPOVERLAPPED);
+typedef DWORD(WINAPI *franzmonta_detach_t)(HANDLE, int, ULONG);
+typedef DWORD(WINAPI *franzmonta_path_t)(HANDLE, PULONG, PWSTR);
+
+/// a volume of the attached disk: its name (\\?\Volume{...}\) and its drive letters
+struct franzmonta_volume
+{
+	wstring guid;
+	string	lettere;
+};
+
+/// Ctrl+C while mounted: detach and end as usual (not killed: an elevated window would close
+/// at once, and nothing said). The window closed, logoff, shutdown: the process ends, and
+/// Windows detaches the disk by itself
+volatile LONG g_franzmonta_stop= 0;
+static BOOL WINAPI franzmonta_ctrl(DWORD i_evento)
+{
+	if ((i_evento == CTRL_C_EVENT) || (i_evento == CTRL_BREAK_EVENT))
+	{
+		InterlockedExchange(&g_franzmonta_stop, 1);
+		return TRUE;
+	}
+	return FALSE;
+}
+
+class franzmonta
+{
+  public:
+	franzmonta() : m_dll(NULL), m_handle(INVALID_HANDLE_VALUE), m_open(NULL), m_attach(NULL), m_detach(NULL), m_path(NULL)
+	{
+	}
+	~franzmonta()
+	{
+		smonta();
+		if (m_dll)
+			FreeLibrary(m_dll);
+	}
+	bool carica()
+	{
+		wchar_t sistema[MAX_PATH];
+		UINT	n= GetSystemDirectoryW(sistema, MAX_PATH);
+		if ((n == 0) || (n >= MAX_PATH))
+			return false;
+		const wstring dll= wstring(sistema) + L"\\virtdisk.dll"; /// from System32 only
+		m_dll			 = LoadLibraryW(dll.c_str());
+		if (!m_dll)
+			return false;
+		m_open	= (franzmonta_open_t)(void *)GetProcAddress(m_dll, "OpenVirtualDisk");
+		m_attach= (franzmonta_attach_t)(void *)GetProcAddress(m_dll, "AttachVirtualDisk");
+		m_detach= (franzmonta_detach_t)(void *)GetProcAddress(m_dll, "DetachVirtualDisk");
+		m_path	= (franzmonta_path_t)(void *)GetProcAddress(m_dll, "GetVirtualDiskPhysicalPath");
+		return m_open && m_attach && m_detach && m_path;
+	}
+	/// 1 .iso, 2 .vhd, 3 .vhdx. Returns 0, or the error of Windows
+	DWORD monta(const wstring &i_file, ULONG i_tipo)
+	{
+		franzmonta_tipo tipo;
+		memset(&tipo, 0, sizeof(tipo));
+		tipo.DeviceId= i_tipo;
+		/// VIRTUAL_STORAGE_TYPE_VENDOR_MICROSOFT {EC984AEC-A0F9-47E9-901F-71415A66345B}
+		static const GUID microsoft= {0xEC984AEC, 0xA0F9, 0x47E9, {0x90, 0x1F, 0x71, 0x41, 0x5A, 0x66, 0x34, 0x5B}};
+		tipo.VendorId			   = microsoft;
+		HANDLE h				   = INVALID_HANDLE_VALUE;
+		/// VIRTUAL_DISK_ACCESS_READ (attach read-only, detach, get info), OPEN_VIRTUAL_DISK_FLAG_NONE,
+		/// no parameters (version 1, the defaults): the same for .vhd .vhdx and .iso
+		DWORD e= m_open(&tipo, i_file.c_str(), 0x000d0000, 0, NULL, &h);
+		if (e != ERROR_SUCCESS)
+			return e;
+		franzmonta_parametri parametri;
+		memset(&parametri, 0, sizeof(parametri));
+		parametri.Version= 1;
+		/// ATTACH_VIRTUAL_DISK_FLAG_READ_ONLY, and not PERMANENT_LIFETIME
+		e= m_attach(h, NULL, 0x00000001, 0, &parametri, NULL);
+		if (e != ERROR_SUCCESS)
+		{
+			CloseHandle(h);
+			return e;
+		}
+		m_handle= h;
+		return ERROR_SUCCESS;
+	}
+	/// \\.\PhysicalDriveN (\\.\CdRomN for an .iso)
+	string disco()
+	{
+		if (m_handle == INVALID_HANDLE_VALUE)
+			return "";
+		wchar_t percorso[MAX_PATH];
+		ULONG	quanti= sizeof(percorso);
+		if (m_path(m_handle, &quanti, percorso) != ERROR_SUCCESS)
+			return "";
+		return wtou(percorso);
+	}
+	/// the volumes on the attached disk: the ones with its very device number
+	vector<franzmonta_volume> volumi()
+	{
+		vector<franzmonta_volume> risultato;
+		STORAGE_DEVICE_NUMBER	  mio;
+		const string			  fisico= disco();
+		if ((fisico == "") || (!numero(utow(fisico.c_str()), mio)))
+			return risultato;
+		wchar_t nome[MAX_PATH];
+		HANDLE	ricerca= FindFirstVolumeW(nome, MAX_PATH);
+		if (ricerca == INVALID_HANDLE_VALUE)
+			return risultato;
+		do
+		{
+			const wstring guid = nome;
+			wstring		  senza= guid; /// the volume as a device: without the last backslash
+			if ((senza.size() > 0) && (senza[senza.size() - 1] == L'\\'))
+				senza.erase(senza.size() - 1);
+			STORAGE_DEVICE_NUMBER suo;
+			if (numero(senza, suo) && (suo.DeviceType == mio.DeviceType) && (suo.DeviceNumber == mio.DeviceNumber))
+			{
+				franzmonta_volume v;
+				v.guid= guid;
+				wchar_t percorsi[2048];
+				DWORD	lunghezza= 0;
+				if (GetVolumePathNamesForVolumeNameW(guid.c_str(), percorsi, 2048, &lunghezza))
+					for (wchar_t *q= percorsi; *q; q+= wcslen(q) + 1)
+						if ((wcslen(q) == 3) && (q[1] == L':'))
+							v.lettere+= (char)toupper((int)q[0]);
+				risultato.push_back(v);
+			}
+		} while (FindNextVolumeW(ricerca, nome, MAX_PATH));
+		FindVolumeClose(ricerca);
+		return risultato;
+	}
+	bool smonta()
+	{
+		if (m_handle == INVALID_HANDLE_VALUE)
+			return true;
+		const DWORD e= m_detach(m_handle, 0, 0);
+		CloseHandle(m_handle); /// not permanent: closing it detaches anyway
+		m_handle= INVALID_HANDLE_VALUE;
+		return (e == ERROR_SUCCESS);
+	}
+
+  private:
+	static bool numero(const wstring &i_device, STORAGE_DEVICE_NUMBER &o_numero)
+	{
+		HANDLE h= CreateFileW(i_device.c_str(), 0, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
+		if (h == INVALID_HANDLE_VALUE)
+			return false;
+		DWORD	   letti= 0;
+		const BOOL ok	= DeviceIoControl(h, IOCTL_STORAGE_GET_DEVICE_NUMBER, NULL, 0, &o_numero, sizeof(o_numero), &letti, NULL);
+		CloseHandle(h);
+		return ok != 0;
+	}
+	HMODULE				m_dll;
+	HANDLE				m_handle;
+	franzmonta_open_t	m_open;
+	franzmonta_attach_t m_attach;
+	franzmonta_detach_t m_detach;
+	franzmonta_path_t	m_path;
+};
+
+/// mount x.vhd Y: the volume gets Y: (and loses the letters Windows gave it)
+static bool franzmonta_lettera(const franzmonta_volume &i_volume, char i_lettera)
+{
+	for (size_t i= 0; i < i_volume.lettere.size(); i++)
+	{
+		wchar_t vecchia[4]= {(wchar_t)i_volume.lettere[i], L':', L'\\', 0};
+		DeleteVolumeMountPointW(vecchia);
+	}
+	wchar_t nuova[4]= {(wchar_t)i_lettera, L':', L'\\', 0};
+	return SetVolumeMountPointW(nuova, i_volume.guid.c_str()) != 0;
+}
+
+/// not an administrator: the very same command again, elevated (UAC), in a window of its own
+/// that waits for a key at the end (-pause), in this same folder. This one waits for it, and
+/// gives its exit code
+static int franzmonta_eleva()
+{
+	/// already the relaunch, and still not an administrator: UAC off, or no desktop to ask on (ssh,
+	/// a service), and "runas" started it as it was. Relaunching again would never end
+	if (flagelevated)
+	{
+		myprintf("77122! Still not an administrator after asking for it (UAC off, or no desktop): the disk cannot be attached\n");
+		return 2;
+	}
+	color_cyan();
+	myprintf("77115: Administrator rights required to attach a virtual disk => a new elevated window\n");
+	color_restore();
+	static wchar_t programma[32768];
+	const DWORD	   n= GetModuleFileNameW(NULL, programma, 32768);
+	if ((n == 0) || (n >= 32768))
+	{
+		myprintf("77116! Cannot get the name of this program\n");
+		return 2;
+	}
+	/// the arguments of this very command line, the program removed
+	const wstring riga= GetCommandLineW();
+	size_t		  i	  = 0;
+	if ((riga.size() > 0) && (riga[0] == L'"'))
+	{
+		i= riga.find(L'"', 1);
+		i= (i == wstring::npos) ? riga.size() : i + 1;
+	}
+	else
+		while ((i < riga.size()) && (riga[i] != L' ') && (riga[i] != L'\t'))
+			i++;
+	while ((i < riga.size()) && ((riga[i] == L' ') || (riga[i] == L'\t')))
+		i++;
+	wstring argomenti= riga.substr(i) + L" -elevated";
+	if (!flagpause)
+		argomenti+= L" -pause";
+	static wchar_t cartella[32768];
+	if (GetCurrentDirectoryW(32768, cartella) == 0)
+		cartella[0]= 0;
+	SHELLEXECUTEINFOW esegui;
+	memset(&esegui, 0, sizeof(esegui));
+	esegui.cbSize		= sizeof(esegui);
+	esegui.fMask		= SEE_MASK_NOCLOSEPROCESS;
+	esegui.lpVerb		= L"runas";
+	esegui.lpFile		= programma;
+	esegui.lpParameters = argomenti.c_str();
+	esegui.lpDirectory	= cartella[0] ? cartella : NULL;
+	esegui.nShow		= SW_SHOWNORMAL;
+	if (!ShellExecuteExW(&esegui))
+	{
+		const DWORD e= GetLastError();
+		if (e == ERROR_CANCELLED)
+			myprintf("77117! Elevation refused: the disk is not attached\n");
+		else
+			myprintf("77118! Cannot start the elevated window: %s\n", decodewinerror(e, "", false).c_str());
+		return 2;
+	}
+	if (esegui.hProcess == NULL)
+		return 0;
+	myprintf("77119: The disk is in the new window: a key (or Ctrl+C) there unmounts it\n");
+	WaitForSingleObject(esegui.hProcess, INFINITE);
+	DWORD codice= 2;
+	if (!GetExitCodeProcess(esegui.hProcess, &codice))
+		codice= 2;
+	CloseHandle(esegui.hProcess);
+	return (codice > 2) ? 2 : (int)codice;
+}
+
+/// mount x.vhd [Y:] [-test]: attached READ-ONLY by Windows, until a key or Ctrl+C
+int Jidac::montadisco()
+{
+	const string file= files[0];
+	if (!fileexists(file))
+	{
+		myprintf("77101! %Z does not exist\n", file.c_str());
+		return 2;
+	}
+	char richiesta= 0;
+	if (files.size() >= 2)
+	{
+		const string l= files[1];
+		if ((l.size() >= 1) && (l.size() <= 3) && isalpha((unsigned char)l[0]) && ((l.size() == 1) || (l[1] == ':')))
+			richiesta= (char)toupper((unsigned char)l[0]);
+		else
+		{
+			myprintf("77102! The mountpoint of a virtual disk is a drive letter (X:), not %Z\n", l.c_str());
+			return 2;
+		}
+		if (GetLogicalDrives() & (1u << (richiesta - 'A')))
+		{
+			myprintf("77103! %c: is already in use\n", richiesta);
+			return 2;
+		}
+	}
+	if (!isadmin())
+		return franzmonta_eleva();
+
+	franzmonta disco;
+	if (!disco.carica())
+	{
+		myprintf("77104! virtdisk.dll not found (Windows 7 or later is needed)\n");
+		return 2;
+	}
+	string estensione= prendiestensione(file);
+	for (size_t i= 0; i < estensione.size(); i++)
+		estensione[i]= (char)tolower((unsigned char)estensione[i]);
+	ULONG tipo= 2; /// VIRTUAL_STORAGE_TYPE_DEVICE_VHD
+	if ((estensione == "vhdx") || (estensione == "avhdx"))
+		tipo= 3;
+	else if (estensione == "iso")
+		tipo= 1;
+	static wchar_t pieno[32768]; /// Windows wants the full path
+	if (GetFullPathNameW(utow(file.c_str()).c_str(), 32768, pieno, NULL) == 0)
+	{
+		myprintf("77120! Cannot get the full path of %Z\n", file.c_str());
+		return 2;
+	}
+	const DWORD e= disco.monta(pieno, tipo);
+	if (e != ERROR_SUCCESS)
+	{
+		myprintf("77105! Windows cannot attach %Z: %s\n", file.c_str(), decodewinerror(e, file.c_str(), false).c_str());
+		return 2;
+	}
+	myprintf("77106: %Z attached READ-ONLY as %s\n", file.c_str(), disco.disco().c_str());
+
+	/// Windows gives the letters in a moment: up to 10 seconds
+	vector<franzmonta_volume> volumi;
+	for (int giro= 0; giro < 40; giro++)
+	{
+		volumi			  = disco.volumi();
+		bool conletterale= false;
+		for (size_t i= 0; i < volumi.size(); i++)
+			if (volumi[i].lettere != "")
+				conletterale= true;
+		if (conletterale || ((volumi.size() > 0) && (giro >= 8)))
+			break;
+		Sleep(250);
+	}
+	if ((richiesta != 0) && (volumi.size() > 0))
+	{
+		if (franzmonta_lettera(volumi[0], richiesta))
+			volumi= disco.volumi();
+		else
+			myprintf("77107$ Cannot give %c: to the volume (error %lu)\n", richiesta, (unsigned long)GetLastError());
+	}
+	if (volumi.size() == 0)
+		myprintf("77110$ No volume on the disk (not formatted, or a file system Windows does not know)\n");
+	char prima= 0;
+	for (size_t i= 0; i < volumi.size(); i++)
+	{
+		if (volumi[i].lettere == "")
+		{
+			myprintf("77109: a volume without a drive letter: %s\n", wtou(volumi[i].guid.c_str()).c_str());
+			continue;
+		}
+		for (size_t k= 0; k < volumi[i].lettere.size(); k++)
+		{
+			const char	  l		  = volumi[i].lettere[k];
+			const wstring radice = wstring(1, (wchar_t)l) + L":\\";
+			wchar_t		  etichetta[MAX_PATH + 1] = {0};
+			wchar_t		  filesystem[MAX_PATH + 1]= {0};
+			GetVolumeInformationW(radice.c_str(), etichetta, MAX_PATH + 1, NULL, NULL, NULL, filesystem, MAX_PATH + 1);
+			ULARGE_INTEGER libero, totale;
+			libero.QuadPart= 0;
+			totale.QuadPart= 0;
+			GetDiskFreeSpaceExW(radice.c_str(), NULL, &totale, &libero);
+			myprintf("77108: %c: %s %s (%s free) %s\n", l, wtou(filesystem).c_str(), tohuman((int64_t)totale.QuadPart), tohuman2((int64_t)libero.QuadPart), wtou(etichetta).c_str());
+			if (prima == 0)
+				prima= l;
+		}
+	}
+	int risultato= 0;
+	if (flagtest)
+	{
+		/// -test: every volume with a letter can be read (its root), then detach
+		for (size_t i= 0; i < volumi.size(); i++)
+			for (size_t k= 0; k < volumi[i].lettere.size(); k++)
+			{
+				const wstring	 cerca= wstring(1, (wchar_t)volumi[i].lettere[k]) + L":\\*";
+				WIN32_FIND_DATAW dati;
+				HANDLE			 h= FindFirstFileW(cerca.c_str(), &dati);
+				int64_t			 n= 0;
+				if (h != INVALID_HANDLE_VALUE)
+				{
+					do
+						n++;
+					while (FindNextFileW(h, &dati));
+					FindClose(h);
+					myprintf("77111: %c:\\ %s entries\n", volumi[i].lettere[k], migliaia(n));
+				}
+				else
+				{
+					myprintf("77112! %c:\\ cannot be read\n", volumi[i].lettere[k]);
+					risultato= 2;
+				}
+			}
+		if (prima == 0)
+			risultato= 2;
+	}
+	else
+	{
+		if (prima != 0)
+		{
+			const wstring radice= wstring(1, (wchar_t)prima) + L":\\";
+			ShellExecuteW(NULL, L"open", radice.c_str(), NULL, NULL, SW_SHOWNORMAL);
+		}
+		InterlockedExchange(&g_franzmonta_stop, 0);
+		SetConsoleCtrlHandler(franzmonta_ctrl, TRUE);
+		color_green();
+		myprintf("77113: Mounted read-only: a key (or Control-C) unmounts\n");
+		color_restore();
+		while (g_franzmonta_stop == 0)
+		{
+			if (iskeypressed(0))
+				break;
+			Sleep(200);
+		}
+		SetConsoleCtrlHandler(franzmonta_ctrl, FALSE);
+	}
+	if (disco.smonta())
+		myprintf("77114: %Z detached\n", file.c_str());
+	else
+	{
+		myprintf("77121! Detach of %Z failed: it goes when this program ends\n", file.c_str());
+		risultato= 2;
+	}
+	return risultato;
 }
 
 int Jidac::get_images_filenames(vector<char> &i_avail_fhd, vector<char> &i_avail_raw)
@@ -225466,6 +227841,9 @@ int Jidac::restore_raw_to_disk(char i_source, char i_destination)
 	string raw_image= "image_" + string(1, i_source) + ".raw";
 	prepare_extract_to_disk(raw_image);
 	flagraw= true;
+	/// extractstdout writes a raw image on "lettera": the destination. It was the source (the
+	/// letter asked to restore): -to was ignored, and the source itself overwritten
+	lettera= i_destination;
 
 	return extractstdout(i_destination, "");
 }
@@ -225519,9 +227897,126 @@ int Jidac::restore_ntfs_to_vhd(char i_source, string i_destfile)
 	if (!validate_source_dest(i_source, i_destfile, "restore_ntfs_to_vhd"))
 		return 2;
 
+	vector<char> avail_fhd, avail_raw;
+	char		 letter= find_and_validate_source_letter(i_source, ImageType::NTFS, avail_fhd, avail_raw);
+	if (letter == 0)
+		return 2;
+
+	/// what a .vhd cannot be: sectors of 512 bytes only, 2040 GB at most
+	if (!extract_ntfs_meta(i_source))
+		return 2;
+	if (!imager.caricametamemory(imager_themetafile))
+	{
+		myprintf("62301! Cannot read the metadata of the image of %c:\n", i_source);
+		return 2;
+	}
+	if (imager.getbytespersector() != FRANZIMAGER_SECTOR_SIZE)
+	{
+		myprintf("62302! The %s of %c: has sectors of %u bytes: a .vhd (sectors of 512) could not mount it (restore to a disk, or to a raw file)\n", imager.nomefs(), i_source, imager.getbytespersector());
+		return 2;
+	}
+	if (imager.gettotalbytes() > FRANZIMAGER_VHD_MAX)
+	{
+		myprintf("62303! %s bytes: more than a .vhd can hold (2040 GB) (restore to a disk, or -raw to a file)\n", migliaia(imager.gettotalbytes()));
+		return 2;
+	}
+
+	/// -to x.vhd: that very file. Else a folder, with image_X.vhd inside
+	const string base	  = "image_" + string(1, i_source);
+	string		 dest	  = i_destfile;
+	string		 minuscolo= dest;
+	for (size_t i= 0; i < minuscolo.size(); i++)
+		minuscolo[i]= (char)tolower((unsigned char)minuscolo[i]);
+	if (!((minuscolo.size() > 4) && (minuscolo.substr(minuscolo.size() - 4) == ".vhd")))
+		dest= includetrailingbackslash(dest) + base + ".vhd";
+	if (fileexists(dest))
+	{
+		if (!flagforce)
+		{
+			myprintf("62304! %Z already exists: -force to overwrite\n", dest.c_str());
+			return 2;
+		}
+		if (!delete_file(dest.c_str()))
+		{
+			myprintf("62305! Cannot delete %Z\n", dest.c_str());
+			return 2;
+		}
+	}
+	print_ready_to_restore("ntfs", i_source, "vhd", dest.c_str());
+
+	/// only the three pieces of this letter (an archive can hold images of more drives): extract()
+	/// joins them into the .vhd. flagvhd set here: -force would turn the automatic join off
+	jidacreset();
 	files.clear();
+	tofiles.clear();
+	files.push_back(base + ".fhd");
+	files.push_back(base + ".header");
+	files.push_back(base + ".footer");
+	tofiles.push_back(dest);
+	flagvhd= true;
 	return extract();
 }
+
+/// a raw image to a .vhd that Windows mounts (-to x.vhd, or a folder: image_X.vhd in it). A
+/// partition gets an MBR of ours, a whole disk (image_0.raw ...) is the disk
+int Jidac::restore_raw_to_vhd(char i_source, string i_destfile)
+{
+	if (!validate_source_dest(i_source, i_destfile, "restore_raw_to_vhd"))
+		return 2;
+
+	vector<char> avail_fhd, avail_raw;
+	char		 letter= find_and_validate_source_letter(i_source, ImageType::RAW, avail_fhd, avail_raw);
+	if (letter == 0)
+		return 2;
+
+	const string base = "image_" + string(1, i_source);
+	int64_t		 quanto= -1;
+	for (DTMap::iterator p= dt.begin(); p != dt.end(); ++p)
+	{
+		if (p->second.date == 0)
+			continue;
+		const size_t barra= p->first.find_last_of("/\\");
+		const string nome = (barra == string::npos) ? p->first : p->first.substr(barra + 1);
+		if (nome == base + ".raw")
+			quanto= p->second.size;
+	}
+	if (quanto <= 0)
+	{
+		myprintf("62306! Cannot find the size of %s.raw\n", base.c_str());
+		return 2;
+	}
+
+	string dest		= i_destfile;
+	string minuscolo= dest;
+	for (size_t i= 0; i < minuscolo.size(); i++)
+		minuscolo[i]= (char)tolower((unsigned char)minuscolo[i]);
+	if (!((minuscolo.size() > 4) && (minuscolo.substr(minuscolo.size() - 4) == ".vhd")))
+		dest= includetrailingbackslash(dest) + base + ".vhd";
+	if (fileexists(dest))
+	{
+		if (!flagforce)
+		{
+			myprintf("62304! %Z already exists: -force to overwrite\n", dest.c_str());
+			return 2;
+		}
+		if (!delete_file(dest.c_str()))
+		{
+			myprintf("62305! Cannot delete %Z\n", dest.c_str());
+			return 2;
+		}
+	}
+	makepath(dest);
+	print_ready_to_restore("raw", i_source, "vhd", dest.c_str());
+
+	prepare_extract_to_disk(base + ".raw");
+	lettera			 = i_source;
+	esportavhdraw	 = true;
+	esportavhdrawsize= quanto;
+	const int risultato= extractstdout(0, dest);
+	esportavhdraw	 = false;
+	return risultato;
+}
+
 
 // Partition check result
 enum PartitionContentStatus
@@ -225761,6 +228256,145 @@ bool Jidac::image_risky_continue(char i_source, char i_destination)
 	return false; // Mai raggiunto, ma evita warning
 }
 
+/*
+	image without -ntfs or -raw: the archive says what the image of that drive is (its used
+	clusters, or the whole partition: the latest one if both), the -to what to do with it
+	  -to x.vhd          a .vhd that Windows mounts (Disk Management, Mount-DiskImage, mount)
+	  -to a folder       image_X.vhd in it (a name without extension is a folder)
+	  -to x.raw (x.img)  the partition, byte by byte
+	  -to G: -image      written on the partition G: (-image is the consent: G: is overwritten)
+	A digit (0: ...) is the image of a whole disk: to a .vhd, or to a raw file
+*/
+int Jidac::restoreimageauto()
+{
+	const string sorgente= files[0];
+	char		 s		 = getwindowsdriveletter(sorgente);
+	if ((s == 0) && (sorgente.size() >= 1) && (sorgente.size() <= 3) && isdigit((unsigned char)sorgente[0]) &&
+		((sorgente.size() == 1) || (sorgente[1] == ':')))
+		s= sorgente[0];
+	if (s == 0)
+	{
+		myprintf("09410: you need a drive letter (or the number of a disk)!\n");
+		return 2;
+	}
+	vector<char> fhd, raw;
+	if (get_images_filenames(fhd, raw) != 0)
+		return 2;
+	bool	   thin	 = (find_letter_in_vector(s, fhd) != 0);
+	const bool grezza= (find_letter_in_vector(s, raw) != 0);
+	if ((!thin) && (!grezza))
+	{
+		string ci= "";
+		for (size_t i= 0; i < fhd.size(); i++)
+			ci+= string(ci == "" ? "" : " ") + fhd[i] + " (used clusters)";
+		for (size_t i= 0; i < raw.size(); i++)
+			ci+= string(ci == "" ? "" : " ") + raw[i] + " (raw)";
+		myprintf("22331! No image of %c in the archive (there are: %s)\n", s, ci.c_str());
+		return 2;
+	}
+	if (thin && grezza)
+	{
+		/// both: the latest one (-until for the other)
+		int64_t datathin  = 0;
+		int64_t datagrezza= 0;
+		for (DTMap::iterator p= dt.begin(); p != dt.end(); ++p)
+		{
+			if (p->second.date == 0)
+				continue;
+			const size_t barra= p->first.find_last_of("/\\");
+			const string nome = (barra == string::npos) ? p->first : p->first.substr(barra + 1);
+			if (nome == "image_" + string(1, s) + ".fhd")
+				datathin= p->second.date;
+			if (nome == "image_" + string(1, s) + ".raw")
+				datagrezza= p->second.date;
+		}
+		thin= (datathin >= datagrezza);
+		color_cyan();
+		myprintf("22332: %c has an image of its used clusters and a raw one: the latest (%s)\n", s, thin ? "used clusters" : "raw");
+		color_restore();
+	}
+	const string dest	 = tofiles[0];
+	const char	 lettdest= getwindowsdriveletter(dest);
+	/// -raw: the whole partition is written, zeros where the image of the used clusters has
+	/// nothing (without it what was on the destination stays there). A raw image is already
+	/// everything; a .vhd is thin by itself and a raw file gets its zeros anyway: nothing to do.
+	/// flagraw off: for the engine it means "this is a raw image"
+	const bool tuttizeri= flagraw;
+	flagraw				= false;
+	/// the restore functions read the archive again
+	jidacreset();
+	lettera= s;
+
+	if (lettdest != 0)
+	{
+		if (!isalpha((unsigned char)s))
+		{
+			myprintf("09411! %c is the image of a whole disk: to a .vhd, or to a raw file\n", s);
+			return 2;
+		}
+		if (!flagimage)
+		{
+			myprintf("09412! -to %c: writes on the partition %c: (overwritten): -image to confirm\n", lettdest, lettdest);
+			return 2;
+		}
+		franzdriveinfo mydrive;
+		const int	   partizione= cercapartizione(lettdest, mydrive);
+		if (partizione < 0)
+		{
+			color_red();
+			myprintf("22321: Cannot find the destination drive for letter %c (bypass with -force)\n", lettdest);
+			color_restore();
+			if (!flagforce)
+				return 2;
+		}
+		else
+		{
+			color_cyan();
+			myprintf("32442: Selected destination\n");
+			color_restore();
+			printdriveinfo(partizione, mydrive);
+		}
+		if (!image_risky_continue(s, lettdest))
+			return 2;
+		if (thin && tuttizeri)
+		{
+			color_cyan();
+			myprintf("22333: -raw: the unused part of the partition is written too, as zeros\n");
+			color_restore();
+		}
+		imager.setriempizeri(thin && tuttizeri);
+		return thin ? restore_ntfs_to_disk(s, lettdest) : restore_raw_to_disk(s, lettdest);
+	}
+	/// a .vhd, a name without extension or an existing folder: a .vhd. Else a raw file
+	string		 nome = dest;
+	const size_t barra= nome.find_last_of("/\\");
+	if (barra != string::npos)
+		nome= nome.substr(barra + 1);
+	const size_t punto	   = nome.find_last_of('.');
+	string		 estensione= (punto == string::npos) ? "" : nome.substr(punto + 1);
+	for (size_t i= 0; i < estensione.size(); i++)
+		estensione[i]= (char)tolower((unsigned char)estensione[i]);
+	if ((estensione == "vhd") || (estensione == "") || direxists(dest))
+		return thin ? restore_ntfs_to_vhd(s, dest) : restore_raw_to_vhd(s, dest);
+	/// a raw file already there: as for a .vhd, -force to overwrite (the used clusters wrote over
+	/// it without asking, the raw image left it as it was, in silence)
+	if (fileexists(dest))
+	{
+		if (!flagforce)
+		{
+			myprintf("62304! %Z already exists: -force to overwrite\n", dest.c_str());
+			return 2;
+		}
+		if (!delete_file(dest.c_str()))
+		{
+			myprintf("62305! Cannot delete %Z\n", dest.c_str());
+			return 2;
+		}
+	}
+	return thin ? restore_ntfs_to_rawfile(s, dest) : restore_raw_to_rawfile(s, dest);
+}
+
+
 int Jidac::restoreimage()
 {
 	if (!iszpaq(archive) && (!isfranzen(archive)))
@@ -225781,18 +228415,11 @@ int Jidac::restoreimage()
 		return 2;
 	}
 
-	if (flagimage)
-		if((flagntfs+flagraw)==0)
-		{
-			myprintf("56433: with -image you must use -ntfs or -raw\n");
-			return 1;
-		}
-
-	if ((flagimage+flagntfs+flagraw)==0)
-	{
-		myprintf("15643: Nothing to do: no -image, -ntfs or -raw\n");
-		return 1;
-	}
+	/// no -ntfs: the archive says what the image is, the -to what to do with it. 65.7s: -raw does
+	/// not choose a branch any more (it was: the raw image, to a raw file whatever its name). It
+	/// asks for the unused part too, as zeros, when the used clusters go on a partition
+	if (!flagntfs)
+		return restoreimageauto();
 		
 	lettera= getwindowsdriveletter(files[0]);
 
@@ -225898,7 +228525,7 @@ int Jidac::restoreimage()
 		if (getwindowsdriveletter(tofiles[0]) != 0)
 		{
 			myprintf("32334: -ntfs 'extract ntfs image to .VHD' "
-					 "-to must be a folder\n");
+					 "-to must be a .vhd file, or a folder\n");
 			return 2;
 		}
 		return restore_ntfs_to_vhd(lettera, tofiles[0]);

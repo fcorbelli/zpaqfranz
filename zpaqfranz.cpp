@@ -64,7 +64,7 @@ OTHER DEALINGS IN THE SOFTWARE.
 /// Comment out the next line to build without -m8 (-m8 is then -m5 again)
 #define ZPAQZSTD
 
-#define ZPAQ_VERSION "65.8b"
+#define ZPAQ_VERSION "65.9z"
 #define ZPAQ_DATE "(2026-10-04)"
 
 
@@ -36695,7 +36695,11 @@ static std::string random_hex(mbedtls_ctr_drbg_context *drbg, size_t nbytes)
     unsigned char b[32];
     if (nbytes > sizeof(b)) nbytes = sizeof(b);
     if (!drbg || mbedtls_ctr_drbg_random(drbg, b, nbytes) != 0) {
+#ifdef __OpenBSD__
+        arc4random_buf(b, nbytes); /* 65.9r: rand() there is a warning of the linker ("may return deterministic values") */
+#else
         for (size_t i = 0; i < nbytes; i++) b[i] = (unsigned char) (rand() ^ (time(NULL) >> (i % 8)));
+#endif
     }
     std::string s;
     for (size_t i = 0; i < nbytes; i++) s += strf("%02x", b[i]);
@@ -87884,6 +87888,10 @@ uint64_t g_chunk_size	= 0;
 int64_t	 g_start		= 0;
 int64_t	 g_dimensione	= 0;
 int64_t	 g_scritti		= 0;
+/// 65.9l: bytes of the archive put in the output by add: what the write really took (a destination
+/// full takes nothing more); with no archive (a "" ...) what it would have taken. The "written" of
+/// the progress lines of a (files and images)
+int64_t	 g_inoutput		= 0;
 int64_t	 g_maxposition	= 0;
 int64_t	 g_zerotime		= 0;
 int64_t	 g_bytescanned	= 0;
@@ -88107,7 +88115,7 @@ bool flagverbose;
 bool flagfranzen;
 bool flagverify;
 bool flagvss;
-bool flagnovss; /// 65.7m: -image with no VSS, not even tried (-image tries it by itself on NTFS)
+bool flagnovss; /// 65.7m: -image with no VSS, not even tried (-image tries it by itself on NTFS; 65.9j: of C: only)
 bool flagzero;
 bool flaghome;
 bool flagfixcase;
@@ -88138,6 +88146,7 @@ std::string g_imgincoerente;
 /// the file of the image being restored (prepare_extract_to_disk): an archive can hold the
 /// images of more drives, only that one goes to the destination
 std::string g_immaginescelta;
+#ifndef ESX /// 65.9z: no images there, an unused function (-Wall)
 static void img_errore(int64_t i_dove, int64_t i_bytes, uint32_t i_settore)
 {
 	if (i_settore == 0)
@@ -88160,6 +88169,7 @@ static void img_errore(int64_t i_dove, int64_t i_bytes, uint32_t i_settore)
 	}
 	g_imgfine= i_dove + i_bytes;
 }
+#endif
 /*
 	-rescue: the image of a DYING disk. A read that fails costs seconds (the disk insists by
 	itself, 7..60 s on a bad sector) and the disk may not have many reads left: what counts is
@@ -88474,6 +88484,13 @@ bool flagfindzpaq;
 bool flagfixreserved;
 bool flagnosanitize;
 bool flagntfs;
+bool flagnontfs; /// 65.9l: -ntfs starts by itself (whole NTFS partitions, an administrator): -nontfs = never
+bool flagac= false; /// 65.9n: the ac command: a c: -image and the rest of the disk of Windows (see ac_prepara)
+bool flagxc= false; /// 65.9p: the xc command: the restore of what ac saved (see Jidac::xc)
+bool flagacfake= false; /// 65.9p (hidden, for the tests of xc): ac takes the drive given as the one of Windows
+bool flaggui= false; /// 65.9v: ac, xc: what to take (and where to restore) is chosen on a screen
+class franzntfs2;
+struct franzntfs2_conti;
 bool flagvhd;
 bool flaglongpath;
 bool flagopen;
@@ -125982,28 +125999,6 @@ void waitexecute(string i_filename, string i_parameters, int i_show)
 	WaitForSingleObject(ShExecInfo.hProcess, INFINITE);
 	CloseHandle(ShExecInfo.hProcess);
 }
-/// 65.8z11: as waitexecute, and the exit code of what was run: -1 when it did not start, or
-/// its exit code cannot be read
-int waitexecutecodice(string i_filename, string i_parameters, int i_show)
-{
-	SHELLEXECUTEINFOA ShExecInfo= SHELLEXECUTEINFOA();
-	ShExecInfo.cbSize			= sizeof(SHELLEXECUTEINFOA);
-	ShExecInfo.fMask			= SEE_MASK_NOCLOSEPROCESS;
-	ShExecInfo.hwnd				= NULL;
-	ShExecInfo.lpVerb			= NULL;
-	ShExecInfo.lpFile			= i_filename.c_str();
-	ShExecInfo.lpParameters		= i_parameters.c_str();
-	ShExecInfo.lpDirectory		= NULL;
-	ShExecInfo.nShow			= i_show;
-	ShExecInfo.hInstApp			= NULL;
-	if ((!ShellExecuteExA(&ShExecInfo)) || (ShExecInfo.hProcess == NULL))
-		return -1;
-	WaitForSingleObject(ShExecInfo.hProcess, INFINITE);
-	DWORD codice= 0;
-	const bool letto= GetExitCodeProcess(ShExecInfo.hProcess, &codice);
-	CloseHandle(ShExecInfo.hProcess);
-	return letto ? (int)codice : -1;
-}
 
 void waitexecutepadre(const std::string &i_filename, const std::string &i_parameters)
 {
@@ -127477,6 +127472,25 @@ string mygetpasswordblind(const string& i_default)
 	return risultato;
 }
 vector<std::pair<int, string> > g_vinforecord; /// read_archive: the VFILE-info records found (version, what follows the tag)
+/// 65.9t: read_archive, for i -verbose: the metafiles of ac found (disk_C.txt, see ac_metafile): the version each
+/// one is in, and its fragments (the info command does not load the files of the archive)
+struct franzacmeta
+{
+	int				 versione;
+	string			 nome;
+	vector<unsigned> ptr;
+};
+vector<franzacmeta> g_acmeta;
+bool				g_acmetatutti= false; /// i -verbose -all: every backup of ac, not the last one only
+/// 65.9y: the archives chosen on the screen (franzscegli) when they are more than one: a run each (multisomething)
+std::vector<std::string> g_scegli_archivi;
+/// disk_X.txt, with or without a path before it: the name ac gives to its metafile
+static bool acmeta_nome(const string &i_nome)
+{
+	const size_t barra= i_nome.find_last_of("/\\");
+	const string nome = (barra == string::npos) ? i_nome : i_nome.substr(barra + 1);
+	return (nome.size() == 10) && (nome.substr(0, 5) == "disk_") && (nome.substr(6) == ".txt") && isalpha((unsigned char)nome[5]);
+}
 FP g_archivefp;
 FP g_archivefp_first;
 
@@ -128601,15 +128615,17 @@ class OutputArchive : public ArchiveBase, public libzpaq::Writer
 			}
 		}
 #endif
+		/// 65.9l: what the write really took is the "written" of the progress lines (a destination full
+		/// takes nothing more, and the number stays where it is)
+		const size_t messi= myfwrite(buf, 1, ptr, fp);
+		g_inoutput+= (int64_t)messi;
 		if (streamout)
 		{
 			/// stdout: a byte not written is an archive not valid, and nobody else would notice
-			if (myfwrite(buf, 1, ptr, fp) != ptr)
+			if (messi != ptr)
 				error("cannot write on stdout");
 			off+= ptr;
 		}
-		else
-			myfwrite(buf, 1, ptr, fp);
 		writtensofar+= ptr;
 		chunksize+= ptr;
 
@@ -128733,10 +128749,14 @@ class OutputArchive : public ArchiveBase, public libzpaq::Writer
 		if (g_fakewrite) /// ransomware
 		{
 			++off; // we do not flush
+			++g_inoutput;
 			return;
 		}
 		if ((fp == FPNULL) && (!nowrite))
+		{
 			++off;
+			++g_inoutput;
+		}
 		else
 		{
 			if (ptr >= BUFSIZE)
@@ -128747,14 +128767,20 @@ class OutputArchive : public ArchiveBase, public libzpaq::Writer
 	// Write buf[0..n-1]
 	void write(const char *ibuf, int len)
 	{
+		/// 65.9l: nothing goes to the disk (the first pass of a -append, no archive at all: a "" ...),
+		/// but the count goes on as if it did: the progress lines show what would have been written
 		if (g_fakewrite) /// ransomware
 		{
 			off+= len;
+			g_inoutput+= len;
 			return;
 		}
 
 		if ((fp == FPNULL) && (!nowrite))
+		{
 			off+= len;
+			g_inoutput+= len;
+		}
 		else
 			/// what put() does byte by byte, a piece at a time: flush() is
 			/// called at the very same points (the buffer full, one more byte
@@ -132501,11 +132527,6 @@ typedef void(WINAPI *RpcStringFreeAFunc)(RPC_CSTR *);
 #define FRANZIMAGER_NTFS_ATTR_END 0xFFFFFFFF
 /// a VHD: at most 2040 GB (Windows), sectors of 512 bytes only
 #define FRANZIMAGER_VHD_MAX (2040ULL * 1024 * 1024 * 1024)
-/// 65.8z10: the zeroing of the free clusters (in the image, and f -zero -ntfs on the volume itself)
-/// was never tried on a volume over 2 TB: not supported (yet) there
-#ifndef FRANZIMAGER_ZERO_MAX
-#define FRANZIMAGER_ZERO_MAX (2048ULL * 1024 * 1024 * 1024)
-#endif
 /// the file systems of a thin image (the .meta keeps it). NTFS: its $Bitmap; FAT12/16/32 and
 /// exFAT: the used clusters from Windows, and what is before the first cluster always
 #define FRANZIMAGER_FS_NTFS 0
@@ -132835,8 +132856,42 @@ static DWORD img_leggi(HANDLE i_handle, uint64_t i_offset, char *o_buffer, DWORD
 	512 grains is in the file, in sectors (0: not there, zeros): 32 bits, so the file
 	cannot be longer than 2 TB. No checksums anywhere. Sectors of 512 bytes only.
 	The bytes are given in order (scrivi), from a grain boundary: the callers give the
-	2 MB blocks of the images
+	2 MB blocks of the images.
+	65.9g: a disk too long for one sparse file (over 4261412864 sectors, 2032 GB) is in
+	more files, the way VMware Workstation itself makes a big one ("twoGbMaxExtentSparse"):
+	x.vmdk is the text alone, x-s001.vmdk, x-s002.vmdk ... the pieces of the disk, one after
+	the other, each a sparse file as above without the text inside.
+	And a .vhdx (franzvhdx, below): the virtual disk of Windows without the 2040 GB of the
+	.vhd. Both are written through franzvdisk, by the same callers
 */
+#define FRANZVMDK_PEZZO (4261412864ULL * FRANZIMAGER_SECTOR_SIZE) /// the longest piece: 2^32 - 2^25 sectors, as Workstation
+class franzvdisk
+{
+  public:
+	virtual ~franzvdisk() {}
+	virtual bool	 scrivi(uint64_t i_offset, const char *i_dati, uint64_t i_quanti)= 0;
+	virtual bool	 chiudi()														= 0;
+	virtual bool	 flat() const													= 0;
+	virtual uint64_t scritti() const												= 0; /// bytes of the disk written in the file
+	virtual uint64_t zeri() const													= 0; /// bytes of zeros left out, or written as zeros (flat)
+	virtual string	 nomedati() const												= 0;
+	virtual string	 genere() const													= 0; /// ".vmdk (sparse)", ".vhdx" ...
+	/// a new GUID (CoCreateGuid, found at run time as everywhere here)
+	static bool guid(uint8_t *o_guid)
+	{
+		HMODULE hole32= LoadLibraryA("ole32.dll");
+		if (hole32 == NULL)
+			return false;
+		typedef HRESULT(WINAPI * cocreateguidfunc)(GUID *);
+		cocreateguidfunc pcocreateguid= (cocreateguidfunc)GetProcAddress(hole32, "CoCreateGuid");
+		GUID			 g;
+		const bool		 ok= (pcocreateguid != NULL) && (pcocreateguid(&g) == S_OK);
+		FreeLibrary(hole32);
+		if (ok)
+			memcpy(o_guid, &g, 16);
+		return ok;
+	}
+};
 #pragma pack(push, 1)
 struct franzvmdkheader
 {
@@ -132861,7 +132916,7 @@ struct franzvmdkheader
 };
 #pragma pack(pop)
 
-class franzvmdk
+class franzvmdk : public franzvdisk
 {
   public:
 	franzvmdk();
@@ -132871,10 +132926,14 @@ class franzvmdk
 	bool	 chiudi();
 	bool	 attivo() const { return m_file != NULL; }
 	bool	 flat() const { return m_flat; }
-	uint64_t scritti() const { return m_scritti; } /// bytes of the disk written in the file
-	uint64_t zeri() const { return m_zeri; }	   /// bytes of zeros left out (sparse), or written as zeros (flat)
+	uint64_t scritti() const { return m_scritti; }
+	uint64_t zeri() const { return m_zeri; }
 	string	 nomedati() const { return m_nomedati; }
-	static string nomeflat(const string &i_nome);
+	string	 genere() const;
+	static string		  nomeflat(const string &i_nome);
+	static string		  nomepezzo(const string &i_nome, unsigned i_quale);
+	static unsigned		  pezzi(uint64_t i_bytes); /// the files of a sparse disk of that size (1: x.vmdk alone)
+	static vector<string> nomi(const string &i_nome, uint64_t i_bytes, bool i_flat); /// every file that will be written
 
   private:
 	enum
@@ -132887,12 +132946,16 @@ class franzvmdk
 	bool	 m_flat;
 	bool	 m_errore;
 	string	 m_nome;	 /// x.vmdk
-	string	 m_nomedati; /// the file with the data: x.vmdk itself, or x-flat.vmdk
+	string	 m_nomedati; /// the file with the data: x.vmdk itself, or x-flat.vmdk (more pieces: x.vmdk, the text)
 	uint64_t m_bytes;	 /// of the disk
 	uint64_t m_fatti;	 /// the disk is given up to here
 	uint64_t m_scritti;
 	uint64_t m_zeri;
-	uint64_t m_tabelle;	 /// grain tables
+	unsigned m_pezzi;		/// 1: one file with the text inside; more: x-s00N.vmdk, and the text in x.vmdk
+	unsigned m_pezzo;		/// the one being written
+	uint64_t m_pezzoinizio; /// of the disk, bytes: where it starts and how long it is
+	uint64_t m_pezzobytes;
+	uint64_t m_tabelle;	 /// grain tables (of the piece)
 	uint64_t m_rgd;		 /// sectors: the redundant directory, the directory, the first grain
 	uint64_t m_gd;
 	uint64_t m_primo;
@@ -132901,11 +132964,13 @@ class franzvmdk
 	char	*m_zero; /// 1 MB of zeros
 	string	 testo() const;
 	bool	 zeriflat(uint64_t i_fino);
+	bool	 apripezzo(unsigned i_quale);
+	bool	 chiudipezzo();
 	franzvmdk(const franzvmdk &);
 	franzvmdk &operator=(const franzvmdk &);
 };
 
-franzvmdk::franzvmdk() : m_file(NULL), m_flat(false), m_errore(false), m_bytes(0), m_fatti(0), m_scritti(0), m_zeri(0), m_tabelle(0), m_rgd(0), m_gd(0), m_primo(0), m_prossimo(0), m_zero(NULL)
+franzvmdk::franzvmdk() : m_file(NULL), m_flat(false), m_errore(false), m_bytes(0), m_fatti(0), m_scritti(0), m_zeri(0), m_pezzi(1), m_pezzo(0), m_pezzoinizio(0), m_pezzobytes(0), m_tabelle(0), m_rgd(0), m_gd(0), m_primo(0), m_prossimo(0), m_zero(NULL)
 {
 }
 franzvmdk::~franzvmdk()
@@ -132914,6 +132979,14 @@ franzvmdk::~franzvmdk()
 		fclose(m_file);
 	if (m_zero)
 		franz_free(m_zero);
+}
+string franzvmdk::genere() const
+{
+	if (m_flat)
+		return ".vmdk (flat)";
+	if (m_pezzi > 1)
+		return ".vmdk (sparse, in " + itos((int64_t)m_pezzi) + " files)";
+	return ".vmdk (sparse)";
 }
 /// x.vmdk => x-flat.vmdk, next to it
 string franzvmdk::nomeflat(const string &i_nome)
@@ -132924,13 +132997,37 @@ string franzvmdk::nomeflat(const string &i_nome)
 		return i_nome + "-flat.vmdk";
 	return i_nome.substr(0, punto) + "-flat.vmdk";
 }
-/// the text that says what the disk is: inside the sparse file, or the x.vmdk of a flat one
+/// x.vmdk => x-s001.vmdk (i_quale from 1), next to it
+string franzvmdk::nomepezzo(const string &i_nome, unsigned i_quale)
+{
+	char coda[32];
+	snprintf(coda, sizeof(coda), "-s%03u.vmdk", i_quale);
+	const size_t punto= i_nome.find_last_of('.');
+	const size_t barra= i_nome.find_last_of("/\\");
+	if ((punto == string::npos) || ((barra != string::npos) && (punto < barra)))
+		return i_nome + coda;
+	return i_nome.substr(0, punto) + coda;
+}
+unsigned franzvmdk::pezzi(uint64_t i_bytes)
+{
+	if (i_bytes <= FRANZVMDK_PEZZO)
+		return 1;
+	return (unsigned)((i_bytes + FRANZVMDK_PEZZO - 1) / FRANZVMDK_PEZZO);
+}
+vector<string> franzvmdk::nomi(const string &i_nome, uint64_t i_bytes, bool i_flat)
+{
+	vector<string> tutti;
+	tutti.push_back(i_nome);
+	if (i_flat)
+		tutti.push_back(nomeflat(i_nome));
+	else if (pezzi(i_bytes) > 1)
+		for (unsigned i= 1; i <= pezzi(i_bytes); i++)
+			tutti.push_back(nomepezzo(i_nome, i));
+	return tutti;
+}
+/// the text that says what the disk is: inside the sparse file, or the x.vmdk of a flat one or of one in more pieces
 string franzvmdk::testo() const
 {
-	string		 nome = m_nomedati;
-	const size_t barra= nome.find_last_of("/\\");
-	if (barra != string::npos)
-		nome= nome.substr(barra + 1);
 	const uint64_t settori= m_bytes / FRANZIMAGER_SECTOR_SIZE;
 	uint64_t	   cilindri= settori / (255 * 63);
 	if (cilindri == 0)
@@ -132940,18 +133037,116 @@ string franzvmdk::testo() const
 	snprintf(riga, sizeof(riga), "CID=%08x\n", (unsigned int)((mtime() ^ (settori * 2654435761u)) & 0xFFFFFFFEu));
 	t+= riga;
 	t+= "parentCID=ffffffff\n";
-	t+= m_flat ? "createType=\"monolithicFlat\"\n" : "createType=\"monolithicSparse\"\n";
+	t+= m_flat ? "createType=\"monolithicFlat\"\n" : ((m_pezzi > 1) ? "createType=\"twoGbMaxExtentSparse\"\n" : "createType=\"monolithicSparse\"\n");
 	t+= "\n# Extent description\n";
-	snprintf(riga, sizeof(riga), "RW %s %s \"", itos((int64_t)settori).c_str(), m_flat ? "FLAT" : "SPARSE");
-	t+= riga + nome + (m_flat ? "\" 0\n" : "\"\n");
+	for (unsigned i= 0; i < m_pezzi; i++)
+	{
+		string		 nome = (m_pezzi > 1) ? nomepezzo(m_nome, i + 1) : m_nomedati;
+		const size_t barra= nome.find_last_of("/\\");
+		if (barra != string::npos)
+			nome= nome.substr(barra + 1);
+		uint64_t quanti= settori;
+		if (m_pezzi > 1)
+		{
+			const uint64_t inizio= (uint64_t)i * FRANZVMDK_PEZZO;
+			quanti				 = (((m_bytes - inizio) > FRANZVMDK_PEZZO) ? FRANZVMDK_PEZZO : (m_bytes - inizio)) / FRANZIMAGER_SECTOR_SIZE;
+		}
+		snprintf(riga, sizeof(riga), "RW %s %s \"", itos((int64_t)quanti).c_str(), m_flat ? "FLAT" : "SPARSE");
+		t+= riga + nome + (m_flat ? "\" 0\n" : "\"\n");
+	}
 	t+= "\n# The Disk Data Base\n#DDB\n\n";
-	t+= "ddb.encoding = \"UTF-8\"\n"; /// of this text: the name of the flat file here above (VMware takes the code page of the PC, without it)
+	t+= "ddb.encoding = \"UTF-8\"\n"; /// of this text: the names of the files here above (VMware takes the code page of the PC, without it)
 	t+= "ddb.virtualHWVersion = \"4\"\n";
 	t+= "ddb.geometry.cylinders = \"" + itos((int64_t)cilindri) + "\"\n";
 	t+= "ddb.geometry.heads = \"255\"\n";
 	t+= "ddb.geometry.sectors = \"63\"\n";
 	t+= "ddb.adapterType = \"lsilogic\"\n";
 	return t;
+}
+/// a sparse file is opened: the whole disk, or the piece i_quale of it. The grains go after the tables, written at the end
+bool franzvmdk::apripezzo(unsigned i_quale)
+{
+	m_pezzo		 = i_quale;
+	m_pezzoinizio= (m_pezzi > 1) ? (uint64_t)i_quale * FRANZVMDK_PEZZO : 0;
+	m_pezzobytes = (m_pezzi > 1) ? (((m_bytes - m_pezzoinizio) > FRANZVMDK_PEZZO) ? FRANZVMDK_PEZZO : (m_bytes - m_pezzoinizio)) : m_bytes;
+	const uint64_t settori	= m_pezzobytes / FRANZIMAGER_SECTOR_SIZE;
+	const uint64_t grani	= (settori + (GRANO / FRANZIMAGER_SECTOR_SIZE) - 1) / (GRANO / FRANZIMAGER_SECTOR_SIZE);
+	m_tabelle				= (grani + PERTABELLA - 1) / PERTABELLA;
+	const uint64_t gdsettori= (m_tabelle * 4 + FRANZIMAGER_SECTOR_SIZE - 1) / FRANZIMAGER_SECTOR_SIZE;
+	const uint64_t gtsettori= (PERTABELLA * 4) / FRANZIMAGER_SECTOR_SIZE;
+	m_rgd	  = 1 + ((m_pezzi > 1) ? 0 : TESTO);
+	m_gd	  = m_rgd + gdsettori + gtsettori * m_tabelle;
+	m_primo	  = m_gd + gdsettori + gtsettori * m_tabelle;
+	m_primo	  = (m_primo + (GRANO / FRANZIMAGER_SECTOR_SIZE) - 1) / (GRANO / FRANZIMAGER_SECTOR_SIZE) * (GRANO / FRANZIMAGER_SECTOR_SIZE);
+	m_prossimo= m_primo;
+	m_gt.assign((size_t)(m_tabelle * PERTABELLA), 0);
+	const string nome= (m_pezzi > 1) ? nomepezzo(m_nome, i_quale + 1) : m_nomedati;
+	m_file			 = _wfopen(utow(nome.c_str()).c_str(), L"wb");
+	if (!m_file)
+	{
+		m_errore= true;
+		return false;
+	}
+	setvbuf(m_file, NULL, _IOFBF, 1048576);
+	if (_fseeki64(m_file, (int64_t)(m_primo * FRANZIMAGER_SECTOR_SIZE), SEEK_SET) != 0)
+		m_errore= true;
+	return !m_errore;
+}
+/// ...and closed: its header, the text (one file only), the directory and the tables twice
+bool franzvmdk::chiudipezzo()
+{
+	if (!m_file)
+		return false;
+	bool ok= !m_errore;
+	if (ok)
+	{
+		const uint64_t gdsettori= (m_tabelle * 4 + FRANZIMAGER_SECTOR_SIZE - 1) / FRANZIMAGER_SECTOR_SIZE;
+		const uint64_t gtsettori= (PERTABELLA * 4) / FRANZIMAGER_SECTOR_SIZE;
+		/// no grain at all: the file as long as what is before the grains anyway
+		if (m_prossimo == m_primo)
+			ok= (_fseeki64(m_file, (int64_t)(m_primo * FRANZIMAGER_SECTOR_SIZE) - 1, SEEK_SET) == 0) && (fwrite(m_zero, 1, 1, m_file) == 1);
+		franzvmdkheader h;
+		memset(&h, 0, sizeof(h));
+		h.magic				= 0x564d444b;
+		h.version			= 1;
+		h.flags				= 3;
+		h.capacity			= m_pezzobytes / FRANZIMAGER_SECTOR_SIZE;
+		h.grainsize			= GRANO / FRANZIMAGER_SECTOR_SIZE;
+		h.descriptoroffset	= (m_pezzi > 1) ? 0 : 1;
+		h.descriptorsize	= (m_pezzi > 1) ? 0 : TESTO;
+		h.numgtespergt		= PERTABELLA;
+		h.rgdoffset			= m_rgd;
+		h.gdoffset			= m_gd;
+		h.overhead			= m_primo;
+		h.singleendlinechar = '\n';
+		h.nonendlinechar	= ' ';
+		h.doubleendlinechar1= '\r';
+		h.doubleendlinechar2= '\n';
+		ok= ok && (_fseeki64(m_file, 0, SEEK_SET) == 0) && (fwrite(&h, 1, sizeof(h), m_file) == sizeof(h));
+		if (m_pezzi == 1)
+		{
+			std::vector<char> t((size_t)TESTO * FRANZIMAGER_SECTOR_SIZE, 0);
+			const string	  descrittore= testo();
+			memcpy(&t[0], descrittore.data(), (descrittore.size() < t.size()) ? descrittore.size() : t.size() - 1);
+			ok= ok && (fwrite(&t[0], 1, t.size(), m_file) == t.size());
+		}
+		/// the directory and its tables, twice: each directory points to its own copy of the tables
+		for (int copia= 0; (copia < 2) && ok; copia++)
+		{
+			const uint64_t		  inizio= (copia == 0) ? m_rgd : m_gd;
+			std::vector<uint32_t> gd((size_t)(gdsettori * FRANZIMAGER_SECTOR_SIZE / 4), 0);
+			for (uint64_t i= 0; i < m_tabelle; i++)
+				gd[(size_t)i]= (uint32_t)(inizio + gdsettori + gtsettori * i);
+			ok= (_fseeki64(m_file, (int64_t)(inizio * FRANZIMAGER_SECTOR_SIZE), SEEK_SET) == 0) && (fwrite(&gd[0], 4, gd.size(), m_file) == gd.size()) &&
+				(fwrite(&m_gt[0], 4, m_gt.size(), m_file) == m_gt.size());
+		}
+	}
+	if (fclose(m_file) != 0)
+		ok= false;
+	m_file= NULL;
+	if (!ok)
+		m_errore= true;
+	return ok;
 }
 bool franzvmdk::apri(const string &i_nome, uint64_t i_bytes, bool i_flat)
 {
@@ -132965,31 +133160,17 @@ bool franzvmdk::apri(const string &i_nome, uint64_t i_bytes, bool i_flat)
 	m_scritti = 0;
 	m_zeri	  = 0;
 	m_errore  = false;
+	m_pezzi	  = i_flat ? 1 : pezzi(i_bytes);
 	m_zero	  = (char *)franz_malloc(1048576);
 	if (!m_zero)
 		return false;
 	memset(m_zero, 0, 1048576);
 	if (!m_flat)
-	{
-		const uint64_t settori= m_bytes / FRANZIMAGER_SECTOR_SIZE;
-		const uint64_t grani  = (settori + (GRANO / FRANZIMAGER_SECTOR_SIZE) - 1) / (GRANO / FRANZIMAGER_SECTOR_SIZE);
-		m_tabelle			  = (grani + PERTABELLA - 1) / PERTABELLA;
-		const uint64_t gdsettori= (m_tabelle * 4 + FRANZIMAGER_SECTOR_SIZE - 1) / FRANZIMAGER_SECTOR_SIZE;
-		const uint64_t gtsettori= (PERTABELLA * 4) / FRANZIMAGER_SECTOR_SIZE;
-		m_rgd	  = 1 + TESTO;
-		m_gd	  = m_rgd + gdsettori + gtsettori * m_tabelle;
-		m_primo	  = m_gd + gdsettori + gtsettori * m_tabelle;
-		m_primo	  = (m_primo + (GRANO / FRANZIMAGER_SECTOR_SIZE) - 1) / (GRANO / FRANZIMAGER_SECTOR_SIZE) * (GRANO / FRANZIMAGER_SECTOR_SIZE);
-		m_prossimo= m_primo;
-		m_gt.assign((size_t)(m_tabelle * PERTABELLA), 0);
-	}
+		return apripezzo(0);
 	m_file= _wfopen(utow(m_nomedati.c_str()).c_str(), L"wb");
 	if (!m_file)
 		return false;
 	setvbuf(m_file, NULL, _IOFBF, 1048576);
-	/// sparse: the grains go after the tables, written at the end in their place
-	if ((!m_flat) && (_fseeki64(m_file, (int64_t)(m_primo * FRANZIMAGER_SECTOR_SIZE), SEEK_SET) != 0))
-		m_errore= true;
 	return !m_errore;
 }
 /// flat: zeros up to i_fino, where nothing was given
@@ -133037,6 +133218,13 @@ bool franzvmdk::scrivi(uint64_t i_offset, const char *i_dati, uint64_t i_quanti)
 			m_zeri+= n;
 			continue;
 		}
+		/// the piece of the disk this grain is in: the ones before are closed (with nothing inside, some)
+		const uint64_t dove= i_offset + fatto;
+		while ((dove >= m_pezzoinizio + m_pezzobytes) && (!m_errore))
+			if ((!chiudipezzo()) || (!apripezzo(m_pezzo + 1)))
+				m_errore= true;
+		if (m_errore)
+			break;
 		if (n < GRANO) /// the end of the disk inside a grain: the grain is whole in the file
 		{
 			memset(ultimo, 0, GRANO);
@@ -133054,7 +133242,7 @@ bool franzvmdk::scrivi(uint64_t i_offset, const char *i_dati, uint64_t i_quanti)
 			m_errore= true;
 			break;
 		}
-		m_gt[(size_t)((i_offset + fatto) / GRANO)]= (uint32_t)m_prossimo;
+		m_gt[(size_t)((dove - m_pezzoinizio) / GRANO)]= (uint32_t)m_prossimo;
 		m_prossimo+= GRANO / FRANZIMAGER_SECTOR_SIZE;
 		m_scritti+= n;
 	}
@@ -133072,55 +133260,276 @@ bool franzvmdk::chiudi()
 		if (fclose(m_file) != 0)
 			ok= false;
 		m_file= NULL;
-		/// the text of the disk: x.vmdk
-		if (ok)
-		{
-			FILE *f= _wfopen(utow(m_nome.c_str()).c_str(), L"wb");
-			const string t= testo();
-			ok= (f != NULL) && (fwrite(t.data(), 1, t.size(), f) == t.size());
-			if (f && (fclose(f) != 0))
-				ok= false;
-		}
-		return ok;
 	}
+	else
+	{
+		m_zeri+= m_bytes - m_fatti; /// what was not given at all: zeros
+		/// this piece, and the ones after it that got nothing: every file the text names is there
+		ok= chiudipezzo() && ok;
+		while (ok && (m_pezzo + 1 < m_pezzi))
+			ok= apripezzo(m_pezzo + 1) && chiudipezzo();
+		if (m_file)
+		{
+			fclose(m_file);
+			m_file= NULL;
+		}
+	}
+	/// the text of the disk: x.vmdk (one sparse file has it inside)
+	if (ok && (m_flat || (m_pezzi > 1)))
+	{
+		FILE		*f= _wfopen(utow(m_nome.c_str()).c_str(), L"wb");
+		const string t= testo();
+		ok			  = (f != NULL) && (fwrite(t.data(), 1, t.size(), f) == t.size());
+		if (f && (fclose(f) != 0))
+			ok= false;
+	}
+	return ok;
+}
+
+/*
+	65.9g: a .vhdx, the virtual disk of Windows that goes beyond the 2040 GB of a .vhd (64 TB). Windows
+	mounts it by itself, 7-Zip and QEMU open it. Dynamic: only the blocks with something inside are in
+	the file. The file, everything at a multiple of 1 MB:
+	  0        the name of the format ("vhdxfile") and of who wrote it
+	  64 KB    the header, twice (64 and 128 KB): the one with the highest sequence number is the good one
+	  192 KB   the region table, twice (192 and 256 KB): where the BAT and the metadata are
+	  1 MB     the log (empty: the header says there is nothing to replay)
+	  2 MB     the metadata: size of a block, size of the disk, its sectors, its id
+	  3 MB     the BAT: for every block of the disk, where it is in the file (in MB) and its state
+	  then     the blocks, one after the other as they come
+	Headers and region tables carry a CRC-32C. Blocks of 2 MB, the ones of the images: a block that was
+	not in the image is not in the file ("not present": zeros for who reads). Every 2048 blocks the BAT
+	has one entry more, for a bitmap that only a differencing disk uses: left empty.
+	Sectors of 512 bytes. The bytes are given in order (scrivi), whole blocks from a block boundary
+*/
+class franzvhdx : public franzvdisk
+{
+  public:
+	franzvhdx();
+	~franzvhdx();
+	bool	 apri(const string &i_nome, uint64_t i_bytes);
+	bool	 scrivi(uint64_t i_offset, const char *i_dati, uint64_t i_quanti);
+	bool	 chiudi();
+	bool	 flat() const { return false; }
+	uint64_t scritti() const { return m_scritti; }
+	uint64_t zeri() const { return m_zeri; }
+	string	 nomedati() const { return m_nome; }
+	string	 genere() const { return ".vhdx"; }
+
+  private:
+	enum
+	{
+		BLOCCO	= 2097152,
+		MEGA	= 1048576,
+		PERCHUNK= 2048 /// 2^23 sectors of 512 bytes / the sectors of a block
+	};
+	FILE				 *m_file;
+	bool				  m_errore;
+	string				  m_nome;
+	uint64_t			  m_bytes;	  /// of the disk
+	uint64_t			  m_fatti;	  /// the disk is given up to here
+	uint64_t			  m_scritti;
+	uint64_t			  m_zeri;
+	uint64_t			  m_batbytes; /// the region of the BAT, whole MB
+	uint64_t			  m_prossimo; /// byte of the file where the next block goes
+	std::vector<uint64_t> m_bat;
+	char				 *m_blocco;
+	static void			  metti32(std::vector<unsigned char> &io_dove, size_t i_pos, uint32_t i_valore) { memcpy(&io_dove[i_pos], &i_valore, 4); }
+	static void			  metti64(std::vector<unsigned char> &io_dove, size_t i_pos, uint64_t i_valore) { memcpy(&io_dove[i_pos], &i_valore, 8); }
+	bool				  a(uint64_t i_dove, const std::vector<unsigned char> &i_cosa);
+	franzvhdx(const franzvhdx &);
+	franzvhdx &operator=(const franzvhdx &);
+};
+franzvhdx::franzvhdx() : m_file(NULL), m_errore(false), m_bytes(0), m_fatti(0), m_scritti(0), m_zeri(0), m_batbytes(0), m_prossimo(0), m_blocco(NULL)
+{
+}
+franzvhdx::~franzvhdx()
+{
+	if (m_file)
+		fclose(m_file);
+	if (m_blocco)
+		franz_free(m_blocco);
+}
+bool franzvhdx::a(uint64_t i_dove, const std::vector<unsigned char> &i_cosa)
+{
+	return (_fseeki64(m_file, (int64_t)i_dove, SEEK_SET) == 0) && (fwrite(&i_cosa[0], 1, i_cosa.size(), m_file) == i_cosa.size());
+}
+bool franzvhdx::apri(const string &i_nome, uint64_t i_bytes)
+{
+	if (m_file || (i_bytes == 0) || ((i_bytes % FRANZIMAGER_SECTOR_SIZE) != 0))
+		return false;
+	m_nome	 = i_nome;
+	m_bytes	 = i_bytes;
+	m_fatti	 = 0;
+	m_scritti= 0;
+	m_zeri	 = 0;
+	m_errore = false;
+	const uint64_t blocchi= (m_bytes + BLOCCO - 1) / BLOCCO;
+	const uint64_t voci	  = blocchi + (blocchi - 1) / PERCHUNK;
+	m_bat.assign((size_t)voci, 0);
+	m_batbytes= (voci * 8 + MEGA - 1) / MEGA * MEGA;
+	m_prossimo= 3 * (uint64_t)MEGA + m_batbytes;
+	m_blocco  = (char *)franz_malloc(BLOCCO);
+	if (!m_blocco)
+		return false;
+	m_file= _wfopen(utow(m_nome.c_str()).c_str(), L"wb");
+	if (!m_file)
+		return false;
+	setvbuf(m_file, NULL, _IOFBF, 1048576);
+	if (_fseeki64(m_file, (int64_t)m_prossimo, SEEK_SET) != 0)
+		m_errore= true;
+	return !m_errore;
+}
+bool franzvhdx::scrivi(uint64_t i_offset, const char *i_dati, uint64_t i_quanti)
+{
+	if ((!m_file) || m_errore)
+		return false;
+	if ((i_offset < m_fatti) || ((i_offset % BLOCCO) != 0) || (i_offset >= m_bytes))
+	{
+		m_errore= true;
+		return false;
+	}
+	if (i_quanti > m_bytes - i_offset)
+		i_quanti= m_bytes - i_offset;
+	for (uint64_t fatto= 0; (fatto < i_quanti) && (!m_errore); fatto+= BLOCCO)
+	{
+		const uint64_t n	 = ((i_quanti - fatto) > BLOCCO) ? BLOCCO : (i_quanti - fatto);
+		const char	  *blocco= i_dati + fatto;
+		bool		   vuoto = true;
+		uint64_t	   i	 = 0;
+		for (; (i + 8 <= n) && vuoto; i+= 8)
+		{
+			uint64_t otto;
+			memcpy(&otto, blocco + i, 8);
+			if (otto)
+				vuoto= false;
+		}
+		for (; (i < n) && vuoto; i++)
+			if (blocco[i])
+				vuoto= false;
+		if (vuoto)
+		{
+			m_zeri+= n;
+			continue;
+		}
+		if (n < BLOCCO) /// the end of the disk inside a block: the block is whole in the file
+		{
+			memset(m_blocco, 0, BLOCCO);
+			memcpy(m_blocco, blocco, (size_t)n);
+			blocco= m_blocco;
+		}
+		if (fwrite(blocco, 1, BLOCCO, m_file) != BLOCCO)
+		{
+			m_errore= true;
+			break;
+		}
+		const uint64_t quale						 = (i_offset + fatto) / BLOCCO;
+		m_bat[(size_t)(quale + quale / PERCHUNK)]= ((m_prossimo / MEGA) << 20) | 6; /// 6: the block is all there
+		m_prossimo+= BLOCCO;
+		m_scritti+= n;
+	}
+	m_fatti= i_offset + i_quanti;
+	return !m_errore;
+}
+bool franzvhdx::chiudi()
+{
+	if (!m_file)
+		return false;
+	bool ok= !m_errore;
 	m_zeri+= m_bytes - m_fatti; /// what was not given at all: zeros
 	if (ok)
 	{
-		const uint64_t gdsettori= (m_tabelle * 4 + FRANZIMAGER_SECTOR_SIZE - 1) / FRANZIMAGER_SECTOR_SIZE;
-		const uint64_t gtsettori= (PERTABELLA * 4) / FRANZIMAGER_SECTOR_SIZE;
-		/// no grain at all: the file as long as what is before the grains anyway
-		if (m_prossimo == m_primo)
-			ok= (_fseeki64(m_file, (int64_t)(m_primo * FRANZIMAGER_SECTOR_SIZE) - 1, SEEK_SET) == 0) && (fwrite(m_zero, 1, 1, m_file) == 1);
-		franzvmdkheader h;
-		memset(&h, 0, sizeof(h));
-		h.magic				= 0x564d444b;
-		h.version			= 1;
-		h.flags				= 3;
-		h.capacity			= m_bytes / FRANZIMAGER_SECTOR_SIZE;
-		h.grainsize			= GRANO / FRANZIMAGER_SECTOR_SIZE;
-		h.descriptoroffset	= 1;
-		h.descriptorsize	= TESTO;
-		h.numgtespergt		= PERTABELLA;
-		h.rgdoffset			= m_rgd;
-		h.gdoffset			= m_gd;
-		h.overhead			= m_primo;
-		h.singleendlinechar = '\n';
-		h.nonendlinechar	= ' ';
-		h.doubleendlinechar1= '\r';
-		h.doubleendlinechar2= '\n';
-		std::vector<char> t((size_t)TESTO * FRANZIMAGER_SECTOR_SIZE, 0);
-		const string	  descrittore= testo();
-		memcpy(&t[0], descrittore.data(), (descrittore.size() < t.size()) ? descrittore.size() : t.size() - 1);
-		ok= ok && (_fseeki64(m_file, 0, SEEK_SET) == 0) && (fwrite(&h, 1, sizeof(h), m_file) == sizeof(h)) && (fwrite(&t[0], 1, t.size(), m_file) == t.size());
-		/// the directory and its tables, twice: each directory points to its own copy of the tables
+		static const unsigned char guidbat[16]	  = {0x66, 0x77, 0xC2, 0x2D, 0x23, 0xF6, 0x00, 0x42, 0x9D, 0x64, 0x11, 0x5E, 0x9B, 0xFD, 0x4A, 0x08};
+		static const unsigned char guidmeta[16]	  = {0x06, 0xA2, 0x7C, 0x8B, 0x90, 0x47, 0x9A, 0x4B, 0xB8, 0xFE, 0x57, 0x5F, 0x05, 0x0F, 0x88, 0x6E};
+		static const unsigned char guidfile[16]	  = {0x37, 0x67, 0xA1, 0xCA, 0x36, 0xFA, 0x43, 0x4D, 0xB3, 0xB6, 0x33, 0xF0, 0xAA, 0x44, 0xE7, 0x6B};
+		static const unsigned char guidsize[16]	  = {0x24, 0x42, 0xA5, 0x2F, 0x1B, 0xCD, 0x76, 0x48, 0xB2, 0x11, 0x5D, 0xBE, 0xD8, 0x3B, 0xF4, 0xB8};
+		static const unsigned char guidpage83[16] = {0xAB, 0x12, 0xCA, 0xBE, 0xE6, 0xB2, 0x23, 0x45, 0x93, 0xEF, 0xC3, 0x09, 0xE0, 0x00, 0xC7, 0x46};
+		static const unsigned char guidlogico[16] = {0x1D, 0xBF, 0x41, 0x81, 0x6F, 0xA9, 0x09, 0x47, 0xBA, 0x47, 0xF2, 0x33, 0xA8, 0xFA, 0xAB, 0x5F};
+		static const unsigned char guidfisico[16] = {0xC7, 0x48, 0xA3, 0xCD, 0x5D, 0x44, 0x71, 0x44, 0x9C, 0xC9, 0xE9, 0x88, 0x52, 0x51, 0xC5, 0x56};
+		uint8_t					   guidscrive[16], guiddati[16], guiddisco[16];
+		ok= guid(guidscrive) && guid(guiddati) && guid(guiddisco);
+		/// no block at all: the file as long as what is before the blocks anyway
+		if (ok && (m_prossimo == 3 * (uint64_t)MEGA + m_batbytes))
+			ok= (_fseeki64(m_file, (int64_t)m_prossimo - 1, SEEK_SET) == 0) && (fputc(0, m_file) == 0);
+		/// the BAT
+		if (ok)
+		{
+			std::vector<unsigned char> bat((size_t)m_batbytes, 0);
+			memcpy(&bat[0], &m_bat[0], m_bat.size() * 8);
+			ok= a(3 * (uint64_t)MEGA, bat);
+		}
+		/// the metadata: a table of five entries, their values from 64 KB on
+		if (ok)
+		{
+			std::vector<unsigned char> meta(MEGA, 0);
+			memcpy(&meta[0], "metadata", 8);
+			meta[10]= 5;
+			struct
+			{
+				const unsigned char *guid;
+				uint32_t			 dove, lungo, flag;
+			} voci[5]= {{guidfile, 65536, 8, 4}, {guidsize, 65544, 8, 6}, {guidpage83, 65552, 16, 6}, {guidlogico, 65568, 4, 6}, {guidfisico, 65572, 4, 6}};
+			for (int i= 0; i < 5; i++)
+			{
+				const size_t p= 32 + (size_t)i * 32;
+				memcpy(&meta[p], voci[i].guid, 16);
+				metti32(meta, p + 16, voci[i].dove);
+				metti32(meta, p + 20, voci[i].lungo);
+				metti32(meta, p + 24, voci[i].flag);
+			}
+			metti32(meta, 65536, BLOCCO); /// (and its flags: 0, not "leave allocated", no parent)
+			metti64(meta, 65544, m_bytes);
+			memcpy(&meta[65552], guiddisco, 16);
+			metti32(meta, 65568, FRANZIMAGER_SECTOR_SIZE);
+			metti32(meta, 65572, 4096);
+			ok= a(2 * (uint64_t)MEGA, meta);
+		}
+		/// the log: nothing in it
+		if (ok)
+		{
+			std::vector<unsigned char> log(MEGA, 0);
+			ok= a(MEGA, log);
+		}
+		/// the region table, twice
+		if (ok)
+		{
+			std::vector<unsigned char> regioni(65536, 0);
+			memcpy(&regioni[0], "regi", 4);
+			metti32(regioni, 8, 2);
+			memcpy(&regioni[16], guidbat, 16);
+			metti64(regioni, 32, 3 * (uint64_t)MEGA);
+			metti32(regioni, 40, (uint32_t)m_batbytes);
+			metti32(regioni, 44, 1);
+			memcpy(&regioni[48], guidmeta, 16);
+			metti64(regioni, 64, 2 * (uint64_t)MEGA);
+			metti32(regioni, 72, MEGA);
+			metti32(regioni, 76, 1);
+			metti32(regioni, 4, crc32c(0, &regioni[0], regioni.size()));
+			ok= a(192 * 1024, regioni) && a(256 * 1024, regioni);
+		}
+		/// the header, twice: the second one is the good one (the higher sequence number)
 		for (int copia= 0; (copia < 2) && ok; copia++)
 		{
-			const uint64_t		  inizio= (copia == 0) ? m_rgd : m_gd;
-			std::vector<uint32_t> gd((size_t)(gdsettori * FRANZIMAGER_SECTOR_SIZE / 4), 0);
-			for (uint64_t i= 0; i < m_tabelle; i++)
-				gd[(size_t)i]= (uint32_t)(inizio + gdsettori + gtsettori * i);
-			ok= (_fseeki64(m_file, (int64_t)(inizio * FRANZIMAGER_SECTOR_SIZE), SEEK_SET) == 0) && (fwrite(&gd[0], 4, gd.size(), m_file) == gd.size()) &&
-				(fwrite(&m_gt[0], 4, m_gt.size(), m_file) == m_gt.size());
+			std::vector<unsigned char> testa(65536, 0);
+			memcpy(&testa[0], "head", 4);
+			metti64(testa, 8, (uint64_t)(copia + 1));
+			memcpy(&testa[16], guidscrive, 16);
+			memcpy(&testa[32], guiddati, 16);
+			/// (48: the id of the log, zeros: nothing to replay. 64: its version, 0)
+			testa[66]= 1; /// the version of the format
+			metti32(testa, 68, MEGA);
+			metti64(testa, 72, MEGA);
+			metti32(testa, 4, crc32c(0, &testa[0], 4096));
+			ok= a((copia == 0) ? 64 * 1024 : 128 * 1024, testa);
+		}
+		if (ok)
+		{
+			std::vector<unsigned char> nome(65536, 0);
+			memcpy(&nome[0], "vhdxfile", 8);
+			const char *chi= "zpaqfranz";
+			for (size_t i= 0; chi[i]; i++)
+				nome[8 + i * 2]= (unsigned char)chi[i];
+			ok= a(0, nome);
 		}
 	}
 	if (fclose(m_file) != 0)
@@ -133215,13 +133624,13 @@ class franzimager
 	bool scrivivhdraw(const char *i_data, size_t i_size);
 	bool chiudivhdraw();
 	/// 65.8z14: the same images as a .vmdk (see franzvmdk). A raw image: setvmdk, then the three
-	/// calls here above (0: a .vhd, as ever; 1: a sparse .vmdk; 2: a flat one). The image of the
-	/// used clusters has its own
+	/// calls here above (0: a .vhd, as ever; 1: a sparse .vmdk; 2: a flat one; 3, 65.9g: a .vhdx).
+	/// The image of the used clusters has its own
 	void setvmdk(int i_tipo)
 	{
 		m_vmdktipo= i_tipo;
 	}
-	bool preparavmdkthin(const std::vector<uint8_t> &i_meta, const char *i_filename, bool i_flat);
+	bool preparavmdkthin(const std::vector<uint8_t> &i_meta, const char *i_filename, int i_tipo);
 	bool scrivivmdkthin(const char *i_data, size_t i_size);
 	bool chiudivmdkthin();
 
@@ -133367,6 +133776,23 @@ class franzimager
 	{
 		return m_blocksize;
 	}
+	/// 65.9p (xc): what a restore by offset needs of a .meta just loaded (caricametamemory)
+	uint64_t getpartitionstart() const
+	{
+		return m_partitionstart;
+	}
+	const std::vector<uint32_t> &getblockmap() const
+	{
+		return m_blockmap;
+	}
+	const uint8_t *getbitmap() const
+	{
+		return m_volumebitmap;
+	}
+	uint64_t getbitmapsize() const
+	{
+		return m_bitmapsize;
+	}
 	uint64_t gettotalclusters() const
 	{
 		return m_totalclusters;
@@ -133478,12 +133904,25 @@ class franzimager
 	vhdrawstate m_vhdraw;
 	/// 65.8z14: a .vmdk being written (NULL: none). A pointer: this class is copied with the Jidac
 	/// that holds it
-	franzvmdk *m_vmdk;
-	int		   m_vmdktipo;		/// what preparavhdraw writes: 0 a .vhd, 1 a sparse .vmdk, 2 a flat one
+	franzvdisk *m_vmdk;
+	int		   m_vmdktipo;		/// what preparavhdraw writes: 0 a .vhd, 1 a sparse .vmdk, 2 a flat one, 3 a .vhdx
 	char	  *m_vmdkaccum;		/// the record of the image of the used clusters being filled
 	size_t	   m_vmdkaccumsize;
 	int64_t	   m_vmdkblocchi;	/// records done: the index in the blockmap
 	void	   riepilogovmdk(bool i_ok);
+	/// 65.9g: a partition over 2 TB in a virtual disk: an MBR cannot say it, the table is a GPT. Made
+	/// when the disk is written (the image of the used clusters has the MBR of the backup in its
+	/// first block): the first 34 sectors, and their copy in the last 33 of a disk 1 MiB longer
+	bool		m_gpt;
+	bool		m_gptfine;	  /// the copy at the end of the disk is written
+	uint64_t	m_gptsettori; /// of the disk
+	uint64_t	m_gptparte;	  /// of the partition, that starts at sector 2048
+	uint8_t		m_gptdisco[16], m_gptpartizione[16];
+	uint64_t	gpt_prepara(uint64_t i_bytesparte);
+	void		gpt_settori(std::vector<uint8_t> &o_testa, std::vector<uint8_t> &o_coda) const;
+	void		gpt_testa(char *io_blocco) const;
+	void		gpt_coda(char *io_blocco, uint64_t i_inizio, uint64_t i_lungo);
+	franzvdisk *nuovodisco(const char *i_filename, uint64_t i_bytes, int i_tipo);
 
 // .meta file header structure
 #pragma pack(push, 1)
@@ -133797,6 +134236,10 @@ franzimager::franzimager()
 	m_ultimolibero	= false;
 	m_vmdk			= NULL;
 	m_vmdktipo		= 0;
+	m_gpt			= false;
+	m_gptfine		= false;
+	m_gptsettori	= 0;
+	m_gptparte		= 0;
 	m_vmdkaccum		= NULL;
 	m_vmdkaccumsize = 0;
 	m_vmdkblocchi	= 0;
@@ -136753,7 +137196,7 @@ bool franzimager::aprivhd(char i_driveletter, bool i_usevss)
 		{
 			if (!m_vssautomatico)
 			{
-				myprintf("445443: error opening volume %c: with vss\n", m_driveletter);
+				myprintf("45443! error opening volume %c: with vss\n", m_driveletter);
 				return false;
 			}
 			/// asked by zpaqfranz, not by the user: the image goes on, of the live volume
@@ -136811,7 +137254,7 @@ bool franzimager::aprivhd(char i_driveletter, bool i_usevss)
 	if (m_bytespersector != FRANZIMAGER_SECTOR_SIZE)
 		myprintf("45482$ %s with sectors of %u bytes: a .vhd (sectors of 512) could not mount it (restore to a disk, or a raw file)\n", nomefs(), m_bytespersector);
 	if (m_disksize > FRANZIMAGER_VHD_MAX)
-		myprintf("45483$ %s bytes: more than a .vhd can hold (2040 GB): restore to a disk, or a raw file\n", migliaia(m_disksize));
+		myprintf("45483: %s bytes: more than a .vhd can hold (2040 GB): the image restores to a .vhdx, a .vmdk, a disk or a raw file\n", migliaia(m_disksize));
 
 	// calculate used blocks
 	if (flagdebug)
@@ -136852,13 +137295,7 @@ bool franzimager::aprivhd(char i_driveletter, bool i_usevss)
 	/// only on a volume that cannot change meanwhile
 	m_liberiazzerati= 0;
 	m_azzeraliberi	= (!m_flagfull) && (m_usingvss || m_bloccato);
-	/// 65.8z10: not over 2 TB (never tried there): the image is the one of before, the free
-	/// clusters that come along with a block as they are
-	if (m_azzeraliberi && (m_partitionsize > FRANZIMAGER_ZERO_MAX))
-	{
-		m_azzeraliberi= false;
-		myprintf("45762: %c: is %s: over 2 TB the free clusters are not zeroed in the image, not supported (yet)\n", m_driveletter, tohuman((int64_t)m_partitionsize));
-	}
+	/// (65.9g: over 2 TB too. Refused since 65.8z10 because never tried there)
 
 	// write initial data
 	if (flagdebug)
@@ -138910,17 +139347,18 @@ bool franzimager::preparavhdraw(const char *i_filename, uint64_t i_sourcesize, b
 	s.disco				= i_disco;
 	s.sorgente			= i_sourcesize;
 	s.disksize			= (inizio + i_sourcesize + FRANZIMAGER_SECTOR_SIZE - 1) / FRANZIMAGER_SECTOR_SIZE * FRANZIMAGER_SECTOR_SIZE;
+	/// 65.9g: a partition over 2 TB: the disk gets a GPT (and room for its copy at the end)
+	m_gpt= false;
+	if ((!i_disco) && (m_vmdktipo != 0) && ((i_sourcesize / FRANZIMAGER_SECTOR_SIZE) > 0xFFFFFFFFULL))
+		s.disksize= gpt_prepara(i_sourcesize);
 	s.posizione			= inizio;
 	s.errore			= false;
 	s.scritti			= 0;
 	s.vuoti				= 0;
-	/// (a flat .vmdk is the disk byte by byte: as long as it is)
-	if ((s.disksize > FRANZIMAGER_VHD_MAX) && (m_vmdktipo != 2))
+	/// (65.9g: only a .vhd stops at 2040 GB; the callers send a bigger one to a .vhdx)
+	if ((s.disksize > FRANZIMAGER_VHD_MAX) && (m_vmdktipo == 0))
 	{
-		if (m_vmdktipo == 1)
-			myprintf("20045! %s bytes: more than a sparse .vmdk is made for here (2040 GB), not supported (yet): -raw for a flat one\n", migliaia(s.disksize));
-		else
-			myprintf("20032! %s bytes: more than a .vhd can hold (2040 GB): export it to a raw file\n", migliaia(s.disksize));
+		myprintf("20032! %s bytes: more than a .vhd can hold (2040 GB): -to x.vhdx\n", migliaia(s.disksize));
 		return false;
 	}
 	s.voci= (uint32_t)((s.disksize + m_blocksize - 1) / m_blocksize);
@@ -138981,12 +139419,9 @@ bool franzimager::preparavhdraw(const char *i_filename, uint64_t i_sourcesize, b
 	/// the whole disk as it is), the blocks go to franzvmdk
 	if (m_vmdktipo != 0)
 	{
-		m_vmdk= new franzvmdk();
-		if (!m_vmdk->apri(i_filename, s.disksize, m_vmdktipo == 2))
+		m_vmdk= nuovodisco(i_filename, s.disksize, m_vmdktipo);
+		if (!m_vmdk)
 		{
-			myprintf("20046! Cannot create %Z\n", m_vmdk->nomedati().c_str());
-			delete m_vmdk;
-			m_vmdk= NULL;
 			franz_free(s.blocco);
 			s.blocco= NULL;
 			delete[] s.bat;
@@ -138996,7 +139431,7 @@ bool franzimager::preparavhdraw(const char *i_filename, uint64_t i_sourcesize, b
 		s.fout	= NULL;
 		s.attivo= true;
 		if (flagverbose)
-			myprintf("20047: .vmdk (%s) of %s bytes (%s)%s\n", (m_vmdktipo == 2) ? "flat" : "sparse", migliaia(s.disksize), tohuman(s.disksize), s.disco ? ", a whole disk" : ", the partition at 1 MiB");
+			myprintf("20047: %s of %s bytes (%s)%s%s\n", m_vmdk->genere().c_str(), migliaia(s.disksize), tohuman(s.disksize), s.disco ? ", a whole disk" : ", the partition at 1 MiB", m_gpt ? " (GPT)" : "");
 		return true;
 	}
 
@@ -139045,7 +139480,13 @@ bool franzimager::scrivibloccovhdraw(uint32_t i_indice)
 		s.errore= true;
 		return false;
 	}
-	if ((i_indice == 0) && (!s.disco))
+	if ((i_indice == 0) && (!s.disco) && m_gpt)
+	{
+		gpt_testa(s.blocco); /// 65.9g: a partition over 2 TB
+		if (flagverbose)
+			myprintf("20063: GPT of the %s: partition at 1 MiB\n", m_vmdk ? m_vmdk->genere().c_str() : ".vhd");
+	}
+	else if ((i_indice == 0) && (!s.disco))
 	{
 		uint8_t mbr[FRANZIMAGER_SECTOR_SIZE];
 		memcpy(mbr, s_mbrtemplate, FRANZIMAGER_SECTOR_SIZE);
@@ -139065,13 +139506,15 @@ bool franzimager::scrivibloccovhdraw(uint32_t i_indice)
 		p->totalsectors		 = (quanti > 0xFFFFFFFF) ? 0xFFFFFFFF : (uint32_t)quanti;
 		memcpy(s.blocco, mbr, FRANZIMAGER_SECTOR_SIZE);
 		if (flagverbose)
-			myprintf("20039: MBR of the %s: partition at 1 MiB, type 0x%02X\n", m_vmdk ? ".vmdk" : ".vhd", (unsigned int)p->type);
+			myprintf("20039: MBR of the %s: partition at 1 MiB, type 0x%02X\n", m_vmdk ? m_vmdk->genere().c_str() : ".vhd", (unsigned int)p->type);
 	}
-	if (m_vmdk) /// 65.8z14: the block to its place in the disk (the zeros: left out, or written, by franzvmdk)
+	if (m_gpt && (i_indice + 1 == s.voci)) /// the copy of the GPT, in the last block of the disk
+		gpt_coda(s.blocco, (uint64_t)i_indice * m_blocksize, m_blocksize);
+	if (m_vmdk) /// 65.8z14: the block to its place in the disk (the zeros: left out, or written, by the writer)
 	{
 		if (!m_vmdk->scrivi((uint64_t)i_indice * m_blocksize, s.blocco, m_blocksize))
 		{
-			myprintf("20048! Cannot write the .vmdk (disk full?%s)\n", m_vmdk->flat() ? "" : " A sparse one holds 2 TB of data at most"); /// 65.8z15: the limit is of the sparse one only
+			myprintf("20048! Cannot write the %s (disk full?)\n", m_vmdk->genere().c_str());
 			s.errore= true;
 			return false;
 		}
@@ -139154,6 +139597,12 @@ bool franzimager::chiudivhdraw()
 	/// the last block: whole, zeros after the end of the disk
 	if (ok && ((s.posizione % m_blocksize) != 0))
 		ok= scrivibloccovhdraw((uint32_t)(s.posizione / m_blocksize));
+	/// 65.9g: the copy of the GPT at the end of the disk, when the data did not get there
+	if (ok && m_gpt && (!m_gptfine))
+	{
+		memset(s.blocco, 0, m_blocksize);
+		ok= scrivibloccovhdraw(s.voci - 1);
+	}
 	if (m_vmdk) /// 65.8z14: a .vmdk: its tables (sparse), or its text (flat)
 	{
 		if (!m_vmdk->chiudi())
@@ -139194,16 +139643,139 @@ bool franzimager::chiudivhdraw()
 	return ok;
 }
 
-/// 65.8z14: the last line of a .vmdk just closed (m_vmdk still there)
+/*
+	65.9g: the GPT of a virtual disk that holds one partition, at 1 MiB as in every disk made here.
+	Sector 0: the "protective" MBR (one entry, type EE, the whole disk). Sector 1: the header. Sectors
+	2-33: the 128 entries, the first one is the partition ("basic data": Windows gives it a letter).
+	The last 33 sectors: the entries again, then the header again (it says of itself that it is the
+	copy). Header and entries carry a CRC-32. The disk is as long as 1 MiB + the partition + 1 MiB
+*/
+uint64_t franzimager::gpt_prepara(uint64_t i_bytesparte)
+{
+	m_gpt		= true;
+	m_gptfine	= false;
+	m_gptparte	= (i_bytesparte + FRANZIMAGER_SECTOR_SIZE - 1) / FRANZIMAGER_SECTOR_SIZE;
+	m_gptsettori= (2048 + m_gptparte + 2048 + 2047) / 2048 * 2048;
+	if ((!franzvdisk::guid(m_gptdisco)) || (!franzvdisk::guid(m_gptpartizione)))
+	{
+		/// (two ids, any, are needed)
+		const uint64_t ora= (uint64_t)mtime();
+		for (int i= 0; i < 16; i++)
+		{
+			m_gptdisco[i]	  = (uint8_t)((ora >> ((i % 8) * 8)) ^ (0x5A + i * 7));
+			m_gptpartizione[i]= (uint8_t)((ora >> ((i % 8) * 8)) ^ (0xA5 + i * 13));
+		}
+	}
+	return m_gptsettori * FRANZIMAGER_SECTOR_SIZE;
+}
+void franzimager::gpt_settori(std::vector<uint8_t> &o_testa, std::vector<uint8_t> &o_coda) const
+{
+	const size_t S= FRANZIMAGER_SECTOR_SIZE;
+	o_testa.assign(34 * S, 0);
+	o_coda.assign(33 * S, 0);
+	const uint64_t		 ultimo= m_gptsettori - 1;
+	std::vector<uint8_t> voci(128 * 128, 0);
+	static const uint8_t datibase[16]= {0xA2, 0xA0, 0xD0, 0xEB, 0xE5, 0xB9, 0x33, 0x44, 0x87, 0xC0, 0x68, 0xB6, 0xB7, 0x26, 0x99, 0xC7};
+	memcpy(&voci[0], datibase, 16);
+	memcpy(&voci[16], m_gptpartizione, 16);
+	const uint64_t primo= 2048, fine= 2048 + m_gptparte - 1;
+	memcpy(&voci[32], &primo, 8);
+	memcpy(&voci[40], &fine, 8);
+	const char *nome= "Basic data partition";
+	for (size_t i= 0; nome[i]; i++)
+		voci[56 + i * 2]= (uint8_t)nome[i];
+	const uint32_t crcvoci= crc32_16bytes(&voci[0], voci.size());
+	for (int copia= 0; copia < 2; copia++)
+	{
+		uint8_t h[92];
+		memset(h, 0, sizeof(h));
+		memcpy(h, "EFI PART", 8);
+		const uint32_t revisione= 0x00010000, lungo= 92, quante= 128, grande= 128;
+		const uint64_t mio= (copia == 0) ? 1 : ultimo, altro= (copia == 0) ? ultimo : 1, primousabile= 34, ultimousabile= ultimo - 33, dovevoci= (copia == 0) ? 2 : (ultimo - 32);
+		memcpy(h + 8, &revisione, 4);
+		memcpy(h + 12, &lungo, 4);
+		memcpy(h + 24, &mio, 8);
+		memcpy(h + 32, &altro, 8);
+		memcpy(h + 40, &primousabile, 8);
+		memcpy(h + 48, &ultimousabile, 8);
+		memcpy(h + 56, m_gptdisco, 16);
+		memcpy(h + 72, &dovevoci, 8);
+		memcpy(h + 80, &quante, 4);
+		memcpy(h + 84, &grande, 4);
+		memcpy(h + 88, &crcvoci, 4);
+		const uint32_t crctesta= crc32_16bytes(h, 92);
+		memcpy(h + 16, &crctesta, 4);
+		if (copia == 0)
+		{
+			memcpy(&o_testa[S], h, 92);
+			memcpy(&o_testa[2 * S], &voci[0], voci.size());
+		}
+		else
+		{
+			memcpy(&o_coda[0], &voci[0], voci.size());
+			memcpy(&o_coda[32 * S], h, 92);
+		}
+	}
+	uint8_t *p= &o_testa[446];
+	p[2]= 0x02;
+	p[4]= 0xEE;
+	p[5]= p[6]= p[7]= 0xFF;
+	const uint32_t da= 1, quanti= (ultimo > 0xFFFFFFFFULL) ? 0xFFFFFFFFu : (uint32_t)ultimo;
+	memcpy(p + 8, &da, 4);
+	memcpy(p + 12, &quanti, 4);
+	o_testa[510]= 0x55;
+	o_testa[511]= 0xAA;
+}
+/// the first block of the disk: the 34 sectors over the MBR that was there
+void franzimager::gpt_testa(char *io_blocco) const
+{
+	std::vector<uint8_t> testa, coda;
+	gpt_settori(testa, coda);
+	memcpy(io_blocco, &testa[0], testa.size());
+}
+/// a block that holds bytes i_inizio.. of the disk: what of the last 33 sectors falls inside it
+void franzimager::gpt_coda(char *io_blocco, uint64_t i_inizio, uint64_t i_lungo)
+{
+	const uint64_t dacoda= (m_gptsettori - 33) * FRANZIMAGER_SECTOR_SIZE, finecoda= m_gptsettori * FRANZIMAGER_SECTOR_SIZE;
+	const uint64_t a= (i_inizio > dacoda) ? i_inizio : dacoda;
+	const uint64_t b= ((i_inizio + i_lungo) < finecoda) ? (i_inizio + i_lungo) : finecoda;
+	if (a >= b)
+		return;
+	std::vector<uint8_t> testa, coda;
+	gpt_settori(testa, coda);
+	memcpy(io_blocco + (a - i_inizio), &coda[(size_t)(a - dacoda)], (size_t)(b - a));
+	if (b == finecoda)
+		m_gptfine= true;
+}
+/// the writer of the virtual disk asked: 1 a sparse .vmdk (in more files when too long for one), 2 a flat one, 3 a .vhdx
+franzvdisk *franzimager::nuovodisco(const char *i_filename, uint64_t i_bytes, int i_tipo)
+{
+	if (i_tipo == 3)
+	{
+		franzvhdx *x= new franzvhdx();
+		if (x->apri(i_filename, i_bytes))
+			return x;
+		myprintf("20062! Cannot create %Z\n", i_filename);
+		delete x;
+		return NULL;
+	}
+	franzvmdk *v= new franzvmdk();
+	if (v->apri(i_filename, i_bytes, i_tipo == 2))
+		return v;
+	myprintf("20046! Cannot create %Z\n", v->nomedati().c_str());
+	delete v;
+	return NULL;
+}
+/// 65.8z14: the last line of a virtual disk just closed (m_vmdk still there)
 void franzimager::riepilogovmdk(bool i_ok)
 {
 	if ((!m_vmdk) || (!i_ok))
 		return;
 	color_cyan();
 	if (m_vmdk->flat())
-		myprintf("20049: .vmdk (flat): the disk byte by byte in %Z (%s of data, %s of zeros)\n", m_vmdk->nomedati().c_str(), tohuman(m_vmdk->scritti()), tohuman2(m_vmdk->zeri()));
+		myprintf("20049: %s: the disk byte by byte in %Z (%s of data, %s of zeros)\n", m_vmdk->genere().c_str(), m_vmdk->nomedati().c_str(), tohuman(m_vmdk->scritti()), tohuman2(m_vmdk->zeri()));
 	else
-		myprintf("20050: .vmdk (sparse): %s of data written, %s of zeros left out\n", tohuman(m_vmdk->scritti()), tohuman2(m_vmdk->zeri()));
+		myprintf("20050: %s: %s of data written, %s of zeros left out%s\n", m_vmdk->genere().c_str(), tohuman(m_vmdk->scritti()), tohuman2(m_vmdk->zeri()), m_gpt ? " (the partition in a GPT)" : "");
 	color_restore();
 }
 
@@ -139214,7 +139786,7 @@ void franzimager::riepilogovmdk(bool i_ok)
 	its place in the disk: what is not in the image is zeros. Sparse: the grains of zeros
 	inside a block are not written either (the free clusters of a thin image)
 */
-bool franzimager::preparavmdkthin(const std::vector<uint8_t> &i_meta, const char *i_filename, bool i_flat)
+bool franzimager::preparavmdkthin(const std::vector<uint8_t> &i_meta, const char *i_filename, int i_tipo)
 {
 	if (m_vmdk)
 	{
@@ -139240,19 +139812,21 @@ bool franzimager::preparavmdkthin(const std::vector<uint8_t> &i_meta, const char
 	m_vmdkaccumsize= 0;
 	m_vmdkblocchi  = 0;
 	/// (whole sectors: the disk of the .vhd is)
-	const uint64_t disco= (m_disksize + FRANZIMAGER_SECTOR_SIZE - 1) / FRANZIMAGER_SECTOR_SIZE * FRANZIMAGER_SECTOR_SIZE;
-	m_vmdk= new franzvmdk();
-	if (!m_vmdk->apri(i_filename, disco, i_flat))
+	uint64_t disco= (m_disksize + FRANZIMAGER_SECTOR_SIZE - 1) / FRANZIMAGER_SECTOR_SIZE * FRANZIMAGER_SECTOR_SIZE;
+	/// 65.9g: a partition over 2 TB: the MBR that the image has in its first block cannot say it. A GPT
+	/// instead, and its copy at the end of a disk 1 MiB longer
+	m_gpt= false;
+	if (((m_partitionsize / FRANZIMAGER_SECTOR_SIZE) > 0xFFFFFFFFULL) && (m_partitionstart == (uint64_t)2048 * FRANZIMAGER_SECTOR_SIZE))
+		disco= gpt_prepara(m_partitionsize);
+	m_vmdk= nuovodisco(i_filename, disco, i_tipo);
+	if (!m_vmdk)
 	{
-		myprintf("20060! Cannot create %Z\n", m_vmdk->nomedati().c_str());
-		delete m_vmdk;
-		m_vmdk= NULL;
 		franz_free(m_vmdkaccum);
 		m_vmdkaccum= NULL;
 		return false;
 	}
 	if (flagverbose)
-		myprintf("20055: .vmdk (%s) of %s bytes (%s), the partition at %s\n", i_flat ? "flat" : "sparse", migliaia(disco), tohuman(disco), migliaia2(m_partitionstart));
+		myprintf("20055: %s of %s bytes (%s), the partition at %s%s\n", m_vmdk->genere().c_str(), migliaia(disco), tohuman(disco), migliaia2(m_partitionstart), m_gpt ? " (GPT)" : "");
 	return true;
 }
 
@@ -139280,10 +139854,16 @@ bool franzimager::scrivivmdkthin(const char *i_data, size_t i_size)
 		}
 		const uint64_t dove= (uint64_t)getoriginalblockindex((size_t)m_vmdkblocchi) * m_blocksize;
 		m_vmdkblocchi++;
-		/// (a block is whole in the image even when the disk ends inside it: franzvmdk stops there)
+		if (m_gpt)
+		{
+			if (dove == 0)
+				gpt_testa(m_vmdkaccum + FRANZIMAGER_SECTOR_SIZE);
+			gpt_coda(m_vmdkaccum + FRANZIMAGER_SECTOR_SIZE, dove, m_blocksize);
+		}
+		/// (a block is whole in the image even when the disk ends inside it: the writer stops there)
 		if (!m_vmdk->scrivi(dove, m_vmdkaccum + FRANZIMAGER_SECTOR_SIZE, m_blocksize))
 		{
-			myprintf("20061! Cannot write the .vmdk (disk full?%s)\n", m_vmdk->flat() ? "" : " A sparse one holds 2 TB of data at most");
+			myprintf("20061! Cannot write the %s (disk full?)\n", m_vmdk->genere().c_str());
 			return false;
 		}
 	}
@@ -139305,9 +139885,21 @@ bool franzimager::chiudivmdkthin()
 		myprintf("20058! The image gave %s blocks instead of %s\n", migliaia(m_vmdkblocchi), migliaia2((int64_t)m_blockmap.size()));
 		ok= false;
 	}
+	/// 65.9g: the copy of the GPT at the end of the disk, in a block of its own when the image did not get there
+	if (ok && m_gpt && (!m_gptfine))
+	{
+		const uint64_t dove= (m_gptsettori * FRANZIMAGER_SECTOR_SIZE - 1) / m_blocksize * m_blocksize;
+		memset(m_vmdkaccum, 0, FRANZIMAGER_SECTOR_SIZE + m_blocksize);
+		gpt_coda(m_vmdkaccum + FRANZIMAGER_SECTOR_SIZE, dove, m_blocksize);
+		if (!m_vmdk->scrivi(dove, m_vmdkaccum + FRANZIMAGER_SECTOR_SIZE, m_blocksize))
+		{
+			myprintf("20064! Cannot write the end of the %s (disk full?)\n", m_vmdk->genere().c_str());
+			ok= false;
+		}
+	}
 	if (!m_vmdk->chiudi())
 	{
-		myprintf("20059! Cannot write the end of the .vmdk (disk full?)\n");
+		myprintf("20059! Cannot write the end of the %s (disk full?)\n", m_vmdk->genere().c_str());
 		ok= false;
 	}
 	riepilogovmdk(ok);
@@ -142409,9 +143001,7 @@ class Jidac
 	void creapath();
 	int extractstdout(char i_dest_partition, const string &i_rawfilename);
 #endif
-#ifdef _WIN32
-	int extracttobuffer(const std::string &filename, std::vector<uint8_t> &out_buffer);
-#endif
+	int extracttobuffer(const std::string &filename, std::vector<uint8_t> &out_buffer); /// (65.9t: on every platform)
 	char take_letter_from_filename(char i_sourceletter);
 	bool get_letters_from_dt(vector<char>& o_fhd,vector<char>& o_raw);
 
@@ -142527,6 +143117,7 @@ class Jidac
 	string				  vinfo_riga(int64_t i_condata, int64_t i_senzadata);
 	int					  vinfo_controlla(const vector<std::pair<int, string> > &i_record);
 	void				  vinfo_mostra();
+	void				  acmeta_mostra();
 	int					  fl_writeblock(OutputArchive &i_out, CompressJob &io_job, vector<unsigned> &io_blocklist, libzpaq::StringBuffer &io_sb, unsigned i_firstfrag, unsigned &io_frags, vector<int64_t> &io_newoffset, int64_t &io_where);
 	bool				  filelist_store(OutputArchive &i_out, CompressJob &io_job, vector<unsigned> &io_blocklist, HTIndex &io_htinv, int64_t i_headerend, unsigned i_htsize, const vector<string> &i_chunks);
 	void				  filelist_pointer(WriterPair &i_wp, unsigned i_blocknumber, int64_t i_jmp, const vector<unsigned> &i_blocklist, const vector<int> &i_csize);
@@ -142544,7 +143135,6 @@ class Jidac
 	int64_t			 pakka_read_archive(const char *arc); // read arc
 	int				 pakkalist();
 
-	string				fullcommandline;
 	std::vector<string> results; // warning and errors
 	string				zpaqfranzexename;
 	MAPPAHELP			help_map; /// maps: string command, helpfunctions(bool,bool)
@@ -142654,6 +143244,7 @@ class Jidac
 	int decimation();				   // get only the newest file
 #endif								   /// NOSFTPEND
 	int deduplicate();				   // get hash / or sum
+	void dedup_elenco(const vector<s_stringpair> &i_vec, bool i_mostra, unsigned int &o_files, uint64_t &o_size, int64_t &o_cancellati, int64_t &o_cancellatisize);
 	int paranoid();					   // paranoid test by unz. Really slow & lot of RAM
 #ifndef ANCIENT
 	int paranoidseq(); // paranoid test by unz. Really slow & lot of RAM
@@ -142750,6 +143341,36 @@ class Jidac
 	void	printsanitizeflags();
 	string	rename(string name);																																	   // rename from -to
 	void	scandir(bool i_checkifselected, DTMap &i_edt, string filename, bool i_recursive= true);																	   // scan dirs to dt
+#ifdef _WIN32
+	/// 65.9c: -ntfs (no -image), the list of the files from the $MFT read raw
+	void ntfs2_scandir(bool i_checkifselected, DTMap &i_edt, const string &i_filename);
+	bool ntfs2_argomento(bool i_checkifselected, DTMap &i_edt, const string &i_filename, franzntfs2_conti &c, string &o_perche);
+	bool ntfs2_cartella(bool i_checkifselected, DTMap &i_edt, const string &i_cartella, franzntfs2_conti &c, string &o_perche);
+	void ntfs2_cammina(bool i_checkifselected, DTMap &i_edt, franzntfs2 &v, uint32_t i_radice, const string &i_cartella, franzntfs2_conti &c);
+	void ntfs2_aggiungi(bool i_checkifselected, DTMap &i_edt, franzntfs2_conti &c, const string &i_filename, int64_t edate, int64_t esize, int64_t eattr, int64_t i_creationdate, int64_t i_accessdate);
+	void ntfs2_normale(bool i_checkifselected, DTMap &i_edt, const string &i_filename, bool i_recursive);
+	bool ntfs2_potata(const string &i_pattern);
+	void ntfs2_riepilogo(const string &i_filename, const franzntfs2_conti &c, double i_secondi, int64_t i_nomi);
+	bool ntfs2_intera(const string &i_filename); /// 65.9l: -ntfs by itself
+	bool ntfs2_dasolo(const string &i_filename);
+#endif
+#if defined(_WIN32) && !defined(ANCIENT)
+	/// 65.9n: ac, the disk of Windows for a restore that boots
+	int	   ac_prepara();
+	bool   ac_mio(const string &i_nome);
+	void   ac_aggiungi();
+	int	   ac_leggi(DTMap::iterator i_p, char *o_buf, int i_quanti);
+	int	   ac_fatale();
+	DTMap::iterator ac_voce(const string &i_nome, franzfs *i_ram, int64_t i_bytes, int64_t i_data, bool i_infondo); /// 65.9o
+	bool   ac_esclusioni(char i_lettera);
+	void   ac_chiudi();
+	int	   ac_cambia(size_t i_fi);
+	bool   ac_grande(const string &i_nome);
+	void   ac_hash(DTMap::iterator i_p, string &o_tipo, string &o_hash);
+	string ac_metafile();
+	void   ac_impronta();
+	int	   xc(); /// 65.9p: the restore of what ac saved
+#endif
 	void	addfile(bool i_checkifselected, DTMap &i_edt, string filename, int64_t edate, int64_t esize, int64_t eattr, int64_t i_creationdate, int64_t i_accessdate); // add external file to dt
 	int64_t franzparallelscandir(bool i_flaghash, bool i_recursive, bool i_forcedir);
 	int64_t franzparallelhashfiles(string i_hashtype, int64_t i_totalsize, vector<string> i_thefiles, bool i_silent, vector<std::pair<string, string> > &o_hashname);
@@ -142852,7 +143473,7 @@ class Jidac
 	bool sanitizefile(string i_filename);
 #ifdef _WIN32
 #ifdef ZPAQFULL /// NOSFTPSTART
-	int runhigh(string i_addendum, bool i_finta);
+	int runhigh(string i_addendum, bool i_finta, const char *i_comando= NULL);
 #endif /// NOSFTPEND
 	bool isrealfile(const string &i_filename);
 
@@ -142924,9 +143545,9 @@ class Jidac
 	int	 sceglimodoimage();	 /// -image alone: what to do with the volume
 	int	 restoreimageauto(); /// image without -ntfs or -raw
 	int	 restore_raw_to_vhd(char i_source, string i_destfile);
-	int	 restore_to_vmdk(char i_source, string i_destfile, bool i_thin, bool i_flat); /// 65.8z14: image -to x.vmdk [-raw]
-	int	 esportavmdk; /// image: a .vmdk is being written (extractstdout): 0 no, 1 sparse, 2 flat
-	int	 imagevss;			 /// -image: 0 no VSS, 1 tried by zpaqfranz (without it the image goes on), 2 -vss (it must be there)
+	int	 restore_to_vmdk(char i_source, string i_destfile, bool i_thin, int i_tipo); /// 65.8z14: image -to x.vmdk [-raw]; 65.9g: -to x.vhdx (1 sparse .vmdk, 2 flat, 3 .vhdx)
+	int	 esportavmdk; /// image: a virtual disk is being written (extractstdout): 0 no, 1 sparse .vmdk, 2 flat .vmdk, 3 .vhdx
+	int	 imagevss;			 /// -image: 0 no VSS, 1 tried by zpaqfranz (C: only; without it the image goes on), 2 -vss (it must be there)
 	bool imageautomatica;	 /// -image alone: zpaqfranz chose (used clusters that cannot be read: raw instead)
 	bool esportavhdraw;		 /// image: a raw image to a .vhd (extractstdout)
 	int64_t esportavhdrawsize;
@@ -142955,7 +143576,6 @@ class Jidac
                                              vector<char>& avail_raw);
 
 
-	int			NTFSEnumerateFiles(string i_path, DTMap &i_edt, bool i_checkifselected);
 	int			drive();
 	std::string enumerate_physical_disks(bool i_output, int i_chosendrive, std::vector<franzdriveinfo> &drives);
 	char		find_drive_letter_for_partition(int diskNumber, DWORD partitionNumber);
@@ -151857,13 +152477,15 @@ string help_a(bool i_usage, bool i_example)
 #endif // corresponds to #if (#if defined(_WIN32))
 #ifdef _WIN32
 		scrivi_riga("-image", "Image of a drive (Administrator): it chooses by itself. NTFS: the used clusters,");
-		scrivi_riga(" ", "  with VSS (none: without, told); FAT12/16/32, exFAT: the used clusters, the drive");
-		scrivi_riga(" ", "  locked; else (ReFS, not formatted...), or when it cannot, the whole partition.");
+		scrivi_riga(" ", "  C: with VSS (none: without, told), any other drive locked (VSS there: add -vss);");
+		scrivi_riga(" ", "  FAT12/16/32, exFAT: the used clusters, the drive locked; else (ReFS, not");
+		scrivi_riga(" ", "  formatted...), or when it cannot, the whole partition.");
 		scrivi_riga(" ", "  A disk (3:): all of it. NTFS: without the swap files (pagefile, swapfile, hiberfil)");
 		scrivi_riga(" ", "  The used clusters only: the free ones are zeros in the image (deleted data is not");
 		scrivi_riga(" ", "  stored), when the drive cannot change meanwhile (VSS, or locked). The files are the same");
-		scrivi_riga(" ", "  (drives up to 2 TB: over that the free clusters stay as they are, not supported yet)");
+		scrivi_riga(" ", "  Over 2 TB too: such an image restores to a .vhdx, a .vmdk, a disk or a raw file");
 		scrivi_riga("-raw", "Image of the whole partition (or disk), byte by byte: no choice (no -image needed)");
+		scrivi_riga("-vss", "-image: a shadow copy that must be there (by itself: C: only, tried). With -raw: tried");
 		scrivi_riga("-novss", "-image: no VSS, not even tried (the drive is locked, when it can be)");
 		scrivi_riga(" ", "  No VSS and not locked (the drive of Windows...): a warning, exit code 1");
 		scrivi_riga("-nofrugal", "-image: the swap files too");
@@ -151930,7 +152552,10 @@ string help_a(bool i_usage, bool i_example)
 		scrivi_riga("-tar", "Store *nix metadata, as tar: owner, mode, ns times, symlinks, hard links, FIFO, devices");
 #endif
 #ifdef _WIN32
-		scrivi_riga("-ntfs", "Scan a NTFS drive (if no -image)");
+		scrivi_riga("-ntfs", "Scan reading the $MFT of the volume, not folder by folder (if no -image): the same list,");
+		scrivi_riga(" ", "  faster. By itself when every source is a whole NTFS drive (a z:\\1.zpaq c:\\ e:\\) and an");
+		scrivi_riga(" ", "  administrator runs; -ntfs asks for it on a folder too. No administrator: the normal scan");
+		scrivi_riga("-nontfs", "Never scan from the $MFT by itself: folder by folder, as always");
 #endif
 		scrivi_riga("-appendoutput", "Append to the output file specified by -out instead of overwriting it");
 		scrivi_riga("-writeonconsole", "Write to stderr too");
@@ -152043,7 +152668,8 @@ losetup -d /dev/loop0
 		scrivi_esempio("Store metadata too", "a /tmp/1.zpaq /www -tar -highway64");
 #endif
 #ifdef _WIN32
-		scrivi_esempio("Quickly scan a NTFS drive", "a z:\\1.zpaq d:\\ -ntfs");
+		scrivi_esempio("Whole NTFS drives: fast scan (admin)", "a z:\\1.zpaq c:\\ e:\\");
+		scrivi_esempio("Fast scan of a folder too (admin)", "a z:\\1.zpaq d:\\data -ntfs");
 #endif
 #ifdef unix
 		scrivi_esempio("Raw imaging a device", "a /tmp/bak.zpaq /dev/sdb -image");
@@ -152054,6 +152680,7 @@ losetup -d /dev/loop0
 		scrivi_esempio("Make franzen file", "a z:\\1.zpaq c:\\nz -franzen pippo -key pluto");
 #ifdef _WIN32
 		scrivi_esempio("Image of C: (used clusters + VSS)", "a z:\\1.zpaq c: -image");
+		scrivi_esempio("Image of D: with VSS (not by itself)", "a z:\\1.zpaq d: -image -vss");
 		scrivi_esempio("Image of a USB stick (FAT32, exFAT)", "a z:\\1.zpaq f: -image");
 		scrivi_esempio("Get the DRIVE where C: is", "a z:\\1.zpaq C: -image -all");
 		scrivi_esempio("The whole partition, byte by byte", "a z:\\1.zpaq e: -raw");
@@ -152566,6 +153193,7 @@ string help_i(bool i_usage, bool i_example)
 		scrivi_riga("-comment", "Shows comments (if any)");
 		scrivi_riga("-stat", "Count 'weird' files and show uncompressed size (slow)");
 		scrivi_riga("-verbose", "What the versions say they are (VFILE-info, written with -fast), below the list");
+		scrivi_riga(" ", "and what ac saved, if the archive has one: the last backup (-all: every one)");
 		help_range();
 	}
 	if (i_usage && i_example)
@@ -152605,14 +153233,109 @@ string help_tui(bool i_usage, bool i_example)
 		scrivi_riga("CMD tui", "Start text-based TUI");
 		scrivi_riga("CMD gui", "Start text-based TUI (yep, no Graphic)");
 		scrivi_riga(" ", "Please strike ? key to get all commands");
+		scrivi_riga(" ", "Without the archive (zpaqfranz tui; and t x l i v e w p zip image crop trim...):");
+		scrivi_riga(" ", "a file chooser on the file system (same keys), then RUN and the switches of");
+		scrivi_riga(" ", "the command. More archives marked: one run each (t and x)");
 	}
 	if (i_usage && i_example)
 		scrivi_examples();
 	if (i_example)
 	{
 		scrivi_esempio("Launch the TUI", "tui z:\\okane.zpaq");
+		scrivi_esempio("Pick the archive on a screen, then the TUI", "tui");
+		scrivi_esempio("Pick the archive(s), then test", "t");
 	}
 	return ("Text UI for listing/extraction");
+}
+#endif
+#if defined(_WIN32) && !defined(ANCIENT)
+/// 65.9n
+string help_ac(bool i_usage, bool i_example)
+{
+	if (i_usage)
+	{
+		scrivi_riga("CMD ac", "The disk of Windows, for a restore that boots (*** REQUIRES ADMIN RIGHTS ***)");
+		scrivi_riga(" ", "ac archive is a archive c: -image (the used clusters of C:, with a shadow copy)");
+		scrivi_riga(" ", "plus everything else of that disk that is not a data partition, raw: the");
+		scrivi_riga(" ", "partitions without a letter (boot, recovery...), the partition table, the");
+		scrivi_riga(" ", "space between the partitions. And disk_C.txt: the map of the disk, with the");
+		scrivi_riga(" ", "hashes of every piece. MBR and GPT disks. One version for each run");
+		scrivi_riga(" ", "The partitions with a letter (D:, E:...) are NOT taken: the table says so");
+		scrivi_riga(" ", "Refused: boot files on another disk or on a data partition, dynamic disks");
+		scrivi_riga("-all", "The partitions with a letter too: NTFS, FAT, exFAT by their used clusters");
+		scrivi_riga(" ", "(image_X.fhd), anything else raw, the whole of it (image_X.raw). Not the one");
+		scrivi_riga(" ", "the archive is on. Each one can be restored alone, with the image command");
+		scrivi_riga(" ", "(a c: -image -all is another thing: the whole disk, raw, in one file)");
+		scrivi_riga("-not X:", "With -all: the partition X: is left out");
+		scrivi_riga("-gui", "Choose on a screen what to take: [+] Windows and what it boots with (always),");
+		scrivi_riga(" ", "[X] or [ ] every other partition. Arrows and space, F8 starts, ESC quits");
+		scrivi_riga("-vss", "With -all: a shadow copy for every NTFS (by itself for C: only: the others");
+		scrivi_riga(" ", "are locked, and read as they are if something keeps them in use)");
+		scrivi_riga("\"\"", "As the archive: a dry run (everything is read, nothing is written)");
+		scrivi_riga("-novss", "No shadow copy of C: (as in a -image)");
+		scrivi_riga("-key X", "Encrypt the archive (a BitLocker volume is saved in clear)");
+		scrivi_riga("***", "The restore: the xc command (the whole disk), image (one partition alone)");
+	}
+	if (i_usage && i_example)
+		scrivi_examples();
+	if (i_example)
+	{
+		scrivi_esempio("The disk of Windows", "ac z:\\pc.zpaq");
+		scrivi_esempio("Dry run: what would be taken", "ac \"\"");
+		scrivi_esempio("Every partition of that disk", "ac z:\\pc.zpaq -all");
+		scrivi_esempio("Every partition but M:", "ac z:\\pc.zpaq -all -not m:");
+		scrivi_esempio("Choose the partitions on a screen", "ac z:\\pc.zpaq -gui");
+		scrivi_esempio("Encrypted archive", "ac z:\\pc.zpaq -key mypassword");
+		scrivi_esempio("Read the map of the disk", "x z:\\pc.zpaq disk_C.txt -to z:\\out\\");
+		scrivi_esempio("C: alone, to a virtual disk", "image z:\\pc.zpaq c: -to z:\\c.vhd");
+		scrivi_esempio("The restore of the disk: its plan", "xc z:\\pc.zpaq");
+	}
+	return ("The disk of Windows, for a restore that boots (Windows only)");
+}
+string help_xc(bool i_usage, bool i_example)
+{
+	if (i_usage)
+	{
+		scrivi_riga("CMD xc", "Restore the disk of Windows saved by ac (*** REQUIRES ADMIN RIGHTS ***)");
+		scrivi_riga(" ", "xc archive alone is the plan: which backup it is, its pieces, where each one");
+		scrivi_riga(" ", "goes. Nothing is written without a -to");
+		scrivi_riga(" ", "Every piece goes back at the offset it had, with the partition table of the");
+		scrivi_riga(" ", "backup: same disk signature (or GUIDs), nothing to repair to make it boot");
+		scrivi_riga(" ", "The pieces must be the ones the backup wrote (size, CRC-32, hash): checked");
+		scrivi_riga(" ", "in the index before anything is written, and again while they are written");
+		scrivi_riga("-to N: -force", "The physical disk N (the drives command lists them). -force is the");
+		scrivi_riga(" ", "consent: the disk is OVERWRITTEN, after a captcha that names it (killdrive2)");
+		scrivi_riga(" ", "At least as big as the one of the backup, same sector size; never the disk");
+		scrivi_riga(" ", "of this Windows, or the one of the archive");
+		scrivi_riga(" ", "On the disk of the backup itself (same signature, same partitions) what was");
+		scrivi_riga(" ", "not in the backup (the data partitions) is not touched. On another disk the");
+		scrivi_riga(" ", "partition table is written last, and those partitions are to be formatted");
+		scrivi_riga("-to x.vmdk", "A virtual disk for VMware, VirtualBox, QEMU/Proxmox (-raw: a flat one)");
+		scrivi_riga("-to x.vhdx", "A virtual disk that Windows mounts (and Hyper-V starts)");
+		scrivi_riga("-to x.raw", "The disk byte by byte, in a (sparse) file. Any other extension too");
+		scrivi_riga("c:", "After the archive: which backup, when the archive has more than one disk");
+		scrivi_riga("-until N", "The backup of version N (default: the last one)");
+		scrivi_riga("-gui", "Choose on a screen what to restore, and the disk: [+] Windows and what it");
+		scrivi_riga(" ", "boots with (always), [X] or [ ] the other partitions of the backup; then the");
+		scrivi_riga(" ", "disks of this PC, one only (red: it cannot be). F8 starts, after the name");
+		scrivi_riga(" ", "of the disk is typed (killdrive2: no -force); i: in a file; ESC quits");
+		scrivi_riga("-verify", "Read back what was written (a disk, a raw file)");
+		scrivi_riga("-force", "The consent to overwrite: the disk of -to N:, a destination file already there");
+		scrivi_riga("-nocaptcha", "Do not ask the captcha before a disk is overwritten (for scripts)");
+	}
+	if (i_usage && i_example)
+		scrivi_examples();
+	if (i_example)
+	{
+		scrivi_esempio("The plan: what is in the backup", "xc z:\\pc.zpaq");
+		scrivi_esempio("Choose on a screen what, and where", "xc z:\\pc.zpaq -gui");
+		scrivi_esempio("On the physical disk 2", "xc z:\\pc.zpaq -to 2: -force");
+		scrivi_esempio("...and read it back", "xc z:\\pc.zpaq -to 2: -force -verify");
+		scrivi_esempio("A disk for a virtual machine", "xc z:\\pc.zpaq -to d:\\pc.vmdk");
+		scrivi_esempio("An older backup, for Hyper-V", "xc z:\\pc.zpaq -to d:\\pc.vhdx -until 3");
+		scrivi_esempio("The disks of this PC", "drives");
+	}
+	return ("Restore the disk of Windows saved by ac (Windows only)");
 }
 #endif
 #ifdef _WIN32
@@ -153391,13 +154114,20 @@ string help_d(bool i_usage, bool i_example)
 	if (i_usage)
 	{
 		scrivi_riga("CMD d", "Deduplicate");
-		scrivi_riga(" ", "Find and delete duplicate files in a single folder.");
+		scrivi_riga(" ", "Find and delete duplicate files in a single folder, and in all that is below.");
 		scrivi_riga(" ", "WARNING: This operation is destructive!");
-		scrivi_riga(" ", "Note: The folder path must end with a path separator ('/' or '\\')");
+		scrivi_riga(" ", "A folder, or a folder and what to search: d c:\\dir\\*.mp4, or (as find) d c:\\dir\\ *.mp4");
+		scrivi_riga(" ", "Of the files with the same content the first one by name stays, the others go");
 		scrivi_riga("-ssd", "Multithread run");
 		scrivi_riga("-force", "Wet run (default: dry-run)");
-		scrivi_riga("-verbose", "Show duplicated files");
-		scrivi_riga("-(somehash)", "Use (somehash), one of the available next two lines, for detection");
+		scrivi_riga("-verbose", "Show the duplicated files in groups: the first (with its date) stays, the ==== ones go;");
+		scrivi_riga(" ", "  then what the group gives back and its hash. Smallest saving first, biggest last.");
+		scrivi_riga(" ", "  Hard links (names of the same file: nothing freed) in yellow, not counted in the total");
+		scrivi_riga("-find X", "Only the files with X in the name (as find, grep -i)");
+		scrivi_riga("-minsize X", "Only the files from X bytes up (-maxsize: up to X); -only, -not, -datefrom, -dateto too");
+		scrivi_riga("-zero", "Leave the empty files alone (by default they are all duplicates of each other)");
+		scrivi_riga("-norecursion", "Only that folder, not what is below");
+		scrivi_riga("-(somehash)", "Use (somehash), one of the available next two lines, for detection (default: xxh3)");
 		help_printhash(false);
 	}
 	if (i_usage && i_example)
@@ -153405,8 +154135,10 @@ string help_d(bool i_usage, bool i_example)
 	if (i_example)
 	{
 		scrivi_esempio("Deduplicate d0 (dry run, w/xxh3)", "d c:\\d0\\");
+		scrivi_esempio("Only the .mp4 of u: (dry run)", "d u:\\*.mp4");
+		scrivi_esempio("The same, the big ones, no empty files", "d u:\\ *.mp4 -minsize 100MB -zero");
 		scrivi_esempio("Deduplicate d0 (dry run,xxh3,M/T)", "d c:\\d0\\ -ssd");
-		scrivi_esempio("Deduplicate d0 WITHOUT MERCY (wet)", "d c:\\d0\\ -kill");
+		scrivi_esempio("Deduplicate d0 WITHOUT MERCY (wet)", "d c:\\d0\\ -force");
 		scrivi_esempio("Dedup WITHOUT MERCY (wet run,sha256)", "d c:\\d0\\ -force -sha256");
 	}
 	return ("Deduplicate file(s) in folder (no mercy)");
@@ -153469,11 +154201,14 @@ string help_image(bool i_usage, bool i_example)
 	{
 		scrivi_riga("CMD image", "Restore/export zpaqfranz images (RISKY: can overwrite drives; use with caution)");
 		scrivi_riga("-to x.vhd", "A .vhd that Windows mounts (Disk Management, Mount-DiskImage, mount x.vhd)");
+		scrivi_riga(" ", "  Up to 2040 GB: over that it becomes x.vhdx by itself (the command x too)");
+		scrivi_riga("-to x.vhdx", "A .vhdx, mounted by Windows the same way, of any size (7-Zip opens it too)");
 		scrivi_riga("-to folder", "image_X.vhd in it (a name without extension is a folder)");
 		scrivi_riga("-to x.vmdk", "A .vmdk for VMware Workstation, VirtualBox, QEMU/Proxmox (7-Zip opens it too)");
 		scrivi_riga(" ", "  One sparse file: the zeros are not in it (a thin image: about the used data)");
 		scrivi_riga(" ", "  With -raw a flat one: x.vmdk (a text) and x-flat.vmdk, the disk byte by byte");
-		scrivi_riga(" ", "  Sectors of 512 only; a sparse one up to 2040 GB (over: not supported yet, -raw)");
+		scrivi_riga(" ", "  Over 2032 GB the sparse one is in more files, as VMware makes it: x.vmdk (a text),");
+		scrivi_riga(" ", "  x-s001.vmdk, x-s002.vmdk... Sectors of 512 only. A partition over 2 TB: in a GPT");
 		scrivi_riga("-to x.raw", "The partition byte by byte (any other extension too: .img, .bin...)");
 		scrivi_riga("-to G: -image", "Write on the partition G: (-image is the consent: G: is overwritten)");
 		scrivi_riga(" ", "  The archive says what the image is: used clusters (NTFS, FAT, exFAT) or raw");
@@ -153495,6 +154230,7 @@ string help_image(bool i_usage, bool i_example)
 		scrivi_esempio("Image to VHD", "image i5.zpaq f: -to d:\\3.vhd");
 		scrivi_esempio("Image of disk 3 in a folder", "image i5.zpaq 3: -to d:\\folderone");
 		scrivi_esempio("Image to raw file", "image i2.zpaq f: -to d:\\1.raw");
+		scrivi_esempio("Image to VHDX (any size)", "image i5.zpaq f: -to d:\\3.vhdx");
 		scrivi_esempio("Image to VMDK (sparse)", "image i5.zpaq f: -to d:\\3.vmdk");
 		scrivi_esempio("Image to VMDK (flat)", "image i5.zpaq f: -to d:\\3.vmdk -raw");
 		scrivi_esempio("An older version", "image i5.zpaq f: -to d:\\old.vhd -until 3");
@@ -153621,7 +154357,6 @@ string help_f(bool i_usage, bool i_example)
 		scrivi_riga(" ", "The volume is locked meanwhile: not the system one, no open files");
 		scrivi_riga(" ", "(there: f X:\\ -zero). -verify: the free clusters are read back");
 		scrivi_riga(" ", "The shadow copies of the volume (restore points), if any, can be lost");
-		scrivi_riga(" ", "Volumes up to 2 TB: over that it is not supported (yet), nothing is done");
 		scrivi_riga("Ctrl+C", "Stop, the report of what is done; again to quit");
 	}
 	if (i_usage && i_example)
@@ -154169,6 +154904,10 @@ void Jidac::load_help_map()
 
 #endif // corresponds to #if (#if defined(_WIN32))
 #endif /// NOSFTPEND
+#if defined(_WIN32) && !defined(ANCIENT)
+	help_map.insert(std::pair<string, HelpInfo>("ac", HelpInfo("Backup   ", help_ac, 1))); /// 65.9n
+	help_map.insert(std::pair<string, HelpInfo>("xc", HelpInfo("Restore  ", help_xc, 2))); /// 65.9p
+#endif
 
 	// Restore
 	help_map.insert(std::pair<string, HelpInfo>("w", HelpInfo("Restore  ", help_w, 2)));
@@ -154378,6 +155117,17 @@ void Jidac::usage(bool i_flagdie= true)
 	color_green();
 	moreprint("franz");
 	color_restore();
+#ifndef ANCIENT
+	/// 65.9y
+	color_cyan();
+	moreprint("Chooser  ", true);
+	color_restore();
+	moreprint(": zpaqfranz ", true);
+	color_green();
+	moreprint("t", true);
+	color_restore();
+	moreprint(" (or x l i v e w zip image...) with no archive: pick it on a screen");
+#endif
 
 #ifdef HWSHA1
 	moreprint("     -hw : Force hardware SHA1 (fails if unsupported by CPU)");
@@ -155830,6 +156580,10 @@ int Jidac::loadparameters(int argc, const char** argv)
 	g_programflags.add(&flagdashboard,		"-dashboard",			"-image: a live map of the source (default)",		"",nuovodefault);
 	g_programflags.add(&flagnodashboard,	"-nodashboard",			"-image: no live map, the classic progress line",	"");
 	g_programflags.add(&flagelevated,		"-elevated",			"",												""); /// not in the help: set by the relaunch of mount
+#ifdef _WIN32
+	g_programflags.add(&flagacfake,			"-acfake",				"",												""); /// not in the help: for the tests of xc (ac on a disk that is not the one of Windows)
+	g_programflags.add(&flaggui,			"-gui",					"ac, xc: choose on a screen what to take, where to restore",	"");
+#endif
 	g_programflags.add(&flagelevatefake,	"-elevatefake",			"",												""); /// not in the help: for the tests of the relaunch of cloud -image
 	g_programflags.add(&flagraw,			"-raw",					"Image of the whole partition (or disk)",			"");
 	g_programflags.add(&flagnofrugal,		"-nofrugal",			"-image: the swap files too (pagefile...)",			"a;");
@@ -155841,7 +156595,8 @@ int Jidac::loadparameters(int argc, const char** argv)
 	g_programflags.add(&flagfixcase,		"-fixcase",				"Fix CAse",											"");
 	g_programflags.add(&flagfixreserved,	"-fixreserved",			"fixreserved",										"");
 	g_programflags.add(&flagnosanitize,		"-nosanitize",			"Do NOT fix Windows-invalid filenames",				"x;");
-	g_programflags.add(&flagntfs,			"-ntfs",				"NTFS image",										"");
+	g_programflags.add(&flagntfs,			"-ntfs",				"NTFS: used clusters (-image), scan from the $MFT",	"");
+	g_programflags.add(&flagnontfs,			"-nontfs",				"Never scan from the $MFT by itself",				"");
 	g_programflags.add(&flagvhd,			"-vhd",					"NTFS image to VHD file",										"");
 	g_programflags.add(&flaglongpath,		"-longpath",			"Longpath",											"");
 	g_programflags.add(&flagopen,			"-open",				"Abort if archive seems already opened",												"");
@@ -155930,7 +156685,6 @@ int Jidac::loadparameters(int argc, const char** argv)
 	g_ioBUFSIZE			=1048576;	//not more just like zpaq
 	g_thechosenhash		=FRANZO_SHA_1; //FRANZO_SHA_1;
 	g_thechosenhash_str	="SHA-1";
-	fullcommandline		="";
   	plainpassword		="";
 	g_mysql_host		="127.0.0.1";
 	g_mysql_port		=3306;
@@ -156033,10 +156787,6 @@ int Jidac::loadparameters(int argc, const char** argv)
 	flagrange			=false;
 	
 	bool flagforzarobocopy=false;
-
-	if (argc>1)
-		for (int i=1; i<argc; i++)
-			fullcommandline+=string(argv[i])+" ";
 
 #ifdef _WIN32
 #ifdef ZPAQFULL ///NOSFTPSTART
@@ -156582,6 +157332,8 @@ int Jidac::loadparameters(int argc, const char** argv)
 		opt=="fzf" 				||
 		opt=="k" 				||
 		opt=="a"  				||
+		opt=="ac"  				||
+		opt=="xc"  				||
 		opt=="e"  				||
 		opt=="x" 				||
 		opt=="xx" 				||
@@ -156648,6 +157400,16 @@ int Jidac::loadparameters(int argc, const char** argv)
 				command='M';
 			if (opt=="image")
 				command='E';
+			if (opt=="xc") /// 65.9p: the restore of what ac saved (Jidac::xc, by the door of image)
+			{
+#if defined(_WIN32) && !defined(ANCIENT)
+				command='E';
+				flagxc=true;
+#else
+				myprintf("66001! xc is not in this build (Windows only: the restore of the disk of Windows saved by ac)\n");
+				return 2;
+#endif
+			}
 			if (opt=="dump")
 				command='D';
 			if (opt=="collision")
@@ -156737,6 +157499,40 @@ int Jidac::loadparameters(int argc, const char** argv)
 			while (++i<argc && argv[i][0]!='-')
 				files.push_back(argv[i]);
 			--i;
+			/// 65.9n: ac archive = the a command on the disk of Windows: a c: -image, then what ac_prepara says
+			if (opt=="ac")
+			{
+#if defined(_WIN32) && !defined(ANCIENT)
+				/// (-acfake, hidden, for the tests of xc: the drive given is taken as the one of Windows, its disk as the one to save)
+				bool finto=false;
+				for (int k=1; k<argc; k++)
+					if (!strcmp(argv[k],"-acfake"))
+						finto=(files.size()==1);
+				if ((files.size()>0) && (!finto))
+				{
+					myprintf("66000! ac takes the archive only (ac z:\\backup.zpaq): what it saves is the disk of Windows\n");
+					return 2;
+				}
+				char cartella[MAX_PATH+1]={0};
+				string unita="c:";
+				if ((GetSystemWindowsDirectoryA(cartella,MAX_PATH)>2) && (cartella[1]==':'))
+					unita=string(1,(char)tolower((unsigned char)cartella[0]))+":";
+				if (finto)
+				{
+					unita=files[0];
+					files.clear();
+					flagacfake=true;
+				}
+				files.push_back(unita);
+				flagac=true;
+				flagimage=true;
+				if (flagnoturbo) /// ac is made in add2 only: -noturbo is its plain loop
+					g_turbothreads=1;
+#else
+				myprintf("66001! ac is not in this build (Windows only: the disk of Windows, for a restore that boots)\n");
+				return 2;
+#endif
+			}
 
 			
 ///zpaqfranz a z:\foo
@@ -161621,7 +162417,11 @@ int Jidac::doCommand()
 		if (flaghome)
 			return addhome();
 #ifndef ANCIENT
-		else if (flagturbo)
+		else if (flagturbo
+#ifdef _WIN32
+				 || flagac /// 65.9n: ac is made in add2 only
+#endif
+		)
 			return add2(); /// the same archive, faster (see add2)
 #else
 		else if (flagturbo)
@@ -162307,601 +163107,6 @@ int64_t dim(string i_filename)
 
 /////////////////////////////
 
-#ifdef _WIN32
-
-struct NTFSFileInfo
-{
-	DWORDLONG	 frn;
-	DWORDLONG	 parentFrn;
-	std::wstring name;
-	bool		 isDirectory;
-	int64_t		 size;
-	FILETIME	 creationTime;
-	FILETIME	 lastWriteTime;
-	FILETIME	 lastAccessTime;
-	DWORD		 attributes;
-};
-
-typedef struct _FILE_RECORD_SEGMENT_HEADER
-{
-	CHAR	  MultiSectorHeader[4];
-	USHORT	  UpdateSequenceArrayOffset;
-	USHORT	  UpdateSequenceArraySize;
-	ULONGLONG LogFileSequenceNumber;
-	USHORT	  SequenceNumber;
-	USHORT	  LinkCount;
-	USHORT	  FirstAttributeOffset;
-	USHORT	  Flags;
-	ULONG	  BytesInUse;
-	ULONG	  BytesAllocated;
-	ULONGLONG BaseFileRecordSegment;
-	USHORT	  NextAttributeInstance;
-} FILE_RECORD_SEGMENT_HEADER, *PFILE_RECORD_SEGMENT_HEADER;
-
-typedef struct _STANDARD_INFORMATION
-{
-	LARGE_INTEGER CreationTime;
-	LARGE_INTEGER LastWriteTime;
-	LARGE_INTEGER LastAccessTime;
-	LARGE_INTEGER ChangeTime;
-	ULONG		  FileAttributes;
-	// ... the rest is not necessary for this implementation
-} STANDARD_INFORMATION, *PSTANDARD_INFORMATION;
-
-// Update the enum to include $ATTRIBUTE_LIST
-typedef enum _ATTRIBUTE_TYPE_CODE
-{
-	AttributeStandardInformation= 0x10,
-	AttributeAttributeList		= 0x20,
-	AttributeFileName			= 0x30,
-	AttributeData				= 0x80,
-	AttributeEnd				= 0xFFFFFFFF
-} ATTRIBUTE_TYPE_CODE;
-
-#pragma pack(push, 1) // Set alignment to 1 byte
-typedef struct _ATTRIBUTE_LIST_ENTRY
-{
-	ATTRIBUTE_TYPE_CODE AttributeTypeCode;
-	USHORT				RecordLength;
-	UCHAR				AttributeNameLength;
-	UCHAR				AttributeNameOffset;
-	ULONGLONG			StartingVcn;
-	ULONGLONG			SegmentReferenceNumber; // This is the FRN of the extension record!
-	USHORT				AttributeInstance;
-	// The attribute name would follow here, if present
-} ATTRIBUTE_LIST_ENTRY, *PATTRIBUTE_LIST_ENTRY;
-#pragma pack(pop) // Restore default alignment
-
-// New structures for a cleaner and safer parsing of NTFS attributes
-typedef struct _ATTRIBUTE_RECORD_HEADER
-{
-	ATTRIBUTE_TYPE_CODE TypeCode;
-	ULONG				RecordLength;
-	UCHAR				NonResident;
-	UCHAR				NameLength;
-	USHORT				NameOffset;
-	USHORT				Flags;
-	USHORT				Instance;
-} ATTRIBUTE_RECORD_HEADER, *PATTRIBUTE_RECORD_HEADER;
-
-typedef struct _RESIDENT_ATTRIBUTE_HEADER
-{
-	ATTRIBUTE_RECORD_HEADER Common;
-	ULONG					ValueLength;
-	USHORT					ValueOffset;
-	USHORT					Reserved;
-} RESIDENT_ATTRIBUTE_HEADER, *PRESIDENT_ATTRIBUTE_HEADER;
-
-typedef struct _NON_RESIDENT_ATTRIBUTE_HEADER
-{
-	ATTRIBUTE_RECORD_HEADER Common;
-	ULONGLONG				StartingVcn;
-	ULONGLONG				LastVcn;
-	USHORT					RunArrayOffset;
-	USHORT					CompressionUnit;
-	ULONG					Padding;
-	ULONGLONG				AllocatedSize;
-	ULONGLONG				RealSize;
-	ULONGLONG				InitializedSize;
-} NON_RESIDENT_ATTRIBUTE_HEADER, *PNON_RESIDENT_ATTRIBUTE_HEADER;
-
-union TimeUnion
-{
-	LARGE_INTEGER li;
-	FILETIME	  ft;
-};
-bool getFileAttributesFromMFT(HANDLE hVolume, DWORDLONG frn, NTFSFileInfo &fi, const std::wstring &debugPath= L"")
-{
-	//  PHASE 1: Reading the base MFT record
-
-	struct
-	{
-		ULONGLONG FileReferenceNumber;
-	} input= {frn};
-	BYTE  outputBuffer[10240];
-	DWORD bytesReturned;
-
-	//  bool isDebugFile = (frn == 2814749767436488) || (frn == 5629499534540560);
-	bool isDebugFile= false;
-	if (isDebugFile)
-	{
-		myprintf("\n DEBUG DUMP per %s \n", wtou(debugPath.c_str()).c_str());
-		myprintf("FRN INIZIALE: %s\n", migliaia(frn));
-	}
-
-	if (!DeviceIoControl(hVolume, FSCTL_GET_NTFS_FILE_RECORD, &input, sizeof(input),
-						 outputBuffer, sizeof(outputBuffer), &bytesReturned, NULL))
-	{
-		if (isDebugFile)
-			myprintf("DeviceIoControl (fas 1) failed, error: %d\n", GetLastError());
-		return false;
-	}
-
-	if (bytesReturned < 12)
-	{ 
-		return false;
-	}
-
-	DWORD mftRecordLength= *(ULONG *)(outputBuffer + 8);
-	BYTE *mftRecord		 = outputBuffer + 12;
-
-	if (bytesReturned < (12 + mftRecordLength) || mftRecordLength < sizeof(FILE_RECORD_SEGMENT_HEADER))
-	{ 
-		return false;
-	}
-
-	PFILE_RECORD_SEGMENT_HEADER record= (PFILE_RECORD_SEGMENT_HEADER)mftRecord;
-	if (memcmp(record->MultiSectorHeader, "FILE", 4) != 0)
-	{ 
-		return false;
-	}
-
-	if (isDebugFile)
-	{
-		myprintf("Header MFT valido, FirstAttributeOffset: %d, BytesInUse: %d\n", record->FirstAttributeOffset, record->BytesInUse);
-	}
-
-	BYTE *attrPtr  = mftRecord + record->FirstAttributeOffset;
-	BYTE *mftEndPtr= mftRecord + record->BytesInUse;
-
-	bool foundStdInfo = false;
-	bool foundDataAttr= false;
-	// NEW: Variable to store theFRN of the extension record containing $DATA
-	DWORDLONG dataRecordFrn= 0;
-
-	fi.size= ULONGLONG(-2);
-
-	while (attrPtr < mftEndPtr)
-	{
-		PATTRIBUTE_RECORD_HEADER attrHeader= (PATTRIBUTE_RECORD_HEADER)attrPtr;
-		if (attrHeader->TypeCode == AttributeEnd)
-			break;
-		if (attrHeader->RecordLength == 0 || (attrPtr + attrHeader->RecordLength > mftEndPtr))
-			break;
-
-		//  Parsing attributes in the base record
-
-		if (attrHeader->TypeCode == AttributeStandardInformation && !foundStdInfo)
-		{
-			PRESIDENT_ATTRIBUTE_HEADER resAttr= (PRESIDENT_ATTRIBUTE_HEADER)attrHeader;
-			if (resAttr->Common.RecordLength >= sizeof(RESIDENT_ATTRIBUTE_HEADER) && resAttr->ValueLength >= sizeof(STANDARD_INFORMATION))
-			{
-				PSTANDARD_INFORMATION stdInfo= (PSTANDARD_INFORMATION)(attrPtr + resAttr->ValueOffset);
-				TimeUnion			  tu;
-
-				tu.li		   = stdInfo->CreationTime;
-				fi.creationTime= tu.ft;
-
-				tu.li			= stdInfo->LastWriteTime;
-				fi.lastWriteTime= tu.ft;
-
-				tu.li			 = stdInfo->LastAccessTime;
-				fi.lastAccessTime= tu.ft;
-
-				fi.attributes= stdInfo->FileAttributes;
-				foundStdInfo = true;
-			}
-		}
-		else if (attrHeader->TypeCode == AttributeData && !fi.isDirectory && !foundDataAttr)
-		{
-			// ... (logic for $DATA, unchanged, is only activated if $DATA is in the base record) ...
-			if (attrHeader->NameLength == 0)
-			{
-				if (attrHeader->NonResident == 0)
-				{
-					fi.size		 = ((PRESIDENT_ATTRIBUTE_HEADER)attrHeader)->ValueLength;
-					foundDataAttr= true;
-				}
-				else
-				{
-					fi.size		 = ((PNON_RESIDENT_ATTRIBUTE_HEADER)attrHeader)->RealSize;
-					foundDataAttr= true;
-				}
-			}
-		}
-		else if (attrHeader->TypeCode == AttributeAttributeList)
-		{
-			// NEW: Handling of $ATTRIBUTE_LIST
-			if (isDebugFile)
-				myprintf("Founded $ATTRIBUTE_LIST, scanning...\n");
-
-			PRESIDENT_ATTRIBUTE_HEADER resAttr	   = (PRESIDENT_ATTRIBUTE_HEADER)attrHeader;
-			BYTE					  *listEntryPtr= attrPtr + resAttr->ValueOffset;
-			BYTE					  *listEndPtr  = attrPtr + resAttr->Common.RecordLength;
-
-			while (listEntryPtr < listEndPtr)
-			{
-				PATTRIBUTE_LIST_ENTRY entry= (PATTRIBUTE_LIST_ENTRY)listEntryPtr;
-				if (entry->RecordLength < sizeof(ATTRIBUTE_LIST_ENTRY))
-					break; // Corrupted entry
-
-				// We look for the entry that describes the $DATA attribute
-				if (entry->AttributeTypeCode == AttributeData)
-				{
-					if (isDebugFile)
-						myprintf("Trovata voce per $DATA in $ATTRIBUTE_LIST. FRN di estensione: %s\n", migliaia(entry->SegmentReferenceNumber));
-					dataRecordFrn= entry->SegmentReferenceNumber;
-					goto end_attribute_scan; // Exit both loops, we have the pointer
-				}
-				listEntryPtr+= entry->RecordLength;
-			}
-		}
-
-		if (foundStdInfo && foundDataAttr)
-			break;
-		attrPtr+= attrHeader->RecordLength;
-	}
-end_attribute_scan:; // Label to exit the base record scan
-
-	//  PHASE 2: Reading the extension record (if necessary)
-
-	// NEW: If we found a pointer to $DATA in an Attribute List and we don't have the size yet...
-	if (dataRecordFrn != 0 && !foundDataAttr)
-	{
-		if (isDebugFile)
-			myprintf("Avvio FASE 2: Lettura del record MFT di estensione FRN %s\n", migliaia(dataRecordFrn));
-
-		input.FileReferenceNumber= dataRecordFrn;
-		BYTE  extOutputBuffer[10240];
-		DWORD extBytesReturned;
-
-		if (DeviceIoControl(hVolume, FSCTL_GET_NTFS_FILE_RECORD, &input, sizeof(input),
-							extOutputBuffer, sizeof(extOutputBuffer), &extBytesReturned, NULL))
-		{
-			BYTE					   *extMftRecord= extOutputBuffer + 12;
-			PFILE_RECORD_SEGMENT_HEADER extRecordHdr= (PFILE_RECORD_SEGMENT_HEADER)extMftRecord;
-			BYTE					   *extAttrPtr	= extMftRecord + extRecordHdr->FirstAttributeOffset;
-			BYTE					   *extMftEndPtr= extMftRecord + extRecordHdr->BytesInUse;
-
-			// Scan the extension record specifically looking for $DATA
-			while (extAttrPtr < extMftEndPtr)
-			{
-				PATTRIBUTE_RECORD_HEADER extAttrHdr= (PATTRIBUTE_RECORD_HEADER)extAttrPtr;
-				if (extAttrHdr->TypeCode == AttributeEnd || extAttrHdr->RecordLength == 0)
-					break;
-
-				if (extAttrHdr->TypeCode == AttributeData && extAttrHdr->NameLength == 0)
-				{
-					if (extAttrHdr->NonResident)
-					{
-						PNON_RESIDENT_ATTRIBUTE_HEADER nonResAttr= (PNON_RESIDENT_ATTRIBUTE_HEADER)extAttrHdr;
-						fi.size									 = nonResAttr->RealSize;
-						foundDataAttr							 = true;
-						if (isDebugFile)
-							myprintf("Trovato $DATA non residente nel record di estensione. Dimensione: %s\n", migliaia(fi.size));
-					}
-					break; // Found, let's exit
-				}
-				extAttrPtr+= extAttrHdr->RecordLength;
-			}
-		}
-		else
-		{
-			if (isDebugFile)
-				myprintf("DeviceIoControl (fas 2) failed, error: %d\n", GetLastError());
-		}
-	}
-
-	if (isDebugFile)
-	{
-		myprintf("Fine parsing attributi:\n");
-		myprintf("foundStdInfo: %s, foundDataAttr: %s\n", foundStdInfo ? "SI" : "NO", foundDataAttr ? "SI" : "NO");
-		if (foundDataAttr)
-		{
-			myprintf("Dimensione finale del file: %s\n", migliaia(fi.size));
-		}
-		else
-		{
-			myprintf("La dimensione del file non e' stata trovata, rimane a -2\n");
-		}
-		myprintf("FINE DEBUG DUMP\n\n");
-	}
-
-	return foundStdInfo;
-}
-
-void buildPaths(DWORDLONG rootFrn, const std::wstring &rootPath, const std::map<DWORDLONG, NTFSFileInfo> &files, std::map<DWORDLONG, std::wstring> &frnToPath)
-{
-	std::map<DWORDLONG, std::vector<DWORDLONG> > parentToChildren;
-	for (const auto &pair : files)
-		parentToChildren[pair.second.parentFrn].push_back(pair.first);
-
-	std::vector<std::pair<DWORDLONG, std::wstring> > stack;
-	stack.push_back(std::make_pair(rootFrn, rootPath));
-
-	while (!stack.empty())
-	{
-		std::pair<DWORDLONG, std::wstring> current= stack.back();
-		stack.pop_back();
-
-		DWORDLONG	 currentFrn = current.first;
-		std::wstring currentPath= current.second;
-
-		frnToPath[currentFrn]= currentPath;
-
-		if (parentToChildren.count(currentFrn))
-			for (DWORDLONG childFrn : parentToChildren[currentFrn])
-				if (files.count(childFrn))
-				{
-					const NTFSFileInfo &childInfo= files.at(childFrn);
-					stack.push_back(std::make_pair(childFrn, currentPath + L"\\" + childInfo.name));
-				}
-	}
-}
-int64_t ConvertFileTimeToCustomInt(const FILETIME &ft)
-{
-	SYSTEMTIME st;
-	if (FileTimeToSystemTime(&ft, &st))
-	{
-		return st.wYear * 10000000000LL + st.wMonth * 100000000LL + st.wDay * 1000000 + st.wHour * 10000 + st.wMinute * 100 + st.wSecond;
-	}
-	return 0;
-}
-
-bool starts_with_case_insensitive(const std::wstring &prefix, const std::wstring &text)
-{
-	if (prefix.size() > text.size())
-		return false;
-
-	for (size_t i= 0; i < prefix.size(); ++i)
-		if (std::towlower(prefix[i]) != std::towlower(text[i]))
-			return false;
-	return true;
-}
-int Jidac::NTFSEnumerateFiles(std::string i_path, DTMap &i_edt, bool i_checkifselected)
-{
-	int fileCount= 0;
-
-	if (i_path.size() == 0)
-	{
-		myprintf("64036: Error i_path empty\n");
-		return 0;
-	}
-
-	std::string	 drive(1, std::toupper(static_cast<unsigned char>(i_path[0])));
-	std::wstring volumePath= L"\\\\.\\" + utow(drive.c_str()) + L":";
-	std::wstring rootPath  = utow(drive.c_str()) + L":\\";
-	std::wstring wi_path   = utow(i_path.c_str());
-
-	HANDLE hVolume= CreateFileW(volumePath.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, NULL);
-	if (hVolume == INVALID_HANDLE_VALUE)
-	{
-		myprintf("64056: error opening volume %s: %d\n", wtou(volumePath.c_str()).c_str(), GetLastError());
-		return 0;
-	}
-
-	// Step 1: Complete enumeration of files from the USN journal
-	std::map<DWORDLONG, NTFSFileInfo> files;
-	MFT_ENUM_DATA					  med;
-	memset(&med, 0, sizeof(med));
-	med.StartFileReferenceNumber= 0;
-	med.LowUsn					= 0;
-	med.HighUsn					= MAXLONGLONG;
-
-	BYTE  buffer[64 * 1024];
-	DWORD bytesReturned;
-	bool  moreData= true;
-	myprintf("64096: Enumerating from USN Journal for drive %c...\n", drive[0]);
-
-	while (moreData)
-	{
-		if (DeviceIoControl(hVolume, FSCTL_ENUM_USN_DATA, &med, sizeof(med), buffer, sizeof(buffer), &bytesReturned, NULL))
-		{
-			DWORDLONG	nextStart= *(DWORDLONG *)buffer;
-			PUSN_RECORD pRecord	 = (PUSN_RECORD)(buffer + 8);
-			DWORD		offset	 = 8;
-			while (offset < bytesReturned)
-			{
-				if (pRecord->MajorVersion == 2)
-				{
-					NTFSFileInfo fi;
-					fi.frn		  = pRecord->FileReferenceNumber;
-					fi.parentFrn  = pRecord->ParentFileReferenceNumber;
-					fi.name		  = std::wstring(pRecord->FileName, pRecord->FileNameLength / sizeof(WCHAR));
-					fi.isDirectory= (pRecord->FileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
-					fi.size		  = -1;						 // Placeholder, metadata will be obtained later
-					fi.attributes = pRecord->FileAttributes; // Base attributes from the journal
-					memset(&fi.creationTime, 0, sizeof(fi.creationTime));
-					memset(&fi.lastWriteTime, 0, sizeof(fi.lastWriteTime));
-					memset(&fi.lastAccessTime, 0, sizeof(fi.lastAccessTime));
-					files[fi.frn]= fi;
-				}
-				offset+= pRecord->RecordLength;
-				pRecord= (PUSN_RECORD)((BYTE *)pRecord + pRecord->RecordLength);
-			}
-			med.StartFileReferenceNumber= nextStart;
-		}
-		else
-		{
-			DWORD error= GetLastError();
-			if (error == ERROR_HANDLE_EOF || error == ERROR_NO_MORE_FILES)
-				moreData= false;
-			else
-			{
-				myprintf("65115: Error in DeviceIoControl: %d\n", error);
-				CloseHandle(hVolume);
-				return 0;
-			}
-		}
-	}
-
-	myprintf("64119: Enumeration completed, total records: %s\n", migliaia(files.size()));
-
-	// Step 2: Find the root of the volume
-	DWORDLONG rootFrn= 0;
-	for (const auto &pair : files)
-	{
-		if ((files.find(pair.second.parentFrn) == files.end() || pair.second.parentFrn == pair.first) &&
-			pair.second.isDirectory &&
-			pair.second.name != L"$RmMetadata" &&
-			pair.second.name != L"Program Files" &&
-			pair.second.name != L"Program Files (x86)")
-		{
-			rootFrn= pair.second.parentFrn;
-			myprintf("64134: Found root FRN via parent check: %s\n", wtou(pair.second.name.c_str()).c_str());
-			break;
-		}
-	}
-
-	// Fallback to FRN 5 if not found
-	if (rootFrn == 0)
-	{
-		if (files.count(5))
-		{
-			rootFrn= 5;
-			myprintf("64147: Fallback to rootFrn=5\n");
-		}
-	}
-
-	if (rootFrn == 0)
-	{
-		myprintf("64153: Cannot find root, cannot build paths\n");
-		CloseHandle(hVolume);
-		return 0;
-	}
-
-	// Step 3: Reconstruct the full paths
-	std::map<DWORDLONG, std::wstring> frnToPath;
-	myprintf("64158: Building paths for drive %s starting from FRN %s\n", wtou(rootPath.c_str()).c_str(), migliaia(rootFrn));
-	int64_t startbuild= mtime();
-	buildPaths(rootFrn, rootPath.substr(0, rootPath.length() - 1), files, frnToPath);
-	myprintf("64181: Path construction complete. Total paths built: %s time %s\n", migliaia(frnToPath.size()), migliaia2(mtime() - startbuild));
-
-	// Step 4: Filter relevant files and get metadata only for those
-	for (const auto &pair : files)
-	{
-		const NTFSFileInfo &fi= pair.second;
-		if (frnToPath.find(fi.frn) == frnToPath.end())
-			continue; // Skip orphan files
-
-		if (fi.isDirectory)
-			continue; // Process only files, not directories
-
-		std::wstring path= frnToPath[fi.frn];
-		if (!starts_with_case_insensitive(wi_path, path))
-			continue; // Skip files that do not start with the specified path
-
-		// Step 5: Get complete metadata from the MFT for the filtered files
-		NTFSFileInfo updatedFi= fi; // Copy existing data
-		if (!getFileAttributesFromMFT(hVolume, fi.frn, updatedFi))
-		{
-			// If it fails, keep the base data (attributes from the journal, size at -1)
-			myprintf("64200: Warning: Failed to get MFT attributes for FRN %s\n", migliaia(fi.frn));
-		}
-
-		// Step 6: Process the file with the updated metadata
-		SYSTEMTIME stCreate, stModify, stAccess;
-		FileTimeToSystemTime(&updatedFi.creationTime, &stCreate);
-		FileTimeToSystemTime(&updatedFi.lastWriteTime, &stModify);
-		FileTimeToSystemTime(&updatedFi.lastAccessTime, &stAccess);
-
-		if (flagdebug)
-		{
-			if (prendidimensionefile(wtou(path.c_str()).c_str()) != updatedFi.size)
-			{
-				myprintf("\n");
-				myprintf("64112: frn %s file: %s\n", migliaia(fi.frn), wtou(path.c_str()).c_str());
-				myprintf("64113: Getted %s expected %s %lld\n", migliaia(prendidimensionefile(wtou(path.c_str()).c_str())), migliaia2(updatedFi.size), (long long)updatedFi.size);
-			}
-
-			myprintf("64179: File: %s\n", wtou(path.c_str()).c_str());
-			myprintf("64183:   Size: %22s bytes ", migliaia(updatedFi.size));
-			if (updatedFi.attributes)
-			{
-				myprintf("Attr:");
-				if (updatedFi.attributes & FILE_ATTRIBUTE_READONLY)
-					myprintf(" Read-only");
-				if (updatedFi.attributes & FILE_ATTRIBUTE_HIDDEN)
-					myprintf(" Hidden");
-				if (updatedFi.attributes & FILE_ATTRIBUTE_SYSTEM)
-					myprintf(" System");
-				if (updatedFi.attributes & FILE_ATTRIBUTE_ARCHIVE)
-					myprintf(" Archive");
-				myprintf("\n");
-			}
-			myprintf("64185:   Created: %04d-%02d-%02d %02d:%02d:%02d Modified: %04d-%02d-%02d %02d:%02d:%02d Access: %04d-%02d-%02d %02d:%02d:%02d\n",
-					 stCreate.wYear, stCreate.wMonth, stCreate.wDay, stCreate.wHour, stCreate.wMinute, stCreate.wSecond,
-					 stModify.wYear, stModify.wMonth, stModify.wDay, stModify.wHour, stModify.wMinute, stModify.wSecond,
-					 stAccess.wYear, stAccess.wMonth, stAccess.wDay, stAccess.wHour, stAccess.wMinute, stAccess.wSecond);
-		}
-
-		// Prepare data for addfile
-		std::string	  fn		  = wtou(path.c_str());
-		int64_t		  esize		  = (updatedFi.size == -1) ? 0 : updatedFi.size;
-		int64_t		  edate		  = ConvertFileTimeToCustomInt(updatedFi.lastWriteTime);
-		int64_t		  creationdate= ConvertFileTimeToCustomInt(updatedFi.creationTime);
-		int64_t		  accessdate  = ConvertFileTimeToCustomInt(updatedFi.lastAccessTime);
-		const int64_t eattr		  = 'w' + (int64_t(updatedFi.attributes) << 8);
-
-		if (flagdebug3)
-			myprintf("63963: NTFS Adding %s\n", fn.c_str());
-
-		// Call the function to add the file
-		addfile(i_checkifselected, i_edt, fn, edate, esize, eattr, creationdate, accessdate);
-		fileCount++;
-	}
-
-	CloseHandle(hVolume);
-	myprintf("\n");
-	myprintf("64237: Filecount %s\n", migliaia(fileCount));
-	return fileCount;
-}
-
-bool IsPathNTFS(const char *path)
-{
-	wchar_t widePath[MAX_PATH];
-	wchar_t volumeRoot[MAX_PATH];
-	wchar_t fileSystemName[MAX_PATH];
-
-	// Convert the path from char* to wchar_t*
-	if (MultiByteToWideChar(CP_ACP, 0, path, -1, widePath, MAX_PATH) == 0)
-	{
-		myprintf("63988: Error multi\n");
-		return false;
-	}
-
-	// Gets the root path of thevolume (e.g. "C:\")
-	if (!GetVolumePathNameW(widePath, volumeRoot, MAX_PATH))
-	{
-		myprintf("63995: Cannot get on path %s\n", path);
-		return false;
-	}
-
-	// Get volume information, including the filesystem name
-	if (!GetVolumeInformationW(volumeRoot, NULL, 0, NULL, NULL, NULL, fileSystemName, MAX_PATH))
-	{
-		myprintf("64002: Error getting volumeroot\n");
-		return false;
-	}
-
-	// Compare the filesystem name with "NTFS"
-	if (_wcsicmp(fileSystemName, L"NTFS") == 0)
-		return true;
-	else
-		return false;
-}
-#endif
-
 void Jidac::exclude_output()
 {
 	if (g_output != "")
@@ -163100,6 +163305,1459 @@ static void scanerrore(const char *i_where, const string &i_path, int i_errno)
 }
 #endif // unix
 
+#ifdef _WIN32
+/*
+	65.9c: -ntfs without -image (65.9a and b: it was -ntfs2, side by side with the old scan of -ntfs
+	through the list of the USN journal, that lost the hard links and the folders: removed).
+
+	The list of the files of an NTFS volume taken from its $MFT, read raw from the volume in one
+	sequential pass, instead of asking Windows folder by folder (FindFirstFile/FindNextFile).
+
+	The rule: the list must be the one of the normal scan, entry by entry. So
+	- every name of every file (the hard links too), the folders, the very strings of scandir()
+	- where only Windows knows what a program is given, Windows is asked, with the very calls of
+	  the normal scan: a folder it may not let list (one question for each security descriptor,
+	  not for each folder), a reparse point (some are hidden to the programs), a name or a path
+	  the Win32 calls cannot take, the folders of a cloud provider (they fill up when listed):
+	  those go to the normal scan as they are, so the result is the same by construction
+	- on a live volume what Windows still has in memory is sent to the disk first, a record caught
+	  while it was being written is asked again to Windows
+	Needs an administrator (the volume is opened raw) and NTFS, else it says so and the normal scan
+	is done.
+	65.9l: it starts by itself too (ntfs2_dasolo), when every argument of the command line is a
+	whole partition (a z:\1.zpaq c:\ e:\; with -vss the link to the shadow copy), all of them are
+	NTFS volumes of this machine, and an administrator runs. Else the normal scan, and nothing is
+	said (when it does not go, the reason is told with -verbose). -ntfs still asks for it (a folder
+	too), -nontfs turns it off. With -image no scan at all: there -ntfs is the image of the used
+	clusters.
+	The copy 159 of the source (65.9b) has the comparison of the two scans inside, entry by
+	entry (-ntfs2test, and -ntfs2fake for the records asked to Windows): the numbers below are its.
+
+	WHAT THE LIST NEEDS (what scandir() gives to addfile()) AND WHERE IT IS IN A RECORD
+	  name           every $FILE_NAME (0x30) of the record and of its extension records, but the
+	                 DOS-only ones (the 8.3): a file with n hard links has n names. The folder of
+	                 each name is the parent reference in that same $FILE_NAME (its sequence number
+	                 is checked against the one of the folder)
+	  folder or file the flag 0x02 in the header of the record
+	  size           the unnamed $DATA (0x80): the length of the value if resident, the "real size"
+	                 in its first piece (lowest VCN 0) if not. A folder: 0
+	  date           $STANDARD_INFORMATION (0x10), offset 8 (last write)
+	  creation date  $STANDARD_INFORMATION, offset 0
+	  access date    not needed: scandir() stores 0
+	  attributes     $STANDARD_INFORMATION, offset 0x20, with what Windows does before giving them:
+	                 0x40000 (the file has extended attributes) and 0x10000000 / 0x20000000 (it has
+	                 an index) are on the disk only; DIRECTORY comes from the flag of the record;
+	                 COMPRESSED, SPARSE, ENCRYPTED of a file are those in the header of its unnamed
+	                 $DATA; 0 becomes NORMAL
+	  reparse tag    $REPARSE_POINT (0xC0), first 4 bytes (if not resident: the copy in $FILE_NAME)
+	  can be listed? the security id in $STANDARD_INFORMATION, offset 0x34 (NTFS 3.0 and later): not
+	                 kept in the list, used to ask Windows once for each security descriptor
+	  streams        a named $DATA only says "this file has alternate streams": with -forcewindows
+	                 those files, and only those, are asked to Windows as scandir() does
+	Not needed: allocated size, number of hard links (every name is an entry), MFT change time, owner.
+	Not to be used: the sizes, the dates and the attributes kept in $FILE_NAME (those of when the name
+	was written, refreshed only now and then).
+	How far they can be trusted: FindFirstFile does not read the record, it reads the copy of size,
+	dates and attributes kept in the entry of the folder, that NTFS refreshes when it likes. For a
+	file with more names, a file a program is writing, a folder, the copy and the record can differ
+	(seen: 15-20 entries of 182.600 on a C:). On a frozen volume (a shadow copy) the record is what
+	the file itself says when opened there. But for a file a program keeps open and writes (seen: the
+	.evtx and .etl logs of the system) NTFS puts the new date in the record only now and then, while
+	the entry of the folder is refreshed whenever anyone opens and closes the file: the date in the
+	record ON THE DISK, and so in a shadow copy, can be older than the one the normal scan gives (seen:
+	7 minutes on Security.evtx, same size; the entries had been refreshed by the comparison itself,
+	that opened the files it asked about). The size was never behind, and often ahead of the folder. Tried:
+	a file kept open by a program that adds 4 KB a second is 0 bytes for the normal scan until the
+	program closes it, and has its true size for -ntfs; its date does not move for either
+
+	WHAT IT COSTS (a VM with Windows 11, 4 cores, a virtual NVMe)
+	The normal scan costs by FOLDER: 30-60 microseconds each with everything in the cache of
+	Windows, about 280 with nothing in it (a shadow copy is a new volume for the cache: with -vss it
+	is always so), and about one microsecond a file. -ntfs costs the read of the whole $MFT (1 KB a
+	record, in use or not: 0,4-0,5 s a GB on that disk) whatever the folder asked, then 0,3
+	microseconds a name, 1,2 with the table of the files (addfile(): about 2).
+	  C: 182.600 names, 34.300 folders, $MFT 263 MB   normal 1,80 s    -ntfs 0,26 s (cold: 10,6 / 0,3)
+	  its shadow copy, first scan                      normal 8,7 s     -ntfs 0,69 s
+	  1.100.000 names, 101.000 folders, $MFT 1,1 GB    normal 3,1 s     -ntfs 0,85-1,15 s (cold: 26,5 / 0,87)
+	  1.010.000 names, 10.100 folders, $MFT 1 GB       normal 0,97 s    -ntfs 0,82 s (cold: 8,8 / 0,83)
+	Break-even, in folders = the time to read the $MFT / the cost of a folder: on that C: 4.000 folders
+	(a tenth of the volume) warm; on the volume of 101.000 folders 17.000 warm, 1.900 cold. Below, the
+	normal scan is faster: the whole $MFT is read to list ten files
+*/
+#define NTFS2_INUSO 1
+#define NTFS2_CARTELLA 2
+#define NTFS2_STREAM 4 /// a named $DATA: alternate streams
+#define NTFS2_DATI 8   /// an unnamed $DATA, and what its header says of it:
+#define NTFS2_COMPRESSO 16
+#define NTFS2_SPARSO 32
+#define NTFS2_CIFRATO 64
+#define NTFS2_POSIX 0x8000
+#define NTFS2_PEZZO (4u << 20) /// measured: 1, 4, 16, 64 MB => 4 is the fastest
+#define NTFS2_LUNGO 240		   /// a folder with a path from here on goes to the normal scan (MAX_PATH)
+
+struct franzntfs2_rec /// one record of the $MFT: a file, or a folder
+{
+	uint64_t mtime;	  /// $STANDARD_INFORMATION: last write, FILETIME
+	uint64_t ctime;	  /// creation
+	int64_t	 size;	  /// the unnamed $DATA
+	uint32_t attr;	  /// $STANDARD_INFORMATION
+	uint32_t reparse; /// the tag of $REPARSE_POINT
+	uint32_t secid;	  /// the security descriptor (NTFS 3.0 and later), 0 = not known
+	uint16_t seq;	  /// sequence number of the record
+	uint8_t	 stato;	  /// NTFS2_INUSO, NTFS2_CARTELLA, NTFS2_STREAM
+	uint8_t	 libero;
+};
+struct franzntfs2_nome /// one name ($FILE_NAME): a file with three hard links has three
+{
+	uint32_t padre;	   /// record of the folder
+	uint32_t file;	   /// record of the file
+	uint32_t off;	   /// in the pool: UTF-8, as wtou() makes it
+	uint16_t len;	   /// bytes; NTFS2_POSIX: a name of the POSIX kind
+	uint16_t seqpadre; /// sequence number of the folder, as the name has it
+};
+struct franzntfs2_run
+{
+	int64_t lcn, clusters;
+};
+static inline uint16_t ntfs2_u16(const unsigned char *p)
+{
+	uint16_t v;
+	memcpy(&v, p, 2);
+	return v;
+}
+static inline uint32_t ntfs2_u32(const unsigned char *p)
+{
+	uint32_t v;
+	memcpy(&v, p, 4);
+	return v;
+}
+static inline uint64_t ntfs2_u64(const unsigned char *p)
+{
+	uint64_t v;
+	memcpy(&v, p, 8);
+	return v;
+}
+
+class franzntfs2 /// the $MFT of one volume, in memory
+{
+  public:
+	string	 m_device;	   /// /Device/HarddiskVolume3
+	string	 m_errore;	   /// why it could not be read
+	uint32_t m_settore, m_cluster, m_recsize;
+	int64_t	 m_mftbytes;
+	uint64_t m_quanti;	   /// records
+	uint64_t m_inuso;	   /// base records in use
+	uint64_t m_estensioni; /// extension records (what they hold is of their base record)
+	uint64_t m_riletti;	   /// caught while being written: asked again to Windows
+	uint64_t m_persi;	   /// ...and not got
+	uint32_t m_maxsecid;
+	unsigned m_runs;
+	int		 m_flush;	  /// 0 not tried, 1 done, 2 not done (a shadow copy is read only)
+	bool	 m_dawindows; /// the pieces of $MFT: said by Windows (false: by its record 0)
+	double	 m_tflush, m_tlettura, m_tanalisi, m_tfigli;
+	std::vector<franzntfs2_rec>	 m_rec;
+	std::vector<franzntfs2_nome> m_nomi;
+	std::vector<char>			 m_pool;
+	std::vector<uint32_t>		 m_primo;	/// the names in the folder r: m_figli[m_primo[r] .. m_primo[r + 1])
+	std::vector<uint32_t>		 m_figli;
+	std::vector<unsigned char>	 m_accesso; /// by security descriptor: 0 not asked, 1 Windows lists such a folder, 2 it does not
+	std::map<uint64_t, int>		 m_reparse; /// by tag and kind: 1 Windows shows the reparse point, 2 it hides it
+
+	franzntfs2() : m_settore(0), m_cluster(0), m_recsize(0), m_mftbytes(0), m_quanti(0), m_inuso(0), m_estensioni(0), m_riletti(0), m_persi(0), m_maxsecid(0), m_runs(0), m_flush(0), m_dawindows(false), m_tflush(0), m_tlettura(0), m_tanalisi(0), m_tfigli(0), m_h(INVALID_HANDLE_VALUE)
+	{
+	}
+	static double adesso()
+	{
+		LARGE_INTEGER f, c;
+		QueryPerformanceFrequency(&f);
+		QueryPerformanceCounter(&c);
+		return (double)c.QuadPart / (double)f.QuadPart;
+	}
+	int64_t memoria() const
+	{
+		return (int64_t)(m_rec.capacity() * sizeof(franzntfs2_rec) + m_nomi.capacity() * sizeof(franzntfs2_nome) + m_pool.capacity() + (m_primo.capacity() + m_figli.capacity()) * sizeof(uint32_t) + m_accesso.capacity());
+	}
+	bool carica(const string &i_device, uint32_t i_seriale);
+
+  private:
+	HANDLE												  m_h;
+	std::vector<std::pair<uint32_t, uint16_t> >			  m_daestensione; /// names found in an extension record: of which life of the base record
+	std::vector<unsigned char>							  m_dawin;		  /// a record as Windows gives it
+
+	static bool leggi(HANDLE h, int64_t i_dove, void *o_buf, DWORD i_quanti)
+	{
+		LARGE_INTEGER p;
+		p.QuadPart= i_dove;
+		DWORD fatti= 0;
+		return SetFilePointerEx(h, p, NULL, FILE_BEGIN) && ReadFile(h, o_buf, i_quanti, &fatti, NULL) && (fatti == i_quanti);
+	}
+	/// the update sequence array: the last two bytes of every 512 of the record are put back
+	bool fixup(unsigned char *r) const
+	{
+		const uint32_t off= ntfs2_u16(r + 4), n= ntfs2_u16(r + 6);
+		if ((n < 2) || (off + n * 2u > m_recsize) || ((n - 1) * 512u > m_recsize))
+			return false;
+		for (uint32_t i= 1; i < n; i++)
+		{
+			unsigned char *fine= r + i * 512 - 2;
+			if ((fine[0] != r[off]) || (fine[1] != r[off + 1]))
+				return false;
+			fine[0]= r[off + i * 2];
+			fine[1]= r[off + i * 2 + 1];
+		}
+		return true;
+	}
+	static void runlist(const unsigned char *p, const unsigned char *i_fine, std::vector<franzntfs2_run> &o_runs)
+	{
+		int64_t lcn= 0;
+		while ((p < i_fine) && *p)
+		{
+			const int nl= *p & 15, no= *p >> 4;
+			p++;
+			if ((nl > 8) || (no > 8) || (p + nl + no > i_fine))
+				return;
+			int64_t n= 0, d= 0;
+			for (int i= nl - 1; i >= 0; i--)
+				n= (n << 8) | p[i];
+			p+= nl;
+			for (int i= no - 1; i >= 0; i--)
+				d= (d << 8) | p[i];
+			if (no && (no < 8) && (p[no - 1] & 0x80))
+				d-= (int64_t)1 << (no * 8);
+			p+= no;
+			lcn+= d;
+			franzntfs2_run x;
+			x.lcn	  = no ? lcn : -1;
+			x.clusters= n;
+			o_runs.push_back(x);
+		}
+	}
+	/// the flags in the header of the unnamed $DATA: compressed (the low byte), encrypted, sparse
+	static unsigned datiflag(unsigned i_flag)
+	{
+		return NTFS2_DATI | ((i_flag & 0x00FF) ? NTFS2_COMPRESSO : 0) | ((i_flag & 0x8000) ? NTFS2_SPARSO : 0) | ((i_flag & 0x4000) ? NTFS2_CIFRATO : 0);
+	}
+	void nome(const unsigned char *v, uint64_t i_questo, bool i_estensione, uint16_t i_seqbase);
+	void analizza(const unsigned char *r, uint64_t i_indice);
+	bool dawindows(uint64_t i_indice);
+	void unrecord(unsigned char *r, uint64_t i_indice, std::vector<uint64_t> &o_rotti);
+	bool chiediruns(const std::wstring &i_volume, std::vector<franzntfs2_run> &o_runs, int64_t &o_validi);
+	bool leggimft(unsigned char *buf, const std::wstring &i_volume, uint32_t i_seriale);
+	void figli();
+};
+/// one name: into the pool as wtou() would give it (the same bytes of the normal scan)
+void franzntfs2::nome(const unsigned char *v, uint64_t i_questo, bool i_estensione, uint16_t i_seqbase)
+{
+	const uint64_t padre= ntfs2_u64(v) & 0xFFFFFFFFFFFFULL;
+	if (padre >= m_quanti)
+		return;
+	franzntfs2_nome x;
+	x.padre	  = (uint32_t)padre;
+	x.seqpadre= ntfs2_u16(v + 6);
+	x.file	  = (uint32_t)i_questo;
+	x.off	  = (uint32_t)m_pool.size();
+	const unsigned		 n= v[0x40];
+	const unsigned char *p= v + 0x42;
+	char				 tmp[255 * 4 + 8];
+	unsigned			 k= 0;
+	for (unsigned i= 0; i < n; i++)
+	{
+		const unsigned c= p[i * 2] | ((unsigned)p[i * 2 + 1] << 8);
+		if (c == '\\')
+			tmp[k++]= '/';
+		else if (c < 128)
+			tmp[k++]= (char)c;
+		else if (c < 2048)
+		{
+			tmp[k++]= (char)(192 + c / 64);
+			tmp[k++]= (char)(128 + c % 64);
+		}
+		else
+		{
+			const unsigned c2= (i + 1 < n) ? (p[i * 2 + 2] | ((unsigned)p[i * 2 + 3] << 8)) : 0;
+			if ((c >= 0xD800) && (c <= 0xDBFF) && (c2 >= 0xDC00) && (c2 <= 0xDFFF))
+			{
+				const uint32_t cp= 0x10000 + ((uint32_t)(c - 0xD800) << 10) + (uint32_t)(c2 - 0xDC00);
+				tmp[k++]		 = (char)(240 + (cp >> 18));
+				tmp[k++]		 = (char)(128 + ((cp >> 12) & 63));
+				tmp[k++]		 = (char)(128 + ((cp >> 6) & 63));
+				tmp[k++]		 = (char)(128 + (cp & 63));
+				i++; /// the low half
+			}
+			else
+			{
+				tmp[k++]= (char)(224 + c / 4096);
+				tmp[k++]= (char)(128 + c / 64 % 64);
+				tmp[k++]= (char)(128 + c % 64);
+			}
+		}
+	}
+	x.len= (uint16_t)k;
+	if (v[0x41] == 0)
+		x.len|= NTFS2_POSIX;
+	m_pool.insert(m_pool.end(), tmp, tmp + k);
+	if (i_estensione)
+		m_daestensione.push_back(std::make_pair((uint32_t)m_nomi.size(), i_seqbase));
+	m_nomi.push_back(x);
+}
+/// one record in use, with its fixup done: what a list of files needs, and nothing else
+void franzntfs2::analizza(const unsigned char *r, uint64_t i_indice)
+{
+	const uint64_t riferimento= ntfs2_u64(r + 0x20);
+	const uint64_t base		  = riferimento & 0xFFFFFFFFFFFFULL;
+	const uint64_t questo	  = base ? base : i_indice;
+	if (questo >= m_quanti)
+		return;
+	franzntfs2_rec &e= m_rec[(size_t)questo];
+	if (!base)
+	{
+		e.stato|= NTFS2_INUSO;
+		if (ntfs2_u16(r + 0x16) & 2)
+			e.stato|= NTFS2_CARTELLA;
+		e.seq= ntfs2_u16(r + 0x10);
+		m_inuso++;
+	}
+	else
+		m_estensioni++;
+	uint32_t usati= ntfs2_u32(r + 0x18);
+	if (usati > m_recsize)
+		usati= m_recsize;
+	uint32_t a= ntfs2_u16(r + 0x14);
+	while (a + 16 <= usati)
+	{
+		const uint32_t tipo= ntfs2_u32(r + a);
+		if (tipo == 0xFFFFFFFF)
+			break;
+		const uint32_t lung= ntfs2_u32(r + a + 4);
+		if ((lung < 16) || (lung > usati - a))
+			break;
+		const unsigned nomeattr= r[a + 9];
+		if (r[a + 8] == 0) /// resident: the value is here
+		{
+			if (lung >= 0x18)
+			{
+				const uint32_t vlen= ntfs2_u32(r + a + 0x10), voff= ntfs2_u16(r + a + 0x14);
+				if ((voff <= lung) && (vlen <= lung - voff))
+				{
+					const unsigned char *v= r + a + voff;
+					if (tipo == 0x10) /// $STANDARD_INFORMATION
+					{
+						if (vlen >= 0x24)
+						{
+							e.ctime= ntfs2_u64(v);
+							e.mtime= ntfs2_u64(v + 8);
+							e.attr = ntfs2_u32(v + 0x20);
+						}
+						if (vlen >= 0x38)
+						{
+							e.secid= ntfs2_u32(v + 0x34);
+							if (e.secid > m_maxsecid)
+								m_maxsecid= e.secid;
+						}
+					}
+					else if (tipo == 0x30) /// $FILE_NAME (the DOS-only one, the 8.3, is not a name of the list)
+					{
+						if ((vlen >= 0x42) && (v[0x41] != 2) && (vlen >= 0x42 + 2u * v[0x40]))
+						{
+							if ((ntfs2_u32(v + 0x38) & FILE_ATTRIBUTE_REPARSE_POINT) && (e.reparse == 0))
+								e.reparse= ntfs2_u32(v + 0x3C); /// in case $REPARSE_POINT is not resident
+							nome(v, questo, base != 0, (uint16_t)(riferimento >> 48));
+						}
+					}
+					else if (tipo == 0x80) /// $DATA
+					{
+						if (nomeattr == 0)
+						{
+							e.size= vlen;
+							e.stato= (uint8_t)((e.stato & ~(NTFS2_COMPRESSO | NTFS2_SPARSO | NTFS2_CIFRATO)) | datiflag(ntfs2_u16(r + a + 0x0C)));
+						}
+						else
+							e.stato|= NTFS2_STREAM;
+					}
+					else if (tipo == 0xC0) /// $REPARSE_POINT
+					{
+						if (vlen >= 4)
+							e.reparse= ntfs2_u32(v);
+					}
+				}
+			}
+		}
+		else if ((tipo == 0x80) && (lung >= 0x40))
+		{
+			if (nomeattr == 0)
+			{
+				if (ntfs2_u64(r + a + 0x10) == 0) /// its first piece: the one with the sizes
+				{
+					e.size = (int64_t)ntfs2_u64(r + a + 0x30);
+					e.stato= (uint8_t)((e.stato & ~(NTFS2_COMPRESSO | NTFS2_SPARSO | NTFS2_CIFRATO)) | datiflag(ntfs2_u16(r + a + 0x0C)));
+				}
+			}
+			else
+				e.stato|= NTFS2_STREAM;
+		}
+		a+= lung;
+	}
+}
+/// a record asked to Windows (FSCTL_GET_NTFS_FILE_RECORD): the one in memory, whole
+bool franzntfs2::dawindows(uint64_t i_indice)
+{
+	if (m_dawin.empty())
+		m_dawin.resize(sizeof(NTFS_FILE_RECORD_OUTPUT_BUFFER) + m_recsize + 16);
+	NTFS_FILE_RECORD_INPUT_BUFFER in;
+	in.FileReferenceNumber.QuadPart= (LONGLONG)i_indice;
+	DWORD resi					   = 0;
+	if (!DeviceIoControl(m_h, FSCTL_GET_NTFS_FILE_RECORD, &in, sizeof(in), &m_dawin[0], (DWORD)m_dawin.size(), &resi, NULL))
+	{
+		m_persi++;
+		return false;
+	}
+	const NTFS_FILE_RECORD_OUTPUT_BUFFER *o= (const NTFS_FILE_RECORD_OUTPUT_BUFFER *)&m_dawin[0];
+	/// Windows gives the first record in use from that number down: another one = that one is not in use any more
+	if ((((uint64_t)o->FileReferenceNumber.QuadPart) & 0xFFFFFFFFFFFFULL) != i_indice)
+		return false;
+	if ((o->FileRecordLength < 0x38) || (o->FileRecordLength > m_recsize))
+	{
+		m_persi++;
+		return false;
+	}
+	const unsigned char *r= (const unsigned char *)o->FileRecordBuffer;
+	if (memcmp(r, "FILE", 4) || (!(ntfs2_u16(r + 0x16) & 1)))
+		return false;
+	return true;
+}
+void franzntfs2::unrecord(unsigned char *r, uint64_t i_indice, std::vector<uint64_t> &o_rotti)
+{
+	if (memcmp(r, "FILE", 4)) /// never used (or BAAD)
+		return;
+	if (!(ntfs2_u16(r + 0x16) & 1)) /// not in use
+		return;
+	/// the fixup does not come back, or the record says another number (NTFS 3.1 writes it): caught
+	/// while it was being written, or not where it should be. Asked to Windows, later
+	if ((!fixup(r)) || ((ntfs2_u16(r + 4) >= 0x30) && (ntfs2_u32(r + 0x2C) != (uint32_t)i_indice)))
+	{
+		o_rotti.push_back(i_indice);
+		return;
+	}
+	analizza(r, i_indice);
+}
+/// where the $MFT is, asked to Windows: right even when its pieces are so many that record 0 has an attribute list
+bool franzntfs2::chiediruns(const std::wstring &i_volume, std::vector<franzntfs2_run> &o_runs, int64_t &o_validi)
+{
+	NTFS_VOLUME_DATA_BUFFER vd;
+	DWORD					resi= 0;
+	if (!DeviceIoControl(m_h, FSCTL_GET_NTFS_VOLUME_DATA, NULL, 0, &vd, sizeof(vd), &resi, NULL))
+		return false;
+	o_validi= vd.MftValidDataLength.QuadPart;
+	const std::wstring nomemft= i_volume + L"\\$MFT";
+	HANDLE			   hm	  = CreateFileW(nomemft.c_str(), FILE_READ_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, NULL);
+	if (hm == INVALID_HANDLE_VALUE)
+		return false;
+	std::vector<unsigned char> out(1 << 18);
+	STARTING_VCN_INPUT_BUFFER  in;
+	in.StartingVcn.QuadPart= 0;
+	bool ancora= true, bene= true;
+	while (ancora && bene)
+	{
+		ancora= false;
+		if (!DeviceIoControl(hm, FSCTL_GET_RETRIEVAL_POINTERS, &in, sizeof(in), &out[0], (DWORD)out.size(), &resi, NULL))
+		{
+			if (GetLastError() == ERROR_MORE_DATA)
+				ancora= true;
+			else
+			{
+				bene= false;
+				break;
+			}
+		}
+		const RETRIEVAL_POINTERS_BUFFER *rp= (const RETRIEVAL_POINTERS_BUFFER *)&out[0];
+		int64_t							 da= rp->StartingVcn.QuadPart;
+		if (rp->ExtentCount == 0)
+			break;
+		for (DWORD i= 0; i < rp->ExtentCount; i++)
+		{
+			franzntfs2_run x;
+			x.lcn	  = rp->Extents[i].Lcn.QuadPart;
+			x.clusters= rp->Extents[i].NextVcn.QuadPart - da;
+			da		  = rp->Extents[i].NextVcn.QuadPart;
+			o_runs.push_back(x);
+		}
+		in.StartingVcn.QuadPart= da;
+	}
+	CloseHandle(hm);
+	return bene && (!o_runs.empty());
+}
+bool franzntfs2::leggimft(unsigned char *buf, const std::wstring &i_volume, uint32_t i_seriale)
+{
+	char testo[200];
+	if (!leggi(m_h, 0, buf, 4096) || memcmp(buf + 3, "NTFS    ", 8))
+	{
+		m_errore= "the boot sector is not the one of NTFS";
+		return false;
+	}
+	m_settore	= ntfs2_u16(buf + 0x0B);
+	uint32_t spc= buf[0x0D];
+	if (spc > 0x80)
+		spc= 1u << (256 - spc);
+	m_cluster			 = m_settore * spc;
+	const int64_t  mftlcn= (int64_t)ntfs2_u64(buf + 0x30);
+	const int	   cpr	 = (signed char)buf[0x40];
+	m_recsize			 = (cpr < 0) ? (((-cpr) < 31) ? (1u << (-cpr)) : 0) : (uint32_t)cpr * m_cluster;
+	const uint32_t seriale= ntfs2_u32(buf + 0x48);
+	if ((m_settore < 512) || (m_settore > 4096) || (m_settore & (m_settore - 1)) || (m_cluster == 0) || (m_cluster > (2u << 20)) || (m_recsize < 512) || (m_recsize > 65536) || (m_recsize % 512) || (NTFS2_PEZZO % m_cluster) || (mftlcn <= 0))
+	{
+		snprintf(testo, sizeof(testo), "a boot sector not understood (sector %u, cluster %u, record %u)", (unsigned)m_settore, (unsigned)m_cluster, (unsigned)m_recsize);
+		m_errore= testo;
+		return false;
+	}
+	if (seriale != i_seriale)
+	{
+		snprintf(testo, sizeof(testo), "not the volume of the folder (serial %08X against %08X)", (unsigned)seriale, (unsigned)i_seriale);
+		m_errore= testo;
+		return false;
+	}
+	/// record 0: $MFT itself, with its own pieces
+	std::vector<franzntfs2_run> runs0, runs;
+	int64_t						bytes0= 0;
+	bool						lista = false, zero= false;
+	if (leggi(m_h, mftlcn * m_cluster, buf, (m_recsize + m_settore - 1) / m_settore * m_settore) && (!memcmp(buf, "FILE", 4)) && fixup(buf))
+	{
+		zero		  = true;
+		uint32_t usati= ntfs2_u32(buf + 0x18);
+		if (usati > m_recsize)
+			usati= m_recsize;
+		for (uint32_t a= ntfs2_u16(buf + 0x14); a + 16 <= usati;)
+		{
+			const uint32_t tipo= ntfs2_u32(buf + a), lung= ntfs2_u32(buf + a + 4);
+			if ((tipo == 0xFFFFFFFF) || (lung < 16) || (lung > usati - a))
+				break;
+			if (tipo == 0x20)
+				lista= true;
+			if ((tipo == 0x80) && (buf[a + 9] == 0) && buf[a + 8] && (lung >= 0x40))
+			{
+				const int64_t reale= (int64_t)ntfs2_u64(buf + a + 0x30), iniziati= (int64_t)ntfs2_u64(buf + a + 0x38);
+				bytes0			   = (iniziati < reale) ? iniziati : reale;
+				const uint32_t dove= ntfs2_u16(buf + a + 0x20);
+				if (dove < lung)
+					runlist(buf + a + dove, buf + a + lung, runs0);
+			}
+			a+= lung;
+		}
+	}
+	int64_t validi= 0;
+	if (chiediruns(i_volume, runs, validi) && (validi > 0))
+	{
+		m_dawindows= true;
+		m_mftbytes = validi;
+	}
+	else if (zero && (!lista) && (!runs0.empty()) && (bytes0 > 0))
+	{
+		runs	  = runs0;
+		m_mftbytes= bytes0;
+	}
+	else
+	{
+		m_errore= zero ? "the $MFT is in too many pieces and Windows does not say where" : "record 0 of the $MFT cannot be read";
+		return false;
+	}
+	m_runs	= (unsigned)runs.size();
+	m_quanti= (uint64_t)(m_mftbytes / m_recsize);
+	if ((m_quanti < 16) || (m_quanti >= 0xFFFFFFF0ULL))
+	{
+		snprintf(testo, sizeof(testo), "a $MFT of %s records", migliaia((int64_t)m_quanti));
+		m_errore= testo;
+		return false;
+	}
+	m_rec.resize((size_t)m_quanti);
+	memset(&m_rec[0], 0, sizeof(franzntfs2_rec) * (size_t)m_quanti);
+	m_nomi.reserve((size_t)(m_quanti / 2));
+	m_pool.reserve((size_t)(m_quanti * 8));
+	std::vector<uint64_t>	   rotti;
+	std::vector<unsigned char> ponte(m_recsize);
+	uint32_t				   nelponte= 0;
+	uint64_t				   indice  = 0;
+	int64_t					   restano = (int64_t)(m_quanti * m_recsize);
+	const DWORD pezzo= NTFS2_PEZZO;
+	for (size_t k= 0; (k < runs.size()) && (restano > 0); k++)
+	{
+		if ((runs[k].lcn < 0) || (runs[k].clusters <= 0))
+		{
+			m_errore= "a piece of the $MFT that is nowhere";
+			return false;
+		}
+		int64_t dove= runs[k].lcn * (int64_t)m_cluster, lungo= runs[k].clusters * (int64_t)m_cluster;
+		if (lungo > restano)
+			lungo= restano;
+		while (lungo > 0)
+		{
+			const DWORD	 n	= (DWORD)((lungo > (int64_t)pezzo) ? pezzo : lungo);
+			const double ta= adesso();
+			if (!leggi(m_h, dove, buf, (n + m_settore - 1) / m_settore * m_settore))
+			{
+				snprintf(testo, sizeof(testo), "read error %u in the $MFT at byte %s of the volume", (unsigned)GetLastError(), migliaia(dove));
+				m_errore= testo;
+				return false;
+			}
+			const double tb= adesso();
+			m_tlettura+= tb - ta;
+			DWORD o= 0;
+			if (nelponte) /// a record across two pieces (a cluster smaller than the record)
+			{
+				const uint32_t manca= m_recsize - nelponte;
+				if (n < manca)
+				{
+					memcpy(&ponte[nelponte], buf, n);
+					nelponte+= n;
+					o		= n;
+				}
+				else
+				{
+					memcpy(&ponte[nelponte], buf, manca);
+					unrecord(&ponte[0], indice++, rotti);
+					nelponte= 0;
+					o		= manca;
+				}
+			}
+			for (; o + m_recsize <= n; o+= m_recsize, indice++)
+				unrecord(buf + o, indice, rotti);
+			if (o < n)
+			{
+				memcpy(&ponte[0], buf + o, n - o);
+				nelponte= n - o;
+			}
+			m_tanalisi+= adesso() - tb;
+			dove+= n;
+			lungo-= n;
+			restano-= n;
+		}
+	}
+	for (size_t i= 0; i < rotti.size(); i++)
+		if (dawindows(rotti[i]))
+		{
+			m_riletti++;
+			analizza((const unsigned char *)((const NTFS_FILE_RECORD_OUTPUT_BUFFER *)&m_dawin[0])->FileRecordBuffer, rotti[i]);
+		}
+	return true;
+}
+/// the names by folder (a counting sort on the record of the folder)
+void franzntfs2::figli()
+{
+	const double t= adesso();
+	/// a name found in an extension record whose base record is another file now: not a name
+	for (size_t i= 0; i < m_daestensione.size(); i++)
+	{
+		franzntfs2_nome &x= m_nomi[m_daestensione[i].first];
+		if (m_rec[x.file].seq != m_daestensione[i].second)
+			x.file= 0xFFFFFFFFu;
+	}
+	std::vector<std::pair<uint32_t, uint16_t> >().swap(m_daestensione);
+	m_primo.assign((size_t)m_quanti + 1, 0);
+	for (size_t i= 0; i < m_nomi.size(); i++)
+		m_primo[(size_t)m_nomi[i].padre + 1]++;
+	for (size_t i= 0; i < (size_t)m_quanti; i++)
+		m_primo[i + 1]+= m_primo[i];
+	m_figli.resize(m_nomi.size());
+	{
+		std::vector<uint32_t> pos(m_primo.begin(), m_primo.end() - 1);
+		for (size_t i= 0; i < m_nomi.size(); i++)
+			m_figli[pos[m_nomi[i].padre]++]= (uint32_t)i;
+	}
+	m_accesso.assign((size_t)((m_maxsecid < (1u << 24)) ? m_maxsecid : (1u << 24)) + 1, 0);
+	m_tfigli= adesso() - t;
+}
+bool franzntfs2::carica(const string &i_device, uint32_t i_seriale)
+{
+	m_device						= i_device;
+	const DWORD		   condiviso	= FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE;
+	const std::wstring volume		= utow(("//?/GLOBALROOT" + i_device).c_str());
+	/// what Windows still has in memory goes to the disk: a file just made would not be in the $MFT read raw
+	const double		t			= adesso();
+	HANDLE				hf			= CreateFileW(volume.c_str(), GENERIC_READ | GENERIC_WRITE, condiviso, NULL, OPEN_EXISTING, 0, NULL);
+	m_flush							= 2;
+	if (hf != INVALID_HANDLE_VALUE)
+	{
+		if (FlushFileBuffers(hf))
+			m_flush= 1;
+		CloseHandle(hf);
+	}
+	m_tflush= adesso() - t;
+	m_h		= CreateFileW(volume.c_str(), GENERIC_READ, condiviso, NULL, OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN, NULL);
+	if (m_h == INVALID_HANDLE_VALUE)
+	{
+		char testo[100];
+		snprintf(testo, sizeof(testo), "the volume cannot be opened (error %u)", (unsigned)GetLastError());
+		m_errore= testo;
+		return false;
+	}
+	bool		   bene= false;
+	unsigned char *buf = (unsigned char *)VirtualAlloc(NULL, NTFS2_PEZZO, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+	if (buf == NULL)
+		m_errore= "no memory for the read buffer";
+	else
+	{
+		try
+		{
+			bene= leggimft(buf, volume, i_seriale);
+			if (bene)
+				figli();
+		}
+		catch (std::bad_alloc &)
+		{
+			m_errore= "not enough memory for the $MFT";
+			bene	= false;
+		}
+		VirtualFree(buf, 0, MEM_RELEASE);
+	}
+	CloseHandle(m_h);
+	m_h= INVALID_HANDLE_VALUE;
+	std::vector<unsigned char>().swap(m_dawin);
+	return bene;
+}
+
+/// what -ntfs did for one argument
+struct franzntfs2_conti
+{
+	DTMap::iterator dopo;	/// where the next name goes in the table: they come in its order
+	bool			valido;
+	uint64_t		voci;	  /// names given to the table
+	uint64_t		cartelle; /// folders walked from the $MFT
+	uint64_t		negate;	  /// folders given to the normal scan: Windows does not let list them
+	uint64_t		lunghe;	  /// ...a path too long for a plain call
+	uint64_t		strane;	  /// ...a name the Win32 calls cannot take
+	uint64_t		cloud;	  /// ...of a cloud provider
+	uint64_t		altre;	  /// ...other reasons (not NTFS, another volume)
+	uint64_t		potate;	  /// -not and the like
+	uint64_t		reparse;  /// reparse points asked to Windows one by one
+	uint64_t		nascosti; /// reparse points Windows hides: plain files for a program
+	uint64_t		domande;  /// security descriptors asked
+	uint64_t		orfani;	  /// names left by a folder that is another one now
+	double			tvolume;  /// seconds: the $MFT read (once for each volume)
+	double			tcammino; /// seconds: the walk, the table of the files filled
+	franzntfs2_conti() : valido(false), voci(0), cartelle(0), negate(0), lunghe(0), strane(0), cloud(0), altre(0), potate(0), reparse(0), nascosti(0), domande(0), orfani(0), tvolume(0), tcammino(0)
+	{
+	}
+};
+/// the names of a folder in the order of the table of the files: a folder is its name and a /
+struct franzntfs2_ordine
+{
+	const franzntfs2 *v;
+	inline int		  byte(const franzntfs2_nome &x, unsigned i) const
+	{
+		const unsigned l= x.len & 0x7FFF;
+		if (i < l)
+			return (unsigned char)v->m_pool[x.off + i];
+		if ((i == l) && (v->m_rec[x.file].stato & NTFS2_CARTELLA))
+			return '/';
+		return -1;
+	}
+	bool operator()(uint32_t a, uint32_t b) const
+	{
+		const franzntfs2_nome &x= v->m_nomi[a], &y= v->m_nomi[b];
+		const unsigned		   lx= x.len & 0x7FFF, ly= y.len & 0x7FFF, comune= (lx < ly) ? lx : ly;
+		const int			   c= comune ? memcmp(&v->m_pool[x.off], &v->m_pool[y.off], comune) : 0;
+		if (c)
+			return c < 0;
+		for (unsigned i= comune;; i++)
+		{
+			const int bx= byte(x, i), by= byte(y, i);
+			if (bx != by)
+				return bx < by;
+			if (bx < 0)
+				return a < b;
+		}
+	}
+};
+static std::vector<franzntfs2 *> g_ntfs2_volumi;	  /// the volumes read in this run
+static int						 g_ntfs2_normale= 0; /// > 0: in a normal scan wanted by -ntfs itself, the hook stays out
+
+static bool ntfs2_cloud(DWORD i_tag)
+{
+	return (i_tag & 0xFFFF0FFFu) == MYIO_REPARSE_TAG_CLOUD; /// 0x9000001A ... 0x9000F01A, the sixteen scandir() names
+}
+/// the date as scandir() makes it from a FILETIME (0 = not a date: the entry is not taken)
+static int64_t ntfs2_data(uint64_t i_filetime)
+{
+	FILETIME ft;
+	ft.dwLowDateTime = (DWORD)i_filetime;
+	ft.dwHighDateTime= (DWORD)(i_filetime >> 32);
+	SYSTEMTIME st;
+	if (!FileTimeToSystemTime(&ft, &st))
+		return 0;
+	return st.wYear * 10000000000LL + st.wMonth * 100000000LL + st.wDay * 1000000 + st.wHour * 10000 + st.wMinute * 100 + st.wSecond;
+}
+/// a folder name the Win32 calls do not take as it is written (FindFirstFile would list something else, or nothing)
+static bool ntfs2_strano(const char *p, unsigned n)
+{
+	if (n == 0)
+		return true;
+	if ((p[n - 1] == '.') || (p[n - 1] == ' '))
+		return true;
+	for (unsigned i= 0; i < n; i++)
+	{
+		const unsigned char c= (unsigned char)p[i];
+		if ((c < 32) || (c == '"') || (c == '*') || (c == '/') || (c == ':') || (c == '<') || (c == '>') || (c == '?') || (c == '\\') || (c == '|'))
+			return true;
+	}
+	/// the device names of DOS: CON, PRN, AUX, NUL, COM1, LPT1... with or without an extension
+	unsigned base= 0;
+	while ((base < n) && (p[base] != '.'))
+		base++;
+	while ((base > 0) && (p[base - 1] == ' '))
+		base--;
+	if ((base < 3) || (base > 7))
+		return false;
+	char su[8];
+	for (unsigned i= 0; i < base; i++)
+		su[i]= (char)toupper((unsigned char)p[i]);
+	su[base]= 0;
+	if ((!strcmp(su, "CON")) || (!strcmp(su, "PRN")) || (!strcmp(su, "AUX")) || (!strcmp(su, "NUL")) || (!strcmp(su, "CONIN$")) || (!strcmp(su, "CONOUT$")))
+		return true;
+	if ((!strncmp(su, "COM", 3)) || (!strncmp(su, "LPT", 3)))
+	{
+		if ((base == 4) && (su[3] >= '0') && (su[3] <= '9'))
+			return true;
+		if ((base == 5) && ((unsigned char)su[3] == 0xC2) && (((unsigned char)su[4] == 0xB9) || ((unsigned char)su[4] == 0xB2) || ((unsigned char)su[4] == 0xB3)))
+			return true;
+	}
+	return false;
+}
+static std::wstring ntfs2_finale(HANDLE h, DWORD i_come)
+{
+	std::vector<wchar_t> buf(33000);
+	const DWORD			 n= GetFinalPathNameByHandleW(h, &buf[0], 32999, i_come);
+	if ((n == 0) || (n >= 32999))
+		return L"";
+	return std::wstring(&buf[0], n);
+}
+/// the volume of a folder already read in this run, or read now
+static franzntfs2 *ntfs2_volume(const string &i_device, uint32_t i_seriale, string &o_perche)
+{
+	for (size_t i= 0; i < g_ntfs2_volumi.size(); i++)
+		if (g_ntfs2_volumi[i]->m_device == i_device)
+			return g_ntfs2_volumi[i];
+	franzntfs2 *v= new franzntfs2;
+	if (!v->carica(i_device, i_seriale))
+	{
+		o_perche= v->m_errore;
+		delete v;
+		return NULL;
+	}
+	g_ntfs2_volumi.push_back(v);
+	if (flagverbose)
+	{
+		myprintf("\r");
+		printbar(' ', false);
+		myprintf("\r");
+		myprintf("65902: $MFT of %s: %s records of %u bytes (%s) in %u piece%s (%s), %s in use, %s names\n", v->m_device.c_str(), migliaia((int64_t)v->m_quanti), (unsigned)v->m_recsize, tohuman(v->m_mftbytes), v->m_runs, (v->m_runs == 1) ? "" : "s",
+				 v->m_dawindows ? "told by Windows" : "from record 0", migliaia2((int64_t)v->m_inuso), migliaia3((int64_t)v->m_nomi.size()));
+		myprintf("65903: flush %s %.3f s, read %.3f s, parse %.3f s, names by folder %.3f s; RAM %s\n", (v->m_flush == 1) ? "done" : "not done (read only: a shadow copy)", v->m_tflush, v->m_tlettura, v->m_tanalisi, v->m_tfigli, tohuman(v->memoria()));
+	}
+	if ((v->m_riletti > 0) || (v->m_persi > 0))
+	{
+		if (v->m_persi > 0)
+			myprintf("65915$ records caught while being written: %s asked again to Windows, %s NOT got\n", migliaia((int64_t)v->m_riletti), migliaia2((int64_t)v->m_persi));
+		else if (flagverbose)
+			myprintf("65904: records caught while being written: %s asked again to Windows\n", migliaia((int64_t)v->m_riletti));
+	}
+	return v;
+}
+static void ntfs2_libera()
+{
+	for (size_t i= 0; i < g_ntfs2_volumi.size(); i++)
+		delete g_ntfs2_volumi[i];
+	g_ntfs2_volumi.clear();
+}
+/// the normal scan, wanted by -ntfs itself: the hook in scandir() stays out
+void Jidac::ntfs2_normale(bool i_checkifselected, DTMap &i_edt, const string &i_filename, bool i_recursive)
+{
+	g_ntfs2_normale++;
+	scandir(i_checkifselected, i_edt, i_filename, i_recursive);
+	g_ntfs2_normale--;
+}
+/// what the top of scandir() does before entering a folder (-not, .zfs, Mac, QNAP): true = not entered
+bool Jidac::ntfs2_potata(const string &i_pattern)
+{
+	for (unsigned i= 0; i < notfiles.size(); ++i)
+		if (ispath(notfiles[i].c_str(), i_pattern.c_str()))
+			return true;
+	if (!flagforcezfs)
+		if (flagskipzfs)
+			if (iszfs(i_pattern))
+			{
+				if (flagverbose)
+					myprintf("65906: Verbose: Skip .zfs ----> %s\n", i_pattern.c_str());
+				return true;
+			}
+	if (flagnomac)
+		if (ismac(i_pattern))
+			return true;
+	if (flagnoqnap)
+	{
+		if (i_pattern.find("@Recently-Snapshot") != std::string::npos)
+		{
+			if (flagverbose)
+				myprintf("65907: Verbose: Skip qnap snapshot ----> %s\n", i_pattern.c_str());
+			return true;
+		}
+		if (i_pattern.find("@Recycle") != std::string::npos)
+		{
+			if (flagverbose)
+				myprintf("65908: Verbose: Skip qnap recycle ----> %s\n", i_pattern.c_str());
+			return true;
+		}
+	}
+	return false;
+}
+/// addfile(), with the place in the table already known: the names come in its order, so the next
+/// one goes right after the last (a table of 3 million names is not searched 3 million times)
+void Jidac::ntfs2_aggiungi(bool i_checkifselected, DTMap &i_edt, franzntfs2_conti &c, const string &i_filename, int64_t edate, int64_t esize, int64_t eattr, int64_t i_creationdate, int64_t i_accessdate)
+{
+	if (i_checkifselected)
+		if (!isselected(i_filename.c_str(), false, esize))
+			return;
+	if (command != 'j')
+	{
+		if (g_datefrom > 0)
+			if (edate <= g_datefrom)
+				return;
+		if (g_dateto > 0)
+			if (edate >= g_dateto)
+				return;
+	}
+	DTMap::iterator p;
+	if ((flagvss) && (!flagimage) && (i_filename.size() > 250)) /// the longpath kludge of addfile()
+	{
+		string lungo= i_filename;
+		myreplace(lungo, g_franzsnap, g_vss_shadow);
+		p= i_edt.insert(DTMap::value_type(lungo, DT())).first;
+	}
+	else
+	{
+		if (c.valido)
+			p= i_edt.emplace_hint(c.dopo, std::piecewise_construct, std::forward_as_tuple(i_filename), std::forward_as_tuple());
+		else
+			p= i_edt.insert(DTMap::value_type(i_filename, DT())).first;
+		c.dopo= p;
+		++c.dopo;
+		c.valido= true;
+	}
+	DT &d= p->second;
+	if (g_touch != 0)
+		d.date= g_touch;
+	else
+		d.date= edate;
+	d.creationdate= i_creationdate;
+	d.accessdate  = i_accessdate;
+	d.size		  = esize;
+	d.attr		  = flagnoattributes ? 0 : eattr;
+	d.data		  = 0;
+	g_bytescanned+= esize;
+	g_filescanned++;
+	c.voci++;
+	if (((c.voci & 1023) == 0) && (flagnoeta == false) && (!flagterse))
+	{
+		static int	 ultimotempo= -1;
+		const double scantime	= (mtime() - g_start + 1);
+		const int	 iscantime	= (int64_t)(scantime / 1000);
+		if (iscantime != ultimotempo)
+		{
+			ultimotempo= iscantime;
+			myprintf("65909: Scanned %10s %02d:%02d:%02d %10s file/s (%21s)\r", migliaia((int64_t)i_edt.size()), int(iscantime / 3600), int(iscantime / 60) % 60, int(iscantime) % 60, migliaia3((int)(i_edt.size() / (scantime / 1000.0))), migliaia2(g_bytescanned));
+			fflush(stdout);
+		}
+	}
+}
+/// a folder and all that is below, from the $MFT in memory. i_cartella: as scandir() writes it, with the final /
+void Jidac::ntfs2_cammina(bool i_checkifselected, DTMap &i_edt, franzntfs2 &v, uint32_t i_radice, const string &i_cartella, franzntfs2_conti &c)
+{
+	struct passo
+	{
+		uint32_t da, a;	 /// in ordine[]: the names of this folder still to do
+		uint32_t inizio; /// where its names begin in ordine[]
+		uint32_t lung;	 /// of the path of this folder
+	};
+	std::vector<passo>	  pila;
+	std::vector<uint32_t> ordine;
+	franzntfs2_ordine	  prima;
+	prima.v= &v;
+	string	 percorso= i_cartella;
+	uint32_t entra	 = i_radice;
+	bool	 daentrare= true;
+	while (daentrare || (!pila.empty()))
+	{
+		if (daentrare) /// the names of the folder, in the order of the table
+		{
+			daentrare= false;
+			passo q;
+			q.inizio= (uint32_t)ordine.size();
+			q.lung	= (uint32_t)percorso.size();
+			const uint16_t seq= v.m_rec[entra].seq;
+			for (uint32_t i= v.m_primo[entra]; i < v.m_primo[entra + 1]; i++)
+			{
+				const franzntfs2_nome &x= v.m_nomi[v.m_figli[i]];
+				/// the root is in itself; the first 16 records are of NTFS ($MFT, $Bitmap...): Windows does not list them
+				if ((x.file == entra) || (x.file < 16) || (x.file >= v.m_quanti) || (!(v.m_rec[x.file].stato & NTFS2_INUSO)))
+					continue;
+				if (x.seqpadre != seq)
+				{
+					c.orfani++;
+					continue;
+				}
+				ordine.push_back(v.m_figli[i]);
+			}
+			std::sort(ordine.begin() + q.inizio, ordine.end(), prima);
+			q.da= q.inizio;
+			q.a = (uint32_t)ordine.size();
+			pila.push_back(q);
+			c.cartelle++;
+		}
+		passo &q= pila.back();
+		if (q.da >= q.a)
+		{
+			ordine.resize(q.inizio);
+			pila.pop_back();
+			continue;
+		}
+		const franzntfs2_nome &x	  = v.m_nomi[ordine[q.da]];
+		const franzntfs2_rec  &e	  = v.m_rec[x.file];
+		const bool			   cartella= (e.stato & NTFS2_CARTELLA) != 0;
+		const unsigned		   lnome  = x.len & 0x7FFF;
+		q.da++;
+		percorso.resize(q.lung);
+		percorso.append(&v.m_pool[x.off], lnome);
+		/// the attributes as Windows gives them: not the bits that live on the disk only (0x40000: the file has
+		/// extended attributes; 0x10000000, 0x20000000: it has an index), and compressed, sparse, encrypted are
+		/// those of the unnamed stream, not of $STANDARD_INFORMATION
+		DWORD attr= e.attr & 0x0FFBFFFFu;
+		if (cartella)
+			attr|= FILE_ATTRIBUTE_DIRECTORY;
+		else if (e.stato & NTFS2_DATI)
+		{
+			attr&= ~((DWORD)(FILE_ATTRIBUTE_COMPRESSED | FILE_ATTRIBUTE_SPARSE_FILE | FILE_ATTRIBUTE_ENCRYPTED));
+			if (e.stato & NTFS2_COMPRESSO)
+				attr|= FILE_ATTRIBUTE_COMPRESSED;
+			if (e.stato & NTFS2_SPARSO)
+				attr|= FILE_ATTRIBUTE_SPARSE_FILE;
+			if (e.stato & NTFS2_CIFRATO)
+				attr|= FILE_ATTRIBUTE_ENCRYPTED;
+		}
+		if (attr == 0)
+			attr= FILE_ATTRIBUTE_NORMAL;
+		int64_t edate= ntfs2_data(e.mtime), creationdate= ntfs2_data(e.ctime), esize= cartella ? 0 : e.size;
+		bool	nuvola= false; /// a folder of a cloud provider: listing it may fill it, so the normal scan does it
+		if (attr & FILE_ATTRIBUTE_REPARSE_POINT)
+		{
+			/// what a program is given for a reparse point is decided by Windows (some are hidden: the files
+			/// compressed by the system; some depend on the process: the cloud ones)
+			const bool cloud= ntfs2_cloud(e.reparse);
+			int		   come = 1;
+			DWORD	   togli= FILE_ATTRIBUTE_REPARSE_POINT;
+			if (!cloud)
+			{
+				const uint64_t					  chiave= ((uint64_t)e.reparse << 1) | (cartella ? 1 : 0);
+				std::map<uint64_t, int>::iterator k		= v.m_reparse.find(chiave);
+				if (k != v.m_reparse.end())
+				{
+					come = k->second & 3;
+					togli= (DWORD)(k->second >> 2);
+				}
+				else
+				{
+					WIN32_FIND_DATA ffd;
+					HANDLE			h= FindFirstFile(utow(percorso.c_str()).c_str(), &ffd);
+					if (h != INVALID_HANDLE_VALUE)
+					{
+						come= (ffd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) ? 1 : 2;
+						/// who hides the reparse point hides what goes with it too: a file compressed by the system
+						/// (WOF) is sparse on the disk and is not for a program. Learned from this one, for its kind
+						togli= (attr & ~ffd.dwFileAttributes) & (FILE_ATTRIBUTE_REPARSE_POINT | FILE_ATTRIBUTE_SPARSE_FILE | FILE_ATTRIBUTE_OFFLINE);
+						FindClose(h);
+						v.m_reparse[chiave]= come | (int)(togli << 2);
+					}
+				}
+			}
+			if (come == 2)
+			{
+				attr&= ~togli;
+				if (attr == 0)
+					attr= FILE_ATTRIBUTE_NORMAL;
+				c.nascosti++;
+			}
+			else if (cartella && (!cloud))
+				edate= 0; /// a junction, a link to a folder: scandir() does not add it and does not enter
+			else
+			{
+				/// this entry as Windows gives it, then the very steps of scandir()
+				DWORD			tag= e.reparse;
+				WIN32_FIND_DATA ffd;
+				HANDLE			h= FindFirstFile(utow(percorso.c_str()).c_str(), &ffd);
+				c.reparse++;
+				if (h != INVALID_HANDLE_VALUE)
+				{
+					SYSTEMTIME st;
+					edate= 0;
+					if (FileTimeToSystemTime(&ffd.ftLastWriteTime, &st))
+						edate= st.wYear * 10000000000LL + st.wMonth * 100000000LL + st.wDay * 1000000 + st.wHour * 10000 + st.wMinute * 100 + st.wSecond;
+					creationdate= 0;
+					if (FileTimeToSystemTime(&ffd.ftCreationTime, &st))
+						creationdate= st.wYear * 10000000000LL + st.wMonth * 100000000LL + st.wDay * 1000000 + st.wHour * 10000 + st.wMinute * 100 + st.wSecond;
+					esize= ffd.nFileSizeLow + (int64_t(ffd.nFileSizeHigh) << 32);
+					attr = ffd.dwFileAttributes;
+					tag	 = ffd.dwReserved0;
+					FindClose(h);
+				}
+				if (cartella)
+					nuvola= true;
+				else if (attr & FILE_ATTRIBUTE_REPARSE_POINT)
+				{
+					const string nuovonome= my_realpath(percorso);
+					if (nuovonome != "")
+						esize= dim(nuovonome);
+					if (tag == IO_REPARSE_TAG_SYMLINK)
+						esize= dim(percorso);
+					if (flagnosymlink)
+						edate= 0;
+				}
+			}
+		}
+		if (!edate)
+			continue;
+		if (!cartella)
+		{
+			ntfs2_aggiungi(i_checkifselected, i_edt, c, percorso, edate, esize, 'w' + (int64_t(attr) << 8), creationdate, 0);
+			/// alternate streams: asked to Windows, as scandir() does, but only for a file that has one
+			if ((e.stato & NTFS2_STREAM) && flagforcewindows && findFirstStreamW && findNextStreamW)
+			{
+				WIN32_FIND_STREAM_DATA fsd;
+				HANDLE				   ah= findFirstStreamW(utow(percorso.c_str()).c_str(), FindStreamInfoStandard, &fsd, 0);
+				while (ah != INVALID_HANDLE_VALUE && findNextStreamW(ah, &fsd))
+					ntfs2_aggiungi(i_checkifselected, i_edt, c, percorso + wtou(fsd.cStreamName), edate, fsd.StreamSize.QuadPart, 'w' + (int64_t(attr) << 8), creationdate, 0);
+				if (ah != INVALID_HANDLE_VALUE)
+					FindClose(ah);
+			}
+			continue;
+		}
+		percorso+= '/';
+		ntfs2_aggiungi(i_checkifselected, i_edt, c, percorso, edate, esize, 'w' + (int64_t(attr) << 8), creationdate, 0);
+		const string pattern= percorso + "*";
+		if (ntfs2_potata(pattern))
+		{
+			c.potate++;
+			continue;
+		}
+		/// where only Windows knows what it would give: the normal scan, for all that is below
+		int motivo= 0;
+		if (nuvola)
+			motivo= 4;
+		else if (percorso.size() >= NTFS2_LUNGO)
+			motivo= 2;
+		else if (ntfs2_strano(&v.m_pool[x.off], lnome)) /// (not by the POSIX kind of the name: a Windows laid down from an image has it on every folder)
+			motivo= 3;
+		else
+		{
+			/// would Windows list it? The answer is in its security descriptor: asked once for each, not for each folder
+			unsigned char  uno	  = 0;
+			unsigned char *accesso= ((e.secid > 0) && (e.secid < v.m_accesso.size())) ? &v.m_accesso[e.secid] : &uno;
+			if (*accesso == 0)
+			{
+				WIN32_FIND_DATA ffd;
+				HANDLE			h= FindFirstFile(utow(pattern.c_str()).c_str(), &ffd);
+				c.domande++;
+				if (h != INVALID_HANDLE_VALUE)
+				{
+					FindClose(h);
+					*accesso= 1;
+				}
+				else if (GetLastError() == ERROR_ACCESS_DENIED)
+					*accesso= 2;
+				else
+					motivo= 1; /// something else (gone?): this one to the normal scan, nothing learned
+			}
+			if (*accesso == 2)
+				motivo= 1;
+		}
+		if (motivo)
+		{
+			if (motivo == 1)
+				c.negate++;
+			else if (motivo == 2)
+				c.lunghe++;
+			else if (motivo == 3)
+				c.strane++;
+			else
+				c.cloud++;
+			ntfs2_normale(i_checkifselected, i_edt, pattern, true);
+			continue;
+		}
+		entra	 = x.file;
+		daentrare= true;
+	}
+}
+/// one whole folder (i_cartella: with the final /, or empty = here) and all that is below.
+/// false: not for -ntfs (o_perche says why) and nothing done: the caller does the normal scan
+bool Jidac::ntfs2_cartella(bool i_checkifselected, DTMap &i_edt, const string &i_cartella, franzntfs2_conti &c, string &o_perche)
+{
+	const string daaprire = (i_cartella == "") ? "." : i_cartella;
+	const DWORD	 condiviso= FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE;
+	/// Windows resolves the path (relative, a junction, a subst, the link to the shadow copy of -vss) and says
+	/// on which volume the folder is and which record of the $MFT it is
+	HANDLE h= CreateFileW(utow(daaprire.c_str()).c_str(), 0, condiviso, NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, NULL);
+	if (h == INVALID_HANDLE_VALUE)
+	{
+		o_perche= "the folder cannot be opened";
+		return false;
+	}
+	BY_HANDLE_FILE_INFORMATION bh;
+	wchar_t					   fs[64]= {0};
+	std::wstring			   nt, nessuno;
+	const bool				   bene= GetFileInformationByHandle(h, &bh) && GetVolumeInformationByHandleW(h, NULL, 0, NULL, NULL, NULL, fs, 63);
+	if (bene)
+	{
+		nt	   = ntfs2_finale(h, VOLUME_NAME_NT);
+		nessuno= ntfs2_finale(h, VOLUME_NAME_NONE);
+	}
+	CloseHandle(h);
+	if (!bene)
+	{
+		o_perche= "Windows does not say on which volume the folder is";
+		return false;
+	}
+	if (_wcsicmp(fs, L"NTFS"))
+	{
+		o_perche= "not NTFS (" + wtou(fs) + ")";
+		return false;
+	}
+	if (!(bh.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY))
+	{
+		o_perche= "not a folder";
+		return false;
+	}
+	if ((nessuno.size() == 0) || (nt.size() <= nessuno.size()) || (nt.compare(nt.size() - nessuno.size(), nessuno.size(), nessuno) != 0))
+	{
+		o_perche= "Windows does not say the device of the volume";
+		return false;
+	}
+	string device= wtou(nt.substr(0, nt.size() - nessuno.size()).c_str());
+	if (device == "") /// the root: the path is the bare slash
+		device= wtou(nt.substr(0, nt.size() - 1).c_str());
+	while ((device.size() > 1) && (device[device.size() - 1] == '/'))
+		device= device.substr(0, device.size() - 1);
+	if (device.substr(0, 11) == "/Device/Mup") /// (a share of an NTFS volume says NTFS too, but there is no volume to read)
+	{
+		o_perche= "a network share";
+		return false;
+	}
+	/// Windows must let list it, as every folder below
+	{
+		WIN32_FIND_DATA ffd;
+		HANDLE			hf= FindFirstFile(utow((i_cartella + "*").c_str()).c_str(), &ffd);
+		if (hf != INVALID_HANDLE_VALUE)
+			FindClose(hf);
+		else if (GetLastError() != ERROR_FILE_NOT_FOUND) /// (an empty root: nothing to list, and nothing is what will be found)
+		{
+			o_perche= "Windows does not list the folder";
+			return false;
+		}
+	}
+	const double t0= franzntfs2::adesso();
+	franzntfs2	*v = ntfs2_volume(device, bh.dwVolumeSerialNumber, o_perche);
+	c.tvolume+= franzntfs2::adesso() - t0;
+	if (v == NULL)
+		return false;
+	const uint64_t indice= ((uint64_t)bh.nFileIndexHigh << 32) | bh.nFileIndexLow;
+	const uint64_t rec	 = indice & 0xFFFFFFFFFFFFULL;
+	if ((rec >= v->m_quanti) || (!(v->m_rec[(size_t)rec].stato & NTFS2_INUSO)) || (!(v->m_rec[(size_t)rec].stato & NTFS2_CARTELLA)) || (v->m_rec[(size_t)rec].seq != (uint16_t)(indice >> 48)))
+	{
+		o_perche= "the folder is not in the $MFT as it was read (made later?)";
+		return false;
+	}
+	const double t1= franzntfs2::adesso();
+	ntfs2_cammina(i_checkifselected, i_edt, *v, (uint32_t)rec, i_cartella, c);
+	c.tcammino+= franzntfs2::adesso() - t1;
+	return true;
+}
+/// one argument of scandir(). false: not for -ntfs, nothing done
+bool Jidac::ntfs2_argomento(bool i_checkifselected, DTMap &i_edt, const string &i_filename, franzntfs2_conti &c, string &o_perche)
+{
+	const string cartella= path(i_filename);
+	const string resto	 = i_filename.substr(cartella.size());
+	if ((resto == "") || (resto == "*"))
+		return ntfs2_cartella(i_checkifselected, i_edt, cartella, c, o_perche);
+	/// one name, or a pattern: this level as always (it is one call, not recursive), then every folder found
+	/// from the $MFT, and the streams of the files found (scandir() lists them only when it recurses)
+	ntfs2_normale(i_checkifselected, i_edt, i_filename, false);
+	WIN32_FIND_DATA ffd;
+	HANDLE			h= FindFirstFile(utow(i_filename.c_str()).c_str(), &ffd);
+	while (h != INVALID_HANDLE_VALUE)
+	{
+		const string t		 = wtou(ffd.cFileName);
+		const bool	 cartella2= (ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
+		SYSTEMTIME	 st;
+		int64_t		 edate= 0;
+		if (FileTimeToSystemTime(&ffd.ftLastWriteTime, &st))
+			edate= st.wYear * 10000000000LL + st.wMonth * 100000000LL + st.wDay * 1000000 + st.wHour * 10000 + st.wMinute * 100 + st.wSecond;
+		if ((t == ".") || (t == ".."))
+			edate= 0;
+		if (ffd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)
+		{
+			if (!cartella2)
+			{
+				if (flagnosymlink)
+					edate= 0;
+			}
+			else if (!ntfs2_cloud(ffd.dwReserved0))
+				edate= 0;
+		}
+		const bool entra= cartella2 && (edate != 0);
+		if ((!cartella2) && (edate != 0) && flagforcewindows && findFirstStreamW && findNextStreamW)
+		{
+			int64_t creationdate= 0;
+			if (FileTimeToSystemTime(&ffd.ftCreationTime, &st))
+				creationdate= st.wYear * 10000000000LL + st.wMonth * 100000000LL + st.wDay * 1000000 + st.wHour * 10000 + st.wMinute * 100 + st.wSecond;
+			const int64_t		   eattr= 'w' + (int64_t(ffd.dwFileAttributes) << 8);
+			const string		   fn	= cartella + t;
+			WIN32_FIND_STREAM_DATA fsd;
+			HANDLE				   ah= findFirstStreamW(utow(fn.c_str()).c_str(), FindStreamInfoStandard, &fsd, 0);
+			while (ah != INVALID_HANDLE_VALUE && findNextStreamW(ah, &fsd))
+				addfile(i_checkifselected, i_edt, fn + wtou(fsd.cStreamName), edate, fsd.StreamSize.QuadPart, eattr, creationdate, 0);
+			if (ah != INVALID_HANDLE_VALUE)
+				FindClose(ah);
+		}
+		if (entra)
+		{
+			const string sotto= cartella + t + "/";
+			if (ntfs2_potata(sotto + "*"))
+				c.potate++;
+			else
+			{
+				string perche;
+				if ((ffd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) || (!ntfs2_cartella(i_checkifselected, i_edt, sotto, c, perche)))
+				{
+					/// said, not only with -verbose: or the summary would look like the work of -ntfs (the first
+					/// three folders: a pattern can find a hundred of them)
+					if ((perche != "") && (flagverbose || (c.altre < 3)))
+					{
+						color_yellow();
+						myprintf("65914$ -ntfs not on <<%Z>> (%s): the normal scan\n", sotto.c_str(), perche.c_str());
+						color_restore();
+					}
+					c.altre++;
+					ntfs2_normale(i_checkifselected, i_edt, sotto + "*", true);
+				}
+			}
+		}
+		if (!FindNextFile(h, &ffd))
+			break;
+	}
+	if (h != INVALID_HANDLE_VALUE)
+		FindClose(h);
+	return true;
+}
+void Jidac::ntfs2_riepilogo(const string &i_filename, const franzntfs2_conti &c, double i_secondi, int64_t i_nomi)
+{
+	myprintf("\r");
+	printbar(' ', false);
+	myprintf("\r");
+	color_cyan();
+	/// 65.9l: fixed widths, the lines of more drives are one below the other
+	myprintf("65910: Readed NTFS <<%Z>>: %15s names in %10.3f s (MFT: %12s)\n", i_filename.c_str(), migliaia(i_nomi), i_secondi, migliaia2((int64_t)c.voci));
+	color_restore();
+	if (flagverbose)
+	{
+		myprintf("65913: the $MFT %.3f s, the walk %.3f s (%s names from the $MFT)\n", c.tvolume, c.tcammino, migliaia((int64_t)c.voci));
+		const uint64_t normali= c.negate + c.lunghe + c.strane + c.cloud + c.altre;
+		myprintf("65911: folders from the $MFT %s; given to the normal scan %s (Windows does not list %s, long path %s, name not for Win32 %s, cloud %s", migliaia((int64_t)c.cartelle), migliaia2((int64_t)normali), migliaia3((int64_t)c.negate),
+				 migliaia4((int64_t)c.lunghe), migliaia5((int64_t)c.strane), migliaia6((int64_t)c.cloud));
+		myprintf(", other %s); cut by -not %s\n", migliaia((int64_t)c.altre), migliaia2((int64_t)c.potate));
+		myprintf("65912: security descriptors asked %s; reparse points asked one by one %s, hidden by Windows %s; names of no folder %s\n", migliaia((int64_t)c.domande), migliaia2((int64_t)c.reparse), migliaia3((int64_t)c.nascosti), migliaia4((int64_t)c.orfani));
+	}
+}
+/// 65.9l: is this folder on an NTFS volume of this machine? (the share of an NTFS volume says NTFS too)
+static bool ntfs2_locale(const string &i_cartella)
+{
+	HANDLE h= CreateFileW(utow(i_cartella.c_str()).c_str(), 0, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, NULL);
+	if (h == INVALID_HANDLE_VALUE)
+		return false;
+	wchar_t			   fs[64]= {0};
+	const bool		   bene	 = GetVolumeInformationByHandleW(h, NULL, 0, NULL, NULL, NULL, fs, 63) != 0;
+	const std::wstring nt	 = bene ? ntfs2_finale(h, VOLUME_NAME_NT) : std::wstring();
+	CloseHandle(h);
+	return bene && (_wcsicmp(fs, L"NTFS") == 0) && (nt.compare(0, 11, L"\\Device\\Mup") != 0);
+}
+/// 65.9l: an argument that is a whole partition: c:/ or c:/* (with -vss: the link to the shadow copy,
+/// as files[] have it then)
+bool Jidac::ntfs2_intera(const string &i_filename)
+{
+	size_t n= i_filename.size();
+	if ((n > 0) && (i_filename[n - 1] == '*'))
+		n--;
+	if (n == 3)
+		return isalpha((unsigned char)i_filename[0]) && (i_filename[1] == ':') && (i_filename[2] == '/');
+	if (flagvss && (n > 3) && (n == g_franzsnap.size() + 1))
+		return (i_filename[n - 1] == '/') && (i_filename.compare(0, n - 1, g_franzsnap) == 0);
+	return false;
+}
+/// 65.9l: -ntfs by itself (-nontfs: never). Every argument of the command line is a whole partition, all of
+/// them are NTFS, an administrator runs: the scan from the $MFT. Else the normal one, and nothing is said.
+/// scandir() asks this for every folder it enters: the cheap test first, the volumes are asked once
+bool Jidac::ntfs2_dasolo(const string &i_filename)
+{
+	if (flagnontfs || (!ntfs2_intera(i_filename)))
+		return false;
+	static vector<string> visti; /// the arguments the answer is for (add() can run more than once)
+	static bool			  esito= false;
+	if (visti != files)
+	{
+		visti= files;
+		esito= (files.size() > 0) && isadmin();
+		for (size_t i= 0; esito && (i < files.size()); i++)
+			esito= ntfs2_intera(files[i]) && ntfs2_locale(path(files[i]));
+	}
+	return esito && (std::find(files.begin(), files.end(), i_filename) != files.end());
+}
+/// the hook of scandir(): one argument, recursive, with -ntfs or by itself (and no -image)
+void Jidac::ntfs2_scandir(bool i_checkifselected, DTMap &i_edt, const string &i_filename)
+{
+	static bool detto= false;
+	if (!isadmin())
+	{
+		if (!detto)
+		{
+			color_yellow();
+			myprintf("65900$ -ntfs needs an administrator (the volume is read raw): the normal scan\n");
+			color_restore();
+			detto= true;
+		}
+		ntfs2_normale(i_checkifselected, i_edt, i_filename, true);
+		return;
+	}
+	franzntfs2_conti c;
+	string			 perche;
+	const double	 t	  = franzntfs2::adesso();
+	const int64_t	 prima= (int64_t)i_edt.size();
+	if (ntfs2_argomento(i_checkifselected, i_edt, i_filename, c, perche))
+		ntfs2_riepilogo(i_filename, c, franzntfs2::adesso() - t, (int64_t)i_edt.size() - prima);
+	else
+	{
+		if (flagntfs)
+		{
+			color_yellow();
+			myprintf("65901$ -ntfs not on <<%Z>> (%s): the normal scan\n", i_filename.c_str(), perche.c_str());
+			color_restore();
+		}
+		else if (flagverbose) /// 65.9l: not asked, it started by itself: nobody is to be warned
+			myprintf("65916: NTFS scan not on <<%Z>> (%s): the normal scan\n", i_filename.c_str(), perche.c_str());
+		ntfs2_normale(i_checkifselected, i_edt, i_filename, true);
+	}
+	/// the $MFT in memory is kept only if another argument of the command line comes after this one
+	bool ancora= false;
+	for (size_t i= 0; i + 1 < files.size(); i++)
+		if ((files[i] == i_filename) || (files[i] + "/" == i_filename))
+			ancora= true;
+	if (!ancora)
+		ntfs2_libera();
+}
+#endif // _WIN32 (-ntfs, the scan)
+
 void Jidac::scandir(bool i_checkifselected, DTMap &i_edt, string filename, bool i_recursive)
 {
 	// Don't scan diretories excluded by -not
@@ -163245,36 +164903,12 @@ void Jidac::scandir(bool i_checkifselected, DTMap &i_edt, string filename, bool 
 #else // Windows: expand wildcards in filename
 
 #ifdef _WIN32
-	if ((flagntfs) && (!flagimage))
+	/// 65.9c: -ntfs without -image, the list from the $MFT read raw: all of it is in ntfs2_scandir()
+	/// 65.9l: by itself too, on whole NTFS partitions (ntfs2_dasolo). With -image never: there -ntfs
+	/// is the image of the used clusters, and nothing is scanned
+	if ((!flagimage) && i_recursive && (g_ntfs2_normale == 0) && (flagntfs || ntfs2_dasolo(filename)))
 	{
-		if (!IsPathNTFS(filename.c_str()))
-		{
-			myprintf("\n");
-			myprintf("64139! I can work only on NTFS, turning off\n");
-			flagntfs= false;
-		}
-	}
-	if ((flagntfs) && (!flagimage))
-	{
-		if (!isadmin())
-		{
-			myprintf("\n");
-			color_yellow();
-			myprintf("67850: Admin rights required => cannot use -ntfs!\n");
-			color_restore();
-			return;
-		}
-	
-		printbar('-');
-		myprintf("Scaning NTFS %s\n", filename.c_str());
-		printbar('-');
-
-		int64_t inizioenumera=mtime();
-		int currentPathFileCount= NTFSEnumerateFiles(filename, i_edt, i_checkifselected);
-		///if (flagdebug)
-		color_cyan();
-		myprintf("64180: Founded %s %s in %s\n", migliaia(currentPathFileCount), migliaia2(i_edt.size()),migliaia3(mtime()-inizioenumera));
-		color_restore();
+		ntfs2_scandir(i_checkifselected, i_edt, filename);
 		return;
 	}
 #endif
@@ -163765,7 +165399,6 @@ ThreadReturn writeThread(void *arg)
 				assert(cj.out.c_str());
 				const char *p= cj.out.c_str();
 				int64_t		n= cj.out.size();
-				g_scritti+= n; // very rude
 
 				const int64_t N= 1 << 30;
 				while (n > N)
@@ -164448,6 +166081,7 @@ static int validate_metadata(const struct franz_posix *metadata)
 	return 0;
 }
 #endif
+#ifndef ANCIENT /// 65.9z: for restorefilemetadata(), that does nothing there: unused functions (-Wall)
 /// -numeric off: by name, if that name exists here (as tar), else the number
 static uid_t tar_restoreuid(const struct franz_posix *i_posix)
 {
@@ -164500,6 +166134,7 @@ static int tar_settimes(const char *i_filepath, const struct franz_posix *i_posi
 	return utimensat(AT_FDCWD, i_filepath, ts, i_link ? AT_SYMLINK_NOFOLLOW : 0);
 #endif
 }
+#endif
 int g_tarnotroot= 0; /// x -tar not as root: owners and devices that could not be given back
 /// Give back the metadata of filepath (already extracted: a placeholder, for symlinks and special files).
 /// i_hardlinkto: where the first name of its hard link group is now (LNKTYPE), else ""
@@ -166527,6 +168162,7 @@ void Jidac::printsanitizeflags()
 int Jidac::info()
 {
 	versioncomment= "";
+	g_acmetatutti = (all != 0); /// 65.9t: -all as it was given: with -verbose every backup of ac, not the last one
 	all			  = 8;
 	archive		  = getbackupnameifany(archive);
 
@@ -168127,6 +169763,7 @@ int Jidac::enumeratecomments()
 		}
 
 		vinfo_mostra(); /// what each version is and did, if the archive says (VFILE-info)
+		acmeta_mostra(); /// 65.9t: and what ac saved, if the archive has the backup of a disk of Windows
 		if (flagbig)
 			if (lastdate != "")
 			{
@@ -168360,20 +169997,63 @@ void *scansionahash(void *t)
 int Jidac::deduplicate()
 {
 	myprintf("01037: *** DIRECTLY DELETE DUPLICATED FILES ***\n");
+	/// 65.9d: one folder, or one folder and what to look for in it, written in one piece (d u:\*.mp4) or
+	/// in two as find wants (d u:\ *.mp4). All that is below is searched (-norecursion: that folder only)
 	if (files.size() == 0)
 	{
-		myprintf("01038: Sorry, works only on exactly 1 dir\n");
+		myprintf("01038: Sorry, works only on exactly 1 dir (d c:\\dir\\), or 1 dir and what to search (d c:\\dir\\*.mp4)\n");
 		return 1;
 	}
-	if (files.size() > 1)
+	if (files.size() > 2)
 	{
-		myprintf("01039: Sorry, works only on exactly 1 dir\n");
+		myprintf("01039: Sorry, works only on exactly 1 dir, and one thing to search at most (d c:\\dir\\ *.mp4)\n");
 		return 1;
+	}
+	string cerca;	  /// as find: a pattern on the whole name (*.mp4, *2019*)
+	string nomecerca; /// in one piece: a name or a pattern, without the folder
+	if (files.size() == 2)
+	{
+		cerca= files[1];
+		files.pop_back();
 	}
 	if (!isdirectory(files[0]))
 	{
-		myprintf("01040: Sorry, you must enter a directory\n");
-		return 1;
+		const string nome	  = extractfilename(files[0]);
+		const bool	 unpattern= (nome.find('*') != string::npos) || (nome.find('?') != string::npos);
+		if ((!unpattern) && direxists(files[0] + "/"))
+			files[0]+= "/"; /// a folder written without the final slash
+		else
+		{
+			if (cerca != "")
+			{
+				myprintf("01040: Sorry, one thing to search: either d c:\\dir\\*.mp4 or d c:\\dir\\ *.mp4\n");
+				return 1;
+			}
+			string cartella= extractfilepath(files[0]);
+			if (cartella == "")
+				cartella= "./";
+			nomecerca= nome;
+			files[0] = cartella;
+		}
+	}
+	const string cosa= (nomecerca != "") ? nomecerca : cerca;
+	if (cosa != "")
+	{
+		myprintf("65942: Searching %Z in %Z%s\n", cosa.c_str(), files[0].c_str(), flagnorecursion ? " (-norecursion: not below)" : " and below");
+		if (flagnorecursion)
+		{
+			/// that folder only: the system does the match (the -only of -norecursion are folders, not patterns)
+			if ((cosa.find('/') != string::npos) || (cosa.find('\\') != string::npos))
+			{
+				myprintf("65943! With -norecursion the thing to search is a name or a pattern, not a path\n");
+				return 1;
+			}
+			files[0]+= cosa;
+		}
+		else if (nomecerca != "")
+			onlyfiles.push_back("*/" + nomecerca); /// the name (or the pattern) wherever it is below
+		else
+			onlyfiles.push_back(cerca);
 	}
 	if (flagverbose)
 		summary= -1;
@@ -168382,7 +170062,17 @@ int Jidac::deduplicate()
 	flagchecksum= false;
 	flagverify	= true;
 	if (!ischecksum())
+	{
+		/// 65.9i: xxh3 when no hash is asked. The flag alone did nothing: the hasher is taken early, from the
+		/// command line (g_thechosenhash), and SHA-1 was used
 		flagxxh3= true;
+		for (MAPPATIPOHASH::iterator p= g_mappatipohash.begin(); p != g_mappatipohash.end(); ++p)
+			if (p->second.switchflag == (&flagxxh3))
+			{
+				g_thechosenhash	   = p->first;
+				g_thechosenhash_str= p->second.hashname;
+			}
+	}
 	flagkill= true;
 	if (!flagforce)
 		myprintf("01041: -force not present: dry run\n");
@@ -171772,6 +173462,9 @@ void my_handler(int s)
 	New DLL-style main
 */
 int zpaq_main_internal(int argc, const char **argv);
+#ifndef ANCIENT
+int scegli_riga(int argc, const char **argv, std::vector<std::string> &o_riga); /// 65.9y: with franzscegli, after the TUI
+#endif
 
 #ifdef DLL
 extern "C" BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
@@ -171978,6 +173671,26 @@ int zpaq_main_internal(int argc, const char **argv)
         }
     }
 
+#ifndef ANCIENT
+    /// 65.9y: a command that wants an archive, typed without one on a console (zpaqfranz t): the archive
+    /// and the switches are chosen on a screen (franzscegli), and the line goes on from here as if it was
+    /// typed that way. Any other line: as it is
+    std::vector<std::string> sceltariga;
+    std::vector<const char *> sceltaargv;
+    {
+        const int scelto = scegli_riga(argc, argv, sceltariga);
+        if (scelto == 2)
+            return 0;
+        if (scelto == 1)
+        {
+            for (size_t i = 0; i < sceltariga.size(); i++)
+                sceltaargv.push_back(sceltariga[i].c_str());
+            argc = (int)sceltaargv.size();
+            argv = &sceltaargv[0];
+            g_start = mtime(); /// (the time of the last line: of the run, not of the choice)
+        }
+    }
+#endif
     // If we get here, do nothing (continue normal execution)
     mailreport_avvia(argc, argv); /// -mailfull -mailprivacy -mailprovider: from the very first line printed
     Jidac jidac;
@@ -172008,7 +173721,10 @@ int zpaq_main_internal(int argc, const char **argv)
             if (!delete_file(g_hashdeeptemp.c_str()))
                 myprintf("01298$ Cannot delete temp <<%Z>>\n", g_hashdeeptemp.c_str());
 #ifdef _WIN32
-    if (!flagimage)
+    /// 65.9m: on Windows the images were left out of this check, all of them. When an image is TAKEN
+    /// (the a command) every write goes to the archive, as for the files: a destination that got full
+    /// is an archive cut short, and the run ended with "(all OK)" and exit code 0
+    if ((!flagimage) || (command == 'a'))
 #endif
         if (g_fwritten != g_fexpected)
         {
@@ -175068,7 +176784,7 @@ int Jidac::listfolders(string i_path, vector<string> *o_thelist)
 
 int Jidac::multisomething()
 {
-	if (fullarchive == "")
+	if ((fullarchive == "") && (g_scegli_archivi.size() < 2))
 	{
 		if (command == 'x')
 			return extract();
@@ -175082,7 +176798,8 @@ int Jidac::multisomething()
 	}
 
 	string estensione= prendiestensione(fullarchive);
-	myprintf("01527: Searching for jolly archive(s) in <<%s>> for extension <<%s>>\n", fullarchive.c_str(), estensione.c_str());
+	if (g_scegli_archivi.size() < 2)
+		myprintf("01527: Searching for jolly archive(s) in <<%s>> for extension <<%s>>\n", fullarchive.c_str(), estensione.c_str());
 
 	g_bytescanned= 0;
 	g_filescanned= 0;
@@ -175090,45 +176807,51 @@ int Jidac::multisomething()
 	flagskipzfs	 = true; // strip down zfs
 	DTMap thedt;
 
-#ifdef unix
-	if (flagdebug)
-		myprintf("01528: running on NIX\n");
-	vector<string> candidate;
-	listfiles(extractfilepath(fullarchive), estensione, true, &candidate);
-	if (flagdebug3)
-		myprintf("01529: candidate %s with pattern %s\n", migliaia(candidate.size()), fullarchive.c_str());
-	for (unsigned int i= 0; i < candidate.size(); i++)
+	/// 65.9y: the archives chosen on the screen (franzscegli) are the list: nothing to search
+	for (size_t i= 0; i < g_scegli_archivi.size(); i++)
+		thedt[g_scegli_archivi[i]];
+	if (g_scegli_archivi.size() < 2)
 	{
-		string filename= candidate[i];
+#ifdef unix
+		if (flagdebug)
+			myprintf("01528: running on NIX\n");
+		vector<string> candidate;
+		listfiles(extractfilepath(fullarchive), estensione, true, &candidate);
 		if (flagdebug3)
-			myprintf("01530: filename %08d %s\n", (int)i, filename.c_str());
+			myprintf("01529: candidate %s with pattern %s\n", migliaia(candidate.size()), fullarchive.c_str());
+		for (unsigned int i= 0; i < candidate.size(); i++)
+		{
+			string filename= candidate[i];
+			if (flagdebug3)
+				myprintf("01530: filename %08d %s\n", (int)i, filename.c_str());
 
-		if (jollymatch(fullarchive.c_str(), filename.c_str()))
-		{
-			if (flagdebug3)
+			if (jollymatch(fullarchive.c_str(), filename.c_str()))
 			{
-				myprintf("01531: matched <<%Z>>\n", filename.c_str());
+				if (flagdebug3)
+				{
+					myprintf("01531: matched <<%Z>>\n", filename.c_str());
+				}
+				DT &d		  = thedt[filename];
+				d.date		  = 0;
+				d.creationdate= 0;
+				d.accessdate  = 0;
+				d.size		  = 0;
+				d.attr		  = 0;
+				d.data		  = 0;
 			}
-			DT &d		  = thedt[filename];
-			d.date		  = 0;
-			d.creationdate= 0;
-			d.accessdate  = 0;
-			d.size		  = 0;
-			d.attr		  = 0;
-			d.data		  = 0;
+			else
+			{
+				if (flagdebug3)
+					myprintf("01532: DISCARDED %s in %s\n", fullarchive.c_str(), filename.c_str());
+			}
 		}
-		else
-		{
-			if (flagdebug3)
-				myprintf("01532: DISCARDED %s in %s\n", fullarchive.c_str(), filename.c_str());
-		}
-	}
 #else
-	scandir(false, thedt, fullarchive, false);
-	eol();
-	/// printbar(' ',false);
-	/// myprintf("\r");
+		scandir(false, thedt, fullarchive, false);
+		eol();
+		/// printbar(' ',false);
+		/// myprintf("\r");
 #endif // corresponds to #ifdef (#ifdef unix)
+	}
 
 	if (thedt.size() == 0)
 	{
@@ -181044,6 +182767,165 @@ string Jidac::get_lastfilename(string i_file, int64_t &o_totalfilesize)
 	}
 	return srisultato;
 }
+/*
+	65.9e: the d command shows what it does. The files with the same content in groups: the first one
+	(by name) is the one that stays, with its date; the others, under it, are the ones that go. Then
+	how much space the group gives back, and its hash. The groups from the smallest saving to the
+	biggest: the biggest at the bottom, the last thing on the screen.
+	Two names of the same file (hard links) have the same content too, but deleting one of them frees
+	nothing: those are in yellow, marked, and do not count. A file with more names gives its space
+	back only when all of its names are among the ones that go, and then once
+*/
+struct franzdoppio
+{
+	string	 nome;
+	int64_t	 size;
+	int64_t	 date;
+	uint64_t volume, file, nomi; /// which file on the disk it is, and how many names that file has
+	bool	 noto;				 /// ...if the system said so
+	bool	 libera;			 /// deleting this name gives its space back
+};
+struct franzdoppi
+{
+	size_t	da, a; /// in the list of all of them: [da] stays, the others go
+	int64_t risparmio;
+	string	hash;
+	string	primo;
+};
+static bool franzdoppi_ordine(const franzdoppi &a, const franzdoppi &b)
+{
+	if (a.risparmio != b.risparmio)
+		return a.risparmio < b.risparmio;
+	return a.primo < b.primo;
+}
+static bool franz_qualefile(const string &i_nome, uint64_t &o_volume, uint64_t &o_file, uint64_t &o_nomi)
+{
+#ifdef _WIN32
+	HANDLE h= CreateFileW(utow(i_nome.c_str()).c_str(), 0, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, NULL);
+	if (h == INVALID_HANDLE_VALUE)
+		return false;
+	BY_HANDLE_FILE_INFORMATION bh;
+	const bool				   bene= GetFileInformationByHandle(h, &bh) != 0;
+	CloseHandle(h);
+	if (!bene)
+		return false;
+	o_volume= bh.dwVolumeSerialNumber;
+	o_file	= ((uint64_t)bh.nFileIndexHigh << 32) | bh.nFileIndexLow;
+	o_nomi	= bh.nNumberOfLinks;
+	return true;
+#else
+	struct stat sb;
+	if (stat(i_nome.c_str(), &sb) != 0)
+		return false;
+	o_volume= (uint64_t)sb.st_dev;
+	o_file	= (uint64_t)sb.st_ino;
+	o_nomi	= (uint64_t)sb.st_nlink;
+	return true;
+#endif
+}
+/// i_vec: name and hash of every file, sorted by hash then by name. Shown (i_mostra), deleted (-force), counted
+void Jidac::dedup_elenco(const vector<s_stringpair> &i_vec, bool i_mostra, unsigned int &o_files, uint64_t &o_size, int64_t &o_cancellati, int64_t &o_cancellatisize)
+{
+	vector<franzdoppio> tutti;
+	vector<franzdoppi>	gruppi;
+	size_t				i= 0;
+	while (i < i_vec.size())
+	{
+		size_t j= i + 1;
+		if (i_vec[i].second != "") /// (no hash: a file that could not be read. Never the duplicate of anything)
+			while ((j < i_vec.size()) && (i_vec[j].second == i_vec[i].second))
+				j++;
+		if (j - i >= 2)
+		{
+			franzdoppi g;
+			g.da	   = tutti.size();
+			g.hash	   = i_vec[i].second;
+			g.primo	   = i_vec[i].first;
+			g.risparmio= 0;
+			for (size_t k= i; k < j; k++)
+			{
+				franzdoppio d;
+				d.nome				= i_vec[k].first;
+				DTMap::iterator p	= edt.find(d.nome);
+				d.size				= (p != edt.end()) ? p->second.size : 0;
+				d.date				= (p != edt.end()) ? p->second.date : 0;
+				d.volume= d.file= d.nomi= 0;
+				d.noto				= franz_qualefile(d.nome, d.volume, d.file, d.nomi) && (d.file != 0) && (d.nomi > 0);
+				d.libera			= true;
+				tutti.push_back(d);
+			}
+			g.a= tutti.size();
+			std::map<std::pair<uint64_t, uint64_t>, uint64_t> vanno; /// of each file on the disk: how many of its names go
+			for (size_t k= g.da + 1; k < g.a; k++)
+				if (tutti[k].noto)
+					vanno[std::make_pair(tutti[k].volume, tutti[k].file)]++;
+			std::set<std::pair<uint64_t, uint64_t> > contati;
+			const franzdoppio						 vivo= tutti[g.da];
+			for (size_t k= g.da + 1; k < g.a; k++)
+			{
+				franzdoppio &d= tutti[k];
+				if (d.noto)
+				{
+					const std::pair<uint64_t, uint64_t> chi= std::make_pair(d.volume, d.file);
+					if (vivo.noto && (d.volume == vivo.volume) && (d.file == vivo.file))
+						d.libera= false; /// another name of the file that stays
+					else if ((vanno[chi] < d.nomi) || (!contati.insert(chi).second))
+						d.libera= false; /// one of its names is left somewhere, or its space is already counted
+				}
+				if (d.libera)
+					g.risparmio+= d.size;
+			}
+			gruppi.push_back(g);
+		}
+		i= j;
+	}
+	std::sort(gruppi.begin(), gruppi.end(), franzdoppi_ordine);
+	for (size_t n= 0; n < gruppi.size(); n++)
+	{
+		const franzdoppi &g= gruppi[n];
+		for (size_t k= g.da; k < g.a; k++)
+		{
+			const franzdoppio &d= tutti[k];
+			if (i_mostra)
+			{
+				if (k == g.da)
+					myprintf("%s %19s ", dateToString(flagutc, d.date, !flagutc).c_str(), migliaia(d.size));
+				else
+				{
+					color_yellow();
+					myprintf("================= ");
+					if (d.libera)
+						color_restore();
+					myprintf("%19s ", migliaia(d.size));
+				}
+				printUTF8(d.nome.c_str());
+				if ((k != g.da) && (!d.libera))
+				{
+					myprintf(" [hard link]");
+					color_restore();
+				}
+				myprintf("\n");
+			}
+			if (k != g.da)
+			{
+				o_files++;
+				if (flagforce)
+					if (delete_file(d.nome.c_str()))
+					{
+						o_cancellati++;
+						if (d.libera)
+							o_cancellatisize+= d.size;
+					}
+			}
+		}
+		o_size+= (uint64_t)g.risparmio;
+		if (i_mostra)
+		{
+			myprintf("%17s %19s - %s %s\n", "", migliaia(g.risparmio), g_thechosenhash_str.c_str(), g.hash.c_str());
+			myprintf("\n");
+		}
+	}
+}
 int Jidac::summa()
 {
 	if (flaghome)
@@ -181276,26 +183158,26 @@ int Jidac::summa()
 		for (DTMap::iterator p= edt.begin(); p != edt.end(); ++p)
 			if (p->second.date && p->first != "" && (!isdirectory(p->first)) && (!isads(p->first)))
 			{
+				/// 65.9d: the filters of find, the same way: -find (a text in the name), -minsize and
+				/// -maxsize (from minsize up: a file of just that size was scanned and then left out).
+				/// d -zero: the empty files are not touched (without it they are all duplicates of
+				/// each other, as they have always been)
+				if (searchfrom != "")
+					if (stristr(p->first.c_str(), searchfrom.c_str()) == 0)
+						continue;
+				if (maxsize > 0)
+					if (maxsize < (uint64_t)p->second.size)
+						continue;
 				if (minsize > 0)
-				{
-					if ((uint64_t)p->second.size > minsize)
-					{
-						s_pair_intstring mypair;
-						mypair.first = p->second.size;
-						mypair.second= p->first;
-						filestobepurged.push_back(mypair);
-						/// filestobepurged.push_back(make_pair(p->second.size,p->first));
-						scannedsize+= p->second.size;
-					}
-				}
-				else
-				{
-					s_pair_intstring mypair;
-					mypair.first = p->second.size;
-					mypair.second= p->first;
-					filestobepurged.push_back(mypair);
-					scannedsize+= p->second.size;
-				}
+					if (minsize > (uint64_t)p->second.size)
+						continue;
+				if ((command == 'd') && flagzero && (p->second.size == 0))
+					continue;
+				s_pair_intstring mypair;
+				mypair.first = p->second.size;
+				mypair.second= p->first;
+				filestobepurged.push_back(mypair);
+				scannedsize+= p->second.size;
 			}
 		// ok, let's purge
 		std::sort(filestobepurged.begin(), filestobepurged.end(), pairsortbyfirst);
@@ -181574,7 +183456,8 @@ int Jidac::summa()
 			}
 			for (const char *p= vec[i].second.c_str(); *p; ++p)
 				sha256.put(*p);
-			franzreplace(filename);
+			if (command != 'd') /// (d: -find is a filter, and the file is deleted by its name: never a changed one)
+				franzreplace(filename);
 
 			if (flaghashdeep)
 			{
@@ -181598,6 +183481,10 @@ int Jidac::summa()
 					else
 						notrenamed++;
 				}
+			}
+			else if (flagkill && (command == 'd'))
+			{
+				/// 65.9e: shown, deleted and counted after this loop, group by group (dedup_elenco)
 			}
 			else if (flagkill)
 			{
@@ -181695,6 +183582,8 @@ int Jidac::summa()
 					}
 			}
 		}
+	if (flagkill && (command == 'd'))
+		dedup_elenco(vec, summary < 0, duplicated_files, duplicated_size, deletedfiles, deletedsize);
 	int64_t printtime= mtime() - startprint;
 	if (flagrename)
 	{
@@ -181729,6 +183618,9 @@ int Jidac::summa()
 			myprintf("%02X", (unsigned char)sha256result[j]);
 		myprintf("\n");
 	}
+	/// 65.9e: the same total with and without -verbose: what the deletion gives back (or gave, with -force)
+	if (flagkill && (command == 'd'))
+		myprintf("65941: DUPLICATED %s %s bytes in %s files\n", tohuman((int64_t)duplicated_size), migliaia((int64_t)duplicated_size), migliaia2((int64_t)duplicated_files));
 	if (flagkill)
 		if (flagforce)
 			if (deletedfiles)
@@ -183880,22 +185772,9 @@ int Jidac::adminrun()
 		myprintf("02531! need an archive (.zpaq)\n");
 		return 2;
 	}
-	if (fullcommandline == "")
-	{
-		myprintf("02532! command line empty\n");
-		return 2;
-	}
-	if (flagntfs)
-		replace(fullcommandline, "g ", "a ");
-	else
-		replace(fullcommandline, "g ", "q ");
-	string myexename= fullzpaqexename;
-	///	get the "right" path is not easy, registry digging needed.
-	///	too "complex", try to run
-	string runme= windowspowerme();
-	string parms= "-Command \"Start-Process '" + myexename + "' '" + fullcommandline + "' -Wait -Verb runAs\"";
-	waitexecute(runme, parms, SW_HIDE);
-	return 0;
+	/// 65.9s: the line as it was typed, with a or q in place of g (see runhigh: it was made again
+	/// from the arguments, and the quotes of a path with spaces were lost), and how it went
+	return runhigh(" -elevated", flagelevatefake, flagntfs ? "a" : "q");
 #else
 	myprintf("02533! Windows C: backup works... on Windows\n");
 	return 2;
@@ -188502,6 +190381,200 @@ void Jidac::vinfo_mostra()
 }
 
 /*
+	65.9t: the i command with -verbose, at the very end: what ac saved, as its metafile says
+	(disk_C.txt, the last file of a backup made by ac: see ac_metafile). The last backup; with
+	-all every one the archive has. The info command does not load the files of the archive:
+	read_archive keeps where each metafile is (g_acmeta), and its text comes out of the archive
+	here (its block is decompressed: the only thing that is read). A text, a key and its value
+	on every line: it is shown on every platform, not only where ac runs
+*/
+/// the metafile as it is: [run], [disk], every [zone NN], the bytes of every file of [files]. false: not one
+static bool acmeta_leggi(const string &i_testo, int &o_formato, map<string, string> &o_run, map<string, string> &o_disco, vector<map<string, string> > &o_zone, map<string, string> &o_file)
+{
+	o_formato= 0;
+	string sezione;
+	bool   prima= true;
+	size_t da	= 0;
+	while (da < i_testo.size())
+	{
+		size_t a= i_testo.find('\n', da);
+		if (a == string::npos)
+			a= i_testo.size();
+		string riga= i_testo.substr(da, a - da);
+		da		   = a + 1;
+		if ((riga.size() > 0) && (riga[riga.size() - 1] == '\r'))
+			riga.resize(riga.size() - 1);
+		if (prima)
+		{
+			if (riga.substr(0, 10) != "franzdisk ")
+				return false;
+			o_formato= atoi(riga.c_str() + 10);
+			prima	 = false;
+			continue;
+		}
+		if ((riga == "") || (riga[0] == '#'))
+			continue;
+		if (riga[0] == '[')
+		{
+			const size_t fine= riga.find(']');
+			sezione			 = riga.substr(1, (fine == string::npos) ? string::npos : fine - 1);
+			if (sezione.substr(0, 5) == "zone ")
+			{
+				o_zone.push_back(map<string, string>());
+				sezione= "zone";
+			}
+			continue;
+		}
+		const size_t uguale= riga.find('=');
+		if (uguale == string::npos)
+			continue;
+		const string chiave= riga.substr(0, uguale);
+		const string valore= riga.substr(uguale + 1);
+		if (sezione == "run")
+			o_run[chiave]= valore;
+		else if (sezione == "disk")
+			o_disco[chiave]= valore;
+		else if ((sezione == "zone") && (o_zone.size() > 0))
+			o_zone[o_zone.size() - 1][chiave]= valore;
+		else if ((sezione == "files") && (chiave == "file"))
+		{
+			/// file=NAME bytes=N crc32=X ...
+			const size_t b= valore.find(" bytes=");
+			if (b != string::npos)
+			{
+				const size_t fine= valore.find(' ', b + 7);
+				o_file[valore.substr(0, b)]= valore.substr(b + 7, (fine == string::npos) ? string::npos : fine - (b + 7));
+			}
+		}
+	}
+	return !prima;
+}
+void Jidac::acmeta_mostra()
+{
+	if ((!flagverbose) || (g_acmeta.size() == 0)) /// only with -verbose, as the VFILE-info above
+		return;
+	const int ultima  = g_acmeta[g_acmeta.size() - 1].versione;
+	const int versioni= (ver.size() > 0) ? (int)ver.size() - 1 : 0;
+	for (size_t i= 0; i < g_acmeta.size(); ++i)
+	{
+		const franzacmeta &m= g_acmeta[i];
+		if ((!g_acmetatutti) && (m.versione != ultima))
+			continue;
+		/// (extracttobuffer takes its file from dt: there it is, for the time it takes)
+		const string	qui= "<acmeta>";
+		vector<uint8_t> letto;
+		{
+			DT voce;
+			voce.date= 1;
+			voce.ptr = m.ptr;
+			dt[qui]	 = voce;
+		}
+		const int esito= extracttobuffer(qui, letto);
+		dt.erase(qui);
+		map<string, string>			 run, disco, file;
+		vector<map<string, string> > zone;
+		int							 formato= 0;
+		myprintf("\n");
+		if ((esito != 0) || (!acmeta_leggi(string(letto.begin(), letto.end()), formato, run, disco, zone, file)))
+		{
+			color_yellow();
+			myprintf("66203$ ac: version %d has a %s that cannot be read from the archive\n", m.versione, m.nome.c_str());
+			color_restore();
+			continue;
+		}
+		color_cyan();
+		myprintf("66200: ac: the backup of %s (%s), taken %s UTC by %s: version %d of %d\n", run["computer"].c_str(), run["windows"].c_str(), run["started_utc"].c_str(), run["program"].c_str(), m.versione, versioni);
+		myprintf("66201: ac: disk %s, %s (%s, %s), %s %s, boot by %s\n", disco["number"].c_str(), tohuman(atoll(disco["bytes"].c_str())), disco["model"].c_str(), disco["bus"].c_str(), disco["style"].c_str(),
+				 (disco["style"] == "GPT") ? disco["guid"].c_str() : disco["signature"].c_str(), run["firmware"].c_str());
+		color_restore();
+		if (formato != 1)
+		{
+			myprintf("66204: ac: its %s is written as \"franzdisk %d\", by a newer zpaqfranz: this one knows franzdisk 1, the table is not shown\n", m.nome.c_str(), formato);
+			continue;
+		}
+		const int cifre= (zone.size() >= 100) ? 3 : 2;
+		char	  riga[512];
+		snprintf(riga, sizeof(riga), "%-*s %14s %10s %10s  %-35s %s", cifre, "#", "from", "size", "read", "saved", "what");
+		myprintf("66202: %s\n", riga);
+		int64_t presi= 0, lasciati= 0;
+		int		pezzi= 0;
+		for (size_t k= 0; k < zone.size(); ++k)
+		{
+			map<string, string> &z		   = zone[k];
+			const bool			 partizione= (z["kind"] == "partition");
+			const bool			 salvata   = (z["saved"] != "no") && (z["saved"] != "");
+			string				 cosa;
+			if (partizione)
+			{
+				cosa= "partition " + z["partition"];
+				if (z["boot"] == "yes")
+					cosa+= ", BOOT";
+				if (z["windows"] == "yes")
+					cosa+= ", WINDOWS";
+				if (z["mounted"] != "")
+					cosa+= ", " + z["mounted"];
+				if (z["what"] != "")
+					cosa+= ", " + z["what"];
+				if (z["filesystem"] != "")
+					cosa+= ", " + z["filesystem"];
+				else if (z["volume"] != "")
+					cosa+= ", unknown file system";
+				if (z["label"] != "")
+					cosa+= " \"" + z["label"] + "\"";
+				if (z["active"] == "yes")
+					cosa+= ", active";
+				if ((z["encrypted"] != "") && (z["encrypted"] != "no"))
+					cosa+= ", " + ((z["encrypted"] == "BitLocker") ? z["encrypted"] : string("encrypted?"));
+			}
+			else
+				cosa= z["what"];
+			string	come;
+			int64_t dentro= 0; /// (the used clusters: the bytes of the image in the archive, a little more than the data)
+			if (!salvata)
+				come= "NOT SAVED: " + z["why"];
+			else
+			{
+				if (z["saved"] == "used clusters")
+					come= "used clusters";
+				else
+					come= (z["file"].substr(0, 6) == "image_") ? "the whole partition" : "raw";
+				come+= " (" + z["file"] + ")";
+				dentro= (file.find(z["file"]) != file.end()) ? atoll(file[z["file"]].c_str()) : atoll(z["read_bytes"].c_str());
+				presi+= dentro;
+				++pezzi;
+			}
+			if ((!salvata) && partizione)
+			{
+				lasciati+= atoll(z["bytes"].c_str());
+				color_yellow();
+			}
+			snprintf(riga, sizeof(riga), "%0*d %14s %10s %10s  %-35s %s", cifre, (int)k, tohuman(atoll(z["start"].c_str())), tohuman2(atoll(z["bytes"].c_str())), salvata ? tohuman3(dentro) : "-", come.c_str(), cosa.c_str());
+			myprintf("66205: %s\n", riga);
+			color_restore();
+		}
+		myprintf("66206: ac: %d pieces, %s read from the disk in %s s%s\n", pezzi, tohuman(presi), run["seconds"].c_str(), (disco["all"] == "yes") ? " (ac -all)" : "");
+		if (lasciati > 0)
+		{
+			color_yellow();
+			myprintf("66207$ ac: the partitions NOT SAVED (%s) are not in this backup\n", tohuman(lasciati));
+			color_restore();
+		}
+		if (atoll(run["read_errors"].c_str()) > 0)
+		{
+			color_yellow();
+			myprintf("66208$ ac: when this backup was taken %s sectors could not be read: zeros in it\n", run["read_errors"].c_str());
+			color_restore();
+		}
+		if (run["warning"] != "")
+		{
+			color_yellow();
+			myprintf("66209$ ac: the backup says: %s\n", run["warning"].c_str());
+			color_restore();
+		}
+	}
+}
+
+/*
 	The t command, after read_archive: what the VFILE-info records say against what was found.
 	For each version that has one: its number (a hole: a version is missing, or out of
 	place), where it begins, its first fragment, how many records its index has. Nothing is
@@ -189729,7 +191802,6 @@ int Jidac::fl_writeblock(OutputArchive &i_out, CompressJob &io_job, vector<unsig
 	libzpaq::StringBuffer cb;
 	libzpaq::compressBlock(&io_sb, &cb, ZPAQFILELIST_METHOD, ("jDC" + itos(date, 14) + "d" + itos(i_firstfrag, 10)).c_str(), "jDC\x01");
 	i_out.write(cb.c_str(), cb.size());
-	g_scritti+= cb.size();
 	io_job.csize.push_back(cb.size());
 	io_blocklist.push_back(i_firstfrag);
 	io_newoffset.push_back(io_where);
@@ -190091,6 +192163,7 @@ int64_t Jidac::read_archive(callback_function i_advance, const char *arc, int *e
 		*errors= 0;
 	dcsize= dhsize= 0;
 	g_vinforecord.clear(); /// the VFILE-info records of this archive
+	g_acmeta.clear();	   /// and the metafiles of ac (i -verbose)
 
 	map<int64_t, double> mycompressionratio; // block offset -> compression ratio
 
@@ -190651,6 +192724,11 @@ int64_t Jidac::read_archive(callback_function i_advance, const char *arc, int *e
 								bool issel= false;
 								if (!i_isinfo)
 									issel= isselected(fn.c_str(), i_renamed, -1);
+								/// 65.9t: i -verbose shows what ac saved: its metafile is kept, with its fragments
+								/// (the only file the info command takes: g_acmeta, never in dt)
+								const bool acmeta= (command == 'i') && flagverbose && acmeta_nome(originalfilename);
+								if (acmeta && i_isinfo)
+									issel= true;
 
 								if (g_rangefrom > 0)
 									if (all)
@@ -190787,6 +192865,14 @@ int64_t Jidac::read_archive(callback_function i_advance, const char *arc, int *e
 											dtr.outputname= originalfilename;
 										dt[fn]= dtr;
 									}
+								if (acmeta && issel && dtr.date)
+								{
+									franzacmeta trovato;
+									trovato.versione= (int)ver.size() - 1;
+									trovato.nome	= originalfilename;
+									trovato.ptr		= dtr.ptr;
+									g_acmeta.push_back(trovato);
+								}
 								///		dt.insert(std::pair<string, DT>(fn,dtr));
 							} // end while more files
 							if (seq_storia != "")
@@ -194752,48 +196838,83 @@ bool Jidac::sanitizefile(string i_filename)
 #ifdef ZPAQFULL /// NOSFTPSTART
 #ifdef _WIN32
 /*
-	The very same command line again, elevated (UAC), in a window of its own: this one waits.
-	65.8z11: returns how the elevated run went, its exit code (0, 1, 2): the shell that starts
-	it hands it over as 100 + the code (a code of the shell itself is not taken for it), 222
-	when nothing started (the elevation refused), 223 when the code cannot be read. Not known:
-	2, as it always was.
+	The very same command line again, elevated (UAC), in a window of its own, in this same
+	folder: this one waits. 65.8z11: returns how the elevated run went, its exit code (0, 1, 2).
+	Not started (the elevation refused), or not known: 2, as it always was.
+	65.9s: as cloud and the mount of a .vhd do (cloud_eleva, franzmonta_eleva): the line is
+	taken as it was typed (GetCommandLineW) and started by ShellExecuteEx. It was made again
+	from the arguments, a space in between, for a PowerShell to start: a "" as the archive
+	(ac "", a "" c: -image: the dry run) was lost there, and so were the quotes of a path with
+	spaces. The elevated run got "ac -pause -elevated", no command at all, and this one
+	ended "(all OK)" in a second.
+	i_comando: put in place of the command typed (the g command: a or q)
 	i_finta (-elevatefake, hidden, for the tests: there is no UAC to answer on a test bench):
 	the relaunch without "runas", in a hidden window
 */
-int Jidac::runhigh(string i_addendum, bool i_finta)
+int Jidac::runhigh(string i_addendum, bool i_finta, const char *i_comando)
 {
-	if (fullcommandline == "")
+	static wchar_t programma[32768];
+	const DWORD	   n= GetModuleFileNameW(NULL, programma, 32768);
+	if ((n == 0) || (n >= 32768))
 	{
-		myprintf("03314! fullcommand line empty\n");
+		myprintf("03315! Cannot get the name of this program\n");
 		return 2;
 	}
-	string myexename= fullzpaqexename;
-	///	get the "right" path is not easy, registry digging needed.
-	///	too "complex", try to run
-	string runme= windowspowerme();
-	if (!fileexists(runme))
+	/// the arguments of this very command line, the program removed
+	const wstring riga= GetCommandLineW();
+	size_t		  i	  = 0;
+	if ((riga.size() > 0) && (riga[0] == L'"'))
 	{
-		myprintf("03315! Sorry, cannot find runme %s\n", runme.c_str());
-		return 2;
+		i= riga.find(L'"', 1);
+		i= (i == wstring::npos) ? riga.size() : i + 1;
 	}
-	fullcommandline+= i_addendum;
-	string parms= "-Command \"$p = Start-Process '" + myexename + "' '" + fullcommandline + "' -PassThru " + string(i_finta ? "-WindowStyle Hidden" : "-Verb runAs") +
-				  "; if (-not $p) { exit 222 }; $null = $p.Handle; $p.WaitForExit(); if ($null -eq $p.ExitCode) { exit 223 }; exit (100 + $p.ExitCode)\"";
-	if (flagdebug2)
-	{
-		myprintf("03316: runme %s\n", runme.c_str());
-		myprintf("03317: parms %s\n", parms.c_str());
-	}
-	const int codice= waitexecutecodice(runme, parms, SW_HIDE);
-	if ((codice >= 100) && (codice <= 102))
-		return codice - 100;
-	if ((codice > 102) && (codice < 222)) /// a count of errors, not 0, 1, 2: errors
-		return 2;
-	if (codice == 222)
-		myprintf("00567! The elevated run did not start (refused?): nothing done\n");
 	else
+		while ((i < riga.size()) && (riga[i] != L' ') && (riga[i] != L'\t'))
+			i++;
+	while ((i < riga.size()) && ((riga[i] == L' ') || (riga[i] == L'\t')))
+		i++;
+	wstring argomenti= riga.substr(i);
+	if (i_comando)
+	{
+		size_t fine= 0;
+		while ((fine < argomenti.size()) && (argomenti[fine] != L' ') && (argomenti[fine] != L'\t'))
+			fine++;
+		argomenti= utow(i_comando) + argomenti.substr(fine);
+	}
+	argomenti+= utow(i_addendum.c_str());
+	if (flagdebug2)
+		myprintf("03317: parms %s\n", wtou(argomenti.c_str()).c_str());
+	static wchar_t cartella[32768];
+	if (GetCurrentDirectoryW(32768, cartella) == 0)
+		cartella[0]= 0;
+	SHELLEXECUTEINFOW esegui;
+	memset(&esegui, 0, sizeof(esegui));
+	esegui.cbSize		= sizeof(esegui);
+	esegui.fMask		= SEE_MASK_NOCLOSEPROCESS;
+	esegui.lpVerb		= i_finta ? NULL : L"runas";
+	esegui.lpFile		= programma;
+	esegui.lpParameters = argomenti.c_str();
+	esegui.lpDirectory	= cartella[0] ? cartella : NULL;
+	esegui.nShow		= i_finta ? SW_HIDE : SW_SHOWNORMAL;
+	if (!ShellExecuteExW(&esegui))
+	{
+		myprintf("00567! The elevated run did not start (refused?): nothing done\n");
+		return 2;
+	}
+	DWORD codice= 2;
+	bool  letto = false;
+	if (esegui.hProcess != NULL)
+	{
+		WaitForSingleObject(esegui.hProcess, INFINITE);
+		letto= GetExitCodeProcess(esegui.hProcess, &codice) != 0;
+		CloseHandle(esegui.hProcess);
+	}
+	if (!letto)
+	{
 		myprintf("00568$ The elevated run ended, how it went is not known: look at its window\n");
-	return 2;
+		return 2;
+	}
+	return (codice > 2) ? 2 : (int)codice; /// (a count of errors, not 0, 1, 2: errors)
 }
 #endif // corresponds to #ifdef (#ifdef _WIN32)
 #endif /// NOSFTPEND
@@ -202051,6 +204172,34 @@ int Jidac::extract()
 		// Verify EXACTLY 1 di ciascuno
 		if ((header_count == 1) && (image_count == 1) && (footer_count==1))
 		{
+			/// 65.9g: over 2040 GB the three pieces joined would not be a .vhd anybody mounts (its table of
+			/// blocks holds sectors in 32 bits, and Windows stops there): the same image as a .vhdx,
+			/// image_X.vhdx where the .vhd would be. The size of the disk: from the table in the header piece
+			uint64_t vocivhd= 0;
+			string	 nomefhd;
+			for (DTMap::iterator p= dt.begin(); p != dt.end(); ++p)
+			{
+				if (isvhdheader(p->first) && (p->second.size > 1536))
+					vocivhd= (uint64_t)(p->second.size - 1536) / 4;
+				if (isvhdimage(p->first))
+					nomefhd= p->first;
+			}
+			const size_t barrafhd= nomefhd.find_last_of("/\\");
+			const string solofhd = (barrafhd == string::npos) ? nomefhd : nomefhd.substr(barrafhd + 1);
+			if ((vocivhd * FRANZIMAGER_BLOCK_SIZE > FRANZIMAGER_VHD_MAX - 256ULL * 1048576) && (solofhd.size() == 11) && (solofhd.substr(0, 6) == "image_"))
+			{
+				string fuori= rename(nomefhd);
+				if ((fuori.size() > 4) && (fuori.substr(fuori.size() - 4) == ".fhd"))
+					fuori= fuori.substr(0, fuori.size() - 4);
+				fuori+= ".vhdx";
+				const char lettfhd= solofhd[6];
+				color_cyan();
+				myprintf("96455: An image of more than a .vhd can hold (2040 GB): extraction to a .vhdx, %Z (the pieces as they are: -force)\n", fuori.c_str());
+				color_restore();
+				jidacreset();
+				lettera= lettfhd;
+				return restore_to_vmdk(lettfhd, fuori, true, 3);
+			}
 			color_cyan();
 			myprintf("96454: Turning on extraction to vhd (you can disable with -force)\n");
 			color_restore();
@@ -205553,6 +207702,10 @@ int get_key()
 			return 132; // F5
 		case 64:
 			return 133; // F6
+		case 75:
+			return 134; // Left arrow (65.9y: for the panel of franzscegli)
+		case 77:
+			return 135; // Right arrow
 		}
 	}
 	return ch;
@@ -205633,6 +207786,12 @@ int get_key()
 				case 'B':
 					ch= 'j';
 					break; // Down arrow
+				case 'D':
+					ch= 134;
+					break; // Left arrow (65.9y: for the panel of franzscegli)
+				case 'C':
+					ch= 135;
+					break; // Right arrow
 				case 'H':
 					ch= 'h';
 					break; // Home
@@ -205718,6 +207877,16 @@ int get_key()
 					}
 					break;
 				}
+			}
+			else if (buf[1] == 'O') /// 65.9y: F1-F4 as xterm and the terminal of Windows send them (ESC O P..S): it was an ESC, then a letter
+			{
+				if (read(STDIN_FILENO, &buf[2], 1) != 1)
+				{
+					tcsetattr(STDIN_FILENO, TCSANOW, &old_settings);
+					return -1;
+				}
+				if ((buf[2] >= 'P') && (buf[2] <= 'S'))
+					ch= 128 + (buf[2] - 'P');
 			}
 		}
 		else
@@ -207565,7 +209734,8 @@ class franztui
 
 	int												current_pos;
 	int												top_line;
-	int												sort_mode;
+	int												sort_mode;	  /// 1 name, 2 size, 3 date, 4 extension
+	bool											sort_reverse; /// 65.9y: the same F key again
 	int												screen_width;
 	int												screen_height;
 	std::string										current_path;
@@ -207707,13 +209877,27 @@ class franztui
 		return a.date < b.date;
 	}
 
+	/// 65.9y: by extension, then by name
+	static bool compare_ext(const fileentry &a, const fileentry &b)
+	{
+		if (a.is_directory != b.is_directory)
+			return a.is_directory > b.is_directory;
+		if (a.is_directory)
+			return a.name < b.name;
+		const size_t	  pa= a.name.find_last_of('.');
+		const size_t	  pb= b.name.find_last_of('.');
+		const std::string ea= (pa == std::string::npos) ? std::string("") : to_lower_case_tui(a.name.substr(pa + 1));
+		const std::string eb= (pb == std::string::npos) ? std::string("") : to_lower_case_tui(b.name.substr(pb + 1));
+		if (ea != eb)
+			return ea < eb;
+		return a.name < b.name;
+	}
+
+	/// 65.9y: F1-F4 = name, size, date, extension; the same key again reverses (F4-F6 were the first three, reversed)
 	void sort_entries()
 	{
 		switch (sort_mode)
 		{
-		case 1:
-			std::sort(entries.begin(), entries.end(), compare_default);
-			break;
 		case 2:
 			std::sort(entries.begin(), entries.end(), compare_size);
 			break;
@@ -207721,18 +209905,14 @@ class franztui
 			std::sort(entries.begin(), entries.end(), compare_date);
 			break;
 		case 4:
+			std::sort(entries.begin(), entries.end(), compare_ext);
+			break;
+		default:
 			std::sort(entries.begin(), entries.end(), compare_default);
-			std::reverse(entries.begin(), entries.end());
-			break;
-		case 5:
-			std::sort(entries.begin(), entries.end(), compare_size);
-			std::reverse(entries.begin(), entries.end());
-			break;
-		case 6:
-			std::sort(entries.begin(), entries.end(), compare_date);
-			std::reverse(entries.begin(), entries.end());
 			break;
 		}
+		if (sort_reverse)
+			std::reverse(entries.begin(), entries.end());
 	}
 
 	int64_t calculate_folder_size(const std::string &folder_path)
@@ -208100,7 +210280,7 @@ class franztui
 		color_cyan();
 		printf("SORTING (list)\n");
 		color_restore();
-		printf("F1-F6     - Sort options\n");
+		printf("F1-F4     - Sort by name, size, date, extension (again: reversed)\n");
 		color_cyan();
 		printf("OTHER\n");
 		color_restore();
@@ -208560,7 +210740,7 @@ class franztui
 
   public:
 	franztui(int i_width, int i_height)
-		: current_pos(0), top_line(0), sort_mode(1),
+		: current_pos(0), top_line(0), sort_mode(1), sort_reverse(false),
 		  screen_width(i_width), screen_height(i_height),
 		  current_path(""), filtervisible(""), tree_mode(false), tree_root("")
 	{
@@ -208691,7 +210871,7 @@ class franztui
 		}
 
 		color_yellow();
-		printf("ESC/q F1-F6=Sort all not inv search filter get SPACE :go t=tree ?help\n");
+		printf("ESC/q F1-F4=Sort all not inv search filter get SPACE :go t=tree ?help\n");
 		color_restore();
 		hide_cursor();
 	}
@@ -208975,16 +211155,16 @@ class franztui
 			case 128:
 			case 129:
 			case 130:
-			case 131:
-			case 132:
-			case 133: // F1-F6
+			case 131: // F1-F4 (65.9y: name, size, date, extension; again: reversed)
 				if (!tree_mode)
 				{
-					sort_mode= (ch == 128) ? 1 : (ch == 129) ? 2
-											 : (ch == 130)	 ? 3
-											 : (ch == 131)	 ? 4
-											 : (ch == 132)	 ? 5
-															 : 6;
+					if (ch - 127 == sort_mode)
+						sort_reverse= !sort_reverse;
+					else
+					{
+						sort_mode	= ch - 127;
+						sort_reverse= false;
+					}
 					sort_entries();
 					show();
 				}
@@ -209140,6 +211320,1074 @@ int Jidac::tui()
 	fg.process();
 	show_cursor();
 	return 0;
+}
+/*
+	65.9y: franzscegli, a file chooser on the FILE SYSTEM (franztui walks inside an archive), and what
+	opens it: a command that wants an archive, typed without one on a console (zpaqfranz t, or
+	zpaqfranz x -to z:\out). It was the usage text.
+	Now the archive is picked on a screen; then, when the command has something to offer, a panel
+	with RUN and the switches of that command; then what must be asked (-to). What comes out is a
+	command line, the one that would have been typed (it is shown): from there everything goes on
+	as ever, the parser reads it. Nothing is "set" by hand, so a switch does what it does when
+	it is typed. With the archive on the line, or not on a console (a script, the output
+	redirected): nothing changes.
+	The commands, with what each one offers and asks: g_sceglirighe, one line each.
+
+	The chooser has the keys of the TUI: arrows (k j), PgUp PgDn (u d), Home End (h e), ENTER
+	enters a folder, BACKSPACE goes up (on Windows, above the root of a drive: the drives),
+	SPACE marks, a n i all / none / invert, s marks by a text, f filters, : goes to a line,
+	F1-F4 sort by name, size, date, extension (the same key again: reversed), ? help, ESC q.
+	p: a path typed by hand (a share of the network...). ENTER on a file takes it, with the ones
+	marked; g (or x) takes the marked ones. The marks stay when the folder changes.
+	Archives (.zpaq, .franzen, the files of the backup command) are cyan, folders green.
+	More than one archive: one run each, as with a jolly in the name (multisomething: t and x).
+	A piece of a multipart archive, or a file of a backup, is its whole set (scegli_archivio).
+	The chooser takes files and folders alike when asked to (not only archives): for the a
+	command, one day
+*/
+/// the commands that open the chooser when they have no archive
+struct franzscegliriga
+{
+	const char *comando;
+	const char *interruttori; /// on the panel, a space in between (ten at most, please). A * after one: on at the start
+	const char *chiede;		  /// a switch with a value, asked when the line does not have it ("": nothing to ask)
+	const char *domanda;	  /// ...what is asked
+	const char *vuoto;		  /// ...its value when nothing is typed ("": the switch is not given at all)
+	bool		molti;		  /// several archives can be taken, one run each (the commands of multisomething)
+};
+static const franzscegliriga g_sceglirighe[]= {
+	{"x", "-force -checksum -longpath -flat -utf -fix255 -zero -space -all", "-to", "Where to extract", "./", true},
+	{"xx", "-force -checksum -longpath -flat -utf -fix255 -zero -space -all", "-to", "Where to extract", "./", true},
+	{"e", "-force -longpath -utf", "", "", "", false},
+	{"t", "-verify -ssd -paranoid -quick -checksum -collision -crc32 -all", "", "", "", true},
+	{"l", "-checksum -summary -comment -utc -terse -attr -date -nodel -all", "", "", "", false},
+	{"i", "-verbose -stat -comment -all", "", "", "", false},
+	{"v", "-ssd -verbose -noeta", "", "", "", false},
+	{"p", "-verify -verbose -noeta", "", "", "", false},
+	{"pp", "-verify -paranoid -ssd -verbose -noeta", "", "", "", false},
+	{"w", "-ramdisk -frugal -ssd -test -verbose -checksum -verify -paranoid -longpath", "-to", "Where to extract (an EMPTY folder)", "", false},
+	{"zip", "-all -deflate -force -space", "-to", "The .zip to write (nothing: next to the archive)", "", false},
+	{"image", "-raw -image -force -space", "-to", "Where: x.vhd x.vhdx x.vmdk x.raw, a folder, a drive (G: with -image)", "", false},
+	{"crop", "-kill -force", "-to", "The smaller archive to write", "", false},
+	{"trim", "-kill -verify", "-to", "The trimmed archive to write", "", false},
+	{"password", "", "", "", "", false},
+	{"ls", "", "", "", "", false},
+	{"tui", "", "", "", "", false},
+	{"gui", "", "", "", "", false},
+#ifdef _WIN32
+	{"xc", "-gui* -verify -verbose", "", "", "", false},
+#endif
+};
+struct franzsceglivoce
+{
+	std::string name; /// a folder ends with /
+	int64_t		date;
+	int64_t		size;
+	bool		is_directory;
+	bool		archivio; /// a file an archive command can be given: cyan
+	franzsceglivoce() : date(0), size(0), is_directory(false), archivio(false)
+	{
+	}
+};
+static std::string scegli_minuscolo(const std::string &i_testo)
+{
+#ifdef _WIN32
+	return to_lower_case_tui(i_testo);
+#else
+	return i_testo;
+#endif
+}
+/// .zpaq, .franzen, and the two small files of a backup (x_00000000_backup.index, x_00000000_backup.txt)
+static bool scegli_earchivio(const std::string &i_nome)
+{
+	if (iszpaq(i_nome) || isfranzen(i_nome))
+		return true;
+	const size_t n= i_nome.size();
+	return ((n > 22) && (i_nome.substr(n - 22) == "_00000000_backup.index")) || ((n > 20) && (i_nome.substr(n - 20) == "_00000000_backup.txt"));
+}
+/// the files and the folders of one folder (it ends with /). On Windows "" is the list of the drives
+static void scegli_leggi(const std::string &i_cartella, std::vector<franzsceglivoce> &o_voci)
+{
+	o_voci.clear();
+#ifdef _WIN32
+	if (i_cartella == "")
+	{
+		const DWORD unita= GetLogicalDrives();
+		for (int i= 0; i < 26; i++)
+			if (unita & (1u << i))
+			{
+				franzsceglivoce v;
+				v.name		  = std::string(1, (char)('A' + i)) + ":/";
+				v.is_directory= true;
+				o_voci.push_back(v);
+			}
+		return;
+	}
+	WIN32_FIND_DATAW dati;
+	HANDLE			 h= FindFirstFileW(utow((i_cartella + "*").c_str()).c_str(), &dati);
+	if (h == INVALID_HANDLE_VALUE)
+		return;
+	do
+	{
+		const std::string nome= wtou(dati.cFileName);
+		if ((nome == ".") || (nome == ".."))
+			continue;
+		franzsceglivoce v;
+		v.is_directory= (dati.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
+		v.name		  = nome + (v.is_directory ? "/" : "");
+		SYSTEMTIME st;
+		if (FileTimeToSystemTime(&dati.ftLastWriteTime, &st))
+			v.date= st.wYear * 10000000000LL + st.wMonth * 100000000LL + st.wDay * 1000000 + st.wHour * 10000 + st.wMinute * 100 + st.wSecond;
+		v.size	  = dati.nFileSizeLow + (int64_t(dati.nFileSizeHigh) << 32);
+		v.archivio= (!v.is_directory) && scegli_earchivio(nome);
+		o_voci.push_back(v);
+	} while (FindNextFileW(h, &dati));
+	FindClose(h);
+#else
+	DIR *d= opendir((i_cartella == "") ? "/" : i_cartella.c_str());
+	if (d == NULL)
+		return;
+	struct dirent *e;
+	while ((e= readdir(d)) != NULL)
+	{
+		const std::string nome= e->d_name;
+		if ((nome == ".") || (nome == ".."))
+			continue;
+		struct stat sb;
+		if (stat((i_cartella + nome).c_str(), &sb) != 0) /// (a link to a folder is a folder here; a broken link: as it is)
+			if (lstat((i_cartella + nome).c_str(), &sb) != 0)
+				continue;
+		franzsceglivoce v;
+		v.is_directory= S_ISDIR(sb.st_mode);
+		v.name		  = nome + (v.is_directory ? "/" : "");
+		v.date		  = decimal_time(sb.st_mtime);
+		v.size		  = (int64_t)sb.st_size;
+		v.archivio	  = (!v.is_directory) && scegli_earchivio(nome);
+		o_voci.push_back(v);
+	}
+	closedir(d);
+#endif
+}
+/// the archive a file is, or is a piece of: what the command is given. x.zpaq, x.franzen: itself.
+/// A file of the backup command (x_00000003.zpaq, x_00000000_backup.index, x_00000000_backup.txt):
+/// x_????????.zpaq. A piece of a multipart archive (x_0002.zpaq with other pieces next to it):
+/// x_????.zpaq. "": not an archive
+static std::string scegli_archivio(const std::string &i_file)
+{
+	const size_t	  barra	  = i_file.find_last_of('/');
+	const std::string cartella= (barra == std::string::npos) ? std::string("") : i_file.substr(0, barra + 1);
+	const std::string nome	  = (barra == std::string::npos) ? i_file : i_file.substr(barra + 1);
+	static const char *piccoli[2]= {"_00000000_backup.index", "_00000000_backup.txt"};
+	for (int i= 0; i < 2; i++)
+	{
+		const size_t lungo= strlen(piccoli[i]);
+		if ((nome.size() > lungo) && (nome.substr(nome.size() - lungo) == piccoli[i]))
+			return cartella + nome.substr(0, nome.size() - lungo) + "_????????.zpaq";
+	}
+	if (isfranzen(nome))
+		return i_file;
+	if ((!iszpaq(nome)) || (nome.size() < 6))
+		return "";
+	/// name_<digits>.zpaq ?
+	const std::string coda = nome.substr(nome.size() - 5);
+	const std::string senza= nome.substr(0, nome.size() - 5);
+	size_t			  cifre= 0;
+	while ((cifre < senza.size()) && isdigit((unsigned char)senza[senza.size() - 1 - cifre]))
+		cifre++;
+	if ((cifre == 0) || (cifre >= senza.size()) || (senza[senza.size() - 1 - cifre] != '_'))
+		return i_file;
+	const std::string prima	 = senza.substr(0, senza.size() - cifre); /// with its _
+	const std::string insieme= cartella + prima + std::string(cifre, '?') + coda;
+	if ((cifre == 8) && fileexists(cartella + prima + "00000000_backup.index"))
+		return insieme;
+	/// a piece, when there are others like it: same name, same number of digits
+	std::vector<franzsceglivoce> voci;
+	scegli_leggi((cartella == "") ? std::string("./") : cartella, voci);
+	int simili= 0;
+	for (size_t i= 0; i < voci.size(); i++)
+	{
+		const std::string &altro= voci[i].name;
+		if (voci[i].is_directory || (altro.size() != nome.size()) || (scegli_minuscolo(altro.substr(0, prima.size())) != scegli_minuscolo(prima)) || (scegli_minuscolo(altro.substr(altro.size() - 5)) != scegli_minuscolo(coda)))
+			continue;
+		bool numero= true;
+		for (size_t k= prima.size(); k < prima.size() + cifre; k++)
+			numero= numero && isdigit((unsigned char)altro[k]);
+		if (numero)
+			simili++;
+	}
+	return (simili > 1) ? insieme : i_file;
+}
+static bool scegli_pernome(const franzsceglivoce &a, const franzsceglivoce &b)
+{
+	if (a.is_directory != b.is_directory)
+		return a.is_directory > b.is_directory;
+	return scegli_minuscolo(a.name) < scegli_minuscolo(b.name);
+}
+static bool scegli_perdimensione(const franzsceglivoce &a, const franzsceglivoce &b)
+{
+	if (a.is_directory != b.is_directory)
+		return a.is_directory > b.is_directory;
+	if (a.is_directory || (a.size == b.size))
+		return scegli_minuscolo(a.name) < scegli_minuscolo(b.name);
+	return a.size < b.size;
+}
+static bool scegli_perdata(const franzsceglivoce &a, const franzsceglivoce &b)
+{
+	if (a.is_directory != b.is_directory)
+		return a.is_directory > b.is_directory;
+	if (a.date == b.date)
+		return scegli_minuscolo(a.name) < scegli_minuscolo(b.name);
+	return a.date < b.date;
+}
+static std::string scegli_estensione(const std::string &i_nome)
+{
+	const size_t punto= i_nome.find_last_of('.');
+	return ((punto == std::string::npos) || (punto == 0)) ? std::string("") : scegli_minuscolo(i_nome.substr(punto + 1));
+}
+static bool scegli_perestensione(const franzsceglivoce &a, const franzsceglivoce &b)
+{
+	if (a.is_directory != b.is_directory)
+		return a.is_directory > b.is_directory;
+	const std::string ea= a.is_directory ? std::string("") : scegli_estensione(a.name);
+	const std::string eb= b.is_directory ? std::string("") : scegli_estensione(b.name);
+	if (ea == eb)
+		return scegli_minuscolo(a.name) < scegli_minuscolo(b.name);
+	return ea < eb;
+}
+/// colors and reverse video as the TUI does: ANSI (the console of Windows 10 and later takes it)
+static void scegli_colore(const char *i_ansi)
+{
+	if (!flagnocolor)
+		printf("%s", i_ansi);
+}
+#define SCEGLI_VERDE "\033[92m"
+#define SCEGLI_CIANO "\033[96m"
+#define SCEGLI_GIALLO "\033[93m"
+#define SCEGLI_ROSSO "\033[91m"
+#define SCEGLI_NORMALE "\033[0m"
+#define SCEGLI_INVERSO "\033[7m"
+/// what is typed in a line of the screen: no spaces around, no quotes, the \ of Windows as / (as every argument is here)
+static std::string scegli_pulito(const std::string &i_testo, bool i_virgolette)
+{
+	std::string t= i_testo;
+	while ((t.size() > 0) && ((t[0] == ' ') || (t[0] == '\t') || (i_virgolette && (t[0] == '"'))))
+		t.erase(0, 1);
+	while ((t.size() > 0) && ((t[t.size() - 1] == ' ') || (t[t.size() - 1] == '\t') || (t[t.size() - 1] == '\r') || (i_virgolette && (t[t.size() - 1] == '"'))))
+		t.erase(t.size() - 1);
+#ifdef _WIN32
+	for (size_t i= 0; i < t.size(); i++)
+		if (t[i] == '\\')
+			t[i]= '/';
+#endif
+	return t;
+}
+class franzscegli
+{
+  public:
+	franzscegli(const std::string &i_titolo, bool i_soloarchivi, bool i_molti)
+		: current_pos(0), top_line(0), sort_mode(1), sort_reverse(false), screen_width(80), screen_height(10), soloarchivi(i_soloarchivi), molti(i_molti), titolo(i_titolo)
+	{
+#ifdef _WIN32
+		HANDLE hOut	 = GetStdHandle(STD_OUTPUT_HANDLE);
+		DWORD  dwMode= 0;
+		GetConsoleMode(hOut, &dwMode);
+		SetConsoleMode(hOut, dwMode | ENABLE_VIRTUAL_TERMINAL_PROCESSING);
+		wchar_t cartella[4096]= {0};
+		if (GetCurrentDirectoryW(4095, cartella) > 0)
+			current_path= wtou(cartella);
+#else
+		char cartella[4096];
+		if (getcwd(cartella, sizeof(cartella)) != NULL)
+			current_path= cartella;
+#endif
+		if ((current_path == "") || (current_path[current_path.size() - 1] != '/'))
+			current_path+= "/";
+		leggi();
+	}
+	void avvisa(const std::string &i_testo) { avviso= i_testo; }
+	/// 0: left (ESC, q); 1: taken: the full paths in o_scelti (a folder ends with /)
+	int scegli(std::vector<std::string> &o_scelti)
+	{
+		o_scelti.clear();
+		hide_cursor();
+		show();
+		for (;;)
+		{
+			const int ch	= get_key();
+			const int quante= (int)entries.size();
+			switch (ch)
+			{
+			case 3: /// Control-C
+				printf(SCEGLI_NORMALE);
+				show_cursor();
+				myprintf("\nGoodbye (CONTROL-C)\n");
+				seppuku(0);
+				break;
+			case -1: /// stdin closed: nothing more will ever come
+			case 27:
+			case 'q':
+			case 'Q':
+				fine();
+				return 0;
+			case 'k':
+				if (current_pos > 0)
+				{
+					const int prima= current_pos--;
+					if (current_pos < top_line)
+					{
+						top_line= current_pos;
+						show();
+					}
+					else
+						redraw_changed_lines(prima, current_pos);
+				}
+				break;
+			case 'j':
+				if (current_pos < quante - 1)
+				{
+					const int prima= current_pos++;
+					if (current_pos >= top_line + screen_height)
+					{
+						top_line= current_pos - screen_height + 1;
+						show();
+					}
+					else
+						redraw_changed_lines(prima, current_pos);
+				}
+				break;
+			case 'u':
+				current_pos= (current_pos > screen_height) ? (current_pos - screen_height) : 0;
+				show();
+				break;
+			case 'd':
+				if (quante > 0)
+				{
+					current_pos= (current_pos + screen_height < quante) ? (current_pos + screen_height) : (quante - 1);
+					show();
+				}
+				break;
+			case 'h':
+				current_pos= 0;
+				show();
+				break;
+			case 'e':
+				if (quante > 0)
+				{
+					current_pos= quante - 1;
+					show();
+				}
+				break;
+			case ' ':
+				if (!molti)
+				{
+					avviso= "one archive at a time here: ENTER on it";
+					show();
+					break;
+				}
+				if (quante > 0)
+				{
+					const franzsceglivoce &v= entries[(size_t)current_pos];
+					if (!prendibile(v))
+						avviso= soloarchivi ? "only an archive can be marked (.zpaq .franzen, the ones in cyan)" : "this one cannot be marked";
+					else if (selezionati.count(current_path + v.name))
+						selezionati.erase(current_path + v.name);
+					else
+						selezionati.insert(current_path + v.name);
+					if (current_pos < quante - 1)
+						current_pos++;
+					show();
+				}
+				break;
+			case 'a':
+			case 'n':
+			case 'i':
+				for (size_t i= 0; molti && (i < entries.size()); i++)
+					if (prendibile(entries[i]))
+					{
+						const std::string intero= current_path + entries[i].name;
+						const bool		  cera	= selezionati.count(intero) > 0;
+						if ((ch == 'n') || ((ch == 'i') && cera))
+							selezionati.erase(intero);
+						else
+							selezionati.insert(intero);
+					}
+				show();
+				break;
+			case 128:
+			case 129:
+			case 130:
+			case 131: /// F1-F4: name, size, date, extension. The same key again: reversed
+				if (ch - 127 == sort_mode)
+					sort_reverse= !sort_reverse;
+				else
+				{
+					sort_mode	= ch - 127;
+					sort_reverse= false;
+				}
+				ordina();
+				show();
+				break;
+			case '?':
+			case 'H':
+				aiuto();
+				show();
+				break;
+			case 's':
+			{
+				const std::string testo= molti ? scegli_minuscolo(chiedi("Mark the ones with this text in the name:")) : std::string("");
+				if (testo != "")
+					for (size_t i= 0; i < entries.size(); i++)
+						if (prendibile(entries[i]))
+						{
+							if (scegli_minuscolo(entries[i].name).find(testo) != std::string::npos)
+								selezionati.insert(current_path + entries[i].name);
+							else
+								selezionati.erase(current_path + entries[i].name);
+						}
+				show();
+				break;
+			}
+			case 'f':
+				filtro	   = chiedi("Filter (only the files with this text in the name; nothing: all of them):");
+				current_pos= 0;
+				top_line   = 0;
+				leggi();
+				show();
+				break;
+			case ':':
+			{
+				const int riga= atoi(chiedi("Goto line:").c_str());
+				if ((riga > 0) && (riga <= quante))
+					current_pos= riga - 1;
+				show();
+				break;
+			}
+			case 'p':
+				percorso(chiedi("Path (a folder to go to, or a file):"));
+				show();
+				break;
+			case 8: /// Backspace
+				su();
+				show();
+				break;
+			case 13: /// Enter: into a folder; a file: that one, with the marked ones
+				if (quante == 0)
+					break;
+				if (entries[(size_t)current_pos].is_directory)
+				{
+					posizioni.push_back(current_pos);
+					current_path+= entries[(size_t)current_pos].name;
+					current_pos= 0;
+					top_line   = 0;
+					leggi();
+					show();
+					break;
+				}
+				if (!prendibile(entries[(size_t)current_pos]))
+				{
+					avviso= "<<" + entries[(size_t)current_pos].name + ">> is not an archive (.zpaq .franzen, the ones in cyan)";
+					show();
+					break;
+				}
+				selezionati.insert(current_path + entries[(size_t)current_pos].name);
+				o_scelti.assign(selezionati.begin(), selezionati.end());
+				fine();
+				return 1;
+			case 'g':
+			case 'x': /// the marked ones
+				if (selezionati.empty())
+				{
+					avviso= "nothing is marked: SPACE marks, ENTER takes the file under the cursor";
+					show();
+					break;
+				}
+				o_scelti.assign(selezionati.begin(), selezionati.end());
+				fine();
+				return 1;
+			default:
+				break;
+			}
+		}
+	}
+
+  private:
+	std::vector<franzsceglivoce> entries;
+	std::set<std::string>		 selezionati; /// full paths: they stay when the folder changes
+	std::vector<int>			 posizioni;	  /// where the cursor was, folder by folder
+	std::string					 current_path; /// it ends with /. "": the drives (Windows)
+	int							 current_pos;
+	int							 top_line;
+	int							 sort_mode; /// 1 name, 2 size, 3 date, 4 extension
+	bool						 sort_reverse;
+	int							 screen_width;
+	int							 screen_height; /// rows of the list
+	bool						 soloarchivi;
+	bool						 molti; /// more than one can be marked
+	std::string					 titolo;
+	std::string					 filtro;
+	std::string					 avviso;
+
+	bool prendibile(const franzsceglivoce &i_v) const
+	{
+		if (current_path == "")
+			return false;
+		return soloarchivi ? ((!i_v.is_directory) && i_v.archivio) : true;
+	}
+	void ordina()
+	{
+		switch (sort_mode)
+		{
+		case 2:
+			std::sort(entries.begin(), entries.end(), scegli_perdimensione);
+			break;
+		case 3:
+			std::sort(entries.begin(), entries.end(), scegli_perdata);
+			break;
+		case 4:
+			std::sort(entries.begin(), entries.end(), scegli_perestensione);
+			break;
+		default:
+			std::sort(entries.begin(), entries.end(), scegli_pernome);
+			break;
+		}
+		if (sort_reverse)
+			std::reverse(entries.begin(), entries.end());
+	}
+	void leggi()
+	{
+		std::vector<franzsceglivoce> tutte;
+		scegli_leggi(current_path, tutte);
+		entries.clear();
+		const std::string f= scegli_minuscolo(filtro);
+		for (size_t i= 0; i < tutte.size(); i++) /// (the folders are always there: one must be able to go on)
+			if ((f == "") || tutte[i].is_directory || (scegli_minuscolo(tutte[i].name).find(f) != std::string::npos))
+				entries.push_back(tutte[i]);
+		ordina();
+		if (current_pos >= (int)entries.size())
+			current_pos= entries.empty() ? 0 : ((int)entries.size() - 1);
+	}
+	/// the cursor on the line with this name, if it is there
+	void vai(const std::string &i_nome)
+	{
+		for (size_t i= 0; i < entries.size(); i++)
+			if (scegli_minuscolo(entries[i].name) == scegli_minuscolo(i_nome))
+				current_pos= (int)i;
+	}
+	void su()
+	{
+		if (current_path == "")
+			return;
+		const std::string senza= current_path.substr(0, current_path.size() - 1);
+		const size_t	  barra= senza.find_last_of('/');
+		std::string		  padre, figlio;
+#ifdef _WIN32
+		/// above the root of a drive, or of a share: the drives
+		const bool condivisa= (senza.size() > 2) && (senza[0] == '/') && (senza[1] == '/');
+		int		   barre	= 0;
+		for (size_t i= 0; i < senza.size(); i++)
+			if (senza[i] == '/')
+				barre++;
+		if ((barra == std::string::npos) || (condivisa && (barre <= 3)))
+			figlio= senza + "/";
+		else
+		{
+			padre = senza.substr(0, barra + 1);
+			figlio= senza.substr(barra + 1) + "/";
+		}
+#else
+		if (senza == "")
+			return; /// the root
+		padre = senza.substr(0, barra + 1);
+		figlio= senza.substr(barra + 1) + "/";
+#endif
+		current_path= padre;
+		current_pos = 0;
+		top_line	= 0;
+		leggi();
+		vai(figlio);
+		if (!posizioni.empty())
+			posizioni.pop_back();
+	}
+	/// a path typed by hand: a folder (go there), or a file (its folder, the cursor on it)
+	void percorso(const std::string &i_scritto)
+	{
+		std::string dove= scegli_pulito(i_scritto, true);
+		if (dove == "")
+			return;
+		const bool assoluto= (dove[0] == '/') || ((dove.size() > 1) && (dove[1] == ':'));
+		if (!assoluto)
+			dove= current_path + dove;
+		if ((dove.size() == 2) && (dove[1] == ':'))
+			dove+= "/";
+		std::string senza= dove;
+		while ((senza.size() > 1) && (senza[senza.size() - 1] == '/') && (!((senza.size() == 3) && (senza[1] == ':'))))
+			senza.erase(senza.size() - 1);
+		if (direxists(senza))
+		{
+			current_path= senza + ((senza[senza.size() - 1] == '/') ? "" : "/");
+			current_pos = 0;
+			top_line	= 0;
+			filtro		= "";
+			posizioni.clear();
+			leggi();
+			return;
+		}
+		if (fileexists(senza))
+		{
+			const size_t barra= senza.find_last_of('/');
+			current_path	  = (barra == std::string::npos) ? current_path : senza.substr(0, barra + 1);
+			current_pos		  = 0;
+			top_line		  = 0;
+			filtro			  = "";
+			posizioni.clear();
+			leggi();
+			vai((barra == std::string::npos) ? senza : senza.substr(barra + 1));
+			return;
+		}
+		avviso= "<<" + dove + ">> is not there";
+	}
+	void misura()
+	{
+		screen_width= terminalwidth();
+		if (screen_width < 60)
+			screen_width= 60;
+		screen_height= terminalheight() - 5; /// the path, the message, the keys, a row to type in, one free
+		if (screen_height < 3)
+			screen_height= 3;
+	}
+	void draw_entry(int i_index, bool i_corrente)
+	{
+		if ((i_index < 0) || (i_index >= (int)entries.size()))
+			return;
+		const franzsceglivoce &v   = entries[(size_t)i_index];
+		const std::string	   nome= truncate_with_extension(v.name, (screen_width > 70) ? (screen_width - 58) : 12);
+		printf("\r\033[K");
+		printf(SCEGLI_NORMALE);
+		if (i_corrente)
+			printf(SCEGLI_INVERSO);
+		if (v.is_directory)
+			scegli_colore(SCEGLI_VERDE);
+		else if (v.archivio)
+			scegli_colore(SCEGLI_CIANO);
+		printf("%c[%c] %08d| %s %21s %s", i_corrente ? '>' : ' ', selezionati.count(current_path + v.name) ? 'X' : ' ', i_index + 1, dateorblank_ls(flagutc, v.date).c_str(), v.is_directory ? "<DIR>" : migliaia(v.size), nome.c_str());
+		printf(SCEGLI_NORMALE);
+	}
+	void redraw_changed_lines(int i_prima, int i_ora)
+	{
+		printf("\033[%d;1H", i_prima - top_line + 3);
+		draw_entry(i_prima, false);
+		printf("\033[%d;1H", i_ora - top_line + 3);
+		draw_entry(i_ora, true);
+		fflush(stdout);
+	}
+	void show()
+	{
+		misura();
+		if (current_pos < top_line)
+			top_line= current_pos;
+		if (current_pos >= top_line + screen_height)
+			top_line= current_pos - screen_height + 1;
+		if (top_line < 0)
+			top_line= 0;
+		clearscreen();
+		scegli_colore(SCEGLI_GIALLO);
+		printf("FILE %08d|", (int)entries.size());
+		printf(SCEGLI_INVERSO);
+		printf("%s", truncate_with_extension((current_path == "") ? std::string("(the drives)") : current_path, screen_width - 20).c_str());
+		printf(SCEGLI_NORMALE);
+		printf("\n");
+		if (avviso != "")
+		{
+			scegli_colore(SCEGLI_ROSSO);
+			printf("%s", avviso.substr(0, (size_t)screen_width - 1).c_str());
+			avviso= "";
+		}
+		else
+		{
+			scegli_colore(SCEGLI_CIANO);
+			printf("%s", titolo.substr(0, (size_t)screen_width - 1).c_str());
+		}
+		printf(SCEGLI_NORMALE);
+		printf("\n");
+		for (int i= 0; (i < screen_height) && ((top_line + i) < (int)entries.size()); i++)
+		{
+			draw_entry(top_line + i, (top_line + i) == current_pos);
+			printf("\n");
+		}
+		scegli_colore(SCEGLI_GIALLO);
+		char marcati[64]= {0};
+		if (!selezionati.empty())
+			snprintf(marcati, sizeof(marcati), " [%d marked: g]", (int)selezionati.size());
+		printf("ESC/q F1-F4=Sort all not inv search filter SPACE :line path ?help%s", marcati);
+		if (filtro != "")
+			printf(" [filter: %s]", filtro.c_str());
+		printf(SCEGLI_NORMALE);
+		printf("\n");
+		fflush(stdout);
+		hide_cursor();
+	}
+	/// a line typed below the list
+	std::string chiedi(const std::string &i_domanda)
+	{
+		show_cursor();
+		const std::string risposta= getuserinput(i_domanda, "");
+		hide_cursor();
+		return scegli_pulito(risposta, false);
+	}
+	void aiuto()
+	{
+		clearscreen();
+		scegli_colore(SCEGLI_CIANO);
+		printf("%s\n", titolo.c_str());
+		printf(SCEGLI_NORMALE);
+		printf("ESC/q/Q   - Exit: nothing is done\n");
+		printf("ENTER     - Enter a folder / Take the file (with the marked ones)\n");
+		printf("BACKSPACE - Go up%s\n",
+#ifdef _WIN32
+			   " (above the root of a drive: the drives)"
+#else
+			   ""
+#endif
+		);
+		printf("k/j       - Up/Down (the arrows)\n");
+		printf("u/d       - Page Up/Down\n");
+		printf("h/e       - Home/End\n");
+		printf("p         - Path: go to a folder typed by hand\n");
+		printf("Space     - Mark/Unmark (the marks stay when the folder changes)\n");
+		printf("a/n/i     - All/None/Invert\n");
+		printf("s         - Mark the ones with a text in the name\n");
+		printf("g/x       - Go: take the marked ones\n");
+		printf("f         - Filter the files by a text in the name\n");
+		printf("F1-F4     - Sort by name, size, date, extension (again: reversed)\n");
+		printf(":         - Goto line\n");
+		if (soloarchivi)
+			printf("In cyan the archives (.zpaq .franzen, the files of the backup command): only they can be taken\n");
+		scegli_colore(SCEGLI_GIALLO);
+		printf("Press any key...");
+		printf(SCEGLI_NORMALE);
+		fflush(stdout);
+		get_key();
+	}
+	void fine()
+	{
+		printf(SCEGLI_NORMALE);
+		show_cursor();
+		fflush(stdout);
+	}
+};
+/// an argument as it is typed: between quotes when it has a space in it (or a jolly: a shell would take it for itself)
+static std::string scegli_virgolette(const std::string &i_argomento)
+{
+	if ((i_argomento != "") && (i_argomento.find_first_of(" *?") == std::string::npos))
+		return i_argomento;
+	return "\"" + i_argomento + "\"";
+}
+/*
+	The panel after the choice: RUN, the switches of the command one after the other (in more rows when
+	they do not fit), and a line to be typed by hand for anything else. Left and right (up and down, from
+	a row to the other) move; space or enter turn the one under the cursor on (shown reversed) or off;
+	enter on RUN starts. 0: back to the files (ESC); 1: run
+*/
+static int scegli_pannello(const std::string &i_comando, const std::vector<std::string> &i_archivi, const std::string &i_gia, const std::vector<std::string> &i_nomi, std::vector<bool> &io_attivi, std::string &io_altro)
+{
+	const int n	  = (int)i_nomi.size();
+	const int voci= n + 2; /// RUN, the switches, the line by hand
+	int		  qui = 0;
+	hide_cursor();
+	for (;;)
+	{
+		int larga= terminalwidth() - 1;
+		if (larga < 40)
+			larga= 40;
+		clearscreen();
+		scegli_colore(SCEGLI_CIANO);
+		printf("zpaqfranz %s: %d archive%s\n", i_comando.c_str(), (int)i_archivi.size(), (i_archivi.size() == 1) ? "" : "s, one run each");
+		printf(SCEGLI_NORMALE);
+		for (size_t i= 0; (i < i_archivi.size()) && (i < 6); i++)
+			printf("  %s\n", truncate_with_extension(i_archivi[i], larga - 4).c_str());
+		if (i_archivi.size() > 6)
+			printf("  ...and %d more\n", (int)i_archivi.size() - 6);
+		/// the line as it is going to be
+		std::string riga= "zpaqfranz " + i_comando + " " + ((i_archivi.size() == 1) ? scegli_virgolette(i_archivi[0]) : std::string("<archive>")) + i_gia;
+		for (int i= 0; i < n; i++)
+			if (io_attivi[(size_t)i])
+				riga+= " " + i_nomi[(size_t)i];
+		if (io_altro != "")
+			riga+= " " + io_altro;
+		printf("\n%s\n\n", riga.substr(0, (size_t)larga).c_str());
+		std::vector<int> rigadi((size_t)voci, 0), colonnadi((size_t)voci, 0);
+		int				 r= 0, c= 0;
+		for (int i= 0; i < voci; i++)
+		{
+			const std::string testo= (i == 0) ? std::string("RUN") : ((i <= n) ? i_nomi[(size_t)i - 1] : ("other: " + ((io_altro == "") ? std::string("(none)") : io_altro)));
+			const int		  lungo= (int)testo.size() + 3;
+			if ((c > 0) && (c + lungo > larga))
+			{
+				printf("\n");
+				r++;
+				c= 0;
+			}
+			rigadi[(size_t)i]	= r;
+			colonnadi[(size_t)i]= c;
+			printf("%c", (i == qui) ? '[' : ' ');
+			if ((i >= 1) && (i <= n) && io_attivi[(size_t)i - 1])
+				printf(SCEGLI_INVERSO);
+			else if (i == 0)
+				scegli_colore(SCEGLI_VERDE);
+			printf("%s", testo.c_str());
+			printf(SCEGLI_NORMALE);
+			printf("%c ", (i == qui) ? ']' : ' ');
+			c+= lungo;
+		}
+		printf("\n\n");
+		scegli_colore(SCEGLI_GIALLO);
+		printf("arrows=move SPACE/ENTER=on/off (on: reversed) ENTER on RUN=start ESC/q=back\n");
+		printf(SCEGLI_NORMALE);
+		fflush(stdout);
+		const int ch= get_key();
+		if (ch == 3)
+		{
+			show_cursor();
+			myprintf("\nGoodbye (CONTROL-C)\n");
+			seppuku(0);
+		}
+		if ((ch == -1) || (ch == 27) || (ch == 'q') || (ch == 'Q'))
+		{
+			show_cursor();
+			return 0;
+		}
+		if ((ch == 134) && (qui > 0))
+			qui--;
+		else if (((ch == 135) || (ch == 9)) && (qui < voci - 1))
+			qui++;
+		else if (ch == 'h')
+			qui= 0;
+		else if (ch == 'e')
+			qui= voci - 1;
+		else if ((ch == 'k') || (ch == 'j'))
+		{
+			/// the nearest one of the row above, or below
+			const int cercata= rigadi[(size_t)qui] + ((ch == 'k') ? -1 : 1);
+			int		  meglio = -1;
+			for (int i= 0; i < voci; i++)
+				if ((rigadi[(size_t)i] == cercata) && ((meglio < 0) || (abs(colonnadi[(size_t)i] - colonnadi[(size_t)qui]) < abs(colonnadi[(size_t)meglio] - colonnadi[(size_t)qui]))))
+					meglio= i;
+			if (meglio >= 0)
+				qui= meglio;
+		}
+		else if ((ch == ' ') || (ch == 13))
+		{
+			if (qui == 0)
+			{
+				if (ch == 13)
+				{
+					show_cursor();
+					return 1;
+				}
+			}
+			else if (qui <= n)
+				io_attivi[(size_t)qui - 1]= !io_attivi[(size_t)qui - 1];
+			else
+			{
+				show_cursor();
+				io_altro= scegli_pulito(getuserinput("Anything else, as on the command line: files, then switches (nothing: none):", ""), false);
+				hide_cursor();
+			}
+		}
+	}
+}
+/*
+	What main asks before anything else. 0: the line is not one for the chooser, it goes on as it is.
+	1: chosen, o_riga is the line to run (the program, the command, the archive, the switches).
+	2: left with ESC, nothing to do
+*/
+int scegli_riga(int argc, const char **argv, std::vector<std::string> &o_riga)
+{
+	o_riga.clear();
+	g_scegli_archivi.clear();
+	if (argc < 2)
+		return 0;
+	const franzscegliriga *riga= NULL;
+	for (size_t i= 0; i < sizeof(g_sceglirighe) / sizeof(g_sceglirighe[0]); i++)
+		if (!strcmp(argv[1], g_sceglirighe[i].comando))
+			riga= &g_sceglirighe[i];
+	if (riga == NULL)
+		return 0;
+	if ((argc > 2) && (argv[2][0] != '-')) /// the archive is there
+		return 0;
+	if ((!isatty(fileno(stdin))) || (!isatty(fileno(stdout)))) /// a script: the usage text, as ever
+		return 0;
+	for (int i= 2; i < argc; i++)
+		if (!strcmp(argv[i], "-nocolor"))
+			flagnocolor= true;
+#ifdef _WIN32
+	color_save();
+#endif
+	/// the switches of the panel; on at the start: the ones with a *, and the ones already on the line
+	std::vector<std::string> nomi;
+	std::vector<bool>		 attivi;
+	{
+		std::string uno;
+		for (const char *p= riga->interruttori;; p++)
+		{
+			if ((*p == ' ') || (*p == 0))
+			{
+				if (uno != "")
+				{
+					const bool acceso= (uno[uno.size() - 1] == '*');
+					if (acceso)
+						uno.erase(uno.size() - 1);
+					nomi.push_back(uno);
+					attivi.push_back(acceso);
+					uno= "";
+				}
+				if (*p == 0)
+					break;
+			}
+			else
+				uno+= *p;
+		}
+	}
+	std::string gia; /// what was on the line, and is not on the panel: it stays as it is
+	for (int i= 2; i < argc; i++)
+	{
+		bool pannello= false;
+		for (size_t k= 0; k < nomi.size(); k++)
+			if (nomi[k] == argv[i])
+			{
+				attivi[k]= true;
+				pannello = true;
+			}
+		if (!pannello)
+			gia+= " " + scegli_virgolette(argv[i]);
+	}
+	std::vector<std::string> archivi;
+	std::string				 altro;
+	franzscegli				 scelta(std::string("zpaqfranz ") + riga->comando + ": ENTER on an archive (in cyan) takes it" + (riga->molti ? "; SPACE marks more than one" : ""), true, riga->molti);
+	for (;;)
+	{
+		std::vector<std::string> presi;
+		if (scelta.scegli(presi) == 0)
+		{
+			clearscreen();
+			printf("zpaqfranz %s: left without choosing, nothing done\n", riga->comando);
+			return 2;
+		}
+		/// the files taken: which archives they are (the pieces of a set are one archive)
+		archivi.clear();
+		for (size_t i= 0; i < presi.size(); i++)
+		{
+			const std::string a= scegli_archivio(presi[i]);
+			bool			  nuovo= (a != "");
+			for (size_t k= 0; k < archivi.size(); k++)
+				if (archivi[k] == a)
+					nuovo= false;
+			if (nuovo)
+				archivi.push_back(a);
+		}
+		if (archivi.empty())
+		{
+			scelta.avvisa("not an archive");
+			continue;
+		}
+		if ((archivi.size() > 1) && (!riga->molti))
+		{
+			char testo[160];
+			snprintf(testo, sizeof(testo), "%d archives are marked: %s takes one at a time (n: unmark all)", (int)archivi.size(), riga->comando);
+			scelta.avvisa(testo);
+			continue;
+		}
+		if ((nomi.size() == 0) && (riga->chiede[0] == 0)) /// nothing to offer, nothing to ask: it starts
+			break;
+		if (scegli_pannello(riga->comando, archivi, gia, nomi, attivi, altro) == 1)
+			break;
+	}
+	/// what must be asked, when the line does not have it
+	std::string valore;
+	if (riga->chiede[0] != 0)
+	{
+		bool cera= false;
+		for (int i= 2; i < argc; i++)
+			if (!strcmp(argv[i], riga->chiede))
+				cera= true;
+		if (!cera)
+		{
+			printf("\n");
+			show_cursor();
+			const std::string domanda= std::string(riga->domanda) + " (" + riga->chiede + "; nothing: " + ((riga->vuoto[0] != 0) ? riga->vuoto : "not given") + "):";
+			valore= scegli_pulito(getuserinput(domanda, ""), true);
+			if (valore == "")
+				valore= riga->vuoto;
+		}
+	}
+	/// the line typed by hand: its words, a "quoted one" is one
+	std::vector<std::string> parole;
+	{
+		std::string parola;
+		bool		dentro= false, piena= false;
+		for (size_t i= 0; i <= altro.size(); i++)
+		{
+			const char c= (i < altro.size()) ? altro[i] : ' ';
+			if (c == '"')
+			{
+				dentro= !dentro;
+				piena = true;
+			}
+			else if ((c == ' ') && (!dentro))
+			{
+				if (piena || (parola != ""))
+					parole.push_back(parola);
+				parola= "";
+				piena = false;
+			}
+			else
+				parola+= c;
+		}
+	}
+	/// the line. What is typed by hand before its first switch goes right after the archive (the drive of an
+	/// image, the files to extract: the parser takes them there only), the rest at the end
+	size_t primi= 0;
+	while ((primi < parole.size()) && (parole[primi] != "") && (parole[primi][0] != '-'))
+		primi++;
+	o_riga.push_back(argv[0]);
+	o_riga.push_back(argv[1]);
+	o_riga.push_back(archivi[0]);
+	for (size_t i= 0; i < primi; i++)
+		o_riga.push_back(parole[i]);
+	for (int i= 2; i < argc; i++)
+	{
+		bool pannello= false;
+		for (size_t k= 0; k < nomi.size(); k++)
+			if (nomi[k] == argv[i])
+				pannello= true;
+		if (!pannello)
+			o_riga.push_back(argv[i]);
+	}
+	if (valore != "")
+	{
+		o_riga.push_back(riga->chiede);
+		o_riga.push_back(valore);
+	}
+	for (size_t k= 0; k < nomi.size(); k++)
+		if (attivi[k])
+			o_riga.push_back(nomi[k]);
+	for (size_t i= primi; i < parole.size(); i++)
+		o_riga.push_back(parole[i]);
+	if (archivi.size() > 1)
+		g_scegli_archivi= archivi;
+	/// what it is, as it would be typed
+	clearscreen();
+	scegli_colore(SCEGLI_CIANO);
+	for (size_t a= 0; a < archivi.size(); a++)
+	{
+		std::string testo= "zpaqfranz " + std::string(argv[1]) + " " + scegli_virgolette(archivi[a]);
+		for (size_t i= 3; i < o_riga.size(); i++)
+			testo+= " " + scegli_virgolette(o_riga[i]);
+		printf("%s\n", testo.c_str());
+	}
+	printf(SCEGLI_NORMALE);
+	fflush(stdout);
+	return 1;
 }
 
 
@@ -212938,7 +216186,7 @@ void franzdash::scrivilinea(int i_riga, const string &i_testo, int i_colore)
 /// the position of the first block of a row: "  12.5G "
 void franzdash::etichetta(int i_riga, char *o_testo, size_t i_size) const
 {
-	char	dove[32];
+	char	dove[24]; /// 65.9z: was 32, as the buffer of who calls ("may be truncated" with gcc -O3)
 	int64_t primo= primoblocco((int64_t)i_riga * m_colonne);
 	usb_posizione(dove, sizeof(dove), primo * m_bytesblocco, m_totale);
 	snprintf(o_testo, i_size, "%7s ", dove);
@@ -214717,6 +217965,7 @@ int franzusbtest::analisi(bool i_tripletta)
 }
 
 #ifndef _WIN32
+#ifdef __linux__ /// 65.9z: /sys is read on Linux only (usb_infounix): elsewhere an unused function (-Wall)
 static string usb_leggi1(const string &i_file)
 {
 	FILE *f= fopen(i_file.c_str(), "r");
@@ -214734,6 +217983,7 @@ static string usb_leggi1(const string &i_file)
 		s.erase(0, 1);
 	return s;
 }
+#endif
 /// f b -test = /dev/sdb, or a path (/dev/nvme0n1, /dev/rdisk4, an image file: read only)
 static string usb_device(const string &i_argomento)
 {
@@ -215526,12 +218776,8 @@ int franzzerontfs::esegui(char i_lettera)
 	myprintf("Size            : %s (%s)\n", migliaia((int64_t)totali.QuadPart), tohuman((int64_t)totali.QuadPart));
 	myprintf("Free            : %s (%s)\n", migliaia((int64_t)liberi.QuadPart), tohuman((int64_t)liberi.QuadPart));
 	printbar('-');
-	/// 65.8z10: never tried over 2 TB, and here the volume is written raw: not yet
-	if (totali.QuadPart > FRANZIMAGER_ZERO_MAX)
-	{
-		myprintf("68739! %c: is %s: -zero -ntfs on a volume over 2 TB is not supported (yet): nothing done\n", m_lettera, tohuman((int64_t)totali.QuadPart));
-		return 2;
-	}
+	/// 65.9f: over 2 TB too (it was refused since 65.8z10 only because never tried there: positions, clusters
+	/// and counters are all of 64 bits; tried on a volume of 4 TB with files and free clusters above 2 TB)
 	color_yellow();
 	myprintf("68776: Zeros in every free cluster of %c:, written straight on the locked volume\n", m_lettera);
 	myprintf("68777: The files are not touched. What was deleted cannot be recovered any more\n");
@@ -215551,12 +218797,6 @@ int franzzerontfs::esegui(char i_lettera)
 	FlushFileBuffers(m_volume);
 	string problema;
 	bool   letta= bitmap(problema);
-	/// (the size again, as NTFS says it: with quotas the one seen above is the room of this user)
-	if (letta && ((uint64_t)(m_clusters * m_cluster) > FRANZIMAGER_ZERO_MAX))
-	{
-		myprintf("68764! %c: is %s: -zero -ntfs on a volume over 2 TB is not supported (yet): nothing done\n", m_lettera, tohuman(m_clusters * m_cluster));
-		return 2;
-	}
 	if (letta)
 	{
 		DWORD fatti	  = 0;
@@ -220406,12 +223646,12 @@ class vmdk_export_handler : public extract_handler
 	franzimager				   &imager_ref;
 	const std::vector<uint8_t> &metafile;
 	const string				vmdkname;
-	bool						flat;
+	int							tipo; /// 1 a sparse .vmdk, 2 a flat one, 3 a .vhdx
 	bool						error_occurred;
 
   public:
-	vmdk_export_handler(franzimager &img, const std::vector<uint8_t> &meta, const string &i_vmdkname, bool i_flat)
-		: imager_ref(img), metafile(meta), vmdkname(i_vmdkname), flat(i_flat), error_occurred(false)
+	vmdk_export_handler(franzimager &img, const std::vector<uint8_t> &meta, const string &i_vmdkname, int i_tipo)
+		: imager_ref(img), metafile(meta), vmdkname(i_vmdkname), tipo(i_tipo), error_occurred(false)
 	{
 	}
 	bool initialize() override
@@ -220421,7 +223661,7 @@ class vmdk_export_handler : public extract_handler
 			myprintf("10375! metadata not loaded (imager_themetafile empty)\n");
 			return false;
 		}
-		return imager_ref.preparavmdkthin(metafile, vmdkname.c_str(), flat);
+		return imager_ref.preparavmdkthin(metafile, vmdkname.c_str(), tipo);
 	}
 	bool should_process_file(const string &filename) override
 	{
@@ -220446,7 +223686,7 @@ class vmdk_export_handler : public extract_handler
 	}
 	const char *mode_name() override
 	{
-		return "VMDK export";
+		return (tipo == 3) ? "VHDX export" : "VMDK export";
 	}
 };
 
@@ -220515,6 +223755,1099 @@ class raw_restore_handler : public extract_handler
 	bool has_error()
 	{
 		return error_occurred;
+	}
+};
+
+/*
+	65.9p: xc, the restore of a backup made by ac (the command itself is Jidac::xc, after ac). Here
+	what the engine of extractstdout() calls while it reads the archive: the plan (the zones of the
+	disk as the metafile of the backup has them, each one with its piece of the archive), where the
+	disk goes (a physical disk, a raw file, a virtual disk), and the handler that puts the bytes of
+	a piece at their place.
+	The engine is run once for each piece, in the order the destination wants: a virtual disk is
+	written from its start to its end, on a physical disk the piece with the partition table is the
+	last one. Every piece is checked while it goes by (size, CRC-32, the hash of the archive) against
+	what the backup wrote of it; a small one is held whole and written only if it is right.
+*/
+#define XC_BLOCCO (2ULL * 1024 * 1024)
+#define XC_PICCOLO (32ULL * 1024 * 1024) /// a raw piece up to this: held whole, checked, then written
+#define XC_MEGA (1024ULL * 1024)
+#ifndef IOCTL_DISK_SET_DISK_ATTRIBUTES
+#define IOCTL_DISK_SET_DISK_ATTRIBUTES CTL_CODE(IOCTL_DISK_BASE, 0x003d, METHOD_BUFFERED, FILE_READ_ACCESS | FILE_WRITE_ACCESS)
+#endif
+#ifndef IOCTL_DISK_GET_DISK_ATTRIBUTES
+#define IOCTL_DISK_GET_DISK_ATTRIBUTES CTL_CODE(IOCTL_DISK_BASE, 0x003c, METHOD_BUFFERED, FILE_ANY_ACCESS)
+#endif
+/// (SET_DISK_ATTRIBUTES and GET_DISK_ATTRIBUTES of Windows: not in every header this is compiled with)
+struct franzxcattributi
+{
+	DWORD	  Version;
+	BOOLEAN	  Persist;
+	BYTE	  Reserved1[3];
+	DWORDLONG Attributes; /// 1: offline, 2: read only
+	DWORDLONG AttributesMask;
+	DWORD	  Reserved2[4];
+};
+struct franzxcattributiletti
+{
+	DWORD	  Version;
+	DWORD	  Reserved1;
+	DWORDLONG Attributes;
+};
+
+/// where the disk goes: a physical disk (1), a raw file (2: sparse, as long as the disk), a virtual
+/// disk (3: a .vmdk or a .vhdx, written by franzvdisk, that wants whole blocks from the start to the end)
+class franzxcuscita
+{
+  public:
+	franzxcuscita() : m_tipo(0), m_h(INVALID_HANDLE_VALUE), m_disco(NULL), m_bytes(0), m_settore(512), m_buffer(NULL), m_zero(NULL), m_vbase(0), m_vpieno(false), m_scritti(0), m_zeri(0), m_numero(-1)
+	{
+	}
+	~franzxcuscita()
+	{
+		string nulla;
+		chiudi(nulla);
+	}
+	bool	 apridisco(int i_numero, string &o_problema);
+	bool	 aprifile(const string &i_nome, uint64_t i_bytes, string &o_problema);
+	bool	 aprivirtuale(const string &i_nome, uint64_t i_bytes, int i_tipo, string &o_problema);
+	bool	 scrivi(uint64_t i_offset, const char *i_dati, uint64_t i_quanti);
+	bool	 zeri(uint64_t i_offset, uint64_t i_quanti);
+	bool	 leggi(uint64_t i_offset, char *o_dati, uint64_t i_quanti);
+	bool	 svuota();
+	bool	 chiudi(string &o_problema);
+	bool	 fisico() const { return m_tipo == 1; }
+	bool	 inordine() const { return m_tipo == 3; }
+	bool	 rileggibile() const { return (m_tipo == 1) || (m_tipo == 2); }
+	uint64_t bytes() const { return m_bytes; }
+	uint64_t scritti() const { return m_scritti; }
+	uint64_t zeriscritti() const { return m_zeri; }
+	string	 genere() const;
+	/// a physical disk: its volumes out of the way, Windows told to read it again, on line or not
+	bool	 bloccavolumi(const std::vector<std::pair<uint64_t, uint64_t> > *i_solo, bool i_comunque, string &o_problema);
+	void	 sbloccavolumi();
+	bool	 aggiorna();
+	bool	 fuorilinea(bool i_si);
+	string	 errore;
+
+  private:
+	int					m_tipo;
+	HANDLE				m_h;
+	franzvdisk		   *m_disco;
+	uint64_t			m_bytes;
+	uint32_t			m_settore;
+	char			   *m_buffer; /// 2 MiB, aligned: what goes to a physical disk, the block of a virtual one
+	char			   *m_zero;
+	uint64_t			m_vbase;  /// virtual disk: the block being filled, and if there is one
+	bool				m_vpieno;
+	uint64_t			m_scritti;
+	uint64_t			m_zeri;
+	int					m_numero;
+	string				m_nome;
+	std::vector<HANDLE> m_volumi;
+	bool				memoria();
+	franzxcuscita(const franzxcuscita &);
+	franzxcuscita &operator=(const franzxcuscita &);
+};
+bool franzxcuscita::memoria()
+{
+	if (!m_buffer)
+		m_buffer= (char *)VirtualAlloc(NULL, (SIZE_T)XC_BLOCCO, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+	if (!m_zero)
+		m_zero= (char *)VirtualAlloc(NULL, (SIZE_T)XC_BLOCCO, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE); /// zeros
+	return (m_buffer != NULL) && (m_zero != NULL);
+}
+string franzxcuscita::genere() const
+{
+	if (m_tipo == 1)
+		return "disk " + itos(m_numero);
+	if (m_tipo == 2)
+		return "raw file";
+	if (m_disco)
+		return m_disco->genere();
+	return "";
+}
+bool franzxcuscita::apridisco(int i_numero, string &o_problema)
+{
+	char nome[64];
+	snprintf(nome, sizeof(nome), "\\\\.\\PhysicalDrive%d", i_numero);
+	m_h= CreateFileA(nome, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, FILE_FLAG_NO_BUFFERING, NULL);
+	if (m_h == INVALID_HANDLE_VALUE)
+	{
+		o_problema= "cannot open disk " + itos(i_numero) + " to write on it (error " + itos((int64_t)GetLastError()) + ")";
+		return false;
+	}
+	DWORD				   fatti= 0;
+	GET_LENGTH_INFORMATION lunghezza;
+	if (DeviceIoControl(m_h, IOCTL_DISK_GET_LENGTH_INFO, NULL, 0, &lunghezza, sizeof(lunghezza), &fatti, NULL))
+		m_bytes= (uint64_t)lunghezza.Length.QuadPart;
+	DISK_GEOMETRY_EX geometria;
+	memset(&geometria, 0, sizeof(geometria));
+	if (DeviceIoControl(m_h, IOCTL_DISK_GET_DRIVE_GEOMETRY_EX, NULL, 0, &geometria, sizeof(geometria), &fatti, NULL) && (geometria.Geometry.BytesPerSector >= 512))
+		m_settore= geometria.Geometry.BytesPerSector;
+	if ((m_bytes == 0) || (!memoria()))
+	{
+		o_problema= "disk " + itos(i_numero) + " does not give its size";
+		CloseHandle(m_h);
+		m_h= INVALID_HANDLE_VALUE;
+		return false;
+	}
+	m_tipo	= 1;
+	m_numero= i_numero;
+	return true;
+}
+bool franzxcuscita::aprifile(const string &i_nome, uint64_t i_bytes, string &o_problema)
+{
+	m_h= CreateFileW(utow(i_nome.c_str()).c_str(), GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+	if (m_h == INVALID_HANDLE_VALUE)
+	{
+		o_problema= "cannot create " + i_nome + " (error " + itos((int64_t)GetLastError()) + ")";
+		return false;
+	}
+	/// sparse where the file system can (NTFS): what is not in the backup takes no room; as long as the disk
+	DWORD fatti= 0;
+	DeviceIoControl(m_h, FSCTL_SET_SPARSE, NULL, 0, NULL, 0, &fatti, NULL);
+	LARGE_INTEGER fine;
+	fine.QuadPart= (LONGLONG)i_bytes;
+	if ((!SetFilePointerEx(m_h, fine, NULL, FILE_BEGIN)) || (!SetEndOfFile(m_h)) || (!memoria()))
+	{
+		o_problema= "cannot make " + i_nome + " as long as the disk, " + string(migliaia((int64_t)i_bytes)) + " bytes (error " + itos((int64_t)GetLastError()) + ")";
+		CloseHandle(m_h);
+		m_h= INVALID_HANDLE_VALUE;
+		return false;
+	}
+	m_tipo = 2;
+	m_bytes= i_bytes;
+	m_nome = i_nome;
+	return true;
+}
+/// i_tipo: 1 a sparse .vmdk, 2 a flat one, 3 a .vhdx
+bool franzxcuscita::aprivirtuale(const string &i_nome, uint64_t i_bytes, int i_tipo, string &o_problema)
+{
+	if (!memoria())
+	{
+		o_problema= "no memory";
+		return false;
+	}
+	bool bene= false;
+	if (i_tipo == 3)
+	{
+		franzvhdx *v= new franzvhdx;
+		bene		= v->apri(i_nome, i_bytes);
+		m_disco		= v;
+	}
+	else
+	{
+		franzvmdk *v= new franzvmdk;
+		bene		= v->apri(i_nome, i_bytes, i_tipo == 2);
+		m_disco		= v;
+	}
+	if (!bene)
+	{
+		o_problema= "cannot create " + i_nome;
+		delete m_disco;
+		m_disco= NULL;
+		return false;
+	}
+	m_tipo = 3;
+	m_bytes= i_bytes;
+	m_nome = i_nome;
+	return true;
+}
+bool franzxcuscita::svuota()
+{
+	if (m_tipo == 3)
+	{
+		if (!m_vpieno)
+			return true;
+		m_vpieno			 = false;
+		const uint64_t quanti= ((m_bytes - m_vbase) < XC_BLOCCO) ? (m_bytes - m_vbase) : XC_BLOCCO;
+		if (!m_disco->scrivi(m_vbase, m_buffer, quanti))
+		{
+			errore= "cannot write " + m_nome + " (the block at " + string(migliaia((int64_t)m_vbase)) + ")";
+			return false;
+		}
+		return true;
+	}
+	if ((m_h != INVALID_HANDLE_VALUE) && (!FlushFileBuffers(m_h)) && (m_tipo == 2))
+	{
+		errore= "cannot flush " + m_nome + " (error " + itos((int64_t)GetLastError()) + ")";
+		return false;
+	}
+	return true;
+}
+bool franzxcuscita::scrivi(uint64_t i_offset, const char *i_dati, uint64_t i_quanti)
+{
+	if (m_tipo == 0)
+		return false;
+	if (i_offset + i_quanti > m_bytes)
+	{
+		errore= "a write of " + string(migliaia((int64_t)i_quanti)) + " bytes at " + string(migliaia2((int64_t)i_offset)) + " goes past the end of the destination";
+		return false;
+	}
+	if (m_tipo == 3)
+	{
+		/// a virtual disk: blocks of 2 MiB, each one given once, whole, in order
+		while (i_quanti > 0)
+		{
+			const uint64_t blocco= i_offset / XC_BLOCCO * XC_BLOCCO;
+			if (m_vpieno && (blocco != m_vbase))
+			{
+				if (blocco < m_vbase)
+				{
+					errore= "a virtual disk is written from its start to its end: " + string(migliaia((int64_t)i_offset)) + " comes after " + string(migliaia2((int64_t)m_vbase));
+					return false;
+				}
+				if (!svuota())
+					return false;
+			}
+			if (!m_vpieno)
+			{
+				m_vbase= blocco;
+				memset(m_buffer, 0, (size_t)XC_BLOCCO);
+				m_vpieno= true;
+			}
+			const uint64_t n= ((m_vbase + XC_BLOCCO - i_offset) < i_quanti) ? (m_vbase + XC_BLOCCO - i_offset) : i_quanti;
+			memcpy(m_buffer + (i_offset - m_vbase), i_dati, (size_t)n);
+			i_offset+= n;
+			i_dati+= n;
+			i_quanti-= n;
+			m_scritti+= n;
+		}
+		return true;
+	}
+	while (i_quanti > 0)
+	{
+		uint64_t	n = (i_quanti < XC_BLOCCO) ? i_quanti : XC_BLOCCO;
+		const char *da= i_dati;
+		DWORD		q = (DWORD)n;
+		if (m_tipo == 1)
+		{
+			/// (a physical disk: whole sectors, from an aligned address)
+			memcpy(m_buffer, i_dati, (size_t)n);
+			if (n % m_settore)
+			{
+				q= (DWORD)((n / m_settore + 1) * m_settore);
+				memset(m_buffer + n, 0, q - (DWORD)n);
+			}
+			da= m_buffer;
+		}
+		LARGE_INTEGER dove;
+		dove.QuadPart= (LONGLONG)i_offset;
+		DWORD fatti	 = 0;
+		if ((!SetFilePointerEx(m_h, dove, NULL, FILE_BEGIN)) || (!WriteFile(m_h, da, q, &fatti, NULL)) || (fatti != q))
+		{
+			errore= "cannot write " + string(migliaia((int64_t)q)) + " bytes at " + string(migliaia2((int64_t)i_offset)) + " of the " + genere() + " (error " + itos((int64_t)GetLastError()) + ")";
+			return false;
+		}
+		i_offset+= n;
+		i_dati+= n;
+		i_quanti-= n;
+		m_scritti+= n;
+	}
+	return true;
+}
+/// zeros where the backup has nothing and the destination could have something. A file or a
+/// virtual disk are born empty: only a physical disk
+bool franzxcuscita::zeri(uint64_t i_offset, uint64_t i_quanti)
+{
+	if (m_tipo != 1)
+		return true;
+	if (i_offset >= m_bytes)
+		return true;
+	if (i_offset + i_quanti > m_bytes)
+		i_quanti= m_bytes - i_offset;
+	while (i_quanti > 0)
+	{
+		const DWORD	  q= (DWORD)((i_quanti < XC_BLOCCO) ? i_quanti : XC_BLOCCO);
+		LARGE_INTEGER dove;
+		dove.QuadPart= (LONGLONG)i_offset;
+		DWORD fatti	 = 0;
+		if ((!SetFilePointerEx(m_h, dove, NULL, FILE_BEGIN)) || (!WriteFile(m_h, m_zero, q, &fatti, NULL)) || (fatti != q))
+		{
+			errore= "cannot write " + string(migliaia((int64_t)q)) + " zeros at " + string(migliaia2((int64_t)i_offset)) + " of the " + genere() + " (error " + itos((int64_t)GetLastError()) + ")";
+			return false;
+		}
+		i_offset+= q;
+		i_quanti-= q;
+		m_zeri+= q;
+	}
+	return true;
+}
+bool franzxcuscita::leggi(uint64_t i_offset, char *o_dati, uint64_t i_quanti)
+{
+	if (!rileggibile())
+		return false;
+	while (i_quanti > 0)
+	{
+		const uint64_t n= (i_quanti < XC_BLOCCO) ? i_quanti : XC_BLOCCO;
+		DWORD		   q= (DWORD)n;
+		if ((m_tipo == 1) && (n % m_settore))
+			q= (DWORD)((n / m_settore + 1) * m_settore);
+		LARGE_INTEGER dove;
+		dove.QuadPart= (LONGLONG)i_offset;
+		DWORD fatti	 = 0;
+		if ((!SetFilePointerEx(m_h, dove, NULL, FILE_BEGIN)) || (!ReadFile(m_h, m_buffer, q, &fatti, NULL)) || (fatti < n))
+		{
+			errore= "cannot read back " + string(migliaia((int64_t)n)) + " bytes at " + string(migliaia2((int64_t)i_offset)) + " of the " + genere() + " (error " + itos((int64_t)GetLastError()) + ")";
+			return false;
+		}
+		memcpy(o_dati, m_buffer, (size_t)n);
+		o_dati+= n;
+		i_offset+= n;
+		i_quanti-= n;
+	}
+	return true;
+}
+bool franzxcuscita::chiudi(string &o_problema)
+{
+	bool bene= true;
+	if (m_tipo == 3)
+	{
+		if (!svuota())
+		{
+			o_problema= errore;
+			bene	  = false;
+		}
+		if (m_disco && (!m_disco->chiudi()))
+		{
+			if (bene)
+				o_problema= "cannot close " + m_nome + " (disk full?)";
+			bene= false;
+		}
+	}
+	if (m_disco)
+		delete m_disco;
+	m_disco= NULL;
+	if (m_h != INVALID_HANDLE_VALUE)
+	{
+		if ((m_tipo == 2) && (!FlushFileBuffers(m_h)))
+		{
+			o_problema= "cannot flush " + m_nome + " (error " + itos((int64_t)GetLastError()) + ")";
+			bene	  = false;
+		}
+		sbloccavolumi();
+		CloseHandle(m_h);
+	}
+	m_h= INVALID_HANDLE_VALUE;
+	if (m_buffer)
+		VirtualFree(m_buffer, 0, MEM_RELEASE);
+	if (m_zero)
+		VirtualFree(m_zero, 0, MEM_RELEASE);
+	m_buffer= NULL;
+	m_zero	= NULL;
+	m_tipo	= 0;
+	return bene;
+}
+/// the volumes of the disk, with or without a letter: locked and dismounted, the handles kept open until the
+/// end (Windows refuses to write into a mounted volume). As the f command does before it wipes a disk
+/// (franzusb::bloccavolumi), and:
+/// i_solo: only the volumes that have something in these pieces of the disk (start, length): the others are
+/// left alone, mounted and in use if they are (the data partitions of the disk of the backup itself)
+/// i_comunque: a volume that cannot be locked is dismounted by force, and it goes on (its partition table is
+/// about to be wiped: the volume will be gone)
+bool franzxcuscita::bloccavolumi(const std::vector<std::pair<uint64_t, uint64_t> > *i_solo, bool i_comunque, string &o_problema)
+{
+	o_problema= "";
+	if (m_tipo != 1)
+		return true;
+	wchar_t nome[MAX_PATH];
+	HANDLE	cerca= FindFirstVolumeW(nome, MAX_PATH);
+	if (cerca == INVALID_HANDLE_VALUE)
+		return true;
+	bool tuttook= true;
+	do
+	{
+		std::wstring volume= nome;
+		if ((!volume.empty()) && (volume[volume.size() - 1] == L'\\'))
+			volume.erase(volume.size() - 1);
+		HANDLE hv= CreateFileW(volume.c_str(), GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
+		if (hv == INVALID_HANDLE_VALUE)
+			continue;
+		ULONGLONG spazio[(sizeof(VOLUME_DISK_EXTENTS) + 32 * sizeof(DISK_EXTENT)) / sizeof(ULONGLONG) + 1];
+		DWORD	  fatti = 0;
+		bool	  nostro= false;
+		if (DeviceIoControl(hv, IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS, NULL, 0, spazio, sizeof(spazio), &fatti, NULL))
+		{
+			VOLUME_DISK_EXTENTS *estensioni= (VOLUME_DISK_EXTENTS *)spazio;
+			for (DWORD i= 0; i < estensioni->NumberOfDiskExtents; i++)
+				if (estensioni->Extents[i].DiskNumber == (DWORD)m_numero)
+				{
+					if (i_solo == NULL)
+						nostro= true;
+					else
+					{
+						const uint64_t da= (uint64_t)estensioni->Extents[i].StartingOffset.QuadPart;
+						const uint64_t a = da + (uint64_t)estensioni->Extents[i].ExtentLength.QuadPart;
+						for (size_t k= 0; k < i_solo->size(); k++)
+							if (((*i_solo)[k].first < a) && ((*i_solo)[k].first + (*i_solo)[k].second > da))
+								nostro= true;
+					}
+				}
+		}
+		if (!nostro)
+		{
+			CloseHandle(hv);
+			continue;
+		}
+		bool bloccato= false;
+		for (int prova= 0; (prova < 10) && (!bloccato); prova++)
+		{
+			if (DeviceIoControl(hv, FSCTL_LOCK_VOLUME, NULL, 0, NULL, 0, &fatti, NULL))
+				bloccato= true;
+			else
+				Sleep(300);
+		}
+		DWORD errore= 0;
+		/// still open somewhere (Explorer, the indexer...): dismounted by force, like format /X, then locked. The
+		/// handle opened again: the one of before the dismount is of what was mounted, and its lock is refused
+		for (int prova= 0; (prova < 5) && (!bloccato); prova++)
+		{
+			DeviceIoControl(hv, FSCTL_DISMOUNT_VOLUME, NULL, 0, NULL, 0, &fatti, NULL);
+			bloccato= DeviceIoControl(hv, FSCTL_LOCK_VOLUME, NULL, 0, NULL, 0, &fatti, NULL) != 0;
+			if (bloccato)
+				break;
+			errore= GetLastError();
+			CloseHandle(hv);
+			Sleep(200);
+			hv= CreateFileW(volume.c_str(), GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
+			if (hv == INVALID_HANDLE_VALUE)
+				break;
+			bloccato= DeviceIoControl(hv, FSCTL_LOCK_VOLUME, NULL, 0, NULL, 0, &fatti, NULL) != 0;
+			if (!bloccato)
+				errore= GetLastError();
+		}
+		if (!bloccato)
+		{
+			if (!i_comunque)
+			{
+				o_problema= wtou(volume.c_str()) + " cannot be locked (in use?), error " + itos((int64_t)errore);
+				if (hv != INVALID_HANDLE_VALUE)
+					CloseHandle(hv);
+				tuttook= false;
+				break;
+			}
+			if (hv == INVALID_HANDLE_VALUE)
+				continue;
+		}
+		DeviceIoControl(hv, FSCTL_DISMOUNT_VOLUME, NULL, 0, NULL, 0, &fatti, NULL);
+		m_volumi.push_back(hv);
+	} while (FindNextVolumeW(cerca, nome, MAX_PATH));
+	FindVolumeClose(cerca);
+	return tuttook;
+}
+void franzxcuscita::sbloccavolumi()
+{
+	DWORD fatti= 0;
+	for (size_t i= 0; i < m_volumi.size(); i++)
+	{
+		DeviceIoControl(m_volumi[i], FSCTL_UNLOCK_VOLUME, NULL, 0, NULL, 0, &fatti, NULL);
+		CloseHandle(m_volumi[i]);
+	}
+	m_volumi.clear();
+}
+/// the partition table changed: Windows reads the disk again
+bool franzxcuscita::aggiorna()
+{
+	DWORD fatti= 0;
+	if (m_tipo != 1)
+		return true;
+	FlushFileBuffers(m_h);
+	return DeviceIoControl(m_h, IOCTL_DISK_UPDATE_PROPERTIES, NULL, 0, NULL, 0, &fatti, NULL) != 0;
+}
+/// off line (until the next start of Windows, not kept): Windows does not mount what is on it
+bool franzxcuscita::fuorilinea(bool i_si)
+{
+	if (m_tipo != 1)
+		return false;
+	franzxcattributi a;
+	memset(&a, 0, sizeof(a));
+	a.Version		= sizeof(a);
+	a.Persist		= FALSE;
+	a.Attributes	= i_si ? 1 : 0;
+	a.AttributesMask= 1;
+	DWORD fatti		= 0;
+	return DeviceIoControl(m_h, IOCTL_DISK_SET_DISK_ATTRIBUTES, &a, sizeof(a), NULL, 0, &fatti, NULL) != 0;
+}
+
+/// a zone of the disk, as the metafile of ac has it, with the piece of the archive that fills it
+struct franzxczona
+{
+	bool	 partizione;
+	uint64_t inizio;
+	uint64_t lunghezza;
+	string	 cosa;
+	int		 numero;
+	string	 mbrtipo;
+	bool	 attiva;
+	string	 gpttipo;
+	string	 gptid;
+	string	 gptnome;
+	string	 lettere;
+	string	 fs;
+	string	 etichetta;
+	string	 seriale; /// of the volume, 8 hex digits ("": the backup does not say)
+	bool	 avvio;
+	bool	 windows;
+	string	 cifrata;
+	string	 salvata; /// "no", "used clusters", "raw"
+	string	 facoltativa; /// "yes": in the backup because it was asked for (-all, the screen). "": a backup of before 65.9v
+	string	 perche;
+	string	 file;
+	int64_t	 errori; /// read errors when the backup was taken
+	/// the piece in the archive: what the metafile says of it, and how the archive names its hash
+	bool	 pezzo;
+	bool	 elencato; /// the list of the files of the backup has it, and the archive has that very one
+	bool	 sottile;
+	int64_t	 bytes;
+	string	 crc32;
+	string	 hash;
+	string	 tipohash;
+	/// an image of the used clusters: its .meta
+	std::vector<uint32_t> mappa;  /// the block of the image each record of the .fhd is
+	std::vector<uint8_t>  bitmap; /// the used clusters (the ones left out of the image, pagefile..., too)
+	uint32_t blocco;
+	uint32_t cluster;
+	uint64_t clusters;
+	uint64_t partinizio; /// of the partition, in the virtual disk the image is
+	uint64_t partbytes;
+	string	 fsimg;
+	/// what was done
+	bool	 iniziato;
+	bool	 fatto;
+	uint64_t scritti;	 /// bytes put on the destination
+	uint32_t crcscritti; /// their CRC-32, in the order they were written (-verify reads them back)
+	uint64_t azzerati;
+	double	 secondi;
+	franzxczona() : partizione(false), inizio(0), lunghezza(0), numero(0), attiva(false), avvio(false), windows(false), errori(0), pezzo(false), elencato(false), sottile(false), bytes(0), blocco(0), cluster(0), clusters(0), partinizio(0), partbytes(0), iniziato(false), fatto(false), scritti(0), crcscritti(0), azzerati(0), secondi(0)
+	{
+	}
+};
+/*
+	65.9u: the dashboard of xc (-dashboard, the default; on a console only): the map of what is
+	written, piece after piece in the order of the disk. Not the whole disk: what is not in the
+	backup is not written, and it is not on the map (the plan above says it, and the legend).
+	A cell is grey to do, cyan now, green when written. With -verify: blue when written, green
+	when it was read back and found right (as in f -test: green is what was seen good).
+	Every piece has blocks of 1 MiB of its own (the last one shorter): a block is done when the
+	stream of the piece, on the destination, got to its end
+*/
+enum
+{
+	XCLOOK_DAFARE= 0,
+	XCLOOK_ORA,
+	XCLOOK_SCRITTO,
+	XCLOOK_RILETTO,
+	XCLOOK_GUASTO,
+	XCLOOK_N
+};
+class franzxcdash
+{
+  public:
+	franzxcdash() : m_attivo(false), m_verifica(false), m_ora(-1), m_ultimodisegno(0)
+	{
+		for (int i= 0; i < XCLOOK_N; i++)
+			m_look[i]= 0;
+	}
+	bool attivo() const { return m_attivo; }
+	int	 larghezza() const { return m_dash.larghezza(); }
+	/// i_bytes: for every zone the bytes of its piece in the archive (0: not a piece)
+	void inizia(const string &i_titolo, const std::vector<uint64_t> &i_bytes, bool i_verifica, const string &i_coda);
+	/// the piece of this zone is on the destination (i_riletto: was read back) up to this byte of its stream
+	void fatto(int i_zona, uint64_t i_fino, bool i_riletto);
+	void righe(const string &i_riga1, const string &i_riga2, bool i_subito);
+	void titolo(const string &i_titolo, int i_colore);
+	void guasto(); /// the cell of now: red
+	void fine();
+
+  private:
+	franzdash			  m_dash;
+	bool				  m_attivo;
+	bool				  m_verifica;
+	std::vector<uint64_t> m_bytes;		  /// of the piece of every zone
+	std::vector<int64_t>  m_base;		  /// its first block on the map...
+	std::vector<int64_t>  m_quanti;		  /// ...and how many it has
+	std::vector<int64_t>  m_scritti;	  /// its blocks done: written
+	std::vector<int64_t>  m_riletti;	  /// and read back
+	std::vector<uint32_t> m_cellascritti; /// of every cell: its blocks written, and read back
+	std::vector<uint32_t> m_cellariletti;
+	int64_t				  m_ora; /// the cell of the last block done (-1: none)
+	int64_t				  m_ultimodisegno;
+	int					  m_look[XCLOOK_N];
+	void				  cella(int64_t i_cella);
+};
+void franzxcdash::inizia(const string &i_titolo, const std::vector<uint64_t> &i_bytes, bool i_verifica, const string &i_coda)
+{
+	m_verifica= i_verifica;
+	m_bytes	  = i_bytes;
+	m_base.assign(i_bytes.size(), 0);
+	m_quanti.assign(i_bytes.size(), 0);
+	m_scritti.assign(i_bytes.size(), 0);
+	m_riletti.assign(i_bytes.size(), 0);
+	int64_t	 blocchi= 0;
+	uint64_t totale = 0;
+	for (size_t i= 0; i < i_bytes.size(); i++)
+	{
+		m_base[i]  = blocchi;
+		m_quanti[i]= (int64_t)((i_bytes[i] + XC_MEGA - 1) / XC_MEGA);
+		blocchi+= m_quanti[i];
+		totale+= i_bytes[i];
+	}
+	if (blocchi == 0)
+		return;
+	m_look[XCLOOK_DAFARE] = m_dash.aspetto('.', 5, true, "todo");
+	m_look[XCLOOK_ORA]	  = m_dash.aspetto('>', 4, true, "now");
+	m_look[XCLOOK_SCRITTO]= m_dash.aspetto(i_verifica ? 'w' : '#', i_verifica ? 6 : 1, true, "written");
+	m_look[XCLOOK_RILETTO]= m_dash.aspetto('#', 1, true, "read back");
+	m_look[XCLOOK_GUASTO] = m_dash.aspetto('E', 3, false, "write error");
+	m_dash.voce(m_look[XCLOOK_SCRITTO], "written");
+	if (i_verifica)
+		m_dash.voce(m_look[XCLOOK_RILETTO], "read back");
+	m_dash.voce(m_look[XCLOOK_ORA], "now");
+	m_dash.voce(m_look[XCLOOK_DAFARE], "todo");
+	m_dash.coda(i_coda);
+	m_dash.inizia(i_titolo, blocchi, (int64_t)XC_MEGA, (int64_t)totale, m_look[XCLOOK_DAFARE]);
+	m_cellascritti.assign((size_t)m_dash.celle(), 0);
+	m_cellariletti.assign((size_t)m_dash.celle(), 0);
+	m_ora	= -1;
+	m_attivo= m_dash.live();
+}
+/// what a cell shows: now, or what all of its blocks are
+void franzxcdash::cella(int64_t i_cella)
+{
+	if ((i_cella < 0) || (i_cella >= m_dash.celle()))
+		return;
+	const int64_t  dopo	  = (i_cella + 1 < m_dash.celle()) ? m_dash.primoblocco(i_cella + 1) : m_dash.blocchi();
+	const uint32_t tutti  = (uint32_t)(dopo - m_dash.primoblocco(i_cella));
+	const bool	   scritta= m_cellascritti[(size_t)i_cella] >= tutti;
+	const bool	   riletta= m_cellariletti[(size_t)i_cella] >= tutti;
+	int			   look	  = XCLOOK_DAFARE;
+	if (scritta && (riletta || (!m_verifica)))
+		look= m_verifica ? XCLOOK_RILETTO : XCLOOK_SCRITTO;
+	else if (i_cella == m_ora)
+		look= XCLOOK_ORA;
+	else if (scritta)
+		look= XCLOOK_SCRITTO;
+	m_dash.imposta(i_cella, m_look[look]);
+}
+void franzxcdash::fatto(int i_zona, uint64_t i_fino, bool i_riletto)
+{
+	if ((!m_attivo) || (i_zona < 0) || ((size_t)i_zona >= m_bytes.size()) || (m_quanti[(size_t)i_zona] == 0))
+		return;
+	std::vector<int64_t>  &fatti= i_riletto ? m_riletti : m_scritti;
+	std::vector<uint32_t> &conta= i_riletto ? m_cellariletti : m_cellascritti;
+	const int64_t		   fin	= (i_fino >= m_bytes[(size_t)i_zona]) ? m_quanti[(size_t)i_zona] : (int64_t)(i_fino / XC_MEGA);
+	for (int64_t b= fatti[(size_t)i_zona]; b < fin; b++)
+	{
+		const int64_t c= m_dash.cella(m_base[(size_t)i_zona] + b);
+		conta[(size_t)c]++;
+		if (c != m_ora)
+		{
+			const int64_t prima= m_ora;
+			m_ora			   = c;
+			cella(prima);
+		}
+		cella(c);
+	}
+	if (fin > fatti[(size_t)i_zona])
+		fatti[(size_t)i_zona]= fin;
+}
+void franzxcdash::righe(const string &i_riga1, const string &i_riga2, bool i_subito)
+{
+	if (!m_attivo)
+		return;
+	m_dash.righe(i_riga1, i_riga2);
+	const int64_t adesso= mtime();
+	if ((!i_subito) && (adesso - m_ultimodisegno < (int64_t)(FRANZUSB_REFRESH * 1000)))
+		return;
+	m_dash.disegna();
+	m_ultimodisegno= adesso;
+}
+void franzxcdash::titolo(const string &i_titolo, int i_colore)
+{
+	if (m_attivo)
+		m_dash.titolo(i_titolo, i_colore);
+}
+void franzxcdash::guasto()
+{
+	if (m_attivo && (m_ora >= 0))
+		m_dash.imposta(m_ora, m_look[XCLOOK_GUASTO]);
+}
+void franzxcdash::fine()
+{
+	if (!m_attivo)
+		return;
+	if (m_dash.aspettodi(m_ora) != m_look[XCLOOK_GUASTO])
+	{
+		const int64_t ultima= m_ora;
+		m_ora				= -1;
+		cella(ultima);
+	}
+	m_dash.finale();
+	m_attivo= false;
+}
+struct franzxc
+{
+	std::map<string, string> run;	/// [run] and [disk] of the metafile
+	std::map<string, string> disco;
+	std::vector<franzxczona> zone;
+	uint64_t				 bytes;
+	uint32_t				 settore;
+	bool					 gpt;
+	string					 metanome;
+	franzxcuscita			*uscita;
+	int						 corrente; /// the zone being written (-1: none)
+	string					 errore;
+	/// the piece going by
+	std::vector<char> acc;
+	size_t			  accn;
+	string			  tieni;
+	uint64_t		  flusso;
+	uint32_t		  crcflusso;
+	franz_do_hash	 *hasher;
+	size_t			  record;
+	size_t			  nrecord;
+	uint64_t		  emessi;
+	int64_t			  pezzoinizio;
+	/// for whoever looks
+	int64_t totale;
+	int64_t fatti;
+	int64_t inizio;
+	int64_t ultimariga;
+	int		pezzi;
+	int		npezzo;
+	bool	silenzio; /// -noeta
+	franzxcdash *dash;	  /// 65.9u: the map (NULL: the line, as before)
+	uint64_t	 zeri;	  /// zeros written where an image left something out (shown on the map)
+	bool		 rilegge; /// -verify is reading back: the lines of the map say that
+	franzxc() : bytes(0), settore(512), gpt(false), uscita(NULL), corrente(-1), accn(0), flusso(0), crcflusso(0), hasher(NULL), record(0), nrecord(0), emessi(0), pezzoinizio(0), totale(0), fatti(0), inizio(0), ultimariga(0), pezzi(0), npezzo(0), silenzio(false), dash(NULL), zeri(0), rilegge(false)
+	{
+	}
+	~franzxc()
+	{
+		if (hasher)
+			delete hasher;
+	}
+	bool metti(franzxczona &io_z, uint64_t i_offset, const char *i_dati, uint64_t i_quanti);
+	bool seriale(const franzxczona &i_z, const char *i_boot, uint64_t i_quanti);
+	bool blocco(franzxczona &io_z);
+	bool inizia();
+	bool dati(const char *i_dati, size_t i_quanti);
+	bool fine();
+	void riga(bool i_subito);
+	/// where a record of a thin image goes in its partition (false: nowhere, it is out of it)
+	static bool dove(const franzxczona &i_z, uint64_t i_quale, uint64_t &o_salto, uint64_t &o_dove, uint64_t &o_lungo)
+	{
+		const uint64_t v= i_quale * i_z.blocco; /// in the virtual disk of the image: our MBR, then the partition
+		o_salto			= 0;
+		o_lungo			= i_z.blocco;
+		if (v < i_z.partinizio)
+		{
+			o_salto= i_z.partinizio - v;
+			if (o_salto >= o_lungo)
+				return false;
+		}
+		o_dove= v + o_salto - i_z.partinizio;
+		o_lungo-= o_salto;
+		if (o_dove >= i_z.lunghezza)
+			return false;
+		if (o_dove + o_lungo > i_z.lunghezza)
+			o_lungo= i_z.lunghezza - o_dove;
+		return true;
+	}
+};
+static franzxc *g_xc= NULL; /// not NULL: extractstdout() is giving a piece to xc
+
+void franzxc::riga(bool i_subito)
+{
+	if (dash && dash->attivo())
+	{
+		/// 65.9u: the two lines above the map. fatti and totale: of the stream of the pieces, or of what is read back
+		const double secondi= (mtime() - inizio) / 1000.0;
+		const double media	= (secondi > 0.001) ? (fatti / secondi) : 0;
+		const double resto	= ((media > 1) && (totale > fatti)) ? ((totale - fatti) / media) : 0;
+		char		 fatto[32], tutto[32], eta[32], velocita[32];
+		snprintf(fatto, sizeof(fatto), "%s", tohuman(fatti));
+		snprintf(tutto, sizeof(tutto), "%s", tohuman(totale));
+		usb_orario(eta, sizeof(eta), resto);
+		usb_velocita(velocita, sizeof(velocita), media / 1e6);
+		char uno[300];
+		snprintf(uno, sizeof(uno), "%-4s %5.1f%% %10s/%s ETA %s avg %12s", rilegge ? "read" : "xc", (totale > 0) ? ((fatti >= totale) ? 100.0 : (100.0 * fatti / totale)) : 100.0, fatto, tutto, eta, velocita);
+		string due;
+		if ((corrente >= 0) && (corrente < (int)zone.size()))
+		{
+			const franzxczona &z= zone[(size_t)corrente];
+			char			   pezzo[64];
+			snprintf(pezzo, sizeof(pezzo), "%s %d/%d ", rilegge ? "read back" : "piece", npezzo, pezzi);
+			due= string(pezzo) + z.file + ": ";
+			if (z.partizione)
+				due+= "partition " + itos(z.numero) + ((z.lettere != "") ? (", " + z.lettere) : string("")) + ((z.fs != "") ? (", " + z.fs) : string(""));
+			else
+				due+= z.cosa;
+		}
+		else
+			due= itos(pezzi) + " pieces";
+		if (zeri > 0)
+			due+= string("  zeros ") + tohuman((int64_t)zeri);
+		dash->righe(uno, due, i_subito);
+		return;
+	}
+	if (silenzio)
+		return;
+	const int64_t ora= mtime();
+	if ((!i_subito) && (ora - ultimariga < 1000))
+		return;
+	ultimariga			= ora;
+	const double secondi= (ora - inizio) / 1000.0;
+	const double media	= (secondi > 0.001) ? (fatti / secondi) : 0;
+	int			 resto	= ((media > 1) && (totale > fatti)) ? (int)((totale - fatti) / media) : 0;
+	if (resto > 359999)
+		resto= 359999;
+	const string nome= ((corrente >= 0) && (corrente < (int)zone.size())) ? zone[(size_t)corrente].file : "";
+	myprintf("xc: %03d%% %02d:%02d:%02d %10s of %10s @ %10s/s  %d/%d %-22s\r", (totale > 0) ? (int)(fatti * 100 / totale) : 100, resto / 3600, (resto % 3600) / 60, resto % 60, tohuman(fatti), tohuman2(totale), tohuman3((int64_t)media), npezzo, pezzi, nome.c_str());
+}
+bool franzxc::metti(franzxczona &io_z, uint64_t i_offset, const char *i_dati, uint64_t i_quanti)
+{
+	if (i_quanti == 0)
+		return true;
+	if (!uscita->scrivi(i_offset, i_dati, i_quanti))
+	{
+		errore= uscita->errore;
+		return false;
+	}
+	io_z.scritti+= i_quanti;
+	io_z.crcscritti= crc32_16bytes(i_dati, (size_t)i_quanti, io_z.crcscritti);
+	return true;
+}
+/// the first sector of the volume inside an image: the serial there is the one the backup wrote
+/// for that partition? (an image put in the archive by something else, after the backup, has
+/// another one; the hashes say it already, this is what a person can check)
+bool franzxc::seriale(const franzxczona &i_z, const char *i_boot, uint64_t i_quanti)
+{
+	if ((i_quanti < 512) || (i_z.seriale == "") || (i_z.seriale == "00000000"))
+		return true;
+	const unsigned char *b	 = (const unsigned char *)i_boot;
+	int					 dove= -1;
+	if (!memcmp(b + 3, "NTFS    ", 8))
+		dove= 0x48;
+	else if (!memcmp(b + 3, "EXFAT   ", 8))
+		dove= 0x64;
+	else if (!memcmp(b + 0x52, "FAT32", 5))
+		dove= 0x43;
+	else if (!memcmp(b + 0x36, "FAT1", 4))
+		dove= 0x27;
+	if (dove < 0)
+		return true;
+	char trovato[16];
+	snprintf(trovato, sizeof(trovato), "%02X%02X%02X%02X", b[dove + 3], b[dove + 2], b[dove + 1], b[dove]);
+	if (i_z.seriale == trovato)
+		return true;
+	errore= "the volume inside " + i_z.file + " has the serial " + string(trovato) + ", the backup says " + i_z.seriale + ": it is not the image of this backup";
+	return false;
+}
+/// a whole record of an image of the used clusters is in acc: half a KB of ours, then the block
+bool franzxc::blocco(franzxczona &io_z)
+{
+	if (nrecord >= io_z.mappa.size())
+	{
+		errore= io_z.file + " has more blocks than its .meta says (" + itos((int64_t)io_z.mappa.size()) + ")";
+		return false;
+	}
+	const uint64_t quale= io_z.mappa[nrecord++];
+	uint64_t	   salto= 0, qui= 0, lungo= 0;
+	if (!dove(io_z, quale, salto, qui, lungo))
+		return true;
+	const char *dati= &acc[FRANZIMAGER_SECTOR_SIZE] + salto;
+	if ((qui == 0) && (!seriale(io_z, dati, lungo)))
+		return false;
+	return metti(io_z, io_z.inizio + qui, dati, lungo);
+}
+bool franzxc::inizia()
+{
+	if ((corrente < 0) || (corrente >= (int)zone.size()) || (uscita == NULL))
+		return false;
+	franzxczona &z= zone[(size_t)corrente];
+	accn		  = 0;
+	tieni.clear();
+	flusso	   = 0;
+	crcflusso  = 0;
+	nrecord	   = 0;
+	emessi	   = 0;
+	record	   = z.sottile ? (FRANZIMAGER_SECTOR_SIZE + (size_t)z.blocco) : (size_t)XC_BLOCCO;
+	pezzoinizio= mtime();
+	z.iniziato = true;
+	z.scritti  = 0;
+	z.crcscritti= 0;
+	if (acc.size() < record)
+		acc.resize(record);
+	if (hasher)
+		delete hasher;
+	hasher= NULL;
+	if (z.tipohash != "")
+	{
+		hasher= new franz_do_hash(z.tipohash);
+		hasher->init();
+	}
+	return true;
+}
+bool franzxc::dati(const char *i_dati, size_t i_quanti)
+{
+	if ((errore != "") || (corrente < 0) || (i_quanti == 0))
+		return errore == "";
+	franzxczona &z= zone[(size_t)corrente];
+	if (!z.iniziato)
+		return false;
+	flusso+= i_quanti;
+	crcflusso= crc32_16bytes(i_dati, i_quanti, crcflusso);
+	if (hasher)
+		for (size_t fatto= 0; fatto < i_quanti;) /// (the hasher takes an int)
+		{
+			const size_t n= ((i_quanti - fatto) > (1u << 30)) ? (1u << 30) : (i_quanti - fatto);
+			hasher->update((char *)i_dati + fatto, (int)n);
+			fatto+= n;
+		}
+	fatti+= (int64_t)i_quanti;
+	riga(false);
+	if (!z.sottile)
+	{
+		if (flusso > z.lunghezza)
+		{
+			errore= z.file + " is longer than its place on the disk (" + string(migliaia((int64_t)z.lunghezza)) + " bytes)";
+			return false;
+		}
+		if (z.lunghezza <= XC_PICCOLO)
+		{
+			tieni.append(i_dati, i_quanti);
+			return true;
+		}
+	}
+	while (i_quanti > 0)
+	{
+		const size_t n= (i_quanti < (record - accn)) ? i_quanti : (record - accn);
+		memcpy(&acc[accn], i_dati, n);
+		accn+= n;
+		i_dati+= n;
+		i_quanti-= n;
+		if (accn < record)
+			break;
+		if (z.sottile)
+		{
+			if (!blocco(z))
+				return false;
+			if (dash)
+				dash->fatto(corrente, (uint64_t)nrecord * record, false);
+		}
+		else
+		{
+			if (!metti(z, z.inizio + emessi, &acc[0], accn))
+				return false;
+			emessi+= accn;
+			if (dash)
+				dash->fatto(corrente, emessi, false);
+		}
+		accn= 0;
+	}
+	return true;
+}
+/// the piece is over: it is what the backup wrote? Then what is left of it goes to the destination
+bool franzxc::fine()
+{
+	if ((corrente < 0) || (corrente >= (int)zone.size()))
+		return false;
+	franzxczona &z= zone[(size_t)corrente];
+	if ((errore != "") || (!z.iniziato))
+		return false;
+	char crc[16];
+	snprintf(crc, sizeof(crc), "%08X", (unsigned)crcflusso);
+	if ((int64_t)flusso != z.bytes)
+		errore= z.file + ": " + string(migliaia((int64_t)flusso)) + " bytes came out of the archive, the backup says " + string(migliaia2(z.bytes));
+	else if (stringtoupper(z.crc32) != crc)
+		errore= z.file + ": the CRC-32 of what came out of the archive is " + string(crc) + ", the backup says " + z.crc32;
+	else if (hasher)
+	{
+		const string h= stringtoupper(hasher->finalize());
+		if (h != stringtoupper(z.hash))
+			errore= z.file + ": the " + z.tipohash + " of what came out of the archive is " + h + ", the backup says " + z.hash;
+	}
+	if (errore != "")
+		return false;
+	if (z.sottile)
+	{
+		if ((accn != 0) || (nrecord != z.mappa.size()))
+		{
+			errore= z.file + ": " + itos((int64_t)nrecord) + " blocks and " + itos((int64_t)accn) + " bytes more, its .meta says " + itos((int64_t)z.mappa.size()) + " blocks";
+			return false;
+		}
+	}
+	else
+	{
+		if (flusso != z.lunghezza)
+		{
+			errore= z.file + ": " + string(migliaia((int64_t)flusso)) + " bytes, its place on the disk is of " + string(migliaia2((int64_t)z.lunghezza));
+			return false;
+		}
+		if (z.lunghezza <= XC_PICCOLO)
+		{
+			if (!metti(z, z.inizio, tieni.data(), tieni.size()))
+				return false;
+			tieni.clear();
+		}
+		else if (accn > 0)
+		{
+			if (!metti(z, z.inizio + emessi, &acc[0], accn))
+				return false;
+			emessi+= accn;
+			accn= 0;
+		}
+	}
+	z.fatto	 = true;
+	z.secondi= (mtime() - pezzoinizio) / 1000.0;
+	if (dash)
+	{
+		dash->fatto(corrente, (uint64_t)z.bytes, false);
+		riga(true);
+	}
+	return true;
+}
+
+/// what extractstdout() calls for the piece of xc it is reading (g_xc->corrente)
+class xc_handler : public extract_handler
+{
+  public:
+	bool initialize() override
+	{
+		return (g_xc != NULL) && (g_xc->corrente >= 0) && (g_xc->corrente < (int)g_xc->zone.size());
+	}
+	bool should_process_file(const string &filename) override
+	{
+		string		 nome = filename;
+		const size_t barra= nome.find_last_of("/\\");
+		if (barra != string::npos)
+			nome= nome.substr(barra + 1);
+		return nome == g_xc->zone[(size_t)g_xc->corrente].file;
+	}
+	bool begin_file(const string &i_storedname, const DT &i_dt, bool i_isdir) override
+	{
+		(void)i_storedname;
+		(void)i_dt;
+		(void)i_isdir;
+		return g_xc->inizia();
+	}
+	bool write_fragment(const char *data, size_t len) override
+	{
+		return g_xc->dati(data, len);
+	}
+	bool end_file() override
+	{
+		return g_xc->fine();
+	}
+	bool finalize() override
+	{
+		return g_xc->errore == "";
+	}
+	const char *mode_name() override
+	{
+		return "Disk restore";
 	}
 };
 #endif // _WIN32
@@ -221074,8 +225407,9 @@ int Jidac::extractstdout(char i_dest_partition, const string &i_rawfilename)
 	archive= getbackupnameifany(archive);
 
 #ifdef _WIN32
-	franzdisktype fdt(archive);
-	if (flagverbose)
+	if (flagverbose) /// 65.9p: asked (WMI, slow) only when it is said: xc comes here once for every piece
+	{
+		franzdisktype fdt(archive);
 		if (fdt.ishdd())
 		{
 			color_yellow();
@@ -221084,6 +225418,7 @@ int Jidac::extractstdout(char i_dest_partition, const string &i_rawfilename)
 			printbar('*');
 			color_restore();
 		}
+	}
 #endif
 
 	if (flagramsize)
@@ -221160,14 +225495,16 @@ int Jidac::extractstdout(char i_dest_partition, const string &i_rawfilename)
 	extract_handler *handler= NULL;
 
 #ifdef _WIN32
-	if (export_to_rawfile)
+	if (g_xc != NULL) /// 65.9p: xc: a piece of the disk, at its place (see franzxc)
+		handler= new xc_handler();
+	else if (export_to_rawfile)
 	{
 		if (flagverbose)
 			myprintf("10355: Raw file export mode to %s\n", i_rawfilename.c_str());
 		if (esportavhdraw)
 			handler= new vhdraw_export_handler(imager, i_rawfilename, (uint64_t)esportavhdrawsize, (lettera >= '0') && (lettera <= '9'), esportavmdk != 0);
 		else if (esportavmdk != 0) /// 65.8z14: the image of the used clusters to a .vmdk
-			handler= new vmdk_export_handler(imager, imager_themetafile, i_rawfilename, esportavmdk == 2);
+			handler= new vmdk_export_handler(imager, imager_themetafile, i_rawfilename, esportavmdk);
 		else
 			handler= new rawfile_export_handler(imager, imager_themetafile, i_rawfilename, flagsparse);
 	}
@@ -221212,6 +225549,14 @@ int Jidac::extractstdout(char i_dest_partition, const string &i_rawfilename)
 	int64_t sz			   = 0;
 	bool	is_special_mode= (restore_to_partition || export_to_rawfile ||
 							  restore_raw_partition || restore_raw_disk);
+	bool	xcmuto		   = false; /// 65.9p: xc runs this once for every piece: the lines are its own
+#ifdef _WIN32
+	if (g_xc != NULL)
+	{
+		is_special_mode= true;
+		xcmuto		   = true;
+	}
+#endif
 
 	int franzentestresult=-1;
 
@@ -221307,9 +225652,11 @@ int Jidac::extractstdout(char i_dest_partition, const string &i_rawfilename)
 			}
 		}
 	}
-	myprintf("\n");
+	if (!xcmuto)
+		myprintf("\n");
 
 	color_cyan();
+	if (!xcmuto)
 	myprintf("09344: %s %s (%s, %d threads, cache %s, %d ublocks)\n",
 			 handler->mode_name(),
 			 migliaia(total_bytes_to_extract),
@@ -222036,7 +226383,8 @@ int Jidac::extractstdout(char i_dest_partition, const string &i_rawfilename)
 
 	delete[] mythreads;
 
-	myprintf("\n");
+	if (!xcmuto)
+		myprintf("\n");
 
 	double total_elapsed= (mtime() - start_time) / 1000.0;
 	if (total_elapsed < 0.001)
@@ -222046,6 +226394,7 @@ int Jidac::extractstdout(char i_dest_partition, const string &i_rawfilename)
 	if (is_special_mode)
 	{
 		color_cyan();
+		if (!xcmuto)
 		myprintf("09847: %s %s (%s) in %.1f sec @ %s/s (average)\n",
 				 handler->mode_name(),
 				 migliaia(global_bytes_written),
@@ -223186,7 +227535,7 @@ int Jidac::testparametriadd()
 		}
 
 
-		if (all)
+		if (all && (!flagac)) /// (65.9o: ac -all is another thing, see ac_prepara: every partition, not the whole disk raw)
 			if ((lettera!=0) && (numerodrive==-1))	
 			{
 				color_cyan();
@@ -223217,6 +227566,15 @@ int Jidac::testparametriadd()
 		{
 			if (sceglimodoimage() != 0)
 				return 2;
+#ifndef ANCIENT
+			/// 65.9n: ac: the disk of Windows, its zones, what is taken and what is not, the cases refused
+			if (flagac)
+			{
+				const int preparato= ac_prepara();
+				if (preparato != 0)
+					return preparato; /// (65.9v: 3, -gui left with ESC: nothing to do, not an error)
+			}
+#endif
 		}
 		else
 			imagevss= flagvss ? 2 : 0;
@@ -223926,10 +228284,3796 @@ void Jidac::handlemultiparttrim()
 						}
 					}
 }
+#if defined(_WIN32) && !defined(ANCIENT)
+/*
+	65.9v: franzscelta, a screen of lines with a box, for ac and xc (-gui). The cursor (>) goes
+	over the lines with the arrows; space, enter, + or x take or leave the one it is on
+	  [ ] not taken (yellow)   [X] taken (green)
+	  [+] always taken (green: nothing to choose there, the cursor skips it)
+	  [-] cannot be taken (red: the row above the keys says why)
+	  [ ] [X] one of them only, where the caller says so (the disks of xc): taking one leaves the others
+	One of the boxes can stand for all of them. Lines of text in between (titles, totals: the
+	caller writes them again after every key). The last two rows: what the line under the cursor
+	is (or a message, or a question: chiedi), and the keys.
+	Drawn in an area of its own below what the console has, by the rows of the console buffer (as
+	franzdash): nothing above it is touched, and it stays there, as it was left, when it is over.
+	The lines marked as a detail are shown only when asked (v, or -verbose)
+*/
+enum
+{
+	SCELTA_TESTO= 0, /// a line of text
+	SCELTA_CASELLA,	 /// [ ] [X]
+	SCELTA_TUTTE,	 /// [ ] [X]: all the boxes at once
+	SCELTA_FISSA,	 /// [+]
+	SCELTA_VIETATA,	 /// [-]
+	SCELTA_UNA		 /// [ ] [X], one only
+};
+#define SCELTA_CAMBIATA (-1) /// what tasto() gives back: a box changed
+#define SCELTA_PARTI (-2)	 /// F8, g
+#define SCELTA_ESCI (-3)	 /// ESC, q
+struct franzsceltariga
+{
+	int	   tipo;
+	bool   presa;
+	bool   dettaglio;
+	int	   colore; /// 0: by what the line is; else a color of usb_colore
+	string testo;
+	string motivo;
+	franzsceltariga() : tipo(SCELTA_TESTO), presa(false), dettaglio(false), colore(0)
+	{
+	}
+};
+class franzscelta
+{
+  public:
+	franzscelta() : m_cursore(-1), m_prima(0), m_origine(0), m_altezza(0), m_larghezza(80), m_tutte(false), m_aperta(false), m_colormessaggio(0)
+	{
+	}
+	int	 aggiungi(int i_tipo, bool i_presa, const string &i_testo, const string &i_motivo= "", bool i_dettaglio= false, int i_colore= 0);
+	void testo(int i_riga, const string &i_testo);
+	bool presa(int i_riga) const;
+	void prendi(int i_riga); /// one of the "one only" lines: that one
+	int	 una() const;		 /// the line taken among the "one only" (-1: none)
+	void tasti(const string &i_tasti) { m_tasti= i_tasti; }
+	void tutte(bool i_tutte) { m_tutte= i_tutte; }
+	bool apri();  /// false: the output is not a console
+	int	 tasto(); /// draws, waits for a key: 0 (nothing for the caller), SCELTA_CAMBIATA, SCELTA_PARTI, SCELTA_ESCI, or the key
+	bool chiedi(const string &i_domanda, string &o_risposta, const string &i_nota= ""); /// a line typed in the row of the messages (i_nota: in the row of the keys, meanwhile). false: ESC
+	void di(const string &i_testo, int i_colore= 0);		  /// a message, until the next key
+	void aiuto(const std::vector<string> &i_righe);
+	void chiudi();
+
+  private:
+	std::vector<franzsceltariga>		 m_righe;
+	std::vector<int>					 m_visibili;
+	std::vector<std::pair<string, int> > m_schermo; /// what every row of the area shows now
+	int									 m_cursore;
+	int									 m_prima;
+	int									 m_origine;
+	int									 m_altezza;
+	int									 m_larghezza;
+	bool								 m_tutte;
+	bool								 m_aperta;
+	string								 m_tasti;
+	string								 m_messaggio;
+	int									 m_colormessaggio;
+	bool								 fuoco(int i_riga) const;
+	void								 muovi(int i_quanto);
+	void								 allinea();
+	void								 scrivi(int i_y, const string &i_testo, int i_colore, bool i_cursore);
+	void								 disegna();
+};
+/// a text cut, or padded with spaces, to a number of columns (UTF-8: a character is not split)
+static string scelta_larga(const string &i_testo, int i_colonne)
+{
+	string fuori;
+	int	   colonne= 0;
+	for (size_t i= 0; (i < i_testo.size()) && (colonne < i_colonne);)
+	{
+		const unsigned char c	 = (unsigned char)i_testo[i];
+		const size_t		lungo= (c >= 0xF0) ? 4 : ((c >= 0xE0) ? 3 : ((c >= 0xC0) ? 2 : 1));
+		if (i + lungo > i_testo.size())
+			break;
+		fuori.append(i_testo, i, lungo);
+		i+= lungo;
+		colonne++;
+	}
+	if (colonne < i_colonne)
+		fuori.append((size_t)(i_colonne - colonne), ' ');
+	return fuori;
+}
+/// (wtou turns every \ into /: not for a path shown while it is typed)
+static string scelta_utf8(const std::wstring &i_testo)
+{
+	if (i_testo.empty())
+		return "";
+	const int n= WideCharToMultiByte(CP_UTF8, 0, i_testo.c_str(), (int)i_testo.size(), NULL, 0, NULL, NULL);
+	if (n <= 0)
+		return "";
+	string fuori((size_t)n, ' ');
+	WideCharToMultiByte(CP_UTF8, 0, i_testo.c_str(), (int)i_testo.size(), &fuori[0], n, NULL, NULL);
+	return fuori;
+}
+int franzscelta::aggiungi(int i_tipo, bool i_presa, const string &i_testo, const string &i_motivo, bool i_dettaglio, int i_colore)
+{
+	franzsceltariga r;
+	r.tipo	   = i_tipo;
+	r.presa	   = i_presa;
+	r.testo	   = i_testo;
+	r.motivo   = i_motivo;
+	r.dettaglio= i_dettaglio;
+	r.colore   = i_colore;
+	m_righe.push_back(r);
+	allinea();
+	return (int)m_righe.size() - 1;
+}
+void franzscelta::testo(int i_riga, const string &i_testo)
+{
+	if ((i_riga >= 0) && (i_riga < (int)m_righe.size()))
+		m_righe[(size_t)i_riga].testo= i_testo;
+}
+bool franzscelta::presa(int i_riga) const
+{
+	return (i_riga >= 0) && (i_riga < (int)m_righe.size()) && m_righe[(size_t)i_riga].presa;
+}
+void franzscelta::prendi(int i_riga)
+{
+	if ((i_riga < 0) || (i_riga >= (int)m_righe.size()) || (m_righe[(size_t)i_riga].tipo != SCELTA_UNA))
+		return;
+	for (size_t i= 0; i < m_righe.size(); i++)
+		if (m_righe[i].tipo == SCELTA_UNA)
+			m_righe[i].presa= ((int)i == i_riga);
+	m_cursore= i_riga;
+}
+int franzscelta::una() const
+{
+	for (size_t i= 0; i < m_righe.size(); i++)
+		if ((m_righe[i].tipo == SCELTA_UNA) && m_righe[i].presa)
+			return (int)i;
+	return -1;
+}
+bool franzscelta::fuoco(int i_riga) const
+{
+	if ((i_riga < 0) || (i_riga >= (int)m_righe.size()))
+		return false;
+	const franzsceltariga &r= m_righe[(size_t)i_riga];
+	return (r.tipo != SCELTA_TESTO) && (r.tipo != SCELTA_FISSA) && (m_tutte || (!r.dettaglio));
+}
+void franzscelta::muovi(int i_quanto)
+{
+	const int passo= (i_quanto < 0) ? -1 : 1;
+	for (int resto= (i_quanto < 0) ? -i_quanto : i_quanto; resto > 0; resto--)
+	{
+		int prossimo= m_cursore + passo;
+		while ((prossimo >= 0) && (prossimo < (int)m_righe.size()) && (!fuoco(prossimo)))
+			prossimo+= passo;
+		if ((prossimo < 0) || (prossimo >= (int)m_righe.size()))
+			break;
+		m_cursore= prossimo;
+	}
+}
+/// the box of "all of them" says what the others are
+void franzscelta::allinea()
+{
+	bool tutte= true, una= false;
+	for (size_t i= 0; i < m_righe.size(); i++)
+		if (m_righe[i].tipo == SCELTA_CASELLA)
+		{
+			una= true;
+			if (!m_righe[i].presa)
+				tutte= false;
+		}
+	for (size_t i= 0; i < m_righe.size(); i++)
+		if (m_righe[i].tipo == SCELTA_TUTTE)
+			m_righe[i].presa= una && tutte;
+}
+bool franzscelta::apri()
+{
+	if (isAnyOutputRedirected())
+		return false;
+	outbuf_flush();
+	fflush(stdout);
+	m_larghezza= terminalwidth();
+	if (m_larghezza < 40)
+		m_larghezza= 40;
+	int alta= terminalheight();
+	if (alta < 8)
+		alta= 8;
+	m_altezza= (int)m_righe.size() + 2;
+	if (m_altezza < 14) /// (the help has that many lines)
+		m_altezza= 14;
+	if (m_altezza > alta - 1)
+		m_altezza= alta - 1;
+	for (int i= 0; i < m_altezza; i++)
+		printf("\n");
+	fflush(stdout);
+	CONSOLE_SCREEN_BUFFER_INFO info;
+	if (GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &info))
+		m_origine= info.dwCursorPosition.Y - m_altezza;
+	if (m_origine < 0)
+		m_origine= 0;
+	m_schermo.assign((size_t)m_altezza, std::make_pair(string(""), -2));
+	hide_cursor();
+	m_aperta= true;
+	return true;
+}
+void franzscelta::scrivi(int i_y, const string &i_testo, int i_colore, bool i_cursore)
+{
+	if ((i_y < 0) || (i_y >= m_altezza))
+		return;
+	/// the colors of usb_colore, as attributes of the console; under the cursor: black on that color
+	static const int normale[8]= {-1, 10, 14, 12, 11, 8, 9, 13};
+	static const int sopra[8]  = {112, 160, 224, 207, 176, 112, 159, 223};
+	const int		 c		   = ((i_colore >= 0) && (i_colore < 8)) ? i_colore : 0;
+	const int		 attributo = i_cursore ? sopra[c] : normale[c];
+	const string	 testo	   = scelta_larga(i_testo, m_larghezza - 1);
+	if ((m_schermo[(size_t)i_y].first == testo) && (m_schermo[(size_t)i_y].second == attributo))
+		return;
+	m_schermo[(size_t)i_y]= std::make_pair(testo, attributo);
+	fflush(stdout);
+	gotoxy(0, m_origine + i_y);
+	if (attributo < 0)
+		color_restore();
+	else
+		color_something(attributo);
+	printf("%s", testo.c_str());
+	fflush(stdout); /// (the color is set on the console, the text may be still in the buffer)
+	color_restore();
+}
+void franzscelta::disegna()
+{
+	if (m_altezza < 3)
+		return;
+	m_visibili.clear();
+	for (size_t i= 0; i < m_righe.size(); i++)
+		if (m_tutte || (!m_righe[i].dettaglio))
+			m_visibili.push_back((int)i);
+	if (m_aperta && (!fuoco(m_cursore)))
+	{
+		/// the nearest line that can have the cursor: after, then before
+		int qui= -1;
+		for (int i= (m_cursore < 0) ? 0 : m_cursore; (i < (int)m_righe.size()) && (qui < 0); i++)
+			if (fuoco(i))
+				qui= i;
+		for (int i= m_cursore; (i >= 0) && (qui < 0); i--)
+			if (fuoco(i))
+				qui= i;
+		m_cursore= qui;
+	}
+	const int spazio= m_altezza - 2;
+	int		  dove	= 0;
+	for (size_t i= 0; i < m_visibili.size(); i++)
+		if (m_visibili[i] == m_cursore)
+			dove= (int)i;
+	if (dove < spazio) /// (the titles above the first box stay there while they can)
+		m_prima= 0;
+	else if (dove >= m_prima + spazio)
+		m_prima= dove - spazio + 1;
+	else if (dove < m_prima)
+		m_prima= dove;
+	for (int y= 0; y < spazio; y++)
+	{
+		const int v= m_prima + y;
+		if (v >= (int)m_visibili.size())
+		{
+			scrivi(y, "", 0, false);
+			continue;
+		}
+		const franzsceltariga &r  = m_righe[(size_t)m_visibili[(size_t)v]];
+		const bool			   qui= m_aperta && (m_visibili[(size_t)v] == m_cursore);
+		string				   t  = qui ? ">" : " ";
+		/// (more lines than rows: a mark where the list goes on, above and below)
+		if ((!qui) && m_aperta && (((y == 0) && (m_prima > 0)) || ((y == spazio - 1) && (v + 1 < (int)m_visibili.size()))))
+			t= (y == 0) ? "^" : "v";
+		int					   colore= r.colore;
+		switch (r.tipo)
+		{
+		case SCELTA_CASELLA:
+		case SCELTA_TUTTE:
+			t+= r.presa ? "[X] " : "[ ] ";
+			if (colore == 0)
+				colore= r.presa ? 1 : 2;
+			break;
+		case SCELTA_FISSA:
+			t+= "[+] ";
+			if (colore == 0)
+				colore= 1;
+			break;
+		case SCELTA_VIETATA:
+			t+= "[-] ";
+			if (colore == 0)
+				colore= 3;
+			break;
+		case SCELTA_UNA:
+			t+= r.presa ? "[X] " : "[ ] ";
+			break;
+		default:
+			break;
+		}
+		scrivi(y, t + r.testo, colore, qui);
+	}
+	if (m_messaggio != "")
+		scrivi(m_altezza - 2, " " + m_messaggio, m_colormessaggio, false);
+	else
+		scrivi(m_altezza - 2, (m_aperta && (m_cursore >= 0)) ? (" " + m_righe[(size_t)m_cursore].motivo) : string(""), 0, false);
+	scrivi(m_altezza - 1, " " + m_tasti, 4, false);
+	gotoxy(0, m_origine + m_altezza);
+	fflush(stdout);
+}
+int franzscelta::tasto()
+{
+	if (!m_aperta)
+		return SCELTA_ESCI;
+	disegna();
+	m_messaggio= ""; /// (shown until this key)
+	int c= _getch();
+	if ((c == 0) || (c == 224))
+	{
+		c= _getch();
+		switch (c)
+		{
+		case 72:
+			muovi(-1);
+			break;
+		case 80:
+			muovi(1);
+			break;
+		case 73:
+			muovi(-(m_altezza - 3));
+			break;
+		case 81:
+			muovi(m_altezza - 3);
+			break;
+		case 71:
+			muovi(-(int)m_righe.size());
+			break;
+		case 79:
+			muovi((int)m_righe.size());
+			break;
+		case 66: /// F8
+			return SCELTA_PARTI;
+		case 59: /// F1
+			return '?';
+		default:
+			break;
+		}
+		return 0;
+	}
+	if ((c == 27) || (c == 'q') || (c == 'Q'))
+		return SCELTA_ESCI;
+	if ((c == 'g') || (c == 'G'))
+		return SCELTA_PARTI;
+	if ((c == 'v') || (c == 'V'))
+	{
+		m_tutte= !m_tutte;
+		return 0;
+	}
+	if ((c == 'a') || (c == 'A'))
+	{
+		bool tutte= true, una= false;
+		for (size_t i= 0; i < m_righe.size(); i++)
+			if (m_righe[i].tipo == SCELTA_CASELLA)
+			{
+				una= true;
+				if (!m_righe[i].presa)
+					tutte= false;
+			}
+		if (!una)
+			return 0;
+		for (size_t i= 0; i < m_righe.size(); i++)
+			if (m_righe[i].tipo == SCELTA_CASELLA)
+				m_righe[i].presa= !tutte;
+		allinea();
+		return SCELTA_CAMBIATA;
+	}
+	if ((c == ' ') || (c == 13) || (c == '+') || (c == 'x') || (c == 'X'))
+	{
+		if (!fuoco(m_cursore))
+			return 0;
+		franzsceltariga &r= m_righe[(size_t)m_cursore];
+		if (r.tipo == SCELTA_CASELLA)
+		{
+			r.presa= !r.presa;
+			allinea();
+			return SCELTA_CAMBIATA;
+		}
+		if (r.tipo == SCELTA_TUTTE)
+		{
+			const bool nuovo= !r.presa;
+			for (size_t i= 0; i < m_righe.size(); i++)
+				if (m_righe[i].tipo == SCELTA_CASELLA)
+					m_righe[i].presa= nuovo;
+			allinea();
+			return SCELTA_CAMBIATA;
+		}
+		if (r.tipo == SCELTA_UNA)
+		{
+			prendi(m_cursore);
+			return SCELTA_CAMBIATA;
+		}
+		if (r.tipo == SCELTA_VIETATA)
+			di(r.motivo, 3);
+		return 0;
+	}
+	return c;
+}
+void franzscelta::di(const string &i_testo, int i_colore)
+{
+	m_messaggio		= i_testo;
+	m_colormessaggio= i_colore;
+}
+bool franzscelta::chiedi(const string &i_domanda, string &o_risposta, const string &i_nota)
+{
+	o_risposta= "";
+	if (!m_aperta)
+		return false;
+	scrivi(m_altezza - 1, " " + ((i_nota != "") ? i_nota : string("ENTER when done, ESC to go back")), 4, false);
+	std::wstring scritto;
+	bool		 bene= false;
+	for (;;)
+	{
+		/// when it is longer than the row: its end is what is seen
+		int posto= m_larghezza - 3 - (int)i_domanda.size();
+		if (posto < 8)
+			posto= 8;
+		const std::wstring visto= ((int)scritto.size() > posto) ? scritto.substr(scritto.size() - (size_t)posto) : scritto;
+		scrivi(m_altezza - 2, " " + i_domanda + scelta_utf8(visto), 4, false);
+		gotoxy(1 + (int)i_domanda.size() + (int)visto.size(), m_origine + m_altezza - 2);
+		show_cursor();
+		const wint_t c= _getwch();
+		if ((c == 0) || ((c == 0xE0) && _kbhit())) /// a function key, an arrow (0xE0 alone is a letter)
+		{
+			_getwch();
+			continue;
+		}
+		if (c == 27)
+			break;
+		if (c == 13)
+		{
+			bene= true;
+			break;
+		}
+		if (c == 8)
+		{
+			if (!scritto.empty())
+				scritto.resize(scritto.size() - 1);
+			continue;
+		}
+		if (c >= 32)
+			scritto+= (wchar_t)c;
+	}
+	hide_cursor();
+	o_risposta= scelta_utf8(scritto);
+	return bene;
+}
+void franzscelta::aiuto(const std::vector<string> &i_righe)
+{
+	if (!m_aperta)
+		return;
+	for (int y= 0; y < m_altezza - 2; y++)
+		scrivi(y, (y < (int)i_righe.size()) ? (" " + i_righe[(size_t)y]) : string(""), 0, false);
+	scrivi(m_altezza - 2, "", 0, false);
+	scrivi(m_altezza - 1, " any key to go back", 4, false);
+	const int c= _getch();
+	if ((c == 0) || (c == 224))
+		_getch();
+}
+/// it stays on the screen as it was left, without the cursor and the keys: what was chosen
+void franzscelta::chiudi()
+{
+	if (!m_aperta)
+		return;
+	m_aperta   = false;
+	m_messaggio= "";
+	m_tasti	   = "";
+	disegna();
+	gotoxy(0, m_origine + m_altezza);
+	show_cursor();
+	color_restore();
+	fflush(stdout);
+}
+/*
+	65.9n: ac (add-c). ac z:\backup.zpaq is a z:\backup.zpaq c: -image, plus what a restore that
+	BOOTS will need: everything of the disk of Windows that is not a data partition, and a text file
+	(the metafile) that says what the disk was and where every piece is. One version of the archive,
+	the same files of a -image for C: (image_C.fhd, .meta, .header, .footer: the archive is a plain
+	image archive too, for the image command, mount, older versions), then
+	  disk_C_NN.raw   a piece of the disk, raw, read from the physical disk by offset
+	  disk_C.txt      the metafile, the LAST file of the version (so it has the hashes of the others)
+	The names do not begin with image_ on purpose: the restore of today takes image_<one char>.*
+	by exact length, and a digit there is a whole disk.
+
+	The disk is not modeled as "ESP, MSR, recovery": it is partitions, and whatever is out of them.
+	So an MBR disk of Windows 7/10 (boot files in a "System Reserved" partition, or in C: itself,
+	logical drives with their tables scattered in an extended partition) and a GPT one are the same
+	  the partition of Windows (C:)        its used clusters, with a shadow copy: as a c: -image
+	  a partition with a letter            data: NOT taken (D:, E:...)
+	  a partition without a letter         raw, the whole of it. Always when Windows boots from it,
+	                                       or its type says it is of the system (ESP, MSR, recovery);
+	                                       any other only up to AC_NASCOSTA_MAX (the tools of the
+	                                       maker of the PC can be tens of GB)
+	  out of the partitions                raw: the start of the disk (sector 0 and what comes before
+	                                       the first partition), the small gaps (the tables of the
+	                                       logical drives are there), the last MiB. A gap bigger than
+	                                       AC_BUCO_MAX is space not allocated: only its first and
+	                                       last MiB (a table can be at either end)
+	A data partition left out keeps its place in the table: a restore never writes inside it.
+	65.9o: ac -all leaves nothing out. A partition with a letter and a file system that the image
+	knows (NTFS, FAT, exFAT) is taken as C: is, by its used clusters (image_X.fhd and its small
+	files); with a letter and anything else in it (encrypted by another program, a BitLocker volume
+	not unlocked, not formatted, ReFS, Linux) the whole of it, raw (image_X.raw). Both are what
+	a x: -image makes, so each can be restored alone by the image command. Without a letter: raw,
+	as above, whatever its size. A shadow copy by itself for C: only: the others are locked (-vss:
+	a shadow copy for every NTFS). One after the other: each image is of its own moment.
+	-not X: leaves the partition X: out (-not of files, in an image, is what it was: those files are
+	left out of the image of their drive). The partition where the archive is being written is never
+	taken (it would be an archive with itself inside, bigger at every run).
+	a c: -image -all is NOT this: it is the whole disk, raw, in one file (image_0.raw), and stays.
+	Refused, for now: the boot files on another disk, the boot files on a data partition that would
+	be left out, a dynamic disk. A disk encrypted below the volume by another program (not BitLocker)
+	is not refused: C: is read in clear through its volume, and that image can always be restored.
+	Nothing is read twice and no other program is run: the hashes in the metafile are the ones add
+	computes while it reads.
+*/
+#define AC_BUCO_MAX (16ULL << 20)
+#define AC_BUCO_PEZZO (1ULL << 20)
+#define AC_NASCOSTA_MAX (1ULL << 30)
+#define AC_NONSALVATA 0
+#define AC_IMMAGINE 1
+#define AC_RAW 2
+struct franzzona
+{
+	bool	 partizione; /// false: space out of every partition
+	uint64_t inizio;	 /// bytes from the start of the disk
+	uint64_t lunghezza;
+	int		 numero;	 /// the partition number of Windows (0: none)
+	int		 mbrtipo;	 /// MBR: the type byte (-1: not an MBR partition)
+	bool	 attiva;
+	string	 gpttipo;
+	string	 gptid;
+	string	 gptnome;
+	uint64_t gptattr;
+	string	 volume;	/// \\?\Volume{...}\ ("": Windows has no volume there)
+	string	 lettere;	/// where it is mounted: "C:\" ("": nowhere)
+	string	 fs;
+	string	 etichetta;
+	uint32_t seriale;
+	uint32_t cluster;
+	uint64_t totale;
+	uint64_t libero;
+	bool	 avvio;		/// Windows boots from here (its "system partition")
+	bool	 windows;	/// Windows is here
+	char	 unita;		/// its letter when it is mounted as a drive (0: no letter)
+	bool	 sottile;	/// AC_IMMAGINE: by its used clusters (else the whole of it, raw)
+	string	 letto;		/// AC_IMMAGINE, after it is opened: shadow copy, locked volume, volume in use
+	string	 strato;	/// ...and from where: volume (data in clear) or disk (as they are on it)
+	string	 cifrata;	/// "": no. Else what was seen
+	string	 cosa;		/// for people: what it is
+	int		 come;		/// AC_NONSALVATA, AC_IMMAGINE, AC_RAW
+	string	 perche;
+	string	 file;		/// the name in the archive
+	uint64_t letti;		/// raw pieces, after the read
+	int64_t	 errori;
+	double	 secondi;
+	bool	 facoltativa; /// 65.9v: taken or not as -all, -not, the screen of -gui say (xc -gui gives the choice again)
+	franzzona() : partizione(false), inizio(0), lunghezza(0), numero(0), mbrtipo(-1), attiva(false), gptattr(0), seriale(0), cluster(0), totale(0), libero(0), avvio(false), windows(false), unita(0), sottile(false), come(AC_NONSALVATA), letti(0), errori(0), secondi(0), facoltativa(false)
+	{
+	}
+};
+/// 65.9o: ac -all, the image of a partition that is not the one of Windows: its names in the archive, its small
+/// files in memory (as add has them for the image of the command line)
+struct franzacimg
+{
+	int		zona;
+	char	lettera;
+	bool	sottile;
+	string	file;
+	string	header;
+	string	footer;
+	string	meta;
+	string	excluded;
+	string	zeroed;
+	franzfs fsheader;
+	franzfs fsfooter;
+	franzfs fsmeta;
+	franzfs fsexcluded;
+	franzfs fszeroed;
+	franzacimg() : zona(-1), lettera(0), sottile(false)
+	{
+	}
+};
+struct franzachash
+{
+	string hash;
+	string nome;
+	string errore;
+};
+struct franzac
+{
+	int					   disco;
+	uint64_t			   bytes;
+	uint32_t			   settore;
+	uint32_t			   settorefisico;
+	int					   stile; /// 0 MBR, 1 GPT
+	uint32_t			   firma;
+	string				   guid;
+	string				   modello;
+	string				   seriale;
+	string				   bus;
+	bool				   rimovibile;
+	uint64_t			   cilindri;
+	uint32_t			   testine;
+	uint32_t			   settoritraccia;
+	string				   firmware;
+	char				   lettera;
+	std::vector<franzzona> zone;
+	std::set<string>	   nomi;	/// the raw pieces, by name in the archive
+	string				   metanome;
+	franzfs				   metafs;
+	HANDLE				   hdisco;
+	int64_t				   inizio;	/// mtime() when ac began
+	int					   cifre; /// of the number of a zone, in the names
+	bool				   tutto;	/// -all: every partition
+	std::set<char>		   esclusi; /// -not X:
+	char				   archiviosu; /// the letter of the volume the archive is written on (0: none, or not a letter)
+	std::vector<franzacimg *> immagini; /// -all: the images after the one of Windows, in the order of the disk
+	std::set<string>	   annullati; /// small files of an image that became raw: not made
+	std::vector<string>	   incoerenti; /// the volumes read while in use, one line each
+	bool				   aperta;	/// one of immagini is open
+	int64_t				   basefatti; /// total_done and g_inoutput when the image being read began (its own progress)
+	int64_t				   basescritti;
+	int					   bufferraw; /// g_ioBUFSIZE of a raw image
+	bool				   windowsntfs; /// flagntfs and g_ioBUFSIZE of the image of Windows: put back when the images are over
+	int					   windowsbuffer;
+	franzac() : disco(-1), bytes(0), settore(512), settorefisico(0), stile(0), firma(0), rimovibile(false), cilindri(0), testine(0), settoritraccia(0), lettera('C'), hdisco(INVALID_HANDLE_VALUE), inizio(0), cifre(2), tutto(false), archiviosu(0), aperta(false), basefatti(0), basescritti(0), bufferraw(1048576), windowsntfs(true), windowsbuffer(1048576)
+	{
+	}
+};
+static franzac							g_ac;
+static std::map<string, franzachash> g_ac_hash; /// the hashes ac took for its metafile (see preparahashtobewritten)
+static bool							g_ac_tutto= false; /// ac -all (the -all of a -image is another thing: the whole disk, raw)
+
+static void ac_riga(string &io_testo, const char *i_formato, ...)
+{
+	char	riga[4096];
+	va_list ap;
+	va_start(ap, i_formato);
+	vsnprintf(riga, sizeof(riga), i_formato, ap);
+	va_end(ap);
+	io_testo+= riga;
+	io_testo+= "\n";
+}
+static string ac_guid(const GUID &g)
+{
+	char t[64];
+	snprintf(t, sizeof(t), "{%08lx-%04x-%04x-%02x%02x-%02x%02x%02x%02x%02x%02x}", (unsigned long)g.Data1, (unsigned)g.Data2, (unsigned)g.Data3, g.Data4[0], g.Data4[1], g.Data4[2], g.Data4[3], g.Data4[4], g.Data4[5], g.Data4[6], g.Data4[7]);
+	return t;
+}
+/// a text for people: only what can be printed, and nothing that could look like another key of the metafile
+static string ac_pulito(const string &i_testo)
+{
+	string r;
+	for (size_t i= 0; i < i_testo.size(); i++)
+	{
+		const unsigned char c= (unsigned char)i_testo[i];
+		if (c >= 32)
+			r+= (char)c;
+	}
+	while ((r.size() > 0) && (r[r.size() - 1] == ' '))
+		r.resize(r.size() - 1);
+	while ((r.size() > 0) && (r[0] == ' '))
+		r= r.substr(1);
+	return r;
+}
+static string ac_registro(HKEY i_radice, const wchar_t *i_chiave, const wchar_t *i_nome)
+{
+	HKEY   h;
+	string r;
+	if (RegOpenKeyExW(i_radice, i_chiave, 0, KEY_READ, &h) != ERROR_SUCCESS)
+		return r;
+	wchar_t testo[1024]= {0};
+	DWORD	tipo	   = 0;
+	DWORD	bytes	   = sizeof(testo) - sizeof(wchar_t);
+	if (RegQueryValueExW(h, i_nome, NULL, &tipo, (LPBYTE)testo, &bytes) == ERROR_SUCCESS)
+	{
+		if ((tipo == REG_SZ) || (tipo == REG_EXPAND_SZ))
+			r= wtou(testo);
+		else if (tipo == REG_DWORD)
+		{
+			DWORD v;
+			memcpy(&v, testo, sizeof(v));
+			char n[32];
+			snprintf(n, sizeof(n), "%lu", (unsigned long)v);
+			r= n;
+		}
+	}
+	RegCloseKey(h);
+	return r;
+}
+/// on which disk a volume is, and where. false: Windows does not say, or it is on more than one piece
+static bool ac_dove(const std::wstring &i_percorso, DWORD &o_disco, uint64_t &o_inizio, uint64_t &o_lunghezza, DWORD &o_pezzi)
+{
+	o_pezzi	 = 0;
+	HANDLE h= CreateFileW(i_percorso.c_str(), 0, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
+	if (h == INVALID_HANDLE_VALUE)
+		return false;
+	BYTE  spazio[sizeof(VOLUME_DISK_EXTENTS) + 16 * sizeof(DISK_EXTENT)];
+	DWORD fatti= 0;
+	bool  bene = DeviceIoControl(h, IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS, NULL, 0, spazio, sizeof(spazio), &fatti, NULL) != 0;
+	if ((!bene) && (GetLastError() == ERROR_MORE_DATA))
+		bene= true; /// more than 16 pieces: the count is what matters
+	CloseHandle(h);
+	if (!bene)
+		return false;
+	const VOLUME_DISK_EXTENTS *e= (const VOLUME_DISK_EXTENTS *)spazio;
+	o_pezzi						 = e->NumberOfDiskExtents;
+	if (o_pezzi < 1)
+		return false;
+	o_disco	   = e->Extents[0].DiskNumber;
+	o_inizio   = (uint64_t)e->Extents[0].StartingOffset.QuadPart;
+	o_lunghezza= (uint64_t)e->Extents[0].ExtentLength.QuadPart;
+	return true;
+}
+/// the first sector of something (a disk at an offset, a volume): false if it cannot be read
+static bool ac_primosettore(const std::wstring &i_percorso, uint64_t i_offset, uint32_t i_settore, std::vector<char> &o_dati)
+{
+	o_dati.assign(i_settore, 0);
+	HANDLE h= CreateFileW(i_percorso.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
+	if (h == INVALID_HANDLE_VALUE)
+		return false;
+	LARGE_INTEGER dove;
+	dove.QuadPart= (LONGLONG)i_offset;
+	DWORD letti	 = 0;
+	const bool bene= SetFilePointerEx(h, dove, NULL, FILE_BEGIN) && ReadFile(h, &o_dati[0], i_settore, &letti, NULL) && (letti == i_settore);
+	CloseHandle(h);
+	return bene;
+}
+static const char *ac_mbrnome(int i_tipo)
+{
+	switch (i_tipo)
+	{
+	case 0x12:
+		return "OEM";
+	case 0x27:
+		return "recovery";
+	case 0x42:
+		return "dynamic";
+	case 0x82:
+		return "Linux swap";
+	case 0x83:
+		return "Linux";
+	case 0x84:
+		return "hibernation";
+	case 0xDE:
+		return "OEM utility";
+	case 0xEE:
+		return "GPT protective";
+	case 0xEF:
+		return "ESP";
+	}
+	return "";
+}
+static const char *ac_gptnome(const string &i_tipo)
+{
+	if (i_tipo == "{c12a7328-f81f-11d2-ba4b-00a0c93ec93b}")
+		return "ESP";
+	if (i_tipo == "{e3c9e316-0b5c-4db8-817d-f92df00215ae}")
+		return "MSR";
+	if (i_tipo == "{de94bba4-06d1-4d40-a16a-bfd50179d6ac}")
+		return "recovery";
+	if (i_tipo == "{5808c8aa-7e8f-42e0-85d2-e1e90434cfb3}")
+		return "dynamic (LDM metadata)";
+	if (i_tipo == "{af9b60a0-1431-4f62-bc68-3311714a69ad}")
+		return "dynamic (LDM data)";
+	return "";
+}
+static bool ac_ordine(const franzzona &a, const franzzona &b)
+{
+	return a.inizio < b.inizio;
+}
+/// space out of the partitions, from i_da to i_a: one piece if small, else its two ends
+static void ac_buco(std::vector<franzzona> &io_zone, uint64_t i_da, uint64_t i_a, bool i_primo, bool i_ultimo)
+{
+	if (i_a <= i_da)
+		return;
+	const uint64_t lungo= i_a - i_da;
+	const char	  *dove = i_primo ? "the start of the disk" : (i_ultimo ? "the end of the disk" : "between the partitions");
+	franzzona	   z;
+	z.partizione= false;
+	if (lungo <= AC_BUCO_MAX)
+	{
+		z.inizio   = i_da;
+		z.lunghezza= lungo;
+		z.cosa	   = dove;
+		z.come	   = AC_RAW;
+		io_zone.push_back(z);
+		return;
+	}
+	z.inizio   = i_da;
+	z.lunghezza= AC_BUCO_PEZZO;
+	z.cosa	   = string(dove) + ", first MiB of a gap";
+	z.come	   = AC_RAW;
+	io_zone.push_back(z);
+	z.inizio   = i_da + AC_BUCO_PEZZO;
+	z.lunghezza= lungo - 2 * AC_BUCO_PEZZO;
+	z.cosa	   = "not allocated";
+	z.come	   = AC_NONSALVATA;
+	z.perche   = "no partition";
+	io_zone.push_back(z);
+	z.inizio   = i_a - AC_BUCO_PEZZO;
+	z.lunghezza= AC_BUCO_PEZZO;
+	z.cosa	   = string(dove) + ", last MiB of a gap";
+	z.come	   = AC_RAW;
+	z.perche   = "";
+	io_zone.push_back(z);
+}
+/// what ac does with a partition: its used clusters, the whole of it raw, or nothing (and why).
+/// i_tutta: it is taken when it can be (ac -all, or chosen on the screen of -gui); i_esclusa: left out with -not.
+/// io_blocco: why a restore of this backup would not boot, when it would not (the first reason found stays).
+/// 65.9v: a function of its own (it was in ac_prepara): the screen of -gui asks it both ways for every partition
+static void ac_decidi(franzzona &z, bool i_tutta, bool i_esclusa, const string &i_comeavvio, string &io_blocco)
+{
+	z.come	 = AC_NONSALVATA; /// (asked again, with the screen: as it was at the start)
+	z.sottile= false;
+	z.perche = "";
+	z.file	 = "";
+	const bool disistema= (z.cosa == "ESP") || (z.cosa == "MSR") || (z.cosa == "recovery") || (z.cosa == "OEM") || (z.cosa == "OEM utility");
+	const bool conosciuto= (z.fs == "NTFS") || (z.fs == "FAT") || (z.fs == "FAT32") || (z.fs == "exFAT");
+	if (z.windows)
+	{
+		z.come	 = AC_IMMAGINE;
+		z.sottile= flagntfs;
+		z.file	 = "image_" + string(1, g_ac.lettera) + (flagntfs ? ".fhd" : ".raw");
+	}
+	else if (z.avvio && ((z.lettere == "") || (z.lunghezza <= AC_NASCOSTA_MAX)))
+		z.come= AC_RAW;
+	else if (i_esclusa)
+	{
+		z.come	= AC_NONSALVATA;
+		z.perche= "left out (-not)";
+		if (z.avvio && (io_blocco == ""))
+			io_blocco= "Windows boots from " + z.lettere + " (" + i_comeavvio + "), left out with -not";
+	}
+	else if (i_tutta && (z.unita != 0) && (z.unita == g_ac.archiviosu))
+	{
+		z.come	= AC_NONSALVATA;
+		z.perche= "the archive is on it";
+		if (z.avvio && (io_blocco == ""))
+			io_blocco= "Windows boots from " + z.lettere + " (" + i_comeavvio + "), where the archive is written";
+	}
+	else if (i_tutta && (z.unita != 0))
+	{
+		/// as a x: -image would: the used clusters of a file system the image knows, else the whole of it
+		z.come	 = AC_IMMAGINE;
+		z.sottile= conosciuto;
+		z.file	 = "image_" + string(1, z.unita) + (conosciuto ? ".fhd" : ".raw");
+	}
+	else if (z.avvio)
+	{
+		z.come	= AC_NONSALVATA;
+		z.perche= "data (mounted)";
+		if (io_blocco == "")
+			io_blocco= "Windows boots from " + z.lettere + " (" + i_comeavvio + "), a data partition that ac leaves out (ac -all takes it)";
+	}
+	else if (disistema)
+		z.come= AC_RAW;
+	else if ((z.lettere != "") && (!i_tutta))
+	{
+		z.come	= AC_NONSALVATA;
+		z.perche= "data (mounted)";
+	}
+	else if (i_tutta || (z.lunghezza <= AC_NASCOSTA_MAX))
+		z.come= AC_RAW;
+	else
+	{
+		z.come	= AC_NONSALVATA;
+		z.perche= "no letter, over " + string(tohuman((int64_t)AC_NASCOSTA_MAX));
+	}
+}
+/*
+	65.9v: ac -gui: what is taken of the disk of Windows is chosen on a screen (franzscelta).
+	Windows, and what it boots with, are always taken ([+]: the pieces of the system are shown
+	only with v, or -verbose). A partition that ac -all would take has a box: taken as -all
+	would (its used clusters if the image knows its file system, else the whole of it, raw), or
+	left out. The boxes start as the command line says (ac: Windows only; -all: every partition;
+	-not X:), and the screen has the last word. The numbers are the ones of the zones (the
+	names of the pieces in the archive, the sections of the metafile): a line that is not shown
+	keeps its own.
+	0: go on; 2: no console; 3: left with ESC, nothing to do
+*/
+static int ac_scegli(const string &i_comeavvio, string &o_blocco)
+{
+	const size_t		  n= g_ac.zone.size();
+	std::vector<int>	  riga(n, -1);
+	std::vector<int>	  classe(n, 0); /// 0 never, 1 always, 2 always (Windows boots from it), 3 a box
+	std::vector<uint64_t> letti(n, 0);	/// what is read of it, when taken
+	franzscelta			  s;
+	const int			  cifre= (n >= 100) ? 3 : 2;
+	char				  testo[768];
+	snprintf(testo, sizeof(testo), "ac: disk %d, %s (%s, %s), boot by %s", g_ac.disco, tohuman((int64_t)g_ac.bytes), g_ac.modello.c_str(), g_ac.bus.c_str(), g_ac.firmware.c_str());
+	s.aggiungi(SCELTA_TUTTE, false, testo, "every partition that can be taken, or none of them");
+	s.aggiungi(SCELTA_TESTO, false, "");
+	snprintf(testo, sizeof(testo), "    %-*s %10s %10s  %-5s %s", cifre, "#", "size", "used", "type", "what");
+	s.aggiungi(SCELTA_TESTO, false, testo);
+	for (size_t i= 0; i < n; i++)
+	{
+		const franzzona &z= g_ac.zone[i];
+		franzzona		 senza= z, con= z; /// as it is without, and with, "take it if it can be"
+		if (z.partizione)
+		{
+			string b0, b1;
+			ac_decidi(senza, false, false, i_comeavvio, b0);
+			ac_decidi(con, true, false, i_comeavvio, b1);
+			if ((b0 != "") && (b1 == "") && (con.come != AC_NONSALVATA))
+				classe[i]= 2;
+			else if (senza.come != AC_NONSALVATA)
+				classe[i]= 1;
+			else if (con.come != AC_NONSALVATA)
+				classe[i]= 3;
+		}
+		else
+			classe[i]= (z.come != AC_NONSALVATA) ? 1 : 0;
+		const franzzona &presa	   = (classe[i] == 1) ? senza : con;
+		const bool		 conosciuto= (z.fs == "NTFS") || (z.fs == "FAT") || (z.fs == "FAT32") || (z.fs == "exFAT");
+		/// (a partition that cannot be taken: what it has, as the others show)
+		const bool usati= ((presa.come == AC_IMMAGINE) && presa.sottile) || ((classe[i] == 0) && z.partizione && conosciuto);
+		letti[i]		= (usati && (z.totale >= z.libero) && (z.totale > 0)) ? (z.totale - z.libero) : z.lunghezza;
+		/// "---": of the system, always taken. A file system: its used clusters. RAW: the whole of it
+		string tipo= "---", genere= "SYSTEM";
+		if (z.windows)
+		{
+			tipo  = presa.sottile ? z.fs : string("RAW");
+			genere= "WINDOWS";
+		}
+		else if (z.partizione && (classe[i] != 1))
+		{
+			tipo  = ((classe[i] == 0) ? conosciuto : presa.sottile) ? z.fs : string("RAW");
+			genere= conosciuto ? "DATA" : "UNKNOWN";
+		}
+		else if (classe[i] == 0)
+		{
+			tipo  = "";
+			genere= "";
+		}
+		string cosa;
+		if (z.partizione)
+		{
+			if (z.avvio)
+				cosa= "BOOT";
+			if (z.lettere != "")
+				cosa+= string((cosa == "") ? "" : ", ") + z.lettere;
+			if (z.cosa != "")
+				cosa+= string((cosa == "") ? "" : ", ") + z.cosa;
+			if (z.fs != "")
+				cosa+= string((cosa == "") ? "" : ", ") + z.fs;
+			else if (z.volume != "")
+				cosa+= string((cosa == "") ? "" : ", ") + "unknown file system";
+			if (z.etichetta != "")
+				cosa+= " \"" + z.etichetta + "\"";
+			if (z.cifrata != "")
+				cosa+= ", " + ((z.cifrata == "BitLocker") ? z.cifrata : string("encrypted?"));
+			if (cosa == "")
+				cosa= "partition " + itos(z.numero);
+		}
+		else
+			cosa= z.cosa;
+		snprintf(testo, sizeof(testo), "%0*d %10s %10s  %-5s %-7s (%s)", cifre, (int)i, tohuman((int64_t)z.lunghezza), ((classe[i] == 0) && (!z.partizione)) ? "-" : tohuman2((int64_t)letti[i]), tipo.c_str(), genere.c_str(), cosa.c_str());
+		string motivo;
+		if ((classe[i] == 1) || (classe[i] == 2))
+			riga[i]= s.aggiungi(SCELTA_FISSA, true, testo, "", (classe[i] == 1) && (!z.windows));
+		else if (classe[i] == 3)
+		{
+			if ((con.come == AC_IMMAGINE) && con.sottile)
+				motivo= "taken: its used clusters, about " + string(tohuman((int64_t)letti[i])) + " to read";
+			else if (con.come == AC_IMMAGINE)
+				motivo= "taken raw, the whole of it (file system not known to Windows): " + string(tohuman((int64_t)letti[i])) + " to read";
+			else
+				motivo= "taken: the whole of it, raw (it has no letter): " + string(tohuman((int64_t)letti[i])) + " to read";
+			riga[i]= s.aggiungi(SCELTA_CASELLA, z.come != AC_NONSALVATA, testo, motivo);
+		}
+		else if (z.partizione)
+			riga[i]= s.aggiungi(SCELTA_VIETATA, false, testo, "cannot be taken: " + ((con.perche != "") ? con.perche : string("ac does not know how")));
+		else
+			riga[i]= s.aggiungi(SCELTA_TESTO, false, "    " + string(testo), "", true, 5);
+	}
+	const int totale  = s.aggiungi(SCELTA_TESTO, false, "", "", false, 4);
+	const int lasciate= s.aggiungi(SCELTA_TESTO, false, "", "", false, 2);
+	s.tasti("ESC/q=quit SPACE=select a=all v=system ?=help F8/g=START");
+	s.tutte(flagverbose);
+	if (!s.apri())
+	{
+		myprintf("66300! ac: -gui needs a console (the output is redirected)\n");
+		return 2;
+	}
+	std::vector<string> aiuto;
+	aiuto.push_back("ac: what to take of the disk of Windows");
+	aiuto.push_back("");
+	aiuto.push_back("[+] always taken: Windows, and what it boots with (partition table,");
+	aiuto.push_back("    boot and recovery partitions, the space between the partitions)");
+	aiuto.push_back("[X] taken    [ ] not taken: a restore leaves its place as it is");
+	aiuto.push_back("[-] cannot be taken: the row above the keys says why");
+	aiuto.push_back("type: NTFS FAT32 exFAT = its used clusters; RAW = the whole of it;");
+	aiuto.push_back("      --- = a piece of the system");
+	aiuto.push_back("");
+	aiuto.push_back("arrows: move      space, enter, + or x: take / leave      a: all / none");
+	aiuto.push_back("v: show or hide the pieces of the system");
+	aiuto.push_back("F8 or g: START the backup          ESC or q: quit, nothing is done");
+	for (;;)
+	{
+		uint64_t leggo= 0, fuori= 0;
+		int		 pezzi= 0;
+		string	 quali;
+		for (size_t i= 0; i < n; i++)
+		{
+			const franzzona &z= g_ac.zone[i];
+			if ((classe[i] == 1) || (classe[i] == 2) || ((classe[i] == 3) && s.presa(riga[i])))
+			{
+				leggo+= letti[i];
+				pezzi++;
+			}
+			else if (z.partizione)
+			{
+				fuori+= z.lunghezza;
+				quali+= " " + ((z.lettere != "") ? z.lettere : ("#" + itos(z.numero)));
+			}
+		}
+		snprintf(testo, sizeof(testo), "    %-*s %10s %10s  %d pieces", cifre, "", "TO READ", tohuman((int64_t)leggo), pezzi);
+		s.testo(totale, testo);
+		if (fuori > 0)
+			snprintf(testo, sizeof(testo), "    %-*s %10s %10s  not in the backup:%s", cifre, "", "NOT SAVED", tohuman((int64_t)fuori), quali.c_str());
+		else
+			testo[0]= 0;
+		s.testo(lasciate, testo);
+		const int tasto= s.tasto();
+		if (tasto == SCELTA_PARTI)
+			break;
+		if (tasto == SCELTA_ESCI)
+		{
+			s.chiudi();
+			myprintf("66301: ac: left without starting: nothing was read\n");
+			return 3;
+		}
+		if (tasto == '?')
+			s.aiuto(aiuto);
+	}
+	s.chiudi();
+	/// every partition again, as the screen says (the ones always taken: as ac alone takes them; one that
+	/// can never be taken: asked as -all does, so it says why)
+	o_blocco= "";
+	bool una= false, tutte= true;
+	for (size_t i= 0; i < n; i++)
+	{
+		franzzona &z= g_ac.zone[i];
+		if (!z.partizione)
+			continue;
+		const bool scelta= (classe[i] == 3) && s.presa(riga[i]);
+		ac_decidi(z, scelta || (classe[i] == 2) || (classe[i] == 0), false, i_comeavvio, o_blocco);
+		if (classe[i] != 3)
+			continue;
+		if (scelta)
+			una= true;
+		else
+		{
+			tutte	= false;
+			z.perche= "not chosen";
+		}
+	}
+	g_ac.tutto= una && tutte;
+	return 0;
+}
+/// the disk of Windows: what it is, its zones, what to do with each. 0: go on; 2: said why not;
+/// 3 (65.9v, -gui): left on the screen, nothing to do
+int Jidac::ac_prepara()
+{
+	g_ac			= franzac();
+	g_ac_hash.clear();
+	g_ac.inizio		= mtime();
+	g_ac.lettera	= (char)toupper((unsigned char)lettera);
+	if (all) /// (kept out of the -all of the other commands: add would see it)
+	{
+		g_ac_tutto= true;
+		all		  = 0;
+	}
+	g_ac.tutto	  = g_ac_tutto;
+	g_ac.bufferraw= g_ioBUFSIZE;
+	/// -not X: this partition is not for ac. Any other -not is for the image, as ever (files left out of it)
+	for (size_t i= 0; i < notfiles.size();)
+	{
+		const string &n	  = notfiles[i];
+		const bool	  unita= (n.size() >= 2) && isalpha((unsigned char)n[0]) && (n[1] == ':') && ((n.size() == 2) || ((n.size() == 3) && ((n[2] == '/') || (n[2] == '\\'))));
+		if (!unita)
+		{
+			i++;
+			continue;
+		}
+		const char l= (char)toupper((unsigned char)n[0]);
+		if (l == g_ac.lettera)
+		{
+			myprintf("66008! ac: -not %c: is the drive of Windows: nothing would be left to save\n", l);
+			return 2;
+		}
+		g_ac.esclusi.insert(l);
+		notfiles.erase(notfiles.begin() + i);
+	}
+	if (archive != "")
+	{
+		char pieno[MAX_PATH + 1]= {0};
+		if ((GetFullPathNameA(archive.c_str(), MAX_PATH, pieno, NULL) > 1) && (pieno[1] == ':'))
+			g_ac.archiviosu= (char)toupper((unsigned char)pieno[0]);
+	}
+	const UINT vecchio= SetErrorMode(SEM_FAILCRITICALERRORS);
+	/// where C: is
+	std::wstring unita= L"\\\\.\\";
+	unita+= (wchar_t)g_ac.lettera;
+	unita+= L":";
+	DWORD	 ndisco= 0, pezzi= 0;
+	uint64_t cinizio= 0, clungo= 0;
+	if (!ac_dove(unita, ndisco, cinizio, clungo, pezzi))
+	{
+		SetErrorMode(vecchio);
+		myprintf("66003! ac: Windows does not say on which disk %c: is\n", g_ac.lettera);
+		return 2;
+	}
+	if (pezzi != 1)
+	{
+		SetErrorMode(vecchio);
+		myprintf("66004! ac: %c: is made of %u pieces (a dynamic disk, a mirror, a storage space): not for ac, for now. a %c: -image takes the volume alone\n", g_ac.lettera, (unsigned)pezzi, g_ac.lettera);
+		return 2;
+	}
+	g_ac.disco= (int)ndisco;
+	char nomedisco[64];
+	snprintf(nomedisco, sizeof(nomedisco), "\\\\.\\PhysicalDrive%d", g_ac.disco);
+	HANDLE hd= CreateFileA(nomedisco, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
+	if (hd == INVALID_HANDLE_VALUE)
+	{
+		SetErrorMode(vecchio);
+		myprintf("66005! ac: cannot open disk %d (error %lu)\n", g_ac.disco, (unsigned long)GetLastError());
+		return 2;
+	}
+	DWORD fatti= 0;
+	/// size, sectors, what it is
+	GET_LENGTH_INFORMATION lunghezza;
+	if (DeviceIoControl(hd, IOCTL_DISK_GET_LENGTH_INFO, NULL, 0, &lunghezza, sizeof(lunghezza), &fatti, NULL))
+		g_ac.bytes= (uint64_t)lunghezza.Length.QuadPart;
+	DISK_GEOMETRY_EX geometria;
+	memset(&geometria, 0, sizeof(geometria));
+	if (DeviceIoControl(hd, IOCTL_DISK_GET_DRIVE_GEOMETRY_EX, NULL, 0, &geometria, sizeof(geometria), &fatti, NULL))
+	{
+		if (geometria.Geometry.BytesPerSector >= 512)
+			g_ac.settore= geometria.Geometry.BytesPerSector;
+		g_ac.cilindri	   = (uint64_t)geometria.Geometry.Cylinders.QuadPart;
+		g_ac.testine	   = geometria.Geometry.TracksPerCylinder;
+		g_ac.settoritraccia= geometria.Geometry.SectorsPerTrack;
+		if (g_ac.bytes == 0)
+			g_ac.bytes= (uint64_t)geometria.DiskSize.QuadPart;
+	}
+	{
+		STORAGE_PROPERTY_QUERY domanda;
+		memset(&domanda, 0, sizeof(domanda));
+		domanda.PropertyId= StorageDeviceProperty;
+		domanda.QueryType = PropertyStandardQuery;
+		BYTE risposta[2048];
+		memset(risposta, 0, sizeof(risposta));
+		if (DeviceIoControl(hd, IOCTL_STORAGE_QUERY_PROPERTY, &domanda, sizeof(domanda), risposta, sizeof(risposta) - 1, &fatti, NULL))
+		{
+			const STORAGE_DEVICE_DESCRIPTOR *d= (const STORAGE_DEVICE_DESCRIPTOR *)risposta;
+			string							 venditore, prodotto;
+			if ((d->VendorIdOffset > 0) && (d->VendorIdOffset < sizeof(risposta)))
+				venditore= ac_pulito((const char *)risposta + d->VendorIdOffset);
+			if ((d->ProductIdOffset > 0) && (d->ProductIdOffset < sizeof(risposta)))
+				prodotto= ac_pulito((const char *)risposta + d->ProductIdOffset);
+			if ((d->SerialNumberOffset > 0) && (d->SerialNumberOffset < sizeof(risposta)))
+				g_ac.seriale= ac_pulito((const char *)risposta + d->SerialNumberOffset);
+			g_ac.modello   = ac_pulito(venditore + " " + prodotto);
+			g_ac.rimovibile= d->RemovableMedia != 0;
+			switch ((int)d->BusType)
+			{
+			case 1:
+				g_ac.bus= "SCSI";
+				break;
+			case 3:
+				g_ac.bus= "ATA";
+				break;
+			case 6:
+				g_ac.bus= "Fibre";
+				break;
+			case 7:
+				g_ac.bus= "USB";
+				break;
+			case 8:
+				g_ac.bus= "RAID";
+				break;
+			case 9:
+				g_ac.bus= "iSCSI";
+				break;
+			case 10:
+				g_ac.bus= "SAS";
+				break;
+			case 11:
+				g_ac.bus= "SATA";
+				break;
+			case 12:
+				g_ac.bus= "SD";
+				break;
+			case 13:
+				g_ac.bus= "MMC";
+				break;
+			case 14:
+				g_ac.bus= "virtual";
+				break;
+			case 15:
+				g_ac.bus= "file backed virtual";
+				break;
+			case 16:
+				g_ac.bus= "storage space";
+				break;
+			case 17:
+				g_ac.bus= "NVMe";
+				break;
+			default:
+				g_ac.bus= "bus " + itos((int)d->BusType);
+				break;
+			}
+		}
+		memset(&domanda, 0, sizeof(domanda));
+		domanda.PropertyId= (STORAGE_PROPERTY_ID)6; /// StorageAccessAlignmentProperty
+		domanda.QueryType = PropertyStandardQuery;
+		memset(risposta, 0, sizeof(risposta));
+		if (DeviceIoControl(hd, IOCTL_STORAGE_QUERY_PROPERTY, &domanda, sizeof(domanda), risposta, sizeof(risposta) - 1, &fatti, NULL) && (fatti >= 28))
+		{
+			DWORD fisico;
+			memcpy(&fisico, risposta + 16, sizeof(fisico)); /// STORAGE_ACCESS_ALIGNMENT_DESCRIPTOR.BytesPerPhysicalSector
+			g_ac.settorefisico= fisico;
+		}
+	}
+	{
+		typedef BOOL(WINAPI * GetFirmwareType_t)(int *);
+		HMODULE			  k= GetModuleHandleA("kernel32.dll");
+		GetFirmwareType_t f= k ? (GetFirmwareType_t)(void *)GetProcAddress(k, "GetFirmwareType") : NULL;
+		int				  t= 0;
+		if (f && f(&t))
+			g_ac.firmware= (t == 1) ? "BIOS" : ((t == 2) ? "UEFI" : "unknown");
+		else
+			g_ac.firmware= "unknown";
+	}
+	/// the partitions
+	std::vector<BYTE> spazio(sizeof(DRIVE_LAYOUT_INFORMATION_EX) + 256 * sizeof(PARTITION_INFORMATION_EX));
+	bool			  bene= false;
+	for (int giro= 0; (giro < 4) && (!bene); giro++)
+	{
+		bene= DeviceIoControl(hd, IOCTL_DISK_GET_DRIVE_LAYOUT_EX, NULL, 0, &spazio[0], (DWORD)spazio.size(), &fatti, NULL) != 0;
+		if ((!bene) && (GetLastError() == ERROR_INSUFFICIENT_BUFFER))
+			spazio.resize(spazio.size() * 4);
+		else if (!bene)
+			break;
+	}
+	CloseHandle(hd);
+	if ((!bene) || (g_ac.bytes == 0))
+	{
+		SetErrorMode(vecchio);
+		myprintf("66006! ac: disk %d does not give its size or its partitions (error %lu)\n", g_ac.disco, (unsigned long)GetLastError());
+		return 2;
+	}
+	const DRIVE_LAYOUT_INFORMATION_EX *schema= (const DRIVE_LAYOUT_INFORMATION_EX *)&spazio[0];
+	if ((schema->PartitionStyle != PARTITION_STYLE_MBR) && (schema->PartitionStyle != PARTITION_STYLE_GPT))
+	{
+		SetErrorMode(vecchio);
+		myprintf("66007! ac: disk %d is neither MBR nor GPT\n", g_ac.disco);
+		return 2;
+	}
+	g_ac.stile= (schema->PartitionStyle == PARTITION_STYLE_GPT) ? 1 : 0;
+	if (g_ac.stile == 1)
+		g_ac.guid= ac_guid(schema->Gpt.DiskId);
+	else
+		g_ac.firma= schema->Mbr.Signature;
+	bool					 dinamico= false;
+	std::vector<franzzona>	 parti;
+	std::vector<uint64_t>	 tabelle; /// MBR: where the tables of the logical drives are (the extended partitions)
+	for (DWORD i= 0; i < schema->PartitionCount; i++)
+	{
+		const PARTITION_INFORMATION_EX &p= schema->PartitionEntry[i];
+		if (p.PartitionLength.QuadPart <= 0)
+			continue;
+		franzzona z;
+		z.partizione= true;
+		z.inizio	= (uint64_t)p.StartingOffset.QuadPart;
+		z.lunghezza = (uint64_t)p.PartitionLength.QuadPart;
+		z.numero	= (int)p.PartitionNumber;
+		if (g_ac.stile == 0)
+		{
+			const int tipo= p.Mbr.PartitionType;
+			if (tipo == 0)
+				continue;
+			if ((tipo == 0x05) || (tipo == 0x0F) || (tipo == 0x85))
+			{
+				tabelle.push_back(z.inizio);
+				continue; /// a container: its logical drives are entries of their own
+			}
+			z.mbrtipo= tipo;
+			z.attiva = p.Mbr.BootIndicator != 0;
+			if (tipo == 0x42)
+				dinamico= true;
+			z.cosa= ac_mbrnome(tipo);
+		}
+		else
+		{
+			z.gpttipo= ac_guid(p.Gpt.PartitionType);
+			z.gptid	 = ac_guid(p.Gpt.PartitionId);
+			z.gptattr= (uint64_t)p.Gpt.Attributes;
+			wchar_t nome[40]= {0};
+			memcpy(nome, p.Gpt.Name, 36 * sizeof(wchar_t));
+			z.gptnome= ac_pulito(wtou(nome));
+			z.cosa	 = ac_gptnome(z.gpttipo);
+			if (z.cosa.substr(0, 7) == "dynamic")
+				dinamico= true;
+		}
+		parti.push_back(z);
+	}
+	std::sort(parti.begin(), parti.end(), ac_ordine);
+	/// the volumes of Windows on this disk: letters, file system, sizes
+	{
+		wchar_t nome[MAX_PATH + 1]= {0};
+		HANDLE	h				   = FindFirstVolumeW(nome, MAX_PATH);
+		while (h != INVALID_HANDLE_VALUE)
+		{
+			const std::wstring v= nome; /// \\?\Volume{...}\ .
+			DWORD			   d= 0, n= 0;
+			uint64_t		   da= 0, lungo= 0;
+			if ((v.size() > 1) && ac_dove(v.substr(0, v.size() - 1), d, da, lungo, n) && ((int)d == g_ac.disco) && (n == 1))
+				for (size_t i= 0; i < parti.size(); i++)
+					if (parti[i].inizio == da)
+					{
+						franzzona &z= parti[i];
+						z.volume	= wtou(v.c_str());
+						std::vector<wchar_t> posti(4096, 0);
+						DWORD				 quanti= 0;
+						if (GetVolumePathNamesForVolumeNameW(v.c_str(), &posti[0], 4095, &quanti))
+							for (const wchar_t *q= &posti[0]; *q; q+= wcslen(q) + 1)
+							{
+								string posto= wtou(q);
+								if ((posto.size() == 3) && (posto[1] == ':'))
+									posto.resize(2);
+								if ((posto.size() == 2) && (z.unita == 0) && isalpha((unsigned char)posto[0]))
+									z.unita= (char)toupper((unsigned char)posto[0]);
+								z.lettere+= string(z.lettere == "" ? "" : " ") + posto;
+							}
+						wchar_t etichetta[MAX_PATH + 1]= {0};
+						wchar_t tipo[MAX_PATH + 1]	   = {0};
+						DWORD	seriale= 0, opzioni= 0;
+						if (GetVolumeInformationW(v.c_str(), etichetta, MAX_PATH, &seriale, NULL, &opzioni, tipo, MAX_PATH))
+						{
+							z.fs	   = wtou(tipo);
+							z.etichetta= ac_pulito(wtou(etichetta));
+							z.seriale  = seriale;
+						}
+						ULARGE_INTEGER tutto, liberi;
+						tutto.QuadPart = 0;
+						liberi.QuadPart= 0;
+						if (GetDiskFreeSpaceExW(v.c_str(), NULL, &tutto, &liberi))
+						{
+							z.totale= tutto.QuadPart;
+							z.libero= liberi.QuadPart;
+						}
+						DWORD spc= 0, bps= 0, cl= 0, tcl= 0;
+						if (GetDiskFreeSpaceW(v.c_str(), &spc, &bps, &cl, &tcl))
+							z.cluster= spc * bps;
+					}
+			if (!FindNextVolumeW(h, nome, MAX_PATH))
+				break;
+		}
+		if (h != INVALID_HANDLE_VALUE)
+			FindVolumeClose(h);
+	}
+	/// Windows, and where it boots from (Windows itself says it, no other program asked)
+	int		 iwindows= -1, iavvio= -1;
+	bool	 avvioaltrove= false;
+	string	 comeavvio;
+	for (size_t i= 0; i < parti.size(); i++)
+		if (parti[i].inizio == cinizio)
+		{
+			parti[i].windows= true;
+			iwindows		= (int)i;
+		}
+	{
+		const string device= flagacfake ? string("") : ac_registro(HKEY_LOCAL_MACHINE, L"SYSTEM\\Setup", L"SystemPartition"); /// (-acfake: not the disk of Windows, see the parser)
+		DWORD		 d= 0, n= 0;
+		uint64_t	 da= 0, lungo= 0;
+		if ((device != "") && ac_dove(L"\\\\?\\GLOBALROOT" + utow(device.c_str()), d, da, lungo, n))
+		{
+			comeavvio= "the registry: " + device;
+			if ((int)d != g_ac.disco)
+				avvioaltrove= true;
+			else
+				for (size_t i= 0; i < parti.size(); i++)
+					if (parti[i].inizio == da)
+						iavvio= (int)i;
+		}
+	}
+	if ((iavvio < 0) && (!avvioaltrove))
+		for (size_t i= 0; i < parti.size(); i++)
+			if ((iavvio < 0) && ((parti[i].attiva) || (parti[i].cosa == "ESP")))
+			{
+				iavvio	 = (int)i;
+				comeavvio= (g_ac.stile == 0) ? "the active partition" : "the ESP";
+			}
+	if (iavvio >= 0)
+		parti[(size_t)iavvio].avvio= true;
+	/// encrypted? What the disk has at the start of the partition against what the volume shows
+	const std::wstring wdisco= utow(nomedisco);
+	for (size_t i= 0; i < parti.size(); i++)
+	{
+		franzzona		 &z= parti[i];
+		std::vector<char> sotto, sopra;
+		if (!ac_primosettore(wdisco, z.inizio, g_ac.settore, sotto))
+			continue;
+		if (!memcmp(&sotto[3], "-FVE-FS-", 8))
+			z.cifrata= "BitLocker";
+		else if ((z.volume != "") && (z.fs != ""))
+		{
+			const std::wstring v= utow(z.volume.c_str());
+			if ((v.size() > 1) && ac_primosettore(v.substr(0, v.size() - 1), 0, g_ac.settore, sopra) && memcmp(&sotto[0], &sopra[0], g_ac.settore))
+				z.cifrata= "the volume is not what is on the disk (encrypted by another program?)";
+		}
+	}
+	SetErrorMode(vecchio);
+	/// what to do with each partition
+	string	  blocco;
+	if (dinamico)
+		blocco= "disk " + itos(g_ac.disco) + " is a dynamic disk: its partitions are not its volumes";
+	else if (iwindows < 0)
+		blocco= string(1, g_ac.lettera) + ": is not one of the partitions of disk " + itos(g_ac.disco);
+	else if (avvioaltrove)
+		blocco= "Windows boots from another disk (" + comeavvio + "), not from disk " + itos(g_ac.disco) + " where " + string(1, g_ac.lettera) + ": is";
+	const string bloccoprima= blocco; /// (not about a partition: nothing to choose can change it)
+	for (size_t i= 0; i < parti.size(); i++)
+	{
+		franzzona &z= parti[i];
+		{
+			/// optional: it is in the backup only when asked (-all, the screen of -gui). The metafile says it
+			franzzona senza= z, con= z;
+			string	  b0, b1;
+			ac_decidi(senza, false, false, comeavvio, b0);
+			ac_decidi(con, true, false, comeavvio, b1);
+			z.facoltativa= (senza.come == AC_NONSALVATA) && (con.come != AC_NONSALVATA) && (b0 == "");
+		}
+		ac_decidi(z, g_ac.tutto, (z.unita != 0) && (g_ac.esclusi.find(z.unita) != g_ac.esclusi.end()), comeavvio, blocco);
+	}
+	/// all the zones, in the order of the disk
+	uint64_t qui= 0;
+	for (size_t i= 0; i < parti.size(); i++)
+	{
+		if (parti[i].inizio > qui)
+			ac_buco(g_ac.zone, qui, parti[i].inizio, qui == 0, false);
+		g_ac.zone.push_back(parti[i]);
+		if (parti[i].inizio + parti[i].lunghezza > qui)
+			qui= parti[i].inizio + parti[i].lunghezza;
+	}
+	if (g_ac.bytes > qui)
+		ac_buco(g_ac.zone, qui, g_ac.bytes, qui == 0, true);
+	/// MBR: every table of the logical drives must be in a piece that is taken
+	string bloccotabelle;
+	for (size_t t= 0; t < tabelle.size(); t++)
+	{
+		bool presa= false;
+		for (size_t i= 0; i < g_ac.zone.size(); i++)
+			if ((tabelle[t] >= g_ac.zone[i].inizio) && (tabelle[t] < g_ac.zone[i].inizio + g_ac.zone[i].lunghezza))
+				presa= (g_ac.zone[i].come == AC_RAW) && (!g_ac.zone[i].partizione);
+		if ((!presa) && (bloccotabelle == ""))
+			bloccotabelle= "the table of a logical drive, at " + string(migliaia((int64_t)tabelle[t])) + ", is not where ac looks for it";
+	}
+	/// 65.9v: -gui: what is taken is chosen on a screen. Not when this disk cannot be done whatever is
+	/// chosen: then the table below, and why
+	if (flaggui && (bloccoprima == "") && (bloccotabelle == ""))
+	{
+		const int scelto= ac_scegli(comeavvio, blocco);
+		if (scelto != 0)
+			return scelto;
+	}
+	if (blocco == "")
+		blocco= bloccotabelle;
+	g_ac.metanome= "disk_" + string(1, g_ac.lettera) + ".txt";
+	g_ac.cifre	 = (g_ac.zone.size() >= 100) ? 3 : 2;
+	const int cifre= g_ac.cifre;
+	for (size_t i= 0; i < g_ac.zone.size(); i++)
+		if (g_ac.zone[i].come == AC_RAW)
+		{
+			char nome[64];
+			snprintf(nome, sizeof(nome), "disk_%c_%0*d.raw", g_ac.lettera, cifre, (int)i);
+			g_ac.zone[i].file= nome;
+			g_ac.nomi.insert(nome);
+		}
+	for (size_t i= 0; i < g_ac.zone.size(); i++)
+		if ((g_ac.zone[i].come == AC_IMMAGINE) && (!g_ac.zone[i].windows))
+		{
+			franzacimg *img= new franzacimg;
+			img->zona	   = (int)i;
+			img->lettera   = g_ac.zone[i].unita;
+			img->sottile   = g_ac.zone[i].sottile;
+			img->file	   = g_ac.zone[i].file;
+			g_ac.immagini.push_back(img);
+		}
+	/// the table, for whoever runs it: what is in this backup and what is not
+	char riga[512];
+	color_cyan();
+	if (g_ac.stile == 1)
+		snprintf(riga, sizeof(riga), "GPT %s", g_ac.guid.c_str());
+	else
+		snprintf(riga, sizeof(riga), "MBR %08X", (unsigned)g_ac.firma);
+	myprintf("66010: ac: disk %d, %s (%s, %s), %s, boot by %s\n", g_ac.disco, tohuman((int64_t)g_ac.bytes), g_ac.modello.c_str(), g_ac.bus.c_str(), riga, g_ac.firmware.c_str());
+	color_restore();
+	snprintf(riga, sizeof(riga), "%-*s %14s %10s %10s  %-35s %s", cifre, "#", "from", "size", "to read", "saved", "what");
+	myprintf("66011: %s\n", riga);
+	uint64_t lasciati= 0, daleggere= 0;
+	for (size_t i= 0; i < g_ac.zone.size(); i++)
+	{
+		const franzzona &z= g_ac.zone[i];
+		string			 cosa;
+		if (z.partizione)
+		{
+			cosa= "partition " + itos(z.numero);
+			if (z.avvio)
+				cosa+= ", BOOT";
+			if (z.windows)
+				cosa+= ", WINDOWS";
+			if (z.lettere != "")
+				cosa+= ", " + z.lettere;
+			if (z.cosa != "")
+				cosa+= ", " + z.cosa;
+			if (z.fs != "")
+				cosa+= ", " + z.fs;
+			else if (z.volume != "")
+				cosa+= ", unknown file system";
+			if (z.etichetta != "")
+				cosa+= " \"" + z.etichetta + "\"";
+			if (z.attiva)
+				cosa+= ", active";
+			if (z.cifrata != "")
+				cosa+= ", " + ((z.cifrata == "BitLocker") ? z.cifrata : string("encrypted?"));
+		}
+		else
+			cosa= z.cosa;
+		string	 come;
+		uint64_t leggo= 0; /// (the used clusters: what Windows says is used, the image reads a little more)
+		if (z.come == AC_IMMAGINE)
+		{
+			come = string(z.sottile ? "used clusters" : "the whole partition") + " (" + z.file + ")";
+			leggo= (z.sottile && (z.totale >= z.libero) && (z.totale > 0)) ? (z.totale - z.libero) : z.lunghezza;
+		}
+		else if (z.come == AC_RAW)
+		{
+			come = "raw (" + z.file + ")";
+			leggo= z.lunghezza;
+		}
+		else
+			come= "NOT SAVED: " + z.perche;
+		daleggere+= leggo;
+		if (z.come == AC_NONSALVATA)
+		{
+			if (z.partizione)
+			{
+				lasciati+= z.lunghezza;
+				color_yellow();
+			}
+		}
+		snprintf(riga, sizeof(riga), "%0*d %14s %10s %10s  %-35s %s", cifre, (int)i, tohuman((int64_t)z.inizio), tohuman2((int64_t)z.lunghezza), (z.come == AC_NONSALVATA) ? "-" : tohuman3((int64_t)leggo), come.c_str(), cosa.c_str());
+		myprintf("66012: %s\n", riga);
+		color_restore();
+	}
+	myprintf("66018: ac: about %s to read%s\n", tohuman((int64_t)daleggere), flaggui ? " (as chosen on the screen)" : (g_ac.tutto ? " (-all: every partition; -not X: leaves one out)" : ""));
+	for (size_t i= 0; i < g_ac.zone.size(); i++)
+		if ((g_ac.zone[i].cifrata != "") && (g_ac.zone[i].come != AC_NONSALVATA))
+		{
+			color_yellow();
+			if (g_ac.zone[i].cifrata == "BitLocker")
+				myprintf("66013$ ac: %s is a BitLocker volume: it is read in clear, a restore gives it back NOT encrypted (protect the archive: -key)\n", (g_ac.zone[i].lettere != "") ? g_ac.zone[i].lettere.c_str() : ("partition " + itos(g_ac.zone[i].numero)).c_str());
+			else
+				myprintf("66014$ ac: %s: %s. Its image is good by itself; the restored disk may not boot as it is\n", (g_ac.zone[i].lettere != "") ? g_ac.zone[i].lettere.c_str() : ("partition " + itos(g_ac.zone[i].numero)).c_str(), g_ac.zone[i].cifrata.c_str());
+			color_restore();
+		}
+	if (blocco != "")
+	{
+		color_red();
+		myprintf("66015! ac: %s. Not done: a restore of this backup would not boot. a %c: -image takes the volume alone\n", blocco.c_str(), g_ac.lettera);
+		color_restore();
+		return 2;
+	}
+	if (lasciati > 0)
+	{
+		color_yellow();
+		myprintf("66016$ ac: the partitions NOT SAVED (%s) are not in this backup: a restore leaves their place as it is, never written\n", tohuman((int64_t)lasciati));
+		color_restore();
+	}
+	if (iavvio < 0)
+	{
+		color_yellow();
+		myprintf("66017$ ac: Windows does not say where it boots from: taken what the rules say, look at the table\n");
+		color_restore();
+	}
+	return 0;
+}
+bool Jidac::ac_mio(const string &i_nome)
+{
+	return (i_nome == g_ac.metanome) || (g_ac.nomi.find(i_nome) != g_ac.nomi.end());
+}
+/// after the files of the image: the raw pieces, in the order of the disk, then the metafile, the last one
+/// a file of this version that add did not find by itself: in memory (made when its turn comes: i_ram) or read
+/// by ac. i_data 0: not there yet (an image not opened, a file in memory not made)
+DTMap::iterator Jidac::ac_voce(const string &i_nome, franzfs *i_ram, int64_t i_bytes, int64_t i_data, bool i_infondo)
+{
+	if (i_ram != NULL)
+		i_ram->init(1);
+	DT &d		  = edt[i_nome];
+	d.creationdate= now();
+	d.accessdate  = now();
+	d.date		  = i_data;
+	d.size		  = i_bytes;
+	d.attr		  = 8311;
+	d.pramfile	  = i_ram;
+	d.data		  = 1;
+	DTMap::iterator p= edt.find(i_nome);
+	if (i_infondo && (p != edt.end()))
+		vf.push_back(p);
+	return p;
+}
+/// a -not of files for the image of this drive (c:/temp/...)?
+bool Jidac::ac_esclusioni(char i_lettera)
+{
+	for (size_t i= 0; i < notfiles.size(); i++)
+		if ((notfiles[i].size() > 2) && (notfiles[i][1] == ':') && (toupper((unsigned char)notfiles[i][0]) == toupper((unsigned char)i_lettera)))
+			return true;
+	return false;
+}
+void Jidac::ac_aggiungi()
+{
+	/// the image of Windows is open by now: what it is, how it is read (for the metafile)
+	g_ac.windowsntfs  = flagntfs;
+	g_ac.windowsbuffer= g_ioBUFSIZE;
+	for (size_t i= 0; i < g_ac.zone.size(); i++)
+		if (g_ac.zone[i].windows)
+		{
+			franzzona &z= g_ac.zone[i];
+			z.sottile	= flagntfs;
+			z.file		= "image_" + string(1, g_ac.lettera) + (flagntfs ? ".fhd" : ".raw");
+			if (flagntfs)
+			{
+				z.letto = imager.usavss() ? "shadow copy" : (imager.bloccato() ? "locked volume" : "volume in use");
+				z.strato= "volume";
+			}
+			else
+			{
+				z.letto = rawimager.usavss() ? "shadow copy" : (rawimager.bloccato() ? "locked volume" : "volume in use");
+				z.strato= rawimager.usavss() ? "volume" : "disk";
+			}
+		}
+	/// -all: the images of the other partitions, each with its small files right after it (they are made from
+	/// the reader of that image, when it has finished), in the order of the disk
+	for (size_t k= 0; k < g_ac.immagini.size(); k++)
+	{
+		franzacimg &img= *g_ac.immagini[k];
+		ac_voce(img.file, NULL, (int64_t)g_ac.zone[(size_t)img.zona].lunghezza, 0, true);
+		if (img.sottile)
+		{
+			const string base= "image_" + string(1, img.lettera);
+			img.header		 = base + ".header";
+			img.footer		 = base + ".footer";
+			img.meta		 = base + ".meta";
+			ac_voce(img.header, &img.fsheader, 1, 0, true);
+			ac_voce(img.footer, &img.fsfooter, 1, 0, true);
+			ac_voce(img.meta, &img.fsmeta, 1, 0, true);
+			if (ac_esclusioni(img.lettera))
+			{
+				img.excluded= base + ".exclud";
+				img.zeroed	= base + ".zeroed";
+				ac_voce(img.excluded, &img.fsexcluded, 1, 0, true);
+				ac_voce(img.zeroed, &img.fszeroed, 1, 0, true);
+			}
+		}
+	}
+	for (size_t i= 0; i < g_ac.zone.size(); i++)
+		if (g_ac.zone[i].come == AC_RAW)
+			ac_voce(g_ac.zone[i].file, NULL, (int64_t)g_ac.zone[i].lunghezza, nowutc(), true);
+	ac_voce(g_ac.metanome, &g_ac.metafs, 1, 0, true); /// the last one: the others have been read when it is made
+}
+/// the reader of the image that has just been read is closed: its shadow copy released, its volume unlocked, and
+/// a new one, with nothing of that partition left in it, for the next
+void Jidac::ac_chiudi()
+{
+	if (g_imgincoerente != "")
+	{
+		g_ac.incoerenti.push_back(g_imgincoerente);
+		g_imgincoerente= "";
+	}
+	imager.~franzimager();
+	new (&imager) franzimager();
+	rawimager.chiudiraw();
+	g_ac.aperta= false;
+}
+/// ac -all, before a file of the version is read. 1: it is the image of another partition, opened now (the
+/// caller starts its map again); 2: a small file of an image that became raw: skip it; 0: nothing to do
+int Jidac::ac_cambia(size_t i_fi)
+{
+	if ((g_ac.immagini.size() == 0) || (i_fi >= vf.size()))
+		return 0;
+	const string nome= vf[i_fi]->first;
+	if (g_ac.annullati.find(nome) != g_ac.annullati.end())
+		return 2;
+	franzacimg *img= NULL;
+	for (size_t k= 0; k < g_ac.immagini.size(); k++)
+		if (g_ac.immagini[k]->file == nome)
+			img= g_ac.immagini[k];
+	if (img == NULL)
+	{
+		/// the first of the raw pieces: the images are over, the reader of the last one is closed
+		if (g_ac.aperta && ac_mio(nome))
+		{
+			ac_chiudi();
+			flagntfs   = g_ac.windowsntfs; /// what add had for the image of the command line
+			g_ioBUFSIZE= g_ac.windowsbuffer;
+			lettera	   = g_ac.lettera;
+		}
+		return 0;
+	}
+	ac_chiudi();
+	franzzona &z	= g_ac.zone[(size_t)img->zona];
+	lettera			= img->lettera;
+	g_ac.basefatti	= total_done;
+	g_ac.basescritti= g_inoutput;
+	eol();
+	color_cyan();
+	myprintf("66040: ac: image of %c: (%s): %s\n", img->lettera, (z.fs != "") ? z.fs.c_str() : "unknown file system", img->sottile ? "the used clusters" : "the whole partition (raw)");
+	color_restore();
+	bool aperta= false;
+	if (img->sottile)
+	{
+		imagevss	   = ((z.fs == "NTFS") && flagvss) ? 2 : 0;
+		flagntfs	   = true;
+		g_ioBUFSIZE	   = 512 + 2 * 1024 * 1024;
+		imager_image   = img->file;
+		imager_header  = img->header;
+		imager_footer  = img->footer;
+		imager_meta	   = img->meta;
+		imager_excluded= img->excluded;
+		imager_zeroed  = img->zeroed;
+		aperta		   = preparavhd(img->lettera);
+		if (aperta)
+		{
+			total_size= (int64_t)imager.getusedbytes();
+			z.letto	  = imager.usavss() ? "shadow copy" : (imager.bloccato() ? "locked volume" : "volume in use");
+			z.strato  = "volume";
+		}
+		else
+		{
+			if ((imagevss == 2) && (imager.motivovss() != ""))
+			{
+				myprintf("66041! ac: -vss: no shadow copy of %c: (%s)\n", img->lettera, imager.motivovss().c_str());
+				return ac_fatale();
+			}
+			/// "when it cannot, raw": the image of the whole partition under its own name, the small files of
+			/// the other one are not made
+			color_yellow();
+			myprintf("66042$ ac: the used clusters of %c: cannot be read: the whole partition (raw) instead\n", img->lettera);
+			color_restore();
+			if (img->header != "")
+				g_ac.annullati.insert(img->header);
+			if (img->footer != "")
+				g_ac.annullati.insert(img->footer);
+			if (img->meta != "")
+				g_ac.annullati.insert(img->meta);
+			if (img->excluded != "")
+				g_ac.annullati.insert(img->excluded);
+			if (img->zeroed != "")
+				g_ac.annullati.insert(img->zeroed);
+			vf[i_fi]->second.date= 0; /// (never made: not in the index)
+			img->sottile		 = false;
+			img->file			 = "image_" + string(1, img->lettera) + ".raw";
+			z.sottile			 = false;
+			z.file				 = img->file;
+			vf[i_fi]			 = ac_voce(img->file, NULL, (int64_t)z.lunghezza, 0, false);
+			imager.~franzimager();
+			new (&imager) franzimager();
+		}
+	}
+	if (!aperta)
+	{
+		imagevss	   = 0;
+		flagntfs	   = false;
+		g_ioBUFSIZE	   = g_ac.bufferraw;
+		imager_image   = "";
+		imager_header  = "";
+		imager_footer  = "";
+		imager_meta	   = "";
+		imager_excluded= "";
+		imager_zeroed  = "";
+		rawimager.setnonbloccare(false);
+		if (!rawimager.apriraw(img->lettera, false))
+		{
+			myprintf("66043! ac: %c: cannot be opened\n", img->lettera);
+			return ac_fatale();
+		}
+		total_size= (int64_t)rawimager.getsize();
+		z.letto	  = rawimager.bloccato() ? "locked volume" : "volume in use";
+		z.strato  = "disk";
+		if (!rawimager.bloccato())
+		{
+			g_imgincoerente= string(1, img->lettera) + ": was read while in use (no VSS, not locked): what was written meanwhile can be inconsistent in the image";
+			color_yellow();
+			myprintf("66044$ %s\n", g_imgincoerente.c_str());
+			color_restore();
+		}
+	}
+	vf[i_fi]->second.size= total_size;
+	vf[i_fi]->second.date= nowutc();
+	g_ac.aperta			 = true;
+	return 1;
+}
+/// the name of something big (a piece of the disk, an image of ac -all): the method of the archive for it, not
+/// the one add keeps for the small files in memory of an image
+bool Jidac::ac_grande(const string &i_nome)
+{
+	if (ac_mio(i_nome))
+		return true;
+	for (size_t k= 0; k < g_ac.immagini.size(); k++)
+		if (g_ac.immagini[k]->file == i_nome)
+			return true;
+	return false;
+}
+/// the read of add for a file of ac: a piece of the disk by offset, or the metafile. The bytes given, 0 at the end
+int Jidac::ac_leggi(DTMap::iterator i_p, char *o_buf, int i_quanti)
+{
+	if (i_p->first == g_ac.metanome)
+	{
+		if (i_p->second.date == 0)
+		{
+			if (g_ac.hdisco != INVALID_HANDLE_VALUE)
+			{
+				CloseHandle(g_ac.hdisco);
+				g_ac.hdisco= INVALID_HANDLE_VALUE;
+			}
+			const string		 testo= ac_metafile();
+			std::vector<uint8_t> dati(testo.begin(), testo.end());
+			i_p->second.size= array_to_ramfile(dati, i_p->second.pramfile);
+			i_p->second.date= nowutc();
+			total_size		= total_done + i_p->second.size; /// (the summary of add: everything that was read)
+		}
+		return (int)i_p->second.pramfile->ramread((size_t)i_quanti, o_buf);
+	}
+	for (size_t i= 0; i < g_ac.zone.size(); i++)
+		if ((g_ac.zone[i].come == AC_RAW) && (g_ac.zone[i].file == i_p->first))
+		{
+			franzzona &z= g_ac.zone[i];
+			if (z.letti >= z.lunghezza)
+				return 0;
+			if (g_ac.hdisco == INVALID_HANDLE_VALUE)
+			{
+				char nomedisco[64];
+				snprintf(nomedisco, sizeof(nomedisco), "\\\\.\\PhysicalDrive%d", g_ac.disco);
+				g_ac.hdisco= CreateFileA(nomedisco, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN, NULL);
+				if (g_ac.hdisco == INVALID_HANDLE_VALUE)
+				{
+					myprintf("66020! ac: cannot open disk %d to read %s (error %lu)\n", g_ac.disco, z.file.c_str(), (unsigned long)GetLastError());
+					return ac_fatale();
+				}
+			}
+			uint64_t voglio= (uint64_t)i_quanti - ((uint64_t)i_quanti % g_ac.settore);
+			if (voglio > z.lunghezza - z.letti)
+				voglio= z.lunghezza - z.letti;
+			if (voglio == 0)
+				return 0;
+			const int64_t t0	= mtime();
+			const int64_t prima= g_imgerrori;
+			const DWORD	  avuti= img_leggi(g_ac.hdisco, z.inizio + z.letti, o_buf, (DWORD)voglio, g_ac.settore, (int64_t)(z.inizio + z.letti), (int64_t)(z.inizio + z.lunghezza));
+			z.secondi+= (mtime() - t0) / 1000.0;
+			z.errori+= g_imgerrori - prima;
+			z.letti+= avuti;
+			return (int)avuti;
+		}
+	return 0;
+}
+/// a piece that cannot even be opened: no backup made of half a disk
+int Jidac::ac_fatale()
+{
+	color_red();
+	myprintf("66021! ac: the disk cannot be read: the backup is not complete, stopped here\n");
+	color_restore();
+	seppuku();
+	return 0;
+}
+/// the hash add has for a file that has been read to its end, taken now and kept (the hasher is closed by this:
+/// preparahashtobewritten gives the same string again when the index is written)
+void Jidac::ac_hash(DTMap::iterator i_p, string &o_tipo, string &o_hash)
+{
+	std::map<string, franzachash>::iterator gia= g_ac_hash.find(i_p->first);
+	if (gia == g_ac_hash.end())
+	{
+		franzachash h;
+		preparahashtobewritten(i_p->first, i_p, h.hash, h.errore, h.nome, WORK_ADDED);
+		g_ac_hash[i_p->first]= h;
+		gia					 = g_ac_hash.find(i_p->first);
+	}
+	o_tipo= gia->second.nome;
+	o_hash= gia->second.hash;
+}
+/// the metafile: what the disk was, zone by zone, and the files of this version with what add computed
+/// while reading them. Text, a key and its value on every line: read by people, and by the restore
+string Jidac::ac_metafile()
+{
+	string t;
+	ac_riga(t, "franzdisk 1");
+	ac_riga(t, "# zpaqfranz ac: the disk of Windows, for a restore that boots. This file is the last one of its version:");
+	ac_riga(t, "# every piece named here is in the SAME version of the archive, with the size and the hashes written here.");
+	ac_riga(t, "# A key not known is to be ignored. Numbers are bytes, from the start of the disk.");
+	ac_riga(t, "");
+	ac_riga(t, "[run]");
+	ac_riga(t, "program=zpaqfranz v%s %s", ZPAQ_VERSION, ZPAQ_DATE);
+	ac_riga(t, "command=%s", ac_pulito(wtou(GetCommandLineW())).c_str());
+	ac_riga(t, "computer=%s", ac_pulito(win_getcomputername()).c_str());
+	{
+		wchar_t utente[512]= {0};
+		DWORD	n		   = 511;
+		if (GetUserNameW(utente, &n))
+			ac_riga(t, "user=%s", ac_pulito(wtou(utente)).c_str());
+	}
+	{
+		const wchar_t *chiave= L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion";
+		string prodotto= ac_pulito(ac_registro(HKEY_LOCAL_MACHINE, chiave, L"ProductName"));
+		/// (65.9p: the registry of a Windows 11 still says "Windows 10" there: the build tells them apart)
+		if ((prodotto.substr(0, 10) == "Windows 10") && (atoi(ac_registro(HKEY_LOCAL_MACHINE, chiave, L"CurrentBuildNumber").c_str()) >= 22000))
+			prodotto= "Windows 11" + prodotto.substr(10);
+		ac_riga(t, "windows=%s", prodotto.c_str());
+		ac_riga(t, "windows_version=%s", ac_pulito(ac_registro(HKEY_LOCAL_MACHINE, chiave, L"DisplayVersion")).c_str());
+		ac_riga(t, "windows_build=%s.%s", ac_pulito(ac_registro(HKEY_LOCAL_MACHINE, chiave, L"CurrentBuildNumber")).c_str(), ac_pulito(ac_registro(HKEY_LOCAL_MACHINE, chiave, L"UBR")).c_str());
+	}
+	ac_riga(t, "firmware=%s", g_ac.firmware.c_str());
+	ac_riga(t, "started_utc=%s", dateToString(true, date).c_str());
+	ac_riga(t, "started_local=%s", dateToString(false, date).c_str());
+	ac_riga(t, "seconds=%.1f", (mtime() - g_ac.inizio) / 1000.0);
+	ac_riga(t, "archive=%s", ac_pulito(archive).c_str());
+	ac_riga(t, "archive_version=%d", (int)ver.size());
+	{
+		MAPPATIPOHASH::iterator a= g_mappatipohash.find(g_franzotype);
+		ac_riga(t, "hash=%s", (a != g_mappatipohash.end()) ? a->second.hashname.c_str() : "none");
+	}
+	ac_riga(t, "read_errors=%s", migliaia(g_imgerrori));
+	if (g_imgincoerente != "")
+		ac_riga(t, "warning=%s", ac_pulito(g_imgincoerente).c_str());
+	ac_riga(t, "");
+	ac_riga(t, "[disk]");
+	ac_riga(t, "number=%d", g_ac.disco);
+	ac_riga(t, "model=%s", g_ac.modello.c_str());
+	ac_riga(t, "serial=%s", g_ac.seriale.c_str());
+	ac_riga(t, "bus=%s", g_ac.bus.c_str());
+	ac_riga(t, "removable=%s", g_ac.rimovibile ? "yes" : "no");
+	ac_riga(t, "bytes=%s", itos((int64_t)g_ac.bytes).c_str());
+	ac_riga(t, "sector=%u", (unsigned)g_ac.settore);
+	ac_riga(t, "sector_physical=%u", (unsigned)g_ac.settorefisico);
+	ac_riga(t, "geometry=%s/%u/%u", itos((int64_t)g_ac.cilindri).c_str(), (unsigned)g_ac.testine, (unsigned)g_ac.settoritraccia);
+	ac_riga(t, "style=%s", (g_ac.stile == 1) ? "GPT" : "MBR");
+	if (g_ac.stile == 1)
+		ac_riga(t, "guid=%s", g_ac.guid.c_str());
+	else
+		ac_riga(t, "signature=%08X", (unsigned)g_ac.firma);
+	ac_riga(t, "windows_drive=%c:", g_ac.lettera);
+	ac_riga(t, "all=%s", g_ac.tutto ? "yes" : "no");
+	ac_riga(t, "zones=%d", (int)g_ac.zone.size());
+	const int cifre= g_ac.cifre;
+	for (size_t i= 0; i < g_ac.zone.size(); i++)
+	{
+		const franzzona &z= g_ac.zone[i];
+		ac_riga(t, "");
+		ac_riga(t, "[zone %0*d]", cifre, (int)i);
+		ac_riga(t, "kind=%s", z.partizione ? "partition" : "outside");
+		ac_riga(t, "start=%s", itos((int64_t)z.inizio).c_str());
+		ac_riga(t, "bytes=%s", itos((int64_t)z.lunghezza).c_str());
+		ac_riga(t, "what=%s", z.cosa.c_str());
+		if (z.partizione)
+		{
+			ac_riga(t, "partition=%d", z.numero);
+			if (z.mbrtipo >= 0)
+			{
+				ac_riga(t, "mbr_type=%02X", (unsigned)z.mbrtipo);
+				ac_riga(t, "active=%s", z.attiva ? "yes" : "no");
+			}
+			else
+			{
+				ac_riga(t, "gpt_type=%s", z.gpttipo.c_str());
+				ac_riga(t, "gpt_id=%s", z.gptid.c_str());
+				ac_riga(t, "gpt_attributes=%016llX", (unsigned long long)z.gptattr);
+				ac_riga(t, "gpt_name=%s", z.gptnome.c_str());
+			}
+			{
+				string volume= z.volume; /// as Windows writes it
+				myreplaceall(volume, "/", "\\");
+				ac_riga(t, "volume=%s", volume.c_str());
+			}
+			ac_riga(t, "mounted=%s", z.lettere.c_str());
+			ac_riga(t, "filesystem=%s", z.fs.c_str());
+			ac_riga(t, "label=%s", z.etichetta.c_str());
+			ac_riga(t, "volume_serial=%08X", (unsigned)z.seriale);
+			ac_riga(t, "cluster=%u", (unsigned)z.cluster);
+			ac_riga(t, "volume_bytes=%s", itos((int64_t)z.totale).c_str());
+			ac_riga(t, "volume_free=%s", itos((int64_t)z.libero).c_str());
+			ac_riga(t, "boot=%s", z.avvio ? "yes" : "no");
+			ac_riga(t, "windows=%s", z.windows ? "yes" : "no");
+			ac_riga(t, "optional=%s", z.facoltativa ? "yes" : "no");
+			ac_riga(t, "encrypted=%s", (z.cifrata == "") ? "no" : z.cifrata.c_str());
+		}
+		if (z.come == AC_NONSALVATA)
+		{
+			ac_riga(t, "saved=no");
+			ac_riga(t, "why=%s", z.perche.c_str());
+		}
+		else if (z.come == AC_IMMAGINE)
+		{
+			ac_riga(t, "saved=%s", z.sottile ? "used clusters" : "raw");
+			ac_riga(t, "file=%s", z.file.c_str());
+			/// from where: the volume shows its data in clear (a restore is not encrypted), the disk has them as they are
+			ac_riga(t, "layer=%s", z.strato.c_str());
+			ac_riga(t, "read=%s", z.letto.c_str());
+		}
+		else
+		{
+			ac_riga(t, "saved=raw");
+			ac_riga(t, "file=%s", z.file.c_str());
+			ac_riga(t, "layer=disk");
+			ac_riga(t, "read=disk");
+			if (z.volume != "")
+				ac_riga(t, "note=its volume was mounted, not locked, while it was read");
+			ac_riga(t, "read_bytes=%s", itos((int64_t)z.letti).c_str());
+			ac_riga(t, "read_seconds=%.3f", z.secondi);
+			ac_riga(t, "read_errors=%s", itos(z.errori).c_str());
+		}
+	}
+	/// the files of this version: size, CRC-32, the hash of the archive with its name, and the hash of the list
+	/// of the fragments (the SHA-1 of the SHA-1 of every fragment, in order: what the deduplication has)
+	ac_riga(t, "");
+	ac_riga(t, "[files]");
+	ac_riga(t, "# name bytes crc32 hash fragments sha1-of-the-fragment-list");
+	for (size_t i= 0; i < vf.size(); i++)
+	{
+		DTMap::iterator p= vf[i];
+		if ((p->first == g_ac.metanome) || (p->second.date == 0)) /// (date 0: a file that was not made)
+			continue;
+		string tipo, hash;
+		ac_hash(p, tipo, hash);
+		libzpaq::SHA1 lista;
+		for (size_t k= 0; k < p->second.ptr.size(); k++)
+			if (p->second.ptr[k] < ht.size())
+				lista.write((const char *)ht[p->second.ptr[k]].sha1, 20);
+		const string hlista= binarytohex((const unsigned char *)lista.result(), 20);
+		ac_riga(t, "file=%s bytes=%s crc32=%08X %s=%s fragments=%u fragments_sha1=%s", p->first.c_str(), itos(p->second.hashedsize).c_str(), (unsigned)p->second.file_crc32, (tipo == "") ? "hash" : tipo.c_str(), (hash == "") ? "none" : hash.c_str(), (unsigned)p->second.ptr.size(), hlista.c_str());
+	}
+	/// what was in the archive before this run: its versions (UTC), as add has them. Not the files of those
+	/// versions: add does not load the table of the files when it takes an image, and nothing is read again
+	/// for this (each version made by ac has its own metafile, with its own hashes)
+	ac_riga(t, "");
+	ac_riga(t, "[archive before]");
+	ac_riga(t, "versions=%d", (ver.size() > 0) ? (int)ver.size() - 1 : 0);
+	for (size_t i= 1; i < ver.size(); i++)
+		ac_riga(t, "version=%d date=%s files=%d deleted=%d", (int)i, dateToString(true, ver[i].date).c_str(), ver[i].updates, ver[i].deletes);
+	return t;
+}
+/// the last line of ac: the hash of the metafile, that has the hashes of every other piece. Kept somewhere
+/// else (it goes in the e-mail report by itself) it says, at the restore, that the backup is this one
+void Jidac::ac_impronta()
+{
+	if (g_ac.incoerenti.size() > 0)
+	{
+		string tutti;
+		for (size_t i= 0; i < g_ac.incoerenti.size(); i++)
+			tutti+= string(1, g_ac.incoerenti[i][0]) + ": ";
+		if (g_imgincoerente != "")
+			tutti+= string(1, g_imgincoerente[0]) + ": ";
+		g_imgincoerente= tutti + "read while in use (no VSS, not locked): what was written meanwhile can be inconsistent in the image";
+	}
+	DTMap::iterator m= edt.find(g_ac.metanome);
+	if (m == edt.end())
+		return;
+	color_cyan();
+	if (m->second.hexhash != "")
+		myprintf("66030: ac: %s %s bytes, CRC-32 %08X, %s %s\n", g_ac.metanome.c_str(), migliaia(m->second.hashedsize), (unsigned)m->second.file_crc32, m->second.hashtype.c_str(), m->second.hexhash.c_str());
+	else
+		myprintf("66030: ac: %s %s bytes, CRC-32 %08X\n", g_ac.metanome.c_str(), migliaia(m->second.hashedsize), (unsigned)m->second.file_crc32);
+	color_restore();
+}
+/*
+	65.9p: xc archive [-to N: | -to x.vmdk | -to x.vhdx | -to x.raw], the restore of what ac saved:
+	the disk of Windows as it was, every piece at the offset it had. Same signature (MBR) or same
+	GUIDs (GPT) and same offsets: the boot files find everything by themselves, nothing is repaired
+	and no other program is run.
+	  xc z:\pc.zpaq                 the plan: which backup it is, what would be written, nothing done
+	  xc z:\pc.zpaq -to x.vmdk      a virtual disk, the whole of it (a VM that boots): .vmdk (-raw:
+	                                a flat one), .vhdx; any other name is a raw file, as long as the disk
+	  xc z:\pc.zpaq -to 2: -force   the physical disk 2 (-force is the consent: it is overwritten),
+	                                after a captcha that names it (killdrive2; 65.9q: it was -image)
+	-until N takes the backup of version N. -verify reads back what was written (a disk, a raw file).
+	Before anything is written: the metafile of the backup (disk_C.txt) names every piece with its
+	size, its CRC-32, its hash and the hash of the list of its fragments; the archive, at the
+	version asked, must have exactly those (an archive has many versions, and something else can
+	have changed a piece after the backup: then it stops and says which -until to use). All of this
+	from the index of the archive, nothing is read for it.
+	A physical disk: at least as big as the one of the backup (the rest stays not allocated), with
+	the same sectors, not the disk of this Windows, not the one the archive is on. Its volumes are
+	locked and dismounted. When it is not the disk of the backup (same signature and the same
+	partitions at the same places) its partition table is wiped first and the piece with the table
+	is written last: a restore that stops half way leaves a disk without partitions, not one that
+	looks good. When it is, the table is never missing and the partitions that are not in the
+	backup (the data ones ac leaves out) are not touched; on another disk their first MiB is zeroed
+	(Windows shows them as not formatted, not with what was there before).
+	Inside a partition restored by its used clusters, what the backup left out (pagefile, hiberfil,
+	swapfile: whole blocks of them are not in the image) is zeroed on a physical disk: an old
+	hiberfil.sys must not be found there by a Windows that starts.
+*/
+struct franzxcfile
+{
+	string	nome;
+	int64_t bytes;
+	string	crc32;
+	string	tipo;
+	string	hash;
+	int64_t frammenti;
+	string	lista;
+	franzxcfile() : bytes(0), frammenti(0)
+	{
+	}
+};
+struct franzxcparte
+{
+	uint64_t inizio;
+	uint64_t lunghezza;
+	int		 numero;
+	string	 lettere;
+	string	 fs;
+	string	 etichetta;
+	franzxcparte() : inizio(0), lunghezza(0), numero(0)
+	{
+	}
+};
+struct franzxcdisco
+{
+	int						  numero;
+	uint64_t				  bytes;
+	uint32_t				  settore;
+	int						  stile; /// -1 no table, 0 MBR, 1 GPT
+	uint32_t				  firma;
+	string					  guid;
+	string					  modello;
+	string					  bus;
+	bool					  solalettura;
+	bool					  fuorilinea;
+	bool					  rimovibile;
+	std::vector<franzxcparte> parti;
+	franzxcdisco() : numero(-1), bytes(0), settore(512), stile(-1), firma(0), solalettura(false), fuorilinea(false), rimovibile(false)
+	{
+	}
+};
+/// what a physical disk is now: size, sectors, table, partitions with their letters. false: it is not there
+static bool xc_disco(int i_numero, franzxcdisco &o_d)
+{
+	o_d		  = franzxcdisco();
+	o_d.numero= i_numero;
+	char nome[64];
+	snprintf(nome, sizeof(nome), "\\\\.\\PhysicalDrive%d", i_numero);
+	HANDLE hd= CreateFileA(nome, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
+	if (hd == INVALID_HANDLE_VALUE)
+		return false;
+	DWORD				   fatti= 0;
+	GET_LENGTH_INFORMATION lunghezza;
+	if (DeviceIoControl(hd, IOCTL_DISK_GET_LENGTH_INFO, NULL, 0, &lunghezza, sizeof(lunghezza), &fatti, NULL))
+		o_d.bytes= (uint64_t)lunghezza.Length.QuadPart;
+	DISK_GEOMETRY_EX geometria;
+	memset(&geometria, 0, sizeof(geometria));
+	if (DeviceIoControl(hd, IOCTL_DISK_GET_DRIVE_GEOMETRY_EX, NULL, 0, &geometria, sizeof(geometria), &fatti, NULL))
+	{
+		if (geometria.Geometry.BytesPerSector >= 512)
+			o_d.settore= geometria.Geometry.BytesPerSector;
+		if (o_d.bytes == 0)
+			o_d.bytes= (uint64_t)geometria.DiskSize.QuadPart;
+	}
+	o_d.solalettura= (!DeviceIoControl(hd, IOCTL_DISK_IS_WRITABLE, NULL, 0, NULL, 0, &fatti, NULL)) && (GetLastError() == ERROR_WRITE_PROTECT);
+	{
+		franzxcattributiletti a;
+		memset(&a, 0, sizeof(a));
+		if (DeviceIoControl(hd, IOCTL_DISK_GET_DISK_ATTRIBUTES, NULL, 0, &a, sizeof(a), &fatti, NULL))
+			o_d.fuorilinea= (a.Attributes & 1) != 0;
+	}
+	{
+		STORAGE_PROPERTY_QUERY domanda;
+		memset(&domanda, 0, sizeof(domanda));
+		domanda.PropertyId= StorageDeviceProperty;
+		domanda.QueryType = PropertyStandardQuery;
+		BYTE risposta[2048];
+		memset(risposta, 0, sizeof(risposta));
+		if (DeviceIoControl(hd, IOCTL_STORAGE_QUERY_PROPERTY, &domanda, sizeof(domanda), risposta, sizeof(risposta) - 1, &fatti, NULL))
+		{
+			const STORAGE_DEVICE_DESCRIPTOR *d= (const STORAGE_DEVICE_DESCRIPTOR *)risposta;
+			string							 venditore, prodotto;
+			if ((d->VendorIdOffset > 0) && (d->VendorIdOffset < sizeof(risposta)))
+				venditore= ac_pulito((const char *)risposta + d->VendorIdOffset);
+			if ((d->ProductIdOffset > 0) && (d->ProductIdOffset < sizeof(risposta)))
+				prodotto= ac_pulito((const char *)risposta + d->ProductIdOffset);
+			o_d.modello	  = ac_pulito(venditore + " " + prodotto);
+			o_d.rimovibile= d->RemovableMedia != 0;
+			switch ((int)d->BusType)
+			{
+			case 1:
+				o_d.bus= "SCSI";
+				break;
+			case 3:
+				o_d.bus= "ATA";
+				break;
+			case 7:
+				o_d.bus= "USB";
+				break;
+			case 8:
+				o_d.bus= "RAID";
+				break;
+			case 10:
+				o_d.bus= "SAS";
+				break;
+			case 11:
+				o_d.bus= "SATA";
+				break;
+			case 14:
+			case 15:
+				o_d.bus= "virtual";
+				break;
+			case 17:
+				o_d.bus= "NVMe";
+				break;
+			default:
+				o_d.bus= "bus " + itos((int)d->BusType);
+				break;
+			}
+		}
+	}
+	std::vector<BYTE> spazio(sizeof(DRIVE_LAYOUT_INFORMATION_EX) + 256 * sizeof(PARTITION_INFORMATION_EX));
+	bool			  bene= false;
+	for (int giro= 0; (giro < 4) && (!bene); giro++)
+	{
+		bene= DeviceIoControl(hd, IOCTL_DISK_GET_DRIVE_LAYOUT_EX, NULL, 0, &spazio[0], (DWORD)spazio.size(), &fatti, NULL) != 0;
+		if ((!bene) && (GetLastError() == ERROR_INSUFFICIENT_BUFFER))
+			spazio.resize(spazio.size() * 4);
+		else if (!bene)
+			break;
+	}
+	CloseHandle(hd);
+	if (o_d.bytes == 0)
+		return false;
+	if (bene)
+	{
+		const DRIVE_LAYOUT_INFORMATION_EX *schema= (const DRIVE_LAYOUT_INFORMATION_EX *)&spazio[0];
+		if (schema->PartitionStyle == PARTITION_STYLE_GPT)
+		{
+			o_d.stile= 1;
+			o_d.guid = ac_guid(schema->Gpt.DiskId);
+		}
+		else if (schema->PartitionStyle == PARTITION_STYLE_MBR)
+		{
+			o_d.stile= 0;
+			o_d.firma= schema->Mbr.Signature;
+		}
+		if (o_d.stile >= 0)
+			for (DWORD i= 0; i < schema->PartitionCount; i++)
+			{
+				const PARTITION_INFORMATION_EX &p= schema->PartitionEntry[i];
+				if (p.PartitionLength.QuadPart <= 0)
+					continue;
+				if (o_d.stile == 0)
+				{
+					const int tipo= p.Mbr.PartitionType;
+					if ((tipo == 0) || (tipo == 0x05) || (tipo == 0x0F) || (tipo == 0x85))
+						continue;
+				}
+				franzxcparte parte;
+				parte.inizio   = (uint64_t)p.StartingOffset.QuadPart;
+				parte.lunghezza= (uint64_t)p.PartitionLength.QuadPart;
+				parte.numero   = (int)p.PartitionNumber;
+				o_d.parti.push_back(parte);
+			}
+	}
+	/// the volumes of Windows on it: letters, file system, label
+	const UINT vecchio				= SetErrorMode(SEM_FAILCRITICALERRORS);
+	wchar_t	   volume[MAX_PATH + 1]= {0};
+	HANDLE	   h					= FindFirstVolumeW(volume, MAX_PATH);
+	while (h != INVALID_HANDLE_VALUE)
+	{
+		const std::wstring v= volume;
+		DWORD			   d= 0, n= 0;
+		uint64_t		   da= 0, lungo= 0;
+		if ((v.size() > 1) && ac_dove(v.substr(0, v.size() - 1), d, da, lungo, n) && ((int)d == i_numero))
+			for (size_t i= 0; i < o_d.parti.size(); i++)
+				if (o_d.parti[i].inizio == da)
+				{
+					franzxcparte		&parte= o_d.parti[i];
+					std::vector<wchar_t> posti(4096, 0);
+					DWORD				 quanti= 0;
+					if (GetVolumePathNamesForVolumeNameW(v.c_str(), &posti[0], 4095, &quanti))
+						for (const wchar_t *q= &posti[0]; *q; q+= wcslen(q) + 1)
+						{
+							string posto= wtou(q);
+							if ((posto.size() == 3) && (posto[1] == ':'))
+								posto.resize(2);
+							parte.lettere+= string(parte.lettere == "" ? "" : " ") + posto;
+						}
+					wchar_t etichetta[MAX_PATH + 1]= {0};
+					wchar_t tipo[MAX_PATH + 1]	   = {0};
+					DWORD	seriale= 0, opzioni= 0;
+					if (GetVolumeInformationW(v.c_str(), etichetta, MAX_PATH, &seriale, NULL, &opzioni, tipo, MAX_PATH))
+					{
+						parte.fs	   = wtou(tipo);
+						parte.etichetta= ac_pulito(wtou(etichetta));
+					}
+				}
+		if (!FindNextVolumeW(h, volume, MAX_PATH))
+			break;
+	}
+	if (h != INVALID_HANDLE_VALUE)
+		FindVolumeClose(h);
+	SetErrorMode(vecchio);
+	return true;
+}
+/// the disk something is on (-1: Windows does not say, or not one disk)
+static int xc_discodi(const std::wstring &i_percorso)
+{
+	DWORD	 d= 0, n= 0;
+	uint64_t da= 0, lungo= 0;
+	if (ac_dove(i_percorso, d, da, lungo, n))
+		return (int)d;
+	return -1;
+}
+/// the disk a file is on, by the volume it is in: a letter, or a folder where a volume is mounted (-1: not a
+/// local disk, or Windows does not say)
+static int xc_discodelfile(const std::wstring &i_file)
+{
+	wchar_t pieno[32768 / 8]= {0};
+	if (GetFullPathNameW(i_file.c_str(), (DWORD)(sizeof(pieno) / sizeof(wchar_t)) - 1, pieno, NULL) < 2)
+		return -1;
+	wchar_t radice[MAX_PATH + 1]= {0};
+	wchar_t volume[MAX_PATH + 1]= {0};
+	if ((!GetVolumePathNameW(pieno, radice, MAX_PATH)) || (!GetVolumeNameForVolumeMountPointW(radice, volume, MAX_PATH)))
+		return -1;
+	std::wstring v= volume;
+	if ((v.size() > 1) && (v[v.size() - 1] == L'\\'))
+		v.resize(v.size() - 1);
+	return xc_discodi(v);
+}
+static uint64_t xc_numero(const string &i_testo)
+{
+	return (uint64_t)strtoull(i_testo.c_str(), NULL, 10);
+}
+/// 65.9u: a line of xc that comes out now, or (io_dopo: the map is on the screen) when the map is over.
+/// i_quale: 0 a piece written, 1 -verify done (green), 2 -verify is not for this destination
+static void xc_di(std::vector<std::pair<int, string> > *io_dopo, int i_quale, const string &i_testo)
+{
+	if (io_dopo)
+	{
+		io_dopo->push_back(std::make_pair(i_quale, i_testo));
+		return;
+	}
+	if (i_quale == 1)
+		color_green();
+	if (i_quale == 0)
+		myprintf("66160: %s", i_testo.c_str());
+	else if (i_quale == 1)
+		myprintf("66171: %s", i_testo.c_str());
+	else
+		myprintf("66170: %s", i_testo.c_str());
+	if (i_quale == 1)
+		color_restore();
+}
+/// the metafile of ac (disk_C.txt): a key and its value on every line, in sections. false: it is not one
+static bool xc_metafile(const string &i_testo, franzxc &o_x, std::vector<franzxcfile> &o_file, string &o_problema)
+{
+	std::vector<string> righe;
+	{
+		string riga;
+		for (size_t i= 0; i <= i_testo.size(); i++)
+		{
+			const char c= (i < i_testo.size()) ? i_testo[i] : '\n';
+			if (c == '\r')
+				continue;
+			if (c != '\n')
+			{
+				riga+= c;
+				continue;
+			}
+			righe.push_back(riga);
+			riga= "";
+		}
+	}
+	if (righe.empty() || (righe[0].substr(0, 10) != "franzdisk "))
+	{
+		o_problema= "it does not begin with \"franzdisk\": not a metafile of ac";
+		return false;
+	}
+	if (atoi(righe[0].c_str() + 10) != 1)
+	{
+		o_problema= "its format is \"" + righe[0] + "\": written by a newer zpaqfranz, this one knows franzdisk 1";
+		return false;
+	}
+	string sezione;
+	for (size_t r= 1; r < righe.size(); r++)
+	{
+		const string &riga= righe[r];
+		if ((riga == "") || (riga[0] == '#'))
+			continue;
+		if (riga[0] == '[')
+		{
+			const size_t fine= riga.find(']');
+			sezione			 = riga.substr(1, (fine == string::npos) ? string::npos : fine - 1);
+			if (sezione.substr(0, 5) == "zone ")
+			{
+				if (atoi(sezione.c_str() + 5) != (int)o_x.zone.size())
+				{
+					o_problema= "its zones are not in order ([" + sezione + "] is number " + itos((int64_t)o_x.zone.size()) + ")";
+					return false;
+				}
+				o_x.zone.push_back(franzxczona());
+				sezione= "zone";
+			}
+			continue;
+		}
+		const size_t uguale= riga.find('=');
+		if (uguale == string::npos)
+			continue;
+		const string chiave= riga.substr(0, uguale);
+		const string valore= riga.substr(uguale + 1);
+		if (sezione == "run")
+			o_x.run[chiave]= valore;
+		else if (sezione == "disk")
+			o_x.disco[chiave]= valore;
+		else if ((sezione == "zone") && (o_x.zone.size() > 0))
+		{
+			franzxczona &z= o_x.zone[o_x.zone.size() - 1];
+			if (chiave == "kind")
+				z.partizione= (valore == "partition");
+			else if (chiave == "start")
+				z.inizio= xc_numero(valore);
+			else if (chiave == "bytes")
+				z.lunghezza= xc_numero(valore);
+			else if (chiave == "what")
+				z.cosa= valore;
+			else if (chiave == "partition")
+				z.numero= atoi(valore.c_str());
+			else if (chiave == "mbr_type")
+				z.mbrtipo= valore;
+			else if (chiave == "active")
+				z.attiva= (valore == "yes");
+			else if (chiave == "gpt_type")
+				z.gpttipo= valore;
+			else if (chiave == "gpt_id")
+				z.gptid= valore;
+			else if (chiave == "gpt_name")
+				z.gptnome= valore;
+			else if (chiave == "mounted")
+				z.lettere= valore;
+			else if (chiave == "filesystem")
+				z.fs= valore;
+			else if (chiave == "label")
+				z.etichetta= valore;
+			else if (chiave == "volume_serial")
+				z.seriale= stringtoupper(valore);
+			else if (chiave == "boot")
+				z.avvio= (valore == "yes");
+			else if (chiave == "windows")
+				z.windows= (valore == "yes");
+			else if (chiave == "optional")
+				z.facoltativa= valore;
+			else if (chiave == "encrypted")
+				z.cifrata= (valore == "no") ? "" : valore;
+			else if (chiave == "saved")
+				z.salvata= valore;
+			else if (chiave == "why")
+				z.perche= valore;
+			else if (chiave == "file")
+				z.file= valore;
+			else if (chiave == "read_errors")
+				z.errori= (int64_t)xc_numero(valore);
+		}
+		else if ((sezione == "files") && (chiave == "file"))
+		{
+			/// file=NAME bytes=N crc32=X HASHNAME=hash fragments=N fragments_sha1=X
+			franzxcfile f;
+			string		pezzo;
+			for (size_t i= 0; i <= riga.size(); i++)
+			{
+				if ((i < riga.size()) && (riga[i] != ' '))
+				{
+					pezzo+= riga[i];
+					continue;
+				}
+				const size_t u= pezzo.find('=');
+				if (u != string::npos)
+				{
+					const string k= pezzo.substr(0, u);
+					const string v= pezzo.substr(u + 1);
+					if (k == "file")
+						f.nome= v;
+					else if (k == "bytes")
+						f.bytes= (int64_t)xc_numero(v);
+					else if (k == "crc32")
+						f.crc32= stringtoupper(v);
+					else if (k == "fragments")
+						f.frammenti= (int64_t)xc_numero(v);
+					else if (k == "fragments_sha1")
+						f.lista= stringtoupper(v);
+					else if (f.tipo == "")
+					{
+						f.tipo= k;
+						f.hash= (v == "none") ? "" : stringtoupper(v);
+					}
+				}
+				pezzo= "";
+			}
+			if (f.nome != "")
+				o_file.push_back(f);
+		}
+	}
+	o_x.bytes  = xc_numero(o_x.disco["bytes"]);
+	o_x.settore= (uint32_t)xc_numero(o_x.disco["sector"]);
+	o_x.gpt	   = (o_x.disco["style"] == "GPT");
+	if ((o_x.bytes == 0) || (o_x.settore < 512) || (o_x.zone.size() == 0))
+	{
+		o_problema= "it does not say the size of the disk, its sectors or its zones";
+		return false;
+	}
+	uint64_t qui= 0;
+	for (size_t i= 0; i < o_x.zone.size(); i++)
+	{
+		franzxczona &z= o_x.zone[i];
+		if ((z.lunghezza == 0) || (z.inizio < qui) || (z.inizio + z.lunghezza > o_x.bytes) || (z.inizio % o_x.settore) || (z.lunghezza % o_x.settore))
+		{
+			o_problema= "zone " + itos((int64_t)i) + " (" + string(migliaia((int64_t)z.inizio)) + ", " + string(migliaia2((int64_t)z.lunghezza)) + " bytes) is not after the one before, or not inside the disk, or not made of sectors";
+			return false;
+		}
+		qui= z.inizio + z.lunghezza;
+		if ((z.salvata != "no") && (z.salvata != "used clusters") && (z.salvata != "raw"))
+		{
+			o_problema= "zone " + itos((int64_t)i) + " is saved as \"" + z.salvata + "\": this zpaqfranz does not know how";
+			return false;
+		}
+		z.pezzo	 = (z.salvata != "no");
+		z.sottile= (z.salvata == "used clusters");
+		if (z.pezzo && (z.file == ""))
+		{
+			o_problema= "zone " + itos((int64_t)i) + " is saved, and its file has no name";
+			return false;
+		}
+	}
+	return true;
+}
+/// a number with 1 or 2 digits, alone or with a colon: a physical disk (2  2:  12:)
+static int xc_numerodisco(const string &i_dest)
+{
+	string n= i_dest;
+	if ((n.size() > 1) && (n[n.size() - 1] == ':'))
+		n.resize(n.size() - 1);
+	if ((n.size() < 1) || (n.size() > 2))
+		return -1;
+	for (size_t i= 0; i < n.size(); i++)
+		if (!isdigit((unsigned char)n[i]))
+			return -1;
+	return atoi(n.c_str());
+}
+
+/// 65.9w: the disks xc must not write on, here: the one of this Windows, of its boot, of the archive, of this
+/// program (-1: not known). And why a disk cannot be the destination, if the disk is the one of the backup: for
+/// xc -to N: and for every disk of the screen of xc -gui (they were lines of Jidac::xc)
+struct franzxcqui
+{
+	int diwindows;
+	int diavvio;
+	int diarchivio;
+	int diprogramma;
+	franzxcqui() : diwindows(-1), diavvio(-1), diarchivio(-1), diprogramma(-1)
+	{
+	}
+};
+static void xc_qui(const string &i_archivio, franzxcqui &o_q)
+{
+	o_q= franzxcqui();
+	char cartella[MAX_PATH + 1]= {0};
+	if ((GetSystemWindowsDirectoryA(cartella, MAX_PATH) > 2) && (cartella[1] == ':'))
+		o_q.diwindows= xc_discodi(utow((string("\\\\.\\") + cartella[0] + ":").c_str()));
+	/// (a Windows PE, the one a restore is made from when the PC has no Windows any more: it runs from
+	/// memory, and what its registry says of the boot partition is not about it)
+	HKEY	   pe;
+	const bool winpe= (RegOpenKeyExW(HKEY_LOCAL_MACHINE, L"SYSTEM\\CurrentControlSet\\Control\\MiniNT", 0, KEY_READ, &pe) == ERROR_SUCCESS);
+	if (winpe)
+		RegCloseKey(pe);
+	const string device= winpe ? string("") : ac_registro(HKEY_LOCAL_MACHINE, L"SYSTEM\\Setup", L"SystemPartition");
+	if (device != "")
+		o_q.diavvio= xc_discodi(L"\\\\?\\GLOBALROOT" + utow(device.c_str()));
+	o_q.diarchivio= xc_discodelfile(utow(i_archivio.c_str()));
+	wchar_t programma[32768 / 8]= {0};
+	if (GetModuleFileNameW(NULL, programma, (DWORD)(sizeof(programma) / sizeof(wchar_t)) - 1) > 0)
+		o_q.diprogramma= xc_discodelfile(programma);
+}
+/// "": the backup can be written on this disk. Else why not (i_breve: in a few words, for a row of the screen)
+static string xc_rifiuto(const franzxcdisco &i_arrivo, const franzxc &i_x, const franzxcqui &i_q, bool i_breve= false)
+{
+	if ((i_arrivo.numero == i_q.diwindows) || (i_arrivo.numero == i_q.diavvio))
+		return "it is the disk this Windows runs from";
+	if (i_arrivo.numero == i_q.diarchivio)
+		return "the archive is on it";
+	if (i_arrivo.numero == i_q.diprogramma)
+		return "this program runs from it";
+	if (i_arrivo.solalettura)
+		return "it is read only";
+	if (i_arrivo.settore != i_x.settore)
+	{
+		if (i_breve)
+			return "sectors of " + itos((int64_t)i_arrivo.settore) + " bytes, the backup has " + itos((int64_t)i_x.settore);
+		return "its sectors are of " + itos((int64_t)i_arrivo.settore) + " bytes, the ones of the backup of " + itos((int64_t)i_x.settore) + ": the file systems would not be read";
+	}
+	if (i_arrivo.bytes < i_x.bytes)
+	{
+		if (i_breve)
+			return "too small: " + string(tohuman((int64_t)i_arrivo.bytes)) + ", the disk of the backup is " + string(tohuman2((int64_t)i_x.bytes));
+		return "it is of " + string(migliaia((int64_t)i_arrivo.bytes)) + " bytes, the disk of the backup of " + string(migliaia2((int64_t)i_x.bytes)) + ": a smaller disk is not for xc, for now";
+	}
+	return "";
+}
+/// the disk of the backup itself (or a copy of it): same signature, and every partition of the backup at its place
+static bool xc_stesso(const franzxcdisco &i_arrivo, franzxc &io_x)
+{
+	bool stesso= (i_arrivo.stile == (io_x.gpt ? 1 : 0));
+	if (stesso)
+	{
+		char firma[16];
+		snprintf(firma, sizeof(firma), "%08X", (unsigned)i_arrivo.firma);
+		stesso= io_x.gpt ? (stringtoupper(i_arrivo.guid) == stringtoupper(io_x.disco["guid"])) : (stringtoupper(io_x.disco["signature"]) == firma);
+	}
+	for (size_t k= 0; (k < io_x.zone.size()) && stesso; k++)
+		if (io_x.zone[k].partizione)
+		{
+			bool trovata= false;
+			for (size_t i= 0; i < i_arrivo.parti.size(); i++)
+				if ((i_arrivo.parti[i].inizio == io_x.zone[k].inizio) && (i_arrivo.parti[i].lunghezza == io_x.zone[k].lunghezza))
+					trovata= true;
+			stesso= trovata;
+		}
+	return stesso;
+}
+/*
+	65.9w: xc -gui: what is restored, and where, chosen on a screen (franzscelta).
+	Above, the partitions of the backup. Windows and the pieces of the system always come back
+	([+]: the pieces are shown with v, or -verbose). A partition that is in the backup because
+	it was asked for (ac -all, the screen of ac -gui) has a box, taken at the start: left out,
+	it is as if the backup did not have it (on the disk of the backup: left as it is; on another
+	disk: empty, to be formatted). What the backup does not have is not offered (shown with v).
+	Below, after two rows of #, the disks of this PC: one only can be taken. Green without
+	partitions, yellow with (EVERYTHING on it is lost), magenta the disk of the backup itself,
+	red when it cannot be: smaller than the disk of the backup, the disk of this Windows, of the
+	archive, of this program, read only (the row above the keys says why).
+	F8 or g, then the captcha that names the disk (killdrive2), typed on the screen: -force is
+	not asked for, the screen is the consent.
+	i: in a file instead, its name typed (the extension says what: .vhdx .vmdk .raw .img).
+	io_dest: -to if it was given (a disk: taken at the start; a file: no disks, F8 starts);
+	then "2:" or the file. 0: go on; 2: no console; 3: left with ESC
+*/
+static int xc_scegli(franzxc &io_x, const string &i_archivio, int i_versione, int i_versioni, string &io_dest, bool &o_sovrascrivi)
+{
+	o_sovrascrivi= false;
+	const size_t		  n= io_x.zone.size();
+	std::vector<int>	  riga(n, -1);
+	std::vector<int>	  classe(n, 0); /// 0 not in the backup, 1 always, 2 a box
+	std::vector<uint64_t> scrivo(n, 0);
+	franzscelta			  s;
+	const int			  cifre= (n >= 100) ? 3 : 2;
+	char				  testo[1024];
+	snprintf(testo, sizeof(testo), "xc: the backup of %s (%s): %s, %s, %s", io_x.run["computer"].c_str(), io_x.run["windows"].c_str(), tohuman((int64_t)io_x.bytes), io_x.gpt ? "GPT" : "MBR", io_x.run["firmware"].c_str());
+	s.aggiungi(SCELTA_TESTO, false, testo, "", false, 4);
+	/// ("zpaqfranz v65.9v (2026-10-04)": without the date, the row is of 80 columns)
+	const string programma= io_x.run["program"].substr(0, io_x.run["program"].find(" ("));
+	snprintf(testo, sizeof(testo), "    taken %s UTC by %s, version %d of %d", io_x.run["started_utc"].c_str(), programma.c_str(), i_versione, i_versioni);
+	s.aggiungi(SCELTA_TESTO, false, testo, "", false, 4);
+	snprintf(testo, sizeof(testo), "    %-*s %10s %10s  %-5s %s", cifre, "#", "size", "to write", "type", "what");
+	s.aggiungi(SCELTA_TESTO, false, testo);
+	for (size_t k= 0; k < n; k++)
+	{
+		const franzxczona &z= io_x.zone[k];
+		if (z.sottile)
+		{
+			scrivo[k]= (uint64_t)z.mappa.size() * z.blocco;
+			if (scrivo[k] > z.lunghezza)
+				scrivo[k]= z.lunghezza;
+		}
+		else if (z.pezzo)
+			scrivo[k]= z.lunghezza;
+		const bool conosciuto= (z.fs == "NTFS") || (z.fs == "FAT") || (z.fs == "FAT32") || (z.fs == "exFAT");
+		/// (a backup of before 65.9v does not say what was optional: the images of ac -all were)
+		if (z.pezzo)
+			classe[k]= (z.partizione && (!z.windows) && ((z.facoltativa == "yes") || ((z.facoltativa == "") && (z.file.substr(0, 6) == "image_")))) ? 2 : 1;
+		string tipo= "---", genere= "SYSTEM";
+		if (z.windows)
+		{
+			tipo  = z.sottile ? z.fs : string("RAW");
+			genere= "WINDOWS";
+		}
+		else if ((classe[k] == 2) || (z.partizione && (!z.pezzo)))
+		{
+			tipo  = (z.pezzo ? z.sottile : conosciuto) ? z.fs : string("RAW");
+			genere= conosciuto ? "DATA" : "UNKNOWN";
+		}
+		else if (!z.pezzo)
+		{
+			tipo  = "";
+			genere= "";
+		}
+		string cosa;
+		if (z.partizione)
+		{
+			if (z.avvio)
+				cosa= "BOOT";
+			if (z.lettere != "")
+				cosa+= string((cosa == "") ? "" : ", ") + z.lettere;
+			if (z.cosa != "")
+				cosa+= string((cosa == "") ? "" : ", ") + z.cosa;
+			if (z.fs != "")
+				cosa+= string((cosa == "") ? "" : ", ") + z.fs;
+			if (z.etichetta != "")
+				cosa+= " \"" + z.etichetta + "\"";
+			if (z.cifrata != "")
+				cosa+= ", " + ((z.cifrata == "BitLocker") ? z.cifrata : string("encrypted?"));
+			if (cosa == "")
+				cosa= "partition " + itos(z.numero);
+			if (!z.pezzo)
+				cosa+= ": NOT IN THE BACKUP";
+		}
+		else
+			cosa= z.cosa;
+		snprintf(testo, sizeof(testo), "%0*d %10s %10s  %-5s %-7s (%s)", cifre, (int)k, tohuman((int64_t)z.lunghezza), z.pezzo ? tohuman2((int64_t)scrivo[k]) : "-", tipo.c_str(), genere.c_str(), cosa.c_str());
+		if (classe[k] == 1)
+			riga[k]= s.aggiungi(SCELTA_FISSA, true, testo, "", !z.windows);
+		else if (classe[k] == 2)
+			riga[k]= s.aggiungi(SCELTA_CASELLA, true, testo, "restored (" + string(tohuman((int64_t)scrivo[k])) + " to write). Left out: as if it was not in the backup");
+		else
+			riga[k]= s.aggiungi(SCELTA_TESTO, false, "    " + string(testo), "", true, 5);
+	}
+	const int totale  = s.aggiungi(SCELTA_TESTO, false, "", "", false, 4);
+	const int lasciate= s.aggiungi(SCELTA_TESTO, false, "", "", false, 2);
+	s.aggiungi(SCELTA_TESTO, false, string(70, '#'));
+	s.aggiungi(SCELTA_TESTO, false, string(70, '#'));
+	/// where: the file of -to, or the disks of this PC
+	const int		   chiesto= xc_numerodisco(io_dest);
+	const bool		   sufile = (io_dest != "") && (chiesto < 0);
+	std::vector<int>   rigadisco, numerodisco;
+	std::vector<bool>  stessodisco;
+	std::vector<string> grande;
+	if (sufile)
+		s.aggiungi(SCELTA_TESTO, false, "    in the file " + io_dest + " (-to)", "", false, 4);
+	else
+	{
+		franzxcqui qui;
+		xc_qui(i_archivio, qui);
+		for (int d= 0; d < 64; d++)
+		{
+			franzxcdisco disco;
+			if (!xc_disco(d, disco))
+				continue;
+			const string no	   = xc_rifiuto(disco, io_x, qui, true);
+			const bool	 stesso= (no == "") && xc_stesso(disco, io_x);
+			/// what is on it: the letters, with their labels; the partitions without one are counted
+			string dentro;
+			int	   senza= 0;
+			for (size_t i= 0; i < disco.parti.size(); i++)
+			{
+				const franzxcparte &p= disco.parti[i];
+				if (p.lettere == "")
+				{
+					senza++;
+					continue;
+				}
+				dentro+= string((dentro == "") ? "" : ", ") + p.lettere;
+				if (p.etichetta != "")
+					dentro+= " \"" + p.etichetta + "\"";
+			}
+			if (disco.parti.empty())
+				dentro= (disco.stile < 0) ? "no partition table" : "no partitions";
+			else if (dentro == "")
+				dentro= itos((int64_t)senza) + " partitions, no letter";
+			else if (senza > 0)
+				dentro+= " (+" + itos((int64_t)senza) + ")";
+			if (disco.fuorilinea)
+				dentro+= ", off line";
+			if (stesso)
+				dentro= "BACKUP DISK: " + dentro;
+			snprintf(testo, sizeof(testo), "%02d %-5s %-5s %-26.26s %10s  %s", d, (disco.bus + ",").c_str(), disco.rimovibile ? "Remov" : "Fixed", disco.modello.c_str(), tohuman((int64_t)disco.bytes), dentro.c_str());
+			int r;
+			if (no != "")
+				r= s.aggiungi(SCELTA_VIETATA, false, testo, "not on disk " + itos(d) + ": " + no);
+			else if (stesso)
+				r= s.aggiungi(SCELTA_UNA, false, testo, "the disk of the backup: the partitions not restored are left as they are", false, 7);
+			else if (disco.parti.empty())
+				r= s.aggiungi(SCELTA_UNA, false, testo, "a disk without partitions", false, 1);
+			else
+				r= s.aggiungi(SCELTA_UNA, false, testo, "EVERYTHING on disk " + itos(d) + " is lost: " + itos((int64_t)disco.parti.size()) + " partitions", false, 2);
+			rigadisco.push_back(r);
+			numerodisco.push_back(d);
+			stessodisco.push_back(stesso);
+			grande.push_back(tohuman((int64_t)disco.bytes));
+			if ((d == chiesto) && (no == ""))
+				s.prendi(r);
+		}
+		if (rigadisco.empty())
+			s.aggiungi(SCELTA_TESTO, false, "    no disk can be opened here (an administrator is needed): i, for a file", "", false, 3);
+	}
+	s.tasti(sufile ? "ESC/q=quit SPACE=select a=all v=system ?=help F8/g=START" : "ESC/q=quit SPACE=select v=system i=image file ?=help F8/g=START");
+	s.tutte(flagverbose);
+	if (!s.apri())
+	{
+		myprintf("66300! xc: -gui needs a console (the output is redirected)\n");
+		return 2;
+	}
+	std::vector<string> aiuto;
+	aiuto.push_back("xc: what to restore of this backup, and where");
+	aiuto.push_back("");
+	aiuto.push_back("[+] always restored: Windows, and what it boots with");
+	aiuto.push_back("[X] restored   [ ] left out: as if the backup did not have it (on the disk");
+	aiuto.push_back("    of the backup it is left as it is; on another disk: empty, to format)");
+	aiuto.push_back("the disks: one only. Green: no partitions. Yellow: EVERYTHING on it is");
+	aiuto.push_back("    lost. Magenta: the disk of the backup. Red [-]: it cannot be (the row");
+	aiuto.push_back("    above the keys says why)");
+	aiuto.push_back("arrows: move    space, enter, + or x: take / leave    v: the system pieces");
+	aiuto.push_back("F8 or g: START. The disk is named to confirm (killdrive2), then written");
+	aiuto.push_back("i: restore in a file instead: .vhdx .vmdk (virtual disks), .raw .img");
+	aiuto.push_back("ESC or q: quit, nothing is written");
+	for (;;)
+	{
+		uint64_t dascrivere= 0, fuori= 0;
+		int		 pezzi= 0;
+		string	 quali;
+		for (size_t k= 0; k < n; k++)
+		{
+			const franzxczona &z= io_x.zone[k];
+			if ((classe[k] == 1) || ((classe[k] == 2) && s.presa(riga[k])))
+			{
+				dascrivere+= scrivo[k];
+				pezzi++;
+			}
+			else if (z.partizione)
+			{
+				fuori+= z.lunghezza;
+				quali+= " " + ((z.lettere != "") ? z.lettere : ("#" + itos(z.numero)));
+			}
+		}
+		int scelto= -1; /// (among the disks listed)
+		for (size_t i= 0; i < rigadisco.size(); i++)
+			if (s.presa(rigadisco[i]))
+				scelto= (int)i;
+		snprintf(testo, sizeof(testo), "    %-*s %10s %10s  %d pieces", cifre, "", "TO WRITE", tohuman((int64_t)dascrivere), pezzi);
+		s.testo(totale, testo);
+		if (fuori > 0)
+			snprintf(testo, sizeof(testo), "    %-*s %10s %10s  %s:%s", cifre, "", "NOT WRITTEN", tohuman((int64_t)fuori), (scelto < 0) ? (sufile ? "empty" : "not restored") : (stessodisco[(size_t)scelto] ? "left as they are" : "empty, to be formatted"), quali.c_str());
+		else
+			testo[0]= 0;
+		s.testo(lasciate, testo);
+		const int tasto= s.tasto();
+		if (tasto == SCELTA_ESCI)
+		{
+			s.chiudi();
+			myprintf("66302: xc: left without starting: nothing was written\n");
+			return 3;
+		}
+		if (tasto == '?')
+		{
+			s.aiuto(aiuto);
+			continue;
+		}
+		if (((tasto == 'i') || (tasto == 'I')) && (!sufile))
+		{
+			string nome;
+			if (!s.chiedi("file: ", nome, "any name and path; the extension can only be one of: .vhdx .vmdk .raw .img"))
+				continue;
+			while ((nome.size() > 0) && ((nome[0] == ' ') || (nome[0] == '"')))
+				nome.erase(0, 1);
+			while ((nome.size() > 0) && ((nome[nome.size() - 1] == ' ') || (nome[nome.size() - 1] == '"')))
+				nome.erase(nome.size() - 1);
+			if (nome == "")
+				continue;
+			myreplaceall(nome, "\\", "/");
+			const size_t barra	   = nome.find_last_of('/');
+			const size_t punto	   = nome.find_last_of('.');
+			string		 estensione= ((punto == string::npos) || ((barra != string::npos) && (punto < barra))) ? "" : nome.substr(punto + 1);
+			for (size_t i= 0; i < estensione.size(); i++)
+				estensione[i]= (char)tolower((unsigned char)estensione[i]);
+			if ((estensione != "vhdx") && (estensione != "vmdk") && (estensione != "raw") && (estensione != "img"))
+			{
+				s.di("not done: the extension can only be .vhdx .vmdk .raw .img (<<" + nome + ">>)", 3);
+				continue;
+			}
+			/// (.vmdk alone, z:.vmdk: an extension without a name before it)
+			if ((punto == 0) || (nome[punto - 1] == '/') || (nome[punto - 1] == ':'))
+			{
+				s.di("not done: <<" + nome + ">> has no name before its extension", 3);
+				continue;
+			}
+			if (direxists(nome))
+			{
+				s.di("not done: <<" + nome + ">> is a folder", 3);
+				continue;
+			}
+			if (((estensione == "vhdx") || (estensione == "vmdk")) && (io_x.settore != FRANZIMAGER_SECTOR_SIZE))
+			{
+				s.di("not done: the disk of the backup has sectors of " + itos((int64_t)io_x.settore) + " bytes, a ." + estensione + " here has 512: .raw", 3);
+				continue;
+			}
+			std::vector<string> nomi;
+			if (estensione == "vmdk")
+				nomi= franzvmdk::nomi(nome, io_x.bytes, false);
+			else
+				nomi.push_back(nome);
+			bool cisono= false;
+			for (size_t i= 0; i < nomi.size(); i++)
+				cisono= cisono || fileexists(nomi[i]);
+			if (cisono)
+			{
+				string si;
+				/// (the question first, the name in the row below: a long path would push the question out of the row)
+				if ((!s.chiedi("it is there already: overwrite it? (y/n) ", si, "<<" + nome + ">>")) || ((si != "y") && (si != "Y")))
+				{
+					s.di("not overwritten: nothing done", 2);
+					continue;
+				}
+				o_sovrascrivi= true;
+			}
+			io_dest= nome;
+			break;
+		}
+		if (tasto == SCELTA_PARTI)
+		{
+			if (sufile)
+				break;
+			if (scelto < 0)
+			{
+				s.di(rigadisco.empty() ? "no disk to write on: i, for a file" : "choose a disk first (the arrows, then space), or i for a file", 3);
+				continue;
+			}
+			const int d= numerodisco[(size_t)scelto];
+			char	  si[32];
+			snprintf(si, sizeof(si), "killdrive%d", d);
+			snprintf(testo, sizeof(testo), "type %s to OVERWRITE disk %d (%s), ESC to go back: ", si, d, grande[(size_t)scelto].c_str());
+			string risposta;
+			if (!s.chiedi(testo, risposta, stessodisco[(size_t)scelto] ? "the disk of the backup: only what is restored is written over" : "EVERYTHING on that disk is lost"))
+				continue;
+			if (risposta != si)
+			{
+				s.di("not confirmed: <<" + risposta + ">> is not " + si, 3);
+				continue;
+			}
+			io_dest= itos(d) + ":";
+			break;
+		}
+	}
+	s.chiudi();
+	/// a partition left out: as if the backup did not have it
+	for (size_t k= 0; k < n; k++)
+		if ((classe[k] == 2) && (!s.presa(riga[k])))
+		{
+			franzxczona &z= io_x.zone[k];
+			z.pezzo		  = false;
+			z.sottile	  = false;
+			z.perche	  = "not chosen";
+		}
+	return 0;
+}
+int Jidac::xc()
+{
+	if (!iszpaq(archive) && (!isfranzen(archive)))
+	{
+		myprintf("17385: You need a .zpaq\n");
+		return 2;
+	}
+	if ((files.size() > 1) || (tofiles.size() > 1))
+	{
+		myprintf("66100! xc takes the archive, the drive of Windows of the backup if the archive has more than one, and one -to (xc z:\\pc.zpaq -to 2: -force)\n");
+		return 2;
+	}
+	char		 chiesta= 0;
+	string		 dest	= (tofiles.size() == 1) ? tofiles[0] : ""; /// (65.9w: -gui can say it)
+	if (files.size() == 1)
+	{
+		chiesta= (char)toupper((unsigned char)files[0][0]);
+		if ((!isalpha((unsigned char)chiesta)) || (files[0].size() > 3) || ((files[0].size() > 1) && (files[0][1] != ':')))
+		{
+			myprintf("66101! xc: <<%Z>> is not a drive (xc z:\\pc.zpaq c:). Where to restore is the -to\n", files[0].c_str());
+			return 2;
+		}
+	}
+	const bool tuttizeri= flagraw; /// (-raw: a flat .vmdk. Off for the engine, where it means "a raw image")
+	flagraw				= false;
+	files.clear();
+	tofiles.clear();
+	archive		   = getbackupnameifany(archive);
+	int			  errors= 0;
+	const int64_t sz	= read_archive(NULL, archive.c_str(), &errors, 0, 0);
+	if (sz < 1)
+	{
+		error("Archive (3) not found");
+		return 2;
+	}
+	const int versioni= (int)ver.size() - 1;
+	/// the metafile: disk_X.txt, the last file ac writes of a backup
+	std::vector<string> metafile;
+	string				quali;
+	for (DTMap::iterator p= dt.begin(); p != dt.end(); ++p)
+	{
+		if (p->second.date == 0)
+			continue;
+		const size_t barra= p->first.find_last_of("/\\");
+		const string nome = (barra == string::npos) ? p->first : p->first.substr(barra + 1);
+		if ((nome.size() == 10) && (nome.substr(0, 5) == "disk_") && (nome.substr(6) == ".txt") && isalpha((unsigned char)nome[5]))
+		{
+			quali+= string(quali == "" ? "" : " ") + string(1, nome[5]) + ":";
+			if ((chiesta == 0) || (chiesta == toupper((unsigned char)nome[5])))
+				metafile.push_back(p->first);
+		}
+	}
+	if (metafile.size() == 0)
+	{
+		if (quali == "")
+			myprintf("66102! xc: no backup made by ac in this archive%s (no disk_C.txt). The image of a drive alone comes back with the image command\n", (version != DEFAULT_VERSION) ? ", at the version asked" : "");
+		else
+			myprintf("66103! xc: no backup of %c: in this archive (there are: %s)\n", chiesta, quali.c_str());
+		return 2;
+	}
+	if (metafile.size() > 1)
+	{
+		myprintf("66104! xc: this archive has the backup of more than one disk (%s): say which one (xc archive c:)\n", quali.c_str());
+		return 2;
+	}
+	const size_t mbarra	 = metafile[0].find_last_of("/\\");
+	const string prefisso= (mbarra == string::npos) ? "" : metafile[0].substr(0, mbarra + 1);
+	franzxc		 x;
+	x.metanome= (mbarra == string::npos) ? metafile[0] : metafile[0].substr(mbarra + 1);
+	std::vector<franzxcfile> elenco;
+	{
+		std::vector<uint8_t> testo;
+		string				 problema;
+		if (extracttobuffer(metafile[0], testo) != 0)
+		{
+			myprintf("66105! xc: cannot read %s from the archive\n", x.metanome.c_str());
+			return 2;
+		}
+		if (!xc_metafile(string(testo.begin(), testo.end()), x, elenco, problema))
+		{
+			myprintf("66106! xc: %s: %s\n", x.metanome.c_str(), problema.c_str());
+			return 2;
+		}
+	}
+	const int delbackup= atoi(x.run["archive_version"].c_str());
+	/// which backup it is
+	color_cyan();
+	myprintf("66110: xc: the backup of %s (%s), taken %s UTC by %s: version %d of %d\n", x.run["computer"].c_str(), x.run["windows"].c_str(), x.run["started_utc"].c_str(), x.run["program"].c_str(), delbackup, versioni);
+	myprintf("66111: xc: disk of %s (%s, %s), %s %s, sectors of %u bytes, boot by %s\n", tohuman((int64_t)x.bytes), x.disco["model"].c_str(), x.disco["bus"].c_str(), x.gpt ? "GPT" : "MBR", x.gpt ? x.disco["guid"].c_str() : x.disco["signature"].c_str(), (unsigned)x.settore, x.run["firmware"].c_str());
+	color_restore();
+	/// every piece the backup wrote: the archive, at this version, has that very one? Only the index is looked at
+	std::vector<string> diversi;
+	for (size_t i= 0; i < elenco.size(); i++)
+	{
+		const franzxcfile &f= elenco[i];
+		DTMap::iterator	   p= dt.find(prefisso + f.nome);
+		if ((p == dt.end()) || (p->second.date == 0))
+		{
+			diversi.push_back(f.nome + ": not in the archive");
+			continue;
+		}
+		string		 tipo, hash, crc;
+		int64_t		 creato= 0, accesso= 0;
+		bool		 ordinato= false, aggiunto= false;
+		int			 versione= 0;
+		franz_posix *posix	 = NULL;
+		decode_franz_block(false, p->second.franz_block, tipo, hash, crc, creato, accesso, ordinato, versione, posix, aggiunto);
+		libzpaq::SHA1 lista;
+		for (size_t k= 0; k < p->second.ptr.size(); k++)
+			if (p->second.ptr[k] < ht.size())
+				lista.write((const char *)ht[p->second.ptr[k]].sha1, 20);
+		const string hlista= stringtoupper(binarytohex((const unsigned char *)lista.result(), 20));
+		string		 cosa;
+		if (p->second.size != f.bytes)
+			cosa= string(migliaia(p->second.size)) + " bytes, the backup wrote " + string(migliaia2(f.bytes));
+		else if ((f.crc32 != "") && (stringtoupper(crc) != f.crc32))
+			cosa= "CRC-32 " + crc + ", the backup wrote " + f.crc32;
+		else if ((f.hash != "") && (hash != "") && (stringtoupper(hash) != f.hash))
+			cosa= tipo + " " + hash + ", the backup wrote " + f.hash;
+		else if (((int64_t)p->second.ptr.size() != f.frammenti) || ((f.lista != "") && (hlista != f.lista)))
+			cosa= "other fragments than the ones the backup wrote";
+		if (cosa != "")
+		{
+			diversi.push_back(f.nome + ": " + cosa);
+			continue;
+		}
+		for (size_t k= 0; k < x.zone.size(); k++)
+			if (x.zone[k].pezzo && (x.zone[k].file == f.nome))
+			{
+				franzxczona &z= x.zone[k];
+				z.bytes		  = f.bytes;
+				z.crc32		  = (f.crc32 != "") ? f.crc32 : stringtoupper(crc);
+				z.hash		  = hash;
+				z.tipohash	  = ((tipo != "") && (hash != "")) ? tipo : "";
+				z.elencato	  = true;
+			}
+	}
+	for (size_t k= 0; k < x.zone.size(); k++)
+		if (x.zone[k].pezzo && (!x.zone[k].elencato))
+		{
+			bool gia= false;
+			for (size_t i= 0; i < diversi.size(); i++)
+				if (diversi[i].substr(0, x.zone[k].file.size() + 1) == x.zone[k].file + ":")
+					gia= true;
+			if (!gia)
+				diversi.push_back(x.zone[k].file + ": the backup does not list it among its files");
+		}
+	if (diversi.size() > 0)
+	{
+		color_red();
+		myprintf("66120! xc: the archive, at version %d, does not have the pieces of this backup as it wrote them:\n", versioni);
+		for (size_t i= 0; (i < diversi.size()) && (i < 12); i++)
+			myprintf("66121!     %s\n", diversi[i].c_str());
+		if (diversi.size() > 12)
+			myprintf("66121!     ... and %s more\n", migliaia((int64_t)diversi.size() - 12));
+		color_restore();
+		if ((delbackup > 0) && (delbackup < versioni))
+			myprintf("66122: xc: something added to the archive after that backup (a c: -image? another ac that did not end?) changed them. The backup is whole at its own version: -until %d\n", delbackup);
+		else
+			myprintf("66123: xc: nothing restored. The image of a drive alone comes back with the image command\n");
+		return 2;
+	}
+	/// the images of the used clusters: their .meta (which block of the partition each block of the image is)
+	for (size_t k= 0; k < x.zone.size(); k++)
+	{
+		franzxczona &z= x.zone[k];
+		if (!z.sottile)
+			continue;
+		const size_t punto= z.file.find_last_of('.');
+		const string nmeta= z.file.substr(0, punto) + ".meta";
+		std::vector<uint8_t> meta;
+		if (extracttobuffer(prefisso + nmeta, meta) != 0)
+		{
+			myprintf("66124! xc: cannot read %s from the archive\n", nmeta.c_str());
+			return 2;
+		}
+		franzimager *lettore= new franzimager;
+		bool		 bene	= lettore->caricametamemory(meta);
+		string		 perche;
+		if (bene)
+		{
+			z.mappa		= lettore->getblockmap();
+			z.blocco	= lettore->getblocksize();
+			z.cluster	= lettore->getclustersize();
+			z.clusters	= lettore->gettotalclusters();
+			z.partinizio= lettore->getpartitionstart();
+			z.partbytes = lettore->getpartitionsize();
+			z.fsimg		= lettore->nomefs();
+			if (lettore->getbitmap() && (lettore->getbitmapsize() > 0))
+				z.bitmap.assign(lettore->getbitmap(), lettore->getbitmap() + lettore->getbitmapsize());
+			if ((z.blocco < 65536) || (z.blocco % FRANZIMAGER_SECTOR_SIZE))
+				perche= "blocks of " + itos((int64_t)z.blocco) + " bytes";
+			else if (z.partbytes > z.lunghezza)
+				perche= "a partition of " + string(migliaia((int64_t)z.partbytes)) + " bytes, the one of the backup is of " + string(migliaia2((int64_t)z.lunghezza));
+			else if (z.bytes != (int64_t)z.mappa.size() * (int64_t)(FRANZIMAGER_SECTOR_SIZE + z.blocco))
+				perche= itos((int64_t)z.mappa.size()) + " blocks, and " + z.file + " is of " + string(migliaia(z.bytes)) + " bytes";
+			for (size_t i= 1; (i < z.mappa.size()) && (perche == ""); i++)
+				if (z.mappa[i] <= z.mappa[i - 1])
+					perche= "its blocks are not in order";
+		}
+		delete lettore;
+		if ((!bene) || (perche != ""))
+		{
+			myprintf("66125! xc: %s is not what the image %s wants%s%s\n", nmeta.c_str(), z.file.c_str(), (perche == "") ? "" : ": ", perche.c_str());
+			return 2;
+		}
+	}
+	/// 65.9w: -gui: what is restored, and where, is chosen on a screen (the consent is there too)
+	bool dalloschermo= false, sovrascrivi= false;
+	if (flaggui)
+	{
+		const int scelto= xc_scegli(x, archive, delbackup, versioni, dest, sovrascrivi);
+		if (scelto == 3)
+			return 0;
+		if (scelto != 0)
+			return 2;
+		dalloschermo= true;
+	}
+	/// where it goes
+	const int numero= xc_numerodisco(dest);
+	int		  tipo	= 0; /// 0 the plan only, 1 a physical disk, 2 a raw file, 3 a sparse .vmdk, 4 a flat one, 5 a .vhdx
+	if (dest != "")
+	{
+		if (numero >= 0)
+			tipo= 1;
+		else
+		{
+			string		 nome = dest;
+			const size_t barra= nome.find_last_of("/\\");
+			if (barra != string::npos)
+				nome= nome.substr(barra + 1);
+			const size_t punto	   = nome.find_last_of('.');
+			string		 estensione= (punto == string::npos) ? "" : nome.substr(punto + 1);
+			for (size_t i= 0; i < estensione.size(); i++)
+				estensione[i]= (char)tolower((unsigned char)estensione[i]);
+			if ((getwindowsdriveletter(dest) != 0) && (dest.size() <= 3))
+			{
+				myprintf("66130! xc: -to %s is a partition: a whole disk comes back, on a disk (its number: -to 2:, see the drives command) or in a file (-to x.vmdk, x.vhdx, x.raw). One partition alone: the image command\n", dest.c_str());
+				return 2;
+			}
+			if ((estensione == "") || direxists(dest))
+			{
+				myprintf("66131! xc: -to <<%Z>>: the name of a file is needed, its extension says what it is (x.vmdk, x.vhdx; anything else, x.raw x.img, a raw file)\n", dest.c_str());
+				return 2;
+			}
+			if (estensione == "vhd")
+			{
+				myprintf("66132! xc: a whole disk does not go in a .vhd here: -to x.vhdx (Windows mounts it the same way)\n");
+				return 2;
+			}
+			tipo= (estensione == "vmdk") ? (tuttizeri ? 4 : 3) : ((estensione == "vhdx") ? 5 : 2);
+			if ((tipo >= 3) && (x.settore != FRANZIMAGER_SECTOR_SIZE))
+			{
+				myprintf("66133! xc: the disk of the backup has sectors of %u bytes: a .vmdk or a .vhdx here have sectors of 512 (a raw file, or a disk)\n", (unsigned)x.settore);
+				return 2;
+			}
+		}
+	}
+	/// a physical disk: what it is now, and if it can be the destination
+	franzxcdisco arrivo;
+	bool		 stesso= false; /// the disk of the backup itself (or a copy of it): same signature, and every partition of the backup at its place
+	if (tipo == 1)
+	{
+		if (!xc_disco(numero, arrivo))
+		{
+			myprintf("66134! xc: there is no disk %d (the drives command lists them), or it does not give its size. Run as administrator?\n", numero);
+			return 2;
+		}
+		franzxcqui qui;
+		xc_qui(archive, qui);
+		const string no= xc_rifiuto(arrivo, x, qui);
+		if (no != "")
+		{
+			myprintf("66135! xc: not on disk %d (%s, %s): %s\n", numero, tohuman((int64_t)arrivo.bytes), arrivo.modello.c_str(), no.c_str());
+			return 2;
+		}
+		stesso= xc_stesso(arrivo, x);
+	}
+	/// the plan
+	const int cifre= (x.zone.size() >= 100) ? 3 : 2;
+	char	  riga[512];
+	snprintf(riga, sizeof(riga), "%-*s %14s %10s %10s  %-40s %s", cifre, "#", "from", "size", "to write", "restored from", "what");
+	myprintf("66112: %s\n", riga);
+	uint64_t			 dascrivere= 0;
+	std::vector<int>	 ordine;
+	for (size_t k= 0; k < x.zone.size(); k++)
+	{
+		const franzxczona &z= x.zone[k];
+		string			   cosa;
+		if (z.partizione)
+		{
+			cosa= "partition " + itos(z.numero);
+			if (z.avvio)
+				cosa+= ", BOOT";
+			if (z.windows)
+				cosa+= ", WINDOWS";
+			if (z.lettere != "")
+				cosa+= ", " + z.lettere;
+			if (z.cosa != "")
+				cosa+= ", " + z.cosa;
+			if (z.fs != "")
+				cosa+= ", " + z.fs;
+			if (z.etichetta != "")
+				cosa+= " \"" + z.etichetta + "\"";
+			if (z.cifrata != "")
+				cosa+= ", " + ((z.cifrata == "BitLocker") ? z.cifrata : string("encrypted?"));
+		}
+		else
+			cosa= z.cosa;
+		string	 come;
+		uint64_t scrivo= 0;
+		if (z.sottile)
+		{
+			come  = "its used clusters (" + z.file + ")";
+			scrivo= (uint64_t)z.mappa.size() * z.blocco;
+			if (scrivo > z.lunghezza)
+				scrivo= z.lunghezza;
+		}
+		else if (z.pezzo)
+		{
+			come  = string(z.partizione ? "the whole partition" : "raw") + " (" + z.file + ")";
+			scrivo= z.lunghezza;
+		}
+		else if (!z.partizione)
+			come= "nothing: not allocated";
+		else if (tipo == 0)
+			come= "NOT IN THE BACKUP (" + z.perche + ")";
+		else if (tipo != 1)
+			come= "NOT IN THE BACKUP: empty";
+		else if (stesso)
+			come= "NOT IN THE BACKUP: left as it is";
+		else
+			come= "NOT IN THE BACKUP: to be formatted";
+		dascrivere+= scrivo;
+		if (z.pezzo)
+			ordine.push_back((int)k);
+		if (z.partizione && (!z.pezzo))
+			color_yellow();
+		snprintf(riga, sizeof(riga), "%0*d %14s %10s %10s  %-40s %s", cifre, (int)k, tohuman((int64_t)z.inizio), tohuman2((int64_t)z.lunghezza), z.pezzo ? tohuman3((int64_t)scrivo) : "-", come.c_str(), cosa.c_str());
+		myprintf("66113: %s\n", riga);
+		color_restore();
+	}
+	myprintf("66114: xc: %d pieces, about %s to write\n", (int)ordine.size(), tohuman((int64_t)dascrivere));
+	/// what the backup itself said of how it went
+	{
+		const int64_t errori= (int64_t)xc_numero(x.run["read_errors"]);
+		if (errori > 0)
+		{
+			color_yellow();
+			myprintf("66115$ xc: when this backup was taken %s sectors could not be read: they come back as zeros\n", migliaia(errori));
+			color_restore();
+		}
+		if (x.run["warning"] != "")
+		{
+			color_yellow();
+			myprintf("66116$ xc: the backup says: %s\n", x.run["warning"].c_str());
+			color_restore();
+		}
+		for (size_t k= 0; k < x.zone.size(); k++)
+			if (x.zone[k].pezzo && (x.zone[k].cifrata == "BitLocker"))
+			{
+				color_yellow();
+				myprintf("66117$ xc: %s was a BitLocker volume: it comes back NOT encrypted\n", (x.zone[k].lettere != "") ? x.zone[k].lettere.c_str() : ("partition " + itos(x.zone[k].numero)).c_str());
+				color_restore();
+			}
+	}
+	if (ordine.size() == 0)
+	{
+		myprintf("66126! xc: this backup has no piece to write\n");
+		return 2;
+	}
+	if (tipo == 0)
+	{
+		myprintf("66118: xc: nothing written: this is the plan. -to N: -force writes it on the physical disk N (the drives command lists them), -to x.vmdk, x.vhdx or x.raw in a file\n");
+		return 0;
+	}
+	/// the consent, and what is there now
+	if (tipo == 1)
+	{
+		char adesso[128];
+		if (arrivo.stile == 1)
+			snprintf(adesso, sizeof(adesso), "GPT %s", arrivo.guid.c_str());
+		else if (arrivo.stile == 0)
+			snprintf(adesso, sizeof(adesso), "MBR %08X", (unsigned)arrivo.firma);
+		else
+			snprintf(adesso, sizeof(adesso), "no partition table");
+		color_cyan();
+		myprintf("66140: xc: the destination: disk %d, %s (%s, %s), %s, %d partitions%s\n", numero, tohuman((int64_t)arrivo.bytes), arrivo.modello.c_str(), arrivo.bus.c_str(), adesso, (int)arrivo.parti.size(), arrivo.fuorilinea ? ", off line" : "");
+		color_restore();
+		for (size_t i= 0; i < arrivo.parti.size(); i++)
+		{
+			const franzxcparte &p= arrivo.parti[i];
+			myprintf("66141:     partition %d, %10s at %10s  %s %s%s%s%s\n", p.numero, tohuman((int64_t)p.lunghezza), tohuman2((int64_t)p.inizio), p.lettere.c_str(), p.fs.c_str(), (p.etichetta == "") ? "" : " \"", p.etichetta.c_str(), (p.etichetta == "") ? "" : "\"");
+		}
+		if (stesso)
+		{
+			myprintf("66142: xc: it is the disk of the backup (same %s, same partitions): the ones that are not in the backup are left as they are\n", x.gpt ? "GUID" : "signature");
+			/// ...but a partition made after the backup is not in the table that comes back
+			for (size_t i= 0; i < arrivo.parti.size(); i++)
+			{
+				bool nota= false;
+				for (size_t k= 0; k < x.zone.size(); k++)
+					if (x.zone[k].partizione && (x.zone[k].inizio == arrivo.parti[i].inizio) && (x.zone[k].lunghezza == arrivo.parti[i].lunghezza))
+						nota= true;
+				if (!nota)
+				{
+					color_yellow();
+					myprintf("66148$ xc: partition %d of disk %d (%s %s) was not there when the backup was taken: the partition table that comes back does not have it, it will be gone\n", arrivo.parti[i].numero, numero, arrivo.parti[i].lettere.c_str(), tohuman((int64_t)arrivo.parti[i].lunghezza));
+					color_restore();
+				}
+			}
+		}
+		if (!isadmin())
+		{
+			myprintf("66143! xc: writing on a disk needs an administrator\n");
+			return 2;
+		}
+		/// 65.9q: -force is the consent (it was -image), and the captcha names the disk (killdrive2): always
+		/// asked, with or without partitions on it (-nocaptcha, as everywhere, not to be asked)
+		if ((!flagforce) && (!dalloschermo))
+		{
+			myprintf("66144! xc: -to %d: writes on the physical disk %d: EVERYTHING on it is overwritten. -force to confirm\n", numero, numero);
+			return 2;
+		}
+		if (!dalloschermo) /// (65.9w: on the screen of -gui the name of the disk was typed already)
+		{
+			color_yellow();
+			printDigitalString("RISKY");
+			myprintf("\n");
+			if (stesso)
+				myprintf("66145: xc: disk %d is written over: the partitions of the backup, the others are left as they are\n", numero);
+			else
+				myprintf("66145: xc: EVERYTHING on disk %d is overwritten (%d partitions)\n", numero, (int)arrivo.parti.size());
+			color_restore();
+			char domanda[128];
+			snprintf(domanda, sizeof(domanda), "Do you really want to OVERWRITE the disk %d (%s) ?", numero, tohuman((int64_t)arrivo.bytes));
+			char si[32];
+			snprintf(si, sizeof(si), "killdrive%d", numero);
+			if (!getcaptcha(si, domanda))
+				return 2;
+		}
+	}
+	else
+	{
+		vector<string> daverificare;
+		if ((tipo == 3) || (tipo == 4))
+			daverificare= franzvmdk::nomi(dest, x.bytes, tipo == 4);
+		else
+			daverificare.push_back(dest);
+		for (size_t i= 0; i < daverificare.size(); i++)
+			if (fileexists(daverificare[i]))
+			{
+				if ((!flagforce) && (!sovrascrivi))
+				{
+					myprintf("66146! %Z already exists: -force to overwrite\n", daverificare[i].c_str());
+					return 2;
+				}
+				if (!delete_file(daverificare[i].c_str()))
+				{
+					myprintf("66147! Cannot delete %Z\n", daverificare[i].c_str());
+					return 2;
+				}
+			}
+		makepath(dest);
+	}
+	/// on a destination written in any order (a disk, a raw file) the piece with the partition table is the last one
+	if ((tipo <= 2) && (ordine.size() > 1) && (x.zone[(size_t)ordine[0]].inizio == 0))
+	{
+		const int tabella= ordine[0];
+		ordine.erase(ordine.begin());
+		ordine.push_back(tabella);
+	}
+	franzxcuscita uscita;
+	string		  problema;
+	bool		  aperto= false;
+	if (tipo == 1)
+		aperto= uscita.apridisco(numero, problema);
+	else if (tipo == 2)
+		aperto= uscita.aprifile(dest, x.bytes, problema);
+	else
+		aperto= uscita.aprivirtuale(dest, x.bytes, (tipo == 3) ? 1 : ((tipo == 4) ? 2 : 3), problema);
+	if (!aperto)
+	{
+		myprintf("66150! xc: %s\n", problema.c_str());
+		return 2;
+	}
+	const int64_t partenza= mtime();
+	if (tipo == 1)
+	{
+		/// the disk of the backup itself: only the volumes where something goes are locked, the others (the data
+		/// partitions that are not in the backup) stay as they are, mounted, in use if they are. Any other
+		/// disk: all of them, and one that cannot be locked does not stop it (they are about to be gone)
+		std::vector<std::pair<uint64_t, uint64_t> > scritte;
+		for (size_t i= 0; i < ordine.size(); i++)
+			scritte.push_back(std::make_pair(x.zone[(size_t)ordine[i]].inizio, x.zone[(size_t)ordine[i]].lunghezza));
+		if (!uscita.bloccavolumi(stesso ? &scritte : NULL, !stesso, problema))
+		{
+			myprintf("66151! xc: disk %d: %s. Nothing written: close what is using it\n", numero, problema.c_str());
+			return 2;
+		}
+		if (!stesso)
+		{
+			/// the table that is there goes first (sector 0 and the 33 of a GPT: no partition is there), and
+			/// Windows is told: its volumes are gone, in use or not. Then the copy a GPT has in the last sectors.
+			/// From now on, and until the last piece is written, this is a disk without partitions
+			bool bene= uscita.zeri(0, 34 * (uint64_t)x.settore);
+			if (bene)
+			{
+				uscita.aggiorna();
+				if (arrivo.bytes > 2 * XC_MEGA)
+					bene= uscita.zeri(arrivo.bytes / XC_MEGA * XC_MEGA - XC_MEGA, XC_MEGA + arrivo.bytes % XC_MEGA);
+			}
+			if (!bene)
+			{
+				myprintf("66152! xc: disk %d: %s. Its partition table may be gone, nothing else was written\n", numero, uscita.errore.c_str());
+				return 2;
+			}
+		}
+	}
+	x.uscita  = &uscita;
+	x.silenzio= flagnoeta;
+	x.pezzi	  = (int)ordine.size();
+	x.inizio  = mtime();
+	for (size_t i= 0; i < ordine.size(); i++)
+		x.totale+= x.zone[(size_t)ordine[i]].bytes;
+	/// 65.9u: the map of what is written (-dashboard, the default; -nodashboard, -noeta, or an output that is
+	/// not a console: the line, as before). The lines of the pieces come out when the map is over
+	franzxcdash						   mappa;
+	std::vector<std::pair<int, string> > dopo;
+	string							   titolomappa;
+	if (flagdashboard && (!flagnoeta) && (!isAnyOutputRedirected()))
+	{
+		std::vector<uint64_t> lunghi(x.zone.size(), 0);
+		for (size_t i= 0; i < ordine.size(); i++)
+			lunghi[(size_t)ordine[i]]= (uint64_t)x.zone[(size_t)ordine[i]].bytes;
+		/// what is not on the map: the partitions that are not in the backup
+		string fuori;
+		for (size_t k= 0; k < x.zone.size(); k++)
+			if (x.zone[k].partizione && (!x.zone[k].pezzo))
+				fuori+= " " + ((x.zone[k].lettere != "") ? x.zone[k].lettere : ("#" + itos(x.zone[k].numero)));
+		if (fuori != "")
+			fuori= string((tipo != 1) ? ", empty:" : (stesso ? ", left as it is:" : ", to format:")) + fuori;
+		char testo[512];
+		if (tipo == 1)
+			snprintf(testo, sizeof(testo), "disk %d, %s (%s)", numero, tohuman((int64_t)arrivo.bytes), arrivo.modello.c_str());
+		else
+			snprintf(testo, sizeof(testo), "%s (%s)", dest.c_str(), uscita.genere().c_str());
+		titolomappa= testo;
+		mappa.inizia("xc: the backup of " + x.run["computer"] + " => " + titolomappa, lunghi, flagverify && uscita.rileggibile(), fuori);
+		if (mappa.attivo())
+		{
+			x.dash= &mappa;
+			x.riga(true);
+		}
+	}
+	const bool etaprima= flagnoeta;
+	flagnoeta		   = true; /// (the engine: its own line for every piece. Here one for the whole disk)
+	g_xc			   = &x;
+	uint64_t azzerati  = 0;
+	for (size_t i= 0; (i < ordine.size()) && (x.errore == ""); i++)
+	{
+		franzxczona &z= x.zone[(size_t)ordine[i]];
+		x.corrente	  = ordine[i];
+		x.npezzo	  = (int)i + 1;
+		prepare_extract_to_disk(z.file);
+		const int esito= extractstdout(0, "");
+		if ((!x.silenzio) && (!mappa.attivo()))
+			eol();
+		if ((esito != 0) || (x.errore != "") || (!z.fatto))
+		{
+			if (x.errore == "")
+				x.errore= z.file + (z.iniziato ? ": the extraction did not end well" : ": not found in the archive");
+			break;
+		}
+		/// what the backup left out of an image (pagefile, hiberfil...: used for the file system, whole
+		/// blocks of them not in the image): zeros, where the destination could have something
+		if (z.sottile && uscita.fisico() && (z.bitmap.size() > 0) && (z.cluster > 0))
+		{
+			const uint64_t blocchi= (z.partinizio + z.lunghezza + z.blocco - 1) / z.blocco;
+			size_t		   m	  = 0;
+			for (uint64_t b= 0; (b < blocchi) && (x.errore == ""); b++)
+			{
+				while ((m < z.mappa.size()) && (z.mappa[m] < b))
+					m++;
+				if ((m < z.mappa.size()) && (z.mappa[m] == b))
+					continue;
+				uint64_t salto= 0, qui= 0, lungo= 0;
+				if (!franzxc::dove(z, b, salto, qui, lungo))
+					continue;
+				const uint64_t primo= qui / z.cluster;
+				uint64_t	   ultimo= (qui + lungo - 1) / z.cluster;
+				if (ultimo >= z.clusters)
+					ultimo= (z.clusters > 0) ? (z.clusters - 1) : 0;
+				bool usato= false;
+				for (uint64_t c= primo; (c <= ultimo) && (!usato); c++)
+					if ((c / 8 < z.bitmap.size()) && ((z.bitmap[(size_t)(c / 8)] >> (c % 8)) & 1))
+						usato= true;
+				if (!usato)
+					continue;
+				if (!uscita.zeri(z.inizio + qui, lungo))
+					x.errore= uscita.errore;
+				z.azzerati+= lungo;
+				if (mappa.attivo())
+				{
+					x.zeri+= lungo;
+					x.riga(false);
+				}
+			}
+			azzerati+= z.azzerati;
+			if (x.errore != "")
+				break;
+		}
+		snprintf(riga, sizeof(riga), "%0*d/%0*d %-18s %10s at %10s in %7.1f s", cifre, (int)i + 1, cifre, (int)ordine.size(), z.file.c_str(), tohuman((int64_t)z.scritti), tohuman2((int64_t)z.inizio), z.secondi);
+		char fatto[1024];
+		snprintf(fatto, sizeof(fatto), "xc: %s: CRC-32 %s%s%s as the backup wrote%s%s\n", riga, z.crc32.c_str(), (z.tipohash == "") ? "" : " and ", z.tipohash.c_str(), (z.azzerati > 0) ? ", zeros where it left out " : "", (z.azzerati > 0) ? tohuman3((int64_t)z.azzerati) : "");
+		xc_di(mappa.attivo() ? &dopo : NULL, 0, fatto);
+	}
+	g_xc			= NULL;
+	x.corrente		= -1;
+	flagnoeta		= etaprima;
+	g_immaginescelta= "";
+	/// on a disk that is not the one of the backup: the partitions that are not in it are to be formatted
+	if ((x.errore == "") && (tipo == 1) && (!stesso))
+		for (size_t k= 0; (k < x.zone.size()) && (x.errore == ""); k++)
+			if (x.zone[k].partizione && (!x.zone[k].pezzo))
+				if (!uscita.zeri(x.zone[k].inizio, (x.zone[k].lunghezza < XC_MEGA) ? x.zone[k].lunghezza : XC_MEGA))
+					x.errore= uscita.errore;
+	if ((x.errore == "") && (!uscita.svuota()))
+		x.errore= uscita.errore;
+	/// -verify: what is on the destination now, read back, against what was written there
+	bool verificato= false;
+	if ((x.errore == "") && flagverify)
+	{
+		if (!uscita.rileggibile())
+		{
+			char nota[512];
+			snprintf(nota, sizeof(nota), "xc: -verify is for a disk or a raw file: a %s is not read back here (7-Zip, qemu-img check it)\n", uscita.genere().c_str());
+			xc_di(mappa.attivo() ? &dopo : NULL, 2, nota);
+		}
+		else
+		{
+			std::vector<char> letto((size_t)XC_BLOCCO);
+			const int64_t	  via= mtime();
+			uint64_t		  riletti= 0;
+			if (mappa.attivo()) /// the lines of the map: what is read back, of what was written
+			{
+				x.rilegge= true;
+				x.inizio = via;
+				x.fatti	 = 0;
+				x.totale = 0;
+				for (size_t i= 0; i < ordine.size(); i++)
+					x.totale+= (int64_t)x.zone[(size_t)ordine[i]].scritti;
+			}
+			for (size_t i= 0; (i < ordine.size()) && (x.errore == ""); i++)
+			{
+				franzxczona &z	= x.zone[(size_t)ordine[i]];
+				uint32_t	 crc= 0;
+				uint64_t	 n	= 0;
+				if (mappa.attivo())
+				{
+					x.corrente= ordine[i];
+					x.npezzo  = (int)i + 1;
+				}
+				if (!z.sottile)
+				{
+					for (uint64_t fatto= 0; (fatto < z.scritti) && (x.errore == "");)
+					{
+						const uint64_t q= ((z.scritti - fatto) < XC_BLOCCO) ? (z.scritti - fatto) : XC_BLOCCO;
+						if (!uscita.leggi(z.inizio + fatto, &letto[0], q))
+							x.errore= uscita.errore;
+						crc= crc32_16bytes(&letto[0], (size_t)q, crc);
+						fatto+= q;
+						n+= q;
+						if (mappa.attivo())
+						{
+							mappa.fatto(ordine[i], fatto, true);
+							x.fatti= (int64_t)(riletti + n);
+							x.riga(false);
+						}
+					}
+				}
+				else
+					for (size_t m= 0; (m < z.mappa.size()) && (x.errore == ""); m++)
+					{
+						uint64_t salto= 0, qui= 0, lungo= 0;
+						if (!franzxc::dove(z, z.mappa[m], salto, qui, lungo))
+							continue;
+						for (uint64_t fatto= 0; (fatto < lungo) && (x.errore == "");)
+						{
+							const uint64_t q= ((lungo - fatto) < XC_BLOCCO) ? (lungo - fatto) : XC_BLOCCO;
+							if (!uscita.leggi(z.inizio + qui + fatto, &letto[0], q))
+								x.errore= uscita.errore;
+							crc= crc32_16bytes(&letto[0], (size_t)q, crc);
+							fatto+= q;
+							n+= q;
+						}
+						if (mappa.attivo())
+						{
+							mappa.fatto(ordine[i], (uint64_t)(m + 1) * (FRANZIMAGER_SECTOR_SIZE + (uint64_t)z.blocco), true);
+							x.fatti= (int64_t)(riletti + n);
+							x.riga(false);
+						}
+						else if ((!flagnoeta) && ((m % 64) == 0))
+							myprintf("xc: -verify %10s read back, %s\r", tohuman((int64_t)(riletti + n)), z.file.c_str());
+					}
+				riletti+= n;
+				if ((x.errore == "") && ((n != z.scritti) || (crc != z.crcscritti)))
+				{
+					char a[16], b[16];
+					snprintf(a, sizeof(a), "%08X", (unsigned)crc);
+					snprintf(b, sizeof(b), "%08X", (unsigned)z.crcscritti);
+					x.errore= "-verify: " + z.file + " read back from the destination has CRC-32 " + string(a) + ", what was written " + string(b);
+				}
+				else if (x.errore == "")
+					mappa.fatto(ordine[i], (uint64_t)z.bytes, true); /// (the whole piece: a block of an image out of its partition is not read)
+			}
+			if ((!flagnoeta) && (!mappa.attivo()))
+				eol();
+			if (x.errore == "")
+			{
+				verificato= true;
+				char nota[512];
+				snprintf(nota, sizeof(nota), "xc: -verify: %s read back in %.1f s, every piece is what was written\n", tohuman((int64_t)riletti), (mtime() - via) / 1000.0);
+				xc_di(mappa.attivo() ? &dopo : NULL, 1, nota);
+			}
+		}
+	}
+	/// the map is over: its last look and its title say how it went, then the lines kept for now
+	if (mappa.attivo())
+	{
+		x.corrente= -1;
+		x.riga(true);
+		if (x.errore != "")
+		{
+			mappa.guasto();
+			mappa.titolo("xc: RESTORE NOT DONE => " + titolomappa, 3);
+		}
+		else
+			mappa.titolo("xc: written" + string(verificato ? " and read back" : "") + " => " + titolomappa, 1);
+		mappa.fine();
+		x.dash= NULL;
+		for (size_t i= 0; i < dopo.size(); i++)
+			xc_di(NULL, dopo[i].first, dopo[i].second);
+	}
+	/// another disk on line here with the same signature? Windows would not keep both: this one stays off (the
+	/// disk of the backup itself is left as it was, on line or not)
+	int	 doppio		= -1;
+	bool fuorilinea= false;
+	if ((x.errore == "") && (tipo == 1))
+	{
+		for (int n= 0; (n < 64) && (doppio < 0) && (!stesso); n++)
+		{
+			franzxcdisco altro;
+			if ((n == numero) || (!xc_disco(n, altro)) || altro.fuorilinea || (altro.stile != (x.gpt ? 1 : 0)))
+				continue;
+			char firma[16];
+			snprintf(firma, sizeof(firma), "%08X", (unsigned)altro.firma);
+			if (x.gpt ? (stringtoupper(altro.guid) == stringtoupper(x.disco["guid"])) : (stringtoupper(x.disco["signature"]) == firma))
+				doppio= n;
+		}
+		if (doppio >= 0)
+			fuorilinea= uscita.fuorilinea(true);
+		uscita.aggiorna();
+	}
+	const uint64_t scritti= uscita.scritti();
+	const uint64_t zeri	  = uscita.zeriscritti();
+	const string   genere = uscita.genere();
+	string		   chiusura;
+	const bool	   chiuso= uscita.chiudi(chiusura);
+	if ((x.errore == "") && (!chiuso))
+		x.errore= chiusura;
+	const double secondi= (mtime() - partenza) / 1000.0;
+	if (x.errore != "")
+	{
+		color_red();
+		myprintf("66180! xc: %s\n", x.errore.c_str());
+		if (tipo == 1)
+			myprintf("66181! xc: RESTORE NOT DONE. Disk %d %s: do not use it as it is\n", numero, stesso ? "has its partition table, and something of the backup written over what was there" : "is left without a partition table");
+		else
+			myprintf("66182! xc: RESTORE NOT DONE: %Z is not good\n", dest.c_str());
+		color_restore();
+		return 2;
+	}
+	color_green();
+	if (tipo == 1)
+		myprintf("66190: xc: disk %d written: %s (and %s of zeros) in %.1f s, %s/s%s\n", numero, tohuman((int64_t)scritti), tohuman2((int64_t)zeri), secondi, tohuman3((int64_t)((scritti + zeri) / ((secondi > 0.01) ? secondi : 0.01))), verificato ? ", read back" : "");
+	else
+		myprintf("66190: xc: %Z written (%s): a disk of %s, %s of it from the backup, in %.1f s%s\n", dest.c_str(), genere.c_str(), tohuman((int64_t)x.bytes), tohuman2((int64_t)scritti), secondi, verificato ? ", read back" : "");
+	color_restore();
+	myprintf("66191: xc: it boots by %s (%s): the PC, or the virtual machine, that starts from it must be set that way\n", x.run["firmware"].c_str(), x.gpt ? "a GPT disk" : "an MBR disk");
+	if ((tipo == 1) && (arrivo.bytes > x.bytes))
+		myprintf("66192: xc: disk %d is %s bigger than the one of the backup: that room is at its end, not allocated\n", numero, tohuman((int64_t)(arrivo.bytes - x.bytes)));
+	if ((tipo == 1) && (!stesso))
+		for (size_t k= 0; k < x.zone.size(); k++)
+			if (x.zone[k].partizione && (!x.zone[k].pezzo))
+			{
+				myprintf("66193: xc: the partitions that were not in the backup are there, empty: Windows will ask to format them\n");
+				break;
+			}
+	if (doppio >= 0)
+	{
+		color_yellow();
+		myprintf("66194$ xc: disk %d here has the same %s: Windows keeps disk %d off line%s. Do NOT put it on line on this PC (it would get another %s, and would not boot): take disk %d away, or move this one\n", doppio, x.gpt ? "GUID" : "signature", numero, fuorilinea ? "" : " (by itself)", x.gpt ? "GUID" : "signature", doppio);
+		color_restore();
+	}
+	return 0;
+}
+#endif // _WIN32, not ANCIENT (ac, xc)
 #ifdef _WIN32
 /*
 	-image alone: the volume says how. NTFS: its used clusters, with a shadow copy (tried: on a
-	USB disk, or without space for it, the image goes on without, told); FAT12/16/32 and exFAT:
+	USB disk, or without space for it, the image goes on without, told) when it is C:, without
+	one for any other drive (65.9j: there the volume is locked, and a shadow copy is asked with
+	-vss. The drive of Windows cannot be locked, the others mostly can; and a shadow copy writes
+	on the volume: on a big one Windows books GBs for it, that end up in the image);
+	FAT12/16/32 and exFAT:
 	their used clusters, the volume locked (there is no VSS for them); anything else (ReFS, not
 	formatted, a file system Windows does not know): the whole partition, raw. -ntfs forces the
 	used clusters, -raw the whole partition, -vss a shadow copy that must be there, -novss none
@@ -223969,6 +232113,9 @@ int Jidac::sceglimodoimage()
 	SetErrorMode(vecchio);
 	const bool ntfs= (fs == "NTFS");
 	const bool fat = (fs == "FAT") || (fs == "FAT32") || (fs == "exFAT");
+	/// 65.9j: a shadow copy by itself only for C:; elsewhere it is asked (-vss)
+	const bool vssdasolo= (toupper((unsigned char)lettera) == 'C');
+	bool	   vsssaltato= false; /// it would have been tried, before 65.9j: said in the line of the image
 	if ((!flagntfs) && (!flagraw))
 	{
 		imageautomatica= true;
@@ -223977,7 +232124,10 @@ int Jidac::sceglimodoimage()
 	if (flagntfs)
 	{
 		if (ntfs)
-			imagevss= flagvss ? 2 : (flagnovss ? 0 : 1);
+		{
+			imagevss  = flagvss ? 2 : ((flagnovss || (!vssdasolo)) ? 0 : 1);
+			vsssaltato= (!flagvss) && (!flagnovss) && (!vssdasolo);
+		}
 		else if (flagvss)
 		{
 			color_yellow();
@@ -223986,7 +232136,10 @@ int Jidac::sceglimodoimage()
 		}
 	}
 	else
-		imagevss= flagvss ? 2 : (((fs == "ReFS") && (!flagnovss)) ? 1 : 0);
+	{
+		imagevss  = flagvss ? 2 : (((fs == "ReFS") && (!flagnovss) && vssdasolo) ? 1 : 0);
+		vsssaltato= (fs == "ReFS") && (!flagvss) && (!flagnovss) && (!vssdasolo);
+	}
 
 	/// the archive on the volume of the image: never locked (the archive could not be written)
 	char	   pieno[MAX_PATH + 1]= {0};
@@ -224003,10 +232156,11 @@ int Jidac::sceglimodoimage()
 
 	const string mostra= (fs == "") ? "not formatted, or unknown to Windows" : fs;
 	color_cyan();
+	const char *comevss= (imagevss > 0) ? ", with VSS" : (vsssaltato ? ", without VSS (by itself for C: only; -vss to have it)" : "");
 	if (flagntfs)
-		myprintf("73904: Image of %c: (%s): the used clusters%s\n", lettera, mostra.c_str(), (imagevss > 0) ? ", with VSS" : "");
+		myprintf("73904: Image of %c: (%s): the used clusters%s\n", lettera, mostra.c_str(), comevss);
 	else
-		myprintf("73905: Image of %c: (%s): the whole partition (raw)%s\n", lettera, mostra.c_str(), (imagevss > 0) ? ", with VSS" : "");
+		myprintf("73905: Image of %c: (%s): the whole partition (raw)%s\n", lettera, mostra.c_str(), comevss);
 	color_restore();
 	return 0;
 }
@@ -224091,6 +232245,13 @@ int Jidac::gestisciflagimage()
 					myprintf("71417: LETTER |%s|\n", letterpath.c_str());
 				if (!preparavhd(lettera))
 				{
+					/// 65.9k: the shadow copy asked with -vss cannot be made: an error (it must be there), not the
+					/// whole partition without one (and since 65.9j -vss is how it is asked on any drive but C:)
+					if ((imagevss == 2) && (imager.motivovss() != ""))
+					{
+						myprintf("78178! -vss: no shadow copy of %c: (%s): no image. Without -vss the volume is locked instead\n", lettera, imager.motivovss().c_str());
+						return 2;
+					}
 					if (!imageautomatica)
 					{
 						myprintf("78176: ERROR preparing the image of %c: (not administrator?)\n", lettera);
@@ -225644,6 +233805,24 @@ void Jidac::preparahashtobewritten(const string &i_filename, const DTMap::iterat
 	i_hashtobewritten= "";
 	i_hasherror		 = "";
 	i_hashname		 = "";
+#if defined(_WIN32) && !defined(ANCIENT)
+	/// 65.9n: ac took this hash already, for its metafile (ac_hash). The hasher is closed by that (the
+	/// result() of a SHA starts again from nothing): the very same string, not a second result
+	if (flagac)
+	{
+		std::map<string, franzachash>::iterator gia= g_ac_hash.find(i_p->first);
+		if (gia != g_ac_hash.end())
+		{
+			i_hashtobewritten	= gia->second.hash;
+			i_hasherror			= gia->second.errore;
+			i_hashname			= gia->second.nome;
+			i_p->second.hashtype= i_hashname;
+			if (i_hashtobewritten != "")
+				i_p->second.hexhash= i_hashtobewritten;
+			return;
+		}
+	}
+#endif
 	if (!(flagdebug && flagzero && flagkill))
 	{
 		///				zpaqfranz: write hashes and/or CRC-32
@@ -225745,7 +233924,7 @@ void Jidac::preparahashtobewritten(const string &i_filename, const DTMap::iterat
 int Jidac::add()
 {
 	string externaloutputfile= "";
-	g_scritti				 = 0;
+	g_inoutput				 = 0;
 	string primalettera		 = "";
 
 	string ffranzotype= decodefranzoffset(g_franzotype);
@@ -225759,8 +233938,13 @@ int Jidac::add()
 
 	turnonfasttxt();
 
-	if (testparametriadd() != 0)
-		return 2;
+	{
+		const int parametri= testparametriadd();
+		if (parametri == 3) /// (65.9v: ac -gui, left on its screen)
+			return 0;
+		if (parametri != 0)
+			return 2;
+	}
 
 	const int risultatoexternal= gestisciexternal(); /// it RUNS the external command: never call it twice
 	if (risultatoexternal != 0)
@@ -226746,9 +234930,9 @@ int Jidac::add()
 										imagefatale(buflen);
 									imgdash.dopo(imager.ultimoblocco(), buflen);
 									img_avvisa(imgdash.live());
-									if ((!imgdash.mostra(total_done, total_size, g_fwritten)) && (!flagnoeta))
+									if ((!imgdash.mostra(total_done, total_size, g_inoutput)) && (!flagnoeta))
 										print_eta_image("NTFS", 100.0f * total_done / (total_size + 1), total_done, total_size,
-														g_fwritten, startstream, &ultimotempo, &last_update_time);
+														g_inoutput, startstream, &ultimotempo, &last_update_time);
 								}
 							}
 							else
@@ -226763,9 +234947,9 @@ int Jidac::add()
 								imagereaded+= buflen;
 								imgdash.dopo(blocco, buflen);
 								img_avvisa(imgdash.live());
-								if ((!imgdash.mostra(imagereaded, total_size, g_scritti)) && (!flagnoeta))
+								if ((!imgdash.mostra(imagereaded, total_size, g_inoutput)) && (!flagnoeta))
 									print_eta_image("raw", 100.0f * imagereaded / (total_size + 1),
-													imagereaded, total_size, g_scritti, startstream,
+													imagereaded, total_size, g_inoutput, startstream,
 													&ultimotempo, &last_update_time);
 							}
 #else
@@ -226780,9 +234964,9 @@ int Jidac::add()
 							imagereaded+= buflen; /// the progress (it stayed at 0)
 							imgdash.dopo(blocco, buflen);
 							img_avvisa(imgdash.live());
-							if ((!imgdash.mostra(imagereaded, total_size, g_scritti)) && (!flagnoeta))
+							if ((!imgdash.mostra(imagereaded, total_size, g_inoutput)) && (!flagnoeta))
 								print_eta_image("DD", 100.0f * imagereaded / (total_size + 1),
-												imagereaded, total_size, g_scritti, startstream,
+												imagereaded, total_size, g_inoutput, startstream,
 												&ultimotempo, &last_update_time);
 #endif
 						}
@@ -226843,8 +235027,8 @@ int Jidac::add()
 									int secondi= (mtime() - startstream) / 1000;
 									if (secondi != ultimotempo)
 									{
-										float ratio= 100.0 * g_scritti / (total_size + 1);
-										myprintf("02081: So far in=%10s out=%10s (ratio %8.2f %%) @ %10s /s        \r", tohuman(total_size), tohuman2(g_scritti), ratio, tohuman3(total_size / secondi));
+										float ratio= 100.0 * g_inoutput / (total_size + 1);
+										myprintf("02081: So far in=%10s out=%10s (ratio %8.2f %%) @ %10s /s        \r", tohuman(total_size), tohuman2(g_inoutput), ratio, tohuman3(total_size / secondi));
 										fflush(stdout);
 										ultimotempo= secondi;
 									}
@@ -226858,7 +235042,7 @@ int Jidac::add()
 									int           percentuale = (int)(100.0 * total_done / (size_ref + 1)) + 1;
 									if (percentuale != ultimapercentuale)
 									{
-										print_progress((int64_t)size_ref, total_done, g_scritti, ultimapercentuale);
+										print_progress((int64_t)size_ref, total_done, g_inoutput, ultimapercentuale);
 										ultimapercentuale = percentuale;
 									}
 								}
@@ -226873,7 +235057,7 @@ int Jidac::add()
 										if (percentuale != ultimapercentuale)
 											if (percentuale % modulo == 0)
 											{
-												print_progress(total_size, total_done, g_scritti, ultimapercentuale);
+												print_progress(total_size, total_done, g_inoutput, ultimapercentuale);
 												ultimapercentuale= percentuale;
 											}
 									}
@@ -227133,7 +235317,7 @@ int Jidac::add()
 						myprintf("02087: operating on %s\n", fn.c_str());
 
 					if (!flagimage)
-						print_progress(total_size, total_done, g_scritti, ultimapercentuale);
+						print_progress(total_size, total_done, g_inoutput, ultimapercentuale);
 
 					if (method[0] != 'i')
 					{
@@ -227168,7 +235352,6 @@ int Jidac::add()
 									assert(my_cj_out.c_str());
 									const char *p= my_cj_out.c_str();
 									int64_t		n= my_cj_out.size();
-									g_scritti+= n; // very rude
 									const int64_t N= 1 << 30;
 									while (n > N)
 									{
@@ -227261,7 +235444,7 @@ int Jidac::add()
 					myprintf("02090: $$$$$$$$$$$$$ updated newname %s\n", newname.c_str());
 			}
 
-			print_progress(total_size, total_done, g_scritti, ultimapercentuale);
+			print_progress(total_size, total_done, g_inoutput, ultimapercentuale);
 			if (!flagmemfile)
 #ifdef _WIN32
 				if ((!flagstdin))
@@ -228117,7 +236300,7 @@ ThreadReturn add2_imgthread(void *i_arg)
 int Jidac::add2()
 {
 	string externaloutputfile= "";
-	g_scritti				 = 0;
+	g_inoutput				 = 0;
 	string primalettera		 = "";
 
 	string ffranzotype= decodefranzoffset(g_franzotype);
@@ -228131,8 +236314,13 @@ int Jidac::add2()
 
 	turnonfasttxt();
 
-	if (testparametriadd() != 0)
-		return 2;
+	{
+		const int parametri= testparametriadd();
+		if (parametri == 3) /// (65.9v: ac -gui, left on its screen)
+			return 0;
+		if (parametri != 0)
+			return 2;
+	}
 
 	const int risultatoexternal= gestisciexternal(); /// it RUNS the external command: never call it twice
 	if (risultatoexternal != 0)
@@ -228738,7 +236926,12 @@ int Jidac::add2()
 	if (flagstdin) // larger buffer not good
 		g_ioBUFSIZE= 4096;
 
+#ifdef _WIN32
+	/// 65.9o: ac -all: images of both kinds in one run, and the one of the used clusters has the biggest reads
+	char *buf= (char *)franz_malloc((flagac && (g_ioBUFSIZE < 512 + 2 * 1024 * 1024)) ? (512 + 2 * 1024 * 1024) : g_ioBUFSIZE);
+#else
 	char *buf= (char *)franz_malloc(g_ioBUFSIZE);
+#endif
 	/// g_allocatedram+=sizeof(g_ioBUFSIZE);
 
 	if (buf == NULL)
@@ -228872,6 +237065,9 @@ int Jidac::add2()
 		}
 		
 	}
+	/// 65.9n: ac: after the files of the image the pieces of the disk, raw, then the metafile, the last one
+	if (flagimage && flagac)
+		ac_aggiungi();
 #endif
 
 	///////////////////////////////////////////////////////////////
@@ -229002,11 +237198,29 @@ int Jidac::add2()
 		*/
 		/// 65.7p: the stream of an image too (not its small pieces in memory: header, footer, meta...).
 		/// It went through the loop below, one thread: the limit of every image of a fast drive
+#ifdef _WIN32
+		/// 65.9o: ac -all: this file is the image of another partition (its reader is opened now, the map starts
+		/// again), or a small file of an image that could not be taken by its used clusters (not made)
+		if (flagac && (fi < vf.size()))
+		{
+			const int cambio= ac_cambia(fi);
+			if (cambio == 2)
+				continue;
+			if (cambio == 1)
+			{
+				imgdash		= franzimgdash();
+				imagereaded= 0;
+				startstream= mtime();
+			}
+		}
+#endif
 		bool turboimg= (fi < vf.size()) && flagimage && (!flagstdin) && (!(flagdebug && flagzero)) && (turbothreads > 1) && ((int64_t)g_ioBUFSIZE <= TURBOCHUNK);
 #ifdef _WIN32
 		if (turboimg && (flagvhd || flagntfs) && (vf[fi]->second.pramfile != NULL))
 			if ((vf[fi]->first == imager_zeroed) || (vf[fi]->first == imager_excluded) || (vf[fi]->first == imager_header) || (vf[fi]->first == imager_footer) || (vf[fi]->first == imager_meta))
 				turboimg= false;
+		if (turboimg && flagac && ac_mio(vf[fi]->first)) /// 65.9n: the pieces of ac: the loop below, as the files in memory
+			turboimg= false;
 #endif
 		const bool turbo= turboimg || ((fi < vf.size()) && (in != FPNULL) && (!flagmemfile) && (!flagimage) && (!flagstdin) && (!(flagdebug && flagzero)) && (turbothreads > 1) && (p->second.expectedsize >= (int64_t)ZPAQ_TURBOMIN));
 		if (turbo && turbobuf[0].empty())
@@ -229135,7 +237349,7 @@ int Jidac::add2()
 						myprintf("02087: operating on %s\n", fn.c_str());
 
 					if (!flagimage)
-						print_progress(total_size, total_done, g_scritti, ultimapercentuale);
+						print_progress(total_size, total_done, g_inoutput, ultimapercentuale);
 
 					if (method[0] != 'i')
 					{
@@ -229146,7 +237360,7 @@ int Jidac::add2()
 
 							/// if (fi == (vf.size() - 1))
 							if (flagimage && (flagvhd || flagntfs))
-								if (fi > 0)		   /// skip over image file
+								if ((fi > 0) && (!(flagac && ((fi >= vf.size()) || ac_grande(vf[fi]->first))))) /// skip over image file (65.9n: and over the pieces of ac; 65.9o: and the images of ac -all)
 									m= "36,207,0"; // packing the .header with method 3
 #endif
 							if (flagdebug2)
@@ -229170,7 +237384,6 @@ int Jidac::add2()
 									assert(my_cj_out.c_str());
 									const char *p= my_cj_out.c_str();
 									int64_t		n= my_cj_out.size();
-									g_scritti+= n; // very rude
 									const int64_t N= 1 << 30;
 									while (n > N)
 									{
@@ -229304,18 +237517,18 @@ int Jidac::add2()
 #ifdef _WIN32
 					if (flagvhd || flagntfs)
 					{
-						if ((!imgdash.mostra(total_done, total_size, g_fwritten)) && (!flagnoeta))
-							print_eta_image("NTFS", 100.0f * total_done / (total_size + 1), total_done, total_size,
-											g_fwritten, startstream, &ultimotempo, &last_update_time);
+						if ((!imgdash.mostra(total_done - g_ac.basefatti, total_size, g_inoutput - g_ac.basescritti)) && (!flagnoeta))
+							print_eta_image("NTFS", 100.0f * (total_done - g_ac.basefatti) / (total_size + 1), total_done - g_ac.basefatti, total_size,
+											g_inoutput - g_ac.basescritti, startstream, &ultimotempo, &last_update_time);
 					}
-					else if ((!imgdash.mostra(imagereaded, total_size, g_scritti)) && (!flagnoeta))
+					else if ((!imgdash.mostra(imagereaded, total_size, g_inoutput - g_ac.basescritti)) && (!flagnoeta))
 						print_eta_image("raw", 100.0f * imagereaded / (total_size + 1),
-										imagereaded, total_size, g_scritti, startstream,
+										imagereaded, total_size, g_inoutput - g_ac.basescritti, startstream,
 										&ultimotempo, &last_update_time);
 #else
-					if ((!imgdash.mostra(imagereaded, total_size, g_scritti)) && (!flagnoeta))
+					if ((!imgdash.mostra(imagereaded, total_size, g_inoutput)) && (!flagnoeta))
 						print_eta_image("DD", 100.0f * imagereaded / (total_size + 1),
-										imagereaded, total_size, g_scritti, startstream,
+										imagereaded, total_size, g_inoutput, startstream,
 										&ultimotempo, &last_update_time);
 #endif
 				}
@@ -229523,7 +237736,7 @@ int Jidac::add2()
 					memcpy(&turbobuf[1 - qui][0] + TURBOROOM - carry, base + e, (size_t)carry);
 				qui= 1 - qui;
 				if ((!flagnoeta) && (!turboimg))
-					print_progress(total_size, total_done, g_scritti, ultimapercentuale);
+					print_progress(total_size, total_done, g_inoutput, ultimapercentuale);
 			}
 			if (turboimg)
 			{
@@ -229567,7 +237780,9 @@ int Jidac::add2()
 						{
 #ifdef _WIN32
 							// Windows-specific imaging management
-							if (flagvhd || flagntfs)
+							if (flagac && ac_mio(vf[fi]->first)) /// 65.9n: a piece of ac: the disk by offset, or the metafile
+								buflen= ac_leggi(vf[fi], buf, g_ioBUFSIZE);
+							else if (flagvhd || flagntfs)
 							{
 								if ((imager_zeroed!="") && (vf[fi]->first == imager_zeroed) && (vf[fi]->second.pramfile != NULL))
 								{
@@ -229688,9 +237903,9 @@ int Jidac::add2()
 										imagefatale(buflen);
 									imgdash.dopo(imager.ultimoblocco(), buflen);
 									img_avvisa(imgdash.live());
-									if ((!imgdash.mostra(total_done, total_size, g_fwritten)) && (!flagnoeta))
-										print_eta_image("NTFS", 100.0f * total_done / (total_size + 1), total_done, total_size,
-														g_fwritten, startstream, &ultimotempo, &last_update_time);
+									if ((!imgdash.mostra(total_done - g_ac.basefatti, total_size, g_inoutput - g_ac.basescritti)) && (!flagnoeta))
+										print_eta_image("NTFS", 100.0f * (total_done - g_ac.basefatti) / (total_size + 1), total_done - g_ac.basefatti, total_size,
+														g_inoutput - g_ac.basescritti, startstream, &ultimotempo, &last_update_time);
 								}
 							}
 							else
@@ -229705,9 +237920,9 @@ int Jidac::add2()
 								imagereaded+= buflen;
 								imgdash.dopo(blocco, buflen);
 								img_avvisa(imgdash.live());
-								if ((!imgdash.mostra(imagereaded, total_size, g_scritti)) && (!flagnoeta))
+								if ((!imgdash.mostra(imagereaded, total_size, g_inoutput - g_ac.basescritti)) && (!flagnoeta))
 									print_eta_image("raw", 100.0f * imagereaded / (total_size + 1),
-													imagereaded, total_size, g_scritti, startstream,
+													imagereaded, total_size, g_inoutput - g_ac.basescritti, startstream,
 													&ultimotempo, &last_update_time);
 							}
 #else
@@ -229722,9 +237937,9 @@ int Jidac::add2()
 							imagereaded+= buflen; /// the progress (it stayed at 0)
 							imgdash.dopo(blocco, buflen);
 							img_avvisa(imgdash.live());
-							if ((!imgdash.mostra(imagereaded, total_size, g_scritti)) && (!flagnoeta))
+							if ((!imgdash.mostra(imagereaded, total_size, g_inoutput)) && (!flagnoeta))
 								print_eta_image("DD", 100.0f * imagereaded / (total_size + 1),
-												imagereaded, total_size, g_scritti, startstream,
+												imagereaded, total_size, g_inoutput, startstream,
 												&ultimotempo, &last_update_time);
 #endif
 						}
@@ -229785,8 +238000,8 @@ int Jidac::add2()
 									int secondi= (mtime() - startstream) / 1000;
 									if (secondi != ultimotempo)
 									{
-										float ratio= 100.0 * g_scritti / (total_size + 1);
-										myprintf("02081: So far in=%10s out=%10s (ratio %8.2f %%) @ %10s /s        \r", tohuman(total_size), tohuman2(g_scritti), ratio, tohuman3(total_size / secondi));
+										float ratio= 100.0 * g_inoutput / (total_size + 1);
+										myprintf("02081: So far in=%10s out=%10s (ratio %8.2f %%) @ %10s /s        \r", tohuman(total_size), tohuman2(g_inoutput), ratio, tohuman3(total_size / secondi));
 										fflush(stdout);
 										ultimotempo= secondi;
 									}
@@ -229800,7 +238015,7 @@ int Jidac::add2()
 									int           percentuale = (int)(100.0 * total_done / (size_ref + 1)) + 1;
 									if (percentuale != ultimapercentuale)
 									{
-										print_progress((int64_t)size_ref, total_done, g_scritti, ultimapercentuale);
+										print_progress((int64_t)size_ref, total_done, g_inoutput, ultimapercentuale);
 										ultimapercentuale = percentuale;
 									}
 								}
@@ -229815,7 +238030,7 @@ int Jidac::add2()
 										if (percentuale != ultimapercentuale)
 											if (percentuale % modulo == 0)
 											{
-												print_progress(total_size, total_done, g_scritti, ultimapercentuale);
+												print_progress(total_size, total_done, g_inoutput, ultimapercentuale);
 												ultimapercentuale= percentuale;
 											}
 									}
@@ -230075,7 +238290,7 @@ int Jidac::add2()
 						myprintf("02087: operating on %s\n", fn.c_str());
 
 					if (!flagimage)
-						print_progress(total_size, total_done, g_scritti, ultimapercentuale);
+						print_progress(total_size, total_done, g_inoutput, ultimapercentuale);
 
 					if (method[0] != 'i')
 					{
@@ -230086,7 +238301,7 @@ int Jidac::add2()
 
 							/// if (fi == (vf.size() - 1))
 							if (flagimage && (flagvhd || flagntfs))
-								if (fi > 0)		   /// skip over image file
+								if ((fi > 0) && (!(flagac && ((fi >= vf.size()) || ac_grande(vf[fi]->first))))) /// skip over image file (65.9n: and over the pieces of ac; 65.9o: and the images of ac -all)
 									m= "36,207,0"; // packing the .header with method 3
 #endif
 							if (flagdebug2)
@@ -230110,7 +238325,6 @@ int Jidac::add2()
 									assert(my_cj_out.c_str());
 									const char *p= my_cj_out.c_str();
 									int64_t		n= my_cj_out.size();
-									g_scritti+= n; // very rude
 									const int64_t N= 1 << 30;
 									while (n > N)
 									{
@@ -230203,7 +238417,7 @@ int Jidac::add2()
 					myprintf("02090: $$$$$$$$$$$$$ updated newname %s\n", newname.c_str());
 			}
 
-			print_progress(total_size, total_done, g_scritti, ultimapercentuale);
+			print_progress(total_size, total_done, g_inoutput, ultimapercentuale);
 			if (!flagmemfile)
 #ifdef _WIN32
 				if ((!flagstdin))
@@ -230734,6 +238948,10 @@ int Jidac::add2()
 	}
 	if (files_added + files_updated + removed > 0)
 		myprintf("02251: Files%s\n", temp.c_str());
+#ifdef _WIN32
+	if (flagac) /// 65.9n: the last line of ac: the hash of its metafile
+		ac_impronta();
+#endif
 
 	if (flagignore)
 	{
@@ -230843,6 +239061,8 @@ bool Jidac::chiudivhd()
 	return true;
 }
 
+#endif // _WIN32
+/// 65.9t: on every platform (it was with the images, Windows only): i -verbose takes the metafile of ac with it
 int Jidac::extracttobuffer(const std::string &filename, std::vector<uint8_t> &out_buffer)
 {
 	if (flagdebug)
@@ -230889,7 +239109,7 @@ int Jidac::extracttobuffer(const std::string &filename, std::vector<uint8_t> &ou
 		unsigned j= f_info.ptr[i];
 		if (j == 0 || j >= ht.size())
 		{
-			f_info.block_for_ptr[i]= -1;
+			f_info.block_for_ptr[i]= (unsigned)-1;
 			continue;
 		}
 
@@ -230944,7 +239164,7 @@ int Jidac::extracttobuffer(const std::string &filename, std::vector<uint8_t> &ou
 		}
 		else
 		{
-			f_info.block_for_ptr[i]= -1;
+			f_info.block_for_ptr[i]= (unsigned)-1;
 		}
 	}
 
@@ -231095,7 +239315,6 @@ int Jidac::extracttobuffer(const std::string &filename, std::vector<uint8_t> &ou
 
 	return 0;
 }
-#endif
 
 #ifdef _WIN32
 
@@ -231879,6 +240098,18 @@ int Jidac::restore_raw_to_rawfile(char i_source, string i_destfile)
 	return extract();
 }
 
+/// 65.9g: the name of the .vhdx made in place of a .vhd: x.vhd => x.vhdx, a folder (or a name without extension) => image_X.vhdx in it
+static string nomevhdx(const string &i_dest, const string &i_base)
+{
+	string minuscolo= i_dest;
+	for (size_t i= 0; i < minuscolo.size(); i++)
+		minuscolo[i]= (char)tolower((unsigned char)minuscolo[i]);
+	if ((minuscolo.size() > 4) && (minuscolo.substr(minuscolo.size() - 4) == ".vhd"))
+		return i_dest + "x";
+	if ((minuscolo.size() > 5) && (minuscolo.substr(minuscolo.size() - 5) == ".vhdx"))
+		return i_dest;
+	return includetrailingbackslash(i_dest) + i_base + ".vhdx";
+}
 int Jidac::restore_ntfs_to_vhd(char i_source, string i_destfile)
 {
 	if (!validate_source_dest(i_source, i_destfile, "restore_ntfs_to_vhd"))
@@ -231902,14 +240133,21 @@ int Jidac::restore_ntfs_to_vhd(char i_source, string i_destfile)
 		myprintf("62302! The %s of %c: has sectors of %u bytes: a .vhd (sectors of 512) could not mount it (restore to a disk, or to a raw file)\n", imager.nomefs(), i_source, imager.getbytespersector());
 		return 2;
 	}
+	const string base	  = "image_" + string(1, i_source);
+	/// 65.9g: over 2040 GB a .vhd cannot be: a .vhdx by itself, with the same name (x.vhd => x.vhdx,
+	/// a folder => image_X.vhdx in it)
 	if (imager.gettotalbytes() > FRANZIMAGER_VHD_MAX)
 	{
-		myprintf("62303! %s bytes: more than a .vhd can hold (2040 GB) (restore to a disk, or -raw to a file)\n", migliaia(imager.gettotalbytes()));
-		return 2;
+		const string nuovo= nomevhdx(i_destfile, base);
+		color_cyan();
+		myprintf("62313: %s bytes: more than a .vhd can hold (2040 GB): a .vhdx instead, %Z\n", migliaia(imager.gettotalbytes()), nuovo.c_str());
+		color_restore();
+		jidacreset();
+		lettera= i_source;
+		return restore_to_vmdk(i_source, nuovo, true, 3);
 	}
 
 	/// -to x.vhd: that very file. Else a folder, with image_X.vhd inside
-	const string base	  = "image_" + string(1, i_source);
 	string		 dest	  = i_destfile;
 	string		 minuscolo= dest;
 	for (size_t i= 0; i < minuscolo.size(); i++)
@@ -231972,6 +240210,17 @@ int Jidac::restore_raw_to_vhd(char i_source, string i_destfile)
 		myprintf("62306! Cannot find the size of %s.raw\n", base.c_str());
 		return 2;
 	}
+	/// 65.9g: over 2040 GB (a partition: with the 1 MiB before it) a .vhdx by itself
+	if (((uint64_t)quanto + (isdigit((unsigned char)i_source) ? 0 : 1048576)) > FRANZIMAGER_VHD_MAX)
+	{
+		const string nuovo= nomevhdx(i_destfile, base);
+		color_cyan();
+		myprintf("62313: %s bytes: more than a .vhd can hold (2040 GB): a .vhdx instead, %Z\n", migliaia(quanto), nuovo.c_str());
+		color_restore();
+		jidacreset();
+		lettera= i_source;
+		return restore_to_vmdk(i_source, nuovo, false, 3);
+	}
 
 	string dest		= i_destfile;
 	string minuscolo= dest;
@@ -232009,10 +240258,12 @@ int Jidac::restore_raw_to_vhd(char i_source, string i_destfile)
 	one (x.vmdk, a text, and x-flat.vmdk, the disk byte by byte). The disk is the one of
 	the .vhd: the image of the used clusters has it inside (our MBR, the partition at 1
 	MiB), a raw partition gets the same, a whole disk (image_0.raw ...) is the disk.
-	What a hosted .vmdk cannot be: sectors that are not of 512 bytes. A sparse one over
-	2040 GB: not supported (yet), the flat one is the way
+	What a hosted .vmdk cannot be: sectors that are not of 512 bytes.
+	65.9g: i_tipo 1 a sparse .vmdk (in more files over 2032 GB: x.vmdk the text, x-s001.vmdk ... the
+	disk), 2 a flat .vmdk, 3 a .vhdx (what Windows mounts over the 2040 GB of a .vhd). A partition
+	over 2 TB is in a GPT
 */
-int Jidac::restore_to_vmdk(char i_source, string i_destfile, bool i_thin, bool i_flat)
+int Jidac::restore_to_vmdk(char i_source, string i_destfile, bool i_thin, int i_tipo)
 {
 	if (!validate_source_dest(i_source, i_destfile, "restore_to_vmdk"))
 		return 2;
@@ -232022,8 +240273,11 @@ int Jidac::restore_to_vmdk(char i_source, string i_destfile, bool i_thin, bool i
 	if (letter == 0)
 		return 2;
 
+	const bool	 i_flat= (i_tipo == 2);
+	const char	*genere= (i_tipo == 3) ? "vhdx" : (i_flat ? "vmdk (flat)" : "vmdk (sparse)");
 	const string base  = "image_" + string(1, i_source);
 	int64_t		 quanto= -1;
+	uint64_t	 grande= 0; /// about how long the disk is: the files of a sparse .vmdk
 	if (i_thin)
 	{
 		if (!extract_ntfs_meta(i_source))
@@ -232035,14 +240289,10 @@ int Jidac::restore_to_vmdk(char i_source, string i_destfile, bool i_thin, bool i
 		}
 		if (imager.getbytespersector() != FRANZIMAGER_SECTOR_SIZE)
 		{
-			myprintf("62309! The %s of %c: has sectors of %u bytes: a .vmdk has sectors of 512 (restore to a disk, or to a raw file)\n", imager.nomefs(), i_source, imager.getbytespersector());
+			myprintf("62309! The %s of %c: has sectors of %u bytes: a %s here has sectors of 512 (restore to a disk, or to a raw file)\n", imager.nomefs(), i_source, imager.getbytespersector(), (i_tipo == 3) ? ".vhdx" : ".vmdk");
 			return 2;
 		}
-		if ((!i_flat) && (imager.gettotalbytes() > FRANZIMAGER_VHD_MAX))
-		{
-			myprintf("62310! %s bytes: more than a sparse .vmdk is made for here (2040 GB), not supported (yet): -raw for a flat one\n", migliaia(imager.gettotalbytes()));
-			return 2;
-		}
+		grande= imager.gettotalbytes();
 	}
 	else
 	{
@@ -232060,14 +240310,17 @@ int Jidac::restore_to_vmdk(char i_source, string i_destfile, bool i_thin, bool i
 			myprintf("62306! Cannot find the size of %s.raw\n", base.c_str());
 			return 2;
 		}
+		grande= (uint64_t)quanto;
 	}
 
-	/// x.vmdk, and with -raw x-flat.vmdk next to it: -force to overwrite what is there
-	const string dest= i_destfile;
+	/// what will be written: x.vhdx; x.vmdk, with -raw x-flat.vmdk next to it, and x-s001.vmdk ... for a
+	/// sparse one too long for one file (4 MiB more: the MBR or the GPT around a partition). -force to overwrite
+	const string   dest= i_destfile;
 	vector<string> daverificare;
-	daverificare.push_back(dest);
-	if (i_flat)
-		daverificare.push_back(franzvmdk::nomeflat(dest));
+	if (i_tipo == 3)
+		daverificare.push_back(dest);
+	else
+		daverificare= franzvmdk::nomi(dest, grande + 4 * 1048576, i_flat);
 	for (size_t i= 0; i < daverificare.size(); i++)
 		if (fileexists(daverificare[i]))
 		{
@@ -232083,14 +240336,14 @@ int Jidac::restore_to_vmdk(char i_source, string i_destfile, bool i_thin, bool i
 			}
 		}
 	makepath(dest);
-	print_ready_to_restore(i_thin ? "ntfs" : "raw", i_source, i_flat ? "vmdk (flat)" : "vmdk (sparse)", dest.c_str());
+	print_ready_to_restore(i_thin ? "ntfs" : "raw", i_source, genere, dest.c_str());
 
 	prepare_extract_to_disk(base + (i_thin ? ".fhd" : ".raw"));
 	lettera	   = i_source;
-	esportavmdk= i_flat ? 2 : 1;
+	esportavmdk= i_tipo;
 	if (!i_thin)
 	{
-		/// the raw image goes the way of the .vhd, the imager told to write a .vmdk
+		/// the raw image goes the way of the .vhd, the imager told what to write
 		imager.setvmdk(esportavmdk);
 		esportavhdraw	 = true;
 		esportavhdrawsize= quanto;
@@ -232346,6 +240599,7 @@ bool Jidac::image_risky_continue(char i_source, char i_destination)
 	clusters, or the whole partition: the latest one if both), the -to what to do with it
 	  -to x.vhd          a .vhd that Windows mounts (Disk Management, Mount-DiskImage, mount)
 	  -to x.vmdk         a sparse .vmdk (VMware, VirtualBox, QEMU); -raw: a flat one (65.8z14)
+	  -to x.vhdx         a .vhdx, what Windows mounts of any size (65.9g; x.vhd over 2040 GB becomes one)
 	  -to a folder       image_X.vhd in it (a name without extension is a folder)
 	  -to x.raw (x.img)  the partition, byte by byte
 	  -to G: -image      written on the partition G: (-image is the consent: G: is overwritten)
@@ -232412,7 +240666,7 @@ int Jidac::restoreimageauto()
 	{
 		if (!isalpha((unsigned char)s))
 		{
-			myprintf("09411! %c is the image of a whole disk: to a .vhd, a .vmdk or a raw file\n", s);
+			myprintf("09411! %c is the image of a whole disk: to a .vhd, a .vhdx, a .vmdk or a raw file\n", s);
 			return 2;
 		}
 		if (!flagimage)
@@ -232460,7 +240714,10 @@ int Jidac::restoreimageauto()
 	/// 65.8z14: a .vmdk (VMware, VirtualBox, QEMU): sparse, or flat with -raw (the whole disk
 	/// byte by byte in x-flat.vmdk)
 	if ((estensione == "vmdk") && (!direxists(dest)))
-		return restore_to_vmdk(s, dest, thin, tuttizeri);
+		return restore_to_vmdk(s, dest, thin, tuttizeri ? 2 : 1);
+	/// 65.9g: a .vhdx, the virtual disk of Windows without the 2040 GB of the .vhd (any size)
+	if ((estensione == "vhdx") && (!direxists(dest)))
+		return restore_to_vmdk(s, dest, thin, 3);
 	if ((estensione == "vhd") || (estensione == "") || direxists(dest))
 		return thin ? restore_ntfs_to_vhd(s, dest) : restore_raw_to_vhd(s, dest);
 	/// a raw file already there: as for a .vhd, -force to overwrite (the used clusters wrote over
@@ -232484,6 +240741,10 @@ int Jidac::restoreimageauto()
 
 int Jidac::restoreimage()
 {
+#ifndef ANCIENT
+	if (flagxc) /// 65.9p: xc, the whole disk saved by ac
+		return xc();
+#endif
 	if (!iszpaq(archive) && (!isfranzen(archive)))
 	{
 		myprintf("17385: You need a .zpaq\n");
@@ -232670,9 +240931,9 @@ int Jidac::restoreimagedevice()
 	for (size_t i= 0; i < minuscolo.size(); i++)
 		minuscolo[i]= (char)tolower((unsigned char)minuscolo[i]);
 	/// (65.8b: nor to a .vmdk: it would be the raw device in a file with that name)
-	if (((minuscolo.size() > 4) && (minuscolo.substr(minuscolo.size() - 4) == ".vhd")) || ((minuscolo.size() > 5) && (minuscolo.substr(minuscolo.size() - 5) == ".vmdk")))
+	if (((minuscolo.size() > 4) && (minuscolo.substr(minuscolo.size() - 4) == ".vhd")) || ((minuscolo.size() > 5) && ((minuscolo.substr(minuscolo.size() - 5) == ".vmdk") || (minuscolo.substr(minuscolo.size() - 5) == ".vhdx"))))
 	{
-		myprintf("62307! The image of a *nix device goes to a raw file (-to x.raw), not to a .vhd or a .vmdk\n");
+		myprintf("62307! The image of a *nix device goes to a raw file (-to x.raw), not to a .vhd, a .vhdx or a .vmdk\n");
 		return 2;
 	}
 	bool nonfile= false;

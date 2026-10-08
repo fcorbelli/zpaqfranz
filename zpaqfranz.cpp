@@ -64,8 +64,8 @@ OTHER DEALINGS IN THE SOFTWARE.
 /// Comment out the next line to build without -m8 (-m8 is then -m5 again)
 #define ZPAQZSTD
 
-#define ZPAQ_VERSION "65.9z"
-#define ZPAQ_DATE "(2026-10-04)"
+#define ZPAQ_VERSION "65.10d"
+#define ZPAQ_DATE "(2026-10-08)"
 
 
 /*
@@ -143215,10 +143215,9 @@ class Jidac
 #endif
 	int addhome(); // add, return 1 if error else 0
 	int list();	   // list (one parameter) / check (more than one)
-#ifndef ANCIENT
 	int ls();
 	int tui();
-#endif
+	int mc(); /// 65.10a
 	int list715();
 	int collision(bool i_flagall); // check for SHA-1 collisions
 	int fzf();
@@ -153208,7 +153207,6 @@ string help_i(bool i_usage, bool i_example)
 	}
 	return ("Show file/archive info");
 }
-#ifndef ANCIENT
 string help_ls(bool i_usage, bool i_example)
 {
 	if (i_usage)
@@ -153247,7 +153245,35 @@ string help_tui(bool i_usage, bool i_example)
 	}
 	return ("Text UI for listing/extraction");
 }
-#endif
+/// 65.10a
+string help_mc(bool i_usage, bool i_example)
+{
+	if (i_usage)
+	{
+		scrivi_riga("CMD mc", "Two panels on the file system, a very small Midnight Commander");
+		scrivi_riga(" ", "TAB (left, right) the other panel; ENTER into a folder, or the TUI of an");
+		scrivi_riga(" ", "archive; BACKSPACE up; \\ the drives (*nix: / /home and the home); SPACE marks");
+		scrivi_riga(" ", "F1 add to an archive (the one under the cursor of the other panel, or a new");
+		scrivi_riga(" ", "one; a menu: default, -m1...-m5, with a password) F2 rename F3 list F4 info");
+		scrivi_riga(" ", "F5 copy F6 move (to another disk: verified) F7 mkdir F8 delete F9 sort");
+		scrivi_riga(" ", "F10 ESC leave. Alt+1...Alt+0 are F1-F10. ? for all the keys");
+		scrivi_riga(" ", "A name typed (letters, digits): the cursor on the first one that begins that way");
+		scrivi_riga(" ", "* marks by a wildcard (*.cpp, source*), | turns the marks over");
+		scrivi_riga(" ", "Ctrl+S size (s), Ctrl+H size of each folder (s -home), Ctrl+V compare the two");
+		scrivi_riga(" ", "panels (c), Ctrl+R robocopy to the other panel (r: dry run, or -kill)");
+		scrivi_riga(" ", "Ctrl+R: from the folder under the cursor, always into a folder with its name");
+		scrivi_riga(" ", "(c:\\data\\715 with z:\\ on the other panel goes to z:\\715; h:\\ to z:\\h_)");
+		scrivi_riga(" ", "F1 F5 F6 F8 work on the marked ones, or on the one under the cursor");
+	}
+	if (i_usage && i_example)
+		scrivi_examples();
+	if (i_example)
+	{
+		scrivi_esempio("The two panels, on the current folder", "mc");
+		scrivi_esempio("Left and right panel", "mc c:\\data z:\\backup");
+	}
+	return ("Two panels on the file system (copy, move, delete, add to an archive)");
+}
 #if defined(_WIN32) && !defined(ANCIENT)
 /// 65.9n
 string help_ac(bool i_usage, bool i_example)
@@ -154922,11 +154948,10 @@ void Jidac::load_help_map()
 
 	// List
 	help_map.insert(std::pair<string, HelpInfo>("fzf", HelpInfo("Info/list", help_fzf, 3)));
-#ifndef ANCIENT
 	help_map.insert(std::pair<string, HelpInfo>("ls", HelpInfo("Info/list", help_ls, 3)));
 	help_map.insert(std::pair<string, HelpInfo>("tui", HelpInfo("Info/list", help_tui, 3)));
 	help_map.insert(std::pair<string, HelpInfo>("gui", HelpInfo("Info/list", help_tui, 3)));
-#endif
+	help_map.insert(std::pair<string, HelpInfo>("mc", HelpInfo("File     ", help_mc, 6))); /// 65.10a
 	help_map.insert(std::pair<string, HelpInfo>("pakka", HelpInfo("Info/list", help_pakka, 3)));
 
 #if defined(_WIN32)
@@ -157260,6 +157285,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 		else if (cli_filesandcommand(opt,"d",			'd',argc,argv,&i));
 		else if (cli_filesandcommand(opt,"dir",			'2',argc,argv,&i));
 		else if (cli_filesandcommand(opt,"tree",		2,argc,argv,&i));
+		else if (cli_filesandcommand(opt,"mc",			3,argc,argv,&i)); /// 65.10a
 		else if (cli_filesandcommand(opt,"find",		'j',argc,argv,&i));
 		else if (cli_filesandcommand(opt,"isopen",		'!',argc,argv,&i));
 		else if (cli_filesandcommand(opt,"password",	'6',argc,argv,&i));
@@ -157317,11 +157343,9 @@ int Jidac::loadparameters(int argc, const char** argv)
 		opt=="last" 			||
 		opt=="list" 			||
 		opt=="mysqldump" 		||
-#ifndef ANCIENT
 		opt=="ls" 				||
 		opt=="tui" 				||
 		opt=="gui" 				||
-#endif
 #ifdef ZPAQFULL ///NOSFTPSTART
 #ifdef SFTP
 		opt=="cloud"				||
@@ -157371,12 +157395,10 @@ int Jidac::loadparameters(int argc, const char** argv)
 				g_optional="ransomware";
 				flagappend=true;
 			}
-#ifndef ANCIENT
 			if ((opt=="tui") || (opt=="gui"))
 				command='T';
 			if (opt=="ls")
 				command=':';
-#endif
 			if (opt=="cc")		//cbackup
 				command='q';
 			if (opt=="pp")
@@ -162524,9 +162546,8 @@ int Jidac::doCommand()
 #ifdef _WIN32
 	else if (command=='S') return ads();
 #endif
-#ifndef ANCIENT
 	else if (command=='T') return tui();
-#endif
+	else if (command==3)   return mc(); /// 65.10a
 #ifdef ZPAQFULL ///NOSFTPSTART
 	else if (command=='U') return update();
 #endif ///NOSFTPEND
@@ -162577,9 +162598,7 @@ int Jidac::doCommand()
 	else if (command=='y') return sfx();
 #endif ///NOSFTPEND
 	else if (command=='z') return zero();
-#ifndef ANCIENT
 	else if (command==':') return ls();
-#endif
 	else usage();
 	return 0;
 }
@@ -208124,7 +208143,6 @@ int xto(string i_outputpath, string i_currentpath, int64_t i_sizetobeextracted)
 	return risultato;
 }
 
-#ifndef ANCIENT
 
 
 // SFTP-style filesystem navigation for ZPAQ archives - FIXED VERSION
@@ -212392,7 +212410,3001 @@ int scegli_riga(int argc, const char **argv, std::vector<std::string> &o_riga)
 
 
 
-#endif // ANCIENT
+/*
+	65.10a: mc, two panels on the file system side by side, in the way of the Midnight Commander
+	(a very small one), with the function keys half of mc and half of Windows:
+	F1 add to an archive (a menu: the method, a password), F2 rename, F3 list and F4 info (of an
+	archive), F5 copy, F6 move, F7 make a folder, F8 delete, F9 sort (a menu), F10 or ESC leave.
+	A function key does not always arrive (a terminal keeps F1 or F10 for itself, ssh, tmux): Alt
+	and a digit, 1-9 and 0, are the same keys (on *nix: the ESC and the digit a terminal sends for it).
+	65.10b: a name typed, letter by letter, puts the cursor on the first one that begins that way (e, et,
+	etc: see cerca()). That is why the letters and the digits alone are not keys: 8 was F8, and
+	the y of a name after it was the yes to the delete. Ctrl+P: a path typed by hand; Ctrl+L: the
+	folders read again; ? the keys.
+	65.10c: * marks by a wildcard (*.cpp; after a name typed, sorgente, it is sorgente*: a line to
+	type, ENTER marks), | turns the marks over. And the commands of zpaqfranz on two folders, from the
+	two panels: Ctrl+S is s (the size: of the marked folders, or of the one under the cursor, or of
+	the one shown), Ctrl+H is s -home (each folder inside the one shown), Ctrl+V is c (this panel,
+	the master, against the other one), Ctrl+R is r (the other panel made equal to this one): a
+	small menu, [RUN] is the dry run, -kill does it after a question. Look (s, c), try (r), do
+	(r -kill). Ctrl+H and BACKSPACE are the same character: on Windows the key tells them apart,
+	on *nix the terminal says which one it deletes with (stty erase).
+	65.10d: the robocopy of Ctrl+R takes the folder under the cursor, and its destination always
+	ends with the name of the source (z:\ becomes z:\715): -kill empties what it is given, and a
+	wrong panel is not a reason to lose a disk. See duecartelle(). Ctrl+V (c) is as it was: it
+	touches nothing, any two folders are good
+	TAB (or left, right) changes panel. ENTER enters a folder; on an archive it opens the TUI.
+	BACKSPACE (or ENTER on ..) goes up; above the root, or with \ or /, the roots: on Windows the
+	drives with what they are, on the others / /home and the home of the user.
+	SPACE (or INS) marks the line under the cursor: F1 F5 F6 F8 work on the marked ones of the
+	panel, or on the one under the cursor when nothing is marked. The marks are of the folder
+	shown: they are gone when the panel goes somewhere else (what is deleted is what is seen).
+	The other panel is where things go: the folder of F5 and F6, and the archive of F1 when its
+	cursor is on one (a new version is added, after a question), otherwise a name is asked.
+
+	The drives: an elevated process does not see the network drives mapped by the normal session
+	(see mapped_network_drives). They are taken from HKCU\Network and entered by their share.
+	Nothing is asked to a network drive (label, free space): one that is off answers after a
+	long while.
+
+	What runs for long, and writes a lot, is zpaqfranz itself started again (a, l, i, tui) on the
+	normal screen: the command line is the one that would have been typed, and a fatal error
+	there does not take the panels away. Passwords do not go on that command line (anyone can
+	read it): in the environment of the child (FRANZKEY, FRANZFRANZEN).
+	Copy and move are made here (cp puts everything in one folder), file by file with filecopy():
+	F6 from a disk to another is a copy with the verify, and the source is deleted only when
+	everything of it went and was read again. Links (and the junctions of Windows) are never
+	followed: deleting one deletes the link.
+
+	The keys are read by a function of its own (get_key gives F1-F6 only, and a PgDn that is a
+	"d"). On *nix an ESC waits 50 ms for the rest of its sequence (it was 100 microseconds: by
+	ssh an F8 in two packets became an ESC, that here is "leave").
+
+	For the tests: FRANZMCKEYS=file, the keys come from that file (names as UP DOWN ENTER TAB F5
+	ESC, "a text", single characters; SNAP writes the screen, as text, in the file of
+	FRANZMCDUMP); FRANZMCSIZE=100x30 is the size of the screen. No console is needed then
+*/
+#define MC_SPECIALE 0x200000
+#define MC_SU (MC_SPECIALE + 1)
+#define MC_GIU (MC_SPECIALE + 2)
+#define MC_PAGSU (MC_SPECIALE + 3)
+#define MC_PAGGIU (MC_SPECIALE + 4)
+#define MC_INIZIO (MC_SPECIALE + 5)
+#define MC_FINE (MC_SPECIALE + 6)
+#define MC_SINISTRA (MC_SPECIALE + 7)
+#define MC_DESTRA (MC_SPECIALE + 8)
+#define MC_INS (MC_SPECIALE + 9)
+#define MC_CANC (MC_SPECIALE + 10)
+#define MC_CTRLH (MC_SPECIALE + 11) /// Ctrl+H, where it is not the BACKSPACE (the two send the same character)
+#define MC_F(i_n) (MC_SPECIALE + 100 + (i_n)) /// F1-F12
+#define MC_FOTO (MC_SPECIALE + 200)			  /// (tests) the screen to the file
+#define MC_PAUSA (MC_SPECIALE + 201)		  /// (tests) a pause between two keys
+#define MC_CHIUSO (-1)						  /// nothing more will ever come
+/// what a cell of the screen looks like: a color, and reversed or not
+#define MC_VERDE 1
+#define MC_CIANO 2
+#define MC_GIALLO 3
+#define MC_ROSSO 4
+#define MC_INVERSO 8
+#ifdef _WIN32
+#define MC_RADICI "(the drives)"
+#else
+#define MC_RADICI "(the roots)"
+#endif
+/// UTF-8 to code points: what cannot be shown (a broken sequence, a control character) is a ?
+static void mc_punti(const std::string &i_testo, std::vector<unsigned int> &o_punti)
+{
+	o_punti.clear();
+	const size_t n= i_testo.size();
+	for (size_t i= 0; i < n;)
+	{
+		const unsigned char c	 = (unsigned char)i_testo[i];
+		unsigned int		p	 = '?';
+		size_t				lungo= 1;
+		if (c < 0x80)
+			p= c;
+		else if ((c >= 0xC2) && (c < 0xE0))
+			lungo= 2;
+		else if ((c & 0xF0) == 0xE0)
+			lungo= 3;
+		else if ((c & 0xF8) == 0xF0)
+			lungo= 4;
+		if (lungo > 1)
+		{
+			bool		 bene= (i + lungo <= n);
+			unsigned int q	 = c & (0xFFu >> (lungo + 1));
+			for (size_t k= 1; bene && (k < lungo); k++)
+			{
+				const unsigned char d= (unsigned char)i_testo[i + k];
+				if ((d & 0xC0) != 0x80)
+					bene= false;
+				else
+					q= (q << 6) | (d & 0x3Fu);
+			}
+			if (bene)
+				p= q;
+			else
+				lungo= 1;
+		}
+		if ((p < 32) || (p == 127))
+			p= '?';
+		o_punti.push_back(p);
+		i+= lungo;
+	}
+}
+static void mc_utf8(unsigned int i_punto, std::string &io_testo)
+{
+	if (i_punto < 0x80)
+		io_testo+= (char)i_punto;
+	else if (i_punto < 0x800)
+	{
+		io_testo+= (char)(0xC0 | (i_punto >> 6));
+		io_testo+= (char)(0x80 | (i_punto & 0x3F));
+	}
+	else if (i_punto < 0x10000)
+	{
+		io_testo+= (char)(0xE0 | (i_punto >> 12));
+		io_testo+= (char)(0x80 | ((i_punto >> 6) & 0x3F));
+		io_testo+= (char)(0x80 | (i_punto & 0x3F));
+	}
+	else
+	{
+		io_testo+= (char)(0xF0 | ((i_punto >> 18) & 0x07));
+		io_testo+= (char)(0x80 | ((i_punto >> 12) & 0x3F));
+		io_testo+= (char)(0x80 | ((i_punto >> 6) & 0x3F));
+		io_testo+= (char)(0x80 | (i_punto & 0x3F));
+	}
+}
+static std::string mc_testo(const std::vector<unsigned int> &i_punti, size_t i_da, size_t i_a)
+{
+	std::string r;
+	for (size_t i= i_da; (i < i_a) && (i < i_punti.size()); i++)
+		mc_utf8(i_punti[i], r);
+	return r;
+}
+/// the small letter of a capital one (the search by name does not tell them apart): Latin, Greek, Cyrillic
+static unsigned int mc_minuscolo(unsigned int i_p)
+{
+	if (((i_p >= 'A') && (i_p <= 'Z')) || ((i_p >= 0xC0) && (i_p <= 0xDE) && (i_p != 0xD7)) || ((i_p >= 0x391) && (i_p <= 0x3A9) && (i_p != 0x3A2)) || ((i_p >= 0x410) && (i_p <= 0x42F)))
+		return i_p + 0x20;
+	if ((i_p >= 0x400) && (i_p <= 0x40F))
+		return i_p + 0x50;
+	return i_p;
+}
+/// a name against a wildcard: * any text (none too), ? one character. Capital and small letters are the same
+static bool mc_jolly(const std::vector<unsigned int> &i_modello, const std::vector<unsigned int> &i_nome)
+{
+	const size_t mai   = (size_t)-1;
+	size_t		 m	   = 0, n= 0;
+	size_t		 stella= mai; /// the last * met, and where in the name it was tried from
+	size_t		 ripresa= 0;
+	while (n < i_nome.size())
+	{
+		if ((m < i_modello.size()) && (i_modello[m] == '*'))
+		{
+			stella = m++;
+			ripresa= n;
+		}
+		else if ((m < i_modello.size()) && ((i_modello[m] == '?') || (mc_minuscolo(i_modello[m]) == mc_minuscolo(i_nome[n]))))
+		{
+			m++;
+			n++;
+		}
+		else if (stella != mai)
+		{
+			m= stella + 1;
+			n= ++ripresa;
+		}
+		else
+			return false;
+	}
+	while ((m < i_modello.size()) && (i_modello[m] == '*'))
+		m++;
+	return m == i_modello.size();
+}
+/// the columns a character takes on the screen: 2 the wide ones (CJK, emoji), 0 what goes over another
+static int mc_colonne(unsigned int i_p)
+{
+	if (i_p == 0)
+		return 0;
+	if (((i_p >= 0x0300) && (i_p <= 0x036F)) || ((i_p >= 0x200B) && (i_p <= 0x200F)) || ((i_p >= 0xFE00) && (i_p <= 0xFE0F)) || (i_p == 0xFEFF))
+		return 0;
+	if (((i_p >= 0x1100) && (i_p <= 0x115F)) || ((i_p >= 0x2E80) && (i_p <= 0xA4CF)) || ((i_p >= 0xAC00) && (i_p <= 0xD7A3)) || ((i_p >= 0xF900) && (i_p <= 0xFAFF)) || ((i_p >= 0xFE30) && (i_p <= 0xFE4F)) || ((i_p >= 0xFF00) && (i_p <= 0xFF60)) || ((i_p >= 0xFFE0) && (i_p <= 0xFFE6)) || ((i_p >= 0x1F300) && (i_p <= 0x1FAFF)) || ((i_p >= 0x20000) && (i_p <= 0x3FFFD)))
+		return 2;
+	return 1;
+}
+static int mc_larghezza(const std::vector<unsigned int> &i_punti, size_t i_da, size_t i_a)
+{
+	int r= 0;
+	for (size_t i= i_da; (i < i_a) && (i < i_punti.size()); i++)
+		r+= mc_colonne(i_punti[i]);
+	return r;
+}
+/// at most i_colonne columns: too long, a ~ where it is cut, and its end stays (the extension)
+static std::string mc_taglia(const std::string &i_testo, int i_colonne)
+{
+	std::vector<unsigned int> p;
+	mc_punti(i_testo, p);
+	if (i_colonne <= 0)
+		return "";
+	if (mc_larghezza(p, 0, p.size()) <= i_colonne)
+		return mc_testo(p, 0, p.size());
+	int coda= i_colonne / 3;
+	if (coda > 8)
+		coda= 8;
+	const int				  testa= i_colonne - 1 - coda;
+	std::vector<unsigned int> r;
+	int						  usate= 0;
+	size_t					  i	   = 0;
+	for (; i < p.size(); i++)
+	{
+		const int c= mc_colonne(p[i]);
+		if (usate + c > testa)
+			break;
+		r.push_back(p[i]);
+		usate+= c;
+	}
+	r.push_back('~');
+	size_t da= p.size();
+	usate	 = 0;
+	while (da > i)
+	{
+		const int c= mc_colonne(p[da - 1]);
+		if (usate + c > coda)
+			break;
+		usate+= c;
+		da--;
+	}
+	for (size_t k= da; k < p.size(); k++)
+		r.push_back(p[k]);
+	return mc_testo(r, 0, r.size());
+}
+/// the end of a path: what does not fit is cut at the beginning
+static std::string mc_coda(const std::string &i_testo, int i_colonne)
+{
+	std::vector<unsigned int> p;
+	mc_punti(i_testo, p);
+	if (i_colonne <= 0)
+		return "";
+	if (mc_larghezza(p, 0, p.size()) <= i_colonne)
+		return mc_testo(p, 0, p.size());
+	size_t da	= p.size();
+	int	   usate= 0;
+	while (da > 0)
+	{
+		const int c= mc_colonne(p[da - 1]);
+		if (usate + c > i_colonne - 1)
+			break;
+		usate+= c;
+		da--;
+	}
+	return "~" + mc_testo(p, da, p.size());
+}
+/// a size in 7 columns at most
+static std::string mc_dimensione(int64_t i_bytes)
+{
+	char testo[32];
+	if (i_bytes < 10000000)
+	{
+		snprintf(testo, sizeof(testo), "%lld", (long long)i_bytes);
+		return testo;
+	}
+	static const char unita[]= "KMGTPE";
+	int64_t			  v		 = i_bytes;
+	int				  u		 = -1;
+	while ((v >= 100000) && (u < 5))
+	{
+		v/= 1024;
+		u++;
+	}
+	snprintf(testo, sizeof(testo), "%lld%c", (long long)v, unita[u]);
+	return testo;
+}
+#ifdef _WIN32
+/// a size for who reads: 1.8T 52.7G 120M (the drives)
+static std::string mc_umano(int64_t i_bytes)
+{
+	static const char unita[]= "BKMGTPE";
+	double			  v		 = (double)i_bytes;
+	int				  u		 = 0;
+	while ((v >= 1000.0) && (u < 6))
+	{
+		v/= 1024.0;
+		u++;
+	}
+	char testo[32];
+	if ((u == 0) || (v >= 100.0))
+		snprintf(testo, sizeof(testo), "%d%c", (int)v, unita[u]);
+	else
+		snprintf(testo, sizeof(testo), "%.1f%c", v, unita[u]);
+	return testo;
+}
+#endif
+/// to the console as it is: UTF-8, with the ANSI sequences
+static void mc_fuori(const std::string &i_testo)
+{
+	fflush(stdout);
+#ifdef _WIN32
+	const HANDLE h	 = GetStdHandle(STD_OUTPUT_HANDLE);
+	DWORD		 modo= 0;
+	if (GetConsoleMode(h, &modo))
+	{
+		const int n= MultiByteToWideChar(CP_UTF8, 0, i_testo.c_str(), (int)i_testo.size(), NULL, 0);
+		if (n > 0)
+		{
+			std::vector<wchar_t> largo((size_t)n + 1);
+			MultiByteToWideChar(CP_UTF8, 0, i_testo.c_str(), (int)i_testo.size(), &largo[0], n);
+			DWORD scritti= 0;
+			WriteConsoleW(h, &largo[0], (DWORD)n, &scritti, NULL);
+		}
+		return;
+	}
+#endif
+	fwrite(i_testo.data(), 1, i_testo.size(), stdout);
+	fflush(stdout);
+}
+/// there is a screen to draw on (NUL, /dev/null are not files, and not a screen either)
+static bool mc_console()
+{
+	if (isAnyOutputRedirected())
+		return false;
+#ifdef _WIN32
+	DWORD modo= 0;
+	return GetConsoleMode(GetStdHandle(STD_OUTPUT_HANDLE), &modo) != 0;
+#else
+	return isatty(fileno(stdout)) != 0;
+#endif
+}
+static bool mc_assoluto(const std::string &i_percorso)
+{
+	return (i_percorso != "") && ((i_percorso[0] == '/') || ((i_percorso.size() > 1) && (i_percorso[1] == ':')));
+}
+/// without the / at the end (but / and c:/ stay as they are)
+static std::string mc_senzabarra(const std::string &i_percorso)
+{
+	std::string r= i_percorso;
+	while ((r.size() > 1) && (r[r.size() - 1] == '/') && (!((r.size() == 3) && (r[1] == ':'))))
+		r.erase(r.size() - 1);
+	return r;
+}
+/// the name of a folder (its path ends with /). "": it does not have one, it is a root (c:/ //server/share/ /)
+static std::string mc_nomecartella(const std::string &i_percorso)
+{
+	const std::string senza= mc_senzabarra(i_percorso);
+	const size_t	  barra= senza.find_last_of('/');
+	if ((senza == "") || (barra == std::string::npos) || (barra + 1 >= senza.size()))
+		return "";
+#ifdef _WIN32
+	if ((senza.size() > 2) && (senza[0] == '/') && (senza[1] == '/')) /// //server/share: three /, it is a root
+	{
+		int barre= 0;
+		for (size_t i= 0; i < senza.size(); i++)
+			if (senza[i] == '/')
+				barre++;
+		if (barre <= 3)
+			return "";
+	}
+#endif
+	return senza.substr(barra + 1);
+}
+/// the name the destination of a robocopy made from mc must end with: the one of the source. A source without a
+/// name (a whole drive, a share, /) gets one made of what it is, with nothing but small letters, digits and _:
+/// h:/ is h_, //nas/dati/ is nas_dati, / is root_
+static std::string mc_nomerobocopy(const std::string &i_origine)
+{
+	const std::string nome= mc_nomecartella(i_origine);
+	if (nome != "")
+		return nome;
+	std::string		  r;
+	const std::string senza= mc_senzabarra(i_origine);
+	for (size_t i= 0; i < senza.size(); i++)
+	{
+		const unsigned char c= (unsigned char)senza[i];
+		if (((c >= 'a') && (c <= 'z')) || ((c >= '0') && (c <= '9')))
+			r+= (char)c;
+		else if ((c >= 'A') && (c <= 'Z'))
+			r+= (char)(c + 32);
+		else if ((r != "") && (r[r.size() - 1] != '_'))
+			r+= '_';
+	}
+	return (r == "") ? std::string("root_") : r;
+}
+/// 0 nothing there, 1 a file (or a link to one, or anything that is not a folder), 2 a folder
+static int mc_cosa(const std::string &i_nome)
+{
+	const std::string nome= mc_senzabarra(i_nome);
+	if (nome == "")
+		return 0;
+#ifdef _WIN32
+	const DWORD a= GetFileAttributesW(preparelongpath(utow(nome.c_str())).c_str());
+	if (a == INVALID_FILE_ATTRIBUTES)
+		return 0;
+	return (a & FILE_ATTRIBUTE_DIRECTORY) ? 2 : 1;
+#else
+	struct stat sb;
+	if (lstat(nome.c_str(), &sb) != 0)
+		return 0;
+	if (S_ISDIR(sb.st_mode))
+		return 2;
+	if (S_ISLNK(sb.st_mode))
+	{
+		struct stat dove;
+		if ((stat(nome.c_str(), &dove) == 0) && S_ISDIR(dove.st_mode))
+			return 2;
+	}
+	return 1;
+#endif
+}
+static std::string mc_qui()
+{
+	std::string r;
+#ifdef _WIN32
+	wchar_t cartella[4096]= {0};
+	if (GetCurrentDirectoryW(4095, cartella) > 0)
+		r= wtou(cartella);
+#else
+	char cartella[4096];
+	if (getcwd(cartella, sizeof(cartella)) != NULL)
+		r= cartella;
+#endif
+	if ((r == "") || (r[r.size() - 1] != '/'))
+		r+= "/";
+	return r;
+}
+/// a folder of the command line as a panel wants it: whole, with its / at the end. Not a folder: the current one
+static std::string mc_cartella(const std::string &i_scritta)
+{
+	std::string c= scegli_pulito(i_scritta, true);
+	if (c == "")
+		return mc_qui();
+#ifdef _WIN32
+	wchar_t intero[4096]= {0};
+	if (GetFullPathNameW(utow(c.c_str()).c_str(), 4095, intero, NULL) > 0)
+		c= wtou(intero);
+#else
+	if (c[0] != '/')
+		c= mc_qui() + c;
+	const std::string vero= my_realpath(c);
+	if (vero != "")
+		c= vero;
+#endif
+	if (c[c.size() - 1] != '/')
+		c+= "/";
+	if (mc_cosa(c) != 2)
+		return mc_qui();
+	return c;
+}
+/// a file, a folder, a root, as a line of a panel
+struct franzmcvoce
+{
+	std::string nome; /// as it is shown (a folder: without its /)
+	std::string dove; /// a root only: where ENTER goes (c:/ //server/share/ /home/)
+	std::string nota; /// a root only: what it is
+	int64_t		data;
+	int64_t		dimensione;
+	bool		cartella;
+	bool		archivio;
+	bool		su; /// the .. line
+	franzmcvoce() : data(0), dimensione(0), cartella(false), archivio(false), su(false)
+	{
+	}
+};
+struct franzmcpannello
+{
+	std::string				 percorso; /// it ends with /. "": the roots
+	std::vector<franzmcvoce> voci;
+	std::set<std::string>	 marcati; /// names of this folder: gone when the panel goes somewhere else
+	int						 cursore;
+	int						 prima;
+	int						 ordine; /// 1 name, 2 size, 3 date, 4 extension
+	bool					 rovescio;
+	franzmcpannello() : cursore(0), prima(0), ordine(1), rovescio(false)
+	{
+	}
+};
+/// the .. line, then the folders, then the files: each group in the order asked
+struct franzmcconfronto
+{
+	int	 ordine;
+	bool rovescio;
+	franzmcconfronto(int i_ordine, bool i_rovescio) : ordine(i_ordine), rovescio(i_rovescio)
+	{
+	}
+	bool operator()(const franzmcvoce &a, const franzmcvoce &b) const
+	{
+		if (a.su != b.su)
+			return a.su;
+		if (a.cartella != b.cartella)
+			return a.cartella;
+		int c= 0;
+		if (ordine == 2)
+			c= (a.dimensione < b.dimensione) ? -1 : ((a.dimensione > b.dimensione) ? 1 : 0);
+		else if (ordine == 3)
+			c= (a.data < b.data) ? -1 : ((a.data > b.data) ? 1 : 0);
+		else if (ordine == 4)
+			c= scegli_minuscolo(scegli_estensione(a.nome)).compare(scegli_minuscolo(scegli_estensione(b.nome)));
+		if (c == 0)
+			c= scegli_minuscolo(a.nome).compare(scegli_minuscolo(b.nome));
+		if (c == 0)
+			c= a.nome.compare(b.nome);
+		return rovescio ? (c > 0) : (c < 0);
+	}
+};
+#ifdef _WIN32
+/// the share of a network drive this user mapped and asked to remember (HKCU\Network\X, RemotePath), as //server/share/
+static std::string mc_rete_registro(char i_lettera)
+{
+	const std::wstring chiave= std::wstring(L"Network\\") + (wchar_t)i_lettera;
+	HKEY			   hk;
+	if (RegOpenKeyExW(HKEY_CURRENT_USER, chiave.c_str(), 0, KEY_READ, &hk) != ERROR_SUCCESS)
+		return "";
+	wchar_t valore[1024]= {0};
+	DWORD	lungo		= sizeof(valore) - sizeof(wchar_t);
+	DWORD	tipo		= 0;
+	std::string r;
+	if ((RegQueryValueExW(hk, L"RemotePath", NULL, &tipo, (LPBYTE)valore, &lungo) == ERROR_SUCCESS) && (tipo == REG_SZ))
+		r= wtou(valore);
+	RegCloseKey(hk);
+	if ((r.size() < 5) || (r[0] != '/') || (r[1] != '/'))
+		return "";
+	if (r[r.size() - 1] != '/')
+		r+= "/";
+	return r;
+}
+/// the share behind a network drive this session sees (\Device\LanmanRedirector\;Z:0000000000012345\server\share)
+static std::string mc_rete_dispositivo(char i_lettera)
+{
+	const wchar_t unita[3]	  = {(wchar_t)i_lettera, L':', 0};
+	wchar_t		  dove[1024]= {0};
+	if (QueryDosDeviceW(unita, dove, 1023) == 0)
+		return "";
+	const std::string d	  = wtou(dove);
+	const size_t	  qui = d.find(std::string(";") + i_lettera + ":");
+	const size_t	  dopo= (qui == std::string::npos) ? std::string::npos : d.find('/', qui);
+	if (dopo == std::string::npos)
+		return "";
+	return "/" + d.substr(dopo) + "/";
+}
+#endif
+/// what is above everything. Windows: the drives, the ones mapped by the not elevated session too. The others: / /home and the home
+static void mc_radici(std::vector<franzmcvoce> &o_voci)
+{
+	o_voci.clear();
+#ifdef _WIN32
+	const UINT	vecchio= SetErrorMode(SEM_FAILCRITICALERRORS); /// (an empty card reader: no window "insert a disk")
+	const DWORD viste  = GetLogicalDrives();
+	for (int i= 0; i < 26; i++)
+	{
+		const char		  lettera= (char)('A' + i);
+		const bool		  vista	 = (viste & (1u << i)) != 0;
+		const std::string remoto = mc_rete_registro(lettera);
+		if ((!vista) && (remoto == ""))
+			continue;
+		franzmcvoce v;
+		v.nome	  = std::string(1, lettera) + ":";
+		v.cartella= true;
+		if (!vista)
+		{
+			v.dove= remoto;
+			v.nota= "network " + remoto + " (by its share)"; /// mapped by the not elevated session: no letter here
+			o_voci.push_back(v);
+			continue;
+		}
+		v.dove					  = v.nome + "/";
+		const std::wstring radice = utow(v.dove.c_str());
+		const UINT		   tipo	  = GetDriveTypeW(radice.c_str());
+		if (tipo == DRIVE_REMOTE)
+		{
+			std::string condivisa= mc_rete_dispositivo(lettera);
+			if (condivisa == "")
+				condivisa= remoto;
+			v.nota= "network " + condivisa;
+			o_voci.push_back(v);
+			continue;
+		}
+		const char *genere= (tipo == DRIVE_FIXED) ? "fixed" : ((tipo == DRIVE_REMOVABLE) ? "removable" : ((tipo == DRIVE_CDROM) ? "cdrom" : ((tipo == DRIVE_RAMDISK) ? "ramdisk" : "unknown")));
+		wchar_t		etichetta[MAX_PATH + 1]= {0};
+		wchar_t		sistema[MAX_PATH + 1]  = {0};
+		if (GetVolumeInformationW(radice.c_str(), etichetta, MAX_PATH, NULL, NULL, NULL, sistema, MAX_PATH))
+		{
+			ULARGE_INTEGER libero, totale;
+			libero.QuadPart= 0;
+			totale.QuadPart= 0;
+			GetDiskFreeSpaceExW(radice.c_str(), &libero, &totale, NULL);
+			v.nota= std::string(genere) + " " + wtou(sistema) + " " + mc_umano((int64_t)totale.QuadPart) + " free " + mc_umano((int64_t)libero.QuadPart);
+			const std::string nome= wtou(etichetta);
+			if (nome != "")
+				v.nota+= " [" + nome + "]";
+		}
+		else
+			v.nota= std::string(genere) + " (not ready)";
+		o_voci.push_back(v);
+	}
+	SetErrorMode(vecchio);
+#else
+	std::vector<std::string> dove;
+	dove.push_back("/");
+	if (mc_cosa("/home") == 2)
+		dove.push_back("/home/");
+	const char *casa= getenv("HOME");
+	if ((casa != NULL) && (casa[0] == '/') && (mc_cosa(casa) == 2))
+	{
+		std::string c= mc_senzabarra(casa) + "/";
+		if (c == "//")
+			c= "/";
+		if ((c != "/") && (c != "/home/"))
+			dove.push_back(c);
+	}
+	for (size_t i= 0; i < dove.size(); i++)
+	{
+		franzmcvoce v;
+		v.nome	  = dove[i];
+		v.dove	  = dove[i];
+		v.cartella= true;
+		o_voci.push_back(v);
+	}
+#endif
+}
+/// one piece of what is copied, moved, deleted
+struct franzmcpezzo
+{
+	std::string nome;	  /// the full path (a folder too: no / at the end)
+	std::string relativo; /// from the source taken: "" the source itself, "/a/b.txt" what is inside it
+	int64_t		dimensione;
+	int64_t		data;
+	int64_t		attr;
+	int			tipo; /// 0 file, 1 folder, 2 link or junction (never followed), 3 something else (a device, a pipe)
+	franzmcpezzo() : dimensione(0), data(0), attr(-1), tipo(0)
+	{
+	}
+};
+struct franzmclavoro
+{
+	franzmcpezzo pezzo;
+	std::string	 a;		/// where it goes
+	size_t		 fonte; /// of which of the sources it is a piece
+	franzmclavoro() : fonte(0)
+	{
+	}
+};
+#ifdef _WIN32
+static void mc_pezzo_windows(const WIN32_FIND_DATAW &i_dati, franzmcpezzo &o_pezzo)
+{
+	const bool cartella= (i_dati.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
+	o_pezzo.tipo	   = cartella ? (((i_dati.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0) ? 2 : 1) : 0;
+	o_pezzo.dimensione = cartella ? 0 : (i_dati.nFileSizeLow + (int64_t(i_dati.nFileSizeHigh) << 32));
+	SYSTEMTIME st;
+	if (FileTimeToSystemTime(&i_dati.ftLastWriteTime, &st))
+		o_pezzo.data= st.wYear * 10000000000LL + st.wMonth * 100000000LL + st.wDay * 1000000 + st.wHour * 10000 + st.wMinute * 100 + st.wSecond;
+	o_pezzo.attr= ((int64_t)i_dati.dwFileAttributes << 8) + 'w';
+}
+#endif
+/// one thing by its name (no / at the end). false: it is not there
+static bool mc_pezzo(const std::string &i_nome, franzmcpezzo &o_pezzo)
+{
+	o_pezzo		= franzmcpezzo();
+	o_pezzo.nome= i_nome;
+#ifdef _WIN32
+	WIN32_FIND_DATAW dati;
+	const HANDLE	 h= FindFirstFileW(preparelongpath(utow(i_nome.c_str())).c_str(), &dati);
+	if (h == INVALID_HANDLE_VALUE)
+		return false;
+	FindClose(h);
+	mc_pezzo_windows(dati, o_pezzo);
+	return true;
+#else
+	struct stat sb;
+	if (lstat(i_nome.c_str(), &sb) != 0)
+		return false;
+	o_pezzo.tipo	  = S_ISLNK(sb.st_mode) ? 2 : (S_ISDIR(sb.st_mode) ? 1 : (S_ISREG(sb.st_mode) ? 0 : 3));
+	o_pezzo.dimensione= (o_pezzo.tipo == 0) ? (int64_t)sb.st_size : 0;
+	o_pezzo.data	  = decimal_time(sb.st_mtime);
+	o_pezzo.attr	  = ((int64_t)sb.st_mode << 8) + 'u';
+	return true;
+#endif
+}
+/// what is inside a folder, each folder before what it has inside. A link is a line, nobody goes through it
+static void mc_dentro(const std::string &i_cartella, const std::string &i_relativo, std::vector<franzmcpezzo> &o_pezzi, int i_livello)
+{
+	if (i_livello > 250)
+		return;
+#ifdef _WIN32
+	WIN32_FIND_DATAW dati;
+	const HANDLE	 h= FindFirstFileW(preparelongpath(utow((i_cartella + "/*").c_str())).c_str(), &dati);
+	if (h == INVALID_HANDLE_VALUE)
+		return;
+	do
+	{
+		const std::string nome= wtou(dati.cFileName);
+		if ((nome == ".") || (nome == ".."))
+			continue;
+		franzmcpezzo p;
+		mc_pezzo_windows(dati, p);
+		p.nome	  = i_cartella + "/" + nome;
+		p.relativo= i_relativo + "/" + nome;
+		o_pezzi.push_back(p);
+		if (p.tipo == 1)
+			mc_dentro(p.nome, p.relativo, o_pezzi, i_livello + 1);
+	} while (FindNextFileW(h, &dati));
+	FindClose(h);
+#else
+	DIR *d= opendir(i_cartella.c_str());
+	if (d == NULL)
+		return;
+	std::vector<std::string> nomi;
+	struct dirent			*e;
+	while ((e= readdir(d)) != NULL)
+	{
+		const std::string nome= e->d_name;
+		if ((nome != ".") && (nome != ".."))
+			nomi.push_back(nome);
+	}
+	closedir(d); /// (closed before going down: a deep tree does not keep a folder open for each level)
+	for (size_t i= 0; i < nomi.size(); i++)
+	{
+		franzmcpezzo p;
+		if (!mc_pezzo(i_cartella + "/" + nomi[i], p))
+			continue;
+		p.relativo= i_relativo + "/" + nomi[i];
+		o_pezzi.push_back(p);
+		if (p.tipo == 1)
+			mc_dentro(p.nome, p.relativo, o_pezzi, i_livello + 1);
+	}
+#endif
+}
+/// a source and everything under it
+static bool mc_albero(const std::string &i_fonte, std::vector<franzmcpezzo> &o_pezzi)
+{
+	franzmcpezzo p;
+	if (!mc_pezzo(i_fonte, p))
+		return false;
+	o_pezzi.push_back(p);
+	if (p.tipo == 1)
+		mc_dentro(i_fonte, "", o_pezzi, 0);
+	return true;
+}
+/// one thing away (a folder must be empty). A link: the link, not what it points to
+static bool mc_via(const franzmcpezzo &i_pezzo)
+{
+#ifdef _WIN32
+	const std::wstring nome= preparelongpath(utow(i_pezzo.nome.c_str()));
+	if (i_pezzo.tipo == 2)
+		return RemoveDirectoryW(nome.c_str()) != 0;
+	SetFileAttributesW(nome.c_str(), FILE_ATTRIBUTE_NORMAL); /// (a read only file cannot be deleted)
+	if (i_pezzo.tipo == 1)
+		return RemoveDirectoryW(nome.c_str()) != 0;
+	return DeleteFileW(nome.c_str()) != 0;
+#else
+	return remove(i_pezzo.nome.c_str()) == 0;
+#endif
+}
+/// from the last to the first: what is inside a folder before the folder. How many could not be deleted
+static int mc_cancella(const std::vector<franzmcpezzo> &i_pezzi, std::string &o_primo)
+{
+	int errori= 0;
+	for (size_t i= i_pezzi.size(); i > 0; i--)
+		if (!mc_via(i_pezzi[i - 1]))
+		{
+			if (errori == 0)
+				o_primo= i_pezzi[i - 1].nome;
+			errori++;
+		}
+	return errori;
+}
+/// 0 done; 1 it cannot (o_perche); 2 the destination is on another disk: a copy, then
+static int mc_rinomina(const std::string &i_da, const std::string &i_a, std::string &o_perche)
+{
+	char testo[256];
+#ifdef _WIN32
+	/// (MoveFileEx without MOVEFILE_COPY_ALLOWED: MoveFile would copy a file to another disk by itself, without a verify)
+	if (MoveFileExW(preparelongpath(utow(i_da.c_str())).c_str(), preparelongpath(utow(i_a.c_str())).c_str(), 0))
+		return 0;
+	const DWORD errore= GetLastError();
+	if (errore == ERROR_NOT_SAME_DEVICE)
+		return 2;
+	snprintf(testo, sizeof(testo), "error %d of Windows", (int)errore);
+#else
+	if (::rename(i_da.c_str(), i_a.c_str()) == 0)
+		return 0;
+	if (errno == EXDEV)
+		return 2;
+	snprintf(testo, sizeof(testo), "%s", strerror(errno));
+#endif
+	o_perche= testo;
+	return 1;
+}
+/// an argument for the child, and as it is shown. Between quotes with a space, or a jolly (the C runtime of Windows would expand it)
+static std::string mc_argomento(const std::string &i_argomento)
+{
+	if ((i_argomento != "") && (i_argomento.find_first_of(" \t\"*?") == std::string::npos))
+		return i_argomento;
+	std::string r	 = "\"";
+	size_t		barre= 0;
+	for (size_t i= 0; i < i_argomento.size(); i++)
+	{
+		const char c= i_argomento[i];
+		if (c == '\\')
+		{
+			barre++;
+			continue;
+		}
+		if (c == '"')
+		{
+			r.append(barre * 2 + 1, '\\');
+			r+= '"';
+		}
+		else
+		{
+			r.append(barre, '\\');
+			r+= c;
+		}
+		barre= 0;
+	}
+	r.append(barre * 2, '\\');
+	r+= '"';
+	return r;
+}
+/// zpaqfranz itself with these arguments: the console is its own while it runs. Its exit code; -1: it did not start
+static int mc_figlio(const std::vector<std::string> &i_argomenti, const std::vector<std::pair<std::string, std::string> > &i_ambiente)
+{
+	const std::string programma= (*pjidac).fullzpaqexename;
+	int				  esito	   = -1;
+	fflush(stdout);
+#ifdef _WIN32
+	/// (the / of the arguments stay: a \ before the closing quote would be taken for an escape)
+	std::wstring riga= utow(mc_argomento(programma).c_str(), '/');
+	for (size_t i= 0; i < i_argomenti.size(); i++)
+		riga+= L" " + utow(mc_argomento(i_argomenti[i]).c_str(), '/');
+	for (size_t i= 0; i < i_ambiente.size(); i++)
+		SetEnvironmentVariableW(utow(i_ambiente[i].first.c_str(), '/').c_str(), utow(i_ambiente[i].second.c_str(), '/').c_str());
+	std::vector<wchar_t> comando(riga.begin(), riga.end());
+	comando.push_back(0);
+	STARTUPINFOW		si;
+	PROCESS_INFORMATION pi;
+	memset(&si, 0, sizeof(si));
+	memset(&pi, 0, sizeof(pi));
+	si.cb= sizeof(si);
+	if (CreateProcessW(utow(programma.c_str()).c_str(), &comando[0], NULL, NULL, TRUE, 0, NULL, NULL, &si, &pi))
+	{
+		SetConsoleCtrlHandler(NULL, TRUE); /// Ctrl+C is for the child (after it started: it would inherit this)
+		WaitForSingleObject(pi.hProcess, INFINITE);
+		DWORD codice= 0;
+		if (GetExitCodeProcess(pi.hProcess, &codice))
+			esito= (int)codice;
+		SetConsoleCtrlHandler(NULL, FALSE);
+		CloseHandle(pi.hProcess);
+		CloseHandle(pi.hThread);
+	}
+	for (size_t i= 0; i < i_ambiente.size(); i++)
+		SetEnvironmentVariableW(utow(i_ambiente[i].first.c_str(), '/').c_str(), NULL);
+#else
+	std::vector<std::string> copie;
+	copie.push_back((programma != "") ? programma : std::string("zpaqfranz"));
+	/// (Solaris: getexecname() of a ./zpaqfranz is "zpaqfranz", from the folder it was started in. Nobody changed it)
+	if ((copie[0][0] != '/') && (mc_cosa(mc_qui() + copie[0]) == 1))
+		copie[0]= mc_qui() + copie[0];
+	for (size_t i= 0; i < i_argomenti.size(); i++)
+		copie.push_back(i_argomenti[i]);
+	std::vector<char *> argomenti;
+	for (size_t i= 0; i < copie.size(); i++)
+		argomenti.push_back((char *)copie[i].c_str());
+	argomenti.push_back(NULL);
+	void (*vecchio)(int)= signal(SIGINT, SIG_IGN); /// Ctrl+C is for the child
+	const pid_t figlio	= fork();
+	if (figlio == 0)
+	{
+		signal(SIGINT, SIG_DFL);
+		for (size_t i= 0; i < i_ambiente.size(); i++)
+			setenv(i_ambiente[i].first.c_str(), i_ambiente[i].second.c_str(), 1);
+		execvp(argomenti[0], &argomenti[0]);
+		_exit(127);
+	}
+	if (figlio > 0)
+	{
+		int stato= 0;
+		while ((waitpid(figlio, &stato, 0) < 0) && (errno == EINTR))
+		{
+		}
+		if (WIFEXITED(stato))
+			esito= WEXITSTATUS(stato);
+		if (esito == 127) /// (the _exit of here above: it is not zpaqfranz that ended)
+			esito= -1;
+	}
+	signal(SIGINT, vecchio);
+#endif
+	return esito;
+}
+#ifndef _WIN32
+/// a byte of the keyboard; -1 when nothing comes in i_ms milliseconds (below 0: for ever), or never again
+static int mc_byte(int i_ms)
+{
+	if (i_ms >= 0)
+	{
+		struct timeval tv;
+		tv.tv_sec = i_ms / 1000;
+		tv.tv_usec= (i_ms % 1000) * 1000;
+		fd_set fds;
+		FD_ZERO(&fds);
+		FD_SET(STDIN_FILENO, &fds);
+		if (select(STDIN_FILENO + 1, &fds, NULL, NULL, &tv) <= 0)
+			return -1;
+	}
+	unsigned char c= 0;
+	if (read(STDIN_FILENO, &c, 1) != 1)
+		return -1;
+	return c;
+}
+/// the terminal gives the keys one by one, and Ctrl+C as a key (the screen must be left in order)
+static int mc_tastiera_grezza(int i_cancella)
+{
+	const int c= mc_byte(-1);
+	if (c < 0)
+		return MC_CHIUSO;
+	if ((c == '\r') || (c == '\n'))
+		return 13;
+	if (c == 127)
+		return 8;
+	/// 8 is Ctrl+H, and the BACKSPACE of some terminals: the terminal says which one it deletes with (stty erase)
+	if (c == 8)
+		return (i_cancella == 8) ? 8 : MC_CTRLH;
+	if (c == 27)
+	{
+		/// alone it is ESC; with something right after, a key that is a sequence
+		const int d= mc_byte(50);
+		if (d < 0)
+			return 27;
+		if (d == '[')
+		{
+			std::string parametri;
+			int			fine= -1;
+			for (int i= 0; i < 16; i++)
+			{
+				const int e= mc_byte(50);
+				if (e < 0)
+					break;
+				if ((e == '[') && parametri.empty()) /// the console of Linux: ESC [ [ A is F1
+				{
+					parametri= "[";
+					continue;
+				}
+				if ((e >= 0x40) && (e <= 0x7E))
+				{
+					fine= e;
+					break;
+				}
+				parametri+= (char)e;
+			}
+			if (parametri == "[")
+				return ((fine >= 'A') && (fine <= 'E')) ? MC_F(fine - 'A' + 1) : 0;
+			const int n= atoi(parametri.c_str()); /// ("1;5": the 5 is Ctrl, not looked at)
+			switch (fine)
+			{
+			case 'A':
+				return MC_SU;
+			case 'B':
+				return MC_GIU;
+			case 'C':
+				return MC_DESTRA;
+			case 'D':
+				return MC_SINISTRA;
+			case 'H':
+				return MC_INIZIO;
+			case 'F':
+				return MC_FINE;
+			case 'P':
+			case 'Q':
+			case 'R':
+			case 'S':
+				return MC_F(fine - 'P' + 1);
+			case '~':
+				if ((n == 1) || (n == 7))
+					return MC_INIZIO;
+				if ((n == 4) || (n == 8))
+					return MC_FINE;
+				if (n == 2)
+					return MC_INS;
+				if (n == 3)
+					return MC_CANC;
+				if (n == 5)
+					return MC_PAGSU;
+				if (n == 6)
+					return MC_PAGGIU;
+				if ((n >= 11) && (n <= 15))
+					return MC_F(n - 10);
+				if ((n >= 17) && (n <= 21))
+					return MC_F(n - 11);
+				if ((n == 23) || (n == 24))
+					return MC_F(n - 12);
+				return 0;
+			default:
+				return 0;
+			}
+		}
+		if (d == 'O')
+		{
+			const int e= mc_byte(50);
+			if ((e >= 'P') && (e <= 'S'))
+				return MC_F(e - 'P' + 1);
+			switch (e)
+			{
+			case 'A':
+				return MC_SU;
+			case 'B':
+				return MC_GIU;
+			case 'C':
+				return MC_DESTRA;
+			case 'D':
+				return MC_SINISTRA;
+			case 'H':
+				return MC_INIZIO;
+			case 'F':
+				return MC_FINE;
+			default:
+				return 0;
+			}
+		}
+		/// ESC and a digit, together: Alt+digit, the function keys of who does not have them
+		if ((d >= '0') && (d <= '9'))
+			return MC_F((d == '0') ? 10 : (d - '0'));
+		return 0;
+	}
+	if (c < 0x80)
+		return c;
+	/// UTF-8: the bytes that follow
+	const int	 lungo= (c >= 0xF0) ? 4 : ((c >= 0xE0) ? 3 : ((c >= 0xC2) ? 2 : 1));
+	unsigned int punto= (unsigned int)c & (0xFFu >> (lungo + 1));
+	if (lungo == 1)
+		return '?';
+	for (int i= 1; i < lungo; i++)
+	{
+		const int e= mc_byte(50);
+		if ((e < 0) || ((e & 0xC0) != 0x80))
+			return '?';
+		punto= (punto << 6) | ((unsigned int)e & 0x3Fu);
+	}
+	return (int)punto;
+}
+#endif
+/// a key: a character (its code point), or one of the MC_ keys. 0: a key nobody knows
+static int mc_tastiera()
+{
+#ifdef _WIN32
+	/// the events of the console, not _getwch(): there an arrow is 0xE0 and then a code, and 0xE0 is a letter too
+	/// (the a with a grave accent). _kbhit() does not tell them apart: it does not see the second half, kept by _getwch()
+	static HANDLE  ingresso= INVALID_HANDLE_VALUE;
+	static wchar_t alto	   = 0; /// the first half of a character over 0xFFFF
+	if (ingresso == INVALID_HANDLE_VALUE)
+		ingresso= CreateFileW(L"CONIN$", GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
+	if (ingresso == INVALID_HANDLE_VALUE)
+		return MC_CHIUSO;
+	DWORD	   modo	  = 0;
+	const bool conmodo= GetConsoleMode(ingresso, &modo) != 0;
+	if (conmodo)
+		SetConsoleMode(ingresso, ENABLE_WINDOW_INPUT); /// (Ctrl+C is a key, not a signal; a new size of the window is told)
+	int tasto= MC_CHIUSO;
+	for (;;)
+	{
+		INPUT_RECORD r;
+		DWORD		 letti= 0;
+		if ((!ReadConsoleInputW(ingresso, &r, 1, &letti)) || (letti == 0))
+			break;
+		if (r.EventType == WINDOW_BUFFER_SIZE_EVENT)
+		{
+			tasto= 0; /// (everything is drawn again, with the new size)
+			break;
+		}
+		if (r.EventType != KEY_EVENT)
+			continue;
+		const KEY_EVENT_RECORD &k= r.Event.KeyEvent;
+		const wchar_t			c= k.uChar.UnicodeChar;
+		if (!k.bKeyDown)
+		{
+			/// (Alt and the digits of the keypad: the character comes when Alt is released)
+			if ((k.wVirtualKeyCode == VK_MENU) && (c != 0))
+			{
+				tasto= (int)c;
+				break;
+			}
+			continue;
+		}
+		/// left Alt and a digit (the row above the letters): F1-F10, for a terminal that keeps a function key for itself
+		if ((k.dwControlKeyState & LEFT_ALT_PRESSED) && (!(k.dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED))) && (k.wVirtualKeyCode >= 0x30) && (k.wVirtualKeyCode <= 0x39))
+		{
+			tasto= MC_F((k.wVirtualKeyCode == 0x30) ? 10 : ((int)k.wVirtualKeyCode - 0x30));
+			break;
+		}
+		if (c != 0)
+		{
+			if ((c == 8) && (k.wVirtualKeyCode != VK_BACK)) /// Ctrl+H: the character of the BACKSPACE, another key
+			{
+				tasto= MC_CTRLH;
+				break;
+			}
+			if ((c >= 0xD800) && (c <= 0xDBFF))
+			{
+				alto= c;
+				continue;
+			}
+			if ((c >= 0xDC00) && (c <= 0xDFFF))
+				tasto= (alto != 0) ? (0x10000 + (((int)alto - 0xD800) << 10) + ((int)c - 0xDC00)) : '?';
+			else
+				tasto= (int)c;
+			alto= 0;
+			break;
+		}
+		int v= 0;
+		switch (k.wVirtualKeyCode)
+		{
+		case VK_UP:
+			v= MC_SU;
+			break;
+		case VK_DOWN:
+			v= MC_GIU;
+			break;
+		case VK_PRIOR:
+			v= MC_PAGSU;
+			break;
+		case VK_NEXT:
+			v= MC_PAGGIU;
+			break;
+		case VK_HOME:
+			v= MC_INIZIO;
+			break;
+		case VK_END:
+			v= MC_FINE;
+			break;
+		case VK_LEFT:
+			v= MC_SINISTRA;
+			break;
+		case VK_RIGHT:
+			v= MC_DESTRA;
+			break;
+		case VK_INSERT:
+			v= MC_INS;
+			break;
+		case VK_DELETE:
+			v= MC_CANC;
+			break;
+		default:
+			if ((k.wVirtualKeyCode >= VK_F1) && (k.wVirtualKeyCode <= VK_F12))
+				v= MC_F((int)k.wVirtualKeyCode - VK_F1 + 1);
+			break;
+		}
+		if (v != 0)
+		{
+			tasto= v;
+			break;
+		}
+		/// (Shift, Ctrl, Alt by themselves, a key nobody knows: the next one)
+	}
+	if (conmodo)
+		SetConsoleMode(ingresso, modo);
+	return tasto;
+#else
+	struct termios prima;
+	const bool	   terminale= (tcgetattr(STDIN_FILENO, &prima) == 0);
+	if (terminale)
+	{
+		struct termios ora= prima;
+		ora.c_lflag&= ~(ICANON | ECHO | ISIG);
+		ora.c_iflag&= ~(ICRNL | INLCR | IXON);
+		ora.c_cc[VMIN] = 1;
+		ora.c_cc[VTIME]= 0;
+		tcsetattr(STDIN_FILENO, TCSANOW, &ora);
+	}
+	const int tasto= mc_tastiera_grezza(terminale ? (int)prima.c_cc[VERASE] : 127);
+	if (terminale)
+		tcsetattr(STDIN_FILENO, TCSANOW, &prima);
+	return tasto;
+#endif
+}
+/// a cell of the screen: a character and how it looks. 0: the second half of a wide character
+struct franzmccella
+{
+	unsigned int  punto;
+	unsigned char stile;
+};
+class franzmc
+{
+  public:
+	franzmc(const std::string &i_sinistra, const std::string &i_destra) : m_attivo(0), m_larga(0), m_alta(0), m_utile(79), m_righe(21), m_sx(39), m_dx(39), m_avvisocolore(0), m_prova(false), m_muto(false), m_provaqui(0), m_provalarga(0), m_provaalta(0), m_foto(0), m_cercaquando(0)
+	{
+#ifdef _WIN32
+		m_modo	= 0;
+		m_modook= false;
+#endif
+		const char *tasti= getenv("FRANZMCKEYS");
+		if ((tasti != NULL) && (tasti[0] != 0))
+		{
+			m_prova= true;
+			carica_tasti(tasti);
+		}
+		const char *foto= getenv("FRANZMCDUMP");
+		if (foto != NULL)
+			m_fotofile= foto;
+		const char *misure= getenv("FRANZMCSIZE");
+		if (misure != NULL)
+			if (sscanf(misure, "%dx%d", &m_provalarga, &m_provaalta) != 2)
+			{
+				m_provalarga= 0;
+				m_provaalta = 0;
+			}
+		if (m_prova && (!mc_console()))
+			m_muto= true;
+		if (m_muto && ((m_provalarga <= 0) || (m_provaalta <= 0)))
+		{
+			m_provalarga= 80;
+			m_provaalta = 25;
+		}
+		m_p[0].percorso= mc_cartella(i_sinistra);
+		m_p[1].percorso= mc_cartella((i_destra != "") ? i_destra : i_sinistra);
+		leggi(m_p[0]);
+		leggi(m_p[1]);
+	}
+	bool prova() const
+	{
+		return m_prova;
+	}
+	int esegui()
+	{
+		if (!entra())
+			return 2;
+		for (;;)
+		{
+			componi();
+			manda();
+			const int k= tasto();
+			m_avviso   = ""; /// (shown until this key)
+			if ((k == MC_CHIUSO) || (k == 3) || (k == MC_F(10)))
+				break;
+			franzmcpannello &p= attivo();
+			const int		 n= (int)p.voci.size();
+			/// a search going on (it is on the screen): ESC ends it, BACKSPACE takes its last letter away
+			if (!m_cerca.empty())
+			{
+				if (k == 27)
+				{
+					m_cerca.clear();
+					continue;
+				}
+				if (k == 8)
+				{
+					m_cerca.erase(m_cerca.end() - 1);
+					const int riga= m_cerca.empty() ? -1 : cerca_riga(p, m_cerca);
+					if (riga >= 0)
+						p.cursore= riga;
+					m_cercaquando= mtime();
+					continue;
+				}
+			}
+			if (k == 27)
+				break;
+			/// *: the names to mark, by a wildcard. After a name typed (sorgente): the ones that begin that way (sorgente*)
+			if (k == '*')
+			{
+				const std::string inizio= mc_testo(m_cerca, 0, m_cerca.size());
+				m_cerca.clear();
+				seleziona(inizio);
+				continue;
+			}
+			/// a character: the name that begins with what is typed. Not the space (it marks), not \ / ? * | (they are keys)
+			if ((k > ' ') && (k < MC_SPECIALE) && (k != 127) && (k != '\\') && (k != '/') && (k != '?') && (k != '|'))
+			{
+				cerca(k);
+				continue;
+			}
+			if (k != 0) /// (any other key ends the search, and does what it does)
+				m_cerca.clear();
+			switch (k)
+			{
+			case MC_SU:
+				if (p.cursore > 0)
+					p.cursore--;
+				break;
+			case MC_GIU:
+				if (p.cursore < n - 1)
+					p.cursore++;
+				break;
+			case MC_PAGSU:
+				p.cursore= (p.cursore > m_righe) ? (p.cursore - m_righe) : 0;
+				break;
+			case MC_PAGGIU:
+				p.cursore= (p.cursore + m_righe < n) ? (p.cursore + m_righe) : ((n > 0) ? (n - 1) : 0);
+				break;
+			case MC_INIZIO:
+				p.cursore= 0;
+				break;
+			case MC_FINE:
+				p.cursore= (n > 0) ? (n - 1) : 0;
+				break;
+			case 9:
+				m_attivo= 1 - m_attivo;
+				break;
+			case MC_SINISTRA:
+				m_attivo= 0;
+				break;
+			case MC_DESTRA:
+				m_attivo= 1;
+				break;
+			case ' ':
+			case MC_INS:
+				marca();
+				break;
+			case 8:
+				su(p);
+				break;
+			case 13:
+				invio();
+				break;
+			case '\\':
+			case '/':
+				cambia(p, "");
+				break;
+			case 16: /// Ctrl+P
+				percorso();
+				break;
+			case 12: /// Ctrl+L (it was Ctrl+R, that is the robocopy now)
+				rileggi(m_p[0]);
+				rileggi(m_p[1]);
+				m_schermo.clear();
+				break;
+			case '|':
+				inverti();
+				break;
+			case 19: /// Ctrl+S
+				dimensioni(false);
+				break;
+			case MC_CTRLH:
+				dimensioni(true);
+				break;
+			case 22: /// Ctrl+V
+				duecartelle(false);
+				break;
+			case 18: /// Ctrl+R
+				duecartelle(true);
+				break;
+			case '?':
+				aiuto();
+				break;
+			case MC_F(1):
+				aggiungi();
+				break;
+			case MC_F(2):
+				rinomina();
+				break;
+			case MC_F(3):
+				archivio("l");
+				break;
+			case MC_F(4):
+				archivio("i");
+				break;
+			case MC_F(5):
+				copia(false);
+				break;
+			case MC_F(6):
+				copia(true);
+				break;
+			case MC_F(7):
+				creacartella();
+				break;
+			case MC_F(8):
+				cancella();
+				break;
+			case MC_F(9):
+				ordina();
+				break;
+			default:
+				break;
+			}
+		}
+		esci();
+#ifdef _WIN32
+		if (m_modook)
+			SetConsoleMode(GetStdHandle(STD_OUTPUT_HANDLE), m_modo);
+#endif
+		return 0;
+	}
+
+  private:
+	franzmcpannello							m_p[2];
+	int										m_attivo;
+	int										m_larga, m_alta; /// the screen
+	int										m_utile;		 /// the columns that are written (the last one is left alone)
+	int										m_righe;		 /// the rows of the lists
+	int										m_sx, m_dx;		 /// the width of the two panels
+	std::string								m_avviso;		 /// shown until the next key, in the place of what is under the cursor
+	int										m_avvisocolore;
+	std::vector<std::vector<franzmccella> > m_foglio;  /// the screen being made
+	std::vector<std::string>				m_schermo; /// the rows as they were sent: only what changes is sent again
+	bool									m_prova;   /// the keys come from a file
+	bool									m_muto;	   /// ...and there is no console: nothing is drawn
+	std::vector<int>						m_provatasti;
+	size_t									m_provaqui;
+	int										m_provalarga, m_provaalta;
+	std::string								m_fotofile;
+	int										m_foto;
+	std::vector<unsigned int>				m_cerca;	   /// the search by name going on: what was typed, in lower case
+	int64_t									m_cercaquando; /// ...and when its last character was typed
+#ifdef _WIN32
+	DWORD m_modo;
+	bool  m_modook;
+#endif
+
+	franzmcpannello &attivo()
+	{
+		return m_p[m_attivo];
+	}
+	franzmcpannello &altro()
+	{
+		return m_p[1 - m_attivo];
+	}
+	const franzmcvoce *sotto(const franzmcpannello &i_p) const
+	{
+		if ((i_p.cursore < 0) || (i_p.cursore >= (int)i_p.voci.size()))
+			return NULL;
+		return &i_p.voci[(size_t)i_p.cursore];
+	}
+	void di(const std::string &i_testo, int i_colore)
+	{
+		m_avviso	  = i_testo;
+		m_avvisocolore= i_colore;
+	}
+	/// --------------------------------------------------------------------- the search by name
+	/// the first line of a panel, from the top, whose name begins with these characters (lower case). -1: none
+	int cerca_riga(const franzmcpannello &i_p, const std::vector<unsigned int> &i_inizio) const
+	{
+		for (size_t i= 0; i < i_p.voci.size(); i++)
+		{
+			if (i_p.voci[i].su)
+				continue;
+			std::vector<unsigned int> nome;
+			mc_punti(i_p.voci[i].nome, nome);
+			if (nome.size() < i_inizio.size())
+				continue;
+			bool uguale= true;
+			for (size_t k= 0; uguale && (k < i_inizio.size()); k++)
+				uguale= (mc_minuscolo(nome[k]) == i_inizio[k]);
+			if (uguale)
+				return (int)i;
+		}
+		return -1;
+	}
+	/// a character typed on the panel: e, then t, then c, and the cursor is on the first name that begins with e,
+	/// with et, with etc. A character that leads nowhere is left out: the cursor stays where it is. After a pause
+	/// what is typed is a new search (as in the Explorer of Windows), not the rest of the old one
+	void cerca(int i_carattere)
+	{
+		franzmcpannello &p	= attivo();
+		const int64_t	 ora= mtime();
+		if ((!m_cerca.empty()) && (ora - m_cercaquando > 1500))
+			m_cerca.clear();
+		std::vector<unsigned int> nuova= m_cerca;
+		nuova.push_back(mc_minuscolo((unsigned int)i_carattere));
+		const int riga= cerca_riga(p, nuova);
+		m_cercaquando = ora;
+		if (riga < 0)
+		{
+			di("no name here begins with <<" + mc_testo(nuova, 0, nuova.size()) + ">>", MC_ROSSO);
+			return;
+		}
+		m_cerca	 = nuova;
+		p.cursore= riga;
+	}
+	/// --------------------------------------------------------------------- the keys of a test
+	void carica_tasti(const char *i_file)
+	{
+		static const struct
+		{
+			const char *nome;
+			int			tasto;
+		} nomi[]= {{"UP", MC_SU}, {"DOWN", MC_GIU}, {"PGUP", MC_PAGSU}, {"PGDN", MC_PAGGIU}, {"HOME", MC_INIZIO}, {"END", MC_FINE}, {"LEFT", MC_SINISTRA}, {"RIGHT", MC_DESTRA}, {"INS", MC_INS}, {"DEL", MC_CANC}, {"ENTER", 13}, {"BS", 8}, {"TAB", 9}, {"SPACE", ' '}, {"ESC", 27}, {"SNAP", MC_FOTO}, {"PAUSE", MC_PAUSA}, {"CTRL-P", 16}, {"CTRL-R", 18}, {"CTRL-L", 12}, {"CTRL-S", 19}, {"CTRL-V", 22}, {"CTRL-H", MC_CTRLH},{"F1", MC_F(1)}, {"F2", MC_F(2)}, {"F3", MC_F(3)}, {"F4", MC_F(4)}, {"F5", MC_F(5)}, {"F6", MC_F(6)}, {"F7", MC_F(7)}, {"F8", MC_F(8)}, {"F9", MC_F(9)}, {"F10", MC_F(10)}};
+		FILE *f= fopen(i_file, "rb");
+		if (f == NULL)
+			return;
+		std::string tutto;
+		char		pezzo[4096];
+		size_t		letti;
+		while ((letti= fread(pezzo, 1, sizeof(pezzo), f)) > 0)
+			tutto.append(pezzo, letti);
+		fclose(f);
+		size_t i= 0;
+		while (i < tutto.size())
+		{
+			const char c= tutto[i];
+			if ((c == ' ') || (c == '\t') || (c == '\r') || (c == '\n'))
+			{
+				i++;
+				continue;
+			}
+			std::string parola;
+			bool		testo= false;
+			if (c == '"') /// a text, typed as it is
+			{
+				const size_t fine= tutto.find('"', i + 1);
+				parola			 = tutto.substr(i + 1, (fine == std::string::npos) ? std::string::npos : (fine - i - 1));
+				i				 = (fine == std::string::npos) ? tutto.size() : (fine + 1);
+				testo			 = true;
+			}
+			else
+			{
+				size_t fine= i;
+				while ((fine < tutto.size()) && (tutto[fine] != ' ') && (tutto[fine] != '\t') && (tutto[fine] != '\r') && (tutto[fine] != '\n'))
+					fine++;
+				parola= tutto.substr(i, fine - i);
+				i	  = fine;
+			}
+			bool nota= false;
+			for (size_t k= 0; (!testo) && (k < sizeof(nomi) / sizeof(nomi[0])); k++)
+				if (parola == nomi[k].nome)
+				{
+					m_provatasti.push_back(nomi[k].tasto);
+					nota= true;
+				}
+			if (nota)
+				continue;
+			std::vector<unsigned int> punti;
+			mc_punti(parola, punti);
+			for (size_t k= 0; k < punti.size(); k++)
+				m_provatasti.push_back((int)punti[k]);
+		}
+	}
+	void fotografa()
+	{
+		if (m_fotofile == "")
+			return;
+		FILE *f= fopen(m_fotofile.c_str(), "ab");
+		if (f == NULL)
+			return;
+		fprintf(f, "=== SNAP %d (%dx%d) active=%c ===\n", ++m_foto, m_larga, m_alta, (m_attivo == 0) ? 'L' : 'R');
+		for (size_t y= 0; y < m_foglio.size(); y++)
+		{
+			std::string r= riga(m_foglio[y], false);
+			while ((r != "") && (r[r.size() - 1] == ' '))
+				r.erase(r.size() - 1);
+			fprintf(f, "%s\n", r.c_str());
+		}
+		fclose(f);
+	}
+	int tasto()
+	{
+		if (!m_prova)
+			return mc_tastiera();
+		for (;;)
+		{
+			if (m_provaqui >= m_provatasti.size())
+				return MC_CHIUSO;
+			const int k= m_provatasti[m_provaqui++];
+			if (k == MC_PAUSA) /// (as if nothing had been typed for a while)
+			{
+				m_cercaquando= 0;
+				continue;
+			}
+			if (k != MC_FOTO)
+				return k;
+			fotografa();
+		}
+	}
+	/// --------------------------------------------------------------------- the screen
+	bool entra()
+	{
+		if (m_muto)
+			return true;
+		fflush(stdout);
+#ifdef _WIN32
+		const HANDLE h= GetStdHandle(STD_OUTPUT_HANDLE);
+		if (!m_modook)
+		{
+			if (!GetConsoleMode(h, &m_modo))
+				return false;
+			m_modook= true;
+		}
+		if (!SetConsoleMode(h, m_modo | ENABLE_VIRTUAL_TERMINAL_PROCESSING))
+			return false;
+#endif
+		mc_fuori("\033[?1049h\033[0m\033[2J\033[H\033[?25l"); /// the other screen of the terminal: what was there comes back at the end
+		m_schermo.clear();
+		return true;
+	}
+	void esci()
+	{
+		if (m_muto)
+			return;
+		mc_fuori("\033[0m\033[?25h\033[?1049l");
+	}
+	void misura()
+	{
+		int larga= (m_provalarga > 0) ? m_provalarga : terminalwidth();
+		int alta = (m_provaalta > 0) ? m_provaalta : terminalheight();
+		if ((larga <= 0) || (alta <= 0)) /// (a terminal that does not tell its size: a serial line, a pty nobody set)
+		{
+			larga= 80;
+			alta = 24;
+		}
+		if (larga < 40)
+			larga= 40;
+		if (alta < 10)
+			alta= 10;
+		if ((larga != m_larga) || (alta != m_alta))
+			m_schermo.clear(); /// another size: everything again
+		m_larga= larga;
+		m_alta = alta;
+		m_utile= m_larga - 1; /// (the last column: written, some terminals go to the next row)
+		m_sx   = m_utile / 2;
+		m_dx   = m_utile - m_sx - 1;
+		m_righe= m_alta - 4; /// the path, the counts, the message, the keys
+	}
+	void pulisci()
+	{
+		franzmccella vuota;
+		vuota.punto= ' ';
+		vuota.stile= 0;
+		m_foglio.assign((size_t)m_alta, std::vector<franzmccella>((size_t)m_utile, vuota));
+	}
+	/// a text from a column on. i_larga: that many columns, cut or filled with spaces (-1: as long as it is)
+	void scrivi(int i_x, int i_y, const std::string &i_testo, int i_stile, int i_larga= -1)
+	{
+		if ((i_y < 0) || (i_y >= (int)m_foglio.size()) || (i_x < 0))
+			return;
+		std::vector<unsigned int> p;
+		mc_punti(i_testo, p);
+		std::vector<franzmccella> &r   = m_foglio[(size_t)i_y];
+		const int				   fine= ((i_larga < 0) || (i_x + i_larga > m_utile)) ? m_utile : (i_x + i_larga);
+		int						   x   = i_x;
+		for (size_t i= 0; i < p.size(); i++)
+		{
+			const int c= mc_colonne(p[i]);
+			if (c == 0)
+				continue; /// (what goes over another character is left out)
+			if (x + c > fine)
+				break;
+			r[(size_t)x].punto= p[i];
+			r[(size_t)x].stile= (unsigned char)i_stile;
+			if (c == 2)
+			{
+				r[(size_t)x + 1].punto= 0;
+				r[(size_t)x + 1].stile= (unsigned char)i_stile;
+			}
+			x+= c;
+		}
+		if (i_larga >= 0)
+			for (; x < fine; x++)
+			{
+				r[(size_t)x].punto= ' ';
+				r[(size_t)x].stile= (unsigned char)i_stile;
+			}
+	}
+	/// a row as it goes to the terminal, or as plain text
+	std::string riga(const std::vector<franzmccella> &i_riga, bool i_colori) const
+	{
+		std::string r;
+		int			stile= 0;
+		for (size_t x= 0; x < i_riga.size(); x++)
+		{
+			unsigned int p= i_riga[x].punto;
+			if (p == 0)
+			{
+				if ((x > 0) && (mc_colonne(i_riga[x - 1].punto) == 2))
+					continue;
+				p= ' ';
+			}
+			else if ((mc_colonne(p) == 2) && ((x + 1 >= i_riga.size()) || (i_riga[x + 1].punto != 0)))
+				p= ' '; /// (half of a wide character, the other half was written over)
+			if (i_colori && (i_riga[x].stile != stile))
+			{
+				stile= i_riga[x].stile;
+				r+= "\033[0m";
+				if (stile & MC_INVERSO)
+					r+= "\033[7m";
+				if (!flagnocolor)
+					switch (stile & 7)
+					{
+					case MC_VERDE:
+						r+= "\033[92m";
+						break;
+					case MC_CIANO:
+						r+= "\033[96m";
+						break;
+					case MC_GIALLO:
+						r+= "\033[93m";
+						break;
+					case MC_ROSSO:
+						r+= "\033[91m";
+						break;
+					default:
+						break;
+					}
+			}
+			mc_utf8(p, r);
+		}
+		if (stile != 0)
+			r+= "\033[0m";
+		return r;
+	}
+	void manda()
+	{
+		if (m_muto)
+			return;
+		std::string fuori;
+		if (m_schermo.size() != m_foglio.size())
+		{
+			m_schermo.assign(m_foglio.size(), std::string("\001"));
+			fuori+= "\033[0m\033[2J";
+		}
+		for (size_t y= 0; y < m_foglio.size(); y++)
+		{
+			const std::string r= riga(m_foglio[y], true);
+			if (r == m_schermo[y])
+				continue;
+			m_schermo[y]= r;
+			char dove[32];
+			snprintf(dove, sizeof(dove), "\033[%d;1H", (int)y + 1);
+			fuori+= dove;
+			fuori+= r;
+			fuori+= "\033[K";
+		}
+		if (fuori != "")
+			mc_fuori(fuori);
+	}
+	/// the two panels, the message, the keys
+	void componi()
+	{
+		misura();
+		pulisci();
+		for (int k= 0; k < 2; k++)
+		{
+			franzmcpannello &p	= m_p[k];
+			const int		 x0 = (k == 0) ? 0 : (m_sx + 1);
+			const int		 w	= (k == 0) ? m_sx : m_dx;
+			const bool		 qui= (k == m_attivo);
+			if (p.cursore < p.prima)
+				p.prima= p.cursore;
+			if (p.cursore >= p.prima + m_righe)
+				p.prima= p.cursore - m_righe + 1;
+			if (p.prima < 0)
+				p.prima= 0;
+			scrivi(x0, 0, " " + mc_coda((p.percorso == "") ? std::string(MC_RADICI) : p.percorso, w - 2), qui ? MC_INVERSO : 0, w);
+			const bool condimensione= (w >= 28);
+			const bool condata		= (w >= 46);
+			const int  nomelargo	= w - 4 - (condimensione ? 8 : 0) - (condata ? 11 : 0);
+			int		   cartelle= 0, file= 0;
+			for (size_t i= 0; i < p.voci.size(); i++)
+				if (!p.voci[i].su)
+				{
+					if (p.voci[i].cartella)
+						cartelle++;
+					else
+						file++;
+				}
+			for (int y= 0; y < m_righe; y++)
+			{
+				const int i= p.prima + y;
+				if (i >= (int)p.voci.size())
+					break;
+				const franzmcvoce &v	  = p.voci[(size_t)i];
+				const bool		   cursore= (i == p.cursore);
+				const bool		   marcato= p.marcati.count(v.nome) > 0;
+				int				   stile  = marcato ? MC_GIALLO : (v.cartella ? MC_VERDE : (v.archivio ? MC_CIANO : 0));
+				if (cursore && qui)
+					stile|= MC_INVERSO;
+				if (p.percorso == "")
+				{
+					scrivi(x0, y + 1, std::string(cursore ? ">" : " ") + v.nome + "  " + v.nota, stile, w);
+					continue;
+				}
+				scrivi(x0, y + 1, std::string(v.su ? "   " : (marcato ? "[X]" : "[ ]")) + (cursore ? ">" : " "), stile, 4);
+				scrivi(x0 + 4, y + 1, mc_taglia(v.nome + ((v.cartella && (!v.su)) ? "/" : ""), nomelargo), stile, nomelargo);
+				if (condimensione)
+				{
+					const std::string d= v.su ? std::string("") : (v.cartella ? std::string("<DIR>") : mc_dimensione(v.dimensione));
+					scrivi(x0 + 4 + nomelargo, y + 1, std::string((d.size() < 8) ? (8 - d.size()) : 1, ' ') + d, stile, 8);
+				}
+				if (condata)
+					scrivi(x0 + 4 + nomelargo + 8, y + 1, " " + (v.su ? std::string("") : dateorblank_ls(flagutc, v.data).substr(0, 10)), stile, 11);
+			}
+			char conto[160];
+			if (p.percorso == "")
+				snprintf(conto, sizeof(conto), " %d: ENTER goes inside", cartelle);
+			else if (p.marcati.empty())
+				snprintf(conto, sizeof(conto), " %d folders, %d files", cartelle, file);
+			else
+				snprintf(conto, sizeof(conto), " %d folders, %d files [%d marked]", cartelle, file, (int)p.marcati.size());
+			scrivi(x0, m_alta - 3, conto, MC_GIALLO, w);
+		}
+		for (int y= 0; y < m_alta - 2; y++)
+			scrivi(m_sx, y, "|", 0, 1);
+		if (m_avviso != "")
+			scrivi(0, m_alta - 2, " " + m_avviso, m_avvisocolore, m_utile);
+		else
+		{
+			const franzmcvoce *v= sotto(attivo());
+			int				   x= 0;
+			if (!m_cerca.empty())
+			{
+				const std::string cercato= " Search: " + mc_testo(m_cerca, 0, m_cerca.size()) + "  ";
+				scrivi(0, m_alta - 2, cercato, MC_GIALLO);
+				x= 11 + mc_larghezza(m_cerca, 0, m_cerca.size());
+			}
+			if (v != NULL)
+			{
+				std::string testo;
+				if (attivo().percorso == "")
+					testo= " " + v->nome + "  " + v->nota;
+				else if (v->su)
+					testo= " ..  (the folder above)";
+				else
+					testo= " " + mc_taglia(v->nome, (m_utile > 60) ? (m_utile - 46) : 14) + "  " + (v->cartella ? std::string("<DIR>") : (std::string(migliaia(v->dimensione)) + " bytes")) + "  " + dateorblank_ls(flagutc, v->data);
+				scrivi(x, m_alta - 2, testo, 0, m_utile - x);
+			}
+		}
+		static const char *nomi[10]= {"Add", "Rename", "List", "Info", "Copy", "Move", "Mkdir", "Delete", "Sort", "Quit"};
+		int				   x	   = 0;
+		for (int i= 0; i < 10; i++)
+		{
+			const char numero[2]= {(char)('0' + ((i + 1) % 10)), 0};
+			scrivi(x, m_alta - 1, numero, 0);
+			scrivi(x + 1, m_alta - 1, nomi[i], MC_INVERSO);
+			x+= 2 + (int)strlen(nomi[i]);
+		}
+		scrivi(x, m_alta - 1, "TAB \\ ?", MC_GIALLO);
+		/// 65.10b: which zpaqfranz this is (its first line is on the other screen, not seen from here)
+		static const char versione[]= "v" ZPAQ_VERSION;
+		if (x + 8 + (int)strlen(versione) <= m_utile)
+			scrivi(m_utile - (int)strlen(versione), m_alta - 1, versione, MC_CIANO);
+	}
+	/// --------------------------------------------------------------------- questions
+	/// a question on the row of the messages, one key for an answer among i_tasti (lower case). 27: ESC
+	int domanda(const std::string &i_testo, const std::string &i_scelte, const char *i_tasti)
+	{
+		for (;;)
+		{
+			componi();
+			scrivi(0, m_alta - 2, " " + i_testo, MC_GIALLO, m_utile);
+			scrivi(0, m_alta - 1, " " + i_scelte, MC_CIANO, m_utile);
+			manda();
+			int k= tasto();
+			if ((k == 27) || (k == MC_CHIUSO) || (k == 3))
+				return 27;
+			if ((k >= 'A') && (k <= 'Z'))
+				k+= 'a' - 'A';
+			if ((k > 0) && (k < 127) && (strchr(i_tasti, k) != NULL))
+				return k;
+		}
+	}
+	/// a line typed on the row of the messages, with something already there to be changed. false: ESC
+	bool chiedi(const std::string &i_domanda, const std::string &i_proposta, std::string &o_risposta, bool i_nascosto= false)
+	{
+		std::vector<unsigned int> testo;
+		mc_punti(i_proposta, testo);
+		size_t qui= testo.size();
+		size_t da = 0;
+		bool   bene= false;
+		for (;;)
+		{
+			componi();
+			std::vector<unsigned int> chiesto;
+			mc_punti(" " + i_domanda + " ", chiesto);
+			const int x0= mc_larghezza(chiesto, 0, chiesto.size());
+			int		  posto= m_utile - x0 - 1;
+			if (posto < 8)
+				posto= 8;
+			std::vector<unsigned int> visto= testo;
+			if (i_nascosto)
+				visto.assign(testo.size(), (unsigned int)'*');
+			/// the part with the cursor in it
+			if (da > qui)
+				da= qui;
+			while ((da < qui) && (mc_larghezza(visto, da, qui) > posto - 1))
+				da++;
+			scrivi(0, m_alta - 2, mc_testo(chiesto, 0, chiesto.size()), MC_GIALLO, m_utile);
+			scrivi(x0, m_alta - 2, mc_testo(visto, da, visto.size()), 0, posto);
+			scrivi(0, m_alta - 1, " ENTER: done   ESC: nothing is done", MC_CIANO, m_utile);
+			manda();
+			if (!m_muto)
+			{
+				char dove[48];
+				snprintf(dove, sizeof(dove), "\033[%d;%dH\033[?25h", m_alta - 1, x0 + mc_larghezza(visto, da, qui) + 1);
+				mc_fuori(dove);
+			}
+			const int k= tasto();
+			if ((k == 27) || (k == MC_CHIUSO) || (k == 3))
+				break;
+			if (k == 13)
+			{
+				bene= true;
+				break;
+			}
+			if ((k == 8) || (k == MC_CTRLH))
+			{
+				if (qui > 0)
+					testo.erase(testo.begin() + (qui - 1)), qui--;
+			}
+			else if (k == MC_CANC)
+			{
+				if (qui < testo.size())
+					testo.erase(testo.begin() + qui);
+			}
+			else if (k == MC_SINISTRA)
+			{
+				if (qui > 0)
+					qui--;
+			}
+			else if (k == MC_DESTRA)
+			{
+				if (qui < testo.size())
+					qui++;
+			}
+			else if (k == MC_INIZIO)
+				qui= 0;
+			else if (k == MC_FINE)
+				qui= testo.size();
+			else if ((k >= 32) && (k < MC_SPECIALE) && (k != 127))
+			{
+				testo.insert(testo.begin() + qui, (unsigned int)k);
+				qui++;
+			}
+		}
+		if (!m_muto)
+			mc_fuori("\033[?25l");
+		o_risposta= bene ? mc_testo(testo, 0, testo.size()) : std::string("");
+		return bene;
+	}
+	/// a small window over the panel in use: a title, some rows, one key for an answer among i_tasti. 27: ESC
+	int menu(const std::string &i_titolo, const std::vector<std::string> &i_righe, const char *i_tasti)
+	{
+		for (;;)
+		{
+			componi();
+			int larga= (int)i_titolo.size();
+			for (size_t i= 0; i < i_righe.size(); i++)
+				if ((int)i_righe[i].size() > larga)
+					larga= (int)i_righe[i].size();
+			const int w= (m_attivo == 0) ? m_sx : m_dx;
+			if (larga > w - 6)
+				larga= w - 6;
+			const int		  x0   = ((m_attivo == 0) ? 0 : (m_sx + 1)) + 1;
+			const std::string bordo= "+" + std::string((size_t)larga + 2, '-') + "+";
+			scrivi(x0, 1, bordo, MC_INVERSO);
+			scrivi(x0, 2, "| ", MC_INVERSO);
+			scrivi(x0 + 2, 2, i_titolo, MC_INVERSO | MC_GIALLO, larga);
+			scrivi(x0 + 2 + larga, 2, " |", MC_INVERSO);
+			scrivi(x0, 3, bordo, MC_INVERSO);
+			for (size_t i= 0; i < i_righe.size(); i++)
+			{
+				scrivi(x0, 4 + (int)i, "| ", MC_INVERSO);
+				scrivi(x0 + 2, 4 + (int)i, i_righe[i], MC_INVERSO, larga);
+				scrivi(x0 + 2 + larga, 4 + (int)i, " |", MC_INVERSO);
+			}
+			scrivi(x0, 4 + (int)i_righe.size(), bordo, MC_INVERSO);
+			manda();
+			int k= tasto();
+			if ((k == 27) || (k == MC_CHIUSO) || (k == 3))
+				return 27;
+			if ((k >= 'A') && (k <= 'Z'))
+				k+= 'a' - 'A';
+			if ((k > 0) && (k < 127) && (strchr(i_tasti, k) != NULL))
+				return k;
+		}
+	}
+	void aiuto()
+	{
+		static const char *righe[]= {
+			"zpaqfranz v" ZPAQ_VERSION " mc: two panels on the file system",
+			"",
+			"TAB, left, right  the other panel (where things are sent)",
+			"ENTER       into a folder; on an archive (cyan): its TUI",
+			"BACKSPACE   the folder above (or ENTER on ..)    \\ or /  " MC_RADICI ", above",
+			"a name      typed (letters, digits): the cursor on the first one that begins",
+			"            that way; ESC ends the search, BACKSPACE takes its last letter",
+			"SPACE, INS  mark      |  the marks turned over      *  mark by a wildcard:",
+			"            *.cpp, or a name typed and then *: the ones that begin that way",
+			"            F1 F5 F6 F8 Ctrl+S: the marked ones, or the one under the cursor",
+			"F1  add to an archive: the one under the cursor of the other panel, or a",
+			"    new one. A menu: the method, a password",
+			"F2  rename          F3  list, F4  info (of an archive)    F5  copy",
+			"F6  move (to another disk: with a verify)    F7  make a folder",
+			"F8  delete          F9  sort          F10, ESC  leave",
+			"Alt+1 ... Alt+0 are F1-F10 (when the terminal keeps a function key for itself)",
+			"Ctrl+S  the size (zpaqfranz s)      Ctrl+H  of each folder here (s -home)",
+			"Ctrl+V  this folder compared with the one of the other panel (zpaqfranz c)",
+			"Ctrl+R  robocopy (zpaqfranz r) of the folder under the cursor (none: of this",
+			"        one) into a folder with its name of the other panel; [RUN] is the dry",
+			"        run, -kill does it (after a question)",
+			"Ctrl+P  go to a path typed by hand      Ctrl+L  read the two folders again",
+		};
+		do
+		{
+			misura();
+			pulisci();
+			for (size_t i= 0; (i < sizeof(righe) / sizeof(righe[0])) && ((int)i < m_alta - 1); i++)
+				scrivi(1, (int)i, righe[i], (i == 0) ? MC_CIANO : 0);
+			scrivi(0, m_alta - 1, " any key to go back", MC_GIALLO, m_utile);
+			manda();
+		} while (tasto() == 0); /// (0: not a key. The window has another size, drawn again)
+	}
+	/// --------------------------------------------------------------------- the panels
+	void leggi(franzmcpannello &io_p)
+	{
+		io_p.voci.clear();
+		if (io_p.percorso == "")
+			mc_radici(io_p.voci);
+		else
+		{
+			std::vector<franzsceglivoce> tutte;
+			scegli_leggi(io_p.percorso, tutte);
+			franzmcvoce sopra;
+			sopra.nome	  = "..";
+			sopra.cartella= true;
+			sopra.su	  = true;
+			io_p.voci.push_back(sopra);
+			for (size_t i= 0; i < tutte.size(); i++)
+			{
+				franzmcvoce v;
+				v.nome= tutte[i].name;
+				if (tutte[i].is_directory && (v.nome != "") && (v.nome[v.nome.size() - 1] == '/'))
+					v.nome.erase(v.nome.size() - 1);
+				v.cartella	= tutte[i].is_directory;
+				v.archivio	= tutte[i].archivio;
+				v.data		= tutte[i].date;
+				v.dimensione= tutte[i].size;
+				io_p.voci.push_back(v);
+			}
+			std::sort(io_p.voci.begin(), io_p.voci.end(), franzmcconfronto(io_p.ordine, io_p.rovescio));
+		}
+		/// (a mark of something that is not there any more)
+		std::set<std::string> ancora;
+		for (size_t i= 0; i < io_p.voci.size(); i++)
+			if ((!io_p.voci[i].su) && io_p.marcati.count(io_p.voci[i].nome))
+				ancora.insert(io_p.voci[i].nome);
+		io_p.marcati.swap(ancora);
+		if (io_p.cursore >= (int)io_p.voci.size())
+			io_p.cursore= io_p.voci.empty() ? 0 : ((int)io_p.voci.size() - 1);
+		if (io_p.cursore < 0)
+			io_p.cursore= 0;
+	}
+	/// the cursor on the line with this name, if it is there
+	void vai(franzmcpannello &io_p, const std::string &i_nome)
+	{
+		for (size_t i= 0; i < io_p.voci.size(); i++)
+			if (io_p.voci[i].nome == i_nome)
+			{
+				io_p.cursore= (int)i;
+				return;
+			}
+		for (size_t i= 0; i < io_p.voci.size(); i++)
+			if (scegli_minuscolo(io_p.voci[i].nome) == scegli_minuscolo(i_nome))
+				io_p.cursore= (int)i;
+	}
+	/// the same folder again, the cursor where it was
+	void rileggi(franzmcpannello &io_p)
+	{
+		const franzmcvoce *v   = sotto(io_p);
+		const std::string  nome= (v != NULL) ? v->nome : std::string("");
+		if ((io_p.percorso != "") && (mc_cosa(io_p.percorso) != 2))
+		{
+			/// (the folder shown was moved, or deleted: the nearest one that is still there)
+			std::string c= io_p.percorso;
+			while ((c != "") && (mc_cosa(c) != 2))
+			{
+				const std::string senza= mc_senzabarra(c);
+				const size_t	  barra= senza.find_last_of('/');
+				c					   = ((barra == std::string::npos) || (senza == c)) ? std::string("") : senza.substr(0, barra + 1);
+			}
+			cambia(io_p, c);
+			return;
+		}
+		leggi(io_p);
+		if (nome != "")
+			vai(io_p, nome);
+	}
+	/// another folder: the marks are of the one that was shown
+	void cambia(franzmcpannello &io_p, const std::string &i_percorso)
+	{
+		io_p.percorso= i_percorso;
+		io_p.marcati.clear();
+		io_p.cursore= 0;
+		io_p.prima	= 0;
+		leggi(io_p);
+	}
+	void su(franzmcpannello &io_p)
+	{
+		if (io_p.percorso == "")
+			return;
+		const std::string da	= io_p.percorso;
+		const std::string senza = da.substr(0, da.size() - 1);
+		const size_t	  barra = senza.find_last_of('/');
+		bool			  radici= false;
+#ifdef _WIN32
+		/// above the root of a drive, or of a share: the drives
+		const bool condivisa= (senza.size() > 2) && (senza[0] == '/') && (senza[1] == '/');
+		int		   barre	= 0;
+		for (size_t i= 0; i < senza.size(); i++)
+			if (senza[i] == '/')
+				barre++;
+		if ((barra == std::string::npos) || (condivisa && (barre <= 3)))
+			radici= true;
+#else
+		if (senza == "")
+			radici= true;
+#endif
+		if (radici)
+		{
+			cambia(io_p, "");
+			for (size_t i= 0; i < io_p.voci.size(); i++)
+				if (scegli_minuscolo(io_p.voci[i].dove) == scegli_minuscolo(da))
+					io_p.cursore= (int)i;
+			return;
+		}
+		cambia(io_p, senza.substr(0, barra + 1));
+		vai(io_p, senza.substr(barra + 1));
+	}
+	void marca()
+	{
+		franzmcpannello	  &p= attivo();
+		const franzmcvoce *v= sotto(p);
+		if ((p.percorso == "") || (v == NULL))
+			return;
+		if (!v->su)
+		{
+			if (p.marcati.count(v->nome))
+				p.marcati.erase(v->nome);
+			else
+				p.marcati.insert(v->nome);
+		}
+		if (p.cursore < (int)p.voci.size() - 1)
+			p.cursore++;
+	}
+	/// the archive under the cursor of a panel, as a command wants it (x_????.zpaq for the pieces of one). "": not an archive
+	std::string archivio_sotto(const franzmcpannello &i_p) const
+	{
+		const franzmcvoce *v= sotto(i_p);
+		if ((i_p.percorso == "") || (v == NULL) || v->su || v->cartella || (!v->archivio))
+			return "";
+		return scegli_archivio(i_p.percorso + v->nome);
+	}
+	void invio()
+	{
+		franzmcpannello	  &p= attivo();
+		const franzmcvoce *v= sotto(p);
+		if (v == NULL)
+			return;
+		if (p.percorso == "")
+		{
+			const std::string dove= v->dove;
+			if (mc_cosa(dove) != 2)
+			{
+				di("<<" + v->nome + ">> does not answer", MC_ROSSO);
+				return;
+			}
+			cambia(p, dove);
+			return;
+		}
+		if (v->su)
+		{
+			su(p);
+			return;
+		}
+		if (v->cartella)
+		{
+			cambia(p, p.percorso + v->nome + "/");
+			return;
+		}
+		const std::string nome= archivio_sotto(p);
+		if (nome == "")
+		{
+			di("ENTER opens folders and archives (.zpaq .franzen, the ones in cyan)", MC_ROSSO);
+			return;
+		}
+		if (m_prova)
+		{
+			di("(test) tui " + nome, 0); /// (its keys would be the ones of the keyboard)
+			return;
+		}
+		std::vector<std::string> argomenti;
+		argomenti.push_back("tui");
+		argomenti.push_back(nome);
+		lancia(argomenti, std::vector<std::pair<std::string, std::string> >(), 2);
+	}
+	/// p: a path typed by hand. A folder: there. A file: its folder, the cursor on it
+	void percorso()
+	{
+		franzmcpannello &p= attivo();
+		std::string		 scritto;
+		if (!chiedi("Go to:", p.percorso, scritto))
+			return;
+		std::string dove= scegli_pulito(scritto, true);
+		if (dove == "")
+			return;
+		if (!mc_assoluto(dove))
+			dove= p.percorso + dove;
+		if ((dove.size() == 2) && (dove[1] == ':'))
+			dove+= "/";
+		const std::string senza= mc_senzabarra(dove);
+		const int		  cosa = mc_cosa(senza);
+		if (cosa == 2)
+		{
+			cambia(p, senza + ((senza[senza.size() - 1] == '/') ? "" : "/"));
+			return;
+		}
+		const size_t barra= senza.find_last_of('/');
+		if ((cosa == 1) && (barra != std::string::npos))
+		{
+			cambia(p, senza.substr(0, barra + 1));
+			vai(p, senza.substr(barra + 1));
+			return;
+		}
+		di("<<" + dove + ">> is not there", MC_ROSSO);
+	}
+	/// what the keys work on: the marked ones of the panel, or the one under the cursor. Names, as the panel has them
+	bool fonti(std::vector<std::string> &o_nomi)
+	{
+		o_nomi.clear();
+		franzmcpannello &p= attivo();
+		if (p.percorso == "")
+		{
+			di("not here: go inside one of these first", MC_ROSSO);
+			return false;
+		}
+		for (size_t i= 0; i < p.voci.size(); i++)
+			if (p.marcati.count(p.voci[i].nome))
+				o_nomi.push_back(p.voci[i].nome);
+		if (o_nomi.empty())
+		{
+			const franzmcvoce *v= sotto(p);
+			if ((v == NULL) || v->su)
+			{
+				di("nothing to work on: the cursor on a file or a folder, or SPACE to mark", MC_ROSSO);
+				return false;
+			}
+			o_nomi.push_back(v->nome);
+		}
+		return true;
+	}
+	/// --------------------------------------------------------------------- what runs on the normal screen
+	void aspetta()
+	{
+		printf("\n");
+		if (!flagnocolor)
+			printf("\033[93m");
+		printf("Press any key to go back to the panels");
+		if (!flagnocolor)
+			printf("\033[0m");
+		fflush(stdout);
+		while (tasto() == 0) /// (0: not a key. Windows tells that the screen changed, when the panels leave it)
+		{
+		}
+		printf("\n");
+		fflush(stdout);
+	}
+	/// zpaqfranz again, on the normal screen. i_aspetta: 0 the panels come back at once, 1 after a key, 2 after a key when it ended badly
+	int lancia(const std::vector<std::string> &i_argomenti, const std::vector<std::pair<std::string, std::string> > &i_ambiente, int i_aspetta)
+	{
+		esci();
+		std::string riga= "zpaqfranz";
+		for (size_t i= 0; i < i_argomenti.size(); i++)
+			riga+= " " + mc_argomento(i_argomenti[i]);
+		printf("%s\n", riga.c_str());
+		fflush(stdout);
+		const int esito= mc_figlio(i_argomenti, i_ambiente);
+		if (esito < 0)
+			printf("\n66101! zpaqfranz could not be started again (%s)\n", (*pjidac).fullzpaqexename.c_str());
+		if ((i_aspetta == 1) || ((i_aspetta == 2) && (esito != 0)))
+			aspetta();
+		entra();
+		rileggi(m_p[0]);
+		rileggi(m_p[1]);
+		return esito;
+	}
+	/// F3 F4: a command that takes the archive and nothing else
+	void archivio(const char *i_comando)
+	{
+		const std::string nome= archivio_sotto(attivo());
+		if (nome == "")
+		{
+			di("the cursor on an archive (.zpaq .franzen, the ones in cyan)", MC_ROSSO);
+			return;
+		}
+		std::vector<std::string> argomenti;
+		argomenti.push_back(i_comando);
+		argomenti.push_back(nome);
+		lancia(argomenti, std::vector<std::pair<std::string, std::string> >(), 1);
+	}
+	/// a password typed twice (once for something that is already there). false: nothing is done
+	bool password(const std::string &i_cosa, bool i_due, std::string &o_password)
+	{
+		o_password= "";
+		std::string prima, seconda;
+		if (!chiedi(i_cosa + ":", "", prima, true))
+			return false;
+		if (prima == "")
+		{
+			di("an empty password: nothing is done", MC_ROSSO);
+			return false;
+		}
+		if (i_due)
+		{
+			if (!chiedi(i_cosa + ", again:", "", seconda, true))
+				return false;
+			if (prima != seconda)
+			{
+				di("the two passwords are not the same: nothing is done", MC_ROSSO);
+				return false;
+			}
+		}
+		o_password= prima;
+		return true;
+	}
+	/// F1
+	void aggiungi()
+	{
+		std::vector<std::string> nomi;
+		if (!fonti(nomi))
+			return;
+		franzmcpannello		   &p= attivo();
+		std::vector<std::string> righe;
+		righe.push_back("0  the default method");
+		righe.push_back("1  -m1");
+		righe.push_back("2  -m2");
+		righe.push_back("3  -m3");
+		righe.push_back("4  -m4");
+		righe.push_back("5  -m5");
+		righe.push_back("6  the default, with a password");
+		righe.push_back("9  ESC: nothing is done");
+		char titolo[64];
+		if (nomi.size() == 1)
+			snprintf(titolo, sizeof(titolo), "Add to an archive");
+		else
+			snprintf(titolo, sizeof(titolo), "Add %d to an archive", (int)nomi.size());
+		const int scelta= menu(titolo, righe, "01234569");
+		if ((scelta == 27) || (scelta == '9'))
+			return;
+		/// where: the archive under the cursor of the other panel, when there is one
+		std::string		  dove;
+		const std::string vicino= archivio_sotto(altro());
+		if ((vicino != "") && (vicino.find("????????") == std::string::npos)) /// (not the files of the backup command: they have their index)
+		{
+			const int k= domanda("Add to <<" + sotto(altro())->nome + ">>, that is there (a new version)?", "Y: add to it   N: another archive   ESC: nothing is done", "yn");
+			if (k == 27)
+				return;
+			if (k == 'y')
+				dove= vicino;
+		}
+		if (dove == "")
+		{
+			const std::string cartella= (altro().percorso != "") ? altro().percorso : p.percorso;
+			std::string		  base	  = nomi[0];
+			if (nomi.size() > 1)
+			{
+				base= mc_senzabarra(p.percorso);
+				const size_t barra= base.find_last_of('/');
+				if (barra != std::string::npos)
+					base= base.substr(barra + 1);
+				if ((base == "") || ((base.size() == 2) && (base[1] == ':')))
+					base= "archive";
+			}
+			std::string scritto;
+			if (!chiedi("Archive:", cartella + base + ".zpaq", scritto))
+				return;
+			dove= scegli_pulito(scritto, true);
+			if (dove == "")
+				return;
+			if (!mc_assoluto(dove))
+				dove= cartella + dove;
+			if ((dove[dove.size() - 1] == '/') || (mc_cosa(dove) == 2))
+				dove= mc_senzabarra(dove) + "/" + base + ".zpaq";
+			if ((!iszpaq(dove)) && (!isfranzen(dove)))
+				dove+= ".zpaq";
+			if (mc_cosa(dove) != 0)
+				if (domanda("<<" + dove + ">> is there: a new version is added to it", "Y: add to it   N or ESC: nothing is done", "yn") != 'y')
+					return;
+		}
+		const bool nuovo= (dove.find('?') == std::string::npos) && (mc_cosa(dove) == 0);
+		std::vector<std::pair<std::string, std::string> > ambiente;
+		std::string										  segreto;
+		if (scelta == '6')
+		{
+			if (!password("Password", nuovo, segreto))
+				return;
+			ambiente.push_back(std::make_pair(std::string("FRANZKEY"), segreto));
+		}
+		if (isfranzen(dove))
+		{
+			if (!password("Password of the franzen", nuovo, segreto))
+				return;
+			ambiente.push_back(std::make_pair(std::string("FRANZFRANZEN"), segreto));
+		}
+		std::vector<std::string> argomenti;
+		argomenti.push_back("a");
+		argomenti.push_back(dove);
+		for (size_t i= 0; i < nomi.size(); i++)
+		{
+			const std::string intero= p.percorso + nomi[i];
+			argomenti.push_back((mc_cosa(intero) == 2) ? (intero + "/") : intero);
+		}
+		if ((scelta >= '1') && (scelta <= '5'))
+			argomenti.push_back(std::string("-m") + (char)scelta);
+		p.marcati.clear();
+		lancia(argomenti, ambiente, 1);
+	}
+	/// F2
+	void rinomina()
+	{
+		franzmcpannello	  &p= attivo();
+		const franzmcvoce *v= sotto(p);
+		if ((p.percorso == "") || (v == NULL) || v->su)
+		{
+			di("nothing to rename: the cursor on a file or a folder", MC_ROSSO);
+			return;
+		}
+		const std::string vecchio= v->nome;
+		std::string		  scritto;
+		if (!chiedi("Rename to:", vecchio, scritto))
+			return;
+		const std::string nuovo= mc_senzabarra(scegli_pulito(scritto, true));
+		if ((nuovo == "") || (nuovo == vecchio))
+			return;
+		if (nuovo.find('/') != std::string::npos)
+		{
+			di("a name, not a path: F6 moves", MC_ROSSO);
+			return;
+		}
+		/// (Windows: a.txt to A.TXT is the same file, and it is there)
+		if ((scegli_minuscolo(nuovo) != scegli_minuscolo(vecchio)) && (mc_cosa(p.percorso + nuovo) != 0))
+		{
+			di("<<" + nuovo + ">> is already there", MC_ROSSO);
+			return;
+		}
+		std::string perche;
+		if (mc_rinomina(p.percorso + vecchio, p.percorso + nuovo, perche) != 0)
+		{
+			di("<<" + vecchio + ">> cannot be renamed: " + perche, MC_ROSSO);
+			return;
+		}
+		if (p.marcati.count(vecchio))
+		{
+			p.marcati.erase(vecchio);
+			p.marcati.insert(nuovo);
+		}
+		rileggi(m_p[0]);
+		rileggi(m_p[1]);
+		vai(p, nuovo);
+	}
+	/// F7
+	void creacartella()
+	{
+		franzmcpannello &p= attivo();
+		if (p.percorso == "")
+		{
+			di("not here: go inside one of these first", MC_ROSSO);
+			return;
+		}
+		std::string scritto;
+		if (!chiedi("New folder:", "", scritto))
+			return;
+		const std::string nome= mc_senzabarra(scegli_pulito(scritto, true));
+		if (nome == "")
+			return;
+		const std::string intero= mc_assoluto(nome) ? nome : (p.percorso + nome);
+		if (mc_cosa(intero) != 0)
+		{
+			di("<<" + nome + ">> is already there", MC_ROSSO);
+			return;
+		}
+		makepath(intero + "/");
+		m_schermo.clear(); /// (makepath may have written something)
+		if (mc_cosa(intero) != 2)
+		{
+			di("<<" + nome + ">> cannot be made", MC_ROSSO);
+			return;
+		}
+		rileggi(m_p[0]);
+		rileggi(m_p[1]);
+		if (!mc_assoluto(nome))
+			vai(p, nome.substr(0, nome.find('/')));
+	}
+	/// F8
+	void cancella()
+	{
+		std::vector<std::string> nomi;
+		if (!fonti(nomi))
+			return;
+		franzmcpannello			 &p= attivo();
+		std::vector<franzmcpezzo> pezzi;
+		for (size_t i= 0; i < nomi.size(); i++)
+			mc_albero(p.percorso + nomi[i], pezzi);
+		int		file= 0, cartelle= 0;
+		int64_t bytes= 0;
+		for (size_t i= 0; i < pezzi.size(); i++)
+		{
+			if (pezzi[i].tipo == 1)
+				cartelle++;
+			else
+				file++;
+			bytes+= pezzi[i].dimensione;
+		}
+		if (pezzi.empty())
+		{
+			di("nothing to delete", MC_ROSSO);
+			return;
+		}
+		char testo[256];
+		if (pezzi.size() == 1)
+			snprintf(testo, sizeof(testo), "Delete <<%s>>?", mc_taglia(nomi[0], 40).c_str());
+		else if (nomi.size() == 1)
+			snprintf(testo, sizeof(testo), "Delete <<%s>> and what is inside: %d files, %d folders, %s bytes?", mc_taglia(nomi[0], 24).c_str(), file, cartelle - 1, migliaia(bytes));
+		else
+			snprintf(testo, sizeof(testo), "Delete the %d marked: %d files, %d folders, %s bytes?", (int)nomi.size(), file, cartelle, migliaia(bytes));
+		if (domanda(testo, "Y: delete, for ever   N or ESC: nothing is done", "yn") != 'y')
+			return;
+		std::string primo;
+		const int	errori= mc_cancella(pezzi, primo);
+		p.marcati.clear();
+		rileggi(m_p[0]);
+		rileggi(m_p[1]);
+		if (errori > 0)
+		{
+			snprintf(testo, sizeof(testo), "%d could not be deleted, the first: ", errori);
+			di(testo + primo, MC_ROSSO);
+		}
+		else
+		{
+			snprintf(testo, sizeof(testo), "deleted: %d files, %d folders", file, cartelle);
+			di(testo, 0);
+		}
+	}
+	/// *: a wildcard, typed (*.cpp, sorgente*): the names like that are marked, with the ones already marked
+	void seleziona(const std::string &i_inizio)
+	{
+		franzmcpannello &p= attivo();
+		if (p.percorso == "")
+		{
+			di("not here: go inside one of these first", MC_ROSSO);
+			return;
+		}
+		std::string scritto;
+		if (!chiedi("Mark (* any text, ? one character):", i_inizio + "*", scritto))
+			return;
+		const std::string modello= scegli_pulito(scritto, true);
+		if (modello == "")
+			return;
+		std::vector<unsigned int> jolly, nome;
+		mc_punti(modello, jolly);
+		int quanti= 0;
+		for (size_t i= 0; i < p.voci.size(); i++)
+		{
+			if (p.voci[i].su)
+				continue;
+			mc_punti(p.voci[i].nome, nome);
+			if (!mc_jolly(jolly, nome))
+				continue;
+			p.marcati.insert(p.voci[i].nome);
+			quanti++;
+		}
+		char testo[64];
+		snprintf(testo, sizeof(testo), "%d here are like <<", quanti);
+		di(testo + modello + ((quanti > 0) ? ">>: marked" : ">>"), (quanti > 0) ? 0 : MC_ROSSO);
+	}
+	/// |: what is marked is not any more, and the other way round
+	void inverti()
+	{
+		franzmcpannello &p= attivo();
+		if (p.percorso == "")
+			return;
+		for (size_t i= 0; i < p.voci.size(); i++)
+		{
+			if (p.voci[i].su)
+				continue;
+			if (p.marcati.count(p.voci[i].nome))
+				p.marcati.erase(p.voci[i].nome);
+			else
+				p.marcati.insert(p.voci[i].nome);
+		}
+	}
+	/// Ctrl+S: zpaqfranz s, the size of the folders marked (none: of the one under the cursor; not a folder: of the one
+	/// shown). Ctrl+H: s -home, the size of each folder inside the one shown
+	void dimensioni(bool i_casa)
+	{
+		franzmcpannello &p= attivo();
+		if (p.percorso == "")
+		{
+			di("not here: go inside one of these first", MC_ROSSO);
+			return;
+		}
+		std::vector<std::string> argomenti;
+		argomenti.push_back("s");
+		if (!i_casa)
+			for (size_t i= 0; i < p.voci.size(); i++)
+				if (p.voci[i].cartella && (!p.voci[i].su) && p.marcati.count(p.voci[i].nome))
+					argomenti.push_back(p.percorso + p.voci[i].nome + "/");
+		if (argomenti.size() == 1)
+		{
+			const franzmcvoce *v= sotto(p);
+			if ((!i_casa) && (v != NULL) && v->cartella && (!v->su))
+				argomenti.push_back(p.percorso + v->nome + "/");
+			else
+				argomenti.push_back(p.percorso);
+		}
+		if (i_casa)
+			argomenti.push_back("-home");
+		lancia(argomenti, std::vector<std::pair<std::string, std::string> >(), 1);
+	}
+	/// Ctrl+V: zpaqfranz c, the folder of this panel (the master) against the one of the other panel. Nothing is
+	/// touched: the two folders are the ones shown, whatever they are.
+	/// Ctrl+R: zpaqfranz r, and -kill deletes in the destination what the source does not have: a wrong folder
+	/// there (z:\ for z:\715) is emptied. So, from here (the r command is what it was):
+	/// - the source is the folder under the cursor, when the cursor is on one (in c:\zpaqfranz, on 715:
+	///   c:\zpaqfranz\715), otherwise the folder shown;
+	/// - the destination is the folder of the other panel, and it always ends with the name of the source. When it
+	///   does not, the name is added: z:\ is z:\715, z:\backup is z:\backup\715, z:\some\where\715 stays as it is.
+	///   A source without a name (a whole drive, a share, /) gets one: h:\ is h_ (see mc_nomerobocopy)
+	/// A small menu, with the two folders: [RUN] is the dry run (what would be done, nothing is touched), -kill does
+	/// it, after a question. r makes the destination by itself when it is not there (-kill only)
+	void duecartelle(bool i_robocopy)
+	{
+		std::string da		= attivo().percorso;
+		std::string a		= altro().percorso;
+		bool		aggiunto= false;
+		if (i_robocopy)
+		{
+			const franzmcvoce *v= sotto(attivo());
+			if ((v != NULL) && v->cartella && (!v->su))
+				da= (da == "") ? v->dove : (da + v->nome + "/");
+		}
+		if ((da == "") || (a == ""))
+		{
+			di("a folder on each panel is needed: one of the two is not inside one", MC_ROSSO);
+			return;
+		}
+		if (i_robocopy)
+		{
+			const std::string nome= mc_nomerobocopy(da);
+			if (scegli_minuscolo(mc_nomecartella(a)) != scegli_minuscolo(nome))
+			{
+				a+= nome + "/";
+				aggiunto= true;
+			}
+		}
+		const std::string x= scegli_minuscolo(da);
+		const std::string y= scegli_minuscolo(a);
+		if ((x == y) || (x.substr(0, y.size()) == y) || (y.substr(0, x.size()) == x))
+		{
+			if (i_robocopy)
+				di((x == y) ? "robocopy: the source and the destination are the same folder" : "robocopy: one of the two folders is inside the other", MC_ROSSO);
+			else
+				di((x == y) ? "the two panels show the same folder" : "one of the two folders is inside the other", MC_ROSSO);
+			return;
+		}
+		std::vector<std::string> argomenti;
+		argomenti.push_back(i_robocopy ? "r" : "c");
+		argomenti.push_back(da);
+		argomenti.push_back(a);
+		if (i_robocopy)
+		{
+			int posto= ((m_attivo == 0) ? m_sx : m_dx) - 6 - 5; /// (what a row of the menu has, after "from ")
+			if (posto < 12)
+				posto= 12;
+			std::vector<std::string> righe;
+			righe.push_back("from " + mc_coda(da, posto));
+			righe.push_back("to   " + mc_coda(a, posto));
+			righe.push_back(aggiunto ? "     (the name was added)" : "");
+			righe.push_back("R  [RUN]  the dry run");
+			righe.push_back("K  -kill  do it for real");
+			righe.push_back("ESC  nothing is done");
+			const int k= menu("Robocopy (zpaqfranz r)", righe, "rk");
+			if (k == 27)
+				return;
+			if (k == 'k')
+			{
+				const int largo= (m_utile > 60) ? ((m_utile - 31) / 2) : 14;
+				if (domanda("-kill: <<" + mc_coda(a, largo) + ">> made equal to <<" + mc_coda(da, largo) + ">>", "Y: do it (what is only in the destination is DELETED)   N or ESC: nothing", "yn") != 'y')
+					return;
+				argomenti.push_back("-kill");
+			}
+		}
+		lancia(argomenti, std::vector<std::pair<std::string, std::string> >(), 1);
+	}
+	/// F9
+	void ordina()
+	{
+		franzmcpannello		   &p= attivo();
+		std::vector<std::string> righe;
+		righe.push_back("1  name");
+		righe.push_back("2  size");
+		righe.push_back("3  date");
+		righe.push_back("4  extension");
+		righe.push_back("   (the one in use: reversed)");
+		righe.push_back("ESC");
+		const int k= menu("Sort by", righe, "1234");
+		if (k == 27)
+			return;
+		const int nuovo= k - '0';
+		if (nuovo == p.ordine)
+			p.rovescio= !p.rovescio;
+		else
+		{
+			p.ordine  = nuovo;
+			p.rovescio= false;
+		}
+		rileggi(p);
+	}
+	/// F5 (copy) and F6 (move)
+	void copia(bool i_sposta)
+	{
+		std::vector<std::string> nomi;
+		if (!fonti(nomi))
+			return;
+		franzmcpannello &p= attivo();
+		char			 titolo[160];
+		if (nomi.size() == 1)
+			snprintf(titolo, sizeof(titolo), "%s <<%s>> to:", i_sposta ? "Move" : "Copy", mc_taglia(nomi[0], 24).c_str());
+		else
+			snprintf(titolo, sizeof(titolo), "%s the %d marked to:", i_sposta ? "Move" : "Copy", (int)nomi.size());
+		std::string scritto;
+		if (!chiedi(titolo, (altro().percorso != "") ? altro().percorso : p.percorso, scritto))
+			return;
+		std::string dove= scegli_pulito(scritto, true);
+		if (dove == "")
+			return;
+		if (!mc_assoluto(dove))
+			dove= p.percorso + dove;
+		/// a folder that is there, or a name that ends with /, or more than one thing: inside it, with the names they have.
+		/// One thing, and a name that is not there: that is its new name
+		std::string cartella, nuovonome;
+		if ((dove[dove.size() - 1] == '/') || (mc_cosa(dove) == 2) || (nomi.size() > 1))
+			cartella= mc_senzabarra(dove) + ((mc_senzabarra(dove)[mc_senzabarra(dove).size() - 1] == '/') ? "" : "/");
+		else
+		{
+			const size_t barra= dove.find_last_of('/');
+			cartella		  = dove.substr(0, barra + 1);
+			nuovonome		  = dove.substr(barra + 1);
+		}
+		std::vector<std::string> da, a;
+		for (size_t i= 0; i < nomi.size(); i++)
+		{
+			da.push_back(p.percorso + nomi[i]);
+			a.push_back(cartella + ((nuovonome != "") ? nuovonome : nomi[i]));
+			const std::string x= scegli_minuscolo(da[i]);
+			const std::string y= scegli_minuscolo(a[i]);
+			if (x == y)
+			{
+				di("<<" + nomi[i] + ">>: it is already there (the same folder)", MC_ROSSO);
+				return;
+			}
+			if ((y.size() > x.size()) && (y.substr(0, x.size() + 1) == x + "/"))
+			{
+				di("<<" + nomi[i] + ">> cannot go inside itself", MC_ROSSO);
+				return;
+			}
+		}
+		/// a move on the same disk is a new name; everything else is a copy
+		std::vector<size_t> dacopiare;
+		int					spostati= 0;
+		char				testo[320];
+		for (size_t i= 0; i < nomi.size(); i++)
+		{
+			if ((!i_sposta) || (mc_cosa(a[i]) != 0))
+			{
+				dacopiare.push_back(i);
+				continue;
+			}
+			if (mc_cosa(cartella) != 2)
+			{
+				makepath(cartella);
+				m_schermo.clear();
+			}
+			std::string perche;
+			const int	esito= mc_rinomina(da[i], a[i], perche);
+			if (esito == 0)
+				spostati++;
+			else if (esito == 2)
+				dacopiare.push_back(i);
+			else
+			{
+				p.marcati.clear();
+				rileggi(m_p[0]);
+				rileggi(m_p[1]);
+				di("<<" + nomi[i] + ">> cannot be moved: " + perche, MC_ROSSO);
+				return;
+			}
+		}
+		if (dacopiare.empty())
+		{
+			p.marcati.clear();
+			rileggi(m_p[0]);
+			rileggi(m_p[1]);
+			snprintf(testo, sizeof(testo), "moved: %d", spostati);
+			di(testo, 0);
+			return;
+		}
+		std::vector<franzmclavoro> lavori;
+		int64_t					   totale= 0;
+		int						   quanti= 0, giali= 0;
+		for (size_t k= 0; k < dacopiare.size(); k++)
+		{
+			const size_t			  i= dacopiare[k];
+			std::vector<franzmcpezzo> pezzi;
+			mc_albero(da[i], pezzi);
+			for (size_t j= 0; j < pezzi.size(); j++)
+			{
+				franzmclavoro l;
+				l.pezzo= pezzi[j];
+				l.a	   = a[i] + pezzi[j].relativo;
+				l.fonte= i;
+				lavori.push_back(l);
+				if (pezzi[j].tipo == 1)
+					continue;
+				quanti++;
+				totale+= pezzi[j].dimensione;
+				if (mc_cosa(l.a) != 0)
+					giali++;
+			}
+		}
+		bool sopra= true;
+		if (giali > 0)
+		{
+			snprintf(testo, sizeof(testo), "%d of the %d files are already in the destination", giali, quanti);
+			const int k= domanda(testo, "O: overwrite them   S: skip them   ESC: nothing is done", "os");
+			if (k == 27)
+			{
+				rileggi(m_p[0]);
+				rileggi(m_p[1]);
+				return;
+			}
+			sopra= (k == 'o');
+		}
+		const int64_t libero= getfreespace(cartella);
+		if (libero < totale)
+		{
+			snprintf(testo, sizeof(testo), "Not enough room: %s bytes to write, %s free", migliaia(totale), migliaia2(libero));
+			if (domanda(testo, "Y: go on anyway   N or ESC: nothing is done", "yn") != 'y')
+			{
+				rileggi(m_p[0]);
+				rileggi(m_p[1]);
+				return;
+			}
+		}
+		esci();
+		printf("zpaqfranz mc: %s of %d files, %s bytes, to %s%s\n", i_sposta ? "move (a copy with a verify, then the source is deleted)" : "copy", quanti, migliaia(totale), cartella.c_str(), nuovonome.c_str());
+		std::vector<bool> intera(nomi.size(), true); /// everything of this source went
+		int				  fatti= 0, saltati= 0, errori= 0;
+		int64_t			  scritti= 0;
+		int64_t			  ultima = mtime();
+		for (size_t j= 0; j < lavori.size(); j++)
+		{
+			const franzmclavoro &l	  = lavori[j];
+			const int			 cosa = mc_cosa(l.a);
+			if (l.pezzo.tipo == 1)
+			{
+				if (cosa == 0)
+					makepath(l.a + "/");
+				if (mc_cosa(l.a) != 2)
+				{
+					printf("66102! the folder cannot be made: %s\n", l.a.c_str());
+					errori++;
+					intera[l.fonte]= false;
+				}
+				continue;
+			}
+			if ((cosa != 0) && (!sopra))
+			{
+				saltati++;
+				intera[l.fonte]= false;
+				continue;
+			}
+			if (l.pezzo.tipo == 3)
+			{
+				printf("66103: not a file, left where it is: %s\n", l.pezzo.nome.c_str());
+				saltati++;
+				intera[l.fonte]= false;
+				continue;
+			}
+			if (cosa == 1)
+			{
+				franzmcpezzo vecchio;
+				if (mc_pezzo(l.a, vecchio))
+					mc_via(vecchio); /// (a read only file is not written over)
+			}
+			if (l.pezzo.tipo == 2)
+			{
+#ifdef _WIN32
+				printf("66104: a junction, left where it is (it is not followed): %s\n", l.pezzo.nome.c_str());
+				saltati++;
+				intera[l.fonte]= false;
+#else
+				char		  punta[4096];
+				const ssize_t n= readlink(l.pezzo.nome.c_str(), punta, sizeof(punta) - 1);
+				if (n > 0)
+					punta[n]= 0;
+				if ((n <= 0) || (symlink(punta, l.a.c_str()) != 0))
+				{
+					printf("66105! the link cannot be made: %s\n", l.a.c_str());
+					errori++;
+					intera[l.fonte]= false;
+				}
+				else
+					fatti++;
+#endif
+				continue;
+			}
+			if (filecopy(true, false, l.pezzo.nome, l.a, i_sposta, true, true, 0) == "")
+			{
+				printf("66106! not copied: %s\n", l.pezzo.nome.c_str());
+				errori++;
+				intera[l.fonte]= false;
+				continue;
+			}
+			touch(l.a.c_str(), l.pezzo.data, l.pezzo.attr);
+			fatti++;
+			scritti+= l.pezzo.dimensione;
+			if (mtime() - ultima >= 1000)
+			{
+				ultima= mtime();
+				printf("%d of %d files, %s of %s bytes\n", fatti + saltati + errori, quanti, migliaia(scritti), migliaia2(totale));
+				fflush(stdout);
+			}
+		}
+		/// the dates of the folders, when everything is inside them (from the deepest one)
+		for (size_t j= lavori.size(); j > 0; j--)
+			if ((lavori[j - 1].pezzo.tipo == 1) && (mc_cosa(lavori[j - 1].a) == 2))
+				touch(lavori[j - 1].a.c_str(), lavori[j - 1].pezzo.data, lavori[j - 1].pezzo.attr);
+		int tolte= 0, nontolte= 0;
+		if (i_sposta)
+			for (size_t k= 0; k < dacopiare.size(); k++)
+			{
+				const size_t i= dacopiare[k];
+				if (!intera[i])
+				{
+					printf("66107: left where it is (not everything of it went): %s\n", da[i].c_str());
+					nontolte++;
+					continue;
+				}
+				std::vector<franzmcpezzo> pezzi;
+				std::string				  primo;
+				mc_albero(da[i], pezzi);
+				if (mc_cancella(pezzi, primo) > 0)
+				{
+					printf("66108! copied, but the source cannot be deleted: %s\n", primo.c_str());
+					nontolte++;
+				}
+				else
+					tolte++;
+			}
+		printf("\n%d copied (%s bytes), %d skipped, %d errors", fatti, migliaia(scritti), saltati, errori);
+		if (i_sposta)
+			printf("; sources moved: %d, left: %d", spostati + tolte, nontolte);
+		printf("\n");
+		aspetta();
+		entra();
+		p.marcati.clear();
+		rileggi(m_p[0]);
+		rileggi(m_p[1]);
+		snprintf(testo, sizeof(testo), "%s: %d files, %d skipped, %d errors", i_sposta ? "moved" : "copied", fatti, saltati, errori);
+		di(testo, (errori > 0) ? MC_ROSSO : 0);
+	}
+};
+int Jidac::mc()
+{
+	franzmc pannelli((files.size() > 0) ? files[0] : std::string(""), (files.size() > 1) ? files[1] : std::string(""));
+	if (!pannelli.prova())
+	{
+		if (!mc_console())
+		{
+			myprintf("66109! mc needs a console: the output is redirected\n");
+			return 2;
+		}
+		/// (0: the terminal does not tell its size, 80x24 then)
+		if ((terminalwidth() > 0) && (terminalheight() > 0) && ((terminalwidth() < 40) || (terminalheight() < 10)))
+		{
+			myprintf("66110! mc: the console is too small (at least 40x10): W=%d H=%d\n", terminalwidth(), terminalheight());
+			return 2;
+		}
+	}
+	outbuf_flush();
+	fflush(stdout);
+	const int esito= pannelli.esegui();
+	if (esito != 0)
+		myprintf("66111! mc: this console does not take the ANSI sequences (Windows 10 or later)\n");
+	return esito;
+}
 
 #ifdef _WIN32
 std::string searchfile(const std::string &i_directory, const std::string &i_file)

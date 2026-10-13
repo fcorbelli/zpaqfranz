@@ -64,8 +64,8 @@ OTHER DEALINGS IN THE SOFTWARE.
 /// Comment out the next line to build without -m8 (-m8 is then -m5 again)
 #define ZPAQZSTD
 
-#define ZPAQ_VERSION "65.10d"
-#define ZPAQ_DATE "(2026-10-08)"
+#define ZPAQ_VERSION "65.11s"
+#define ZPAQ_DATE "(2026-10-13)"
 
 
 /*
@@ -87824,6 +87824,9 @@ std::string g_vss_shadow;
 std::string g_replaceme;
 std::string g_copy;
 std::string g_freeze;
+uint64_t	g_freezesize   = 0;		/// 65.11q: -freezesize, the size for -freeze (it was -maxsize: the filter on the files to add, too)
+bool		g_freeze_fatto = false; /// -freeze: once for each run (backup goes through add)
+int			g_freeze_avviso= 0;		/// -freeze: 1 = not done (the archive is where it was), 2 = done, but something is left to delete by hand
 std::string g_exec_error;
 std::string g_exec_warn;
 std::string g_exec_ok;
@@ -88117,6 +88120,8 @@ bool flagverify;
 bool flagvss;
 bool flagnovss; /// 65.7m: -image with no VSS, not even tried (-image tries it by itself on NTFS; 65.9j: of C: only)
 bool flagzero;
+bool flagnuke;		/// 65.11g: f X: -nuke NN -force = fast NTFS sanitize (65.11m: structures + files, format, NN% of the free space; 65.11n: not zeros, 100 = the old data first)
+int	 g_nuke_pct= -1;	/// 65.11g: the NN of -nuke (1..100: percent of the free space zeroed at the end); -1 = -nuke given with no number
 bool flaghome;
 bool flagfixcase;
 bool flagturbo;
@@ -88488,7 +88493,7 @@ bool flagnontfs; /// 65.9l: -ntfs starts by itself (whole NTFS partitions, an ad
 bool flagac= false; /// 65.9n: the ac command: a c: -image and the rest of the disk of Windows (see ac_prepara)
 bool flagxc= false; /// 65.9p: the xc command: the restore of what ac saved (see Jidac::xc)
 bool flagacfake= false; /// 65.9p (hidden, for the tests of xc): ac takes the drive given as the one of Windows
-bool flaggui= false; /// 65.9v: ac, xc: what to take (and where to restore) is chosen on a screen
+bool flaggui= false; /// 65.9v: ac, xc: what to take (and where to restore) is chosen on a screen; 65.11o: f too (what to do, and where)
 class franzntfs2;
 struct franzntfs2_conti;
 bool flagvhd;
@@ -103658,6 +103663,39 @@ int zstd_encode(const std::string& i_method, const char* i_src, int i_n, int i_b
 		return 0;
 	return (int)risultato;
 }
+/*
+	65.11e: -m7 and -m9, two zstd by name. Nothing new in the archive: they
+	are -m8 with its switches written out, so any zpaq extracts them
+		-m9 = -m8h9    level 9, 16 MB blocks
+		-m7 = -m86h19  level 19, 64 MB blocks
+	A block size after the digit and a level of one's own win: -m78 is
+	-m88h19, -m96 is -m86h9, -m9h12 is -m8h12. Measured (65.11d, 32 threads,
+	1.7 GB of mixed files, 6.6 GB in 116.703 files, a 11.8 GB disk of a VM):
+	-m9 smaller AND faster than -m2 on all three; -m7 from 4.9% smaller to
+	0.9% bigger than -m3, and it extracts in 1-4 s instead of 21-112
+*/
+std::string zstd_sinonimo(const std::string& i_method)
+{
+	if (i_method.empty() || ((i_method[0]!='7') && (i_method[0]!='9')))
+		return i_method;
+	const bool sette= (i_method[0]=='7');
+	std::string risultato= i_method;
+	risultato[0]= '8';
+	if (sette)
+		if ((risultato.size()==1) || (!isdigit((unsigned char)risultato[1])))
+			risultato.insert(1, "6");
+	/// the level: an h (or an a) before the first comma, see zstd_encode
+	size_t virgola= risultato.find(',');
+	if (virgola==std::string::npos)
+		virgola= risultato.size();
+	bool livello= false;
+	for (size_t i= 1; i<virgola; i++)
+		if ((risultato[i]=='h') || (risultato[i]=='a'))
+			livello= true;
+	if (!livello)
+		risultato.insert(virgola, sette ? "h19" : "h9");
+	return risultato;
+}
 /// ph=19: the tables of the pcomp live in H (2 MB), M is the block
 static std::string zstd_config(int i_pm)
 {
@@ -103780,6 +103818,36 @@ static bool pcomp_is_frozen()
 	static const bool congelato= (pcomp_frozen_check(false)==0);
 	return congelato;
 }
+/// 65.11i: the -m8 branch of compressBlock, in a function of its own. Its Compressor (111 KB) and
+/// the one of compressBlock were two in the same stack frame: 260 KB (clang -Wframe-larger-than).
+/// false: nothing written, the block does not compress (the caller stores it)
+static bool compressBlockZstd(StringBuffer* in, Writer* out, const std::string& method,
+                   const unsigned n, const int arg0,
+                   const char* filename, const char* comment, const char* sha1ptr) {
+  if (!pcomp_is_frozen()) /// never an archive with a pcomp that is not the frozen one
+    error("-m8: PCOMP bytecode changed, refusing to write (see pcomp_frozen_check)");
+  std::vector<char> zst;
+  const int zstsize= zstd_encode(method, in->c_str(), (int)n, arg0+20, zst);
+  if (zstsize<=0)
+    return false;
+  const std::string config= zstd_config(arg0+20); /// M = the whole block
+  int args[9]={0};
+  libzpaq::Compressor co;
+  co.setOutput(out);
+  StringBuffer pcomp_cmd;
+  co.writeTag();
+  co.startBlock(config.c_str(), args, &pcomp_cmd);
+  std::string cs=itos(n);
+  if (comment) cs=cs+" "+comment;
+  co.startSegment(filename, cs.c_str());
+  StringBuffer zin;
+  zin.write(&zst[0], zstsize);
+  co.setInput(&zin);
+  co.compress();
+  co.endSegment(sha1ptr);
+  co.endBlock();
+  return true;
+}
 #endif // corresponds to #ifdef (#ifdef ZPAQZSTD)
 void compressBlock(StringBuffer* in, Writer* out, const char* method_,
                    const char* filename, const char* comment, bool dosha1) {
@@ -103817,29 +103885,8 @@ void compressBlock(StringBuffer* in, Writer* out, const char* method_,
 #ifdef ZPAQZSTD
   // -m8: zstd stored + ZPAQL decoder (see ZSTD_PCOMP)
   if (method[0]=='8') {
-    if (!pcomp_is_frozen()) /// never an archive with a pcomp that is not the frozen one
-      error("-m8: PCOMP bytecode changed, refusing to write (see pcomp_frozen_check)");
-    std::vector<char> zst;
-    const int zstsize= zstd_encode(method, in->c_str(), (int)n, arg0+20, zst);
-    if (zstsize>0) {
-      const std::string config= zstd_config(arg0+20); /// M = the whole block
-      int args[9]={0};
-      libzpaq::Compressor co;
-      co.setOutput(out);
-      StringBuffer pcomp_cmd;
-      co.writeTag();
-      co.startBlock(config.c_str(), args, &pcomp_cmd);
-      std::string cs=itos(n);
-      if (comment) cs=cs+" "+comment;
-      co.startSegment(filename, cs.c_str());
-      StringBuffer zin;
-      zin.write(&zst[0], zstsize);
-      co.setInput(&zin);
-      co.compress();
-      co.endSegment(sha1ptr);
-      co.endBlock();
+    if (compressBlockZstd(in, out, method, n, arg0, filename, comment, sha1ptr))
       return;
-    }
     method="0"+method.substr(1); /// incompressible: stored
   }
 #endif // ZPAQZSTD
@@ -103923,7 +103970,7 @@ void compressBlock(StringBuffer* in, Writer* out, const char* method_,
       // Analyze the data
       const int NR=1<<12;
       int pt[256]={0};  // position of last occurrence
-      int r[NR]={0};    // count repetition gaps of length r
+      std::vector<int> r(NR, 0);  // count repetition gaps of length r (65.11i: 16 KB less on the stack)
       const unsigned char* p=in->data();
       if (level>0) {
         for (unsigned i=0; i<n; ++i) {
@@ -118581,6 +118628,37 @@ uint64_t		   g_sodio_block_size	  = G_FRANZEN_SIZE;
 unsigned long long g_sodio_pwhash_opslimit= CRYPTO_PWHASH_OPSLIMIT_MODERATE;
 size_t			   g_sodio_pwhash_memlimit= CRYPTO_PWHASH_MEMLIMIT_MODERATE;
 
+/*
+	65.11l: the key of a franzen file comes from Argon2id (about a second, and 256 MB): it is derived once
+	per run for the same password, salt and limits, then taken from here. Before, every thread asked for
+	it again (a t on a franzen archive: all the threads at once, 256 MB each). And so would every part of
+	a multipart archive: its parts (and the index of a backup) are made with the salt of the first one
+*/
+pthread_mutex_t					   g_franzen_chiavi_mutex= PTHREAD_MUTEX_INITIALIZER;
+std::map<std::string, std::string> g_franzen_chiavi;
+/// 65.11r //FIX-FRANZEN: writes on a franzen file that did not make it (media full, I/O error): the run cannot end
+/// "all OK". With -franzen alone there is no .zpaq behind, and nobody else would notice (see myfwrite)
+int64_t g_franzen_scrittirotti= 0;
+/*
+	//FIX-FRANZEN 65.11s: an update that does not get to its end (the process killed, the power gone,
+	the media full) leaves, after the last good footer, the blocks it had written, and no footer at the
+	end of the file. Such a file could not be opened any more ("Footer is corrupted"), not even for the
+	versions of before, all there in its first bytes. A plain zpaq archive in the same state just ignores
+	its incomplete transaction. Now the last valid footer is looked for (franzcri::cerca_ultimo_footer):
+	the file is read up to there, with a warning, and the first add cuts the rest away
+	(franzcri::taglia_resti). Nothing changes in the format, nothing changes for a file that ends well.
+	Here: where the good part of a file ends (looked for once per run: every thread opens the file on
+	its own), and what the run says at its end
+*/
+struct franzen_fine_nota
+{
+	int64_t fisica; // the size of the file when it was looked at
+	int64_t valida; // where its last complete update ends
+};
+std::map<std::string, franzen_fine_nota> g_franzen_fini;
+int64_t g_franzen_recuperati= 0; // files read up to their last complete update
+int64_t g_franzen_tagliati	= 0; // of which: put right by an add (the rest cut away)
+
 struct sodium_functions
 {
 #ifdef _WIN32
@@ -118686,6 +118764,12 @@ class franzcri
   private:
 	size_t		  password_len;
 	unsigned char password_buf[256];
+	/// 65.11r //FIX-FRANZEN: the password given is over 255 bytes (see the constructor, and open)
+	bool		  password_lunga;
+	//FIX-FRANZEN 65.11s: -1, or where the last complete update of this file ends, when it is not at
+	// the end of the file (see cerca_ultimo_footer); and the name the file was opened with
+	int64_t		  fine_valida;
+	std::string	  nome_file;
 
 	// Cache for segment lookup - maps logical offsets to physical locations
 	struct segment_cache_item
@@ -118839,7 +118923,13 @@ class franzcri
 #endif
 
 #else // Unix/Linux
+		//FIX-FRANZEN 65.11s: on macOS the library is a .dylib (Homebrew: /usr/local/lib on Intel, /opt/homebrew/lib
+		// on Apple silicon, where dlopen does not look by itself). It was never looked for: no Franzen on a Mac
+#ifdef __APPLE__
+		const char *lib_names[]= {"libsodium.dylib", "/usr/local/lib/libsodium.dylib", "/opt/homebrew/lib/libsodium.dylib", "/opt/local/lib/libsodium.dylib", "libsodium.so", NULL};
+#else
 		const char *lib_names[]= {"libsodium.so", "libsodium.so.26", "libsodium.so.23", "libsodium.so.4", NULL};
+#endif
 
 		for (unsigned int i= 0; lib_names[i] != NULL; ++i)
 		{
@@ -118980,7 +119070,33 @@ class franzcri
 		sodium.handle= NULL;
 	}
 
+	/// 65.11l: the key of this password, salt and limits: from g_franzen_chiavi, or made now and put there.
+	/// The lock is kept while Argon2id runs: the other threads wait for it, they do not run their own
 	bool derive_key(const unsigned char *salt)
+	{
+		std::string quale((const char *)password_buf, password_len);
+		quale.append((const char *)salt, SIZEOF_SALT);
+		char limiti[80];
+		snprintf(limiti, sizeof(limiti), "|%llu|%llu|%d", (unsigned long long)pwhash_opslimit, (unsigned long long)pwhash_memlimit, pwhash_alg);
+		quale+= limiti;
+		bool fatto= false;
+		pthread_mutex_lock(&g_franzen_chiavi_mutex);
+		std::map<std::string, std::string>::iterator nota= g_franzen_chiavi.find(quale);
+		if ((nota != g_franzen_chiavi.end()) && (nota->second.size() == sizeof(key)))
+		{
+			memcpy(key, nota->second.data(), sizeof(key));
+			fatto= true;
+		}
+		else if (derive_key_argon(salt))
+		{
+			g_franzen_chiavi[quale]= std::string((const char *)key, sizeof(key));
+			fatto= true;
+		}
+		pthread_mutex_unlock(&g_franzen_chiavi_mutex);
+		return fatto;
+	}
+
+	bool derive_key_argon(const unsigned char *salt)
 	{
 		if (sodium.crypto_pwhash(key, sizeof(key), (const char *)password_buf, password_len,
 								 salt, pwhash_opslimit, pwhash_memlimit, pwhash_alg) != 0)
@@ -119042,6 +119158,11 @@ class franzcri
 	{
 		if (!file_handle)
 			return -1;
+
+		//FIX-FRANZEN 65.11s: a file with what an unfinished update left ends, for everybody here, where
+		// its last complete update ends (see cerca_ultimo_footer)
+		if (fine_valida >= 0)
+			return fine_valida;
 
 		// Save current position
 		int64_t current_pos;
@@ -119461,7 +119582,12 @@ class franzcri
 			return false;
 		}
 
-		fflush(file_handle);
+		/// 65.11r //FIX-FRANZEN: fwrite fills the buffer of stdio, the media is touched here: full, or gone, is known now
+		if (fflush(file_handle) != 0)
+		{
+			perror("CRITICAL FOOTER WRITING ERROR (flush)");
+			return false;
+		}
 		if (flagdebug)
 		{
 			myprintf("Footer written at offset %s\n", migliaia(footer_offset));
@@ -119574,11 +119700,144 @@ class franzcri
 																 f.footer_nonce, key) == 0);
 	}
 
+	//FIX-FRANZEN 65.11s: from here to read_footer, the file that ends with what an unfinished update
+	// left (see the note at g_franzen_fini)
+	static uint64_t le64_da(const unsigned char *i_p)
+	{
+		uint64_t v= 0;
+		for (int i= 7; i >= 0; i--)
+			v= (v << 8) | i_p[i];
+		return v;
+	}
+	/// the size of the file on the disk, whatever fine_valida says (the position is left at the end)
+	int64_t dimensione_fisica()
+	{
+		if (!file_handle)
+			return -1;
+		if (fseek64(file_handle, 0, SEEK_END) != 0)
+			return -1;
+#ifdef _WIN32
+		return _ftelli64(file_handle);
+#else
+		return ftello(file_handle);
+#endif
+	}
+	/// the 84 bytes of a footer as they are on the disk => o_f (host endian). True if its tag is good
+	bool footer_da_disco(const unsigned char *i_p, file_footer &o_f)
+	{
+		memcpy(&o_f, i_p, sizeof(file_footer));
+		o_f.file_data_size		= le64_to_host(o_f.file_data_size);
+		o_f.crc32				= le64_to_host(o_f.crc32);
+		o_f.prefix_crc32		= le64_to_host(o_f.prefix_crc32);
+		o_f.prefix_size			= le64_to_host(o_f.prefix_size);
+		o_f.segment_count		= le64_to_host(o_f.segment_count);
+		o_f.segment_data_size	= le64_to_host(o_f.segment_data_size);
+		o_f.segment_start_offset= le64_to_host(o_f.segment_start_offset);
+		return validate_footer_auth_tag(o_f);
+	}
+	/// is there a good footer that ends at i_fine?
+	bool footer_valido_a(int64_t i_fine, file_footer &o_f)
+	{
+		unsigned char crudo[sizeof(file_footer)];
+		const int64_t inizio= i_fine - (int64_t)sizeof(file_footer);
+		if (inizio < (int64_t)(sizeof(file_header) + sizeof(header_nonce)))
+			return false;
+		if (fseek64(file_handle, inizio, SEEK_SET) != 0)
+			return false;
+		if (fread(crudo, 1, sizeof(crudo), file_handle) != sizeof(crudo))
+			return false;
+		return footer_da_disco(crudo, o_f);
+	}
+	/*
+		The last valid footer before i_fine (the size of the file): where it ENDS, or -1. The file is read
+		backward, a piece at a time. Every place is first asked what costs nothing (a footer says where its
+		segment starts, and how many bytes of data it holds: the start must be after the header and before
+		the footer itself, the data must fit in between; the bytes of an encrypted block pass this once in
+		billions of billions), then its tag is checked with the key: only a footer written with this key
+		passes. The time is the time to read what the unfinished update had written
+	*/
+	int64_t cerca_ultimo_footer(int64_t i_fine)
+	{
+		const int64_t testa= (int64_t)(sizeof(file_header) + sizeof(header_nonce));
+		const int64_t lungo= (int64_t)sizeof(file_footer);
+		if (i_fine < testa + lungo)
+			return -1;
+		const int64_t			   PEZZO= 4 * 1024 * 1024;
+		std::vector<unsigned char> buf((size_t)(PEZZO + lungo));
+		int64_t					   alto= i_fine - lungo + 1; // one past the last place where a footer can start
+		while (alto > testa)
+		{
+			int64_t basso= alto - PEZZO;
+			if (basso < testa)
+				basso= testa;
+			/// the footers that start in [basso, alto): their bytes
+			const size_t quanti= (size_t)(alto - basso + lungo - 1);
+			if (fseek64(file_handle, basso, SEEK_SET) != 0)
+				return -1;
+			if (fread(&buf[0], 1, quanti, file_handle) != quanti)
+				return -1;
+			for (int64_t p= alto - 1; p >= basso; p--)
+			{
+				const unsigned char *q	   = &buf[(size_t)(p - basso)];
+				const uint64_t		 inizio= le64_da(q + 48); // segment_start_offset
+				if ((inizio < (uint64_t)testa) || (inizio > (uint64_t)p))
+					continue;
+				const uint64_t dati= le64_da(q + 40); // segment_data_size
+				if (dati > (uint64_t)p - inizio)
+					continue;
+				if (dati > le64_da(q)) // file_data_size
+					continue;
+				file_footer f;
+				if (footer_da_disco(q, f))
+					return p + lungo;
+			}
+			alto= basso;
+		}
+		return -1;
+	}
+	/// the footer at the end of the file is not good: the last good one goes in footer, and fine_valida
+	/// says where it ends. False if there is none (a file never finished, or damaged)
+	bool recupera_footer(int64_t i_fisica)
+	{
+		int64_t buona= -1;
+		pthread_mutex_lock(&g_franzen_chiavi_mutex);
+		std::map<std::string, franzen_fine_nota>::iterator nota= g_franzen_fini.find(nome_file);
+		if ((nota != g_franzen_fini.end()) && (nota->second.fisica == i_fisica) && footer_valido_a(nota->second.valida, footer))
+			buona= nota->second.valida; /// already looked for in this run (by another thread, by who read the archive)
+		else
+		{
+			color_yellow();
+			myprintf("41750$ <<%Z>>: no valid footer at its end (an update that did not finish?)\n", nome_file.c_str());
+			myprintf("41751$ Looking for the last complete update...\n");
+			color_restore();
+			buona= cerca_ultimo_footer(i_fisica);
+			if ((buona >= 0) && footer_valido_a(buona, footer))
+			{
+				franzen_fine_nota n;
+				n.fisica= i_fisica;
+				n.valida= buona;
+				g_franzen_fini[nome_file]= n;
+				g_franzen_recuperati++;
+				color_yellow();
+				myprintf("41752$ Found: it ends at %s. The %s bytes after it are ignored (the next add removes them)\n", migliaia(buona), migliaia2(i_fisica - buona));
+				color_restore();
+			}
+			else
+				buona= -1;
+		}
+		pthread_mutex_unlock(&g_franzen_chiavi_mutex);
+		if (buona < 0)
+			return false;
+		fine_valida= buona;
+		return true;
+	}
+
 	// NEW: Read footer from end of file
 	bool read_footer()
 	{
 		if (!file_handle)
 			return false;
+		fine_valida= -1; //FIX-FRANZEN 65.11s
 
 		// Get file size to find footer
 		if (fseek64(file_handle, 0, SEEK_END) != 0)
@@ -119659,8 +119918,13 @@ class franzcri
 															 &footer_data[0], footer_data.size(),
 															 footer.footer_nonce, key) != 0)
 		{
-			myprintf("41748! Footer is corrupted (auth tag failed)\n");
-			return false;
+			//FIX-FRANZEN 65.11s: it was the end of the story. Now: is there a complete update before?
+			if (!recupera_footer(file_size))
+			{
+				myprintf("41748! Footer is corrupted (auth tag failed)\n");
+				myprintf("41755! No complete update in this file: never finished (delete it, and make it again), or damaged\n");
+				return false;
+			}
 		}
 
 		// Validate footer data
@@ -119815,6 +120079,9 @@ class franzcri
 
   public:
 	uint64_t worked_so_far;
+	/// 65.11l: a new file made with this salt, not a random one (see usa_sale)
+	bool		  sale_imposto;
+	unsigned char sale_voluto[SIZEOF_SALT];
 
   public:
 	// Funzione rapida per verificare se la password è corretta per un dato file,
@@ -120016,11 +120283,19 @@ class franzcri
 	{
 		// Password management
 		// Validation of password and its length
+		/*
+			65.11r //FIX-FRANZEN: a password over 255 bytes was said "not good" here, and then not used at all: the
+			file was made with an EMPTY one (and it is read with an empty one), with an "all OK" at the
+			end. Nothing new is made that way any more (see open). What is already there can still be
+			read, as before: with a warning
+		*/
+		password_lunga= (p != NULL) && (p_len > 255);
 		if (p == NULL || p_len == 0 || p_len > 255)
 		{
 			// Handle error appropriately, ad es. lanciando un'eccezione
 			// o impostando uno stato di errore interno. Per ora, azzeriamo.
-			myprintf("42100! Error: password not good or too long\n");
+			if (!password_lunga)
+				myprintf("42100! Error: password not good or too long\n");
 			memset(password_buf, 0, sizeof(password_buf));
 			password_len= 0;
 		}
@@ -120045,6 +120320,9 @@ class franzcri
 		_segments_cache_valid		  = false;
 		current_segment_physical_start= 0;
 		current_segment_logical_start = 0;
+		sale_imposto				  = false;
+		memset(sale_voluto, 0, sizeof(sale_voluto));
+		fine_valida					  = -1; //FIX-FRANZEN 65.11s
 		is_libsodium_loaded			  = load_library();
 	}
 
@@ -120103,6 +120381,96 @@ class franzcri
 		return 0;
 	}
 
+	/*
+		65.11l: the parts of a multipart archive (and the index of a backup) are franzen files of their own,
+		all made with the salt of the first one: one key for all (see g_franzen_chiavi), the nonces are
+		random. Without the password: the salt of a file, and how many bytes of data it holds. The size
+		comes from the footer as it is: it is checked for real (auth tag) when the part is opened
+	*/
+	static bool leggi_sale(const char *i_filename, unsigned char *o_salt)
+	{
+		if (detect_franzen_type(i_filename) == 0)
+			return false;
+		FILE *f= fopen(i_filename, "rb");
+		if (!f)
+			return false;
+		file_header testa;
+		const bool	letto= (fread(&testa, 1, sizeof(testa), f) == sizeof(testa));
+		fclose(f);
+		if (letto)
+			memcpy(o_salt, testa.salt, SIZEOF_SALT);
+		return letto;
+	}
+	static int64_t leggi_dimensione(const char *i_filename)
+	{
+		if (detect_franzen_type(i_filename) == 0)
+			return -1;
+		const int64_t tutto= prendidimensionefile(i_filename);
+		if (tutto < (int64_t)(sizeof(file_header) + SIZEOF_ONCE + sizeof(file_footer)))
+			return -1;
+		FILE *f= fopen(i_filename, "rb");
+		if (!f)
+			return -1;
+		unsigned char coda[8];
+		bool		  letto= false;
+#ifdef _WIN32
+		if (_fseeki64(f, tutto - (int64_t)sizeof(file_footer), SEEK_SET) == 0)
+#else
+		if (fseeko(f, tutto - (int64_t)sizeof(file_footer), SEEK_SET) == 0)
+#endif
+			letto= (fread(coda, 1, 8, f) == 8);
+		fclose(f);
+		if (!letto)
+			return -1;
+		uint64_t dati= 0; /// file_data_size, little endian on disk
+		for (int i= 7; i >= 0; i--)
+			dati= (dati << 8) | coda[i];
+		if (dati > (uint64_t)tutto)
+			return -1;
+		return (int64_t)dati;
+	}
+	/// a new file (open with create_new) with the salt of another franzen file
+	void usa_sale(const unsigned char *i_salt)
+	{
+		memcpy(sale_voluto, i_salt, sizeof(sale_voluto));
+		sale_imposto= true;
+	}
+	/*
+		//FIX-FRANZEN 65.11s: the bytes that an unfinished update left after the last valid footer (see
+		cerca_ultimo_footer) are cut away. For who is going to write: the new blocks go there. A read
+		never does it. True if there was nothing to cut, or if it is done
+	*/
+	bool taglia_resti()
+	{
+		if (fine_valida < 0)
+			return true;
+		if (!file_handle)
+			return false;
+		const int64_t fisica= dimensione_fisica();
+		fflush(file_handle);
+#ifdef _WIN32
+		const bool fatto= (_chsize_s(_fileno(file_handle), fine_valida) == 0);
+#else
+		const bool fatto= (ftruncate(fileno(file_handle), fine_valida) == 0);
+#endif
+		if (!fatto)
+		{
+			color_red();
+			myprintf("41753! <<%Z>>: cannot remove the %s bytes left by an unfinished update (read only?)\n", nome_file.c_str(), migliaia(fisica - fine_valida));
+			color_restore();
+			return false;
+		}
+		color_yellow();
+		myprintf("41754: <<%Z>>: the %s bytes left by an unfinished update are removed, the file ends at %s again\n", nome_file.c_str(), migliaia(fisica - fine_valida), migliaia2(fine_valida));
+		color_restore();
+		pthread_mutex_lock(&g_franzen_chiavi_mutex);
+		g_franzen_fini.erase(nome_file);
+		g_franzen_tagliati++;
+		pthread_mutex_unlock(&g_franzen_chiavi_mutex);
+		fine_valida= -1;
+		return true;
+	}
+
 	bool open(const char *filename, bool create_new)
 	{
 		if (is_file_open)
@@ -120116,8 +120484,18 @@ class franzcri
 			return false;
 		}
 		file_was_modified= false;
+		fine_valida		 = -1; //FIX-FRANZEN 65.11s
+		nome_file		 = filename;
 		if (flagdebug)
 			myprintf(" Attempting to open '%s' (create_new=%s)\n", filename, create_new ? "true" : "false");
+
+		if (create_new && password_lunga) /// 65.11r //FIX-FRANZEN: before the file is made (or emptied)
+		{
+			color_red();
+			myprintf("42101! The -franzen password is longer than 255 bytes: not supported. Nothing is written\n");
+			color_restore();
+			return false;
+		}
 
 		file_handle= fopen(filename, create_new ? "w+b" : "r+b");
 		if (!file_handle)
@@ -120159,7 +120537,10 @@ class franzcri
 			current_segment_physical_start= footer.segment_start_offset;
 			current_segment_logical_start = 0;
 
-			sodium.randombytes_buf(header.salt, sizeof(header.salt));
+			if (sale_imposto)
+				memcpy(header.salt, sale_voluto, sizeof(header.salt));
+			else
+				sodium.randombytes_buf(header.salt, sizeof(header.salt));
 			if (!derive_key(header.salt))
 			{
 				fclose(file_handle);
@@ -120311,6 +120692,19 @@ class franzcri
 			}
 		}
 
+		if (password_lunga) /// 65.11r //FIX-FRANZEN: only an existing file gets here
+		{
+			static bool detto= false;
+			if (!detto)
+			{
+				detto= true;
+				color_red();
+				myprintf("42102$ <<%Z>> is opened by a -franzen password longer than 255 bytes.\n", filename);
+				myprintf("42103$ zpaqfranz up to 65.11q did not use such a password at all: this file is encrypted\n");
+				myprintf("42104$ with an EMPTY one. Make it again, with a password of 255 bytes at most\n");
+				color_restore();
+			}
+		}
 		is_file_open= true;
 		if (flagdebug)
 			myprintf("File '%s' opened\n", filename);
@@ -120332,6 +120726,7 @@ class franzcri
 			if (!write_footer())
 			{
 				myprintf("38415! CRITICAL ERROR: Footer update failed!\n");
+				g_franzen_scrittirotti++; /// 65.11r //FIX-FRANZEN: a file without its footer cannot be opened: not an "all OK"
 			}
 		}
 		if (flagdebug6)
@@ -120340,7 +120735,11 @@ class franzcri
 			myprintf("fclose handle\n");
 			color_restore();
 		}
-		fclose(file_handle);
+		if ((fclose(file_handle) != 0) && file_was_modified) /// 65.11r //FIX-FRANZEN
+		{
+			myprintf("38416! CRITICAL ERROR: cannot close the franzen file (media full?)\n");
+			g_franzen_scrittirotti++;
+		}
 		file_handle = NULL;
 		is_file_open= false;
 		wipesecrets();
@@ -120558,7 +120957,8 @@ class franzcri
 						footer.segment_data_size+= data_written_this_call;
 					}
 
-					fflush(file_handle);
+					if (fflush(file_handle) != 0) /// 65.11r //FIX-FRANZEN: see the other one, below
+						success= false;
 					file_was_modified= true;
 					goto cleanup;
 				}
@@ -120573,6 +120973,13 @@ class franzcri
 			// Reopened existing file - this is a true APPEND creating a new segment
 			// Start writing at current end of file (AFTER the old footer)
 			// This preserves the old data completely (rsync-friendly)
+			//FIX-FRANZEN 65.11s: what an unfinished update left after the last footer goes away now,
+			// before the new blocks are written there (see cerca_ultimo_footer)
+			if (!taglia_resti())
+			{
+				success= false;
+				goto cleanup;
+			}
 			int64_t file_size= get_actual_file_size();
 			if (file_size < 0)
 			{
@@ -120679,7 +121086,12 @@ class franzcri
 			footer.segment_data_size+= data_written_this_call;
 		}
 
-		fflush(file_handle);
+		/// 65.11r //FIX-FRANZEN: fwrite fills the buffer of stdio, the media is touched here: full, or gone, is known now
+		if (fflush(file_handle) != 0)
+		{
+			perror("Error flushing encrypted data");
+			success= false;
+		}
 		file_was_modified= true;
 
 	cleanup:
@@ -120853,12 +121265,24 @@ class franzcri
 				memcpy(work_plaintext + offset_in_block, src_ptr, bytes_in_this_block);
 			}
 
-			// Re-encrypt using the SAME nonce (allowed within same transaction)
+			/*
+				//FIX-FRANZEN 65.11s: the block goes back to its place (zpaq must write backward, as with
+				a fseek: the jidac header of a transaction is written again at its end, with the size of
+				the compressed data) with a NEW random nonce, as every block written by write() has.
+				It was encrypted again with the nonce it already had ("allowed within same transaction"):
+				that is two different contents under the same key and the same nonce, the block as it
+				was during the run and as it is at the end. Who has both (a copy, a snapshot, a sync
+				taken while the run goes) sees the XOR of the two contents, and the tag of that block
+				does not stand for it any more. The nonce is stored in front of its block: nothing
+				changes in the format, every version reads the files of the others.
+				To have it as before: remove the next line (randombytes_buf)
+			*/
+			sodium.randombytes_buf(work_nonce, nonce_len);
 			unsigned long long new_cipher_len= 0;
 			if (sodium.crypto_aead_chacha20poly1305_ietf_encrypt(
 					work_encrypted, &new_cipher_len,
 					work_plaintext, block_plain_size,
-					NULL, 0, NULL, work_nonce, key) != 0) // SAME nonce
+					NULL, 0, NULL, work_nonce, key) != 0)
 			{
 				myprintf("38494! Error re-encrypting block\n");
 				success= false;
@@ -120897,7 +121321,8 @@ class franzcri
 
 		if (success)
 		{
-			fflush(file_handle);
+			if (fflush(file_handle) != 0) /// 65.11r //FIX-FRANZEN: as in write()
+				success= false;
 			file_was_modified= true;
 		}
 
@@ -121602,6 +122027,9 @@ class franzcri
 			myprintf("39644! Error: Unable to determine the actual file size\n");
 			return false;
 		}
+		//FIX-FRANZEN 65.11s: see get_actual_file_size
+		if (fine_valida >= 0)
+			actual_file_size= fine_valida;
 
 		// V3: With segment tracking, each segment has its own blocks
 		// File structure: [HEADER][seg1_blocks][footer1][seg2_blocks][footer2]...[segN_blocks][footerN]
@@ -123340,7 +123768,8 @@ class franzcri
 
 		if (total_size == 0)
 		{
-			open(output_filename, true);
+			if (!open(output_filename, true)) /// 65.11r //FIX-FRANZEN: it said OK with no file at all
+				return false;
 			close();
 			return true;
 		}
@@ -123569,6 +123998,67 @@ class franzcri
 		}
 
 		return true;
+	}
+
+	//FIX-FRANZEN 65.11s: what the tests 11-15 of criautotest need
+	static bool at_leggi(const char *i_nome, std::vector<unsigned char> &o_dati)
+	{
+		o_dati.clear();
+		FILE *f= fopen(i_nome, "rb");
+		if (!f)
+			return false;
+		std::vector<unsigned char> pezzo(65536);
+		size_t					   n;
+		while ((n= fread(&pezzo[0], 1, pezzo.size(), f)) > 0)
+			o_dati.insert(o_dati.end(), pezzo.begin(), pezzo.begin() + n);
+		fclose(f);
+		return true;
+	}
+	static bool at_scrivi(const char *i_nome, const std::vector<unsigned char> &i_dati, size_t i_quanti)
+	{
+		FILE *f= fopen(i_nome, "wb");
+		if (!f)
+			return false;
+		const bool fatto= (i_quanti == 0) || (fwrite(&i_dati[0], 1, i_quanti, f) == i_quanti);
+		return (fclose(f) == 0) && fatto;
+	}
+	/// bytes that do not repeat block after block: a wrong block, or a block out of its place, shows
+	static void at_dati(std::vector<char> &o_dati, size_t i_quanti, unsigned int i_seme)
+	{
+		o_dati.resize(i_quanti);
+		uint32_t x= 2463534242u + i_seme * 7919u;
+		if (x == 0)
+			x= 1;
+		for (size_t i= 0; i < i_quanti; i++)
+		{
+			x^= x << 13;
+			x^= x >> 17;
+			x^= x << 5;
+			o_dati[i]= (char)(x & 255);
+		}
+	}
+	/// the file opens with this password and holds exactly these bytes (read in pieces of an odd size)
+	static bool at_contiene(const char *i_nome, const std::string &i_password, const std::vector<char> &i_attesi)
+	{
+		franzcri f(i_password.c_str(), i_password.length());
+		if (!f.open(i_nome, false))
+			return false;
+		bool			  uguale= (f.get_file_data_size() == (uint64_t)i_attesi.size());
+		std::vector<char> letto(70001);
+		size_t			  fatto= 0;
+		while (uguale && (fatto < i_attesi.size()))
+		{
+			size_t quanti= i_attesi.size() - fatto;
+			if (quanti > letto.size())
+				quanti= letto.size();
+			if (!f.read_at_to(&letto[0], quanti, fatto))
+				uguale= false;
+			else if (memcmp(&letto[0], &i_attesi[fatto], quanti) != 0)
+				uguale= false;
+			fatto+= quanti;
+		}
+		f.close();
+		return uguale;
 	}
 
 	bool criautotest()
@@ -125013,6 +125503,279 @@ class franzcri
 							  test10_passed, &all_tests_passed);
 		}
 
+		//FIX-FRANZEN 65.11s: tests 11-15, on what the review of October 2026 found and changed
+
+		// TEST 11: writeat (the jidac header written again at the end of a transaction) puts the block
+		// back with a new nonce; the blocks it does not touch stay as they are, byte by byte
+		{
+			myprintf("\nTEST 11: writeat: the block is written again with a new nonce\n");
+			const size_t			   testa = sizeof(file_header) + SIZEOF_ONCE;
+			const size_t			   blocco= SIZEOF_ONCE + block_size_default + SIZEOF_AUTH_TAG;
+			bool					   fatto = true;
+			std::vector<char>		   attesi, secondo;
+			std::vector<unsigned char> prima, dopo;
+			at_dati(attesi, 200000, 11);
+			at_dati(secondo, 100000, 111);
+			const std::string h1(104, 'H'), h2(104, 'K'), h3(104, 'Z');
+			{
+				franzcri fc(correct_password.c_str(), correct_password.length(), block_size_default);
+				fatto= fc.open(test_filename, true) && fc.write(&attesi[0], attesi.size()) && at_leggi(test_filename, prima);
+				// 104 bytes at the start (the header of a transaction), then 104 across the first two blocks
+				fatto= fatto && fc.writeat(0, h1.c_str(), h1.size()) && fc.writeat(block_size_default - 50, h2.c_str(), h2.size());
+				fatto= fatto && at_leggi(test_filename, dopo);
+				fc.close();
+			}
+			memcpy(&attesi[0], h1.c_str(), 104);
+			memcpy(&attesi[block_size_default - 50], h2.c_str(), 104);
+			fatto= fatto && (prima.size() == dopo.size()) && (prima.size() > testa + 3 * blocco);
+			print_test_result("TEST 11 - New file: writing, writeat", fatto, &all_tests_passed);
+			if (fatto)
+			{
+				const bool nuove= (memcmp(&prima[testa], &dopo[testa], SIZEOF_ONCE) != 0) &&
+								  (memcmp(&prima[testa + blocco], &dopo[testa + blocco], SIZEOF_ONCE) != 0);
+				const bool ferme= (memcmp(&prima[0], &dopo[0], testa) == 0) &&
+								  (memcmp(&prima[testa + 2 * blocco], &dopo[testa + 2 * blocco], prima.size() - testa - 2 * blocco) == 0);
+				print_test_result("TEST 11 - The two blocks written again have a new nonce", nuove, &all_tests_passed);
+				print_test_result("TEST 11 - Header and other blocks: not touched", ferme, &all_tests_passed);
+				print_test_result("TEST 11 - Content after writeat", at_contiene(test_filename, correct_password, attesi), &all_tests_passed);
+			}
+			// the same on the file opened again: the header of the second transaction (a new segment)
+			std::vector<unsigned char> chiuso;
+			fatto= fatto && at_leggi(test_filename, chiuso);
+			if (fatto)
+			{
+				franzcri fc(correct_password.c_str(), correct_password.length(), block_size_default);
+				fatto= fc.open(test_filename, false) && fc.write(&secondo[0], secondo.size()) && at_leggi(test_filename, prima);
+				fatto= fatto && fc.writeat(attesi.size(), h3.c_str(), h3.size()) && at_leggi(test_filename, dopo);
+				fc.close();
+			}
+			memcpy(&secondo[0], h3.c_str(), 104);
+			attesi.insert(attesi.end(), secondo.begin(), secondo.end());
+			fatto= fatto && (prima.size() == dopo.size()) && (prima.size() > chiuso.size() + blocco);
+			print_test_result("TEST 11 - File opened again: writing, writeat", fatto, &all_tests_passed);
+			if (fatto)
+			{
+				const size_t qui= chiuso.size(); // the new segment starts where the file ended
+				print_test_result("TEST 11 - Second transaction: its first block has a new nonce",
+								  memcmp(&prima[qui], &dopo[qui], SIZEOF_ONCE) != 0, &all_tests_passed);
+				print_test_result("TEST 11 - Second transaction: what was there before is not touched",
+								  (memcmp(&chiuso[0], &dopo[0], qui) == 0) &&
+									  (memcmp(&prima[qui + blocco], &dopo[qui + blocco], prima.size() - qui - blocco) == 0),
+								  &all_tests_passed);
+				print_test_result("TEST 11 - Content of the two transactions", at_contiene(test_filename, correct_password, attesi), &all_tests_passed);
+			}
+		}
+
+		// TEST 12: a password over 255 bytes was said "not good", and then an EMPTY one was used
+		{
+			myprintf("\nTEST 12: a password over 255 bytes\n");
+			const char		 *nome2= "test_file2.franzen";
+			const std::string lunga(300, 'A'), altra(290, 'B');
+			const std::string p255(255, 'C');
+			std::string		  q255(255, 'C');
+			q255[254]= 'D';
+			std::vector<char> dati;
+			at_dati(dati, 100000, 12);
+			remove(nome2);
+			bool rifiutata;
+			{
+				franzcri fc(lunga.c_str(), lunga.length());
+				rifiutata= !fc.open(nome2, true);
+				fc.close();
+			}
+			FILE	  *c   = fopen(nome2, "rb");
+			const bool nato= (c != NULL);
+			if (c)
+				fclose(c);
+			print_test_result("TEST 12 - New file, 300 bytes of password: refused, and no file made", rifiutata && (!nato), &all_tests_passed);
+			bool fatto;
+			{
+				franzcri fc(p255.c_str(), p255.length());
+				fatto= fc.open(nome2, true) && fc.write(&dati[0], dati.size());
+				fc.close();
+			}
+			print_test_result("TEST 12 - 255 bytes of password: written and read", fatto && at_contiene(nome2, p255, dati), &all_tests_passed);
+			print_test_result("TEST 12 - 255 bytes, the last one different: refused", !at_contiene(nome2, q255, dati), &all_tests_passed);
+			// a file of a zpaqfranz up to 65.11q, made with a long password (that is: with an empty one)
+			{
+				franzcri fc(lunga.c_str(), lunga.length());
+				fc.password_lunga= false; // as it was
+				fatto			 = fc.open(nome2, true) && fc.write(&dati[0], dati.size());
+				fc.close();
+			}
+			print_test_result("TEST 12 - File of an older version (long password): still read, with any long password",
+							  fatto && at_contiene(nome2, altra, dati), &all_tests_passed);
+			print_test_result("TEST 12 - ... and not with a wrong short one", !at_contiene(nome2, wrong_password, dati), &all_tests_passed);
+			remove(nome2);
+		}
+
+		// TEST 13: an update that does not get to its end (killed, power loss, media full) leaves its
+		// blocks after the last footer: the file is read up to there, a new update removes them
+		{
+			myprintf("\nTEST 13: an update that did not finish\n");
+			const int64_t			   contati= g_franzen_recuperati, tolti= g_franzen_tagliati;
+			std::vector<char>		   s1, s2, s3, s4, tutto, nulla;
+			std::vector<unsigned char> uno, buono, interrotto, ora, prova;
+			at_dati(s1, 150000, 131);
+			at_dati(s2, 70000, 132);
+			at_dati(s3, 200000, 133);
+			at_dati(s4, 30000, 134);
+			bool fatto;
+			{
+				franzcri fc(correct_password.c_str(), correct_password.length());
+				fatto= fc.open(test_filename, true) && fc.write(&s1[0], s1.size());
+				fc.close();
+			}
+			fatto= fatto && at_leggi(test_filename, uno); // one update
+			if (fatto)
+			{
+				franzcri fc(correct_password.c_str(), correct_password.length());
+				fatto= fc.open(test_filename, false) && fc.write(&s2[0], s2.size());
+				fc.close();
+			}
+			fatto= fatto && at_leggi(test_filename, buono); // two updates
+			if (fatto)
+			{
+				// the third one writes its blocks and stops there: the file as it is on the disk then
+				franzcri fc(correct_password.c_str(), correct_password.length());
+				fatto= fc.open(test_filename, false) && fc.write(&s3[0], s3.size()) && at_leggi(test_filename, interrotto);
+				fc.close();
+			}
+			fatto= fatto && (uno.size() < buono.size()) && (buono.size() + 100000 < interrotto.size());
+			print_test_result("TEST 13 - Preparing (two updates, a third one left unfinished)", fatto, &all_tests_passed);
+			tutto= s1;
+			tutto.insert(tutto.end(), s2.begin(), s2.end());
+			if (fatto)
+			{
+				bool passa= at_scrivi(test_filename, interrotto, interrotto.size()) && at_contiene(test_filename, correct_password, tutto);
+				print_test_result("TEST 13 - The file is read up to its last complete update", passa, &all_tests_passed);
+				print_test_result("TEST 13 - Reading does not change it", at_leggi(test_filename, ora) && (ora == interrotto), &all_tests_passed);
+				{
+					franzcri fc(correct_password.c_str(), correct_password.length());
+					passa= fc.open(test_filename, false) && fc.write(&s4[0], s4.size());
+					fc.close();
+				}
+				std::vector<char> conquarto= tutto;
+				conquarto.insert(conquarto.end(), s4.begin(), s4.end());
+				print_test_result("TEST 13 - A new update after it: all the data are there", passa && at_contiene(test_filename, correct_password, conquarto), &all_tests_passed);
+				const size_t attesa= buono.size() + SIZEOF_ONCE + s4.size() + SIZEOF_AUTH_TAG + sizeof(file_footer);
+				passa			   = at_leggi(test_filename, ora) && (ora.size() == attesa) && (memcmp(&ora[0], &buono[0], buono.size()) == 0);
+				print_test_result("TEST 13 - ... and what was left is gone (the file is the good one + the new update)", passa, &all_tests_passed);
+
+				prova= buono;
+				prova.insert(prova.end(), interrotto.begin() + buono.size(), interrotto.begin() + buono.size() + 50);
+				passa= at_scrivi(test_filename, prova, prova.size()) && at_contiene(test_filename, correct_password, tutto);
+				print_test_result("TEST 13 - 50 bytes left (less than a footer)", passa, &all_tests_passed);
+				prova= buono;
+				prova.insert(prova.end(), interrotto.begin() + buono.size(), interrotto.begin() + buono.size() + 1000);
+				passa= at_scrivi(test_filename, prova, prova.size()) && at_contiene(test_filename, correct_password, tutto);
+				print_test_result("TEST 13 - A piece of a block left", passa, &all_tests_passed);
+				prova= buono;
+				prova[prova.size() - 10]^= 0x55;
+				passa= at_scrivi(test_filename, prova, prova.size()) && at_contiene(test_filename, correct_password, s1);
+				print_test_result("TEST 13 - Last footer damaged: the file is read as it was one update before", passa, &all_tests_passed);
+				passa= at_scrivi(test_filename, buono, uno.size() + 20000) && at_contiene(test_filename, correct_password, s1);
+				print_test_result("TEST 13 - A copy cut in the middle of the second update: the first one is read", passa, &all_tests_passed);
+
+				// nothing complete in the file: it is not opened, and it is left as it is
+				prova= uno;
+				prova[prova.size() - 10]^= 0x55;
+				passa= at_scrivi(test_filename, prova, prova.size()) && (!at_contiene(test_filename, correct_password, s1));
+				{
+					franzcri fc(correct_password.c_str(), correct_password.length());
+					if (fc.open(test_filename, false))
+						passa= false;
+					fc.close();
+				}
+				print_test_result("TEST 13 - One update only, its footer damaged: not opened", passa, &all_tests_passed);
+				print_test_result("TEST 13 - ... and not touched", at_leggi(test_filename, ora) && (ora == prova), &all_tests_passed);
+				passa= at_scrivi(test_filename, uno, uno.size() - 5000) && (!at_contiene(test_filename, correct_password, s1));
+				print_test_result("TEST 13 - One update only, cut before its footer: not opened", passa, &all_tests_passed);
+
+				// an empty file (made and closed), then an update that does not finish
+				{
+					franzcri fc(correct_password.c_str(), correct_password.length());
+					passa= fc.open(test_filename, true);
+					fc.close();
+				}
+				if (passa)
+				{
+					franzcri fc(correct_password.c_str(), correct_password.length());
+					passa= fc.open(test_filename, false) && fc.write(&s3[0], s3.size()) && at_leggi(test_filename, prova);
+					fc.close();
+				}
+				passa= passa && at_scrivi(test_filename, prova, prova.size()) && at_contiene(test_filename, correct_password, nulla);
+				print_test_result("TEST 13 - Empty file + unfinished update: read as the empty file it was", passa, &all_tests_passed);
+				{
+					franzcri fc(correct_password.c_str(), correct_password.length());
+					passa= fc.open(test_filename, false) && fc.write(&s4[0], s4.size());
+					fc.close();
+				}
+				print_test_result("TEST 13 - ... and a new update goes in", passa && at_contiene(test_filename, correct_password, s4), &all_tests_passed);
+			}
+			print_test_result("TEST 13 - The unfinished updates were seen, and two of them removed",
+							  (g_franzen_recuperati > contati) && (g_franzen_tagliati == tolti + 2), &all_tests_passed);
+			/// these were tests: nothing to say at the end of the run
+			g_franzen_recuperati= contati;
+			g_franzen_tagliati	= tolti;
+		}
+
+		// TEST 14: a write of 104 bytes (the size of a jidac header) is data as any other
+		{
+			myprintf("\nTEST 14: 700 writes of 104 bytes\n");
+			std::vector<char> attesi;
+			at_dati(attesi, 104 * 700, 14);
+			bool fatto;
+			{
+				franzcri fc(correct_password.c_str(), correct_password.length());
+				fatto= fc.open(test_filename, true);
+				for (size_t i= 0; fatto && (i < 700); i++)
+					fatto= fc.write(&attesi[i * 104], 104);
+				fc.close();
+			}
+			print_test_result("TEST 14 - 700 writes of 104 bytes: all there, in their order", fatto && at_contiene(test_filename, correct_password, attesi), &all_tests_passed);
+		}
+
+		// TEST 15: one byte changed inside a block: that block is refused, the others are read
+		{
+			myprintf("\nTEST 15: one damaged block\n");
+			const size_t			   testa = sizeof(file_header) + SIZEOF_ONCE;
+			const size_t			   blocco= SIZEOF_ONCE + block_size_default + SIZEOF_AUTH_TAG;
+			std::vector<char>		   attesi;
+			std::vector<unsigned char> crudo;
+			at_dati(attesi, 3 * block_size_default + 100, 15);
+			bool fatto;
+			{
+				franzcri fc(correct_password.c_str(), correct_password.length());
+				fatto= fc.open(test_filename, true) && fc.write(&attesi[0], attesi.size());
+				fc.close();
+			}
+			fatto= fatto && at_contiene(test_filename, correct_password, attesi) && at_leggi(test_filename, crudo) && (crudo.size() > testa + 3 * blocco);
+			if (fatto)
+			{
+				crudo[testa + blocco + 5000]^= 1; // inside the second block
+				fatto= at_scrivi(test_filename, crudo, crudo.size());
+			}
+			print_test_result("TEST 15 - Preparing", fatto, &all_tests_passed);
+			if (fatto)
+			{
+				franzcri fc(correct_password.c_str(), correct_password.length());
+				bool	 aperto= fc.open(test_filename, false);
+				char	 b[100];
+				bool	 primo= false, secondo= true, terzo= false, intatto= true;
+				if (aperto)
+				{
+					primo  = fc.read_at_to(b, 100, 10) && (memcmp(b, &attesi[10], 100) == 0);
+					secondo= fc.read_at_to(b, 100, block_size_default + 10);
+					terzo  = fc.read_at_to(b, 100, 2 * block_size_default + 10) && (memcmp(b, &attesi[2 * block_size_default + 10], 100) == 0);
+					intatto= fc.is_not_changed();
+				}
+				fc.close();
+				print_test_result("TEST 15 - The damaged block is refused", aperto && (!secondo) && (!intatto), &all_tests_passed);
+				print_test_result("TEST 15 - The blocks before and after it are read", aperto && primo && terzo, &all_tests_passed);
+			}
+		}
+
 	cleanup:
 		remove(test_filename);
 
@@ -125037,6 +125800,19 @@ class franzcri
 
 franzcri *g_p_franzenfile	   = 0;
 int64_t	  g_franzen_jidacheader= -1;
+/*
+	65.11l: the index (a -index, backup) of a franzen archive is a franzen file of its own
+	(x.index.franzen): what goes to the index is written there, and only there. Before, the bytes of
+	the index went into the franzen file of the archive too, and closing the index closed that one:
+	a .franzen that could not be opened any more, after an "all OK"
+*/
+franzcri	 *g_p_franzenindex	  = 0;
+/// the salt of the last franzen file made or opened for writing: the index is made with it (as the
+/// parts after the first: one key for the whole set, see g_franzen_chiavi)
+bool		  g_franzen_salenoto  = false;
+unsigned char g_franzen_sale[SIZEOF_SALT];
+/// reads of a franzen file that could not be decrypted (see InputArchive::read): the run cannot end "all OK"
+int64_t		  g_franzen_lettirotti= 0;
 
 string g_franzen_filename = "";     // Franzen file path
 
@@ -125105,6 +125881,9 @@ void cleanup_thread_franzenfile()
 #endif /// NOSFTPEND
 
 #endif
+/// 65.11l: set by the OutputArchive of the index while it writes: its bytes are not for the franzen
+/// file of the archive (and, with no file behind, they are not the archive for -fasttxt)
+bool g_franzen_scriveindice= false;
 // Write nobj objects of size size from ptr to fp. Return number written.
 // "overloaded" from fwrite() for flagfasttxt
 size_t myfwrite(const void *ptr, size_t size, size_t nobj, FP fp)
@@ -125115,7 +125894,7 @@ size_t myfwrite(const void *ptr, size_t size, size_t nobj, FP fp)
 	// Franzen-only: the cleartext .zpaq is deliberately not opened (fp==FPNULL, which
 	// is INVALID_HANDLE_VALUE on Windows, NULL elsewhere), but the byte stream must
 	// still flow through here to feed the .zpaq.franzen below
-	fakezpaq= ((fp == 0) || (fp == FPNULL)) && g_franzen_zpaq_nowrite && (g_p_franzenfile != 0);
+	fakezpaq= ((fp == 0) || (fp == FPNULL)) && (g_franzen_scriveindice ? (g_p_franzenindex != 0) : (g_franzen_zpaq_nowrite && (g_p_franzenfile != 0)));
 #endif /// NOSFTPEND
 #endif
 	if ((fp == 0) && (!fakezpaq))
@@ -125172,62 +125951,54 @@ size_t myfwrite(const void *ptr, size_t size, size_t nobj, FP fp)
 #ifndef NOFRANZEN
 #ifdef ZPAQFULL /// NOSFTPSTART
 	
-	if (g_p_franzenfile)
+	if (g_franzen_scriveindice)
 	{
-		if (r == 104)
+		/// 65.11l: the index: its own franzen file (if any), always forward
+		if (g_p_franzenindex)
+			if (!g_p_franzenindex->write((const char *)ptr, size * nobj))
+				if (g_franzen_scrittirotti++ == 0) /// 65.11r //FIX-FRANZEN: said once, counted always (see below)
+					myprintf("31680! cannot write on the franzen file of the index\n");
+	}
+	else if (g_p_franzenfile)
+	{
+		/*
+			65.11r //FIX-FRANZEN: the jidac header written again at the end of add() is known by what add() says
+			(g_franzen_jidacheader: set just before it, cleared just after), not by its size. Any write
+			of 104 bytes was taken for it: when the last bytes of the archive, flushed before going back
+			to the header, were exactly 104 (one run in 65.536) they were not written at all. The run
+			ended "all OK", and the archive could not be read. And a write that fails is an error now:
+			with -franzen alone there is no .zpaq behind to tell that the media is full
+		*/
+		bool fatto;
+		if (g_franzen_jidacheader >= 0)
 		{
 			if (flagdebug6)
-			 myprintf("FRANZEN_WRITEAT: offset=%s size=%s\n", migliaia(g_franzen_jidacheader), migliaia2(size*nobj));
-				 
-			if (flagdebug3)
-				myprintf("r is %s g_franzen_jidacheader %s \n", migliaia(r), migliaia2(g_franzen_jidacheader));
-
-			if (g_franzen_jidacheader >= 0)
+				myprintf("FRANZEN_WRITEAT: offset=%s size=%s\n", migliaia(g_franzen_jidacheader), migliaia2(size * nobj));
+			fatto= g_p_franzenfile->writeat(g_franzen_jidacheader, (const char *)ptr, size * nobj);
+			if (fatto && flagdebug3)
 			{
-				int64_t myoffsettino= g_franzen_jidacheader;
+				myprintf("111111111111111 fatto writeat del jidacheader %s di %d\n", migliaia(g_franzen_jidacheader), (int)(size * nobj));
 				if (g_password)
 				{
-					if (g_franzen_jidacheader == 32)
-						myoffsettino= 32;
+					color_yellow();
+					char verify[36];
+					g_p_franzenfile->read_at_to(verify, 36, 0);
+					myprintf("VERIFY salt after writeat:\n");
+					for (int i= 0; i < 36; i++)
+						myprintf("  %03d: %02X\n", i, (unsigned char)verify[i]);
+					color_restore();
 				}
-				if (g_p_franzenfile->writeat(myoffsettino, (const char *)ptr, size * nobj))
-				{
-					if (flagdebug3)
-					{
-						myprintf("111111111111111 fatto writeat del jidacheader %s myoffsettino %s di %d\n",
-								 migliaia(g_franzen_jidacheader), migliaia2(myoffsettino), (int)(size * nobj));
-								 
-					 if (g_password)
-						{
-							color_yellow();
-							char verify[36];
-							g_p_franzenfile->read_at_to(verify, 36, 0);
-							myprintf("VERIFY salt after writeat:\n");
-							for (int i = 0; i < 36; i++)
-								myprintf("  %03d: %02X\n", i, (unsigned char)verify[i]);
-							color_restore();
-						}
-					}
-
-				}
-				
-			}
-			else
-			{
-				if (flagverbose)
-					myprintf("34912: skipp 104 on ((((((((((-------)))))))))) franzenfile\n");
 			}
 		}
 		else
 		{
-			 ///myprintf("FRANZEN_WRITE: sequential, size=%s, g_crc32_seq=%d\n",
-                /// migliaia(size*nobj), g_crc32_sequence_data);
-			if (g_p_franzenfile->write((const char *)ptr, size * nobj))
-			{
-				if (flagdebug3)
-					myprintf("31679: writted on franzenfile %21s %21s\n", migliaia(size * nobj), migliaia(int64_t(g_p_franzenfile)));
-			}
+			fatto= g_p_franzenfile->write((const char *)ptr, size * nobj);
+			if (fatto && flagdebug3)
+				myprintf("31679: writted on franzenfile %21s %21s\n", migliaia(size * nobj), migliaia(int64_t(g_p_franzenfile)));
 		}
+		if (!fatto)
+			if (g_franzen_scrittirotti++ == 0)
+				myprintf("31681! cannot write on the franzen file of the archive\n");
 	}
 	else
 	{
@@ -125239,7 +126010,7 @@ size_t myfwrite(const void *ptr, size_t size, size_t nobj, FP fp)
 #endif
 	if (flagfasttxt || flagbackupzeta)
 	{
-		if ((fp == g_fp_zpaq) || (g_fp_zpaq == 0))
+		if ((!g_franzen_scriveindice) && ((fp == g_fp_zpaq) || (g_fp_zpaq == 0)))
 		{
 			if (flagdebug3)
 			{
@@ -127547,6 +128318,22 @@ class InputArchive : public ArchiveBase, public libzpaq::Reader
 	ArchiveType     archive_type;  // detected archive type
 	string          physical_file; // actual file to open (.zpaq or .zpaq.franzen)
 	bool            uses_franzen;  // true if Franzen encryption is present
+#ifndef NOFRANZEN
+#ifdef ZPAQFULL /// NOSFTPSTART
+	/*
+		65.11l: the franzen files belong to the InputArchive that reads them: one for every part of a
+		multipart archive, opened when a read needs it, closed with the InputArchive. Before: one franzcri
+		per thread, opened on the first franzen file met and used for whatever archive came after (a
+		second archive in the same run, the index of a backup and then its parts: read from the wrong
+		file), and one file only (no multipart)
+	*/
+	vector<string>	   franzen_nomi;		 // the franzen file of every part
+	vector<franzcri *> franzen_parti;		 // NULL until needed
+	unsigned		   franzen_ultima;		 // the part of the last read (the next one is there too, almost always)
+	int64_t			   franzen_ultimoinizio; // where it begins, in the whole archive
+	franzcri		  *franzen_parte(unsigned i_parte);
+#endif /// NOSFTPEND
+#endif
 	
   public:
 	vector<string> filepartnames;
@@ -127566,6 +128353,20 @@ class InputArchive : public ArchiveBase, public libzpaq::Reader
 
 	// Open filename. If password then decrypt input.
 	InputArchive(const char *filename);
+#ifndef NOFRANZEN
+#ifdef ZPAQFULL /// NOSFTPSTART
+	~InputArchive()
+	{
+		for (unsigned i= 0; i < franzen_parti.size(); i++)
+			if (franzen_parti[i] != NULL)
+			{
+				franzen_parti[i]->close();
+				delete franzen_parti[i];
+				franzen_parti[i]= NULL;
+			}
+	}
+#endif /// NOSFTPEND
+#endif
 	
 	// Read and return 1 byte or -1 (EOF)
 	int get()
@@ -127765,6 +128566,8 @@ ArchiveType InputArchive::detect_archive_type(const string& base_file)
 		// Franzen file exists and is valid
 		physical_file = franzen_file;
 		uses_franzen = true;
+		franzen_nomi.clear();
+		franzen_nomi.push_back(franzen_file); /// 65.11l: the first part (the others: see the constructor)
 		
 		// Read first 32 bytes (decrypted) to check for AES salt
 		char header[32];
@@ -127897,7 +128700,7 @@ bool InputArchive::read_header_bytes(char* buffer, size_t len)
 			}
 
 		}
-		franzcri* my_franzen = get_thread_franzenfile();
+		franzcri* my_franzen = franzen_parte(0);
 		if (my_franzen == NULL)
 		{
 			error("Failed to initialize Franzen decryption");
@@ -127935,6 +128738,41 @@ bool InputArchive::read_header_bytes(char* buffer, size_t len)
 	}
 }
 
+#ifndef NOFRANZEN
+#ifdef ZPAQFULL /// NOSFTPSTART
+/// 65.11l: the franzen file of a part (0 = the first), opened at the first read that falls there
+franzcri *InputArchive::franzen_parte(unsigned i_parte)
+{
+	if (i_parte >= franzen_nomi.size())
+		return NULL;
+	if (franzen_parti.size() < franzen_nomi.size())
+		franzen_parti.resize(franzen_nomi.size(), NULL);
+	if (franzen_parti[i_parte] == NULL)
+	{
+		if (flagdebug)
+			myprintf("46012: opening the franzen file of part %d %Z\n", (int)i_parte + 1, franzen_nomi[i_parte].c_str());
+		franzcri *nuovo = new franzcri(g_franzen.c_str(), g_franzen.length());
+		if (!nuovo->open(franzen_nomi[i_parte].c_str(), false))
+		{
+			myprintf("46013! Failed to open franzen file <<%Z>>\n", franzen_nomi[i_parte].c_str());
+			delete nuovo;
+			return NULL;
+		}
+		/// the size taken from the footer without the key, when the parts were counted: now it is authenticated
+		if ((i_parte < sz.size()) && (i_parte > 0) && ((int64_t)nuovo->get_file_data_size() != sz[i_parte]))
+		{
+			myprintf("46011! <<%Z>>: %s bytes of data, not the %s of its footer when it was counted\n", franzen_nomi[i_parte].c_str(),
+					 migliaia((int64_t)nuovo->get_file_data_size()), migliaia2(sz[i_parte]));
+			delete nuovo;
+			return NULL;
+		}
+		franzen_parti[i_parte] = nuovo;
+	}
+	return franzen_parti[i_parte];
+}
+#endif /// NOSFTPEND
+#endif
+
 // InputArchive constructor
 InputArchive::InputArchive(const char *filename) : fn(filename), uses_franzen(false)
 {
@@ -127942,6 +128780,12 @@ InputArchive::InputArchive(const char *filename) : fn(filename), uses_franzen(fa
 	lastfilename = "";
 	off = 0;
 	total_sz = 0;
+#ifndef NOFRANZEN
+#ifdef ZPAQFULL /// NOSFTPSTART
+	franzen_ultima = 0;
+	franzen_ultimoinizio = 0;
+#endif /// NOSFTPEND
+#endif
 	
 	// Get file sizes (for multi-part archives)
 	const string part0 = subpart(filename, 0);
@@ -128009,17 +128853,37 @@ InputArchive::InputArchive(const char *filename) : fn(filename), uses_franzen(fa
 		// But zpaq uses totalsize()/sz[] to compute logical seek offsets, and read_at_to()
 		// works with logical offsets bounded by file_data_size.
 		// We must replace sz[] with the logical (plaintext) data size from the Franzen footer.
+		/// 65.11l: of every part. The first one is open (its header was read to tell if AES is there too),
+		/// the others give their size without being opened: checked when a read opens them
 		{
-			franzcri* my_franzen = get_thread_franzenfile();
+			franzcri* my_franzen = franzen_parte(0);
 			if (my_franzen != NULL)
 			{
-				uint64_t logical_size = my_franzen->get_file_data_size();
-				if (flagverbose)
-					myprintf("Franzen: physical file size %s -> logical data size %s\n",
-							migliaia(total_sz), migliaia2(logical_size));
+				const int64_t physical_size = total_sz;
 				sz.clear();
-				sz.push_back(logical_size);
-				total_sz = logical_size;
+				filepartnames.clear();
+				sz.push_back((int64_t)my_franzen->get_file_data_size());
+				filepartnames.push_back(franzen_nomi[0]);
+				for (unsigned i = 2; part0 != string(filename); ++i)
+				{
+					const string parti = subpart(filename, i);
+					if (parti == part0)
+						break;
+					const string  nome	 = franzenname(parti);
+					const int64_t logica = franzcri::leggi_dimensione(nome.c_str());
+					if (logica < 0)
+						break;
+					franzen_nomi.push_back(nome);
+					filepartnames.push_back(nome);
+					sz.push_back(logica);
+				}
+				lastfilename = franzen_nomi[franzen_nomi.size() - 1];
+				total_sz	 = 0;
+				for (unsigned i = 0; i < sz.size(); ++i)
+					total_sz += sz[i];
+				if (flagverbose)
+					myprintf("Franzen: physical file size %s -> logical data size %s (%d part%s)\n",
+							migliaia(physical_size), migliaia2(total_sz), (int)sz.size(), (sz.size() == 1) ? "" : "s");
 			}
 		}
 	}
@@ -128124,16 +128988,30 @@ int InputArchive::read(char *obuf, int len)
 #ifdef ZPAQFULL
 	if (uses_franzen)
 	{
-		///myprintf("Uso franzen\n");
-		// Read and decrypt via Franzen
-				
-		franzcri* my_franzen = get_thread_franzenfile();
+		/*
+			65.11l: off is inside one of the parts, each one a franzen file with its own offsets. A read
+			stops at the end of its part: the next call goes on with the next one (as the plain parts do)
+		*/
+		unsigned parte	= franzen_ultima;
+		int64_t	 inizio = franzen_ultimoinizio; // of the part, in the whole archive
+		if ((parte >= sz.size()) || (off < inizio) || (off >= inizio + sz[parte]))
+		{
+			parte  = 0;
+			inizio = 0;
+			while ((parte < sz.size()) && (off >= inizio + sz[parte]))
+				inizio += sz[parte++];
+		}
+		if (parte >= sz.size())
+			return 0; // already at or past EOF
+		franzen_ultima		 = parte;
+		franzen_ultimoinizio = inizio;
+		franzcri* my_franzen = franzen_parte(parte);
 		if (my_franzen == NULL)
 		{
 			error("Franzen decryption not available");
 			return 0;
 		}
-		
+
 		if (flagdebug6)
 			if (len==4)
 			{
@@ -128143,27 +129021,30 @@ int InputArchive::read(char *obuf, int len)
 					printf("%02X %c",obuf[i]&255,obuf[i]);
 				myprintf("\n");
 			}
-		///myprintf("Chiamo read_at_to di %d offset %d\n",len,off);
-		
+
 		// FIX: Calculate actual readable bytes - don't request beyond file_data_size
-		uint64_t franzen_data_size = my_franzen->get_file_data_size();
+		const int64_t dentro = off - inizio; // inside the part
 		int actual_len = len;
-		if ((uint64_t)off >= franzen_data_size)
+		if (dentro + len > sz[parte])
 		{
-			// Already at or past EOF
-			return 0;
+			actual_len = (int)(sz[parte] - dentro);
 		}
-		if ((uint64_t)off + len > franzen_data_size)
+
+		if (!my_franzen->read_at_to(obuf, actual_len, dentro))
 		{
-			actual_len = (int)(franzen_data_size - off);
-		}
-		
-		if (!my_franzen->read_at_to(obuf, actual_len, off))
-		{
-			myprintf("43282: Error read_at_to (off=%lld, len=%d, actual_len=%d, data_size=%lld)\n",
-			         (long long)off, len, actual_len, (long long)franzen_data_size);
-			// EOF or error
-			return 0;
+			/*
+				65.11l: a block that cannot be decrypted (a damaged file) is NOT the end of the archive.
+				It was read as one (return 0): what came after was ignored in silence. A part of a
+				multipart archive damaged at its start made every version from there on disappear,
+				with a "t" that ended all OK. Zeros are given back, as the damaged bytes of a plain
+				archive would be: the checks of zpaq find them, and what is good after them is read
+			*/
+			myprintf("43282! Error read_at_to (off=%lld, len=%d, actual_len=%d, part=%d, inside=%lld, data_size=%lld)\n",
+					 (long long)off, len, actual_len, (int)parte + 1, (long long)dentro, (long long)sz[parte]);
+			memset(obuf, 0, (size_t)actual_len);
+			pthread_mutex_lock(&g_franzen_chiavi_mutex);
+			g_franzen_lettirotti++;
+			pthread_mutex_unlock(&g_franzen_chiavi_mutex);
 		}
 		if (flagdebug6)
 			if (len==4)
@@ -128391,6 +129272,28 @@ class OutputArchive : public ArchiveBase, public libzpaq::Writer
 	bool   flagindex;
 	bool	nowrite;	// franzen-only: no physical .zpaq behind this stream
 	int64_t nowriteeof; // virtual EOF while nowrite is active
+	/// 65.11l: nowrite on a part of a multipart archive: off is the position inside the part (what ftello
+	/// would say), these are the bytes of the parts before it (AES encrypts by the offset in the whole archive)
+	int64_t nowritebase;
+	bool	eindice; // this is the index (a -index, backup), not the archive
+	/// 65.11p: -chunk is for the archive. Its index (backup -chunk has one) is a single file, never cut
+	bool	apezzi;
+	/// a chunk made by backup is born .tmp, as its parts are: the name comes at the end (finalemultiparttmp)
+	string nomepezzo(string i_nome)
+	{
+		if (flagtmp && (i_nome.size() > 5) && (i_nome.substr(i_nome.size() - 5) == ".zpaq"))
+			i_nome= i_nome.substr(0, i_nome.size() - 5) + ".tmp";
+		return i_nome;
+	}
+	/// what myfwrite does, said to be of the index when it is: see g_franzen_scriveindice
+	size_t scrivi(const void *i_buf, size_t i_size, size_t i_nobj, FP i_fp)
+	{
+		const bool prima	  = g_franzen_scriveindice;
+		g_franzen_scriveindice= eindice;
+		const size_t fatti	  = myfwrite(i_buf, i_size, i_nobj, i_fp);
+		g_franzen_scriveindice= prima;
+		return fatti;
+	}
 	bool	streamout;	// a -append -stdout: fp is stdout, off is the logical position inside the archive, never back
 
 	FP			 firstfp;
@@ -128496,7 +129399,7 @@ class OutputArchive : public ArchiveBase, public libzpaq::Writer
 			if (flagdebug3)
 				myprintf("00221: realfwrite104 on firstfp %s @ftello %s\n", migliaia(int64_t(firstfp)), migliaia2(int64_t(ftello(firstfp))));
 #endif
-			myfwrite(buf, 1, ptr, firstfp);
+			scrivi(buf, 1, ptr, firstfp);
 #ifndef ESX
 			if (flagdebug3)
 				myprintf("00222: closing the firstp %s\n", migliaia(int64_t(firstfp)));
@@ -128569,7 +129472,7 @@ class OutputArchive : public ArchiveBase, public libzpaq::Writer
 			myprintf("00232: flush k6\n");
 
 		int64_t cryptoffset;
-		if (g_chunk_size > 0)
+		if (apezzi)
 		{
 			cryptoffset= writtensofar + previoussize; /// va primo run
 			if ((aes) && (previoussize == 0))
@@ -128578,7 +129481,7 @@ class OutputArchive : public ArchiveBase, public libzpaq::Writer
 		else
 		{
 			if (nowrite || streamout) // must come first: fp is FPNULL (-1 on Windows), which is != 0; stdout has no ftello
-				cryptoffset= off; // off is the virtual ftello (no multipart in nowrite mode)
+				cryptoffset= off + nowritebase; // off is the virtual ftello (65.11l: inside the part, if multipart)
 			else if ((int64_t)fp != 0)
 				cryptoffset= ftello(fp) + off;
 			else
@@ -128617,7 +129520,7 @@ class OutputArchive : public ArchiveBase, public libzpaq::Writer
 #endif
 		/// 65.9l: what the write really took is the "written" of the progress lines (a destination full
 		/// takes nothing more, and the number stays where it is)
-		const size_t messi= myfwrite(buf, 1, ptr, fp);
+		const size_t messi= scrivi(buf, 1, ptr, fp);
 		g_inoutput+= (int64_t)messi;
 		if (streamout)
 		{
@@ -128639,7 +129542,7 @@ class OutputArchive : public ArchiveBase, public libzpaq::Writer
 		if (flagdebug3)
 			myprintf("00235: flush k8\n");
 
-		if (g_chunk_size > 0)
+		if (apezzi)
 			if (chunksize > g_chunk_size)
 			{
 				if ((fp != firstfp) && (fp != FPNULL))
@@ -128848,7 +129751,15 @@ class OutputArchive : public ArchiveBase, public libzpaq::Writer
 				myprintf("37816: ho fatto close su file\n");
 #ifndef NOFRANZEN
 #ifdef ZPAQFULL /// NOSFTPSTART
-			if (g_p_franzenfile)
+			if (eindice) /// 65.11l: the index closes its own franzen file (if any), never the one of the archive
+			{
+				if (g_p_franzenindex)
+				{
+					g_p_franzenindex->close();
+					g_p_franzenindex= 0;
+				}
+			}
+			else if (g_p_franzenfile)
 			{
 				color_magenta();
 				{
@@ -128871,7 +129782,7 @@ class OutputArchive : public ArchiveBase, public libzpaq::Writer
 		}
 #ifndef NOFRANZEN
 #ifdef ZPAQFULL /// NOSFTPSTART
-		if (nowrite)
+		if (nowrite && (!eindice)) /// 65.11l: the index is closed before the archive, which still needs it
 			g_franzen_zpaq_nowrite= false;
 #endif /// NOSFTPEND
 #endif
@@ -128901,7 +129812,7 @@ class OutputArchive : public ArchiveBase, public libzpaq::Writer
 
 		if (part0 != firstfilename)
 		{
-			string temp= subpart(firstfilename, i_number);
+			string temp= nomepezzo(subpart(firstfilename, i_number));
 			if (flagdebug2)
 				myprintf("00247: created by subpart %s\n", temp.c_str());
 			filepartnames.push_back(temp);
@@ -129061,6 +129972,8 @@ bool jollymatch(const char *i_pattern, const char *i_thestring)
 
 int getpartnumber(string i_thefilename)
 {
+	if (isfranzen(i_thefilename)) /// 65.11l: x_00000001.zpaq.franzen is the part x_00000001.zpaq
+		i_thefilename= i_thefilename.substr(0, i_thefilename.size() - 8);
 	if (i_thefilename.size() < 14)
 	{
 		if (flagdebug)
@@ -142937,6 +143850,21 @@ struct ThreadContext
 	volatile int   blocks_decompressed;
 	volatile int   blocks_waiting_ram;
 	volatile int   main_waiting_blocks;
+
+	/*
+		65.11a: x -recover. One byte for every fragment of ht, NULL when nobody
+		asked for it (the mount of an image: there the worker does what it
+		always did; 65.11b: the restore of an image asks). The worker fills in the bytes of the
+		block it has just decompressed, together with the block itself (under
+		cache_mutex), and the main thread reads them when it takes the block:
+		0 = not looked at, 1 = SHA-1 as in the fragment table, 2 = NOT good
+		(wrong SHA-1, or the block ends before it), 3 = no SHA-1 to compare with
+	*/
+	vector<unsigned char> *frag_stato;
+	std::set<int>		   blocchi_rotti; /// the blocks with at least one fragment that is not good
+	ThreadContext() : frag_stato(NULL)
+	{
+	}
 };
 #define SECTOR_SIZE 512
 
@@ -143250,6 +144178,8 @@ class Jidac
 #endif
 	int fillami();	  // media check
 	int usbtest();	  // f -test: surface test of a device, raw (-force -paranoid: write too, Windows)
+	int nukeami();	  // 65.11g: f X: -nuke NN -force: fast NTFS sanitize (Windows)
+	int fillgui();	  // 65.11o: f -gui: what to do and where is asked on a screen (Windows). 0: chosen, go on; 1: left; 2: error
 	int dir(bool flagtreeview = false);  // Windows-like dir command
 	int tree();
 	int robocopy();	  // Like robocopy, but with XLS
@@ -143260,7 +144190,7 @@ class Jidac
 #ifdef ZPAQFULL		  /// NOSFTPSTART
 	int rd();		  // Remove dir (rd /s or rm-f)
 #endif				  /// NOSFTPEND
-	int purgersync(); // Purge rsync temporary file
+	int grep(); 	  //  minigrep
 #ifdef ZPAQFULL		  /// NOSFTPSTART
 	int sfx();		  // Write autoextract module
 #endif				  /// NOSFTPEND
@@ -143643,6 +144573,10 @@ class Jidac
 	int	 controlla_size();
 	void turnonfasttxt();
 	int	 testparametriadd();
+	int	 congela();
+#ifdef _WIN32
+	int	 findzpaq();
+#endif
 	int	 gestisciexternal();
 	int	 gestiscithunderbird();
 	int	 gestiscidataset();
@@ -143663,6 +144597,7 @@ class Jidac
 	void rilasciasnapshot();
 	void gestiscibackupzeta();
 	int	 gestiscicalcolifinali();
+	int	 calcolifinali(const string &thephysical); // 65.11p: the part of gestiscicalcolifinali for one file (backup -chunk: one each)
 	void gestiscisfx();
 	int	 finalemultiparttmp();
 	void handlemultiparttrim();
@@ -143834,11 +144769,24 @@ void *worker_routine(void *arg)
 
 		try
 		{
-			pthread_mutex_lock(ctx->io_mutex);
+			/// 65.11a: the buffer is taken BEFORE the lock, and the lock is given
+			/// back whatever happens. An exception with io_mutex held (no memory
+			/// for a block with a crazy size, a part that is not there) left every
+			/// other worker waiting for good, and the extraction with them
 			Block &b= (*ctx->blocks)[block_idx];
-			ctx->in->seek(b.offset, SEEK_SET);
 			raw_data.resize(b.bsize);
-			int bytes_read= ctx->in->read(&raw_data[0], b.bsize);
+			int bytes_read= -1;
+			pthread_mutex_lock(ctx->io_mutex);
+			try
+			{
+				ctx->in->seek(b.offset, SEEK_SET);
+				bytes_read= ctx->in->read(&raw_data[0], b.bsize);
+			}
+			catch (...)
+			{
+				pthread_mutex_unlock(ctx->io_mutex);
+				throw;
+			}
 			pthread_mutex_unlock(ctx->io_mutex);
 
 			if (bytes_read != b.bsize)
@@ -143871,9 +144819,66 @@ void *worker_routine(void *arg)
 			read_success= false;
 		}
 
-		string *res= read_success ? new string(out_sb.c_str(), out_sb.size()) : new string("");
+		/*
+			65.11a: x -recover (ctx->frag_stato). A block that fails is not thrown
+			away as a whole: what came out before the failure is kept, and every
+			fragment is checked against the SHA-1 of the fragment table, the way
+			x does. The fragments before the damage (all of them but one, in a
+			block with no model) are good, and they are written: one by one the
+			main thread knows which are not
+		*/
+		const bool			  recupero= (ctx->frag_stato != NULL);
+		string				 *res	  = (read_success || recupero) ? new string(out_sb.c_str(), out_sb.size()) : new string("");
+		vector<unsigned char> stati;
+		unsigned			  primofrag= 0;
+		unsigned			  nonbuoni = 0;
+		long long			  dove	   = 0;
+		long long			  quanto   = 0;
+		if (recupero)
+		{
+			static const unsigned char zero[20]= {0};
+			const Block				  &b	   = (*ctx->blocks)[block_idx];
+			const vector<HT>		  &ht	   = *ctx->hts;
+			int64_t					   q	   = 0;
+			primofrag= b.start;
+			dove	 = b.offset;
+			quanto	 = b.bsize;
+			for (unsigned j= b.start; (j < b.start + b.frags) && (j < ht.size()); ++j)
+			{
+				unsigned char stato= 2;
+				const int64_t lung = ht[j].usize;
+				if ((lung >= 0) && (q + lung <= (int64_t)res->size()))
+				{
+					if (memcmp(ht[j].sha1, zero, 20) == 0)
+						stato= 3;
+					else
+					{
+						libzpaq::SHA1 sha1;
+						sha1.write(res->data() + q, lung);
+						if (memcmp(sha1.result(), ht[j].sha1, 20) == 0)
+							stato= 1;
+					}
+				}
+				if (stato == 2)
+					nonbuoni++;
+				stati.push_back(stato);
+				if (lung > 0)
+					q+= lung;
+			}
+		}
 
 		pthread_mutex_lock(ctx->cache_mutex);
+
+		bool primavolta= false;
+		if (recupero)
+		{
+			for (size_t k= 0; (k < stati.size()) && (primofrag + k < ctx->frag_stato->size()); k++)
+				(*ctx->frag_stato)[primofrag + k]= stati[k];
+			if (nonbuoni > 0)
+				primavolta= ctx->blocchi_rotti.insert(block_idx).second;
+		}
+		if (primavolta) /// once: a block thrown out of the cache comes back here
+			myprintf("66401! Block %d at offset %lld (%lld bytes): %u of %u fragments are NOT good\n", block_idx, dove, quanto, nonbuoni, (unsigned)stati.size());
 
 		bool is_priority= (block_idx == ctx->priority_block);
 
@@ -147067,6 +148072,9 @@ OutputArchive::OutputArchive(string i_thearchive, const char *filename, const ch
 	flagindex  = false;
 	nowrite	   = false;
 	nowriteeof = 0;
+	nowritebase= 0;
+	eindice	   = false;
+	apezzi	   = false;
 	streamout  = false;
 	/// g_p_franzenfile=0;
 
@@ -147074,12 +148082,14 @@ OutputArchive::OutputArchive(string i_thearchive, const char *filename, const ch
 		return;
 
 	thefilename		  = filename;
+	eindice			  = (g_indexname != "") && (thefilename == g_indexname);
+	apezzi			  = (g_chunk_size > 0) && (!eindice);
 	chunknumber		  = 0;
 	writtensofar	  = 0;
 	writtenonlastchunk= 0;
 	firstchunk		  = true;
 	previoussize	  = 0;
-	if (g_chunk_size > 0)
+	if (apezzi)
 	{
 		firstfilename= i_thearchive;
 		easymultipart chunkedoutput(i_thearchive);
@@ -147101,7 +148111,7 @@ OutputArchive::OutputArchive(string i_thearchive, const char *filename, const ch
 			return;
 		}
 		chunknumber= chunkedoutput.nextpart_integer;
-		thefilename= chunkedoutput.nextpart;
+		thefilename= nomepezzo(chunkedoutput.nextpart);
 		if (flagdebug)
 			myprintf("00284: changed thefilename to %s\n", thefilename.c_str());
 
@@ -147136,7 +148146,7 @@ OutputArchive::OutputArchive(string i_thearchive, const char *filename, const ch
 			memcpy(salt, salt_, 32);
 			if (!exists(thefilename))
 			{
-				if (myfwrite(salt, 1, 32, fp) != 32)
+				if (scrivi(salt, 1, 32, fp) != 32)
 					error("cannot write the salt on stdout");
 				writtensofar= 32;
 				off			= 32;
@@ -147153,6 +148163,17 @@ OutputArchive::OutputArchive(string i_thearchive, const char *filename, const ch
 #ifdef ZPAQFULL /// NOSFTPSTART
 	// the archive itself is the .franzen: it must NEVER be opened as a cleartext .zpaq
 	franzenistheoutput= (g_franzen != "") && isfranzen(thefilename);
+	/// 65.11l: the index of an archive that is franzen-only: franzen-only too (x.index.franzen)
+	const bool indicefranzen= eindice && (g_franzen != "") && g_franzen_zpaq_nowrite;
+	if (indicefranzen)
+	{
+		if (exists(thefilename))
+		{
+			myprintf("43799! the index <<%Z>> is there and it is not a franzen file: it cannot go on with -franzen\n", thefilename.c_str());
+			error("the index is not a franzen file");
+		}
+		franzenistheoutput= true;
+	}
 #endif /// NOSFTPEND
 #endif
 	if (franzenistheoutput)
@@ -147175,7 +148196,7 @@ OutputArchive::OutputArchive(string i_thearchive, const char *filename, const ch
 
 	if (flagdebug3)
 		myprintf("00287: ***********************************************************\n");
-	if (g_chunk_size > 0)
+	if (apezzi)
 	{
 		/// g_addedchunklist_fp.push_back(fp);
 		g_addedchunklist.push_back(thefilename);
@@ -147218,7 +148239,7 @@ OutputArchive::OutputArchive(string i_thearchive, const char *filename, const ch
 		seek(0, SEEK_END);
 #ifndef NOFRANZEN
 #ifdef ZPAQFULL /// NOSFTPSTART
-		if (g_franzen != "")
+		if ((g_franzen != "") && (!eindice)) /// 65.11l: not for the index (it was a "442581 franzenfile already setted!")
 		{
 			if (g_p_franzenfile)
 			{
@@ -147230,6 +148251,14 @@ OutputArchive::OutputArchive(string i_thearchive, const char *filename, const ch
 				g_p_franzenfile = new franzcri(g_franzen.c_str(), g_franzen.length());
 				if (g_p_franzenfile->open(franzenfilename.c_str(), false))
 				{
+					//FIX-FRANZEN 65.11s: see below, the other open for append
+					if (!g_p_franzenfile->taglia_resti())
+						error("cannot remove what an unfinished update left in the franzen archive");
+					{
+						const int64_t ora= prendidimensionefile(franzenfilename.c_str());
+						if ((ora >= 0) && (ora < g_starting_franzenfile))
+							g_starting_franzenfile= ora;
+					}
 					color_cyan();
 					printbar('*');
 					if (g_p_franzenfile->get_is_aes_too())
@@ -147287,16 +148316,17 @@ OutputArchive::OutputArchive(string i_thearchive, const char *filename, const ch
 				ioerr(thefilename.c_str());
 		}
 
-		if (g_chunk_size > 0)
+		if (apezzi)
 		{
 			/// g_addedchunklist_fp.push_back(fp);
 			g_addedchunklist.push_back(thefilename);
 		}
 #ifndef NOFRANZEN
 #ifdef ZPAQFULL /// NOSFTPSTART
-		if (g_franzen != "")
+		if ((g_franzen != "") && ((!eindice) || indicefranzen)) /// 65.11l: the index too, if franzen-only
 		{
-			if (g_p_franzenfile)
+			franzcri *&ilfranzen= eindice ? g_p_franzenindex : g_p_franzenfile;
+			if (ilfranzen)
 			{
 				myprintf("442581 franzenfile already setted!\n");
 			}
@@ -147308,10 +148338,27 @@ OutputArchive::OutputArchive(string i_thearchive, const char *filename, const ch
 				{
 					// franzen-only incremental append: the archive lives only in the .zpaq.franzen
 					nowriteeof= g_header_pos; // logical (decoded) size of the existing archive
-					g_p_franzenfile= new franzcri(g_franzen.c_str(), g_franzen.length());
-					if (g_p_franzenfile->open(franzenfilename.c_str(), false))
+					ilfranzen= new franzcri(g_franzen.c_str(), g_franzen.length());
+					if (ilfranzen->open(franzenfilename.c_str(), false))
 					{
-						if (g_p_franzenfile->get_is_aes_too() != has_aes)
+						/*
+							//FIX-FRANZEN 65.11s: a franzen file that ends with what an unfinished update left
+							(see franzcri::cerca_ultimo_footer) is put right here, where it is opened to be
+							written: the rest is cut away, the new update starts where the last complete one
+							ends. The size "at the start" (where a control-C, or an update with nothing in
+							it, brings the file back) is that one
+						*/
+						if (!ilfranzen->taglia_resti())
+							error("cannot remove what an unfinished update left in the franzen archive");
+						if (!eindice)
+						{
+							const int64_t ora= prendidimensionefile(franzenfilename.c_str());
+							if ((ora >= 0) && (ora < g_starting_franzenfile))
+								g_starting_franzenfile= ora;
+						}
+						if (eindice) /// 65.11l: the index goes on from its own end (nobody seeks it: see below)
+							nowriteeof= (int64_t)ilfranzen->get_file_data_size();
+						if (ilfranzen->get_is_aes_too() != has_aes)
 						{
 							if (has_aes)
 								myprintf("43796! <<%Z>> is Franzen-only (no AES): -key cannot be used\n", franzenfilename.c_str());
@@ -147336,8 +148383,18 @@ OutputArchive::OutputArchive(string i_thearchive, const char *filename, const ch
 				}
 				else
 				{
-					g_p_franzenfile = new franzcri(g_franzen.c_str(), g_franzen.length(), 0, 0, 0, CRYPTO_PWHASH_ALG_DEFAULT, has_aes);
-					if (g_p_franzenfile->open(franzenfilename.c_str(), true))
+					ilfranzen = new franzcri(g_franzen.c_str(), g_franzen.length(), 0, 0, 0, CRYPTO_PWHASH_ALG_DEFAULT, has_aes);
+					/// 65.11l: a part after the first, and the index, with the salt of the first franzen file of
+					/// the set: one key (one Argon2id) for all of them
+					{
+						unsigned char sale[SIZEOF_SALT];
+						const string  primo= franzenname(subpart(i_thearchive, 1));
+						if ((primo != franzenfilename) && franzcri::leggi_sale(primo.c_str(), sale))
+							ilfranzen->usa_sale(sale);
+						else if (g_franzen_salenoto)
+							ilfranzen->usa_sale(g_franzen_sale);
+					}
+					if (ilfranzen->open(franzenfilename.c_str(), true))
 					{
 						color_cyan();
 						printbar('*');
@@ -147357,6 +148414,19 @@ OutputArchive::OutputArchive(string i_thearchive, const char *filename, const ch
 				}
 			}
 		}
+#endif /// NOSFTPEND
+#endif
+		if (nowrite) /// 65.11l: a new part of a multipart archive: from here on off is inside the part
+		{
+			nowritebase= off;
+			off		   = 0;
+			if (eindice && (nowriteeof > 0))
+				off= nowriteeof;
+		}
+#ifndef NOFRANZEN
+#ifdef ZPAQFULL /// NOSFTPSTART
+		if ((!eindice) && (g_p_franzenfile != 0))
+			g_franzen_salenoto= franzcri::leggi_sale(franzenname(thefilename).c_str(), g_franzen_sale);
 #endif /// NOSFTPEND
 #endif
 		if (password)
@@ -147393,9 +148463,11 @@ OutputArchive::OutputArchive(string i_thearchive, const char *filename, const ch
 			}
 			else
 			{
-				if (off == 0 && myfwrite(salt, 1, 32, fp) != 32)
+				/// 65.11l: the salt opens the archive, not every part of it (nowrite: off is inside the part)
+				const bool inizioarchivio= nowrite ? (nowritebase == 0) : (off == 0);
+				if (inizioarchivio && scrivi(salt, 1, 32, fp) != 32)
 					ioerr(thefilename.c_str());
-				if (nowrite)
+				if (nowrite && inizioarchivio)
 				{
 					off		  = 32; // virtual position just after the salt
 					nowriteeof= 32;
@@ -147413,7 +148485,7 @@ OutputArchive::OutputArchive(string i_thearchive, const char *filename, const ch
 	firstfp	 = FPNULL;
 	chunksize= 0;
 
-	if (g_chunk_size > 0)
+	if (apezzi)
 	{
 		firstfp			 = fp;
 		g_archivefp_first= firstfp;
@@ -151627,21 +152699,36 @@ string help_backup(bool i_usage, bool i_example)
 		scrivi_riga("CMD backup", "Multipart-managed backup: keeps part size/hash/quickhash");
 		scrivi_riga(" ", "Hardening backups in 'pieces' (ex. rsync, robocopy etc)");
 		scrivi_riga(" ", "Use command testbackup to check missing or invalid 'pieces'");
+		scrivi_riga("-key X", "AES-256: parts and index encrypted");
+		scrivi_riga("-franzen X", "Parts and index as .franzen files only (also with -key)");
+		scrivi_riga("-chunk X", "No part bigger than X: a run makes as many parts as it takes");
+		scrivi_riga(" ", "(they get their names at the end of the run, all together).");
+		scrivi_riga(" ", "Also with -key. Not with -franzen, not with -backupzeta");
 		scrivi_riga("-backupxxh3", "Store XXH3 instead of default MD5");
 		scrivi_riga("-backupzeta", "Store ZETA instead of default MD5 [UNENCRYPTED]");
 		scrivi_riga("-index X", "Store index (and .pid) files in X folder (for WORM drive)");
 		scrivi_riga("-tmp", ".tmp instead of .zpaq for running multipart");
 		scrivi_riga("-notrim", "DISABLE autotrim (if possible) of incomplete transaction");
+		scrivi_riga("-freeze kajo", "Backup (parts, index, txt) bigger than -freezesize: moved into");
+		scrivi_riga(" ", "a new folder of kajo (named by date and time), then it starts anew");
+		scrivi_riga("-freezesize X", "The size for -freeze. Use K, M, G, T and KB,MB,GB,TB");
+#ifdef _WIN32
+		scrivi_riga("-findzpaq", "On Windows search the backup in every drive letter (USB device)");
+#endif // corresponds to #ifdef (#ifdef _WIN32)
 	}
 	if (i_usage && i_example)
 		scrivi_examples();
 	if (i_example)
 	{
 		scrivi_esempio("Use the same parameters as add", "backup z:\\prova.zpaq *.txt -key pippo");
+		scrivi_esempio("Franzen: no cleartext file at all", "backup z:\\prova.zpaq c:\\nz -franzen pluto");
+		scrivi_esempio("AES inside, Franzen outside", "backup z:\\prova.zpaq c:\\nz -key pippo -franzen pluto");
+		scrivi_esempio("No part over 1GB (encrypted)", "backup z:\\prova.zpaq c:\\nz -chunk 1GB -key pippo");
 		scrivi_esempio("Store XXH3 (instead of MD5)", "backup z:\\prova.zpaq *.txt -backupxxh3");
 		scrivi_esempio("Write index in c:\\temp", "backup z:\\prova.zpaq c:\\nz -index c:\\temp");
 		scrivi_esempio("Store ZETA (instead of MD5)", "backup z:\\prova.zpaq *.txt -backupzeta");
 		scrivi_esempio("Rename to .zpaq after completing", "backup z:\\prova.zpaq *.txt -tmp");
+		scrivi_esempio("Over 100GB: all to the NAS, restart", "backup z:\\prova.zpaq c:\\nz -freeze \\\\nas\\old -freezesize 100GB");
 	}
 	return ("Create hardened multipart backup");
 }
@@ -151694,6 +152781,7 @@ string help_testbackup(bool i_usage, bool i_example)
 		scrivi_riga("-verify", "Read from filesystem and recompute hashes");
 		scrivi_riga("-ssd", "Multithread (for SSDs, do NOT use on spinning drives)");
 		scrivi_riga("-paranoid", "Compare index vs chunks (require password if encrypted)");
+		scrivi_riga(" ", "(-key X and/or -franzen X: the ones given to backup)");
 		scrivi_riga("-verbose", "Show more things");
 		scrivi_riga("-find", "Change something in filenames");
 		scrivi_riga("-replace", "for 'dirty' tricks");
@@ -151711,6 +152799,8 @@ string help_testbackup(bool i_usage, bool i_example)
 		scrivi_esempio("With multithread (on solid drives)", "testbackup foo.zpaq -to \\\\franzk\\z\\ -verify -ssd");
 		scrivi_esempio("Check from chunk 10 until last", "testbackup foo.zpaq -range 10: -verify");
 		scrivi_esempio("Test index with password (if any)", "testbackup foo.zpaq -paranoid -key pippo");
+		scrivi_esempio("A Franzen backup (quick: no password)", "testbackup foo.zpaq -verify");
+		scrivi_esempio("A Franzen backup, index vs parts", "testbackup foo.zpaq -paranoid -franzen pluto");
 		scrivi_esempio("Compare md5 hashes", "testbackup foo.zpaq -checktxt z:\\md5.txt");
 		scrivi_esempio("Test with index in c:\\temp", "testbackup z:\\prova.zpaq -index c:\\temp -paranoid");
 	}
@@ -152408,7 +153498,7 @@ string help_a(bool i_usage, bool i_example)
 		scrivi_riga("-touch", "Re-hash unchanged files without a usable hash (7.15, other algo)");
 		scrivi_riga("-norecursion", "Do not recurse into folders (default: YES)");
 #ifdef _WIN32
-		scrivi_riga("-findzpaq", "On Windows search the .zpaq in every drive letter (USB device)");
+		scrivi_riga("-findzpaq", "On Windows search the archive in every drive letter (USB device)");
 #endif // corresponds to #ifdef (#ifdef _WIN32)
 		scrivi_riga("-append", "Append-only (antiransomware): two passes, the output is written only forward");
 		scrivi_riga(" ", "  (never a seek back to fix the header). The passes must add the same number of");
@@ -152441,7 +153531,9 @@ string help_a(bool i_usage, bool i_example)
 #ifdef ZPAQFULL /// NOSFTPSTART
 		scrivi_riga("-exec_ok", "p.sh Execute p.sh on successful completion, passing the archive name as a parameter");
 #endif /// NOSFTPEND
-		scrivi_riga("-freeze kajo", "If current archive size > maxsize, move to kajo folder");
+		scrivi_riga("-freeze kajo", "Archive (all its files) bigger than -freezesize: moved into a new");
+		scrivi_riga(" ", "folder of kajo (named by date and time), then a new one is started");
+		scrivi_riga("-freezesize X", "The size for -freeze. Use K, M, G, T and KB,MB,GB,TB");
 		scrivi_riga("-stdin",             "Input data from stdin (pipe)");
 		scrivi_riga("-stdinsize X",       "Hint: uncompressed size of stdin data (enables % progress)");
 		scrivi_riga("-stdout", "Force a NOT DEDUPLICATED file ready to stdout (pipe OUT)");
@@ -152453,7 +153545,7 @@ string help_a(bool i_usage, bool i_example)
 		scrivi_riga("-fasttxt -verify", "Post-check of crc32.txt");
 		scrivi_riga("-home", "Create one archive for folder (-not -only)");
 		scrivi_riga("-collision", "Double check for SHA-1 collisions");
-		scrivi_riga("-chunk X", "Split in chunk of size X");
+		scrivi_riga("-chunk X", "Split in chunk of size X (a multipart name, with ?)");
 #ifdef ZPAQFULL /// NOSFTPSTART
 #ifdef unix
 		scrivi_riga("-dataset", "x    Add changes on zfs dataset x");
@@ -152605,7 +153697,7 @@ losetup -d /dev/loop0
 #ifdef ZPAQFULL /// NOSFTPSTART
 		scrivi_esempio("Launch pippo.bat after OK", "a \"z:\\g_???.zpaq\" c:\\nz\\ -exec_ok u:\\pippo.bat");
 #endif /// NOSFTPEND
-		scrivi_esempio("Archive file if bigger of 10GB", "a z:\\h.zpaq c:\\nz\\ -freeze y:\\archived -maxsize 10000000000");
+		scrivi_esempio("Archive file if bigger of 10GB", "a z:\\h.zpaq c:\\nz\\ -freeze y:\\archived -freezesize 10GB");
 #ifdef ZPAQFULL /// NOSFTPSTART
 #if defined(_WIN32)
 		scrivi_esempio("Make z:\\2.exe from z:\\1.zpaq", "a z:\\1.zpaq *.cpp -sfx z:\\2.exe");
@@ -152644,7 +153736,7 @@ losetup -d /dev/loop0
 #ifdef _WIN32
 		scrivi_esempio("Store CRC-32 on NTFS ADS", "a z:\\1.zpaq *.cpp -ads");
 #endif // corresponds to #ifdef (#ifdef _WIN32)
-		scrivi_esempio("Split in 1GB chunks", "a z:\\1.zpaq c:\\pippo -chunk 1GB");
+		scrivi_esempio("Split in 1GB chunks", "a z:\\1_????.zpaq c:\\pippo -chunk 1GB");
 		scrivi_esempio("Do not mess output with errors", "a z:\\1.zpaq c:\\users -ignore");
 		scrivi_esempio("Wait for a key press after run", "a z:\\1.zpaq c:\\users -pause");
 		scrivi_esempio("Abort if /monta...rar does not exist", "a /1.zpaq /thefolder -ifexist /monta/nas1_nfs3/rar");
@@ -152857,6 +153949,10 @@ string help_pakka(bool i_usage, bool i_example)
 		scrivi_riga("-until X", "Choose version X");
 		scrivi_riga("-out", "thefile  Write output on thefile");
 		scrivi_riga("-catpaqmode", "Generate catpaq output");
+		scrivi_riga("-key X", "The password of an encrypted (AES) archive");
+		scrivi_riga("-franzen X", "The one of a Franzen archive (.zpaq.franzen), with or without AES");
+		scrivi_riga(" ", "Never a question on the console for a Franzen archive: a password");
+		scrivi_riga(" ", "that is missing or wrong is one line (zpaqlist:...) and exit code 1");
 		
 	}
 	if (i_usage && i_example)
@@ -152867,6 +153963,7 @@ string help_pakka(bool i_usage, bool i_example)
 		scrivi_esempio("Disable de-duplicator", "pakka h:\\zarc\\1.zpaq -all -distinct -out z:\\default.txt");
 		scrivi_esempio("Get version 10", "pakka h:\\zarc\\1.zpaq -until 10 -out z:\\10.txt");
 		scrivi_esempio("List to catpaq", "pakka h:\\zarc\\1.zpaq -catpaqmode");
+		scrivi_esempio("A Franzen archive", "pakka h:\\zarc\\1.zpaq.franzen -all -catpaqmode -franzen pippo");
 
 	}
 	return ("Output for third-party extractors");
@@ -152981,6 +154078,10 @@ string help_xx(bool i_usage, bool i_example)
 		scrivi_riga(" ", "output files are buffered in a RAM cache and written sequentially.");
 		scrivi_riga(" ", "Faster on spinning drives, reduces fragmentation of restored files,");
 		scrivi_riga(" ", "and gets out as much data as possible from a damaged archive.");
+		scrivi_riga(" ", "A damaged block is checked fragment by fragment (SHA-1): the");
+		scrivi_riga(" ", "good ones are written, the wrong ones too (as they came out),");
+		scrivi_riga(" ", "zeros take the place of the missing ones. The damaged files");
+		scrivi_riga(" ", "are listed at the end (-verbose: where in each file).");
 		scrivi_riga("-ramsize X", "Size of the write cache (default 1GB)");
 		scrivi_riga(" ", "Everything else (-to -only -not -until -force ...) works as in x");
 	}
@@ -153532,21 +154633,32 @@ string help_sfx(bool i_usage, bool i_example)
 }
 #endif // corresponds to #ifdef (#ifdef _WIN32)
 #endif /// NOSFTPEND
-string help_rsync(bool i_usage, bool i_example)
+string help_grep(bool i_usage, bool i_example)
 {
 	if (i_usage)
 	{
-		scrivi_riga("CMD rsync", "Delete dangling temporary rsync file");
-		scrivi_riga("-kill", "Wet run (default: dry run)");
+		scrivi_riga("CMD grep", "Mini grep");
+		scrivi_riga(" ", "Last parameter is the text to search, the others are folders/files/masks");
+		scrivi_riga(" ", "Case-insensitive (ASCII), line-by-line, no regex");
+		scrivi_riga("-verbose", "Show all the matching lines, leading spaces trimmed");
+		scrivi_riga(" ", "(of a line over 200 bytes, the part around the match)");
+		scrivi_riga("-all", "Do not skip files with binary extensions (zip, jpg, exe...)");
+		scrivi_riga(" ", "(files with NUL bytes in the first 64 KB are always skipped,");
+		scrivi_riga(" ", "but UTF-16 text with a BOM, which is read as UTF-8)");
+		scrivi_riga("-n X", "Width of the path column in -verbose (default: 40)");
+		scrivi_riga("-debug", "Show unreadable and skipped binary files");
 	}
 	if (i_usage && i_example)
 		scrivi_examples();
 	if (i_example)
 	{
-		scrivi_esempio("Purge temporary (dry run)", "rsync \\\\nas\\thebackup");
-		scrivi_esempio("Purge temporary (WET run)", "rsync \\\\nas\\thebackup -kill");
+		scrivi_esempio("First match in each cpp", "grep c:\\*.cpp d:\\ something");
+		scrivi_esempio("Every matching line", "grep c:\\src something -verbose");
+		scrivi_esempio("Text with spaces (quote it)", "grep c:\\src \"mysql --user\" -verbose");
+		scrivi_esempio("Wider path column", "grep c:\\dropbox password -verbose -n 60");
+		scrivi_esempio("Include binary extensions", "grep c:\\dropbox something -all");
 	}
-	return ("Clean rsync dangling temp file(s)");
+	return ("Search (case-insensitive) for text in files");
 }
 string help_checkpassword(bool i_usage, bool i_example)
 {
@@ -154357,6 +155469,10 @@ string help_f(bool i_usage, bool i_example)
 		scrivi_riga(" ", "Stress-testing a storage subsystem (disk,controller,cache,cables)");
 		scrivi_riga(" ", "Live map and report as -test: written and read back block by block,");
 		scrivi_riga(" ", "without the cache of the system (-buffer X: the block, default 1MB)");
+		scrivi_riga("-gui", "(Windows) A guide to everything below: what to do, how and where");
+		scrivi_riga(" ", "are asked one at a time (the last: the list of disks and volumes),");
+		scrivi_riga(" ", "the command is shown and RUN. Its captcha is always asked; a disk");
+		scrivi_riga(" ", "that is not USB is written only with -debug, the system one never");
 		scrivi_riga("-nodashboard", "No map: the classic lines, a 512MB chunk at a time");
 		scrivi_riga("-verbose", "With -nodashboard: a line for every chunk (speed consistency)");
 		scrivi_riga("-force", "Do NOT delete (after run) the temporary filename. By default free");
@@ -154383,12 +155499,27 @@ string help_f(bool i_usage, bool i_example)
 		scrivi_riga(" ", "The volume is locked meanwhile: not the system one, no open files");
 		scrivi_riga(" ", "(there: f X:\\ -zero). -verify: the free clusters are read back");
 		scrivi_riga(" ", "The shadow copies of the volume (restore points), if any, can be lost");
+		scrivi_riga("-n NN", "Read/write only NN% of the blocks (1..99), equispaced: faster, less coverage");
+		scrivi_riga("-nuke NN", "FAST NTFS sanitize of a USB stick (Windows): f X: -nuke NN -force");
+		scrivi_riga(" ", "1) what NTFS points at is overwritten: the whole $MFT (names, small files),");
+		scrivi_riga(" ", "   every file it knows, the DELETED ones too (the first 16 MB and the");
+		scrivi_riga(" ", "   last MB of each: up to 16 MB a file is wiped whole), the folders;");
+		scrivi_riga(" ", "   also for an older MFT left by a format. As long as the data, not the stick");
+		scrivi_riga(" ", "2) the volume is formatted: an empty NTFS (same label), ready to be used");
+		scrivi_riga(" ", "3) NN% (1..100) of its free space is overwritten: what is left of the big");
+		scrivi_riga(" ", "   files and of what was deleted long ago. Ctrl+C here: the stick is good");
+		scrivi_riga(" ", "-nuke 100: in 1) the big files whole too (the old data first), in 3) all");
+		scrivi_riga(" ", "Not zeros: every sector says where it is and which step wrote it; -verify");
+		scrivi_riga(" ", "reads back and checks it (a stick that drops or misplaces writes is seen)");
+		scrivi_riga(" ", "Below 100 NOT a secure erase. Do not format the stick before: its MFT is");
+		scrivi_riga(" ", "the map of what to wipe. Only a removable USB NTFS volume, never the system");
 		scrivi_riga("Ctrl+C", "Stop, the report of what is done; again to quit");
 	}
 	if (i_usage && i_example)
 		scrivi_examples();
 	if (i_example)
 	{
+		scrivi_esempio("The guide (Windows): what, how, where", "f -gui");
 		scrivi_esempio("Fill (wipe) almost all free space", "f z:\\");
 		scrivi_esempio("Fill (wipe) keep temp files", "f z:\\ -force -verbose");
 		scrivi_esempio("Zero free space (VM shrink)", "f z:\\ -zero");
@@ -154402,6 +155533,11 @@ string help_f(bool i_usage, bool i_example)
 		scrivi_esempio("Zeros on all of disk 3 (DESTROYS IT)", "f 3 -test -force -paranoid -zero");
 		scrivi_esempio("Zero the free clusters of E: (NTFS)", "f E: -test -force -zero -ntfs");
 		scrivi_esempio("The same, and read them back", "f E: -test -force -zero -ntfs -verify");
+		scrivi_esempio("Read test, only 30% of the blocks", "f 3 -test -n 30");
+		scrivi_esempio("Fast NTFS sanitize of E: (30%)", "f E: -nuke 30 -force");
+		scrivi_esempio("Fastest NTFS sanitize of E:", "f E: -nuke 1 -force");
+		scrivi_esempio("Sanitize: the old data, then all the rest", "f E: -nuke 100 -force");
+		scrivi_esempio("The same, everything read back", "f E: -nuke 100 -force -verify");
 	}
 	return ("Fill/wipe disk (for reliability/privacy)");
 }
@@ -154613,14 +155749,30 @@ string help_mainswitches(bool i_usage, bool i_example)
 		scrivi_riga("", "env var FRANZKEY used as fallback if -key is not given");
 		scrivi_riga("-franzen X", "Franzen (ChaCha20) password X");
 		scrivi_riga("", "env var FRANZFRANZEN used as fallback if -franzen is not given");
+		/// 65.11e/f: the methods, a line each, for who has to choose. The texts are the
+		/// author's; the numbers behind them are in zpaqmount/compressor.txt
 #if defined(ZPAQZSTD) && !defined(ANCIENT)
-		scrivi_riga("-mN -method N", "0=no compression, 1..5=faster..better, 8=zstd (default)");
+		scrivi_riga("-mN -method N", "compression method: 0 = none, 1..9 = see below");
+#elif defined(ZPAQZSTD)
+		scrivi_riga("-mN -method N", "compression method: 0 = none, 1..9 = see below (default 1)");
 #else
-		scrivi_riga("-mN -method N", "0=no compression, 1..5=faster..better (default 1)");
+		scrivi_riga("-mN -method N", "compression method: 0 = none, 1..6 = see below (default 1)");
 #endif
-		scrivi_riga("-m6", "-m4 with sparse contexts: a bit smaller (binaries), +25% time");
+		scrivi_riga("-m1", "zpaq default: fast, fast extraction");
+		scrivi_riga("-m2", "smaller than -m1, a lot slower to add, fast extraction");
+		scrivi_riga("-m3", "efficient, extraction not that fast");
+		scrivi_riga("-m4", "very efficient, slower, slow extraction");
+		scrivi_riga("-m5", "the smallest, very slow to add AND to extract");
+		scrivi_riga("-m6", "enhanced -m4: smaller, slower, slow extraction");
 #ifdef ZPAQZSTD
-		scrivi_riga("-m8[hN|aN]", "zstd (any zpaq, 7.15 too, extracts it)");
+		scrivi_riga("-m7", "~as small as -m3, slow to add, very fast extraction");
+#if !defined(ANCIENT)
+		scrivi_riga("-m8", "zpaqfranz default: very fast, very fast extraction");
+#else
+		scrivi_riga("-m8", "very fast, very fast extraction");
+#endif
+		scrivi_riga("-m9", "a bit slower than -m8 but smaller, very fast extraction");
+		scrivi_riga("-m8[hN|aN]", "-m7 -m8 -m9 are zstd (any zpaq, 7.15 too, extracts them). By hand:");
 		scrivi_riga(" ", "  -m8 level 3, -m8h19 level 1..22, -m8a5 fast level -5, -m86: 64 MB blocks");
 #endif // ZPAQZSTD
 		scrivi_riga("-force", "Overwrite");
@@ -154773,6 +155925,9 @@ string help_voodooswitches(bool i_usage, bool i_example)
 		scrivi_riga(" ", "  1..22 (default 3), aN: fast level -N (bigger = faster, larger). The");
 		scrivi_riga(" ", "  window is the whole block; the pcomp needs a block-sized buffer + 2 MB");
 		scrivi_riga(" ", "  Ex: -m8 -m8h1 -m8h19 -m8a3 -m86h9");
+		scrivi_riga("-m7[B] -m9[B]", "Two zstd by name: -m7 = -m86h19 (level 19, 64 MB blocks),");
+		scrivi_riga(" ", "  -m9 = -m8h9 (level 9, 16 MB blocks). A block size and a level of");
+		scrivi_riga(" ", "  one's own win: -m78 = -m88h19, -m96 = -m86h9, -m9h12 = -m8h12");
 #endif // ZPAQZSTD
 	}
 	return ("Expert-level (nerd) switches");
@@ -155048,7 +156203,7 @@ void Jidac::load_help_map()
 	help_map.insert(std::pair<string, HelpInfo>("mount", HelpInfo("Utils    ", help_montadisco, 8)));
 #endif
 	help_map.insert(std::pair<string, HelpInfo>("pause", HelpInfo("Utils    ", help_pause, 8)));
-	help_map.insert(std::pair<string, HelpInfo>("rsync", HelpInfo("Utils    ", help_rsync, 8)));
+	help_map.insert(std::pair<string, HelpInfo>("grep", HelpInfo("Utils    ", help_grep, 8)));
 	help_map.insert(std::pair<string, HelpInfo>("utf", HelpInfo("Utils    ", help_utf, 8)));
 	help_map.insert(std::pair<string, HelpInfo>("versum", HelpInfo("Utils    ", help_versum, 8)));
 	help_map.insert(std::pair<string, HelpInfo>("work", HelpInfo("Utils    ", help_work, 8)));
@@ -156607,7 +157762,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 	g_programflags.add(&flagelevated,		"-elevated",			"",												""); /// not in the help: set by the relaunch of mount
 #ifdef _WIN32
 	g_programflags.add(&flagacfake,			"-acfake",				"",												""); /// not in the help: for the tests of xc (ac on a disk that is not the one of Windows)
-	g_programflags.add(&flaggui,			"-gui",					"ac, xc: choose on a screen what to take, where to restore",	"");
+	g_programflags.add(&flaggui,			"-gui",					"ac, xc, f: choose on a screen (what to take, where to restore, what f does)",	"");
 #endif
 	g_programflags.add(&flagelevatefake,	"-elevatefake",			"",												""); /// not in the help: for the tests of the relaunch of cloud -image
 	g_programflags.add(&flagraw,			"-raw",					"Image of the whole partition (or disk)",			"");
@@ -156745,6 +157900,8 @@ int Jidac::loadparameters(int argc, const char** argv)
 	g_sfxuntil			="";
 #endif ///NOSFTPEND
 	g_freeze			="";
+	g_freezesize		=0;
+	g_freeze_fatto		=false;
 	g_archive			="";
 	g_indexname			="";
 	g_csvstring			="";
@@ -157289,7 +158446,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 		else if (cli_filesandcommand(opt,"find",		'j',argc,argv,&i));
 		else if (cli_filesandcommand(opt,"isopen",		'!',argc,argv,&i));
 		else if (cli_filesandcommand(opt,"password",	'6',argc,argv,&i));
-		else if (cli_filesandcommand(opt,"rsync",		'3',argc,argv,&i));
+		else if (cli_filesandcommand(opt,"grep",		'3',argc,argv,&i));
 		else if (cli_filesandcommand(opt,"1on1",		')',argc,argv,&i));
 		else if (cli_filesandcommand(opt,"sum",			'1',argc,argv,&i));
 		else if (cli_filesandcommand(opt,"hash",		'9',argc,argv,&i));
@@ -157649,11 +158806,21 @@ int Jidac::loadparameters(int argc, const char** argv)
 		else if (cli_getuint	(opt,"-dirlength",	false,	"",								argc,argv,&i,dirlength,			&dirlength));
 		else if (cli_getuint	(opt,"-n",			false,	"",								argc,argv,&i,menoenne,			&menoenne));
 		else if (cli_getuint	(opt,"-limit",		false,	"",								argc,argv,&i,menoenne,			&menoenne));
+		/// 65.11g: -nuke [NN] (f, Windows): a number is mandatory, so presence and value are kept apart
+		else if (opt=="-nuke")
+		{
+			flagnuke= true;
+			if ((i<argc-1) && (isdigit((unsigned char)argv[i+1][0])))
+				g_nuke_pct= (int)myatoll(argv[++i]);
+			else
+				g_nuke_pct= -1;
+		}
 		else if (cli_getint		(opt,"-buffer",		false,	"",								argc,argv,&i,g_ioBUFSIZE,		&g_ioBUFSIZE));
 		else if (cli_getuint64	(opt,"-chunk",		false,	"",								argc,argv,&i,g_chunk_size,		&g_chunk_size));
 		else if (cli_getuint64	(opt,"-stdinsize",	false,	"",								argc,argv,&i,g_stdinsize,		&g_stdinsize));
 		else if (cli_getuint64	(opt,"-minsize",	false,	"",								argc,argv,&i,minsize,			&minsize));
 		else if (cli_getuint64	(opt,"-maxsize",	false,	"",								argc,argv,&i,maxsize,			&maxsize));
+		else if (cli_getuint64	(opt,"-freezesize",false,	"",								argc,argv,&i,g_freezesize,		&g_freezesize));
 		else if (cli_getuint64	(opt,"-remotespeed",false,	"",								argc,argv,&i,g_remotespeed,		&g_remotespeed));
 		else if (cli_getuint64	(opt,"-checksize",	false,	"",								argc,argv,&i,g_checksize,		&g_checksize));
 		else if (cli_getstring	(opt,"-method",		false,	"-m",							argc,argv,&i,"",				&method));
@@ -158042,6 +159209,14 @@ int Jidac::loadparameters(int argc, const char** argv)
 		all=8;
 	}
 
+#ifdef ZPAQZSTD
+	/// 65.11e: -m7 = -m86h19, -m9 = -m8h9 (see zstd_sinonimo). Here, once, for every
+	/// command: from now on the method begins with 8, as if it had been written so
+	if (!method.empty())
+		if ((method[0] == '7') || (method[0] == '9'))
+			method= libzpaq::zstd_sinonimo(method);
+#endif // ZPAQZSTD
+
 	/// only for the levels (a digit): x... and s... are explicit models ('x'-48 > 5 said
 	/// "method >5 not different of method 5" for every one of them)
 	if (!method.empty())
@@ -158263,6 +159438,8 @@ int Jidac::loadparameters(int argc, const char** argv)
 		flagdate			=false;
 		flagutc				=true;
 		flagzero			=false;
+		flagnuke			=false;
+		g_nuke_pct			=-1;
 		flagforcezfs		=true;
 		flagdonotforcexls	=true;
 		flagforcewindows	=true;
@@ -162287,18 +163464,19 @@ int Jidac::doCommand()
 {
 	if (g_chunk_size>0)
 	{
-		if (command!='a')
+		/// 65.11p: backup too (it makes the names of its parts by itself: no ? to give; its -index is a folder)
+		if ((command!='a') && (command!='Z'))
 		{
-			myprintf("00582! -chunk works only with a command\n");
+			myprintf("00582! -chunk works only with the a (add) and the backup commands\n");
 			return 2;
 		}
-		
-		if (!iswildcards(archive))
+
+		if ((command=='a') && (!iswildcards(archive)))
 		{
 			myprintf("00583! the archive must be multipart (with some ?) for -chunk\n");
 			return 2;
 		}
-		if (g_indexname!="")
+		if ((command=='a') && (g_indexname!=""))
 		{
 			myprintf("00584! -chunk incompatible with -index\n");
 			return 2;
@@ -162384,6 +163562,14 @@ int Jidac::doCommand()
 	}
 
 	
+#ifdef _WIN32
+	/// 65.11q: before the name is used by anybody (it was inside add(): after backup had made its
+	/// .pid and its names with the letter given, and never for the commands that only read)
+	if (flagfindzpaq)
+		if (findzpaq() != 0)
+			return 2;
+#endif
+
 	theonlyone(command,archive);
 #ifdef ZPAQFULL ///NOSFTPSTART
 	if (flagslow)
@@ -162438,22 +163624,15 @@ int Jidac::doCommand()
 			return append();
 		if (flaghome)
 			return addhome();
-#ifndef ANCIENT
-		else if (flagturbo
-#ifdef _WIN32
-				 || flagac /// 65.9n: ac is made in add2 only
-#endif
-		)
-			return add2(); /// the same archive, faster (see add2)
-#else
+#ifdef ANCIENT
 		else if (flagturbo)
 		{
 			myprintf("65391: -turbo is not in the ANCIENT builds (ESX, NAS): plain add\n");
 			return add();
 		}
-#endif // corresponds to #ifndef (#ifndef ANCIENT)
+#endif // corresponds to #ifdef (#ifdef ANCIENT)
 		else
-			return add();
+			return add(); /// 65.11k: add2() everywhere (ac too), but in the ANCIENT builds: see add()
 	}
 #ifdef _WIN32 /// a .vhd .vhdx .iso: attached by Windows, in every build (no WinFsp)
 	else if ((command=='V') && (files.size()>0) && isdiscovirtuale(files[0].c_str())) return montadisco();
@@ -162498,7 +163677,7 @@ int Jidac::doCommand()
 	else if (command=='1') return summa();
 	else if (command=='2') return dir();
 	else if (command==2)   return tree();
-	else if (command=='3') return purgersync();
+	else if (command=='3') return grep();
 	else if (command=='4') return trim();
 	else if (command=='5') return zpaqdirsize();
 	else if (command=='6') return setpassword();
@@ -168961,19 +170140,22 @@ int Jidac::list()
 
 	if (!flagsilent)
 	{
-		color_cyan();
-		if (fastlist)
+		if (flagverbose)
 		{
-			myprintf("65414: Times (ms): find %s, blocks %s (%s, %s bytes), join+hash %s, rebuild %s | ",
-					 migliaia(fl_t[0]), migliaia2(fl_t[1]), migliaia3(fl_blocks), migliaia4(fl_tbytes), migliaia5(fl_t[2]), migliaia6(fl_t[3]));
-			myprintf("read %s, prepare %s, print %s, total %s",
-					 migliaia(t_read), migliaia2(t_prep), migliaia3(t_print), migliaia4(mtime() - t_start));
-			myprintf("\n");
+			color_cyan();
+			if (fastlist)
+			{
+				myprintf("65414: Times (ms): find %s, blocks %s (%s, %s bytes), join+hash %s, rebuild %s | ",
+						 migliaia(fl_t[0]), migliaia2(fl_t[1]), migliaia3(fl_blocks), migliaia4(fl_tbytes), migliaia5(fl_t[2]), migliaia6(fl_t[3]));
+				myprintf("read %s, prepare %s, print %s, total %s",
+						 migliaia(t_read), migliaia2(t_prep), migliaia3(t_print), migliaia4(mtime() - t_start));
+				myprintf("\n");
+			}
+			else
+				myprintf("65415: Times (ms): read_archive %s | prepare %s, print %s, total %s\n",
+						 migliaia(t_read), migliaia2(t_prep), migliaia3(t_print), migliaia4(mtime() - t_start));
+			color_restore();
 		}
-		else
-			myprintf("65415: Times (ms): read_archive %s | prepare %s, print %s, total %s\n",
-					 migliaia(t_read), migliaia2(t_prep), migliaia3(t_print), migliaia4(mtime() - t_start));
-		color_restore();
 	}
 
 #ifdef unix
@@ -170700,90 +171882,6 @@ int Jidac::trim()
 		myprintf("01090: DONE on %Z (%s)\n", arcname.c_str(), migliaia(nuovadim));
 	}
 	return 0;
-}
-int Jidac::purgersync()
-{
-	myprintf("01091: PURGING RSYNC TEMPORARY FILES ");
-	if (!flagkill)
-		myprintf(" : DRY RUN (no -kill)");
-	myprintf("\n");
-	if (files.size() == 0)
-	{
-		myprintf("01092: No folder selected\n");
-		return 1;
-	}
-	DTMap myedt;
-	for (unsigned int i= 0; i < files.size(); i++)
-	{
-		myprintf("01093: SCAN FOLDER %02d %Z\n", i, files[i].c_str());
-		scandir(false, myedt, files[i].c_str(), true);
-	}
-	eol();
-	myprintf("01095: Files to be checked %s\n", migliaia(myedt.size()));
-	int erased	  = 0;
-	int tobeerased= 0;
-	for (DTMap::iterator p= myedt.begin(); p != myedt.end(); ++p)
-	{
-		string filename= p->first;
-		myreplaceall(filename, "\\", "/");
-		string percorso= extractfilepath(filename);
-		filename	   = extractfilename(filename);
-		int lunghezza  = filename.length();
-		if (lunghezza > 10)
-		{
-			if (filename[0] == '.')
-				if (filename[lunghezza - 7] == '.')
-				{
-					string estensionefinale= myright(filename, 6);
-					bool   spazzatura	   = true;
-					for (unsigned int i= 0; i < estensionefinale.length(); i++)
-					{
-						if ((!isdigit(estensionefinale[i])) && (!isalpha(estensionefinale[i])))
-						{
-							spazzatura= false;
-							break;
-						}
-					}
-					if (spazzatura)
-					{
-						string senzaestensione= myleft(filename, filename.length() - 7);
-						string estensione	  = prendiestensione(senzaestensione);
-						if ((estensione.length() > 0) && (estensione.length() <= 4))
-						{
-							string filetobepurged= percorso + filename;
-#if defined(_WIN32)
-							myprintf("del ");
-#else
-							myprintf("rm ");
-#endif // corresponds to #if (#if defined (_WIN32))
-							myprintf("\"");
-							printUTF8(filetobepurged.c_str());
-							myprintf("\"");
-							myprintf("\n");
-							tobeerased++;
-							if (flagkill)
-							{
-								myprintf("01096: Deleting...\n");
-								if (delete_file(filetobepurged.c_str()))
-									erased++;
-							}
-						}
-					}
-				}
-		}
-	}
-	if (flagkill)
-	{
-		myprintf("01097: Erased  %08d / %08d\n", erased, tobeerased);
-		if (tobeerased == erased)
-			return 0;
-		else
-			return 1;
-	}
-	if (tobeerased > 0)
-		return 0;
-	else
-		return 2;
 }
 bool isfilesequal(string i_source, string i_destination, bool i_flagfast= false)
 {
@@ -172988,15 +174086,17 @@ int Jidac::autotest()
 			const string altro	 = "\"" + outfolder + "bigone03.big\"";
 			const char	*v1		 = "-timestamp 2025-01-01_10:00:00";
 			const char	*v2		 = "-timestamp 2025-01-02_10:00:00";
-			fprintf(batch, "\"%s\" a \"%sturbo_no.zpaq\" %s %s -m1 -noturbo -noeta %s", myzpaqexe.c_str(), outfolder.c_str(), sorgenti.c_str(), v1, acapo.c_str());
-			fprintf(batch, "\"%s\" a \"%sturbo_no.zpaq\" %s %s -m1 -noturbo -noeta %s", myzpaqexe.c_str(), outfolder.c_str(), altro.c_str(), v2, acapo.c_str());
-			fprintf(batch, "\"%s\" a \"%sturbo_si.zpaq\" %s %s -m1 -turbo -noeta -out \"%sout83.txt\"%s", myzpaqexe.c_str(), outfolder.c_str(), sorgenti.c_str(), v1, outfolder.c_str(), acapo.c_str());
-			fprintf(batch, "\"%s\" a \"%sturbo_si.zpaq\" %s %s -m1 -turbo -noeta %s", myzpaqexe.c_str(), outfolder.c_str(), altro.c_str(), v2, acapo.c_str());
+			/// 65.11l: -nofast: the VFILE-info record (65.8t) holds how long the add took, never the same twice:
+			/// the two "Binary ==" checks below (out84, out86) could not pass any more
+			fprintf(batch, "\"%s\" a \"%sturbo_no.zpaq\" %s %s -m1 -noturbo -noeta -nofast %s", myzpaqexe.c_str(), outfolder.c_str(), sorgenti.c_str(), v1, acapo.c_str());
+			fprintf(batch, "\"%s\" a \"%sturbo_no.zpaq\" %s %s -m1 -noturbo -noeta -nofast %s", myzpaqexe.c_str(), outfolder.c_str(), altro.c_str(), v2, acapo.c_str());
+			fprintf(batch, "\"%s\" a \"%sturbo_si.zpaq\" %s %s -m1 -turbo -noeta -nofast -out \"%sout83.txt\"%s", myzpaqexe.c_str(), outfolder.c_str(), sorgenti.c_str(), v1, outfolder.c_str(), acapo.c_str());
+			fprintf(batch, "\"%s\" a \"%sturbo_si.zpaq\" %s %s -m1 -turbo -noeta -nofast %s", myzpaqexe.c_str(), outfolder.c_str(), altro.c_str(), v2, acapo.c_str());
 			fprintf(batch, "\"%s\" work fc \"%sturbo_no.zpaq\" \"%sturbo_si.zpaq\" -out \"%sout84.txt\"%s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), outfolder.c_str(), acapo.c_str());
 			fprintf(batch, "\"%s\" t \"%sturbo_si.zpaq\" -noeta -out \"%sout85.txt\"%s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), acapo.c_str());
 #ifdef ZPAQZSTD
-			fprintf(batch, "\"%s\" a \"%sturbo8_no.zpaq\" %s %s -m8 -noturbo -noeta %s", myzpaqexe.c_str(), outfolder.c_str(), sorgenti.c_str(), v1, acapo.c_str());
-			fprintf(batch, "\"%s\" a \"%sturbo8_si.zpaq\" %s %s -m8 -turbo -noeta %s", myzpaqexe.c_str(), outfolder.c_str(), sorgenti.c_str(), v1, acapo.c_str());
+			fprintf(batch, "\"%s\" a \"%sturbo8_no.zpaq\" %s %s -m8 -noturbo -noeta -nofast %s", myzpaqexe.c_str(), outfolder.c_str(), sorgenti.c_str(), v1, acapo.c_str());
+			fprintf(batch, "\"%s\" a \"%sturbo8_si.zpaq\" %s %s -m8 -turbo -noeta -nofast %s", myzpaqexe.c_str(), outfolder.c_str(), sorgenti.c_str(), v1, acapo.c_str());
 			fprintf(batch, "\"%s\" work fc \"%sturbo8_no.zpaq\" \"%sturbo8_si.zpaq\" -out \"%sout86.txt\"%s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), outfolder.c_str(), acapo.c_str());
 #endif // corresponds to #ifdef (#ifdef ZPAQZSTD)
 		}
@@ -173346,6 +174446,27 @@ void my_handler(int s)
 					else
 						myprintf("01279! *CANNOT DELETE* <<%Z>>\n", g_archive.c_str());
 				}
+#ifndef NOFRANZEN
+#ifdef ZPAQFULL /// NOSFTPSTART
+		/// 65.11l: the new part of a backup made as a franzen file only (x_003.tmp.franzen): closed, then removed
+		bool franzenrimasto= false;
+		if (flagalwayscheck && (g_archive != "") && (g_franzen != "") && (!isfranzen(g_archive)) && fileexists(franzenname(g_archive)))
+		{
+			if (g_p_franzenfile)
+			{
+				g_p_franzenfile->close();
+				g_p_franzenfile= 0;
+			}
+			if (delete_file(franzenname(g_archive).c_str()))
+				myprintf("01278: Erased chunk <<%Z>>\n", franzenname(g_archive).c_str());
+			else
+			{
+				myprintf("01279! *CANNOT DELETE* <<%Z>>\n", franzenname(g_archive).c_str());
+				franzenrimasto= true;
+			}
+		}
+#endif /// NOSFTPEND
+#endif
 		// we must trim the index too!
 		if (!g_flagcreating)
 		{
@@ -173396,6 +174517,12 @@ void my_handler(int s)
 			rollbackok= !fileexists(g_archive);
 		else
 			rollbackok= (prendidimensionefile(g_archive.c_str()) <= g_starting_zpaqsize);
+#ifndef NOFRANZEN
+#ifdef ZPAQFULL /// NOSFTPSTART
+		if (franzenrimasto)
+			rollbackok= false;
+#endif /// NOSFTPEND
+#endif
 	}
 	/// the archive being written: where it is now (single file, multipart: the new part, -chunk: the new chunks)
 	if (g_archive != "")
@@ -173757,6 +174884,44 @@ int zpaq_main_internal(int argc, const char **argv)
         }
     if ((g_frammentiorfani > 0) && (errorcode == 0)) /// 72414: the last archive read has files missing from a version
         errorcode = 1;
+#ifndef NOFRANZEN
+#ifdef ZPAQFULL /// NOSFTPSTART
+    if (g_franzen_lettirotti > 0) /// 65.11l: whatever the command made of it, a franzen file is damaged
+    {
+        color_red();
+        myprintf("43810! %s read(s) of a franzen file could not be decrypted: the file is damaged\n", migliaia(g_franzen_lettirotti));
+        color_restore();
+        errorcode = 2;
+    }
+    if (g_franzen_scrittirotti > 0) /// 65.11r //FIX-FRANZEN: a franzen file not written as it should (media full, I/O error)
+    {
+        color_red();
+        myprintf("43814! %s write(s) on a franzen file failed (media full?): that file is NOT good\n", migliaia(g_franzen_scrittirotti));
+        color_restore();
+        errorcode = 2;
+    }
+    //FIX-FRANZEN 65.11s: a franzen file read up to its last complete update, and left as it is (no add in this run)
+    if ((g_franzen_recuperati > g_franzen_tagliati) && (errorcode == 0))
+    {
+        color_yellow();
+        myprintf("43815$ A franzen file ends with what an unfinished update left (see above): the next add removes it\n");
+        color_restore();
+        errorcode = 1;
+    }
+#endif /// NOSFTPEND
+#endif
+
+    if (g_freeze_avviso > 0) /// 65.11q: the backup is done, but -freeze asks for a look
+    {
+        color_yellow();
+        if (g_freeze_avviso == 1)
+            myprintf("68875$ -freeze did not make it (see above): the archive is where it was, over -freezesize\n");
+        else
+            myprintf("68876$ -freeze done, but something is left to delete by hand (see above)\n");
+        color_restore();
+        if (errorcode == 0)
+            errorcode = 1;
+    }
 
     if (flagdebug)
     {
@@ -176515,7 +177680,11 @@ class multipart
 
 			if (partname == part0)
 				error("84285: too many archive parts");
-			if (!fileexists(partname))
+			/// 65.11l: a part can be a franzen file only (x_00000001.zpaq.franzen)
+			string fisico= partname;
+			if ((!fileexists(fisico)) && fileexists(partname + ".franzen"))
+				fisico= partname + ".franzen";
+			if (!fileexists(fisico))
 			{
 				thehole= partname;
 				if (flagdebug3)
@@ -176529,7 +177698,7 @@ class multipart
 						myprintf("01498: last filenamearraysize %s\n", filenamearray[filenamearray.size() - 1].filename.c_str());
 						myprintf("01499: i-1                    %s\n", subpart(i_filename, i - 1).c_str());
 					}
-					if (filenamearray[filenamearray.size() - 1].filename == subpart(i_filename, i - 1))
+					if ((filenamearray[filenamearray.size() - 1].filename == subpart(i_filename, i - 1)) || (filenamearray[filenamearray.size() - 1].filename == subpart(i_filename, i - 1) + ".franzen"))
 						thehole= "";
 				}
 				break;
@@ -176537,11 +177706,11 @@ class multipart
 			else
 			{
 				s_fileandsize myblock;
-				myblock.filename	  = partname;
-				myblock.size		  = prendidimensionefile(partname.c_str());
+				myblock.filename	  = fisico;
+				myblock.size		  = prendidimensionefile(fisico.c_str());
 				myblock.attr		  = 0;
 				myblock.date		  = 0;
-				myblock.isdir		  = isdirectory(partname);
+				myblock.isdir		  = isdirectory(fisico);
 				myblock.flaghashstored= false;
 				partarray.push_back(myblock);
 				if (flagdebug2)
@@ -176576,6 +177745,8 @@ class multipart
 		{
 			if (fileexists(subpart(i_filename, parts)))
 				lastpart= subpart(i_filename, parts);
+			else if (fileexists(subpart(i_filename, parts) + ".franzen"))
+				lastpart= subpart(i_filename, parts) + ".franzen";
 			nextpart= subpart(i_filename, parts + 1);
 		}
 		else
@@ -176608,7 +177779,15 @@ class multipart
 		if (mypos("/", temppath) == -1)
 			temppath= "./" + temppath;
 
+		/// 65.11q: the parts are not the files to add: -maxsize and -minsize are not for them. A part over
+		/// -maxsize was left out of this list: "AT LEAST ONE HOLE DETECTED", and backup refused to run
+		const uint64_t eramax= maxsize;
+		const uint64_t eramin= minsize;
+		maxsize= 0;
+		minsize= 0;
 		myscandir(0, thedt, temppath, false, false);
+		maxsize= eramax;
+		minsize= eramin;
 		eol();
 		/// printbar(' ',false);
 		/// myprintf("\r");
@@ -176627,7 +177806,11 @@ class multipart
 #ifdef _WIN32
 			currentfilename= stringtolower(currentfilename);
 #endif // corresponds to #ifdef (#ifdef _WIN32)
-			if (isbackuppart(currentfilename, onlyname))
+			/// 65.11l: x_00000001.zpaq.franzen is the part x_00000001.zpaq
+			string comeparte= currentfilename;
+			if (isfranzen(comeparte))
+				comeparte= comeparte.substr(0, comeparte.size() - 8);
+			if (isbackuppart(comeparte, onlyname))
 			{
 				int thepartnumber= getpartnumber(currentfilename);
 				if (thepartnumber > 0)
@@ -178849,7 +180032,7 @@ int64_t Jidac::franzparallelscandir(bool i_flaghash, bool i_recursive, bool i_fo
 	return mtime() - startscan;
 }
 #ifndef ANCIENT
-static int fill_dashboard(const string &i_cartella, int64_t i_dascrivere); /// 65.8z1: with franzusbtest, after it
+static int fill_dashboard(const string &i_cartella, int64_t i_dascrivere, unsigned int i_perc); /// 65.8z1: with franzusbtest, after it
 #endif
 /// 65.8z: f, a chunk just written: on the media, and out of the cache of the system (the verify
 /// must read the media, not the memory: with less free space than RAM it checked nothing)
@@ -178884,6 +180067,16 @@ static void fill_scordacache(const string &i_file)
 /// wipe free space-check if can write and read OK
 int Jidac::fillami()
 {
+#ifdef _WIN32
+	if (flaggui) /// 65.11o: the case is chosen on a screen, then it goes on from here as if it was typed
+	{
+		const int scelto= fillgui();
+		if (scelto != 0)
+			return (scelto == 1) ? 0 : 2;
+	}
+#endif
+	if (flagnuke) /// 65.11g: f X: -nuke NN -force, fast NTFS sanitize (before -test: it is not a test)
+		return nukeami();
 	if (flagtest) /// the device, raw: not the free space of a filesystem
 		return usbtest();
 	if (files.size() != 1)
@@ -178943,7 +180136,7 @@ int Jidac::fillami()
 	}
 #ifndef ANCIENT
 	if (flagdashboard) /// 65.8z1: the default: the map and the report of f -test. -nodashboard: the lines below
-		return fill_dashboard(outputdir, (int64_t)spacetowrite);
+		return fill_dashboard(outputdir, (int64_t)spacetowrite, menoenne);
 #endif
 	myprintf("%d chunks of (%s) will be written%s\n", chunks, tohuman(chunkbytes), (coda > 0) ? ", the last one smaller" : "");
 	const uint32_t chunksize  = (uint32_t)(chunkbytes / sizeof(uint32_t)); // half gigabyte in 32 bits at time
@@ -187357,7 +188550,7 @@ int Jidac::testbackup()
 	myreplace(onlyname, "????????.zpaq", "");
 	myreplace(onlyname, ".zpaq", "");
 
-	if (!exists(firstzpaq))
+	if ((!exists(firstzpaq)) && (!exists(franzenname(firstzpaq)))) /// 65.11l: or the part as a franzen file
 	{
 		myprintf("02716! Cannot find first zpaq %Z\n", firstzpaq.c_str());
 		return 2;
@@ -187635,15 +188828,20 @@ int Jidac::testbackup()
 				myprintf("02751: Working on %08d  %08lld %s\n", (int)i, (long long)filenumbers[i], filenames[i].c_str());
 			if (filenumbers[i] + 1 != filenumbers[i + 1])
 			{
+				/// 65.11l: x_00000003.zpaq.franzen is the part x_00000003.zpaq
 				string	i_candidato = extractfilename(filenames[i]);
+				if (isfranzen(i_candidato))
+					i_candidato= i_candidato.substr(0, i_candidato.size() - 8);
 				string	i_numerini_i= i_candidato.substr(i_candidato.size() - 13, 8);
 				int64_t inumerini	= myatoll(i_numerini_i.c_str()) + 1;
 
 				string	ip_candidato = extractfilename(filenames[i + 1]);
+				if (isfranzen(ip_candidato))
+					ip_candidato= ip_candidato.substr(0, ip_candidato.size() - 8);
 				string	ip_numerini_i= ip_candidato.substr(ip_candidato.size() - 13, 8);
 				int64_t ipnumerini	 = myatoll(ip_numerini_i.c_str()) - 1;
 
-				string partetestuale= extractfilename(filenames[i]);
+				string partetestuale= i_candidato;
 				partetestuale		= partetestuale.substr(0, partetestuale.size() - 13);
 
 				myprintf("02752: We have a hole in part numbers [%s..%s], checking if 0-bytes\n", migliaia(inumerini), migliaia2(ipnumerini));
@@ -187931,7 +189129,7 @@ int Jidac::testbackup()
 		myprintf("02787: Last date %s\n", filedate[filedate.size() - 1].c_str());
 	if (flagparanoid)
 	{
-		if (fileexists(indexname))
+		if (fileexists(indexname) || fileexists(franzenname(indexname))) /// 65.11l: or the index as a franzen file
 		{
 			bool matchok= true;
 			printbar('-');
@@ -188000,12 +189198,7 @@ int Jidac::testbackup()
 }
 int Jidac::backup()
 {
-	if (g_franzen != "")
-	{
-		myprintf("02735! Sorry, franzen not supported (yet) for backup\n");
-		return 2;
-	}
-	
+	/// 65.11l: -franzen (with or without -key): the parts and the index are franzen files, see add
 	if (archive == "")
 	{
 		myprintf("02795! You need a non-empty archive name\n");
@@ -188066,7 +189259,34 @@ int Jidac::backup()
 		myprintf("02803! Multipart backup DOES NOT SEEMS GOOD!\n");
 		myprintf("02804! To prevent corruption no 'holes' in numeration allowed\n");
 		myprintf("02805! Manually fill with 0-bytes [ex touch] to bypass\n");
+		/// 65.11p: a backup -chunk that stopped while its chunks were taking their names (from the last to
+		/// the first): the ones of the hole are still .tmp, and they are whole. NOT to be filled with 0 bytes
+		for (int n= 1; n < 100000000; n++)
+		{
+			const string pezzo= subpart(archive, n);
+			if (fileexists(pezzo))
+				continue;
+			string ancoratmp= pezzo;
+			myreplace(ancoratmp, ".zpaq", ".tmp");
+			if (fileexists(ancoratmp))
+			{
+				color_yellow();
+				myprintf("43812! <<%Z>> is there: a backup -chunk stopped while naming its chunks.\n", ancoratmp.c_str());
+				myprintf("43813! Rename the .tmp of the hole to .zpaq (do NOT fill it with 0-bytes), then testbackup\n");
+				color_restore();
+			}
+			break;
+		}
 		return 2;
+	}
+
+	/// 65.11q: -freeze: the whole backup (parts, index, txt) is put away, and this run starts from part 1
+	{
+		const int gelo= congela();
+		if (gelo == 2)
+			return 2;
+		if (gelo == 1)
+			archivechunks= multipart(archive);
 	}
 
 	if (flagverbose)
@@ -188092,7 +189312,20 @@ int Jidac::backup()
 		fclose(handlepid);
 		g_pid_handle= 0; /// closed: the control-C handler must not fclose() it again
 	}
-	int risultato= add();
+	int risultato= 2;
+	try
+	{
+		risultato= add();
+	}
+	catch (...)
+	{
+		/// 65.11l: a backup that dies (a wrong password, a part that cannot be read...) is not a backup that
+		/// runs: the pid stayed there, and every backup after it "Quit because backup seems running"
+		if (!flagnopid)
+			if (fileexists(g_pidname))
+				delete_file(g_pidname.c_str());
+		throw;
+	}
 
 	if (!flagnopid)
 		if (fileexists(g_pidname))
@@ -191804,7 +193037,13 @@ void Jidac::buildindexchunks(vector<string> &o_chunks)
 			}
 			else
 #endif
-				myprintf("02122: %s +added, %s -removed.\n", migliaia(added), migliaia2(removed));
+			{
+				if (flagnofilelist)
+					myprintf("02122: %s +added, %s -removed.\n", migliaia(added), migliaia2(removed));
+				else
+					myprintf("02121: %s +added, %s -removed ", migliaia(added), migliaia2(removed));
+					
+			}
 		}
 
 }
@@ -192006,7 +193245,7 @@ bool Jidac::filelist_store(OutputArchive &i_out, CompressJob &io_job, vector<uns
 		if (flagverbose)
 			myprintf("65411: -fast history %s bytes, %s new in %d blocks (%s fragments, %s blocks to read) %s ms\n", migliaia(len), migliaia2(newbytes), newblocks, migliaia3(ptr.size()), migliaia4(usati.size()), migliaia5(mtime() - startfl));
 		else
-			myprintf("65411: -fast: history of %s versions stored (%s bytes, %s new)\n", migliaia(ver.size()), migliaia2(len), migliaia3(newbytes));
+			myprintf("65412: stored %s versions in %s\n", migliaia(ver.size()), tohuman(newbytes));
 		color_restore();
 	}
 	return true;
@@ -192115,11 +193354,13 @@ static bool multipartbucato(const string &i_archivio)
 	for (unsigned int i= 1;; ++i)
 	{
 		const string parte= subpart(i_archivio, i);
-		if ((parte == parte0) || (!fileexists(parte)))
+		if ((parte == parte0) || ((!fileexists(parte)) && (!fileexists(parte + ".franzen")))) /// 65.11l: or its franzen file
 			break;
 		presenti= i;
 	}
-	const string oltre= multipartoltre(i_archivio, presenti);
+	string oltre= multipartoltre(i_archivio, presenti);
+	if (oltre == "")
+		oltre= multipartoltre(i_archivio + ".franzen", presenti);
 	if (oltre == "")
 		return false;
 	color_red();
@@ -192245,7 +193486,9 @@ int64_t Jidac::read_archive(callback_function i_advance, const char *arc, int *e
 	}
 	/// a part missing in the middle of a multipart: what follows it would be ignored, silently
 	{
-		const string oltre= multipartoltre(arc, in.filepartnames.size());
+		/// 65.11l: the parts can be franzen files (x_001.zpaq.franzen)
+		const bool	 cifrate= (in.filepartnames.size() > 0) && isfranzen(in.filepartnames[0]) && (!isfranzen(arc));
+		const string oltre	= multipartoltre(cifrate ? string(arc) + ".franzen" : string(arc), in.filepartnames.size());
 		if (oltre != "")
 		{
 			color_red();
@@ -193875,14 +195118,150 @@ void Jidac::blockdecoder()
 }
 
 
+/*
+	65.11c: pakka on a Franzen archive (.zpaq.franzen, with or without AES).
+	pakka reads with the classes of zpaqlist (list_Archive, list_Decompresser),
+	that know AES only: a Franzen archive was noise to them ("archive contains
+	no data", or "zpaqlist:password incorrect" with -key), while l and x went
+	fine. A Franzen archive now goes through InputArchive, the reader of l and
+	x, that decodes it while reading (no temporary copy); any other archive
+	through list_Archive, as before, with the very same output.
+	The decompresser of zpaqlist reads one byte at a time with get(), that
+	InputArchive does not have: a buffer here, and the offset kept with it.
+	Who reads the output of pakka is a program: never a question on the
+	console for a password that is not there, one line and exit code 1
+*/
+class pakka_Archive : public libzpaq::Reader
+{
+	list_Archive  classico;
+	InputArchive *franzen; /// NULL: not a Franzen archive, everything goes to classico
+	vector<char>  buf;	   /// 65.11i: on the heap (64 KB less in the stack frame of pakka_read_archive)
+	int			  bufpos, buflen;
+	int64_t		  logico; /// offset of the next byte get() gives (as zpaq counts it: the AES salt is in)
+
+  public:
+	pakka_Archive() : franzen(NULL), buf(65536), bufpos(0), buflen(0), logico(0)
+	{
+	}
+	~pakka_Archive()
+	{
+		close();
+	}
+	bool open(const char *i_arc)
+	{
+#ifndef NOFRANZEN
+#ifdef ZPAQFULL /// NOSFTPSTART
+		const string nome		= i_arc;
+		const string nomefranzen= isfranzen(nome) ? nome : nome + ".franzen";
+		/// a Franzen archive: named .franzen, or a .zpaq that is not there while its .franzen is
+		if (fileexists(nomefranzen) && is_file_franzen(nomefranzen) && (isfranzen(nome) || !fileexists(nome)))
+		{
+			if (g_franzen == "")
+			{
+				list_print_datetime();
+				printf("zpaqlist:franzen password needed\n");
+				exit(1);
+			}
+			bool anche_aes= false;
+			{
+				franzcri prova(g_franzen.c_str(), g_franzen.length());
+				if (!prova.open(nomefranzen.c_str(), false))
+				{
+					list_print_datetime();
+					printf("zpaqlist:franzen password incorrect\n");
+					exit(1);
+				}
+				anche_aes= prova.get_is_aes_too();
+				prova.close();
+			}
+			if (anche_aes && (g_password == NULL))
+			{
+				list_print_datetime();
+				printf("zpaqlist:password needed (AES + Franzen)\n");
+				exit(1);
+			}
+			franzen= new InputArchive(i_arc);
+			if (!franzen->isopen())
+				return false;
+			logico			 = franzen->tell();
+			list_g_dimensione= franzen->totalsize(); /// the total of the @SPK@ progress lines
+			return true;
+		}
+#endif /// NOSFTPEND
+#endif
+		return classico.open(false, i_arc, g_password);
+	}
+	int get()
+	{
+		if (franzen == NULL)
+			return classico.get();
+		if (bufpos >= buflen)
+		{
+			buflen= franzen->read(&buf[0], (int)buf.size());
+			bufpos= 0;
+			if (buflen <= 0)
+			{
+				buflen= 0;
+				return -1;
+			}
+		}
+		logico++;
+		return (unsigned char)buf[bufpos++];
+	}
+	int read(char *o_buf, int i_n)
+	{
+		if (franzen == NULL)
+			return classico.read(o_buf, i_n);
+		int fatti= 0;
+		while (fatti < i_n)
+		{
+			const int c= get();
+			if (c < 0)
+				break;
+			o_buf[fatti++]= (char)c;
+		}
+		return fatti;
+	}
+	void seek(int64_t i_p, int i_whence)
+	{
+		if (franzen == NULL)
+		{
+			classico.seek(i_p, i_whence);
+			return;
+		}
+		if (i_whence == SEEK_SET)
+			logico= i_p;
+		else if (i_whence == SEEK_CUR)
+			logico+= i_p;
+		else
+			logico= franzen->totalsize() + i_p;
+		franzen->seek(logico, SEEK_SET);
+		bufpos= buflen= 0;
+	}
+	int64_t tell()
+	{
+		return (franzen == NULL) ? classico.tell() : logico;
+	}
+	void close()
+	{
+		if (franzen != NULL)
+		{
+			delete franzen;
+			franzen= NULL;
+		}
+		else
+			classico.close();
+	}
+};
+
 // Read arc (default: archive) up to -date into ht, dt, ver. Return place to
 // append. If errors is not NULL then set it to number of errors found.
 int64_t Jidac::pakka_read_archive(const char *arc)
 {
 	dcsize= dhsize= 0;
 
-	list_Archive in;
-	if (!in.open(false, arc, g_password))
+	pakka_Archive in;
+	if (!in.open(arc))
 	{
 		list_printutf8(arc, stderr);
 		printf(" not found.\n");
@@ -194529,7 +195908,23 @@ int Jidac::pakkalist()
 	list_global_start= mtime(); // get start time
 
 	if (g_output != "")
+	{
+		/*
+			65.11d: -out. The file was open twice: by open_output(), for
+			everything myprintf says (the banner, the time in front of every
+			progress line), and here for the list. Two writers, each one with
+			its own offset: the times landed on top of the first records, and
+			who read the file found them glued together or not at all (127
+			files out of 129, in a test). The file is the list and only the
+			list: the other writer is closed before this one opens
+		*/
+		if (g_output_handle)
+		{
+			fclose(g_output_handle);
+			g_output_handle= NULL;
+		}
 		list_outputlog= fopen(g_output.c_str(), "w");
+	}
 
 	if (list_outputlog == NULL)
 	{
@@ -201704,8 +203099,19 @@ int Jidac::repackfunction(int64_t i_size)
 		if (flagdebug2)
 			myprintf("00927: writejidacheader 2\n");
 
+#ifndef NOFRANZEN
+#ifdef ZPAQFULL /// NOSFTPSTART
+		/// 65.11r //FIX-FRANZEN: with -franzen the C block goes back to its place in the franzen file too (see myfwrite)
+		g_franzen_jidacheader= cstart;
+#endif /// NOSFTPEND
+#endif
 		writeJidacHeader(&out, ver[1].date, csize, 1);
 		out.close();
+#ifndef NOFRANZEN
+#ifdef ZPAQFULL /// NOSFTPSTART
+		g_franzen_jidacheader= -1;
+#endif /// NOSFTPEND
+#endif
 		return 0;
 }
 void Jidac::extractstreaming()
@@ -218258,6 +219664,20 @@ enum
 	USB_STATI
 };
 
+/*
+	65.11g: -n NN on f (1..99): only NN% of the blocks are read/written, picked
+	equispaced along the whole surface (a Bresenham pick: ~NN out of every 100),
+	to trade coverage for time. 0 (or >=100): every block, the old behaviour.
+	The skipped blocks are not an anomaly: they are left out of the statistics,
+	they keep the median honest, and on the map their cells still turn done
+*/
+static inline bool usb_campione(int64_t i_blocco, unsigned int i_perc)
+{
+	if ((i_perc == 0) || (i_perc >= 100))
+		return true;
+	return (uint64_t)((i_blocco * (int64_t)i_perc) % 100) < (uint64_t)i_perc;
+}
+
 /// the platform layer
 class franzusb
 {
@@ -219013,10 +220433,11 @@ class franzdash
 	int64_t					 m_totale;
 #ifdef _WIN32
 	int m_origine; /// first row of the area, in the console buffer
+#else
+	int m_attuale; /// *nix: row of the cursor, inside the area (m_altezza = below it)
 #endif
 	int				m_altezza; /// rows of the whole area: title, 2 info lines, map, legend
 	int				m_colortitolo;
-	int				m_attuale; /// *nix: row of the cursor, inside the area (m_altezza = below it)
 	string			m_titolo;
 	string			m_riga1;
 	string			m_riga2;
@@ -219030,10 +220451,12 @@ class franzdash
 	void			legenda();
 };
 
-franzdash::franzdash() : m_live(false), m_utf8(false), m_righe(0), m_colonne(0), m_celle(0), m_blocchi(1), m_bytesblocco(1), m_totale(0), m_altezza(0), m_colortitolo(0), m_attuale(0)
+franzdash::franzdash() : m_live(false), m_utf8(false), m_righe(0), m_colonne(0), m_celle(0), m_blocchi(1), m_bytesblocco(1), m_totale(0), m_altezza(0), m_colortitolo(0)
 {
 #ifdef _WIN32
 	m_origine= 0;
+#else
+	m_attuale= 0;
 #endif
 }
 int franzdash::aspetto(char i_lettera, int i_colore, bool i_quadrato, const string &i_nome, const char *i_glifo)
@@ -219524,6 +220947,7 @@ class franzusbtest
 	bool interrotto() const { return m_interrotto; }
 	void generatore();
 	void zeri() { m_zero= true; } /// 65.8z1: -zero, zeros instead of the pseudorandom data (written, and expected back)
+	void campiona(unsigned int i_perc) { m_perc= i_perc; } /// 65.11g: -n NN, only NN% of the blocks (equispaced)
 	bool finito() const { return m_finito; }
 	bool guasto() const { return (m_voto[1].errori + m_voto[2].errori + m_voto[2].sbagliati + m_voto[2].rilette) > 0; } /// wrong data or I/O errors, not the speed
 
@@ -219531,6 +220955,7 @@ class franzusbtest
 	franzusb	   &m_usb;
 	franzusbdisco	m_disco;
 	bool			m_zero;
+	unsigned int	m_perc; /// 65.11g: -n NN (0 = every block)
 	bool			m_finito; /// 65.8z1: the files of a folder: no more free space before the end
 	int64_t			m_totale;
 	uint32_t		m_blocco;
@@ -219539,6 +220964,7 @@ class franzusbtest
 	vector<float>	m_tp[3];	/// MB/s of every block, per pass
 	vector<uint8_t> m_stato[3]; /// USB_OK...
 	vector<uint8_t> m_caldo[3]; /// 1: done in the warm-up
+	vector<uint8_t> m_campione[3]; /// 65.11g: 1 = the block was really tested (0 = skipped by -n)
 	int64_t			m_fatti[3]; /// blocks done (a pass stopped by Ctrl+C: fewer)
 	bool			m_fatta[3];
 	double			m_tempo[3];
@@ -219584,7 +221010,7 @@ static void *franzusb_thread(void *i_test)
 	return NULL;
 }
 
-franzusbtest::franzusbtest(franzusb &i_usb, const franzusbdisco &i_disco, uint32_t i_blocco) : m_usb(i_usb), m_disco(i_disco), m_zero(false), m_finito(false), m_totale(0), m_blocco(i_blocco), m_blocchi(0), m_run(0), m_interrotto(false), m_wrapdelta(-1), m_primowrap(-1), m_bitflip(0), m_slcfine(-1), m_slcplateau(0), m_slcprima(0), m_slcdopo(0), m_fermati(0), m_prossimo(0), m_genstop(false), m_genattivo(false)
+franzusbtest::franzusbtest(franzusb &i_usb, const franzusbdisco &i_disco, uint32_t i_blocco) : m_usb(i_usb), m_disco(i_disco), m_zero(false), m_perc(0), m_finito(false), m_totale(0), m_blocco(i_blocco), m_blocchi(0), m_run(0), m_interrotto(false), m_wrapdelta(-1), m_primowrap(-1), m_bitflip(0), m_slcfine(-1), m_slcplateau(0), m_slcprima(0), m_slcdopo(0), m_fermati(0), m_prossimo(0), m_genstop(false), m_genattivo(false)
 {
 	for (int i= 0; i < 3; i++)
 	{
@@ -219773,6 +221199,7 @@ void franzusbtest::passata(int i_tipo)
 	tp.assign((size_t)m_blocchi, 0);
 	stato.assign((size_t)m_blocchi, USB_TODO);
 	caldo.assign((size_t)m_blocchi, 0);
+	m_campione[i_tipo].assign((size_t)m_blocchi, 1);
 	m_fatti[i_tipo]= 0;
 	m_fatta[i_tipo]= true;
 
@@ -219784,6 +221211,12 @@ void franzusbtest::passata(int i_tipo)
 	string titolo= m_disco.nome + "  " + dimensione + "  sector " + settore + "  block " + blocco + "  " + nomi[i_tipo];
 	if (m_zero && (i_tipo != 0))
 		titolo+= " (zeros)";
+	if ((m_perc >= 1) && (m_perc <= 99)) /// 65.11g: -n NN
+	{
+		char nn[16];
+		snprintf(nn, sizeof(nn), " -n %u%%", m_perc);
+		titolo+= nn;
+	}
 	if (!m_usb.diretto())
 		titolo+= " (cached!)";
 	m_mappa.inizia(titolo, m_blocchi, m_totale, m_blocco, i_tipo);
@@ -219833,6 +221266,19 @@ void franzusbtest::passata(int i_tipo)
 		unsigned char *atteso= NULL;
 		if (i_tipo != 0)
 			atteso= attendi(b); /// the data, ready (made by the thread meanwhile)
+		if (!usb_campione(b, m_perc)) /// 65.11g: -n NN, this block is skipped (the generator is kept in sync above)
+		{
+			if (i_tipo != 0)
+				rilascia(b);
+			tp[(size_t)b]				 = 0;
+			caldo[(size_t)b]			 = 0;
+			stato[(size_t)b]			 = USB_OK; /// benign: tp==0 keeps it out of the speed stats, m_campione marks it skipped
+			m_campione[i_tipo][(size_t)b]= 0;
+			m_mappa.blocco(b, USB_OK);
+			m_mappa.corrente(b + 1);
+			m_fatti[i_tipo]= b + 1;
+			continue;
+		}
 		bool   ok	  = false;
 		double secondi= 0;
 		(void)m_usb.pronto(offset, i_tipo == 1, err); /// 65.8z1: a folder: its file open before the clock starts (it fails: the I/O says it)
@@ -220343,8 +221789,19 @@ void franzusbtest::rapporto(int i_tipo)
 	myprintf("68730: %s %s of %s in %s%s\n", nomi[i_tipo], tohuman(fatti > 0 ? (fatti - 1) * (int64_t)m_blocco + quanti(fatti - 1) : 0), tohuman2(m_totale), stempo,
 			 (fatti < m_blocchi) ? "  *** NOT FINISHED ***" : "");
 	scrivibande(i_tipo);
+	/// 65.11g: -n NN, the blocks really tested (skipped ones have tp==0)
+	int64_t provati= 0;
+	for (int64_t b= 0; b < fatti; b++)
+		if ((b >= (int64_t)m_campione[i_tipo].size()) || (m_campione[i_tipo][(size_t)b]))
+			provati++;
+	if ((m_perc >= 1) && (m_perc <= 99))
+	{
+		color_yellow();
+		myprintf("68800$ -n %u%%: only %s of %s blocks tested (equispaced): less coverage, faster\n", m_perc, migliaia(provati), migliaia2(fatti));
+		color_restore();
+	}
 	const double cv		 = media > 0 ? dev / media : 0;
-	const double pctlenti= fatti > 0 ? 100.0 * lenti / fatti : 0;
+	const double pctlenti= provati > 0 ? 100.0 * lenti / provati : 0;
 	/// the color of the numbers: the level of the pass (verify: the data counts too)
 	int livello= m_voto[i_tipo].livello;
 	if ((i_tipo == 2) && (dati > 0))
@@ -220527,9 +221984,16 @@ franzusbvoto franzusbtest::valuta(int i_tipo) const
 	v.rilette  = conta[USB_RETRY];
 	v.sbagliati= conta[USB_DATA] + conta[USB_ZERO] + conta[USB_FF] + conta[USB_OLD] + conta[USB_WRAP];
 	v.stall	   = conta[USB_STALL];
-	v.pctstall = 100.0 * v.stall / fatti;
+	/// 65.11g: -n NN leaves blocks untested (tp==0, m_campione 0): the percentages are over the tested ones
+	int64_t provati= 0;
+	for (int64_t b= 0; b < fatti; b++)
+		if ((b >= (int64_t)m_campione[i_tipo].size()) || (m_campione[i_tipo][(size_t)b]))
+			provati++;
+	if (provati <= 0)
+		provati= 1;
+	v.pctstall = 100.0 * v.stall / provati;
 	v.lenti	   = conta[USB_SLOW];
-	v.pctlenti = 100.0 * v.lenti / fatti;
+	v.pctlenti = 100.0 * v.lenti / provati;
 
 	/// the zones, 32 blocks at least: the median speed (read) and the throughput (write) of the blocks out of the warm-up
 	int zone= (int)(fatti / 32);
@@ -220605,7 +222069,7 @@ franzusbvoto franzusbtest::valuta(int i_tipo) const
 		for (int64_t b= 0; b < fatti; b++)
 			if ((b < (int64_t)m_unavolta[i_tipo].size()) && m_unavolta[i_tipo][(size_t)b])
 				v.unavolta++;
-		v.pctunavolta= 100.0 * v.unavolta / fatti;
+		v.pctunavolta= 100.0 * v.unavolta / provati;
 		if (v.stall > 0) /// reading should never stop
 			v.l_stall= ((v.stall >= FRANZUSB_R_STALLS) && (v.pctstall >= 0.01)) ? 3 : 2;
 		if (v.pctlenti >= FRANZUSB_R_SLOWPCT[1])
@@ -221147,6 +222611,56 @@ static void usb_infounix(franzusbdisco &io_disco)
 
 #ifdef _WIN32
 /*
+	65.11n: what f -nuke writes. Not zeros: a stick can take zeros as "nothing to write", and
+	read back they say nothing (written here? already zero? a write that went nowhere?).
+	Every sector of 512 bytes says where it is, who wrote it, when:
+	   0  F5 'n' 'u' 'k'   (not text, not the head of any kind of file: a carver has nothing to find)
+	   4  1                the layout
+	   5  the round: 1 the MFT, 2 the heads of the files, 3 the files, 4 the rest of the big files
+	                 (-nuke 100), 5 the free space of the new volume
+	   8  the number of the sector, counted from the start of the volume (8 bytes)
+	  16  the number of the run, drawn at random (8 bytes): what an older nuke wrote is not of this one
+	  24  "zpaqnuke"
+	  32  progressive numbers of 4 bytes, going on from a sector to the next
+	 508  "zfnk"
+	Read back (-verify) a block is right only if it is this, byte by byte: a write dropped, or
+	landed on another block (the sticks that are smaller than they say), is seen
+*/
+#define NUKE_SETTORE 512
+#define NUKE_GIRO_LIBERO 5
+static void nuke_modello(unsigned char *o_buffer, int64_t i_offset, int64_t i_bytes, uint64_t i_run, uint8_t i_giro)
+{
+	for (int64_t fatto= 0; fatto + NUKE_SETTORE <= i_bytes; fatto+= NUKE_SETTORE)
+	{
+		unsigned char *p	  = o_buffer + fatto;
+		const uint64_t settore= (uint64_t)(i_offset + fatto) / NUKE_SETTORE;
+		p[0]= 0xF5;
+		p[1]= 'n';
+		p[2]= 'u';
+		p[3]= 'k';
+		p[4]= 1;
+		p[5]= i_giro;
+		p[6]= 0;
+		p[7]= 0;
+		for (int i= 0; i < 8; i++)
+		{
+			p[8 + i] = (unsigned char)(settore >> (8 * i));
+			p[16 + i]= (unsigned char)(i_run >> (8 * i));
+		}
+		memcpy(p + 24, "zpaqnuke", 8);
+		uint32_t numero= (uint32_t)(settore * 119);
+		for (int i= 32; i < 508; i+= 4, numero++)
+		{
+			p[i]	= (unsigned char)numero;
+			p[i + 1]= (unsigned char)(numero >> 8);
+			p[i + 2]= (unsigned char)(numero >> 16);
+			p[i + 3]= (unsigned char)(numero >> 24);
+		}
+		memcpy(p + 508, "zfnk", 4);
+	}
+}
+
+/*
 	65.8z1: f X: -test -force -zero -ntfs. Zeros in every free cluster of an NTFS
 	volume, the files are not touched: what a thin image of a virtual disk wants.
 	The volume is locked first: nothing else can write there meanwhile (so never
@@ -221161,6 +222675,19 @@ class franzzerontfs
 	franzzerontfs();
 	~franzzerontfs();
 	int esegui(char i_lettera);
+	void campiona(unsigned int i_perc) { m_perc= i_perc; } /// 65.11g: -n NN, only NN% of the free-cluster blocks
+	/// 65.11m: the last step of f -nuke NN (on the volume it has just formatted): NN% of the free space
+	/// (100: all of it), no question (the one of the nuke was answered already)
+	/// 65.11n: it writes what the nuke writes (nuke_modello, the round of the free space) and not zeros;
+	/// i_gia: the blocks the first step of the nuke has overwritten already (not 0), of i_blocco bytes
+	void danuke(unsigned int i_perc, uint64_t i_run, const std::vector<uint8_t> *i_gia, int64_t i_blocco)
+	{
+		m_perc		= (i_perc >= 100) ? 0 : i_perc;
+		m_danuke	= true;
+		m_nukerun	= i_run;
+		m_nukegia	= i_gia;
+		m_nukeblocco= i_blocco;
+	}
 
   private:
 	enum
@@ -221190,6 +222717,12 @@ class franzzerontfs
 	bool			 m_interrotto;
 	int64_t			 m_errori;	  /// blocks with an I/O error
 	int64_t			 m_sbagliati; /// blocks read back not all zeros
+	unsigned int	 m_perc;	  /// 65.11g: -n NN (0 = every block)
+	bool			 m_danuke;	  /// 65.11m: see danuke()
+	uint64_t					m_nukerun;
+	const std::vector<uint8_t> *m_nukegia;
+	int64_t						m_nukeblocco;
+	unsigned char			   *m_modello; /// what is written (and expected back) in the block at hand
 	franzdash		 m_dash;
 	int				 m_look[ZL_N];
 	vector<uint32_t> m_celladafare; /// of every cell: its blocks to do, the ones done, the worst one
@@ -221207,7 +222740,7 @@ class franzzerontfs
 	franzzerontfs &operator=(const franzzerontfs &);
 };
 
-franzzerontfs::franzzerontfs() : m_volume(INVALID_HANDLE_VALUE), m_lettera(0), m_cluster(0), m_clusters(0), m_liberi(0), m_usati(NULL), m_blocco(0), m_perblocco(0), m_blocchi(0), m_zeri(NULL), m_letti(NULL), m_interrotto(false), m_errori(0), m_sbagliati(0), m_corrente(-1)
+franzzerontfs::franzzerontfs() : m_volume(INVALID_HANDLE_VALUE), m_lettera(0), m_cluster(0), m_clusters(0), m_liberi(0), m_usati(NULL), m_blocco(0), m_perblocco(0), m_blocchi(0), m_zeri(NULL), m_letti(NULL), m_interrotto(false), m_errori(0), m_sbagliati(0), m_perc(0), m_danuke(false), m_nukerun(0), m_nukegia(NULL), m_nukeblocco(0), m_modello(NULL), m_corrente(-1)
 {
 	for (int i= 0; i < ZL_N; i++)
 		m_look[i]= 0;
@@ -221224,6 +222757,7 @@ franzzerontfs::~franzzerontfs()
 		franz_free(m_usati);
 	franzusb::libera(m_zeri);
 	franzusb::libera(m_letti);
+	franzusb::libera(m_modello);
 }
 
 bool franzzerontfs::leggi(int64_t i_offset, void *o_buffer, uint32_t i_quanti)
@@ -221562,31 +223096,34 @@ void franzzerontfs::corrente(int64_t i_blocco)
 /// a pass on the free clusters: zeros written, or read back and compared
 void franzzerontfs::passata(bool i_verifica)
 {
-	const char	 *nome		 = i_verifica ? "VERIFY" : "ZERO";
+	const char	 *nome		 = i_verifica ? "VERIFY" : (m_danuke ? "WIPE" : "ZERO");
 	const int64_t bytestotali= m_liberi * m_cluster;
 	char		  dimensione[64], blocco[64], liberi[64], titolo[300];
 	snprintf(dimensione, sizeof(dimensione), "%s", tohuman(m_clusters * m_cluster));
 	snprintf(blocco, sizeof(blocco), "%s", tohuman(m_blocco));
 	snprintf(liberi, sizeof(liberi), "%s", tohuman(bytestotali));
 	snprintf(titolo, sizeof(titolo), "%c: NTFS  %s  free %s  cluster %s  block %s  %s", m_lettera, dimensione, liberi, migliaia(m_cluster), blocco, nome);
+	/// 65.11n: f -nuke does not write zeros
+	const char *buono  = i_verifica ? (m_danuke ? "as written" : "zeros") : (m_danuke ? "wiped" : "zeroed");
+	const char *cattivo= m_danuke ? "NOT as written" : "not zeros";
 	m_dash			 = franzdash();
-	m_look[ZL_USATO] = m_dash.aspetto('-', 5, true, "used (not touched)", "\xC2\xB7"); /// U+00B7 middle dot
+	m_look[ZL_USATO] = m_dash.aspetto('-', 5, true, m_danuke ? "not in this step" : "used (not touched)", "\xC2\xB7"); /// U+00B7 middle dot
 	m_look[ZL_TODO]	 = m_dash.aspetto('.', 5, true, "todo");
 	m_look[ZL_ORA]	 = m_dash.aspetto('>', 4, true, "now");
-	m_look[ZL_OK]	 = i_verifica ? m_dash.aspetto('#', 1, true, "zeros") : m_dash.aspetto('#', 6, true, "zeroed");
+	m_look[ZL_OK]	 = i_verifica ? m_dash.aspetto('#', 1, true, buono) : m_dash.aspetto('#', 6, true, buono);
 	m_look[ZL_LENTO] = m_dash.aspetto('s', 2, true, "slow");
 	m_look[ZL_STALLO]= m_dash.aspetto('S', 3, true, "stall");
 	m_look[ZL_ERRORE]= m_dash.aspetto('E', 3, false, "I/O error");
-	m_look[ZL_DATI]	 = m_dash.aspetto('D', 3, false, "not zeros");
-	m_dash.voce(m_look[ZL_OK], i_verifica ? "zeros" : "zeroed");
-	m_dash.voce(m_look[ZL_USATO], "used");
+	m_look[ZL_DATI]	 = m_dash.aspetto('D', 3, false, cattivo);
+	m_dash.voce(m_look[ZL_OK], buono);
+	m_dash.voce(m_look[ZL_USATO], m_danuke ? "not now" : "used");
 	m_dash.voce(m_look[ZL_LENTO], "slow");
 	m_dash.voce(m_look[ZL_STALLO], "stall");
 	m_dash.voce(m_look[ZL_ORA], "now");
 	m_dash.voce(m_look[ZL_TODO], "todo");
 	m_dash.voce(m_look[ZL_ERRORE], "I/O error");
 	if (i_verifica)
-		m_dash.voce(m_look[ZL_DATI], "not zeros");
+		m_dash.voce(m_look[ZL_DATI], cattivo);
 	m_dash.coda("  Ctrl+C=stop");
 	m_corrente= -1;
 	m_dash.inizia(titolo, m_blocchi, m_blocco, m_clusters * m_cluster, m_look[ZL_TODO]);
@@ -221628,6 +223165,8 @@ void franzzerontfs::passata(bool i_verifica)
 		bool		  ok	 = true;
 		bool		  zeri	 = true;
 		int64_t		  c		 = primo;
+		if (m_danuke) /// 65.11n: what goes in this block, sector by sector
+			nuke_modello(m_modello, primo * m_cluster, m_blocco, m_nukerun, NUKE_GIRO_LIBERO);
 		while (c < ultimo) /// every run of free clusters of the block: only those
 		{
 			if (usato(c))
@@ -221640,13 +223179,14 @@ void franzzerontfs::passata(bool i_verifica)
 				f++;
 			const DWORD	   quanti= (DWORD)((f - c) * m_cluster);
 			const uint64_t offset= (uint64_t)c * (uint64_t)m_cluster;
+			const unsigned char *atteso= m_danuke ? m_modello + (size_t)((c - primo) * m_cluster) : m_zeri;
 			OVERLAPPED	   dove; /// synchronous handle: the OVERLAPPED is just the position
 			memset(&dove, 0, sizeof(dove));
 			dove.Offset	   = (DWORD)(offset & 0xFFFFFFFF);
 			dove.OffsetHigh= (DWORD)(offset >> 32);
 			DWORD		 fatti = 0;
 			const double t0	   = franzusb::adesso();
-			const BOOL	 fatto = i_verifica ? ReadFile(m_volume, m_letti, quanti, &fatti, &dove) : WriteFile(m_volume, m_zeri, quanti, &fatti, &dove);
+			const BOOL	 fatto = i_verifica ? ReadFile(m_volume, m_letti, quanti, &fatti, &dove) : WriteFile(m_volume, atteso, quanti, &fatti, &dove);
 			const DWORD	 errore= fatto ? 0 : GetLastError();
 			secondi+= franzusb::adesso() - t0;
 			if ((!fatto) || (fatti != quanti))
@@ -221654,7 +223194,7 @@ void franzzerontfs::passata(bool i_verifica)
 				ultimoerrore= fatto ? (int)ERROR_HANDLE_EOF : (int)errore;
 				ok			= false;
 			}
-			else if (i_verifica && (memcmp(m_letti, m_zeri, quanti) != 0))
+			else if (i_verifica && (memcmp(m_letti, atteso, quanti) != 0))
 				zeri= false;
 			c= f;
 		}
@@ -221716,8 +223256,8 @@ void franzzerontfs::passata(bool i_verifica)
 			usb_velocita(smedia, sizeof(smedia), tempoio > 0 ? bytesfatti / tempoio / 1e6 : 0);
 			usb_velocita(sora, sizeof(sora), ora);
 			snprintf(riga1, sizeof(riga1), "%-6s %5.1f%% %10s/%s ETA %s avg %12s now %12s", nome, 100.0 * passati / bytestotali, fatto, liberi, eeta, smedia, sora);
-			snprintf(riga2, sizeof(riga2), "slow %s  stall %s  I/O errors %s%s%s", migliaia(lenti), migliaia2(stall), migliaia3(errori),
-					 i_verifica ? "  not zeros " : "", i_verifica ? migliaia4(sbagliati) : "");
+			snprintf(riga2, sizeof(riga2), "slow %s  stall %s  I/O errors %s%s%s%s%s", migliaia(lenti), migliaia2(stall), migliaia3(errori),
+					 i_verifica ? "  " : "", i_verifica ? cattivo : "", i_verifica ? " " : "", i_verifica ? migliaia4(sbagliati) : "");
 			if (m_dash.live())
 			{
 				m_dash.righe(riga1, riga2);
@@ -221756,7 +223296,7 @@ void franzzerontfs::passata(bool i_verifica)
 	printbar('-');
 	myprintf("68709: %s %s of %s in %s  avg %s%s\n", nome, tohuman(clusterfatti * m_cluster), tohuman2(bytestotali), stempo, smedia, (clusterfatti < m_liberi) ? "  *** NOT FINISHED ***" : "");
 	usb_colore(((errori + sbagliati) > 0) ? 3 : (i_verifica ? 1 : 6)); /// written: blue, not green
-	myprintf("68728: slow %s  stall %s  I/O errors %s%s%s\n", migliaia(lenti), migliaia2(stall), migliaia3(errori), i_verifica ? "  not zeros " : "", i_verifica ? migliaia4(sbagliati) : "");
+	myprintf("68728: slow %s  stall %s  I/O errors %s%s%s%s%s\n", migliaia(lenti), migliaia2(stall), migliaia3(errori), i_verifica ? "  " : "", i_verifica ? cattivo : "", i_verifica ? " " : "", i_verifica ? migliaia4(sbagliati) : "");
 	color_restore();
 }
 
@@ -221790,6 +223330,8 @@ int franzzerontfs::esegui(char i_lettera)
 	printbar('-');
 	/// 65.9f: over 2 TB too (it was refused since 65.8z10 only because never tried there: positions, clusters
 	/// and counters are all of 64 bits; tried on a volume of 4 TB with files and free clusters above 2 TB)
+	if (!m_danuke) /// 65.11m: f -nuke has said (and asked) its own
+	{
 	color_yellow();
 	myprintf("68776: Zeros in every free cluster of %c:, written straight on the locked volume\n", m_lettera);
 	myprintf("68777: The files are not touched. What was deleted cannot be recovered any more\n");
@@ -221799,6 +223341,7 @@ int franzzerontfs::esegui(char i_lettera)
 	color_restore();
 	if (!getcaptcha("ok", string("Zeros in the free space of ") + m_lettera + ":"))
 		return 1;
+	}
 	m_volume= CreateFileW(utow(volume).c_str(), GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, FILE_FLAG_NO_BUFFERING, NULL);
 	if (m_volume == INVALID_HANDLE_VALUE)
 	{
@@ -221863,6 +223406,54 @@ int franzzerontfs::esegui(char i_lettera)
 		if (!usato(c))
 			m_dafare[(size_t)(c / m_perblocco)]++;
 	}
+	const char *verbo= m_danuke ? "overwritten" : "zeroed";
+	/*
+		65.11n: f -nuke: what its first step has overwritten (the files of before) is free space of the
+		new volume: not written again. The blocks are the same if -buffer and the clusters are the same
+		(if not, everything is written: twice, but right)
+	*/
+	if (m_danuke && (m_nukegia != NULL) && (m_nukeblocco == m_blocco))
+	{
+		int64_t gia= 0;
+		for (int64_t b= 0; (b < m_blocchi) && (b < (int64_t)m_nukegia->size()); b++)
+			if (((*m_nukegia)[(size_t)b] != 0) && (m_dafare[(size_t)b] > 0))
+			{
+				gia+= m_dafare[(size_t)b];
+				m_dafare[(size_t)b]= 0;
+			}
+		if (gia > 0)
+		{
+			myprintf("68841: %s of the free space was overwritten already by the first step: not written again\n", tohuman(gia * m_cluster));
+			m_liberi-= gia;
+		}
+		if (m_liberi <= 0)
+		{
+			myprintf("68842: %c: nothing else to overwrite\n", m_lettera);
+			return 0;
+		}
+	}
+	if ((m_perc >= 1) && (m_perc <= 99)) /// 65.11g: -n NN, keep only NN% of the work-blocks (equispaced)
+	{
+		int64_t idx= 0, nuovo= 0;
+		for (int64_t b= 0; b < m_blocchi; b++)
+			if (m_dafare[(size_t)b] > 0)
+			{
+				if (usb_campione(idx, m_perc))
+					nuovo+= m_dafare[(size_t)b];
+				else
+					m_dafare[(size_t)b]= 0; /// skipped
+				idx++;
+			}
+		color_yellow();
+		myprintf("68801$ %s %u%%: only %s of %s free clusters %s (equispaced): less coverage, faster\n", m_danuke ? "-nuke" : "-n", m_perc, migliaia(nuovo), migliaia2(m_liberi), verbo);
+		color_restore();
+		m_liberi= nuovo;
+		if (m_liberi == 0)
+		{
+			myprintf("68802: %c: nothing to do after -n\n", m_lettera);
+			return 0;
+		}
+	}
 	m_zeri = (unsigned char *)franzusb::riserva((size_t)m_blocco);
 	m_letti= (unsigned char *)franzusb::riserva((size_t)m_blocco);
 	if ((m_zeri == NULL) || (m_letti == NULL))
@@ -221871,6 +223462,15 @@ int franzzerontfs::esegui(char i_lettera)
 		return 2;
 	}
 	memset(m_zeri, 0, (size_t)m_blocco);
+	if (m_danuke)
+	{
+		m_modello= (unsigned char *)franzusb::riserva((size_t)m_blocco);
+		if (m_modello == NULL)
+		{
+			myprintf("68783! Cannot allocate the buffers (block %s)\n", migliaia(m_blocco));
+			return 2;
+		}
+	}
 	passata(false);
 	const bool riletto= flagverify && (!m_interrotto);
 	if (riletto)
@@ -221878,21 +223478,1183 @@ int franzzerontfs::esegui(char i_lettera)
 	printbar('=');
 	if ((m_errori + m_sbagliati) > 0)
 	{
-		myprintf("68785! %c: NOT all the free space is zeroed: blocks with I/O errors %s, read back not zeros %s\n", m_lettera, migliaia(m_errori), migliaia2(m_sbagliati));
+		myprintf("68785! %c: NOT all the free space is %s: blocks with I/O errors %s, read back %s %s\n", m_lettera, verbo, migliaia(m_errori), m_danuke ? "NOT as written" : "not zeros", migliaia2(m_sbagliati));
 		return 2;
 	}
 	if (m_interrotto)
 	{
 		color_yellow();
-		myprintf("68786$ Stopped before the end: the free space of %c: is zeroed only in part\n", m_lettera);
+		myprintf("68786$ Stopped before the end: the free space of %c: is %s only in part\n", m_lettera, verbo);
 		color_restore();
 		return 1;
 	}
 	usb_colore(riletto ? 1 : 6);
-	myprintf("68729: +OK the free space of %c: is zeroed: %s%s\n", m_lettera, tohuman(m_liberi * m_cluster), riletto ? ", read back" : " (not read back: -verify)");
+	myprintf("68729: +OK the free space of %c: is %s: %s%s\n", m_lettera, verbo, tohuman(m_liberi * m_cluster), riletto ? ", read back" : " (not read back: -verify)");
 	color_restore();
 	return 0;
 }
+
+// ============================================================================
+//  franznuke – Fast NTFS sanitize for USB sticks (non-secure)
+//  65.11m: three steps (65.11n: not zeros: see nuke_modello; -verify reads back)
+//  1. what the NTFS itself points at is overwritten (fast: it is as big as
+//     the data on the stick, not as the stick):
+//    • first + last 64 MB of the volume
+//    • the system files, whole: $MFT (the names, the small files), $MFTMirr,
+//      $LogFile, $Bitmap, $Secure...
+//    • every extent the MFT knows: of the files, of the DELETED ones (their
+//      records are still there, and say where the data was), of the folders
+//      (the indexes: names again), of the streams. The first 16 MB and the
+//      last 1 MB of each: a file up to 16 MB is wiped whole
+//    • with -nuke 100 (65.11n): the rest of the bigger files too, and whatever
+//      else the $Bitmap says is in use. The data of before FIRST, whole
+//  2. the volume is formatted: an empty NTFS, ready to be used
+//  3. NN% of the free space of the new volume is overwritten (all of it
+//     with 100): what was deleted long ago, with NN below 100 the body of the
+//     big files. The long step, and the one Ctrl+C can stop at any time: the
+//     stick is good as it is
+// ============================================================================
+
+static constexpr int64_t NUKE_BORDO = 64LL << 20;   // begin + end of partition
+static constexpr int64_t NUKE_TESTA = 16LL << 20;   // head of every file (up to this size: the whole file)
+static constexpr int64_t NUKE_CODA  = 1LL << 20;    // tail of the bigger ones
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+struct nuke_run
+{
+    int64_t vcn;      // where it is inside the file, in clusters
+    int64_t lcn;      // where it is on the volume
+    int64_t count;
+};
+
+// The runs of a non-resident attribute, with their place inside the file (a
+// sparse piece has no clusters: skipped, but it counts). end_vcn: where the
+// last one ends
+static bool nuke_runs(const unsigned char* attr, uint32_t len,
+                      int64_t total_clusters,
+                      std::vector<nuke_run>& out, int64_t* end_vcn = nullptr)
+{
+    out.clear();
+    if (len < 64 || attr[8] == 0) return false;          // resident
+
+    uint16_t run_offset;
+    memcpy(&run_offset, attr + 32, 2);
+    if (run_offset < 64 || run_offset >= len) return false;
+
+    int64_t vcn = 0;                                     // lowest VCN of this piece
+    memcpy(&vcn, attr + 16, 8);
+    if (vcn < 0) return false;
+
+    const unsigned char* p    = attr + run_offset;
+    const unsigned char* end  = attr + len;
+    int64_t              lcn  = 0;
+
+    while (p < end && *p)
+    {
+        const int nl = *p & 0x0F;
+        const int nd = (*p >> 4) & 0x0F;
+        ++p;
+
+        if (nl == 0 || nl > 8 || nd > 8 || p + nl + nd > end)
+            return false;
+
+        uint64_t count = 0;
+        for (int i = 0; i < nl; ++i)
+            count |= uint64_t(*p++) << (8 * i);
+
+        if (count == 0 || count > (uint64_t(1) << 52))
+            return false;
+
+        if (nd == 0)                                     // sparse hole
+        {
+            vcn += int64_t(count);
+            continue;
+        }
+
+        uint64_t delta = 0;
+        for (int i = 0; i < nd; ++i)
+            delta |= uint64_t(*p++) << (8 * i);
+
+        if (nd < 8 && (delta >> (nd * 8 - 1)) & 1)       // sign-extend
+            delta |= ~uint64_t(0) << (nd * 8);
+
+        lcn += int64_t(delta);
+
+        if (lcn < 0 ||
+            count > uint64_t(total_clusters) ||
+            lcn + int64_t(count) > total_clusters)
+            return false;
+
+        nuke_run r;
+        r.vcn   = vcn;
+        r.lcn   = lcn;
+        r.count = int64_t(count);
+        out.push_back(r);
+        vcn += int64_t(count);
+    }
+    if (end_vcn)
+        *end_vcn = vcn;
+    return !out.empty();
+}
+
+static bool nuke_fixup(unsigned char* rec, uint32_t recsize)
+{
+    uint16_t usa_off, usa_count;
+    memcpy(&usa_off,   rec + 4, 2);
+    memcpy(&usa_count, rec + 6, 2);
+
+    if (usa_count < 2 ||
+        int64_t(usa_count - 1) * 512 != int64_t(recsize) ||
+        int64_t(usa_off) + 2 * usa_count > int64_t(recsize))
+        return false;
+
+    for (int i = 1; i < usa_count; ++i)
+    {
+        unsigned char* tail = rec + i * 512 - 2;
+        if (memcmp(tail, rec + usa_off, 2) != 0)
+            return false;
+        memcpy(tail, rec + usa_off + 2 * i, 2);
+    }
+    return true;
+}
+
+static const unsigned char* nuke_trovadata(const unsigned char* rec,
+                                           uint32_t recsize,
+                                           uint32_t& out_len)
+{
+    uint16_t first;
+    memcpy(&first, rec + 20, 2);
+    int64_t off = first;
+
+    while (off + 16 <= int64_t(recsize))
+    {
+        uint32_t type, size;
+        memcpy(&type, rec + off,     4);
+        memcpy(&size, rec + off + 4, 4);
+
+        if (type == 0xFFFFFFFF || size < 16 || off + size > int64_t(recsize))
+            break;
+
+        if (type == 0x80 && rec[off + 9] == 0)           // unnamed $DATA
+        {
+            out_len = size;
+            return rec + off;
+        }
+        off += size;
+    }
+    return nullptr;
+}
+
+// A buffer for the raw reads and writes (FILE_FLAG_NO_BUFFERING wants it aligned
+// to the sector: a plain new[] is not, and not every USB bridge forgives it)
+struct nuke_buffer
+{
+    unsigned char* p;
+    explicit nuke_buffer(size_t bytes) : p(static_cast<unsigned char*>(franzusb::riserva(bytes))) {}
+    ~nuke_buffer() { franzusb::libera(p); }
+    unsigned char* get() const { return p; }
+    explicit operator bool() const { return p != nullptr; }
+    nuke_buffer(const nuke_buffer&)            = delete;
+    nuke_buffer& operator=(const nuke_buffer&) = delete;
+};
+
+// fmifs.dll: the formatter of Windows (the one of format.com and of Explorer)
+typedef BOOLEAN (WINAPI* nuke_fmifs_callback)(int command, DWORD modifier, PVOID argument);
+typedef VOID (WINAPI* nuke_fmifs_formatex)(PWCHAR root, DWORD media, PWCHAR filesystem, PWCHAR label,
+                                           BOOL quick, DWORD cluster_size, nuke_fmifs_callback callback);
+static bool g_nuke_formatted = false;
+static BOOLEAN WINAPI nuke_format_callback(int command, DWORD, PVOID argument)
+{
+    if (command == 11 && argument != nullptr)            // FCC_DONE: a BOOLEAN, how it went
+        g_nuke_formatted = (*static_cast<BOOLEAN*>(argument)) != 0;
+    return TRUE;
+}
+
+// ---------------------------------------------------------------------------
+// Class
+// ---------------------------------------------------------------------------
+
+class franznuke
+{
+public:
+    franznuke() = default;
+    ~franznuke();
+
+    // returns 0 = OK, 1 = interrupted, 2 = error
+    int esegui(char letter, int percent, const std::wstring& label);
+
+private:
+    enum class CellState : uint8_t
+    {
+        Empty = 0,   // never touched
+        Todo,
+        Now,
+        Ok,
+        OkBig,       // wiped in the fourth round (-nuke 100: the rest of the big files)
+        Slow,
+        Stall,
+        Error,
+        Count
+    };
+
+    // ---- members ----------------------------------------------------------
+    HANDLE   m_volume   = INVALID_HANDLE_VALUE;
+    char     m_letter   = 0;
+    int      m_perc     = 0;
+
+    int64_t  m_cluster  = 0;
+    int64_t  m_clusters = 0;
+    int64_t  m_length   = 0;          // bytes of the whole partition
+    int64_t  m_recsize  = 0;
+    int64_t  m_mftlcn   = 0;
+    int64_t  m_mftmirrlcn = 0;
+
+    int64_t  m_block    = 0;          // surface block size (bytes)
+    int64_t  m_perblock = 0;          // clusters per block
+    int64_t  m_blocks   = 0;
+
+    unsigned char* m_fill = nullptr;  // what is written in the block at hand (nuke_modello)
+    unsigned char* m_back = nullptr;  // -verify: what is read back
+    uint64_t       m_run  = 0;        // the number of this run, in every sector written
+    // 0 = left alone; else the round it is wiped in (the most urgent first, should a Ctrl+C come):
+    // 1 = the $MFT (small: the names, where the files are, the little files themselves)
+    // 2 = where every file begins (its head: what a carver looks for), the indexes of the folders
+    // 3 = the rest: the other system files, the files up to NUKE_TESTA, the tails, the borders
+    // 4 = -nuke 100 only: the rest of the bigger files, and what else the $Bitmap says is in use
+    std::vector<uint8_t>             m_todo;
+    int64_t                          m_todo_count = 0;
+    int                              m_round      = 0;    // the round a Ctrl+C came in (0: none)
+
+    // what the MFT said (for the user)
+    int64_t  m_records  = 0;          // records with something on the volume
+    int64_t  m_deleted  = 0;          // of which: of deleted files
+    int64_t  m_extents  = 0;          // their lists of clusters
+    int64_t  m_whole    = 0;          // of which: up to NUKE_TESTA, wiped whole
+    int64_t  m_older    = 0;          // records of an older filesystem, found after the $MFT
+    std::vector<nuke_run> m_bitmap_runs;       // where the $Bitmap is (-nuke 100: the net)
+    int64_t  m_bitmap_bytes = 0;
+    int64_t  m_bitmap_more  = 0;      // blocks in use that the MFT did not point at
+    int64_t  m_wrong    = 0;          // -verify: blocks read back that are not what was written
+
+    bool     m_stopped  = false;
+    int64_t  m_errors   = 0;
+    int      m_last_error = 0;
+
+    // dashboard
+    franzdash                m_dash;
+    int                      m_look[static_cast<int>(CellState::Count)]{};
+    std::vector<uint32_t>    m_cell_todo;
+    std::vector<uint32_t>    m_cell_done;
+    std::vector<uint8_t>     m_cell_worst;
+    std::vector<uint32_t>    m_cell_big;      // blocks of the fourth round in the cell
+    int64_t                  m_current_cell = -1;
+
+    // ---- private methods --------------------------------------------------
+    bool read (int64_t offset, void* buf, uint32_t size);
+    bool write(int64_t offset, const void* buf, uint32_t size);
+
+    bool boot(std::string& err);
+    bool read_mft(std::string& err);
+    bool record(unsigned char* r, int64_t idx, std::vector<nuke_run>* mft_runs);
+    void older_records(int64_t from, unsigned char* scratch, uint32_t scratch_size, unsigned char* rec);
+
+    void mark(int64_t lcn, int64_t clusters, uint8_t round);   // mark surface blocks
+    void target(const std::vector<nuke_run>& runs, int64_t end_vcn, uint8_t whole);
+    void update_cell(int64_t cell);
+    void set_current(int64_t block);
+
+    void mark_used();
+    bool phase_wipe();
+    void phase_verify();
+    bool format(const std::wstring& label);
+
+    // non-copyable
+    franznuke(const franznuke&)            = delete;
+    franznuke& operator=(const franznuke&) = delete;
+};
+
+// ---------------------------------------------------------------------------
+// Implementation
+// ---------------------------------------------------------------------------
+
+franznuke::~franznuke()
+{
+    if (m_volume != INVALID_HANDLE_VALUE)
+    {
+        DWORD dummy = 0;
+        DeviceIoControl(m_volume, FSCTL_UNLOCK_VOLUME, nullptr, 0, nullptr, 0, &dummy, nullptr);
+        CloseHandle(m_volume);
+    }
+    franzusb::libera(m_fill);
+    franzusb::libera(m_back);
+}
+
+bool franznuke::read(int64_t offset, void* buf, uint32_t size)
+{
+    OVERLAPPED ov = {};
+    ov.Offset     = DWORD(uint64_t(offset) & 0xFFFFFFFFu);
+    ov.OffsetHigh = DWORD(uint64_t(offset) >> 32);
+    DWORD done    = 0;
+    return ReadFile(m_volume, buf, size, &done, &ov) && done == size;
+}
+
+bool franznuke::write(int64_t offset, const void* buf, uint32_t size)
+{
+    OVERLAPPED ov = {};
+    ov.Offset     = DWORD(uint64_t(offset) & 0xFFFFFFFFu);
+    ov.OffsetHigh = DWORD(uint64_t(offset) >> 32);
+    DWORD done    = 0;
+    return WriteFile(m_volume, buf, size, &done, &ov) && done == size;
+}
+
+bool franznuke::boot(std::string& err)
+{
+    nuke_buffer scratch(4096);
+    if (!scratch)
+    {
+        err = "no memory";
+        return false;
+    }
+
+    err = "not NTFS";
+    if (!read(0, scratch.get(), 4096))
+    {
+        err = "boot sector unreadable: " + franzusb::errore(int(GetLastError()));
+        return false;
+    }
+
+    ntfsbootsector bs;
+    memcpy(&bs, scratch.get(), sizeof(bs));
+    if (memcmp(bs.oemid, "NTFS    ", 8) != 0)
+        return false;
+
+    const uint32_t sector = bs.bytespersector;
+    if (sector < 512 || sector > 4096 || (sector & (sector - 1)) != 0)
+        return false;
+
+    uint32_t spc = bs.sectorspercluster;
+    if (spc > 0x80)
+        spc = 1u << (256 - spc);
+
+    m_cluster = int64_t(sector) * spc;
+    if (m_cluster < 512 || m_cluster > (64LL << 20))
+        return false;
+
+    m_recsize = (bs.clusterspermftrecord > 0)
+                    ? int64_t(bs.clusterspermftrecord) * m_cluster
+                    : (1LL << (-bs.clusterspermftrecord));
+
+    if (m_recsize < 512 || m_recsize > 65536 || (m_recsize % sector) != 0)
+        return false;
+
+    if (bs.mftlcn == 0 || int64_t(bs.mftlcn) >= m_length / m_cluster)
+        return false;
+
+    m_mftlcn     = int64_t(bs.mftlcn);
+    m_mftmirrlcn = int64_t(bs.mftmirrlcn);
+    m_clusters   = int64_t(bs.totalsectors) / spc;
+    if (m_clusters <= 0)
+        return false;
+
+    return true;
+}
+
+// What must be wiped of a list of clusters: all of it (whole: in that round),
+// or its first NUKE_TESTA and its last NUKE_CODA, counted inside the file
+void franznuke::target(const std::vector<nuke_run>& runs, int64_t end_vcn, uint8_t whole)
+{
+    const int64_t head      = (NUKE_TESTA + m_cluster - 1) / m_cluster;
+    const int64_t tail_from = end_vcn - (NUKE_CODA + m_cluster - 1) / m_cluster;
+
+    for (const auto& r : runs)
+    {
+        if (whole != 0)
+        {
+            mark(r.lcn, r.count, whole);
+            continue;
+        }
+        if (r.vcn == 0)
+            mark(r.lcn, 1, 2);               // where the file begins: before the rest
+        if (r.vcn < head)
+            mark(r.lcn, std::min(r.count, head - r.vcn), 3);
+        if (r.vcn + r.count > tail_from)
+        {
+            const int64_t from = std::max(r.vcn, tail_from);
+            mark(r.lcn + (from - r.vcn), r.vcn + r.count - from, 3);
+        }
+        if (m_perc >= 100)
+            mark(r.lcn, r.count, 4);         // -nuke 100: all of it, what is left for last
+    }
+}
+
+// One record of an MFT (r: a copy, it is changed): what its attributes point
+// at goes into the plan. idx: its number (the first 16 are the system files,
+// wiped whole). mft_runs: if given, another piece of the $MFT itself is added
+// there (to be walked too). False: not a good record
+bool franznuke::record(unsigned char* r, int64_t idx, std::vector<nuke_run>* mft_runs)
+{
+    if (memcmp(r, "FILE", 4) != 0 || !nuke_fixup(r, uint32_t(m_recsize)))
+        return false;
+
+    uint16_t flags;
+    memcpy(&flags, r + 22, 2);
+
+    // whose record it is: its own, or (an extension) of a base record
+    uint64_t base;
+    memcpy(&base, r + 32, 8);
+    const int64_t owner  = (base != 0) ? int64_t(base & 0xFFFFFFFFFFFFULL) : idx;
+    const bool    system = owner < 16;       // $MFT, $LogFile, $Bitmap, $Secure...: whole
+
+    // every attribute with clusters of its own: $DATA (the unnamed one
+    // and the streams), the index of a folder, a long list of attributes...
+    uint16_t first;
+    memcpy(&first, r + 20, 2);
+    int64_t a   = first;
+    bool    any = false;
+    bool    good = false;
+    while (a + 16 <= m_recsize)
+    {
+        uint32_t type, size;
+        memcpy(&type, r + a,     4);
+        memcpy(&size, r + a + 4, 4);
+        if (type == 0xFFFFFFFF)
+        {
+            good = true;                     // the end of the attributes, where it must be
+            break;
+        }
+        if (size < 16 || a + size > m_recsize)
+            break;
+
+        std::vector<nuke_run> runs;
+        int64_t               end_vcn = 0;
+        if (r[a + 8] != 0 && nuke_runs(r + a, size, m_clusters, runs, &end_vcn))
+        {
+            // one more piece of the $MFT itself: its records are walked too
+            if (mft_runs != nullptr && owner == 0 && type == 0x80 && r[a + 9] == 0 && runs[0].vcn > 0)
+                for (const auto& x : runs)
+                    mft_runs->push_back(x);
+
+            // the $Bitmap (record 6): which clusters are in use, for -nuke 100
+            if (owner == 6 && base == 0 && type == 0x80 && r[a + 9] == 0 && runs[0].vcn == 0)
+            {
+                m_bitmap_runs = runs;
+                memcpy(&m_bitmap_bytes, r + a + 48, 8);
+            }
+
+            // all of it: the $MFT and its mirror (at once), the other system files (with the
+            // rest), the index of a folder (0xA0: the names of its files, with the heads)
+            uint8_t whole = 0;
+            if (owner <= 1)
+                whole = 1;
+            else if (system)
+                whole = 3;
+            else if (type == 0xA0)
+                whole = 2;
+            target(runs, end_vcn, whole);
+            any = true;
+            ++m_extents;
+            if (!system && runs[0].vcn == 0 && end_vcn * m_cluster <= NUKE_TESTA)
+                ++m_whole;
+        }
+        a += size;
+    }
+    if (any)
+    {
+        ++m_records;
+        if ((flags & 1) == 0)
+            ++m_deleted;
+    }
+    return good;
+}
+
+/*
+    The stick was formatted before (once, many times): the MFT of now is new,
+    and short. The one of before began at the same place and went on after it:
+    its records are still there, with the names and the place of the files of
+    before (what "unformat" tools look for). From the end of the $MFT on, as
+    long as records are found: each one is treated as the others, and wiped.
+    A few MB read; nothing found (the common case): 8 MB read
+*/
+void franznuke::older_records(int64_t from, unsigned char* scratch, uint32_t scratch_size, unsigned char* rec)
+{
+    const int64_t quiet_max = 8LL << 20;     // this much with no record: the end
+    int64_t       quiet     = 0;
+    const uint32_t chunk    = (scratch_size / uint32_t(m_recsize)) * uint32_t(m_recsize);
+
+    for (int64_t offset = from; offset + chunk <= m_length && quiet < quiet_max && !g_usbtest_stop; offset += chunk)
+    {
+        if (!read(offset, scratch, chunk))
+            break;
+        bool found = false;
+        for (uint32_t off = 0; off + m_recsize <= chunk; off += uint32_t(m_recsize))
+        {
+            if (memcmp(scratch + off, "FILE", 4) != 0) continue;
+            memcpy(rec, scratch + off, size_t(m_recsize));
+            uint32_t number;                 // its own number (NTFS 3.1: written in the record)
+            memcpy(&number, rec + 44, 4);
+            if (!record(rec, (number < 16) ? 16 : int64_t(number), nullptr))
+                continue;
+            mark((offset + off) / m_cluster, (m_recsize + m_cluster - 1) / m_cluster, 1);
+            ++m_older;
+            found = true;
+        }
+        quiet = found ? 0 : quiet + chunk;
+    }
+}
+
+bool franznuke::read_mft(std::string& err)
+{
+    constexpr uint32_t SCRATCH = 1u << 20;
+    nuke_buffer scratch(SCRATCH);
+    auto rec     = std::make_unique<unsigned char[]>(size_t(m_recsize));
+
+    if (!scratch || !rec)
+    {
+        err = "no memory";
+        return false;
+    }
+
+    // ---- record 0 ($MFT) --------------------------------------------------
+    std::vector<nuke_run> mft_runs;
+    if (!read(m_mftlcn * m_cluster, scratch.get(), uint32_t(m_recsize)))
+    {
+        err = "MFT unreadable: " + franzusb::errore(int(GetLastError()));
+        return false;
+    }
+
+    memcpy(rec.get(), scratch.get(), size_t(m_recsize));
+    if (memcmp(rec.get(), "FILE", 4) != 0 || !nuke_fixup(rec.get(), uint32_t(m_recsize)))
+    {
+        err = "MFT record 0 invalid";
+        return false;
+    }
+
+    uint32_t data_len = 0;
+    const unsigned char* data = nuke_trovadata(rec.get(), uint32_t(m_recsize), data_len);
+    if (!data || !nuke_runs(data, data_len, m_clusters, mft_runs))
+    {
+        err = "MFT runlist unreadable";
+        return false;
+    }
+
+    // mark whole MFT
+    for (const auto& r : mft_runs)
+        mark(r.lcn, r.count, 1);
+
+    // $MFTMirr (first 4 records)
+    mark(m_mftmirrlcn, (4 * m_recsize + m_cluster - 1) / m_cluster, 1);
+
+    // ---- walk every record ------------------------------------------------
+    // In use or not: the record of a deleted file is still there until it is
+    // used again, and says where the data was (what an undelete goes by).
+    // mft_runs can grow on the way: the other pieces of a fragmented $MFT
+    int64_t idx = 0;
+    for (size_t ri = 0; ri < mft_runs.size() && !g_usbtest_stop; ++ri)
+    {
+        int64_t offset = mft_runs[ri].lcn * m_cluster;
+        int64_t remain = mft_runs[ri].count * m_cluster;
+
+        while (remain > 0 && !g_usbtest_stop)
+        {
+            uint32_t chunk = (remain > SCRATCH)
+                                 ? (SCRATCH / uint32_t(m_recsize)) * uint32_t(m_recsize)
+                                 : uint32_t(remain);
+            if (chunk == 0) chunk = uint32_t(m_recsize);
+
+            if (!read(offset, scratch.get(), chunk))
+            {
+                // skip unreadable portion
+                remain -= chunk;
+                offset += chunk;
+                idx    += chunk / m_recsize;
+                continue;
+            }
+
+            for (uint32_t off = 0; off + m_recsize <= chunk; off += uint32_t(m_recsize), ++idx)
+            {
+                if (memcmp(scratch.get() + off, "FILE", 4) != 0) continue;
+
+                memcpy(rec.get(), scratch.get() + off, size_t(m_recsize));
+                record(rec.get(), idx, &mft_runs);
+            }
+
+            remain -= chunk;
+            offset += chunk;
+        }
+    }
+
+    // what is left of an older MFT, after this one
+    if (!g_usbtest_stop)
+        older_records((mft_runs[0].lcn + mft_runs[0].count) * m_cluster, scratch.get(), SCRATCH, rec.get());
+    return true;
+}
+
+void franznuke::mark(int64_t lcn, int64_t clusters, uint8_t round)
+{
+    if (lcn < 0 || clusters <= 0 || m_block <= 0) return;
+
+    int64_t a = lcn * m_cluster;
+    int64_t b = (lcn + clusters) * m_cluster;
+    if (b > m_length) b = m_length;
+    if (a >= b) return;
+
+    for (int64_t x = a / m_block; x <= (b - 1) / m_block; ++x)
+    {
+        if (x < 0 || x >= m_blocks) continue;
+        if (m_todo[size_t(x)] == 0)
+            ++m_todo_count;
+        if (m_todo[size_t(x)] == 0 || m_todo[size_t(x)] > round)
+            m_todo[size_t(x)] = round;       // the earliest round asked for this block
+    }
+}
+
+// -nuke 100: every cluster the $Bitmap says is in use goes in the last round.
+// The MFT has said almost all of it already (and more: the deleted files):
+// this is the net under it, for what a record did not say or was not read
+void franznuke::mark_used()
+{
+    if (m_bitmap_runs.empty() || m_bitmap_bytes <= 0)
+        return;
+    const int64_t chunk = std::max<int64_t>(1 << 20, m_cluster);
+    nuke_buffer   buf(static_cast<size_t>(chunk));
+    if (!buf)
+        return;
+
+    const int64_t before  = m_todo_count;
+    int64_t       cluster = 0;        // the one the next bit is about
+    int64_t       from    = -1;       // a stretch of clusters in use, still open
+    int64_t       left    = m_bitmap_bytes;
+
+    for (size_t i = 0; i < m_bitmap_runs.size() && left > 0; ++i)
+    {
+        int64_t offset = m_bitmap_runs[i].lcn * m_cluster;
+        int64_t remain = m_bitmap_runs[i].count * m_cluster;
+        while (remain > 0 && left > 0)
+        {
+            const uint32_t n = uint32_t(std::min(remain, chunk));
+            if (!read(offset, buf.get(), n))
+                return;
+            const int64_t valid = std::min<int64_t>(n, left);
+            for (int64_t k = 0; k < valid; ++k)
+            {
+                const unsigned char byte = buf.get()[k];
+                for (int bit = 0; bit < 8; ++bit, ++cluster)
+                {
+                    const bool used = ((byte >> bit) & 1) != 0;
+                    if (used && from < 0)
+                        from = cluster;
+                    else if (!used && from >= 0)
+                    {
+                        mark(from, cluster - from, 4);
+                        from = -1;
+                    }
+                }
+            }
+            left   -= valid;
+            remain -= n;
+            offset += n;
+        }
+    }
+    if (from >= 0)
+        mark(from, cluster - from, 4);
+    m_bitmap_more = m_todo_count - before;
+}
+
+// -verify: every block of step 1 is read back. It must hold what was written
+// there: the place, the round, the run. Ctrl+C: enough of it
+void franznuke::phase_verify()
+{
+    const double refresh = m_dash.live() ? FRANZUSB_REFRESH : 10.0;
+    double  last = 0;
+    int64_t done = 0;
+
+    g_usbtest_stop   = false;
+    g_usbtest_attivo = true;
+    for (int64_t b = 0; b < m_blocks && !g_usbtest_stop; ++b)
+    {
+        const uint8_t round = m_todo[size_t(b)];
+        if (round == 0) continue;
+
+        const int64_t offset = b * m_block;
+        const uint32_t n = (offset + m_block <= m_length)
+                               ? uint32_t(m_block)
+                               : uint32_t(m_length - offset);
+        nuke_modello(m_fill, offset, n, m_run, round);
+        if (!read(offset, m_back, n))
+        {
+            ++m_errors;
+            m_last_error = int(GetLastError());
+        }
+        else if (memcmp(m_back, m_fill, n) != 0)
+            ++m_wrong;
+
+        ++done;
+        const double now = franzusb::adesso();
+        if (now - last >= refresh || done >= m_todo_count)
+        {
+            myprintf("68845: VERIFY %5.1f%% %10s/%s  not as written %s\r", 100.0 * done / m_todo_count,
+                     tohuman(done * m_block), tohuman2(m_todo_count * m_block), migliaia(m_wrong));
+            last = now;
+        }
+    }
+    g_usbtest_attivo = false;
+    myprintf("\n");
+    if (g_usbtest_stop)
+    {
+        m_stopped = true;
+        m_round   = 5;
+    }
+}
+
+void franznuke::update_cell(int64_t cell)
+{
+    if (cell < 0 || cell >= m_dash.celle()) return;
+
+    const size_t c = size_t(cell);
+    const uint8_t worst = m_cell_worst[c];
+    int look = m_look[static_cast<int>((c < m_cell_big.size() && m_cell_big[c] > 0) ? CellState::OkBig : CellState::Ok)];
+
+    if      (worst == USB_STALL)                 look = m_look[static_cast<int>(CellState::Stall)];
+    else if (worst >  USB_STALL)                 look = m_look[static_cast<int>(CellState::Error)];
+    else if (m_cell_todo[c] == 0)                look = m_look[static_cast<int>(CellState::Empty)];
+    else if (m_cell_done[c] < m_cell_todo[c])
+        look = (m_cell_done[c] > 0 || cell == m_current_cell)
+                   ? m_look[static_cast<int>(CellState::Now)]
+                   : m_look[static_cast<int>(CellState::Todo)];
+    else if (worst == USB_SLOW)                  look = m_look[static_cast<int>(CellState::Slow)];
+
+    m_dash.imposta(cell, look);
+}
+
+void franznuke::set_current(int64_t block)
+{
+    const int64_t prev = m_current_cell;
+    m_current_cell = (block >= 0 && block < m_blocks) ? m_dash.cella(block) : -1;
+    if (prev != m_current_cell)
+    {
+        update_cell(prev);
+        update_cell(m_current_cell);
+    }
+}
+
+// Step 1: every marked block is overwritten, in three rounds: the $MFT, the
+// heads of the files, the rest; with -nuke 100 a fourth one, the rest of the
+// big files. Each round in the order of the surface (the fastest way to write
+// on a stick)
+bool franznuke::phase_wipe()
+{
+    char dim[64], blk[64], title[320];
+    snprintf(dim,   sizeof(dim),   "%s", tohuman(m_length));
+    snprintf(blk,   sizeof(blk),   "%s", tohuman2(m_block));
+    snprintf(title, sizeof(title), "%c: NUKE  %s  block %s  NTFS structures + files: wipe %s",
+             m_letter, dim, blk, tohuman(m_todo_count * m_block));
+
+    m_dash = franzdash();
+    m_look[static_cast<int>(CellState::Empty)] = m_dash.aspetto('-', 5, true, "left (see -nuke NN)", "\xC2\xB7");
+    m_look[static_cast<int>(CellState::Todo)]  = m_dash.aspetto('.', 5, true, "todo");
+    m_look[static_cast<int>(CellState::Now)]   = m_dash.aspetto('>', 4, true, "now");
+    m_look[static_cast<int>(CellState::Ok)]    = m_dash.aspetto('#', 6, true, "wiped");
+    m_look[static_cast<int>(CellState::OkBig)] = m_dash.aspetto('B', 7, true, "wiped (-nuke 100: the rest of the big files)");
+    m_look[static_cast<int>(CellState::Slow)]  = m_dash.aspetto('s', 2, true, "slow");
+    m_look[static_cast<int>(CellState::Stall)] = m_dash.aspetto('S', 3, true, "stall");
+    m_look[static_cast<int>(CellState::Error)] = m_dash.aspetto('E', 3, false, "I/O error");
+
+    m_dash.voce(m_look[static_cast<int>(CellState::Ok)],    "wiped");
+    if (m_perc >= 100)
+        m_dash.voce(m_look[static_cast<int>(CellState::OkBig)], "rest of big files");
+    m_dash.voce(m_look[static_cast<int>(CellState::Empty)], "left");
+    m_dash.voce(m_look[static_cast<int>(CellState::Now)],   "now");
+    m_dash.voce(m_look[static_cast<int>(CellState::Todo)],  "todo");
+    m_dash.voce(m_look[static_cast<int>(CellState::Error)], "I/O error");
+    m_dash.coda("  Ctrl+C=stop");
+
+    m_current_cell = -1;
+    m_dash.inizia(title, m_blocks, m_block, m_length, m_look[static_cast<int>(CellState::Todo)]);
+
+    m_cell_todo.assign(size_t(m_dash.celle()), 0);
+    m_cell_done.assign(size_t(m_dash.celle()), 0);
+    m_cell_worst.assign(size_t(m_dash.celle()), USB_TODO);
+    m_cell_big.assign(size_t(m_dash.celle()), 0);
+
+    for (int64_t b = 0; b < m_blocks; ++b)
+        if (m_todo[size_t(b)])
+        {
+            ++m_cell_todo[size_t(m_dash.cella(b))];
+            if (m_todo[size_t(b)] == 4)
+                ++m_cell_big[size_t(m_dash.cella(b))];
+        }
+
+    for (int64_t c = 0; c < m_dash.celle(); ++c)
+        update_cell(c);
+    m_dash.disegna();
+
+    if (!m_dash.live())
+        myprintf("68805: NUKE %s of %c: (block %s): a line every 10 seconds\n",
+                 tohuman(m_todo_count * m_block), m_letter, blk);
+
+    franzusbistogramma hist;
+    const int64_t total_bytes = m_todo_count * m_block;
+    const double  start       = franzusb::adesso();
+    double last_draw = 0, last_line = start, io_time = 0, last_speed_t = start;
+    int64_t bytes_done = 0, bytes_prev = 0, blocks_done = 0;
+    int64_t slow = 0, stall = 0, consecutive = 0;
+    double instant = 0;
+
+    g_usbtest_stop   = false;
+    g_usbtest_attivo = true;
+
+    const int rounds = (m_perc >= 100) ? 4 : 3;
+    int       shown  = 1;
+    for (uint8_t round = 1; round <= rounds && !m_stopped; ++round)
+    for (int64_t b = 0; b < m_blocks; ++b)
+    {
+        if (m_todo[size_t(b)] != round) continue;
+        shown = round;
+
+        set_current(b);
+        const int64_t offset = b * m_block;
+        const uint32_t n = (offset + m_block <= m_length)
+                               ? uint32_t(m_block)
+                               : uint32_t(m_length - offset);
+
+        nuke_modello(m_fill, offset, n, m_run, round);
+        const double t0 = franzusb::adesso();
+        const bool ok   = write(offset, m_fill, n);
+        double secs     = franzusb::adesso() - t0;
+        if (secs <= 0) secs = 1e-9;
+
+        uint8_t result = USB_OK;
+        if (!ok)
+        {
+            result = USB_IOERR;
+            ++m_errors;
+            ++consecutive;
+            m_last_error = int(GetLastError());
+        }
+        else
+        {
+            consecutive = 0;
+            io_time    += secs;
+            bytes_done += n;
+            const double mbs = n / secs / 1e6;
+            hist.aggiungi(mbs);
+            result = usb_classifica(1, mbs, secs, hist.totale > 16 ? hist.mediana() : 0);
+            if (result == USB_TIMEOUT) result = USB_STALL;
+            if (result == USB_SLOW)  ++slow;
+            else if (result == USB_STALL) ++stall;
+        }
+
+        ++blocks_done;
+        const size_t cl = size_t(m_dash.cella(b));
+        ++m_cell_done[cl];
+        if (result > m_cell_worst[cl])
+            m_cell_worst[cl] = result;
+        update_cell(int64_t(cl));
+
+        const bool stop = g_usbtest_stop || consecutive >= FRANZUSB_MAXERRORS;
+        const double now = franzusb::adesso();
+
+        if (now - last_draw >= FRANZUSB_REFRESH || blocks_done >= m_todo_count || stop)
+        {
+            if (now - last_speed_t > 0.2)
+            {
+                instant      = (bytes_done - bytes_prev) / (now - last_speed_t) / 1e6;
+                bytes_prev   = bytes_done;
+                last_speed_t = now;
+            }
+
+            const int64_t done_bytes = blocks_done * m_block;
+            const double eta = done_bytes > 0
+                                   ? (now - start) * double(total_bytes - done_bytes) / double(done_bytes)
+                                   : 0;
+
+            char fatto[32], eeta[32], smedia[32], sora[32], r1[300], r2[200];
+            snprintf(fatto, sizeof(fatto), "%s", tohuman(done_bytes));
+            usb_orario(eeta, sizeof(eeta), eta);
+            usb_velocita(smedia, sizeof(smedia), io_time > 0 ? bytes_done / io_time / 1e6 : 0);
+            usb_velocita(sora,   sizeof(sora),   instant);
+
+            snprintf(r1, sizeof(r1),
+                     "NUKE %d/%d %4.1f%% %10s/%s ETA %s avg %12s now %12s",
+                     shown, rounds, 100.0 * done_bytes / total_bytes, fatto, tohuman2(total_bytes),
+                     eeta, smedia, sora);
+            snprintf(r2, sizeof(r2),
+                     "slow %s  stall %s  I/O errors %s",
+                     migliaia(slow), migliaia2(stall), migliaia3(m_errors));
+
+            if (m_dash.live())
+            {
+                m_dash.righe(r1, r2);
+                m_dash.disegna();
+            }
+            else if (now - last_line >= 10 || blocks_done >= m_todo_count || stop)
+            {
+                myprintf("%s  %s\n", r1, r2);
+                last_line = now;
+            }
+            last_draw = now;
+        }
+
+        if (stop)
+        {
+            m_stopped = true;
+            m_round   = round;
+            break;
+        }
+    }
+
+    g_usbtest_attivo = false;
+    FlushFileBuffers(m_volume);
+    set_current(-1);
+    m_dash.finale();
+    myprintf("\n");
+
+    if (consecutive >= FRANZUSB_MAXERRORS)
+        myprintf("68806! %s consecutive I/O errors: volume not responding (%s)\n",
+                 migliaia(consecutive), franzusb::errore(m_last_error).c_str());
+
+    return !m_stopped;
+}
+
+// Step 2: an empty NTFS, by the formatter of Windows (quick: the structures
+// only). The volume must not be open here
+bool franznuke::format(const std::wstring& label)
+{
+    wchar_t root[8]       = {wchar_t(m_letter), L':', L'\\', 0};
+    wchar_t filesystem[8] = L"NTFS";
+    std::vector<wchar_t> name(label.begin(), label.end());
+    name.push_back(0);
+
+    HMODULE lib = LoadLibraryW(L"fmifs.dll");
+    if (lib == nullptr)
+        return false;
+
+    g_nuke_formatted = false;
+    nuke_fmifs_formatex formatex = (nuke_fmifs_formatex)(void*)GetProcAddress(lib, "FormatEx");
+    if (formatex != nullptr)
+        formatex(root, (GetDriveTypeW(root) == DRIVE_REMOVABLE) ? 0x0B : 0x0C,   // removable media, hard disk
+                 filesystem, name.data(), TRUE, 0, nuke_format_callback);
+    FreeLibrary(lib);
+    if (!g_nuke_formatted)
+        return false;
+
+    // there, and NTFS: Windows mounts it at the first look
+    for (int i = 0; i < 20; ++i)
+    {
+        wchar_t type[64] = {0};
+        if (GetVolumeInformationW(root, nullptr, 0, nullptr, nullptr, nullptr, type, 63) && wcscmp(type, L"NTFS") == 0)
+            return true;
+        Sleep(250);
+    }
+    return false;
+}
+
+int franznuke::esegui(char letter, int percent, const std::wstring& label)
+{
+    m_letter = toupper(letter);
+	m_perc   = percent;
+
+    char vol[16];
+    snprintf(vol, sizeof(vol), "\\\\.\\%c:", m_letter);
+
+    m_volume = CreateFileW(utow(vol).c_str(),
+                           GENERIC_READ | GENERIC_WRITE,
+                           FILE_SHARE_READ | FILE_SHARE_WRITE,
+                           nullptr, OPEN_EXISTING,
+                           FILE_FLAG_NO_BUFFERING, nullptr);
+
+    if (m_volume == INVALID_HANDLE_VALUE)
+    {
+        myprintf("68807! Cannot open %s (%s): nothing done\n",
+                 vol, franzusb::errore(int(GetLastError())).c_str());
+        return 2;
+    }
+
+    GET_LENGTH_INFORMATION leninfo = {};
+    DWORD dummy = 0;
+    if (!DeviceIoControl(m_volume, IOCTL_DISK_GET_LENGTH_INFO,
+                         nullptr, 0, &leninfo, sizeof(leninfo), &dummy, nullptr) ||
+        leninfo.Length.QuadPart <= 0)
+    {
+        myprintf("68808! %c: length unreadable (%s): nothing done\n",
+                 m_letter, franzusb::errore(int(GetLastError())).c_str());
+        return 2;
+    }
+    m_length = int64_t(leninfo.Length.QuadPart);
+
+    std::string problem;
+    if (!boot(problem))
+    {
+        color_yellow();
+        myprintf("68809$ %c: %s: nothing done (full wipe: f %c: -test -force -paranoid)\n",
+                 m_letter, problem.c_str(), m_letter);
+        color_restore();
+        return 0;
+    }
+
+    // surface block size
+    m_block = g_ioBUFSIZE > 0 ? g_ioBUFSIZE : 1048576;
+    if (m_block > FRANZUSB_MAXBLOCK) m_block = FRANZUSB_MAXBLOCK;
+    m_block    = (m_block + m_cluster - 1) / m_cluster * m_cluster; // align
+    m_perblock = m_block / m_cluster;
+    m_blocks   = (m_length + m_block - 1) / m_block;
+
+    m_todo.assign(size_t(m_blocks), 0);
+    m_fill = static_cast<unsigned char*>(franzusb::riserva(size_t(m_block)));
+    m_back = static_cast<unsigned char*>(franzusb::riserva(size_t(m_block)));
+    if (m_fill == nullptr || m_back == nullptr)
+    {
+        myprintf("68810! Cannot allocate buffer (block %s): nothing done\n", migliaia(m_block));
+        return 2;
+    }
+    libzpaq::random(reinterpret_cast<char*>(&m_run), 8);
+
+    // lock + dismount
+    FlushFileBuffers(m_volume);
+    bool locked = false;
+    DWORD why   = 0;
+    for (int i = 0; i < 10 && !locked; ++i)
+    {
+        if (DeviceIoControl(m_volume, FSCTL_LOCK_VOLUME, nullptr, 0, nullptr, 0, &dummy, nullptr))
+            locked = true;
+        else
+        {
+            why = GetLastError();
+            Sleep(300);
+        }
+    }
+    if (!locked)
+    {
+        myprintf("68811! %c: cannot lock (%s): nothing done\n",
+                 m_letter, franzusb::errore(int(why)).c_str());
+        myprintf("68812! Volume in use (open files / pagefile / system)\n");
+        return 2;
+    }
+    DeviceIoControl(m_volume, FSCTL_DISMOUNT_VOLUME, nullptr, 0, nullptr, 0, &dummy, nullptr);
+    // the whole partition, not just what NTFS calls the volume: its last sector (the copy
+    // of the boot sector) is outside, and the write of the last block ended with an error
+    DeviceIoControl(m_volume, FSCTL_ALLOW_EXTENDED_DASD_IO, nullptr, 0, nullptr, 0, &dummy, nullptr);
+
+    // plan the wipe
+    const bool understood = read_mft(problem);
+    if (!understood)
+        myprintf("68813$ %c: MFT partially understood (%s): the structures are wiped, the files maybe not all\n",
+                 m_letter, problem.c_str());
+
+    // borders (the last block of the volume too: the copy of the boot sector)
+    mark(0, (NUKE_BORDO + m_cluster - 1) / m_cluster, 3);
+    const int64_t tail_lcn = (m_length - NUKE_BORDO) / m_cluster;
+    mark(tail_lcn > 0 ? tail_lcn : 0, (NUKE_BORDO + m_cluster - 1) / m_cluster + 1, 3);
+
+    printbar('-');
+    myprintf("68803: The MFT knows %s files and folders with data on the volume (%s of them deleted)\n",
+             migliaia(m_records), migliaia2(m_deleted));
+    myprintf("68804: %s lists of clusters, %s up to %s (wiped whole); of the others the first %s and the last %s\n",
+             migliaia(m_extents), migliaia2(m_whole), tohuman(NUKE_TESTA), tohuman2(NUKE_TESTA), tohuman3(NUKE_CODA));
+    if (m_older > 0)
+        myprintf("68837: %s records of an OLDER filesystem are still there after the MFT (the stick was formatted before): counted above\n",
+                 migliaia(m_older));
+    if (m_perc >= 100)
+    {
+        // the net: what is in use and no record has said
+        mark_used();
+        myprintf("68843: -nuke 100: the rest of the files over %s too, before the free space (the bitmap adds %s to what the MFT said)\n",
+                 tohuman(NUKE_TESTA), tohuman2(m_bitmap_more * m_block));
+    }
+
+    // step 1: the structures and the files
+    phase_wipe();
+    if (flagverify && !m_stopped)
+        phase_verify();
+
+    DWORD unlock = 0;
+    DeviceIoControl(m_volume, FSCTL_UNLOCK_VOLUME, nullptr, 0, nullptr, 0, &unlock, nullptr);
+    CloseHandle(m_volume);
+    m_volume = INVALID_HANDLE_VALUE;
+
+    if (m_errors > 0)
+        myprintf("68815! %c: %s I/O errors (the last: %s)\n",
+                 m_letter, migliaia(m_errors), franzusb::errore(m_last_error).c_str());
+    if (m_wrong > 0)
+    {
+        color_red();
+        myprintf("68839! %c: %s blocks read back are NOT what was written there: this stick drops the writes, or puts them elsewhere\n",
+                 m_letter, migliaia(m_wrong));
+        color_restore();
+    }
+
+    // step 2: an empty NTFS, also after a Ctrl+C: the stick is taken away usable
+    printbar('-');
+    const bool formatted = format(label);
+    if (formatted)
+        myprintf("68822: %c: formatted: an empty NTFS\n", m_letter);
+    else
+    {
+        color_yellow();
+        myprintf("68831$ %c: cannot be formatted from here: it has no filesystem now, format it (quick is enough)\n", m_letter);
+        color_restore();
+    }
+
+    if (m_stopped)
+    {
+        printbar('=');
+        color_yellow();
+        myprintf("68814$ Stopped early: %c: only partially sanitized. Wiped: %s\n", m_letter,
+                 (m_round <= 1) ? "a part of the MFT" : (m_round == 2) ? "the MFT, the heads of a part of the files"
+                 : (m_round == 3) ? "the MFT, the heads of all the files, a part of the rest"
+                 : (m_round == 4) ? "the MFT, the files up to 16 MB, a part of the rest of the bigger ones"
+                 : "the MFT and the files (the read back was stopped); the free space: nothing");
+        color_restore();
+        return 1;
+    }
+
+    // the old data is gone: from here on, the free space
+    if (formatted && m_errors == 0 && m_wrong == 0)
+    {
+        usb_colore(1);
+        if (m_perc >= 100)
+            myprintf("68838: Everything the MFT and the bitmap of %c: pointed at is overwritten%s (%s)\n",
+                     m_letter, flagverify ? " and read back" : "", tohuman(m_todo_count * m_block));
+        else
+            myprintf("68838: The files of %c: up to %s are overwritten whole, the bigger ones in their first %s and last %s%s\n",
+                     m_letter, tohuman(NUKE_TESTA), tohuman2(NUKE_TESTA), tohuman3(NUKE_CODA), flagverify ? " (read back)" : "");
+        myprintf("68840: From here on it is free space only (%d%% of it): Ctrl+C whenever you want, the stick is good as it is\n", m_perc);
+        color_restore();
+    }
+
+    // step 3: NN% of the free space of the new volume (what step 1 wrote: not again)
+    int zeroed = 2;
+    if (formatted)
+    {
+        franzzerontfs zero;
+        zero.danuke(unsigned(m_perc), m_run, &m_todo, m_block);
+        zeroed = zero.esegui(m_letter);
+    }
+
+    printbar('=');
+    if (m_errors > 0 || m_wrong > 0 || !formatted || zeroed == 2)
+    {
+        myprintf("68835! %c: NOT fully sanitized (see above)\n", m_letter);
+        return 2;
+    }
+    if (zeroed == 1)
+    {
+        color_yellow();
+        myprintf("68836$ %c: the NTFS structures and the files are wiped%s; the free space only in part (stopped)\n", m_letter, (m_perc >= 100) ? " (all of them, whole)" : "");
+        color_restore();
+        return 1;
+    }
+
+    usb_colore(6);
+    myprintf("68816: +OK %c: sanitized: NTFS structures and files wiped (%s), then %d%% of the free space. Ready to be used\n",
+             m_letter, tohuman(m_todo_count * m_block), m_perc);
+    color_restore();
+    return 0;
+}
+
 #endif
 
 int Jidac::usbtest()
@@ -221926,6 +224688,7 @@ int Jidac::usbtest()
 			return 2;
 		}
 		franzzerontfs zero;
+		zero.campiona(menoenne); /// 65.11g: -n NN
 		return zero.esegui(unita);
 	}
 #endif
@@ -222130,6 +224893,7 @@ int Jidac::usbtest()
 		color_restore();
 	}
 	franzusbtest test(usb, disco, (uint32_t)blocco);
+	test.campiona(menoenne); /// 65.11g: -n NN, only NN% of the blocks
 	if (tripletta && flagzero) /// 65.8z1: zeros on the whole surface, and zeros expected back
 		test.zeri();
 	if (!test.prepara())
@@ -222167,7 +224931,7 @@ int Jidac::usbtest()
 	-verify. The files are deleted at the end, but with -force, or when the data
 	read back is wrong (to look at them)
 */
-static int fill_dashboard(const string &i_cartella, int64_t i_dascrivere)
+static int fill_dashboard(const string &i_cartella, int64_t i_dascrivere, unsigned int i_perc)
 {
 	/// the block: -buffer (1 MB by default), a multiple of the sector
 	int64_t blocco= g_ioBUFSIZE;
@@ -222204,6 +224968,7 @@ static int fill_dashboard(const string &i_cartella, int64_t i_dascrivere)
 	disco.nome		= i_cartella;
 	disco.dimensione= usb.dimensione();
 	franzusbtest test(usb, disco, (uint32_t)blocco);
+	test.campiona(i_perc); /// 65.11g: -n NN, only NN% of the blocks
 	if (flagzero)
 		test.zeri();
 	if (!test.prepara())
@@ -222232,6 +224997,133 @@ static int fill_dashboard(const string &i_cartella, int64_t i_dascrivere)
 }
 #endif
 
+/// 65.11g: f X: -nuke NN -force, the fast NTFS sanitize (see franznuke)
+int Jidac::nukeami()
+{
+#if defined(_WIN32) && !defined(ANCIENT)
+	if (files.size() != 1)
+	{
+		myprintf("68817! -nuke wants one volume: f E: -nuke 30 -force (a letter of an NTFS volume on a USB stick)\n");
+		return 2;
+	}
+	if (!flagforce)
+	{
+		myprintf("68818! -nuke destroys the volume: add -force (and answer the captcha)\n");
+		return 2;
+	}
+	if ((g_nuke_pct < 1) || (g_nuke_pct > 100))
+	{
+		myprintf("68819! -nuke wants a number 1..100 (how much of the free space is overwritten after the wipe of the files; 1 = fastest): f E: -nuke 30 -force\n");
+		return 2;
+	}
+	if (!isadmin())
+	{
+		myprintf("68820! -nuke writes the volume raw: administrator rights needed\n");
+		return 2;
+	}
+	string argomento= files[0];
+	myreplaceall(argomento, "\\", "/");
+	char lettera= 0;
+	int	 numero = -1;
+	if ((!parsediskunit(argomento, lettera, numero)) || (lettera == 0))
+	{
+		myprintf("68821! -nuke wants a volume letter: f E: -nuke 30 -force\n");
+		return 2;
+	}
+	lettera= (char)toupper((unsigned char)lettera);
+	char radice[8];
+	snprintf(radice, sizeof(radice), "%c:\\", lettera);
+	wchar_t tipo[64]			   = {0};
+	wchar_t etichetta[MAX_PATH + 1]= {0};
+	if (!GetVolumeInformationW(utow(radice).c_str(), etichetta, MAX_PATH, NULL, NULL, NULL, tipo, 63))
+	{
+		myprintf("68822! %c: cannot be read (%s): no volume there, or no filesystem\n", lettera, franzusb::errore((int)GetLastError()).c_str());
+		return 2;
+	}
+	if (wcscmp(tipo, L"NTFS") != 0) /// decision of the author: not NTFS, franznuke does nothing
+	{
+		color_yellow();
+		myprintf("68823$ %c: is %s, not NTFS: nothing done (for a full wipe: f %c: -test -force -paranoid)\n", lettera, wtou(tipo).c_str(), lettera);
+		color_restore();
+		return 0;
+	}
+	/// the physical disk: it must be a removable USB one, never the system disk (no -debug override here)
+	franzdriveinfo quale;
+	if (cercapartizione(lettera, quale) <= 0)
+	{
+		myprintf("68824! %c: is not on any disk here\n", lettera);
+		return 2;
+	}
+	numero= quale.number;
+	vector<franzdriveinfo> dischi;
+	enumerate_physical_disks(false, -1, dischi);
+	int trovato= -1;
+	for (size_t i= 0; i < dischi.size(); i++)
+		if (dischi[i].number == numero)
+			trovato= (int)i;
+	if (trovato < 0)
+	{
+		myprintf("68825! %c: disk %d not found\n", lettera, numero);
+		return 2;
+	}
+	franzdriveinfo &d= dischi[(size_t)trovato];
+	char			windows[MAX_PATH]= {0};
+	GetWindowsDirectoryA(windows, sizeof(windows));
+	bool sistema= false;
+	for (size_t i= 0; i < d.partitions.size(); i++)
+	{
+		const char l= (char)toupper((unsigned char)d.partitions[i].lettera);
+		if ((l != 0) && ((l == 'C') || (l == (char)toupper((unsigned char)windows[0]))))
+			sistema= true;
+	}
+	if (sistema)
+	{
+		color_red();
+		myprintf("68826! Disk %d holds the system (C: or the Windows folder): NEVER\n", d.number);
+		color_restore();
+		return 2;
+	}
+	if (!flagdebug)
+		if (d.bustype != "USB")
+		{
+			myprintf("68827! Disk %d is not USB (bus %s): -nuke is for USB sticks only\n", d.number, d.bustype.c_str());
+			return 2;
+		}
+	ULARGE_INTEGER perme, totali, liberi;
+	perme.QuadPart= totali.QuadPart= liberi.QuadPart= 0;
+	GetDiskFreeSpaceExW(utow(radice).c_str(), &perme, &totali, &liberi);
+	printbar('-');
+	color_red();
+	myprintf("68828! *** FAST SANITIZE of %c: \"%s\" NTFS on disk %d (%s) ***\n", lettera, wtou(etichetta).c_str(), d.number, d.product.c_str());
+	myprintf("68829! Everything on it is lost: the NTFS structures and the files are wiped (the deleted ones too),\n");
+	myprintf("68830! then %c: is formatted (an empty NTFS) and %d%% of its free space is overwritten\n", lettera, g_nuke_pct);
+	color_restore();
+	color_yellow();
+	if (g_nuke_pct < 100)
+	{
+		myprintf("68832: This is FAST, not a secure erase: a file over %s keeps what is not in that %d%%,\n", tohuman(NUKE_TESTA), g_nuke_pct);
+		myprintf("68833: and so does what was deleted long ago. For everything: -nuke 100 (the old data first)\n");
+	}
+	else
+		myprintf("68832: -nuke 100: the files whole first, then all the free space: Ctrl+C there keeps what is done (-verify: read back)\n");
+	color_restore();
+	if (!getcaptcha("nuke", string("sanitize ") + lettera + ":"))
+		return 1;
+	franznuke nk;
+	return nk.esegui(lettera, g_nuke_pct, std::wstring(etichetta));
+#else
+	myprintf("68834! -nuke runs on Windows only (not in this build)\n");
+	return 2;
+#endif
+}
+#if !(defined(_WIN32) && !defined(ANCIENT))
+/// 65.11o: f -gui (see Jidac::fillgui, after franzscelta) is of Windows only
+int Jidac::fillgui()
+{
+	myprintf("68854! f -gui runs on Windows only (not in this build)\n");
+	return 2;
+}
+#endif
 
 /*
 	a -image -dashboard: the map of the source on franzdash, while the image is
@@ -223112,11 +226004,7 @@ int Jidac::cloud()
 			color_restore();
 			flagfasttxt= true;
 			command	   = 'a';
-#ifndef ANCIENT
-			result_add= flagturbo ? add2() : add();
-#else
 			result_add= add();
-#endif
 			command= 'O';
 #ifdef _WIN32
 			/// the shadow copy is for the image, not for the rest (test, upload: hours, for a whole
@@ -223136,11 +226024,7 @@ int Jidac::cloud()
 			flagfasttxt= true;
 			flagstat   = true;
 			/// -turbo (the default) as the a command: it was always the plain add()
-#ifndef ANCIENT
-			result_add= flagturbo ? add2() : add();
-#else
 			result_add= add();
-#endif
 		}
 
 		///		myprintf("KKKKKKKKKK$$$$$ result_add %d\n",result_add);
@@ -228414,6 +231298,143 @@ int Jidac::paranoidverify()
     }
 }
 
+/*
+	65.11a: x -recover on a damaged archive. The sequential engine threw away
+	the whole block that gave an error, and skipped its fragments: the file
+	came out shorter, with everything after the hole in the wrong place, and
+	only the hash of the file (when there was one) could tell. Now the worker
+	checks every fragment (SHA-1, see worker_routine) and the good ones of a
+	damaged block are written. Of the others:
+	- a fragment that did come out, with a wrong SHA-1, is written as it is
+	  (in a block with no model it is one wrong byte in 64 KB: zeros would
+	  throw away the rest) and its place in the file is noted
+	- a fragment that did not come out at all gets zeros of its length, so
+	  that what follows stays where it belongs
+	A file with such fragments is listed at the end, with or without a hash,
+	and the exit code is 2
+*/
+struct recover_tratto
+{
+	int64_t dove;  /// where in the file
+	int64_t lungo; /// how many bytes
+	bool	zeri;  /// zeros (nothing came out), or the bytes of a fragment with a wrong SHA-1
+};
+struct recover_danno
+{
+	DTMap::iterator		   file;
+	int64_t				   zeri;	   /// bytes of zeros written in place of the fragments
+	int64_t				   fzeri;	   /// how many fragments they were
+	int64_t				   sospetti;   /// bytes written as they came out, the SHA-1 of the fragment is wrong
+	int64_t				   fsospetti;  /// how many fragments they were
+	int64_t				   ignoti;	   /// fragments with no size at all: nothing to put in their place
+	vector<recover_tratto> tratti;
+	recover_danno() : zeri(0), fzeri(0), sospetti(0), fsospetti(0), ignoti(0)
+	{
+	}
+};
+/// i_lunghezza bytes at i_posizione of the file are not good: zeros, or a fragment with a wrong SHA-1
+static void recover_segna(recover_danno &io_danno, bool i_zeri, int64_t i_lunghezza, int64_t i_posizione)
+{
+	if (i_zeri)
+	{
+		io_danno.zeri+= i_lunghezza;
+		io_danno.fzeri++;
+	}
+	else
+	{
+		io_danno.sospetti+= i_lunghezza;
+		io_danno.fsospetti++;
+	}
+	if ((!io_danno.tratti.empty()) && (io_danno.tratti.back().zeri == i_zeri) && (io_danno.tratti.back().dove + io_danno.tratti.back().lungo == i_posizione))
+		io_danno.tratti.back().lungo+= i_lunghezza;
+	else
+	{
+		recover_tratto nuovo;
+		nuovo.dove = i_posizione;
+		nuovo.lungo= i_lunghezza;
+		nuovo.zeri = i_zeri;
+		io_danno.tratti.push_back(nuovo);
+	}
+}
+/// zeros in place of a fragment: on the file, or wherever the handler writes (stdout, the zip)
+static void recover_zeri(extract_handler *i_handler, FP i_f, franz_do_hash *i_hash, int64_t i_quanti)
+{
+	static const string zeri(65536, '\0');
+	while (i_quanti > 0)
+	{
+		const int64_t pezzo= (i_quanti < (int64_t)zeri.size()) ? i_quanti : (int64_t)zeri.size();
+		if (i_hash != NULL)
+			i_hash->update((char *)zeri.data(), (int)pezzo);
+		if (i_f != FPNULL)
+			myfwrite(zeri.data(), 1, (size_t)pezzo, i_f);
+		else
+			i_handler->write_fragment(zeri.data(), (size_t)pezzo);
+		i_quanti-= pezzo;
+	}
+}
+/// a fragment that did not come out, i_lunghezza bytes at i_posizione of the file (-1: nobody knows how long)
+static void recover_buco(recover_danno &io_danno, int64_t i_lunghezza, int64_t i_posizione, extract_handler *i_handler, FP i_f, franz_do_hash *i_hash)
+{
+	if (i_lunghezza < 0)
+	{
+		io_danno.ignoti++;
+		return;
+	}
+	if (i_lunghezza == 0)
+		return;
+	recover_zeri(i_handler, i_f, i_hash, i_lunghezza);
+	recover_segna(io_danno, true, i_lunghezza, i_posizione);
+}
+/// the files with fragments that are not good, hash or no hash (-verbose: where in the file)
+static void recover_elenco(const vector<recover_danno> &i_danneggiati)
+{
+	color_red();
+	for (unsigned int i= 0; i < i_danneggiati.size(); i++)
+	{
+		myprintf("66402: %08d DAMAGED %s bytes wrong SHA-1 + %s zero-filled <<%Z>>\n", i + 1,
+				 migliaia(i_danneggiati[i].sospetti), migliaia2(i_danneggiati[i].zeri), i_danneggiati[i].file->first.c_str());
+		if (i_danneggiati[i].ignoti > 0)
+			myprintf("66403:          and %s fragment(s) with no size at all: the file is SHORTER\n", migliaia(i_danneggiati[i].ignoti));
+		if (flagverbose)
+			for (unsigned int j= 0; j < i_danneggiati[i].tratti.size(); j++)
+				myprintf("66404:          %s at %s, %s bytes\n", i_danneggiati[i].tratti[j].zeri ? "zero-filled" : "wrong SHA-1",
+						 migliaia(i_danneggiati[i].tratti[j].dove), migliaia2(i_danneggiati[i].tratti[j].lungo));
+	}
+	color_restore();
+}
+/// what the damage of the archive did to the files (2), or did not (1: the archive is damaged anyway), 0 = no damage seen
+static int recover_totali(const vector<recover_danno> &i_danneggiati, size_t i_blocchirotti)
+{
+	if (i_danneggiati.size() > 0)
+	{
+		int64_t zeribytes= 0, zerifrag= 0, sospbytes= 0, sospfrag= 0, ignoti= 0;
+		for (unsigned int i= 0; i < i_danneggiati.size(); i++)
+		{
+			zeribytes+= i_danneggiati[i].zeri;
+			zerifrag+= i_danneggiati[i].fzeri;
+			sospbytes+= i_danneggiati[i].sospetti;
+			sospfrag+= i_danneggiati[i].fsospetti;
+			ignoti+= i_danneggiati[i].ignoti;
+		}
+		myprintf("66405! DAMAGED files: %s (bad blocks in the archive: %s)\n", migliaia((int64_t)i_danneggiati.size()), migliaia2((int64_t)i_blocchirotti));
+		if (sospfrag > 0)
+			myprintf("66408: wrong SHA-1, written as they came out: %s bytes in %s fragments\n", migliaia(sospbytes), migliaia2(sospfrag));
+		if (zerifrag > 0)
+			myprintf("66409: nothing came out, zero-filled        : %s bytes in %s fragments\n", migliaia(zeribytes), migliaia2(zerifrag));
+		if (ignoti > 0)
+			myprintf("66410: no size at all, files are SHORTER    : %s fragments\n", migliaia(ignoti));
+		if (!flagverbose)
+			myprintf("66406: -verbose shows where in each file\n");
+		return 2;
+	}
+	if (i_blocchirotti > 0)
+	{
+		myprintf("66407$ The archive has %s bad block(s), but every fragment of the extracted files is good\n", migliaia((int64_t)i_blocchirotti));
+		return 1;
+	}
+	return 0;
+}
+
 int Jidac::extractstdout(char i_dest_partition, const string &i_rawfilename)
 {
 	archive= getbackupnameifany(archive);
@@ -228700,6 +231721,19 @@ int Jidac::extractstdout(char i_dest_partition, const string &i_rawfilename)
 	ctx.blocks_waiting_ram = 0;
 	ctx.main_waiting_blocks= 0;
 
+	/// 65.11a: the fragments are checked one by one (see worker_routine). 65.11b: for
+	/// the restore of an image too (it was for files, stdout and zip only). Not for
+	/// xc: it comes here once for every piece, it checks each one with the hashes of
+	/// its own metafile and it has its own way to end ("RESTORE NOT DONE"): a piece
+	/// that only shares a block with the damage would stop it. Left as it is
+	vector<unsigned char> frag_stato;
+	if (!xcmuto)
+	{
+		frag_stato.resize(ht.size(), 0);
+		ctx.frag_stato= &frag_stato;
+	}
+	vector<recover_danno> danneggiati;
+
 	if (flagdebug)
 		myprintf("09326: Starting %d workers", howmanythreads);
 	for (int i= 0; i < howmanythreads; ++i)
@@ -228833,12 +231867,32 @@ int Jidac::extractstdout(char i_dest_partition, const string &i_rawfilename)
 		if (myhashtype != "" && handler->needs_hash_check())
 			myhashcheck.init();
 
+		/// 65.11a: the holes of this file, and the hash that has to see the zeros too
+		recover_danno  danno;
+		franz_do_hash *hashbuchi= ((myhashtype != "") && handler->needs_hash_check()) ? &myhashcheck : NULL;
+		danno.file= file_it;
+
 		// LOOP SUI FRAMMENTI DEL FILE
 		for (unsigned int i= 0; i < file_info.ptr.size(); i++)
 		{
 			int current_needed_block= file_info.block_for_ptr[i];
 			if (current_needed_block < 0)
+			{
+				/// 65.11a: a fragment that is in no block. Its size, when the
+				/// fragment table has it, is enough to keep the rest in place
+				if (ctx.frag_stato != NULL)
+				{
+					const unsigned idperso	= file_info.ptr[i];
+					const int64_t  lungperso= ((idperso > 0) && (idperso < ht.size())) ? ht[idperso].usize : -1;
+					recover_buco(danno, lungperso, file_info.expectedsize, handler, f, hashbuchi);
+					if (lungperso > 0)
+					{
+						global_bytes_written+= lungperso;
+						file_info.expectedsize+= lungperso;
+					}
+				}
 				continue;
+			}
 
 			pthread_mutex_lock(&cache_mutex);
 			int64_t cache_percent= (100 * ctx.current_cache_size) / g_GLOBAL_RAM_LIMIT;
@@ -228940,7 +231994,8 @@ int Jidac::extractstdout(char i_dest_partition, const string &i_rawfilename)
 					scan_finito= true;
 			}
 
-			string *block_data= NULL;
+			string		 *block_data	 = NULL;
+			unsigned char stato_frammento= 0; /// 65.11a: what the worker found (2 = not good)
 
 			pthread_mutex_lock(&cache_mutex);
 
@@ -228985,9 +232040,24 @@ int Jidac::extractstdout(char i_dest_partition, const string &i_rawfilename)
 			{
 				block_data								   = ctx.block_cache[current_needed_block];
 				ctx.block_access_time[current_needed_block]= ctx.access_counter++;
+				if ((ctx.frag_stato != NULL) && (file_info.ptr[i] < ctx.frag_stato->size()))
+					stato_frammento= (*ctx.frag_stato)[file_info.ptr[i]];
 			}
 
 			pthread_mutex_unlock(&cache_mutex);
+
+			if ((ctx.frag_stato != NULL) && ((block_data == NULL) || block_data->empty()))
+			{
+				/// 65.11a: nothing at all came out of the block: zeros as long as the fragment
+				const unsigned idperso	= file_info.ptr[i];
+				const int64_t  lungperso= (idperso < ht.size()) ? ht[idperso].usize : -1;
+				recover_buco(danno, lungperso, file_info.expectedsize, handler, f, hashbuchi);
+				if (lungperso > 0)
+				{
+					global_bytes_written+= lungperso;
+					file_info.expectedsize+= lungperso;
+				}
+			}
 
 			if (block_data && !block_data->empty())
 			{
@@ -229003,9 +232073,21 @@ int Jidac::extractstdout(char i_dest_partition, const string &i_rawfilename)
 
 				int64_t frag_len= (frag_id < ht.size()) ? ht[frag_id].usize : 0;
 
-				if (frag_len > 0 && frag_offset + frag_len <= (int64_t)block_data->size())
+				if ((ctx.frag_stato != NULL) && (frag_len > 0) && (frag_offset + frag_len > (int64_t)block_data->size()))
+				{
+					/// 65.11a: the block is there, but it ends before this
+					/// fragment: zeros, and what follows stays in place
+					recover_buco(danno, frag_len, file_info.expectedsize, handler, f, hashbuchi);
+					global_bytes_written+= frag_len;
+					file_info.expectedsize+= frag_len;
+				}
+				else if (frag_len > 0 && frag_offset + frag_len <= (int64_t)block_data->size())
 				{
 					const char *frag_data= block_data->c_str() + frag_offset;
+
+					/// 65.11a: it came out, with a wrong SHA-1: written as it is, and noted
+					if (stato_frammento == 2)
+						recover_segna(danno, false, frag_len, file_info.expectedsize);
 
 					if (is_special_mode)
 					{
@@ -229362,6 +232444,9 @@ int Jidac::extractstdout(char i_dest_partition, const string &i_rawfilename)
 			}
 		}
 
+		if ((danno.zeri > 0) || (danno.sospetti > 0) || (danno.ignoti > 0)) /// 65.11a
+			danneggiati.push_back(danno);
+
 		++file_it;
 	} // fine loop file
 
@@ -229419,6 +232504,23 @@ int Jidac::extractstdout(char i_dest_partition, const string &i_rawfilename)
 		delete handler;
 		if (franzentestresult>0)
 			result=2;
+		/*
+			65.11b: an image, a disk. A block of the archive that failed was
+			skipped: everything after it went to the wrong place (the clusters
+			of the image are one long stream) and the run ended with 0, "all
+			OK". Now the place of what is missing is kept with zeros, as for
+			the files, and an image with something that is not the original is
+			an error: said here, with what and how much
+		*/
+		recover_elenco(danneggiati);
+		const int danni= recover_totali(danneggiati, ctx.blocchi_rotti.size());
+		if (danni == 2)
+		{
+			myprintf("66411! The image is NOT the one that was saved: do not trust what has been written\n");
+			result= 2;
+		}
+		else if ((danni == 1) && (result < 1))
+			result= 1;
 		return result;
 	}
 
@@ -229445,6 +232547,8 @@ int Jidac::extractstdout(char i_dest_partition, const string &i_rawfilename)
 	if (flagverbose) /// same as above: hundreds of lines, one number
 		for (unsigned int i= 0; i < nohash.size(); i++)
 			myprintf("05551: %08d No hash for        <<%Z>>\n", i + 1, nohash[i]->first.c_str());
+
+	recover_elenco(danneggiati); /// 65.11a
 
 	color_red();
 	for (unsigned int i= 0; i < notgood.size(); i++)
@@ -229529,7 +232633,11 @@ int Jidac::extractstdout(char i_dest_partition, const string &i_rawfilename)
 				 tohuman2(avg_rate));
 	color_restore();
 
-	if (hash_ko)
+	/// 65.11a: what the damage of the archive did to the files (2), or did not (1: the archive is damaged anyway)
+	if ((recover_totali(danneggiati, ctx.blocchi_rotti.size()) == 1) && (risultato < 1))
+		risultato= 1;
+
+	if (hash_ko || (danneggiati.size() > 0))
 		return 2;
 
 	///if (frag_scartati > 0)
@@ -230353,14 +233461,488 @@ void Jidac::turnonfasttxt()
 		}
 }
 
-int Jidac::testparametriadd()
+/// the files of a folder (it ends with /): the names, no folders, no filter of any kind
+static void freeze_elenca(const string &i_cartella, vector<string> &o_nomi)
 {
-	if (strrchr(archive.c_str(), '?'))
-		if (g_franzen != "")
+	o_nomi.clear();
+#ifdef _WIN32
+	WIN32_FIND_DATAW dati;
+	HANDLE			 h= FindFirstFileW(utow((i_cartella + "*").c_str()).c_str(), &dati);
+	if (h == INVALID_HANDLE_VALUE)
+		return;
+	do
+	{
+		if (!(dati.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY))
+			o_nomi.push_back(wtou(dati.cFileName));
+	} while (FindNextFileW(h, &dati));
+	FindClose(h);
+#else
+	DIR *d= opendir(i_cartella.c_str());
+	if (d == NULL)
+		return;
+	struct dirent *e;
+	while ((e= readdir(d)) != NULL)
+	{
+		const string nome= e->d_name;
+		struct stat	 sb;
+		if ((stat((i_cartella + nome).c_str(), &sb) == 0) && S_ISREG(sb.st_mode))
+			o_nomi.push_back(nome);
+	}
+	closedir(d);
+#endif
+}
+/// i_nome is a part of the multipart i_modello (a name with some ?): a digit for each ?.
+/// x_0003.zpaq.franzen is the part x_0003.zpaq
+static bool freeze_eparte(const string &i_modello, string i_nome)
+{
+	if (isfranzen(i_nome) && (i_nome.size() > 8))
+		i_nome= i_nome.substr(0, i_nome.size() - 8);
+	if (i_nome.size() != i_modello.size())
+		return false;
+	for (size_t i= 0; i < i_nome.size(); i++)
+		if (i_modello[i] == '?')
 		{
-			myprintf("02735! Sorry, franzen not supported (yet) for multipart\n");
+			if (!isdigit((unsigned char)i_nome[i]))
+				return false;
+		}
+		else
+		{
+#ifdef _WIN32
+			if (tolower((unsigned char)i_modello[i]) != tolower((unsigned char)i_nome[i]))
+				return false;
+#else
+			if (i_modello[i] != i_nome[i])
+				return false;
+#endif
+		}
+	return true;
+}
+static bool freeze_stesso(const string &i_uno, const string &i_due)
+{
+#ifdef _WIN32
+	return stringtolower(i_uno) == stringtolower(i_due);
+#else
+	return i_uno == i_due;
+#endif
+}
+/// one more file of the archive: if it is there, and not already taken
+static void freeze_aggiungi(vector<string> &io_altri, const vector<string> &i_parti, const string &i_file)
+{
+	if ((i_file == "") || (!fileexists(i_file)))
+		return;
+	for (size_t i= 0; i < i_parti.size(); i++)
+		if (freeze_stesso(i_parti[i], i_file))
+			return;
+	for (size_t i= 0; i < io_altri.size(); i++)
+		if (freeze_stesso(io_altri[i], i_file))
+			return;
+	io_altri.push_back(i_file);
+}
+/// what was copied goes away, and the folder made for it (if nothing else is inside)
+static void freeze_annulla(const vector<string> &i_copiati, const string &i_sotto)
+{
+	for (size_t i= 0; i < i_copiati.size(); i++)
+		if (fileexists(i_copiati[i]))
+			delete_file(i_copiati[i].c_str());
+	string cartella= i_sotto;
+	while ((cartella.size() > 1) && (cartella[cartella.size() - 1] == '/'))
+		cartella= cartella.substr(0, cartella.size() - 1);
+	delete_dir(cartella.c_str());
+}
+/*
+	65.11q: -freeze X -freezesize N. When the archive is bigger than N it is put away in X (a NAS...),
+	and this run makes a new one from scratch. The archive is ALL its files: the parts of a multipart
+	(-chunk too) and of a backup, the .franzen ones, the index (-index, _backup.index), the
+	_backup.txt, the _crc32.txt of -fasttxt, the _md5.txt / .md5 of -checktxt. Not the CRC-32 kept in
+	an ADS, not the .pid. Before only x.zpaq was moved: its _crc32.txt stayed (and every run after ended
+	with 01841), its index stayed (and the new archive was a suffix of the one put away), and multipart,
+	franzen and backup were not seen at all.
+	They go in a NEW folder of X named by date and time (2026-10-12_18-15-07): the names are the ones
+	they had (in there l, t, testbackup work as they are) and nothing already in X is ever written over.
+	First every file is copied and read back (XXH3). Only when all of them are there the ones here go:
+	renamed first (a file that cannot be renamed could not be deleted: every name is given back, as if
+	nothing was done), then deleted. If a copy fails, what was copied is removed and nothing is touched
+	here: the run goes on with the archive it has, and ends "with warnings" (g_freeze_avviso).
+	The size was -maxsize, which is the filter on the files to add too: every file bigger than the
+	threshold was left out of the backup, without a word. A command line of before (-freeze, -maxsize,
+	no -freezesize) is taken for what it meant: the threshold, and not a filter.
+	Returns 0 nothing to do (or not done), 1 frozen, 2 wrong switches
+*/
+int Jidac::congela()
+{
+	if (g_freeze == "")
+	{
+		if (g_freezesize > 0)
+		{
+			myprintf("68860! -freezesize without -freeze (the folder where the archive is moved)\n");
 			return 2;
 		}
+		return 0;
+	}
+	if (g_freeze_fatto)
+		return 0;
+	g_freeze_fatto= true;
+	if (g_freezesize == 0)
+	{
+		if (maxsize == 0)
+		{
+			myprintf("68861! -freeze needs -freezesize (the size over which the archive is moved)\n");
+			return 2;
+		}
+		g_freezesize= maxsize;
+		maxsize		= 0;
+		color_yellow();
+		myprintf("68862$ -freeze with -maxsize (the old way): taken as -freezesize %s, and not as a filter on the files to add\n", migliaia(g_freezesize));
+		color_restore();
+	}
+
+	/// the parts: their size is the one that counts
+	const string   cartella	   = extractfilepath(archive);
+	const string   nomearchivio= extractfilename(archive);
+	vector<string> parti;
+	if (subpart(archive, 0) == archive)
+	{
+		if (fileexists(archive))
+			parti.push_back(archive);
+		if ((!isfranzen(archive)) && fileexists(franzenname(archive)))
+			parti.push_back(franzenname(archive));
+	}
+	else if (nomearchivio.find('*') != string::npos)
+	{
+		/// (a * is a number as long as it takes: one part after the other, up to the first that is not there)
+		for (int i= 1; i < 1000000; i++)
+		{
+			const string parte= subpart(archive, i);
+			if (fileexists(parte))
+				parti.push_back(parte);
+			else if (fileexists(franzenname(parte)))
+				parti.push_back(franzenname(parte));
+			else
+				break;
+		}
+	}
+	else
+	{
+		/// every file of the folder that is a part, the ones after a hole too
+		vector<string> nomi;
+		freeze_elenca((cartella == "") ? string("./") : cartella, nomi);
+		for (size_t i= 0; i < nomi.size(); i++)
+			if (freeze_eparte(nomearchivio, nomi[i]))
+				parti.push_back(cartella + nomi[i]);
+		std::sort(parti.begin(), parti.end());
+	}
+	if (parti.empty())
+		return 0; /// the first run, or the run right after a freeze
+	int64_t dimensione= 0;
+	for (size_t i= 0; i < parti.size(); i++)
+	{
+		const int64_t una= prendidimensionefile(parti[i].c_str());
+		if (una > 0)
+			dimensione+= una;
+	}
+	if ((uint64_t)dimensione <= g_freezesize)
+	{
+		if (flagverbose)
+			myprintf("68863: -freeze: the archive is %s in %s file(s), not over -freezesize %s\n", migliaia(dimensione), migliaia2(parti.size()), migliaia3(g_freezesize));
+		return 0;
+	}
+
+	/// what lives with the parts
+	vector<string> altri;
+	for (size_t i= 0; i < parti.size(); i++)
+	{
+		string logico= parti[i];
+		if (isfranzen(logico) && (logico.size() > 8))
+			logico= logico.substr(0, logico.size() - 8);
+		const string base= extractfilepath(logico) + prendinomefileebasta(logico);
+		freeze_aggiungi(altri, parti, base + "_crc32.txt");
+		freeze_aggiungi(altri, parti, base + "_md5.txt");
+		freeze_aggiungi(altri, parti, base + ".md5");
+	}
+	if ((command == 'a') && (g_indexname != ""))
+	{
+		freeze_aggiungi(altri, parti, g_indexname);
+		if (!isfranzen(g_indexname))
+			freeze_aggiungi(altri, parti, franzenname(g_indexname));
+	}
+	if (command == 'Z')
+	{
+		/// (as gestiscisingleormultipart names them; with -index X they are in that folder)
+		const string dove = (g_backupposition != "") ? g_backupposition : cartella;
+		const string nome0= prendinomefileebasta(subpart(archive, 0));
+		freeze_aggiungi(altri, parti, dove + nome0 + "_backup.index");
+		freeze_aggiungi(altri, parti, dove + nome0 + "_backup.index.franzen");
+		freeze_aggiungi(altri, parti, dove + nome0 + "_backup.txt");
+	}
+	if (checktxt != "")
+		freeze_aggiungi(altri, parti, checktxt);
+	vector<string> tutti= parti;
+	for (size_t i= 0; i < altri.size(); i++)
+		tutti.push_back(altri[i]);
+	int64_t totale= 0;
+	for (size_t i= 0; i < tutti.size(); i++)
+	{
+		const int64_t una= prendidimensionefile(tutti[i].c_str());
+		if (una > 0)
+			totale+= una;
+	}
+
+	/// a new folder, by date and time: never one that is already there
+	string radice= g_freeze;
+#ifdef _WIN32
+	radice= wintolinuxpath(radice);
+#endif
+	if (!isdirectory(radice))
+		radice+= "/";
+	const string marca= format_datetime("%datetime");
+	string		 sotto= radice + marca;
+	for (int i= 1; (i < 100000) && (direxists(sotto + "/") || fileexists(sotto)); i++)
+	{
+		char numero[16];
+		snprintf(numero, sizeof(numero), "_%05d", i);
+		sotto= radice + marca + numero;
+	}
+	sotto+= "/";
+	myprintf("01918: Freezing archive size %s vs freezesize %s: %s file(s), %s bytes to <<%Z>>\n", migliaia(dimensione), migliaia2(g_freezesize), migliaia3(tutti.size()), migliaia4(totale), sotto.c_str());
+	makepath(sotto);
+	if (!direxists(sotto))
+	{
+		color_red();
+		myprintf("68864! -freeze: cannot make the folder <<%Z>>: nothing done, going on with the archive as it is\n", sotto.c_str());
+		color_restore();
+		g_freeze_avviso= 1;
+		return 0;
+	}
+	vector<string> copiati;
+	const int64_t  libero= getfreespace(sotto);
+	if (libero < totale)
+	{
+		color_red();
+		myprintf("68865! -freeze: %s bytes to copy, %s free on <<%Z>>: nothing done, going on with the archive as it is\n", migliaia(totale), migliaia2(libero), sotto.c_str());
+		color_restore();
+		freeze_annulla(copiati, sotto);
+		g_freeze_avviso= 1;
+		return 0;
+	}
+
+	/// 1: every file copied and read back
+	for (size_t i= 0; i < tutti.size(); i++)
+	{
+		string arrivo= sotto + extractfilename(tutti[i]);
+		if (fileexists(arrivo)) /// (two files with the same name, from two folders: the index of -index)
+			arrivo= nomefileseesistegia(arrivo);
+		myprintf("68866: -freeze %03d/%03d %19s <<%Z>>\n", (int)(i + 1), (int)tutti.size(), migliaia(prendidimensionefile(tutti[i].c_str())), tutti[i].c_str());
+		copiati.push_back(arrivo);
+		const string scritto= (arrivo == "") ? string("") : filecopy(true, false, tutti[i], arrivo, true, true, true, 0);
+		if (scritto == "")
+		{
+			color_red();
+			myprintf("68867! -freeze: cannot copy <<%Z>>: nothing done, going on with the archive as it is\n", tutti[i].c_str());
+			color_restore();
+			freeze_annulla(copiati, sotto);
+			g_freeze_avviso= 1;
+			return 0;
+		}
+		int64_t quanto= 0;
+		int64_t quando= 0;
+		int64_t attributi= 0;
+		if (getfileinfo(tutti[i], quanto, quando, attributi) && (quando > 0))
+			touch(scritto.c_str(), quando, -1);
+	}
+
+	/// 2: the ones here get out of the way. From the last to the first
+	vector<string> spostati;
+	bool		   liberi= true;
+	for (size_t i= tutti.size(); i > 0; i--)
+	{
+		const string daparte= tutti[i - 1] + ".frozen";
+		if (fileexists(daparte)) /// (left by a freeze killed right here: its copies were already safe)
+			delete_file(daparte.c_str());
+		if (myrename(tutti[i - 1], daparte) != 0)
+		{
+			color_red();
+			myprintf("68868! -freeze: <<%Z>> is in use (it cannot be renamed): nothing done, going on with the archive as it is\n", tutti[i - 1].c_str());
+			color_restore();
+			liberi= false;
+			break;
+		}
+		spostati.push_back(tutti[i - 1]);
+	}
+	if (!liberi)
+	{
+		for (size_t i= 0; i < spostati.size(); i++)
+			myrename(spostati[i] + ".frozen", spostati[i]);
+		freeze_annulla(copiati, sotto);
+		g_freeze_avviso= 1;
+		return 0;
+	}
+
+	/// 3: and they are deleted
+	for (size_t i= 0; i < tutti.size(); i++)
+	{
+		const string daparte= tutti[i] + ".frozen";
+		if ((!delete_file(daparte.c_str())) || fileexists(daparte))
+		{
+			color_yellow();
+			myprintf("68869$ -freeze: cannot delete <<%Z>> (its copy is safe): delete it by hand\n", daparte.c_str());
+			color_restore();
+			g_freeze_avviso= 2;
+		}
+	}
+	color_green();
+	myprintf("68870: -freeze: %s file(s), %s bytes, now in <<%Z>>. A new archive starts here\n", migliaia(tutti.size()), migliaia2(totale), sotto.c_str());
+	color_restore();
+	return 1;
+}
+
+#ifdef _WIN32
+/*
+	65.11q: -findzpaq. The archive is on a device that takes the letter it finds (a USB disk: D: today,
+	F: tomorrow). The name is given with any letter, and it is looked for on every drive there is: not
+	the CD/DVD, not the network ones (the letter given is always tried, whatever it is). Exactly one
+	drive must have it. None (the disk is not plugged: never a new archive somewhere else) and more
+	than one are errors. What is looked for: the archive or its .franzen; the first part of a multipart;
+	the first part of a backup (backup, testbackup).
+	It was inside add(): after backup had made its .pid with the letter given (and failed), only for
+	a file that is exactly the name given (no franzen), on the 26 letters whether they exist or not,
+	and never for the commands that read
+*/
+int Jidac::findzpaq()
+{
+	static const char comandi[]= "aZ_lxtiv"; /// a, backup, testbackup, l, x, t, i, v
+	if ((command <= 0) || (command > 126) || (strchr(comandi, (char)command) == NULL))
+		return 0;
+	const bool dafiles= (command == '_'); /// testbackup: its name is the first of the files
+	if (dafiles && (files.size() == 0))
+		return 0;
+	const string nome= dafiles ? files[0] : archive;
+	if (nome == "")
+		return 0;
+	if (!isdospath(nome))
+	{
+		myprintf("01885: WARN -findzpaq but archive is not letter:/something\n");
+		return 0;
+	}
+	if (nome.find('*') != string::npos)
+	{
+		myprintf("68871$ -findzpaq does not work with a * in the name: ignored\n");
+		return 0;
+	}
+	/// what must be there, with the letter given
+	vector<string> cerca;
+	if ((command == 'Z') || (command == '_'))
+	{
+		string base= nome;
+		if (isjolly(base))
+			base= processBackupFilename(base);
+		const string primo= extractfilepath(base) + prendinomefileebasta(base) + "_00000001.zpaq";
+		cerca.push_back(primo);
+		cerca.push_back(primo + ".franzen");
+	}
+	else if (subpart(nome, 0) != nome)
+	{
+		cerca.push_back(subpart(nome, 1));
+		cerca.push_back(subpart(nome, 1) + ".franzen");
+	}
+	else
+	{
+		cerca.push_back(nome);
+		if (!isfranzen(nome))
+			cerca.push_back(franzenname(nome));
+	}
+	const char	data	= (char)toupper((unsigned char)nome[0]);
+	const UINT	vecchio = SetErrorMode(SEM_FAILCRITICALERRORS); /// (an empty card reader: no window "insert a disk")
+	const DWORD unita	= GetLogicalDrives();
+	int			trovati = 0;
+	char		lettera = 0;
+	string		dove	= "";
+	for (int i= 0; i < 26; i++)
+	{
+		if (!(unita & (1u << i)))
+			continue;
+		const char questa	= (char)('A' + i);
+		char	   radice[4]= {questa, ':', '\\', 0};
+		const UINT tipo		= GetDriveTypeA(radice);
+		if (questa != data)
+			if ((tipo == DRIVE_CDROM) || (tipo == DRIVE_REMOTE) || (tipo == DRIVE_NO_ROOT_DIR) || (tipo == DRIVE_UNKNOWN))
+			{
+				if (flagdebug3)
+					myprintf("01881: drive %c type %d: not looked at\n", questa, (int)tipo);
+				continue;
+			}
+		for (size_t k= 0; k < cerca.size(); k++)
+		{
+			string prova= cerca[k];
+			prova[0]	= questa;
+			if (flagdebug3)
+				myprintf("01881: drive %c type %d  %Z\n", questa, (int)tipo, prova.c_str());
+			if (fileexists(prova))
+			{
+				trovati++;
+				lettera= questa;
+				dove+= string(dove == "" ? "" : ", ") + questa + ":";
+				break;
+			}
+		}
+	}
+	SetErrorMode(vecchio);
+	if (trovati == 0)
+	{
+		myprintf("01882! ERROR -findzpaq but archive is not found\n");
+		myprintf("68872! (looked for <<%Z>> on every drive: is the device plugged?)\n", cerca[0].c_str() + 2);
+		return 2;
+	}
+	if (trovati > 1)
+	{
+		myprintf("01883! ERROR -findzpaq but MORE THEN one archive found (%d)\n", trovati);
+		myprintf("68873! (<<%Z>> is on %s)\n", cerca[0].c_str() + 2, dove.c_str());
+		return 2;
+	}
+	if (dafiles)
+		files[0][0]= lettera;
+	else
+		archive[0]= lettera;
+	myprintf("01884: INFO -findzpaq in %Z\n", (dafiles ? files[0] : archive).c_str());
+	return 0;
+}
+#endif // corresponds to #ifdef (#ifdef _WIN32)
+
+int Jidac::testparametriadd()
+{
+	/*
+		65.11l: a multipart archive can be franzen: every part a franzen file of its own
+		(x_001.zpaq.franzen), and the index of a backup too. Not yet: -chunk, and -index
+		(the parts elsewhere). All franzen or all plain: decided by the first part
+	*/
+	if (g_franzen != "")
+	{
+		if (g_chunk_size > 0)
+		{
+			myprintf("43806! Sorry, franzen not supported (yet) for -chunk\n");
+			return 2;
+		}
+		if (index && (command != 'Z'))
+		{
+			myprintf("43807! Sorry, franzen not supported (yet) for -index\n");
+			return 2;
+		}
+	}
+	if (strrchr(archive.c_str(), '?') && (!isfranzen(archive)))
+	{
+		const string prima	= subpart(archive, 1);
+		const bool	 chiara = exists(prima);
+		const bool	 cifrata= is_file_franzen(franzenname(prima));
+		if ((g_franzen != "") && chiara && (!cifrata))
+		{
+			myprintf("43808! <<%Z>> is not a franzen archive: it cannot go on with -franzen\n", prima.c_str());
+			return 2;
+		}
+		if ((g_franzen == "") && cifrata && (!chiara) && (command == 'Z'))
+		{
+			myprintf("43809! <<%Z>> is a franzen archive: the -franzen password is needed\n", franzenname(prima).c_str());
+			return 2;
+		}
+	}
 	/// an archive named .franzen IS the franzen file: no cleartext .zpaq at all
 	if (isfranzen(archive))
 	{
@@ -230439,15 +234021,31 @@ int Jidac::testparametriadd()
 				myprintf("68130$ WARNING: -longpath turned off, incompatible with -to\n");
 #endif // corresponds to #ifdef (#ifdef _WIN32)
 
-	if (g_chunk_size > 0)
+	/*
+		65.11p: backup -chunk X. A run of backup makes as many parts as it takes, none bigger than X,
+		numbered after the ones that are there. They are written as .tmp and take their names at the
+		end, all together (finalemultiparttmp): a run that dies leaves no part at all, so the trim of
+		backup stays as it is (and a run with nothing new leaves no part). Each chunk has its line in
+		the _backup.txt, the index is one file as always. Not with -franzen (43806, above), not with
+		-backupzeta (a hash made while ONE part is written)
+	*/
+	if ((g_chunk_size > 0) && (command == 'Z'))
+	{
+		if (flagbackupzeta)
+		{
+			myprintf("43811! Sorry, -backupzeta does not work with -chunk\n");
+			return 2;
+		}
+	}
+	else if (g_chunk_size > 0)
 	{
 		flagnotrim= true;
 		myprintf("62896$ -notrim enabled due to -chunk\n");
-	}
-	if ((g_chunk_size > 0) && (flagtmp))
-	{
-		myprintf("62802! Sorry -tmp does not work with -chunk\n");
-		return 2;
+		if (flagtmp)
+		{
+			myprintf("62802! Sorry -tmp does not work with -chunk\n");
+			return 2;
+		}
 	}
 	if ((g_password != NULL) && (flagbackupzeta))
 	{
@@ -230591,52 +234189,6 @@ int Jidac::testparametriadd()
 		else
 			imagevss= flagvss ? 2 : 0;
 	}
-#endif // corresponds to #ifdef (#ifdef _WIN32)
-
-#ifdef _WIN32
-	if (flagfindzpaq)
-		if (archive != "")
-		{
-			if (isdospath(archive))
-			{
-				string filename	  = archive;
-				DWORD  unita	  = GetLogicalDrives();
-				int	   founded	  = 0;
-				string filefounded= "";
-				for (int i= 0; i < 26; i++)
-				{
-					filename[0]= 'A' + i;
-					if (flagdebug3)
-					{
-						myprintf("01881: drive %c  %d  %Z\n", 'A' + i, unita & 1, filename.c_str());
-					}
-					if (fileexists(filename))
-					{
-						founded++;
-						filefounded= filename;
-					}
-					unita= unita >> 1;
-				}
-				if (founded == 0)
-				{
-					myprintf("01882! ERROR -findzpaq but archive is not found\n");
-					return 2;
-				}
-				else if (founded > 1)
-				{
-					myprintf("01883! ERROR -findzpaq but MORE THEN one archive found (%d)\n", founded);
-					return 2;
-				}
-
-				if (filefounded != "")
-				{
-					myprintf("01884: INFO -findzpaq in %Z\n", filefounded.c_str());
-					archive= filefounded;
-				}
-			}
-			else
-				myprintf("01885: WARN -findzpaq but archive is not letter:/something\n");
-		}
 #endif // corresponds to #ifdef (#ifdef _WIN32)
 
 #ifdef _WIN32
@@ -230838,31 +234390,9 @@ int Jidac::testparametriadd()
 			myprintf("01917: cannot find fasttxt-ADS on %s\n", archive.c_str());
 	}
 #endif // corresponds to #ifdef (#ifdef _WIN32)
-	if (g_freeze != "")
-	{
-		if (maxsize > 0)
-		{
-			if (fileexists(archive))
-			{
-				int64_t dimensionefile= prendidimensionefile(archive.c_str());
-				if (dimensionefile > (int64_t)maxsize)
-				{
-					myprintf("01918: Freezing archive size %s vs maxsize %s\n", migliaia(dimensionefile), migliaia2(maxsize));
-					string filescritto= filecopy(false, false, archive, g_freeze, true, false, false, 0);
-					if (filescritto != "")
-					{
-						myprintf("01919: Moved <<%s>> to <<%s>>\n", archive.c_str(), filescritto.c_str());
-						myprintf("01920: Deleting (by -freeze) <<%s>>\n", archive.c_str());
-						delete_file(archive.c_str());
-					}
-					else
-						myprintf("01921: ERROR doing -freeze from %s to %s\n", archive.c_str(), filescritto.c_str());
-				}
-			}
-		}
-		else
-			error("-freeze without -maxsize");
-	}
+	/// 65.11q: -freeze, see congela() (for backup it was already done, before its .pid)
+	if (congela() == 2)
+		return 2;
 
 	return 0;
 }
@@ -231295,6 +234825,40 @@ void Jidac::handlemultiparttrim()
 							}
 						}
 					}
+#ifndef NOFRANZEN
+#ifdef ZPAQFULL /// NOSFTPSTART
+	/*
+		65.11l: the same when the part and the index are franzen files (backup -franzen): a part with the
+		header only is removed, and the index is cut back to what it was. A franzen file grows by
+		segments, each one closed by its footer: cut where it ended before, it is the file of before
+	*/
+	if ((!flagnotrim) && index && g_flagmultipart && (g_franzen != "") && ((files_added + files_updated + removed) == 0))
+	{
+		const string parte = franzenname(arcname);
+		const string indice= franzenname(g_indexname);
+		if ((!exists(arcname)) && (franzcri::leggi_dimensione(parte.c_str()) == 104))
+		{
+			bool indietro= true;
+			if (fileexists(indice))
+			{
+				if (g_starting_indexsize > 0)
+					indietro= (truncate(indice.c_str(), g_starting_indexsize) == 0);
+				else
+					indietro= delete_file(indice.c_str());
+			}
+			if (!indietro)
+				myprintf("71427! Cannot put back the index <<%Z>>\n", indice.c_str());
+			else if (delete_file(parte.c_str()))
+			{
+				if (flagverbose)
+					myprintf("71421: Empty part deleted %Z\n", parte.c_str());
+			}
+			else
+				myprintf("72146: Cannot delete_file <<%Z>>\n", parte.c_str());
+		}
+	}
+#endif /// NOSFTPEND
+#endif
 }
 #if defined(_WIN32) && !defined(ANCIENT)
 /*
@@ -231338,7 +234902,7 @@ struct franzsceltariga
 class franzscelta
 {
   public:
-	franzscelta() : m_cursore(-1), m_prima(0), m_origine(0), m_altezza(0), m_larghezza(80), m_tutte(false), m_aperta(false), m_colormessaggio(0)
+	franzscelta() : m_cursore(-1), m_prima(0), m_origine(0), m_altezza(0), m_larghezza(80), m_tutte(false), m_aperta(false), m_colormessaggio(0), m_minima(0), m_invio(false)
 	{
 	}
 	int	 aggiungi(int i_tipo, bool i_presa, const string &i_testo, const string &i_motivo= "", bool i_dettaglio= false, int i_colore= 0);
@@ -231354,6 +234918,12 @@ class franzscelta
 	void di(const string &i_testo, int i_colore= 0);		  /// a message, until the next key
 	void aiuto(const std::vector<string> &i_righe);
 	void chiudi();
+	/// 65.11o (f -gui): more screens, one after the other, in the same area
+	void svuota();								   /// no lines any more: the next screen is written in their place
+	void alta(int i_righe) { m_minima= i_righe; } /// the rows wanted, at least (before apri: the first screen can be the shortest)
+	void invio(bool i_parte) { m_invio= i_parte; } /// ENTER (F8, g): the line under the cursor is taken, and SCELTA_PARTI
+	void cursore(int i_riga) { m_cursore= i_riga; } /// where the cursor starts (a line that can have it)
+	void via();									   /// nothing of it stays: what comes next is written from its first row
 
   private:
 	std::vector<franzsceltariga>		 m_righe;
@@ -231369,6 +234939,9 @@ class franzscelta
 	string								 m_tasti;
 	string								 m_messaggio;
 	int									 m_colormessaggio;
+	int									 m_minima;
+	bool								 m_invio;
+	int									 vai();
 	bool								 fuoco(int i_riga) const;
 	void								 muovi(int i_quanto);
 	void								 allinea();
@@ -231494,6 +235067,8 @@ bool franzscelta::apri()
 	m_altezza= (int)m_righe.size() + 2;
 	if (m_altezza < 14) /// (the help has that many lines)
 		m_altezza= 14;
+	if (m_altezza < m_minima)
+		m_altezza= m_minima;
 	if (m_altezza > alta - 1)
 		m_altezza= alta - 1;
 	for (int i= 0; i < m_altezza; i++)
@@ -231643,7 +235218,7 @@ int franzscelta::tasto()
 			muovi((int)m_righe.size());
 			break;
 		case 66: /// F8
-			return SCELTA_PARTI;
+			return m_invio ? vai() : SCELTA_PARTI;
 		case 59: /// F1
 			return '?';
 		default:
@@ -231653,8 +235228,8 @@ int franzscelta::tasto()
 	}
 	if ((c == 27) || (c == 'q') || (c == 'Q'))
 		return SCELTA_ESCI;
-	if ((c == 'g') || (c == 'G'))
-		return SCELTA_PARTI;
+	if ((c == 'g') || (c == 'G') || (m_invio && (c == 13)))
+		return m_invio ? vai() : SCELTA_PARTI;
 	if ((c == 'v') || (c == 'V'))
 	{
 		m_tutte= !m_tutte;
@@ -231783,6 +235358,539 @@ void franzscelta::chiudi()
 	show_cursor();
 	color_restore();
 	fflush(stdout);
+}
+void franzscelta::svuota()
+{
+	m_righe.clear();
+	m_visibili.clear();
+	m_cursore  = -1;
+	m_prima	   = 0;
+	m_messaggio= "";
+}
+void franzscelta::via()
+{
+	if (!m_aperta)
+		return;
+	for (int y= 0; y < m_altezza; y++)
+		scrivi(y, "", 0, false);
+	m_aperta= false;
+	gotoxy(0, m_origine);
+	show_cursor();
+	color_restore();
+	fflush(stdout);
+}
+/// the line under the cursor is the answer (a line that cannot be taken says why, and nothing happens)
+int franzscelta::vai()
+{
+	if (fuoco(m_cursore))
+	{
+		franzsceltariga &r= m_righe[(size_t)m_cursore];
+		if (r.tipo == SCELTA_VIETATA)
+		{
+			di(r.motivo, 3);
+			return 0;
+		}
+		if (r.tipo == SCELTA_UNA)
+			prendi(m_cursore);
+	}
+	return SCELTA_PARTI;
+}
+/*
+	65.11o: f -gui. f has many cases by now (read or write, the free space by files or by
+	clusters, zeros, the whole device, the fast sanitize), each one with its switches: here they
+	are asked one question at a time, a screen each (franzscelta), down to the list of the disks
+	with their volumes. Then the command is RUN, as if it was typed: it says what it does and asks
+	its own captcha (always: -nocaptcha does not count from here), and a disk that is not USB is
+	written only with -debug (f -gui -debug), as from the command line; the disk of the system
+	never. What is not asked comes from the command line and is kept: -buffer, -nodashboard,
+	-debug, and -n where the screen does not ask it
+*/
+enum
+{
+	FGUI_LEGGI= 0, /// f N -test [-n NN]
+	FGUI_FILE,	   /// f X:\ [-zero] [-verify]
+	FGUI_CLUSTER,  /// f X: -test -force -zero -ntfs [-verify]
+	FGUI_NUKE,	   /// f X: -nuke NN -force [-verify]
+	FGUI_SCRIVI	   /// f N -test -force -paranoid [-zero] [-quick]
+};
+struct franzfcaso
+{
+	int			modo;
+	bool		zeri;	  /// -zero
+	bool		verifica; /// -verify
+	bool		veloce;	  /// -quick
+	int			perc;	  /// the NN of -n (FGUI_LEGGI, 0: all of it) or of -nuke; -1: asked
+	bool		admin;	  /// a device read or written raw
+	const char *testo;	  /// the line on the screen
+	const char *nota;	  /// after the command, in the row above the keys
+};
+static const franzfcaso g_fgui_leggi[]= {
+	{FGUI_LEGGI, false, false, false, 0, true, "all of it", "every block is read"},
+	{FGUI_LEGGI, false, false, false, 30, true, "30% of the blocks, equispaced: faster, less coverage", ""},
+	{FGUI_LEGGI, false, false, false, 10, true, "10% of the blocks", ""},
+	{FGUI_LEGGI, false, false, false, -1, true, "another percent...", ""}};
+static const franzfcaso g_fgui_liberi[]= {
+	{FGUI_FILE, false, false, false, 0, false, "by files: random data, written and read back (a test of the media)", "any filesystem"},
+	{FGUI_FILE, true, false, false, 0, false, "by files: zeros (what was deleted is gone, a thin VM disk can shrink)", "any filesystem"},
+	{FGUI_FILE, true, true, false, 0, false, "by files: zeros, then read back", "any filesystem"},
+	{FGUI_CLUSTER, true, false, false, 0, true, "by clusters: zeros straight in the free clusters of an NTFS volume", "locked meanwhile"},
+	{FGUI_CLUSTER, true, true, false, 0, true, "by clusters: zeros, then read back", "locked meanwhile"}};
+static const franzfcaso g_fgui_tutto[]= {
+	{FGUI_NUKE, false, false, false, 1, true, "NTFS stick, fast sanitize: files wiped, then 1% of the free space", "the fastest"},
+	{FGUI_NUKE, false, false, false, 30, true, "NTFS stick, fast sanitize, then 30% of the free space", ""},
+	{FGUI_NUKE, false, false, false, 100, true, "NTFS stick, sanitize, then ALL the free space (the old data first)", ""},
+	{FGUI_NUKE, false, true, false, 100, true, "NTFS stick, sanitize, ALL the free space, everything read back", ""},
+	{FGUI_NUKE, false, false, false, -1, true, "NTFS stick, fast sanitize, another percent...", ""},
+	{FGUI_SCRIVI, false, false, false, 0, true, "whole device: written and read back (fake capacity, lost writes)", "no partitions left"},
+	{FGUI_SCRIVI, false, false, true, 0, true, "whole device: written, not read back", "no partitions left"},
+	{FGUI_SCRIVI, true, false, false, 0, true, "whole device: zeros, read back", "no partitions left"},
+	{FGUI_SCRIVI, true, false, true, 0, true, "whole device: zeros, not read back", "no partitions left"}};
+/// a case as it would be typed. i_dove: the disk or the volume ("": not chosen yet)
+static string fgui_comando(const franzfcaso &i_caso, int i_perc, const string &i_dove, unsigned int i_n)
+{
+	string c= "zpaqfranz f ";
+	switch (i_caso.modo)
+	{
+	case FGUI_LEGGI:
+		c+= ((i_dove == "") ? string("N") : i_dove) + " -test";
+		if (i_perc != 0)
+			c+= " -n " + ((i_perc > 0) ? itos(i_perc) : string("NN"));
+		break;
+	case FGUI_FILE:
+		c+= (i_dove == "") ? string("X:\\") : i_dove;
+		break;
+	case FGUI_CLUSTER:
+		c+= ((i_dove == "") ? string("X:") : i_dove) + " -test -force";
+		break;
+	case FGUI_NUKE:
+		c+= ((i_dove == "") ? string("X:") : i_dove) + " -nuke " + ((i_perc > 0) ? itos(i_perc) : string("NN")) + " -force";
+		break;
+	default:
+		c+= ((i_dove == "") ? string("N") : i_dove) + " -test -force -paranoid";
+		break;
+	}
+	if (i_caso.zeri)
+		c+= " -zero";
+	if (i_caso.modo == FGUI_CLUSTER)
+		c+= " -ntfs";
+	if (i_caso.verifica)
+		c+= " -verify";
+	if (i_caso.veloce)
+		c+= " -quick";
+	/// what the command line had, and stays
+	if ((i_caso.modo != FGUI_LEGGI) && (i_caso.modo != FGUI_NUKE) && (i_n >= 1) && (i_n <= 99))
+		c+= " -n " + itos((int64_t)i_n);
+	if (g_ioBUFSIZE != 1048576)
+		c+= " -buffer " + itos((int64_t)g_ioBUFSIZE);
+	if (flagnodashboard)
+		c+= " -nodashboard";
+	if (flagdebug)
+		c+= " -debug";
+	return c;
+}
+struct franzfdove
+{
+	int	   riga;
+	string argomento; /// what f gets: 3, E:, E:/
+	string mostrato;  /// as it is typed: 3, E:, E:\ (the row above the keys)
+	franzfdove(int i_riga, const string &i_argomento, const string &i_mostrato) : riga(i_riga), argomento(i_argomento), mostrato(i_mostrato)
+	{
+	}
+};
+int Jidac::fillgui()
+{
+	if (files.size() > 0)
+	{
+		myprintf("68852! f -gui asks what to do and where: no device or folder with it (f -gui)\n");
+		return 2;
+	}
+	const bool	admin  = isadmin();
+	const char *noadmin= "administrator rights needed: a console opened \"as administrator\"";
+	vector<franzdriveinfo> dischi;
+	const bool			   debugprima= flagdebug; /// (its line of debug would land on the screen)
+	flagdebug						 = false;
+	enumerate_physical_disks(false, -1, dischi);
+	flagdebug= debugprima;
+	char windows[MAX_PATH]= {0};
+	GetWindowsDirectoryA(windows, sizeof(windows));
+	const char lw= (char)toupper((unsigned char)windows[0]);
+
+	franzscelta s;
+	s.invio(true);
+	s.alta(22);
+	bool			  aperta= false;
+	int				  passo = 0;		 /// 0 what, 1 how, 2 where
+	int				  cosa	= 0;		 /// 0 read, 1 the free space, 2 everything
+	int				  come[3]= {0, 0, 0}; /// the line of each list (to find it again going back)
+	const franzfcaso *caso	= NULL;
+	int				  perc	= 0;
+	string			  argomento, mostrato;
+	char			  testo[1024];
+	for (;;)
+	{
+		s.svuota();
+		std::vector<string>		aiuto;
+		std::vector<int>		righe;
+		std::vector<franzfdove> dove;
+		int						altra= -1; /// the line "another folder..."
+		const franzfcaso	   *lista= (cosa == 0) ? g_fgui_leggi : ((cosa == 1) ? g_fgui_liberi : g_fgui_tutto);
+		const int				quanti= (cosa == 0) ? (int)(sizeof(g_fgui_leggi) / sizeof(g_fgui_leggi[0])) : ((cosa == 1) ? (int)(sizeof(g_fgui_liberi) / sizeof(g_fgui_liberi[0])) : (int)(sizeof(g_fgui_tutto) / sizeof(g_fgui_tutto[0])));
+		aiuto.push_back("f -gui: the cases of the f command, one question at a time");
+		aiuto.push_back("");
+		aiuto.push_back("arrows: move   ENTER: this one, go on   ESC, q, backspace: go back");
+		aiuto.push_back("The row above the keys: the command that will be run, or why a");
+		aiuto.push_back("line cannot be taken ([-], red)");
+		aiuto.push_back("After the last question the command is RUN as if it was typed: it");
+		aiuto.push_back("says what it does and asks its captcha (always)");
+		if (passo == 0)
+		{
+			s.aggiungi(SCELTA_TESTO, false, "f: what do you want to do?", "", false, 4);
+			s.aggiungi(SCELTA_TESTO, false, "");
+			righe.push_back(s.aggiungi(admin ? SCELTA_UNA : SCELTA_VIETATA, false, "READ a whole disk: a test of its surface, nothing is written", admin ? "every block is read: live map, speeds, slow blocks, stalls" : noadmin));
+			righe.push_back(s.aggiungi(SCELTA_UNA, false, "WRITE in the free space of a volume: the files are not touched", "a test of the media, or zeros where the deleted files were"));
+			righe.push_back(s.aggiungi(admin ? SCELTA_UNA : SCELTA_VIETATA, false, "WIPE a USB stick or a disk: EVERYTHING on it is lost", admin ? "the fast sanitize of an NTFS stick, or every block of the device written" : noadmin, false, admin ? 2 : 0));
+			if ((!admin) && (cosa != 1))
+				cosa= 1;
+			s.prendi(righe[(size_t)cosa]);
+			s.tasti("ENTER=choose  ESC/q=quit  ?=help");
+			aiuto.push_back("READ: f N -test. WRITE in the free space: by files (f X:\\, any");
+			aiuto.push_back("filesystem) or by clusters (NTFS). WIPE: -nuke, or the whole device");
+			aiuto.push_back("Kept from the command line: -buffer -nodashboard -debug -n");
+		}
+		else if (passo == 1)
+		{
+			s.aggiungi(SCELTA_TESTO, false, (cosa == 0) ? "READ a whole disk: how much of it?" : ((cosa == 1) ? "WRITE in the free space of a volume: how?" : "WIPE a USB stick or a disk: how?"), "", false, 4);
+			s.aggiungi(SCELTA_TESTO, false, "");
+			for (int i= 0; i < quanti; i++)
+			{
+				const franzfcaso &c	  = lista[i];
+				string			  nota= fgui_comando(c, c.perc, "", menoenne);
+				if (c.nota[0] != 0)
+					nota+= string("   (") + c.nota + ")";
+				if (c.admin && (!admin))
+					righe.push_back(s.aggiungi(SCELTA_VIETATA, false, c.testo, noadmin));
+				else
+					righe.push_back(s.aggiungi(SCELTA_UNA, false, c.testo, nota, false, (cosa == 2) ? 2 : 0));
+			}
+			if ((come[cosa] < 0) || (come[cosa] >= quanti) || (lista[come[cosa]].admin && (!admin)))
+				come[cosa]= 0;
+			s.prendi(righe[(size_t)come[cosa]]);
+			s.tasti("ENTER=choose  ESC/q=back  ?=help");
+			if (cosa == 0)
+				aiuto.push_back("A sample (-n NN): NN% of the blocks, equispaced along the disk");
+			else if (cosa == 1)
+			{
+				aiuto.push_back("By files: a folder of files as big as the free space, deleted at");
+				aiuto.push_back("the end. Any filesystem, no administrator");
+				aiuto.push_back("By clusters: the free clusters of an NTFS volume written straight");
+				aiuto.push_back("(all of them, faster). The volume is locked: not the one of Windows");
+			}
+			else
+			{
+				aiuto.push_back("Fast sanitize (-nuke): what the NTFS knows is overwritten (files,");
+				aiuto.push_back("deleted ones, names), the stick is formatted (an empty NTFS), then");
+				aiuto.push_back("NN% of the free space is overwritten. Below 100: not a secure erase");
+				aiuto.push_back("Whole device: every block written. At the end: NO partitions");
+				aiuto.push_back("USB only (f -gui -debug: any disk); never the disk of the system");
+			}
+		}
+		else
+		{
+			const bool sudisco	= (caso->modo == FGUI_LEGGI) || (caso->modo == FGUI_SCRIVI);
+			const bool distrugge= (caso->modo == FGUI_NUKE) || (caso->modo == FGUI_SCRIVI);
+			s.aggiungi(SCELTA_TESTO, false, fgui_comando(*caso, perc, "", menoenne), "", false, 4);
+			s.aggiungi(SCELTA_TESTO, false, string(sudisco ? "N: which disk?" : ((caso->modo == FGUI_FILE) ? "X:\\ which volume (or folder)?" : "X: which volume?")) + (distrugge ? "   EVERYTHING ON IT IS LOST" : ""), "", false, distrugge ? 3 : 4);
+			snprintf(testo, sizeof(testo), "    %-2s %-5s %-5s %-34s %10s", "#", "bus", "kind", "model", "size");
+			s.aggiungi(SCELTA_TESTO, false, testo);
+			int prima= -1; /// the first line that can be taken: the cursor starts there
+			bool vista[26];
+			for (int i= 0; i < 26; i++)
+				vista[i]= false;
+			int buone= 0;
+			for (size_t i= 0; i < dischi.size(); i++)
+			{
+				const franzdriveinfo &d		 = dischi[i];
+				bool				  sistema= false;
+				for (size_t j= 0; j < d.partitions.size(); j++)
+				{
+					const char l= (char)toupper((unsigned char)d.partitions[j].lettera);
+					if ((l != 0) && ((l == 'C') || (l == lw)))
+						sistema= true;
+				}
+				const string numero= itos((int64_t)d.number);
+				string		 perche; /// why this disk is not to be written
+				if (distrugge)
+				{
+					if (sistema)
+						perche= "disk " + numero + " holds the system (C: or the Windows folder): never";
+					else if ((d.bustype != "USB") && (!flagdebug))
+						perche= "disk " + numero + " is not USB (bus " + d.bustype + "): written only with -debug (f -gui -debug)";
+				}
+				snprintf(testo, sizeof(testo), "%02d %-5s %-5s %-34.34s %10s  %s", d.number, d.bustype.c_str(), (d.removable == "Yes") ? "Remov" : "Fixed", d.product.c_str(), tohuman(d.disksize), d.partitionstyle.c_str());
+				if (!sudisco)
+					s.aggiungi(SCELTA_TESTO, false, string("    ") + testo);
+				else if (perche != "")
+					s.aggiungi(SCELTA_VIETATA, false, testo, perche);
+				else
+				{
+					const string riga= string(distrugge ? "EVERYTHING on disk " + numero + " is lost: " : "") + fgui_comando(*caso, perc, numero, menoenne);
+					dove.push_back(franzfdove(s.aggiungi(SCELTA_UNA, false, testo, riga, false, distrugge ? 2 : 1), numero, numero));
+					if (prima < 0)
+						prima= dove.back().riga;
+					buone++;
+				}
+				int senza= 0; /// the partitions without a letter: counted, a line for all of them
+				for (size_t j= 0; j < d.partitions.size(); j++)
+				{
+					const franzpartinfo &p= d.partitions[j];
+					const char			 l= (char)toupper((unsigned char)p.lettera);
+					if ((l < 'A') || (l > 'Z'))
+					{
+						senza++;
+						continue;
+					}
+					vista[l - 'A']= true;
+					char radice[8];
+					snprintf(radice, sizeof(radice), "%c:\\", l);
+					ULARGE_INTEGER perme, totali, liberi;
+					perme.QuadPart= totali.QuadPart= liberi.QuadPart= 0;
+					GetDiskFreeSpaceExA(radice, &perme, &totali, &liberi);
+					const string fs	   = p.filesystemtype.empty() ? string("no filesystem") : p.filesystemtype;
+					const string volume= string(1, l) + ":";
+					if (p.filesystemtype.empty())
+						snprintf(testo, sizeof(testo), "    %c: %10s  no filesystem", l, tohuman(p.partsize));
+					else
+						snprintf(testo, sizeof(testo), "    %c: %10s  %-6s free %10s  %s", l, tohuman(p.partsize), fs.c_str(), tohuman2((int64_t)liberi.QuadPart), p.label.empty() ? "" : ("\"" + p.label + "\"").c_str());
+					if (sudisco)
+					{
+						s.aggiungi(SCELTA_TESTO, false, string("    ") + testo, "", false, 5);
+						continue;
+					}
+					string no= perche;
+					if ((no == "") && (caso->modo != FGUI_FILE) && (p.filesystemtype != "NTFS"))
+						no= volume + " is " + fs + ", not NTFS" + ((caso->modo == FGUI_NUKE) ? ": the fast sanitize is for NTFS (go back: the whole device)" : ": the free clusters are of NTFS only (go back: by files)");
+					if ((no == "") && (caso->modo == FGUI_CLUSTER) && (l == lw))
+						no= volume + " is the volume of Windows, it cannot be locked (go back: by files)";
+					if ((no == "") && (caso->modo == FGUI_FILE) && p.filesystemtype.empty())
+						no= volume + " has no filesystem: no files can be written there";
+					if (no != "")
+					{
+						s.aggiungi(SCELTA_VIETATA, false, testo, no);
+						continue;
+					}
+					const string tipico= (caso->modo == FGUI_FILE) ? (volume + "\\") : volume;
+					const string riga  = string(distrugge ? "EVERYTHING on " + volume + " is lost: " : "") + fgui_comando(*caso, perc, tipico, menoenne);
+					dove.push_back(franzfdove(s.aggiungi(SCELTA_UNA, false, testo, riga, false, distrugge ? 2 : 1), (caso->modo == FGUI_FILE) ? (volume + "/") : volume, tipico));
+					if (prima < 0)
+						prima= dove.back().riga;
+					buone++;
+				}
+				if (d.partitions.empty())
+					s.aggiungi(SCELTA_TESTO, false, "        (no partitions)", "", false, 5);
+				else if (senza > 0)
+				{
+					snprintf(testo, sizeof(testo), "        (%s%d partition%s without a letter)", (senza < (int)d.partitions.size()) ? "+ " : "", senza, (senza == 1) ? "" : "s");
+					s.aggiungi(SCELTA_TESTO, false, testo, "", false, 5);
+				}
+			}
+			if (caso->modo == FGUI_FILE)
+			{
+				/// the letters that are not on a disk seen here: network, RAM disk, subst
+				char unita[512]= {0};
+				bool titolo	   = false;
+				if (GetLogicalDriveStringsA(sizeof(unita) - 1, unita) > 0)
+					for (const char *u= unita; *u != 0; u+= strlen(u) + 1)
+					{
+						const char l= (char)toupper((unsigned char)u[0]);
+						if ((l < 'A') || (l > 'Z') || vista[l - 'A'])
+							continue;
+						const UINT genere= GetDriveTypeA(u);
+						if ((genere == DRIVE_CDROM) || (genere == DRIVE_NO_ROOT_DIR) || (genere == DRIVE_UNKNOWN))
+							continue;
+						if (!titolo)
+							s.aggiungi(SCELTA_TESTO, false, "    other volumes");
+						titolo= true;
+						const string volume= string(1, l) + ":";
+						/// (a share that does not answer: nothing asked to it here)
+						snprintf(testo, sizeof(testo), "    %c: %s", l, (genere == DRIVE_REMOTE) ? "network" : ((genere == DRIVE_RAMDISK) ? "RAM disk" : "volume"));
+						dove.push_back(franzfdove(s.aggiungi(SCELTA_UNA, false, testo, fgui_comando(*caso, perc, volume + "\\", menoenne), false, 1), volume + "/", volume + "\\"));
+						if (prima < 0)
+							prima= dove.back().riga;
+						buone++;
+					}
+				altra= s.aggiungi(SCELTA_UNA, false, "another folder...", "typed by hand: a folder of a volume, a share (\\\\server\\share\\)", false, 1);
+				buone++;
+			}
+			if (dischi.empty())
+				s.aggiungi(SCELTA_TESTO, false, "    no disk seen here", "", false, 3);
+			if (prima >= 0)
+				s.cursore(prima);
+			if (buone == 0)
+				s.di(string("nothing to take here (the lines say why). ") + ((distrugge && (!flagdebug)) ? "A stick? Plug it in, then r" : "ESC: back"), 2);
+			s.tasti(distrugge ? "ENTER=RUN (its captcha is asked)  r=disks again  ESC/q=back  ?=help" : "ENTER=RUN  r=disks again  ESC/q=back  ?=help");
+			aiuto.push_back("Green: nothing is lost there. Yellow: EVERYTHING on it is lost");
+			aiuto.push_back("r: the disks are read again (a stick plugged in now)");
+			if (distrugge)
+				aiuto.push_back("Written: USB only (f -gui -debug: any disk); never the system one");
+		}
+		if (!aperta)
+		{
+			if (!s.apri())
+			{
+				myprintf("68853! f -gui needs a console (the output is redirected)\n");
+				return 2;
+			}
+			aperta= true;
+		}
+		int vado= 0; /// 1 on, -1 back, 2 this screen again
+		while (vado == 0)
+		{
+			const int tasto= s.tasto();
+			if ((tasto == SCELTA_ESCI) || (tasto == 8))
+				vado= -1;
+			else if (tasto == '?')
+				s.aiuto(aiuto);
+			else if ((passo == 2) && ((tasto == 'r') || (tasto == 'R')))
+			{
+				flagdebug= false;
+				enumerate_physical_disks(false, -1, dischi);
+				flagdebug= debugprima;
+				vado	 = 2;
+			}
+			else if (tasto == SCELTA_PARTI)
+			{
+				const int scelta= s.una();
+				if (scelta < 0)
+				{
+					s.di("choose a line first (the arrows, then ENTER)", 3);
+					continue;
+				}
+				if (passo == 0)
+				{
+					for (size_t i= 0; i < righe.size(); i++)
+						if (righe[i] == scelta)
+							cosa= (int)i;
+					vado= 1;
+				}
+				else if (passo == 1)
+				{
+					for (size_t i= 0; i < righe.size(); i++)
+						if (righe[i] == scelta)
+							come[cosa]= (int)i;
+					caso= &lista[come[cosa]];
+					perc= caso->perc;
+					if (perc < 0)
+					{
+						const int massimo= (caso->modo == FGUI_NUKE) ? 100 : 99;
+						string	  risposta;
+						snprintf(testo, sizeof(testo), "percent (1..%d): ", massimo);
+						if (!s.chiedi(testo, risposta, (caso->modo == FGUI_NUKE) ? "how much of the free space is overwritten after the wipe of the files" : "how many of the blocks are read, equispaced along the disk"))
+							continue;
+						bool numero= !risposta.empty();
+						for (size_t i= 0; i < risposta.size(); i++)
+							if (!isdigit((unsigned char)risposta[i]))
+								numero= false;
+						const int64_t valore= numero ? myatoll(risposta.c_str()) : 0;
+						if ((valore < 1) || (valore > massimo))
+						{
+							snprintf(testo, sizeof(testo), "not done: a number from 1 to %d (<<%s>>)", massimo, risposta.c_str());
+							s.di(testo, 3);
+							continue;
+						}
+						perc= (int)valore;
+					}
+					vado= 1;
+				}
+				else if (scelta == altra)
+				{
+					string cartella;
+					if (!s.chiedi("folder: ", cartella, "a folder that is there: files as big as its free space are written in it"))
+						continue;
+					while ((cartella.size() > 0) && ((cartella[0] == ' ') || (cartella[0] == '"')))
+						cartella.erase(0, 1);
+					while ((cartella.size() > 0) && ((cartella[cartella.size() - 1] == ' ') || (cartella[cartella.size() - 1] == '"')))
+						cartella.erase(cartella.size() - 1);
+					if (cartella == "")
+						continue;
+					const string scritta= cartella; /// (as it was typed, for the message)
+					myreplaceall(cartella, "\\", "/");
+					if (cartella[cartella.size() - 1] != '/')
+						cartella+= "/";
+					if (!direxists(cartella))
+					{
+						s.di("not done: <<" + scritta + ">> is not a folder that is there", 3);
+						continue;
+					}
+					argomento= cartella;
+					mostrato = cartella;
+					myreplaceall(mostrato, "/", "\\");
+					if (mostrato.find(' ') != string::npos)
+						mostrato= "\"" + mostrato + "\\\""; /// (typed: the last \ doubled, or it eats the quote)
+					vado= 1;
+				}
+				else
+				{
+					for (size_t i= 0; i < dove.size(); i++)
+						if (dove[i].riga == scelta)
+						{
+							argomento= dove[i].argomento;
+							mostrato = dove[i].mostrato;
+							vado	 = 1;
+						}
+				}
+			}
+		}
+		if (vado == 2)
+			continue;
+		if (vado < 0)
+		{
+			if (passo == 0)
+			{
+				s.via();
+				myprintf("68851: f -gui: left without starting: nothing done\n");
+				return 1;
+			}
+			passo--;
+			continue;
+		}
+		if (passo == 2)
+			break;
+		passo++;
+	}
+	s.via();
+	/// as if it was typed
+	files.clear();
+	files.push_back(argomento);
+	flagtest= flagforce= flagparanoid= flagzero= flagntfs= flagverify= flagquick= flagnuke= false;
+	g_nuke_pct= -1;
+	switch (caso->modo)
+	{
+	case FGUI_LEGGI:
+		flagtest= true;
+		menoenne= (unsigned int)perc;
+		break;
+	case FGUI_FILE:
+		break;
+	case FGUI_CLUSTER:
+		flagtest= flagforce= flagntfs= true;
+		break;
+	case FGUI_NUKE:
+		flagnuke= flagforce= true;
+		g_nuke_pct		   = perc;
+		break;
+	default:
+		flagtest= flagforce= flagparanoid= true;
+		break;
+	}
+	flagzero	 = caso->zeri;
+	flagverify	 = caso->verifica;
+	flagquick	 = caso->veloce;
+	flagnocaptcha= false; /// from here the captcha is asked, always
+	flaggui		 = false;
+	color_cyan();
+	myprintf("68850: f -gui: %s\n", fgui_comando(*caso, perc, mostrato, menoenne).c_str());
+	color_restore();
+	return 0;
 }
 /*
 	65.9n: ac (add-c). ac z:\backup.zpaq is a z:\backup.zpaq c: -image, plus what a restore that
@@ -234828,7 +238936,6 @@ int Jidac::xc()
 	const bool etaprima= flagnoeta;
 	flagnoeta		   = true; /// (the engine: its own line for every piece. Here one for the whole disk)
 	g_xc			   = &x;
-	uint64_t azzerati  = 0;
 	for (size_t i= 0; (i < ordine.size()) && (x.errore == ""); i++)
 	{
 		franzxczona &z= x.zone[(size_t)ordine[i]];
@@ -234878,7 +238985,6 @@ int Jidac::xc()
 					x.riga(false);
 				}
 			}
-			azzerati+= z.azzerati;
 			if (x.errore != "")
 				break;
 		}
@@ -235545,7 +239651,21 @@ int Jidac::gestiscisingleormultipart()
 				error("too many archive parts");
 			FP fp= myfopen(partname.c_str(), RB);
 			if (fp == FPNULL)
+			{
+#ifndef NOFRANZEN
+#ifdef ZPAQFULL /// NOSFTPSTART
+				/// 65.11l: a part that is a franzen file only: its size is the one of the data inside
+				const int64_t dentro= (g_franzen != "") ? franzcri::leggi_dimensione(franzenname(partname).c_str()) : -1;
+				if (dentro >= 0)
+				{
+					++parts;
+					offset+= dentro;
+					continue;
+				}
+#endif /// NOSFTPEND
+#endif
 				break;
+			}
 			++parts;
 			fseeko(fp, 0, SEEK_END);
 			offset+= ftello(fp);
@@ -235559,13 +239679,13 @@ int Jidac::gestiscisingleormultipart()
 		arcname	  = subpart(archive, parts + 1);
 		if (flagdebug3)
 			myprintf("01956: archive %s arcname, parts+1 %s %d\n", archive.c_str(), arcname.c_str(), parts + 1);
-		if (exists(arcname))
+		if (exists(arcname) || exists(franzenname(arcname)))
 			error("part exists");
 		g_flagmultipart= true;
 
 		if (!flagnotrim)
 		{
-			if ((g_chunk_size > 0) && (g_incomplete_version > 0))
+			if ((g_chunk_size > 0) && (g_incomplete_version > 0) && (command != 'Z'))
 			{
 				color_red();
 				myprintf("69068: Cannot update a chunked-multipart with incomplete transaction\n");
@@ -235593,6 +239713,8 @@ int Jidac::gestiscisingleormultipart()
 					myprintf("69072: More on https://github.com/fcorbelli/zpaqfranz/wiki/Real-world-corruption\n");
 					return 2;
 				}
+				if ((!exists(pezzetto)) && exists(franzenname(pezzetto)))
+					pezzetto= franzenname(pezzetto); /// 65.11l: the part is a franzen file
 				string renamedchunk= pezzetto;
 				forceextension(renamedchunk, ".spaz");
 				renamedchunk= nomefileseesistegia(renamedchunk);
@@ -235752,6 +239874,52 @@ void Jidac::gestiscimultipart()
 					error("69691$ Impossible to rename");
 				}
 			}
+			/// 65.11l: the same for a part that was being made as a franzen file (x_003.tmp.franzen)
+			if (fileexists(franzenname(arcname)))
+			{
+				string renamedfile= arcname;
+				forceextension(renamedfile, ".spaz");
+				renamedfile= nomefileseesistegia(renamedfile);
+
+				myprintf("69688! The tmp part does exists <<%Z>> => renaming to <<%Z>>\n", franzenname(arcname).c_str(), renamedfile.c_str());
+				if (myrename(franzenname(arcname), renamedfile) != 0)
+				{
+					error("69692$ Impossible to rename");
+				}
+			}
+		}
+		/// 65.11p: backup -chunk: a run that died left a .tmp for each chunk it had begun: the ones after
+		/// the first too (this run would write over some of them, and leave the others there)
+		if (g_chunk_size > 0)
+		{
+			const string part0= subpart(archive, 0);
+			bool		 dopo = false;
+			for (int n= (parts > 0) ? parts : 1;; n++)
+			{
+				string pezzo= subpart(archive, n);
+				if (pezzo == part0)
+					break;
+				myreplace(pezzo, ".zpaq", ".tmp");
+				if (pezzo == arcname)
+				{
+					dopo= true;
+					continue;
+				}
+				if (!dopo)
+				{
+					if (n > parts + 1)
+						break;
+					continue;
+				}
+				if (!fileexists(pezzo))
+					break;
+				string renamedfile= pezzo;
+				forceextension(renamedfile, ".spaz");
+				renamedfile= nomefileseesistegia(renamedfile);
+				myprintf("69689! The tmp chunk does exists <<%Z>> => renaming to <<%Z>>\n", pezzo.c_str(), renamedfile.c_str());
+				if (myrename(pezzo, renamedfile) != 0)
+					error("69693$ Impossible to rename");
+			}
 		}
 	}
 
@@ -235785,6 +239953,8 @@ void Jidac::gestiscimultipart()
 			if (g_indexname != "")
 			{
 				g_starting_indexsize= prendidimensionefile(g_indexname.c_str());
+				if ((g_franzen != "") && (!exists(g_indexname)) && exists(franzenname(g_indexname))) /// 65.11l
+					g_starting_indexsize= prendidimensionefile(franzenname(g_indexname).c_str());
 				if (flagdebug3)
 					myprintf("69211: g_indexname %Z size %s\n", g_indexname.c_str(), migliaia(g_starting_indexsize));
 			}
@@ -236460,6 +240630,17 @@ void Jidac::gestiscibackupzeta()
 
 int Jidac::gestiscicalcolifinali()
 {
+	/// 65.11p: backup -chunk: a line of the _backup.txt for each chunk of this run (they have their names by now)
+	if ((g_chunk_size > 0) && (backuptxt != "") && (!g_addedchunklist.empty()))
+	{
+		for (size_t i= 0; i < g_addedchunklist.size(); i++)
+		{
+			const int fatto= calcolifinali(g_addedchunklist[i]);
+			if (fatto != 0)
+				return fatto;
+		}
+		return 0;
+	}
 	string thephysical= g_archive;
 #ifndef NOFRANZEN
 #ifdef ZPAQFULL /// NOSFTPSTART
@@ -236467,6 +240648,11 @@ int Jidac::gestiscicalcolifinali()
 		thephysical= franzenname(g_archive); // franzen-only: hash the real file on disk
 #endif /// NOSFTPEND
 #endif
+	return calcolifinali(thephysical);
+}
+/// the hash of a part just written: its line in the _backup.txt (and the -checktxt)
+int Jidac::calcolifinali(const string &thephysical)
+{
 	if ((checktxt != "") || (backuptxt != ""))
 		if (fileexists(thephysical)) // with no changes no multipart file is created
 		{
@@ -236623,10 +240809,12 @@ int Jidac::gestiscicalcolifinali()
 						if (goodhash != thehash)
 						{
 							myprintf("02198: Rebuilding %s on %s\n", goodhash.c_str(), thephysical.c_str());
-							franz_do_hash dummyquick(goodhash);
+							/// 65.11p: with the hasher of the txt (it was the one of this run: an XXH3 in a list of
+							/// MD5, and testbackup -verify said "real hash ... vs expected" for that part ever after)
+							franz_do_hash deltxt(goodhash);
 							if (flagdebug3)
 								myprintf("02199: filehash on %s\n", thephysical.c_str());
-							hashreloaded= dummy.filehash(0, thephysical, false, startverify, larghezzain);
+							hashreloaded= deltxt.filehash(0, thephysical, false, startverify, larghezzain);
 						}
 					}
 					fprintf(backupfile, "%s %s|[%21s] <%s> $%s$ %s\r\n", stringtolower(hashreloaded).c_str(), checktxt.c_str(), migliaia(larghezzain), quickhash.c_str(), dateToString(true, now()).c_str(), thephysical.c_str());
@@ -236670,11 +240858,54 @@ void Jidac::gestiscisfx()
 
 int Jidac::finalemultiparttmp()
 {
+	/*
+		65.11p: backup -chunk: the chunks of this run (.tmp) take their names. From the last to the
+		first: if it stops halfway the parts have a hole (the first ones are still .tmp) and the next
+		backup refuses to go on (02803), instead of writing after a version that is not whole
+	*/
+	if (g_flagmultipart && flagtmp && (g_chunk_size > 0))
+	{
+		std::vector<string> pezzi;
+		for (size_t i= 0; i < g_addedchunklist.size(); i++)
+			if (fileexists(g_addedchunklist[i]) && (std::find(pezzi.begin(), pezzi.end(), g_addedchunklist[i]) == pezzi.end()))
+			{
+				/// the last buffer filled a chunk to the brim: the next one was opened, and nothing came for it.
+				/// (a -chunk drops it too). As a part it would be an empty one: the next backup removes those,
+				/// and its line would stay in the _backup.txt
+				if (prendidimensionefile(g_addedchunklist[i].c_str()) == 0)
+				{
+					if (!delete_file(g_addedchunklist[i].c_str()))
+						myprintf("71352$ cannot delete the empty chunk <<%Z>>\n", g_addedchunklist[i].c_str());
+					continue;
+				}
+				pezzi.push_back(g_addedchunklist[i]);
+			}
+		for (size_t i= pezzi.size(); i > 0; i--)
+		{
+			string &pezzo= pezzi[i - 1];
+			if ((pezzo.size() < 5) || (pezzo.substr(pezzo.size() - 4) != ".tmp"))
+				continue;
+			const string sto= pezzo.substr(0, pezzo.size() - 4) + ".zpaq";
+			if (flagverbose)
+				myprintf("68938$ Renaming  <<%Z>> to <<%Z>>\n", pezzo.c_str(), sto.c_str());
+			if (myrename(pezzo, sto) != 0)
+			{
+				myprintf("71350$ GURU CANNOT RENAME <<%Z>> to <<%Z>>\n", pezzo.c_str(), sto.c_str());
+				return 2;
+			}
+			pezzo= sto;
+		}
+		g_addedchunklist= pezzi; /// (control-C, the lines of the _backup.txt, -copy: the names of now)
+		if (!pezzi.empty())
+			g_archive= pezzi.back();
+		return 0;
+	}
 	if (g_flagmultipart && flagtmp)
+	{
+		string sto= arcname;
+		myreplace(sto, ".tmp", ".zpaq");
 		if (fileexists(arcname))
 		{
-			string sto= arcname;
-			myreplace(sto, ".tmp", ".zpaq");
 			if (flagverbose)
 				myprintf("68938$ Renaming  <<%Z>> to <<%Z>>\n", arcname.c_str(), sto.c_str());
 			if (myrename(arcname, sto) != 0)
@@ -236692,27 +240923,30 @@ int Jidac::finalemultiparttmp()
 				}
 				g_archive= sto;
 			}
-			
-			// Gestione file .tmp.franzen
-			string franzen_tmp = arcname + ".franzen";
-			if (fileexists(franzen_tmp))
-			{
-				string franzen_sto = sto + ".franzen";
-				if (flagverbose)
-					myprintf("68939$ Renaming  <<%Z>> to <<%Z>>\n", franzen_tmp.c_str(), franzen_sto.c_str());
-				if (myrename(franzen_tmp, franzen_sto) != 0)
-				{
-					myprintf("71351$ GURU CANNOT RENAME <<%Z>> to <<%Z>>\n", franzen_tmp.c_str(), franzen_sto.c_str());
-					return 2;
-				}
-				else if (flagverbose)
-				{
-					color_green();
-					myprintf("71355: Franzen renaming done\n");
-					color_restore();
-				}
-			}
 		}
+
+		// Gestione file .tmp.franzen
+		/// 65.11l: also when it is alone (the part made as a franzen file only: there is no .tmp)
+		string franzen_tmp = arcname + ".franzen";
+		if (fileexists(franzen_tmp))
+		{
+			string franzen_sto = sto + ".franzen";
+			if (flagverbose)
+				myprintf("68939$ Renaming  <<%Z>> to <<%Z>>\n", franzen_tmp.c_str(), franzen_sto.c_str());
+			if (myrename(franzen_tmp, franzen_sto) != 0)
+			{
+				myprintf("71351$ GURU CANNOT RENAME <<%Z>> to <<%Z>>\n", franzen_tmp.c_str(), franzen_sto.c_str());
+				return 2;
+			}
+			else if (flagverbose)
+			{
+				color_green();
+				myprintf("71355: Franzen renaming done\n");
+				color_restore();
+			}
+			g_archive= sto;
+		}
+	}
 	return 0;
 }
 
@@ -236933,6 +241167,7 @@ void Jidac::preparahashtobewritten(const string &i_filename, const DTMap::iterat
 }
 
 
+#ifdef ANCIENT /// 65.11k: the plain loop, for the old systems only (ESX, NAS): elsewhere add() is add2(), see there
 int Jidac::add()
 {
 	string externaloutputfile= "";
@@ -237399,7 +241634,8 @@ int Jidac::add()
 	// with -key too: AES+franzen goes into a single FRENZEN file, no cleartext-side .zpaq
 	// a .franzen archive (a z:/pippo.franzen) is franzen-only by definition: -debug cannot
 	// turn on a cleartext .zpaq, there is no .zpaq name at all
-	g_franzen_zpaq_nowrite= (g_franzen != "") && (isfranzen(arcname) || ((!exists(arcname)) && ((!flagdebug) || is_file_franzen(arcname + ".franzen")))) && (g_chunk_size == 0) && (!g_fakewrite) && (!index);
+	/// 65.11l: with an index too (backup): the index is then a franzen file as well (see OutputArchive)
+	g_franzen_zpaq_nowrite= (g_franzen != "") && (isfranzen(arcname) || ((!exists(arcname)) && ((!flagdebug) || is_file_franzen(arcname + ".franzen")))) && (g_chunk_size == 0) && (!g_fakewrite);
 #endif /// NOSFTPEND
 #endif
 
@@ -237412,7 +241648,10 @@ int Jidac::add()
 
 	int64_t initial_archive_size= header_pos;
 
-	if (g_chunk_size > 0) // we have multiple output,maybe multiple in too: => sum the filesizes
+	/// 65.11k: a -append -chunk, first pass on a NEW archive: nothing is written, there is no part to open
+	/// ("Archive not found", and the command ended there)
+	/// 65.11p: (the same for the first run of a backup -chunk: its first chunk is a .tmp, there is no part yet)
+	if ((g_chunk_size > 0) && (!((g_fakewrite || flagtmp) && (!exists(subpart(archive, 1)))))) // we have multiple output,maybe multiple in too: => sum the filesizes
 	{
 		InputArchive in(archive.c_str());
 		initial_archive_size= in.totalsize();
@@ -238479,6 +242718,7 @@ int Jidac::add()
 	/// the index is built here, before the fragment tables: -fast
 	/// needs the records of this version to store the history
 	vector<string> indexchunks;
+
 	buildindexchunks(indexchunks);
 	const bool filelistwrite= filelist_store(out, job, blocklist, htinv, header_end, htsize, indexchunks);
 
@@ -238614,6 +242854,11 @@ int Jidac::add()
 			if (flagdebug3)
 				myprintf("02131: preflush\n");
 			out.flush(); // this is fundamental!
+#ifndef NOFRANZEN
+#ifdef ZPAQFULL /// NOSFTPSTART
+			g_franzen_jidacheader= -1; /// 65.11r //FIX-FRANZEN: the header is written: what comes after is not the header
+#endif /// NOSFTPEND
+#endif
 			if (flagdebug3)
 				myprintf("02132: postflush\n");
 			out.seek(0, SEEK_END);
@@ -238789,6 +243034,13 @@ int Jidac::add()
 						{
 							myprintf("02145: deleted %Z: no data to be archived\n", arcname.c_str());
 						}
+					/// 65.11l: the part made as a franzen file only
+					if ((g_franzen != "") && (!isfranzen(arcname)) && fileexists(franzenname(arcname)))
+						if (delete_file(franzenname(arcname).c_str()))
+							if (flagverbose)
+							{
+								myprintf("02145: deleted %Z: no data to be archived\n", franzenname(arcname).c_str());
+							}
 				}
 			}
 		}
@@ -238813,24 +243065,22 @@ int Jidac::add()
 
 		if (g_chunk_size > 0)
 		{
-			inchunks   = "[CKS #" + itos(out.filepartnames.size() + 1) + "]";
+			/// 65.11p: every chunk of this run, the first one too (it was left out: the sizes shown were short
+			/// of it), and not an empty one (the last buffer filled a chunk to the brim: see finalemultiparttmp)
+			std::vector<string> contati;
+			myarchive_end= 0;
+			for (size_t i= 0; i < g_addedchunklist.size(); i++)
+				if (fileexists(g_addedchunklist[i]) && (prendidimensionefile(g_addedchunklist[i].c_str()) > 0) && (std::find(contati.begin(), contati.end(), g_addedchunklist[i]) == contati.end()))
+				{
+					contati.push_back(g_addedchunklist[i]);
+					myarchive_end+= prendidimensionefile(g_addedchunklist[i].c_str());
+				}
+			inchunks   = "[CKS #" + itos((int64_t)contati.size()) + "]";
 			intotalsize= "[TOT]";
 		}
 		else if (g_flagmultipart)
 		{
 			intotalsize= "[LAST]";
-		}
-		if (g_chunk_size > 0) // we have multiple output
-			if (out.filepartnames.size() > 0)
-			{
-				myarchive_end= 0;
-				for (unsigned int i= 0; i < out.filepartnames.size(); i++)
-				{
-					if (flagdebug3)
-						myprintf("02147: Getting %08d %s\n", i, out.filepartnames[i].c_str());
-					if (fileexists(out.filepartnames[i]))
-						myarchive_end+= prendidimensionefile(out.filepartnames[i].c_str());
-				}
 			}
 		/// myprintf("02148: ZZZ %21s myarchive_end initial_archive_size %s\n",migliaia4(myarchive_end),migliaia(initial_archive_size));
 
@@ -238861,8 +243111,8 @@ int Jidac::add()
 				if (global_file_len <= 0)
 					global_file_len= myarchive_end;
 				myprintf("\n");
-				if (g_chunk_size > 0) // we have multiple output
-					global_file_len= myarchive_end + initial_archive_size;
+				if (g_chunk_size > 0) // we have multiple output (65.11p: a new archive is all in the chunks of this run, its salt too)
+					global_file_len= out.firstchunk ? myarchive_end : (myarchive_end + initial_archive_size);
 
 				if (files_added + files_updated + removed > 0)
 				{
@@ -238912,11 +243162,25 @@ int Jidac::add()
 				tobecopied= g_archive + ".franzen"; // franzen-only: the .franzen is the archive
 #endif /// NOSFTPEND
 #endif
-			string filescritto= filecopy(false, false, tobecopied, g_copy, true, false, false, 0);
-			if (filescritto != "")
-				myprintf("02165: Copied <<%s>> to <<%s>>\n", tobecopied.c_str(), filescritto.c_str());
+			/// 65.11p: -chunk: every chunk of this run (it was the first one only)
+			std::vector<string> dacopiare;
+			if (g_chunk_size > 0)
+			{
+				for (size_t i= 0; i < g_addedchunklist.size(); i++)
+					if (fileexists(g_addedchunklist[i]) && (std::find(dacopiare.begin(), dacopiare.end(), g_addedchunklist[i]) == dacopiare.end()))
+						dacopiare.push_back(g_addedchunklist[i]);
+			}
 			else
-				myprintf("02166: ERROR doing -copy from %s to %s\n", tobecopied.c_str(), filescritto.c_str());
+				dacopiare.push_back(tobecopied);
+			for (size_t i= 0; i < dacopiare.size(); i++)
+			{
+				tobecopied		  = dacopiare[i];
+				string filescritto= filecopy(false, false, tobecopied, g_copy, true, false, false, 0);
+				if (filescritto != "")
+					myprintf("02165: Copied <<%s>> to <<%s>>\n", tobecopied.c_str(), filescritto.c_str());
+				else
+					myprintf("02166: ERROR doing -copy from %s to %s\n", tobecopied.c_str(), filescritto.c_str());
+			}
 		}
 	gestisciposttest();
 #ifdef ZPAQFULL /// NOSFTPSTART
@@ -239063,6 +243327,7 @@ int Jidac::add()
 	/// errors is a count: as an exit code 256 errors would become 0 (all OK)
 	return (errors > 2) ? 2 : errors;
 }
+#endif // corresponds to #ifdef (#ifdef ANCIENT)
 #ifndef ANCIENT
 /*
 	-turbo, add2(): add() with the fragmenter and the SHA-1 of the fragments
@@ -239474,6 +243739,8 @@ int Jidac::add2()
 	}
 
 	gestiscimultipart();
+	if (g_appendstdout)
+		g_archive= ""; /// a -append -stdout: the archive on the command line is never written, control-C has nothing to roll back
 
 	g_header_pos= header_pos;
 	if (flagdebug2)
@@ -239773,7 +244040,8 @@ int Jidac::add2()
 	// with -key too: AES+franzen goes into a single FRENZEN file, no cleartext-side .zpaq
 	// a .franzen archive (a z:/pippo.franzen) is franzen-only by definition: -debug cannot
 	// turn on a cleartext .zpaq, there is no .zpaq name at all
-	g_franzen_zpaq_nowrite= (g_franzen != "") && (isfranzen(arcname) || ((!exists(arcname)) && ((!flagdebug) || is_file_franzen(arcname + ".franzen")))) && (g_chunk_size == 0) && (!g_fakewrite) && (!index);
+	/// 65.11l: with an index too (backup): the index is then a franzen file as well (see OutputArchive)
+	g_franzen_zpaq_nowrite= (g_franzen != "") && (isfranzen(arcname) || ((!exists(arcname)) && ((!flagdebug) || is_file_franzen(arcname + ".franzen")))) && (g_chunk_size == 0) && (!g_fakewrite);
 #endif /// NOSFTPEND
 #endif
 
@@ -239786,7 +244054,10 @@ int Jidac::add2()
 
 	int64_t initial_archive_size= header_pos;
 
-	if (g_chunk_size > 0) // we have multiple output,maybe multiple in too: => sum the filesizes
+	/// 65.11k: a -append -chunk, first pass on a NEW archive: nothing is written, there is no part to open
+	/// ("Archive not found", and the command ended there)
+	/// 65.11p: (the same for the first run of a backup -chunk: its first chunk is a .tmp, there is no part yet)
+	if ((g_chunk_size > 0) && (!((g_fakewrite || flagtmp) && (!exists(subpart(archive, 1)))))) // we have multiple output,maybe multiple in too: => sum the filesizes
 	{
 		InputArchive in(archive.c_str());
 		initial_archive_size= in.totalsize();
@@ -239894,7 +244165,7 @@ int Jidac::add2()
 		myprintf("02067: g_cdatasize  %s\n", migliaia(g_cdatasize));
 		myprintf("02068: g_htsize     %s\n", migliaia(g_htsize));
 	}
-	if ((g_optional == "ransomware") && (g_cdatasize > 0) && (g_htsize > 0))
+	if (g_appendpass2) /// a -append, second pass: sizes known from the first one, the header is final now
 	{
 		if (flagdebug2)
 			myprintf("02069: append cdatasize %s htsize %s\n", migliaia(g_cdatasize), migliaia2(g_htsize));
@@ -240107,6 +244378,8 @@ int Jidac::add2()
 	int64_t					turboserial= 0;
 	/// -turbo N: N threads for the fragmenter (1 = the plain loop, as -t1), -turbo alone: as -t
 	int turbothreads= (g_turbothreads > 0) ? g_turbothreads : howmanythreads;
+	if (!flagturbo) /// 65.11k: -noturbo (and -715): one thread cuts, the plain loop for every file (it was add())
+		turbothreads= 1;
 	if (turbothreads < 1)
 		turbothreads= 1;
 	if (turbothreads > 32)
@@ -241453,8 +245726,10 @@ int Jidac::add2()
 	/// needs the records of this version to store the history
 	vector<string> indexchunks;
 	buildindexchunks(indexchunks);
+	
+	///fika
 	const bool filelistwrite= filelist_store(out, job, blocklist, htinv, header_end, htsize, indexchunks);
-
+	
 	salt[0]^= '7' ^ 'z';
 
 	OutputArchive outi(archive, index ? index : "", g_password, salt, 0);
@@ -241521,12 +245796,29 @@ int Jidac::add2()
 	if (flagdebug3)
 		myprintf("02123: calculated **** %s %s\n", migliaia(cdatasize), migliaia2(htsize));
 
-	if ((g_optional == "ransomware") && (g_cdatasize == 0) && (g_htsize == 0))
+	/// a -append: what this pass has really added (the folders are counted by buildindexchunks)
+	g_appendfiles= files_added + files_updated;
+	g_appendbytes= total_done;
+	if ((g_optional == "ransomware") && g_fakewrite)
 	{
 		if (flagdebug3)
 			myprintf("02124: calculated cdatasize %s  htsize %s\n", migliaia(cdatasize), migliaia2(htsize));
 		g_cdatasize= cdatasize;
 		g_htsize   = htsize;
+	}
+	else if (g_appendpass2)
+	{
+		/// second pass: the header was written at the start with the sizes of the first pass,
+		/// nothing to fix, NO seek back. If this pass did not get the very same result, that
+		/// header would be wrong: the whole new version is thrown away (after the close)
+		int64_t verifica= cdatasize;
+		if ((g_chunk_size > 0) && (g_password != NULL) && out.firstchunk)
+			verifica+= 32; /// the same correction the normal (seek back) path does
+		if ((verifica != g_cdatasize) || (htsize != g_htsize) || (g_appendfiles != g_appendfirstfiles) ||
+			(g_appenddirs != g_appendfirstdirs) || (g_appendbytes != g_appendfirstbytes))
+			g_appenddiverso= true;
+		if (flagdebug3)
+			myprintf("02124: second pass cdatasize %s (first %s) htsize %s (first %s)\n", migliaia(verifica), migliaia2(g_cdatasize), migliaia3(htsize), migliaia4(g_htsize));
 	}
 	else
 	{
@@ -241572,6 +245864,11 @@ int Jidac::add2()
 			if (flagdebug3)
 				myprintf("02131: preflush\n");
 			out.flush(); // this is fundamental!
+#ifndef NOFRANZEN
+#ifdef ZPAQFULL /// NOSFTPSTART
+			g_franzen_jidacheader= -1; /// 65.11r //FIX-FRANZEN: the header is written: what comes after is not the header
+#endif /// NOSFTPEND
+#endif
 			if (flagdebug3)
 				myprintf("02132: postflush\n");
 			out.seek(0, SEEK_END);
@@ -241582,6 +245879,37 @@ int Jidac::add2()
 	archive_size= out.tell();
 
 	out.close();
+
+	/// a -append: a second pass not the same as the first one => the new version is not valid
+	if (g_appendpass2 && g_appenddiverso)
+	{
+		if (!g_appendstdout)
+		{
+			bool annullato= true;
+			if (g_chunk_size > 0)
+			{
+				for (unsigned int i= 0; i < g_addedchunklist.size(); i++)
+					if (fileexists(g_addedchunklist[i]))
+						if (!delete_file(g_addedchunklist[i].c_str()))
+							annullato= false;
+			}
+			else if (g_flagmultipart || (!archive_exists))
+			{
+				if (fileexists(arcname))
+					annullato= delete_file(arcname.c_str());
+			}
+			else if (truncate(arcname.c_str(), header_pos) != 0)
+				annullato= false;
+			if (annullato)
+				fprintf(stderr, "a -append: the new version has been removed, <<%s>> is as before\n", arcname.c_str());
+			else
+				fprintf(stderr, "a -append: CANNOT remove the new version from <<%s>>: check it (t) and trim\n", arcname.c_str());
+		}
+		return 2;
+	}
+	/// a -append -stdout: the archive on the command line is not touched (no trim, no date, no -fasttxt)
+	if (g_appendstdout)
+		return (errors > 2) ? 2 : errors;
 
 	if (g_chunk_size > 0)
 	{
@@ -241716,6 +246044,13 @@ int Jidac::add2()
 						{
 							myprintf("02145: deleted %Z: no data to be archived\n", arcname.c_str());
 						}
+					/// 65.11l: the part made as a franzen file only
+					if ((g_franzen != "") && (!isfranzen(arcname)) && fileexists(franzenname(arcname)))
+						if (delete_file(franzenname(arcname).c_str()))
+							if (flagverbose)
+							{
+								myprintf("02145: deleted %Z: no data to be archived\n", franzenname(arcname).c_str());
+							}
 				}
 			}
 		}
@@ -241740,24 +246075,22 @@ int Jidac::add2()
 
 		if (g_chunk_size > 0)
 		{
-			inchunks   = "[CKS #" + itos(out.filepartnames.size() + 1) + "]";
+			/// 65.11p: every chunk of this run, the first one too (it was left out: the sizes shown were short
+			/// of it), and not an empty one (the last buffer filled a chunk to the brim: see finalemultiparttmp)
+			std::vector<string> contati;
+			myarchive_end= 0;
+			for (size_t i= 0; i < g_addedchunklist.size(); i++)
+				if (fileexists(g_addedchunklist[i]) && (prendidimensionefile(g_addedchunklist[i].c_str()) > 0) && (std::find(contati.begin(), contati.end(), g_addedchunklist[i]) == contati.end()))
+				{
+					contati.push_back(g_addedchunklist[i]);
+					myarchive_end+= prendidimensionefile(g_addedchunklist[i].c_str());
+				}
+			inchunks   = "[CKS #" + itos((int64_t)contati.size()) + "]";
 			intotalsize= "[TOT]";
 		}
 		else if (g_flagmultipart)
 		{
 			intotalsize= "[LAST]";
-		}
-		if (g_chunk_size > 0) // we have multiple output
-			if (out.filepartnames.size() > 0)
-			{
-				myarchive_end= 0;
-				for (unsigned int i= 0; i < out.filepartnames.size(); i++)
-				{
-					if (flagdebug3)
-						myprintf("02147: Getting %08d %s\n", i, out.filepartnames[i].c_str());
-					if (fileexists(out.filepartnames[i]))
-						myarchive_end+= prendidimensionefile(out.filepartnames[i].c_str());
-				}
 			}
 		/// myprintf("02148: ZZZ %21s myarchive_end initial_archive_size %s\n",migliaia4(myarchive_end),migliaia(initial_archive_size));
 
@@ -241788,8 +246121,8 @@ int Jidac::add2()
 				if (global_file_len <= 0)
 					global_file_len= myarchive_end;
 				myprintf("\n");
-				if (g_chunk_size > 0) // we have multiple output
-					global_file_len= myarchive_end + initial_archive_size;
+				if (g_chunk_size > 0) // we have multiple output (65.11p: a new archive is all in the chunks of this run, its salt too)
+					global_file_len= out.firstchunk ? myarchive_end : (myarchive_end + initial_archive_size);
 
 				if (files_added + files_updated + removed > 0)
 				{
@@ -241839,11 +246172,25 @@ int Jidac::add2()
 				tobecopied= g_archive + ".franzen"; // franzen-only: the .franzen is the archive
 #endif /// NOSFTPEND
 #endif
-			string filescritto= filecopy(false, false, tobecopied, g_copy, true, false, false, 0);
-			if (filescritto != "")
-				myprintf("02165: Copied <<%s>> to <<%s>>\n", tobecopied.c_str(), filescritto.c_str());
+			/// 65.11p: -chunk: every chunk of this run (it was the first one only)
+			std::vector<string> dacopiare;
+			if (g_chunk_size > 0)
+			{
+				for (size_t i= 0; i < g_addedchunklist.size(); i++)
+					if (fileexists(g_addedchunklist[i]) && (std::find(dacopiare.begin(), dacopiare.end(), g_addedchunklist[i]) == dacopiare.end()))
+						dacopiare.push_back(g_addedchunklist[i]);
+			}
 			else
-				myprintf("02166: ERROR doing -copy from %s to %s\n", tobecopied.c_str(), filescritto.c_str());
+				dacopiare.push_back(tobecopied);
+			for (size_t i= 0; i < dacopiare.size(); i++)
+			{
+				tobecopied		  = dacopiare[i];
+				string filescritto= filecopy(false, false, tobecopied, g_copy, true, false, false, 0);
+				if (filescritto != "")
+					myprintf("02165: Copied <<%s>> to <<%s>>\n", tobecopied.c_str(), filescritto.c_str());
+				else
+					myprintf("02166: ERROR doing -copy from %s to %s\n", tobecopied.c_str(), filescritto.c_str());
+			}
 		}
 	gestisciposttest();
 #ifdef ZPAQFULL /// NOSFTPSTART
@@ -241993,6 +246340,12 @@ int Jidac::add2()
 	}
 	/// errors is a count: as an exit code 256 errors would become 0 (all OK)
 	return (errors > 2) ? 2 : errors;
+}
+/// 65.11k: one way to add on the systems of today: add() is add2() (one thread to cut with -noturbo).
+/// The loop of add(), above, is compiled for the ANCIENT builds only (ESX, NAS), where add2() is not
+int Jidac::add()
+{
+	return add2();
 }
 #endif // corresponds to #ifndef (#ifndef ANCIENT)
 #ifdef _WIN32
@@ -245866,4 +250219,608 @@ int Jidac::monitor()
 int Jidac::tree()
 {
 	return dir(true);
+}
+
+
+
+///fika
+
+
+bool isbinextension(std::string i_file)
+{
+    // 1. Trova l'ultimo separatore di directory (\ o /) per evitare di confondere 
+    // i punti nei nomi delle cartelle con l'estensione del file.
+    size_t last_slash = i_file.find_last_of("/\\");
+    size_t last_dot = i_file.find_last_of('.');
+
+    // Se non c'è un punto, o se il punto si trova prima del percorso della cartella, non c'è estensione
+    if (last_dot == std::string::npos || (last_slash != std::string::npos && last_dot < last_slash)) {
+        return false;
+    }
+
+    // Estrae l'estensione (incluso il punto, es. ".jpg")
+    std::string ext = i_file.substr(last_dot);
+
+    // Converte l'estensione in minuscolo (compatibile C++98)
+    for (size_t i = 0; i < ext.length(); ++i) {
+        ext[i] = static_cast<char>(std::tolower(static_cast<unsigned char>(ext[i])));
+    }
+
+    // 2. Elenco completo di estensioni binarie comuni (al 99.99% non testuali)
+    static const char* bin_exts[] = {
+        // Archivi e Compressi
+        ".zip", ".rar", ".7z", ".tar", ".gz", ".bz2", ".xz", ".cab", ".iso", ".dmg", ".tgz", ".tbz2", ".rpm", ".deb",
+        // Immagini
+        ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".ico", ".tiff", ".tif", ".webp", ".psd", ".ai", ".eps",
+        // Audio e Video
+        ".mp3", ".wav", ".flac", ".aac", ".ogg", ".wma", ".m4a", ".mp4", ".avi", ".mkv", ".mov", ".wmv", ".flv", ".m4v", ".webm", ".mpeg", ".mpg",
+        // Documenti e Office (formati container binari)
+        ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".odt", ".ods", ".odp", ".epub", ".mobi",
+        // Eseguibili, Librerie e File di Sistema
+        ".exe", ".dll", ".so", ".dylib", ".bin", ".obj", ".o", ".lib", ".a", ".class", ".pyc", ".wasm", ".msi", ".apk",
+        // Database e Altri
+        ".sqlite", ".db", ".mdb", ".rom", ".img", ".vhd", ".vmdk", ".bak", ".dat", ".woff", ".woff2", ".ttf", ".otf", ".eot"
+    };
+    
+    size_t num_exts = sizeof(bin_exts) / sizeof(bin_exts[0]);
+
+    // 3. Controllo lineare sull'array
+    for (size_t i = 0; i < num_exts; ++i) {
+        if (ext == bin_exts[i]) {
+            return true;
+        }
+    }
+
+    return false;
+}
+#define DEFAULT_GREP_LEN 40
+#define GREP_MAXLINE ((size_t)1 << 20) /// 65.11j: a line longer than this (a file with no newlines) is searched in pieces
+
+// Cerca un pattern (case-insensitive ASCII) in un buffer, con Boyer-Moore-Horspool
+class franzmatcher
+{
+public:
+    explicit franzmatcher(const std::string& p) : pat(p), m(p.size())
+    {
+        for (int i = 0; i < 256; i++)
+            lower[i] = (unsigned char)std::tolower(i);
+        for (size_t i = 0; i < m; i++)
+            pat[i] = (char)lower[(unsigned char)pat[i]];
+        for (int i = 0; i < 256; i++)
+            skip[i] = m;
+        for (size_t i = 0; i + 1 < m; i++)
+            skip[(unsigned char)pat[i]] = m - 1 - i;
+    }
+
+    // Dove comincia il primo match in s[0..n-1]; std::string::npos se non c'e'
+    size_t find(const char* s, size_t n) const
+    {
+        if (m == 0 || n < m)
+            return std::string::npos;
+        const unsigned char last_p = (unsigned char)pat[m - 1];
+        size_t pos = 0;
+        while (pos + m <= n)
+        {
+            unsigned char last = lower[(unsigned char)s[pos + m - 1]];
+            if (last == last_p)
+            {
+                size_t k = 0;
+                while (k + 1 < m && lower[(unsigned char)s[pos + k]] == (unsigned char)pat[k])
+                    k++;
+                if (k + 1 == m)
+                    return pos;
+            }
+            pos += skip[last];
+        }
+        return std::string::npos;
+    }
+
+    size_t length() const { return m; }
+
+private:
+    std::string pat;           // gia' in minuscolo
+    size_t m;
+    unsigned char lower[256];
+    size_t skip[256];
+};
+
+// Legge un file a blocchi e restituisce una alla volta le righe che contengono il pattern.
+// Memoria limitata: una riga oltre GREP_MAXLINE (un file senza a capo) si cerca a pezzi.
+// Un file UTF-16 con il BOM (su Windows: .reg, l'uscita di PowerShell) si legge come UTF-8:
+// prima era scartato come binario, per gli zeri.
+class franzscanner
+{
+public:
+    franzscanner(FILE* file, const franzmatcher& matcher)
+        : f(file), mt(matcher), buf(64 * 1024), cur(NULL), bufpos(0), buflen(0),
+          lineno(1), first(true), eof(false), skipline(false), tagliata(false), datatagliata(false),
+          utf16(0), spaiato(-1), alto(0) {}
+
+    // La riga appena data non comincia dall'inizio (riga enorme, cercata a pezzi)
+    bool cut() const { return datatagliata; }
+
+    // Ritorna: 1 = riga trovata (out, ln, pos valorizzati; pos = dove comincia il match in out)
+    //          0 = fine file
+    //         -1 = file binario
+    int next(std::string& out, unsigned long& ln, size_t& pos)
+    {
+        for (;;)
+        {
+            if (bufpos == buflen)
+            {
+                if (eof)
+                {
+                    // ultima riga senza '\n' finale
+                    if (line.empty() || skipline)
+                        return 0;
+                    pos = mt.find(line.data(), line.size());
+                    if (pos != std::string::npos)
+                    {
+                        datatagliata = tagliata;
+                        take(out);
+                        ln = lineno;
+                        return 1;
+                    }
+                    line.clear();
+                    return 0;
+                }
+                size_t n = fread(&buf[0], 1, buf.size(), f);
+                if (n < buf.size())
+                    eof = true;
+                if (first)
+                {
+                    first = false;
+                    if (n >= 2 && (unsigned char)buf[0] == 0xFF && (unsigned char)buf[1] == 0xFE)
+                        utf16 = 1; // little endian
+                    else if (n >= 2 && (unsigned char)buf[0] == 0xFE && (unsigned char)buf[1] == 0xFF)
+                        utf16 = 2; // big endian
+                    else if (n > 0 && memchr(&buf[0], 0, n) != NULL)
+                        return -1;
+                }
+                if (utf16 != 0)
+                {
+                    converti(&buf[0], n);
+                    cur = conv.data();
+                    buflen = conv.size();
+                }
+                else
+                {
+                    cur = &buf[0];
+                    buflen = n;
+                }
+                bufpos = 0;
+                continue;
+            }
+
+            const char* start = cur + bufpos;
+            const char* nl = (const char*)memchr(start, '\n', buflen - bufpos);
+            if (nl == NULL)
+            {
+                if (!skipline)
+                    line.append(start, buflen - bufpos);
+                bufpos = buflen;
+                if (line.size() > GREP_MAXLINE)
+                {
+                    // riga enorme: si cerca in questo pezzo, poi se ne tiene solo la coda
+                    // (un match a cavallo di due pezzi comincia negli ultimi m-1 byte)
+                    pos = mt.find(line.data(), line.size());
+                    if (pos != std::string::npos)
+                    {
+                        skipline = true; // una riga si mostra una volta: il resto si salta
+                        datatagliata = tagliata;
+                        take(out);
+                        ln = lineno;
+                        return 1;
+                    }
+                    line.erase(0, line.size() - (mt.length() - 1));
+                    tagliata = true;
+                }
+                continue;
+            }
+
+            bufpos += (size_t)(nl - start) + 1;
+            unsigned long questa = lineno++;
+            datatagliata = tagliata;
+            tagliata = false;
+            if (skipline)
+            {
+                skipline = false; // la fine di una riga enorme gia' mostrata
+                continue;
+            }
+            line.append(start, (size_t)(nl - start));
+            pos = mt.find(line.data(), line.size());
+            if (pos != std::string::npos)
+            {
+                take(out);
+                ln = questa;
+                return 1;
+            }
+            line.clear();
+        }
+    }
+
+private:
+    void take(std::string& out)
+    {
+        out.swap(line);
+        line.clear();
+        if (!out.empty() && out[out.size() - 1] == '\r')
+            out.erase(out.size() - 1);
+    }
+
+    // UTF-16 -> UTF-8, un blocco alla volta: un byte spaiato e la prima meta' di una
+    // coppia surrogata aspettano il blocco dopo
+    void converti(const char* p, size_t n)
+    {
+        conv.clear();
+        size_t i = 0;
+        if (spaiato >= 0 && n > 0)
+        {
+            unita((unsigned)spaiato, (unsigned char)p[0]);
+            spaiato = -1;
+            i = 1;
+        }
+        for (; i + 1 < n; i += 2)
+            unita((unsigned char)p[i], (unsigned char)p[i + 1]);
+        if (i < n)
+            spaiato = (unsigned char)p[i];
+    }
+    void unita(unsigned a, unsigned b)
+    {
+        const unsigned u = (utf16 == 1) ? (a | (b << 8)) : ((a << 8) | b);
+        unsigned cp = u;
+        if (alto != 0 && u >= 0xDC00 && u <= 0xDFFF)
+        {
+            cp = 0x10000 + ((alto - 0xD800) << 10) + (u - 0xDC00);
+            alto = 0;
+        }
+        else
+        {
+            alto = 0; // una meta' rimasta sola si butta
+            if (u >= 0xD800 && u <= 0xDBFF)
+            {
+                alto = u;
+                return;
+            }
+            if (u == 0xFEFF) // il BOM
+                return;
+        }
+        if (cp < 0x80)
+            conv += (char)cp;
+        else if (cp < 0x800)
+        {
+            conv += (char)(0xC0 | (cp >> 6));
+            conv += (char)(0x80 | (cp & 0x3F));
+        }
+        else if (cp < 0x10000)
+        {
+            conv += (char)(0xE0 | (cp >> 12));
+            conv += (char)(0x80 | ((cp >> 6) & 0x3F));
+            conv += (char)(0x80 | (cp & 0x3F));
+        }
+        else
+        {
+            conv += (char)(0xF0 | (cp >> 18));
+            conv += (char)(0x80 | ((cp >> 12) & 0x3F));
+            conv += (char)(0x80 | ((cp >> 6) & 0x3F));
+            conv += (char)(0x80 | (cp & 0x3F));
+        }
+    }
+
+    FILE* f;
+    const franzmatcher& mt;
+    std::vector<char> buf;
+    std::string conv;      // il blocco in UTF-8, se il file e' UTF-16
+    const char* cur;       // il blocco da esaminare: buf oppure conv
+    size_t bufpos, buflen;
+    std::string line;
+    unsigned long lineno;
+    bool first, eof;
+    bool skipline;         // il resto di una riga enorme di cui si e' gia' dato un pezzo
+    bool tagliata;         // della riga in corso si e' gia' buttato l'inizio (riga enorme)
+    bool datatagliata;     // lo stesso, per la riga appena data: vedi cut()
+    int utf16;             // 0 no, 1 little endian, 2 big endian
+    int spaiato;           // byte rimasto a meta' di un'unita' UTF-16 (-1: nessuno)
+    unsigned alto;         // prima meta' di una coppia surrogata (0: nessuna)
+};
+
+// --- Helper UTF-8 (conta/taglia per caratteri, senza spezzare le sequenze) ---
+
+// numero di caratteri (non di byte)
+static size_t franz_u8len(const std::string& s)
+{
+    size_t n = 0;
+    for (size_t i = 0; i < s.size(); i++)
+        if (((unsigned char)s[i] & 0xC0) != 0x80)
+            n++;
+    return n;
+}
+
+// primi n caratteri
+static std::string franz_u8prefix(const std::string& s, size_t n)
+{
+    size_t i = 0, c = 0;
+    while (i < s.size())
+    {
+        if (((unsigned char)s[i] & 0xC0) != 0x80)
+        {
+            if (c == n)
+                break;
+            c++;
+        }
+        i++;
+    }
+    return s.substr(0, i);
+}
+
+// ultimi n caratteri
+static std::string franz_u8suffix(const std::string& s, size_t n)
+{
+    size_t total = franz_u8len(s);
+    if (n >= total)
+        return s;
+    size_t skipchars = total - n;
+    size_t i = 0, c = 0;
+    while (i < s.size())
+    {
+        if (((unsigned char)s[i] & 0xC0) != 0x80)
+        {
+            if (c == skipchars)
+                break;
+            c++;
+        }
+        i++;
+    }
+    return s.substr(i);
+}
+
+// Costruisce "percorso:" + spazi di riempimento, in modo che la parte
+// percorso occupi esattamente W caratteri (W >= 4).
+//  - percorso corto: intero, riempito con spazi dopo i due punti
+//  - percorso lungo: inizio del percorso + "..." + nome file intero
+//  - nome file troppo lungo da solo: "..." + ultimi W-3 caratteri del nome
+static std::string franz_fitpath(const std::string& path, size_t W)
+{
+	if (!flagverbose)
+		return path;
+	std::string out;
+    size_t len = franz_u8len(path);
+
+    if (len <= W)
+        out = path;
+    else
+    {
+        size_t slash = path.rfind('/');
+        std::string name = (slash == std::string::npos) ? path : path.substr(slash + 1);
+        size_t nlen = franz_u8len(name);
+        if (nlen + 3 <= W)
+            out = franz_u8prefix(path, W - 3 - nlen) + "..." + name;
+        else
+            out = "..." + franz_u8suffix(name, W - 3);
+    }
+
+    size_t vis = franz_u8len(out);
+    out += ":";
+    if (vis < W)
+        out.append(W - vis, ' ');
+    return out;
+}
+
+// La riga da mostrare: senza gli spazi iniziali, al massimo i_max byte. Di una riga piu' lunga
+// si mostra il pezzo attorno al match (prima sempre l'inizio: in una riga lunga il match non si
+// vedeva), con "..." dove e' tagliata e senza spezzare le sequenze UTF-8
+static std::string franz_showline(const std::string& i_text, size_t i_pos, size_t i_max, bool i_cut)
+{
+    size_t da = i_text.find_first_not_of(" \t\r\n\v\f");
+    if (da == std::string::npos)
+        return "";
+    if (i_pos < da) // il testo cercato comincia con uno spazio
+        da = i_pos;
+    size_t a = da;
+    if (i_text.size() - da > i_max && i_pos > da + i_max / 2)
+        a = i_pos - i_max / 4; // un po' di quello che viene prima del match
+    size_t b = a + i_max;
+    if (b > i_text.size())
+        b = i_text.size();
+    while (a < b && ((unsigned char)i_text[a] & 0xC0) == 0x80)
+        a++;
+    while (b > a && b < i_text.size() && ((unsigned char)i_text[b] & 0xC0) == 0x80)
+        b--;
+    std::string out;
+    if (a > da || i_cut) // i_cut: il testo stesso non comincia dove comincia la riga
+        out = "...";
+    out.append(i_text, a, b - a);
+    if (b < i_text.size())
+        out += "...";
+    return out;
+}
+
+int Jidac::grep()
+{
+    if (files.size() < 2)
+    {
+        myprintf("01092: At least one folder and one string needed\n");
+        return 1;
+    }
+
+    // L'ultimo elemento e' la stringa da cercare
+    std::string search_str = files[files.size() - 1];
+#ifdef _WIN32
+    /// 65.11j: on Windows main() turns every \ of the arguments into / (wtou): a text with a
+    /// backslash (grep c:\src "d:\backup") was never found. Here the text as it was typed
+    {
+        int     quanti = 0;
+        LPWSTR* larghi = CommandLineToArgvW(GetCommandLineW(), &quanti);
+        if (larghi != NULL)
+        {
+            for (int i = quanti - 1; i > 0; i--)
+                if (wtou(larghi[i]) == search_str)
+                {
+                    const wchar_t* w = larghi[i]; // the k-th / of search_str is the k-th \ or / of the argument
+                    for (size_t j = 0; j < search_str.size(); j++)
+                        if (search_str[j] == '/')
+                        {
+                            while (*w && *w != L'\\' && *w != L'/')
+                                w++;
+                            if (*w == L'\\')
+                                search_str[j] = '\\';
+                            if (*w)
+                                w++;
+                        }
+                    break;
+                }
+            LocalFree(larghi);
+        }
+    }
+#endif
+    if (search_str.empty())
+    {
+        myprintf("01094: Search string cannot be empty\n");
+        return 1;
+    }
+    if (search_str.find('\n') != std::string::npos)
+    {
+        myprintf("01096: Search string cannot contain newlines\n");
+        return 1;
+    }
+
+    franzmatcher matcher(search_str);
+
+    // Larghezza del campo percorso: menoenne (se > 0), altrimenti DEFAULT_GREP_LEN
+    size_t pathwidth = (menoenne > 0) ? (size_t)menoenne : DEFAULT_GREP_LEN;
+    if (pathwidth < 4)
+        pathwidth = 4;
+
+    color_cyan();
+    myprintf("47250: Haystack/Query <<%Z>>\n", search_str.c_str());
+    color_restore();
+
+    DTMap myedt;
+    for (unsigned int i = 0; i + 1 < files.size(); i++)
+    {
+        if (flagverbose)
+            myprintf("01093: SCAN FOLDER %02d %Z\n", i, files[i].c_str());
+        scandir(false, myedt, files[i].c_str(), true);
+        if (flagverbose)
+            eol();
+    }
+
+    eol();
+    if (flagverbose)
+    {
+        /// 65.11j: the folders are in the list too: not files to check
+        int64_t dacontrollare = 0;
+        for (DTMap::iterator p = myedt.begin(); p != myedt.end(); ++p)
+            if (!isdirectory(p->first))
+                dacontrollare++;
+        myprintf("01095: Files to be checked %s\n", migliaia(dacontrollare));
+    }
+
+    const size_t MAX_SHOW = 200;   // massimo numero di byte mostrati per riga
+    bool setwarning = false;
+    int trovati = 0;               // file con almeno un match
+    unsigned long totlines = 0;    // righe totali trovate (solo verbose)
+
+    for (DTMap::iterator p = myedt.begin(); p != myedt.end(); ++p)
+    {
+        std::string filename = p->first;
+        myreplaceall(filename, "\\", "/");
+        /// 65.11j: a folder is not a file to open: every one was a "cannot open" (shown with
+        /// -debug only), and the command ended "with warnings", exit code 1, on any tree
+        if (isdirectory(filename))
+            continue;
+        if (flagdebug3)
+            myprintf("47267: File to grep %Z\n", filename.c_str());
+        if (all == 0)
+            if (isbinextension(filename))
+                continue;
+#ifdef _WIN32
+        /// 65.11j: fopen() takes the name in the ANSI codepage: a file with a non-ASCII char in
+        /// its path (UTF-8 here) was never opened, so never searched
+        FILE* f = _wfopen(utow(filename.c_str()).c_str(), L"rb");
+#else
+        FILE* f = fopen(filename.c_str(), "rb");
+#endif
+        if (f == NULL)
+        {
+            if (flagdebug)
+            {
+                color_yellow();
+                myprintf("24725: Warning: cannot open %Z (%s)\n", filename.c_str(), strerror(errno));
+                color_restore();
+            }
+            setwarning = true;
+            continue;
+        }
+
+        // campo "percorso:" gia' allineato (uguale per tutte le righe del file)
+        const std::string shown = franz_fitpath(filename, pathwidth);
+
+        franzscanner scanner(f, matcher);
+        std::string text;
+        unsigned long ln = 0;
+        size_t dove = 0;               // dove comincia il match dentro text
+        unsigned long hits = 0;
+        int rc;
+
+        while ((rc = scanner.next(text, ln, dove)) == 1)
+        {
+            hits++;
+            if (flagverbose)
+            {
+                // senza gli spazi iniziali; di una riga lunga il pezzo attorno al match
+                const std::string mostrata = franz_showline(text, dove, MAX_SHOW, scanner.cut());
+
+                color_green();
+                myprintf("47351:  -> %Z", shown.c_str());
+                color_restore();
+
+                myprintf("47355:  %08lu:", ln);
+
+                color_cyan();
+                myprintf("47356:  %Z\n", mostrata.c_str());
+                color_restore();
+            }
+            else
+            {
+                // senza verbose ci si ferma al primo match del file
+                color_green();
+                myprintf("47357:  -> %Z:", shown.c_str());
+                color_restore();
+
+                myprintf("47354:  %lu\n", ln);
+                break;
+            }
+        }
+
+        if (rc == -1 && flagdebug)
+        {
+            color_yellow();
+            myprintf("47296:  -> skipped binary file %Z\n", filename.c_str());
+            color_restore();
+        }
+
+        if (ferror(f))
+        {
+            if (flagdebug)
+            {
+                color_yellow();
+                myprintf("24726: Warning: read error on %Z\n", filename.c_str());
+                color_restore();
+            }
+            setwarning = true;
+        }
+        fclose(f);
+
+        if (hits > 0)
+        {
+            trovati++;
+            totlines += hits;
+        }
+    }
+
+    myprintf("47352: Total match: %s\n", migliaia(trovati));
+    if (flagverbose)
+        myprintf("47353: Total lines: %lu\n", totlines);
+    return setwarning ? 1 : 0;
 }

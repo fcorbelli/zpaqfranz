@@ -64,8 +64,8 @@ OTHER DEALINGS IN THE SOFTWARE.
 /// Comment out the next line to build without -m8 (-m8 is then -m5 again)
 #define ZPAQZSTD
 
-#define ZPAQ_VERSION "65.11s"
-#define ZPAQ_DATE "(2026-10-13)"
+#define ZPAQ_VERSION "65.12i"
+#define ZPAQ_DATE "(2026-10-18)"
 
 
 /*
@@ -87826,6 +87826,7 @@ std::string g_copy;
 std::string g_freeze;
 uint64_t	g_freezesize   = 0;		/// 65.11q: -freezesize, the size for -freeze (it was -maxsize: the filter on the files to add, too)
 bool		g_freeze_fatto = false; /// -freeze: once for each run (backup goes through add)
+int			g_fastadddiversi= 0; /// 65.12f: -fastaddtest, the stored state is not the one read
 int			g_freeze_avviso= 0;		/// -freeze: 1 = not done (the archive is where it was), 2 = done, but something is left to delete by hand
 std::string g_exec_error;
 std::string g_exec_warn;
@@ -88011,6 +88012,8 @@ bool flagdesc;
 bool flagdonotforcexls;
 bool flagfilelist;
 bool flagnofilelist;
+bool flagfastadd;	  /// 65.12f: add from the state stored by the add before
+bool flagfastaddtest; /// ...then the archive read again, the states compared (autotest)
 bool g_dtlight= false; /// l: the DT do not need the hash objects (a new for every file, never freed)
 bool g_dtnoblock= false; /// l by -fast: no franz_block in DT(), fl_record() makes it as big as needed
 /// -fast: the method of its d blocks (0 store, 1..5, 6/7 if compiled...),
@@ -88120,6 +88123,7 @@ bool flagverify;
 bool flagvss;
 bool flagnovss; /// 65.7m: -image with no VSS, not even tried (-image tries it by itself on NTFS; 65.9j: of C: only)
 bool flagzero;
+bool flagboot; /// 65.12b: work fat32 -boot = BIOS boot code that starts BOOTMGR
 bool flagnuke;		/// 65.11g: f X: -nuke NN -force = fast NTFS sanitize (65.11m: structures + files, format, NN% of the free space; 65.11n: not zeros, 100 = the old data first)
 int	 g_nuke_pct= -1;	/// 65.11g: the NN of -nuke (1..100: percent of the free space zeroed at the end); -1 = -nuke given with no number
 bool flaghome;
@@ -128379,6 +128383,10 @@ class InputArchive : public ArchiveBase, public libzpaq::Reader
 	{
 		return total_sz;
 	}
+	ArchiveType get_archivetype() const /// 65.12d: plain, AES, Franzen, Franzen + AES (dump says it)
+	{
+		return archive_type;
+	}
 	
 	// Read up to len bytes into obuf at current offset. Return 0..len bytes
 	// actually read. 0 indicates EOF.
@@ -130486,6 +130494,46 @@ class franzfs
 #define WORK_REMOVED 3
 
 // filename entry
+/*
+	65.12e: the franz block of a DT. Its size (the constructor, and read_archive for the records
+	that go into dt: dt_inserisci) and the block itself
+*/
+static int dt_franzdimensione()
+{
+	///	let's save a bit of RAM (during compression)
+	int dimensione= FRANZOFFSETV3;
+	if (command == 'a')
+		if (flagfrugal)
+		{
+			dimensione= FRANZOFFSETV2;
+			if ((g_franzotype == FRANZO_CRC_32) || (g_franzotype == FRANZO_XXHASH64) || (g_franzotype == FRANZO_XXHASH64B) || (g_franzotype == FRANZO_MD5B) || (g_franzotype == FRANZO_BLAKE3B) ||
+				(g_franzotype == FRANZO_SHA_256B) || (g_franzotype == FRANZO_SHA3B) || (g_franzotype == FRANZO_XXH3B) || (g_franzotype == FRANZO_SHA_1B))
+				dimensione= FRANZOFFSETV1;
+			else if (flagtar)
+				dimensione= FRANZOFFSETV3;
+			if (flagnochecksum)
+				dimensione= 0;
+		}
+	if (g_dtnoblock)
+		dimensione= 0;
+	return dimensione;
+}
+static char *dt_franzalloca(int i_dimensione)
+{
+	/// +1: read_archive() puts a zero after what it copies, and a V3 block
+	/// with posix (-tar) is exactly FRANZOFFSETV3 bytes: [550] was one past the end
+	char *blocco= (char *)franz_malloc(i_dimensione + 1);
+	if (blocco == NULL)
+	{
+		myprintf("00321! cannot franz_malloc\n");
+		seppuku();
+	}
+	memset(blocco, 0, i_dimensione + 1);
+	g_dt_ram+= i_dimensione;
+	g_allocatedram-= i_dimensione; // (updated in franz_malloc)
+	return blocco;
+}
+
 struct DT // if you get some warning here, update your compiler!
 {
 	int64_t date; // if you get some warning here, update your compiler!
@@ -130507,6 +130555,7 @@ struct DT // if you get some warning here, update your compiler!
 
 	int		 franz_block_size;
 	char	*franz_block; //[FRANZOFFSETV3];
+	int		 franz_letti; /// 65.12f: the bytes of the franz block read from the archive (0: none)
 	uint32_t file_crc32;
 	int64_t	 hashedsize;
 	int		 chunk;
@@ -130548,41 +130597,14 @@ struct DT // if you get some warning here, update your compiler!
 	DT() : date(0), size(0), attr(0), data(0), creationdate(0), accessdate(0), written(-1), isordered(false), isselected(false), /*franz_block_size(FRANZOFFSETV3),*/ file_crc32(0), hashedsize(0), chunk(-1), expectedsize(0), version(0), forceadd(false), rehash(false), is4(false), red_total(0), red_count(0), red_min(256), red_max(0), red_avg(0), red_candidate(0), isedt(false), kompressedsize(0), filework(0),
 		   donotextractme(false), zipdataoffset(-1), zipindex(-1)
 	{
-		///	let's save a bit of RAM (during compression)
-		franz_block_size= FRANZOFFSETV3;
-
-		if (command == 'a')
-			if (flagfrugal)
-			{
-				franz_block_size= FRANZOFFSETV2;
-				if ((g_franzotype == FRANZO_CRC_32) || (g_franzotype == FRANZO_XXHASH64) || (g_franzotype == FRANZO_XXHASH64B) || (g_franzotype == FRANZO_MD5B) || (g_franzotype == FRANZO_BLAKE3B) ||
-					(g_franzotype == FRANZO_SHA_256B) || (g_franzotype == FRANZO_SHA3B) || (g_franzotype == FRANZO_XXH3B) || (g_franzotype == FRANZO_SHA_1B))
-					franz_block_size= FRANZOFFSETV1;
-				else if (flagtar)
-					franz_block_size= FRANZOFFSETV3;
-				if (flagnochecksum)
-					franz_block_size= 0;
-			}
+		franz_block_size= dt_franzdimensione();
 
 		///		myprintf("00320: franz_block_size %d  franzo_type %d |%c|\n",franz_block_size,g_franzotype,command);
 
 		franz_block= NULL;
-		if (g_dtnoblock)
-			franz_block_size= 0;
+		franz_letti= 0;
 		if (franz_block_size > 0)
-		{
-			/// +1: read_archive() puts a zero after what it copies, and a V3 block
-			/// with posix (-tar) is exactly FRANZOFFSETV3 bytes: [550] was one past the end
-			franz_block= (char *)franz_malloc(franz_block_size + 1);
-			if (franz_block == NULL)
-			{
-				myprintf("00321! cannot franz_malloc\n");
-				seppuku();
-			}
-			memset(franz_block, 0, franz_block_size + 1);
-			g_dt_ram+= franz_block_size;
-			g_allocatedram-= franz_block_size; // (updated in franz_malloc)
-		}
+			franz_block= dt_franzalloca(franz_block_size);
 		// g_dt_ram+=franz_block_size+sizeof(DT);
 
 		hexhash = "";
@@ -130751,6 +130773,7 @@ struct VER
   int64_t csize;         // size of compressed data, -1 = no index
   int updates;           // file updates
   int deletes;           // file deletions
+  int comments;          // 65.12g: its VCOMMENT record (a deletion in the index, not counted in deletes)
   unsigned firstFragment;// first fragment ID
   int64_t usize;         // uncompressed size of files
   VER() {memset(this, 0, sizeof(*this));}
@@ -144036,6 +144059,24 @@ class Jidac
 	bool				  fl_decompressblock(InputArchive &i_in, int64_t i_offset, libzpaq::StringBuffer &o_out);
 	int64_t				  fl_readarchive(const char *i_arc);
 	int64_t				  read_archive_add(const char *i_arc);
+	/// 65.12f: -fastadd, the state of read_archive stored by the add before
+	bool				  sc_attivo;	 /// add2 with -fastadd: the state is loaded and stored (the add of ANCIENT never)
+	int64_t				  sc_riprendida; /// read_archive goes on from here (what is before is loaded)
+	unsigned			  sc_files;		 /// ...with these files already counted
+	unsigned			  sc_ultimifile; /// the files counted by the last read_archive
+	bool				  sc_nofiltro;	 /// read_archive takes every name: the selection comes later (sc_filtra)
+	bool				  sc_usato;		 /// this add started from the stored state
+	bool				  sc_vietato;	 /// -fastaddtest: the second read, the usual way
+	string				  sc_blob;		 /// the state to store in this add
+	string				  sc_serializza(int64_t i_x, unsigned i_files);
+	bool				  sc_deserializza(const string &i_blob, int64_t &o_x, unsigned &o_files);
+	bool				  sc_caricablob(const char *i_arc, const string &i_blocchi, const string &i_intervalli, int64_t i_size, const string &i_hash, string &o_blob);
+	bool				  sc_storia(const char *i_arc, const string &i_payload);
+	bool				  sc_trovapuntatore(InputArchive &i_in, string &o_payload, int64_t &o_dove);
+	string				  sc_infoprima(InputArchive &i_in, int64_t i_dove);
+	int64_t				  sc_readarchive_add(const char *i_arc);
+	void				  sc_filtra();
+	bool				  sc_salva(OutputArchive &i_out, CompressJob &io_job, vector<unsigned> &io_blocklist, HTIndex &io_htinv, int64_t i_headerend, vector<string> &io_chunks);
 	void				  buildindexchunks(vector<string> &o_chunks);
 	bool				  m_vinfook;	   /// a: the version being written gets a VFILE-info record (as the -fast history)
 	int					  m_vinfoversione; /// its number
@@ -144113,6 +144154,10 @@ class Jidac
 	string			 fasttxt;
 	string			 indexfasttxt;
 	map<int, string> mappacommenti;
+	MAPPACOMMENTI	 commentiversioni; /// 65.12g: every comment met by the last read_archive (the info command shows them)
+	bool			 fl_commenti(const char *i_arc, MAPPACOMMENTI &o_commenti);
+	int				 versionedicommento(const string &i_testo);
+	int				 elencocommenti();
 	string			 versioncomment;
 	/// bool flagnoattributes;        		// -noattributes option
 	/// bool flagforce;               		// -force option
@@ -144180,6 +144225,8 @@ class Jidac
 	int usbtest();	  // f -test: surface test of a device, raw (-force -paranoid: write too, Windows)
 	int nukeami();	  // 65.11g: f X: -nuke NN -force: fast NTFS sanitize (Windows)
 	int fillgui();	  // 65.11o: f -gui: what to do and where is asked on a screen (Windows). 0: chosen, go on; 1: left; 2: error
+	int workfat32(); // 65.12b: work fat32 X:|N [label] [-boot]: FAT32 up to 2 TB (Windows)
+	int workpoke();	 // 65.12g: work poke file offset[:to] value -force -kill: bytes of a file changed (tests)
 	int dir(bool flagtreeview = false);  // Windows-like dir command
 	int tree();
 	int robocopy();	  // Like robocopy, but with XLS
@@ -144676,6 +144723,13 @@ Jidac::Jidac()
 	fl_vopen   = false;
 	fl_writestop= false;
 	fl_attail  = false;
+	sc_attivo	 = false;
+	sc_riprendida= 0;
+	sc_files	 = 0;
+	sc_ultimifile= 0;
+	sc_nofiltro	 = false;
+	sc_usato	 = false;
+	sc_vietato	 = false;
 	fl_vnnames = 0;
 	fl_vnrecs  = 0;
 	fl_lastv   = 0;
@@ -152606,6 +152660,16 @@ string help_autotest(bool i_usage, bool i_example)
 		scrivi_riga("-all -quick", "The QUICK suite (with -to): ONLY extract sha256.zpaq, compress it with");
 		scrivi_riga(" ", "-m1, then with -m8, then t of both archives (script quicktest.sh/bat)");
 		scrivi_riga(" ", "(-quick keeps its general meaning outside autotest -all)");
+		scrivi_riga("-m1 ... -m5", "With -all -to: the level of the tests (no -m: -m4, the suite as before)");
+		scrivi_riga(" ", "-m1 quick (a few MB): default values, x, -fast history, VFILE-info, -comment,");
+		scrivi_riga(" ", "    -fastadd, dump, difficult names");
+		scrivi_riga(" ", "-m2 + 31.080 small files: hashes, -key, multipart, -chunk, backup -chunk, healing,");
+		scrivi_riga(" ", "    -m6, -turbo, -tar (*nix)");
+		scrivi_riga(" ", "-m3 + 1.75 GB of folders: the hashes, encrypted -chunk, -frugal, -m8, -fastadd");
+		scrivi_riga(" ", "-m4 + 6 GB of big files: Franzen, mount, -turbo, backup -chunk (28 GB free)");
+		scrivi_riga(" ", "-m5 everything (hours): every method (t, p), -all, -715, damaged archives");
+		scrivi_riga(" ", "    (32 GB free; there, a -m5 with 16 threads takes ~6 GB of RAM)");
+		scrivi_riga(" ", "-checktxt checks the level the folder was made with");
 		scrivi_riga("-franzen pippo", "Turn on the franzen test");
 		scrivi_riga(" ", "-to also tests the hash healing (attribute-only change, -touch)");
 		scrivi_riga(" ", "and, if mount works here (tried for real), the mount (mount -test)");
@@ -152625,6 +152689,8 @@ string help_autotest(bool i_usage, bool i_example)
 		scrivi_esempio("Check output results", "autotest -checktxt z:\\ugo");
 		scrivi_esempio("Test franzen too", "autotest -all -to z:\\pippo -franzen pippo");
 		scrivi_esempio("Quick suite (4 operations)", "autotest -all -quick -to z:\\pippo");
+		scrivi_esempio("Level 1: quick, a few MB", "autotest -all -m1 -to z:\\pippo");
+		scrivi_esempio("Level 5: everything (hours)", "autotest -all -m5 -to z:\\pippo -franzen pippo");
 	}
 	return "Check hidden errors post-build";
 }
@@ -152905,6 +152971,8 @@ string help_work(bool i_usage, bool i_example)
 		scrivi_riga("monitoron         ", "Turns on the monitor");
 		scrivi_riga("shutdown          ", "(Try to) shutdown");
 #ifdef _WIN32
+		scrivi_riga("fat32 X: [label]", "FAT32 up to 2 TB on X: (only USB/removable, -debug: any)");
+		scrivi_riga("fat32 N  [label]", "Whole disk N: new MBR + FAT32. -boot: BIOS starts BOOTMGR");
 		scrivi_riga("resetacl", "Revert Windows' ACL to administrators");
 		scrivi_riga("frugal", "Check (/delete) the junk space");
 #endif
@@ -152928,6 +152996,8 @@ string help_work(bool i_usage, bool i_example)
 #endif /// NOSFTPEND
 		scrivi_riga("compare2", "Compare substrings from 2 files");
 		scrivi_riga("fc", "Binary comparing two files");
+		scrivi_riga("poke f o v", "The byte at offset o (from 0) of f becomes v (0-255); o:e from o to e");
+		scrivi_riga(" ", "  (e included). Not past the end. Only with -force -kill: else what it would do");
 		scrivi_riga("zip f1 f2", "Compress f1 into the new .zip f2 (-force to overwrite)"); /// POSTAMI help_work zip
 #ifndef NOEMAIL /// POSTAMI help_work usage
 		scrivi_riga("email", "Send an e-mail (SMTP/TLS), see below");
@@ -152952,6 +153022,8 @@ string help_work(bool i_usage, bool i_example)
 		scrivi_esempio("Turn off monitor", "work monitoroff");
 		scrivi_esempio("Shutdown", "work shutdown");
 #ifdef _WIN32
+		scrivi_esempio("FAT32 on the USB stick E:", "work fat32 e: DIAG");
+		scrivi_esempio("Whole disk 3, BIOS boot (WinPE)", "work fat32 3 WINPE -boot");
 		scrivi_esempio("Fix 'strange' ACLs", "work resetacl z:\\temp");
 		scrivi_esempio("Free junk space", "work frugal -kill");
 #endif
@@ -153518,7 +153590,9 @@ string help_a(bool i_usage, bool i_example)
 		scrivi_riga("-timestamp X", "Setting version datetime @X, ex 2021-12-30_01:03:04 to freeze zfs snapshots");
 		scrivi_riga(" ", "Must be monotonic. increasing (v[i+1].date>v[i]+date)");
 		help_date();
-		scrivi_riga("-comment", "foo  Add a version with ASCII text 'foo'");
+		scrivi_riga("-comment", "foo  Add a version with ASCII text 'foo' (unique, case does not matter)");
+		scrivi_riga(" ", "  %date %time %datetime %year %month %day %hour %min %sec %week %weekday");
+		scrivi_riga(" ", "  (or $date...) are replaced: -comment \"daily %date\"");
 #ifdef ANCIENT
 		scrivi_riga("-fast", "Store the history inside, for a fast l (then automatic)");
 #else
@@ -153527,6 +153601,8 @@ string help_a(bool i_usage, bool i_example)
 		scrivi_riga("-nofast", "Do not store the history (-fast)");
 		scrivi_riga(" ", "With the history, a VFILE-info record too: what the version is and did");
 		scrivi_riga(" ", "  (zpaqfranz, system, method, time, files, bytes). i -verbose shows them, t checks them");
+		scrivi_riga("-fastadd", "Store the state of the archive: the next add -fastadd reads only the last version");
+		scrivi_riga(" ", "  (much faster on a big archive; some tens of KB each version; with -fast only)");
 		scrivi_riga("-copy", "z:\\two  Make a 2nd copy of the written data into another folder");
 #ifdef ZPAQFULL /// NOSFTPSTART
 		scrivi_riga("-exec_ok", "p.sh Execute p.sh on successful completion, passing the archive name as a parameter");
@@ -154004,9 +154080,13 @@ string help_dump(bool i_usage, bool i_example)
 	{
 		scrivi_riga("CMD dump", "Display technical archive information");
 		scrivi_riga("BTW", "will show archive compatibility level");
-		scrivi_riga(" ", "60+  = zpaqfranz from  v60 and more ~jul 2024");
-		scrivi_riga(" ", "<60  = zpaqfranz up to v59.x");
-		scrivi_riga(" ", "715  = standard  zpaq  7.15 (or zpaqfranz -715)");
+		scrivi_riga(" ", "715  = plain zpaq 7.15 (or zpaqfranz -715)");
+		scrivi_riga(" ", "60+  = 7.15 + extensions of zpaqfranz v60+ ~jul 2024");
+		scrivi_riga(" ", "<60  = 7.15 + extensions of zpaqfranz up to v59.x");
+		scrivi_riga(" ", "the file: plain, AES, Franzen, Franzen+AES, parts");
+		scrivi_riga("Virtual files", "-fast history, VFILE-info, VCOMMENT...: how many,");
+		scrivi_riga(" ", "how big, the first and the last version");
+		scrivi_riga("Blocks", "c, d+h, i of every version: what is missing");
 		scrivi_riga("-summary", "Brief");
 		scrivi_riga("-verbose", "Show useful infos");
 		scrivi_riga("-all", "A bit deeper");
@@ -154020,7 +154100,7 @@ string help_dump(bool i_usage, bool i_example)
 		scrivi_esempio("Brief", "dump z:\\kajo.zpaq -summary");
 		scrivi_esempio("All available details", "dump z:\\kajo.zpaq -all");
 	}
-	return ("Show tech info (may fail with large archives)");
+	return ("Show tech info: blocks, virtual files, verdict");
 }
 string help_redu(bool i_usage, bool i_example)
 {
@@ -154223,7 +154303,7 @@ string help_l(bool i_usage, bool i_example)
 		scrivi_riga("-force", "Shows all files (even marked as corrupted)");
 		scrivi_riga("-checksum", "Shows CRC-32/hash, if any");
 		scrivi_riga("-summary", "Compact file list");
-		scrivi_riga("-comment", "foo  Works on version foo, if possible");
+		scrivi_riga("-comment", "foo  Works on the version with comment foo (also x, t)");
 		scrivi_riga("-comment", "Enumerate version-comment");
 		scrivi_riga("-find", "pippo   Just like |grep -i pippo");
 		scrivi_riga("-replace", "foo  Replace -find with -replace in the output");
@@ -154290,7 +154370,7 @@ string help_i(bool i_usage, bool i_example)
 	if (i_usage)
 	{
 		scrivi_riga("CMD i (info)", "Directly shows the versions into the archive, with size and comments");
-		scrivi_riga("-comment", "Shows comments (if any)");
+		scrivi_riga("-comment", "Shows comments (if any: they are shown without it too)");
 		scrivi_riga("-stat", "Count 'weird' files and show uncompressed size (slow)");
 		scrivi_riga("-verbose", "What the versions say they are (VFILE-info, written with -fast), below the list");
 		scrivi_riga(" ", "and what ac saved, if the archive has one: the last backup (-all: every one)");
@@ -157658,6 +157738,8 @@ int Jidac::loadparameters(int argc, const char** argv)
 	g_programflags.add(&flagnofilelist,		"-nofilelist",			"",													"");
 	g_programflags.add(&flagfilelist,		"-fast",				"Store the history for a fast l (then automatic)",	"",nuovodefault);
 	g_programflags.add(&flagnofilelist,		"-nofast",				"Stop the automatic -fast / l the slow way",		"");
+	g_programflags.add(&flagfastadd,		"-fastadd",				"Store the state of the archive for a fast add",	"");
+	g_programflags.add(&flagfastaddtest,	"-fastaddtest",			"",													"");
 #ifdef _WIN32
 	g_programflags.add(&flagads,			"-ads",					"Store CRC-32 on NTFS ADS",							"");
 	g_programflags.add(&flagsparse,			"-sparse",				"Extract big files as sparse files (default)",		"",true);
@@ -157739,6 +157821,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 	g_programflags.add(&flagnovss,			"-novss",				"-image: no VSS, not even tried",							"a;");
 	g_programflags.add(&flagrescue,			"-rescue",				"-image of a dying disk: jump over what does not read",		"a;");
 	g_programflags.add(&flagzero,			"-zero",				"Zeroing something",										"");
+	g_programflags.add(&flagboot,			"-boot",				"work fat32: BIOS boot code that starts BOOTMGR",		"");
 	g_programflags.add(&flagpause,			"-pause",				"Pause after run (for runhigh)",					"");
 	g_programflags.add(&flagquiet,			"-quiet",				"Do not show filesystem errors",												"");
 #ifdef ZPAQFULL ///NOSFTPSTART
@@ -169543,6 +169626,25 @@ bool Jidac::noselection()
 		(searchfrom == ""));
 }
 // List contents
+/// 65.12g: a comment of a version, VCOMMENT 00000002 the text:$DATA (the name of a deletion record).
+/// false: not one. Only the last :$DATA goes away (a text with :$DATA inside lost a piece)
+static bool vcomment_leggi(const string &i_nome, int &o_versione, string &o_testo)
+{
+	if (!isads(i_nome))
+		return false;
+	const size_t trovato= i_nome.find("VCOMMENT ");
+	if (trovato == string::npos)
+		return false;
+	string resto= i_nome.substr(trovato);
+	if ((resto.size() >= 6) && (resto.compare(resto.size() - 6, 6, ":$DATA") == 0))
+		resto.resize(resto.size() - 6);
+	if (resto.size() < 18) /// "VCOMMENT " + 8 digits + ' '
+		return false;
+	o_versione= mystoi(resto.substr(9, 8));
+	o_testo	  = resto.substr(18);
+	return true;
+}
+
 int Jidac::list()
 {
 	if (flag715)
@@ -169565,24 +169667,21 @@ int Jidac::list()
 	if (flagcomment)
 	{
 		if (versioncomment == "")
-			return enumeratecomments();
-		enumeratecomments();
-		vector<DTMap::iterator> myfilelist;
-		int						versione= searchcomments(versioncomment, myfilelist);
+			return elencocommenti();
+		const int versione= versionedicommento(versioncomment);
 		if (versione == 0)
 		{
-			myprintf("00750: cannot find version comment <<%s>>\n", versioncomment.c_str());
-			return 1;
+			myprintf("00750! cannot find version comment <<%s>>\n", versioncomment.c_str());
+			return 2;
 		}
 		if (versione == -1)
 		{
-			myprintf("00751: multiple match for version comment <<%s>>\n", versioncomment.c_str());
-			return 1;
+			myprintf("00751! multiple match for version comment <<%s>>\n", versioncomment.c_str());
+			return 2;
 		}
 		version	   = versione;
 		flagcomment= false;
-		myprintf("00752: Found version -until %d scanning again...\n", versione);
-		jidacreset();
+		myprintf("00752: Found version -until %d\n", versione);
 	}
 
 	decodelastversion();
@@ -169731,19 +169830,10 @@ int Jidac::list()
 	for (unsigned i= 0; i < filelist.size(); i++)
 	{
 		DTMap::iterator p= filelist[i];
-		if (isads(p->first))
-		{
-			string fakefile= p->first;
-			myreplace(fakefile, ":$DATA", "");
-			size_t found= fakefile.find("VCOMMENT ");
-			if ((found != string::npos) && (found + 18 <= fakefile.size())) /// "VCOMMENT " + 8 digits + ' '
-			{
-				string numeroversione= fakefile.substr(found + 9, 8);
-				int	   numver		 = mystoi(numeroversione);
-				string commento		 = fakefile.substr(found + 9 + 8 + 1, 65000);
-				mappacommenti.insert(std::pair<int, string>(numver, commento));
-			}
-		}
+		int	   numver= 0;
+		string commento;
+		if (vcomment_leggi(p->first, numver, commento))
+			mappacommenti.insert(std::pair<int, string>(numver, commento));
 	}
 	flagchecksum= ischecksum() || flagchecksum;
 
@@ -169856,6 +169946,13 @@ int Jidac::list()
 		*/
 		if ((!flag715) && (!flagforcewindows) && (!all))
 			flagshow= !iszpaqfranzvirtualfile(p->first);
+		if ((!flag715) && (!flagforcewindows) && all) /// 65.12g: -all shows the comment on the line of its version
+		{
+			int	   numver= 0;
+			string commento;
+			if (vcomment_leggi(p->first, numver, commento))
+				flagshow= false;
+		}
 
 		/// redundant, but not a really big deal
 		if (flagchecksum)
@@ -170809,23 +170906,16 @@ int Jidac::searchcomments(string i_testo, vector<DTMap::iterator> &filelist)
 	for (unsigned i= 0; i < filelist.size(); i++)
 	{
 		DTMap::iterator p= filelist[i];
-		if (isads(p->first))
+		int	   numver= 0;
+		string commento;
+		if (vcomment_leggi(p->first, numver, commento))
 		{
-			string fakefile= p->first;
-			myreplace(fakefile, ":$DATA", "");
-			size_t found= fakefile.find("VCOMMENT ");
-			if ((found != string::npos) && (found + 18 <= fakefile.size())) /// "VCOMMENT " + 8 digits + ' '
-			{
-				string numeroversione= fakefile.substr(found + 9, 8);
-				int	   numver		 = mystoi(numeroversione);
-				string commento		 = fakefile.substr(found + 9 + 8 + 1, 65000);
-				if (i_testo.length() > 0)
-					if (!stringcomparei(commento, i_testo))
-						continue;
-				mappacommenti.insert(std::pair<int, string>(numver, commento));
-				versione= numver;
-				quanti++;
-			}
+			if (i_testo.length() > 0)
+				if (!stringcomparei(commento, i_testo))
+					continue;
+			mappacommenti.insert(std::pair<int, string>(numver, commento));
+			versione= numver;
+			quanti++;
 		}
 	}
 	if (quanti == 1)
@@ -170943,6 +171033,12 @@ int Jidac::enumeratecomments()
 					commento= mappacommenti.find(v);
 					if (commento != mappacommenti.end())
 						myprintf(" <<%s>>", commento->second.c_str());
+					else
+					{
+						commento= commentiversioni.find(v); /// 65.12g: i without -comment
+						if (commento != commentiversioni.end())
+							myprintf(" <<%s>>", commento->second.c_str());
+					}
 					myprintf("\n");
 				}
 		}
@@ -172850,11 +172946,401 @@ static const autotest_quickop g_autotestquick[]= {
 	 {"quick4.txt", "quick5.txt"}, {"(all OK)", "(all OK)"}, "t of the -m1 and -m8 archives"}};
 static const unsigned int g_autotestquickn= sizeof(g_autotestquick) / sizeof(g_autotestquick[0]);
 
+/*
+	65.12h: autotest -all -to X -m1 ... -m5, the level of the tests (no -m: -m4, the suite as it was)
+	  -m1  quick: the default values, x, the -fast history (l), VFILE-info (t), -comment, -fastadd, dump,
+		   the difficult names
+	  -m2  + the folders 05-09 (31.080 small files, 31 MB): hashes, -key, multipart, -chunk, backup
+		   (with -chunk too, plain and -key), the hash healing, -m6, -turbo, -tar (*nix)
+	  -m3  + the folders 00-09 (1,75 GB): testme.zpaq, the encrypted -chunk multipart, -frugal, -m8, -fastadd
+	  -m4  + the big files (6 GB): what the suite was before, Franzen (-franzen), mount (if it works here),
+		   backup -chunk of big files
+	  -m5  everything: every method (t, and p -verify), -all, a -715 archive, damaged archives
+		   (work poke), -fastadd for 20 versions
+	ONE table: the script is written from it, and -checktxt checks from it (the level is in
+	autotestlevel.txt, written with the script: none = 4, a folder made before 65.12h). Every step has
+	its level and its conditions; the ones with an output are checked (that file must have that text).
+	A step without a command is one more check on the output of the step before.
+	In the commands: %E zpaqfranz  %D the test folder (with its last separator)  %L the same with /
+	%X the folder without its last separator  %S the separator  %F the -franzen password
+	%O the -only list of out18-20  %C the folders 00-09, quoted  %N the number of a repeated step (01...)
+*/
+#define AT_FRANZEN 1 // only with -franzen
+#define AT_MOUNT 2	 // only if the mount works here (mounttest.txt)
+#define AT_ZSTD 4	 // only with zstd (-m7, -m8, -m9)
+#define AT_WIN 8	 // Windows only
+#define AT_UNIX 16	 // not on Windows
+struct autotestpasso
+{
+	int			livello;	 // the step is in this level and in the ones above
+	int			condizione;	 // AT_...: all of them must be true
+	int			ripeti;		 // 0: once; N: N times, %N from 01 to N
+	const char *comando;	 // NULL: no command, one more check on the output before
+	const char *uscita;		 // the -out file to check (NULL: none)
+	const char *atteso;		 // what it must have
+	const char *descrizione;
+};
+static const autotestpasso g_autotestpassi[]= {
+	{1, 0, 0, "\"%E\" x \"%Dsha256.zpaq\" -space -to \"%Dte\" ", NULL, NULL, NULL},
+	{1, 0, 0, "\"%E\" sum \"%Dte\" -sha256 -rename -force -out \"%Dout01.txt\"", "out01.txt", "NOT renamed files  256", "Extracting pre-computed data"},
+	{3, 0, 0, "\"%E\" a \"%Dtestme.zpaq\" \"%D00\" -xxhash -comment \"xxhash\" ", NULL, NULL, NULL},
+	{3, 0, 0, "\"%E\" a \"%Dtestme.zpaq\" \"%D01\" -xxh3   -comment \"xxh3\" ", NULL, NULL, NULL},
+	{3, 0, 0, "\"%E\" a \"%Dtestme.zpaq\" \"%D02\" -sha1   -comment \"sha1\" ", NULL, NULL, NULL},
+	{3, 0, 0, "\"%E\" a \"%Dtestme.zpaq\" \"%D03\" -sha256 -comment \"sha256\" ", NULL, NULL, NULL},
+	{3, 0, 0, "\"%E\" a \"%Dtestme.zpaq\" \"%D04\" -sha3   -comment \"sha3\" ", NULL, NULL, NULL},
+	{3, 0, 0, "\"%E\" a \"%Dtestme.zpaq\" \"%D05\" -blake3 -comment \"blake3\" ", NULL, NULL, NULL},
+	{3, 0, 0, "\"%E\" a \"%Dtestme.zpaq\" \"%D06\" -md5    -comment \"md5\" ", NULL, NULL, NULL},
+	{3, 0, 0, "\"%E\" a \"%Dtestme.zpaq\" \"%D07\" -whirlpool -comment \"whirlpool\" ", NULL, NULL, NULL},
+	{3, 0, 0, "\"%E\" a \"%Dtestme.zpaq\" \"%D08\" -highway64 -comment \"high64\" ", NULL, NULL, NULL},
+	{3, 0, 0, "\"%E\" a \"%Dtestme.zpaq\" \"%D09\" -highway128 -comment \"high128\" ", NULL, NULL, NULL},
+	{3, 0, 0, "\"%E\" x \"%Dtestme.zpaq\" \"%D00%S0770%S00771.dat\" -space -to \"%Dverifica\" ", NULL, NULL, NULL},
+	{3, 0, 0, "\"%E\" sum \"%Dverifica\" -sha256 -out \"%Dout02.txt\"", "out02.txt", "67708591460BCE3BC45AE086A342F9F390AD2913A22639EC7AF3646B7D2AEA78", "Adding and/or extracting data"},
+	{3, 0, 0, "\"%E\" t \"%Dtestme.zpaq\" -until 10 -verify -out \"%Dout03.txt\"", "out03.txt", "(all OK)", "Testing with -verify"},
+	{3, 0, 0, "\"%E\" v \"%Dtestme.zpaq\" -all -out \"%Dout04.txt\"", "out04.txt", "(all OK)", "Verify"},
+	{3, 0, 0, "\"%E\" w \"%Dtestme.zpaq\" -all -test -checksum -verbose -out \"%Dout05.txt\"", "out05.txt", "(all OK)", "w (chunked test)"},
+	{3, 0, 0, "\"%E\" p \"%Dtestme.zpaq\" -verify -out \"%Dout06.txt\"", "out06.txt", "SURE    :       42.727 of       42.727 (stored=decompressed=file on disk)", "p (paranoid test)"},
+	{3, 0, 0, "\"%E\" x \"%Dtestme.zpaq\" -to \"%Lfranco\" -space -find \"%X\" -replace \"\" ", NULL, NULL, NULL},
+	{3, 0, 0, "\"%E\" sum \"%Lfranco/01\"  \"%Lfranco/02\"  \"%Lfranco/03\" \"%Lfranco/04\" \"%Lfranco/05\" \"%Lfranco/06\" \"%Lfranco/07\" \"%Lfranco/08\" \"%Lfranco/09\" -xxh3 -summary -out \"%Dout07.txt\"", "out07.txt", "GLOBAL SHA256: 7B32DB3F6F0180062773C5A046A2C99D17BE7668202379BA136E7A4D134FFC26", "Extract with different hashes)"},
+	{3, 0, 0, "\"%E\" a \"%Dchunk_????.zpaq\" \"%D00\" -key pippo -md5b      -chunk 200k -to \"./locale/00\" ", NULL, NULL, NULL},
+	{3, 0, 0, "\"%E\" a \"%Dchunk_????.zpaq\" \"%D01\" -key pippo -xxhashb   -chunk 200k -to \"./locale/01\" ", NULL, NULL, NULL},
+	{3, 0, 0, "\"%E\" a \"%Dchunk_????.zpaq\" \"%D02\" -key pippo -blake3    -chunk 200k -to \"./locale/02\" ", NULL, NULL, NULL},
+	{3, 0, 0, "\"%E\" a \"%Dchunk_????.zpaq\" \"%D03\" -key pippo -xxh3b     -chunk 200k -to \"./locale/03\" ", NULL, NULL, NULL},
+	{3, 0, 0, "\"%E\" a \"%Dchunk_????.zpaq\" \"%D04\" -key pippo -xxhashb   -chunk 500k -to \"./locale/04\" ", NULL, NULL, NULL},
+	{3, 0, 0, "\"%E\" a \"%Dchunk_????.zpaq\" \"%D05\" -key pippo -sha3b     -chunk 200k -to \"./locale/05\" ", NULL, NULL, NULL},
+	{3, 0, 0, "\"%E\" a \"%Dchunk_????.zpaq\" \"%D06\" -key pippo -whirlpool -chunk 200k -to \"./locale/06\" ", NULL, NULL, NULL},
+	{3, 0, 0, "\"%E\" a \"%Dchunk_????.zpaq\" \"%D07\" -key pippo -sha256b   -chunk 200k -to \"./locale/07\" ", NULL, NULL, NULL},
+	{3, 0, 0, "\"%E\" a \"%Dchunk_????.zpaq\" \"%D08\" -key pippo -xxhashb   -chunk 50k  -to \"./locale/08\" ", NULL, NULL, NULL},
+	{3, 0, 0, "\"%E\" a \"%Dchunk_????.zpaq\" \"%D09\" -key pippo -sha256    -chunk 50k  -to \"./locale/09\" ", NULL, NULL, NULL},
+	{3, 0, 0, "\"%E\" x \"%Dchunk_????.zpaq\" -space -key pippo  ", NULL, NULL, NULL},
+	{3, 0, 0, "\"%E\" sum \"%Dlocale\" -summary -out \"%Dout08.txt\"", "out08.txt", "GLOBAL SHA256: 5088D26FE31EEE0E04F1569CD4851B6DE4A1CBC00EC56BAC7F390A123A8C1111", "Fixed encrypted -chunk multipart creating/extracting"},
+	{3, 0, 0, "\"%E\" t \"%Dchunk_????.zpaq\" -key pippo -paranoid -to \"%Dkane\" -space -out \"%Dout09.txt\" ", "out09.txt", "Files deleted                       42.735", "Fixed -chunk multipart testing"},
+	{3, 0, 0, "echo errore >>\"%Dlocale%S04%S2229%S10000.dat\"", NULL, NULL, NULL},
+	{3, 0, 0, "\"%E\" v \"%Dchunk_????.zpaq\" -key pippo -verbose -out \"%Dout10.txt\"", "out10.txt", "10000.dat", "Fixed -chunk multipart verify"},
+	{3, 0, 0, "\"%E\" c \"%Dlocale\" \"%Dfranco\" -xxh3 -checksum -out \"%Dout11.txt\"", "out11.txt", "10000.dat", "Folder comparing"},
+	{2, 0, 0, "\"%E\" backup \"%Dmultipart.zpaq\" \"%Dte\" -only \"*te/0*\" -xxhashb    -key pippo ", NULL, NULL, NULL},
+	{2, 0, 0, "\"%E\" backup \"%Dmultipart.zpaq\" \"%Dte\" -only \"*te/1*\" -md5b       -key pippo ", NULL, NULL, NULL},
+	{2, 0, 0, "\"%E\" backup \"%Dmultipart.zpaq\" \"%Dte\" -only \"*te/2*\" -xxh3b      -key pippo ", NULL, NULL, NULL},
+	{2, 0, 0, "\"%E\" backup \"%Dmultipart.zpaq\" \"%Dte\" -only \"*te/3*\" -sha256b    -key pippo ", NULL, NULL, NULL},
+	{2, 0, 0, "\"%E\" backup \"%Dmultipart.zpaq\" \"%Dte\" -only \"*te/4*\" -sha3b      -key pippo ", NULL, NULL, NULL},
+	{2, 0, 0, "\"%E\" backup \"%Dmultipart.zpaq\" \"%Dte\" -only \"*te/5*\" -blake3b    -key pippo ", NULL, NULL, NULL},
+	{2, 0, 0, "\"%E\" backup \"%Dmultipart.zpaq\" \"%Dte\" -only \"*te/6*\" -sha1b      -key pippo ", NULL, NULL, NULL},
+	{2, 0, 0, "\"%E\" backup \"%Dmultipart.zpaq\" \"%Dte\" -only \"*te/7*\" -whirlpool  -key pippo ", NULL, NULL, NULL},
+	{2, 0, 0, "\"%E\" backup \"%Dmultipart.zpaq\" \"%Dte\" -only \"*te/8*\" -highway64  -key pippo ", NULL, NULL, NULL},
+	{2, 0, 0, "\"%E\" backup \"%Dmultipart.zpaq\" \"%Dte\" -only \"*te/9*\" -highway128 -key pippo ", NULL, NULL, NULL},
+	{2, 0, 0, "\"%E\" backup \"%Dmultipart.zpaq\" \"%Dte\" -only \"*te/A*\" -xxhash     -key pippo ", NULL, NULL, NULL},
+	{2, 0, 0, "\"%E\" backup \"%Dmultipart.zpaq\" \"%Dte\" -only \"*te/B*\" -md5        -key pippo ", NULL, NULL, NULL},
+	{2, 0, 0, "\"%E\" backup \"%Dmultipart.zpaq\" \"%Dte\" -only \"*te/C*\" -xxh3       -key pippo ", NULL, NULL, NULL},
+	{2, 0, 0, "\"%E\" backup \"%Dmultipart.zpaq\" \"%Dte\" -only \"*te/D*\" -sha256     -key pippo ", NULL, NULL, NULL},
+	{2, 0, 0, "\"%E\" backup \"%Dmultipart.zpaq\" \"%Dte\" -only \"*te/E*\" -sha3       -key pippo ", NULL, NULL, NULL},
+	{2, 0, 0, "\"%E\" backup \"%Dmultipart.zpaq\" \"%Dte\" -only \"*te/F*\" -blake3     -key pippo ", NULL, NULL, NULL},
+	{2, 0, 0, "\"%E\" testbackup \"%Dmultipart.zpaq\" -paranoid -verify -key pippo -out \"%Dout12.txt\" ", "out12.txt", "(all OK)", "Testbackup for multipart"},
+	{2, 0, 0, "\"%E\" x \"%Dmultipart_????????\" -key pippo -until 17 -space -to \"%Dex_multipart\" ", NULL, NULL, NULL},
+	{2, 0, 0, "\"%E\" t \"%Dmultipart_????????\" -key pippo -until 17 -verify -to \"%Dex_multipart\" -out \"%Dout13.txt\" ", "out13.txt", "OK      XXHASH64B : 00000256 of 00000256", "Standard multipart with backup command"},
+	{2, 0, 0, "\"%E\" t \"%Dmultipart_????????\" \"%Dte\" -key pippo -checksum -out \"%Dout14.txt\" ", "out14.txt", "== very same bytes 9.472.000", "Extracting/testing single version from multipart"},
+	{3, 0, 0, "\"%E\" a \"%Dbinary.zpaq\" \"%D00\" -xxhashb -frugal ", NULL, NULL, NULL},
+	{3, 0, 0, "\"%E\" a \"%Dbinary.zpaq\" \"%D01\" -xxhashb -frugal ", NULL, NULL, NULL},
+	{3, 0, 0, "\"%E\" a \"%Dbinary.zpaq\" \"%D02\" -xxhashb -frugal ", NULL, NULL, NULL},
+	{3, 0, 0, "\"%E\" a \"%Dbinary.zpaq\" \"%D03\" -xxhashb -frugal ", NULL, NULL, NULL},
+	{3, 0, 0, "\"%E\" a \"%Dbinary.zpaq\" \"%Dsha256.zpaq\" -xxhashb -frugal ", NULL, NULL, NULL},
+	{3, 0, 0, "\"%E\" a \"%Dbinary.zpaq\" \"%D04\" -xxhashb -frugal ", NULL, NULL, NULL},
+	{3, 0, 0, "\"%E\" a \"%Dbinary.zpaq\" \"%D05\" -xxhashb -frugal ", NULL, NULL, NULL},
+	{3, 0, 0, "\"%E\" a \"%Dbinary.zpaq\" \"%D06\" -xxhashb -frugal ", NULL, NULL, NULL},
+	{3, 0, 0, "\"%E\" a \"%Dbinary.zpaq\" \"%D07\" -xxhashb -frugal ", NULL, NULL, NULL},
+	{3, 0, 0, "\"%E\" a \"%Dbinary.zpaq\" \"%D09\" -xxhashb -frugal ", NULL, NULL, NULL},
+	{3, 0, 0, "\"%E\" a \"%Dbinary.zpaq\" \"%D09\" -xxhashb -frugal ", NULL, NULL, NULL},
+	{3, 0, 0, "\"%E\" x \"%Dbinary.zpaq\" -only \"*sha256.zpaq\" -space -find \"sha256.zpaq\" -replace \"restored.zpaq\" ", NULL, NULL, NULL},
+	{3, 0, 0, "\"%E\" sum \"%Drestored.zpaq\" \"%Dsha256.zpaq\" -stdout -pakka -noeta -out \"%Dout15.txt\" ", "out15.txt", "===", "Creating/extracting different hashes"},
+	{3, 0, 0, "\"%E\" p \"%Dbinary.zpaq\" -verify -out \"%Dout16.txt\" ", "out16.txt", "All OK (paranoid test with check against filesystem)", "Paranoid test of different hashes"},
+	{3, 0, 0, "\"%E\" r \"%D04\" \"%Dlocale%S04\" -kill -out \"%Dout17.txt\" ", "out17.txt", "+              1", "Robocopy of folder"},
+	{3, 0, 0, "\"%E\" x \"%Dbinary.zpaq\" -all %O -space -to \"%Dex_binary\" ", NULL, NULL, NULL},
+	{3, 0, 0, "\"%E\" sum \"%Dex_binary\" -summary -blake3 -out \"%Dout18.txt\" ", "out18.txt", "GLOBAL SHA256: 9C443D84B87B678E4506AD5F6A2FC89B83546E286F19998899DC4461BB9F97D0", "Extract multihash"},
+	{3, 0, 0, "\"%E\" sum \"%Dlocale\" %O -summary -blake3 -out \"%Dout19.txt\" ", "out19.txt", "GLOBAL SHA256: 9C443D84B87B678E4506AD5F6A2FC89B83546E286F19998899DC4461BB9F97D0", "Testing that extract is OK (a)"},
+	{3, 0, 0, "\"%E\" sum \"%D00\" \"%D01\" \"%D02\" \"%D03\" \"%D04\" \"%D05\" \"%D06\" \"%D07\" \"%D08\" \"%D09\" %O -summary -blake3 -out \"%Dout20.txt\" ", "out20.txt", "GLOBAL SHA256: 9C443D84B87B678E4506AD5F6A2FC89B83546E286F19998899DC4461BB9F97D0", "Testing that extract is OK (b)"},
+	{4, 0, 15, "\"%E\" a \"%Dthebigone.zpaq\" \"%Dbigone%N.big\" ", NULL, NULL, NULL},
+	{4, 0, 0, "\"%E\" x \"%Dthebigone.zpaq\" -space -to \"%Dex_bigone\" ", NULL, NULL, NULL},
+	{4, 0, 0, "\"%E\" sum \"%Dex_bigone\" -summary -sha3 -out \"%Dout21.txt\" ", "out21.txt", "GLOBAL SHA256: EEBFFD8399E88CE05BCFD1AAE65C4A118E57638511AF18255C5A295A6378F437", "Creating & extracting big file"},
+	{4, 0, 0, "\"%E\" pp \"%Dthebigone.zpaq\" -out \"%Dout22.txt\" ", "out22.txt", "(all OK)", "Testing with sequential algo"},
+	{4, AT_FRANZEN, 0, "\"%E\" a \"%Daesfranzen\" \"%Dbigone01.big\" -key pippo -franzen \"%F\" -timestamp 20250101000000 -out \"%Dout23.txt\" ", "out23.txt", "(all OK)", "Creating archive 2"},
+	{4, AT_FRANZEN, 0, "\"%E\" a \"%Daesfranzen\" \"%Dbigone02.big\" -key pippo -franzen \"%F\" -timestamp 20250102000000 -out \"%Dout24.txt\" ", "out24.txt", "(all OK)", "Updating archive 2"},
+	{4, AT_FRANZEN, 0, "\"%E\" a \"%Daesfranzen\" \"%Dbigone03.big\" -key pippo -franzen \"%F\" -timestamp 20250103000000 -out \"%Dout25.txt\" ", "out25.txt", "(all OK)", "Updating archive 2"},
+	{4, AT_FRANZEN, 0, "\"%E\" a \"%Daesfranzen\" \"%Dbigone01.big\" -key pippo -franzen \"%F\" -timestamp 20250104000000 -out \"%Dout26.txt\" ", "out26.txt", "(all OK)", "Discarded update 2"},
+	{4, AT_FRANZEN, 0, "\"%E\" pp \"%Daesfranzen\" -key pippo -franzen \"%F\" -verify -out \"%Dout27.txt\" ", "out27.txt", "(all OK)", "PP test 2"},
+	{4, AT_FRANZEN, 0, "\"%E\" franzen test \"%Daesfranzen.zpaq.franzen\" -key pippo -franzen \"%F\" -out \"%Dout28.txt\" ", "out28.txt", "(all OK)", "Franzen test 2"},
+	{4, AT_FRANZEN, 0, "\"%E\" franzen \"%Daesfranzen.zpaq.franzen\" -to \"%Daesfranzen_decoded.zpaq\" -franzen \"%F\" -out \"%Dout29.txt\" ", "out29.txt", "(all OK)", "Decoding 2"},
+	{4, AT_FRANZEN, 0, "\"%E\" t \"%Daesfranzen_decoded.zpaq\" -key pippo -noeta -out \"%Dout30.txt\" ", "out30.txt", "(all OK)", "t of the decoded .franzen 2"},
+	{4, AT_FRANZEN, 0, "\"%E\" a \"%Donlyfranzen\" \"%Dbigone01.big\"  -franzen \"%F\" -timestamp 20250101000000 -out \"%Dout31.txt\" ", "out31.txt", "(all OK)", "Creating archive 1"},
+	{4, AT_FRANZEN, 0, "\"%E\" a \"%Donlyfranzen\" \"%Dbigone02.big\"  -franzen \"%F\" -timestamp 20250102000000 -out \"%Dout32.txt\" ", "out32.txt", "(all OK)", "Updating archive 1"},
+	{4, AT_FRANZEN, 0, "\"%E\" a \"%Donlyfranzen\" \"%Dbigone03.big\"  -franzen \"%F\" -timestamp 20250103000000 -out \"%Dout33.txt\" ", "out33.txt", "(all OK)", "Updating archive 1"},
+	{4, AT_FRANZEN, 0, "\"%E\" a \"%Donlyfranzen\" \"%Dbigone01.big\"  -franzen \"%F\" -timestamp 20250104000000 -out \"%Dout34.txt\" ", "out34.txt", "(all OK)", "Discarded update 1"},
+	{4, AT_FRANZEN, 0, "\"%E\" pp \"%Donlyfranzen\" -franzen \"%F\" -verify -out \"%Dout35.txt\" ", "out35.txt", "(all OK)", "PP test 1"},
+	{4, AT_FRANZEN, 0, "\"%E\" franzen test \"%Donlyfranzen.zpaq.franzen\" -franzen \"%F\" -out \"%Dout36.txt\" ", "out36.txt", "(all OK)", "Franzen test 1"},
+	{4, AT_FRANZEN, 0, "\"%E\" franzen \"%Donlyfranzen.zpaq.franzen\" -to \"%Donlyfranzen_decoded.zpaq\" -franzen \"%F\" -out \"%Dout37.txt\" ", "out37.txt", "(all OK)", "Decoding 1"},
+	{4, AT_FRANZEN, 0, "\"%E\" t \"%Donlyfranzen_decoded.zpaq\" -noeta -out \"%Dout38.txt\" ", "out38.txt", "(all OK)", "t of the decoded .franzen 1"},
+	{4, AT_FRANZEN, 0, "\"%E\" x \"%Daesfranzen\" \"%Dbigone01.big\" -to \"%Daes_franzen_bigone01.bin\" -space -key pippo -franzen \"%F\" -out \"%Dout39.txt\" ", "out39.txt", "(all OK)", "extract big1 2"},
+	{4, AT_FRANZEN, 0, "\"%E\" x \"%Daesfranzen\" \"%Dbigone02.big\" -to \"%Daes_franzen_bigone02.bin\" -space -key pippo -franzen \"%F\" -out \"%Dout40.txt\" ", "out40.txt", "(all OK)", "extract big3 2"},
+	{4, AT_FRANZEN, 0, "\"%E\" x \"%Daesfranzen\" \"%Dbigone03.big\" -to \"%Daes_franzen_bigone03.bin\" -space -key pippo -franzen \"%F\" -out \"%Dout41.txt\" ", "out41.txt", "(all OK)", "extract big3 2"},
+	{4, AT_FRANZEN, 0, "\"%E\" x \"%Donlyfranzen\" \"%Dbigone01.big\" -to \"%Donly_franzen_bigone01.bin\" -space -franzen \"%F\" -out \"%Dout42.txt\" ", "out42.txt", "(all OK)", "extract big1 1"},
+	{4, AT_FRANZEN, 0, "\"%E\" x \"%Donlyfranzen\" \"%Dbigone02.big\" -to \"%Donly_franzen_bigone02.bin\" -space -franzen \"%F\" -out \"%Dout43.txt\" ", "out43.txt", "(all OK)", "extract big2 1"},
+	{4, AT_FRANZEN, 0, "\"%E\" x \"%Donlyfranzen\" \"%Dbigone03.big\" -to \"%Donly_franzen_bigone03.bin\" -space -franzen \"%F\" -out \"%Dout44.txt\" ", "out44.txt", "(all OK)", "extract big3 1"},
+	{4, AT_FRANZEN, 0, "\"%E\" work fc \"%Dbigone01.big\" \"%Daes_franzen_bigone01.bin\" -out \"%Dout45.txt\" ", "out45.txt", "Binary ==", "fc big1 2"},
+	{4, AT_FRANZEN, 0, "\"%E\" work fc \"%Dbigone02.big\" \"%Daes_franzen_bigone02.bin\" -out \"%Dout46.txt\" ", "out46.txt", "Binary ==", "fc big2 2"},
+	{4, AT_FRANZEN, 0, "\"%E\" work fc \"%Dbigone03.big\" \"%Daes_franzen_bigone03.bin\" -out \"%Dout47.txt\" ", "out47.txt", "Binary ==", "fc big3 2"},
+	{4, AT_FRANZEN, 0, "\"%E\" work fc \"%Dbigone01.big\" \"%Donly_franzen_bigone01.bin\" -out \"%Dout48.txt\" ", "out48.txt", "Binary ==", "fc big1 1"},
+	{4, AT_FRANZEN, 0, "\"%E\" work fc \"%Dbigone02.big\" \"%Donly_franzen_bigone02.bin\" -out \"%Dout49.txt\" ", "out49.txt", "Binary ==", "fc big2 1"},
+	{4, AT_FRANZEN, 0, "\"%E\" work fc \"%Dbigone03.big\" \"%Donly_franzen_bigone03.bin\" -out \"%Dout50.txt\" ", "out50.txt", "Binary ==", "fc big3 1"},
+	{2, 0, 0, "\"%E\" a \"%Dheal.zpaq\" \"%Dheal\" -sha256 -noeta ", NULL, NULL, NULL},
+	{2, AT_WIN, 0, "attrib -A \"%Dheal%Sh1.txt\"", NULL, NULL, NULL},
+	{2, AT_UNIX, 0, "chmod 600 \"%Dheal%Sh1.txt\"", NULL, NULL, NULL},
+	{2, 0, 0, "\"%E\" a \"%Dheal.zpaq\" \"%Dheal\" -noeta -out \"%Dout51.txt\"", "out51.txt", "(all OK)", "Attribute-only change, hash read again"},
+	{2, 0, 0, "\"%E\" v \"%Dheal.zpaq\" -out \"%Dout52.txt\"", "out52.txt", "(all OK)", "Verify after attribute-only change"},
+	{2, 0, 0, "\"%E\" a \"%Dtouch.zpaq\" \"%Dheal\" -715 -noeta ", NULL, NULL, NULL},
+	{2, 0, 0, "\"%E\" a \"%Dtouch.zpaq\" \"%Dheal\" -touch -sha3 -noeta -out \"%Dout53.txt\"", "out53.txt", "(all OK)", "-touch on a 7.15 archive"},
+	{2, 0, 0, "\"%E\" v \"%Dtouch.zpaq\" -out \"%Dout54.txt\"", "out54.txt", "SHA-3 : 00000003 of 00000003", "Verify after -touch"},
+	{2, 0, 0, "\"%E\" a \"%Dtouch.zpaq\" \"%Dheal\" -touch -sha3 -noeta -out \"%Dout55.txt\"", "out55.txt", "0 +added, 0 -removed", "-touch again: nothing to do"},
+	{1, 0, 0, "\"%E\" a \"%Dnames.zpaq\" \"%Dnames\" -sha256 -noeta ", NULL, NULL, NULL},
+	{1, 0, 0, "\"%E\" v \"%Dnames.zpaq\" -out \"%Dout64.txt\"", "out64.txt", "(all OK)", "UTF-8, emoji, % and spaces in names"},
+	///NOSFTPSTART
+	{4, AT_MOUNT, 0, "\"%E\" mount \"%Dtestme.zpaq\" \"%Dmnt\" -test -noeta -out \"%Dout56.txt\"", "out56.txt", "Mount test: OK", "Mount last version"},
+	{4, AT_MOUNT, 0, "\"%E\" mount \"%Dtestme.zpaq\" \"%Dmnt\" -all -test -noeta -out \"%Dout57.txt\"", "out57.txt", "Mount test: OK", "Mount every version (-all)"},
+	{4, AT_MOUNT, 0, "\"%E\" mount \"%Dtestme.zpaq\" \"%Dmnt\" -until 3 -test -noeta -out \"%Dout58.txt\"", "out58.txt", "Mount test: OK", "Mount version 3 (-until)"},
+	{4, AT_MOUNT, 0, "\"%E\" mount \"%Dchunk_????.zpaq\" \"%Dmnt\" -key pippo -test -noeta -out \"%Dout59.txt\"", "out59.txt", "Mount test: OK", "Mount encrypted -chunk multipart"},
+	{4, AT_MOUNT, 0, "\"%E\" mount \"%Dmultipart_????????\" \"%Dmnt\" -key pippo -test -noeta -out \"%Dout60.txt\"", "out60.txt", "Mount test: OK", "Mount encrypted backup multipart"},
+	{4, AT_MOUNT, 0, "\"%E\" mount \"%Dheal.zpaq\" \"%Dmnt\" -test -noeta -out \"%Dout61.txt\"", "out61.txt", "Mount test: OK", "Mount the healed archive"},
+	{4, AT_MOUNT, 0, "\"%E\" mount \"%Dnames.zpaq\" \"%Dmnt\" -test -noeta -out \"%Dout65.txt\"", "out65.txt", "Mount test: OK", "Mount UTF-8, emoji, % and spaces in names"},
+	{4, AT_MOUNT, 0, "\"%E\" mount \"%Dtouch.zpaq\" \"%Dmnt\" -until 1 -test -noeta -out \"%Dout66.txt\"", "out66.txt", "0 hash OK, 3 size and date only", "Mount a zpaq 7.15 version (no hash)"},
+	{4, AT_MOUNT, 0, "\"%E\" mount \"%Dthebigone.zpaq\" \"%Dmnt\" -test -noeta -out \"%Dout67.txt\"", "out67.txt", "Mount test: OK", "Mount big files"},
+	{4, AT_MOUNT | AT_FRANZEN, 0, "\"%E\" mount \"%Daesfranzen\" \"%Dmnt\" -key pippo -franzen \"%F\" -test -noeta -out \"%Dout62.txt\"", "out62.txt", "Mount test: OK", "Mount AES + Franzen"},
+	{4, AT_MOUNT | AT_FRANZEN, 0, "\"%E\" mount \"%Donlyfranzen\" \"%Dmnt\" -franzen \"%F\" -test -noeta -out \"%Dout63.txt\"", "out63.txt", "Mount test: OK", "Mount Franzen"},
+	///NOSFTPEND
+	{3, AT_ZSTD, 0, "\"%E\" a \"%Dm8.zpaq\" %C-m8 -noeta -out \"%Dout87.txt\"", "out87.txt", "(all OK)", "-m8 (zstd) creating, 1.75 GB with dedup"},
+	{3, AT_ZSTD, 0, "\"%E\" t \"%Dm8.zpaq\" -noeta -out \"%Dout88.txt\"", "out88.txt", "(all OK)", "-m8 testing (native zstd decoder)"},
+	{3, AT_ZSTD, 0, "\"%E\" p \"%Dm8.zpaq\" -verify -noeta -out \"%Dout89.txt\"", "out89.txt", "All OK (paranoid test with check against filesystem)", "-m8 paranoid (unzpaq runs the ZPAQL decoder)"},
+	{4, AT_ZSTD, 0, "\"%E\" a \"%Dm8h19.zpaq\" \"%Dte\" \"%Dheal\" \"%Dnames\" \"%Dbigone01.big\" \"%Dbigone15.big\" -m8h19 -noeta -out \"%Dout90.txt\"", "out90.txt", "(all OK)", "-m8h19 (zstd 19) names and big files"},
+	{4, AT_ZSTD, 0, "\"%E\" p \"%Dm8h19.zpaq\" -verify -noeta -out \"%Dout91.txt\"", "out91.txt", "All OK (paranoid test with check against filesystem)", "-m8h19 paranoid (ZPAQL decoder)"},
+	{4, AT_ZSTD, 0, "\"%E\" a \"%Dm86.zpaq\" \"%Dbigone01.big\" \"%Dbigone02.big\" \"%Dbigone15.big\" -m86a3 -noeta -out \"%Dout92.txt\"", "out92.txt", "(all OK)", "-m86a3 (zstd fast) 64 MB blocks"},
+	{4, AT_ZSTD, 0, "\"%E\" p \"%Dm86.zpaq\" -verify -noeta -out \"%Dout93.txt\"", "out93.txt", "All OK (paranoid test with check against filesystem)", "-m86a3 paranoid (ZPAQL decoder)"},
+	///NOSFTPSTART
+	{4, AT_ZSTD | AT_MOUNT, 0, "\"%E\" mount \"%Dm8.zpaq\" \"%Dmnt\" -test -noeta -out \"%Dout94.txt\"", "out94.txt", "Mount test: OK", "Mount -m8 (zstd) archive"},
+	///NOSFTPEND
+	{4, 0, 0, "\"%E\" a \"%Dm6.zpaq\" \"%Dte\" \"%Dheal\" \"%Dnames\" \"%Dbigone01.big\" \"%E\" -m6 -noeta -out \"%Dout68.txt\"", "out68.txt", "(all OK)", "-m6 (m4.5) names, big files, one .exe"},
+	{4, 0, 0, "\"%E\" t \"%Dm6.zpaq\" -noeta -out \"%Dout69.txt\"", "out69.txt", "(all OK)", "-m6 testing"},
+	{4, 0, 0, "\"%E\" p \"%Dm6.zpaq\" -verify -noeta -out \"%Dout70.txt\"", "out70.txt", "All OK (paranoid test with check against filesystem)", "-m6 paranoid (unzpaq)"},
+	///NOSFTPSTART
+	{4, AT_MOUNT, 0, "\"%E\" mount \"%Dm6.zpaq\" \"%Dmnt\" -test -noeta -out \"%Dout76.txt\"", "out76.txt", "Mount test: OK", "Mount -m6 (m4.5) archive"},
+	///NOSFTPEND
+	{4, 0, 0, "\"%E\" a \"%Dturbo_no.zpaq\" \"%Dbigone01.big\" \"%Dbigone02.big\" \"%Dbigone15.big\" \"%Dte\" \"%Dheal\" -timestamp 2025-01-01_10:00:00 -m1 -noturbo -noeta -nofast ", NULL, NULL, NULL},
+	{4, 0, 0, "\"%E\" a \"%Dturbo_no.zpaq\" \"%Dbigone03.big\" -timestamp 2025-01-02_10:00:00 -m1 -noturbo -noeta -nofast ", NULL, NULL, NULL},
+	{4, 0, 0, "\"%E\" a \"%Dturbo_si.zpaq\" \"%Dbigone01.big\" \"%Dbigone02.big\" \"%Dbigone15.big\" \"%Dte\" \"%Dheal\" -timestamp 2025-01-01_10:00:00 -m1 -turbo -noeta -nofast -out \"%Dout83.txt\"", "out83.txt", "(all OK)", "-turbo add (parallel fragmenter)"},
+	{4, 0, 0, "\"%E\" a \"%Dturbo_si.zpaq\" \"%Dbigone03.big\" -timestamp 2025-01-02_10:00:00 -m1 -turbo -noeta -nofast ", NULL, NULL, NULL},
+	{4, 0, 0, "\"%E\" work fc \"%Dturbo_no.zpaq\" \"%Dturbo_si.zpaq\" -out \"%Dout84.txt\"", "out84.txt", "Binary ==", "-turbo archive == plain archive (2 versions)"},
+	{4, 0, 0, "\"%E\" t \"%Dturbo_si.zpaq\" -noeta -out \"%Dout85.txt\"", "out85.txt", "(all OK)", "-turbo archive testing"},
+	{4, AT_ZSTD, 0, "\"%E\" a \"%Dturbo8_no.zpaq\" \"%Dbigone01.big\" \"%Dbigone02.big\" \"%Dbigone15.big\" \"%Dte\" \"%Dheal\" -timestamp 2025-01-01_10:00:00 -m8 -noturbo -noeta -nofast ", NULL, NULL, NULL},
+	{4, AT_ZSTD, 0, "\"%E\" a \"%Dturbo8_si.zpaq\" \"%Dbigone01.big\" \"%Dbigone02.big\" \"%Dbigone15.big\" \"%Dte\" \"%Dheal\" -timestamp 2025-01-01_10:00:00 -m8 -turbo -noeta -nofast ", NULL, NULL, NULL},
+	{4, AT_ZSTD, 0, "\"%E\" work fc \"%Dturbo8_no.zpaq\" \"%Dturbo8_si.zpaq\" -out \"%Dout86.txt\"", "out86.txt", "Binary ==", "-turbo -m8 archive == plain -m8 archive"},
+	/// 65.12h -m1: the default values, x, the -fast history (l), VFILE-info (t), -comment, -fastadd, dump
+	{1, 0, 0, "\"%E\" a \"%Dbase.zpaq\" \"%Dte\" -noeta -out \"%Dout95.txt\"", "out95.txt", "(all OK)", "a with the default values"},
+	{1, 0, 0, "\"%E\" a \"%Dbase.zpaq\" \"%Dheal\" -comment \"second\" -noeta", NULL, NULL, NULL},
+	{1, 0, 0, "\"%E\" t \"%Dbase.zpaq\" -noeta -out \"%Dout96.txt\"", "out96.txt", "(all OK)", "t with the default values"},
+	{1, 0, 0, NULL, "out96.txt", "VFILE-info: 2 version(s) of 2 are as they were written", "t, VFILE-info of the versions"},
+	{1, 0, 0, "\"%E\" v \"%Dbase.zpaq\" -out \"%Dout97.txt\"", "out97.txt", "(all OK)", "v against the files"},
+	{1, 0, 0, "\"%E\" x \"%Dbase.zpaq\" \"%Dte\" -to \"%Dex_base\" -space -noeta", NULL, NULL, NULL},
+	{1, 0, 0, "\"%E\" sum \"%Dex_base\" -sha256 -rename -force -out \"%Dout99.txt\"", "out99.txt", "NOT renamed files  256", "x, the files extracted"},
+	{1, 0, 0, "\"%E\" l \"%Dbase.zpaq\" -out \"%Dout100.txt\"", "out100.txt", "Fast list by -fast", "l from the -fast history"},
+	{1, 0, 0, "\"%E\" l \"%Dbase.zpaq\" -comment second -out \"%Dout101.txt\"", "out101.txt", "Found version -until 2", "l -comment: the version of a comment"},
+	{1, 0, 0, "\"%E\" a \"%Dfastadd.zpaq\" \"%Dte\" -fastadd -noeta", NULL, NULL, NULL},
+	{1, 0, 0, "\"%E\" a \"%Dfastadd.zpaq\" \"%Dheal\" -fastaddtest -noeta -out \"%Dout102.txt\"", "out102.txt", "the stored state is the one read", "-fastadd: the stored state against a full read"},
+	{1, 0, 0, "\"%E\" dump \"%Dbase.zpaq\" -out \"%Dout103.txt\"", "out103.txt", "VERDICT: zpaq 7.15 archive with extensions of zpaqfranz", "dump: the verdict"},
+	/// -m2: the folders 05-09 (31.080 small files, 31 MB): hashes, -key, multipart, -chunk, backup -chunk, -fastadd, -m6, -turbo, -tar (*nix)
+	{2, 0, 0, "\"%E\" a \"%Dsmall.zpaq\" \"%D05\" -xxh3 -noeta", NULL, NULL, NULL},
+	{2, 0, 0, "\"%E\" a \"%Dsmall.zpaq\" \"%D06\" -sha256 -noeta", NULL, NULL, NULL},
+	{2, 0, 0, "\"%E\" a \"%Dsmall.zpaq\" \"%D07\" -blake3 -noeta", NULL, NULL, NULL},
+	{2, 0, 0, "\"%E\" a \"%Dsmall.zpaq\" \"%D08\" -md5 -noeta", NULL, NULL, NULL},
+	{2, 0, 0, "\"%E\" a \"%Dsmall.zpaq\" \"%D09\" -sha3 -noeta", NULL, NULL, NULL},
+	{2, 0, 0, "\"%E\" t \"%Dsmall.zpaq\" -verify -noeta -out \"%Dout104.txt\"", "out104.txt", "(all OK)", "five hashes, t -verify"},
+	{2, 0, 0, "\"%E\" v \"%Dsmall.zpaq\" -all -out \"%Dout105.txt\"", "out105.txt", "(all OK)", "five hashes, v -all"},
+	{2, 0, 0, "\"%E\" p \"%Dsmall.zpaq\" -verify -noeta -out \"%Dout106.txt\"", "out106.txt", "All OK (paranoid test with check against filesystem)", "five hashes, p -verify"},
+	{2, 0, 0, "\"%E\" a \"%Dkey.zpaq\" \"%D05\" \"%Dheal\" -key pippo -noeta", NULL, NULL, NULL},
+	{2, 0, 0, "\"%E\" t \"%Dkey.zpaq\" -key pippo -noeta -out \"%Dout107.txt\"", "out107.txt", "(all OK)", "-key, t"},
+	{2, 0, 0, "\"%E\" v \"%Dkey.zpaq\" -key pippo -out \"%Dout108.txt\"", "out108.txt", "(all OK)", "-key, v"},
+	{2, 0, 0, "\"%E\" l \"%Dkey.zpaq\" -key pippo -out \"%Dout109.txt\"", "out109.txt", "Fast list by -fast", "-key, l from the -fast history"},
+	{2, 0, 0, "\"%E\" a \"%Dfkey.zpaq\" \"%D05\" -fastadd -key pippo -noeta", NULL, NULL, NULL},
+	{2, 0, 0, "\"%E\" a \"%Dfkey.zpaq\" \"%D06\" -fastaddtest -key pippo -noeta -out \"%Dout110.txt\"", "out110.txt", "the stored state is the one read", "-key, -fastadd"},
+	{2, 0, 0, "\"%E\" a \"%Dmp_????.zpaq\" \"%D05\" -noeta", NULL, NULL, NULL},
+	{2, 0, 0, "\"%E\" a \"%Dmp_????.zpaq\" \"%D06\" -noeta", NULL, NULL, NULL},
+	{2, 0, 0, "\"%E\" a \"%Dmp_????.zpaq\" \"%D07\" -noeta", NULL, NULL, NULL},
+	{2, 0, 0, "\"%E\" t \"%Dmp_????.zpaq\" -all -noeta -out \"%Dout111.txt\"", "out111.txt", "(all OK)", "multipart, t -all"},
+	{2, 0, 0, "\"%E\" l \"%Dmp_????.zpaq\" -out \"%Dout112.txt\"", "out112.txt", "Fast list by -fast", "multipart, l from the -fast history"},
+	{2, 0, 0, "\"%E\" a \"%Dfmp_????.zpaq\" \"%D05\" -fastadd -noeta", NULL, NULL, NULL},
+	{2, 0, 0, "\"%E\" a \"%Dfmp_????.zpaq\" \"%D06\" -fastaddtest -noeta -out \"%Dout113.txt\"", "out113.txt", "the stored state is the one read", "multipart, -fastadd"},
+	{2, 0, 0, "\"%E\" a \"%Dch_????.zpaq\" \"%D05\" \"%D06\" -chunk 200k -noeta", NULL, NULL, NULL},
+	{2, 0, 0, "\"%E\" t \"%Dch_????.zpaq\" -noeta -out \"%Dout114.txt\"", "out114.txt", "(all OK)", "-chunk, t"},
+	{2, 0, 0, "\"%E\" a \"%Dchk_????.zpaq\" \"%D05\" \"%D06\" -chunk 200k -key pippo -noeta", NULL, NULL, NULL},
+	{2, 0, 0, "\"%E\" t \"%Dchk_????.zpaq\" -key pippo -noeta -out \"%Dout115.txt\"", "out115.txt", "(all OK)", "-chunk -key, t"},
+	{2, 0, 0, "\"%E\" backup \"%Dbkc.zpaq\" \"%D05\" -chunk 200k -noeta", NULL, NULL, NULL},
+	{2, 0, 0, "\"%E\" backup \"%Dbkc.zpaq\" \"%D05\" \"%D06\" -chunk 200k -noeta", NULL, NULL, NULL},
+	{2, 0, 0, "\"%E\" testbackup \"%Dbkc.zpaq\" -paranoid -verify -out \"%Dout116.txt\"", "out116.txt", "(all OK)", "backup -chunk, testbackup"},
+	{2, 0, 0, "\"%E\" backup \"%Dbkck.zpaq\" \"%D05\" -chunk 200k -key pippo -noeta", NULL, NULL, NULL},
+	{2, 0, 0, "\"%E\" backup \"%Dbkck.zpaq\" \"%D05\" \"%D06\" -chunk 200k -key pippo -noeta", NULL, NULL, NULL},
+	{2, 0, 0, "\"%E\" testbackup \"%Dbkck.zpaq\" -paranoid -verify -key pippo -out \"%Dout117.txt\"", "out117.txt", "(all OK)", "backup -chunk -key, testbackup"},
+	{2, 0, 0, "\"%E\" a \"%Dm6s.zpaq\" \"%Dte\" \"%Dheal\" \"%Dnames\" \"%D07\" -m6 -noeta", NULL, NULL, NULL},
+	{2, 0, 0, "\"%E\" t \"%Dm6s.zpaq\" -noeta -out \"%Dout118.txt\"", "out118.txt", "(all OK)", "-m6, t"},
+	{2, 0, 0, "\"%E\" p \"%Dm6s.zpaq\" -verify -noeta -out \"%Dout119.txt\"", "out119.txt", "All OK (paranoid test with check against filesystem)", "-m6, p -verify"},
+	{2, 0, 0, "\"%E\" a \"%Dts_no.zpaq\" \"%Dte\" \"%Dheal\" \"%D05\" -timestamp 2025-01-01_10:00:00 -m1 -noturbo -noeta -nofast", NULL, NULL, NULL},
+	{2, 0, 0, "\"%E\" a \"%Dts_si.zpaq\" \"%Dte\" \"%Dheal\" \"%D05\" -timestamp 2025-01-01_10:00:00 -m1 -turbo -noeta -nofast", NULL, NULL, NULL},
+	{2, 0, 0, "\"%E\" work fc \"%Dts_no.zpaq\" \"%Dts_si.zpaq\" -out \"%Dout120.txt\"", "out120.txt", "Binary ==", "-turbo archive == plain archive"},
+	{2, AT_UNIX, 0, "\"%E\" a \"%Dtar.zpaq\" \"%Dheal\" \"%Dnames\" -tar -noeta", NULL, NULL, NULL},
+	{2, AT_UNIX, 0, "\"%E\" t \"%Dtar.zpaq\" -noeta -out \"%Dout158.txt\"", "out158.txt", "(all OK)", "-tar, t"},
+	{2, AT_UNIX, 0, "\"%E\" x \"%Dtar.zpaq\" -tar -to \"%Dex_tar\" -space -noeta -out \"%Dout159.txt\"", "out159.txt", "(all OK)", "-tar, x -tar"},
+	/// -m3: -fastadd on the folders 00-09
+	{3, 0, 0, "\"%E\" a \"%Dfat.zpaq\" \"%D00\" -fastadd -noeta", NULL, NULL, NULL},
+	{3, 0, 0, "\"%E\" a \"%Dfat.zpaq\" \"%D01\" -fastadd -noeta", NULL, NULL, NULL},
+	{3, 0, 0, "\"%E\" a \"%Dfat.zpaq\" \"%D02\" -fastadd -noeta", NULL, NULL, NULL},
+	{3, 0, 0, "\"%E\" a \"%Dfat.zpaq\" \"%D09\" -fastaddtest -noeta -out \"%Dout121.txt\"", "out121.txt", "the stored state is the one read", "-fastadd, 1 GB in 4 versions"},
+	{3, 0, 0, "\"%E\" l \"%Dfat.zpaq\" -out \"%Dout122.txt\"", "out122.txt", "Fast list by -fast", "l from the -fast history, 1 GB"},
+	/// -m4: backup -chunk on big files, plain and -key; -fastadd with Franzen
+	{4, 0, 0, "\"%E\" backup \"%Dbkb.zpaq\" \"%Dbigone01.big\" -chunk 100m -noeta", NULL, NULL, NULL},
+	{4, 0, 0, "\"%E\" backup \"%Dbkb.zpaq\" \"%Dbigone01.big\" \"%Dbigone02.big\" -chunk 100m -noeta", NULL, NULL, NULL},
+	{4, 0, 0, "\"%E\" testbackup \"%Dbkb.zpaq\" -paranoid -verify -out \"%Dout123.txt\"", "out123.txt", "(all OK)", "backup -chunk of big files, testbackup"},
+	{4, 0, 0, "\"%E\" backup \"%Dbkbk.zpaq\" \"%Dbigone01.big\" -chunk 100m -key pippo -noeta", NULL, NULL, NULL},
+	{4, 0, 0, "\"%E\" backup \"%Dbkbk.zpaq\" \"%Dbigone01.big\" \"%Dbigone02.big\" -chunk 100m -key pippo -noeta", NULL, NULL, NULL},
+	{4, 0, 0, "\"%E\" testbackup \"%Dbkbk.zpaq\" -paranoid -verify -key pippo -out \"%Dout124.txt\"", "out124.txt", "(all OK)", "backup -chunk -key of big files, testbackup"},
+	{4, AT_FRANZEN, 0, "\"%E\" a \"%Dfafr\" \"%D05\" -fastadd -franzen \"%F\" -noeta", NULL, NULL, NULL},
+	{4, AT_FRANZEN, 0, "\"%E\" a \"%Dfafr\" \"%D06\" -fastaddtest -franzen \"%F\" -noeta -out \"%Dout125.txt\"", "out125.txt", "the stored state is the one read", "Franzen, -fastadd"},
+	/// -m5: every method (t, and p -verify: another decoder), -all, a -715 archive, damaged archives, -fastadd for 20 versions
+	{5, 0, 0, "\"%E\" a \"%Dmet0.zpaq\" \"%Dte\" \"%Dheal\" \"%Dnames\" \"%Dbigone01.big\" -m0 -noeta -out \"%Dout126.txt\"", "out126.txt", "(all OK)", "-m0"},
+	{5, 0, 0, "\"%E\" t \"%Dmet0.zpaq\" -noeta -out \"%Dout127.txt\"", "out127.txt", "(all OK)", "-m0, t"},
+	{5, 0, 0, "\"%E\" p \"%Dmet0.zpaq\" -verify -noeta -out \"%Dout128.txt\"", "out128.txt", "All OK (paranoid test with check against filesystem)", "-m0, p -verify"},
+	{5, 0, 0, "\"%E\" a \"%Dmet1.zpaq\" \"%Dte\" \"%Dheal\" \"%Dnames\" \"%Dbigone01.big\" -m1 -noeta -out \"%Dout129.txt\"", "out129.txt", "(all OK)", "-m1"},
+	{5, 0, 0, "\"%E\" t \"%Dmet1.zpaq\" -noeta -out \"%Dout130.txt\"", "out130.txt", "(all OK)", "-m1, t"},
+	{5, 0, 0, "\"%E\" p \"%Dmet1.zpaq\" -verify -noeta -out \"%Dout131.txt\"", "out131.txt", "All OK (paranoid test with check against filesystem)", "-m1, p -verify"},
+	{5, 0, 0, "\"%E\" a \"%Dmet2.zpaq\" \"%Dte\" \"%Dheal\" \"%Dnames\" \"%Dbigone01.big\" -m2 -noeta -out \"%Dout132.txt\"", "out132.txt", "(all OK)", "-m2"},
+	{5, 0, 0, "\"%E\" t \"%Dmet2.zpaq\" -noeta -out \"%Dout133.txt\"", "out133.txt", "(all OK)", "-m2, t"},
+	{5, 0, 0, "\"%E\" p \"%Dmet2.zpaq\" -verify -noeta -out \"%Dout134.txt\"", "out134.txt", "All OK (paranoid test with check against filesystem)", "-m2, p -verify"},
+	{5, 0, 0, "\"%E\" a \"%Dmet3.zpaq\" \"%Dte\" \"%Dheal\" \"%Dnames\" \"%Dbigone01.big\" -m3 -noeta -out \"%Dout135.txt\"", "out135.txt", "(all OK)", "-m3"},
+	{5, 0, 0, "\"%E\" t \"%Dmet3.zpaq\" -noeta -out \"%Dout136.txt\"", "out136.txt", "(all OK)", "-m3, t"},
+	{5, 0, 0, "\"%E\" p \"%Dmet3.zpaq\" -verify -noeta -out \"%Dout137.txt\"", "out137.txt", "All OK (paranoid test with check against filesystem)", "-m3, p -verify"},
+	{5, 0, 0, "\"%E\" a \"%Dmet4.zpaq\" \"%Dte\" \"%Dheal\" \"%Dnames\" \"%Dbigone01.big\" -m4 -noeta -out \"%Dout138.txt\"", "out138.txt", "(all OK)", "-m4"},
+	{5, 0, 0, "\"%E\" t \"%Dmet4.zpaq\" -noeta -out \"%Dout139.txt\"", "out139.txt", "(all OK)", "-m4, t"},
+	{5, 0, 0, "\"%E\" p \"%Dmet4.zpaq\" -verify -noeta -out \"%Dout140.txt\"", "out140.txt", "All OK (paranoid test with check against filesystem)", "-m4, p -verify"},
+	{5, 0, 0, "\"%E\" a \"%Dmet5.zpaq\" \"%Dte\" \"%Dheal\" \"%Dnames\" \"%Dbigone01.big\" -m5 -noeta -out \"%Dout141.txt\"", "out141.txt", "(all OK)", "-m5"},
+	{5, 0, 0, "\"%E\" t \"%Dmet5.zpaq\" -noeta -out \"%Dout142.txt\"", "out142.txt", "(all OK)", "-m5, t"},
+	{5, 0, 0, "\"%E\" p \"%Dmet5.zpaq\" -verify -noeta -out \"%Dout143.txt\"", "out143.txt", "All OK (paranoid test with check against filesystem)", "-m5, p -verify"},
+	{5, AT_ZSTD, 0, "\"%E\" a \"%Dmet7.zpaq\" \"%Dte\" \"%Dheal\" \"%Dnames\" \"%Dbigone01.big\" -m7 -noeta -out \"%Dout144.txt\"", "out144.txt", "(all OK)", "-m7"},
+	{5, AT_ZSTD, 0, "\"%E\" t \"%Dmet7.zpaq\" -noeta -out \"%Dout145.txt\"", "out145.txt", "(all OK)", "-m7, t"},
+	{5, AT_ZSTD, 0, "\"%E\" p \"%Dmet7.zpaq\" -verify -noeta -out \"%Dout146.txt\"", "out146.txt", "All OK (paranoid test with check against filesystem)", "-m7, p -verify"},
+	{5, AT_ZSTD, 0, "\"%E\" a \"%Dmet9.zpaq\" \"%Dte\" \"%Dheal\" \"%Dnames\" \"%Dbigone01.big\" -m9 -noeta -out \"%Dout147.txt\"", "out147.txt", "(all OK)", "-m9"},
+	{5, AT_ZSTD, 0, "\"%E\" t \"%Dmet9.zpaq\" -noeta -out \"%Dout148.txt\"", "out148.txt", "(all OK)", "-m9, t"},
+	{5, AT_ZSTD, 0, "\"%E\" p \"%Dmet9.zpaq\" -verify -noeta -out \"%Dout149.txt\"", "out149.txt", "All OK (paranoid test with check against filesystem)", "-m9, p -verify"},
+	{5, 0, 0, "\"%E\" t \"%Dtestme.zpaq\" -all -noeta -out \"%Dout150.txt\"", "out150.txt", "(all OK)", "t -all"},
+	{5, 0, 0, "\"%E\" t \"%Dchunk_????.zpaq\" -key pippo -all -noeta -out \"%Dout151.txt\"", "out151.txt", "(all OK)", "t -all of an encrypted -chunk multipart"},
+	{5, 0, 0, "\"%E\" t \"%Dmultipart_????????\" -key pippo -all -noeta -out \"%Dout152.txt\"", "out152.txt", "(all OK)", "t -all of a backup multipart"},
+	{5, 0, 0, "\"%E\" a \"%Ds715.zpaq\" \"%Dte\" -715 -noeta", NULL, NULL, NULL},
+	{5, 0, 0, "\"%E\" a \"%Ds715.zpaq\" \"%Dheal\" -noeta", NULL, NULL, NULL},
+	{5, 0, 0, "\"%E\" t \"%Ds715.zpaq\" -all -noeta -out \"%Dout153.txt\"", "out153.txt", "(all OK)", "zpaq 7.15, then zpaqfranz: t -all"},
+	{5, 0, 0, "\"%E\" dump \"%Ds715.zpaq\" -out \"%Dout154.txt\"", "out154.txt", "Files without the hash of zpaqfranz", "zpaq 7.15, then zpaqfranz: dump"},
+	{5, 0, 0, "\"%E\" a \"%Ddamage.zpaq\" \"%Dte\" -m1 -noeta", NULL, NULL, NULL},
+	{5, 0, 0, "\"%E\" work poke \"%Ddamage.zpaq\" 200000:200100 0 -force -kill -out \"%Dout155.txt\"", "out155.txt", "done", "work poke into an archive"},
+	{5, 0, 0, "\"%E\" t \"%Ddamage.zpaq\" -noeta -out \"%Dout156.txt\"", "out156.txt", "file(s) CORRUPTED", "a damaged archive: t"},
+	{5, 0, 0, "\"%E\" x \"%Ddamage.zpaq\" -recover -to \"%Dex_damage\" -space -noeta -out \"%Dout157.txt\"", "out157.txt", "DAMAGED files", "a damaged archive: x -recover"},
+	{5, 0, 0, "mkdir \"%Dfa20\"", NULL, NULL, NULL},
+	{5, 0, 0, "echo 00 >\"%Dfa20%Sf00.txt\" && \"%E\" a \"%Dfa20.zpaq\" \"%Dfa20\" -fastadd -noeta", NULL, NULL, NULL},
+	{5, 0, 20, "echo %N >\"%Dfa20%Sf%N.txt\" && \"%E\" a \"%Dfa20.zpaq\" \"%Dfa20\" -comment \"v%N\" -fastaddtest -noeta -out \"%Dfa20_%N.txt\"", "fa20_%N.txt", "the stored state is the one read", "-fastadd, version %N of 20"},
+	///NOSFTPSTART
+	{5, AT_MOUNT, 0, "\"%E\" mount \"%Dchunk_????.zpaq\" \"%Dmnt\" -key pippo -all -test -noeta -out \"%Dout160.txt\"", "out160.txt", "Mount test: OK", "mount -all of an encrypted -chunk multipart"},
+	///NOSFTPEND
+};
+static const unsigned int g_autotestpassin= sizeof(g_autotestpassi) / sizeof(g_autotestpassi[0]);
+
+/// the conditions of a step (i_franzen, i_mount: of this run, or of the run that made the folder)
+static bool autotest_condizione(int i_condizione, bool i_franzen, bool i_mount)
+{
+	if ((i_condizione & AT_FRANZEN) && (!i_franzen))
+		return false;
+	if ((i_condizione & AT_MOUNT) && (!i_mount))
+		return false;
+#ifndef ZPAQZSTD
+	if (i_condizione & AT_ZSTD)
+		return false;
+#endif // corresponds to #ifndef (#ifndef ZPAQZSTD)
+#ifdef _WIN32
+	if (i_condizione & AT_UNIX)
+		return false;
+#else
+	if (i_condizione & AT_WIN)
+		return false;
+#endif // corresponds to #ifdef (#ifdef _WIN32)
+	return true;
+}
+static string autotest_numero(int i_n)
+{
+	char numero[16];
+	snprintf(numero, sizeof(numero), "%02d", i_n);
+	return numero;
+}
+/// %E, %D... in one pass: a value that has a % (a folder) is not expanded again
+static string autotest_espandi(const char *i_modello, const std::map<char, string> &i_valori)
+{
+	string risultato;
+	if (i_modello == NULL)
+		return risultato;
+	for (const char *p= i_modello; *p; p++)
+	{
+		if ((*p == '%') && (*(p + 1) != 0))
+		{
+			std::map<char, string>::const_iterator v= i_valori.find(*(p + 1));
+			if (v != i_valori.end())
+			{
+				risultato+= v->second;
+				p++;
+				continue;
+			}
+		}
+		risultato+= *p;
+	}
+	return risultato;
+}
+/// the level asked: -m1 ... -m5, nothing = 4. -1: anything else
+static int autotest_livello(const string &i_method)
+{
+	if (i_method == "")
+		return 4;
+	if ((i_method.size() == 1) && (i_method[0] >= '1') && (i_method[0] <= '5'))
+		return i_method[0] - '0';
+	return -1;
+}
+/// the level of a test folder: autotestlevel.txt, written with the script. None: 4 (a folder made before 65.12h)
+static int autotest_livellocartella(const string &i_cartella)
+{
+	vector<string> righe;
+	if (fileexists(i_cartella + "autotestlevel.txt"))
+		readfiletoarray(i_cartella + "autotestlevel.txt", righe);
+	for (unsigned int i= 0; i < righe.size(); i++)
+		if ((righe[i].size() > 0) && (righe[i][0] >= '1') && (righe[i][0] <= '5'))
+			return righe[i][0] - '0';
+	return 4;
+}
+/// the folders 00-09 of the data written by a level (the names of the files do not change)
+static bool autotest_cartella(int i_livello, int i_iterazione)
+{
+	if (i_livello >= 3)
+		return true;
+	if (i_livello == 2)
+		return i_iterazione >= 5;
+	return false;
+}
+
 int Jidac::autotest()
 {
 	myprintf("01147: Self-test for correct internal functioning\n"); // for non-Intel CPU
 	/// -quick with -all: the quick suite (see g_autotestquick), and nothing else
 	const bool quick= all && flagquick;
+	/// 65.12h: -m1 ... -m5 = the level of the tests of -all -to (no -m: -m4, the suite as it was)
+	const int livello= autotest_livello(method);
+	if ((!quick) && (livello < 0) && (all || (tofiles.size() > 0)))
+	{
+		myprintf("03491! autotest -all: -m is the level of the tests, -m1 ... -m5 (no -m: -m4): this one is not\n"); /// method: -m7 is already 86h19
+		return 2;
+	}
 	if (all)
 		pc_info();
 #ifdef ZPAQZSTD
@@ -173078,11 +173564,16 @@ int Jidac::autotest()
 				myprintf("01162: getfoldersize failed!\n");
 		}
 
-		int64_t spazio= getfreespace(outfolder);
-		if ((spazio / 1000000000) < 18)
+		/// 65.12h: what a level needs at its peak (measured on Windows, with -franzen, plus some more): 22 MB,
+		/// 135 MB, 7.6 GB, 27.6 GB, 30.8 GB. The 18 GB of before were too few for -m4 (the suite of before) too
+		static const char *spazioserve[6]= {"", "0.2", "1", "10", "28", "32"};
+		const int64_t	   spaziogb[6]	  = {0, 200000000LL, 1000000000LL, 10000000000LL, 28000000000LL, 32000000000LL};
+		const int		   livellospazio  = (livello >= 1) ? livello : 4; /// -quick: any -m
+		int64_t			   spazio		  = getfreespace(outfolder);
+		if (spazio < spaziogb[livellospazio])
 			if ((!flagspace) && (!quick)) /// the quick suite needs just a few MB
 			{
-				myprintf("01163! You need at least 18GB free on %s (founded %s). Use -space to bypass\n", outfolder.c_str(), tohuman(spazio));
+				myprintf("01163! You need at least %sGB free on %s (founded %s). Use -space to bypass\n", spazioserve[livellospazio], outfolder.c_str(), tohuman(spazio));
 				franz_free(state);
 				franz_free(buffer8bit);
 				franz_free(buffer32bit);
@@ -173333,8 +173824,9 @@ int Jidac::autotest()
 				for (int j= 0; j < 300; j++)
 					buffer8bit[j]++;
 				if (outfolder != "")
+					chunk++; /// 65.12h: the names of the files are the same at every level
+				if ((outfolder != "") && autotest_cartella(livello, i))
 				{
-					chunk++;
 					snprintf(mynomefile, sizeof(mynomefile), "%s%02d/%04d/%05d.dat", outfolder.c_str(), i, k, (int)chunk);
 					makepath(mynomefile);
 					if (chunk % 100 == 0)
@@ -173585,7 +174077,8 @@ int Jidac::autotest()
 	{
 		chunksize= 1000000;
 
-		for (unsigned int j= 1; j <= 15; j++)
+		/// 65.12h: the big files (6 GB) for -m4 and -m5 only
+		for (unsigned int j= 1; (livello >= 4) && (j <= 15); j++)
 		{
 			snprintf(mynomefile, sizeof(mynomefile), "%sbigone%02d.big", outfolder.c_str(), j);
 			FILE *myfile= fopen(mynomefile, "wb");
@@ -173691,7 +174184,6 @@ int Jidac::autotest()
 		if (flagdebug3)
 			myprintf("01219: filebatch %s\n", filebatch.c_str());
 
-		string filezpaq= outfolder + "testme.zpaq";
 #ifdef _WIN32
 		wchar_t myexepath[_MAX_PATH];
 		GetModuleFileName(NULL, myexepath, _MAX_PATH);
@@ -173724,6 +174216,8 @@ int Jidac::autotest()
 			if (!direxists(mountpoint))
 				mkdir(mountpoint.c_str(), 0700);
 #endif // corresponds to #ifdef (#ifdef _WIN32)
+			if (livello < 4)
+				presente= false; /// 65.12h: the mount steps are of -m4 and -m5
 			if (presente)
 			{
 				myprintf("56471: Trying a mount (mount %ssha256.zpaq %s -test), please wait...\n", outfolder.c_str(), mountpoint.c_str());
@@ -173738,7 +174232,7 @@ int Jidac::autotest()
 				if (!testmount)
 					myprintf("56472: The mount does not work here (exit code %d): no mount tests\n", codice);
 			}
-			else
+			else if (livello >= 4)
 				myprintf("56473: WinFsp not installed: no mount tests\n");
 			if (testmount)
 			{
@@ -173785,322 +174279,39 @@ int Jidac::autotest()
 #else
 		fprintf(batch, "cd \"%s\" || exit 1%s", cartellatest.c_str(), acapo.c_str());
 #endif // corresponds to #ifdef (#ifdef _WIN32)
-		fprintf(batch, "\"%s\" x \"%ssha256.zpaq\" -space -to \"%ste\" %s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), acapo.c_str());
-		fprintf(batch, "\"%s\" sum \"%ste\" -sha256 -rename -force -out \"%sout01.txt\"%s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), acapo.c_str());
-
-		fprintf(batch, "\"%s\" a \"%s\" \"%s00\" -xxhash -comment \"xxhash\" %s", myzpaqexe.c_str(), filezpaq.c_str(), outfolder.c_str(), acapo.c_str());
-		fprintf(batch, "\"%s\" a \"%s\" \"%s01\" -xxh3   -comment \"xxh3\" %s", myzpaqexe.c_str(), filezpaq.c_str(), outfolder.c_str(), acapo.c_str());
-		fprintf(batch, "\"%s\" a \"%s\" \"%s02\" -sha1   -comment \"sha1\" %s", myzpaqexe.c_str(), filezpaq.c_str(), outfolder.c_str(), acapo.c_str());
-		fprintf(batch, "\"%s\" a \"%s\" \"%s03\" -sha256 -comment \"sha256\" %s", myzpaqexe.c_str(), filezpaq.c_str(), outfolder.c_str(), acapo.c_str());
-		fprintf(batch, "\"%s\" a \"%s\" \"%s04\" -sha3   -comment \"sha3\" %s", myzpaqexe.c_str(), filezpaq.c_str(), outfolder.c_str(), acapo.c_str());
-		fprintf(batch, "\"%s\" a \"%s\" \"%s05\" -blake3 -comment \"blake3\" %s", myzpaqexe.c_str(), filezpaq.c_str(), outfolder.c_str(), acapo.c_str());
-		fprintf(batch, "\"%s\" a \"%s\" \"%s06\" -md5    -comment \"md5\" %s", myzpaqexe.c_str(), filezpaq.c_str(), outfolder.c_str(), acapo.c_str());
-		fprintf(batch, "\"%s\" a \"%s\" \"%s07\" -whirlpool -comment \"whirlpool\" %s", myzpaqexe.c_str(), filezpaq.c_str(), outfolder.c_str(), acapo.c_str());
-		fprintf(batch, "\"%s\" a \"%s\" \"%s08\" -highway64 -comment \"high64\" %s", myzpaqexe.c_str(), filezpaq.c_str(), outfolder.c_str(), acapo.c_str());
-		fprintf(batch, "\"%s\" a \"%s\" \"%s09\" -highway128 -comment \"high128\" %s", myzpaqexe.c_str(), filezpaq.c_str(), outfolder.c_str(), acapo.c_str());
-
-		fprintf(batch, "\"%s\" x \"%s\" \"%s00%c0770%c00771.dat\" -space -to \"%sverifica\" %s", myzpaqexe.c_str(), filezpaq.c_str(), outfolder.c_str(), barra, barra, outfolder.c_str(), acapo.c_str());
-		fprintf(batch, "\"%s\" sum \"%sverifica\" -sha256 -out \"%sout02.txt\"%s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), acapo.c_str());
-		fprintf(batch, "\"%s\" t \"%s\" -until 10 -verify -out \"%sout03.txt\"%s", myzpaqexe.c_str(), filezpaq.c_str(), outfolder.c_str(), acapo.c_str());
-		fprintf(batch, "\"%s\" v \"%s\" -all -out \"%sout04.txt\"%s", myzpaqexe.c_str(), filezpaq.c_str(), outfolder.c_str(), acapo.c_str());
-		fprintf(batch, "\"%s\" w \"%s\" -all -test -checksum -verbose -out \"%sout05.txt\"%s", myzpaqexe.c_str(), filezpaq.c_str(), outfolder.c_str(), acapo.c_str());
-		fprintf(batch, "\"%s\" p \"%s\" -verify -out \"%sout06.txt\"%s", myzpaqexe.c_str(), filezpaq.c_str(), outfolder.c_str(), acapo.c_str());
-
-		string temp2= excludetrailingbackslash(outfolder);
-		fprintf(batch, "\"%s\" x \"%s\" -to \"%sfranco\" -space -find \"%s\" -replace \"\" %s", myzpaqexe.c_str(), filezpaq.c_str(), linuxpath.c_str(), temp2.c_str(), acapo.c_str());
-
-		fprintf(batch, "\"%s\" sum \"%sfranco/01\"  \"%sfranco/02\"  \"%sfranco/03\" \"%sfranco/04\" \"%sfranco/05\" \"%sfranco/06\" \"%sfranco/07\" \"%sfranco/08\" \"%sfranco/09\" -xxh3 -summary -out \"%sout07.txt\"%s", myzpaqexe.c_str(),
-				linuxpath.c_str(),
-				linuxpath.c_str(),
-				linuxpath.c_str(),
-				linuxpath.c_str(),
-				linuxpath.c_str(),
-				linuxpath.c_str(),
-				linuxpath.c_str(),
-				linuxpath.c_str(),
-				linuxpath.c_str(),
-				outfolder.c_str(), acapo.c_str());
-
-		fprintf(batch, "\"%s\" a \"%schunk_????.zpaq\" \"%s00\" -key pippo -md5b      -chunk 200k -to \"./locale/00\" %s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), acapo.c_str());
-		fprintf(batch, "\"%s\" a \"%schunk_????.zpaq\" \"%s01\" -key pippo -xxhashb   -chunk 200k -to \"./locale/01\" %s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), acapo.c_str());
-		fprintf(batch, "\"%s\" a \"%schunk_????.zpaq\" \"%s02\" -key pippo -blake3    -chunk 200k -to \"./locale/02\" %s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), acapo.c_str());
-		fprintf(batch, "\"%s\" a \"%schunk_????.zpaq\" \"%s03\" -key pippo -xxh3b     -chunk 200k -to \"./locale/03\" %s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), acapo.c_str());
-		fprintf(batch, "\"%s\" a \"%schunk_????.zpaq\" \"%s04\" -key pippo -xxhashb   -chunk 500k -to \"./locale/04\" %s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), acapo.c_str());
-		fprintf(batch, "\"%s\" a \"%schunk_????.zpaq\" \"%s05\" -key pippo -sha3b     -chunk 200k -to \"./locale/05\" %s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), acapo.c_str());
-		fprintf(batch, "\"%s\" a \"%schunk_????.zpaq\" \"%s06\" -key pippo -whirlpool -chunk 200k -to \"./locale/06\" %s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), acapo.c_str());
-		fprintf(batch, "\"%s\" a \"%schunk_????.zpaq\" \"%s07\" -key pippo -sha256b   -chunk 200k -to \"./locale/07\" %s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), acapo.c_str());
-		fprintf(batch, "\"%s\" a \"%schunk_????.zpaq\" \"%s08\" -key pippo -xxhashb   -chunk 50k  -to \"./locale/08\" %s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), acapo.c_str());
-		fprintf(batch, "\"%s\" a \"%schunk_????.zpaq\" \"%s09\" -key pippo -sha256    -chunk 50k  -to \"./locale/09\" %s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), acapo.c_str());
-
-		fprintf(batch, "\"%s\" x \"%schunk_????.zpaq\" -space -key pippo  %s",
-				myzpaqexe.c_str(), outfolder.c_str(), acapo.c_str());
-
-		fprintf(batch, "\"%s\" sum \"%slocale\" -summary -out \"%sout08.txt\"%s",
-				myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), acapo.c_str());
-
-		fprintf(batch, "\"%s\" t \"%schunk_????.zpaq\" -key pippo -paranoid -to \"%skane\" -space -out \"%sout09.txt\" %s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), outfolder.c_str(), acapo.c_str());
-
-		fprintf(batch, "echo errore >>\"%slocale%c04%c2229%c10000.dat\"%s", outfolder.c_str(), barra, barra, barra, acapo.c_str());
-		fprintf(batch, "\"%s\" v \"%schunk_????.zpaq\" -key pippo -verbose -out \"%sout10.txt\"%s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), acapo.c_str());
-
-		fprintf(batch, "\"%s\" c \"%slocale\" \"%sfranco\" -xxh3 -checksum -out \"%sout11.txt\"%s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), outfolder.c_str(), acapo.c_str());
-
-		fprintf(batch, "\"%s\" backup \"%smultipart.zpaq\" \"%ste\" -only \"*te/0*\" -xxhashb    -key pippo %s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), acapo.c_str());
-		fprintf(batch, "\"%s\" backup \"%smultipart.zpaq\" \"%ste\" -only \"*te/1*\" -md5b       -key pippo %s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), acapo.c_str());
-		fprintf(batch, "\"%s\" backup \"%smultipart.zpaq\" \"%ste\" -only \"*te/2*\" -xxh3b      -key pippo %s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), acapo.c_str());
-		fprintf(batch, "\"%s\" backup \"%smultipart.zpaq\" \"%ste\" -only \"*te/3*\" -sha256b    -key pippo %s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), acapo.c_str());
-		fprintf(batch, "\"%s\" backup \"%smultipart.zpaq\" \"%ste\" -only \"*te/4*\" -sha3b      -key pippo %s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), acapo.c_str());
-		fprintf(batch, "\"%s\" backup \"%smultipart.zpaq\" \"%ste\" -only \"*te/5*\" -blake3b    -key pippo %s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), acapo.c_str());
-		fprintf(batch, "\"%s\" backup \"%smultipart.zpaq\" \"%ste\" -only \"*te/6*\" -sha1b      -key pippo %s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), acapo.c_str());
-		fprintf(batch, "\"%s\" backup \"%smultipart.zpaq\" \"%ste\" -only \"*te/7*\" -whirlpool  -key pippo %s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), acapo.c_str());
-		fprintf(batch, "\"%s\" backup \"%smultipart.zpaq\" \"%ste\" -only \"*te/8*\" -highway64  -key pippo %s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), acapo.c_str());
-		fprintf(batch, "\"%s\" backup \"%smultipart.zpaq\" \"%ste\" -only \"*te/9*\" -highway128 -key pippo %s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), acapo.c_str());
-		fprintf(batch, "\"%s\" backup \"%smultipart.zpaq\" \"%ste\" -only \"*te/A*\" -xxhash     -key pippo %s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), acapo.c_str());
-		fprintf(batch, "\"%s\" backup \"%smultipart.zpaq\" \"%ste\" -only \"*te/B*\" -md5        -key pippo %s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), acapo.c_str());
-		fprintf(batch, "\"%s\" backup \"%smultipart.zpaq\" \"%ste\" -only \"*te/C*\" -xxh3       -key pippo %s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), acapo.c_str());
-		fprintf(batch, "\"%s\" backup \"%smultipart.zpaq\" \"%ste\" -only \"*te/D*\" -sha256     -key pippo %s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), acapo.c_str());
-		fprintf(batch, "\"%s\" backup \"%smultipart.zpaq\" \"%ste\" -only \"*te/E*\" -sha3       -key pippo %s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), acapo.c_str());
-		fprintf(batch, "\"%s\" backup \"%smultipart.zpaq\" \"%ste\" -only \"*te/F*\" -blake3     -key pippo %s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), acapo.c_str());
-
-		fprintf(batch, "\"%s\" testbackup \"%smultipart.zpaq\" -paranoid -verify -key pippo -out \"%sout12.txt\" %s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), acapo.c_str());
-		fprintf(batch, "\"%s\" x \"%smultipart_????????\" -key pippo -until 17 -space -to \"%sex_multipart\" %s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), acapo.c_str());
-		fprintf(batch, "\"%s\" t \"%smultipart_????????\" -key pippo -until 17 -verify -to \"%sex_multipart\" -out \"%sout13.txt\" %s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), outfolder.c_str(), acapo.c_str());
-		fprintf(batch, "\"%s\" t \"%smultipart_????????\" \"%ste\" -key pippo -checksum -out \"%sout14.txt\" %s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), outfolder.c_str(), acapo.c_str());
-
-		fprintf(batch, "\"%s\" a \"%sbinary.zpaq\" \"%s00\" -xxhashb -frugal %s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), acapo.c_str());
-		fprintf(batch, "\"%s\" a \"%sbinary.zpaq\" \"%s01\" -xxhashb -frugal %s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), acapo.c_str());
-		fprintf(batch, "\"%s\" a \"%sbinary.zpaq\" \"%s02\" -xxhashb -frugal %s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), acapo.c_str());
-		fprintf(batch, "\"%s\" a \"%sbinary.zpaq\" \"%s03\" -xxhashb -frugal %s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), acapo.c_str());
-		fprintf(batch, "\"%s\" a \"%sbinary.zpaq\" \"%ssha256.zpaq\" -xxhashb -frugal %s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), acapo.c_str());
-		fprintf(batch, "\"%s\" a \"%sbinary.zpaq\" \"%s04\" -xxhashb -frugal %s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), acapo.c_str());
-		fprintf(batch, "\"%s\" a \"%sbinary.zpaq\" \"%s05\" -xxhashb -frugal %s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), acapo.c_str());
-		fprintf(batch, "\"%s\" a \"%sbinary.zpaq\" \"%s06\" -xxhashb -frugal %s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), acapo.c_str());
-		fprintf(batch, "\"%s\" a \"%sbinary.zpaq\" \"%s07\" -xxhashb -frugal %s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), acapo.c_str());
-		fprintf(batch, "\"%s\" a \"%sbinary.zpaq\" \"%s09\" -xxhashb -frugal %s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), acapo.c_str());
-		fprintf(batch, "\"%s\" a \"%sbinary.zpaq\" \"%s09\" -xxhashb -frugal %s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), acapo.c_str());
-
-		fprintf(batch, "\"%s\" x \"%sbinary.zpaq\" -only \"*sha256.zpaq\" -space -find \"sha256.zpaq\" -replace \"restored.zpaq\" %s", myzpaqexe.c_str(), outfolder.c_str(), acapo.c_str());
-		fprintf(batch, "\"%s\" sum \"%srestored.zpaq\" \"%ssha256.zpaq\" -stdout -pakka -noeta -out \"%sout15.txt\" %s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), outfolder.c_str(), acapo.c_str());
-		fprintf(batch, "\"%s\" p \"%sbinary.zpaq\" -verify -out \"%sout16.txt\" %s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), acapo.c_str());
-		fprintf(batch, "\"%s\" r \"%s04\" \"%slocale%c04\" -kill -out \"%sout17.txt\" %s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), barra, outfolder.c_str(), acapo.c_str());
-
-		string onlylist= "-only \"*05000.dat\" -only \"*06000.dat\" -only \"*15000.dat\" -only \"*00777.dat\" -only \"*00778.dat\" -only \"*02332.dat\" -only \"*04663.dat\" -only \"*07771.dat\" -only \"*11656.dat\" -only \"*16318.dat\" -only \"*21757.dat\" -only \"*34996.dat\"";
-
-		fprintf(batch, "\"%s\" x \"%sbinary.zpaq\" -all %s -space -to \"%sex_binary\" %s",
-				myzpaqexe.c_str(), outfolder.c_str(), onlylist.c_str(), outfolder.c_str(), acapo.c_str());
-
-		fprintf(batch, "\"%s\" sum \"%sex_binary\" -summary -blake3 -out \"%sout18.txt\" %s",
-				myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), acapo.c_str());
-
-		fprintf(batch, "\"%s\" sum \"%slocale\" %s -summary -blake3 -out \"%sout19.txt\" %s",
-				myzpaqexe.c_str(), outfolder.c_str(), onlylist.c_str(), outfolder.c_str(), acapo.c_str());
-
-		fprintf(batch, "\"%s\" sum \"%s00\" \"%s01\" \"%s02\" \"%s03\" \"%s04\" \"%s05\" \"%s06\" \"%s07\" \"%s08\" \"%s09\" %s -summary -blake3 -out \"%sout20.txt\" %s",
-				myzpaqexe.c_str(),
-				outfolder.c_str(),
-				outfolder.c_str(),
-				outfolder.c_str(),
-				outfolder.c_str(),
-				outfolder.c_str(),
-				outfolder.c_str(),
-				outfolder.c_str(),
-				outfolder.c_str(),
-				outfolder.c_str(),
-				outfolder.c_str(),
-				onlylist.c_str(),
-				outfolder.c_str(), acapo.c_str());
-
-		for (unsigned j= 1; j <= 15; j++)
-			fprintf(batch, "\"%s\" a \"%sthebigone.zpaq\" \"%sbigone%02d.big\" %s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), j, acapo.c_str());
-
-		fprintf(batch, "\"%s\" x \"%sthebigone.zpaq\" -space -to \"%sex_bigone\" %s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), acapo.c_str());
-
-		fprintf(batch, "\"%s\" sum \"%sex_bigone\" -summary -sha3 -out \"%sout21.txt\" %s",
-				myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), acapo.c_str());
-
-		fprintf(batch, "\"%s\" pp \"%sthebigone.zpaq\" -out \"%sout22.txt\" %s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), acapo.c_str());
-		
+		/// 65.12h: the steps of g_autotestpassi of this level (and of what is here: -franzen, mount, zstd, the OS)
+		std::map<char, string> valori;
+		valori['E']= myzpaqexe;
+		valori['D']= outfolder;
+		valori['L']= linuxpath;
+		valori['X']= excludetrailingbackslash(outfolder);
+		valori['S']= string(1, barra);
+		valori['F']= g_franzen;
+		valori['O']= "-only \"*05000.dat\" -only \"*06000.dat\" -only \"*15000.dat\" -only \"*00777.dat\" -only \"*00778.dat\" -only \"*02332.dat\" -only \"*04663.dat\" -only \"*07771.dat\" -only \"*11656.dat\" -only \"*16318.dat\" -only \"*21757.dat\" -only \"*34996.dat\"";
+		string cartelle= "";
+		for (int j= 0; j <= 9; j++)
+			cartelle+= "\"" + outfolder + autotest_numero(j) + "\" ";
+		valori['C']		 = cartelle;
+		unsigned int passi= 0;
+		unsigned int prove= 0;
+		for (unsigned int i= 0; i < g_autotestpassin; i++)
+		{
+			const autotestpasso &p= g_autotestpassi[i];
+			if ((p.livello > livello) || (!autotest_condizione(p.condizione, g_franzen != "", testmount)))
+				continue;
+			for (int n= 1; n <= ((p.ripeti > 0) ? p.ripeti : 1); n++)
+			{
+				valori['N']= autotest_numero(n);
+				if (p.comando != NULL)
+				{
+					fprintf(batch, "%s%s", autotest_espandi(p.comando, valori).c_str(), acapo.c_str());
+					passi++;
+				}
+				if ((p.uscita != NULL) && (p.atteso != NULL))
+					prove++;
+			}
+		}
 		string temp= excludetrailingbackslash(outfolder);
-
-
-		if (g_franzen != "")
-		{
-			
-			// 1. AES + FRANZEN (Doppia criptazione)
-			// Creazione archivio incrementale (out23 - out26)
-			fprintf(batch, "\"%s\" a \"%saesfranzen\" \"%sbigone01.big\" -key pippo -franzen \"%s\" -timestamp 20250101000000 -out \"%sout23.txt\" %s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), g_franzen.c_str(), outfolder.c_str(), acapo.c_str());
-			fprintf(batch, "\"%s\" a \"%saesfranzen\" \"%sbigone02.big\" -key pippo -franzen \"%s\" -timestamp 20250102000000 -out \"%sout24.txt\" %s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), g_franzen.c_str(), outfolder.c_str(), acapo.c_str());
-			fprintf(batch, "\"%s\" a \"%saesfranzen\" \"%sbigone03.big\" -key pippo -franzen \"%s\" -timestamp 20250103000000 -out \"%sout25.txt\" %s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), g_franzen.c_str(), outfolder.c_str(), acapo.c_str());
-			fprintf(batch, "\"%s\" a \"%saesfranzen\" \"%sbigone01.big\" -key pippo -franzen \"%s\" -timestamp 20250104000000 -out \"%sout26.txt\" %s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), g_franzen.c_str(), outfolder.c_str(), acapo.c_str());
-
-			// Verifica 'paranoid preview' (out27)
-			fprintf(batch, "\"%s\" pp \"%saesfranzen\" -key pippo -franzen \"%s\" -verify -out \"%sout27.txt\" %s", myzpaqexe.c_str(), outfolder.c_str(), g_franzen.c_str(), outfolder.c_str(), acapo.c_str());
-
-			// Test strutturale basso livello (out28)
-			fprintf(batch, "\"%s\" franzen test \"%saesfranzen.zpaq.franzen\" -key pippo -franzen \"%s\" -out \"%sout28.txt\" %s", myzpaqexe.c_str(), outfolder.c_str(), g_franzen.c_str(), outfolder.c_str(), acapo.c_str());
-
-			// Rimozione strato esterno (out29)
-			fprintf(batch, "\"%s\" franzen \"%saesfranzen.zpaq.franzen\" -to \"%saesfranzen_decoded.zpaq\" -franzen \"%s\" -out \"%sout29.txt\" %s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), g_franzen.c_str(), outfolder.c_str(), acapo.c_str());
-
-			// The decoded .zpaq must be a good archive (out30). No binary compare:
-			// since 65.1 there is no cleartext .zpaq beside the .franzen to compare with
-			fprintf(batch, "\"%s\" t \"%saesfranzen_decoded.zpaq\" -key pippo -noeta -out \"%sout30.txt\" %s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), acapo.c_str());
-
-			// 2. ONLY FRANZEN (out31 - out38)
-			fprintf(batch, "\"%s\" a \"%sonlyfranzen\" \"%sbigone01.big\"  -franzen \"%s\" -timestamp 20250101000000 -out \"%sout31.txt\" %s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), g_franzen.c_str(), outfolder.c_str(), acapo.c_str());
-			fprintf(batch, "\"%s\" a \"%sonlyfranzen\" \"%sbigone02.big\"  -franzen \"%s\" -timestamp 20250102000000 -out \"%sout32.txt\" %s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), g_franzen.c_str(), outfolder.c_str(), acapo.c_str());
-			fprintf(batch, "\"%s\" a \"%sonlyfranzen\" \"%sbigone03.big\"  -franzen \"%s\" -timestamp 20250103000000 -out \"%sout33.txt\" %s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), g_franzen.c_str(), outfolder.c_str(), acapo.c_str());
-			fprintf(batch, "\"%s\" a \"%sonlyfranzen\" \"%sbigone01.big\"  -franzen \"%s\" -timestamp 20250104000000 -out \"%sout34.txt\" %s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), g_franzen.c_str(), outfolder.c_str(), acapo.c_str());
-
-			fprintf(batch, "\"%s\" pp \"%sonlyfranzen\" -franzen \"%s\" -verify -out \"%sout35.txt\" %s", myzpaqexe.c_str(), outfolder.c_str(), g_franzen.c_str(), outfolder.c_str(), acapo.c_str());
-			
-			fprintf(batch, "\"%s\" franzen test \"%sonlyfranzen.zpaq.franzen\" -franzen \"%s\" -out \"%sout36.txt\" %s", myzpaqexe.c_str(), outfolder.c_str(), g_franzen.c_str(), outfolder.c_str(), acapo.c_str());
-			
-			fprintf(batch, "\"%s\" franzen \"%sonlyfranzen.zpaq.franzen\" -to \"%sonlyfranzen_decoded.zpaq\" -franzen \"%s\" -out \"%sout37.txt\" %s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), g_franzen.c_str(), outfolder.c_str(), acapo.c_str());
-			
-			fprintf(batch, "\"%s\" t \"%sonlyfranzen_decoded.zpaq\" -noeta -out \"%sout38.txt\" %s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), acapo.c_str());
-
-
-			// 3. ESTRAZIONE E VERIFICA CONTENUTI (out39 - out44)
-			// AES+Franzen extract
-			fprintf(batch, "\"%s\" x \"%saesfranzen\" \"%sbigone01.big\" -to \"%saes_franzen_bigone01.bin\" -space -key pippo -franzen \"%s\" -out \"%sout39.txt\" %s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), outfolder.c_str(), g_franzen.c_str(), outfolder.c_str(), acapo.c_str());
-			fprintf(batch, "\"%s\" x \"%saesfranzen\" \"%sbigone02.big\" -to \"%saes_franzen_bigone02.bin\" -space -key pippo -franzen \"%s\" -out \"%sout40.txt\" %s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), outfolder.c_str(), g_franzen.c_str(), outfolder.c_str(), acapo.c_str());
-			fprintf(batch, "\"%s\" x \"%saesfranzen\" \"%sbigone03.big\" -to \"%saes_franzen_bigone03.bin\" -space -key pippo -franzen \"%s\" -out \"%sout41.txt\" %s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), outfolder.c_str(), g_franzen.c_str(), outfolder.c_str(), acapo.c_str());
-
-			// OnlyFranzen extract
-			fprintf(batch, "\"%s\" x \"%sonlyfranzen\" \"%sbigone01.big\" -to \"%sonly_franzen_bigone01.bin\" -space -franzen \"%s\" -out \"%sout42.txt\" %s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), outfolder.c_str(), g_franzen.c_str(), outfolder.c_str(), acapo.c_str());
-			fprintf(batch, "\"%s\" x \"%sonlyfranzen\" \"%sbigone02.big\" -to \"%sonly_franzen_bigone02.bin\" -space -franzen \"%s\" -out \"%sout43.txt\" %s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), outfolder.c_str(), g_franzen.c_str(), outfolder.c_str(), acapo.c_str());
-			fprintf(batch, "\"%s\" x \"%sonlyfranzen\" \"%sbigone03.big\" -to \"%sonly_franzen_bigone03.bin\" -space -franzen \"%s\" -out \"%sout44.txt\" %s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), outfolder.c_str(), g_franzen.c_str(), outfolder.c_str(), acapo.c_str());
-
-			// 4. CONFRONTO FINALE FILE ESTRATTI vs ORIGINALI (out45)
-			fprintf(batch, "\"%s\" work fc \"%sbigone01.big\" \"%saes_franzen_bigone01.bin\" -out \"%sout45.txt\" %s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), outfolder.c_str(), acapo.c_str());
-			fprintf(batch, "\"%s\" work fc \"%sbigone02.big\" \"%saes_franzen_bigone02.bin\" -out \"%sout46.txt\" %s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), outfolder.c_str(), acapo.c_str());
-			fprintf(batch, "\"%s\" work fc \"%sbigone03.big\" \"%saes_franzen_bigone03.bin\" -out \"%sout47.txt\" %s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), outfolder.c_str(), acapo.c_str());
-
-			fprintf(batch, "\"%s\" work fc \"%sbigone01.big\" \"%sonly_franzen_bigone01.bin\" -out \"%sout48.txt\" %s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), outfolder.c_str(), acapo.c_str());
-			fprintf(batch, "\"%s\" work fc \"%sbigone02.big\" \"%sonly_franzen_bigone02.bin\" -out \"%sout49.txt\" %s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), outfolder.c_str(), acapo.c_str());
-			fprintf(batch, "\"%s\" work fc \"%sbigone03.big\" \"%sonly_franzen_bigone03.bin\" -out \"%sout50.txt\" %s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), outfolder.c_str(), acapo.c_str());
-		}
-		/*
-			Hash healing (65.3q/65.3s). heal.zpaq: SHA-256 first, then only the
-			attribute of h1.txt changes and the default hash (XXHASH64) is asked:
-			h1 must be read again, not stored with a zero hash (v would FAIL).
-			touch.zpaq: a zpaq 7.15 archive (no hash at all), then -touch -sha3
-			gives a hash to every file, in one run; run again, nothing to do
-		*/
-		string heal= outfolder + "heal";
-		fprintf(batch, "\"%s\" a \"%sheal.zpaq\" \"%s\" -sha256 -noeta %s", myzpaqexe.c_str(), outfolder.c_str(), heal.c_str(), acapo.c_str());
-#ifdef _WIN32
-		fprintf(batch, "attrib -A \"%s%ch1.txt\"%s", heal.c_str(), barra, acapo.c_str());
-#else
-		fprintf(batch, "chmod 600 \"%s%ch1.txt\"%s", heal.c_str(), barra, acapo.c_str());
-#endif // corresponds to #ifdef (#ifdef _WIN32)
-		fprintf(batch, "\"%s\" a \"%sheal.zpaq\" \"%s\" -noeta -out \"%sout51.txt\"%s", myzpaqexe.c_str(), outfolder.c_str(), heal.c_str(), outfolder.c_str(), acapo.c_str());
-		fprintf(batch, "\"%s\" v \"%sheal.zpaq\" -out \"%sout52.txt\"%s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), acapo.c_str());
-		fprintf(batch, "\"%s\" a \"%stouch.zpaq\" \"%s\" -715 -noeta %s", myzpaqexe.c_str(), outfolder.c_str(), heal.c_str(), acapo.c_str());
-		fprintf(batch, "\"%s\" a \"%stouch.zpaq\" \"%s\" -touch -sha3 -noeta -out \"%sout53.txt\"%s", myzpaqexe.c_str(), outfolder.c_str(), heal.c_str(), outfolder.c_str(), acapo.c_str());
-		fprintf(batch, "\"%s\" v \"%stouch.zpaq\" -out \"%sout54.txt\"%s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), acapo.c_str());
-		fprintf(batch, "\"%s\" a \"%stouch.zpaq\" \"%s\" -touch -sha3 -noeta -out \"%sout55.txt\"%s", myzpaqexe.c_str(), outfolder.c_str(), heal.c_str(), outfolder.c_str(), acapo.c_str());
-		/// difficult names: stored and verified against the disk
-		fprintf(batch, "\"%s\" a \"%snames.zpaq\" \"%snames\" -sha256 -noeta %s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), acapo.c_str());
-		fprintf(batch, "\"%s\" v \"%snames.zpaq\" -out \"%sout64.txt\"%s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), acapo.c_str());
-
-		/*
-			Mount: every archive made above, read THROUGH the mount (mount -test:
-			mount, compare with the index, unmount by itself). Plain, every
-			version, -until, encrypted multipart, backup multipart, the healed
-			one, and the Franzen ones if any
-		*/
-		if (testmount)
-		{
-			fprintf(batch, "\"%s\" mount \"%s\" \"%s\" -test -noeta -out \"%sout56.txt\"%s", myzpaqexe.c_str(), filezpaq.c_str(), mountpoint.c_str(), outfolder.c_str(), acapo.c_str());
-			fprintf(batch, "\"%s\" mount \"%s\" \"%s\" -all -test -noeta -out \"%sout57.txt\"%s", myzpaqexe.c_str(), filezpaq.c_str(), mountpoint.c_str(), outfolder.c_str(), acapo.c_str());
-			fprintf(batch, "\"%s\" mount \"%s\" \"%s\" -until 3 -test -noeta -out \"%sout58.txt\"%s", myzpaqexe.c_str(), filezpaq.c_str(), mountpoint.c_str(), outfolder.c_str(), acapo.c_str());
-			fprintf(batch, "\"%s\" mount \"%schunk_????.zpaq\" \"%s\" -key pippo -test -noeta -out \"%sout59.txt\"%s", myzpaqexe.c_str(), outfolder.c_str(), mountpoint.c_str(), outfolder.c_str(), acapo.c_str());
-			fprintf(batch, "\"%s\" mount \"%smultipart_????????\" \"%s\" -key pippo -test -noeta -out \"%sout60.txt\"%s", myzpaqexe.c_str(), outfolder.c_str(), mountpoint.c_str(), outfolder.c_str(), acapo.c_str());
-			fprintf(batch, "\"%s\" mount \"%sheal.zpaq\" \"%s\" -test -noeta -out \"%sout61.txt\"%s", myzpaqexe.c_str(), outfolder.c_str(), mountpoint.c_str(), outfolder.c_str(), acapo.c_str());
-			/// the difficult names through the mount (escaping on Windows)
-			fprintf(batch, "\"%s\" mount \"%snames.zpaq\" \"%s\" -test -noeta -out \"%sout65.txt\"%s", myzpaqexe.c_str(), outfolder.c_str(), mountpoint.c_str(), outfolder.c_str(), acapo.c_str());
-			/// version 1 of touch.zpaq is a zpaq 7.15 one: no hash, size and date only
-			fprintf(batch, "\"%s\" mount \"%stouch.zpaq\" \"%s\" -until 1 -test -noeta -out \"%sout66.txt\"%s", myzpaqexe.c_str(), outfolder.c_str(), mountpoint.c_str(), outfolder.c_str(), acapo.c_str());
-			/// big files (400 MB, 15 versions, deduplicated; bigone15: 1 MB of zeros every 4 MB)
-			fprintf(batch, "\"%s\" mount \"%sthebigone.zpaq\" \"%s\" -test -noeta -out \"%sout67.txt\"%s", myzpaqexe.c_str(), outfolder.c_str(), mountpoint.c_str(), outfolder.c_str(), acapo.c_str());
-			if (g_franzen != "")
-			{
-				fprintf(batch, "\"%s\" mount \"%saesfranzen\" \"%s\" -key pippo -franzen \"%s\" -test -noeta -out \"%sout62.txt\"%s", myzpaqexe.c_str(), outfolder.c_str(), mountpoint.c_str(), g_franzen.c_str(), outfolder.c_str(), acapo.c_str());
-				fprintf(batch, "\"%s\" mount \"%sonlyfranzen\" \"%s\" -franzen \"%s\" -test -noeta -out \"%sout63.txt\"%s", myzpaqexe.c_str(), outfolder.c_str(), mountpoint.c_str(), g_franzen.c_str(), outfolder.c_str(), acapo.c_str());
-			}
-		}
-
-#ifdef ZPAQZSTD
-		/*
-			-m8 (zstd + a decoder in ZPAQL): the ten hash folders (1.75 GB, a
-			lot of dedup) with t (the native decoder) and p -verify (unzpaq,
-			which RUNS the ZPAQL), zstd 19 on the difficult names and the big
-			files, and the fast levels with 64 MB blocks (bigone15, 1 MB of
-			zeros every 4 MB: RLE blocks)
-		*/
-		{
-			string cartelle= "";
-			for (int j= 0; j <= 9; j++)
-			{
-				char numero[8];
-				snprintf(numero, sizeof(numero), "%02d", j);
-				cartelle+= "\"" + outfolder + numero + "\" ";
-			}
-			fprintf(batch, "\"%s\" a \"%sm8.zpaq\" %s-m8 -noeta -out \"%sout87.txt\"%s", myzpaqexe.c_str(), outfolder.c_str(), cartelle.c_str(), outfolder.c_str(), acapo.c_str());
-			fprintf(batch, "\"%s\" t \"%sm8.zpaq\" -noeta -out \"%sout88.txt\"%s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), acapo.c_str());
-			fprintf(batch, "\"%s\" p \"%sm8.zpaq\" -verify -noeta -out \"%sout89.txt\"%s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), acapo.c_str());
-			fprintf(batch, "\"%s\" a \"%sm8h19.zpaq\" \"%ste\" \"%sheal\" \"%snames\" \"%sbigone01.big\" \"%sbigone15.big\" -m8h19 -noeta -out \"%sout90.txt\"%s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), outfolder.c_str(), outfolder.c_str(), outfolder.c_str(), outfolder.c_str(), outfolder.c_str(), acapo.c_str());
-			fprintf(batch, "\"%s\" p \"%sm8h19.zpaq\" -verify -noeta -out \"%sout91.txt\"%s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), acapo.c_str());
-			fprintf(batch, "\"%s\" a \"%sm86.zpaq\" \"%sbigone01.big\" \"%sbigone02.big\" \"%sbigone15.big\" -m86a3 -noeta -out \"%sout92.txt\"%s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), outfolder.c_str(), outfolder.c_str(), outfolder.c_str(), acapo.c_str());
-			fprintf(batch, "\"%s\" p \"%sm86.zpaq\" -verify -noeta -out \"%sout93.txt\"%s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), acapo.c_str());
-			if (testmount)
-				fprintf(batch, "\"%s\" mount \"%sm8.zpaq\" \"%s\" -test -noeta -out \"%sout94.txt\"%s", myzpaqexe.c_str(), outfolder.c_str(), mountpoint.c_str(), outfolder.c_str(), acapo.c_str());
-		}
-#endif // corresponds to #ifdef (#ifdef ZPAQZSTD)
-		/*
-			-m6 (65.5d), the "m4.5": -m4 with three sparse contexts in the CM
-			branch. The difficult names, a big file, and zpaqfranz itself (x86
-			code: E8E9 and the sparse contexts at work); t, and p -verify
-			(unzpaq, another decoder, compared with the files on disk)
-		*/
-		{
-			fprintf(batch, "\"%s\" a \"%sm6.zpaq\" \"%ste\" \"%sheal\" \"%snames\" \"%sbigone01.big\" \"%s\" -m6 -noeta -out \"%sout68.txt\"%s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), outfolder.c_str(), outfolder.c_str(), outfolder.c_str(), myzpaqexe.c_str(), outfolder.c_str(), acapo.c_str());
-			fprintf(batch, "\"%s\" t \"%sm6.zpaq\" -noeta -out \"%sout69.txt\"%s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), acapo.c_str());
-			fprintf(batch, "\"%s\" p \"%sm6.zpaq\" -verify -noeta -out \"%sout70.txt\"%s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), acapo.c_str());
-			if (testmount)
-				fprintf(batch, "\"%s\" mount \"%sm6.zpaq\" \"%s\" -test -noeta -out \"%sout76.txt\"%s", myzpaqexe.c_str(), outfolder.c_str(), mountpoint.c_str(), outfolder.c_str(), acapo.c_str());
-		}
-		/*
-			-turbo (add2, the parallel fragmenter): the same files, with the same
-			version dates and -m1, with and without it (-noturbo: -turbo is the
-			default since 65.6a). The two archives must be the
-			same file, to the byte: the big files go through the parallel path,
-			the small ones through the loop of add(), and the second version
-			(another big file, on top of the first) checks the deduplication.
-			Then the same with -m8, and a t of what -turbo made
-		*/
-		{
-			const string sorgenti= "\"" + outfolder + "bigone01.big\" \"" + outfolder + "bigone02.big\" \"" + outfolder + "bigone15.big\" \"" + outfolder + "te\" \"" + outfolder + "heal\"";
-			const string altro	 = "\"" + outfolder + "bigone03.big\"";
-			const char	*v1		 = "-timestamp 2025-01-01_10:00:00";
-			const char	*v2		 = "-timestamp 2025-01-02_10:00:00";
-			/// 65.11l: -nofast: the VFILE-info record (65.8t) holds how long the add took, never the same twice:
-			/// the two "Binary ==" checks below (out84, out86) could not pass any more
-			fprintf(batch, "\"%s\" a \"%sturbo_no.zpaq\" %s %s -m1 -noturbo -noeta -nofast %s", myzpaqexe.c_str(), outfolder.c_str(), sorgenti.c_str(), v1, acapo.c_str());
-			fprintf(batch, "\"%s\" a \"%sturbo_no.zpaq\" %s %s -m1 -noturbo -noeta -nofast %s", myzpaqexe.c_str(), outfolder.c_str(), altro.c_str(), v2, acapo.c_str());
-			fprintf(batch, "\"%s\" a \"%sturbo_si.zpaq\" %s %s -m1 -turbo -noeta -nofast -out \"%sout83.txt\"%s", myzpaqexe.c_str(), outfolder.c_str(), sorgenti.c_str(), v1, outfolder.c_str(), acapo.c_str());
-			fprintf(batch, "\"%s\" a \"%sturbo_si.zpaq\" %s %s -m1 -turbo -noeta -nofast %s", myzpaqexe.c_str(), outfolder.c_str(), altro.c_str(), v2, acapo.c_str());
-			fprintf(batch, "\"%s\" work fc \"%sturbo_no.zpaq\" \"%sturbo_si.zpaq\" -out \"%sout84.txt\"%s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), outfolder.c_str(), acapo.c_str());
-			fprintf(batch, "\"%s\" t \"%sturbo_si.zpaq\" -noeta -out \"%sout85.txt\"%s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), acapo.c_str());
-#ifdef ZPAQZSTD
-			fprintf(batch, "\"%s\" a \"%sturbo8_no.zpaq\" %s %s -m8 -noturbo -noeta -nofast %s", myzpaqexe.c_str(), outfolder.c_str(), sorgenti.c_str(), v1, acapo.c_str());
-			fprintf(batch, "\"%s\" a \"%sturbo8_si.zpaq\" %s %s -m8 -turbo -noeta -nofast %s", myzpaqexe.c_str(), outfolder.c_str(), sorgenti.c_str(), v1, acapo.c_str());
-			fprintf(batch, "\"%s\" work fc \"%sturbo8_no.zpaq\" \"%sturbo8_si.zpaq\" -out \"%sout86.txt\"%s", myzpaqexe.c_str(), outfolder.c_str(), outfolder.c_str(), outfolder.c_str(), acapo.c_str());
-#endif // corresponds to #ifdef (#ifdef ZPAQZSTD)
-		}
-
 		if (g_franzen!="")
 			fprintf(batch, "\"%s\" autotest -checktxt \"%s\" -franzen pluto%s", myzpaqexe.c_str(), temp.c_str(), acapo.c_str());
 		else
@@ -174119,7 +174330,15 @@ int Jidac::autotest()
 		if (flagdebug3)
 			myprintf("01226: after chmod\n");
 #endif // corresponds to #ifdef (#ifdef unix)
+		/// the level, for -checktxt
+		FILE *segnolivello= fopen((outfolder + "autotestlevel.txt").c_str(), "wb");
+		if (segnolivello != NULL)
+		{
+			fprintf(segnolivello, "%d\nthe level (-m%d) of autotest -all: autotest -checktxt checks its steps\n", livello, livello);
+			fclose(segnolivello);
+		}
 		myprintf("\n\n");
+		myprintf("03492: Level -m%d (-m1 quick ... -m4 the suite of before ... -m5 everything): %u commands, %u checks\n", livello, passi, prove);
 		myprintf("01227: The test batchfile is: %s\n", filebatch.c_str());
 		color_cyan();
 		myprintf("56476: NOTE: the script works INSIDE %s\n", excludetrailingbackslash(outfolder).c_str());
@@ -174817,6 +175036,27 @@ int zpaq_main_internal(int argc, const char **argv)
         }
     }
 
+#ifndef DLL
+    /// 65.12d: an archive (.zpaq, .franzen) in the place of the command is tui on it, and what comes after
+    /// goes along as it is: zpaqfranz x.zpaq -all = zpaqfranz tui x.zpaq -all. So a double click on an
+    /// archive, when the system opens it with zpaqfranz. On a console only, as the chooser (scegli_riga):
+    /// in a script (no console, the output redirected) the usage text, as ever. The TUI there would wait
+    /// for a key forever (Windows: _getch reads the console, not stdin)
+    std::vector<const char *> tuiargv;
+    if ((argc >= 2) && (argv[1][0] != '-') && isatty(fileno(stdin)) && isatty(fileno(stdout)))
+    {
+        const string estensione = stringtolower(prendiestensione(argv[1]));
+        if ((estensione == "zpaq") || (estensione == "franzen"))
+        {
+            tuiargv.push_back(argv[0]);
+            tuiargv.push_back("tui");
+            for (int i = 1; i < argc; i++)
+                tuiargv.push_back(argv[i]);
+            argc = (int)tuiargv.size();
+            argv = &tuiargv[0];
+        }
+    }
+#endif
 #ifndef ANCIENT
     /// 65.9y: a command that wants an archive, typed without one on a console (zpaqfranz t): the archive
     /// and the switches are chosen on a screen (franzscegli), and the line goes on from here as if it was
@@ -174911,6 +175151,8 @@ int zpaq_main_internal(int argc, const char **argv)
 #endif /// NOSFTPEND
 #endif
 
+    if (g_fastadddiversi > 0) /// 65.12f: see add2
+        errorcode = 2;
     if (g_freeze_avviso > 0) /// 65.11q: the backup is done, but -freeze asks for a look
     {
         color_yellow();
@@ -176668,6 +176910,24 @@ int Jidac::test()
 	flagtest		 = true;
 	summary			 = 1;
 	int read_errors	 = 0;
+	/// 65.12g: t -comment text tests that version (as x and l): it was ignored, the last one tested
+	if (flagcomment && (versioncomment.length() > 0))
+	{
+		const int versione= versionedicommento(versioncomment);
+		if (versione == 0)
+		{
+			myprintf("03495! cannot find version comment <<%s>>\n", versioncomment.c_str()); /// 65.12i: 02958-02960 are of -home
+			return 2;
+		}
+		if (versione == -1)
+		{
+			myprintf("03496! multiple match for version comment <<%s>>\n", versioncomment.c_str());
+			return 2;
+		}
+		myprintf("03497: Found version -until %d\n", versione);
+		version	   = versione;
+		flagcomment= false;
+	}
 
 	const int64_t sz= read_archive(NULL, archive.c_str(), &read_errors);
 	const vector<std::pair<int, string> > recordvinfo= g_vinforecord; /// the ones of this archive (another read_archive clears them)
@@ -176830,6 +177090,9 @@ int Jidac::test()
 					 (mtime() - starttest) / 1000.0, tohuman((int64_t)(tid.size() * job.maxMemory)));
 	}
 	//// OK now check against CRC32 and the entire World (if any)
+	/// 65.12h: the files this stage could not decompress. The CRC-32 stage below does not see them:
+	/// its verdict was "OK" (and t gave 1, a warning) on an archive with every file corrupted
+	const unsigned int rotti715= errors;
 
 	unsigned int   status_e		  = 0; // all kinds of error
 	unsigned int   status_e_hash  = 0; // errors on hashes by file
@@ -177223,7 +177486,7 @@ int Jidac::test()
 		myprintf("01442$ WARNING         : %08d (Cannot say anything)\n", status_0);
 	if (status_1)
 		myprintf("01443: GOOD            : %08d of %08d (stored=decompressed)\n", status_1, total_files);
-	if (status_e == 0)
+	if ((status_e == 0) && (rotti715 == 0))
 	{
 		if (status_0)
 			myprintf("01444: VERDICT         : UNKNOWN  (Cannot say anything)\n");
@@ -177232,6 +177495,12 @@ int Jidac::test()
 	}
 	else
 	{
+		if (rotti715 > 0)
+		{
+			color_red();
+			myprintf("01448! VERDICT         : %08u file(s) CORRUPTED (not all their fragments decompressed)\n", rotti715);
+			color_restore();
+		}
 		myprintf("01446: WITH ERRORS\n");
 		errors= 2;
 	}
@@ -177251,6 +177520,8 @@ int Jidac::test()
 	if (read_errors)
 		return 2;
 	if (status_e != 0)
+		return 2;
+	if (rotti715 > 0) /// 65.12h: corrupted files are an error, not a warning
 		return 2;
 	if (errorivinfo > 0) /// VFILE-info: versions that are not as they were written
 		return 2;
@@ -191196,22 +191467,19 @@ int Jidac::fzf()
 	{
 		if (versioncomment == "")
 			return -1;
-		enumeratecomments();
-		vector<DTMap::iterator> myfilelist;
-		int						versione= searchcomments(versioncomment, myfilelist);
+		const int versione= versionedicommento(versioncomment);
 		if (versione == 0)
 		{
-			myprintf("02956: cannot find version comment <<%s>>\n", versioncomment.c_str());
-			return 1;
+			myprintf("02956! cannot find version comment <<%s>>\n", versioncomment.c_str());
+			return 2;
 		}
 		if (versione == -1)
 		{
-			myprintf("02957: multiple match for version comment <<%s>>\n", versioncomment.c_str());
-			return 1;
+			myprintf("02957! multiple match for version comment <<%s>>\n", versioncomment.c_str());
+			return 2;
 		}
 		version	   = versione;
 		flagcomment= false;
-		jidacreset();
 	}
 
 	int errors= 0;
@@ -191883,10 +192151,10 @@ int Jidac::vinfo_controlla(const vector<std::pair<int, string> > &i_record)
 			color_restore();
 			buona= false;
 		}
-		if (vinfo_decimale(campi, "id", valore) && (valore != ver[k].deletes))
+		if (vinfo_decimale(campi, "id", valore) && (valore != ver[k].deletes + ver[k].comments)) /// (id: with its comment)
 		{
 			color_red();
-			myprintf("65436! VFILE-info: version %d has %s deletions in its index, %s were written\n", k, migliaia(ver[k].deletes), migliaia2(valore));
+			myprintf("65436! VFILE-info: version %d has %s deletions in its index, %s were written\n", k, migliaia(ver[k].deletes + ver[k].comments), migliaia2(valore));
 			color_restore();
 			buona= false;
 		}
@@ -192568,13 +192836,23 @@ int64_t Jidac::fl_readarchive(const char *i_arc)
 				++files;
 			}
 			else
-				++ver.back().deletes;
+			{
+				int	   numver= 0;
+				string testo;
+				if (vcomment_leggi(names[id], numver, testo)) /// 65.12g: a comment, not a deletion
+					++ver.back().comments;
+				else
+					++ver.back().deletes;
+			}
 #ifdef _WIN32
 			if (longcache[id] == 0)
 			{
 				string lungo= names[id];
 				int	   quanti= 0;
-				checkfilename(lungo, &quanti, NULL, NULL, NULL, NULL, NULL, NULL);
+				int	   numver= 0;
+				string testo;
+				if (!vcomment_leggi(lungo, numver, testo)) /// 65.12g: a comment is not a name
+					checkfilename(lungo, &quanti, NULL, NULL, NULL, NULL, NULL, NULL);
 				longcache[id]= quanti ? 2 : 1;
 			}
 			if (longcache[id] == 2)
@@ -192741,6 +193019,21 @@ int64_t Jidac::read_archive_add(const char *i_arc)
 	fl_capture= false;
 	fl_attail = false;
 	fl_blob	  = "";
+	if (sc_attivo && (!sc_vietato)) /// 65.12f: -fastadd (add2 only)
+	{
+		const int64_t risultato= sc_readarchive_add(i_arc);
+		if (risultato >= 0)
+		{
+			if ((!flagfilelist) && (!flagnofilelist))
+			{
+				flagfilelist= true; /// as below: the archive has a -fast history
+				color_cyan();
+				myprintf("65406: This archive has a -fast history, keep going (-nofast to stop)\n");
+				color_restore();
+			}
+			return risultato;
+		}
+	}
 	if (flagappend || flag715) /// 65.6a: no history with -append (two passes) or -715 (zpaq), not even the automatic one
 		return read_archive(NULL, i_arc, &errors);
 	if (!flagnofilelist)
@@ -193282,21 +193575,104 @@ void Jidac::filelist_pointer(WriterPair &i_wp, unsigned i_blocknumber, int64_t i
 }
 
 /// End of a journaling version: data (c block jump) with no fragment table, or fragment
-/// tables with no index, means that some blocks are missing. Returns true if reported
-static bool seq_versionebucata(int i_versione, int64_t i_csize, int i_hvisti, int i_ivisti, int *io_errors)
+/// tables with no index, means that some blocks are missing. Returns 0 (nothing), 1 (data
+/// without fragment tables), 2 (fragment tables without index)
+static int seq_versionebucata(int i_versione, int64_t i_csize, int i_hvisti, int i_ivisti, int *io_errors)
 {
 	if (i_csize < 0) /// streaming or incomplete: nothing to check
-		return false;
+		return 0;
+	int risultato= 0;
 	if ((i_csize > 0) && (i_hvisti == 0))
+	{
 		myprintf("72401! Version %d: data without fragment tables (missing h/i blocks?)\n", i_versione);
+		risultato= 1;
+	}
 	else if (((i_csize > 0) || (i_hvisti > 0)) && (i_ivisti == 0))
+	{
 		myprintf("72402! Version %d: fragment tables without index (missing i block?)\n", i_versione);
+		risultato= 2;
+	}
 	else
-		return false;
+		return 0;
 	if (io_errors)
 		++*io_errors;
-	return true;
+	return risultato;
 }
+
+/// 65.12e read_archive: a record into dt, with its franz block. A name already there gives its own block
+/// (the record before is replaced, its block was lost before), a new name gets a new one. The block is
+/// copied from the i block, no more than its size
+static void dt_inserisci(DTMap &io_dt, const string &i_nome, DT &io_record, const char *i_franz, unsigned i_lungo)
+{
+	const int		dimensione= dt_franzdimensione();
+	DTMap::iterator e		  = io_dt.find(i_nome);
+	char		   *blocco	  = NULL;
+	if ((e != io_dt.end()) && (e->second.franz_block != NULL) && (e->second.franz_block_size == dimensione))
+		blocco= e->second.franz_block;
+	else if (dimensione > 0)
+		blocco= dt_franzalloca(dimensione);
+	if (blocco != NULL)
+	{
+		memset(blocco, 0, dimensione + 1);
+		const unsigned copiati= (i_lungo < (unsigned)dimensione) ? i_lungo : (unsigned)dimensione;
+		if ((i_franz != NULL) && (copiati > 0))
+			memcpy(blocco, i_franz, copiati);
+	}
+	io_record.franz_block	  = blocco;
+	io_record.franz_block_size= dimensione;
+	io_record.franz_letti	  = ((blocco != NULL) && (i_franz != NULL)) ? (int)((i_lungo < (unsigned)dimensione) ? i_lungo : (unsigned)dimensione) : 0;
+	if (e != io_dt.end())
+		e->second= io_record;
+	else
+		io_dt.insert(e, std::pair<string, DT>(i_nome, io_record));
+}
+
+/// a line of the damage report: on stderr with -stdout (the data go to stdout), as 72414
+static void seq_scrivi(bool i_stderr, const char *i_formato, ...)
+{
+	va_list args;
+	va_start(args, i_formato);
+	if (i_stderr)
+		vfprintf(stderr, i_formato, args);
+#ifdef DLL
+	else if (g_outputCallback)
+	{
+		std::string buffer;
+		zpaqfranz_vformat(buffer, i_formato, args, false);
+		g_outputCallback(buffer.c_str());
+	}
+#endif
+	else
+		my_vprintf_refactored(i_formato, args);
+	va_end(args);
+}
+
+/*
+	65.12d: the lines of the checks above (72401-72405, a block skipped) say what is wrong in the
+	blocks, not what it means. read_archive keeps, version by version, what they found, and at the
+	end says it in plain words: which versions, what is lost in each one, and if the files of the
+	version read (or of every version, with -all) use the missing data. For an old version that is
+	damaged, while the last one is not, that is the line that matters
+*/
+struct seq_danno
+{
+	int64_t indicimancanti; /// i blocks not found (holes in their numbers)
+	int64_t primoindice;	/// the first one of the first hole
+	int64_t ultimoindice;	/// the last one of the last hole
+	bool	indicifuoriposto; /// an i block number seen again, or going back
+	int64_t datisenzatabella; /// bytes of data (the c block jump) with no fragment table
+	bool	tabellesenzaindice;
+	int64_t frammentiprima;	   /// fragment numbers before its own that no h block declared (blocks missing before it)
+	int64_t frammentimancanti; /// ...among its own tables
+	bool	bloccosaltato;	   /// a block of this version could not be read at all
+	seq_danno() : indicimancanti(0), primoindice(0), ultimoindice(0), indicifuoriposto(false), datisenzatabella(0), tabellesenzaindice(false), frammentiprima(0), frammentimancanti(0), bloccosaltato(false) {}
+	/// nothing but a jump of the fragment numbers at its start
+	bool soloprima() const
+	{
+		return (frammentiprima > 0) && (indicimancanti == 0) && (!indicifuoriposto) && (datisenzatabella == 0) && (!tabellesenzaindice) && (frammentimancanti == 0) && (!bloccosaltato);
+	}
+};
+typedef std::map<int, seq_danno> seq_dannimappa;
 
 /// Multipart archive: the parts are read 1,2,3... up to the first missing one, and whatever
 /// follows is silently ignored. Returns the first existing part numbered above i_parti, or ""
@@ -193421,17 +193797,19 @@ int64_t Jidac::read_archive(callback_function i_advance, const char *arc, int *e
 {
 	if (errors)
 		*errors= 0;
-	dcsize= dhsize= 0;
+	if (sc_riprendida == 0) /// 65.12f: going on (-fastadd), the sizes of what is loaded stay
+		dcsize= dhsize= 0;
 	g_vinforecord.clear(); /// the VFILE-info records of this archive
+	commentiversioni.clear(); /// 65.12g: and its version comments
 	g_acmeta.clear();	   /// and the metafiles of ac (i -verbose)
 
 	map<int64_t, double> mycompressionratio; // block offset -> compression ratio
 
-	assert(ver.size() == 1);
+	assert((ver.size() == 1) || (sc_riprendida > 0));
 	const bool i_renamed= command == 'l' || command == 'a' || command == '5' || command == 'Z'; /// 5 for dirsize arrggghh hidden parameter!
-	const bool i_isinfo = (command == 'i') && (!flagstat) && (!flagcomment);					// -stat? Do a lot of work
+	const bool i_isinfo = (command == 'i') && (!flagstat);										// -stat? Do a lot of work (65.12g: -comment no more: the comments are always kept)
 
-	unsigned files= 0; // count
+	unsigned files= (sc_riprendida > 0) ? sc_files : 0; // count
 //	abort if file is open (from something else)
 #ifdef _WIN32
 	if (flagopen)
@@ -193521,6 +193899,12 @@ int64_t Jidac::read_archive(callback_function i_advance, const char *arc, int *e
 		lastfile= lastfile.substr(0, lastfile.size() - 5); // drop .zpaq
 	int64_t		 block_offset= 32 * (g_password != 0);	   // start of last block of any type
 	int64_t		 data_offset = block_offset;			   // start of last block of d fragments
+	if (sc_riprendida > 0) /// 65.12f: the state before is loaded, from its end on
+	{
+		in.seek(sc_riprendida, SEEK_SET);
+		block_offset= sc_riprendida;
+		data_offset = sc_riprendida;
+	}
 	bool		 found_data	 = false;					   // exit if nothing found
 	bool		 first		 = true;					   // first segment in archive?
 #if defined(ANCIENT) || defined(ESX)
@@ -193567,6 +193951,10 @@ int64_t Jidac::read_archive(callback_function i_advance, const char *arc, int *e
 	int64_t seq_fuori		= 0;	 // file pointers to fragments no h block declared
 	vector<bool> seq_usato;				 // fragments used by a file (or by the -fast history)
 	bool		 seq_nonverificabile= false; // streaming, or the old filelistpointer: record: unused fragments are not counted
+	seq_dannimappa seq_danni;				 // 65.12d: what was found, version by version (said at the end)
+	if (sc_riprendida > 0) /// 65.12f: the files of the versions loaded are not seen here
+		seq_nonverificabile= true;
+	bool seq_ripresa= (sc_riprendida > 0); /// 65.12f: the first c block closes a version read by somebody else
 
 	int64_t expectedfilesize= in.get_totalsize();
 	int		lastperc		= 0;
@@ -193752,17 +194140,25 @@ int64_t Jidac::read_archive(callback_function i_advance, const char *arc, int *e
 							{
 								/// the previous version is complete, and this one must start
 								/// exactly at the first fragment not yet seen
-								bool bucata= false;
-								if ((ver.size() > 1) && (!seq_saltato))
+								int bucata= 0;
+								if ((ver.size() > 1) && (!seq_saltato) && (!seq_ripresa))
 									bucata= seq_versionebucata(ver.size() - 1, ver.back().csize, seq_hvisti, seq_ivisti, errors);
+								seq_ripresa= false;
 								if (bucata)
+								{
 									++seq_segnalati;
+									if (bucata == 1)
+										seq_danni[ver.size() - 1].datisenzatabella= ver.back().csize;
+									else
+										seq_danni[ver.size() - 1].tabellesenzaindice= true;
+								}
 								else if ((!seq_saltato) && (num > int64_t(ht.size())))
 								{
 									myprintf("72405! Version %d: first fragment %1.0f, %d expected (missing blocks before it?)\n", int(ver.size()), double(num), int(ht.size()));
 									if (errors)
 										++*errors;
 									++seq_segnalati;
+									seq_danni[ver.size()].frammentiprima+= num - int64_t(ht.size());
 								}
 								seq_attesoi= 1;
 								seq_hvisti = 0;
@@ -193829,6 +194225,10 @@ int64_t Jidac::read_archive(callback_function i_advance, const char *arc, int *e
 								if (errors)
 									++*errors;
 								++seq_segnalati;
+								if (seq_hvisti == 0) /// its first table: the hole is before the version
+									seq_danni[ver.size() - 1].frammentiprima+= num - int64_t(ht.size());
+								else
+									seq_danni[ver.size() - 1].frammentimancanti+= num - int64_t(ht.size());
 							}
 							++seq_hvisti;
 							for (unsigned ik= 0; ik < n; ++ik)
@@ -193876,6 +194276,16 @@ int64_t Jidac::read_archive(callback_function i_advance, const char *arc, int *e
 								if (errors)
 									++*errors;
 								++seq_segnalati;
+								seq_danno &danno= seq_danni[ver.size() - 1];
+								if (num > seq_attesoi) /// a hole: from the expected one up to the one before this
+								{
+									if (danno.indicimancanti == 0)
+										danno.primoindice= seq_attesoi;
+									danno.indicimancanti+= num - seq_attesoi;
+									danno.ultimoindice= num - 1;
+								}
+								else /// the same number again, or going back: some blocks are not where they should be
+									danno.indicifuoriposto= true;
 							}
 							seq_attesoi= num + 1;
 							++seq_ivisti;
@@ -193886,8 +194296,22 @@ int64_t Jidac::read_archive(callback_function i_advance, const char *arc, int *e
 							string seq_storia; /// the pieces of a -fast pointer in this i block
 							while (s + 9 <= end)
 							{
+								/// 65.12e: the DT of a record is light: no hash objects (only add needs them, for the files
+								/// of the disk) and no franz block. It gets one only if it goes into dt (dt_inserisci). It
+								/// was a new of a hasher and 551 bytes for EVERY record, never freed: with millions of
+								/// records most of the time of an add, and gigabytes (killed on a machine with less)
+								const bool leggero	  = (!flagstat) && (!g_dtnoblock); /// -stat decodes the block right here
+								const bool primalight = g_dtlight;
+								const bool primablocco= g_dtnoblock;
+								g_dtlight			  = true;
+								if (leggero)
+									g_dtnoblock= true;
 								DT dtr;
-								dtr.version= ver.size() - 1;
+								g_dtlight		  = primalight;
+								g_dtnoblock		  = primablocco;
+								const char *franzda	  = NULL; /// the franz block of the record, where it is in the i block
+								unsigned	franzlungo= 0;
+								dtr.version			  = ver.size() - 1;
 
 								dtr.date= btol(s); // date
 								if (dtr.date)
@@ -193915,13 +194339,39 @@ int64_t Jidac::read_archive(callback_function i_advance, const char *arc, int *e
 								{
 									--ver.back().deletes;
 									g_vinforecord.push_back(std::pair<int, string>((int)ver.size() - 1, string(s + sizeof(ZPAQINFO_TAG) - 1)));
+									/// 65.12f: the fragments of the state of -fastadd are used by it (1;size;hash;blocks;fragments)
+									const char *statosc= strstr(s, "|sc=");
+									if (statosc != NULL)
+									{
+										string valore(statosc + 4);
+										const size_t barra= valore.find('|');
+										if (barra != string::npos)
+											valore.resize(barra);
+										const size_t pv= valore.rfind(';');
+										if (pv != string::npos)
+											seq_segnastoria(seq_usato, ht.size(), "|" + valore.substr(pv + 1));
+									}
 									s+= len + 1;
 									continue;
 								}
 								string fn			   = s; // filename ren
 								string originalfilename= s;
+								/// 65.12g: the comment of the version: a deletion record, not a deletion (and not a long name)
+								bool commentoversione= false;
+								if (dtr.date == 0)
+								{
+									int	   numver= 0;
+									string testo;
+									if (vcomment_leggi(fn, numver, testo))
+									{
+										commentoversione= true;
+										--ver.back().deletes;
+										++ver.back().comments;
+										commentiversioni[numver]= testo;
+									}
+								}
 
-								if (!i_isinfo)
+								if ((!i_isinfo) && (!commentoversione))
 								{
 									if ((flagstat) && (command != '5') && (command != '6'))
 									//-stat, we ask for extended infos
@@ -193950,8 +194400,9 @@ int64_t Jidac::read_archive(callback_function i_advance, const char *arc, int *e
 										}
 #endif // corresponds to #ifdef (#ifdef _WIN32)
 									}
-									else
 #ifdef _WIN32
+									/// 65.12h: the else here, not above: on *nix it had no statement (65.12g did not compile)
+									else
 										checkfilename(fn, /// by default check only toolong and utf
 													  &toolongfilenames,
 													  NULL,
@@ -193963,6 +194414,9 @@ int64_t Jidac::read_archive(callback_function i_advance, const char *arc, int *e
 
 #else  // *nix can restore (almost) everything, no warnings needed by default
 #endif // corresponds to #ifdef (#ifdef _WIN32)
+								}
+								if (!i_isinfo)
+								{
 									if (all)
 									{
 										if ((command == 'l') && (flag715))
@@ -193985,7 +194439,7 @@ int64_t Jidac::read_archive(callback_function i_advance, const char *arc, int *e
 								}
 								bool issel= false;
 								if (!i_isinfo)
-									issel= isselected(fn.c_str(), i_renamed, -1);
+									issel= sc_nofiltro ? true : isselected(fn.c_str(), i_renamed, -1); /// -fastadd: the selection after
 								/// 65.9t: i -verbose shows what ac saved: its metafile is kept, with its fragments
 								/// (the only file the info command takes: g_acmeta, never in dt)
 								const bool acmeta= (command == 'i') && flagverbose && acmeta_nome(originalfilename);
@@ -194009,14 +194463,22 @@ int64_t Jidac::read_archive(callback_function i_advance, const char *arc, int *e
 									na		   = btoi(s); // attr bytes
 									if (s + na > end || na > 65535)
 										error("attr too long");
-									if (!i_isinfo)
+									if ((!i_isinfo) && leggero && (na > FRANZOFFSETV1))
+									{
+										franzda	  = s + 8;
+										franzlungo= na - 8;
+									}
+									if ((!i_isinfo) && (!leggero) && (dtr.franz_block != NULL))
 										if (na > FRANZOFFSETV1) // Get FRANZOFFSETV1
 										{
 											assert((na - 8) < FRANZOFFSETV3); // cannot work on too small buffer
-											for (unsigned int ik= 0; ik < (na - 8); ik++)
+											/// 65.12e: no more than the block (-frugal makes it of 50 bytes)
+											const unsigned copiati= ((na - 8) < (unsigned)dtr.franz_block_size) ? (na - 8) : (unsigned)dtr.franz_block_size;
+											for (unsigned int ik= 0; ik < copiati; ik++)
 												dtr.franz_block[ik]= *(s + (na - (na - 8)) + ik);
 											/// dtr.franz_block_size=(na-8);
-											dtr.franz_block[(na - 8)]= 0x0;
+											dtr.franz_block[copiati]= 0x0;
+											dtr.franz_letti			= copiati;
 											if (flagstat)
 											{
 												string		 myhashtype	   = "";
@@ -194065,7 +194527,7 @@ int64_t Jidac::read_archive(callback_function i_advance, const char *arc, int *e
 									for (unsigned ik= 0; ik < na; ++ik, ++s) // read attr
 										if (ik < 8)
 											dtr.attr+= int64_t(*s & 255) << (ik * 8);
-									if (flagnoattributes)
+									if (flagnoattributes && (!sc_nofiltro)) /// -fastadd: the attributes as they are, sc_filtra after
 										dtr.attr= 0;
 									if (s + 4 > end)
 										error("missing ptr");
@@ -194125,7 +194587,10 @@ int64_t Jidac::read_archive(callback_function i_advance, const char *arc, int *e
 										}
 										if (all)
 											dtr.outputname= originalfilename;
-										dt[fn]= dtr;
+										if (leggero)
+											dt_inserisci(dt, fn, dtr, franzda, franzlungo);
+										else
+											dt[fn]= dtr;
 									}
 								if (acmeta && issel && dtr.date)
 								{
@@ -194225,6 +194690,7 @@ int64_t Jidac::read_archive(callback_function i_advance, const char *arc, int *e
 				++*errors;
 			seq_saltato		= true;
 			seq_qualchesalto= true;
+			seq_danni[(int)ver.size() - 1].bloccosaltato= true; /// (0: before the first version)
 			if (bloccoletto) /// e.g. only the end-of-block marker is missing: the content is already in
 			{
 				g_bloccoletto_inizio= block_offset;
@@ -194237,13 +194703,24 @@ int64_t Jidac::read_archive(callback_function i_advance, const char *arc, int *e
 	if (in.tell() > 32 * (g_password != 0) && !found_data)
 		error("archive contains no data");
 	if ((ver.size() > 1) && (!seq_saltato))
-		if (seq_versionebucata(ver.size() - 1, ver.back().csize, seq_hvisti, seq_ivisti, errors))
+	{
+		const int bucata= seq_versionebucata(ver.size() - 1, ver.back().csize, seq_hvisti, seq_ivisti, errors);
+		if (bucata)
+		{
 			++seq_segnalati;
+			if (bucata == 1)
+				seq_danni[ver.size() - 1].datisenzatabella= ver.back().csize;
+			else
+				seq_danni[ver.size() - 1].tabellesenzaindice= true;
+		}
+	}
+	bool seq_fuoridetti= false; /// 72406 said: the files that use them are counted at the end
 	if ((seq_fuori > 0) && (seq_segnalati == 0) && (!seq_qualchesalto))
 	{
 		myprintf("72406! %s file pointers to fragments without a fragment table (missing h block?)\n", migliaia(seq_fuori));
 		if (errors)
 			++*errors;
+		seq_fuoridetti= true;
 	}
 	/// A clean read (no block skipped, no hole, no incomplete version), but fragments that no file
 	/// uses: the data of files whose index is lost. The last i block of a version can go without a
@@ -194319,6 +194796,114 @@ int64_t Jidac::read_archive(callback_function i_advance, const char *arc, int *e
 					if (flagdebug2)
 						myprintf("02990: dt size  %s\n", migliaia(dt.size()));
 				}
+	}
+	/// 65.12d: the damage found by the checks of the sequence, in plain words (see seq_danno)
+	if ((!seq_danni.empty()) || seq_fuoridetti)
+	{
+		const bool aerr= i_quiet; /// -stdout: the data go to stdout
+		/// a version whose fragment numbers only jump at its start, after a version whose data have no
+		/// table (or a block not read): that is the same hole, of the version before. Not one more
+		for (seq_dannimappa::iterator p= seq_danni.begin(); p != seq_danni.end();)
+		{
+			seq_dannimappa::const_iterator prima= seq_danni.find(p->first - 1);
+			if (p->second.soloprima() && (prima != seq_danni.end()) && ((prima->second.datisenzatabella > 0) || prima->second.bloccosaltato))
+				seq_danni.erase(p++);
+			else
+				++p;
+		}
+		if (!seq_danni.empty())
+		{
+			string elenco;
+			int	   n= 0;
+			for (seq_dannimappa::const_iterator p= seq_danni.begin(); p != seq_danni.end(); ++p)
+			{
+				if (++n > 10)
+				{
+					elenco+= ", ...";
+					break;
+				}
+				if (elenco != "")
+					elenco+= ", ";
+				elenco+= itos(p->first);
+				if ((p->first > 0) && (p->first < (int)ver.size()))
+					elenco+= " (" + dateToString(flagutc, ver[p->first].date) + ")";
+				else
+					elenco+= " (before the first version)";
+			}
+			seq_scrivi(aerr, "72415! DAMAGED ARCHIVE: blocks are missing in %s version(s): %s\n", migliaia(seq_danni.size()), elenco.c_str());
+			n= 0;
+			for (seq_dannimappa::const_iterator p= seq_danni.begin(); p != seq_danni.end(); ++p)
+			{
+				if (++n > 10)
+				{
+					seq_scrivi(aerr, "72415! ...and %s more version(s)\n", migliaia(seq_danni.size() - 10));
+					break;
+				}
+				const int		 v	  = p->first;
+				const seq_danno &danno= p->second;
+				int64_t			 letti= 0;
+				if ((v > 0) && (v < (int)ver.size()))
+					letti= ver[v].updates + ver[v].deletes;
+				if (danno.indicimancanti > 0)
+				{
+					if (danno.indicimancanti == 1)
+						seq_scrivi(aerr, "72416!   %d: index block %s not found: the list of its files is not complete (%s records read)\n", v, migliaia(danno.primoindice), migliaia3(letti));
+					else if (danno.ultimoindice - danno.primoindice + 1 == danno.indicimancanti)
+						seq_scrivi(aerr, "72416!   %d: index blocks %s-%s not found: the list of its files is not complete (%s records read)\n", v, migliaia(danno.primoindice), migliaia2(danno.ultimoindice), migliaia3(letti));
+					else
+						seq_scrivi(aerr, "72416!   %d: %s index blocks not found: the list of its files is not complete (%s records read)\n", v, migliaia(danno.indicimancanti), migliaia3(letti));
+				}
+				if (danno.indicifuoriposto)
+					seq_scrivi(aerr, "72417!   %d: index blocks out of place (a number seen twice?): the list of its files can be wrong\n", v);
+				if (danno.datisenzatabella > 0)
+					seq_scrivi(aerr, "72418!   %d: %s bytes of data have no fragment table: what is stored only there cannot be extracted\n", v, migliaia(danno.datisenzatabella));
+				if (danno.tabellesenzaindice)
+					seq_scrivi(aerr, "72419!   %d: no index at all: its files are lost (their data is there, no file points to it)\n", v);
+				if (danno.frammentiprima > 0)
+					seq_scrivi(aerr, "72420!   %d: %s fragments before it have no fragment table (blocks missing before it): the files that use them cannot be extracted\n", v, migliaia(danno.frammentiprima));
+				if (danno.frammentimancanti > 0)
+					seq_scrivi(aerr, "72420!   %d: %s fragments among its tables have no fragment table: the files that use them cannot be extracted\n", v, migliaia(danno.frammentimancanti));
+				if (danno.bloccosaltato)
+					seq_scrivi(aerr, "72421!   %d: a block cannot be read (see above): what is after it, up to the next good block, is lost\n", v);
+			}
+		}
+		/// what matters for this run: the files of the version read (of every version with -all) that
+		/// use a fragment no h block declared. The info command does not load the files
+		if (!i_isinfo)
+		{
+			int64_t tutti= 0;
+			int64_t rotti= 0;
+			for (DTMap::const_iterator p= dt.begin(); p != dt.end(); ++p)
+			{
+				if ((p->second.date == 0) || (isdirectory(p->first)))
+					continue;
+				++tutti;
+				for (unsigned k= 0; k < p->second.ptr.size(); ++k)
+				{
+					const unsigned j= p->second.ptr[k];
+					if ((j == 0) || (j >= ht.size()) || (ht[j].usize == -2)) /// -2: a hole filled in by a later table
+					{
+						++rotti;
+						break;
+					}
+				}
+			}
+			const int letta= (int)ver.size() - 1;
+			if (rotti == 0)
+			{
+				if (all)
+					seq_scrivi(aerr, "72422: None of the %s files of all the versions (-all) uses the missing data: they can be extracted\n", migliaia(tutti));
+				else
+					seq_scrivi(aerr, "72422: None of the %s files of version %d (the one read) uses the missing data: they can be extracted\n", migliaia(tutti), letta);
+			}
+			else
+			{
+				if (all)
+					seq_scrivi(aerr, "72423! %s files of %s, of all the versions (-all), use the missing data: they cannot be extracted as they were (x -recover: what is left of them, shorter)\n", migliaia(rotti), migliaia2(tutti));
+				else
+					seq_scrivi(aerr, "72423! %s files of %s, of version %d (the one read), use the missing data: they cannot be extracted as they were (x -recover: what is left of them, shorter)\n", migliaia(rotti), migliaia2(tutti), letta);
+			}
+		}
 	}
 	if (!i_quiet)
 	{
@@ -194407,8 +194992,920 @@ int64_t Jidac::read_archive(callback_function i_advance, const char *arc, int *e
 					p->second.size= -1; // unknown size
 			}
 		}
+	sc_ultimifile= files;
 
 	return block_offset;
+}
+
+/*
+	65.12f: -fastadd. An add reads all the index of the archive (read_archive) before it adds
+	anything: with millions of records that is most of the time. Here
+	the add stores, in its own d blocks (deduplicated, as the -fast history), the state read_archive
+	gave at the start of its version: the versions, the blocks, the fragments (SHA-1 and size), the
+	files alive (name, date, attributes, franz block, fragments). Where that state is goes in the
+	VFILE-info record of the version (key sc, unknown to the others: skipped). The next add with
+	-fastadd: the last block is the pointer of the -fast history, the block before it has the
+	VFILE-info with sc. That state is loaded (the archive up to the start of its version), then
+	read_archive reads only from there to the end: the last version. The -fast history is taken
+	from the archive as it is (not collected again). Anything strange: the usual way
+	-fastaddtest (not in the help): the same, then the archive is read all again, and the two states
+	are compared byte by byte (the autotest does it)
+	What it costs: the first add with -fastadd reads all of it (to make the state); then some tens of KB
+	for every version (the parts of the state that changed). What it does not do: a damage in the
+	versions before the last one is not seen any more (as the l of -fast does not). zpaqfranz up to
+	65.12e does not know the key sc: the fragments of the state are "used by no file" for it (72414)
+	The state: "ZPSC" 1, then LEB128 numbers (zigzag where they can be < 0)
+	  x files dcsize dhsize nver nblock nht ndt
+	  ver[1..]   date lastdate offset data_offset csize(z) updates deletes firstFragment usize(z)
+	  block[0..] offset usize(z) bsize start frags
+	  ht[1..]    usize(z) sha1[20]
+	  dt (alive, and the VCOMMENT of the versions, by name) namelen name date version attr[8] franzlen franz[franzlen] ni ptr[ni](delta, z)
+*/
+#define SC_FRAGMENT 3 /// fragments of about 8 KB: a change costs less than with the 64 KB of the history
+
+/// seconds, for what -fastadd says with -verbose
+static double sc_adesso()
+{
+#ifdef _WIN32
+	static LARGE_INTEGER frequenza= {};
+	if (frequenza.QuadPart == 0)
+		QueryPerformanceFrequency(&frequenza);
+	LARGE_INTEGER ora;
+	QueryPerformanceCounter(&ora);
+	return (double)ora.QuadPart / (double)frequenza.QuadPart;
+#else
+	struct timeval ora;
+	gettimeofday(&ora, NULL);
+	return (double)ora.tv_sec + (double)ora.tv_usec / 1e6;
+#endif
+}
+
+/// a comment of a version (VCOMMENT 00000002 text:$DATA) is a deletion, but a add -comment looks for the
+/// ones there are (unique): it goes in the state too
+static bool sc_commento(const string &i_nome)
+{
+	return isads(i_nome) && (i_nome.find("VCOMMENT ") != string::npos);
+}
+
+string Jidac::sc_serializza(int64_t i_x, unsigned i_files)
+{
+	string o= "ZPSC";
+	o+= char(1);
+	uint64_t vivi= 0;
+	for (DTMap::const_iterator p= dt.begin(); p != dt.end(); ++p)
+		if (p->second.date || sc_commento(p->first))
+			vivi++;
+	fl_putv(o, i_x);
+	fl_putv(o, i_files);
+	fl_putv(o, dcsize);
+	fl_putv(o, dhsize);
+	fl_putv(o, ver.size());
+	fl_putv(o, block.size());
+	fl_putv(o, ht.size());
+	fl_putv(o, vivi);
+	for (size_t v= 1; v < ver.size(); v++)
+	{
+		const VER &q= ver[v];
+		fl_putv(o, q.date);
+		fl_putv(o, q.lastdate);
+		fl_putv(o, q.offset);
+		fl_putv(o, q.data_offset);
+		fl_puts(o, q.csize);
+		fl_putv(o, q.updates);
+		fl_putv(o, q.deletes);
+		fl_putv(o, q.firstFragment);
+		fl_puts(o, q.usize);
+	}
+	for (size_t b= 0; b < block.size(); b++)
+	{
+		const Block &q= block[b];
+		fl_putv(o, q.offset);
+		fl_puts(o, q.usize);
+		fl_putv(o, q.bsize);
+		fl_putv(o, q.start);
+		fl_putv(o, q.frags);
+	}
+	for (size_t j= 1; j < ht.size(); j++)
+	{
+		fl_puts(o, ht[j].usize);
+		o.append((const char *)ht[j].sha1, 20);
+	}
+	for (DTMap::const_iterator p= dt.begin(); p != dt.end(); ++p)
+	{
+		const DT &d= p->second;
+		if ((d.date == 0) && (!sc_commento(p->first)))
+			continue;
+		fl_putv(o, p->first.size());
+		o+= p->first;
+		fl_putv(o, d.date);
+		fl_putv(o, d.version);
+		for (int k= 0; k < 8; k++)
+			o+= char((d.attr >> (8 * k)) & 255);
+		const int franz= ((d.franz_block != NULL) && (d.franz_letti > 0)) ? d.franz_letti : 0;
+		fl_putv(o, franz);
+		if (franz > 0)
+			o.append(d.franz_block, franz);
+		fl_putv(o, d.ptr.size());
+		int64_t prima= 0;
+		for (size_t k= 0; k < d.ptr.size(); k++)
+		{
+			fl_puts(o, int64_t(d.ptr[k]) - prima);
+			prima= d.ptr[k];
+		}
+	}
+	return o;
+}
+
+/// The state into ver ht block dt (they are empty, as read_archive wants them). false: broken
+bool Jidac::sc_deserializza(const string &i_blob, int64_t &o_x, unsigned &o_files)
+{
+	const char		 *p	 = i_blob.data();
+	const char *const end= p + i_blob.size();
+	if ((i_blob.size() < 5) || (memcmp(p, "ZPSC\x01", 5) != 0))
+		return false;
+	p+= 5;
+	uint64_t x= 0, nfiles= 0, dc= 0, dh= 0, nv= 0, nb= 0, nh= 0, nd= 0;
+	if (!fl_getv(p, end, x) || !fl_getv(p, end, nfiles) || !fl_getv(p, end, dc) || !fl_getv(p, end, dh) ||
+		!fl_getv(p, end, nv) || !fl_getv(p, end, nb) || !fl_getv(p, end, nh) || !fl_getv(p, end, nd))
+		return false;
+	if ((nv < 1) || (nh < 1) || (nv > 100000000) || (nb > 1000000000) || (nh > 2000000000))
+		return false;
+	ver.resize(1);
+	ver.reserve(nv);
+	for (uint64_t v= 1; v < nv; v++)
+	{
+		VER		 q;
+		uint64_t a= 0, b= 0, c= 0, e= 0, u= 0, dl= 0, ff= 0;
+		int64_t	 cs= 0, us= 0;
+		if (!fl_getv(p, end, a) || !fl_getv(p, end, b) || !fl_getv(p, end, c) || !fl_getv(p, end, e) || !fl_gets(p, end, cs) ||
+			!fl_getv(p, end, u) || !fl_getv(p, end, dl) || !fl_getv(p, end, ff) || !fl_gets(p, end, us))
+			return false;
+		q.date			= a;
+		q.lastdate		= b;
+		q.offset		= c;
+		q.data_offset	= e;
+		q.csize			= cs;
+		q.updates		= (int)u;
+		q.deletes		= (int)dl;
+		q.firstFragment = (unsigned)ff;
+		q.usize			= us;
+		ver.push_back(q);
+	}
+	block.clear();
+	block.reserve(nb);
+	for (uint64_t b= 0; b < nb; b++)
+	{
+		uint64_t off= 0, bs= 0, st= 0, fr= 0;
+		int64_t	 us = 0;
+		if (!fl_getv(p, end, off) || !fl_gets(p, end, us) || !fl_getv(p, end, bs) || !fl_getv(p, end, st) || !fl_getv(p, end, fr))
+			return false;
+		block.push_back(Block((unsigned)st, (int64_t)off));
+		block.back().usize= us;
+		block.back().bsize= bs;
+		block.back().frags= (unsigned)fr;
+	}
+	ht.resize(1);
+	ht.reserve(nh);
+	for (uint64_t j= 1; j < nh; j++)
+	{
+		int64_t us= 0;
+		if (!fl_gets(p, end, us) || (end - p < 20))
+			return false;
+		ht.push_back(HT(p, (int)us));
+		p+= 20;
+	}
+	/// the estimated ratio, as read_archive computes it from the h blocks
+	for (size_t b= 0; b < block.size(); b++)
+	{
+		double		   usum = 0;
+		const unsigned da	= block[b].start;
+		const unsigned fino = da + block[b].frags;
+		for (unsigned j= da; (j < fino) && (j < ht.size()); j++)
+			usum+= ht[j].usize;
+		if (usum > 0)
+			for (unsigned j= da; (j < fino) && (j < ht.size()); j++)
+				ht[j].estimatedratio= block[b].bsize / usum;
+	}
+	dt.clear();
+	string nome;
+	for (uint64_t k= 0; k < nd; k++)
+	{
+		uint64_t lungo= 0, data= 0, versione= 0, franz= 0, ni= 0;
+		if (!fl_getv(p, end, lungo) || ((uint64_t)(end - p) < lungo))
+			return false;
+		nome.assign(p, lungo);
+		p+= lungo;
+		if (!fl_getv(p, end, data) || !fl_getv(p, end, versione) || (end - p < 8))
+			return false;
+		const bool primalight= g_dtlight;
+		g_dtlight			 = true;
+		DT d;
+		g_dtlight= primalight;
+		d.date	 = data;
+		d.version= (int)versione;
+		d.attr	 = 0;
+		for (int b= 0; b < 8; b++)
+			d.attr+= int64_t(p[b] & 255) << (b * 8);
+		p+= 8;
+		if (!fl_getv(p, end, franz) || ((uint64_t)(end - p) < franz))
+			return false;
+		if ((franz > 0) && (d.franz_block != NULL) && (franz <= (uint64_t)d.franz_block_size))
+		{
+			memcpy(d.franz_block, p, franz);
+			d.franz_block[franz]= 0;
+			d.franz_letti		= (int)franz;
+		}
+		p+= franz;
+		if (!fl_getv(p, end, ni) || (ni > (uint64_t)(end - p)))
+			return false;
+		d.ptr.resize(ni);
+		int64_t prima= 0;
+		for (uint64_t i= 0; i < ni; i++)
+		{
+			int64_t delta= 0;
+			if (!fl_gets(p, end, delta))
+				return false;
+			prima+= delta;
+			d.ptr[i]= (unsigned)prima;
+		}
+		d.size= 0; /// read_archive adds the fragments up at its end
+		dt.insert(dt.end(), std::pair<string, DT>(nome, d));
+	}
+	if (p != end)
+		return false;
+	dcsize = dc;
+	dhsize = dh;
+	o_x	   = x;
+	o_files= (unsigned)nfiles;
+	return true;
+}
+
+/// A blob stored as the history is: its blocks ("offset:first fragment,...") and its fragments
+/// ("a-b,c,..."), with its size and XXHASH64. false: not all there, or not that one
+bool Jidac::sc_caricablob(const char *i_arc, const string &i_blocchi, const string &i_intervalli, int64_t i_size, const string &i_hash, string &o_blob)
+{
+	o_blob= "";
+	vector<string> blocchi;
+	explode(i_blocchi, ',', blocchi);
+	vector<int64_t>	 boffset;
+	vector<unsigned> bstart;
+	for (unsigned i= 0; i < blocchi.size(); i++)
+	{
+		const size_t duepunti= blocchi[i].find(':');
+		if (duepunti == string::npos)
+			return false;
+		boffset.push_back(myatoll(blocchi[i].substr(0, duepunti).c_str()));
+		bstart.push_back((unsigned)myatoll(blocchi[i].substr(duepunti + 1).c_str()));
+	}
+	vector<string> intervalli;
+	explode(i_intervalli, ',', intervalli);
+	vector<unsigned> ptr;
+	for (unsigned i= 0; i < intervalli.size(); i++)
+	{
+		const size_t   trattino= intervalli[i].find('-');
+		const unsigned da	   = (unsigned)myatoll(intervalli[i].substr(0, trattino).c_str());
+		unsigned	   a	   = da;
+		if (trattino != string::npos)
+			a= (unsigned)myatoll(intervalli[i].substr(trattino + 1).c_str());
+		if ((a < da) || (a - da > 100000000))
+			return false;
+		for (unsigned j= da; j <= a; j++)
+			ptr.push_back(j);
+	}
+	if (ptr.empty() || boffset.empty() || (i_size <= 0))
+		return false;
+	std::set<unsigned>	  needed(ptr.begin(), ptr.end());
+	map<unsigned, string> frammenti;
+	unsigned			  quanti= howmanythreads;
+	if (quanti < 1)
+		quanti= 1;
+	if (quanti > boffset.size())
+		quanti= boffset.size();
+	vector<fl_blockjob> jobs(quanti);
+	for (unsigned i= 0; i < quanti; i++)
+	{
+		jobs[i].jidac  = this;
+		jobs[i].arc	   = i_arc;
+		jobs[i].boffset= &boffset;
+		jobs[i].bstart = &bstart;
+		jobs[i].needed = &needed;
+		jobs[i].first  = i;
+		jobs[i].step   = quanti;
+	}
+	if (quanti == 1)
+		fl_doblocks(&jobs[0]);
+	else
+	{
+		vector<ThreadID> tid(quanti);
+		for (unsigned i= 0; i < quanti; i++)
+			run(tid[i], fl_blockthread, &jobs[i]);
+		for (unsigned i= 0; i < quanti; i++)
+			join(tid[i]);
+	}
+	for (unsigned i= 0; i < quanti; i++)
+	{
+		if (!jobs[i].ok)
+			return false;
+		for (map<unsigned, string>::iterator f= jobs[i].frammenti.begin(); f != jobs[i].frammenti.end(); ++f)
+			frammenti[f->first].swap(f->second);
+		jobs[i].frammenti.clear();
+	}
+	o_blob.reserve(i_size);
+	for (unsigned i= 0; i < ptr.size(); i++)
+	{
+		map<unsigned, string>::iterator f= frammenti.find(ptr[i]);
+		if (f == frammenti.end())
+		{
+			o_blob= "";
+			return false;
+		}
+		o_blob+= f->second;
+	}
+	XXHash64 myhash(0);
+	myhash.add(o_blob.data(), o_blob.size());
+	if (((int64_t)o_blob.size() != i_size) || (bin2hex_64(myhash.hash()) != i_hash))
+	{
+		o_blob= "";
+		return false;
+	}
+	return true;
+}
+
+/// The -fast history of the archive into fl_blob and fl_names, as if read_archive had collected it
+/// (the pointer of the last block, its payload already read). The last version of the history has
+/// jmp and dhsize 0 (they are in the pointer, see filelist_pointer): put back
+bool Jidac::sc_storia(const char *i_arc, const string &i_payload)
+{
+	vector<string> campi;
+	explode(i_payload, '|', campi);
+	if ((campi.size() != 8) || (campi[0] != "ZPFL1"))
+		return false;
+	string blob;
+	if (!sc_caricablob(i_arc, campi[6], campi[7], myatoll(campi[2].c_str()), campi[3], blob))
+		return false;
+	if ((blob.size() < 5) || (memcmp(blob.data(), "ZPFL\x01", 5) != 0))
+		return false;
+	fl_clear();
+	const char		 *p		 = blob.data() + 5;
+	const char *const end	 = blob.data() + blob.size();
+	size_t			  ultimav= 0; /// where the last 'V' begins
+	size_t			  dopov	 = 0; /// ...and its numbers end
+	uint64_t		  numeri[8];
+	int64_t			  salto	 = 0;
+	uint64_t		  vv	 = 0;
+	while (p < end)
+	{
+		const size_t qui= p - blob.data();
+		if (*p++ != 'V')
+			return false;
+		uint64_t fdate= 0, lastdate= 0, voffset= 0, vdataoffset= 0, vdh= 0, vff= 0, nn= 0, nr= 0;
+		int64_t	 jmp= 0;
+		if (!fl_getv(p, end, vv) || !fl_getv(p, end, fdate) || !fl_getv(p, end, lastdate) || !fl_getv(p, end, voffset) ||
+			!fl_getv(p, end, vdataoffset) || !fl_gets(p, end, jmp) || !fl_getv(p, end, vdh) || !fl_getv(p, end, vff))
+			return false;
+		ultimav	  = qui;
+		dopov	  = p - blob.data();
+		numeri[0] = vv;
+		numeri[1] = fdate;
+		numeri[2] = lastdate;
+		numeri[3] = voffset;
+		numeri[4] = vdataoffset;
+		numeri[6] = vdh;
+		numeri[7] = vff;
+		salto	  = jmp;
+		if (!fl_getv(p, end, nn))
+			return false;
+		for (uint64_t i= 0; i < nn; i++)
+		{
+			uint64_t len= 0;
+			if ((!fl_getv(p, end, len)) || ((uint64_t)(end - p) < len))
+				return false;
+			const uint32_t id= fl_names.size();
+			fl_names.insert(std::pair<string, uint32_t>(string(p, len), id));
+			p+= len;
+		}
+		if (!fl_getv(p, end, nr))
+			return false;
+		for (uint64_t r= 0; r < nr; r++)
+		{
+			uint64_t id= 0, rdate= 0;
+			int64_t	 size= 0;
+			if ((!fl_getv(p, end, id)) || (!fl_getv(p, end, rdate)) || (!fl_skiprecord(p, end, rdate, size)))
+				return false;
+		}
+	}
+	if ((int64_t)vv != myatoll(campi[1].c_str()))
+		return false;
+	(void)salto;
+	string testa= "V";
+	for (int i= 0; i < 8; i++)
+		if (i == 5)
+			fl_puts(testa, myatoll(campi[4].c_str()));
+		else if (i == 6)
+			fl_putv(testa, myatoll(campi[5].c_str()));
+		else
+			fl_putv(testa, numeri[i]);
+	fl_blob.assign(blob, 0, ultimav);
+	fl_blob+= testa;
+	fl_blob.append(blob, dopov, string::npos);
+	fl_lastv  = vv;
+	fl_seen	  = true;
+	fl_attail = true;
+	fl_capture= false;
+	return true;
+}
+
+/// read exactly i_size bytes from i_from (a multipart gives a part at a time)
+static bool sc_leggitutto(InputArchive &i_in, int64_t i_from, char *o_buf, int64_t i_size)
+{
+	i_in.seek(i_from, SEEK_SET);
+	int64_t fatti= 0;
+	while (fatti < i_size)
+	{
+		const int64_t resto= i_size - fatti;
+		const int	  letti= i_in.read(o_buf + fatti, (int)((resto > (1 << 30)) ? (1 << 30) : resto));
+		if (letti <= 0)
+			return false;
+		fatti+= letti;
+	}
+	return true;
+}
+
+/// As fl_findpointer, with where the pointer begins
+bool Jidac::sc_trovapuntatore(InputArchive &i_in, string &o_payload, int64_t &o_dove)
+{
+	static const unsigned char tag[13]= {0x37, 0x6B, 0x53, 0x74, 0xA0, 0x31, 0x83, 0xD3, 0x8C, 0xB2, 0x28, 0xB0, 0xD3};
+	const int64_t			   total  = i_in.totalsize();
+	const int64_t			   windows[3]= {65536, 1 << 20, 16 << 20};
+	int64_t					   scanned= 0;
+	o_dove							  = -1;
+	for (int w= 0; w < 3; w++)
+	{
+		int64_t size= windows[w];
+		if (size > total)
+			size= total;
+		if (size < 13)
+			return false;
+		vector<char> buf(size);
+		if (!sc_leggitutto(i_in, total - size, &buf[0], size))
+			return false;
+		for (int64_t i= size - 13 - scanned; i >= 0; --i)
+			if (memcmp(&buf[i], tag, 13) == 0)
+			{
+				const int risultato= fl_parsepointer(i_in, total - size + i, o_payload);
+				if (risultato == 1)
+				{
+					o_dove= total - size + i;
+					return true;
+				}
+				if (risultato == 0)
+					return false;
+			}
+		if (size == total)
+			break;
+		scanned= size - 12;
+	}
+	return false;
+}
+
+/// The text of the VFILE-info record in the i block that is just before i_dove (after its tag). "": none
+string Jidac::sc_infoprima(InputArchive &i_in, int64_t i_dove)
+{
+	static const unsigned char tag[13]= {0x37, 0x6B, 0x53, 0x74, 0xA0, 0x31, 0x83, 0xD3, 0x8C, 0xB2, 0x28, 0xB0, 0xD3};
+	const int64_t			   finestra= (i_dove < (1 << 20)) ? i_dove : (1 << 20);
+	if (finestra < 13)
+		return "";
+	vector<char> buf(finestra);
+	if (!sc_leggitutto(i_in, i_dove - finestra, &buf[0], finestra))
+		return "";
+	int64_t inizio= -1;
+	for (int64_t i= finestra - 13; i >= 0; --i)
+		if (memcmp(&buf[i], tag, 13) == 0)
+		{
+			inizio= i_dove - finestra + i;
+			break;
+		}
+	if (inizio < 0)
+		return "";
+	try
+	{
+		i_in.seek(inizio, SEEK_SET);
+		libzpaq::Decompresser d;
+		d.setInput(&i_in);
+		double mem= 0;
+		if (!d.findBlock(&mem))
+			return "";
+		StringWriter filename, comment;
+		if (!d.findFilename(&filename))
+			return "";
+		d.readComment(&comment);
+		if ((filename.s.size() != 28) || (filename.s.substr(0, 3) != "jDC") || (filename.s[17] != 'i'))
+			return "";
+		int64_t usize= 0;
+		for (unsigned i= 0; i < comment.s.size() && isdigit(comment.s[i]); ++i)
+			usize= usize * 10 + comment.s[i] - '0';
+		if (usize > 100000000)
+			return "";
+		libzpaq::StringBuffer os;
+		os.setLimit(usize);
+		d.setOutput(&os);
+		libzpaq::SHA1 sha1;
+		d.setSHA1(&sha1);
+		d.decompress();
+		char sha1result[21]= {0};
+		d.readSegmentEnd(sha1result);
+		if (((int64_t)os.size() != usize) || (sha1result[0] && memcmp(sha1result + 1, sha1.result(), 20)))
+			return "";
+		const char		 *s	 = os.c_str();
+		const char *const end= s + os.size();
+		string			  trovato;
+		while (s + 9 <= end)
+		{
+			const int64_t thedate= btol(s);
+			const char	 *zero	 = (const char *)memchr(s, 0, end - s);
+			if (zero == NULL)
+				return "";
+			if ((thedate == 0) && vinfo_isinfo(s))
+				trovato.assign(s + sizeof(ZPAQINFO_TAG) - 1, zero - s - (sizeof(ZPAQINFO_TAG) - 1));
+			s= zero + 1;
+			if (thedate) /// attr and fragments
+			{
+				if (s + 4 > end)
+					return "";
+				const unsigned na= btoi(s);
+				if (s + na > end)
+					return "";
+				s+= na;
+				if (s + 4 > end)
+					return "";
+				const unsigned ni= btoi(s);
+				if (ni > (unsigned)((end - s) / 4))
+					return "";
+				s+= 4 * ni;
+			}
+		}
+		return trovato;
+	}
+	catch (std::exception &e)
+	{
+		return "";
+	}
+}
+
+/// add -fastadd: the state stored by the last add, then the last version only. -1: the usual way
+int64_t Jidac::sc_readarchive_add(const char *i_arc)
+{
+	const double inizio= sc_adesso();
+	string		 payload;
+	int64_t		 dove= -1;
+	string		 info;
+	{
+		InputArchive in(i_arc);
+		if (!in.isopen())
+			return -1;
+		if (!sc_trovapuntatore(in, payload, dove))
+		{
+			myprintf("65450: -fastadd: the archive does not end with the -fast history, read all of it\n");
+			return -1;
+		}
+		info= sc_infoprima(in, dove);
+	}
+	map<string, string> campi;
+	int					generazione= 0;
+	if ((info == "") || (!vinfo_leggi(info, campi, generazione)) || (campi.find("sc") == campi.end()))
+	{
+		myprintf("65451: -fastadd: no state stored in the last version, read all of it\n");
+		return -1;
+	}
+	vector<string> sc;
+	explode(campi["sc"], ';', sc);
+	if ((sc.size() != 5) || (sc[0] != "1"))
+	{
+		myprintf("65452$ -fastadd: the stored state is not understood (a newer zpaqfranz?), read all of it\n");
+		return -1;
+	}
+	string blob;
+	if (!sc_caricablob(i_arc, sc[3], sc[4], myatoll(sc[1].c_str()), sc[2], blob))
+	{
+		myprintf("65453! -fastadd: the stored state cannot be read (damaged?), read all of it\n");
+		return -1;
+	}
+	const double letto= sc_adesso();
+	int64_t		 x	  = 0;
+	unsigned	 nfiles= 0;
+	const bool	  statoletto= sc_deserializza(blob, x, nfiles);
+	const int64_t ps		= myatoll(campi["ps"].c_str());
+	/// the state of a new archive is empty, and says 0: its version begins after the salt of -key (32)
+	if (statoletto && (ver.size() == 1) && (x == 0))
+		x= ps;
+	if ((!statoletto) || (x != ps) || ((int64_t)ver.size() != myatoll(campi["v"].c_str())))
+	{
+		myprintf("65454! -fastadd: the stored state is broken (read %d, it begins at %s, the version at %s, versions %s of %s), read all of it\n", int(statoletto), migliaia(x), migliaia2(ps), migliaia3(ver.size()), migliaia4(myatoll(campi["v"].c_str())));
+		jidacreset();
+		return -1;
+	}
+	const double caricato= sc_adesso();
+	if (!sc_storia(i_arc, payload))
+	{
+		myprintf("65455! -fastadd: the -fast history cannot be read, read all of it\n");
+		jidacreset();
+		fl_clear();
+		fl_seen	 = false;
+		fl_attail= false;
+		return -1;
+	}
+	const double storia= sc_adesso();
+	/// the last version, as read_archive does
+	sc_riprendida= x;
+	sc_files	 = nfiles;
+	fl_capture	 = false;
+	const int64_t risultato= read_archive(NULL, i_arc, &errors);
+	sc_riprendida		   = 0;
+	if (errors > 0)
+	{
+		myprintf("65456! -fastadd: the last version is not right, read all of it (it says what)\n");
+		jidacreset();
+		fl_clear();
+		fl_seen	  = false;
+		fl_attail = false;
+		errors	  = 0;
+		return -1;
+	}
+	sc_usato= true;
+	color_cyan();
+	if (flagverbose)
+		myprintf("65458: -fastadd: state %s bytes (%s files alive, %s fragments) read %1.3f s + loaded %1.3f s, history %s bytes %1.3f s, last version %1.3f s: %1.3f s\n",
+				 migliaia(blob.size()), migliaia2(dt.size()), migliaia3(ht.size()), letto - inizio, caricato - letto, migliaia4(fl_blob.size()), storia - caricato, sc_adesso() - storia, sc_adesso() - inizio);
+	else
+		myprintf("65457: -fastadd: from the stored state, the last version read (%1.3f s)\n", sc_adesso() - inizio);
+	color_restore();
+	return risultato;
+}
+
+/// After the serialization: what read_archive would have left out (the selection of this add)
+void Jidac::sc_filtra()
+{
+	sc_nofiltro= false;
+	for (DTMap::iterator p= dt.begin(); p != dt.end();)
+		if (!isselected(p->first.c_str(), true, -1))
+			dt.erase(p++);
+		else
+		{
+			if (flagnoattributes)
+				p->second.attr= 0;
+			++p;
+		}
+}
+
+/// add: the state (sc_blob) in its own d blocks, deduplicated, after the history; where it is goes in
+/// the VFILE-info record of this version (the last index chunk). false: not stored
+bool Jidac::sc_salva(OutputArchive &i_out, CompressJob &io_job, vector<unsigned> &io_blocklist, HTIndex &io_htinv, int64_t i_headerend, vector<string> &io_chunks)
+{
+	if ((sc_blob == "") || io_chunks.empty())
+		return false;
+	string &ultimo= io_chunks[io_chunks.size() - 1];
+	size_t	posinfo= string::npos;
+	for (size_t i= ultimo.find(ZPAQINFO_TAG); i != string::npos; i= ultimo.find(ZPAQINFO_TAG, i + 1))
+		posinfo= i;
+	if (posinfo == string::npos)
+	{
+		myprintf("65459$ -fastadd: no VFILE-info record in this version: the state is not stored\n");
+		return false;
+	}
+	const size_t finerecord= ultimo.find('\0', posinfo);
+	if (finerecord == string::npos)
+		return false;
+	const double inizio= sc_adesso();
+	int64_t		 where = offset + i_headerend; /// as filelist_store: logical, after the blocks written so far
+	for (unsigned i= 0; i < io_job.csize.size(); ++i)
+		where+= io_job.csize[i];
+	vector<int64_t>		  newoffset;
+	const unsigned		  blocksize	  = (1u << 24) - 4096;
+	const unsigned		  MAX_FRAGMENT= 8128u << SC_FRAGMENT;
+	const unsigned		  MIN_FRAGMENT= 64u << SC_FRAGMENT;
+	const unsigned		  threshold	  = 1u << (22 - SC_FRAGMENT);
+	const char			 *data		  = sc_blob.data();
+	const size_t		  len		  = sc_blob.size();
+	vector<unsigned>	  ptr;
+	libzpaq::StringBuffer sb;
+	unsigned			  firstfrag= 0;
+	unsigned			  frags	   = 0;
+	int64_t				  newbytes = 0;
+	int					  newblocks= 0;
+	unsigned char		  o1[256]  = {0};
+	unsigned			  c1	   = 0;
+	size_t				  pos	   = 0;
+	const size_t		  primoblocco= io_blocklist.size();
+	while (pos < len)
+	{
+		const size_t start= pos;
+		unsigned	 h	  = 0;
+		while (pos < len)
+		{
+			const unsigned char c= data[pos++];
+			if (c == o1[c1])
+				h= (h + c + 1) * 314159265u;
+			else
+				h= (h + c + 1) * 271828182u;
+			o1[c1]= c;
+			c1	  = c;
+			const size_t fatti= pos - start;
+			if ((fatti >= MAX_FRAGMENT) || ((h < threshold) && (fatti >= MIN_FRAGMENT)))
+				break;
+		}
+		const unsigned sz= pos - start;
+		libzpaq::SHA1  sha1;
+		sha1.write(data + start, sz);
+		char sha1result[20];
+		memcpy(sha1result, sha1.result(), 20);
+		unsigned htptr= io_htinv.find(sha1result);
+		if (htptr == 0)
+		{
+			if ((frags > 0) && (sb.size() + sz + 4 * (frags + 1) + 8 >= blocksize))
+				newblocks+= fl_writeblock(i_out, io_job, io_blocklist, sb, firstfrag, frags, newoffset, where);
+			if (frags == 0)
+				firstfrag= ht.size();
+			sb.write(data + start, sz);
+			++frags;
+			htptr= ht.size();
+			ht.push_back(HT(sha1result, sz));
+			io_htinv.update();
+			newbytes+= sz;
+		}
+		ptr.push_back(htptr);
+	}
+	newblocks+= fl_writeblock(i_out, io_job, io_blocklist, sb, firstfrag, frags, newoffset, where);
+	/// where are the fragments: the blocks read (block), then the ones written in this version
+	vector<unsigned> tuttistart;
+	vector<int64_t>	 tuttioffset;
+	for (unsigned i= 0; i < block.size(); ++i)
+	{
+		tuttistart.push_back(block[i].start);
+		tuttioffset.push_back(block[i].offset);
+	}
+	/// the blocks of this version before these (data, history): their offsets from their sizes
+	int64_t qui= offset + i_headerend;
+	for (unsigned i= 0; i < io_blocklist.size(); ++i)
+	{
+		if (i < primoblocco)
+		{
+			tuttistart.push_back(io_blocklist[i]);
+			tuttioffset.push_back(qui);
+		}
+		else
+		{
+			tuttistart.push_back(io_blocklist[i]);
+			tuttioffset.push_back(newoffset[i - primoblocco]);
+		}
+		if (i < io_job.csize.size())
+			qui+= io_job.csize[i];
+	}
+	std::set<unsigned> usati;
+	for (unsigned i= 0; i < ptr.size(); ++i)
+	{
+		vector<unsigned>::iterator u= std::upper_bound(tuttistart.begin(), tuttistart.end(), ptr[i]);
+		if (u == tuttistart.begin())
+		{
+			myprintf("65460$ -fastadd: fragment %s without a block, the state is not stored\n", migliaia(ptr[i]));
+			return false;
+		}
+		usati.insert((unsigned)(u - tuttistart.begin()) - 1);
+	}
+	string blocchi= "";
+	for (std::set<unsigned>::iterator i= usati.begin(); i != usati.end(); ++i)
+	{
+		if (blocchi != "")
+			blocchi+= ",";
+		blocchi+= itos(tuttioffset[*i]) + ":" + itos(tuttistart[*i]);
+	}
+	string intervalli= "";
+	for (unsigned i= 0; i < ptr.size();)
+	{
+		unsigned j= i;
+		while ((j + 1 < ptr.size()) && (ptr[j + 1] == ptr[j] + 1))
+			j++;
+		if (intervalli != "")
+			intervalli+= ",";
+		intervalli+= itos(ptr[i]);
+		if (j > i)
+			intervalli+= "-" + itos(ptr[j]);
+		i= j + 1;
+	}
+	XXHash64 myhash(0);
+	myhash.add(sc_blob.data(), sc_blob.size());
+	const string valore= "1;" + itos(sc_blob.size()) + ";" + bin2hex_64(myhash.hash()) + ";" + blocchi + ";" + intervalli;
+	ultimo.insert(finerecord, "|sc=" + valore);
+	if ((!flagsilent) && (!flagterse))
+	{
+		color_cyan();
+		if (flagverbose)
+			myprintf("65462: -fastadd: state %s bytes, %s new in %d blocks (%s fragments, %s blocks to read), pointer %s bytes, %1.3f s\n",
+					 migliaia(len), migliaia2(newbytes), newblocks, migliaia3(ptr.size()), migliaia4(usati.size()), migliaia5(valore.size()), sc_adesso() - inizio);
+		else
+			myprintf("65461: -fastadd: state of %s stored (%s new)\n", tohuman(len), tohuman2(newbytes));
+		color_restore();
+	}
+	return true;
+}
+
+/// 65.12g: the comments of the versions from the -fast history, without reading the archive. false:
+/// no history at the end of the archive (the archive is read)
+bool Jidac::fl_commenti(const char *i_arc, MAPPACOMMENTI &o_commenti)
+{
+	o_commenti.clear();
+	string payload;
+	{
+		InputArchive in(i_arc);
+		if (!in.isopen())
+			return false;
+		if (!fl_findpointer(in, payload))
+			return false;
+	}
+	vector<string> campi;
+	explode(payload, '|', campi);
+	if ((campi.size() != 8) || (campi[0] != "ZPFL1"))
+		return false;
+	string blob;
+	if (!sc_caricablob(i_arc, campi[6], campi[7], myatoll(campi[2].c_str()), campi[3], blob))
+		return false;
+	if ((blob.size() < 5) || (memcmp(blob.data(), "ZPFL\x01", 5) != 0))
+		return false;
+	const char		 *p	 = blob.data() + 5;
+	const char *const end= blob.data() + blob.size();
+	while (p < end)
+	{
+		if (*p++ != 'V')
+			return false;
+		uint64_t numero= 0, nn= 0, nr= 0;
+		int64_t	 salto = 0;
+		for (int i= 0; i < 8; i++)
+			if (!((i == 5) ? fl_gets(p, end, salto) : fl_getv(p, end, numero)))
+				return false;
+		if (!fl_getv(p, end, nn))
+			return false;
+		for (uint64_t i= 0; i < nn; i++)
+		{
+			uint64_t len= 0;
+			if ((!fl_getv(p, end, len)) || ((uint64_t)(end - p) < len))
+				return false;
+			int	   numver= 0;
+			string testo;
+			if (vcomment_leggi(string(p, len), numver, testo))
+				o_commenti[numver]= testo;
+			p+= len;
+		}
+		if (!fl_getv(p, end, nr))
+			return false;
+		for (uint64_t r= 0; r < nr; r++)
+		{
+			uint64_t id= 0, rdate= 0;
+			int64_t	 size= 0;
+			if ((!fl_getv(p, end, id)) || (!fl_getv(p, end, rdate)) || (!fl_skiprecord(p, end, rdate, size)))
+				return false;
+		}
+	}
+	return true;
+}
+
+/// 65.12g: the version with comment i_testo (the case does not matter), before the archive is read for the
+/// command: from the -fast history if there is one, else reading the archive (as it was, every time).
+/// >0 the version, 0 none, -1 more than one
+int Jidac::versionedicommento(const string &i_testo)
+{
+	MAPPACOMMENTI commenti;
+	if (!fl_commenti(archive.c_str(), commenti))
+	{
+		int errori= 0;
+		read_archive(NULL, archive.c_str(), &errori, 1, true);
+		vector<DTMap::iterator> elenco;
+		const int				versione= searchcomments(i_testo, elenco);
+		jidacreset();
+		return versione;
+	}
+	int versione= 0;
+	int quanti	= 0;
+	for (MAPPACOMMENTI::const_iterator c= commenti.begin(); c != commenti.end(); ++c)
+		if (stringcomparei(c->second, i_testo))
+		{
+			versione= c->first;
+			quanti++;
+		}
+	if (quanti > 1)
+		return -1;
+	return versione;
+}
+
+/// 65.12g: l -comment (no text): the comments of the versions, from the -fast history if there is one
+int Jidac::elencocommenti()
+{
+	MAPPACOMMENTI commenti;
+	if (!fl_commenti(archive.c_str(), commenti))
+		return enumeratecomments();
+	myprintf("\n");
+	myprintf("00995: Version(s) enumerator\n");
+	for (MAPPACOMMENTI::const_iterator c= commenti.begin(); c != commenti.end(); ++c)
+		myprintf("%08d <<%s>>\n", c->first, c->second.c_str());
+	return 0;
 }
 
 int Jidac::checksha1collision(DTMap &i_dtmap, bool i_decodefranzblock)
@@ -199601,141 +201098,42 @@ int Jidac::checkautotest(string i_path, bool i_quick)
     }
     
     vector<TestCase> test_cases;
-    
-    // Test base sempre presenti
-    test_cases.push_back(TestCase("out01.txt", "NOT renamed files  256", "Extracting pre-computed data"));
-    test_cases.push_back(TestCase("out02.txt", "67708591460BCE3BC45AE086A342F9F390AD2913A22639EC7AF3646B7D2AEA78", "Adding and/or extracting data"));
-    test_cases.push_back(TestCase("out03.txt", "(all OK)", "Testing with -verify"));
-    test_cases.push_back(TestCase("out04.txt", "(all OK)", "Verify"));
-    test_cases.push_back(TestCase("out05.txt", "(all OK)", "w (chunked test)"));
-    test_cases.push_back(TestCase("out06.txt", "SURE    :       42.727 of       42.727 (stored=decompressed=file on disk)", "p (paranoid test)"));
-    test_cases.push_back(TestCase("out07.txt", "GLOBAL SHA256: 7B32DB3F6F0180062773C5A046A2C99D17BE7668202379BA136E7A4D134FFC26", "Extract with different hashes)"));
-    test_cases.push_back(TestCase("out08.txt", "GLOBAL SHA256: 5088D26FE31EEE0E04F1569CD4851B6DE4A1CBC00EC56BAC7F390A123A8C1111", "Fixed encrypted -chunk multipart creating/extracting"));
-    test_cases.push_back(TestCase("out09.txt", "Files deleted                       42.735", "Fixed -chunk multipart testing"));
-    test_cases.push_back(TestCase("out10.txt", "10000.dat", "Fixed -chunk multipart verify"));
-    test_cases.push_back(TestCase("out11.txt", "10000.dat", "Folder comparing"));
-    test_cases.push_back(TestCase("out12.txt", "(all OK)", "Testbackup for multipart"));
-    test_cases.push_back(TestCase("out13.txt", "OK      XXHASH64B : 00000256 of 00000256", "Standard multipart with backup command"));
-    test_cases.push_back(TestCase("out14.txt", "== very same bytes 9.472.000", "Extracting/testing single version from multipart"));
-    test_cases.push_back(TestCase("out15.txt", "===", "Creating/extracting different hashes"));
-    test_cases.push_back(TestCase("out16.txt", "All OK (paranoid test with check against filesystem)", "Paranoid test of different hashes"));
-    test_cases.push_back(TestCase("out17.txt", "+              1", "Robocopy of folder"));
-    test_cases.push_back(TestCase("out18.txt", "GLOBAL SHA256: 9C443D84B87B678E4506AD5F6A2FC89B83546E286F19998899DC4461BB9F97D0", "Extract multihash"));
-    test_cases.push_back(TestCase("out19.txt", "GLOBAL SHA256: 9C443D84B87B678E4506AD5F6A2FC89B83546E286F19998899DC4461BB9F97D0", "Testing that extract is OK (a)"));
-    test_cases.push_back(TestCase("out20.txt", "GLOBAL SHA256: 9C443D84B87B678E4506AD5F6A2FC89B83546E286F19998899DC4461BB9F97D0", "Testing that extract is OK (b)"));
-    test_cases.push_back(TestCase("out21.txt", "GLOBAL SHA256: EEBFFD8399E88CE05BCFD1AAE65C4A118E57638511AF18255C5A295A6378F437", "Creating & extracting big file"));
-    test_cases.push_back(TestCase("out22.txt", "(all OK)", "Testing with sequential algo"));
-    
-    // Test aggiuntivi Franzen
-    if (g_franzen != "")
-    {
-        // AES + Franzen Creation
-        test_cases.push_back(TestCase("out23.txt", "(all OK)", "Creating archive 2"));
-        test_cases.push_back(TestCase("out24.txt", "(all OK)", "Updating archive 2"));
-        test_cases.push_back(TestCase("out25.txt", "(all OK)", "Updating archive 2"));
-        test_cases.push_back(TestCase("out26.txt", "(all OK)", "Discarded update 2"));
-        
-        // AES + Franzen Verify & Decode
-        test_cases.push_back(TestCase("out27.txt", "(all OK)", "PP test 2"));
-        test_cases.push_back(TestCase("out28.txt", "(all OK)", "Franzen test 2"));
-        test_cases.push_back(TestCase("out29.txt", "(all OK)", "Decoding 2"));
-        test_cases.push_back(TestCase("out30.txt", "(all OK)", "t of the decoded .franzen 2"));
-        
-        // Only Franzen Creation
-        test_cases.push_back(TestCase("out31.txt", "(all OK)", "Creating archive 1"));
-        test_cases.push_back(TestCase("out32.txt", "(all OK)", "Updating archive 1"));
-        test_cases.push_back(TestCase("out33.txt", "(all OK)", "Updating archive 1"));
-        test_cases.push_back(TestCase("out34.txt", "(all OK)", "Discarded update 1"));
-        
-        // Only Franzen Verify & Decode
-        test_cases.push_back(TestCase("out35.txt", "(all OK)", "PP test 1"));
-        test_cases.push_back(TestCase("out36.txt", "(all OK)", "Franzen test 1"));
-        test_cases.push_back(TestCase("out37.txt", "(all OK)", "Decoding 1"));
-        test_cases.push_back(TestCase("out38.txt", "(all OK)", "t of the decoded .franzen 1"));
-        
-        // Extraction
-        test_cases.push_back(TestCase("out39.txt", "(all OK)", "extract big1 2"));
-        test_cases.push_back(TestCase("out40.txt", "(all OK)", "extract big3 2"));
-        test_cases.push_back(TestCase("out41.txt", "(all OK)", "extract big3 2"));
-        test_cases.push_back(TestCase("out42.txt", "(all OK)", "extract big1 1"));
-        test_cases.push_back(TestCase("out43.txt", "(all OK)", "extract big2 1"));
-        test_cases.push_back(TestCase("out44.txt", "(all OK)", "extract big3 1"));
-        
-        // Final multi-file compare
-        test_cases.push_back(TestCase("out45.txt", "Binary ==", "fc big1 2"));
-        test_cases.push_back(TestCase("out46.txt", "Binary ==", "fc big2 2"));
-        test_cases.push_back(TestCase("out47.txt", "Binary ==", "fc big3 2"));
-        test_cases.push_back(TestCase("out48.txt", "Binary ==", "fc big1 1"));
-        test_cases.push_back(TestCase("out49.txt", "Binary ==", "fc big2 1"));
-        test_cases.push_back(TestCase("out50.txt", "Binary ==", "fc big3 1"));
-    }
-    
     i_path = wintolinuxpath(i_path);
     i_path = includetrailingbackslash(i_path);
-
-    // Hash healing: always there
-    test_cases.push_back(TestCase("out51.txt", "(all OK)", "Attribute-only change, hash read again"));
-    test_cases.push_back(TestCase("out52.txt", "(all OK)", "Verify after attribute-only change"));
-    test_cases.push_back(TestCase("out53.txt", "(all OK)", "-touch on a 7.15 archive"));
-    test_cases.push_back(TestCase("out54.txt", "SHA-3 : 00000003 of 00000003", "Verify after -touch"));
-    test_cases.push_back(TestCase("out55.txt", "0 +added, 0 -removed", "-touch again: nothing to do"));
-    test_cases.push_back(TestCase("out64.txt", "(all OK)", "UTF-8, emoji, % and spaces in names"));
-    // -m6: the "m4.5" (-m4 with sparse contexts)
-    test_cases.push_back(TestCase("out68.txt", "(all OK)", "-m6 (m4.5) names, big files, one .exe"));
-    test_cases.push_back(TestCase("out69.txt", "(all OK)", "-m6 testing"));
-    test_cases.push_back(TestCase("out70.txt", "All OK (paranoid test with check against filesystem)", "-m6 paranoid (unzpaq)"));
-#ifdef ZPAQZSTD
-    // -m8: zstd stored + ZPAQL decoder
-    test_cases.push_back(TestCase("out87.txt", "(all OK)", "-m8 (zstd) creating, 1.75 GB with dedup"));
-    test_cases.push_back(TestCase("out88.txt", "(all OK)", "-m8 testing (native zstd decoder)"));
-    test_cases.push_back(TestCase("out89.txt", "All OK (paranoid test with check against filesystem)", "-m8 paranoid (unzpaq runs the ZPAQL decoder)"));
-    test_cases.push_back(TestCase("out90.txt", "(all OK)", "-m8h19 (zstd 19) names and big files"));
-    test_cases.push_back(TestCase("out91.txt", "All OK (paranoid test with check against filesystem)", "-m8h19 paranoid (ZPAQL decoder)"));
-    test_cases.push_back(TestCase("out92.txt", "(all OK)", "-m86a3 (zstd fast) 64 MB blocks"));
-    test_cases.push_back(TestCase("out93.txt", "All OK (paranoid test with check against filesystem)", "-m86a3 paranoid (ZPAQL decoder)"));
-#endif
-    // -turbo: the same archive, to the byte
-    test_cases.push_back(TestCase("out83.txt", "(all OK)", "-turbo add (parallel fragmenter)"));
-    test_cases.push_back(TestCase("out84.txt", "Binary ==", "-turbo archive == plain archive (2 versions)"));
-    test_cases.push_back(TestCase("out85.txt", "(all OK)", "-turbo archive testing"));
-#ifdef ZPAQZSTD
-    test_cases.push_back(TestCase("out86.txt", "Binary ==", "-turbo -m8 archive == plain -m8 archive"));
-#endif
-
+    /// 65.12h: the checks of g_autotestpassi, of the level of the folder (autotestlevel.txt; none: -m4)
+    const int livello  = autotest_livellocartella(i_path);
+    bool      montaggio= false;
 ///NOSFTPSTART
     // Mount: only if the script has them (autotest found a working mount)
-    if (fileexists(i_path + "mounttest.txt"))
-    {
-        test_cases.push_back(TestCase("out56.txt", "Mount test: OK", "Mount last version"));
-        test_cases.push_back(TestCase("out57.txt", "Mount test: OK", "Mount every version (-all)"));
-        test_cases.push_back(TestCase("out58.txt", "Mount test: OK", "Mount version 3 (-until)"));
-        test_cases.push_back(TestCase("out59.txt", "Mount test: OK", "Mount encrypted -chunk multipart"));
-        test_cases.push_back(TestCase("out60.txt", "Mount test: OK", "Mount encrypted backup multipart"));
-        test_cases.push_back(TestCase("out61.txt", "Mount test: OK", "Mount the healed archive"));
-        test_cases.push_back(TestCase("out65.txt", "Mount test: OK", "Mount UTF-8, emoji, % and spaces in names"));
-        test_cases.push_back(TestCase("out66.txt", "0 hash OK, 3 size and date only", "Mount a zpaq 7.15 version (no hash)"));
-        test_cases.push_back(TestCase("out67.txt", "Mount test: OK", "Mount big files"));
-        test_cases.push_back(TestCase("out76.txt", "Mount test: OK", "Mount -m6 (m4.5) archive"));
-#ifdef ZPAQZSTD
-        test_cases.push_back(TestCase("out94.txt", "Mount test: OK", "Mount -m8 (zstd) archive"));
-#endif
-        if (g_franzen != "")
-        {
-            test_cases.push_back(TestCase("out62.txt", "Mount test: OK", "Mount AES + Franzen"));
-            test_cases.push_back(TestCase("out63.txt", "Mount test: OK", "Mount Franzen"));
-        }
-    }
-    else
+    montaggio= fileexists(i_path + "mounttest.txt");
+    if ((!montaggio) && (livello >= 4))
         myprintf("56475: No mount tests in this run (no mounttest.txt)\n");
 ///NOSFTPEND
-
-    myprintf("03368: Checking results (in %Z)\n", i_path.c_str());
+    std::map<char, string> valori;
+    for (unsigned int i= 0; i < g_autotestpassin; i++)
+    {
+        const autotestpasso &p= g_autotestpassi[i];
+        if ((p.livello > livello) || (p.uscita == NULL) || (p.atteso == NULL) || (!autotest_condizione(p.condizione, g_franzen != "", montaggio)))
+            continue;
+        for (int n= 1; n <= ((p.ripeti > 0) ? p.ripeti : 1); n++)
+        {
+            valori['N']= autotest_numero(n);
+            test_cases.push_back(TestCase(autotest_espandi(p.uscita, valori), p.atteso, autotest_espandi(p.descrizione, valori)));
+        }
+    }
+    myprintf("03368: Checking results (in %Z), level -m%d\n", i_path.c_str(), livello);
     
     int errori = 0;
+    /// 65.12h: the names in a column (out99.txt, out100.txt, fa20_01.txt)
+    size_t larghezza= 0;
+    for (size_t i = 0; i < test_cases.size(); i++)
+        if (test_cases[i].filename.size() > larghezza)
+            larghezza= test_cases[i].filename.size();
     for (size_t i = 0; i < test_cases.size(); i++)
     {
         const TestCase& tc = test_cases[i];
-        myprintf("03370: %03d (%s) :", (int)i, tc.filename.c_str());
+        const string nome= "(" + tc.filename + ")" + string(larghezza - tc.filename.size(), ' ');
+        myprintf("03370: %03d %s :", (int)i, nome.c_str());
         
         bool trovato = grep(i_path + tc.filename, tc.expected_content);
         if (trovato)
@@ -201528,6 +202926,10 @@ int Jidac::work()
 	}
 
 	string mycommand= files[0];
+	if (mycommand == "fat32") /// 65.12b: FAT32 up to 2 TB on a USB stick (Windows), see Jidac::workfat32
+		return workfat32();
+	if (mycommand == "poke") /// 65.12g: bytes of a file changed, see Jidac::workpoke
+		return workpoke();
 #ifndef NOEMAIL /// POSTAMI mail work
 	if (mycommand == "email") /// with the -mail switches
 		return zpaqfranz_workemail();
@@ -204965,14 +206367,10 @@ int Jidac::extract()
 	if (flagcomment && flagrange)
 		if (versioncomment.length() > 0)
 		{
-			int errors= 0;
-			read_archive(NULL, archive.c_str(), &errors, 0, flagstdout); // we want to be quiet by stdout?
 			// try to find the comment, but be careful: 1, and only 1, allowed
-			vector<DTMap::iterator> myfilelist;
-			int						versione= searchcomments(versioncomment, myfilelist);
+			const int versione= versionedicommento(versioncomment); /// 65.12g: from the -fast history, if there is
 			if (versione > 0)
 			{
-				jidacreset();
 				myprintf("85368: -comment 'something' with -range => extracting single version\n");
 				g_rangefrom= versione;
 				g_rangeto  = versione;
@@ -205258,6 +206656,20 @@ int Jidac::extract()
 	{
 		g_rangefrom= 0;
 		g_rangeto  = 0;
+	}
+	/// 65.12g: -comment text: the version before reading, from the -fast history if there is one (it was a
+	/// whole read, then a second one up to the version found)
+	if (flagcomment && (versioncomment.length() > 0) && (!flagrange))
+	{
+		const int versione= versionedicommento(versioncomment);
+		if (versione == 0)
+			error("Cannot find version comment");
+		if (versione < 0)
+			error("Multiple match for version comment. Please use -until");
+		if (!flagstdout)
+			myprintf("00898: Found version -until %d\n", versione);
+		version	   = versione;
+		flagcomment= false;
 	}
 	int errors= 0;
 	if (flagstdout) /// stdout carries the data: silent before reading, the messages of a damaged archive went there
@@ -220174,6 +221586,53 @@ double franzusb::adesso()
 }
 
 #ifdef _WIN32
+/// 65.12b: one volume locked, then dismounted (the handle returned, open). Still open
+/// somewhere (Explorer, the indexer...): dismounted by force, like format /X, and opened
+/// again: the handle of before the dismount is of what was mounted, and its lock is
+/// refused (as franzxcuscita::bloccavolumi knew). INVALID_HANDLE_VALUE: not locked
+static HANDLE franzusb_bloccauno(const std::wstring &i_volume, string &o_problema)
+{
+	HANDLE hv= CreateFileW(i_volume.c_str(), GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
+	if (hv == INVALID_HANDLE_VALUE)
+	{
+		o_problema= wtou(i_volume.c_str()) + " cannot be opened " + franzusb::errore((int)GetLastError());
+		return hv;
+	}
+	DWORD fatti	  = 0;
+	bool  bloccato= false;
+	for (int prova= 0; (prova < 10) && (!bloccato); prova++)
+	{
+		if (DeviceIoControl(hv, FSCTL_LOCK_VOLUME, NULL, 0, NULL, 0, &fatti, NULL))
+			bloccato= true;
+		else
+			Sleep(300);
+	}
+	DWORD errore= 0;
+	for (int prova= 0; (prova < 5) && (!bloccato); prova++)
+	{
+		DeviceIoControl(hv, FSCTL_DISMOUNT_VOLUME, NULL, 0, NULL, 0, &fatti, NULL);
+		CloseHandle(hv);
+		Sleep(200);
+		hv= CreateFileW(i_volume.c_str(), GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
+		if (hv == INVALID_HANDLE_VALUE)
+		{
+			errore= GetLastError();
+			break;
+		}
+		bloccato= DeviceIoControl(hv, FSCTL_LOCK_VOLUME, NULL, 0, NULL, 0, &fatti, NULL) != 0;
+		if (!bloccato)
+			errore= GetLastError();
+	}
+	if (!bloccato)
+	{
+		o_problema= wtou(i_volume.c_str()) + " cannot be locked (in use?) " + franzusb::errore((int)errore);
+		if (hv != INVALID_HANDLE_VALUE)
+			CloseHandle(hv);
+		return INVALID_HANDLE_VALUE;
+	}
+	DeviceIoControl(hv, FSCTL_DISMOUNT_VOLUME, NULL, 0, NULL, 0, &fatti, NULL);
+	return hv;
+}
 /// every volume of the disk, with or without a letter: locked and dismounted, the
 /// handles kept open until the end (Windows refuses to write into a mounted volume)
 bool franzusb::bloccavolumi(int i_disco, string &o_problema)
@@ -220202,32 +221661,15 @@ bool franzusb::bloccavolumi(int i_disco, string &o_problema)
 				if (estensioni->Extents[i].DiskNumber == (DWORD)i_disco)
 					nostro= true;
 		}
+		CloseHandle(hv);
 		if (!nostro)
-		{
-			CloseHandle(hv);
 			continue;
-		}
-		bool bloccato= false;
-		for (int prova= 0; (prova < 10) && (!bloccato); prova++)
+		hv= franzusb_bloccauno(volume, o_problema); /// 65.12b: a new handle after a forced dismount
+		if (hv == INVALID_HANDLE_VALUE)
 		{
-			if (DeviceIoControl(hv, FSCTL_LOCK_VOLUME, NULL, 0, NULL, 0, &fatti, NULL))
-				bloccato= true;
-			else
-				Sleep(300);
-		}
-		if (!bloccato) /// still open somewhere (Explorer, the indexer...): dismounted by force, like format /X, then locked
-		{
-			DeviceIoControl(hv, FSCTL_DISMOUNT_VOLUME, NULL, 0, NULL, 0, &fatti, NULL);
-			bloccato= DeviceIoControl(hv, FSCTL_LOCK_VOLUME, NULL, 0, NULL, 0, &fatti, NULL) != 0;
-		}
-		if (!bloccato)
-		{
-			o_problema= wtou(volume.c_str()) + " cannot be locked (in use?) " + errore((int)GetLastError());
-			CloseHandle(hv);
 			tuttook= false;
 			break;
 		}
-		DeviceIoControl(hv, FSCTL_DISMOUNT_VOLUME, NULL, 0, NULL, 0, &fatti, NULL);
 		m_volumi.push_back(hv);
 	} while (FindNextVolumeW(cerca, nome, MAX_PATH));
 	FindVolumeClose(cerca);
@@ -225126,6 +226568,1561 @@ int Jidac::fillgui()
 #endif
 
 /*
+	65.12b: work fat32, a FAT32 of up to 2 TB on a USB stick (the format of Windows
+	refuses FAT32 over 32 GB; many diagnostic tools, and UEFI, want FAT32).
+		work fat32 X: [label]	the volume X:, the partition stays (MBR: type 0x0C)
+		work fat32 N  [label]	the whole disk N: a new MBR, one primary partition from
+								1 MB to the end, type 0x0C, active
+		-boot					BIOS boot code that starts BOOTMGR (WinPE, Windows setup)
+	-boot on X: of a GPT disk (65.12c): the BIOS boots from MBR only, so the whole disk
+	becomes MBR, as with N, if X: is its only partition (the MSR aside); else refused.
+	Never C: (nor the Windows volume, nor the disk with them); USB or removable media
+	only, -debug for any other disk; over 2 TB refused; the captcha is always asked.
+	Written from the Microsoft specification (fatgen103), not from fat32format (GPL):
+	the FAT has room for every cluster plus the two reserved entries (fat32format 1.07
+	is one entry short on 0.78% of the sizes: Windows and Linux lose a cluster, fsck.fat
+	refuses the volume), the data area starts on a cluster boundary of the disk.
+	The boot code (MIT, written from scratch) is below, with its nasm source.
+	The volume is written through the physical disk, with the volumes locked and
+	dismounted, like f -test -force -paranoid
+*/
+#ifdef _WIN32
+/*
+	The source of the three arrays below (nasm 2.16: nasm -f bin x.asm -o x.bin)
+
+	======== mbr.asm
+	; zpaqfranz MBR (65.12b, MIT, written from scratch): starts the active primary partition.
+	; The BIOS loads it at 0000:7C00 with DL = drive. It moves itself to 0000:0600, reads the
+	; first sector of the active partition at 0000:7C00 (INT 13h extensions; CHS from the
+	; table when they are not there), checks 55AA and jumps there with DL = drive and
+	; DS:SI = the partition entry. On an error: a line, a key, then INT 18h (the next device)
+	bits 16
+	org 0x0600
+
+	tabella		equ 0x0600+446
+
+	start:
+		cli
+		xor ax, ax
+		mov ss, ax
+		mov sp, 0x7C00
+		mov ds, ax
+		mov es, ax
+		sti
+		cld
+		mov si, 0x7C00
+		mov di, 0x0600
+		mov cx, 256
+		rep movsw
+		jmp 0x0000:spostato
+	spostato:
+		mov [disco], dl
+		mov si, tabella
+		mov cx, 4
+	cerca:
+		cmp byte [si], 0x80
+		je trovata
+		add si, 16
+		loop cerca
+		mov si, msg_attiva
+		jmp errore
+	trovata:
+		mov [voce], si
+		mov byte [prove], 3
+	riprova:
+		mov ah, 0x41
+		mov bx, 0x55AA
+		mov dl, [disco]
+		int 0x13
+		jc conchs
+		cmp bx, 0xAA55
+		jne conchs
+		test cl, 1
+		jz conchs
+		mov si, [voce]
+		mov eax, [si+8]
+		mov [dap_lba], eax
+		mov si, dap
+		mov ah, 0x42
+		mov dl, [disco]
+		int 0x13
+		jnc letto
+		jmp sbagliato
+	conchs:
+		mov si, [voce]
+		mov dh, [si+1]
+		mov cx, [si+2]
+		mov bx, 0x7C00
+		mov ax, 0x0201
+		mov dl, [disco]
+		int 0x13
+		jnc letto
+	sbagliato:
+		xor ah, ah
+		mov dl, [disco]
+		int 0x13
+		dec byte [prove]
+		jnz riprova
+		mov si, msg_lettura
+		jmp errore
+	letto:
+		mov si, msg_avvio
+		cmp word [0x7DFE], 0xAA55
+		jne errore
+		mov si, [voce]
+		mov dl, [disco]
+		jmp 0x0000:0x7C00
+
+	errore:
+		call stampa
+		mov si, msg_tasto
+		call stampa
+		xor ax, ax
+		int 0x16
+		int 0x18
+	ferma:
+		hlt
+		jmp ferma
+
+	stampa:
+		lodsb
+		or al, al
+		jz .fine
+		mov ah, 0x0E
+		mov bx, 0x0007
+		int 0x10
+		jmp stampa
+	.fine:
+		ret
+
+	dap:		db 0x10, 0
+				dw 1
+				dw 0x7C00, 0
+	dap_lba:	dd 0, 0
+	disco:		db 0
+	prove:		db 0
+	voce:		dw 0
+	msg_attiva:		db "MBR: no active partition", 0
+	msg_lettura:	db "MBR: disk read error", 0
+	msg_avvio:		db "MBR: no boot sector", 0
+	msg_tasto:		db 13, 10, "Press a key", 0
+
+	%if ($-$$) > 440
+	%error "MBR code over 440 bytes"
+	%endif
+		times 440-($-$$) db 0
+
+	======== vbrno.asm
+	; zpaqfranz FAT32 boot sector with no loader (65.12b, MIT, written from scratch): if a BIOS
+	; starts it, a line, a key, then INT 18h (the next device). Bytes 3-89 = the BPB (zpaqfranz)
+	bits 16
+	org 0x7C00
+		jmp short codice
+		nop
+		times 0x5A-($-$$) db 0
+	codice:
+		cli
+		xor ax, ax
+		mov ds, ax
+		mov ss, ax
+		mov sp, 0x7C00
+		sti
+		cld
+		mov si, messaggio
+	stampa:
+		lodsb
+		or al, al
+		jz tasto
+		mov ah, 0x0E
+		mov bx, 0x0007
+		int 0x10
+		jmp stampa
+	tasto:
+		xor ax, ax
+		int 0x16
+		int 0x18
+	ferma:
+		hlt
+		jmp ferma
+	messaggio:	db 13, 10, "Not a bootable disk (zpaqfranz FAT32 without -boot)", 13, 10, "Press a key", 13, 10, 0
+	%if ($-$$) > 510
+	%error "sector too big"
+	%endif
+		times 510-($-$$) db 0
+		dw 0xAA55
+
+	======== vbrboot.asm
+	; zpaqfranz FAT32 boot sectors that start BOOTMGR (65.12b, MIT, written from scratch).
+	; Sector 0 of the partition (the BIOS, or the MBR, loads it at 0000:7C00 with DL = drive)
+	; reads sector 2 of the partition at 0000:7E00 and goes on there: BOOTMGR is looked for in
+	; the root folder, loaded at 2000:0000 cluster by cluster (never over the memory the BIOS
+	; declares at 0040:0013) and started with DL = drive, DS = ES = SS = 0, SP = 7C00 and this
+	; sector (the BPB) still at 0000:7C00. 512-byte sectors only (zpaqfranz refuses -boot
+	; otherwise); the INT 13h extensions are needed (every BIOS that boots from USB has them).
+	; Bytes 3-89 of sector 0 = the BPB, written by zpaqfranz
+	bits 16
+	org 0x7C00
+
+	BPB_SPC		equ 0x7C0D
+	BPB_RSVD	equ 0x7C0E
+	BPB_NFATS	equ 0x7C10
+	BPB_HIDDEN	equ 0x7C1C
+	BPB_FATSZ	equ 0x7C24
+	BPB_ROOT	equ 0x7C2C
+	BPB_DRIVE	equ 0x7C40
+	BUFDIR		equ 0x8000
+	BUFFAT		equ 0x8200
+
+		jmp short codice
+		nop
+		times 0x5A-($-$$) db 0
+	codice:
+		cli
+		xor ax, ax
+		mov ds, ax
+		mov es, ax
+		mov ss, ax
+		mov sp, 0x7C00
+		sti
+		cld
+		mov [BPB_DRIVE], dl
+		mov ah, 0x41
+		mov bx, 0x55AA
+		int 0x13
+		jc senzalba
+		cmp bx, 0xAA55
+		jne senzalba
+		test cl, 1
+		jz senzalba
+		mov eax, [BPB_HIDDEN]
+		add eax, 2
+		mov bx, 0x7E00
+		mov cx, 1
+		call leggi
+		mov si, msg_secondo
+		cmp word [0x7FFE], 0xAA55
+		jne errore
+		jmp secondo
+	senzalba:
+		mov si, msg_lba
+	errore:
+		call stampa
+		mov si, msg_tasto
+		call stampa
+		xor ax, ax
+		int 0x16
+		int 0x18
+	ferma:
+		hlt
+		jmp ferma
+
+	stampa:
+		lodsb
+		or al, al
+		jz .fine
+		mov ah, 0x0E
+		mov bx, 0x0007
+		int 0x10
+		jmp stampa
+	.fine:
+		ret
+
+	; EAX = LBA, CX = sectors, ES:BX = where. Three tries (a reset between), then the error
+	leggi:
+		pushad
+		mov [dap_n], cx
+		mov [dap_off], bx
+		mov [dap_seg], es
+		mov [dap_lba], eax
+		mov di, 3
+	.prova:
+		mov si, dap
+		mov ah, 0x42
+		mov dl, [BPB_DRIVE]
+		int 0x13
+		jnc .letto
+		xor ah, ah
+		mov dl, [BPB_DRIVE]
+		int 0x13
+		dec di
+		jnz .prova
+		mov si, msg_lettura
+		jmp errore
+	.letto:
+		popad
+		ret
+
+	dap:		db 0x10, 0
+	dap_n:		dw 0
+	dap_off:	dw 0
+	dap_seg:	dw 0
+	dap_lba:	dd 0, 0
+
+	msg_lba:		db "No INT 13h extensions", 0
+	msg_secondo:	db "Boot sector 2 missing", 0
+	msg_lettura:	db "Disk read error", 0
+	msg_tasto:		db 13, 10, "Press a key", 13, 10, 0
+
+	%if ($-$$) > 510
+	%error "sector 0 too big"
+	%endif
+		times 510-($-$$) db 0
+		dw 0xAA55
+
+	; ---------------- sector 2 of the partition, at 0000:7E00
+	secondo:
+		movzx eax, word [BPB_RSVD]
+		add eax, [BPB_HIDDEN]
+		mov [fat_lba], eax
+		movzx eax, byte [BPB_NFATS]
+		mul dword [BPB_FATSZ]
+		add eax, [fat_lba]
+		mov [dati_lba], eax
+		mov eax, [BPB_ROOT]
+	cartella:
+		cmp eax, 2
+		jb manca
+		mov [cluster], eax
+		call primosettore
+		movzx cx, byte [BPB_SPC]
+	.settore:
+		push cx
+		push eax
+		mov bx, BUFDIR
+		mov cx, 1
+		call leggi
+		mov di, BUFDIR
+		mov dx, 16
+	.voce:
+		cmp byte [di], 0
+		je manca
+		test byte [di+11], 0x18
+		jnz .avanti
+		mov si, nome
+		mov cx, 11
+		push di
+		repe cmpsb
+		pop di
+		je trovato
+	.avanti:
+		add di, 32
+		dec dx
+		jnz .voce
+		pop eax
+		pop cx
+		inc eax
+		loop .settore
+		mov eax, [cluster]
+		call seguente
+		cmp eax, 0x0FFFFFF8
+		jb cartella
+	manca:
+		mov si, msg_manca
+		jmp errore
+	trovato:
+		add sp, 6
+		mov ax, [di+20]
+		shl eax, 16
+		mov ax, [di+26]
+		mov word [destinazione], 0x2000
+	file:
+		cmp eax, 2
+		jb rotto
+		cmp eax, 0x0FFFFFF0
+		jae rotto
+		mov [cluster], eax
+		movzx bx, byte [BPB_SPC]
+		shl bx, 5
+		mov dx, [0x0413]
+		shl dx, 6
+		mov ax, [destinazione]
+		add ax, bx
+		jc grande
+		cmp ax, dx
+		ja grande
+		mov eax, [cluster]
+		call primosettore
+		movzx cx, byte [BPB_SPC]
+		push es
+		mov es, [destinazione]
+		xor bx, bx
+		call leggi
+		pop es
+		movzx ax, byte [BPB_SPC]
+		shl ax, 5
+		add [destinazione], ax
+		mov eax, [cluster]
+		call seguente
+		cmp eax, 0x0FFFFFF8
+		jb file
+		mov dl, [BPB_DRIVE]
+		xor ax, ax
+		mov ds, ax
+		mov es, ax
+		jmp 0x2000:0x0000
+	rotto:
+		mov si, msg_rotto
+		jmp errore
+	grande:
+		mov si, msg_grande
+		jmp errore
+
+	; EAX = cluster => EAX = its first LBA (EDX, ECX lost)
+	primosettore:
+		sub eax, 2
+		movzx ecx, byte [BPB_SPC]
+		mul ecx
+		add eax, [dati_lba]
+		ret
+
+	; EAX = cluster => EAX = the next one, from the FAT (28 bits). CX lost
+	seguente:
+		push bx
+		mov bx, ax
+		and bx, 127
+		shl bx, 2
+		shr eax, 7
+		add eax, [fat_lba]
+		cmp eax, [fat_letto]
+		je .pronto
+		mov [fat_letto], eax
+		push bx
+		mov bx, BUFFAT
+		mov cx, 1
+		call leggi
+		pop bx
+	.pronto:
+		mov eax, [BUFFAT+bx]
+		and eax, 0x0FFFFFFF
+		pop bx
+		ret
+
+	fat_lba:		dd 0
+	dati_lba:		dd 0
+	cluster:		dd 0
+	fat_letto:		dd 0xFFFFFFFF
+	destinazione:	dw 0
+	nome:			db "BOOTMGR    "
+	msg_manca:		db "BOOTMGR is missing", 0
+	msg_rotto:		db "BOOTMGR: broken FAT chain", 0
+	msg_grande:		db "BOOTMGR is too big", 0
+
+	%if ($-$$) > 1022
+	%error "sector 2 too big"
+	%endif
+		times 1022-($-$$) db 0
+		dw 0xAA55
+
+*/
+/// the MBR code (bytes 0-439 of sector 0 of the disk): nasm -f bin mbr.asm
+static const unsigned char g_fat32_mbr[440]=
+{
+	0xFA, 0x31, 0xC0, 0x8E, 0xD0, 0xBC, 0x00, 0x7C, 0x8E, 0xD8, 0x8E, 0xC0, 0xFB, 0xFC, 0xBE, 0x00,
+	0x7C, 0xBF, 0x00, 0x06, 0xB9, 0x00, 0x01, 0xF3, 0xA5, 0xEA, 0x1E, 0x06, 0x00, 0x00, 0x88, 0x16,
+	0xE7, 0x06, 0xBE, 0xBE, 0x07, 0xB9, 0x04, 0x00, 0x80, 0x3C, 0x80, 0x74, 0x0A, 0x83, 0xC6, 0x10,
+	0xE2, 0xF6, 0xBE, 0xEB, 0x06, 0xEB, 0x7F, 0x89, 0x36, 0xE9, 0x06, 0xC6, 0x06, 0xE8, 0x06, 0x03,
+	0xB4, 0x41, 0xBB, 0xAA, 0x55, 0x8A, 0x16, 0xE7, 0x06, 0xCD, 0x13, 0x72, 0x26, 0x81, 0xFB, 0x55,
+	0xAA, 0x75, 0x20, 0xF6, 0xC1, 0x01, 0x74, 0x1B, 0x8B, 0x36, 0xE9, 0x06, 0x66, 0x8B, 0x44, 0x08,
+	0x66, 0xA3, 0xDF, 0x06, 0xBE, 0xD7, 0x06, 0xB4, 0x42, 0x8A, 0x16, 0xE7, 0x06, 0xCD, 0x13, 0x73,
+	0x2D, 0xEB, 0x18, 0x8B, 0x36, 0xE9, 0x06, 0x8A, 0x74, 0x01, 0x8B, 0x4C, 0x02, 0xBB, 0x00, 0x7C,
+	0xB8, 0x01, 0x02, 0x8A, 0x16, 0xE7, 0x06, 0xCD, 0x13, 0x73, 0x13, 0x30, 0xE4, 0x8A, 0x16, 0xE7,
+	0x06, 0xCD, 0x13, 0xFE, 0x0E, 0xE8, 0x06, 0x75, 0xA7, 0xBE, 0x04, 0x07, 0xEB, 0x18, 0xBE, 0x19,
+	0x07, 0x81, 0x3E, 0xFE, 0x7D, 0x55, 0xAA, 0x75, 0x0D, 0x8B, 0x36, 0xE9, 0x06, 0x8A, 0x16, 0xE7,
+	0x06, 0xEA, 0x00, 0x7C, 0x00, 0x00, 0xE8, 0x0F, 0x00, 0xBE, 0x2D, 0x07, 0xE8, 0x09, 0x00, 0x31,
+	0xC0, 0xCD, 0x16, 0xCD, 0x18, 0xF4, 0xEB, 0xFD, 0xAC, 0x08, 0xC0, 0x74, 0x09, 0xB4, 0x0E, 0xBB,
+	0x07, 0x00, 0xCD, 0x10, 0xEB, 0xF2, 0xC3, 0x10, 0x00, 0x01, 0x00, 0x00, 0x7C, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x4D, 0x42, 0x52, 0x3A, 0x20,
+	0x6E, 0x6F, 0x20, 0x61, 0x63, 0x74, 0x69, 0x76, 0x65, 0x20, 0x70, 0x61, 0x72, 0x74, 0x69, 0x74,
+	0x69, 0x6F, 0x6E, 0x00, 0x4D, 0x42, 0x52, 0x3A, 0x20, 0x64, 0x69, 0x73, 0x6B, 0x20, 0x72, 0x65,
+	0x61, 0x64, 0x20, 0x65, 0x72, 0x72, 0x6F, 0x72, 0x00, 0x4D, 0x42, 0x52, 0x3A, 0x20, 0x6E, 0x6F,
+	0x20, 0x62, 0x6F, 0x6F, 0x74, 0x20, 0x73, 0x65, 0x63, 0x74, 0x6F, 0x72, 0x00, 0x0D, 0x0A, 0x50,
+	0x72, 0x65, 0x73, 0x73, 0x20, 0x61, 0x20, 0x6B, 0x65, 0x79, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+};
+
+/// boot sector without -boot (the BPB, bytes 3-89, is zpaqfranz's): nasm -f bin vbrno.asm
+static const unsigned char g_fat32_noboot[512]=
+{
+	0xEB, 0x58, 0x90, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFA, 0x31, 0xC0, 0x8E, 0xD8, 0x8E,
+	0xD0, 0xBC, 0x00, 0x7C, 0xFB, 0xFC, 0xBE, 0x80, 0x7C, 0xAC, 0x08, 0xC0, 0x74, 0x09, 0xB4, 0x0E,
+	0xBB, 0x07, 0x00, 0xCD, 0x10, 0xEB, 0xF2, 0x31, 0xC0, 0xCD, 0x16, 0xCD, 0x18, 0xF4, 0xEB, 0xFD,
+	0x0D, 0x0A, 0x4E, 0x6F, 0x74, 0x20, 0x61, 0x20, 0x62, 0x6F, 0x6F, 0x74, 0x61, 0x62, 0x6C, 0x65,
+	0x20, 0x64, 0x69, 0x73, 0x6B, 0x20, 0x28, 0x7A, 0x70, 0x61, 0x71, 0x66, 0x72, 0x61, 0x6E, 0x7A,
+	0x20, 0x46, 0x41, 0x54, 0x33, 0x32, 0x20, 0x77, 0x69, 0x74, 0x68, 0x6F, 0x75, 0x74, 0x20, 0x2D,
+	0x62, 0x6F, 0x6F, 0x74, 0x29, 0x0D, 0x0A, 0x50, 0x72, 0x65, 0x73, 0x73, 0x20, 0x61, 0x20, 0x6B,
+	0x65, 0x79, 0x0D, 0x0A, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x55, 0xAA
+};
+
+/// -boot: sector 0 (bytes 0-511, BPB as above) and sector 2 (512-1023) of the partition: nasm -f bin vbrboot.asm
+static const unsigned char g_fat32_boot[1024]=
+{
+	0xEB, 0x58, 0x90, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFA, 0x31, 0xC0, 0x8E, 0xD8, 0x8E,
+	0xC0, 0x8E, 0xD0, 0xBC, 0x00, 0x7C, 0xFB, 0xFC, 0x88, 0x16, 0x40, 0x7C, 0xB4, 0x41, 0xBB, 0xAA,
+	0x55, 0xCD, 0x13, 0x72, 0x2A, 0x81, 0xFB, 0x55, 0xAA, 0x75, 0x24, 0xF6, 0xC1, 0x01, 0x74, 0x1F,
+	0x66, 0xA1, 0x1C, 0x7C, 0x66, 0x83, 0xC0, 0x02, 0xBB, 0x00, 0x7E, 0xB9, 0x01, 0x00, 0xE8, 0x32,
+	0x00, 0xBE, 0x1E, 0x7D, 0x81, 0x3E, 0xFE, 0x7F, 0x55, 0xAA, 0x75, 0x06, 0xE9, 0x61, 0x01, 0xBE,
+	0x08, 0x7D, 0xE8, 0x0F, 0x00, 0xBE, 0x44, 0x7D, 0xE8, 0x09, 0x00, 0x31, 0xC0, 0xCD, 0x16, 0xCD,
+	0x18, 0xF4, 0xEB, 0xFD, 0xAC, 0x08, 0xC0, 0x74, 0x09, 0xB4, 0x0E, 0xBB, 0x07, 0x00, 0xCD, 0x10,
+	0xEB, 0xF2, 0xC3, 0x66, 0x60, 0x89, 0x0E, 0xFA, 0x7C, 0x89, 0x1E, 0xFC, 0x7C, 0x8C, 0x06, 0xFE,
+	0x7C, 0x66, 0xA3, 0x00, 0x7D, 0xBF, 0x03, 0x00, 0xBE, 0xF8, 0x7C, 0xB4, 0x42, 0x8A, 0x16, 0x40,
+	0x7C, 0xCD, 0x13, 0x73, 0x10, 0x30, 0xE4, 0x8A, 0x16, 0x40, 0x7C, 0xCD, 0x13, 0x4F, 0x75, 0xE8,
+	0xBE, 0x34, 0x7D, 0xEB, 0xAD, 0x66, 0x61, 0xC3, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x4E, 0x6F, 0x20, 0x49, 0x4E, 0x54, 0x20, 0x31,
+	0x33, 0x68, 0x20, 0x65, 0x78, 0x74, 0x65, 0x6E, 0x73, 0x69, 0x6F, 0x6E, 0x73, 0x00, 0x42, 0x6F,
+	0x6F, 0x74, 0x20, 0x73, 0x65, 0x63, 0x74, 0x6F, 0x72, 0x20, 0x32, 0x20, 0x6D, 0x69, 0x73, 0x73,
+	0x69, 0x6E, 0x67, 0x00, 0x44, 0x69, 0x73, 0x6B, 0x20, 0x72, 0x65, 0x61, 0x64, 0x20, 0x65, 0x72,
+	0x72, 0x6F, 0x72, 0x00, 0x0D, 0x0A, 0x50, 0x72, 0x65, 0x73, 0x73, 0x20, 0x61, 0x20, 0x6B, 0x65,
+	0x79, 0x0D, 0x0A, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x55, 0xAA,
+	0x66, 0x0F, 0xB7, 0x06, 0x0E, 0x7C, 0x66, 0x03, 0x06, 0x1C, 0x7C, 0x66, 0xA3, 0x58, 0x7F, 0x66,
+	0x0F, 0xB6, 0x06, 0x10, 0x7C, 0x66, 0xF7, 0x26, 0x24, 0x7C, 0x66, 0x03, 0x06, 0x58, 0x7F, 0x66,
+	0xA3, 0x5C, 0x7F, 0x66, 0xA1, 0x2C, 0x7C, 0x66, 0x83, 0xF8, 0x02, 0x72, 0x51, 0x66, 0xA3, 0x60,
+	0x7F, 0xE8, 0xDC, 0x00, 0x0F, 0xB6, 0x0E, 0x0D, 0x7C, 0x51, 0x66, 0x50, 0xBB, 0x00, 0x80, 0xB9,
+	0x01, 0x00, 0xE8, 0x7E, 0xFE, 0xBF, 0x00, 0x80, 0xBA, 0x10, 0x00, 0x80, 0x3D, 0x00, 0x74, 0x2E,
+	0xF6, 0x45, 0x0B, 0x18, 0x75, 0x0C, 0xBE, 0x6A, 0x7F, 0xB9, 0x0B, 0x00, 0x57, 0xF3, 0xA6, 0x5F,
+	0x74, 0x22, 0x83, 0xC7, 0x20, 0x4A, 0x75, 0xE3, 0x66, 0x58, 0x59, 0x66, 0x40, 0xE2, 0xCA, 0x66,
+	0xA1, 0x60, 0x7F, 0xE8, 0xAD, 0x00, 0x66, 0x3D, 0xF8, 0xFF, 0xFF, 0x0F, 0x72, 0xA9, 0xBE, 0x75,
+	0x7F, 0xE9, 0x1E, 0xFE, 0x83, 0xC4, 0x06, 0x8B, 0x45, 0x14, 0x66, 0xC1, 0xE0, 0x10, 0x8B, 0x45,
+	0x1A, 0xC7, 0x06, 0x68, 0x7F, 0x00, 0x20, 0x66, 0x83, 0xF8, 0x02, 0x72, 0x67, 0x66, 0x3D, 0xF0,
+	0xFF, 0xFF, 0x0F, 0x73, 0x5F, 0x66, 0xA3, 0x60, 0x7F, 0x0F, 0xB6, 0x1E, 0x0D, 0x7C, 0xC1, 0xE3,
+	0x05, 0x8B, 0x16, 0x13, 0x04, 0xC1, 0xE2, 0x06, 0xA1, 0x68, 0x7F, 0x01, 0xD8, 0x72, 0x4B, 0x39,
+	0xD0, 0x77, 0x47, 0x66, 0xA1, 0x60, 0x7F, 0xE8, 0x46, 0x00, 0x0F, 0xB6, 0x0E, 0x0D, 0x7C, 0x06,
+	0x8E, 0x06, 0x68, 0x7F, 0x31, 0xDB, 0xE8, 0xEA, 0xFD, 0x07, 0x0F, 0xB6, 0x06, 0x0D, 0x7C, 0xC1,
+	0xE0, 0x05, 0x01, 0x06, 0x68, 0x7F, 0x66, 0xA1, 0x60, 0x7F, 0xE8, 0x36, 0x00, 0x66, 0x3D, 0xF8,
+	0xFF, 0xFF, 0x0F, 0x72, 0xA2, 0x8A, 0x16, 0x40, 0x7C, 0x31, 0xC0, 0x8E, 0xD8, 0x8E, 0xC0, 0xEA,
+	0x00, 0x00, 0x00, 0x20, 0xBE, 0x88, 0x7F, 0xE9, 0x98, 0xFD, 0xBE, 0xA2, 0x7F, 0xE9, 0x92, 0xFD,
+	0x66, 0x83, 0xE8, 0x02, 0x66, 0x0F, 0xB6, 0x0E, 0x0D, 0x7C, 0x66, 0xF7, 0xE1, 0x66, 0x03, 0x06,
+	0x5C, 0x7F, 0xC3, 0x53, 0x89, 0xC3, 0x83, 0xE3, 0x7F, 0xC1, 0xE3, 0x02, 0x66, 0xC1, 0xE8, 0x07,
+	0x66, 0x03, 0x06, 0x58, 0x7F, 0x66, 0x3B, 0x06, 0x64, 0x7F, 0x74, 0x0F, 0x66, 0xA3, 0x64, 0x7F,
+	0x53, 0xBB, 0x00, 0x82, 0xB9, 0x01, 0x00, 0xE8, 0x79, 0xFD, 0x5B, 0x66, 0x8B, 0x87, 0x00, 0x82,
+	0x66, 0x25, 0xFF, 0xFF, 0xFF, 0x0F, 0x5B, 0xC3, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x42, 0x4F, 0x4F, 0x54, 0x4D, 0x47,
+	0x52, 0x20, 0x20, 0x20, 0x20, 0x42, 0x4F, 0x4F, 0x54, 0x4D, 0x47, 0x52, 0x20, 0x69, 0x73, 0x20,
+	0x6D, 0x69, 0x73, 0x73, 0x69, 0x6E, 0x67, 0x00, 0x42, 0x4F, 0x4F, 0x54, 0x4D, 0x47, 0x52, 0x3A,
+	0x20, 0x62, 0x72, 0x6F, 0x6B, 0x65, 0x6E, 0x20, 0x46, 0x41, 0x54, 0x20, 0x63, 0x68, 0x61, 0x69,
+	0x6E, 0x00, 0x42, 0x4F, 0x4F, 0x54, 0x4D, 0x47, 0x52, 0x20, 0x69, 0x73, 0x20, 0x74, 0x6F, 0x6F,
+	0x20, 0x62, 0x69, 0x67, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x55, 0xAA
+};
+
+/// the layout of one FAT32
+struct franzfat32
+{
+	uint32_t settore;	/// bytes per sector
+	uint32_t inizio;	/// first sector of the partition on the disk (the hidden sectors of the BPB)
+	uint32_t settori;	/// sectors of the partition
+	uint32_t spc;		/// sectors per cluster
+	uint32_t riservati; /// reserved sectors: 32, more to put the data area on a cluster boundary
+	uint32_t fat;		/// sectors of each of the two FATs
+	uint32_t cluster;	/// clusters of the data area
+	franzfat32() : settore(512), inizio(0), settori(0), spc(0), riservati(0), fat(0), cluster(0)
+	{
+	}
+};
+
+static void fat32_metti16(unsigned char *o_p, uint32_t i_valore)
+{
+	o_p[0]= (unsigned char)(i_valore & 0xFF);
+	o_p[1]= (unsigned char)((i_valore >> 8) & 0xFF);
+}
+static void fat32_metti32(unsigned char *o_p, uint32_t i_valore)
+{
+	fat32_metti16(o_p, i_valore & 0xFFFF);
+	fat32_metti16(o_p + 2, i_valore >> 16);
+}
+static uint32_t fat32_prendi32(const unsigned char *i_p)
+{
+	return (uint32_t)i_p[0] | ((uint32_t)i_p[1] << 8) | ((uint32_t)i_p[2] << 16) | ((uint32_t)i_p[3] << 24);
+}
+
+/// the cluster of the format of Windows for FAT32 (Microsoft KB140365)
+static uint32_t fat32_clusterbyte(uint64_t i_byte)
+{
+	const uint64_t mb= 1048576;
+	if (i_byte < 64 * mb)
+		return 512;
+	if (i_byte < 128 * mb)
+		return 1024;
+	if (i_byte < 256 * mb)
+		return 2048;
+	if (i_byte < 8192 * mb)
+		return 4096;
+	if (i_byte < 16384 * mb)
+		return 8192;
+	if (i_byte < 32768 * mb)
+		return 16384;
+	return 32768;
+}
+
+/// reserved sectors, FAT, clusters for io_f.spc: false if they do not fit
+static bool fat32_disponi(franzfat32 &io_f)
+{
+	const uint64_t s= io_f.spc;
+	const uint64_t b= io_f.settore;
+	const uint64_t t= io_f.settori;
+	uint64_t	   r= 32;
+	for (int giro= 0; giro < 100; giro++)
+	{
+		if (t <= r + 2 * s)
+			return false;
+		/// the smallest FAT with room for (clusters + 2) entries of 4 bytes
+		uint64_t fat	= (4 * (t - r + 2 * s) + b * s + 8 - 1) / (b * s + 8);
+		uint64_t dati	= 0;
+		uint64_t cluster= 0;
+		for (;;)
+		{
+			dati= r + 2 * fat;
+			if (dati >= t)
+				return false;
+			cluster= (t - dati) / s;
+			if ((cluster + 2) * 4 <= fat * b)
+				break;
+			fat++;
+		}
+		const uint64_t fuori= (io_f.inizio + dati) % s; /// the data area on a cluster boundary of the disk
+		if (fuori == 0)
+		{
+			if ((r > 0xFFFF) || (cluster > 0x0FFFFFF4))
+				return false;
+			io_f.riservati= (uint32_t)r;
+			io_f.fat	  = (uint32_t)fat;
+			io_f.cluster  = (uint32_t)cluster;
+			return true;
+		}
+		r+= s - fuori;
+	}
+	return false;
+}
+
+/// the layout for a partition: the cluster of Windows, smaller if under 65.525 clusters
+static bool fat32_forma(uint64_t i_inizio, uint64_t i_settori, uint32_t i_settore, franzfat32 &o_f, string &o_problema)
+{
+	if ((i_inizio > 0xFFFFFFFFULL) || (i_settori > 0xFFFFFFFFULL))
+	{
+		o_problema= "over 2 TB (FAT32 counts the sectors in 32 bits)";
+		return false;
+	}
+	o_f.settore		= i_settore;
+	o_f.inizio		= (uint32_t)i_inizio;
+	o_f.settori		= (uint32_t)i_settori;
+	uint32_t quanto = fat32_clusterbyte(i_settori * i_settore);
+	if (quanto < i_settore)
+		quanto= i_settore;
+	for (;;)
+	{
+		o_f.spc= quanto / i_settore;
+		if (fat32_disponi(o_f) && (o_f.cluster >= 65525))
+			return true;
+		if (quanto <= i_settore)
+			break;
+		quanto/= 2;
+	}
+	o_problema= "too small for FAT32 (65.525 clusters at least)";
+	return false;
+}
+
+/// the label: up to 11 characters (uppercase), the ones FAT accepts; empty = none ("NO NAME")
+static bool fat32_etichetta(const string &i_testo, string &o_undici)
+{
+	o_undici= "NO NAME    ";
+	if (i_testo.empty())
+		return true;
+	string e;
+	for (size_t i= 0; i < i_testo.size(); i++)
+	{
+		unsigned char c= (unsigned char)i_testo[i];
+		if ((c >= 'a') && (c <= 'z'))
+			c= (unsigned char)(c - 'a' + 'A');
+		const bool buono= ((c >= 'A') && (c <= 'Z')) || ((c >= '0') && (c <= '9')) || ((c != 0) && (strchr(" !#$%&'()-@^_`{}~", c) != NULL));
+		if (!buono)
+			return false;
+		e+= (char)c;
+	}
+	if ((e.size() > 11) || (e[0] == ' '))
+		return false;
+	o_undici= e + string(11 - e.size(), ' ');
+	return true;
+}
+
+/// CHS of an MBR entry (255 heads, 63 sectors; 1023/254/63 over 8 GB)
+static void fat32_chs(uint64_t i_lba, unsigned char *o_p)
+{
+	uint64_t c= i_lba / (255 * 63);
+	unsigned h= (unsigned)((i_lba / 63) % 255);
+	unsigned s= (unsigned)(i_lba % 63) + 1;
+	if (c > 1023)
+	{
+		c= 1023;
+		h= 254;
+		s= 63;
+	}
+	o_p[0]= (unsigned char)h;
+	o_p[1]= (unsigned char)(s | ((c >> 2) & 0xC0));
+	o_p[2]= (unsigned char)(c & 0xFF);
+}
+
+/// i_quanti bytes of zeros from i_da (multiples of the sector), the percent on a long run (on a console)
+static bool fat32_zeri(franzusb &io_disco, int64_t i_da, int64_t i_quanti, const char *i_zero, uint32_t i_blocco, string &o_problema)
+{
+	const bool lungo = (i_quanti > 64 * 1048576) && (!isOutputRedirected());
+	int64_t	   fatti = 0;
+	int		   ultimo= -1;
+	while (fatti < i_quanti)
+	{
+		const uint32_t n	 = (uint32_t)((i_quanti - fatti < (int64_t)i_blocco) ? (i_quanti - fatti) : i_blocco);
+		int			   errore= 0;
+		if (!io_disco.scrivi(i_da + fatti, i_zero, n, errore))
+		{
+			o_problema= string("write error at byte ") + migliaia(i_da + fatti) + " (" + franzusb::errore(errore) + ")";
+			return false;
+		}
+		fatti+= n;
+		if (lungo)
+		{
+			const int perc= (int)(fatti * 100 / i_quanti);
+			if (perc / 5 != ultimo / 5)
+			{
+				printf("\r%3d%%", perc);
+				fflush(stdout);
+				ultimo= perc;
+			}
+		}
+	}
+	if (lungo)
+		printf("\r    \r");
+	return true;
+}
+
+/// one sector (i_quanti bytes) from i_dati, written at the sector i_dove of the disk
+static bool fat32_settore(franzusb &io_disco, uint64_t i_dove, const unsigned char *i_dati, uint32_t i_quanti, string &o_problema)
+{
+	int errore= 0;
+	if (io_disco.scrivi((int64_t)(i_dove * io_disco.settore()), i_dati, i_quanti, errore))
+		return true;
+	o_problema= string("write error at sector ") + migliaia((int64_t)i_dove) + " (" + franzusb::errore(errore) + ")";
+	return false;
+}
+
+/*
+	the FAT32 of i_f on the disk open for writing: zeros on the reserved sectors, on
+	the two FATs and on the root folder (and on the last MB of the partition: old
+	signatures, a GPT copy); boot sector, FSInfo, sector 2 and their copies at 6, 7,
+	8; the first sector of each FAT; the label in the root folder. Read back at the end
+*/
+static bool fat32_scrivi(franzusb &io_disco, const franzfat32 &i_f, const string &i_undici, bool i_etichetta, bool i_boot, uint32_t i_seriale, string &o_problema)
+{
+	const uint32_t b	  = i_f.settore;
+	const uint32_t blocco = 1048576;
+	char		  *zero	  = (char *)franzusb::riserva(blocco);
+	unsigned char *s	  = (unsigned char *)franzusb::riserva(b);
+	unsigned char *letto  = (unsigned char *)franzusb::riserva(b);
+	bool		   ok	  = false;
+	const int64_t  base	  = (int64_t)i_f.inizio * b;
+	const int64_t  coda	  = (int64_t)i_f.settori * b;
+	const int64_t  sistema= ((int64_t)i_f.riservati + 2 * (int64_t)i_f.fat + i_f.spc) * b;
+	if ((zero == NULL) || (s == NULL) || (letto == NULL))
+	{
+		o_problema= "out of memory";
+		goto fine;
+	}
+	memset(zero, 0, blocco);
+	if (coda > sistema + blocco)
+		if (!fat32_zeri(io_disco, base + coda - blocco, blocco, zero, blocco, o_problema))
+			goto fine;
+	if (!fat32_zeri(io_disco, base, sistema, zero, blocco, o_problema))
+		goto fine;
+	{
+		/// sector 0: the jump and the code from the template, the BPB here
+		memset(s, 0, b);
+		memcpy(s, i_boot ? g_fat32_boot : g_fat32_noboot, 512);
+		memcpy(s + 3, "MSWIN4.1", 8);
+		fat32_metti16(s + 11, b);
+		s[13]= (unsigned char)i_f.spc;
+		fat32_metti16(s + 14, i_f.riservati);
+		s[16]= 2;						/// FATs
+		s[21]= 0xF8;					/// media: fixed
+		fat32_metti16(s + 24, 63);		/// sectors per track, heads: the usual ones of LBA
+		fat32_metti16(s + 26, 255);
+		fat32_metti32(s + 28, i_f.inizio);
+		fat32_metti32(s + 32, i_f.settori);
+		fat32_metti32(s + 36, i_f.fat);
+		fat32_metti32(s + 44, 2);		/// root folder: cluster 2
+		fat32_metti16(s + 48, 1);		/// FSInfo: sector 1
+		fat32_metti16(s + 50, 6);		/// copy of the boot sector: sector 6
+		s[64]= 0x80;
+		s[66]= 0x29;
+		fat32_metti32(s + 67, i_seriale);
+		memcpy(s + 71, i_undici.c_str(), 11);
+		memcpy(s + 82, "FAT32   ", 8);
+		if (b > 512)
+		{
+			s[b - 2]= 0x55;
+			s[b - 1]= 0xAA;
+		}
+		if ((!fat32_settore(io_disco, i_f.inizio, s, b, o_problema)) || (!fat32_settore(io_disco, (uint64_t)i_f.inizio + 6, s, b, o_problema)))
+			goto fine;
+		/// sector 1: FSInfo, every cluster free but the root folder
+		memset(s, 0, b);
+		fat32_metti32(s, 0x41615252);
+		fat32_metti32(s + 484, 0x61417272);
+		fat32_metti32(s + 488, i_f.cluster - 1);
+		fat32_metti32(s + 492, 3);
+		fat32_metti32(s + 508, 0xAA550000);
+		if ((!fat32_settore(io_disco, (uint64_t)i_f.inizio + 1, s, b, o_problema)) || (!fat32_settore(io_disco, (uint64_t)i_f.inizio + 7, s, b, o_problema)))
+			goto fine;
+		/// sector 2: the second half of the loader (-boot), else empty
+		memset(s, 0, b);
+		if (i_boot)
+			memcpy(s, g_fat32_boot + 512, 512);
+		s[510]= 0x55;
+		s[511]= 0xAA;
+		if ((!fat32_settore(io_disco, (uint64_t)i_f.inizio + 2, s, b, o_problema)) || (!fat32_settore(io_disco, (uint64_t)i_f.inizio + 8, s, b, o_problema)))
+			goto fine;
+		/// the first sector of each FAT: media, end of chain, the root folder (one cluster)
+		memset(s, 0, b);
+		fat32_metti32(s, 0x0FFFFFF8);
+		fat32_metti32(s + 4, 0x0FFFFFFF);
+		fat32_metti32(s + 8, 0x0FFFFFFF);
+		if ((!fat32_settore(io_disco, (uint64_t)i_f.inizio + i_f.riservati, s, b, o_problema)) || (!fat32_settore(io_disco, (uint64_t)i_f.inizio + i_f.riservati + i_f.fat, s, b, o_problema)))
+			goto fine;
+		if (i_etichetta) /// the label, as Windows does, also as the first entry of the root folder
+		{
+			SYSTEMTIME ora;
+			GetLocalTime(&ora);
+			memset(s, 0, b);
+			memcpy(s, i_undici.c_str(), 11);
+			s[11]= 0x08;
+			fat32_metti16(s + 22, (uint32_t)((ora.wHour << 11) | (ora.wMinute << 5) | (ora.wSecond / 2)));
+			fat32_metti16(s + 24, (uint32_t)(((ora.wYear - 1980) << 9) | (ora.wMonth << 5) | ora.wDay));
+			if (!fat32_settore(io_disco, (uint64_t)i_f.inizio + i_f.riservati + 2 * (uint64_t)i_f.fat, s, b, o_problema))
+				goto fine;
+		}
+		if (!io_disco.svuota())
+		{
+			o_problema= "flush error " + franzusb::errore((int)GetLastError());
+			goto fine;
+		}
+		/// read back: boot sector and FAT
+		int errore= 0;
+		if ((!io_disco.leggi(base, letto, b, errore)) || (letto[510] != 0x55) || (letto[511] != 0xAA) || (memcmp(letto + 82, "FAT32   ", 8) != 0) || (fat32_prendi32(letto + 36) != i_f.fat))
+		{
+			o_problema= "the boot sector read back is not the one written " + franzusb::errore(errore);
+			goto fine;
+		}
+		if ((!io_disco.leggi(base + (int64_t)i_f.riservati * b, letto, b, errore)) || (fat32_prendi32(letto) != 0x0FFFFFF8) || (fat32_prendi32(letto + 8) != 0x0FFFFFFF))
+		{
+			o_problema= "the FAT read back is not the one written " + franzusb::errore(errore);
+			goto fine;
+		}
+	}
+	ok= true;
+fine:
+	franzusb::libera(zero);
+	franzusb::libera(s);
+	franzusb::libera(letto);
+	return ok;
+}
+
+/// the volume X: alone locked and dismounted (the whole disk: franzusb::bloccavolumi): the handle stays open
+static HANDLE fat32_bloccavolume(char i_lettera, string &o_problema)
+{
+	char nome[16];
+	snprintf(nome, sizeof(nome), "\\\\.\\%c:", i_lettera);
+	return franzusb_bloccauno(utow(nome), o_problema);
+}
+
+/// where the volume X: is: its disk, first byte and length (one extent only), MBR or GPT
+static bool fat32_dovevolume(char i_lettera, int &o_disco, int64_t &o_inizio, int64_t &o_lunghezza, bool &o_gpt, string &o_problema)
+{
+	char nome[16];
+	snprintf(nome, sizeof(nome), "\\\\.\\%c:", i_lettera);
+	HANDLE hv= CreateFileW(utow(nome).c_str(), 0, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
+	if (hv == INVALID_HANDLE_VALUE)
+	{
+		o_problema= "not a volume here " + franzusb::errore((int)GetLastError());
+		return false;
+	}
+	ULONGLONG spazio[(sizeof(VOLUME_DISK_EXTENTS) + 32 * sizeof(DISK_EXTENT)) / sizeof(ULONGLONG) + 1];
+	DWORD	  fatti= 0;
+	bool	  ok   = false;
+	if (!DeviceIoControl(hv, IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS, NULL, 0, spazio, sizeof(spazio), &fatti, NULL))
+		o_problema= "no disk extents " + franzusb::errore((int)GetLastError());
+	else
+	{
+		VOLUME_DISK_EXTENTS *estensioni= (VOLUME_DISK_EXTENTS *)spazio;
+		if (estensioni->NumberOfDiskExtents != 1)
+			o_problema= "the volume spans more disks (or none)";
+		else
+		{
+			o_disco		= (int)estensioni->Extents[0].DiskNumber;
+			o_inizio	= estensioni->Extents[0].StartingOffset.QuadPart;
+			o_lunghezza = estensioni->Extents[0].ExtentLength.QuadPart;
+			o_gpt		= false;
+			PARTITION_INFORMATION_EX partizione;
+			if (DeviceIoControl(hv, IOCTL_DISK_GET_PARTITION_INFO_EX, NULL, 0, &partizione, sizeof(partizione), &fatti, NULL))
+				o_gpt= (partizione.PartitionStyle == PARTITION_STYLE_GPT);
+			ok= true;
+		}
+	}
+	CloseHandle(hv);
+	return ok;
+}
+
+/// 65.12c: the partitions of the GPT disk i_disco but the one at byte i_inizio and the
+/// reserved one of Microsoft (MSR, no data): "" = none, else what they are
+static string fat32_altregpt(int i_disco, int64_t i_inizio)
+{
+	char nome[64];
+	snprintf(nome, sizeof(nome), "\\\\.\\PhysicalDrive%d", i_disco);
+	HANDLE hd= CreateFileW(utow(nome).c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
+	if (hd == INVALID_HANDLE_VALUE)
+		return "partition table not read " + franzusb::errore((int)GetLastError());
+	const DWORD			  quanto= sizeof(DRIVE_LAYOUT_INFORMATION_EX) + 128 * sizeof(PARTITION_INFORMATION_EX);
+	vector<unsigned char> spazio(quanto);
+	DWORD				  fatti= 0;
+	string				  altre;
+	if (!DeviceIoControl(hd, IOCTL_DISK_GET_DRIVE_LAYOUT_EX, NULL, 0, &spazio[0], quanto, &fatti, NULL))
+		altre= "partition table not read " + franzusb::errore((int)GetLastError());
+	else
+	{
+		static const GUID				   msr		   = {0xE3C9E316, 0x0B5C, 0x4DB8, {0x81, 0x7D, 0xF9, 0x2D, 0xF0, 0x02, 0x15, 0xAE}};
+		const DRIVE_LAYOUT_INFORMATION_EX *disposizione= (const DRIVE_LAYOUT_INFORMATION_EX *)&spazio[0];
+		for (DWORD i= 0; i < disposizione->PartitionCount; i++)
+		{
+			const PARTITION_INFORMATION_EX &p= disposizione->PartitionEntry[i];
+			if ((p.PartitionLength.QuadPart == 0) || (p.StartingOffset.QuadPart == i_inizio))
+				continue;
+			if ((p.PartitionStyle == PARTITION_STYLE_GPT) && (memcmp(&p.Gpt.PartitionType, &msr, sizeof(GUID)) == 0))
+				continue;
+			if (!altre.empty())
+				altre+= ", ";
+			altre+= tohuman(p.PartitionLength.QuadPart);
+			if ((p.PartitionStyle == PARTITION_STYLE_GPT) && (p.Gpt.Name[0] != 0))
+			{
+				wchar_t testo[37]= {0};
+				memcpy(testo, p.Gpt.Name, sizeof(p.Gpt.Name));
+				altre+= " \"" + wtou(testo) + "\"";
+			}
+		}
+	}
+	CloseHandle(hd);
+	return altre;
+}
+
+/// the volume serial, from the date and the time (as DOS did)
+static uint32_t fat32_seriale()
+{
+	SYSTEMTIME ora;
+	GetLocalTime(&ora);
+	const uint32_t basso= (uint32_t)(((ora.wMonth << 8) | ora.wDay) + ((ora.wSecond << 8) | (ora.wMilliseconds / 10)));
+	const uint32_t alto = (uint32_t)(((ora.wHour << 8) | ora.wMinute) + ora.wYear);
+	return ((alto & 0xFFFF) << 16) | (basso & 0xFFFF);
+}
+#endif
+
+/*
+	65.12g: work poke file offset value -force -kill. As the POKE of the Commodore 64: the byte at offset
+	(from 0) of the file becomes value (0-255, decimal); offset:end changes every byte from offset to end,
+	both included. The size of the file does not change (an offset past its end is refused). Without
+	-force AND -kill it says what it would do, and does nothing. For the tests: an archive damaged on
+	purpose (autotest -m5). The bytes are read back after the write
+*/
+static bool poke_numero(const string &i_testo, int64_t &o_numero)
+{
+	o_numero= 0;
+	if ((i_testo == "") || (i_testo.size() > 18))
+		return false;
+	for (size_t i= 0; i < i_testo.size(); i++)
+	{
+		if ((i_testo[i] < '0') || (i_testo[i] > '9'))
+			return false;
+		o_numero= o_numero * 10 + (i_testo[i] - '0');
+	}
+	return true;
+}
+/// i_scrivi false: read i_quanti bytes from i_da into io_buf; true: write them. false: it did not
+static bool poke_io(const string &i_file, int64_t i_da, char *io_buf, size_t i_quanti, bool i_scrivi)
+{
+#ifdef _WIN32
+	HANDLE h= CreateFileW(utow(i_file.c_str()).c_str(), i_scrivi ? (GENERIC_READ | GENERIC_WRITE) : GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+	if (h == INVALID_HANDLE_VALUE)
+		return false;
+	LARGE_INTEGER dove;
+	dove.QuadPart= i_da;
+	bool  fatto	 = SetFilePointerEx(h, dove, NULL, FILE_BEGIN) != 0;
+	DWORD n		 = 0;
+	if (fatto)
+		fatto= (i_scrivi ? WriteFile(h, io_buf, (DWORD)i_quanti, &n, NULL) : ReadFile(h, io_buf, (DWORD)i_quanti, &n, NULL)) && (n == i_quanti);
+	if (i_scrivi && fatto)
+		fatto= FlushFileBuffers(h) != 0;
+	CloseHandle(h);
+	return fatto;
+#else
+	FILE *f= fopen(i_file.c_str(), i_scrivi ? "r+b" : "rb");
+	if (f == NULL)
+		return false;
+	bool fatto= fseeko(f, (off_t)i_da, SEEK_SET) == 0;
+	if (fatto)
+		fatto= (i_scrivi ? fwrite(io_buf, 1, i_quanti, f) : fread(io_buf, 1, i_quanti, f)) == i_quanti;
+	if (fclose(f) != 0)
+		fatto= false;
+	return fatto;
+#endif
+}
+int Jidac::workpoke()
+{
+	if (files.size() != 4)
+	{
+		myprintf("03480! work poke needs: the file, an offset (or from:to), a value (0-255)\n");
+		return 2;
+	}
+	const string nome= files[1];
+	const string dove= files[2];
+	int64_t		 da	 = 0;
+	int64_t		 a	 = 0;
+	int64_t		 valore= 0;
+	const size_t duepunti= dove.find(':');
+	bool		 buono	 = (duepunti == string::npos) ? poke_numero(dove, da) : (poke_numero(dove.substr(0, duepunti), da) && poke_numero(dove.substr(duepunti + 1), a));
+	if (duepunti == string::npos)
+		a= da;
+	if ((!buono) || (a < da))
+	{
+		myprintf("03481! work poke: the offset is a number (from 0), or from:to with to >= from: <<%s>>\n", dove.c_str());
+		return 2;
+	}
+	if ((!poke_numero(files[3], valore)) || (valore > 255))
+	{
+		myprintf("03482! work poke: the value is a number from 0 to 255: <<%s>>\n", files[3].c_str());
+		return 2;
+	}
+	if (!fileexists(nome))
+	{
+		myprintf("03483! work poke: file not found <<%Z>>\n", nome.c_str());
+		return 2;
+	}
+	const int64_t dimensione= prendidimensionefile(nome.c_str());
+	if (a >= dimensione)
+	{
+		myprintf("03484! work poke: the file is %s bytes, offset %s is past its end: nothing done\n", migliaia(dimensione), migliaia2(a));
+		return 2;
+	}
+	/// what is there now: the first byte, and how many are not the value
+	const int64_t	  quanti= a - da + 1;
+	const size_t	  pezzo = 1 << 20;
+	std::vector<char> buffer((size_t)((quanti < (int64_t)pezzo) ? quanti : (int64_t)pezzo));
+	int64_t			  diversi= 0;
+	int				  primo	 = -1;
+	for (int64_t fatti= 0; fatti < quanti;)
+	{
+		const size_t n= (size_t)(((quanti - fatti) < (int64_t)buffer.size()) ? (quanti - fatti) : (int64_t)buffer.size());
+		if (!poke_io(nome, da + fatti, &buffer[0], n, false))
+		{
+			myprintf("03485! work poke: cannot read <<%Z>> at %s\n", nome.c_str(), migliaia(da + fatti));
+			return 2;
+		}
+		if (primo < 0)
+			primo= buffer[0] & 255;
+		for (size_t i= 0; i < n; i++)
+			if ((buffer[i] & 255) != valore)
+				diversi++;
+		fatti+= n;
+	}
+	string cosa;
+	if (quanti == 1)
+		cosa= "offset " + string(migliaia(da)) + ": " + itos(primo) + " => " + itos(valore);
+	else
+		cosa= "offsets " + string(migliaia(da)) + "-" + string(migliaia2(a)) + " (" + string(migliaia3(quanti)) + " bytes, " + string(migliaia4(diversi)) + " not " + itos(valore) + ") => " + itos(valore);
+	if (!(flagforce && flagkill))
+	{
+		color_yellow();
+		myprintf("03486$ work poke <<%Z>> %s: nothing done (-force -kill to do it)\n", nome.c_str(), cosa.c_str());
+		color_restore();
+		return 1;
+	}
+	std::fill(buffer.begin(), buffer.end(), (char)valore);
+	for (int64_t fatti= 0; fatti < quanti;)
+	{
+		const size_t n= (size_t)(((quanti - fatti) < (int64_t)buffer.size()) ? (quanti - fatti) : (int64_t)buffer.size());
+		if (!poke_io(nome, da + fatti, &buffer[0], n, true))
+		{
+			myprintf("03487! work poke: cannot write <<%Z>> at %s\n", nome.c_str(), migliaia(da + fatti));
+			return 2;
+		}
+		fatti+= n;
+	}
+	/// read back: they must all be the value now
+	std::vector<char> letto(buffer.size());
+	for (int64_t fatti= 0; fatti < quanti;)
+	{
+		const size_t n= (size_t)(((quanti - fatti) < (int64_t)letto.size()) ? (quanti - fatti) : (int64_t)letto.size());
+		if ((!poke_io(nome, da + fatti, &letto[0], n, false)) || (memcmp(&letto[0], &buffer[0], n) != 0))
+		{
+			myprintf("03488! work poke: <<%Z>> at %s is not what was written\n", nome.c_str(), migliaia(da + fatti));
+			return 2;
+		}
+		fatti+= n;
+	}
+	if (prendidimensionefile(nome.c_str()) != dimensione)
+	{
+		myprintf("03489! work poke: <<%Z>> changed size\n", nome.c_str());
+		return 2;
+	}
+	myprintf("03490: work poke <<%Z>> %s: done\n", nome.c_str(), cosa.c_str());
+	return 0;
+}
+
+int Jidac::workfat32()
+{
+#ifndef _WIN32
+	myprintf("69300! work fat32 runs on Windows only (here: mkfs.fat, newfs_msdos)\n");
+	return 2;
+#else
+	if ((files.size() < 2) || (files.size() > 3))
+	{
+		myprintf("69301! work fat32 X: [label] (a volume) or work fat32 N [label] (the whole disk N), -boot for BIOS boot\n");
+		return 2;
+	}
+	string undici;
+	const bool etichetta= (files.size() == 3) && (!files[2].empty());
+	if (!fat32_etichetta(etichetta ? files[2] : "", undici))
+	{
+		myprintf("69302! label <<%s>>: 11 characters at most: letters, digits, space (not first) and ! # $ %% & ' ( ) - @ ^ _ ` { } ~\n", files[2].c_str());
+		return 2;
+	}
+	if (!isadmin())
+	{
+		myprintf("69303! work fat32 writes the disk raw: administrator rights needed\n");
+		return 2;
+	}
+	string argomento= files[1];
+	myreplaceall(argomento, "\\", "/");
+	char lettera= 0;
+	int	 numero = -1;
+	vector<franzdriveinfo> dischi;
+	if (!parsediskunit(argomento, lettera, numero))
+	{
+		myprintf("69304! %s is not a letter (E E: E:\\) nor a disk number (3 3:), the disks are:\n", files[1].c_str());
+		enumerate_physical_disks(true, -1, dischi);
+		return 2;
+	}
+	lettera					 = (char)toupper(lettera);
+	char windows[MAX_PATH]	 = {0};
+	GetWindowsDirectoryA(windows, sizeof(windows));
+	const char letterawindows= (char)toupper(windows[0]);
+	char	   eseguibile[MAX_PATH]= {0};
+	GetModuleFileNameA(NULL, eseguibile, sizeof(eseguibile));
+	const char letteraexe= (eseguibile[1] == ':') ? (char)toupper(eseguibile[0]) : 0;
+
+	int64_t vol_inizio	 = 0;
+	int64_t vol_lunghezza= 0;
+	bool	vol_gpt		 = false;
+	if (lettera != 0)
+	{
+		if ((lettera == 'C') || (lettera == letterawindows))
+		{
+			color_red();
+			myprintf("69305! %c: holds the system: NEVER\n", lettera);
+			color_restore();
+			return 2;
+		}
+		string problema;
+		if (!fat32_dovevolume(lettera, numero, vol_inizio, vol_lunghezza, vol_gpt, problema))
+		{
+			myprintf("69306! %c: %s\n", lettera, problema.c_str());
+			return 2;
+		}
+	}
+	enumerate_physical_disks(false, -1, dischi);
+	int trovato= -1;
+	for (size_t i= 0; i < dischi.size(); i++)
+		if (dischi[i].number == numero)
+			trovato= (int)i;
+	if (trovato < 0)
+	{
+		myprintf("69307! %s is not a disk here, the disks are:\n", files[1].c_str());
+		enumerate_physical_disks(true, -1, dischi);
+		return 2;
+	}
+	franzdriveinfo &d= dischi[(size_t)trovato];
+	char			nomedisco[300];
+	snprintf(nomedisco, sizeof(nomedisco), "Disk %d: %s", d.number, mytrim(d.product).c_str());
+	/// 65.12c: -boot on X: of a GPT disk: the BIOS boots from MBR only, so the whole disk
+	/// becomes MBR (as work fat32 N) when X: is its only partition, the MSR aside
+	char letteragpt= 0;
+	if (flagboot && (lettera != 0) && vol_gpt)
+	{
+		const string altre= fat32_altregpt(d.number, vol_inizio);
+		if (!altre.empty())
+		{
+			myprintf("69318! -boot: %c: is on the GPT %s with other partitions (%s): the BIOS boots from MBR only, work fat32 %d -boot makes the whole disk MBR (everything on it lost)\n",
+					 lettera, nomedisco, altre.c_str(), d.number);
+			return 2;
+		}
+		letteragpt= lettera;
+		lettera	  = 0;
+	}
+	bool sistema= false;
+	bool eseguo = false;
+	for (size_t i= 0; i < d.partitions.size(); i++)
+	{
+		const char l= (char)toupper(d.partitions[i].lettera);
+		if ((l != 0) && ((l == 'C') || (l == letterawindows)))
+			sistema= true;
+		if ((l != 0) && (l == letteraexe))
+			eseguo= true;
+	}
+	if ((lettera == 0) && sistema)
+	{
+		color_red();
+		myprintf("69308! %s holds the system (C: or the Windows folder): NEVER\n", nomedisco);
+		color_restore();
+		return 2;
+	}
+	if (((lettera == 0) && eseguo) || ((lettera != 0) && (lettera == letteraexe)))
+	{
+		myprintf("69309! zpaqfranz runs from %c: (%s): copy it somewhere else first\n", letteraexe, eseguibile);
+		return 2;
+	}
+	/// USB or removable media; -debug lifts it, never the ones above
+	if ((d.bustype != "USB") && (d.removable != "Yes") && (!flagdebug))
+	{
+		myprintf("69310! %s is not USB nor removable (bus %s): refused (-debug for any disk but the system one)\n", nomedisco, d.bustype.c_str());
+		return 2;
+	}
+	char device[64];
+	snprintf(device, sizeof(device), "\\\\.\\PhysicalDrive%d", d.number);
+	franzusb usb;
+	if (!usb.apri(device, false))
+	{
+		myprintf("69311! Cannot open %s (%s)\n", device, franzusb::errore((int)GetLastError()).c_str());
+		return 2;
+	}
+	const uint32_t settore= usb.settore();
+	const int64_t  disco  = usb.dimensione();
+	const int64_t  limite = 2199023255552LL; /// 2 TB
+	const int64_t  unmega = 1048576;
+	int64_t		   p_inizio;
+	int64_t		   p_lunghezza;
+	if (lettera == 0)
+	{
+		if (disco > limite)
+		{
+			myprintf("69312! %s is %s (%s): over 2 TB, refused\n", nomedisco, migliaia(disco), tohuman(disco));
+			return 2;
+		}
+		p_inizio   = unmega;
+		p_lunghezza= (disco - unmega) / settore * settore;
+	}
+	else
+	{
+		if (vol_lunghezza > limite)
+		{
+			myprintf("69313! %c: is %s (%s): over 2 TB, refused\n", lettera, migliaia(vol_lunghezza), tohuman(vol_lunghezza));
+			return 2;
+		}
+		p_inizio   = vol_inizio;
+		p_lunghezza= vol_lunghezza / settore * settore;
+	}
+	/// letter on an MBR disk: is it a primary partition? (-boot wants one, and its entry gets the type)
+	unsigned char *mbr	  = (unsigned char *)franzusb::riserva(settore);
+	int			   primaria= -1;
+	if (mbr == NULL)
+	{
+		myprintf("69314! out of memory\n");
+		return 2;
+	}
+	int errore= 0;
+	if ((lettera != 0) && (!vol_gpt) && (p_inizio > 0))
+	{
+		if (!usb.leggi(0, mbr, settore, errore))
+		{
+			myprintf("69315! Cannot read the MBR of %s (%s)\n", nomedisco, franzusb::errore(errore).c_str());
+			franzusb::libera(mbr);
+			return 2;
+		}
+		if ((mbr[510] == 0x55) && (mbr[511] == 0xAA))
+			for (int i= 0; i < 4; i++)
+				if ((mbr[446 + i * 16 + 4] != 0) && ((int64_t)fat32_prendi32(mbr + 446 + i * 16 + 8) * settore == p_inizio))
+					primaria= i;
+	}
+	if (flagboot)
+	{
+		char perche[200]= {0};
+		if (settore != 512)
+			snprintf(perche, sizeof(perche), "the BIOS boots from 512-byte sectors only");
+		else if ((lettera != 0) && (p_inizio > 0) && (primaria < 0))
+			snprintf(perche, sizeof(perche), "%c: is not a primary partition of the MBR (work fat32 %d -boot: the whole disk, everything on it lost)", lettera, d.number);
+		if (perche[0] != 0)
+		{
+			myprintf("69316! -boot: %s\n", perche);
+			franzusb::libera(mbr);
+			return 2;
+		}
+	}
+	franzfat32 forma;
+	string	   problema;
+	if (!fat32_forma((uint64_t)(p_inizio / settore), (uint64_t)(p_lunghezza / settore), settore, forma, problema))
+	{
+		myprintf("69317! %s: %s\n", (lettera != 0) ? (string(1, lettera) + ":").c_str() : nomedisco, problema.c_str());
+		franzusb::libera(mbr);
+		return 2;
+	}
+
+	printbar('-');
+	myprintf("%s  serial %s  bus %s%s\n", nomedisco, mytrim(d.serial).c_str(), d.bustype.c_str(), (d.removable == "Yes") ? " (removable)" : "");
+	myprintf("Size            : %s (%s), sector %u\n", migliaia(disco), tohuman(disco), settore);
+	color_red();
+	if (lettera == 0)
+	{
+		if (letteragpt != 0)
+			myprintf("69319! -boot: %c: is on a GPT disk, the BIOS boots from MBR only: the WHOLE disk becomes MBR\n", letteragpt);
+		myprintf("69320! *** THIS DESTROYS EVERYTHING ON %s ***\n", nomedisco);
+		if (d.partitions.empty())
+			myprintf("69321! (no partitions)\n");
+		for (size_t i= 0; i < d.partitions.size(); i++)
+		{
+			string testo= string(migliaia(d.partitions[i].partsize)) + " (" + tohuman(d.partitions[i].partsize) + ")";
+			if (d.partitions[i].lettera != 0)
+				testo+= string(" -> ") + (char)toupper(d.partitions[i].lettera) + ":";
+			if (!d.partitions[i].filesystemtype.empty())
+				testo+= " [" + d.partitions[i].filesystemtype + "]";
+			if (!d.partitions[i].label.empty())
+				testo+= " \"" + d.partitions[i].label + "\"";
+			myprintf("69322! LOST: partition %d %s\n", (int)i, testo.c_str());
+		}
+		myprintf("69323! New MBR: one partition from 1 MB to the end, type 0x0C (FAT32 LBA), active\n");
+	}
+	else
+	{
+		string testo;
+		for (size_t i= 0; i < d.partitions.size(); i++)
+			if (toupper(d.partitions[i].lettera) == lettera)
+			{
+				if (!d.partitions[i].filesystemtype.empty())
+					testo+= " [" + d.partitions[i].filesystemtype + "]";
+				if (!d.partitions[i].label.empty())
+					testo+= " \"" + d.partitions[i].label + "\"";
+			}
+		myprintf("69324! *** THIS DESTROYS EVERYTHING ON %c: ***%s\n", lettera, testo.c_str());
+		myprintf("69325! %c: from byte %s, %s (%s), %s\n", lettera, migliaia(p_inizio), migliaia2(p_lunghezza), tohuman(p_lunghezza),
+				 vol_gpt ? "GPT (type not changed)" : ((p_inizio == 0) ? "no partition table" : ((primaria >= 0) ? "MBR primary: type 0x0C" : "MBR logical: type 0x0C")));
+	}
+	color_restore();
+	myprintf("FAT32           : cluster %s bytes, %s clusters, FAT %s sectors x 2, reserved %u\n", migliaia(forma.spc * settore), migliaia2(forma.cluster), migliaia3(forma.fat), forma.riservati);
+	myprintf("Label           : %s\n", etichetta ? undici.c_str() : "(none)");
+	if (flagboot)
+		myprintf("Boot            : BIOS, MBR + boot sector that start BOOTMGR (-boot)\n");
+	else
+		myprintf("Boot            : none (BIOS: a message; UEFI needs no boot code)\n");
+	printbar('-');
+
+	/// always asked: -nocaptcha does not count here
+	const bool salvato= flagnocaptcha;
+	flagnocaptcha	  = false;
+	const bool ok	  = getcaptcha("fat32format", string("FAT32 on ") + ((lettera != 0) ? (string(1, lettera) + ":") : string(nomedisco)));
+	flagnocaptcha	  = salvato;
+	if (!ok)
+	{
+		franzusb::libera(mbr);
+		return 1;
+	}
+	HANDLE volume= INVALID_HANDLE_VALUE;
+	if (lettera != 0)
+		volume= fat32_bloccavolume(lettera, problema);
+	else if (!usb.bloccavolumi(d.number, problema))
+		problema= problema.empty() ? "cannot lock" : problema;
+	else
+		problema= "";
+	if ((lettera != 0) && (volume == INVALID_HANDLE_VALUE))
+	{
+		myprintf("69330! %s: nothing written\n", problema.c_str());
+		franzusb::libera(mbr);
+		return 2;
+	}
+	if ((lettera == 0) && (!problema.empty()))
+	{
+		myprintf("69331! %s: nothing written\n", problema.c_str());
+		usb.chiudi();
+		franzusb::libera(mbr);
+		return 2;
+	}
+	int risultato= 2;
+	if (!usb.apri(device, true))
+	{
+		myprintf("69332! Cannot open %s for writing (%s): nothing written\n", device, franzusb::errore((int)GetLastError()).c_str());
+		goto chiudi;
+	}
+	{
+		const double partenza= franzusb::adesso();
+		bool		 scritto = true;
+		if (lettera == 0) /// the old MBR / GPT go away first: a disk left half done has no table
+		{
+			char *zero= (char *)franzusb::riserva((size_t)unmega);
+			scritto	  = (zero != NULL);
+			if (scritto)
+			{
+				memset(zero, 0, (size_t)unmega);
+				scritto= fat32_zeri(usb, 0, unmega, zero, (uint32_t)unmega, problema);
+				franzusb::libera(zero);
+			}
+		}
+		if (scritto)
+			scritto= fat32_scrivi(usb, forma, undici, etichetta, flagboot, fat32_seriale(), problema);
+		if (scritto && (lettera == 0)) /// the new MBR, last
+		{
+			memset(mbr, 0, settore);
+			memcpy(mbr, g_fat32_mbr, 440);
+			uint32_t firma= fat32_seriale() ^ (uint32_t)GetTickCount();
+			if (firma == 0)
+				firma= 0x7A706171;
+			fat32_metti32(mbr + 440, firma);
+			unsigned char *voce= mbr + 446;
+			voce[0]			   = 0x80;
+			fat32_chs(forma.inizio, voce + 1);
+			voce[4]= 0x0C;
+			fat32_chs((uint64_t)forma.inizio + forma.settori - 1, voce + 5);
+			fat32_metti32(voce + 8, forma.inizio);
+			fat32_metti32(voce + 12, forma.settori);
+			mbr[510]= 0x55;
+			mbr[511]= 0xAA;
+			scritto = fat32_settore(usb, 0, mbr, settore, problema);
+		}
+		if (scritto && (lettera != 0) && (primaria >= 0)) /// a primary partition: type 0x0C, -boot = code + active
+		{
+			mbr[446 + primaria * 16 + 4]= 0x0C;
+			if (flagboot)
+			{
+				memcpy(mbr, g_fat32_mbr, 440);
+				for (int i= 0; i < 4; i++)
+					mbr[446 + i * 16]= (i == primaria) ? 0x80 : 0x00;
+			}
+			scritto= fat32_settore(usb, 0, mbr, settore, problema);
+		}
+		if (scritto && (lettera != 0) && (!vol_gpt) && (p_inizio > 0) && (primaria < 0)) /// logical: Windows writes the type in its table
+		{
+			SET_PARTITION_INFORMATION tipo;
+			tipo.PartitionType= 0x0C;
+			DWORD fatti		  = 0;
+			if (!DeviceIoControl(volume, IOCTL_DISK_SET_PARTITION_INFO, &tipo, sizeof(tipo), NULL, 0, &fatti, NULL))
+			{
+				color_yellow();
+				myprintf("69333$ the type of the logical partition is not 0x0C (%s): Windows reads the FAT32 anyway\n", franzusb::errore((int)GetLastError()).c_str());
+				color_restore();
+			}
+		}
+		if (scritto)
+			scritto= usb.svuota();
+		usb.aggiornadisco(); /// Windows reads the table again
+		if (!scritto)
+		{
+			myprintf("69334! %s: the FAT32 is NOT good%s\n", problema.c_str(), (lettera == 0) ? " (the disk has no partition table now)" : "");
+			goto chiudi;
+		}
+		const double tempo= franzusb::adesso() - partenza;
+		myprintf("69335: FAT32 written in %.2f s (%s of structures)\n", tempo,
+				 tohuman(((int64_t)forma.riservati + 2 * (int64_t)forma.fat + forma.spc) * settore));
+		risultato= 0;
+	}
+chiudi:
+	if (volume != INVALID_HANDLE_VALUE)
+	{
+		DWORD fatti= 0;
+		DeviceIoControl(volume, FSCTL_UNLOCK_VOLUME, NULL, 0, NULL, 0, &fatti, NULL);
+		CloseHandle(volume);
+	}
+	usb.chiudi();
+	franzusb::libera(mbr);
+	if (risultato != 0)
+		return risultato;
+	/// the volume back, with its letter
+	char nuova= 0;
+	for (int prova= 0; (prova < 40) && (nuova == 0); prova++)
+	{
+		Sleep(500);
+		if (lettera != 0)
+		{
+			char radice[4]	= {lettera, ':', '\\', 0};
+			char tipo[32]	= {0};
+			if (GetVolumeInformationA(radice, NULL, 0, NULL, NULL, NULL, tipo, sizeof(tipo)) && (strcmp(tipo, "FAT32") == 0))
+				nuova= lettera;
+		}
+		else
+		{
+			vector<franzdriveinfo> ora;
+			enumerate_physical_disks(false, -1, ora);
+			for (size_t i= 0; i < ora.size(); i++)
+				if ((ora[i].number == numero) && (ora[i].partitions.size() == 1) && (ora[i].partitions[0].lettera != 0))
+					nuova= (char)toupper(ora[i].partitions[0].lettera);
+		}
+	}
+	if (nuova != 0)
+	{
+		char prima[32]= {0};
+		if ((letteragpt != 0) && (letteragpt != nuova))
+			snprintf(prima, sizeof(prima), " (it was %c:)", letteragpt);
+		color_green();
+		myprintf("69336: %c: is FAT32 now%s%s\n", nuova, prima, flagboot ? " (copy BOOTMGR and the rest of a WinPE on it to boot it)" : "");
+		color_restore();
+	}
+	else
+	{
+		color_yellow();
+		myprintf("69337$ FAT32 written, but Windows shows no letter for it yet (Disk Management can give one)\n");
+		color_restore();
+	}
+	return 0;
+#endif
+}
+
+/*
 	a -image -dashboard: the map of the source on franzdash, while the image is
 	taken. NTFS knows from the start which blocks are free (grey dots), all
 	excluded (magenta), to read (grey). A block read is green when its data was
@@ -226025,6 +229022,9 @@ int Jidac::cloud()
 			flagstat   = true;
 			/// -turbo (the default) as the a command: it was always the plain add()
 			result_add= add();
+			if (result_add==1) //warning
+				if (flagignore)
+					result_add=0;
 		}
 
 		///		myprintf("KKKKKKKKKK$$$$$ result_add %d\n",result_add);
@@ -232854,6 +235854,133 @@ string incolonna(const string &filename, int lunghezza)
 	return parte_iniziale + "..." + parte_finale + estensione;
 }
 
+/*
+	65.12d dump, what is new:
+	- the "virtual files": the records of zpaqfranz that are not files (the -fast history and its
+	  pointers, VFILE-info, the version comments, the VFILE-l-* files...), kind by kind: how many, how
+	  big, the first and the last version with one. And the -fast history itself: its blocks, its bytes
+	- the blocks of every version, in sequence: c, then d and h in pairs (same number), i from 1.
+	  What is missing is said, version by version (read_archive does the same, without the d blocks)
+	- a block that cannot be read does not end the dump: it goes on from the next block found (it was
+	  "Skipping block ... skipped to EOF", and the versions after it were not there at all)
+	- the franz blocks (hash and CRC-32 of zpaqfranz) counted always, not only with -all: without -all
+	  every archive was "a 715 archive"
+	- the verdict: plain zpaq 7.15, or 7.15 with the extensions of zpaqfranz (which ones), and the
+	  file: plain, AES (-key), Franzen, Franzen + AES (FRENZEN), multipart
+*/
+/// a record of zpaqfranz that is not a file (a "virtual file"), kind by kind
+struct dump_virtuale
+{
+	int64_t record; /// how many
+	int64_t byte;	/// in the index (a record with date 0), or of the file (its fragments)
+	int		prima;	/// the first version with one
+	int		ultima; /// the last one
+	dump_virtuale() : record(0), byte(0), prima(0), ultima(0) {}
+};
+/// one more record, of version i_versione
+static void dump_conta(dump_virtuale &io_v, int i_versione)
+{
+	io_v.record++;
+	if ((io_v.prima == 0) || (i_versione < io_v.prima))
+		io_v.prima= i_versione;
+	if (i_versione > io_v.ultima)
+		io_v.ultima= i_versione;
+}
+/// "versions 3-1.350", or "version 7"
+static string dump_versioni(const dump_virtuale &i_v)
+{
+	if (i_v.prima == i_v.ultima)
+		return "version " + string(migliaia(i_v.prima));
+	return "versions " + string(migliaia(i_v.prima)) + "-" + string(migliaia2(i_v.ultima));
+}
+/// the kind of a record that is not a file; "" for a file
+static string dump_tipovirtuale(const char *i_nome, int64_t i_data)
+{
+	if (i_data == 0)
+	{
+		if (fl_ispointer(i_nome))
+			return (strcmp(i_nome, ZPAQFILELIST_TAG "stop") == 0) ? "-fast history: stop (-nofast)" : "-fast history: pointer";
+		if (vinfo_isinfo(i_nome))
+			return (strstr(i_nome, "|sc=") != NULL) ? "VFILE-info, with -fastadd state" : "VFILE-info";
+		if (strncmp(i_nome, "filelistpointer:", 16) == 0)
+			return "filelistpointer: (older -fast)";
+	}
+	if (strncmp(i_nome, "VCOMMENT ", 9) == 0)
+		return "VCOMMENT (version comment)";
+	for (const char *p= strstr(i_nome, "FILE-"); p != NULL; p= strstr(p + 1, "FILE-"))
+		if ((p > i_nome) && ((p[-1] == 'V') || (p[-1] == 'M')))
+			return p - 1; /// VFILE-l-filelist.txt, VFILE-l-hashdeep.txt...
+	return "";
+}
+/// the blocks of a version, to tell if some are missing. As the checks of read_archive
+/// (72401-72405), with the d blocks too: dump reads them, read_archive jumps over them
+struct dump_versione
+{
+	int64_t			  jmp;		   /// the c block: the bytes of the d blocks
+	int64_t			  dbyte;	   /// the d blocks found (each one with its end byte)
+	int64_t			  iatteso;	   /// the next i block number
+	int64_t			  imancanti;   /// i blocks not found
+	int64_t			  iprimo;	   /// the first one of the first hole
+	int64_t			  iultimo;	   /// the last one of the last hole
+	bool			  ifuoriposto; /// a number seen twice, or going back
+	int64_t			  primoframmento; /// the c block: the first fragment of the version
+	int64_t			  fprima;	   /// fragment numbers before its own that no h block declared (blocks missing before it)
+	int64_t			  fdentro;	   /// ...among its own tables
+	std::set<int64_t> dnumeri;	   /// the first fragment of each d block...
+	std::set<int64_t> hnumeri;	   /// ...and of each h block: they go in pairs
+	vector<string>	  saltati;	   /// the blocks that could not be read: where, and why
+	dump_versione() : jmp(0), dbyte(0), iatteso(1), imancanti(0), iprimo(0), iultimo(0), ifuoriposto(false), primoframmento(0), fprima(0), fdentro(0) {}
+};
+/// where the next block begins (its 13 bytes locator), from i_da on. -1: none up to the end
+static int64_t dump_prossimotag(InputArchive &in, int64_t i_da)
+{
+	static const char tag[13]= {0x37, 0x6B, 0x53, 0x74, (char)0xA0, 0x31, (char)0x83, (char)0xD3, (char)0x8C, (char)0xB2, 0x28, (char)0xB0, (char)0xD3};
+	const int		  lungo	 = 1 << 20;
+	vector<char>	  buffer(lungo + 12);
+	int64_t			  base	= i_da; /// where buffer[0] is
+	int				  tenuti= 0;	/// bytes kept from the read before (a locator across two reads)
+	in.seek(i_da, SEEK_SET);
+	for (;;)
+	{
+		const int letti= in.read(&buffer[tenuti], lungo);
+		if (letti <= 0)
+			return -1;
+		const int quanti= tenuti + letti;
+		for (int i= 0; i + 13 <= quanti; i++)
+			if ((buffer[i] == tag[0]) && (memcmp(&buffer[i], tag, 13) == 0))
+				return base + i;
+		tenuti= (quanti < 12) ? quanti : 12; /// the last 12 bytes can be the start of a locator
+		memmove(&buffer[0], &buffer[quanti - tenuti], tenuti);
+		base+= quanti - tenuti;
+	}
+}
+/// the header of a franzen file: in clear, no password needed
+static bool dump_franzenheader(const string &i_file, string &o_magia, uint64_t &o_formato, uint64_t &o_blocco, uint64_t &o_ops, uint64_t &o_mem)
+{
+	FP f= myfopen(i_file.c_str(), RB);
+	if (f == FPNULL)
+		return false;
+	unsigned char h[112];
+	const size_t  letti= fread(h, 1, sizeof(h), f);
+	myfclose(&f);
+	if (letti != sizeof(h))
+		return false;
+	uint64_t campo[4];
+	const int dove[4]= {56, 88, 96, 104};
+	for (int k= 0; k < 4; k++)
+	{
+		campo[k]= 0;
+		for (int b= 7; b >= 0; b--)
+			campo[k]= (campo[k] << 8) | h[dove[k] + b];
+	}
+	o_magia	 = string((const char *)h, 7);
+	o_blocco = campo[0];
+	o_formato= campo[1];
+	o_ops	 = campo[2];
+	o_mem	 = campo[3];
+	return true;
+}
+
 int Jidac::dump()
 {
 	unsigned files= 0;
@@ -232876,6 +236003,17 @@ int Jidac::dump()
 	vector<uint64_t>   cblock_position, dblock_position, hblock_position, iblock_position;
 	MAPPASTRINGINTEGER mappahash;
 	MAPPAINTINT		   mappafranzoblock;
+
+	std::map<string, dump_virtuale> virtuali;
+	vector<dump_versione>			versioni(1);  /// 0: what comes before the first c block
+	std::map<int, string>			storie;		  /// the -fast pointer of every version, its pieces joined
+	std::map<string, string>		tipihash;	  /// the bytes that tell the hash of a franz block -> its name (decoded once)
+	int64_t							franzblocchi= 0; /// records with a franz block (hash, CRC-32...)
+	int64_t							posix		= 0; /// ...with the posix part of -tar
+	int								illeggibili = 0; /// blocks that could not be read
+	dump_virtuale					confranz;		 /// the files with a franz block: how many, which versions
+	dump_virtuale					senzafranz;		 /// ...and without (as zpaq 7.15 writes them)
+	std::map<string, dump_virtuale> versionihash;	 /// every kind of hash: which versions
 
 	int64_t expectedfilesize= in.get_totalsize();
 	int		lastperc		= 0;
@@ -232952,6 +236090,8 @@ int Jidac::dump()
 							error("bad fragment");
 
 						char block_type= filename.s[17];
+						if (block_type == 'd') /// before reading it: a d block that cannot be read is still a d block of this version
+							versioni.back().dnumeri.insert(num);
 
 						// Decompression setup
 						os.resize(0);
@@ -233040,6 +236180,12 @@ int Jidac::dump()
 								ver.back().date= ver.back().lastdate= fdate;
 								ver.back().csize					= jmp;
 
+								versioni.push_back(dump_versione());
+								versioni.back().jmp= jmp;
+								versioni.back().primoframmento= num;
+								if (num > int64_t(ht.size())) /// the version begins after fragments no table declared
+									versioni.back().fprima+= num - int64_t(ht.size());
+
 								if (all)
 								{
 									string fn  = itos(ver.size() - 1, all) + "/";
@@ -233047,18 +236193,6 @@ int Jidac::dump()
 								}
 
 								block_offset= block_end;
-
-								// Se jmp > 0, devo saltare DOPO aver mostrato il D block
-								// so I do NOT goto here, ma lo faccio DOPO
-								if (jmp)
-								{
-									// Continua a leggere per trovare il D block
-									// But remember we must skip later
-								}
-								else
-								{
-									// jmp == 0: non c'è blocco D, continua normalmente
-								}
 							}
 						}
 
@@ -233067,6 +236201,7 @@ int Jidac::dump()
 						{
 							dblock++;
 							dblock_position.push_back(block_start);
+							versioni.back().dbyte+= block_size + 1; /// +1: the end of block byte
 
 							if (summary < 0)
 							{
@@ -233101,12 +236236,22 @@ int Jidac::dump()
 								myprintf("d-compr %15s\n", migliaia(bsize));
 							}
 
+							/// expected: the next fragment, or the first one of the version (its jump is already counted)
+							const int64_t attesoh= (versioni.back().primoframmento > int64_t(ht.size())) ? versioni.back().primoframmento : int64_t(ht.size());
 							if (int64_t(ht.size()) > num)
 							{
 								fflush(stdout);
 								fprintf(stderr, "Unordered fragment tables: expected >= %d found %1.0f\n",
 										int(ht.size()), double(num));
 							}
+							else if (attesoh < num)
+							{
+								if (versioni.back().hnumeri.empty())
+									versioni.back().fprima+= num - attesoh;
+								else
+									versioni.back().fdentro+= num - attesoh;
+							}
+							versioni.back().hnumeri.insert(num);
 
 							for (unsigned i= 0; i < n; ++i)
 							{
@@ -233162,6 +236307,18 @@ int Jidac::dump()
 							if (fdate > ver.back().lastdate)
 								ver.back().lastdate= fdate;
 
+							dump_versione &questa= versioni.back();
+							if (num > questa.iatteso)
+							{
+								if (questa.imancanti == 0)
+									questa.iprimo= questa.iatteso;
+								questa.imancanti+= num - questa.iatteso;
+								questa.iultimo= num - 1;
+							}
+							else if (num < questa.iatteso)
+								questa.ifuoriposto= true;
+							questa.iatteso= num + 1;
+
 							if (summary < 0)
 							{
 								myprintf("\n");
@@ -233169,6 +236326,7 @@ int Jidac::dump()
 
 							const char		 *s	 = os.c_str();
 							const char *const end= s + os.size();
+							const int		  qui= (int)ver.size() - 1;
 
 							while (s + 9 <= end)
 							{
@@ -233182,6 +236340,9 @@ int Jidac::dump()
 								const int64_t len= strlen(s);
 								if (len > 65535)
 									error("filename too long");
+								const string tipo= dump_tipovirtuale(s, dtr.date);
+								if ((tipo != "") && (dtr.date == 0) && fl_ispointer(s) && (strcmp(s, ZPAQFILELIST_TAG "stop") != 0) && (len > (int64_t)(sizeof(ZPAQFILELIST_TAG) - 1 + 7)))
+									storie[qui].append(s + sizeof(ZPAQFILELIST_TAG) - 1 + 7); /// NNNNNN:piece
 								string fn= s;
 								if (all)
 									fn= append_path(itos(ver.size() - 1, all), fn);
@@ -233189,6 +236350,7 @@ int Jidac::dump()
 								s+= len + 1;
 								if (s > end)
 									error("filename too long");
+								int64_t bytefile= 0; /// a virtual file with data: the bytes of its fragments
 
 								if (dtr.date)
 								{
@@ -233209,38 +236371,57 @@ int Jidac::dump()
 										if (i < 8)
 											dtr.attr+= int64_t(*s & 255) << (i * 8);
 
-									if (all && na > FRANZOFFSETV1)
+									if (tipo == "")
+										dump_conta(na > 8 ? confranz : senzafranz, qui);
+									if (na > 8) /// a franz block (zpaqfranz): counted always (it was with -all only)
 									{
-										mappafranzoblock[na - 8]= mappafranzoblock[na - 8] + 1;
-
-										char franz_block_data[256];
-										for (unsigned int ik= 0; ik < (na - 8); ik++)
-											franz_block_data[ik]= *(s - (na - 8) + ik);
-										franz_block_data[na - 8]= 0x0;
-
-										string		 myhashtype	   = "";
-										string		 myhash		   = "";
-										string		 mycrc32	   = "";
-										int64_t		 mycreationtime= 0;
-										int64_t		 myaccesstime  = 0;
-										bool		 myisordered   = false;
-										int			 myversion	   = 0;
-										franz_posix *myposix	   = NULL;
-										bool		 myisadded	   = false;
-
-										decode_franz_block(false, franz_block_data,
-														   myhashtype, myhash, mycrc32,
-														   mycreationtime, myaccesstime,
-														   myisordered, myversion,
-														   myposix, myisadded);
-
-										if (myhashtype == "")
-											myhashtype= "UNKNOWN";
-										mappahash[myhashtype]= mappahash[myhashtype] + 1;
-
-										if (summary < 0 && all)
+										const unsigned lungo= na - 8;
+										mappafranzoblock[lungo]= mappafranzoblock[lungo] + 1;
+										franzblocchi++;
+										if (lungo >= FRANZOFFSETV3)
+											posix++;
+										if (lungo >= FRANZOFFSETV1)
 										{
-											myprintf(" |%10s|", myhashtype.c_str());
+											char franz_block_data[FRANZOFFSETV3 + 16];
+											memset(franz_block_data, 0, sizeof(franz_block_data));
+											const unsigned copiati= (lungo < FRANZOFFSETV3) ? lungo : FRANZOFFSETV3;
+											memcpy(franz_block_data, s - lungo, copiati);
+											/// the hash is told by these bytes only (decode_franz_block): decoded once per kind
+											string chiave(1, char(franz_block_data[0]));
+											chiave+= char(franz_block_data[1]);
+											chiave+= char(franz_block_data[8] != 0);
+											chiave+= char(franz_block_data[40] == 0);
+											chiave+= char(franz_block_data[66] == 0);
+											std::map<string, string>::iterator t= tipihash.find(chiave);
+											string myhashtype;
+											if (t != tipihash.end())
+												myhashtype= t->second;
+											else
+											{
+												string		 myhash		   = "";
+												string		 mycrc32	   = "";
+												int64_t		 mycreationtime= 0;
+												int64_t		 myaccesstime  = 0;
+												bool		 myisordered   = false;
+												int			 myversion	   = 0;
+												franz_posix *myposix	   = NULL;
+												bool		 myisadded	   = false;
+												decode_franz_block(false, franz_block_data,
+																   myhashtype, myhash, mycrc32,
+																   mycreationtime, myaccesstime,
+																   myisordered, myversion,
+																   myposix, myisadded);
+												if (myhashtype == "")
+													myhashtype= "UNKNOWN";
+												tipihash[chiave]= myhashtype;
+											}
+											mappahash[myhashtype]= mappahash[myhashtype] + 1;
+											dump_conta(versionihash[myhashtype], qui);
+
+											if (summary < 0 && all)
+											{
+												myprintf(" |%10s|", myhashtype.c_str());
+											}
 										}
 									}
 
@@ -233265,6 +236446,8 @@ int Jidac::dump()
 										if (issel)
 											dtr.ptr[i]= j;
 										ptr_list.push_back(j);
+										if ((tipo != "") && (j < ht.size()) && (ht[j].usize > 0))
+											bytefile+= ht[j].usize;
 									}
 
 									if (summary < 0 && all)
@@ -233294,6 +236477,17 @@ int Jidac::dump()
 									}
 								}
 
+								if (tipo != "")
+								{
+									dump_virtuale &v= virtuali[tipo];
+									v.record++;
+									v.byte+= (dtr.date == 0) ? (8 + len + 1) : bytefile;
+									if ((v.prima == 0) || (qui < v.prima))
+										v.prima= qui;
+									if (qui > v.ultima)
+										v.ultima= qui;
+								}
+
 								if (issel)
 									dt[fn]= dtr;
 							}
@@ -233318,9 +236512,28 @@ int Jidac::dump()
 		}
 		catch (std::exception &e)
 		{
-			in.seek(-d.buffered(), SEEK_CUR);
+			/// 65.12d: from the next block found, not from where the reading stopped (a damaged d block
+			/// can read up to the end of the archive: every version after it was lost)
+			illeggibili++;
+			const int64_t prossimo= dump_prossimotag(in, block_offset + 1);
 			fflush(stdout);
-			fprintf(stderr, "Skipping block at %1.0f: %s\n", double(block_offset), e.what());
+			string dove= "@ " + string(migliaia(block_offset)) + " (" + e.what() + ")";
+			if (prossimo >= 0)
+				dove+= ", the next block is @ " + string(migliaia(prossimo));
+			else
+				dove+= ", no block after it";
+			myprintf("03100! Cannot read the block %s\n", dove.c_str());
+			versioni.back().saltati.push_back(dove);
+			if (prossimo < 0)
+			{
+				block_offset= expectedfilesize;
+				done		= true;
+			}
+			else
+			{
+				in.seek(prossimo, SEEK_SET);
+				block_offset= prossimo;
+			}
 		}
 	endblock:;
 	}
@@ -233376,6 +236589,140 @@ int Jidac::dump()
 			}
 		}
 
+	/// the virtual files
+	color_cyan();
+	myprintf("Virtual files (records of zpaqfranz that are not files)\n");
+	color_restore();
+	if (virtuali.empty())
+		myprintf("03101: None\n");
+	else
+	{
+		myprintf("03102: %-34s %12s %17s %10s %10s\n", "Kind", "Records", "Bytes", "First ver", "Last ver");
+		for (std::map<string, dump_virtuale>::const_iterator p= virtuali.begin(); p != virtuali.end(); ++p)
+			myprintf("03103: %-34s %12s %17s %10s %10s\n", p->first.c_str(), migliaia(p->second.record), migliaia2(p->second.byte), migliaia3(p->second.prima), migliaia4(p->second.ultima));
+	}
+	/// the -fast history: the last pointer says how big it is; the fragments of all the pointers are its blocks
+	int64_t storiablocchi= 0;
+	if (!storie.empty())
+	{
+		vector<bool> distoria(ht.size(), false);
+		int			 ultima	   = 0;
+		int64_t		 versioni_s= 0;
+		int64_t		 grandezza = 0;
+		int			 rotte	   = 0;
+		for (std::map<int, string>::const_iterator p= storie.begin(); p != storie.end(); ++p)
+		{
+			vector<string> campi;
+			explode(p->second, '|', campi);
+			if ((campi.size() != 8) || (campi[0] != "ZPFL1"))
+			{
+				rotte++;
+				continue;
+			}
+			ultima	  = p->first;
+			versioni_s= myatoll(campi[1].c_str());
+			grandezza = myatoll(campi[2].c_str());
+			vector<string> intervalli;
+			explode(campi[7], ',', intervalli);
+			for (unsigned k= 0; k < intervalli.size(); k++)
+			{
+				const size_t   trattino= intervalli[k].find('-');
+				const unsigned da	   = (unsigned)myatoll(intervalli[k].substr(0, trattino).c_str());
+				unsigned	   a	   = da;
+				if (trattino != string::npos)
+					a= (unsigned)myatoll(intervalli[k].substr(trattino + 1).c_str());
+				for (unsigned j= da; (j <= a) && (j < distoria.size()); j++)
+					distoria[j]= true;
+			}
+		}
+		int64_t frammenti = 0;
+		int64_t compresso = 0;
+		int64_t espanso	  = 0;
+		for (unsigned j= 0; j < distoria.size(); j++)
+			if (distoria[j])
+			{
+				frammenti++;
+				if (ht[j].usize > 0)
+					espanso+= ht[j].usize;
+			}
+		for (unsigned k= 0; k < block.size(); k++)
+			if ((block[k].start < distoria.size()) && distoria[block[k].start])
+			{
+				storiablocchi++;
+				compresso+= block[k].bsize;
+			}
+		if (ultima > 0)
+			myprintf("03104: -fast history: the last one (version %s) is of %s versions, %s bytes\n", migliaia(ultima), migliaia2(versioni_s), migliaia3(grandezza));
+		myprintf("03105: -fast history: %s fragments (%s bytes, deduplicated) in %s d blocks, %s bytes in the archive (%1.3f%%)\n", migliaia(frammenti), migliaia2(espanso), migliaia3(storiablocchi), migliaia4(compresso), (block_offset > 0) ? (100.0 * compresso / block_offset) : 0.0);
+		if (rotte > 0)
+			myprintf("03106$ -fast history: %s pointer(s) not understood (damaged, or a newer zpaqfranz?)\n", migliaia(rotte));
+	}
+
+	/// the blocks of every version, in sequence
+	color_cyan();
+	myprintf("Blocks of the versions\n");
+	color_restore();
+	int	 dannate				= 0;
+	bool precedentesenzatabella= false; /// the version before has data with no table, or a block not read
+	for (unsigned v= 0; v < versioni.size(); v++)
+	{
+		const dump_versione &q= versioni[v];
+		string				 chi;
+		if ((v > 0) && (v < ver.size()))
+			chi= "Version " + itos(v) + " (" + dateToString(flagutc, ver[v].date) + ")";
+		else
+			chi= "Before the first version";
+		vector<string> righe;
+		for (unsigned k= 0; k < q.saltati.size(); k++)
+			righe.push_back("a block cannot be read " + q.saltati[k]);
+		if (q.imancanti > 0)
+		{
+			if (q.imancanti == 1)
+				righe.push_back("i block " + string(migliaia(q.iprimo)) + " not found: the list of its files is not complete");
+			else if (q.iultimo - q.iprimo + 1 == q.imancanti)
+				righe.push_back("i blocks " + string(migliaia(q.iprimo)) + "-" + string(migliaia2(q.iultimo)) + " not found: the list of its files is not complete");
+			else
+				righe.push_back(string(migliaia(q.imancanti)) + " i blocks not found: the list of its files is not complete");
+		}
+		if (q.ifuoriposto)
+			righe.push_back("i blocks out of place (a number seen twice?)");
+		if ((v > 0) && (q.jmp > 0) && (q.hnumeri.empty()) && (q.dnumeri.empty()))
+			righe.push_back("no d block and no fragment table, but the c block says " + string(migliaia(q.jmp)) + " bytes of data");
+		int dsenzah= 0;
+		int hsenzad= 0;
+		for (std::set<int64_t>::const_iterator p= q.dnumeri.begin(); p != q.dnumeri.end(); ++p)
+			if (q.hnumeri.find(*p) == q.hnumeri.end())
+				dsenzah++;
+		for (std::set<int64_t>::const_iterator p= q.hnumeri.begin(); p != q.hnumeri.end(); ++p)
+			if (q.dnumeri.find(*p) == q.dnumeri.end())
+				hsenzad++;
+		if (dsenzah > 0)
+			righe.push_back(string(migliaia(dsenzah)) + " d block(s) without fragment table (h): their data cannot be extracted");
+		if (hsenzad > 0)
+			righe.push_back(string(migliaia(hsenzad)) + " fragment table(s) without their d block: the files that use them cannot be extracted");
+		/// a jump of the numbers at its start, after a version whose data have no table: the same hole
+		if ((q.fprima > 0) && (!precedentesenzatabella))
+			righe.push_back(string(migliaia(q.fprima)) + " fragment numbers before its own that no table declares (blocks missing before it)");
+		if (q.fdentro > 0)
+			righe.push_back(string(migliaia(q.fdentro)) + " fragment numbers among its tables that no table declares (h blocks missing)");
+		precedentesenzatabella= (dsenzah > 0) || (!q.saltati.empty());
+		if ((v > 0) && q.saltati.empty() && (q.jmp != q.dbyte) && ((q.jmp > 0) || (q.dbyte > 0)))
+			righe.push_back("the c block says " + string(migliaia(q.jmp)) + " bytes of data, the d blocks are " + string(migliaia2(q.dbyte)));
+		if (righe.empty())
+			continue;
+		dannate++;
+		if (dannate > 20)
+			continue;
+		for (unsigned k= 0; k < righe.size(); k++)
+			myprintf("03107! %s: %s\n", chi.c_str(), righe[k].c_str());
+	}
+	if (dannate > 20)
+		myprintf("03108! ...and %d more versions like these\n", dannate - 20);
+	if (dannate == 0)
+		myprintf("03109: All the %s versions have their blocks in sequence (c, d and h in pairs, i from 1)\n", migliaia(ver.size() - 1));
+	else
+		myprintf("03110! DAMAGED ARCHIVE: %s version(s) with blocks missing or not readable (see above)\n", migliaia(dannate));
+
 	if (mappafranzoblock.size() > 0)
 	{
 		color_cyan();
@@ -233384,34 +236731,21 @@ int Jidac::dump()
 		for (MAPPAINTINT::iterator p= mappafranzoblock.begin(); p != mappafranzoblock.end(); ++p)
 			myprintf("03049: FRANZOBLOCK %03d %s\n", p->first, migliaia(p->second));
 	}
-	else
-	{
-		color_yellow();
-		myprintf("03050: This seems a 715 archive (original zpaq format)\n");
-		color_restore();
-	}
-
+	bool zpaqfranz60= false; /// a hash of the kind of zpaqfranz 60+ (its name ends with B)
+	bool zpaqfranz59= false; /// ...of the kind before
 	if (mappahash.size() > 0)
 	{
-		bool zpaqfranz60= false;
 		for (MAPPASTRINGINTEGER::iterator p= mappahash.begin(); p != mappahash.end(); ++p)
 		{
-			if (p->first[p->first.size() - 1] == 'B')
-				zpaqfranz60= true;
-			myprintf("03051: HASHTYPE %16s %s\n", p->first.c_str(), migliaia(p->second));
+			if (p->first != "UNKNOWN")
+			{
+				if (p->first[p->first.size() - 1] == 'B')
+					zpaqfranz60= true;
+				else
+					zpaqfranz59= true;
+			}
+			myprintf("03051: HASHTYPE %16s %s (%s)\n", p->first.c_str(), migliaia(p->second), dump_versioni(versionihash[p->first]).c_str());
 		}
-
-		if (mappafranzoblock.size() == mappahash.size())
-			color_green();
-
-		if (zpaqfranz60)
-			myprintf("03052: This seems 60+ archive (newer zpaqfranz v60)\n");
-		else
-			myprintf("03053: This seems <60 archive (older zpaqfranz v59)\n");
-
-		if (mappafranzoblock.size() == mappahash.size())
-			color_restore();
-
 		if (mappahash.size() > 1)
 		{
 			color_yellow();
@@ -233420,6 +236754,69 @@ int Jidac::dump()
 		}
 	}
 
+	/// the verdict: the file, then what is inside
+	color_cyan();
+	myprintf("Verdict\n");
+	color_restore();
+	const ArchiveType tipo	= in.get_archivetype();
+	const bool		  franzen= (tipo == ARCHIVE_ZPAQ_FRANZEN) || (tipo == ARCHIVE_ZPAQ_AES_FRANZEN);
+	if (franzen)
+	{
+		string	 magia;
+		uint64_t formato= 0, blocco= 0, ops= 0, memoria= 0;
+		string	 dettagli;
+		if ((in.filepartnames.size() > 0) && dump_franzenheader(in.filepartnames[0], magia, formato, blocco, ops, memoria))
+			dettagli= " (" + magia + " format " + itos(formato) + ", blocks of " + tohuman(blocco) + ", Argon2id ops " + itos(ops) + " memory " + tohuman2(memoria) + ")";
+		if (tipo == ARCHIVE_ZPAQ_AES_FRANZEN)
+			myprintf("03111: File: Franzen + AES%s: only zpaqfranz opens it (-franzen and -key)\n", dettagli.c_str());
+		else
+			myprintf("03111: File: Franzen%s: only zpaqfranz opens it (-franzen)\n", dettagli.c_str());
+	}
+	else if (tipo == ARCHIVE_ZPAQ_AES)
+		myprintf("03112: File: AES-256 encrypted: zpaq 7.15 opens it too (-key)\n");
+	else
+		myprintf("03113: File: not encrypted\n");
+	if (in.filepartnames.size() > 1)
+		myprintf("03114: Multipart: %s parts\n", migliaia(in.filepartnames.size()));
+
+	vector<string> estensioni;
+	if (franzblocchi > 0)
+		estensioni.push_back("hashes and CRC-32 of the files (" + string(migliaia(franzblocchi)) + ", " + dump_versioni(confranz) + ")");
+	if (posix > 0)
+		estensioni.push_back("posix data of -tar (" + string(migliaia(posix)) + ")");
+	for (std::map<string, dump_virtuale>::const_iterator p= virtuali.begin(); p != virtuali.end(); ++p)
+		estensioni.push_back(p->first + " (" + string(migliaia(p->second.record)) + ", " + dump_versioni(p->second) + ")");
+	if (estensioni.empty())
+	{
+		color_yellow();
+		myprintf("03115: VERDICT: plain zpaq 7.15 archive, no extension of zpaqfranz%s\n", franzen ? "" : ": zpaq 7.15 reads all of it");
+		color_restore();
+	}
+	else
+	{
+		string elenco;
+		for (unsigned k= 0; k < estensioni.size(); k++)
+			elenco+= ((k > 0) ? ", " : "") + estensioni[k];
+		string chi;
+		if (zpaqfranz59 && zpaqfranz60)
+			chi= " up to 59, and 60+ (both: see HASHTYPE)";
+		else if (zpaqfranz60)
+			chi= " 60+ (Jul 2024 and later)";
+		else if (zpaqfranz59)
+			chi= " up to 59";
+		color_green();
+		myprintf("03116: VERDICT: zpaq 7.15 archive with extensions of zpaqfranz%s\n", chi.c_str());
+		color_restore();
+		if ((senzafranz.record > 0) && (confranz.record > 0)) /// the older files as zpaq 7.15 (or -715) writes them
+			myprintf("03117: Files without the hash of zpaqfranz (as zpaq 7.15 writes them) %s, %s\n", migliaia(senzafranz.record), dump_versioni(senzafranz).c_str());
+		myprintf("03119: Extensions: %s\n", elenco.c_str());
+		if (!franzen)
+			myprintf("03120: zpaq 7.15 lists and extracts it: the extensions are attributes it skips, and records it takes for deleted files\n");
+	}
+	if (illeggibili > 0)
+		myprintf("03121! %s block(s) could not be read: the counts above are without them\n", migliaia(illeggibili));
+	if ((illeggibili > 0) || (dannate > 0))
+		return 2;
 	return 0;
 }
 
@@ -239591,6 +242988,22 @@ void Jidac::manipolalistafile()
 
 int Jidac::gestiscicomment()
 {
+	/// 65.12g: nothing was said: the version had no comment, in silence
+	if (flagcomment && (versioncomment == ""))
+	{
+		color_yellow();
+		myprintf("03493$ -comment without a text: this version gets no comment\n"); /// 65.12i: 01947-01948 are of the salt
+		color_restore();
+	}
+	/// -715 is an archive as zpaq 7.15 makes it: no record of zpaqfranz (the comment is one)
+	if (flagcomment && (versioncomment != "") && flag715)
+	{
+		color_yellow();
+		myprintf("03494$ -715: zpaq 7.15 has no version comments, <<%s>> is not stored\n", versioncomment.c_str());
+		color_restore();
+		versioncomment= "";
+		return 0;
+	}
 	if (flagcomment)
 		if (versioncomment != "")
 		{
@@ -243666,6 +247079,11 @@ int Jidac::add2()
 	if (index)
 		arcname= index;
 	header_pos= 0;
+	/// 65.12f: -fastadd, the state of this read is stored in the version: every name, the selection after
+	sc_attivo  = (flagfastadd || flagfastaddtest) && (!index) && (g_chunk_size == 0) && (!flagappend) && (!flag715) && (!flagnofilelist) && (!flagstdin);
+	sc_nofiltro= sc_attivo;
+	sc_usato   = false;
+	sc_blob	   = "";
 	if (exists(subpart(arcname, 1).c_str()))
 		header_pos= read_archive_add(arcname.c_str());
 #ifndef NOFRANZEN
@@ -243677,6 +247095,42 @@ int Jidac::add2()
 	}
 #endif /// NOSFTPEND
 #endif
+	if (sc_attivo)
+	{
+		const double sc_inizio= sc_adesso();
+		sc_blob				  = sc_serializza(header_pos, sc_ultimifile);
+		if (flagfastaddtest && sc_usato)
+		{
+			/// the same archive read again, all of it: the two states must be the same
+			const string  dalsalvato= sc_blob;
+			const string  storia	= fl_blob;
+			const int64_t finea		= header_pos;
+			jidacreset();
+			fl_clear();
+			sc_vietato		   = true;
+			const double  prima= sc_adesso();
+			const int64_t fineb= read_archive_add(arcname.c_str());
+			const double  tutto= sc_adesso() - prima;
+			sc_vietato		   = false;
+			sc_blob			   = sc_serializza(fineb, sc_ultimifile);
+			size_t diverso	   = 0;
+			while ((diverso < sc_blob.size()) && (diverso < dalsalvato.size()) && (sc_blob[diverso] == dalsalvato[diverso]))
+				diverso++;
+			if ((sc_blob == dalsalvato) && (fl_blob == storia) && (finea == fineb))
+				myprintf("65463: -fastaddtest: the stored state is the one read (%s bytes, history %s bytes, all read in %1.3f s)\n", migliaia(sc_blob.size()), migliaia2(fl_blob.size()), tutto);
+			else
+			{
+				g_fastadddiversi++;
+				myprintf("65464! -fastaddtest: DIFFERENT: state %s/%s bytes (from byte %s), history %s/%s %s\n", migliaia(dalsalvato.size()), migliaia2(sc_blob.size()), migliaia3(diverso), migliaia4(storia.size()), migliaia5(fl_blob.size()), (fl_blob == storia) ? "same" : "DIFFERENT");
+				myprintf("65465! -fastaddtest: end of the archive %s (stored state) %s (read)\n", migliaia(finea), migliaia2(fineb));
+			}
+			header_pos= fineb;
+		}
+		sc_filtra();
+		sc_attivo= false;
+		if (flagverbose)
+			myprintf("65466: -fastadd: state of %s bytes made in %1.3f s\n", migliaia(sc_blob.size()), sc_adesso() - sc_inizio);
+	}
 
 	/// the last block was read (x extracts its content) but it is damaged at its very end:
 	/// header_pos is its start, and writing there would destroy it. Append after it instead
@@ -245729,6 +249183,8 @@ int Jidac::add2()
 	
 	///fika
 	const bool filelistwrite= filelist_store(out, job, blocklist, htinv, header_end, htsize, indexchunks);
+	if (filelistwrite && (sc_blob != "") && (!fl_writestop))
+		sc_salva(out, job, blocklist, htinv, header_end, indexchunks); /// 65.12f: -fastadd
 	
 	salt[0]^= '7' ^ 'z';
 

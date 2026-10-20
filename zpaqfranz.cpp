@@ -64,8 +64,8 @@ OTHER DEALINGS IN THE SOFTWARE.
 /// Comment out the next line to build without -m8 (-m8 is then -m5 again)
 #define ZPAQZSTD
 
-#define ZPAQ_VERSION "65.12i"
-#define ZPAQ_DATE "(2026-10-18)"
+#define ZPAQ_VERSION "65.13n"
+#define ZPAQ_DATE "(2026-10-20)"
 
 
 /*
@@ -87720,6 +87720,7 @@ typedef CURLcode (*_curl_seek_callback2)(const void *, curl_off_t, int);
 int64_t g_GLOBAL_RAM_LIMIT= 1 * 1024LL * 1024 * 1024; // 1 GB
 
 std::string g_franzen;
+std::string g_franzen2; /// 65.13n: password -franzen2, the new password of a Franzen archive
 int64_t		g_dt_ram;
 int64_t		g_debug_sequence= 0;
 bool		g_write_on_first= false;
@@ -88200,6 +88201,7 @@ bool		flagrescue		   = false;
 int			g_rescuemb		   = 16;	/// -rescue N: the longest jump, MB
 int			g_rescuetime	   = 2;		/// -rescuetime S: a read slower than this (seconds) is a sick zone. 0: errors only
 std::string g_rescuefake;				/// -rescuefake (hidden, for the tests): "start:bytes[:slow],..." of the source that fail (or are slow)
+std::string g_cpfake;					/// 65.13d: -cpfake (hidden, for the tests): "piece[:times],...": cp -verify, a byte of the destination changed after the write of that piece (from 0, in this run)
 int64_t		g_rescue_buco	   = -1;	/// the hole: [g_rescue_buco, g_rescue_finebuco) of the source is not to be read
 int64_t		g_rescue_finebuco  = -1;
 int64_t		g_rescue_salti	   = 0;		/// jumps
@@ -93175,8 +93177,11 @@ char *mymigliaia(int64_t i_bytes, char *i_buffer, int i_buffersize)
 /// very quick and very dirty output
 inline char *migliaia(int64_t n)
 {
-	static char retbuf[30];
-	return mymigliaia(n, retbuf, 30);
+	/// 65.13h: 8 buffers in turn, not one: two migliaia() in the same printf wrote one over the other
+	/// (find: "Files 7 for 63.507 bytes" of 63.500, the 7 on the last digit)
+	static char			retbuf[8][30];
+	static unsigned int quale= 0;
+	return mymigliaia(n, retbuf[(quale++) & 7], 30);
 }
 inline char *migliaia2(int64_t n)
 {
@@ -112914,8 +112919,10 @@ char *mytohuman(int64_t i_bytes, char *i_buffer, int i_buffersize)
 
 inline char *tohuman(int64_t i_bytes)
 {
-	static char io_buf[30];
-	return mytohuman(i_bytes, io_buf, 30);
+	/// 65.13h: 8 buffers in turn, as migliaia(): two tohuman() in the same printf showed the same number
+	static char			io_buf[8][30];
+	static unsigned int quale= 0;
+	return mytohuman(i_bytes, io_buf[(quale++) & 7], 30);
 }
 inline char *tohuman2(int64_t i_bytes)
 {
@@ -113103,12 +113110,19 @@ int64_t encodestringdate(string i_date, bool i_flagfrom)
 		if (lunghezza == 6) /// 202209
 		{
 			if (month == 2)
-				day= 28;
+				day= (((year % 4 == 0) && (year % 100 != 0)) || (year % 400 == 0)) ? 29 : 28;
 			else if ((month == 4) || (month == 6) || (month == 9) || (month == 11))
 				day= 30;
 			else
 				day= 31;
 		}
+		/// 65.13h: the last second of the period, not the first (-dateto 2022-10-01 = all of the 1st of October)
+		if (lunghezza <= 8)
+			hour= 23;
+		if (lunghezza <= 10)
+			minute= 59;
+		if (lunghezza <= 12)
+			second= 59;
 	}
 	if (flagdebug2)
 		myprintf("00050: date   %04d-%02d-%02d %02d:%02d:%02d\n", year, month, day, hour, minute, second);
@@ -113536,6 +113550,26 @@ time_t unix_time(int64_t date)
 	if (month < 0)
 		return 0;
 	return (day - 1 + days[month] + (year % 4 == 0 && month > 1) + ((year - 1970) * 1461 + 1) / 4) * 86400 + hour * 3600 + min * 60 + sec;
+}
+/// 65.13m: a decimal date typed by the user (-datefrom, -dateto) is local time, as the dates shown: the files
+/// have it in UTC. A file shown at 13:00 (12:00 UTC) was out of -datefrom 2017-01-01_12:30
+int64_t localeautc(int64_t i_data)
+{
+	if (i_data <= 0)
+		return i_data;
+	struct tm quando;
+	memset(&quando, 0, sizeof(quando));
+	quando.tm_year = int(i_data / 10000000000LL % 10000) - 1900;
+	quando.tm_mon  = int(i_data / 100000000 % 100) - 1;
+	quando.tm_mday = int(i_data / 1000000 % 100);
+	quando.tm_hour = int(i_data / 10000 % 100);
+	quando.tm_min  = int(i_data / 100 % 100);
+	quando.tm_sec  = int(i_data % 100);
+	quando.tm_isdst= -1; /// the summer time of that day, not of today
+	const time_t t = mktime(&quando);
+	if (t == (time_t)-1)
+		return i_data;
+	return decimal_time(t);
 }
 /*
 	section: errors
@@ -118640,6 +118674,28 @@ size_t			   g_sodio_pwhash_memlimit= CRYPTO_PWHASH_MEMLIMIT_MODERATE;
 */
 pthread_mutex_t					   g_franzen_chiavi_mutex= PTHREAD_MUTEX_INITIALIZER;
 std::map<std::string, std::string> g_franzen_chiavi;
+/*
+	65.13e: -debug4 = the deterministic encryption, for the tests: the same input gives the same bytes, so
+	that archives can be compared to the byte (see tortura\backup). The salt of a franzen file is fixed,
+	every nonce comes from a counter (in the order of the writes: one thread writes), the nonce of a block
+	encrypted by the threads of encode_parallela from its number. NOT secure at all: the same password gives
+	the same key, and another run uses the same nonces again
+*/
+uint64_t		g_debug4_contatore= 0;
+pthread_mutex_t g_debug4_mutex	  = PTHREAD_MUTEX_INITIALIZER;
+void debug4_byte(unsigned char *o_buf, size_t i_len, uint64_t i_numero)
+{
+	static const char fisso[]= "zpaqfranz-debug4";
+	for (size_t i= 0; i < i_len; i++)
+		o_buf[i]= (i < 8) ? (unsigned char)(i_numero >> (8 * i)) : (unsigned char)fisso[i % 16];
+}
+uint64_t debug4_prossimo()
+{
+	pthread_mutex_lock(&g_debug4_mutex);
+	const uint64_t numero= ++g_debug4_contatore;
+	pthread_mutex_unlock(&g_debug4_mutex);
+	return numero;
+}
 /// 65.11r //FIX-FRANZEN: writes on a franzen file that did not make it (media full, I/O error): the run cannot end
 /// "all OK". With -franzen alone there is no .zpaq behind, and nobody else would notice (see myfwrite)
 int64_t g_franzen_scrittirotti= 0;
@@ -118759,6 +118815,20 @@ struct file_footer
 #pragma pack(pop)
 
 #define SIZEOF_FOOTER sizeof(file_footer)
+
+/// 65.13e: -chunk -franzen: how many bytes of data fit in a new franzen file of i_limite bytes (its header,
+/// the blocks each one with its nonce and its tag, the last one not full, its footer)
+uint64_t franzen_capienza(uint64_t i_limite)
+{
+	const uint64_t fisso	= sizeof(file_header) + SIZEOF_ONCE + sizeof(file_footer);
+	const uint64_t perblocco= SIZEOF_ONCE + SIZEOF_AUTH_TAG;
+	if (i_limite <= fisso + perblocco)
+		return 0;
+	const uint64_t posto= i_limite - fisso;
+	const uint64_t pieni= posto / (g_sodio_block_size + perblocco);
+	const uint64_t resto= posto % (g_sodio_block_size + perblocco);
+	return pieni * g_sodio_block_size + ((resto > perblocco) ? (resto - perblocco) : 0);
+}
 
 // Total header size: 132 bytes + 12 byte nonce = 144 bytes
 // File structure: [HEADER 144 bytes][ENCRYPTED BLOCKS...][FOOTER 84 bytes]
@@ -119394,6 +119464,14 @@ class franzcri
 		return header_size + block_idx * full_block_disk_size;
 	}
 
+	/// 65.13e: a nonce: random, or from the counter of -debug4 (the deterministic encryption, see g_debug4_contatore)
+	void casuali(unsigned char *o_buf, size_t i_len)
+	{
+		if (flagdebug4)
+			debug4_byte(o_buf, i_len, debug4_prossimo());
+		else
+			sodium.randombytes_buf(o_buf, i_len);
+	}
 	bool write_header()
 	{
 		// NOTA: Questa funzione ora scrive SOLO l'header iniziale alla creazione del file.
@@ -119416,7 +119494,7 @@ class franzcri
 		header.reserved4= 0;
 
 		// Generate header nonce (usata sia per il key check che per l'auth tag)
-		sodium.randombytes_buf(header_nonce, sizeof(header_nonce));
+		casuali(header_nonce, sizeof(header_nonce)); /// 65.13e: -debug4 = from a counter
 
 		// Creation of Key Check Value
 		// We encrypt a null message per generare un tag. Questo permette una verifica
@@ -119531,7 +119609,7 @@ class franzcri
 		footer.prefix_size = 0;
 
 		// Generate footer nonce
-		sodium.randombytes_buf(footer.footer_nonce, sizeof(footer.footer_nonce));
+		casuali(footer.footer_nonce, sizeof(footer.footer_nonce)); /// 65.13e: -debug4 = from a counter
 
 		// Prepare footer data for authentication (all fields except nonce and auth_tag)
 		std::vector<unsigned char> footer_data;
@@ -120543,6 +120621,8 @@ class franzcri
 
 			if (sale_imposto)
 				memcpy(header.salt, sale_voluto, sizeof(header.salt));
+			else if (flagdebug4) /// 65.13e: the deterministic encryption, a fixed salt
+				debug4_byte(header.salt, sizeof(header.salt), 0);
 			else
 				sodium.randombytes_buf(header.salt, sizeof(header.salt));
 			if (!derive_key(header.salt))
@@ -121279,9 +121359,9 @@ class franzcri
 				taken while the run goes) sees the XOR of the two contents, and the tag of that block
 				does not stand for it any more. The nonce is stored in front of its block: nothing
 				changes in the format, every version reads the files of the others.
-				To have it as before: remove the next line (randombytes_buf)
+				To have it as before: remove the next line (casuali)
 			*/
-			sodium.randombytes_buf(work_nonce, nonce_len);
+			casuali(work_nonce, nonce_len); /// 65.13e: -debug4 = from a counter
 			unsigned long long new_cipher_len= 0;
 			if (sodium.crypto_aead_chacha20poly1305_ietf_encrypt(
 					work_encrypted, &new_cipher_len,
@@ -121487,7 +121567,7 @@ class franzcri
 	{
 		size_t nonce_len= sodium.crypto_aead_chacha20poly1305_ietf_npubbytes();
 
-		sodium.randombytes_buf(out_nonce, nonce_len);
+		casuali(out_nonce, nonce_len); /// 65.13e: -debug4 = from a counter
 
 		unsigned long long ciphertext_len= 0;
 		if (sodium.crypto_aead_chacha20poly1305_ietf_encrypt(
@@ -122348,7 +122428,10 @@ class franzcri
 			}
 
 			// Generate nonce
-			data->instance->sodium.randombytes_buf(block_nonce, nonce_len);
+			if (flagdebug4) /// 65.13e: the deterministic encryption: from the number of the block, whatever thread gets it
+				debug4_byte(block_nonce, nonce_len, ((uint64_t)1 << 62) + current_block_idx);
+			else
+				data->instance->sodium.randombytes_buf(block_nonce, nonce_len);
 
 			// Encrypt block (CPU intensive - outside mutex)
 			unsigned long long ciphertext_len= 0;
@@ -125803,6 +125886,9 @@ class franzcri
 
 
 franzcri *g_p_franzenfile	   = 0;
+/// 65.13e: -chunk -franzen: the franzen file of the first part of the run, open until the end (the jidac header
+/// of the run is written there again, with its sizes). g_p_franzenfile is the one of the part being written
+franzcri *g_p_franzenprimo	   = 0;
 int64_t	  g_franzen_jidacheader= -1;
 /*
 	65.11l: the index (a -index, backup) of a franzen archive is a franzen file of its own
@@ -126889,6 +126975,37 @@ bool exists(string filename)
 	return GetFileAttributes(utow(filename.c_str()).c_str()) != INVALID_FILE_ATTRIBUTES;
 #endif // corresponds to #ifdef (#ifdef unix)
 }
+/// 65.13m: the same file on the disk, whatever the spelling (relative path, case on Windows, a hard link): an
+/// output that is its own input. One of the two not there: never the same (as franz_qualefile, for the dedup)
+bool stessofile(const string &i_uno, const string &i_due)
+{
+	if ((i_uno == "") || (i_due == ""))
+		return false;
+#ifdef _WIN32
+	BY_HANDLE_FILE_INFORMATION info[2];
+	for (int i= 0; i < 2; i++)
+	{
+		HANDLE h= CreateFileW(utow(((i == 0) ? i_uno : i_due).c_str()).c_str(), 0, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, NULL);
+		if (h == INVALID_HANDLE_VALUE)
+			return false;
+		const bool bene= GetFileInformationByHandle(h, &info[i]) != 0;
+		CloseHandle(h);
+		if (!bene)
+			return false;
+	}
+	return (info[0].dwVolumeSerialNumber == info[1].dwVolumeSerialNumber) && (info[0].nFileIndexHigh == info[1].nFileIndexHigh) && (info[0].nFileIndexLow == info[1].nFileIndexLow);
+#else
+	struct stat a, b;
+	if ((stat(i_uno.c_str(), &a) != 0) || (stat(i_due.c_str(), &b) != 0))
+		return false;
+	return (a.st_dev == b.st_dev) && (a.st_ino == b.st_ino);
+#endif
+}
+/// the same, with the .franzen of each one too (an archive can be its .franzen only)
+bool stessoarchivio(const string &i_uno, const string &i_due)
+{
+	return stessofile(i_uno, i_due) || stessofile(franzenname(i_uno), franzenname(i_due)) || stessofile(i_uno, franzenname(i_due)) || stessofile(franzenname(i_uno), i_due);
+}
 #ifdef _WIN32
 bool wintouch(string i_filename, int64_t i_date, int64_t i_creationdate)
 {
@@ -127183,8 +127300,10 @@ int truncate(const char *filename, int64_t length)
 	if (out != INVALID_HANDLE_VALUE)
 	{
 		//// LONG
-		long hi= length >> 32;
-		if (SetFilePointer(out, length, &hi, FILE_BEGIN) != INVALID_SET_FILE_POINTER && SetEndOfFile(out) && CloseHandle(out))
+		long	   hi	= length >> 32;
+		const bool fatto= (SetFilePointer(out, length, &hi, FILE_BEGIN) != INVALID_SET_FILE_POINTER) && SetEndOfFile(out);
+		/// 65.13m: closed anyway (a failed SetEndOfFile left it open, and with no sharing: the file locked)
+		if (CloseHandle(out) && fatto)
 			return 0;
 	}
 	return -1;
@@ -128310,6 +128429,8 @@ enum ArchiveType
 	ARCHIVE_ZPAQ_FRANZEN,    // .zpaq.franzen with Franzen only
 	ARCHIVE_ZPAQ_AES_FRANZEN // .zpaq.franzen with AES + Franzen
 };
+/// 65.13g: work quadra: an AES archive is read as it is (no password asked, nothing decrypted). A franzen one is decoded
+bool g_letturacruda= false;
 
 // An InputArchive supports encrypted reading
 class InputArchive : public ArchiveBase, public libzpaq::Reader
@@ -128540,6 +128661,25 @@ bool isfranzenonly(const string &i_zpaqname)
 }
 #endif /// NOSFTPEND
 #endif
+/// 65.13e: -chunk -franzen: a part is a franzen file only (x_0003.zpaq.franzen). The size of the data in a part
+/// on the disk: of a franzen one, what the part would be in clear
+int64_t dimensionepezzo(const string &i_fisico)
+{
+#ifndef NOFRANZEN
+#ifdef ZPAQFULL /// NOSFTPSTART
+	if (isfranzen(i_fisico))
+		return franzcri::leggi_dimensione(i_fisico.c_str());
+#endif /// NOSFTPEND
+#endif
+	return prendidimensionefile(i_fisico.c_str());
+}
+/// the file on the disk for the name of a part: itself or its franzen file
+string pezzofisico(const string &i_nome)
+{
+	if ((!fileexists(i_nome)) && fileexists(franzenname(i_nome)))
+		return franzenname(i_nome);
+	return i_nome;
+}
 
 // Detect archive type and determine physical file to use
 ArchiveType InputArchive::detect_archive_type(const string& base_file)
@@ -128898,8 +129038,8 @@ InputArchive::InputArchive(const char *filename) : fn(filename), uses_franzen(fa
 #endif
 #endif
 	
-	// Initialize AES if needed
-	if (archive_type == ARCHIVE_ZPAQ_AES || archive_type == ARCHIVE_ZPAQ_AES_FRANZEN)
+	// Initialize AES if needed (65.13g: not for work quadra, g_letturacruda)
+	if ((archive_type == ARCHIVE_ZPAQ_AES || archive_type == ARCHIVE_ZPAQ_AES_FRANZEN) && (!g_letturacruda))
 	{
 		// Ask for AES password if not provided
 		if (!g_flagcreating)
@@ -129265,6 +129405,16 @@ int64_t arraytoint64(const char *i_buffer)
 	return risultato;
 }
 
+/// 65.13e: the salt of a new AES archive. With -debug4 (the deterministic encryption, for the tests: the
+/// same input gives the same bytes) it is all zeros, as -debug4 already did in add(). NOT secure
+void salezpaq(char *o_salt)
+{
+	if (flagdebug4)
+		memset(o_salt, 0, 32);
+	else
+		libzpaq::random(o_salt, 32);
+}
+
 // An Archive is a file supporting encryption
 class OutputArchive : public ArchiveBase, public libzpaq::Writer
 {
@@ -129286,6 +129436,10 @@ class OutputArchive : public ArchiveBase, public libzpaq::Writer
 	bool	eindice; // this is the index (a -index, backup), not the archive
 	/// 65.11p: -chunk is for the archive. Its index (backup -chunk has one) is a single file, never cut
 	bool	apezzi;
+	/// 65.13e: -chunk -franzen: every part is a franzen file only (the .zpaq is never written), and no part bigger
+	/// than -chunk ON THE DISK: limitepezzo is the data that fits in it (in clear it is -chunk)
+	bool	 franzenpezzi;
+	uint64_t limitepezzo;
 	/// a chunk made by backup is born .tmp, as its parts are: the name comes at the end (finalemultiparttmp)
 	string nomepezzo(string i_nome)
 	{
@@ -129343,12 +129497,34 @@ class OutputArchive : public ArchiveBase, public libzpaq::Writer
 			myprintf("00211: flush k2\n");
 #ifndef ESX
 		if (ptr == 104)
-			if (flagdebug4)
+			if (flagdebug3) //fika: it was -debug4 (now the deterministic encryption)
 				myprintf("00212: =============== g_write_on_first %d firstp %s\n", int(g_write_on_first), migliaia(int64_t(firstfp)));
 #endif
 		if (flagdebug3)
 			myprintf("00213: flush k3\n");
 
+#ifndef NOFRANZEN
+#ifdef ZPAQFULL /// NOSFTPSTART
+		/// 65.13e: -chunk -franzen: the jidac header of the run, written again at its end, goes to its place in
+		/// the franzen file of the first part of the run (still open), encrypted (AES) at its offset in the archive
+		if (g_write_on_first && (ptr == 104) && franzenpezzi && g_p_franzenprimo)
+		{
+			if (aes)
+				aes->encrypt(buf, ptr, g_write_on_seek + previoussize);
+			if (!g_p_franzenprimo->writeat(g_write_on_seek, buf, ptr))
+				if (g_franzen_scrittirotti++ == 0)
+					myprintf("31681! cannot write on the franzen file of the archive\n");
+			if (g_p_franzenprimo != g_p_franzenfile)
+			{
+				g_p_franzenprimo->close();
+				delete g_p_franzenprimo;
+			}
+			g_p_franzenprimo= 0;
+			ptr				= 0;
+			return;
+		}
+#endif /// NOSFTPEND
+#endif
 		if (g_write_on_first && (ptr == 104) && (firstfp != FPNULL))
 		{
 #ifndef ESX
@@ -129363,6 +129539,8 @@ class OutputArchive : public ArchiveBase, public libzpaq::Writer
 			if (flagdebug3)
 				myprintf("00216: HERE WE ARE @ %12s on fp %12s  size %s\n", migliaia3(ftello(firstfp)), migliaia(int64_t(firstfp)), migliaia2(ptr));
 #endif
+/* //fika: -debug4 wrote every buffer on z:\ (before and after AES). Now -debug4 is the deterministic
+   encryption. And those files went through myfwrite, that is into the franzen file of the archive too
 			char debugfilename[100];
 #ifndef ESX
 			FP debugoutf;
@@ -129374,6 +129552,7 @@ class OutputArchive : public ArchiveBase, public libzpaq::Writer
 				myfclose(&debugoutf);
 			}
 #endif
+//fika */
 			if (firstchunk)
 			{
 				if (flagdebug3)
@@ -129387,8 +129566,10 @@ class OutputArchive : public ArchiveBase, public libzpaq::Writer
 			}
 			int64_t criptoposition= ftello(firstfp) + off;
 
+/* //fika
 			if (flagdebug4)
 				myprintf("00219: write104 at %s (fetello %s + off %s)  on file %s should thefilename %s\n", migliaia(ftello(firstfp) + off), migliaia2(ftello(firstfp)), migliaia3(off), debugfilename, thefilename.c_str());
+//fika */
 
 			if (aes)
 			{
@@ -129397,6 +129578,7 @@ class OutputArchive : public ArchiveBase, public libzpaq::Writer
 				aes->encrypt(buf, ptr, criptoposition);
 			}
 #ifndef ESX
+/* //fika
 			if (flagdebug4)
 			{
 				snprintf(debugfilename, sizeof(debugfilename), "z:\\enc_%04d,%04d_u_%08d_size_%06d_%s_at_%08d_due.bin", (int)g_debug_sequence++, (int)int64_t(fp), (int)int64_t(ftello(fp)), ptr, nomefile.c_str(), (int)criptoposition);
@@ -129404,6 +129586,7 @@ class OutputArchive : public ArchiveBase, public libzpaq::Writer
 				myfwrite(buf, 1, ptr, debugoutf);
 				myfclose(&debugoutf);
 			}
+//fika */
 			if (flagdebug3)
 				myprintf("00221: realfwrite104 on firstfp %s @ftello %s\n", migliaia(int64_t(firstfp)), migliaia2(int64_t(ftello(firstfp))));
 #endif
@@ -129447,6 +129630,7 @@ class OutputArchive : public ArchiveBase, public libzpaq::Writer
 			myprintf("00227: flush k4bis\n");
 
 #ifndef ESX
+/* //fika
 		char debugfilename[100];
 		FP	 debugoutf;
 		if (flagdebug4)
@@ -129459,9 +129643,10 @@ class OutputArchive : public ArchiveBase, public libzpaq::Writer
 				myfclose(&debugoutf);
 			}
 		}
+//fika */
 		if (flagdebug3)
 			if ((int64_t)fp != 0)
-				myprintf("00228: !!!!!!!!!!!!!!!!!!!!!! unecrypted on [ENCRYPT @ %s] %s\n", migliaia(ftello(fp) + off), debugfilename);
+				myprintf("00228: !!!!!!!!!!!!!!!!!!!!!! unecrypted on [ENCRYPT @ %s]\n", migliaia(ftello(fp) + off)); //fika: without the name of the z:\ file
 #endif
 
 		if (flagdebug3)
@@ -129501,6 +129686,7 @@ class OutputArchive : public ArchiveBase, public libzpaq::Writer
 		if (aes)
 		{
 #ifndef ESX
+/* //fika: the sequence of the z:\ files
 			if (flagdebug4)
 				if ((int64_t)fp != 0)
 					myprintf("00234: AES seq %08lld [size %6s] crypt %10s (ftello %10s + off %10s + written %10s) %s\n",
@@ -129511,10 +129697,12 @@ class OutputArchive : public ArchiveBase, public libzpaq::Writer
 							 migliaia3(off),
 							 migliaia4(writtensofar),
 							 nomefile.c_str());
+//fika */
 #endif
 			aes->encrypt(buf, ptr, cryptoffset);
 		}
 #ifndef ESX
+/* //fika
 		if (flagdebug4)
 		{
 			if (fp != NULL)
@@ -129525,10 +129713,11 @@ class OutputArchive : public ArchiveBase, public libzpaq::Writer
 				myfclose(&debugoutf);
 			}
 		}
+//fika */
 #endif
 		/// 65.9l: what the write really took is the "written" of the progress lines (a destination full
 		/// takes nothing more, and the number stays where it is)
-		const size_t messi= scrivi(buf, 1, ptr, fp);
+		const size_t messi= apezzi ? scrivipezzi() : scrivi(buf, 1, ptr, fp);
 		g_inoutput+= (int64_t)messi;
 		if (streamout)
 		{
@@ -129538,7 +129727,6 @@ class OutputArchive : public ArchiveBase, public libzpaq::Writer
 			off+= ptr;
 		}
 		writtensofar+= ptr;
-		chunksize+= ptr;
 
 		if (nowrite)
 		{
@@ -129549,39 +129737,97 @@ class OutputArchive : public ArchiveBase, public libzpaq::Writer
 
 		if (flagdebug3)
 			myprintf("00235: flush k8\n");
-
-		if (apezzi)
-			if (chunksize > g_chunk_size)
-			{
-				if ((fp != firstfp) && (fp != FPNULL))
-				{
-#ifndef ESX
-					if (flagdebug3)
-					{
-						myprintf("\r                                                                                \r");
-						myprintf("\r");
-						myprintf("00236: closing __________________________ %s |%s|\n", migliaia(int64_t(fp)), thefilename.c_str());
-					}
-#endif
-					tocca_now(fp);
-					myfclose(&fp);
-				}
-				thefilename= format_filename(++chunknumber);
-				if (flagdebug3)
-					myprintf("00237: the (new) filename %s\n", thefilename.c_str());
-				fp= myfopen(thefilename.c_str(), WB, DATE_1980);
-				if (!isopen())
-					ioerr(thefilename.c_str());
-#ifndef ESX
-				if (flagdebug3)
-					myprintf("00238: file open and ready on fp %s!\n", migliaia(int64_t(fp)));
-#endif
-				chunksize		  = 0;
-				writtenonlastchunk= writtensofar;
-				g_addedchunklist.push_back(thefilename);
-				/// g_addedchunklist_fp.push_back(fp);
-			}
 		ptr= 0;
+	}
+	/*
+		65.13e: -chunk X is a strict maximum, no part bigger than X. The buffer (already encrypted, as
+		one piece, at its offset in the whole archive) is cut where the part is full and the rest goes
+		on in the next one, opened only when there is something to put in it (no empty last part).
+		Before, the size was checked after the whole buffer was written, and with >: a part could be
+		up to 64 KB (one buffer) bigger than X, even when X was a multiple of 64 KB
+	*/
+	size_t scrivipezzi()
+	{
+		size_t	 messi= 0;
+		unsigned fatto= 0;
+		while (fatto < ptr)
+		{
+			if (chunksize >= limitepezzo)
+			{
+				writtenonlastchunk= writtensofar + fatto;
+				nuovopezzo();
+			}
+			uint64_t quanto= limitepezzo - chunksize;
+			if (quanto > (uint64_t)(ptr - fatto))
+				quanto= ptr - fatto;
+			messi+= scrivi(buf + fatto, 1, (size_t)quanto, fp);
+			chunksize+= quanto;
+			fatto+= (unsigned)quanto;
+		}
+		return messi;
+	}
+	/// the part is full: close it (not the first one of the run, where the header is written at the end)
+	void nuovopezzo()
+	{
+		if ((fp != firstfp) && (fp != FPNULL))
+		{
+#ifndef ESX
+			if (flagdebug3)
+			{
+				myprintf("\r                                                                                \r");
+				myprintf("\r");
+				myprintf("00236: closing __________________________ %s |%s|\n", migliaia(int64_t(fp)), thefilename.c_str());
+			}
+#endif
+			tocca_now(fp);
+			myfclose(&fp);
+		}
+		thefilename= format_filename(++chunknumber);
+		if (flagdebug3)
+			myprintf("00237: the (new) filename %s\n", thefilename.c_str());
+		if (franzenpezzi)
+			nuovopezzofranzen();
+		else
+		{
+			fp= myfopen(thefilename.c_str(), WB, DATE_1980);
+			if (!isopen())
+				ioerr(thefilename.c_str());
+		}
+#ifndef ESX
+		if (flagdebug3)
+			myprintf("00238: file open and ready on fp %s!\n", migliaia(int64_t(fp)));
+#endif
+		chunksize= 0;
+		g_addedchunklist.push_back(franzenpezzi ? franzenname(thefilename) : thefilename);
+		/// g_addedchunklist_fp.push_back(fp);
+	}
+	/// 65.13e: -chunk -franzen: the part is a franzen file only, with the salt of the first one (one key for all,
+	/// see g_franzen_chiavi). The franzen file of the part that is full is closed, but not the first one of
+	/// the run (g_p_franzenprimo: its header is written again at the end)
+	void nuovopezzofranzen()
+	{
+#ifndef NOFRANZEN
+#ifdef ZPAQFULL /// NOSFTPSTART
+		if (g_p_franzenfile && (g_p_franzenfile != g_p_franzenprimo))
+		{
+			g_p_franzenfile->close();
+			delete g_p_franzenfile;
+		}
+		g_p_franzenfile	  = 0;
+		const string nome = franzenname(thefilename);
+		const bool	 conaes= (g_password != NULL) && (g_password[0] != 0);
+		g_p_franzenfile	  = new franzcri(g_franzen.c_str(), g_franzen.length(), 0, 0, 0, CRYPTO_PWHASH_ALG_DEFAULT, conaes);
+		if (g_franzen_salenoto)
+			g_p_franzenfile->usa_sale(g_franzen_sale);
+		if (!g_p_franzenfile->open(nome.c_str(), true))
+		{
+			myprintf("43791!  cannot create franzen <<%Z>>\n", nome.c_str());
+			error("cannot create franzen archive");
+		}
+		if (flagverbose)
+			myprintf("43787: Creating Franzen (FRANZEN) <<%Z>>\n", nome.c_str());
+#endif /// NOSFTPEND
+#endif
 	}
 	// Position the next read or write offset to p.
 	void seek(int64_t p, int whence)
@@ -129775,6 +130021,13 @@ class OutputArchive : public ArchiveBase, public libzpaq::Writer
 						myprintf("-------------------- chiudo davvero %21s\n", migliaia(int64_t(g_p_franzenfile)));
 				}
 				color_restore();
+				/// 65.13e: -chunk -franzen: the first part of the run, if still open (its header not written again)
+				if (g_p_franzenprimo && (g_p_franzenprimo != g_p_franzenfile))
+				{
+					g_p_franzenprimo->close();
+					delete g_p_franzenprimo;
+				}
+				g_p_franzenprimo= 0;
 				g_p_franzenfile->close();
 				g_p_franzenfile= 0;
 			}
@@ -130058,7 +130311,9 @@ class easymultipart
 	int		nextpart_integer;
 	int64_t maxpart;
 
-	easymultipart(string i_filename) : howmanychunks(0),
+	/// 65.13e: i_franzen = the parts are franzen files only (-chunk -franzen): a part is there when its
+	/// .franzen is, and its size is the one of the data inside
+	easymultipart(string i_filename, bool i_franzen= false) : howmanychunks(0),
 									   ismultipart(false),
 									   isgood(false),
 									   howmanyjolly(0),
@@ -130092,7 +130347,7 @@ class easymultipart
 		ismultipart= howmanyjolly > 0;
 		if (howmanyjolly > 9)
 		{
-			myprintf("00265! too many jolly '?' (max 9), founded %d in %s\n", howmanyjolly, i_filename.c_str());
+			myprintf("00265! too many jolly '?' (max 9), found %d in %s\n", howmanyjolly, i_filename.c_str());
 			seppuku();
 			return;
 		}
@@ -130110,12 +130365,14 @@ class easymultipart
 			string partname= subpart(i_filename, i);
 			if (partname == part0)
 				error("84285: too many archive parts");
+			if (i_franzen)
+				partname= pezzofisico(partname);
 			if (!fileexists(partname))
 			{
 				thehole= partname;
 				if (flagdebug3)
 					myprintf("00266: filenamearraysize %08d part %08d %Z does not exists\n", (int)filenamearray.size(), i, partname.c_str());
-				if (i == 1)
+				if ((i == 1) || i_franzen) /// franzen: no .franzen in filenamearray (only *.zpaq): the hole of the parts is checked by add (multipartbucato)
 					thehole= "";
 				else if ((filenamearray.size() > 0) && (i > 0))
 				{
@@ -130133,7 +130390,7 @@ class easymultipart
 			{
 				s_fileandsize myblock;
 				myblock.filename= partname;
-				int64_t tempsize= prendidimensionefile(partname.c_str());
+				int64_t tempsize= dimensionepezzo(partname);
 				totalchunksize+= tempsize;
 				myblock.size		  = tempsize;
 				myblock.attr		  = 0;
@@ -130179,7 +130436,7 @@ class easymultipart
 
 		if (partarray.size() > 0)
 		{
-			if (fileexists(subpart(i_filename, parts)))
+			if (fileexists(subpart(i_filename, parts)) || (i_franzen && fileexists(franzenname(subpart(i_filename, parts)))))
 				lastpart= subpart(i_filename, parts);
 			nextpart		= subpart(i_filename, parts + 1);
 			nextpart_integer= parts + 1;
@@ -135839,7 +136096,7 @@ bool franzimager::ntfs_apply_fixup(uint8_t *io_record, uint32_t i_recordsize, ui
 		if (*sector_footer != update_seq_num)
 		{
 			if (flagdebug)
-				myprintf("43566: ntfs_apply_fixup: mismatch sector %u (expected 0x%04X, founded 0x%04X)\n",
+				myprintf("43566: ntfs_apply_fixup: mismatch sector %u (expected 0x%04X, found 0x%04X)\n",
 					   i, update_seq_num, *sector_footer);
 			// Questo indica corruzione o scrittura incompleta
 			// In alcuni casi potremmo voler continuare comunque, ma è rischioso
@@ -136292,7 +136549,7 @@ bool franzimager::readmftbitmap()
 												  FRANZIMAGER_NTFS_ATTR_DATA, NULL);
 	if (!data_attr)
 	{
-		myprintf("44076: attribute $DATA not founded in $Bitmap\n");
+		myprintf("44076: attribute $DATA not found in $Bitmap\n");
 		delete[] mft_record;
 		return false;
 	}
@@ -136553,7 +136810,7 @@ bool franzimager::calculateusedblocks()
 		if (flagverbose)
 			if (blockschecked % 1000 == 0)
 			{
-				myprintf("  getted %12s blocks, founded %12s used...\r", migliaia(blockschecked), migliaia2(m_usedblocks));
+				myprintf("  getted %12s blocks, found %12s used...\r", migliaia(blockschecked), migliaia2(m_usedblocks));
 				fflush(stdout);
 			}
 	}
@@ -139713,7 +139970,7 @@ bool franzimager::deletevss()
 
 	if (ureturn == 0 || !pobj)
 	{
-		myprintf("46809: snapshot vss not founded to delete\n");
+		myprintf("46809: snapshot vss not found to delete\n");
 		return false;
 	}
 
@@ -143511,7 +143768,7 @@ bool get_partition_info(char drive_letter)
 
 		if (extents->NumberOfDiskExtents == 0)
 		{
-			myprintf("42045: no extension founded\n");
+			myprintf("42045: no extension found\n");
 			CloseHandle(hvol);
 			return false;
 		}
@@ -144198,6 +144455,7 @@ class Jidac
 	int append();					   // anti-ramsomware (slow)
 	int multisomething();			   // extract/test with "*"
 	int setpassword();				   // set or change password
+	int setpassword_franzen();		   // 65.13n: -franzen2
 	int checkpassword();			   // check if password is OK
 	int extractw();					   // chunked-extract, return 1 if error else 0
 	int info();						   // wrap for list
@@ -144227,6 +144485,7 @@ class Jidac
 	int fillgui();	  // 65.11o: f -gui: what to do and where is asked on a screen (Windows). 0: chosen, go on; 1: left; 2: error
 	int workfat32(); // 65.12b: work fat32 X:|N [label] [-boot]: FAT32 up to 2 TB (Windows)
 	int workpoke();	 // 65.12g: work poke file offset[:to] value -force -kill: bytes of a file changed (tests)
+	int workquadra(); // 65.13g: work quadra A B: two archives (glued parts, franzen decoded) the same bytes (tests)
 	int dir(bool flagtreeview = false);  // Windows-like dir command
 	int tree();
 	int robocopy();	  // Like robocopy, but with XLS
@@ -144495,6 +144754,7 @@ class Jidac
 	string	getbackupnameifany(const string &i_filename);
 	int		sumhome();
 	bool	is_incomplete_trans(const char *arc);
+	bool	trim_pezzi(const string &i_thearchive, easymultipart &i_parti, const vector<bool> &i_conc, int &o_risultato);
 	bool	onlynorecursion(string filename);
 #ifdef ZPAQFULL /// NOSFTPSTART
 	int maxcpu(int i_percent);
@@ -144833,8 +145093,18 @@ void *worker_routine(void *arg)
 			pthread_mutex_lock(ctx->io_mutex);
 			try
 			{
+				/// 65.13g: a read stops at the end of a part (InputArchive): a block of a -chunk archive goes
+				/// on in the next one. One read gave the first piece only: "09187: Incomplete read" for every
+				/// block across two chunks (pp, x -recover). Read until the block is all there, or nothing comes
 				ctx->in->seek(b.offset, SEEK_SET);
-				bytes_read= ctx->in->read(&raw_data[0], b.bsize);
+				bytes_read= 0;
+				while (bytes_read < b.bsize)
+				{
+					const int letti= ctx->in->read(&raw_data[bytes_read], b.bsize - bytes_read);
+					if (letti <= 0)
+						break;
+					bytes_read+= letti;
+				}
 			}
 			catch (...)
 			{
@@ -146301,7 +146571,7 @@ class zpaqfranzsftp2
 
 			if (flagdebug)
 			{
-				myprintf("41257: File founded: %s (%s) - %s bytes - %s\n",
+				myprintf("41257: File found: %s (%s) - %s bytes - %s\n",
 						 fileinfo.name.c_str(),
 						 fileinfo.isdirectory ? "DIR" : "FILE",
 						 migliaia(fileinfo.size),
@@ -148129,6 +148399,8 @@ OutputArchive::OutputArchive(string i_thearchive, const char *filename, const ch
 	nowritebase= 0;
 	eindice	   = false;
 	apezzi	   = false;
+	franzenpezzi= false;
+	limitepezzo= 0;
 	streamout  = false;
 	/// g_p_franzenfile=0;
 
@@ -148138,6 +148410,13 @@ OutputArchive::OutputArchive(string i_thearchive, const char *filename, const ch
 	thefilename		  = filename;
 	eindice			  = (g_indexname != "") && (thefilename == g_indexname);
 	apezzi			  = (g_chunk_size > 0) && (!eindice);
+	franzenpezzi	  = false;
+#ifndef NOFRANZEN
+#ifdef ZPAQFULL /// NOSFTPSTART
+	franzenpezzi= apezzi && g_franzen_zpaq_nowrite;
+#endif /// NOSFTPEND
+#endif
+	limitepezzo		  = g_chunk_size;
 	chunknumber		  = 0;
 	writtensofar	  = 0;
 	writtenonlastchunk= 0;
@@ -148146,13 +148425,20 @@ OutputArchive::OutputArchive(string i_thearchive, const char *filename, const ch
 	if (apezzi)
 	{
 		firstfilename= i_thearchive;
-		easymultipart chunkedoutput(i_thearchive);
-		if (chunkedoutput.filenamearray.size() == 0)
+		easymultipart chunkedoutput(i_thearchive, franzenpezzi);
+		/// (franzen: the parts are not *.zpaq, filenamearray does not see them)
+		if ((franzenpezzi ? chunkedoutput.partarray.size() : chunkedoutput.filenamearray.size()) == 0)
 			firstchunk= true;
 		else
 			firstchunk= false;
+#ifndef NOFRANZEN
+#ifdef ZPAQFULL /// NOSFTPSTART
+		if (franzenpezzi)
+			limitepezzo= franzen_capienza(g_chunk_size);
+#endif /// NOSFTPEND
+#endif
 
-		if (flagdebug4)
+		if (flagdebug3) //fika: it was -debug4 (now the deterministic encryption)
 		{
 			myprintf("00280: is firstchunk %d\n", (int)firstchunk);
 			myprintf("00281: chunkedoutput count %s total size %21s\n", migliaia(chunkedoutput.filenamearray.size()), migliaia2(chunkedoutput.totalchunksize));
@@ -148170,7 +148456,7 @@ OutputArchive::OutputArchive(string i_thearchive, const char *filename, const ch
 			myprintf("00284: changed thefilename to %s\n", thefilename.c_str());
 
 		previoussize= chunkedoutput.totalchunksize;
-		if (flagdebug4)
+		if (flagdebug3) //fika: it was -debug4
 			myprintf("00285: previoussize %s\n", migliaia(previoussize));
 	}
 
@@ -148179,7 +148465,8 @@ OutputArchive::OutputArchive(string i_thearchive, const char *filename, const ch
 		return;
 
 	// Open existing file
-	char salt[32]= {0};
+	char	 salt[32]	 = {0};
+	uint64_t salenelpezzo= 0; /// 65.13e: the salt written at the start of the first part counts in its -chunk size
 	/// a -append -stdout: the output is stdout. The archive on the command line is NEVER opened
 	/// for writing: an existing one already has its salt (the new data are a delta to be glued
 	/// after it, encrypted with the same salt), a new one starts with it, as always
@@ -148239,7 +148526,12 @@ OutputArchive::OutputArchive(string i_thearchive, const char *filename, const ch
 	{
 		if (flagdebug2)
 			myprintf("00286: try BSD ABPLUS\n");
-		fp= myfopen(thefilename.c_str(), ABPLUS);
+		/// 65.13e: "ab+" makes the file when it is not there: a new archive went the way of an existing one
+		/// (with -key: no salt to read, "cannot read salt", and a file of 0 bytes that stopped every run after)
+		if (exists(thefilename))
+			fp= myfopen(thefilename.c_str(), ABPLUS);
+		else
+			fp= FPNULL;
 	}
 	else
 		fp= myfopen(thefilename.c_str(), RBPLUS);
@@ -148279,6 +148571,7 @@ OutputArchive::OutputArchive(string i_thearchive, const char *filename, const ch
 		{
 			if (flagdebug2)
 				myprintf("00292: password, reading salt\n");
+			fseeko(fp, 0, SEEK_SET); /// 65.13e: "ab+" (BSD, -append) is at the end of the file, not at its start
 			if (fread(salt, 1, 32, fp) != 32)
 				error("38679: cannot read salt");
 			if (salt_ && memcmp(salt, salt_, 32))
@@ -148373,7 +148666,7 @@ OutputArchive::OutputArchive(string i_thearchive, const char *filename, const ch
 		if (apezzi)
 		{
 			/// g_addedchunklist_fp.push_back(fp);
-			g_addedchunklist.push_back(thefilename);
+			g_addedchunklist.push_back(franzenpezzi ? franzenname(thefilename) : thefilename); /// 65.13e: the file on the disk
 		}
 #ifndef NOFRANZEN
 #ifdef ZPAQFULL /// NOSFTPSTART
@@ -148481,6 +148774,8 @@ OutputArchive::OutputArchive(string i_thearchive, const char *filename, const ch
 #ifdef ZPAQFULL /// NOSFTPSTART
 		if ((!eindice) && (g_p_franzenfile != 0))
 			g_franzen_salenoto= franzcri::leggi_sale(franzenname(thefilename).c_str(), g_franzen_sale);
+		if (franzenpezzi) /// 65.13e: the first part of the run: open until the end (its header is written again)
+			g_p_franzenprimo= g_p_franzenfile;
 #endif /// NOSFTPEND
 #endif
 		if (password)
@@ -148521,6 +148816,8 @@ OutputArchive::OutputArchive(string i_thearchive, const char *filename, const ch
 				const bool inizioarchivio= nowrite ? (nowritebase == 0) : (off == 0);
 				if (inizioarchivio && scrivi(salt, 1, 32, fp) != 32)
 					ioerr(thefilename.c_str());
+				if (inizioarchivio) /// (in clear, or in the franzen file of the part)
+					salenelpezzo= 32;
 				if (nowrite && inizioarchivio)
 				{
 					off		  = 32; // virtual position just after the salt
@@ -148537,7 +148834,7 @@ OutputArchive::OutputArchive(string i_thearchive, const char *filename, const ch
 	if (flagdebug)
 		myprintf("00299: opened 1 thefilename %s\n", thefilename.c_str());
 	firstfp	 = FPNULL;
-	chunksize= 0;
+	chunksize= salenelpezzo;
 
 	if (apezzi)
 	{
@@ -148886,7 +149183,7 @@ int Jidac::zfsrestore()
 	}
 	if (filename.size() == 0)
 	{
-		myprintf("00361! no .zfs files founded in archive\n");
+		myprintf("00361! no .zfs files found in archive\n");
 		return 2;
 	}
 	char nomeatteso[20];
@@ -149123,7 +149420,7 @@ int Jidac::updatezfsbackup(const string &poolName, const string &archiveName, co
 
 	if (foundindex == -1 || ((foundindex + 1) != (int)array_primachiocciola.size()))
 	{
-		myprintf("00402! The founded index %d is < snapshot size %d, cowardly abort (not the LAST snapshot)\n", foundindex, (int)array_primachiocciola.size());
+		myprintf("00402! The found index %d is < snapshot size %d, cowardly abort (not the LAST snapshot)\n", foundindex, (int)array_primachiocciola.size());
 		return 2;
 	}
 
@@ -152578,8 +152875,10 @@ void help_range()
 
 void help_date()
 {
-	scrivi_riga("-datefrom X", "datetime<=X The length must be even, beware of leading zeros");
-	scrivi_riga("-dateto   Y", "datetime>=Y OK 2022, 202210, 2022-12-25, 2002-12-25_03:04:05, 20121225030405");
+	scrivi_riga("-datefrom X", "datetime>=X The length must be even, beware of leading zeros");
+	scrivi_riga("-dateto   Y", "datetime<=Y OK 2022, 202210, 2022-12-25, 2002-12-25_03:04:05, 20121225030405");
+	scrivi_riga("", "Y is the end of its period: -dateto 2022 => up to 2022-12-31 23:59:59");
+	scrivi_riga("", "Local time, as the dates shown (with -utc: UTC)");
 }
 void help_size()
 {
@@ -152667,9 +152966,12 @@ string help_autotest(bool i_usage, bool i_example)
 		scrivi_riga(" ", "    -m6, -turbo, -tar (*nix)");
 		scrivi_riga(" ", "-m3 + 1.75 GB of folders: the hashes, encrypted -chunk, -frugal, -m8, -fastadd");
 		scrivi_riga(" ", "-m4 + 6 GB of big files: Franzen, mount, -turbo, backup -chunk (28 GB free)");
-		scrivi_riga(" ", "-m5 everything (hours): every method (t, p), -all, -715, damaged archives");
-		scrivi_riga(" ", "    (32 GB free; there, a -m5 with 16 threads takes ~6 GB of RAM)");
+		scrivi_riga(" ", "-m5 everything (hours): every method (t, p), -all, -715, damaged archives,");
+		scrivi_riga(" ", "    the quadratura: in clear, -key, -franzen, both; one piece == multipart");
+		scrivi_riga(" ", "    == -chunk == backup to the byte, and one byte changed must be seen");
+		scrivi_riga(" ", "    (33 GB free; there, a -m5 with 16 threads takes ~6 GB of RAM)");
 		scrivi_riga(" ", "-checktxt checks the level the folder was made with");
+		scrivi_riga("-debug4", "With -all -to: bigone01.big of 4 MB, not 400 (-m5 much faster)");
 		scrivi_riga("-franzen pippo", "Turn on the franzen test");
 		scrivi_riga(" ", "-to also tests the hash healing (attribute-only change, -touch)");
 		scrivi_riga(" ", "and, if mount works here (tried for real), the mount (mount -test)");
@@ -152769,7 +153071,7 @@ string help_backup(bool i_usage, bool i_example)
 		scrivi_riga("-franzen X", "Parts and index as .franzen files only (also with -key)");
 		scrivi_riga("-chunk X", "No part bigger than X: a run makes as many parts as it takes");
 		scrivi_riga(" ", "(they get their names at the end of the run, all together).");
-		scrivi_riga(" ", "Also with -key. Not with -franzen, not with -backupzeta");
+		scrivi_riga(" ", "Also with -key, -franzen, both. Not with -backupzeta");
 		scrivi_riga("-backupxxh3", "Store XXH3 instead of default MD5");
 		scrivi_riga("-backupzeta", "Store ZETA instead of default MD5 [UNENCRYPTED]");
 		scrivi_riga("-index X", "Store index (and .pid) files in X folder (for WORM drive)");
@@ -152808,7 +153110,7 @@ string help_franzencommand(bool i_usage, bool i_example)
         scrivi_riga("-franzen PWD", "Password for Franzen encryption/decryption");
         scrivi_riga("-to FILE", "Explicit output filename (default: auto-generated)");
         scrivi_riga("-ssd", "Enable multi-threaded operation");
-        scrivi_riga("-t N", "Use N threads (requires -ssd)");
+        scrivi_riga("-tN", "Use N threads, ex -t8 (requires -ssd)"); /// 65.13f: it said "-t N": "-t 8" is not taken (unknown option)
         scrivi_riga(" ", " ");
         scrivi_riga("SUB test", "Verify decryption without writing output");
         scrivi_riga("SUB ispasswordok", "Verify if password is correct");
@@ -152826,7 +153128,7 @@ string help_franzencommand(bool i_usage, bool i_example)
         scrivi_esempio("Decrypt file (auto-detect)", "franzen archive.zpaq.franzen -franzen mypassword");
         scrivi_esempio("Encrypt with explicit output", "franzen archive.zpaq -franzen mypassword -to backup.franzen");
         scrivi_esempio("Decrypt with explicit output", "franzen archive.zpaq.franzen -franzen mypassword -to restored.zpaq");
-        scrivi_esempio("Multi-threaded encrypt", "franzen archive.zpaq -franzen mypassword -ssd -t 8");
+        scrivi_esempio("Multi-threaded encrypt", "franzen archive.zpaq -franzen mypassword -ssd -t8");
         scrivi_esempio("Test decryption (no output)", "franzen test archive.zpaq.franzen -franzen mypassword");
         scrivi_esempio("Check password", "franzen ispasswordok archive.zpaq.franzen -franzen mypassword");
 ///        scrivi_esempio("Dump header only (no pwd)", "franzen dump archive.zpaq.franzen");
@@ -152997,7 +153299,9 @@ string help_work(bool i_usage, bool i_example)
 		scrivi_riga("compare2", "Compare substrings from 2 files");
 		scrivi_riga("fc", "Binary comparing two files");
 		scrivi_riga("poke f o v", "The byte at offset o (from 0) of f becomes v (0-255); o:e from o to e");
-		scrivi_riga(" ", "  (e included). Not past the end. Only with -force -kill: else what it would do");
+		scrivi_riga(" ", "  (e included). v ~ = its complement. Not past the end. Only with -force -kill");
+		scrivi_riga("quadra a b", "Two archives as one stream (parts glued, franzen decoded with -franzen,");
+		scrivi_riga(" ", "  AES as it is: no -key) must be the same bytes. a b can be multipart with ?");
 		scrivi_riga("zip f1 f2", "Compress f1 into the new .zip f2 (-force to overwrite)"); /// POSTAMI help_work zip
 #ifndef NOEMAIL /// POSTAMI help_work usage
 		scrivi_riga("email", "Send an e-mail (SMTP/TLS), see below");
@@ -153461,11 +153765,14 @@ string help_setpassword(bool i_usage, bool i_example)
 	if (i_usage)
 	{
 		scrivi_riga("CMD password", "Change/remove password of single archive (no multipart)");
-		scrivi_riga(" ", "By default DRY RUN (only test)");
+		scrivi_riga(" ", "The source is not touched: the output is a new archive");
 		scrivi_riga("-force", "Overwrite output if exists");
 		scrivi_riga("-space", "Do not check for free space");
 		scrivi_riga("-key2 X", "Use X as new password");
 		scrivi_riga("-key2 .", "No password in the output (remove it)");
+		scrivi_riga("-franzen X", "A Franzen archive: -key2 changes the AES key, the Franzen password stays");
+		scrivi_riga("-franzen2 Y", "New Franzen password Y (-franzen X the old one; one change at a time)");
+		scrivi_riga("-verify", "With -franzen2: the output read back and compared");
 	}
 	if (i_usage && i_example)
 		scrivi_examples();
@@ -153474,6 +153781,7 @@ string help_setpassword(bool i_usage, bool i_example)
 		scrivi_esempio("Change pass from X to Y", "password z:\\x.zpaq z:\\y.zpaq -key X -key2 Y");
 		scrivi_esempio("Add password X to NON encrypted", "password z:\\nocrypt.zpaq z:\\yescrypt.zpaq -key2 X");
 		scrivi_esempio("Remove password X from encrypted", "password z:\\crypt.zpaq z:\\nocrypt.zpaq -key X -key2 .");
+		scrivi_esempio("Franzen password from X to Y", "password z:\\f.zpaq z:\\g.zpaq -franzen X -franzen2 Y -verify");
 	}
 	return ("Change/remove password of single archive (no multipart)");
 }
@@ -153511,7 +153819,7 @@ string help_crop(bool i_usage, bool i_example)
 		scrivi_riga("-to tiny.zpaq", "Reduce to tiny.zpaq (safer)");
 		scrivi_riga("-until X", "Discard every versions >X");
 		scrivi_riga("-maxsize X", "Manually cut at X (RISKY)");
-		scrivi_riga("-force", "Crop in-place (no backup: VERY RISKY!)");
+		scrivi_riga("-force", "Crop in-place, without -to (no backup: VERY RISKY!)");
 	}
 	if (i_usage && i_example)
 		scrivi_examples();
@@ -153522,7 +153830,7 @@ string help_crop(bool i_usage, bool i_example)
 		scrivi_esempio("Reduce to first 100.000", "crop z:\\1.zpaq -to d:\\2.zpaq -maxsize 100k -kill");
 		scrivi_esempio("Crop in place (NO BACKUP! RISKY!)", "crop z:\\1.zpaq -until 2 -kill -force");
 	}
-	return ("Trim .zpaq archive (remove old versions, reduce size)");
+	return ("Discard the latest version(s) of .zpaq (reduce size)");
 }
 void print_sub()
 {
@@ -153621,7 +153929,7 @@ string help_a(bool i_usage, bool i_example)
 		scrivi_riga("-fasttxt -verify", "Post-check of crc32.txt");
 		scrivi_riga("-home", "Create one archive for folder (-not -only)");
 		scrivi_riga("-collision", "Double check for SHA-1 collisions");
-		scrivi_riga("-chunk X", "Split in chunk of size X (a multipart name, with ?)");
+		scrivi_riga("-chunk X", "No part bigger than X (a multipart name, with ?)");
 #ifdef ZPAQFULL /// NOSFTPSTART
 #ifdef unix
 		scrivi_riga("-dataset", "x    Add changes on zfs dataset x");
@@ -154659,7 +154967,7 @@ string help_dirsize(bool i_usage, bool i_example)
 	{
 		scrivi_riga("CMD dirsize", "Show cumulative folder(s) size");
 		scrivi_riga(" ", "Case INsensitive ENDING with parameters (unless -force)");
-		scrivi_riga(" ", "i.e. marcus == /1/marcus, /tank/d/documenti/MARCUS");
+		scrivi_riga(" ", "i.e. marcus == /1/marcus, /tank/d/documenti/MARCUS (not /1/xmarcus)");
 		scrivi_riga("-force", "Exact match; /tank/marcus != /tank/MARCUS");
 	}
 	if (i_usage && i_example)
@@ -154667,7 +154975,7 @@ string help_dirsize(bool i_usage, bool i_example)
 	if (i_example)
 	{
 		scrivi_esempio("Search with 2 parameters", "dirsize z:\\1.zpaq marcus vanessa");
-		scrivi_esempio("Getting size (insensitive)", "dirsize z:\\1.zpaq /tank/d/documenti/marcus -force");
+		scrivi_esempio("Getting size (exact, sensitive)", "dirsize z:\\1.zpaq /tank/d/documenti/marcus -force");
 	}
 	return ("Show total folder(s) size");
 }
@@ -154679,6 +154987,7 @@ string help_monitor(bool i_usage, bool i_example)
 	{
         scrivi_riga("CMD monitor", "Analyze NTFS USN Journal to detect background changes");
         scrivi_riga("-n <sec>", "Set polling interval in seconds (default: 10)"); 
+        scrivi_riga("-not -only", "Filter what is listed, as add does");
         scrivi_riga("NOTE:", "Audit mode only. Detects changes but does NOT archive them (yet)");
 	}
 	if (i_usage && i_example)
@@ -154952,6 +155261,7 @@ string help_s(bool i_usage, bool i_example)
 		scrivi_riga("-715", "Work as 7.15 (with .zfs and ADS)");
 		scrivi_riga("-forcezfs", "Include .zfs");
 		scrivi_riga("-home", "Show 1-level cumulative size, with [oldest]-[newest] file date");
+		scrivi_riga("/os", "With -home, order by size (smaller first)");
 		scrivi_riga("-ignore", "Do not show file errors (ex. ERROR_ACCESS_DENIED)");
 		scrivi_riga("-verbose", "With -home, also show oldest/newest filename and full timestamp");
 	}
@@ -154963,6 +155273,7 @@ string help_s(bool i_usage, bool i_example)
 		scrivi_esempio("Multithreaded size", "s r:\\vbox s:\\uno -ssd");
 		scrivi_esempio("(Kind of) size of c:\\users", "s c:\\users -home -ssd -ignore");
 		scrivi_esempio("Find 'cold' (unused) folders", "s c:\\users -home -verbose");
+		scrivi_esempio("Subfolders by size, biggest last", "s c:\\users -home /os");
 	}
 	return ("Show dir(s) size and free disk space");
 }
@@ -154986,7 +155297,7 @@ string help_oneonone(bool i_usage, bool i_example)
 	if (i_example)
 	{
 		scrivi_esempio("Dry run, =hash,=filename,multithread", "1on1 c:\\dropbox -deleteinto z:\\pippero2 -ssd");
-		scrivi_esempio("Real run, 0-files too", "1on1 c:\\dropbox -deleteinto z:\\pippero2 -zero -kill");
+		scrivi_esempio("Real run (0-length files too)", "1on1 c:\\dropbox -deleteinto z:\\pippero2 -kill");
 		scrivi_esempio("Real run, with XXH3, with *", "1on1 c:\\dropbox -deleteinto z:\\pippero2 -xxh3 -kill -forcezfs");
 		scrivi_esempio("Compare folder", "1on1 c:\\ f:\\ -home -xxh3 -ssd");
 	}
@@ -155052,9 +155363,15 @@ string help_cp(bool i_usage, bool i_example)
 		scrivi_riga(" ", "with 1 sec progression feedback. Huge file, tiny bandwidth");
 		scrivi_riga(" ", "and unreliable media (-verify)");
 		scrivi_riga(" ", "By default overwrite, use -paranoid to create unique name");
-		scrivi_riga("-verify", "Do an heavy (XXH3) check of copied data");
+		scrivi_riga(" ", "One file on a console: the map of the file while it is copied");
+		scrivi_riga("-verify", "Copy by pieces: each one written, read back, XXH3 checked");
+		scrivi_riga(" ", "A piece that differs is written again (3 times), then error");
+		scrivi_riga("-n X", "With -verify: pieces of X% (default 10%, at most 1GB)");
+		scrivi_riga("-chunk X", "With -verify: files under X in one piece (default 100MB)");
 		scrivi_riga("-paranoid", "Rename output file to do not overwrite");
-		scrivi_riga("-append", "Only append data (*risky, use with zpaq archives)");
+		scrivi_riga("-append", "Only append data (use with zpaq archives): resumable");
+		scrivi_riga(" ", "The part already there must be the beginning of the source");
+		scrivi_riga(" ", "(quick hash); with -verify its last piece is read back too");
 		scrivi_riga("-force", "Do no check if destination is writeable");
 		scrivi_riga("-space", "Do no check if enough destination free space");
 	}
@@ -155066,6 +155383,7 @@ string help_cp(bool i_usage, bool i_example)
 		scrivi_esempio("Copy with verify", "cp k:\\*.mp4 -to z:\\pluto -verify");
 		scrivi_esempio("Copy WITHOUT overwrite", "cp k:\\*.mp4 -to z:\\pluto -paranoid");
 		scrivi_esempio("Resumable copy (append only)", "cp k:\\*.zpaq -to z:\\pluto -append");
+		scrivi_esempio("Resumable, checked by pieces of 5%", "cp k:\\*.zpaq -to z:\\pluto -append -verify -n 5");
 	}
 	return ("Friendly file copy with ETA (resumable)");
 }
@@ -155814,7 +156132,7 @@ string help_n(bool i_usage, bool i_example)
 	{
 		scrivi_esempio("Keep 10 newest files in z:\\1\\", "n z:\\1\\*.txt -n 10 -kill");
 		scrivi_esempio("Keep 20 ordered by name", "n z:\\1\\dumpy_*.sql -n 20 -kill -force /on");
-		scrivi_esempio("Keep 30 txt ordered by name", "n z:\\1\\*.txt -n 20 -kill -force /on");
+		scrivi_esempio("Keep 30 txt ordered by name", "n z:\\1\\*.txt -n 30 -kill -force /on");
 		scrivi_esempio("Check the last file with ugo.bat", "n z:\\1\\*.txt -kill -exec ugo.bat");
 	}
 	return ("Delete older file(s), keep newest X");
@@ -157082,9 +157400,11 @@ bool Jidac::cli_getkey	(const string& i_opt,string i_string,int argc,const char*
 			bool nuovoarchivio=false;
 			if ((command=='a') || (command=='Z') || (command=='O'))
 				nuovoarchivio=!fileexists(get_final_part(archive));
+			/// 65.13m: the new key of password (-key2) is a new archive's too: twice
+			const bool duevolte=nuovoarchivio || ((command=='6') && (i_string=="-key2"));
 			if (spassword!="")
 			{
-				if (nuovoarchivio)
+				if (duevolte)
 				{
 					string doublepwd=mygetpasswordblind("Password,again :");
 					if (doublepwd!=spassword)
@@ -157342,7 +157662,8 @@ bool Jidac::cli_getdate(string& i_opt,string i_string,int argc,const char** argv
 				(*i_i)++;
 				///format_datetime
 
-				int64_t newdate=encodestringdate(mytimestamp,true);
+				/// 65.13h: -dateto is the END of its period (it was the start: -datefrom 2017 -dateto 2017 found nothing)
+				int64_t newdate=encodestringdate(mytimestamp,i_string!="-dateto");
 				if (newdate!=-1)
 				{
 					
@@ -157721,7 +158042,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 	g_programflags.add(&flagdebug,			"-debug",				"Show debug line number",							"");
 	g_programflags.add(&flagdebug2,			"-debug2",				"Show debug infos",									"");
 	g_programflags.add(&flagdebug3,			"-debug3",				"Show A LOT of debug",								"");
-	g_programflags.add(&flagdebug4,			"-debug4",				"Write debug data on z:\\",							"");
+	g_programflags.add(&flagdebug4,			"-debug4",				"Deterministic encryption (tests only, NOT secure)",	""); //fika: it was "Write debug data on z:\"
 	g_programflags.add(&flagdebug5,			"-debug5",				"Show RAM usage",							"");
 	g_programflags.add(&flagdebug6,			"-debug6",				"NTFS/Enforce test",							"");
 	g_programflags.add(&flagdesc,			"-desc",				"Orderby desc",										"");
@@ -157833,7 +158154,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 #endif ///NOSFTPEND
 	g_programflags.add(&flagbarraod,		"/od",					"Order by date",									"dir;");
 	g_programflags.add(&flagbarraon,		"/on",					"Order by name",									"dir;");
-	g_programflags.add(&flagbarraos,		"/os",					"Order by size",									"dir;");
+	g_programflags.add(&flagbarraos,		"/os",					"Order by size (dir, s -home)",						"dir;s;");
 
 	g_programflags.add(&flagnocolor,		"-nocolor",				"Monochrome output",								"",flagnocolor);
 	g_programflags.add(&flagnodelete,		"-nodelete",			"Do not logical delete files",						"");
@@ -158867,7 +159188,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 				cutdoublequote(candidate);
 				if (havedoublequote(candidate))
 				{
-					myprintf("00557$ WARNING: double quote founded in command line and cutted\n");
+					myprintf("00557$ WARNING: double quote found in command line and cutted\n");
 					candidate=mypopback(candidate);
 					myprintf("||%s||\n",candidate.c_str());
 				}
@@ -158875,7 +159196,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 			}
 			i--;
 		}
-		else if ((!flagforzarobocopy) && ((opt.size()<2 || opt[0]!='-'))) usage();
+		else if ((!flagforzarobocopy) && ((opt.size()<2 || opt[0]!='-')) && (!g_programflags.exists(opt))) usage(); /// 65.13b: /os /od /on after a switch (s x -home /os) are flags, already set: not the usage
 		else if (cli_getint		(opt,"-P",			false,	"-P",							argc,argv,&i,4,					&g_mysql_port));
 		else if (cli_getint		(opt,"-bandwidth",	false,	"",								argc,argv,&i,0,					&g_sftp_bandwidth));
 #ifdef ZPAQFULL ///NOSFTPSTART
@@ -158972,6 +159293,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 		}
 		else if (cli_getint(opt, "-rescuetime", false, "", argc, argv, &i, 2, &g_rescuetime));
 		else if (cli_onlystring(opt, "-rescuefake", "", g_rescuefake, argc, argv, &i, NULL)); /// not in the help: for the tests
+		else if (cli_onlystring(opt, "-cpfake", "", g_cpfake, argc, argv, &i, NULL)); /// 65.13d: not in the help: for the tests
 		else if (opt == "-turbo") /// the flag is set by g_programflags; a number after it (only digits: a folder "2024_photos" stays a folder) are its threads
 		{
 			if (i < argc - 1)
@@ -159034,6 +159356,7 @@ int Jidac::loadparameters(int argc, const char** argv)
 		else if (cli_getarray	(opt,"-sfxonly",											argc,argv,&i,					&sfxonlyfiles,	NULL));
 		else if (cli_getstring	(opt,"-sfxuntil",	false, 	"",								argc,argv,&i,"",				&g_sfxuntil));
 		else if (cli_onlystring	(opt,"-franzen",				"",							g_franzen,	argc,argv,&i,					NULL));
+		else if (cli_onlystring	(opt,"-franzen2",				"",							g_franzen2,	argc,argv,&i,					NULL)); /// 65.13n
 
 #endif ///NOSFTPEND
 		else if (cli_getarray	(opt,"-only",												argc,argv,&i,					&onlyfiles,		NULL));
@@ -159400,6 +159723,15 @@ int Jidac::loadparameters(int argc, const char** argv)
 			snapmark=newmark;
 		}
 	}
+	/// 65.13m: -out (written over) and -errorlog (deleted here) on the archive itself: refused
+	if (archive!="")
+	{
+		if (stessoarchivio(g_output,archive) || stessoarchivio(g_error,archive))
+		{
+			myprintf("03573! -out / -errorlog <<%Z>> is the archive itself: refused (nothing done)\n",(stessoarchivio(g_output,archive) ? g_output : g_error).c_str());
+			return 2;
+		}
+	}
 	if (g_output!="")
 		open_output(g_output);
 
@@ -159610,6 +159942,13 @@ int Jidac::loadparameters(int argc, const char** argv)
 	}
 #endif // corresponds to #ifdef (#ifdef _WIN32)
 
+	/// 65.13m: -datefrom and -dateto are typed in local time, as the dates are shown (-utc: UTC, as before).
+	/// Here, after every switch: -utc can come after them, and -715 turns it on
+	if (!flagutc)
+	{
+		g_datefrom= localeautc(g_datefrom);
+		g_dateto  = localeautc(g_dateto);
+	}
 	return 0;
 }
 
@@ -163545,12 +163884,21 @@ int Jidac::mount()
 #endif // ZPAQMOUNT ///NOSFTPEND
 int Jidac::doCommand()
 {
+	/// 65.13e: -debug4 is the deterministic encryption: the same input gives the same bytes (AES salt of zeros,
+	/// franzen salt fixed, every franzen nonce from a counter), to compare archives to the byte in the tests
+	if (flagdebug4)
+	{
+		color_yellow();
+		myprintf("01948$ -debug4: deterministic encryption (fixed salt and nonces): for tests only, NOT secure\n");
+		color_restore();
+	}
 	if (g_chunk_size>0)
 	{
 		/// 65.11p: backup too (it makes the names of its parts by itself: no ? to give; its -index is a folder)
-		if ((command!='a') && (command!='Z'))
+		/// 65.13d: and cp (-verify: files under it in one piece)
+		if ((command!='a') && (command!='Z') && (command!='o'))
 		{
-			myprintf("00582! -chunk works only with the a (add) and the backup commands\n");
+			myprintf("00582! -chunk works only with the a (add), the backup and the cp commands\n");
 			return 2;
 		}
 
@@ -163562,6 +163910,13 @@ int Jidac::doCommand()
 		if ((command=='a') && (g_indexname!=""))
 		{
 			myprintf("00584! -chunk incompatible with -index\n");
+			return 2;
+		}
+		/// 65.13e: no part bigger than -chunk, and the header of a run is written again (at the end) in
+		/// its first part: it must be all there. Before, every part took at least one 64 KB buffer
+		if (((command=='a') || (command=='Z')) && (g_chunk_size<4096))
+		{
+			myprintf("03548! -chunk %s is too small: at least 4KB (4.096 bytes)\n", migliaia(g_chunk_size));
 			return 2;
 		}
 	}
@@ -165498,10 +165853,10 @@ void Jidac::ntfs2_aggiungi(bool i_checkifselected, DTMap &i_edt, franzntfs2_cont
 	if (command != 'j')
 	{
 		if (g_datefrom > 0)
-			if (edate <= g_datefrom)
+			if (edate < g_datefrom)
 				return;
 		if (g_dateto > 0)
-			if (edate >= g_dateto)
+			if (edate > g_dateto)
 				return;
 	}
 	DTMap::iterator p;
@@ -166421,10 +166776,10 @@ void Jidac::addfile(bool i_checkifselected, DTMap &i_edt, string filename, int64
 	if (command != 'j')
 	{
 		if (g_datefrom > 0)
-			if (edate <= g_datefrom)
+			if (edate < g_datefrom)
 				return;
 		if (g_dateto > 0)
-			if (edate >= g_dateto)
+			if (edate > g_dateto)
 				return;
 	}
 	DT &d= i_edt[filename];
@@ -169474,7 +169829,9 @@ int Jidac::zpaqdirsize()
 		for (DTMap::iterator p= dp[i]->begin(); p != dp[i]->end(); ++p)
 		{
 			int len= p->first.size();
-			if (len > 0 && p->first[len] != '/')
+			/// 65.13h: files only ([len] was the terminator: the folders too, each one added to itself);
+			/// a size -1 (unknown, damaged archive) is not taken away from the folders
+			if (len > 0 && p->first[len - 1] != '/' && p->second.size > 0)
 				for (int j= 0; j < len; ++j)
 				{
 					if (p->first[j] == '/')
@@ -169489,6 +169846,7 @@ int Jidac::zpaqdirsize()
 		a "complex" thing... just to sort the output (!)
 	*/
 	vector<DTMap::iterator> filelist;
+	unsigned int			nontrovate= 0; /// 65.13h: the parameters with no folder (warned, exit code 1, with or without -force)
 	myprintf("\n\n");
 	if (flagforce)
 	{
@@ -169498,18 +169856,19 @@ int Jidac::zpaqdirsize()
 			if (!isdirectory(files[i]))
 				files[i]+= '/';
 			DTMap::iterator a= dt.find(files[i]);
-			if (a != dt.end())
+			if ((a != dt.end()) && (a->second.date != 0)) /// date 0: deleted in a later version, not in the archive any more
 				filelist.push_back(a);
 			else
 			{
-				if (flagdebug)
-					myprintf("00722$ WARNING cannot find folder in the zpaq %s\n", files[i].c_str());
+				nontrovate++;
+				myprintf("00722$ WARNING cannot find folder in the zpaq <<%Z>>\n", files[i].c_str());
 			}
 		}
 	}
 	else
 	{
-		/// case insensitive. I know, very slow, but who cares?
+		/// case insensitive: the path ENDS with the parameter, cut at a /
+		/// marcus => /1/marcus/ and /1/marcus/x/MARCUS/ yes, /1/xmarcus/ no
 		myprintf("00723: case iNSeNsITIVE right search, because NO -force switch\n");
 		for (unsigned int i= 0; i < files.size(); i++)
 		{
@@ -169518,36 +169877,33 @@ int Jidac::zpaqdirsize()
 			files[i]			= stringtolower(files[i]);
 			unsigned int oldsize= filelist.size();
 			for (DTMap::iterator a= dt.begin(); a != dt.end(); ++a)
-				if (isdirectory(a->first))
+				if (isdirectory(a->first) && (a->second.date != 0) && (a->first.size() >= files[i].size()))
 				{
-					int posizione= myposi(files[i], a->first);
-					if (posizione > -1)
-						if ((unsigned int)posizione == (unsigned int)(a->first.size() - files[i].size()))
+					const size_t inizio= a->first.size() - files[i].size();
+					if ((inizio == 0) || (files[i][0] == '/') || (a->first[inizio - 1] == '/'))
+						if (stringtolower(a->first.substr(inizio)) == files[i])
 							filelist.push_back(a);
 				}
-			if (flagdebug)
-				if (filelist.size() == oldsize)
-					myprintf("00724$ WARNING cannot find folder in the zpaq <<%s>>\n", files[i].c_str());
+			if (filelist.size() == oldsize)
+			{
+				nontrovate++;
+				myprintf("00724$ WARNING cannot find folder in the zpaq <<%Z>>\n", files[i].c_str());
+			}
 		}
 	}
 	sort(filelist.begin(), filelist.end(), compareFragmentList);
+	filelist.erase(unique(filelist.begin(), filelist.end()), filelist.end()); /// marcus MARCUS: each folder once
 	myprintf("\n\n");
 	for (unsigned fi= 0; fi < filelist.size(); ++fi)
 	{
 		DTMap::iterator p= filelist[fi];
 		myprintf("%19s [%s] <<%Z>>\n", migliaia(p->second.size), dateToString(flagutc, p->second.date).c_str(), p->first.c_str());
 	}
+	if (nontrovate == 0)
+		return 0;
 	if (flagforce) // .find() search
-	{
-		if (filelist.size() == files.size())
-			return 0;
-		else
-		{
-			myprintf("00725: folder searched %s != founded %s\n", migliaia((int64_t)files.size()), migliaia2((int64_t)filelist.size()));
-			return 1;
-		}
-	}
-	return 0;
+		myprintf("00725: folder searched %s != found %s\n", migliaia((int64_t)files.size()), migliaia2((int64_t)(files.size() - nontrovate)));
+	return 1;
 }
 
 void Jidac::decodelastversion()
@@ -169968,10 +170324,10 @@ int Jidac::list()
 			if (minsize > (uint64_t)p->second.size)
 				flagshow= false;
 		if (g_datefrom > 0)
-			if ((p->second.date) <= g_datefrom)
+			if ((p->second.date) < g_datefrom)
 				flagshow= false;
 		if (g_dateto > 0)
-			if ((p->second.date) >= g_dateto)
+			if ((p->second.date) > g_dateto)
 				flagshow= false;
 
 		if (g_rangefrom > 0)
@@ -170479,6 +170835,15 @@ int Jidac::setpassword()
 		myprintf("00826! so sorry, this seems a multipart archive, abort\n");
 		return 2;
 	}
+	/// 65.13n: -franzen2, the Franzen password: a branch of its own (the franzen file, not the archive inside)
+	if (g_franzen2 != "")
+		return setpassword_franzen();
+	/// 65.13m: never an output on its own input (-force deleted the output = the source, before reading it)
+	if (stessoarchivio(archive, repack))
+	{
+		myprintf("03584! The output <<%Z>> is the source itself: refused (nothing done)\n", repack.c_str());
+		return 2;
+	}
 	if (!flagspace)
 		if (!saggiascrivibilitacartella(repack))
 		{
@@ -170529,8 +170894,21 @@ int Jidac::setpassword()
 		string spassword= mygetpasswordblind("");
 		if (spassword == ".")
 			myprintf("00833: password in output removed\n");
+		else if (spassword == "") /// 65.13m: an Enter by mistake was an output with no password at all
+		{
+			myprintf("\n");
+			myprintf("03588! No new password entered (. to remove it): nothing done\n");
+			return 2;
+		}
 		else
 		{
+			/// 65.13m: twice, as a new archive's (a typo was an archive nobody can open)
+			if (mygetpasswordblind("Password,again :") != spassword)
+			{
+				myprintf("\n");
+				myprintf("51852! You must enter the exact password TWICE\n");
+				return 2;
+			}
 			if (spassword != "")
 			{
 				libzpaq::SHA256 sha256;
@@ -170553,13 +170931,26 @@ int Jidac::setpassword()
 			return 2;
 		}
 	}
+	/// 65.13l: with -franzen the output is its .franzen too (exists() sees the name only)
+	const string repackfranzen= (g_franzen != "") ? franzenname(repack) : "";
 	if (flagforce)
+	{
 		delete_file(repack.c_str());
-	if (exists(repack))
+		if (repackfranzen != "")
+			delete_file(repackfranzen.c_str());
+	}
+	if (exists(repack) || ((repackfranzen != "") && exists(repackfranzen)))
 		error("32507: output file exists and no -force");
+	/// 65.13l: as add: -franzen (without -debug) writes the .franzen only. It wrote a .zpaq beside it: AES only
+	/// with -key2, all in clear with -key2 . (an archive kept under franzen, copied out in clear)
+#ifndef NOFRANZEN
+#ifdef ZPAQFULL /// NOSFTPSTART
+	g_franzen_zpaq_nowrite= (g_franzen != "") && (isfranzen(repack) || (!flagdebug));
+#endif /// NOSFTPEND
+#endif
 	char salt[32]= {0};
 	if (new_password)
-		libzpaq::random(salt, 32);
+		salezpaq(salt); /// 65.13e: zeros with -debug4
 	myprintf("00836: Running for %s bytes\n", migliaia(in.totalsize()));
 	if (g_password != NULL)
 		myprintf("00837: Source password:       present\n");
@@ -170594,6 +170985,159 @@ int Jidac::setpassword()
 		throw;
 	}
 	return 0;
+}
+
+/*
+	65.13n: password -franzen OLD -franzen2 NEW. The archive inside is not read: its franzen file is, block
+	by block, decrypted with -franzen and written again, encrypted with -franzen2 (a new salt, new nonces).
+	The AES inside of an AES+Franzen (FRENZEN) is not touched (the output is FRENZEN too: -key as before).
+	Nothing in clear on the disk. One password at a time: -key2 and -franzen2 together are refused.
+	With -verify all the output is read back with the new password and compared (XXH3).
+*/
+int Jidac::setpassword_franzen()
+{
+#ifndef NOFRANZEN
+#ifdef ZPAQFULL /// NOSFTPSTART
+	if (g_franzen == "")
+	{
+		myprintf("03599! -franzen2 needs -franzen (the password of now)\n");
+		return 2;
+	}
+	if ((new_password != NULL) || (plainpassword2 != ""))
+	{
+		myprintf("03600! -key2 and -franzen2 together: one password at a time (first one, then the other)\n");
+		return 2;
+	}
+	/// archive and repack have their .zpaq: the files are their .franzen (or the .franzen given)
+	const string sorgente= isfranzen(files[0]) ? files[0] : franzenname(archive);
+	const string uscita	 = isfranzen(files[1]) ? files[1] : franzenname(repack);
+	if (!is_file_franzen(sorgente))
+	{
+		myprintf("03601! <<%Z>> is not a franzen file (-franzen2 changes the password of Franzen)\n", sorgente.c_str());
+		return 2;
+	}
+	if (stessofile(sorgente, uscita))
+	{
+		myprintf("03602! The output <<%Z>> is the source itself: refused (nothing done)\n", uscita.c_str());
+		return 2;
+	}
+	if (flagforce)
+		delete_file(uscita.c_str());
+	if (exists(uscita))
+	{
+		myprintf("03603! The output <<%Z>> exists (-force to overwrite)\n", uscita.c_str());
+		return 2;
+	}
+	const int64_t grande= prendidimensionefile(sorgente.c_str());
+	if (!flagspace)
+		if (getfreespace(uscita) < grande + 1024)
+		{
+			myprintf("03604! The free space seems tiny %s on %Z (-space to bypass)\n", migliaia(getfreespace(uscita)), uscita.c_str());
+			return 2;
+		}
+	franzcri lettore(g_franzen.c_str(), g_franzen.length());
+	if (!lettore.open(sorgente.c_str(), false))
+	{
+		color_red();
+		myprintf("03605! Cannot open <<%Z>> with -franzen (wrong password? damaged?): nothing written\n", sorgente.c_str());
+		color_restore();
+		return 2;
+	}
+	const bool	   aes	 = lettore.get_is_aes_too();
+	const uint64_t totale= lettore.get_file_data_size();
+	myprintf("03606: Franzen password of <<%Z>> => <<%Z>> (%s bytes, AES inside: %s)\n", sorgente.c_str(), uscita.c_str(), migliaia((int64_t)totale), aes ? "yes, untouched" : "no");
+	franzcri	  scrittore(g_franzen2.c_str(), g_franzen2.length(), 0, 0, 0, CRYPTO_PWHASH_ALG_DEFAULT, aes);
+	const int64_t rottiprima= g_franzen_scrittirotti;
+	if (!scrittore.open(uscita.c_str(), true))
+	{
+		lettore.close();
+		myprintf("03607! Cannot create <<%Z>>\n", uscita.c_str());
+		delete_file(uscita.c_str());
+		return 2;
+	}
+	std::vector<char> buffer(1 << 20);
+	XXH3_state_t	  stato;
+	(void)XXH3_128bits_reset(&stato);
+	uint64_t	  fatto = 0;
+	bool		  bene	= true;
+	const int64_t inizio= mtime();
+	while (bene && (fatto < totale))
+	{
+		const size_t n= (size_t)(((totale - fatto) < (uint64_t)buffer.size()) ? (totale - fatto) : (uint64_t)buffer.size());
+		if (!lettore.read_at_to(&buffer[0], n, fatto))
+		{
+			myprintf("\n");
+			myprintf("03608! Cannot read <<%Z>> at %s\n", sorgente.c_str(), migliaia((int64_t)fatto));
+			bene= false;
+			break;
+		}
+		if (flagverify)
+			(void)XXH3_128bits_update(&stato, &buffer[0], n);
+		if (!scrittore.write(&buffer[0], n))
+		{
+			myprintf("\n");
+			myprintf("03609! Cannot write <<%Z>> at %s\n", uscita.c_str(), migliaia((int64_t)fatto));
+			bene= false;
+			break;
+		}
+		fatto+= n;
+		if (!flagnoeta)
+			myavanzamentoby1sec(fatto, totale, inizio);
+	}
+	scrittore.close();
+	lettore.close();
+	if (flagmemzero)
+		memset(&buffer[0], 0, buffer.size());
+	if (g_franzen_scrittirotti != rottiprima)
+		bene= false;
+	if (bene) /// the output opens with the new password, the same size, the same kind (AES inside or not)
+	{
+		franzcri prova(g_franzen2.c_str(), g_franzen2.length());
+		if ((!prova.open(uscita.c_str(), false)) || (prova.get_file_data_size() != totale) || (prova.get_is_aes_too() != aes))
+		{
+			myprintf("03610! The output does not open as it should with -franzen2\n");
+			bene= false;
+		}
+		else if (flagverify)
+		{
+			XXH3_state_t riletto;
+			(void)XXH3_128bits_reset(&riletto);
+			for (uint64_t letto= 0; bene && (letto < totale);)
+			{
+				const size_t n= (size_t)(((totale - letto) < (uint64_t)buffer.size()) ? (totale - letto) : (uint64_t)buffer.size());
+				if (!prova.read_at_to(&buffer[0], n, letto))
+					bene= false;
+				else
+					(void)XXH3_128bits_update(&riletto, &buffer[0], n);
+				letto+= n;
+			}
+			const XXH128_hash_t a= XXH3_128bits_digest(&stato);
+			const XXH128_hash_t b= XXH3_128bits_digest(&riletto);
+			if ((!bene) || (a.high64 != b.high64) || (a.low64 != b.low64))
+			{
+				myprintf("03611! -verify: the output read back is NOT the source\n");
+				bene= false;
+			}
+			else
+				myprintf("03612: -verify: the output read back with -franzen2 is the source (XXH3)\n");
+		}
+		prova.close();
+		if (flagmemzero)
+			memset(&buffer[0], 0, buffer.size());
+	}
+	eol();
+	if (!bene)
+	{
+		if (delete_file(uscita.c_str()))
+			myprintf("03613! The Franzen password change failed: the output <<%Z>> was deleted\n", uscita.c_str());
+		return 2;
+	}
+	myprintf("03614: Done <<%Z>> (%s bytes, the new Franzen password)\n", uscita.c_str(), migliaia(prendidimensionefile(uscita.c_str())));
+	return 0;
+#endif /// NOSFTPEND
+#endif
+	myprintf("03615! -franzen2: Franzen is not in this build\n");
+	return 2;
 }
 
 int Jidac::checkpassword()
@@ -171074,6 +171618,42 @@ int Jidac::enumeratecomments()
 	}
 	return 0;
 }
+/// 65.13j: k compares the names from the two folders down (the one in the archive, the -to one)
+string kill_cartella(string i_cartella)
+{
+	myreplaceall(i_cartella, "\\", "/");
+	if (!isdirectory(i_cartella))
+		i_cartella+= '/';
+	return i_cartella;
+}
+/// the name inside i_cartella (with its / at the end), "" for the folder itself; false = not inside it.
+/// On Windows without case, as the filesystem (Z:\Z is z:\z)
+bool kill_relativo(const string &i_nome, const string &i_cartella, string &o_relativo)
+{
+	o_relativo			= "";
+	const size_t lungo	= i_cartella.size();
+	const size_t confronto= (i_nome.size() + 1 == lungo) ? i_nome.size() : lungo; /// z:/knb is the folder z:/knb/
+	if (i_nome.size() < confronto)
+		return false;
+	for (size_t i= 0; i < confronto; i++)
+	{
+#ifdef _WIN32
+		if (tolower((unsigned char)i_nome[i]) != tolower((unsigned char)i_cartella[i]))
+			return false;
+#else
+		if (i_nome[i] != i_cartella[i])
+			return false;
+#endif
+	}
+	if (i_nome.size() > lungo)
+		o_relativo= i_nome.substr(lungo);
+#ifdef _WIN32
+	for (size_t i= 0; i < o_relativo.size(); i++)
+		if ((unsigned char)o_relativo[i] < 128)
+			o_relativo[i]= tolower((unsigned char)o_relativo[i]);
+#endif
+	return true;
+}
 int Jidac::kill()
 {
 	myprintf("01013: KILL of:");
@@ -171108,27 +171688,45 @@ int Jidac::kill()
 		return 1;
 	}
 	myprintf("\n");
+	/// 65.13j: the names from the two folders down. It was a replace of files[0] with tofiles[0] in the names
+	/// of the archive: a / more on one side (-to z:\knb\, as the TAB of Windows writes it; c:\z\), or another
+	/// case on Windows (Z:\Z), and nothing matched: every file, and the -to folder itself, "to be killed"
+	const string   cartellainterna= kill_cartella(files[0]);
+	const string   cartellaesterna= kill_cartella(tofiles[0]);
 	vector<string> inzpaqrinominato;
 	vector<string> tobekilled;
 	vector<string> dirtobekilled;
+	inzpaqrinominato.push_back(""); /// the -to folder itself: never
 	for (DTMap::iterator a= dt.begin(); a != dt.end(); ++a)
 	{
-		string dentrofile= a->first;
-		myreplace(dentrofile, files[0], tofiles[0]);
+		string dentrofile;
+		if (!kill_relativo(a->first, cartellainterna, dentrofile))
+			continue;
 		if (a->second.date == 0)
 		{
 			if (flagverbose)
 				myprintf("01016: DELETED ");
 		}
 		else
+		{
 			inzpaqrinominato.push_back(dentrofile);
+			/// and the folders over it, even without their record in the archive
+			for (size_t j= 0; j + 1 < dentrofile.size(); j++)
+				if (dentrofile[j] == '/')
+					inzpaqrinominato.push_back(dentrofile.substr(0, j + 1));
+		}
 		if (flagverbose)
-			myprintf("01017: Into zpaq %s  > renamed %s\n", a->first.c_str(), dentrofile.c_str());
+			myprintf("01017: Into zpaq %s  > renamed %s%s\n", a->first.c_str(), cartellaesterna.c_str(), dentrofile.c_str());
 	}
 	std::sort(inzpaqrinominato.begin(), inzpaqrinominato.end());
+	inzpaqrinominato.erase(unique(inzpaqrinominato.begin(), inzpaqrinominato.end()), inzpaqrinominato.end());
 	uint64_t sizetobekilled= 0;
 	for (DTMap::iterator a= edt.begin(); a != edt.end(); ++a)
-		if (binary_search(inzpaqrinominato.begin(), inzpaqrinominato.end(), a->first) == false)
+	{
+		string fuori;
+		if (!kill_relativo(a->first, cartellaesterna, fuori)) /// (scandir gives only names inside -to)
+			continue;
+		if (binary_search(inzpaqrinominato.begin(), inzpaqrinominato.end(), fuori) == false)
 		{
 			if (isdirectory(a->first))
 				dirtobekilled.push_back(a->first);
@@ -171138,6 +171736,7 @@ int Jidac::kill()
 				sizetobekilled+= a->second.size;
 			}
 		}
+	}
 	for (unsigned int i= 0; i < dirtobekilled.size(); i++)
 	{
 		myprintf("01018: Dir  to be killed %Z\n", dirtobekilled[i].c_str());
@@ -171535,6 +172134,41 @@ bool compare_s_benchmark(const s_benchmark &a, const s_benchmark &b)
 {
 	return a.speed < b.speed;
 }
+static bool fill_sumedia(FILE *i_file);			  /// 65.13c: (with f, below) the -verify of filecopy reads the media,
+static void fill_scordacache(const string &i_file); /// not the cache, as the one of f
+
+/// 65.13d: cp, the copy of big files on media that may lie (franzcopia, below the f command)
+#define CP_SOGLIA	 104857600LL  /// -verify: under this (or -chunk) a file is one piece (100 MB, as tohuman shows it)
+#define CP_PEZZOMAX	 1073741824LL /// -verify: the default piece, the smaller of this (1 GB) and 10% of the file
+#define CP_TENTATIVI 3			  /// -verify: a piece that differs is written again this many times, at most
+enum
+{
+	CP_NIENTE= 0, /// redirected, -noeta: the last line of a file only
+	CP_RIGA	 = 1, /// a line with a bar, every second
+	CP_MAPPA = 2  /// one file on a console: the map of the file
+};
+string cp_copia(const string &i_infile, const string &i_cartella, bool i_append, bool i_overwrite, bool i_verifica, unsigned int i_percento, int i_vista);
+
+static FILE *cp_apri(const string &i_file, const char *i_modo)
+{
+#ifdef _WIN32
+	return _wfopen(utow(i_file.c_str()).c_str(), utow(i_modo).c_str());
+#else
+	return fopen(i_file.c_str(), i_modo);
+#endif
+}
+
+/// the first i_quanti bytes of two files, by the quick hash (16 KB at the head, in the middle and at the
+/// tail; all of them under 64 KB): -append on a file with the same name that is not the same file
+static bool cp_quickuguale(const string &i_uno, const string &i_due, int64_t i_quanti)
+{
+	franz_do_hash quno("QUICK");
+	franz_do_hash qdue("QUICK");
+	const string  huno= quno.filehash(0, i_uno, false, 0, 0, i_quanti);
+	const string  hdue= qdue.filehash(0, i_due, false, 0, 0, i_quanti);
+	return (huno != "") && (huno == hdue);
+}
+
 string filecopy(bool i_singlefile, bool i_append, const string &i_infile, const string &i_outfile, bool i_verify, bool i_donotcheckspace, bool i_overwrite, uint64_t i_maxoutputsize)
 {
 	if ((i_infile) == "")
@@ -171570,6 +172204,11 @@ string filecopy(bool i_singlefile, bool i_append, const string &i_infile, const 
 	}
 	if (flagdebug2)
 		myprintf("01046: ready to make a copy in %s\n", filedefinitivo.c_str());
+	if (stessofile(i_infile, filedefinitivo)) /// 65.13m: never on itself (cp of a file on its own folder emptied it)
+	{
+		myprintf("03585! <<%Z>> is the source itself: not copied\n", filedefinitivo.c_str());
+		return "";
+	}
 	int64_t dimensioneoutput= 0;
 	int64_t bytestoappend	= 0;
 	if (i_append)
@@ -171577,27 +172216,32 @@ string filecopy(bool i_singlefile, bool i_append, const string &i_infile, const 
 		dimensioneoutput= prendidimensionefile(filedefinitivo.c_str());
 		bytestoappend	= larghezzain - dimensioneoutput;
 
+		/// 65.13d: (cp -append, the only one) a destination larger than the source is an error, no more
+		/// deleted (it may be a good backup); the part already there must be the beginning of the source
+		/// (quick hash), not a file with the same name
+		if (bytestoappend < 0)
+		{
+			myprintf("03527! -append: %Z is larger than the source (%s > %s): not touched\n", filedefinitivo.c_str(), migliaia(dimensioneoutput), migliaia2(larghezzain));
+			return "";
+		}
+		if ((dimensioneoutput > 0) && (!cp_quickuguale(i_infile, filedefinitivo, dimensioneoutput)))
+		{
+			myprintf("03528! -append: the %s bytes of %Z are not the beginning of the source (quick hash): not touched\n", migliaia(dimensioneoutput), filedefinitivo.c_str());
+			return "";
+		}
 		if (bytestoappend > 0)
 		{
 			if (dimensioneoutput > 0)
 				myprintf("01047: Ready to append %s bytes to %s => %s\n", migliaia(bytestoappend), migliaia2(dimensioneoutput), migliaia3(larghezzain));
 		}
-		else if (bytestoappend < 0)
-		{
-			myprintf("01048: Destination file larger than source (-append), deleting ...\n");
-			if (!delete_file(filedefinitivo.c_str()))
-			{
-				myprintf("01049! We get an highlander %Z\n", filedefinitivo.c_str());
-				return "";
-			}
-			bytestoappend= larghezzain;
-			i_append	 = false;
-		}
 		else if (bytestoappend == 0)
 		{
 			if (flagdebug2)
 				myprintf("01051: Source and destination filesize ==, exit\n");
-			return filedefinitivo;
+			/// 65.13c: with -verify the check is done anyway: a copy finished and never checked (or
+			/// different) was taken as good, "files OK"
+			if (!i_verify)
+				return filedefinitivo;
 		}
 
 		//// 100.000 => 80.000
@@ -171722,8 +172366,8 @@ string filecopy(bool i_singlefile, bool i_append, const string &i_infile, const 
 
 		donesize+= written;
 
-		if (!i_append && i_verify)
-			(void)XXH3_128bits_update(&state128, buffer, readSize);
+		if (!i_append && i_verify) /// 65.13c: what is written (with a maximum size the last buffer is cut: crop -verify was always KO)
+			(void)XXH3_128bits_update(&state128, buffer, bytesToWrite);
 
 		if (!flagnoeta)
 			hostampato|= myavanzamentoby1sec(donesize, bytestoappend, startcopy, false);
@@ -171744,84 +172388,95 @@ string filecopy(bool i_singlefile, bool i_append, const string &i_infile, const 
 		myprintf("01060: Written  %20s\n", migliaia(donesize));
 		myprintf("01061: Expected %20s\n\n", migliaia(bytestoappend));
 	}
-	fclose(outFile);
+	/// 65.13c: an error of a delayed write (a network share) comes out at the flush or at the close, not at
+	/// the fwrite: they were not looked at. With -verify the data go to the media (on a share: to the
+	/// server) before the re-read, and then out of the cache: the check read back the RAM of this computer
+	bool chiuso= i_verify ? fill_sumedia(outFile) : (fflush(outFile) == 0);
+	if (fclose(outFile) != 0)
+		chiuso= false;
 
-	if (buffer != NULL)
+	/// 65.13c: the buffer is freed at the end: the re-read of -append -verify used it after the free
+	/// (always "does not match" on Windows, a NULL pointer to fread elsewhere)
+	string esito= "";
+	do
 	{
-		franz_free(buffer);
-		buffer= 0;
-	}
-	if (donesize != (uint64_t)bytestoappend)
-	{
-		myprintf("01062: GURU bytes written does not match expected\n");
-		fclose(inFile);
-		return "";
-	}
-
-	dimensioneoutput= prendidimensionefile(filedefinitivo.c_str());
-
-	if (larghezzain != dimensioneoutput)
-	{
-		myprintf("01063: GURU input size %s != output size %s\n", migliaia(larghezzain), migliaia2(dimensioneoutput));
-		fclose(inFile);
-		return "";
-	}
-
-	if (i_verify)
-	{
-		if (!flagnoeta)
+		if (!chiuso)
 		{
-			/// printbar('=');
-			myprintf("01064: XXH3 verify of %Z\n", filedefinitivo.c_str());
+			myprintf("03506! ERROR writing %Z (flush/close)\n", filedefinitivo.c_str());
+			break;
 		}
-		if (i_append)
+		if (donesize != (uint64_t)bytestoappend)
 		{
-			if (flagdebug2)
-				myprintf("01066: Full re-read, because of -append\n");
-			fseeko(inFile, 0, SEEK_SET);
-			donesize	 = 0;
-			bytestoappend= prendidimensionehandle(inFile);
-			startcopy	 = mtime();
-			while ((readSize= fread(buffer, 1, g_ioBUFSIZE, inFile)) > 0)
+			myprintf("01062: GURU bytes written does not match expected\n");
+			break;
+		}
+
+		dimensioneoutput= prendidimensionefile(filedefinitivo.c_str());
+
+		if (larghezzain != dimensioneoutput)
+		{
+			myprintf("01063: GURU input size %s != output size %s\n", migliaia(larghezzain), migliaia2(dimensioneoutput));
+			break;
+		}
+
+		if (i_verify)
+		{
+			if (!flagnoeta)
 			{
-				donesize+= readSize;
-				(void)XXH3_128bits_update(&state128, buffer, readSize);
-				if (!flagnoeta)
-					myavanzamentoby1sec(donesize, bytestoappend, startcopy, false);
+				/// printbar('=');
+				myprintf("01064: XXH3 verify of %Z\n", filedefinitivo.c_str());
+			}
+			if (i_append)
+			{
+				if (flagdebug2)
+					myprintf("01066: Full re-read, because of -append\n");
+				fseeko(inFile, 0, SEEK_SET);
+				donesize	 = 0;
+				bytestoappend= prendidimensionehandle(inFile);
+				startcopy	 = mtime();
+				while ((readSize= fread(buffer, 1, g_ioBUFSIZE, inFile)) > 0)
+				{
+					donesize+= readSize;
+					(void)XXH3_128bits_update(&state128, buffer, readSize);
+					if (!flagnoeta)
+						myavanzamentoby1sec(donesize, bytestoappend, startcopy, false);
+				}
+			}
+
+			XXH128_hash_t myhash= XXH3_128bits_digest(&state128);
+			char		  risultato[33];
+			snprintf(risultato, sizeof(risultato), "%s", bin2hex_128(myhash.high64, myhash.low64).c_str());
+			int64_t startverify= mtime();
+
+			g_dimensione= 0;
+			if (flagdebug3)
+				myprintf("01067: franz_do_hash\n");
+
+			fill_scordacache(filedefinitivo);
+			franz_do_hash dummy("XXH3");
+			if (flagdebug3)
+				myprintf("01068: filehash on %s\n", filedefinitivo.c_str());
+
+			string hashreloaded= dummy.filehash(0, filedefinitivo, false, startverify, larghezzain);
+
+			if (flagverbose || flagdebug)
+			{
+				myprintf("01069: Expected   XXH3 hash of the output file %s\n", risultato);
+				myprintf("01070: Calculated XXH3 hash of the output file %s\n", hashreloaded.c_str());
+			}
+			if (hashreloaded != risultato)
+			{
+				myprintf("01071: GURU hash of output file does not match!\n");
+				break;
 			}
 		}
+		esito= filedefinitivo;
+	} while (false);
 
-		XXH128_hash_t myhash= XXH3_128bits_digest(&state128);
-		char		  risultato[33];
-		snprintf(risultato, sizeof(risultato), "%s", bin2hex_128(myhash.high64, myhash.low64).c_str());
-		int64_t startverify= mtime();
-
-		g_dimensione= 0;
-		if (flagdebug3)
-			myprintf("01067: franz_do_hash\n");
-
-		franz_do_hash dummy("XXH3");
-		if (flagdebug3)
-			myprintf("01068: filehash on %s\n", filedefinitivo.c_str());
-
-		string hashreloaded= dummy.filehash(0, filedefinitivo, false, startverify, larghezzain);
-
-		if (flagverbose || flagdebug)
-		{
-			myprintf("01069: Expected   XXH3 hash of the output file %s\n", risultato);
-			myprintf("01070: Calculated XXH3 hash of the output file %s\n", hashreloaded.c_str());
-		}
-		if (hashreloaded != risultato)
-		{
-			myprintf("01071: GURU hash of output file does not match!\n");
-			fclose(inFile);
-			return "";
-		}
-	}
-
+	franz_free(buffer);
 	fclose(inFile);
 
-	return filedefinitivo;
+	return esito;
 }
 bool isjolly(const string &i_filename)
 {
@@ -171837,24 +172492,36 @@ int Jidac::trim()
 	}
 	if (files.size() != 1)
 	{
-		myprintf("01072! TRIM works with ONLY one single .zpaq file (no multipart)\n");
+		/// 65.13i: the multipart is there (uno_????): on *nix an unquoted one comes as many files
+		myprintf("01072! TRIM works with ONLY one .zpaq (a multipart as \"uno_????\", in double quotes on *nix)\n");
 		return 2;
 	}
 	if (isjolly(files[0]))
 	{
 		if (flagdebug)
-			myprintf("59604: Jolly founded => multipart trim\n");
+			myprintf("59604: Jolly found => multipart trim\n");
+		if (tofiles.size() > 0) /// 65.13m: it was ignored, in silence
+		{
+			myprintf("03575! -to does not work on a multipart: trim cuts its parts in place (-kill)\n");
+			return 2;
+		}
 		return fix(files[0]);
 	}
 
 	if (tofiles.size() > 1)
 	{
-		myprintf("01073! TROM -to with only ONE output, please\n");
+		myprintf("01073! TRIM -to with only ONE output, please\n");
 		return 2;
 	}
 	archive= files[0]; // append ".zpaq" to archive if no extension
 	if (!iszpaq(archive))
 		archive+= ".zpaq";
+	/// 65.13i: as crop: the offsets are in clear, a franzen file is encrypted by blocks
+	if (is_file_franzen(files[0]) || is_file_franzen(archive) || ((!exists(archive)) && is_file_franzen(franzenname(archive))))
+	{
+		myprintf("03565! trim does not work on a franzen archive (encrypted by blocks: no cut in clear)\n");
+		return 2;
+	}
 	myprintf("01074: TRIMMING on %s\n", archive.c_str());
 	int64_t archivesize= prendidimensionefile(archive.c_str());
 	// Read archive or index into ht, dt, ver.
@@ -171870,7 +172537,7 @@ int Jidac::trim()
 	int64_t offset	= 0;	   // total size of existing parts
 	char	salt[32]= {0};	   // encryption salt
 	if (g_password)
-		libzpaq::random(salt, 32);
+		salezpaq(salt); /// 65.13e: zeros with -debug4
 
 	// Remote archive
 	if (index)
@@ -171917,8 +172584,9 @@ int Jidac::trim()
 	{
 		myprintf("01079: TRIM seems not necessary on size %s\n", migliaia(header_pos + offset));
 		/// fclose(fp);
-		return 1;
+		return 0; /// 65.13m: nothing to do is not a warning (it was 1, as k and crop are not)
 	}
+	const int64_t buono= header_pos + offset; /// the bytes that stay
 	if (tofiles.size() == 1)
 	{
 		string trimmeddestination= tofiles[0];
@@ -171929,19 +172597,26 @@ int Jidac::trim()
 		}
 		if (!iszpaq(trimmeddestination))
 			trimmeddestination+= ".zpaq";
+		if (stessoarchivio(archive, trimmeddestination)) /// 65.13m: never an output on its own input
+		{
+			myprintf("03576! -to <<%Z>> is the archive itself: refused (trim -kill cuts it in place)\n", trimmeddestination.c_str());
+			return 2;
+		}
 		if (!flagforce)
 			if (!saggiascrivibilitacartella(trimmeddestination))
 			{
 				myprintf("01081! sorry -to folder seems not writeable. Use -force to bypass\n");
 				return 2;
 			}
+		/// 65.13i: only the good part is copied (it was all the archive, then cut: the space and the time of the
+		/// incomplete tail too). maxoutputsize 0 = all the file: an archive with nothing good is copied and cut
 		int64_t spaziolibero= 0;
 		spaziolibero		= getfreespace(trimmeddestination);
-		if (spaziolibero < archivesize)
+		if (spaziolibero < ((buono > 0) ? buono : archivesize))
 		{
 			myprintf("\n");
 			printbar('*');
-			myprintf("01082$ WARNING FREE SPACE SEEMS %s NEEDED %s\n", migliaia(spaziolibero), migliaia2(archivesize));
+			myprintf("01082$ WARNING FREE SPACE SEEMS %s NEEDED %s\n", migliaia(spaziolibero), migliaia2((buono > 0) ? buono : archivesize));
 			printbar('*');
 		}
 		myprintf("01083: DOING COPY (before trimming)\n");
@@ -171953,7 +172628,7 @@ int Jidac::trim()
 			flagverify, // verify
 			true,		// donocheckspace
 			false,		/// overwrite
-			0);			// maxoutputsize
+			(buono > 0) ? buono : 0); // maxoutputsize
 		if (risultato == "")
 		{
 			myprintf("01084! ERROR: %s\n", risultato.c_str());
@@ -171967,16 +172642,20 @@ int Jidac::trim()
 		myprintf("01087: dry run without -to: -kill to execute in-place\n");
 		return 1;
 	}
-	if (truncate(arcname.c_str(), header_pos + offset))
+	if (prendidimensionefile(arcname.c_str()) != buono)
+		if (truncate(arcname.c_str(), buono))
+		{
+			myprintf("01088! something wrong in trimming\n");
+			return 2;
+		}
+	int64_t nuovadim= prendidimensionefile(arcname.c_str());
+	if (nuovadim != buono) /// 65.13i: it was silent, and "all OK"
 	{
-		myprintf("01088! something wrong in trimming\n");
+		myprintf("01089! trimmed %Z is %s bytes, should be %s\n", arcname.c_str(), migliaia(nuovadim), migliaia2(buono));
 		return 2;
 	}
-	int64_t nuovadim= prendidimensionefile(arcname.c_str());
-	if (nuovadim == (header_pos + offset))
-	{
-		myprintf("01090: DONE on %Z (%s)\n", arcname.c_str(), migliaia(nuovadim));
-	}
+	myprintf("01090: DONE on %Z (%s)\n", arcname.c_str(), migliaia(nuovadim));
+	g_incomplete_version= 0; /// 65.13i: the incomplete transaction is gone (it was "INCOMPLETE TRANS", use trim, rc 2)
 	return 0;
 }
 bool isfilesequal(string i_source, string i_destination, bool i_flagfast= false)
@@ -172220,13 +172899,46 @@ int Jidac::mycopy()
 		myprintf("01115! cannot build source file list\n");
 		return 2;
 	}
+	/// 65.13d: -verify copies by pieces (franzcopia); one file on a console shows the map of the file (a
+	/// direct copy without -verify), more files a line with a bar (-verify) or the line of filecopy
+	if (flagverify)
+	{
+		const int64_t soglia= (g_chunk_size > 0) ? (int64_t)g_chunk_size : CP_SOGLIA;
+		if ((menoenne >= 1) && (menoenne <= 100))
+			myprintf("03526: -verify: pieces of %d%% of a file, read back and checked (files under %s: one piece)\n", (int)menoenne, tohuman(soglia));
+		else
+			myprintf("03530: -verify: pieces of 10%% of a file (at most %s), read back and checked (files under %s: one piece)\n", tohuman(CP_PEZZOMAX), tohuman2(soglia));
+	}
+	const bool console= (!isAnyOutputRedirected()) && (!flagnoeta) && (!flagterse) && (!flagsilent) && (!flagnoconsole) && (!flagcatpaqmode);
+	int		   vista  = CP_NIENTE;
+	if (console)
+	{
+		vista= CP_RIGA;
+#ifndef ANCIENT
+		if (sourcelist.size() == 1)
+			vista= CP_MAPPA;
+#endif
+	}
+	/// 65.13d: with -append only what is missing is needed
+	int64_t dascrivere= totalsourcesize;
+	if (flagappend)
+	{
+		dascrivere= 0;
+		for (unsigned int i= 0; i < sourcelist.size(); i++)
+		{
+			const string  destinazione= todirectory + extractfilename(sourcelist[i]);
+			const int64_t gia		  = fileexists(destinazione) ? prendidimensionefile(destinazione.c_str()) : 0;
+			if (gia < sourcesize[i])
+				dascrivere+= sourcesize[i] - gia;
+		}
+	}
 	int64_t spaziolibero= 0;
 	spaziolibero		= getfreespace(todirectory);
-	if (spaziolibero < totalsourcesize)
+	if (spaziolibero < dascrivere)
 	{
 		myprintf("\n");
 		printbar('*');
-		myprintf("01116$ WARNING FREE SPACE %s NEEDED %s\n", migliaia(spaziolibero), migliaia2(totalsourcesize));
+		myprintf("01116$ WARNING FREE SPACE %s NEEDED %s\n", migliaia(spaziolibero), migliaia2(dascrivere));
 		printbar('*');
 		if (!flagspace)
 		{
@@ -172245,14 +172957,17 @@ int Jidac::mycopy()
 		spaziolibero	  = getfreespace(todirectory);
 		myprintf("%21s  %21s  %s\n", migliaia(filesize), migliaia2(spaziolibero), filesource.c_str());
 		string risultato;
-		risultato= filecopy(
-			false,		// not a single file, but a folder as output
-			flagappend, // append
-			filesource, todirectory,
-			flagverify,	   // verify
-			true,		   // donocheckspace
-			!flagparanoid, // overwrite
-			0);			   // maxoutputsize
+		if (flagverify || (vista == CP_MAPPA))
+			risultato= cp_copia(filesource, todirectory, flagappend, !flagparanoid, flagverify, menoenne, vista);
+		else
+			risultato= filecopy(
+				false,		// not a single file, but a folder as output
+				flagappend, // append
+				filesource, todirectory,
+				flagverify,	   // verify
+				true,		   // donocheckspace
+				!flagparanoid, // overwrite
+				0);			   // maxoutputsize
 		if (risultato == "")
 		{
 			myprintf("01119! ERROR copying %Z\n", filesource.c_str());
@@ -172956,7 +173671,9 @@ static const unsigned int g_autotestquickn= sizeof(g_autotestquick) / sizeof(g_a
 	  -m4  + the big files (6 GB): what the suite was before, Franzen (-franzen), mount (if it works here),
 		   backup -chunk of big files
 	  -m5  everything: every method (t, and p -verify), -all, a -715 archive, damaged archives
-		   (work poke), -fastadd for 20 versions
+		   (work poke), -fastadd for 20 versions; 65.13g: the quadratura (one piece == multipart == -chunk
+		   == backup to the byte, in clear, -key, -franzen, both; one byte changed must be seen)
+	  65.13g: autotest -all -debug4: bigone01.big of 4 MB (not 400), autotestdebug4.txt for -checktxt (out21)
 	ONE table: the script is written from it, and -checktxt checks from it (the level is in
 	autotestlevel.txt, written with the script: none = 4, a folder made before 65.12h). Every step has
 	its level and its conditions; the ones with an output are checked (that file must have that text).
@@ -173176,6 +173893,8 @@ static const autotestpasso g_autotestpassi[]= {
 	{2, 0, 0, "\"%E\" t \"%Dch_????.zpaq\" -noeta -out \"%Dout114.txt\"", "out114.txt", "(all OK)", "-chunk, t"},
 	{2, 0, 0, "\"%E\" a \"%Dchk_????.zpaq\" \"%D05\" \"%D06\" -chunk 200k -key pippo -noeta", NULL, NULL, NULL},
 	{2, 0, 0, "\"%E\" t \"%Dchk_????.zpaq\" -key pippo -noeta -out \"%Dout115.txt\"", "out115.txt", "(all OK)", "-chunk -key, t"},
+	{2, 0, 0, "\"%E\" pp \"%Dch_????.zpaq\" -noeta -out \"%Dout161.txt\"", "out161.txt", "(all OK)", "-chunk, pp (blocks across two chunks)"},
+	{2, 0, 0, "\"%E\" pp \"%Dchk_????.zpaq\" -key pippo -noeta -out \"%Dout162.txt\"", "out162.txt", "(all OK)", "-chunk -key, pp (blocks across two chunks)"},
 	{2, 0, 0, "\"%E\" backup \"%Dbkc.zpaq\" \"%D05\" -chunk 200k -noeta", NULL, NULL, NULL},
 	{2, 0, 0, "\"%E\" backup \"%Dbkc.zpaq\" \"%D05\" \"%D06\" -chunk 200k -noeta", NULL, NULL, NULL},
 	{2, 0, 0, "\"%E\" testbackup \"%Dbkc.zpaq\" -paranoid -verify -out \"%Dout116.txt\"", "out116.txt", "(all OK)", "backup -chunk, testbackup"},
@@ -173245,6 +173964,196 @@ static const autotestpasso g_autotestpassi[]= {
 	{5, 0, 0, "mkdir \"%Dfa20\"", NULL, NULL, NULL},
 	{5, 0, 0, "echo 00 >\"%Dfa20%Sf00.txt\" && \"%E\" a \"%Dfa20.zpaq\" \"%Dfa20\" -fastadd -noeta", NULL, NULL, NULL},
 	{5, 0, 20, "echo %N >\"%Dfa20%Sf%N.txt\" && \"%E\" a \"%Dfa20.zpaq\" \"%Dfa20\" -comment \"v%N\" -fastaddtest -noeta -out \"%Dfa20_%N.txt\"", "fa20_%N.txt", "the stored state is the one read", "-fastadd, version %N of 20"},
+	/*
+		65.13g -m5, the quadratura: in clear, -key, -franzen, -key -franzen; 5 versions of 4 folders (05 06 06 07 08:
+		the third one changes nothing), -debug4 (salts and nonces fixed) and -timestamp. One piece, multipart, -chunk,
+		backup, backup -chunk: work quadra (parts glued, franzen decoded) == one piece; pp of the -chunk one; then one
+		byte of a part complemented (work poke ~): work quadra must say KO, t must end with errors
+	*/
+	{5, 0, 0, "\"%E\" a \"%Dq5s_P.zpaq\" \"%D05\" -debug4 -nofast -noeta -timestamp 2025-02-01_10:00:00", NULL, NULL, NULL},
+	{5, 0, 0, "\"%E\" a \"%Dq5m_P_????.zpaq\" \"%D05\" -debug4 -nofast -noeta -timestamp 2025-02-01_10:00:00", NULL, NULL, NULL},
+	{5, 0, 0, "\"%E\" a \"%Dq5c_P_????.zpaq\" \"%D05\" -chunk 100k -debug4 -nofast -noeta -timestamp 2025-02-01_10:00:00", NULL, NULL, NULL},
+	{5, 0, 0, "\"%E\" backup \"%Dq5b_P.zpaq\" \"%D05\" -debug4 -nofast -noeta -timestamp 2025-02-01_10:00:00", NULL, NULL, NULL},
+	{5, 0, 0, "\"%E\" backup \"%Dq5bc_P.zpaq\" \"%D05\" -chunk 100k -debug4 -nofast -noeta -timestamp 2025-02-01_10:00:00", NULL, NULL, NULL},
+	{5, 0, 0, "\"%E\" a \"%Dq5s_P.zpaq\" \"%D06\" -debug4 -nofast -noeta -timestamp 2025-02-02_10:00:00", NULL, NULL, NULL},
+	{5, 0, 0, "\"%E\" a \"%Dq5m_P_????.zpaq\" \"%D06\" -debug4 -nofast -noeta -timestamp 2025-02-02_10:00:00", NULL, NULL, NULL},
+	{5, 0, 0, "\"%E\" a \"%Dq5c_P_????.zpaq\" \"%D06\" -chunk 100k -debug4 -nofast -noeta -timestamp 2025-02-02_10:00:00", NULL, NULL, NULL},
+	{5, 0, 0, "\"%E\" backup \"%Dq5b_P.zpaq\" \"%D06\" -debug4 -nofast -noeta -timestamp 2025-02-02_10:00:00", NULL, NULL, NULL},
+	{5, 0, 0, "\"%E\" backup \"%Dq5bc_P.zpaq\" \"%D06\" -chunk 100k -debug4 -nofast -noeta -timestamp 2025-02-02_10:00:00", NULL, NULL, NULL},
+	{5, 0, 0, "\"%E\" a \"%Dq5s_P.zpaq\" \"%D06\" -debug4 -nofast -noeta -timestamp 2025-02-03_10:00:00", NULL, NULL, NULL},
+	{5, 0, 0, "\"%E\" a \"%Dq5m_P_????.zpaq\" \"%D06\" -debug4 -nofast -noeta -timestamp 2025-02-03_10:00:00", NULL, NULL, NULL},
+	{5, 0, 0, "\"%E\" a \"%Dq5c_P_????.zpaq\" \"%D06\" -chunk 100k -debug4 -nofast -noeta -timestamp 2025-02-03_10:00:00", NULL, NULL, NULL},
+	{5, 0, 0, "\"%E\" backup \"%Dq5b_P.zpaq\" \"%D06\" -debug4 -nofast -noeta -timestamp 2025-02-03_10:00:00", NULL, NULL, NULL},
+	{5, 0, 0, "\"%E\" backup \"%Dq5bc_P.zpaq\" \"%D06\" -chunk 100k -debug4 -nofast -noeta -timestamp 2025-02-03_10:00:00", NULL, NULL, NULL},
+	{5, 0, 0, "\"%E\" a \"%Dq5s_P.zpaq\" \"%D07\" -debug4 -nofast -noeta -timestamp 2025-02-04_10:00:00", NULL, NULL, NULL},
+	{5, 0, 0, "\"%E\" a \"%Dq5m_P_????.zpaq\" \"%D07\" -debug4 -nofast -noeta -timestamp 2025-02-04_10:00:00", NULL, NULL, NULL},
+	{5, 0, 0, "\"%E\" a \"%Dq5c_P_????.zpaq\" \"%D07\" -chunk 100k -debug4 -nofast -noeta -timestamp 2025-02-04_10:00:00", NULL, NULL, NULL},
+	{5, 0, 0, "\"%E\" backup \"%Dq5b_P.zpaq\" \"%D07\" -debug4 -nofast -noeta -timestamp 2025-02-04_10:00:00", NULL, NULL, NULL},
+	{5, 0, 0, "\"%E\" backup \"%Dq5bc_P.zpaq\" \"%D07\" -chunk 100k -debug4 -nofast -noeta -timestamp 2025-02-04_10:00:00", NULL, NULL, NULL},
+	{5, 0, 0, "\"%E\" a \"%Dq5s_P.zpaq\" \"%D08\" -debug4 -nofast -noeta -timestamp 2025-02-05_10:00:00", NULL, NULL, NULL},
+	{5, 0, 0, "\"%E\" a \"%Dq5m_P_????.zpaq\" \"%D08\" -debug4 -nofast -noeta -timestamp 2025-02-05_10:00:00", NULL, NULL, NULL},
+	{5, 0, 0, "\"%E\" a \"%Dq5c_P_????.zpaq\" \"%D08\" -chunk 100k -debug4 -nofast -noeta -timestamp 2025-02-05_10:00:00", NULL, NULL, NULL},
+	{5, 0, 0, "\"%E\" backup \"%Dq5b_P.zpaq\" \"%D08\" -debug4 -nofast -noeta -timestamp 2025-02-05_10:00:00", NULL, NULL, NULL},
+	{5, 0, 0, "\"%E\" backup \"%Dq5bc_P.zpaq\" \"%D08\" -chunk 100k -debug4 -nofast -noeta -timestamp 2025-02-05_10:00:00", NULL, NULL, NULL},
+	{5, 0, 0, "\"%E\" t \"%Dq5s_P.zpaq\" -noeta -out \"%Dqu_P_01.txt\"", "qu_P_01.txt", "(all OK)", "quadratura in clear, t of the one piece"},
+	{5, 0, 0, NULL, "qu_P_01.txt", "4 versions,", "quadratura in clear, 4 versions (the third run changed nothing)"},
+	{5, 0, 0, "\"%E\" t \"%Dq5m_P_????.zpaq\" -noeta -out \"%Dqu_P_02.txt\"", "qu_P_02.txt", "(all OK)", "quadratura in clear, t of the multipart"},
+	{5, 0, 0, "\"%E\" t \"%Dq5c_P_????.zpaq\" -noeta -out \"%Dqu_P_03.txt\"", "qu_P_03.txt", "(all OK)", "quadratura in clear, t of the -chunk"},
+	{5, 0, 0, "\"%E\" t \"%Dq5b_P_????????.zpaq\" -noeta -out \"%Dqu_P_04.txt\"", "qu_P_04.txt", "(all OK)", "quadratura in clear, t of the backup"},
+	{5, 0, 0, "\"%E\" t \"%Dq5bc_P_????????.zpaq\" -noeta -out \"%Dqu_P_05.txt\"", "qu_P_05.txt", "(all OK)", "quadratura in clear, t of the backup -chunk"},
+	{5, 0, 0, "\"%E\" testbackup \"%Dq5bc_P.zpaq\" -verify -out \"%Dqu_P_06.txt\"", "qu_P_06.txt", "(all OK)", "quadratura in clear, testbackup -verify of the backup -chunk"},
+	{5, 0, 0, "\"%E\" work quadra \"%Dq5s_P.zpaq\" \"%Dq5m_P_????.zpaq\" -out \"%Dqu_P_07.txt\"", "qu_P_07.txt", "QUADRA OK", "quadratura in clear: one piece == multipart"},
+	{5, 0, 0, "\"%E\" work quadra \"%Dq5s_P.zpaq\" \"%Dq5c_P_????.zpaq\" -out \"%Dqu_P_08.txt\"", "qu_P_08.txt", "QUADRA OK", "quadratura in clear: one piece == -chunk"},
+	{5, 0, 0, "\"%E\" work quadra \"%Dq5s_P.zpaq\" \"%Dq5b_P_????????.zpaq\" -out \"%Dqu_P_09.txt\"", "qu_P_09.txt", "QUADRA OK", "quadratura in clear: one piece == backup"},
+	{5, 0, 0, "\"%E\" work quadra \"%Dq5b_P_????????.zpaq\" \"%Dq5bc_P_????????.zpaq\" -out \"%Dqu_P_10.txt\"", "qu_P_10.txt", "QUADRA OK", "quadratura in clear: backup == backup -chunk"},
+	{5, 0, 0, "\"%E\" pp \"%Dq5c_P_????.zpaq\" -noeta -out \"%Dqu_P_11.txt\"", "qu_P_11.txt", "(all OK)", "quadratura in clear, pp of the -chunk (blocks across two chunks)"},
+	{5, 0, 0, "\"%E\" work poke \"%Dq5m_P_0001.zpaq\" 50000 \"~\" -force -kill -out \"%Dqu_P_12.txt\"", "qu_P_12.txt", "done", "quadratura in clear negative: one byte of the multipart changed"},
+	{5, 0, 0, "\"%E\" work quadra \"%Dq5s_P.zpaq\" \"%Dq5m_P_????.zpaq\" -out \"%Dqu_P_13.txt\"", "qu_P_13.txt", "QUADRA KO", "quadratura in clear negative: the multipart is not the same any more"},
+	{5, 0, 0, "\"%E\" t \"%Dq5m_P_????.zpaq\" -noeta -out \"%Dqu_P_14.txt\"", "qu_P_14.txt", "(with errors)", "quadratura in clear negative: t of the multipart ends with errors"},
+	{5, 0, 0, "\"%E\" work poke \"%Dq5c_P_0001.zpaq\" 50000 \"~\" -force -kill -out \"%Dqu_P_15.txt\"", "qu_P_15.txt", "done", "quadratura in clear negative: one byte of the -chunk changed"},
+	{5, 0, 0, "\"%E\" work quadra \"%Dq5s_P.zpaq\" \"%Dq5c_P_????.zpaq\" -out \"%Dqu_P_16.txt\"", "qu_P_16.txt", "QUADRA KO", "quadratura in clear negative: the -chunk is not the same any more"},
+	{5, 0, 0, "\"%E\" t \"%Dq5c_P_????.zpaq\" -noeta -out \"%Dqu_P_17.txt\"", "qu_P_17.txt", "(with errors)", "quadratura in clear negative: t of the -chunk ends with errors"},
+	{5, 0, 0, "\"%E\" work poke \"%Dq5bc_P_00000001.zpaq\" 50000 \"~\" -force -kill -out \"%Dqu_P_18.txt\"", "qu_P_18.txt", "done", "quadratura in clear negative: one byte of the backup -chunk changed"},
+	{5, 0, 0, "\"%E\" work quadra \"%Dq5b_P_????????.zpaq\" \"%Dq5bc_P_????????.zpaq\" -out \"%Dqu_P_19.txt\"", "qu_P_19.txt", "QUADRA KO", "quadratura in clear negative: the backup -chunk is not the same any more"},
+	{5, 0, 0, "\"%E\" t \"%Dq5bc_P_????????.zpaq\" -noeta -out \"%Dqu_P_20.txt\"", "qu_P_20.txt", "(with errors)", "quadratura in clear negative: t of the backup -chunk ends with errors"},
+	{5, 0, 0, "\"%E\" a \"%Dq5s_A.zpaq\" \"%D05\" -key pippo -debug4 -nofast -noeta -timestamp 2025-02-01_10:00:00", NULL, NULL, NULL},
+	{5, 0, 0, "\"%E\" a \"%Dq5m_A_????.zpaq\" \"%D05\" -key pippo -debug4 -nofast -noeta -timestamp 2025-02-01_10:00:00", NULL, NULL, NULL},
+	{5, 0, 0, "\"%E\" a \"%Dq5c_A_????.zpaq\" \"%D05\" -chunk 100k -key pippo -debug4 -nofast -noeta -timestamp 2025-02-01_10:00:00", NULL, NULL, NULL},
+	{5, 0, 0, "\"%E\" backup \"%Dq5b_A.zpaq\" \"%D05\" -key pippo -debug4 -nofast -noeta -timestamp 2025-02-01_10:00:00", NULL, NULL, NULL},
+	{5, 0, 0, "\"%E\" backup \"%Dq5bc_A.zpaq\" \"%D05\" -chunk 100k -key pippo -debug4 -nofast -noeta -timestamp 2025-02-01_10:00:00", NULL, NULL, NULL},
+	{5, 0, 0, "\"%E\" a \"%Dq5s_A.zpaq\" \"%D06\" -key pippo -debug4 -nofast -noeta -timestamp 2025-02-02_10:00:00", NULL, NULL, NULL},
+	{5, 0, 0, "\"%E\" a \"%Dq5m_A_????.zpaq\" \"%D06\" -key pippo -debug4 -nofast -noeta -timestamp 2025-02-02_10:00:00", NULL, NULL, NULL},
+	{5, 0, 0, "\"%E\" a \"%Dq5c_A_????.zpaq\" \"%D06\" -chunk 100k -key pippo -debug4 -nofast -noeta -timestamp 2025-02-02_10:00:00", NULL, NULL, NULL},
+	{5, 0, 0, "\"%E\" backup \"%Dq5b_A.zpaq\" \"%D06\" -key pippo -debug4 -nofast -noeta -timestamp 2025-02-02_10:00:00", NULL, NULL, NULL},
+	{5, 0, 0, "\"%E\" backup \"%Dq5bc_A.zpaq\" \"%D06\" -chunk 100k -key pippo -debug4 -nofast -noeta -timestamp 2025-02-02_10:00:00", NULL, NULL, NULL},
+	{5, 0, 0, "\"%E\" a \"%Dq5s_A.zpaq\" \"%D06\" -key pippo -debug4 -nofast -noeta -timestamp 2025-02-03_10:00:00", NULL, NULL, NULL},
+	{5, 0, 0, "\"%E\" a \"%Dq5m_A_????.zpaq\" \"%D06\" -key pippo -debug4 -nofast -noeta -timestamp 2025-02-03_10:00:00", NULL, NULL, NULL},
+	{5, 0, 0, "\"%E\" a \"%Dq5c_A_????.zpaq\" \"%D06\" -chunk 100k -key pippo -debug4 -nofast -noeta -timestamp 2025-02-03_10:00:00", NULL, NULL, NULL},
+	{5, 0, 0, "\"%E\" backup \"%Dq5b_A.zpaq\" \"%D06\" -key pippo -debug4 -nofast -noeta -timestamp 2025-02-03_10:00:00", NULL, NULL, NULL},
+	{5, 0, 0, "\"%E\" backup \"%Dq5bc_A.zpaq\" \"%D06\" -chunk 100k -key pippo -debug4 -nofast -noeta -timestamp 2025-02-03_10:00:00", NULL, NULL, NULL},
+	{5, 0, 0, "\"%E\" a \"%Dq5s_A.zpaq\" \"%D07\" -key pippo -debug4 -nofast -noeta -timestamp 2025-02-04_10:00:00", NULL, NULL, NULL},
+	{5, 0, 0, "\"%E\" a \"%Dq5m_A_????.zpaq\" \"%D07\" -key pippo -debug4 -nofast -noeta -timestamp 2025-02-04_10:00:00", NULL, NULL, NULL},
+	{5, 0, 0, "\"%E\" a \"%Dq5c_A_????.zpaq\" \"%D07\" -chunk 100k -key pippo -debug4 -nofast -noeta -timestamp 2025-02-04_10:00:00", NULL, NULL, NULL},
+	{5, 0, 0, "\"%E\" backup \"%Dq5b_A.zpaq\" \"%D07\" -key pippo -debug4 -nofast -noeta -timestamp 2025-02-04_10:00:00", NULL, NULL, NULL},
+	{5, 0, 0, "\"%E\" backup \"%Dq5bc_A.zpaq\" \"%D07\" -chunk 100k -key pippo -debug4 -nofast -noeta -timestamp 2025-02-04_10:00:00", NULL, NULL, NULL},
+	{5, 0, 0, "\"%E\" a \"%Dq5s_A.zpaq\" \"%D08\" -key pippo -debug4 -nofast -noeta -timestamp 2025-02-05_10:00:00", NULL, NULL, NULL},
+	{5, 0, 0, "\"%E\" a \"%Dq5m_A_????.zpaq\" \"%D08\" -key pippo -debug4 -nofast -noeta -timestamp 2025-02-05_10:00:00", NULL, NULL, NULL},
+	{5, 0, 0, "\"%E\" a \"%Dq5c_A_????.zpaq\" \"%D08\" -chunk 100k -key pippo -debug4 -nofast -noeta -timestamp 2025-02-05_10:00:00", NULL, NULL, NULL},
+	{5, 0, 0, "\"%E\" backup \"%Dq5b_A.zpaq\" \"%D08\" -key pippo -debug4 -nofast -noeta -timestamp 2025-02-05_10:00:00", NULL, NULL, NULL},
+	{5, 0, 0, "\"%E\" backup \"%Dq5bc_A.zpaq\" \"%D08\" -chunk 100k -key pippo -debug4 -nofast -noeta -timestamp 2025-02-05_10:00:00", NULL, NULL, NULL},
+	{5, 0, 0, "\"%E\" t \"%Dq5s_A.zpaq\" -key pippo -noeta -out \"%Dqu_A_01.txt\"", "qu_A_01.txt", "(all OK)", "quadratura -key, t of the one piece"},
+	{5, 0, 0, NULL, "qu_A_01.txt", "4 versions,", "quadratura -key, 4 versions (the third run changed nothing)"},
+	{5, 0, 0, "\"%E\" t \"%Dq5m_A_????.zpaq\" -key pippo -noeta -out \"%Dqu_A_02.txt\"", "qu_A_02.txt", "(all OK)", "quadratura -key, t of the multipart"},
+	{5, 0, 0, "\"%E\" t \"%Dq5c_A_????.zpaq\" -key pippo -noeta -out \"%Dqu_A_03.txt\"", "qu_A_03.txt", "(all OK)", "quadratura -key, t of the -chunk"},
+	{5, 0, 0, "\"%E\" t \"%Dq5b_A_????????.zpaq\" -key pippo -noeta -out \"%Dqu_A_04.txt\"", "qu_A_04.txt", "(all OK)", "quadratura -key, t of the backup"},
+	{5, 0, 0, "\"%E\" t \"%Dq5bc_A_????????.zpaq\" -key pippo -noeta -out \"%Dqu_A_05.txt\"", "qu_A_05.txt", "(all OK)", "quadratura -key, t of the backup -chunk"},
+	{5, 0, 0, "\"%E\" testbackup \"%Dq5bc_A.zpaq\" -key pippo -verify -out \"%Dqu_A_06.txt\"", "qu_A_06.txt", "(all OK)", "quadratura -key, testbackup -verify of the backup -chunk"},
+	{5, 0, 0, "\"%E\" work quadra \"%Dq5s_A.zpaq\" \"%Dq5m_A_????.zpaq\" -out \"%Dqu_A_07.txt\"", "qu_A_07.txt", "QUADRA OK", "quadratura -key: one piece == multipart"},
+	{5, 0, 0, "\"%E\" work quadra \"%Dq5s_A.zpaq\" \"%Dq5c_A_????.zpaq\" -out \"%Dqu_A_08.txt\"", "qu_A_08.txt", "QUADRA OK", "quadratura -key: one piece == -chunk"},
+	{5, 0, 0, "\"%E\" work quadra \"%Dq5s_A.zpaq\" \"%Dq5b_A_????????.zpaq\" -out \"%Dqu_A_09.txt\"", "qu_A_09.txt", "QUADRA OK", "quadratura -key: one piece == backup"},
+	{5, 0, 0, "\"%E\" work quadra \"%Dq5b_A_????????.zpaq\" \"%Dq5bc_A_????????.zpaq\" -out \"%Dqu_A_10.txt\"", "qu_A_10.txt", "QUADRA OK", "quadratura -key: backup == backup -chunk"},
+	{5, 0, 0, "\"%E\" pp \"%Dq5c_A_????.zpaq\" -key pippo -noeta -out \"%Dqu_A_11.txt\"", "qu_A_11.txt", "(all OK)", "quadratura -key, pp of the -chunk (blocks across two chunks)"},
+	{5, 0, 0, "\"%E\" work poke \"%Dq5m_A_0001.zpaq\" 50000 \"~\" -force -kill -out \"%Dqu_A_12.txt\"", "qu_A_12.txt", "done", "quadratura -key negative: one byte of the multipart changed"},
+	{5, 0, 0, "\"%E\" work quadra \"%Dq5s_A.zpaq\" \"%Dq5m_A_????.zpaq\" -out \"%Dqu_A_13.txt\"", "qu_A_13.txt", "QUADRA KO", "quadratura -key negative: the multipart is not the same any more"},
+	{5, 0, 0, "\"%E\" t \"%Dq5m_A_????.zpaq\" -key pippo -noeta -out \"%Dqu_A_14.txt\"", "qu_A_14.txt", "(with errors)", "quadratura -key negative: t of the multipart ends with errors"},
+	{5, 0, 0, "\"%E\" work poke \"%Dq5c_A_0001.zpaq\" 50000 \"~\" -force -kill -out \"%Dqu_A_15.txt\"", "qu_A_15.txt", "done", "quadratura -key negative: one byte of the -chunk changed"},
+	{5, 0, 0, "\"%E\" work quadra \"%Dq5s_A.zpaq\" \"%Dq5c_A_????.zpaq\" -out \"%Dqu_A_16.txt\"", "qu_A_16.txt", "QUADRA KO", "quadratura -key negative: the -chunk is not the same any more"},
+	{5, 0, 0, "\"%E\" t \"%Dq5c_A_????.zpaq\" -key pippo -noeta -out \"%Dqu_A_17.txt\"", "qu_A_17.txt", "(with errors)", "quadratura -key negative: t of the -chunk ends with errors"},
+	{5, 0, 0, "\"%E\" work poke \"%Dq5bc_A_00000001.zpaq\" 50000 \"~\" -force -kill -out \"%Dqu_A_18.txt\"", "qu_A_18.txt", "done", "quadratura -key negative: one byte of the backup -chunk changed"},
+	{5, 0, 0, "\"%E\" work quadra \"%Dq5b_A_????????.zpaq\" \"%Dq5bc_A_????????.zpaq\" -out \"%Dqu_A_19.txt\"", "qu_A_19.txt", "QUADRA KO", "quadratura -key negative: the backup -chunk is not the same any more"},
+	{5, 0, 0, "\"%E\" t \"%Dq5bc_A_????????.zpaq\" -key pippo -noeta -out \"%Dqu_A_20.txt\"", "qu_A_20.txt", "(with errors)", "quadratura -key negative: t of the backup -chunk ends with errors"},
+	{5, AT_FRANZEN, 0, "\"%E\" a \"%Dq5s_F.zpaq\" \"%D05\" -franzen \"%F\" -debug4 -nofast -noeta -timestamp 2025-02-01_10:00:00", NULL, NULL, NULL},
+	{5, AT_FRANZEN, 0, "\"%E\" a \"%Dq5m_F_????.zpaq\" \"%D05\" -franzen \"%F\" -debug4 -nofast -noeta -timestamp 2025-02-01_10:00:00", NULL, NULL, NULL},
+	{5, AT_FRANZEN, 0, "\"%E\" a \"%Dq5c_F_????.zpaq\" \"%D05\" -chunk 100k -franzen \"%F\" -debug4 -nofast -noeta -timestamp 2025-02-01_10:00:00", NULL, NULL, NULL},
+	{5, AT_FRANZEN, 0, "\"%E\" backup \"%Dq5b_F.zpaq\" \"%D05\" -franzen \"%F\" -debug4 -nofast -noeta -timestamp 2025-02-01_10:00:00", NULL, NULL, NULL},
+	{5, AT_FRANZEN, 0, "\"%E\" backup \"%Dq5bc_F.zpaq\" \"%D05\" -chunk 100k -franzen \"%F\" -debug4 -nofast -noeta -timestamp 2025-02-01_10:00:00", NULL, NULL, NULL},
+	{5, AT_FRANZEN, 0, "\"%E\" a \"%Dq5s_F.zpaq\" \"%D06\" -franzen \"%F\" -debug4 -nofast -noeta -timestamp 2025-02-02_10:00:00", NULL, NULL, NULL},
+	{5, AT_FRANZEN, 0, "\"%E\" a \"%Dq5m_F_????.zpaq\" \"%D06\" -franzen \"%F\" -debug4 -nofast -noeta -timestamp 2025-02-02_10:00:00", NULL, NULL, NULL},
+	{5, AT_FRANZEN, 0, "\"%E\" a \"%Dq5c_F_????.zpaq\" \"%D06\" -chunk 100k -franzen \"%F\" -debug4 -nofast -noeta -timestamp 2025-02-02_10:00:00", NULL, NULL, NULL},
+	{5, AT_FRANZEN, 0, "\"%E\" backup \"%Dq5b_F.zpaq\" \"%D06\" -franzen \"%F\" -debug4 -nofast -noeta -timestamp 2025-02-02_10:00:00", NULL, NULL, NULL},
+	{5, AT_FRANZEN, 0, "\"%E\" backup \"%Dq5bc_F.zpaq\" \"%D06\" -chunk 100k -franzen \"%F\" -debug4 -nofast -noeta -timestamp 2025-02-02_10:00:00", NULL, NULL, NULL},
+	{5, AT_FRANZEN, 0, "\"%E\" a \"%Dq5s_F.zpaq\" \"%D06\" -franzen \"%F\" -debug4 -nofast -noeta -timestamp 2025-02-03_10:00:00", NULL, NULL, NULL},
+	{5, AT_FRANZEN, 0, "\"%E\" a \"%Dq5m_F_????.zpaq\" \"%D06\" -franzen \"%F\" -debug4 -nofast -noeta -timestamp 2025-02-03_10:00:00", NULL, NULL, NULL},
+	{5, AT_FRANZEN, 0, "\"%E\" a \"%Dq5c_F_????.zpaq\" \"%D06\" -chunk 100k -franzen \"%F\" -debug4 -nofast -noeta -timestamp 2025-02-03_10:00:00", NULL, NULL, NULL},
+	{5, AT_FRANZEN, 0, "\"%E\" backup \"%Dq5b_F.zpaq\" \"%D06\" -franzen \"%F\" -debug4 -nofast -noeta -timestamp 2025-02-03_10:00:00", NULL, NULL, NULL},
+	{5, AT_FRANZEN, 0, "\"%E\" backup \"%Dq5bc_F.zpaq\" \"%D06\" -chunk 100k -franzen \"%F\" -debug4 -nofast -noeta -timestamp 2025-02-03_10:00:00", NULL, NULL, NULL},
+	{5, AT_FRANZEN, 0, "\"%E\" a \"%Dq5s_F.zpaq\" \"%D07\" -franzen \"%F\" -debug4 -nofast -noeta -timestamp 2025-02-04_10:00:00", NULL, NULL, NULL},
+	{5, AT_FRANZEN, 0, "\"%E\" a \"%Dq5m_F_????.zpaq\" \"%D07\" -franzen \"%F\" -debug4 -nofast -noeta -timestamp 2025-02-04_10:00:00", NULL, NULL, NULL},
+	{5, AT_FRANZEN, 0, "\"%E\" a \"%Dq5c_F_????.zpaq\" \"%D07\" -chunk 100k -franzen \"%F\" -debug4 -nofast -noeta -timestamp 2025-02-04_10:00:00", NULL, NULL, NULL},
+	{5, AT_FRANZEN, 0, "\"%E\" backup \"%Dq5b_F.zpaq\" \"%D07\" -franzen \"%F\" -debug4 -nofast -noeta -timestamp 2025-02-04_10:00:00", NULL, NULL, NULL},
+	{5, AT_FRANZEN, 0, "\"%E\" backup \"%Dq5bc_F.zpaq\" \"%D07\" -chunk 100k -franzen \"%F\" -debug4 -nofast -noeta -timestamp 2025-02-04_10:00:00", NULL, NULL, NULL},
+	{5, AT_FRANZEN, 0, "\"%E\" a \"%Dq5s_F.zpaq\" \"%D08\" -franzen \"%F\" -debug4 -nofast -noeta -timestamp 2025-02-05_10:00:00", NULL, NULL, NULL},
+	{5, AT_FRANZEN, 0, "\"%E\" a \"%Dq5m_F_????.zpaq\" \"%D08\" -franzen \"%F\" -debug4 -nofast -noeta -timestamp 2025-02-05_10:00:00", NULL, NULL, NULL},
+	{5, AT_FRANZEN, 0, "\"%E\" a \"%Dq5c_F_????.zpaq\" \"%D08\" -chunk 100k -franzen \"%F\" -debug4 -nofast -noeta -timestamp 2025-02-05_10:00:00", NULL, NULL, NULL},
+	{5, AT_FRANZEN, 0, "\"%E\" backup \"%Dq5b_F.zpaq\" \"%D08\" -franzen \"%F\" -debug4 -nofast -noeta -timestamp 2025-02-05_10:00:00", NULL, NULL, NULL},
+	{5, AT_FRANZEN, 0, "\"%E\" backup \"%Dq5bc_F.zpaq\" \"%D08\" -chunk 100k -franzen \"%F\" -debug4 -nofast -noeta -timestamp 2025-02-05_10:00:00", NULL, NULL, NULL},
+	{5, AT_FRANZEN, 0, "\"%E\" t \"%Dq5s_F.zpaq\" -franzen \"%F\" -noeta -out \"%Dqu_F_01.txt\"", "qu_F_01.txt", "(all OK)", "quadratura -franzen, t of the one piece"},
+	{5, AT_FRANZEN, 0, NULL, "qu_F_01.txt", "4 versions,", "quadratura -franzen, 4 versions (the third run changed nothing)"},
+	{5, AT_FRANZEN, 0, "\"%E\" t \"%Dq5m_F_????.zpaq\" -franzen \"%F\" -noeta -out \"%Dqu_F_02.txt\"", "qu_F_02.txt", "(all OK)", "quadratura -franzen, t of the multipart"},
+	{5, AT_FRANZEN, 0, "\"%E\" t \"%Dq5c_F_????.zpaq\" -franzen \"%F\" -noeta -out \"%Dqu_F_03.txt\"", "qu_F_03.txt", "(all OK)", "quadratura -franzen, t of the -chunk"},
+	{5, AT_FRANZEN, 0, "\"%E\" t \"%Dq5b_F_????????.zpaq\" -franzen \"%F\" -noeta -out \"%Dqu_F_04.txt\"", "qu_F_04.txt", "(all OK)", "quadratura -franzen, t of the backup"},
+	{5, AT_FRANZEN, 0, "\"%E\" t \"%Dq5bc_F_????????.zpaq\" -franzen \"%F\" -noeta -out \"%Dqu_F_05.txt\"", "qu_F_05.txt", "(all OK)", "quadratura -franzen, t of the backup -chunk"},
+	{5, AT_FRANZEN, 0, "\"%E\" testbackup \"%Dq5bc_F.zpaq\" -franzen \"%F\" -verify -out \"%Dqu_F_06.txt\"", "qu_F_06.txt", "(all OK)", "quadratura -franzen, testbackup -verify of the backup -chunk"},
+	{5, AT_FRANZEN, 0, "\"%E\" work quadra \"%Dq5s_F.zpaq\" \"%Dq5m_F_????.zpaq\" -franzen \"%F\" -out \"%Dqu_F_07.txt\"", "qu_F_07.txt", "QUADRA OK", "quadratura -franzen: one piece == multipart"},
+	{5, AT_FRANZEN, 0, "\"%E\" work quadra \"%Dq5s_F.zpaq\" \"%Dq5c_F_????.zpaq\" -franzen \"%F\" -out \"%Dqu_F_08.txt\"", "qu_F_08.txt", "QUADRA OK", "quadratura -franzen: one piece == -chunk"},
+	{5, AT_FRANZEN, 0, "\"%E\" work quadra \"%Dq5s_F.zpaq\" \"%Dq5b_F_????????.zpaq\" -franzen \"%F\" -out \"%Dqu_F_09.txt\"", "qu_F_09.txt", "QUADRA OK", "quadratura -franzen: one piece == backup"},
+	{5, AT_FRANZEN, 0, "\"%E\" work quadra \"%Dq5b_F_????????.zpaq\" \"%Dq5bc_F_????????.zpaq\" -franzen \"%F\" -out \"%Dqu_F_10.txt\"", "qu_F_10.txt", "QUADRA OK", "quadratura -franzen: backup == backup -chunk"},
+	{5, AT_FRANZEN, 0, "\"%E\" pp \"%Dq5c_F_????.zpaq\" -franzen \"%F\" -noeta -out \"%Dqu_F_11.txt\"", "qu_F_11.txt", "(all OK)", "quadratura -franzen, pp of the -chunk (blocks across two chunks)"},
+	{5, AT_FRANZEN, 0, "\"%E\" work poke \"%Dq5m_F_0001.zpaq.franzen\" 50000 \"~\" -force -kill -out \"%Dqu_F_12.txt\"", "qu_F_12.txt", "done", "quadratura -franzen negative: one byte of the multipart changed"},
+	{5, AT_FRANZEN, 0, "\"%E\" work quadra \"%Dq5s_F.zpaq\" \"%Dq5m_F_????.zpaq\" -franzen \"%F\" -out \"%Dqu_F_13.txt\"", "qu_F_13.txt", "QUADRA KO", "quadratura -franzen negative: the multipart is not the same any more"},
+	{5, AT_FRANZEN, 0, "\"%E\" t \"%Dq5m_F_????.zpaq\" -franzen \"%F\" -noeta -out \"%Dqu_F_14.txt\"", "qu_F_14.txt", "(with errors)", "quadratura -franzen negative: t of the multipart ends with errors"},
+	{5, AT_FRANZEN, 0, "\"%E\" work poke \"%Dq5c_F_0001.zpaq.franzen\" 50000 \"~\" -force -kill -out \"%Dqu_F_15.txt\"", "qu_F_15.txt", "done", "quadratura -franzen negative: one byte of the -chunk changed"},
+	{5, AT_FRANZEN, 0, "\"%E\" work quadra \"%Dq5s_F.zpaq\" \"%Dq5c_F_????.zpaq\" -franzen \"%F\" -out \"%Dqu_F_16.txt\"", "qu_F_16.txt", "QUADRA KO", "quadratura -franzen negative: the -chunk is not the same any more"},
+	{5, AT_FRANZEN, 0, "\"%E\" t \"%Dq5c_F_????.zpaq\" -franzen \"%F\" -noeta -out \"%Dqu_F_17.txt\"", "qu_F_17.txt", "(with errors)", "quadratura -franzen negative: t of the -chunk ends with errors"},
+	{5, AT_FRANZEN, 0, "\"%E\" work poke \"%Dq5bc_F_00000001.zpaq.franzen\" 50000 \"~\" -force -kill -out \"%Dqu_F_18.txt\"", "qu_F_18.txt", "done", "quadratura -franzen negative: one byte of the backup -chunk changed"},
+	{5, AT_FRANZEN, 0, "\"%E\" work quadra \"%Dq5b_F_????????.zpaq\" \"%Dq5bc_F_????????.zpaq\" -franzen \"%F\" -out \"%Dqu_F_19.txt\"", "qu_F_19.txt", "QUADRA KO", "quadratura -franzen negative: the backup -chunk is not the same any more"},
+	{5, AT_FRANZEN, 0, "\"%E\" t \"%Dq5bc_F_????????.zpaq\" -franzen \"%F\" -noeta -out \"%Dqu_F_20.txt\"", "qu_F_20.txt", "(with errors)", "quadratura -franzen negative: t of the backup -chunk ends with errors"},
+	{5, AT_FRANZEN, 0, "\"%E\" a \"%Dq5s_K.zpaq\" \"%D05\" -key pippo -franzen \"%F\" -debug4 -nofast -noeta -timestamp 2025-02-01_10:00:00", NULL, NULL, NULL},
+	{5, AT_FRANZEN, 0, "\"%E\" a \"%Dq5m_K_????.zpaq\" \"%D05\" -key pippo -franzen \"%F\" -debug4 -nofast -noeta -timestamp 2025-02-01_10:00:00", NULL, NULL, NULL},
+	{5, AT_FRANZEN, 0, "\"%E\" a \"%Dq5c_K_????.zpaq\" \"%D05\" -chunk 100k -key pippo -franzen \"%F\" -debug4 -nofast -noeta -timestamp 2025-02-01_10:00:00", NULL, NULL, NULL},
+	{5, AT_FRANZEN, 0, "\"%E\" backup \"%Dq5b_K.zpaq\" \"%D05\" -key pippo -franzen \"%F\" -debug4 -nofast -noeta -timestamp 2025-02-01_10:00:00", NULL, NULL, NULL},
+	{5, AT_FRANZEN, 0, "\"%E\" backup \"%Dq5bc_K.zpaq\" \"%D05\" -chunk 100k -key pippo -franzen \"%F\" -debug4 -nofast -noeta -timestamp 2025-02-01_10:00:00", NULL, NULL, NULL},
+	{5, AT_FRANZEN, 0, "\"%E\" a \"%Dq5s_K.zpaq\" \"%D06\" -key pippo -franzen \"%F\" -debug4 -nofast -noeta -timestamp 2025-02-02_10:00:00", NULL, NULL, NULL},
+	{5, AT_FRANZEN, 0, "\"%E\" a \"%Dq5m_K_????.zpaq\" \"%D06\" -key pippo -franzen \"%F\" -debug4 -nofast -noeta -timestamp 2025-02-02_10:00:00", NULL, NULL, NULL},
+	{5, AT_FRANZEN, 0, "\"%E\" a \"%Dq5c_K_????.zpaq\" \"%D06\" -chunk 100k -key pippo -franzen \"%F\" -debug4 -nofast -noeta -timestamp 2025-02-02_10:00:00", NULL, NULL, NULL},
+	{5, AT_FRANZEN, 0, "\"%E\" backup \"%Dq5b_K.zpaq\" \"%D06\" -key pippo -franzen \"%F\" -debug4 -nofast -noeta -timestamp 2025-02-02_10:00:00", NULL, NULL, NULL},
+	{5, AT_FRANZEN, 0, "\"%E\" backup \"%Dq5bc_K.zpaq\" \"%D06\" -chunk 100k -key pippo -franzen \"%F\" -debug4 -nofast -noeta -timestamp 2025-02-02_10:00:00", NULL, NULL, NULL},
+	{5, AT_FRANZEN, 0, "\"%E\" a \"%Dq5s_K.zpaq\" \"%D06\" -key pippo -franzen \"%F\" -debug4 -nofast -noeta -timestamp 2025-02-03_10:00:00", NULL, NULL, NULL},
+	{5, AT_FRANZEN, 0, "\"%E\" a \"%Dq5m_K_????.zpaq\" \"%D06\" -key pippo -franzen \"%F\" -debug4 -nofast -noeta -timestamp 2025-02-03_10:00:00", NULL, NULL, NULL},
+	{5, AT_FRANZEN, 0, "\"%E\" a \"%Dq5c_K_????.zpaq\" \"%D06\" -chunk 100k -key pippo -franzen \"%F\" -debug4 -nofast -noeta -timestamp 2025-02-03_10:00:00", NULL, NULL, NULL},
+	{5, AT_FRANZEN, 0, "\"%E\" backup \"%Dq5b_K.zpaq\" \"%D06\" -key pippo -franzen \"%F\" -debug4 -nofast -noeta -timestamp 2025-02-03_10:00:00", NULL, NULL, NULL},
+	{5, AT_FRANZEN, 0, "\"%E\" backup \"%Dq5bc_K.zpaq\" \"%D06\" -chunk 100k -key pippo -franzen \"%F\" -debug4 -nofast -noeta -timestamp 2025-02-03_10:00:00", NULL, NULL, NULL},
+	{5, AT_FRANZEN, 0, "\"%E\" a \"%Dq5s_K.zpaq\" \"%D07\" -key pippo -franzen \"%F\" -debug4 -nofast -noeta -timestamp 2025-02-04_10:00:00", NULL, NULL, NULL},
+	{5, AT_FRANZEN, 0, "\"%E\" a \"%Dq5m_K_????.zpaq\" \"%D07\" -key pippo -franzen \"%F\" -debug4 -nofast -noeta -timestamp 2025-02-04_10:00:00", NULL, NULL, NULL},
+	{5, AT_FRANZEN, 0, "\"%E\" a \"%Dq5c_K_????.zpaq\" \"%D07\" -chunk 100k -key pippo -franzen \"%F\" -debug4 -nofast -noeta -timestamp 2025-02-04_10:00:00", NULL, NULL, NULL},
+	{5, AT_FRANZEN, 0, "\"%E\" backup \"%Dq5b_K.zpaq\" \"%D07\" -key pippo -franzen \"%F\" -debug4 -nofast -noeta -timestamp 2025-02-04_10:00:00", NULL, NULL, NULL},
+	{5, AT_FRANZEN, 0, "\"%E\" backup \"%Dq5bc_K.zpaq\" \"%D07\" -chunk 100k -key pippo -franzen \"%F\" -debug4 -nofast -noeta -timestamp 2025-02-04_10:00:00", NULL, NULL, NULL},
+	{5, AT_FRANZEN, 0, "\"%E\" a \"%Dq5s_K.zpaq\" \"%D08\" -key pippo -franzen \"%F\" -debug4 -nofast -noeta -timestamp 2025-02-05_10:00:00", NULL, NULL, NULL},
+	{5, AT_FRANZEN, 0, "\"%E\" a \"%Dq5m_K_????.zpaq\" \"%D08\" -key pippo -franzen \"%F\" -debug4 -nofast -noeta -timestamp 2025-02-05_10:00:00", NULL, NULL, NULL},
+	{5, AT_FRANZEN, 0, "\"%E\" a \"%Dq5c_K_????.zpaq\" \"%D08\" -chunk 100k -key pippo -franzen \"%F\" -debug4 -nofast -noeta -timestamp 2025-02-05_10:00:00", NULL, NULL, NULL},
+	{5, AT_FRANZEN, 0, "\"%E\" backup \"%Dq5b_K.zpaq\" \"%D08\" -key pippo -franzen \"%F\" -debug4 -nofast -noeta -timestamp 2025-02-05_10:00:00", NULL, NULL, NULL},
+	{5, AT_FRANZEN, 0, "\"%E\" backup \"%Dq5bc_K.zpaq\" \"%D08\" -chunk 100k -key pippo -franzen \"%F\" -debug4 -nofast -noeta -timestamp 2025-02-05_10:00:00", NULL, NULL, NULL},
+	{5, AT_FRANZEN, 0, "\"%E\" t \"%Dq5s_K.zpaq\" -key pippo -franzen \"%F\" -noeta -out \"%Dqu_K_01.txt\"", "qu_K_01.txt", "(all OK)", "quadratura -key -franzen, t of the one piece"},
+	{5, AT_FRANZEN, 0, NULL, "qu_K_01.txt", "4 versions,", "quadratura -key -franzen, 4 versions (the third run changed nothing)"},
+	{5, AT_FRANZEN, 0, "\"%E\" t \"%Dq5m_K_????.zpaq\" -key pippo -franzen \"%F\" -noeta -out \"%Dqu_K_02.txt\"", "qu_K_02.txt", "(all OK)", "quadratura -key -franzen, t of the multipart"},
+	{5, AT_FRANZEN, 0, "\"%E\" t \"%Dq5c_K_????.zpaq\" -key pippo -franzen \"%F\" -noeta -out \"%Dqu_K_03.txt\"", "qu_K_03.txt", "(all OK)", "quadratura -key -franzen, t of the -chunk"},
+	{5, AT_FRANZEN, 0, "\"%E\" t \"%Dq5b_K_????????.zpaq\" -key pippo -franzen \"%F\" -noeta -out \"%Dqu_K_04.txt\"", "qu_K_04.txt", "(all OK)", "quadratura -key -franzen, t of the backup"},
+	{5, AT_FRANZEN, 0, "\"%E\" t \"%Dq5bc_K_????????.zpaq\" -key pippo -franzen \"%F\" -noeta -out \"%Dqu_K_05.txt\"", "qu_K_05.txt", "(all OK)", "quadratura -key -franzen, t of the backup -chunk"},
+	{5, AT_FRANZEN, 0, "\"%E\" testbackup \"%Dq5bc_K.zpaq\" -key pippo -franzen \"%F\" -verify -out \"%Dqu_K_06.txt\"", "qu_K_06.txt", "(all OK)", "quadratura -key -franzen, testbackup -verify of the backup -chunk"},
+	{5, AT_FRANZEN, 0, "\"%E\" work quadra \"%Dq5s_K.zpaq\" \"%Dq5m_K_????.zpaq\" -franzen \"%F\" -out \"%Dqu_K_07.txt\"", "qu_K_07.txt", "QUADRA OK", "quadratura -key -franzen: one piece == multipart"},
+	{5, AT_FRANZEN, 0, "\"%E\" work quadra \"%Dq5s_K.zpaq\" \"%Dq5c_K_????.zpaq\" -franzen \"%F\" -out \"%Dqu_K_08.txt\"", "qu_K_08.txt", "QUADRA OK", "quadratura -key -franzen: one piece == -chunk"},
+	{5, AT_FRANZEN, 0, "\"%E\" work quadra \"%Dq5s_K.zpaq\" \"%Dq5b_K_????????.zpaq\" -franzen \"%F\" -out \"%Dqu_K_09.txt\"", "qu_K_09.txt", "QUADRA OK", "quadratura -key -franzen: one piece == backup"},
+	{5, AT_FRANZEN, 0, "\"%E\" work quadra \"%Dq5b_K_????????.zpaq\" \"%Dq5bc_K_????????.zpaq\" -franzen \"%F\" -out \"%Dqu_K_10.txt\"", "qu_K_10.txt", "QUADRA OK", "quadratura -key -franzen: backup == backup -chunk"},
+	{5, AT_FRANZEN, 0, "\"%E\" pp \"%Dq5c_K_????.zpaq\" -key pippo -franzen \"%F\" -noeta -out \"%Dqu_K_11.txt\"", "qu_K_11.txt", "(all OK)", "quadratura -key -franzen, pp of the -chunk (blocks across two chunks)"},
+	{5, AT_FRANZEN, 0, "\"%E\" work poke \"%Dq5m_K_0001.zpaq.franzen\" 50000 \"~\" -force -kill -out \"%Dqu_K_12.txt\"", "qu_K_12.txt", "done", "quadratura -key -franzen negative: one byte of the multipart changed"},
+	{5, AT_FRANZEN, 0, "\"%E\" work quadra \"%Dq5s_K.zpaq\" \"%Dq5m_K_????.zpaq\" -franzen \"%F\" -out \"%Dqu_K_13.txt\"", "qu_K_13.txt", "QUADRA KO", "quadratura -key -franzen negative: the multipart is not the same any more"},
+	{5, AT_FRANZEN, 0, "\"%E\" t \"%Dq5m_K_????.zpaq\" -key pippo -franzen \"%F\" -noeta -out \"%Dqu_K_14.txt\"", "qu_K_14.txt", "(with errors)", "quadratura -key -franzen negative: t of the multipart ends with errors"},
+	{5, AT_FRANZEN, 0, "\"%E\" work poke \"%Dq5c_K_0001.zpaq.franzen\" 50000 \"~\" -force -kill -out \"%Dqu_K_15.txt\"", "qu_K_15.txt", "done", "quadratura -key -franzen negative: one byte of the -chunk changed"},
+	{5, AT_FRANZEN, 0, "\"%E\" work quadra \"%Dq5s_K.zpaq\" \"%Dq5c_K_????.zpaq\" -franzen \"%F\" -out \"%Dqu_K_16.txt\"", "qu_K_16.txt", "QUADRA KO", "quadratura -key -franzen negative: the -chunk is not the same any more"},
+	{5, AT_FRANZEN, 0, "\"%E\" t \"%Dq5c_K_????.zpaq\" -key pippo -franzen \"%F\" -noeta -out \"%Dqu_K_17.txt\"", "qu_K_17.txt", "(with errors)", "quadratura -key -franzen negative: t of the -chunk ends with errors"},
+	{5, AT_FRANZEN, 0, "\"%E\" work poke \"%Dq5bc_K_00000001.zpaq.franzen\" 50000 \"~\" -force -kill -out \"%Dqu_K_18.txt\"", "qu_K_18.txt", "done", "quadratura -key -franzen negative: one byte of the backup -chunk changed"},
+	{5, AT_FRANZEN, 0, "\"%E\" work quadra \"%Dq5b_K_????????.zpaq\" \"%Dq5bc_K_????????.zpaq\" -franzen \"%F\" -out \"%Dqu_K_19.txt\"", "qu_K_19.txt", "QUADRA KO", "quadratura -key -franzen negative: the backup -chunk is not the same any more"},
+	{5, AT_FRANZEN, 0, "\"%E\" t \"%Dq5bc_K_????????.zpaq\" -key pippo -franzen \"%F\" -noeta -out \"%Dqu_K_20.txt\"", "qu_K_20.txt", "(with errors)", "quadratura -key -franzen negative: t of the backup -chunk ends with errors"},
 	///NOSFTPSTART
 	{5, AT_MOUNT, 0, "\"%E\" mount \"%Dchunk_????.zpaq\" \"%Dmnt\" -key pippo -all -test -noeta -out \"%Dout160.txt\"", "out160.txt", "Mount test: OK", "mount -all of an encrypted -chunk multipart"},
 	///NOSFTPEND
@@ -173318,6 +174227,14 @@ static int autotest_livellocartella(const string &i_cartella)
 		if ((righe[i].size() > 0) && (righe[i][0] >= '1') && (righe[i][0] <= '5'))
 			return righe[i][0] - '0';
 	return 4;
+}
+/// 65.13g: what a step must have. autotest -all -debug4: bigone01.big is 4 MB (autotestdebug4.txt in the folder),
+/// and the hash of the big files extracted (out21.txt) is another one
+static const char *autotest_atteso(const autotestpasso &i_passo, bool i_piccolo)
+{
+	if (i_piccolo && (i_passo.uscita != NULL) && (string(i_passo.uscita) == "out21.txt"))
+		return "GLOBAL SHA256: D856464081201B49AD898E1DF15FCDB210D0C3088FD3436FB892864D045CAA99";
+	return i_passo.atteso;
 }
 /// the folders 00-09 of the data written by a level (the names of the files do not change)
 static bool autotest_cartella(int i_livello, int i_iterazione)
@@ -173566,14 +174483,14 @@ int Jidac::autotest()
 
 		/// 65.12h: what a level needs at its peak (measured on Windows, with -franzen, plus some more): 22 MB,
 		/// 135 MB, 7.6 GB, 27.6 GB, 30.8 GB. The 18 GB of before were too few for -m4 (the suite of before) too
-		static const char *spazioserve[6]= {"", "0.2", "1", "10", "28", "32"};
-		const int64_t	   spaziogb[6]	  = {0, 200000000LL, 1000000000LL, 10000000000LL, 28000000000LL, 32000000000LL};
+		static const char *spazioserve[6]= {"", "0.2", "1", "10", "28", "33"};
+		const int64_t	   spaziogb[6]	  = {0, 200000000LL, 1000000000LL, 10000000000LL, 28000000000LL, 33000000000LL}; /// 65.13g: -m5 one more (the quadratura)
 		const int		   livellospazio  = (livello >= 1) ? livello : 4; /// -quick: any -m
 		int64_t			   spazio		  = getfreespace(outfolder);
 		if (spazio < spaziogb[livellospazio])
 			if ((!flagspace) && (!quick)) /// the quick suite needs just a few MB
 			{
-				myprintf("01163! You need at least %sGB free on %s (founded %s). Use -space to bypass\n", spazioserve[livellospazio], outfolder.c_str(), tohuman(spazio));
+				myprintf("01163! You need at least %sGB free on %s (found %s). Use -space to bypass\n", spazioserve[livellospazio], outfolder.c_str(), tohuman(spazio));
 				franz_free(state);
 				franz_free(buffer8bit);
 				franz_free(buffer32bit);
@@ -174090,7 +175007,10 @@ int Jidac::autotest()
 			myprintf("01217: Big file %s ", mynomefile);
 			/// memset() counts bytes: 15 (zeros), 3 6 9 12 (the byte j) set just the first MB of
 			/// every 4 MB block, the other 3 MB are the last ones of the file before (random)
-			for (unsigned int i= 0; i < 100; i++)
+			/// 65.13g: -debug4, bigone01.big is 4 MB (its first 4 MB), not 400: the methods of -m5 (-m5 on 400 MB of
+			/// random data was most of the time) and the quadratura go much faster. The others are as always
+			const unsigned int giri= ((j == 1) && flagdebug4) ? 1 : 100;
+			for (unsigned int i= 0; i < giri; i++)
 			{
 				if (j == 15)
 					memset(buffer32bit, 0, chunksize);
@@ -174337,6 +175257,16 @@ int Jidac::autotest()
 			fprintf(segnolivello, "%d\nthe level (-m%d) of autotest -all: autotest -checktxt checks its steps\n", livello, livello);
 			fclose(segnolivello);
 		}
+		/// 65.13g: -debug4 (bigone01.big of 4 MB): -checktxt expects another hash of the big files (out21.txt)
+		if (flagdebug4 && (livello >= 4))
+		{
+			FILE *segnopiccolo= fopen((outfolder + "autotestdebug4.txt").c_str(), "wb");
+			if (segnopiccolo != NULL)
+			{
+				fprintf(segnopiccolo, "autotest -all -debug4: bigone01.big is 4 MB, not 400 (autotest -checktxt expects its hash)\n");
+				fclose(segnopiccolo);
+			}
+		}
 		myprintf("\n\n");
 		myprintf("03492: Level -m%d (-m1 quick ... -m4 the suite of before ... -m5 everything): %u commands, %u checks\n", livello, passi, prove);
 		myprintf("01227: The test batchfile is: %s\n", filebatch.c_str());
@@ -174375,11 +175305,12 @@ int Jidac::findj()
 		return 1;
 	}
 	if (files.size() == 2)
-	{
-		myprintf("01232: magically search %s\n", files[1].c_str());
-		onlyfiles.push_back(files[1]);
-		files.pop_back();
-	}
+		if (!direxists(files[1])) /// 65.13h: two folders (find c:\uno z:\kb -only *franco*) are two folders
+		{
+			myprintf("01232: magically search %s\n", files[1].c_str());
+			onlyfiles.push_back(files[1]);
+			files.pop_back();
+		}
 	if (files[0] == ".")
 		files[0]+= '/';
 	int64_t startscan= mtime();
@@ -174390,6 +175321,7 @@ int Jidac::findj()
 	if (flagverbose)
 		myprintf("01233: Scantime %f\n", (scantime * 0.001));
 	int64_t					howmany	 = 0;
+	int64_t					howmanyfolders= 0; /// 65.13h: the folders are listed, not counted as files
 	int64_t					totalsize= 0;
 	vector<DTMap::iterator> filelist;
 	for (DTMap::iterator p= edt.begin(); p != edt.end(); ++p)
@@ -174399,10 +175331,10 @@ int Jidac::findj()
 			if (stristr(p->first.c_str(), searchfrom.c_str()) == 0)
 				flagshow= false;
 		if (g_datefrom > 0)
-			if ((p->second.date) <= g_datefrom)
+			if ((p->second.date) < g_datefrom)
 				flagshow= false;
 		if (g_dateto > 0)
-			if ((p->second.date) >= g_dateto)
+			if ((p->second.date) > g_dateto)
 				flagshow= false;
 		if (maxsize > 0)
 			if (maxsize < (uint64_t)p->second.size)
@@ -174413,8 +175345,13 @@ int Jidac::findj()
 		if (flagshow)
 		{
 			filelist.push_back(p);
-			howmany++;
-			totalsize+= p->second.size;
+			if (isdirectory(p->first))
+				howmanyfolders++;
+			else
+			{
+				howmany++;
+				totalsize+= p->second.size;
+			}
 		}
 	}
 
@@ -174428,7 +175365,8 @@ int Jidac::findj()
 	}
 	if (orderby != "")
 	{
-		myprintf("01234: orderby |%s|\n", orderby.c_str());
+		if (flagverbose) /// 65.13m: on every search by date, without -verbose too
+			myprintf("01234: orderby |%s|\n", orderby.c_str());
 		sort(filelist.begin(), filelist.end(), compareorderby);
 	}
 	for (unsigned int i= 0; i < filelist.size(); i++)
@@ -174443,10 +175381,15 @@ int Jidac::findj()
 		myprintf("\n");
 	}
 
-	if (howmany)
+	if (howmany || howmanyfolders)
 	{
 		printbar('=');
-		myprintf("01235: Files %s for %s bytes (%s)\n", migliaia((int64_t)howmany), migliaia((int64_t)totalsize), tohuman((int64_t)totalsize));
+		myprintf("01235: Files %s for %s bytes (%s)", migliaia((int64_t)howmany), migliaia((int64_t)totalsize), tohuman((int64_t)totalsize));
+		if (howmanyfolders)
+			myprintf(", folders %s", migliaia((int64_t)howmanyfolders));
+		myprintf("\n");
+		if (menoenne && (menoenne < filelist.size())) /// 65.13m: -n cut the lines, the total is of all of them
+			myprintf("03574: shown %s of %s (-n)\n", migliaia((int64_t)menoenne), migliaia((int64_t)filelist.size()));
 	}
 	return 0;
 }
@@ -174603,6 +175546,19 @@ void my_handler(int s)
 		unsigned int expected= 0;
 
 		myprintf("01268: Fixed-size chunk: (try) deleting all of them (should be %s)\n", migliaia(g_addedchunklist.size() - 1));
+#ifndef NOFRANZEN
+#ifdef ZPAQFULL /// NOSFTPSTART
+		/// 65.13e: -chunk -franzen: the parts are franzen files, open (Windows does not delete an open file)
+		if (g_p_franzenprimo && (g_p_franzenprimo != g_p_franzenfile))
+			g_p_franzenprimo->close();
+		g_p_franzenprimo= 0;
+		if (g_p_franzenfile)
+		{
+			g_p_franzenfile->close();
+			g_p_franzenfile= 0;
+		}
+#endif /// NOSFTPEND
+#endif
 		for (unsigned int i= 0; i < g_addedchunklist.size(); i++)
 		{
 			if (fileexists(g_addedchunklist[i]))
@@ -176411,6 +177367,13 @@ uint32_t crc32zeros(int64_t i_size)
 
 /// concatenate multipart archive into one zpaq
 /// check for freespace and (optionally) hash check
+/// 65.13m: m failed after it began to write: the output is not the merge, it does not stay there (as password)
+static int m_fallito(const string &i_out)
+{
+	if (delete_file(i_out.c_str()))
+		myprintf("03582! The merge failed: <<%Z>> deleted\n", i_out.c_str());
+	return 2;
+}
 int Jidac::consolidate(string i_archive)
 {
 	///	assert(i_archive);
@@ -176436,6 +177399,22 @@ int Jidac::consolidate(string i_archive)
 		myprintf("01374! Something strange: cannot find archive chunks\n");
 		return 2;
 	}
+	/// 65.13k: franzen parts are encrypted files each one on its own: glued, they are not an archive (it was "Done")
+	if (is_file_franzen(chunk_name[0]))
+	{
+		myprintf("03568! m does not work on franzen parts (each one is encrypted by itself: glued, not an archive)\n");
+		return 2;
+	}
+	/// 65.13k: the parts are read up to the first missing one: with a hole the ones after it were left out, silently
+	if (isjolly(i_archive))
+	{
+		easymultipart parti(i_archive);
+		if (!parti.isgood)
+		{
+			myprintf("03569! A hole among the parts: the merge would stop there, the parts after it left out\n");
+			return 2;
+		}
+	}
 	int64_t total_size= 0;
 	for (int unsigned i= 0; i < chunk_name.size(); i++)
 	{
@@ -176447,14 +177426,20 @@ int Jidac::consolidate(string i_archive)
 	if (files.size() != 1)
 	{
 		myprintf("01377: WARN exactly one file as output for merge needed\n");
-		return 1;
+		return 2; /// 65.13m: not done = 2 (as password)
 	}
 	string outfile= files[0];
+	for (unsigned int i= 0; i < chunk_name.size(); i++) /// 65.13m: never an output on its own input (-force wiped a part)
+		if (stessofile(outfile, chunk_name[i]))
+		{
+			myprintf("03583! The output <<%Z>> is a part of the archive: refused\n", outfile.c_str());
+			return 2;
+		}
 	if (fileexists(outfile))
 		if (!flagforce)
 		{
 			myprintf("01378: outfile exists, and no -force. Quit %s\n", outfile.c_str());
-			return 1;
+			return 2;
 		}
 	int64_t spazio= getfreespace(outfile);
 	myprintf("01379: Outfile    <<%s>>\n", outfile.c_str());
@@ -176464,7 +177449,7 @@ int Jidac::consolidate(string i_archive)
 		if (!flagspace)
 		{
 			myprintf("01382: Free space seems < needed, and no -space. Quit\n");
-			return 1;
+			return 2;
 		}
 #ifdef _WIN32
 	wstring widename= utow(outfile.c_str());
@@ -176498,7 +177483,7 @@ int Jidac::consolidate(string i_archive)
 			myprintf("\n");
 			myprintf("01385! ERR <%s> kind %d\n", sorgente_nome.c_str(), err);
 			fclose(outFile); // Close the output file too before exiting
-			return 2;
+			return m_fallito(outfile);
 		}
 		size_t	readSize;
 		int64_t chunk_readed = 0;
@@ -176537,21 +177522,31 @@ int Jidac::consolidate(string i_archive)
 		{
 			myprintf("01387: GURU on chunk %d Read, Write, Expec not equal!\n", i);
 			fclose(outFile);
-			return 1;
+			return m_fallito(outfile); /// 65.13k: the output is not the merge (it was 1, "with warnings")
 		}
 	}
-	fclose(outFile);
+	/// 65.13k: as cp (65.13c): the last bytes go to the disk at the close, unchecked = "Done" on a short file;
+	/// with -verify to the media and then out of the cache, or the check reads back the RAM
+	bool chiuso= flagverify ? fill_sumedia(outFile) : (fflush(outFile) == 0);
+	if (fclose(outFile) != 0)
+		chiuso= false;
+	if (!chiuso)
+	{
+		myprintf("03570! ERROR writing %Z (flush/close)\n", outfile.c_str());
+		return m_fallito(outfile);
+	}
 	myprintf("01388: Done\n");
 	myprintf("01389: Written  %20s\n", migliaia(donesize));
 	myprintf("01390: Expected %20s\n\n", migliaia(total_size));
 	if (donesize != total_size)
 	{
 		myprintf("01391: GURU bytes written does not match expected\n");
-		return 1;
+		return m_fallito(outfile);
 	}
 	if (flagverify)
 	{
-		myprintf("01392: -flagverify: double check...\n");
+		fill_scordacache(outfile);
+		myprintf("01392: -verify: double check...\n");
 		XXH128_hash_t myhash= XXH3_128bits_digest(&state128);
 		char		  risultato[33];
 		snprintf(risultato, sizeof(risultato), "%s", bin2hex_128(myhash.high64, myhash.low64).c_str());
@@ -176572,7 +177567,7 @@ int Jidac::consolidate(string i_archive)
 		if (hashreloaded != risultato)
 		{
 			myprintf("01397: GURU hash of output file does not match!\n");
-			return 1;
+			return m_fallito(outfile);
 		}
 	}
 	return 0;
@@ -177463,7 +178458,7 @@ int Jidac::test()
 					triple_error++;
 					if (flagverbose)
 					{
-						myprintf("01439: KAPUTT CRC-32 expected %08X founded %08X %s\n",
+						myprintf("01439: KAPUTT CRC-32 expected %08X found %08X %s\n",
 								 p->second.file_crc32,
 								 crc32fromfilesystem,
 								 crc32_pair[j].second.c_str());
@@ -178328,7 +179323,7 @@ int Jidac::multisomething()
 
 	if (thedt.size() == 0)
 	{
-		myprintf("01533: no archive founded => quit\n");
+		myprintf("01533: no archive found => quit\n");
 		return 1;
 	}
 	myprintf("01534: Founded %s archive(s), working\n", migliaia(thedt.size()));
@@ -179910,6 +180905,12 @@ int Jidac::dircompare(bool i_flagonlysize, bool i_flagrobocopy)
 			myprintf("66395: On dircompare you need at least one master and one slave\n");
 			return 1;
 		}
+	/// 65.13b: s x /os -home: the /os written before the switches is in files too (it is not a folder,
+	/// as for dir); alone it stays (on *nix it may be a real /os)
+	if (i_flagonlysize && flaghome && (files.size() > 1))
+		for (unsigned int i= files.size(); i-- > 0;)
+			if (stringcomparei(files[i], "/os"))
+				files.erase(files.begin() + i);
 	if (!exists(files[0]))
 	{
 		myprintf("66400: Master dir <<%Z>> does not exists\n", files[0].c_str());
@@ -181818,7 +182819,7 @@ myprintf("VEDIAMO: files[0] = %s, folder = %s\n",
         }
         
         if (flagverbose)
-            myprintf("01750: Limit founded %d\n", limite);
+            myprintf("01750: Limit found %d\n", limite);
         
         if (limite > -1)
             for (int i = fileandsize.size() - 1; i >= limite; i--)
@@ -182020,7 +183021,7 @@ int Jidac::decimation()
 	if (g_exec != "")
 		if (!fileexists(g_exec))
 		{
-			myprintf("01762! -g_exec does not exists\n");
+			myprintf("01762! -exec file does not exist <<%Z>>\n", g_exec.c_str()); /// 65.13j: it said -g_exec (no such switch)
 			return 2;
 		}
 	if (flagthelastone)
@@ -182039,6 +183040,11 @@ int Jidac::decimation()
 		myprintf("01764: only one dir can be elaborated\n");
 		return 1;
 	}
+	if (files.size() == 0) /// 65.13j: it crashed (files[0] of nothing)
+	{
+		myprintf("03567! n needs the files to be decimated (ex. n z:\\1\\*.txt -n 10)\n");
+		return 2;
+	}
 #ifdef _WIN32
 	if (mypos("*", files[0]) == -1)
 	{
@@ -182048,6 +183054,13 @@ int Jidac::decimation()
 #endif // corresponds to #ifdef (#ifdef _WIN32)
 	franzparallelscandir(false, false, false);
 	myprintf("\n");
+	/// 65.13j: files only. A folder matching the * took one of the -n places (-n 4 = 3 files and the folder kept),
+	/// or was "deleted" (it cannot be: Highlander)
+	for (DTMap::iterator a= files_edt[0].begin(); a != files_edt[0].end();)
+		if (isdirectory(a->first))
+			files_edt[0].erase(a++);
+		else
+			++a;
 	if (files_edt[0].size() == 0)
 	{
 		myprintf("01766: empty result, nothing to do\n");
@@ -182057,7 +183070,7 @@ int Jidac::decimation()
 		if (!flagforce)
 			if (files_edt[0].size() > 50)
 			{
-				myprintf("01767: founded a lot of files (%s), no -force => quit (security measure)\n", migliaia(files_edt[0].size()));
+				myprintf("01767: found a lot of files (%s), no -force => quit (security measure)\n", migliaia(files_edt[0].size()));
 				return 1;
 			}
 	vector<string> scannedfiles;
@@ -182083,7 +183096,7 @@ int Jidac::decimation()
 			menoenne= scannedfiles.size();
 		else
 		{
-			myprintf("01770: candidate %s less or equal to limit %s => do nothing\n", migliaia(menoenne), migliaia2(scannedfiles.size()));
+			myprintf("01770: candidate %s less or equal to limit %s => do nothing\n", migliaia(scannedfiles.size()), migliaia2(menoenne)); /// 65.13j: they were swapped
 			return 0;
 		}
 	}
@@ -182128,7 +183141,9 @@ int Jidac::decimation()
 	int highlander= 0;
 	for (unsigned int i= 0; i < tobedeleted.size(); i++)
 	{
-		if (flagverbose)
+		if (!flagkill) /// 65.13m: the dry run says what it would delete (it was with -verbose only)
+			myprintf("03581: to be deleted <<%Z>>\n", tobedeleted[i].c_str());
+		else if (flagverbose)
 		{
 			myprintf("01776: DELETE <<%Z>>\n", tobedeleted[i].c_str());
 		}
@@ -185399,7 +186414,7 @@ int Jidac::sfx()
 		}
 
 		int64_t offsetfromstart= (endblock - &buffer[0]) + g_franzo_end.size();
-		myprintf("74794: End founded, this is good, offset %s\n", migliaia(offsetfromstart));
+		myprintf("74794: End found, this is good, offset %s\n", migliaia(offsetfromstart));
 
 		if (offsetfromstart >= exesize)
 		{
@@ -186317,7 +187332,7 @@ bool Jidac::removetempdirifempty(string i_folder, bool i_deleteifsizezero= false
 			somefile= false;
 	if (somefile)
 	{
-		myprintf("02467: some files founded in %s, do nothing\n", i_folder.c_str());
+		myprintf("02467: some files found in %s, do nothing\n", i_folder.c_str());
 	}
 	else
 	{
@@ -187630,7 +188645,7 @@ bool Jidac::getjollylist(string i_fullarchive, DTMap *o_thedt)
 
 	if ((*o_thedt).size() == 0)
 	{
-		myprintf("02591: no archive founded => quit\n");
+		myprintf("02591: no archive found => quit\n");
 		return false;
 	}
 	return true;
@@ -187697,7 +188712,7 @@ int Jidac::zfsproxbackup()
 
 		if (files.size() == 0)
 		{
-			myprintf("02599! no .conf files founded in %s (not discarded by -not)\n", theconf.c_str());
+			myprintf("02599! no .conf files found in %s (not discarded by -not)\n", theconf.c_str());
 			return 2;
 		}
 		for (unsigned int i= 0; i < files.size(); i++)
@@ -188269,7 +189284,8 @@ int Jidac::oneonone()
 
 	temp.clear();
 
-	int64_t startdelete= mtime();
+	std::set<string> dacancellare; /// the files of -deleteinto already taken (counted, or deleted with -kill)
+	int64_t			 startdelete= mtime();
 	for (unsigned int i= 0; i < tobehashedsource_hashname.size(); i++)
 	{
 		string										cerco= tobehashedsource_hashname[i].first;
@@ -188301,6 +189317,10 @@ int Jidac::oneonone()
 				*/
 				if (flagkill)
 				{
+					/// 65.13j: each file here once. Two files in the source, one copy here: the second delete
+					/// found it gone (*nix: "CANNOT DELETE", Delete FAIL, rc 2, after a good run)
+					if (flaguccidi && (!dacancellare.insert(a->second).second))
+						continue;
 					if (flaguccidi)
 					{
 						if (!flagnoeta)
@@ -188332,11 +189352,14 @@ int Jidac::oneonone()
 				}
 				else
 				{
-					if (flagverbose)
-						if (flaguccidi)
+					/// 65.13j: the space to be freed without -verbose too (it was there only with -kill), and each
+					/// file once (two files in the source, one copy here: counted twice)
+					if (flaguccidi)
+						if (dacancellare.insert(a->second).second)
 						{
 							byteserased+= prendidimensionefile(a->second.c_str());
-							myprintf("        63944: TO BE ERASED   %08d %s (%s)\n", (int)(a - tobehasheddest_hashname.begin()), a->first.c_str(), a->second.c_str());
+							if (flagverbose)
+								myprintf("        63944: TO BE ERASED   %08d %s (%s)\n", (int)(a - tobehasheddest_hashname.begin()), a->first.c_str(), a->second.c_str());
 						}
 				}
 			}
@@ -188349,7 +189372,7 @@ int Jidac::oneonone()
 	printbar(' ');
 	myprintf("\n");
 	if (flagkill)
-		if (deleted > 0)
+		if ((deleted > 0) && (mtime() > startdelete)) /// 65.13m: a time of 0 printed "Deleted inf files/s"
 			myprintf("02666: Deleted %.0f files/s\n", (deleted / ((mtime() - startdelete) / 1000.0)));
 	myprintf("02667: Same hash             %9s (same name too) %s\n", migliaia(samehash), migliaia(veryequal));
 	if (!flagchecksum)
@@ -188376,7 +189399,7 @@ int Jidac::oneonone()
 	if ((byteserased > 0) && (!flagkill))
 		myprintf("02675: Space to be freed %s (%s)\n", migliaia(byteserased), tohuman(byteserased));
 
-	return errors;
+	return (errors > 0) ? 2 : 0; /// 65.13j: it was the number of errors (256 = exit code 0 on *nix)
 }
 
 int64_t Jidac::franzparallelhashfiles(const string i_hashtype, int64_t i_totalsize, vector<string> i_thefiles, bool i_silent, vector<std::pair<string, string> > &o_hashname)
@@ -189535,10 +190558,11 @@ int Jidac::backup()
 		for (int n= 1; n < 100000000; n++)
 		{
 			const string pezzo= subpart(archive, n);
-			if (fileexists(pezzo))
+			if (fileexists(pezzofisico(pezzo))) /// 65.13e: a part can be a franzen file
 				continue;
 			string ancoratmp= pezzo;
 			myreplace(ancoratmp, ".zpaq", ".tmp");
+			ancoratmp= pezzofisico(ancoratmp);
 			if (fileexists(ancoratmp))
 			{
 				color_yellow();
@@ -189689,9 +190713,17 @@ bool is_same_path(const std::string &i_old, const std::string &i_new)
 		return false;
 	}
 	
-	const char *old_full = realpath(i_old.c_str(), old_resolved);
-	const char *new_full = realpath(i_new.c_str(), new_resolved);
-	
+	/// 65.13k: the folders, as on Windows: it was the files (the new one is not there yet: KAPUTT, and two
+	/// names are never the same path: consolidate -destination copied instead of renaming, in the same folder)
+	string percorso_old= extractfilepath(i_old);
+	string percorso_new= extractfilepath(i_new);
+	if (percorso_old == "")
+		percorso_old= "./";
+	if (percorso_new == "")
+		percorso_new= "./";
+	const char *old_full = realpath(percorso_old.c_str(), old_resolved);
+	const char *new_full = realpath(percorso_new.c_str(), new_resolved);
+
 	bool result = false;
 	if (old_full && new_full)
 	{
@@ -189749,7 +190781,7 @@ bool copy_or_rename(const std::string &i_old, const std::string &i_new)
 int Jidac::rebuildbackupindex()
 {
     // --- Validazione flags e parametri iniziali ---
-    if ((!flagmd5 && !flagxxh3) || (flagmd5 && flagxxh3))
+    if (flagmd5 && flagxxh3)
     {
         myprintf("92629: You must choose exactly one of -md5 or -xxh3\n");
         return 2;
@@ -189779,14 +190811,17 @@ int Jidac::rebuildbackupindex()
         myprintf("92647: Sorry, cannot find first piece: %Z\n", temp.c_str());
         return 2;
     }
-    if (fileexists(temp2) && !flagforce)
+    /// 65.13m: without -force, what is missing only (it wanted -force with the .index there and the .txt to make)
+    const bool rifaitxt  = flagforce || !fileexists(temp3);
+    const bool rifaindice= flagforce || !fileexists(temp2);
+    if ((!rifaitxt) && (!rifaindice))
     {
-        myprintf("92644: Abort: %Z already exists (use -force to bypass)\n", temp2.c_str());
+        myprintf("92644: Abort: %Z and %Z are there (use -force to make them again)\n", temp3.c_str(), temp2.c_str());
         return 2;
     }
-    if (fileexists(temp3) && !flagforce)
+    if (rifaitxt && (!flagmd5) && (!flagxxh3)) /// the hashes of the .txt: the .index alone does not need them
     {
-        myprintf("92645: Abort: %Z already exists (use -force to bypass)\n", temp3.c_str());
+        myprintf("92629: You must choose exactly one of -md5 or -xxh3\n");
         return 2;
     }
 
@@ -189880,7 +190915,7 @@ int Jidac::rebuildbackupindex()
         if (numeroEffettivo != expected)
         {
             sequenzaOk = false;
-            myprintf("02832: Hole detected! Expected piece %08d, found %08d in %s\n",
+            myprintf("03597: Hole detected! Expected piece %08d, found %08d in %s\n",
                      expected, numeroEffettivo, filepiece.c_str());
             // Riallineamento: continua dal pezzo trovato per rilevare buchi successivi
             expected = numeroEffettivo;
@@ -189935,86 +190970,93 @@ int Jidac::rebuildbackupindex()
         return 1;
     }
 
-    // --- Hashing parallelo ---
-    string hashtype = (flagxxh3 || flagbackupxxh3) ? "XXH3" : "MD5";
-
-    g_dimensione = 0;
-    if (!flagssd)
-        myprintf("97129: Rebuilding %s file(s) for %s, hashing with %s"
-                 " (use -ssd for multithread)...\n",
-                 migliaia2(localfiles.size()), migliaia(totallocalsize), hashtype.c_str());
-    else
-        myprintf("97121: Rebuilding %s file(s) for %s, hashing with %s...\n",
-                 migliaia2(localfiles.size()), migliaia(totallocalsize), hashtype.c_str());
-
-    vector< std::pair<string, string> > local_hash_array;
-    (void)franzparallelhashfiles(hashtype, totallocalsize, localfiles, false, local_hash_array);
-    eol();
-
-    // --- Verifica allineamento array (sanity check post-hash) ---
-    if (local_hash_array.size() != localfiles.size() ||
-        filesizes.size()        != localfiles.size() ||
-        quickhashes.size()      != localfiles.size())
+    if (rifaitxt)
     {
-        myprintf("92782: FATAL: array size mismatch after hashing!\n");
-        myprintf("92783:   localfiles      : %zu\n", localfiles.size());
-        myprintf("92784:   local_hash_array: %zu\n", local_hash_array.size());
-        myprintf("92785:   filesizes       : %zu\n", filesizes.size());
-        myprintf("92786:   quickhashes     : %zu\n", quickhashes.size());
-        return 2;
-    }
+        // --- Hashing parallelo ---
+        string hashtype = (flagxxh3 || flagbackupxxh3) ? "XXH3" : "MD5";
 
-    if (flagverbose)
-    {
-        for (size_t i = 0; i < local_hash_array.size(); i++)
-            myprintf("97144: Hash[%08zu] %s  %s\n",
-                     i, local_hash_array[i].first.c_str(), local_hash_array[i].second.c_str());
-        for (size_t i = 0; i < filesizes.size(); i++)
-            myprintf("82722: Quick[%08zu] %s  size %s\n",
-                     i, quickhashes[i].c_str(), migliaia(filesizes[i]));
-    }
+        g_dimensione = 0;
+        if (!flagssd)
+            myprintf("97129: Rebuilding %s file(s) for %s, hashing with %s"
+                     " (use -ssd for multithread)...\n",
+                     migliaia2(localfiles.size()), migliaia(totallocalsize), hashtype.c_str());
+        else
+            myprintf("97121: Rebuilding %s file(s) for %s, hashing with %s...\n",
+                     migliaia2(localfiles.size()), migliaia(totallocalsize), hashtype.c_str());
 
-    // --- Scrittura file .txt ---
-    myprintf("92805: Writing .txt to %Z\n", temp3.c_str());
-    FILE *backupfile = fopen(temp3.c_str(), "wb");
-    if (backupfile == NULL)
-    {
-        myprintf("02138: Cannot write .txt file %Z\n", temp3.c_str());  // fix: era temp2
-        return 2;
-    }
+        vector< std::pair<string, string> > local_hash_array;
+        (void)franzparallelhashfiles(hashtype, totallocalsize, localfiles, false, local_hash_array);
+        eol();
 
-    fprintf(backupfile,
-            "$zpaqfranz backupfile|2|%s|%s|%s_????????.zpaq\n",
-            hashtype.c_str(),
-            dateToString(true, now()).c_str(),
-            backuparchive.c_str());
+        // --- Verifica allineamento array (sanity check post-hash) ---
+        if (local_hash_array.size() != localfiles.size() ||
+            filesizes.size()        != localfiles.size() ||
+            quickhashes.size()      != localfiles.size())
+        {
+            myprintf("92782: FATAL: array size mismatch after hashing!\n");
+            myprintf("92783:   localfiles      : %zu\n", localfiles.size());
+            myprintf("92784:   local_hash_array: %zu\n", local_hash_array.size());
+            myprintf("92785:   filesizes       : %zu\n", filesizes.size());
+            myprintf("92786:   quickhashes     : %zu\n", quickhashes.size());
+            return 2;
+        }
 
-    for (size_t i = 0; i < local_hash_array.size(); i++)
-    {
+        if (flagverbose)
+        {
+            for (size_t i = 0; i < local_hash_array.size(); i++)
+                myprintf("97144: Hash[%08zu] %s  %s\n",
+                         i, local_hash_array[i].first.c_str(), local_hash_array[i].second.c_str());
+            for (size_t i = 0; i < filesizes.size(); i++)
+                myprintf("82722: Quick[%08zu] %s  size %s\n",
+                         i, quickhashes[i].c_str(), migliaia(filesizes[i]));
+        }
+
+        // --- Scrittura file .txt ---
+        myprintf("92805: Writing .txt to %Z\n", temp3.c_str());
+        FILE *backupfile = fopen(temp3.c_str(), "wb");
+        if (backupfile == NULL)
+        {
+            myprintf("02138: Cannot write .txt file %Z\n", temp3.c_str());  // fix: era temp2
+            return 2;
+        }
+
         fprintf(backupfile,
-                "%s |[%21s] <%s> $%s$ %s\n",
-                stringtolower(local_hash_array[i].first.c_str()).c_str(),
-                migliaia(filesizes[i]),
-                quickhashes[i].c_str(),
+                "$zpaqfranz backupfile|2|%s|%s|%s_????????.zpaq\n",
+                hashtype.c_str(),
                 dateToString(true, now()).c_str(),
-                local_hash_array[i].second.c_str());
-    }
+                basepath.c_str()); /// 65.13k: without its .zpaq (it was uno.zpaq_????????.zpaq)
 
-    fclose(backupfile);
+        for (size_t i = 0; i < local_hash_array.size(); i++)
+        {
+            fprintf(backupfile,
+                    "%s |[%21s] <%s> $%s$ %s\n",
+                    stringtolower(local_hash_array[i].first.c_str()).c_str(),
+                    migliaia(filesizes[i]),
+                    quickhashes[i].c_str(),
+                    dateToString(true, now()).c_str(),
+                    local_hash_array[i].second.c_str());
+        }
+
+        fclose(backupfile);
+    }
 
     // --- Avvio estrazione/ricostruzione indice ---
-    g_indexname = temp2;
-    index       = g_indexname.c_str(); /// not temp2: a global, still alive after the return
-    archive     = backuparchive + "_????????.zpaq";
+    int risultato= 0;
+    if (rifaindice)
+    {
+        g_indexname = temp2;
+        index       = g_indexname.c_str(); /// not temp2: a global, still alive after the return
+        archive     = basepath + "_????????.zpaq"; /// 65.13k: consolidate uno.zpaq -recover: "Archive not found: uno.zpaq_00000001.zpaq"
 
-    color_cyan();
-    myprintf("92829: Rebuilding index <<%Z>> from archive %Z\n",
-             g_indexname.c_str(), archive.c_str());
-    color_restore();
+        color_cyan();
+        myprintf("92829: Rebuilding index <<%Z>> from archive %Z\n",
+                 g_indexname.c_str(), archive.c_str());
+        color_restore();
 
-    files.clear();
-	flagrecover=false; // DO NOT recover!!!!
-    int risultato=extract();
+        files.clear();
+        flagrecover=false; // DO NOT recover!!!!
+        risultato=extract();
+    }
 	
 	color_magenta();
 	myprintf("92893: You should use zpaqfranz testbackup %s -verify -paranoid\n",backuparchive.c_str());
@@ -190135,6 +191177,18 @@ int Jidac::consolidatebackup()
 				myprintf("96016! Multipart backup NOT GOOD <<%Z>>\n", zpaqchunks.c_str());
 				return 2;
 			}
+			/// 65.13k: the new parts must not be there either (as the .index and the .txt above): in another folder
+			/// the copy took another name (the .txt said the old one), in the same one the rename failed half way
+			for (unsigned int i= 0; i < archivechunks.filenamearray.size(); i++)
+			{
+				string newfile= archivechunks.filenamearray[i].filename;
+				myreplace(newfile, rinomina_from, rinomina_to);
+				if (fileexists(newfile))
+				{
+					myprintf("03572! The new part does exist <<%Z>>\n", newfile.c_str());
+					return 2;
+				}
+			}
 			if (!iszpaqfranzfile(theindex, "$zpaqfranz backupfile|"))
 			{
 				myprintf("96021! File does not seems zpaqfranz's backup\n");
@@ -190219,10 +191273,6 @@ int Jidac::consolidatebackup()
 			fclose(backupfile);
 
 			myprintf("96107: Copy-Rename .index <<%Z>> => <<%Z>> :", oldindexname.c_str(), newindexname.c_str());
-			color_green();
-			myprintf("OK\n");
-			color_restore();
-
 			if (!copy_or_rename(oldindexname, newindexname))
 			// if (myrename(oldindexname,newindexname)!=0)
 			{
@@ -190230,6 +191280,9 @@ int Jidac::consolidatebackup()
 				myprintf("96110! KAPUTT copy_or_rename .index!\n");
 				return 2;
 			}
+			color_green(); /// 65.13k: OK after it, not before (it was "OK", then KAPUTT)
+			myprintf("OK\n");
+			color_restore();
 
 			for (unsigned int i= 0; i < archivechunks.filenamearray.size(); i++)
 			{
@@ -190326,6 +191379,14 @@ int Jidac::consolidatebackup()
 	bool esistenewindex	  = fileexists(newindexname);
 	bool esistenewtxt	  = fileexists(newfilename);
 	bool esistenewlonezpaq= fileexists(newlonezpaq);
+
+	/// 65.13k: a backup already there with that name: its .txt and .index went to .bak, then the merge refused
+	/// its first part ("guru for consolidate") and it was left without them. Now nothing is touched
+	if (fileexists(newfirstzpaq))
+	{
+		myprintf("03571! The -to backup already exists <<%Z>>: choose another name (nothing touched)\n", newfirstzpaq.c_str());
+		return 2;
+	}
 
 	if (esistenewtxt)
 	{
@@ -190441,7 +191502,8 @@ int Jidac::consolidatebackup()
 		return 2;
 	}
 
-	fprintf(backupfile, "$zpaqfranz backupfile|2|%s|%s|%s\n", dateToString(true, now()).c_str(), thehash.c_str(), g_archive.c_str());
+	/// 65.13k: hash then date, as backup writes it; 65.13m: and its parts as backup writes them (_????????), not the first one
+	fprintf(backupfile, "$zpaqfranz backupfile|2|%s|%s|%s\n", thehash.c_str(), dateToString(true, now()).c_str(), (extractfilepath(tofilez) + prendinomefileebasta(tofilez) + "_????????.zpaq").c_str());
 	franz_do_hash dummyquick("QUICK");
 	if (flagdebug3)
 		myprintf("02846: filehash on %s\n", g_archive.c_str());
@@ -191531,7 +192593,7 @@ int Jidac::addhome()
 	{
 		myprintf("02962: Sorry, cannot find something in <<%Z>>\n", basehome.c_str());
 	}
-	myprintf("02964: founded %s\n", migliaia(candidate.size()));
+	myprintf("02964: found %s\n", migliaia(candidate.size()));
 	int risultato= 0;
 	int therun	 = 0;
 
@@ -192130,7 +193192,9 @@ int Jidac::vinfo_controlla(const vector<std::pair<int, string> > &i_record)
 			color_restore();
 			buona= false;
 		}
-		if (vinfo_decimale(campi, "ps", valore) && (valore != ver[k].offset))
+		/// 65.13l: the password command adds (or takes away) the 32 bytes of the salt of -key in front: every version
+		/// moves by them, it is not another archive before it (after a password, t said "NOT as they were written", rc 2)
+		if (vinfo_decimale(campi, "ps", valore) && (valore != ver[k].offset) && (ver[k].offset - valore != ((g_password != NULL) ? 32 : -32)))
 		{
 			color_red();
 			myprintf("65429! VFILE-info: version %d begins at byte %s, it was written at %s: the archive before it is not the same\n", k, migliaia(ver[k].offset), migliaia2(valore));
@@ -193793,6 +194857,12 @@ static void seq_segnastoria(vector<bool> &io_usato, size_t i_htsize, const strin
 			return;
 	}
 }
+/// 65.13m: the ending of the run (zpaq_main_internal) shows the "incomplete" banner for these: read_archive shows
+/// it only where the ending does not (it was shown twice, at the reading and at the end)
+bool bannerincompletoallafine()
+{
+	return (!flaghashdeep) && (!flagstdout) && (command != 'L') && (command != 'F') && (command != '.') && (!flagterse) && (!((command == 'l') && flag715));
+}
 int64_t Jidac::read_archive(callback_function i_advance, const char *arc, int *errors, int i_myappend, bool i_quiet)
 {
 	if (errors)
@@ -194770,7 +195840,7 @@ int64_t Jidac::read_archive(callback_function i_advance, const char *arc, int *e
 	{
 		if ((command != 'a') && (command != 'Z'))
 			if (!flagnotrim)
-				if (g_incomplete_version > 0)
+				if ((g_incomplete_version > 0) && (!bannerincompletoallafine()))
 				{
 					color_red();
 					ascii::Ascii font= ascii::Ascii();
@@ -195600,7 +196670,8 @@ int64_t Jidac::sc_readarchive_add(const char *i_arc)
 		x= ps;
 	if ((!statoletto) || (x != ps) || ((int64_t)ver.size() != myatoll(campi["v"].c_str())))
 	{
-		myprintf("65454! -fastadd: the stored state is broken (read %d, it begins at %s, the version at %s, versions %s of %s), read all of it\n", int(statoletto), migliaia(x), migliaia2(ps), migliaia3(ver.size()), migliaia4(myatoll(campi["v"].c_str())));
+		/// 65.13m: a warning, not an error: all is read, nothing is lost (a password changed: every offset moved by the salt)
+		myprintf("65454$ -fastadd: the stored state does not match (read %d, it begins at %s, the version at %s, versions %s of %s; a password changed?), read all of it\n", int(statoletto), migliaia(x), migliaia2(ps), migliaia3(ver.size()), migliaia4(myatoll(campi["v"].c_str())));
 		jidacreset();
 		return -1;
 	}
@@ -196513,7 +197584,7 @@ int Jidac::ads()
 	// myprintf("\r");
 	if (thedt.size() == 0)
 	{
-		myprintf("03088: no archive founded => quit\n");
+		myprintf("03088: no archive found => quit\n");
 		return 1;
 	}
 	if (flagverbose)
@@ -197584,7 +198655,7 @@ bool isurl(const string& i_url)
 			barre++;
 	if (barre < 3)
 	{
-		myprintf("03189: ERROR: at least 3 slashes needed founded %d\n", barre);
+		myprintf("03189: ERROR: at least 3 slashes needed found %d\n", barre);
 		return false;
 	}
 	return true;
@@ -198908,7 +199979,7 @@ int Jidac::download()
 			myprintf("03255! GURU => downloaded hash does not match!\n");
 			myprintf("03256: hash type     %s\n", thehashtype.c_str());
 			myprintf("03257: hash expected %s\n", thehash.c_str());
-			myprintf("03258: hash founded  %s\n", hashreloaded.c_str());
+			myprintf("03258: hash found  %s\n", hashreloaded.c_str());
 
 			color_restore();
 			if (!flagforce)
@@ -199090,6 +200161,13 @@ int Jidac::crop()
 			return 2;
 		}
 
+	/// 65.13i: the offsets of the versions are in clear, a franzen file is encrypted by blocks: its first
+	/// bytes are not an archive (it was "DONE", and the copy was garbage)
+	if (is_file_franzen(archive) || ((!exists(archive)) && is_file_franzen(franzenname(archive))))
+	{
+		myprintf("03566! crop does not work on a franzen archive (encrypted by blocks: no cut in clear)\n");
+		return 2;
+	}
 	vector<uint64_t> version_position;
 	version_position.push_back(0);
 	all				   = 8;
@@ -199155,7 +200233,7 @@ int Jidac::crop()
 		return 2;
 	}
 
-	if (flagforce)
+	if (flagforce && (tofiles.size() == 0)) /// 65.13m: with -to, the -to (it was in place all the same)
 	{
 		if (!getcaptcha("cropplease", "Crop in place without backup"))
 			return 1;
@@ -199166,6 +200244,7 @@ int Jidac::crop()
 		}
 		else
 			myprintf("03272: in-place crop done\n");
+		g_incomplete_version= 0; /// 65.13i: cut at a complete version, the incomplete one is gone
 		return 0;
 	}
 
@@ -199177,6 +200256,11 @@ int Jidac::crop()
 	}
 	if (!iszpaq(trimmeddestination))
 		trimmeddestination+= ".zpaq";
+	if (stessoarchivio(archive, trimmeddestination)) /// 65.13m: never an output on its own input
+	{
+		myprintf("03578! -to <<%Z>> is the archive itself: refused (in place: -force without -to)\n", trimmeddestination.c_str());
+		return 2;
+	}
 	if (!flagspace)
 		if (!saggiascrivibilitacartella(trimmeddestination))
 		{
@@ -199185,10 +200269,10 @@ int Jidac::crop()
 		}
 	int64_t spaziolibero= getfreespace(trimmeddestination);
 	if (!flagspace)
-		if (spaziolibero < archivesize)
+		if (spaziolibero < wheretotrim) /// 65.13i: what is copied (it was all the archive: refused, with that number)
 		{
 			printbar('*');
-			myprintf("03275! WARNING FREE SPACE SEEMS %s NEEDED %s -space to bypass\n", migliaia(spaziolibero), migliaia2(archivesize));
+			myprintf("03275! WARNING FREE SPACE SEEMS %s NEEDED %s -space to bypass\n", migliaia(spaziolibero), migliaia2(wheretotrim));
 			printbar('*');
 			return 2;
 		}
@@ -199203,10 +200287,11 @@ int Jidac::crop()
 	if (nuovadim == wheretotrim)
 	{
 		myprintf("03278: DONE on %Z (%s)\n", risultato.c_str(), migliaia(nuovadim));
+		g_incomplete_version= 0; /// 65.13i: the copy ends at a complete version (as trim -to)
 	}
 	else
 	{
-		myprintf("03280! Something goest wrong C5\n");
+		myprintf("03280! Something goes wrong C5\n");
 		return 2;
 	}
 	return 0;
@@ -199462,6 +200547,19 @@ int Jidac::hasha()
 	return errori;
 }
 
+/// 65.13b: s -home /os, the rows from the smallest folder to the biggest (same size: by name)
+struct homesize_perdimensione
+{
+	const vector<int64_t> *dimensione;
+	const vector<string>  *nome;
+	bool				   operator()(unsigned int a, unsigned int b) const
+	{
+		if ((*dimensione)[a] != (*dimensione)[b])
+			return (*dimensione)[a] < (*dimensione)[b];
+		return (*nome)[a] < (*nome)[b];
+	}
+};
+
 int Jidac::homesize()
 {
 	/// myprintf("03293: homesize\n");
@@ -199503,6 +200601,51 @@ int Jidac::homesize()
 	if (!flagverbose)
 		flagnoeta= true;
 	franzparallelscandir(false, true, false);
+
+	/// 65.13b: the files of the home folder itself (not in a subfolder) were in no row, and so not in the
+	/// total: a row of their own, when there are some
+	{
+		if (g_arraybytescanned.size() == 0) /// (no subfolders: myaddfile wants a slot)
+		{
+			g_arraybytescanned.push_back(0);
+			g_arrayfilescanned.push_back(0);
+		}
+		DTMap radice;
+		myscandir(0, radice, basehome, false, false);
+		int64_t	 dimensione= 0;
+		uint64_t quanti	   = 0;
+		for (DTMap::iterator p= radice.begin(); p != radice.end(); ++p)
+			if (p->second.date && p->first != "" && (!isdirectory(p->first)) && (!isads(rename(p->first))))
+			{
+				dimensione+= p->second.size;
+				quanti++;
+			}
+		if (quanti > 0)
+		{
+			files.push_back(basehome);
+			files_edt.push_back(radice);
+			files_size.push_back(dimensione);
+			files_count.push_back(quanti);
+			files_time.push_back(0);
+		}
+	}
+	const bool		haradice= (files.size() > candidate.size()); /// the row of the files of the folder itself (the last one)
+	const unsigned	radice	= files.size() - 1;
+
+	/// the order of the rows: by name (the files of the folder itself first), or by size with /os
+	vector<unsigned int> ordine;
+	if (haradice)
+		ordine.push_back(radice);
+	for (unsigned int i= 0; i < candidate.size(); i++)
+		ordine.push_back(i);
+	if (flagbarraos)
+	{
+		homesize_perdimensione perdimensione;
+		perdimensione.dimensione= &files_size;
+		perdimensione.nome		= &files;
+		std::sort(ordine.begin(), ordine.end(), perdimensione);
+	}
+
 	int64_t totalsize = 0;
 	int		totalcount= 0;
 
@@ -199547,9 +200690,12 @@ int Jidac::homesize()
 		}
 	}
 
+	if (flagbarraos)
+		myprintf("03498: Order by size (/os)\n");
 	printbar('-');
-	for (unsigned int i= 0; i < files_size.size(); i++)
+	for (unsigned int k= 0; k < ordine.size(); k++)
 	{
+		const unsigned int i= ordine[k];
 		string daterange= "                         "; // 25 spaces, same width as [YYYY-MM-DD]-[YYYY-MM-DD]
 		if (oldestdate[i] > 0)
 			daterange= "[" + dateToString(flagutc, oldestdate[i]).substr(0, 10) + "]-[" + dateToString(flagutc, newestdate[i]).substr(0, 10) + "]";
@@ -199557,14 +200703,16 @@ int Jidac::homesize()
 			daterange= "(no valid date)          "; // has entries, but none with a usable date (dirs only, or excluded anomalies)
 		if (folderanomaly[i])
 			color_yellow();
-		myprintf("03970: %21s %12s   %08d %s %s\n", migliaia(files_size[i]), tohuman(files_size[i]), (int)files_edt[i].size(), daterange.c_str(), files[i].c_str());
+		/// 65.13b: the files (files_count), not the entries of the scan: the subfolders were counted as files
+		myprintf("03970: %21s %12s   %08d %s %s%s\n", migliaia(files_size[i]), tohuman(files_size[i]), (int)files_count[i], daterange.c_str(), files[i].c_str(),
+				 (haradice && (i == radice)) ? " (files of the folder itself)" : "");
 		if (folderanomaly[i])
 		{
 			myprintf("03974!   ^^^ %d anomalous date(s) excluded, latest [%s]\n", anomalycount[i], dateToString(flagutc, anomalydate[i]).substr(0, 10).c_str());
 			color_restore();
 		}
 		totalsize+= files_size[i];
-		totalcount+= files_edt[i].size();
+		totalcount+= files_count[i];
 	}
 	printbar('-');
 	myprintf("03971: %21s %12s   %08d\n", migliaia(totalsize), tohuman(totalsize), totalcount);
@@ -199580,11 +200728,15 @@ int Jidac::homesize()
 	if (flagverbose)
 	{
 		printbar('-');
-		for (unsigned int i= 0; i < files_size.size(); i++)
+		for (unsigned int k= 0; k < ordine.size(); k++)
 		{
-			string foldername= files[i];
+			const unsigned int i= ordine[k];
+			/// 65.13b: the name inside the home folder (the whole path cut at 30 was the same for every row)
+			string foldername= files[i].substr(basehome.size());
 			if ((foldername.size() > 0) && (foldername[foldername.size() - 1] == '/'))
 				foldername= foldername.substr(0, foldername.size() - 1);
+			if (foldername == "")
+				foldername= ".";
 			if (foldername.size() > 30)
 				foldername= foldername.substr(0, 27) + "...";
 
@@ -199619,7 +200771,7 @@ bool Jidac::sanitizeline(string i_filename)
 {
 	if ((i_filename.size() <= 83) || (i_filename.size() > 87))
 	{
-		myprintf("03303: GURU file size must be [83..87] (founded %s)\n", migliaia(i_filename.size()));
+		myprintf("03303: GURU file size must be [83..87] (found %s)\n", migliaia(i_filename.size()));
 		seppuku();
 		return false;
 	}
@@ -199665,7 +200817,7 @@ bool Jidac::sanitizeline(string i_filename)
 			break;
 		if (!isnotevil(verchar))
 		{
-			myprintf("03309! GURU unallowed char founded at %d value %d\n", i, verchar);
+			myprintf("03309! GURU unallowed char found at %d value %d\n", i, verchar);
 			seppuku();
 		}
 	}
@@ -199736,7 +200888,7 @@ bool Jidac::sanitizefile(string i_filename)
 			break;
 		if (!isnotevil(verchar))
 		{
-			myprintf("03313! GURU unallowed char founded at %d value %d\n", i, verchar);
+			myprintf("03313! GURU unallowed char found at %d value %d\n", i, verchar);
 			seppuku();
 			return false;
 		}
@@ -200079,6 +201231,7 @@ int Jidac::comparefilelists(const std::vector<DTMap::iterator> &externalfilelist
 	int		filedahashare= 0;
 
 	int filelocalinontrovati= 0;
+	int solodimensione		= 0;
 
 	int internalfilecount  = 0;
 	int externalfilecount  = 0;
@@ -200205,6 +201358,8 @@ int Jidac::comparefilelists(const std::vector<DTMap::iterator> &externalfilelist
 									hasherini[myhashtype].push_back(a->first);
 									filedahashare++;
 								}
+								else
+									solodimensione++; /// 65.13m: no hash in the archive: the size only (it said "No difference")
 							}
 						}
 					}
@@ -200301,19 +201456,19 @@ int Jidac::comparefilelists(const std::vector<DTMap::iterator> &externalfilelist
 	if (solointerni.size() > 0)
 	{
 		color_yellow();
-		myprintf("80829: Only INT %08d (%K %H) - files in .zpaq but NOT on filesystem\n", (int)solointerni.size(), internisize, internisize);
+		myprintf("03589: Only INT %08d (%K %H) - files in .zpaq but NOT on filesystem\n", (int)solointerni.size(), internisize, internisize);
 	}
 	else
 	{
 		color_green();
-		myprintf("80829: There are no files in the .zpaq archive that are not present in the filesystem\n");
+		myprintf("03590: There are no files in the .zpaq archive that are not present in the filesystem\n");
 	}
 	color_restore();
 	if (!solointerni.empty())
 	{
 		size_t ciclomax= flagverbose ? solointerni.size() : std::min(solointerni.size(), static_cast<size_t>(10));
 		for (size_t i= 0; i < ciclomax; ++i)
-			myprintf("80843:                   <<%Z>>\n", solointerni[i].c_str());
+			myprintf("03592:                   <<%Z>>\n", solointerni[i].c_str());
 		if (ciclomax < solointerni.size())
 			myprintf("80962$ ... showed first %d files, use -verbose to get them all\n", (int)ciclomax);
 		myprintf("\n");
@@ -200326,13 +201481,19 @@ int Jidac::comparefilelists(const std::vector<DTMap::iterator> &externalfilelist
 		color_yellow();
 		for (unsigned int i= 0; i < filecorrotti.size(); i++)
 			myprintf("80898:              %s\n", filecorrotti[i].c_str());
-		myprintf("80935:              Total ABS different size %K (%H)\n", corrottisize, corrottisize);
+		myprintf("80935:              Total size of the files that differ %K (%H)\n", corrottisize, corrottisize);
 		color_restore();
 	}
 	else
 	{
 		color_green();
-		myprintf("80831: No difference internal-external files detected\n");
+		myprintf("03591: No difference internal-external files detected\n");
+		color_restore();
+	}
+	if (solodimensione > 0)
+	{
+		color_yellow();
+		myprintf("03580$ %s file(s) checked by size only (no hash in the archive)\n", migliaia(solodimensione));
 		color_restore();
 	}
 
@@ -200348,9 +201509,11 @@ int Jidac::comparefilelists(const std::vector<DTMap::iterator> &externalfilelist
 	}
 	color_restore();
 	int64_t totaldelta= corrottisize + internisize + esternisize + filelocalinontrovati;
-	if (totaldelta > 0)
+	/// 65.13j: what differs, not its size: an empty file or a folder on one side only was listed, then
+	/// "No delta (this is VERY GOOD)"
+	if ((totaldelta > 0) || (soloesterni.size() > 0) || (solointerni.size() > 0) || (filecorrotti.size() > 0) || (filelocalinontrovati > 0))
 	{
-		myprintf("80931$	 Total delta %K (%H)\n", corrottisize + internisize + esternisize + filelocalinontrovati, corrottisize + internisize + esternisize + filelocalinontrovati);
+		myprintf("80931$ Total delta %K (%H)\n", corrottisize + internisize + esternisize + filelocalinontrovati, corrottisize + internisize + esternisize + filelocalinontrovati);
 		return 2;
 	}
 	else
@@ -200916,6 +202079,8 @@ int Jidac::sync()
 	{
 		if (flagdebug3)
 			myprintf("New dt %s\n", a->first.c_str());
+		if (a->second.date == 0) /// 65.13j: deleted in a later version, not in the archive any more ("Only INT")
+			continue;
 		internalfilelist.push_back(a);
 	}
 	if (flagdebug3)
@@ -200940,7 +202105,7 @@ int Jidac::sync()
 		color_restore();
 	}
 	else
-		myprintf("81541: External count %d\n", (int)externalfilelist.size());
+		myprintf("03593: External count %d\n", (int)externalfilelist.size());
 
 	if ((externalfilelist.size() > 0) && (internalfilelist.size() > 0))
 	{
@@ -201102,6 +202267,7 @@ int Jidac::checkautotest(string i_path, bool i_quick)
     i_path = includetrailingbackslash(i_path);
     /// 65.12h: the checks of g_autotestpassi, of the level of the folder (autotestlevel.txt; none: -m4)
     const int livello  = autotest_livellocartella(i_path);
+    const bool piccolo = fileexists(i_path + "autotestdebug4.txt"); /// 65.13g: bigone01.big of 4 MB (autotest -all -debug4)
     bool      montaggio= false;
 ///NOSFTPSTART
     // Mount: only if the script has them (autotest found a working mount)
@@ -201118,7 +202284,7 @@ int Jidac::checkautotest(string i_path, bool i_quick)
         for (int n= 1; n <= ((p.ripeti > 0) ? p.ripeti : 1); n++)
         {
             valori['N']= autotest_numero(n);
-            test_cases.push_back(TestCase(autotest_espandi(p.uscita, valori), p.atteso, autotest_espandi(p.descrizione, valori)));
+            test_cases.push_back(TestCase(autotest_espandi(p.uscita, valori), autotest_atteso(p, piccolo), autotest_espandi(p.descrizione, valori)));
         }
     }
     myprintf("03368: Checking results (in %Z), level -m%d\n", i_path.c_str(), livello);
@@ -201551,7 +202717,7 @@ int Jidac::count()
 
 	if (thedt.size() == 0)
 	{
-		myprintf("03427! no archive founded => quit\n");
+		myprintf("03427! no archive found => quit\n");
 		return 2;
 	}
 	if (flagverbose)
@@ -201583,7 +202749,7 @@ int Jidac::count()
 
 	if (founded == expectedlen)
 		color_green();
-	myprintf("03431: Total founded %s (expected %s)  ", migliaia(founded), migliaia2(expectedlen));
+	myprintf("03431: Total found %s (expected %s)  ", migliaia(founded), migliaia2(expectedlen));
 	if (founded == expectedlen)
 		myprintf(": THIS IS GOOD\n");
 	else
@@ -202930,6 +204096,8 @@ int Jidac::work()
 		return workfat32();
 	if (mycommand == "poke") /// 65.12g: bytes of a file changed, see Jidac::workpoke
 		return workpoke();
+	if (mycommand == "quadra") /// 65.13g: two archives the same bytes, see Jidac::workquadra
+		return workquadra();
 #ifndef NOEMAIL /// POSTAMI mail work
 	if (mycommand == "email") /// with the -mail switches
 		return zpaqfranz_workemail();
@@ -204379,7 +205547,7 @@ int Jidac::repackall()
 		error("output file exists");
 	char salt[32]= {0};
 	if (new_password)
-		libzpaq::random(salt, 32);
+		salezpaq(salt); /// 65.13e: zeros with -debug4
 	myprintf("00886: Changing password for %s bytes\n\n", migliaia(in.totalsize()));
 	OutputArchive out(archive, repack.c_str(), new_password, salt, 0);
 	copywitheta(in.totalsize(), in, out);
@@ -204409,7 +205577,7 @@ int Jidac::repackfunction(int64_t i_size)
 		delete_file(repack.c_str());
 		char salt[32]= {0};
 		if (new_password)
-			libzpaq::random(salt, 32);
+			salezpaq(salt); /// 65.13e: zeros with -debug4
 		OutputArchive out(archive, repack.c_str(), new_password, salt, 0);
 		int64_t		  cstart= out.tell();
 		// Write C block using first version date
@@ -206608,6 +207776,12 @@ int Jidac::extract()
 #endif /// NOSFTPEND
 
 	g_scritti= 0;
+	/// 65.13m: never an output on its own input
+	if ((repack != "") && stessoarchivio(archive, repack))
+	{
+		myprintf("03586! -repack <<%Z>> is the archive itself: refused\n", repack.c_str());
+		return 2;
+	}
 	// Encrypt or decrypt whole archive
 	if ((repack != "") && all)
 		return repackall();
@@ -207182,6 +208356,38 @@ int Jidac::extract()
 	std::set<string>	  cartelleverificate;
 	int					  bloccatisymlink= 0;
 #endif
+	/// 65.13m: the archive being read is never written over (x -force, the archive inside the folder it goes to).
+	/// Its files (parts, .franzen): the name first, the file on the disk only when the name is the same
+	vector<string>	 archiviletti;
+	std::set<string> nomiarchivi;
+	int				 sullarchivio= 0;
+	if (flagforce && (!flagstdout) && (!flagzip) && (repack == "") && (!flagtest))
+	{
+		vector<string> candidati;
+		if (isjolly(archive))
+		{
+			const string part0= subpart(archive, 0);
+			for (int i= 1; i < 100000; i++)
+			{
+				const string pezzo= subpart(archive, i);
+				if ((pezzo == part0) || ((!fileexists(pezzo)) && (!fileexists(franzenname(pezzo)))))
+					break;
+				candidati.push_back(pezzo);
+			}
+		}
+		else
+			candidati.push_back(archive);
+		for (size_t i= 0; i < candidati.size(); i++)
+			for (int k= 0; k < 2; k++)
+			{
+				const string nome= (k == 0) ? candidati[i] : franzenname(candidati[i]);
+				if (fileexists(nome))
+				{
+					archiviletti.push_back(nome);
+					nomiarchivi.insert(stringtolower(extractfilename(nome)));
+				}
+			}
+	}
 	for (DTMap::iterator p= dt.begin(); p != dt.end(); ++p)
 	{
 		p->second.data= -1; // skip
@@ -207269,6 +208475,20 @@ int Jidac::extract()
 				}
 			}
 #endif
+			if ((!isdir) && (nomiarchivi.size() > 0) && (nomiarchivi.count(stringtolower(extractfilename(fn))) > 0))
+			{
+				bool sopra= false;
+				for (size_t k= 0; (k < archiviletti.size()) && (!sopra); k++)
+					sopra= stessofile(fn, archiviletti[k]);
+				if (sopra)
+				{
+					sullarchivio++;
+					color_red();
+					myprintf("03587! <<%Z>> is the archive being read: NOT written over\n", fn.c_str());
+					color_restore();
+					continue;
+				}
+			}
 			if (isdir)
 				real_dirs++;
 			string dummy= "";
@@ -208290,7 +209510,7 @@ int Jidac::extract()
 		printbar(' ');
 		myprintf("\r");
 		if (tobesetted > 0)
-			myprintf("00992: Files to be worked %s  => founded %s => OK %s\n", migliaia((int64_t)tobeworked), migliaia2((int64_t)tobesetted), migliaia3((int64_t)setted));
+			myprintf("00992: Files to be worked %s  => found %s => OK %s\n", migliaia((int64_t)tobeworked), migliaia2((int64_t)tobesetted), migliaia3((int64_t)setted));
 	}
 
 	if (flagcomment)
@@ -208361,6 +209581,8 @@ int Jidac::extract()
 	if ((bloccatisymlink > 0) && (errors < 2))
 		errors= 2;
 #endif
+	if ((sullarchivio > 0) && (errors < 2))
+		errors= 2;
 	if (nienteselezionato && (errors == 0))
 		errors= 1;
 	if ((skipped_diversi > 0) && (errors == 0))
@@ -208371,17 +209593,21 @@ int Jidac::extract()
 	return (errors > 2) ? 2 : errors;
 }
 
+int g_trim_cvisti= 0; /// 65.13i: the c blocks (transaction headers) is_incomplete_trans() saw in its part
+int g_trim_chiuse= 0; /// 65.13m: the parts it could not open (it said "incomplete": return 2 of a bool)
+
 bool Jidac::is_incomplete_trans(const char *arc)
 {
-#ifdef _WIN32
-
+	/// 65.13i: on every system (it was Windows only: on *nix every part "COMPLETE", trim -kill did nothing)
+	g_trim_cvisti= 0;
 	dcsize= dhsize= 0;
 
 	list_Archive in;
 	if (!in.open(true, arc, g_password))
 	{
 		myprintf("05328! Not found %Z\n", arc);
-		return 2;
+		g_trim_chiuse++;
+		return false;
 	}
 
 	// Test password
@@ -208546,6 +209772,7 @@ bool Jidac::is_incomplete_trans(const char *arc)
 					// from input and jump over it.
 					if (filename.s[17] == 'c' && fdate >= 19000000000000LL && fdate < 30000000000000LL && pass != LIST_RECOVER)
 					{
+						g_trim_cvisti++;
 						data_offset	   = in.tell() + 1;
 						bool	isbreak= version < 19000000000000LL ? list_size(list_ver) > version : version < fdate;
 						int64_t jmp	   = 0;
@@ -208802,11 +210029,118 @@ bool Jidac::is_incomplete_trans(const char *arc)
 	if (in.tell() > 32 * (g_password != 0) && !found_data)
 		myprintf("05761$ archive contains no data\n");
 	in.close();
-#endif // corresponds to #ifdef (#ifdef _WIN32)
 	if (arc)
 		if (flagdebug3)
 			myprintf("be quiet\n");
 	return false;
+}
+
+/*
+	65.13i: trim of a multipart whose parts are NOT one transaction each (-chunk: a part holds the end
+	of a version and the start of the next one, a version runs over many parts). The part-by-part fix()
+	took the part with the c = -1 for a whole transaction: renamed and emptied, with the good versions
+	in it (an incomplete transaction in the first part of a -chunk = the archive gone).
+	read_archive reads the parts as one stream and stops at the incomplete transaction: there is the cut.
+	The part with the cut is saved whole as .spaz and written back up to the cut, the parts after it are
+	renamed .spaz (as fix() does: nothing deleted).
+	Not of one transaction each: a transaction starts inside a part, or a part after the cut has no
+	transaction header at all (i_conc: the parts where is_incomplete_trans saw one) = it is the rest of the
+	incomplete transaction (-chunk starts a new part at every add: with a first version of one part only the
+	starts are the same as a multipart's).
+	false = parts of one transaction each, or nothing to cut: fix() goes on as before
+*/
+bool Jidac::trim_pezzi(const string &i_thearchive, easymultipart &i_parti, const vector<bool> &i_conc, int &o_risultato)
+{
+	o_risultato			= 0;
+	int			  errors= 0;
+	const int64_t taglio= read_archive(NULL, i_thearchive.c_str(), &errors, 0, true);
+	const int	  incompleta= g_incomplete_version;
+	g_incomplete_version	= 0; /// the parts of one transaction each: the old fix() says it, not the ending of the run
+	vector<s_fileandsize> &parti= i_parti.filenamearray; /// the parts fix() checked one by one (i_conc in the same order)
+	if ((incompleta == 0) || (taglio < 0) || (taglio >= i_parti.totalchunksize) || (!i_parti.isgood) || (i_conc.size() != parti.size()))
+		return false;
+
+	/// where the transactions start (the versions read, then the incomplete one) against where the parts start
+	std::set<int64_t> inizi;
+	for (unsigned int i= 1; i < ver.size(); i++)
+		inizi.insert(ver[i].offset);
+	inizi.insert(taglio);
+	std::set<int64_t> inizipezzi;
+	int				  pezzo	   = -1; /// the part with the cut
+	int64_t			  dovepezzo= 0;
+	int64_t			  inizio   = 0;
+	for (unsigned int i= 0; i < parti.size(); i++)
+	{
+		const int64_t lungo= (int64_t)parti[i].size;
+		if ((lungo > 0) && (inizio <= taglio))
+			inizipezzi.insert(inizio);
+		if ((pezzo < 0) && (taglio < inizio + lungo))
+		{
+			pezzo	 = i;
+			dovepezzo= inizio;
+		}
+		inizio+= lungo;
+	}
+	if (pezzo < 0)
+		return false;
+	bool seguito= false;
+	for (unsigned int i= pezzo + 1; i < parti.size(); i++)
+		if ((parti[i].size > 0) && (!i_conc[i]))
+			seguito= true;
+	if (flagdebug)
+		myprintf("03555: trim of the parts: cut at %s, %s transaction(s) and %s part(s) up to it, rest after it %d\n", migliaia(taglio), migliaia2(inizi.size()), migliaia3(inizipezzi.size()), (int)seguito);
+	if ((inizi == inizipezzi) && (!seguito))
+		return false;
+
+	const string  nomepezzo= parti[pezzo].filename;
+	const int64_t dentro   = taglio - dovepezzo;
+	const int	  dopo	   = (int)parti.size() - pezzo - 1;
+	color_yellow();
+	myprintf("03556: Parts NOT of one transaction each (-chunk): the incomplete transaction starts at %s\n", migliaia(taglio));
+	color_restore();
+	myprintf("03557: Cut <<%Z>> at %s of %s, %s part(s) after it (all of the incomplete transaction)\n", nomepezzo.c_str(), migliaia(dentro), migliaia2(parti[pezzo].size), migliaia3(dopo));
+	if (!flagkill)
+	{
+		myprintf("03558: dry run: -kill to cut (the part saved as .spaz, the parts after it renamed .spaz)\n");
+		o_risultato= 1;
+		return true;
+	}
+	int sbagli= 0;
+	for (unsigned int i= pezzo; i < parti.size(); i++)
+	{
+		const string nome	= parti[i].filename;
+		string		 rinomina= nome;
+		forceextension(rinomina, ".spaz");
+		rinomina= nomefileseesistegia(rinomina);
+		if (myrename(nome, rinomina) != 0)
+		{
+			myprintf("03559! Cannot rename <<%Z>> to <<%Z>>\n", nome.c_str(), rinomina.c_str());
+			sbagli++;
+			continue;
+		}
+		myprintf("03560: Renamed <<%Z>> to <<%Z>>\n", nome.c_str(), rinomina.c_str());
+		if (((int)i == pezzo) && (dentro > 0))
+		{
+			const string scritto= filecopy(true, false, rinomina, nome, false, true, true, dentro);
+			if ((scritto != nome) || (prendidimensionefile(nome.c_str()) != dentro))
+			{
+				myprintf("03561! Cannot write the first %s bytes of <<%Z>> back on <<%Z>>\n", migliaia(dentro), rinomina.c_str(), nome.c_str());
+				sbagli++;
+			}
+			else
+				myprintf("03562: Written back <<%Z>> (%s bytes)\n", nome.c_str(), migliaia(dentro));
+		}
+	}
+	if (sbagli > 0)
+	{
+		myprintf("03563! Cut NOT done right (%d error(s)): the .spaz files are the parts as they were\n", sbagli);
+		o_risultato= 2;
+		return true;
+	}
+	color_green();
+	myprintf("03564: The trimmed multipart archive is a 'good archive' now (%s bytes)\n", migliaia(taglio));
+	color_restore();
+	return true;
 }
 
 int Jidac::fix(const string& i_thearchive)
@@ -208826,6 +210160,7 @@ int Jidac::fix(const string& i_thearchive)
 	int			 incomplete= 0;
 	int			 complete  = 0;
 	unsigned int latest	   = 0;
+	vector<bool> conc; /// 65.13i: the parts with a transaction header (c block) in them, as filenamearray
 
 	for (unsigned int i= 0; i < chunkedinput.filenamearray.size(); i++)
 
@@ -208833,6 +210168,7 @@ int Jidac::fix(const string& i_thearchive)
 		myprintf("03158: Block %12s                               <<%Z>>\r", migliaia2(0), chunkedinput.filenamearray[i].filename.c_str());
 
 		bool incomplete_trans= is_incomplete_trans(chunkedinput.filenamearray[i].filename.c_str());
+		conc.push_back(g_trim_cvisti > 0);
 		if (incomplete_trans)
 		{
 			chunkedinput.filenamearray[i].hashok= false;
@@ -208851,6 +210187,14 @@ int Jidac::fix(const string& i_thearchive)
 			color_restore();
 		}
 	}
+	if (g_trim_chiuse > 0) /// 65.13m: a part that cannot be read is not judged (and not renamed with -kill)
+	{
+		myprintf("03577! %d part(s) cannot be opened: nothing done\n", g_trim_chiuse);
+		return 2;
+	}
+	int risultatopezzi= 0;
+	if (trim_pezzi(i_thearchive, chunkedinput, conc, risultatopezzi)) /// 65.13i: -chunk, cut where the stream stops
+		return risultatopezzi;
 	if (incomplete > 0)
 	{
 		color_yellow();
@@ -208865,7 +210209,7 @@ int Jidac::fix(const string& i_thearchive)
 	if ((incomplete == 1) && (latest == (chunkedinput.filenamearray.size() - 1)))
 	{
 		color_green();
-		myprintf("05446: Incomplete transaction founded, but on the last chunk\n");
+		myprintf("05446: Incomplete transaction found, but on the last chunk\n");
 		myprintf("05444: Using trim -kill you can get a 'good' archive\n");
 	}
 	else
@@ -208873,7 +210217,7 @@ int Jidac::fix(const string& i_thearchive)
 		if (incomplete > 0)
 		{
 			color_yellow();
-			myprintf("05346: Incomplete transaction founded, NOT on the last chunk     (this is bad)\n");
+			myprintf("05346: Incomplete transaction found, NOT on the last chunk     (this is bad)\n");
 			myprintf("05244: Using trim -kill you can try to fix to extract data ASAP  (and rebuild)\n");
 		}
 	}
@@ -209261,7 +210605,7 @@ int Jidac::sftp_dorsync()
 	}
 	if (localfiles.size() == 0)
 	{
-		myprintf("0043! zero file(s) founded\n");
+		myprintf("0043! zero file(s) found\n");
 		return 2;
 	}
 	int64_t totallocalsize= 0;
@@ -209313,7 +210657,7 @@ int Jidac::sftp_dorsync()
 
 	sftp2.listremotedir(remotepath, &remotefiles);
 	if (remotefiles.size() == 0)
-		myprintf("38641$ INFO: no file founded on remote path\n");
+		myprintf("38641$ INFO: no file found on remote path\n");
 
 	int64_t totalremotesize= 0;
 	for (unsigned int i= 0; i < remotefiles.size(); i++)
@@ -209603,7 +210947,7 @@ int Jidac::sftp_doupload()
 
 		if (filename.size() == 0)
 		{
-			myprintf("00363! no last file founded\n");
+			myprintf("00363! no last file found\n");
 			return 2;
 		}
 		std::sort(filename.begin(), filename.end());
@@ -210121,7 +211465,7 @@ int Jidac::sftp_do1on1()
 	}
 	if (localfiles.size() == 0)
 	{
-		myprintf("00433! zero file(s) founded\n");
+		myprintf("00433! zero file(s) found\n");
 		return 2;
 	}
 
@@ -226439,6 +227783,711 @@ static int fill_dashboard(const string &i_cartella, int64_t i_dascrivere, unsign
 }
 #endif
 
+/*
+	65.13d: cp, the copy of big files on media that may lie (a network share): franzcopia.
+	-verify, by pieces: every piece is written (with the XXH3 of what is read from the source), put on
+	the media (on a share: on the server) and out of the cache of this computer, read back from the
+	destination and compared. A piece that differs is written again (3 times at most), then error, with
+	the destination cut back to the end of the last piece checked: -append resumes from data checked.
+	The pieces: -n X = X% of the file (1..100), otherwise the smaller of 1 GB and 10%; a file under 100 MB
+	(-chunk X) is one piece. Without -verify: a direct copy (here only for one file on a console, to show
+	the map: otherwise filecopy, as ever).
+	-append resumes from what is there: larger than the source, or not its beginning by the quick hash,
+	is an error and the file is not touched; with -verify the last piece already there is read back in
+	full (different: cut back to its start, written again).
+	Shown: one file on a console = the map of the file (franzdash): what is written, read back, checked;
+	more files = a line with a bar, every second; redirected or -noeta = the last line of a file. What
+	moves is printf (as franzdash): not in the log, not in the report by mail
+*/
+class franzcopia
+{
+  public:
+	franzcopia(const string &i_sorgente, const string &i_destinazione, bool i_verifica, unsigned int i_percento, int i_vista);
+	bool copia(bool i_append);
+
+  private:
+	string							   m_sorgente;
+	string							   m_destinazione;
+	bool							   m_verifica;
+	int								   m_vista;
+	int64_t							   m_dimensione;
+	int64_t							   m_pezzo;
+	std::vector<unsigned char>		   m_buffer;
+	int								   m_pezzi;		   /// pieces checked
+	int								   m_riscritti;	   /// pieces written again
+	int64_t							   m_verificati;   /// [0, m_verificati) checked
+	int64_t							   m_scritti;	   /// [0, m_scritti) written
+	int64_t							   m_iniziopezzo;  /// the piece in hand starts here
+	int64_t							   m_posizione;	   /// where the work is
+	char							   m_fase;		   /// W write, R read back, Q quick (-append), X write again a piece that differed
+	bool							   m_rosso;		   /// the piece in hand differed
+	int64_t							   m_lavoro;	   /// bytes written + read back
+	int64_t							   m_lavorototale; /// (the ETA)
+	int64_t							   m_inizio;
+	int64_t							   m_iniziofase;
+	int64_t							   m_lavorofase;
+	int64_t							   m_ultimo; /// the second last shown
+	bool							   m_riga;	 /// a line with a bar on the screen, not ended
+	string							   m_evento; /// the map: the last thing that happened (its second line)
+	vector<std::pair<string, string> > m_messaggi; /// the map: the lines to print below it (format with the code, text)
+#ifndef ANCIENT
+	franzdash m_dash;
+	string	  m_titolo;
+	int		  m_look[10];
+	void	  mappainizia();
+	void	  mappa();
+#endif
+	void   stacca();
+	void   avvisa(const char *i_formato, const string &i_testo);
+	void   fase(char i_fase, int64_t i_posizione);
+	void   numeri(char *o_testo, size_t i_size);
+	void   mostra(bool i_adesso);
+	void   barra(int i_larghezza);
+	bool   scrivi(FILE *i_in, int64_t i_da, int64_t i_quanti, XXH128_hash_t &o_hash);
+	bool   rileggi(const string &i_file, int64_t i_da, int64_t i_quanti, bool i_lavoro, XXH128_hash_t &o_hash);
+	bool   taglia(int64_t i_dove);
+	bool   fine(bool i_ok);
+	std::map<int, int> m_finto; /// -cpfake: piece => how many times
+	bool			   finto(int i_pezzo);
+	void			   rovina(int64_t i_dove);
+};
+
+/// -cpfake: this piece spoilt now? (the tests of a piece that differs, of a piece that keeps differing)
+bool franzcopia::finto(int i_pezzo)
+{
+	std::map<int, int>::iterator p= m_finto.find(i_pezzo);
+	if ((p == m_finto.end()) || (p->second <= 0))
+		return false;
+	p->second--;
+	return true;
+}
+/// a byte of the destination changed, on the media (as a network that lies would leave it)
+void franzcopia::rovina(int64_t i_dove)
+{
+	FILE *f= cp_apri(m_destinazione, "r+b");
+	if (f == NULL)
+		return;
+	unsigned char b= 0;
+	if ((fseeko(f, i_dove, SEEK_SET) == 0) && (fread(&b, 1, 1, f) == 1) && (fseeko(f, i_dove, SEEK_SET) == 0))
+	{
+		b^= 0xFF;
+		(void)fwrite(&b, 1, 1, f);
+	}
+	(void)fill_sumedia(f);
+	fclose(f);
+}
+
+franzcopia::franzcopia(const string &i_sorgente, const string &i_destinazione, bool i_verifica, unsigned int i_percento, int i_vista)
+{
+	m_sorgente	   = i_sorgente;
+	m_destinazione = i_destinazione;
+	m_verifica	   = i_verifica;
+	m_vista		   = i_vista;
+	m_dimensione   = prendidimensionefile(i_sorgente.c_str());
+	m_pezzi		   = 0;
+	m_riscritti	   = 0;
+	m_verificati   = 0;
+	m_scritti	   = 0;
+	m_iniziopezzo  = 0;
+	m_posizione	   = 0;
+	m_fase		   = 'W';
+	m_rosso		   = false;
+	m_lavoro	   = 0;
+	m_lavorototale = 0;
+	m_inizio	   = mtime();
+	m_iniziofase   = m_inizio;
+	m_lavorofase   = 0;
+	m_ultimo	   = -1;
+	m_riga		   = false;
+	/// the piece: -n X %, otherwise the smaller of 1 GB and 10%; under 100 MB (-chunk) one piece; no -verify one piece
+	const int64_t soglia= (g_chunk_size > 0) ? (int64_t)g_chunk_size : CP_SOGLIA;
+	if ((!m_verifica) || (m_dimensione < soglia))
+		m_pezzo= m_dimensione;
+	else if ((i_percento >= 1) && (i_percento <= 100)) /// rounded up: 10% = 10 pieces, not 10 and a crumb
+		m_pezzo= (m_dimensione * (int64_t)i_percento + 99) / 100;
+	else
+	{
+		m_pezzo= (m_dimensione + 9) / 10;
+		if (m_pezzo > CP_PEZZOMAX)
+			m_pezzo= CP_PEZZOMAX;
+	}
+	if (m_pezzo < 1)
+		m_pezzo= 1;
+	m_buffer.resize((g_ioBUFSIZE > 65536) ? g_ioBUFSIZE : 65536);
+#ifndef ANCIENT
+	for (int i= 0; i < 10; i++)
+		m_look[i]= 0;
+#endif
+	/// -cpfake "2,5:4": the piece 2 spoilt once, the piece 5 four times
+	const char *f= g_cpfake.c_str();
+	while (*f)
+	{
+		const int pezzo= atoi(f);
+		int		  volte= 1;
+		while (isdigit((unsigned char)*f))
+			f++;
+		if (*f == ':')
+		{
+			f++;
+			volte= atoi(f);
+			while (isdigit((unsigned char)*f))
+				f++;
+		}
+		m_finto[pezzo]= volte;
+		if (*f != ',')
+			break;
+		f++;
+	}
+}
+
+void franzcopia::stacca()
+{
+	if (m_riga)
+	{
+		printf("\n");
+		fflush(stdout);
+		m_riga= false;
+	}
+}
+
+/// a line while it works: with the map below it at the end (now it would break it), otherwise at once
+void franzcopia::avvisa(const char *i_formato, const string &i_testo)
+{
+	if (m_vista == CP_MAPPA)
+	{
+		m_messaggi.push_back(std::make_pair(string(i_formato), i_testo));
+		m_evento= i_testo;
+		mostra(true);
+		return;
+	}
+	stacca();
+	myprintf(i_formato, i_testo.c_str());
+}
+
+void franzcopia::fase(char i_fase, int64_t i_posizione)
+{
+	m_fase		= i_fase;
+	m_posizione = i_posizione;
+	m_iniziofase= mtime();
+	m_lavorofase= 0;
+}
+
+/// the numbers, the widths fixed (tohuman padded): they do not move from a second to the next
+void franzcopia::numeri(char *o_testo, size_t i_size)
+{
+	const int64_t adesso= mtime();
+	double		  tutto = (adesso - m_inizio) / 1000.0;
+	double		  tratto= (adesso - m_iniziofase) / 1000.0;
+	if (tutto < 0.001)
+		tutto= 0.001;
+	if (tratto < 0.001)
+		tratto= 0.001;
+	const double media	 = m_lavoro / tutto;
+	int			 percento= 100;
+	if (m_lavorototale > 0)
+		percento= (int)(m_lavoro * 100.0 / m_lavorototale);
+	if (percento > 100)
+		percento= 100;
+	double mancano= -1;
+	if (media > 0)
+		mancano= (m_lavorototale > m_lavoro) ? (m_lavorototale - m_lavoro) / media : 0;
+	char eta[32];
+	if ((mancano >= 0) && (mancano < 360000))
+		snprintf(eta, sizeof(eta), "%02d:%02d:%02d", (int)(mancano / 3600), (int)(mancano / 60) % 60, (int)mancano % 60);
+	else
+		snprintf(eta, sizeof(eta), "--:--:--");
+	snprintf(o_testo, i_size, "%3d%% %10s %c %10s/s avg %10s/s %s", percento, tohuman(m_scritti), m_fase, tohuman2((int64_t)(m_lavorofase / tratto)), tohuman3((int64_t)media), eta);
+}
+
+void franzcopia::mostra(bool i_adesso)
+{
+	if (flagcatpaqmode)
+	{
+		(void)myavanzamentoby1sec(m_lavoro, m_lavorototale, m_inizio, false);
+		return;
+	}
+	if (m_vista == CP_NIENTE)
+		return;
+	const int64_t secondo= (mtime() - m_inizio) / 1000;
+	if ((!i_adesso) && (secondo == m_ultimo))
+		return;
+	m_ultimo= secondo;
+	char dati[256];
+	numeri(dati, sizeof(dati));
+#ifndef ANCIENT
+	if (m_vista == CP_MAPPA)
+	{
+		char riga2[256];
+		if (m_verifica)
+			snprintf(riga2, sizeof(riga2), "piece %s of %s (%s)  written again %d  ", migliaia((m_iniziopezzo / m_pezzo) + 1), migliaia2((m_dimensione + m_pezzo - 1) / m_pezzo), tohuman(m_pezzo), m_riscritti);
+		else
+			snprintf(riga2, sizeof(riga2), "direct copy (no -verify)  ");
+		m_dash.righe(dati, string(riga2) + m_evento);
+		mappa();
+		m_dash.disegna();
+		return;
+	}
+#endif
+	/// a line: the numbers, then the bar in the rest of it (one column free: no wrap)
+	printf("\r%s ", dati);
+	const int larghezza= terminalwidth() - (int)strlen(dati) - 4;
+	if ((larghezza >= 10) && (m_dimensione > 0))
+		barra(larghezza);
+	fflush(stdout);
+	m_riga= true;
+}
+
+/// = checked (green), - written (red: the piece that differed), the letter of the phase where the work
+/// is (X red), ? still to do
+void franzcopia::barra(int i_larghezza)
+{
+	int marcatore= (int)((double)m_posizione * i_larghezza / (double)m_dimensione);
+	if (marcatore >= i_larghezza)
+		marcatore= i_larghezza - 1;
+	if (marcatore < 0)
+		marcatore= 0;
+	if ((m_verifica ? m_verificati : m_scritti) >= m_dimensione) /// all done: no letter of a phase
+		marcatore= -1;
+	printf("[");
+	string tratto;
+	int	   colore= 0; /// of tratto: 0 plain, 1 green, 2 red
+	for (int i= 0; i <= i_larghezza; i++)
+	{
+		char c	= '?';
+		int	 col= 0;
+		if (i < i_larghezza)
+		{
+			const int64_t dove= (int64_t)((double)i * (double)m_dimensione / i_larghezza);
+			if (i == marcatore)
+			{
+				c  = m_fase;
+				col= (m_fase == 'X') ? 2 : 0;
+			}
+			else if (dove < m_verificati)
+			{
+				c  = '=';
+				col= 1;
+			}
+			else if (dove < m_scritti)
+			{
+				c  = '-';
+				col= (m_rosso && (dove >= m_iniziopezzo)) ? 2 : 0;
+			}
+		}
+		if ((!tratto.empty()) && ((i == i_larghezza) || (col != colore)))
+		{
+			fflush(stdout); /// Windows: the color is set on the console, the text may be still in the buffer
+			if (colore == 1)
+				color_green();
+			else if (colore == 2)
+				color_red();
+			printf("%s", tratto.c_str());
+			fflush(stdout);
+			if (colore != 0)
+				color_restore();
+			tratto.clear();
+		}
+		colore= col;
+		if (i < i_larghezza)
+			tratto+= c;
+	}
+	printf("]");
+}
+
+#ifndef ANCIENT
+/// the map of the file, a cell a stretch of it. Green is only what was read back right
+void franzcopia::mappainizia()
+{
+	m_dash	 = franzdash();
+	m_look[0]= m_dash.aspetto('.', 5, true, "todo");
+	m_look[1]= m_dash.aspetto('-', 6, true, m_verifica ? "written" : "copied");
+	m_look[2]= m_dash.aspetto('=', 1, true, "verified");
+	m_look[3]= m_dash.aspetto('w', 4, true, "writing");
+	m_look[4]= m_dash.aspetto('r', 7, true, "reading back");
+	m_look[5]= m_dash.aspetto('x', 3, true, "differs");
+	m_look[6]= m_dash.aspetto('W', 4, false, "now: writing");
+	m_look[7]= m_dash.aspetto('R', 7, false, "now: reading back");
+	m_look[8]= m_dash.aspetto('Q', 2, false, "now: quick hash");
+	m_look[9]= m_dash.aspetto('X', 3, false, "now: writing again");
+	if (m_verifica)
+	{
+		m_dash.voce(m_look[2], "verified");
+		m_dash.voce(m_look[1], "written");
+		m_dash.voce(m_look[3], "writing");
+		m_dash.voce(m_look[4], "reading back");
+		m_dash.voce(m_look[5], "differs");
+		m_dash.voce(m_look[6], "");
+		m_dash.voce(m_look[7], "");
+		m_dash.voce(m_look[9], "now");
+	}
+	else
+	{
+		m_dash.voce(m_look[1], "copied");
+		m_dash.voce(m_look[6], "now");
+	}
+	m_dash.voce(m_look[0], "todo");
+	m_titolo					= string(m_verifica ? "cp -verify " : "cp ") + m_sorgente + " => " + m_destinazione;
+	const int64_t blocco = 1048576;
+	m_dash.inizia(m_titolo, (m_dimensione + blocco - 1) / blocco, blocco, m_dimensione, m_look[0]);
+}
+
+void franzcopia::mappa()
+{
+	const int64_t blocco= 1048576;
+	const int64_t celle = m_dash.celle();
+	const int64_t qui	= ((m_verifica ? m_verificati : m_scritti) >= m_dimensione) ? -1 : m_dash.cella(m_posizione / blocco); /// all done: no letter
+	for (int64_t c= 0; c < celle; c++)
+	{
+		const int64_t da= m_dash.primoblocco(c) * blocco;
+		int64_t		  a = m_dash.primoblocco(c + 1) * blocco;
+		if (a > m_dimensione)
+			a= m_dimensione;
+		int look= m_look[0];
+		if (c == qui)
+			look= (m_fase == 'R') ? m_look[7] : (m_fase == 'Q') ? m_look[8] : (m_fase == 'X') ? m_look[9] : m_look[6];
+		else if (a <= m_verificati)
+			look= m_look[2];
+		else if (m_verifica && (m_fase != 'Q') && (da < m_posizione) && (a > m_iniziopezzo))
+			look= (m_fase == 'R') ? m_look[4] : (m_fase == 'X') ? m_look[5] : m_look[3]; /// the piece in hand: done in this phase
+		else if (m_rosso && (da < m_scritti) && (a > m_iniziopezzo))
+			look= m_look[5];
+		else if (da < m_scritti)
+			look= m_look[1];
+		m_dash.imposta(c, look);
+	}
+}
+#endif
+
+bool franzcopia::scrivi(FILE *i_in, int64_t i_da, int64_t i_quanti, XXH128_hash_t &o_hash)
+{
+	XXH3_state_t stato;
+	(void)XXH3_128bits_reset(&stato);
+	FILE *out= cp_apri(m_destinazione, "r+b");
+	if (out == NULL)
+	{
+		avvisa("03507! %s\n", "cannot open the destination for writing");
+		o_hash= XXH3_128bits_digest(&stato);
+		return false;
+	}
+	char testo[256];
+	bool ok= (fseeko(i_in, i_da, SEEK_SET) == 0) && (fseeko(out, i_da, SEEK_SET) == 0);
+	if (!ok)
+	{
+		snprintf(testo, sizeof(testo), "cannot seek at %s", migliaia(i_da));
+		avvisa("03508! %s\n", testo);
+	}
+	int64_t fatti= 0;
+	while (ok && (fatti < i_quanti))
+	{
+		size_t n= m_buffer.size();
+		if ((int64_t)n > i_quanti - fatti)
+			n= (size_t)(i_quanti - fatti);
+		if (fread(&m_buffer[0], 1, n, i_in) != n)
+		{
+			snprintf(testo, sizeof(testo), "read error on the source at %s", migliaia(i_da + fatti));
+			avvisa("03509! %s\n", testo);
+			ok= false;
+			break;
+		}
+		(void)XXH3_128bits_update(&stato, &m_buffer[0], n);
+		if (fwrite(&m_buffer[0], 1, n, out) != n)
+		{
+			snprintf(testo, sizeof(testo), "write error at %s", migliaia(i_da + fatti));
+			avvisa("03510! %s\n", testo);
+			ok= false;
+			break;
+		}
+		fatti+= n;
+		m_posizione= i_da + fatti;
+		if (m_posizione > m_scritti)
+			m_scritti= m_posizione;
+		m_lavoro+= n;
+		m_lavorofase+= n;
+		mostra(false);
+	}
+	/// -verify: on the media (on a share: on the server) before it is read back. An error of a delayed
+	/// write comes out at the flush or at the close, not at the fwrite
+	bool chiuso= m_verifica ? fill_sumedia(out) : (fflush(out) == 0);
+	if (fclose(out) != 0)
+		chiuso= false;
+	if (ok && (!chiuso))
+	{
+		avvisa("03511! %s\n", "write error on the destination (flush/close)");
+		ok= false;
+	}
+	o_hash= XXH3_128bits_digest(&stato);
+	return ok;
+}
+
+bool franzcopia::rileggi(const string &i_file, int64_t i_da, int64_t i_quanti, bool i_lavoro, XXH128_hash_t &o_hash)
+{
+	XXH3_state_t stato;
+	(void)XXH3_128bits_reset(&stato);
+	FILE   *in	 = freadopen(i_file.c_str());
+	bool	ok	 = (in != NULL) && (fseeko(in, i_da, SEEK_SET) == 0);
+	int64_t fatti= 0;
+	while (ok && (fatti < i_quanti))
+	{
+		size_t n= m_buffer.size();
+		if ((int64_t)n > i_quanti - fatti)
+			n= (size_t)(i_quanti - fatti);
+		if (fread(&m_buffer[0], 1, n, in) != n)
+		{
+			ok= false;
+			break;
+		}
+		(void)XXH3_128bits_update(&stato, &m_buffer[0], n);
+		fatti+= n;
+		if (i_lavoro)
+		{
+			m_posizione= i_da + fatti;
+			m_lavoro+= n;
+			m_lavorofase+= n;
+		}
+		mostra(false);
+	}
+	if (in != NULL)
+		fclose(in);
+	if (!ok)
+	{
+		char testo[256];
+		snprintf(testo, sizeof(testo), "cannot read the %s at %s", (i_file == m_sorgente) ? "source" : "destination", migliaia(i_da + fatti));
+		avvisa("03512! %s\n", testo);
+	}
+	o_hash= XXH3_128bits_digest(&stato);
+	return ok;
+}
+
+/// the destination cut back to i_dove: what is left has been checked (-append resumes from there)
+bool franzcopia::taglia(int64_t i_dove)
+{
+	if (truncate(m_destinazione.c_str(), i_dove) == 0)
+	{
+		m_scritti= i_dove;
+		return true;
+	}
+	char testo[256];
+	snprintf(testo, sizeof(testo), "cannot cut the destination back to %s", migliaia(i_dove));
+	avvisa("03514! %s\n", testo);
+	return false;
+}
+
+/// the end of a file: the map closed and what happened below it, the last line
+bool franzcopia::fine(bool i_ok)
+{
+	mostra(true);
+#ifndef ANCIENT
+	if (m_vista == CP_MAPPA)
+	{
+		m_dash.titolo(m_titolo + (i_ok ? "  OK" : "  ERROR"), i_ok ? 1 : 3);
+		m_dash.finale();
+		for (size_t i= 0; i < m_messaggi.size(); i++)
+			myprintf(m_messaggi[i].first.c_str(), m_messaggi[i].second.c_str());
+	}
+#endif
+	stacca();
+	if (!i_ok)
+		return false;
+	const double tempo= (mtime() - m_inizio) / 1000.0;
+	if (m_verifica)
+		myprintf("03524: %Z verified: %s in %d piece(s) of %s, %d written again, %.1f s\n", m_destinazione.c_str(), tohuman(m_dimensione), m_pezzi, tohuman2(m_pezzo), m_riscritti, tempo);
+	else
+		myprintf("03525: %Z copied: %s in %.1f s\n", m_destinazione.c_str(), tohuman(m_dimensione), tempo);
+	return true;
+}
+
+bool franzcopia::copia(bool i_append)
+{
+	m_inizio= mtime();
+	FILE *in= freadopen(m_sorgente.c_str());
+	if (in == NULL)
+	{
+		myprintf("03519! Cannot open the source %Z\n", m_sorgente.c_str());
+		return false;
+	}
+	if ((m_vista == CP_MAPPA) && (m_dimensione <= 0)) /// nothing to draw
+		m_vista= CP_NIENTE;
+	const int64_t giapresenti= fileexists(m_destinazione) ? prendidimensionefile(m_destinazione.c_str()) : 0;
+	const bool	  riprendi	 = i_append && (giapresenti > 0);
+	if (riprendi)
+	{
+		if (giapresenti > m_dimensione)
+		{
+			fclose(in);
+			myprintf("03515! -append: %Z is larger than the source (%s > %s): not touched\n", m_destinazione.c_str(), migliaia(giapresenti), migliaia2(m_dimensione));
+			return false;
+		}
+		if (!cp_quickuguale(m_sorgente, m_destinazione, giapresenti))
+		{
+			fclose(in);
+			myprintf("03516! -append: the %s bytes of %Z are not the beginning of the source (quick hash): not touched\n", migliaia(giapresenti), m_destinazione.c_str());
+			return false;
+		}
+		m_scritti= giapresenti;
+	}
+	else
+	{
+		/// a new copy (or the old one overwritten): empty, then written
+		FILE *nuovo= cp_apri(m_destinazione, "wb");
+		if ((nuovo == NULL) || (fclose(nuovo) != 0))
+		{
+			fclose(in);
+			myprintf("03531! Cannot open for writing %Z\n", m_destinazione.c_str());
+			return false;
+		}
+	}
+#ifndef ANCIENT
+	if (m_vista == CP_MAPPA)
+		mappainizia();
+#endif
+	char	testo[256];
+	int64_t partenza= riprendi ? giapresenti : 0;
+	if (riprendi && m_verifica)
+	{
+		/// the last piece already there, read back in full: the copy may have stopped in the middle of it
+		const int64_t da= (giapresenti > m_pezzo) ? giapresenti - m_pezzo : 0;
+		m_iniziopezzo	= da;
+		m_verificati	= da;
+		m_lavorototale	= (giapresenti - da) + 2 * (m_dimensione - giapresenti);
+		XXH128_hash_t hsorgente;
+		XXH128_hash_t hdestinazione;
+		fase('Q', da);
+		bool ok= rileggi(m_sorgente, da, giapresenti - da, false, hsorgente);
+		if (ok)
+		{
+			fill_scordacache(m_destinazione);
+			fase('R', da);
+			ok= rileggi(m_destinazione, da, giapresenti - da, true, hdestinazione);
+		}
+		if (!ok)
+		{
+			fclose(in);
+			return fine(false);
+		}
+		if ((hsorgente.high64 == hdestinazione.high64) && (hsorgente.low64 == hdestinazione.low64))
+		{
+			m_verificati= giapresenti;
+			snprintf(testo, sizeof(testo), "-append: %s of %s already there (quick hash, the last %s read back: OK)", migliaia(giapresenti), migliaia2(m_dimensione), tohuman(giapresenti - da));
+			avvisa("03517: %s\n", testo);
+		}
+		else
+		{
+			snprintf(testo, sizeof(testo), "-append: the last %s already there differ: cut back to %s, written again", tohuman(giapresenti - da), migliaia(da));
+			avvisa("03518$ %s\n", testo);
+			if (!taglia(da))
+			{
+				fclose(in);
+				return fine(false);
+			}
+			partenza= da;
+		}
+	}
+	else if (riprendi)
+	{
+		snprintf(testo, sizeof(testo), "-append: %s of %s already there (quick hash: OK)", migliaia(giapresenti), migliaia2(m_dimensione));
+		avvisa("03529: %s\n", testo);
+	}
+	m_lavorototale= m_lavoro + (m_verifica ? 2 : 1) * (m_dimensione - partenza);
+
+	bool ok		= true;
+	int	 numero = 0; /// the piece in this run (-cpfake)
+	for (int64_t da= partenza; ok && (da < m_dimensione); numero++)
+	{
+		const int64_t quanti= ((m_dimensione - da) < m_pezzo) ? (m_dimensione - da) : m_pezzo;
+		m_iniziopezzo		= da;
+		bool uguale			= false;
+		for (int tentativo= 0; ok && (!uguale) && (tentativo <= CP_TENTATIVI); tentativo++)
+		{
+			if (tentativo > 0)
+			{
+				m_riscritti++;
+				m_lavorototale+= 2 * quanti;
+			}
+			XXH128_hash_t hsorgente;
+			XXH128_hash_t hdestinazione;
+			fase((tentativo > 0) ? 'X' : 'W', da);
+			ok= scrivi(in, da, quanti, hsorgente);
+			if (ok && (!m_verifica)) /// a direct copy: nothing to read back
+			{
+				uguale= true;
+				break;
+			}
+			if (ok && finto(numero))
+				rovina(da + quanti / 2);
+			if (ok)
+			{
+				fill_scordacache(m_destinazione); /// read back the media, not the RAM of this computer
+				fase('R', da);
+				ok= rileggi(m_destinazione, da, quanti, true, hdestinazione);
+			}
+			if (ok)
+			{
+				uguale= (hsorgente.high64 == hdestinazione.high64) && (hsorgente.low64 == hdestinazione.low64);
+				if (!uguale)
+				{
+					m_rosso= true;
+					if (tentativo < CP_TENTATIVI)
+					{
+						snprintf(testo, sizeof(testo), "the piece at %s (%s) differs on the destination: written again (%d of %d)", migliaia(da), tohuman(quanti), tentativo + 1, CP_TENTATIVI);
+						avvisa("03520$ %s\n", testo);
+					}
+					else
+					{
+						snprintf(testo, sizeof(testo), "the piece at %s (%s) still differs after %d rewrites", migliaia(da), tohuman(quanti), CP_TENTATIVI);
+						avvisa("03521! %s\n", testo);
+					}
+				}
+			}
+		}
+		if (!uguale)
+			ok= false;
+		if (!ok)
+		{
+			/// what is left on the destination has been checked: -append resumes from there
+			if (m_verifica && taglia(da))
+			{
+				snprintf(testo, sizeof(testo), "the destination cut back to %s (checked): -append to resume", migliaia(da));
+				avvisa("03522: %s\n", testo);
+			}
+			break;
+		}
+		m_rosso= false;
+		da+= quanti;
+		if (m_verifica)
+		{
+			m_verificati= da;
+			m_pezzi++;
+		}
+	}
+	fclose(in);
+	if (ok && (prendidimensionefile(m_destinazione.c_str()) != m_dimensione))
+	{
+		avvisa("03523! %s\n", "the size of the destination is not the one of the source");
+		ok= false;
+	}
+	return fine(ok);
+}
+
+/// the name as filecopy makes it (the folder, -paranoid), then franzcopia
+string cp_copia(const string &i_infile, const string &i_cartella, bool i_append, bool i_overwrite, bool i_verifica, unsigned int i_percento, int i_vista)
+{
+	string percorso= i_cartella;
+	if (!isdirectory(percorso))
+		percorso+= "/";
+	if (!direxists(percorso))
+		makepath(percorso);
+	string destinazione= percorso + extractfilename(i_infile);
+	if (!i_overwrite)
+		destinazione= nomefileseesistegia(destinazione);
+	if (stessofile(i_infile, destinazione)) /// 65.13m: a file copied on itself was emptied
+	{
+		myprintf("03598! <<%Z>> is the source itself: not copied\n", destinazione.c_str());
+		return "";
+	}
+	franzcopia copia(i_infile, destinazione, i_verifica, i_percento, i_vista);
+	return copia.copia(i_append) ? destinazione : "";
+}
+
 /// 65.11g: f X: -nuke NN -force, the fast NTFS sanitize (see franznuke)
 int Jidac::nukeami()
 {
@@ -227638,9 +229687,11 @@ int Jidac::workpoke()
 		myprintf("03481! work poke: the offset is a number (from 0), or from:to with to >= from: <<%s>>\n", dove.c_str());
 		return 2;
 	}
-	if ((!poke_numero(files[3], valore)) || (valore > 255))
+	/// 65.13g: ~ = every byte becomes its complement: a byte surely different (the quadratura of autotest -m5)
+	const bool complemento= (files[3] == "~");
+	if ((!complemento) && ((!poke_numero(files[3], valore)) || (valore > 255)))
 	{
-		myprintf("03482! work poke: the value is a number from 0 to 255: <<%s>>\n", files[3].c_str());
+		myprintf("03482! work poke: the value is a number from 0 to 255 (or ~, the complement): <<%s>>\n", files[3].c_str());
 		return 2;
 	}
 	if (!fileexists(nome))
@@ -227671,15 +229722,16 @@ int Jidac::workpoke()
 		if (primo < 0)
 			primo= buffer[0] & 255;
 		for (size_t i= 0; i < n; i++)
-			if ((buffer[i] & 255) != valore)
+			if (complemento || ((buffer[i] & 255) != valore))
 				diversi++;
 		fatti+= n;
 	}
-	string cosa;
+	const string verso= complemento ? string("~ (the complement)") : itos(valore);
+	string		 cosa;
 	if (quanti == 1)
-		cosa= "offset " + string(migliaia(da)) + ": " + itos(primo) + " => " + itos(valore);
+		cosa= "offset " + string(migliaia(da)) + ": " + itos(primo) + " => " + (complemento ? itos(primo ^ 255) : itos(valore));
 	else
-		cosa= "offsets " + string(migliaia(da)) + "-" + string(migliaia2(a)) + " (" + string(migliaia3(quanti)) + " bytes, " + string(migliaia4(diversi)) + " not " + itos(valore) + ") => " + itos(valore);
+		cosa= "offsets " + string(migliaia(da)) + "-" + string(migliaia2(a)) + " (" + string(migliaia3(quanti)) + " bytes, " + string(migliaia4(diversi)) + " not " + verso + ") => " + verso;
 	if (!(flagforce && flagkill))
 	{
 		color_yellow();
@@ -227687,22 +229739,27 @@ int Jidac::workpoke()
 		color_restore();
 		return 1;
 	}
+	/// a piece at a time: written (the value, or the complement of what is there), read back: it must be that
 	std::fill(buffer.begin(), buffer.end(), (char)valore);
+	std::vector<char> letto(buffer.size());
 	for (int64_t fatti= 0; fatti < quanti;)
 	{
 		const size_t n= (size_t)(((quanti - fatti) < (int64_t)buffer.size()) ? (quanti - fatti) : (int64_t)buffer.size());
+		if (complemento)
+		{
+			if (!poke_io(nome, da + fatti, &buffer[0], n, false))
+			{
+				myprintf("03485! work poke: cannot read <<%Z>> at %s\n", nome.c_str(), migliaia(da + fatti));
+				return 2;
+			}
+			for (size_t i= 0; i < n; i++)
+				buffer[i]= (char)(buffer[i] ^ 0xFF);
+		}
 		if (!poke_io(nome, da + fatti, &buffer[0], n, true))
 		{
 			myprintf("03487! work poke: cannot write <<%Z>> at %s\n", nome.c_str(), migliaia(da + fatti));
 			return 2;
 		}
-		fatti+= n;
-	}
-	/// read back: they must all be the value now
-	std::vector<char> letto(buffer.size());
-	for (int64_t fatti= 0; fatti < quanti;)
-	{
-		const size_t n= (size_t)(((quanti - fatti) < (int64_t)letto.size()) ? (quanti - fatti) : (int64_t)letto.size());
 		if ((!poke_io(nome, da + fatti, &letto[0], n, false)) || (memcmp(&letto[0], &buffer[0], n) != 0))
 		{
 			myprintf("03488! work poke: <<%Z>> at %s is not what was written\n", nome.c_str(), migliaia(da + fatti));
@@ -227717,6 +229774,108 @@ int Jidac::workpoke()
 	}
 	myprintf("03490: work poke <<%Z>> %s: done\n", nome.c_str(), cosa.c_str());
 	return 0;
+}
+/// 65.13g: the reads of a franzen file that could not be decrypted, so far (none without franzen)
+static int64_t franzenrotti()
+{
+#ifndef NOFRANZEN
+#ifdef ZPAQFULL /// NOSFTPSTART
+	return g_franzen_lettirotti;
+#endif /// NOSFTPEND
+#endif
+	return 0;
+}
+/*
+	65.13g: work quadra A B, the "quadratura" of autotest -m5: two archives, each one read as ONE stream of bytes
+	(InputArchive: a multipart or a -chunk one its parts in order, glued; a franzen file decoded, -franzen; AES as
+	it is, NOT decrypted: no -key), must be the same bytes. The same versions (-timestamp) with the same salts
+	(-debug4: the deterministic encryption) in one piece, multipart, -chunk, backup: one archive. OK, or the first
+	byte that is not the same (and rc 2): a part changed by one byte must say it
+*/
+int Jidac::workquadra()
+{
+	if (files.size() != 3)
+	{
+		myprintf("03549! work quadra needs two archives (a multipart or a -chunk one with its ?)\n");
+		return 2;
+	}
+	if (g_password != NULL)
+	{
+		myprintf("03550! work quadra compares the AES bytes as they are: no -key\n");
+		return 2;
+	}
+	const string	nomea	  = files[1];
+	const string	nomeb	  = files[2];
+	const int64_t	rottiprima= franzenrotti();
+	int64_t			lunga	  = 0;
+	int64_t			lungb	  = 0;
+	int64_t			diverso	  = -1;
+	string			guasto	  = "";
+	/// an archive that cannot be read at all (a franzen part with its first block damaged: InputArchive reads its
+	/// header to know what it is, and error()) is not the same either: QUADRA KO, with why, not a plain error
+	g_letturacruda= true;
+	try
+	{
+		InputArchive a(nomea.c_str());
+		InputArchive b(nomeb.c_str());
+		if ((!a.isopen()) || (!b.isopen()))
+			guasto= "cannot open <<" + (a.isopen() ? nomeb : nomea) + ">>";
+		else
+		{
+			lunga= a.totalsize();
+			lungb= b.totalsize();
+			const int		  pezzo= 1 << 20;
+			std::vector<char> bufa(pezzo);
+			std::vector<char> bufb(pezzo);
+			int64_t			  fatti= 0;
+			while (diverso < 0)
+			{
+				const int na= a.read(&bufa[0], pezzo);
+				int		  nb= 0;
+				while (nb < na) /// the same bytes from B (a read can give fewer: the end of a part)
+				{
+					const int r= b.read(&bufb[nb], na - nb);
+					if (r <= 0)
+						break;
+					nb+= r;
+				}
+				if (na <= 0)
+				{
+					if (b.read(&bufb[0], 1) > 0) /// A is over, B is not
+						diverso= fatti;
+					break;
+				}
+				for (int i= 0; (i < nb) && (diverso < 0); i++)
+					if (bufa[i] != bufb[i])
+						diverso= fatti + i;
+				if ((diverso < 0) && (nb < na)) /// B is over, A is not
+					diverso= fatti + nb;
+				fatti+= na;
+			}
+		}
+	}
+	catch (std::exception &e)
+	{
+		guasto= e.what();
+	}
+	g_letturacruda	   = false;
+	const int64_t rotti= franzenrotti() - rottiprima;
+	if ((guasto == "") && (diverso < 0) && (lunga == lungb) && (rotti == 0))
+	{
+		myprintf("03552: QUADRA OK %s bytes: <<%Z>> == <<%Z>>\n", migliaia(lunga), nomea.c_str(), nomeb.c_str());
+		return 0;
+	}
+	color_red();
+	if (guasto != "")
+		myprintf("03551! QUADRA KO: %s\n", guasto.c_str());
+	if (rotti > 0)
+		myprintf("03553! QUADRA KO: %s reads of a franzen file could not be decrypted\n", migliaia(rotti));
+	if (diverso >= 0)
+		myprintf("03554! QUADRA KO: <<%Z>> (%s bytes) and <<%Z>> (%s bytes) are not the same from byte %s\n", nomea.c_str(), migliaia(lunga), nomeb.c_str(), migliaia2(lungb), migliaia3(diverso));
+	else if (guasto == "")
+		myprintf("03554! QUADRA KO: <<%Z>> (%s bytes) and <<%Z>> (%s bytes)\n", nomea.c_str(), migliaia(lunga), nomeb.c_str(), migliaia2(lungb));
+	color_restore();
+	return 2;
 }
 
 int Jidac::workfat32()
@@ -229415,7 +231574,7 @@ int caricadllssh()
 		return -1;
 	}
 	if (flagdebug)
-		myprintf("libssh founded in %s\n", dllPath);
+		myprintf("libssh found in %s\n", dllPath);
 #endif
 
 	// Load the library
@@ -230287,7 +232446,7 @@ int Jidac::ssh_dohasha(std::string i_algo)
 
 	if (localfiles.size() == 0)
 	{
-		myprintf("96959: No local file founded\n");
+		myprintf("96959: No local file found\n");
 		return 1;
 	}
 
@@ -231156,7 +233315,7 @@ int Jidac::oneononehome()
 
 	if (files.size() != 2)
 	{
-		myprintf("03293! One-on-One require 2 folders => quit\n");
+		myprintf("03596! One-on-One require 2 folders => quit\n");
 		return 2;
 	}
 
@@ -231175,12 +233334,12 @@ int Jidac::oneononehome()
 
 	if (foldersone.size() == 0)
 	{
-		myprintf("03291: Sorry, cannot find something in one <<%Z>>\n", basehomeone.c_str());
+		myprintf("03594: Sorry, cannot find something in one <<%Z>>\n", basehomeone.c_str());
 		return 1;
 	}
 	if (folderstwo.size() == 0)
 	{
-		myprintf("03291: Sorry, cannot find something in two <<%Z>>\n", basehometwo.c_str());
+		myprintf("03595: Sorry, cannot find something in two <<%Z>>\n", basehometwo.c_str());
 		return 1;
 	}
 
@@ -231284,6 +233443,8 @@ int Jidac::oneononehome()
 		libzpaq::SHA256 sha256;
 		for (size_t j= 0; j < hashpairs.size(); j++)
 		{
+			/// 65.13j: the name too (relative, lowercase): one.txt and two.txt of the same content were EQUAL
+			sha256.write(hashpairs[j].first.c_str(), hashpairs[j].first.size() + 1);
 			sha256.write(hashpairs[j].second.c_str(), hashpairs[j].second.size());
 		}
 
@@ -231401,6 +233562,8 @@ int Jidac::oneononehome()
 		libzpaq::SHA256 sha256;
 		for (size_t j= 0; j < hashpairs.size(); j++)
 		{
+			/// 65.13j: the name too (relative, lowercase): one.txt and two.txt of the same content were EQUAL
+			sha256.write(hashpairs[j].first.c_str(), hashpairs[j].first.size() + 1);
 			sha256.write(hashpairs[j].second.c_str(), hashpairs[j].second.size());
 		}
 
@@ -234259,7 +236422,7 @@ int Jidac::paranoidverify()
     if (!stats.allOk())
     {
         myprintf("\n");
-        myprintf("Issues founded\n");
+        myprintf("Issues found\n");
         if (stats.paths_not_accessible > 0)
             myprintf("  Paths not accessible:              %12s\n", migliaia(stats.paths_not_accessible));
         if (stats.files_on_disk_not_in_archive > 0)
@@ -237308,16 +239471,12 @@ int Jidac::testparametriadd()
 {
 	/*
 		65.11l: a multipart archive can be franzen: every part a franzen file of its own
-		(x_001.zpaq.franzen), and the index of a backup too. Not yet: -chunk, and -index
-		(the parts elsewhere). All franzen or all plain: decided by the first part
+		(x_001.zpaq.franzen), and the index of a backup too. Not yet: -index (the parts
+		elsewhere; -chunk yes, since 65.13e). All franzen or all plain: decided by the first part
 	*/
+	/// 65.13e: -chunk too (every part a franzen file only, none bigger than -chunk on the disk): 43806 is no more
 	if (g_franzen != "")
 	{
-		if (g_chunk_size > 0)
-		{
-			myprintf("43806! Sorry, franzen not supported (yet) for -chunk\n");
-			return 2;
-		}
 		if (index && (command != 'Z'))
 		{
 			myprintf("43807! Sorry, franzen not supported (yet) for -index\n");
@@ -237423,8 +239582,8 @@ int Jidac::testparametriadd()
 		numbered after the ones that are there. They are written as .tmp and take their names at the
 		end, all together (finalemultiparttmp): a run that dies leaves no part at all, so the trim of
 		backup stays as it is (and a run with nothing new leaves no part). Each chunk has its line in
-		the _backup.txt, the index is one file as always. Not with -franzen (43806, above), not with
-		-backupzeta (a hash made while ONE part is written)
+		the _backup.txt, the index is one file as always. Also with -franzen (65.13e: every chunk a
+		franzen file). Not with -backupzeta (a hash made while ONE part is written)
 	*/
 	if ((g_chunk_size > 0) && (command == 'Z'))
 	{
@@ -243324,13 +245483,14 @@ void Jidac::gestiscimultipart()
 						break;
 					continue;
 				}
-				if (!fileexists(pezzo))
+				const string fisico= pezzofisico(pezzo); /// 65.13e: -chunk -franzen: x_N.tmp.franzen
+				if (!fileexists(fisico))
 					break;
 				string renamedfile= pezzo;
 				forceextension(renamedfile, ".spaz");
 				renamedfile= nomefileseesistegia(renamedfile);
-				myprintf("69689! The tmp chunk does exists <<%Z>> => renaming to <<%Z>>\n", pezzo.c_str(), renamedfile.c_str());
-				if (myrename(pezzo, renamedfile) != 0)
+				myprintf("69689! The tmp chunk does exists <<%Z>> => renaming to <<%Z>>\n", fisico.c_str(), renamedfile.c_str());
+				if (myrename(fisico, renamedfile) != 0)
 					error("69693$ Impossible to rename");
 			}
 		}
@@ -244285,7 +246445,7 @@ int Jidac::finalemultiparttmp()
 				/// the last buffer filled a chunk to the brim: the next one was opened, and nothing came for it.
 				/// (a -chunk drops it too). As a part it would be an empty one: the next backup removes those,
 				/// and its line would stay in the _backup.txt
-				if (prendidimensionefile(g_addedchunklist[i].c_str()) == 0)
+				if (dimensionepezzo(g_addedchunklist[i]) == 0)
 				{
 					if (!delete_file(g_addedchunklist[i].c_str()))
 						myprintf("71352$ cannot delete the empty chunk <<%Z>>\n", g_addedchunklist[i].c_str());
@@ -244296,9 +246456,17 @@ int Jidac::finalemultiparttmp()
 		for (size_t i= pezzi.size(); i > 0; i--)
 		{
 			string &pezzo= pezzi[i - 1];
-			if ((pezzo.size() < 5) || (pezzo.substr(pezzo.size() - 4) != ".tmp"))
+			/// 65.13e: -chunk -franzen: x_0003.tmp.franzen => x_0003.zpaq.franzen
+			string base= pezzo;
+			string coda= "";
+			if (isfranzen(base))
+			{
+				base= base.substr(0, base.size() - 8);
+				coda= ".franzen";
+			}
+			if ((base.size() < 5) || (base.substr(base.size() - 4) != ".tmp"))
 				continue;
-			const string sto= pezzo.substr(0, pezzo.size() - 4) + ".zpaq";
+			const string sto= base.substr(0, base.size() - 4) + ".zpaq" + coda;
 			if (flagverbose)
 				myprintf("68938$ Renaming  <<%Z>> to <<%Z>>\n", pezzo.c_str(), sto.c_str());
 			if (myrename(pezzo, sto) != 0)
@@ -244310,7 +246478,11 @@ int Jidac::finalemultiparttmp()
 		}
 		g_addedchunklist= pezzi; /// (control-C, the lines of the _backup.txt, -copy: the names of now)
 		if (!pezzi.empty())
+		{
 			g_archive= pezzi.back();
+			if (isfranzen(g_archive)) /// the name of the part, as without -chunk (its file is the .franzen)
+				g_archive= g_archive.substr(0, g_archive.size() - 8);
+		}
 		return 0;
 	}
 	if (g_flagmultipart && flagtmp)
@@ -244624,7 +246796,7 @@ int Jidac::add()
 	// "automagic" check: distinguish .zpaq exists / only .zpaq.franzen exists / nothing exists.
 	// If the .zpaq is missing but a valid .zpaq.franzen is there, this is a franzen-only archive:
 	// never fork a fresh cleartext .zpaq beside it.
-	if ((!index) && (g_chunk_size == 0) && (!g_fakewrite))
+	if ((!index) && (!g_fakewrite)) /// 65.13e: -chunk too (-chunk -franzen)
 		if ((!archive_exists) || isfranzen(subpart(archive, 1))) // the archive can BE the .franzen
 			if (is_file_franzen(franzenname(subpart(archive, 1))))
 			{
@@ -244677,7 +246849,7 @@ int Jidac::add()
 		header_pos= read_archive_add(arcname.c_str());
 #ifndef NOFRANZEN
 #ifdef ZPAQFULL /// NOSFTPSTART
-	else if ((g_chunk_size == 0) && isfranzenonly(subpart(arcname, 1)))
+	else if (isfranzenonly(subpart(arcname, 1))) /// 65.13e: -chunk too
 	{
 		// no cleartext .zpaq: load the index from the .zpaq.franzen (decrypted on the fly)
 		header_pos= read_archive_add(arcname.c_str());
@@ -244719,18 +246891,7 @@ int Jidac::add()
 	{
 		if (flagdebug3)
 			myprintf("01947: CREATING SALT____________________\n");
-		if (flagdebug4)
-		{
-			myprintf("01948: **** BEWARE SALT NULL BECAUSE -debug4 ****\n");
-			myprintf("01949: **** BEWARE SALT NULL BECAUSE -debug4 ****\n");
-			myprintf("01950: **** BEWARE SALT NULL BECAUSE -debug4 ****\n");
-			myprintf("01951: **** BEWARE SALT NULL BECAUSE -debug4 ****\n");
-			myprintf("01952: **** BEWARE SALT NULL BECAUSE -debug4 ****\n");
-			myprintf("01953: **** BEWARE SALT NULL BECAUSE -debug4 ****\n");
-			myprintf("01954: **** BEWARE SALT NULL BECAUSE -debug4 ****\n");
-		}
-		else
-			libzpaq::random(salt, 32);
+		salezpaq(salt); /// 65.13e: -debug4 = salt of zeros (the seven "BEWARE SALT NULL" lines: one, at the start of the command)
 	}
 
 	// Remote archive
@@ -245048,7 +247209,8 @@ int Jidac::add()
 	// a .franzen archive (a z:/pippo.franzen) is franzen-only by definition: -debug cannot
 	// turn on a cleartext .zpaq, there is no .zpaq name at all
 	/// 65.11l: with an index too (backup): the index is then a franzen file as well (see OutputArchive)
-	g_franzen_zpaq_nowrite= (g_franzen != "") && (isfranzen(arcname) || ((!exists(arcname)) && ((!flagdebug) || is_file_franzen(arcname + ".franzen")))) && (g_chunk_size == 0) && (!g_fakewrite);
+	/// 65.13e: -chunk -franzen: always the franzen file only (also with -debug), every part a franzen file
+	g_franzen_zpaq_nowrite= (g_franzen != "") && (isfranzen(arcname) || ((!exists(arcname)) && ((!flagdebug) || (g_chunk_size > 0) || is_file_franzen(arcname + ".franzen")))) && (!g_fakewrite);
 #endif /// NOSFTPEND
 #endif
 
@@ -245064,6 +247226,15 @@ int Jidac::add()
 	/// 65.11k: a -append -chunk, first pass on a NEW archive: nothing is written, there is no part to open
 	/// ("Archive not found", and the command ended there)
 	/// 65.11p: (the same for the first run of a backup -chunk: its first chunk is a .tmp, there is no part yet)
+	/// 65.13e: -chunk -franzen: offset is the sum of the parts there (the data in them, see gestiscisingleormultipart): the
+	/// first franzen part of this run is already there, empty, and an InputArchive cannot read it
+#ifndef NOFRANZEN
+#ifdef ZPAQFULL /// NOSFTPSTART
+	if ((g_chunk_size > 0) && g_franzen_zpaq_nowrite)
+		initial_archive_size= offset;
+	else
+#endif /// NOSFTPEND
+#endif
 	if ((g_chunk_size > 0) && (!((g_fakewrite || flagtmp) && (!exists(subpart(archive, 1)))))) // we have multiple output,maybe multiple in too: => sum the filesizes
 	{
 		InputArchive in(archive.c_str());
@@ -246334,14 +248505,14 @@ int Jidac::add()
 			{
 				printbar('-');
 				for (unsigned int i= 0; i < out.filepartnames.size(); i++)
-					myprintf("02136: Chunk %08d %21s %s\n", i + 1, migliaia(prendidimensionefile(out.filepartnames[i].c_str())), out.filepartnames[i].c_str());
+					myprintf("02136: Chunk %08d %21s %s\n", i + 1, migliaia(dimensionepezzo(pezzofisico(out.filepartnames[i]))), out.filepartnames[i].c_str());
 				printbar('=');
 			}
-			string thelast= out.lastfilename();
+			string thelast= pezzofisico(out.lastfilename()); /// 65.13e: a part can be a franzen file (-chunk -franzen)
 			myprintf("02137: INFO: The last chunk is: %Z\n", thelast.c_str());
 			/// nothing changed: the new chunk holds only the 104-byte header of an empty version (the
 			/// non-chunked path truncates it away): drop it, as an empty chunk
-			if ((prendidimensionefile(thelast.c_str()) == 0) || (((files_added + files_updated + removed) == 0) && (prendidimensionefile(thelast.c_str()) == 104)))
+			if ((dimensionepezzo(thelast) == 0) || (((files_added + files_updated + removed) == 0) && (dimensionepezzo(thelast) == 104)))
 			{
 				if (delete_file(thelast.c_str()))
 				{
@@ -246483,10 +248654,10 @@ int Jidac::add()
 			std::vector<string> contati;
 			myarchive_end= 0;
 			for (size_t i= 0; i < g_addedchunklist.size(); i++)
-				if (fileexists(g_addedchunklist[i]) && (prendidimensionefile(g_addedchunklist[i].c_str()) > 0) && (std::find(contati.begin(), contati.end(), g_addedchunklist[i]) == contati.end()))
+				if (fileexists(g_addedchunklist[i]) && (dimensionepezzo(g_addedchunklist[i]) > 0) && (std::find(contati.begin(), contati.end(), g_addedchunklist[i]) == contati.end()))
 				{
 					contati.push_back(g_addedchunklist[i]);
-					myarchive_end+= prendidimensionefile(g_addedchunklist[i].c_str());
+					myarchive_end+= dimensionepezzo(g_addedchunklist[i]); /// 65.13e: of a franzen part, the data in it
 				}
 			inchunks   = "[CKS #" + itos((int64_t)contati.size()) + "]";
 			intotalsize= "[TOT]";
@@ -247030,7 +249201,7 @@ int Jidac::add2()
 	// "automagic" check: distinguish .zpaq exists / only .zpaq.franzen exists / nothing exists.
 	// If the .zpaq is missing but a valid .zpaq.franzen is there, this is a franzen-only archive:
 	// never fork a fresh cleartext .zpaq beside it.
-	if ((!index) && (g_chunk_size == 0) && (!g_fakewrite))
+	if ((!index) && (!g_fakewrite)) /// 65.13e: -chunk too (-chunk -franzen)
 		if ((!archive_exists) || isfranzen(subpart(archive, 1))) // the archive can BE the .franzen
 			if (is_file_franzen(franzenname(subpart(archive, 1))))
 			{
@@ -247088,7 +249259,7 @@ int Jidac::add2()
 		header_pos= read_archive_add(arcname.c_str());
 #ifndef NOFRANZEN
 #ifdef ZPAQFULL /// NOSFTPSTART
-	else if ((g_chunk_size == 0) && isfranzenonly(subpart(arcname, 1)))
+	else if (isfranzenonly(subpart(arcname, 1))) /// 65.13e: -chunk too
 	{
 		// no cleartext .zpaq: load the index from the .zpaq.franzen (decrypted on the fly)
 		header_pos= read_archive_add(arcname.c_str());
@@ -247166,18 +249337,7 @@ int Jidac::add2()
 	{
 		if (flagdebug3)
 			myprintf("01947: CREATING SALT____________________\n");
-		if (flagdebug4)
-		{
-			myprintf("01948: **** BEWARE SALT NULL BECAUSE -debug4 ****\n");
-			myprintf("01949: **** BEWARE SALT NULL BECAUSE -debug4 ****\n");
-			myprintf("01950: **** BEWARE SALT NULL BECAUSE -debug4 ****\n");
-			myprintf("01951: **** BEWARE SALT NULL BECAUSE -debug4 ****\n");
-			myprintf("01952: **** BEWARE SALT NULL BECAUSE -debug4 ****\n");
-			myprintf("01953: **** BEWARE SALT NULL BECAUSE -debug4 ****\n");
-			myprintf("01954: **** BEWARE SALT NULL BECAUSE -debug4 ****\n");
-		}
-		else
-			libzpaq::random(salt, 32);
+		salezpaq(salt); /// 65.13e: -debug4 = salt of zeros (the seven "BEWARE SALT NULL" lines: one, at the start of the command)
 	}
 
 	// Remote archive
@@ -247495,7 +249655,8 @@ int Jidac::add2()
 	// a .franzen archive (a z:/pippo.franzen) is franzen-only by definition: -debug cannot
 	// turn on a cleartext .zpaq, there is no .zpaq name at all
 	/// 65.11l: with an index too (backup): the index is then a franzen file as well (see OutputArchive)
-	g_franzen_zpaq_nowrite= (g_franzen != "") && (isfranzen(arcname) || ((!exists(arcname)) && ((!flagdebug) || is_file_franzen(arcname + ".franzen")))) && (g_chunk_size == 0) && (!g_fakewrite);
+	/// 65.13e: -chunk -franzen: always the franzen file only (also with -debug), every part a franzen file
+	g_franzen_zpaq_nowrite= (g_franzen != "") && (isfranzen(arcname) || ((!exists(arcname)) && ((!flagdebug) || (g_chunk_size > 0) || is_file_franzen(arcname + ".franzen")))) && (!g_fakewrite);
 #endif /// NOSFTPEND
 #endif
 
@@ -247511,6 +249672,15 @@ int Jidac::add2()
 	/// 65.11k: a -append -chunk, first pass on a NEW archive: nothing is written, there is no part to open
 	/// ("Archive not found", and the command ended there)
 	/// 65.11p: (the same for the first run of a backup -chunk: its first chunk is a .tmp, there is no part yet)
+	/// 65.13e: -chunk -franzen: offset is the sum of the parts there (the data in them, see gestiscisingleormultipart): the
+	/// first franzen part of this run is already there, empty, and an InputArchive cannot read it
+#ifndef NOFRANZEN
+#ifdef ZPAQFULL /// NOSFTPSTART
+	if ((g_chunk_size > 0) && g_franzen_zpaq_nowrite)
+		initial_archive_size= offset;
+	else
+#endif /// NOSFTPEND
+#endif
 	if ((g_chunk_size > 0) && (!((g_fakewrite || flagtmp) && (!exists(subpart(archive, 1)))))) // we have multiple output,maybe multiple in too: => sum the filesizes
 	{
 		InputArchive in(archive.c_str());
@@ -249387,14 +251557,14 @@ int Jidac::add2()
 			{
 				printbar('-');
 				for (unsigned int i= 0; i < out.filepartnames.size(); i++)
-					myprintf("02136: Chunk %08d %21s %s\n", i + 1, migliaia(prendidimensionefile(out.filepartnames[i].c_str())), out.filepartnames[i].c_str());
+					myprintf("02136: Chunk %08d %21s %s\n", i + 1, migliaia(dimensionepezzo(pezzofisico(out.filepartnames[i]))), out.filepartnames[i].c_str());
 				printbar('=');
 			}
-			string thelast= out.lastfilename();
+			string thelast= pezzofisico(out.lastfilename()); /// 65.13e: a part can be a franzen file (-chunk -franzen)
 			myprintf("02137: INFO: The last chunk is: %Z\n", thelast.c_str());
 			/// nothing changed: the new chunk holds only the 104-byte header of an empty version (the
 			/// non-chunked path truncates it away): drop it, as an empty chunk
-			if ((prendidimensionefile(thelast.c_str()) == 0) || (((files_added + files_updated + removed) == 0) && (prendidimensionefile(thelast.c_str()) == 104)))
+			if ((dimensionepezzo(thelast) == 0) || (((files_added + files_updated + removed) == 0) && (dimensionepezzo(thelast) == 104)))
 			{
 				if (delete_file(thelast.c_str()))
 				{
@@ -249536,10 +251706,10 @@ int Jidac::add2()
 			std::vector<string> contati;
 			myarchive_end= 0;
 			for (size_t i= 0; i < g_addedchunklist.size(); i++)
-				if (fileexists(g_addedchunklist[i]) && (prendidimensionefile(g_addedchunklist[i].c_str()) > 0) && (std::find(contati.begin(), contati.end(), g_addedchunklist[i]) == contati.end()))
+				if (fileexists(g_addedchunklist[i]) && (dimensionepezzo(g_addedchunklist[i]) > 0) && (std::find(contati.begin(), contati.end(), g_addedchunklist[i]) == contati.end()))
 				{
 					contati.push_back(g_addedchunklist[i]);
-					myarchive_end+= prendidimensionefile(g_addedchunklist[i].c_str());
+					myarchive_end+= dimensionepezzo(g_addedchunklist[i]); /// 65.13e: of a franzen part, the data in it
 				}
 			inchunks   = "[CKS #" + itos((int64_t)contati.size()) + "]";
 			intotalsize= "[TOT]";
@@ -250242,7 +252412,7 @@ bool Jidac::extract_ntfs_meta(char source)
 	if (howmanyexcluded != 0)
 	{
 		if (flagverbose)
-			myprintf("10432: No excluded founded\n");
+			myprintf("10432: No excluded found\n");
 	}
 	else
 	{
@@ -250267,7 +252437,7 @@ bool Jidac::extract_ntfs_meta(char source)
 	if (howmanyzeroed != 0)
 	{
 		if (flagverbose)
-			myprintf("10433: No zeroed founded\n");
+			myprintf("10433: No zeroed found\n");
 	}
 	else
 	{	
@@ -252126,6 +254296,8 @@ int Jidac::do_franzen_operation(const string& input_filename, const string& outp
 #define MAX_REASONABLE_RECORDS 50000000
 #define VOLUME_CACHE_SIZE 20000
 #define DEFAULT_NUM_THREADS 4
+/// 65.13a: the reasons that say the content changed (a rename without them is a rename only)
+#define FRANZJU_DATA_CHANGES (USN_REASON_DATA_OVERWRITE | USN_REASON_DATA_EXTEND | USN_REASON_DATA_TRUNCATION | USN_REASON_NAMED_DATA_OVERWRITE | USN_REASON_NAMED_DATA_EXTEND | USN_REASON_NAMED_DATA_TRUNCATION | USN_REASON_STREAM_CHANGE)
 
 #ifdef ZERR
 typedef enum _FILE_ID_TYPE
@@ -252181,7 +254353,7 @@ inline void cls()
 }
 
 inline void print_header(const std::wstring &monitor_folder, const std::wstring &volume,
-						 int64_t total_archived, int64_t total_excluded= 0,
+						 int64_t total_toarchive, int64_t total_excluded= 0,
 						 int64_t excluded_bytes= 0)
 {
 	cls();
@@ -252199,7 +254371,7 @@ inline void print_header(const std::wstring &monitor_folder, const std::wstring 
 		myprintf("Monitoring: %s (entire volume)\n", wtou(volume.c_str()).c_str());
 	color_restore();
 
-	myprintf("Session: %12s archived", migliaia(total_archived));
+	myprintf("Session: %12s to archive", migliaia(total_toarchive));
 	if (total_excluded > 0)
 		myprintf(" | %12s excluded (%12s)", migliaia(total_excluded), tohuman(excluded_bytes));
 	myprintf("\n");
@@ -252436,7 +254608,8 @@ class franzju
 		CHANGE_MODIFIED= 1,
 		CHANGE_DELETED = 2,
 		CHANGE_ADDED   = 3,
-		CHANGE_RENAMED = 4
+		CHANGE_RENAMED = 4,
+		CHANGE_DIRRENAMED= 5 /// 65.13a: a folder renamed or moved (what is inside has no records of its own)
 	};
 
 	struct FileMetadata
@@ -252458,11 +254631,24 @@ class franzju
 		std::wstring		  filename;
 	};
 
+	/// 65.13a: all the records of one file (its ID) put together: the reasons add up, the last record
+	/// says the name, the folder and the attributes
+	struct FileRecords
+	{
+		DWORDLONG	 fileRef;
+		DWORDLONG	 parentRef;
+		DWORD		 reasons;
+		DWORD		 attributes;
+		FILETIME	 timeStamp;
+		std::wstring filename;
+	};
+
   public:
 	franzju(const std::wstring &volumePath, int num_threads= DEFAULT_NUM_THREADS);
 	~franzju();
 
 	bool capture();
+	bool capturefrom(const franzju &i_old, bool &o_reliable);
 	bool loadfromfile(const std::wstring &i_fileinput);
 	bool savetofile(const std::wstring &i_fileoutput) const;
 	bool loadfrombuffer(const std::vector<unsigned char> &buffer);
@@ -252470,15 +254656,9 @@ class franzju
 
 	static bool attivajournal(const std::wstring &volumePath);
 
-	static bool comparefrombuffers(const std::wstring					&volumePath,
-								   const std::vector<unsigned char>		&bufferold,
-								   const std::vector<unsigned char>		&buffernew,
-								   std::map<std::wstring, FileMetadata> &changes,
-								   bool									&isReliable,
-								   const std::wstring					&monitor_folder,
-								   int									 num_threads= DEFAULT_NUM_THREADS);
+	bool getchanges(std::map<std::wstring, FileMetadata> &o_changes, const std::wstring &i_monitor_folder) const;
 
-	static bool			get_file_info_by_ref(HANDLE hVolume, DWORDLONG fileRef, ULONGLONG &fileSize, FILETIME &lastModified);
+	static bool			infobyid(HANDLE hVolume, DWORDLONG ref, std::wstring &o_path, ULONGLONG &o_size, FILETIME &o_lastModified);
 	static std::wstring resolve_id_to_path(HANDLE hVolume, DWORDLONG ref);
 
 	int getNumThreads() const
@@ -252504,8 +254684,8 @@ class franzju
 // Threading structure
 struct ThreadCompareData
 {
-	const franzju								  *new_journal;
-	USN											   lastReadUsn;
+	const std::vector<franzju::FileRecords>		  *files;
+	bool										   ok; /// 65.13a: false = this thread could not open the volume
 	std::wstring								   volumePath;
 	SimplePathCache								  *parent_cache;
 	size_t										   start_idx;
@@ -252647,34 +254827,100 @@ bool franzju::capture()
 		return false;
 	}
 
+	/// 65.13a: only where the journal is now. The records before are of no use (the changes are the
+	/// ones after): reading the whole journal at every scan was up to 1 GB every 10 s
 	m_records.clear();
-	m_records.reserve(10000);
 
 	m_header.firstUsn	= journalData.FirstUsn;
 	m_header.nextUsn	= journalData.NextUsn;
 	m_header.lastReadUsn= journalData.NextUsn;
 	m_header.journalId	= journalData.UsnJournalID;
 	m_header.recordCount= 0;
+	return true;
+}
+
+/// 65.13a: the records written after i_old, from its lastReadUsn on (all of them: the first one has
+/// USN == lastReadUsn, the "> lastReadUsn" of before lost it). The new lastReadUsn is the USN the
+/// last read gave back (records written while reading included), not the NextUsn asked before reading.
+/// o_reliable false = something may be lost in between: journal recreated, records gone (the journal
+/// wrapped, even while reading), journal behind i_old (a restored volume). Then no records, and the
+/// header is where the journal is now. A read error is an error (false), not "no changes"
+bool franzju::capturefrom(const franzju &i_old, bool &o_reliable)
+{
+	o_reliable= false;
+	if (flagdebug)
+		myprintf("Starting capture for volume %s\n", wtou(m_volumePath.c_str()).c_str());
+
+	VolumeHandle hVolume(open_volume(m_volumePath));
+	if (!hVolume.valid())
+		return false;
+
+	USN_JOURNAL_DATA journalData;
+	DWORD			 bytesReturned;
+	if (!DeviceIoControl(hVolume, FSCTL_QUERY_USN_JOURNAL, NULL, 0,
+						 &journalData, sizeof(journalData), &bytesReturned, NULL))
+		return false;
+
+	m_records.clear();
+	m_header.firstUsn	= journalData.FirstUsn;
+	m_header.nextUsn	= journalData.NextUsn;
+	m_header.lastReadUsn= journalData.NextUsn;
+	m_header.journalId	= journalData.UsnJournalID;
+	m_header.recordCount= 0;
+
+	const USN start= i_old.m_header.lastReadUsn;
+	if (journalData.UsnJournalID != i_old.m_header.journalId)
+	{
+		if (flagdebug)
+			myprintf("Journal ID changed (recreated)\n");
+		return true;
+	}
+	if (journalData.FirstUsn > start)
+	{
+		if (flagdebug)
+			myprintf("Journal gap detected\n");
+		return true;
+	}
+	if (start > journalData.NextUsn)
+	{
+		if (flagdebug)
+			myprintf("Journal behind the master snapshot\n");
+		return true;
+	}
 
 	const DWORD				   bufferSize= 4 * 1024 * 1024;
 	std::vector<unsigned char> buffer(bufferSize);
 
 	READ_USN_JOURNAL_DATA readData;
-	readData.StartUsn		  = journalData.FirstUsn;
+	readData.StartUsn		  = start;
 	readData.ReasonMask		  = 0xFFFFFFFF;
 	readData.ReturnOnlyOnClose= FALSE;
 	readData.Timeout		  = 0;
 	readData.BytesToWaitFor	  = 0;
 	readData.UsnJournalID	  = journalData.UsnJournalID;
 
-	while (DeviceIoControl(hVolume, FSCTL_READ_USN_JOURNAL,
-						   &readData, sizeof(readData),
-						   &buffer[0], bufferSize, &bytesReturned, NULL))
+	USN nextUsn= start;
+	while (true)
 	{
-		if (bytesReturned <= sizeof(USN))
-			break;
+		if (!DeviceIoControl(hVolume, FSCTL_READ_USN_JOURNAL,
+							 &readData, sizeof(readData),
+							 &buffer[0], bufferSize, &bytesReturned, NULL))
+		{
+			if (GetLastError() == ERROR_JOURNAL_ENTRY_DELETED)
+			{
+				m_records.clear();
+				if (flagdebug)
+					myprintf("Journal gap detected while reading\n");
+				return true;
+			}
+			return false;
+		}
+		if (bytesReturned < sizeof(USN))
+			return false;
 
-		USN nextUsn= *(USN *)&buffer[0];
+		nextUsn= *(USN *)&buffer[0];
+		if (bytesReturned == sizeof(USN)) /// nothing more: nextUsn is where the next scan starts
+			break;
 
 		DWORD offset= sizeof(USN);
 		while (offset < bytesReturned)
@@ -252683,81 +254929,56 @@ bool franzju::capture()
 			if (usnRecord->RecordLength == 0)
 				break;
 
-			if (usnRecord->FileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+			if (usnRecord->MajorVersion != 2) /// a V3 record (128-bit IDs, ReFS) read as a V2 one is garbage
 			{
-				offset+= usnRecord->RecordLength;
-				continue;
+				myprintf("03500! USN record version %d not supported (NTFS only)\n", (int)usnRecord->MajorVersion);
+				m_records.clear();
+				return false;
 			}
 
-			if (usnRecord->Reason == USN_REASON_CLOSE)
+			/// folders too (65.13a): a folder renamed or moved is the only record of what is inside
+			if (usnRecord->Reason != USN_REASON_CLOSE)
 			{
-				offset+= usnRecord->RecordLength;
-				continue;
+				JournalRecord rec;
+				rec.data.usn					 = usnRecord->Usn;
+				rec.data.fileRefNumber			 = usnRecord->FileReferenceNumber;
+				rec.data.parentRefNumber		 = usnRecord->ParentFileReferenceNumber;
+				rec.data.reason					 = usnRecord->Reason;
+				rec.data.timeStamp.dwLowDateTime = usnRecord->TimeStamp.LowPart;
+				rec.data.timeStamp.dwHighDateTime= usnRecord->TimeStamp.HighPart;
+				rec.data.fileAttributes			 = usnRecord->FileAttributes;
+				rec.data.fileNameLength			 = usnRecord->FileNameLength;
+				rec.filename.assign(usnRecord->FileName, usnRecord->FileNameLength / sizeof(WCHAR));
+
+				m_records.push_back(rec);
 			}
-
-			JournalRecord rec;
-			rec.data.usn					 = usnRecord->Usn;
-			rec.data.fileRefNumber			 = usnRecord->FileReferenceNumber;
-			rec.data.parentRefNumber		 = usnRecord->ParentFileReferenceNumber;
-			rec.data.reason					 = usnRecord->Reason;
-			rec.data.timeStamp.dwLowDateTime = usnRecord->TimeStamp.LowPart;
-			rec.data.timeStamp.dwHighDateTime= usnRecord->TimeStamp.HighPart;
-			rec.data.fileAttributes			 = usnRecord->FileAttributes;
-			rec.data.fileNameLength			 = usnRecord->FileNameLength;
-			rec.filename.assign(usnRecord->FileName, usnRecord->FileNameLength / sizeof(WCHAR));
-
-			m_records.push_back(rec);
 			offset+= usnRecord->RecordLength;
 		}
 		readData.StartUsn= nextUsn;
 	}
 
+	m_header.lastReadUsn= nextUsn;
 	m_header.recordCount= static_cast<DWORD>(m_records.size());
+	o_reliable			= true;
 	return true;
 }
 
+/// 65.13a: the header only (where the journal was): that is all a master snapshot is needed for.
+/// A file with records (written before the 65.13a) is still read: the records are not used
 bool franzju::savetofile(const std::wstring &i_fileoutput) const
 {
+	FranzjuJournalHeader header= m_header;
+	header.recordCount		   = 0;
+
 	FILE *outFile= _wfopen(i_fileoutput.c_str(), L"wb");
 	if (!outFile)
 		return false;
 
-	setvbuf(outFile, NULL, _IOFBF, 1024 * 1024);
+	bool success= (fwrite(JU_MAGIC_BYTES, 1, JU_MAGIC_BYTES_LEN, outFile) == JU_MAGIC_BYTES_LEN) &&
+				  (fwrite(&header, sizeof(FranzjuJournalHeader), 1, outFile) == 1);
 
-	bool success= false;
-	do
-	{
-		if (fwrite(JU_MAGIC_BYTES, 1, JU_MAGIC_BYTES_LEN, outFile) != JU_MAGIC_BYTES_LEN)
-			break;
-
-		if (fwrite(&m_header, sizeof(FranzjuJournalHeader), 1, outFile) != 1)
-			break;
-
-		bool write_ok= true;
-		for (size_t i= 0; i < m_records.size() && write_ok; ++i)
-		{
-			const JournalRecord &rec= m_records[i];
-			if (fwrite(&rec.data, sizeof(FranzjuSavedUSNRecord), 1, outFile) != 1)
-			{
-				write_ok= false;
-				break;
-			}
-			if (rec.data.fileNameLength > 0)
-			{
-				if (fwrite(rec.filename.c_str(), rec.data.fileNameLength, 1, outFile) != 1)
-				{
-					write_ok= false;
-					break;
-				}
-			}
-		}
-		if (!write_ok)
-			break;
-
-		success= true;
-	} while (false);
-
-	fclose(outFile);
+	if (fclose(outFile) != 0)
+		success= false;
 	return success;
 }
 
@@ -252826,34 +255047,19 @@ bool franzju::loadfromfile(const std::wstring &i_fileinput)
 	return success;
 }
 
+/// 65.13a: the header only, as savetofile
 bool franzju::savetobuffer(std::vector<unsigned char> &buffer) const
 {
-	size_t totalSize= JU_MAGIC_BYTES_LEN + sizeof(FranzjuJournalHeader);
-	for (size_t i= 0; i < m_records.size(); ++i)
-		totalSize+= sizeof(FranzjuSavedUSNRecord) + m_records[i].data.fileNameLength;
+	FranzjuJournalHeader header= m_header;
+	header.recordCount		   = 0;
 
 	buffer.clear();
-	buffer.resize(totalSize);
+	buffer.resize(JU_MAGIC_BYTES_LEN + sizeof(FranzjuJournalHeader));
 
 	char *p= (char *)&buffer[0];
-
 	memcpy(p, JU_MAGIC_BYTES, JU_MAGIC_BYTES_LEN);
 	p+= JU_MAGIC_BYTES_LEN;
-
-	memcpy(p, &m_header, sizeof(FranzjuJournalHeader));
-	p+= sizeof(FranzjuJournalHeader);
-
-	for (size_t i= 0; i < m_records.size(); ++i)
-	{
-		const JournalRecord &rec= m_records[i];
-		memcpy(p, &rec.data, sizeof(FranzjuSavedUSNRecord));
-		p+= sizeof(FranzjuSavedUSNRecord);
-		if (rec.data.fileNameLength > 0)
-		{
-			memcpy(p, rec.filename.c_str(), rec.data.fileNameLength);
-			p+= rec.data.fileNameLength;
-		}
-	}
+	memcpy(p, &header, sizeof(FranzjuJournalHeader));
 	return true;
 }
 
@@ -252903,53 +255109,10 @@ bool franzju::loadfrombuffer(const std::vector<unsigned char> &buffer)
 	return true;
 }
 
-bool franzju::get_file_info_by_ref(HANDLE hVolume, DWORDLONG fileRef,
-								   ULONGLONG &fileSize, FILETIME &lastModified)
+static std::wstring franzju_pathofhandle(HANDLE i_file)
 {
-	if (!g_pOpenFileById)
-		return false;
-
-	FILE_ID_DESCRIPTOR fileId;
-	fileId.dwSize		  = sizeof(FILE_ID_DESCRIPTOR);
-	fileId.Type			  = FileIdType;
-	fileId.FileId.QuadPart= fileRef;
-
-	VolumeHandle hFile(g_pOpenFileById(hVolume, &fileId, 0,
-									   FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL, 0));
-	if (!hFile.valid())
-		return false;
-
-	BY_HANDLE_FILE_INFORMATION fileInfo;
-	if (GetFileInformationByHandle(hFile, &fileInfo))
-	{
-		LARGE_INTEGER size;
-		size.HighPart= fileInfo.nFileSizeHigh;
-		size.LowPart = fileInfo.nFileSizeLow;
-		fileSize	 = size.QuadPart;
-		lastModified = fileInfo.ftLastWriteTime;
-		return true;
-	}
-	return false;
-}
-
-std::wstring franzju::resolve_id_to_path(HANDLE hVolume, DWORDLONG ref)
-{
-	if (!g_pOpenFileById || !g_pGetFinalPathNameByHandleW)
-		return L"";
-
-	FILE_ID_DESCRIPTOR fileId;
-	fileId.dwSize		  = sizeof(FILE_ID_DESCRIPTOR);
-	fileId.Type			  = FileIdType;
-	fileId.FileId.QuadPart= ref;
-
-	VolumeHandle hFile(g_pOpenFileById(hVolume, &fileId, 0,
-									   FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-									   NULL, FILE_FLAG_BACKUP_SEMANTICS));
-	if (!hFile.valid())
-		return L"";
-
 	wchar_t pathBuffer[32768];
-	DWORD	pathLen= g_pGetFinalPathNameByHandleW(hFile, pathBuffer, 32768, FILE_NAME_NORMALIZED);
+	DWORD	pathLen= g_pGetFinalPathNameByHandleW(i_file, pathBuffer, 32768, FILE_NAME_NORMALIZED);
 
 	if (pathLen > 0 && pathLen < 32768)
 	{
@@ -252959,6 +255122,56 @@ std::wstring franzju::resolve_id_to_path(HANDLE hVolume, DWORDLONG ref)
 		return result;
 	}
 	return L"";
+}
+
+static HANDLE franzju_openbyid(HANDLE hVolume, DWORDLONG ref)
+{
+	FILE_ID_DESCRIPTOR fileId;
+	fileId.dwSize		  = sizeof(FILE_ID_DESCRIPTOR);
+	fileId.Type			  = FileIdType;
+	fileId.FileId.QuadPart= ref;
+
+	return g_pOpenFileById(hVolume, &fileId, 0,
+						   FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+						   NULL, FILE_FLAG_BACKUP_SEMANTICS);
+}
+
+/// 65.13a: one open by ID for where the file (or folder) is now and its size; o_path empty if it is not there
+bool franzju::infobyid(HANDLE hVolume, DWORDLONG ref, std::wstring &o_path, ULONGLONG &o_size, FILETIME &o_lastModified)
+{
+	o_path.clear();
+	if (!g_pOpenFileById || !g_pGetFinalPathNameByHandleW)
+		return false;
+
+	VolumeHandle hFile(franzju_openbyid(hVolume, ref));
+	if (!hFile.valid())
+		return false;
+
+	o_path= franzju_pathofhandle(hFile);
+	if (o_path.empty())
+		return false;
+
+	BY_HANDLE_FILE_INFORMATION fileInfo;
+	if (GetFileInformationByHandle(hFile, &fileInfo))
+	{
+		LARGE_INTEGER size;
+		size.HighPart = fileInfo.nFileSizeHigh;
+		size.LowPart  = fileInfo.nFileSizeLow;
+		o_size		  = size.QuadPart;
+		o_lastModified= fileInfo.ftLastWriteTime;
+	}
+	return true;
+}
+
+std::wstring franzju::resolve_id_to_path(HANDLE hVolume, DWORDLONG ref)
+{
+	if (!g_pOpenFileById || !g_pGetFinalPathNameByHandleW)
+		return L"";
+
+	VolumeHandle hFile(franzju_openbyid(hVolume, ref));
+	if (!hFile.valid())
+		return L"";
+	return franzju_pathofhandle(hFile);
 }
 
 static bool should_ignore_file(const std::wstring &path, const std::wstring &monitor_folder)
@@ -252992,14 +255205,28 @@ static bool should_ignore_file(const std::wstring &path, const std::wstring &mon
 	return false;
 }
 
-// Worker thread with pre-allocation stringhe e double-check locking
+/// 65.13a: a path seen twice (a file deleted and another one there now: the "save to a temporary,
+/// delete the original, rename the temporary" of many programs) is the one that is there
+static void franzju_metti(std::map<std::wstring, franzju::FileMetadata> &o_changes, const std::wstring &i_path, const franzju::FileMetadata &i_meta)
+{
+	std::map<std::wstring, franzju::FileMetadata>::iterator it= o_changes.find(i_path);
+	if (it == o_changes.end())
+		o_changes[i_path]= i_meta;
+	else if ((i_meta.changeType != franzju::CHANGE_DELETED) || (it->second.changeType == franzju::CHANGE_DELETED))
+		it->second= i_meta;
+}
+
+// Worker thread: one file (ID) at a time, with all its records put together
 void *compare_worker_thread(void *arg)
 {
 	ThreadCompareData *data= (ThreadCompareData *)arg;
 
 	VolumeHandle hVolume(franzju::open_volume(data->volumePath));
 	if (!hVolume.valid())
+	{
+		data->ok= false;
 		return NULL;
+	}
 
 	// Pre-allocate strings per evitare reallocazioni frequenti
 	std::wstring fullPath;
@@ -253009,199 +255236,199 @@ void *compare_worker_thread(void *arg)
 
 	for (size_t i= data->start_idx; i < data->end_idx; ++i)
 	{
-		const franzju::JournalRecord &record= data->new_journal->m_records[i];
+		const franzju::FileRecords &file = (*data->files)[i];
+		const bool					isdir= (file.attributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
 
-		if (record.data.usn > data->lastReadUsn)
+		/// deleted in the end = deleted, even if created in between (temporary files)
+		franzju::FileChangeType changeType= franzju::CHANGE_MODIFIED;
+		if (file.reasons & USN_REASON_FILE_DELETE)
+			changeType= franzju::CHANGE_DELETED;
+		else if (file.reasons & USN_REASON_FILE_CREATE)
+			changeType= franzju::CHANGE_ADDED;
+		else if (file.reasons & (USN_REASON_RENAME_OLD_NAME | USN_REASON_RENAME_NEW_NAME))
 		{
-			franzju::FileChangeType changeType= franzju::CHANGE_MODIFIED;
-			if (record.data.reason & USN_REASON_FILE_CREATE)
-				changeType= franzju::CHANGE_ADDED;
-			else if (record.data.reason & USN_REASON_FILE_DELETE)
-				changeType= franzju::CHANGE_DELETED;
-			else if (record.data.reason & USN_REASON_RENAME_NEW_NAME)
+			if (isdir)
+				changeType= franzju::CHANGE_DIRRENAMED;
+			else if (!(file.reasons & FRANZJU_DATA_CHANGES))
 				changeType= franzju::CHANGE_RENAMED;
+		}
 
-			// Reuse strings: clear() mantiene la capacità già allocata
-			fullPath.clear();
+		/// a folder created or deleted: what is inside has its own records. Changed attributes: nothing to list
+		if (isdir && (changeType != franzju::CHANGE_DIRRENAMED))
+			continue;
+
+		franzju::FileMetadata meta;
+		meta.lastModified= file.timeStamp;
+		meta.changeType	 = changeType;
+
+		/// where it is now (after any rename), read from the ID
+		fullPath.clear();
+		if (changeType != franzju::CHANGE_DELETED)
+		{
+			ULONGLONG realSize= 0;
+			FILETIME  realModTime;
+			if (franzju::infobyid(hVolume, file.fileRef, fullPath, realSize, realModTime))
+			{
+				meta.fileSize	 = isdir ? 0 : realSize;
+				meta.lastModified= realModTime;
+			}
+		}
+
+		/// deleted (or not to be opened by ID): its folder + its last name
+		if (fullPath.empty())
+		{
 			parentPath.clear();
 			bool parentFound= false;
 
 			// 1. Attempt to resolve parent from cache (fast, short lock)
 			pthread_mutex_lock(data->cache_mutex);
-			parentFound= data->parent_cache->get(record.data.parentRefNumber, parentPath);
+			parentFound= data->parent_cache->get(file.parentRef, parentPath);
 			pthread_mutex_unlock(data->cache_mutex);
 
 			// 2. If not found, resolve parent (slow I/O, NO LOCK)
 			if (!parentFound)
 			{
-				parentPath= franzju::resolve_id_to_path(hVolume, record.data.parentRefNumber);
+				parentPath= franzju::resolve_id_to_path(hVolume, file.parentRef);
 
 				// Double-check locking: un altro thread potrebbe averlo già inserito
 				if (!parentPath.empty())
 				{
 					pthread_mutex_lock(data->cache_mutex);
 					std::wstring existing;
-					if (!data->parent_cache->get(record.data.parentRefNumber, existing))
-						data->parent_cache->put(record.data.parentRefNumber, parentPath);
+					if (!data->parent_cache->get(file.parentRef, existing))
+						data->parent_cache->put(file.parentRef, parentPath);
 					pthread_mutex_unlock(data->cache_mutex);
 				}
 			}
 
-			// 3. Build final path - optimized to avoid allocations
 			if (!parentPath.empty())
 			{
-				// Reserve solo se necessario (evita realloc)
-				size_t needed= parentPath.length() + 1 + record.filename.length();
-				if (needed > fullPath.capacity())
-					fullPath.reserve(needed);
-
 				fullPath.append(parentPath);
 				if (!fullPath.empty() && fullPath.back() != L'\\')
 					fullPath+= L'\\';
-				fullPath.append(record.filename);
+				fullPath.append(file.filename);
 			}
+			else if (changeType == franzju::CHANGE_DELETED)
+				fullPath= file.filename;
 			else
-			{
-				fullPath= franzju::resolve_id_to_path(hVolume, record.data.fileRefNumber);
-				if (fullPath.empty())
-				{
-					if (changeType == franzju::CHANGE_DELETED)
-						fullPath= record.filename;
-					else
-						continue;
-				}
-			}
-
-			if (should_ignore_file(fullPath, data->monitor_folder))
 				continue;
-
-			franzju::FileMetadata meta;
-			meta.lastModified= record.data.timeStamp;
-			meta.changeType	 = changeType;
-
-			if (changeType != franzju::CHANGE_DELETED)
-			{
-				ULONGLONG realSize= 0;
-				FILETIME  realModTime;
-				if (franzju::get_file_info_by_ref(hVolume, record.data.fileRefNumber, realSize, realModTime))
-				{
-					meta.fileSize	 = realSize;
-					meta.lastModified= realModTime;
-				}
-			}
-			else
-				meta.fileSize= 0;
-
-			(*data->local_changes)[fullPath]= meta;
 		}
+
+		if (should_ignore_file(fullPath, data->monitor_folder))
+			continue;
+
+		franzju_metti(*data->local_changes, fullPath, meta);
 	}
 
 	return NULL;
 }
 
-bool franzju::comparefrombuffers(const std::wstring					  &volumePath,
-								 const std::vector<unsigned char>	  &bufferold,
-								 const std::vector<unsigned char>	  &buffernew,
-								 std::map<std::wstring, FileMetadata> &changes,
-								 bool								  &isReliable,
-								 const std::wstring					  &monitor_folder,
-								 int								   num_threads)
+/// 65.13a: what changed, from the records of capturefrom(). Put together by file ID (not one record at a
+/// time: a file renamed was MODIFIED where it was not any more, and missed where it was; a temporary file
+/// created and deleted was ADDED), then one open by ID per file, split on the threads
+bool franzju::getchanges(std::map<std::wstring, FileMetadata> &o_changes, const std::wstring &i_monitor_folder) const
 {
-	franzju old_journal(volumePath);
-	if (!old_journal.loadfrombuffer(bufferold))
-		return false;
+	o_changes.clear();
 
-	franzju new_journal(volumePath);
-	if (!new_journal.loadfrombuffer(buffernew))
-		return false;
-
-	changes.clear();
-
-	isReliable= true;
-
-	if (new_journal.m_header.journalId != old_journal.m_header.journalId)
+	std::vector<FileRecords>	files;
+	std::map<DWORDLONG, size_t> where;
+	for (size_t i= 0; i < m_records.size(); ++i)
 	{
-		isReliable= false;
-		if (flagdebug)
-			myprintf("Journal ID changed (recreated)\n");
+		const JournalRecord								&rec= m_records[i];
+		std::pair<std::map<DWORDLONG, size_t>::iterator, bool> ins=
+			where.insert(std::make_pair(rec.data.fileRefNumber, files.size()));
+		if (ins.second)
+		{
+			FileRecords nuovo;
+			nuovo.fileRef= rec.data.fileRefNumber;
+			nuovo.reasons= 0;
+			files.push_back(nuovo);
+		}
+		FileRecords &file= files[ins.first->second];
+		file.reasons|= rec.data.reason;
+		file.parentRef = rec.data.parentRefNumber;
+		file.attributes= rec.data.fileAttributes;
+		file.timeStamp = rec.data.timeStamp;
+		file.filename  = rec.filename;
 	}
 
-	if (new_journal.m_header.firstUsn > old_journal.m_header.lastReadUsn)
-	{
-		isReliable= false;
-		if (flagdebug)
-			myprintf("Journal gap detected\n");
-	}
+	size_t total_files= files.size();
+	if (total_files == 0)
+		return true;
 
 	SimplePathCache parentCache(VOLUME_CACHE_SIZE);
 	pthread_mutex_t cache_mutex;
 	pthread_mutex_init(&cache_mutex, NULL);
 
-	size_t total_records= new_journal.m_records.size();
-
+	int num_threads= m_num_threads;
 	if (num_threads <= 0)
 		num_threads= DEFAULT_NUM_THREADS;
-	if ((size_t)num_threads > total_records && total_records > 0)
-		num_threads= (int)total_records;
+	if ((size_t)num_threads > total_files)
+		num_threads= (int)total_files;
 
-	size_t records_per_thread= (total_records + num_threads - 1) / num_threads;
+	size_t files_per_thread= (total_files + num_threads - 1) / num_threads;
 
 	std::vector<pthread_t>							  threads(num_threads);
+	std::vector<bool>								  started(num_threads, false);
 	std::vector<ThreadCompareData>					  thread_data(num_threads);
 	std::vector<std::map<std::wstring, FileMetadata> > local_results(num_threads);
 
-	int active_threads= 0;
 	for (int t= 0; t < num_threads; t++)
 	{
-		thread_data[t].new_journal = &new_journal;
-		thread_data[t].lastReadUsn = old_journal.m_header.lastReadUsn;
-		thread_data[t].volumePath  = volumePath;
+		thread_data[t].files	   = &files;
+		thread_data[t].ok		   = true;
+		thread_data[t].volumePath  = m_volumePath;
 		thread_data[t].parent_cache= &parentCache;
-		thread_data[t].start_idx   = t * records_per_thread;
-		thread_data[t].end_idx	   = (t + 1) * records_per_thread;
-		if (thread_data[t].end_idx > total_records)
-			thread_data[t].end_idx= total_records;
+		thread_data[t].start_idx   = t * files_per_thread;
+		thread_data[t].end_idx	   = (t + 1) * files_per_thread;
+		if (thread_data[t].end_idx > total_files)
+			thread_data[t].end_idx= total_files;
 		thread_data[t].local_changes = &local_results[t];
 		thread_data[t].cache_mutex	 = &cache_mutex;
-		thread_data[t].monitor_folder= monitor_folder;
+		thread_data[t].monitor_folder= i_monitor_folder;
 
-		if (thread_data[t].start_idx < total_records)
+		if (thread_data[t].start_idx < total_files)
 		{
-			pthread_create(&threads[t], NULL, compare_worker_thread, &thread_data[t]);
-			active_threads++;
+			if (pthread_create(&threads[t], NULL, compare_worker_thread, &thread_data[t]) == 0)
+				started[t]= true;
+			else
+				compare_worker_thread(&thread_data[t]); /// no thread: here
 		}
 	}
 
-	for (int t= 0; t < active_threads; t++)
-		pthread_join(threads[t], NULL);
-
+	bool ok= true;
 	for (int t= 0; t < num_threads; t++)
 	{
+		if (started[t])
+			pthread_join(threads[t], NULL);
+		if (!thread_data[t].ok)
+			ok= false;
+	}
+
+	for (int t= 0; t < num_threads; t++)
 		for (std::map<std::wstring, FileMetadata>::iterator it= local_results[t].begin();
 			 it != local_results[t].end(); ++it)
-		{
-			changes[it->first]= it->second;
-		}
-	}
+			franzju_metti(o_changes, it->first, it->second);
 
 	// Debug: mostra statistiche cache
 	if (flagdebug)
 	{
 		size_t hits, misses;
 		parentCache.get_stats(hits, misses);
-		myprintf("Parent cache hit rate: %.1f%% (%s hits, %s misses, %s entries)\n",
-				 parentCache.hit_rate(), migliaia(hits), migliaia(misses), migliaia(parentCache.size()));
+		myprintf("%s records, %s files; parent cache hit rate: %.1f%% (%s hits, %s misses, %s entries)\n",
+				 migliaia(m_records.size()), migliaia2(total_files),
+				 parentCache.hit_rate(), migliaia3(hits), migliaia4(misses), migliaia5(parentCache.size()));
 	}
 
 	pthread_mutex_destroy(&cache_mutex);
-	return true;
+	return ok;
 }
 
 // Global counters for session statistics
-static int64_t	   g_total_files_archived= 0;
-static int64_t	   g_total_files_excluded= 0;
-static int64_t	   g_total_bytes_excluded= 0;
-static std::string g_last_status		 = "";
+static int64_t	   g_total_files_toarchive= 0; /// 65.13a: found, NOT archived (audit mode: add() is not called)
+static int64_t	   g_total_files_excluded = 0;
+static int64_t	   g_total_bytes_excluded = 0;
+static std::string g_last_status		  = "";
 
 void Jidac::perform_single_scan(const std::wstring		   &volume,
 								const std::wstring		   &program,
@@ -253218,10 +255445,17 @@ void Jidac::perform_single_scan(const std::wstring		   &volume,
 		return;
 	}
 
-	const std::vector<unsigned char> &old_buffer= *master_buffer_ptr;
+	/// 65.13a: the master says where the journal was; only the records after it are read
+	franzju master_snapshot(volume);
+	if (!master_snapshot.loadfrombuffer(*master_buffer_ptr))
+	{
+		myprintf("\n03501! Cannot read the master snapshot in RAM\n");
+		return;
+	}
 
 	franzju current_snapshot(volume);
-	if (!current_snapshot.capture())
+	bool	isReliable= false;
+	if (!current_snapshot.capturefrom(master_snapshot, isReliable))
 	{
 		myprintf("\n05693! Cannot get journal\n");
 		return;
@@ -253235,224 +255469,166 @@ void Jidac::perform_single_scan(const std::wstring		   &volume,
 	}
 
 	std::map<std::wstring, franzju::FileMetadata> changes;
-	bool										  isReliable= false;
 
-	if (franzju::comparefrombuffers(volume, old_buffer, current_buffer, changes, isReliable, monitor_folder))
+	if (isReliable && !current_snapshot.getchanges(changes, monitor_folder))
 	{
-		myprintf("\r%s #%08d  t=%8s ms  %s  changes: %3d  archived: %s   ",
-				 print_datetime(false).c_str(),
-				 scan_count,
-				 migliaia(mtime() - startscan),
-				 isReliable ? "RELIABLE    " : "NOT RELIABLE",
-				 (int)changes.size(),
-				 migliaia2(g_total_files_archived));
-		fflush(stdout);
-
-		if (isReliable)
-		{
-			if (!changes.empty())
-			{
-				ConsoleUI::print_header(monitor_folder, volume, g_total_files_archived,
-										g_total_files_excluded, g_total_bytes_excluded);
-
-				myprintf("%s #%08d  t=%8s ms  %s  changes: %3d  archived: %s\n",
-						 print_datetime(false).c_str(),
-						 scan_count,
-						 migliaia(mtime() - startscan),
-						 isReliable ? "RELIABLE    " : "NOT RELIABLE",
-						 (int)changes.size(),
-						 migliaia2(g_total_files_archived));
-
-				myprintf("\n");
-
-				// Pre-calcola notfiles lowercase UNA SOLA VOLTA
-				std::vector<std::string> notfiles_lower;
-				notfiles_lower.reserve(notfiles.size());
-				for (size_t j= 0; j < notfiles.size(); j++)
-				{
-					std::string pattern= notfiles[j];
-					for (size_t k= 0; k < pattern.size(); k++)
-						pattern[k]= tolower(pattern[k]);
-					notfiles_lower.push_back(pattern);
-				}
-
-				files.clear();
-				int		shown			   = 0;
-				int64_t scan_files_excluded= 0;
-				int64_t scan_bytes_excluded= 0;
-
-				for (std::map<std::wstring, franzju::FileMetadata>::const_iterator it= changes.begin();
-					 it != changes.end(); ++it)
-				{
-					if (it->second.changeType == franzju::CHANGE_MODIFIED ||
-						it->second.changeType == franzju::CHANGE_ADDED)
-					{
-						std::string filepath= wtou(it->first.c_str());
-
-						// Convert filepath to lowercase
-						std::string filepath_lower= filepath;
-						for (size_t i= 0; i < filepath_lower.size(); i++)
-							filepath_lower[i]= tolower(filepath_lower[i]);
-
-						// Checks exclusion using pattern pre-calcolati
-						bool excluded= false;
-						for (size_t j= 0; j < notfiles_lower.size() && !excluded; j++)
-						{
-							const std::string &pattern= notfiles_lower[j];
-
-							if (!pattern.empty())
-							{
-								char lastchar= pattern[pattern.size() - 1];
-								if (lastchar == '/' || lastchar == '\\')
-								{
-									if (filepath_lower.size() >= pattern.size() &&
-										filepath_lower.compare(0, pattern.size(), pattern) == 0)
-									{
-										excluded= true;
-									}
-								}
-								else
-								{
-									if (filepath_lower == pattern)
-									{
-										excluded= true;
-									}
-								}
-							}
-						}
-
-						std::string changeTypeStr;
-						switch (it->second.changeType)
-						{
-						case franzju::CHANGE_MODIFIED:
-							changeTypeStr= "MODIFIED";
-							break;
-						case franzju::CHANGE_ADDED:
-							changeTypeStr= "ADDED";
-							break;
-						default:
-							changeTypeStr= "UNKNOWN";
-							break;
-						}
-
-						if (!excluded)
-						{
-							files.push_back(filepath);
-
-							if (shown < 20)
-							{
-								myprintf("[%12s] %21s %s\n",
-										 changeTypeStr.c_str(),
-										 migliaia(it->second.fileSize),
-										 filepath.c_str());
-								shown++;
-							}
-							else if (shown == 20)
-							{
-								myprintf("...\n");
-								shown++;
-							}
-						}
-						else
-						{
-							// File escluso: aggiorna contatori
-							scan_files_excluded++;
-							scan_bytes_excluded+= it->second.fileSize;
-
-							if (flagverbose)
-							{
-								color_yellow();
-								myprintf("[%12s] %21s %s (excluded)\n",
-										 changeTypeStr.c_str(),
-										 migliaia(it->second.fileSize),
-										 filepath.c_str());
-								color_restore();
-							}
-						}
-					}
-				}
-
-				// Update global counters
-				g_total_files_excluded+= scan_files_excluded;
-				g_total_bytes_excluded+= scan_bytes_excluded;
-
-				if (shown > 20)
-				{
-					myprintf("... and %s more files to archive\n", migliaia(files.size() - 20));
-				}
-
-				// Show exclusion summary for this scan
-				if (scan_files_excluded > 0)
-				{
-					color_yellow();
-					myprintf(">>> Excluded: %s files (%s)\n",
-							 migliaia(scan_files_excluded),
-							 tohuman(scan_bytes_excluded));
-					color_restore();
-				}
-
-				if (!files.empty())
-				{
-					myprintf("\n");
-					color_yellow();
-					myprintf(">>> Starting backup of %s file(s)...\n", migliaia(files.size()));
-					color_restore();
-					myprintf("\n");
-
-					ver.clear();
-					block.clear();
-					dt.clear();
-					ht.clear();
-					edt.clear();
-					ht.resize(1);
-					ver.resize(1);
-					dhsize= dcsize= 0;
-
-					getcaptcha("ok", "To add");
-
-					int64_t add_start  = mtime();
-					int		risultatino= 0; // add();
-					int64_t add_time   = mtime() - add_start;
-
-					if (risultatino != 0)
-					{
-						color_red();
-						myprintf("\n!!! add() returned error: %d\n", risultatino);
-						color_restore();
-					}
-					else
-					{
-						g_total_files_archived+= files.size();
-						color_green();
-						myprintf("\n>>> Backup completed in %s ms (%s files archived this session)\n",
-								 migliaia(add_time), migliaia2(g_total_files_archived));
-						color_restore();
-					}
-				}
-
-				ConsoleUI::print_header(monitor_folder, volume, g_total_files_archived,
-										g_total_files_excluded, g_total_bytes_excluded);
-			}
-
-			*master_buffer_ptr= std::move(current_buffer);
-		}
-		else
-		{
-			myprintf("\n");
-			color_red();
-			myprintf("WARNING: Snapshot not reliable! A full backup is recommended.\n");
-			color_restore();
-
-			*master_buffer_ptr= std::move(current_buffer);
-		}
-	}
-	else
-	{
+		/// the master stays as it is: the next scan reads the same records again
 		myprintf("\n");
 		color_red();
 		myprintf("GURU: failed snapshot compare\n");
 		color_restore();
+		return;
 	}
+
+	if (!isReliable)
+	{
+		myprintf("\r%s #%08d  t=%8s ms  %s  changes: %3d  to archive: %s   ",
+				 print_datetime(false).c_str(),
+				 scan_count,
+				 migliaia(mtime() - startscan),
+				 "NOT RELIABLE",
+				 0,
+				 migliaia2(g_total_files_toarchive));
+		myprintf("\n");
+		color_red();
+		myprintf("WARNING: Snapshot not reliable! A full backup is recommended.\n");
+		color_restore();
+
+		*master_buffer_ptr= std::move(current_buffer);
+		return;
+	}
+
+	/// 65.13a: first what is to be shown (and the counters), then the header with the right counters,
+	/// then the list. The header after the list (cls) wiped it at once: it was seen only while the
+	/// captcha of the add that was not there waited
+	files.clear();
+	std::vector<std::string> elenco;
+	std::vector<bool>		 escluso;
+	int64_t					 scan_files_excluded= 0;
+	int64_t					 scan_bytes_excluded= 0;
+	int64_t					 scan_folders		= 0;
+
+	for (std::map<std::wstring, franzju::FileMetadata>::const_iterator it= changes.begin();
+		 it != changes.end(); ++it)
+	{
+		const char *changeTypeStr;
+		switch (it->second.changeType)
+		{
+		case franzju::CHANGE_MODIFIED:
+			changeTypeStr= "MODIFIED";
+			break;
+		case franzju::CHANGE_ADDED:
+			changeTypeStr= "ADDED";
+			break;
+		case franzju::CHANGE_RENAMED: /// a file renamed or moved is not in the archive with its new name
+			changeTypeStr= "RENAMED";
+			break;
+		case franzju::CHANGE_DIRRENAMED:
+			changeTypeStr= "DIR RENAMED";
+			break;
+		default: /// deleted: nothing to archive
+			continue;
+		}
+
+		const bool	cartella= (it->second.changeType == franzju::CHANGE_DIRRENAMED);
+		std::string filepath= wtou(it->first.c_str()); /// (C:/the/path, as the files of add)
+
+		char testa[64];
+		snprintf(testa, sizeof(testa), "[%12s] %21s ", changeTypeStr, cartella ? "<DIR>" : migliaia(it->second.fileSize));
+
+		/// -not and -only as add does (wildcards, / or \, no case)
+		if (acceptonlynot(filepath))
+		{
+			files.push_back(filepath);
+			if (cartella)
+				scan_folders++;
+			elenco.push_back(string(testa) + filepath);
+			escluso.push_back(false);
+		}
+		else
+		{
+			scan_files_excluded++;
+			scan_bytes_excluded+= it->second.fileSize;
+			if (flagverbose)
+			{
+				elenco.push_back(string(testa) + filepath + " (excluded)");
+				escluso.push_back(true);
+			}
+		}
+	}
+
+	g_total_files_excluded+= scan_files_excluded;
+	g_total_bytes_excluded+= scan_bytes_excluded;
+	g_total_files_toarchive+= files.size();
+
+	if (changes.empty() || (elenco.empty() && (scan_files_excluded == 0)))
+	{
+		/// nothing to show (no changes, or deleted files only): the status line, as ever
+		myprintf("\r%s #%08d  t=%8s ms  %s  changes: %3d  to archive: %s   ",
+				 print_datetime(false).c_str(),
+				 scan_count,
+				 migliaia(mtime() - startscan),
+				 "RELIABLE    ",
+				 (int)changes.size(),
+				 migliaia2(g_total_files_toarchive));
+		fflush(stdout);
+		*master_buffer_ptr= std::move(current_buffer);
+		return;
+	}
+
+	ConsoleUI::print_header(monitor_folder, volume, g_total_files_toarchive,
+							g_total_files_excluded, g_total_bytes_excluded);
+
+	myprintf("%s #%08d  t=%8s ms  %s  changes: %3d  to archive: %s\n",
+			 print_datetime(false).c_str(),
+			 scan_count,
+			 migliaia(mtime() - startscan),
+			 "RELIABLE    ",
+			 (int)changes.size(),
+			 migliaia2(g_total_files_toarchive));
+	myprintf("\n");
+
+	int shown= 0;
+	for (size_t i= 0; i < elenco.size(); i++)
+	{
+		if (escluso[i])
+		{
+			color_yellow();
+			myprintf("%s\n", elenco[i].c_str());
+			color_restore();
+		}
+		else
+		{
+			if (shown < 20)
+				myprintf("%s\n", elenco[i].c_str());
+			else if (shown == 20)
+				myprintf("...\n");
+			shown++;
+		}
+	}
+	if (shown > 20)
+		myprintf("... and %s more\n", migliaia(shown - 20));
+
+	if (scan_files_excluded > 0)
+	{
+		color_yellow();
+		myprintf(">>> Excluded: %s files (%s)\n",
+				 migliaia(scan_files_excluded),
+				 tohuman(scan_bytes_excluded));
+		color_restore();
+	}
+
+	if (!files.empty())
+	{
+		myprintf("\n");
+		color_yellow();
+		myprintf("03504: %s to archive (audit mode: nothing is archived)\n", migliaia(files.size()));
+		if (scan_folders > 0)
+			myprintf("03505: %s folder(s) renamed or moved: what is inside is not listed one by one\n", migliaia(scan_folders));
+		color_restore();
+	}
+
+	*master_buffer_ptr= std::move(current_buffer);
 }
 
 int Jidac::monitor()
@@ -253479,7 +255655,7 @@ int Jidac::monitor()
 
 	if (arg_narrow.empty())
 	{
-		myprintf("06113: Empty argument\n");
+		myprintf("03502: Empty argument\n");
 		return 1;
 	}
 
@@ -253490,7 +255666,7 @@ int Jidac::monitor()
 			volume= std::wstring(1, driveLetter) + L":";
 		else
 		{
-			myprintf("ERRORE: Volume non valido '%s'. Usa una lettera da A a Z\n", arg_narrow.c_str());
+			myprintf("03503: Invalid volume '%s': use a letter from A to Z\n", arg_narrow.c_str());
 			return 1;
 		}
 	}
@@ -253517,10 +255693,10 @@ int Jidac::monitor()
 	std::vector<unsigned char> master_buffer_ram;
 
 	// Reset global counters
-	g_total_files_archived= 0;
-	g_total_files_excluded= 0;
-	g_total_bytes_excluded= 0;
-	g_last_status		  = "";
+	g_total_files_toarchive= 0;
+	g_total_files_excluded = 0;
+	g_total_bytes_excluded = 0;
+	g_last_status		   = "";
 
 	ConsoleUI::init();
 	ConsoleUI::cls();
@@ -253535,7 +255711,7 @@ int Jidac::monitor()
 		return 2;
 	}
 
-	ConsoleUI::print_header(monitor_folder, volume, g_total_files_archived,
+	ConsoleUI::print_header(monitor_folder, volume, g_total_files_toarchive,
 							g_total_files_excluded, g_total_bytes_excluded);
 
 	int64_t mastertime= mtime();
@@ -253582,7 +255758,7 @@ int Jidac::monitor()
 		color_green();
 		myprintf(" Done! (t=%s ms, %s bytes)\n",
 				 migliaia(mtime() - mastertime),
-				 migliaia(master_buffer_ram.size()));
+				 migliaia2(master_buffer_ram.size())); /// 65.13a: two migliaia() in one line share the buffer (it said "40 bytes" for 44)
 		color_restore();
 	}
 
@@ -253635,7 +255811,7 @@ int Jidac::monitor()
 	myprintf("\n");
 	myprintf("Session Summary\n");
 	myprintf("Total scans: %d\n", scan_count);
-	myprintf("Files archived: %s\n", migliaia(g_total_files_archived));
+	myprintf("Files to archive (not archived: audit mode): %s\n", migliaia(g_total_files_toarchive));
 	myprintf("Files excluded: %s (%s)\n", migliaia(g_total_files_excluded), tohuman(g_total_bytes_excluded));
 	myprintf("\n");
 
